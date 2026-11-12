@@ -30,6 +30,11 @@ export const FOLD_VALUES_QUERY_KEY = ['fabric-properties', 'fold-values'] as con
  */
 const EMPTY_FOLD_VALUES: FabricPropertyValue[] = [];
 
+/** Ön seçilecek kat: panelde ★ (varsayılan) işaretli değer; yoksa sıradaki ilk değer. */
+export function preferredFoldCode(values: readonly FabricPropertyValue[]): string | null {
+  return (values.find((v) => v.isDefault) ?? values[0])?.code ?? null;
+}
+
 export function useFoldValues() {
   const q = useQuery({
     queryKey: FOLD_VALUES_QUERY_KEY,

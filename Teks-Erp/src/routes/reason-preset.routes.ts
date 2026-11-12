@@ -21,7 +21,7 @@
 
 import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
-import { MachineStopLossClass, ReasonPresetKind } from "@prisma/client";
+import { MachineStopLossClass, ReasonPresetKind, StationKind } from "@prisma/client";
 
 import { ReasonPresetService } from "../services/reason-preset.service";
 import { verifyToken } from "../middlewares/auth.middleware";
@@ -40,6 +40,9 @@ const stopLossClassSchema = z.nativeEnum(MachineStopLossClass).optional().nullab
 const targetMinutesSchema = z.number().int().min(1).max(1440).optional().nullable();
 /** F9 yeniden işlem sınıfı — yalnız WORK_ORDER_REWORK (serviste, 400 REASON_BILLABLE_KIND); null = sınıfsız (ücretli). */
 const billableSchema = z.boolean().optional().nullable();
+/** İstasyon türü kapsamı — yalnız MACHINE_STOP (serviste, 400 STOP_STATION_KINDS_NOT_APPLICABLE); boş = her istasyon. */
+const stationKindSchema = z.nativeEnum(StationKind, { error: "Bilinmeyen istasyon türü" });
+const stationKindsSchema = z.array(stationKindSchema).max(Object.keys(StationKind).length).optional().nullable();
 
 const createSchema = z.object({
   kind: kindSchema,
@@ -49,6 +52,7 @@ const createSchema = z.object({
   stopLossClass: stopLossClassSchema,
   targetMinutes: targetMinutesSchema,
   billable: billableSchema,
+  stationKinds: stationKindsSchema,
 });
 
 const updateSchema = z.object({
@@ -59,6 +63,7 @@ const updateSchema = z.object({
   stopLossClass: stopLossClassSchema,
   targetMinutes: targetMinutesSchema,
   billable: billableSchema,
+  stationKinds: stationKindsSchema,
 });
 
 const duplicateSchema = z.object({
@@ -81,6 +86,12 @@ const reorderSchema = z.object({
  *       `?includeInactive=true` düzenleme yüzeyi içindir — gizlenmiş satırlar da gelir.
  *       E7 `quickPick` (türetilmiş, kolon değil): `MACHINE_STOP` kind'ının AKTİF ilk 4 satırı (sortOrder) true —
  *       tablet duruş anında tek dokunuş düğmesi çizer; fabrika dörtlüyü `PATCH /reorder` ile seçer.
+ *       `?stationKind=TAMBUR` (2026-11-09): yalnız kapsamı boş ya da o türü taşıyan satırlar; `quickPick` süzülmüş
+ *       listede hesaplanır. Tanınmayan tür 400.
+ *     parameters:
+ *       - { in: query, name: kind, schema: { type: string } }
+ *       - { in: query, name: includeInactive, schema: { type: boolean } }
+ *       - { in: query, name: stationKind, schema: { type: string, enum: [RAW_QC, PROCESS_QC, TAMBUR, SUBCONTRACTOR, SHIPPING, OTHER, WEAVING, WARPING] } }
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Sebep listesi }
@@ -88,9 +99,12 @@ const reorderSchema = z.object({
 router.get("/", verifyToken, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const kind = req.query.kind ? kindSchema.parse(req.query.kind) : undefined;
+    // Tanınmayan tür 400 (fail-closed); parametresiz çağrı bugünkü tam liste.
+    const stationKind = req.query.stationKind ? stationKindSchema.parse(req.query.stationKind) : undefined;
     res.status(200).json(
       await ReasonPresetService.list({
         kind,
+        stationKind,
         includeInactive: req.query.includeInactive === "true",
       }),
     );

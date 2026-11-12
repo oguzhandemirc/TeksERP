@@ -1,13 +1,14 @@
 // S1 (Gülkesim, 2026-11-03): BELGE TİPİ TANITMA — şablon önerisi (saf). Kullanıcı fotoğrafta değer kutusuna dokunup alan atar;
 // sistem değerin yanındaki BASILI ETİKETİ bulur ve anchor stratejisi üretir (aynı satırda solda → "right", üstte → "below");
 // etiket yoksa göreli konum (roi); etiket varsa da değer kutusu konum yedeği olur (bozuk okunan etiket). Kimlik yazıları sınıflandırma anahtarıdır. Belgeler basılıdır (fabrika cevabı 38).
-import { TABLE_TOTAL_SOURCE, type DocumentTemplate, type FieldSpec, type FieldType, type MeterSourcesSpec, type NormRect, type OcrElement, type OcrLine, type OcrRect, type OcrResult, type RoiStrategy, type Strategy, type TableColumnSpec } from "./types";
+import { type DocumentTemplate, type FieldSpec, type FieldType, type NormRect, type OcrElement, type OcrLine, type OcrRect, type OcrResult, type RoiStrategy, type Strategy, type TableColumnSpec, type TemplateRules } from "./types";
 import { DEFAULT_MIN_LABEL_SIMILARITY, buildAnchorContext, findLabelMatches } from "./anchor";
 import { resolveRegions } from "./document";
 import { buildRows, centerInNormRect, collectLines, unionRect } from "./geometry";
-import { isNumericText } from "./labels";
+import { isNumericText, sectionStartLabel, totalsLabelOf } from "./labels";
 import { validateTemplate } from "./templates";
 import { valueShapeOf } from "./value-limit";
+import { KG_FAMILY_FIELDS, METER_FAMILY_FIELDS, learnAnchorSkip, meterKgClashes } from "./olcu-cakisma";
 
 /** Tanıtmada atanabilen başlık alanları → motor alan anahtarı + tip (taslak eşlemesi bu anahtarları okur). Anahtar KALICIDIR
  *  (kayıtlı şablonlar bunu taşır) — yalnız etiket değişir. K30: iş emri formu alanları (`hedefMetraj`, `hedefKg`, `not`). */
@@ -15,12 +16,15 @@ export const ASSIGNABLE_FIELDS = {
   musteri: { label: "Müşteri", type: "text" },
   partiNo: { label: "Parti No", type: "alnum" },
   toplamMetre: { label: "Gelen metre", type: "decimal" },
+  // 2026-11-09: belgedeki gelen kg (fason malın kilosu) — hedef kg DEĞİL; özet satırına ve İE "Gelen kg"ye gider.
+  toplamKg: { label: "Gelen kg", type: "decimal" },
   evrakNo: { label: "Evrak No", type: "alnum" },
   tarih: { label: "Tarih", type: "date" },
   siparisNo: { label: "Sipariş No", type: "alnum" },
   topAdet: { label: "Top adedi", type: "integer" },
-  desen: { label: "Hedef kumaş (desen)", type: "text" },
-  renk: { label: "Hedef renk", type: "text" },
+  // 2026-11-09: kumaş adı/renk belgenin BEYANI (özet satırı itemText/colorText); İE hedefine yalnız formda öneri olur.
+  desen: { label: "Gelen kumaş", type: "text" },
+  renk: { label: "Gelen renk", type: "text" },
   en: { label: "En (cm)", type: "decimal" },
   hedefMetraj: { label: "Hedef metraj", type: "decimal" },
   hedefKg: { label: "Hedef kg", type: "decimal" },
@@ -55,6 +59,8 @@ export interface TemplateSuggestInput {
   table?: { columns: Array<{ key: TableColumnKey; header: string }>; totalsLabel?: string | null };
   /** Tekrarlayan bölümün başlangıç etiketi (ör. "Sipariş No"); yoksa bölümsüz. */
   sectionStartLabel?: string | null;
+  /** Belge tipi kuralları (③ Kurallar); yoksa alan yazılmaz = fabrika ayarı. */
+  rules?: TemplateRules;
 }
 
 export interface TemplateSuggestion {
@@ -64,6 +70,9 @@ export interface TemplateSuggestion {
   errors: string[];
 }
 
+/** Metre/kg ailesi: etiket okuması dokunulan kutuya ulaşmazsa konum stratejisine düşen alanlar (`olcu-cakisma.ts`). */
+const MEASURE_FIELDS: ReadonlySet<string> = new Set<string>([...METER_FAMILY_FIELDS, ...KG_FAMILY_FIELDS]);
+
 /** Adet etiketi ("T.Adet", "Top Adedi"): sağındaki sayı metre değil top sayısıdır. */
 const COUNT_LABEL = /adet/iu;
 
@@ -72,18 +81,27 @@ const COUNT_LABEL = /adet/iu;
  * etiketi adet etiketi ya da tablonun toplam etiketi olamaz. "Tekrar eden bölümde tablo gerekli" tablette (`teachProblems`) —
  * "Şablonu güncelle" eski tabloyu taşıyabildiği için kararı yalnız tablet bilir.
  */
-function teachErrors(input: TemplateSuggestInput, explain: TemplateSuggestion["explain"]): string[] {
-  const out: string[] = [];
+function teachErrors(input: TemplateSuggestInput, explain: TemplateSuggestion["explain"], t: DocumentTemplate): string[] {
+  const out: string[] = meterKgClashErrors(t);
   const meterLabel = explain.find((e) => e.field === "toplamMetre")?.label ?? null;
   const totals = input.table?.totalsLabel?.trim() ?? null;
   const tapped = input.assignments.find((a) => a.field === "toplamMetre");
   const integer = !!tapped && /^\d+$/.test(wordsIn(input.ocr, tapped.rect).trim());
   // Tablolu belgede toplam satırı tablo toplamından okunur; tablosuzda yalnız tam sayı (adet) reddedilir, metre değeri serbest.
   const countRow = !!meterLabel && (COUNT_LABEL.test(meterLabel) || (!!totals && cleanLabel(meterLabel) === cleanLabel(totals)));
-  if (countRow && (integer || (input.table?.columns.length ?? 0) > 0)) {
+  // Bölüm alanı her partinin kendi toplam satırından okunur (beyan = o blok); sayfa başlığındaki tek değer ise bir bloğunkidir.
+  const perSection = !!tapped?.section && !!input.sectionStartLabel?.trim();
+  if (countRow && (integer || ((input.table?.columns.length ?? 0) > 0 && !perSection))) {
     out.push(`"${meterLabel}" adet/toplam satırıdır — sağındaki sayı top adedi; gelen metre için tablonun Metre sütununu işaretleyin ("Gelen metre" atamasını kaldırın).`);
   }
   return out;
+}
+
+const fieldLabel = (k: string) => ASSIGNABLE_FIELDS[k as AssignableField]?.label ?? k;
+
+/** Metre ailesi ↔ kg ailesi aynı hücre (`meterKgClashes`) — tanıtma kapısı; güncelleme birleşimi de bunu sorar. */
+export function meterKgClashErrors(t: DocumentTemplate): string[] {
+  return meterKgClashes(t).map((c) => `Aynı kutu hem "${fieldLabel(c.meter)}" hem "${fieldLabel(c.kg)}" olamaz — kg için belgedeki kg değerine dokunun.`);
 }
 
 /** Kutunun içindeki OCR kelimeleri (merkezi kutuda). */
@@ -98,6 +116,13 @@ const inside = (p: { x: number; y: number }, r: OcrRect) => p.x >= r.x && p.x <=
 const cleanLabel = (t: string) => t.replace(/[:.\s]+$/u, "").replace(/\s+/g, " ").trim();
 const isLabelText = (t: string) => t.length >= 2 && t.length <= 40 && !isNumericText(t) && /\p{L}/u.test(t);
 
+/** Etiketin sonundaki saf sayılar etiket değil başka bir değerdir ("T.Adet 5" → "T.Adet"; adet her blokta değişir). */
+function labelElements(els: OcrElement[]): OcrElement[] {
+  let n = els.length;
+  while (n > 0 && /^\d+(?:[.,]\d+)*$/.test(els[n - 1]!.text.trim())) n--;
+  return els.slice(0, n);
+}
+
 /** Değer kutusunun etiketi: aynı satırda önündeki kelimeler → soldaki satır (aynı hiza) → üstteki satır (yatay çakışan). */
 export function findLabelFor(ocr: OcrResult, rect: OcrRect): { label: string; direction: "right" | "below"; rect: OcrRect } | null {
   const lines = collectLines(ocr);
@@ -108,7 +133,7 @@ export function findLabelFor(ocr: OcrResult, rect: OcrRect): { label: string; di
     // Değer kelimeleri = kutuyla yatayda yarıdan çok çakışanlar; etiket onların ÖNÜNDEKİ kelimeler (satırın tamamı değerse yok).
     const vals = els.filter((e) => hOverlap(e.rect, rect) > e.rect.width / 2);
     const firstX = vals.length ? Math.min(...vals.map((e) => e.rect.x)) : c.x;
-    const beforeEls = els.filter((e) => e.rect.x + e.rect.width <= firstX);
+    const beforeEls = labelElements(els.filter((e) => e.rect.x + e.rect.width <= firstX));
     const t = cleanLabel(beforeEls.map((e) => e.text).join(" "));
     if (isLabelText(t)) return { label: t, direction: "right", rect: unionRect(beforeEls.map((e) => e.rect)) };
   }
@@ -116,7 +141,12 @@ export function findLabelFor(ocr: OcrResult, rect: OcrRect): { label: string; di
   const left = others
     .filter((l) => l.rect.x + l.rect.width <= rect.x + rect.width * 0.25 && vOverlap(l.rect, rect) > Math.min(l.rect.height, rect.height) * 0.4 && isLabelText(cleanLabel(l.text)))
     .sort((a, b) => b.rect.x + b.rect.width - (a.rect.x + a.rect.width))[0];
-  if (left) return { label: cleanLabel(left.text), direction: "right", rect: left.rect };
+  if (left) {
+    const els = labelElements(left.elements ?? []);
+    const t = cleanLabel(els.map((e) => e.text).join(" "));
+    if (els.length && els.length < (left.elements ?? []).length && isLabelText(t)) return { label: t, direction: "right", rect: unionRect(els.map((e) => e.rect)) };
+    return { label: cleanLabel(left.text), direction: "right", rect: left.rect };
+  }
   const above = others
     .filter((l: OcrLine) => l.rect.y + l.rect.height <= rect.y + rect.height * 0.25 && hOverlap(l.rect, rect) > 0 && rect.y - (l.rect.y + l.rect.height) < rect.height * 3 && isLabelText(cleanLabel(l.text)))
     .sort((a, b) => b.rect.y - a.rect.y)[0];
@@ -188,8 +218,16 @@ export function suggestTemplate(input: TemplateSuggestInput): TemplateSuggestion
   for (const a of input.assignments) {
     if (fields.some((f) => f.key === a.field)) continue;
     const meta = ASSIGNABLE_FIELDS[a.field];
-    const found = findLabelFor(input.ocr, a.rect);
-    const strategy: Strategy = found ? { kind: "anchor", labels: [found.label], direction: found.direction, ...valueLimitOf(input.ocr, a.rect, meta.type) } : roiOf(input.ocr, a.rect);
+    let found = findLabelFor(input.ocr, a.rect);
+    let strategy: Strategy = found ? { kind: "anchor", labels: [found.label], direction: found.direction, ...valueLimitOf(input.ocr, a.rect, meta.type) } : roiOf(input.ocr, a.rect);
+    // Etiketin sağında başka değer önce geliyorsa ("TOPLAM 241,00 MT 734,00 KG") dokunulana kadar atlanır.
+    const skip = found && strategy.kind === "anchor" ? learnAnchorSkip(input.ocr, strategy, found.rect, a.rect) : 0;
+    if (skip && strategy.kind === "anchor") strategy.skipWords = skip;
+    // Ölçü alanı etiketten dokunulan kutuya ulaşamıyorsa çapa başka hücreyi okur (metre ↔ kg aynı değer) → konumdan okunur.
+    if (skip === null && MEASURE_FIELDS.has(a.field)) {
+      found = null;
+      strategy = roiOf(input.ocr, a.rect);
+    }
     // Bölüm alanı her bölümde ayrı okunur (bant dilimi) → pencere/konum yedeği onu ilk bölüme çiviler; yalnız başlık alanına.
     if (found && !a.section) {
       labelRects.set(a.field, found.rect);
@@ -206,12 +244,13 @@ export function suggestTemplate(input: TemplateSuggestInput): TemplateSuggestion
   const cols = input.table?.columns ?? [];
   if (cols.length > 0) {
     const columns: TableColumnSpec[] = cols.map((c) => ({ key: c.key, label: TABLE_COLUMN_KEYS[c.key].label, type: TABLE_COLUMN_KEYS[c.key].type, headers: [c.header.trim()], ...(c.key === "m" ? { required: true } : {}) }));
-    t.tables = [{ key: "toplar", columns, minHeaderMatches: Math.min(2, columns.length), ...(input.table?.totalsLabel ? { totals: { labels: [input.table.totalsLabel.trim()] } } : {}) }];
+    t.tables = [{ key: "toplar", columns, minHeaderMatches: Math.min(2, columns.length), ...(input.table?.totalsLabel ? { totals: { labels: [totalsLabelOf(input.table.totalsLabel)] } } : {}) }];
   }
   const sectionFields = input.assignments.filter((a) => a.section).map((a) => a.field);
   if (input.sectionStartLabel?.trim() && sectionFields.length > 0) {
     t.sections = {
-      startLabels: [input.sectionStartLabel.trim()], fields: [...new Set(sectionFields)],
+      // Bölüm başı ETİKETİYLE kaydedilir ("Ham PartiNo: P2618733" → "Ham PartiNo"): değer her partide değişir.
+      startLabels: [sectionStartLabel(input.sectionStartLabel)], fields: [...new Set(sectionFields)],
       ...(sectionFields.includes("partiNo") ? { batchField: "partiNo" } : {}),
       ...(sectionFields.includes("siparisNo") ? { orderField: "siparisNo" } : {}),
       ...(sectionFields.includes("topAdet") ? { countField: "topAdet" } : {}),
@@ -221,12 +260,13 @@ export function suggestTemplate(input: TemplateSuggestInput): TemplateSuggestion
   const has = (k: string) => fields.some((f) => f.key === k);
   const batch = (["partiNo", "evrakNo", "siparisNo"] as const).filter(has).map((k) => ({ field: k, kind: k === "partiNo" ? "BATCH" as const : k === "evrakNo" ? "DOC" as const : "ORDER" as const }));
   if (batch.length) t.batchNoCandidates = batch;
+  if (input.rules && Object.keys(input.rules).length > 0) t.rules = { ...input.rules };
   if (t.tables?.[0]?.totals) t.meterSources = { output: ["$tableTotal"], ...(has("toplamMetre") ? { total: ["toplamMetre"] } : {}) };
   else if (has("toplamMetre")) t.meterSources = { total: ["toplamMetre"] };
   addLabelWindows(t, input.ocr, labelRects);
   addPositionFallbacks(t, input.ocr, valueRects);
   const v = validateTemplate(t);
-  return { template: t, explain, errors: [...teachErrors(input, explain), ...v.errors] };
+  return { template: t, explain, errors: [...teachErrors(input, explain, t), ...v.errors] };
 }
 
 /** Pencere çıkarımın göreceği BÖLGE çerçevesinde kurulur (iki belgeli fotoğrafta bölge koordinatı sayfanınki değil). */
@@ -262,40 +302,4 @@ function addPositionFallbacks(t: DocumentTemplate, ocr: OcrResult, valueRects: M
     const local = region ? { ...rect, y: rect.y - region.rect.y } : rect;
     f.strategies.push({ ...roiOf(frame, local), fallback: true });
   }
-}
-
-/** "Şablonu güncelle"de eski şablondan taşınabilecek yapılar (yeni öneride yoksa); ekranda kutu olarak sorulur. */
-export const UPDATE_KEEP_PARTS = ["tables", "sections"] as const;
-export type UpdateKeepPart = (typeof UPDATE_KEEP_PARTS)[number];
-
-/**
- * Güncelleme birleşimi (TEK kaynak; önizleme de kayıt da bunu kullanır): yeniden atanan alan ezilir, atanmamış eski alan korunur;
- * tablo/bölüm yeni öneride varsa onunki, yoksa yalnız `keep`te ise eskisi (yoksa kalkar). Metre kaynakları kalan alan/tabloya süzülür.
- */
-export function mergeTemplateForUpdate(old: DocumentTemplate, next: DocumentTemplate, keep: readonly UpdateKeepPart[]): DocumentTemplate {
-  const fields = [...next.fields, ...(old.fields ?? []).filter((f) => !next.fields.some((n) => n.key === f.key))];
-  const out: DocumentTemplate = { ...old, ...next, fields, identifiers: { ...old.identifiers, ...next.identifiers } };
-  delete out.tables;
-  delete out.sections;
-  delete out.meterSources;
-  const tables = next.tables ?? (keep.includes("tables") ? old.tables : undefined);
-  if (tables) out.tables = tables;
-  const sections = next.sections ?? (keep.includes("sections") ? old.sections : undefined);
-  if (sections) {
-    out.sections = { ...sections };
-    if (!tables) delete out.sections.table;
-  }
-  const hasField = (k: string) => fields.some((f) => f.key === k);
-  const hasTotals = !!tables?.some((t) => t.totals);
-  const ms: Record<string, string[]> = {};
-  for (const [k, v] of Object.entries({ ...(old.meterSources ?? {}), ...(next.meterSources ?? {}) })) {
-    const kept = (v ?? []).filter((s) => (s === TABLE_TOTAL_SOURCE ? hasTotals : hasField(s)));
-    if (kept.length) ms[k] = kept;
-  }
-  if (Object.keys(ms).length) out.meterSources = ms as MeterSourcesSpec;
-  const bc = [...(next.batchNoCandidates ?? []), ...(old.batchNoCandidates ?? [])].filter((c) => hasField(c.field));
-  const cands = bc.filter((c, i) => bc.findIndex((x) => x.field === c.field) === i);
-  if (cands.length) out.batchNoCandidates = cands;
-  else delete out.batchNoCandidates;
-  return out;
 }

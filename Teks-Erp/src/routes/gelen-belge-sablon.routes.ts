@@ -5,9 +5,10 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
 import { requirePermission } from "../middlewares/rbac.middleware";
-import { createUserTemplate, getUserTemplate, listUserTemplates, updateUserTemplate } from "../services/gelen-belge-ozel-sablon.service";
+import { createUserTemplate, editUserTemplate, getUserTemplate, listUserTemplates, updateUserTemplate } from "../services/gelen-belge-ozel-sablon.service";
+import { previewUserTemplateReset, resetUserTemplates } from "../services/gelen-belge-sablon-sifirla.service";
 import { getScanWords, suggestFromScan } from "../services/gelen-belge-tanitma.service";
-import { ASSIGNABLE_FIELD_KEYS, MAX_TEMPLATE_IDENTIFIERS, UPDATE_KEEP_PARTS } from "../lib/gelen-belge/motor";
+import { ASSIGNABLE_FIELD_KEYS, MAX_TEMPLATE_IDENTIFIERS, MULTI_PARTY_RULES, UPDATE_KEEP_PARTS, type MultiPartyRule } from "../lib/gelen-belge/motor";
 
 const router = Router();
 
@@ -26,8 +27,31 @@ const Name = z.string().trim().min(2, "Şablon adı en az 2 karakter").max(80, "
 const TemplateJson = z.record(z.string(), z.unknown());
 const Rect = z.strictObject({ x: z.number().finite(), y: z.number().finite(), width: z.number().finite().positive(), height: z.number().finite().positive() });
 
+// Alan anahtarı: atanabilir katalog + şablonda bulunabilecek eski anahtarlar (bilinmeyen anahtar serviste 400 olur).
+const FieldKey = z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,31}$/, "Geçersiz alan anahtarı");
+const Rules = z.strictObject({ multiParty: z.enum(MULTI_PARTY_RULES as [MultiPartyRule, ...MultiPartyRule[]]).nullable().optional() });
+
 const CreateBody = z.strictObject({ name: Name, template: TemplateJson, clientToken: Id.optional() });
 const UpdateBody = z.strictObject({ expectedVersion: z.number().int().min(1).max(32000), template: TemplateJson, name: Name.optional() });
+const Identifier = z.string().trim().min(2).max(60);
+const EditBody = z.strictObject({
+  expectedVersion: z.number().int().min(1).max(32000),
+  name: Name.optional(),
+  identifiers: z.array(Identifier).min(1, "En az bir kimlik yazısı kalmalı").max(MAX_TEMPLATE_IDENTIFIERS, `En çok ${MAX_TEMPLATE_IDENTIFIERS} kimlik yazısı seçilebilir`).optional(),
+  dropFields: z.array(FieldKey).min(1).max(60).optional(),
+  // `multiParty: null` kuralı kaldırır (fabrika ayarına döner).
+  rules: z.strictObject({ multiParty: z.enum(MULTI_PARTY_RULES as [MultiPartyRule, ...MultiPartyRule[]]).nullable() }).optional(),
+  // "Barkoddan al" işaretli alanların tam listesi; [] hepsini kaldırır, verilmezse dokunulmaz.
+  barcodeFields: z.array(FieldKey).max(60).optional(),
+});
+const ResetPreviewQuery = z.strictObject({
+  codes: z.string().trim().min(1, "En az bir kod verin").transform((v) => v.split(",").map((c) => c.trim()).filter(Boolean))
+    .pipe(z.array(UserCode).min(1, "En az bir kod verin").max(100, "En çok 100 kod")),
+});
+const ResetBody = z.strictObject({
+  items: z.array(z.strictObject({ code: UserCode, expectedVersion: z.number().int().min(1).max(32000) })).min(1, "En az bir belge tipi seçin").max(100, "En çok 100 belge tipi")
+    .refine((xs) => new Set(xs.map((x) => x.code)).size === xs.length, "Aynı belge tipi iki kez seçilmiş"),
+});
 const SuggestBody = z.strictObject({
   scanId: Id,
   name: Name,
@@ -36,7 +60,7 @@ const SuggestBody = z.strictObject({
     rect: Rect,
     section: z.boolean().optional(),
   })).max(30),
-  identifiers: z.array(z.string().trim().min(2).max(60)).min(1, "En az bir kimlik yazısı seçin")
+  identifiers: z.array(Identifier).min(1, "En az bir kimlik yazısı seçin")
     .max(MAX_TEMPLATE_IDENTIFIERS, `En çok ${MAX_TEMPLATE_IDENTIFIERS} kimlik yazısı seçilebilir`),
   table: z.strictObject({
     columns: z.array(z.strictObject({ key: z.enum(["topNo", "kg", "m", "en"]), header: z.string().trim().min(1).max(40) })).min(1).max(8),
@@ -44,7 +68,14 @@ const SuggestBody = z.strictObject({
   }).optional(),
   sectionStartLabel: z.string().trim().max(40).nullable().optional(),
   // Güncelle kipi: önizleme bu kullanıcı şablonuyla birleşik koşar; `keep` = yeni öneride yoksa eskisinden taşınacak yapılar.
-  base: z.strictObject({ code: UserCode, keep: z.array(z.enum(UPDATE_KEEP_PARTS)).max(UPDATE_KEEP_PARTS.length) }).optional(),
+  // `drop`: eski tanımdan gelip bu sefer kaldırılan alanlar (2026-11-09); eski istemci göndermez → bugünkü davranış (korunur).
+  base: z.strictObject({
+    code: UserCode,
+    keep: z.array(z.enum(UPDATE_KEEP_PARTS)).max(UPDATE_KEEP_PARTS.length),
+    drop: z.array(FieldKey).max(ASSIGNABLE_FIELD_KEYS.length).optional(),
+  }).optional(),
+  // ③ Kurallar: yoksa fabrika ayarı (yeni tipte alan yazılmaz; güncellemede eski kural korunur, `null` kaldırır).
+  rules: Rules.optional(),
 // Güncellemede atanmayan eski alan aynen korunur → yeni atama şart değil; yeni tipte en az bir alan şart.
 }).refine((b) => b.assignments.length > 0 || !!b.base, { path: ["assignments"], message: "En az bir alan atayın" });
 
@@ -66,6 +97,36 @@ const SuggestBody = z.strictObject({
  *       201: { description: "UserTemplateView" }
  *       400: { description: "USER_TEMPLATE_INVALID · USER_TEMPLATE_TOO_LARGE · doğrulama" }
  *       409: { description: "USER_TEMPLATE_CODE_TAKEN · CLIENT_TOKEN_COLLISION" }
+ * /api/gelen-belge/sablonlar/ozel/sifirla-onizleme:
+ *   get:
+ *     tags: [Gelen belge]
+ *     summary: Belge tipi sıfırla ÖNİZLEMESİ (yazmaz) — şablon başına sürüm, okuma sayısı, belge durumları, açık taslaklar (≤50 + toplam), bağlı gönderen
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: codes, required: true, schema: { type: string }, description: "virgülle ayrılmış u-… kodları (1-100)" }
+ *     responses:
+ *       200: { description: "{ items: [{ code, name, version, isActive, hitCount, lastReadAt, notesByStatus, drafts[{ id, documentNo, senderDocNo, createdAt }], draftsTotal, sender }], failed: [{ code, reason: NOT_FOUND, message }] }" }
+ *       400: { description: "doğrulama (geçersiz kod)" }
+ * /api/gelen-belge/sablonlar/ozel/sifirla:
+ *   post:
+ *     tags: [Gelen belge]
+ *     summary: Belge tiplerini sıfırla = pasife al ("bu tipi unut"); kayıt başına atomik (code + expectedVersion + aktif), audit'li; eski belgeler değişmez; geri al PATCH /sablonlar/{code} isActive true
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ done: [{ code, version }], failed: [{ code, reason: NOT_FOUND | ALREADY_INACTIVE | VERSION_CHANGED, message }] }" }
+ *       400: { description: "doğrulama (1-100 kayıt, tekil kod)" }
+ * /api/gelen-belge/sablonlar/ozel/{code}/tanim:
+ *   patch:
+ *     tags: [Gelen belge]
+ *     summary: Belge tipini fotoğrafsız düzenle — ad, kimlik yazıları, alan kaldır, kurallar, barkoddan alınan alanlar `barcodeFields` (birleşim sunucuda; sürüm+1; kod değişmez)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: code, required: true, schema: { type: string } }
+ *     responses:
+ *       200: { description: "UserTemplateView + changes + warnings[] (değişiklik yoksa sürüm artmaz)" }
+ *       400: { description: "USER_TEMPLATE_EDIT_INVALID (boş kimlik, olmayan alan) · USER_TEMPLATE_INVALID · doğrulama" }
+ *       404: { description: "USER_TEMPLATE_NOT_FOUND" }
+ *       409: { description: "USER_TEMPLATE_VERSION_CHANGED · USER_TEMPLATE_INACTIVE (sıfırlanmış tip)" }
  * /api/gelen-belge/sablonlar/ozel/{code}:
  *   get:
  *     tags: [Gelen belge]
@@ -110,6 +171,12 @@ const SuggestBody = z.strictObject({
  */
 router.get("/sablonlar/ozel", requirePermission("gelen-belge:template"), wrap(async () => ({ status: 200, data: await listUserTemplates() })));
 router.post("/sablonlar/ozel", requirePermission("gelen-belge:template"), wrap(async (req) => ({ status: 201, data: await createUserTemplate(CreateBody.parse(req.body), req.user!.userId) })));
+// Sabit yollar `/:code`dan ÖNCE (yoksa "sifirla-onizleme" kod sanılırdı).
+router.get("/sablonlar/ozel/sifirla-onizleme", requirePermission("gelen-belge:template"), wrap(async (req) => ({ status: 200, data: await previewUserTemplateReset(ResetPreviewQuery.parse(req.query).codes) })));
+router.post("/sablonlar/ozel/sifirla", requirePermission("gelen-belge:template"), wrap(async (req) => ({ status: 200, data: await resetUserTemplates(ResetBody.parse(req.body).items, req.user!.userId) })));
+router.patch("/sablonlar/ozel/:code/tanim", requirePermission("gelen-belge:template"), wrap(async (req) => ({
+  status: 200, data: await editUserTemplate(UserCode.parse(req.params.code), EditBody.parse(req.body), req.user!.userId),
+})));
 router.get("/sablonlar/ozel/:code", requirePermission("gelen-belge:template"), wrap(async (req) => ({ status: 200, data: await getUserTemplate(UserCode.parse(req.params.code)) })));
 router.put("/sablonlar/ozel/:code", requirePermission("gelen-belge:template"), wrap(async (req) => ({
   status: 200, data: await updateUserTemplate(UserCode.parse(req.params.code), UpdateBody.parse(req.body), req.user!.userId),

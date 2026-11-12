@@ -1,15 +1,17 @@
 // Canlı okuma (L3) ekran durumu. Kare gelir → (ritim izin verirse) sunucuya TEK istek → yanıt oylamaya. Açılış/kapanış
 // nesil sayacını artırır: geç gelen yanıt/çekim atılır. Tüm form alanları kilitli + kamera sabit + net → "Kıpırdatmayın"
-// halkası → bir kez çekim (`useLiveCapture`). "Şimdi çek" aynı çekimi elle başlatır.
+// halkası → bir kez çekim (`useLiveCapture`) — yalnız çekim ayarı "Otomatik"se. "Çek ve bitir" aynı çekimi elle başlatır.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { liveReadService } from '../../../../services/liveRead.service';
 import type { LiveCameraError, LiveStability, LiveTextFrame } from '../../../../services/liveCamera';
 import type { ClientOcr } from '../../../../services/deviceOcr';
 import type { ScanPage } from '../docScan';
 import { liveFormLocked } from './liveLocks';
+import { LIVE_VOTE_MIN_SHARPNESS } from './liveTuning';
 import { IDLE_RHYTHM, canSend, markSent, markSettled, readyToCapture, stepHold, type HoldState } from './liveRhythm';
 import { EMPTY_VOTE, applyLiveReading, editLiveField, unlockLiveField, type LiveVoteState } from './liveVote';
 import { useLiveCapture } from './useLiveCapture';
+import { useDeviceSettingsStore } from '../../../../store/deviceSettingsStore';
 
 interface Options {
   visible: boolean;
@@ -23,7 +25,11 @@ export function useLiveRead({ visible, onDone }: Options) {
   /** null = halka yok; 0–1 = "Kıpırdatmayın" halkası ilerlemesi. */
   const [holdProgress, setHoldProgress] = useState<number | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const captureMode = useDeviceSettingsStore((s) => s.docDeskCaptureMode);
+  const captureModeRef = useRef(captureMode);
+  captureModeRef.current = captureMode;
   const rhythm = useRef(IDLE_RHYTHM);
+  const sharpness = useRef<number | null>(null);
   const hold = useRef<HoldState>({ since: null });
   const gen = useRef(0);
   const resetHold = useCallback(() => {
@@ -41,7 +47,7 @@ export function useLiveRead({ visible, onDone }: Options) {
   // Her açılış/kapanış yeni nesil: önceki oturumun uçuştaki yanıtı ve çekimi sonuç üretmez.
   useEffect(() => {
     gen.current++;
-    rhythm.current = IDLE_RHYTHM;
+    [rhythm.current, sharpness.current] = [IDLE_RHYTHM, null];
     voteRef.current = EMPTY_VOTE;
     setVote(EMPTY_VOTE);
     setOcr(null);
@@ -58,10 +64,11 @@ export function useLiveRead({ visible, onDone }: Options) {
       if (capturingRef.current || !canSend(rhythm.current, now)) return;
       rhythm.current = markSent(rhythm.current, now);
       const g = gen.current;
+      const counts = sharpness.current === null || sharpness.current >= LIVE_VOTE_MIN_SHARPNESS; // bulanık kare oy değil
       liveReadService
         .readFrame(frame.ocr)
         .then((r) => {
-          if (g === gen.current && r) updateVote((s) => applyLiveReading(s, r));
+          if (g === gen.current && r) updateVote((s) => applyLiveReading(s, r, { counts }));
         })
         .catch(() => undefined) // ağ hatası: bir sonraki kare yeniden dener
         .finally(() => {
@@ -73,8 +80,9 @@ export function useLiveRead({ visible, onDone }: Options) {
 
   const onStability = useCallback(
     (s: LiveStability) => {
+      sharpness.current = s.sharpness;
       if (capturingRef.current) return;
-      const step = stepHold(hold.current, readyToCapture(liveFormLocked(voteRef.current.fields), s), Date.now());
+      const step = stepHold(hold.current, readyToCapture(captureModeRef.current, liveFormLocked(voteRef.current.fields), s), Date.now());
       hold.current = step.hold;
       setHoldProgress(step.hold.since === null ? null : step.progress);
       if (step.fire) void capture();

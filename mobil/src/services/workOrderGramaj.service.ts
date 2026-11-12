@@ -1,4 +1,4 @@
-// Tablet İE Düzelt → "Gramajı Değiştir" uçları (`workOrder.service.ts` satır tavanında olduğu için ayrı dosya).
+// Tablet İE Düzelt → "Gramajı Değiştir" + "Hedef değeri değiştir" + "Kat Tipini Değiştir" uçları (`workOrder.service.ts` satır tavanında olduğu için ayrı dosya).
 import { apiClient } from './api';
 import type { ApiResponse } from '../types/api';
 
@@ -21,4 +21,28 @@ export const workOrderGramajService = {
     apiClient
       .put<{ warnings?: string[] }>(`/work-orders/${id}/target-values`, { items: [{ propertyId: data.propertyId, valueId: data.valueId }], reason: data.reason })
       .then((r) => ({ warnings: r.data.warnings ?? [] })),
+
+  /**
+   * Hedef değeri değiştir (kurşun dışı çeşit değeri) — `correction: true` panel izinli kullanıcıda da tablet kurallarını
+   * açar: sebep zorunlu, değerin adımı başladıysa sunucu 409 `TARGET_VALUE_STEP_STARTED`.
+   */
+  changeTargetValue: (id: string, data: { propertyId: string; valueId: string; reason: string; reasonCode?: string | null }): Promise<{ warnings: string[] }> =>
+    apiClient
+      .put<{ warnings?: string[] }>(`/work-orders/${id}/target-values`, {
+        items: [{ propertyId: data.propertyId, valueId: data.valueId }],
+        reason: data.reason,
+        ...(data.reasonCode ? { reasonCode: data.reasonCode } : {}),
+        correction: true,
+      })
+      .then((r) => ({ warnings: r.data.warnings ?? [] })),
+
+  /** Kat Tipini Değiştir — sebep zorunlu; Tambur başladıysa sunucu 409 (kat kilitli). */
+  changeFoldType: (id: string, data: { foldType: string | null; reason: string; reasonCode?: string | null }): Promise<void> =>
+    apiClient
+      .patch(`/work-orders/${id}/fold-type`, {
+        foldType: data.foldType,
+        reason: data.reason,
+        ...(data.reasonCode ? { reasonCode: data.reasonCode } : {}),
+      })
+      .then(() => undefined),
 };

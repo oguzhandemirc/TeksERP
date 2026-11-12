@@ -11,6 +11,7 @@ export { goodsReceiptContract } from "./goods-receipt"; // GOODS_RECEIPT
 export { inspectionReportContract } from "./inspection-report"; // INSPECTION_REPORT
 export { invoiceInternalContract } from "./invoice-internal"; // INVOICE_INTERNAL
 export { kartelaDispatchContract } from "./kartela-dispatch"; // KARTELA_DISPATCH
+export { orderConfirmationContract } from "./order-confirmation"; // ORDER_CONFIRMATION
 export { paymentReceiptContract } from "./payment-receipt"; // PAYMENT_RECEIPT
 export { priceListContract } from "./price-list"; // PRICE_LIST
 export { qualityCertificateContract } from "./quality-certificate"; // QUALITY_CERTIFICATE

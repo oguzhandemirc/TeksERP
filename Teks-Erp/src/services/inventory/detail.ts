@@ -11,6 +11,7 @@ import { ACTIVE_ROLL_PROPERTY } from "../helpers/property-revoke.helper";
 import { ACTIVE_MOVEMENT } from "../helpers/roll-movement.helper";
 import prisma from "../../lib/prisma";
 import { loadActiveCustomerCodes } from "../helpers/roll-customer-code-read.helper";
+import { resolveDeliveryNoteLinesForRolls } from "../helpers/roll-delivery-note-line.helper";
 import { ambiguousCustomerCodeError, matchExtras, resolveRollByScanCode } from "../helpers/roll-scan-resolve.helper";
 import { ApiResponse } from "../../types/api.types";
 import {
@@ -65,6 +66,14 @@ export async function findRollById(this: InventoryServiceThis, id: string): Prom
         // Detay paneli listeyle AYNI şekli döner (ROLL_LIST_INCLUDE emsali).
         warehouse: { select: { id: true, code: true, name: true } },
         goodsReceipt: { select: { id: true, receiptNo: true, deliveryNoteNo: true } },
+        // TOP KARTI (2026-11-10): sahiplik (emanet) ≠ etiket müşterisi; köken (ata top) ve parti/iş emri — to-one, N+1 yok.
+        ownerCustomer: ROLL_LIST_INCLUDE.ownerCustomer,
+        labelCustomer: { select: { id: true, name: true } },
+        labelConsignee: { select: { id: true, name: true } },
+        // Etiket düzenlemesi (2026-11-10): kartta "bir seferlik şablon" adı.
+        labelTemplate: { select: { id: true, name: true } },
+        parent: { select: { id: true, barcode: true, initialQty: true, currentQty: true } },
+        batch: { select: { id: true, batchNumber: true, workOrder: { select: { id: true, workOrderNumber: true } } } },
         // TOPUN BULUNDUĞU ADIM/İSTASYON — liste include'uyla AYNI şekil.
         // İkisi ayrışırsa panel ile satır aynı top için farklı şey söyler.
         currentStep: {
@@ -169,9 +178,14 @@ export async function findRollById(this: InventoryServiceThis, id: string): Prom
     const cancelDiag = await this.buildCancelDiagnostics(roll);
     // Panel künyesinde aktif müşteri kodu (D4-F2) — etiket/çeki ile AYNI okuyucu; kodsuz top → null.
     const customerCode = (await loadActiveCustomerCodes([roll.id])).get(roll.id) ?? null;
+    // "Nereden geldi": en yakın atanın gelen belge satırı (tek çözücü); `inherited` = satır atada.
+    const dnl = (await resolveDeliveryNoteLinesForRolls([roll.id])).get(roll.id);
+    const deliveryNote = dnl
+      ? { noteId: dnl.noteId, noteNo: dnl.noteNo, senderDocNo: dnl.senderDocNo, customerBatchNo: dnl.customerBatchNo?.trim() || null, senderRollNo: dnl.senderRollNo, inherited: dnl.sourceRollId !== roll.id }
+      : null;
     return {
       success: true,
-      data: { ...roll, manualReason, customerCode, ...(cancelDiag ?? {}) } as unknown as Roll,
+      data: { ...roll, manualReason, customerCode, deliveryNote, customerBatchNo: deliveryNote?.customerBatchNo ?? null, ...(cancelDiag ?? {}) } as unknown as Roll,
     };
   }
 

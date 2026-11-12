@@ -3,15 +3,15 @@
 import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Button, Chip, Text } from 'react-native-paper';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import ModuleSheet from '../../../../components/ModuleSheet';
 import NumpadInput from '../../../../components/NumpadInput';
-import { ChoiceChips } from '../../../../components/form/ChoiceChips';
-import { SectionBand } from '../../../../components/form/SectionBand';
-import { DOC_HIGHLIGHT_BG } from '../../../../components/DocHighlight';
-import { colors, radius, spacing, typography } from '../../../../theme';
+import { defaultChoiceText } from '../../../../components/form/defaultChoice';
+import { colors, spacing, typography } from '../../../../theme';
 import { meterChoices, parseMeters } from '../approvalGate';
 import type { DocRow, WoRowsState } from './useWoRows';
+import { ChoiceRow } from '../../../../components/form/ChoiceRow';
+import { DeclaredField, declaredLayout } from './DeclaredField';
+import { NoticeStrip } from '../../../../components/form/NoticeStrip';
 
 interface MeterProps {
   row: DocRow;
@@ -21,7 +21,7 @@ interface MeterProps {
   onEdit: () => void;
 }
 
-/** Salt okunur "Gelen metre" kutusu: belgeden geldiyse sarı + belge ikonu, doğrulama bekliyorsa amber kenar, yoksa kırmızı. */
+/** "Gelen metre" beyan kutusu: belgeden geldiyse sarı, doğrulama bekliyorsa amber kenar + "Doğru", yoksa kırmızı; dokununca düzeltme. */
 export function MeterField({ row, wo, meterText, locked, onEdit }: MeterProps) {
   const f = row.form!;
   // Okunan metre elle düzeltilmediyse sarı vurgu (belgeden geldi).
@@ -30,33 +30,15 @@ export function MeterField({ row, wo, meterText, locked, onEdit }: MeterProps) {
   const value = meterText?.replace(/ m$/, '') ?? null;
   return (
     <View style={styles.wrap} testID={`belge-satir-metre-${row.noteNo}`}>
-      <View style={styles.row}>
-        <View
-          testID={fromDoc ? `belgeden-metre-${row.noteNo}` : undefined}
-          style={[styles.box, fromDoc && styles.boxDoc, f.metersReview && styles.boxReview, !value && styles.boxMissing]}
-        >
-          <View style={styles.boxHead}>
-            <Text style={styles.boxLabel}>Gelen metre</Text>
-            {fromDoc ? <MaterialCommunityIcons name="file-document-check-outline" size={16} color={colors.textSecondary} /> : null}
-          </View>
-          {value ? (
-            <Text style={styles.value}>
-              {value}
-              <Text style={styles.unit}> m</Text>
-            </Text>
-          ) : (
-            <Text style={styles.missing}>Metre yok</Text>
-          )}
-        </View>
+      <View style={declaredLayout.row}>
+        <DeclaredField label="Gelen metre" value={value} unit="m" fromDoc={fromDoc} review={f.metersReview} missing={!value} emptyText="Yok — dokunun"
+          onPress={onEdit} disabled={locked} testID={`belge-satir-metre-kutu-${row.noteNo}`} />
         {f.metersReview && (
           <Button mode="contained-tonal" icon="check" onPress={() => wo.updateForm(row.noteId, { metersReview: false })} disabled={locked}
             buttonColor={colors.warningContainer} textColor={colors.warningText} contentStyle={styles.btn} testID={`belge-satir-dogrula-${row.noteNo}`}>
             Doğru
           </Button>
         )}
-        <Button mode="outlined" icon="pencil" onPress={onEdit} disabled={locked} contentStyle={styles.btn} testID={`belge-satir-duzelt-${row.noteNo}`}>
-          {meterText ? 'Düzelt' : 'Metre gir'}
-        </Button>
       </View>
       {f.metersReview && <Text style={styles.help}>Metreyi belgeyle karşılaştırın.</Text>}
     </View>
@@ -68,24 +50,33 @@ export function GramajField({ row, wo, locked }: { row: DocRow; wo: WoRowsState;
   const f = row.form!;
   if (!wo.showGramaj || wo.catalog.options.length === 0) return null;
   const no = row.noteNo;
-  const chosen = wo.catalog.options.find((o) => o.id === f.gramajValueId);
   return (
-    <>
-      <SectionBand
-        title="Kurşun gramajı"
-        icon="weight-gram"
-        tone={chosen ? 'ok' : 'idle'}
-        status={chosen ? { icon: 'check', text: chosen.name } : null}
-        testID={`belge-serit-gramaj-${no}`}
-      />
-      <ChoiceChips
-        options={wo.catalog.options.map((o) => ({ value: o.id, label: o.isDefault ? `${o.name} ★` : o.name, a11y: o.isDefault ? `${o.name}, varsayılan` : o.name, testID: `belge-satir-gramaj-${no}-${o.name}` }))}
+    <ChoiceRow
+        label="Gramaj"
+        rowTestID={`belge-serit-gramaj-${no}`}
+        options={wo.catalog.options.map((o) => ({ value: o.id, ...defaultChoiceText(o.name, o.isDefault), testID: `belge-satir-gramaj-${no}-${o.name}` }))}
         value={f.gramajValueId ?? null}
         onChange={(v) => wo.updateForm(row.noteId, { gramajValueId: v === f.gramajValueId ? null : v })}
         disabled={locked}
         testID={`belge-satir-gramaj-${no}`}
       />
-    </>
+  );
+}
+
+/** Kat tipi — gramajın altında aynı satır biçimiyle (tambur adımının üretim bilgisi; kurşun gramajı gibi baştan sorulur). */
+export function FoldField(p: { values: readonly { code: string; name: string; isDefault?: boolean }[]; value: string | null; locked: boolean; onChange: (code: string) => void }) {
+  // Kat kataloğu boş (özellik pasif): seçilecek değer yok, kayıt engellenmez — yalnız bilgi.
+  if (p.values.length === 0) return <NoticeStrip tone="warn" text="Kat değeri tanımlı değil (seçmeden de kaydedilir) — panelden Kumaş Özellikleri → KAT ekleyin." testID="ie-form-kat-bos" />;
+  return (
+    <ChoiceRow
+        label="Kat tipi"
+        rowTestID="ie-form-kat-satir"
+        options={p.values.map((f) => ({ value: f.code, ...defaultChoiceText(f.name, f.isDefault), testID: `ie-form-kat-${f.code}` }))}
+        value={p.value}
+        onChange={(v) => v && p.onChange(v)}
+        disabled={p.locked}
+        testID="ie-form-kat"
+      />
   );
 }
 
@@ -103,7 +94,7 @@ export function MeterSheet({ choices, current, onDismiss, onSave }: SheetProps) 
     <ModuleSheet
       visible
       onDismiss={onDismiss}
-      title="Kurşun metresi"
+      title="Gelen metre"
       subtitle={current ? `Okunan: ${current}` : 'Belgeden okunamadı'}
       size="sm"
       footer={
@@ -130,27 +121,7 @@ export function MeterSheet({ choices, current, onDismiss, onSave }: SheetProps) 
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: spacing.xs },
-  row: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
-  box: {
-    minWidth: 180,
-    minHeight: 64,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.md,
-    borderWidth: 1.5,
-    borderColor: colors.borderStrong,
-    backgroundColor: colors.surface,
-    justifyContent: 'center',
-  },
-  boxDoc: { backgroundColor: DOC_HIGHLIGHT_BG },
-  boxReview: { borderWidth: 2, borderColor: colors.warning },
-  boxMissing: { borderWidth: 2, borderColor: colors.danger, backgroundColor: colors.dangerContainer },
-  boxHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  boxLabel: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
-  value: { fontSize: 24, fontWeight: '700', color: colors.text },
-  unit: { fontSize: 16, fontWeight: '600', color: colors.textSecondary },
-  missing: { fontSize: typography.size.lg, fontWeight: typography.weight.bold, color: colors.dangerText },
+  wrap: { gap: spacing.xs, flexGrow: 1, flexBasis: 150, minWidth: 150 },
   help: { fontSize: typography.size.sm, color: colors.warningText },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: { minHeight: 56, justifyContent: 'center' },

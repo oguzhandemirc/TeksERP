@@ -1,15 +1,13 @@
-// Liste görünümü SATIRI — istasyon hücreleri + makine hücreleri (her biri 80 satır tavanının altında).
-import { Plus } from "lucide-react";
+// Liste görünümü SATIRI — bir satır = bir İSTASYON; tıklama/Enter sağdaki istasyon panelini açar.
+import { ChevronRight, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { toneFor } from "@/lib/station-colors";
-import { stationKindLabel, stationTypeLabels } from "@/types/enums";
-import { peripheralKindLabels } from "@/pages/PeripheralDevices/types";
+import { stationTypeLabels } from "@/types/enums";
 import type { Station } from "./types";
-import type { StationMachineRow } from "./stationMachineRows";
-import { MachineRowActions, type MachineActionHandlers } from "./MachineRowActions";
+import type { StationListItem, StationKursunInfo } from "./stationListItems";
+import { plainStationKindLabel } from "./stationPlainLabels";
 
 /** Yetenek rozetleri — dışa aktarımdaki Evet/Hayır sütunlarının satır içi karşılığı. */
 export function capabilityChips(s: Station): string[] {
@@ -17,6 +15,7 @@ export function capabilityChips(s: Station): string[] {
   if (s.appliesColor) out.push("Renk");
   if (s.appliesProperty) out.push("Özellik");
   if (s.inspectionEnabled) out.push("Muayene");
+  if (s.machineStopEnabled === false) out.push("Duruş bildirimi kapalı");
   if (s.appliesQuality) out.push("Kart akışı");
   if (s.producesWarpBeam) out.push("Levent sarar");
   if (s.consumesWarpBeam) out.push("Levent tüketir");
@@ -26,96 +25,100 @@ export function capabilityChips(s: Station): string[] {
   return out;
 }
 
-const LINK_BTN = "text-left font-medium hover:underline disabled:cursor-default disabled:no-underline";
+/** Belirgin kurşun rozeti + varsayılan gramaj (★). Kurşun kapalıysa hiçbir şey çizmez. */
+export function KursunBadge({ kursun, className }: { kursun: StationKursunInfo | null; className?: string }) {
+  if (!kursun?.enabled) return null;
+  return (
+    <Badge
+      data-testid="kursun-badge"
+      className={cn("gap-1 border-amber-300 bg-amber-100 font-semibold text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200", className)}
+      title={kursun.defaultGramaj ? `Kurşun uygular · varsayılan gramaj ${kursun.defaultGramaj}` : "Kurşun uygular · varsayılan gramaj seçilmedi"}
+    >
+      Kurşun
+      {kursun.defaultGramaj && (
+        <span className="inline-flex items-center gap-0.5 font-medium">
+          <Star className="h-3 w-3 fill-current" />
+          {kursun.defaultGramaj}
+        </span>
+      )}
+    </Badge>
+  );
+}
 
-function StationCells({ s, canWrite, onEditStation }: { s: Station; canWrite: boolean; onEditStation: (s: Station) => void }) {
+export function StationStatusBadge({ active }: { active: boolean }) {
+  return (
+    <Badge variant={active ? "secondary" : "muted"} className="gap-1.5">
+      <span className={cn("h-1.5 w-1.5 rounded-full", active ? "bg-emerald-500" : "bg-muted-foreground/50")} />
+      {active ? "Aktif" : "Pasif"}
+    </Badge>
+  );
+}
+
+interface Props {
+  item: StationListItem;
+  selected: boolean;
+  showType: boolean;
+  onSelect: (s: Station) => void;
+}
+
+export function StationListRow({ item, selected, showType, onSelect }: Props) {
+  const s = item.station;
   const tone = toneFor(s.type, s.kind);
   const chips = capabilityChips(s);
+  const inactiveMachines = item.machines.filter((m) => m.isActive === false).length;
   return (
-    <>
-      <TableCell className="py-1.5">
+    <TableRow
+      data-testid="station-row"
+      data-state={selected ? "selected" : undefined}
+      aria-selected={selected}
+      tabIndex={0}
+      onClick={() => onSelect(s)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect(s);
+        }
+      }}
+      className={cn(
+        "cursor-pointer focus-visible:bg-muted/60 focus-visible:outline-none data-[state=selected]:bg-primary/10",
+        !s.isActive && "text-muted-foreground",
+      )}
+    >
+      <TableCell className={cn("border-l-2 py-2", selected ? "border-l-primary" : "border-l-transparent")}>
         <div className="flex items-center gap-2">
           <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", tone.solid)} />
-          <button type="button" disabled={!canWrite} className={LINK_BTN} onClick={() => canWrite && onEditStation(s)} title={canWrite ? "İstasyonu düzenle" : undefined}>
-            {s.name}
-          </button>
-          {s.code && <span className="shrink-0 font-mono text-xs text-muted-foreground">{s.code}</span>}
-          {!s.isActive && (
-            <Badge variant="outline" className="shrink-0">
-              pasif
-            </Badge>
-          )}
+          <div className="min-w-0">
+            <div className="flex items-baseline gap-2">
+              <span className="truncate font-medium">{s.name}</span>
+              {s.code && <span className="shrink-0 font-mono text-xs text-muted-foreground">{s.code}</span>}
+            </div>
+            <div className="text-xs text-muted-foreground">{plainStationKindLabel(s.kind)}</div>
+          </div>
         </div>
       </TableCell>
-      <TableCell className="py-1.5">
-        <Badge className={cn("border-transparent font-medium", tone.bgSoft, tone.text)}>{stationKindLabel(s.kind)}</Badge>
-      </TableCell>
-      <TableCell className="py-1.5 text-xs">{stationTypeLabels[s.type]}</TableCell>
-      <TableCell className="py-1.5 text-xs">{s.department ?? "—"}</TableCell>
-      <TableCell className="py-1.5">
-        <div className="flex flex-wrap gap-1">
-          {chips.length === 0 && <span className="text-xs text-muted-foreground">—</span>}
+      <TableCell className="py-2 text-sm">{s.defaultCategory?.name ?? <span className="text-muted-foreground">—</span>}</TableCell>
+      <TableCell className="py-2">
+        <div className="flex flex-wrap items-center gap-1">
+          <KursunBadge kursun={item.kursun} />
           {chips.map((c) => (
             <Badge key={c} variant="muted" className="text-[10px]">
               {c}
             </Badge>
           ))}
+          {chips.length === 0 && !item.kursun?.enabled && <span className="text-xs text-muted-foreground">—</span>}
         </div>
       </TableCell>
-    </>
-  );
-}
-
-function MachineCells({ r, canWrite, onAddMachine, h }: { r: StationMachineRow; canWrite: boolean; onAddMachine: (stationId: string) => void; h: MachineActionHandlers }) {
-  const m = r.machine;
-  if (!m) {
-    return (
-      <>
-        <TableCell className="py-1.5"><span className="text-muted-foreground">—</span></TableCell>
-        <TableCell className="py-1.5"><span className="text-xs text-muted-foreground">Makine yok</span></TableCell>
-        <TableCell className="py-1.5" />
-        <TableCell className="py-1.5">
-          {canWrite && (
-            <div className="flex justify-end">
-              <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs" onClick={() => onAddMachine(r.station.id)}>
-                <Plus className="h-3.5 w-3.5" /> Makine
-              </Button>
-            </div>
-          )}
-        </TableCell>
-      </>
-    );
-  }
-  const active = m.isActive !== false;
-  return (
-    <>
-      <TableCell className="py-1.5">
-        <button type="button" disabled={!canWrite} className={LINK_BTN} onClick={() => canWrite && h.onEdit(m)} title={canWrite ? "Makineyi düzenle" : undefined}>
-          {m.name}
-        </button>
+      {showType && <TableCell className="py-2 text-xs">{stationTypeLabels[s.type]}</TableCell>}
+      <TableCell className="py-2 text-right tabular-nums" title={inactiveMachines > 0 ? `${inactiveMachines} pasif makine dahil` : undefined}>
+        {item.machines.length > 0 ? item.machines.length : <span className="text-muted-foreground">0</span>}
+        {inactiveMachines > 0 && <span className="ml-1 text-xs text-muted-foreground">({inactiveMachines} pasif)</span>}
       </TableCell>
-      <TableCell className="py-1.5">
-        <Badge variant={active ? "secondary" : "muted"} className="gap-1.5">
-          <span className={cn("h-1.5 w-1.5 rounded-full", active ? "bg-emerald-500" : "bg-muted-foreground/50")} />
-          {active ? "Aktif" : "Pasif"}
-        </Badge>
+      <TableCell className="py-2">
+        <StationStatusBadge active={s.isActive} />
       </TableCell>
-      <TableCell className="py-1.5 text-xs" title={r.devices.map((d) => `${d.name} (${peripheralKindLabels[d.kind]})`).join(", ")}>
-        {r.devices.length > 0 ? r.devices.map((d) => d.name).join(", ") : "—"}
+      <TableCell className="w-8 py-2 pr-3">
+        <ChevronRight className={cn("h-4 w-4 text-muted-foreground", selected && "text-primary")} />
       </TableCell>
-      <TableCell className="py-1.5">
-        <MachineRowActions m={m} canWrite={canWrite} h={h} stationKind={r.station.kind} />
-      </TableCell>
-    </>
-  );
-}
-
-export function StationListRow({ r, canWrite, onEditStation, onAddMachine, machine }: { r: StationMachineRow; canWrite: boolean; onEditStation: (s: Station) => void; onAddMachine: (stationId: string) => void; machine: MachineActionHandlers }) {
-  const active = r.machine ? r.machine.isActive !== false : r.station.isActive;
-  return (
-    <TableRow className={active ? undefined : "opacity-60"}>
-      <StationCells s={r.station} canWrite={canWrite} onEditStation={onEditStation} />
-      <MachineCells r={r} canWrite={canWrite} onAddMachine={onAddMachine} h={machine} />
     </TableRow>
   );
 }

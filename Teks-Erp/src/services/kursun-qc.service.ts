@@ -17,7 +17,7 @@
 import { stationWorkSearchWhere } from "./helpers/workorder-doc-search.helper";
 import { scanRoutedOpenCards, type ScanRoutedOpenCard } from "./helpers/scan-route-open-cards.helper";
 import { kursunOpenStepWhere, PENDING_BYPASS_WHERE, stationScreenStationWhere } from "./helpers/station-open-step.helper";
-import { ACTIVE_OPERATION, OWN_OPERATION, prepareWidthTracedStepOpTx, revokeWidthTracedStepOperationsTx } from "./helpers/roll-operation.helper";
+import { ACTIVE_OPERATION, OWN_OPERATION, prepareWidthTracedStepOpTx, revokeRollOperations, revokeWidthTracedStepOperationsTx } from "./helpers/roll-operation.helper";
 import { ACTIVE_MOVEMENT, reopenClosedMovementsTx, revokeRollMovements } from "./helpers/roll-movement.helper";
 import { readActiveTargetValues } from "./helpers/workorder-target-value.helper";
 import prisma from "../lib/prisma";
@@ -103,8 +103,11 @@ import { uyari } from "../lib/logger";
 import { assertRollsRevivable } from "./helpers/item-usage.helper";
 import { processMeterNumber, requireProcessMeter } from "./helpers/roll-error-meter.helper";
 import { recordRollDefectTx } from "./helpers/roll-defect.helper";
+import { beyondDeclaredDefectWarning, rollDeclaredMeters } from "./helpers/meter-compare.helper";
 import { ACTIONABLE_ROLL_ERROR_WHERE, isActionableRollError } from "./helpers/roll-error-scope.helper";
 import { TERIM } from "../constants/terim";
+import { kursunGoodsOwnerOf, type KursunGoodsOwner } from "./helpers/kursun-goods-owner.helper";
+import { ACTIVE_ORDER_LINK } from "./helpers/order-link.helper";
 
 /** Muayene satırı KK2/Tambur silme ucundan silinemez (belge parçası; düzeltme revizyondur). */
 const INSPECTION_ERROR_IMMUTABLE_MESSAGE = "Muayene hatası buradan silinemez; muayeneyi panelden düzeltin";
@@ -142,6 +145,8 @@ interface RollSummary {
   meter?: RollMeterBase;
   /// D4-KUC3b: ölçülen en sınırı — YALNIZ `capturesWidth` adımda (tablet isteği göndermeden uyarır; sınır yazım kapısıyla aynı hesap).
   widthLimit?: MeasuredWidthLimit;
+  /// GK 2026-11-11 "Malın sahibi": emanet sahibi ya da İE/sipariş müşterisi; bilinmiyorsa null. Eski APK yok sayar.
+  goodsOwner: KursunGoodsOwner | null;
 }
 
 interface PriorDefectSummary {
@@ -886,6 +891,7 @@ export class KursunQcService {
           defectTypeId: data.defectTypeId,
           userId,
           stationGate: "FLOW",
+          allowBeyondLength: true,
         }),
       );
     } catch (e) {
@@ -917,10 +923,14 @@ export class KursunQcService {
       },
     });
 
+    // Kural 4: beyanı aşan konum kayıt engeli değil — sarı uyarı; iz `meter-compare.helper` okumasında.
+    const declared = (await rollDeclaredMeters([data.rollId])).get(data.rollId);
+    const beyond = declared !== undefined && new Prisma.Decimal(data.startMeter).gt(declared);
     return {
       success: true,
       data: err,
       message: `${created.errorType} · ${data.startMeter}. metrede`,
+      ...(beyond ? { warnings: [beyondDeclaredDefectWarning(data.startMeter, Number(declared))] } : {}),
     };
   }
 
@@ -1288,6 +1298,73 @@ export class KursunQcService {
    * (IN_PRODUCTION) yapılır. İleri taşınmış veya status değişmişse hata döner —
    * admin müdahalesi gerekir.
    */
+  /**
+   * GK (2026-11-10): AÇIK adımda kontrolü tamamlanmış TEK topu yeniden açar (tablette hata eklemeden önce onaylı).
+   * QC2_COMPLETED satırı damgalanır (ölçülen en geri konur), bu adımdaki ÇIKIŞ okuması damgalanır (stok
+   * etkisi `reverseExitMeterStockTx` ile terslenir); KURSUN_APPLIED/RollProperty korunur (reopenStep paritesi).
+   * Kapalı adım için yol `reopenStep`tir. Aktif QC2 satırı yoksa 409 `KURSUN_ROLL_NOT_COMPLETED`.
+   */
+  async reopenRoll(
+    data: { rollId: string; stepId: string },
+    userId?: string
+  ): Promise<ApiResponse<{ qc2Revoked: number; meterReadingsRevoked: number; widthRestored: number }>> {
+    await this.assertRollInFlowStep(data.rollId, data.stepId);
+    const step = await prisma.workOrderStep.findUnique({
+      where: { id: data.stepId },
+      select: { workOrderId: true, status: true },
+    });
+    if (!step) throw AppError.notFound("Adım bulunamadı");
+    if (step.status === StepStatus.COMPLETED) {
+      throw AppError.badRequest("Adım kapalı — önce kartı okutup adımı yeniden açın");
+    }
+    const widthRestored = { count: 0 };
+    const out = await prisma.$transaction(async (tx) => {
+      // completeQc2/finishStep ile aynı iş emri kilidi; tablet kapısı tx İÇİNDE.
+      await touchWorkOrderTx(tx, step.workOrderId);
+      await assertKursunTabletMayWrite(tx, data.stepId, "Top yeniden açma");
+      // Atomik claim: aktif QC2 satırı yoksa (zaten açık / eşzamanlı açıldı) hiçbir şey değişmez.
+      const qc2Revoked = await revokeRollOperations(tx, {
+        rollIds: [data.rollId],
+        workOrderStepIds: [data.stepId],
+        operationTypes: [RollOperationType.QC2_COMPLETED],
+        reason: "KURSUN_ROLL_REOPEN",
+        userId: userId ?? null,
+        widthRestored,
+      });
+      if (qc2Revoked === 0) {
+        throw AppError.conflict("Bu topun kontrolü zaten açık", { code: "KURSUN_ROLL_NOT_COMPLETED" });
+      }
+      const meterReadingsRevoked = await revokeStepMeterReadingsTx(tx, {
+        rollIds: [data.rollId],
+        stepId: data.stepId,
+        userId: userId ?? null,
+        reason: "KURSUN_ROLL_REOPEN",
+        phase: MeterPhase.OUT,
+      });
+      return { qc2Revoked, meterReadingsRevoked };
+    });
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "ROLL",
+      recordId: data.rollId,
+      newData: {
+        status: "QC2_REOPENED",
+        rollId: data.rollId,
+        stepId: data.stepId,
+        ...(out.meterReadingsRevoked > 0 ? { meterReadingsRevoked: out.meterReadingsRevoked } : {}),
+        ...(widthRestored.count > 0 ? { widthRestored: widthRestored.count } : {}),
+      },
+    });
+
+    return {
+      success: true,
+      data: { ...out, widthRestored: widthRestored.count },
+      message: "Topun kontrolü yeniden açıldı",
+    };
+  }
+
   async reopenStep(
     data: { stepId: string },
     userId?: string
@@ -1738,6 +1815,8 @@ export class KursunQcService {
             workOrderNumber: true,
             targetItem: { select: { name: true } },
             targetColor: { select: { name: true } },
+            customer: { select: { name: true } },
+            orderLinks: { where: ACTIVE_ORDER_LINK, select: { orderLine: { select: { order: { select: { customer: { select: { name: true } } } } } } } },
           },
         },
       },
@@ -1754,7 +1833,7 @@ export class KursunQcService {
     const openMovements = await prisma.rollMovement.findMany({
       where: { ...ACTIVE_MOVEMENT, workOrderStepId: stepId, exitedAt: null },
       select: {
-        roll: { select: { id: true, barcode: true, currentQty: true, width: true } },
+        roll: { select: { id: true, barcode: true, currentQty: true, width: true, ownerCustomer: { select: { name: true } } } },
       },
       orderBy: { enteredAt: "asc" },
     });
@@ -1857,6 +1936,7 @@ export class KursunQcService {
     // barkodsuz açık kumaş topları listede ad + renkle görünsün.
     const itemName = step.workOrder.targetItem?.name ?? null;
     const colorName = step.workOrder.targetColor?.name ?? null;
+    const orderCustomerNames = step.workOrder.orderLinks.map((l) => l.orderLine.order.customer?.name);
     // H3b: sayaç kipi kapalıyken (varsayılan) yalnız kip okunur; taban/politika okunmaz, anahtar eklenmez.
     const capture = await resolveKursunMeterCapture();
     const meterOn = capture !== "OFF";
@@ -1886,6 +1966,7 @@ export class KursunQcService {
         ...(widthToleranceCm != null
           ? { widthLimit: measuredWidthLimit(m.roll.width == null ? null : Number(m.roll.width), widthToleranceCm) }
           : {}),
+        goodsOwner: kursunGoodsOwnerOf({ rollOwnerName: m.roll.ownerCustomer?.name, workOrderCustomerName: step.workOrder.customer?.name, orderCustomerNames }),
       };
     });
 

@@ -17,6 +17,7 @@
 //   §10 ⭐ K22: istasyonun KAT varsayılanı çok partili İE'lere de yazılır (PER_PARTY + SINGLE; tek parti yoluyla aynı)
 //   §15 ⭐ 214279: parti metresi beyan ara toplamından (Σ satır yalnız beyansızda); SERIES'te kağıttaki parti no künyede + aramada;
 //      DOCUMENT'ta İE parti no'su kağıttaki no (scripts/lib/gelen-belge-cok-parti-kagit-no.ts)
+//   §16 ⭐ 0248 ML Kit yan tarama: parti metre/kg/adet basılı toplam satırından, satır sayısıyla eşlenir (scripts/lib/gelen-belge-cok-parti-toplam-satiri.ts)
 //   §14 ⭐ parti kaydı (özet satırı) top sayısına karışmaz: detay `summary`, liste `docLineCount` (scripts/lib/gelen-belge-cok-parti-sayim.ts)
 // Negatif sonda: `partyWorkOrderToken` sabit token'a (clientToken) bağlanınca §5 ikinci İE replay'e düşer → kırmızı;
 // `engineTemplates` yalnız dosya şablonlarını dönünce §8 kırmızı.
@@ -41,8 +42,13 @@ import { sayfaDamgasiUyaridir } from "./lib/gelen-belge-cok-parti-sayfa";
 import { cokBlokKismi } from "./lib/gelen-belge-cok-parti-kismi";
 import { cokPartiSayim } from "./lib/gelen-belge-cok-parti-sayim";
 import { cokPartiKagitNo } from "./lib/gelen-belge-cok-parti-kagit-no";
+import { cokPartiToplamSatiri } from "./lib/gelen-belge-cok-parti-toplam-satiri";
 import { StationCapabilityService } from "../src/services/station-capability.service";
 import { FOLD_PROPERTY_CODE } from "../src/services/helpers/fold-type";
+import { testSablonlariniKaydet } from "./lib/gelen-belge-test-sablonlar";
+
+// Gönderen şablonları pakette yok (2026-11-09): bekçi onları süreç içi dosya şablonu olarak kaydeder.
+testSablonlariniKaydet();
 
 const engel = hedefDbEngeli();
 if (engel) {
@@ -160,10 +166,13 @@ async function run(url: string): Promise<void> {
   const n1 = await mkNote(false);
   const p2 = await call("GET", `/api/gelen-belge/irsaliyeler/${n1}/partiler`, tk);
   const parties = (p2.data?.parties ?? []) as Array<{ blockNo: number; batchNo: string; lineCount: number; meters: number; warnings: string[] }>;
-  check("§2 ⭐ 2 parti: parti no, satır sayısı, metre", p2.status === 200 && p2.data?.multi === true && parties.length === 2 && parties[0]!.batchNo === `${TAG}-P1A` && parties[0]!.lineCount === 3 && parties[0]!.meters === 330 && parties[1]!.lineCount === 2 && parties[1]!.meters === 410 && p2.data?.defaultMode === "SINGLE",
+  check("§2 ⭐ 2 parti: parti no, satır sayısı, metre", p2.status === 200 && p2.data?.multi === true && parties.length === 2 && parties[0]!.batchNo === `${TAG}-P1A` && parties[0]!.lineCount === 3 && parties[0]!.meters === 330 && parties[1]!.lineCount === 2 && parties[1]!.meters === 410 && p2.data?.defaultMode === "SINGLE" && p2.data?.defaultModeSource === "FACTORY",
     JSON.stringify(parties.map((p) => [p.batchNo, p.lineCount, p.meters])));
   check("§2 ⭐ canlı uyarı: parti 1 '4 TOP ↔ 3 satır'; parti 2 temiz; belge '2 sayfa, eksik 2'", /4 TOP yazıyor, 3 satır/.test(parties[0]!.warnings.join(" ")) && parties[1]!.warnings.length === 0 && /eksik sayfa: 2/.test(((p2.data?.warnings ?? []) as string[]).join(" ")),
     JSON.stringify({ p: parties.map((p) => p.warnings), d: p2.data?.warnings }));
+  // B1 2026-11-09: parti başına gelen kg önerisi (beyan kg → Σ satır kg, kısmi toplam yok); alan her partide var.
+  const kgs = (p2.data?.parties ?? []) as Array<{ suggestedKg?: number | null; kgSource?: string | null }>;
+  check("§2 ⭐ suggestedKg + kgSource her partide (null ↔ null tutarlı)", kgs.length === 2 && kgs.every((p) => "suggestedKg" in p && "kgSource" in p && (p.suggestedKg === null) === (p.kgSource === null)), JSON.stringify(kgs.map((p) => [p.suggestedKg, p.kgSource])));
   const nAdd = await mkNote();
   await call("POST", `/api/gelen-belge/irsaliyeler/${nAdd}/satirlar`, tk, { senderRollNo: `${TAG}-EK`, meters: 0.5, blockNo: 1 });
   const ekLine = await prisma.customerDeliveryNoteLine.findFirst({ where: { noteId: nAdd, senderRollNo: `${TAG}-EK` }, select: { id: true } });
@@ -330,6 +339,23 @@ async function run(url: string): Promise<void> {
 
   await cokBlokKismi({ check, tag: TAG, mkNote: () => mkNote(), parties: (id) => call("GET", `/api/gelen-belge/irsaliyeler/${id}/partiler`, tk), formWo, body });
   await cokPartiKagitNo({ check, tag: TAG, mkNote: () => mkNote(), parties: (id) => call("GET", `/api/gelen-belge/irsaliyeler/${id}/partiler`, tk), formWo, body, setSetting, get: (path) => call("GET", path, tk) });
+  await cokPartiToplamSatiri({
+    check, tag: TAG, ocr: gercek("0248-ceki-listesi-mlkit-yan"), addScan,
+    createTemplate: async (name, template) => {
+      const r = await call("POST", "/api/gelen-belge/sablonlar/ozel", tk, { name, template, clientToken: randomUUID() });
+      const row = r.data?.code ? await prisma.senderTemplate.findUnique({ where: { code: String(r.data.code) }, select: { id: true } }) : null;
+      if (row) made.templates.push(row.id);
+      return r;
+    },
+    deactivate: (code) => call("PATCH", `/api/gelen-belge/sablonlar/${code}`, tk, { isActive: false }),
+    emptyNote: async () => {
+      const r = await call("POST", "/api/gelen-belge/irsaliyeler", tk, { sourceKind: "MANUAL", senderText: `${TAG} ML Kit` });
+      const id = (r.data as { id?: string } | undefined)?.id ?? "";
+      made.notes.push(id);
+      return id;
+    },
+    parties: (id) => call("GET", `/api/gelen-belge/irsaliyeler/${id}/partiler`, tk),
+  });
 }
 
 async function cleanup(): Promise<void> {

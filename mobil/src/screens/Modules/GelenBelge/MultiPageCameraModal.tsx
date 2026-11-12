@@ -14,10 +14,13 @@ import AppModal from '../../../components/AppModal';
 import { withSystemDialog } from '../../../store/lockStore';
 import { colors, spacing, typography } from '../../../theme';
 import { pickPictureSize } from './docScan';
+import { useDocTorch } from './docTorch';
+import TorchButton from './TorchButton';
 import type { FinishResult, Shot } from './captureSession';
 import { useMultiCapture } from './useMultiCapture';
 import type { MultiCameraBinding } from './usePageSource';
 import LiveReadModal from './live/LiveReadModal';
+import { useIsCompact } from '../../../hooks/useDeviceType';
 
 export const MULTI_CAMERA_HINT = 'Belgeyi çerçeveyi dolduracak şekilde düz tutun';
 
@@ -33,7 +36,10 @@ function MultiShotCamera({ visible, capacity, firstPageNo, onDone, onDismiss, on
   const { width, height } = useWindowDimensions();
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView | null>(null);
-  const [pictureSize, setPictureSize] = useState<string | undefined>(undefined);
+  const { torch, toggle: toggleTorch } = useDocTorch(visible);
+  const compact = useIsCompact();
+  // Tek çekimlik kullanım (istasyon "Belgeden iş bul"): sayfa no anlamsız, çekim kendiliğinden biter → Tamam yok.
+  const single = capacity === 1;
 
   const finished = (r: FinishResult) => {
     if (r.dropped) Toast.show({ type: 'error', text1: `${r.dropped} çekim okunamadı, eklenmedi` });
@@ -48,34 +54,21 @@ function MultiShotCamera({ visible, capacity, firstPageNo, onDone, onDismiss, on
     if (cap.requestDismiss()) onDismiss();
   };
 
-  const onReady = async () => {
-    try {
-      const sizes = (await cameraRef.current?.getAvailablePictureSizesAsync()) ?? [];
-      setPictureSize(pickPictureSize(sizes));
-    } catch {
-      setPictureSize(undefined); // kamera varsayılanı; çekim yine çalışır
-    }
-  };
-
-  const body = !permission ? (
-    <ActivityIndicator color={colors.textOnDark} />
-  ) : !permission.granted ? (
-    <View style={styles.center}>
-      <Text style={styles.onDark}>Belge çekmek için kamera izni gerekiyor.</Text>
-      <Button mode="contained" onPress={() => void withSystemDialog(() => requestPermission())}>
-        Kamera izni ver
-      </Button>
-    </View>
-  ) : (
-    <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} pictureSize={pictureSize} onCameraReady={() => void onReady()} />
+  // Çok sayfalı belgede sıradaki sayfanın numarası açıkça söylenir ("Sayfa 1" belge numarası sanılıyordu, saha 2026-11-10).
+  const counter = n
+    ? `${n} sayfa çekildi — sıradaki ${firstPageNo + n}. sayfa ya da Tamam`
+    : single ? MULTI_CAMERA_HINT : `${firstPageNo}. sayfayı çekin — ${MULTI_CAMERA_HINT}`;
+  const finishBtn = (
+    <Button mode="contained" buttonColor={colors.info} textColor={colors.textOnDark} icon="check" onPress={cap.finish} contentStyle={styles.btn} disabled={n === 0 || busy || cap.shooting} testID="belge-cok-tamam">
+      {`Tamam (${n})`}
+    </Button>
   );
-
-  const counter = n ? `${n} sayfa çekildi (en çok ${capacity})` : `Sayfa ${firstPageNo} — ${MULTI_CAMERA_HINT}`;
 
   return (
     <AppModal visible={visible} onDismiss={dismiss} swipeToDismiss={false} contentStyle={[styles.sheet, { width: width * 0.94, height: height * 0.9 }]}>
       <View style={styles.cameraLayer}>
-        {body}
+        <CameraBody permission={permission} requestPermission={requestPermission} cameraRef={cameraRef} torch={torch} />
+        {permission?.granted && <TorchButton on={torch} onPress={toggleTorch} style={styles.torch} testID="belge-cok-flas" />}
         {busy && cap.progress && (
           <View style={styles.overlay} testID="belge-cok-iyilestiriliyor">
             <ActivityIndicator color={colors.textOnDark} size="large" />
@@ -90,12 +83,17 @@ function MultiShotCamera({ visible, capacity, firstPageNo, onDone, onDismiss, on
         <Text style={styles.onDark} testID="belge-cok-sayac">
           {cap.confirmDiscard ? `${n} çekim silinecek — kapatmak için Vazgeç'e tekrar basın` : counter}
         </Text>
+        {/* Vazgeç en solda kırmızı, Çek en sağda yeşil; dar ekranda Tamam alt satırda tam genişlik — etiketler kısalmaz (saha 2026-11-10). */}
         <View style={styles.actions}>
-          <Button mode="outlined" textColor={colors.textOnDark} onPress={dismiss} contentStyle={styles.btn} disabled={busy} testID="belge-cok-vazgec">
+          <Button mode="contained" buttonColor={colors.danger} textColor={colors.textOnDark} onPress={dismiss} contentStyle={styles.btn} disabled={busy} testID="belge-cok-vazgec">
             Vazgeç
           </Button>
+          <View style={styles.spacer} />
+          {!single && !compact && finishBtn}
           <Button
-            mode="contained-tonal"
+            mode="contained"
+            buttonColor={colors.success}
+            textColor={colors.textOnDark}
             icon="camera"
             onPress={cap.capture}
             contentStyle={styles.btn}
@@ -105,12 +103,40 @@ function MultiShotCamera({ visible, capacity, firstPageNo, onDone, onDismiss, on
           >
             Çek
           </Button>
-          <Button mode="contained" icon="check" onPress={cap.finish} contentStyle={styles.btn} disabled={n === 0 || busy || cap.shooting} testID="belge-cok-tamam">
-            {`Tamam (${n})`}
-          </Button>
         </View>
+        {!single && compact && finishBtn}
       </View>
     </AppModal>
+  );
+}
+
+/** Kamera katmanı: izin bekleniyor / izin iste / önizleme (en iyi çekim boyu kamera hazır olunca seçilir). */
+function CameraBody({ permission, requestPermission, cameraRef, torch }: {
+  permission: ReturnType<typeof useCameraPermissions>[0];
+  requestPermission: ReturnType<typeof useCameraPermissions>[1];
+  cameraRef: React.RefObject<CameraView | null>;
+  torch: boolean;
+}) {
+  const [pictureSize, setPictureSize] = useState<string | undefined>(undefined);
+  const onReady = async () => {
+    try {
+      const sizes = (await cameraRef.current?.getAvailablePictureSizesAsync()) ?? [];
+      setPictureSize(pickPictureSize(sizes));
+    } catch {
+      setPictureSize(undefined); // kamera varsayılanı; çekim yine çalışır
+    }
+  };
+  return !permission ? (
+    <ActivityIndicator color={colors.textOnDark} />
+  ) : !permission.granted ? (
+    <View style={styles.center}>
+      <Text style={styles.onDark}>Belge çekmek için kamera izni gerekiyor.</Text>
+      <Button mode="contained" onPress={() => void withSystemDialog(() => requestPermission())}>
+        Kamera izni ver
+      </Button>
+    </View>
+  ) : (
+    <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} pictureSize={pictureSize} enableTorch={torch} onCameraReady={() => void onReady()} />
   );
 }
 
@@ -142,6 +168,7 @@ const styles = StyleSheet.create({
   sheet: { backgroundColor: colors.headerBg, borderRadius: 16, overflow: 'hidden', padding: 0 },
   cameraLayer: { flex: 1, position: 'relative', overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
   overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.scrim, justifyContent: 'center', alignItems: 'center', gap: spacing.md },
+  torch: { position: 'absolute', top: spacing.sm, right: spacing.sm },
   center: { gap: spacing.md, alignItems: 'center', padding: spacing.lg },
   stripBox: { flexGrow: 0 },
   strip: { gap: spacing.sm, paddingHorizontal: spacing.md, paddingTop: spacing.sm },
@@ -151,7 +178,8 @@ const styles = StyleSheet.create({
   thumbDel: { position: 'absolute', top: 0, right: 0, width: 56, height: 56, alignItems: 'flex-end', justifyContent: 'flex-start', padding: 4 },
   thumbDelText: { color: colors.textOnDark, backgroundColor: colors.scrim, borderRadius: 12, width: 24, height: 24, textAlign: 'center', lineHeight: 24, fontWeight: '700' },
   bar: { padding: spacing.md, gap: spacing.sm },
-  actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.md },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  spacer: { flex: 1 },
   btn: { minHeight: 56, paddingHorizontal: spacing.md },
   onDark: { color: colors.textOnDark, fontSize: typography.size.base },
 });

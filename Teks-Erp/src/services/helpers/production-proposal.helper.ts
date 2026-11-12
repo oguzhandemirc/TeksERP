@@ -4,7 +4,8 @@
 // Önizleme ve uygula AYNI fonksiyonu koşar; uygula onu satır kilitlerinin ARKASINDA yeniden koşar
 // (önizlemeye güvenilmez). Dokuma işi grubu = (ürün, varyant); iş emri grubu = (ürün, renk, en) —
 // toplu "Siparişten İş Emri" eylemiyle aynı kural. Zaten bağlı satır gruptan düşer, uyarıyla listelenir.
-// Ham ihtiyaç = açık metre ÷ (1 − boy çekmesi); çekme varyant → ürün yapısı terbiye tarifesinden (öneri, düzenlenebilir).
+// Ham ihtiyaç = açık metre ÷ (1 − boy çekmesi) ÷ (1 − dokuma firesi) — formül ve çekme önceliği (ürün yapısı → terbiye
+// tarifesi) tek kaynak `raw-need.helper`; fire fabrika ayarı `dokuma.weavingWastePct` (öneri, düzenlenebilir).
 // =============================================================================
 
 import { Prisma } from "@prisma/client";
@@ -16,6 +17,9 @@ import { ACTIVE_ORDER_LINK } from "./order-link.helper";
 import { resolveFinishingRateCode } from "./finishing-rate-code.helper";
 import { availableBySpec, beamNeeds, readBeamLengthsM, warpRequirements, type BeamNeed } from "./beam-need.helper";
 import { readBeamStockBySpec } from "./warp-beam-stock.helper";
+import { rawMetersFromFinished, rawNeedFactorsActive, resolveLengthShrinkPct, type LengthShrinkSource } from "./raw-need.helper";
+import { resolveDokumaWeavingWastePct } from "../system-setting.service";
+import type { LoomSummary, WeavingDurationEstimate, YarnSummary } from "./production-proposal-insight.helper";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -47,11 +51,19 @@ export interface WeavingProposal {
   weftSpecId: string | null;
   weaveDesignId: string | null;
   shrinkPct: number | null;
+  /** Çekmenin kaynağı: `YAPI` (ürün yapısı) · `KART` (terbiye tarifesi) · null (bilinmiyor). */
+  shrinkSource: LengthShrinkSource | null;
+  /** Uygulanan dokuma firesi % (fabrika ayarı; 0 = fire eklenmedi). */
+  weavingWastePct: number;
   /** Önerilen plan metresi (ham ihtiyaç toplamı); ölçülmeyen birimde null. */
   plannedM: number | null;
   orderLines: Array<{ orderLineId: string; openM: number | null; allocatedM: number | null }>;
   /** SY-M2: çözgü katmanı başına gerekli metre + eksik için PLANNED levent önerisi (yalnız `scope.beamNeeds`). */
   beamNeeds?: BeamNeed[];
+  /** Yalnız önizleme (K1): karar özetleri — `production-proposal-insight.helper`; hesaplanamayan null. Uygula yolu yazmaz. */
+  loomSummary?: LoomSummary | null;
+  yarnSummary?: YarnSummary | null;
+  durationEstimate?: WeavingDurationEstimate | null;
 }
 
 export interface WorkOrderProposal {
@@ -74,6 +86,10 @@ export interface ProductionProposal {
   weavingOrders: WeavingProposal[];
   workOrders: WorkOrderProposal[];
   excluded: Array<{ orderLineId: string; kind: "WEAVING" | "WORK_ORDER" | "LINE"; code: string }>;
+  /** Uygulanan dokuma firesi % — yalnız dokuma bölümü hesaplandıysa yazılır. */
+  weavingWastePct?: number;
+  /** Yalnız önizleme: sipariş termini (ISO); süre tahmininin karşılaştırdığı değer. */
+  deadline?: string | null;
 }
 
 /** "Satır zaten planlanmış mı" — canlı dokuma işi bağı (iptal dışı her durum). */
@@ -85,7 +101,7 @@ export const LIVE_WORK_ORDER_LINK = {
 
 const LINE_SELECT = {
   id: true, itemId: true, colorId: true, width: true, quantity: true, shippedQty: true, unit: true, recipeId: true,
-  item: { select: { name: true, costStructure: { select: { finishingRateCode: true } } } },
+  item: { select: { name: true, costStructure: { select: { finishingRateCode: true, lengthShrinkPct: true } } } },
   recipe: { select: { routeId: true, foldType: true, finishingRateCode: true } },
   weavingOrderLinks: { where: LIVE_WEAVING_ORDER_LINK, select: { id: true }, take: 1 },
   workOrderLinks: { where: LIVE_WORK_ORDER_LINK, select: { id: true }, take: 1 },
@@ -108,26 +124,30 @@ export function workOrderKey(itemId: string, colorId: string | null, width: numb
   return `I:${itemId}:${colorId ?? "-"}:${width ?? "-"}`;
 }
 
-async function shrinkPctOf(db: Db, code: string | null | undefined, memo: Map<string, number | null>): Promise<number | null> {
+/** Tarifenin tipik çekmesi (ham değer; öncelik kararı `resolveLengthShrinkPct`te). */
+async function rateShrinkOf(db: Db, code: string | null | undefined, memo: Map<string, Prisma.Decimal | null>): Promise<Prisma.Decimal | null> {
   if (!code) return null;
   if (!memo.has(code)) {
     const rate = await db.finishingRate.findFirst({ where: { code, ...ACTIVE_FINISHING_RATE }, select: { typicalShrinkPct: true } });
-    memo.set(code, rate?.typicalShrinkPct == null ? null : Number(rate.typicalShrinkPct));
+    memo.set(code, rate?.typicalShrinkPct ?? null);
   }
   return memo.get(code) ?? null;
 }
 
-/** Ham ihtiyaç: açık metre ÷ (1 − çekme%); çekme yoksa/geçersizse açık metre. */
-export function rawNeedMeters(openM: number | null, shrinkPct: number | null): number | null {
+/** Ham ihtiyaç: açık metre ÷ (1 − çekme%) ÷ (1 − fire%); çarpan yoksa/geçersizse açık metre aynen. */
+export function rawNeedMeters(openM: number | null, shrinkPct: number | null, weavingWastePct: number | null = null): number | null {
   if (openM == null) return null;
-  if (shrinkPct == null || shrinkPct <= 0 || shrinkPct >= 100) return openM;
-  return round3(openM / (1 - shrinkPct / 100));
+  if (!rawNeedFactorsActive(shrinkPct, weavingWastePct)) return openM;
+  return round3(Number(rawMetersFromFinished(openM, shrinkPct, weavingWastePct)));
 }
 
-async function buildWeavingGroups(db: Db, lines: LineRow[], out: ProductionProposal, withBeamNeeds: boolean): Promise<void> {
+export type GroupConstructions = Map<string, Awaited<ReturnType<typeof resolveEffectiveConstruction>>>;
+
+async function buildWeavingGroups(db: Db, lines: LineRow[], out: ProductionProposal, o: { withBeamNeeds: boolean; constructions: GroupConstructions }): Promise<void> {
+  const { withBeamNeeds, constructions } = o;
+  const weavingWastePct = out.weavingWastePct ?? 0;
   const groups = new Map<string, WeavingProposal>();
-  const constructions = new Map<string, Awaited<ReturnType<typeof resolveEffectiveConstruction>>>();
-  const shrinkMemo = new Map<string, number | null>();
+  const shrinkMemo = new Map<string, Prisma.Decimal | null>();
   for (const l of lines) {
     if (l.weavingOrderLinks.length > 0) {
       out.excluded.push({ orderLineId: l.id, kind: "WEAVING", code: PROPOSAL_CODES.alreadyPlanned });
@@ -142,16 +162,19 @@ async function buildWeavingGroups(db: Db, lines: LineRow[], out: ProductionPropo
         out.excluded.push({ orderLineId: l.id, kind: "WEAVING", code: PROPOSAL_CODES.notWoven });
         continue;
       }
+      const rateShrink = await rateShrinkOf(db, resolveFinishingRateCode(l.recipe?.finishingRateCode, l.item.costStructure?.finishingRateCode), shrinkMemo);
+      const shrink = resolveLengthShrinkPct(l.item.costStructure?.lengthShrinkPct, rateShrink);
       g = {
         key, itemId: l.itemId, itemName: l.item.name, recipeId: l.recipeId,
         warpSpecId: c.groundWarp?.id ?? null, weftSpecId: c.weft?.weftSpecId ?? null, weaveDesignId: c.weaveDesign?.id ?? null,
-        shrinkPct: await shrinkPctOf(db, resolveFinishingRateCode(l.recipe?.finishingRateCode, l.item.costStructure?.finishingRateCode), shrinkMemo), plannedM: null, orderLines: [],
+        shrinkPct: shrink.value === null ? null : Number(shrink.value), shrinkSource: shrink.value === null ? null : shrink.source,
+        weavingWastePct, plannedM: null, orderLines: [],
       };
       groups.set(key, g);
       constructions.set(key, c);
     }
     const openM = openMeters(l);
-    g.orderLines.push({ orderLineId: l.id, openM, allocatedM: rawNeedMeters(openM, g.shrinkPct) });
+    g.orderLines.push({ orderLineId: l.id, openM, allocatedM: rawNeedMeters(openM, g.shrinkPct, weavingWastePct) });
   }
   for (const g of groups.values()) {
     const measured = g.orderLines.map((x) => x.allocatedM);
@@ -208,7 +231,14 @@ function buildWorkOrderGroups(lines: LineRow[], out: ProductionProposal): void {
  * Satırlar id sırasıyla okunur (uygula yolu aynı sırayla kilitler).
  */
 export async function buildProductionProposal(db: Db, orderId: string, scope: ProposalScope): Promise<ProductionProposal> {
-  const order = await db.order.findUnique({ where: { id: orderId }, select: { id: true, orderNumber: true, status: true } });
+  return (await buildProductionProposalWithContext(db, orderId, scope)).proposal;
+}
+
+/** Önizlemenin ek özetleri için: öneri + grup başına çözülmüş yapı + sipariş termini (ikinci okuma yazılmasın). */
+export async function buildProductionProposalWithContext(
+  db: Db, orderId: string, scope: ProposalScope,
+): Promise<{ proposal: ProductionProposal; constructions: GroupConstructions; deadline: Date | null }> {
+  const order = await db.order.findUnique({ where: { id: orderId }, select: { id: true, orderNumber: true, status: true, deadline: true } });
   if (!order) throw AppError.notFound("Sipariş bulunamadı");
   if (!(PROPOSAL_ORDER_STATUSES as readonly string[]).includes(order.status)) {
     throw AppError.conflict("Üretim önerisi yalnız onaylı ya da kısmi sevk edilmiş siparişte açılır.", { code: "ORDER_NOT_PRODUCIBLE", status: order.status });
@@ -221,7 +251,11 @@ export async function buildProductionProposal(db: Db, orderId: string, scope: Pr
     if (m === 0) out.excluded.push({ orderLineId: r.id, kind: "LINE", code: PROPOSAL_CODES.lineClosed });
     else open.push(r);
   }
-  if (scope.weaving) await buildWeavingGroups(db, open, out, scope.beamNeeds === true);
+  const constructions: GroupConstructions = new Map();
+  if (scope.weaving) {
+    out.weavingWastePct = await resolveDokumaWeavingWastePct(db);
+    await buildWeavingGroups(db, open, out, { withBeamNeeds: scope.beamNeeds === true, constructions });
+  }
   if (scope.workOrder) buildWorkOrderGroups(open, out);
-  return out;
+  return { proposal: out, constructions, deadline: order.deadline ?? null };
 }

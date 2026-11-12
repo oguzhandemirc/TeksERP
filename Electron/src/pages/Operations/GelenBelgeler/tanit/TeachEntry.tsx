@@ -1,4 +1,4 @@
-// Tanıtmaya giriş (S1b): "Bu belgeyi tanıt" / "Şablonu güncelle" düğmesi ve belge tanınmadıysa "Bu belge hangi tip?" şeridi + diyaloğu.
+// Tanıtmaya giriş (S1b): "Bu belgeyi tanıt" / "Tanımı düzenle" düğmesi ve belge tanınmadıysa "Bu belge hangi tip?" şeridi + diyaloğu.
 // Yalnız `gelen-belge:template` izniyle çizilir; okunmuş fotoğrafı olmayan belgede çizilmez.
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -37,24 +37,37 @@ function useOwnUserTemplate(templateId: string | null, enabled: boolean): string
   return row?.code ?? null;
 }
 
-export function TeachButton({ note, go: goProp }: Props) {
+export type TeachAction = { kind: "purged"; label: string; title: string } | { kind: "ready"; label: string; run: () => void } | null;
+
+/** Tanıtma eyleminin TEK kararı (düğme ve detay menüsü aynı yüklemi kullanır): izin yoksa / fotoğraf yoksa null. */
+export function useTeachAction(note: TeachNote, goProp?: Props["go"]): TeachAction {
   const { hasPermission } = useRoleAccess();
   const go = useGo(goProp);
-  const allowed = hasPermission("gelen-belge:template") && teachableScans(note.scans).length > 0;
+  const canTemplate = hasPermission("gelen-belge:template");
+  const allowed = canTemplate && teachableScans(note.scans).length > 0;
   const own = useOwnUserTemplate(note.templateId, allowed);
   if (!allowed) {
-    if (!hasPermission("gelen-belge:template") || !allReadPhotosPurged(note.scans)) return null;
+    if (!canTemplate || !allReadPhotosPurged(note.scans)) return null;
+    return { kind: "purged", label: `Tanıtılamaz — ${SCAN_PURGED_TEXT}`, title: `${SCAN_PURGED_TEXT} Tanıtma için fotoğraf gerekir.` };
+  }
+  return { kind: "ready", label: own ? "Tanımı düzenle" : note.templateId ? "Yeniden tanıt" : "Bu belgeyi tanıt", run: () => go(teachPath(note.id, own)) };
+}
+
+export function TeachButton({ note, go }: Props) {
+  const action = useTeachAction(note, go);
+  if (!action) return null;
+  if (action.kind === "purged") {
     return (
-      <Button variant="outline" disabled title={`${SCAN_PURGED_TEXT} Tanıtma için fotoğraf gerekir.`} data-testid="note-teach-purged">
+      <Button variant="outline" disabled title={action.title} data-testid="note-teach-purged">
         <Sparkles className="mr-1 h-4 w-4" />
-        Tanıtılamaz — {SCAN_PURGED_TEXT}
+        {action.label}
       </Button>
     );
   }
   return (
-    <Button variant="outline" onClick={() => go(teachPath(note.id, own))} data-testid="note-teach">
+    <Button variant="outline" onClick={action.run} data-testid="note-teach">
       <Sparkles className="mr-1 h-4 w-4" />
-      {own ? "Şablonu güncelle" : "Bu belgeyi tanıt"}
+      {action.label}
     </Button>
   );
 }
@@ -90,16 +103,26 @@ export function TypeChoiceDialog({ noteId, open, onOpenChange, go }: { noteId: s
 }
 
 /** Sınıflandırma düşük (GENEL yedekle okundu): uyarı şeridi + "Belge tipini seç" diyaloğu. */
-export function UnknownTypeStrip({ note, go: goProp }: Props) {
+export function UnknownTypeStrip({ note, go: goProp, compact = false }: Props & { compact?: boolean }) {
   const { hasPermission } = useRoleAccess();
   const go = useGo(goProp);
   const [open, setOpen] = useState(false);
   if (!isUnrecognized(note) || !hasPermission("gelen-belge:template")) return null;
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200" data-testid="teach-unknown-strip">
-      <span className="flex items-center gap-2">
-        <FileQuestion className="h-4 w-4" /> Bu belgenin tipi tanınmadı; alanlar genel sözlükle okundu. Belge tipini tanıtırsanız sonraki belgeler doğru okunur.
-      </span>
+    <div
+      className={compact ? "flex items-center justify-between gap-2 text-sm text-amber-900 dark:text-amber-200" : "flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200"}
+      title={compact ? "Alanlar genel sözlükle okundu. Belge tipini tanıtırsanız sonraki belgeler doğru okunur." : undefined}
+      data-testid="teach-unknown-strip"
+    >
+      {compact ? (
+        <span className="flex min-w-0 items-center gap-2 truncate">
+          <FileQuestion className="h-4 w-4 shrink-0" /> Belge tipi tanınmadı
+        </span>
+      ) : (
+        <span className="flex items-center gap-2">
+          <FileQuestion className="h-4 w-4" /> Bu belgenin tipi tanınmadı; alanlar genel sözlükle okundu. Belge tipini tanıtırsanız sonraki belgeler doğru okunur.
+        </span>
+      )}
       <Button size="sm" variant="outline" onClick={() => setOpen(true)} data-testid="teach-unknown-choose">Belge tipini seç</Button>
       {open && <TypeChoiceDialog noteId={note.id} open onOpenChange={setOpen} go={go} />}
     </div>

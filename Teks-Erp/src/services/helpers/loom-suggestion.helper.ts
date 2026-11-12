@@ -126,43 +126,83 @@ async function resolveTarget(db: Db, input: LoomSuggestionInput) {
   return { weavingOrderId: null, itemId: input.itemId, recipeId: input.recipeId ?? null, plannedM: input.plannedM ?? null, warpSpecId: input.warpSpecId ?? null, weaveDesignId: null, closed: false };
 }
 
+type Target = Awaited<ReturnType<typeof resolveTarget>>;
+type Construction = Awaited<ReturnType<typeof resolveEffectiveConstruction>>;
+
 /** Dokuma işi (ya da taslak) için tezgâh önerisi — salt okuma, kilitsiz. */
 export async function suggestLoomsForWeaving(db: Db, input: LoomSuggestionInput): Promise<LoomSuggestion> {
-  const t = await resolveTarget(db, input);
-  const c = await resolveEffectiveConstruction(db, t.itemId, t.recipeId);
-  const groundId = t.warpSpecId ?? c.groundWarp?.id ?? null;
-  const out: LoomSuggestion = { weavingOrderId: t.weavingOrderId, itemId: t.itemId, recipeId: t.recipeId, plannedM: t.plannedM, requirements: [], candidates: [], warnings: [] };
-  const ground = groundId ? await db.warpSpec.findUnique({ where: { id: groundId }, select: { id: true, code: true, takeUpPct: true, reedWidthCm: true } }) : null;
-  if (!ground) {
-    out.warnings.push({ code: LOOM_SUGGESTION_WARNING.noGroundWarp, message: "Ürünün zemin çözgüsü tanımlı değil — tezgâh önerisi çıkarılamaz." });
-    return out;
+  const [out] = await suggestForTargets(db, [{ t: await resolveTarget(db, input) }]);
+  return out!;
+}
+
+/**
+ * Birden çok taslak için AYNI karar (üretim önerisi önizlemesi): tezgâh listesi, takılı levent, levent stoku ve açık
+ * koşumlar taslak sayısından bağımsız TEK kez okunur. Yapı verilirse yeniden çözülmez (grup başına tek yapı).
+ */
+export async function suggestLoomsForDrafts(
+  db: Db, drafts: ReadonlyArray<{ itemId: string; recipeId: string | null; plannedM: number | null; construction?: Construction }>,
+): Promise<LoomSuggestion[]> {
+  const targets = [];
+  for (const d of drafts) targets.push({ t: await resolveTarget(db, { itemId: d.itemId, recipeId: d.recipeId, plannedM: d.plannedM }), c: d.construction });
+  return suggestForTargets(db, targets);
+}
+
+async function suggestForTargets(db: Db, targets: ReadonlyArray<{ t: Target; c?: Construction }>): Promise<LoomSuggestion[]> {
+  const prepared: Array<{ t: Target; c: Construction; out: LoomSuggestion; own: WarpRequirement[]; widthWarning: boolean; live: boolean }> = [];
+  const groundIds: string[] = [];
+  const resolved: Array<{ t: Target; c: Construction; groundId: string | null }> = [];
+  for (const { t, c: given } of targets) {
+    const c = given ?? (await resolveEffectiveConstruction(db, t.itemId, t.recipeId));
+    const groundId = t.warpSpecId ?? c.groundWarp?.id ?? null;
+    if (groundId) groundIds.push(groundId);
+    resolved.push({ t, c, groundId });
   }
-  out.requirements = warpRequirements(c, ground, t.plannedM);
-  const widthWarning = ground.reedWidthCm != null && c.widthCm != null && ground.reedWidthCm.lt(c.widthCm);
-  if (widthWarning) {
-    out.warnings.push({ code: LOOM_SUGGESTION_WARNING.reedNarrower, message: `Çözgü kartının tarak eni (${ground.reedWidthCm!.toString()} cm) ürün eninden (${c.widthCm!.toString()} cm) dar.` });
+  const grounds = groundIds.length
+    ? new Map((await db.warpSpec.findMany({ where: { id: { in: [...new Set(groundIds)] } }, select: { id: true, code: true, takeUpPct: true, reedWidthCm: true } })).map((g) => [g.id, g]))
+    : new Map();
+  let tracking: boolean | null = null;
+  for (const { t, c, groundId } of resolved) {
+    const out: LoomSuggestion = { weavingOrderId: t.weavingOrderId, itemId: t.itemId, recipeId: t.recipeId, plannedM: t.plannedM, requirements: [], candidates: [], warnings: [] };
+    const ground = groundId ? grounds.get(groundId) : undefined;
+    const entry = { t, c, out, own: [] as WarpRequirement[], widthWarning: false, live: false };
+    prepared.push(entry);
+    if (!ground) {
+      out.warnings.push({ code: LOOM_SUGGESTION_WARNING.noGroundWarp, message: "Ürünün zemin çözgüsü tanımlı değil — tezgâh önerisi çıkarılamaz." });
+      continue;
+    }
+    out.requirements = warpRequirements(c, ground, t.plannedM);
+    entry.widthWarning = ground.reedWidthCm != null && c.widthCm != null && ground.reedWidthCm.lt(c.widthCm);
+    if (entry.widthWarning) {
+      out.warnings.push({ code: LOOM_SUGGESTION_WARNING.reedNarrower, message: `Çözgü kartının tarak eni (${ground.reedWidthCm!.toString()} cm) ürün eninden (${c.widthCm!.toString()} cm) dar.` });
+    }
+    if (t.closed) {
+      out.warnings.push({ code: LOOM_SUGGESTION_WARNING.orderClosed, message: `${TERIM.dokumaIsEmri.tekil} kapalı (tamamlandı/iptal) — tezgâh önerisi yok.` });
+      continue;
+    }
+    // Takılı levent kaydı yalnız devere + levent takibi açıkken doğar; kapalıyken sınıflamak her tezgâhı yanlış T3 yapar.
+    tracking ??= (await readDevereEnabled(db)) && (await readDevereMountTracking(db));
+    if (!tracking) {
+      out.warnings.push({ code: LOOM_SUGGESTION_WARNING.mountTrackingOff, message: "Levent takibi kapalı — tezgâhtaki levent bilinmediği için hazırlık sınıfı çıkarılamaz." });
+      continue;
+    }
+    entry.own = out.requirements.filter((r) => r.ownBeam);
+    entry.live = true;
   }
-  if (t.closed) {
-    out.warnings.push({ code: LOOM_SUGGESTION_WARNING.orderClosed, message: `${TERIM.dokumaIsEmri.tekil} kapalı (tamamlandı/iptal) — tezgâh önerisi yok.` });
-    return out;
-  }
-  // Takılı levent kaydı yalnız devere + levent takibi açıkken doğar; kapalıyken sınıflamak her tezgâhı yanlış T3 yapar.
-  if (!(await readDevereEnabled(db)) || !(await readDevereMountTracking(db))) {
-    out.warnings.push({ code: LOOM_SUGGESTION_WARNING.mountTrackingOff, message: "Levent takibi kapalı — tezgâhtaki levent bilinmediği için hazırlık sınıfı çıkarılamaz." });
-    return out;
-  }
-  const own = out.requirements.filter((r) => r.ownBeam);
+  const live = prepared.filter((p) => p.live);
+  if (live.length === 0) return prepared.map((p) => p.out);
   const looms = await db.machine.findMany({ where: LOOM_MACHINE_WHERE, select: { id: true, code: true, name: true }, orderBy: { code: "asc" } });
   const ids = looms.map((l) => l.id);
   const mounted = await mountedBeamViewsTx(db, ids);
-  const stock = await readBeamStockBySpec(db, own.map((r) => r.warpSpecId));
+  const stock = await readBeamStockBySpec(db, [...new Set(live.flatMap((p) => p.own.map((r) => r.warpSpecId)))]);
   const runs = ids.length
     ? await db.machineRun.findMany({ where: { machineId: { in: ids }, ...OPEN_MACHINE_RUN_WHERE }, select: { machineId: true, itemId: true, weavingOrder: { select: { itemId: true, weaveDesignId: true } } } })
     : [];
-  const target = { itemId: t.itemId, weaveDesignId: t.weaveDesignId ?? c.weaveDesign?.id ?? null, widthWarning };
-  out.candidates = looms.map((loom) => classifyLoom(own, {
-    loom, mounted: mounted.get(loom.id) ?? [],
-    openRuns: runs.filter((r) => r.machineId === loom.id).map((r) => ({ itemId: r.weavingOrder?.itemId ?? r.itemId, weaveDesignId: r.weavingOrder?.weaveDesignId ?? null })),
-  }, stock, target)).sort(compareCandidates);
-  return out;
+  for (const p of live) {
+    const target = { itemId: p.t.itemId, weaveDesignId: p.t.weaveDesignId ?? p.c.weaveDesign?.id ?? null, widthWarning: p.widthWarning };
+    p.out.candidates = looms.map((loom) => classifyLoom(p.own, {
+      loom, mounted: mounted.get(loom.id) ?? [],
+      openRuns: runs.filter((r) => r.machineId === loom.id).map((r) => ({ itemId: r.weavingOrder?.itemId ?? r.itemId, weaveDesignId: r.weavingOrder?.weaveDesignId ?? null })),
+    }, stock, target)).sort(compareCandidates);
+  }
+  return prepared.map((p) => p.out);
 }

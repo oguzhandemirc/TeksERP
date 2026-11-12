@@ -21,8 +21,8 @@ vi.mock("@/components/forms/SimilarNamesWarning", () => ({ SimilarNamesWarning: 
 vi.mock("@/components/RecordInfoButton", () => ({ RecordInfoButton: () => null }));
 vi.mock("./AllowedColorsDialog", () => ({ AllowedColorsDialog: () => null }));
 vi.mock("./AllowedPropertiesDialog", () => ({ AllowedPropertiesDialog: () => null }));
-const flags = vi.hoisted(() => ({ kg: false }));
-vi.mock("@/hooks/usePricingEnabled", () => ({ useDevereEnabled: () => false, useDokumaEnabled: () => false, useKaliteGuvenceEnabled: () => flags.kg, useMaliyetEnabled: () => false }));
+const flags = vi.hoisted(() => ({ kg: false, mal: false }));
+vi.mock("@/hooks/usePricingEnabled", () => ({ useDevereEnabled: () => false, useDokumaEnabled: () => false, useKaliteGuvenceEnabled: () => flags.kg, useMaliyetEnabled: () => flags.mal }));
 
 const COLORS = "İzinli Renkler (opsiyonel)";
 const PROPS = "İzinli Özellikler (opsiyonel)";
@@ -114,5 +114,37 @@ describe("ItemFormDialog — hizmet kartı ayrı tabloda (D2)", () => {
     await user.click(screen.getByRole("combobox"));
     const names = (await screen.findAllByRole("option")).map((o) => o.textContent);
     expect(names).toEqual(["Kumaş", "İplik", "Sarf Malzeme"]);
+  });
+});
+
+describe("ItemFormDialog — iplik firesi % (SY-3 I2)", () => {
+  const LABEL = /İplik firesi/;
+  it("maliyet kapalı: iplikte de alan yok, payload'da anahtar yok", async () => {
+    flags.mal = false;
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    renderWithProviders(<ItemFormDialog open onOpenChange={() => {}} onSubmit={onSubmit} initial={item({ itemType: "YARN", unit: "KG", yarnWastePct: 3 })} />);
+    expect(screen.queryByLabelText(LABEL)).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Güncelle" }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect("yarnWastePct" in (onSubmit.mock.calls[0]![0] as Record<string, unknown>)).toBe(false);
+  });
+
+  it("maliyet açık: iplikte kayıtlı değer gelir, düzenlenen değer noktalı gider; kumaşta alan yok", async () => {
+    flags.mal = true;
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    const { unmount } = renderWithProviders(<ItemFormDialog open onOpenChange={() => {}} onSubmit={onSubmit} initial={item({ itemType: "YARN", unit: "KG", yarnWastePct: 3 })} />);
+    const input = screen.getByLabelText(LABEL);
+    expect(input).toHaveValue("3");
+    await user.clear(input);
+    await user.type(input, "4,25");
+    await user.click(screen.getByRole("button", { name: "Güncelle" }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect(onSubmit.mock.calls[0]![0]).toMatchObject({ yarnWastePct: "4.25" });
+    unmount();
+    renderWithProviders(<ItemFormDialog open onOpenChange={() => {}} onSubmit={() => {}} initial={item({ itemType: "FABRIC" })} />);
+    expect(screen.queryByLabelText(LABEL)).toBeNull();
+    flags.mal = false;
   });
 });

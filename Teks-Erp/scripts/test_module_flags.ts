@@ -440,6 +440,10 @@ function main(): void {
     readDokumaOrderLineLinkRequired: { resolver: "resolveOrderLineLinkRequired", ebeveyn: "üretim+dokuma" },
     // S1 top KK1'de doğar (2026-10-21): enum ayar, etkin değer dokuma kapalıyken TABLET_DOFF; kapı `assertKk1BirthGate` yalnız resolver okur.
     readDokumaRollBirth: { resolver: "resolveDokumaRollBirth", ebeveyn: "üretim+dokuma" },
+    // Seyitoğlu temel (2026-11-11): dokuma firesi — öneri ve iplik ihtiyacı yalnız resolver okur (kapalıyken 0).
+    readDokumaWeavingWastePct: { resolver: "resolveDokumaWeavingWastePct", ebeveyn: "üretim+dokuma" },
+    // SY-3 I1 (2026-11-12): iplik ayırma görünürlüğü — iplik ihtiyacı ve öneri özeti yalnız resolver okur.
+    readDokumaYarnReservationEnabled: { resolver: "resolveDokumaYarnReservationEnabled", ebeveyn: "üretim+dokuma" },
     // n irsaliye → 1 fatura (2026-09-18): onay toleransı muhasebe modülünün davranış bayrağı.
     readFinanceInvoiceMatchTolerance: { resolver: "resolveInvoiceMatchToleranceEnabled", ebeveyn: "finans" },
     readFinanceChequeNoteMovementEnabled: { resolver: "resolveChequeNoteMovementEnabled", ebeveyn: "finans" },

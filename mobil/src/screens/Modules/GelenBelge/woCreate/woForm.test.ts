@@ -132,16 +132,16 @@ describe('docShown (belgeden dolan alanın yeri) / applyOrderLine özellik kural
 
   it('engel gizli alandaysa ipucu yerini söyler', () => {
     const e = extras({ woType: 'ORDER_PRODUCTION', steps: [] });
-    const c = { routeChosen: true, hasTambur: false, inOther: (k: string) => k === 'isEmriTuru' };
+    const c = { routeChosen: true, hasTambur: false, inOther: (k: string) => k === 'siparis' };
     const out = extrasIssues(e, c);
-    expect(out[0]).toEqual({ key: 'isEmriTuru', text: expect.stringMatching(/Siparişe üretim.*"Diğer alanlar" bölümünde/) });
+    expect(out[0]).toEqual({ key: 'siparis', text: expect.stringMatching(/Siparişe üretim.*"Diğer alanlar" bölümünde/) });
     expect(out[1]).toEqual({ key: 'rotaAdimlari', text: 'Rotada en az bir adım kalmalı.' });
   });
 });
 
 describe('extrasIssues / createBlockReason', () => {
   it('rota, sayı, kat ve tarih engelleri', () => {
-    expect(extrasIssues(extras(), { routeChosen: false, hasTambur: false })).toEqual([{ key: 'rota', text: 'Rotayı seçin.' }]);
+    expect(extrasIssues(extras(), { routeChosen: false, hasTambur: false })).toEqual([{ key: 'rota', text: 'Üretim Rotasını seçin.' }]);
     expect(extrasIssues(extras({ width: 'x', targetQuantity: '0' }), { routeChosen: true, hasTambur: false })).toEqual([
       { key: 'en', text: "En 0'dan büyük olmalı." },
       { key: 'hedefMetraj', text: "Hedef metraj 0'dan büyük olmalı." },

@@ -360,16 +360,18 @@ export function templateTextLines(
   payload: LabelPayload,
   template: LabelTemplate | null,
 ): NativeTextLine[] {
-  if (!template) {
-    return rollTextLines(payload).map((ln) => ({
-      text: ln.text,
-      size: (ln.big ? "lg" : "md") as FontSize,
-      bold: false,
-    }));
-  }
-  const fields = (template.fields as unknown as TemplateField[] | null) ?? null;
+  return templateTextLinesKeyed(payload, template).map(({ text, size, bold }) => ({ text, size, bold }));
+}
+
+/** `templateTextLines` + satırın alan anahtarı (şablonsuz yedek satırlarda null) — tablet önizlemesi dokunur. */
+export function templateTextLinesKeyed(
+  payload: LabelPayload,
+  template: LabelTemplate | null,
+): Array<NativeTextLine & { key: string | null }> {
+  const fields = template ? ((template.fields as unknown as TemplateField[] | null) ?? null) : null;
   if (!fields) {
     return rollTextLines(payload).map((ln) => ({
+      key: null,
       text: ln.text,
       size: (ln.big ? "lg" : "md") as FontSize,
       bold: false,
@@ -387,7 +389,7 @@ export function templateTextLines(
       // FieldsPanel'den başlığı yazar/siler. (Eskiden headline alanlar label'ı düşürüyordu.)
       const label = f.label?.trim();
       const text = label ? `${label}: ${dv.value}` : dv.value;
-      return { text, size, bold: f.isBold ?? false };
+      return { key: f.key, text, size, bold: f.isBold ?? false };
     });
 }
 

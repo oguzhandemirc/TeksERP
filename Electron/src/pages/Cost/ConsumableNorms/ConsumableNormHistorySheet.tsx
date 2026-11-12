@@ -38,7 +38,7 @@ export function ConsumableNormHistorySheet({ row, onClose }: { row: ConsumableNo
           {(q.data ?? []).map((p) => (
             <li key={p.id} className="rounded-md border p-2">
               <div className="flex items-center justify-between gap-2">
-                <span className="font-medium tabular-nums">{fmtDecFull(p.qtyPerM, 6)} {p.unit}/m</span>
+                <span className="font-medium tabular-nums">{fmtDecFull(p.qtyPerM, 6)} {p.unit}/{p.basis === "PER_ROLL" ? "top" : "m"}</span>
                 {p.revokedAt ? <Badge variant="muted">Damgalı</Badge> : <Badge>Geçerli</Badge>}
               </div>
               <p className="text-xs text-muted-foreground">
@@ -57,7 +57,7 @@ export function ConsumableNormHistorySheet({ row, onClose }: { row: ConsumableNo
           open={revokeOpen}
           onOpenChange={setRevokeOpen}
           title={`${pair} normu kaldırılsın mı?`}
-          description={`${fmtDecFull(row.qtyPerM, 6)} ${row.unit}/m damgalanır, silinmez. Bu hizmetin bundan sonraki işlerinde bu sarf kârlılığa girmez; geçmiş aylar değişmez.`}
+          description={`${fmtDecFull(row.qtyPerM, 6)} ${row.unit}/${row.basis === "PER_ROLL" ? "top" : "m"} damgalanır, silinmez. Bu hizmetin bundan sonraki işlerinde bu sarf kârlılığa girmez; geçmiş aylar değişmez.`}
           confirmLabel="Kaldır"
           destructive
           isPending={revoke.isPending}

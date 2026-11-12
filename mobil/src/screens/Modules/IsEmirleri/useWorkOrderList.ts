@@ -15,15 +15,16 @@ export const WORK_ORDER_LIST_KEY = ['work-orders', 'is-emirleri'] as const;
 /** Arama yazılırken istek ~300 ms bekler; yeni harf eski isteği iptal eder (react-query `signal`). */
 export const SEARCH_DEBOUNCE_MS = 300;
 
-export function useWorkOrderList(filters: ListFilters) {
+/** `withMeter`: Metre sütunu açıkken satırlara beyan ↔ ölçülen özeti istenir (kapalıyken sunucu hesaplamaz). */
+export function useWorkOrderList(filters: ListFilters, withMeter = false) {
   const search = useDebouncedValue(filters.search, SEARCH_DEBOUNCE_MS);
   const query = useMemo(() => buildListQuery({ ...filters, search }), [filters, search]);
   const q = useInfiniteQuery({
-    queryKey: [...WORK_ORDER_LIST_KEY, query],
+    queryKey: [...WORK_ORDER_LIST_KEY, query, withMeter],
     queryFn: ({ pageParam, signal }) =>
       workOrderService.getAllCursor(
         { limit: PAGE_SIZE, cursor: pageParam, withTotal: !pageParam, search: query.search, filters: query.filters, dateField: query.dateField, dateFrom: query.dateFrom, dateTo: query.dateTo },
-        { signal },
+        { signal, withMeterSummary: withMeter },
       ),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => (last.pagination.hasMore ? last.pagination.nextCursor : undefined),

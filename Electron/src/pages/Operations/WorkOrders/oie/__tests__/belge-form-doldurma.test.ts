@@ -61,6 +61,11 @@ describe("applyReadSummary — özet → form", () => {
     expect(docTextHints({ formFields: SUMMARY.formFields })).toEqual({ desen: "TÜL 12", renk: "KREM" });
     expect(docTextHints(SUMMARY)).toEqual({ desen: null, renk: null });
   });
+
+  it("⭐ yeni sunucu: ipucu incomingDeclared beyanından; eşlenen kart varsa o alanın ipucu yok", () => {
+    const d = { itemText: "Ham Bez", colorText: "EKRU", suggestedItem: null, suggestedColor: { id: "c1", name: "Ekru" } };
+    expect(docTextHints({ formFields: { desenText: "eski" }, incomingDeclared: d })).toEqual({ desen: "Ham Bez", renk: null });
+  });
 });
 
 describe("docMarks — Belgeden rozeti", () => {

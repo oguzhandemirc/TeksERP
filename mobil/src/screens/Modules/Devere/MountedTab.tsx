@@ -21,6 +21,9 @@ interface Props {
   /** Levent etiketi okutuldu (çözüm + ret metni hook'ta). */
   onScanBeam: (raw: string) => void;
   scanMessage: string | null;
+  /** Aşağı çekip yenile (verilmezse çekme kapalı). */
+  refreshing?: boolean;
+  onRefresh?: () => void;
 }
 
 /** Levent etiketi okutma bandı — tek kod okutan yüzey (`trigger="auto"`). */
@@ -56,7 +59,7 @@ function Row({ beam, locked, onMount }: { beam: WarpBeam; locked: boolean; onMou
   );
 }
 
-export default function MountedTab({ beams, loading, locked, onMount, onScanBeam, scanMessage }: Props) {
+export default function MountedTab({ beams, loading, locked, onMount, onScanBeam, scanMessage, refreshing, onRefresh }: Props) {
   const sorted = [...beams].sort((a, b) => (a.status === b.status ? 0 : a.status === 'MOUNTED' ? -1 : 1));
   return (
     <>
@@ -65,6 +68,8 @@ export default function MountedTab({ beams, loading, locked, onMount, onScanBeam
       <FlatList
         data={sorted}
         keyExtractor={(b) => b.id}
+        refreshing={refreshing}
+        onRefresh={onRefresh}
         renderItem={({ item }) => <Row beam={item} locked={locked} onMount={onMount} />}
         contentContainerStyle={styles.list}
         ListEmptyComponent={loading ? null : <Text style={styles.empty}>Hazır ya da tezgahta levent yok.</Text>}

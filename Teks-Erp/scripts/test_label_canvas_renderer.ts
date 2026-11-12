@@ -299,9 +299,18 @@ async function main() {
 
   // --- HTML: mutlak konum + UTF-8 (native'de asciiFold, HTML'de tam Türkçe) ---
   check("HTML: mutlak konum mm", html.includes("left:30mm") && html.includes("top:3mm"));
-  // ORTAK PAYDA: HTML de native ile AYNI metni basar (Türkçe ASCII'ye katlanır)
-  // — eleman dilden dile farklı çıktı vermez (kullanıcı kararı).
-  check("HTML: metin native ile aynı (ASCII katlama)", html.includes("Sahin Tekstil") && html.includes("SABIT NOT") && !html.includes("Şahin"));
+  // HTML metni KATLANMAZ (2026-11-11, EN/RU şablon önizlemesi): Türkçe ve Kiril tam basılır;
+  // katlama yalnız yazıcı komut yolunda (PPLA/ZPL yukarıda "SABIT NOT").
+  // Negatif sonda (ölçüldü 2026-11-11): textDiv'e asciiFold geri konunca bu üç satır kırmızı.
+  check("HTML: Türkçe metin korunur (katlama yok)", html.includes("Şahin Tekstil") && html.includes("SABİT NOT") && !html.includes("Sahin Tekstil"));
+  const ruLayout: CanvasLayout = { v: 1, elements: [
+    { id: "q", type: "qr", x: 3, y: 3 },
+    { id: "ru", type: "text", text: "Ткань: тюль", x: 30, y: 3 },
+    { id: "rf", type: "field", bind: "customerName", label: "Клиент", x: 30, y: 10 },
+  ] } as unknown as CanvasLayout;
+  const htmlRu = buildCanvasLabelHtml({ ...mk({ layout: ruLayout, payload: { ...payload, customerName: "ERTÜL" } as unknown as LabelPayload }), copies: 1, barcodeSvg: "<svg viewBox=\"0 0 1 1\"></svg>", qrSvg: "<svg viewBox=\"0 0 1 1\"></svg>" });
+  check("HTML: Kiril sabit metin korunur", htmlRu.includes(">Ткань: тюль<"));
+  check("HTML: Kiril başlık + Türkçe değer korunur (ERTÜL)", htmlRu.includes(">Клиент: ERTÜL<"));
   check("HTML: @page medya boyutu", html.includes("size: 100mm 60mm"));
   check("HTML: kopya=2 sayfa", (html.match(/page-break-after/g) ?? []).length === 1);
   check("HTML: line/box div'leri", html.includes("background:#000") && html.includes("border:1mm solid #000"));

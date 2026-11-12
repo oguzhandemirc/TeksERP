@@ -5,9 +5,9 @@
 // gelsin, kullanıcı değiştirebilsin. Tek kaynak bu sabit. Davranış (basit, dirty takibi yok):
 //   · YENİ kayıtta tür değişimi = öneriyi UYGULA (kutular öneriye sıfırlanır)
 //   · DÜZENLEMEDE = DOKUNMA (tür değişse bile mevcut istasyonun yetenekleri sessizce ezilmez)
-// Düzen: RAW_QC hiçbiri · PROCESS_QC kart akışı + muayene · TAMBUR özellik + muayene (seed Tambur kolon
-// varsayılanıyla özellik uygular) · SUBCONTRACTOR renk + özellik · SHIPPING hiçbiri · WEAVING levent
-// tüketir · OTHER hiçbiri. Muayene önerisi backend `inspectionDefaultForKind` ile aynı küme.
+// Düzen: RAW_QC hiçbiri · PROCESS_QC kart akışı + muayene · TAMBUR yalnız özellik (muayene 2026-11-09'dan
+// beri kapalı — son istasyon topa hata yazmaz) · SUBCONTRACTOR renk + özellik · SHIPPING hiçbiri · WEAVING
+// levent tüketir · OTHER hiçbiri. Muayene önerisi backend `inspectionDefaultForKind` ile aynı küme.
 // =============================================================================
 import { StationKind } from "@/types/enums";
 import type { StationFormValues } from "./schema";
@@ -29,7 +29,7 @@ const NONE: StationCapabilityValues = {
 export const STATION_KIND_CAPABILITY_DEFAULTS: Record<StationKind, StationCapabilityValues> = {
   [StationKind.RAW_QC]: NONE,
   [StationKind.PROCESS_QC]: { ...NONE, appliesQuality: true, inspectionEnabled: true },
-  [StationKind.TAMBUR]: { ...NONE, appliesProperty: true, inspectionEnabled: true },
+  [StationKind.TAMBUR]: { ...NONE, appliesProperty: true },
   [StationKind.SUBCONTRACTOR]: { ...NONE, appliesColor: true, appliesProperty: true },
   [StationKind.SHIPPING]: NONE,
   [StationKind.WEAVING]: { ...NONE, consumesWarpBeam: true },

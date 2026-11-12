@@ -238,6 +238,8 @@ const ENUM_LABELS_ANA: Record<string, string> = {
   PPLB: "PPLB (Argox)",
   // RollEntrySource (eksik kalanlar)
   SEMI_FINISHED: "Yarı Mamul",
+  // RollStage (2026-11-10) — RAW InspectionPhase ile paylaşımlı (override aşağıda), SEMI_FINISHED ortak.
+  FINISHED: "Bitmiş",
   TAMBUR_MANUAL: "Tamburda Elle Eklendi",
   WEAVING: "Dokumadan İndi",
   // StationKind.WARPING (devere, 2026-09-18) — tek anlam, çakışma yok.
@@ -317,6 +319,14 @@ const ENUM_LABELS_ANA: Record<string, string> = {
 
   // DocumentScanContentState (K28 fotoğraf saklama) — REDUCED/PURGED çakışır, DOCUMENT_SCAN.contentState override'ı
   FULL: "Tam",
+  // ConsumableNormBasis — sarf normu tabanı (2026-11-10)
+  PER_METER: "Metre başına",
+  PER_ROLL: "Top başına",
+  // ConsumableMovementKind (sarf stok defteri — kuşak / kurşun şeridi; ek dosya satır tavanında)
+  RECEIPT_IN: "Mal kabul girişi",
+  RECEIPT_CANCEL_OUT: "Mal kabul iptali",
+  CONSUMPTION_OUT: "Üretim tüketimi",
+  CONSUMPTION_REVERSAL_IN: "Tüketim geri alındı",
 };
 
 /** Enum DEĞERLERİ (durum/tür kolonlarının içeriği) → Türkçe. Bilinmeyen → ham. */
@@ -398,6 +408,10 @@ export const FIELD_ENUM_OVERRIDES: Record<string, Record<string, string>> = {
   // DeliveryNoteAliasScope.PROCESS (gelen belge D4, 2026-10-29) — belgedeki İŞLEM metninin eşlemesi;
   // global `PROCESS` RollErrorOrigin dilinde ("Süreç hatası"). Ortak Türkçe YETMEZ.
   "DELIVERY_NOTE_ALIAS.scope": { PROCESS: "İşlem" },
+  // RollStage.RAW (top aşaması, 2026-11-10) — global "Ham muayene" InspectionPhase dilidir; aşamada "Ham".
+  "ROLL.stage": { RAW: "Ham" },
+  "ROUTE.outputStage": { RAW: "Ham" },
+  "WORK_ORDER_STEP.outputStage": { RAW: "Ham" },
   // ServiceMeterBasis (H7, 2026-10-29) — global `CUT` ("Kesildi", RollErrorAction) ve `RECEIVED`
   // ("Aldığımız", ChequeKind) fatura metre esasında yanlış. Ortak Türkçe YETMEZ.
   "SERVICE_BILLING_LINK.meterBasis": { CUT: "Kesim metresi", RECEIVED: "Teslim alınan metre" },

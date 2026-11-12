@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Ban, CheckCircle2, FileText, History, Link2, Maximize2, PackageCheck, Palette, Pencil, Ruler } from "lucide-react";
+import { Maximize2 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
-import { PermissionGate } from "@/components/PermissionGate";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { printHistoryHref } from "@/lib/print-history-query";
 import { workOrderStatusLabels, workOrderTypeLabels } from "@/types/enums";
 import { workOrderService } from "./service";
 import { WorkOrderDocumentsDialog } from "./WorkOrderDocumentsDialog";
@@ -14,13 +15,15 @@ import { WorkOrderCancelDialog } from "./WorkOrderCancelDialog";
 import { WorkOrderCompleteDialog } from "./WorkOrderCompleteDialog";
 import { LinkOrderDialog } from "./LinkOrderDialog";
 import { ChangeTargetDialog } from "./ChangeTargetDialog";
-import { AddBatchButton } from "./AddBatchButton";
-import { UnlinkOrderButton } from "./UnlinkOrderButton";
+import { AddBatchDialog } from "./AddBatchDialog";
+import { UnlinkOrderDialog } from "./UnlinkOrderDialog";
+import { WorkOrderSheetActions } from "./WorkOrderHeaderActions";
+import { sheetActionVisibility, type SheetActionId } from "./header-actions";
 import { FasonReceiveDialog } from "./FasonReceiveDialog";
 import { summarizeLinkedFulfillment } from "./order-fulfillment";
 import { V3Section } from "./detail-v3/V3Section";
 import { ProcessSummaryCard } from "./detail-v3/ProcessSummaryCard";
-import { VariantTargetsSection } from "./detail-v3/VariantTargetsSection";
+import { ConsumableUsageCard } from "./detail-v3/ConsumableUsageCard";
 import { useKursunGramajCatalog } from "@/lib/kursun-gramaj";
 import { KunyeCard } from "./detail-v3/KunyeCard";
 import { RouteStepline } from "./detail-v3/RouteStepline";
@@ -31,7 +34,7 @@ import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
 import "./detail-v3/work-order-detail-v3.css";
 import type { WorkOrder } from "./types";
 import { TERIM } from "@/lib/terim";
-import { PrintHistoryLink } from "@/components/print/PrintHistoryLink";
+import { FasonTag } from "./FasonTag";
 
 interface Props {
   workOrder: WorkOrder | null;
@@ -73,7 +76,10 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
   const [inProgressConfirmOpen, setInProgressConfirmOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [completeOpen, setCompleteOpen] = useState(false);
+  const [addBatchOpen, setAddBatchOpen] = useState(false);
+  const [unlinkOpen, setUnlinkOpen] = useState(false);
   const openTarget = useOpenTarget();
+  const { permissions } = useRoleAccess();
 
   const detail = useQuery({
     queryKey: ["work-order-detail", workOrder?.id],
@@ -104,17 +110,34 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
   const hasProduced = (wo?.producedRolls?.count ?? 0) > 0 || !!wo?.closeSnapshot;
   const showOrders = hasOrders || wo?.type === "STOCK_PRODUCTION";
 
-  const canEdit = Boolean(wo && onEdit && (wo.status === "PLANNED" || wo.status === "IN_PROGRESS"));
-  const canCancel = Boolean(
-    wo && wo.status !== "COMPLETED" && wo.status !== "CANCELLED" && wo.status !== "SUPERSEDED",
+  // Görünürlük tek kaynak `header-actions.ts` (detay başlığıyla aynı koşullar); burada yalnız diyalog bağlanır.
+  const visible = wo ? sheetActionVisibility(wo, permissions, Boolean(onEdit)) : null;
+  const editWarn = wo?.status === "IN_PROGRESS" && (
+    <span style={{ color: "var(--warn)" }} aria-label="üretim devam ediyor">
+      ⚠
+    </span>
   );
-  const canComplete = Boolean(wo && wo.status === "IN_PROGRESS");
-  // Plan değişikliği (renk/en) bitmiş/iptal/devredilmiş iş emrinde KAPALI
-  // (2026-08-21 kullanıcı kararı); uyumlu "Sipariş Bağla" açık kalır (stoktan
-  // siparişe). Backend aynı kuralı 409 ile uygular — buton yalnız aynayı gösterir.
-  const canChangePlan = Boolean(
-    wo && wo.status !== "COMPLETED" && wo.status !== "CANCELLED" && wo.status !== "SUPERSEDED",
-  );
+  const runAction = (id: SheetActionId) => {
+    if (!wo) return;
+    const open: Record<SheetActionId, () => void> = {
+      edit: () => (wo.status === "IN_PROGRESS" ? setInProgressConfirmOpen(true) : onEdit?.(wo)),
+      addBatch: () => setAddBatchOpen(true),
+      fasonReceive: () => setFasonReceiveOpen(true),
+      linkOrder: () => setLinkOrderOpen(true),
+      unlinkOrder: () => setUnlinkOpen(true),
+      changeColor: () => setChangeMode("color"),
+      changeWidth: () => setChangeMode("width"),
+      documents: () => setDocumentsOpen(true),
+      events: () => setEventsOpen(true),
+      printHistory: () => {
+        onOpenChange(false);
+        openTarget(printHistoryHref(wo.id));
+      },
+      complete: () => setCompleteOpen(true),
+      cancel: () => setCancelOpen(true),
+    };
+    open[id]();
+  };
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -141,11 +164,11 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                 <div className="sheet-head">
                   <div className="sheet-id">
                     <span className="wonum mono">{wo.workOrderNumber}</span>
+                    <FasonTag type={wo.type} long />
                     <span className={`pill ${STATUS_PILL[wo.status] ?? "neutral"}`}>
                       <span className="dot" />
                       {workOrderStatusLabels[wo.status]}
                     </span>
-                    <PrintHistoryLink subjectId={wo.id} className="ml-auto" />
                   </div>
                   <div className="sheet-sub">
                     {workOrderTypeLabels[wo.type]}
@@ -166,94 +189,13 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                       <Maximize2 className="h-3.5 w-3.5" /> Detayı Aç
                     </button>
 
-                    {canEdit && (
-                      <PermissionGate permission="workorder:write">
-                        <button
-                          type="button"
-                          className="btn"
-                          onClick={() => {
-                            if (wo.status === "IN_PROGRESS") setInProgressConfirmOpen(true);
-                            else onEdit?.(wo);
-                          }}
-                        >
-                          <Pencil className="h-3.5 w-3.5" /> Düzenle
-                          {wo.status === "IN_PROGRESS" && (
-                            <span style={{ color: "var(--warn)" }} aria-label="üretim devam ediyor">
-                              ⚠
-                            </span>
-                          )}
-                        </button>
-                      </PermissionGate>
-                    )}
-
-                    {/* Dar kapılar (2026-08-17): tek bir şeyi değiştirirler ve
-                        "Düzenle"nin aksine rota/hedef/metrajı açmazlar. Üretim
-                        başlamış iş emrinde de kullanılabilirler — asıl amaç bu. */}
-                    <PermissionGate permission="workorder:write">
-                      <button type="button" className="btn" onClick={() => setLinkOrderOpen(true)}>
-                        <Link2 className="h-3.5 w-3.5" /> Sipariş Bağla
-                      </button>
-                    </PermissionGate>
-                    <UnlinkOrderButton
-                      wo={wo}
-                      look="sheet"
-                      onSuggestColor={(id) => {
-                        setPrefillColorId(id);
-                        setChangeMode("color");
-                      }}
-                    />
-                    <PermissionGate permission="workorder:write">
-                      {canChangePlan && (
-                        <>
-                          <button type="button" className="btn" onClick={() => setChangeMode("color")}>
-                            <Palette className="h-3.5 w-3.5" /> Rengi Değiştir
-                          </button>
-                          <button type="button" className="btn" onClick={() => setChangeMode("width")}>
-                            <Ruler className="h-3.5 w-3.5" /> Eni Değiştir
-                          </button>
-                        </>
-                      )}
-                      <button type="button" className="btn" onClick={() => setFasonReceiveOpen(true)}>
-                        <PackageCheck className="h-3.5 w-3.5" /> Fason Kabul
-                      </button>
-                    </PermissionGate>
-                    <AddBatchButton wo={wo} look="sheet" />
-
-                    <button type="button" className="btn" onClick={() => setDocumentsOpen(true)}>
-                      <FileText className="h-3.5 w-3.5" /> Belgeler
-                    </button>
-
-                    <button type="button" className="btn" onClick={() => setEventsOpen(true)}>
-                      <History className="h-3.5 w-3.5" /> Hareketler
-                    </button>
-
-                    {canComplete && (
-                      <PermissionGate permission="workorder:write">
-                        <button
-                          type="button"
-                          className="btn"
-                          style={{
-                            color: "var(--ok)",
-                            borderColor: "color-mix(in srgb, var(--ok) 40%, var(--border-strong))",
-                          }}
-                          onClick={() => setCompleteOpen(true)}
-                        >
-                          <CheckCircle2 className="h-3.5 w-3.5" /> Kapat
-                        </button>
-                      </PermissionGate>
-                    )}
-
-                    {canCancel && (
-                      <PermissionGate permission="workorder:write">
-                        <button
-                          type="button"
-                          className="btn danger"
-                          style={{ marginLeft: "auto" }}
-                          onClick={() => setCancelOpen(true)}
-                        >
-                          <Ban className="h-3.5 w-3.5" /> İptal Et
-                        </button>
-                      </PermissionGate>
+                    {visible && (
+                      <WorkOrderSheetActions
+                        visible={visible}
+                        onAction={runAction}
+                        marks={editWarn ? { edit: editWarn } : undefined}
+                        groupMarks={editWarn && visible.edit ? { duzenle: editWarn } : undefined}
+                      />
                     )}
                   </div>
                 </div>
@@ -284,7 +226,7 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                   </V3Section>
                 )}
 
-                <VariantTargetsSection workOrderId={wo.id} />
+                <ConsumableUsageCard workOrderId={wo.id} />
 
                 {hasProduced && (
                   <V3Section title="Üretilen Toplar">
@@ -320,6 +262,18 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
 
         {wo && (
           <>
+            {visible?.addBatch && <AddBatchDialog open={addBatchOpen} onOpenChange={setAddBatchOpen} wo={wo} />}
+            {visible?.unlinkOrder && (
+              <UnlinkOrderDialog
+                open={unlinkOpen}
+                onOpenChange={setUnlinkOpen}
+                wo={wo}
+                onSuggestColor={(id) => {
+                  setPrefillColorId(id);
+                  setChangeMode("color");
+                }}
+              />
+            )}
             <FasonReceiveDialog
               open={fasonReceiveOpen}
               onOpenChange={setFasonReceiveOpen}

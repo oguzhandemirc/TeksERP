@@ -11,7 +11,7 @@ import { useTabsStore } from "@/store/tabs";
 import { useIsTabActive } from "@/components/layout/tabs/tab-active";
 import { belgeOkutStage, type BelgeOkutStage } from "@/pages/Operations/GelenBelgeler/belgeOkut";
 import { getDeliveryNote, INCOMING_DOCUMENT_QUERY_KEY } from "@/pages/Operations/GelenBelgeler/service";
-import { duplicateDocNoConflict } from "@/pages/Operations/GelenBelgeler/DuplicateDocNo";
+import { duplicateGateConflict, duplicateGateText, withDuplicateConfirm } from "@/pages/Operations/GelenBelgeler/DuplicateDocNo";
 import type { DeliveryNoteDetail } from "@/pages/Operations/GelenBelgeler/types";
 import type { WorkOrderFormValues } from "../schema";
 import { FromDocBadge } from "./DocFields";
@@ -181,11 +181,12 @@ function useDocSubmit() {
       if (autoPrint) toast.message(AUTO_PRINT_TEXT[await printRefakatCard(out.result.workOrderId)]);
     } catch (e) {
       attempt.onFailure(e);
-      const dup = duplicateDocNoConflict(e);
+      const dup = duplicateGateConflict(e);
       if (dup) {
-        toast.error(`Bu belge no (${dup.senderDocNo}) işi süren başka bir belgede de var.`, {
-          action: { label: "Yine de kaydet", onClick: () => void run({ ...input, confirmDuplicateDocNo: true }) },
-        });
+        // Parti no BLOCK'u yalnız bilgi; WARN'larda "Yine de" önceki onaylarla birlikte yeniden gönderir.
+        toast.error(duplicateGateText(dup), dup.confirmable
+          ? { action: { label: dup.gate === "docNo" ? "Yine de kaydet" : "Yine de aç", onClick: () => void run({ ...input, confirms: withDuplicateConfirm(input.confirms, dup) }) } }
+          : undefined);
         return;
       }
       toast.error(saveErrorHint(e) ?? apiErrorText(e, "Kaydedilemedi."));

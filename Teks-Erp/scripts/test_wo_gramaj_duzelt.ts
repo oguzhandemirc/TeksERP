@@ -5,10 +5,11 @@
 //   §1 önizleme (`getWorkOrderKursunGramaj`): hedef · seçenekler · kurşunu uygulanmış / kalan canlı top sayısı
 //   §2 ⭐ değişim: uygulanmış topun RollOperation gramajı DEĞİŞMEZ · uyarı "N topa eski … kalan M topa" ·
 //      İE hareket defterine FIELD_CHANGED `kursunGramaj` (sebep + eski/yeni ad) · aynısı no-op, uyarısız
-//   §3 kapı: route `workorder:write ∨ mobile:is-emri-duzelt` · ⭐ yalnız tablet izniyle kurşun dışı özellik 403 ·
+//   §3 kapı: route `workorder:write ∨ mobile:is-emri-duzelt` · ⭐ yalnız tablet izniyle İE'de OLMAYAN kurşun dışı hedef 403
+//      (mevcut hedefin sebepli düzeltmesi 2026-11-09'dan beri serbest — `test_wo_target_tablet_fix`) ·
 //      tablet izniyle kapanmış İE 409 WORK_ORDER_PLAN_FROZEN · panel izniyle (workorder:write) bugünkü gibi serbest
 // NEGATİF SONDA (2026-11-06): `kursunRollSplit`teki uygulanmış top süzgeci (`id notIn`) kaldırılınca §1/§2 sayıları
-//   KIRMIZI; controller'da `kursunOnly` hep false yapılınca §3 ⭐ 403 KIRMIZI.
+//   KIRMIZI; controller'da `kursunOnly` (2026-11-09: `tabletFix`) hep false yapılınca §3 ⭐ 403 KIRMIZI.
 // =============================================================================
 import type { NextFunction, Request, Response } from "express";
 import prisma, { pool } from "../src/lib/prisma";
@@ -151,7 +152,7 @@ async function main(): Promise<void> {
   const denied = gate(["workorder:read"]);
   check("route: yalnız workorder:read → 403", denied instanceof AppError && denied.statusCode === 403);
   const wide = await callPut(wo.id, ["mobile:is-emri-duzelt"], actor, { items: [{ propertyId: other.id, valueId: other.values[0]!.id }] });
-  check("⭐ tablet izniyle kurşun dışı özellik → 403", wide.err instanceof AppError && wide.err.statusCode === 403, String((wide.err as Error | null)?.message ?? wide.status));
+  check("⭐ tablet izniyle İE'de olmayan kurşun dışı hedef → 403", wide.err instanceof AppError && wide.err.statusCode === 403, String((wide.err as Error | null)?.message ?? wide.status));
   const panel = await callPut(wo.id, ["workorder:write"], actor, { items: [{ propertyId: other.id, valueId: other.values[0]!.id }] });
   check("panel izniyle kurşun dışı özellik bugünkü gibi yazılır", panel.status === 200 && panel.err === null);
   await prisma.workOrder.update({ where: { id: wo.id }, data: { status: "COMPLETED" } });

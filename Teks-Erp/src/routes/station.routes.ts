@@ -11,6 +11,7 @@ import { WorkSessionService, MOBILE_SESSION_PERMS } from "../services/work-sessi
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { validateMachineDevereFields, validateStationDevereFields } from "../middlewares/devere-station-fields.middleware";
+import { validateMachinePlanFields } from "../middlewares/machine-plan-fields.middleware";
 
 // --- Station ---
 export const stationService = new StationService({
@@ -179,6 +180,9 @@ router.get("/:id", verifyToken, requirePermission("station:read"), stationContro
  *               inspectionEnabled:
  *                 type: boolean
  *                 description: Kalite MUAYENESİ (hata girişi) bu istasyonda açık mı. Gönderilmezse türden türetilir (PROCESS_QC ve TAMBUR true, diğerleri false).
+ *               machineStopEnabled:
+ *                 type: boolean
+ *                 description: Duruş bildirimi — false iken bu istasyonun makinelerinde insan duruş AÇAMAZ (400 STOP_STATION_DISABLED); açık duruş kapatılabilir. Varsayılan true.
  *               producesWarpBeam:
  *                 type: boolean
  *                 description: Devere — bu istasyonun makineleri LEVENT SARAR. Varsayılan false.
@@ -229,6 +233,9 @@ router.post("/", verifyToken, requirePermission("station:write"), validateStatio
  *               inspectionEnabled:
  *                 type: boolean
  *                 description: Kalite MUAYENESİ (hata girişi) açık mı. Gönderilmezse DOKUNULMAZ.
+ *               machineStopEnabled:
+ *                 type: boolean
+ *                 description: Duruş bildirimi açık mı (false → insan duruş açamaz). Gönderilmezse DOKUNULMAZ.
  *               isActive: { type: boolean }
  *     responses:
  *       200:
@@ -378,11 +385,14 @@ machineRouter.get("/:id/delete-preview", verifyToken, requirePermission("station
  *               code: { type: string, example: "TEZGAH_04" }
  *               name: { type: string, example: "Dokuma Tezgah 4" }
  *               warpBeamSlots: { type: integer, minimum: 0, maximum: 32, description: "Devere Faz 3 — levent yuva sayısı (0 = cağlıklı çözgü makinesi). Varsayılan 1." }
+ *               planRpm: { type: integer, nullable: true, minimum: 1, maximum: 5000, description: "Plan devri (devir/dk) — öneri girdisi; null = bilinmiyor." }
+ *               planEfficiencyPct: { type: number, nullable: true, exclusiveMinimum: 0, maximum: 100, description: "Plan randımanı (%), 2 ondalık." }
+ *               maxWorkingWidthCm: { type: number, nullable: true, exclusiveMinimum: 0, description: "Azami çalışma eni (cm), 2 ondalık." }
  *     responses:
  *       201:
  *         description: Makine oluşturuldu
  */
-machineRouter.post("/", verifyToken, requirePermission("station:write"), validateMachineDevereFields, machineController.create);
+machineRouter.post("/", verifyToken, requirePermission("station:write"), validateMachinePlanFields, validateMachineDevereFields, machineController.create);
 
 /**
  * @openapi
@@ -397,11 +407,21 @@ machineRouter.post("/", verifyToken, requirePermission("station:write"), validat
  *         name: id
  *         required: true
  *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               warpBeamSlots: { type: integer, minimum: 0, maximum: 32 }
+ *               planRpm: { type: integer, nullable: true, minimum: 1, maximum: 5000, description: "Plan devri (devir/dk) — öneri girdisi; null = bilinmiyor." }
+ *               planEfficiencyPct: { type: number, nullable: true, exclusiveMinimum: 0, maximum: 100, description: "Plan randımanı (%), 2 ondalık." }
+ *               maxWorkingWidthCm: { type: number, nullable: true, exclusiveMinimum: 0, description: "Azami çalışma eni (cm), 2 ondalık." }
  *     responses:
  *       200:
  *         description: Güncellendi
  */
-machineRouter.patch("/:id", verifyToken, requirePermission("station:write"), validateMachineDevereFields, machineController.update);
+machineRouter.patch("/:id", verifyToken, requirePermission("station:write"), validateMachinePlanFields, validateMachineDevereFields, machineController.update);
 
 /**
  * @openapi

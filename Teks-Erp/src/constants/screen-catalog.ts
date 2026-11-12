@@ -248,6 +248,8 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // Dokuma işi planlama (2026-09-13, ekran dilimi). Modül `dokumaEnabled` — üretime
   // bağımlı, tezgah izlemenin kardeşi; referans profilde KAPALI.
   { key: "operations/weaving-orders", app: "desktop", modul: "dokumaEnabled", title: TERIM.dokumaIsEmri.cogul, requires: ["weavingorder:read"], capabilities: ["weavingorder:write"] },
+  // Tezgâh Yükü (SY-3 L2): salt okuma çizelgesi, aynı okuma izni; yazma yeteneği yok.
+  { key: "operations/loom-load", app: "desktop", modul: "dokumaEnabled", title: "Tezgâh Yükü", requires: ["weavingorder:read"], capabilities: [] },
   // Leventler (devere Faz 1b, 2026-09-14): plan → sar → hazır levent; sarım iptali ayrı yetenek.
   { key: "operations/warp-beams", app: "desktop", modul: "devereEnabled", title: "Leventler", requires: ["warpbeam:read"], capabilities: ["warpbeam:write", "warpbeam:cancel"] },
   // Tezgah duruşları (Faz 1b web yüzeyi, 2026-09-14): elle giriş/kapatma/geri alma `loom:manual-entry`,
@@ -365,6 +367,8 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
 const mobile: ScreenEntry[] = [
   { key: "KK1", app: "mobile", modul: "productionEnabled", title: "Ham Giriş", requires: ["mobile:kk1"], capabilities: [{ code: "mobile:kk1-desen", label: "Yeni desen (kumaş) oluşturabilir" }, { code: "mobile:kk1-yari-mamul", label: "Dışarıdan yarı mamul kabul edebilir" }, { code: "mobile:kumas", label: "Kumaş tanımı ekleyebilir" }] },
   { key: "KursunQc", app: "mobile", modul: "productionEnabled", title: "Kurşun", requires: ["mobile:kk2-kursun"], capabilities: [{ code: "mobile:makine-durus", label: "Makine duruşu aç / kapat / sebep gir (Duruş çipi; uretim.makineDurusTakibi açıkken)" }] },
+  // Kurşunsuz kalite istasyonu (Detaylı KK vb.): Kurşun ekranının kurşun kipi kapalı hâli; aynı izin. İstasyon yoksa tablet gizler.
+  { key: "KaliteKontrol", app: "mobile", modul: "productionEnabled", title: "Kalite Kontrol", requires: ["mobile:kk2-kursun"], capabilities: [{ code: "mobile:makine-durus", label: "Makine duruşu aç / kapat / sebep gir (Duruş çipi; uretim.makineDurusTakibi açıkken)" }] },
   { key: "Tambur", app: "mobile", modul: "productionEnabled", title: "Tambur", requires: ["mobile:tambur"], capabilities: [{ code: "mobile:makine-durus", label: "Makine duruşu aç / kapat / sebep gir (Duruş çipi; uretim.makineDurusTakibi açıkken)" }, { code: "mobile:tambur-duzelt", label: "Saha düzeltmesi: topu Tambur'a alma / manuel top" }, { code: "label:edit", label: "Etiketteki müşteri adını sipariş kalemi için düzeltebilir" }, { code: "customer-alias:write", label: "Müşterideki adı KALICI değiştirebilir" }, { code: "roll:manual-adjust", label: "Top metraj/kalite düzeltmesi" }] },
   { key: "Depo", app: "mobile", modul: "cekirdek:stok-giris", title: "Depo", requires: ["mobile:depo"], capabilities: [] },
   { key: "TartiPaket", app: "mobile", modul: "cekirdek:sevkiyat-depo", title: TERIM_AD.tartiPaket, requires: ["mobile:tarti-paket"], capabilities: [{ code: "mobile:sevkiyat", label: "Sevk çıkışı adımlarını da görebilir" }] },

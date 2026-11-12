@@ -46,8 +46,12 @@ import {
   StationKind,
 } from "@prisma/client";
 import { reserveRollBarcodesInOrderTx } from "../helpers/roll-barcode.helper";
-import { resolveTamburCutWeight, resolveTamburLabelBatchNo } from "../helpers/tambur-customer-settings.helper";
+import { resolveTamburConsignee, resolveTamburCutWeight, resolveTamburLabelBatchNo, resolveTamburWeightSource } from "../helpers/tambur-customer-settings.helper";
+import { inheritedChildWidth, ownerTailIntent, resolveTamburChildWidth } from "../helpers/tambur-child-label.helper";
+import { resolveRollLabelTexts } from "../helpers/label-batch-no.helper";
 import { applyTamburCapabilitiesTx, closeOrphanRollErrors, liveCutChildIdsTx } from "./shared";
+import { resolveTamburLabelTemplate } from "../helpers/tambur-label-template.helper";
+import { rollLabelKindOf } from "../helpers/roll-stage.helper";
 
 // eslint-disable-next-line max-params -- özgün metot 5 parametreli ve uyarısı cephedeki imzada sayılır; ailenin max-params katkısı bölme öncesi gibi İKİ
 export async function finalizeWarehouseCut(
@@ -65,6 +69,18 @@ export async function finalizeWarehouseCut(
       weightKg?: number | null;
       /** Kalan topun etiket parti no'su (müşteri ayarı açıksa). */
       labelBatchNo?: string | null;
+      labelItemName?: string | null;
+      labelColorName?: string | null;
+      /** Emanet top etiket alıcısı (sahibin alıcısı; boş = sahibin kendisi). */
+      labelConsigneeId?: string | null;
+      /** Kesimde seçilen etiket şablonu (çoklu etiket seti); boş/varsayılan = null yazılır. */
+      labelTemplateId?: string | null;
+      /** Teklif hesabının cihaz bağlamı (controller `req.device.id`). */
+      labelDeviceId?: string | null;
+      /** Etikette kartında ölçülen en (cm) — mirası ezer (K7). */
+      widthCm?: number | null;
+      /** Kg kaynağı beyanı (SCALE | MANUAL | SIMULATED); kaynaksız kg MANUAL yazılır. */
+      weightSource?: "SCALE" | "MANUAL" | "SIMULATED" | null;
     },
     userId?: string,
     /** Oturum istasyonu — KALAN parçanın giriş istasyonu damgası (cutWarehouseRoll ikizi). */
@@ -132,6 +148,33 @@ export async function finalizeWarehouseCut(
       action !== "discard" && Number(parent.currentQty) > 0
         ? await resolveTamburLabelBatchNo({ labelBatchNo: data.labelBatchNo, targetCustomerId: null, ownerCustomerId: parent.ownerCustomerId })
         : null;
+    // Kalan topun etiket kumaş adı / rengi — yalnız top doğuyorsa; miras yok, ayara bağlı değil.
+    const labelTexts =
+      action !== "discard" && Number(parent.currentQty) > 0
+        ? resolveRollLabelTexts(data)
+        : { labelItemName: null, labelColorName: null };
+    // Kalan topun kg kaynağı + emanet alıcısı + en (K7) + niyet (emanet → sahip) — yalnız top doğuyorsa.
+    const remainingBorn = action !== "discard" && Number(parent.currentQty) > 0;
+    const remainingWeightSource = remainingBorn
+      ? await resolveTamburWeightSource({ weightKg: remainingWeightKg, weightSource: data.weightSource, stamp: { machineId: sessionMachineId } })
+      : null;
+    const remainingConsigneeId = remainingBorn
+      ? await resolveTamburConsignee({ labelConsigneeId: data.labelConsigneeId, targetCustomerId: null, ownerCustomerId: parent.ownerCustomerId })
+      : null;
+    const remainingWidth = remainingBorn
+      ? await resolveTamburChildWidth(await inheritedChildWidth(parent.id, parent.width), data.widthCm)
+      : { width: parent.width, trace: null };
+    const remainingIntent = ownerTailIntent(parent.ownerCustomerId);
+    const remainingTemplate = remainingBorn
+      ? await resolveTamburLabelTemplate({
+          labelTemplateId: data.labelTemplateId,
+          kind: rollLabelKindOf(parent.stage),
+          customerId: remainingIntent.labelCustomerId,
+          consigneeId: remainingConsigneeId,
+          deviceId: data.labelDeviceId,
+          machineId: sessionMachineId,
+        })
+      : { labelTemplateId: null, labelTemplateKind: null };
     // Ham parent: kalan parça ham kalır — "keep_*" → ham STOCK (üretime devam),
     // "scrap" → fire rolü. Bitmiş parent: klasik kalite kodu, çıktı WAREHOUSE.
     //
@@ -237,14 +280,20 @@ export async function finalizeWarehouseCut(
             barcode: childBarcode,
             itemId: parent.itemId,
             colorId: parent.colorId,
-            width: parent.width,
+            width: remainingWidth.width,
             // KAT — bu "kalan" parçadır, aynı sarımın devamı: parent'ın katını
             // DEVRALIR (kesilen parça yeni değer alabilir, kalan almaz).
             foldType: parent.foldType,
             initialQty: remainingQty,
             currentQty: remainingQty,
             weightKg: remainingWeightKg,
+            weightSource: remainingWeightSource,
+            labelConsigneeId: remainingConsigneeId,
+            labelTemplateId: remainingTemplate.labelTemplateId,
+            labelTemplateKind: remainingTemplate.labelTemplateKind,
             labelBatchNo: remainingLabelBatchNo,
+            labelItemName: labelTexts.labelItemName,
+            labelColorName: labelTexts.labelColorName,
             // Ham parent → kalan ham STOCK/SCRAP; bitmiş parent → WAREHOUSE.
             status: childStatus,
             qualityGrade: childQualityGrade,
@@ -261,16 +310,18 @@ export async function finalizeWarehouseCut(
             // (depo topu yeni bir iş emrine sokulabiliyor); doğru cevap KESİMİN yeri.
             entryStationId: resolveEntryStationId({ sessionStationId }),
             entrySource: RollEntrySource.TAMBUR_SPLIT,
+            stage: parent.stage, // Top Kesme çocuğu atanın aşamasını alır
             createdById: userId ?? null,
             createdMachineId: sessionMachineId ?? null,
-            // Kalan (leftover) parça — müşteri niyeti yok → stok etiketi.
-            lastLabelSnapshot: { stock: true },
+            // Kalan (leftover) parça — müşteri niyeti yok → stok etiketi; emanet topta sahip (sahip kilidi).
+            lastLabelSnapshot: remainingIntent.lastLabelSnapshot,
+            labelCustomerId: remainingIntent.labelCustomerId,
             },
         });
         if (propertySnapshot.length > 0) {
           await inheritRollPropertiesTx(tx, { childId: child.id, rows: propertySnapshot });
         }
-        await applyTamburCapabilitiesTx(tx, { caps: tamburCaps, stationId: tamburStationId, rollId: child.id, userId });
+        await applyTamburCapabilitiesTx(tx, { caps: tamburCaps, stationId: tamburStationId, rollId: child.id, userId, birth: "OUTPUT" });
         // Kalan child'a da KURSUN/QC2 kalıtımı uygula. Filter YOK — zincirleme
         // inherit (depo topundaki op'lar zaten inherit'li).
         const inheritedOps = await tx.rollOperation.findMany({
@@ -427,6 +478,8 @@ export async function finalizeWarehouseCut(
         remainingQty: result.remainingQty,
         defter: result.defter,
         notes: data.notes ?? null,
+        ...(remainingWidth.trace ? { measuredWidth: remainingWidth.trace } : {}),
+        ...(labelTexts.labelItemName || labelTexts.labelColorName ? labelTexts : {}),
       },
     });
 

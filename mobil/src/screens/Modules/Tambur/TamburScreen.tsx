@@ -17,6 +17,7 @@ import {
   TouchableRipple,
   Icon,
   ActivityIndicator,
+  Chip,
 } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
 import {
@@ -37,6 +38,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ScreenChrome from '../../../components/ScreenChrome';
+import StationActionBar from '../../../components/stationActions/StationActionBar';
+import type { StationAction } from '../../../components/stationActions/stationActionLayout';
 import AppMenu from '../../../components/AppMenu';
 import { tamburHeaderActions, type TamburHeaderAction } from './headerActions';
 import { MachineStopBand, MachineStopChip, useMachineStopControl } from '../../../components/machine-stop/MachineStopChip';
@@ -44,10 +47,21 @@ import { showStopOpenEntryWarning } from '../../../components/machine-stop/entry
 import CutActionBar from './CutActionBar';
 import WorkOrderOutputPanel from './WorkOrderOutputPanel';
 import TamburFinalLabelStrip from './TamburFinalLabelStrip';
+import { TARGET_LINE_PREFIX, TARGET_STOCK_VALUE, TargetButton, QualitySegment, targetButtonText } from './TamburCompactPickers';
+import { rememberedGrade, shortGradeLabel, startGrade } from './qualityMemory';
+import { RECENT_OUTPUT_SCREEN_KEY, resolveOutputColumns, toggleOutputColumn, type OutputColumnKey } from './recentOutputColumns';
+import { OutputColumnsButton, OutputColumnsPicker } from './OutputColumnsPicker';
+import { useTamburLabelCard } from './useTamburLabelCard';
 import TamburLabelInfoModal from './TamburLabelInfoModal';
-import { useTamburFinalLabel, useTamburPrintTiming } from './useTamburFinalLabel';
+import ConfirmDialog from '../../../components/ConfirmDialog';
+import { labelSummaryText, type LabelTextsBody } from './labelTexts';
+import { useTamburFinalLabel, useTamburLabelSuggestions, useTamburPrintTiming } from './useTamburFinalLabel';
+import { LABEL_TEMPLATE_NOT_OFFERED, useTamburTemplateChoice, useTemplateChoiceSync } from './useTamburTemplateChoice';
+import {
+  cutTemplateId, offerFromPreview, previewTemplateId, reprintTemplateWrite, shownTemplateId, templatePickerOptions,
+} from './labelTemplateChoice';
 import { useOwnerDefaultTarget } from './ownerTarget';
-import { finalizeWeightError, shouldAutoPrintAfterCut } from './finalLabel';
+import { finalizeWeightError, shouldAutoPrintAfterCut, splitSuggestion } from './finalLabel';
 import { LabelNamePreview } from './LabelNamePreview';
 import TamburFieldFix from './TamburFieldFix';
 import { usePermissions } from '../../../hooks/usePermission';
@@ -65,14 +79,16 @@ import { useOpenCardSearch } from '../../../components/stationDocLookup/useOpenC
 import { useMachinePeripherals, meterPeripheralFor } from '../../../hooks/useMachinePeripherals';
 import { readMeter } from '../../../hooks/usePeripheralIO';
 import RefreshButton from '../../../components/RefreshButton';
+import PullToRefreshView from '../../../components/PullToRefreshView';
 import RemoteListSheet from '../../../components/RemoteListSheet';
-import { labelService } from '../../../services/label.service';
+import { labelService, type RollTemplateOptions } from '../../../services/label.service';
 import { VARIANCE_MIN_REASON_TEXT } from '../../../constants/varianceReasons';
 import ScannerEntryBar from '../../../components/ScannerEntryBar';
 import { useDrawerActionQueue } from '../../../hooks/useDrawerActionQueue';
 import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
 import { useTruncationWarning } from '../../../hooks/useTruncationWarning';
 import { useManualRefresh, type ManualRefresh } from '../../../hooks/useManualRefresh';
+import TruncatedText from '../../../components/TruncatedText';
 import NumpadInput from '../../../components/NumpadInput';
 import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
@@ -83,7 +99,7 @@ import {
   useScrapGradeLabelEnabled,
   useScanRouteMode,
 } from '../../../hooks/useFeatureFlags';
-import { NumpadHost } from '../../../components/NumpadProvider';
+import { NumpadHost, NumpadModalHost } from '../../../components/NumpadProvider';
 import { RightPanelDrawer } from '../../../components/RightPanelDrawer';
 import PickerModal, { type PickerOption } from '../../../components/PickerModal';
 import RollFilterBar from '../../../components/filters/RollFilterBar';
@@ -105,7 +121,18 @@ import {
   type TamburMeasure,
 } from './measureSource';
 import TamburMeasureStrip, { type LastTamburMeasure } from './TamburMeasureStrip';
-import TamburTargetValueChips from './TamburTargetValueChips';
+import TamburMeterTrail, { useRollMeterTrail } from './TamburMeterTrail';
+import TamburWideCut from './TamburWideCut';
+import TamburMeasureCard from './TamburMeasureCard';
+import TamburIdleState, { TAMBUR_PICK_ROLL_TEXT } from './TamburIdleState';
+import TamburCardCodeSheet from './TamburCardCodeSheet';
+import { useTamburLivePreview } from './useTamburLivePreview';
+import { buildPreviewDraft, kesSubLabel, nextCutMode, widthHintText } from './labelPreviewMap';
+import { draftKey, partyCards, showJobTabs, showPartyList, switchDraft } from './partyList';
+import TamburModeBitirBar from './TamburModeBitirBar';
+import TamburCutSettingsCard from './TamburCutSettingsCard';
+import { collectCutReadings, kgAutoActive, measureVisibility } from './cutReadings';
+import { parseCutInput, rulerTotalM } from './meterTrail';
 import { findGradeByRole, gradeColor } from '../../../utils/qualityRole';
 import { resolveShortCutConfig } from './resolveShortCutConfig';
 import TamburSendToDyeModal from './TamburSendToDyeModal';
@@ -139,6 +166,7 @@ import {
 import SyncStatusChip from '../../../components/SyncStatusChip';
 import { SkeletonList, usePressScale, AnimatedEntrance } from '../../../components/motion';
 import { colors, spacing, radius, shadow } from '../../../theme';
+import { palette } from '../../../theme/tokens';
 import { lifecycleBadge } from '../../../lib/item-lifecycle';
 import { MANUAL_MIN_REASON } from '../../../constants/manualReasons';
 import Sortable, {
@@ -161,7 +189,7 @@ import type { ReasonPreset } from '../../../services/reasonPreset.service';
 import Animated, { useAnimatedRef } from 'react-native-reanimated';
 import { defectTypeService } from '../../../services/defectType.service';
 import { qualityGradeService } from '../../../services/qualityGrade.service';
-import { useFoldValues } from '../../../hooks/useFoldValues';
+import { preferredFoldCode, useFoldValues } from '../../../hooks/useFoldValues';
 import { useAttemptToken } from '../../../offline/attemptToken';
 import type {
   TamburStepSummary,
@@ -189,6 +217,7 @@ import { CustomerCodeBindSheet } from '../../../components/customerCode/Customer
 import { CustomerCodeBindButton } from '../../../components/customerCode/CustomerCodeBindButton';
 import { useAmbiguousScanPicker } from '../../../components/customerCode/CustomerCodeCandidateModal';
 import { useCustomerCodeBindable } from '../../../components/customerCode/useCustomerCodeBindable';
+const WorkOrderDetailSheet = React.lazy(() => import('../HizliIsEmri/WorkOrderDetailSheet'));
 
 // =============================================================================
 // Multi-job state — Tambur'da operatör paralel iş yürütebilir (KursunQc paralel).
@@ -278,7 +307,6 @@ function HeaderChip({
   label,
   onPress,
   accent,
-  fill,
   active,
   iconOnly,
 }: {
@@ -286,8 +314,6 @@ function HeaderChip({
   label: string;
   onPress: () => void;
   accent?: boolean;
-  /** true: 2. kat satırını (secondRow) eşit paylaşır — taşmaz, kaydırma gerekmez. */
-  fill?: boolean;
   /**
    * AÇIK bir MODU temsil eden chip (aksiyon değil, durum): dolu amber zemin +
    * koyu yazı. Aksiyon chip'lerinin translucent dilinden bilinçli olarak ayrışır
@@ -304,7 +330,6 @@ function HeaderChip({
       style={[
         styles.headerChip,
         accent && styles.headerChipAccent,
-        fill && styles.headerChipFill,
         active && styles.headerChipOn,
       ]}
       borderless
@@ -316,7 +341,6 @@ function HeaderChip({
       <View
         style={[
           styles.headerChipInner,
-          fill && styles.headerChipInnerFill,
           iconOnly && styles.headerChipInnerIcon,
         ]}
       >
@@ -468,6 +492,9 @@ export default function TamburScreen() {
   const { has: hasPermission } = usePermissions();
   // Cihaz tercihi (sunucuya gitmez): kesimden sonra kalite 1. Kaliteye dönsün mü?
   const resetQualityAfterCut = useDeviceSettingsStore((st) => st.tamburResetQualityAfterCut);
+  // Son elle basılan kalite cihazda kalıcı (saha 2026-11-10): kesim, top/kart geçişi ve yeniden açılışta seçili kalır.
+  const lastQualityCode = useDeviceSettingsStore((st) => st.tamburLastQualityCode);
+  const setLastQualityCode = useDeviceSettingsStore((st) => st.setTamburLastQualityCode);
   // KISA KESİM → OTOMATİK A1 (kural: shortCutQuality.ts). Bayrak + eşik artık
   // FABRİKA ayarıdır (feature-flags); cihaz yalnız 3-durumlu override taşır ve
   // ikisini `resolveShortCutConfig` birleştirir — "hangisi geçerli" sorusunun
@@ -539,6 +566,9 @@ export default function TamburScreen() {
   // tek bir gerçektir — iki ayrı hafıza tutmak operatörü şaşırtırdı.
   const cutMode = useDeviceSettingsStore((s) => s.tamburCutMode);
   const setCutMode = useDeviceSettingsStore((s) => s.setTamburCutMode);
+  // Kg kipi ayrı cihaz ayarı (2026-11-10); varsayılan manual = bugünkü davranış.
+  const kgMode = useDeviceSettingsStore((s) => s.tamburKgMode);
+  const setKgMode = useDeviceSettingsStore((s) => s.setTamburKgMode);
   
   const pendingRecutCleanupRef = useRef<{ remainingChild: Roll | null } | null>(null);
 
@@ -567,12 +597,8 @@ export default function TamburScreen() {
   const copiesBar = labelCopies.enabled
     ? { count: labelCopies.count, onInc: labelCopies.inc, onDec: labelCopies.dec }
     : undefined;
-  // Etiket TÜRÜ normalde RENKTEN çözülür (renksiz = ham kumaş → ROLL_RAW).
-  // Manuel Mod BİTMİŞ ürün üretir ve renk OPSİYONELDİR → renksiz manuel top ham
-  // etiketle basılırdı. Bu yüzden tür baskı İŞİNE bağlanır: null = renkten çöz
-  // (eski davranış, tüm mevcut yollar), değer = o iş için sabitlenmiş tür.
-  // Global "manuel moddayken hep ROLL_FINISHED" YANLIŞ olurdu — mod açıkken
-  // "Çıkanlar"dan yeniden basılan ESKİ bir ham top da bitmiş etiket alırdı.
+  // Etiket TÜRÜNÜ sunucu topun AŞAMASINDAN seçer (2026-11-10); tablet tahmin etmez.
+  // null = sunucuya bırak (tüm mevcut yollar); değer yalnız ELLE seçim içindir.
   const [printKind, setPrintKind] = useState<'ROLL_RAW' | 'ROLL_FINISHED' | null>(null);
   /** Fire kalitede ELLE baskı onayı bekleyen iş (bkz. startPrint fire kapısı). */
   const [scrapPrintConfirm, setScrapPrintConfirm] = useState<{
@@ -783,6 +809,9 @@ export default function TamburScreen() {
   // kendi içinde ayrı bir `undoTarget` tutuyor — o modal ayrı bir bileşen ve
   // state'i paylaşmıyorlar; ikisi aynı onay diyaloğunu kullanır.
   const [panelUndoTarget, setPanelUndoTarget] = useState<Roll | null>(null);
+  // "Bu işten çıkanlar" satırından etiket ad/renk/parti düzeltmesi → kayıttan sonra "yeniden bas?" sorusu.
+  const [labelFixRoll, setLabelFixRoll] = useState<Roll | null>(null);
+  const [labelFixReprint, setLabelFixReprint] = useState<Roll | null>(null);
   // AÇIK KUMAŞ akışının kapanış kararı (2026-08-09). Recut'ınkinden AYRI state:
   // iki akış aynı anda ekranda olabiliyor ve tek bayrağı paylaşsalardı biri
   // kapanınca diğerinin modalı da kapanırdı.
@@ -875,6 +904,23 @@ export default function TamburScreen() {
   );
   const defaultQualityCode = defaultGrade?.code ?? '';
   const defaultQualityName = defaultGrade?.name ?? '';
+  const lastGrade = useMemo(() => rememberedGrade(lastQualityCode, qualityGrades), [lastQualityCode, qualityGrades]);
+  // Top Kesme sıfırlamalarında: hatırlanan kalite > varsayılan (1. Kalite).
+  const recutStartQualityCode = (!resetQualityAfterCut && lastGrade?.code) || defaultQualityCode;
+  // Boş seçim başlangıç kalitesine çekilir (son seçilen → FIRST → katalogun ilki; kullanıcı 2026-11-11) — Kes kalite
+  // yüzünden kapalı başlamasın. Katalog/cihaz tercihi geç yüklenince de çalışır; elle seçim varsa dokunulmaz.
+  const initialGrade = useMemo(
+    () => startGrade(lastGrade, defaultGrade, qualityGrades, resetQualityAfterCut),
+    [lastGrade, defaultGrade, qualityGrades, resetQualityAfterCut],
+  );
+  useEffect(() => {
+    if (!initialGrade) return;
+    setWork((w) =>
+      w.voluntaryEntry.qualityGrade
+        ? w
+        : { ...w, voluntaryEntry: { ...w.voluntaryEntry, qualityGrade: initialGrade.code, qualityName: initialGrade.name } },
+    );
+  }, [initialGrade]);
   // KISA KESİM kalitesi de ROLDEN (`SECOND`) — `shortCutQuality.ts` ile aynı
   // kaynak; burada ikinci kez kod yazılsaydı iki yüzey sessizce ayrışırdı.
   const secondQualityCode = findGradeByRole(qualityGrades, 'SECOND')?.code ?? null;
@@ -1017,7 +1063,86 @@ export default function TamburScreen() {
     setRecutTargetCustomerName(o.name);
   });
   const [labelInfoOpen, setLabelInfoOpen] = useState(false);
+  const [woDetailId, setWoDetailId] = useState<string | null>(null);
+  // Etiket özeti/penceresi: boş kutuda basılacak kaynak değerler (kumaşın kendi adı/rengi, İE parti no).
+  const openLabelDefaults = {
+    itemName: selectedRoll?.itemName ?? null,
+    colorName: selectedRoll?.colorName ?? null,
+    // stepSummary.batchNumber İE numarasıdır (parti değil) — ipucu genel metinde kalır.
+    batchNo: null,
+  };
+  const recutLabelDefaults = { itemName: recutRollMeta?.item ?? null, colorName: recutRollMeta?.colorName ?? null, batchNo: null };
+  const openLabelSummary = labelSummaryText({
+    itemName: openFinal.texts.itemName, colorName: openFinal.texts.colorName, batchNo: openFinal.batch.value,
+    batchEnabled: openFinal.batch.enabled, defaults: openLabelDefaults,
+  });
+  const recutLabelSummary = labelSummaryText({
+    itemName: recutFinal.texts.itemName, colorName: recutFinal.texts.colorName, batchNo: recutFinal.batch.value,
+    batchEnabled: recutFinal.batch.enabled, defaults: recutLabelDefaults,
+  });
+  // "Etikette" kartı (2026-11-10): şablon alanları + kimin için (emanet) + kg Tart/elle + en.
+  const qualityNameOf = (code: string | null | undefined) => qualityGrades.find((q) => q.code === code)?.name ?? code ?? null;
+  const openCard = useTamburLabelCard({
+    final: openFinal,
+    summaryText: openLabelSummary,
+    onOpenInfo: () => setLabelInfoOpen(true),
+    defaults: openLabelDefaults,
+    qualityName: qualityNameOf(work.voluntaryEntry.qualityGrade),
+    meters: work.voluntaryEntry.length?.trim() || (selectedRoll ? String(selectedRoll.currentQty).replace('.', ',') : null),
+    inheritedWidthCm: selectedRoll?.width ?? null,
+    targetCustomerName: work.voluntaryEntry.targetCustomerName ?? null,
+  });
+  const recutCard = useTamburLabelCard({
+    final: recutFinal,
+    summaryText: recutLabelSummary,
+    onOpenInfo: () => setLabelInfoOpen(true),
+    defaults: recutLabelDefaults,
+    qualityName: qualityNameOf(recutQualityGrade),
+    meters: recutCutLength.trim() || null,
+    inheritedWidthCm: recutRollMeta?.width ?? null,
+    targetCustomerName: recutTargetCustomerName ?? null,
+  });
   const printTiming = useTamburPrintTiming();
+  // Geniş tablet ana kesim (2026-11-10, hedef görsel): yalnız kart akışı; telefon/manuel/Top Kesme bugünkü düzende.
+  const wideMain = !compact && !manualMode && !(recutResolvedRollId && recutRollMeta) && !!activeJob && !!selectedRoll;
+  // İş yokken tablette tam ekran tek boş durum (2026-11-11): sütunlar + tuş takımı çizilmez.
+  const idleFull = !compact && !manualMode && !(recutResolvedRollId && recutRollMeta) && !activeJob;
+  const [cardCodeOpen, setCardCodeOpen] = useState(false);
+  // Geniş hata cetveli ölçeği için (metre şeridiyle aynı sorgu, önbellek ortak).
+  const rollTrail = useRollMeterTrail(selectedRoll?.rollId);
+  // Etiket şablonu seçimi (çoklu etiket seti): İE boyunca yapışkan; öneri sorgusu openFinal'inkiyle AYNI anahtar (ek istek yok).
+  const templateSugg = useTamburLabelSuggestions({ ...openFinal.suggestionParams, consigneeId: null }, wideMain);
+  const templateChoice = useTamburTemplateChoice(activeJob?.stepSummary.workOrderId ?? selectedRoll?.rollId ?? null, {
+    loaded: !!templateSugg.data || templateSugg.isError,
+    templateId: templateSugg.data?.last?.templateId,
+  });
+  const livePreview = useTamburLivePreview({
+    rollId: wideMain ? selectedRoll?.rollId : null,
+    orderLineId: work.voluntaryEntry.targetOrderLineId,
+    customerId: work.voluntaryEntry.targetCustomerId,
+    consigneeId: openFinal.texts.consigneeId,
+    templateId: previewTemplateId(templateChoice.state, null),
+    draft: buildPreviewDraft({
+      lengthText: cutMode === 'manual' ? work.voluntaryEntry.length : '',
+      kgText: openFinal.kgText,
+      widthText: openFinal.widthText,
+      qualityCode: work.voluntaryEntry.qualityGrade,
+      itemName: openFinal.texts.itemName,
+      colorName: openFinal.texts.colorName,
+      batch: openFinal.batch,
+    }),
+  });
+  // Belgenin/topun bilinen eni En kutusuna DOLU gelir (kullanıcı 2026-11-11); top başına bir kez — operatör silerse yeniden dolmaz.
+  const widthPrefilledRef = useRef<string | null>(null);
+  const prefillWidth = widthHintText(selectedRoll?.width, livePreview.preview?.sourceWidthCm);
+  useEffect(() => {
+    const id = selectedRoll?.rollId ?? null;
+    if (!id || !prefillWidth || widthPrefilledRef.current === id) return;
+    widthPrefilledRef.current = id;
+    if (openFinal.widthText === '') openFinal.setWidthText(prefillWidth);
+  }, [selectedRoll?.rollId, prefillWidth, openFinal]);
+  const templateOffer = useMemo(() => (wideMain ? offerFromPreview(livePreview.preview) : null), [wideMain, livePreview.preview]);
+  useTemplateChoiceSync(templateChoice, templateOffer, livePreview);
 
   // Top/sekme değişimi → çalışma state'i temizlenir. İş emrinde PLANLANAN kat
   // otomatik seçili gelir; plan yoksa KATALOGUN İLK değeri. Operatör
@@ -1027,13 +1152,32 @@ export default function TamburScreen() {
   // ikiliye indiriyordu. Katalog büyüyünce 6-KAT planlanmış bir iş emrinde
   // ekran sessizce 2-KAT'ı seçili gösterirdi — operatör fark etmezse top
   // YANLIŞ katla kaydedilir ve yanlış metreyle ölçülürdü.
+  // Parti/top geçişinde taslak belleği (2026-11-10, kullanıcı onaylı): ayrılınan topun SON hali (metre, kat, kalite,
+  // hedef, kg, en) saklanır, geri dönünce aynen gelir; oturum içi, kalıcı değil (partyList.switchDraft).
+  const draftMemRef = useRef(new Map<string, { work: RollWorkState; kgText: string; widthText: string }>());
+  const draftKeyRef = useRef<string | null>(null);
   useEffect(() => {
+    const nextKey = draftKey(activeCardId, activeJob?.selectedRollId);
+    const restored = switchDraft(draftMemRef.current, draftKeyRef.current, nextKey, {
+      work,
+      kgText: openFinal.kgText,
+      widthText: openFinal.widthText,
+    });
+    draftKeyRef.current = nextKey;
+    if (restored) {
+      setWork(restored.work);
+      openFinal.setKgText(restored.kgText);
+      openFinal.setWidthText(restored.widthText);
+      return;
+    }
     const planned = activeJob?.context?.plannedFoldType ?? null;
     const known = planned && foldValues.some((v) => v.code === planned) ? planned : null;
     // Plan katalogda yoksa (silinmiş/pasif değer) yine de PLANI KORU: iş emrinin
     // spec'ini istemci tarafında değiştirmek, sessizce başka bir ürün üretmektir.
-    const defaultFold: TamburFoldType | null = known ?? planned ?? foldValues[0]?.code ?? null;
-    setWork({ ...EMPTY_WORK, foldType: defaultFold });
+    const defaultFold: TamburFoldType | null = known ?? planned ?? preferredFoldCode(foldValues);
+    // Hatırlanan kalite yeni topa taşınır; "kesimden sonra 1. Kaliteye dön" açıksa bugünkü gibi seçimsiz başlar.
+    const keep = !resetQualityAfterCut && lastGrade ? { qualityGrade: lastGrade.code, qualityName: lastGrade.name } : {};
+    setWork({ ...EMPTY_WORK, foldType: defaultFold, voluntaryEntry: { ...EMPTY_VOLUNTARY_ENTRY, ...keep } });
     redecideOwnerTarget();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- sıfırlayıcı ref temizler, tetik değildir
   }, [activeCardId, activeJob?.selectedRollId, activeJob?.context?.plannedFoldType, foldValues]);
@@ -1269,6 +1413,14 @@ export default function TamburScreen() {
     if (compact) setRightDrawerOpen(false);
   };
 
+  // Geniş tablette ara "top seçin" ekranı yok (kullanıcı 2026-11-11): iş açılınca/top bitince kuyruğun ilk topu seçilir.
+  useEffect(() => {
+    if (compact || manualMode || recutResolvedRollId || !activeJob || selectedRoll) return;
+    const first = activeJob.stepSummary.rolls[0];
+    if (!first) return;
+    setOpenJobs((prev) => prev.map((j) => (j.cardId === activeJob.cardId ? { ...j, selectedRollId: first.rollId } : j)));
+  }, [compact, manualMode, recutResolvedRollId, activeJob, selectedRoll]);
+
   // Compact'ta aktif kart değiştiğinde (yeni kart çözüldü / tab değişti) drawer kapanır.
   useEffect(() => {
     if (compact && activeCardId) setRightDrawerOpen(false);
@@ -1287,32 +1439,41 @@ export default function TamburScreen() {
   const queueLabel = (roll: Roll, defaultLineId: string | null = null) =>
     setPendingTargetRolls((q) => [...q, { roll, defaultLineId }]);
 
-  /**
-   * Etiket türünü topun KENDİ kimliğinden çöz — renginden DEĞİL.
-   *
-   * Varsayılan (null) yol türü RENKTEN çıkarır: renksiz = ham kumaş → ROLL_RAW.
-   * Bu, istasyondan çıkan ham kesim parçaları için doğrudur ama depoya inmiş bir
-   * top için sessizce YANLIŞTIR: renksiz (ham beyaz) bitmiş bir topun etiketi ham
-   * etiket olarak basılır. Yeni üretimde bu tuzağa `startPrint(roll,'ROLL_FINISHED')`
-   * ile giriliyordu; YENİDEN BASIMDA ise açıkta kalıyordu — "Çıkanlar"dan basılan
-   * WAREHOUSE topu türü yine renkten çözüyordu.
-   *
-   * Kural backend ile aynı kaynağa dayanır: `finalBarcodeType` satılabilire
-   * (WAREHOUSE/A1_STOCK) inen topu "F" (final) damgalar. Yani barkodunda F yazan
-   * top bitmiş etiket alır — iki yüzey artık aynı şeyi söyler.
-   *
-   * `null` dönüşü BİLİNÇLİ: depoya inmemiş top (üretime devam eden ham kesim
-   * parçası) için eski davranış birebir korunur.
-   */
-  const printKindForRoll = (roll: Roll): 'ROLL_RAW' | 'ROLL_FINISHED' | null =>
-    roll.status === 'WAREHOUSE' || roll.status === 'A1_STOCK' ? 'ROLL_FINISHED' : null;
-
   // "Etiketi Tekrar Bas" — varolan etiketi AYNEN bas, "kime?" SORMA.
   // labelContext=undefined → backend topun mevcut snapshot/effective etiketini
   // basar (yeni hedef seçilmez). Müşteri değiştirmek = "Etiket Değiştir" akışı.
-  const reprintLabel = (roll: Roll) => {
+  const printAsIs = (roll: Roll) => {
     setLabelContext(undefined);
-    startPrint(roll, printKindForRoll(roll));
+    startPrint(roll);
+  };
+  // K8: teklif ≥2 ise önce şablon seçici (ön seçili = topun şablonu); farklı seçim topa yazılır, sonra basılır.
+  // Eski backend (404) / hata → bugünkü gibi doğrudan basar, tost yok.
+  const [reprintPick, setReprintPick] = useState<{ roll: Roll; opts: RollTemplateOptions } | null>(null);
+  const reprintLabel = (roll: Roll) => {
+    labelService
+      .getRollTemplateOptions(roll.id)
+      .then((opts) => {
+        if (opts && opts.options.length >= 2) setReprintPick({ roll, opts });
+        else printAsIs(roll);
+      })
+      .catch(() => printAsIs(roll));
+  };
+  const onReprintTemplate = (id: string) => {
+    const pick = reprintPick;
+    setReprintPick(null);
+    if (!pick) return;
+    const write = reprintTemplateWrite(id, pick.opts);
+    if (write === undefined) {
+      printAsIs(pick.roll);
+      return;
+    }
+    labelService
+      .setRollTemplate(pick.roll.id, { templateId: write })
+      .then(() => {
+        void qc.invalidateQueries({ queryKey: ['tambur', 'wo-output'] });
+        printAsIs(pick.roll);
+      })
+      .catch((e: unknown) => showScreenError(e, 'Etiket şablonu kaydedilemedi'));
   };
 
   // "Müşterisiz (Stok)" — müşteri bilgisi OLMADAN bas. labelContext={stock:true}
@@ -1320,7 +1481,7 @@ export default function TamburScreen() {
   // reprint'inde tek dokunuşta müşterisiz etiket.
   const reprintLabelStock = (roll: Roll) => {
     setLabelContext({ stock: true });
-    startPrint(roll, printKindForRoll(roll));
+    startPrint(roll);
   };
 
   // ── Mutations ──
@@ -1398,6 +1559,10 @@ export default function TamburScreen() {
       weightKg?: number;
       /** Müşteri parti no (etiket); ayar kapalıysa undefined. */
       labelBatchNo?: string | null;
+      /** Etiket kumaş adı / renk (boşsa alan yok). */
+      labelTexts?: LabelTextsBody;
+      /** Seçilen etiket şablonu — yalnız varsayılandan farklıysa dolu. */
+      labelTemplateId?: string;
     }) =>
       tamburService.cutOpenFabric(data.rollId, withMeasure({
         lengthMeters: data.lengthMeters,
@@ -1419,6 +1584,9 @@ export default function TamburScreen() {
         confirmMismatch: data.confirmMismatch,
         weightKg: data.weightKg,
         labelBatchNo: data.labelBatchNo,
+        ...data.labelTexts,
+        // Aynı sessiz-allowlist tuzağı: seçim yoksa alan HİÇ gitmez (eski backend / varsayılan).
+        ...(data.labelTemplateId ? { labelTemplateId: data.labelTemplateId } : {}),
       }, data.measure)),
     onSuccess: async (res, variables) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -1451,16 +1619,12 @@ export default function TamburScreen() {
               ? { orderLineId: variables.targetOrderLineId }
               : { stock: true },
         );
-        // Tür topun kendi kimliğinden (bkz. printKindForRoll): depoya inen renksiz
-
-        // çocuk da bitmiş etiket alır. Üretime devam eden STOCK parçasında null
-
-        // döner → renkten çözülen eski davranış birebir korunur.
+        // Tür sunucuda topun aşamasından çözülür (depoya inen çocuk Bitmiş doğar).
 
         // S5: basım zamanı END ise tek tek basılmaz — "Bu işten çıkanlar" → "Basılmayanları bas".
         openFinal.setKgText('');
         if (shouldAutoPrintAfterCut({ printTiming })) {
-          startPrint(data.childRoll, printKindForRoll(data.childRoll), { auto: true });
+          startPrint(data.childRoll, null, { auto: true });
         } else {
           Toast.show({ type: 'info', text1: 'Etiket iş bitince basılacak', text2: 'Bu işten çıkanlar → Basılmayanları bas' });
         }
@@ -1499,6 +1663,12 @@ export default function TamburScreen() {
     onError: (err: Error, variables) => {
       if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
       cutAttempt.onFailure(err);
+      // Seçilen şablon artık teklifte değil (yönetici seti değiştirdi): varsayılana dön, operatör yeniden basar.
+      if ((err as Error & { details?: { code?: unknown } }).details?.code === LABEL_TEMPLATE_NOT_OFFERED) {
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        templateChoice.drop('Seçilen şablon artık tanımlı değil — varsayılana dönüldü, tekrar Kes\'e basın');
+        return;
+      }
       const mm = readPlanMismatch(err);
       if (mm) {
         // Onay modalı konuşur — kırmızı toast basılmaz (409 bir hata değil,
@@ -1697,6 +1867,7 @@ export default function TamburScreen() {
       measure,
       weightKg,
       labelBatchNo,
+      labelTexts,
     }: {
       rollId: string;
       cutLength: number;
@@ -1716,6 +1887,7 @@ export default function TamburScreen() {
       /** S5 tartım (kg). */
       weightKg?: number;
       labelBatchNo?: string | null;
+      labelTexts?: LabelTextsBody;
     }) =>
       tamburService.cutWarehouseRoll(rollId, withMeasure({
         cutLength,
@@ -1727,6 +1899,7 @@ export default function TamburScreen() {
         clientToken,
         weightKg,
         labelBatchNo,
+        ...labelTexts,
       }, measure)),
     onSuccess: (res, variables) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -1762,15 +1935,11 @@ export default function TamburScreen() {
               ? { orderLineId: variables.targetOrderLineId }
               : { stock: true },
         );
-        // Tür topun kendi kimliğinden (bkz. printKindForRoll): depoya inen renksiz
-
-        // çocuk da bitmiş etiket alır. Üretime devam eden STOCK parçasında null
-
-        // döner → renkten çözülen eski davranış birebir korunur.
+        // Tür sunucuda topun aşamasından çözülür (depoya inen çocuk Bitmiş doğar).
 
         recutFinal.setKgText('');
         if (shouldAutoPrintAfterCut({ printTiming })) {
-          startPrint(data.childRoll, printKindForRoll(data.childRoll), { auto: true });
+          startPrint(data.childRoll, null, { auto: true });
         } else {
           Toast.show({ type: 'info', text1: 'Etiket iş bitince basılacak', text2: 'Bu işten çıkanlar → Basılmayanları bas' });
         }
@@ -1824,6 +1993,7 @@ export default function TamburScreen() {
       varianceReasonText,
       weightKg,
       labelBatchNo,
+      labelTexts,
     }: {
       rollId: string;
       remainingAction: 'keep_1kalite' | 'keep_a1' | 'scrap' | 'discard';
@@ -1831,6 +2001,7 @@ export default function TamburScreen() {
       varianceReasonText?: string | null;
       weightKg?: number;
       labelBatchNo?: string | null;
+      labelTexts?: LabelTextsBody;
     }) =>
       tamburService.finalizeWarehouseCut(rollId, {
         remainingAction,
@@ -1838,6 +2009,7 @@ export default function TamburScreen() {
         varianceReasonText,
         weightKg,
         labelBatchNo,
+        ...labelTexts,
       }),
     onSuccess: (res, variables) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -1874,7 +2046,7 @@ export default function TamburScreen() {
         setRecutResolvedRollId(null);
         setRecutRollMeta(null);
         setRecutCutLength('');
-        setRecutQualityGrade(defaultQualityCode);
+        setRecutQualityGrade(recutStartQualityCode);
         setRecutLastParentRoll(null);
         qc.invalidateQueries({ queryKey: ['rolls'] });
       // "Bu işten çıkanlar" paneli AYNI ANDA tazelensin — anahtarı ['rolls']
@@ -1927,8 +2099,7 @@ export default function TamburScreen() {
             : { stock: true },
       );
       // LabelPrinter topun yalnız `id`'sini kullanır; gövde yanıttan kurulur
-      // (ek istek yok). Tür SABİTLENİR: manuel mod bitmiş ürün üretir, renksiz
-      // olsa bile ham etiket basılmamalı (bkz. printKind gerekçesi).
+      // (ek istek yok). Tür sunucuda: manuel mod çıktısı Bitmiş aşamada doğar.
       startPrint(
         {
           id: d.rollId,
@@ -1943,7 +2114,7 @@ export default function TamburScreen() {
           status: 'WAREHOUSE',
           markedForKartela: d.markedForKartela,
         },
-        'ROLL_FINISHED',
+        null,
         { auto: true },
       );
       // Metraj sıfırlanır (sıradaki top), ürün/renk/sebep KALIR: aynı sebeple
@@ -2116,6 +2287,8 @@ export default function TamburScreen() {
         measure: resolveMeasure(capture, length),
         weightKg: openFinal.weightKg(),
         labelBatchNo: openFinal.batch.body(),
+        labelTexts: openFinal.texts.body(),
+        labelTemplateId: wideMain ? cutTemplateId(templateChoice.state, templateOffer) : undefined,
       });
     };
     // Aşımda parmak hatası koruması: onay iste (açık kumaşın tamamı tek topa döner).
@@ -2161,20 +2334,29 @@ export default function TamburScreen() {
       toast: (t) => Toast.show(t),
     });
 
-  // Footer "Kes" — manuel: input'taki uzunluk; otomatik: makineden ölçülen.
+  // Footer "Kes" — metre manuel: input'taki uzunluk; otomatik: makineden. Kg otomatik (kg alanı varken): tartıdan.
+  // Önce okumalar, sonra TEK kesim; okuma düşerse kesim yok (fail-closed, toast okuyucuda).
   const handleKes = async () => {
-    if (cutMode === 'auto') {
-      if (!selectedRoll || measuring) return;
-      setMeasuring(true);
-      try {
-        const measured = await measureFromMachine(selectedRoll.currentQty);
-        if (measured == null) return; // okunamadı → hata gösterildi, kesim yapma
-        addVoluntaryCut(measured.value, measured);
-      } finally {
-        setMeasuring(false);
-      }
-    } else {
+    const kgAuto = kgAutoActive(kgMode, openCard.card.kg.visible);
+    if (cutMode !== 'auto' && !kgAuto) {
       addVoluntaryCut();
+      return;
+    }
+    if (!selectedRoll || measuring) return;
+    setMeasuring(true);
+    try {
+      const r = await collectCutReadings<MeterCapture>({
+        meterAuto: cutMode === 'auto',
+        kgAuto,
+        readMeter: () => measureFromMachine(selectedRoll.currentQty),
+        readKg: openCard.readKg,
+        stampKg: openFinal.stampKg,
+      });
+      if (!r) return;
+      if (r.capture) addVoluntaryCut(r.capture.value, r.capture);
+      else addVoluntaryCut();
+    } finally {
+      setMeasuring(false);
     }
   };
 
@@ -2398,6 +2580,7 @@ export default function TamburScreen() {
         measure: resolveMeasure(capture, cut),
         weightKg: recutFinal.weightKg(),
         labelBatchNo: recutFinal.batch.body(),
+        labelTexts: recutFinal.texts.body(),
       });
     };
     // Aşımda parmak hatası koruması: onay iste (top tamamen tüketilir).
@@ -2718,6 +2901,17 @@ export default function TamburScreen() {
 
   // Çerçeveli (pinned) grup — recut: topa uyan açık sipariş SATIRLARI (value=lineId);
   // ana akış: bu iş emrinde siparişi olan müşteriler (value=customerId).
+  // Geniş tablette Kime? tek düğmedir (K5): Stok ve İE sipariş satırları da bu pickerın çerçeveli grubuna girer.
+  const targetStockOption: PickerOption = { value: TARGET_STOCK_VALUE, label: 'Stok (müşterisiz)', sublabel: 'Etiket müşteri bilgisi olmadan basılır' };
+  const targetOrderLineOptions = useMemo<PickerOption[]>(
+    () =>
+      manualMode
+        ? []
+        : (activeJob?.context?.orders ?? []).flatMap((o) =>
+            o.lines.map((l) => ({ value: `${TARGET_LINE_PREFIX}${l.lineId}`, label: o.customerName, sublabel: l.itemName })),
+          ),
+    [manualMode, activeJob],
+  );
   const kimePinnedOptions = useMemo<PickerOption[]>(() => {
     if (recutRollMeta) {
       return recutLineOptions.map((l) => ({
@@ -2739,6 +2933,18 @@ export default function TamburScreen() {
   }, [recutRollMeta, recutLineOptions, customersQuery.data, orderCustomerIds]);
 
   const handleKimeSelect = (value: string) => {
+    if (value === TARGET_STOCK_VALUE) {
+      clearToStock();
+      return;
+    }
+    if (!recutRollMeta && value.startsWith(TARGET_LINE_PREFIX)) {
+      const lineId = value.slice(TARGET_LINE_PREFIX.length);
+      setWork((w) => ({
+        ...w,
+        voluntaryEntry: { ...w.voluntaryEntry, targetOrderLineId: lineId, targetCustomerId: null, targetCustomerName: undefined },
+      }));
+      return;
+    }
     if (recutRollMeta) {
       // Pinned = sipariş satırı (value=lineId); ana liste = müşteri (value=customerId).
       // İkisi karşılıklı dışlar; aynı değere 2. kez basınca seçim kalkar.
@@ -2855,6 +3061,29 @@ export default function TamburScreen() {
     </TouchableRipple>
   );
 
+  // Geniş tablet (K5): Kime? tek düğme; metin sipariş satırı > müşteri > Stok.
+  const mainTargetLineLabel = (() => {
+    const id = work.voluntaryEntry.targetOrderLineId;
+    if (!id) return null;
+    for (const o of activeJob?.context?.orders ?? []) {
+      const l = o.lines.find((x) => x.lineId === id);
+      if (l) return `${o.customerName} · ${l.itemName}`;
+    }
+    return null;
+  })();
+  const recutTargetLine = recutTargetLineId ? recutLineOptions.find((l) => l.lineId === recutTargetLineId) : undefined;
+  const targetButton = (
+    <TargetButton
+      text={
+        recutRollMeta
+          ? targetButtonText({ lineLabel: recutTargetLine ? `${recutTargetLine.customerName} · ${recutTargetLine.orderNumber}` : null, customerName: recutTargetCustomerName })
+          : targetButtonText({ lineLabel: mainTargetLineLabel, customerName: work.voluntaryEntry.targetCustomerName })
+      }
+      stock={stokActive}
+      onPress={() => setKimePickerOpen(true)}
+    />
+  );
+
   // ── Kesim formunun ORTAK parçaları (ana kesim ⟷ MANUEL MOD) ───────────────
   // Kopya DEĞİL: birebir aynı bileşenler + aynı state (`cutMode`,
   // `work.voluntaryEntry`). Top Kesme (recut) kendi metraj/kalite state'ini
@@ -2871,57 +3100,79 @@ export default function TamburScreen() {
    *   diye: tuş içeride kalsaydı giriş alanı %50 eksi tuş genişliği olurdu.
    *   Kart akışında false → bugünkü düzen bit bit aynı.
    */
+  /** Kesim uzunluğunu yaz — kısa kesim kuralıyla; NumpadInput ve önizleme düzenleyicisi aynı yazıcıyı kullanır. */
+  const setCutLength = (v: string) => {
+    // KISA KESİM kuralı yazım ANINDA görünür çalışır: eşik altına inen
+    // uzunluk kaliteyi A1'e çevirir (yalnız 1. Kalite seçiliyken), eşik
+    // üstüne çıkan/temizlenen uzunluk OTOMATİK yazılmış A1'i geri alır.
+    // Hesap setWork DIŞINDA (updater saf kalsın — kamera flip dersi).
+    const len = parseFloat(v.trim().replace(',', '.'));
+    const current = work.voluntaryEntry.qualityGrade;
+    const sug = shortCutOverride({
+      enabled: shortCutEnabled,
+      thresholdM: shortCutThresholdM,
+      lengthM: len,
+      currentCode: current,
+      defaultCode: defaultQualityCode,
+      grades: qualityGrades,
+    });
+    // Boş/geçersiz uzunluk da geri döndürür: input silinip "kalanı kes"e
+    // dönülürse ekranda bayat bir otomatik-A1 kalmasın (kalanın kalitesi
+    // gönderim anında yeniden çözülür).
+    const revert =
+      shortCutRevert({
+        enabled: shortCutEnabled,
+        thresholdM: shortCutThresholdM,
+        lengthM: len,
+        currentCode: current,
+        autoApplied: shortCutAutoMainRef.current,
+        grades: qualityGrades,
+      }) ||
+      (!Number.isFinite(len) &&
+        shortCutAutoMainRef.current &&
+        secondQualityCode !== null &&
+        current === secondQualityCode);
+    if (sug) shortCutAutoMainRef.current = true;
+    else if (revert) shortCutAutoMainRef.current = false;
+    setWork((w) => ({
+      ...w,
+      voluntaryEntry: {
+        ...w.voluntaryEntry,
+        length: v,
+        ...(sug
+          ? { qualityGrade: sug.code, qualityName: sug.name }
+          : revert
+            ? { qualityGrade: defaultQualityCode, qualityName: defaultQualityName }
+            : {}),
+      },
+    }));
+  };
+  /** Uzunluğu temizle (otomatik yazılmış A1 de geri alınır). */
+  const clearCutLength = () => {
+    // Otomatik yazılmış A1 uzunlukla birlikte gider (bayat kalite kalmasın).
+    const revert =
+      shortCutAutoMainRef.current &&
+      secondQualityCode !== null &&
+      work.voluntaryEntry.qualityGrade === secondQualityCode;
+    if (revert) shortCutAutoMainRef.current = false;
+    setWork((w) => ({
+      ...w,
+      voluntaryEntry: {
+        ...w.voluntaryEntry,
+        length: '',
+        ...(revert
+          ? { qualityGrade: defaultQualityCode, qualityName: defaultQualityName }
+          : {}),
+      },
+    }));
+  };
+
   const renderCutLength = (placeholder: string, halfWidth = false) => {
     const input = (
       <NumpadInput
         mode="outlined"
         value={work.voluntaryEntry.length}
-        onChangeText={(v) => {
-          // KISA KESİM kuralı yazım ANINDA görünür çalışır: eşik altına inen
-          // uzunluk kaliteyi A1'e çevirir (yalnız 1. Kalite seçiliyken), eşik
-          // üstüne çıkan/temizlenen uzunluk OTOMATİK yazılmış A1'i geri alır.
-          // Hesap setWork DIŞINDA (updater saf kalsın — kamera flip dersi).
-          const len = parseFloat(v.trim().replace(',', '.'));
-          const current = work.voluntaryEntry.qualityGrade;
-          const sug = shortCutOverride({
-            enabled: shortCutEnabled,
-            thresholdM: shortCutThresholdM,
-            lengthM: len,
-            currentCode: current,
-            defaultCode: defaultQualityCode,
-            grades: qualityGrades,
-          });
-          // Boş/geçersiz uzunluk da geri döndürür: input silinip "kalanı kes"e
-          // dönülürse ekranda bayat bir otomatik-A1 kalmasın (kalanın kalitesi
-          // gönderim anında yeniden çözülür).
-          const revert =
-            shortCutRevert({
-              enabled: shortCutEnabled,
-              thresholdM: shortCutThresholdM,
-              lengthM: len,
-              currentCode: current,
-              autoApplied: shortCutAutoMainRef.current,
-              grades: qualityGrades,
-            }) ||
-            (!Number.isFinite(len) &&
-              shortCutAutoMainRef.current &&
-              secondQualityCode !== null &&
-              current === secondQualityCode);
-          if (sug) shortCutAutoMainRef.current = true;
-          else if (revert) shortCutAutoMainRef.current = false;
-          setWork((w) => ({
-            ...w,
-            voluntaryEntry: {
-              ...w.voluntaryEntry,
-              length: v,
-              ...(sug
-                ? { qualityGrade: sug.code, qualityName: sug.name }
-                : revert
-                  ? { qualityGrade: defaultQualityCode, qualityName: defaultQualityName }
-                  : {}),
-            },
-          }));
-        }}
+        onChangeText={setCutLength}
         numpadLabel="Kesim uzunluğu"
         allowDecimal
         autoActivate
@@ -2939,24 +3190,7 @@ export default function TamburScreen() {
         size={24}
         iconColor="#475569"
         containerColor="#e2e8f0"
-        onPress={() => {
-          // Otomatik yazılmış A1 uzunlukla birlikte gider (bayat kalite kalmasın).
-          const revert =
-            shortCutAutoMainRef.current &&
-            secondQualityCode !== null &&
-            work.voluntaryEntry.qualityGrade === secondQualityCode;
-          if (revert) shortCutAutoMainRef.current = false;
-          setWork((w) => ({
-            ...w,
-            voluntaryEntry: {
-              ...w.voluntaryEntry,
-              length: '',
-              ...(revert
-                ? { qualityGrade: defaultQualityCode, qualityName: defaultQualityName }
-                : {}),
-            },
-          }));
-        }}
+        onPress={clearCutLength}
         disabled={!work.voluntaryEntry.length}
         accessibilityLabel="Uzunluğu temizle"
         style={{ margin: 0 }}
@@ -2979,7 +3213,7 @@ export default function TamburScreen() {
               key={m}
               borderless
               onPress={() => void setCutMode(m)}
-              style={[styles.cutModeChip, active && styles.cutModeChipActive]}
+              style={[styles.cutModeChip, !compact && styles.cutModeChipWide, active && styles.cutModeChipActive]}
             >
               <Text
                 style={[
@@ -3028,6 +3262,46 @@ export default function TamburScreen() {
     );
   };
 
+  const pickGrade = (qg: QualityGrade, active: boolean) => {
+    // Elle seçim = kontrol operatörde; kısa-kesim kuralı bu seçimi geri almaz
+    // (yeni uzunluk yazılana dek yeniden de ateşlemez — kural yalnız varsayılan seçiliyken çalışır).
+    shortCutAutoMainRef.current = false;
+    void setLastQualityCode(active ? null : qg.code);
+    setWork((w) => ({
+      ...w,
+      voluntaryEntry: {
+        ...w.voluntaryEntry,
+        qualityGrade: active ? '' : qg.code,
+        qualityName: active ? undefined : qg.name,
+      },
+    }));
+  };
+  /** Geniş tablet (K5): Kime düğmesi | Kalite segmenti tek satır; müşteri hedefinde müşteriye özel ad satırı. */
+  const renderKimeKaliteWide = (opts: {
+    owner?: { id: string; name: string } | null;
+    grades: QualityGrade[];
+    gradeNote?: string | null;
+  }) => {
+    const targeted = !!work.voluntaryEntry.targetOrderLineId || !!work.voluntaryEntry.targetCustomerId;
+    return (
+      <>
+        <View style={styles.kimeKaliteRowWide}>
+          {opts.owner ? <OwnerLockColumn owner={opts.owner} inline /> : targetButton}
+          <QualitySegment grades={opts.grades} value={work.voluntaryEntry.qualityGrade} onPick={(g, a) => pickGrade(g as QualityGrade, a)} />
+        </View>
+        {!!opts.gradeNote && <Text style={styles.gradeNote}>{opts.gradeNote}</Text>}
+        {/* Müşteriye özel ad yalnız bir müşteri hedeflenince anlamlı; Stok'ta satır yer kaplamaz. */}
+        {!opts.owner && targeted ? (
+          <LabelNamePreview
+            rollId={selectedRoll?.rollId ?? null}
+            orderLineId={work.voluntaryEntry.targetOrderLineId ?? null}
+            customerId={work.voluntaryEntry.targetCustomerId ?? null}
+          />
+        ) : null}
+      </>
+    );
+  };
+
   /**
    * "Kime?" + "Kalite" YAN YANA; her biri kendi içinde dikey liste. Kime uzarsa
    * kendi sütununda scroll olur, Kalite'yi etkilemez.
@@ -3038,11 +3312,18 @@ export default function TamburScreen() {
    * `manualQualityGrades` gerekçesi).
    */
   const renderKimeKalite = (opts: {
+    /** Emanet top (sahip kilidi, 2026-11-10): Kime? çizilmez, sahip sabit satırda. */
+    owner?: { id: string; name: string } | null;
     orderShortcuts?: React.ReactNode;
     grades: QualityGrade[];
     gradeNote?: string | null;
-  }) => (
+  }) => {
+    if (!compact) return renderKimeKaliteWide(opts);
+    return (
     <View style={styles.kimeKaliteRow}>
+      {opts.owner ? (
+        <OwnerLockColumn owner={opts.owner} />
+      ) : (
       <View style={styles.kimeCol}>
         <Text style={styles.cutSubLabel}>Kime?</Text>
         {/* Açık "Stok" seçeneği — hiç seçim yokken aktif görünür. */}
@@ -3058,6 +3339,7 @@ export default function TamburScreen() {
           customerId={work.voluntaryEntry.targetCustomerId ?? null}
         />
       </View>
+      )}
 
       <View style={styles.kaliteCol}>
         <Text style={styles.cutSubLabel}>Kalite</Text>
@@ -3068,20 +3350,7 @@ export default function TamburScreen() {
               <TouchableRipple
                 key={qg.id}
                 borderless
-                onPress={() => {
-                  // Elle seçim = kontrol operatörde; kısa-kesim kuralı bu
-                  // seçimi geri almaz (yeni uzunluk yazılana dek yeniden de
-                  // ateşlemez — kural yalnız varsayılan seçiliyken çalışır).
-                  shortCutAutoMainRef.current = false;
-                  setWork((w) => ({
-                    ...w,
-                    voluntaryEntry: {
-                      ...w.voluntaryEntry,
-                      qualityGrade: active ? '' : qg.code,
-                      qualityName: active ? undefined : qg.name,
-                    },
-                  }));
-                }}
+                onPress={() => pickGrade(qg, active)}
                 style={[
                   styles.listOption,
                   active && styles.listOptionActive,
@@ -3096,7 +3365,7 @@ export default function TamburScreen() {
                     active && styles.listOptionTextActive,
                   ]}
                 >
-                  {qg.name}
+                  {shortGradeLabel(qg.name)}
                 </Text>
               </TouchableRipple>
             );
@@ -3105,7 +3374,8 @@ export default function TamburScreen() {
         {!!opts.gradeNote && <Text style={styles.gradeNote}>{opts.gradeNote}</Text>}
       </View>
     </View>
-  );
+    );
+  };
 
   const resetRecut = () => {
     // X kapat: kesim yapıldıysa parent etiketini otomatik basım kuyruğuna at —
@@ -3119,7 +3389,7 @@ export default function TamburScreen() {
     setRecutTargetCustomerId(null);
     setRecutTargetCustomerName(undefined);
     setRecutCutLength('');
-    setRecutQualityGrade(defaultQualityCode);
+    setRecutQualityGrade(recutStartQualityCode);
     setRecutRawDestination('STOCK');
     setRecutLastParentRoll(null);
     // Kartelalık işareti akışa özgüdür — X ile kapatınca da sıfırla; yoksa
@@ -3134,11 +3404,285 @@ export default function TamburScreen() {
       qc.invalidateQueries({ queryKey: ['tambur', 'wo-output'] });
   };
 
+  // En ipucu = topun bilinen/miras eni (yalnız ipucu: dokunulmazsa kesime en gönderilmez, bugünkü davranış).
+  const wideWidthHint = (roll: TamburRollSummary) => {
+    const w = widthHintText(roll.width, livePreview.preview?.sourceWidthCm);
+    return w ? `${w} cm` : 'En (cm)';
+  };
+
+  /** Geniş ana kesim Kat / Kalite / En kartı (En kutusu birimi kendi gösterir → yer tutucu çıplak sayı ya da "En") — sağ sütunda Çıkan etiketlerin altında (kullanıcı 2026-11-10). */
+  const renderWideSettings = (roll: TamburRollSummary) => (
+    <TamburCutSettingsCard
+      fold={{ options: foldValues, value: work.foldType, onPick: (code) => setWork((w) => ({ ...w, foldType: code })) }}
+      width={openCard.card.width.visible ? { value: openFinal.widthText, onChange: openFinal.setWidthText, placeholder: widthHintText(roll.width, livePreview.preview?.sourceWidthCm) ?? 'En' } : null}
+      quality={{ grades: qualityGrades, value: work.voluntaryEntry.qualityGrade, onPick: (g, a) => pickGrade(g as QualityGrade, a) }}
+    />
+  );
+
+  /** Geniş ana kesim sol sütunu — değerler ve yazıcılar ekranın kesim state'inden (ikinci kaynak yok). */
+  const renderWideCut = (roll: TamburRollSummary) => {
+    const owner = openFinal.owner;
+    const customerName = owner?.name ?? targetButtonText({ lineLabel: mainTargetLineLabel, customerName: work.voluntaryEntry.targetCustomerName });
+    const targeted = !!work.voluntaryEntry.targetOrderLineId || !!work.voluntaryEntry.targetCustomerId;
+    const orders = activeJob?.context?.orders ?? [];
+    const errs = roll.errors;
+    const critCount = errs.filter((e) => defectTypes.find((d) => d.name === e.errorType)?.severity === 'CRITICAL').length;
+    const widthHint = wideWidthHint(roll);
+    return (
+      <TamburWideCut
+        zoomResetKey={`${activeJob?.stepSummary.workOrderId ?? ''}:${roll.rollId}`}
+        info={{
+          customerName,
+          owner,
+          onPickCustomer: owner ? null : () => setKimePickerOpen(true),
+          itemLine: [roll.itemName, roll.colorName, roll.width != null ? `${roll.width} cm` : null].filter(Boolean).join(' · '),
+          trail: <TamburMeterTrail rollId={roll.rollId} pendingM={cutMode === 'manual' ? parseCutInput(work.voluntaryEntry.length) : 0} tone="onOrange" omitRemaining />,
+          remaining: segmentPreview?.remaining ?? roll.currentQty,
+          orders: orders.length > 0 ? { count: orders.length, onPress: () => setOrdersModalOpen(true) } : null,
+        }}
+        note={stepNoteStrip}
+        defects={
+          errs.length === 0 && !inspectionEnabled
+            ? null
+            : {
+                count: errs.length,
+                critCount,
+                // Ölçek topun ölçülmüş tavanına (kurşun / kesilen+kalan), kesilen kısım mavi dolgu + "▲" (2026-11-10).
+                ruler: errs.length > 0 ? <DefectRuler errors={errs} defectTypes={defectTypes} rulerMax={rulerMaxForErrors(rulerTotalM(rollTrail.data, roll.currentQty), errs)} cutM={rollTrail.data?.cutSoFarM ?? 0} /> : null,
+                onOpen: () => setErrorsModalOpen(true),
+                onAdd: inspectionEnabled ? () => setDefectDrawerOpen(true) : null,
+              }
+        }
+        preview={{
+          preview: livePreview.preview,
+          stale: livePreview.stale,
+          fallbackRows: (openCard.card.rows ?? []).map((r) => ({ key: r.key, text: `${r.label}: ${r.value}`, muted: r.muted })),
+          ctx: { owner: !!owner, batchEnabled: openFinal.batch.enabled, manualLength: cutMode === 'manual' },
+          templateOffer,
+          selectedTemplateId: shownTemplateId(templateChoice.state, templateOffer),
+          onPickTemplate: (id) => {
+            if (templateOffer) templateChoice.pick(id, templateOffer);
+          },
+          onOpenInfo: () => setLabelInfoOpen(true),
+          length: { value: work.voluntaryEntry.length, set: setCutLength },
+          kg: { value: openFinal.kgText, set: openFinal.setKgText },
+          width: { value: openFinal.widthText, set: openFinal.setWidthText, placeholder: widthHint },
+          itemName: { value: openFinal.texts.itemName, set: (v) => openFinal.texts.set({ itemName: v, colorName: openFinal.texts.colorName }) },
+          colorName: { value: openFinal.texts.colorName, set: (v) => openFinal.texts.set({ itemName: openFinal.texts.itemName, colorName: v }) },
+          batch: { value: openFinal.batch.value, set: openFinal.batch.setValue },
+          quality: {
+            grades: qualityGrades.map((g) => ({ code: g.code, name: g.name })),
+            value: work.voluntaryEntry.qualityGrade,
+            pick: (code) => {
+              const g = qualityGrades.find((q) => q.code === code);
+              if (g) pickGrade(g, false);
+            },
+          },
+          onConsignee: openCard.card.consignee?.onPress,
+          onCustomer: () => setKimePickerOpen(true),
+          footer:
+            !owner && targeted ? (
+              <LabelNamePreview
+                rollId={roll.rollId}
+                orderLineId={work.voluntaryEntry.targetOrderLineId ?? null}
+                customerId={work.voluntaryEntry.targetCustomerId ?? null}
+              />
+            ) : null,
+        }}
+      />
+    );
+  };
+
+  /** Geniş ana kesim: iş sekmeleri (>1 iş) ya da yalnız belge kardeş seçicisi. */
+  const renderWideJobTabs = (job: NonNullable<typeof activeJob>) =>
+    showJobTabs(openJobs.length) ? (
+      // İş değiştirme bugünkü sekme çubuğuyla (yalnız >1 açık işte); tek işte detay/yenile/kapat "Diğer"de.
+      <View style={[styles.tabBar, styles.wideTabBar]}>
+        <DocSiblingsStrip
+          siblings={docSiblings.siblings}
+          activeCardBarcode={job.cardBarcode ?? null}
+          onSwitch={(w) => resolveCard(w.cardBarcode, false)}
+          style={styles.partySelector}
+        />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabScroll}>
+          {openJobs.map((j) => (
+            <JobTab
+              key={j.cardId}
+              job={j}
+              active={j.cardId === activeCardId}
+              onPress={() => (j.cardId === activeCardId ? setWoDetailId(j.stepSummary.workOrderId ?? null) : setActiveCardId(j.cardId))}
+              onClose={() => closeJob(j.cardId)}
+            />
+          ))}
+        </ScrollView>
+        <View style={styles.tabRefreshWrap}>
+          <RefreshButton
+            onPress={activeRefresh.onRefresh}
+            refreshing={activeRefresh.refreshing}
+            isError={activeRefresh.isError}
+            errorMessage={activeRefresh.errorMessage}
+            successMessage={activeRefresh.successMessage}
+          />
+        </View>
+      </View>
+    ) : (
+      // Çok partili belgede kardeş iş emri seçici (tek partide kendisi çizilmez).
+      <DocSiblingsStrip
+        siblings={docSiblings.siblings}
+        activeCardBarcode={job.cardBarcode ?? null}
+        onSwitch={(w) => resolveCard(w.cardBarcode, false)}
+        style={styles.partySelector}
+      />
+    );
+
+  /** Geniş ana kesim "Parti listesi" (≤1 partide çizilmez) + partide birden çok top varsa top kuyruğu. */
+  const renderWidePartyList = (job: NonNullable<typeof activeJob>, parties: ReturnType<typeof partyCards>) => (
+    <>
+      {showPartyList(parties) && (
+        <View style={styles.wideCard} testID="tambur-parti-listesi">
+          <View style={styles.wideCardHead}>
+            <Text style={styles.wideCardTitle}>Parti listesi</Text>
+            <View style={{ flex: 1 }} />
+            <Text style={styles.wideCardMeta}>{`${parties.length} parti`}</Text>
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator contentContainerStyle={styles.partyScroll}>
+            {parties.map((c) => (
+              <TouchableRipple
+                key={c.key}
+                onPress={c.selected ? undefined : () => selectRoll(c.rollId)}
+                style={[styles.partyTile, c.selected && styles.partyTileOn]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: c.selected }}
+                accessibilityLabel={`Parti ${c.label}, ${c.meters.toFixed(1)} metre`}
+                testID={`tambur-parti-${c.key}`}
+              >
+                <View>
+                  <Text style={[styles.partyTileTitle, c.selected && styles.partyTileTitleOn]} numberOfLines={1}>
+                    {c.label}
+                  </Text>
+                  <Text style={styles.partyTileSub}>{`${c.meters.toFixed(1)} m`}</Text>
+                </View>
+              </TouchableRipple>
+            ))}
+          </ScrollView>
+        </View>
+      )}
+      {job.stepSummary.rolls.length > Math.max(parties.length, 1) && (
+        // Partide birden çok top varsa top seçimi bugünkü kuyrukla.
+        <View style={styles.wideQueue}>
+          <BranchGroupedRollList
+            rolls={job.stepSummary.rolls}
+            selectedRollId={job.selectedRollId}
+            onSelect={selectRoll}
+            refreshing={activeRefresh.refreshing}
+            onRefresh={activeRefresh.onRefresh}
+          />
+        </View>
+      )}
+    </>
+  );
+  /** Geniş ana kesim: Ölçüm kartı (yalnız Manuel alanlar; ikisi otomatikse yok) + alt şeridin sağ grubu (METRE · KG · Bitir). */
+  const renderWideMeasure = () => {
+    const kgCard = openCard.card.kg;
+    const vis = measureVisibility(cutMode, kgMode, kgCard.visible);
+    const suggestion = vis.meterBox ? splitSuggestion(openFinal.settings.splitLengthM, selectedRoll?.currentQty ?? 0) : null;
+    const endMode = !shouldAutoPrintAfterCut(openFinal.settings);
+    const endHint = endMode ? <Text style={styles.wideCardMeta}>Etiket iş bitince basılır</Text> : null;
+    return (
+      <>
+        {vis.card ? (
+          <TamburMeasureCard
+            length={vis.meterBox ? { value: work.voluntaryEntry.length, onChange: setCutLength, onClear: clearCutLength, placeholder: 'kalanı kes' } : null}
+            kg={vis.kgBox ? { value: openFinal.kgText, onChange: openFinal.setKgText, required: kgCard.required, onTart: kgCard.onTart, tartBusy: kgCard.tartBusy } : null}
+            extras={
+              suggestion || endHint ? (
+                <View style={styles.wideExtras}>
+                  {suggestion ? (
+                    <Chip
+                      icon="ruler"
+                      compact
+                      onPress={() => setWork((w) => ({ ...w, voluntaryEntry: { ...w.voluntaryEntry, length: suggestion } }))}
+                      testID="tambur-bolme-onerisi"
+                    >
+                      {`Bölme ${suggestion} m`}
+                    </Chip>
+                  ) : null}
+                  {endHint}
+                </View>
+              ) : null
+            }
+          />
+        ) : (
+          endHint
+        )}
+        <TamburModeBitirBar
+          meter={{ mode: cutMode, onToggle: () => void setCutMode(nextCutMode(cutMode)) }}
+          kg={kgCard.visible ? { mode: kgMode, onToggle: () => void setKgMode(nextCutMode(kgMode)) } : null}
+          busy={cutOpenFabricMutation.isPending || measuring}
+          onBitir={bitirOpenFabric}
+          bitirLoading={finalizeOpenFabricMutation.isPending}
+        />
+      </>
+    );
+  };
+
+  /** Geniş ana kesim sağ sütunu: İş emri listesi (yalnız >1 iş) · top kuyruğu (>1 top) · Çıkan etiketler · Ölçüm. */
+  const renderWideRight = (job: NonNullable<typeof activeJob>) => {
+    const parties = partyCards(job.stepSummary.rolls, job.selectedRollId);
+    return (
+      <View style={styles.wideRight}>
+        {manualBarcodeEntry && (
+          <ScannerEntryBar
+            value={cardBarcode}
+            onChangeText={setCardBarcode}
+            placeholder="Refakat kartı barkodu okut/yaz..."
+            onResolve={handleResolveCard}
+            resolving={resolvingCard}
+            onScan={() => openScanner()}
+            onList={() => openList()}
+            tone="blue"
+            hardwareListening
+          />
+        )}
+        {renderWideJobTabs(job)}
+        {renderWidePartyList(job, parties)}
+        {woDetailId ? (
+          <React.Suspense fallback={null}>
+            <WorkOrderDetailSheet workOrderId={woDetailId} onClose={() => setWoDetailId(null)} onChanged={() => undefined} />
+          </React.Suspense>
+        ) : null}
+        <WorkOrderOutputPanel
+          title="Çıkan etiketler"
+          fill
+          workOrderId={job.stepSummary.workOrderId}
+          lastMeasure={lastMeasure}
+          onPrint={(r: Roll) => {
+            setLabelContext(undefined);
+            startPrint(r);
+          }}
+          onUndo={(r: Roll) => setPanelUndoTarget(r)}
+          onFixLabel={(r: Roll) => setLabelFixRoll(r)}
+          onPrintUnprinted={
+            shouldAutoPrintAfterCut({ printTiming })
+              ? undefined
+              : (rs: Roll[]) => {
+                  setLabelContext(undefined);
+                  setPendingPrintRolls(rs);
+                }
+          }
+        />
+        {selectedRoll ? renderWideSettings(selectedRoll) : null}
+        {renderWideMeasure()}
+      </View>
+    );
+  };
+
   const renderRightContent = () => {
     // MANUEL MOD: kart okutma çubuğu, açık iş sekmeleri ve top kuyruğu HİÇ
     // çizilmez — üçü de refakat kartına dayanır ve bu modda hiçbiri işletilmez.
     // Yerine ne olduğunu söyleyen bir panel + moddan çıkış (telefonda drawer'ın
     // içinden de ulaşılabilen ikinci kapı).
+    if (wideMain && activeJob) return renderWideRight(activeJob);
     if (manualMode) {
       return (
         <View style={styles.manualPane}>
@@ -3261,15 +3805,15 @@ export default function TamburScreen() {
         </View>
       ) : null}
 
-      <DocSiblingsStrip
-        siblings={docSiblings.siblings}
-        activeCardBarcode={activeJob?.cardBarcode ?? null}
-        onSwitch={(w) => resolveCard(w.cardBarcode, false)}
-        onDismiss={docSiblings.clear}
-      />
-
       {openJobs.length > 0 && (
         <View style={styles.tabBar}>
+          {/* K6 (2026-11-10): çok partili belgede parti seçici İE sekmeleriyle AYNI satırda; tek partide çizilmez. */}
+          <DocSiblingsStrip
+            siblings={docSiblings.siblings}
+            activeCardBarcode={activeJob?.cardBarcode ?? null}
+            onSwitch={(w) => resolveCard(w.cardBarcode, false)}
+            style={styles.partySelector}
+          />
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -3280,7 +3824,7 @@ export default function TamburScreen() {
                 key={job.cardId}
                 job={job}
                 active={job.cardId === activeCardId}
-                onPress={() => setActiveCardId(job.cardId)}
+                onPress={() => (job.cardId === activeCardId ? setWoDetailId(job.stepSummary.workOrderId ?? null) : setActiveCardId(job.cardId))}
                 onClose={() => closeJob(job.cardId)}
               />
             ))}
@@ -3297,24 +3841,30 @@ export default function TamburScreen() {
         </View>
       )}
 
-      {/* SY-F3: iş emrinin hedef değerleri ("Kuşak: ZEBRA") — salt-okunur; boşsa çizilmez. */}
-      {activeJob && <TamburTargetValueChips targetValues={activeJob.stepSummary.targetValues} />}
+      {/* K1 (2026-11-10): İE hedef değerleri ana ekranda çizilmez; aktif İE sekmesine dokununca açılan detayda. */}
+      {woDetailId ? (
+        <React.Suspense fallback={null}>
+          <WorkOrderDetailSheet workOrderId={woDetailId} onClose={() => setWoDetailId(null)} onChanged={() => undefined} />
+        </React.Suspense>
+      ) : null}
       {!activeJob ? (
-        <View style={styles.paneEmpty}>
+        <PullToRefreshView refreshing={activeRefresh.refreshing} onRefresh={activeRefresh.onRefresh} contentContainerStyle={styles.paneEmpty}>
           <Icon source="package-variant-closed" size={48} color="#cbd5e1" />
           <Text style={styles.paneEmptyText}>Henüz açık iş yok</Text>
-        </View>
+        </PullToRefreshView>
       ) : activeJob.stepSummary.rolls.length === 0 ? (
-        <View style={styles.paneEmpty}>
+        <PullToRefreshView refreshing={activeRefresh.refreshing} onRefresh={activeRefresh.onRefresh} contentContainerStyle={styles.paneEmpty}>
           <Icon source="check-circle-outline" size={48} color="#10b981" />
           <Text style={styles.paneEmptyText}>Tüm toplar finalize</Text>
           <Text style={styles.paneEmptyHint}>Sekmeyi kapatabilirsin</Text>
-        </View>
+        </PullToRefreshView>
       ) : (
         <BranchGroupedRollList
           rolls={activeJob.stepSummary.rolls}
           selectedRollId={activeJob.selectedRollId}
           onSelect={selectRoll}
+          refreshing={activeRefresh.refreshing}
+          onRefresh={activeRefresh.onRefresh}
         />
       )}
       {/* BU İŞTEN ÇIKANLAR (2026-08-09) — üstteki liste "işlenecek toplar"ı,
@@ -3322,13 +3872,15 @@ export default function TamburScreen() {
       {activeJob && (
         <WorkOrderOutputPanel
           workOrderId={activeJob.stepSummary.workOrderId}
+          lastMeasure={compact ? null : lastMeasure}
           onPrint={(r: Roll) => {
             // Kayıtlı etiket niyetiyle bas — "Kime?" TEKRAR SORULMAZ (kesim
             // akışlarındaki kuralın aynısı; hedef zaten topun üstünde).
             setLabelContext(undefined);
-            startPrint(r, printKindForRoll(r));
+            startPrint(r);
           }}
           onUndo={(r: Roll) => setPanelUndoTarget(r)}
+          onFixLabel={(r: Roll) => setLabelFixRoll(r)}
           // S5: basım zamanı "iş bitince" ise basılmamış topları mevcut kuyruğa verir.
           onPrintUnprinted={
             shouldAutoPrintAfterCut({ printTiming })
@@ -3344,71 +3896,117 @@ export default function TamburScreen() {
     );
   };
 
-  // Telefonda "Açık İşler" (operatörün açtığı kart sekmeleri), "Açık Kartlar"
-  // ve "Tara" erişimi Kurşun/Ham Giriş ile aynı desende: header'da sıkışan tek
-  // ikon yerine, başlığın ALTINDAKİ 2. katta yan yana üç etiketli chip
-  // (secondRow) — hepsi drawer açmadan doğrudan erişilir. Çıkanlar/Kesme
-  // telefonda drawer içinde kalır.
-  // MANUEL MODDA kart chip'leri (Açık İşler / Açık Kartlar / Tara) ÇİZİLMEZ:
-  // üçü de refakat kartına dayanır, modda hiçbiri işletilmez ve basıldığında
-  // görünmeyen bir iş açarlar. Yerine moddan çıkış chip'i gelir — dar telefon
-  // satırında mod anahtarı okunabilir kalsın diye (aksi hâlde 5 chip eşit
-  // bölüşür ve etiketler tek harfe kırpılır).
-  const phoneSecondRow = manualMode ? (
-    <>
-      <HeaderChip
-        icon="hand-back-right"
-        label="MANUEL MOD AÇIK — kapat"
-        onPress={toggleManualMode}
-        active
-        fill
-      />
-      {/* Serbest Etiket telefonda da çizilmez — manuel modda sadeleştirme
-          (2026-08-04); Çıkanlar drawer'ın içinden erişilebilir. */}
-    </>
-  ) : (
-    <>
-      <HeaderChip
-        icon="clipboard-list-outline"
-        label={`Açık İşler · ${openJobs.length}`}
-        onPress={() => setRightDrawerOpen(true)}
-        fill
-      />
-      <HeaderChip
-        icon="format-list-bulleted"
-        label="Açık Kartlar"
-        onPress={() => openList()}
-        fill
-      />
-      <HeaderChip icon={hardware ? 'barcode-scan' : 'camera'} label="Tara" onPress={() => openScanner()} fill />
-      {docLookup.enabled && (
-        <HeaderChip icon="file-document-outline" label="Belge" onPress={() => drawerQueue.run(() => docLookup.setOpen(true))} fill />
-      )}
-      {canLinkOrders && activeJob && (
-        <HeaderChip
-          icon="link-variant"
-          label="Sipariş Bağla"
-          onPress={() => setOrderLinkOpen(true)}
-          fill
-        />
-      )}
-      <HeaderChip
-        icon="tag-multiple"
-        label="Serbest Etiket"
-        onPress={() => openStandalone()}
-        fill
-      />
-      {canFieldFix && (
-        <HeaderChip
-          icon="hand-back-right-outline"
-          label="Manuel Ekle"
-          onPress={toggleManualMode}
-          fill
-        />
-      )}
-    </>
-  );
+  // Telefon 2. kat aksiyonları — TEK dizi; çubuk + "Diğer" menüsü StationActionBar'da
+  // türer. El terminalinde (dar) öncelikli üçü çubukta: Açık İşler (kart sekmeleri,
+  // her geçişte), Belge okut (GK'de iş belgeden bulunur), Tara (kart okutma);
+  // Belge kapalıysa Açık Kartlar yükselir. Seyrekler (Sipariş Bağla yalnız aktif
+  // işte, Manuel Ekle yetkili, Serbest Etiket) "Diğer"e iner.
+  // MANUEL MODDA kart aksiyonları (Açık İşler / Açık Kartlar / Tara / Belge) ÇİZİLMEZ:
+  // refakat kartına dayanırlar, basıldığında görünmeyen bir iş açarlar. Yerine
+  // moddan çıkış chip'i tek başına gelir (Serbest Etiket de modda sadeleşir, 2026-08-04).
+  const phoneActions: StationAction[] = manualMode
+    ? [
+        {
+          id: 'manualExit',
+          icon: 'hand-back-right',
+          label: 'MANUEL MOD AÇIK — kapat',
+          priority: 0,
+          visible: true,
+          active: true,
+          onPress: toggleManualMode,
+        },
+      ]
+    : [
+        {
+          id: 'openJobs',
+          icon: 'clipboard-list-outline',
+          label: 'Açık İşler',
+          count: openJobs.length,
+          priority: 1,
+          visible: true,
+          onPress: () => setRightDrawerOpen(true),
+        },
+        {
+          id: 'list',
+          icon: 'format-list-bulleted',
+          label: 'Açık Kartlar',
+          priority: 4,
+          visible: true,
+          onPress: () => openList(),
+        },
+        {
+          id: 'scan',
+          icon: hardware ? 'barcode-scan' : 'camera',
+          label: 'Tara',
+          priority: 3,
+          visible: true,
+          onPress: () => openScanner(),
+        },
+        {
+          id: 'doc',
+          icon: 'file-document-outline',
+          label: 'Belge okut',
+          priority: 2,
+          visible: docLookup.enabled,
+          onPress: () => drawerQueue.run(() => docLookup.setOpen(true)),
+        },
+        {
+          id: 'orderLink',
+          icon: 'link-variant',
+          label: 'Sipariş Bağla',
+          priority: 5,
+          visible: canLinkOrders && !!activeJob,
+          onPress: () => setOrderLinkOpen(true),
+        },
+        {
+          id: 'standalone',
+          icon: 'tag-multiple',
+          label: 'Serbest Etiket',
+          priority: 7,
+          visible: true,
+          onPress: () => openStandalone(),
+        },
+        {
+          id: 'manual',
+          icon: 'hand-back-right-outline',
+          label: 'Manuel Ekle',
+          priority: 6,
+          visible: canFieldFix,
+          onPress: toggleManualMode,
+        },
+      ];
+  const phoneSecondRow = <StationActionBar actions={phoneActions} testIDPrefix="tambur-bar" />;
 
+  // İş emri Tambur adım notu şeridi — telefon/klasik ve geniş ana kesim aynı öğeyi çizer.
+  const stepNoteStrip = !!activeJob?.context?.stepNote?.trim() && (
+    <TouchableRipple
+      onPress={() => setNoteModalOpen(true)}
+      style={styles.noteStrip}
+    >
+      <View style={styles.noteStripInner}>
+        <Icon source="note-text-outline" size={16} color="#78350f" />
+        <Text style={styles.noteStripLabel}>Tambur Notu</Text>
+        <Text style={styles.noteStripText} numberOfLines={1}>
+          {activeJob.context.stepNote.trim()}
+        </Text>
+        <Icon source="chevron-right" size={16} color="#b45309" />
+      </View>
+    </TouchableRipple>
+  );
+  const bitirOpenFabric = () => {
+    if (!selectedRoll) return;
+    if (selectedRoll.currentQty > 0.05) {
+      setOpenFabricFinalizeOpen(true);
+    } else {
+      // Kalan yok → sorulacak bir şey de yok. `discard` gönderilir
+      // ama sapma satırı DOĞMAZ (qty 0 → `recordVarianceTx` atlar).
+      finalizeOpenFabricMutation.mutate({
+        rollId: selectedRoll.rollId,
+        remainingAction: 'discard',
+        foldType: work.foldType ?? null,
+      });
+    }
+  };
   // Tablet başlık aksiyonları — tek tablo; yerleşim kararı saf `tamburHeaderActions`ta.
   const { width: headerWinW } = useWindowDimensions();
   const [headerMoreOpen, setHeaderMoreOpen] = useState(false);
@@ -3419,6 +4017,9 @@ export default function TamburScreen() {
     canLinkOrders,
     canFieldFix,
     hasActiveJob: !!activeJob,
+    labelInfo: wideMain,
+    singleJobTab: wideMain && !showJobTabs(openJobs.length),
+    cardCodeEntry: idleFull,
   });
   const headerActionMeta = (
     a: TamburHeaderAction,
@@ -3450,6 +4051,16 @@ export default function TamburScreen() {
         };
       case 'standalone':
         return { icon: 'tag-multiple', label: 'Serbest Etiket', onPress: () => openStandalone() };
+      case 'labelInfo':
+        return { icon: 'tag-text-outline', label: 'Etiket bilgisi', onPress: () => setLabelInfoOpen(true) };
+      case 'woDetail':
+        return { icon: 'clipboard-text-outline', label: `${TERIM.terbiyeIsEmri.cumleBasi.yalin} detayı`, onPress: () => setWoDetailId(activeJob?.stepSummary.workOrderId ?? null) };
+      case 'refreshJob':
+        return { icon: 'refresh', label: 'İşi yenile', onPress: () => activeRefresh.onRefresh() };
+      case 'closeJob':
+        return { icon: 'close', label: 'İşi kapat', onPress: () => activeCardId && closeJob(activeCardId) };
+      case 'cardCode':
+        return { icon: 'keyboard-outline', label: 'Kart no yaz', onPress: () => setCardCodeOpen(true) };
     }
   };
   const renderHeaderAction = (a: TamburHeaderAction) => {
@@ -3476,6 +4087,7 @@ export default function TamburScreen() {
       hidePlaceChip={compact}
       titleRowExtras={<MachineStopChip control={machineStop} />}
       topStrip={<MachineStopBand control={machineStop} />}
+      flushBottom={!compact}
       headerExtras={
         <View style={styles.headerExtrasRow}>
           <SyncStatusChip />
@@ -3544,8 +4156,10 @@ export default function TamburScreen() {
             : undefined
         }
       >
+        {idleFull && <TamburIdleState />}
         {/* ════════ SOL: form ════════ */}
-        <View style={styles.formCol}>
+        {!idleFull && (
+        <View style={[styles.formCol, wideMain && styles.formColWide]}>
           {manualMode ? (
             // ══ MANUEL EKLE — kartsız BİTMİŞ ürün ══════════════════════════
             // Top Kesme ile aynı sınıfta EXCLUSIVE bir mod: kabuk aynı (band +
@@ -3887,13 +4501,13 @@ export default function TamburScreen() {
                 </View>
               </Surface>
 
-              {/* WO akışıyla aynı düzen: kaydırılabilir form + sticky footer */}
+              {/* WO akışıyla aynı düzen: form + sticky footer; geniş tablette form ekrana sığar (K5). */}
               <ScrollView
                 style={{ flex: 1 }}
-                contentContainerStyle={styles.scrollContent}
+                contentContainerStyle={compact ? styles.scrollContent : styles.scrollContentWide}
                 keyboardShouldPersistTaps="handled"
               >
-                <Surface style={styles.section} elevation={1}>
+                <Surface style={[styles.section, !compact && styles.sectionWide]} elevation={1}>
                   {/* Uzunluk girişi + Manuel/Otomatik toggle yan yana */}
                   <View style={styles.lengthModeRow}>
                     <View style={styles.lengthCol}>
@@ -3941,7 +4555,7 @@ export default function TamburScreen() {
                             key={m}
                             borderless
                             onPress={() => void setRecutMode(m)}
-                            style={[styles.cutModeChip, active && styles.cutModeChipActive]}
+                            style={[styles.cutModeChip, !compact && styles.cutModeChipWide, active && styles.cutModeChipActive]}
                           >
                             <Text
                               style={[
@@ -4013,9 +4627,24 @@ export default function TamburScreen() {
                       keser; footer "Kes — Kalanı Kes (X mt)" ile bunu söyler
                       (normal akışla aynı). */}
 
-                  {/* Kime + Kalite yan yana iki sütun; her sütun kendi dikey listesi */}
+                  {/* Geniş tablet (K5): Kime düğmesi | Kalite segmenti tek satır; telefonda iki dikey sütun. */}
+                  {!compact ? (
+                    <View style={styles.kimeKaliteRowWide}>
+                      {recutFinal.owner ? <OwnerLockColumn owner={recutFinal.owner} inline /> : targetButton}
+                      <QualitySegment
+                        grades={qualityGrades}
+                        value={recutQualityGrade}
+                        onPick={(g) => {
+                          shortCutAutoRecutRef.current = false;
+                          setRecutQualityGrade(g.code);
+                          void setLastQualityCode(g.code);
+                        }}
+                      />
+                    </View>
+                  ) : (
                   <View style={styles.kimeKaliteRow}>
-                    <View style={styles.kimeCol}>
+                    {recutFinal.owner ? <OwnerLockColumn owner={recutFinal.owner} /> : null}
+                    <View style={[styles.kimeCol, recutFinal.owner ? styles.hidden : null]}>
                       <Text style={styles.cutSubLabel}>Kime?</Text>
                       {stokChip}
                       {kimeListChip}
@@ -4071,6 +4700,7 @@ export default function TamburScreen() {
                                 // Elle seçim = kontrol operatörde (ana kesimle aynı).
                                 shortCutAutoRecutRef.current = false;
                                 setRecutQualityGrade(qg.code);
+                                void setLastQualityCode(qg.code);
                               }}
                               style={[
                                 styles.listOption,
@@ -4086,7 +4716,7 @@ export default function TamburScreen() {
                                   active && styles.listOptionTextActive,
                                 ]}
                               >
-                                {qg.name}
+                                {shortGradeLabel(qg.name)}
                               </Text>
                             </TouchableRipple>
                           );
@@ -4094,6 +4724,7 @@ export default function TamburScreen() {
                       </View>
                     </View>
                   </View>
+                  )}
                 </Surface>
               </ScrollView>
 
@@ -4108,9 +4739,11 @@ export default function TamburScreen() {
                 kgText={recutFinal.kgText}
                 onKgChange={recutFinal.setKgText}
                 onSuggest={handleRecutLengthChange}
-                batch={recutFinal.batch}
-                onOpenLabelInfo={activeJob?.stepSummary.workOrderId ? () => setLabelInfoOpen(true) : undefined}
+                labelSummary={{ text: recutLabelSummary, onPress: () => setLabelInfoOpen(true) }}
+                card={recutCard.card}
+                wide={!compact}
               />
+              {recutCard.overlay}
               <TamburMeasureStrip last={lastMeasure} />
               <CutActionBar
                 compact={compact}
@@ -4161,6 +4794,8 @@ export default function TamburScreen() {
                 {emptyCardHint({ compact, docLookupEnabled: docLookup.enabled, where: 'Sağdan' })}
               </Text>
             </View>
+          ) : !selectedRoll && !compact ? (
+            <TamburIdleState text={TAMBUR_PICK_ROLL_TEXT} icon="gesture-tap" />
           ) : !selectedRoll ? (
             <View style={styles.emptyState}>
               <Icon source="package-variant" size={64} color="#cbd5e1" />
@@ -4169,6 +4804,24 @@ export default function TamburScreen() {
                 Sağdaki kuyruktan birini seçin
               </Text>
             </View>
+          ) : wideMain ? (
+            <>
+              {renderWideCut(selectedRoll)}
+              {kartelaStrip}
+              {openCard.overlay}
+              <CutActionBar
+                compact={false}
+                kartelaOn={markAsKartela}
+                copies={copiesBar}
+                onToggleKartela={() => setMarkAsKartela((v) => !v)}
+                onKes={handleKes}
+                kesLoading={cutOpenFabricMutation.isPending || measuring}
+                kesDisabled={!work.voluntaryEntry.qualityGrade}
+                kesLabel="Kes & Etiket Bas"
+                kesSubLabel={kesSubLabel(cutMode, work.voluntaryEntry.length, selectedRoll.currentQty, !!work.voluntaryEntry.qualityGrade)}
+                wideLeft
+              />
+            </>
           ) : (
             <>
               {/* Sticky header — kalan metre + siparişler butonu prominent */}
@@ -4193,19 +4846,11 @@ export default function TamburScreen() {
                     {selectedRoll.colorName ? ` · ${selectedRoll.colorName}` : ''}
                     {selectedRoll.width != null ? ` · ${selectedRoll.width} cm` : ''}
                   </Text>
-                  {selectedRoll.properties.length > 0 && (
-                    <View style={styles.headerPropRow}>
-                      {selectedRoll.properties.map((p) => (
-                        <View key={p.id} style={styles.headerPropChip}>
-                          <Text style={styles.headerPropChipText} numberOfLines={1}>
-                            {/* Değer de basılır ("Gramaj: 50 gr") — final kararı
-                                veren operatör kurşundaki seçimi görmeli (VAL-03). */}
-                            {p.value ? `${p.name}: ${p.value.name}` : p.name}
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
+                  {/* Beyan ↔ ölçülen şeridi: bilgi + aşım uyarısı, kesimi ENGELLEMEZ; uç yoksa çizilmez. */}
+                  <TamburMeterTrail
+                    rollId={selectedRoll.rollId}
+                    pendingM={cutMode === 'manual' ? parseCutInput(work.voluntaryEntry.length) : 0}
+                  />
                 </View>
 
                 {/* mt kalan / katlama / sipariş kutu grubu. Telefonda başlığın
@@ -4229,26 +4874,7 @@ export default function TamburScreen() {
                     <Text style={styles.headerBoxSub}>mt kalan</Text>
                   </View>
 
-                  {/* İş emrinde belirlenen katlama — metre kutusunun yanında, mor.
-                      SABİT referans: iş emrinin planı (plannedFoldType). Aşağıdaki
-                      düzenlenebilir kat chip'lerinden BAĞIMSIZ — operatör chip'i
-                      değiştirse bile burası iş emrinin değerini gösterir.
-                      "2 Kat / sarım" şeklinde okunur. */}
-                  <View
-                    style={[
-                      styles.headerBox,
-                      styles.headerBoxFold,
-                      compact && styles.headerBoxFlex,
-                    ]}
-                  >
-                    <Text style={styles.headerBoxValue}>
-                      {activeJob?.context?.plannedFoldType === '4-KAT'
-                        ? '4 Kat'
-                        : '2 Kat'}
-                    </Text>
-                    <Text style={styles.headerBoxSub}>sarım</Text>
-                  </View>
-
+                  {/* "Kat sarım" kutusu kaldırıldı (K5): aşağıdaki kat seçimi aynı bilgiyi taşır. */}
                   {/* Siparişler — modal trigger */}
                   {!!activeJob?.context?.orders &&
                     activeJob.context.orders.length > 0 && (
@@ -4294,25 +4920,12 @@ export default function TamburScreen() {
               {/* İş emri Tambur adım notu — sticky şerit (header'ın hemen altında,
                   ScrollView dışında → kesim için aşağı kaydırınca kaybolmaz).
                   İlk satır dokunmadan görünür; dokun → tam not modal'i. */}
-              {!!activeJob?.context?.stepNote?.trim() && (
-                <TouchableRipple
-                  onPress={() => setNoteModalOpen(true)}
-                  style={styles.noteStrip}
-                >
-                  <View style={styles.noteStripInner}>
-                    <Icon source="note-text-outline" size={16} color="#78350f" />
-                    <Text style={styles.noteStripLabel}>Tambur Notu</Text>
-                    <Text style={styles.noteStripText} numberOfLines={1}>
-                      {activeJob.context.stepNote.trim()}
-                    </Text>
-                    <Icon source="chevron-right" size={16} color="#b45309" />
-                  </View>
-                </TouchableRipple>
-              )}
+              {stepNoteStrip}
 
+              {/* Geniş tablette içerik ekrana sığar (K5); ScrollView yalnız büyük yazı ölçeğinde emniyet. */}
               <ScrollView
                 style={{ flex: 1 }}
-                contentContainerStyle={styles.scrollContent}
+                contentContainerStyle={compact ? styles.scrollContent : styles.scrollContentWide}
                 keyboardShouldPersistTaps="handled"
               >
                 {/* Hata noktaları — metre cetveli. Çok nokta olsa da tek bakışta
@@ -4342,7 +4955,7 @@ export default function TamburScreen() {
                       borderless
                       style={styles.defectGuideSection}
                     >
-                      <View style={{ gap: 6 }}>
+                      <View style={compact ? { gap: 6 } : styles.defectRowWide}>
                         <View style={styles.defectGuideTitleRow}>
                           <Text style={styles.defectGuideTitle}>
                             Hata Noktaları ({errs.length})
@@ -4354,14 +4967,17 @@ export default function TamburScreen() {
                               </Text>
                             </View>
                           )}
-                          <View style={{ flex: 1 }} />
-                          <Icon source="chevron-right" size={18} color="#94a3b8" />
+                          {compact && <View style={{ flex: 1 }} />}
+                          {compact && <Icon source="chevron-right" size={18} color="#94a3b8" />}
                         </View>
-                        <DefectRuler
-                          errors={errs}
-                          defectTypes={defectTypes}
-                          rulerMax={rulerMaxForErrors(selectedRoll.currentQty, errs)}
-                        />
+                        <View style={compact ? undefined : styles.defectRulerWide}>
+                          <DefectRuler
+                            errors={errs}
+                            defectTypes={defectTypes}
+                            rulerMax={rulerMaxForErrors(selectedRoll.currentQty, errs)}
+                          />
+                        </View>
+                        {!compact && <Icon source="chevron-right" size={22} color={colors.textMuted} />}
                       </View>
                     </TouchableRipple>
                   );
@@ -4369,9 +4985,10 @@ export default function TamburScreen() {
 
                 {/* Kesim — operatör fiziksel kesim yapar, anında sisteme girer.
                     Her "Top Oluştur" tıklaması child Roll oluşturur + etiket basar. */}
-                <Surface style={styles.section} elevation={1}>
-                  {/* Katlama (2/4 kat) — başlıksız, bölümün en üstünde. */}
-                  <View style={styles.foldInlineRow}>
+                <Surface style={[styles.section, !compact && styles.sectionWide]} elevation={1}>
+                  {/* Katlama (2/4 kat) — telefonda bölümün en üstünde; geniş tablette metre satırının başında (K5). */}
+                  <View style={compact ? undefined : styles.cutRowWide}>
+                  <View style={compact ? styles.foldInlineRow : styles.foldWide}>
                     {/* Seçenekler KATALOGDAN (2026-08-10). Seçilen kod hem topa
                         yazılır hem METRE cihazının rolüyle BİREBİR eşleştirilir. */}
                     {foldValues.map((ft) => {
@@ -4383,7 +5000,7 @@ export default function TamburScreen() {
                           // Biri her zaman seçili kalmalı → aktif chip'e basınca
                           // boşa düşmez; sadece diğerine geçiş yapılır.
                           onPress={() => setWork((w) => ({ ...w, foldType: ft.code }))}
-                          style={[styles.foldChipSm, active && styles.foldChipActive]}
+                          style={[styles.foldChipSm, !compact && styles.foldChipWide, active && styles.foldChipActive]}
                         >
                           <Text
                             style={[
@@ -4400,7 +5017,8 @@ export default function TamburScreen() {
 
                   {/* Uzunluk girişi + Manuel/Otomatik metraj kaynağı — MANUEL
                       MOD ile ORTAK blok (aynı bileşen, aynı state; kopya değil). */}
-                  {renderCutLength('Boş = kalanı kes (metre)')}
+                  <View style={compact ? undefined : { flex: 1 }}>{renderCutLength('Boş = kalanı kes (metre)')}</View>
+                  </View>
 
                   {/* Kime? + Kalite — MANUEL MOD ile ORTAK blok. Tek fark
                       sipariş kısayolları: kart akışında iş emrinin sipariş
@@ -4408,6 +5026,7 @@ export default function TamburScreen() {
                       kaldırır = stok). Manuel modda iş emri yok → kısayol yok. */}
                   {renderKimeKalite({
                     grades: qualityGrades,
+                    owner: openFinal.owner,
                     orderShortcuts: (
                       <ScrollView
                         style={styles.kimeScroll}
@@ -4476,30 +5095,21 @@ export default function TamburScreen() {
                 remaining={selectedRoll.currentQty}
                 kgText={openFinal.kgText}
                 onKgChange={openFinal.setKgText}
-                batch={openFinal.batch}
+                labelSummary={{ text: openLabelSummary, onPress: () => setLabelInfoOpen(true) }}
                 onSuggest={(t) => setWork((w) => ({ ...w, voluntaryEntry: { ...w.voluntaryEntry, length: t } }))}
-                onOpenLabelInfo={activeJob?.stepSummary.workOrderId ? () => setLabelInfoOpen(true) : undefined}
+                card={openCard.card}
+                wide={!compact}
               />
-              <TamburMeasureStrip last={lastMeasure} />
+              {openCard.overlay}
+              {/* Geniş tablette son kesim "Bu işten çıkanlar" başlığında (K5). */}
+              {compact && <TamburMeasureStrip last={lastMeasure} />}
               <CutActionBar
                 compact={compact}
                 kartelaOn={markAsKartela}
                 copies={copiesBar}
                 onToggleKartela={() => setMarkAsKartela((v) => !v)}
                 onKes={handleKes}
-                onBitir={() => {
-                  if (selectedRoll.currentQty > 0.05) {
-                    setOpenFabricFinalizeOpen(true);
-                  } else {
-                    // Kalan yok → sorulacak bir şey de yok. `discard` gönderilir
-                    // ama sapma satırı DOĞMAZ (qty 0 → `recordVarianceTx` atlar).
-                    finalizeOpenFabricMutation.mutate({
-                      rollId: selectedRoll.rollId,
-                      remainingAction: 'discard',
-                      foldType: work.foldType ?? null,
-                    });
-                  }
-                }}
+                onBitir={bitirOpenFabric}
                 bitirLoading={finalizeOpenFabricMutation.isPending}
                 // cutOpenFabric offline-aware değil → isPending'de kilitlenir.
                 // Otomatik modda makineden okuma uçuşurken de (measuring) kilitli.
@@ -4520,16 +5130,20 @@ export default function TamburScreen() {
           )}
 
         </View>
+        )}
 
         {/* ════════ SAĞ: card scan + tab + roll list + numpad ════════ */}
-        {!compact && (
-          <View style={styles.rightCol}>
+        {!compact && !idleFull && (
+          <View style={[styles.rightCol, wideMain && styles.rightColWide]}>
             {renderRightContent()}
             {/* Otomatik modda yazılacak bir şey yok → numpad gizlenir. Recut
                 akışı aktifse onun modu (recutMode), değilse açık-kumaş (cutMode). */}
-            {(recutRollMeta ? recutMode : cutMode) === 'manual' && (
+            {/* Top seçilmeden yazılacak bir şey yok → tuş takımı yalnız seçili top / Top Kesme / manuel modda (2026-11-11). */}
+            {!wideMain && (!!selectedRoll || !!recutRollMeta || manualMode) && (recutRollMeta ? recutMode : cutMode) === 'manual' && (
               <NumpadHost style={styles.numpadHost} />
             )}
+            {/* Geniş ana kesim: sağ sütun kartlarla dolu → numpad alt sayfada açılır. */}
+            {wideMain && <NumpadModalHost />}
           </View>
         )}
 
@@ -4555,7 +5169,17 @@ export default function TamburScreen() {
         onDismiss={() => docLookup.setOpen(false)}
         onOpen={handleDocLookupOpen}
         readerConfigured={docLookup.readerConfigured}
+        deviceOcrAccepted={docLookup.deviceOcrAccepted}
         screen={{ screen: 'TAMBUR', stationId: listStationId }}
+      />
+
+      <TamburCardCodeSheet
+        visible={cardCodeOpen}
+        onDismiss={() => setCardCodeOpen(false)}
+        onSubmit={(code) => {
+          setCardCodeOpen(false);
+          void resolveCard(code, true);
+        }}
       />
 
       {/* Refakat kartı QR/barkod okuma — gerçek kamera */}
@@ -4680,9 +5304,39 @@ export default function TamburScreen() {
           onaylatacak bir karar yok, yalnız bilgi toast'ı gösterilir. */}
 
       <TamburLabelInfoModal
-        workOrderId={activeJob?.stepSummary.workOrderId ?? null}
+        workOrderId={recutRollMeta ? null : (activeJob?.stepSummary.workOrderId ?? null)}
         visible={labelInfoOpen}
         onDismiss={() => setLabelInfoOpen(false)}
+        final={recutRollMeta ? recutFinal : openFinal}
+        defaults={recutRollMeta ? recutLabelDefaults : openLabelDefaults}
+      />
+      {labelFixRoll ? (
+        <TamburLabelInfoModal
+          mode="fix"
+          visible
+          roll={labelFixRoll}
+          onDismiss={() => setLabelFixRoll(null)}
+          defaults={{ itemName: labelFixRoll.item?.name ?? null, colorName: labelFixRoll.color?.name ?? null, batchNo: null }}
+          onSaved={(res) => {
+            void qc.invalidateQueries({ queryKey: ['tambur', 'wo-output'] });
+            void qc.invalidateQueries({ queryKey: ['tambur', 'recent-output-rolls'] });
+            setLabelFixReprint({ ...labelFixRoll, labelItemName: res.labelItemName, labelColorName: res.labelColorName, labelBatchNo: res.labelBatchNo });
+          }}
+        />
+      ) : null}
+      <ConfirmDialog
+        kind="simple"
+        visible={!!labelFixReprint}
+        title="Etiketi yeniden bas"
+        description={`Etiket bilgisi düzeltildi${labelFixReprint?.barcode ? ` (${labelFixReprint.barcode})` : ''}. Topun üstündeki eski etiketi değiştirmek için yeniden basılsın mı?`}
+        confirmLabel="Yeniden bas"
+        cancelLabel="Sonra"
+        onDismiss={() => setLabelFixReprint(null)}
+        onConfirm={() => {
+          const r = labelFixReprint;
+          setLabelFixReprint(null);
+          if (r) reprintLabel(r);
+        }}
       />
       {/* Etiket basımı modal'ı — finalize/post-split sonrası */}
       {recutAmbiguous.modal}
@@ -4752,6 +5406,8 @@ export default function TamburScreen() {
             remainingAction: action,
             weightKg,
             labelBatchNo: action === 'discard' ? undefined : openFinal.batch.body(),
+            // Kuyruğa serileşen vars: alanlar düz (offline/mutations.ts aynı adları geçirir).
+            ...(action === 'discard' ? {} : openFinal.texts.body()),
             foldType: work.foldType ?? null,
             varianceReasonCode: reasonCode,
             varianceReasonText: reasonText,
@@ -4780,6 +5436,7 @@ export default function TamburScreen() {
             remainingAction: action,
             weightKg: action === 'discard' ? undefined : recutFinal.weightKg(),
             labelBatchNo: action === 'discard' ? undefined : recutFinal.batch.body(),
+            labelTexts: action === 'discard' ? undefined : recutFinal.texts.body(),
             varianceReasonCode: reasonCode,
             varianceReasonText: reasonText,
           });
@@ -4794,7 +5451,7 @@ export default function TamburScreen() {
             setRecutResolvedRollId(null);
             setRecutRollMeta(null);
             setRecutCutLength('');
-            setRecutQualityGrade(defaultQualityCode);
+            setRecutQualityGrade(recutStartQualityCode);
             setRecutLastParentRoll(null);
             qc.invalidateQueries({ queryKey: ['rolls'] });
       // "Bu işten çıkanlar" paneli AYNI ANDA tazelensin — anahtarı ['rolls']
@@ -5135,17 +5792,11 @@ export default function TamburScreen() {
       )}
 
       {/* Aktif yazdırma — LabelPrinter expo-print ile PDF/sistem yazdırma açar.
-          VARSAYILAN tür renkten çözülür: renksiz top = ham kumaş → ham etiket
-          (ROLL_RAW); renkli/boyanmış = bitmiş (ROLL_FINISHED). Tambur ham kesim
-          parçaları renksiz olduğundan ham etiketle basılır.
-          İSTİSNA: Manuel Mod çıktısı BİTMİŞ üründür (backend statüyü açıkça
-          WAREHOUSE yazar) — renksiz olsa da bitmiş etiket basılmalı; o iş türü
-          `startPrint(roll, 'ROLL_FINISHED')` ile sabitler (printKind). */}
+          Tür verilmezse sunucu topun aşamasından seçer (ham/yarı mamul → ham,
+          bitmiş → bitmiş etiket); printKind yalnız elle seçimdir. */}
       <LabelPrinter
         roll={activePrintRoll}
-        kind={
-          printKind ?? (activePrintRoll?.colorId == null ? 'ROLL_RAW' : 'ROLL_FINISHED')
-        }
+        kind={printKind ?? undefined}
         labelContext={labelContext}
         confirmScrap={printConfirmScrap}
         copies={printCopies}
@@ -5180,14 +5831,24 @@ export default function TamburScreen() {
         visible={kimePickerOpen}
         title={recutRollMeta ? 'Müşteri / Sipariş Seç' : 'Müşteri Seç (tüm müşteriler)'}
         options={kimeOptions}
-        pinnedOptions={kimePinnedOptions}
+        pinnedOptions={
+          compact
+            ? kimePinnedOptions
+            : [targetStockOption, ...(recutRollMeta ? [] : targetOrderLineOptions), ...kimePinnedOptions]
+        }
         pinnedLabel={
-          recutRollMeta ? 'Bu topa uyan açık siparişler' : `Bu ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} siparişi olan müşteriler`
+          !compact
+            ? recutRollMeta ? 'Stok · bu topa uyan açık siparişler' : `Stok · bu ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} siparişleri`
+            : recutRollMeta ? 'Bu topa uyan açık siparişler' : `Bu ${TERIM.terbiyeIsEmri.cekimKucuk.bulunma} siparişi olan müşteriler`
         }
         selectedValue={
           recutRollMeta
-            ? recutTargetLineId ?? recutTargetCustomerId
-            : work.voluntaryEntry.targetCustomerId
+            ? recutTargetLineId ?? recutTargetCustomerId ?? (compact ? null : TARGET_STOCK_VALUE)
+            : compact
+              ? work.voluntaryEntry.targetCustomerId
+              : work.voluntaryEntry.targetOrderLineId
+                ? `${TARGET_LINE_PREFIX}${work.voluntaryEntry.targetOrderLineId}`
+                : work.voluntaryEntry.targetCustomerId ?? TARGET_STOCK_VALUE
         }
         numColumns={compact ? 1 : 2}
         onSelect={handleKimeSelect}
@@ -5376,13 +6037,24 @@ export default function TamburScreen() {
           setLabelContext(
             ctx.orderLineId || ctx.customerId || ctx.stock ? ctx : undefined,
           );
-          // Tür yine topun kendi kimliğinden — "Yeni Etiket" hedefi değiştirir,
-          // topun ham/bitmiş olmasını değiştirmez (bkz. printKindForRoll).
-          startPrint(r, printKindForRoll(r));
+          // "Yeni Etiket" hedefi değiştirir; tür sunucuda topun aşamasından çözülür.
+          startPrint(r);
         }}
       />
 
       {scanRoute.dialog}
+      {/* Yeniden basım şablon seçicisi — en sonda: açık liste modallarının ÜSTÜNDE açılır. */}
+      {reprintPick ? (
+        <PickerModal
+          visible
+          title="Etiket şablonu — yeniden bas"
+          options={templatePickerOptions(reprintPick.opts)}
+          selectedValue={reprintPick.opts.currentTemplateId ?? reprintPick.opts.defaultTemplateId}
+          disableSort
+          onSelect={onReprintTemplate}
+          onDismiss={() => setReprintPick(null)}
+        />
+      ) : null}
     </ScreenChrome>
   );
 }
@@ -6065,7 +6737,7 @@ const noteModalStyles = StyleSheet.create({
 // "Çıkanlar" listesinde tek top satırı — TÜM satır tıklanır (dokun → önizleme:
 // Bas / Yeni Etiket). (Eski "Etiket Değiştir" RelabelPickerModal'i kaldırıldı;
 // yönlendirme artık Çıkanlar önizlemesindeki "Yeni Etiket" butonundan yapılıyor.)
-function RelabelRollRow({
+export function RelabelRollRow({
   grades,
   roll,
   onPress,
@@ -6073,7 +6745,10 @@ function RelabelRollRow({
   stacked,
   selectMode,
   selected,
+  cols,
 }: {
+  /** Görünür sütunlar (tablo düzeni); verilmezse bugünkü tüm sütunlar. */
+  cols?: ReadonlySet<OutputColumnKey>;
   roll: Roll;
   onPress: () => void;
   /** "Geri Al" ikonu — Tambur işlemini iptal akışını açar (önizleme onaylı). */
@@ -6095,6 +6770,7 @@ function RelabelRollRow({
   // İşaret olmasaydı operatör "bu top hangi işten çıktı" sorusuna listeye bakarak
   // yanlış cevap verirdi — satırdaki iş emri alanı manuel topta boştur.
   const isManual = roll.entrySource === 'TAMBUR_MANUAL';
+  const show = (k: OutputColumnKey) => !cols || cols.has(k);
   const itemText = `${roll.item?.name ?? '—'}${color?.name ? ` · ${color.name}` : ''}`;
   const qtyText =
     (roll.currentQty != null ? `${Number(roll.currentQty).toFixed(1)} m` : '—') +
@@ -6174,9 +6850,11 @@ function RelabelRollRow({
             color={selected ? '#1e40af' : '#94a3b8'}
           />
         )}
-        <View style={[relabelStyles.gradePill, { backgroundColor: gradeBg }]}>
-          <Text style={relabelStyles.gradePillText}>{grade}</Text>
-        </View>
+        {show('quality') && (
+          <View style={[relabelStyles.gradePill, { backgroundColor: gradeBg }]}>
+            <Text style={relabelStyles.gradePillText}>{grade}</Text>
+          </View>
+        )}
         <Text style={relabelStyles.rowBarcode} numberOfLines={1}>
           {roll.barcode ?? '—'}
         </Text>
@@ -6185,11 +6863,17 @@ function RelabelRollRow({
             <Text style={relabelStyles.manualPillText}>MANUEL</Text>
           </View>
         )}
-        <View style={relabelStyles.colItem}>
-          <Text style={relabelStyles.colItemText} numberOfLines={1}>
-            {roll.item?.name ?? '—'}
-          </Text>
-        </View>
+        {/* Ürün kapalıyken boşluğu dolduran esnek ayraç — sağdaki sütunlar sağa yaslı kalsın. */}
+        {show('item') ? (
+          <View style={relabelStyles.colItem}>
+            <Text style={relabelStyles.colItemText} numberOfLines={1}>
+              {roll.item?.name ?? '—'}
+            </Text>
+          </View>
+        ) : (
+          <View style={{ flex: 1 }} />
+        )}
+        {show('color') && (
         <View style={relabelStyles.colColor}>
           {color && (
             <View
@@ -6203,27 +6887,49 @@ function RelabelRollRow({
             {color?.name ?? '—'}
           </Text>
         </View>
-        <View style={relabelStyles.colWidth}>
-          <Text style={relabelStyles.colMutedText}>
-            {roll.width != null ? `${Number(roll.width).toFixed(0)} cm` : '—'}
-          </Text>
-        </View>
+        )}
+        {show('width') && (
+          <View style={relabelStyles.colWidth}>
+            <Text style={relabelStyles.colMutedText}>
+              {roll.width != null ? `${Number(roll.width).toFixed(0)} cm` : '—'}
+            </Text>
+          </View>
+        )}
+        {show('labelBatch') && (
+          <View style={relabelStyles.colExtra} testID="son-cikan-hucre-labelBatch">
+            <Text style={relabelStyles.colMutedText} numberOfLines={1}>{roll.labelBatchNo || '—'}</Text>
+          </View>
+        )}
+        {show('workOrder') && (
+          <View style={relabelStyles.colExtra}>
+            <Text style={relabelStyles.colMutedText} numberOfLines={1}>{roll.batch?.workOrder?.workOrderNumber ?? '—'}</Text>
+          </View>
+        )}
         {/* ÜRETİM ANI — gün + saat (2026-08-09 saha isteği).
             ⚠️ `createdAt` kullanılır, `updatedAt` DEĞİL: bu liste "bu top ne
             zaman ÇIKTI" sorusuna bakar. `updatedAt` etiket yeniden basımında da
             değişir ve sıralamayı yalanlar (envanter kuralı: listede TEK tarih
             kolonu görünür ve SIRALANAN kolonun aynısıdır — liste
             `createdAt desc` sıralı). Vardiya içi ayırt etmek için saat şart. */}
-        <View style={relabelStyles.colDate}>
-          <Text style={relabelStyles.colMutedText} numberOfLines={1}>
-            {formatOutputDate(roll.createdAt)}
-          </Text>
-        </View>
-        <View style={relabelStyles.colQty}>
-          <Text style={relabelStyles.colQtyText}>
-            {roll.currentQty != null ? `${Number(roll.currentQty).toFixed(1)} m` : '—'}
-          </Text>
-        </View>
+        {show('date') && (
+          <View style={relabelStyles.colDate}>
+            <Text style={relabelStyles.colMutedText} numberOfLines={1}>
+              {formatOutputDate(roll.createdAt)}
+            </Text>
+          </View>
+        )}
+        {show('kg') && (
+          <View style={relabelStyles.colWidth}>
+            <Text style={relabelStyles.colMutedText}>{roll.weightKg != null ? `${Number(roll.weightKg)} kg` : '—'}</Text>
+          </View>
+        )}
+        {show('qty') && (
+          <View style={relabelStyles.colQty}>
+            <Text style={relabelStyles.colQtyText}>
+              {roll.currentQty != null ? `${Number(roll.currentQty).toFixed(1)} m` : '—'}
+            </Text>
+          </View>
+        )}
         {onUndo && (
           <IconButton
             icon="undo-variant"
@@ -6326,8 +7032,9 @@ const relabelStyles = StyleSheet.create({
   },
   // Üretim anı — "GG.AA SS:dd" için yeterli, kumaş adını daha fazla kırpmayan
   // en dar genişlik.
+  // "GG.AA SS:dd" yazı ölçeği büyük tablette de kesilmesin (2026-11-10: 92'de "10.11 11:…" kırpılıyordu).
   colDate: {
-    width: 92,
+    width: 118,
     paddingLeft: 10,
     borderLeftWidth: 1,
     borderLeftColor: '#e2e8f0',
@@ -6335,6 +7042,7 @@ const relabelStyles = StyleSheet.create({
   },
   colItemText: { fontSize: 14, fontWeight: '600', color: '#0f172a' },
   colMutedText: { fontSize: 13, color: '#475569', flexShrink: 1, fontVariant: ['tabular-nums'] },
+  colExtra: { width: 120, paddingLeft: 10, borderLeftWidth: 1, borderLeftColor: colors.border },
   colQtyText: {
     fontSize: 14,
     fontWeight: '800',
@@ -6465,6 +7173,10 @@ function RecentOutputModal({
   const { width: winW, height: winH } = useWindowDimensions();
   const isCompactPortrait = winH > winW;
   const [search, setSearch] = useState('');
+  // Sütun seçimi cihazda, ekran kimliğiyle (başka listelerin varsayılanı değişmez).
+  const storedCols = useDeviceSettingsStore((st) => st.listColumns[RECENT_OUTPUT_SCREEN_KEY]);
+  const setListColumns = useDeviceSettingsStore((st) => st.setListColumns);
+  const [colsOpen, setColsOpen] = useState(false);
   const debouncedSearch = useDebouncedValue(search.trim(), 300);
 
   // Modal kapanınca aramayı sıfırla — sonraki açılış temiz başlasın.
@@ -6558,6 +7270,7 @@ function RecentOutputModal({
     [q.data],
   );
   const total = q.data?.pages[0]?.pagination.totalEstimate ?? null;
+  const visibleCols = useMemo(() => resolveOutputColumns(storedCols, rolls), [storedCols, rolls]);
 
   // Satıra dokununca topun "son basılan etiket"ini önizle (LabelPreviewSheet,
   // snapshot/effective cascade). Liste açık kalır; önizleme üstüne (Portal) açılır.
@@ -6719,7 +7432,7 @@ function RecentOutputModal({
         headerTint="#dbeafe"
         // Tabloya geçince 6 sütun oldu (kalite·barkod·kumaş·renk·en·metraj) —
         // %50 dar kalıyordu, kumaş adı sürekli kırpılıyordu.
-        widthRatio={isCompactPortrait ? 0.96 : 0.78}
+        widthRatio={isCompactPortrait ? 0.96 : 0.95}
         heightRatio={isCompactPortrait ? 0.9 : 0.85}
         loading={q.isLoading}
         fetching={q.isFetching && !q.isFetchingNextPage}
@@ -6729,6 +7442,17 @@ function RecentOutputModal({
         successMessage="Son çıkan toplar güncellendi"
         items={rolls}
         keyExtractor={(r) => r.id}
+        headerExtras={isCompactPortrait ? undefined : <OutputColumnsButton onPress={() => setColsOpen(true)} />}
+        swipeToDismiss={!colsOpen}
+        overlay={
+          <OutputColumnsPicker
+            visible={colsOpen}
+            value={visibleCols}
+            onToggle={(k) => void setListColumns(RECENT_OUTPUT_SCREEN_KEY, toggleOutputColumn(visibleCols, k))}
+            onReset={() => void setListColumns(RECENT_OUTPUT_SCREEN_KEY, null)}
+            onClose={() => setColsOpen(false)}
+          />
+        }
         onEndReached={() => {
           if (q.hasNextPage && !q.isFetchingNextPage) q.fetchNextPage();
         }}
@@ -6862,6 +7586,7 @@ function RecentOutputModal({
             grades={grades}
             roll={roll}
             stacked={isCompactPortrait}
+            cols={visibleCols}
             selectMode={selectMode}
             selected={selected.has(roll.id)}
             onPress={() => (selectMode ? toggleSelect(roll.id) : setPreviewRoll(roll))}
@@ -7071,6 +7796,8 @@ function CameraScanModal({
             <FlashList
               data={cards}
               keyExtractor={(c) => c.cardId}
+              refreshing={refresh.refreshing}
+              onRefresh={refresh.onRefresh}
               contentContainerStyle={{ padding: 10 }}
               renderItem={({ item }) => (
                 <Surface style={cameraStyles.row} elevation={1}>
@@ -7314,10 +8041,14 @@ function BranchGroupedRollList({
   rolls,
   selectedRollId,
   onSelect,
+  refreshing,
+  onRefresh,
 }: {
   rolls: TamburRollSummary[];
   selectedRollId: string | null;
   onSelect: (rollId: string) => void;
+  refreshing: boolean;
+  onRefresh: () => void;
 }) {
   const groups = useMemo(() => buildBranchGroups(rolls), [rolls]);
 
@@ -7325,8 +8056,11 @@ function BranchGroupedRollList({
   if (groups.length <= 1) {
     return (
       <FlashList
+        testID="tambur-rulo-listesi"
         data={rolls}
         keyExtractor={(r) => r.rollId}
+        refreshing={refreshing}
+        onRefresh={onRefresh}
         contentContainerStyle={{ padding: 8 }}
         renderItem={({ item, index }) => (
           <RollListItem
@@ -7343,8 +8077,11 @@ function BranchGroupedRollList({
   // ≥2 parti → her parti renkli çerçeveli grup kartında.
   return (
     <FlashList
+      testID="tambur-rulo-listesi"
       data={groups}
       keyExtractor={(g) => g.key}
+      refreshing={refreshing}
+      onRefresh={onRefresh}
       contentContainerStyle={{ padding: 8 }}
       renderItem={({ item: g }) => (
         <View style={[branchStyles.groupCard, { borderColor: g.palette.border }]}>
@@ -7909,12 +8646,16 @@ function DefectRuler({
   errors,
   defectTypes,
   rulerMax,
+  cutM = 0,
 }: {
   errors: TamburRollDefect[];
   defectTypes: DefectType[];
   rulerMax: number;
+  /** Kesilen kısım (0'dan) — mavi dolgu + konum işareti; 0 = çizilmez. */
+  cutM?: number;
 }) {
   const [w, setW] = useState(0);
+  const cutX = cutM > 0 ? (Math.min(cutM, rulerMax) / rulerMax) * w : 0;
   const isCritical = (e: TamburRollDefect) =>
     defectTypes.find((d) => d.name === e.errorType)?.severity === 'CRITICAL';
 
@@ -7983,6 +8724,14 @@ function DefectRuler({
       onLayout={(e) => setW(e.nativeEvent.layout.width)}
     >
       <View style={styles.rulerTrack} />
+      {cutX > 0 && (
+        <>
+          <View style={[styles.rulerTrack, styles.rulerCutFill, { width: cutX, right: undefined }]} testID="tambur-cetvel-kesilen" />
+          <Text style={[styles.rulerCutMark, { left: Math.max(0, Math.min(cutX - 22, w - 44)) }]} numberOfLines={1}>
+            {`${fmtMeter(Math.round(cutM * 10) / 10)} ▲`}
+          </Text>
+        </>
+      )}
 
       {/* Uç ölçek: sol 0, sağ = seçili topun uzunluğu (metre). */}
       {w > 0 && (
@@ -8679,9 +9428,6 @@ const styles = StyleSheet.create({
   },
   // İkon-only: kare orantı, dokunma hedefi korunur (etiket yok ama alan aynı).
   headerChipInnerIcon: { paddingHorizontal: 11, gap: 0 },
-  // secondRow'da (telefon) 3 chip eşit paylaşır — taşmaz, kaydırma gerekmez.
-  headerChipFill: { flex: 1, marginLeft: 0 },
-  headerChipInnerFill: { justifyContent: 'center' },
   headerChipText: { color: '#fff', fontWeight: '700', fontSize: 13 },
   // AÇIK MOD chip'i (Manuel Ekle) — translucent aksiyon dilinden bilinçli
   // ayrışma: dolu amber + koyu yazı. Durum, aksiyon değil.
@@ -8693,6 +9439,9 @@ const styles = StyleSheet.create({
   reprintBadge: { position: 'absolute', top: 4, right: 2, backgroundColor: '#dc2626' },
 
   formCol: { flex: 1.4 },
+  // Geniş ana kesim: hedef görseldeki ~54/46 oranı; zemin gri, kartlar beyaz.
+  formColWide: { flex: 1.2 },
+  rightColWide: { backgroundColor: colors.surfaceMuted, borderLeftWidth: 0 },
   // Compact (telefon) — form üstü sağa yaslı sağ panel tetiği
   compactTriggerBar: {
     flexDirection: 'row',
@@ -8814,8 +9563,8 @@ const styles = StyleSheet.create({
   // Siparişler kutusu — turuncu. Yeşil (metre) / mor (katlama) / kırmızı (uyarı)
   // paletinde boşta olan tek belirgin renk; hiçbiriyle karışmaz.
   headerBoxOrders: { backgroundColor: '#ea580c' },
-  // KQ-D7 "HATA GİR": kırmızı, dokunma hedefi ≥ 64 dp.
-  headerBoxDefect: { backgroundColor: '#b91c1c', minHeight: 64, minWidth: 96 },
+  // KQ-D7 "HATA GİR": kırmızı; boyut yanındaki başlık kutularıyla aynı.
+  headerBoxDefect: { backgroundColor: '#b91c1c' },
   headerBoxGreen: { backgroundColor: '#059669' },
   headerBoxDanger: { backgroundColor: '#dc2626' },
   // İş emrinde belirlenen katlama kutusu — yeşil metre / koyu sipariş'ten ayrışsın.
@@ -9040,6 +9789,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   rulerEndLabelLeft: { left: 0 },
+  rulerCutFill: { top: 24, height: 7, backgroundColor: palette.blue[600] },
+  rulerCutMark: { position: 'absolute', bottom: 0, width: 44, textAlign: 'center', fontSize: 11, fontWeight: '800', color: palette.blue[700] },
   rulerEndLabelRight: { right: 0 },
 
   // Kesim — uzunluk input + temizleme tuşu
@@ -9057,6 +9808,16 @@ const styles = StyleSheet.create({
   },
   // Kime + Kalite YAN YANA iki sütun; her sütun kendi içinde dikey liste.
   kimeKaliteRow: { flexDirection: 'row', gap: 10, marginBottom: 8, alignItems: 'flex-start' },
+  // Geniş tablet (K5): Kime düğmesi | Kalite segmenti tek satır.
+  kimeKaliteRowWide: { flexDirection: 'row', gap: 10, alignItems: 'stretch' },
+  // Geniş tablet (K5): kat · metre · temizle · Manuel/Otomatik tek satır.
+  cutRowWide: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  foldWide: { flexDirection: 'row', gap: 6, width: 200 },
+  foldChipWide: { flex: 1, minHeight: 56, justifyContent: 'center' },
+  defectRowWide: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  defectRulerWide: { flex: 1 },
+  scrollContentWide: { padding: 8, gap: 8 },
+  sectionWide: { padding: 10, gap: 8 },
   kimeCol: { flex: 3 },
   kaliteCol: { flex: 2 },
   cutSubLabel: { fontSize: 12, fontWeight: '700', color: '#475569', marginBottom: 4 },
@@ -9217,6 +9978,7 @@ const styles = StyleSheet.create({
     padding: 2,
   },
   cutModeChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 6 },
+  cutModeChipWide: { minHeight: 52, justifyContent: 'center' },
   cutModeChipActive: { backgroundColor: '#7c3aed' },
   cutModeChipText: { fontSize: 13, fontWeight: '700', color: '#475569' },
   cutModeChipTextActive: { color: '#fff' },
@@ -9543,6 +10305,23 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   tabScroll: { paddingHorizontal: 6, gap: 6, alignItems: 'center' },
+  // Geniş ana kesim sağ sütunu (2026-11-10, hedef görsel).
+  wideRight: { flex: 1, gap: 10, padding: 12 },
+  wideCard: { backgroundColor: colors.surface, borderRadius: 14, padding: 12, gap: 8, borderWidth: 1, borderColor: colors.border },
+  wideCardHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  wideCardTitle: { fontSize: 17, fontWeight: '800', color: colors.text },
+  wideCardMeta: { fontSize: 13, color: colors.textMuted },
+  wideQueue: { maxHeight: 200, borderRadius: 14, overflow: 'hidden', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  wideExtras: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
+  wideTabBar: { borderRadius: 14 },
+  partyScroll: { gap: 8, paddingVertical: 2 },
+  partyTile: { minWidth: 150, minHeight: 64, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12, borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.surface, justifyContent: 'center' },
+  partyTileOn: { borderColor: colors.brand, backgroundColor: colors.brandSoft },
+  partyTileTitle: { fontSize: 17, fontWeight: '800', color: colors.text },
+  partyTileTitleOn: { color: colors.brandDark },
+  partyTileSub: { fontSize: 14, color: colors.textSecondary },
+  partySelector: { marginHorizontal: 6, marginTop: 0, alignSelf: 'center' },
+  hidden: { display: 'none' },
   tabRefreshWrap: {
     paddingHorizontal: 6,
     justifyContent: 'center',
@@ -9562,7 +10341,9 @@ const styles = StyleSheet.create({
   paneEmptyHint: { fontSize: 12, color: '#cbd5e1', textAlign: 'center' },
 
   numpadHost: {
+    // Alt kenar boşluğu yok: ekran dibine yapışır, Kes çubuğuyla aynı alt hiza (padding 8 = çubuğun alt dolgusu).
     margin: 8,
+    marginBottom: 0,
     backgroundColor: '#f8fafc',
     borderRadius: 12,
     padding: 8,
@@ -9746,4 +10527,37 @@ const cameraStyles = StyleSheet.create({
     color: '#0f172a',
     fontVariant: ['tabular-nums'],
   },
+});
+
+/** Emanet topun sabit sahibi (2026-11-10): Kime? yerine; sunucu başka hedefi 409 ile reddeder. */
+function OwnerLockColumn({ owner, inline = false }: { owner: { id: string; name: string }; inline?: boolean }) {
+  // Geniş tablette tek satır (K5): başlık ve ipucu satırı düşer, bilgi erişilebilirlik etiketinde kalır.
+  if (inline) {
+    return (
+      <View style={[ownerStyles.row, ownerStyles.inline]} testID="tambur-sahip" accessibilityLabel={`Malın sahibi ${owner.name}, etiket sahibine basılır`}>
+        <Icon source="lock" size={20} color={colors.warningDark} />
+        <Text style={ownerStyles.inlineLabel}>Sahibi</Text>
+        <TruncatedText style={ownerStyles.name}>{owner.name}</TruncatedText>
+      </View>
+    );
+  }
+  return (
+    <View style={[styles.kimeCol, ownerStyles.box]} testID="tambur-sahip" accessibilityLabel={`Malın sahibi ${owner.name}, etiket sahibine basılır`}>
+      <Text style={styles.cutSubLabel}>Sahibi</Text>
+      <View style={ownerStyles.row}>
+        <Icon source="lock" size={20} color={colors.warningDark} />
+        <TruncatedText style={ownerStyles.name}>{owner.name}</TruncatedText>
+      </View>
+      <Text style={ownerStyles.hint}>Müşteri malı (emanet) — hedef değiştirilemez</Text>
+    </View>
+  );
+}
+
+const ownerStyles = StyleSheet.create({
+  box: { gap: 4 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 56, paddingHorizontal: 10, borderRadius: 8, backgroundColor: colors.warningContainer },
+  name: { flex: 1, fontSize: 17, fontWeight: '700', color: colors.warningDark },
+  hint: { fontSize: 12, color: colors.textSecondary },
+  inline: { flex: 1 },
+  inlineLabel: { fontSize: 13, fontWeight: '700', color: colors.warningDark },
 });

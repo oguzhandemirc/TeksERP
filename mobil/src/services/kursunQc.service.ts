@@ -156,6 +156,10 @@ export const kursunQcService = {
       .post<ApiResponse<{ reopenedRollCount: number }>>('/kursun-qc/reopen-step', data)
       .then((r) => r.data),
 
+  /** GK: açık adımda kontrolü tamamlanmış tek topu yeniden açar (QC2 + çıkış okuması damgalanır). YALNIZ çevrimiçi. */
+  reopenRoll: (data: { rollId: string; stepId: string }): Promise<ApiResponse<unknown>> =>
+    apiClient.post<ApiResponse<unknown>>('/kursun-qc/reopen-roll', data).then((r) => r.data),
+
   // reopen-step öncesi salt-okunur önizleme — onay modalında hangi topların
   // Tambur'dan geri çekileceğini göstermek için.
   recordMeterReading: (data: MeterReadingRequest): Promise<ApiResponse<unknown>> =>

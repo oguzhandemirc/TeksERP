@@ -5,8 +5,10 @@
 // itibaren": değişim aynı tx'te damga (`updateMany WHERE {id, revokedAt:null}`, 0 → 409) + yeni satır.
 // Tür kapısı burada (items'ta tür tetiği emsali yok): SERVICE dışı hizmet / CONSUMABLE dışı sarf → 400.
 // `unit` sarf kaleminin birimidir, doğuşta donar. Replay TEK boğazdan; audit miktar DEĞERİ taşımaz.
+// Taban (`basis`): PER_METER (varsayılan, bugünkü) | PER_ROLL (tambur çıktı topu başına). Çeşit (`propertyValueId`,
+// ör. kurşun gramajı) normun KİMLİĞİDİR (hizmet, sarf, çeşit) — değişimde taşınır, değiştirilmez; taban değişebilir.
 // =============================================================================
-import { ItemType, Prisma, type ServiceConsumableNorm } from "@prisma/client";
+import { ConsumableNormBasis, ItemType, Prisma, type ServiceConsumableNorm } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { isClientTokenP2002, p2002Mentions } from "../utils/p2002";
@@ -28,6 +30,9 @@ export const CONSUMABLE_NORM_SELECT = {
   serviceItemId: true,
   consumableItemId: true,
   qtyPerM: true,
+  basis: true,
+  propertyValueId: true,
+  propertyValue: { select: { id: true, name: true, amount: true, property: { select: { id: true, name: true } } } },
   unit: true,
   note: true,
   createdAt: true,
@@ -43,12 +48,14 @@ export type ConsumableNormRow = Prisma.ServiceConsumableNormGetPayload<{ select:
 
 export interface ConsumableNormValues {
   qtyPerM: unknown;
+  basis?: ConsumableNormBasis;
   note?: unknown;
   clientToken: string;
 }
 
 interface ParsedValues {
   qtyPerM: Prisma.Decimal;
+  basis: ConsumableNormBasis;
   note: string | null;
 }
 
@@ -61,12 +68,14 @@ function parseValues(input: ConsumableNormValues): ParsedValues {
   // 0 = "bu hizmet sarf kullanmaz" açık beyanı (kârlılık ölçülmüş 0 sayar); negatif red.
   const qtyPerM = parseDecimalField(input.qtyPerM, { label: "Metre başına sarf miktarı", min: 0, scale: 6 });
   if (qtyPerM === null || qtyPerM === undefined) throw AppError.badRequest("Metre başına sarf miktarı zorunludur.");
-  return { qtyPerM, note: parseTextField(input.note, "Not", 300) ?? null };
+  return { qtyPerM, basis: input.basis ?? ConsumableNormBasis.PER_METER, note: parseTextField(input.note, "Not", 300) ?? null };
 }
 
 const conflict = (message: string, code: string, extra: Record<string, unknown> = {}): AppError => AppError.conflict(message, { code, ...extra });
 
-const normReplay = (serviceItemId: string, consumableItemId: string, values: ParsedValues) =>
+type NormKey = { serviceItemId: string; consumableItemId: string; propertyValueId: string | null };
+
+const normReplay = ({ serviceItemId, consumableItemId, propertyValueId }: NormKey, values: ParsedValues) =>
   tokenReplay<ServiceConsumableNorm, ConsumableNormResult>({
     find: (db, clientToken) => db.serviceConsumableNorm.findUnique({ where: { clientToken } }),
     alive: (prior) => {
@@ -76,7 +85,9 @@ const normReplay = (serviceItemId: string, consumableItemId: string, values: Par
     identity: (prior) => [
       { ad: "serviceItemId", mevcut: prior.serviceItemId, gelen: serviceItemId },
       { ad: "consumableItemId", mevcut: prior.consumableItemId, gelen: consumableItemId },
+      { ad: "propertyValueId", mevcut: prior.propertyValueId, gelen: propertyValueId },
       { ad: "qtyPerM", mevcut: prior.qtyPerM, gelen: values.qtyPerM },
+      { ad: "basis", mevcut: prior.basis, gelen: values.basis },
     ],
     collision: "Bu istemci anahtarı FARKLI bir sarf normu için kullanılmış. Formu kapatıp yeniden açın.",
     collisionEk: (prior) => ({ normId: prior.id }),
@@ -124,8 +135,17 @@ async function checkUsage(serviceItemId: string, consumableItemId: string, tx?: 
   await assertItemUsable(prisma, consumableItemId, "DEFINITION");
 }
 
-function activeExists(serviceItemId: string, consumableItemId: string): AppError {
-  return conflict("Bu hizmet ve sarf kalemi için zaten aktif bir norm var — değiştirmek için mevcut satırı değiştirin.", "CONSUMABLE_NORM_ACTIVE_EXISTS", { serviceItemId, consumableItemId });
+function activeExists({ serviceItemId, consumableItemId, propertyValueId }: NormKey): AppError {
+  const kim = propertyValueId ? "hizmet, sarf kalemi ve çeşit" : "hizmet ve sarf kalemi (çeşitsiz)";
+  return conflict(`Bu ${kim} için zaten aktif bir norm var — değiştirmek için mevcut satırı değiştirin.`, "CONSUMABLE_NORM_ACTIVE_EXISTS", { serviceItemId, consumableItemId, propertyValueId });
+}
+
+/** Çeşit kapısı: değer var olmalı (pasif değer yeni tanıma bağlanmaz). */
+async function assertPropertyValueWritable(propertyValueId: string | null): Promise<void> {
+  if (!propertyValueId) return;
+  const v = await prisma.fabricPropertyValue.findUnique({ where: { id: propertyValueId }, select: { isActive: true, name: true } });
+  if (!v) throw AppError.badRequest("Çeşit (özellik değeri) bulunamadı.", { code: "PROPERTY_VALUE_INVALID", propertyValueId });
+  if (!v.isActive) throw AppError.badRequest(`"${v.name}" çeşidi pasif — sarf normu bağlanamaz.`, { code: "PROPERTY_VALUE_INVALID", propertyValueId });
 }
 
 function logAudit(userId: string, action: "CREATE" | "UPDATE", recordId: string, newData: Record<string, unknown>): void {
@@ -153,32 +173,29 @@ export async function listConsumableNorms(opts: {
 }
 
 /** YARAT — çiftin ilk (ya da kaldırılmış sonrası) normu; aktif varsa 409 (değişim ayrı uçtur). */
-export async function createConsumableNorm(
-  serviceItemId: string,
-  consumableItemId: string,
-  input: ConsumableNormValues,
-  userId: string,
-): Promise<ConsumableNormResult> {
+export async function createConsumableNorm(key: NormKey, input: ConsumableNormValues, userId: string): Promise<ConsumableNormResult> {
+  const { serviceItemId, consumableItemId, propertyValueId } = key;
   const values = parseValues(input);
-  return normReplay(serviceItemId, consumableItemId, values).run(input.clientToken, async () => {
+  return normReplay(key, values).run(input.clientToken, async () => {
     const unit = await assertItemsWritable(serviceItemId, consumableItemId);
-    const current = await prisma.serviceConsumableNorm.findFirst({ where: { serviceItemId, consumableItemId, ...ACTIVE_COST_RATE }, select: { id: true } });
-    if (current) throw activeExists(serviceItemId, consumableItemId);
+    await assertPropertyValueWritable(propertyValueId);
+    const current = await prisma.serviceConsumableNorm.findFirst({ where: { serviceItemId, consumableItemId, propertyValueId, ...ACTIVE_COST_RATE }, select: { id: true } });
+    if (current) throw activeExists(key);
     let created: { id: string };
     try {
       created = await prisma.$transaction(async (tx) => {
         await checkUsage(serviceItemId, consumableItemId, tx);
         return tx.serviceConsumableNorm.create({
-          data: { serviceItemId, consumableItemId, ...values, unit, clientToken: input.clientToken, createdById: userId },
+          data: { serviceItemId, consumableItemId, propertyValueId, ...values, unit, clientToken: input.clientToken, createdById: userId },
           select: { id: true },
         });
       });
     } catch (e) {
       if (isClientTokenP2002(e)) throw e;
-      if (p2002Mentions(e, ACTIVE_PAIR_RE)) throw activeExists(serviceItemId, consumableItemId);
+      if (p2002Mentions(e, ACTIVE_PAIR_RE)) throw activeExists(key);
       throw e;
     }
-    logAudit(userId, "CREATE", created.id, { serviceItemId, consumableItemId, alanlar: ["qtyPerM", "note"] });
+    logAudit(userId, "CREATE", created.id, { serviceItemId, consumableItemId, propertyValueId, basis: values.basis, alanlar: ["qtyPerM", "note"] });
     return { row: await prisma.serviceConsumableNorm.findUniqueOrThrow({ where: { id: created.id }, select: CONSUMABLE_NORM_SELECT }), previousId: null };
   });
 }
@@ -186,10 +203,11 @@ export async function createConsumableNorm(
 /** DEĞİŞTİR — aynı tx'te eski aktif satırın damgası + yeni satır; eski satır artık aktif değilse 409 `CONSUMABLE_NORM_STALE`. */
 export async function changeConsumableNorm(normId: string, input: ConsumableNormValues, userId: string): Promise<ConsumableNormResult> {
   const values = parseValues(input);
-  const old = await prisma.serviceConsumableNorm.findUnique({ where: { id: normId }, select: { id: true, serviceItemId: true, consumableItemId: true } });
+  const old = await prisma.serviceConsumableNorm.findUnique({ where: { id: normId }, select: { id: true, serviceItemId: true, consumableItemId: true, propertyValueId: true } });
   if (!old) throw AppError.notFound("Sarf normu bulunamadı.", { code: "CONSUMABLE_NORM_NOT_FOUND" });
-  const { serviceItemId, consumableItemId } = old;
-  return normReplay(serviceItemId, consumableItemId, values).run(input.clientToken, async () => {
+  const { serviceItemId, consumableItemId, propertyValueId } = old;
+  const key: NormKey = { serviceItemId, consumableItemId, propertyValueId };
+  return normReplay(key, values).run(input.clientToken, async () => {
     const unit = await assertItemsWritable(serviceItemId, consumableItemId);
     const at = new Date();
     let created: { id: string };
@@ -204,17 +222,17 @@ export async function changeConsumableNorm(normId: string, input: ConsumableNorm
           throw conflict("Bu sarf normu aynı anda başka bir işlemle değişti ya da kaldırıldı — listeyi yenileyin.", "CONSUMABLE_NORM_STALE", { normId });
         }
         return tx.serviceConsumableNorm.create({
-          data: { serviceItemId, consumableItemId, ...values, unit, clientToken: input.clientToken, createdById: userId, createdAt: at },
+          data: { serviceItemId, consumableItemId, propertyValueId, ...values, unit, clientToken: input.clientToken, createdById: userId, createdAt: at },
           select: { id: true },
         });
       });
     } catch (e) {
       if (isClientTokenP2002(e)) throw e;
-      if (p2002Mentions(e, ACTIVE_PAIR_RE)) throw activeExists(serviceItemId, consumableItemId);
+      if (p2002Mentions(e, ACTIVE_PAIR_RE)) throw activeExists(key);
       throw e;
     }
     logAudit(userId, "UPDATE", normId, { serviceItemId, consumableItemId, revokeReason: COST_RATE_REVOKE_REASON.CHANGED, yeniSurumId: created.id });
-    logAudit(userId, "CREATE", created.id, { serviceItemId, consumableItemId, oncekiSurumId: normId, alanlar: ["qtyPerM", "note"] });
+    logAudit(userId, "CREATE", created.id, { serviceItemId, consumableItemId, propertyValueId, basis: values.basis, oncekiSurumId: normId, alanlar: ["qtyPerM", "note"] });
     return {
       row: await prisma.serviceConsumableNorm.findUniqueOrThrow({ where: { id: created.id }, select: CONSUMABLE_NORM_SELECT }),
       previousId: normId,

@@ -11,11 +11,14 @@ import type {
   OwnerSuggestion,
   ReadSummary,
 } from '../../../../services/inboundDoc.service';
+import { declaredBodyPart } from './incomingDeclared';
+import { skipDeclaredOf, type DocIncomingField } from '../../../../store/docIncomingFields';
 import type { ProductionRoute } from '../../../../services/route.service';
 import { withDeskPlan } from '../desk/deskPlan';
 import { multiPartyIssues, openedWorkOrders, withParties, type MultiPartyDraft, type OpenedWo } from './partyDraft';
 import { rollIssues, withRolls, type RollRow } from './rollDraft';
 import type { FormIssue } from './woIssues';
+import { parseFormNumber } from './woForm';
 
 /** K29 S14b: rotasız seçenek (sözde rota; kimliği sunucuya HİÇ gitmez — gövdede rota anahtarı olmaz). */
 export const SCAN_ROUTE_ID = 'scan-routed';
@@ -95,6 +98,7 @@ export function detailFromSummary(s: ReadSummary): InboundNoteDetail {
     formFields: s.formFields ?? null,
     suggestions: s.suggestions ?? null,
     ...(s.docRolls ? { docRolls: s.docRolls } : {}),
+    ...(s.incomingKg !== undefined ? { incomingKg: s.incomingKg, incomingKgSource: s.incomingKgSource ?? null } : {}),
   };
 }
 
@@ -105,9 +109,11 @@ export function withSummaryFields(d: InboundNoteDetail, s: ReadSummary | null | 
   const docRolls = d.docRolls ?? s?.docRolls;
   // Müşteri parti no özetten (güven süzgeçli: SORMA'da tanıtılmamış tahmin null); detay ham kolonu taşır.
   const cbn = s?.customerBatchNo !== undefined ? s.customerBatchNo : d.customerBatchNo;
+  // Gelen kg önerisi yalnız okuma özetinde (detay ucu taşımaz).
+  const kg = d.incomingKg === undefined && s?.incomingKg !== undefined ? { incomingKg: s.incomingKg, incomingKgSource: s.incomingKgSource ?? null } : null;
   // Eklenecek bir şey yoksa detay AYNEN döner (eski sunucuda bugünkü nesne).
-  if ((fields === null || fields === d.formFields) && (suggestions === null || suggestions === d.suggestions) && docRolls === d.docRolls && cbn === d.customerBatchNo) return d;
-  return { ...d, formFields: fields, suggestions, ...(docRolls ? { docRolls } : {}), ...(cbn !== undefined ? { customerBatchNo: cbn } : {}) };
+  if ((fields === null || fields === d.formFields) && (suggestions === null || suggestions === d.suggestions) && docRolls === d.docRolls && cbn === d.customerBatchNo && !kg) return d;
+  return { ...d, formFields: fields, suggestions, ...(docRolls ? { docRolls } : {}), ...(cbn !== undefined ? { customerBatchNo: cbn } : {}), ...(kg ?? {}) };
 }
 
 export interface RowForm {
@@ -127,6 +133,18 @@ export interface RowForm {
   meters: number | null;
   /** Okunan metre doğrulama bekliyor: doğrula ya da düzelt. */
   metersReview: boolean;
+  /** Gelen kg (belgeden önerilen ya da elle); HEDEF kg değil. Yok/null = belgede kg yok. */
+  incomingKg?: number | null;
+  /** Kullanıcı gelen kg'yi değiştirdi → gövdeye girer (yoksa sunucu belgeden önerileni yazar). */
+  incomingKgEdited?: boolean;
+  /** Gelen en (cm) elle düzeltildi; düzeltilmediyse ekran belgedekini (`docIncomingWidth`) gösterir, gövdeye girmez. */
+  incomingWidth?: number | null;
+  incomingWidthEdited?: boolean;
+  /** Gelen kumaş / renk beyanı (müşteri yazısı; İE hedefi DEĞİL): elle düzeltildiyse değer (null = beyan yok), gövdeye girer; düzeltilmediyse belgedeki (`docDeclaredText`) gösterilir. */
+  incomingItemText?: string | null;
+  incomingItemEdited?: boolean;
+  incomingColorText?: string | null;
+  incomingColorEdited?: boolean;
   gramajValueId: string | null;
   /** S1 çok partili belge: parti satırları + kip (null/yok = tek partili, bugünkü form). */
   multi?: MultiPartyDraft | null;
@@ -164,8 +182,14 @@ export function initialRowForm(d: InboundNoteDetail, gramajFor?: (customerId: st
     customerBatchNoFromDoc: customerBatchNo !== null,
     meters,
     metersReview: meters !== null && !!d.kursunMetersReview,
+    incomingKg: toNumber(d.incomingKg),
     gramajValueId: gramajFor?.(owner) ?? null,
   };
+}
+
+/** Belgenin gelen eni (cm): okunan şablon `en` alanı (İE eninin ön dolumuyla aynı kaynak); yoksa null. */
+export function docIncomingWidth(d: Pick<InboundNoteDetail, 'formFields'> | null | undefined): number | null {
+  return parseFormNumber(d?.formFields?.en);
 }
 
 /** Müşteri parti no kaynağı: taslağın başlık değeri (özet/detay) → belgenin "parti no" türlü ilk adayı; yoksa null. */
@@ -197,7 +221,11 @@ export const rowIssues = (f: RowForm): string[] => rowIssueList(f).map((i) => i.
 
 export function buildCreateBody(
   f: RowForm,
-  opts: { clientToken: string; routeTemplateId: string | null; gramajPropertyId: string | null; passThrough?: readonly { propertyId: string; valueId: string }[]; kursunSequence?: number | null },
+  opts: {
+    clientToken: string; routeTemplateId: string | null; gramajPropertyId: string | null; passThrough?: readonly { propertyId: string; valueId: string }[]; kursunSequence?: number | null;
+    /** Cihazda kapatılan gelen alanlar (`deviceSettingsStore.docHiddenIncoming`). */
+    hiddenIncoming?: readonly DocIncomingField[];
+  },
 ): CreateWorkOrderFromNoteBody {
   const body: CreateWorkOrderFromNoteBody = {
     clientToken: opts.clientToken,
@@ -210,11 +238,28 @@ export function buildCreateBody(
   body.ourBatchNo = f.ourBatchNo ?? null;
   if (f.ourBatchNo && f.ourBatchNoKey) body.ourBatchNoKey = f.ourBatchNoKey;
   if (f.customerBatchNoEdited) body.customerBatchNo = f.customerBatchNo?.trim() || null;
+  // Gelen kg yalnız elle değiştiyse (boşaltılırsa anahtar yok → sunucu belgedekini yazar); çok parti/ayrı topta parti başınadır.
+  if (!f.multi && !f.rolls && f.incomingKgEdited && f.incomingKg != null && f.incomingKg > 0) body.incomingKg = f.incomingKg;
+  // Gelen en da aynı desen: elle değişmediyse sunucu belgedekini (şablon `en`) yazar.
+  if (!f.multi && !f.rolls && f.incomingWidthEdited && f.incomingWidth != null && f.incomingWidth > 0) body.incomingWidth = f.incomingWidth;
+  // Gelen kumaş / renk beyanı: aynı desen (yalnız elle değiştiyse; çok parti/ayrı topta parti başınadır).
+  if (!f.multi && !f.rolls) Object.assign(body, declaredBodyPart({ text: f.incomingItemText ?? null, edited: !!f.incomingItemEdited }, 'item'), declaredBodyPart({ text: f.incomingColorText ?? null, edited: !!f.incomingColorEdited }, 'color'));
   // K22: hedef değerleri HEP açık (boş = "Hedef yok"): sunucu anahtarsız gövdeye değer dayatmaz; ekranda görülen gider.
   body.targetValues = [...(f.gramajValueId && opts.gramajPropertyId ? [{ propertyId: opts.gramajPropertyId, valueId: f.gramajValueId }] : []), ...(opts.passThrough ?? [])];
   // Çok parti önce: iki kip ekranda birlikte gösterilmez; sunucu ikisini birden 400'ler.
   const base = f.multi ? withParties(body, f.multi) : f.rolls ? withRolls(body, f.rolls) : body;
-  return withDeskPlan(base, f, { kursunSequence: opts.kursunSequence ?? null, gramajPropertyId: opts.gramajPropertyId });
+  return withoutHiddenIncoming(withDeskPlan(base, f, { kursunSequence: opts.kursunSequence ?? null, gramajPropertyId: opts.gramajPropertyId }), opts.hiddenIncoming ?? []);
+}
+
+/**
+ * Kapalı gelen alanlar gövdeden (parti başına dahil) düşer ve `skipDeclared` ile sunucuya "belgeden de doldurma" denir —
+ * anahtarsız alanı sunucu belgedeki okunan değerle doldururdu. Hepsi açıkken gövde bayt-aynı (eski sunucu strict 400 vermesin).
+ */
+export function withoutHiddenIncoming(body: CreateWorkOrderFromNoteBody, hidden: readonly DocIncomingField[]): CreateWorkOrderFromNoteBody {
+  const skip = skipDeclaredOf(hidden);
+  if (skip.length === 0) return body;
+  const drop = <T extends object>(o: T): T => Object.fromEntries(Object.entries(o).filter(([k]) => !(skip as string[]).includes(k))) as T;
+  return { ...drop(body), ...(body.parties ? { parties: body.parties.map(drop) } : {}), skipDeclared: skip };
 }
 
 /** Taslak kaydı (ayrı onay kipi): yalnız değişen başlık alanları PATCH'e gider; boşsa çağrı yok. */

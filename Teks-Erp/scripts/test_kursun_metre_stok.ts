@@ -15,6 +15,8 @@
 // §11 ⭐ imza bekleyen okuma, top elle İLERİ taşındıktan sonra imzalanırsa 409 (metraj başka adımda değişmez).
 // §12 ⭐ IN düzeltmesiyle imza beklentisi kalkan okuma adım kapanışında uygulanır; sonraki qtyIn = taze metraj.
 // §10 ayar: geçersiz değer 400 (Türkçe), APPLY/RECORD yazılır; okuma kopyası ayar değişiminden etkilenmez.
+// §15 ⭐ GK tek top yeniden açma (reopenRoll): QC2 damgalanır, OUT okuma damgalanır + APPLY terslenir (metraj 100),
+//      IN okuma kalır; ikinci çağrı 409 KURSUN_ROLL_NOT_COMPLETED; yeniden tamamlama yeni okumayı uygular.
 // §14 ⭐ Gülkesim tek büyük top (belge başına tek kayıt): 4.521 m / 960 kg APPLY + bitir; Σ defter = durum.
 // Negatif sondalar (elle, PR gövdesinde): initialQty yükseltmesi kaldırılınca §4 ❌ · ters çağrısı
 // (`reverseExitMeterStockTx`) kaldırılınca §3/§5/§7/§8 ❌ (defter ≠ durum).
@@ -329,6 +331,32 @@ async function main(): Promise<void> {
         `bekleyen=${n(pending.currentQty)} kapanış=${finErr.msg.slice(0, 80)} qty=${n(r.currentQty)} sapma=${v.length} sonraki.qtyIn=${n(nextMv?.qtyIn)}`);
       await setFlag(SETTING_KEYS.KURSUN_METER_CAPTURE, "OUT");
       await prisma.systemSetting.deleteMany({ where: { key: { in: [SETTING_KEYS.KURSUN_METER_VARIANCE_BASIS, SETTING_KEYS.KURSUN_METER_VARIANCE_THRESHOLD_M, SETTING_KEYS.KURSUN_METER_VARIANCE_APPROVAL] } } });
+    }
+
+    // ── §15 GK tek top yeniden açma ──────────────────────────────────────────
+    {
+      await setFlag(SETTING_KEYS.KURSUN_METER_CAPTURE, "IN_OUT");
+      const a = await mkActive("next");
+      await svc.recordMeterReading({ rollId: a.rollId, stepId: a.stepId, phase: MeterPhase.IN, input: meter(100) }, admin.id, null);
+      await qc2(a.rollId, a.stepId, 97);
+      const before = await rollOf(a.rollId);
+      const res = await svc.reopenRoll({ rollId: a.rollId, stepId: a.stepId }, admin.id);
+      const r = await rollOf(a.rollId);
+      const v = await variances(a.rollId);
+      const qc2Active = await prisma.rollOperation.count({ where: { rollId: a.rollId, workOrderStepId: a.stepId, operationType: "QC2_COMPLETED", revokedAt: null } });
+      const inActive = await prisma.rollMeterReading.count({ where: { rollId: a.rollId, workOrderStepId: a.stepId, phase: MeterPhase.IN, revokedAt: null } });
+      check("§15a ⭐ reopenRoll: QC2 damgalı, OUT okuma damgalı + APPLY terslendi (97→100), IN okuma kalır",
+        n(before.currentQty) === 97 && n(r.currentQty) === 100 && qc2Active === 0 && (await activeOut(a.rollId, a.stepId)) == null
+          && inActive === 1 && v.length === 1 && v[0]!.reversedAt != null && res.data?.meterReadingsRevoked === 1,
+        `qty=${n(before.currentQty)}→${n(r.currentQty)} qc2=${qc2Active} in=${inActive} sapma=${v.map((x) => `${n(x.qty)}:${x.reversedAt ? "T" : "A"}`).join(",")}`);
+      const e2 = await hata(svc.reopenRoll({ rollId: a.rollId, stepId: a.stepId }, admin.id));
+      check("§15b ikinci reopenRoll 409 KURSUN_ROLL_NOT_COMPLETED (atomik claim)", e2.status === 409 && e2.code === "KURSUN_ROLL_NOT_COMPLETED", `${e2.status} ${String(e2.code)}`);
+      await qc2(a.rollId, a.stepId, 98);
+      const r3 = await rollOf(a.rollId);
+      check("§15c yeniden tamamlama yeni okumayı uygular (metraj 98)", n(r3.currentQty) === 98, `qty=${n(r3.currentQty)}`);
+      const e4 = await hata(svc.reopenRoll({ rollId: a.rollId, stepId: a.nextStepId! }, admin.id));
+      check("§15d top başka adımdayken 400", e4.status === 400, `${e4.status} ${e4.msg.slice(0, 80)}`);
+      await setFlag(SETTING_KEYS.KURSUN_METER_CAPTURE, "OUT");
     }
 
     // ── §9 DB seddi ───────────────────────────────────────────────────────────

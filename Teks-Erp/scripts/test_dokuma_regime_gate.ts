@@ -149,6 +149,8 @@ const IZINLI_ISTEMCI_DOSYALARI: ReadonlyArray<{ dosya: string; ekranKey: string;
   { dosya: "Electron/src/pages/Operations/WeavingOrders/service.ts", ekranKey: "operations/weaving-orders", izinler: ["weavingorder:read"], karo: "operations" },
   // Fason dokuma (G2p, 2026-09-14): aynı ekranın "Fason" bölümü — dokuma işi detayı, ayrı karo/route yok.
   { dosya: "Electron/src/pages/Operations/WeavingOrders/fason/service.ts", ekranKey: "operations/weaving-orders", izinler: ["weavingorder:read"], karo: "operations" },
+  // Tezgâh Yükü (SY-3 L2): salt okuma `/api/weaving-orders/loom-load`; router `requireDokumaEnabled`, route `weavingorder:read`.
+  { dosya: "Electron/src/pages/Operations/LoomLoad/service.ts", ekranKey: "operations/loom-load", izinler: ["weavingorder:read"], karo: "operations" },
   // Tezgah Duruşları (2026-09-14): iki izinden BİRİ açar — route `requireAnyPermission`, manifesto `requires` ikisini de anar.
   { dosya: "Electron/src/pages/Operations/MachineStops/service.ts", ekranKey: "operations/machine-stops", izinler: ["loom:manual-entry", "loom:classify"], karo: "operations", rejimAlani: "machineStopEnabled" },
   // Vardiya tanımları (2026-10-10): Tanımlar hub'ı karosu; yazma/okuma `loom:spec-manage`.

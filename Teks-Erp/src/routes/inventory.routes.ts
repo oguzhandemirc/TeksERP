@@ -9,6 +9,7 @@ import { requireEmanetEnabled, requireProductionEnabled } from "../middlewares/m
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { getRollTabletContext } from "../services/roll-tablet.service";
 import { listRollOwnerCustomers } from "../services/roll-owner.service";
+import { getRollMeterTrail } from "../services/meter-comparison.service";
 import { RollCustomerCodeService } from "../services/roll-customer-code.service";
 
 // Mobil ekran yetkileri web yetkilerine alternatif olarak kabul edilir:
@@ -530,6 +531,31 @@ router.get("/:id/history", verifyToken, requireAnyPermission("roll:read", "roll:
 
 /**
  * @openapi
+ * /api/rolls/{id}/meter-trail:
+ *   get:
+ *     tags: [Inventory]
+ *     summary: Tambur metre şeridi — topun beyanı, önceki ölçümü (kurşun çıkışı → başka ölçen istasyon), kesilen ve kalan
+ *     description: Simüle okumalar ölçüme girmez; kesim referansı aşınca `overReference=true` (engel değil, uyarı).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: "{ rollId, declaredM, prior: { kind: KURSUN_OUT|STATION_OUT, stationName, meters, at } | null, referenceM, cutSoFarM, remainingM, overReference }" }
+ *       404: { description: Top bulunamadı }
+ */
+router.get("/:id/meter-trail", verifyToken, requireAnyPermission("roll:read", "mobile:tambur", "mobile:kk2-kursun"), async (req, res, next) => {
+  try {
+    res.json({ success: true, data: await getRollMeterTrail(req.params.id) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
  * /api/rolls/initial-entry:
  *   post:
  *     tags: [Inventory]
@@ -862,6 +888,51 @@ router.patch(
   verifyToken,
   requireAnyPermission("roll:write", "label:edit", "mobile:tarti-paket", "mobile:sevkiyat"),
   controller.relabel,
+);
+
+/**
+ * @openapi
+ * /api/rolls/{id}/label-texts:
+ *   patch:
+ *     tags: [Inventory]
+ *     summary: Topun etikete basılan kumaş adı / renk / parti no düzeltmesi (sevk edilene kadar)
+ *     description: |
+ *       `Roll.labelItemName` / `labelColorName` / `labelBatchNo` (tamburda kesimde yazılan müşteri
+ *       etiket değerleri). Alan gönderilmezse dokunulmaz; boş string ya da null temizler (etiket
+ *       varsayılan ada döner). Sebep zorunlu; değişimde `labelDirty=true` + audit (eski→yeni).
+ *       Sevk edilmiş (SHIPPED) ya da fason/kartela sevkiyle dışarıdaki top 409 `ROLL_SHIPPED`;
+ *       tüketilmiş/iptal/fire top 409 `ROLL_DEAD`; arada değişen top 409 `ROLL_CHANGED`.
+ *       Yeniden baskı mevcut etiket yolundan yapılır.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [reason]
+ *             properties:
+ *               labelItemName:  { type: string, nullable: true, maxLength: 80 }
+ *               labelColorName: { type: string, nullable: true, maxLength: 80 }
+ *               labelBatchNo:   { type: string, nullable: true, maxLength: 64 }
+ *               reason:         { type: string, minLength: 3, maxLength: 500 }
+ *     responses:
+ *       200: { description: Etiket bilgisi düzeltildi (ya da zaten aynı — changed=false) }
+ *       400: { description: Sebep yok / alan yok / uzunluk aşımı }
+ *       403: { description: Yetki yok }
+ *       404: { description: Top bulunamadı }
+ *       409: { description: ROLL_SHIPPED · ROLL_DEAD · ROLL_CHANGED }
+ */
+router.patch(
+  "/:id/label-texts",
+  verifyToken,
+  requireAnyPermission("roll:write", "label:edit", "mobile:tambur"),
+  controller.fixLabelTexts,
 );
 
 /**

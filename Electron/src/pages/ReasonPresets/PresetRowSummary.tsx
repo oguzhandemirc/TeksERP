@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import type { ReasonPreset } from "./service";
 import { StopLossClassBadge, StopTargetBadge } from "./StopLossClassField";
 import { ReworkBillableBadge } from "./ReworkBillableField";
+import { StationKindsBadge } from "./StationKindsField";
 
 /** Liste satırının sol bloğu: ad + durum rozetleri + kod/tam metin. `hideTarget`: hedef ayrı sütunda. */
 export function PresetRowSummary({ row, hideTarget = false }: { row: ReasonPreset; hideTarget?: boolean }) {
@@ -17,6 +18,7 @@ export function PresetRowSummary({ row, hideTarget = false }: { row: ReasonPrese
         <StopLossClassBadge value={row.stopLossClass} />
         {!hideTarget && <StopTargetBadge value={row.targetMinutes} />}
         {row.kind === "WORK_ORDER_REWORK" && <ReworkBillableBadge value={row.billable} />}
+        {row.kind === "MACHINE_STOP" && <StationKindsBadge value={row.stationKinds} />}
       </div>
       <div className="truncate text-xs text-muted-foreground">
         <span className="font-mono">{row.code}</span>

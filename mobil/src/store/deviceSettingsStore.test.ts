@@ -64,6 +64,21 @@ describe('deviceSettingsStore — metraj giriş tercihi', () => {
     expect(useDeviceSettingsStore.getState().tamburCutMode).toBe('auto');
   });
 
+  it('Tambur kg kipi: varsayılan manual (bugünkü davranış); yazılır ve geri gelir; bozuk → manual', async () => {
+    const disk = fakeDisk();
+    useDeviceSettingsStore.setState({ tamburKgMode: 'auto' });
+    await useDeviceSettingsStore.getState().init();
+    expect(useDeviceSettingsStore.getState().tamburKgMode).toBe('manual');
+    await useDeviceSettingsStore.getState().setTamburKgMode('auto');
+    expect(disk['device_tambur_kg_mode']).toBe('auto');
+    useDeviceSettingsStore.setState({ tamburKgMode: 'manual', isLoaded: false });
+    await useDeviceSettingsStore.getState().init();
+    expect(useDeviceSettingsStore.getState().tamburKgMode).toBe('auto');
+    disk['device_tambur_kg_mode'] = 'ÇÖP';
+    await useDeviceSettingsStore.getState().init();
+    expect(useDeviceSettingsStore.getState().tamburKgMode).toBe('manual');
+  });
+
   it('state ANINDA döner (disk yazımı beklenmez — anahtar takılmasın)', () => {
     fakeDisk();
     void useDeviceSettingsStore.getState().setKk1ManualEntry(true);
@@ -325,5 +340,23 @@ describe('deviceSettingsStore — belge çekimi (kendi kamera | ML Kit)', () => 
     useDeviceSettingsStore.setState({ docScanEngine: 'camera' });
     await useDeviceSettingsStore.getState().init();
     expect(useDeviceSettingsStore.getState().docScanEngine).toBe('mlkit');
+  });
+});
+
+describe('deviceSettingsStore — belge kamerası flaşı (docTorchAuto)', () => {
+  it('⭐ kayıt yokken AÇIK', async () => {
+    fakeDisk();
+    useDeviceSettingsStore.setState({ docTorchAuto: false });
+    await useDeviceSettingsStore.getState().init();
+    expect(useDeviceSettingsStore.getState().docTorchAuto).toBe(true);
+  });
+
+  it('kapatma diske yazılır ve SONRAKİ açılışta geri gelir', async () => {
+    const disk = fakeDisk();
+    await useDeviceSettingsStore.getState().setDocTorchAuto(false);
+    expect(disk['device_doc_torch_auto']).toBe('false');
+    useDeviceSettingsStore.setState({ docTorchAuto: true });
+    await useDeviceSettingsStore.getState().init();
+    expect(useDeviceSettingsStore.getState().docTorchAuto).toBe(false);
   });
 });

@@ -12,7 +12,7 @@ import { StyleSheet, View } from 'react-native';
 import { Icon, Surface, Text } from 'react-native-paper';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
-import { palette } from '../../theme/tokens';
+import { palette, spacing } from '../../theme/tokens';
 import type { DefectType } from '../../types/models';
 import DefectRuler from './DefectRuler';
 import DeletePointModal from './DeletePointModal';
@@ -21,12 +21,16 @@ import InspectionSummaryStrip, { type InspectionSummary } from './InspectionSumm
 import PriorDefectList from './PriorDefectList';
 import {
   isCriticalDefect,
+  overMaxWarning,
   rulerMaxFor,
+  rulerSectionMode,
   validateDefectInput,
+  validationMaxMeter,
   type InspectionDefect,
   type InspectionDefectInput,
   type InspectionPriorDefect,
   type InspectionSizeClass,
+  type OverMaxMode,
 } from './inspectionModel';
 
 export {
@@ -54,10 +58,16 @@ export interface InspectionPanelProps {
   onDelete: (id: string) => void;
   /** Topun boyu (mt): cetvel ölçeği + "metraj kumaşı aşamaz" istemci ikizi. */
   maxMeter?: number;
+  /** Top boyunu aşan metre: 'block' (varsayılan, bugünkü) engeller; 'warn' kaydeder + sarı satır (kurşun). */
+  overMaxMode?: OverMaxMode;
   /** Telefonda yerel klavye (tablette ekran numpad'i). */
   compact?: boolean;
   /** Cetvel + girişin altına konak eki (ör. işlem paneli) — giriş bloğuyla aynı sütunda. */
   children?: React.ReactNode;
+  /** Giriş bloğu (ve konağın altındaki düğme) kabın altına yaslanır; artan yerin TAMAMI giriş bloğuna gider ve
+   *  `flexGrow`lu konak eki (ör. kurşun sayaç şeridi) onu doldurur — bloklar arası aralık hep aynı kalır.
+   *  Konak `flex:1` kolon olmalı; varsayılan kapalı (diğer ekranlar bugünkü gibi yukarıdan dizer). */
+  entryAtBottom?: boolean;
   /** K4P özet şeridi: sayım + sunucu önizlemesi (konak hesaplar/çeker; bileşen yalnız gösterir). */
   summary?: InspectionSummary;
   /** 4 puan: metre boşsa kayıt konumsuz (`meter: null`) düşer. */
@@ -66,6 +76,8 @@ export interface InspectionPanelProps {
   meterAutoActivate?: boolean;
   /** Cetvel boşken metin; metresiz kayıt tutan konak "hata yok" demesin diye verir. */
   rulerEmptyText?: string;
+  /** true: hata yokken de boş metre cetveli + "Hata Noktaları (0)" çizilir (boş durum yazısı yerine). */
+  rulerAlways?: boolean;
 }
 
 interface RulerSectionProps {
@@ -76,13 +88,14 @@ interface RulerSectionProps {
   readOnly: boolean;
   onMarkerPress: (ids: string[]) => void;
   emptyText?: string;
+  alwaysRuler: boolean;
 }
 
 // Kayıtlı hatalar — metre cetveli; tik'e dokun → o noktadaki hata(lar)ı sil.
-function RulerSection({ defectTypes, ownDefects, priorDefects, maxMeter, readOnly, onMarkerPress, emptyText }: RulerSectionProps) {
+function RulerSection({ defectTypes, ownDefects, priorDefects, maxMeter, readOnly, onMarkerPress, emptyText, alwaysRuler }: RulerSectionProps) {
   const critCount = ownDefects.reduce((n, d) => n + (isCriticalDefect(d, defectTypes) ? 1 : 0), 0);
   const allDefects = [...priorDefects, ...ownDefects];
-  if (allDefects.length === 0) {
+  if (rulerSectionMode(allDefects.length, alwaysRuler) === 'empty') {
     return (
       <View style={styles.emptyDefects}>
         <Icon source="check-circle-outline" size={28} color={palette.slate[300]} />
@@ -91,7 +104,7 @@ function RulerSection({ defectTypes, ownDefects, priorDefects, maxMeter, readOnl
     );
   }
   return (
-    <Surface style={styles.section} elevation={1}>
+    <Surface style={styles.section} elevation={1} testID="inspection-ruler">
       <View style={styles.titleRow}>
         <Text style={styles.sectionTitle}>Hata Noktaları ({ownDefects.length})</Text>
         {priorDefects.length > 0 && (
@@ -118,6 +131,18 @@ function RulerSection({ defectTypes, ownDefects, priorDefects, maxMeter, readOnl
   );
 }
 
+// "Top beyandan uzun" — yalnız warn kipinde; block kipinde aşan metre zaten kayda gitmez.
+function OverMaxRow({ meterInput, ownDefects, maxMeter }: { meterInput: string; ownDefects: InspectionDefect[]; maxMeter?: number }) {
+  const text = overMaxWarning(meterInput, ownDefects, maxMeter);
+  if (!text) return null;
+  return (
+    <View style={styles.overWarn} testID="inspection-over-max">
+      <Icon source="alert-outline" size={16} color={palette.amber[700]} />
+      <Text style={styles.overWarnText}>{text}</Text>
+    </View>
+  );
+}
+
 export default function InspectionPanel(props: InspectionPanelProps) {
   const { defectTypes, ownDefects, priorDefects = [], sizeClassMode = false, readOnly = false } = props;
   const [deleteIds, setDeleteIds] = useState<string[] | null>(null);
@@ -132,7 +157,7 @@ export default function InspectionPanel(props: InspectionPanelProps) {
     if (readOnly) return;
     // 4 puan muayenesi: metre boşsa kayıt konumsuz düşer (plan §4.1 md. 2).
     const unplaced = props.meterOptional === true && props.meterInput.trim() === '';
-    const v = unplaced ? ({ ok: true, meter: null } as const) : validateDefectInput(props.meterInput, defectTypeId, ownDefects, props.maxMeter);
+    const v = unplaced ? ({ ok: true, meter: null } as const) : validateDefectInput(props.meterInput, defectTypeId, ownDefects, validationMaxMeter(props.maxMeter, props.overMaxMode));
     if (!v.ok) {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
       Toast.show({ type: 'error', text1: v.title, text2: v.detail });
@@ -164,10 +189,11 @@ export default function InspectionPanel(props: InspectionPanelProps) {
           readOnly={readOnly}
           onMarkerPress={setDeleteIds}
           emptyText={props.rulerEmptyText}
+          alwaysRuler={props.rulerAlways === true}
         />
       </View>
       {/* Giriş: metre gir → hata tipine bas → konak kaydeder (ayrı "Ekle" yok). */}
-      <View style={styles.entryFixed}>
+      <View style={[styles.entryFixed, props.entryAtBottom === true && styles.entryGrow]} testID="inspection-entry-block">
         {!readOnly && (
           <InspectionEntry
             defectTypes={defectTypes}
@@ -183,6 +209,7 @@ export default function InspectionPanel(props: InspectionPanelProps) {
             meterOptional={props.meterOptional}
           />
         )}
+        {props.overMaxMode === 'warn' && <OverMaxRow meterInput={props.meterInput} ownDefects={ownDefects} maxMeter={props.maxMeter} />}
         {props.summary && <InspectionSummaryStrip summary={props.summary} />}
         {props.children}
       </View>
@@ -199,7 +226,10 @@ export default function InspectionPanel(props: InspectionPanelProps) {
 
 const styles = StyleSheet.create({
   rulerBlock: { height: 112, paddingHorizontal: 8 },
-  entryFixed: { paddingHorizontal: 8, gap: 10 },
+  entryFixed: { paddingHorizontal: 8, gap: spacing.md },
+  // Ayrı boşluk görünümü yok (kolon gap'iyle çift aralık doğuruyordu): artan yer bloğun içinde, büyüyen eke ya da
+  // (ek yoksa) bloğun üstüne gider; içerik alta yaslı.
+  entryGrow: { flexGrow: 1, justifyContent: 'flex-end' },
   section: { flex: 1, backgroundColor: palette.white, borderRadius: 12, padding: 14, gap: 8 },
   sectionTitle: { fontSize: 14, fontWeight: '700', color: palette.slate[900] },
   muted: { fontSize: 12, color: palette.slate[400], fontStyle: 'italic' },
@@ -212,4 +242,6 @@ const styles = StyleSheet.create({
   critBadgeText: { color: palette.red[700], letterSpacing: 0.2 },
   priorBadge: { backgroundColor: palette.slate[100], borderColor: palette.slate[300] },
   priorBadgeText: { color: palette.slate[500] },
+  overWarn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: palette.amber[50], borderColor: palette.amber[300], borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
+  overWarnText: { flexShrink: 1, fontSize: 14, fontWeight: '700', color: palette.amber[900] },
 });

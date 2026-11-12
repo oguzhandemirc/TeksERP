@@ -1,6 +1,7 @@
 // Canlı okuma (L3) istek ritmi + otomatik çekim zamanlaması — saf. Kare ~4/sn gelir; sunucuya en çok ~1/sn gider ve
 // uçuşta hep TEK istek vardır (yanıt/hata gelmeden yenisi çıkmaz). Bitiş: tüm alanlar kilitli + kamera sabit + net →
 // "Kıpırdatmayın" halkası; koşul halka boyunca kesintisiz sürerse çekim.
+import type { DocDeskCaptureMode } from '../../../../store/deviceSettingsStore';
 import { LIVE_HOLD_MS, LIVE_MIN_SHARPNESS, LIVE_REQUEST_INTERVAL_MS } from './liveTuning';
 
 export interface RhythmState {
@@ -25,9 +26,15 @@ export function markSettled(s: RhythmState): RhythmState {
   return { ...s, inFlight: false };
 }
 
-/** Otomatik çekim koşulu: tüm alanlar kilitli + kamera kıpırtısız + orta bölge yeterince net. */
-export function readyToCapture(allLocked: boolean, stability: { still: boolean; sharpness: number } | null): boolean {
-  return allLocked && !!stability && stability.still && stability.sharpness >= LIVE_MIN_SHARPNESS;
+/**
+ * Otomatik çekim koşulu: çekim ayarı otomatik + tüm alanlar kilitli + orta bölge yeterince net. "Kıpırtısız" şartı aranmaz: elde tutulan
+ * tablette titreme kare farkını eşiğin üstünde tutuyor, her şey okunduğu halde çekim hiç gelmiyordu; bulanıklığı
+ * netlik eşiği zaten eler (siyah/karanlık kare de net sayılmaz → boş fotoğraf çekilmez).
+ */
+export function readyToCapture(mode: DocDeskCaptureMode, allLocked: boolean, stability: { still: boolean; sharpness: number } | null): boolean {
+  // Çekim ayarı "Dokunarak" iken canlı okuma da kendiliğinden çekmez (halka yok): operatör paneli inceleyip "Çek ve bitir"e basar.
+  if (mode !== 'auto') return false;
+  return allLocked && !!stability && stability.sharpness >= LIVE_MIN_SHARPNESS;
 }
 
 export interface HoldState {

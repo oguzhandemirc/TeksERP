@@ -142,6 +142,8 @@ export interface WoInput {
   count: number;
   /** Üretime giren toplam metraj (kök initialQty + fasondan-sevk charge-split çocuğu). */
   meters: Prisma.Decimal;
+  /** Girdi kökü top kimlikleri (İE "Gelen kg" bunların belge satırlarından toplanır). */
+  rootIds: string[];
 }
 
 /**
@@ -173,7 +175,7 @@ export async function computeWoInput(
   const out = new Map<string, WoInput>();
   const ids = [...new Set(woIds)];
   if (ids.length === 0) return out;
-  for (const id of ids) out.set(id, { count: 0, meters: D0() });
+  for (const id of ids) out.set(id, { count: 0, meters: D0(), rootIds: [] });
 
   const steps = await client.workOrderStep.findMany({
     where: { workOrderId: { in: ids } },
@@ -261,6 +263,7 @@ export async function computeWoInput(
     const memberIds = new Set(members.map((r) => r.id));
     let count = 0;
     let meters = D0();
+    const rootIds: string[] = [];
     for (const r of members) {
       const parentIsMember = r.parentRollId != null && memberIds.has(r.parentRollId);
       const receiptInThisWo = r.parentReceiptId != null && receiptWo.get(r.parentReceiptId) === wo;
@@ -268,12 +271,13 @@ export async function computeWoInput(
         // GİRDİ KÖKÜ (W dışından geldi)
         count += 1;
         meters = meters.plus(r.initialQty);
+        rootIds.push(r.id);
       }
       // ⚠️ Fasondan-sevk charge-split çocuğu İÇİN AYRI DAL YOK: ebeveynin
       // `initialQty`si artık düşürülmüyor (giriş snapshot'ı dokunulmazdır),
       // yani charge zaten kökte tam duruyor — çocuğu eklemek çift sayardı.
     }
-    out.set(wo, { count, meters });
+    out.set(wo, { count, meters, rootIds });
   }
   return out;
 }

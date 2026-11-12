@@ -18,13 +18,22 @@ describe('liveRhythm', () => {
     expect(canSend(IDLE_RHYTHM, 0)).toBe(true);
   });
 
-  it('readyToCapture: üç koşul birden', () => {
+  it('readyToCapture: kilit + netlik; elde titreme (still=false) çekimi engellemez', () => {
     const good = { still: true, sharpness: LIVE_MIN_SHARPNESS };
-    expect(readyToCapture(true, good)).toBe(true);
-    expect(readyToCapture(false, good)).toBe(false);
-    expect(readyToCapture(true, { ...good, still: false })).toBe(false);
-    expect(readyToCapture(true, { still: true, sharpness: LIVE_MIN_SHARPNESS - 0.01 })).toBe(false);
-    expect(readyToCapture(true, null)).toBe(false);
+    expect(readyToCapture('auto', true, good)).toBe(true);
+    expect(readyToCapture('auto', false, good)).toBe(false);
+    expect(readyToCapture('auto', true, { ...good, still: false })).toBe(true);
+    expect(readyToCapture('auto', true, { still: true, sharpness: LIVE_MIN_SHARPNESS - 0.01 })).toBe(false);
+    expect(readyToCapture('auto', true, null)).toBe(false);
+  });
+
+  it('⭐ çekim ayarı "Dokunarak" (tap): her şey kilitli + net olsa da otomatik çekim/halka YOK', () => {
+    const good = { still: true, sharpness: LIVE_MIN_SHARPNESS };
+    expect(readyToCapture('auto', true, good)).toBe(true);
+    expect(readyToCapture('tap', true, good)).toBe(false);
+    let r = stepHold({ since: null }, readyToCapture('tap', true, good), 0);
+    r = stepHold(r.hold, readyToCapture('tap', true, good), LIVE_HOLD_MS * 3);
+    expect(r).toMatchObject({ fire: false, progress: 0, hold: { since: null } });
   });
 
   it('halka: süre dolunca fire; koşul koparsa sıfırlanır', () => {

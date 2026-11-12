@@ -22,6 +22,8 @@ jest.mock('../../../../services/customer.service', () => ({
   customerService: { quickCreate: (b: unknown) => mockQuickCreate(b) },
 }));
 let mockPerms: string[] = ['gelen-belge:write'];
+let mockCompact = false;
+jest.mock('../../../../hooks/useDeviceType', () => ({ ...jest.requireActual('../../../../hooks/useDeviceType'), useIsCompact: () => mockCompact }));
 jest.mock('../../../../hooks/usePermission', () => ({ usePermissions: () => ({ has: (c: string) => mockPerms.includes(c) }) }));
 
 const none: OwnerUnmatched = { text: 'YENI TEKSTIL', candidates: [] };
@@ -60,6 +62,7 @@ beforeEach(() => {
   resetCustomerOfferStore();
   mockQuickCreate.mockReset();
   mockPerms = ['gelen-belge:write'];
+  mockCompact = false;
 });
 
 describe('CustomerFromDocOffer — teklif varyantları', () => {
@@ -78,7 +81,7 @@ describe('CustomerFromDocOffer — teklif varyantları', () => {
   it('⭐ b) tek benzer de olsa "Bunu mu demek istediniz?" listesi (ad + kod); dokununca seçilir, kayıt yok', async () => {
     const { ui, onPicked } = await setup(oneSimilar);
     expect(ui.getByText('Bunu mu demek istediniz?')).toBeTruthy();
-    expect(ui.getByTestId('musteri-ekle-aday-c1')).toHaveTextContent('Kod: M-001', { exact: false });
+    expect(ui.getByTestId('musteri-ekle-aday-c1')).toHaveTextContent('M-001', { exact: false });
     expect(ui.queryByTestId('musteri-ekle-evet')).toBeNull();
     fireEvent.press(ui.getByTestId('musteri-ekle-aday-c1'));
     await flush();
@@ -97,7 +100,7 @@ describe('CustomerFromDocOffer — teklif varyantları', () => {
   it('⭐ b) Hiçbiri → yeni kayıt modalı, okunan ad ön dolu', async () => {
     mockQuickCreate.mockResolvedValue({ success: true, data: { id: 'n2', name: 'MAVIDERE BOYAHNE' } });
     const { ui, onPicked } = await setup(oneSimilar);
-    expect(ui.getByTestId('musteri-ekle-hayir')).toHaveTextContent('Hiçbiri — “MAVIDERE BOYAHNE” adıyla yeni kaydet');
+    expect(ui.getByTestId('musteri-ekle-hayir')).toHaveTextContent('Hiçbiri, yeni kaydet');
     fireEvent.press(ui.getByTestId('musteri-ekle-hayir'));
     await flush();
     expect(ui.getByTestId('musteri-ekle-ad').props.value).toBe('MAVIDERE BOYAHNE');
@@ -113,6 +116,24 @@ describe('CustomerFromDocOffer — teklif varyantları', () => {
     expect(onPickFromList).toHaveBeenCalledTimes(1);
     expect(onPicked).not.toHaveBeenCalled();
     expect(openTitles(ui)).toEqual([]);
+  });
+});
+
+describe('CustomerFromDocOffer — dar ekran (el terminali, saha 2026-11-10)', () => {
+  it('⭐ alt şerit iki satır: Vazgeç + Listeden seç üstte, "yeni kaydet" altta ve sade; kod adın altında', async () => {
+    mockCompact = true;
+    const { ui } = await setup(oneSimilar);
+    const stack = ui.getByTestId('musteri-ekle-alt-dar');
+    expect(stack).toContainElement(ui.getByTestId('musteri-ekle-vazgec'));
+    expect(stack).toContainElement(ui.getByTestId('musteri-ekle-hayir'));
+    const btns = ui.UNSAFE_root.findAll((n: { props: { testID?: unknown; mode?: unknown } }) => n.props.testID === 'musteri-ekle-hayir' && n.props.mode !== undefined);
+    expect(btns[0]?.props.mode).toBe('outlined');
+    expect(ui.getByText('M-001')).toBeTruthy();
+  });
+
+  it('geniş ekranda tek satır (iki satırlık kap yok)', async () => {
+    const { ui } = await setup(oneSimilar);
+    expect(ui.queryByTestId('musteri-ekle-alt-dar')).toBeNull();
   });
 });
 

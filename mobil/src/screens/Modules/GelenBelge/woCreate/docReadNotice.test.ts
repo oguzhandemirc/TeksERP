@@ -16,6 +16,19 @@ const all = (w: ReadWatch | null, extra: { formFilled?: boolean; detailFailed?: 
 };
 
 describe('docReadNotice', () => {
+  it('⭐ çapraz doğrulama uyarısı (iki farklı metre) formda sarı iletiyle; diğer kodlar gösterilmez', () => {
+    const notices = [{ code: 'METER_VALUES_DIFFER', title: 'Belgede iki farklı metre', detail: 'Belgede iki farklı metre: 238 / 241' }, { code: 'GRID_EMPTY', title: 'x', detail: 'y' }];
+    const r = all(done({ ownerCustomerId: 'c1', notices }));
+    expect(r.notices).toEqual([{ key: 'capraz-METER_VALUES_DIFFER', tone: 'warn', text: 'Belgede iki farklı metre: 238 / 241', code: 'METER_VALUES_DIFFER' }]);
+  });
+
+  it('⭐ şablonda olup bulunamayan alanlar formda sarı iletiyle listelenir (ara "Belge okundu" kartı yok)', () => {
+    const tf = [{ key: 'musteri', label: 'Müşteri', value: null, required: true }, { key: 'ieNo', label: 'İş Emri No', value: '12', required: false }, { key: 'tasima', label: 'Taşıma tipi', value: '  ', required: false }];
+    const r = all(done({ ownerCustomerId: 'c1', templateFields: tf }));
+    expect(r.notices).toEqual([{ key: 'eksik-alan', tone: 'warn', text: 'Belgede bulunamadı: Müşteri, Taşıma tipi — formda kontrol edin.', fields: ['Müşteri', 'Taşıma tipi'] }]);
+    expect(all(done({ ownerCustomerId: 'c1', templateFields: [tf[1]] })).notices).toEqual([]);
+  });
+
   it('⭐ Gülkesim: READ + satır 0 + müşteri/metre dolu → ileti YOK, hap "Okundu"', () => {
     const r = all(done({ ownerCustomerId: 'c1', kursunMeters: '241' }));
     expect(r.notices).toEqual([]);

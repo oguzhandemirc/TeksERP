@@ -33,6 +33,10 @@ import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { setReaderUrlForTests } from "../src/lib/gelen-belge/url";
 import { __resetDocumentReaderForTests, runReaderOnce } from "../src/jobs/gelen-belge-okuma.job";
+import { testSablonlariniKaydet } from "./lib/gelen-belge-test-sablonlar";
+
+// Gönderen şablonları pakette yok (2026-11-09): bekçi onları süreç içi dosya şablonu olarak kaydeder.
+testSablonlariniKaydet();
 
 const engel = hedefDbEngeli();
 if (engel) {

@@ -124,15 +124,16 @@ export {
   readIncomingDocEntryMode, AUTO_WORK_ORDER_PATTERNLESS_VALUES, DEFAULT_AUTO_WORK_ORDER_PATTERNLESS, readAutoWorkOrderPatternless,
   FORM_APPROVAL_VALUES, DEFAULT_FORM_APPROVAL, readIncomingDocFormApproval, MULTI_PARTY_WORK_ORDER_VALUES,
   DEFAULT_MULTI_PARTY_WORK_ORDER, readMultiPartyWorkOrder, DUPLICATE_DOC_NO_VALUES, DEFAULT_DUPLICATE_DOC_NO, readDuplicateDocNoMode,
+  DUPLICATE_BATCH_NO_VALUES, DEFAULT_DUPLICATE_BATCH_NO, readDuplicateBatchNoMode,
   PHOTO_RETENTION_VALUES, DEFAULT_PHOTO_RETENTION, readPhotoRetention, DESEN_RENK_ESLESME_VALUES, DEFAULT_DESEN_RENK_ESLESME,
   readDesenRenkEslesme, TABLET_IE_GIRISI_VALUES, DEFAULT_TABLET_IE_GIRISI, readTabletIeGirisi, TANITIM_GUVENI_VALUES,
-  DEFAULT_TANITIM_GUVENI, readTanitimGuveni, readRefakatAutoPrint, readIncomingDocDefaultRouteId, ROUTE_SUGGESTION_PRIORITY_VALUES,
+  DEFAULT_TANITIM_GUVENI, readTanitimGuveni, DEFAULT_SERVER_OCR_ENABLED, readServerOcrEnabled, readRefakatAutoPrint, readIncomingDocDefaultRouteId, ROUTE_SUGGESTION_PRIORITY_VALUES,
   DEFAULT_ROUTE_SUGGESTION_PRIORITY, readRouteSuggestionPriority, readHandwritingOutlierFactor, readGelenBelgeEnabled,
   effectiveIncomingDocsEnabled, resolveYarnOutOnInvoiceEnabled,
 } from "./incoming-docs";
 export type {
   UnreviewedApprovalMode, HeaderLineMeterSource, DocumentTotalCheckMode, BatchNumberSourceMode, IncomingDocEntryMode,
-  AutoWorkOrderPatternlessMode, IncomingDocFormApprovalMode, MultiPartyWorkOrderMode, DuplicateDocNoMode, PhotoRetentionMode,
+  AutoWorkOrderPatternlessMode, IncomingDocFormApprovalMode, MultiPartyWorkOrderMode, DuplicateDocNoMode, DuplicateBatchNoMode, PhotoRetentionMode,
   DesenRenkEslesmeMode, TabletIeGirisiMode, TanitimGuveniMode, RouteSuggestionPriority,
 } from "./incoming-docs";
 export {
@@ -158,7 +159,7 @@ export {
   readDepoMultiEnabledRaw, readDepoMultiEnabled, readKumasTeknikEnabledRaw, readKumasTeknikEnabled, readTezgahEnabledRaw,
   readTezgahEnabled, readDevereEnabledRaw, readDevereEnabled, readEmanetEnabledRaw, readEmanetEnabled, readKaliteGuvenceEnabledRaw,
   readKaliteGuvenceEnabled, readDevereLotRequired, readDevereMountTracking, readDevereMountTrackingRequired, readDevereAutoConsume,
-  readDevereBeamWeavingLinkRequired, readDokumaRunWeavingOrderRequired, readDokumaOrderLineLinkRequired, readDokumaRollBirth,
+  readDevereBeamWeavingLinkRequired, readDokumaRunWeavingOrderRequired, readDokumaOrderLineLinkRequired, readDokumaRollBirth, readDokumaWeavingWastePct, readDokumaYarnReservationEnabled, DEFAULT_DOKUMA_WEAVING_WASTE_PCT, DOKUMA_WEAVING_WASTE_PCT_MAX,
   readReportsClosedKeys, readReportsV2Enabled, readDokumaEnabledRaw, readDokumaEnabled, readMaliyetEnabledRaw, readMaliyetEnabled,
   readGelenBelgeEnabledRaw,
 } from "./modules";
@@ -181,7 +182,7 @@ export {
   readPinLockoutEscalateAfter, readPinLockoutLongPenaltyMin, readPinLockoutConfig, readLoginMethods,
 } from "./pin-backup";
 export {
-  readTargetQuantityEnabled, readRawWidthEnabled, readKk1WeightEntryEnabled, readWorkOrderQuickOwnOnlyEnabled,
+  readTargetQuantityEnabled, readTargetWidthEnabled, readRawWidthEnabled, readKk1WeightEntryEnabled, readWorkOrderQuickOwnOnlyEnabled,
   readSupportOwnTicketsOnlyEnabled, readKk1DuplicateGuardEnabled, readKk1OnlineOnlyEnabled, readKk1LabelScanVerifyEnabled,
   readKk1HistoryAllEntriesEnabled, readSimulatedWeightEnabled, readPartyCodeAuto, readReturnGradingEnabled,
   readKartelaMeasurementEnabled, readFasonNoteMobileEntry,
@@ -189,7 +190,7 @@ export {
 export {
   resolvePurchaseBlockOverReceiptEnabled, resolveInvoiceMatchToleranceEnabled, resolveChequeNoteMovementEnabled,
   resolveCancelReasonRequired, resolveYarnQualityHoldEnabled, resolveGoodsReceiptRequirePriceEnabled, resolveBeamWeavingLinkRequired,
-  resolveRunWeavingOrderRequired, effectivePackingGroupMode, resolveOrderLineLinkRequired, resolveDokumaRollBirth,
+  resolveRunWeavingOrderRequired, effectivePackingGroupMode, resolveOrderLineLinkRequired, resolveDokumaRollBirth, resolveDokumaWeavingWastePct, resolveDokumaYarnReservationEnabled,
   resolveKursunMeterCapture, resolveKursunBypassEnabled, resolveTamburOverQuantityEnabled, resolveTamburUndoFullSameDayOnly,
   resolveBatchShortNumberEnabled,
 } from "./resolvers";
@@ -199,7 +200,7 @@ export {
   readMobileOfflineLockDefer, readRememberLastUser, readMobileIdleLockMinutes, readAbsoluteSessionCapDays,
 } from "./session";
 export {
-  readShipmentManualSackCountEnabled, readShipmentLooseLoadEnabled, readShipmentConfirmationEnabled, readShipmentUndoSameDayOnly,
+  readShipmentManualSackCountEnabled, readShipmentLooseLoadEnabled, readShipmentHandheldCreateEnabled, readShipmentConfirmationEnabled, readShipmentUndoSameDayOnly,
   readShippingOrderRequirement, readItemPhaseOutNewOrder, readItemPhaseOutLineQty, readItemPhaseOutNewPlan,
   readShippingWeighRequiredEnabled, readShippingManualWeightRestrictedEnabled, readShippingInvoiceMode, readShippingDocItemNameMode,
   readShippingDocCekiNameMode, readShippingOrderCoverage, readShippingDocProductColorSplit, readShippingAllocWidthToleranceEnabled,

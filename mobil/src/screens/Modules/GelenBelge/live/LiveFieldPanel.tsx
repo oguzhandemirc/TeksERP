@@ -1,6 +1,7 @@
-// Canlı okuma (L3) sağ panel: şablonun her başlık alanı = etiket + değer + durum (gri aday / yeşil kilitli / sarı boş).
-// Satıra dokununca düzelt penceresi: elle değer kilitler, "Kilidi aç" oylamayı baştan başlatır. Müşteri yalnız bilgidir
-// (forma gitmez; formda öneri/modal yoluyla seçilir) → düzeltilmez.
+// Canlı okuma (L3) sağ panel: şablonun her başlık alanı = etiket + değer + durum (gri aday / yeşil kilitli / sarı boş /
+// gri "Belgede yok"; oy kilidi kendini düzeltince kısa "Düzeltildi"). Kilitli alanda son kareler farklı okuyorsa altında
+// "Son karelerde: X" — dokununca X elle kilitlenir. Satıra dokununca düzelt penceresi: elle değer kilitler, "Kilidi aç"
+// oylamayı baştan başlatır. Müşteri yalnız bilgidir (forma gitmez; fotoğraftan eşleşir) → düzeltilmez.
 import React, { useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Text, TouchableRipple } from 'react-native-paper';
@@ -10,7 +11,8 @@ import TruncatedText from '../../../../components/TruncatedText';
 import { SectionBand, StatusPill, type PillTone } from '../../../../components/form';
 import { colors, radius, spacing } from '../../../../theme';
 import { isLiveInfoOnly } from './liveLocks';
-import { liveFieldStatus, type LiveField, type LiveVoteState } from './liveVote';
+import { liveProgress } from './liveSummary';
+import { liveFieldStatus, liveSuggestion, type LiveField, type LiveVoteState } from './liveVote';
 
 interface Props {
   vote: LiveVoteState;
@@ -18,11 +20,15 @@ interface Props {
   onUnlock: (key: string) => void;
 }
 
-const STATUS: Record<ReturnType<typeof liveFieldStatus>, { tone: PillTone; text: string; icon: 'lock' | 'eye-outline' | 'alert-outline' }> = {
+type StatusIcon = 'lock' | 'eye-outline' | 'alert-outline' | 'minus-circle-outline' | 'lock-reset';
+const STATUS: Record<ReturnType<typeof liveFieldStatus>, { tone: PillTone; text: string; icon: StatusIcon }> = {
   locked: { tone: 'ok', text: 'Kilitli', icon: 'lock' },
   candidate: { tone: 'idle', text: 'Okunuyor', icon: 'eye-outline' },
   empty: { tone: 'warn', text: 'Boş', icon: 'alert-outline' },
+  absent: { tone: 'idle', text: 'Belgede yok', icon: 'minus-circle-outline' },
 };
+const CORRECTED = { tone: 'ok' as PillTone, text: 'Düzeltildi', icon: 'lock-reset' as StatusIcon };
+export const LIVE_INFO_PENDING = 'Fotoğraftan eşleşecek';
 
 export default function LiveFieldPanel({ vote, onEdit, onUnlock }: Props) {
   const [editing, setEditing] = useState<LiveField | null>(null);
@@ -33,8 +39,7 @@ export default function LiveFieldPanel({ vote, onEdit, onUnlock }: Props) {
     draftRef.current = v;
     setDraft(v);
   };
-  const locked = vote.fields.filter((f) => f.lock && !isLiveInfoOnly(f.key)).length;
-  const total = vote.fields.filter((f) => !isLiveInfoOnly(f.key)).length;
+  const { settled: locked, total } = liveProgress(vote);
 
   const open = (f: LiveField) => {
     type(f.lock?.value ?? f.candidate ?? '');
@@ -48,7 +53,8 @@ export default function LiveFieldPanel({ vote, onEdit, onUnlock }: Props) {
         title="Okunan alanlar"
         icon="text-box-search-outline"
         tone={total > 0 && locked === total ? 'ok' : 'idle'}
-        aside={total ? `${locked}/${total} kilitli` : null}
+        aside={total ? `${locked}/${total} tamam` : null}
+        style={styles.band}
         testID="canli-alan-baslik"
       />
       {vote.fields.length === 0 ? (
@@ -56,7 +62,7 @@ export default function LiveFieldPanel({ vote, onEdit, onUnlock }: Props) {
       ) : (
         <ScrollView contentContainerStyle={styles.list}>
           {vote.fields.map((f) => (
-            <FieldRow key={f.key} field={f} onPress={() => open(f)} />
+            <FieldRow key={f.key} field={f} onPress={() => open(f)} onTake={(v) => onEdit(f.key, v)} />
           ))}
         </ScrollView>
       )}
@@ -83,17 +89,20 @@ export default function LiveFieldPanel({ vote, onEdit, onUnlock }: Props) {
   );
 }
 
-function FieldRow({ field, onPress }: { field: LiveField; onPress: () => void }) {
+function FieldRow({ field, onPress, onTake }: { field: LiveField; onPress: () => void; onTake: (value: string) => void }) {
   const info = isLiveInfoOnly(field.key);
-  const st = STATUS[liveFieldStatus(field)];
+  const status = liveFieldStatus(field);
+  const st = field.lock && field.corrected ? CORRECTED : STATUS[status];
   const value = field.lock?.value ?? field.candidate;
   const tone: PillTone = info ? 'info' : st.tone;
+  const empty = status === 'absent' ? 'Belgede yok' : info ? LIVE_INFO_PENDING : '—';
+  const suggestion = info ? null : liveSuggestion(field);
   const content = (
     <View style={[styles.row, field.lock && !info && styles.rowLocked]}>
       <View style={styles.rowText}>
         <TruncatedText style={styles.label}>{field.label}</TruncatedText>
         <TruncatedText style={[styles.value, !field.lock && styles.valueCandidate]} testID={`canli-alan-deger-${field.key}`}>
-          {value ?? '—'}
+          {value ?? empty}
         </TruncatedText>
       </View>
       <StatusPill tone={tone} icon={info ? 'information-outline' : st.icon} text={info ? 'Bilgi' : st.text} testID={`canli-alan-durum-${field.key}`} />
@@ -101,13 +110,23 @@ function FieldRow({ field, onPress }: { field: LiveField; onPress: () => void })
   );
   if (info) return <View testID={`canli-alan-${field.key}`}>{content}</View>;
   return (
-    <TouchableRipple onPress={onPress} style={styles.touch} accessibilityLabel={`${field.label} düzelt`} testID={`canli-alan-${field.key}`}>
-      {content}
-    </TouchableRipple>
+    <View>
+      <TouchableRipple onPress={onPress} style={styles.touch} accessibilityLabel={`${field.label} düzelt`} testID={`canli-alan-${field.key}`}>
+        {content}
+      </TouchableRipple>
+      {suggestion !== null && (
+        <TouchableRipple onPress={() => onTake(suggestion)} style={styles.suggest} accessibilityRole="button"
+          accessibilityLabel={`${field.label}: son karelerde ${suggestion}, bunu kullan`} testID={`canli-alan-oneri-${field.key}`}>
+          <TruncatedText style={styles.suggestText}>Son karelerde: {suggestion} — dokunun, bunu kullanın</TruncatedText>
+        </TouchableRipple>
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  // Şerit modal kartının sağ üst köşesine oturur: yalnız o köşe yuvarlak, diğerleri düz.
+  band: { borderRadius: 0, borderTopRightRadius: radius.lg },
   panel: { flex: 1, backgroundColor: colors.surface, gap: spacing.sm, paddingBottom: spacing.sm },
   empty: { padding: spacing.lg, fontSize: 14, color: colors.textSecondary },
   list: { gap: spacing.sm, paddingHorizontal: spacing.sm },
@@ -121,6 +140,8 @@ const styles = StyleSheet.create({
   label: { fontSize: 12, color: colors.textSecondary },
   value: { fontSize: 16, fontWeight: '700', color: colors.text },
   valueCandidate: { fontWeight: '400', color: colors.textMuted },
+  suggest: { minHeight: 48, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: colors.warningContainer, marginTop: spacing.xs },
+  suggestText: { fontSize: 14, color: colors.warningText },
   dialog: { width: 480, maxWidth: '94%', borderRadius: radius.lg, padding: spacing.lg },
   dialogBody: { gap: spacing.md },
   dialogTitle: { fontSize: 18, fontWeight: '700', color: colors.text },

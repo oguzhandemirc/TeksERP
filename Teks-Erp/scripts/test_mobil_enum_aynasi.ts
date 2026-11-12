@@ -175,6 +175,7 @@ const MOBILDE_BEKLENEN: Record<string, string> = {
   WarpLengthSource: "devere Faz 3 tezgah bağı (2026-09-14, 6e) — tüketim/söküm/bitiş ölçüm kaynağı",
   YarnLotQualityStatus: "iplik lotu kalite bekletme (2026-09-18, 01) — levent sarımı lot listesi rozeti",
   ItemLifecycleStatus: "ürün yaşam döngüsü tablet dilimi (2026-09-25, 9b) — seçici kapsamı ve Tükenene kadar rozeti",
+  RollStage: "top aşaması (2026-11-10) — tablet Roll tipi `stage` alanı (etiket türü sunucuda)",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

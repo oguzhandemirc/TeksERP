@@ -4,6 +4,7 @@
 import { z } from "zod";
 import { EgressError, egressRequest } from "../http-egress";
 import type { OcrResult } from "./motor";
+import { normalizeOcrLetters } from "./motor/turkce-harf";
 
 /** Sidecar tek sayfa kilidiyle çalışır; 2600 px fotoğraf CPU'da ~10–60 s (tasarım §3.2: 90 s). */
 export const READER_TIMEOUT_MS = 90 * 1000;
@@ -29,8 +30,14 @@ const Line = z.object({
   elements: z.array(Element).default([]),
 });
 const Block = z.object({ text: z.string(), rect: Rect, corners: z.array(Point).optional(), lines: z.array(Line) });
+const Barcode = z.object({ format: z.string(), value: z.string() });
 
-/** Sidecar `POST /ocr` gövdesi — `motor/types.ts` `OcrResult` ile aynı sözleşme; fazla alan yok sayılır. */
+/**
+ * Sidecar `POST /ocr` gövdesi — `motor/types.ts` `OcrResult` ile aynı sözleşme; fazla alan yok sayılır.
+ * `barcodes`: tablet barkodları zarfta saklanır, yeniden okuma/taslak yeniden kurulumu barkodu kaybetmez.
+ * transform: Türkçe dışı aksanlı harf ("GÙLEÇSOY") motora girmeden Türkçe karşılığına döner — sidecar ve saklı zarf aynı boğazdan.
+ * Alan listesine yorum ve iç içe `z.object` YAZMA: okuma/tests/test_sozlesme.py alanları düz metinden ayrıştırır.
+ */
 export const OcrResultSchema = z.object({
   text: z.string(),
   blocks: z.array(Block),
@@ -39,7 +46,8 @@ export const OcrResultSchema = z.object({
   durationMs: z.number().optional(),
   engine: z.string().optional(),
   rotation: z.number().int().optional(),
-});
+  barcodes: z.array(Barcode).max(10).optional(),
+}).transform((r) => normalizeOcrLetters(r as OcrResult) as typeof r);
 
 /** Sidecar `POST /donustur` yanıtı — okuma `app/contract.py` `DonusumSonucu` ile BİREBİR (`tests/test_donustur.py` ölçer). */
 export const ConvertResultSchema = z.object({

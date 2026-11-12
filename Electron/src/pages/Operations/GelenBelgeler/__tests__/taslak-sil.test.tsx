@@ -1,9 +1,11 @@
 // Prova-2: "Taslağı iptal et" yalnız DRAFT'ta görünür; onay diyaloğu sunucu önizlemesinden satır + parti sayısını yazar,
 // onay mevcut DELETE ucunu çağırır. Negatif sonda: `note.status === "DRAFT"` kapısı kaldırılınca §2 kırmızı;
 // açıklamada parti dalı kaldırılınca §1 kırmızı; `confirmDisabled` önizleme engeli kaldırılınca §3 kırmızı (2026-11-06).
+// Sadeleştirme (2026-11-10): eylem başlığın "⋯ Diğer" menüsünde; menü açılır, madde aynı onay diyaloğunu açar.
 import type { ReactNode } from "react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/render";
 import { IncomingDocumentDetailPage } from "../GelenBelgeDetailPage";
 
@@ -29,12 +31,9 @@ vi.mock("../ScanViewer", () => ({ ScanViewer: () => null }));
 vi.mock("../NoteHeaderForm", () => ({ NoteHeaderForm: () => null }));
 vi.mock("../TotalsStrip", () => ({ TotalsStrip: () => null }));
 vi.mock("../LinesTable", () => ({ LinesTable: () => null }));
-vi.mock("../AddLineForm", () => ({ AddLineForm: () => null }));
-vi.mock("../LineImportButton", () => ({ LineImportButton: () => null }));
 vi.mock("../CellReviewDialog", () => ({ CellReviewDialog: () => null }));
 vi.mock("../ApproveDialog", () => ({ ApproveDialog: () => null }));
 vi.mock("../ScanReadBanner", () => ({ ScanReadBanner: () => null }));
-vi.mock("../AddPagesAction", () => ({ AddPagesAction: () => null }));
 vi.mock("../ProcessGramajPanel", () => ({ ProcessGramajPanel: () => null }));
 
 const state = { status: "DRAFT" };
@@ -45,6 +44,12 @@ vi.mock("../useNoteDetail", () => ({
     suggestions: { data: undefined }, header: idle, line: idle, removeLine: idle, invalidate: vi.fn(),
   }),
 }));
+
+/** "⋯ Diğer" menüsü varsa açar (yoksa eylem zaten yok). */
+async function openMore() {
+  const trigger = screen.queryByTestId("note-more-menu");
+  if (trigger) await userEvent.click(trigger);
+}
 
 describe("gelen belge taslağı silme (prova-2)", () => {
   beforeEach(() => {
@@ -57,8 +62,9 @@ describe("gelen belge taslağı silme (prova-2)", () => {
   it("§1 DRAFT: Taslağı iptal et → onay (satır + parti önizlemeden, numara yeniden verilmez) → DELETE /irsaliyeler/:id", async () => {
     state.status = "DRAFT";
     renderWithProviders(<IncomingDocumentDetailPage />);
+    await openMore();
     expect(screen.getByTestId("note-delete-draft")).toHaveTextContent("Taslağı iptal et");
-    fireEvent.click(screen.getByTestId("note-delete-draft"));
+    await userEvent.click(screen.getByTestId("note-delete-draft"));
     expect(await screen.findByText("GB-0001 taslağı iptal edilsin mi?")).toBeInTheDocument();
     expect(await screen.findByText(/7 satır · 2 parti/)).toBeInTheDocument();
     expect(apiPost).toHaveBeenCalledWith(expect.stringMatching(/toplu-sil\/onizleme$/), { ids: ["n1"] });
@@ -74,14 +80,16 @@ describe("gelen belge taslağı silme (prova-2)", () => {
     preview.deletable = false;
     preview.reason = "Onaylanmış belge silinemez.";
     renderWithProviders(<IncomingDocumentDetailPage />);
-    fireEvent.click(screen.getByTestId("note-delete-draft"));
+    await openMore();
+    await userEvent.click(screen.getByTestId("note-delete-draft"));
     expect(await screen.findByText(/Onaylanmış belge silinemez/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Taslağı iptal et" })).toBeDisabled();
   });
 
-  it.each(["APPROVING", "APPROVED", "PARTIAL", "CANCELLED"])("§2 %s: iptal düğmesi YOK", (status) => {
+  it.each(["APPROVING", "APPROVED", "PARTIAL", "CANCELLED"])("§2 %s: iptal maddesi YOK", async (status) => {
     state.status = status;
     renderWithProviders(<IncomingDocumentDetailPage />);
+    await openMore();
     expect(screen.queryByTestId("note-delete-draft")).toBeNull();
   });
 });

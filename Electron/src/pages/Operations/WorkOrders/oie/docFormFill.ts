@@ -19,6 +19,14 @@ export interface DocFormSuggestions {
   targetColor?: { id: string; name: string } | null;
 }
 
+/** Gelen kumaş/renk BEYANI (2026-11-09) — İE hedefinden ayrı; `suggested*` beyanın eşlendiği kart (yalnız ONER). Eski sunucu göndermez. */
+export interface DocIncomingDeclared {
+  itemText: string | null;
+  colorText: string | null;
+  suggestedItem: { id: string; name: string; code?: string | null } | null;
+  suggestedColor: { id: string; name: string } | null;
+}
+
 /** K30-T: belgenin kullanıcı şablonuyla tanınıp tanınmadığı (eski sunucu ve sistem şablonu → alan yok). */
 export type Tanitim = { durum: "TANITILDI"; sablonKodu: string; sablonAdi: string } | { durum: "TANITILMAMIS" };
 
@@ -27,6 +35,7 @@ export interface DocReadSummary {
   state?: string;
   formFields?: DocFormFields | null;
   suggestions?: DocFormSuggestions | null;
+  incomingDeclared?: DocIncomingDeclared | null;
   tanitim?: Tanitim | null;
 }
 
@@ -118,10 +127,13 @@ export function docMarks(current: DocFillValues, applied: AppliedDoc): Set<DocFi
 /** Belgede okunan not (Not kutusu boşsa dolar). */
 export const docNoteText = (s: DocReadSummary | null | undefined): string => (s?.formFields?.not ?? "").trim();
 
-/** Okunan desen/renk yazısı — katalog önerisi yoksa operatöre ipucu. */
+/** Belgedeki gelen kumaş/renk beyanı (`incomingDeclared`, eski sunucuda `formFields`) — hedef için kart önerisi yoksa operatöre ipucu. */
 export function docTextHints(s: DocReadSummary | null | undefined): { desen: string | null; renk: string | null } {
   const t = (v: string | null | undefined) => (v && v.trim() ? v.trim() : null);
-  return { desen: s?.suggestions?.targetItem ? null : t(s?.formFields?.desenText), renk: s?.suggestions?.targetColor ? null : t(s?.formFields?.renkText) };
+  const d = s?.incomingDeclared;
+  const item = d ? d.itemText : s?.formFields?.desenText;
+  const color = d ? d.colorText : s?.formFields?.renkText;
+  return { desen: (d?.suggestedItem ?? s?.suggestions?.targetItem) ? null : t(item), renk: (d?.suggestedColor ?? s?.suggestions?.targetColor) ? null : t(color) };
 }
 
 /** Klasik formun kurduğu yükten form ucuna giden kısım (`buildPayload` çıktısının alt kümesi). */

@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { INCOMING_DOCUMENT_QUERY_KEY } from "../service";
 import { createUserTemplate, getScanWords, getUserTemplate, TEACH_QUERY_KEY, updateUserTemplate, USER_TEMPLATES_QUERY_KEY } from "./service";
-import { adoptTemplate, initialTeach, locateKept, oldParts, suggestBody, teachProblems, templateFieldKeys, templateKeywords, type TeachState } from "./teachDraft";
+import { adoptTemplate, initialTeach, locateKept, multiPartyRuleOf, oldParts, suggestBody, teachProblems, templateFieldKeys, templateKeywords, type TeachState } from "./teachDraft";
 import { saveDecision, suggestName, type SaveChoice } from "./guidedTeach";
 import { useTeachPreview } from "./useTeachPreview";
 import type { SimilarTemplate, SuggestBody, UserTemplateDetail, UserTemplateView } from "./types";
@@ -24,7 +24,7 @@ export function useTeach(scanId: string | null, existing: UserTemplateDetail | n
   const [state, setState] = useState<TeachState | null>(null);
   // Sayfa değişince işaretleme o sayfanın kelimeleriyle yeniden başlar (kutu indeksleri sayfaya özgü); ad yoksa başlıktan önerilir.
   useEffect(() => {
-    if (words.data) setState(initialTeach(words.data, existing?.name ?? suggestName(words.data), templateKeywords(existing?.template), { keepOld: oldParts(existing?.template), kept: templateFieldKeys(existing?.template) }));
+    if (words.data) setState(initialTeach(words.data, existing?.name ?? suggestName(words.data), templateKeywords(existing?.template), { keepOld: oldParts(existing?.template), kept: templateFieldKeys(existing?.template), multiParty: multiPartyRuleOf(existing?.template) }));
   }, [words.data, existing]);
   const body = useMemo(() => (state && scanId && words.data ? suggestBody(state, words.data.words, scanId, existing?.code ?? null) : null), [state, scanId, words.data, existing?.code]);
   const previewBody = useMemo(() => (body ? forPreview(body) : null), [body]);
@@ -40,6 +40,8 @@ export function useTeach(scanId: string | null, existing: UserTemplateDetail | n
     if (pv.result) setFirstPreview(true);
   }, [pv.result]);
   const rects = pv.result?.preview?.fieldRects;
+  // Aşama kapısı yalnız TAZE önizlemenin hatasını sayar (bayat yanıt yeni işaretlemeyi kilitlemesin).
+  const stageCtx = useMemo(() => ({ serverErrors: (pv.fresh ? pv.result?.errors : undefined) ?? [] }), [pv.fresh, pv.result]);
   const located = useMemo(() => (state && words.data ? locateKept(state, words.data.words, rects) : {}), [state, words.data, rects]);
   const runPreview = () => {
     if (previewBody && previewProblems.length === 0 && !saving) fetchPreview(previewBody).catch(() => undefined);
@@ -98,6 +100,7 @@ export function useTeach(scanId: string | null, existing: UserTemplateDetail | n
     /** Kayıtlı (korunan) alanların belge üstündeki kelimeleri — son önizlemenin okuduğu kutudan. */
     located,
     previewFresh: pv.fresh,
+    stageCtx,
     previewError: pv.error,
     previewing: pv.previewing,
     runPreview,

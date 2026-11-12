@@ -3,6 +3,9 @@
 import { spacing } from '../../../../theme';
 
 export const WO_TWO_COLUMN_MIN_WIDTH = 960;
+
+/** İki sütun oranı (sol belge : sağ üretim) — içerikten bağımsız; ilk iki sütunlu tasarımın eşit bölmesi. */
+export const WO_PANE_FLEX = { left: 1, right: 1 } as const;
 const TABLET_MIN_SHORT_SIDE = 600;
 
 export interface WoFormLayout {

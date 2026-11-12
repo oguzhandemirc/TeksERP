@@ -7,21 +7,27 @@
 // Aynı fotoğraf (sha256) zaten taranmışsa OCR koşmaz: o taramanın belgesi ya da saklı okuması kullanılır.
 // K30-E: belge no tutmazsa / okunamazsa (kullanıcı şablonunda Evrak No atanmamış) okunan PARTİ NO açık iş emirlerinde
 // aranır; iki yol da OCR'a toleranslı karşılaştırmayı `helpers/doc-code-match.helper.ts`ten alır.
-// Elle arama (`q`) ve istasyon/panel liste araması aynı helper'dan (`workOrderDocSearchWhere`) beslenir.
+// Elle arama (`q`) ve istasyon/panel liste araması aynı helper'dan (`workOrderDocSearchWhere`) beslenir; parti no → İE TEK yüklemi
+// `workOrdersOfNoteBatchWhere` (satır partisi önce; başlık yalnız satırında parti olmayan belgede — 2026-11-10).
 // Çok İE (2026-11-06): tablet ekranını bildirirse her İE "burada bekliyor mu" (ekranın açık kart listesinin yüklemi,
 // `helpers/station-open-step.helper.ts`) + şu an nerede ile döner; satır yükleme ve sınıflama `helpers/station-lookup-rows.helper.ts`.
 // Doğrulama (2026-11-06): fotoğraf adayları öteki alanlarla puanlanır; eşik altı OTOMATİK AÇILMAZ (`station-scan-verify.helper`).
+// Cihaz okuması (2026-11-09): tablet ML Kit okumasını (`clientOcr` + `barcodes`) gönderirse sıra SAME_PHOTO → saklı okuma →
+// DEVICE → sunucu okuyucu; cihaz okuması varken okuyucu çağrılmaz ("Bilgisayarda ikinci okuma" kapalıyken de çalışır).
 // Tek yazım: okutma izi (TELEMETRİ, `station-scan-check.service`) — iş kaydı doğmaz.
 // =============================================================================
 import { type Prisma, WorkOrderStatus } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { TERIM } from "../constants/terim";
-import { getReaderUrl } from "../lib/gelen-belge/url";
+import { serverReaderState, serverReaderUrl, serverOcrDisabledError } from "./gelen-belge-sunucu-okuyucu.service";
 import { readerOcr } from "../lib/gelen-belge/okuma-istemcisi";
+import { normalizeBarcodes } from "../lib/gelen-belge/barkod";
+import type { OcrResult } from "../lib/gelen-belge/motor";
+import { parseClientOcr } from "./gelen-belge-istemci-okuma.service";
 import { foldNameForCompare } from "./helpers/name-normalize.helper";
 import { whereWorkOrdersOfRolls } from "./helpers/workorder-rolls.helper";
-import { LOOKUP_NOTE_STATUSES, stationWorkSearchWhere } from "./helpers/workorder-doc-search.helper";
+import { LINE_HAS_BATCH_WHERE, LOOKUP_NOTE_STATUSES, stationWorkSearchWhere, workOrdersOfNoteBatchWhere } from "./helpers/workorder-doc-search.helper";
 import { decodeScanUpload, PDF_MIME } from "./gelen-belge-scan.service";
 import { extractDraft, ocrFromEnvelope } from "./gelen-belge-taslak-doldur.service";
 import { readIncomingDocStationLookup, readProductionEnabled, SETTING_KEYS } from "./system-setting.service";
@@ -50,7 +56,9 @@ const TOLERANT_UNIVERSE_CAP = 2000;
 
 /** UNVERIFIED: aday var ama hiçbiri doğrulama eşiğini geçmedi (`unverifiedWorkOrders`; kendiliğinden açılmaz). */
 export type StationLookupOutcome = "SINGLE" | "MULTIPLE" | "NO_WORK_ORDER" | "NO_DOCUMENT" | "NO_DOC_NO" | "UNREADABLE" | "UNVERIFIED";
-export type StationLookupSource = "SAME_PHOTO" | "STORED_READ" | "OCR" | "SEARCH";
+export type StationLookupSource = "SAME_PHOTO" | "STORED_READ" | "DEVICE" | "OCR" | "SEARCH";
+/** Cihaz okuması boş/başarısız + sunucu okuyucu kapalı: kısa cümle (tablet aynı metni hata kodunda da gösterir). */
+const DEVICE_UNREADABLE_MESSAGE = "Belge okunamadı — tekrar çekin ya da fiş no ile arayın.";
 
 
 export interface StationLookupResult {
@@ -74,8 +82,12 @@ export interface StationLookupResult {
   readonly checkId?: string | null;
 }
 
-export async function stationLookupStatus(): Promise<{ enabled: boolean; readerConfigured: boolean }> {
-  return { enabled: (await readIncomingDocStationLookup()) && (await readProductionEnabled()), readerConfigured: getReaderUrl().url !== null };
+/**
+ * `readerConfigured` = sunucu okuyucu kullanılabilir (bugünkü anlam; eski tablet buna bakar). `deviceOcrAccepted` = uç
+ * cihaz okumasını kabul eder — yeni tablet "okutma yapılabilir mi"yi `readerConfigured || (deviceOcrAccepted && cihazda OCR)` ile cevaplar.
+ */
+export async function stationLookupStatus(): Promise<{ enabled: boolean; readerConfigured: boolean; deviceOcrAccepted: true }> {
+  return { enabled: (await readIncomingDocStationLookup()) && (await readProductionEnabled()), readerConfigured: (await serverReaderUrl()) !== null, deviceOcrAccepted: true };
 }
 
 async function assertStationLookupEnabled(): Promise<void> {
@@ -88,13 +100,15 @@ async function assertStationLookupEnabled(): Promise<void> {
   }
 }
 
-export type StationLookupInput = { contentBase64: string; sha256?: string | null } | { q: string };
+export type StationLookupInput =
+  | { contentBase64: string; sha256?: string | null; clientOcr?: unknown; barcodes?: { format: string; value: string }[] }
+  | { q: string };
 
 export async function stationDocLookup(input: StationLookupInput, ctx: StationLookupContext | null = null): Promise<StationLookupResult> {
   await assertStationLookupEnabled();
   const label = ctx ? await stationLabel(ctx) : null;
   const sink: ScanVerifySink = {};
-  const raw = "q" in input ? await searchLookup(input.q) : await photoLookup(input.contentBase64, input.sha256 ?? null, sink);
+  const raw = "q" in input ? await searchLookup(input.q) : await photoLookup(input.contentBase64, input.sha256 ?? null, deviceReadOf(input), sink);
   const result = "q" in input ? raw : await applyVerification(raw, sink, ctx?.screen ?? null);
   if (!ctx || !label) return { ...result, station: null };
   const unverified = result.unverifiedWorkOrders ? await markAtStation(result.unverifiedWorkOrders, ctx) : undefined;
@@ -120,7 +134,20 @@ async function searchLookup(q: string): Promise<StationLookupResult> {
   return finish({ source: "SEARCH", read: null, notes: [], workOrders, closed, noteCount: null });
 }
 
-async function photoLookup(contentBase64: string, sha256: string | null, sink: ScanVerifySink): Promise<StationLookupResult> {
+/**
+ * Gövdedeki cihaz okuması (katı ayrıştırma `parseClientOcr`, ihlal 400 CLIENT_OCR_INVALID — tablet alansız tekrarlar);
+ * barkodlar yükleme yoluyla aynı biçimde eklenir (motor `applyBarcodes`). Yok/null → null (bugünkü yol).
+ */
+function deviceReadOf(input: { clientOcr?: unknown; barcodes?: { format: string; value: string }[] }): OcrResult | null {
+  if (input.clientOcr === undefined || input.clientOcr === null) return null;
+  const parsed = parseClientOcr(input.clientOcr);
+  const barcodes = normalizeBarcodes(input.barcodes);
+  return barcodes.length ? { ...parsed, barcodes } : parsed;
+}
+
+const hasText = (ocr: OcrResult): boolean => ocr.blocks.some((b) => b.lines.some((l) => l.text.trim().length > 0));
+
+async function photoLookup(contentBase64: string, sha256: string | null, device: OcrResult | null, sink: ScanVerifySink): Promise<StationLookupResult> {
   const upload = await decodeScanUpload(contentBase64, sha256);
   if (upload.mime === PDF_MIME) {
     throw AppError.badRequest("PDF belge okunmaz; belgenin fotoğrafını çekin.", { code: "DOCUMENT_SCAN_PDF_NOT_READABLE" });
@@ -138,8 +165,16 @@ async function photoLookup(contentBase64: string, sha256: string | null, sink: S
   const stored = known ? ocrFromEnvelope(known.ocrResult) : null;
   let source: StationLookupSource = "STORED_READ";
   let ocr = stored;
+  // Boş cihaz okuması (kelime yok) okuma sayılmaz: okuyucu açıksa o okur, kapalıysa kısa "okunamadı" cümlesi.
+  if (!ocr && device && hasText(device)) {
+    ocr = device;
+    source = "DEVICE";
+  }
   if (!ocr) {
-    const url = getReaderUrl().url;
+    const reader = await serverReaderState();
+    if (!reader.enabled && device) return finish({ source: "DEVICE", read: null, notes: [], workOrders: [], noteCount: null, unreadable: true });
+    if (!reader.enabled) throw serverOcrDisabledError("Fiş no ile elle arayın.");
+    const url = reader.url;
     if (!url) throw new AppError("Okuma servisi bu kurulumda yok; fiş no ile elle arayın.", 503, true, { code: "OCR_SERVICE_UNAVAILABLE" });
     const r = await readerOcr(url, upload.content, upload.mime);
     if (!r.ok) {
@@ -251,36 +286,44 @@ function warnIfCapped(what: string, size: number): void {
 }
 
 /**
- * Parti no yedeği: açık İE'lerin parti no'ları + işi süren belgelerin parti no'ları (bizim / müşterinin) evreninde
- * toleranslı eşleşme → eşleşen KAYITLI değerlerle açık İE'ler. Arama sorusudur (elle aramanın parti dalı gibi);
- * partinin kimliği yine `id`dir.
+ * Parti no yedeği: açık İE'lerin parti no'ları + işi süren belgelerin parti no'ları (başlık bizim / müşterinin + satır
+ * müşteri parti no'su) evreninde toleranslı eşleşme → eşleşen KAYITLI değerlerle açık İE'ler. İE kümesi TEK yüklemden
+ * (`workOrdersOfNoteBatchWhere`: satır partisi önce; başlık yalnız satırında parti olmayan belgede bütün belgeye).
  */
 async function workOrdersOfBatchNos(reads: string[]): Promise<{ tier: CodeMatchTier; loaded: LoadedWorkOrders } | null> {
   const open: Prisma.WorkOrderWhereInput = { status: { in: OPEN_WORK_ORDER_STATUSES }, isActive: true };
   const noteHasBatch: Prisma.CustomerDeliveryNoteWhereInput = { OR: [{ ourBatchNo: { not: null } }, { customerBatchNo: { not: null } }] };
-  const fetch = async (batchWhere: Prisma.BatchWhereInput, noteWhere: Prisma.CustomerDeliveryNoteWhereInput, cap: number | undefined) => {
+  const fetch = async (batchWhere: Prisma.BatchWhereInput, noteWhere: Prisma.CustomerDeliveryNoteWhereInput, lineWhere: Prisma.CustomerDeliveryNoteLineWhereInput, cap: number | undefined) => {
     const batches = await prisma.batch.findMany({ where: { AND: [{ workOrder: open }, batchWhere] }, select: { batchNumber: true }, distinct: ["batchNumber"], orderBy: [{ createdAt: "desc" }, { id: "asc" }], take: cap });
     const notes = await prisma.customerDeliveryNote.findMany({
       where: { AND: [ONGOING_LOOKUP_NOTE, noteHasBatch, noteWhere] },
       select: { ourBatchNo: true, customerBatchNo: true }, orderBy: [{ createdAt: "desc" }, { id: "asc" }], take: cap,
     });
-    return { size: Math.max(batches.length, notes.length), values: [...batches.map((b) => b.batchNumber), ...notes.flatMap((n) => [n.ourBatchNo, n.customerBatchNo])] };
+    const lines = await prisma.customerDeliveryNoteLine.findMany({
+      where: { AND: [{ note: ONGOING_LOOKUP_NOTE }, LINE_HAS_BATCH_WHERE, lineWhere] },
+      select: { customerBatchNo: true }, distinct: ["customerBatchNo"], orderBy: [{ customerBatchNo: "asc" }], take: cap,
+    });
+    return {
+      size: Math.max(batches.length, notes.length, lines.length),
+      values: [...batches.map((b) => b.batchNumber), ...notes.flatMap((n) => [n.ourBatchNo, n.customerBatchNo]), ...lines.map((l) => l.customerBatchNo)],
+    };
   };
   // Tam eşleşme önce DB'de (tavansız); kayıttaki yazım `matchCodes`la süzülür (ölçü TEK helper'da).
   const eq = (v: string) => ({ equals: v, mode: "insensitive" as const });
   const exact = await fetch(
     { OR: reads.map((r) => ({ batchNumber: eq(r) })) },
     { OR: reads.flatMap((r) => [{ ourBatchNo: eq(r) }, { customerBatchNo: eq(r) }]) },
+    { OR: reads.map((r) => ({ customerBatchNo: eq(r) })) },
     undefined,
   );
   let m = matchCodes(reads, exact.values);
   if (!m) {
-    const universe = await fetch({}, {}, TOLERANT_UNIVERSE_CAP);
+    const universe = await fetch({}, {}, {}, TOLERANT_UNIVERSE_CAP);
     warnIfCapped("parti no", universe.size);
     m = matchCodes(reads, universe.values);
   }
   if (!m) return null;
-  const byNote = whereWorkOrdersOfRolls({ deliveryNoteLine: { note: { status: { in: [...LOOKUP_NOTE_STATUSES] }, OR: [{ ourBatchNo: { in: m.values } }, { customerBatchNo: { in: m.values } }] } } });
+  const byNote = workOrdersOfNoteBatchWhere({ in: m.values });
   return { tier: m.tier, loaded: await loadWorkOrders({ AND: [open, { OR: [{ batches: { some: { batchNumber: { in: m.values } } } }, byNote] }] }, null) };
 }
 
@@ -333,7 +376,7 @@ function finish(p: {
 }): StationLookupResult {
   const notes = p.notes.map((n) => ({ id: n.id, noteNo: n.noteNo, senderDocNo: n.senderDocNo, ownerName: n.ownerCustomer?.name ?? null, senderName: n.senderCustomer?.name ?? null }));
   const base = { source: p.source, read: p.read, notes, workOrders: p.workOrders };
-  if (p.unreadable) return { ...base, outcome: "UNREADABLE", message: "Belge okunamadı; fiş no ile elle arayın." };
+  if (p.unreadable) return { ...base, outcome: "UNREADABLE", message: p.source === "DEVICE" ? DEVICE_UNREADABLE_MESSAGE : "Belge okunamadı; fiş no ile elle arayın." };
   if (p.noDocNo) return { ...base, outcome: "NO_DOC_NO", message: `Belgede evrak no da parti no da okunamadı; evrak no, parti no ya da ${TERIM.terbiyeIsEmri.tekilKucuk} no ile elle arayın.` };
   if (p.readValues) {
     const v = p.readValues;

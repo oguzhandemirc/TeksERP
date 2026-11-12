@@ -21,6 +21,7 @@ import {
   WorkOrder,
   WorkOrderStatus,
   Prisma,
+  type RollStage,
 } from "@prisma/client";
 import {
   createWorkOrderTx,
@@ -212,6 +213,7 @@ export async function prepareCreate(this: WorkOrderServiceThis, data: WorkOrderC
       plannedSubcontractorId?: string | null;
       dispatchWithoutColor?: boolean;
       plannedMachineId?: string | null;
+      outputStage?: RollStage | null;
     }[] = [];
 
     // Eski veride aktif rota pasif renk/özellik planlıyor olabilir — engel değil UYARI.
@@ -258,6 +260,8 @@ export async function prepareCreate(this: WorkOrderServiceThis, data: WorkOrderC
           // 2026-08-17: "fasona renksiz git" işareti de şablondan klonlanır.
           dispatchWithoutColor:   overlay?.dispatchWithoutColor ?? s.dispatchWithoutColor ?? false,
           plannedMachineId:       s.plannedMachineId ?? null,
+          // Top aşaması 2026-11-10: çıktı aşaması şablondan klonlanır; overlay verirse ezer.
+          outputStage:            overlay?.outputStage !== undefined ? overlay.outputStage : (s.outputStage ?? null),
         };
       });
       // Şablondaki öneri bayatsa (pasif/başka istasyon) açılış durmaz: öneri düşer + uyarı.
@@ -286,6 +290,7 @@ export async function prepareCreate(this: WorkOrderServiceThis, data: WorkOrderC
         plannedSubcontractorId: s.plannedSubcontractorId ?? null,
         dispatchWithoutColor:   s.dispatchWithoutColor ?? false,
         plannedMachineId:       s.plannedMachineId ?? null,
+        outputStage:            s.outputStage ?? null,
       }));
     }
 
@@ -630,6 +635,7 @@ export async function insertPreparedTx(this: WorkOrderServiceThis, tx: Prisma.Tr
             // kadar YOKTU: finalSteps alanı taşıyordu ama yazıma girmiyordu, yani
             // şablondan miras da form overlay'i de sessizce düşüyordu.
             dispatchWithoutColor:   step.dispatchWithoutColor ?? false,
+            outputStage:            step.outputStage ?? null,
           })),
         },
         ...(allocations.length > 0

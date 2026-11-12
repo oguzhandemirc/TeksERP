@@ -7,7 +7,8 @@
 import { factoryDayEndIso, factoryDayStartIso } from '../../../lib/factory-time';
 import { calendarKey, type DateRange } from '../../../components/filters/rollHistoryFilter';
 import { stationToneFor, type StationTone } from '../../../theme/stationTone';
-import { TERIM, TERIM_AD } from '../../../lib/terim';
+import { TERIM } from '../../../lib/terim';
+import type { WorkOrderMeterSummary } from '../../../services/workOrder.service';
 
 export interface LocationStation {
   istasyonId: string;
@@ -42,6 +43,8 @@ export interface WorkOrderListRow {
   inputMeters?: number;
   producedMeters?: number;
   konum?: WorkOrderLocation;
+  /** Yalnız `withMeterSummary=true` istenince; partisiz İE → null. */
+  meterSummary?: WorkOrderMeterSummary | null;
 }
 
 /** Rozet: büyük, istasyon renginde dolgulu; renk tek taşıyıcı değil — metin her zaman yazar. */
@@ -61,13 +64,17 @@ export function locationBadge(konum: WorkOrderLocation | undefined, status: stri
   }
   const fason = konum.sinif === 'FASONDA' || (first.dis && first.fasondaTop > 0);
   const text = (fason ? first.fasoncular[0] : undefined) ?? first.ad;
-  const detail = fason && text !== first.ad ? `${first.ad} · ${first.topSayisi} top` : `${first.topSayisi} top`;
+  // Top sayısı artık ayrı "Top" sütununda; burada yalnız fason ise istasyon adı.
+  const detail = fason && text !== first.ad ? first.ad : '';
   return { kind: 'station', text, extra: konum.istasyonlar.length - 1, tone: stationToneFor(first.dis, first.tur), detail };
 }
 
-/** Tür rozeti: yalnız Fason (müşteri malı) işaretlenir — listedeki çoğunluk (kendi üretimimiz) gürültüsüz kalır. */
+/** "Fason İş Emri" ölçütü TEK: `type === CUSTOMER_GOODS_SERVICE` (liste etiketi, detay başlığı, oluşturma başlığı). */
+export const isCustomerGoodsWo = (type: string | null | undefined): boolean => type === 'CUSTOMER_GOODS_SERVICE';
+
+/** Tür etiketi: yalnız Fason (müşteri malı) işaretlenir — listedeki çoğunluk (kendi üretimimiz) gürültüsüz kalır. */
 export function typeBadgeText(r: Pick<WorkOrderListRow, 'type'>): string | null {
-  return r.type === 'CUSTOMER_GOODS_SERVICE' ? TERIM_AD.fasonMusteriMali : null;
+  return isCustomerGoodsWo(r.type) ? 'Fason' : null;
 }
 
 /** Müşteri hücresi: ilk müşteri + "+N". */

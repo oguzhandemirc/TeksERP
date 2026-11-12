@@ -11,6 +11,7 @@ import type {
   TamburCutRequest,
   TamburMeasureBody,
   TamburFinalizeOpenFabricRequest,
+  TamburLabelExtras,
   Roll,
 } from '../types/models';
 
@@ -295,6 +296,83 @@ export interface TamburLabelSettings {
   labelBatchEnabled?: boolean;
   /** Topun sahibi (EMANET, fason mal) — Kime?'den bağımsız; eski backend göndermez → undefined (bugünkü davranış). */
   ownerCustomer?: { id: string; name: string } | null;
+  /** Topun gelen belge müşteri partisi — parti no varsayılanı; eski backend göndermez → tohum yok. */
+  deliveryNoteBatchNo?: string | null;
+  /** Gelen belgedeki kumaş/renk metni (2026-11-10) — ad/renk seçicinin "Gelen belgede" bölümü. */
+  deliveryNoteItemText?: string | null;
+  deliveryNoteColorText?: string | null;
+  /** Sahip kilidi (2026-11-10): true → emanet top, Kime? çizilmez, sunucu başka hedefi 409'lar. Eski backend göndermez. */
+  ownerLocked?: boolean;
+}
+
+/** GET /tambur/label-preview-fields (2026-11-10) — topun basılacağı şablonun alanları. Eski backend 404 → null. */
+export interface TamburLabelPreviewFields {
+  kind: string;
+  templateId: string | null;
+  templateName: string | null;
+  /** null = şablon çözülemedi/alan listesi yok → özet satırına dönülür. */
+  fields: { key: string; label: string }[] | null;
+}
+
+/** POST /tambur/label-preview — kesimde doğacak çocuğun etiketi (HTML render elemanları, mm). */
+export type TamburPreviewElement =
+  | { type: 'text'; x: number; y: number; hMm: number; bold: boolean; align: 'left' | 'center' | 'right'; rot: number; wr: number; text: string; bind: string | null; empty?: true; auto?: true }
+  | { type: 'line' | 'box'; x: number; y: number; wMm: number; hMm: number; thickMm: number }
+  | { type: 'code128'; x: number; y: number; wMm: number; hMm: number; human: boolean; humanHMm: number; value: string | null }
+  | { type: 'qr'; x: number; y: number; sizeMm: number }
+  | { type: 'banner'; x: number; y: number; wMm: number; hMm: number; rot: number; text: string; bind: 'lengthMeters' };
+
+export interface TamburLabelPreview {
+  kind: string;
+  templateId: string | null;
+  templateName: string | null;
+  widthMm: number;
+  heightMm: number;
+  /** Miras en (taslaksız) — En kutusunun ipucu; eski backend göndermez. */
+  sourceWidthCm?: number | null;
+  elements: TamburPreviewElement[] | null;
+  rows: { key: string | null; text: string; size: string; bold: boolean }[] | null;
+  /** Bu bağlamda seçilebilir şablonlar (çoklu etiket seti, 2026-11-11); eski backend göndermez → seçici yok. */
+  templateOptions?: LabelTemplateOption[];
+  /** Seçim yapılmasaydı basılacak şablon; eski backend göndermez. */
+  defaultTemplateId?: string | null;
+}
+
+/** Seçilebilir etiket şablonu (backend `helpers/label-template-options.ts` aynası). */
+export interface LabelTemplateOption {
+  id: string;
+  name: string;
+  source: 'DEFAULT' | 'CUSTOMER' | 'GLOBAL';
+  isDefault: boolean;
+}
+
+export interface TamburLabelPreviewDraft {
+  lengthMeters?: number | null;
+  weightKg?: number | null;
+  widthCm?: number | null;
+  qualityGrade?: string | null;
+  labelItemName?: string | null;
+  labelColorName?: string | null;
+  labelBatchNo?: string | null;
+}
+
+/** GET /tambur/label-suggestions yanıtı — müşterinin son 180 gündeki etiket değerleri, en son önce. */
+export interface TamburLabelSuggestions {
+  workOrderId: string | null;
+  customerIds: string[];
+  itemNames: string[];
+  colorNames: string[];
+  batchNos: string[];
+  /** Bu İE'de bu alanlardan birini taşıyan en son topun değerleri (yapışkan başlangıç). */
+  last: {
+    itemName: string | null;
+    colorName: string | null;
+    batchNo: string | null;
+    consigneeId?: string | null;
+    consigneeName?: string | null;
+    /** İE'nin son kesiminde seçilen şablon (null = varsayılan); eski backend göndermez. */
+    templateId?: string | null;
+  } | null;
 }
 
 /** GET/PUT /labels/work-orders/:id/overrides yanıtı. */
@@ -486,6 +564,50 @@ export const tamburService = {
       .then((r) => r.data.data as TamburLabelSettings);
   },
 
+  /** Basılacak şablonun alanları (Etikette kartı). Eski backend 404 → null (çağıran özet satırına döner). */
+  labelPreviewFields: (params: { rollId: string; customerId?: string | null; consigneeId?: string | null }): Promise<TamburLabelPreviewFields | null> => {
+    const qs = new URLSearchParams({ rollId: params.rollId });
+    if (params.customerId) qs.set('customerId', params.customerId);
+    if (params.consigneeId) qs.set('consigneeId', params.consigneeId);
+    return apiClient
+      .get<ApiResponse<TamburLabelPreviewFields>>(`/tambur/label-preview-fields?${qs.toString()}`)
+      .then((r) => r.data.data as TamburLabelPreviewFields)
+      .catch((e: unknown) => {
+        if ((e as { response?: { status?: number } })?.response?.status === 404) return null;
+        throw e;
+      });
+  },
+
+  /** Canlı etiket önizlemesi (yazmaz). Eski backend 404 → null (kart alan listesine düşer). */
+  labelPreview: (body: {
+    rollId: string;
+    orderLineId?: string | null;
+    customerId?: string | null;
+    consigneeId?: string | null;
+    /** Yalnız varsayılandan FARKLI seçimde gönderilir (eski backend alanı strip eder). */
+    templateId?: string;
+    draft: TamburLabelPreviewDraft;
+  }): Promise<TamburLabelPreview | null> =>
+    apiClient
+      .post<ApiResponse<TamburLabelPreview>>('/tambur/label-preview', body)
+      .then((r) => r.data.data as TamburLabelPreview)
+      .catch((e: unknown) => {
+        if ((e as { response?: { status?: number } })?.response?.status === 404) return null;
+        throw e;
+      }),
+
+  /** Etiket kumaş adı / renk / parti no önerileri + bu İE'deki son değer. Eski backend 404 → çağıran boş listeye düşer. */
+  labelSuggestions: (params: { workOrderId?: string | null; rollId?: string | null; consigneeId?: string | null }): Promise<TamburLabelSuggestions> => {
+    const qs = new URLSearchParams();
+    if (params.workOrderId) qs.set('workOrderId', params.workOrderId);
+    if (params.rollId) qs.set('rollId', params.rollId);
+    // Alıcı seçiliyse ad/renk geçmişi o alıcının basılanlarından (2026-11-10); eski backend parametreyi yok sayar.
+    if (params.consigneeId) qs.set('consigneeId', params.consigneeId);
+    return apiClient
+      .get<ApiResponse<TamburLabelSuggestions>>(`/tambur/label-suggestions?${qs.toString()}`)
+      .then((r) => r.data.data as TamburLabelSuggestions);
+  },
+
   /** İş emri etiket bilgisi (eksik alan / düzelt / boş bas). */
   getLabelOverrides: (workOrderId: string): Promise<WorkOrderLabelOverrides> =>
     apiClient
@@ -527,7 +649,7 @@ export const tamburService = {
    */
   cutWarehouseRoll: (
     rollId: string,
-    data: { cutLength: number; qualityGrade?: string | null; notes?: string | null; targetOrderLineId?: string | null; targetCustomerId?: string | null; markedForKartela?: boolean; rawDestination?: 'STOCK' | 'WAREHOUSE'; clientToken?: string; measure?: TamburMeasureBody; weightKg?: number | null; labelBatchNo?: string | null }
+    data: { cutLength: number; qualityGrade?: string | null; notes?: string | null; targetOrderLineId?: string | null; targetCustomerId?: string | null; markedForKartela?: boolean; rawDestination?: 'STOCK' | 'WAREHOUSE'; clientToken?: string; measure?: TamburMeasureBody; weightKg?: number | null; labelBatchNo?: string | null; labelItemName?: string | null; labelColorName?: string | null } & TamburLabelExtras
   ): Promise<ApiResponse<{ childRoll: Roll; parentRoll: Roll; parentRemainingQty: number }>> =>
     apiClient
       .post<ApiResponse<{ childRoll: Roll; parentRoll: Roll; parentRemainingQty: number }>>(
@@ -552,7 +674,10 @@ export const tamburService = {
       weightKg?: number | null;
       /** Kalan topun etiketine basılacak müşteri parti no (ayar kapalıysa gönderilmez). */
       labelBatchNo?: string | null;
-    }
+      /** Kalan topun etiket kumaş adı / rengi (boşsa gönderilmez). */
+      labelItemName?: string | null;
+      labelColorName?: string | null;
+    } & TamburLabelExtras
   ): Promise<ApiResponse<{ rollId: string; remainingChild: Roll | null; remainingQty: number }>> =>
     apiClient
       .post<ApiResponse<{ rollId: string; remainingChild: Roll | null; remainingQty: number }>>(

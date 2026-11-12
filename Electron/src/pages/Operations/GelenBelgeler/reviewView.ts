@@ -1,6 +1,6 @@
 // Gözden geçirme yüzeyi (saf, yalnız GÖSTERİM): sorun ve toplam hükmü backend'den gelir (`problems`, `totalsCheck`
 // — onay ön kontrolüyle aynı yüklem); burada kural yok, yalnız süzme ve Türkçe metin.
-import type { BlockCheck, LineProblem, TotalDiff } from "./reviewTypes";
+import type { BlockCheck, LineProblem, TotalDiff, TotalsCheck } from "./reviewTypes";
 
 export const PROBLEM_LABEL: Record<LineProblem, string> = {
   FAILED: "Girilemedi",
@@ -36,4 +36,13 @@ export function describeDiff(d: TotalDiff): string {
 
 export function blockSummary(b: BlockCheck): string {
   return `${b.lines.count} top · ${qty(b.lines.m)} m${b.lines.kg > 0 ? ` · ${qty(b.lines.kg)} kg` : ""}`;
+}
+
+/** Toplam kapısı TUTMUYOR metni — şerit ve detayın "Dikkat" kutusu aynı metni basar. */
+export const TOTALS_BAD_TEXT = { approvable: "Toplamlar tutmuyor — onayda fark gerekçesi istenir", closed: "Toplamlar tutmuyor" } as const;
+
+/** "Dikkat" kutusunun toplam satırı: yalnız hüküm TUTMUYOR iken metin, aksi hâlde null (hüküm backend `totalsCheck`ten). */
+export function totalsAttentionText(check: Pick<TotalsCheck, "ok"> | undefined, approvable: boolean): string | null {
+  if (check?.ok !== false) return null;
+  return approvable ? TOTALS_BAD_TEXT.approvable : TOTALS_BAD_TEXT.closed;
 }

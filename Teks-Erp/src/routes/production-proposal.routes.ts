@@ -20,6 +20,7 @@ function accessOf(req: Request): ProposalAccess {
     readWeaving: matchesPermission(p, "weavingorder:read"),
     writeWeaving: matchesPermission(p, "weavingorder:write"),
     writeWorkOrder: matchesPermission(p, "workorder:write"),
+    readYarnNeed: matchesPermission(p, "report:yarn-need"),
   };
 }
 
@@ -44,6 +45,9 @@ const applySchema = z.strictObject({
  *       Onaylı/kısmi sevk siparişin satırlarından önerilen dokuma işlerini (ürün + varyant) ve terbiye
  *       iş emirlerini (ürün + renk + en) listeler; zaten bağlı satırlar `excluded`ta. Ayar
  *       `siparis.uretimOnerisi` KAPALI iken 403 `PRODUCTION_PROPOSAL_DISABLED`. Hiçbir şey yazmaz.
+ *       Dokuma grubunda karar özetleri: `loomSummary` (tezgâh sınıfı + sayılar), `yarnSummary` (yalnız
+ *       `report:yarn-need` ∧ maliyet modülü; grubun ham metresi için kg + eksik), `durationEstimate` (yalnız
+ *       dokuma süresi; plan devri/randımanı/atkı sıklığı yoksa null). Hesaplanamayan özet null.
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path

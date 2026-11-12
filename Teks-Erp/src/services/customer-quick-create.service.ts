@@ -1,6 +1,6 @@
-// Belgeden İE formunun HIZLI müşteri kaydı (Gülkesim 2026-11-04): yalnız ad, rol yalnız Müşteri. Kart yolu `create` ile
-// AYNI (kod, ad seddi 409, cari hesap, audit); `clientToken` replay'i tek boğazdan (R kipi). Kart servisi 300 satır
-// sınırında olduğundan ayrı dosyada; kart doğumu yine `CustomerService` yöntemlerinden geçer.
+// Belgeden İE formunun HIZLI müşteri kaydı (Gülkesim 2026-11-04): ad (+ seçicinin "Diğer" iletişim alanları, 2026-11-10),
+// rol yalnız Müşteri. Kart yolu `create` ile AYNI (kod, ad/vergi no seddi 409, cari hesap, audit); `clientToken` replay'i
+// tek boğazdan (R kipi). Kart servisi 300 satır sınırında olduğundan ayrı dosyada; doğum `CustomerService` yöntemlerinden.
 import prisma from "../lib/prisma";
 import { ApiResponse } from "../types/api.types";
 import { AppError } from "../utils/app-error";
@@ -22,8 +22,12 @@ function quickCreateReplay(name: string, load: (id: string) => Promise<ApiRespon
   });
 }
 
-export async function quickCreate(svc: CustomerService, name: string, clientToken: string, userId: string | undefined): Promise<ApiResponse<unknown>> {
-  const data: Record<string, unknown> = { name, isCustomerRole: true };
+/** Seçicinin "Diğer" bölümündeki opsiyonel kart alanları — route Zod'u yalnız bunları geçirir. */
+export type QuickCreateExtra = Partial<Record<"taxNumber" | "contactName" | "contactPhone" | "email" | "city" | "district" | "address" | "notes", string>>;
+
+export async function quickCreate(svc: CustomerService, input: { name: string; clientToken: string } & QuickCreateExtra, userId: string | undefined): Promise<ApiResponse<unknown>> {
+  const { name, clientToken, ...extra } = input;
+  const data: Record<string, unknown> = { ...extra, name, isCustomerRole: true };
   return quickCreateReplay(name, (id) => svc.findById(id)).run(clientToken, async () => {
     const plan = svc.prepareCardCreate(data);
     return svc.withCardCreateRetry(data, async () => {

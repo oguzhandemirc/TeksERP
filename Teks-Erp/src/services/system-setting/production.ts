@@ -27,6 +27,19 @@ export async function readTargetQuantityEnabled(
   return asBoolean(setting?.value);
 }
 
+/** İş emri formunda hedef en kutusu çizilsin mi. Default AÇIK (kayıt yoksa true): bugünkü form hedef enini hep soruyor. */
+export async function readTargetWidthEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.WORKORDER_TARGET_WIDTH_ENABLED },
+    select: { value: true },
+  });
+  if (!setting) return true;
+  return asBoolean(setting.value);
+}
+
 /**
  * KK1 ham kumaş girişinde "en (cm)" alanı gösterilsin mi? Default false
  * (müşteri: ham kumaşın eni önemsiz). Kapalıyken mobil KK1 en alanını gizler,

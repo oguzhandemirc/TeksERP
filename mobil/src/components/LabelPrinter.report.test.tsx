@@ -95,3 +95,10 @@ it('başarı → iş ucuna printJob eki; /print-jobs raporu yok', async () => {
   expect(call[2]).toMatchObject({ transport: 'BLUETOOTH', printerAddress: '00:11:22:33:44:55', printerName: 'KK1 Etiket' });
   expect(call[2].clientToken).toMatch(/^[0-9a-f-]{36}$/);
 });
+
+it('tür verilmezse native isteğine kind gitmez (sunucu topun aşamasından seçer, 2026-11-10)', async () => {
+  const onDone = jest.fn();
+  render(<LabelPrinter roll={roll} onDone={onDone} />);
+  await waitFor(() => expect(onDone).toHaveBeenCalled());
+  expect((labelService.getRollNative as jest.Mock).mock.calls[0]![1]).toBeUndefined();
+});

@@ -27,7 +27,7 @@
 // gerekçe). Gizleme bir GÖRÜNÜRLÜK kararıdır, geçerlilik kararı değil.
 // =============================================================================
 
-import { MachineStopLossClass, Prisma, ReasonPresetKind, RollVarianceKind } from "@prisma/client";
+import { MachineStopLossClass, Prisma, ReasonPresetKind, RollVarianceKind, StationKind } from "@prisma/client";
 import { TAMBUR_UNDO_CANCEL_CODE, TAMBUR_UNDO_CANCEL_TEXT, QUICK_PICK_COUNT, QUICK_PICK_KINDS } from "../constants/reason-presets";
 
 import prisma from "../lib/prisma";
@@ -41,6 +41,7 @@ import { registerReasonCatalogSource } from "../constants/variance-reasons";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { foldNameForCompare } from "./helpers/name-normalize.helper";
+import { stationKindScopeWhere } from "./helpers/station-kind-scope.helper";
 
 export type ReasonPresetDto = {
   id: string;
@@ -60,6 +61,8 @@ export type ReasonPresetDto = {
   targetMinutes: number | null;
   /** F9 yeniden işlem sınıfı — yalnız `WORK_ORDER_REWORK`; null = sınıfsız (ücretli) · true = müşteri talebi · false = bizim hatamız. */
   billable: boolean | null;
+  /** İstasyon türü kapsamı — yalnız `MACHINE_STOP`ta dolu olabilir; boş = her istasyon. Görünürlük, geçerlilik değil. */
+  stationKinds: StationKind[];
 };
 
 /** Liste satırı: DTO + türetilmiş `quickPick` (E7) — kolon değil, sıralamadan (`markQuickPicks`). */
@@ -94,6 +97,7 @@ const SELECT = {
   stopLossClass: true,
   targetMinutes: true,
   billable: true,
+  stationKinds: true,
 } satisfies Prisma.ReasonPresetSelect;
 
 /** Eski-ad listesinin üst sınırı — en eskisi düşer (sınırsız dizi = sınırsız satır). */
@@ -376,15 +380,19 @@ export const ReasonPresetService = {
   /**
    * Listeleme. `includeInactive` yalnız DÜZENLEME yüzeyi içindir; operatör
    * ekranları aktifleri alır (gizlenen satır orada çizilmemeli).
+   * `stationKind` (tablet duruş modalı): kapsamı boş VEYA o türü taşıyan satırlar — süzme SUNUCUDA;
+   * `quickPick` süzülmüş liste üzerinden türer. Verilmezse bugünkü tam liste (eski istemci).
    */
   async list(params: {
     kind?: ReasonPresetKind;
     includeInactive?: boolean;
+    stationKind?: StationKind;
   }): Promise<ReasonPresetListRow[]> {
     const rows = await prisma.reasonPreset.findMany({
       where: {
         ...(params.kind ? { kind: params.kind } : {}),
         ...(params.includeInactive ? {} : { isActive: true }),
+        ...(params.stationKind ? stationKindScopeWhere(params.stationKind) : {}),
       },
       select: SELECT,
       orderBy: [{ kind: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
@@ -402,10 +410,12 @@ export const ReasonPresetService = {
       stopLossClass?: MachineStopLossClass | null;
       targetMinutes?: number | null;
       billable?: boolean | null;
+      stationKinds?: StationKind[] | null;
     },
     userId?: string,
   ): Promise<ReasonPresetDto> {
     const label = input.label.trim();
+    const stationKinds = resolveStationKinds(input.kind, input.stationKinds ?? null) ?? [];
     const billable = resolveBillable(input.kind, input.billable ?? null);
     if (!label) throw new AppError("Etiket boş olamaz", 400);
     const stopLossClass = resolveStopLossClass(input.kind, input.stopLossClass);
@@ -425,6 +435,7 @@ export const ReasonPresetService = {
         stopLossClass,
         targetMinutes,
         billable,
+        stationKinds,
         sortOrder,
         isSystem: false,
         createdById: userId ?? null,
@@ -458,6 +469,7 @@ export const ReasonPresetService = {
       stopLossClass?: MachineStopLossClass | null;
       targetMinutes?: number | null;
       billable?: boolean | null;
+      stationKinds?: StationKind[] | null;
     },
     userId?: string,
   ): Promise<ReasonPresetDto> {
@@ -476,6 +488,7 @@ export const ReasonPresetService = {
 
     // Sınıf katalogda düzeltilir; açılmış İE'lerdeki kopya DONUK kalır (`WorkOrder.reworkBillable`).
     const billable = input.billable !== undefined ? resolveBillable(current.kind, input.billable) : undefined;
+    const stationKinds = input.stationKinds !== undefined ? resolveStationKinds(current.kind, input.stationKinds) ?? [] : undefined;
 
     const label = input.label?.trim();
     if (input.label !== undefined && !label) throw new AppError("Etiket boş olamaz", 400);
@@ -503,6 +516,7 @@ export const ReasonPresetService = {
         ...(stopLossClass !== undefined ? { stopLossClass } : {}),
         ...(targetMinutes !== undefined ? { targetMinutes } : {}),
         ...(billable !== undefined ? { billable } : {}),
+        ...(stationKinds !== undefined ? { stationKinds } : {}),
         updatedById: userId ?? null,
       },
       select: SELECT,
@@ -549,6 +563,7 @@ export const ReasonPresetService = {
           stopLossClass: src.stopLossClass,
           targetMinutes: src.targetMinutes,
           billable: src.billable,
+          stationKinds: src.stationKinds,
           sortOrder: src.sortOrder + 1,
           isSystem: false,
           createdById: userId ?? null,
@@ -680,6 +695,19 @@ function resolveStopLossClass(
   }
   return given;
 }
+
+/**
+ * İstasyon türü kapsamı kapısı — DB CHECK `reason_presets_station_kinds_chk`ın servis ikizi: dolu kapsam yalnız
+ * `MACHINE_STOP`ta (başka kind'de 400 `STOP_STATION_KINDS_NOT_APPLICABLE`). Tekrarlar atılır; null/boş = her istasyon.
+ */
+function resolveStationKinds(kind: ReasonPresetKind, given: StationKind[] | null): StationKind[] | null {
+  if (!given || given.length === 0) return given === null ? null : [];
+  if (kind !== ReasonPresetKind.MACHINE_STOP) {
+    throw AppError.badRequest("İstasyon türü kapsamı yalnız duruş sebeplerinde girilir", { code: "STOP_STATION_KINDS_NOT_APPLICABLE", kind });
+  }
+  return [...new Set(given)];
+}
+
 
 /** `kind` içinde boş bir kod bulur (çakışırsa `_2`, `_3` … ekler). */
 async function nextFreeCode(kind: ReasonPresetKind, base: string): Promise<string> {

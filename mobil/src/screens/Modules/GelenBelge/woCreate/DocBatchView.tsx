@@ -23,6 +23,7 @@ import { removePage, type ScanPage } from '../docScan';
 import { useDocScan } from '../useDocScan';
 import { usePageSource } from '../usePageSource';
 import { DuplicateDocNoDialog } from '../DuplicateDocNoDialog';
+import { DuplicateBatchNoDialog } from '../DuplicateBatchNoDialog';
 import DocRowCard, { type DocRowOpenRequest } from './DocRowCard';
 import type { WoType } from './woForm';
 import { useWoRows, type WoRowsState } from './useWoRows';
@@ -107,6 +108,7 @@ export default function DocBatchView({ route, multi = true, autoStart = false, o
       </KeyboardAwareScrollView>
       {wo.rows.length > 0 && <SaveBar wo={wo} label={saveLabel} />}
       <DuplicateDocNoDialog conflict={wo.duplicate?.conflict ?? null} busy={wo.saving} onCancel={wo.dismissDuplicate} onConfirm={() => void wo.confirmDuplicate()} />
+      <DuplicateBatchNoDialog conflict={wo.duplicateBatch?.conflict ?? null} busy={wo.saving} onCancel={wo.dismissDuplicateBatch} onConfirm={() => void wo.confirmDuplicateBatch()} />
       <SameDocumentCard
         match={b.sameDoc ?? wo.sameDoc}
         onClose={() => { b.clearSameDoc(); wo.dismissSameDoc(); }}

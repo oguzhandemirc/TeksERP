@@ -33,9 +33,15 @@ export interface SuggestBody {
   identifiers: string[];
   table?: { columns: { key: string; header: string }[]; totalsLabel?: string | null };
   sectionStartLabel?: string | null;
-  /** Güncelle kipi: sunucu bu kullanıcı şablonuyla birleştirip önizler; dönen `template` aynen kaydedilir. */
-  base?: { code: string; keep: TemplateKeepPart[] };
+  /** Güncelle kipi: sunucu bu kullanıcı şablonuyla birleştirip önizler; dönen `template` aynen kaydedilir.
+   *  `drop`: kayıtlı olup bu sefer kaldırılan alanlar (2026-11-09; yoksa kayıtlı alan korunur). */
+  base?: { code: string; keep: TemplateKeepPart[]; drop?: string[] };
+  /** ③ Kurallar (2026-11-09): yoksa fabrika ayarı; `multiParty: null` yalnız düzenlemede kayıtlı kuralı kaldırır. */
+  rules?: { multiParty: MultiPartyRule | null };
 }
+
+/** Çok partili belgede iş emri kuralı — backend `MULTI_PARTY_RULES` (fabrika ayarı `gelenBelge.multiPartyWorkOrder` ile aynı küme). */
+export type MultiPartyRule = 'SINGLE' | 'PER_PARTY';
 
 export interface SuggestPreview {
   matched: boolean;

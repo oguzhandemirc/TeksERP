@@ -6,6 +6,7 @@ import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { stationSearchQuerySchema } from "../services/helpers/workorder-doc-search.helper";
 import { scanRoutedQuerySchema } from "../services/helpers/scan-route-open-cards.helper";
+import { measuredWidthCmSchema } from "../services/helpers/measured-width.helper";
 import { meterSourceSchema } from "../services/helpers/meter-reading.helper";
 import { meterCalibrationWarnings, withResponseWarnings } from "../services/helpers/meter-calibration.helper";
 import { TamburService } from "../services/tambur.service";
@@ -44,6 +45,15 @@ const stationFilterQuerySchema = z.object({
 // Müşterinin etikete istediği parti metni (Gülkesim 2026-11-06) — ayar kapısı serviste
 // (`resolveTamburLabelBatchNo`). ⚠️ Zod tanımadığı anahtarı sessizce siler: her şemada şart.
 const labelBatchNoField = z.string().max(64, "Etiket parti no en çok 64 karakter").nullish();
+// Etikete basılacak kumaş adı / renk (topun kendi değeri; ayara bağlı değil) — aynı strip tuzağı.
+const labelItemNameField = z.string().max(80, "Etiket kumaş adı en çok 80 karakter").nullish();
+const labelColorNameField = z.string().max(80, "Etiket rengi en çok 80 karakter").nullish();
+// Emanet top etiket alıcısı (tablet önce `ensure` çağırır; sahip doğrulaması serviste) — aynı strip tuzağı.
+const labelConsigneeIdField = z.string().uuid("Geçersiz alıcı ID").nullish();
+// Kesimde seçilen etiket şablonu (çoklu etiket seti) — ⚠️ Zod tanımadığı anahtarı sessizce siler; beş şemada da.
+const labelTemplateIdField = z.string().uuid("Geçersiz şablon ID").nullish();
+// Kg kaynağı beyanı — yalnız kg ile; simüle kapısı serviste (`resolveTamburWeightSource`).
+const weightSourceField = z.enum(["SCALE", "MANUAL", "SIMULATED"], { message: "Kg kaynağı SCALE, MANUAL ya da SIMULATED olmalı" }).nullish();
 
 // export: `test_tambur_olcum_kaynagi` `measure` alanını GERÇEK parse ile sınar (Zod strip tuzağı).
 export const finalizeSchema = z.object({
@@ -58,6 +68,7 @@ export const finalizeSchema = z.object({
         measure: meterSourceSchema.nullish(),
         // Tamburda tartım (S5) — bu parçanın kg'ı; müşteri tartım istiyorsa zorunlu.
         weightKg: z.number().positive("Tartım kg pozitif olmalı").max(100_000).nullish(),
+        weightSource: weightSourceField,
       })
     )
     // Cap: her segment tx içinde ayrı roll.create + rollProperty + rollOperation
@@ -90,7 +101,13 @@ export const finalizeSchema = z.object({
   markedForKartela: z.boolean().optional(),
   // Otomatik kalan kuyruk parçasının kg'ı (S5 tartım kapısı).
   remainingWeightKg: z.number().positive("Tartım kg pozitif olmalı").max(100_000).nullish(),
+  remainingWeightSource: weightSourceField,
   labelBatchNo: labelBatchNoField,
+  labelItemName: labelItemNameField,
+  labelColorName: labelColorNameField,
+  labelConsigneeId: labelConsigneeIdField,
+  labelTemplateId: labelTemplateIdField,
+  widthCm: measuredWidthCmSchema,
   // Plan-gerçek sapma onayı (renk/en) — 409 PLAN_MISMATCH sonrası aynı istek
   // bu bayrakla tekrarlanır. bkz. constants/tambur-plan-gate.ts.
   confirmMismatch: z.boolean().optional(),
@@ -132,6 +149,12 @@ export const cutOpenFabricSchema = z.object({
   // ⚠️ Zod tanımadığı anahtarı sessizce siler: bu satır düşerse kg hiç yazılmaz.
   weightKg: z.number().positive("Tartım kg pozitif olmalı").max(100_000).nullish(),
   labelBatchNo: labelBatchNoField,
+  labelItemName: labelItemNameField,
+  labelColorName: labelColorNameField,
+  labelConsigneeId: labelConsigneeIdField,
+  labelTemplateId: labelTemplateIdField,
+  widthCm: measuredWidthCmSchema,
+  weightSource: weightSourceField,
   // Plan-gerçek sapma onayı — ⚠️ Zod tanımadığı anahtarı SESSİZCE SİLER: bu satır
   // düşerse mobil onayı gönderir, backend hiç görmez ve operatör onayladığı hâlde
   // 409'a çarpar (varianceReason dersinin aynısı).
@@ -172,6 +195,12 @@ export const finalizeOpenFabricSchema = z.object({
   // Kalan topun kg'ı (S5) — müşteri tartım istiyorsa kalan top doğarken zorunlu.
   weightKg: z.number().positive("Tartım kg pozitif olmalı").max(100_000).nullish(),
   labelBatchNo: labelBatchNoField,
+  labelItemName: labelItemNameField,
+  labelColorName: labelColorNameField,
+  labelConsigneeId: labelConsigneeIdField,
+  labelTemplateId: labelTemplateIdField,
+  widthCm: measuredWidthCmSchema,
+  weightSource: weightSourceField,
 });
 
 // export: `test_tambur_olcum_kaynagi` `measure` alanını GERÇEK parse ile sınar (Zod strip tuzağı).
@@ -197,6 +226,12 @@ export const cutWarehouseRollSchema = z.object({
   // ⚠️ Zod tanımadığı anahtarı sessizce siler: bu satır düşerse kg hiç yazılmaz.
   weightKg: z.number().positive("Tartım kg pozitif olmalı").max(100_000).nullish(),
   labelBatchNo: labelBatchNoField,
+  labelItemName: labelItemNameField,
+  labelColorName: labelColorNameField,
+  labelConsigneeId: labelConsigneeIdField,
+  labelTemplateId: labelTemplateIdField,
+  widthCm: measuredWidthCmSchema,
+  weightSource: weightSourceField,
 });
 
 // Kurşun Dağıtım (bypass) kapanışı — Tambur tabletinde refakat kartı okutulur,
@@ -262,6 +297,12 @@ export const finalizeWarehouseCutSchema = z.object({
   // Kalan topun kg'ı (S5) — `finalizeOpenFabricSchema` ile aynı sözleşme.
   weightKg: z.number().positive("Tartım kg pozitif olmalı").max(100_000).nullish(),
   labelBatchNo: labelBatchNoField,
+  labelItemName: labelItemNameField,
+  labelColorName: labelColorNameField,
+  labelConsigneeId: labelConsigneeIdField,
+  labelTemplateId: labelTemplateIdField,
+  widthCm: measuredWidthCmSchema,
+  weightSource: weightSourceField,
 });
 
 export class TamburController {
@@ -337,7 +378,7 @@ export class TamburController {
   async cutWarehouseRoll(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const id = req.params.id as string;
-      const body = cutWarehouseRollSchema.parse(req.body);
+      const body = { ...cutWarehouseRollSchema.parse(req.body), labelDeviceId: req.device?.id ?? null };
       // Oturum bağlamı — çıkan parçanın GİRİŞ İSTASYONU damgası için.
       // ⚠️ `enforceForMobile` KOYULMADI: bu uç bugüne kadar oturum ZORUNLU
       // kılmıyordu; enforce eklemek oturumsuz tablette 409 üretir ve çalışan
@@ -360,7 +401,7 @@ export class TamburController {
   async finalizeWarehouseCut(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const id = req.params.id as string;
-      const body = finalizeWarehouseCutSchema.parse(req.body);
+      const body = { ...finalizeWarehouseCutSchema.parse(req.body), labelDeviceId: req.device?.id ?? null };
       // Kesilen parçayla AYNI damga — biri yapılıp diğeri unutulursa aynı kesimin
       // parçası dolu, kalanı boş doğar.
       const stamp = await getStampContext(req);
@@ -381,7 +422,7 @@ export class TamburController {
   async cutOpenFabric(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const id = req.params.id as string;
-      const body = cutOpenFabricSchema.parse(req.body);
+      const body = { ...cutOpenFabricSchema.parse(req.body), labelDeviceId: req.device?.id ?? null };
       // Makine atfı: kesim çocukları "Bu makine" süzgecinde görünebilsin (2026-08-12).
       const stamp = await getStampContext(req);
       const result = await this.service.cutOpenFabric(
@@ -400,7 +441,7 @@ export class TamburController {
   async finalizeOpenFabric(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const id = req.params.id as string;
-      const body = finalizeOpenFabricSchema.parse(req.body);
+      const body = { ...finalizeOpenFabricSchema.parse(req.body), labelDeviceId: req.device?.id ?? null };
       // Makine atfı: aktif çalışma oturumu → GEÇİŞ fallback'i cihazın statik ataması.
       const stamp = await getStampContext(req, { enforceForMobile: true });
       const result = await this.service.finalizeOpenFabric(
@@ -579,7 +620,7 @@ export class TamburController {
    */
   async finalize(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const body = finalizeSchema.parse(req.body);
+      const body = { ...finalizeSchema.parse(req.body), labelDeviceId: req.device?.id ?? null };
       // Makine atfı: aktif çalışma oturumu → GEÇİŞ fallback'i cihazın statik ataması.
       const stamp = await getStampContext(req, { enforceForMobile: true });
       const result = await this.service.finalize(

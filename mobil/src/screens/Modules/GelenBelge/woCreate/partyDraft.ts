@@ -2,12 +2,26 @@
 // satırın düzenlenebilir parti listesi + kip; kayıt kapısı ve gövde parçası. Kural sunucudadır (uyarılar oradan gelir).
 import { TERIM } from '../../../../lib/terim';
 import { fmtMeters } from '../../../../utils/meters';
+import { declaredBodyPart } from './incomingDeclared';
+import { partyProblems, partyTabTitle } from './partyTabs';
+import { MULTI_PARTY_TEXT as MODE_SHORT } from '../tanit/stages';
 import type { CreateWorkOrderFromNoteBody, CreateWorkOrderFromNoteResult, MultiPartyMode, NoteParty, NotePartiesView } from '../../../../services/inboundDoc.service';
 
 export interface PartyRow {
   blockNo: number;
   batchNo: string;
   meters: number | null;
+  /** Parti gelen kg'si (öneri `suggestedKg`, elle düzeltilebilir); `kgEdited` yoksa gövdeye girmez. */
+  incomingKg?: number | null;
+  kgEdited?: boolean;
+  /** Parti gelen eni (cm) elle düzeltildi; düzeltilmediyse ekran belgenin enini gösterir, gövdeye girmez. */
+  incomingWidth?: number | null;
+  widthEdited?: boolean;
+  /** Parti gelen kumaş / renk beyanı: elle düzeltildiyse (null = beyan yok) gövdeye girer; yoksa sunucu bölüm/belge beyanını yazar. */
+  incomingItemText?: string | null;
+  itemEdited?: boolean;
+  incomingColorText?: string | null;
+  colorEdited?: boolean;
   /** Belge masası: parti başına plan makinesi / gramaj (yok = gövdedeki ortak değer). */
   machineId?: string | null;
   gramajValueId?: string | null;
@@ -16,13 +30,18 @@ export interface PartyRow {
 export interface MultiPartyDraft {
   rows: PartyRow[];
   mode: MultiPartyMode;
+  /** Sunucunun varsayılanı (belge tipi kuralı > fabrika) ve kaynağı; yok = eski taslak/sunucu (fabrika ayarı). */
+  defaultMode?: MultiPartyMode;
+  modeSource?: 'TEMPLATE' | 'FACTORY';
+  /** Kullanıcı bu belge için varsayılandan farklı kip seçti (şerit "Bu belge için: …" der); varsayılana dönünce düşer. */
+  modeTouched?: boolean;
 }
 
 /**
  * Forma ilk metre: onaylı partide KAYITLI metre (elle düzeltme dahil), yoksa sunucunun önerisi (beyan ara toplamı önce),
  * eski sunucuda Σ satır; seçim kuralı istemcide kurulmaz.
  */
-const partyMeters = (p: NoteParty): number | null => {
+export const partyMeters = (p: NoteParty): number | null => {
   const m = p.recordedMeters ?? p.suggestedMeters ?? p.meters;
   return m > 0 ? m : null;
 };
@@ -30,25 +49,52 @@ const partyMeters = (p: NoteParty): number | null => {
 /** Çok parti (≥2) ise satırlar + fabrika varsayılan kipi; tek/bölümsüz belgede (ya da eski sunucuda) null = bugünkü form. */
 export function initialMultiParty(view: NotePartiesView | null | undefined): MultiPartyDraft | null {
   if (!view?.multi || view.parties.length < 2) return null;
+  const mode: MultiPartyMode = view.defaultMode === 'PER_PARTY' ? 'PER_PARTY' : 'SINGLE';
   return {
-    rows: view.parties.map((p) => ({ blockNo: p.blockNo, batchNo: p.batchNo ?? '', meters: partyMeters(p) })),
-    mode: view.defaultMode === 'PER_PARTY' ? 'PER_PARTY' : 'SINGLE',
+    rows: view.parties.map((p) => ({ blockNo: p.blockNo, batchNo: p.batchNo ?? '', meters: partyMeters(p), incomingKg: p.suggestedKg != null && p.suggestedKg > 0 ? p.suggestedKg : null })),
+    mode,
+    defaultMode: mode,
+    modeSource: view.defaultModeSource === 'TEMPLATE' ? 'TEMPLATE' : 'FACTORY',
+    modeTouched: false,
   };
 }
 
+/** Kip seçimi: varsayılandan farklıysa dokunulmuş sayılır, varsayılana dönüş dokunuşu siler. */
+export function chooseMode(m: MultiPartyDraft, mode: MultiPartyMode): MultiPartyDraft {
+  return { ...m, mode, modeTouched: mode !== (m.defaultMode ?? m.mode) };
+}
+
+/** ③ Kip satırı: "3 parti → 3 iş emri" | elle seçildiyse "Bu belge için: Tek İE"; kaynak yazısı gösterilmez (2026-11-10). */
+export function modeRuleLine(m: MultiPartyDraft): { text: string; touched: boolean } {
+  const n = m.rows.length;
+  if (m.modeTouched) return { text: `Bu belge için: ${MODE_SHORT[m.mode]}`, touched: true };
+  return { text: `${n} parti → ${m.mode === 'PER_PARTY' ? n : 1} ${TERIM.terbiyeIsEmri.tekilKucuk}`, touched: false };
+}
+
+/** Kilit sebebi sekme başlığıyla (parti no, yoksa "Parti N") — görevli hangi sekmeye bakacağını görür. */
 export function multiPartyIssues(m: MultiPartyDraft): string[] {
-  const missing = m.rows.filter((r) => r.meters === null || !(r.meters > 0)).map((r) => `${r.blockNo}. parti`);
+  const missing = m.rows.filter((r) => partyProblems(r).length > 0).map(partyTabTitle);
   return missing.length ? [`Parti metresi eksik: ${missing.join(', ')}.`] : [];
 }
 
 export const multiPartyTotal = (m: MultiPartyDraft): number => Math.round(m.rows.reduce((s, r) => s + (r.meters ?? 0), 0) * 1000) / 1000;
 
-/** Tek partili gövdeye parti listesi + kip eklenir; kurşun metresi parti toplamıdır. */
+/**
+ * Tek partili gövdeye parti listesi + kip eklenir; kurşun metresi parti toplamıdır. Kip HER ZAMAN gider (ekranda yazan
+ * olur: varsayılan okunduktan sonra fabrika ayarı değişse de form başka kiple açılmaz); `modeTouched` yalnız gösterimdir.
+ * Parti gelen kg'si / eni yalnız elle değiştiyse gider (yoksa sunucu önerisini / belgedekini yazar).
+ */
 export function withParties(body: CreateWorkOrderFromNoteBody, m: MultiPartyDraft): CreateWorkOrderFromNoteBody {
   return {
     ...body,
     kursunMeters: String(multiPartyTotal(m)),
-    parties: m.rows.map((r) => ({ blockNo: r.blockNo, batchNo: r.batchNo.trim() || null, meters: r.meters ?? 0 })),
+    parties: m.rows.map((r) => ({
+      blockNo: r.blockNo, batchNo: r.batchNo.trim() || null, meters: r.meters ?? 0,
+      ...(r.kgEdited && r.incomingKg != null && r.incomingKg > 0 ? { incomingKg: r.incomingKg } : {}),
+      ...(r.widthEdited && r.incomingWidth != null && r.incomingWidth > 0 ? { incomingWidth: r.incomingWidth } : {}),
+      ...declaredBodyPart({ text: r.incomingItemText ?? null, edited: !!r.itemEdited }, 'item'),
+      ...declaredBodyPart({ text: r.incomingColorText ?? null, edited: !!r.colorEdited }, 'color'),
+    })),
     mode: m.mode,
   };
 }
@@ -102,12 +148,10 @@ export function partyOutcome(
   return wo ? { kind: 'OPENED', workOrderNo: wo.workOrderNo } : null;
 }
 
-/** K1 (2026-11-06): fabrika varsayılanı "her parti ayrı" ise kip seçimi gösterilmez — kaç parti o kadar İE. */
-export const showModeChoice = (view: NotePartiesView): boolean => view.defaultMode !== 'PER_PARTY';
-
+/** Kip seçenekleri (belge şeridinin "Değiştir" sayfası — kip değiştirmenin TEK yolu). */
 export const MODE_LABELS: Record<MultiPartyMode, string> = {
   PER_PARTY: `Her parti ayrı ${TERIM.terbiyeIsEmri.tekilKucuk}`,
-  SINGLE: `Tek ${TERIM.terbiyeIsEmri.tekilKucuk} (partiler ayrı top)`,
+  SINGLE: `Tek ${TERIM.terbiyeIsEmri.tekilKucuk}`,
 };
 
 /**

@@ -5,10 +5,16 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { money, type Currency } from "./service";
-import { basisLabel, sortServiceWorks, sourceLabel, subjectKindLabel, summarizeServiceWorks, unitLabel, type ServiceDraftWorkRow } from "./serviceWorks";
+import { basisLabel, meterCompareText, sortServiceWorks, sourceLabel, subjectKindLabel, summarizeServiceWorks, unitLabel, type ServiceDraftWorkRow } from "./serviceWorks";
 
 const qtyText = (r: ServiceDraftWorkRow) =>
   `${Number(r.qty).toLocaleString("tr-TR", { maximumFractionDigits: 3 })} ${unitLabel(r.unit)}`.trim();
+
+function MeterCompareLine({ row }: { row: ServiceDraftWorkRow }) {
+  const text = meterCompareText(row.meterCompare);
+  if (!text) return null;
+  return <div className="text-[10px] font-normal text-muted-foreground" data-testid="service-work-meter-compare">{text}</div>;
+}
 
 export function ServiceWorksBreakdown({ rows, currency }: { rows: readonly ServiceDraftWorkRow[] | undefined; currency: Currency }) {
   const [open, setOpen] = useState(false);
@@ -51,6 +57,7 @@ export function ServiceWorksBreakdown({ rows, currency }: { rows: readonly Servi
                   </td>
                   <td className="px-2 py-1 text-right tabular-nums whitespace-nowrap" title={r.unit === "METER" ? basisLabel(r.meterBasis) : undefined}>
                     {qtyText(r)}
+                    <MeterCompareLine row={r} />
                   </td>
                   <td className="px-2 py-1 text-right tabular-nums whitespace-nowrap">{money(r.unitPrice, currency)}</td>
                 </tr>

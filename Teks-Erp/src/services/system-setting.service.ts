@@ -322,12 +322,14 @@ export class SystemSettingService {
     // 400'e düşürür ya da API sözleşmesine olmayan bir null sokar.
     input: Omit<
       Partial<FeatureFlags>,
-      "fasonShrinkTolerancePct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "shippingReadyTolerancePct" | "tamburPlanGateWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "financeWithholdingNumerator" | "financeWithholdingDenominator" | "financePurchaseWithholdingNumerator" | "financePurchaseWithholdingDenominator" | "shippingSackSeqStart" | "tezgahEscalationGraceMinutes" | "tezgahAlarmRenotifyMinutes" | "tezgahMaxOpenStopHours" | "tezgahCollectorSilenceMinutes" | "license"
+      "fasonShrinkTolerancePct" | "dokumaWeavingWastePct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "shippingReadyTolerancePct" | "tamburPlanGateWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "financeWithholdingNumerator" | "financeWithholdingDenominator" | "financePurchaseWithholdingNumerator" | "financePurchaseWithholdingDenominator" | "shippingSackSeqStart" | "tezgahEscalationGraceMinutes" | "tezgahAlarmRenotifyMinutes" | "tezgahMaxOpenStopHours" | "tezgahCollectorSilenceMinutes" | "license"
     > & {
       /** null = fabrika varsayılanına dön (1). */
       shippingSackSeqStart?: number | null;
       /** null = fabrika varsayılanına dön (0 dk). */
       tezgahEscalationGraceMinutes?: number | null;
+      /** null = fabrika varsayılanına dön (%0). */
+      dokumaWeavingWastePct?: number | null;
       /** null = varsayılana dön (10 dk). */
       tezgahAlarmRenotifyMinutes?: number | null;
       /** null = varsayılana dön (12 sa). */

@@ -1,8 +1,9 @@
-// "Toplar ayrı geldi" anahtarı (Gülkesim fason): kapalıyken gövde bugünkü tek parça; açılınca docRolls'tan dolar, top
+// "Kumaş nasıl geldi?" (Toplar halinde / Tek parça) (Gülkesim fason): kapalıyken gövde bugünkü tek parça; açılınca docRolls'tan dolar, top
 // eklenir/silinir, gelen metre toplamı izler, gövde SEPARATE + rolls + toplam. Çok partide anahtar çizilmez.
 // Negatif sonda: RollRows `set` içindeki `meters: total` kaldırılınca "gelen metre toplamı izler" vakası kırmızı.
 import React, { useState } from 'react';
-import { act, fireEvent } from '@testing-library/react-native';
+import { act, fireEvent, within } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 import { renderWithPaper } from '../../../../test/render';
 import type { InboundNoteDetail } from '../../../../services/inboundDoc.service';
 import RollRows from './RollRows';
@@ -25,12 +26,28 @@ function Harness({ detail, form = baseForm }: { detail: Partial<InboundNoteDetai
   return <RollRows row={row} wo={wo} locked={false} />;
 }
 
+describe('RollRows — seçenek satırı kalıbı (her genişlikte)', () => {
+  it('⭐ soru kutu değil küçük başlık; "Toplar halinde"/"Tek parça" eşit genişlik, ikonlu, ≥56dp', () => {
+    const ui = renderWithPaper(<Harness detail={{}} />);
+    const cap = ui.getByTestId('belge-ayri-top-GB-1-baslik');
+    expect(StyleSheet.flatten(cap.props.style).backgroundColor).toBeUndefined();
+    expect(within(cap).getByText('Kumaş nasıl geldi?')).toBeTruthy();
+    for (const id of ['belge-ayri-top-GB-1-toplar', 'belge-ayri-top-GB-1-tek']) {
+      const st = StyleSheet.flatten(ui.getByTestId(id).props.style);
+      expect(st).toMatchObject({ flexGrow: 1, flexBasis: 0 });
+      expect(st.minHeight).toBeGreaterThanOrEqual(56);
+    }
+    expect(ui.UNSAFE_getAllByProps({ name: 'layers-triple-outline' }).length).toBeGreaterThan(0);
+    expect(ui.UNSAFE_getAllByProps({ name: 'paper-roll-outline' }).length).toBeGreaterThan(0);
+  });
+});
+
 describe('RollRows — toplar ayrı geldi', () => {
   it('⭐ anahtar varsayılan KAPALI: satır yok, gövde bugünkü (rollMode/rolls yok)', () => {
     const ui = renderWithPaper(<Harness detail={{}} />);
-    expect(ui.getByTestId('belge-ayri-top-GB-1')).toBeTruthy();
-    expect(ui.getByTestId('belge-ayri-top-GB-1').props.accessibilityRole).toBe('switch');
-    expect(ui.getByTestId('belge-ayri-top-GB-1').props.accessibilityState).toMatchObject({ checked: false });
+    expect(ui.getByTestId('belge-ayri-top-GB-1')).toHaveTextContent(/Kumaş nasıl geldi\?/);
+    expect(ui.getByTestId('belge-ayri-top-GB-1-tek').props.accessibilityState).toMatchObject({ selected: true });
+    expect(ui.getByTestId('belge-ayri-top-GB-1-toplar').props.accessibilityState).toMatchObject({ selected: false });
     expect(ui.queryByTestId('belge-toplar-GB-1')).toBeNull();
     const b = buildCreateBody(current.form!, opts);
     expect(b.kursunMeters).toBe('300');
@@ -39,8 +56,11 @@ describe('RollRows — toplar ayrı geldi', () => {
 
   it('⭐ açılınca docRolls dolar; gelen metre toplamı izler; gövde SEPARATE + rolls + toplam; kapatınca eski gövde', () => {
     const ui = renderWithPaper(<Harness detail={{ docRolls: [{ lineNo: 1, meters: 100, weightKg: 25, senderRollNo: 'T1' }, { lineNo: 2, meters: 50, weightKg: null, senderRollNo: null }] }} />);
-    act(() => fireEvent.press(ui.getByTestId('belge-ayri-top-GB-1')));
-    expect(ui.getByTestId('belge-ayri-top-GB-1').props.accessibilityState).toMatchObject({ checked: true });
+    act(() => fireEvent.press(ui.getByTestId('belge-ayri-top-GB-1-toplar')));
+    expect(ui.getByTestId('belge-ayri-top-GB-1-toplar').props.accessibilityState).toMatchObject({ selected: true });
+    // Seçili seçeneğe yeniden basmak durumu bozmaz.
+    act(() => fireEvent.press(ui.getByTestId('belge-ayri-top-GB-1-toplar')));
+    expect(current.form!.rolls).toHaveLength(2);
     expect(ui.getByTestId('belge-top-GB-1-2')).toBeTruthy();
     expect(current.form!.meters).toBe(150);
     expect(current.form!.metersReview).toBe(false);
@@ -59,8 +79,8 @@ describe('RollRows — toplar ayrı geldi', () => {
     act(() => fireEvent.press(ui.getByTestId('belge-top-sil-GB-1-2')));
     expect(current.form!.rolls).toHaveLength(2);
     expect(current.form!.meters).toBe(130.5);
-    // Kapat → rollMode/rolls gitmez.
-    act(() => fireEvent.press(ui.getByTestId('belge-ayri-top-GB-1')));
+    // Tek parça → rollMode/rolls gitmez.
+    act(() => fireEvent.press(ui.getByTestId('belge-ayri-top-GB-1-tek')));
     expect(ui.queryByTestId('belge-toplar-GB-1')).toBeNull();
     const off = buildCreateBody(current.form!, opts);
     expect('rollMode' in off || 'rolls' in off).toBe(false);
@@ -68,7 +88,7 @@ describe('RollRows — toplar ayrı geldi', () => {
 
   it('docRolls yok (eski sunucu) → 1 boş satır; tek satır silinemez', () => {
     const ui = renderWithPaper(<Harness detail={{}} />);
-    act(() => fireEvent.press(ui.getByTestId('belge-ayri-top-GB-1')));
+    act(() => fireEvent.press(ui.getByTestId('belge-ayri-top-GB-1-toplar')));
     expect(current.form!.rolls).toHaveLength(1);
     expect(current.form!.meters).toBeNull();
     expect(ui.getByTestId('belge-top-sil-GB-1-1')).toBeDisabled();

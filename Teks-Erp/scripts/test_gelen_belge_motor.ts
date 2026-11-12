@@ -25,11 +25,13 @@
 //    (Gülkesim A 2026-11-02 §11) kurşun önceliği ters (giriş önce) → §11a/§11c ❌; yıldız soyma kapatılınca §11f ❌.
 //    (2. prova 2026-11-06 §7i) `isTotalsLabel` yalnız `matchesLabel`e indirilince bitişik "T.Adet16" vakası ❌ (137/1; geri alındı).
 // =============================================================================
+import { olcuCakisma } from "./lib/gelen-belge-motor-olcu-cakisma";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import {
   buildRowsTilted,
   classifyDocument,
+  classifyWithFallback,
   computeNoteTotals,
   extractDocument,
   extractFields,
@@ -44,12 +46,14 @@ import {
   type OcrResult,
 } from "../src/lib/gelen-belge/motor";
 import { DEFAULT_OUTLIER_FACTOR, draftFromExtraction, suspectGridReasons, suspectGridSeqs } from "../src/lib/gelen-belge/taslak";
+import { testSablonlariniKaydet } from "./lib/gelen-belge-test-sablonlar";
 import { gulkesimPartiMetre } from "./lib/gelen-belge-motor-parti-metre";
 import { gulkesimBolum } from "./lib/gelen-belge-motor-bolum";
 import { etiketPencere } from "./lib/gelen-belge-motor-etiket-pencere";
 import { degerSiniri } from "./lib/gelen-belge-motor-deger-sinir";
 import { konumYedegi } from "./lib/gelen-belge-motor-konum-yedegi";
 import { cokBlok, cokBlokBirlesikToplam, cokBlokSahipsiz, cokBlokTanit } from "./lib/gelen-belge-motor-cok-blok";
+import { toplamSatiri } from "./lib/gelen-belge-motor-toplam-satiri";
 
 let pass = 0;
 let fail = 0;
@@ -65,7 +69,10 @@ function check(label: string, ok: boolean, detay = ""): void {
 
 const FIKSTUR = join(__dirname, "..", "src", "lib", "gelen-belge", "motor", "__tests__", "fikstur");
 const gercek = (ad: string): OcrResult => JSON.parse(readFileSync(join(FIKSTUR, "gercek", `${ad}.json`), "utf8")) as OcrResult;
-const sablonlar = loadTemplates();
+// §0 ürün paketi yalnız GENEL taşır (gönderen şablonları bekçi fikstürü, 2026-11-09) — kayıttan ÖNCE ölçülür.
+const urunSablonlari = loadTemplates().map((t) => t.id);
+const sablonlar = testSablonlariniKaydet();
+check("§0 ürün `loadTemplates()` yalnız GENEL döner (yerleşik gönderen şablonu pakette yok)", urunSablonlari.join(",") === "genel", urunSablonlari.join(","));
 
 function kutu(text: string, x: number, y: number, w: number, h: number, angle: number | null = 0): OcrLine {
   return { text, rect: { x, y, width: w, height: h }, confidence: 0.99, angle, elements: [{ text, rect: { x, y, width: w, height: h }, confidence: 0.99 }] };
@@ -73,7 +80,7 @@ function kutu(text: string, x: number, y: number, w: number, h: number, angle: n
 
 // ── §1 Vendor + şablonlar ────────────────────────────────────────────────────
 {
-  check("§1a 6 başlangıç şablonu (5 gönderen taslağı + GENEL) yüklendi", sablonlar.length === 6, sablonlar.map((t) => t.id).join(","));
+  check("§1a 6 şablon (5 fikstür gönderen şablonu + GENEL) yüklendi", sablonlar.length === 6, sablonlar.map((t) => t.id).join(","));
   const hatalar = sablonlar.flatMap((t) => validateTemplate(t).errors.map((e) => `${t.id}: ${e}`));
   check("§1b her şablon validateTemplate'ten geçiyor (tables/grid dahil)", hatalar.length === 0, hatalar.join(" | "));
   check("§1c GENEL şablon listenin SONUNDA (yedek; puanlamaya girmez)", sablonlar[sablonlar.length - 1]!.id === "genel");
@@ -398,6 +405,22 @@ cokBlok(check, gercek, sablonlar);
 cokBlokSahipsiz(check, gercek, sablonlar);
 cokBlokTanit(check, gercek, sablonlar);
 cokBlokBirlesikToplam(check, gercek, sablonlar);
+
+// ── §17 tanıtılmış (u-) şablon eşiği geçince hazır şablonun önüne geçer; geçmezse hazır şablon tutar ──
+{
+  const hazir = sablonlar.find((t) => t.id === "ceki-listesi-a")!;
+  const ocr = gercek("0245-ceki-listesi-a");
+  const own = { ...hazir, id: "u-tanitilan" } as DocumentTemplate;
+  check("§17 ⭐ aynı belgeye uyan tanıtılmış şablon hazır şablonu geçer", classifyWithFallback(ocr, [hazir, own], "genel").templateId === "u-tanitilan");
+  const yabanci = { ...hazir, id: "u-yabanci", identifiers: { keywords: ["BU YAZI BELGEDE YOK QX"] } } as unknown as DocumentTemplate;
+  check("§17 eşiği geçmeyen tanıtılmış şablon hazır şablonu ezmez", classifyWithFallback(ocr, [hazir, yabanci], "genel").templateId === "ceki-listesi-a");
+}
+
+// ── §18 metre ↔ kg aynı hücre: atlama öğrenimi + tanıtma kapısı + okuma koruması (`lib/gelen-belge-motor-olcu-cakisma.ts`) ──
+olcuCakisma(check);
+
+// ── §19 basılı toplam satırı birincil: etiket şablondan, partiye adetle, yeri serbest (`lib/gelen-belge-motor-toplam-satiri.ts`) ──
+toplamSatiri(check, gercek);
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exitCode = fail > 0 ? 1 : 0;

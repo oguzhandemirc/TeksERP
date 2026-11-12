@@ -680,6 +680,12 @@ async function main() {
       file: "Teks-Erp/src/routes/gelen-belge.routes.ts",
       needle: "duplicateDocNo: z.enum(",
     },
+    // 2026-11-10: aynı sahip + müşteri parti no kipi; panel radyosu `GelenBelgeDuplicateDocNoField.tsx`.
+    GELEN_BELGE_DUPLICATE_BATCH_NO: {
+      why: "Aynı müşteri parti no (ALLOW varsayılan | WARN | BLOCK) — doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; flag yüküne konmaz; onay ön kontrolü okur",
+      file: "Teks-Erp/src/routes/gelen-belge.routes.ts",
+      needle: "duplicateBatchNo: z.enum(",
+    },
     // Gülkesim S2 (K17, 2026-11-03): istasyonda belge okutarak iş emri bulma; panel satırı kayıt kipi alanında.
     GELEN_BELGE_STATION_DOC_LOOKUP: {
       why: "İstasyon tabletinde belge okutarak iş emri bulma (varsayılan false) — doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; flag yüküne konmaz; kapıyı `/api/gelen-belge/istasyon-okutma` okur",
@@ -713,6 +719,12 @@ async function main() {
       why: "Tanıtılan belgeye güven (SOR varsayılan | SORMA) — doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; flag yüküne konmaz; okuma özeti (`gelen-belge-okuma-ozeti.service`) ve okuma anı parti/metre kolonu okur",
       file: "Electron/src/pages/GeneralSettings/GelenBelgeIeFormField.tsx",
       needle: "gb-tanitim-guveni",
+    },
+    // 2026-11-09: bilgisayarda ikinci okuma (sunucu OCR) aç/kapa; panel anahtarı `GelenBelgeReadOptionsField.tsx`.
+    GELEN_BELGE_SERVER_OCR_ENABLED: {
+      why: "Bilgisayarda ikinci okuma (varsayılan true) — doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; flag yüküne konmaz; okuma kapısı `gelen-belge-sunucu-okuyucu.service` okur",
+      file: "Electron/src/pages/GeneralSettings/GelenBelgeReadOptionsField.tsx",
+      needle: "gb-server-ocr",
     },
     PRODUCTION_REFAKAT_AUTO_PRINT: {
       why: "İş emri açılınca refakat kartı otomatik yazdırma (varsayılan false) — doğrulamalı `PUT /api/gelen-belge/ayarlar` ucu, ham uç 400; flag yüküne konmaz; istemci okur",

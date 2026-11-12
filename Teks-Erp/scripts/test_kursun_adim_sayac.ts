@@ -10,6 +10,8 @@
 // §4 ⭐ measuredIn = aktif IN okuması (düzeltmede damgalanan IN sayılmaz); IN yoksa null.
 // §5 listOpenCards yanıtında `meter` YOK (yalnız adım özeti).
 // §6 ⭐ 1 top ve 50 top adımında getStep sorgu sayısı EŞİT (N+1 yok; pg Client.query sayacı).
+// §7 ⭐ rolls[].goodsOwner "Malın sahibi" (GK 2026-11-11): emanet topta sahibi (consigned), sahipsiz + müşterisiz İE'de
+//    null; saf öncelik emanet > İE carisi > siparişlerin TEK müşterisi, çok müşteri → null.
 // Negatif sondalar (2026-10-29, elle; PR gövdesinde): declaredIn initialQty'den okununca §3a ❌ ·
 // IN `revokedAt` süzgeci kaldırılınca §4 ❌.
 // =============================================================================
@@ -21,6 +23,7 @@ import { KursunQcService } from "../src/services/kursun-qc.service";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { resolveKursunMeterPolicy } from "../src/services/helpers/kursun-meter.helper";
 import { declaredInSql } from "../src/services/helpers/kursun-meter-variance-sql.helper";
+import { kursunGoodsOwnerOf } from "../src/services/helpers/kursun-goods-owner.helper";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { testActorId } from "./fixture-test-user";
 
@@ -85,6 +88,7 @@ async function main(): Promise<void> {
   const woIds: string[] = [];
   const rollIds: string[] = [];
   const noteIds: string[] = [];
+  const customerIds: string[] = [];
 
   /** Akışta N top: WO IN_PROGRESS + aktif kart, PROCESS_QC adımı ACTIVE, toplar adımda + açık hareket. */
   const mkStep = async (n: number): Promise<{ stepId: string; cardBarcode: string; rollIds: string[] }> => {
@@ -222,6 +226,20 @@ async function main(): Promise<void> {
       check("§6a ⭐ 1 top ve 50 top adımında sorgu sayısı eşit", q1 === q50 && q1 > 0, `1 top=${q1} · 50 top=${q50}`);
       check("§6b 50 topun hepsinde meter dolu (declaredIn 100)", d50.rolls.length === 50 && d50.rolls.every((r) => r.meter?.declaredIn === 100));
     }
+
+    // §7 Malın sahibi
+    {
+      const cust = await prisma.customer.create({ data: { code: `TKAS${STAMP}`.slice(0, 20), name: `${tag} SAHIP` }, select: { id: true } });
+      customerIds.push(cust.id);
+      await prisma.roll.update({ where: { id: rollB }, data: { ownerCustomerId: cust.id } });
+      const d = await step(s.stepId);
+      check("§7a ⭐ emanet top ⇒ goodsOwner = sahibi, consigned", JSON.stringify(rollOf(d, rollB).goodsOwner) === JSON.stringify({ name: `${tag} SAHIP`, consigned: true }), JSON.stringify(rollOf(d, rollB).goodsOwner));
+      check("§7b ⭐ sahipsiz top + müşterisiz/siparişsiz İE ⇒ goodsOwner null (uydurma yok)", rollOf(d, rollA).goodsOwner === null, JSON.stringify(rollOf(d, rollA).goodsOwner));
+      const o = (r: string | null, w: string | null, names: (string | null)[]) => JSON.stringify(kursunGoodsOwnerOf({ rollOwnerName: r, workOrderCustomerName: w, orderCustomerNames: names }));
+      check("§7c öncelik: emanet > İE carisi > tek sipariş müşterisi; çok müşteri/boş ⇒ null",
+        o("E", "W", ["S"]) === '{"name":"E","consigned":true}' && o(null, "W", ["S"]) === '{"name":"W","consigned":false}'
+          && o(null, null, ["S", "S", null]) === '{"name":"S","consigned":false}' && o(null, null, ["S", "T"]) === "null" && o(null, null, []) === "null");
+    }
   } finally {
     await prisma.customerDeliveryNote.deleteMany({ where: { id: { in: noteIds } } }).catch(() => {});
     await prisma.rollMeterAck.deleteMany({ where: { reading: { rollId: { in: rollIds } } } }).catch(() => {});
@@ -235,6 +253,7 @@ async function main(): Promise<void> {
     await prisma.systemLog.deleteMany({ where: { recordId: { in: [...woIds, ...rollIds] } } }).catch(() => {});
     await prisma.workOrder.deleteMany({ where: { id: { in: woIds } } }).catch(() => {});
     await prisma.station.deleteMany({ where: { id: station.id } }).catch(() => {});
+    await prisma.customer.deleteMany({ where: { id: { in: customerIds } } }).catch(() => {});
     await prisma.item.deleteMany({ where: { id: item.id } }).catch(() => {});
     await prisma.systemSetting.deleteMany({ where: { key: { in: KEYS } } });
     for (const x of saved) {

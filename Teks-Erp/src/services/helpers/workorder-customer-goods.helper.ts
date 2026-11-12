@@ -12,6 +12,7 @@ import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { TERIM, TERIM_AD } from "../../constants/terim";
 import { readFilterList } from "../../utils/query-parser";
+import { isConsignedRoll } from "./stock-ownership.helper";
 
 export const CUSTOMER_GOODS = WorkOrderType.CUSTOMER_GOODS_SERVICE;
 
@@ -63,6 +64,21 @@ export function customerFromRollOwners(type: string | null | undefined, given: s
     throw AppError.badRequest(`Okutulan toplar birden çok müşterinin malı; her müşteri için ayrı ${TERIM.terbiyeIsEmri.tekilKucuk} açın.`, { code: "WO_CUSTOMER_AMBIGUOUS", owners: distinct });
   }
   return distinct[0] ?? null;
+}
+
+/**
+ * Kendi üretim (`ownGoods`, tablet "Kendi üretim" formu): tür Fason olamaz ve müşteri malı (emanet) top bağlanamaz.
+ * Opt-in: bayraksız çağrı bugünkü gibi sahibe bakmaz (belgeden İE yolu müşteri malını Stok türüyle açar).
+ */
+export function assertOwnGoodsRolls(ownGoods: boolean | undefined, type: string | null | undefined, rolls: ReadonlyArray<{ barcode: string | null; ownerCustomerId: string | null }>): void {
+  if (!ownGoods) return;
+  if (type === CUSTOMER_GOODS) {
+    throw AppError.badRequest(`Kendi üretim ${TERIM.terbiyeIsEmri.tekilKucuk} ${TERIM_AD.fasonMusteriMali} türünde açılamaz.`, { code: "WO_OWN_GOODS_TYPE" });
+  }
+  const consigned = rolls.filter((r) => isConsignedRoll(r)).map((r) => r.barcode ?? "");
+  if (consigned.length > 0) {
+    throw AppError.badRequest(`Müşteri malı (emanet) top kendi üretime bağlanamaz: ${consigned.join(", ")}`, { code: "WO_OWN_GOODS_CONSIGNED_ROLL", barcodes: consigned });
+  }
 }
 
 /** Tür değişimi Fason'a girip çıkamaz (1. tur: mevcut İE'nin türü değiştirilmez). */

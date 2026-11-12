@@ -1,5 +1,5 @@
 // K17 — istasyonda belgeden iş emri bulma: sunucu sonucu → ekran kararı (tek aç · çok seçtir · yok mesaj).
-import { decideLookup, partyLabel, rowDetail, rowWhere, searchable, siblingStripText, unsureMessage, verifyBadges, verifyScoreText, verifyText, workOrderSubtitle } from './decide';
+import { decideLookup, partyLabel, rowDetail, rowWhere, partySelectorModel, searchable, unsureMessage, verifyBadges, verifyScoreText, verifyText, workOrderSubtitle } from './decide';
 import type { StationLookupResult, StationLookupWorkOrder } from '../../services/stationDocLookup.service';
 
 const wo = (n: string, extra: Partial<StationLookupWorkOrder> = {}): StationLookupWorkOrder => ({
@@ -57,13 +57,19 @@ describe('yardımcılar', () => {
     expect(workOrderSubtitle(wo('IE1'))).toBe('P-IE1 · Belge 914279');
     expect(workOrderSubtitle(wo('IE2', { batchNumbers: [], documents: [{ noteNo: 'GB9', senderDocNo: null }] }))).toBe('Belge GB9');
   });
-  it('satır: parti no büyük yazı, ayrıntı, nerede, şerit metni', () => {
+  it('satır: parti no büyük yazı, ayrıntı, nerede', () => {
     const w = wo('IE1', { processText: 'YIKAMA', rollCount: 3, meters: 250.5, documents: [{ noteNo: 'GB1', senderDocNo: null, customerOrderNo: 'MS-1' }], atStationText: 'Rotasız · burada başlatılabilir', locationText: 'Henüz başlamadı' });
     expect(partyLabel(w)).toBe('P-IE1');
     expect(partyLabel(wo('IE2', { batchNumbers: [] }))).toBe('IE2');
     expect(rowDetail(w)).toBe('YIKAMA · 3 top · 250,5 m · Müşteri İE MS-1 · IE1');
     expect(rowWhere(w)).toBe('Rotasız · burada başlatılabilir · Henüz başlamadı');
-    expect(siblingStripText([w, wo('IE2')], w)).toBe('Bu belgede 2 parti var · açılan: P-IE1 (YIKAMA)');
+  });
+  it('satır: tek parça İE "Tek parça · gelen metre" der; top top gelende ve eski sunucuda bugünkü metin', () => {
+    const single = wo('IE1011260004', { rollCount: 0, meters: 0, arrival: { form: 'SINGLE_PIECE', meters: 241 }, documents: [{ noteNo: 'GB1', senderDocNo: null }] });
+    expect(rowDetail(single)).toBe('Tek parça · 241 m · IE1011260004');
+    expect(rowDetail({ ...single, arrival: { form: 'SINGLE_PIECE', meters: 240.5 } })).toBe('Tek parça · 240,5 m · IE1011260004');
+    expect(rowDetail({ ...single, rollCount: 4, meters: 407, arrival: { form: 'ROLLS', meters: 407 } })).toBe('4 top · 407 m · IE1011260004');
+    expect(rowDetail({ ...single, arrival: undefined })).toBe('0 top · 0 m · IE1011260004');
   });
   it('arama en az 2 karakter', () => {
     expect(searchable(' 9 ')).toBe(false);
@@ -83,11 +89,11 @@ describe('doğrulama (2026-11-06)', () => {
     const r = { ...res([], 'UNVERIFIED', 'sunucu'), unverifiedWorkOrders: [wo('IE1', { verification: ver(62, false) })], verification: { threshold: 80, bestScore: 62 } };
     const d = decideLookup(r);
     expect(d.kind).toBe('unsure');
-    expect(d.kind === 'unsure' && d.message).toBe('Belge tam eşleşmedi (%62) — listeden seçin ya da fiş no ile arayın.');
+    expect(d.kind === 'unsure' && d.message).toBe('Belge tam eşleşmedi (%62) — doğru işi seçin.');
     expect(d.kind === 'unsure' && names(d.workOrders)).toEqual(['IE1']);
   });
   it('⭐ top listesi okunamadı (puan yok) → nedeni söylenir', () => {
-    expect(unsureMessage(null)).toBe('Belge doğrulanamadı (top listesi okunamadı) — listeden seçin ya da fiş no ile arayın.');
+    expect(unsureMessage(null)).toBe('Belge doğrulanamadı — doğru işi seçin.');
     expect(unsureMessage(100, false)).toBe(unsureMessage(null));
   });
   it('⭐ eşiği geçen tek aday → açılır (bugünkü yol)', () => {
@@ -126,5 +132,24 @@ describe('doğrulama rozetleri (gece UX turu)', () => {
     expect(verifyScoreText(v([], null))).toBe('Puan yok');
     expect(verifyScoreText(wo('IE1'))).toBeNull();
     expect(verifyBadges(wo('IE1'))).toEqual([]);
+  });
+});
+
+describe('partySelectorModel — kompakt parti seçici', () => {
+  const sibs = [wo('IE1'), wo('IE2'), wo('IE3'), wo('IE4')].map((w) => ({ ...w, cardBarcode: `K-${w.workOrderNumber}` }));
+  it('⭐ 2–3 parti segment; seçili = belgeden açılan kart', () => {
+    const m = partySelectorModel(sibs.slice(0, 2), 'K-IE2');
+    expect(m?.mode).toBe('segment');
+    expect(m?.opened.workOrderNumber).toBe('IE2');
+    expect(m?.options.map((o) => [o.label, o.selected])).toEqual([['P-IE1', false], ['P-IE2', true]]);
+    expect(partySelectorModel(sibs.slice(0, 3), 'K-IE1')?.mode).toBe('segment');
+  });
+  it('⭐ 3ten fazla parti PickerModal (picker)', () => {
+    expect(partySelectorModel(sibs, 'K-IE4')?.mode).toBe('picker');
+  });
+  it('tek parti / aktif kart eşleşmez / kart yok → çizilmez', () => {
+    expect(partySelectorModel(sibs.slice(0, 1), 'K-IE1')).toBeNull();
+    expect(partySelectorModel(sibs, 'K-BASKA')).toBeNull();
+    expect(partySelectorModel(sibs, null)).toBeNull();
   });
 });

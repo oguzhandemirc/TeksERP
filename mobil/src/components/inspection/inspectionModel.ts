@@ -56,6 +56,14 @@ export function inspectionSaveErrorText(err: unknown): string | null {
   return null;
 }
 
+/** Top boyunu aşan hata metresi: 'block' engeller (varsayılan), 'warn' kaydeder + konak sarı satır basar. */
+export type OverMaxMode = 'block' | 'warn';
+
+/** Doğrulamaya giden boy sınırı: warn kipinde sınır yok (kayıt geçer, uyarıyı `overMaxWarning` basar). */
+export function validationMaxMeter(maxMeter: number | undefined, mode: OverMaxMode = 'block'): number | undefined {
+  return mode === 'warn' ? undefined : maxMeter;
+}
+
 /** Girdi doğrulaması (saf): metre sayı, top boyunu aşmaz, aynı metre + tip mükerrer değil. */
 export function validateDefectInput(
   meterInput: string,
@@ -85,6 +93,19 @@ export function validateDefectInput(
   return { ok: true, meter };
 }
 
+/**
+ * "Top beyandan uzun" uyarısı (kurşun, engel yok): yazılan metre ya da bu adımın kayıtlı hatası top
+ * metresini aşarsa en büyüğüyle metin; aşım yoksa / top metresi bilinmiyorsa null.
+ */
+export function overMaxWarning(meterInput: string, ownDefects: InspectionDefect[], maxMeter?: number): string | null {
+  if (maxMeter === undefined || !Number.isFinite(maxMeter) || maxMeter <= 0) return null;
+  const typed = parseFloat(meterInput);
+  let top = Number.isFinite(typed) ? typed : -Infinity;
+  for (const d of ownDefects) if (d.startMeter > top) top = d.startMeter;
+  if (!(top > maxMeter)) return null;
+  return `Top beyandan uzun görünüyor (${fmtMeter(top)} > ${fmtMeter(maxMeter)} m)`;
+}
+
 // Metre değeri — tamsa ondalıksız, değilse tek ondalık (47, 47.5).
 export function fmtMeter(v: number): string {
   return Number.isInteger(v) ? String(v) : v.toFixed(1);
@@ -95,6 +116,14 @@ export function rulerMaxFor(maxMeter: number | undefined, defects: InspectionDef
   let m = maxMeter && maxMeter > 0 ? maxMeter : 0;
   for (const d of defects) if (d.startMeter > m) m = d.startMeter;
   return Math.max(m, 1);
+}
+
+/**
+ * Cetvel bölümü hata yokken ne çizer: `alwaysRuler` konağında (kurşun) boş 0…top boyu cetveli + "(0)" başlık,
+ * diğer konaklarda bugünkü "Henüz hata yok" boş durumu.
+ */
+export function rulerSectionMode(defectCount: number, alwaysRuler: boolean): 'ruler' | 'empty' {
+  return defectCount > 0 || alwaysRuler ? 'ruler' : 'empty';
 }
 
 export function isCriticalDefect(e: InspectionDefect, defectTypes: DefectType[]): boolean {

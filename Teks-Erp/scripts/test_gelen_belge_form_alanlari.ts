@@ -164,8 +164,8 @@ async function run(url: string): Promise<void> {
 
   console.log("§1 iki ayar");
   const s1 = await call("GET", "/api/gelen-belge/ayarlar", tk);
-  check("§1 desenRenkEslesme KAPALI + default KAPALI; tabletIeGirisi IKISI + default IKISI",
-    s1.data?.desenRenkEslesme === "KAPALI" && s1.data?.defaultDesenRenkEslesme === "KAPALI" && s1.data?.tabletIeGirisi === "IKISI" && s1.data?.defaultTabletIeGirisi === "IKISI",
+  check("§1 desenRenkEslesme ONER + default ONER; tabletIeGirisi IKISI + default IKISI",
+    s1.data?.desenRenkEslesme === "ONER" && s1.data?.defaultDesenRenkEslesme === "ONER" && s1.data?.tabletIeGirisi === "IKISI" && s1.data?.defaultTabletIeGirisi === "IKISI",
     JSON.stringify({ d: s1.data?.desenRenkEslesme, t: s1.data?.tabletIeGirisi }));
   check("§1 iki anahtar ham ayar ucuna kapalı (dedicated)", INCOMING_DOC_DEDICATED_SETTING_KEYS.has(SETTING_KEYS.GELEN_BELGE_DESEN_RENK_ESLESME) && INCOMING_DOC_DEDICATED_SETTING_KEYS.has(SETTING_KEYS.GELEN_BELGE_TABLET_IE_GIRISI));
   const bad1 = await call("PUT", "/api/gelen-belge/ayarlar", tk, { desenRenkEslesme: "BENZER" });
@@ -243,6 +243,8 @@ async function run(url: string): Promise<void> {
     const r = await call("GET", `/api/gelen-belge/irsaliyeler/${id}/okuma-ozeti`, woUser);
     return { status: r.status, ff: (r.data?.formFields ?? null) as Record<string, unknown> | null, sg: (r.data?.suggestions ?? null) as { targetItem?: { id: string }; targetColor?: { id: string } } | null };
   };
+  // Varsayılan 2026-11-09'dan beri ONER (3632b6e39); KAPALI dalı ayar AÇIKÇA seçilerek ölçülür.
+  await setSetting(SETTING_KEYS.GELEN_BELGE_DESEN_RENK_ESLESME, "KAPALI");
   const k5 = await read(n5);
   check("§5 ⭐ KAPALI: TR sayı 1250.5, kanonik 125.125 (binlik sanılmaz), en 180, yazılar; öneri yok, not yalnız 'acil'",
     k5.status === 200 && k5.ff?.hedefMetraj === 1250.5 && k5.ff?.hedefKg === 125.125 && k5.ff?.en === 180 && k5.ff?.desenText === fabric2Name.toLowerCase() && k5.ff?.renkText === colorCode.toLowerCase() && k5.ff?.not === "acil"

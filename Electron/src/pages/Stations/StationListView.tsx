@@ -1,42 +1,42 @@
 // =============================================================================
-// Üretim İstasyonları — LİSTE görünümü (kullanıcı isteği #3, 2026-09-16)
+// Üretim İstasyonları — LİSTE görünümü (2026-11-08 yeniden tasarım)
 // =============================================================================
-// Satır = MAKİNE, dışa aktarım satırıyla AYNI şekil (`buildStationMachineRows`) — iki görünüm ve dosya
-// tek kümeden. Makinesiz istasyon tek satır "—". Satır aksiyonları kart tablosuyla aynı bileşen
-// (`MachineRowActions`); istasyon adına tıklama istasyon düzenleme. Kart görünümü olduğu gibi durur.
-// Sütun sırası: İstasyon · Görev Türü · Tip · Departman · Yetenekler · Makine · Durum · Cihazlar · İşlemler.
+// Satır = İSTASYON (makineler sağ paneldedir). Satıra tıklama `StationDetailPanel`'i açar; seçili satır
+// vurgulu. "Tip" sütunu yalnız listede dış/fason istasyon varsa çizilir (hep "Dahili" yer kaplamasın).
+// Kart görünümü olduğu gibi durur.
 // =============================================================================
 import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { StationType } from "@/types/enums";
 import type { Station } from "./types";
-import type { StationMachineRow } from "./stationMachineRows";
-import type { MachineActionHandlers } from "./MachineRowActions";
+import type { StationListItem } from "./stationListItems";
 import { StationListRow } from "./StationListRow";
 
 interface Props {
-  rows: StationMachineRow[];
-  canWrite: boolean;
-  onEditStation: (s: Station) => void;
-  onAddMachine: (stationId: string) => void;
-  machine: MachineActionHandlers;
+  items: StationListItem[];
+  selectedId: string | null;
+  onSelect: (s: Station) => void;
 }
 
-export const STATION_LIST_HEADERS = ["İstasyon", "Görev Türü", "Tip", "Departman", "Yetenekler", "Makine", "Durum", "Cihazlar", "İşlemler"] as const;
+export function stationListHeaders(showType: boolean): string[] {
+  return ["İstasyon", "Süreç türü", "Yetenekler", ...(showType ? ["Tip"] : []), "Makine", "Durum", ""];
+}
 
-export function StationListView({ rows, canWrite, onEditStation, onAddMachine, machine }: Props) {
+export function StationListView({ items, selectedId, onSelect }: Props) {
+  const showType = items.some((i) => i.station.type === StationType.EXTERNAL);
   return (
     <Table data-testid="station-list-view" containerClassName="overflow-visible">
       <TableHeader>
         <TableRow className="hover:bg-transparent">
-          {STATION_LIST_HEADERS.map((h) => (
-            <TableHead key={h} className={h === "İşlemler" ? "text-right" : undefined}>
+          {stationListHeaders(showType).map((h, i) => (
+            <TableHead key={h || `bos-${i}`} className={h === "Makine" ? "text-right" : undefined}>
               {h}
             </TableHead>
           ))}
         </TableRow>
       </TableHeader>
       <TableBody>
-        {rows.map((r) => (
-          <StationListRow key={r.machine ? r.machine.id : `st-${r.station.id}`} r={r} canWrite={canWrite} onEditStation={onEditStation} onAddMachine={onAddMachine} machine={machine} />
+        {items.map((it) => (
+          <StationListRow key={it.station.id} item={it} selected={it.station.id === selectedId} showType={showType} onSelect={onSelect} />
         ))}
       </TableBody>
     </Table>

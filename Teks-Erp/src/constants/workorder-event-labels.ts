@@ -36,7 +36,9 @@ export const WORK_ORDER_FIELD_LABEL: Record<WorkOrderTrackedField, string> = {
 
 /** Kolon olmayan izlenen plan alanı: kurşun gramajı hedefi (`WorkOrderTargetValue`) — FIELD_CHANGED satırı bu adla yazılır. */
 export const KURSUN_GRAMAJ_EVENT_FIELD = "kursunGramaj";
-export const WORK_ORDER_EXTRA_FIELD_LABEL: Record<string, string> = { [KURSUN_GRAMAJ_EVENT_FIELD]: "Kurşun gramajı" };
+/** Kurşun dışı hedef çeşit değeri (tablet "Hedef değeri değiştir"); etiket satırı "Özellik: değer" taşır. */
+export const TARGET_VALUE_EVENT_FIELD = "targetValue";
+export const WORK_ORDER_EXTRA_FIELD_LABEL: Record<string, string> = { [KURSUN_GRAMAJ_EVENT_FIELD]: "Kurşun gramajı", [TARGET_VALUE_EVENT_FIELD]: "Hedef değer" };
 
 /** Fason adımı planının alanları (STEP_PLAN_CHANGED; "route" rotanın bütünü). */
 export const WORK_ORDER_STEP_FIELD_LABEL: Record<string, string> = {
@@ -45,6 +47,7 @@ export const WORK_ORDER_STEP_FIELD_LABEL: Record<string, string> = {
   requiredCategoryId: "Fason kategorisi",
   plannedSubcontractorId: "Planlanan fasoncu",
   dispatchWithoutColor: "Sevk rengi",
+  outputStage: "Çıktı aşaması",
 };
 
 /** Toplara uygulanan plan düzeltmesi (ROLL_ATTRIBUTES_APPLIED). */
@@ -86,6 +89,8 @@ export const WORK_ORDER_TRIGGER_LABEL: Record<string, string> = {
   WO_REPLACE: "Düzenle",
   COLOR_CHANGE: "Rengi Değiştir",
   WIDTH_CHANGE: "Eni Değiştir",
+  FOLD_CHANGE: "Kat Tipini Değiştir",
+  TARGET_VALUE_CHANGE: "Hedef Değeri Değiştir",
   FASON_RECEIPT_WIDTH: "Fason kabulünde ölçülen en",
   ORDER_LINK: "Sipariş bağla",
   ORDER_UNLINK: "Sipariş bağını kaldır",

@@ -8,6 +8,7 @@ import type { Order } from "./types";
 import type { OrderFormValues, OrderLineFormValues } from "./schema";
 import type { TargetValueItem } from "./lineTargetValues";
 import { linePlanPayload, type OrderLinePlanPayload } from "./orderLinePlanPayload";
+import { parseTolerancePct } from "./lineTolerance";
 
 export interface CreatePayload {
   /** Boş = backend otomatik üretir (SIP + günlük sayaç). Doluysa o kullanılır. */
@@ -29,6 +30,8 @@ export interface CreatePayload {
     customerItemName?: string | null;
     customerColorName?: string | null;
     cutNote?: string | null;
+    /** Yalnız doluysa gider (boş satır gövdesi bugünküyle bayt-aynı); noktalı metin. */
+    tolerancePct?: string;
     requiredPropertyIds: string[];
   } & OrderLinePlanPayload)[];
 }
@@ -45,6 +48,8 @@ interface UpdateLinePayload extends Omit<OrderLinePlanPayload, "targetValues"> {
   customerItemName?: string | null;
   customerColorName?: string | null;
   cutNote?: string | null;
+  /** Her zaman gider: form kayıtlı değeri yükler; null = temizle (fabrika ayarına dön). */
+  tolerancePct: string | null;
   requiredPropertyIds: string[];
   /** Yoksa sunucu mevcut kümeyi korur; `[]` = temizle (yalnız önceden hedefli satırda gönderilir). */
   targetValues?: TargetValueItem[];
@@ -86,6 +91,7 @@ export function buildCreatePayload(
       customerItemName: l.customerItemName?.trim() ? l.customerItemName.trim() : null,
       customerColorName: l.customerColorName?.trim() ? l.customerColorName.trim() : null,
       cutNote: l.cutNote?.trim() ? l.cutNote.trim() : null,
+      ...tolerancePayload(l),
       requiredPropertyIds: l.requiredPropertyIds ?? [],
       // SY-K2 plan alanları + hedef: yalnız dolu olan gider (hedefsiz satır gövdesi bayt-aynı).
       ...linePlanPayload(l, "create"),
@@ -133,6 +139,7 @@ export function buildUpdatePayload(
             customerItemName: l.customerItemName?.trim() ? l.customerItemName.trim() : null,
             customerColorName: l.customerColorName?.trim() ? l.customerColorName.trim() : null,
             cutNote: l.cutNote?.trim() ? l.cutNote.trim() : null,
+            tolerancePct: parseTolerancePct(l.tolerancePct).value,
             requiredPropertyIds: l.requiredPropertyIds ?? [],
             ...updatePlanFields(l, savedTargets.get(l.clientId)),
           })),
@@ -159,4 +166,10 @@ function targetKey(targets: ReadonlyArray<{ propertyId: string; valueId: string 
 function targetValuesForUpdate(targets: TargetValueItem[], saved: string | undefined): { targetValues?: TargetValueItem[] } {
   if (saved === undefined) return targets.length > 0 ? { targetValues: targets } : {};
   return targetKey(targets) === saved ? {} : { targetValues: targets };
+}
+
+/** Yeni satırda tolerans yalnız doluysa gider (anahtar yok = fabrika ayarı; gövde bugünküyle bayt-aynı). */
+function tolerancePayload(l: OrderLineFormValues): { tolerancePct?: string } {
+  const { value } = parseTolerancePct(l.tolerancePct);
+  return value === null ? {} : { tolerancePct: value };
 }

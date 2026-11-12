@@ -80,8 +80,9 @@ export function etiketPencere(check: Check, gercek: (ad: string) => OcrResult): 
     anchorOf(birlesik, "partiNo").window !== undefined && JSON.stringify(bs) === JSON.stringify(["P9918733", "P9918734"]), JSON.stringify(bs));
 
   // §13e: gerçek 0246 (iki belgeli fotoğraf, anonim "MA"): pencere BÖLGE çerçevesinde kurulur; bölge 1 müşteri 'MA'.
+  // Kimlikte başlık şart: yalnız genel etiketli şablon aday olmaz (`motor/kimlik-gucu.ts`, 2026-11-10).
   const g = gercek("0246-iki-belge");
-  const tE = suggestTemplate({ code: "u-0246", name: "0246", ocr: g, identifiers: ["Müşteri", "Cinsi", "Mamül En"], assignments: [{ field: "musteri", rect: rectOf(g, "MA") }] }).template;
+  const tE = suggestTemplate({ code: "u-0246", name: "0246", ocr: g, identifiers: ["Çıkış Çeki Listesi", "Müşteri", "Cinsi", "Mamül En"], assignments: [{ field: "musteri", rect: rectOf(g, "MA") }] }).template;
   const r1 = extractDocument(g, [tE], null).regions[0];
   check("§13e ⭐ gerçek 0246: 'Müşteri KG/MT' rakipken pencere bölge koordinatında, bölge 1 müşteri 'MA'",
     anchorOf(tE, "musteri").window !== undefined && r1?.fields?.fields.musteri?.value === "MA",

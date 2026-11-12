@@ -162,6 +162,10 @@ export const DOC_PERMISSIONS: Record<string, { read: string[]; write: string[] }
   PRICE_LIST: {
     read: ["price-list:read", "price-list:write"],
     write: ["price-list:write"],
+  },  // Seyitoğlu L1 — sipariş uçlarıyla HİZALI: fiyatı `order:read` sipariş detayında zaten görür, ek kapı yok.
+  ORDER_CONFIRMATION: {
+    read: ["order:read", "order:write"],
+    write: ["order:write"],
   },
 };
 

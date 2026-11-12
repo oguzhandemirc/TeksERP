@@ -12,6 +12,8 @@ export type DesenRenkMode = "KAPALI" | "ONER" | "NOT";
 export interface FormFields {
   hedefMetraj?: number;
   hedefKg?: number;
+  /** Belgedeki gelen kg (`toplamKg`, 2026-11-09) — hedef kg'ye KOPYALANMAZ; eski tablet yok sayar. */
+  toplamKg?: number;
   en?: number;
   desenText?: string;
   renkText?: string;
@@ -45,11 +47,13 @@ export function formFieldsFromRegion(fields: Readonly<Record<string, string | nu
   const out: FormFields = {};
   const targetMeters = formNumber(fields.hedefMetraj);
   const targetKg = formNumber(fields.hedefKg);
+  const incomingKg = formNumber(fields.toplamKg);
   const en = formNumber(fields.en);
   const desenText = text(fields.desen);
   const renkText = text(fields.renk);
   if (targetMeters !== undefined) out.hedefMetraj = targetMeters;
   if (targetKg !== undefined) out.hedefKg = targetKg;
+  if (incomingKg !== undefined) out.toplamKg = incomingKg;
   if (en !== undefined) out.en = en;
   if (desenText) out.desenText = desenText;
   if (renkText) out.renkText = renkText;

@@ -3,22 +3,26 @@
 /**
  * Şablon yükleyici ve şablon doğrulayıcı. JSON dosyaları statik import ile yüklenir.
  */
-import { BATCH_NO_CANDIDATE_KINDS, TABLE_TOTAL_SOURCE, type DocumentTemplate } from "../types";
+import { BATCH_NO_CANDIDATE_KINDS, MULTI_PARTY_RULES, TABLE_TOTAL_SOURCE, TEMPLATE_RULE_KEYS, type DocumentTemplate } from "../types";
 import genel from "./genel.json";
-import cekiListesiA from "./ceki-listesi-a.json";
-import cikisCekiListesi from "./cikis-ceki-listesi.json";
-import urunSevkFisi from "./urun-sevk-fisi.json";
-import kesimTakipFormu from "./kesim-takip-formu.json";
-import kumasIrsaliyesi from "./kumas-irsaliyesi.json";
 
 const FIELD_TYPES = new Set(["text", "alnum", "integer", "decimal", "date", "enum", "code"]);
 const STRATEGY_KINDS = new Set(["anchor", "regex", "roi"]);
 const DIRECTIONS = new Set(["right", "below", "sameLine", "rightOrBelow"]);
 const POST_PROCESS = new Set(["upper", "stripSpaces", "digitsOnly", "trimPunct", "collapseSpaces"]);
 
-/** Başlangıç şablonları: 5 gönderen taslağı + GENEL yedek (SONDA; classifyWithFallback puanlamaya sokmaz). Şablon VERİDİR, D8 DB'ye taşır. */
+// Pakette yalnız GENEL yedek gelir; her fabrika belgesini kendisi tanıtır (`u-…`, kullanıcı kararı 2026-11-09).
+// Gönderene özgü dosya şablonları yalnız bekçi malzemesidir (`__tests__/sablonlar/`, `scripts/lib/gelen-belge-test-sablonlar.ts`).
+let fixtureTemplates: readonly DocumentTemplate[] = [];
+
+/** Dosya şablonları: [bekçi fikstürleri…] + GENEL yedek (SONDA; classifyWithFallback puanlamaya sokmaz). Üretimde yalnız GENEL. */
 export function loadTemplates(): DocumentTemplate[] {
-  return [cekiListesiA, cikisCekiListesi, urunSevkFisi, kesimTakipFormu, kumasIrsaliyesi, genel].map((t) => t as unknown as DocumentTemplate);
+  return [...fixtureTemplates, genel as unknown as DocumentTemplate];
+}
+
+/** YALNIZ BEKÇİ: süreç içi fikstür dosya şablonu kaydı (üretim kodu çağırmaz; `test_gelen_belge_motor` §0 ölçer). */
+export function registerFixtureTemplates(list: readonly DocumentTemplate[]): void {
+  fixtureTemplates = list.filter((t) => t.id !== "genel");
 }
 
 const TABLE_COLUMN_TYPES = new Set(["integer", "decimal", "alnum", "text"]);
@@ -44,6 +48,10 @@ function validateTables(t: Record<string, unknown>, errors: string[]): void {
     });
     if (tb.totals !== undefined) {
       if (!isObj(tb.totals) || !Array.isArray(tb.totals.labels) || tb.totals.labels.length === 0) errors.push(`${p}.totals.labels boş olmayan dizi olmalı`);
+      else if (tb.totals.valueOrder !== undefined) {
+        const vo = tb.totals.valueOrder;
+        if (!Array.isArray(vo) || vo.length === 0 || vo.some((k) => k !== "count" && k !== "kg" && k !== "m") || new Set(vo).size !== vo.length) errors.push(`${p}.totals.valueOrder count/kg/m'den tekrarsız dizi olmalı`);
+      }
     }
   });
 }
@@ -132,6 +140,15 @@ function validateBatchAndMeters(t: Record<string, unknown>, keys: Set<unknown>, 
   }
 }
 
+/** `rules` FAIL-CLOSED: nesne değilse, bilinmeyen anahtar ya da bilinmeyen değer → hata (eski sunucu yeni kuralı sessizce yok saymasın). */
+function validateRules(t: Record<string, unknown>, errors: string[]): void {
+  const r = t.rules;
+  if (r === undefined) return;
+  if (!isObj(r)) { errors.push("rules nesne olmalı"); return; }
+  for (const k of Object.keys(r)) if (!(TEMPLATE_RULE_KEYS as readonly string[]).includes(k)) errors.push(`rules.${k} bilinmiyor`);
+  if (r.multiParty !== undefined && !(MULTI_PARTY_RULES as readonly unknown[]).includes(r.multiParty)) errors.push("rules.multiParty SINGLE ya da PER_PARTY olmalı");
+}
+
 function isObj(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
@@ -180,6 +197,7 @@ export function validateTemplate(t: unknown): { ok: boolean; errors: string[] } 
   validateTables(t, errors);
   validateGrid(t, errors);
   validateBlockAndHeaderLine(t, errors);
+  validateRules(t, errors);
   if (!Array.isArray(t.fields) || t.fields.length === 0) {
     errors.push('fields boş olmayan dizi olmalı');
     return { ok: errors.length === 0, errors };
@@ -201,6 +219,7 @@ export function validateTemplate(t: unknown): { ok: boolean; errors: string[] } 
     if (typeof f.min === 'number' && typeof f.max === 'number' && f.min > f.max) errors.push(`${p}: min > max`);
     if (f.minConfidence !== undefined && (typeof f.minConfidence !== 'number' || f.minConfidence < 0 || f.minConfidence > 1)) errors.push(`${p}.minConfidence 0..1 olmalı`);
     if (f.dateFormats !== undefined && (!Array.isArray(f.dateFormats) || !f.dateFormats.every((d) => typeof d === 'string'))) errors.push(`${p}.dateFormats string dizisi olmalı`);
+    if (f.fromBarcode !== undefined && typeof f.fromBarcode !== 'boolean') errors.push(`${p}.fromBarcode evet/hayır olmalı`);
     if (f.postProcess !== undefined && (!Array.isArray(f.postProcess) || !f.postProcess.every((x) => typeof x === 'string' && POST_PROCESS.has(x)))) errors.push(`${p}.postProcess bilinmeyen adım içeriyor`);
     if (!Array.isArray(f.strategies) || f.strategies.length === 0) { errors.push(`${p}.strategies boş olmayan dizi olmalı`); return; }
     f.strategies.forEach((s, si) => {
@@ -215,6 +234,7 @@ export function validateTemplate(t: unknown): { ok: boolean; errors: string[] } 
         if (s.takeLines !== undefined && typeof s.takeLines !== 'number') errors.push(`${sp}.takeLines sayı olmalı`);
         if (s.maxWords !== undefined && (typeof s.maxWords !== 'number' || !Number.isInteger(s.maxWords) || s.maxWords < 1)) errors.push(`${sp}.maxWords pozitif tam sayı olmalı`);
         if (s.valueShape !== undefined && !shapeOk(s.valueShape)) errors.push(`${sp}.valueShape geçersiz`);
+        if (s.skipWords !== undefined && (typeof s.skipWords !== 'number' || !Number.isInteger(s.skipWords) || s.skipWords < 1 || s.skipWords > 20)) errors.push(`${sp}.skipWords 1..20 tam sayı olmalı`);
         if (s.minLabelSimilarity !== undefined && (typeof s.minLabelSimilarity !== 'number' || s.minLabelSimilarity < 0 || s.minLabelSimilarity > 1)) errors.push(`${sp}.minLabelSimilarity 0..1 olmalı`);
       } else if (s.kind === 'regex') {
         if (!regexOk(s.pattern)) errors.push(`${sp}.pattern geçersiz`);

@@ -456,7 +456,6 @@ export default function CuvalDuzeltScreen() {
           uçuştayken başka top seçildiyse yeni slot ezilmesin (işi kuyrukta). */}
       <LabelPrinter
         roll={reprintRoll}
-        kind="ROLL_FINISHED"
         labelContext={{ stock: true }}
         onDone={(printed) =>
           setReprintRoll((cur) => (cur?.id === printed.id ? null : cur))

@@ -8,21 +8,25 @@ import { addBatchOutcome, type AddBatchRoll } from './addBatch';
 import { useAmbiguousScanPicker } from '../../../components/customerCode/CustomerCodeCandidateModal';
 import { SCAN_NOT_FOUND_REASON, scanLookupReason } from './scanLookupReason';
 
-/** Parti Ekle'nin top listesi: okutma + listeden seçme aynı kabul kuralından geçer (`addBatchOutcome`). */
-export function useAddBatchRolls(lockedItemId: string | null) {
+/**
+ * Parti Ekle'nin top listesi: okutma + listeden seçme aynı kabul kuralından geçer (`addBatchOutcome`).
+ * `extraReject`: çağıranın ek ön süzgeci (kendi üretim formu emanet topu reddeder); verilmezse bugünkü kural.
+ */
+export function useAddBatchRolls(lockedItemId: string | null, extraReject?: (roll: Roll) => string | null) {
   const [rolls, setRolls] = useState<AddBatchRoll[]>([]);
   const rollsRef = useRef<AddBatchRoll[]>([]);
   const feedback = useScanFeedback();
 
   const take = useCallback((incoming: Roll[]) => {
     for (const roll of incoming) {
-      const out = addBatchOutcome(rollsRef.current, roll, lockedItemId);
+      const extra = extraReject?.(roll) ?? null;
+      const out = extra && !rollsRef.current.some((r) => r.id === roll.id) ? { kind: 'reject' as const, reason: extra } : addBatchOutcome(rollsRef.current, roll, lockedItemId);
       if (out.kind === 'duplicate') feedback.flashDuplicate(roll.barcode ?? '');
       else if (out.kind === 'reject') feedback.pushRejects([{ barcode: roll.barcode ?? '', reason: out.reason }]);
       else rollsRef.current = [...rollsRef.current, out.roll];
     }
     setRolls(rollsRef.current);
-  }, [feedback, lockedItemId]);
+  }, [feedback, lockedItemId, extraReject]);
 
   // Belirsiz müşteri barkodu → aday modalı; seçilen topun İÇ barkodu aynı okutmadan geçer.
   const onScanRef = useRef<(raw: string) => Promise<void>>(async () => {});

@@ -1,35 +1,45 @@
 // Tek İE formunun alt çubuğu: solda eksik hapları (en çok 3 + "+N"; dokununca ilgili alanı açar) ve tek cümlelik ipucu,
 // eksik yokken yeşil "Hazır"; sağda "İş emri oluştur" (kayıttan sonra "Yeni iş emri"). Kart altı madde listesi tek formda
-// yok — engelin tek kaynağı bu çubuk.
+// yok — engelin tek kaynağı bu çubuk. Dar ekranda (<600dp) dikey: haplar + ipucu üstte TAM metin, düğme altta tam genişlik.
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Button, Text, TouchableRipple } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { TERIM } from '../../../../lib/terim';
+import { useIsCompact } from '../../../../hooks/useDeviceType';
 import { colors, radius, spacing, typography } from '../../../../theme';
 import type { IssueKey, MissingChip } from './woIssues';
 import type { WoRowsState } from './useWoRows';
 
 const MAX_CHIPS = 3;
 
+/** Kaydedici: belge kipinde `useWoRows`, kendi üretim kipinde quick-start kancası (aynı dört alan). */
+export type CreateBarSaver = Pick<WoRowsState, 'saving' | 'mode'> & { saveAll: () => unknown; counts: { ready: number } };
+
 interface Props {
-  wo: WoRowsState;
+  wo: CreateBarSaver;
   done: boolean;
   block: string | null;
+  /** Engel cümlesinin kaynağı olan hap; müşteri / mal sahibi hapında cümle hapı tekrarladığı için çizilmez. */
+  blockKey?: IssueKey | null;
   missing: readonly MissingChip[];
   onMissing: (key: IssueKey) => void;
   onNew: () => void;
   pad: number;
 }
 
-export default function CreateBar({ wo, done, block, missing, onMissing, onNew, pad }: Props) {
+const ECHO_KEYS: readonly IssueKey[] = ['musteri', 'malSahibi'];
+
+export default function CreateBar({ wo, done, block, blockKey = null, missing, onMissing, onNew, pad }: Props) {
   const ready = !done && block === null;
   const shown = missing.slice(0, MAX_CHIPS);
   const more = missing.length - shown.length;
+  const echo = !done && blockKey !== null && ECHO_KEYS.includes(blockKey) && shown.some((m) => m.key === blockKey);
+  const compact = useIsCompact();
   const hint = done ? `${TERIM.terbiyeIsEmri.tekil} kaydedildi.` : block ?? 'Hazır — kontrol edip oluşturun';
   return (
-    <View style={[styles.bar, { paddingHorizontal: pad }]}>
-      <View style={styles.left}>
+    <View style={[styles.bar, compact && styles.barCompact, { paddingHorizontal: pad }]} testID={compact ? 'ie-form-alt-dar' : undefined}>
+      <View style={[styles.left, compact && styles.leftCompact]}>
         {!done && shown.length > 0 && (
           <View style={styles.chips}>
             {shown.map((m) => (
@@ -45,13 +55,15 @@ export default function CreateBar({ wo, done, block, missing, onMissing, onNew, 
             {more > 0 ? <Text style={styles.more} testID="ie-eksik-fazla">{`+${more}`}</Text> : null}
           </View>
         )}
+        {!echo && (
         <View style={styles.hintRow}>
           {ready ? <MaterialCommunityIcons name="check-circle" size={22} color={colors.success} /> : null}
-          <Text style={[styles.hint, ready && styles.readyText]} numberOfLines={2} testID="ie-form-ipucu">{hint}</Text>
+          <Text style={[styles.hint, ready && styles.readyText]} numberOfLines={compact ? undefined : 2} testID="ie-form-ipucu">{hint}</Text>
         </View>
+        )}
       </View>
       {done ? (
-        <Button mode="contained" icon="plus" onPress={onNew} contentStyle={styles.btn} style={styles.main} testID="ie-form-yeni">
+        <Button mode="contained" icon="plus" onPress={onNew} contentStyle={compact ? styles.btnCompact : styles.btn} style={compact ? styles.mainCompact : styles.main} testID="ie-form-yeni">
           {`Yeni ${TERIM.terbiyeIsEmri.tekilKucuk}`}
         </Button>
       ) : (
@@ -61,9 +73,9 @@ export default function CreateBar({ wo, done, block, missing, onMissing, onNew, 
           onPress={() => void wo.saveAll()}
           loading={wo.saving}
           disabled={wo.saving || block !== null || wo.counts.ready === 0}
-          contentStyle={styles.btn}
+          contentStyle={compact ? styles.btnCompact : styles.btn}
           labelStyle={styles.mainLabel}
-          style={styles.main}
+          style={compact ? styles.mainCompact : styles.main}
           testID="ie-form-olustur"
         >
           {wo.mode === 'SEPARATE' ? 'Taslak kaydet' : `${TERIM.terbiyeIsEmri.tekil} oluştur`}
@@ -85,6 +97,10 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border,
   },
   left: { flex: 1, gap: spacing.xs },
+  // Dar ekran: ipucu düğmenin üstünde tam genişlik (kesilmez), düğme tam genişlik.
+  barCompact: { flexDirection: 'column', alignItems: 'stretch', gap: spacing.sm, minHeight: 0 },
+  leftCompact: { flex: 0 },
+  mainCompact: { alignSelf: 'stretch' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm },
   chip: {
     minHeight: 56,
@@ -104,4 +120,5 @@ const styles = StyleSheet.create({
   main: { minWidth: 260 },
   mainLabel: { fontSize: typography.size.lg },
   btn: { minHeight: 64 },
+  btnCompact: { minHeight: 56 },
 });

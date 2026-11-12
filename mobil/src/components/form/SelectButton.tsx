@@ -15,6 +15,8 @@ export interface SelectButtonProps {
   caption?: string;
   hint?: string | null;
   optional?: boolean;
+  /** Boşken nötr çerçeve + soluk etiket (isteğe bağlı plan alanı "seç" çağrısı gibi bağırmaz). */
+  quiet?: boolean;
   icon?: IconName;
   state?: SelectButtonState;
   onPress: () => void;
@@ -22,11 +24,11 @@ export interface SelectButtonProps {
   testID: string;
 }
 
-function frame(filled: boolean, state: SelectButtonState) {
+function frame(filled: boolean, state: SelectButtonState, quiet: boolean) {
   if (state === 'missing') return { backgroundColor: colors.dangerContainer, borderColor: colors.danger, borderWidth: 2 };
   if (state === 'review') return { backgroundColor: colors.surface, borderColor: colors.warning, borderWidth: 2 };
   if (state === 'fromDoc') return { backgroundColor: DOC_HIGHLIGHT_BG, borderColor: colors.borderStrong, borderWidth: 1.5 };
-  if (!filled) return { backgroundColor: colors.brandSoft, borderColor: colors.brand, borderWidth: 2 };
+  if (!filled && !quiet) return { backgroundColor: colors.brandSoft, borderColor: colors.brand, borderWidth: 2 };
   return { backgroundColor: colors.surface, borderColor: colors.borderStrong, borderWidth: 1.5 };
 }
 
@@ -36,10 +38,10 @@ const STATE_ICON: Partial<Record<SelectButtonState, { name: IconName; color: str
 };
 
 export function SelectButton({
-  label, value, caption, hint, optional, icon, state = 'normal', onPress, disabled, testID,
+  label, value, caption, hint, optional, quiet = false, icon, state = 'normal', onPress, disabled, testID,
 }: SelectButtonProps) {
   const filled = !!value;
-  const labelColor = state === 'missing' ? colors.dangerText : colors.brand;
+  const labelColor = state === 'missing' ? colors.dangerText : quiet ? colors.textSecondary : colors.brand;
   const mark = STATE_ICON[state];
   return (
     <TouchableRipple
@@ -49,7 +51,7 @@ export function SelectButton({
       accessibilityLabel={filled ? `${caption ?? label}: ${value}` : label}
       onPress={onPress}
       disabled={disabled}
-      style={[styles.box, frame(filled, state), disabled ? styles.disabled : null]}
+      style={[styles.box, frame(filled, state, quiet), disabled ? styles.disabled : null]}
     >
       <View style={styles.row}>
         {icon ? <MaterialCommunityIcons name={icon} size={22} color={filled ? colors.textSecondary : labelColor} /> : null}
@@ -60,7 +62,7 @@ export function SelectButton({
               <Text style={styles.value} numberOfLines={2}>{value}</Text>
             </>
           ) : (
-            <Text style={[styles.label, { color: labelColor }]}>{label}</Text>
+            <Text style={[styles.label, quiet ? styles.quietLabel : null, { color: labelColor }]}>{label}</Text>
           )}
           {hint ? <Text style={styles.hint} numberOfLines={2}>{hint}</Text> : null}
         </View>
@@ -79,6 +81,7 @@ const styles = StyleSheet.create({
   caption: { fontSize: 13, fontWeight: '600', color: colors.textSecondary },
   value: { fontSize: 20, fontWeight: '700', color: colors.text },
   label: { fontSize: 18, fontWeight: '700' },
+  quietLabel: { fontSize: 16, fontWeight: '600' },
   hint: { fontSize: 14, fontWeight: '400', color: colors.textSecondary, marginTop: 2 },
   optional: { fontSize: 13, fontWeight: '600', color: colors.textMuted },
   disabled: { opacity: 0.5 },

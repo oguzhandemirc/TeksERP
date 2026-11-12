@@ -72,6 +72,7 @@ import {
   ReasonPresetKind,
   RollEntrySource,
   type RollMeterReading,
+  RollStage,
   RollStatus,
   StationKind,
   WorkOrderStatus,
@@ -96,6 +97,7 @@ import { ACTIVE_MOVEMENT } from "./helpers/roll-movement.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { postProductionIssuesTx } from "./helpers/production-issue-ledger.helper";
 import { resolveLabelIntent } from "./helpers/label-intent.helper";
+import { resolveTamburWeightSource } from "./helpers/tambur-customer-settings.helper";
 import { resolveFoldTypeForWrite } from "./helpers/fold-type";
 import { STEP_CAPABILITY_SELECT, stepCanApplyColor } from "./helpers/step-capability.helper";
 import { lengthWarning } from "./helpers/measurement-threshold.helper";
@@ -907,6 +909,8 @@ export class TamburManualService {
       width?: number | null;
       qualityGrade?: string;
       weightKg?: number;
+      /** Kg kaynağı beyanı; kaynaksız kg MANUAL (tek boğaz `resolveTamburWeightSource`). */
+      weightSource?: "SCALE" | "MANUAL" | "SIMULATED" | null;
       /**
        * Topun bağlanacağı PARTİ (2026-08-04 saha bulgusu).
        *
@@ -935,6 +939,9 @@ export class TamburManualService {
     const early = await this.manualRollAttachedReplay(input).replayIfAny(input.clientToken);
     if (early) return early;
     await assertTamburMeasuresAllowed([input.measure]);
+    const weightSource = await resolveTamburWeightSource({
+      weightKg: input.weightKg != null ? new Prisma.Decimal(input.weightKg) : null, weightSource: input.weightSource, stamp: { machineId: ctx.machineId },
+    });
     const reason = input.reason?.trim() ?? "";
     if (reason.length < 3) {
       throw AppError.badRequest("İşlem nedeni zorunlu (en az 3 karakter)", {
@@ -1084,6 +1091,7 @@ export class TamburManualService {
         colorId,
         initialQty: input.initialQty,
         weightKg: input.weightKg,
+        weightSource,
         qualityGrade: input.qualityGrade,
         // EN: operatöre SORULMAZ, iş emrinden MİRAS alınır (2026-08-04 kararı).
         // Gerekçe ürün/renkle aynı: bu top ŞU iş emrinin malı ve o iş emrinin eni
@@ -1111,6 +1119,8 @@ export class TamburManualService {
         // değil mi) topun `currentStep`/iş emri bağından ZATEN okunuyor, ayrıca
         // audit olayları da ayrı (`TAMBUR_MANUAL_ROLL` ↔ `TAMBUR_MANUAL_PRODUCE`).
         forcedEntrySource: RollEntrySource.TAMBUR_MANUAL,
+        // Tamburda elle eklenen top işlenmiş maldır → bitmiş aşama (renkten bağımsız, top aşaması 2026-11-10).
+        stage: RollStage.FINISHED,
         // Açık iş emrinin ürettiği top — mevcut malı yürütür (E): "Tükenene kadar" kartta da akar.
         itemUsage: "EXISTING_GOODS",
         // Sebep artık TOPUN ÜZERİNDE kalıcı kolonda (audit'e ek olarak): audit
@@ -1234,7 +1244,7 @@ export class TamburManualService {
       });
 
       // İstasyon yeteneği (T1) bağlamayla AYNI tx'te: FAZ 2 düşerse replay yeniden yazar (no-op güvenli).
-      await applyTamburCapabilitiesTx(tx, { caps: tamburCaps, stationId: ctx.stationId, rollId: roll.id, userId: ctx.userId });
+      await applyTamburCapabilitiesTx(tx, { caps: tamburCaps, stationId: ctx.stationId, rollId: roll.id, userId: ctx.userId, birth: "INPUT" });
       // Adım/WO durumu: yeni açık hareket adımı ACTIVE'e çeker; PLANNED WO üretime girer.
       await recomputeStepStatus(tx, step.id);
       await ensureWorkOrderInProgress(tx, step.workOrderId);
@@ -1458,6 +1468,8 @@ export class TamburManualService {
       qualityGrade?: string;
       width?: number | null;
       weightKg?: number;
+      /** Kg kaynağı beyanı; kaynaksız kg MANUAL (tek boğaz `resolveTamburWeightSource`). */
+      weightSource?: "SCALE" | "MANUAL" | "SIMULATED" | null;
       /** Etiket niyeti — "Kime?" bölümü. İkisi de boşsa stok (müşterisiz). */
       targetOrderLineId?: string | null;
       targetCustomerId?: string | null;
@@ -1477,6 +1489,9 @@ export class TamburManualService {
     ctx: TamburFieldContext = {},
   ): Promise<ApiResponse<unknown>> {
     await assertTamburMeasuresAllowed([input.measure]);
+    const weightSource = await resolveTamburWeightSource({
+      weightKg: input.weightKg != null ? new Prisma.Decimal(input.weightKg) : null, weightSource: input.weightSource, stamp: { machineId: ctx.machineId },
+    });
     const reason = input.reason?.trim() ?? "";
     if (reason.length < 3) {
       throw AppError.badRequest("İşlem nedeni zorunlu (en az 3 karakter)", {
@@ -1524,6 +1539,7 @@ export class TamburManualService {
           colorId: input.colorId ?? null,
           initialQty: input.initialQty,
           weightKg: input.weightKg,
+          weightSource,
           qualityGrade: input.qualityGrade,
           width: input.width ?? null,
           clientToken: input.clientToken,
@@ -1538,6 +1554,7 @@ export class TamburManualService {
           // bu iki satırda (yukarıdaki iz #1).
           forcedStatus: RollStatus.WAREHOUSE,
           forcedEntrySource: RollEntrySource.TAMBUR_MANUAL,
+          stage: RollStage.FINISHED,
           // Açık iş emrinin ürettiği top — mevcut malı yürütür (E): "Tükenene kadar" kartta da akar.
           itemUsage: "EXISTING_GOODS",
           // Sebep kalıcı kolonda (audit'e EK olarak — audit arşivleniyor).
@@ -1569,7 +1586,7 @@ export class TamburManualService {
     const capStationId = created.idempotent === true ? roll.entryStationId : ctx.stationId;
     const tamburCaps = await loadSessionTamburCaps(capStationId);
     if (capStationId && tamburCaps.length > 0) {
-      await prisma.$transaction((tx) => applyTamburCapabilitiesTx(tx, { caps: tamburCaps, stationId: capStationId, rollId: roll.id, userId: ctx.userId }));
+      await prisma.$transaction((tx) => applyTamburCapabilitiesTx(tx, { caps: tamburCaps, stationId: capStationId, rollId: roll.id, userId: ctx.userId, birth: "OUTPUT" }));
     }
     // Yarışın kaybedeni de replay'dir: faz 1'in boğazı `idempotent: true` döndü → ikinci CREATE audit yazılmaz.
     const idempotentReplay = created.idempotent === true;

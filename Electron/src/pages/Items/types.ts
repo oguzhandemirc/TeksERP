@@ -29,6 +29,8 @@ export interface Item {
   lifecycleStatus?: ItemLifecycleStatus;
   /** İplik inceliği (denye). Yalnız YARN'da dolu; çözgü kartı bunu ister. */
   linearDensityDen: string | number | null;
+  /** SY-3 I2: iplik başına fire % (yalnız YARN; boş = çözgü/atkı kartının fire zinciri). Eski sunucuda yok. */
+  yarnWastePct?: string | number | null;
   /** KUMAŞ → varsayılan çözgü kartı (E4, 2026-09-18): dokuma işi formu ve sunucu ön-dolum kaynağı; yalnız FABRIC. */
   warpSpecId?: string | null;
   /** SY-A4: atkı kartı + desen kartı (yalnız KUMAŞ; eski sunucuda yok). */
@@ -36,6 +38,10 @@ export interface Item {
   weaveDesignId?: string | null;
   /** K4P ürün kartı eni (cm); Decimal metin gelir. Eski sunucuda yok. */
   widthCm?: string | number | null;
+  /** Dokuma ayrıntıları (yalnız KUMAŞ; Decimal sayı/metin gelir; eski sunucuda yok). */
+  rawWidthCm?: string | number | null;
+  rawGsm?: string | number | null;
+  finishedGsm?: string | number | null;
   /** Saha (mobil KK1) "yeni desen" olarak açtı → admin gözden geçirmesi bekleniyor. */
   pendingReview?: boolean;
   /** Item'a uygulanabilir özellikler (kataloğu). Boşsa = serbest. */
@@ -55,6 +61,8 @@ export interface ItemCreatePayload {
   isActive?: boolean;
   /** Denye — boş bırakılırsa `null` gider (kolon nullable, FABRIC'te anlamsız). */
   linearDensityDen?: string | null;
+  /** SY-3 I2: iplik firesi % — yalnız YARN + maliyet açıkken; anahtar dolu ya da kayıtlı değer temizleniyorsa gider. */
+  yarnWastePct?: string | null;
   /** Varsayılan çözgü kartı — yalnız KUMAŞ; boş = `null` (temizler). */
   warpSpecId?: string | null;
   /** SY-A4: atkı/desen kartı — anahtar yalnız seçici görünür ve alan dolu/temizlenmişse gider. */
@@ -62,8 +70,23 @@ export interface ItemCreatePayload {
   weaveDesignId?: string | null;
   /** K4P en (cm) — yalnız Kalite Güvence açıkken ve KUMAŞta gider; boş = `null` (temizler). */
   widthCm?: string | null;
+  /** Dokuma ayrıntıları — yalnız KUMAŞ; anahtar dolu ya da kayıtlı değer temizleniyorsa gider. */
+  rawWidthCm?: string | null;
+  rawGsm?: string | null;
+  finishedGsm?: string | null;
   /** Düzenlemede admin onayı: kaydedince saha işareti temizlenir (false). */
   pendingReview?: boolean;
   allowedPropertyIds?: string[];
   allowedColorIds?: string[];
+}
+
+/** `GET /api/items/:id/computed-gsm` — null = bilinmiyor (hesap kapanır). */
+export interface ItemComputedGsm {
+  rawWidthCm: number | null;
+  warpGPerM: number | null;
+  weftGPerM: number | null;
+  totalGPerM: number | null;
+  gsm: number | null;
+  enteredRawGsm: number | null;
+  diffPct: number | null;
 }

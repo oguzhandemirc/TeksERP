@@ -52,6 +52,11 @@ export const KALITE_TUKETICI_BEYANI: readonly KaliteTuketici[] = [
     gerekce: "K4P-KK1: oturum yanıtının `station.canInspect` alanı tabletin muayene düğmesini gösterir; akış sorulmaz.",
   },
   {
+    dosya: "services/work-session.service.ts",
+    fonksiyon: "places",
+    gerekce: "Yer listesinin `canInspect` alanı: tablet kurşunsuz muayeneli PROCESS_QC'yi \"Kalite Kontrol\" listesine ayırır; akış sorulmaz.",
+  },
+  {
     dosya: "services/helpers/roll-defect.helper.ts",
     fonksiyon: "assertDefectStepGate",
     gerekce: "Hata YAZMA tek boğazı (KQ-D7): KK2/Kurşun, Tambur ve kurşun bitirişi listesi buradan geçer; istasyonda muayene açık olmalı (kapalıysa eski APK yazması 400, bilinçli fark K2).",

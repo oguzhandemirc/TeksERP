@@ -4,6 +4,8 @@ import type { ReactNode } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { TERIM } from "@/lib/terim";
+import { ProposalInsights } from "./ProposalInsights";
+import { shrinkSourceText, wasteNote } from "./insight-text";
 import { excludedKindLabel, excludedReason, parsePlannedM, type ProposalSelection } from "./selection";
 import type { BeamNeed, ProductionProposal, WeavingProposal, WorkOrderProposal } from "./types";
 
@@ -28,12 +30,16 @@ interface WeavingProps {
   lineLabel: LineLabel;
   onToggle: (key: string) => void;
   onPlannedM: (key: string, text: string) => void;
+  /** Uygulanan dokuma firesi % (üst düzey; eski backend göndermez). */
+  wastePct?: number | null;
 }
 
-export function WeavingSection({ rows, sel, canCreate, lineLabel, onToggle, onPlannedM }: WeavingProps) {
+export function WeavingSection({ rows, sel, canCreate, lineLabel, onToggle, onPlannedM, wastePct }: WeavingProps) {
   if (rows.length === 0) return null;
+  const waste = wasteNote(wastePct ?? rows[0]?.weavingWastePct);
+  const hint = canCreate ? `Plan metresi = açık metre ÷ (1 − çekme)${waste ? `; ${waste}` : ""}; düzeltebilirsiniz.` : "Dokuma iş emri oluşturma izniniz yok.";
   return (
-    <Section title={`${TERIM.dokumaIsEmri.cogul} (${rows.length})`} hint={canCreate ? "Plan metresi = açık metre ÷ (1 − çekme); düzeltebilirsiniz." : "Dokuma iş emri oluşturma izniniz yok."}>
+    <Section title={`${TERIM.dokumaIsEmri.cogul} (${rows.length})`} hint={hint}>
       <ul className="divide-y rounded-md border">
         {rows.map((w) => {
           const text = sel.plannedM.get(w.key) ?? (w.plannedM == null ? "" : String(w.plannedM));
@@ -45,8 +51,9 @@ export function WeavingSection({ rows, sel, canCreate, lineLabel, onToggle, onPl
                 <div className="font-medium">{w.itemName}</div>
                 <div className="text-xs text-muted-foreground">
                   {w.orderLines.map((l) => lineLabel(l.orderLineId)).join(" · ")}
-                  {w.shrinkPct != null && ` · çekme %${w.shrinkPct}`}
+                  {w.shrinkPct != null && ` · çekme %${w.shrinkPct}${shrinkSourceText(w.shrinkSource) ? ` (${shrinkSourceText(w.shrinkSource)})` : ""}`}
                 </div>
+                <ProposalInsights w={w} />
               </div>
               <label className="flex items-center gap-1 text-xs">
                 Plan m

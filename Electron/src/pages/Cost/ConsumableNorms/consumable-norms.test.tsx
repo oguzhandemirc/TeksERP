@@ -9,6 +9,9 @@ import type { ConsumableNorm } from "./service";
 const svc = vi.hoisted(() => ({ listActive: vi.fn(), history: vi.fn(), create: vi.fn(), change: vi.fn(), revoke: vi.fn() }));
 vi.mock("./service", async (orig) => ({ ...(await orig<typeof import("./service")>()), consumableNormService: svc }));
 vi.mock("@/components/forms/ItemPickerModal", () => ({ ItemPickerModal: () => null }));
+vi.mock("@/lib/kursun-gramaj", () => ({
+  useKursunGramajCatalog: () => ({ catalog: { propertyId: "pv", options: [{ id: "g50", name: "50 gr", amount: "50" }] }, isLoading: false }),
+}));
 vi.mock("@/components/layout/PageHeader", () => ({
   PageHeader: ({ title, actions }: { title: string; actions?: React.ReactNode }) => <header><h1>{title}</h1>{actions}</header>,
 }));
@@ -45,7 +48,7 @@ describe("ConsumableNormsPage", () => {
     renderWithProviders(<ConsumableNormsPage />);
     expect(await screen.findByText("HZM-KRS")).toBeInTheDocument();
     expect(screen.getByText("SRF-IP")).toBeInTheDocument();
-    expect(screen.getByText("0,0125 kg")).toBeInTheDocument();
+    expect(screen.getByText("0,0125 kg/m")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Normu değiştir" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Norm gir" })).toBeInTheDocument();
   });
@@ -77,7 +80,7 @@ describe("ConsumableNormDialog — deneme token'ı ve 409", () => {
     const user = userEvent.setup();
     renderWithProviders(<ConsumableNormDialog current={norm} onClose={onClose} />);
     expect(screen.getByRole("button", { name: /HZM-KRS/ })).toBeDisabled();
-    const input = screen.getByLabelText("Metre başına miktar");
+    const input = screen.getByLabelText("Miktar");
     await user.clear(input);
     await user.type(input, "0,015");
     for (let i = 1; i <= 2; i++) {
@@ -101,11 +104,31 @@ describe("ConsumableNormDialog — sıfır norm 'sarf kullanmaz' beyanı", () =>
     const user = userEvent.setup();
     renderWithProviders(<ConsumableNormDialog current={norm} onClose={vi.fn()} />);
     expect(screen.getByText(/sarf kullanmaz/)).toBeInTheDocument();
-    const input = screen.getByLabelText("Metre başına miktar");
+    const input = screen.getByLabelText("Miktar");
     await user.clear(input);
     await user.type(input, "0");
     await user.click(screen.getByRole("button", { name: "Kaydet" }));
     await waitFor(() => expect(svc.change).toHaveBeenCalledTimes(1));
     expect(svc.change.mock.calls[0]![1]).toMatchObject({ qtyPerM: "0" });
+  });
+});
+
+describe("ConsumableNormDialog — taban + gramaj (2026-11-10)", () => {
+  it("değişimde Top başına seçilince gövdeye basis=PER_ROLL gider; gramaj kimliktir, kilitli", async () => {
+    perms = ["cost:read", "cost:write"];
+    svc.change.mockReset().mockResolvedValueOnce({ success: true, data: norm });
+    const user = userEvent.setup();
+    renderWithProviders(<ConsumableNormDialog current={{ ...norm, propertyValueId: "g50" }} onClose={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "50 gr" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "50 gr" })).toHaveAttribute("aria-pressed", "true");
+    await user.click(screen.getByRole("button", { name: "Top başına" }));
+    await user.click(screen.getByRole("button", { name: "Kaydet" }));
+    await waitFor(() => expect(svc.change).toHaveBeenCalledTimes(1));
+    expect(svc.change.mock.calls[0]![1]).toMatchObject({ basis: "PER_ROLL" });
+  });
+  it("eski backend basis göndermezse Metre başına seçili", () => {
+    perms = ["cost:read", "cost:write"];
+    renderWithProviders(<ConsumableNormDialog current={norm} onClose={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Metre başına" })).toHaveAttribute("aria-pressed", "true");
   });
 });

@@ -1,11 +1,12 @@
 // "Sayfa çek" düğmesinin durumu: cihaz ayarına göre kendi çok çekimli kameramız (varsayılan) ya da ML Kit tarayıcısı;
-// tarayıcı kullanılamaz/hata → kendi kameramız; iptal ekranda bırakır. Ekran `camera`yı `MultiPageCameraModal`a verir;
+// tarayıcı kullanılamaz/hata → kendi kameramız + bilgi toast'ı (sebep); iptal ekranda bırakır. Ekran `camera`yı `MultiPageCameraModal`a verir;
 // 'live' (yalnız canlı kamera modülü olan APK'da) aynı bağlamayla canlı okuma ekranını açar.
 import { useRef, useState } from 'react';
 import Toast from 'react-native-toast-message';
 import { effectiveScanEngine, useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
 import { isLiveCameraAvailable } from '../../../services/liveCamera';
 import { scanWithDocScanner } from '../../../services/docScannerNative';
+import { SCANNER_FALLBACK_TITLE, scannerUnavailableDetail } from '../../../services/docScannerStatus';
 import { scannerPageLimit, type ScanPage } from './docScan';
 import { acquirePages } from './pageSource';
 
@@ -36,6 +37,7 @@ export function usePageSource(currentCount: number, onPages: (pages: ScanPage[])
       if (r.route === 'pages') onPages(r.pages);
       else if (r.route === 'camera') {
         if (r.error) Toast.show({ type: 'info', text1: 'Belge tarayıcı açılamadı; kamera açıldı', text2: r.error });
+        else if (r.unavailable) Toast.show({ type: 'info', text1: SCANNER_FALLBACK_TITLE, text2: scannerUnavailableDetail(r.unavailable) });
         setLive(r.live === true);
         setCameraOpen(true);
       }

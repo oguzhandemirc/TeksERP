@@ -55,6 +55,12 @@ export async function updateNoteHeader(id: string, patch: HeaderPatch): Promise<
   return (await apiClient.patch<ApiResponse<unknown>>(`${BASE}/irsaliyeler/${id}`, patch)).data.data;
 }
 
+/** Onaylı belgede künye düzeltmesi: YALNIZ fiş no + fiş tarihi (sunucu başka anahtarı 400'ler); WARN eşinde 409 + peers.
+ *  Hata diyalogda satır içinde gösterilir — apiClient toast'ı bastırılır (tek hata yüzeyi). */
+export async function fixNoteIdentity(id: string, body: { senderDocNo?: string | null; senderDocDate?: string | null; confirmDuplicateDocNo?: true }): Promise<DeliveryNoteDetail> {
+  return (await apiClient.patch<ApiResponse<DeliveryNoteDetail>>(`${BASE}/irsaliyeler/${id}/kunye`, body, { suppressErrorToast: true })).data.data;
+}
+
 export async function deleteDraftNote(id: string): Promise<unknown> {
   return (await apiClient.delete<ApiResponse<unknown>>(`${BASE}/irsaliyeler/${id}`)).data.data;
 }
@@ -99,7 +105,7 @@ export async function approveNote(
   id: string,
   varianceReason: string | null,
   processChoices: readonly ProcessChoice[] = [],
-  opts: { routeTemplateId?: string | null; confirmDuplicateDocNo?: boolean } = {},
+  opts: { routeTemplateId?: string | null; confirmDuplicateDocNo?: boolean; confirmDuplicateBatchNo?: boolean } = {},
 ): Promise<{ result: ApproveResult; warnings: string[] }> {
   // Boş seçimde alan gönderilmez: gövde eski backend'in katı şemasıyla da (strictObject) aynı kalır.
   // `routeTemplateId` (P3 "Belge okut"): onaydan sonra iş emri SEÇİLEN rotayla açılır (öneri zinciri yerine).
@@ -111,6 +117,8 @@ export async function approveNote(
       ...(opts.routeTemplateId ? { routeTemplateId: opts.routeTemplateId } : {}),
       // K27: yalnız operatör "Yine de onayla" dediğinde gider (BLOCK kipinde sunucu yine 409 verir).
       ...(opts.confirmDuplicateDocNo ? { confirmDuplicateDocNo: true } : {}),
+      // Aynı müşteri parti no (WARN): yalnız "Yine de aç" sonrası (BLOCK'ta sunucu yine 409 verir).
+      ...(opts.confirmDuplicateBatchNo ? { confirmDuplicateBatchNo: true } : {}),
     },
     { suppressErrorToast: true },
   );
@@ -138,7 +146,7 @@ export async function getIncomingDocumentSettings(): Promise<IncomingDocumentSet
 }
 
 /** Yazım `admin:settings` + ayar şifresi (tanımlıysa diyalog `withSettingsPassword`ten). */
-export function updateIncomingDocumentSettings(body: { defaultItemId?: string | null; unreviewedApproval?: UnreviewedApproval; autoWorkOrder?: boolean; defaultRouteTemplateId?: string | null; routeSuggestionPriority?: RouteSuggestionPriority; handwritingOutlierFactor?: number | null; headerLineMeterSource?: HeaderLineMeterSource; autoSenderFromTemplate?: boolean; documentTotalCheck?: DocumentTotalCheckMode; duplicateDocNo?: DuplicateDocNoMode; desenRenkEslesme?: DesenRenkEslesmeMode; tabletIeGirisi?: TabletIeGirisiMode; tanitimGuveni?: TanitimGuveniMode; stationVerifyThreshold?: number | null }): Promise<IncomingDocumentSettings> {
+export function updateIncomingDocumentSettings(body: { defaultItemId?: string | null; unreviewedApproval?: UnreviewedApproval; autoWorkOrder?: boolean; defaultRouteTemplateId?: string | null; routeSuggestionPriority?: RouteSuggestionPriority; handwritingOutlierFactor?: number | null; headerLineMeterSource?: HeaderLineMeterSource; autoSenderFromTemplate?: boolean; serverOcrEnabled?: boolean; documentTotalCheck?: DocumentTotalCheckMode; duplicateDocNo?: DuplicateDocNoMode; duplicateBatchNo?: DuplicateDocNoMode; desenRenkEslesme?: DesenRenkEslesmeMode; tabletIeGirisi?: TabletIeGirisiMode; tanitimGuveni?: TanitimGuveniMode; stationVerifyThreshold?: number | null }): Promise<IncomingDocumentSettings> {
   return withSettingsPassword((headers) =>
     apiClient.put<ApiResponse<IncomingDocumentSettings>>(`${BASE}/ayarlar`, body, { headers }).then((r) => r.data.data),
   );

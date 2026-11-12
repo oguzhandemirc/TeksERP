@@ -18,7 +18,6 @@ import { AppError } from "../../utils/app-error";
 import { AuditService } from "../audit.service";
 import {
   readShippingManualWeightRestrictedEnabled,
-  readSimulatedWeightEnabled,
 } from "../system-setting.service";
 import {
   assertManualWeightAllowed,
@@ -28,7 +27,7 @@ import {
 } from "../helpers/shipment-locks.helper";
 import { ApiResponse } from "../../types/api.types";
 import { transitionSwatchesTx } from "../helpers/swatch-event.helper";
-import { ekranYolu } from "../../constants/panel-ekran-yolu";
+import { resolveWeightSource } from "../helpers/weight-source-gate.helper";
 import type { ShippingServiceThis } from "./shared";
 
 // eslint-disable-next-line max-params -- `this` bağlam bildirimi parametre değil; özgün metot 4 parametreli
@@ -81,34 +80,13 @@ export async function weighSack(this: ShippingServiceThis,
         permissions: opts?.permissions,
       });
     }
-    // ⚠️ `simulated` blok DIŞINDA: kolona ÇÖZÜLMÜŞ kaynak yazılacak, beyan edilen
-    // değil. Aksi halde bayrak AÇIKKEN (demo/eğitim) sunucu çapraz kontrolü cihazı
-    // simüle bulup isteği GEÇİRDİĞİNDE kolona "SCALE" yazılırdı — yani kolonun tek
-    // varlık sebebi (simüle 47.3 ≠ gerçek 47.3) kaybolurdu.
-    let simulated = declaredSource === "SIMULATED";
-    if (declaredSource !== "MANUAL") {
-      if (!simulated && (stamp?.machineId || stamp?.stationId)) {
-        const scale = await prisma.peripheralDevice.findFirst({
-          where: {
-            kind: "SCALE",
-            isActive: true,
-            deletedAt: null,
-            ...(stamp.machineId
-              ? { machineId: stamp.machineId }
-              : { stationId: stamp.stationId!, machineId: null }),
-          },
-          orderBy: { createdAt: "asc" },
-          select: { simulate: true },
-        });
-        if (scale?.simulate) simulated = true;
-      }
-      if (simulated && !(await readSimulatedWeightEnabled())) {
-        throw AppError.badRequest(
-          `Simüle kantarla tartı kaydedilemez — ${ekranYolu("donanim")} ekranındaki Cihaz Kaydı'ndan bu kantarın ` +
-            '"simülasyon" bayrağını kapatın, ya da ⋮ → "Elle kg gir" ile girin.'
-        );
-      }
-    }
+    // Kolona ÇÖZÜLMÜŞ kaynak yazılır, beyan edilen değil (bayrak açıkken simüle cihaz geçse de SIMULATED kalır);
+    // çözüm + simüle kapısı tek boğaz `weight-source-gate.helper` (tambur kesimi de aynısını kullanır).
+    const resolvedSource: SackWeightSource = await resolveWeightSource(
+      declaredSource as SackWeightSource,
+      stamp,
+      '⋮ → "Elle kg gir" ile girin',
+    );
 
     const sack = await prisma.sack.findUnique({ where: { id: data.sackId }, select: { id: true, shipmentId: true } });
     if (!sack) throw AppError.notFound("Çuval bulunamadı");
@@ -121,44 +99,52 @@ export async function weighSack(this: ShippingServiceThis,
     // ÇÖZÜLMÜŞ kaynak — beyan edilen DEĞİL. Sunucu cihazı simüle bulduysa (ve bayrak
     // açık olduğu için istek geçtiyse) kolona SIMULATED yazılır; aksi halde kolon
     // "SCALE" der ve simüle 47.3 ile gerçek 47.3 yine ayırt edilemezdi.
-    const resolvedSource: SackWeightSource = simulated
-      ? SackWeightSource.SIMULATED
-      : (declaredSource as SackWeightSource);
+
 
     await prisma.$transaction(async (tx) => {
       await touchWarehouseSackTx(tx, data.sackId);
-      // ÖLÇÜM DEFTERİ (2026-09-11): yeniden tartı eskiden `weightKg`in ÜSTÜNE
-      // yazıyordu ve irsaliyeye giden BRÜT kg'ın önceki değeri hiçbir kalıcı
-      // kolonda kalmıyordu. Önceki değeri okuyup olay tipini ondan çözüyoruz.
-      const onceki = await tx.sack.findUnique({
-        where: { id: data.sackId },
-        select: { weightKg: true },
-      });
-      const stamp = new Date();
-      await tx.sack.update({
-        where: { id: data.sackId },
-        data: {
-          weightKg: new Prisma.Decimal(data.weightKg!),
-          weightSource: resolvedSource,
-          weighedBy: userId ? { connect: { id: userId } } : { disconnect: true },
-          weighedAt: stamp,
-        },
-      });
-      await tx.sackWeighing.create({
-        data: {
-          sackId: data.sackId,
-          kind: onceki?.weightKg == null ? SackWeighingKind.WEIGHED : SackWeighingKind.REWEIGHED,
-          weightKg: new Prisma.Decimal(data.weightKg!),
-          weightSource: resolvedSource,
-          weighedById: userId ?? null,
-          weighedAt: stamp,
-        },
-      });
+      await writeSackWeightTx(tx, { sackId: data.sackId, weightKg: data.weightKg!, source: resolvedSource, userId });
     });
     // Kaynak hem KOLONA (sorgulanabilir, kalıcı) hem AUDİT'e (kim/ne zaman bağlamıyla)
     // yazılır. Kolon iç izdir: belgeye/etikete BASILMAZ (bkz. schema.prisma doc).
     return this.finishWeigh(data, resolvedSource, userId);
   }
+
+export type SackWeightWrite = "WEIGHED" | "REWEIGHED" | "CLEARED" | "NOOP";
+
+/**
+ * Çuval kg'sini yazar — TEK YAZAR: kolon + ölçüm defteri (`SackWeighing` WEIGHED · REWEIGHED · CLEARED) aynı adımda.
+ * Çağıran çuval satırını kilitlemiş olmalı (havuz: `touchWarehouseSackTx`; el terminali: sevkiyat + FOR UPDATE).
+ * `weightKg: null` kg'yi kaldırır (CLEARED). `skipIfSame` yalnız el terminalinin durum-idempotent yoludur:
+ * aynı değer tekrar gelirse satır yazılmaz (havuz tartısı her basışı REWEIGHED olarak deftere yazar, değişmedi).
+ */
+export async function writeSackWeightTx(
+  tx: Prisma.TransactionClient,
+  p: { sackId: string; weightKg: number | null; source: SackWeightSource; userId?: string; skipIfSame?: boolean },
+): Promise<SackWeightWrite> {
+  // ÖLÇÜM DEFTERİ (2026-09-11): yeniden tartı eskiden `weightKg`in ÜSTÜNE
+  // yazıyordu ve irsaliyeye giden BRÜT kg'ın önceki değeri hiçbir kalıcı
+  // kolonda kalmıyordu. Önceki değeri okuyup olay tipini ondan çözüyoruz.
+  const onceki = await tx.sack.findUnique({ where: { id: p.sackId }, select: { weightKg: true, weightSource: true } });
+  const stamp = new Date();
+  if (p.weightKg === null) {
+    if (onceki?.weightKg == null) return "NOOP";
+    await tx.sack.update({ where: { id: p.sackId }, data: { weightKg: null, weightSource: null, weighedById: null, weighedAt: null } });
+    await tx.sackWeighing.create({
+      data: { sackId: p.sackId, kind: SackWeighingKind.CLEARED, weightKg: null, weightSource: onceki.weightSource, weighedById: p.userId ?? null, weighedAt: stamp, notes: `Elle kaldırıldı — önceki ${onceki.weightKg.toString()} kg` },
+    });
+    return "CLEARED";
+  }
+  const kg = new Prisma.Decimal(p.weightKg);
+  if (p.skipIfSame && onceki?.weightKg != null && onceki.weightKg.equals(kg) && onceki.weightSource === p.source) return "NOOP";
+  await tx.sack.update({
+    where: { id: p.sackId },
+    data: { weightKg: kg, weightSource: p.source, weighedBy: p.userId ? { connect: { id: p.userId } } : { disconnect: true }, weighedAt: stamp },
+  });
+  const kind = onceki?.weightKg == null ? SackWeighingKind.WEIGHED : SackWeighingKind.REWEIGHED;
+  await tx.sackWeighing.create({ data: { sackId: p.sackId, kind, weightKg: kg, weightSource: p.source, weighedById: p.userId ?? null, weighedAt: stamp } });
+  return kind;
+}
 
 export async function finishWeigh(
     data: { sackId: string; weightKg?: number | null },

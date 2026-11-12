@@ -7,7 +7,7 @@
 //      tekrar → replay (yeni iş emri 0); başka canlı iş emrindeki top → red (mevcut kod), yeni iş emri yok;
 //      plan artık topları bağlanamaz + canlı iş emriyle gösterir
 //   §3 desensiz satır ayrı grup (patternless, sonda); rota şablonu önerisi = aynı sahibin son şablonu
-//   §4 İE özeti: `variantTargets` (desen hedefi) + `deliveryNoteGramaj.customerBatches` (türetilmiş müşteri partisi)
+//   §4 İE özeti: `variantTargets` (desen hedefi); `deliveryNoteGramaj.customerBatches` artık YOK (2026-11-10)
 //   §5 desen araması (>12 değer): sunucuda süzme, toplam + cursor tek where, iki sayfa ∪ = toplam; çeşit olmayan özellik 400
 //   §6 tek tanım: ready-works müşteri partisi SQL'i `customerBatchKeySql`ten (ikinci kopya yok)
 // Negatif sonda: `groupToken` grup başına değil TEK token döndürünce §2 "2 iş emri" + replay maddeleri kırmızı.
@@ -168,11 +168,11 @@ async function run(): Promise<void> {
   check("§3 parti nosuz belge → müşteri partisi null", p2.customerBatch === null);
   check("§3 ⭐ rota önerisi = aynı sahibin son iş emrinin şablonu", p2.suggestedRouteTemplateId === route.id, String(p2.suggestedRouteTemplateId));
 
-  console.log("§4 İş emri özeti — desen hedefi + müşteri partisi");
+  console.log("§4 İş emri özeti — desen hedefi");
   const sum = (await getWorkOrderProcessSummary(rA.data!.workOrder.id)).data;
   check("§4 ⭐ variantTargets = desen hedefi Q10", sum.variantTargets?.length === 1 && sum.variantTargets[0]!.valueId === vA && sum.variantTargets[0]!.propertyId === desen.id, JSON.stringify(sum.variantTargets));
-  const cb = sum.deliveryNoteGramaj?.customerBatches ?? [];
-  check("§4 ⭐ türetilmiş müşteri partisi P-77 (3 top, sahip adıyla)", cb.length === 1 && cb[0]!.batchNo === "P-77" && cb[0]!.rollCount === 3 && cb[0]!.key === plan.customerBatch?.key && cb[0]!.ownerName === `${TAG} sahip`, JSON.stringify(cb));
+  // Müşteri partisi İE özetinde YOK (2026-11-10): "Üretime giren" kartı gösteriyor; ayrı bölüm kaldırıldı.
+  check("§4 ⭐ deliveryNoteGramaj'da `customerBatches` anahtarı YOK", !!sum.deliveryNoteGramaj && !("customerBatches" in sum.deliveryNoteGramaj), Object.keys(sum.deliveryNoteGramaj ?? {}).join(","));
 
   console.log("§5 Desen araması — sunucu, >12 değer");
   const all = await searchProcessChoiceValues({ propertyId: desen.id, limit: 50 });

@@ -340,6 +340,9 @@ export const SETTING_KEYS = {
   /** Aynı (sahip, gönderen belge no) tekrar gelirse (K27): BLOCK iptal dışı tek belge (varsayılan = bugünkü) | WARN işi süren
    *  eş varken onay 409 + operatör onayıyla geçer | ALLOW serbest. Tek yazar `PUT /api/gelen-belge/ayarlar`; flag yüküne konmaz. */
   GELEN_BELGE_DUPLICATE_DOC_NO: "gelenBelge.duplicateDocNo",
+  /** Aynı (sahip, müşteri parti no) işi süren başka belgede varsa: ALLOW serbest (varsayılan = bugünkü) | WARN onay 409 +
+   *  operatör onayıyla geçer | BLOCK 409. Tek yazar `PUT /api/gelen-belge/ayarlar`; flag yüküne konmaz. */
+  GELEN_BELGE_DUPLICATE_BATCH_NO: "gelenBelge.duplicateBatchNo",
   /** İş emri açılınca refakat kartı istemcide kendiliğinden yazdırılır mı (varsayılan false = bugünkü: elle).
    *  Tek yazar `PUT /api/gelen-belge/ayarlar`; flag yüküne konmaz. */
   PRODUCTION_REFAKAT_AUTO_PRINT: "production.refakatAutoPrint",
@@ -361,12 +364,19 @@ export const SETTING_KEYS = {
   /** K30-B tanıtılan belgeye güven: SOR (varsayılan = bugünkü, okunanlar onaylatılır) | SORMA kullanıcı şablonuyla
    *  tanınan belge sorusuz dolar, tanınmayanın sözlük tahmini forma dolmaz. Tek yazar `PUT /api/gelen-belge/ayarlar`. */
   GELEN_BELGE_TANITIM_GUVENI: "gelenBelge.tanitimGuveni",
+  /** Bilgisayarda ikinci okuma (sunucu OCR, okuma servisi): true (varsayılan = bugünkü) | false okuma servisine OCR/dönüştürme
+   *  isteği gitmez, belgeyi yalnız cihaz okur. Tek yazar `PUT /api/gelen-belge/ayarlar`; kapı `gelen-belge-sunucu-okuyucu.service`. */
+  GELEN_BELGE_SERVER_OCR_ENABLED: "gelenBelge.serverOcrEnabled",
   /** Z1 ÜRETİM BELGE ZİNCİRİ (2026-09-18) — üç davranış bayrağı, varsayılan KAPALI = bugünkü davranış (bağ opsiyonel). */
   DEVERE_BEAM_WEAVING_LINK_REQUIRED: "devere.beamWeavingLinkRequired",
   DOKUMA_RUN_WEAVING_ORDER_REQUIRED: "dokuma.runWeavingOrderRequired",
   DOKUMA_ORDER_LINE_LINK_REQUIRED: "dokuma.orderLineLinkRequired",
   /** S1 (2026-10-21, D1): topun doğuş yolu — `TABLET_DOFF` (bugün) · `KK1_LABEL_OR_ORDER` · `KK1_LABEL_ONLY`. Enum; kalıp `DOKUMA_ROLL_BIRTH_MODES`. */
   DOKUMA_ROLL_BIRTH: "dokuma.rollBirth",
+  /** Seyitoğlu temel (2026-11-11): üretim önerisi + iplik ihtiyacında dokuma firesi % (ham = … ÷ (1 − fire)); varsayılan 0 = bugünkü davranış. */
+  DOKUMA_WEAVING_WASTE_PCT: "dokuma.weavingWastePct",
+  /** SY-3 I1 (2026-11-12): iplik ayırma görünürlüğü — açık dokuma işlerinin kalan iplik kg'ı "ayrılmış" sayılır; ENGELLEMEZ. Varsayılan FALSE. */
+  DOKUMA_YARN_RESERVATION_ENABLED: "dokuma.yarnReservationEnabled",
   /**
    * KAPALI raporların anahtar listesi (JSON `string[]`, `REPORT_CATALOG` anahtarları).
    *
@@ -381,6 +391,8 @@ export const SETTING_KEYS = {
   REPORTS_V2_ENABLED: "reports.v2Enabled",
   /** İş emrinde "hedef metraj" alanı gösterilsin mi. Default false (proses-only fabrika). */
   WORKORDER_TARGET_QUANTITY_ENABLED: "workorder.targetQuantityEnabled",
+  /** İş emri formunda "hedef en" kutusu gösterilsin mi. Default TRUE (bugünkü davranış). */
+  WORKORDER_TARGET_WIDTH_ENABLED: "workorder.targetWidthEnabled",
   /** KK1 ham kumaş girişinde "en" alanı gösterilsin mi. Default false (ham en önemsiz). */
   KK1_RAW_WIDTH_ENABLED: "kk1.rawWidthEnabled",
   /** KK1 ham kumaş girişinde "ağırlık (kg)" alanı gösterilsin mi. Default false.
@@ -513,6 +525,9 @@ export const SETTING_KEYS = {
   SHIPMENT_MANUAL_SACK_COUNT_ENABLED: "shipping.manualSackCountEnabled",
   /** Çuvalsız sevk (dökme / araba yükü). Default false: tablet kipi görünmez, yük birimi alanı 400. */
   SHIPMENT_LOOSE_LOAD_ENABLED: "shipping.looseLoadEnabled",
+  /** El terminalinden (Sevk Çıkışı) sevk kurma — v2 uçları (`/shipments/handheld`, `/scan`, `/sacks`, `/handheld-dispatch`).
+   *  Default false: uçlar 403 HANDHELD_DISABLED (sunucu kapısı), eski yollar etkilenmez. Ön koşul looseLoadEnabled. */
+  SHIPMENT_HANDHELD_CREATE_ENABLED: "shipping.handheldCreateEnabled",
   /** Sevk geri alma (storno) YALNIZ aynı fabrika gününde mi yapılabilsin. Default false
    *  (KAPALI = zaman sınırı YOK). Açıkken `dispatchedAt` bugünün fabrika günü başlangıcından
    *  (Europe/Istanbul) önceyse 409. Fatura ve iade koşulları bu ayardan BAĞIMSIZ ve her

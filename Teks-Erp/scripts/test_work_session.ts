@@ -15,10 +15,13 @@
 //   11. forceClose → ADMIN; ikinci forceClose → 409
 //   12. current() → lastPlace son oturumun yerini hatırlar
 //   13. resolveMachineByCode → tam eşleşme; bilinmeyen kod → 404
+//   14. ⭐ places/current/resolve yer nesnesinde `isKursunStation` (KURSUN_DISPATCH_STATION_WHERE) + places `canInspect`:
+//       kurşunsuz muayeneli PROCESS_QC → false/true (tablet "Kalite Kontrol" listesi), kurşun istasyonu → true
 // =============================================================================
 import prisma from "../src/lib/prisma";
 import { WorkSessionService } from "../src/services/work-session.service";
 import { resolveActiveSession } from "../src/services/helpers/work-session.helper";
+import { KURSUN_DISPATCH_STATION_WHERE } from "../src/services/helpers/quality-station.helper";
 
 let pass = 0, fail = 0;
 function check(label: string, ok: boolean, extra = "") {
@@ -79,6 +82,27 @@ async function main() {
   });
 
   const deviceIds = [dev1.id, dev2.id, dev3.id, dev4.id];
+  // 14) kurşunsuz, muayeneli PROCESS_QC istasyonu (tablet "Kalite Kontrol" listesi) + makinesi.
+  const qcStation = await prisma.station.create({
+    data: { code: `TST-WS-QC-${ts}`, name: "TEST WS DETAYLI KK", type: "INTERNAL", kind: "PROCESS_QC", inspectionEnabled: true, appliesQuality: true, appliesProperty: false },
+    select: { id: true },
+  });
+  const qcMachine = await prisma.machine.create({
+    data: { stationId: qcStation.id, code: `TST-WS-QC-M-${ts}`, name: "TEST WS QC MAKİNE" },
+    select: { id: true, code: true },
+  });
+  // 14c) kurşun istasyonu: KURSUN özelliği AUTO + PROCESS_QC (yer listesinde görünsün diye aktif makineli).
+  const kursunProp = await prisma.fabricProperty.findFirst({ where: { code: "KURSUN" }, select: { id: true } });
+  const kursunStation = kursunProp
+    ? await prisma.station.create({
+        data: { code: `TST-WS-KR-${ts}`, name: "TEST WS KURŞUN", type: "INTERNAL", kind: "PROCESS_QC", inspectionEnabled: true, appliesQuality: true, appliesProperty: true },
+        select: { id: true },
+      })
+    : null;
+  if (kursunStation && kursunProp) await prisma.stationProperty.create({ data: { stationId: kursunStation.id, propertyId: kursunProp.id, mode: "AUTO" } });
+  const kursunMachine = kursunStation
+    ? await prisma.machine.create({ data: { stationId: kursunStation.id, code: `TST-WS-KR-M-${ts}`, name: "TEST WS KURŞUN MAKİNE" }, select: { id: true } })
+    : null;
 
   // 9. adım (tembel idle) DB'deki idle-timeout ayarından bağımsız olmalı: ambient
   // bir systemSetting (0 = kapalı, ya da >11 saat) testi bayatlatırdı. Bilinen küçük
@@ -222,6 +246,27 @@ async function main() {
     check("resolveMachineByCode → makine + istasyon", (rm.data as { id: string }).id === tamburMachine.id);
     await expectErr("bilinmeyen makine kodu → 404", "bulunamadı", () =>
       WorkSessionService.resolveMachineByCode(`YOK-${ts}`));
+
+    // 14) yer nesnelerinde isKursunStation + canInspect (tablet Kurşun ↔ Kalite Kontrol ayrımı)
+    type Place = { id: string; isKursunStation?: boolean; canInspect?: boolean; inspectionEnabled?: unknown };
+    const places = (await WorkSessionService.places()).data as Place[];
+    const qcPlace = places.find((p) => p.id === qcStation.id);
+    check("§14a ⭐ kurşunsuz PROCESS_QC → isKursunStation=false, canInspect=true",
+      qcPlace?.isKursunStation === false && qcPlace?.canInspect === true, JSON.stringify(qcPlace ?? null));
+    check("§14b places ham inspectionEnabled sızdırmaz", places.every((p) => !("inspectionEnabled" in p)));
+    // Kendi kurşun istasyonu fikstürü (KURSUN AUTO + akış): ortamdaki istasyonlara bağlı kalmaz.
+    check("§14c fikstür: KURSUN AUTO'lu istasyon yüklemi karşılar",
+      !!kursunStation && (await prisma.station.count({ where: { id: kursunStation.id, ...KURSUN_DISPATCH_STATION_WHERE } })) === 1);
+    check("§14c ⭐ kurşun istasyonu → isKursunStation=true", !!kursunStation && places.find((p) => p.id === kursunStation.id)?.isKursunStation === true);
+    check("§14d her yerde isKursunStation boolean", places.every((p) => typeof p.isKursunStation === "boolean"));
+    const qcOpen = await WorkSessionService.open({ userId: user.id, deviceRowId: dev4.id, machineId: qcMachine.id, confirmTakeover: true });
+    check("§14e open yanıtı istasyonu isKursunStation=false",
+      (qcOpen.data as { station: Place }).station.isKursunStation === false);
+    const qcCur = (await WorkSessionService.current(dev4.id)).data as { active: { station: Place } | null; lastPlace: { station: Place } | null };
+    check("§14f current active + lastPlace istasyonu isKursunStation=false",
+      qcCur.active?.station.isKursunStation === false && qcCur.lastPlace?.station.isKursunStation === false);
+    const qcRm = (await WorkSessionService.resolveMachineByCode(qcMachine.code)).data as { station: Place };
+    check("§14g resolveMachineByCode istasyonu isKursunStation=false", qcRm.station.isKursunStation === false);
   } finally {
     // idle-timeout ayarını eski değerine döndür (9. adım geçici sabitlemişti).
     if (prevIdle !== undefined) {
@@ -230,7 +275,9 @@ async function main() {
     }
     await prisma.workSession.deleteMany({ where: { deviceId: { in: deviceIds } } }).catch(() => {});
     await prisma.device.deleteMany({ where: { id: { in: deviceIds } } }).catch(() => {});
-    await prisma.machine.deleteMany({ where: { id: fasonMachine.id } }).catch(() => {});
+    await prisma.machine.deleteMany({ where: { id: { in: [fasonMachine.id, qcMachine.id, ...(kursunMachine ? [kursunMachine.id] : [])] } } }).catch(() => {});
+    if (kursunStation) await prisma.stationProperty.deleteMany({ where: { stationId: kursunStation.id } }).catch(() => {});
+    await prisma.station.deleteMany({ where: { id: { in: [qcStation.id, ...(kursunStation ? [kursunStation.id] : [])] } } }).catch(() => {});
   }
 
   console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

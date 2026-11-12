@@ -49,7 +49,7 @@ export function FabricPropertyFormDialog({
         valueType: initial.valueType ?? "FLAG",
         // Pasif değerler de forma gelir: gizlenirse kaydetmek onları listeden
         // düşürür ve backend replace'i geri getirilemez şekilde pasif bırakır.
-        values: (initial.values ?? []).map(({ code, name, isActive, serviceItemId, stitchCount }) => ({ code, name, isActive, serviceItemId: serviceItemId ?? null, stitchCount: stitchCount ?? null })),
+        values: (initial.values ?? []).map(({ code, name, isActive, serviceItemId, stitchCount, isDefault }) => ({ code, name, isActive, serviceItemId: serviceItemId ?? null, stitchCount: stitchCount ?? null, isDefault: isDefault === true })),
         variantOfPropertyId: initial.variantOfPropertyId ?? null,
         serviceItemId: initial.serviceItemId ?? null,
         isActive: initial.isActive,

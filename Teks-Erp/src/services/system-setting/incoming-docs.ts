@@ -187,6 +187,13 @@ export const DUPLICATE_DOC_NO_VALUES: readonly DuplicateDocNoMode[] = ["BLOCK", 
 export const DEFAULT_DUPLICATE_DOC_NO: DuplicateDocNoMode = "BLOCK";
 export const readDuplicateDocNoMode = (tx?: Pick<typeof prisma, "systemSetting">): Promise<DuplicateDocNoMode> =>
   readClosedSetting(SETTING_KEYS.GELEN_BELGE_DUPLICATE_DOC_NO, DUPLICATE_DOC_NO_VALUES, DEFAULT_DUPLICATE_DOC_NO, tx);
+/** Mükerrer müşteri parti no kipi (aynı sahip + aynı parti no işi süren başka belgede). */
+export type DuplicateBatchNoMode = "BLOCK" | "WARN" | "ALLOW";
+export const DUPLICATE_BATCH_NO_VALUES: readonly DuplicateBatchNoMode[] = ["BLOCK", "WARN", "ALLOW"];
+/** Varsayılan ALLOW = bugünkü davranış (müşteri parti no hiç denetlenmez; 2026-11-10 ölçüldü). */
+export const DEFAULT_DUPLICATE_BATCH_NO: DuplicateBatchNoMode = "ALLOW";
+export const readDuplicateBatchNoMode = (tx?: Pick<typeof prisma, "systemSetting">): Promise<DuplicateBatchNoMode> =>
+  readClosedSetting(SETTING_KEYS.GELEN_BELGE_DUPLICATE_BATCH_NO, DUPLICATE_BATCH_NO_VALUES, DEFAULT_DUPLICATE_BATCH_NO, tx);
 
 /** K28 belge fotoğrafı saklama — onaydan/sevkten sonra bayt küçültülür ya da silinir; satır (sha256, okuma, künye) kalır. */
 export type PhotoRetentionMode = "FULL" | "SHRINK_ON_APPROVAL" | "DELETE_ON_APPROVAL" | "DELETE_ON_DISPATCH";
@@ -200,7 +207,7 @@ export const readPhotoRetention = (tx?: Pick<typeof prisma, "systemSetting">): P
 export type DesenRenkEslesmeMode = "KAPALI" | "ONER" | "NOT";
 export const DESEN_RENK_ESLESME_VALUES: readonly DesenRenkEslesmeMode[] = ["KAPALI", "ONER", "NOT"];
 /** Varsayılan KAPALI = bugünkü davranış (öneri yok, nota eklenmez). */
-export const DEFAULT_DESEN_RENK_ESLESME: DesenRenkEslesmeMode = "KAPALI";
+export const DEFAULT_DESEN_RENK_ESLESME: DesenRenkEslesmeMode = "ONER";
 export const readDesenRenkEslesme = (tx?: Pick<typeof prisma, "systemSetting">): Promise<DesenRenkEslesmeMode> =>
   readClosedSetting(SETTING_KEYS.GELEN_BELGE_DESEN_RENK_ESLESME, DESEN_RENK_ESLESME_VALUES, DEFAULT_DESEN_RENK_ESLESME, tx);
 /** K30 S16a tablet iş emri formunun giriş yolu. */
@@ -217,6 +224,16 @@ export const TANITIM_GUVENI_VALUES: readonly TanitimGuveniMode[] = ["SOR", "SORM
 export const DEFAULT_TANITIM_GUVENI: TanitimGuveniMode = "SOR";
 export const readTanitimGuveni = (tx?: Pick<typeof prisma, "systemSetting">): Promise<TanitimGuveniMode> =>
   readClosedSetting(SETTING_KEYS.GELEN_BELGE_TANITIM_GUVENI, TANITIM_GUVENI_VALUES, DEFAULT_TANITIM_GUVENI, tx);
+
+/** Bilgisayarda ikinci okuma (sunucu OCR). Kayıt yok / çöp = true (bugünkü: okuma servisi adresi varsa kullanılır);
+ *  yalnız açık `false` kapatır. Önbellek yok — her soruda DB'den (ayar anında geçerli). */
+export const DEFAULT_SERVER_OCR_ENABLED = true;
+export async function readServerOcrEnabled(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({ where: { key: SETTING_KEYS.GELEN_BELGE_SERVER_OCR_ENABLED }, select: { value: true } });
+  const v = setting?.value;
+  return !(v === false || v === "false");
+}
 
 /** İş emri açılınca refakat kartı kendiliğinden yazdırılsın mı (kayıt yok/çöp = false, bugünkü). */
 export async function readRefakatAutoPrint(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {

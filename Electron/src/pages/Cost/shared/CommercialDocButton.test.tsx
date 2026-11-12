@@ -46,4 +46,10 @@ describe("CommercialDocButton", () => {
     expect(getTables).toHaveBeenCalledWith("PRICE_LIST", "p1", { version: 2, currentTemplate: false });
     expect(vi.mocked(saveWorkbook).mock.calls[0]?.[1]).toBe("FL20260001-R2-fiyat-listesi");
   });
+
+  it("sipariş teyidi: ORDER_CONFIRMATION, order:write yeniden basım, taslak yok, düğme metni verilebilir", async () => {
+    renderWithProviders(<CommercialDocButton docType="ORDER_CONFIRMATION" sourceId="o1" label="Sipariş SIP-1" draft={false} buttonLabel="Sipariş teyidi" />);
+    await userEvent.click(screen.getByRole("button", { name: /Sipariş teyidi/ }));
+    expect(seen.props).toMatchObject({ docType: "ORDER_CONFIRMATION", sourceId: "o1", title: "Sipariş Teyidi", writePermission: "order:write", allowDraft: false });
+  });
 });

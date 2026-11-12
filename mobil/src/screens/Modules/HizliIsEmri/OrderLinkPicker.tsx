@@ -44,6 +44,10 @@ interface Props {
   picked?: PickedOrderLines;
   /** Tetik satırını çizme — açma düğmesi başka yerde (el terminali: alt çubukta İLERİ'nin yanında). */
   hideTrigger?: boolean;
+  /** Boş tetiğin ikincil satırı; verilmezse "Opsiyonel — stok üretimi için gerekmez" (tek İE formu kısa ifade verir). */
+  emptyHint?: string;
+  /** Boş tetik tek satır: "Sipariş Bağla (isteğe bağlı)" — ek soluk ve küçük, ikincil satır yok (tek İE formu). */
+  optionalInline?: boolean;
 }
 
 // "İş emrini siparişe bağla" — açık kalemleri çoklu seçtirir. Seçim varsa
@@ -57,6 +61,8 @@ export default function OrderLinkPicker({
   onOpenChange,
   picked: pickedProp,
   hideTrigger = false,
+  emptyHint = 'Opsiyonel — stok üretimi için gerekmez',
+  optionalInline = false,
 }: Props) {
   const [openInternal, setOpenInternal] = useState(false);
   const open = openProp ?? openInternal;
@@ -258,10 +264,13 @@ export default function OrderLinkPicker({
           <View style={{ flex: 1 }}>
             <Text style={styles.triggerText} numberOfLines={1}>
               {value.length > 0 ? `${value.length} sipariş kalemi bağlı` : 'Sipariş Bağla'}
+              {value.length === 0 && optionalInline ? <Text style={styles.triggerOptional}> (isteğe bağlı)</Text> : null}
             </Text>
-            <Text style={styles.triggerHint} numberOfLines={1}>
-              {value.length > 0 ? 'Değiştirmek için dokun' : 'Opsiyonel — stok üretimi için gerekmez'}
-            </Text>
+            {value.length === 0 && optionalInline ? null : (
+              <Text style={styles.triggerHint} numberOfLines={1}>
+                {value.length > 0 ? 'Değiştirmek için dokun' : emptyHint}
+              </Text>
+            )}
           </View>
           <Icon source="chevron-right" size={22} color={colors.textMuted} />
         </View>
@@ -419,6 +428,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   triggerText: { fontSize: 16, color: colors.text, fontWeight: '700' },
+  triggerOptional: { fontSize: 13, color: colors.textMuted, fontWeight: '500' },
   triggerHint: { fontSize: 11, color: colors.textMuted, fontWeight: '600', marginTop: 1 },
 
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.sm },

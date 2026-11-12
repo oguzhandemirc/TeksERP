@@ -2,6 +2,7 @@
 // Kaynak: `Teks-Erp/src/services/gelen-belge-{note,line,scan,eslestirme,onay}.service.ts` select/dönüş şekilleri.
 // Prisma Decimal JSON'da metindir (`meters`/`weightKg`/`widthCm`); toplam kapısının hükmü backend `totalsCheck`ten okunur.
 
+import type { Tanima } from "./tanimaTypes";
 import type { AutoWorkOrderResult } from "./workOrderTypes";
 import type { DocumentTotalCheckSettings, LineProblem, TotalsCheck } from "./reviewTypes";
 import type { EntryModeSettings, PartiMetreDetailFields, PartiMetrePatch, PartiMetreHeaderFields, ScanContentFields, SenderTemplateBatchNoFields } from "./partiMetreTypes";
@@ -71,6 +72,13 @@ export interface DeliveryNoteHeader extends PartiMetreHeaderFields {
   _count: { lines: number; scans: number };
   /** Liste: özet satırı (parti kaydı) hariç belge satırı sayısı; eski sunucu göndermez → `_count.lines`. */
   docLineCount?: number;
+  /** Liste: satır toplarının bağlı iş emirleri (iptal hariç, İE no sırasıyla); eski sunucu göndermez → undefined ("—"). */
+  workOrders?: NoteWorkOrderRef[];
+}
+
+export interface NoteWorkOrderRef {
+  id: string;
+  workOrderNumber: string;
 }
 
 export interface DeliveryNoteLine {
@@ -90,6 +98,8 @@ export interface DeliveryNoteLine {
   colorText: string | null;
   colorId: string | null;
   processText: string | null;
+  /** Onayda doğan parti kaydının müşteri parti no'su (çok partide partinin); belge satırında ve eski sunucuda yok/null. */
+  customerBatchNo?: string | null;
   confidence: number | null;
   needsReview: boolean;
   sourceRects: Record<string, OcrRect> | null;
@@ -138,6 +148,10 @@ export interface DeliveryNoteDetail extends DeliveryNoteHeader, PartiMetreDetail
   sameBatch?: SameBatchNotes | null;
   /** Okuma servisi tanımlı mı (false → bekleyen sayfa hiç okunmaz, form elle doldurulur); eski backend göndermez. */
   readerConfigured?: boolean;
+  /** "Bilgisayarda ikinci okuma" ayarı (false → okunamayan sayfa yeniden çekilir, Yeniden okut yok); eski backend göndermez. */
+  serverOcrEnabled?: boolean;
+  /** Tanıma özeti (belge tanıt 3 aşama); okunmuş sayfa yoksa / eski backend → yok. */
+  tanima?: Tanima;
 }
 
 export interface SameBatchNotes {
@@ -274,6 +288,8 @@ export interface ReaderStatus {
   service: "var" | "yok" | "erisilemiyor" | "gecersiz";
   engine: string | null;
   version: string | null;
+  /** "Bilgisayarda ikinci okuma" ayarı (eski backend göndermez = açık) · kuyrukta bekleyen fotoğraf sayısı (PDF hariç). */
+  serverOcrEnabled?: boolean; pending?: number;
 }
 
 /** Satır yazım gövdesi (backend `LineBody`; strictObject — fazla anahtar 400). */
@@ -326,6 +342,8 @@ export interface IncomingDocumentSettings extends DocumentTotalCheckSettings, En
   defaultHeaderLineMeterSource?: HeaderLineMeterSource;
   /** Okunan şablonun gönderen carisi boş gönderene yazılır; eski backend göndermez (undefined = alan çizilmez). */
   autoSenderFromTemplate?: boolean;
+  /** Bilgisayarda ikinci okuma (sunucu OCR); eski backend göndermez (undefined = anahtar çizilmez). */
+  serverOcrEnabled?: boolean; defaultServerOcrEnabled?: boolean;
 }
 /** Rota önerisi önceliği — backend `RouteSuggestionPriority` aynası. */
 export type RouteSuggestionPriority = "CUSTOMER_FIRST" | "FACTORY_FIRST";

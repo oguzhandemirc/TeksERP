@@ -27,7 +27,18 @@ export function defaultTargetHintText(d: DefaultTargetItem | undefined): string 
   return `Boş bırakılırsa: ${d.item.name} (${SOURCE_LABEL[d.source]})`;
 }
 
-export function useDefaultTargetHint(customerId: string | null, enabled: boolean): string | null {
+/** Seçici kutusunda gösterim: hedef boşken varsayılan kumaşın adı kutuya "varsayılan" ekiyle yazılır; kart kullanılamıyorsa uyarı. */
+export interface DefaultTargetView {
+  name: string;
+  problem: boolean;
+}
+
+export function defaultTargetView(d: DefaultTargetItem | undefined): DefaultTargetView | null {
+  if (!d?.item || !d.source) return null;
+  return { name: d.item.name, problem: !!d.item.problem };
+}
+
+export function useDefaultTargetHint(customerId: string | null, enabled: boolean): DefaultTargetView | null {
   const q = useQuery({
     queryKey: ['work-orders', 'default-target-item', customerId ?? ''],
     queryFn: () => fetchDefaultTargetItem(customerId),
@@ -35,5 +46,5 @@ export function useDefaultTargetHint(customerId: string | null, enabled: boolean
     staleTime: 60_000,
     retry: false,
   });
-  return defaultTargetHintText(q.data);
+  return defaultTargetView(q.data);
 }

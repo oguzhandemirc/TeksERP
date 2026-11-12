@@ -14,23 +14,26 @@ import { loadUserTemplates } from "./gelen-belge-ozel-sablon.service";
 import { templateByCode } from "../lib/gelen-belge/sablon-bul";
 
 /** Tel sözleşmesi madde 1 — okuma özetinin `data.tanitim` alanı. */
-export type TanitimInfo = { durum: "TANITILDI"; sablonKodu: string; sablonAdi: string } | { durum: "TANITILMAMIS" };
-export type IntroState = { durum: "TANITILDI"; sablonKodu: string } | { durum: "TANITILMAMIS" } | null;
+/** `SISTEM`: hazır (dosya) şablonla tanındı — istemci "Yeniden tanıt" sunar; eski istemci bunu tanıtılmış sayar (zararsız). */
+export type TanitimInfo = { durum: "TANITILDI" | "SISTEM"; sablonKodu: string; sablonAdi: string } | { durum: "TANITILMAMIS" };
+export type IntroState = { durum: "TANITILDI" | "SISTEM"; sablonKodu: string } | { durum: "TANITILMAMIS" } | null;
 
 /**
  * Saf: bölgelerin şablon kodlarından tanıtım durumu. Herhangi bir bölge kullanıcı şablonuyla → TANITILDI (ilk `u-`);
- * hiçbir bölge şablon tutmadıysa (GENEL/null, en az bir bölge) → TANITILMAMIS; sistem şablonu tuttuysa ya da bölge yoksa null.
+ * hiçbir bölge şablon tutmadıysa (GENEL/null/bilinmeyen kod, en az bir bölge) → TANITILMAMIS; hazır şablon tuttuysa SISTEM; bölge yoksa null.
  */
 export function introStateOf(templateIds: ReadonlyArray<string | null | undefined>): IntroState {
   const user = templateIds.find((c): c is string => typeof c === "string" && c.startsWith(USER_TEMPLATE_PREFIX));
   if (user) return { durum: "TANITILDI", sablonKodu: user };
   if (templateIds.length === 0) return null;
-  return templateIds.every((c) => !c || c === FALLBACK_TEMPLATE_CODE) ? { durum: "TANITILMAMIS" } : null;
+  // Yalnız motorda HÂLÂ olan dosya şablonu SISTEM'dir; kaldırılmış yerleşik kodu (eski kayıt) tanıtılmamış sayılır.
+  const system = templateIds.find((c): c is string => !!c && c !== FALLBACK_TEMPLATE_CODE && templateByCode(c) !== undefined);
+  return system ? { durum: "SISTEM", sablonKodu: system } : { durum: "TANITILMAMIS" };
 }
 
 /** Saf: SOR → NORMAL (bugünkü) · SORMA + tanıtılmış → TRUSTED · SORMA + tanıtılmamış → BLIND · sistem şablonu → NORMAL. */
 export function trustModeOf(mode: TanitimGuveniMode, st: IntroState): TrustMode {
-  if (mode !== "SORMA" || !st) return "NORMAL";
+  if (mode !== "SORMA" || !st || st.durum === "SISTEM") return "NORMAL";
   return st.durum === "TANITILDI" ? "TRUSTED" : "BLIND";
 }
 
@@ -66,6 +69,7 @@ export async function noteTanitim(noteId: string): Promise<{ tanitim: TanitimInf
   const trust = trustModeOf(await readTanitimGuveni(), st);
   if (!st) return { tanitim: undefined, trust };
   if (st.durum === "TANITILMAMIS") return { tanitim: st, trust };
+  if (st.durum === "SISTEM") return { tanitim: { ...st, sablonAdi: templateByCode(st.sablonKodu)?.name ?? st.sablonKodu }, trust };
   // Kullanıcı şablonu önbelleği süreç açılışında dolmaz (ilk okumada dolar) — sorusuz türetim şablonu görmeli.
   if (trust === "TRUSTED" && !templateByCode(st.sablonKodu)) await loadUserTemplates();
   return { tanitim: { ...st, sablonAdi: await userTemplateName(st.sablonKodu) }, trust };

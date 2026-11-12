@@ -114,6 +114,9 @@ export type RollEntrySource =
   // 2026-09-13 (dokuma P3): tezgahtan inip KK1'de doğan top.
   | 'WEAVING';
 
+// Backend `enum RollStage` aynası (2026-11-10): topun üretim aşaması; `test_mobil_enum_aynasi` ölçer.
+export type RollStage = 'RAW' | 'SEMI_FINISHED' | 'FINISHED';
+
 // Backend `MachineDataSource` enum'unun BİREBİR aynası (2026-09-14, tablet doff
 // dilimi öncülü): tezgah sayacı / koşum / duruş kaynağı — kim söyledi? Ekran
 // her yükte GÖNDERİR (`@default` yok), uydurma değer `SIMULATED` beyanıyla
@@ -230,6 +233,8 @@ export interface Station {
   name: string;
   type: StationType;
   kind?: StationKind;
+  /** `GET /work-orders/:id` adım istasyonunda: hedef özellik eşlemesi için; eski sunucuda yok. */
+  propertyCapabilities?: { propertyId: string }[];
 }
 
 // =============================================================================
@@ -307,6 +312,40 @@ export interface WorkOrderToOrderLine {
   };
 }
 
+export interface WorkOrderIncoming {
+  meters: number | null;
+  kg: number | null;
+  widthCm: number | null;
+  notes: {
+    id: string;
+    noteNo: string;
+    /** Müşterinin kendi evrak no'su / belge tarihi (ISO) / gönderen (yalnız sahipten farklıysa) / belgedeki top adedi / müşteri sipariş no / istenen işlem. */
+    senderDocNo?: string | null;
+    senderDocDate?: string | null;
+    sender?: string | null;
+    declaredTopCount?: number | null;
+    customerOrderNo?: string | null;
+    processText?: string | null;
+  }[];
+  customerBatchNo: string | null;
+  itemText: string | null;
+  colorText: string | null;
+  /** 2026-11-10 sunucusundan: girdi kökü sayısı/kimlikleri ve geliş biçimi (eski sunucuda yok → satır çizilmez). */
+  rootCount?: number;
+  rootRollIds?: string[];
+  arrivalForm?: 'SINGLE_PIECE' | 'ROLLS';
+}
+
+/** İE detayının hedef çeşit değeri. `edit` + `property.values` 2026-11-09 sunucusundan gelir (eski sunucuda yok). */
+export interface WorkOrderTargetValue {
+  propertyId?: string;
+  valueId?: string;
+  property?: { name?: string | null; variantOfPropertyId?: string | null; values?: { id: string; name: string }[] } | null;
+  value?: { name?: string | null } | null;
+  /** Sunucunun adım eşlemesi + tablet düzeltme kilidi (yazma kapısıyla aynı fonksiyon). */
+  edit?: { stepId: string | null; locked: boolean; reason?: string | null } | null;
+}
+
 export interface WorkOrder {
   id: string;
   workOrderNumber: string;
@@ -336,6 +375,15 @@ export interface WorkOrder {
   batches?: { id: string; batchNumber: string }[];
   /** Liste response'unda — canlı parti toplamı ("+N" için). */
   _count?: { batches: number };
+  /** `GET /work-orders/:id` — işin müşterisi (fason) ve oluşturan; eski sunucuda yok. */
+  customer?: { id: string; name: string; code?: string | null } | null;
+  createdBy?: { id: string; fullName: string | null } | null;
+  /** Hedef çeşit değerleri (gramaj vb.); aktif olanlar. */
+  targetValues?: WorkOrderTargetValue[];
+  /** Üretime giren ham toplar özeti. */
+  inputRolls?: { count: number; totalMeters: number } | null;
+  /** Gelen (belgeden) bloğu — belgeden doğmamış İE'de null. */
+  incoming?: WorkOrderIncoming | null;
   /** `GET /work-orders/:id` ekler — fiziksel taahhüt; tablet iptal kapısı `materialCommitted`ı okur. */
   locks?: { materialCommitted: boolean } | null;
 }
@@ -435,8 +483,14 @@ export interface Roll {
   qualityGrade: string;
   status: RollStatus;
   entrySource?: RollEntrySource;
+  /** Üretim aşaması (2026-11-10) — etiket türü buradan; eski sunucuda yok. */
+  stage?: RollStage;
   /** Kaç kat sarıldığı ("2-KAT" | "4-KAT"); NULL = kayıtlı değil. */
   foldType?: string | null;
+  /** Etikete basılan müşteri kumaş adı / rengi / parti no (tamburda topa yazılır); eski sunucuda yok. */
+  labelItemName?: string | null;
+  labelColorName?: string | null;
+  labelBatchNo?: string | null;
   parentReceiptId?: string | null;
   /** Barkod okumasında (`/rolls/barcode`) kartın tamamı gelir; listelerde yalnız kimlik. */
   item?: { id: string; code: string; name: string; lifecycleStatus?: ItemLifecycleStatus };
@@ -445,6 +499,8 @@ export interface Roll {
   producedInStep?: {
     workOrder?: { id: string; workOrderNumber: string } | null;
   } | null;
+  /** Partinin iş emri — yalnız bazı listelerde gelir (Tambur son çıkanlar `include.batch.workOrder`). */
+  batch?: { workOrder?: { id: string; workOrderNumber: string } | null } | null;
   createdBy?: { id: string; username: string; fullName: string } | null;
   /** Topun sisteme GİRDİĞİ istasyon (kalıcı köken; 2026-08-05 öncesi toplar null). */
   entryStation?: { id: string; code: string; name: string } | null;
@@ -873,6 +929,8 @@ export interface KursunRollSummary {
   meter?: { declaredIn: number | null; measuredIn: number | null } | null;
   /** D4-KUC3b: ölçülen en sınırı (yalnız en ölçen adımda; sunucu yazım kapısıyla aynı hesap). Eski backend göndermez → ön-denetim yok. */
   widthLimit?: { widthBefore: number | null; toleranceCm: number; maxCm: number | null };
+  /** GK 2026-11-11 "Malın sahibi": emanet sahibi (consigned) ya da İE/sipariş müşterisi; bilinmiyorsa null. Eski backend göndermez → satır yok. */
+  goodsOwner?: { name: string; consigned: boolean } | null;
 }
 
 /** Önceki adım hatası + künye ("KK Masa 2 · Ayşe · 13:40"). */
@@ -1121,11 +1179,27 @@ export interface TamburMeasureBody {
   rawCounter?: number | null;
 }
 
+/** Etiket alıcısı · kg kaynağı · ölçülen en (2026-11-10) — tambur kesim/bitir uçlarının ortak ek alanları.
+ *  Eski backend zod `strip` eder (alanlar sessizce düşer, kesim yine geçer). */
+export type TamburWeightSource = 'SCALE' | 'MANUAL' | 'SIMULATED';
+export interface TamburLabelExtras {
+  /** Emanet topun alıcısı (müşterimizin müşterisi); null/yok = malın sahibi. */
+  labelConsigneeId?: string | null;
+  /** Kg'nin kaynağı — kg yoksa gönderilmez (backend 400 WEIGHT_SOURCE_WITHOUT_KG). */
+  weightSource?: TamburWeightSource;
+  /** Operatörün ölçtüğü en (cm); yok = atadan miras / gelen belge. */
+  widthCm?: number | null;
+  /** Çocuğun etiket şablonu (çoklu etiket seti); yalnız varsayılandan FARKLI seçimde gönderilir. */
+  labelTemplateId?: string;
+}
+
 export interface TamburCut {
   length: number;
   qualityGrade: string;
   relatedErrorIds?: string[];
   measure?: TamburMeasureBody;
+  weightKg?: number | null;
+  weightSource?: TamburWeightSource;
 }
 
 export interface TamburFinalizeRequest {
@@ -1309,7 +1383,7 @@ export interface TamburContext {
 }
 
 /** `POST /api/tambur/:id/cut` — açık kumaşta tek kesim */
-export interface TamburCutRequest {
+export interface TamburCutRequest extends TamburLabelExtras {
   lengthMeters: number;
   /** Tamburda tartım (Gülkesim S5) — müşteri ayarı açıksa zorunlu; eski backend yok sayar. */
   weightKg?: number | null;
@@ -1339,6 +1413,9 @@ export interface TamburCutRequest {
   measure?: TamburMeasureBody;
   /** Çocuğun etiketine basılacak müşteri parti no; ayar kapalıysa GÖNDERİLMEZ (sunucu 400). */
   labelBatchNo?: string | null;
+  /** Çocuğun etiket kumaş adı / rengi (ayara bağlı değil; boşsa gönderilmez). */
+  labelItemName?: string | null;
+  labelColorName?: string | null;
 }
 
 /** `POST /api/tambur/:id/finalize-open-fabric` — açık kumaşı bitir */
@@ -1348,7 +1425,7 @@ export type TamburFinalizeRemainingAction =
   | "scrap"
   | "discard";
 
-export interface TamburFinalizeOpenFabricRequest {
+export interface TamburFinalizeOpenFabricRequest extends TamburLabelExtras {
   /**
    * Kalan metre (parent.currentQty) için operatör kararı:
    *   - keep_1kalite → 1.KALITE barkodlu top oluştur
@@ -1375,6 +1452,9 @@ export interface TamburFinalizeOpenFabricRequest {
   weightKg?: number | null;
   /** Kalan topun etiketine basılacak müşteri parti no (ayar kapalıysa gönderilmez). */
   labelBatchNo?: string | null;
+  /** Kalan topun etiket kumaş adı / rengi (boşsa gönderilmez). */
+  labelItemName?: string | null;
+  labelColorName?: string | null;
 }
 
 // =============================================================================
@@ -1413,7 +1493,8 @@ export interface QualityGrade {
 // Label payload + template
 // =============================================================================
 
-export type NameSource = 'OVERRIDE' | 'MASTER' | 'DEFAULT';
+/** ROLL = topun kendi etiket adı (tamburda kesimde seçilir; eski backend göndermez). */
+export type NameSource = 'OVERRIDE' | 'MASTER' | 'DEFAULT' | 'ROLL';
 
 /**
  * Ana veri kademesi kazandığında hangi tablodan geldiği: `ITEM` = müşterinin YALNIZ

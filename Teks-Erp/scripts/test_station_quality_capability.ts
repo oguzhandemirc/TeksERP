@@ -38,6 +38,8 @@
 // 2026-11-08 (bölme temizliği, taban 58/0): eski regex sökücü → §0 ❌ · `tambur/read.ts` `station: true` daraltılınca
 //   → §5 tam satır beyanı ölü + kalite okuması ❌ (2) · beyan anahtarı bozulunca → aynı iki ❌; geri alındı.
 //   Sökücü türü TSX'e zorlanınca (`.ts` uzantısı yok sayılır) → §0b ❌ (`<any>b` sonrası yorumlar kalır).
+// 2026-11-09 (Tambur muayenesiz doğar, taban 60/0): INSPECTION_DEFAULT_KINDS'e TAMBUR geri → §2 doğuş ❌ ·
+//   `stationLayoutWarning` yeniden `inspectionDefaultForKind`e bağlanınca → §2 eski tablet uyarısı ❌; geri alındı.
 // Faz A sondaları (S1–S5) aynı kalıpları akış ikizinde ölçmüştü; dersleri:
 //   • muaf DOSYA bazında değil SAYIM bazında (aynı dosyaya eklenen yeni tür
 //     kontrolü sessizce kapsanıyordu);
@@ -59,6 +61,7 @@ import {
   STEP_QUALITY_SELECT,
   inspectionDefaultForKind,
   INSPECTION_DEFAULT_KINDS,
+  stationLayoutWarning,
   KURSUN_PROPERTY_CODE,
   stepDecidesDefects,
   DEFECT_DECISION_STATION_WHERE,
@@ -73,6 +76,9 @@ import { ENVANTER_SERVIS_REL, envanterServisMetni } from "./lib/envanter-servis-
 import { TAMBUR_SERVIS_REL, tamburServisDosyasiMi, tamburServisMetni } from "./lib/tambur-servis-kaynak";
 import { yorumlariSokTs } from "./lib/yorum-sok";
 
+
+// 2026-10-24 migration'ının geri doldurduğu küme — GEÇMİŞTİR, doğuş varsayılanıyla (2026-11-09 Tambur kapalı) ayrıştı.
+const MIGRATION_BACKFILL_KINDS: readonly StationKind[] = [StationKind.PROCESS_QC, StationKind.TAMBUR];
 let pass = 0;
 let fail = 0;
 function check(label: string, ok: boolean, extra = "") {
@@ -255,15 +261,22 @@ async function main() {
       stepCanApplyQuality(null) === false && stepCanApplyQuality(undefined) === false);
 
     const tumTurler = Object.values(StationKind) as StationKind[];
+    // Tambur 2026-11-09'dan beri muayenesiz doğar (son istasyon topa hata yazmaz); geçmiş geri doldurma §7'de DONMUŞ.
     const dogusYanlis = tumTurler.filter((k) =>
-      inspectionDefaultForKind(k) !== (k === StationKind.PROCESS_QC || k === StationKind.TAMBUR));
+      inspectionDefaultForKind(k) !== (k === StationKind.PROCESS_QC));
     // KARAR İKİZİ (KQ-D8): yalnız TAMBUR; muayene/akış bayrağı etkisiz.
     const kararYanlis = tumTurler.filter((k) => stepDecidesDefects({ kind: k }) !== (k === StationKind.TAMBUR));
     check("§2 karar tablosu: yalnız TAMBUR karar verir", kararYanlis.length === 0 &&
       stepDecidesDefects(null) === false && stepDecidesDefects(undefined) === false, kararYanlis.join(", ") || `${tumTurler.length} tür`);
-    check("§2 doğuş varsayılanı: yalnız PROCESS_QC + TAMBUR true", dogusYanlis.length === 0 &&
-      INSPECTION_DEFAULT_KINDS.length === 2 && inspectionDefaultForKind(undefined) === false,
+    check("§2 doğuş varsayılanı: yalnız PROCESS_QC true (TAMBUR false)", dogusYanlis.length === 0 &&
+      INSPECTION_DEFAULT_KINDS.length === 1 && inspectionDefaultForKind(undefined) === false,
       dogusYanlis.join(", ") || `${tumTurler.length} tür`);
+    // Eski APK uyarısı varsayılandan BAĞIMSIZ: <1.4.3 Tambur'da paneli türden çizer (muayene kapalı → kayıt 400).
+    check("§2 eski tablet uyarısı: muayenesi kapalı TAMBUR + PROCESS_QC uyarır, açık ya da başka tür uyarmaz",
+      stationLayoutWarning({ kind: "TAMBUR", inspectionEnabled: false }) !== null
+        && stationLayoutWarning({ kind: "PROCESS_QC", inspectionEnabled: false }) !== null
+        && stationLayoutWarning({ kind: "TAMBUR", inspectionEnabled: true }) === null
+        && stationLayoutWarning({ kind: "RAW_QC", inspectionEnabled: false }) === null);
 
     // ── §3 ⭐ İki ikizin canlı DB eşdeğerliği ───────────────────────────────
     const kose: Array<{ ad: string; kind: StationKind; q: boolean; ins: boolean }> = [];
@@ -472,7 +485,7 @@ async function main() {
                 code: `TSQCMIG-${ids.length}-${ts}`, // kod kolonu 32 karakter
                 name: `TEST Migration Türetme ${kind} ${q} ${ts}`,
                 type: "INTERNAL", kind, appliesQuality: q,
-                inspectionEnabled: !inspectionDefaultForKind(kind),
+                inspectionEnabled: !MIGRATION_BACKFILL_KINDS.includes(kind),
               },
               select: { id: true },
             });
@@ -490,8 +503,8 @@ async function main() {
     } catch (e) {
       if (e !== ROLLBACK) throw e;
     }
-    const sqlYanlis = sqlSonuc.filter((r) => r.ins !== inspectionDefaultForKind(r.kind));
-    check("§7 ⭐ migration UPDATE her StationKind × appliesQuality'de `inspectionDefaultForKind` ile AYNI",
+    const sqlYanlis = sqlSonuc.filter((r) => r.ins !== MIGRATION_BACKFILL_KINDS.includes(r.kind));
+    check("§7 ⭐ migration UPDATE her StationKind × appliesQuality'de donmuş geri doldurma kümesiyle (PROCESS_QC + TAMBUR) AYNI",
       sqlSonuc.length === tumTurler.length * 2 && sqlYanlis.length === 0,
       sqlYanlis.map((r) => `${r.kind}/${r.q}→${r.ins}`).join(", ") || `${sqlSonuc.length} satır`);
     const geriAlindi = await prisma.station.count({ where: { code: { startsWith: "TSQCMIG-" } } });
@@ -509,7 +522,7 @@ async function main() {
       where: { code: { in: ["KK1_1", "KURSUN_KK2", "TAMBUR_1"] } },
       select: { code: true, kind: true, inspectionEnabled: true },
     });
-    const seedYanlis = seedSatir.filter((r) => r.inspectionEnabled !== inspectionDefaultForKind(r.kind));
+    const seedYanlis = seedSatir.filter((r) => r.inspectionEnabled !== MIGRATION_BACKFILL_KINDS.includes(r.kind));
     check("§7 canlı DB seed satırları: KK2/Tambur true, KK1 false", seedSatir.length === 3 && seedYanlis.length === 0,
       seedSatir.map((r) => `${r.code}=${r.inspectionEnabled}`).join(" "));
 

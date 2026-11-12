@@ -112,6 +112,8 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   dokumaOrderLineLinkRequired: "dokumaEnabled",
   // S1 (2026-10-21): top doğuş yolu dokumanın enum bayrağı (panel satırı S4b).
   dokumaRollBirth: "dokumaEnabled",
+  dokumaWeavingWastePct: "dokumaEnabled",
+  dokumaYarnReservationEnabled: "dokumaEnabled",
   // Tezgah Salonu (2026-10-10): iletim payı tezgah izleme modülünün sayısal ayarı.
   tezgahEscalationGraceMinutes: "tezgahEnabled",
   // Dokuma alarmı: alarm motoru ve ayarları tezgah izleme modülünün davranış bayrakları ("Tezgah izleme" kategorisi).
@@ -127,6 +129,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
 
   // --- ÜRETİM (`operations/work-orders` · KK1 · Tambur · Kurşun · Parti) -----
   targetQuantityEnabled: "productionEnabled",
+  targetWidthEnabled: "productionEnabled",
   partyCodeAuto: "productionEnabled",
   batchShortNumberEnabled: "productionEnabled",
   batchLastNumberHintEnabled: "productionEnabled",
@@ -259,6 +262,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   shipmentConfirmationEnabled: "cekirdek",
   shipmentManualSackCountEnabled: "cekirdek",
   shipmentLooseLoadEnabled: "cekirdek",
+  shipmentHandheldCreateEnabled: "cekirdek",
   shipmentUndoSameDayOnly: "cekirdek",
   shippingOrderRequirement: "cekirdek",
   itemPhaseOutNewOrder: "cekirdek",

@@ -3,7 +3,7 @@ import NotificationStrip from './bildirim/NotificationStrip';
 import { isSessionScreen } from '../constants/stationScreens';
 import type { MobileScreenKey } from '../types/permissions';
 import React, { useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View } from 'react-native';
 import { useHardwareStepBack } from '../hooks/useHardwareStepBack';
 import { Appbar, Text, TouchableRipple, Icon, Divider } from 'react-native-paper';
 // paper `Menu` YERİNE — Fabric'te profil menüsü açılırken "Maximum update depth
@@ -23,6 +23,7 @@ import { usePlaceActions, MachinePickerModal } from './session/PlaceActions';
 import HeaderSecondRow from './HeaderSecondRow';
 import type { MainStackParamList, RootStackParamList } from '../navigation/types';
 import HeaderInfoButton, { HeaderStatusLine } from './HeaderInfoButton';
+import { styles } from './ScreenChrome.styles';
 
 interface Props {
   title: string;
@@ -53,8 +54,12 @@ interface Props {
    *  tuş orada "diğer aksiyonlar" arasında kaybolur — mod, bulunulan yerin
    *  yanında okunmalı (2026-08-17 saha geri bildirimi, KK1 yarı mamul). */
   titleRowExtras?: React.ReactNode;
+  /** Profil tuşunun HEMEN SOLUNDA (zilden sonra) duran yalnız-ikon ekran tetiği (ör. İE formunda ⚙ Alanlar). */
+  profileExtras?: React.ReactNode;
   /** İçeriğin üstündeki şerit yuvası (tezgah alarmı). İstasyon ekranında bildirim şeridi bunun ALTINA gelir. */
   topStrip?: React.ReactNode;
+  /** true: alt safe-area boşluğu bırakılmaz — dipteki eylem çubuğu ekrana yapışır (geniş tablet Tambur, 2026-11-10). */
+  flushBottom?: boolean;
   children: React.ReactNode;
 }
 
@@ -69,7 +74,9 @@ export default function ScreenChrome({
   secondRowSpread,
   hidePlaceChip,
   titleRowExtras,
+  profileExtras,
   topStrip,
+  flushBottom,
   children,
 }: Props) {
   const user = useAuthStore((s) => s.user);
@@ -178,6 +185,8 @@ export default function ScreenChrome({
 
         {/* Bildirim zili — bayrak kapalı / eski backend → null (bugünkü başlık bayt-eşit). */}
         <NotificationBellButton />
+
+        {profileExtras}
 
         {/* Konum tetiğin GERÇEK ölçümünden gelir (measureInWindow) — eski
             `anchorPosition`/`marginTop` telafisi artık gerekmiyor. */}
@@ -301,14 +310,14 @@ export default function ScreenChrome({
           ekranları (sticky footer'lar dahil) bundan faydalanır. */}
       {topStrip}
       {isSessionScreen(route.name as MobileScreenKey) && <NotificationStrip />}
-      <View style={[styles.content, { paddingBottom: insets.bottom }]}>{children}</View>
+      <View style={[styles.content, { paddingBottom: flushBottom ? 0 : insets.bottom }]}>{children}</View>
 
       {/* Makine seçme modalı (profil menüsü → Makine değiştir). Menü kapansa da
           yaşasın diye burada — menü içinde olsaydı kapanınca unmount olurdu. */}
-      {placeActions.expectedKind && (
+      {placeActions.screenKey && (
         <MachinePickerModal
           visible={machinePickerOpen}
-          expectedKind={placeActions.expectedKind}
+          screenKey={placeActions.screenKey}
           onClose={() => setMachinePickerOpen(false)}
         />
       )}
@@ -326,60 +335,3 @@ export default function ScreenChrome({
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#f8fafc' },
-  appbar: { backgroundColor: '#0f172a' },
-  // RN Paper Appbar.Content title bazı sürümlerde center hizalar; sola sabitle.
-  // flexShrink: makine çipi yanına sığsın diye başlık gerekirse kısalır.
-  title: { color: '#fff', fontWeight: '700', textAlign: 'left', flexShrink: 1 },
-  // Başlık + makine çipi yan yana.
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  // Content view'i sola hizala — title kenara dayalı. paddingLeft 4: ufak nefes
-  // payı, ev/back ikonuna yakın dursun (telefonda sağdaki aksiyon butonları için yer açar).
-  // flex: 1 de vererek available space'i kaplamasını garanti edelim.
-  // justifyContent: 'center' ekleyerek dikeyde ortalayalım.
-  appbarContent: { alignItems: 'flex-start', justifyContent: 'center', paddingLeft: 4, flex: 1 },
-  // Baştaki ikonsuz düzen (tablet): içerik padding'iyle (16) hizalı başlık.
-  appbarContentNoLead: { paddingLeft: 16 },
-  // Profil tetiği — kendini belli eden DOLU marka-indigo buton (diğer soluk
-  // pill'lerden ayrışır); ölçüler aynı (radius 10 + paddingV 9 → eş boy).
-  userTrigger: {
-    borderRadius: 10,
-    backgroundColor: '#4f46e5',
-    borderWidth: 1,
-    borderColor: '#818cf8',
-    overflow: 'hidden',
-    marginHorizontal: 4,
-  },
-  userTriggerInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
-  // Ad gizliyken (telefon) yatay iç boşluk dikeyle eşitlenir → 36×36 KARE buton.
-  // Metin için ayarlanmış 12px yatay boşluk tek ikonla 42×36 dikdörtgen bırakıyor
-  // ve "yazısı silinmiş buton" gibi duruyordu.
-  userTriggerIconOnly: { paddingHorizontal: 9 },
-  userTriggerName: { color: '#fff', fontWeight: '700', fontSize: 13, maxWidth: 160 },
-  // Menü ilk satırı — giriş yapan operatörün adı (kim olduğun). Menü yüzeyi beyaz →
-  // koyu metin. Ad + (varsa) @kullanıcı-adı alt satır.
-  menuHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 10,
-    maxWidth: 340,
-  },
-  menuHeaderText: { flexShrink: 1 },
-  menuHeaderName: { fontSize: 16, fontWeight: '700', color: '#0f172a' },
-  menuHeaderSub: { fontSize: 13, color: '#64748b', marginTop: 1 },
-  // Menü maddeleri — saha dokunma hedefi (min 56dp kuralı) + büyük yazı.
-  menuItem: { height: 58, maxWidth: 340 },
-  menuItemTitle: { fontSize: 17 },
-  content: { flex: 1 },
-});

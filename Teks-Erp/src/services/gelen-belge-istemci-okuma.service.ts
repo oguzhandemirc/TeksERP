@@ -1,20 +1,27 @@
 // =============================================================================
 // GELEN BELGE — cihazda OCR (S16c): tablet fotoğrafı ML Kit ile okur, yüklemeye `clientOcr` ekler; sunucu okuma servisini
 // ATLAR ve aynı motor/taslak yolunu (`processClaimedScan`) yükleme isteği içinde koşar — okuma servisi yokken de taslak doğar.
-// Her başarısızlıkta tarama PENDING'e döner ve sunucu okumasına düşer (yanıt yine 201). Ham OCR metni audit/log'a girmez.
+// Her başarısızlıkta tarama PENDING'e döner ve sunucu okumasına düşer (yanıt yine 201); "Bilgisayarda ikinci okuma" kapalıysa
+// devralacak okuyucu yok → READ_FAILED (tablet "Okunamadı", sayfa yeniden çekilir). Ham OCR metni audit/log'a girmez.
 // =============================================================================
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { uyari } from "../lib/logger";
 import { ClientOcrSchema, clientOcrToResult } from "../lib/gelen-belge/istemci-ocr";
+import { uprightClientOcr } from "../lib/gelen-belge/sayfa-yonu";
 import type { OcrResult } from "../lib/gelen-belge/motor";
+import { normalizeBarcodes } from "../lib/gelen-belge/barkod";
 import { processClaimedScan, type CompleteFn } from "./gelen-belge-okuma.service";
 import { serverCompleter } from "./gelen-belge-sunucu-tamamlama.service";
+import { serverReaderState } from "./gelen-belge-sunucu-okuyucu.service";
 import { PDF_MIME, SCAN_SELECT, uploadDocumentScan, type DocumentScanInput } from "./gelen-belge-scan.service";
 
-/** `READ`: cihaz okuması taslağa işlendi · `FALLBACK`: sunucu okumasına bırakıldı · `null`: cihaz okuması yok/kullanılmadı. */
-export type DeviceReadOutcome = "READ" | "FALLBACK" | null;
+/** `READ`: cihaz okuması taslağa işlendi · `FALLBACK`: sunucu okumasına bırakıldı · `FAILED`: okunamadı, sunucu okuması
+ *  kapalı (READ_FAILED) · `null`: cihaz okuması yok/kullanılmadı. */
+export type DeviceReadOutcome = "READ" | "FALLBACK" | "FAILED" | null;
+/** Ayar kapalıyken düşen/okunmayan taramanın künye neden kodu (audit). */
+const SERVER_OCR_DISABLED = "SERVER_OCR_DISABLED";
 /** Bekçi düşme yolunu bu parametreyle sınar (işlemci hata atar); üretimde hep `processClaimedScan` (+ `serverCompleter()`). */
 type ProcessFn = typeof processClaimedScan;
 const SCAN_TABLE = "DOCUMENT_SCAN";
@@ -27,7 +34,8 @@ export function parseClientOcr(raw: unknown): OcrResult {
     const where = issue?.path.length ? ` (${issue.path.join(".")})` : "";
     throw AppError.badRequest(`Cihaz okuması geçersiz${where}; fotoğraf sunucuda okunacak biçimde yeniden gönderilmeli.`, { code: "CLIENT_OCR_INVALID" });
   }
-  return clientOcrToResult(parsed.data);
+  // Yan/ters dönük sayfa çeyrek adımla dikleştirilir (`rotation` sözleşmesi saklanan fotoğraf kutularını geri çevirir).
+  return clientOcrToResult(uprightClientOcr(parsed.data, "QUARTER").ocr);
 }
 
 /** Yeniden kullanılan PENDING kayıt (ağ kopması tekrarı): PENDING → READING atomik claim; kaybeden cihaz okumasını bırakır. */
@@ -48,24 +56,33 @@ async function readOnDevice(c: { id: string; attempts: number; result: OcrResult
   // Boş başlık alanı kalırsa aynı fotoğraf sunucuda bir kez okunur, yalnız boş alanlar dolar (`gelen-belge-sunucu-tamamlama`).
   const outcome = await process(id, "", async () => ({ ok: true, result, engine: "mlkit", version: null, durationMs }), { complete })
     .catch((err: unknown) => {
-      uyari("gelen-belge", `cihaz okuması işlenemedi (${err instanceof Error ? err.name : "?"}) — sunucu okumasına bırakıldı`);
+      uyari("gelen-belge", `cihaz okuması işlenemedi (${err instanceof Error ? err.name : "?"})`);
       return "ERROR" as const;
     });
   if (outcome === "READ") return "READ";
-  const back = await prisma.documentScan.updateMany({ where: { id, status: "READING", attempts }, data: { status: "PENDING", attempts: attempts - 1 } });
-  // Düşme bir durum geçişidir (READING → PENDING) — ayak izi; READ yolu kendi audit'ini `processClaimedScan`te basar.
-  if (back.count === 1) await AuditService.log({ userId, action: "UPDATE", tableName: SCAN_TABLE, recordId: id, oldData: { status: "READING" }, newData: { status: "PENDING", deviceOcr: "FALLBACK" } });
-  return "FALLBACK";
+  // Sunucu okuması kapalıysa PENDING'e bırakmak sonsuz "okunuyor" olur → READ_FAILED/0 (panel "Yeniden okut" ayar açılınca).
+  const serverOff = !(await serverReaderState()).enabled;
+  const next = serverOff ? { status: "READ_FAILED" as const, attempts: 0 } : { status: "PENDING" as const, attempts: attempts - 1 };
+  const back = await prisma.documentScan.updateMany({ where: { id, status: "READING", attempts }, data: next });
+  // Düşme bir durum geçişidir (READING → PENDING|READ_FAILED) — ayak izi; READ yolu kendi audit'ini `processClaimedScan`te basar.
+  const newData = serverOff ? { status: next.status, deviceOcr: "FAILED", reason: SERVER_OCR_DISABLED } : { status: next.status, deviceOcr: "FALLBACK" };
+  if (back.count === 1) await AuditService.log({ userId, action: "UPDATE", tableName: SCAN_TABLE, recordId: id, oldData: { status: "READING" }, newData });
+  return serverOff ? "FAILED" : "FALLBACK";
 }
 
 /**
  * Yükleme ucu gövdesi: `clientOcr` yoksa bugünkü yükleme. Varsa yeni fotoğraf READING doğar ve hemen cihaz okumasıyla
  * işlenir; yeniden kullanılan PENDING kayıt claim'lenip aynı yoldan okunur; okunmuş/başarısız/PDF kayıt cihaz okumasını yok sayar.
  */
-export async function uploadScanWithDeviceRead(input: DocumentScanInput & { clientOcr?: unknown }, userId: string, process: ProcessFn = processClaimedScan, complete: CompleteFn = serverCompleter()) {
-  const { clientOcr, ...rest } = input;
-  const device = clientOcr === undefined || clientOcr === null ? null : parseClientOcr(clientOcr);
-  const r = await uploadDocumentScan(rest, userId, { bornReading: device !== null });
+export async function uploadScanWithDeviceRead(input: DocumentScanInput & { clientOcr?: unknown; barcodes?: { format: string; value: string }[] }, userId: string, process: ProcessFn = processClaimedScan, complete: CompleteFn = serverCompleter()) {
+  const { clientOcr, barcodes: rawBarcodes, ...rest } = input;
+  const parsed = clientOcr === undefined || clientOcr === null ? null : parseClientOcr(clientOcr);
+  // Fotoğraftaki barkodlar cihaz okumasına eklenir (motor `fromBarcode` alanına yazar); cihaz okuması yoksa kullanılmaz.
+  const barcodes = normalizeBarcodes(rawBarcodes);
+  const device = parsed && barcodes.length ? { ...parsed, barcodes } : parsed;
+  // Cihaz okuması gelmedi + sunucu okuması kapalı: okuyacak kimse yok → kayıt READ_FAILED doğar (PDF zaten öyle).
+  const bornUnread = device === null && !(await serverReaderState()).enabled ? SERVER_OCR_DISABLED : undefined;
+  const r = await uploadDocumentScan(rest, userId, { bornReading: device !== null, bornUnread });
   if (!device || r.scan.mimeType === PDF_MIME) return { ...r, deviceOcr: null as DeviceReadOutcome };
   const attempts = !r.duplicate && r.scan.status === "READING" ? r.scan.attempts : r.scan.status === "PENDING" ? await claimPendingForDevice(r.scan.id) : null;
   if (attempts === null) return { ...r, deviceOcr: null as DeviceReadOutcome };

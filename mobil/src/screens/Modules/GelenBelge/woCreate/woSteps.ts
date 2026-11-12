@@ -3,6 +3,7 @@
 // şablonu klonlar (bugünkü yol). Kural sunucudadır (klasik İE doğrulaması); burası yalnız listeyi kurar.
 import type { CreateWorkOrderFromNoteBody } from '../../../../services/inboundDoc.service';
 import type { ProductionRoute } from '../../../../services/route.service';
+import type { RollStage } from '../../../../types/models';
 
 type RouteStep = NonNullable<ProductionRoute['steps']>[number];
 export type StepStation = NonNullable<RouteStep['station']>;
@@ -17,12 +18,17 @@ export interface EditStep {
   notes: string;
   plannedMachineId: string | null;
   dispatchWithoutColor: boolean;
+  /** Şablon adımının çıktı aşaması (null = otomatik) — düzenlenmiş listede düşmesin diye taşınır. */
+  outputStage: RollStage | null;
 }
 
 export type StepsBody = NonNullable<CreateWorkOrderFromNoteBody['steps']>;
 
 /** Kurşun adımı (sunucu `isKursunStation`; eski sunucuda kurşun+KK2 istasyon türü — deskPlan ile aynı). */
 export const isKursunStation = (s: StepStation | null | undefined): boolean => !!s && (s.isKursunStation ?? s.kind === 'PROCESS_QC');
+
+/** Fason (dış işlem) adımı: sunucunun ölçütüyle aynı — istasyon türü SUBCONTRACTOR. İç istasyonun süreç türü fason değildir. */
+export const isFasonStation = (s: StepStation | null | undefined): boolean => s?.kind === 'SUBCONTRACTOR';
 
 /** Adımın fason kategorisi (firma seçimi bunun firmalarından); fason değilse null. */
 export const stepCategoryId = (s: Pick<EditStep, 'requiredCategoryId' | 'station'>): string | null => s.requiredCategoryId ?? s.station?.defaultCategory?.id ?? null;
@@ -40,6 +46,7 @@ export function stepsFromRoute(route: ProductionRoute | null | undefined): EditS
       notes: s.defaultNotes ?? '',
       plannedMachineId: s.plannedMachineId ?? null,
       dispatchWithoutColor: s.dispatchWithoutColor === true,
+      outputStage: s.outputStage ?? null,
     }));
 }
 
@@ -56,6 +63,7 @@ export function addStep(steps: readonly EditStep[], station: StepStation & { id:
       notes: '',
       plannedMachineId: null,
       dispatchWithoutColor: false,
+      outputStage: null,
     },
   ];
 }
@@ -96,6 +104,7 @@ export function effectiveRoute(route: ProductionRoute, steps: readonly EditStep[
       plannedSubcontractorId: s.plannedSubcontractorId,
       plannedMachineId: s.plannedMachineId,
       dispatchWithoutColor: s.dispatchWithoutColor,
+      outputStage: s.outputStage,
       ...(s.station ? { station: s.station } : {}),
     })),
   };
@@ -127,6 +136,7 @@ export function buildStepsBody(steps: readonly EditStep[], machineId?: string | 
       ...(s.plannedSubcontractorId ? { plannedSubcontractorId: s.plannedSubcontractorId } : {}),
       ...(machine ? { plannedMachineId: machine } : {}),
       ...(s.dispatchWithoutColor ? { dispatchWithoutColor: true } : {}),
+      ...(s.outputStage ? { outputStage: s.outputStage } : {}),
     };
   });
 }

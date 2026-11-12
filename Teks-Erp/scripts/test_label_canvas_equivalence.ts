@@ -122,7 +122,7 @@ async function main() {
       barcodeSvg: "<svg viewBox=\"0 0 10 10\"></svg>", qrSvg: "<svg viewBox=\"0 0 10 10\"></svg>",
       copies: 1, format: { ...format, language: "RASTER_HTML" as PrinterLanguage },
     })).content;
-    const missingHtml = boundValues.filter((x) => !html.includes(escapeHtml(asciiFold(x.dv.value)))).map((x) => x.key);
+    const missingHtml = boundValues.filter((x) => !html.includes(escapeHtml(x.dv.value))).map((x) => x.key);
     check(`${tag} × HTML: kanvas alan değerleri içerikte (${boundValues.length} alan)`,
       missingHtml.length === 0, missingHtml.length ? `eksik: ${missingHtml.join(", ")}` : "");
 

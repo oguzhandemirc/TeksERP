@@ -42,9 +42,16 @@ export function partyFactItems(p: NoteParty): PartyFact[] {
     p.senderWorkOrderNo ? { text: `Müşteri İE ${p.senderWorkOrderNo}` } : null,
     { text: `${p.lineCount} top${p.declaredTopCount !== null && p.declaredTopCount !== p.lineCount ? ` (belgede ${p.declaredTopCount})` : ""}` },
     ...partyMeterFacts(p),
-    p.weightKg !== null ? { text: `${formatNumber(p.weightKg, 2)} kg` } : null,
+    partyKgFact(p),
   ];
   return items.filter((x): x is PartyFact => !!x);
+}
+
+/** Satır kg toplamı; yoksa sunucunun gelen kg önerisi (belgedeki parti toplamı) kaynağıyla. */
+function partyKgFact(p: NoteParty): PartyFact | null {
+  if (p.weightKg !== null) return { text: `${formatNumber(p.weightKg, 2)} kg` };
+  if (p.suggestedKg != null) return { text: `${formatNumber(p.suggestedKg, 2)} kg${p.kgSource === "TOTAL" ? " (belge toplamı)" : ""}` };
+  return null;
 }
 
 /**

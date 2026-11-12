@@ -36,6 +36,13 @@ export async function listShortcutRoutes(where: Record<string, unknown>, include
   return { success: true, data, pagination: { page: 1, pageSize: SHORTCUT_LIST_MAX, total: data.length, totalPages: 1 } };
 }
 
+/** Verilen istasyonlardan kurşun istasyonu olanlar (`KURSUN_DISPATCH_STATION_WHERE`, tek sorgu) — `isKursunStation` alanının TEK türetmesi. */
+export async function kursunStationIdSet(ids: ReadonlyArray<string>): Promise<Set<string>> {
+  if (ids.length === 0) return new Set();
+  const rows = await prisma.station.findMany({ where: { id: { in: [...new Set(ids)] }, ...KURSUN_DISPATCH_STATION_WHERE }, select: { id: true } });
+  return new Set(rows.map((r) => r.id));
+}
+
 type StepWithStation = { station?: { id?: string; isKursunStation?: boolean } | null };
 
 /**
@@ -45,8 +52,7 @@ type StepWithStation = { station?: { id?: string; isKursunStation?: boolean } | 
 export async function markKursunStations(routes: ReadonlyArray<unknown>): Promise<void> {
   const stations = routes.flatMap((r) => ((r as { steps?: StepWithStation[] } | null)?.steps ?? []).map((s) => s.station).filter((st): st is { id: string } => !!st?.id));
   if (stations.length === 0) return;
-  const rows = await prisma.station.findMany({ where: { id: { in: [...new Set(stations.map((st) => st.id))] }, ...KURSUN_DISPATCH_STATION_WHERE }, select: { id: true } });
-  const kursun = new Set(rows.map((r) => r.id));
+  const kursun = await kursunStationIdSet(stations.map((st) => st.id));
   for (const st of stations as Array<{ id: string; isKursunStation?: boolean }>) st.isKursunStation = kursun.has(st.id);
 }
 

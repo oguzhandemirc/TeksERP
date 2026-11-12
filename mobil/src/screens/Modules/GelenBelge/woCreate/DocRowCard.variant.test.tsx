@@ -1,6 +1,6 @@
 // DocRowCard kipleri (İE oluştur yeniden tasarım Dilim 2): toplu görünüm (`list`) kart + "Listeden çıkar" + madde listesi;
-// tek form (`single`) şeritlerle — çıkar/madde yok, "Yeniden okut" Belge şeridinin altında, şablon düğmesi aynı satırda.
-// Alt çubuk isteği (`openRequest`) müşteri seçicisini / metre sayfasını açar; şerit tonları alanların durumunu söyler.
+// tek form (`single`) şeritsiz — belge tek satır (no + durum ikonu, Yeniden okut / iptal ikonları, şablon düğmesi aynı satırda);
+// alan durumu seçicinin çerçevesinde. Alt çubuk isteği (`openRequest`) müşteri seçicisini / metre sayfasını açar.
 import React from 'react';
 import { StyleSheet } from 'react-native';
 import { fireEvent, within } from '@testing-library/react-native';
@@ -57,8 +57,8 @@ function draw(opts: { variant?: 'list' | 'single'; form?: Partial<RowForm>; onRe
   const ui = renderWithPaper(el(opts.req));
   return { ui, rerender: (req: DocRowOpenRequest | null) => ui.rerender(el(req)) };
 }
-const barColor = (ui: ReturnType<typeof renderWithPaper>, testID: string) =>
-  (StyleSheet.flatten(ui.getByTestId(`${testID}-kenar`).props.style) as { backgroundColor?: string }).backgroundColor;
+const borderColor = (ui: ReturnType<typeof renderWithPaper>, testID: string) =>
+  (StyleSheet.flatten(ui.getByTestId(testID).props.style) as { borderColor?: string }).borderColor;
 
 beforeEach(() => {
   mockWatch = done();
@@ -73,42 +73,47 @@ describe('DocRowCard — list / single', () => {
     expect(ui.getByTestId('belge-serit-musteri-GB-1-durum')).toHaveTextContent(/Seçin$/);
   });
 
-  it('⭐ single (tek form): çıkar ve madde yok; Belge şeridi ✓, sunucunun "satır çıkmadı" metni yok; Yeniden okut çağrılır', () => {
+  it('⭐ single (tek form): çıkar, madde ve şerit yok; belge satırı ✓ (yazısız), "satır çıkmadı" metni yok; Yeniden okut çağrılır', () => {
     const onReread = jest.fn();
     const { ui } = draw({ variant: 'single', onReread });
     expect(ui.queryByTestId('belge-satir-cikar-GB-1')).toBeNull();
     expect(ui.queryByText('Listeden çıkar')).toBeNull();
     expect(ui.queryByText(/Müşteriyi seçin\./)).toBeNull();
     expect(ui.queryByText(/satır çıkmadı/)).toBeNull();
-    expect(ui.getByTestId('ie-serit-musteri-durum')).toHaveTextContent(/Seçin$/);
-    expect(barColor(ui, 'ie-serit-musteri')).toBe(colors.band.bar.missing);
+    expect(ui.queryByTestId('ie-serit-musteri')).toBeNull();
+    expect(ui.queryByTestId('ie-serit-parti')).toBeNull();
+    expect(ui.getByTestId('ie-serit-belge')).toHaveTextContent(/GB-1/);
+    expect(ui.queryByTestId('ie-serit-belge-durum')).toBeNull();
+    expect(borderColor(ui, 'belge-satir-musteri-GB-1')).toBe(colors.danger);
+    expect(ui.getByTestId('ie-belge-taslak-iptal')).toBeTruthy();
     fireEvent.press(ui.getByTestId('ie-belge-yeniden-okut'));
     expect(onReread).toHaveBeenCalledTimes(1);
   });
 
-  it('⭐ TANITILDI: "Şablonu güncelle" Belge şeridinin alt satırında, şablon adıyla aynı satır', () => {
+  it('⭐ TANITILDI: "Tanımı düzenle" belge satırında, şablon adıyla aynı satır', () => {
     rememberLocalPages([{ sha256: 'aa', uri: 'file:///1.jpg' }]);
     mockWatch = done({ durum: 'TANITILDI', sablonKodu: 'u-g', sablonAdi: 'Güleçsoy' });
     const { ui } = draw({ variant: 'single', onReread: jest.fn() });
-    const sub = within(ui.getByTestId('ie-serit-belge-alt'));
+    const sub = within(ui.getByTestId('ie-serit-belge'));
     expect(sub.getByTestId('tanit-serit-guncelle')).toBeTruthy();
-    expect(sub.getByTestId('tanit-sablon')).toHaveTextContent(/Şablon:\s*Güleçsoy/);
+    expect(sub.getByTestId('tanit-sablon')).toHaveTextContent(/Güleçsoy/);
+    expect(sub.getByTestId('tanit-sablon')).not.toHaveTextContent(/Şablon/);
   });
 
-  it('⭐ müşteri seçili → ✓ "Seçildi"; belgede geçen ad sorusu bekliyorsa ! "Kontrol et"', () => {
-    expect(draw({ variant: 'single', form: { ownerCustomerId: 'c1' } }).ui.getByTestId('ie-serit-musteri-durum')).toHaveTextContent(/Seçildi$/);
+  it('⭐ müşteri seçili → düz çerçeve + ad; belgede geçen ad sorusu bekliyorsa sarı çerçeve + soru çipi', () => {
+    const a = draw({ variant: 'single', form: { ownerCustomerId: 'c1' } }).ui;
+    expect(a.getByTestId('belge-satir-musteri-GB-1')).toHaveTextContent(/Gülkesim/);
+    expect(borderColor(a, 'belge-satir-musteri-GB-1')).toBe(colors.borderStrong);
     const ask = { customerId: 'c1', name: 'Gülkesim', matchedText: 'GULKESIM' };
     const { ui } = draw({ variant: 'single', form: { ownerAsk: ask } as Partial<RowForm> });
-    expect(ui.getByTestId('ie-serit-musteri-durum')).toHaveTextContent(/Kontrol et$/);
+    expect(borderColor(ui, 'belge-satir-musteri-GB-1')).toBe(colors.warning);
     expect(ui.getByTestId('belge-satir-sahip-sor-GB-1')).toBeTruthy();
   });
 
-  it('⭐ Parti ve metre şeridi: metre yok → kırmızı + "Metre yok"; doğrulama bekliyor → sarı + "Doğru"', () => {
+  it('⭐ metre: yok → "Yok — dokunun" (kırmızı, tek satır); doğrulama bekliyor → "Doğru" + kısa ipucu (şerit yok)', () => {
     const a = draw({ variant: 'single', form: { meters: null } }).ui;
-    expect(barColor(a, 'ie-serit-parti')).toBe(colors.band.bar.missing);
-    expect(a.getByText('Metre yok')).toBeTruthy();
+    expect(a.getByTestId('belge-satir-metre-kutu-GB-1-deger')).toHaveTextContent(/^Yok — dokunun$/);
     const b = draw({ variant: 'single', form: { metersReview: true } }).ui;
-    expect(barColor(b, 'ie-serit-parti')).toBe(colors.band.bar.warn);
     expect(b.getByTestId('belge-satir-dogrula-GB-1')).toHaveTextContent(/Doğru$/);
     expect(b.getByText('Metreyi belgeyle karşılaştırın.')).toBeTruthy();
   });

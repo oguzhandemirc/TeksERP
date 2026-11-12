@@ -1,6 +1,6 @@
 // Bölüm şeridi — formun tek cesur öğesi: sol çubuk rengi bölümün durumunu söyler.
 import React from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Text } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, radius, spacing } from '../../theme';
@@ -16,12 +16,14 @@ export interface SectionBandProps {
   aside?: string | null;
   status?: { icon?: IconName; text: string } | null;
   dimmed?: boolean;
+  /** Köşe/kenar uyarlaması (ör. kartın köşesine oturan şerit). */
+  style?: StyleProp<ViewStyle>;
   testID: string;
 }
 
-export function SectionBand({ title, icon, tone = 'idle', aside, status, dimmed, testID }: SectionBandProps) {
+export function SectionBand({ title, icon, tone = 'idle', aside, status, dimmed, style, testID }: SectionBandProps) {
   return (
-    <View testID={testID} accessibilityRole="header" style={[styles.band, dimmed ? styles.dimmed : null]}>
+    <View testID={testID} accessibilityRole="header" style={[styles.band, dimmed ? styles.dimmed : null, style]}>
       <View testID={`${testID}-kenar`} style={[styles.bar, { backgroundColor: colors.band.bar[tone] }]} />
       <MaterialCommunityIcons name={icon} size={22} color={colors.band.text} />
       <Text style={styles.title} numberOfLines={1}>{title}</Text>

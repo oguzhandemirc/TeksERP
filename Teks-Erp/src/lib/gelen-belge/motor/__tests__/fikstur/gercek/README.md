@@ -12,4 +12,5 @@ gerçek). Fotoğraf ve ham çıktı repoda YOKTUR (`TASARIM-KARARI` §8 fikstür
 | `0245-ceki-listesi-a.json` | kumaş çeki listesi, 2 blok | 21/21 satır; beyan 5/141,70/586,00 ve 16/819,20/3.935,00 = Σ |
 | `0246-iki-belge.json` | tek fotoğrafta çıkış çeki listesi + ürün sevk fişi | 2 bölge, her birinde başlık alanları |
 | `0244-kumas-irsaliyesi.json` | el yazısı ızgara (5 sütun) | ≥15 hücre rect + TOTAL_UNVERIFIED |
+| `0248-ceki-listesi-mlkit-yan.json` | kumaş çeki listesi, 2 bölüm, demo tablet ML Kit taraması (yan çekilmiş, rotation 90; birleşik hücre "13,70 54,4", başlık "Kilo Metre", hücre kenarı "\|", 2. partinin toplamı sayfa başında) | `test_gelen_belge_motor` §19 · `test_gelen_belge_cok_parti` §16: 5/141,70/586,00 ve 16/819,20/3.935,00 basılı toplamdan |
 | `0243-kesim-takip-formu.json` | el yazısı ızgara (3 sütun) | başlık 3 alan: tarih, evrak no, giriş mt |

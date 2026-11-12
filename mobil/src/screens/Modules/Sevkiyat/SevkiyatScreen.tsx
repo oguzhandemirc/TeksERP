@@ -22,20 +22,22 @@ import { usePortraitLock } from '../../../hooks/usePortraitLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import { useDebouncedValue } from '../../../hooks/useDebouncedValue';
 import { useManualRefresh } from '../../../hooks/useManualRefresh';
-import { FLAGS_KEY, useFeatureFlags, useShipmentLooseLoadEnabled } from '../../../hooks/useFeatureFlags';
+import { FLAGS_KEY, useShipmentHandheldCreateEnabled } from '../../../hooks/useFeatureFlags';
+import SevkCikisListe from './SevkCikisListe';
 import type { MainStackParamList } from '../../../navigation/types';
 import SackContentsModal from './SackContentsModal';
 import ShipmentCancelModal from './ShipmentCancelModal';
 import { CariHoldBlockedScreen, cariHoldBlockFromError, type CariHoldBlock } from './CariHold';
 import { BoardEmpty, ShipmentBoardCard, fmtM } from './ShipmentBoardCard';
 import { boardUnitText } from '../../../lib/loadUnit';
-import { READY_WORKS_KEY, ReadyWorksSheet, ReadyWorksStrip } from './ReadyWorks';
+import { READY_WORKS_KEY } from './ReadyWorks';
 import { LoadAddFlow } from './LoadAddFlow';
 import { LoadPreviewCard } from './LoadPreviewCard';
 import { useLooseRollRemove } from './LooseRollRemove';
-import type { ReadyWorkRow } from '../../../services/readyWorks.service';
 import { showScreenError } from '../../../lib/screenToast';
 import TruncatedText from '../../../components/TruncatedText';
+import CollapsibleSearch, { SEARCH_SIBLING_LAYOUT, SearchToggleAction, useCollapsibleSearch } from '../../../components/CollapsibleSearch';
+import Animated from 'react-native-reanimated';
 
 // =============================================================================
 // Sevk Kapısı — havuzdan kurulmuş, sevk bekleyen PLANNED sevkiyatlar. Sevk onayı
@@ -44,17 +46,23 @@ import TruncatedText from '../../../components/TruncatedText';
 // HAFİF board: FlashList + cursor sonsuz kaydırma + sunucu araması. Kart özet;
 // çuval+rulo dökümü karta tıklayınca lazy (SackContentsModal). PLANNED'da çuval
 // çıkarılabilir (havuza döner). Stok yalnız çıkışta (dispatch) düşer.
+// Arama üst çubuktaki büyüteçle açılır (kapatınca temizlenir). `shipping.handheldCreateEnabled` açıkken bu board
+// yerine el terminali listesi (SevkCikisListe) açılır.
 // =============================================================================
 
 const PAGE_SIZE = 30;
 
 export default function SevkiyatScreen() {
+  return useShipmentHandheldCreateEnabled() ? <SevkCikisListe /> : <SevkKapisiBoard />;
+}
+
+function SevkKapisiBoard() {
   usePortraitLock(useDeviceType() === 'phone');
   const nav = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const qc = useQueryClient();
 
-  const [search, setSearch] = useState('');
-  const debouncedSearch = useDebouncedValue(search.trim(), 300);
+  const search = useCollapsibleSearch();
+  const debouncedSearch = useDebouncedValue(search.term, 300);
 
   const [contentsShip, setContentsShip] = useState<SackStoreShipmentLite | null>(null);
   const [dispatchShip, setDispatchShip] = useState<SackStoreShipmentLite | null>(null);
@@ -63,10 +71,6 @@ export default function SevkiyatScreen() {
   const looseRemove = useLooseRollRemove();
   // D4-I4: 409 CARI_HOLD → tam ekran (metin sunucudan); diğer hatalar tost.
   const [holdBlock, setHoldBlock] = useState<CariHoldBlock | null>(null);
-  // D4-J4: hazır iş çipine dokunulan müşteri (liste lazy; sevk mevcut Paketleme akışından).
-  const [readyCustomer, setReadyCustomer] = useState<ReadyWorkRow | null>(null);
-  const incomingDocsEnabled = useFeatureFlags().data?.gelenBelgeEnabled === true;
-  const looseLoadEnabled = useShipmentLooseLoadEnabled();
   const [plate, setPlate] = useState('');
   const [driver, setDriver] = useState('');
   const [carrier, setCarrier] = useState('');
@@ -160,6 +164,7 @@ export default function SevkiyatScreen() {
       title="Sevk Çıkışı"
       headerExtras={
         <>
+          <SearchToggleAction open={search.open} onPress={search.toggle} testID="sevk-arama-ac" />
           <RefreshButton
             headerStyle
             onPress={headerRefresh.onRefresh}
@@ -177,33 +182,33 @@ export default function SevkiyatScreen() {
         </>
       }
     >
-      <View style={styles.filters}>
-        <TextInput
-          mode="outlined"
-          placeholder="Çuval kodu, sevk no veya müşteri ara..."
-          value={search}
-          onChangeText={setSearch}
-          left={<TextInput.Icon icon="magnify" />}
-        />
-      </View>
-      <ReadyWorksStrip onOpen={setReadyCustomer} />
-
-      <View style={{ flex: 1 }}>
-        <FlashList
-          data={items}
-          keyExtractor={(s) => s.id}
-          renderItem={renderCard}
-          contentContainerStyle={styles.body}
-          onEndReachedThreshold={0.5}
-          onEndReached={() => {
-            if (listQ.hasNextPage && !listQ.isFetchingNextPage) listQ.fetchNextPage();
-          }}
-          ListEmptyComponent={<BoardEmpty q={listQ} search={debouncedSearch} />}
-          ListFooterComponent={
-            listQ.isFetchingNextPage ? <ActivityIndicator style={{ marginVertical: 16 }} /> : null
-          }
-        />
-      </View>
+      <CollapsibleSearch
+        open={search.open}
+        value={search.text}
+        onChangeText={search.setText}
+        placeholder="Çuval kodu, sevk no veya müşteri ara..."
+        testID="sevk-arama-kutu"
+      />
+      <Animated.View layout={SEARCH_SIBLING_LAYOUT} style={{ flex: 1 }}>
+        <View style={{ flex: 1 }}>
+          <FlashList
+            data={items}
+            keyExtractor={(s) => s.id}
+            refreshing={headerRefresh.refreshing}
+            onRefresh={headerRefresh.onRefresh}
+            renderItem={renderCard}
+            contentContainerStyle={styles.body}
+            onEndReachedThreshold={0.5}
+            onEndReached={() => {
+              if (listQ.hasNextPage && !listQ.isFetchingNextPage) listQ.fetchNextPage();
+            }}
+            ListEmptyComponent={<BoardEmpty q={listQ} search={debouncedSearch} />}
+            ListFooterComponent={
+              listQ.isFetchingNextPage ? <ActivityIndicator style={{ marginVertical: 16 }} /> : null
+            }
+          />
+        </View>
+      </Animated.View>
 
       {/* Çuval + rulo dökümü (lazy) — PLANNED sevkiyatta çuval çıkarma butonlu */}
       <SackContentsModal
@@ -272,23 +277,12 @@ export default function SevkiyatScreen() {
           </View>
         </Surface>
       </AppModal>
-      <ReadyWorksSheet
-        customer={readyCustomer}
-        incomingDocsEnabled={incomingDocsEnabled}
-        looseLoadEnabled={looseLoadEnabled}
-        onDismiss={() => setReadyCustomer(null)}
-        onGoPacking={(customerId) => {
-          setReadyCustomer(null);
-          nav.navigate('Paketleme', { customerId });
-        }}
-      />
       <CariHoldBlockedScreen block={holdBlock} onClose={() => setHoldBlock(null)} />
     </ScreenChrome>
   );
 }
 
 const styles = StyleSheet.create({
-  filters: { padding: 12, gap: 8, backgroundColor: '#fff' },
   body: { padding: 12, paddingBottom: 24 },
   customer: { fontSize: 13, color: '#334155', marginTop: 2 },
   sheet: { borderRadius: 16, padding: 16, backgroundColor: '#fff', alignSelf: 'stretch' },

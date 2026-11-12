@@ -1,9 +1,10 @@
 import { createCrudService } from "@/services/crudService";
 import apiClient from "@/services/apiClient";
-import type { ApiResponse, ListScope } from "@/types/api";
-import { buildScopeQueryString } from "@/lib/query-builder";
+import type { ApiResponse, CursorPaginatedResponse, CursorParams, ListScope } from "@/types/api";
+import { buildCursorQueryString, buildScopeQueryString } from "@/lib/query-builder";
 import type { PrintJobAttachment } from "@/services/printJobService";
 import type { TravelerCardConfig } from "@/services/featureFlagService";
+import type { RollStage } from "@/types/enums";
 import type {
   WorkOrder,
   TargetPropertyChangeImpact,
@@ -18,6 +19,12 @@ const base = createCrudService<WorkOrder>("/api/work-orders");
 
 export const workOrderService = {
   ...base,
+
+  /** Panel listesi: satır başına beyan ↔ ölçülen özeti ister (opt-in; eski backend alanı yok sayar). */
+  listCursorWithMeter: (params: CursorParams) =>
+    apiClient
+      .get<CursorPaginatedResponse<WorkOrder>>(`/api/work-orders${buildCursorQueryString(params)}&withMeterSummary=true`)
+      .then((r) => r.data),
 
   /**
    * Parti kodu blur kontrolü — kaydetmeden önce benzersizlik uyarısı.
@@ -641,6 +648,8 @@ export interface QuickStartPayload {
     plannedSubcontractorId?: string | null;
     notes?: string | null;
     dispatchWithoutColor?: boolean;
+    /** Çıktı aşaması (2026-11-10) — yoksa şablon adımınınki kalır. */
+    outputStage?: RollStage | null;
   }[];
   /** İlk adım fason + firma çözülüyse: WO ile birlikte sevki de yap (çeki listesi). */
   dispatchFirstStep?: boolean;

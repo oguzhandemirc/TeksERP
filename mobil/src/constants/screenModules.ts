@@ -29,6 +29,7 @@ export type MobileModuleFlag = 'productionEnabled' | 'dokumaEnabled' | 'devereEn
 export const SCREEN_MODULE: Partial<Record<MobileScreenKey, MobileModuleFlag>> = {
   KK1: 'productionEnabled',
   KursunQc: 'productionEnabled',
+  KaliteKontrol: 'productionEnabled',
   Tambur: 'productionEnabled',
   HizliIsEmri: 'productionEnabled',
   KursunDagitim: 'productionEnabled',

@@ -47,6 +47,7 @@ import {
 } from "./helpers/code-unique.helper";
 import { assertItemUsable } from "./helpers/item-usage.helper";
 import { parseDecimalField, parseTextField } from "./helpers/cost-input.helper";
+import { YARN_WASTE_PCT_MAX } from "./helpers/yarn-waste.helper";
 import { findWeftOverrideOrphans, throwWeftOverrideOrphan } from "./helpers/effective-construction.helper";
 import { TERIM } from "../constants/terim";
 import { CARD_CODE_LOCK_SCOPE, assertCodeFreeInOtherKind, assertNameFreeInOtherKind, cardCodesWithPrefix } from "./helpers/card-identity.helper";
@@ -227,6 +228,19 @@ async function readFabricStructureFields(itemType: string | undefined, data: Rec
   return out;
 }
 
+/**
+ * SY-3 I2: iplik başına fire (%) — `BaseController` skaleri olduğu için doğrulama burada AÇIKÇA: 0..50, en çok 2
+ * ondalık, değer yalnız İPLİK kartına (400 `ITEM_YARN_WASTE_YARN_ONLY`); `null`/"" temizler. DB CHECK ikinci hat.
+ */
+function readYarnWasteField(itemType: string | undefined, data: Record<string, unknown>): { yarnWastePct?: Prisma.Decimal | null } {
+  if (!Object.prototype.hasOwnProperty.call(data, "yarnWastePct")) return {};
+  const v = parseDecimalField(data.yarnWastePct, { label: "İplik firesi (%)", min: 0, max: YARN_WASTE_PCT_MAX, scale: 2 }) ?? null;
+  if (v !== null && itemType !== "YARN") {
+    throw AppError.badRequest("İplik firesi yalnız İPLİK kartına girilir", { code: "ITEM_YARN_WASTE_YARN_ONLY" });
+  }
+  return { yarnWastePct: v };
+}
+
 export class ItemService extends BaseService {
   /**
    * İLİŞKİ SÜZGECİ (ürün seçici modalı, 2026-09-17): `filter[allowedColorId]` = "bu rengi ALABİLECEĞİM
@@ -291,7 +305,7 @@ export class ItemService extends BaseService {
       return legacyResponse(await serviceItemService.create({ code, name, unit, isActive }, actorId));
     }
     await assertWarpSpecAssignable(input.itemType, input.warpSpecId);
-    const fabricStructure = await readFabricStructureFields(input.itemType, data);
+    const fabricStructure = { ...(await readFabricStructureFields(input.itemType, data)), ...readYarnWasteField(input.itemType, data) };
 
     // Stok kodu hibrit: boş bırakıldıysa backend STK-NNNNNN üretir; kullanıcı
     // girdiyse manuel kod aynen kabul edilir (trim + regex + max 32).
@@ -579,6 +593,10 @@ export class ItemService extends BaseService {
     if (Object.prototype.hasOwnProperty.call(data, "warpSpecId")) {
       const cur = await prisma.item.findUnique({ where: { id }, select: { itemType: true } });
       await assertWarpSpecAssignable(cur?.itemType, data.warpSpecId as string | null | undefined);
+    }
+    if (Object.prototype.hasOwnProperty.call(data, "yarnWastePct")) {
+      const cur = await prisma.item.findUnique({ where: { id }, select: { itemType: true } });
+      Object.assign(data, readYarnWasteField(cur?.itemType, data));
     }
     if (FABRIC_STRUCTURE_KEYS.some((k) => Object.prototype.hasOwnProperty.call(data, k))) {
       const cur = await prisma.item.findUnique({ where: { id }, select: { itemType: true } });

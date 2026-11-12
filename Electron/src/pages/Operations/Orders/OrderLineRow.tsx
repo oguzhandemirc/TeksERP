@@ -22,6 +22,7 @@ import { PhaseOutLineNote } from "./PhaseOutLineNote";
 import { LineTargetValuesField } from "./LineTargetValuesField";
 import { pruneTargetValues, useVariantCatalog } from "./lineTargetValues";
 import { OrderLinePlanButton } from "./OrderLinePlanDialog";
+import { OrderLineToleranceField } from "./OrderLineToleranceField";
 import type { OrderLineFormValues } from "./schema";
 
 export const ITEM_WARNING_TEXT = "Önce kumaş seçin";
@@ -136,6 +137,7 @@ function OrderLineExtras(p: OrderLineRowProps) {
           <PackagePlus className="h-3.5 w-3.5" /> Yeni Kumaş
         </Button>
         <OrderLinePlanButton line={line} onPatch={onPatch} onMissingItem={onWarnItem} />
+        <OrderLineToleranceField value={line.tolerancePct ?? ""} onChange={(t) => onPatch({ tolerancePct: t })} />
         <LineRequiredPropertiesEditor
           itemId={line.itemId}
           value={line.requiredPropertyIds ?? []}

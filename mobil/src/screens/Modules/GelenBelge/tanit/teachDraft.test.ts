@@ -1,9 +1,12 @@
 // Tablet tanıtma çekirdeği (panel `tanitma.test.tsx` saf bölümünün aynası) + sayfa eşleme / fotoğraf boyutu.
 import type { ScanWord, ScanWords } from '../../../../types/inboundDocTeach';
 import {
-  assignColumn, assignField, initialTeach, keptOldFields, meterOnCountRow, oldParts, setRepeats, toggleKeepOld, suggestBody, suggestIdentifiers, teachErrText, teachMarks, teachProblems, toggleWord, wordAt, MAX_TEMPLATE_IDENTIFIERS, addIdentifier, isKept, locateKept, templateFieldKeys,
+  adoptTemplate, assignColumn, assignField, initialTeach, keptOldFields, meterOnCountRow, oldParts, setRepeats, toggleKeepOld, suggestBody, suggestIdentifiers, teachErrText, teachMarks, teachProblems, toggleWord, wordAt, MAX_TEMPLATE_IDENTIFIERS, addIdentifier, identifierText, isKept, locateKept, templateFieldKeys,
+  templateMultiParty, meterKgClashes,
 } from './teachDraft';
-import { chipStatus, fieldReadout, guidedMarks, toggleFieldWord } from './guided';
+import { sameCellRatio } from './olcuCakisma';
+import { chipStatus, fieldReadout, toggleFieldWord } from './guided';
+import { dropKept, stageMarks, undoDrop } from './stages';
 import { isUnrecognized, photoSize, teachPages } from './teachPages';
 
 // Fotoğraf dönük saklanmış gibi: photoRect ≠ rect (öneri OCR çerçevesini almalı).
@@ -26,18 +29,32 @@ describe('tanıtma çekirdeği (tablet)', () => {
     expect(wordAt(W, { x: 10, y: 10 })).toBeNull();
   });
 
-  it('kimlik önerisi üst bölgedeki yazı satırları, hazır seçili; rakam satırı ve alt bölge dışarıda', () => {
-    expect(suggestIdentifiers(SCAN)).toEqual(['GÜLEÇSOY BOYA', 'ÇEKİ LİSTESİ', 'Ham PartiNo: P2618733']);
+  it('kimlik önerisi üst bölgedeki yazı satırları, hazır seçili; rakam satırı, değer kelimesi ve alt bölge dışarıda', () => {
+    expect(suggestIdentifiers(SCAN)).toEqual(['GÜLEÇSOY BOYA', 'ÇEKİ LİSTESİ', 'Ham PartiNo']);
     expect(initialTeach(SCAN, 'Güleçsoy').identifiers.every((d) => d.on)).toBe(true);
   });
 
-  it('kutu atama → öneri gövdesi: OCR çerçevesinde kutu; değeri içeren kimlik kapanır; sütun başlığı kimlik olur', () => {
-    let s = initialTeach(SCAN, 'Güleçsoy');
+  it('⭐ kimlik önerisi başlık / firma adını genel etiketlerin önüne alır; tavan güçlüleri kesmez', () => {
+    const scan: ScanWords = { ...SCAN, words: [w('SEVK', [50, 10], 1), w('TARİH', [120, 10], 1), w('Açıklama', [50, 40], 2), w('Cinsi', [50, 70], 3), w('Mamul', [50, 100], 4), w('En', [120, 100], 4), w('KG', [50, 130], 5), w('ÜRÜN', [50, 160], 6), w('SEVK', [120, 160], 6), w('FİŞİ', [180, 160], 6), w('ÖRNEK', [50, 190], 7), w('TEKSTİL', [120, 190], 7)] };
+    expect(suggestIdentifiers(scan, 3)).toEqual(['ÜRÜN SEVK FİŞİ', 'ÖRNEK TEKSTİL', 'SEVK TARİH']);
+  });
+
+  it('değer kelimesi kimlik önerisine girmez: rakamlı kelime atılır, etiket kalır', () => {
+    const scan: ScanWords = { ...SCAN, words: [w('Müşteri', [50, 20], 1), w('MT', [120, 20], 1), w('238,00', [180, 20], 1), w('Parti', [50, 60], 2), w('No:12345', [120, 60], 2), w('İrsaliye', [50, 100], 3), w('-', [130, 100], 3), w('2026/0042', [150, 100], 3)] };
+    // Güçlü yazı (genel etiket olmayan) önce: "İrsaliye" ayırt eder, "Müşteri MT" / "Parti No" her belgede var.
+    expect(suggestIdentifiers(scan)).toEqual(['İrsaliye', 'Müşteri MT', 'Parti No']);
+    expect(identifierText('Ham PartiNo: P2618733')).toBe('Ham PartiNo');
+    expect(identifierText('12.01.2026 1234')).toBe('');
+    expect(suggestIdentifiers({ ...SCAN, words: [w('No', [50, 20], 1), w('5', [100, 20], 1)] })).toEqual([]); // harf < 3
+  });
+
+  it('kutu atama → öneri gövdesi: OCR çerçevesinde kutu; değeri içeren (elle eklenmiş) kimlik kapanır; sütun başlığı kimlik olur', () => {
+    let s = addIdentifier(initialTeach(SCAN, 'Güleçsoy'), 'Ham PartiNo: P2618733');
     s = assignField(toggleWord(s, 6), W, 'partiNo');
     s = assignColumn(toggleWord(s, 7), W, 'm');
     const b = suggestBody(s, W, 's1');
     expect(b.assignments).toEqual([{ field: 'partiNo', rect: { x: 200, y: 300, width: 90, height: 20 } }]);
-    expect(b.identifiers).toEqual(['GÜLEÇSOY BOYA', 'ÇEKİ LİSTESİ', 'Metre']);
+    expect(b.identifiers).toEqual(['GÜLEÇSOY BOYA', 'ÇEKİ LİSTESİ', 'Ham PartiNo', 'Metre']);
     expect(b.table).toEqual({ columns: [{ key: 'm', header: 'Metre' }], totalsLabel: null });
     expect(b.sectionStartLabel).toBeUndefined();
   });
@@ -124,7 +141,7 @@ describe('tablet sayfa eşleme', () => {
   });
 });
 
-// Gülkesim 2026-11-04: "Şablonu güncelle"de yalnız Başlık ✓ görünüyordu — eski şablonun alanları taslağa hiç girmiyordu.
+// Gülkesim 2026-11-04: "Tanımı düzenle"de yalnız Başlık ✓ görünüyordu — eski şablonun alanları taslağa hiç girmiyordu.
 describe('güncelle kipi — kayıtlı alanlar (kept)', () => {
   const OLD = { fields: [{ key: 'musteri' }, { key: 'partiNo', strategies: [{ kind: 'anchor', maxWords: 1, valueShape: '^\\p{L}+\\d+$' }] }, { key: 'toplamMetre' }, { key: 'bilinmez' }] };
   const open = () => initialTeach(SCAN, 'kömürhan', [], { kept: templateFieldKeys(OLD) });
@@ -156,7 +173,7 @@ describe('güncelle kipi — kayıtlı alanlar (kept)', () => {
     expect(fieldReadout(s, 'partiNo', { result, fresh: false, error: null })).toEqual({ kind: 'ok', value: 'P2618733', label: null, kept: true });
     const located = locateKept(s, W, result.preview.fieldRects);
     expect(located).toEqual({ partiNo: [6] });
-    const m = guidedMarks(s, W, 0, located)[6]!;
+    const m = stageMarks(s, W, { stage: 'ESLEME', target: null }, located)[6]!;
     expect(m.tone).toBe('field');
     expect(m.label).toMatch(/kayıtlı/);
   });
@@ -186,7 +203,7 @@ describe('çok blok tanıtma kapıları', () => {
     expect(suggestBody({ ...s, sectionStart: 'Sipariş No' }, X, 's1').assignments).toEqual([expect.objectContaining({ field: 'islem', section: true })]);
   });
 
-  it('⭐ tekrar eden bölüm Metre sütunu ister ("Şablonu güncelle" eski tabloyu taşıyorsa istemez)', () => {
+  it('⭐ tekrar eden bölüm Metre sütunu ister ("Tanımı düzenle" eski tabloyu taşıyorsa istemez)', () => {
     const s = { ...setRepeats(initialTeach(CB, 'Çeki'), true), sectionStart: 'Sipariş No' };
     const msg = 'Tekrar eden bölümde top tablosu gerekli: tablonun Metre sütun başlığını işaretleyin.';
     const withId = assignField(toggleWord(s, 2), X, 'siparisNo');
@@ -201,5 +218,75 @@ describe('çok blok tanıtma kapıları', () => {
     expect(meterOnCountRow(adet, X)).toBe(true);
     expect(teachProblems(adet, X).some((p) => p.includes('T.Adet'))).toBe(true);
     expect(meterOnCountRow(assignField(toggleWord(s, 8), X, 'toplamMetre'), X)).toBe(false);
+  });
+});
+
+// B1 2026-11-09: sunucu kataloğa yeni alan ekleyince (ör. `toplamKg` "Gelen kg") bu sürümün tableti şablonu düzenlerken
+// bilinmeyen anahtarı yok sayar; gövdeye atama olarak girmez → sunucu birleşimi (`mergeTemplateForUpdate`) alanı korur.
+describe('adoptTemplate — sunucunun yeni alanı (eski tablet sözleşmesi)', () => {
+  it('⭐ bilinmeyen alan anahtarı kept\'e ve gövdeye girmez; bilinenler kayıtlı gelir', () => {
+    const s = adoptTemplate(initialTeach(SCAN, 'x', []), { name: 'Kömürhan', template: { identifiers: { keywords: ['KÖMÜRHAN'] }, fields: [{ key: 'toplamMetre' }, { key: 'gelecekKgAlani', label: 'Gelen kg' }] } });
+    expect(s.kept).toEqual(['toplamMetre']);
+    expect(suggestBody(s, W, 's1', 'u-komurhan').assignments).toEqual([]);
+  });
+});
+
+// Üç aşama (2026-11-09): gelen kg alanı, kurallar ve alan kaldırma gövdesi, şablon kuralının benimsenmesi, metre/kg aynı kutu.
+describe('üç aşama gövdesi ve kapıları', () => {
+  const marked = () => assignField(toggleWord(initialTeach(SCAN, 'Güleçsoy'), 6), W, 'partiNo');
+
+  it('"Gelen kg" (toplamKg) atanabilir alandır ve gövdeye atama olarak girer', () => {
+    const s = assignField(toggleWord(marked(), 9), W, 'toplamKg');
+    expect(suggestBody(s, W, 's1').assignments.map((a) => a.field)).toEqual(['partiNo', 'toplamKg']);
+  });
+
+  it('⭐ fabrika ayarı → gövdede rules YOK; kural seçilince var; düzenlemede kayıtlı kuralı fabrikaya döndürmek null', () => {
+    const s = marked();
+    expect(suggestBody(s, W, 's1')).not.toHaveProperty('rules');
+    expect(suggestBody({ ...s, multiParty: 'SINGLE' }, W, 's1').rules).toEqual({ multiParty: 'SINGLE' });
+    expect(suggestBody({ ...s, oldMultiParty: 'PER_PARTY' }, W, 's1', 'u-x').rules).toEqual({ multiParty: null });
+    expect(suggestBody({ ...s, oldMultiParty: 'PER_PARTY' }, W, 's1')).not.toHaveProperty('rules');
+    expect(suggestBody(s, W, 's1', 'u-x')).not.toHaveProperty('rules');
+  });
+
+  it('⭐ kaldırılan kayıtlı alan base.drop; yeniden işaretlenen drop\'a girmez (sunucu yeni atamayı da silerdi)', () => {
+    let s: ReturnType<typeof marked> = { ...marked(), kept: ['partiNo', 'tarih'] };
+    expect(suggestBody(s, W, 's1', 'u-x').base).toEqual({ code: 'u-x', keep: [] });
+    s = dropKept(dropKept(s, 'tarih'), 'partiNo');
+    expect(isKept(s, 'tarih')).toBe(false);
+    expect(suggestBody(s, W, 's1', 'u-x').base).toEqual({ code: 'u-x', keep: [], drop: ['tarih'] });
+    expect(suggestBody(undoDrop(s, 'tarih'), W, 's1', 'u-x').base).toEqual({ code: 'u-x', keep: [] });
+    expect(keptOldFields({ fields: [{ key: 'tarih', label: 'Tarih' }, { key: 'not' }] }, s)).toEqual(['not']);
+  });
+
+  it('adoptTemplate kuralı alır (kullanıcı seçimi önce gelir), bilinmeyen alan anahtarını yok sayar', () => {
+    const t = { fields: [{ key: 'partiNo' }, { key: 'gelecekAlani' }], identifiers: { keywords: ['ESKİ'] }, rules: { multiParty: 'PER_PARTY' } };
+    const a = adoptTemplate(initialTeach(SCAN, 'X'), { name: 'Eski', template: t });
+    expect(a.kept).toEqual(['partiNo']);
+    expect(a).toMatchObject({ multiParty: 'PER_PARTY', oldMultiParty: 'PER_PARTY', drop: [] });
+    expect(adoptTemplate({ ...initialTeach(SCAN, 'X'), multiParty: 'SINGLE' }, { name: 'Eski', template: t }).multiParty).toBe('SINGLE');
+    expect(adoptTemplate(initialTeach(SCAN, 'X'), { name: 'Eski', template: { rules: { multiParty: 'BILINMEYEN' } } }).multiParty).toBeNull();
+    expect(templateMultiParty(undefined)).toBeNull();
+  });
+
+  it('⭐ aynı kutu hem metre hem kg alanına işaretlenemez (backend teachErrors aynası, ≥ %50 kesişim)', () => {
+    const X: ScanWord[] = [...W, w('241', [52, 1002], 9, 58)];
+    let s = assignField(toggleWord(initialTeach({ ...SCAN, words: X }, 'G'), 9), X, 'toplamMetre');
+    s = assignField(toggleWord(s, 10), X, 'hedefKg');
+    expect(meterKgClashes(s, X)).toEqual([{ meter: 'toplamMetre', kg: 'hedefKg' }]);
+    expect(teachProblems(s, X)).toContain('Aynı kutu hem "Gelen metre" hem "Hedef kg" olamaz — kg için belgedeki kg değerine dokunun.');
+    expect(sameCellRatio({ x: 0, y: 0, width: 10, height: 10 }, { x: 20, y: 0, width: 10, height: 10 })).toBe(0);
+    const apart = assignField(toggleWord(assignField(toggleWord(initialTeach(SCAN, 'G'), 9), W, 'toplamMetre'), 6), W, 'hedefKg');
+    expect(meterKgClashes(apart, W)).toEqual([]);
+  });
+
+  it('⭐ adet satırında yan yana iki toplam (T.Adet 5 | 141,70 | 586,00): ayrı kutular çakışma değil, metre adet sayılmaz', () => {
+    // 2026-11-09 tablet (214279): sunucu iki alanı aynı çapaya bağlayıp reddediyordu; istemci ayrı kutuya uyarı vermemeli.
+    const X: ScanWord[] = [...W, w('T.Adet', [230, 1098], 9, 76), w('5', [343, 1102], 9, 12), w('141,70', [556, 1097], 9, 74), w('586,00', [681, 1100], 9, 72)];
+    let s = assignField(toggleWord(initialTeach({ ...SCAN, words: X }, 'G'), 13), X, 'toplamMetre');
+    s = assignField(toggleWord(s, 12), X, 'toplamKg');
+    expect(meterKgClashes(s, X)).toEqual([]);
+    expect(meterOnCountRow(s, X)).toBe(false);
+    expect(teachProblems(s, X).filter((p) => p.includes('Aynı kutu') || p.includes('adet satırına'))).toEqual([]);
   });
 });

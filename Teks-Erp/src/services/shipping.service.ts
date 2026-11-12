@@ -57,6 +57,10 @@ import { previewShipmentHold as previewShipmentHoldImpl, previewCreateShipment a
 import { setShipmentOrders as setShipmentOrdersImpl, addSacksToShipment as addSacksToShipmentImpl, removeSackFromShipment as removeSackFromShipmentImpl, addLoadByScan as addLoadByScanImpl, addLooseRollsToShipment as addLooseRollsToShipmentImpl, addLooseRollsFresh as addLooseRollsFreshImpl, openUnitInShipmentTx as openUnitInShipmentTxImpl, removeRollFromLoadUnit as removeRollFromLoadUnitImpl, previewShipmentLoad as previewShipmentLoadImpl } from "./shipping/load";
 import { setDestination as setDestinationImpl, setProcedureCode as setProcedureCodeImpl, setDeliveryTo as setDeliveryToImpl, setDispatchNote as setDispatchNoteImpl, setManualSackCount as setManualSackCountImpl, setShipmentInvoice as setShipmentInvoiceImpl, setDirectShipmentInvoice as setDirectShipmentInvoiceImpl, getDispatchNote as getDispatchNoteImpl, setSackNotes as setSackNotesImpl, sackNoteAppearsOnLabel as sackNoteAppearsOnLabelImpl, getSackNotes as getSackNotesImpl } from "./shipping/fields";
 import { performDispatchTx as performDispatchTxImpl, dispatchShipment as dispatchShipmentImpl } from "./shipping/dispatch";
+import { openHandheldShipment as openHandheldShipmentImpl, openSackInShipment as openSackInShipmentImpl, type HandheldOpenResult, type HandheldSackOpenResult } from "./shipping/handheld-open";
+import { scanIntoShipment as scanIntoShipmentImpl, type HandheldOutcome, type HandheldScanBody } from "./shipping/handheld-load";
+import { handheldDispatch as handheldDispatchImpl, setSackWeightInShipment as setSackWeightInShipmentImpl, type HandheldDispatchResult } from "./shipping/handheld-dispatch";
+import { assertHandheldEnabled, getHandheldLoadState as getHandheldLoadStateImpl, type HandheldLoadState } from "./shipping/handheld-state";
 import { getCancelPreview as getCancelPreviewImpl, cancelPlannedShipmentTx as cancelPlannedShipmentTxImpl, cancelShipment as cancelShipmentImpl } from "./shipping/cancel";
 import { resolveUndoBlockReason as resolveUndoBlockReasonImpl, getUndoDispatchPreview as getUndoDispatchPreviewImpl, writeUndoDispatchLedgerTx as writeUndoDispatchLedgerTxImpl, undoDispatch as undoDispatchImpl } from "./shipping/undo-dispatch";
 import { listShipments as listShipmentsImpl, buildShipmentListSummary as buildShipmentListSummaryImpl } from "./shipping/list";
@@ -960,6 +964,40 @@ export class ShippingService {
     userId?: string
   ): Promise<ApiResponse<unknown>> {
     return dispatchShipmentImpl.call(this as unknown as ShippingServiceThis, shipmentId, data, userId);
+  }
+
+  // =========================================================================
+  // EL TERMİNALİ SEVKİYAT (v2, bayrak `shipping.handheldCreateEnabled`) — gövde `shipping/handheld-*.ts`
+  // =========================================================================
+  /** A1 — boş PLANNED sevkiyat aç (çekirdeğin boş küme çağrısı; token zorunlu). */
+  async openHandheldShipment(body: { customerId: string; branchId?: string | null; clientToken: string }, userId?: string): Promise<HandheldOpenResult> {
+    return openHandheldShipmentImpl.call(this as unknown as ShippingServiceThis, body, userId);
+  }
+
+  /** A2 — okutma ekranının durumu. */
+  async getHandheldLoadState(shipmentId: string): Promise<HandheldLoadState> {
+    await assertHandheldEnabled();
+    return getHandheldLoadStateImpl(shipmentId);
+  }
+
+  /** A3 — tek okutma ucu (sınıflandırma sunucuda). */
+  async scanIntoShipment(shipmentId: string, body: HandheldScanBody, userId?: string): Promise<{ outcome: HandheldOutcome; state: HandheldLoadState }> {
+    return scanIntoShipmentImpl.call(this as unknown as ShippingServiceThis, shipmentId, body, userId);
+  }
+
+  /** A4 — sevkiyat içinde çuval aç. */
+  async openSackInShipment(shipmentId: string, body: { clientToken: string }, userId?: string): Promise<HandheldSackOpenResult> {
+    return openSackInShipmentImpl.call(this as unknown as ShippingServiceThis, shipmentId, body, userId);
+  }
+
+  /** A5 — çuvala elle kg (null = kaldır). */
+  async setSackWeightInShipment(shipmentId: string, sackId: string, body: { weightKg: number | null }, ctx: { userId?: string; permissions?: string[] }): Promise<{ state: HandheldLoadState; warning: string | null }> {
+    return setSackWeightInShipmentImpl(shipmentId, sackId, body, ctx);
+  }
+
+  /** A6 — sevk et (boş çuval düşer, bayat ekran kapısı, durum tabanlı tekrar). */
+  async handheldDispatch(shipmentId: string, body: { plateNumber?: string | null; driverName?: string | null; expectedRollCount: number }, userId?: string): Promise<HandheldDispatchResult> {
+    return handheldDispatchImpl.call(this as unknown as ShippingServiceThis, shipmentId, body, userId);
   }
 
   // =========================================================================

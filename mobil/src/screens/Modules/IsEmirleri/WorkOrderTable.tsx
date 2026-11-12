@@ -1,17 +1,21 @@
 // İş Emirleri — kompakt tablo (FlashList, cursor + sonsuz kaydırma). Görsel hiyerarşi: "Şu an nerede" rozeti en büyük
 // öğe (≥20pt, istasyon renginde dolgulu, yanında istasyon/fasoncu adı — renk tek taşıyıcı değil). Geniş ekranda tablo
-// satırı + başlık; dar ekranda (telefon dikey) aynı sütun kümesi kart satırına dizilir.
+// satırı + başlık; 600–720dp'de aynı sütun kümesi kart satırına dizilir. El terminalinde (<600dp) kart 3 satırdır:
+// İE no + durum · müşteri + tür rozeti · kumaş/renk + top; konum yalnız istasyondaysa rozet (İptal/Başlamadı durumu tekrar etmez).
 import React from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import { ActivityIndicator, Button, Icon, Text, TouchableRipple } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
+import PullToRefreshView from '../../../components/PullToRefreshView';
 import TruncatedText from '../../../components/TruncatedText';
 import { formatCalendarDay } from '../../../lib/factory-time';
+import { useIsCompact } from '../../../hooks/useDeviceType';
 import { TERIM } from '../../../lib/terim';
 import { QUERY_PROBLEM_TEXT, type QueryProblem } from '../../../utils/queryState';
 import { WORK_ORDER_STATUS_COLOR, WORK_ORDER_STATUS_LABEL, trLabel } from '../../../utils/labels';
 import { colors, radius, spacing, typography } from '../../../theme';
 import { visibleDefs, type ColumnDef, type ColumnKey } from './columns';
+import { MeterLine } from '../HizliIsEmri/WorkOrderMeter';
 import { batchText, customerText, fabricText, locationBadge, rollMeterText, typeBadgeText, type EmptyAction, type WorkOrderListRow } from './workOrderRow';
 
 export const WIDE_MIN = 720;
@@ -40,6 +44,7 @@ const EMPTY_ACTION_LABEL: Record<Exclude<EmptyAction, null>, { label: string; ic
 
 export default function WorkOrderTable(p: Props) {
   const wide = useWindowDimensions().width >= WIDE_MIN;
+  const compact = useIsCompact();
   const defs = visibleDefs(p.visible);
   if (p.loading) {
     return (
@@ -51,17 +56,17 @@ export default function WorkOrderTable(p: Props) {
   }
   if (p.problem) {
     return (
-      <View style={styles.center} testID="ie-liste-hata">
+      <PullToRefreshView refreshing={p.refreshing} onRefresh={p.onRefresh} contentContainerStyle={styles.centerContent} testID="ie-liste-hata">
         <Icon source={p.problem === 'offline' ? 'wifi-off' : 'alert-circle-outline'} size={48} color={colors.dangerText} />
         <Text style={styles.centerTitle}>{p.problem === 'offline' ? 'Çevrimdışısınız' : 'Liste alınamadı'}</Text>
         <Text style={styles.centerText}>{QUERY_PROBLEM_TEXT[p.problem]}</Text>
         <Button mode="contained" onPress={p.onRetry} contentStyle={styles.bigBtn} icon="refresh">Tekrar dene</Button>
-      </View>
+      </PullToRefreshView>
     );
   }
   if (p.rows.length === 0) {
     return (
-      <View style={styles.center} testID="ie-liste-bos">
+      <PullToRefreshView refreshing={p.refreshing} onRefresh={p.onRefresh} contentContainerStyle={styles.centerContent} testID="ie-liste-bos">
         <Icon source="clipboard-search-outline" size={52} color={colors.textMuted} />
         <Text style={styles.centerTitle}>{p.empty.title}</Text>
         <Text style={styles.centerText}>{p.empty.text}</Text>
@@ -70,7 +75,7 @@ export default function WorkOrderTable(p: Props) {
             {EMPTY_ACTION_LABEL[p.empty.action].label}
           </Button>
         )}
-      </View>
+      </PullToRefreshView>
     );
   }
   return (
@@ -86,7 +91,7 @@ export default function WorkOrderTable(p: Props) {
       <FlashList
         data={p.rows}
         keyExtractor={(r) => r.id}
-        renderItem={({ item }) => <Row row={item} defs={defs} wide={wide} onOpen={p.onOpen} />}
+        renderItem={({ item }) => (compact ? <CompactRow row={item} defs={defs} onOpen={p.onOpen} /> : <Row row={item} defs={defs} wide={wide} onOpen={p.onOpen} />)}
         onEndReachedThreshold={0.6}
         onEndReached={p.onEndReached}
         refreshing={p.refreshing}
@@ -131,17 +136,60 @@ function Row({ row, defs, wide, onOpen }: { row: WorkOrderListRow; defs: ColumnD
   );
 }
 
+/** Kart dışı kalan isteğe bağlı sütunlar (parti, top/metre, giren·çıkan metre, tarih) açıksa küçük 4. satırda. */
+const COMPACT_EXTRA: readonly ColumnKey[] = ['parti', 'topMetre', 'metre', 'tarih'];
+
+function CompactRow({ row, defs, onOpen }: { row: WorkOrderListRow; defs: ColumnDef[]; onOpen: (id: string) => void }) {
+  const on = (k: ColumnKey) => defs.some((d) => d.key === k);
+  const b = locationBadge(row.konum, row.status);
+  const tur = on('tur') ? typeBadgeText(row) : null;
+  const extra = defs.filter((d) => COMPACT_EXTRA.includes(d.key));
+  return (
+    <TouchableRipple onPress={() => onOpen(row.id)} style={styles.row} testID={`ie-satir-${row.id}`} accessibilityRole="button" accessibilityLabel={`${row.workOrderNumber} ayrıntısı`}>
+      <View style={styles.rowCompact} testID={`ie-kart-dar-${row.id}`}>
+        <View style={styles.compactLine} testID={`ie-kart-satir1-${row.id}`}>
+          <Text style={styles.no} numberOfLines={1}>{row.workOrderNumber}</Text>
+          {b.kind === 'station' && (
+            <View style={[styles.badgeSmall, { backgroundColor: b.tone.bg }]} testID={`ie-konum-dar-${row.id}`}>
+              <TruncatedText style={[styles.badgeSmallText, { color: b.tone.fg }]}>{b.extra > 0 ? `${b.text} +${b.extra}` : b.text}</TruncatedText>
+            </View>
+          )}
+          <View style={styles.fill} />
+          <Cell k="durum" row={row} />
+        </View>
+        {(on('musteri') || tur) && (
+          <View style={styles.compactLine} testID={`ie-kart-satir2-${row.id}`}>
+            {on('musteri') && <TruncatedText style={[styles.text, styles.compactGrow]}>{customerText(row)}</TruncatedText>}
+            {tur && <Text style={styles.typeBadge} numberOfLines={1} testID={`ie-tur-rozet-${row.id}`}>{tur}</Text>}
+          </View>
+        )}
+        {(on('kumas') || on('top')) && (
+          <View style={styles.compactLine} testID={`ie-kart-satir3-${row.id}`}>
+            {on('kumas') && <TruncatedText style={[styles.sub, styles.compactGrow]}>{fabricText(row)}</TruncatedText>}
+            {on('top') && <Cell k="top" row={row} />}
+          </View>
+        )}
+        {extra.length > 0 && (
+          <View style={styles.compactLine}>
+            {extra.map((d) => <Cell key={d.key} k={d.key} row={row} />)}
+          </View>
+        )}
+      </View>
+    </TouchableRipple>
+  );
+}
+
 function Cell({ k, row }: { k: ColumnKey; row: WorkOrderListRow }) {
   switch (k) {
     case 'no': {
-      const tur = typeBadgeText(row);
-      return (
-        <View style={styles.noWrap}>
-          <Text style={styles.no} numberOfLines={1}>{row.workOrderNumber}</Text>
-          {tur && <Text style={styles.typeBadge} numberOfLines={1} testID={`ie-tur-rozet-${row.id}`}>{tur}</Text>}
-        </View>
-      );
+      return <Text style={styles.no} numberOfLines={1}>{row.workOrderNumber}</Text>;
     }
+    case 'tur': {
+      const tur = typeBadgeText(row);
+      return tur ? <Text style={styles.typeBadge} numberOfLines={1} testID={`ie-tur-rozet-${row.id}`}>{tur}</Text> : <Text style={styles.sub}>—</Text>;
+    }
+    case 'top':
+      return <Text style={styles.text} numberOfLines={1} testID={`ie-top-${row.id}`}>{row.konum ? `${row.konum.canliTop} top` : '—'}</Text>;
     case 'musteri':
       return <TruncatedText style={styles.text}>{customerText(row)}</TruncatedText>;
     case 'kumas':
@@ -150,6 +198,8 @@ function Cell({ k, row }: { k: ColumnKey; row: WorkOrderListRow }) {
       return <Text style={styles.text} numberOfLines={1}>{batchText(row)}</Text>;
     case 'topMetre':
       return <Text style={styles.text} numberOfLines={1}>{rollMeterText(row)}</Text>;
+    case 'metre':
+      return <MeterLine summary={row.meterSummary} testID={`ie-metre-${row.id}`} dash />;
     case 'tarih':
       return <Text style={styles.sub} numberOfLines={1}>{formatCalendarDay(row.createdAt, 'dd.MM.yy')}</Text>;
     case 'durum':
@@ -177,7 +227,8 @@ function LocationCell({ row }: { row: WorkOrderListRow }) {
           </View>
         )}
       </View>
-      <Text style={styles.sub} numberOfLines={1}>{b.detail}{b.extra > 0 ? ` · ${b.extra} istasyon daha` : ''}</Text>
+      {/* Alt satır yalnız metin varken: boş satır rozeti dikey ortadan yukarı itiyordu. */}
+      {(b.detail || b.extra > 0) && <Text style={styles.sub} numberOfLines={1}>{b.detail}{b.extra > 0 ? `${b.detail ? ' · ' : ''}${b.extra} istasyon daha` : ''}</Text>}
     </View>
   );
 }
@@ -185,6 +236,7 @@ function LocationCell({ row }: { row: WorkOrderListRow }) {
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, padding: spacing.xxl },
+  centerContent: { alignItems: 'center', justifyContent: 'center', gap: spacing.sm, padding: spacing.xxl },
   centerTitle: { fontSize: typography.size.lg, fontWeight: typography.weight.bold, color: colors.text, textAlign: 'center' },
   centerText: { fontSize: typography.size.base, color: colors.textSecondary, textAlign: 'center' },
   bigBtn: { minHeight: 56, paddingHorizontal: spacing.lg },
@@ -195,13 +247,17 @@ const styles = StyleSheet.create({
   row: { borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.surface },
   rowWide: { flexDirection: 'row', alignItems: 'center', minHeight: 72, paddingHorizontal: spacing.sm, paddingVertical: spacing.sm, gap: spacing.md },
   rowNarrow: { paddingHorizontal: spacing.sm, paddingVertical: spacing.md, gap: spacing.sm },
+  rowCompact: { paddingHorizontal: spacing.xs, paddingVertical: spacing.sm, gap: 2, minHeight: 56 },
+  compactLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 22 },
+  compactGrow: { flexShrink: 1 },
+  badgeSmall: { flexShrink: 1, borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 1 },
+  badgeSmallText: { fontSize: typography.size.sm, fontWeight: typography.weight.bold },
   narrowTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   narrowLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   narrowLabel: { width: 104, fontSize: typography.size.sm, color: colors.textMuted },
   cell: { justifyContent: 'center' },
   no: { fontSize: typography.size.base, fontWeight: typography.weight.bold, color: colors.text },
-  noWrap: { gap: 2, alignItems: 'flex-start' },
-  typeBadge: { fontSize: typography.size.xs, fontWeight: typography.weight.bold, color: colors.infoText, backgroundColor: colors.infoContainer, borderRadius: radius.sm, paddingHorizontal: spacing.xs, overflow: 'hidden' },
+  typeBadge: { alignSelf: 'flex-start', fontSize: typography.size.xs, fontWeight: typography.weight.bold, color: colors.warningDark, backgroundColor: colors.warningContainer, borderRadius: radius.sm, paddingHorizontal: spacing.xs, overflow: 'hidden' },
   text: { fontSize: typography.size.sm, color: colors.text },
   sub: { fontSize: typography.size.sm, color: colors.textSecondary },
   status: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },

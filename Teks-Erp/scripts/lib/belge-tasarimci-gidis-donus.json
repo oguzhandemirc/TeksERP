@@ -2,7 +2,7 @@
   "contract": {
     "docType": "SHIPMENT_DISPATCH",
     "hedef": "musteri",
-    "contractVersion": 3,
+    "contractVersion": 4,
     "kokler": [
       {
         "yol": "belge.no",
@@ -233,6 +233,13 @@
         "etiket": "Beyan edilen fiziksel çuval",
         "tur": "sayi",
         "ondalik": 0,
+        "sinif": "musteri",
+        "ornek": null
+      },
+      {
+        "yol": "toplamlar.yuk_ozeti",
+        "etiket": "Karışık yük özeti (çuval + dökme)",
+        "tur": "metin",
         "sinif": "musteri",
         "ornek": null
       },

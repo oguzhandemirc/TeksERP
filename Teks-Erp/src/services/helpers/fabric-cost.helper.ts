@@ -12,6 +12,13 @@ import { warpYarnKgExact } from "../../constants/warp-beam";
 import { theoreticalMPerHourDecimal } from "./dokuma-levent-rapor.helper";
 import { ratePerM, type FinishingKgBasis, type RateContext } from "./fabric-cost-kg.helper";
 import { fastestGroupTakeUpPct } from "./warp-layer-beam.helper";
+import { resolveYarnWastePct, type YarnWasteSource } from "./yarn-waste.helper";
+import type {
+  CostComponent, CostInput, CostLine, CostMissing, CostOutcome, CostPrice, CostResult, CostSource, CostWarning,
+  CostWarp, CostWarpLayer, CostWeftYarn, CostYarn, FxRates, Sourced,
+} from "./fabric-cost-types.helper";
+import { WARP_LAYER_ROLE_LABEL } from "./fabric-cost-types.helper";
+export * from "./fabric-cost-types.helper";
 
 type Dec = Prisma.Decimal;
 const D = (v: Prisma.Decimal.Value): Dec => new Prisma.Decimal(v);
@@ -19,77 +26,6 @@ const ZERO = D(0);
 const ONE = D(1);
 const HUNDRED = D(100);
 const HALF_UP = Prisma.Decimal.ROUND_HALF_UP;
-
-/** Değerin nereden geldiği (plan §2.1 öncelik tablosu); uyarılar buradan türer. */
-export type CostSource = "KART" | "YAPI" | "PARAMETRE" | "OLCULMUS" | "ELLE";
-export const COST_MISSING_CODES = [
-  "WARP_SPEC_MISSING", "DENIER_MISSING", "TAKEUP_MISSING", "WEFT_SPEC_MISSING", "PICKS_MISSING",
-  "WEFT_LENGTH_MISSING", "YARN_PRICE_MISSING", "FX_RATE_MISSING", "RPM_MISSING", "PARAMETER_SET_MISSING",
-  // Plan §2.2 listesine ek (MAL-2): yapıdaki tarife kodu aktif tarifeye çözülmüyor — terbiye sessizce 0 olmasın.
-  "FINISHING_RATE_MISSING",
-  // SY-D2: ATKI_UCRETI yönteminde ne yapıda ne parametre setinde atkı ücreti var — dokuma sessizce 0 olmasın.
-  "PICK_RATE_MISSING",
-] as const;
-export type CostMissing = (typeof COST_MISSING_CODES)[number];
-export const COST_WARNING_CODES = [
-  "TAKEUP_DEFAULTED", "WARP_WASTE_DEFAULTED", "WARP_WASTE_MEASURED", "WEFT_LENGTH_FROM_WIDTH",
-  "SHRINK_UNKNOWN", "RPM_DEFAULTED", "PRICE_STALE",
-] as const;
-export type CostWarning = (typeof COST_WARNING_CODES)[number];
-export type CostComponent =
-  | "WARP_YARN" | "WEFT_YARN" | "LOOM_MACHINE" | "LOOM_LABOR" | "ENERGY" | "BEAM_PREP"
-  | "FINISHING" | "LENGTH_SHRINK" | "FABRIC_WASTE" | "OVERHEAD" | "EXTRA" | "PROCESS" | "WEAVING_PICK";
-
-/** Kaynağıyla değer; `flag` derleyicinin türettiği uyarıdır (ör. atkı boyu enden türedi). */
-export interface Sourced<T> { value: T | null; source: CostSource; flag?: CostWarning }
-export interface CostPrice { amount: Dec; currency: Currency; source: CostSource; flag?: CostWarning }
-export interface CostYarn { yarnItemId: string | null; name: string; denier: Sourced<Dec>; price: CostPrice | null }
-export interface CostWeftYarn extends CostYarn { picksInRepeat: number }
-/** `kgBase` yalnız KG tabanında yazılır — metre tabanlı tarifenin girdisi + hash'i bayt-aynı kalır. */
-export interface CostRate { code: string; name: string; basis: "RAW_M" | "FINISHED_M" | "KG"; kgBase?: FinishingKgBasis; price: CostPrice | null }
-export interface CostWarp { warpSpecId: string | null; endsCount: number; takeUpPct: Sourced<Dec>; wastePct: Sourced<Dec>; yarn: CostYarn }
-/** SY-B1 ek çözgü katmanı (döner/ikinci çözgü): zeminle AYNI formül, kendi tel/iplik/take-up'ı. */
-export interface CostWarpLayer extends CostWarp { role: "LENO" | "SECONDARY"; beamMode: "SEPARATE_BEAM" | "SHARED_BEAM" | "CREEL" }
-export const WARP_LAYER_ROLE_LABEL: Record<CostWarpLayer["role"], string> = { LENO: "döner", SECONDARY: "ikinci" };
-export interface CostInput {
-  schemaVersion: 1;
-  parameterSetId: string | null;
-  warp: CostWarp | null;
-  /** SY-B1 ek çözgü katmanları: yalnız doluyken yazılır — yoksa girdi + hash bayt-aynı. */
-  warpLayers?: CostWarpLayer[];
-  weft: { weftSpecId: string | null; picksPerCm: Sourced<Dec>; lengthCm: Sourced<Dec>; wastePct: Sourced<Dec>; yarns: CostWeftYarn[] } | null;
-  loom: {
-    rpm: Sourced<Dec>; efficiencyPct: Sourced<Dec>; machineRateTry: Sourced<Dec>; laborRateTry: Sourced<Dec>;
-    loomsPerOperator: Sourced<Dec>; energyKwhPerHour: Sourced<Dec>; energyPriceTry: Sourced<Dec>;
-  };
-  beam: { prepCostTry: Sourced<Dec>; lengthM: Sourced<Dec> };
-  /** null = ham satış (tarife yok): F = 0, sᵦ = 0, uyarı yok. */
-  finishing: CostRate | null;
-  /** SY-G1 ek işlemler (kurşun/devere…): yalnız doluyken yazılır — yoksa girdi + hash bayt-aynı. */
-  processes?: CostRate[];
-  lengthShrinkPct: Sourced<Dec>;
-  fabricWastePct: Sourced<Dec>;
-  overheadPct: Sourced<Dec>;
-  extra: { amountTry: Dec; label: string | null } | null;
-  /**
-   * SY-D2: yalnız `maliyet.dokumaStandartYontemi = ATKI_UCRETI` iken YAZILIR (yokken anahtar hiç yok →
-   * TEZGAH_SAATI girdisi/hash'i bayt-aynı). Ücret birimi: 1 atkı/cm sıklık için metre başına.
-   */
-  loomPick?: { rate: CostPrice | null };
-}
-/** 1 birim döviz kaç TL; TRY verilmese de 1'dir. Eksik döviz → FX_RATE_MISSING. */
-export type FxRates = Partial<Record<Currency, Dec>>;
-
-export interface CostLine {
-  component: CostComponent; label: string; yarnItemId: string | null;
-  qty: Dec | null; qtyUnit: string | null; unitPriceTry: Dec | null; amountPerMTry: Dec;
-}
-export interface CostResult {
-  /** `loomMPerHour` null = atkı ücreti yönteminde devir/randıman bilinmiyor (bilgi satırı; hesaba girmez). */
-  lines: CostLine[]; warpKgPerM: Dec; weftKgPerM: Dec; loomMPerHour: Dec | null;
-  rawCostPerMTry: Dec; finishedCostPerMTry: Dec | null; soundCostPerMTry: Dec; overheadPerMTry: Dec; totalCostPerMTry: Dec;
-}
-export interface CostOutcome { result: CostResult | null; missing: CostMissing[]; warnings: CostWarning[] }
 
 class Collector {
   readonly missing = new Set<CostMissing>();
@@ -126,19 +62,21 @@ function toTry(p: CostPrice | null, fx: FxRates, c: Collector, missingCode: Cost
 }
 
 /** Kᶜ = (N × dᶜ / 9 000 000) / (1 − t) / (1 − fᶜ) — kg/m. Zemin ve HER ek katman bunu çağırır (kopya yok). */
-function warpKg(w: CostWarp | null, c: Collector): { kg: Dec; net: Dec; takeUp: Dec } | null {
+function warpKg(w: CostWarp | null, c: Collector): { kg: Dec; net: Dec; takeUp: Dec; wasteSource: YarnWasteSource } | null {
   if (!w) {
     c.missing.add("WARP_SPEC_MISSING");
     return null;
   }
   const d = c.take(w.yarn.denier, "DENIER_MISSING");
   const t = c.take(w.takeUpPct, "TAKEUP_MISSING", { PARAMETRE: "TAKEUP_DEFAULTED" });
-  const f = c.take(w.wastePct, "PARAMETER_SET_MISSING", { PARAMETRE: "WARP_WASTE_DEFAULTED", OLCULMUS: "WARP_WASTE_MEASURED" });
+  // SY-3 I2: iplik kartı firesi zincirin YERİNE (tek çözücü); boşken zincir bugünkü gibi okunur.
+  const ws = resolveYarnWastePct(w.yarn.wastePct, w.wastePct);
+  const f = ws.source === "IPLIK" ? ws.value : c.take(w.wastePct, "PARAMETER_SET_MISSING", { PARAMETRE: "WARP_WASTE_DEFAULTED", OLCULMUS: "WARP_WASTE_MEASURED" });
   if (d === null || t === null || f === null) return null;
   const takeUp = pct(t);
   // `net` = take-up'lı, FİRESİZ ara değer (KG terbiye tabanı NET_HAM); `kg` aynı işlem sırasıyla bayt-aynı.
   const net = warpYarnKgExact(w.endsCount, d, 1).div(ONE.minus(takeUp));
-  return { kg: net.div(ONE.minus(pct(f))), net, takeUp };
+  return { kg: net.div(ONE.minus(pct(f))), net, takeUp, wasteSource: ws.source };
 }
 
 /** Zemin + ek katmanlar; herhangi biri eksikse null (yarım çözgü kg'ı gösterilmez). */
@@ -153,7 +91,7 @@ function warpKgs(input: CostInput, c: Collector): { kg: Dec; net: Dec; groundKg:
 }
 
 /** Kⱼ = p × 100 × W × sⱼ × dⱼ / 9 000 000 / (1 − fᵃ), sⱼ = picksInRepeat / Σ — kg/m. */
-function weftKgs(input: CostInput, c: Collector): { picksPerCm: Dec; perYarn: Array<{ yarn: CostWeftYarn; kg: Dec; net: Dec }> } | null {
+function weftKgs(input: CostInput, c: Collector): { picksPerCm: Dec; perYarn: Array<{ yarn: CostWeftYarn; kg: Dec; net: Dec; wasteSource: YarnWasteSource }> } | null {
   const w = input.weft;
   if (!w) {
     c.missing.add("WEFT_SPEC_MISSING");
@@ -162,36 +100,54 @@ function weftKgs(input: CostInput, c: Collector): { picksPerCm: Dec; perYarn: Ar
   const p = c.take(w.picksPerCm, "PICKS_MISSING");
   if (p !== null && !p.gt(0)) c.missing.add("PICKS_MISSING");
   const lengthCm = c.take(w.lengthCm, "WEFT_LENGTH_MISSING");
-  const f = c.take(w.wastePct, "PARAMETER_SET_MISSING");
+  // SY-3 I2: zincir yalnız iplik firesi boş bir atkı ipliği varsa okunur (hepsi doluyken eksik kodu doğmaz).
+  const chainNeeded = w.yarns.length === 0 || w.yarns.some((y) => resolveYarnWastePct(y.wastePct, w.wastePct).source === "KART");
+  const f = chainNeeded ? c.take(w.wastePct, "PARAMETER_SET_MISSING") : w.wastePct.value;
   const total = w.yarns.reduce((a, y) => a + y.picksInRepeat, 0);
   if (total <= 0) c.missing.add("WEFT_SPEC_MISSING");
   const deniers = w.yarns.map((y) => c.take(y.denier, "DENIER_MISSING"));
-  if (p === null || !p.gt(0) || lengthCm === null || f === null || total <= 0 || deniers.some((d) => d === null)) return null;
+  if (p === null || !p.gt(0) || lengthCm === null || (chainNeeded && f === null) || total <= 0 || deniers.some((d) => d === null)) return null;
   const weftMPerM = p.mul(HUNDRED).mul(lengthCm.div(HUNDRED));
   const perYarn = w.yarns.map((yarn, i) => {
     const net = weftMPerM.mul(D(yarn.picksInRepeat).div(total)).mul(deniers[i]!).div(9_000_000);
-    return { yarn, kg: net.div(ONE.minus(pct(f))), net };
+    const ws = resolveYarnWastePct(yarn.wastePct, { value: f, source: w.wastePct.source });
+    return { yarn, kg: net.div(ONE.minus(pct(ws.value!))), net, wasteSource: ws.source };
   });
   return { picksPerCm: p, perYarn };
 }
 
-/** Yalnız iplik tüketimi (kg/m) — ihtiyaç planı (MAL-7) fiyat/kur/parametre istemez. */
-export function yarnUsagePerM(input: CostInput): {
+/** Fire payları 0'a çekilmiş girdi — AYNI formülden net (firesiz) kg/m; kaynak etiketi korunur. */
+function withoutYarnWaste(input: CostInput): CostInput {
+  // İplik kartı firesi de sıfırlanır (anahtar kaldırılır): gramaj fire içermez (SY-3 I2).
+  const bare = <Y extends CostYarn>(y: Y): Y => {
+    if (y.wastePct === undefined) return y;
+    const { wastePct: _w, ...rest } = y;
+    return rest as Y;
+  };
+  const zero = <T extends { wastePct: Sourced<Dec>; yarn: CostYarn }>(x: T): T => ({ ...x, wastePct: { value: ZERO, source: x.wastePct.source }, yarn: bare(x.yarn) });
+  const weft = input.weft && { ...input.weft, wastePct: { value: ZERO, source: input.weft.wastePct.source }, yarns: input.weft.yarns.map(bare) };
+  return { ...input, warp: input.warp && zero(input.warp), ...(input.warpLayers ? { warpLayers: input.warpLayers.map(zero) } : {}), weft };
+}
+
+/** İplik tüketimi (kg/m; MAL-7 fiyat istemez). `includeWaste: false` = firesiz net kumaş (gramaj); varsayılan fireli. */
+export function yarnUsagePerM(input: CostInput, opts: { includeWaste?: boolean } = {}): {
   missing: CostMissing[];
-  warp: { yarnItemId: string | null; kgPerM: Dec } | null;
-  weft: Array<{ yarnItemId: string | null; kgPerM: Dec }>;
+  /** `wasteSource` (SY-3 I2): `IPLIK` = iplik kartı firesi, `KART` = çözgü/atkı fire zinciri. */
+  warp: { yarnItemId: string | null; kgPerM: Dec; wasteSource: YarnWasteSource } | null;
+  weft: Array<{ yarnItemId: string | null; kgPerM: Dec; wasteSource: YarnWasteSource }>;
   /** SY-B1 ek çözgü katmanları (zemin `warp`a KATILMAZ — kip başına ayrı düşüm). */
-  warpLayers: Array<{ yarnItemId: string | null; warpSpecId: string | null; beamMode: CostWarpLayer["beamMode"]; kgPerM: Dec }>;
+  warpLayers: Array<{ yarnItemId: string | null; warpSpecId: string | null; beamMode: CostWarpLayer["beamMode"]; kgPerM: Dec; wasteSource: YarnWasteSource }>;
 } {
+  if (opts.includeWaste === false) return yarnUsagePerM(withoutYarnWaste(input));
   const c = new Collector();
   const warp = warpKg(input.warp, c);
   const layers = (input.warpLayers ?? []).map((l) => ({ l, r: warpKg(l, c) }));
   const weft = weftKgs(input, c);
   return {
     missing: [...c.missing].sort(),
-    warp: warp && input.warp ? { yarnItemId: input.warp.yarn.yarnItemId, kgPerM: warp.kg } : null,
-    weft: (weft?.perYarn ?? []).map((x) => ({ yarnItemId: x.yarn.yarnItemId, kgPerM: x.kg })),
-    warpLayers: layers.flatMap(({ l, r }) => (r ? [{ yarnItemId: l.yarn.yarnItemId, warpSpecId: l.warpSpecId, beamMode: l.beamMode, kgPerM: r.kg }] : [])),
+    warp: warp && input.warp ? { yarnItemId: input.warp.yarn.yarnItemId, kgPerM: warp.kg, wasteSource: warp.wasteSource } : null,
+    weft: (weft?.perYarn ?? []).map((x) => ({ yarnItemId: x.yarn.yarnItemId, kgPerM: x.kg, wasteSource: x.wasteSource })),
+    warpLayers: layers.flatMap(({ l, r }) => (r ? [{ yarnItemId: l.yarn.yarnItemId, warpSpecId: l.warpSpecId, beamMode: l.beamMode, kgPerM: r.kg, wasteSource: r.wasteSource }] : [])),
   };
 }
 

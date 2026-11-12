@@ -4,9 +4,10 @@
 // Tarama + başlık: DRAFT irsaliye + sayfa fotoğrafları. Belge başına tek kayıt kipinde (T2) onay kartı detayı okur,
 // başlığı yamar ve `gelen-belge:approve` izniyle onaylar; kural sunucuda. Tarama uçları `gelen-belge:write`; modül kapalıyken 403 MODULE_DISABLED (ekran zaten gizli).
 // =============================================================================
+import type { PageBarcode } from './deviceBarcode';
 import { apiClient } from './api';
 import type { ApiResponse } from '../types/api';
-import type { CreateWorkOrderFromNoteBody, CreateWorkOrderFromNoteResult, NotePartiesView } from '../types/inboundDocWoCreate';
+import type { CreateWorkOrderFromNoteBody, CreateWorkOrderFromNoteResult, DocIncomingDeclared, NotePartiesView } from '../types/inboundDocWoCreate';
 import type { ClientOcr } from './deviceOcr';
 import type { DocRoll } from '../types/inboundDocRolls';
 import type { SameDocumentMatch, SameDocumentQuery } from '../types/inboundDocSameDoc';
@@ -19,6 +20,7 @@ import type {
   UserTemplateView,
 } from '../types/inboundDocTeach';
 import type { OwnerSuggestion, OwnerUnmatched } from '../types/inboundDocOwner';
+import type { IncomingKgSource, ReadSummaryTanima } from '../types/inboundDocTanima';
 
 export type { OwnerSuggestion, OwnerUnmatched } from '../types/inboundDocOwner';
 
@@ -67,21 +69,25 @@ export interface UploadScanBody {
   sha256: string;
   /** S16c: tabletin ML Kit okuması — varsa sunucu okuma servisini atlar (gövde katmanı allowlist'i: alan iki uçta). */
   clientOcr?: ClientOcr;
+  /** Fotoğraftaki barkodlar (cihaz ML Kit, ≤ 10); sunucu şablonun "Barkoddan al" alanına yazar. Eski sunucu 400 → barkodsuz tekrar. */
+  barcodes?: PageBarcode[];
 }
 
 export interface UploadScanResult {
   scan: { id: string; sha256: string; noteId: string | null };
   duplicate: boolean;
   boundTo: string | null;
-  /** `READ`: cihaz okuması taslağa işlendi · `FALLBACK`: sunucu okumasına bırakıldı · null/yok: cihaz okuması yok (eski sunucu). */
-  deviceOcr?: 'READ' | 'FALLBACK' | null;
+  /** `READ`: cihaz okuması taslağa işlendi · `FALLBACK`: sunucu okumasına bırakıldı · `FAILED`: okunamadı, bilgisayarda
+   *  ikinci okuma kapalı (özet FAILED → "Okunamadı") · null/yok: cihaz okuması yok (eski sunucu). */
+  deviceOcr?: 'READ' | 'FALLBACK' | 'FAILED' | null;
 }
 
 /** Okuma durumu — SUNUCU türetir (`readSummaryState`); istemci yalnız gösterir. */
 export type ReadSummaryState = 'NO_PAGES' | 'READING' | 'NO_SERVICE' | 'READ' | 'PARTIAL' | 'FAILED';
 
 /** `GET /gelen-belge/irsaliyeler/:id/okuma-ozeti` (tablet izni `gelen-belge:write`). */
-export interface ReadSummary {
+/** `tanima` + gelen kg (2026-11-09) `ReadSummaryTanima`dan; eski sunucu göndermez. */
+export interface ReadSummary extends ReadSummaryTanima {
   noteId: string;
   noteNo: string;
   noteStatus: string;
@@ -115,6 +121,8 @@ export interface ReadSummary {
   /** S16a: tanıtmada işaretlenen form alanları + katalog önerileri (tek form doldurur). Eski sunucu göndermez. */
   formFields?: DocFormFields | null;
   suggestions?: DocFormSuggestions | null;
+  /** Gelen kumaş/renk beyanı + eşlenen kart (hedeften ayrı); eski sunucu göndermez. */
+  incomingDeclared?: DocIncomingDeclared;
   /** Toplar ayrı geldi: belgenin top satırları (özet satırı/atlanan hariç). Eski sunucu göndermez. */
   docRolls?: DocRoll[];
   /** K30-T: belge kullanıcı şablonuyla mı okundu (TANITILDI) / hiçbir şablon tutmadı mı (TANITILMAMIS). Yerleşik şablonda ve eski sunucuda yok. */
@@ -123,7 +131,8 @@ export interface ReadSummary {
   templateFields?: { key: string; label: string; value: string | null; required: boolean }[];
 }
 
-export type ReadTanitim = { durum: 'TANITILDI'; sablonKodu: string; sablonAdi: string } | { durum: 'TANITILMAMIS' };
+/** `SISTEM`: hazır şablonla tanındı (yeni sunucu) — "Yeniden tanıt" sunulur, düzenlenecek kullanıcı şablonu yok. */
+export type ReadTanitim = { durum: 'TANITILDI' | 'SISTEM'; sablonKodu: string; sablonAdi: string } | { durum: 'TANITILMAMIS' };
 
 /** S16a sözleşme 3: belgeden okunan form değerleri (sayılar sunucuda TR biçiminden çözülür; string de kabul). */
 export interface DocFormFields {
@@ -191,8 +200,30 @@ export interface InboundNoteDetail {
   /** S16a: okuma özetindekiyle aynı (tek form doldurur). */
   formFields?: DocFormFields | null;
   suggestions?: DocFormSuggestions | null;
+  /** Gelen kumaş/renk beyanı + eşlenen kart (hedeften ayrı); eski sunucu göndermez. */
+  incomingDeclared?: DocIncomingDeclared;
   /** Okuma özetindekiyle aynı (toplar ayrı geldi). */
   docRolls?: DocRoll[];
+  /** Gelen kg önerisi: detay ucu taşımaz, okuma özetinden tamamlanır (`withSummaryFields`). */
+  incomingKg?: number | null;
+  incomingKgSource?: IncomingKgSource | null;
+  /** Belge satırları (detay ucu hep gönderir; tablet yalnız parti önizlemesinde okur: top satırları + foto kutusu). */
+  lines?: InboundNoteLine[];
+}
+
+/** Detay satırının tabletin okuduğu alt kümesi; `sourceRects` taramanın okuma çerçevesindedir (piksel). */
+export interface InboundNoteLine {
+  id: string;
+  lineNo: number;
+  blockNo: number;
+  lineKind: string;
+  /** Onayda doğan parti kaydı (özet satırı); eski sunucu göndermez. */
+  summary?: boolean;
+  senderRollNo: string | null;
+  meters: string;
+  weightKg: string | null;
+  sourceRects: Record<string, { x: number; y: number; width: number; height: number }> | null;
+  scanId?: string | null;
 }
 
 /** Backend `PhotoRetentionMode` aynası (K28). */
@@ -204,6 +235,9 @@ export interface InboundNoteScan {
   sha256: string;
   status: string;
   mimeType: string;
+  /** Küçültülmüş fotoğrafta kutuların çerçevesi (okuma boyutu); tam fotoğrafta null/yok → görüntünün kendi boyutu. */
+  rectFrameWidth?: number | null;
+  rectFrameHeight?: number | null;
 }
 
 /** Gelen belge ayarı (`GET /gelen-belge/ayarlar`) — tabletin okuduğu alt küme. Eski sunucu `formApproval` göndermez. */
@@ -215,13 +249,16 @@ export interface InboundDocSettings {
   tabletIeGirisi?: TabletWoEntry;
   /** İE partisinin numarası: SERIES = seriden (formda "Otomatik verilir") · DOCUMENT = belgedeki parti no. Eski sunucu göndermez. */
   batchNumberSource?: 'SERIES' | 'DOCUMENT';
+  /** Çok partili belgede fabrika ayarı (tanıtmanın ③ "Fabrika ayarı (şu an …)" satırı). Eski sunucu göndermez. */
+  multiPartyWorkOrder?: 'SINGLE' | 'PER_PARTY';
 }
 
 /** Tablet iş emri girişi: IKISI = bugünkü (top + belge) · BELGE = her karo tek formu açar · TOP = yalnız top yolu. */
 export type TabletWoEntry = 'IKISI' | 'BELGE' | 'TOP';
 
 export type { SameDocumentMatch, SameDocumentQuery, SameDocumentState } from '../types/inboundDocSameDoc';
-export type { CreateWorkOrderFromNoteBody, CreateWorkOrderFromNoteResult, MultiPartyMode, NoteParty, NotePartiesView } from '../types/inboundDocWoCreate';
+export type { IncomingKgSource, Tanima, TanimaMappingRow, TanimaRule } from '../types/inboundDocTanima';
+export type { CreateWorkOrderFromNoteBody, CreateWorkOrderFromNoteResult, DocIncomingDeclared, MultiPartyMode, NoteParty, NotePartiesView } from '../types/inboundDocWoCreate';
 
 /** Başlık PATCH alt kümesi (sunucu `UpdateBody` allowlist'i). */
 export interface InboundNotePatch {
@@ -238,6 +275,8 @@ export interface ApproveNoteBody {
   routeTemplateId?: string;
   /** K27 WARN: işi süren aynı belge no'lu eşe rağmen onayla (yalnız operatör "Yine de onayla" deyince). */
   confirmDuplicateDocNo?: true;
+  /** Aynı müşteri parti no WARN: işi süren eşe rağmen onayla (yalnız "Yine de aç" sonrası; BLOCK'ta sunucu yine 409). */
+  confirmDuplicateBatchNo?: true;
 }
 
 export interface AutoWorkOrderGroup {

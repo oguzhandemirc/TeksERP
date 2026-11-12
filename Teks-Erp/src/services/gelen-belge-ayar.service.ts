@@ -19,13 +19,15 @@
 //   · `gelenBelge.formApproval` — SEPARATE (varsayılan, ayrı onay) | WITH_WORK_ORDER (iş emri formundan okutulan belgeyi iş emri açan kaydeder)
 //   · `gelenBelge.multiPartyWorkOrder` — SINGLE (varsayılan, tek iş emri) | PER_PARTY (çok partili belgede her parti ayrı iş emri)
 //   · `gelenBelge.duplicateDocNo` — BLOCK (varsayılan, sahip + belge no tek) | WARN (işi süren eşte onay 409 + onay bayrağı) | ALLOW (K27)
+//   · `gelenBelge.duplicateBatchNo` — ALLOW (varsayılan, bugünkü) | WARN | BLOCK: aynı sahip + müşteri parti no işi süren başka belgede
 //   · `production.refakatAutoPrint` — iş emri açılınca refakat kartı istemcide kendiliğinden yazdırılır (varsayılan false)
 //   · `gelenBelge.stationDocLookup` — istasyon tabletinde "Belge okut" ile iş emri bulma (K17; varsayılan false)
 //   · `gelenBelge.stationVerifyThreshold` — okutmada doğrulama eşiği % (0 = kapalı; varsayılan 80, yalnız okutma açıkken etkili)
 //   · `gelenBelge.photoRetention` — belge fotoğrafı saklama (K28): FULL (varsayılan) | onayda küçült/sil | sevkte sil
-//   · `gelenBelge.desenRenkEslesme` — okunan desen/renk: KAPALI (varsayılan) | ONER kayıt önerilir | NOT nota eklenir (K30)
+//   · `gelenBelge.desenRenkEslesme` — okunan desen/renk: KAPALI kullanılmaz | ONER kayıt önerilir (varsayılan) | NOT nota eklenir (K30)
 //   · `gelenBelge.tabletIeGirisi` — tablet iş emri girişi: IKISI (varsayılan) | BELGE | TOP (K30)
 //   · `gelenBelge.tanitimGuveni` — tanıtılan belgeye güven: SOR (varsayılan) | SORMA sorusuz doldur (K30-B)
+//   · `gelenBelge.serverOcrEnabled` — bilgisayarda ikinci okuma (sunucu OCR): açık (varsayılan) | kapalı = yalnız cihaz okur
 // Ürün kapısı tek karar: yaşam döngüsü `assertItemUsable(NEW_STOCK)` + top doğurabilen tür ALLOWLIST'i
 // (`ROLL_BEARING_ITEM_TYPES`; yeni tür — ör. SERVICE — eklendiği gün kendiliğinden dışarıda kalır).
 // =============================================================================
@@ -47,54 +49,48 @@ import {
   readRouteSuggestionPriority,
   DEFAULT_ROUTE_SUGGESTION_PRIORITY,
   ROUTE_SUGGESTION_PRIORITY_VALUES,
-  type RouteSuggestionPriority,
   readIncomingDocDefaultItemId,
   readHandwritingOutlierFactor,
   readHeaderLineMeterSource,
   readIncomingDocAutoSender,
   DEFAULT_HEADER_LINE_METER_SOURCE,
   HEADER_LINE_METER_SOURCE_VALUES,
-  type HeaderLineMeterSource,
   readDocumentTotalCheck,
   DEFAULT_DOCUMENT_TOTAL_CHECK,
   DOCUMENT_TOTAL_CHECK_VALUES,
-  type DocumentTotalCheckMode,
   readUnreviewedApprovalMode,
   systemSettingService,
-  type UnreviewedApprovalMode,
   readBatchNumberSource,
   DEFAULT_BATCH_NUMBER_SOURCE,
   BATCH_NUMBER_SOURCE_VALUES,
-  type BatchNumberSourceMode,
   readIncomingDocEntryMode,
   DEFAULT_ENTRY_MODE,
   ENTRY_MODE_VALUES,
-  type IncomingDocEntryMode,
   readAutoWorkOrderPatternless,
   DEFAULT_AUTO_WORK_ORDER_PATTERNLESS,
   AUTO_WORK_ORDER_PATTERNLESS_VALUES,
-  type AutoWorkOrderPatternlessMode,
   readIncomingDocFormApproval,
   DEFAULT_FORM_APPROVAL,
   FORM_APPROVAL_VALUES,
-  type IncomingDocFormApprovalMode,
   readMultiPartyWorkOrder,
   DEFAULT_MULTI_PARTY_WORK_ORDER,
   MULTI_PARTY_WORK_ORDER_VALUES,
-  type MultiPartyWorkOrderMode,
   readDuplicateDocNoMode,
   DEFAULT_DUPLICATE_DOC_NO,
   DUPLICATE_DOC_NO_VALUES,
-  type DuplicateDocNoMode,
+  readDuplicateBatchNoMode,
+  DEFAULT_DUPLICATE_BATCH_NO,
+  DUPLICATE_BATCH_NO_VALUES,
   readRefakatAutoPrint,
   readIncomingDocStationLookup,
   readPhotoRetention,
   DEFAULT_PHOTO_RETENTION,
   PHOTO_RETENTION_VALUES,
-  type PhotoRetentionMode,
-  readDesenRenkEslesme, DEFAULT_DESEN_RENK_ESLESME, DESEN_RENK_ESLESME_VALUES, type DesenRenkEslesmeMode,
-  readTabletIeGirisi, DEFAULT_TABLET_IE_GIRISI, TABLET_IE_GIRISI_VALUES, type TabletIeGirisiMode, readTanitimGuveni, DEFAULT_TANITIM_GUVENI, TANITIM_GUVENI_VALUES, type TanitimGuveniMode,
+  readDesenRenkEslesme, DEFAULT_DESEN_RENK_ESLESME, DESEN_RENK_ESLESME_VALUES,
+  readServerOcrEnabled, DEFAULT_SERVER_OCR_ENABLED,
+  readTabletIeGirisi, DEFAULT_TABLET_IE_GIRISI, TABLET_IE_GIRISI_VALUES, readTanitimGuveni, DEFAULT_TANITIM_GUVENI, TANITIM_GUVENI_VALUES,
 } from "./system-setting.service";
+import type { DefaultItemView, IncomingDocSettings, IncomingDocSettingsInput } from "./gelen-belge-ayar-types";
 
 /** Top doğurabilen ürün türleri — `InventoryService.createInitialEntry` kapısıyla aynı küme (yalnız kumaş). */
 export const ROLL_BEARING_ITEM_TYPES: readonly ItemType[] = [ItemType.FABRIC];
@@ -102,65 +98,7 @@ export const ROLL_BEARING_ITEM_TYPES: readonly ItemType[] = [ItemType.FABRIC];
 // Ham ayar ucunun yazamadığı anahtarlar ayrı dosyada (bu servis satır tavanında); içe aktaranlar buradan okur.
 export { INCOMING_DOC_DEDICATED_SETTING_KEYS } from "./gelen-belge-ayar-anahtarlari";
 
-export interface DefaultItemView {
-  id: string;
-  code: string;
-  name: string;
-  /** null = top doğurabilir; dolu = neden doğuramaz (pasif, birleşmiş, tür …). */
-  problem: string | null;
-}
-
-export interface IncomingDocSettings extends StationVerifySettings {
-  defaultItem: DefaultItemView | null;
-  unreviewedApproval: UnreviewedApprovalMode;
-  defaultUnreviewedApproval: UnreviewedApprovalMode;
-  /** Onaydan sonra net desen gruplarına iş emri kendiliğinden açılır mı (varsayılan false). */
-  autoWorkOrder: boolean;
-  /** Rota önerisinin fabrika varsayılanı; null = ayar boş. `problem` dolu = onay anında kullanılmaz (atlanır + neden). */
-  defaultRoute: { id: string; name: string; problem: string | null } | null;
-  routeSuggestionPriority: RouteSuggestionPriority;
-  defaultRouteSuggestionPriority: RouteSuggestionPriority;
-  /** El yazısı şüpheli metre oranı K (medyanın 1/K altı ya da K katı üstü); yeni okumaya uygulanır. */
-  handwritingOutlierFactor: number;
-  defaultHandwritingOutlierFactor: number;
-  handwritingOutlierFactorRange: { min: number; max: number };
-  /** Tablosuz belgede (ürün sevk fişi) satır metresi/kg kaynağı; yeni okumaya uygulanır. */
-  headerLineMeterSource: HeaderLineMeterSource;
-  defaultHeaderLineMeterSource: HeaderLineMeterSource;
-  /** Okunan şablonun gönderen carisi boş gönderen alanına yazılır mı (varsayılan false). */
-  autoSenderFromTemplate: boolean;
-  /** Belge geneli beyan (Müşteri MT) farkı: INFO bilgi (onay geçer) | REQUIRE_REASON gerekçe ister. */
-  documentTotalCheck: DocumentTotalCheckMode;
-  defaultDocumentTotalCheck: DocumentTotalCheckMode;
-  /** Gelen belgeden doğan partinin numarası: SERIES seriden (varsayılan) | DOCUMENT taslağın parti no'su (boşsa seri). */
-  batchNumberSource: BatchNumberSourceMode;
-  defaultBatchNumberSource: BatchNumberSourceMode;
-  /** Onay kipi: PER_LINE her satır bir top (varsayılan) | PER_DOCUMENT belge başına tek top. */
-  entryMode: IncomingDocEntryMode;
-  defaultEntryMode: IncomingDocEntryMode;
-  /** İşlem değeri çözülemeyen grupta oto iş emri: SKIP atla (varsayılan) | OPEN hedef değersiz aç. */
-  autoWorkOrderPatternless: AutoWorkOrderPatternlessMode;
-  defaultAutoWorkOrderPatternless: AutoWorkOrderPatternlessMode;
-  /** İş emri formundan okutulan belge: SEPARATE ayrı onay (varsayılan) | WITH_WORK_ORDER iş emri açan kaydeder. */
-  formApproval: IncomingDocFormApprovalMode;
-  defaultFormApproval: IncomingDocFormApprovalMode;
-  multiPartyWorkOrder: MultiPartyWorkOrderMode;
-  defaultMultiPartyWorkOrder: MultiPartyWorkOrderMode;
-  /** K27 aynı gönderen belge no: BLOCK engelle (varsayılan) | WARN işi süren eşte uyar | ALLOW serbest. */
-  duplicateDocNo: DuplicateDocNoMode;
-  defaultDuplicateDocNo: DuplicateDocNoMode;
-  /** İş emri açılınca refakat kartı kendiliğinden yazdırılır mı (varsayılan false). */
-  refakatAutoPrint: boolean;
-  /** İstasyon tabletinde "Belge okut" ile iş emri bulma (varsayılan false). */
-  stationDocLookup: boolean;
-  /** Belge fotoğrafı saklama (K28); geçmiş onaylı belgelere de uygulanır. */
-  photoRetention: PhotoRetentionMode;
-  /** K30 okunan desen/renk: KAPALI (varsayılan) | ONER kayıt önerilir | NOT nota eklenir. */
-  desenRenkEslesme: DesenRenkEslesmeMode; defaultDesenRenkEslesme: DesenRenkEslesmeMode;
-  /** K30 tablet iş emri girişi: IKISI (varsayılan) | BELGE | TOP. */
-  tabletIeGirisi: TabletIeGirisiMode; defaultTabletIeGirisi: TabletIeGirisiMode; tanitimGuveni: TanitimGuveniMode; defaultTanitimGuveni: TanitimGuveniMode;
-  defaultPhotoRetention: PhotoRetentionMode;
-}
+export type { DefaultItemView, IncomingDocSettings, IncomingDocSettingsInput } from "./gelen-belge-ayar-types";
 
 /**
  * Ürün top doğurabilir mi — null = evet, metin = Türkçe sebep. Bulunamayan ürün de sebeptir. Fabrika ve müşteri
@@ -223,6 +161,8 @@ export async function getIncomingDocSettings(): Promise<IncomingDocSettings> {
     defaultMultiPartyWorkOrder: DEFAULT_MULTI_PARTY_WORK_ORDER,
     duplicateDocNo: await readDuplicateDocNoMode(),
     defaultDuplicateDocNo: DEFAULT_DUPLICATE_DOC_NO,
+    duplicateBatchNo: await readDuplicateBatchNoMode(),
+    defaultDuplicateBatchNo: DEFAULT_DUPLICATE_BATCH_NO,
     refakatAutoPrint: await readRefakatAutoPrint(),
     stationDocLookup: await readIncomingDocStationLookup(), ...(await readStationVerifySettings()),
     photoRetention: await readPhotoRetention(),
@@ -230,32 +170,8 @@ export async function getIncomingDocSettings(): Promise<IncomingDocSettings> {
     desenRenkEslesme: await readDesenRenkEslesme(), defaultDesenRenkEslesme: DEFAULT_DESEN_RENK_ESLESME,
     tabletIeGirisi: await readTabletIeGirisi(), defaultTabletIeGirisi: DEFAULT_TABLET_IE_GIRISI,
     tanitimGuveni: await readTanitimGuveni(), defaultTanitimGuveni: DEFAULT_TANITIM_GUVENI,
+    serverOcrEnabled: await readServerOcrEnabled(), defaultServerOcrEnabled: DEFAULT_SERVER_OCR_ENABLED,
   };
-}
-
-export interface IncomingDocSettingsInput {
-  /** null = temizle (bugünkü davranışa dön). */
-  defaultItemId?: string | null;
-  unreviewedApproval?: UnreviewedApprovalMode;
-  autoWorkOrder?: boolean;
-  /** null = temizle (bugünkü davranış). */
-  defaultRouteTemplateId?: string | null;
-  routeSuggestionPriority?: RouteSuggestionPriority;
-  /** null = temizle (varsayılan oran). */
-  handwritingOutlierFactor?: number | null;
-  headerLineMeterSource?: HeaderLineMeterSource;
-  autoSenderFromTemplate?: boolean;
-  documentTotalCheck?: DocumentTotalCheckMode;
-  batchNumberSource?: BatchNumberSourceMode;
-  entryMode?: IncomingDocEntryMode;
-  autoWorkOrderPatternless?: AutoWorkOrderPatternlessMode;
-  formApproval?: IncomingDocFormApprovalMode;
-  multiPartyWorkOrder?: MultiPartyWorkOrderMode;
-  duplicateDocNo?: DuplicateDocNoMode;
-  refakatAutoPrint?: boolean;
-  stationDocLookup?: boolean; stationVerifyThreshold?: number | null;
-  photoRetention?: PhotoRetentionMode;
-  desenRenkEslesme?: DesenRenkEslesmeMode; tabletIeGirisi?: TabletIeGirisiMode; tanitimGuveni?: TanitimGuveniMode;
 }
 
 /**
@@ -339,10 +255,11 @@ async function updateEntryOptions(input: IncomingDocSettingsInput, userId: strin
   await setClosed(SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER_PATTERNLESS, input.autoWorkOrderPatternless, { values: AUTO_WORK_ORDER_PATTERNLESS_VALUES, label: `Gelen belge: işlem değeri çözülemeyen grupta ${ie} (SKIP atla / OPEN hedefsiz aç)` }, userId);
   await setClosed(SETTING_KEYS.GELEN_BELGE_FORM_APPROVAL, input.formApproval, { values: FORM_APPROVAL_VALUES, label: `Gelen belge: ${ie} formundan okutulan belgenin kaydı (SEPARATE ayrı onay / WITH_WORK_ORDER ${ie} açan kaydeder)` }, userId);
   await setClosed(SETTING_KEYS.GELEN_BELGE_MULTI_PARTY_WORK_ORDER, input.multiPartyWorkOrder, { values: MULTI_PARTY_WORK_ORDER_VALUES, label: `Gelen belge: çok partili belgeden ${ie} (SINGLE tek / PER_PARTY her parti ayrı)` }, userId);
-  await setClosed(SETTING_KEYS.GELEN_BELGE_DESEN_RENK_ESLESME, input.desenRenkEslesme, { values: DESEN_RENK_ESLESME_VALUES, label: "Gelen belge: okunan desen/renk yazısı (KAPALI / ONER kayıt öner / NOT nota ekle)" }, userId);
+  await setClosed(SETTING_KEYS.GELEN_BELGE_DESEN_RENK_ESLESME, input.desenRenkEslesme, { values: DESEN_RENK_ESLESME_VALUES, label: "Gelen belge: okunan desen/renk yazısı (KAPALI / ONER kayıt öner, varsayılan / NOT nota ekle)" }, userId);
   await setClosed(SETTING_KEYS.GELEN_BELGE_TABLET_IE_GIRISI, input.tabletIeGirisi, { values: TABLET_IE_GIRISI_VALUES, label: `Gelen belge: tablet ${ie} girişi (IKISI / BELGE yalnız belge / TOP yalnız top)` }, userId);
   await setClosed(SETTING_KEYS.GELEN_BELGE_TANITIM_GUVENI, input.tanitimGuveni, { values: TANITIM_GUVENI_VALUES, label: "Gelen belge: tanıtılan belgeye güven (SOR okunanları onaylat / SORMA sormadan doldur)" }, userId);
   await setClosed(SETTING_KEYS.GELEN_BELGE_DUPLICATE_DOC_NO, input.duplicateDocNo, { values: DUPLICATE_DOC_NO_VALUES, label: "Gelen belge: aynı gönderen belge no tekrar gelirse (BLOCK engelle / WARN işi sürüyorsa uyar / ALLOW serbest)" }, userId);
+  await setClosed(SETTING_KEYS.GELEN_BELGE_DUPLICATE_BATCH_NO, input.duplicateBatchNo, { values: DUPLICATE_BATCH_NO_VALUES, label: "Gelen belge: aynı müşteri parti no tekrar gelirse (BLOCK engelle / WARN işi sürüyorsa uyar / ALLOW serbest)" }, userId);
   if (input.refakatAutoPrint !== undefined) {
     await systemSettingService.set(SETTING_KEYS.PRODUCTION_REFAKAT_AUTO_PRINT, input.refakatAutoPrint, `${TERIM.terbiyeIsEmri.tekil} açılınca refakat kartı kendiliğinden yazdırılır`, userId);
   }
@@ -363,6 +280,9 @@ async function updateReadOptions(input: IncomingDocSettingsInput, userId: string
     await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_PHOTO_RETENTION, input.photoRetention, "Gelen belge: belge fotoğrafı saklama (FULL tam / SHRINK_ON_APPROVAL onayda küçült / DELETE_ON_APPROVAL onayda sil / DELETE_ON_DISPATCH sevkte sil) — geçmiş onaylı belgelere de uygulanır", userId);
   }
   await setStationLookupOptions(input, userId);
+  if (input.serverOcrEnabled !== undefined) {
+    await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_SERVER_OCR_ENABLED, input.serverOcrEnabled, "Gelen belge: bilgisayarda ikinci okuma (okuma servisiyle sunucu OCR; kapalıyken belgeyi yalnız tablet/telefon okur)", userId);
+  }
   if (input.autoSenderFromTemplate !== undefined) {
     await systemSettingService.set(SETTING_KEYS.GELEN_BELGE_AUTO_SENDER, input.autoSenderFromTemplate, "Gelen belge: okunan şablonun gönderen carisi boş gönderen alanına yazılır", userId);
   }

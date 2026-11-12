@@ -44,9 +44,12 @@ import {
 
 const PURPLE = moduleAccents.Tambur.tint; // #7c3aed
 const RIPPLE_ON_PURPLE = 'rgba(255,255,255,0.26)';
-const RIPPLE_ON_LIGHT = 'rgba(124,58,237,0.16)';
+// Üç yan düğme dolu ve birbirinden ayrışır: Kartela amber, Etiket bilgisi mavi, Bitir yeşil.
+const KARTELA_BG = colors.warningDark;
+const LABEL_INFO_BG = colors.infoDark;
+const BITIR_BG = colors.successDark;
 const BAR_HEIGHT = 60; // telefon
-const BAR_HEIGHT_TABLET = 80; // tablet — daha büyük dokunma hedefi (Kes/Kartela)
+export const BAR_HEIGHT_TABLET = 80; // tablet — daha büyük dokunma hedefi (Kes/Kartela)
 
 interface Props {
   compact: boolean;
@@ -76,6 +79,13 @@ interface Props {
   /** Etiket adedi seçicisi — yalnız `labelCopiesSource = STATION` iken verilir
    *  (Bitir ile Kes arasında çizilir, Kes metnine "×N" eklenir). Yoksa bar bugünküyle aynı. */
   copies?: { count: number; onInc: () => void; onDec: () => void };
+  /** "Etiket bilgisi" penceresini açar; verilmezse (iş emri yok) düğme çizilmez. */
+  onOpenLabelInfo?: () => void;
+  /** Geniş tablet ana kesim (2026-11-10, kullanıcı onaylı): yalnız SOL grup — Kartela · Kes (+adet), sol sütun
+   *  genişliğinde; kip + Bitir sağ sütunda (`TamburModeBitirBar`). Verilmezse bar bugünkü düzende. */
+  wideLeft?: boolean;
+  /** Kes düğmesinin küçük ikinci satırı (varyant: "kalanı kes · X m" / "makineden ölç"). */
+  kesSubLabel?: string | null;
 }
 
 export default function CutActionBar({
@@ -90,9 +100,15 @@ export default function CutActionBar({
   bitirDisabled,
   bitirLoading,
   copies,
+  onOpenLabelInfo,
+  wideLeft,
+  kesSubLabel,
 }: Props) {
+  if (wideLeft && !compact) {
+    return <WideLeftBar {...{ kartelaOn, onToggleKartela, kesLabel, kesSubLabel, onKes, kesDisabled, kesLoading, copies }} />;
+  }
   return (
-    <Surface style={styles.bar} elevation={3}>
+    <Surface style={[styles.bar, !compact && styles.barFlush]} elevation={3}>
       {/* Telefonda dört öğe tek satıra sığmaz → seçici kendi satırında, üstte. */}
       {copies && compact && (
         <View style={styles.copiesRow}>
@@ -109,6 +125,7 @@ export default function CutActionBar({
       )}
       <View style={styles.row}>
         <KartelaToggle on={kartelaOn} onToggle={onToggleKartela} compact={compact} />
+        {onOpenLabelInfo && <LabelInfoButton onPress={onOpenLabelInfo} compact={compact} />}
         {onBitir && (
           <BitirButton
             onPress={onBitir}
@@ -141,24 +158,54 @@ export default function CutActionBar({
   );
 }
 
+// Geniş ana kesim sol grubu: Kartela · Kes (+ikinci satır) · adet; sol sütun genişliğinde, zeminsiz.
+function WideLeftBar(p: Pick<Props, 'kartelaOn' | 'onToggleKartela' | 'kesLabel' | 'kesSubLabel' | 'onKes' | 'kesDisabled' | 'kesLoading' | 'copies'>) {
+  const { copies } = p;
+  return (
+    <View style={styles.barWideLeft}>
+      <View style={styles.row}>
+        <KartelaToggle on={p.kartelaOn} onToggle={p.onToggleKartela} compact={false} />
+        <KesButton
+          label={`${p.kesLabel}${labelCopiesSuffix(!!copies, copies?.count ?? 0)}`}
+          subLabel={p.kesSubLabel}
+          onPress={p.onKes}
+          disabled={p.kesDisabled}
+          loading={p.kesLoading}
+          compact={false}
+        />
+        {copies && (
+          <LabelCopiesStepper count={copies.count} onInc={copies.onInc} onDec={copies.onDec} height={BAR_HEIGHT_TABLET} tint={PURPLE} disabled={p.kesLoading} />
+        )}
+      </View>
+    </View>
+  );
+}
+
+/** Kesim ekranı aksiyon düğmelerinin köşe yuvarlaklığı (Bitir/Kartela/Kes; önizlemedeki Şablon Değiştir de). */
+export const ACTION_BUTTON_RADIUS = radius.md;
+
 // ───────────────────────── Bitir (Top Kesme kapanışı) ─────────────────────────
-function BitirButton({
+export function BitirButton({
   onPress,
   disabled,
   compact,
+  fill = false,
 }: {
   onPress: () => void;
   disabled: boolean;
   compact: boolean;
+  /** Eşit genişlikli grupta (geniş ana kesim sağ grubu) kalan payı alır. */
+  fill?: boolean;
 }) {
   return (
     <View
       style={[
         styles.toggle,
         {
-          width: compact ? 88 : 112,
+          ...(fill ? { flex: 1 } : { width: compact ? 88 : 112 }),
           height: compact ? BAR_HEIGHT : BAR_HEIGHT_TABLET,
         },
+        { backgroundColor: BITIR_BG, borderColor: BITIR_BG },
         disabled && styles.bitirDisabled,
       ]}
     >
@@ -173,7 +220,7 @@ function BitirButton({
         }
         disabled={disabled}
         borderless
-        rippleColor={RIPPLE_ON_LIGHT}
+        rippleColor={RIPPLE_ON_PURPLE}
         style={styles.toggleInner}
         accessibilityRole="button"
         accessibilityState={{ disabled }}
@@ -183,7 +230,7 @@ function BitirButton({
           <Icon
             source="flag-checkered"
             size={20}
-            color={disabled ? colors.textMuted : PURPLE}
+            color={disabled ? colors.textMuted : colors.textOnDark}
           />
           <Text
             style={[
@@ -231,10 +278,8 @@ function KartelaToggle({
 
   const boxStyle = useAnimatedStyle(() => ({
     transform: [{ scale: press.value * pop.value }],
-    backgroundColor: interpolateColor(prog.value, [0, 1], [colors.surface, PURPLE]),
-  }));
-  const labelStyle = useAnimatedStyle(() => ({
-    color: interpolateColor(prog.value, [0, 1], [PURPLE, colors.textOnDark]),
+    backgroundColor: KARTELA_BG,
+    borderColor: interpolateColor(prog.value, [0, 1], [KARTELA_BG, colors.text]),
   }));
 
   return (
@@ -260,7 +305,7 @@ function KartelaToggle({
           if (!reduced) press.value = withSpring(1, springs.press);
         }}
         borderless
-        rippleColor={on ? RIPPLE_ON_PURPLE : RIPPLE_ON_LIGHT}
+        rippleColor={RIPPLE_ON_PURPLE}
         style={styles.toggleInner}
         accessibilityRole="switch"
         accessibilityState={{ checked: on }}
@@ -270,10 +315,10 @@ function KartelaToggle({
           <Icon
             source={on ? 'checkbox-marked' : 'checkbox-blank-outline'}
             size={20}
-            color={on ? colors.textOnDark : PURPLE}
+            color={colors.textOnDark}
           />
           <Animated.Text
-            style={[styles.toggleLabel, { fontSize: compact ? 13 : 14 }, labelStyle]}
+            style={[styles.toggleLabel, { fontSize: compact ? 13 : 14 }]}
             numberOfLines={1}
           >
             Kartela
@@ -284,15 +329,75 @@ function KartelaToggle({
   );
 }
 
+// ───────────────────────── Etiket bilgisi ─────────────────────────
+// ───────────────────────── Kip düğmesi (Manuel ⇄ Otomatik) ─────────────────────────
+/** O anki kipi gösterir; dokununca diğer kipe geçer (kaynak çağıranın `cutMode`u). */
+function LabelInfoButton({ onPress, compact }: { onPress: () => void; compact: boolean }) {
+  return (
+    <View
+      style={[
+        styles.toggle,
+        {
+          width: compact ? 104 : 132,
+          height: compact ? BAR_HEIGHT : BAR_HEIGHT_TABLET,
+          backgroundColor: LABEL_INFO_BG,
+          borderColor: LABEL_INFO_BG,
+        },
+      ]}
+    >
+      <TouchableRipple
+        onPress={() => {
+          Haptics.selectionAsync().catch(() => {});
+          onPress();
+        }}
+        borderless
+        rippleColor={RIPPLE_ON_PURPLE}
+        style={styles.toggleInner}
+        accessibilityRole="button"
+        accessibilityLabel="Etiket bilgisi"
+        testID="tambur-etiket-bilgisi"
+      >
+        <View style={styles.toggleContent}>
+          <Icon source="tag-text-outline" size={20} color={colors.textOnDark} />
+          <Text
+            style={[styles.toggleLabel, { fontSize: compact ? 12 : 14, color: colors.textOnDark }]}
+            numberOfLines={2}
+          >
+            Etiket bilgisi
+          </Text>
+        </View>
+      </TouchableRipple>
+    </View>
+  );
+}
+
 // ───────────────────────── Kes (asıl aksiyon) ─────────────────────────
+// Kes metni: ana satır + (geniş ana kesimde) küçük ikinci satır, alt alta.
+function KesText(p: { label: string; subLabel?: string | null; loading: boolean; dimmed: boolean; compact: boolean }) {
+  return (
+    <View style={styles.kesTextCol}>
+      <Text style={[styles.kesLabel, { fontSize: p.compact ? 15 : 17 }, p.dimmed && styles.kesLabelDimmed]} numberOfLines={1}>
+        {p.loading ? 'Kesiliyor…' : p.label}
+      </Text>
+      {!p.loading && p.subLabel ? (
+        <Text style={[styles.kesSub, p.dimmed && styles.kesLabelDimmed]} numberOfLines={1}>
+          {p.subLabel}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 function KesButton({
   label,
+  subLabel,
   onPress,
   disabled,
   loading,
   compact,
 }: {
   label: string;
+  subLabel?: string | null;
   onPress: () => void;
   disabled: boolean;
   loading: boolean;
@@ -337,7 +442,7 @@ function KesButton({
         ]}
         accessibilityRole="button"
         accessibilityState={{ disabled: blocked }}
-        accessibilityLabel={loading ? 'Kesiliyor' : label}
+        accessibilityLabel={loading ? 'Kesiliyor' : subLabel ? `${label}, ${subLabel}` : label}
       >
         <View style={styles.kesContent}>
           {loading ? (
@@ -349,16 +454,7 @@ function KesButton({
               color={dimmed ? colors.textMuted : colors.textOnDark}
             />
           )}
-          <Text
-            style={[
-              styles.kesLabel,
-              { fontSize: compact ? 15 : 17 },
-              dimmed && styles.kesLabelDimmed,
-            ]}
-            numberOfLines={1}
-          >
-            {loading ? 'Kesiliyor…' : label}
-          </Text>
+          <KesText label={label} subLabel={subLabel} loading={loading} dimmed={dimmed} compact={compact} />
         </View>
       </TouchableRipple>
     </Animated.View>
@@ -373,6 +469,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
   },
+  // Geniş tablette ekran alt boşluk bırakmaz (ScreenChrome flushBottom); çubuk dibe yapışır, numpad ile aynı alt hiza.
+  barFlush: { paddingBottom: spacing.sm },
+  // Geniş ana kesim sol grubu: sütun ızgarasıyla hizalı (kartlarla aynı 12 dp kenar), zeminsiz.
+  barWideLeft: { paddingHorizontal: spacing.md, paddingBottom: spacing.md, paddingTop: spacing.xs },
   row: { flexDirection: 'row', alignItems: 'stretch', gap: spacing.sm },
   copiesRow: {
     flexDirection: 'row',
@@ -385,9 +485,9 @@ const styles = StyleSheet.create({
   // Kartela toggle — sabit genişlik (outline↔dolu geçişinde Kes zıplamasın).
   toggle: {
     height: BAR_HEIGHT,
-    borderRadius: radius.md,
+    borderRadius: ACTION_BUTTON_RADIUS,
     borderWidth: 1.5,
-    borderColor: PURPLE,
+    borderColor: KARTELA_BG,
     overflow: 'hidden',
     justifyContent: 'center',
   },
@@ -398,8 +498,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
   },
   toggleContent: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  toggleLabel: { fontWeight: '800', letterSpacing: 0.2 },
-  bitirLabel: { fontWeight: '800', letterSpacing: 0.2, color: PURPLE },
+  toggleLabel: { fontWeight: '800', letterSpacing: 0.2, color: colors.textOnDark },
+  bitirLabel: { fontWeight: '800', letterSpacing: 0.2, color: colors.textOnDark },
   bitirDisabled: { borderColor: colors.border, backgroundColor: colors.surfaceSunken },
 
   // Kes — esnek (kalanı doldurur), büyük dokunma hedefi, gölgeyle "kalkık".
@@ -421,5 +521,7 @@ const styles = StyleSheet.create({
   kesBlocked: { backgroundColor: colors.surfaceSunken },
   kesContent: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   kesLabel: { color: colors.textOnDark, fontWeight: '700', letterSpacing: 0.2 },
+  kesTextCol: { flexShrink: 1, alignItems: 'center' },
+  kesSub: { color: colors.textOnDark, fontSize: 13, fontWeight: '600', opacity: 0.85 },
   kesLabelDimmed: { color: colors.textMuted },
 });

@@ -43,6 +43,7 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "scanCustomerCodeLookupEnabled",
       "shipmentManualSackCountEnabled",
       "shipmentLooseLoadEnabled",
+      "shipmentHandheldCreateEnabled",
       "shipmentUndoSameDayOnly",
       "returnGradingEnabled",
       "shippingSimulatedWeightEnabled",
@@ -84,6 +85,7 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
     permission: "settings:work-orders",
     flagKeys: [
       "targetQuantityEnabled",
+      "targetWidthEnabled",
       "partyCodeAuto",
       "batchShortNumberEnabled",
       "batchLastNumberHintEnabled",
@@ -148,7 +150,7 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
     ],
   },
   // `dokumaRollBirth` (S4b, 2026-10-21) panel Dokuma kategorisinin enum satırıyla birlikte girdi (`settings-scope-mirror.test`).
-  { permission: "settings:dokuma", flagKeys: ["dokumaRunWeavingOrderRequired", "dokumaOrderLineLinkRequired", "dokumaRollBirth", "tezgahEscalationGraceMinutes", "tezgahAlarmEnabled", "tezgahAlarmUnclassifiedTargetMinutes", "tezgahAlarmUnclassifiedEnabled", "tezgahAlarmRenotifyMinutes", "tezgahAlarmEscalateWhenAcked", "tezgahAlarmNoShiftMode", "tezgahCollectorSilenceMinutes", "tezgahMaxOpenStopHours"] },
+  { permission: "settings:dokuma", flagKeys: ["dokumaRunWeavingOrderRequired", "dokumaOrderLineLinkRequired", "dokumaRollBirth", "dokumaWeavingWastePct", "dokumaYarnReservationEnabled", "tezgahEscalationGraceMinutes", "tezgahAlarmEnabled", "tezgahAlarmUnclassifiedTargetMinutes", "tezgahAlarmUnclassifiedEnabled", "tezgahAlarmRenotifyMinutes", "tezgahAlarmEscalateWhenAcked", "tezgahAlarmNoShiftMode", "tezgahCollectorSilenceMinutes", "tezgahMaxOpenStopHours"] },
   {
     permission: "settings:warehouse",
     flagKeys: ["purchaseBlockOverReceiptEnabled", "goodsReceiptRequirePriceEnabled", "consumableStockEnabled"],

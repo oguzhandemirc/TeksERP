@@ -1,4 +1,5 @@
 import apiClient from "@/services/apiClient";
+import type { StationKind } from "@/types/enums";
 import { TERIM } from "@/lib/terim";
 
 // =============================================================================
@@ -45,6 +46,8 @@ export interface ReasonPreset {
   targetMinutes?: number | null;
   /** Yalnız `WORK_ORDER_REWORK`: null = belirtilmemiş (ücretli) · true = müşteri talebi · false = bizim hatamız (faturasız). İE açılırken donar. */
   billable?: boolean | null;
+  /** Yalnız `MACHINE_STOP`: istasyon türü kapsamı; boş = her istasyon. Eski backend göndermez. */
+  stationKinds?: StationKind[];
 }
 
 /** Sebebe verilebilen kayıp sınıfları — `MINOR` bilinçli dışarıda (süre sınıfı, sebep değil). */
@@ -104,8 +107,10 @@ export const KIND_STORES_TEXT: Record<ReasonPresetKind, boolean> = {
  * Duruşlar `dokumaEnabled` altında yazılır (Tezgah Duruşları ekranı, tablet
  * Dokuma ekranı) — sekme aynı bayrağı okur; `tezgahEnabled` telemetrinindir.
  * Parite bekçisi sekmenin VARLIĞINI ister, GÖRÜNÜRLÜĞÜNÜ değil — ikisi ayrı.
+ * 2026-11-09: duruş sekmesi duruş REJİMİNİ okur (`machineStopEnabled` = dokuma ∨ üretim ∧ makine duruşu
+ * takibi) — dokumasız fason fabrikası kurşun/tambur duruş sebeplerini panelden ekleyebilsin.
  */
-export const KIND_TABS: { kind: ReasonPresetKind; title: string; hint: string; modul?: "dokumaEnabled" | "devereEnabled" | "iplikEnabled" | "kaliteGuvenceEnabled" }[] = [
+export const KIND_TABS: { kind: ReasonPresetKind; title: string; hint: string; modul?: "machineStopEnabled" | "devereEnabled" | "iplikEnabled" | "kaliteGuvenceEnabled" }[] = [
   {
     kind: "ROLL_SCRAP",
     title: "Fire",
@@ -138,9 +143,9 @@ export const KIND_TABS: { kind: ReasonPresetKind; title: string; hint: string; m
   },
   {
     kind: "MACHINE_STOP",
-    title: "Tezgah Duruşu",
-    hint: "Tezgah neden durdu. Her sebep bir KAYIP SINIFI taşır (plansız / kurulum / planlı / çalışma dışı) ve randıman raporu o sınıfa göre gruplar; sınıf sebepten kopyalanıp duruşa donar. Kısa kopuşlar buraya girmez — onlar süre sınıfıdır, sebep değil.",
-    modul: "dokumaEnabled",
+    title: "Makine Duruşu",
+    hint: "Makine / tezgah neden durdu. Her sebep bir KAYIP SINIFI taşır (plansız / kurulum / planlı / çalışma dışı) ve randıman raporu o sınıfa göre gruplar; sınıf sebepten kopyalanıp duruşa donar. İSTASYON TÜRLERİ seçilen sebep tablette yalnız o türdeki istasyonlarda listelenir (boş = her istasyon). Kısa kopuşlar buraya girmez — onlar süre sınıfıdır, sebep değil.",
+    modul: "machineStopEnabled",
   },
   {
     kind: "WARP_RETURN",
@@ -185,6 +190,12 @@ export const reasonPresetService = {
       .get<ReasonPreset[]>(`/api/reason-presets${includeInactive ? "?includeInactive=true" : ""}`)
       .then((r) => r.data),
 
+  /** Aktif duruş sebepleri, istasyon türü kapsamıyla SUNUCUDA süzülmüş (boş kapsam + o türü taşıyanlar). */
+  listStopReasonsFor: (stationKind: StationKind): Promise<ReasonPreset[]> =>
+    apiClient
+      .get<ReasonPreset[]>(`/api/reason-presets?kind=MACHINE_STOP&stationKind=${encodeURIComponent(stationKind)}`)
+      .then((r) => r.data),
+
   create: (input: {
     kind: ReasonPresetKind;
     label: string;
@@ -192,6 +203,7 @@ export const reasonPresetService = {
     stopLossClass?: StopLossClass | null;
     targetMinutes?: number | null;
     billable?: boolean | null;
+    stationKinds?: StationKind[];
   }): Promise<ReasonPreset> =>
     apiClient.post<ReasonPreset>("/api/reason-presets", input).then((r) => r.data),
 
@@ -204,6 +216,7 @@ export const reasonPresetService = {
       stopLossClass?: StopLossClass | null;
       targetMinutes?: number | null;
       billable?: boolean | null;
+      stationKinds?: StationKind[];
     },
   ): Promise<ReasonPreset> =>
     apiClient.patch<ReasonPreset>(`/api/reason-presets/${id}`, input).then((r) => r.data),

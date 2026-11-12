@@ -1,6 +1,6 @@
 // Excel'den satır yükleme (ReceiptImportButton deseni): şablon indir + dosya oku + TOPLU gönder.
 // Parti token'ı deneme başına: belirsiz hatada aynı token'la tekrar → sunucu satırları ikilemez.
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Download, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -45,7 +45,17 @@ async function readSheetRows(file: File): Promise<Array<Record<string, unknown>>
   return rows;
 }
 
-export function LineImportButton({ noteId, onImported }: { noteId: string; onImported: () => void }) {
+export interface LineImport {
+  busy: boolean;
+  errors: LineImportError[];
+  pick: () => void;
+  downloadTemplate: () => void;
+  /** Gizli dosya girdisi — çağıran sayfaya bir kez yerleştirir (menü kapanınca girdi kaybolmasın). */
+  input: ReactNode;
+}
+
+/** Excel yükleme durumu — düğme de detay ⋯ menüsü de bunu kullanır; atlanan satır listesi `LineImportErrors`. */
+export function useLineImport(noteId: string, onImported: () => void): LineImport {
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<LineImportError[]>([]);
@@ -83,26 +93,42 @@ export function LineImportButton({ noteId, onImported }: { noteId: string; onImp
     }
   };
 
+  return {
+    busy,
+    errors,
+    pick: () => fileRef.current?.click(),
+    downloadTemplate: () => void downloadTemplate(),
+    input: <input ref={fileRef} type="file" accept=".xlsx" className="hidden" data-testid="line-import-input" onChange={(e) => e.target.files?.[0] && void handleFile(e.target.files[0])} />,
+  };
+}
+
+export function LineImportErrors({ errors }: { errors: LineImportError[] }) {
+  if (errors.length === 0) return null;
+  return (
+    <ul className="text-xs text-destructive" data-testid="line-import-errors">
+      {errors.map((er) => (
+        <li key={`${er.row}:${er.message}`}>{er.row > 0 ? `Satır ${er.row}: ` : ""}{er.message}</li>
+      ))}
+    </ul>
+  );
+}
+
+export function LineImportButton({ noteId, onImported }: { noteId: string; onImported: () => void }) {
+  const imp = useLineImport(noteId, onImported);
   return (
     <div className="flex flex-col gap-1">
       <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="outline" size="sm" onClick={() => void downloadTemplate()}>
+        <Button type="button" variant="outline" size="sm" onClick={imp.downloadTemplate}>
           <Download className="mr-1 h-4 w-4" />
           Şablon
         </Button>
-        <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => fileRef.current?.click()}>
+        <Button type="button" variant="outline" size="sm" disabled={imp.busy} onClick={imp.pick}>
           <FileSpreadsheet className="mr-1 h-4 w-4" />
           Excel'den yükle
         </Button>
-        <input ref={fileRef} type="file" accept=".xlsx" className="hidden" onChange={(e) => e.target.files?.[0] && void handleFile(e.target.files[0])} />
+        {imp.input}
       </div>
-      {errors.length > 0 && (
-        <ul className="text-xs text-destructive">
-          {errors.map((er) => (
-            <li key={`${er.row}:${er.message}`}>{er.row > 0 ? `Satır ${er.row}: ` : ""}{er.message}</li>
-          ))}
-        </ul>
-      )}
+      <LineImportErrors errors={imp.errors} />
     </div>
   );
 }

@@ -12,8 +12,10 @@ import { stationFormDefaults, stationFormSchema, type StationFormValues } from "
 import { visibleStationKindLabels } from "./stationKindVisibility";
 import { inspectionHintForKind, suggestedCapabilities, valuesAfterKindChange } from "./stationKindDefaults";
 import { StationLabelCopiesField } from "./StationLabelCopiesField";
+import { StationMachineStopField } from "./StationMachineStopField";
 import { StationScanRouteFields } from "./StationScanRouteFields";
 import { StationKursunSection } from "./StationKursunSection";
+import { canHaveKursun } from "./stationListItems";
 
 const CAPABILITY_FIELDS = ["appliesColor", "appliesProperty", "appliesQuality", "inspectionEnabled", "producesWarpBeam", "consumesWarpBeam"] as const;
 import type { Station } from "./types";
@@ -26,9 +28,11 @@ interface Props {
   initial?: Station | null;
   onSubmit: (values: StationFormValues) => void | Promise<void>;
   isSubmitting?: boolean;
+  /** Liste görünümünde kurşun ayarı istasyon panelindedir; aynı veri iki açık formdan yazılmasın. */
+  hideKursun?: boolean;
 }
 
-export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting }: Props) {
+export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting, hideKursun }: Props) {
   // WEAVING türü yalnız dokuma modülü açıkken seçilebilir (mevcut değer korunur).
   const dokumaEnabled = useDokumaEnabled();
   // Devere yetenek kutuları yalnız devere modülü açıkken çizilir (kapalıyken form BİREBİR eski).
@@ -44,6 +48,7 @@ export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSub
         appliesProperty: initial.appliesProperty ?? true,
         appliesQuality: initial.appliesQuality ?? false,
         inspectionEnabled: initial.inspectionEnabled ?? false,
+        machineStopEnabled: initial.machineStopEnabled ?? true,
         producesWarpBeam: initial.producesWarpBeam ?? false,
         consumesWarpBeam: initial.consumesWarpBeam ?? false,
         capturesWidth: initial.capturesWidth ?? false,
@@ -167,6 +172,7 @@ export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSub
               <p className="-mt-1 pl-6 text-xs text-muted-foreground" data-testid="inspection-hint">
                 {inspectionHintForKind(form.watch("kind") as StationKind)}
               </p>
+              <StationMachineStopField form={form} />
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" {...form.register("appliesQuality")} /> Ara istasyon kart akışı
                 (Kurşun/KK2 ekranı)
@@ -193,7 +199,10 @@ export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSub
           </FormField>
           <StationLabelCopiesField form={form} />
           {/* oie-a: kurşun ayarı yalnız kayıtlı istasyonda (kendi kaydıyla). */}
-          {initial?.id && <StationKursunSection stationId={initial.id} />}
+          {initial?.id && !hideKursun && <StationKursunSection stationId={initial.id} />}
+          {initial?.id && hideKursun && canHaveKursun(initial) && (
+            <p className="text-xs text-muted-foreground">Kurşun ve varsayılan gramaj ayarı sağdaki istasyon panelindedir.</p>
+          )}
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" {...form.register("isActive")} /> Aktif
           </label>

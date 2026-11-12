@@ -45,7 +45,8 @@ function readLineItems(raw: unknown, lines: ReadonlyArray<{ lineNo: number; item
   return out;
 }
 
-export interface ConvertResult { quote: QuoteRecord; orderId: string; orderNumber: string | null; replay: boolean }
+/** `warnings`: sipariş doğuşunun uyarıları (`finishOrderCreate` — K3 risk limiti dahil); replay'de boş. */
+export interface ConvertResult { quote: QuoteRecord; orderId: string; orderNumber: string | null; replay: boolean; warnings: string[] }
 
 type OrderWithQuote = { id: string; status: OrderStatus; orderNumber: string | null; convertedFromQuote: { id: string } | null };
 
@@ -56,7 +57,7 @@ function convertReplay(quoteId: string) {
     alive: (p) => assertOrderReplayAlive({ id: p.id, status: p.status, orderNumber: p.orderNumber }),
     identity: (p) => [{ ad: "quoteId", mevcut: p.convertedFromQuote?.id ?? null, gelen: quoteId }],
     collision: (p) => `Bu form daha önce başka bir sipariş için kullanılmış (${p.orderNumber ?? "-"}). Formu yeniden açın.`,
-    respond: async (p) => ({ quote: await prisma.salesQuote.findUniqueOrThrow({ where: { id: quoteId }, include: QUOTE_INCLUDE }), orderId: p.id, orderNumber: p.orderNumber, replay: true }),
+    respond: async (p) => ({ quote: await prisma.salesQuote.findUniqueOrThrow({ where: { id: quoteId }, include: QUOTE_INCLUDE }), orderId: p.id, orderNumber: p.orderNumber, replay: true, warnings: [] }),
   });
 }
 
@@ -88,7 +89,8 @@ export async function convertQuoteToOrder(quoteId: string, body: { clientToken?:
       })),
     };
     const svc = await orderService();
-    const prepared = await svc.prepareOrderCreate(data, clientToken, { userId: user.userId });
+    // K3 (Seyitoğlu L4): risk uyarısı POST /orders ile aynı çekirdek; tutar yalnız bakiye görme izniyle.
+    const prepared = await svc.prepareOrderCreate(data, clientToken, { userId: user.userId, canSeeRiskAmounts: matchesPermission(user.permissions ?? [], "finance:read") });
     const r = await withBarcodeRetry(
       () =>
         prisma.$transaction(async (tx) => {
@@ -107,13 +109,14 @@ export async function convertQuoteToOrder(quoteId: string, body: { clientToken?:
     );
     if ("replayed" in r && r.replayed) return r.replayed;
     const order = (r as { order: Record<string, unknown> }).order;
-    await svc.finishOrderCreate(order, data, prepared, { auditExtra: { kaynak: "TEKLIF", quoteId, quoteNo: q.quoteNo, revisionNo: q.revisionNo } });
+    const finished = await svc.finishOrderCreate(order, data, prepared, { auditExtra: { kaynak: "TEKLIF", quoteId, quoteNo: q.quoteNo, revisionNo: q.revisionNo } });
     auditQuoteStatus(quoteId, { from: "ACCEPTED", to: "CONVERTED", userId: user.userId, extra: { convertedOrderId: order.id } });
     return {
       quote: await prisma.salesQuote.findUniqueOrThrow({ where: { id: quoteId }, include: QUOTE_INCLUDE }),
       orderId: order.id as string,
       orderNumber: (order.orderNumber as string | null) ?? null,
       replay: false,
+      warnings: finished.warnings ?? [],
     };
   });
 }

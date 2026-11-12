@@ -16,6 +16,7 @@ import {
   OrderStatus,
   Prisma,
   type MaterialProvider,
+  type RollStage,
 } from "@prisma/client";
 import { type TargetValueItem } from "../helpers/workorder-target-value.helper";
 import {
@@ -307,6 +308,8 @@ export interface WorkOrderCreateInput {
     dispatchWithoutColor?: boolean;
     /** Önerilen makine (yalnız öneri) — adımın istasyonuna ait olmalı. */
     plannedMachineId?: string | null;
+    /** Çıktı aşaması (2026-11-10) — null = otomatik; gelmezse replace eski değeri korur. */
+    outputStage?: RollStage | null;
   }[];
   /**
    * routeTemplateId ile birlikte verilebilir: şablondan klonlanan adımların fason
@@ -320,6 +323,8 @@ export interface WorkOrderCreateInput {
     dispatchWithoutColor?: boolean;
     /** Önerilen makine: verilirse şablon değerini ezer, null temizler. */
     plannedMachineId?: string | null;
+    /** Çıktı aşaması: verilirse şablon değerini ezer, null = otomatik. */
+    outputStage?: RollStage | null;
   }[];
   /**
    * Tercih edilen: her satıra tahsis miktarı.

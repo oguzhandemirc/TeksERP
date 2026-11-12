@@ -1,4 +1,4 @@
-import { WorkOrderType } from "@/types/enums";
+import { WorkOrderType, type RollStage } from "@/types/enums";
 import { isMeasuredUnit } from "@/lib/item-unit";
 import { lineOpen } from "./order-fulfillment";
 import { buildPicked, type PickedOrderLine } from "./OrderPickerDialog";
@@ -185,6 +185,7 @@ export function designerStepsFromWorkOrder(wo: WorkOrder): DesignerStep[] {
       plannedSubcontractorId: s.plannedSubcontractorId ?? null,
       dispatchWithoutColor: s.dispatchWithoutColor ?? false,
       plannedMachineId: s.plannedMachineId,
+      outputStage: s.outputStage,
     }));
 }
 
@@ -202,6 +203,8 @@ export function stepsToCustom(steps: DesignerStep[]): CustomRouteStep[] {
     dispatchWithoutColor: s.dispatchWithoutColor ?? false,
     // Yalnız biliniyorsa gönderilir: undefined = sunucu planlamacının sonradan seçimini korur.
     ...(s.plannedMachineId !== undefined ? { plannedMachineId: s.plannedMachineId } : {}),
+    // Aynı kural: undefined = sunucu adımın çıktı aşamasını korur (eski sunucu alanı da tanımaz).
+    ...(s.outputStage !== undefined ? { outputStage: s.outputStage } : {}),
   }));
 }
 
@@ -276,6 +279,7 @@ export function routeStepsToCreatePayload(
   plannedSubcontractorId: string | null;
   dispatchWithoutColor: boolean;
   plannedMachineId?: string | null;
+  outputStage?: RollStage | null;
   plannedColorId?: string | null;
   plannedPropertyIds?: string[];
 }[] {
@@ -290,6 +294,7 @@ export function routeStepsToCreatePayload(
       dispatchWithoutColor: s.dispatchWithoutColor ?? false,
       // Öneri yoksa gövde eskisiyle bayt-aynı (yeni şablonda yokluk = öneri yok).
       ...(s.plannedMachineId ? { plannedMachineId: s.plannedMachineId } : {}),
+      ...(s.outputStage ? { outputStage: s.outputStage } : {}),
       ...(plan
         ? {
             plannedColorId: plan.plannedColorId,

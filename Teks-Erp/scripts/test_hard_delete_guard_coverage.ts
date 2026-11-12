@@ -147,6 +147,7 @@ const EXPECTED: Record<string, string> = {
   "Item <- ItemPrice.item : Cascade": "cascade-intended — fiyat kalemsiz anlamsız",
   "Customer <- CustomerStandaloneLabel.customer : Cascade": "cascade-intended — müşteri etiket konfigürasyonu",
   "Customer <- CustomerTemplateRoute.customer : Cascade": "cascade-intended — müşteri şablon yönlendirmesi",
+  "Customer <- CustomerLabelTemplateOption.customer : Cascade": "cascade-intended — müşteri etiket seti (yapılandırma pivotu)",
   "Customer <- Route.customer : SetNull": "guarded (routeCount, A5 2026-07-31)",
   // 2026-08-19 — BİRLEŞTİRME SOY BAĞI (`mergedIntoId`). Sayım guard'ı BİLEREK
   // EKLENMEDİ ve SetNull doğru davranıştır:

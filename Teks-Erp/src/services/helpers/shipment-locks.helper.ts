@@ -90,7 +90,8 @@ export async function touchShipmentPlannedTx(
   });
   if (touched.count === 0) {
     throw AppError.conflict(
-      "Sevkiyat bu sırada sevk / iptal edildi — çuval kümesi artık değiştirilemez. Sayfayı yenileyin."
+      "Sevkiyat bu sırada sevk / iptal edildi — çuval kümesi artık değiştirilemez. Sayfayı yenileyin.",
+      { code: "SHIPMENT_NOT_PLANNED" },
     );
   }
 }

@@ -8,8 +8,11 @@
 // Öncelikler:
 //   dil    : peripheral.languageOverride > format.language (global ayar)
 //   format : cihaz medyası (peripheral.labelWidthMm vd.) > sistem varsayılan medyası
-//   şablon : explicit templateId > peripheral.templateRoutes[kind] > kind default (isDefault) > null
+//   şablon : explicit templateId > ALICI şablonu > müşteri route > peripheral.templateRoutes[kind] > bağlam default > null
+//            (toplu yol `label.service` bulk bağlamı AYNI sırayı `consigneeTemplateUsable` ile kurar — bekçi)
 //
+// `kind` çağırandan gelir; top etiketi için TEK türetici `rollLabelKindOf(roll.stage)`
+// (`roll-stage.helper.ts`, 2026-11-10) — renkten kind türetilmez.
 // Cihaz eşleşmezse: tümüyle bugünkü davranış (resolveLabelFormat + kind default
 // şablon) — BAYT-stabil geri uyum.
 // =============================================================================
@@ -51,6 +54,13 @@ export interface LabelRoutingOpts {
    *  doluysa CustomerTemplateRoute halkası devreye girer. Stok/müşterisiz baskıda
    *  null → halka hiç sorgulanmaz (WO tahmini YASAK kuralı korunur). */
   customerId?: string | null;
+  /** Emanet topun etiket alıcısı (`Roll.labelConsigneeId`) — alıcıya bağlı şablon müşteri halkasından ÖNCE. */
+  consigneeId?: string | null;
+}
+
+/** Alıcı şablonu bu kind için kullanılabilir mi — tekil ve toplu yolun ORTAK yüklemi (aktif, silinmemiş, kind uyumlu). */
+export function consigneeTemplateUsable(t: Pick<LabelTemplate, "isActive" | "deletedAt" | "kind"> | null | undefined, kind: LabelKind): boolean {
+  return !!t && t.isActive && t.deletedAt == null && (t.kind == null || t.kind === kind);
 }
 
 const PERIPHERAL_INCLUDE = (kind: LabelKind) => ({
@@ -119,6 +129,13 @@ export async function resolveLabelRouting(opts: LabelRoutingOpts): Promise<Label
       where: { id: opts.templateId, deletedAt: null },
       include: { variants: true },
     });
+  }
+  if (!template && opts.consigneeId) {
+    const c = await prisma.customerConsignee.findUnique({
+      where: { id: opts.consigneeId },
+      select: { labelTemplate: { include: { variants: true } } },
+    });
+    if (c?.labelTemplate && consigneeTemplateUsable(c.labelTemplate, kind)) template = c.labelTemplate;
   }
   if (!template && opts.customerId) {
     const route = await prisma.customerTemplateRoute.findUnique({

@@ -21,10 +21,11 @@ import { reasonPresetService } from '../services/reasonPreset.service';
 
 jest.mock('../services/reasonPreset.service', () => {
   const actual = jest.requireActual('../services/reasonPreset.service');
-  return { ...actual, reasonPresetService: { list: jest.fn() } };
+  return { ...actual, reasonPresetService: { list: jest.fn(), listForStation: jest.fn() } };
 });
 
 const mockList = reasonPresetService.list as jest.Mock;
+const mockListForStation = reasonPresetService.listForStation as jest.Mock;
 
 function Probe({ onRender }: { onRender: (v: ReturnType<typeof useReasonPresets>) => void }) {
   const v = useReasonPresets('ROLL_SCRAP');
@@ -85,5 +86,36 @@ describe('useReasonPresets', () => {
     const last = seen[seen.length - 1]!;
     // Sıra sunucununki, başka türün satırı sızmaz, GİZLİ satır operatöre ÇİZİLMEZ.
     expect(last.presets.map((p) => p.code)).toEqual(['A', 'B']);
+  });
+
+  describe('istasyon türü süzgeci (2026-11-09)', () => {
+    const row = (code: string, sortOrder: number) => ({ id: code, kind: 'MACHINE_STOP', code, label: code, fullText: null, requiresText: false, sortOrder, isActive: true, isSystem: true });
+    function StopProbe({ stationKind, onRender }: { stationKind: string | null; onRender: (v: ReturnType<typeof useReasonPresets>) => void }) {
+      const v = useReasonPresets('MACHINE_STOP', false, stationKind);
+      onRender(v);
+      return <Text>{v.presets.map((p) => p.code).join(',')}</Text>;
+    }
+
+    it('stationKind verilince SUNUCUDA süzülmüş liste kullanılır (istemci süzmez)', async () => {
+      mockList.mockResolvedValue([row('COZGU_KOPUSU', 0), row('MEKANIK_ARIZA', 1)]);
+      mockListForStation.mockResolvedValue([row('MEKANIK_ARIZA', 1)]);
+      const { findByText } = wrap(<StopProbe stationKind="TAMBUR" onRender={() => undefined} />);
+      await findByText('MEKANIK_ARIZA');
+      expect(mockListForStation).toHaveBeenCalledWith('MACHINE_STOP', 'TAMBUR');
+    });
+
+    it('süzülmüş liste boş dönerse tam listeye düşer (operatör kilitlenmez)', async () => {
+      mockList.mockResolvedValue([row('COZGU_KOPUSU', 0), row('MEKANIK_ARIZA', 1)]);
+      mockListForStation.mockResolvedValue([]);
+      const { findByText } = wrap(<StopProbe stationKind="TAMBUR" onRender={() => undefined} />);
+      await findByText('COZGU_KOPUSU,MEKANIK_ARIZA');
+    });
+
+    it('stationKind yoksa süzülmüş uç çağrılmaz (bugünkü davranış)', async () => {
+      mockList.mockResolvedValue([row('COZGU_KOPUSU', 0)]);
+      const { findByText } = wrap(<StopProbe stationKind={null} onRender={() => undefined} />);
+      await findByText('COZGU_KOPUSU');
+      expect(mockListForStation).not.toHaveBeenCalled();
+    });
   });
 });

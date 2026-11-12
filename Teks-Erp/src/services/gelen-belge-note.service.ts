@@ -10,7 +10,7 @@
 // =============================================================================
 import { suggestOwnerForNote } from "./gelen-belge-sahip-onerisi.service";
 import { cariHoldNotice } from "./helpers/cari-hold.helper";
-import { DeliveryNoteSourceKind, DeliveryNoteStatus, Prisma } from "@prisma/client";
+import { DeliveryNoteStatus, Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { resolveRangeEnd, resolveRangeStart } from "../constants/time";
@@ -32,9 +32,12 @@ import { sameBatchNotes } from "./gelen-belge-parti-tekrar.service";
 import { readDocumentTotalCheck, readDuplicateDocNoMode, readIncomingDocEntryMode, readPhotoRetention, readUnreviewedApprovalMode } from "./system-setting.service";
 import { assertDocNoUniqueTx, duplicateDocNoNotice, lockDocNosTx } from "./helpers/gelen-belge-mukerrer.helper";
 import { noteBatchAndMeters } from "./gelen-belge-parti-metre.service";
-import { getReaderUrl } from "../lib/gelen-belge/url";
+import { serverReaderState } from "./gelen-belge-sunucu-okuyucu.service";
 import { noteTanitim } from "./gelen-belge-tanitim-guveni.service";
+import { noteTanima } from "./gelen-belge-tanima-ozeti.service";
 import { withDocLineCount } from "./gelen-belge-satir-sayim.service";
+import { withNoteWorkOrders } from "./gelen-belge-liste-is-emri.service";
+import type { DeliveryNoteCreateInput, DeliveryNoteHeaderInput, DeliveryNoteListQuery } from "./gelen-belge-note-types";
 
 const NOTE_TABLE = "CUSTOMER_DELIVERY_NOTE";
 const SERIES_KEY = "customerDeliveryNote";
@@ -44,40 +47,7 @@ export { addDeliveryNoteLines, deleteDeliveryNoteLine, updateDeliveryNoteLine, t
 // Durum kümesi Prisma enum'undan TÜRETİLİR (elle kopya bayatlar; D4 yeni değer eklerse tek yer).
 export const DELIVERY_NOTE_STATUSES = Object.values(DeliveryNoteStatus) as readonly DeliveryNoteStatus[];
 
-// ── Girdi tipleri (route Zod'u bunlara daraltır) ────────────────────────────
-export interface DeliveryNoteHeaderInput {
-  ownerCustomerId?: string | null;
-  senderCustomerId?: string | null;
-  senderText?: string | null;
-  senderDocNo?: string | null;
-  /** YYYY-AA-GG — takvim günü. */
-  senderDocDate?: string | null;
-  customerBatchNo?: string | null;
-  customerOrderNo?: string | null;
-  processText?: string | null;
-  pageCount?: number | null;
-  declaredTopCount?: number | null;
-  totalsDeclared?: Record<string, unknown> | null;
-}
-export interface DeliveryNoteCreateInput extends DeliveryNoteHeaderInput {
-  clientToken?: string | null;
-  sourceKind: Exclude<DeliveryNoteSourceKind, "OCR">;
-  /** Önceden yüklenmiş, sahipsiz taramalar (sha256 ile doğmuş) taslağa bağlanır. */
-  scanIds?: string[];
-  lines?: DeliveryNoteLineInput[];
-}
-export interface DeliveryNoteListQuery {
-  status?: DeliveryNoteStatus;
-  sourceKind?: DeliveryNoteSourceKind;
-  ownerCustomerId?: string | string[];
-  senderCustomerId?: string | string[];
-  q?: string;
-  /** createdAt aralığı (dahil); gün-yalnız değer fabrika gününün başı/sonu. */
-  from?: string;
-  to?: string;
-  cursor?: string;
-  limit?: number;
-}
+export type { DeliveryNoteCreateInput, DeliveryNoteHeaderInput, DeliveryNoteListQuery } from "./gelen-belge-note-types";
 
 // ── Seçimler ────────────────────────────────────────────────────────────────
 const HEADER_SELECT = {
@@ -112,7 +82,7 @@ function auditHeader(n: { noteNo: string; status: string; sourceKind: string; ow
     customerBatchNo: n.customerBatchNo, customerOrderNo: n.customerOrderNo, processText: n.processText, pageCount: n.pageCount, declaredTopCount: n.declaredTopCount,
   };
 }
-function parseDay(v: string | null | undefined): Date | null {
+export function parseDay(v: string | null | undefined): Date | null {
   if (v === undefined || v === null || v === "") return null;
   const d = new Date(`${v}T00:00:00.000Z`);
   if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== v) {
@@ -156,6 +126,12 @@ export function translateUnique(err: unknown): never {
 }
 
 // ── Okuma ───────────────────────────────────────────────────────────────────
+/** `readerConfigured` = sunucu okuyucusu bu an kullanılabilir (adres + ayar); `serverOcrEnabled` = panel ayarının kendisi. */
+async function readerFlags(): Promise<{ readerConfigured: boolean; serverOcrEnabled: boolean }> {
+  const r = await serverReaderState();
+  return { readerConfigured: r.url !== null, serverOcrEnabled: r.enabled };
+}
+
 export async function getDeliveryNote(id: string) {
   const note = await prisma.customerDeliveryNote.findUnique({ where: { id }, select: DETAIL_SELECT });
   if (!note) throw AppError.notFound("Gelen belge taslağı bulunamadı.", { code: "DELIVERY_NOTE_NOT_FOUND" });
@@ -172,20 +148,21 @@ export async function getDeliveryNote(id: string) {
   // Belge geneli kip onayla AYNI okuyucudan; beyansız belgede ayar okunmaz.
   const documentMode = hasDocumentDeclared(note.totalsDeclared) ? await readDocumentTotalCheck() : "INFO";
   // Belge başına tek kayıt kipi: onayın AYNI kapı yüklemi (yalnız kip açıkken anahtar doğar — PER_LINE yanıtı bugünkü gibi).
-  const perDocument = (await readIncomingDocEntryMode()) === "PER_DOCUMENT"
-    ? { gate: perDocumentGate(note, note.kursunMetersReview ? await readUnreviewedApprovalMode() : "WARN") }
-    : null;
+  const perDocument = (await readIncomingDocEntryMode()) === "PER_DOCUMENT" ? { gate: perDocumentGate(note, note.kursunMetersReview ? await readUnreviewedApprovalMode() : "WARN") } : null;
   // Parti no adayları + kurşun metre adayları CANLI (saklanmaz); eski istemci alanları yok sayar.
   // "Satır toplamı" toplam kıyasıyla AYNI küme: onayda INFO'ya dönen belge satırları sayılır, onayda doğan özet satırı
   // (kurşun metresinin kendisi) sayılmaz — aksi halde onaydan sonra sayı belgenin satırlarından kopuyordu.
   // Güven kipi okuma özetiyle AYNI (`noteTanitim`): tablet detayı tercih eder; süzgeçsiz aday listesi SORMA'yı delerdi.
-  const batchMeters = await noteBatchAndMeters(note.id, note.totalsDeclared, note.lines.filter((l) => l.status !== "SKIPPED" && !isSummaryLine(note.id, l)).map((l) => l.meters), (await noteTanitim(note.id)).trust);
+  const { trust } = await noteTanitim(note.id);
+  const batchMeters = await noteBatchAndMeters(note.id, note.totalsDeclared, note.lines.filter((l) => l.status !== "SKIPPED" && !isSummaryLine(note.id, l)).map((l) => l.meters), trust);
+  // Tanıma kartı (2026-11-09): okuma özetiyle AYNI blok; okunmuş sayfa yoksa alan yok. Eski panel yok sayar.
+  const tanima = await noteTanima(note.id, trust);
   // Müşteri önerisi (OIE): okunan metinde yazan cari; yalnız sahipsiz taslakta, aksi null. Eski istemci alanı yok sayar.
   const ownerSuggestion = await suggestOwnerForNote(note);
   // `readerConfigured`: okuyucu tanımsız kurulumda bekleyen sayfa hiç okunmaz → panel "okunuyor"da beklemez, formu elle doldurtur.
   // K27 (WARN kipi) `duplicateDocNo`: aynı belge no'lu İŞİ SÜREN eşler — bilgi şeridi; yoksa null. Eski istemci yok sayar.
   // K28: onay ekranı kip FULL değilse belge no'yu vurgular ("fotoğraf küçültülecek/silinecek"); eski istemci yok sayar.
-  return { ...note, duplicateDocNo: await duplicateDocNoNotice(note), lines, totalsCheck: totalsCheck(note, note.lines, { documentMode }), notices: noteNotices(note.warnings), cariHold, sameBatch, ...batchMeters, ...(perDocument ? { perDocument: perDocument.gate } : {}), ownerSuggestion, readerConfigured: getReaderUrl().url !== null, photoRetention: await readPhotoRetention() };
+  return { ...note, duplicateDocNo: await duplicateDocNoNotice(note), lines, totalsCheck: totalsCheck(note, note.lines, { documentMode }), notices: noteNotices(note.warnings), cariHold, sameBatch, ...batchMeters, ...(perDocument ? { perDocument: perDocument.gate } : {}), ownerSuggestion, ...(tanima ? { tanima } : {}), ...(await readerFlags()), photoRetention: await readPhotoRetention() };
 }
 
 /** Liste where'i — özet şeridi de BUNDAN türer (durum süzgeci hariç; şerit duruma göre sayar). */
@@ -212,8 +189,8 @@ export function buildDeliveryNoteBaseWhere(q: DeliveryNoteListQuery): Prisma.Cus
       { noteNo: { contains: term, mode: "insensitive" } },
       { senderDocNo: { contains: term, mode: "insensitive" } },
       { senderText: { contains: term, mode: "insensitive" } },
-      { customerBatchNo: { contains: term, mode: "insensitive" } },
-      { customerOrderNo: { contains: term, mode: "insensitive" } },
+      { customerBatchNo: { contains: term, mode: "insensitive" } }, { customerOrderNo: { contains: term, mode: "insensitive" } },
+      { lines: { some: { customerBatchNo: { contains: term, mode: "insensitive" } } } }, // çok partide parti no satırda yaşar
     ];
   }
   return where;
@@ -228,9 +205,9 @@ export async function listDeliveryNotes(q: DeliveryNoteListQuery) {
   const page = rows.slice(0, limit);
   const grouped = await prisma.customerDeliveryNote.groupBy({ by: ["status"], where: base, _count: { _all: true } });
   const summary = Object.fromEntries(DELIVERY_NOTE_STATUSES.map((s) => [s, grouped.find((g) => g.status === s)?._count._all ?? 0])) as Record<DeliveryNoteStatus, number>;
-  // `docLineCount`: özet satırı hariç belge satırı (listede "Top"); eski istemci `_count.lines` okur.
+  // `docLineCount`: özet satırı hariç belge satırı ("Top"; eski istemci `_count.lines`) · `workOrders`: bağlı İE'ler (eski istemci yok sayar).
   return {
-    items: await withDocLineCount(page),
+    items: await withNoteWorkOrders(await withDocLineCount(page)),
     nextCursor: rows.length > limit ? encodeOffsetCursor(offset + limit) : null,
     summary: { ...summary, total: Object.values(summary).reduce((a, b) => a + b, 0) },
   };

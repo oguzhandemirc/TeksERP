@@ -294,7 +294,7 @@ export interface FeatureFlags {
   financeAutoDraftFromShipmentEnabled: boolean;
   /** H7: hizmet faturası — ana anahtar + alt ayarlar (backend aynası; default false / OUT / DECLARED_WITH_WARNING / PER_SHIPMENT / SERVICE_DAY). */
   financeServiceBillingEnabled: boolean;
-  financeServiceBillingMeterBasis: "OUT" | "IN" | "DECLARED";
+  financeServiceBillingMeterBasis: "OUT" | "IN" | "DECLARED" | "MAX_DECLARED";
   financeServiceBillingMissingMeter: "DECLARED_WITH_WARNING" | "BLOCK_LINE";
   /** Brode fiyat birimi (backend aynası; default METER). */
   financeServiceBillingBrodeUnit: "METER" | "PIECE" | "STITCH";
@@ -436,6 +436,10 @@ export interface FeatureFlags {
   dokumaOrderLineLinkRequired: boolean;
   /** S1 (2026-10-21): top doğuş yolu — `TABLET_DOFF` (bugün) · `KK1_LABEL_OR_ORDER` · `KK1_LABEL_ONLY`. Panel: Dokuma kategorisi (S4b). */
   dokumaRollBirth: DokumaRollBirth;
+  /** Dokuma firesi % (backend `DEFAULT_DOKUMA_WEAVING_WASTE_PCT` = 0). */
+  dokumaWeavingWastePct: number;
+  /** SY-3 I1: iplik ayırma görünürlüğü (HAM; etkin = üretim && dokuma && bayrak). Varsayılan KAPALI. */
+  dokumaYarnReservationEnabled: boolean;
   /** Dokuma işi modülü (dokuma işi planlama · tezgah koşumu · top indirme).
    *  Varsayılan KAPALI. ⚠️ ÜRETİME BAĞIMLI, tezgah izlemenin KARDEŞİ: bu alan HAM
    *  değerdir; etkin değer `production && dokuma` (`useOperationsVisibilityContext`). */
@@ -452,6 +456,7 @@ export interface FeatureFlags {
   /** Yeni rapor merkezi (Raporlar v2) — default false; bugün hiçbir davranışı değiştirmez (okuyucusu R0-SABLON). */
   reportsV2Enabled: boolean;
   targetQuantityEnabled: boolean;
+  targetWidthEnabled: boolean;
   rawWidthEnabled: boolean;
   /** KK1 ham kumaş girişinde ağırlık (kg) alanı — default false; backend ENFORCE eder. */
   kk1WeightEntryEnabled: boolean;
@@ -509,6 +514,8 @@ export interface FeatureFlags {
   shipmentManualSackCountEnabled: boolean;
   /** Çuvalsız sevk (dökme / araba) açık mı (false=default). Kapalıyken tablet kipi görünmez. */
   shipmentLooseLoadEnabled: boolean;
+  /** Sevk Çıkışı'nda (el terminali) hazır toplardan sevk kurma (false=default). Ön koşul çuvalsız sevk. */
+  shipmentHandheldCreateEnabled: boolean;
   /** Sevk geri alma (storno) yalnız aynı fabrika gününde mi yapılabilsin (false=default,
    *  yani tarih sınırı YOK). Faturalanmış ve iade alınmış sevkiyat koşulları bu ayardan
    *  BAĞIMSIZ, her zaman geçerlidir — bu yalnız ek bir daraltma. Backend ENFORCE eder. */

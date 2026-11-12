@@ -112,6 +112,7 @@ export const ROOT_FIELDS: FieldDef[] = [
   { yol: "toplamlar.kg", etiket: "Toplam kg", tur: "sayi", ondalik: 2, birim: "kg", sinif: "musteri", ornek: 73.5 },
   { yol: "toplamlar.cuval_adedi", etiket: "Çuval kaydı adedi", tur: "sayi", ondalik: 0, sinif: "musteri", ornek: 2 },
   { yol: "toplamlar.cuval_beyan_adedi", etiket: "Beyan edilen fiziksel çuval", tur: "sayi", ondalik: 0, sinif: "musteri", ornek: null },
+  { yol: "toplamlar.yuk_ozeti", etiket: "Karışık yük özeti (çuval + dökme)", tur: "metin", sinif: "musteri", ornek: null },
   ...PRINT_FIELDS,
   { yol: "baski.bizdeki_ad", etiket: "Ürün listesinde bizdeki ad", tur: "mantiksal", sinif: "musteri", ornek: true },
   { yol: "baski.musteri_ad", etiket: "Ürün listesinde müşterideki ad", tur: "mantiksal", sinif: "musteri", ornek: false },

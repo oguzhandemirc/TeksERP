@@ -89,6 +89,8 @@ export interface FeatureFlags {
   devereBeamWeavingLinkRequired: boolean;
   pricingEnabled: boolean;
   targetQuantityEnabled: boolean;
+  /** Hedef en kutusu (default true = bugünkü form). */
+  targetWidthEnabled: boolean;
   /** KK1 ham kumaş girişinde "en (cm)" alanı gösterilsin mi (default false). */
   rawWidthEnabled: boolean;
   /** KK1 ham kumaş girişinde "ağırlık (kg)" alanı gösterilsin mi (default false).
@@ -133,6 +135,9 @@ export interface FeatureFlags {
   /** Çuvalsız sevk (dökme / araba) açık mı (default false). Kapalıyken Paketleme'de
    *  "Çuvalsız Sevk" düğmesi görünmez — bugünkü ekran aynen. */
   shipmentLooseLoadEnabled: boolean;
+  /** El terminali sevk (default false): Sevk Çıkışı listesi + cari seç → okut (çuval/dökme) → sevk et.
+   *  Kapalıyken ekran bugünkü bekleyen sevkiyat listesidir; eski backend alanı döndürmez → kapalı. */
+  shipmentHandheldCreateEnabled?: boolean;
   /** Tambur'da çıkan top metresi kayıtlı (giriş) metreyi aşabilsin mi (default TRUE/açık).
    *  Açıkken operatör kayıtlıdan fazla ölçtüğünde onay diyaloğu sonrası kabul edilir;
    *  backend ENFORCE eder (admin kapatırsa aşan giriş 400 döner). */
@@ -249,6 +254,7 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   devereBeamWeavingLinkRequired: false,
   pricingEnabled: false,
   targetQuantityEnabled: false,
+  targetWidthEnabled: true,
   rawWidthEnabled: false,
   kk1WeightEntryEnabled: false,
   kk1HistoryAllEntriesEnabled: false,
@@ -270,6 +276,8 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   shipmentConfirmationEnabled: false,
   // FAIL-CLOSED: yüklenemezse çuvalsız sevk kipi görünmez (bugünkü davranış).
   shipmentLooseLoadEnabled: false,
+  // FAIL-CLOSED: yüklenemezse/eski backend'de el terminali sevk görünmez (bugünkü ekran).
+  shipmentHandheldCreateEnabled: false,
   // Default AÇIK (backend ile aynı) — yüklenene/offline'da da aşıma izin var.
   tamburOverQuantityEnabled: true,
   // FAIL-SAFE: bayrak yüklenemezse kural KAPALI — kaliteyi kendiliğinden

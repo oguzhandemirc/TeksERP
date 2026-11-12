@@ -16,6 +16,8 @@ export interface BatchNumberState {
   enabled: boolean;
   lastCode: string | null;
   nextCode: string | null;
+  /** Ardışık `count` tahmini (çok partili form); eski sunucu göndermez → yalnız `nextCode`. */
+  nextCodes?: string[];
   min: number;
   max: number;
 }
@@ -23,4 +25,7 @@ export interface BatchNumberState {
 export const batchService = {
   getNumberState: (): Promise<ApiResponse<BatchNumberState>> =>
     apiClient.get<ApiResponse<BatchNumberState>>('/batches/number-state').then((r) => r.data),
+  /** Sıradaki `count` parti numarası tahmini (`nextCodes`) — numara TÜKETMEZ; belgeden İE formu "Bizim parti no". */
+  getNumberPreview: (count: number): Promise<ApiResponse<BatchNumberState>> =>
+    apiClient.get<ApiResponse<BatchNumberState>>('/batches/number-state', { params: { count } }).then((r) => r.data),
 };

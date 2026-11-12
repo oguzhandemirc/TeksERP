@@ -8,6 +8,8 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { withSystemDialog } from '../../../../store/lockStore';
 import { colors, radius, spacing, typography } from '../../../../theme';
 import { CAPTURE_QUALITY, photoSha256, pickPictureSize, type ScanPage } from '../docScan';
+import { useDocTorch } from '../docTorch';
+import TorchButton from '../TorchButton';
 import type { AutoCaptureState } from './autoCapture';
 import type { RecentWo } from './deskPlan';
 import { useAutoCapture } from './useAutoCapture';
@@ -96,6 +98,8 @@ export default function DeskCamera(p: DeskCameraProps) {
   const [permission, requestPermission] = useCameraPermissions();
   const s = useShutter(p.onCaptured, p.onError);
   const granted = permission?.granted === true;
+  // Masa kamerası bağlanınca açık; inceleme kamerayı söker → dönüşte yeniden ayardan başlar.
+  const { torch, toggle: toggleTorch } = useDocTorch(true);
   const auto = useAutoCapture({ enabled: p.auto && granted && s.ready && !p.sending, intervalMs: p.frameMs, probe: s.probe, onCapture: () => void s.shoot(), stateRef: p.autoState });
 
   const manual = () => {
@@ -120,8 +124,9 @@ export default function DeskCamera(p: DeskCameraProps) {
     </View>
   ) : (
     <>
-      <CameraView ref={s.cameraRef} style={StyleSheet.absoluteFill} pictureSize={s.pictureSize} animateShutter={false} onCameraReady={() => void s.onReady()} />
+      <CameraView ref={s.cameraRef} style={StyleSheet.absoluteFill} pictureSize={s.pictureSize} animateShutter={false} enableTorch={torch} onCameraReady={() => void s.onReady()} />
       <Pressable style={StyleSheet.absoluteFill} onPress={onSurface} accessibilityLabel="Ekrana dokun: sayfayı çek" testID="masa-kamera-yuzey" />
+      <TorchButton on={torch} onPress={toggleTorch} style={styles.torch} testID="masa-flas" />
     </>
   );
 
@@ -207,6 +212,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row' },
   col: { flexDirection: 'column' },
   cameraLayer: { flex: 1, position: 'relative', overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
+  torch: { position: 'absolute', top: spacing.sm, right: spacing.sm },
   center: { gap: spacing.md, alignItems: 'center', padding: spacing.lg },
   onDark: { color: colors.textOnDark, fontSize: typography.size.base },
   panel: { padding: spacing.lg, gap: spacing.md, backgroundColor: colors.surface },

@@ -17,12 +17,13 @@
 // `forcedStatus: STOCK` ZORUNLU: motorun renk sezgisi (`colorId != null → WAREHOUSE`, ~1130) fason
 // gelen renkli kumaşı bitmiş depoya düşürürdü; emanet mal İŞLENMEK üzere gelir → ham stok.
 // =============================================================================
-import { DeliveryNoteAliasScope, DeliveryNoteLineStatus, DeliveryNoteStatus, Prisma, RollEntrySource, RollStatus } from "@prisma/client";
+import { DeliveryNoteAliasScope, DeliveryNoteLineKind, DeliveryNoteLineStatus, DeliveryNoteStatus, Prisma, RollEntrySource, RollStatus } from "@prisma/client";
 import { createHash } from "node:crypto";
 import { v5 as uuidv5 } from "uuid";
 import prisma from "../lib/prisma";
-import { duplicateDocNoApprovalGate } from "./helpers/gelen-belge-mukerrer.helper";
 import { AppError } from "../utils/app-error";
+import { duplicateDocNoApprovalGate } from "./helpers/gelen-belge-mukerrer.helper";
+import { claimForApproval } from "./gelen-belge-onay-claim.service";
 import { AuditService } from "./audit.service";
 import { InventoryService } from "./inventory.service";
 import { assertEmanetWritableTx } from "./helpers/emanet-owner.helper";
@@ -32,13 +33,13 @@ import { assertCustomerRiskLimitTx } from "./helpers/risk-exposure.helper";
 import { getDeliveryNote } from "./gelen-belge-note.service";
 import { auditLine } from "./gelen-belge-line.service";
 import { resolveDefaultItemForApproval, type DefaultItemSource } from "./gelen-belge-varsayilan.service";
-import { readBatchNumberSource, readDocumentTotalCheck, readIncomingDocEntryMode, readUnreviewedApprovalMode, type IncomingDocEntryMode } from "./system-setting.service";
+import { readBatchNumberSource, readDocumentTotalCheck, readDuplicateBatchNoMode, readIncomingDocEntryMode, readUnreviewedApprovalMode, type IncomingDocEntryMode } from "./system-setting.service";
 import { assertProcessChoiceValue } from "./helpers/process-choice-catalog.helper";
 import { aliasKey } from "./gelen-belge-eslestirme.service";
 import { hasDocumentDeclared, isOpenForApproval, isSummaryLine, lineProblems, perDocumentGate, reviewGate, summaryLineId, totalMismatches, totalsCheck, totalWarnings, type ReviewGate } from "./gelen-belge-kontrol.service";
 import { declaredPageCount } from "../lib/gelen-belge/parti-ozet";
 import { learnBatchNoKey } from "./gelen-belge-sablon.service";
-import { perDocumentEntryWarning, preparePerDocument, summaryTargets, type PartyEntry } from "./gelen-belge-onay-parti.service";
+import { auditPerDocument, perDocumentEntryWarning, summaryTargets, type PartyEntry, type SummaryDeclared } from "./gelen-belge-onay-parti.service";
 
 // Kapı yüklemleri tek kaynakta (detay yanıtı da aynılarını okur); eski içe aktaranlar için yeniden dışa aktarılır.
 export { totalMismatches, totalWarnings };
@@ -54,8 +55,6 @@ export { summaryLineId };
  * `MANUAL_ENTRY_REASONS` kataloğuna GİRMEZ (katalog tablet/Electron seçici zeminidir, mobil ayna bayt-eşit).
  */
 export const INCOMING_DOC_REASON_CODE = "GELEN_BELGE";
-/** Yarıda kalmış APPROVING (süreç ölümü) bu süreden sonra yeniden claim edilebilir. */
-const STALE_APPROVING_MS = 10 * 60 * 1000;
 /** Uzun koşumda başlığın `updatedAt`'i bu aralıkla tazelenir (kalp atışı): meşru koşum bayat sayılıp devralınmasın. */
 const HEARTBEAT_MS = 60 * 1000;
 
@@ -71,6 +70,7 @@ export interface ApproveInput {
   processChoices?: ReadonlyArray<{ lineId: string | null; valueId: string }> | null;
   /** K27 WARN: işi süren aynı belge no'lu eşe rağmen onayla ("Yine de onayla"); BLOCK'ta yok sayılmaz (409 kalır). */
   confirmDuplicateDocNo?: boolean;
+  /** `gelenBelge.duplicateBatchNo` WARN: aynı müşteri parti no'lu eşe rağmen onayla; BLOCK'ta yok sayılır. */ confirmDuplicateBatchNo?: boolean;
 }
 
 /** Sistem onayı (OIE, iş emri formundan kayıt): kip zorlanır, ayak izine onaylatan yol yazılır. Ayrı onay ucu vermez. */
@@ -82,6 +82,8 @@ export type ApproveOptions = {
   parties?: ReadonlyArray<PartyEntry>;
   /** "Toplar ayrı geldi": `parties` her biri bir top (giriş sebebi "<no> top N", uyarı "Toplar ayrı"). */
   separateRolls?: boolean;
+  /** Tek özet satırının (partisiz ARABA) gelen kg'si ve eni — satıra yazılır, topa geçmez (2026-11-09). */
+  summary?: SummaryDeclared;
   /** K30 S16a (yalnız PER_DOCUMENT): iş emri formunda seçilen hedef ürün — özet satırı topları varsayılan yerine bununla doğar.
    *  Top doğurabilirliği çağıran (`itemProblem`) önceden doğrular. */
   item?: { id: string; name: string; source?: "FORM" | "WORK_ORDER_DEFAULT" };
@@ -94,13 +96,13 @@ export interface ApproveResult {
   warnings: string[];
 }
 
-type LineRow = { id: string; lineNo: number; blockNo: number; status: DeliveryNoteLineStatus; meters: Prisma.Decimal; weightKg: Prisma.Decimal | null; widthCm: Prisma.Decimal | null; itemId: string | null; colorId: string | null; itemText: string | null; colorText: string | null; processText: string | null; rollId: string | null; needsReview: boolean; ocrRaw?: Prisma.JsonValue };
+type LineRow = { id: string; lineNo: number; blockNo: number; lineKind: DeliveryNoteLineKind; status: DeliveryNoteLineStatus; meters: Prisma.Decimal; weightKg: Prisma.Decimal | null; widthCm: Prisma.Decimal | null; itemId: string | null; colorId: string | null; itemText: string | null; colorText: string | null; processText: string | null; rollId: string | null; needsReview: boolean; ocrRaw?: Prisma.JsonValue };
 
 const PRE_SELECT = {
-  id: true, noteNo: true, status: true, ownerCustomerId: true, senderCustomerId: true, senderText: true, senderDocNo: true, processText: true, pageCount: true,
+  id: true, noteNo: true, status: true, ownerCustomerId: true, senderCustomerId: true, senderText: true, senderDocNo: true, customerBatchNo: true, processText: true, pageCount: true,
   declaredTopCount: true, totalsDeclared: true, varianceReason: true, updatedAt: true,
   kursunMeters: true, kursunMetersSource: true, kursunMetersReview: true, ourBatchNo: true, ourBatchNoKey: true, templateId: true,
-  lines: { select: { id: true, lineNo: true, blockNo: true, status: true, meters: true, weightKg: true, widthCm: true, itemId: true, colorId: true, itemText: true, colorText: true, processText: true, rollId: true, needsReview: true, ocrRaw: true }, orderBy: [{ blockNo: "asc" }, { lineNo: "asc" }] },
+  lines: { select: { id: true, lineNo: true, blockNo: true, lineKind: true, status: true, meters: true, weightKg: true, widthCm: true, itemId: true, colorId: true, itemText: true, colorText: true, processText: true, rollId: true, needsReview: true, ocrRaw: true }, orderBy: [{ blockNo: "asc" }, { lineNo: "asc" }] },
   scans: { select: { pageNo: true } },
 } satisfies Prisma.CustomerDeliveryNoteSelect;
 
@@ -301,31 +303,6 @@ export async function learnAlias(a: AliasLearnInput, userId: string): Promise<vo
   }
 }
 
-/** Başlık claim — ön kontrol görüntüsüne (`snap`) bağlı; count 0 → 409 (CHANGED ya da NOT_APPROVABLE). */
-async function claimHeader(id: string, snap: { status: DeliveryNoteStatus; updatedAt: Date }, userId: string, varianceReason: string | undefined): Promise<void> {
-  // ── Başlık claim: DRAFT|PARTIAL (ya da bayat APPROVING — süreç ölümü) → APPROVING. count 0 → 409.
-  // `updatedAt` eşitliği ön kontrolün anlık görüntüsünü bağlar: başlık PATCH'i ya da satır yazımı (claimDraft başlığı
-  // tazeler) arada olduysa claim düşer → sahip/toplam ESKİ görüntüyle top doğurmaz.
-  const claim = await prisma.customerDeliveryNote.updateMany({
-    where: {
-      id,
-      updatedAt: snap.updatedAt,
-      OR: [
-        { status: { in: [DeliveryNoteStatus.DRAFT, DeliveryNoteStatus.PARTIAL] } },
-        { status: DeliveryNoteStatus.APPROVING, updatedAt: { lt: new Date(Date.now() - STALE_APPROVING_MS) } },
-      ],
-    },
-    data: { status: DeliveryNoteStatus.APPROVING, updatedById: userId, ...(varianceReason ? { varianceReason } : {}) },
-  });
-  if (claim.count === 0) {
-    const cur = await prisma.customerDeliveryNote.findUnique({ where: { id }, select: { status: true, noteNo: true } });
-    if (cur && cur.status === snap.status && cur.status !== DeliveryNoteStatus.APPROVING) {
-      throw AppError.conflict(`${cur.noteNo} ön kontrolden sonra değişti (başlık ya da satır düzenlendi); yeniden deneyin.`, { code: "DELIVERY_NOTE_CHANGED", status: cur.status });
-    }
-    throw AppError.conflict(`${cur?.noteNo ?? id} şu an onaylanamaz (${cur?.status ?? "?"}): başka bir onay sürüyor ya da belge kapanmış.`, { code: "DELIVERY_NOTE_NOT_APPROVABLE", status: cur?.status ?? null });
-  }
-}
-
 /**
  * ONAY — `POST /api/gelen-belge/irsaliyeler/:id/onay` (`gelen-belge:approve`).
  * Sıra: ön kontrol (yazmaz) → başlık claim DRAFT|PARTIAL → APPROVING → satır claim PENDING|FAILED → ENTERING →
@@ -338,15 +315,14 @@ export async function approveDeliveryNote(id: string, input: ApproveInput, userI
   if (opts.parties?.length && mode !== "PER_DOCUMENT") throw AppError.badRequest("Parti başına kayıt yalnız belge başına tek kayıt kipinde yapılır.", { code: "DELIVERY_NOTE_PARTIES_NEED_PER_DOCUMENT" });
   if (opts.item && mode !== "PER_DOCUMENT") throw AppError.badRequest("Hedef ürünle kayıt yalnız belge başına tek kayıt kipinde yapılır.", { code: "GELEN_BELGE_TARGET_ITEM_INVALID" });
   const { warnings, defaultItem } = await precheck(note, input, mode, opts);
-  // K27 aynı gönderen belge no (ayar kipi): BLOCK eş → 409, WARN işi süren eş + bayraksız → 409 ACTIVE; DB yazmaz.
+  // K27 aynı gönderen belge no (ayar kipi; DB yazmaz). Aynı müşteri parti no kapısı claim tx'inde, 8046 kilidi altında.
   const dup = await duplicateDocNoApprovalGate(note, input.confirmDuplicateDocNo);
-  warnings.push(...dup.warnings);
   const processChoices = await resolveProcessChoices(note, input.processChoices);
   const varianceReason = input.varianceReason?.trim() || undefined;
 
-  await claimHeader(id, note, userId, varianceReason);
-  await AuditService.log({ userId, action: "UPDATE", tableName: NOTE_TABLE, recordId: id, oldData: { status: note.status }, newData: { status: "APPROVING", noteNo: note.noteNo, ...(varianceReason ? { varianceReason } : {}), ...(dup.confirmedPeers.length ? { duplicateDocNoConfirmed: dup.confirmedPeers } : {}), ...(mode === "PER_DOCUMENT" ? { entryMode: mode } : {}), ...(opts.via ? { via: opts.via } : {}) } });
-  if (mode === "PER_DOCUMENT") await preparePerDocument(note, userId, opts.parties);
+  const claimed = await claimForApproval(note, { userId, varianceReason, entryMode: mode, batchMode: await readDuplicateBatchNoMode(), confirmDuplicateBatchNo: input.confirmDuplicateBatchNo, parties: opts.parties, summary: opts.summary, auditExtra: { ...(dup.confirmedPeers.length ? { duplicateDocNoConfirmed: dup.confirmedPeers } : {}), ...(opts.via ? { via: opts.via } : {}) } });
+  warnings.push(...dup.warnings, ...claimed.batch.warnings);
+  if (claimed.perDocument) await auditPerDocument(note, userId, claimed.perDocument, opts.parties);
 
   // ── Satır claim: yalnız topsuz satır (PENDING|FAILED; bayat ENTERING de alınır — token replay korur).
   await prisma.customerDeliveryNoteLine.updateMany({
@@ -372,8 +348,10 @@ export async function approveDeliveryNote(id: string, input: ApproveInput, userI
           itemId: (line.itemId ?? defaultItem?.id)!,
           colorId: line.colorId,
           initialQty: Number(line.meters),
-          weightKg: line.weightKg == null ? undefined : Number(line.weightKg),
-          width: line.widthCm == null ? null : Number(line.widthCm),
+          // ARABA özet satırının kg'si belgenin GELEN kg'sidir, tartılmış top kg'si değil → topa geçmez (TOP kipi bugünkü gibi).
+          weightKg: line.weightKg == null || (isSummaryLine(note.id, line) && line.lineKind === DeliveryNoteLineKind.ARABA) ? undefined : Number(line.weightKg),
+          // Gelen en da belgenin beyanıdır (ARABA özet satırı) — ölçülmüş top eni değil, topa geçmez.
+          width: line.widthCm == null || (isSummaryLine(note.id, line) && line.lineKind === DeliveryNoteLineKind.ARABA) ? null : Number(line.widthCm),
           clientToken: uuidv5(line.id, LINE_TOKEN_NS),
         },
         userId,

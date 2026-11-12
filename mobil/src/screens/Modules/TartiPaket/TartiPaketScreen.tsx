@@ -334,6 +334,8 @@ export default function TartiPaketScreen() {
       <FlashList
         data={orderRows}
         keyExtractor={(r) => (r.kind === 'order' ? r.o.order.id : 'group-sep')}
+        refreshing={headerRefresh.refreshing}
+        onRefresh={headerRefresh.onRefresh}
         renderItem={({ item }) =>
           item.kind === 'order' ? (
             renderOrderCard(item.o)

@@ -27,14 +27,14 @@ function setup(initial = "/") {
 }
 
 describe("İade Takibi — tek satır", () => {
-  it("⭐ okutma alanı başta; Durum · Tarih · Müşteri · Neden; ayrı arama kutusu yok, '+ Filtre' yalnız dar ekranda", () => {
+  it("⭐ okutma alanı başta; Durum · Tarih · Müşteri · Neden; ayrı arama kutusu yok, '+ Filtre' hep görünür (kutular kaldırılabilir)", () => {
     setup();
     const row = screen.getByTestId("filter-row");
     expect(within(row).getByLabelText("Okut")).toBeTruthy();
     expect(within(row).queryByRole("textbox", { name: "Ara" })).toBeNull();
     const chips = within(screen.getByTestId("filter-row-scroll")).getAllByTestId(/^filter-chip-/).map((c) => c.dataset.testid);
     expect(chips).toEqual(["filter-chip-cancelled", "filter-chip-date", "filter-chip-customerId", "filter-chip-reasonId"]);
-    expect(screen.getByRole("button", { name: "Filtre ekle" }).className).toContain("lg:hidden");
+    expect(screen.getByRole("button", { name: "Filtre ekle" }).className).not.toContain("lg:hidden");
   });
 
   it("⭐ Durum varsayılanı 'Geçerli' (param yok); 'İptal edilen' URL'ye yazar, Temizle siler (arama kalır)", () => {

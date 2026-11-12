@@ -47,13 +47,16 @@ export function partyLabel(w: StationLookupWorkOrder): string {
   return customer ?? w.workOrderNumber;
 }
 
-/** Satır ayrıntısı: işlem · top/metre · müşteri İE no · İE no (eski sunucuda yalnız bugünkü alt metin). */
+/** Satır ayrıntısı: işlem · top/metre (tek parçada "Tek parça · gelen metre") · müşteri İE no · İE no (eski sunucuda yalnız bugünkü alt metin). */
 export function rowDetail(w: StationLookupWorkOrder): string {
   if (w.rollCount === undefined) return workOrderSubtitle(w);
   const orders = [...new Set(w.documents.map((d) => d.customerOrderNo).filter((v): v is string => !!v))];
+  const amount = w.arrival?.form === 'SINGLE_PIECE'
+    ? `Tek parça · ${formatMeters(w.arrival.meters)} m`
+    : `${w.rollCount} top · ${formatMeters(w.meters ?? 0)} m`;
   return [
     w.processText ?? '',
-    `${w.rollCount} top · ${formatMeters(w.meters ?? 0)} m`,
+    amount,
     orders.length > 0 ? `Müşteri İE ${orders.join(', ')}` : '',
     w.workOrderNumber,
   ].filter(Boolean).join(' · ');
@@ -66,12 +69,6 @@ export function rowWhere(w: StationLookupWorkOrder): string {
 
 function formatMeters(m: number): string {
   return Number.isInteger(m) ? String(m) : m.toFixed(1).replace('.', ',');
-}
-
-/** Şerit metni: "Bu belgede 3 parti var · açılan: P1 (YIKAMA)". */
-export function siblingStripText(siblings: StationLookupWorkOrder[], opened: StationLookupWorkOrder): string {
-  const process = opened.processText ? ` (${opened.processText})` : '';
-  return `Bu belgede ${siblings.length} parti var · açılan: ${partyLabel(opened)}${process}`;
 }
 
 /** Liste satırının alt metni (eski sunucu): parti no'ları · belge no'ları (fiş no öncelikli). */
@@ -88,8 +85,8 @@ export function searchable(q: string): boolean {
 
 /** "Belge tam eşleşmedi (%62) — listeden seçin" · puan yoksa nedeni. */
 export function unsureMessage(best: number | null, strong = true): string {
-  if (best === null || !strong) return 'Belge doğrulanamadı (top listesi okunamadı) — listeden seçin ya da fiş no ile arayın.';
-  return `Belge tam eşleşmedi (%${best}) — listeden seçin ya da fiş no ile arayın.`;
+  if (best === null || !strong) return 'Belge doğrulanamadı — doğru işi seçin.';
+  return `Belge tam eşleşmedi (%${best}) — doğru işi seçin.`;
 }
 
 /** Ne tuttu / ne tutmadı: "%62 · Top no ✗ 3/16 · Müşteri ✓". */
@@ -127,4 +124,29 @@ export function verifyScoreText(w: StationLookupWorkOrder): string | null {
   if (!v) return null;
   if (v.score === null) return 'Puan yok';
   return v.threshold > 0 ? `%${v.score} · eşik %${v.threshold}` : `%${v.score}`;
+}
+
+/** Kompakt parti seçicisinin segmentle çizebileceği en çok parti; fazlası PickerModal'a düşer. */
+export const PARTY_SEGMENT_MAX = 3;
+
+export type PartySelectorModel =
+  | null
+  | {
+      mode: 'segment' | 'picker';
+      opened: StationLookupWorkOrder;
+      options: { workOrder: StationLookupWorkOrder; label: string; selected: boolean }[];
+    };
+
+/**
+ * Belgeden açılan işin parti seçicisi (2026-11-10, eski "Bu belgede N parti var" şeridinin yerine): tek parti ya da
+ * aktif kart belgeden açılan değilse çizilmez; ≤3 parti segment, fazlası "Parti P1 ▾" seçici.
+ */
+export function partySelectorModel(siblings: StationLookupWorkOrder[], activeCardBarcode: string | null): PartySelectorModel {
+  const opened = activeCardBarcode ? siblings.find((w) => w.cardBarcode === activeCardBarcode) : undefined;
+  if (siblings.length < 2 || !opened) return null;
+  return {
+    mode: siblings.length > PARTY_SEGMENT_MAX ? 'picker' : 'segment',
+    opened,
+    options: siblings.map((w) => ({ workOrder: w, label: partyLabel(w), selected: w.id === opened.id })),
+  };
 }

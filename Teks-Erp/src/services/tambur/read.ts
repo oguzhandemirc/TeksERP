@@ -58,6 +58,9 @@ export interface TamburRollSummary {
   /** WO içindeki 1-based parti sırası (Batch.createdAt'e göre, stabil — bir
    *  parti Tambur'dan çıksa bile numarası kaymaz). */
   branchOrdinal: number | null;
+  /** Emanet topun sahibi (malın sahibi; tablet "Sahip: …" satırı ve etiket kilidi). Sahipsiz: null. */
+  ownerCustomerId: string | null;
+  ownerCustomerName: string | null;
 }
 
 export interface TamburStepSummary {
@@ -207,6 +210,7 @@ export async function loadTamburRolls(this: TamburServiceThis, step: {
           include: {
             item: { select: { code: true, name: true } },
             color: { select: { code: true, name: true } },
+            ownerCustomer: { select: { name: true } },
             properties: {
               where: ACTIVE_ROLL_PROPERTY,
               // value: Tambur FINAL KARAR noktasıdır — kurşunda seçilen GRAMAJ
@@ -267,6 +271,8 @@ export async function loadTamburRolls(this: TamburServiceThis, step: {
         batchNumber: bi?.batchNumber ?? null,
         dispatchNo: bi?.dispatchNo ?? null,
         branchOrdinal: bi?.ordinal ?? null,
+        ownerCustomerId: m.roll.ownerCustomerId ?? null,
+        ownerCustomerName: m.roll.ownerCustomer?.name ?? null,
       };
     });
   }

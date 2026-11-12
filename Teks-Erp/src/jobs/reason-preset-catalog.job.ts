@@ -12,6 +12,7 @@
 //     ya da gizlemiş olabilir ve bizim varsayılanımız onu geri getirmemeli.
 //   • Fabrikanın kendi eklediği satırlara DOKUNULMAZ.
 //   • `requiresText` de ezilmez (fabrika "Diğer"i kapatmış olabilir).
+//   • `stationKinds` (duruş sebebinin istasyon türü kapsamı) de ezilmez — yalnız doğuşta yazılır.
 //
 // ⚠️ `isSystem` bayrağı satırın SİLİNEMEZ olduğunu söyler; sert silme bir sonraki
 // `pm2 restart`'ta DİRİLİŞ demekti (rol şablonlarında birebir yaşandı). Silmek
@@ -68,6 +69,8 @@ export async function reconcileReasonPresets(): Promise<ReasonPresetReconcileRes
           // (`PERMISSION_CATALOG_RECONCILE_FAILED`). Katalog + CHECK + bu satır
           // AYNI commit'te değişir.
           stopLossClass: seed.stopLossClass ?? null,
+          // Kapsam yalnız DOĞUŞTA yazılır (etiket gibi): fabrikanın panelden değiştirdiği kapsam boot'ta ezilmez.
+          stationKinds: seed.stationKinds ? [...seed.stationKinds] : [],
           sortOrder: isFirstInstall ? i : nextOrder++,
           isSystem: true,
         },

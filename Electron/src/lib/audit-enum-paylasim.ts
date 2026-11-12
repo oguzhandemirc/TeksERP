@@ -34,6 +34,12 @@
  * şişmiş bir liste kapının kendisi olur.
  */
 export const SHARED_ENUM_VALUES: Record<string, string> = {
+  // ── Top aşaması (2026-11-10)
+  SEMI_FINISHED:
+    "RollEntrySource(dışarıdan alınan yarı mamul girişi) ve RollStage(topun aşaması yarı mamul) — 'Yarı Mamul' ikisinde de doğru",
+  RAW:
+    "InspectionPhase(ham muayene) ve RollStage(ham aşama) — ortak Türkçe YETMEZ: ROLL.stage / ROUTE.outputStage / " +
+    "WORK_ORDER_STEP.outputStage override'ı 'Ham' ile ayrıldı (2026-11-10)",
   // ── Cihaz eşleme v2 (D1, 2026-10-24)
   MERGED:
     "DuplicateReviewDecision(mükerrer kart birleşti) ve DeviceBindingEventType(cihaz kopyası ana kayda birleşti) — 'Birleştirildi' ikisinde de doğru",

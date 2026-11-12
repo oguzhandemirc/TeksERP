@@ -65,6 +65,7 @@ import Toast from 'react-native-toast-message';
 import ScreenChrome from '../../../components/ScreenChrome';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
 import RefreshButton from '../../../components/RefreshButton';
+import PullToRefreshView from '../../../components/PullToRefreshView';
 import { useManualRefresh } from '../../../hooks/useManualRefresh';
 import RemoteListSheet from '../../../components/RemoteListSheet';
 import ConfirmDialog from '../../../components/ConfirmDialog';
@@ -2409,6 +2410,8 @@ export default function FasonKabulScreen() {
               searchQ={searchQ}
               onSearchChange={setSearchQ}
               onSelect={selectGroup}
+              onRefresh={refresh.onRefresh}
+              refreshing={refresh.refreshing}
             />
           )}
           {rightTab === 'cancellable' && (
@@ -2424,7 +2427,8 @@ export default function FasonKabulScreen() {
                 setCancelTargetReceiptId(id);
                 setCancelReason('');
               }}
-              onRefresh={() => cancellableReceiptsQuery.refetch()}
+              onRefresh={refresh.onRefresh}
+              refreshing={refresh.refreshing}
             />
           )}
           {rightTab === 'history' && (
@@ -2438,7 +2442,8 @@ export default function FasonKabulScreen() {
               onShowDetail={setDetailReceiptId}
               /* onCancel verilmedi → ReceiptRow iptal butonunu gizler.
                  Geçmiş kabuller artık iptal edilemez (born roll'lar işleme girdi). */
-              onRefresh={() => receiptsQuery.refetch()}
+              onRefresh={refresh.onRefresh}
+              refreshing={refresh.refreshing}
             />
           )}
           </>
@@ -3669,6 +3674,8 @@ function PendingPane({
   searchQ,
   onSearchChange,
   onSelect,
+  onRefresh,
+  refreshing,
 }: {
   loading: boolean;
   groupLoading: boolean;
@@ -3678,6 +3685,8 @@ function PendingPane({
   searchQ: string;
   onSearchChange: (q: string) => void;
   onSelect: (g: PendingReturnSummary) => void;
+  onRefresh: () => void;
+  refreshing: boolean;
 }) {
   return (
     <View style={{ flex: 1 }}>
@@ -3702,16 +3711,18 @@ function PendingPane({
         {loading ? (
           <SkeletonList count={6} />
         ) : groups.length === 0 ? (
-          <View style={styles.paneEmpty}>
+          <PullToRefreshView refreshing={refreshing} onRefresh={onRefresh} contentContainerStyle={styles.paneEmpty}>
             <Icon source="package-variant" size={48} color="#cbd5e1" />
             <Text style={styles.paneEmptyText}>
               {searchQ.length >= 2 ? 'Eşleşen sevk yok' : 'Fasonda bekleyen sevk yok'}
             </Text>
-          </View>
+          </PullToRefreshView>
         ) : (
           <FlashList
             data={groups}
             keyExtractor={(g) => g.step.id}
+            refreshing={refreshing}
+            onRefresh={onRefresh}
             contentContainerStyle={{ padding: 8 }}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
@@ -3836,6 +3847,7 @@ function HistoryPane({
   onShowDetail,
   onCancel,
   onRefresh,
+  refreshing,
 }: {
   loading: boolean;
   error: Error | null;
@@ -3849,27 +3861,28 @@ function HistoryPane({
       → ReceiptRow iptal butonunu otomatik gizler. */
   onCancel?: (id: string) => void;
   onRefresh: () => void;
+  refreshing: boolean;
 }) {
   if (loading) {
     return <SkeletonList count={6} />;
   }
   if (error) {
     return (
-      <View style={styles.paneEmpty}>
+      <PullToRefreshView refreshing={refreshing} onRefresh={onRefresh} contentContainerStyle={styles.paneEmpty}>
         <Text style={styles.paneEmptyText}>Liste yüklenemedi</Text>
         <Text style={styles.paneEmptyHint}>{error.message}</Text>
         <Button mode="outlined" onPress={onRefresh} style={{ marginTop: 8 }}>
           Tekrar dene
         </Button>
-      </View>
+      </PullToRefreshView>
     );
   }
   if (receipts.length === 0) {
     return (
-      <View style={styles.paneEmpty}>
+      <PullToRefreshView refreshing={refreshing} onRefresh={onRefresh} contentContainerStyle={styles.paneEmpty}>
         <Icon source="package-check" size={48} color="#cbd5e1" />
         <Text style={styles.paneEmptyText}>Henüz mal kabul yok</Text>
-      </View>
+      </PullToRefreshView>
     );
   }
   return (
@@ -3877,6 +3890,8 @@ function HistoryPane({
       <FlashList
         data={receipts}
         keyExtractor={(r) => r.id}
+        refreshing={refreshing}
+        onRefresh={onRefresh}
         contentContainerStyle={{ padding: 8 }}
         onEndReachedThreshold={0.6}
         onEndReached={() => {

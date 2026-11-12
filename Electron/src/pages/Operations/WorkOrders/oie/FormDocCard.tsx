@@ -25,7 +25,7 @@ function TanitimStrip({ scan, tanitim }: { scan: FormDocScan; tanitim: Tanitim }
     return (
       <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground" data-testid="wo-doc-tanitildi">
         Belge “{tanitim.sablonAdi}” tipiyle okundu.
-        {can && <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => openTab(teachPath(noteId, tanitim.sablonKodu))} data-testid="wo-doc-sablon-guncelle">Şablonu güncelle</Button>}
+        {can && <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => openTab(teachPath(noteId, tanitim.sablonKodu))} data-testid="wo-doc-sablon-guncelle">Tanımı düzenle</Button>}
       </p>
     );
   }
@@ -55,7 +55,7 @@ export function FormDocCard({ scan, disabled }: { scan: FormDocScan; disabled?: 
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <FromDocBadge />
         <span>Belge <b>{n?.noteNo ?? "…"}</b></span>
-        {/* Tanıtım bilgisi yoksa (eski sunucu) bugünkü "Bu belgeyi tanıt / Şablonu güncelle" düğmesi. */}
+        {/* Tanıtım bilgisi yoksa (eski sunucu) bugünkü "Bu belgeyi tanıt / Tanımı düzenle" düğmesi. */}
         {n && scan.stage !== "READING" && scan.summary && !scan.summary.tanitim && <TeachButton note={n} go={(p) => openTab(p)} />}
       </div>
       {scan.noteError && <p className="text-sm text-destructive">Belge yüklenemedi.</p>}
@@ -67,12 +67,12 @@ export function FormDocCard({ scan, disabled }: { scan: FormDocScan; disabled?: 
         <p className="text-sm text-muted-foreground">Belge artık taslak değil ({n?.noteNo}).</p>
       ) : (
         <>
-          {scan.stage === "READ_FAILED" && n && <ScanReadBanner scans={n.scans} lines={n.lines} editable canRequeue onRequeued={scan.reread} />}
+          {scan.stage === "READ_FAILED" && n && <ScanReadBanner scans={n.scans} lines={n.lines} editable canRequeue onRequeued={scan.reread} serverOcrOff={n.serverOcrEnabled === false} />}
           {scan.stage === "NO_SERVICE" && <p className="text-sm text-amber-800 dark:text-amber-300">Bu kurulumda belge okuma servisi yok; değerleri elle girin.</p>}
           {scan.summary?.tanitim && <TanitimStrip scan={scan} tanitim={scan.summary.tanitim} />}
           {(hints.desen || hints.renk) && (
             <p className="text-xs text-muted-foreground" data-testid="wo-doc-hints">
-              Belgede yazan{hints.desen ? ` desen: “${hints.desen}”` : ""}{hints.renk ? ` renk: “${hints.renk}”` : ""} — katalogda eşleşmedi, aşağıdan seçin.
+              Belgede yazan{hints.desen ? ` gelen kumaş: “${hints.desen}”` : ""}{hints.renk ? ` gelen renk: “${hints.renk}”` : ""} — hedef için katalogda eşleşmedi, aşağıdan seçin.
             </p>
           )}
           {n && scan.draft && <DocFields note={n} draft={scan.draft} onChange={scan.setDraft} gramajOptions={NO_GRAMAJ} disabled={disabled} />}

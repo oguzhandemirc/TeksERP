@@ -300,7 +300,7 @@ export const updateSchema = z.strictObject({
   financeAutoDraftFromShipmentEnabled: z.boolean().optional(),
   /** H7: hizmet faturası — ana anahtar + enum alt ayarlar (servis kümeleriyle birebir; PERIOD_END → dönem sonu taslağı, H8). */
   financeServiceBillingEnabled: z.boolean().optional(),
-  financeServiceBillingMeterBasis: z.enum(["OUT", "IN", "DECLARED"]).optional(),
+  financeServiceBillingMeterBasis: z.enum(["OUT", "IN", "DECLARED", "MAX_DECLARED"]).optional(),
   financeServiceBillingMissingMeter: z.enum(["DECLARED_WITH_WARNING", "BLOCK_LINE"]).optional(),
   financeServiceBillingBrodeUnit: z.enum(["METER", "PIECE", "STITCH"]).optional(),
   financeServiceBillingStepWorks: z.boolean().optional(),
@@ -402,8 +402,11 @@ export const updateSchema = z.strictObject({
   devereBeamWeavingLinkRequired: z.boolean().optional(),
   dokumaRunWeavingOrderRequired: z.boolean().optional(),
   dokumaOrderLineLinkRequired: z.boolean().optional(),
+  dokumaYarnReservationEnabled: z.boolean().optional(),
   /** S1: top doğuş yolu (enum; `DOKUMA_ROLL_BIRTH_MODES` ile birebir). */
   dokumaRollBirth: z.enum(["TABLET_DOFF", "KK1_LABEL_OR_ORDER", "KK1_LABEL_ONLY"]).optional(),
+  /** Dokuma firesi % (`DOKUMA_WEAVING_WASTE_PCT_MAX` ile birebir); null = varsayılana (0) dön. */
+  dokumaWeavingWastePct: z.number({ message: "Dokuma firesi sayı olmalı" }).min(0, "Dokuma firesi negatif olamaz").max(50, "Dokuma firesi en çok %50 olabilir").nullable().optional(),
   // reports.closedKeys — KAPALI raporların anahtar listesi (`REPORT_CATALOG` anahtarları).
   // ⚠️ Anahtar doğrulaması BURADA DEĞİL serviste: tanınmayan anahtar 400 `REPORT_KEY_UNKNOWN`
   // ile ADIYLA reddedilir; Zod'un `z.enum(29 anahtar)` hâli yalnız "geçersiz değer" derdi ve
@@ -412,6 +415,7 @@ export const updateSchema = z.strictObject({
   // reports.v2Enabled — yeni rapor merkezi (default FALSE = bugünkü rapor menüsü).
   reportsV2Enabled: z.boolean().optional(),
   targetQuantityEnabled: z.boolean().optional(),
+  targetWidthEnabled: z.boolean().optional(),
   rawWidthEnabled: z.boolean().optional(),
   kk1WeightEntryEnabled: z.boolean().optional(),
   // kk1.duplicateGuardEnabled — ham girişte mükerrer top tuzağı (default FALSE).
@@ -466,6 +470,8 @@ export const updateSchema = z.strictObject({
   shipmentManualSackCountEnabled: z.boolean().optional(),
   // shipping.looseLoadEnabled — çuvalsız sevk (dökme/araba; default false).
   shipmentLooseLoadEnabled: z.boolean().optional(),
+  // shipping.handheldCreateEnabled — Sevk Çıkışı'nda el terminalinden sevk kurma (default false).
+  shipmentHandheldCreateEnabled: z.boolean().optional(),
   // shipping.undoDispatchSameDayOnly — sevk geri almayı aynı günle sınırla
   // (default false = sınırsız). Backend ENFORCE (undoDispatch).
   shipmentUndoSameDayOnly: z.boolean().optional(),

@@ -6,7 +6,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/render";
 import {
-  assignColumn, assignField, initialTeach, keptOldFields, oldParts, setRepeats, toggleKeepOld, suggestBody, suggestIdentifiers, teachProblems, toggleWord, wordAt,
+  addIdentifier, assignColumn, assignField, identifierText, initialTeach, keptOldFields, oldParts, setRepeats, toggleKeepOld, suggestBody, suggestIdentifiers, teachProblems, toggleWord, wordAt,
 } from "../tanit/teachDraft";
 import { fromScreen, toScreen, type Rotation } from "../scanView";
 import { isUnrecognized } from "../tanit/teachScans";
@@ -81,19 +81,27 @@ describe("tanıtma çekirdeği (saf)", () => {
     }
   });
 
-  it("kimlik önerisi üst bölgedeki yazı satırları, hazır seçili; rakam satırı ve alt bölge dışarıda", () => {
-    expect(suggestIdentifiers(SCAN)).toEqual(["GÜLEÇSOY BOYA", "ÇEKİ LİSTESİ", "Ham PartiNo: P2618733"]);
+  it("kimlik önerisi üst bölgedeki yazı satırları, hazır seçili; rakam satırı, değer kelimesi ve alt bölge dışarıda", () => {
+    expect(suggestIdentifiers(SCAN)).toEqual(["GÜLEÇSOY BOYA", "ÇEKİ LİSTESİ", "Ham PartiNo"]);
     const s = initialTeach(SCAN, "Güleçsoy");
     expect(s.identifiers.every((d) => d.on)).toBe(true);
   });
 
-  it("kutu atama → öneri gövdesi: alan + OCR çerçevesinde kutu; değeri içeren kimlik kapanır; sütun başlığı kimlik olur", () => {
-    let s = initialTeach(SCAN, "Güleçsoy");
+  it("değer kelimesi kimlik önerisine girmez: rakamlı kelime atılır, etiket kalır", () => {
+    const scan: ScanWords = { ...SCAN, words: [w("Müşteri", [50, 20], 1), w("MT", [120, 20], 1), w("238,00", [180, 20], 1), w("Parti", [50, 60], 2), w("No:12345", [120, 60], 2), w("İrsaliye", [50, 100], 3), w("-", [130, 100], 3), w("2026/0042", [150, 100], 3)] };
+    expect(suggestIdentifiers(scan)).toEqual(["Müşteri MT", "Parti No", "İrsaliye"]);
+    expect(identifierText("Ham PartiNo: P2618733")).toBe("Ham PartiNo");
+    expect(identifierText("12.01.2026 1234")).toBe("");
+    expect(suggestIdentifiers({ ...SCAN, words: [w("No", [50, 20], 1), w("5", [100, 20], 1)] })).toEqual([]); // harf < 3
+  });
+
+  it("kutu atama → öneri gövdesi: alan + OCR çerçevesinde kutu; değeri içeren (elle eklenmiş) kimlik kapanır; sütun başlığı kimlik olur", () => {
+    let s = addIdentifier(initialTeach(SCAN, "Güleçsoy"), "Ham PartiNo: P2618733");
     s = assignField(toggleWord(s, 6), W, "partiNo");
     s = assignColumn(toggleWord(s, 7), W, "m");
     const b = suggestBody(s, W, "s1");
     expect(b.assignments).toEqual([{ field: "partiNo", rect: { x: 200, y: 300, width: 90, height: 20 } }]);
-    expect(b.identifiers).toEqual(["GÜLEÇSOY BOYA", "ÇEKİ LİSTESİ", "Metre"]);
+    expect(b.identifiers).toEqual(["GÜLEÇSOY BOYA", "ÇEKİ LİSTESİ", "Ham PartiNo", "Metre"]);
     expect(b.table).toEqual({ columns: [{ key: "m", header: "Metre" }], totalsLabel: null });
     expect(b.sectionStartLabel).toBeUndefined();
   });

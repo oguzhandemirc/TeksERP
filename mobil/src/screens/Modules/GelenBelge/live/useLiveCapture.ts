@@ -6,7 +6,7 @@ import type { LiveCameraHandle } from '../../../../components/liveCamera/LiveCam
 import { enhanceWithNative } from '../../../../services/docScannerNative';
 import { CAPTURE_QUALITY, MAX_SCAN_BYTES, TARGET_LONG_EDGE_PX, scannedToScanPage, type ScanPage } from '../docScan';
 import { rememberLiveLocks } from './liveLocks';
-import { lockedLiveValues, type LiveVoteState } from './liveVote';
+import { lockedLiveValues, userLockedLiveKeys, type LiveVoteState } from './liveVote';
 
 export const LIVE_CAPTURE_FAILED = 'Fotoğraf hazırlanamadı; yeniden çekin';
 
@@ -41,7 +41,7 @@ export function useLiveCapture({ gen, voteRef, onDone, onSettled }: Options) {
         return;
       }
       const page = scannedToScanPage(raw);
-      rememberLiveLocks(page.sha256, lockedLiveValues(voteRef.current));
+      rememberLiveLocks(page.sha256, lockedLiveValues(voteRef.current), userLockedLiveKeys(voteRef.current));
       cb.current.onDone([page]);
     } catch (e) {
       if (g === gen.current) Toast.show({ type: 'error', text1: LIVE_CAPTURE_FAILED, text2: e instanceof Error ? e.message : undefined });

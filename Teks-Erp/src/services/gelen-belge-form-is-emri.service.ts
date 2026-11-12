@@ -10,7 +10,7 @@
 // replay olur; ikinci top/İE doğmaz. Okuma kapısı yalnız SÜREN okumadır: düşen/okuyucusuz belgede operatörün elle girdiği
 // değerlerle kayıt yapılır (uyarıyla).
 // =============================================================================
-import { DeliveryNoteStatus } from "@prisma/client";
+import { DeliveryNoteStatus, type RollStage } from "@prisma/client";
 import prisma from "../lib/prisma";
 import type { JwtPayload } from "../types/api.types";
 import { AppError } from "../utils/app-error";
@@ -28,9 +28,12 @@ import { assertCustomerGoodsHasNoOrderLines } from "./helpers/workorder-customer
 import { assertPlannedMachines } from "./helpers/planned-machine.helper";
 import { mergeRouteDefaults, resolveStationDefaultTargets } from "./helpers/station-default-targets.helper";
 import { FOLD_PROPERTY_CODE } from "./helpers/fold-type";
-import { allPartiesEntered, assertPartiesShape, openPartyWorkOrders, partyRolls, type PartyInput, type PartyWorkOrder, type PartyWorkOrderFailure } from "./gelen-belge-cok-parti.service";
-import { readIncomingDocFormApproval, readMultiPartyWorkOrder, readTargetQuantityEnabled, type MultiPartyWorkOrderMode } from "./system-setting.service";
+import { allPartiesEntered, assertPartiesShape, getNoteParties, openPartyWorkOrders, partyRolls, type PartyInput, type PartyWorkOrder, type PartyWorkOrderFailure } from "./gelen-belge-cok-parti.service";
+import { readIncomingDocFormApproval, readTargetQuantityEnabled, type MultiPartyWorkOrderMode } from "./system-setting.service";
+import { resolveMultiPartyMode } from "./gelen-belge-parti-kipi.service";
 import { itemProblem } from "./gelen-belge-ayar.service";
+import { noteIncomingDeclared, noteIncomingKg, noteIncomingWidth } from "./gelen-belge-gelen-kg.service";
+import { noteTanitim } from "./gelen-belge-tanitim-guveni.service";
 
 const workOrders = new WorkOrderService();
 
@@ -63,6 +66,16 @@ export interface FormWorkOrderInput {
   /** Müşterinin parti no'su (belge başlığı); yalnız gönderildiyse taslağa yazılır. */
   customerBatchNo?: string | null;
   kursunMeters: number;
+  /** Gelen kg (operatörün gördüğü/düzelttiği); yoksa belgeden önerilen (`noteIncomingKg`). Özet satırına yazılır, topa geçmez. */
+  incomingKg?: number;
+  /** Gelen en (cm, belgenin beyanı); yoksa şablon `en` alanı (`noteIncomingWidth`). Özet satırına yazılır; İE eni `width` ayrı. */
+  incomingWidth?: number;
+  /** Gelen kumaş adı / rengi (müşteri BEYANI); undefined → şablon `desen`/`renk`, null/"" → yok. Özet satırına yazılır; İE hedefi
+   *  (`targetItemId`/`targetColorId`) bağımsızdır. */
+  incomingItemText?: string | null;
+  incomingColorText?: string | null;
+  /** Cihazda kapatılan gelen alanlar (2026-11-10): gövde değeri de belgeden türetilen de yazılmaz → satırda null. Yok = bugünkü. */
+  skipDeclared?: SkipDeclaredField[];
   /** Yoksa yalnız "Rota uygulaması: Okutmayla" iken rotasız iş emri (K29 S14b); SIRALI'da onaydan önce 400. */
   routeTemplateId?: string;
   /** `plannedMachineId` D dilimiyle quickStart'a akar; burada olduğu gibi geçirilir. */
@@ -72,13 +85,15 @@ export interface FormWorkOrderInput {
   notes?: string | null;
   /** S1 çok partili belge (≥2): parti başına top; verilmezse tek top = kursunMeters (bugünkü). */
   parties?: PartyInput[];
-  /** Verilmezse fabrika ayarı `gelenBelge.multiPartyWorkOrder` (varsayılan SINGLE). Yalnız `parties` ile anlamlı. */
+  /** Verilmezse belge tipi kuralı, o da yoksa fabrika ayarı (`resolveMultiPartyMode`). Yalnız `parties` ile anlamlı. */
   mode?: MultiPartyWorkOrderMode;
   /** "Toplar ayrı geldi": SEPARATE + `rolls` → tek İE, her top ayrı top (parti yoluyla, kip SINGLE). Verilmezse tek parça (bugünkü). */
   rollMode?: FormRollMode;
   rolls?: FormRollInput[];
   /** K27 WARN: işi süren aynı belge no'lu eşe rağmen kaydet (onaya geçer). */
   confirmDuplicateDocNo?: boolean;
+  /** Aynı sahip + müşteri parti no (WARN): işi süren eşe rağmen kaydet (onaya geçer). */
+  confirmDuplicateBatchNo?: boolean;
   /** K30 S16a form alanları: verilen değer türetileni EZER, verilmeyen (undefined/null) bugünkü davranış. `targetItemId`
    *  belge onayında topların ürünü olur; `targetQuantity`/`targetWeight` belge toplamıdır → PER_PARTY'de 400. */
   targetItemId?: string | null;
@@ -106,6 +121,8 @@ export interface FormWorkOrderStep {
   plannedSubcontractorId?: string | null;
   plannedMachineId?: string | null;
   dispatchWithoutColor?: boolean;
+  /** Top aşaması 2026-11-10 — null = otomatik. */
+  outputStage?: RollStage | null;
 }
 
 /**
@@ -212,6 +229,33 @@ async function flagPropertyIds(targets: ReadonlyArray<{ propertyId: string }>): 
  */
 export const stockFromCustomerGoodsWarning = (): string => `Belgedeki mal müşteri malı; tür seçilmediği için ${TERIM.terbiyeIsEmri.tekilKucuk} Stoğa üretim olarak açıldı. Fason (müşteri malı) için "Fason Belge Okut"u kullanın.`;
 
+/** Onayın satır şekli: ayrı toplar TOP satırı (kendi kg'si), partiler ARABA özet satırı + parti kg/en'i, tek belge özet kg/en'i. */
+async function approvalLines(noteId: string, input: FormWorkOrderInput, parties: PartyInput[] | null, separateRolls: boolean) {
+  const kg = await incomingPlan(noteId, input, parties, separateRolls);
+  const skip = skipped(input.skipDeclared);
+  const doc = { itemText: skip.item ? null : given(input.incomingItemText, kg.declared.itemText), colorText: skip.color ? null : given(input.incomingColorText, kg.declared.colorText) };
+  if (!parties) return { summary: { kg: skip.kg ? null : kg.summary, widthCm: skip.width ? null : kg.width, ...doc } };
+  return {
+    parties: parties.map((p) => {
+      // Parti beyanı: gövde > bölüm beyanı > belge geneli (ayrı toplarda her top belge genelini taşır).
+      const sec = kg.sections.get(p.blockNo);
+      const texts = { itemText: skip.item ? null : given(p.incomingItemText, sec?.itemText ?? doc.itemText), colorText: skip.color ? null : given(p.incomingColorText, sec?.colorText ?? doc.colorText) };
+      // Ayrı topların kg'si topun kendi tartısıdır (gelen beyan değil) → kapatma onu etkilemez.
+      return { blockNo: p.blockNo, meters: p.meters, ...texts, ...(separateRolls ? { weightKg: p.weightKg ?? null, senderRollNo: p.senderRollNo ?? null, lineKind: "TOP" as const } : { weightKg: skip.kg ? null : kg.byBlock.get(p.blockNo) ?? null, widthCm: skip.width ? null : p.incomingWidth ?? kg.width, customerBatchNo: p.batchNo ?? null }) };
+    }),
+    ...(separateRolls ? { separateRolls: true } : {}),
+  };
+}
+
+/** Cihazda kapatılabilen gelen (beyan) alanları — gövde anahtar adlarıyla; parti no ve beyan metre kapatılamaz. */
+export const SKIP_DECLARED_FIELDS = ["incomingKg", "incomingWidth", "incomingItemText", "incomingColorText"] as const;
+export type SkipDeclaredField = (typeof SKIP_DECLARED_FIELDS)[number];
+
+function skipped(list: readonly SkipDeclaredField[] | undefined) {
+  const has = (k: SkipDeclaredField) => !!list?.includes(k);
+  return { kg: has("incomingKg"), width: has("incomingWidth"), item: has("incomingItemText"), color: has("incomingColorText") };
+}
+
 export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrderInput, actor: Pick<JwtPayload, "userId" | "permissions">): Promise<FormWorkOrderResult> {
   await assertFormApprovalEnabled();
   // İzin + üretim modülü (lisans sorusu önce) + rota/rotasız — onaydan ÖNCE (fail-closed; tek kapı, SIRALI'da rota zorunlu).
@@ -231,7 +275,8 @@ export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrd
   if (parties) assertPartiesShape(parties);
   // K30: kip onaydan ÖNCE çözülür; parti başına İE'de hedef metraj/kg belge toplamı olduğundan her İE'ye yazılamaz.
   // Ayrı toplar her zaman tek İE (SINGLE); gövdenin `mode`u yalnız partiler içindir.
-  const mode = rollParties ? "SINGLE" : parties ? (input.mode ?? (await readMultiPartyWorkOrder())) : undefined;
+  // Öncelik: gövde `mode` > notun okunduğu şablon sürümünün kuralı > fabrika ayarı (`resolveMultiPartyMode`).
+  const mode = rollParties ? "SINGLE" : parties ? (input.mode ?? (await resolveMultiPartyMode(noteId)).mode) : undefined;
   if (mode === "PER_PARTY" && (input.targetQuantity != null || input.targetWeight != null)) {
     throw AppError.badRequest(`Her parti ayrı ${TERIM.terbiyeIsEmri.tekilKucuk} kipinde hedef metraj ve hedef kg verilemez (belge toplamıdır).`, { code: "GELEN_BELGE_FORM_TARGET_PER_PARTY" });
   }
@@ -267,11 +312,11 @@ export async function createWorkOrderFromNote(noteId: string, input: FormWorkOrd
     const owner = item ? null : await prisma.customerDeliveryNote.findUnique({ where: { id: noteId }, select: { ownerCustomerId: true } });
     const woDefault = item ? undefined : await resolveNoteWorkOrderDefaultItem(owner?.ownerCustomerId ?? null);
     const target = item ?? woDefault;
-    const approved = await approveDeliveryNote(noteId, input.confirmDuplicateDocNo ? { confirmDuplicateDocNo: true } : {}, actor.userId, {
+    const confirms = { ...(input.confirmDuplicateDocNo ? { confirmDuplicateDocNo: true } : {}), ...(input.confirmDuplicateBatchNo ? { confirmDuplicateBatchNo: true } : {}) };
+    const approved = await approveDeliveryNote(noteId, confirms, actor.userId, {
       entryMode: "PER_DOCUMENT",
       via: `WITH_WORK_ORDER: ${user?.username ?? actor.userId}`,
-      ...(parties ? { parties: parties.map((p) => ({ blockNo: p.blockNo, meters: p.meters, ...(rollParties ? { weightKg: p.weightKg ?? null, senderRollNo: p.senderRollNo ?? null, lineKind: "TOP" as const } : {}) })) } : {}),
-      ...(rollParties ? { separateRolls: true } : {}),
+      ...(await approvalLines(noteId, input, parties, !!rollParties)),
       ...(target ? { item: target } : {}),
     });
     if (woDefault) warnings.push(`Hedef kumaş seçilmedi; ${TERIM.terbiyeIsEmri.tekilKucuk} varsayılan stok kartı (${woDefault.name}) yazıldı.`);
@@ -321,6 +366,37 @@ async function finishParties({ note, parties, mode, input, route, steps, userId,
   warnings.push(...res.warnings);
   const first = res.workOrders[0]!;
   return { workOrderId: first.workOrderId, workOrderNo: first.workOrderNo, batchNumber: first.batchNumber, rollId: first.rollIds[0]!, warnings, workOrders: res.workOrders, failed: res.failed, mode };
+}
+
+/**
+ * Özet satırlarının GELEN kg'si: gövde (operatör) > belge önerisi (`pickIncomingKg`; parti başına `/partiler` `suggestedKg`).
+ * GELEN en: gövde > şablon `en` (belge geneli; partide `parties[].incomingWidth` yoksa her partiye). "Toplar ayrı geldi"de
+ * kg top başınadır (gövde `rolls[].weightKg`) — burada türetilmez.
+ */
+type SectionDeclared = { itemText: string | null; colorText: string | null };
+type IncomingPlan = { summary: number | null; width: number | null; byBlock: Map<number, number | null>; declared: SectionDeclared; sections: Map<number, SectionDeclared> };
+
+async function incomingPlan(noteId: string, input: FormWorkOrderInput, parties: PartyInput[] | null, separateRolls: boolean): Promise<IncomingPlan> {
+  const byBlock = new Map<number, number | null>();
+  const sections = new Map<number, SectionDeclared>();
+  const { trust } = await noteTanitim(noteId);
+  const declared = await noteIncomingDeclared(noteId, trust);
+  if (separateRolls) return { summary: null, width: null, byBlock, declared, sections };
+  const width = await noteIncomingWidth(noteId, trust, parties ? null : input.incomingWidth);
+  if (parties) {
+    const read = (await getNoteParties(noteId)).parties;
+    const suggested = new Map(read.map((p) => [p.blockNo, p.suggestedKg]));
+    // BLIND'da bölüm beyanı da şablon tahminidir → kullanılmaz (kg önerisi beyan/satırdan, metin yok).
+    if (trust !== "BLIND") for (const p of read) sections.set(p.blockNo, { itemText: p.incomingItemText, colorText: p.incomingColorText });
+    for (const p of parties) byBlock.set(p.blockNo, p.incomingKg ?? suggested.get(p.blockNo) ?? null);
+    return { summary: null, width, byBlock, declared, sections };
+  }
+  return { summary: (await noteIncomingKg(noteId, trust, input.incomingKg)).kg, width, byBlock, declared, sections };
+}
+
+/** Gövdede VERİLEN beyan metni türetileni ezer (null/"" = yok); verilmeyen → türetilen. */
+function given(body: string | null | undefined, derived: string | null): string | null {
+  return body === undefined ? derived : body?.trim() || null;
 }
 
 function round3(n: number): number {

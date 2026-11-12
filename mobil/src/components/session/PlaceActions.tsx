@@ -22,11 +22,13 @@ import { useSessionStore } from '../../store/sessionStore';
 import { useVisibleScreens } from '../../hooks/useVisibleScreens';
 import { workSessionService } from '../../services/workSession.service';
 import { placesOfKind } from './placeSuggest';
-import { STATION_KIND_BY_SCREEN, type SessionStationKind } from '../../constants/stationScreens';
+import { STATION_KIND_BY_SCREEN, stationMatchesScreen, type SessionStationKind } from '../../constants/stationScreens';
 import type { MobileScreenKey } from '../../types/permissions';
 
 export function usePlaceActions(): {
   expectedKind: SessionStationKind | undefined;
+  /** Oturumlu ekranın anahtarı (makine seçme modalı buna göre listeler); gezici ekranda undefined. */
+  screenKey: MobileScreenKey | undefined;
   showMachine: boolean;
   showStation: boolean;
 } {
@@ -36,8 +38,9 @@ export function usePlaceActions(): {
   const { hasMultipleVisibleScreens } = useVisibleScreens();
   const active = useSessionStore((s) => s.active);
 
-  const expectedKind = STATION_KIND_BY_SCREEN[route.name as MobileScreenKey];
-  const sessionMatches = !!expectedKind && !!active && active.station.kind === expectedKind;
+  const routeKey = route.name as MobileScreenKey;
+  const expectedKind = STATION_KIND_BY_SCREEN[routeKey];
+  const sessionMatches = !!expectedKind && stationMatchesScreen(routeKey, active?.station);
 
   // Yerler — yalnız oturumlu ekranda çekilir (cache'li, 5 dk taze).
   const placesQ = useQuery({
@@ -50,11 +53,12 @@ export function usePlaceActions(): {
   // Bu türde seçilebilir toplam yer: makineli istasyon = makine sayısı,
   // makinesiz istasyon (SHIPPING) = kendisi (1). 1'den fazlaysa değişilecek
   // bir yer VAR → madde görünür; tek yer varsa madde anlamsız, gizli.
-  const kindPlaces = expectedKind ? placesOfKind(placesQ.data ?? [], expectedKind) : [];
+  const kindPlaces = expectedKind ? placesOfKind(placesQ.data ?? [], expectedKind, routeKey) : [];
   const optionCount = kindPlaces.reduce((n, st) => n + Math.max(st.machines.length, 1), 0);
 
   return {
     expectedKind,
+    screenKey: expectedKind ? routeKey : undefined,
     showMachine: sessionMatches && optionCount > 1,
     showStation: hasMultipleVisibleScreens && route.name !== 'ModuleSelect',
   };
@@ -63,11 +67,11 @@ export function usePlaceActions(): {
 /** Makine seçme modalı (PlaceConfirmView drill-down) — menüden bağımsız yaşar. */
 export function MachinePickerModal({
   visible,
-  expectedKind,
+  screenKey,
   onClose,
 }: {
   visible: boolean;
-  expectedKind: SessionStationKind;
+  screenKey: MobileScreenKey;
   onClose: () => void;
 }) {
   const { width: winW, height: winH } = useWindowDimensions();
@@ -81,7 +85,7 @@ export function MachinePickerModal({
           overflow: 'hidden',
         }}
       >
-        <PlaceConfirmView expectedKind={expectedKind} onDone={onClose} onCancel={onClose} />
+        <PlaceConfirmView screenKey={screenKey} onDone={onClose} onCancel={onClose} />
       </View>
     </AppModal>
   );

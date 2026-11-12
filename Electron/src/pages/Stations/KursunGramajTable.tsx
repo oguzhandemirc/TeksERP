@@ -15,13 +15,19 @@ export function KursunGramajTable({ rows, onChange }: { rows: KursunGramajRow[];
             <tbody>
               {rows.map((r, i) => (
                 <tr key={r.code ?? `new-${i}`} className={r.isActive ? "" : "opacity-50"}>
-                  <td className="py-1 pr-2">{r.name}</td>
+                  <td className="py-1 pr-2">
+                    <Input
+                      aria-label={`Gramaj ${i + 1} adı`}
+                      value={r.name}
+                      onChange={(e) => onChange(rows.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
+                    />
+                  </td>
                   <td className="w-28 py-1 pr-2">
                     <Input
                       aria-label={`${r.name} gr/m`}
                       inputMode="decimal"
                       value={r.amount}
-                      onChange={(e) => onChange(rows.map((x, j) => (j === i ? { ...x, amount: e.target.value } : x)))}
+                      onChange={(e) => onChange(rows.map((x, j) => (j === i ? followAmount(x, e.target.value) : x)))}
                     />
                   </td>
                   <td className="py-1 pr-2">
@@ -53,4 +59,10 @@ export function KursunGramajTable({ rows, onChange }: { rows: KursunGramajRow[];
           </div>
     </>
   );
+}
+
+// Ad miktarın kendisiyse ("25 gr" + 25) miktar değişince ad da izler; elle verilmiş ad ("Hafif") korunur (GK 2026-11-11).
+export function followAmount(r: KursunGramajRow, amount: string): KursunGramajRow {
+  const auto = r.name.trim().replace(/\s*gr$/i, "").replace(",", ".") === r.amount.trim().replace(",", ".");
+  return { ...r, amount, name: auto && amount.trim() !== "" ? `${amount.trim()} gr` : r.name };
 }

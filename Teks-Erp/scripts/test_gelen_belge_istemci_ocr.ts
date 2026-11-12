@@ -33,6 +33,10 @@ import { draftFromExtraction } from "../src/lib/gelen-belge/taslak";
 import { linesToPhotoFrame } from "../src/lib/gelen-belge/taslak-foto-cerceve";
 import { uploadScanWithDeviceRead } from "../src/services/gelen-belge-istemci-okuma.service";
 import { uploadDocumentScan } from "../src/services/gelen-belge-scan.service";
+import { testSablonlariniKaydet } from "./lib/gelen-belge-test-sablonlar";
+
+// Gönderen şablonları pakette yok (2026-11-09): bekçi onları süreç içi dosya şablonu olarak kaydeder.
+testSablonlariniKaydet();
 
 const engel = hedefDbEngeli();
 if (engel) {

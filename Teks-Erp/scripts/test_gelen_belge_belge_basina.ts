@@ -26,6 +26,10 @@ import { ensureSenderTemplate } from "../src/services/gelen-belge-sablon.service
 import { lineProblems } from "../src/services/gelen-belge-kontrol.service";
 import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { testSablonlariniKaydet } from "./lib/gelen-belge-test-sablonlar";
+
+// Gönderen şablonları pakette yok (2026-11-09): bekçi onları süreç içi dosya şablonu olarak kaydeder.
+testSablonlariniKaydet();
 
 const engel = hedefDbEngeli();
 if (engel) {

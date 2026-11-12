@@ -46,7 +46,7 @@ describe("Sevkiyatlar — tek satır", () => {
     expect(within(scroll).getAllByTestId(/^filter-chip-/).map((c) => c.dataset.testid)).toEqual(["filter-chip-date", "filter-chip-status", "filter-chip-customerId", "filter-chip-invoiced"]);
     fireEvent.click(screen.getByRole("button", { name: "Filtre ekle" }));
     const menu = within(screen.getByRole("menu"));
-    for (const n of ["Şube", "İade", "İptaller dahil"]) expect(menu.getByRole("menuitem", { name: n })).toBeTruthy();
+    for (const n of ["Şube", "İade", "İptaller dahil"]) expect(menu.getByRole("menuitemcheckbox", { name: n })).toBeTruthy();
   });
 
   it("⭐ İptaller dahil URL'de: kutu etkin, Temizle onu ve Müşteri→Şube'yi TEK yazımla siler", () => {

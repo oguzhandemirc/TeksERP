@@ -23,6 +23,9 @@ interface Props {
   selectedId: string | null;
   onOpen: (alarmId: string) => void;
   now: number;
+  /** Aşağı çekip yenile (verilmezse çekme kapalı). */
+  refreshing?: boolean;
+  onRefresh?: () => void;
 }
 
 export default function AlarmListPane(p: Props) {
@@ -46,6 +49,8 @@ export default function AlarmListPane(p: Props) {
         <FlashList
           data={p.items}
           keyExtractor={(a) => a.id}
+          refreshing={p.refreshing}
+          onRefresh={p.onRefresh}
           extraData={`${p.selectedId}:${p.now}`}
           renderItem={({ item }) => <AlarmRow alarm={item} now={p.now} selected={item.id === p.selectedId} onPress={() => p.onOpen(item.id)} />}
           ListEmptyComponent={<Text style={styles.empty}>Açık tezgah alarmı yok.</Text>}

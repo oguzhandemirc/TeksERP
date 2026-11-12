@@ -82,6 +82,7 @@ export type LicensePermission = 'license:view' | 'license:manage';
 export type MobileScreenKey =
   | 'KK1'
   | 'KursunQc'
+  | 'KaliteKontrol'
   | 'Tambur'
   | 'Depo'
   | 'TartiPaket'
@@ -126,6 +127,15 @@ export const MOBILE_SCREENS: MobileScreenMeta[] = [
     label: 'Kurşun',
     icon: 'magnify-scan',
     description: 'Hata tespiti ve metraj girişi',
+  },
+  {
+    // Kurşunsuz kalite istasyonu (ör. Detaylı KK): aynı ekran kurşun kipi kapalı, aynı izin.
+    // Böyle istasyon yoksa gizli (`useVisibleScreens`).
+    key: 'KaliteKontrol',
+    permission: 'mobile:kk2-kursun',
+    label: 'Kalite Kontrol',
+    icon: 'clipboard-check-outline',
+    description: 'Top okutma, hata girişi ve kalite kararı',
   },
   {
     key: 'Tambur',

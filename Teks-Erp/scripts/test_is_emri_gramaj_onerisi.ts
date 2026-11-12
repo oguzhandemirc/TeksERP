@@ -7,7 +7,8 @@
 //   §1 saf birleştirme: tek değer → öneri · çelişki → öneri yok + liste · çözülmeyen metin = çelişki · boş → null
 //   §2 ⭐ 3 top aynı belgeden "41 GR" → öneri 41 gr, kapsama 3/3
 //   §3 ⭐ iki topun işlem metni farklı gramaj → öneri YOK, liste iki kalem
-//   §4 ⭐ Tambur çocuğu atanın satırını taşır (başlık metni yedeği) + kısmi kapsama aynı değer → öneri, 2/3
+//   §4 ⭐ Tambur çocuğu atanın satırını taşır (başlık metni yedeği); sayım KÖK başına (ölü ata kökü tek) → öneri, 1/2
+//   §4b ⭐ canlı girdi topu + çıktıları → 1 kök (İE "Üretime giren" ile aynı birim)
 //   §5 PROCESS sözlüğü kalıptan önce (gramajsız metin onayda öğrenilmiş çeşide çözülür)
 //   §5b ⭐ D4-D1 özellik gruplu: kurşun + brode deseni ayrı gruplarda (`variants`); iki desende birleşmeyen toplar → brode önerisi yok
 //   §6 ⭐ gelen belgesiz İE → alan null
@@ -146,7 +147,15 @@ async function main(): Promise<void> {
   const woChild = await mkWorkOrder([parent!, await mkRoll("C1", parent!), await mkRoll("C2", parent!), await mkRoll("P1", null)]);
   const s4 = (await read(woChild)).deliveryNoteGramaj;
   check("§4 ⭐ çocuk toplar atanın satırını (başlık metni) taşır → 41 gr", s4?.suggested?.valueId === v41, JSON.stringify(s4));
-  check("§4 ⭐ kısmi kapsama 2/3 (gelen belgesiz top kapsam dışı; TAMBUR_CONSUMED ata sayılmaz)", s4?.coveredRollCount === 2 && s4.rollCount === 3, `${s4?.coveredRollCount}/${s4?.rollCount}`);
+  check("§4 ⭐ kök başına kapsama 1/2 (iki çocuk ölü atalarının kökünde TEK; gelen belgesiz top ayrı kök)", s4?.coveredRollCount === 1 && s4.rollCount === 2, `${s4?.coveredRollCount}/${s4?.rollCount}`);
+
+  console.log("§4b Canlı girdi topu + çıktıları (Üretime giren ile aynı birim)");
+  const [liveParent] = await noteRolls(`KURŞUN 41 GR ${TAG}`, [null]);
+  // Fikstür: girdi topu üretimde (bölünmedi), çıktıları İE partisinde — sayım 1 kök olmalı, 3 değil.
+  await prisma.roll.updateMany({ where: { id: liveParent! }, data: { status: RollStatus.IN_PRODUCTION } });
+  const woLive = await mkWorkOrder([liveParent!, await mkRoll("L1", liveParent!), await mkRoll("L2", liveParent!)]);
+  const s4b = (await read(woLive)).deliveryNoteGramaj;
+  check("§4b ⭐ girdi + 2 çıktı → 1/1 kök (çıktılar ayrıca sayılmaz)", s4b?.rollCount === 1 && s4b.coveredRollCount === 1 && s4b.suggested?.valueId === v41, JSON.stringify(s4b));
 
   console.log("§5 Sözlük kalıptan önce");
   const ALIAS_TEXT = `ÖZEL APRE ${TAG}`;

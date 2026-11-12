@@ -18,6 +18,7 @@ const MOBILE_CUSTOMER_READ = ["mobile:tarti-paket", "mobile:sevkiyat", "mobile:f
 import branchRoutes from "./customer-branch.routes";
 import aliasRoutes from "./customer-alias.routes";
 import templateRouteRoutes from "./customer-template-route.routes";
+import { customerLabelOptionRoutes } from "./label-template-option.routes";
 import standaloneLabelRoutes from "./customer-standalone-label.routes";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
 
@@ -81,6 +82,7 @@ router.use("/:customerId/branches", branchRoutes);
 router.use("/:customerId", aliasRoutes);
 // /api/customers/:customerId/template-routes — müşteriye özel etiket şablonu ataması
 router.use("/:customerId", templateRouteRoutes);
+router.use("/:customerId/label-template-options", customerLabelOptionRoutes);
 // /api/customers/:customerId/standalone-labels — müşteriye bağlı serbest etiketler (M:N; rota DEĞİL)
 router.use("/:customerId", standaloneLabelRoutes);
 
@@ -154,8 +156,9 @@ router.get("/similar-names", verifyToken, requirePermission("customer:write"), c
  *     tags: [Customers]
  *     summary: Belgeden iş emri formunda hızlı müşteri kaydı — yalnız ad
  *     description: >
- *       Tablet belgeden İE formu okunan müşteri adı kayıtlı değilse kartı yalnız adla açar (rol Müşteri; kod, ad seddi,
- *       cari hesap ve audit genel kart yoluyla aynı). `clientToken` deneme başına; aynı token tekrarı aynı kartı döner.
+ *       Tablet belgeden İE formu okunan müşteri adı kayıtlı değilse kartı adla açar (rol Müşteri; kod, ad seddi,
+ *       cari hesap ve audit genel kart yoluyla aynı). Seçicinin "Yeni ekle" formu "Diğer" bölümünden opsiyonel iletişim
+ *       alanlarını da gönderebilir. `clientToken` deneme başına; aynı token tekrarı aynı kartı döner.
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -168,6 +171,14 @@ router.get("/similar-names", verifyToken, requirePermission("customer:write"), c
  *             properties:
  *               name: { type: string, example: "YENİ TEKSTİL" }
  *               clientToken: { type: string, format: uuid }
+ *               taxNumber: { type: string, description: "Opsiyonel; 10-15 hane, aktif kartta mükerrer 409" }
+ *               contactName: { type: string }
+ *               contactPhone: { type: string }
+ *               email: { type: string }
+ *               city: { type: string }
+ *               district: { type: string }
+ *               address: { type: string }
+ *               notes: { type: string }
  *     responses:
  *       201:
  *         description: Müşteri oluşturuldu (ya da aynı token'ın kaydı döndü)
@@ -177,18 +188,27 @@ router.get("/similar-names", verifyToken, requirePermission("customer:write"), c
  *         description: Aynı adda müşteri zaten var (CUSTOMER_NAME_DUPLICATE) ya da token çakışması
  */
 // Belgeden İE formunu açan tablet kullanıcısı `gelen-belge:write` taşır (form bağlamı o izinle okunur); yeni izin kodu yok.
-// Gövde `.strict()`: yalnız ad + token — rol/kod/finans istemciden GELMEZ.
+// Gövde `.strict()`: ad + token + kartın opsiyonel iletişim alanları (seçicinin "Diğer" bölümü, 2026-11-10) — rol/kod/finans
+// istemciden GELMEZ. Biçim (e-posta, vergi no) ve uzunluk kartla aynı doğrulamadan (`CustomerService`) geçer.
 const QUICK_CREATE_PERMISSIONS = ["customer:write", "gelen-belge:write"] as const;
+const optText = (label: string, max: number) => z.string({ message: `${label} metin olmalı` }).max(max, `${label} en fazla ${max} karakter olabilir`).optional();
 const quickCreateBody = z
   .object({
     name: z.string().trim().min(1, "Müşteri adı zorunlu").max(100, "Müşteri adı en fazla 100 karakter olabilir"),
     clientToken: z.string().uuid("Geçersiz işlem kimliği"),
+    taxNumber: optText("Vergi numarası", 32),
+    contactName: optText("Yetkili adı", 120),
+    contactPhone: optText("Telefon", 40),
+    email: optText("E-posta", 200),
+    city: optText("Şehir", 80),
+    district: optText("İlçe", 80),
+    address: optText("Adres", 500),
+    notes: optText("Notlar", 500),
   })
   .strict();
 router.post("/quick-create", verifyToken, requireAnyPermission(...QUICK_CREATE_PERMISSIONS), async (req, res, next) => {
   try {
-    const { name, clientToken } = quickCreateBody.parse(req.body);
-    res.status(201).json(await quickCreate(customerService, name, clientToken, req.user?.userId));
+    res.status(201).json(await quickCreate(customerService, quickCreateBody.parse(req.body), req.user?.userId));
   } catch (e) {
     next(e);
   }

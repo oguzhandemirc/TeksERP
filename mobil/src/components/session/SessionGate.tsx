@@ -24,7 +24,7 @@ import React from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { useIsFocused } from '@react-navigation/native';
 import { useSessionStore } from '../../store/sessionStore';
-import { STATION_KIND_BY_SCREEN } from '../../constants/stationScreens';
+import { STATION_KIND_BY_SCREEN, stationMatchesScreen } from '../../constants/stationScreens';
 import type { MobileScreenKey } from '../../types/permissions';
 import PlaceConfirmView from './PlaceConfirmView';
 
@@ -51,7 +51,8 @@ export function withWorkSession(
     const isLoaded = useSessionStore((s) => s.isLoaded);
     const isFocused = useIsFocused();
 
-    const matches = active?.station.kind === expectedKind;
+    // Tür + Kurşun/Kalite ayrımı: kurşunsuz kalite istasyonunun oturumu Kurşun ekranını açmaz (ve tersi).
+    const matches = stationMatchesScreen(screenKey, active?.station);
     if (matches) {
       if (!Loaded) Loaded = load();
       const Screen = Loaded;
@@ -70,6 +71,6 @@ export function withWorkSession(
     // Oturum açılınca store güncellenir → matches true → ekran render (onDone no-op).
     // autoOpen: girişte makine seçtirme YOK — çözülebilir yer (son yer / tek istasyon+
     // tek makine) varsa otomatik açılır; değilse seçim ekranı çıkar.
-    return <PlaceConfirmView expectedKind={expectedKind} onDone={() => undefined} autoOpen />;
+    return <PlaceConfirmView screenKey={screenKey} onDone={() => undefined} autoOpen />;
   };
 }

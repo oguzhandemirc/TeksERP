@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Text, TouchableRipple, Icon, ActivityIndicator } from 'react-native-paper';
+import { Text, Icon, IconButton, ActivityIndicator } from 'react-native-paper';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 
@@ -15,6 +15,8 @@ import { useDeviceSettingsStore, type DocPageSize } from '../../../store/deviceS
 import { upperTr } from '../../../utils/trCase';
 import { formatFactory } from '../../../lib/factory-time';
 import { TERIM } from '../../../lib/terim';
+import { useIncomingScans } from './useIncomingScans';
+import type { IncomingScanItem } from './incomingScans';
 
 // =============================================================================
 // İŞ EMRİ BELGELERİ — sahadaki operatör iş emrine basınca TÜM belgelerine
@@ -28,7 +30,11 @@ import { TERIM } from '../../../lib/terim';
 // kabuğunu ve infinite-scroll sözleşmesini paylaşmak istiyoruz.
 // =============================================================================
 
-type Row = { kind: 'header'; key: string; label: string } | { kind: 'doc'; key: string; doc: WorkOrderDocument };
+// Gelen belge fotoğrafları listenin EN ÜSTÜNDE (kullanıcı 2026-11-09: Belgeler'de önce kaynak belge görünsün).
+type Row =
+  | { kind: 'header'; key: string; label: string }
+  | { kind: 'scan'; key: string; scan: IncomingScanItem }
+  | { kind: 'doc'; key: string; doc: WorkOrderDocument };
 
 interface Props {
   visible: boolean;
@@ -59,11 +65,14 @@ export default function WorkOrderDocumentsSheet({
   });
 
   const docs = q.data?.data?.documents ?? [];
+  const scans = useIncomingScans(workOrderId, visible);
 
   // Grup başlıklarını araya serpiştir. Sıra backend'den geldiği gibi korunur
   // (kart önce, sonra fason belgeleri tarih desc) — istemci yeniden sıralamaz.
   const rows = useMemo<Row[]>(() => {
     const out: Row[] = [];
+    if (scans.items.length > 0) out.push({ kind: 'header', key: 'h-gelen-belge', label: 'Gelen Belge' });
+    for (const sc of scans.items) out.push({ kind: 'scan', key: `scan-${sc.scanId}`, scan: sc });
     let lastGroup: string | null = null;
     for (const d of docs) {
       if (d.group !== lastGroup) {
@@ -73,7 +82,7 @@ export default function WorkOrderDocumentsSheet({
       out.push({ kind: 'doc', key: `${d.docType}-${d.sourceId}`, doc: d });
     }
     return out;
-  }, [docs]);
+  }, [docs, scans.items]);
 
   const handlePrint = async (doc: WorkOrderDocument, key: string) => {
     if (printingKey) return; // tek soket değil ama çift baskı da istenmez
@@ -98,85 +107,98 @@ export default function WorkOrderDocumentsSheet({
     }
   };
 
-  /**
-   * Kâğıt boyu rozeti — ÜÇ durumlu: `Ayar → A4 → A5 → Ayar`.
-   *
-   * ⚠️ "Ayar" durumu ŞART ve kaldırılmamalı. Mobil, sunucudaki KALICI belge
-   * ayarının ne olduğunu BİLMİYOR; rozette varsayılan olarak "A4" göstermek,
-   * ayar A5 iken ekranın YALAN söylemesi olurdu. Üçüncü durum hem dürüst hem de
-   * geri dönülebilir: operatör seçimini iptal edip kalıcı ayara dönebilir.
-   * (İki durumlu yapılırsa "kalıcı ayarı kullan" hâline bir daha ulaşılamaz.)
-   */
   const cyclePageSize = async (docType: string) => {
     const cur = docPageSize[docType];
     const next: DocPageSize | null = cur == null ? 'A4' : cur === 'A4' ? 'A5' : null;
     if (next == null) await clearDocPageSize(docType);
     else await setDocPageSize(docType, next);
+    Toast.show({ type: 'info', text1: next ? `Kâğıt boyu: ${next}` : 'Kâğıt boyu: belge ayarı', text2: 'Bu cihazda hatırlanır.' });
+  };
+
+  // Satır yalnız ikon + belge adı · no (+ gerekiyorsa kısa tarih); eylemler sağda 56dp ikon düğmesi.
+  const renderScan = (sc: IncomingScanItem) => {
+    const busy = scans.openingId === sc.scanId;
+    const sub = [sc.subtitle, sc.blockedReason].filter(Boolean).join(' · ');
+    return (
+      <View style={[styles.card, !sc.viewable && styles.cardCancelled]} testID={`ie-gelen-belge-${sc.scanId}`}>
+        <Icon source="image-outline" size={24} color={sc.viewable ? colors.brand : colors.textMuted} />
+        <View style={styles.cardBody}>
+          <Text style={styles.cardTitle}>{sc.title}</Text>
+          {sub ? <Text style={styles.cardSub}>{sub}</Text> : null}
+        </View>
+        {busy ? (
+          <View style={styles.actionBox}><ActivityIndicator size={22} /></View>
+        ) : (
+          <IconButton
+            icon={sc.viewable ? 'magnify-plus-outline' : 'image-off-outline'}
+            size={26}
+            onPress={() => void scans.open(sc)}
+            disabled={!sc.viewable}
+            accessibilityLabel={`Tam ekran aç: ${sc.title}`}
+            testID={`ie-gelen-belge-ac-${sc.scanId}`}
+            style={styles.actionBtn}
+          />
+        )}
+      </View>
+    );
   };
 
   const renderItem = (row: Row) => {
     if (row.kind === 'header') {
-      return (
-        <Text style={styles.groupHeader}>{upperTr(row.label)}</Text>
-      );
+      return <Text style={styles.groupHeader}>{upperTr(row.label)}</Text>;
     }
+    if (row.kind === 'scan') return renderScan(row.scan);
     const d = row.doc;
     const busy = printingKey === row.key;
+    const size = docPageSize[d.docType] ?? null;
     return (
-      <TouchableRipple
-        onPress={() => void handlePrint(d, row.key)}
-        disabled={busy}
-        style={[styles.card, d.cancelled && styles.cardCancelled]}
-        borderless={false}
-      >
-        <View style={styles.cardInner}>
-          <View style={styles.cardIcon}>
-            <Icon
-              source={d.docType === 'TRAVELER_CARD' ? 'card-account-details-outline' : 'file-document-outline'}
-              size={22}
-              color={d.cancelled ? colors.textMuted : colors.brand}
-            />
+      <View style={[styles.card, d.cancelled && styles.cardCancelled]} testID={`ie-belge-${row.key}`}>
+        <Icon
+          source={d.docType === 'TRAVELER_CARD' ? 'card-account-details-outline' : 'file-document-outline'}
+          size={24}
+          color={d.cancelled ? colors.textMuted : colors.brand}
+        />
+        <View style={styles.cardBody}>
+          <View style={styles.cardTitleRow}>
+            <Text style={styles.cardTitle}>{[d.title, d.documentNo].filter(Boolean).join(' · ')}</Text>
+            {d.cancelled && <Text style={styles.badgeCancel}>İPTAL</Text>}
+            {/* ⚠️ "GÜNCEL DEĞİL" rozeti KALDIRILDI (2026-08-06, kullanıcı kararı) — gerekçe Electron
+                `TravelerCardPrintDialog` başlığında; `contentDirty` yanıtta hâlâ dönüyor. */}
           </View>
-          <View style={styles.cardBody}>
-            <View style={styles.cardTitleRow}>
-              <Text style={styles.cardTitle} numberOfLines={1}>
-                {d.title}
-              </Text>
-              {d.cancelled && <Text style={styles.badgeCancel}>İPTAL</Text>}
-              {/* ⚠️ "GÜNCEL DEĞİL" rozeti KALDIRILDI (2026-08-06, kullanıcı kararı) —
-                  gerekçe Electron `TravelerCardPrintDialog` başlığında. `contentDirty`
-                  yanıtta hâlâ dönüyor; geri koymadan önce oradaki notu oku. */}
-            </View>
-            <Text style={styles.cardNo} numberOfLines={1}>
-              {d.documentNo}
-            </Text>
-            {!!d.subtitle && (
-              <Text style={styles.cardSub} numberOfLines={2}>
-                {d.subtitle}
-              </Text>
-            )}
-            <Text style={styles.cardDate}>{formatFactory(d.date, 'dd.MM.yyyy HH:mm')}</Text>
-          </View>
-          <View style={styles.cardAction}>
-            {/* KÂĞIT BOYU ROZETİ — dokunmak BASMAZ, yalnız boyu değiştirir.
-                İç TouchableRipple dokunmayı yakalar (RN responder sistemi:
-                en içteki kazanır), bu yüzden kartın baskı onPress'i tetiklenmez. */}
-            <TouchableRipple
-              onPress={() => void cyclePageSize(d.docType)}
-              disabled={busy}
-              style={styles.sizeBadge}
-              borderless={false}
-            >
-              <Text style={styles.sizeBadgeText}>{docPageSize[d.docType] ?? 'Ayar'}</Text>
-            </TouchableRipple>
-            {busy ? <ActivityIndicator size={20} /> : <Icon source="printer" size={22} color={colors.textMuted} />}
-          </View>
+          <Text style={styles.cardSub}>{formatFactory(d.date, 'dd.MM.yyyy')}</Text>
         </View>
-      </TouchableRipple>
+        {/* Kâğıt boyu üç durumlu (belge ayarı → A4 → A5 → belge ayarı): mobil sunucunun kalıcı ayarını bilmez,
+            "belge ayarı" durumu kaldırılmamalı. Seçim varsa ikonun altında küçük yazar; değişim tostla söylenir. */}
+        <View style={styles.actionBox}>
+          <IconButton
+            icon="cog-outline"
+            size={22}
+            onPress={() => void cyclePageSize(d.docType)}
+            disabled={busy}
+            accessibilityLabel={`Kâğıt boyu: ${size ?? 'belge ayarı'}`}
+            testID={`ie-belge-boyut-${row.key}`}
+            style={styles.actionBtn}
+          />
+          {size ? <Text style={styles.sizeCaption}>{size}</Text> : null}
+        </View>
+        {busy ? (
+          <View style={styles.actionBox}><ActivityIndicator size={22} /></View>
+        ) : (
+          <IconButton
+            icon="printer"
+            size={26}
+            onPress={() => void handlePrint(d, row.key)}
+            accessibilityLabel={`Yazdır: ${d.title}`}
+            testID={`ie-belge-yazdir-${row.key}`}
+            style={styles.actionBtn}
+          />
+        )}
+      </View>
     );
   };
 
   return (
+    <>
     <RemoteListSheet<Row>
       visible={visible}
       onDismiss={onDismiss}
@@ -193,10 +215,6 @@ export default function WorkOrderDocumentsSheet({
       emptyIcon="file-document-outline"
       emptyText={`Bu ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} ait belge yok`}
       emptyHint={`Refakat kartı ${TERIM.terbiyeIsEmri.tekilKucuk} açılışında doğar; fason belgeleri sevk/kabul yapıldıkça listelenir.`}
-      hint={{
-        text: 'Satıra dokun → yazdırılır. Kâğıt boyu için sağdaki kutuya dokun (bu cihazda hatırlanır).',
-        icon: 'printer',
-      }}
       // ScrollView (FlashList değil): liste KISA (bir iş emrinin belgeleri) ve
       // satırlar HETEROJEN (grup başlığı ↔ belge kartı). FlashList farklı tipleri
       // aynı havuzda geri dönüştürür; `getItemType` verilmediğinde başlık ile kart
@@ -206,8 +224,14 @@ export default function WorkOrderDocumentsSheet({
       widthRatio={0.94}
       heightRatio={0.9}
     />
+    {/* Görüntüleyici listenin KARDEŞİ: sonra mount olan portal üstte kalır, kapanınca listeye dönülür. */}
+    {scans.viewer}
+    </>
   );
 }
+
+// Kart ve başlık aynı yatay iç boşlukla (ScrollView kipinde RemoteListSheet liste dolgusu vermez).
+const EDGE = spacing.xl;
 
 const styles = StyleSheet.create({
   groupHeader: {
@@ -217,18 +241,24 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     marginTop: spacing.md,
     marginBottom: spacing.xs,
-    paddingHorizontal: spacing.xs,
+    marginHorizontal: EDGE,
   },
   card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    minHeight: 72,
+    marginHorizontal: EDGE,
+    marginBottom: spacing.sm,
+    paddingLeft: spacing.lg,
+    paddingRight: spacing.sm,
+    paddingVertical: spacing.sm,
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
-    marginBottom: spacing.sm,
   },
   cardCancelled: { opacity: 0.6 },
-  cardInner: { flexDirection: 'row', alignItems: 'center', padding: spacing.md, gap: spacing.md },
-  cardIcon: { width: 32, alignItems: 'center' },
   cardBody: { flex: 1, minWidth: 0, gap: 2 },
   cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flexWrap: 'wrap' },
   cardTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
@@ -242,23 +272,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     paddingVertical: 1,
   },
-  cardNo: { fontSize: 15, fontWeight: '600', color: colors.brand },
   cardSub: { fontSize: 13, color: colors.textMuted },
-  cardDate: { fontSize: 12, color: colors.textMuted },
-  // Rozet + yazıcı ikonu alt alta; genişlik rozete göre büyüdü.
-  cardAction: { width: 56, alignItems: 'center', gap: 6 },
-  // ⚠️ Dokunma hedefi bilerek geniş (min 44dp): eldivenli operatör rozete
-  // isabet edemezse kartın baskı onPress'i tetiklenir ve YANLIŞLIKLA basar.
-  sizeBadge: {
-    minWidth: 44,
-    minHeight: 30,
-    paddingHorizontal: 6,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceMuted,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sizeBadgeText: { fontSize: 12, fontWeight: '700', color: colors.textMuted },
+  actionBox: { minWidth: 56, minHeight: 56, alignItems: 'center', justifyContent: 'center' },
+  actionBtn: { margin: 0, width: 56, height: 56 },
+  sizeCaption: { fontSize: 12, fontWeight: '700', color: colors.textSecondary, marginTop: -8 },
 });

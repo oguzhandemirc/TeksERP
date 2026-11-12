@@ -70,3 +70,32 @@ describe('suggestPlace', () => {
     expect(placesOfKind(places, 'RAW_QC').map((p) => p.id)).toEqual(['kk1']);
   });
 });
+
+describe('ekran kapsamlı yer listesi (Kurşun ↔ Kalite Kontrol)', () => {
+  const st = (id: string, isKursunStation?: boolean) => ({
+    id, code: id, name: id, kind: 'PROCESS_QC', canInspect: true, machines: [{ id: `${id}-m`, code: `${id}-m`, name: `${id}-m` }],
+    ...(isKursunStation === undefined ? {} : { isKursunStation }),
+  });
+  const places = [st('kursun', true), st('detayli', false)];
+
+  it('⭐ Kurşun listesi yalnız kurşun istasyonu, Kalite listesi yalnız kurşunsuz', () => {
+    expect(placesOfKind(places, 'PROCESS_QC', 'KursunQc').map((p) => p.id)).toEqual(['kursun']);
+    expect(placesOfKind(places, 'PROCESS_QC', 'KaliteKontrol').map((p) => p.id)).toEqual(['detayli']);
+  });
+
+  it('⭐ tek istasyon önerisi ekran kapsamında: Kalite ekranında Detaylı KK önerilir', () => {
+    expect(suggestPlace(null, places, 'PROCESS_QC', 'KaliteKontrol')?.stationId).toBe('detayli');
+    expect(suggestPlace(null, places, 'PROCESS_QC', 'KursunQc')?.stationId).toBe('kursun');
+  });
+
+  it('son yer başka ekranınsa önerilmez', () => {
+    const last = { machine: null, station: { id: 'detayli', code: 'd', name: 'd', kind: 'PROCESS_QC', isKursunStation: false, isActive: true } };
+    expect(suggestPlace(last, [st('kursun', true), st('k2', true)], 'PROCESS_QC', 'KursunQc')).toBeNull();
+  });
+
+  it('eski sunucu (alan yok) → hepsi Kurşun listesinde, Kalite boş', () => {
+    const legacy = [st('a'), st('b')];
+    expect(placesOfKind(legacy, 'PROCESS_QC', 'KursunQc')).toHaveLength(2);
+    expect(placesOfKind(legacy, 'PROCESS_QC', 'KaliteKontrol')).toHaveLength(0);
+  });
+});

@@ -19,6 +19,7 @@ import { countRollsOfWeavingOrder, receivedMetersByWeavingOrder, rollsOfWeavingO
 import { liveMachineOperators } from "./helpers/work-session.helper";
 import { mountedBeamViewsTx, type MountedBeamView } from "./helpers/warp-beam-mount.helper";
 import { remainingByBeam } from "./helpers/warp-beam.helper";
+import { weavingProducedM, weavingRemainingM } from "./helpers/weaving-order-list-progress.helper";
 
 /** Liste tavanları — kırpılan liste `truncated: true` + `total` taşır. */
 export const OVERVIEW_LIVE_RUN_CAP = 50;
@@ -47,6 +48,10 @@ export interface OverviewProgress {
   doffCount: number;
   /** Fasonda dokunan işte kabul edilen metre (makbuz zinciri); kendi tezgahımızdaki işte null. */
   fasonReceivedM: number | null;
+  /** ÜRETİLEN metre (`weavingProducedM`, listeyle aynı): fasonda kabul, kendi tezgahımızda top metresi; top yoksa null. */
+  producedM: number | null;
+  /** Kalan = plannedM − ÜRETİLEN (üretilen null → 0 sayılır); sıfırın altına inmez; açık uçlu işte null. */
+  remainingM: number | null;
 }
 
 export interface OverviewLiveRun {
@@ -128,15 +133,20 @@ async function loadProgress(id: string, plannedM: number | null, kind: WeavingEx
   const doffCount = await prisma.doffEvent.count({ where: doffsOfOrderWhere(id) });
   const fason = kind === "SUBCONTRACTED" ? ((await receivedMetersByWeavingOrder(prisma, [id])).get(id) ?? 0) : null;
   const closedRunCount = runs._count._all;
+  const rollMeters = rolls._count._all > 0 ? num(rolls._sum.initialQty) : null;
+  // dokuma.md: kalan = plannedM − ÜRETİLEN; TEZGAHTA (türetilen) ve koşum metresi bu çıkarmaya girmez.
+  const producedM = weavingProducedM(kind, fason, rollMeters);
   return {
     plannedM,
     rollCount: rolls._count._all,
-    rollMeters: rolls._count._all > 0 ? num(rolls._sum.initialQty) : null,
+    rollMeters,
     runMeters: closedRunCount > unmeasuredRunCount ? num(runs._sum.producedM) : null,
     closedRunCount,
     unmeasuredRunCount,
     doffCount,
     fasonReceivedM: fason,
+    producedM,
+    remainingM: weavingRemainingM(plannedM, producedM),
   };
 }
 

@@ -18,7 +18,7 @@ import { openLineWhere } from "../helpers/order-line-scope.helper";
 import { resolveEntryStationId } from "../helpers/roll-entry-station.helper";
 import { resolveTargetWarehouseId } from "../helpers/warehouse.helper";
 import { ApiResponse } from "../../types/api.types";
-import { Prisma, PrintedDocType, RollEntrySource, RollOperationType, RollStatus, StationKind, StepStatus, ScanType } from "@prisma/client";
+import { Prisma, PrintedDocType, RollEntrySource, RollOperationType, RollStage, RollStatus, StationKind, StepStatus, ScanType } from "@prisma/client";
 import { printedDocumentService } from "../printed-document.service";
 import { nextSeriesNo } from "../number-series.service";
 import { assertOwnerMatchesTx } from "../helpers/emanet-owner.helper";
@@ -65,6 +65,8 @@ async function createFasonShipChild(
     warehouseId: string | null;
     /** EMANET sahipliği doğum niteliği — müşterinin kumaşından bölünen parça da onundur (H10). */
     ownerCustomerId: string | null;
+    /** Top aşaması — kısmi sevk çocuğu atanın aşamasını alır (aynı mal, bölündü). */
+    stage: RollStage;
   },
   shipQty: number,
   stepId: string,
@@ -101,6 +103,7 @@ async function createFasonShipChild(
       ownerCustomerId: parent.ownerCustomerId,
       batchId: parent.batchId,
       entrySource: RollEntrySource.TAMBUR_SPLIT,
+      stage: parent.stage,
       createdById: userId ?? null,
       entryStationId: resolveEntryStationId({ stepStationId }),
     },
@@ -185,6 +188,7 @@ async function applyDirectShipSplits(
       batchId: true,
       currentQty: true,
       ownerCustomerId: true,
+      stage: true,
       // Çocuk depoyu ebeveynden miras alır — select'ten düşerse derleme kırılır
       // (createFasonShipChild parametre tipi bunu ZORUNLU tutar).
       warehouseId: true,

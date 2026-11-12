@@ -1,8 +1,8 @@
 // BELGE TİPİ TANITMA — tablet (S1b, fabrika cevabı 16/18/38; panel `TanitPage` ikizi). Tam ekran: okunmuş sayfa fotoğrafı +
-// OCR kelime kutuları (iki parmakla yakınlaştır, serbest kaydır) + yan/alt panel. Varsayılan REHBERLİ kip (K30-A2: başlık → alanlar
-// sırayla → ad + kaydet); "Gelişmiş" eski serbest kip (tablo/bölüm). Düzen `teachLayout`; Kaydet çubuğu kaydırmadan bağımsız sabittir.
-import React, { useEffect, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type ViewStyle } from 'react-native';
+// OCR kelime kutuları (iki parmakla yakınlaştır, serbest kaydır) + yan/alt panel. Varsayılan ÜÇ AŞAMA (2026-11-09: ① Tanıma ·
+// ② Eşleme · ③ Kurallar); "Serbest işaretleme" eski serbest kip. Düzen `teachLayout`; şerit ve Kaydet çubuğu kaydırmadan bağımsız.
+import React, { useEffect, useRef, useState } from 'react';
+import { Image, Pressable, StyleSheet, View, useWindowDimensions, type ViewStyle } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,15 +11,15 @@ import AppModal from '../../../../components/AppModal';
 import TruncatedText from '../../../../components/TruncatedText';
 import { colors, radius, spacing, typography } from '../../../../theme';
 import type { ScanWords } from '../../../../types/inboundDocTeach';
-import { FINISH_STEP, guidedMarks, stepField, toggleFieldWord, toggleHeaderWord, type FieldKey } from './guided';
-import GuidedPanel from './GuidedPanel';
 import SimilarDialog from './SimilarDialog';
-import { clearField, teachMarks, toggleWord, type ScanMark } from './teachDraft';
+import { canAdvance, stageMarks, stageTap } from './stages';
+import { teachMarks, toggleWord, type ScanMark } from './teachDraft';
 import { teachLayout } from './teachLayout';
 import { photoSize, type TeachPage } from './teachPages';
-import { useTeachModal, type TeachModalState, type TeachSaved } from './useTeachModal';
-import TeachPanel from './TeachPanel';
-import TeachPreview from './TeachPreview';
+import { normTurns, rotateBox, rotatedSize } from './rotateBox';
+import TeachSide from './TeachSide';
+import { useStageNav } from './useStageNav';
+import { useTeachModal, type TeachSaved } from './useTeachModal';
 
 interface Props {
   visible: boolean;
@@ -101,13 +101,21 @@ function usePinchPan(frame: { width: number; height: number }, cw: number, ch: n
 
 // Fotoğraf galerisi gibi: sayfa bölmeye sığar, iki parmakla yakınlaşır (parmakların altındaki nokta yerinde kalır), tek parmakla
 // her yöne kayar. İç içe ScrollView'lar yalnız dik/yatay kaydırıyordu (2026-11-05 kullanıcı denemesi).
-function ScanPane({ uri, scan, marks, size, onToggle }: { uri: string; scan: ScanWords; marks: ScanMark[]; size: ViewStyle; onToggle: (i: number) => void }) {
+// Döndür yalnız GÖRÜNTÜDÜR: kutular `photoRect`ten dönmüş çerçeveye çevrilip çizilir, dokunma kelime sırasıyla çalışır; öneri ucuna
+// `rect` (OCR dik çerçevesi) gider — kaydedilen şablon döndürmeden bağımsızdır (`rotateBox.ts`).
+function ScanPane({ uri, scan, marks, size, turns, onRotate, onToggle }: { uri: string; scan: ScanWords; marks: ScanMark[]; size: ViewStyle; turns: number; onRotate: () => void; onToggle: (i: number) => void }) {
   const [frame, setFrame] = useState({ width: 0, height: 0 });
   const photo = photoSize(scan);
-  const k = frame.width > 0 && photo.width > 0 && photo.height > 0 ? Math.min(frame.width / photo.width, frame.height / photo.height) : 0;
-  const cw = photo.width * k;
-  const ch = photo.height * k;
+  const q = normTurns(turns);
+  const view = rotatedSize(photo.width, photo.height, q);
+  const k = frame.width > 0 && view.width > 0 && view.height > 0 ? Math.min(frame.width / view.width, frame.height / view.height) : 0;
+  const cw = view.width * k;
+  const ch = view.height * k;
+  // Görüntü dönmeden önceki ölçüsüyle çizilip merkezinden döndürülür; dönmüş hâli tam (cw × ch) kabını doldurur.
+  const iw = photo.width * k;
+  const ih = photo.height * k;
   const { gesture, moved, zoomed, reset } = usePinchPan(frame, cw, ch);
+  useEffect(() => reset(false), [q]); // eslint-disable-line react-hooks/exhaustive-deps
   // Kenar kalınlığı yakınlıkla büyümesin (yazıyı örtmesin); hareket bitince bir kez güncellenir.
   const border = 2 / zoomed;
   return (
@@ -116,8 +124,16 @@ function ScanPane({ uri, scan, marks, size, onToggle }: { uri: string; scan: Sca
         <View style={styles.frame} collapsable={false} onLayout={(e) => setFrame({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })} testID="tanit-foto-cerceve">
           <Animated.View style={[{ width: cw, height: ch }, moved]}>
             {/* Tam çözünürlük (scale): yakınlaşınca küçük yazı bulanıklaşmasın. */}
-            <Image source={{ uri }} style={{ width: cw, height: ch }} resizeMode="stretch" resizeMethod="scale" testID="tanit-foto" />
-            {marks.map((m, i) => (
+            <Image
+              source={{ uri }}
+              style={{ position: 'absolute', left: (cw - iw) / 2, top: (ch - ih) / 2, width: iw, height: ih, transform: [{ rotate: `${q * 90}deg` }] }}
+              resizeMode="stretch"
+              resizeMethod="scale"
+              testID="tanit-foto"
+            />
+            {marks.map((m, i) => {
+              const b = rotateBox(m.box, photo.width, photo.height, q);
+              return (
               <Pressable
                 key={m.key}
                 onPress={() => onToggle(i)}
@@ -125,19 +141,45 @@ function ScanPane({ uri, scan, marks, size, onToggle }: { uri: string; scan: Sca
                 hitSlop={4}
                 style={[
                   styles.mark,
-                  { left: m.box.x * k, top: m.box.y * k, width: Math.max(m.box.width * k, 8), height: Math.max(m.box.height * k, 8), borderWidth: border },
+                  { left: b.x * k, top: b.y * k, width: Math.max(b.width * k, 8), height: Math.max(b.height * k, 8), borderWidth: border },
                   { borderColor: TONE[m.tone].border, backgroundColor: TONE[m.tone].bg },
                 ]}
                 testID={`tanit-kutu-${i}`}
               />
-            ))}
+              );
+            })}
           </Animated.View>
         </View>
       </GestureDetector>
+      <IconButton icon="rotate-right" mode="contained-tonal" size={28} style={[styles.iconBtn, styles.rotate]} onPress={onRotate} accessibilityLabel="Fotoğrafı döndür" testID="tanit-dondur" />
       {/* Yakınlaşınca görünür: ipucu yazısı yerine tek düğme (az yazı). */}
       {zoomed > 1.01 && (
         <IconButton icon="fit-to-screen-outline" mode="contained-tonal" size={28} style={[styles.iconBtn, styles.fit]} onPress={() => reset(true)} accessibilityLabel="Sığdır" testID="tanit-sigdir" />
       )}
+    </View>
+  );
+}
+
+/** Sayfa başına görüntü dönüşü (çeyrek); yalnız bu tanıtma oturumu — kapanınca sıfırlanır, fotoğraf dosyasına dokunulmaz. */
+function usePageTurns(visible: boolean) {
+  const [turns, setTurns] = useState<Record<string, number>>({});
+  useEffect(() => {
+    if (!visible) setTurns({});
+  }, [visible]);
+  return {
+    of: (scanId: string) => turns[scanId] ?? 0,
+    rotate: (scanId: string) => setTurns((m) => ({ ...m, [scanId]: normTurns((m[scanId] ?? 0) + 1) })),
+  };
+}
+
+/** Yanlış tanınmış belgeden çıkış: kayıt X'i değiştirir; "Yeni tip olarak tanıt" X'e dokunmadan baştan tanıtır. */
+function NotThisType({ name, onNew }: { name: string; onNew: () => void }) {
+  return (
+    <View style={styles.notThis} testID="tanit-bu-degil">
+      <Text style={styles.notThisText}>{`Bu belge "${name}" değil mi? Kaydetmek o tanımı değiştirir — yeni tip olarak tanıtın.`}</Text>
+      <Button mode="outlined" icon="file-plus-outline" onPress={onNew} contentStyle={styles.btn} testID="tanit-yeni-tip">
+        Yeni tip olarak tanıt
+      </Button>
     </View>
   );
 }
@@ -147,8 +189,9 @@ export default function TeachModal({ visible, pages, code, onDismiss, onSaved }:
   const layout = teachLayout(width, height);
   const insets = useSafeAreaInsets();
   const [pageIdx, setPageIdx] = useState(0);
-  const nav = useGuidedNav(visible);
-  const { advanced, step } = nav;
+  const turns = usePageTurns(visible);
+  const nav = useStageNav(visible);
+  const { advanced, stage } = nav;
   const page = pages[Math.min(pageIdx, Math.max(0, pages.length - 1))] ?? null;
   const t = useTeachModal(
     visible ? (page?.scanId ?? null) : null,
@@ -159,18 +202,25 @@ export default function TeachModal({ visible, pages, code, onDismiss, onSaved }:
     },
     { auto: !advanced },
   );
-  const title = t.existing ? `Şablonu güncelle — ${t.existing.name}` : 'Bu belgeyi tanıt';
+  const title = t.existing ? `Tanımı düzenle — ${t.existing.name}` : 'Bu belgeyi tanıt';
+  const startNew = () => {
+    t.startNew();
+    nav.goTo('TANIMA', null);
+  };
   // Bölme oranla (flex 58/42) değil ölçüyle: tablette fotoğraf bölmesi tüm alanı yutup paneli 32 px'e sıkıştırıyordu (2026-11-05 cihaz ölçümü).
   const paneSize: ViewStyle = layout.mode === 'side' ? { width: layout.imageWidth - spacing.md } : { height: layout.imageHeight };
   const words = t.words.data?.words ?? [];
-  const marks = t.state ? (advanced ? teachMarks(t.state, words, t.located) : guidedMarks(t.state, words, step, t.located)) : [];
-  const onTap = (i: number) =>
-    t.setState((s) => {
-      if (advanced) return toggleWord(s, i);
-      if (step === 0) return toggleHeaderWord(s, words, i);
-      const key = stepField(step);
-      return key ? toggleFieldWord(s, words, key, i) : s;
-    });
+  const marks = t.state ? (advanced ? teachMarks(t.state, words, t.located) : stageMarks(t.state, words, { stage, target: nav.target }, t.located)) : [];
+  const onTap = (i: number) => t.setState((s) => (advanced ? toggleWord(s, i) : stageTap(s, words, { stage, target: nav.target }, i)));
+  // Düzenlemede kimlik ve ad zaten hazır: ① temizse doğrudan ② Eşleme'den başlanır (açılış başına bir kez).
+  const opened = useRef(false);
+  useEffect(() => {
+    if (!visible) opened.current = false;
+    else if (!opened.current && t.state && words.length > 0) {
+      opened.current = true;
+      if (t.existing && canAdvance(t.state, words, 'TANIMA')) nav.goTo('ESLEME', t.state);
+    }
+  }, [visible, t.state, t.existing, words]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     // Kaydırma (yakınlaştırılmış fotoğraf) ile çakışmasın diye sürükleyip kapatma kapalı; kapat düğmesi + geri tuşu var.
     <AppModal visible={visible} onDismiss={onDismiss} position="right" contentStyle={{ width, height }} swipeToDismiss={false}>
@@ -182,11 +232,12 @@ export default function TeachModal({ visible, pages, code, onDismiss, onSaved }:
               {`v${t.existing.version} → ${t.existing.version + 1}`}
             </Text>
           )}
-          <Button mode={advanced ? 'contained-tonal' : 'text'} icon={advanced ? 'school-outline' : 'tune'} onPress={nav.toggleAdvanced} contentStyle={styles.btn} testID="tanit-gelismis">
-            {advanced ? 'Adım adım' : 'Gelişmiş'}
+          <Button mode="text" icon={advanced ? 'school-outline' : 'gesture-tap-box'} onPress={nav.toggleAdvanced} contentStyle={styles.btn} testID="tanit-gelismis">
+            {advanced ? 'Adım adım' : 'Serbest işaretleme'}
           </Button>
           <IconButton icon="close" size={32} style={styles.iconBtn} onPress={onDismiss} accessibilityLabel="Tanıtmayı kapat" testID="tanit-kapat" />
         </View>
+        {t.existing && <NotThisType name={t.existing.name} onNew={startNew} />}
         {pages.length > 1 && (
           <View style={styles.pages}>
             {pages.map((p, i) => (
@@ -205,13 +256,8 @@ export default function TeachModal({ visible, pages, code, onDismiss, onSaved }:
           </View>
         ) : (
           <View style={[styles.body, layout.mode === 'stack' && styles.bodyStack]} testID={layout.mode === 'side' ? 'tanit-duzen-yan' : 'tanit-duzen-ust'}>
-            <ScanPane key={page.scanId} uri={page.uri} scan={t.words.data} marks={marks} size={paneSize} onToggle={onTap} />
-            <View style={styles.side}>
-              <ScrollView style={styles.side} contentContainerStyle={styles.sideBody} keyboardShouldPersistTaps="handled">
-                <TeachSide t={t} nav={nav} />
-              </ScrollView>
-              <SaveBar t={t} nav={nav} />
-            </View>
+            <ScanPane key={page.scanId} uri={page.uri} scan={t.words.data} marks={marks} size={paneSize} turns={turns.of(page.scanId)} onRotate={() => turns.rotate(page.scanId)} onToggle={onTap} />
+            <TeachSide t={t} nav={nav} />
           </View>
         )}
       </View>
@@ -221,90 +267,6 @@ export default function TeachModal({ visible, pages, code, onDismiss, onSaved }:
 }
 
 
-/** Yan panel (kayan): rehberli adımlar | gelişmiş serbest panel + eksikler + önizleme. */
-function TeachSide({ t, nav }: { t: TeachModalState; nav: GuidedNav }) {
-  const { advanced, step } = nav;
-  const state = t.state!;
-  return (
-    <>
-      {advanced ? (
-        <TeachPanel state={state} words={t.words.data?.words ?? []} onChange={t.setState} old={t.existing?.template ?? null} />
-      ) : (
-        <GuidedPanel
-          state={state}
-          onChange={t.setState}
-          step={step}
-          onStep={nav.onStep}
-          skipped={nav.skipped}
-          onSkip={(k) => {
-            t.setState((s) => clearField(s, k));
-            nav.skip(k);
-          }}
-          preview={{ result: t.preview, fresh: t.previewFresh, error: t.previewError, blocked: t.previewBlocked }}
-        />
-      )}
-      {t.problems.length > 0 && (advanced || step === FINISH_STEP) && (
-        <View testID="tanit-eksikler">
-          {t.problems.map((p) => (
-            <Text key={p} style={styles.warn}>
-              • {p}
-            </Text>
-          ))}
-        </View>
-      )}
-      {advanced && t.preview && <TeachPreview result={t.preview} stale={!t.previewFresh} />}
-    </>
-  );
-}
-
-/** Kaydet çubuğu: kaydırmanın dışında, her adımda görünür; pasifse altında tek satır neden. */
-function SaveBar({ t, nav }: { t: TeachModalState; nav: GuidedNav }) {
-  const { advanced, step } = nav;
-  return (
-    <View style={styles.saveBar} testID="tanit-kaydet-cubugu">
-      {!advanced && step !== FINISH_STEP && t.problems.length > 0 && (
-        <Text style={styles.warn} testID="tanit-kaydet-neden">{`Kaydetmek için: ${t.problems[0]}`}</Text>
-      )}
-      <View style={styles.actions}>
-        {advanced && (
-          <Button mode="outlined" icon="eye" onPress={() => void t.runPreview()} disabled={t.problems.length > 0 || t.busy !== null} loading={t.busy === 'preview'} contentStyle={styles.btn} testID="tanit-onizle">
-            Önizle
-          </Button>
-        )}
-        <Button mode="contained" icon="content-save" onPress={() => void t.save()} disabled={!t.canSave} loading={t.busy === 'save'} contentStyle={styles.btn} testID="tanit-kaydet">
-          {t.existing ? 'Şablonu güncelle' : 'Belge tipini kaydet'}
-        </Button>
-      </View>
-    </View>
-  );
-}
-
-/** Rehber gezintisi (adım, atlanan alanlar, kip); her açılış rehberin başından başlar. */
-function useGuidedNav(visible: boolean) {
-  const [advanced, setAdvanced] = useState(false);
-  const [step, setStep] = useState(0);
-  const [skipped, setSkipped] = useState<FieldKey[]>([]);
-  useEffect(() => {
-    if (!visible) return;
-    setAdvanced(false);
-    setStep(0);
-    setSkipped([]);
-  }, [visible]);
-  return {
-    advanced,
-    step,
-    skipped,
-    toggleAdvanced: () => setAdvanced((a) => !a),
-    onStep: (n: number) => {
-      const key = stepField(n);
-      if (key) setSkipped((xs) => xs.filter((k) => k !== key));
-      setStep(n);
-    },
-    skip: (k: FieldKey) => setSkipped((xs) => (xs.includes(k) ? xs : [...xs, k])),
-  };
-}
-type GuidedNav = ReturnType<typeof useGuidedNav>;
-
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: colors.appBg, paddingHorizontal: spacing.lg, gap: spacing.md },
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 56 },
@@ -312,18 +274,16 @@ const styles = StyleSheet.create({
   version: { fontSize: typography.size.sm, color: colors.textSecondary, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radius.sm, backgroundColor: colors.surfaceSunken },
   iconBtn: { width: 56, height: 56, margin: 0 },
   fit: { position: 'absolute', top: spacing.sm, right: spacing.sm },
+  rotate: { position: 'absolute', top: spacing.sm, left: spacing.sm },
   pages: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm },
+  notThis: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm },
+  notThisText: { flexShrink: 1, fontSize: typography.size.sm, color: colors.textSecondary },
   body: { flex: 1, flexDirection: 'row', gap: spacing.lg },
   bodyStack: { flexDirection: 'column', gap: spacing.md },
   scanPane: { borderRadius: radius.lg, overflow: 'hidden', backgroundColor: colors.surfaceSunken },
   frame: { flex: 1, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
   mark: { position: 'absolute', borderRadius: 2 },
-  side: { flex: 1 },
-  sideBody: { gap: spacing.md, paddingBottom: spacing.lg },
-  saveBar: { gap: spacing.xs, paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: spacing.sm },
   btn: { minHeight: 56 },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   error: { fontSize: typography.size.base, color: colors.dangerText },
-  warn: { fontSize: typography.size.sm, color: colors.warningText },
 });

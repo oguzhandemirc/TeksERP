@@ -34,19 +34,28 @@ router.use(verifyToken, requireProductionEnabled);
  *       numarasını döner. `next` bir ÖNİZLEMEDİR (rezervasyon değil) — kilit
  *       dışında okunur, arada bir parti doğarsa gerçekleşen numara farklı olur.
  *       Bayrak kapalıyken sayaç yoktur ve numara alanları null döner.
+ *       `count` verilirse `nextCodes` ardışık `count` tahmini taşır (çok partili
+ *       iş emri formu; numara TÜKETİLMEZ). Geçersiz `count` → 400 (Türkçe).
  *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: count
+ *         required: false
+ *         schema: { type: integer, minimum: 1, maximum: 20, default: 1 }
  *     responses:
- *       200: { description: "{ enabled, min, max, last, next, lastCode, nextCode }" }
+ *       200: { description: "{ enabled, min, max, last, next, lastCode, nextCode, nextCodes }" }
+ *       400: { description: "Geçersiz adet" }
  */
 // `admin:settings` DE kabul edilir: göstergenin tüketicisi Genel Ayarlar ekranı ve
 // oradaki yönetici `workorder:read` taşımak zorunda değil. Tersi kurgu göstergeyi
 // panelde sessizce boş bırakırdı.
 // `mobile:hizli-is-emri` — Hızlı İş Emri sihirbazının ilk adımı "SON PARTİ: P47"
 // göstergesini basar (2026-08-17). Saha kullanıcısı `workorder:read` taşımaz.
+// `workorder:write` — belgeden İE formu "Bizim parti no: Otomatik · sıradaki" tahminini basar (açan kişi okur).
 router.get(
   "/number-state",
   verifyToken,
-  requireAnyPermission("workorder:read", "admin:settings", "mobile:hizli-is-emri"),
+  requireAnyPermission("workorder:read", "workorder:write", "admin:settings", "mobile:hizli-is-emri"),
   controller.numberState,
 );
 

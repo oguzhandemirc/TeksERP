@@ -32,13 +32,13 @@ export const INCOMING_DOCUMENTS_PATH = "/operations/gelen-belgeler";
 function TemplateLinks() {
   return (
     <PermissionGate permission="gelen-belge:template">
-      <Button variant="ghost" asChild>
+      <Button variant="outline" asChild>
         <Link to={SENDER_TEMPLATES_PATH}>
           <FileCog className="mr-1 h-4 w-4" />
-          Gönderen şablonları
+          Belge tipleri
         </Link>
       </Button>
-      <Button variant="ghost" asChild>
+      <Button variant="outline" asChild>
         <Link to={CUSTOMER_DEFAULTS_PATH}>
           <PackageCheck className="mr-1 h-4 w-4" />
           Müşteri varsayılanları

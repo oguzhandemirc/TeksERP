@@ -48,6 +48,9 @@ export type MainStackParamList = {
   HizliSiparis: undefined;
   // Çuvalsız sevk (dökme / araba) — Paketleme'den müşteri seçili açılır.
   CuvalsizSevk: { customerId: string; customerName: string; branchId?: string | null };
+  // El terminali sevk (bayrak `shipping.handheldCreateEnabled`): cari seçimi → okutma ekranı.
+  SevkCariSec: undefined;
+  SevkOkut: { shipmentId: string; shipmentNo?: string };
   KartelaSevkGecmisi: undefined;
   KartelaKabulGecmisi: undefined;
   FasonSevkGecmisi: undefined;

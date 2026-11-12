@@ -26,6 +26,8 @@ export interface Station {
    * `appliesQuality` artık yalnız ara istasyon kart akışıdır; muayene bu alandır.
    */
   inspectionEnabled: boolean;
+  /** Duruş bildirimi açık mı (false → tablet "Duruş" çipi yok, sunucu açılışı reddeder). Eski backend göndermez → açık. */
+  machineStopEnabled?: boolean;
   /** Devere: bu istasyonun makineleri LEVENT SARAR (WOUND.machineId adayı). */
   producesWarpBeam: boolean;
   /** Devere Faz 3: bu istasyonun makinelerine LEVENT BAĞLANIR (dokuma/raşel); yuva kapısı budur. */

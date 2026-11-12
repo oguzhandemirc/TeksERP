@@ -12,7 +12,7 @@ import { requirePermission } from "../../middlewares/rbac.middleware";
 import { requireReportOpen } from "../../middlewares/report.middleware";
 import { requireDokumaEnabled, requireMaliyetEnabled } from "../../middlewares/module.middleware";
 import { yarnNeedReport } from "../../services/reports/yarn-need.report.service";
-import { buildYarnNeedSunumu } from "../../services/reports/yarn-need.sunum";
+import { buildYarnNeedSunumu, yarnReservationWarnings } from "../../services/reports/yarn-need.sunum";
 import { requireFinanceEnabled } from "../../middlewares/finance.middleware";
 import { reportEnvelope } from "../../services/reports/_shared";
 import { coreDayRangeQuerySchema, resolveCoreDayRange } from "../../services/reports/temel/_day-range";
@@ -47,7 +47,7 @@ export const yarnNeedQuerySchema = z.object({
  *       - { in: query, name: musteriId, schema: { type: string, format: uuid } }
  *       - { in: query, name: urunId, schema: { type: string, format: uuid } }
  *     responses:
- *       200: { description: "v2 sunum zarfı (data.tablo · anaSayi · uyarilar) + data.detay (satirlar[iplik, cozguKg, atkiKg, ihtiyacKg, serbestStokKg, emanetKg, acikAlisKg, eksikKg, eksikBelirsiz] · ozet · meta[yapisiEksik, olculemeyen, leventler, kaynaklar, hesapZamani])" }
+ *       200: { description: "v2 sunum zarfı (data.tablo · anaSayi · uyarilar) + data.detay (satirlar[iplik, cozguKg, atkiKg, ihtiyacKg, serbestStokKg, emanetKg, acikAlisKg, eksikKg, eksikBelirsiz] · ozet · meta[yapisiEksik, olculemeyen, leventler, kaynaklar, hesapZamani]); ayar dokuma.yarnReservationEnabled açıkken satır ayrilanKg/serbestKg, ozet.ayrilanKg, meta.ayirma ve gövdede warnings" }
  *       400: { description: Tanınmayan ya da geçersiz parametre }
  *       403: { description: Maliyet modülü kapalı (MODULE_DISABLED), rapor kapalı ya da yetki yok }
  */
@@ -56,7 +56,8 @@ router.get("/iplik-ihtiyaci", requireReportOpen("maliyet/iplik-ihtiyaci"), requi
     const q = yarnNeedQuerySchema.parse(req.query);
     const opts = { netle: q.netle !== "0", leventDus: q.leventDus !== "0", musteriId: q.musteriId, urunId: q.urunId };
     const detay = await yarnNeedReport(opts);
-    res.status(200).json({ success: true, data: { ...buildYarnNeedSunumu(detay, opts), detay } });
+    const warnings = yarnReservationWarnings(detay);
+    res.status(200).json({ success: true, data: { ...buildYarnNeedSunumu(detay, opts), detay }, ...(warnings.length ? { warnings } : {}) });
   } catch (e) {
     next(e);
   }

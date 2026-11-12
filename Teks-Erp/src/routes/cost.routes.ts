@@ -314,10 +314,17 @@ const machineRateValues = {
 };
 const machineRateCreateSchema = z.object({ machineId: z.string().uuid("Geçersiz makine ID"), ...machineRateValues }).strict();
 const machineRateChangeSchema = z.object(machineRateValues).strict();
-const normValues = { qtyPerM: decimalInput, note: z.string().nullable().optional(), clientToken: clientTokenField };
+const normValues = {
+  qtyPerM: decimalInput,
+  // Gönderilmezse PER_METER (eski istemci bayt-aynı).
+  basis: z.enum(["PER_METER", "PER_ROLL"], { message: "Geçersiz taban (PER_METER | PER_ROLL)" }).optional(),
+  note: z.string().nullable().optional(),
+  clientToken: clientTokenField,
+};
 const normCreateSchema = z.object({
   serviceItemId: z.string().uuid("Geçersiz hizmet kalemi ID"),
   consumableItemId: z.string().uuid("Geçersiz sarf kalemi ID"),
+  propertyValueId: z.string().uuid("Geçersiz çeşit ID").nullable().optional(),
   ...normValues,
 }).strict();
 const normChangeSchema = z.object(normValues).strict();
@@ -444,8 +451,8 @@ router.get("/consumable-norms", requirePermission("cost:read"), wrap(async (req,
 }));
 
 router.post("/consumable-norms", requirePermission("cost:write"), wrap(async (req, res) => {
-  const { serviceItemId, consumableItemId, ...values } = normCreateSchema.parse(req.body ?? {});
-  const r = await createConsumableNorm(serviceItemId, consumableItemId, values, actorOf(req));
+  const { serviceItemId, consumableItemId, propertyValueId, ...values } = normCreateSchema.parse(req.body ?? {});
+  const r = await createConsumableNorm({ serviceItemId, consumableItemId, propertyValueId: propertyValueId ?? null }, values, actorOf(req));
   res.status(201).json({ success: true, data: { ...r.row, previousId: r.previousId }, message: "Sarf normu kaydedildi." });
 }));
 

@@ -36,6 +36,7 @@ export const NOTICE_TITLE: Record<string, string> = {
   MULTI_REGION: "Fotoğrafta birden çok bölge",
   TABLE_TOTALS_AMBIGUOUS: "Birden çok toplam satırı",
   TABLE_TOTALS_ORPHAN: "Bağlanamayan toplam satırı",
+  TABLE_TOTALS_BY_ORDER: "Toplam satırı partiye sırayla bağlandı",
   TABLE_ROWS_SKIPPED: "Çözülemeyen satırlar atlandı",
   TABLE_NOT_FOUND: "Tablo bulunamadı",
   LINE_SKIPPED_NO_METERS: "Metresi okunamayan satır atlandı",
@@ -49,6 +50,9 @@ export const NOTICE_TITLE: Record<string, string> = {
   PAGE_INCOMPLETE: "Belgenin diğer sayfaları eksik",
   SERVER_COMPLETED: "Boş alanlar sunucu okumasıyla dolduruldu",
   BATCH_NO_DIFFERS: "Parti no farklı okundu",
+  KG_FROM_METER_CELL: "Kg metre hücresinden okunuyor",
+  METER_VALUES_DIFFER: "Belgede iki farklı metre",
+  KG_METER_RATIO: "Kg / metre oranı olağan dışı",
 };
 const OTHER_TITLE = "Okuma uyarısı";
 

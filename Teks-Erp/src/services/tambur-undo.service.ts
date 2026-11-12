@@ -71,6 +71,7 @@
 // HER kaydı somut listeler; apply tx-içi TAZE guard'larla (atomik claim) korunur.
 // =============================================================================
 
+import { reverseBirthConsumptionTx } from "./helpers/consumable-stock.helper";
 import { ACTIVE_OPERATION, revokeRollOperations } from "./helpers/roll-operation.helper";
 import {
   revokePlanDeviationsTx,
@@ -115,6 +116,8 @@ import { InventoryService } from "./inventory.service";
 import { assertRollsRevivable } from "./helpers/item-usage.helper";
 import { ACTIONABLE_ROLL_ERROR_WHERE } from "./helpers/roll-error-scope.helper";
 import { TERIM } from "../constants/terim";
+
+const TAMBUR_UNDO_CONSUMABLE_REASON = "Tambur geri alındı — top başına sarf iadesi";
 
 /**
  * Elle eklenen topu geri alırken İKİNCİ BİR İPTAL MOTORU YAZILMAZ.
@@ -1428,6 +1431,8 @@ export class TamburUndoService {
       cutRevokedIds = await revokeUndoneCutReadingsTx(tx, [childId], userId);
       // D4-F2 TERS YOL: iptal edilen parçanın müşteri kodu damgalanır (basılı etiket ölü topa çözülmesin).
       codesRevoked = await revokeCustomerCodesOfRollsTx(tx, { rollIds: [childId], userId: userId ?? null, reason: TAMBUR_UNDO_CODE_REASON });
+      // Top başına sarf (PER_ROLL) çocuğun doğumuna bağlı — iptal claim'iyle aynı tx'te ters kayıt.
+      await reverseBirthConsumptionTx(tx, [childId], userId ?? null, TAMBUR_UNDO_CONSUMABLE_REASON);
 
       // DEPO DEFTERİ — çocuğun doğarken yazdığı GİRİŞ satırı terslenir. Yoksa
       // iptal edilen metraj defterde depoda kalır ve her geri alma turu depoya
@@ -1685,6 +1690,8 @@ export class TamburUndoService {
       cutRevokedIds = await revokeUndoneCutReadingsTx(tx, [childId], userId);
       // D4-F2 TERS YOL: iptal edilen parçanın müşteri kodu damgalanır (basılı etiket ölü topa çözülmesin).
       codesRevoked = await revokeCustomerCodesOfRollsTx(tx, { rollIds: [childId], userId: userId ?? null, reason: TAMBUR_UNDO_CODE_REASON });
+      // Top başına sarf (PER_ROLL) çocuğun doğumuna bağlı — iptal claim'iyle aynı tx'te ters kayıt.
+      await reverseBirthConsumptionTx(tx, [childId], userId ?? null, TAMBUR_UNDO_CONSUMABLE_REASON);
 
       // DEPO DEFTERİ — ÖNCE grup (ebeveyn OUT + çocuk IN), sonra çocuğun kalan
       // ileri satırları. Bu modda metraj ebeveyne DAİMA geri konur (aşağısı),
@@ -1963,6 +1970,7 @@ export class TamburUndoService {
       cutRevokedIds = await revokeUndoneCutReadingsTx(tx, ids, userId);
       // D4-F2 TERS YOL: iptal edilen parçanın müşteri kodu damgalanır (basılı etiket ölü topa çözülmesin).
       codesRevoked = await revokeCustomerCodesOfRollsTx(tx, { rollIds: ids, userId: userId ?? null, reason: TAMBUR_UNDO_CODE_REASON });
+      await reverseBirthConsumptionTx(tx, ids, userId ?? null, TAMBUR_UNDO_CONSUMABLE_REASON);
 
       // DEPO DEFTERİ — TÜM çocukların giriş satırları terslenir. FULL'de öksüz
       // satır sayısı çocuk sayısı kadar olurdu (2026-08-09 vakasında 14 top).

@@ -12,6 +12,7 @@
 import { Prisma, StationKind } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
+import { ekranYolu } from "../../constants/panel-ekran-yolu";
 import { SETTING_KEYS, readDokumaEnabled, readMachineStopTrackingEnabled, readProductionEnabled } from "../system-setting.service";
 import { licenseModuleError } from "../../lib/license/module-ceiling";
 import { assertStopShiftWritableTx } from "./machine-stop-context.helper";
@@ -96,6 +97,17 @@ export function assertMachineStopKindAllowed(r: MachineStopRegime, kind: Station
       code: "STOP_STATION_KIND_UNSUPPORTED", stationKind: kind,
     });
   }
+}
+
+/**
+ * İSTASYON KAPISI (2026-11-09): `Station.machineStopEnabled = false` iken insan duruş AÇAMAZ → 400 `STOP_STATION_DISABLED`.
+ * Yalnız açılış çağırır — açık duruşu kapatma/sınıflama serbest kalır (kilitli duruş olmaz); makine sinyali çağırmaz.
+ */
+export function assertStationStopEnabled(station: { machineStopEnabled: boolean }, machineId: string): void {
+  if (station.machineStopEnabled) return;
+  throw AppError.badRequest(`Bu istasyonda duruş bildirimi kapalı (${ekranYolu("uretimIstasyonlari")}: istasyon kartında “Duruş bildirimi”).`, {
+    code: "STOP_STATION_DISABLED", machineId,
+  });
 }
 
 function assertKindInPermissionScope(kind: StationKind, scope: MachineStopKindScope): void {

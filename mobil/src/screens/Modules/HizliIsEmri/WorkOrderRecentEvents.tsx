@@ -7,6 +7,7 @@ import { workOrderService } from '../../../services/workOrder.service';
 import { colors, spacing } from '../../../theme';
 import { TERIM } from '../../../lib/terim';
 import { formatFactory } from '../../../lib/factory-time';
+import { stripDeviceId } from './workOrderDetailView';
 
 /**
  * İş emrinin son 5 hareketi — salt-okunur özet (kullanıcı kararı S9). Tam liste,
@@ -35,11 +36,11 @@ export default function WorkOrderRecentEvents({ workOrderId }: { workOrderId: st
             <View style={styles.body}>
               <Text style={styles.head} numberOfLines={1}>
                 {r.title}
-                {r.detail ? ` · ${r.detail}` : ''}
+                {stripDeviceId(r.detail) ? ` · ${stripDeviceId(r.detail)}` : ''}
               </Text>
               <Text style={styles.meta} numberOfLines={1}>
                 {[r.actor, r.channel, r.trigger].filter(Boolean).join(' · ')}
-                {r.reason ? ` · Sebep: ${r.reason}` : ''}
+                {stripDeviceId(r.reason) ? ` · Sebep: ${stripDeviceId(r.reason)}` : ''}
               </Text>
             </View>
           </View>
@@ -51,9 +52,9 @@ export default function WorkOrderRecentEvents({ workOrderId }: { workOrderId: st
 }
 
 const styles = StyleSheet.create({
-  section: { marginTop: spacing.md },
+  section: { backgroundColor: colors.surface, borderRadius: 8, padding: spacing.md },
   title: { fontSize: 13, fontWeight: '800', color: colors.textSecondary, marginBottom: spacing.xs },
-  line: { flexDirection: 'row', gap: spacing.sm, paddingVertical: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  line: { flexDirection: 'row', gap: spacing.sm, paddingVertical: 4, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   when: { width: 84, fontSize: 12, color: colors.textMuted, fontWeight: '600' },
   body: { flex: 1 },
   head: { fontSize: 13, fontWeight: '700', color: colors.text },

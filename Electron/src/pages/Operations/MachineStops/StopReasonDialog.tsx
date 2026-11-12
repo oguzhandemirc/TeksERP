@@ -9,10 +9,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import type { ReasonPreset } from "@/pages/ReasonPresets/service";
 import type { MachineStop } from "./types";
+import { useScopedStopReasons } from "./useScopedStopReasons";
 
 interface Props {
   target: MachineStop;
   mode: "classify" | "reclassify";
+  /** Tam aktif liste — duruşun istasyon türü bilinmiyorsa (eski sunucu) kullanılır. */
   presets: ReasonPreset[];
   labelOf: (code: string | null) => string;
   isPending: boolean;
@@ -24,6 +26,8 @@ export function StopReasonDialog({ target, mode, presets, labelOf, isPending, on
   const [code, setCode] = useState<string>("");
   const [note, setNote] = useState("");
   const reclass = mode === "reclassify";
+  // Sunucu kapsam dışı sebebi reddeder (STOP_REASON_OUT_OF_SCOPE) — liste duruşun istasyon türüyle süzülür.
+  const scoped = useScopedStopReasons([target.machine.station?.kind], presets);
   const ok = code !== "" && (!reclass || code !== target.reasonCode);
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -41,10 +45,10 @@ export function StopReasonDialog({ target, mode, presets, labelOf, isPending, on
             <Label>Sebep</Label>
             <Select value={code} onValueChange={setCode}>
               <SelectTrigger>
-                <SelectValue placeholder="Sebep seç..." />
+                <SelectValue placeholder={scoped.isLoading ? "Yükleniyor..." : "Sebep seç..."} />
               </SelectTrigger>
               <SelectContent>
-                {presets.map((p) => (
+                {scoped.presets.map((p) => (
                   <SelectItem key={p.code} value={p.code} disabled={reclass && p.code === target.reasonCode}>
                     {p.label}
                   </SelectItem>

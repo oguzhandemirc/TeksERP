@@ -1,12 +1,16 @@
 // Canlı okuma oylama/kilit: son N yanıtta ≥K aynı normalize değer → kilit; kilitli alanı okuma değiştirmez; elle düzeltme
 // kilidi "user" yapar; kilit açılınca eski oylar yeniden kilitlemez; belge türü değişince panel baştan kurulur.
-import { LIVE_VOTE_QUORUM, LIVE_VOTE_WINDOW } from './liveTuning';
+import { LIVE_VOTE_QUORUM, LIVE_VOTE_RELOCK, LIVE_VOTE_WINDOW } from './liveTuning';
 import {
   EMPTY_VOTE,
   allLiveLocked,
   applyLiveReading,
   editLiveField,
+  isLabelLikeValue,
+  isLiveAbsent,
   liveFieldStatus,
+  liveSuggestion,
+  userLockedLiveKeys,
   lockedLiveValues,
   normalizeLiveValue,
   topVote,
@@ -96,5 +100,72 @@ describe('liveVote', () => {
     s = editLiveField(s, 'y', 'B-1');
     expect(allLiveLocked(s)).toBe(true);
     expect(lockedLiveValues(s)).toEqual({ x: 'a', y: 'B-1' });
+  });
+});
+
+describe('liveVote — kendini düzelten kilit, belgede yok, öneri, etiket ve netlik seddi (2026-11-09)', () => {
+  it('A ⭐ oy kilidi kendini düzeltir: son 5in ≥4ü kilitten farklı aynı değer → kilit geçer + "düzeltildi"', () => {
+    expect(LIVE_VOTE_RELOCK).toBe(4);
+    let s = feed(EMPTY_VOTE, [{ x: 'a' }, { x: 'a' }, { x: 'a' }]);
+    expect(s.fields[0].lock).toEqual({ value: 'a', by: 'vote' });
+    s = feed(s, [{ x: 'b' }, { x: 'b' }, { x: 'b' }]);
+    expect(s.fields[0].lock?.value).toBe('a'); // 3 farklı yetmez
+    s = applyLiveReading(s, reading({ x: 'b' }));
+    expect(s.fields[0].lock).toEqual({ value: 'b', by: 'vote' });
+    expect(s.fields[0].corrected).toBeGreaterThan(0);
+    s = feed(s, [{ x: 'b' }, { x: 'b' }, { x: 'b' }]);
+    expect(s.fields[0].corrected).toBe(0); // işaret kısa sürer
+  });
+
+  it('A ⭐ elle kilit ("user") oylamadan asla etkilenmez', () => {
+    let s = editLiveField(feed(EMPTY_VOTE, [{ x: 'a' }]), 'x', 'ELLE');
+    s = feed(s, [{ x: 'z' }, { x: 'z' }, { x: 'z' }, { x: 'z' }, { x: 'z' }]);
+    expect(s.fields[0].lock).toEqual({ value: 'ELLE', by: 'user' });
+    expect(userLockedLiveKeys(s)).toEqual(['x']);
+  });
+
+  it('B ⭐ son 5 yanıtın hiçbirinde değer yok → "Belgede yok", tamam sayılır; değer gelince oylamaya döner', () => {
+    let s = feed(EMPTY_VOTE, [{ cins: null, m: 'a' }, { cins: null, m: 'a' }, { cins: null, m: 'a' }, { cins: null, m: 'a' }]);
+    expect(liveFieldStatus(s.fields[0])).toBe('empty'); // 4 yanıt: henüz değil
+    s = applyLiveReading(s, reading({ cins: null, m: 'a' }));
+    expect(isLiveAbsent(s.fields[0])).toBe(true);
+    expect(liveFieldStatus(s.fields[0])).toBe('absent');
+    expect(allLiveLocked(s)).toBe(true);
+    expect(lockedLiveValues(s)).toEqual({ m: 'a' }); // forma değer yazmaz
+    s = applyLiveReading(s, reading({ cins: 'Saten', m: 'a' }));
+    expect(liveFieldStatus(s.fields[0])).toBe('candidate');
+    expect(allLiveLocked(s)).toBe(false);
+  });
+
+  it('C kilitli alanda son kareler farklıysa öneri; dokununca elle kilit', () => {
+    let s = feed(EMPTY_VOTE, [{ x: 'a' }, { x: 'a' }, { x: 'a' }]);
+    expect(liveSuggestion(s.fields[0])).toBeNull();
+    s = feed(s, [{ x: 'b' }]);
+    expect(liveSuggestion(s.fields[0])).toBeNull(); // tek kare gürültü
+    s = feed(s, [{ x: 'b' }]);
+    expect(liveSuggestion(s.fields[0])).toBe('b');
+    s = editLiveField(s, 'x', 'b');
+    expect(s.fields[0].lock).toEqual({ value: 'b', by: 'user' });
+    expect(liveSuggestion(s.fields[0])).toBeNull();
+  });
+
+  it('E etiket-benzeri değer oy değildir (yalnız harf + ":" / bilinen başlık sözcükleri); gerçek değer geçer', () => {
+    for (const v of ['TARİH', 'Tarih:', 'MÜŞTERİ', 'Cinsi :', 'PARTİ NO', 'tarih']) expect(isLabelLikeValue(v)).toBe(true);
+    for (const v of ['Saten', 'P-12', '1.250', 'Lacivert', 'No: 12', 'KIRMIZI']) expect(isLabelLikeValue(v)).toBe(false);
+    const s = feed(EMPTY_VOTE, [{ x: 'TARİH' }, { x: 'TARİH' }, { x: 'TARİH' }]);
+    expect(s.fields[0].lock).toBeNull();
+    expect(s.fields[0].history).toEqual([null, null, null]);
+  });
+
+  it('F bulanık kare oy değildir: geçmişe eklenmez (pencere kaymaz), aday görünür', () => {
+    let s = feed(EMPTY_VOTE, [{ x: 'a' }, { x: 'a' }]);
+    s = applyLiveReading(s, reading({ x: 'q' }), { counts: false });
+    s = applyLiveReading(s, reading({ x: 'q' }), { counts: false });
+    s = applyLiveReading(s, reading({ x: 'q' }), { counts: false });
+    expect(s.fields[0].history).toEqual(['a', 'a']);
+    expect(s.fields[0].candidate).toBe('q');
+    expect(s.fields[0].lock).toBeNull();
+    s = applyLiveReading(s, reading({ x: 'a' }));
+    expect(s.fields[0].lock?.value).toBe('a');
   });
 });

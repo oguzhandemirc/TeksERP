@@ -72,6 +72,9 @@ export const CUSTOMER_MERGE_RULES: MoveRule[] = [
     // Genel fason F5 (2026-11-08): emanet çıkış belgesinin sahibi — referans bağ, tekillik yok (levent/lot sahibi ikizi).
     { kind: "MOVE", model: "ConsignmentDispatch", table: "consignment_dispatches", column: "ownerCustomerId", label: "Emanet çıkış belgesi (sahip)" },
     { kind: "MOVE", model: "Route", table: "routes", column: "customerId", label: "Rota şablonu" },
+    // 2026-11-10 alıcı kataloğu: aynı katlanmış adlı alıcılar taşımadan ÖNCE hedefinkine birleşir
+    // (`foldConsigneesOnCustomerMergeTx`); kalan satırlar (mezar taşları dahil) partial unique'e girmeden taşınır.
+    { kind: "MOVE", model: "CustomerConsignee", table: "customer_consignees", column: "customerId", label: "Alıcı (etiket)" },
     {
       kind: "CONFLICT",
       model: "CustomerBranch",
@@ -150,6 +153,16 @@ export const CUSTOMER_MERGE_RULES: MoveRule[] = [
       uniqueOn: ["customerId", "templateId"],
       policy: "UNION",
       why: "Saf M:N kolaylık bağı — birleşim kayıpsız ve doğru anlam.",
+    },
+    {
+      kind: "CONFLICT",
+      model: "CustomerLabelTemplateOption",
+      table: "customer_label_template_options",
+      column: "customerId",
+      label: "Etiket şablonu seçeneği",
+      uniqueOn: ["customerId", "kind", "templateId"],
+      policy: "UNION",
+      why: "Ek seçenek listesi — birleşim kayıpsız; varsayılan `CustomerTemplateRoute`ta (SKIP, survivor'ınki) kalır.",
     },
     // —— Ticaret / ön muhasebe bacağı ——————————————————————————————————————
     // Bu dört FK ana veri birleştirmesinden SONRA main'e girdi (finans + satın

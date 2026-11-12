@@ -1,6 +1,7 @@
 // Gülkesim K27 WARN + formApproval=WITH_WORK_ORDER: iş emri formundan kayıt 409 `DELIVERY_NOTE_DUPLICATE_DOC_NO_ACTIVE`
 // → genel "Kaydedilemedi" yerine eş künyesi kutusu; "Yine de onayla" gövdeye `confirmDuplicateDocNo: true` ekleyip yeniden
-// gönderir (tekli form + toplu satır). BLOCK kodu bugünkü genel hata metninde kalır.
+// gönderir (tekli form + toplu satır). BLOCK kodu bugünkü genel hata metninde kalır. Aynı müşteri parti no 409'u aynı
+// kutuda: WARN "Yine de aç" `confirmDuplicateBatchNo` + önceki belge no onayıyla, BLOCK yalnız bilgi ("Tamam").
 // Negatif sonda: `noteWorkOrderBody` çağrısından bayrak düşürülünce "Yine de onayla" vakaları kırmızı.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
@@ -67,7 +68,7 @@ describe("saveDoc gövdesi", () => {
   it("onay bayrağı yalnız istenince gövdeye girer (bugünkü gövde değişmez)", async () => {
     createWO.mockResolvedValue(WO);
     await saveDoc(input);
-    await saveDoc({ ...input, confirmDuplicateDocNo: true });
+    await saveDoc({ ...input, confirms: { confirmDuplicateDocNo: true } });
     expect(createWO.mock.calls[0]?.[1]).not.toHaveProperty("confirmDuplicateDocNo");
     expect(flagOf(1)).toBe(true);
   });
@@ -117,5 +118,59 @@ describe("toplu kayıt", () => {
     expect(createWO.mock.calls[2]?.[0]).toBe("n1");
     expect(flagOf(2)).toBe(true);
     expect(screen.queryByTestId("duplicate-doc-no-confirm")).toBeNull();
+  });
+});
+
+const BATCH_PEERS = [{ id: "p2", noteNo: "GB-0005", customerBatchNo: "ISM1439770", workOrderNumber: "IE0911260003" }];
+const BATCH = (code = "DELIVERY_NOTE_DUPLICATE_BATCH_NO_ACTIVE") => err409(code, { peers: BATCH_PEERS });
+const bodyOf = (call: number) => createWO.mock.calls[call]?.[1] as { confirmDuplicateDocNo?: boolean; confirmDuplicateBatchNo?: boolean } | undefined;
+
+describe("aynı müşteri parti no (tekli form)", () => {
+  const open = async () => {
+    renderWithProviders(<BelgedenIsEmriForm noteId="n1" route={{ id: "rt", name: "Kurşun" }} />);
+    const save = await screen.findByTestId("oie-save");
+    await waitFor(() => expect(save).toBeEnabled());
+    await userEvent.click(save);
+  };
+  it("⭐ belge no onayından sonra parti no 409 → 'Yine de aç' iki bayrakla gönderir", async () => {
+    createWO.mockRejectedValueOnce(ACTIVE()).mockRejectedValueOnce(BATCH()).mockResolvedValueOnce(WO);
+    await open();
+    await userEvent.click(within(await screen.findByTestId("duplicate-doc-no-confirm")).getByTestId("duplicate-doc-no-force"));
+    const box = await screen.findByTestId("duplicate-batch-no-confirm");
+    expect(box).toHaveTextContent("BU PARTİ ZATEN VAR");
+    expect(within(box).getByTestId("duplicate-batch-no-peer")).toHaveTextContent("ISM1439770 → IE0911260003");
+    expect(screen.queryByTestId("oie-error")).toBeNull();
+    await userEvent.click(within(box).getByRole("button", { name: "Yine de aç" }));
+    await waitFor(() => expect(navigateActive).toHaveBeenCalledWith("/operations/work-orders/w1"));
+    expect(bodyOf(1)).not.toHaveProperty("confirmDuplicateBatchNo");
+    expect(bodyOf(2)).toMatchObject({ confirmDuplicateDocNo: true, confirmDuplicateBatchNo: true });
+  });
+  it("BLOCK → yalnız bilgi: 'Yine de aç' yok, 'Tamam' kutuyu kapatır", async () => {
+    createWO.mockRejectedValueOnce(BATCH("DELIVERY_NOTE_DUPLICATE_BATCH_NO"));
+    await open();
+    const box = await screen.findByTestId("duplicate-batch-no-confirm");
+    expect(within(box).queryByRole("button", { name: "Yine de aç" })).toBeNull();
+    expect(box).toHaveTextContent("izin vermiyor");
+    await userEvent.click(within(box).getByRole("button", { name: "Tamam" }));
+    await waitFor(() => expect(screen.queryByTestId("duplicate-batch-no-confirm")).toBeNull());
+    expect(createWO).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("aynı müşteri parti no (toplu)", () => {
+  it("⭐ satır 409 → 'Yine de aç' yalnız o satırı `confirmDuplicateBatchNo` ile gönderir", async () => {
+    getNote.mockImplementation((id: string) => Promise.resolve(note({ id, noteNo: id })));
+    createWO.mockImplementation((id: string) => (id === "n1" && createWO.mock.calls.length === 1 ? Promise.reject(BATCH()) : Promise.resolve({ ...WO, workOrderNo: `IE-${id}` })));
+    renderWithProviders(<TopluBelgeForm noteIds={["n1", "n2"]} route={{ id: "rt", name: "K" }} />);
+    const save = await screen.findByTestId("oie-bulk-save");
+    await waitFor(() => expect(save).toBeEnabled());
+    await userEvent.click(save);
+    const box = await screen.findByTestId("duplicate-batch-no-confirm");
+    expect(screen.getByTestId("row-n1")).toHaveTextContent("DUPLICATE:Bu parti zaten var");
+    await userEvent.click(within(box).getByRole("button", { name: "Yine de aç" }));
+    await waitFor(() => expect(screen.getByTestId("row-n1")).toHaveTextContent("OK:"));
+    expect(createWO.mock.calls[2]?.[0]).toBe("n1");
+    expect(bodyOf(2)).toMatchObject({ confirmDuplicateBatchNo: true });
+    expect(bodyOf(2)).not.toHaveProperty("confirmDuplicateDocNo");
   });
 });

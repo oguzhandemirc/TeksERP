@@ -9,7 +9,7 @@ import { renderWithProviders } from "@/test/render";
 import { StationKind, StationType } from "@/types/enums";
 import { DEFAULT_STATIONS_VIEW_MODE, STATIONS_VIEW_MODE_KEY, readStationsViewMode, useStationsViewMode, writeStationsViewMode } from "./stationsViewMode";
 import { StationsViewToggle } from "./StationsViewToggle";
-import { buildStationMachineRows } from "./stationMachineRows";
+import { buildStationListItems } from "./stationListItems";
 import { StationListView } from "./StationListView";
 import { visibleStationKinds } from "./visibleStationKinds";
 import type { Station } from "./types";
@@ -62,27 +62,43 @@ describe("Görünüm tercihi", () => {
   });
 });
 
-describe("Liste görünümü — kart ve dosya ile aynı küme", () => {
-  it("⭐ satır = makine, makinesiz istasyon tek satır; süzülmüş küme form enum'uyla aynı (#2 bekçisi)", () => {
+describe("Liste görünümü — satır = istasyon, kart ve dosya ile aynı küme", () => {
+  const items = (stations: Station[], machines = new Map<string, Machine[]>()) =>
+    buildStationListItems(stations, { machinesByStation: machines, peripheralsByMachine: new Map(), capByStation: new Map(), kursunByStation: new Map() });
+
+  it("⭐ çok makineli istasyon TEK satır; makine sayısı sütunda; süzülmüş küme form enum'uyla aynı (#2 bekçisi)", () => {
     const s1 = station({ id: "s1", name: "KK1", kind: StationKind.RAW_QC });
     const s2 = station({ id: "s2", name: "Tezgah", kind: StationKind.WEAVING, consumesWarpBeam: true });
     const s3 = station({ id: "s3", name: "Sevk", kind: StationKind.SHIPPING });
     const stations = [s1, s2, s3].filter((s) => visibleStationKinds({ dokumaEnabled: true, devereEnabled: true }).includes(s.kind));
     expect(stations).toHaveLength(3);
-    const rows = buildStationMachineRows(stations, new Map([["s2", [machine("m1", "s2"), machine("m2", "s2")]]]), new Map(), new Map());
-    expect(rows.map((r) => `${r.station.id}:${r.machine?.id ?? "-"}`)).toEqual(["s1:-", "s2:m1", "s2:m2", "s3:-"]);
-    renderWithProviders(<StationListView rows={rows} canWrite onEditStation={() => {}} onAddMachine={() => {}} machine={{ onEdit: () => {}, onQr: () => {}, onPrintLabel: () => {}, onDeactivate: () => {}, onReactivate: () => {}, onDelete: () => {} }} />);
-    expect(screen.getAllByRole("row")).toHaveLength(1 + rows.length);
-    expect(screen.getByText("Makine m1")).toBeInTheDocument();
-    expect(screen.getAllByText("Levent tüketir")).toHaveLength(2); // tezgahın iki makine satırı — istasyon sütunları tekrarlanır
-    expect(screen.getAllByText("Makine yok")).toHaveLength(2);
-    expect(screen.getAllByTitle("Düzenle")).toHaveLength(2);
+    const list = items(stations, new Map([["s2", [machine("m1", "s2"), machine("m2", "s2"), machine("m3", "s2")]]]));
+    expect(list.map((r) => `${r.station.id}:${r.machines.length}`)).toEqual(["s1:0", "s2:3", "s3:0"]);
+    renderWithProviders(<StationListView items={list} selectedId={null} onSelect={() => {}} />);
+    expect(screen.getAllByTestId("station-row")).toHaveLength(3);
+    expect(screen.getAllByText("Levent tüketir")).toHaveLength(1);
+    expect(screen.getByText("3")).toBeInTheDocument();
+    expect(screen.getByText("Giriş kontrolü (KK1)")).toBeInTheDocument();
+    // Hepsi dahili → "Tip" sütunu çizilmez.
+    expect(screen.queryByRole("columnheader", { name: "Tip" })).toBeNull();
   });
 
-  it("⭐ K22: istasyon KODU listede görünür (formda doğan kimlik listede de görünür)", () => {
+  it("⭐ K22: istasyon KODU listede görünür; fason istasyon varsa Tip sütunu çıkar; tıklama seçer", async () => {
     const s1 = station({ id: "s1", name: "KK1", code: "IST2309260007" });
-    const rows = buildStationMachineRows([s1], new Map(), new Map(), new Map());
-    renderWithProviders(<StationListView rows={rows} canWrite onEditStation={() => {}} onAddMachine={() => {}} machine={{ onEdit: () => {}, onQr: () => {}, onPrintLabel: () => {}, onDeactivate: () => {}, onReactivate: () => {}, onDelete: () => {} }} />);
+    const s2 = station({ id: "s2", name: "Boyahane", type: StationType.EXTERNAL, kind: StationKind.SUBCONTRACTOR });
+    const onSelect = vi.fn();
+    renderWithProviders(<StationListView items={items([s1, s2])} selectedId="s1" onSelect={onSelect} />);
     expect(screen.getByText("IST2309260007")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Tip" })).toBeInTheDocument();
+    expect(screen.getAllByTestId("station-row")[0]).toHaveAttribute("aria-selected", "true");
+    await userEvent.click(screen.getByText("Boyahane"));
+    expect(onSelect).toHaveBeenCalledWith(s2);
+  });
+
+  it("kurşun rozeti varsayılan gramajla görünür", () => {
+    const s1 = station({ id: "s1", name: "KURŞUN", kind: StationKind.PROCESS_QC });
+    const list = buildStationListItems([s1], { machinesByStation: new Map(), peripheralsByMachine: new Map(), capByStation: new Map(), kursunByStation: new Map([["s1", { enabled: true, defaultGramaj: "25 gr" }]]) });
+    renderWithProviders(<StationListView items={list} selectedId={null} onSelect={() => {}} />);
+    expect(screen.getByTestId("kursun-badge")).toHaveTextContent("Kurşun25 gr");
   });
 });

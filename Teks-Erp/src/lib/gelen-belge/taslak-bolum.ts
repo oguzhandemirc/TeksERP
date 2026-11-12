@@ -11,6 +11,9 @@ export interface SectionIdentity {
   /** Bölümün işlem yazısı (boyahanenin; bilgi) ve gönderenin İE no'su ("İş Emri No"; K4: bizim İE'ye künye olarak yazılır). */
   processText: string | null;
   senderWorkOrderNo: string | null;
+  /** Bölümün gelen kumaş adı / gelen rengi (müşteri BEYANI, `desen`/`renk` bölüm alanı; 2026-11-09). Eski taslakta yok. */
+  itemText?: string | null;
+  colorText?: string | null;
 }
 
 /** Bölüm alanlarından işlem / gönderen İE no — dosya şablonu (`islem`, `isEmriNo`) ve tanıtılmış şablon (`islem`, `gonderenIsEmriNo`). */
@@ -41,6 +44,7 @@ export function sectionDeclaredBlocks(reg: RegionExtraction, blockOffset: number
     count: x.declared?.count ?? null, kg: x.declared?.kg ?? null, m: x.declared?.m ?? null,
     batchNo: x.batchNo, orderNo: x.orderNo, topCount: count(x.declaredCount),
     processText: firstOf(x.fields, PROCESS_FIELDS, 120), senderWorkOrderNo: firstOf(x.fields, SENDER_WO_FIELDS, 64),
+    itemText: firstOf(x.fields, ["desen"], 160), colorText: firstOf(x.fields, ["renk"], 120),
   }));
 }
 

@@ -9,6 +9,8 @@ describe('moduleSheetWidth', () => {
     [1024, 'md', 780], // 8" yatay
     [800, 'md', 736], // %92
     [1280, 'sm', 520],
+    [1280, 'xl', 1178], // geniş tek pencere: %92
+    [400, 'xl', 368],
     [400, 'md', 368], // telefon dikey: ekran − 32 (%92 = 368 → aynı)
     [360, 'md', 328],
   ] as const)('%d px %s → %d', (w, size, beklenen) => {

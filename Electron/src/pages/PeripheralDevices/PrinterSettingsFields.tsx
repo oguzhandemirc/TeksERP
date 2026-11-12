@@ -19,8 +19,8 @@ const ROUTE_KINDS: {
   label: string;
   field: "templateRawId" | "templateFinishedId" | "templateSwatchId" | "templateSackId" | "templateMachineId" | "templateWarpBeamId";
 }[] = [
-  { key: "ROLL_RAW", label: "Ham Top (KK1)", field: "templateRawId" },
-  { key: "ROLL_FINISHED", label: "Bitmiş Top (Tambur)", field: "templateFinishedId" },
+  { key: "ROLL_RAW", label: "Ham / Yarı mamul top", field: "templateRawId" },
+  { key: "ROLL_FINISHED", label: "Bitmiş top", field: "templateFinishedId" },
   { key: "SWATCH", label: "Kartela", field: "templateSwatchId" },
   { key: "SACK", label: "Çuval (Sevkiyat)", field: "templateSackId" },
   { key: "MACHINE", label: "Tezgah (Dokuma)", field: "templateMachineId" },

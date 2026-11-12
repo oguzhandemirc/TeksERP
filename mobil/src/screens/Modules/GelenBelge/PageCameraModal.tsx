@@ -13,6 +13,8 @@ import AppModal from '../../../components/AppModal';
 import { withSystemDialog } from '../../../store/lockStore';
 import { colors, spacing, typography } from '../../../theme';
 import { CAPTURE_QUALITY, photoSha256, pickPictureSize, type ScanPage } from './docScan';
+import { useDocTorch } from './docTorch';
+import TorchButton from './TorchButton';
 
 interface Props {
   visible: boolean;
@@ -28,6 +30,7 @@ export default function PageCameraModal({ visible, pageNo, onDismiss, onCaptured
   const cameraRef = useRef<CameraView | null>(null);
   const [pictureSize, setPictureSize] = useState<string | undefined>(undefined);
   const [busy, setBusy] = useState(false);
+  const { torch, toggle: toggleTorch } = useDocTorch(visible);
 
   const onReady = async () => {
     try {
@@ -65,7 +68,10 @@ export default function PageCameraModal({ visible, pageNo, onDismiss, onCaptured
       </Button>
     </View>
   ) : (
-    <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} pictureSize={pictureSize} onCameraReady={() => void onReady()} />
+    <>
+      <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} pictureSize={pictureSize} enableTorch={torch} onCameraReady={() => void onReady()} />
+      <TorchButton on={torch} onPress={toggleTorch} style={styles.torch} testID="belge-tara-flas" />
+    </>
   );
 
   return (
@@ -97,6 +103,7 @@ export default function PageCameraModal({ visible, pageNo, onDismiss, onCaptured
 const styles = StyleSheet.create({
   sheet: { backgroundColor: colors.headerBg, borderRadius: 16, overflow: 'hidden', padding: 0 },
   cameraLayer: { flex: 1, position: 'relative', overflow: 'hidden', justifyContent: 'center', alignItems: 'center' },
+  torch: { position: 'absolute', top: spacing.sm, right: spacing.sm },
   center: { gap: spacing.md, alignItems: 'center', padding: spacing.lg },
   bar: { padding: spacing.md, gap: spacing.sm },
   actions: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.md },

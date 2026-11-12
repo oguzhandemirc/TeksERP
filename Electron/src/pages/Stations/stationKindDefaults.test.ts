@@ -16,10 +16,10 @@ describe("İstasyon formu — türe göre önerilen yetenekler", () => {
     expect(suggestedCapabilities(StationKind.TAMBUR)).toMatchObject({ appliesProperty: true, appliesColor: false });
   });
 
-  it("⭐ muayene önerisi (KQ-D1): yalnız PROCESS_QC + TAMBUR — backend `inspectionDefaultForKind` ile aynı küme; Tambur kart akışına girmez", () => {
+  it("⭐ muayene önerisi (KQ-D1, Tambur 2026-11-09): yalnız PROCESS_QC — backend `inspectionDefaultForKind` ile aynı küme; Tambur muayenesiz doğar", () => {
     const muayeneli = Object.values(StationKind).filter((k) => suggestedCapabilities(k).inspectionEnabled).sort();
-    expect(muayeneli).toEqual([StationKind.PROCESS_QC, StationKind.TAMBUR].sort());
-    expect(suggestedCapabilities(StationKind.TAMBUR).appliesQuality).toBe(false);
+    expect(muayeneli).toEqual([StationKind.PROCESS_QC]);
+    expect(suggestedCapabilities(StationKind.TAMBUR)).toMatchObject({ appliesQuality: false, inspectionEnabled: false, appliesProperty: true });
     expect(suggestedCapabilities(StationKind.PROCESS_QC)).toMatchObject({ appliesQuality: true, inspectionEnabled: true });
     for (const k of [StationKind.RAW_QC, StationKind.SHIPPING, StationKind.OTHER]) {
       expect(Object.values(suggestedCapabilities(k)).some(Boolean)).toBe(false);

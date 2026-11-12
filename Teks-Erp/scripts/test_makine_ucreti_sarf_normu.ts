@@ -250,13 +250,13 @@ async function main(): Promise<void> {
     const hizmet = await kalem(ItemType.SERVICE);
     const sarf = await kalem(ItemType.CONSUMABLE);
     const kumas = await kalem(ItemType.FABRIC);
-    const e4a = await hata(() => createConsumableNorm(kumas, sarf, { qtyPerM: "0.01", clientToken: randomUUID() }, uid));
+    const e4a = await hata(() => createConsumableNorm({ serviceItemId: kumas, consumableItemId: sarf, propertyValueId: null }, { qtyPerM: "0.01", clientToken: randomUUID() }, uid));
     check("§4a ⭐ SERVICE dışı hizmet kalemi → 400 SERVICE_ITEM_INVALID", e4a?.statusCode === 400 && kod(e4a) === "SERVICE_ITEM_INVALID", kod(e4a));
-    const e4b = await hata(() => createConsumableNorm(hizmet, kumas, { qtyPerM: "0.01", clientToken: randomUUID() }, uid));
+    const e4b = await hata(() => createConsumableNorm({ serviceItemId: hizmet, consumableItemId: kumas, propertyValueId: null }, { qtyPerM: "0.01", clientToken: randomUUID() }, uid));
     check("§4b ⭐ CONSUMABLE dışı sarf kalemi → 400 CONSUMABLE_ITEM_INVALID", e4b?.statusCode === 400 && kod(e4b) === "CONSUMABLE_ITEM_INVALID", kod(e4b));
     const tn = randomUUID();
-    const n1 = await createConsumableNorm(hizmet, sarf, { qtyPerM: "0.012500", clientToken: tn }, uid);
-    const n1b = await createConsumableNorm(hizmet, sarf, { qtyPerM: "0.0125", clientToken: tn }, uid);
+    const n1 = await createConsumableNorm({ serviceItemId: hizmet, consumableItemId: sarf, propertyValueId: null }, { qtyPerM: "0.012500", clientToken: tn }, uid);
+    const n1b = await createConsumableNorm({ serviceItemId: hizmet, consumableItemId: sarf, propertyValueId: null }, { qtyPerM: "0.0125", clientToken: tn }, uid);
     check("§4c ⭐ norm: aynı clientToken iki istek → tek satır + replay", n1.row.id === n1b.row.id && (await prisma.serviceConsumableNorm.count({ where: { serviceItemId: hizmet } })) === 1);
     check("§4d birim sarf kaleminden donar (KG)", n1.row.unit === "KG", n1.row.unit);
     const tn2 = randomUUID();
@@ -269,12 +269,12 @@ async function main(): Promise<void> {
     const gecmis = await consumableNormsValidAt(prisma, hizmet, new Date(n1d.revokedAt!.getTime() - 1));
     const simdi = await consumableNormsValidAt(prisma, hizmet, new Date());
     check("§4g ⭐ norm as-of: değişim öncesi eski, sonrası yeni miktar", gecmis.length === 1 && gecmis[0]!.id === n1.row.id && simdi.length === 1 && simdi[0]!.qtyPerM.equals("0.015"), `${gecmis.map((x) => x.qtyPerM.toString())} / ${simdi.map((x) => x.qtyPerM.toString())}`);
-    const e4h = await hata(() => createConsumableNorm(hizmet, sarf, { qtyPerM: "0.03", clientToken: randomUUID() }, uid));
+    const e4h = await hata(() => createConsumableNorm({ serviceItemId: hizmet, consumableItemId: sarf, propertyValueId: null }, { qtyPerM: "0.03", clientToken: randomUUID() }, uid));
     check("§4h aktif norm varken ikinci yaratma → 409 CONSUMABLE_NORM_ACTIVE_EXISTS", kod(e4h) === "CONSUMABLE_NORM_ACTIVE_EXISTS", kod(e4h));
     const sarfsiz = await kalem(ItemType.SERVICE);
-    const e4i = await hata(() => createConsumableNorm(sarfsiz, sarf, { qtyPerM: "-0.001", clientToken: randomUUID() }, uid));
+    const e4i = await hata(() => createConsumableNorm({ serviceItemId: sarfsiz, consumableItemId: sarf, propertyValueId: null }, { qtyPerM: "-0.001", clientToken: randomUUID() }, uid));
     check("§4i ⭐ negatif norm → 400 (Türkçe)", e4i?.statusCode === 400 && /en az 0/.test(e4i.message), e4i?.message);
-    const n0 = await createConsumableNorm(sarfsiz, sarf, { qtyPerM: "0", clientToken: randomUUID() }, uid);
+    const n0 = await createConsumableNorm({ serviceItemId: sarfsiz, consumableItemId: sarf, propertyValueId: null }, { qtyPerM: "0", clientToken: randomUUID() }, uid);
     check("§4j ⭐ sıfır norm ('sarf kullanmaz' açık beyanı) kabul, 0 olarak yazılır", n0.row.qtyPerM.isZero(), n0.row.qtyPerM.toString());
     await revokeConsumableNorm(n0.row.id, null, uid); // §6e/§6f sarfın canlı norm sayısını 1 ölçer
 
@@ -302,16 +302,16 @@ async function main(): Promise<void> {
     const e6a = await hata(() => createMachineCostRate(pasifM, { hourRateTry: "5", clientToken: randomUUID() }, uid));
     check("§6a pasif makine → 409 MACHINE_INACTIVE", e6a?.statusCode === 409 && kod(e6a) === "MACHINE_INACTIVE", kod(e6a));
     const pasifSarf = await kalem(ItemType.CONSUMABLE, false);
-    const e6b = await hata(() => createConsumableNorm(hizmet, pasifSarf, { qtyPerM: "0.1", clientToken: randomUUID() }, uid));
+    const e6b = await hata(() => createConsumableNorm({ serviceItemId: hizmet, consumableItemId: pasifSarf, propertyValueId: null }, { qtyPerM: "0.1", clientToken: randomUUID() }, uid));
     check("§6b pasif sarf kalemi → 409 ITEM_INACTIVE", e6b?.statusCode === 409 && kod(e6b) === "ITEM_INACTIVE", kod(e6b));
     await revokeConsumableNorm(n2.row.id, "deneme", uid);
     const e6c = await hata(() => revokeConsumableNorm(n2.row.id, null, uid));
     const nKalan = await prisma.serviceConsumableNorm.count({ where: { serviceItemId: hizmet } });
     check("§6c kaldırma damgadır (satır durur), ikinci kaldırma 409", kod(e6c) === "CONSUMABLE_NORM_STALE" && nKalan === 2, `${kod(e6c)} n=${nKalan}`);
-    const e6d = await hata(() => createConsumableNorm(hizmet, sarf, { qtyPerM: "0.0125", clientToken: tn }, uid));
+    const e6d = await hata(() => createConsumableNorm({ serviceItemId: hizmet, consumableItemId: sarf, propertyValueId: null }, { qtyPerM: "0.0125", clientToken: tn }, uid));
     check("§6d damgalanmış normun token'ı tekrar → 409 CONSUMABLE_NORM_SUPERSEDED", kod(e6d) === "CONSUMABLE_NORM_SUPERSEDED", kod(e6d));
     // Aktif norm canlı referanstır (MASTER-VERI: canlı referanslı ana veri pasife alınamaz) — iki kalem de.
-    const n6e = await createConsumableNorm(hizmet, sarf, { qtyPerM: "0.02", clientToken: randomUUID() }, uid);
+    const n6e = await createConsumableNorm({ serviceItemId: hizmet, consumableItemId: sarf, propertyValueId: null }, { qtyPerM: "0.02", clientToken: randomUUID() }, uid);
     const arsivle = (itemId: string) => hata(() => transitionItemLifecycle({ itemId, to: ItemLifecycleStatus.ARCHIVED, userId: uid }));
     const e6eS = await arsivle(sarf);
     // D1b: hizmet kartı `service_items`'ta — kendi tek yazarından geçer.

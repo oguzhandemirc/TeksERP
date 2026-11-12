@@ -13,8 +13,8 @@ import { stationKindLabels } from "@/types/enums";
  * yüzden iki hafta boyunca kullanılamadı. Alanı opsiyonel yapma — kayıt
  * "tanımlandı ama kullanılamaz" durumunda doğabildiği sürece unutulmaya devam eder.
  *
- * Liste yalnız `canApplyProperty` istasyonları gösterir (kategorisi 'özellik veren'
- * olmayan fason istasyonu backend'de de reddedilir).
+ * Liste `canApplyProperty` istasyonları gösterir (kategorisi 'özellik veren' olmayan fason istasyonu backend'de de
+ * reddedilir); zaten seçili olanlar uygun olmasa da görünür.
  */
 export function PropertyStationsField({
   value,
@@ -31,17 +31,22 @@ export function PropertyStationsField({
     staleTime: 60_000,
   });
 
-  const items = useMemo<MultiSelectItem[]>(
-    () =>
-      (stationsQ.data?.data ?? [])
-        .filter((s) => s.canApplyProperty)
-        .map((s) => ({
-          id: s.stationId,
-          label: s.stationName,
-          hint: `${s.stationCode} · ${stationKindLabels[s.stationKind] ?? s.stationKind}`,
-        })),
-    [stationsQ.data?.data],
-  );
+  // Seçili ama artık uygun olmayan (yeteneği kapanmış / pasif) istasyon listeden DÜŞMEZ: "2/2 seçili" yazıp hiçbirini
+  // göstermemek yerine işaretli satır + nedeni görünür; kullanıcı kaldırabilir.
+  const items = useMemo<MultiSelectItem[]>(() => {
+    const all = stationsQ.data?.data ?? [];
+    const chosen = new Set(value);
+    const rows: MultiSelectItem[] = all
+      .filter((s) => s.canApplyProperty || chosen.has(s.stationId))
+      .map((s) => ({
+        id: s.stationId,
+        label: s.stationName,
+        hint: `${s.stationCode} · ${stationKindLabels[s.stationKind] ?? s.stationKind}${s.canApplyProperty ? "" : " · özellik vermiyor"}`,
+      }));
+    const known = new Set(all.map((s) => s.stationId));
+    for (const id of value) if (!known.has(id)) rows.push({ id, label: "Pasif istasyon", hint: "Listede yok (pasif) — kaldırabilirsiniz" });
+    return rows;
+  }, [stationsQ.data?.data, value]);
 
   return (
     <MultiSelectCheckboxList

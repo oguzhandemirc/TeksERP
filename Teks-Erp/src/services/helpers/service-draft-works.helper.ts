@@ -24,5 +24,6 @@ export async function toDraftWorkRows(works: ServiceRollWork[], db: Db, reworkOu
     serviceItemId: w.serviceItemId!, processLabel: w.source === "WEAVING" ? `Dokuma · ${w.valueName}` : ROLL_SOURCE[w.source] === "LEAD" ? `Kurşun ${w.valueName}` : w.valueName,
     workOrderStepId: w.workOrderStepId, qty: (w.quantity ?? w.meters).toFixed(3), unit: w.qtyUnit, meterBasis: w.meterBasis,
     unitPrice: (w.unitPrice ?? new Prisma.Decimal(0)).toFixed(4), excludedReason: reworkOurFault ? REWORK_OUR_FAULT : null,
+    ...(w.meterCompare ? { meterCompare: w.meterCompare } : {}),
   }));
 }

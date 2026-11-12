@@ -14,9 +14,12 @@
 //   §6 ⭐ bir belgeden iki İE (belgenin topu ikinci İE'nin partisinde) → MULTIPLE, iki İE de aynı belgeyi gösterir
 //   §6b ⭐ aktif refakat kartı olmayan (tamamlanmış) İE listeye girmez; yalnız o varsa NO_WORK_ORDER + İE no'lu cümle
 //   §7 ⭐ bilinmeyen belge no → NO_DOCUMENT; İE'siz onaylı belge → NO_WORK_ORDER (fotoğraf + elle arama); okuyucu yok 503
+//   §9 ⭐ cihaz okuması (`clientOcr`): sunucu okuma kapalı + clientOcr → eşleşme (DEVICE), okuyucu çağrılmaz; clientOcr yok +
+//      kapalı → bugünkü 409 SERVER_OCR_DISABLED; açık + clientOcr → yine cihaz; boş cihaz okuması + kapalı → UNREADABLE;
+//      durum ucu deviceOcrAccepted; geçersiz clientOcr 400
 //   §8 ⭐ q ile kurşun + tambur açık kart, panel İE listesi fiş no / GB no / parti no'dan bulur; iptal belge eşleşmez
 // Negatif sonda: `whereWorkOrdersOfRolls`tan `batches` dalı çıkarılınca §6 kırmızı; `assertStationLookupEnabled`ten
-// ayar koşulu kaldırılınca §2 kırmızı; arama yükleminden `LOOKUP_NOTE_STATUSES` çıkarılınca §8 iptal kırmızı.
+// ayar koşulu kaldırılınca §2 kırmızı; `photoLookup`ta cihaz dalı kapatılınca §9 kırmızı; arama yükleminden `LOOKUP_NOTE_STATUSES` çıkarılınca §8 iptal kırmızı.
 // =============================================================================
 import { randomUUID, createHash } from "crypto";
 import type { AddressInfo } from "net";
@@ -55,6 +58,18 @@ const fixture0245 = (docNo: string): unknown => {
   const raw = readFileSync(join(FIKSTUR, readdirSync(FIKSTUR).find((f) => f.startsWith("0245"))!), "utf8");
   return JSON.parse(raw.split("914279").join(docNo));
 };
+/** Okuma servisi zarfı → tabletin göndereceği `clientOcr` (kelime + satır dörtgeni; `test_gelen_belge_istemci_ocr` aynası). */
+type Q = [number, number][];
+const rectQuad = (r: { x: number; y: number; width: number; height: number }): Q => [[r.x, r.y], [r.x + r.width, r.y], [r.x + r.width, r.y + r.height], [r.x, r.y + r.height]];
+type Env = { imageWidth: number; imageHeight: number; blocks: Array<{ lines: Array<{ corners?: Array<{ x: number; y: number }>; confidence: number | null; elements: Array<{ text: string; rect: { x: number; y: number; width: number; height: number }; confidence: number | null }> }> }> };
+const asClientOcr = (env: Env) => {
+  const lines = env.blocks.flatMap((b) => b.lines);
+  return {
+    engine: "mlkit", width: env.imageWidth, height: env.imageHeight, rotation: 0,
+    words: lines.flatMap((l, i) => l.elements.map((e) => ({ t: e.text, c: rectQuad(e.rect), l: i, p: e.confidence }))),
+    lines: lines.map((l) => ({ c: (l.corners ?? []).map((p) => [p.x, p.y] as [number, number]), p: l.confidence })),
+  };
+};
 const jpeg = (salt: string) => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.from(`${TAG} ${salt}`)]);
 
 const made = { customers: [] as string[], users: [] as string[], notes: [] as string[], items: [] as string[], stations: [] as string[], routes: [] as string[], scans: [] as string[], workOrders: [] as string[] };
@@ -63,7 +78,7 @@ const SETTINGS = [
   SETTING_KEYS.GELEN_BELGE_UNREVIEWED_APPROVAL, SETTING_KEYS.GELEN_BELGE_ENTRY_MODE, SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER,
   SETTING_KEYS.GELEN_BELGE_BATCH_NUMBER_SOURCE, SETTING_KEYS.GELEN_BELGE_FORM_APPROVAL, SETTING_KEYS.PRODUCTION_REFAKAT_AUTO_PRINT,
   SETTING_KEYS.GELEN_BELGE_STATION_VERIFY_THRESHOLD,
-  SETTING_KEYS.GELEN_BELGE_STATION_DOC_LOOKUP,
+  SETTING_KEYS.GELEN_BELGE_STATION_DOC_LOOKUP, SETTING_KEYS.GELEN_BELGE_SERVER_OCR_ENABLED,
 ];
 
 type WoRow = { id: string; workOrderNumber: string; cardBarcode: string; batchNumbers: string[]; documents: Array<{ noteNo: string; senderDocNo: string | null }> };
@@ -253,6 +268,31 @@ async function run(url: string, sidecar: { url: string; hits: () => number }): P
   const r7d = await lookup(kursunOp, { contentBase64: jpeg(`SERVISSIZ DOC:${UNIQ}`).toString("base64") });
   const r7e = await lookup(kursunOp, { contentBase64: noteA.photo });
   check("§7 okuyucu yok → yeni fotoğraf 503 OCR_SERVICE_UNAVAILABLE; aynı fotoğraf yine bulunur", r7d.status === 503 && r7d.code === "OCR_SERVICE_UNAVAILABLE" && r7e.data?.outcome === "SINGLE", `${r7d.status} ${r7d.code ?? ""} ${r7e.data?.outcome}`);
+
+  console.log("§9 cihaz okuması (clientOcr)");
+  setReaderUrlForTests(sidecar.url);
+  const device = asClientOcr(fixture0245(UNIQ) as Env);
+  const st9 = await call("GET", "/api/gelen-belge/istasyon-okutma", kursunOp);
+  check("§9 durum ucu deviceOcrAccepted true", st9.data?.deviceOcrAccepted === true, JSON.stringify(st9.data));
+  await setSetting(SETTING_KEYS.GELEN_BELGE_SERVER_OCR_ENABLED, false);
+  const st9off = await call("GET", "/api/gelen-belge/istasyon-okutma", kursunOp);
+  check("§9 kapalı: readerConfigured false (bugünkü anlam), deviceOcrAccepted true", st9off.data?.readerConfigured === false && st9off.data?.deviceOcrAccepted === true, JSON.stringify(st9off.data));
+  const h9a = sidecar.hits();
+  const r9a = await lookup(kursunOp, { contentBase64: jpeg(`CIHAZ1 DOC:${UNIQ}`).toString("base64"), clientOcr: device });
+  check("§9 ⭐ sunucu okuma kapalı + clientOcr → DEVICE, MULTIPLE İE1+İE2, okuyucu çağrılmadı", r9a.status === 200 && r9a.data?.source === "DEVICE" && r9a.data?.read?.senderDocNo === UNIQ && ids(r9a) === [wo1.id, wo2.id].sort().join(",") && sidecar.hits() === h9a, `${r9a.status} ${r9a.code ?? ""} ${r9a.data?.source} ${r9a.data?.outcome} ${ids(r9a)} hits=${sidecar.hits() - h9a}`);
+  const r9b = await lookup(kursunOp, { contentBase64: jpeg(`CIHAZ2 DOC:${UNIQ}`).toString("base64") });
+  check("§9 ⭐ clientOcr yok + kapalı → bugünkü 409 SERVER_OCR_DISABLED, okuyucu çağrılmadı", r9b.status === 409 && r9b.code === "SERVER_OCR_DISABLED" && sidecar.hits() === h9a, `${r9b.status} ${r9b.code ?? ""}`);
+  const r9c = await lookup(kursunOp, { contentBase64: jpeg(`CIHAZ3 DOC:${UNIQ}`).toString("base64"), clientOcr: { ...device, words: [], lines: [] } });
+  check("§9 boş cihaz okuması + kapalı → UNREADABLE, kısa cümle", r9c.status === 200 && r9c.data?.outcome === "UNREADABLE" && r9c.data?.message === "Belge okunamadı — tekrar çekin ya da fiş no ile arayın.", `${r9c.status} ${r9c.data?.outcome} ${r9c.data?.message}`);
+  await setSetting(SETTING_KEYS.GELEN_BELGE_SERVER_OCR_ENABLED, true);
+  const r9d = await lookup(kursunOp, { contentBase64: jpeg(`CIHAZ4 DOC:${UNIQ}`).toString("base64"), clientOcr: device, barcodes: [{ format: "code128", value: "X1" }] });
+  check("§9 ⭐ açık + clientOcr (+ barkod) → yine DEVICE, okuyucu çağrılmadı", r9d.status === 200 && r9d.data?.source === "DEVICE" && ids(r9d) === [wo1.id, wo2.id].sort().join(",") && sidecar.hits() === h9a, `${r9d.status} ${r9d.code ?? ""} ${r9d.data?.source} hits=${sidecar.hits() - h9a}`);
+  const r9e = await lookup(kursunOp, { contentBase64: jpeg(`CIHAZ5 DOC:${UNIQ}`).toString("base64"), clientOcr: { ...device, extra: 1 } });
+  check("§9 geçersiz clientOcr → 400 CLIENT_OCR_INVALID", r9e.status === 400 && r9e.code === "CLIENT_OCR_INVALID", `${r9e.status} ${r9e.code ?? ""}`);
+  const r9f = await lookup(kursunOp, { contentBase64: noteA.photo, clientOcr: device });
+  check("§9 aynı fotoğraf cihaz okumasından önce (SAME_PHOTO)", r9f.data?.source === "SAME_PHOTO", `${r9f.data?.source}`);
+  await setSetting(SETTING_KEYS.GELEN_BELGE_SERVER_OCR_ENABLED, null);
+  setReaderUrlForTests(null);
   const after = await counts();
   check("§3 ⭐ eşleme okuması satır doğurmaz (tarama/belge/satır/şablon/İE/top sabit)", before === after, `${before} → ${after}`);
 

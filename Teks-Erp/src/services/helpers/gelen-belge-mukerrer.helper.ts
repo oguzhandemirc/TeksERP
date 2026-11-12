@@ -7,18 +7,24 @@
 // BLOCK tekilliği 8044 advisory kilidi (tx'in İLK ifadesi) + tx sonunda satırın GERÇEK çiftiyle kontrol.
 // "Belgenin işi sürüyor mu" TEK tanımı `NOTE_WORK_ONGOING_WHERE` (onay kapısı · taslak şeridi · tarama yeniden kullanımı ·
 // istasyon eşlemesi aynı parçayı okur). sha256 UNIQUE de kalktı: aynı bayt 8045 kilidi altında en yeni kayda bakar.
+// Aynı (sahip, müşteri parti no) `gelenBelge.duplicateBatchNo` (ALLOW varsayılan = bugünkü · WARN · BLOCK): aynı kâğıdın
+// farklı fotoğrafla yeniden okutulması (belge no boş okununca K27 görmez). Kapı onay claim tx'inde, 8046 kilidi altında koşar
+// (özet/parti satırları aynı tx'te yazılır) → eşzamanlı iki onay aynı partiyi geçiremez.
 // =============================================================================
 import { DeliveryNoteStatus, type Prisma, WorkOrderStatus } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
+import { foldCodeForCompare } from "../../utils/code-format";
 import { NO_LIVE_MATERIAL_STATUSES } from "../batch.service";
-import { readDuplicateDocNoMode, type DuplicateDocNoMode } from "../system-setting.service";
+import { readDuplicateDocNoMode, type DuplicateBatchNoMode, type DuplicateDocNoMode } from "../system-setting.service";
 import { whereWorkOrdersOfRolls } from "./workorder-rolls.helper";
 
 /** (sahip, gönderen belge no) BLOCK tekilliği — anahtar `hashtext(senderDocNo)`. Envanter: `period-guard.helper.ts` — **8044**. */
 export const DELIVERY_DOC_NO_LOCK_NS: number = 8044;
 /** Aynı baytın (sha256) eşzamanlı yüklemesi tek kayıt doğurur — anahtar `hashtext(sha256)`. Envanter: **8045**. */
 export const DOCUMENT_SCAN_SHA_LOCK_NS: number = 8045;
+/** (sahip, katlı müşteri parti no) onay kapısı — anahtar `hashtext(sahip:anahtar)`. Envanter: **8046**. */
+export const DELIVERY_BATCH_NO_LOCK_NS: number = 8046;
 
 type Tx = Prisma.TransactionClient;
 type Reader = Pick<typeof prisma, "customerDeliveryNote" | "workOrder">;
@@ -136,6 +142,89 @@ export async function duplicateDocNoNotice(note: PairNote & { status: DeliveryNo
   if ((await readDuplicateDocNoMode()) !== "WARN") return null;
   const peers = await activeDocNoPeers(note);
   return peers.length ? { senderDocNo: note.senderDocNo, peers } : null;
+}
+
+// ── Aynı müşteri parti no ────────────────────────────────────────────────────
+
+/** Parti no karşılaştırma anahtarı: kod katlaması (i/İ, büyük harf) + bütün boşluklar atılır; boş → null. */
+export function batchNoFoldKey(v: string | null | undefined): string | null {
+  const k = v ? foldCodeForCompare(v).replace(/\s+/g, "") : "";
+  return k.length > 0 ? k : null;
+}
+
+export interface BatchNoPeer {
+  id: string;
+  noteNo: string;
+  status: DeliveryNoteStatus;
+  /** Eşte yazılı biçimiyle (katlanmamış) parti no. */
+  customerBatchNo: string;
+  /** İlk iptal dışı iş emri (yoksa null) — tablet "parti → İE" satırı. */
+  workOrderNumber: string | null;
+  workOrderNumbers: string[];
+}
+
+/**
+ * Aynı sahipte, verilen parti no'lardan birini başlıkta ya da özet/parti satırında taşıyan İŞİ SÜREN diğer belgeler
+ * (en yeni önce, en çok 5). Belgenin kendisi (çok partinin kardeş satırları) sayılmaz; iptal belge sürmez.
+ */
+export async function activeBatchNoPeers(note: { id: string; ownerCustomerId: string | null }, batchNos: ReadonlyArray<string | null | undefined>, client: Reader = prisma): Promise<BatchNoPeer[]> {
+  const keys = new Set(batchNos.map(batchNoFoldKey).filter((k): k is string => k !== null));
+  if (!note.ownerCustomerId || keys.size === 0) return [];
+  // Katlama ifadesi Prisma süzgecinde yazılamaz: sahibin işi süren, parti no taşıyan belgeleri okunur, eşleme bellekte.
+  const rows = await client.customerDeliveryNote.findMany({
+    where: { AND: [{ id: { not: note.id }, ownerCustomerId: note.ownerCustomerId }, NOTE_WORK_ONGOING_WHERE, { OR: [{ customerBatchNo: { not: null } }, { lines: { some: { customerBatchNo: { not: null } } } }] }] },
+    select: { id: true, noteNo: true, status: true, customerBatchNo: true, lines: { where: { customerBatchNo: { not: null } }, select: { id: true, customerBatchNo: true } } },
+    orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+  });
+  const out: BatchNoPeer[] = [];
+  for (const r of rows) {
+    if (out.length >= 5) break;
+    const headerHit = keys.has(batchNoFoldKey(r.customerBatchNo) ?? "");
+    const lineHits = r.lines.filter((l) => keys.has(batchNoFoldKey(l.customerBatchNo) ?? ""));
+    if (!headerHit && lineHits.length === 0) continue;
+    // Başlık eşleşirse belgenin bütün topları, yalnız satır eşleşirse o satırların topları.
+    const rollWhere: Prisma.RollWhereInput = headerHit ? { deliveryNoteLine: { noteId: r.id } } : { deliveryNoteLine: { id: { in: lineHits.map((l) => l.id) } } };
+    const wos = await client.workOrder.findMany({
+      where: { AND: [whereWorkOrdersOfRolls(rollWhere), { status: { not: WorkOrderStatus.CANCELLED } }] },
+      select: { workOrderNumber: true },
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+      take: 3,
+    });
+    const nos = wos.map((w) => w.workOrderNumber);
+    const shown = (headerHit ? r.customerBatchNo : lineHits[0]!.customerBatchNo)!.trim();
+    out.push({ id: r.id, noteNo: r.noteNo, status: r.status, customerBatchNo: shown, workOrderNumber: nos[0] ?? null, workOrderNumbers: nos });
+  }
+  return out;
+}
+
+const peerText = (peers: ReadonlyArray<BatchNoPeer>): string =>
+  peers.map((p) => `${p.customerBatchNo} → ${p.workOrderNumber ?? p.noteNo}`).join(", ");
+
+/** 8046 kilidi — onay claim tx'inin İLK ifadesi; anahtarlar katlı ve sıralı (çok parti deadlock'suz). */
+async function lockBatchNosTx(tx: Tx, ownerCustomerId: string, batchNos: ReadonlyArray<string | null | undefined>): Promise<void> {
+  for (const k of [...new Set(batchNos.map(batchNoFoldKey).filter(nonEmpty))].sort()) {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(${DELIVERY_BATCH_NO_LOCK_NS}::int, hashtext(${`${ownerCustomerId}:${k}`}))`;
+  }
+}
+
+/**
+ * Onay kapısı — claim tx'inde (`mode` tx DIŞINDA okunur). ALLOW: kilit/sorgu yok (bugünkü). Diğerinde İLK ifade 8046 kilidi,
+ * eşler aynı tx'te okunur. BLOCK: işi süren eş → 409 DUPLICATE_BATCH_NO (bayrak yok sayılır); WARN: bayraksız → 409 ..._ACTIVE.
+ */
+export async function duplicateBatchNoGateTx(tx: Tx, note: { id: string; noteNo: string; ownerCustomerId: string | null }, batchNos: ReadonlyArray<string | null | undefined>, { mode, confirmed }: { mode: DuplicateBatchNoMode; confirmed: boolean | undefined }): Promise<{ warnings: string[]; confirmedPeers: string[] }> {
+  const none = { warnings: [], confirmedPeers: [] };
+  if (!note.ownerCustomerId || mode === "ALLOW") return none;
+  await lockBatchNosTx(tx, note.ownerCustomerId, batchNos);
+  const peers = await activeBatchNoPeers(note, batchNos, tx);
+  if (peers.length === 0) return none;
+  const text = peerText(peers);
+  if (mode === "BLOCK") {
+    throw AppError.conflict(`Bu müşteri parti no işi süren başka kayıtta var (${text}). Aynı parti ikinci kez açılamaz.`, { code: "DELIVERY_NOTE_DUPLICATE_BATCH_NO", peers });
+  }
+  if (!confirmed) {
+    throw AppError.conflict(`Bu müşteri parti no işi süren başka kayıtta var (${text}). Aynı kâğıdı ikinci kez mi okutuyorsunuz?`, { code: "DELIVERY_NOTE_DUPLICATE_BATCH_NO_ACTIVE", peers });
+  }
+  return { warnings: [`${note.noteNo}: aynı müşteri parti no işi süren kayıt varken (${text}) operatör onayıyla kaydedildi.`], confirmedPeers: peers.map((p) => p.noteNo) };
 }
 
 // ── Aynı fotoğraf (sha256) ───────────────────────────────────────────────────

@@ -71,10 +71,18 @@ describe("liste", () => {
     renderWithProviders(<IncomingDocumentsPage />);
     expect(await screen.findByText("GB-0001")).toBeInTheDocument();
     expect(listDeliveryNotes).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 50, status: undefined }));
-    const group = screen.getByRole("group", { name: "Durum süzgeci" });
-    expect(within(group).getByText(/Tümü \(1\)/)).toBeInTheDocument();
-    await userEvent.click(within(group).getByRole("button", { name: /Onaylandı/ }));
+    // Eski çip satırı yok; Durum filtre çubuğunda açılır liste, sayılar sunucu özetinden.
+    expect(screen.queryByRole("group", { name: "Durum süzgeci" })).toBeNull();
+    const row = screen.getByTestId("filter-row");
+    await userEvent.click(within(row).getByRole("button", { name: "Durum süzgeci" }));
+    const all = await screen.findByRole("option", { name: /Tümü/ });
+    expect(all).toHaveTextContent("1");
+    await userEvent.click(screen.getByRole("option", { name: /Onaylandı/ }));
     await waitFor(() => expect(listDeliveryNotes).toHaveBeenLastCalledWith(expect.objectContaining({ status: "APPROVED" })));
+    expect(within(row).getByRole("button", { name: "Durum süzgeci" })).toHaveTextContent("Durum: Onaylandı");
+    // Kutunun ✕'ü süzgeci kaldırır.
+    await userEvent.click(within(row).getByRole("button", { name: "Durum filtresini kaldır" }));
+    await waitFor(() => expect(listDeliveryNotes).toHaveBeenLastCalledWith(expect.objectContaining({ status: undefined })));
   });
   it("Yenile düğmesi çizilir; liste + sekme sayaçlarını yeniden ister", async () => {
     // Okuma durumu çözülmezse düğme "yükleniyor" sayıp pasif kalır (kök anahtar onu da kapsar).

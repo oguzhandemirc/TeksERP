@@ -21,6 +21,10 @@ vi.mock("@/pages/Operations/MachineStops/useStopReasonPresets", () => ({
   }),
 }));
 
+// Salon sebep listesini dokuma türünün kapsamıyla SUNUCUDAN ister (STOP_REASON_OUT_OF_SCOPE ile tutarlı).
+const scoped = vi.hoisted(() => ({ listStopReasonsFor: vi.fn() }));
+vi.mock("@/pages/ReasonPresets/service", () => ({ reasonPresetService: scoped }));
+
 import { StopBulkDialog, type StopDialogMode } from "./StopBulkDialog";
 
 const loom = (id: string): LiveLoom => ({ id, code: `T-${id}`, openStop: null }) as unknown as LiveLoom;
@@ -49,6 +53,10 @@ const toPreview = async () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  scoped.listStopReasonsFor.mockResolvedValue([
+    { code: "ELEKTRIK", label: "Elektrik kesintisi", isActive: true },
+    { code: "PLANLI_BAKIM", label: "Planlı bakım", isActive: true },
+  ]);
   api.preview.mockImplementation(({ action, machineIds }: { action: string; machineIds: string[] }) =>
     Promise.resolve({
       action,
@@ -79,7 +87,7 @@ describe("StopBulkDialog — Duruş bildir", () => {
     show("open");
     const list = screen.getByRole("radiogroup", { name: "Duruş sebebi" });
     expect(within(list).getByRole("radio", { name: "Sebep sonra girilecek" }).getAttribute("aria-checked")).toBe("true");
-    fireEvent.click(within(list).getByRole("radio", { name: "Elektrik kesintisi" }));
+    fireEvent.click(await within(list).findByRole("radio", { name: "Elektrik kesintisi" })); // liste sunucudan (WEAVING kapsamı) gelir
     await toPreview();
     fireEvent.click(screen.getByRole("checkbox", { name: "T-b" }));
     fireEvent.click(submit(/Duruş aç \(1 tezgah\)/));
@@ -180,6 +188,7 @@ describe("StopBulkDialog — Sebep ata", () => {
     show("classify");
     const table = await screen.findByRole("table", { name: "Etkilenecek tezgahlar" });
     expect(api.classifyPreview).toHaveBeenCalledWith({ machineIds: ["a", "b", "c"] });
+    expect(scoped.listStopReasonsFor).toHaveBeenCalledWith("WEAVING");
     expect(api.preview).not.toHaveBeenCalled();
     expect(within(table).getByText("Açık duruşun sebebi zaten girilmiş.")).toBeTruthy();
     expect((screen.getByRole("checkbox", { name: "T-c" }) as HTMLButtonElement).disabled).toBe(true);
@@ -190,7 +199,7 @@ describe("StopBulkDialog — Sebep ata", () => {
     show("classify");
     await screen.findByRole("table", { name: "Etkilenecek tezgahlar" });
     expect((submit(/Sebebi yaz \(2 tezgah\)/) as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(screen.getByRole("radio", { name: "Planlı bakım" }));
+    fireEvent.click(await screen.findByRole("radio", { name: "Planlı bakım" }));
     fireEvent.click(submit(/Sebebi yaz \(2 tezgah\)/));
     await waitFor(() => expect(api.classify).toHaveBeenCalledWith({ reasonCode: "PLANLI_BAKIM", reasonNote: null, rows: [{ stopId: "s-a" }, { stopId: "s-b" }] }));
     expect(await screen.findByText(/Sebep girildi/)).toBeTruthy();

@@ -75,12 +75,15 @@ export function cokBlok(check: Check, gercek: (ad: string) => OcrResult, sablonl
   check("§16j özgün 0245: sıra uyarısı yok, taşma satırı yok", !clean.has("SECTION_ROW_ORDER_AMBIGUOUS") && clean.per.join() === "5,16", clean.info);
 }
 
-/** §16k: iki beyansız blokta Σ'sı tutmayan sahipsiz toplam "en yakın" bloğa yapıştırılmaz (R2). */
+/**
+ * §16k (2026-11-10 kuralı): iki beyansız blokta Σ'sı tutmayan toplam ADEDİYLE (16 = blok 2'nin satır sayısı) bağlanır — konum ya da
+ * "en yakın" değil; fark doğru partide TOTAL_MISMATCH olur, yanlış partide doğmaz, sahipsiz kalmaz.
+ */
 export function cokBlokSahipsiz(check: Check, gercek: (ad: string) => OcrResult, sablonlar: DocumentTemplate[]): void {
   const ocr = edit(gercek("0245-ceki-listesi-a"), (l) => (block1Total(l) ? null : l.text === "3.935,00" ? retext(l, "3.936,00") : l));
   const r = run(ocr, sablonlar);
-  check("§16k iki beyansız blok + Σ tutmayan toplam: hiçbir bloğa bağlanmaz, TABLE_TOTALS_ORPHAN; TOTAL_MISMATCH yanlış partide doğmaz",
-    r.has("TABLE_TOTALS_ORPHAN") && !r.has("TOTAL_MISMATCH") && r.has("TOTAL_UNVERIFIED", 1) && r.has("TOTAL_UNVERIFIED", 2), r.info);
+  check("§16k iki beyansız blok + Σ tutmayan toplam: adetle blok 2'ye, TOTAL_MISMATCH yalnız blok 2, blok 1 TOTAL_UNVERIFIED, sahipsiz yok",
+    r.tb[1]?.m === "3936" && r.has("TOTAL_MISMATCH", 2) && !r.has("TOTAL_MISMATCH", 1) && r.has("TOTAL_UNVERIFIED", 1) && !r.has("TABLE_TOTALS_ORPHAN") && !r.has("TABLE_TOTALS_BY_ORDER"), r.info);
 }
 
 /** §16l–n (D2): tanıtılmış (`u-`) şablonla 0245 — bölüm başına parti/sipariş/işlem/gönderen İE no + tablo + toplam (S9). */

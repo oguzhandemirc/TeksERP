@@ -12,7 +12,11 @@
 
 import type { LabelPayload } from "../../types/label.types";
 import { formatNumber, formatDate } from "./label-html.shared";
-import { formatMeasure, isDefaultUnitSettings, type LabelUnitSettings, type MeasureDim } from "../../config/label-units";
+import {
+  FIELD_DATE_KEYS, FIELD_MEASURE_DIM, formatFieldDate, formatFieldMeasure, formatMeasure, isDefaultUnitSettings, readFieldFormat,
+  type LabelUnitSettings, type MeasureDim,
+} from "../../config/label-units";
+import { factoryDateTr } from "../../constants/time";
 
 /** Alanın etiketteki yerleşim rolü. scan = barkod/QR (sabit sol kolon, metin değil);
  *  headline = büyük vurgulu (ürün adı / metraj); row = normal "Etiket: değer" satırı. */
@@ -56,11 +60,67 @@ function measure(
   return { value: formatMeasure(n, dim, units), present: true, role };
 }
 
+// OPT-IN düz metin satırları — kaynağı olmayan topta boş → satır basılmaz: açık hata notu (KQ-D8) ·
+// müşteri belgesindeki kumaş/renk/top no (E3, H9) · müşteri barkodu (D4-F3) · emanet alıcısı (2026-11-10).
+const OPT_IN_TEXT_KEYS = ["openDefects", "deliveryNoteItemText", "deliveryNoteColorText", "deliveryNoteRollNo", "customerCode", "consigneeName"] as const;
+type OptInTextKey = (typeof OPT_IN_TEXT_KEYS)[number];
+const isOptInTextKey = (key: string): key is OptInTextKey => (OPT_IN_TEXT_KEYS as readonly string[]).includes(key);
+
 /**
  * payload + field key → görüntü değeri/rol. Bilinmeyen key → present:false (atlanır).
  * Roller: barcode/qrCode=scan; itemName + metraj=headline; gerisi=row.
  */
 export function fieldDisplayValue(payload: LabelPayload, key: string): FieldValue {
+  const ov = payload.displayOverrides;
+  if (ov && Object.prototype.hasOwnProperty.call(ov, key)) return overriddenValue(payload, key, ov[key] ?? "");
+  return sourceFieldValue(payload, key);
+}
+
+/**
+ * Kanvas `field` elemanının değeri — eleman `fmt` taşıyorsa ona göre biçimlenir (dönüşüm, sabit hane,
+ * sıfır dolgu, birim metni, saatsiz tarih); `fmt`siz eleman `fieldDisplayValue` ile bayt-aynı. Varlık
+ * (present) ve rol hep kaynaktan: değersiz alan biçimle de ATLANIR. HTML + native + raster bunu çağırır.
+ */
+export function fieldElementValue(payload: LabelPayload, el: { bind: string; fmt?: unknown }): FieldValue {
+  const base = fieldDisplayValue(payload, el.bind);
+  const fmt = el.fmt === undefined ? null : readFieldFormat(el.fmt, el.bind);
+  if (!fmt || !base.present) return base;
+  const dim = FIELD_MEASURE_DIM[el.bind];
+  if (dim) {
+    const ov = payload.displayOverrides;
+    const raw = ov && Object.prototype.hasOwnProperty.call(ov, el.bind)
+      ? Number((ov[el.bind] ?? "").trim().replace(",", "."))
+      : Number((payload as unknown as Record<string, unknown>)[el.bind]);
+    // Elle yazılmış sayı olmayan ezme yazıldığı gibi kalır.
+    if (!Number.isFinite(raw)) return base;
+    return { ...base, value: formatFieldMeasure(raw, dim, fmt, payload.unitSettings?.decimalSep ?? ",") };
+  }
+  if (fmt.date && FIELD_DATE_KEYS.has(el.bind)) {
+    const iso = el.bind === "printedAt" ? payload.printedAt : payload.woundAt;
+    const d = new Date(iso ?? "");
+    if (Number.isNaN(d.getTime())) return base;
+    return { ...base, value: formatFieldDate(factoryDateTr(d), fmt.date) };
+  }
+  return base;
+}
+
+// Ölçü ezmesi sayıysa şablonun birimiyle biçimlenir ("22,5" → "22,5 m"); değilse yazıldığı gibi basılır.
+const MEASURE_DIM: Record<string, MeasureDim> = { widthCm: "cm", lengthMeters: "m", weightKg: "kg" };
+
+/** Elle yazılmış alan: rol kaynaktan korunur, "" → present:false (alan boş basılır). */
+function overriddenValue(payload: LabelPayload, key: string, raw: string): FieldValue {
+  const role = sourceFieldValue(payload, key).role;
+  const v = raw.trim();
+  const dim = MEASURE_DIM[key];
+  if (dim && v !== "") {
+    const n = Number(v.replace(",", "."));
+    if (Number.isFinite(n)) return measure(n, dim, payload.unitSettings, role);
+  }
+  return str(v, role);
+}
+
+function sourceFieldValue(payload: LabelPayload, key: string): FieldValue {
+  if (isOptInTextKey(key)) return str(payload[key]);
   switch (key) {
     case "barcode":
     case "qrCode":
@@ -89,6 +149,9 @@ export function fieldDisplayValue(payload: LabelPayload, key: string): FieldValu
     // Müşterinin etikete istediği parti — boşsa present:false (eleman atlanır).
     case "labelBatchNo":
       return str(payload.labelBatchNo);
+    // Müşteri partisi zinciri: etikete yazılan (tamburda girilen) > gelen belgenin partisi; ikisi de yoksa atlanır.
+    case "customerBatchNo":
+      return str((payload.labelBatchNo ?? "").trim() || payload.deliveryNoteBatchNo);
     case "widthCm":
       return measure(payload.widthCm, "cm", payload.unitSettings);
     case "lengthMeters":
@@ -114,21 +177,6 @@ export function fieldDisplayValue(payload: LabelPayload, key: string): FieldValu
     // Kartelalık damgası — yalnız top işaretliyse anlamlı (headline vurgu).
     case "kartelaMark":
       return { value: "KARTELALIK", present: payload.markedForKartela === true, role: "headline" };
-
-    // Açık hata notu (KQ-D8) — hatasız topta boş → satır basılmaz.
-    case "openDefects":
-      return str(payload.openDefects);
-    // Müşteri belgesindeki kumaş/renk metni (E3) — gelen belgesiz topta boş → satır basılmaz.
-    case "deliveryNoteItemText":
-      return str(payload.deliveryNoteItemText);
-    case "deliveryNoteColorText":
-      return str(payload.deliveryNoteColorText);
-    // Müşteri top no (H9) — gelen belgesiz topta boş → satır basılmaz.
-    case "deliveryNoteRollNo":
-      return str(payload.deliveryNoteRollNo);
-    // Müşteri barkodu (D4-F3) — metin olarak opt-in; kodsuz topta boş → satır basılmaz.
-    case "customerCode":
-      return str(payload.customerCode);
 
     // ── SACK (çuval) alanları — roll/swatch payload'unda undefined → present:false ──
     // sackNo: barkodun okunur karşılığı, etiketin kimliği → headline.

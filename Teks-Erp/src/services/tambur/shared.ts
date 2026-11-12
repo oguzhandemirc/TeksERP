@@ -12,6 +12,7 @@ import {
   type StationPropertyCap,
 } from "../helpers/station-capability-transfer.helper";
 import prisma from "../../lib/prisma";
+import { consumeForTamburBirthTx } from "../helpers/consumable-birth.helper";
 import { assertRollReplayAlive, tokenReplay } from "../helpers/token-replay.helper";
 import {
   Prisma,
@@ -34,16 +35,18 @@ export async function liveCutChildIdsTx(tx: Prisma.TransactionClient, parentId: 
  * Tambur istasyon yeteneği (T1): kesimle doğan çocuğa istasyonun AUTO özellikleri,
  * KALITIMDAN SONRA yazılır (kalıtılmış aynı bayrak no-op; değer seçimi bu yolda yok).
  * Tek boğaz `copyStationCapabilitiesToRoll`; yetenek yoksa sorgusuz döner.
+ * `birth`: OUTPUT = tamburdan ÇIKAN top → top başına sarf (`consumeForTamburBirthTx`); INPUT = tambura
+ * GİREN top (elle eklenen kartlı top) — sarf yok, çocukları kesimde ayrıca düşer (çift sayım olmasın).
  */
 export async function applyTamburCapabilitiesTx(
   tx: Prisma.TransactionClient,
-  args: { caps: StationPropertyCap[]; stationId: string | null | undefined; rollId: string; userId?: string | null },
+  args: { caps: StationPropertyCap[]; stationId: string | null | undefined; rollId: string; userId?: string | null; birth: "OUTPUT" | "INPUT" },
 ): Promise<void> {
   const { caps, stationId, rollId, userId } = args;
   if (caps.length === 0 || !stationId) return;
   const child = await tx.roll.findUniqueOrThrow({ where: { id: rollId }, select: { createdAt: true } });
   const before = await tx.rollProperty.findMany({ where: { rollId, ...ACTIVE_ROLL_PROPERTY }, select: { propertyId: true } });
-  await copyStationCapabilitiesToRoll(tx, { stationId, rollId, caps, userId: userId ?? null });
+  const { propertyIds } = await copyStationCapabilitiesToRoll(tx, { stationId, rollId, caps, userId: userId ?? null });
   // Geri kurulum donörü (tambur-undo birthPropertiesOf) `createdAt <= çocuk.createdAt` satırını
   // atadan kalıtılmış sayar; istasyon satırı aynı ms'ye düşerse ataya dirilirdi → +1 ms ayrıştır.
   const inherited = before.map((r) => r.propertyId);
@@ -51,6 +54,7 @@ export async function applyTamburCapabilitiesTx(
     where: { rollId, ...ACTIVE_ROLL_PROPERTY, createdAt: { lte: child.createdAt }, ...(inherited.length > 0 ? { propertyId: { notIn: inherited } } : {}) },
     data: { createdAt: new Date(child.createdAt.getTime() + 1) },
   });
+  if (args.birth === "OUTPUT") await consumeForTamburBirthTx(tx, { rollId, propertyIds, userId });
 }
 
 /**

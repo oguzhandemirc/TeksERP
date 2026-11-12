@@ -39,6 +39,10 @@ export function hubTiles(entry: TabletWoEntry, a: { canManual: boolean; shortcut
 /** Belgeden dolabilen (ve "belgeden" rozeti taşıyan) form alanları. */
 export type DocFilledKey = 'width' | 'targetQuantity' | 'targetWeight' | 'note';
 
+/** Belgeden hedef kutusuna KOPYALANACAK alanlar (false = kutu boş kalır; `targetPrefill.docCopy`). */
+export type DocCopy = Record<'width' | 'targetQuantity' | 'targetWeight', boolean>;
+const COPY_ALL: DocCopy = { width: true, targetQuantity: true, targetWeight: true };
+
 export interface WoFormExtras {
   targetItemId: string | null;
   targetItemLabel: string | null;
@@ -55,7 +59,7 @@ export interface WoFormExtras {
   plannedEnd: string | null;
   note: string;
   // K30-D: null / anahtarsız = kullanıcı dokunmadı → gövdeye GİTMEZ (sunucu bugünkü gibi türetir).
-  /** İş emri türü; null = otomatik (sipariş kalemi varsa siparişe, yoksa stoğa). */
+  /** İş emri türü; null = sunucu sipariş bağından türetir (kalem varsa siparişe, yoksa stoğa); Fason "Malın sahibi" kartından. */
   woType: WoType | null;
   /** Hedef özellikler (BAYRAK) açık kümesi; null = rota varsayılanları. */
   propertyIds: string[] | null;
@@ -125,12 +129,18 @@ const cleanText = (v: string | null | undefined): string | null => (typeof v ===
  * değerini alır (yoksa boşalır). Öneriler alana YAZILMAZ — "X mi? Evet" çipiyle görevli onaylar.
  */
 export function applyDocRead(s: WoFormState, noteId: string, fields: DocFormFields | null | undefined, suggestions: DocFormSuggestions | null | undefined): WoFormState {
+  return applyDocReadCopy(s, noteId, { fields, suggestions }, COPY_ALL);
+}
+
+/** `applyDocRead` + hedef kutularına kopyalama kararı (`copy[k]=false` → kutu boş kalır; belge değeri ipucu olur). */
+export function applyDocReadCopy(s: WoFormState, noteId: string, read: { fields: DocFormFields | null | undefined; suggestions: DocFormSuggestions | null | undefined }, copy: DocCopy): WoFormState {
   if (s.appliedNoteId === noteId) return s;
-  const f = fields ?? {};
+  const f = read.fields ?? {};
+  const suggestions = read.suggestions;
   const incoming: Record<DocFilledKey, string> = {
-    width: numText(parseFormNumber(f.en)),
-    targetQuantity: numText(parseFormNumber(f.hedefMetraj)),
-    targetWeight: numText(parseFormNumber(f.hedefKg)),
+    width: copy.width ? numText(parseFormNumber(f.en)) : '',
+    targetQuantity: copy.targetQuantity ? numText(parseFormNumber(f.hedefMetraj)) : '',
+    targetWeight: copy.targetWeight ? numText(parseFormNumber(f.hedefKg)) : '',
     note: cleanText(f.not) ?? '',
   };
   const extras = { ...s.extras };
@@ -179,12 +189,12 @@ export function clearDocRead(s: WoFormState): WoFormState {
 }
 
 /** Sipariş kalemi seçildi: boş hedef kumaş / renk / en kalemden dolar (Hızlı İE ile aynı; dolu alan ezilmez). */
-export function applyOrderLine(s: WoFormState, line: { itemId: string; itemName: string; colorId: string | null; width: number | null }): WoFormState {
+export function applyOrderLine(s: WoFormState, line: { itemId: string; itemName: string; colorId: string | null; width: number | null }, widthEnabled = true): WoFormState {
   const e = s.extras;
   const patch: Partial<WoFormExtras> = {};
   if (!e.targetItemId) Object.assign(patch, { targetItemId: line.itemId, targetItemLabel: line.itemName });
   if (!e.targetColorId && line.colorId) patch.targetColorId = line.colorId;
-  if (!e.width.trim() && line.width != null && line.width > 0) patch.width = String(line.width);
+  if (widthEnabled && !e.width.trim() && line.width != null && line.width > 0) patch.width = String(line.width);
   // editExtras ile aynı panel kuralı: hedef kumaş değişince elle seçilen özellik kümesi boşalır.
   if (patch.targetItemId && e.propertyIds !== null) patch.propertyIds = [];
   return { ...s, extras: { ...e, ...patch } };
@@ -204,14 +214,15 @@ export interface ExtrasCtx {
 export function extrasIssues(e: WoFormExtras, c: ExtrasCtx): FormIssue[] {
   const out: FormIssue[] = [];
   const push = (key: WoFieldKey, msg: string) => out.push({ key, text: c.inOther?.(key) ? `${msg} (alan altta "Diğer alanlar" bölümünde)` : msg });
-  if (!c.routeChosen) out.push({ key: 'rota', text: 'Rotayı seçin.' });
+  if (!c.routeChosen) out.push({ key: 'rota', text: 'Üretim Rotasını seçin.' });
   const bad = (t: string) => t.trim() !== '' && parseFormNumber(t) === null;
   if (bad(e.width)) push('en', "En 0'dan büyük olmalı.");
   if (!c.perParty && bad(e.targetQuantity)) push('hedefMetraj', "Hedef metraj 0'dan büyük olmalı.");
   if (!c.perParty && bad(e.targetWeight)) push('hedefKg', "Hedef kg 0'dan büyük olmalı.");
   if (c.hasTambur && !e.foldType) push('katTipi', 'Kat tipini seçin.');
   if (e.plannedStart && e.plannedEnd && e.plannedEnd < e.plannedStart) push('planBitis', 'Planlı bitiş başlangıçtan önce olamaz.');
-  if (e.woType === 'ORDER_PRODUCTION' && e.orderLineIds.length === 0) push('isEmriTuru', 'Siparişe üretim için sipariş kalemi seçin ya da "Stoğa üretim" seçin.');
+  // Formda tür seçici yok (woType yalnız null ya da Fason); savunma: Siparişe üretim kalemsiz gönderilmez.
+  if (e.woType === 'ORDER_PRODUCTION' && e.orderLineIds.length === 0) push('siparis', 'Siparişe üretim için sipariş kalemi seçin.');
   if (e.steps && e.steps.length === 0) push('rotaAdimlari', 'Rotada en az bir adım kalmalı.');
   return out;
 }
@@ -251,16 +262,18 @@ export function derivedTargetQuantity(e: WoFormExtras, incomingMeters: number | 
 }
 
 /** Form ucunun ek alanları: yalnız dolu olanlar gider (anahtarsız = sunucuda bugünkü türetme). */
-export function buildExtraBody(e: WoFormExtras, c: { hasTambur: boolean; perParty?: boolean; route?: ProductionRoute | null }): ExtraBody {
+export function buildExtraBody(e: WoFormExtras, c: { hasTambur: boolean; perParty?: boolean; route?: ProductionRoute | null; ownGoods?: boolean; omitColor?: boolean; omitWidth?: boolean; omitQuantity?: boolean }): ExtraBody {
   const out: ExtraBody = {};
   if (e.targetItemId) out.targetItemId = e.targetItemId;
-  if (e.targetColorId) out.targetColorId = e.targetColorId;
+  // Gizlenen hedef renk sorusunda önceden seçilmiş değer gitmez (siparişten gelen ya da sorulabilen renk gider).
+  if (e.targetColorId && !c.omitColor) out.targetColorId = e.targetColorId;
   const width = parseFormNumber(e.width);
-  if (width !== null) out.width = width;
+  // Kapalı ayarda (hedef en / hedef metraj-kg) gizli kutudan değer gitmez.
+  if (width !== null && !c.omitWidth) out.width = width;
   // S16a: her parti ayrı İE kipinde hedef metraj/kg belge toplamıdır — yalnız tek İE kipinde gider.
-  const qty = c.perParty ? null : parseFormNumber(e.targetQuantity);
+  const qty = c.perParty || c.omitQuantity ? null : parseFormNumber(e.targetQuantity);
   if (qty !== null) out.targetQuantity = qty;
-  const kg = c.perParty ? null : parseFormNumber(e.targetWeight);
+  const kg = c.perParty || c.omitQuantity ? null : parseFormNumber(e.targetWeight);
   if (kg !== null) out.targetWeight = kg;
   if (e.plannedStart) out.plannedStartDate = factoryDayStartIso(e.plannedStart);
   if (e.plannedEnd) out.plannedEndDate = factoryDayStartIso(e.plannedEnd);
@@ -269,7 +282,9 @@ export function buildExtraBody(e: WoFormExtras, c: { hasTambur: boolean; perPart
   if (e.orderLineIds.length) out.orderLineIds = [...e.orderLineIds];
   const note = e.note.trim();
   if (note) out.notes = note;
+  // Tür bağın aynası: kalem bağlıysa gönderilmez (sunucu Siparişe türetir); "Kendi Üretimimiz" + kalemsiz → açıkça Stoğa.
   if (e.woType) out.type = e.woType;
+  else if (c.ownGoods && e.orderLineIds.length === 0) out.type = 'STOCK_PRODUCTION';
   if (e.propertyIds !== null) out.targetPropertyIds = [...e.propertyIds];
   Object.assign(out, planBody(e, c));
   return out;

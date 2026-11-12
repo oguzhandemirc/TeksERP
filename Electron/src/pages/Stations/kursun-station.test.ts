@@ -59,3 +59,11 @@ describe("kurşun gramaj tablosu", () => {
     expect(defaultGramajId([{ id: "a", name: "40" }])).toBeNull();
   });
 });
+
+describe("followAmount (gramaj adı miktarı izler)", () => {
+  it("ad miktarın kendisiyse izler, elle adı korur", async () => {
+    const { followAmount } = await import("./KursunGramajTable");
+    expect(followAmount({ code: "25GR", name: "25 gr", amount: "25", isActive: true, isDefault: false }, "14").name).toBe("14 gr");
+    expect(followAmount({ code: "X", name: "Hafif", amount: "25", isActive: true, isDefault: false }, "14").name).toBe("Hafif");
+  });
+});

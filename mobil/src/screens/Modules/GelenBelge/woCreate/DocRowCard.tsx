@@ -1,5 +1,5 @@
 // Belgeden terbiye iş emri — tek belge satırı: okuma izlenir, bitince form dolar (müşteri önerisi, parti adayı, metre +
-// doğrulama, varsayılan gramaj). Toplu görünüm (`list`) kart + madde listesi; tek form (`single`) şeritlerle, kartsız.
+// doğrulama, varsayılan gramaj). Toplu görünüm (`list`) kart + şeritler + madde listesi; tek form (`single`) şeritsiz, kartsız.
 import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Button, Text } from 'react-native-paper';
@@ -20,11 +20,20 @@ import PartyRows, { useRowParties } from './PartyRows';
 import RollRows from './RollRows';
 import DocHeadBand, { type DocRowVariant } from './DocHeadBand';
 import DocRowOwner from './DocRowOwner';
+import CustomerQuickAddSheet from './CustomerQuickAddSheet';
+import { useCanQuickCreateCustomer } from './useQuickCustomerAdd';
+import { NO_PERMISSION_TEXT } from './useCustomerFromDoc';
 import { GramajField, MeterField, MeterSheet } from './DocRowMeasures';
+import { IncomingKgField, IncomingWidthField } from './DocRowKg';
+import { IncomingDeclaredRow } from './DocRowDeclaredText';
+import { useIncomingShown } from './useIncomingShown';
+import { declaredLayout } from './DeclaredField';
 import { bandTone, type IssueKey } from './woIssues';
 import type { PartyPlanCtx } from './partyPlan';
+import { NoticeStrip } from '../../../../components/form/NoticeStrip';
+import { liveConflictText, liveConflictsOf } from '../live/liveLocks';
 
-export { GramajField } from './DocRowMeasures';
+export { FoldField, GramajField } from './DocRowMeasures';
 
 /** Alt çubuk hapından gelen "şu alanı aç" isteği; `seq` her basışta artar (aynı alana ikinci basış da açar). */
 export interface DocRowOpenRequest {
@@ -39,22 +48,40 @@ interface Props {
   customersLoading: boolean;
   /** Belge masası çok partide gramajı parti başına kendi plan bölümünde çizer. */
   hideGramaj?: boolean;
+  /** Gramajın hemen altına çizilen satır (tek formda kat tipi). */
+  afterGramaj?: React.ReactNode;
   /** `list` (vars.): toplu görünüm/masa kartı; `single`: tek İE formunun sol sütunu. */
   variant?: DocRowVariant;
-  /** Tek formda "Yeniden okut". */
+  /** Tek formda "Yeniden okut" (belgesiz taslakta "Belge ekle"). */
   onReread?: () => void;
+  /** Belgesiz (elle) taslak: sayfa yokken okuma iletileri susar, düğme "Belge ekle". */
+  manual?: boolean;
   /** "Taslağı iptal et" başarılı; verilmezse satır listeden kalkar. */
   onDraftCancelled?: () => void;
   openRequest?: DocRowOpenRequest | null;
   /** Tek formda "her parti ayrı": parti kartında gramaj + makine. */
   partyPlan?: PartyPlanCtx | null;
+  /** Tek formda "Belgeyi önizle" (okutulan sayfalar tam ekran). */
+  onPreview?: () => void;
 }
 
 type Picker = 'owner' | 'batch' | null;
 
+/** Tek formda gramaj + kat tipi "Özellikler" küçük başlığı altında (rotada varsa); ikisi de yoksa başlık da çizilmez. */
+function PropsGroup({ gramaj, fold }: { gramaj: React.ReactNode; fold: React.ReactNode }) {
+  if (!gramaj && !fold) return null;
+  return (
+    <View style={styles.props} testID="ie-form-ozellikler">
+      <Text style={styles.propsHead}>Özellikler</Text>
+      {gramaj}
+      {fold}
+    </View>
+  );
+}
+
 const METER_BAND: { keys: IssueKey[]; warnKeys: IssueKey[]; done: boolean } = { keys: ['kursunMetresi', 'metreDogrula'], warnKeys: ['metreDogrula'], done: true };
 
-export default function DocRowCard({ row, wo, customers, customersLoading, hideGramaj = false, variant = 'list', onReread, onDraftCancelled, openRequest, partyPlan }: Props) {
+export default function DocRowCard({ row, wo, customers, customersLoading, hideGramaj = false, afterGramaj, variant = 'list', onReread, manual = false, onDraftCancelled, openRequest, partyPlan, onPreview }: Props) {
   const { read, detailFailed } = useRowRead(row, wo);
   const [picker, setPicker] = useState<Picker>(null);
   const [meterOpen, setMeterOpen] = useState(false);
@@ -62,6 +89,7 @@ export default function DocRowCard({ row, wo, customers, customersLoading, hideG
   useOpenRequest(openRequest, setPicker, setMeterOpen);
 
   const single = variant === 'single';
+  const shown = useIncomingShown();
   const f = row.form;
   const done = row.result?.kind === 'OPENED' || row.result?.kind === 'DRAFT';
   const locked = done || wo.saving;
@@ -73,20 +101,38 @@ export default function DocRowCard({ row, wo, customers, customersLoading, hideG
 
   return (
     <View style={boxStyle} testID={`belge-satir-${row.noteNo}`}>
-      <DocHeadBand row={row} wo={wo} read={read} detailFailed={detailFailed} variant={variant} onReread={onReread} onDraftCancelled={onDraftCancelled} customers={customers} />
+      <DocHeadBand row={row} wo={wo} read={read} detailFailed={detailFailed} variant={variant} onReread={onReread} manual={manual} onDraftCancelled={onDraftCancelled} customers={customers} onPreview={onPreview} />
       {f && (
         <>
+          {!done && liveConflictsOf(row.detail).map((c) => (
+            <NoticeStrip key={c.key} tone="warn" text={liveConflictText(c)} testID={`belge-canli-celiski-${c.key}-${row.noteNo}`} />
+          ))}
           <DocRowOwner row={row} wo={wo} read={read} customers={customers} locked={locked} single={single} onPick={() => setPicker('owner')} />
-          <SectionBand title="Parti ve metre" icon="pound" tone={bandTone(issueList, METER_BAND)}
-            testID={single ? 'ie-serit-parti' : `belge-serit-parti-${row.noteNo}`} />
+          {!single && <SectionBand title="Parti ve metre" icon="pound" tone={bandTone(issueList, METER_BAND)} testID={`belge-serit-parti-${row.noteNo}`} />}
           {f.multi ? <PartyRows row={row} wo={wo} locked={partyLocked} plan={partyPlan} /> : (
             <>
               <BatchFields row={row} wo={wo} locked={locked} onPick={() => setPicker('batch')} />
               <RollRows row={row} wo={wo} locked={locked} />
-              {!f.rolls && <MeterField row={row} wo={wo} meterText={meterText} locked={locked} onEdit={() => setMeterOpen(true)} />}
+              {!f.rolls && (
+                <View style={declaredLayout.row}>
+                  <MeterField row={row} wo={wo} meterText={meterText} locked={locked} onEdit={() => setMeterOpen(true)} />
+                  {shown('kg') && <IncomingKgField row={row} wo={wo} locked={locked} />}
+                  {shown('width') && <IncomingWidthField row={row} wo={wo} locked={locked} />}
+                </View>
+              )}
+              {!f.rolls && (
+                <IncomingDeclaredRow row={row} wo={wo} locked={locked} />
+              )}
             </>
           )}
-          {!hideGramaj && <GramajField row={row} wo={wo} locked={partyLocked} />}
+          {single ? (
+            <PropsGroup gramaj={!hideGramaj && wo.showGramaj && wo.catalog.options.length > 0 ? <GramajField row={row} wo={wo} locked={partyLocked} /> : null} fold={afterGramaj} />
+          ) : (
+            <>
+              {!hideGramaj && <GramajField row={row} wo={wo} locked={partyLocked} />}
+              {afterGramaj}
+            </>
+          )}
           {!single && !done && issueList.map((n) => <Text key={n.text} style={styles.note}>• {n.text}</Text>)}
         </>
       )}
@@ -148,6 +194,10 @@ interface PickersProps {
 
 function RowPickers({ row, wo, picker, setPicker, owners, customersLoading }: PickersProps) {
   const candidates = row.detail?.batchNoCandidates ?? [];
+  const canAdd = useCanQuickCreateCustomer();
+  const [adding, setAdding] = useState(false);
+  const allOwners = useMemo(() => [...owners.pinned, ...owners.rest], [owners]);
+  const pickOwner = (id: string) => wo.updateForm(row.noteId, { ownerCustomerId: id, ownerSuggested: null });
   return (
     <>
         <PickerModal
@@ -158,12 +208,26 @@ function RowPickers({ row, wo, picker, setPicker, owners, customersLoading }: Pi
           pinnedLabel="Son kullanılanlar"
           selectedValue={row.form?.ownerCustomerId ?? null}
           loading={customersLoading}
+          // Saha 2026-11-10: listede yoksa buradan yeni müşteri (yalnız ad; "Diğer" açılır). İzinsizde soluk + açıklama.
+          leadingAction={{
+            label: 'Yeni müşteri ekle',
+            sublabel: canAdd ? 'Listede yok — adını yazıp kaydedin' : NO_PERMISSION_TEXT,
+            icon: 'account-plus',
+            disabled: !canAdd,
+            onPress: () => { setPicker(null); setAdding(true); },
+          }}
           onSelect={(id) => {
             setPicker(null);
-            wo.updateForm(row.noteId, { ownerCustomerId: id, ownerSuggested: null });
+            pickOwner(id);
           }}
           onDismiss={() => setPicker(null)}
           emptyText="Aktif müşteri yok."
+        />
+        <CustomerQuickAddSheet
+          visible={adding}
+          options={allOwners}
+          onDismiss={() => { setAdding(false); setPicker('owner'); }}
+          onPicked={(id) => { setAdding(false); pickOwner(id); }}
         />
         <PickerModal
           visible={picker === 'batch'}
@@ -216,8 +280,11 @@ function RowResultView({ row, wo }: { row: DocRow; wo: WoRowsState }) {
 }
 
 const styles = StyleSheet.create({
+  props: { gap: spacing.sm },
+  propsHead: { fontSize: typography.size.sm, fontWeight: typography.weight.semibold, color: colors.textSecondary },
   box: { padding: spacing.lg, borderRadius: radius.md, gap: spacing.sm, backgroundColor: colors.surfaceMuted },
-  flat: { gap: spacing.sm },
+  flat: { gap: spacing.md },
+  // Gelen metre + kg + en (belgenin beyanı) yan yana eşit pay; dar ekranda alt alta.
   ok: { backgroundColor: colors.successContainer },
   warn: { backgroundColor: colors.warningContainer },
   warnText: { color: colors.warningText },

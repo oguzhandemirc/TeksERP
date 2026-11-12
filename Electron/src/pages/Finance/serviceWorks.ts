@@ -18,6 +18,15 @@ export interface ServiceDraftWorkRow {
   unitPrice: string;
   /** Dolu satır taslak toplamına GİRMEZ (yeniden işlem — bizim hatamız). */
   excludedReason: "REWORK_OUR_FAULT" | null;
+  /** Beyan ↔ ölçülen (ayar `MAX_DECLARED`); yalnız yeni backend + metre satırında gelir, yoksa görünüm bugünkü gibi. */
+  meterCompare?: ServiceMeterCompare;
+}
+
+export interface ServiceMeterCompare {
+  declaredM: number | null;
+  measuredM: number | null;
+  billedM: number;
+  basis: "DECLARED" | "MEASURED";
 }
 
 export const SERVICE_WORK_SOURCE_LABEL: Record<ServiceWorkSource, string> = {
@@ -38,6 +47,7 @@ const BASIS_LABEL: Record<string, string> = {
   RECEIVED: "kabul metresi",
   WOUND: "sarım metresi",
   WOVEN: "dokuma metresi",
+  MAX_DECLARED: "beyan ile ölçülenin büyüğü",
 };
 
 /** Bilinmeyen değer ham kod olarak değil nötr metinle düşer (yeni backend değeri ekranı bozmasın). */
@@ -70,4 +80,13 @@ export function sortServiceWorks(rows: readonly ServiceDraftWorkRow[]): ServiceD
       a.processLabel.localeCompare(b.processLabel, "tr") ||
       a.subjectCode.localeCompare(b.subjectCode, "tr"),
   );
+}
+
+const m = (v: number | null) => (v == null ? "—" : `${v.toLocaleString("tr-TR", { maximumFractionDigits: 2 })} m`);
+
+/** "Beyan 500 m · Ölçülen 540 m · Faturalanan 540 m (ölçülen)"; alan yoksa null (satır bugünkü gibi). */
+export function meterCompareText(c: ServiceMeterCompare | undefined): string | null {
+  if (!c) return null;
+  const basis = c.basis === "MEASURED" ? "ölçülen" : "beyan";
+  return `Beyan ${m(c.declaredM)} · Ölçülen ${m(c.measuredM)} · Faturalanan ${m(c.billedM)} (${basis})`;
 }

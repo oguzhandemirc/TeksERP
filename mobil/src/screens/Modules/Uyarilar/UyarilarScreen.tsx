@@ -10,6 +10,7 @@ import { View, StyleSheet } from 'react-native';
 import { Text } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useManualRefresh } from '../../../hooks/useManualRefresh';
 import ScreenChrome from '../../../components/ScreenChrome';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import { usePortraitLock } from '../../../hooks/usePortraitLock';
@@ -31,6 +32,7 @@ export default function LoomAlarmsScreen() {
   const [showAll, setShowAll] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const feed = useLoomAlarmFeed({ enabled: access.canView, mine: !showAll });
+  const refresh = useManualRefresh(() => feed.refetch(), 'Uyarılar güncellendi');
   const now = useNow(15_000);
   const permission = useNotifyPermission(access.canView);
 
@@ -56,6 +58,8 @@ export default function LoomAlarmsScreen() {
       selectedId={compact ? null : detailId}
       onOpen={(alarmId) => (compact ? navigation.navigate('UyariDetay', { alarmId }) : setSelected(alarmId))}
       now={now}
+      refreshing={refresh.refreshing}
+      onRefresh={refresh.onRefresh}
     />
   );
   return (

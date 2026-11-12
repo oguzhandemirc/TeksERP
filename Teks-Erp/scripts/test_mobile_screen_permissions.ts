@@ -323,11 +323,6 @@ const EXEMPT: { screen: string; path: string; why: string }[] = [
     why: "Dokuma satır ayrıntısı; listeyle aynı kapı (`dokumaAnahtariGorunur`) — liste görünmüyorsa satır da yok. `mobile:kk1` listeyi açar ama genel bakışı açmaz; bu yüzden kapı kümesine kk1 ALINMADI.",
   },
   {
-    screen: "mobile:hizli-is-emri",
-    path: "GET /gelen-belge/tablet-baglam",
-    why: "İş Emirleri › Fason Belge Okut önizlemesi (`ScanStage`) taslaktaki müşterinin adını cari listesinden çözer. ScanStage yalnız `useScanAction().available` iken açılır: GelenBelge ekranı görünür (`gelen-belge:write` + modül) — uç guard'ının aynısı. Okunamazsa ad 'Seçili müşteri' olarak kalır, akış sürer.",
-  },
-  {
     screen: "gelen-belge:write",
     path: "GET /gelen-belge/irsaliyeler/:p",
     why: "Belge Tara onay kartı (T2) detayı okur; okunamazsa (gelen-belge:read yok → 403) kart çizilmez, tarama yolu aynen çalışır (fail-closed, `useApprovalDetail`). Belgeden iş emri satırı (`DocRowCard`) izin yoksa detayı hiç istemez, 403'te de formu okuma özetinden (`detailFromSummary`, gelen-belge:write) kurar.",
@@ -548,7 +543,33 @@ const EXEMPT: { screen: string; path: string; why: string }[] = [
   {
     screen: "mobile:hizli-is-emri",
     path: "PUT /work-orders/:p/target-values",
-    why: "Gramajı Değiştir — `mobile:is-emri-duzelt` yeteneği (panel izni yoksa yalnız kurşun özelliği); menü yeteneksiz operatörde çizilmez (WorkOrderDetailSheet `canFix`).",
+    why: "Gramajı / Hedef değeri değiştir — `mobile:is-emri-duzelt` yeteneği (tablet yolunda yalnız mevcut hedefin sebepli düzeltmesi, adımı başlamış değer 409); düğme yeteneksiz operatörde çizilmez (WorkOrderDetailSheet `canFix`).",
+  },
+  {
+    screen: "mobile:hizli-is-emri",
+    path: "PATCH /work-orders/:p/fold-type",
+    why: "Katı Değiştir — `mobile:is-emri-duzelt` yeteneği; kalem yalnız `canFix` iken çizilir (WorkOrderDetailSheet `fixAllowed.fold`).",
+  },
+  {
+    screen: "mobile:hizli-is-emri",
+    path: "GET /gelen-belge/is-emirleri/:p/belgeler",
+    why: "İE Belgeler → kaynak gelen belge taramaları — sorgu yalnız `gelen-belge:read` varken atılır (useIncomingScans `enabled: canRead`); yetkisizde satır çıkmaz.",
+  },
+  {
+    screen: "mobile:hizli-is-emri",
+    path: "GET /gelen-belge/taramalar/:p/icerik",
+    why: "Tarama baytı — yalnız yukarıdaki (`gelen-belge:read` kapılı) listeden dokunulan satır için çağrılır (useIncomingScans `open`).",
+  },
+  // Tek İE formu GelenBelge dizininde yaşar; İş Emirleri ekranı da (mobile:hizli-is-emri) aynı formu açar.
+  {
+    screen: "gelen-belge:write",
+    path: "POST /work-orders/quick-start",
+    why: "Kendi üretim kaydı — yalnız İş Emirleri ekranının `ownerKinds` verdiği kipte; kayıt `workorder:write ∨ mobile:hizli-is-emri` yoksa engel cümlesiyle kapalı (useOwnGoodsCreate `allowed`/`denied`).",
+  },
+  {
+    screen: "gelen-belge:write",
+    path: "GET /batches/number-state",
+    why: "Bizim parti no tahmini (numara tüketmez) — sorgu yalnız ucun izinlerinden biri varken atılır (useOurBatchPreview `canPeek`); yetkisizde kutu \"Otomatik\" der.",
   },
 ];
 

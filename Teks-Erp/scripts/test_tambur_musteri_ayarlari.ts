@@ -5,7 +5,7 @@
 //   §1 customer.update doğrulaması: en kaynağı INCOMING|MEASURED|"" (→null), bölme > 0, tartım boolean
 //   §2 tartım KAPALI (varsayılan) → kg'sız kesim geçer (bugünkü), kg verilirse çocuğa yazılır
 //   §3 tartım AÇIK → kg'sız kesim 400 TAMBUR_WEIGHT_REQUIRED (depo topu + açık kumaş), kg ile geçer
-//   §4 ayar sahibi müşteri: Kime? (targetCustomerId) sahibi EZER
+//   §4 ayar sahibi müşteri: emanet topta SAHİP (2026-11-10); Kime?=başka müşteri 409 sahip kilidi
 //   §5 GET label-settings görünümü: ayarlar + printTiming (varsayılan EACH) + ownerCustomer (sahip); yok top 404
 //   §6 kesim şeması weightKg'ı TAŞIR (Zod strip tuzağı)
 //   §7 'Bitir' yolları (s5 inceleme): kalan top doğuran finalizeWarehouseCut / finalizeOpenFabric /
@@ -166,15 +166,18 @@ async function main(): Promise<void> {
   const kgs4 = await Promise.all((f4.data?.splitRolls ?? []).map((r) => kgOf(r.id)));
   check("§7 segmentli finalize kg'lar parçalara (4 · 3)", JSON.stringify(kgs4) === "[4,3]", JSON.stringify(kgs4));
 
-  console.log("\n[§4] Kime? müşterisi sahibi ezer");
+  console.log("\n[§4] emanet topta ayar SAHİPTEN (2026-11-10; eskiden Kime? ezerdi)");
   const w3 = await warehouseRoll(owner);
-  check("§4 Kime?=tartımsız müşteri → kg'sız geçer", (await errCode(tambur.cutWarehouseRoll(w3, { cutLength: 10, targetCustomerId: target }, actor?.id))) === "OK");
+  check("§4 Kime?=başka müşteri → 409 LABEL_TARGET_NOT_OWNER (sahip kilidi)", (await errCode(tambur.cutWarehouseRoll(w3, { cutLength: 10, weightKg: 2, targetCustomerId: target }, actor?.id))) === "409:LABEL_TARGET_NOT_OWNER");
+  check("§4 Kime?=sahip, kg'sız → 400 TAMBUR_WEIGHT_REQUIRED (sahibin ayarı)", (await errCode(tambur.cutWarehouseRoll(w3, { cutLength: 10, targetCustomerId: owner }, actor?.id))) === "400:TAMBUR_WEIGHT_REQUIRED");
 
   console.log("\n[§5] label-settings görünümü");
   const v = await getTamburLabelSettings({ rollId: w3 });
   check("§5 sahibin ayarları + EACH", v.customerId === owner && v.weighRequired && v.splitLengthM === 50 && v.printTiming === "EACH", JSON.stringify(v));
   const v2 = await getTamburLabelSettings({ rollId: w3, customerId: target });
-  check("§5 Kime? verilince onun ayarı", v2.customerId === target && !v2.weighRequired && v2.splitLengthM === null);
+  check("§5 Kime? verilse de emanet topta sahibin ayarı + ownerLocked", v2.customerId === owner && v2.weighRequired && v2.ownerLocked === true);
+  const v3 = await getTamburLabelSettings({ customerId: target });
+  check("§5 topsuz okumada Kime? müşterisinin ayarı", v3.customerId === target && !v3.weighRequired && v3.splitLengthM === null && v3.ownerLocked === false);
   // Tablet fason topta Kime? varsayılanını buradan alır: Kime? verilse de sahip DEĞİŞMEZ (prova 2026-11-06).
   check("§5 ownerCustomer = malın sahibi (Kime?'den bağımsız)", v.ownerCustomer?.id === owner && v2.ownerCustomer?.id === owner && !!v2.ownerCustomer?.name, JSON.stringify(v2.ownerCustomer));
   const vNone = await getTamburLabelSettings({});

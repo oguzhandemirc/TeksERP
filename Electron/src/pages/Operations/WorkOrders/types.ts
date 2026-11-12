@@ -1,6 +1,7 @@
-import type { MaterialProvider, RollStatus, StepStatus, WorkOrderStatus, WorkOrderType } from "@/types/enums";
+import type { MaterialProvider, RollStage, RollStatus, StepStatus, WorkOrderStatus, WorkOrderType } from "@/types/enums";
 import type { TravelerCardConfig } from "@/services/featureFlagService";
 import type { WorkOrderLocation } from "./location";
+import type { WorkOrderMeterSummary } from "./meter-cell";
 
 /** findById response'unda her adım için anlık rulo özeti. List view'de boş gelir. */
 export interface StepRollSummary {
@@ -83,6 +84,8 @@ export interface WorkOrderStepLite {
   dispatchWithoutColor?: boolean;
   /** Önerilen makine (Gülkesim 2026-11-02, yalnız öneri). */
   plannedMachineId?: string | null;
+  /** Çıktı aşaması (2026-11-10) — null = otomatik; eski sunucu göndermez. */
+  outputStage?: RollStage | null;
   /** K29: 'SCAN' = adım sahada istasyon okutmasıyla eklendi (plan değil). findById döner. */
   addedVia?: string | null;
   /** Atlanma nedeni (SKIPPED adımda): SCAN_SKIP = okutmayla atlandı. */
@@ -134,6 +137,8 @@ export interface WorkOrder {
   /** Liste response'unda — bağlı sipariş satırlarının toplam talep metrajı (m).
    *  Stok üretiminde / siparişe bağlı değilken 0. Çıkan/giren ile sipariş kıyası için. */
   orderedMeters?: number;
+  /** Liste response'unda (`withMeterSummary=true`) — beyan ↔ ölçülen İE toplamı; partisizde null, eski backend'de yok. */
+  meterSummary?: WorkOrderMeterSummary | null;
   /** Liste response'unda — şu an mal tutulan fason istasyon adları (genelde tek;
    *  AT_SUBCONTRACTOR toplar). Boş = şu an fasonda mal yok. "Şu an: Boyahane" rozeti. */
   currentFasonStations?: string[];
@@ -270,6 +275,13 @@ export interface WorkOrder {
    * fason açık kumaşı hariç. totalMeters = giriş anı (initialQty) toplamı.
    */
   inputRolls?: { count: number; totalMeters: number };
+  /**
+   * Sadece findById — girdi kökü topların gelen belge satırlarından metre + kg (2026-11-09). null = İE belgeden doğmadı;
+   * `kg` null = bir kökün satırında kg yok (kısmi toplam gösterilmez). Decimal JSON'da metin olabilir. Eski sunucu göndermez.
+   * `notes` kaynak belgeler · `widthCm` her kökte aynıysa · `customerBatchNo` tekil birleşik (yeni alanlar; eski sunucu göndermez).
+   * `itemText`/`colorText` gelen kumaş adı / gelen renk — müşteri BEYANI, hedef kumaş/renk değil; her kökte aynıysa.
+   */
+  incoming?: { meters: number | string; kg: number | string | null; kgSource: "DOCUMENT" | null; notes?: Array<{ id: string; noteNo: string }>; widthCm?: number | string | null; customerBatchNo?: string | null; itemText?: string | null; colorText?: string | null } | null;
   /**
    * Sadece findById response'unda — iptal edilmemiş fason sevklerin toplam
    * metrajı. Form'da yeni hedef metraj girilirken karşılaştırma için kullanılır

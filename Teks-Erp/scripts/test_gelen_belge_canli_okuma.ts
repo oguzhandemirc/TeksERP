@@ -9,10 +9,11 @@
 //   §c şema dışı (fazla alan · 4001 kelime · motor adı) → 400 `details.code` LIVE_FRAME_INVALID
 //   §d ⭐ YAZMAZ: DocumentScan · CustomerDeliveryNote · SenderTemplate sayısı + hitCount toplamı · SystemLog · RequestTrace değişmez
 //   §e modül kapalı → 403 MODULE_DISABLED
+//   §g ⭐ biçim kuralına (pattern) uymayan değer → value null + `pattern-mismatch` issues'ta (tablet oylamaz); uyan değer dolu
 //   §f süre: 4000 kelimelik kare `engineMs` (ölçüldü 2026-11-05: medyan ~133 ms, M serisi Mac; eşik değil, rapora yazılır)
 // ⭐ NEGATİF SONDA (2026-11-05, elle, md5 ile geri alındı): servisteki GENEL filtresi (`t.id !== FALLBACK_TEMPLATE_CODE`)
 //    kaldırılınca §b2 düşer; servise şablon isabeti artırımı (`senderTemplate.updateMany … hitCount increment`) eklenince §d düşer; `REQUEST_TRACE_EXCLUSIONS`ten canlı okuma satırı silinince §d düşer (§c'nin 400'leri izlenir, 2026-11-06); kutu `toFrameBox` yerine undefined
-//    dönünce §a kutu kontrolü düşer.
+//    dönünce §a kutu kontrolü düşer. (2026-11-09) `LIVE_FORMAT_ISSUES` süzgeci etkisizleşince §g1 düşer.
 // =============================================================================
 import type { AddressInfo } from "net";
 import type { Server } from "node:http";
@@ -50,6 +51,7 @@ const TEMPLATE = {
     { key: "evrakNo", label: "Evrak no", type: "alnum", strategies: anchor(["EVRAK NO"]) },
     { key: "musteri", label: "Müşteri", type: "text", strategies: anchor(["MUSTERI"]) },
     { key: "partiNo", label: "Parti no", type: "alnum", strategies: anchor(["PARTI NO"]) },
+    { key: "siparisNo", label: "Sipariş no", type: "text", pattern: "^SP-\\d{3}$", strategies: anchor(["SIPARIS NO"]) },
   ],
 };
 
@@ -67,11 +69,12 @@ function frame(rows: Array<{ x: number; y: number; text: string }>, size = { wid
   });
   return { engine: "mlkit", ...size, rotation: 0, ms: 50, words, lines };
 }
-const KNOWN = frame([
+const KNOWN_ROWS = [
   { x: 40, y: 40, text: KEYWORD },
   { x: 40, y: 120, text: "EVRAK NO" }, { x: 300, y: 120, text: "A12345" },
   { x: 40, y: 200, text: "MUSTERI" }, { x: 300, y: 200, text: "ORNEK TEKSTIL" },
-]);
+];
+const KNOWN = frame(KNOWN_ROWS);
 const UNKNOWN = frame([{ x: 40, y: 40, text: "ALAKASIZ BIR KAGIT" }, { x: 40, y: 120, text: "SADECE NOT" }]);
 /** Yalnız GENEL yedeğin anahtar sözcüklerini taşıyan kare (Tarih · Metre · Kilo · Top No ≥ 0.3): motor GENEL'e düşerdi. */
 const GENERIC = frame([{ x: 40, y: 40, text: "TARIH" }, { x: 300, y: 40, text: "05.11.2026" }, { x: 40, y: 120, text: "TOP NO" }, { x: 300, y: 120, text: "METRE" }, { x: 500, y: 120, text: "KILO" }]);
@@ -109,7 +112,7 @@ async function run(call: (method: string, path: string, body?: unknown) => Promi
   const d = a.data as Live | undefined;
   const by = (k: string) => d?.fields.find((f) => f.key === k);
   check("§a1 ⭐ 200, şablon tanındı (kod/ad/sürüm 1)", a.status === 200 && d?.template?.code === code && d.template.name === `TEST-${TAG} canli` && d.template.version === 1, `${a.status} ${a.code ?? ""} ${JSON.stringify(d?.template)}`);
-  check("§a2 şablonun TÜM alanları sırasıyla döner", JSON.stringify(d?.fields.map((f) => f.key)) === JSON.stringify(["evrakNo", "musteri", "partiNo"]), JSON.stringify(d?.fields.map((f) => f.key)));
+  check("§a2 şablonun TÜM alanları sırasıyla döner", JSON.stringify(d?.fields.map((f) => f.key)) === JSON.stringify(["evrakNo", "musteri", "partiNo", "siparisNo"]), JSON.stringify(d?.fields.map((f) => f.key)));
   check("§a3 ⭐ bulunan alanlar dolu (A12345 · ORNEK TEKSTIL)", by("evrakNo")?.value === "A12345" && by("musteri")?.value === "ORNEK TEKSTIL", `${by("evrakNo")?.value} | ${by("musteri")?.value}`);
   const evBox = by("evrakNo")?.box;
   const muBox = by("musteri")?.box;
@@ -133,6 +136,13 @@ async function run(call: (method: string, path: string, body?: unknown) => Promi
   const c2 = await live({ ...KNOWN, words: Array.from({ length: 4001 }, () => KNOWN.words[0]) });
   const c3 = await live({ ...KNOWN, engine: "paddle" });
   check("§c ⭐ fazla alan · 4001 kelime · motor adı → 400 LIVE_FRAME_INVALID", [c1, c2, c3].every((r) => r.status === 400 && r.code === "LIVE_FRAME_INVALID"), [c1, c2, c3].map((r) => `${r.status}/${r.code ?? ""}`).join(" "));
+
+  console.log("§g biçim kuralı");
+  const gBad = await live(frame([...KNOWN_ROWS, { x: 40, y: 280, text: "SIPARIS NO" }, { x: 300, y: 280, text: "TARIHSIZ" }]));
+  const gOk = await live(frame([...KNOWN_ROWS, { x: 40, y: 280, text: "SIPARIS NO" }, { x: 300, y: 280, text: "SP-123" }]));
+  const sp = (r: Resp) => (r.data as Live | undefined)?.fields.find((f) => f.key === "siparisNo");
+  check("§g1 ⭐ pattern'e uymayan değer → value null + pattern-mismatch", gBad.status === 200 && sp(gBad)?.value === null && (sp(gBad)?.issues ?? []).includes("pattern-mismatch") && sp(gBad)?.box === undefined, JSON.stringify(sp(gBad)));
+  check("§g2 pattern'e uyan değer dolu", gOk.status === 200 && sp(gOk)?.value === "SP-123", JSON.stringify(sp(gOk)));
 
   console.log("§d yazmaz");
   const after = await snapshot();

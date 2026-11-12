@@ -31,3 +31,9 @@ export function isDeadlineApproaching(deadline: Date | null | undefined, nowMs: 
   if (!deadline || daysPastDeadline(deadline, nowMs) !== null) return false;
   return deadline.getTime() - nowMs <= days * DAY_MS;
 }
+
+/** Termine kalan saat (geçmişse negatif), termin yoksa `null` — üretim önerisi süre kıyası. */
+export function hoursUntilDeadline(deadline: Date | null | undefined, nowMs: number): number | null {
+  // tz-ok: mutlak an farkı.
+  return deadline ? (deadline.getTime() - nowMs) / 3_600_000 : null;
+}

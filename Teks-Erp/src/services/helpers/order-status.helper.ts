@@ -84,12 +84,22 @@ export async function computeLineLedgerTx(
 }
 
 /**
+ * Satırın sevk toleransı (metre) = miktar × tolerancePct / 100; NULL → 0. Sipariş tamamlanması sipariş toplamında
+ * ölçüldüğü için satır toleransı fabrika toleransına TOPLANIR (ayrı satır kapanışı yok). Tek kaynak: bu fonksiyon.
+ */
+export function lineToleranceMeters(quantity: Prisma.Decimal.Value, tolerancePct: Prisma.Decimal.Value | null | undefined): Prisma.Decimal {
+  if (tolerancePct == null) return new Prisma.Decimal(0);
+  return new Prisma.Decimal(quantity).times(tolerancePct).div(100);
+}
+
+/**
  * Bir siparişin karşılanma denormunu (satır + header shippedQty) defterden
  * YENİDEN HESAPLA ve status'unu güncelle.
  *
  * Status kuralları (yalnız GERÇEK sevkle ilerler):
  *   - shippedQty <= 0                                  → APPROVED
  *   - (totalRequired - shippedQty) <= tolerans          → COMPLETED
+ *     (tolerans = fabrika `shipping.toleranceMeters` + Σ aktif metre satırı `lineToleranceMeters`; K4)
  *   - aksi                                              → PARTIAL_SHIPPED
  *
  * CANCELLED terminal; manuel kapatılmış (manualClosedById dolu) COMPLETED terminal —
@@ -108,7 +118,7 @@ export async function recomputeOrderStatusTx(
       status: true,
       completedAt: true,
       manualClosedById: true,
-      lines: { select: { id: true, quantity: true, cancelledAt: true, unit: true } },
+      lines: { select: { id: true, quantity: true, cancelledAt: true, unit: true, tolerancePct: true } },
     },
   });
   if (!order) return null;
@@ -127,6 +137,7 @@ export async function recomputeOrderStatusTx(
   //     yani o kalem "tam karşılandı" sayılır ve sipariş kapanabilir.
   let shippedQty = new Prisma.Decimal(0);
   let totalRequired = new Prisma.Decimal(0);
+  let lineTolerance = new Prisma.Decimal(0); // K4: Σ aktif metre satırı toleransı; NULL satır 0 → bayt-aynı
   let activeLineCount = 0;
   // MT-dışı (kg/adet) AKTİF satır var mı: sipariş KENDİLİĞİNDEN KAPANAMAZ.
   let unmeasuredActive = false;
@@ -158,8 +169,8 @@ export async function recomputeOrderStatusTx(
     // ettiremez — belirsizlikte AKTİF kabul edilir (önceki davranış).
     if (l.cancelledAt == null) {
       activeLineCount++;
-      if (measured) totalRequired = totalRequired.plus(l.quantity);
-      else unmeasuredActive = true;
+      if (!measured) unmeasuredActive = true;
+      else [totalRequired, lineTolerance] = [totalRequired.plus(l.quantity), lineTolerance.plus(lineToleranceMeters(l.quantity, l.tolerancePct))];
     } else {
       totalRequired = totalRequired.plus(led.shipped);
     }
@@ -182,7 +193,7 @@ export async function recomputeOrderStatusTx(
 
   const tolerance = new Prisma.Decimal(
     toleranceMeters ?? (await readShippingToleranceMeters(tx))
-  );
+  ).plus(lineTolerance);
 
   // "Bir şey sevk edildi" — metre Σ ya da MT-dışı satıra düşmüş defter satırı.
   const anyShipped = shippedQty.greaterThan(0) || unmeasuredShipped;

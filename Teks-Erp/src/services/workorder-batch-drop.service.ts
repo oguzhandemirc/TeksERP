@@ -15,6 +15,7 @@
 // ÜRETTİK" demektir ve olan bunun tam tersidir. Yanıttaki `noLiveRollsRemain`
 // bayrağı ile arayüz "iş emrini de iptal et" teklif eder; karar kullanıcınındır.
 // =============================================================================
+import { reentryStageData } from "./helpers/roll-stage.helper";
 import { ReasonPresetKind, RollStatus, WorkOrderStatus } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { resolveReasonCode } from "./reason-preset.service";
@@ -399,7 +400,7 @@ class WorkOrderBatchDropService {
           }
           const res = await tx.roll.updateMany({
             where: { id: { in: ids }, status: RollStatus.IN_PRODUCTION, sackId: null, shipmentId: null },
-            data: { status: target, currentStepId: null, batchId: null },
+            data: { status: target, ...reentryStageData(target), currentStepId: null, batchId: null },
           });
           claimed += res.count;
         }

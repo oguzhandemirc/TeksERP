@@ -144,11 +144,14 @@ export const QUALITY_STEP_ERROR = "Bu istasyonda kalite muayenesi (hata girişi)
 export const stationCanInspect = stepCanApplyQuality;
 
 /**
- * Doğuşta muayene varsayılanı: migration'ın türettiği kümeyle AYNI (bekçi §7
- * SQL ↔ bu tablo). Eski panel alanı göndermezse `station.service` create bunu
- * kullanır; seed ve içe aktarım da buradan okur.
+ * Doğuşta muayene varsayılanı. Eski panel alanı göndermezse `station.service` create bunu
+ * kullanır; içe aktarım da buradan okur. Tambur 2026-11-09'dan beri KAPALI doğar (son istasyon,
+ * topa hata yazmaz); mevcut satırlar ve 2026-10-24 migration'ının geri doldurduğu küme değişmez.
  */
-export const INSPECTION_DEFAULT_KINDS = [StationKind.PROCESS_QC, StationKind.TAMBUR] as const;
+export const INSPECTION_DEFAULT_KINDS = [StationKind.PROCESS_QC] as const;
+
+/** Tablet < 1.4.3'ün türden hata paneli çizdiği türler — varsayılandan BAĞIMSIZ (eski APK `inspectionEnabled` okumaz). */
+export const LEGACY_INSPECTION_PANEL_KINDS = [StationKind.PROCESS_QC, StationKind.TAMBUR] as const;
 
 export function inspectionDefaultForKind(kind: StationKind | null | undefined): boolean {
   return !!kind && (INSPECTION_DEFAULT_KINDS as readonly StationKind[]).includes(kind);
@@ -210,11 +213,11 @@ export function defectDecisionWarning(gapNames: readonly string[]): string | nul
  */
 export const INSPECTION_LAYOUT_MIN_TABLET = "1.4.3";
 
-/** Varsayılanı muayene AÇIK olan türde kutu kapatılırsa eski APK hata panelini çizer ve 400 alır. */
+/** Eski APK'nın hata paneli çizdiği türde muayene kapalıysa o tablet paneli gösterir, kayıt 400 alır — yazma engellenmez, uyarır. */
 export function stationLayoutWarning(st: { kind?: unknown; inspectionEnabled?: unknown } | null | undefined): string | null {
   if (!st || typeof st.kind !== "string") return null;
-  if (!inspectionDefaultForKind(st.kind as StationKind) || st.inspectionEnabled !== false) return null;
-  return `Bu düzen tablet ≥ ${INSPECTION_LAYOUT_MIN_TABLET} ister — eski tablet hata panelini gösterir ama kayıt reddedilir.`;
+  if (!(LEGACY_INSPECTION_PANEL_KINDS as readonly string[]).includes(st.kind) || st.inspectionEnabled !== false) return null;
+  return `Muayene kapalı: tablet ≥ ${INSPECTION_LAYOUT_MIN_TABLET} hata panelini gizler; daha eski tablet paneli gösterir ama hata kaydı reddedilir.`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

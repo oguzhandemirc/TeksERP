@@ -21,7 +21,10 @@ import {
 import { resolveProducedOutputWhere } from "../helpers/produced-output.helper";
 import { loadCloseSnapshotView } from "../helpers/workorder-close-snapshot.helper";
 import { computeWorkOrderLocks } from "../helpers/workorder-locks.helper";
+import { targetValueEditLock } from "../helpers/workorder-target-value-step.helper";
+import { KURSUN_PROPERTY_CODE } from "../helpers/quality-station.helper";
 import { computeWoInput } from "../helpers/coverage.helper";
+import { computeWoIncoming, woMemberRootInput, type WoIncoming } from "../helpers/wo-incoming.helper";
 import { loadProducedBuckets } from "../helpers/roll-finalize.helper";
 import { workOrderBoundOnly } from "../helpers/dispatch-header.helper";
 import { hasRoll } from "../helpers/dispatch-item-kind.helper";
@@ -34,12 +37,30 @@ export async function findById(id: string): Promise<ApiResponse<Record<string, u
         targetItem: true,
         targetColor: true,
         customer: { select: { id: true, name: true, code: true } },
+        // Tablet detay özeti (2026-11-09, additive): canlı partiler, oluşturan, hedef çeşit değerleri (gramaj).
+        batches: { where: { mergedIntoId: null }, select: { id: true, batchNumber: true }, orderBy: { createdAt: "asc" } },
+        createdBy: { select: { id: true, fullName: true } },
+        // propertyId/variantOfPropertyId: tablet hedef değeri hangi adımın istasyon yeteneğine bağlı eşler (2026-11-09, additive).
+        // values + edit (aşağıda): tablet "Hedef değeri değiştir" seçenekleri ve adım kilidi (2026-11-09, additive).
+        targetValues: {
+          where: { revokedAt: null },
+          select: {
+            propertyId: true, valueId: true, value: { select: { name: true } },
+            property: {
+              select: {
+                name: true, variantOfPropertyId: true, variantOf: { select: { code: true } },
+                values: { where: { isActive: true }, select: { id: true, name: true }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] },
+              },
+            },
+          },
+        },
         // Aktif süzgeç ŞART: panel prefill bu listeyi PUT replace'e echo eder — damgalı
         // hedef burada dönerse replace onu DİRİLTİR.
         targetProperties: { where: ACTIVE_TARGET_PROPERTY, include: { property: true } },
         steps: {
           include: {
-            station: true,
+            // propertyCapabilities: adım→hedef özellik eşlemesi (tablet rota çipi altı); additive.
+            station: { include: { propertyCapabilities: { select: { propertyId: true } } } },
             requiredCategory: true,
             plannedSubcontractor: true,
           },
@@ -141,6 +162,8 @@ export async function findById(id: string): Promise<ApiResponse<Record<string, u
       count: 0,
       totalMeters: new Prisma.Decimal(0),
     };
+    // Gelen (belgeden): kök topların belge satırları — metre + kg; belgeden doğmamış İE'de null (2026-11-09 ek alan).
+    let incoming: WoIncoming | null = null;
 
     // Per-step individual roll listesi — detay panelinde "hangi parça kaç metre"
     // sorusunun cevabı. Aggregate ile aynı sorgudan dolduruyoruz, ek round-trip yok.
@@ -388,6 +411,12 @@ export async function findById(id: string): Promise<ApiResponse<Record<string, u
         count: wi?.count ?? 0,
         totalMeters: wi?.meters ?? new Prisma.Decimal(0),
       };
+      if (wi) incoming = await computeWoIncoming(wi);
+    }
+    // Rotasız / girdisi adıma işlenmemiş İE: kök parti üyeliğinden — Gelen bloğu boş kalmasın; inputRolls sayımı değişmez.
+    if (!incoming && inputRolls.count === 0) {
+      const member = await woMemberRootInput(id);
+      if (member) incoming = await computeWoIncoming(member);
     }
 
     const stepsWithRollSummary = wo.steps.map((step) => ({
@@ -421,10 +450,16 @@ export async function findById(id: string): Promise<ApiResponse<Record<string, u
       success: true,
       data: {
         ...wo,
+        // Hedef değer → adım + tablet düzeltme kilidi: yazma kapısıyla AYNI saf fonksiyon (tek kaynak).
+        targetValues: wo.targetValues.map((tv) => ({
+          ...tv,
+          edit: targetValueEditLock(wo.steps, { propertyId: tv.propertyId, variantOfPropertyId: tv.property.variantOfPropertyId, isKursun: tv.property.variantOf?.code === KURSUN_PROPERTY_CODE }),
+        })),
         steps: stepsWithRollSummary,
         dispatchedTotalQty,
         producedRolls,
         inputRolls,
+        incoming,
         locks,
         closeSnapshot,
       },

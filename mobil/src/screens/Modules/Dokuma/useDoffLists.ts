@@ -3,6 +3,7 @@
 // =============================================================================
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useManualRefresh } from '../../../hooks/useManualRefresh';
 import { doffService, type DoffListRow, type OpenMachineRun } from '../../../services/doff.service';
 
 export const todayKey = (machineId: string) => ['doffs', 'today', machineId] as const;
@@ -25,6 +26,7 @@ export function useDoffLists(machineId: string | null, lineNo: number) {
     () => (runsQuery.data?.data ?? []).filter((r) => r.productionLineNo === lineNo),
     [runsQuery.data, lineNo]
   );
+  const todayRefresh = useManualRefresh(() => todayQuery.refetch(), 'Bugünkü kayıtlar güncellendi');
   const todayRows: DoffListRow[] = todayQuery.data?.data ?? [];
   return {
     openRuns,
@@ -33,6 +35,7 @@ export function useDoffLists(machineId: string | null, lineNo: number) {
     todayRows,
     todayLoading: todayQuery.isLoading,
     todayError: todayQuery.isError,
-    refreshToday: () => void todayQuery.refetch(),
+    todayRefreshing: todayRefresh.refreshing,
+    refreshToday: todayRefresh.onRefresh,
   };
 }

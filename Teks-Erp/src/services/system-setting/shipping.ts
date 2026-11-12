@@ -53,6 +53,21 @@ export async function readShipmentLooseLoadEnabled(
   return asBoolean(setting?.value);
 }
 
+/**
+ * `shipping.handheldCreateEnabled` — Sevk Çıkışı'nda (telefon/el terminali) cari seç → okut → çuval aç → sevk et.
+ * Kayıt yok = false (bugünkü davranış: el terminali uçları 403 `HANDHELD_DISABLED`).
+ */
+export async function readShipmentHandheldCreateEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.SHIPMENT_HANDHELD_CREATE_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
 export async function readShipmentConfirmationEnabled(
   tx?: Pick<typeof prisma, "systemSetting">,
 ): Promise<boolean> {

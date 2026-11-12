@@ -1,11 +1,12 @@
 // Bekçi: Ayarlar → Belge Masası → Belge çekimi. "Canlı okuma" YALNIZ canlı kamera modülü olan APK'da listelenir;
 // eski APK'da gizlidir ve kayıtlı 'live' bugünkü kendi kamerayı seçili gösterir. Menü özeti seçimi yansıtır.
 import React from 'react';
-import { fireEvent, screen } from '@testing-library/react-native';
+import { fireEvent, screen, waitFor } from '@testing-library/react-native';
 import DocDeskSettingsScreen, { docDeskSummary, engineOptions } from './DocDeskSettingsScreen';
 import { renderWithPaper } from '../../../test/render';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
 import { isLiveCameraAvailable } from '../../../services/liveCamera';
+import { checkDocScanner } from '../../../services/docScannerNative';
 
 jest.mock('@react-navigation/native', () => ({ useNavigation: () => ({ canGoBack: () => false, goBack: jest.fn() }) }));
 jest.mock('@expo/vector-icons/MaterialCommunityIcons', () => {
@@ -15,7 +16,10 @@ jest.mock('@expo/vector-icons/MaterialCommunityIcons', () => {
 });
 jest.mock('../../../services/liveCamera', () => ({ isLiveCameraAvailable: jest.fn(() => false) }));
 
+jest.mock('../../../services/docScannerNative', () => ({ checkDocScanner: jest.fn(async () => ({ available: true, reason: 'ok' })) }));
+
 const liveAvailable = isLiveCameraAvailable as jest.Mock;
+const checkScanner = checkDocScanner as jest.Mock;
 
 beforeEach(() => {
   useDeviceSettingsStore.setState({ docScanEngine: 'camera', docDeskDevice: false, docDeskCaptureMode: 'tap' });
@@ -50,5 +54,44 @@ describe('DocDeskSettingsScreen — canlı okuma seçeneği', () => {
   it('menü özeti seçimi yansıtır', () => {
     expect(docDeskSummary(false, 'tap', 'live')).toBe('Kapalı · dokunarak çekim · canlı okuma');
     expect(docDeskSummary(false, 'tap', 'camera')).toBe('Kapalı · dokunarak çekim');
+  });
+});
+
+describe('DocDeskSettingsScreen — flaş', () => {
+  it('⭐ "Flaşı otomatik aç" varsayılan açık görünür; dokununca kapatılır', () => {
+    const setTorch = jest.fn(async () => undefined);
+    useDeviceSettingsStore.setState({ docTorchAuto: true, setDocTorchAuto: setTorch });
+    renderWithPaper(<DocDeskSettingsScreen />);
+    expect(screen.getByText('Flaşı otomatik aç')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('ayar-flas-otomatik'));
+    expect(setTorch).toHaveBeenCalledWith(false);
+  });
+});
+
+describe('DocDeskSettingsScreen — Google tarayıcı durumu', () => {
+  beforeEach(() => checkScanner.mockClear());
+
+  it('⭐ Google seçili değilken durum sorulmaz, satır yok', () => {
+    renderWithPaper(<DocDeskSettingsScreen />);
+    expect(screen.queryByTestId('ayar-belge-cekim-durum')).toBeNull();
+    expect(checkScanner).not.toHaveBeenCalled();
+  });
+
+  it('⭐ Google seçiliyken bir kez sorulur: hazır', async () => {
+    useDeviceSettingsStore.setState({ docScanEngine: 'mlkit' });
+    renderWithPaper(<DocDeskSettingsScreen />);
+    await waitFor(() => expect(screen.getByTestId('ayar-belge-cekim-durum')).toHaveTextContent('Durum: hazır'));
+    expect(checkScanner).toHaveBeenCalledTimes(1);
+  });
+
+  it('bileşen inmemiş → "indiriliyor"; modül yok → "bu sürümde yok"', async () => {
+    useDeviceSettingsStore.setState({ docScanEngine: 'mlkit' });
+    checkScanner.mockResolvedValueOnce({ available: false, reason: 'module_missing' });
+    const first = renderWithPaper(<DocDeskSettingsScreen />);
+    await waitFor(() => expect(screen.getByTestId('ayar-belge-cekim-durum')).toHaveTextContent(/bileşen indiriliyor/));
+    first.unmount();
+    checkScanner.mockResolvedValueOnce({ available: false, reason: 'no_module' });
+    renderWithPaper(<DocDeskSettingsScreen />);
+    await waitFor(() => expect(screen.getByTestId('ayar-belge-cekim-durum')).toHaveTextContent('Durum: bu sürümde yok'));
   });
 });

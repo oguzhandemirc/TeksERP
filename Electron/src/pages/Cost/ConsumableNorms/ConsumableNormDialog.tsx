@@ -11,8 +11,9 @@ import { ServiceItemSelect } from "@/components/forms/ServiceItemSelect";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { apiErrorText } from "@/lib/api-error";
 import { decToInput, toDecimalText } from "../shared/format";
-import { consumableNormService, type ConsumableNorm } from "./service";
+import { consumableNormService, type ConsumableNorm, type NormBasis } from "./service";
 import { CONSUMABLE_NORM_NOTE_MAX } from "./schema";
+import { NormBasisField, NormVariantField } from "./NormBasisFields";
 
 type Picked = { id: string; code: string; name: string; unit?: string };
 
@@ -42,11 +43,15 @@ export function ConsumableNormDialog({ onClose, current }: { onClose: () => void
   const [pickConsumable, setPickConsumable] = useState(false);
   const [qty, setQty] = useState(decToInput(current?.qtyPerM));
   const [note, setNote] = useState("");
+  const [basis, setBasis] = useState<NormBasis>(current?.basis ?? "PER_METER");
+  const [variantId, setVariantId] = useState<string | null>(current?.propertyValueId ?? null);
   const qtyText = toDecimalText(qty);
   const save = useMutation({
     mutationFn: () => {
-      const values = { qtyPerM: qtyText!, note: note.trim() || null, clientToken: attempt.token() };
-      return current ? consumableNormService.change(current.id, values) : consumableNormService.create(service!.id, consumable!.id, values);
+      const values = { qtyPerM: qtyText!, basis, note: note.trim() || null, clientToken: attempt.token() };
+      return current
+        ? consumableNormService.change(current.id, values)
+        : consumableNormService.create({ serviceItemId: service!.id, consumableItemId: consumable!.id, propertyValueId: variantId }, values);
     },
     onSuccess: (r) => {
       attempt.onSuccess();
@@ -63,7 +68,7 @@ export function ConsumableNormDialog({ onClose, current }: { onClose: () => void
         <DialogHeader>
           <DialogTitle>{current ? "Sarf normunu değiştir" : "Hizmet sarf normu"}</DialogTitle>
           <DialogDescription>
-            Hizmetin bir metresi için harcanan sarf miktarı (ör. kurşun dikiminde ip). Yeni norm şu andan itibaren geçerli; eskisi damgalı kalır. Norm gerçek tüketim değildir.
+            Hizmetin bir metresi ya da tamburdan çıkan bir topu için harcanan sarf (ör. kurşun ipi, poşet). Yeni norm şu andan itibaren geçerli; eskisi damgalı kalır.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 text-sm">
@@ -77,12 +82,9 @@ export function ConsumableNormDialog({ onClose, current }: { onClose: () => void
               {consumable ? `${consumable.code} — ${consumable.name}` : "Sarf kalemi seç…"}
             </Button>
           </div>
-          <label>
-            <span className="text-muted-foreground">Metre başına miktar{consumable?.unit ? ` (${consumable.unit}/m)` : ""}</span>
-            <Input aria-label="Metre başına miktar" className="mt-1 text-right tabular-nums" inputMode="decimal" value={qty} onChange={(e) => setQty(e.target.value)} />
-          </label>
-          <ZeroNormHint />
-          {current && <p className="text-xs text-muted-foreground">Şu anki: {decToInput(current.qtyPerM)} {current.unit}/m</p>}
+          <NormVariantField value={variantId} onChange={setVariantId} locked={locked} />
+          <NormBasisField value={basis} onChange={setBasis} />
+          <QtyField value={qty} onChange={setQty} unit={consumable?.unit} basis={basis} current={current} />
           <label>
             <span className="text-muted-foreground">Not</span>
             <Input className="mt-1" maxLength={CONSUMABLE_NORM_NOTE_MAX} value={note} onChange={(e) => setNote(e.target.value)} />
@@ -108,6 +110,21 @@ export function ConsumableNormDialog({ onClose, current }: { onClose: () => void
         }}
       />
     </Dialog>
+  );
+}
+
+const perOf = (b: NormBasis | undefined) => (b === "PER_ROLL" ? "top" : "m");
+
+function QtyField(p: { value: string; onChange: (v: string) => void; unit?: string; basis: NormBasis; current?: ConsumableNorm | null }) {
+  return (
+    <>
+      <label>
+        <span className="text-muted-foreground">Miktar{p.unit ? ` (${p.unit}/${perOf(p.basis)})` : ""}</span>
+        <Input aria-label="Miktar" className="mt-1 text-right tabular-nums" inputMode="decimal" value={p.value} onChange={(e) => p.onChange(e.target.value)} />
+      </label>
+      <ZeroNormHint />
+      {p.current && <p className="text-xs text-muted-foreground">Şu anki: {decToInput(p.current.qtyPerM)} {p.current.unit}/{perOf(p.current.basis)}</p>}
+    </>
   );
 }
 

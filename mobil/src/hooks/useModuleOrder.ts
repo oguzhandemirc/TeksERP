@@ -4,7 +4,7 @@ import Toast from 'react-native-toast-message';
 import { useVisibleScreens } from './useVisibleScreens';
 import { preferencesService, type PreferenceBlob } from '../services/preferences.service';
 import { menuLayoutService } from '../services/menuLayout.service';
-import { filterMenuHidden } from './menuHidden';
+import { filterHomeGridHidden, filterMenuHidden } from './menuHidden';
 import type { MobileScreenKey, MobileScreenMeta } from '../types/permissions';
 
 // Modül grid'i sırası kullanıcı profilinde (backend tercih blob'u) saklanır →
@@ -81,7 +81,7 @@ export function useModuleOrder() {
   const hiddenScreens = useMenuHiddenScreens();
 
   const orderedScreens = useMemo(
-    () => applyOrder(filterMenuHidden(visibleScreens, hiddenScreens), storedOrder),
+    () => applyOrder(filterMenuHidden(filterHomeGridHidden(visibleScreens), hiddenScreens), storedOrder),
     [visibleScreens, hiddenScreens, storedOrder],
   );
 

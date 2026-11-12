@@ -139,6 +139,12 @@ export async function listShipments(this: ShippingServiceThis,
     // DirectShipment'ın e-İrsaliyesi yok → süzgeç aktifken union'dan düşer.
     const eIrsWhere = await resolveEIrsaliyeListFilter(readFilterList(params.filters.eIrsaliye));
     if (eIrsWhere) where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), eIrsWhere];
+    // --- BOŞ PLANLI GİZLE (`hasRolls=true`, el terminali listesi) — yalnız hiç topu olmayan PLANNED düşer;
+    // sevk edilmiş sevkiyat iade sonrası canlı topsuz kalabilir, o görünür kalmalı (brüt).
+    const hasRollsFilter = req.query.hasRolls === "true";
+    if (hasRollsFilter) {
+      where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), { OR: [{ status: { not: ShipmentStatus.PLANNED } }, { rolls: { some: {} } }] }];
+    }
 
     // destination (DOMESTIC|EXPORT) buildWhereClause tarafından where'e YAZILDI;
     // DirectShipment'ta destination YOK → aktifse doğrudan sevkler union'dan düşer
@@ -152,19 +158,24 @@ export async function listShipments(this: ShippingServiceThis,
     // göre dizilince pazartesi kurulup cuma sevk edilen sevkiyat yanlış yere düşüyordu.
     // ⚠️ DirectShipment'ta bu alanın adı `shippedAt` (NON-NULL) — direct dalındaki
     // orderBy/cursor AYRI kurulur, Shipment'ınki paylaşılamaz.
-    const SORTABLE = ["createdAt", "shipmentNo", "dispatchedAt"] as const;
+    // customerName (el terminali, K4b): DB harmanlamasıyla sıralanır → JS birleşimi yeniden dizemez, bu yüzden
+    // bu sıralamada doğrudan sevkler birleşime girmez (kendi cari adı sırasını JS'te kurmak sayfa sınırını bozardı).
+    const SORTABLE = ["createdAt", "shipmentNo", "dispatchedAt", "customerName"] as const;
     type ShipSortField = (typeof SORTABLE)[number];
     const sortField = resolveSortBy(params.sortBy, SORTABLE, "createdAt") as ShipSortField;
     const sortDir: "asc" | "desc" = params.sortOrder === "asc" ? "asc" : "desc";
     // Direct tablosundaki karşılık — union'ın iki tarafında alan adı farklı.
-    const directSortField = sortField === "dispatchedAt" ? "shippedAt" : sortField;
+    const byCustomer = sortField === "customerName";
+    const directSortField = sortField === "dispatchedAt" ? "shippedAt" : byCustomer ? "createdAt" : sortField;
     const sortNullable = sortField === "dispatchedAt";
     const shipOrderBy: Prisma.ShipmentOrderByWithRelationInput[] =
-      sortField === "shipmentNo"
-        ? [{ shipmentNo: sortDir }, { id: sortDir }]
-        : sortField === "dispatchedAt"
-          ? [{ dispatchedAt: { sort: sortDir, nulls: "last" } }, { id: sortDir }]
-          : [{ createdAt: sortDir }, { id: sortDir }];
+      byCustomer
+        ? [{ customer: { name: sortDir } }, { id: sortDir }]
+        : sortField === "shipmentNo"
+          ? [{ shipmentNo: sortDir }, { id: sortDir }]
+          : sortField === "dispatchedAt"
+            ? [{ dispatchedAt: { sort: sortDir, nulls: "last" } }, { id: sortDir }]
+            : [{ createdAt: sortDir }, { id: sortDir }];
     const directOrderBy: Prisma.DirectShipmentOrderByWithRelationInput[] =
       sortField === "shipmentNo"
         ? [{ shipmentNo: sortDir }, { id: sortDir }]
@@ -280,6 +291,8 @@ export async function listShipments(this: ShippingServiceThis,
     // DAİMA id, aynı yönde (dynamicCursorWhere tie-break'iyle simetrik).
     const dir = sortDir === "asc" ? 1 : -1;
     const cmp = (a: UnifiedRow, b: UnifiedRow): number => {
+      // Cari adı: yalnız Shipment satırı var ve DB sırası otoritedir (sort kararlı → sıra korunur).
+      if (byCustomer) return 0;
       // NULL kuyruğu: dispatchedAt sıralamasında null'lar YÖNDEN BAĞIMSIZ olarak sonda
       // durur (Prisma `nulls: "last"` ile birebir) → `dir` ile çarpılmaz.
       if (sortField === "dispatchedAt") {
@@ -323,7 +336,8 @@ export async function listShipments(this: ShippingServiceThis,
       (!rawStatus || rawStatus === ShipmentStatus.DISPATCHED) &&
       !hasReturnsFilter &&
       !hasDestinationFilter &&
-      !eIrsWhere;
+      !eIrsWhere &&
+      !byCustomer;
 
     // DirectShipment where — Shipment ile AYNI filtreleri alanlarına eşle.
     const directBaseWhere: Prisma.DirectShipmentWhereInput = {};
@@ -445,7 +459,7 @@ export async function listShipments(this: ShippingServiceThis,
       // Bayrak olmadan ek sorgu koşmaz → operasyon ekranı bedel ödemez.
       const wantSummary = req.query.withSummary === "true";
       const cursor = decodeDynamicCursor(req.query.cursor as string | undefined);
-      const cw = cursor ? dynamicCursorWhere(cursor, sortField, sortDir, sortNullable) : null;
+      const cw = cursor ? (byCustomer ? (customerNameCursorWhere(cursor, sortDir) as Record<string, unknown>) : dynamicCursorWhere(cursor, sortField, sortDir, sortNullable)) : null;
       // Direct tarafı AYRI cursor ister: union'ın iki tablosunda sıralama kolonunun adı
       // farklı (dispatchedAt ↔ shippedAt). Aynı `cw` nesnesini paylaşmak DirectShipment'ta
       // var olmayan bir alana filtre yazmak olurdu.
@@ -468,7 +482,8 @@ export async function listShipments(this: ShippingServiceThis,
       const hasMore = merged.length > limit;
       const dataRows = hasMore ? merged.slice(0, limit) : merged;
       const last = dataRows[dataRows.length - 1] as Record<string, unknown> | undefined;
-      const nextCursor = hasMore ? buildNextDynamicCursor(last, sortField) : null;
+      const cursorRow = byCustomer && last ? { id: last.id, customerName: (last.customer as { name: string }).name } : last;
+      const nextCursor = hasMore ? buildNextDynamicCursor(cursorRow, sortField) : null;
       const totalEstimate = shipTotal !== undefined ? shipTotal + (directTotal ?? 0) : undefined;
       const data = await attachTotals(await attachBadges(dataRows));
       const summary = wantSummary
@@ -492,6 +507,13 @@ export async function listShipments(this: ShippingServiceThis,
     const data = await attachTotals(await attachBadges(merged));
     return { success: true, data };
   }
+
+/** `customerName` sıralamasının keyset koşulu — ilişki alanı `dynamicCursorWhere`in düz kolon kalıbına sığmaz. */
+function customerNameCursorWhere(cursor: { v: string | null; id: string }, sortDir: "asc" | "desc"): Prisma.ShipmentWhereInput {
+  const op = sortDir === "asc" ? "gt" : "lt";
+  const name = cursor.v ?? "";
+  return { OR: [{ customer: { name: { [op]: name } } }, { AND: [{ customer: { name } }, { id: { [op]: cursor.id } }] }] };
+}
 
 export async function buildShipmentListSummary(
     where: Prisma.ShipmentWhereInput,

@@ -1,5 +1,5 @@
-// Tablet tanıtma — REHBERLİ kip (K30-A2/A3, sahte API): başlık dokun aç/kapa → alan adımları (Bu belgede yok · değer dokun → okunan
-// değer + etiket · Etiketi değiştir) → Bitir (ad önerisi) → Kaydet tek dokunuş; önizleme debounce'lu; benzer şablon sorusu iki yol.
+// Tablet tanıtma — ÜÇ AŞAMA (2026-11-09, sahte API): ① kimlik satırı aç/kapa + ad → ② satır seç, değere dokun → okunan değer +
+// etiket → ③ kurallar (çok parti: fabrika = gövdede `rules` yok) → Kaydet; düzenlemede "Kaldır" → `base.drop`; benzer şablon iki yol.
 import React from 'react';
 import { act, fireEvent, waitFor } from '@testing-library/react-native';
 import { renderWithPaper } from '../../../../test/render';
@@ -15,6 +15,7 @@ const mockApi = {
   getUserTemplate: jest.fn(),
   createUserTemplate: jest.fn(),
   updateUserTemplate: jest.fn(),
+  settings: jest.fn(),
 };
 jest.mock('../../../../services/inboundDoc.service', () => ({
   inboundDocService: {
@@ -24,6 +25,7 @@ jest.mock('../../../../services/inboundDoc.service', () => ({
     getUserTemplate: (...a: unknown[]) => mockApi.getUserTemplate(...a),
     createUserTemplate: (...a: unknown[]) => mockApi.createUserTemplate(...a),
     updateUserTemplate: (...a: unknown[]) => mockApi.updateUserTemplate(...a),
+    settings: (...a: unknown[]) => mockApi.settings(...a),
   },
 }));
 jest.mock('react-native-toast-message', () => ({ __esModule: true, default: { show: jest.fn() } }));
@@ -70,33 +72,55 @@ beforeEach(() => {
   mockApi.getUserTemplate.mockResolvedValue({ ...USER_T, versions: [] });
   mockApi.createUserTemplate.mockResolvedValue({ ...USER_T, version: 1 });
   mockApi.updateUserTemplate.mockResolvedValue({ ...USER_T, version: 3 });
+  mockApi.settings.mockResolvedValue({ multiPartyWorkOrder: 'SINGLE' });
   setPerms(['gelen-belge:read', 'gelen-belge:template']);
 });
 afterEach(() => act(() => useAuthStore.setState({ user: null })));
 
 const sleep = (ms: number) => act(() => new Promise<void>((res) => setTimeout(res, ms)));
+const lastSuggest = () => mockApi.suggestTemplate.mock.calls[mockApi.suggestTemplate.mock.calls.length - 1][0];
 
 async function openGuided(r: ReturnType<typeof renderWithPaper>) {
   await flush();
   fireEvent.press(await r.findByTestId('tanit-ac'));
   await flush();
   expect(await r.findByTestId('tanit-kutu-6')).toBeTruthy();
-  expect(r.getByTestId('tanit-rehber')).toBeTruthy();
+  expect(r.getByTestId('tanit-asama-seridi')).toBeTruthy();
 }
 
-/** Başlık adımından Parti no adımına: Sonraki → Müşteri "Bu belgede yok". */
+/** ①'den ②'ye geçip "Gönderen parti no" satırını seçer. */
 async function toPartiNo(r: ReturnType<typeof renderWithPaper>) {
-  await press(r.getByTestId('tanit-sonraki'));
-  expect(r.getByTestId('tanit-soru')).toHaveTextContent(/Müşteri/);
-  await press(r.getByTestId('tanit-yok'));
-  expect(r.getByTestId('tanit-soru')).toHaveTextContent('Parti no değerine dokunun');
+  await press(r.getByTestId('tanit-ileri'));
+  expect(r.getByTestId('tanit-asama-2')).toBeTruthy();
+  await press(r.getByTestId('tanit-adim-partiNo'));
+  expect(r.getByTestId('tanit-soru')).toHaveTextContent('Gönderen parti no: belgede değerine dokunun');
 }
 
-describe('TeachModal — rehberli kip', () => {
-  it('⭐ başlık aç/kapa → Bu belgede yok → değere dokun → okunan değer + etiket → Etiketi değiştir → Bitir → Kaydet tek dokunuş POST', async () => {
+async function markPartiNo(r: ReturnType<typeof renderWithPaper>) {
+  await toPartiNo(r);
+  await press(r.getByTestId('tanit-kutu-6'));
+  await waitFor(() => expect(r.getByTestId('tanit-deger-partiNo')).toHaveTextContent('P2618733'));
+}
+
+describe('TeachModal — üç aşama', () => {
+  it('⭐ ① yalnız genel etiket seçiliyse uyarı (teachIssues engeli değil); başlık seçilince kalkar', async () => {
     const r = renderWithPaper(<TeachEntry detail={detail(null)} localPages={LOCAL} />);
     await openGuided(r);
-    expect(r.getByTestId('tanit-soru')).toHaveTextContent('Belgenin başlığına dokunun');
+    expect(r.queryByTestId('tanit-kimlik-zayif')).toBeNull();
+    await press(r.getByTestId('tanit-kutu-0')); // GÜLEÇSOY BOYA kapandı
+    await press(r.getByTestId('tanit-kutu-2')); // ÇEKİ LİSTESİ kapandı → yalnız "Ham PartiNo"
+    expect(r.getByTestId('tanit-baslik-secili')).toHaveTextContent(/Ham PartiNo/);
+    expect(r.getByTestId('tanit-kimlik-zayif')).toHaveTextContent(/^Belgeyi ayırt eden bir yazı seçin: başlık ya da firma adı/);
+    await press(r.getByTestId('tanit-kutu-2'));
+    expect(r.queryByTestId('tanit-kimlik-zayif')).toBeNull();
+  });
+
+  it('⭐ ① kimlik aç/kapa → İleri → ② değere dokun → okunan değer + etiket → işareti kaldır → ③ özet → Kaydet POST (fabrika ayarı: rules yok)', async () => {
+    const r = renderWithPaper(<TeachEntry detail={detail(null)} localPages={LOCAL} />);
+    await openGuided(r);
+    expect(r.getByTestId('tanit-asama-1')).toBeTruthy();
+    expect(r.queryByTestId('tanit-asama-2')).toBeNull();
+    expect(r.getByTestId('tanit-asama-TANIMA')).toHaveProp('accessibilityState', expect.objectContaining({ selected: true }));
     expect(r.getByTestId('tanit-baslik-secili')).toHaveTextContent(/GÜLEÇSOY BOYA/);
     await press(r.getByTestId('tanit-kutu-0'));
     expect(r.getByTestId('tanit-baslik-secili')).not.toHaveTextContent(/GÜLEÇSOY BOYA/);
@@ -104,47 +128,89 @@ describe('TeachModal — rehberli kip', () => {
     expect(r.getByTestId('tanit-baslik-secili')).toHaveTextContent(/GÜLEÇSOY BOYA/);
 
     await toPartiNo(r);
-    // Alan yokken önizleme koşmaz (eksik var).
-    expect(mockApi.suggestTemplate).not.toHaveBeenCalled();
+    expect(mockApi.suggestTemplate).not.toHaveBeenCalled(); // alan yokken önizleme koşmaz
     await press(r.getByTestId('tanit-kutu-6'));
     expect(r.getByTestId('tanit-okunan')).toHaveTextContent(/Okunuyor/);
-    await waitFor(() => expect(r.getByTestId('tanit-okunan')).toHaveTextContent(/Okunan: P2618733/));
+    await waitFor(() => expect(r.getByTestId('tanit-deger-partiNo')).toHaveTextContent('P2618733'));
     expect(r.getByTestId('tanit-okunan')).toHaveTextContent(/Etiket: “Ham PartiNo”/);
     expect(mockApi.suggestTemplate).toHaveBeenCalledTimes(1);
-    expect(mockApi.suggestTemplate.mock.calls[0][0]).toMatchObject({
-      scanId: 's1',
-      name: 'GÜLEÇSOY BOYA',
-      assignments: [{ field: 'partiNo', rect: { x: 200, y: 300, width: 90, height: 20 } }],
-    });
+    expect(mockApi.suggestTemplate.mock.calls[0][0]).toMatchObject({ scanId: 's1', name: 'GÜLEÇSOY BOYA', assignments: [{ field: 'partiNo', rect: { x: 200, y: 300, width: 90, height: 20 } }] });
 
-    // Etiketi değiştir: değer temizlenir, başka kutuya dokunulana dek sonuç yok.
     await press(r.getByTestId('tanit-etiket-degistir'));
-    expect(r.queryByTestId('tanit-okunan')).toBeNull();
+    expect(r.queryByTestId('tanit-deger-partiNo')).toBeNull();
     await press(r.getByTestId('tanit-kutu-6'));
-    await waitFor(() => expect(r.getByTestId('tanit-okunan')).toHaveTextContent(/Okunan: P2618733/));
+    await waitFor(() => expect(r.getByTestId('tanit-deger-partiNo')).toHaveTextContent('P2618733'));
 
-    await press(r.getByTestId('tanit-adim-bitir'));
-    expect(r.getByTestId('tanit-soru')).toHaveTextContent(/ad verin/);
-    expect(r.getByTestId('tanit-ozet')).toHaveTextContent(/Parti no: P2618733/);
-    expect(r.getByTestId('tanit-ozet')).toHaveTextContent(/Müşteri: yok/);
+    await press(r.getByTestId('tanit-ileri'));
+    expect(r.getByTestId('tanit-asama-3')).toBeTruthy();
+    expect(r.queryByTestId('tanit-ileri')).toBeNull();
+    expect(r.getByTestId('tanit-asama-TANIMA')).toHaveProp('accessibilityLabel', '1. Tanıma, tamam');
+    expect(r.getByTestId('tanit-ozet')).toHaveTextContent('3 kimlik yazısı · 1 alan · 0 kural');
+    expect(r.getByTestId('tanit-cok-parti-FABRIKA')).toHaveProp('accessibilityState', expect.objectContaining({ checked: true }));
+    await waitFor(() => expect(r.getByTestId('tanit-kural-cok-parti')).toHaveTextContent(/Şu an: Tek İE/));
     const calls = mockApi.suggestTemplate.mock.calls.length;
     await press(r.getByTestId('tanit-kaydet'));
     await flush();
-    // Önizleme tazeydi → Kaydet yeniden önizlemeden doğrudan kaydeder.
-    expect(mockApi.suggestTemplate).toHaveBeenCalledTimes(calls);
+    expect(mockApi.suggestTemplate).toHaveBeenCalledTimes(calls); // önizleme tazeydi
+    expect(lastSuggest()).not.toHaveProperty('rules');
     expect(mockApi.createUserTemplate).toHaveBeenCalledTimes(1);
     expect(mockApi.createUserTemplate.mock.calls[0][0]).toMatchObject({ name: 'GÜLEÇSOY BOYA', template: SUGGEST.template });
     expect(mockApi.updateUserTemplate).not.toHaveBeenCalled();
   });
 
-  it('pasif Kaydet\'in altında eksik tek satır yazılır; alan atanınca kalkar', async () => {
+  it('⭐ kimlik yazısı yokken İleri kapalı, nedeni tek satır; şeritten ileri atlanamaz', async () => {
     const r = renderWithPaper(<TeachEntry detail={detail(null)} localPages={LOCAL} />);
     await openGuided(r);
+    await press(r.getByTestId('tanit-kutu-0'));
+    await press(r.getByTestId('tanit-kutu-2'));
+    await press(r.getByTestId('tanit-kutu-4'));
+    expect(r.getByTestId('tanit-baslik-secili')).toHaveTextContent(/Henüz kimlik yazısı seçilmedi/);
+    expect(r.getByTestId('tanit-ileri')).toBeDisabled();
+    expect(r.getByTestId('tanit-kaydet-neden')).toHaveTextContent(/^İlerlemek için: En az bir kimlik yazısı/);
+    expect(r.getByTestId('tanit-asama-ESLEME')).toBeDisabled();
+    await press(r.getByTestId('tanit-asama-KURALLAR'));
+    expect(r.getByTestId('tanit-asama-1')).toBeTruthy();
+    await press(r.getByTestId('tanit-kutu-2'));
+    expect(r.getByTestId('tanit-ileri')).not.toBeDisabled();
+  });
+
+});
+
+describe('TeachModal — üç aşama: kurallar ve önizleme', () => {
+  it('⭐ ③ "Her parti ayrı İE" gövdeye rules girer; "Fabrika ayarı"na dönünce gövdede rules YOK', async () => {
+    const r = renderWithPaper(<TeachEntry detail={detail(null)} localPages={LOCAL} />);
+    await openGuided(r);
+    await markPartiNo(r);
+    await press(r.getByTestId('tanit-ileri'));
+    await press(r.getByTestId('tanit-cok-parti-PER_PARTY'));
+    await waitFor(() => expect(lastSuggest().rules).toEqual({ multiParty: 'PER_PARTY' }));
+    expect(r.getByTestId('tanit-ozet')).toHaveTextContent(/1 kural$/);
+    await press(r.getByTestId('tanit-cok-parti-FABRIKA'));
+    await waitFor(() => expect(lastSuggest()).not.toHaveProperty('rules'));
+    await press(r.getByTestId('tanit-kaydet'));
+    await flush();
+    expect(mockApi.createUserTemplate).toHaveBeenCalledTimes(1);
+  });
+
+  it('③ tekrar eden bölüm: Evet → başlangıç yazısına dokun → önizleme bölüm sayısı; tablo yoksa Kaydet kapalı', async () => {
+    mockApi.suggestTemplate.mockResolvedValue({ ...SUGGEST, preview: { ...SUGGEST.preview, blocks: [{ blockNo: 1 }, { blockNo: 2 }] } });
+    const r = renderWithPaper(<TeachEntry detail={detail(null)} localPages={LOCAL} />);
+    await openGuided(r);
+    await markPartiNo(r);
+    await press(r.getByTestId('tanit-ileri'));
+    await press(r.getByTestId('tanit-tekrar-evet'));
     expect(r.getByTestId('tanit-kaydet')).toBeDisabled();
-    expect(r.getByTestId('tanit-kaydet-neden')).toHaveTextContent(/^Kaydetmek için: En az bir alan atayın/);
-    await toPartiNo(r);
-    await press(r.getByTestId('tanit-kutu-6'));
-    expect(r.queryByTestId('tanit-kaydet-neden')).toBeNull();
+    await press(r.getByTestId('tanit-kutu-4'));
+    await press(r.getByTestId('tanit-kutu-5'));
+    expect(r.getByTestId('tanit-bolum-baslangic-deger')).toHaveTextContent(/^Ham PartiNo$/);
+    expect(r.getByTestId('tanit-kaydet-neden')).toHaveTextContent(/top tablosu gerekli/);
+    await press(r.getByTestId('tanit-asama-ESLEME'));
+    await press(r.getByTestId('tanit-sutun-m'));
+    await press(r.getByTestId('tanit-kutu-7'));
+    expect(r.getByTestId('tanit-sutun-m-deger')).toHaveTextContent('Metre');
+    await press(r.getByTestId('tanit-asama-KURALLAR'));
+    await waitFor(() => expect(r.getByTestId('tanit-bolum-onizleme')).toHaveTextContent('‘Ham PartiNo’ ile başlıyor · 2 bölüm bulundu'));
+    expect(lastSuggest()).toMatchObject({ sectionStartLabel: 'Ham PartiNo', assignments: [{ field: 'partiNo', section: true }], table: { columns: [{ key: 'm', header: 'Metre' }] } });
     expect(r.getByTestId('tanit-kaydet')).not.toBeDisabled();
   });
 
@@ -162,98 +228,3 @@ describe('TeachModal — rehberli kip', () => {
   });
 });
 
-describe('TeachModal — benzer şablon sorusu', () => {
-  const SIMILAR = { ...SUGGEST, benzerSablonlar: [{ kod: 'u-gulecsoy', ad: 'Güleçsoy', skor: 0.9 }] };
-
-  async function markAndSave(r: ReturnType<typeof renderWithPaper>) {
-    await openGuided(r);
-    await toPartiNo(r);
-    await press(r.getByTestId('tanit-kutu-6'));
-    await waitFor(() => expect(r.getByTestId('tanit-okunan')).toHaveTextContent(/Okunan: P2618733/));
-    await press(r.getByTestId('tanit-kaydet'));
-    await flush();
-    expect(await r.findByTestId('tanit-benzer')).toBeTruthy();
-    expect(mockApi.createUserTemplate).not.toHaveBeenCalled();
-  }
-
-  it('"Yeni tip olarak kaydet" → POST (soru tekrar sorulmaz)', async () => {
-    mockApi.suggestTemplate.mockResolvedValue(SIMILAR);
-    const r = renderWithPaper(<TeachEntry detail={detail(null)} localPages={LOCAL} />);
-    await markAndSave(r);
-    expect(r.getByTestId('tanit-benzer-yeni')).toHaveTextContent(/Yeni tip olarak kaydet/);
-    await press(r.getByTestId('tanit-benzer-yeni'));
-    await flush();
-    expect(mockApi.createUserTemplate).toHaveBeenCalledTimes(1);
-    expect(mockApi.updateUserTemplate).not.toHaveBeenCalled();
-  });
-
-  it('"Aynı tip" seçildi ama şablon çekilemedi → kayıt yok, ekran takılmaz; "Yeni tip" ile kaydedilebilir', async () => {
-    mockApi.suggestTemplate.mockResolvedValue(SIMILAR);
-    mockApi.getUserTemplate.mockRejectedValue(Object.assign(new Error('Ağ hatası'), { status: undefined }));
-    const r = renderWithPaper(<TeachEntry detail={detail(null)} localPages={LOCAL} />);
-    await markAndSave(r);
-    await press(r.getByTestId('tanit-benzer-guncelle-u-gulecsoy'));
-    await flush();
-    expect(mockApi.getUserTemplate).toHaveBeenCalledWith('u-gulecsoy');
-    expect(mockApi.updateUserTemplate).not.toHaveBeenCalled();
-    expect(r.getByTestId('tanit-kutu-6')).toBeTruthy();
-    expect(r.getByTestId('tanit-baslik')).not.toHaveTextContent(/güncelle/);
-    await press(r.getByTestId('tanit-kaydet'));
-    await press(await r.findByTestId('tanit-benzer-yeni'));
-    await flush();
-    expect(mockApi.createUserTemplate).toHaveBeenCalledTimes(1);
-  });
-
-  it('"Aynı tip" → şablon çekilir, işaretleme benimsenir, base ile önizlenip PUT expectedVersion 2', async () => {
-    mockApi.suggestTemplate.mockResolvedValue(SIMILAR);
-    const r = renderWithPaper(<TeachEntry detail={detail(null)} localPages={LOCAL} />);
-    await markAndSave(r);
-    await press(r.getByTestId('tanit-benzer-guncelle-u-gulecsoy'));
-    await waitFor(() => expect(mockApi.updateUserTemplate).toHaveBeenCalledTimes(1));
-    expect(mockApi.getUserTemplate).toHaveBeenCalledWith('u-gulecsoy');
-    const last = mockApi.suggestTemplate.mock.calls[mockApi.suggestTemplate.mock.calls.length - 1][0];
-    expect(last.base).toMatchObject({ code: 'u-gulecsoy' });
-    expect(last.identifiers).toEqual(expect.arrayContaining(['ESKİ KİMLİK', 'GÜLEÇSOY BOYA']));
-    expect(last.assignments).toEqual([{ field: 'partiNo', rect: { x: 200, y: 300, width: 90, height: 20 } }]);
-    const [code, put] = mockApi.updateUserTemplate.mock.calls[0];
-    expect(code).toBe('u-gulecsoy');
-    expect(put).toMatchObject({ expectedVersion: 2, template: SUGGEST.template, name: 'Güleçsoy' });
-    expect(mockApi.createUserTemplate).not.toHaveBeenCalled();
-  });
-});
-
-// Gülkesim 2026-11-04 cihaz: "Şablonu güncelle"de yalnız Başlık ✓; Müşteri/Parti no/Gelen metre işaretsiz, Kaydet pasif.
-describe('TeachModal — şablonu güncelle (kayıtlı alanlar)', () => {
-  const OLD_T = {
-    ...USER_T,
-    name: 'kömürhan',
-    template: { fields: [{ key: 'musteri' }, { key: 'partiNo', strategies: [{ kind: 'anchor', maxWords: 1 }] }, { key: 'toplamMetre' }], identifiers: { keywords: ['GÜLEÇSOY BOYA'] } },
-  };
-  const MERGED = {
-    ...SUGGEST,
-    template: { id: 'u-gulecsoy', fields: OLD_T.template.fields },
-    explain: [],
-    preview: { ...SUGGEST.preview, fields: { musteri: 'GÜLEÇSOY', partiNo: 'P2618733', toplamMetre: '1234' }, fieldRects: { partiNo: { x: 195, y: 295, width: 100, height: 30 } } },
-  };
-
-  it('⭐ açılışta kayıtlı alanlar ✓ + değer + belge üstünde işaret; yeni atamasız Kaydet → base\'li boş atama → PUT (alan kaybı yok)', async () => {
-    mockApi.getUserTemplate.mockResolvedValue({ ...OLD_T, versions: [] });
-    mockApi.suggestTemplate.mockResolvedValue(MERGED);
-    const r = renderWithPaper(<TeachEntry detail={detail('t-u1')} localPages={LOCAL} />);
-    await waitFor(() => expect(r.getByTestId('tanit-ac')).toHaveTextContent(/Şablonu güncelle/));
-    await openGuided(r);
-    await waitFor(() => expect(mockApi.suggestTemplate).toHaveBeenCalledTimes(1));
-    expect(mockApi.suggestTemplate.mock.calls[0][0]).toMatchObject({ assignments: [], base: { code: 'u-gulecsoy', keep: [] } });
-    expect(r.queryByTestId('tanit-kaydet-neden')).toBeNull();
-    expect(r.getByTestId('tanit-kaydet')).not.toBeDisabled();
-    expect(r.getByTestId('tanit-adim-partiNo')).toHaveProp('accessibilityLabel', 'Parti no: kayıtlı');
-    expect(r.getByTestId('tanit-adim-en')).toHaveProp('accessibilityLabel', 'En: atanmadı');
-    expect(r.getByTestId('tanit-kutu-6')).toHaveProp('accessibilityLabel', 'Parti No (kayıtlı)');
-    await press(r.getByTestId('tanit-adim-partiNo'));
-    expect(r.getByTestId('tanit-okunan')).toHaveTextContent(/Okunan: P2618733/);
-    expect(r.getByTestId('tanit-okunan')).toHaveTextContent(/Kayıtlı/);
-    await press(r.getByTestId('tanit-kaydet'));
-    await flush();
-    expect(mockApi.updateUserTemplate).toHaveBeenCalledWith('u-gulecsoy', { expectedVersion: 2, name: 'kömürhan', template: MERGED.template });
-  });
-});

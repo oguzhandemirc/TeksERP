@@ -11,6 +11,10 @@ import { requirePermission, requireAnyPermission } from "../middlewares/rbac.mid
 import { z } from "zod";
 import { correctCutReading } from "../services/tambur-meter-correct.service";
 import { getTamburLabelSettings } from "../services/helpers/tambur-customer-settings.helper";
+import { getTamburLabelSuggestions } from "../services/tambur/label-suggestions";
+import { getTamburLabelPreviewFields } from "../services/tambur/label-preview-fields";
+import { getTamburLabelPreview } from "../services/tambur/label-preview";
+import { TERIM } from "../constants/terim";
 
 const controller = new TamburController();
 /** Saha düzeltmesi uçları (`/manual/*`) — ayrı controller, aynı router. */
@@ -639,6 +643,7 @@ router.post(
  *               width:        { type: number, nullable: true }
  *               qualityGrade: { type: string }
  *               weightKg:     { type: number }
+ *               weightSource: { type: string, enum: [SCALE, MANUAL, SIMULATED], nullable: true, description: "Kg kaynağı; yalnız kg ile (kaynaksız kg MANUAL)" }
  *     responses:
  *       201: { description: "Top oluşturuldu ve Tambur adımına bağlandı" }
  *       400: { description: "Geçersiz gövde / sebep-metraj eksik / ürün çözülemedi / ağırlık girişi kapalı" }
@@ -705,6 +710,7 @@ router.post(
  *               qualityGrade:      { type: string, description: "Katalog kodu; verilmezse kalite Belirsiz" }
  *               width:             { type: number, nullable: true }
  *               weightKg:          { type: number }
+ *               weightSource:      { type: string, enum: [SCALE, MANUAL, SIMULATED], nullable: true, description: "Kg kaynağı; yalnız kg ile. Simüle kantar bayrak kapalıyken 400 SIMULATED_WEIGHT_DISABLED" }
  *               targetOrderLineId: { type: string, format: uuid, nullable: true, description: "Etiket niyeti — müşteriye önceliklidir" }
  *               targetCustomerId:  { type: string, format: uuid, nullable: true }
  *               markedForKartela:  { type: boolean }
@@ -863,9 +869,13 @@ router.post(
  *               cutLength: { type: number }
  *               clientToken: { type: string, format: uuid }
  *               measure: { $ref: '#/components/schemas/TamburMeasureBody' }
+ *               labelConsigneeId: { type: string, format: uuid, nullable: true, description: "Emanet top alıcısı (sahibin alıcısı; beş kesim/bitir yolunda aynı alan)" }
+ *               weightSource: { type: string, enum: [SCALE, MANUAL, SIMULATED], nullable: true, description: "Kg kaynağı; yalnız kg ile" }
+ *               widthCm: { type: number, nullable: true, description: "Ölçülen en (cm) — mirası ezer; sınır miras en + Tambur en eşiği" }
  *     responses:
  *       201: { description: Kesim başarılı, child barkodlu top oluştu }
- *       400: { description: Parent açık kumaş / status WAREHOUSE değil / metre yetmiyor }
+ *       400: { description: "Parent açık kumaş / status WAREHOUSE değil / metre yetmiyor · CONSIGNEE_OWNER_MISMATCH · SIMULATED_WEIGHT_DISABLED · WEIGHT_SOURCE_WITHOUT_KG · WIDTH_OUT_OF_RANGE" }
+ *       409: { description: "LABEL_TARGET_NOT_OWNER (emanet top yalnız sahibi adına) · CONSIGNEE_INACTIVE" }
  */
 router.post(
   "/:id/cut-warehouse",
@@ -970,7 +980,7 @@ router.post(
  *     tags: [Tambur]
  *     summary: Kesim ekranı için müşteri tambur/etiket ayarları + basım zamanı
  *     description: |
- *       Müşteri = `customerId` (Kime?) verildiyse o, yoksa `rollId`'nin sahibi. Döner:
+ *       Müşteri = `rollId`'nin sahibi (emanet) varsa o, yoksa `customerId` (Kime?). Döner:
  *       en kaynağı (null = güncel en), tartım zorunlu mu, bölme ölçüsü önerisi (m), fabrika
  *       ayarı `tambur.labelPrintTiming` (EACH | END). Gülkesim S5.
  *     security: [{ bearerAuth: [] }]
@@ -982,7 +992,7 @@ router.post(
  *         name: customerId
  *         schema: { type: string, format: uuid }
  *     responses:
- *       200: { description: "{ customerId, widthSource, weighRequired, splitLengthM, printTiming, ownerCustomer }" }
+ *       200: { description: "{ customerId, widthSource, weighRequired, splitLengthM, printTiming, ownerCustomer, deliveryNoteBatchNo (topun gelen belge müşteri partisi — tablet parti no varsayılanı; yoksa null), deliveryNoteItemText, deliveryNoteColorText (belgedeki kumaş adı / renk; yoksa null), ownerLocked (emanet top: etiket müşterisi sahibe kilitli) }" }
  *       404: { description: Top bulunamadı }
  */
 const labelSettingsQuery = z.object({
@@ -997,6 +1007,147 @@ router.get(
     try {
       const q = labelSettingsQuery.parse(req.query);
       res.json({ success: true, data: await getTamburLabelSettings(q) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * @openapi
+ * /api/tambur/label-suggestions:
+ *   get:
+ *     tags: [Tambur]
+ *     summary: Etiket kumaş adı / renk / parti no önerileri (son 180 gün) + bu İE'deki son değer
+ *     description: |
+ *       Müşteri kümesi = İE müşterisi ∪ İE partilerindeki topların sahibi (fason); `rollId` verilirse
+ *       topun sahibi/etiket müşterisi ve partisinin İE'si. Listeler tekil, en son kullanılan önce, en çok 20.
+ *       `last` = bu İE'de bu alanlardan birini taşıyan en son topun değerleri (tablet yapışkan değeri; alıcı dahil).
+ *       `consigneeId` verilirse listeler yalnız o alıcının toplarından (emanet: alıcı başına ad/renk).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: workOrderId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: rollId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: consigneeId
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: "{ workOrderId, customerIds, itemNames, colorNames, batchNos, last{…, consigneeId, consigneeName} }" }
+ *       400: { description: İkisi de yok }
+ *       404: { description: İş emri / top bulunamadı }
+ */
+const labelSuggestionsQuery = z
+  .object({
+    workOrderId: z.string().uuid({ error: () => `Geçersiz ${TERIM.terbiyeIsEmri.tekilKucuk} ID` }).optional(),
+    rollId: z.string().uuid("Geçersiz top ID").optional(),
+    consigneeId: z.string().uuid("Geçersiz alıcı ID").optional(),
+  })
+  .refine((q) => !!q.workOrderId || !!q.rollId, { message: "workOrderId ya da rollId gerekli" });
+router.get(
+  "/label-suggestions",
+  verifyToken,
+  requireAnyPermission("quality:read", "mobile:tambur"),
+  async (req, res, next) => {
+    try {
+      const q = labelSuggestionsQuery.parse(req.query);
+      res.json({ success: true, data: await getTamburLabelSuggestions(q) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * @openapi
+ * /api/tambur/label-preview-fields:
+ *   get:
+ *     tags: [Tambur]
+ *     summary: Kesimde doğacak çocuğun etiket şablonu ve basılacak alanları (Etikette kartı)
+ *     description: |
+ *       Şablon baskıyla aynı zincirden çözülür (alıcı > müşteri > cihaz > bağlam varsayılanı); müşteri =
+ *       topun sahibi (emanet) yoksa `customerId`. Kanvas varyantında bağlı alan elemanları, akış şablonunda
+ *       görünür alanlar; barkod/QR/tarih atılır. Şablon çözülmezse `fields: null` (tablet özete düşer).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: rollId, required: true, schema: { type: string, format: uuid } }
+ *       - { in: query, name: customerId, schema: { type: string, format: uuid } }
+ *       - { in: query, name: consigneeId, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: "{ kind, templateId, templateName, fields: [{ key, label }] | null }" }
+ *       404: { description: Top bulunamadı }
+ */
+const labelPreviewFieldsQuery = z.object({
+  rollId: z.string().uuid("Geçersiz top ID"),
+  customerId: z.string().uuid("Geçersiz müşteri ID").optional(),
+  consigneeId: z.string().uuid("Geçersiz alıcı ID").optional(),
+});
+router.get(
+  "/label-preview-fields",
+  verifyToken,
+  requireAnyPermission("quality:read", "mobile:tambur"),
+  async (req, res, next) => {
+    try {
+      const q = labelPreviewFieldsQuery.parse(req.query);
+      res.json({ success: true, data: await getTamburLabelPreviewFields({ ...q, deviceId: req.device?.id ?? null, machineId: req.device?.machineId ?? null }) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * @openapi
+ * /api/tambur/label-preview:
+ *   post:
+ *     tags: [Tambur]
+ *     summary: Kesimde doğacak çocuğun etiketi — taslak değerlerle çizilebilir önizleme (yazmaz)
+ *     description: |
+ *       Payload `getRollLabel` zinciri, şablon preview-fields ile aynı karar (emanette sahip). Kanvas varyantında
+ *       konumlu elemanlar (metin baskıyla aynı fonksiyonlardan), akış şablonunda sıralı satırlar. Çocuk barkodu
+ *       kesimde doğar → barkod elemanı yer tutucu. Gövdede `templateId` (çoklu etiket seti) seçilen şablonla çizer;
+ *       teklif dışı id 400 `LABEL_TEMPLATE_NOT_OFFERED`. Yanıt seçiciyi besler: `templateOptions`, `defaultTemplateId`.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ kind, templateId, templateName, widthMm, heightMm, elements | null, rows | null, templateOptions:[{id,name,source,isDefault}], defaultTemplateId }" }
+ *       400: { description: LABEL_TEMPLATE_NOT_OFFERED }
+ *       404: { description: Top bulunamadı }
+ */
+const optNum = z.number().finite().nonnegative().max(100000).nullish();
+const optText = z.string().max(200).nullish();
+const labelPreviewBody = z.object({
+  rollId: z.string().uuid("Geçersiz top ID"),
+  orderLineId: z.string().uuid("Geçersiz sipariş satırı ID").nullish(),
+  customerId: z.string().uuid("Geçersiz müşteri ID").nullish(),
+  consigneeId: z.string().uuid("Geçersiz alıcı ID").nullish(),
+  templateId: z.string().uuid("Geçersiz şablon ID").nullish(),
+  draft: z
+    .object({
+      lengthMeters: optNum,
+      weightKg: optNum,
+      widthCm: optNum,
+      qualityGrade: z.string().max(40).nullish(),
+      labelItemName: optText,
+      labelColorName: optText,
+      labelBatchNo: optText,
+    })
+    .strict()
+    .default({}),
+});
+router.post(
+  "/label-preview",
+  verifyToken,
+  requireAnyPermission("quality:read", "mobile:tambur"),
+  async (req, res, next) => {
+    try {
+      const b = labelPreviewBody.parse(req.body ?? {});
+      res.json({
+        success: true,
+        data: await getTamburLabelPreview({ ...b, deviceId: req.device?.id ?? null, machineId: req.device?.machineId ?? null }),
+      });
     } catch (err) {
       next(err);
     }

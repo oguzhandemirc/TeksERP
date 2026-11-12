@@ -258,6 +258,11 @@ describe("istasyon mutation kayıt bütünlüğü", () => {
       confirmMismatch: true,
       weightKg: 6.5,
       labelBatchNo: "J1",
+      labelItemName: "SULTAN",
+      labelColorName: "EKRU",
+      labelConsigneeId: "k-1",
+      weightSource: "SCALE",
+      widthCm: 148,
     });
     expect(tamburService.finalizeOpenFabric).toHaveBeenCalledWith(
       "r-pg",
@@ -269,6 +274,11 @@ describe("istasyon mutation kayıt bütünlüğü", () => {
         confirmMismatch: true,
         weightKg: 6.5,
         labelBatchNo: "J1",
+        labelItemName: "SULTAN",
+        labelColorName: "EKRU",
+        labelConsigneeId: "k-1",
+        weightSource: "SCALE",
+        widthCm: 148,
       }),
     );
   });

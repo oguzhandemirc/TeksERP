@@ -218,6 +218,10 @@ export interface FeatureFlags {
   dokumaOrderLineLinkRequired: boolean;
   /** S1: topun doğuş yolu (varsayılan `TABLET_DOFF` = bugün). HAM; etkin `resolveDokumaRollBirth` (dokuma kapalı → TABLET_DOFF). */
   dokumaRollBirth: DokumaRollBirth;
+  /** Dokuma firesi % (0 = bugünkü davranış); üretim önerisi ve iplik ihtiyacı ham metresine girer. */
+  dokumaWeavingWastePct: number;
+  /** SY-3 I1: iplik ayırma görünürlüğü (HAM; etkin değer `resolveDokumaYarnReservationEnabled`). */
+  dokumaYarnReservationEnabled: boolean;
   /** Dokuma işi modülü (dokuma işi planlama · tezgah koşumu · top indirme).
    *  Varsayılan KAPALI. ⚠️ ÜRETİME BAĞIMLI: bu alan HAM değerdir; etkin değer
    *  `production && dokuma` ve kapının içinde çözülür. */
@@ -236,6 +240,8 @@ export interface FeatureFlags {
   /** Yeni rapor merkezi (Raporlar v2) açık mı (default false). Client (panel) okur. */
   reportsV2Enabled: boolean;
   targetQuantityEnabled: boolean;
+  /** İş emri formunda hedef en kutusu (default true = bugünkü davranış). */
+  targetWidthEnabled: boolean;
   rawWidthEnabled: boolean;
   /** KK1 ham kumaş girişinde ağırlık (kg) alanı gösterilsin mi. Default false;
    *  backend ENFORCE eder (kapalıyken gelen weightKg reddedilir). */
@@ -287,6 +293,8 @@ export interface FeatureFlags {
   shipmentManualSackCountEnabled: boolean;
   /** Çuvalsız sevk — toplar dökme ya da araba ile çıkar (default false). */
   shipmentLooseLoadEnabled: boolean;
+  /** Sevk Çıkışı'nda (el terminali) hazır toplardan sevk kurma (default false; ön koşul shipmentLooseLoadEnabled). */
+  shipmentHandheldCreateEnabled: boolean;
   /** Sevk geri alma (storno) yalnız aynı fabrika gününde mi (default false = sınırsız).
    *  Faturasız + iadesiz koşulları bundan bağımsız her zaman geçerlidir. */
   shipmentUndoSameDayOnly: boolean;

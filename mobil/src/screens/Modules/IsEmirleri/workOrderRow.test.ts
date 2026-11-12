@@ -8,12 +8,12 @@ const st = (over: Partial<WorkOrderLocation['istasyonlar'][number]> = {}) => ({
 describe('locationBadge — "şu an nerede" rozeti', () => {
   it('tek istasyon: ad + istasyon tonu + top sayısı', () => {
     const b = locationBadge({ sinif: 'TEK_ISTASYON', canliTop: 8, istasyonlar: [st()] }, 'IN_PROGRESS');
-    expect(b).toEqual({ kind: 'station', text: 'Kurşun', extra: 0, tone: stationToneFor(false, 'PROCESS_QC'), detail: '8 top' });
+    expect(b).toEqual({ kind: 'station', text: 'Kurşun', extra: 0, tone: stationToneFor(false, 'PROCESS_QC'), detail: '' });
   });
 
   it('fasonda: fasoncu adı rozette, istasyon adı ayrıntıda, fason tonu', () => {
     const b = locationBadge({ sinif: 'FASONDA', canliTop: 5, istasyonlar: [st({ ad: 'Boyahane', tur: 'SUBCONTRACTOR', dis: true, topSayisi: 5, fasondaTop: 5, fasoncular: ['Gül Boya'] })] }, 'IN_PROGRESS');
-    expect(b.kind === 'station' && [b.text, b.detail, b.tone.key]).toEqual(['Gül Boya', 'Boyahane · 5 top', 'fason']);
+    expect(b.kind === 'station' && [b.text, b.detail, b.tone.key]).toEqual(['Gül Boya', 'Boyahane', 'fason']);
   });
 
   it('bölünmüş: ilk istasyon + "+N"', () => {
@@ -97,7 +97,7 @@ describe('emptyStateFor — boş liste başlığı + çıkış eylemi', () => {
 
 describe('typeBadgeText — tür rozeti', () => {
   it('yalnız Fason (müşteri malı) işaretlenir; kendi üretimi ve eski sunucu rozetsiz', () => {
-    expect(typeBadgeText({ type: 'CUSTOMER_GOODS_SERVICE' })).toBe('Fason (müşteri malı)');
+    expect(typeBadgeText({ type: 'CUSTOMER_GOODS_SERVICE' })).toBe('Fason');
     expect(typeBadgeText({ type: 'ORDER_PRODUCTION' })).toBeNull();
     expect(typeBadgeText({ type: 'STOCK_PRODUCTION' })).toBeNull();
     expect(typeBadgeText({})).toBeNull();

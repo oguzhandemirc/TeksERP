@@ -15,6 +15,8 @@
 //   §6 levent: devere kapalı → `beams: null`; açık → işe bağlı levent listesi
 //   §7 HTTP: 200 · dokuma kapalı 403 MODULE_DISABLED · izinsiz 403 · bozuk kimlik 400 · bilinmeyen 404
 //   §8 yapısal: servis paylaşılan yüklemleri çağırır, kopya yüklem yazmaz; uç detayla aynı izin kümesi
+//   §1h/§1i/§4b (K2 2026-11-11) kalan = plannedM − ÜRETİLEN (`weavingRemainingM`), üretilen seçimi listeyle tek helper
+//      (`weavingProducedM`); sonda: kalan koşum metresinden hesaplanınca §1h ❌
 //   §9 liste ilerlemesi (tablet Dokuma listesi): satırın `producedM`i genel bakışın top metresiyle AYNI,
 //      `openRunMachines` yalnız açık koşumun tezgahı; koşumsuz/topsuz işte boş dizi + null (0 uydurulmaz)
 //
@@ -41,6 +43,7 @@ import { factoryDayKeyUtcMidnight } from "../src/constants/time";
 import { PASSWORD_BCRYPT_COST } from "../src/constants/password-policy";
 import { invalidateFeatureFlagsCache, SETTING_KEYS } from "../src/services/system-setting.service";
 import { createWeavingOrder, getWeavingOrder, listWeavingOrders } from "../src/services/weaving-order.service";
+import { weavingProducedM, weavingRemainingM } from "../src/services/helpers/weaving-order-list-progress.helper";
 import { getWeavingOrderOverview, OVERVIEW_RECENT_RUN_CAP } from "../src/services/weaving-order-overview.service";
 import { ensureTestAdmin, testActorId } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
@@ -131,6 +134,9 @@ async function serviceSections(f: Awaited<ReturnType<typeof fixture>>, now: Date
   check("§1e ölçülmeyen koşum ayrı sayılır (kapanmış 2, ölçülmemiş 1)", a.progress.closedRunCount === 2 && a.progress.unmeasuredRunCount === 1);
   check("§1f hedef ve fason alanı (kendi tezgahımızda → null)", a.progress.plannedM === 500 && a.progress.fasonReceivedM === null);
   check("§1g indirme sayısı geri alınmışı saymaz (2)", a.progress.doffCount === 2, String(a.progress.doffCount));
+  check("§1h ⭐ K2 kalan = plannedM − ÜRETİLEN (top metresi): 500 − 155 = 345; koşum metresi (120) girmez", a.progress.producedM === 155 && a.progress.remainingM === 345, `${a.progress.producedM}/${a.progress.remainingM}`);
+  check("§1i kalan saf kuralı: fasonda kabul yoksa üretilen 0 · fazla üretimde kalan 0 · topsuz işte kalan = plan",
+    weavingProducedM("SUBCONTRACTED", null, 50) === 0 && weavingProducedM("IN_HOUSE", 80, null) === null && weavingRemainingM(100, 150) === 0 && weavingRemainingM(500, null) === 500 && weavingRemainingM(null, 10) === null);
 
   console.log("\n§2 — açık koşum");
   const live = a.liveRuns.items;
@@ -151,6 +157,7 @@ async function serviceSections(f: Awaited<ReturnType<typeof fixture>>, now: Date
   console.log("\n§4 — açık uçlu iş");
   const b = (await getWeavingOrderOverview(f.B, now)).data!;
   check("§4a plannedM null · top yok → metre null (0 uydurulmaz) · koşum yok", b.progress.plannedM === null && b.progress.rollCount === 0 && b.progress.rollMeters === null && b.progress.runMeters === null && b.liveRuns.items.length === 0 && b.recentRuns.total === 0);
+  check("§4b açık uçlu iş → remainingM null; top yok → producedM null", b.progress.remainingM === null && b.progress.producedM === null);
 
   console.log("\n§5 — tavan");
   const c = (await getWeavingOrderOverview(f.C, now)).data!;

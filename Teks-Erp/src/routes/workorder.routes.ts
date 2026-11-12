@@ -7,11 +7,14 @@ import { z } from "zod";
 import { WorkOrderController } from "../controllers/workorder.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requireProductionEnabled } from "../middlewares/module.middleware";
-import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
+import { matchesPermission, requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
+import { workOrderConsumableUsage } from "../services/consumable-usage.service";
+import { getWorkOrderMeterComparison } from "../services/meter-comparison.service";
 import { workOrderTravelerRouter } from "./traveler-card.routes";
 import { getEffectiveDefaultTarget, getWorkOrderDefaultItem } from "../services/workorder-default-item.service";
 import { requireQuickWorkOrderOwnership } from "../services/helpers/scope-narrowing.helper";
-import { getKursunGramaj, getWorkOrderSummary, patchStepPlannedMachine, putTargetValues } from "../controllers/workorder-process.controller";
+import { getKursunGramaj, getWorkOrderSummary, patchFoldType, patchStepPlannedMachine, putTargetValues } from "../controllers/workorder-process.controller";
+import { TERIM } from "../constants/terim";
 
 const controller = new WorkOrderController();
 const router = Router();
@@ -155,7 +158,12 @@ router.get(
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200:
- *         description: İş emri detayı (rota adımları ve siparişler dahil)
+ *         description: |
+ *           İş emri detayı (rota adımları ve siparişler dahil). `incoming` (belgeden doğmuş İE; değilse null): meters,
+ *           kg (kök satırlarının toplamı; eksik satırda null), kgSource DOCUMENT|null, notes[{id, noteNo}] (kaynak gelen
+ *           belgeler), widthCm (her kökte aynıysa tek değer, değilse null), customerBatchNo (satırlardaki müşteri parti
+ *           no'ları, tekil birleşik; yoksa null), itemText / colorText (gelen kumaş adı / gelen renk — müşteri beyanı,
+ *           İE hedefi değil; her kökte aynıysa tek değer, değilse null). Eski istemci yeni alanları yok sayar.
  *       404:
  *         description: İş emri bulunamadı
  */
@@ -496,9 +504,12 @@ router.post("/", verifyToken, requirePermission("workorder:write"), controller.c
  *               scanRouted:
  *                 type: boolean
  *                 description: "K29 rotasız iş emri (adımlar sahada okutmayla eklenir); yalnız production.routeMode=SCAN, değilse 400 SCAN_ROUTE_DISABLED"
+ *               ownGoods:
+ *                 type: boolean
+ *                 description: "Kendi üretim (tablet): rollBarcodes boş olabilir (yalnız İE açılır, toplar sonra Parti Ekle ile); müşteri malı top 400 WO_OWN_GOODS_CONSIGNED_ROLL; Fason türü 400 WO_OWN_GOODS_TYPE. Yoksa bugünkü davranış"
  *     responses:
  *       201: { description: İş emri başlatıldı (workOrder + attached + errors) }
- *       400: { description: "Validasyon / uygun olmayan top / SCAN_ROUTE_DISABLED" }
+ *       400: { description: "Validasyon · uygun olmayan top (details.code ROLL_NOT_FOUND · ROLL_NOT_ATTACHABLE · ROLL_COMMITTED · ROLLS_MIXED_ITEM · ROLL_ITEM_MISMATCH · WO_OWN_GOODS_CONSIGNED_ROLL) · WO_OWN_GOODS_TYPE · SCAN_ROUTE_DISABLED" }
  *       409: { description: Hiç top bağlanamadı }
  */
 router.post(
@@ -683,14 +694,16 @@ router.patch("/:id/lock", verifyToken, requirePermission("workorder:write"), con
  *                   properties:
  *                     propertyId: { type: string, format: uuid }
  *                     valueId: { type: string, format: uuid, nullable: true }
- *               reason: { type: string, nullable: true, description: "Gramaj değişim sebebi (İE hareket defterine)" }
+ *               reason: { type: string, nullable: true, description: "Değişim sebebi (İE hareket defterine); tablet düzeltmesinde kurşun dışı değer için zorunlu" }
+ *               reasonCode: { type: string, nullable: true, description: "WORK_ORDER_PLAN_CHANGE sebep kodu (tanınmayan 400)" }
+ *               correction: { type: boolean, enum: [true], description: "Tablet düzeltme kuralları panel izninde de uygulanır" }
  *     responses:
  *       200: { description: "Hedef güncellendi (ya da aynıydı); kurşun gramajı değişti ve uygulanmış top varsa warnings[] eski/yeni top sayısını söyler" }
- *       403: { description: "Yalnız mobile:is-emri-duzelt — gövdede kurşun gramajı dışı özellik" }
- *       409: { description: "WORK_ORDER_PLAN_FROZEN — tablet yolu, iş emri kapanmış" }
+ *       403: { description: "Tablet düzeltmesi — İE'de olmayan hedefi ekleme/kaldırma ya da boş liste" }
+ *       409: { description: "WORK_ORDER_PLAN_FROZEN (iş emri kapanmış) · TARGET_VALUE_STEP_STARTED (değerin adımı başladı) — tablet yolu" }
  *       400: { description: Özellik çeşit değil / değer o özelliğe ait değil }
  */
-// Tablet Düzelt (`mobile:is-emri-duzelt`) yalnız kurşun gramajını yazar — daraltma serviste (`kursunOnly`).
+// Tablet Düzelt (`mobile:is-emri-duzelt`) mevcut hedefleri sebepli düzeltir, adımı başlamışı yazamaz — kapı serviste (`tabletFix`).
 router.put("/:id/target-values", verifyToken, requireAnyPermission("workorder:write", "mobile:is-emri-duzelt"), putTargetValues);
 
 /**
@@ -724,6 +737,56 @@ router.get("/:id/kursun-gramaj", verifyToken, requireAnyPermission("workorder:wr
  *       200: { description: "{ kursun: { target, rows, totals }, deliveryNoteGramaj? } — deliveryNoteGramaj yalnız gelen belge modülü açıkken (H9b; gelen belgesiz İE'de null)" }
  */
 router.get("/:id/process-summary", verifyToken, requirePermission("workorder:read"), getWorkOrderSummary);
+
+/**
+ * @openapi
+ * /api/work-orders/{id}/meter-comparison:
+ *   get:
+ *     tags: [WorkOrders]
+ *     summary: Beyan ↔ ölçülen metre — parti başına beyan, kurşun çıkan, tambura giren, tamburdan çıkan, fark ve faturalanan
+ *     description: Faturalanan = partinin en büyük ölçümü beyandan %0,5 ve daha fazla uzunsa ölçülen, değilse beyan. Simüle okumalar ölçüme girmez.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: "{ tolerancePct, parties[{ partyKey, batchNo, declaredM, declaredSource, kursunOutM, tamburInM, tamburCutM, measuredMaxM, billedM, billedBasis, diffM, diffPct, withinTolerance, longerThanDeclared, defectsBeyondDeclared[] }], totals }" }
+ *       404: { description: İş emri bulunamadı }
+ */
+router.get("/:id/meter-comparison", verifyToken, requireAnyPermission("workorder:read", "mobile:hizli-is-emri"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json({ success: true, data: await getWorkOrderMeterComparison(req.params.id) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/work-orders/{id}/consumables:
+ *   get:
+ *     tags: [WorkOrders]
+ *     summary: İE sarfiyatı — şu ana kadarki canlı sarf tüketimi (poşet, kurşun ipi …); maliyet alanları yalnız cost:read
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: "{ enabled, rows[{ itemId, name, unit, qty, kursunKg, costTry?, unitCostTry? }], totalCostTry?, customer? }" }
+ *       404: { description: İş emri bulunamadı }
+ */
+router.get("/:id/consumables", verifyToken, requirePermission("workorder:read"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = z.string().uuid(`Geçersiz ${TERIM.terbiyeIsEmri.tekilKucuk} ID`).parse(req.params.id);
+    // Maliyet OPT-IN: alan izinsiz yanıta hiç girmez (istemci izni ikinci kez yorumlamaz).
+    const canCost = matchesPermission(req.user?.permissions ?? [], "cost:read");
+    res.json({ success: true, data: await workOrderConsumableUsage(id, { canCost }) });
+  } catch (e) { next(e); }
+});
 
 // ── Sipariş bağlama + hedef düzeltme (2026-08-17 saha talepleri 8/10/12) ─────
 // Bu dört uç, "Düzenle" ekranını hiç açmadan TEK bir şeyi değiştirir. Gerekçe:
@@ -1008,6 +1071,32 @@ router.post(
   requireAnyPermission("roll:manual-adjust", "workorder:write"),
   controller.applyAttributeToRolls,
 );
+
+/**
+ * @openapi
+ * /api/work-orders/{id}/fold-type:
+ *   patch:
+ *     tags: [WorkOrders]
+ *     summary: Kat Tipini Değiştir (tablet Düzelt) — sebep zorunlu; Tambur adımı başladıysa 409 (kilit)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [foldType, reason]
+ *             properties:
+ *               foldType: { type: string, nullable: true, description: "KAT katalog kodu; null = kaldır" }
+ *               reason: { type: string }
+ *               reasonCode: { type: string }
+ *     responses:
+ *       200: { description: "{ previousFoldType, foldType }" }
+ *       400: { description: Katalogda olmayan kat / aynı değer / sebep yok }
+ *       409: { description: "Kat kilitli (Tambur başladı) ya da WORK_ORDER_PLAN_FROZEN" }
+ */
+router.patch("/:id/fold-type", verifyToken, requireAnyPermission("workorder:write", "mobile:is-emri-duzelt"), patchFoldType);
 
 router.patch(
   "/:id/width",

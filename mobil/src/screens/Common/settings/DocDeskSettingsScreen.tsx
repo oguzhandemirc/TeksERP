@@ -4,10 +4,11 @@
 // "Bu cihaz belge masası": açılışta İE oluştur ekranı doğrudan kamera-önce masa kipinde açılır (varsayılan kapalı =
 // bugünkü açılış). Çekim: dokunarak (varsayılan) | otomatik (deneysel, paketsiz; ara kare aralığı ayarlı).
 // Belge çekimi (okut/tanıt): kendi çok çekimli kameramız + otomatik iyileştirme (varsayılan) | Google belge tarayıcı |
-// canlı okuma (yalnız canlı kamera modülü olan APK'da listelenir).
+// canlı okuma (yalnız canlı kamera modülü olan APK'da listelenir). "Flaşı otomatik aç": belge kameraları feneri yakarak açılır
+// (varsayılan açık; flaşsız cihazda etkisiz), operatör çekimde kamera üstündeki düğmeyle değiştirir.
 // Ekran açık kalma paketi YOK (expo-keep-awake onay bekliyor) → cihazın "şarjdayken uyanık kal" ipucu gösterilir.
 // =============================================================================
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Icon, Switch, Text, TouchableRipple } from 'react-native-paper';
 import {
@@ -19,17 +20,19 @@ import {
 } from '../../../store/deviceSettingsStore';
 import { TERIM } from '../../../lib/terim';
 import { isLiveCameraAvailable } from '../../../services/liveCamera';
+import { checkDocScanner } from '../../../services/docScannerNative';
+import { scannerStatusLine, type ScannerAvailability } from '../../../services/docScannerStatus';
 import { SETTINGS_COLORS as COLORS, SettingsPage, settingsStyles } from './settingsUi';
 
 const CAPTURE_OPTIONS: { value: DocDeskCaptureMode; label: string; desc: string }[] = [
-  { value: 'tap', label: 'Dokunarak', desc: 'Okut düğmesine ya da ekrana dokununca çeker (varsayılan).' },
-  { value: 'auto', label: 'Otomatik (deneysel)', desc: 'Kağıt konup hareket durunca kendisi çeker; yanlış çekimde “Tekrar çek”.' },
+  { value: 'tap', label: 'Dokunarak', desc: 'Okut / Çek ve bitir düğmesine ya da ekrana dokununca çeker; canlı okumada da otomatik çekim yapmaz (varsayılan).' },
+  { value: 'auto', label: 'Otomatik (deneysel)', desc: 'Kağıt konup hareket durunca kendisi çeker (canlı okumada alanlar kilitlenince); yanlış çekimde “Tekrar çek”.' },
 ];
 
 const ENGINE_OPTIONS: { value: DocScanEngine; label: string; desc: string }[] = [
   { value: 'camera', label: 'Kendi kamera (varsayılan)', desc: 'Art arda çekin, Tamam deyin; sayfalar kendiliğinden iyileştirilir, ara ekran yok.' },
   { value: 'mlkit', label: 'Google belge tarayıcı', desc: 'Kenar bulur ve kırpar; her sayfada inceleme ekranı açılır. Açılamazsa kendi kamera açılır.' },
-  { value: 'live', label: 'Canlı okuma', desc: 'Kamera açıkken alanları okur, sağdaki panele doldurur; hepsi kilitlenince kendisi çeker.' },
+  { value: 'live', label: 'Canlı okuma', desc: 'Kamera açıkken alanları okur, sağdaki panele doldurur; çekim “Otomatik” ise hepsi kilitlenince kendisi çeker, “Dokunarak” ise Çek ve bitir beklenir.' },
 ];
 
 /** Eski APK'da (canlı kamera modülü yok) "Canlı okuma" listelenmez. */
@@ -114,6 +117,25 @@ function CaptureCard() {
   );
 }
 
+/** Google seçiliyken tarayıcı uygunluğu: ekran başına bir kez sorulur (modül inmemişse indirmeyi de tetikler). */
+function ScannerStatus() {
+  const [state, setState] = useState<ScannerAvailability | null>(null);
+  useEffect(() => {
+    let alive = true;
+    void checkDocScanner().then((a) => {
+      if (alive) setState(a);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return (
+    <Text style={[styles.status, state?.available && styles.statusOk]} testID="ayar-belge-cekim-durum">
+      {scannerStatusLine(state)}
+    </Text>
+  );
+}
+
 function ScanEngineCard() {
   const stored = useDeviceSettingsStore((s) => s.docScanEngine);
   const setEngine = useDeviceSettingsStore((s) => s.setDocScanEngine);
@@ -127,7 +149,27 @@ function ScanEngineCard() {
           <Choice key={o.value} active={engine === o.value} label={o.label} desc={o.desc} onPress={() => void setEngine(o.value)} testID={`ayar-belge-cekim-${o.value}`} />
         ))}
       </View>
+      {engine === 'mlkit' && <ScannerStatus />}
       <Text style={settingsStyles.hint}>Belge okut ve belge tanıt ekranlarındaki “Sayfa çek” düğmesi için geçerlidir.</Text>
+    </View>
+  );
+}
+
+function TorchCard() {
+  const on = useDeviceSettingsStore((s) => s.docTorchAuto);
+  const setOn = useDeviceSettingsStore((s) => s.setDocTorchAuto);
+  return (
+    <View style={settingsStyles.card}>
+      <Text style={settingsStyles.label}>FLAŞ</Text>
+      <TouchableRipple onPress={() => void setOn(!on)} style={styles.toggleRow} testID="ayar-flas-otomatik">
+        <View style={styles.toggleInner}>
+          <Text style={[styles.choiceLabel, styles.grow]}>Flaşı otomatik aç</Text>
+          <Switch value={on} onValueChange={(v) => void setOn(v)} color={COLORS.accentLight} />
+        </View>
+      </TouchableRipple>
+      <Text style={settingsStyles.hint}>
+        Belge kamerası açılınca fener yanar (flaşı olan cihazlarda). Çekim sırasında kameradaki fener düğmesiyle kapatılabilir. Varsayılan: açık.
+      </Text>
     </View>
   );
 }
@@ -138,6 +180,7 @@ export default function DocDeskSettingsScreen() {
       <DeviceCard />
       <CaptureCard />
       <ScanEngineCard />
+      <TorchCard />
     </SettingsPage>
   );
 }
@@ -154,4 +197,6 @@ const styles = StyleSheet.create({
   choiceLabel: { fontSize: 16, fontWeight: '600', color: COLORS.text },
   choiceLabelActive: { fontWeight: '800', color: COLORS.accentLight },
   choiceDesc: { fontSize: 13, color: COLORS.subtext, marginTop: 2 },
+  status: { fontSize: 14, fontWeight: '600', color: COLORS.subtext, marginTop: 10 },
+  statusOk: { color: COLORS.accentLight },
 });

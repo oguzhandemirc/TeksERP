@@ -104,6 +104,16 @@ const printEventSchema = z.object({
   printJob: printJobAttachmentSchema.optional(),
 });
 
+/** Taslak önizleme gövdesi — alan anahtarları serviste katalogdan doğrulanır (bilinmeyen 400). */
+const rollDraftPreviewSchema = z.object({
+  templateId: z.string().uuid("Geçersiz şablon ID").nullable().optional(),
+  fields: z.record(z.string(), z.union([z.string(), z.null()])).optional(),
+  customerId: z.string().uuid("Geçersiz müşteri ID").nullish(),
+  stock: z.boolean().optional(),
+  confirmScrap: z.boolean().optional(),
+  peripheralId: z.string().uuid("Geçersiz cihaz ID").nullish(),
+});
+
 /** Toplu top etiketi baskı izi — panelin birleşik belgesi basıldıktan sonra (A2). */
 const bulkPrintEventSchema = z.object({
   rollIds: z.array(z.string().uuid("Geçersiz top ID")).min(1, "En az bir top").max(PRINT_SUBJECT_IDS_MAX),
@@ -198,8 +208,8 @@ export class LabelController {
 
   /**
    * Roll etiketinin tam HTML'i. Mobil expo-print bunu basar, Electron iframe
-   * srcDoc ile preview gösterir. Kind otomatik (renksiz STOCK SUPPLIER → RAW,
-   * aksi FINISHED); `?kind=ROLL_RAW|ROLL_FINISHED` ile override.
+   * srcDoc ile preview gösterir. Kind topun aşamasından (`rollLabelKindOf`: bitmiş →
+   * FINISHED, ham/yarı mamul → RAW); `?kind=ROLL_RAW|ROLL_FINISHED` ile override.
    *
    * Response: text/html (raw), JSON sarmalama yok — iframe ve Print için direkt.
    */
@@ -353,6 +363,22 @@ export class LabelController {
         stock: req.query.stock === "1" || req.query.stock === "true",
         confirmScrap: req.query.confirmScrap === "1" || req.query.confirmScrap === "true",
         ...(await resolveFormatOpts(req)),
+      });
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  /** Etiket düzenleme TASLAĞIYLA önizleme (kaydetmeden) — GET önizlemeyle aynı çözüm, üstüne taslak yama. */
+  previewRollDraft = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = rollDraftPreviewSchema.parse(req.body ?? {});
+      const result = await this.service.getRollPreview(req.params.id as string, undefined, {
+        customerId: body.stock ? undefined : (body.customerId ?? undefined),
+        stock: body.stock === true,
+        confirmScrap: body.confirmScrap === true,
+        ...(await resolveFormatOpts(req)),
+        ...(body.peripheralId ? { peripheralId: body.peripheralId } : {}),
+        labelEdit: { ...(body.templateId !== undefined ? { templateId: body.templateId } : {}), fields: body.fields ?? {} },
       });
       res.status(200).json(result);
     } catch (e) { next(e); }

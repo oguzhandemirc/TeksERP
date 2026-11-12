@@ -72,6 +72,7 @@ export interface OcrResult {
   engine?: string;
   /** Okuma servisi sayfayı dikleştirmek için girdiye saat yönünde uyguladığı dönüş (0/90/180/270); rect'ler DİK çerçevededir. */
   rotation?: number;
+  // `barcodes` (fotoğraftaki barkodlar) modül genişletmesiyle `lib/gelen-belge/barkod.ts`te (dosya boyu tavanı).
 }
 
 // ---------------------------------------------------------------------------
@@ -122,6 +123,8 @@ export interface AnchorStrategy {
   maxWords?: number;
   /** Tanıtmada dokunulan değerin biçimi (`u` bayraklı regex kaynağı): adayın buna uyan EN UZUN kelime öneki alınır. */
   valueShape?: string;
+  /** Tanıtmada ölçülen: etiketten sonraki adayın ilk N kelimesi başka alanındır (aynı satırda metre + kg); değer N'den başlar. */
+  skipWords?: number;
 }
 
 /** Düzenli ifade stratejisi: tüm metinde (ya da roi içinde) pattern aranır. */
@@ -175,6 +178,7 @@ export interface FieldSpec {
   postProcess?: PostProcess[];
   /** Azami karakter (uzun metin alanlarında taşmayı keser). */
   maxLength?: number;
+  // `fromBarcode` ("Barkoddan al") modül genişletmesiyle `lib/gelen-belge/barkod.ts`te.
 }
 
 export interface TemplateIdentifiers {
@@ -208,7 +212,17 @@ export interface DocumentTemplate {
   batchNoCandidates?: BatchNoCandidateSpec[];
   /** Kurşun metresi kaynakları rol başına (alan anahtarı ya da `$tableTotal`); Σ satır her zaman son yedektir, yazılmaz. */
   meterSources?: MeterSourcesSpec;
+  /** Belge tipi kuralları (2026-11-09); yokken fabrika ayarı (bugünkü davranış). Bilinmeyen anahtar/değer doğrulamada reddedilir. */
+  rules?: TemplateRules;
 }
+
+/** Çok partili belgede iş emri kuralı — fabrika ayarı `gelenBelge.multiPartyWorkOrder` ile aynı değer kümesi. */
+export type MultiPartyRule = "SINGLE" | "PER_PARTY";
+export const MULTI_PARTY_RULES: readonly MultiPartyRule[] = ["SINGLE", "PER_PARTY"];
+
+export interface TemplateRules { multiParty?: MultiPartyRule }
+/** `rules` nesnesinin tanınan anahtarları (fail-closed doğrulama tek kaynağı). */
+export const TEMPLATE_RULE_KEYS = ["multiParty"] as const;
 
 /** Tekrarlayan bölüm: başlangıç etiketi her geçtiğinde yeni bölüm (parti); alan anahtarları şablonda TANIMLI olmalı. */
 export interface SectionSpec {
@@ -267,7 +281,7 @@ export interface HeaderLineSpec {
 // ---------------------------------------------------------------------------
 
 export interface FieldSource {
-  strategy: Strategy["kind"] | "none";
+  strategy: Strategy["kind"] | "none" | "barcode";
   /** Eşleşen etiket metni (anchor için). */
   anchor?: string;
   /** Değerin görüntüdeki kutusu (UI'da vurgulamak için). */
@@ -362,6 +376,8 @@ export interface TableTotalsSpec {
   labels: string[];
   /** Adet (satır sayısı) hücresi hangi kolon anahtarına yazılır; yoksa artakalan tam sayı hücre. */
   countKey?: string;
+  /** Etiketin sağındaki değerlerin sırası (soldan sağa); yoksa adet + tablonun ölçü kolonları kendi sırasıyla (Top/Kilo/Metre: adet-kg-mt). */
+  valueOrder?: Array<"count" | "kg" | "m">;
 }
 
 /**

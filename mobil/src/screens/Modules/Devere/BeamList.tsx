@@ -149,6 +149,8 @@ export default function BeamList({ state, tab, onTab }: { state: DevereScreenSta
           onMount={state.mountForm.open}
           onScanBeam={(raw) => state.mountForm.scanBeam(raw, state.liveBeams)}
           scanMessage={state.mountForm.scanMessage}
+          refreshing={state.refreshing}
+          onRefresh={state.refresh}
         />
       ) : (
         <>
@@ -159,6 +161,8 @@ export default function BeamList({ state, tab, onTab }: { state: DevereScreenSta
           <FlatList
             data={rows}
             keyExtractor={(b) => b.id}
+            refreshing={state.refreshing}
+            onRefresh={state.refresh}
             renderItem={({ item }) => <Row beam={item} state={state} />}
             contentContainerStyle={styles.list}
             ListEmptyComponent={

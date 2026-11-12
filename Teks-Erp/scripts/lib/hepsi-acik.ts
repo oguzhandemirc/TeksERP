@@ -72,7 +72,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   financeServiceBillingEnabled: A(true),
   financeServiceBillingStepWorks: A(true),
   financeServiceBillingWeavingWorks: A(true),
-  financeServiceBillingMeterBasis: V("metre tabanı; üç değer de geçerli, varsayılan OUT okuma yolunu işletir"),
+  financeServiceBillingMeterBasis: V("metre tabanı; dört değer de geçerli, varsayılan OUT okuma yolunu işletir"),
   financeServiceBillingBrodeUnit: V("brode fiyat birimi; METER bugünkü yol, ADET/VURUŞ adet girişi ister (bekçi test_brode_fiyat_birimi ölçer)"),
   financeServiceBillingMissingMeter: V("eksik ölçüm davranışı; varsayılan satırı uyarıyla yazar (yolu işletir)"),
   financeServiceBillingTrigger: V("tetik; PER_SHIPMENT sevk taslağı yolunu işletir, PERIOD_END dönem sonu ucunu bekletir (iki yol da geçerli)"),
@@ -105,6 +105,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   // ── üretim ─────────────────────────────────────────────────────────────────
   productionCancelReasonRequired: A(true),
   targetQuantityEnabled: A(true),
+  targetWidthEnabled: A(true),
   rawWidthEnabled: A(true),
   kursunBypassEnabled: A(true),
   kursunMeterCapture: A("IN_OUT"), // giriş + çıkış: iki okuma yolunu da işletir
@@ -153,6 +154,8 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   devereBeamWeavingLinkRequired: A(true),
   dokumaRunWeavingOrderRequired: A(true),
   dokumaOrderLineLinkRequired: A(true),
+  dokumaYarnReservationEnabled: A(true),
+  dokumaWeavingWastePct: A(5), // fireyi devreye sokan değer: öneri/iplik ihtiyacı ham metresi büyür
   dokumaRollBirth: A("KK1_LABEL_OR_ORDER"), // KK1_LABEL_ONLY A yolunu kapatır; en çok işleten değer iki yolu da açar
   tezgahEscalationGraceMinutes: A(5),
   tezgahAlarmEnabled: A(true),
@@ -178,6 +181,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   shipmentConfirmationEnabled: A(true),
   shipmentManualSackCountEnabled: A(true),
   shipmentLooseLoadEnabled: A(true),
+  shipmentHandheldCreateEnabled: A(true),
   shipmentUndoSameDayOnly: A(true),
   shippingOrderRequirement: A("block"),
   shippingOrderCoverage: A("block"),

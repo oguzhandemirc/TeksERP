@@ -27,13 +27,11 @@ vi.mock("@/pages/Finance/CariHold/CariHoldStrip", () => ({ CariHoldStrip: () => 
 vi.mock("@/components/forms/ItemPickerModal", () => ({ ItemPickerModal: () => null }));
 vi.mock("@/components/forms/color-picker/ColorPickerModal", () => ({ ColorPickerModal: () => <button type="button">Renk seç</button> }));
 vi.mock("../ScanViewer", () => ({ ScanViewer: () => null }));
+vi.mock("../AddPagesAction", () => ({ AddPagesDialog: () => null }));
 vi.mock("../NoteHeaderForm", () => ({ NoteHeaderForm: () => null }));
 vi.mock("../TotalsStrip", () => ({ TotalsStrip: () => null }));
-vi.mock("../AddLineForm", () => ({ AddLineForm: () => null }));
-vi.mock("../LineImportButton", () => ({ LineImportButton: () => null }));
 vi.mock("../CellReviewDialog", () => ({ CellReviewDialog: () => null }));
 vi.mock("../ScanReadBanner", () => ({ ScanReadBanner: () => null }));
-vi.mock("../AddPagesAction", () => ({ AddPagesAction: () => null }));
 vi.mock("../ProcessGramajPanel", () => ({ ProcessGramajPanel: () => null }));
 vi.mock("../useNoteTabTitle", () => ({ useNoteTabTitle: () => false }));
 

@@ -344,13 +344,14 @@ async function revokeReadingsTx(tx: Tx, args: { ids: string[]; userId: string | 
 /** Adım yeniden açılınca o turun toplarının bu adımdaki aktif okumalarını damgalar (§3-7). */
 export async function revokeStepMeterReadingsTx(
   tx: Tx,
-  args: { rollIds: string[]; stepId: string; userId: string | null; reason: string },
+  args: { rollIds: string[]; stepId: string; userId: string | null; reason: string; phase?: MeterPhase },
 ): Promise<number> {
   if (args.rollIds.length === 0) return 0;
   // H7: faturalı işin adımı yeniden açılamaz (okuma damgası faturanın metresini dayanaksız bırakırdı).
   await assertWorkNotBilledTx(tx, { rollIds: args.rollIds, workOrderStepId: args.stepId });
   const rows = await tx.rollMeterReading.findMany({
-    where: { rollId: { in: args.rollIds }, workOrderStepId: args.stepId, revokedAt: null },
+    // Tek top yeniden açmada yalnız ÇIKIŞ okuması tamamlamaya bağlıdır; giriş okuması kalır.
+    where: { rollId: { in: args.rollIds }, workOrderStepId: args.stepId, revokedAt: null, ...(args.phase ? { phase: args.phase } : {}) },
     select: { id: true },
   });
   return revokeReadingsTx(tx, { ids: rows.map((r) => r.id), userId: args.userId, reason: args.reason });

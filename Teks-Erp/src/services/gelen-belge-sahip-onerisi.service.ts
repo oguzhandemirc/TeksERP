@@ -19,6 +19,7 @@ import { readCompanyName } from "./system-setting.service";
 import { suggestCustomer, type Named } from "./gelen-belge-eslestirme.service";
 import type { TrustMode } from "./gelen-belge-parti-metre.service";
 import { noteIntroState } from "./gelen-belge-tanitim-guveni.service";
+import { OCR_CANDIDATE_MAX, ocrNameCandidates } from "./helpers/ocr-name-candidate.helper";
 
 export interface OwnerSuggestion {
   customerId: string;
@@ -129,13 +130,13 @@ async function readOcrPages(noteId: string): Promise<string[][]> {
 export interface OwnerUnmatched {
   /** Belgeden okunan müşteri adı (sahip alanı; müşteri adı tavanında kesilir). */
   text: string;
-  /** Benzer aktif cariler (eşleme sıralayıcısı, ≥ `MATCH_LIST_THRESHOLD`), puana göre azalan; en çok `UNMATCHED_MAX`. */
+  /** Benzer aktif cariler (eşleme sıralayıcısı + OCR'a dayanıklı adaylar `ocrNameCandidates`), puana göre azalan; en çok `UNMATCHED_MAX`. */
   /** `code`: modalda aynı adlı carileri ayırt eder (2026-11-05; eski istemci yok sayar). */
   candidates: Array<{ customerId: string; code: string | null; name: string; score: number }>;
 }
 
 /** "Bunu mu demek istediniz?" listesinin tavanı (tablet modalı tek ekranda gösterir). */
-export const UNMATCHED_MAX = 3;
+export const UNMATCHED_MAX = OCR_CANDIDATE_MAX;
 /** Müşteri adı kolonunun tavanı (`Customer.name` VarChar(100)). */
 const CUSTOMER_NAME_MAX = 100;
 /** Serbest okumada katlanmış adın en kısa uzunluğu — 1-2 harfli okuma gürültüdür, kayıt teklif edilmez. */
@@ -187,7 +188,8 @@ export async function readOwnerForNote(note: { id: string; status: string; owner
   if (chars < UNMATCHED_MIN_CHARS && (chars < UNMATCHED_MIN_CHARS_INTRODUCED || !(trust === "TRUSTED" || (await noteIntroState(note.id))?.durum === "TANITILDI"))) {
     return { suggestion, unmatched: null };
   }
-  return { suggestion: null, unmatched: unmatchedOf(ownerText, [...(s.suggested ? [s.suggested] : []), ...s.list]) };
+  // Liste eşiğinin (0,80) kaçırdığı OCR hatalı okumalar ("HHL M" → HHL) yalnız ADAY olarak eklenir; seçim operatörde.
+  return { suggestion: null, unmatched: unmatchedOf(ownerText, [...(s.suggested ? [s.suggested] : []), ...s.list, ...ocrNameCandidates(ownerText, customers)]) };
 }
 
 /** Saf: çözülemeyen okumanın teklifi — adaylar tekilleşir, puana göre ilk `UNMATCHED_MAX`. */

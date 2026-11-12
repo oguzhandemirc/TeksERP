@@ -51,9 +51,13 @@ import {
 import { buildIntentSnapshot } from "../label.service";
 import { resolveLabelIntent, labelCustomerIdOf } from "../helpers/label-intent.helper";
 import { generateRollBarcodeTx } from "../helpers/roll-barcode.helper";
-import { resolveTamburCutWeight, resolveTamburLabelBatchNo } from "../helpers/tambur-customer-settings.helper";
+import { resolveTamburConsignee, resolveTamburCutWeight, resolveTamburLabelBatchNo, resolveTamburWeightSource } from "../helpers/tambur-customer-settings.helper";
+import { inheritedChildWidth, resolveTamburChildWidth } from "../helpers/tambur-child-label.helper";
+import { resolveRollLabelTexts } from "../helpers/label-batch-no.helper";
 import type { TamburService } from "../tambur.service";
 import { applyTamburCapabilitiesTx, cutReplay, type TamburServiceThis } from "./shared";
+import { resolveTamburLabelTemplate } from "../helpers/tambur-label-template.helper";
+import { rollLabelKindOf } from "../helpers/roll-stage.helper";
 
 export async function cutWarehouseRoll(this: TamburServiceThis, 
     ...args: Parameters<TamburService["cutWarehouseRollInner"]>
@@ -97,6 +101,18 @@ export async function cutWarehouseRollInner(
       weightKg?: number | null;
       /** Müşterinin etikete istediği parti metni — çocuğa yazılır (miras yok). */
       labelBatchNo?: string | null;
+      labelItemName?: string | null;
+      labelColorName?: string | null;
+      /** Emanet top etiket alıcısı (sahibin alıcısı; boş = sahibin kendisi). */
+      labelConsigneeId?: string | null;
+      /** Kesimde seçilen etiket şablonu (çoklu etiket seti); boş/varsayılan = null yazılır. */
+      labelTemplateId?: string | null;
+      /** Teklif hesabının cihaz bağlamı (controller `req.device.id`). */
+      labelDeviceId?: string | null;
+      /** Etikette kartında ölçülen en (cm) — mirası ezer (K7). */
+      widthCm?: number | null;
+      /** Kg kaynağı beyanı (SCALE | MANUAL | SIMULATED); kaynaksız kg MANUAL yazılır. */
+      weightSource?: "SCALE" | "MANUAL" | "SIMULATED" | null;
     },
     userId?: string,
     /**
@@ -144,6 +160,14 @@ export async function cutWarehouseRollInner(
       targetCustomerId: data.targetCustomerId,
       ownerCustomerId: parent.ownerCustomerId,
     });
+    // Etikete basılacak kumaş adı / renk — topun kendi değeri (miras yok), ayara bağlı değil.
+    const labelTexts = resolveRollLabelTexts(data);
+    // Kg kaynağı (tek boğaz) + emanet alıcısı + en (miras/belge/ölçülen, K7) — tx'ten önce.
+    const cutWeightSource = await resolveTamburWeightSource({ weightKg: cutWeightKg, weightSource: data.weightSource, stamp: { machineId: sessionMachineId } });
+    const cutConsigneeId = await resolveTamburConsignee({
+      labelConsigneeId: data.labelConsigneeId, targetCustomerId: data.targetCustomerId, ownerCustomerId: parent.ownerCustomerId,
+    });
+    const cutWidth = await resolveTamburChildWidth(await inheritedChildWidth(parent.id, parent.width), data.widthCm);
     // Ham (renksiz STOCK) top da "Top Kesme" aracında kesilebilir. Bitmiş depo
     // topu (WAREHOUSE) klasik akış; ham stok ise operatörün seçtiği hedefe göre
     // çıktı verir. Diğer statüler (IN_PRODUCTION vb.) kesime uygun değil.
@@ -232,10 +256,18 @@ export async function cutWarehouseRollInner(
     // ayrıştırabilirdi.
     const cutIntent =
       childStatus === RollStatus.WAREHOUSE
-        ? await resolveLabelIntent(data)
+        ? await resolveLabelIntent({ ...data, ownerCustomerId: parent.ownerCustomerId })
         : { stock: true as const };
     const cutIntentSnapshot = buildIntentSnapshot(cutIntent);
     const cutLabelCustomerId = labelCustomerIdOf(cutIntent);
+    const cutTemplate = await resolveTamburLabelTemplate({
+      labelTemplateId: data.labelTemplateId,
+      kind: rollLabelKindOf(parent.stage),
+      customerId: cutLabelCustomerId,
+      consigneeId: cutConsigneeId,
+      deviceId: data.labelDeviceId,
+      machineId: sessionMachineId,
+    });
 
     let result: {
       child: Roll;
@@ -270,14 +302,20 @@ export async function cutWarehouseRollInner(
         clientToken: data.clientToken ?? null,
         itemId: parent.itemId,
         colorId: parent.colorId,
-        width: parent.width,
+        width: cutWidth.width,
         // KAT — kesim anında seçilen değer KAZANIR. Bu yolda iş emri/adım YOK
         // (depo topu kesimi), tek bağlam parent → fallback yalnız parent.
         foldType: foldType !== undefined ? foldType : (parent.foldType ?? null),
         initialQty: data.cutLength,
         currentQty: data.cutLength,
         weightKg: cutWeightKg,
+        weightSource: cutWeightSource,
+        labelConsigneeId: cutConsigneeId,
+        labelTemplateId: cutTemplate.labelTemplateId,
+        labelTemplateKind: cutTemplate.labelTemplateKind,
         labelBatchNo: cutLabelBatchNo,
+        labelItemName: labelTexts.labelItemName,
+        labelColorName: labelTexts.labelColorName,
         // Bitmiş re-cut → WAREHOUSE; ham kesim → operatör hedefi (STOCK/WAREHOUSE).
         status: childStatus,
         qualityGrade: resolvedQualityGrade,
@@ -296,6 +334,7 @@ export async function cutWarehouseRollInner(
         // (depo topu yeni bir iş emrine sokulabiliyor); doğru cevap KESİMİN yeri.
         entryStationId: resolveEntryStationId({ sessionStationId }),
         entrySource: RollEntrySource.TAMBUR_SPLIT,
+        stage: parent.stage, // Top Kesme çocuğu atanın aşamasını alır
         createdById: userId ?? null,
         createdMachineId: sessionMachineId ?? null,
         // Kartelalık yalnız depoya (WAREHOUSE) inen çıktıda anlamlı; ham stoğa
@@ -312,7 +351,7 @@ export async function cutWarehouseRollInner(
     if (propertySnapshot.length > 0) {
       await inheritRollPropertiesTx(tx, { childId: child.id, rows: propertySnapshot });
     }
-    await applyTamburCapabilitiesTx(tx, { caps: tamburCaps, stationId: tamburStationId, rollId: child.id, userId });
+    await applyTamburCapabilitiesTx(tx, { caps: tamburCaps, stationId: tamburStationId, rollId: child.id, userId, birth: "OUTPUT" });
 
     // KURSUN_APPLIED + QC2_COMPLETED kalıtım — parent topta yapılmış operasyonlar
     // child'a `inheritedFromParentRollId=parent.id` ile kopyalanır. Aksi halde
@@ -561,6 +600,8 @@ export async function cutWarehouseRollInner(
         // (deposuz defter-öncesi top) sessiz kalmasın.
         defter: result.defter,
         notes: data.notes ?? null,
+        ...(cutWidth.trace ? { measuredWidth: cutWidth.trace } : {}),
+        ...(labelTexts.labelItemName || labelTexts.labelColorName ? labelTexts : {}),
       },
     });
 

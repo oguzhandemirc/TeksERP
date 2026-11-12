@@ -136,6 +136,8 @@ export default function KartelaSevkGecmisiScreen() {
         <FlashList
           data={rows}
           keyExtractor={(it) => it.id}
+          refreshing={refresh.refreshing}
+          onRefresh={refresh.onRefresh}
           contentContainerStyle={styles.listContent}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           onEndReachedThreshold={0.4}

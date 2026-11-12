@@ -20,27 +20,15 @@
 
 import { type ScanRoutedOpenCard } from "./helpers/scan-route-open-cards.helper";
 import { ApiResponse } from "../types/api.types";
-import {
-  type RemainingAction,
-} from "./helpers/quality-role.helper";
-import {
-  type MeterSourceInput,
-} from "./helpers/meter-reading.helper";
+import { type RemainingAction } from "./helpers/quality-role.helper";
+import { type MeterSourceInput } from "./helpers/meter-reading.helper";
 import type { CursorPaginatedResponse } from "./base.service";
-import {
-  SwatchStatus,
-  Roll,
-  RollError,
-  Swatch,
-} from "@prisma/client";
+import { SwatchStatus, Roll, RollError, Swatch } from "@prisma/client";
 // ⚠️ TEK YÖNLÜ BAĞIMLILIK: tambur.service → kursun-bypass.service.
 // `kursun-bypass.service` bu dosyayı (ya da onu import eden bir modülü) ASLA
 // import etmez — ortak guard'lar `helpers/kursun-bypass-guard.helper.ts`'te
 // yaşar. Bu kural bozulursa statik import döngüsü doğar (lazy import gerekir).
-import {
-  KursunBypassService,
-  type KursunBypassTamburContext,
-} from "./kursun-bypass.service";
+import { KursunBypassService, type KursunBypassTamburContext } from "./kursun-bypass.service";
 import { getPendingRolls as getPendingRollsImpl, getRollForDecision as getRollForDecisionImpl, buildBranchInfoMap as buildBranchInfoMapImpl, loadTamburRolls as loadTamburRollsImpl, enrichTamburScanError as enrichTamburScanErrorImpl, assertAtTamburWithReason as assertAtTamburWithReasonImpl, getByCardBarcode as getByCardBarcodeImpl, getStep as getStepImpl } from "./tambur/read";
 import { finalize as finalizeImpl } from "./tambur/finalize";
 import { listRecentOutputRolls as listRecentOutputRollsImpl } from "./tambur/output-rolls";
@@ -53,7 +41,6 @@ import { cutOpenFabric as cutOpenFabricImpl, cutOpenFabricInner as cutOpenFabric
 import { finalizeOpenFabric as finalizeOpenFabricImpl } from "./tambur/open-fabric-finalize";
 import { getTamburContext as getTamburContextImpl } from "./tambur/context";
 import type { TamburRollSummary, TamburStepSummary } from "./tambur/read";
-import type { CutInput, ErrorDecision } from "./tambur/finalize";
 import type { SwatchStats } from "./tambur/swatch";
 import type { TamburOpenCard } from "./tambur/open-cards";
 import type { TamburRollErrorSummary, TamburServiceThis } from "./tambur/shared";
@@ -187,38 +174,11 @@ export class TamburService {
    *   parent'tan kopyalanır (`inheritedFromParentRollId`).
    */
   async finalize(
-    data: {
-      rollId: string;
-      decisions: ErrorDecision[];
-      cuts: CutInput[];
-      /** Operatörün seçtiği kat. 2026-08-10'dan beri KATALOĞA bağlı (2-KAT /
-       *  4-KAT / TÜP / fabrikanın eklediği 6-KAT…) → literal union DEĞİL.
-       *  Geçerlilik `resolveFoldTypeForWrite` ile ölçülür. */
-      foldType?: string | null;
-      /** Çıktı topları (depoya gidenler) kartelalık işaretlensin — depoda
-       *  kartela sevki için kolay bulunsun. Sevki engellemez. */
-      markedForKartela?: boolean;
-      /** Plan-gerçek sapma onayı (renk/en) — 409 PLAN_MISMATCH'i geçer.
-       *  Sapma yokken gönderilmesi zararsız (kapı hiç açılmaz). */
-      confirmMismatch?: boolean;
-      /** S5: otomatik kalan kuyruk parçasının kg'ı (tartım kapısı). */
-      remainingWeightKg?: number | null;
-      /** Müşterinin etikete istediği parti metni — bu finalize'da doğan HER parçaya yazılır. */
-      labelBatchNo?: string | null;
-    },
+    data: Parameters<typeof finalizeImpl>[0],
     userId?: string,
-    /** TAMBUR makine atfı — aktif çalışma oturumundan (controller çözer).
-     *  TAMBUR_PROCESSED op'una + kapanan movement'a damgalanır. */
+    /** TAMBUR makine atfı — aktif çalışma oturumundan (controller çözer). Girdi/sonuç tipi tek kaynak: `tambur/finalize.ts`. */
     machineId?: string | null
-  ): Promise<
-    ApiResponse<{
-      originalRoll: Roll;
-      splitRolls: Roll[];
-      processedErrors: number;
-      /** D4-F2: yalnız kod doğduysa (label.customerCodeAt=TAMBUR_OUTPUT + müşteri serisi). */
-      customerCodes?: Array<{ rollId: string; code: string }>;
-    }>
-  > {
+  ): ReturnType<typeof finalizeImpl> {
     return finalizeImpl(data, userId, machineId);
   }
 
@@ -415,6 +375,16 @@ export class TamburService {
       weightKg?: number | null;
       /** Müşterinin etikete istediği parti metni — çocuğa yazılır (miras yok). */
       labelBatchNo?: string | null;
+      labelItemName?: string | null;
+      labelColorName?: string | null;
+      /** Emanet top etiket alıcısı (sahibin alıcısı; boş = sahibin kendisi). */
+      labelConsigneeId?: string | null;
+      labelTemplateId?: string | null;
+      labelDeviceId?: string | null;
+      /** Etikette kartında ölçülen en (cm) — mirası ezer (K7). */
+      widthCm?: number | null;
+      /** Kg kaynağı beyanı (SCALE | MANUAL | SIMULATED); kaynaksız kg MANUAL yazılır. */
+      weightSource?: "SCALE" | "MANUAL" | "SIMULATED" | null;
     },
     userId?: string,
     /**
@@ -459,6 +429,16 @@ export class TamburService {
       weightKg?: number | null;
       /** Kalan topun etiket parti no'su (müşteri ayarı açıksa). */
       labelBatchNo?: string | null;
+      labelItemName?: string | null;
+      labelColorName?: string | null;
+      /** Emanet top etiket alıcısı (sahibin alıcısı; boş = sahibin kendisi). */
+      labelConsigneeId?: string | null;
+      labelTemplateId?: string | null;
+      labelDeviceId?: string | null;
+      /** Etikette kartında ölçülen en (cm) — mirası ezer (K7). */
+      widthCm?: number | null;
+      /** Kg kaynağı beyanı (SCALE | MANUAL | SIMULATED); kaynaksız kg MANUAL yazılır. */
+      weightSource?: "SCALE" | "MANUAL" | "SIMULATED" | null;
     },
     userId?: string,
     /** Oturum istasyonu — KALAN parçanın giriş istasyonu damgası (cutWarehouseRoll ikizi). */
@@ -518,6 +498,16 @@ export class TamburService {
       weightKg?: number | null;
       /** Müşterinin etikete istediği parti metni — çocuğa yazılır (miras yok). */
       labelBatchNo?: string | null;
+      labelItemName?: string | null;
+      labelColorName?: string | null;
+      /** Emanet top etiket alıcısı (sahibin alıcısı; boş = sahibin kendisi). */
+      labelConsigneeId?: string | null;
+      labelTemplateId?: string | null;
+      labelDeviceId?: string | null;
+      /** Etikette kartında ölçülen en (cm) — mirası ezer (K7). */
+      widthCm?: number | null;
+      /** Kg kaynağı beyanı (SCALE | MANUAL | SIMULATED); kaynaksız kg MANUAL yazılır. */
+      weightSource?: "SCALE" | "MANUAL" | "SIMULATED" | null;
     },
     userId?: string,
     /** Kesimin makinesi — "Bu makine" süzgeci + makine raporları (2026-08-12). */
@@ -564,6 +554,16 @@ export class TamburService {
       weightKg?: number | null;
       /** Kalan topun etiket parti no'su (müşteri ayarı açıksa). */
       labelBatchNo?: string | null;
+      labelItemName?: string | null;
+      labelColorName?: string | null;
+      /** Emanet top etiket alıcısı (sahibin alıcısı; boş = sahibin kendisi). */
+      labelConsigneeId?: string | null;
+      labelTemplateId?: string | null;
+      labelDeviceId?: string | null;
+      /** Etikette kartında ölçülen en (cm) — mirası ezer (K7). */
+      widthCm?: number | null;
+      /** Kg kaynağı beyanı (SCALE | MANUAL | SIMULATED); kaynaksız kg MANUAL yazılır. */
+      weightSource?: "SCALE" | "MANUAL" | "SIMULATED" | null;
     },
     userId?: string,
     /** TAMBUR makine atfı — aktif çalışma oturumundan (controller çözer). */

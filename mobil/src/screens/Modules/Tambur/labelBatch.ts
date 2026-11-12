@@ -10,10 +10,14 @@ export interface LabelBatchState {
   value: string;
   /** Bu değerle başarıyla doğan top sayısı. */
   count: number;
+  /** Değer otomatik tohumdan mı (gelen belge partisi / İE'nin son değeri) — yeni topun tohumu ezebilir. */
+  auto: boolean;
+  /** Operatör bu kapsamda değeri elle değiştirdi/temizledi mi — sonra otomatik tohum DOKUNMAZ. */
+  touched: boolean;
 }
 
 export function initialLabelBatch(scopeKey: string | null): LabelBatchState {
-  return { scopeKey, value: '', count: 0 };
+  return { scopeKey, value: '', count: 0, auto: false, touched: false };
 }
 
 export function normalizeLabelBatch(text: string | null | undefined): string | null {
@@ -26,10 +30,23 @@ export function withScope(s: LabelBatchState, scopeKey: string | null): LabelBat
   return s.scopeKey === scopeKey ? s : initialLabelBatch(scopeKey);
 }
 
-/** Yeni değer: normalize hâli değiştiyse sayaç sıfırlanır, aynıysa sayaç korunur. */
+/** Operatörün yeni değeri: normalize hâli değiştiyse sayaç sıfırlanır ve değer artık elle girilmiştir; aynıysa durum korunur. */
 export function withValue(s: LabelBatchState, text: string): LabelBatchState {
   const same = normalizeLabelBatch(text) === normalizeLabelBatch(s.value);
-  return { ...s, value: text.slice(0, LABEL_BATCH_MAX), count: same ? s.count : 0 };
+  if (same) return { ...s, value: text.slice(0, LABEL_BATCH_MAX) };
+  return { ...s, value: text.slice(0, LABEL_BATCH_MAX), count: 0, auto: false, touched: true };
+}
+
+/**
+ * Otomatik tohum (varsayılan değer): operatör elle girmediyse uygulanır — değer boşsa ya da
+ * önceki değer de otomatikse. Elle girilen/temizlenen değer EZİLMEZ. Boş tohum durumu değiştirmez.
+ */
+export function withAutoSeed(s: LabelBatchState, seed: string | null | undefined): LabelBatchState {
+  const v = normalizeLabelBatch(seed);
+  if (v == null || s.touched) return s;
+  if (!s.auto && normalizeLabelBatch(s.value) != null) return s;
+  if (normalizeLabelBatch(s.value) === v) return s.auto ? s : { ...s, auto: true };
+  return { ...s, value: v, count: 0, auto: true };
 }
 
 /** Kesim başarılı → gönderilen değer hâlâ geçerli değerse sayaç artar (arada değiştiyse sayılmaz). */

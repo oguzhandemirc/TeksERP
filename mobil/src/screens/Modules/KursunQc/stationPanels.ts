@@ -9,6 +9,7 @@
 
 import { TERIM_AD } from '../../../lib/terim';
 import { lowerTr } from '../../../utils/trCase';
+import { KURSUN_PROPERTY_CODE } from '../../../services/fabricProperty.service';
 
 export type StationCompletion = 'BUTTON' | 'TAP_VALUE';
 
@@ -165,8 +166,18 @@ export interface FlowScreenLabels {
   noteTitle: string;
 }
 
-export function flowScreenLabels(stationName: string | null | undefined): FlowScreenLabels {
+/** Kurşun kipi kapalı (Kalite Kontrol ekranı): başlık "Kalite Kontrol — <ad>", kurşun metni yok. */
+export function flowScreenLabels(stationName: string | null | undefined, kursunEnabled = true): FlowScreenLabels {
   const name = stationName?.trim();
+  if (!kursunEnabled) {
+    const kk = TERIM_AD.kaliteKontrol;
+    return {
+      title: name ? `${kk} — ${name}` : kk,
+      queueTitle: name ? `${name} · İşler` : `${kk} İşleri`,
+      emptyQueue: name ? `${name} istasyonunda bekleyen kart yok` : `${kk}'de bekleyen kart yok`,
+      noteTitle: name ? `${name} Notu` : `${kk} Notu`,
+    };
+  }
   if (!name) {
     return {
       title: 'Kurşun',
@@ -181,4 +192,13 @@ export function flowScreenLabels(stationName: string | null | undefined): FlowSc
     emptyQueue: `${name} istasyonunda bekleyen kart yok`,
     noteTitle: `${name} Notu`,
   };
+}
+
+/** Kurşun kipi kapalıyken işlem panelinden düşen özellikler: KURSUN bayrağı ve onun
+ *  çeşitleri (gramaj). Kalan özellikler (varsa) bugünkü gibi çizilir. */
+export function withoutKursunProps<T extends { propertyId: string; code?: string; variantOfPropertyId?: string | null }>(
+  props: readonly T[],
+): T[] {
+  const kursunIds = new Set(props.filter((p) => p.code === KURSUN_PROPERTY_CODE).map((p) => p.propertyId));
+  return props.filter((p) => p.code !== KURSUN_PROPERTY_CODE && !(p.variantOfPropertyId && kursunIds.has(p.variantOfPropertyId)));
 }

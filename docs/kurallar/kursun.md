@@ -33,10 +33,13 @@ Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın se
 - **[ÇEKİRDEK]** Metre sapmasını okuma satırındaki politika kopyasından türet: karar tek kaynak `lib/kursun-meter-variance.ts` (tablet aynası bayt-eşit, SQL ikizi `kursun-meter-variance-sql.helper.ts`).
 - **[ÇEKİRDEK]** İmza yalnız `RollMeterAck`'e yazılır; PIN kuyruğa/log'a/audit'e girmez; imza bekleyen sapma `finishStep`i WO kilidi altında 409'la tutar.
 - **[ÇEKİRDEK]** Çıkış metresini stoğa yalnız okumadaki `stockMode = APPLY` ile ve okuma ETKİNKEN uygula; fark `KURSUN_EXIT_MEASURE` sapması (`sourceRefId` = okuma, artıda `initialQtyRaise`); ters yol aynı tx'te `reverseExitMeterStockTx`; tek yazar `helpers/kursun-meter-stock.helper.ts`.
+- **[ÇEKİRDEK]** Kurşun tekil hata ucunda topun kayıtlı metresini aşan konumu reddetme (`allowBeyondLength`); kaydı al, `beyondDeclaredDefectWarning` uyarısını dön, izi okumada türet (`defectsBeyondDeclared`) <sub>(arşiv:2026-11-10 GK metre)</sub>.
+- **[ÇEKİRDEK]** Açık adımda tek topu yalnız `reopenRoll` yeniden açar: QC2 + ÇIKIŞ okuması damgalanır (stok ters yolu aynı tx), KURSUN_APPLIED korunur; tablet tamamlanmış topa hatayı onaysız yazmaz <sub>(arşiv:2026-11-10 GK kurşun tableti)</sub>.
 - **[ÇEKİRDEK]** APPLY'ı yalnız top okumanın adımında `IN_PRODUCTION` ve iş faturasızken yap (değilse 409 `METER_STOCK_ROLL_LEFT_STEP` / `SERVICE_ALREADY_BILLED`); imza beklentisi kalkan okumayı adım kapanışı uygular; sonraki adım `qtyIn`i taze `currentQty`.
 - **[ÇEKİRDEK]** DECLARED_IN tabanını yalnız `rollDeclaredInSql`den oku; `initialQty`yi yükselten yeni yazıcı `initialQtyRaise` doldurur.
 - **[ÇEKİRDEK]** "İmza bekliyor" yüklemi yalnız `METER_SIGNATURE_MODES` (SUPERVISOR_PIN · OFFICE); SQL ve bellek ikizi aynı sabitten; OPERATOR_REASON'da sebep yazımda alınır, sonradan kayan fark "imzasız sapma"dır, adımı tutmaz.
 - **[ÇEKİRDEK]** Adım özetinde `meter`/`rolls[].meter`i YALNIZ `kursun.meterCapture` OUT/IN_OUT iken ekle (OFF'ta bayt-aynı); kip/politika `resolveKursunMeterCapture`/`resolveKursunMeterPolicy`, taban `loadRollMeterBases` tek sorguda; açık kart listesine koyma.
+- **[ÇEKİRDEK]** Adım özetindeki `rolls[].goodsOwner`ı ("Malın sahibi") yalnız `kursunGoodsOwnerOf`tan türet: emanet sahibi > İE carisi > siparişlerin TEK müşterisi, değilse null (tablet gizler, ad uydurmaz).
 - **[ÇEKİRDEK]** Dağıtımsız kapanışta atomik claim GEREKMEZ: `closeBypassMovementsTx`'in `exitedAt IS NULL` guard'ı + kapsam paritesi; idempotent tekrar izi marker (`findCompletedUnassignedClosure`).
 - **[ÇEKİRDEK]** Bypass ataması istasyon özelliğinde MOD `AUTO` arar; `StationProperty` satırının varlığı YETMEZ.
 - **[ÇEKİRDEK]** Gramaj görünümü YALNIZ `process-summary.helper.ts`ten türer; hedef gramaj `WorkOrderTargetValue` (damgayla sürümlü), sapma türetilir, engellemez; kâğıt gramajı `KursunBypassAssignment.propertyValueId`ye, tamamlanınca donar, RollOperation yazmaz.
@@ -90,6 +93,7 @@ Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın se
 - **[PROFİL]** Brode "Adet" girişini YALNIZ `pieceInput` gelince çiz (sayaç açık + `BRODE` + `finance.serviceBilling.brodeUnit` PIECE/STITCH; `brodePieceInputOf`); adet `meterOut.pieceCount`e; boş adette dur; METER/eski backend'de alan yok.
 - **[ÇEKİRDEK]** Sayacı kuyruğa KALICI yazımdan sonra ve sapma modalı kapalıyken sıfırla (`resetCounterAfterDurable` + `persistStationQueueNow`); OFF'ta `completeQc2` gövdesine `meterOut` yazma; PIN yalnız çevrimiçi `pin-ack` gövdesinde.
 - **[ÇEKİRDEK]** Doğrulanmamış RESETTING sayacın sonraki okumasını metre sayma; cihaz başına kalıcı "sıfırlanmadı" işaretiyle elle yola düşür; sunucu sayaç değerini reddederse aynı dokunuşu aynı değerle elle/sebep modalında sürdür.
+- **[ÇEKİRDEK]** Top metresini aşan hata metresini kurşunda ENGELLEME: `InspectionPanel overMaxMode="warn"` kaydeder + sarı "Top beyandan uzun görünüyor" satırı basar; Tambur çekmecesi ve Muayene varsayılan `block`ta kalır. <sub>(arşiv:2026-11-10 Beyan ↔ ölçülen metre)</sub>
 
 ## Geçersiz kılınan kurallar — bunlara UYMA
 
@@ -121,7 +125,7 @@ Backend: `test_station_default_targets`, `test_fason_kursun_zincir`, `test_audit
 
 Madde içi: `test_guarded_hard_remove`, `test_gelen_belge_formdan_is_emri`, `test_station_quality_capability`, `test_permission_catalog`, `test_brode_fiyat_birimi`
 
-İstemci: `machine-tabs.test.ts`, `queue-reorder.test.ts`, `selection.test.ts`, `production-regime.test.ts`, `tile-visibility.test.ts`, `command-entries.test.ts`, `GramajTapPanel.test.tsx`, `kursun-station.test.ts`, `belge-kayit.test.tsx`, `useWoRows.test.tsx`, `KursunStepFields.test`, `brodePiece.test.tsx`, `meterCapture.test.tsx`, `meterRecovery.test.tsx`
+İstemci: `machine-tabs.test.ts`, `queue-reorder.test.ts`, `selection.test.ts`, `production-regime.test.ts`, `tile-visibility.test.ts`, `command-entries.test.ts`, `GramajTapPanel.test.tsx`, `kursun-station.test.ts`, `belge-kayit.test.tsx`, `useWoRows.test.tsx`, `KursunStepFields.test`, `brodePiece.test.tsx`, `meterCapture.test.tsx`, `meterRecovery.test.tsx`, `GoodsOwnerCard.test.tsx`
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 

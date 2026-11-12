@@ -61,6 +61,8 @@ export interface OrderLine {
   colorNameScope?: ColorNameScope | null;
   /** Kesim/sevk için serbest not — örn. kaç parçaya bölüneceği. Tamburda görünür. */
   cutNote: string | null;
+  /** Satır sevk toleransı % (0..50; NULL = fabrika ayarı); Decimal sayı ya da metin; eski backend göndermez. */
+  tolerancePct?: number | string | null;
   /** Top boyu (m) — eski backend göndermez. */
   pieceLengthM?: number | string | null;
   /** Satır varyantı (SY-K1k); NULL = desen geneli. Eski backend göndermez. */

@@ -1,7 +1,10 @@
-// K30-T A2/A3 rehberli tanıtma çekirdeği: adım ilerleme, TAP/NEXT/SKIP/RELABEL, ad başlıktan, "Okunan: …" okuması, benzer şablon kararı.
+// Belge tanıt 3 aşama (2026-11-09) rehberli çekirdek: aşama kapısı (① Tanıma · ② Eşleme · ③ Kurallar), ② satır seç → değere dokun,
+// SKIP/RELABEL/NEXT, top tablosu sütunu, ③ bölüm başı / toplam satırı / çok parti kuralı, "Okunan: …", benzer şablon kararı.
+// Negatif sonda: `suggestBody`den `rules` düşürülünce "⭐ kurallar gövdesi" kırmızı; STAGE_NEXT kapısı (`canReach`) kaldırılınca "⭐ aşama kapısı" kırmızı.
 import { describe, expect, it } from "vitest";
-import { adoptTemplate, emptyTeach, initialTeach, isKept, locateKept, suggestBody, teachMarks, teachProblems, templateFieldKeys } from "../tanit/teachDraft";
-import { FINISH_STEP, GUIDED_FIELDS, chipStatus, fieldReadout, guidedMarks, guidedReduce, guidedStart, saveDecision, stepField, suggestName } from "../tanit/guidedTeach";
+import { adoptTemplate, emptyTeach, initialTeach, isKept, locateKept, suggestBody, teachMarks, teachProblems, templateFieldKeys, type TeachState } from "../tanit/teachDraft";
+import { chipStatus, fieldReadout, guidedMarks, guidedReduce, guidedStart, saveDecision, suggestName, type GuidedEvent, type GuidedState } from "../tanit/guidedTeach";
+import { MAIN_FIELDS, OTHER_FIELDS, teachSummary } from "../tanit/stages";
 import type { ScanWord, ScanWords, SuggestResult } from "../tanit/types";
 
 const w = (text: string, [x, y]: [number, number], lineNo: number, width = 60): ScanWord => ({
@@ -21,64 +24,140 @@ const result = (fields: Record<string, string | null>, extra: Partial<SuggestRes
   preview: { matched: true, score: 1, fields, lineCount: 1, warnings: [] }, ...extra,
 });
 
-describe("rehberli tanıtma reducer'ı", () => {
-  it("adım sırası: başlık → Müşteri, Parti no, Hedef metraj, Kurşun metresi, En, Desen, Renk → bitir", () => {
-    expect(GUIDED_FIELDS).toEqual(["musteri", "partiNo", "hedefMetraj", "toplamMetre", "en", "desen", "renk", "evrakNo"]);
-    expect(stepField(GUIDED_FIELDS.length)).toBe("evrakNo");
-    expect(stepField(0)).toBeNull();
-    expect(stepField(1)).toBe("musteri");
-    expect(stepField(FINISH_STEP)).toBeNull();
-    let g = guidedStart(emptyTeach());
-    for (let i = 0; i < FINISH_STEP + 3; i++) g = guidedReduce(g, { type: "NEXT" }, W);
-    expect(g.step).toBe(FINISH_STEP);
-    expect(guidedReduce(guidedStart(emptyTeach()), { type: "BACK" }, W).step).toBe(0);
+const run = (g: GuidedState, evs: GuidedEvent[], ctx = {}) => evs.reduce((acc, ev) => guidedReduce(acc, ev, W, ctx), g);
+const named = (t: TeachState = emptyTeach()) => guidedReduce(guidedStart({ ...t, name: "Güleçsoy" }), { type: "TAP", i: 1 }, W);
+const atField = (key: Parameters<typeof isKept>[1], t?: TeachState) => run(named(t), [{ type: "STAGE_NEXT" }, { type: "GOTO", target: { kind: "field", key } }]);
+
+describe("rehberli tanıtma — aşamalar", () => {
+  it("② satır düzeni: görünür alanlar grup sırasıyla, hedef/diğer alanlar açılırda; Gelen kg görünür", () => {
+    expect(MAIN_FIELDS).toEqual(["musteri", "partiNo", "evrakNo", "toplamMetre", "toplamKg", "desen", "renk", "en"]);
+    expect(OTHER_FIELDS).toEqual(["topAdet", "hedefMetraj", "hedefKg", "siparisNo", "tarih", "not", "islem", "gonderenIsEmriNo"]);
   });
 
-  it("başlıkta dokunma satırı kimlik yapar / kapatır; NEXT ad boşsa başlıktan önerir, doluysa dokunmaz", () => {
+  it("⭐ aşama kapısı: kimlik/ad yokken İleri yok; ② alansızken ③'e atlanmaz; geri hep serbest", () => {
+    const g0 = guidedStart(emptyTeach());
+    expect(guidedReduce(g0, { type: "STAGE_NEXT" }, W).stage).toBe("TANIMA");
+    const noName = guidedReduce(guidedStart(emptyTeach()), { type: "TAP", i: 1 }, W);
+    expect(guidedReduce(noName, { type: "STAGE_NEXT" }, W).stage).toBe("TANIMA");
+    const g = named();
+    expect(g.teach.identifiers).toEqual([{ text: "GÜLEÇSOY BOYA", on: true }]);
+    expect(guidedReduce(g, { type: "STAGE_GOTO", stage: "KURALLAR" }, W).stage).toBe("TANIMA");
+    const e = guidedReduce(g, { type: "STAGE_NEXT" }, W);
+    expect(e.stage).toBe("ESLEME");
+    expect(e.target).toEqual({ kind: "field", key: "musteri" });
+    expect(guidedReduce(e, { type: "STAGE_NEXT" }, W).stage).toBe("ESLEME");
+    const done = run(e, [{ type: "TAP", i: 8 }, { type: "STAGE_NEXT" }]);
+    expect(done.stage).toBe("KURALLAR");
+    expect(done.target).toBeNull();
+    expect(guidedReduce(done, { type: "STAGE_GOTO", stage: "TANIMA" }, W).stage).toBe("TANIMA");
+    expect(run(done, [{ type: "STAGE_GOTO", stage: "TANIMA" }, { type: "STAGE_GOTO", stage: "KURALLAR" }]).stage).toBe("KURALLAR");
+    expect(guidedReduce(done, { type: "STAGE_BACK" }, W).stage).toBe("ESLEME");
+  });
+
+  it("② metre/kg aynı kutu (sunucu teachErrors) İleri'yi kapatır; başka sunucu hatası ② kapısı değildir", () => {
+    const e = run(named(), [{ type: "STAGE_NEXT" }, { type: "TAP", i: 8 }]);
+    const clash = { serverErrors: ['Aynı kutu hem "Gelen metre" hem "Hedef kg" olamaz — kg için belgedeki kg değerine dokunun.'] };
+    expect(guidedReduce(e, { type: "STAGE_NEXT" }, W, clash).stage).toBe("ESLEME");
+    expect(guidedReduce(e, { type: "STAGE_NEXT" }, W, { serverErrors: ["Bölüm bulunamadı"] }).stage).toBe("KURALLAR");
+  });
+
+});
+
+describe("rehberli tanıtma — dokunuşlar", () => {
+  it("① dokunma satırı kimlik yapar / kapatır; ad başlıktan önerilir", () => {
     let g = guidedStart(emptyTeach());
     g = guidedReduce(g, { type: "TAP", i: 1 }, W);
     expect(g.teach.identifiers).toEqual([{ text: "GÜLEÇSOY BOYA", on: true }]);
     expect(guidedReduce(g, { type: "TAP", i: 0 }, W).teach.identifiers[0]!.on).toBe(false);
-    const next = guidedReduce(g, { type: "NEXT" }, W);
-    expect(next.step).toBe(1);
-    expect(next.teach.name).toBe("GÜLEÇSOY BOYA");
-    expect(guidedReduce({ ...g, teach: { ...g.teach, name: "Benim adım" } }, { type: "NEXT" }, W).teach.name).toBe("Benim adım");
+    // Değerli satırda yalnız etiket kimlik olur; değer kelimesine dokunmak aynı etiketi kapatır, değer "Başlık" boyanmaz.
+    g = guidedReduce(g, { type: "TAP", i: 5 }, W);
+    expect(g.teach.identifiers[1]).toEqual({ text: "Ham PartiNo", on: true });
+    expect(guidedMarks(g.teach, W, g).slice(4, 7).map((m) => m.tone)).toEqual(["column", "column", "word"]);
+    expect(guidedReduce(g, { type: "TAP", i: 6 }, W).teach.identifiers).toEqual([g.teach.identifiers[0], { text: "Ham PartiNo", on: false }]);
     expect(suggestName(SCAN)).toBe("GÜLEÇSOY BOYA");
   });
 
-  it("alan adımında TAP değere ekler/çıkarır (çok kelime); RELABEL boşaltır ve adımda kalır; SKIP boşaltıp ilerler", () => {
-    let g = guidedReduce(guidedStart(emptyTeach()), { type: "GOTO", step: 1 }, W);
-    g = guidedReduce(g, { type: "TAP", i: 8 }, W);
-    g = guidedReduce(g, { type: "TAP", i: 9 }, W);
+  it("② TAP değere ekler/çıkarır (çok kelime); RELABEL boşaltır, satırda kalır; SKIP boşaltıp sonraki satıra geçer", () => {
+    let g = atField("musteri");
+    g = run(g, [{ type: "TAP", i: 8 }, { type: "TAP", i: 9 }]);
     expect(g.teach.fields.musteri).toEqual([8, 9]);
     expect(guidedReduce(g, { type: "TAP", i: 9 }, W).teach.fields.musteri).toEqual([8]);
     const rel = guidedReduce(g, { type: "RELABEL" }, W);
-    expect(rel.step).toBe(1);
+    expect(rel.target).toEqual({ kind: "field", key: "musteri" });
     expect(rel.teach.fields.musteri).toBeUndefined();
     const sk = guidedReduce(g, { type: "SKIP" }, W);
-    expect(sk.step).toBe(2);
+    expect(sk.target).toEqual({ kind: "field", key: "partiNo" });
     expect(sk.skipped).toEqual(["musteri"]);
-    expect(sk.teach.fields.musteri).toBeUndefined();
     expect(chipStatus(sk.teach, "musteri", sk.skipped)).toBe("skipped");
-    // Atlanan alana dönüp dokunmak "yok" işaretini kaldırır.
-    const back = guidedReduce(guidedReduce(sk, { type: "GOTO", step: 1 }, W), { type: "TAP", i: 8 }, W);
+    const back = run(sk, [{ type: "GOTO", target: { kind: "field", key: "musteri" } }, { type: "TAP", i: 8 }]);
     expect(back.skipped).toEqual([]);
     expect(chipStatus(back.teach, "musteri", back.skipped)).toBe("done");
+    // af797085a: Gelen kumaş/renk GELEN grubuna geçti, son görünür alan artık En.
+    expect(run(atField("renk"), [{ type: "NEXT" }]).target).toEqual({ kind: "field", key: "en" });
+    expect(run(atField("en"), [{ type: "NEXT" }]).target).toBeNull();
+    expect(run(atField("partiNo"), [{ type: "BACK" }]).target).toEqual({ kind: "field", key: "musteri" });
   });
 
-  it("aynı kelime başka alana atanınca önceki alandan düşer", () => {
-    let g = guidedReduce(guidedStart(emptyTeach()), { type: "GOTO", step: 1 }, W);
-    g = guidedReduce(g, { type: "TAP", i: 6 }, W);
-    g = guidedReduce(guidedReduce(g, { type: "NEXT" }, W), { type: "TAP", i: 6 }, W);
-    expect(g.teach.fields).toEqual({ partiNo: [6] });
+  it("aynı kelime başka alana atanınca önceki alandan düşer; Gelen kg atanabilir ve gövdeye gider", () => {
+    let g = run(atField("partiNo"), [{ type: "TAP", i: 6 }, { type: "GOTO", target: { kind: "field", key: "toplamKg" } }, { type: "TAP", i: 6 }]);
+    expect(g.teach.fields).toEqual({ toplamKg: [6] });
+    expect(suggestBody(g.teach, W, "s1").assignments.map((a) => a.field)).toEqual(["toplamKg"]);
+    g = run(g, [{ type: "GOTO", target: { kind: "column", key: "m" } }, { type: "TAP", i: 6 }]);
+    expect(g.teach.fields).toEqual({});
+    expect(g.teach.columns).toEqual({ m: [6] });
   });
 
-  it("fotoğraf işaretleri: başlık adımında kimlik satırı, alan adımında o alanın değeri seçili", () => {
+  it("③ bölüm: Evet → başlangıç yazısına dokun (satır); toplam satırı dokunuşu; Hayır kapatır", () => {
+    let g = run(named(), [{ type: "STAGE_NEXT" }, { type: "TAP", i: 6 }, { type: "STAGE_NEXT" }, { type: "SET_RULE", set: { rule: "repeats", on: true } }]);
+    expect(g.target).toEqual({ kind: "sectionStart" });
+    g = guidedReduce(g, { type: "TAP", i: 5 }, W);
+    // Etiket kısmı kaydedilir: değer (P2618733) her partide değişir, ikinci partiyi kaçırmasın.
+    expect(g.teach.sectionStart).toBe("Ham PartiNo");
+    expect(suggestBody(g.teach, W, "s1").sectionStartLabel).toBe("Ham PartiNo");
+    const marks = guidedMarks(g.teach, W, g);
+    expect(marks[4]).toMatchObject({ tone: "selected", label: "Bölüm başı" });
+    expect(marks[6]?.label).not.toBe("Bölüm başı");
+    expect(guidedReduce(g, { type: "TAP", i: 4 }, W).teach.sectionStart).toBe("");
+    g = run(g, [{ type: "GOTO", target: { kind: "totals" } }, { type: "TAP", i: 2 }]);
+    expect(g.teach.totalsLabel).toEqual([2]);
+    const off = guidedReduce(g, { type: "SET_RULE", set: { rule: "repeats", on: false } }, W);
+    expect(off.teach.repeats).toBe(false);
+  });
+
+  it("fotoğraf işaretleri: ① kimlik satırı 'Başlık', ② seçili satırın değeri seçili", () => {
     const s = initialTeach(SCAN);
-    const head = guidedMarks(s, W, 0);
-    expect(head[0]).toMatchObject({ tone: "column", label: "Başlık" });
-    const g = guidedReduce(guidedReduce(guidedStart(s), { type: "GOTO", step: 2 }, W), { type: "TAP", i: 6 }, W);
-    expect(guidedMarks(g.teach, W, 2)[6]).toMatchObject({ tone: "selected", label: "Parti no" });
+    expect(guidedMarks(s, W, { stage: "TANIMA", target: null })[0]).toMatchObject({ tone: "column", label: "Başlık" });
+    const g = run(atField("partiNo", s), [{ type: "TAP", i: 6 }]);
+    expect(guidedMarks(g.teach, W, g)[6]).toMatchObject({ tone: "selected", label: "Gönderen parti no" });
+  });
+});
+
+describe("⭐ kurallar gövdesi ve Kaldır (base.drop)", () => {
+  const OLD = { identifiers: { keywords: ["GÜLEÇSOY BOYA"] }, fields: [{ key: "partiNo", label: "Parti No" }, { key: "musteri", label: "Müşteri" }], rules: { multiParty: "PER_PARTY" } };
+  it("yeni tipte Fabrika ayarı = gövdede rules YOK; seçilen kural gider", () => {
+    const g = run(named(), [{ type: "STAGE_NEXT" }, { type: "TAP", i: 6 }]);
+    expect(suggestBody(g.teach, W, "s1")).not.toHaveProperty("rules");
+    const single = guidedReduce(g, { type: "SET_RULE", set: { rule: "multiParty", value: "SINGLE" } }, W);
+    expect(suggestBody(single.teach, W, "s1").rules).toEqual({ multiParty: "SINGLE" });
+  });
+  it("güncellemede kayıtlı kural varsayılan korunur; Fabrika ayarına dönmek açıkça null gönderir", () => {
+    const s = initialTeach(SCAN, "A", [], { kept: templateFieldKeys(OLD), multiParty: "PER_PARTY" });
+    expect(suggestBody(s, W, "s1", "u-a").rules).toEqual({ multiParty: "PER_PARTY" });
+    expect(suggestBody({ ...s, multiParty: null }, W, "s1", "u-a").rules).toEqual({ multiParty: null });
+    expect(adoptTemplate(emptyTeach("T"), { name: "A", template: OLD }).multiParty).toBe("PER_PARTY");
+    expect(adoptTemplate({ ...emptyTeach("T"), multiParty: "SINGLE" }, { name: "A", template: OLD }).multiParty).toBe("SINGLE");
+  });
+  it("Kaldır kayıtlı alanı base.drop'a koyar, Geri al çıkarır; yeniden dokunmak kaldırmayı iptal eder; hepsi kalkınca alan eksik", () => {
+    const s = initialTeach(SCAN, "A Boya", ["GÜLEÇSOY BOYA"], { kept: templateFieldKeys(OLD) });
+    let g = run(guidedStart(s), [{ type: "DROP_FIELD", key: "musteri", on: true }]);
+    expect(isKept(g.teach, "musteri")).toBe(false);
+    expect(suggestBody(g.teach, W, "s1", "u-a").base).toEqual({ code: "u-a", keep: [], drop: ["musteri"] });
+    expect(teachSummary(g.teach)).toBe(`${g.teach.identifiers.filter((d) => d.on).length} kimlik yazısı · 1 alan · 0 kural`);
+    expect(suggestBody(guidedReduce(g, { type: "DROP_FIELD", key: "musteri", on: false }, W).teach, W, "s1", "u-a").base).toEqual({ code: "u-a", keep: [] });
+    const re = run(g, [{ type: "STAGE_NEXT" }, { type: "GOTO", target: { kind: "field", key: "musteri" } }, { type: "TAP", i: 8 }]);
+    expect(suggestBody(re.teach, W, "s1", "u-a").base).toEqual({ code: "u-a", keep: [] });
+    g = guidedReduce(g, { type: "DROP_FIELD", key: "partiNo", on: true }, W);
+    expect(teachProblems(g.teach)).toContain("En az bir alan atayın (ör. Parti No).");
   });
 });
 
@@ -142,7 +221,7 @@ describe("şablonu güncelle — kayıtlı alanlar (tablet #549 aynası)", () =>
     const located = locateKept(s, W, rects);
     expect(located).toEqual({ partiNo: [6] });
     expect(teachMarks(s, W, located)[6]).toMatchObject({ tone: "field", label: "Parti No (kayıtlı)" });
-    expect(guidedMarks(s, W, 1 + GUIDED_FIELDS.indexOf("partiNo"), located)[6]).toMatchObject({ tone: "selected" });
+    expect(guidedMarks(s, W, { stage: "ESLEME", target: { kind: "field", key: "partiNo" } }, located)[6]).toMatchObject({ tone: "selected" });
     const re = { ...s, fields: { partiNo: [6] } };
     expect(isKept(re, "partiNo")).toBe(false);
     expect(locateKept(re, W, rects)).toEqual({});

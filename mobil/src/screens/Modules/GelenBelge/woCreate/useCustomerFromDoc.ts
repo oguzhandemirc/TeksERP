@@ -3,7 +3,7 @@
 // kaydedilsin mi?". Not başına bir kez kendiliğinden açılır, aynı anda tek teklif (`customerOfferStore`).
 // Token mantıksal deneme başına (`useAttemptToken`); ad değişirse yeni deneme, belirsiz hatada aynı token yapışır.
 import { useEffect, useRef, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { customerService } from '../../../../services/customer.service';
 import type { ApiResponse } from '../../../../types/api';
 import type { InboundDocTabletContext, OwnerUnmatched } from '../../../../services/inboundDoc.service';
@@ -23,6 +23,16 @@ export const QUICK_CREATE_PERMISSIONS = ['customer:write', 'gelen-belge:write'] 
 export function describeQuickCreateError(e: unknown): string {
   if ((e as { status?: number } | null)?.status === 403) return NO_PERMISSION_TEXT;
   return (e as { message?: string } | null)?.message || 'Müşteri kaydedilemedi';
+}
+
+/** Seçici listesi yeni kartı hemen göstersin; arkadan tazelenir (belge teklifi + seçicinin "Yeni ekle" formu ortak). */
+export function rememberBornCustomer(qc: QueryClient, born: { id: string; name: string }): void {
+  qc.setQueryData<ApiResponse<InboundDocTabletContext>>(INBOUND_DOC_CONTEXT_KEY, (old) =>
+    old && !old.data.customers.some((c) => c.id === born.id)
+      ? { ...old, data: { ...old.data, customers: [...old.data.customers, born] } }
+      : old,
+  );
+  void qc.invalidateQueries({ queryKey: INBOUND_DOC_CONTEXT_KEY });
 }
 
 export function useCustomerFromDoc({ noteId, unmatched, disabled, onPicked }: {
@@ -95,13 +105,7 @@ export function useCustomerFromDoc({ noteId, unmatched, disabled, onPicked }: {
       attempt.onSuccess();
       tokenName.current = null;
       const born = { id: res.data.id, name: res.data.name };
-      // Seçici listesi yeni kartı hemen göstersin; arkadan tazelenir.
-      qc.setQueryData<ApiResponse<InboundDocTabletContext>>(INBOUND_DOC_CONTEXT_KEY, (old) =>
-        old && !old.data.customers.some((c) => c.id === born.id)
-          ? { ...old, data: { ...old.data, customers: [...old.data.customers, born] } }
-          : old,
-      );
-      void qc.invalidateQueries({ queryKey: INBOUND_DOC_CONTEXT_KEY });
+      rememberBornCustomer(qc, born);
       finish();
       onPicked(born.id, born.name);
     } catch (e) {

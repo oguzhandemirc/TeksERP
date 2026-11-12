@@ -20,28 +20,12 @@ interface Props {
   onLabelResolved?: (label: string | null) => void;
   /** "Temizle" kısayolu gösterilsin mi (kilitliyken zaten gizlenir). */
   showClear?: boolean;
+  /** Tetiği dışarıda çiz (ör. etiketi içinde taşıyan seçici satırı); verilirse "Temizle" seçicinin başında durur. */
+  renderTrigger?: (t: { label: string | null; open: () => void }) => React.ReactNode;
 }
 
-/**
- * Hedef renk seçici — public renk listesi + seçili rengin ad çözümü.
- *
- * `scope=public` → müşteriye ATANMIŞ (exclusive) renkler listelenmez; Hızlı İş
- * Emri stok üretimidir. Seçili renk public listede değilse (ör. sipariş kaleminden
- * gelen müşteri-özel renk) tek-renk fallback sorgusu adını çeker — yoksa alan
- * boş "seç" görünür ve operatör rengin kaybolduğunu sanır.
- *
- * Hızlı İş Emri sihirbazı ve iş emri düzeltme menüsü (Rengi Değiştir) ortak kullanır.
- */
-export default function ColorSelectField({
-  value,
-  onChange,
-  disabled,
-  labelOverride,
-  onLabelResolved,
-  showClear = true,
-}: Props) {
-  const [pickerOpen, setPickerOpen] = useState(false);
-
+/** Public renk listesi + listede olmayan seçili rengin ad çözümü (tek-renk fallback sorgusu). */
+function useColorOptions(value: string | null) {
   const colorsQuery = useQuery({
     queryKey: ['colors', 'wo-picker-public'],
     queryFn: () =>
@@ -78,6 +62,31 @@ export default function ColorSelectField({
     const fromList = colorOptions.find((o) => o.value === value)?.label;
     return fromList ?? fallbackColorQuery.data?.data?.name ?? null;
   }, [value, colorOptions, fallbackColorQuery.data]);
+  return { colorsQuery, colorOptions, selectedColorLabel };
+}
+
+/**
+ * Hedef renk seçici — public renk listesi + seçili rengin ad çözümü.
+ *
+ * `scope=public` → müşteriye ATANMIŞ (exclusive) renkler listelenmez; Hızlı İş
+ * Emri stok üretimidir. Seçili renk public listede değilse (ör. sipariş kaleminden
+ * gelen müşteri-özel renk) tek-renk fallback sorgusu adını çeker — yoksa alan
+ * boş "seç" görünür ve operatör rengin kaybolduğunu sanır.
+ *
+ * Hızlı İş Emri sihirbazı ve iş emri düzeltme menüsü (Rengi Değiştir) ortak kullanır.
+ */
+export default function ColorSelectField({
+  value,
+  onChange,
+  disabled,
+  labelOverride,
+  onLabelResolved,
+  showClear = true,
+  renderTrigger,
+}: Props) {
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  const { colorsQuery, colorOptions, selectedColorLabel } = useColorOptions(value);
 
   const effectiveLabel = labelOverride ?? selectedColorLabel;
 
@@ -87,6 +96,7 @@ export default function ColorSelectField({
 
   return (
     <>
+      {renderTrigger ? renderTrigger({ label: effectiveLabel, open: () => setPickerOpen(true) }) : (
       <View style={styles.row}>
         <TouchableRipple
           onPress={() => setPickerOpen(true)}
@@ -105,14 +115,16 @@ export default function ColorSelectField({
           </TouchableRipple>
         ) : null}
       </View>
+      )}
 
       <PickerModal
         visible={pickerOpen}
         title="Hedef Renk Seç"
         options={colorOptions}
         selectedValue={value}
+        pinnedOptions={renderTrigger && value && showClear ? [{ value: '', label: 'Temizle (renksiz / ham)' }] : undefined}
         loading={colorsQuery.isLoading}
-        onSelect={(v) => onChange(v)}
+        onSelect={(v) => onChange(v || null)}
         onDismiss={() => setPickerOpen(false)}
         onRefresh={() => colorsQuery.refetch()}
         emptyText="Renk bulunamadı"

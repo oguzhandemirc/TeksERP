@@ -22,6 +22,7 @@ import {
   WorkOrder,
   Prisma,
   type MaterialProvider,
+  type RollStage,
 } from "@prisma/client";
 import {
   type WorkOrderPlaceOptions,
@@ -186,7 +187,7 @@ export class WorkOrderService {
   }
 
   private async quickStartFresh(
-    data: WorkOrderCreateInput & { rollBarcodes: string[]; dispatchFirstStep?: boolean; sourceNoteId?: string | null; /** S1 çok parti: belgenin bu partisinin no'su (nottaki ourBatchNo yerine). */ sourceBatchNo?: string | null },
+    data: WorkOrderCreateInput & { rollBarcodes: string[]; /** Kendi üretim (tablet): emanet top 400, topsuz açılış serbest. */ ownGoods?: boolean; dispatchFirstStep?: boolean; sourceNoteId?: string | null; /** S1 çok parti: belgenin bu partisinin no'su (nottaki ourBatchNo yerine). */ sourceBatchNo?: string | null },
     userId?: string,
   ): Promise<
     ApiResponse<{
@@ -660,6 +661,7 @@ export class WorkOrderService {
       plannedSubcontractorId?: string | null;
       /** 2026-08-17 — adım fasona renksiz gitsin ("ekru" kuralı). */
       dispatchWithoutColor?: boolean;
+      outputStage?: RollStage | null;
     },
     userId?: string
   ): Promise<ApiResponse<unknown>> {

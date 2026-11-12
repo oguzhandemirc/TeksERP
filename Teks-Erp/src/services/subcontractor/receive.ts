@@ -23,6 +23,7 @@ import { ApiResponse } from "../../types/api.types";
 import { createBatchTx } from "../batch.service";
 import { Prisma, RollOperationType, RollStatus, RollForm, RollVarianceKind, StationType, StepStatus, ScanType, WarehouseEventType, TravelerCardStatus } from "@prisma/client";
 import { resolveOwnerFromReceiptTx } from "../helpers/emanet-owner.helper";
+import { lowestStage, stageForProductionExit, stageForStepBirth } from "../helpers/roll-stage.helper";
 import { recomputeStepStatus, completeWorkOrderIfStepsDone } from "../helpers/roll-step.helper";
 import { reserveRollBarcodesTx } from "../helpers/roll-barcode.helper";
 import { touchWorkOrderTx } from "../helpers/workorder-locks.helper";
@@ -900,7 +901,7 @@ export async function receiveInner(
         // kimliğini kalıtır → dönüş çıktısı tüm rota boyunca aynı lane'de izlenir.
         const sourceLotRolls = await tx.roll.findMany({
           where: { id: { in: data.returns.map((r) => r.rollId) } },
-          select: { batchId: true },
+          select: { batchId: true, stage: true },
         });
         let bornBatchId =
           receiptBatchId ?? sourceLotRolls.find((r) => r.batchId)?.batchId ?? null;
@@ -936,6 +937,10 @@ export async function receiveInner(
         // barkodsuz (kesin ölçüm/etiket bir sonraki İÇ istasyonun FINISH'inde damgalanır;
         // STOCK yerine IN_PRODUCTION — currentStepId dolu, cutOpenFabric bunu zorunlu kılar).
         const bornStatus = nextStep ? RollStatus.IN_PRODUCTION : RollStatus.WAREHOUSE;
+        // Top aşaması: son adımsa üretimden çıkış (adım ?? bitmiş), ara adımsa adım ?? kaynakların en düşüğü.
+        const bornStage = nextStep
+          ? stageForStepBirth(step.outputStage, lowestStage(sourceLotRolls.map((r) => r.stage)))
+          : stageForProductionExit(step.outputStage);
         // (2026-08-10, F-CORE-VER-001) TEK rezervasyon — eskiden döngü her doğan
         // top için ayrı bir sayaç turu atıyordu; sayaç satırının kilidi ilk turdan
         // itibaren zaten tutulduğu için araya giren her tur kilidi o kadar
@@ -974,6 +979,7 @@ export async function receiveInner(
             qualityGrade: null,
             qualityGradeId: null,
             entrySource: "SUBCONTRACTOR_RETURN",
+            stage: bornStage,
             parentReceiptId: receipt.id,
             ownerCustomerId: bornOwnerCustomerId,
             batchId: bornBatchId,

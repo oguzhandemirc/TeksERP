@@ -22,6 +22,15 @@ const moveSchema = z.object({
 const mergeSchema = z.object({
   batchIds: z.array(z.string().uuid()).min(2, "En az iki parti seçilmeli"),
 });
+/** Önizlenecek ardışık numara sayısı (çok partili iş emri sekmeleri); verilmezse 1. */
+const numberStateQuery = z.object({
+  count: z.coerce
+    .number({ message: "Adet bir sayı olmalı." })
+    .int("Adet tam sayı olmalı.")
+    .min(1, "Adet en az 1 olabilir.")
+    .max(20, "Adet en fazla 20 olabilir.")
+    .default(1),
+});
 const splitSchema = z.object({
   rollIds: z.array(z.string().uuid()).min(1, "En az bir top seçilmeli"),
 });
@@ -44,9 +53,10 @@ export class BatchController {
    * ⚠️ `next` ÖNİZLEMEDİR, rezervasyon DEĞİL — kilit dışında okunur; arada bir
    * parti doğarsa gerçekleşen numara başka olur.
    */
-  async numberState(_req: Request, res: Response, next: NextFunction): Promise<void> {
+  async numberState(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      res.status(200).json({ success: true, data: await svcGetBatchNumberState() });
+      const { count } = numberStateQuery.parse(req.query ?? {});
+      res.status(200).json({ success: true, data: await svcGetBatchNumberState(count) });
     } catch (e) {
       next(e);
     }

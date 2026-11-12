@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,6 +8,7 @@ import { useScrollEdges } from "./useScrollEdges";
 import { FilterChip } from "./FilterChip";
 import { MoreFiltersMenu } from "./MoreFiltersMenu";
 import { clearAllKeys, isRowFilterActive, withoutKeys, type RowFilter } from "./row-filter";
+import { isShown, isToggleFilter, useFilterRowVisibility, withOverride } from "./filter-visibility";
 
 export interface FilterRowProps {
   search?: string;
@@ -15,10 +16,12 @@ export interface FilterRowProps {
   /** Arama kutusunun yerine (ör. barkod okutma alanı — o da `search` yazar). */
   leading?: ReactNode;
   placeholder?: string;
-  /** Her zaman görünen kutular (Görünüm, Termin, Müşteri, Durum…). */
+  /** İlk açılışta görünen kutular (Görünüm, Termin, Müşteri, Durum…) — çakılı değil, kullanıcı "+ Filtre"den kaldırabilir. */
   primary: readonly RowFilter[];
-  /** "+ Filtre" altındakiler; etkin olan ya da eklenen satıra kutu olarak çıkar. */
+  /** İlk açılışta gizli olanlar; etkin olan ya da kullanıcının eklediği satıra kutu olarak çıkar. */
   more?: readonly RowFilter[];
+  /** Görünürlük kaydının sayfa kimliği; verilmezse pathname. */
+  viewKey?: string;
   /** Sağ uç (Sütunlar, kayıtlı görünümler…) — "Temizle"den sonra. */
   trailing?: ReactNode;
 }
@@ -28,30 +31,57 @@ export interface FilterRowProps {
  * `[Ara][kutular… + Filtre] … [Temizle][trailing]`. Satır HİÇBİR genişlikte sarmaz:
  * arama küçülür, kutu bölgesi yatay kayar, sağ uç sabit kalır. Açılır listeler ve
  * pencereler portalda çizildiği için kaydırma kabı onları kırpmaz.
- * Bekçi: `FilterRow.test.tsx` (✕ · Temizle · + Filtre · tek satır sınıf sözleşmesi).
+ * Çakılı kutu yok (2026-11-10): "+ Filtre" bütün filtreleri tikli listeler; seçim sayfa başına kalıcı (`filter-visibility.ts`).
+ * Bekçi: `FilterRow.test.tsx` (✕ · Temizle · + Filtre tik/kalıcılık · tek satır sınıf sözleşmesi).
  */
 export const FILTER_ROW_CLASS = "flex shrink-0 flex-nowrap items-center gap-2 border-b px-3 py-2";
 export const FILTER_ROW_SCROLL_CLASS = "flex min-w-0 shrink flex-nowrap items-center gap-1.5 overflow-x-auto py-0.5 [scrollbar-width:thin]";
 
-export function FilterRow({ search = "", onSearchChange, leading, placeholder = "Ara...", primary, more = [], trailing }: FilterRowProps) {
+export function FilterRow({ search = "", onSearchChange, leading, placeholder = "Ara...", primary, more = [], trailing, viewKey }: FilterRowProps) {
   const [sp, setSp] = useSearchParams();
+  const { pathname } = useLocation();
+  const { overrides, write } = useFilterRowVisibility(viewKey ?? pathname);
+  /** Bu oturumda menüden açılanlar: dar ekranda da satırda kalır. */
   const [pinned, setPinned] = useState<string[]>([]);
   const [justAdded, setJustAdded] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const edges = useScrollEdges(scrollRef);
-  const visibleMore = more.filter((f) => pinned.includes(f.id) || isRowFilterActive(f, sp));
-  const hidden = more.filter((f) => !visibleMore.includes(f));
+  const primaryIds = new Set(primary.map((f) => f.id));
   const all = [...primary, ...more];
+  const defaultShown = (f: RowFilter) => primaryIds.has(f.id) && !isToggleFilter(f);
+  // Oturumda açılan kutu tercih yazımı dönmeden de satırdadır.
+  const shown = all.filter((f) => pinned.includes(f.id) || isShown(f, defaultShown(f), overrides, isRowFilterActive(f, sp)));
+  const shownIds = new Set(shown.map((f) => f.id));
   const anyActive = all.some((f) => isRowFilterActive(f, sp));
-  // Dar ekranda (lg altı) satırda yalnız etkin/eklenmiş kutular kalır; boş kalıcı kutular "+ Filtre"ye geçer
+  // Dar ekranda (lg altı) satırda yalnız etkin/açılmış kutular kalır; boş kutular "+ Filtre"den açılır
   // ki etkin süzgeç kaymaya düşüp gizlenmesin.
-  const idlePrimary = primary.filter((f) => !isRowFilterActive(f, sp) && !pinned.includes(f.id));
-  const narrowOnly = new Set(idlePrimary.map((f) => f.id));
+  const narrowOnly = new Set(shown.filter((f) => !isRowFilterActive(f, sp) && !pinned.includes(f.id)).map((f) => f.id));
 
-  const remove = (f: RowFilter) => {
-    if (f.keys.length > 0) setSp(withoutKeys(sp, f.keys), { replace: true });
-    f.onClear?.();
+  /** Gizlenen kutu değerini taşımaz: gizli filtre listeyi sessizce süzmesin (tek where). */
+  const clearValues = (fs: readonly RowFilter[]) => {
+    const keys = fs.flatMap((f) => f.keys).filter((k) => sp.has(k));
+    if (keys.length > 0) setSp(withoutKeys(sp, keys), { replace: true });
+    for (const f of fs) if (isRowFilterActive(f, sp)) f.onClear?.();
+  };
+  const hide = (f: RowFilter) => {
+    clearValues([f]);
     setPinned((p) => p.filter((id) => id !== f.id));
+    if (!isToggleFilter(f)) write((ov) => withOverride(ov, f.id, false, defaultShown(f)));
+  };
+  const show = (f: RowFilter, open: boolean) => {
+    if (f.onAdd) return f.onAdd();
+    write((ov) => withOverride(ov, f.id, true, defaultShown(f)));
+    if (open) {
+      setPinned((p) => (p.includes(f.id) ? p : [...p, f.id]));
+      setJustAdded(f.id);
+    }
+  };
+  /** ✕: dolu kutuda yalnız değeri siler; kullanıcının eklediği boş kutuyu kapatır. */
+  const remove = (f: RowFilter) => {
+    if (isRowFilterActive(f, sp)) {
+      if (f.keys.length > 0) setSp(withoutKeys(sp, f.keys), { replace: true });
+      f.onClear?.();
+    } else hide(f);
   };
   const clearAll = () => {
     const active = all.filter((f) => isRowFilterActive(f, sp));
@@ -59,16 +89,16 @@ export function FilterRow({ search = "", onSearchChange, leading, placeholder = 
     for (const f of active) f.onClear?.();
     setPinned([]);
   };
-  const add = (f: RowFilter) => {
-    if (f.onAdd) return f.onAdd();
-    setPinned((p) => (p.includes(f.id) ? p : [...p, f.id]));
-    setJustAdded(f.id);
+  const resetVisibility = () => {
+    clearValues(all.filter((f) => !isToggleFilter(f) && !defaultShown(f)));
+    write(() => ({}));
+    setPinned([]);
   };
 
-  const chip = (f: RowFilter, extra: boolean, narrowHide = false) => {
+  const chip = (f: RowFilter) => {
     const active = isRowFilterActive(f, sp);
     return (
-      <FilterChip key={f.id} id={f.id} label={f.label} active={active} removable={active || extra} onRemove={() => remove(f)} className={narrowHide ? "hidden lg:inline-flex" : undefined}>
+      <FilterChip key={f.id} id={f.id} label={f.label} active={active} removable={active || !defaultShown(f)} onRemove={() => remove(f)} className={narrowOnly.has(f.id) ? "hidden lg:inline-flex" : undefined}>
         {f.render({ autoOpen: justAdded === f.id })}
       </FilterChip>
     );
@@ -78,11 +108,10 @@ export function FilterRow({ search = "", onSearchChange, leading, placeholder = 
     <div data-testid="filter-row" className={FILTER_ROW_CLASS}>
       {leading ?? (onSearchChange && <RowSearch value={search} onChange={onSearchChange} placeholder={placeholder} />)}
       <div ref={scrollRef} data-testid="filter-row-scroll" className={cn(FILTER_ROW_SCROLL_CLASS, fadeClass(edges))}>
-        {primary.map((f) => chip(f, pinned.includes(f.id), narrowOnly.has(f.id)))}
-        {visibleMore.map((f) => chip(f, true))}
+        {shown.map(chip)}
       </div>
       {/* Kayan bölgenin DIŞINDA: dar ekranda kutular kaysa da ekleme düğmesi görünür kalır. */}
-      <MoreFiltersMenu filters={[...idlePrimary, ...hidden]} onPick={add} narrowOnly={narrowOnly} />
+      <MoreFiltersMenu filters={all} shownIds={shownIds} narrowOnly={narrowOnly} onShow={show} onHide={hide} onReset={resetVisibility} />
       <div className="ml-auto flex shrink-0 items-center gap-1.5">
         {anyActive && (
           <Button type="button" variant="ghost" size="sm" className="h-8 gap-1 px-2 text-xs" onClick={clearAll} title="Bütün filtreleri kaldır" aria-label="Temizle">

@@ -24,6 +24,8 @@ export interface RollDeliveryNoteLine {
   itemText: string | null;
   colorText: string | null;
   senderRollNo: string | null;
+  /** Satırın beyan eni (cm) — TOP ve ARABA satırında (en toplanmaz: arabanın eni içindeki her topun enidir). Tambur en varsayılanı (K7). */
+  widthCm: number | null;
   /** Satırın ham işlem metni; satırda yoksa belge başlığınınki (H9 kuralı, `effectiveProcessText`) — H9b İE gramaj önerisi. */
   processText: string | null;
   /** Belgenin onaylı gönderen carisi (PROCESS sözlüğünün gönderene özel satırı için). */
@@ -31,6 +33,8 @@ export interface RollDeliveryNoteLine {
   /** Müşteri partisi kaynağı (D4-D2): belgenin emanet sahibi + parti no; anahtar `customerBatchKeyOf`. */
   ownerCustomerId: string | null;
   customerBatchNo: string | null;
+  /** Gönderenin kendi belge (irsaliye) numarası — top kartı "Nereden geldi". */
+  senderDocNo: string | null;
 }
 
 /** rollId → en yakın atanın gelen belge satırı. Satırı olmayan top haritada YOK. */
@@ -42,13 +46,13 @@ export async function resolveDeliveryNoteLinesForRolls(rollIds: readonly string[
     const probeIds = [...new Set(pending.values())];
     const lines = await db.customerDeliveryNoteLine.findMany({
       where: { rollId: { in: probeIds } },
-      select: { id: true, rollId: true, noteId: true, itemText: true, colorText: true, senderRollNo: true, processText: true, note: { select: { noteNo: true, processText: true, senderCustomerId: true, ownerCustomerId: true, customerBatchNo: true } } },
+      select: { id: true, rollId: true, noteId: true, widthCm: true, itemText: true, colorText: true, senderRollNo: true, processText: true, note: { select: { noteNo: true, processText: true, senderCustomerId: true, ownerCustomerId: true, customerBatchNo: true, senderDocNo: true } } },
     });
     const byRoll = new Map(lines.map((l) => [l.rollId!, l]));
     const unresolved: Array<[string, string]> = [];
     for (const [origin, probe] of pending) {
       const l = byRoll.get(probe);
-      if (l) out.set(origin, { sourceRollId: probe, lineId: l.id, noteId: l.noteId, noteNo: l.note.noteNo, itemText: l.itemText, colorText: l.colorText, senderRollNo: l.senderRollNo, processText: effectiveProcessText(l.processText, l.note.processText), senderCustomerId: l.note.senderCustomerId, ownerCustomerId: l.note.ownerCustomerId, customerBatchNo: l.note.customerBatchNo });
+      if (l) out.set(origin, { sourceRollId: probe, lineId: l.id, noteId: l.noteId, noteNo: l.note.noteNo, itemText: l.itemText, colorText: l.colorText, senderRollNo: l.senderRollNo, widthCm: l.widthCm != null ? Number(l.widthCm) : null, processText: effectiveProcessText(l.processText, l.note.processText), senderCustomerId: l.note.senderCustomerId, ownerCustomerId: l.note.ownerCustomerId, customerBatchNo: l.note.customerBatchNo, senderDocNo: l.note.senderDocNo });
       else unresolved.push([origin, probe]);
     }
     if (unresolved.length === 0) break;
@@ -62,4 +66,11 @@ export async function resolveDeliveryNoteLinesForRolls(rollIds: readonly string[
     pending = next;
   }
   return out;
+}
+
+/** Liste satırlarına türetilmiş MÜŞTERİ PARTİ NO'su (gelen belge, ata zinciriyle) — sayfa başına seviye başı tek sorgu; yoksa null. */
+export async function attachCustomerBatchNo<T extends { id: string }>(rows: T[]): Promise<Array<T & { customerBatchNo: string | null }>> {
+  if (rows.length === 0) return [];
+  const lines = await resolveDeliveryNoteLinesForRolls(rows.map((r) => r.id));
+  return rows.map((r) => ({ ...r, customerBatchNo: lines.get(r.id)?.customerBatchNo?.trim() || null }));
 }

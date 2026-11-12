@@ -32,7 +32,16 @@ export async function machineCostRateValidAt(db: Reader, machineId: string, at: 
   });
 }
 
-/** Hizmet kaleminin `at` anında geçerli sarf normları (sarf kalemi başına en çok bir satır). */
+/**
+ * Çeşit seçimi TEK KAYNAK (sarf stoğu + kârlılık): işlemin çeşidine (kurşun gramajı) özel norm(lar) varsa
+ * YALNIZ onlar, yoksa çeşitsiz normlar. Küme düzeyinde ezme: özel norm varken çeşitsiz kalem eklenmez.
+ */
+export function pickNormsForValue<T extends { propertyValueId: string | null }>(norms: T[], valueId: string | null): T[] {
+  const specific = valueId ? norms.filter((n) => n.propertyValueId === valueId) : [];
+  return specific.length > 0 ? specific : norms.filter((n) => n.propertyValueId === null);
+}
+
+/** Hizmet kaleminin `at` anında geçerli sarf normları (çeşit × sarf kalemi başına en çok bir satır; seçim `pickNormsForValue`). */
 export async function consumableNormsValidAt(db: Reader, serviceItemId: string, at: Date): Promise<ServiceConsumableNorm[]> {
   return db.serviceConsumableNorm.findMany({
     where: { AND: [{ serviceItemId }, validWindow(at)] },

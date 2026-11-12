@@ -9,7 +9,7 @@
 //   · el yazısı şüpheli değer oranı K — 4 (varsayılan; alt sınır bugünkü %25, üst sınır yeni)
 //   · okuma seçenekleri (tablosuz fişte metre kaynağı, şablondan gönderen) — `GelenBelgeReadOptionsField.tsx`
 //   · kayıt kipi (onay kipi, parti numarası kaynağı, gramajsız oto iş emri) — `GelenBelgeEntryModeField.tsx`
-//   · aynı belge no tekrar gelirse (K27) — `GelenBelgeDuplicateDocNoField.tsx`
+//   · aynı belge no tekrar gelirse (K27) + aynı müşteri parti no tekrar gelirse — `GelenBelgeDuplicateDocNoField.tsx`
 // Ürün seçici DOĞRUDAN modal açar (combobox yok); yalnız aktif kumaş listelenir, sunucu ikinci kapıdır.
 // =============================================================================
 import { useEffect, useState } from "react";
@@ -31,7 +31,7 @@ import { OutlierFactorField, useOutlierDraft } from "./GelenBelgeOutlierField";
 import { StationVerifyField, useStationVerifyDraft } from "./GelenBelgeStationVerifyField";
 import { ReadOptionsFields, useReadOptionsDraft } from "./GelenBelgeReadOptionsField";
 import { EntryModeFields, useEntryModeDraft } from "./GelenBelgeEntryModeField";
-import { DuplicateDocNoField, useDuplicateDocNoDraft } from "./GelenBelgeDuplicateDocNoField";
+import { DuplicateFields, useDuplicateDrafts } from "./GelenBelgeDuplicateDocNoField";
 import { IeFormFields, useIeFormDraft } from "./GelenBelgeIeFormField";
 import { SettingsSaveBar } from "./SettingsSaveBar";
 import { useRegisterSettingsDirty } from "./settings-dirty";
@@ -176,12 +176,12 @@ export function IncomingDocumentSettingsSection({ writePermissions = [SETTINGS_A
   const vd = useStationVerifyDraft(server);
   const ro = useReadOptionsDraft(server);
   const ed = useEntryModeDraft(server);
-  const dd = useDuplicateDocNoDraft(server);
+  const dd = useDuplicateDrafts(server);
   const fd = useIeFormDraft(server);
   const [picking, setPicking] = useState(false);
   const resetAll = () => { setItem(serverItem); setMode(server?.unreviewedApproval ?? "WARN"); setAuto(serverAuto); rd.reset(); od.reset(); vd.reset(); ro.reset(); ed.reset(); dd.reset(); fd.reset(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(resetAll, [server?.defaultItem?.id, server?.unreviewedApproval, serverAuto, rd.serverRouteId, rd.serverPriority, od.serverValue, vd.serverValue, ro.serverSource, ro.serverAutoSender, ed.serverKey, dd.serverValue, fd.serverDesen, fd.serverGiris, fd.serverGuven]);
+  useEffect(resetAll, [server?.defaultItem?.id, server?.unreviewedApproval, serverAuto, rd.serverRouteId, rd.serverPriority, od.serverValue, vd.serverValue, ro.serverSource, ro.serverAutoSender, ro.serverServerOcr, ed.serverKey, dd.doc.serverValue, dd.batch.serverValue, fd.serverDesen, fd.serverGiris, fd.serverGuven]);
 
   const itemDirty = (item?.id ?? null) !== (server?.defaultItem?.id ?? null);
   const modeDirty = mode !== (server?.unreviewedApproval ?? "WARN");
@@ -238,7 +238,7 @@ export function IncomingDocumentSettingsSection({ writePermissions = [SETTINGS_A
         <ReadOptionsFields draft={ro} />
         <EntryModeFields draft={ed} hasDefaultItem={item !== null} />
         <StationVerifyField draft={vd} defaultValue={server?.defaultStationVerifyThreshold} />
-        <DuplicateDocNoField draft={dd} />
+        <DuplicateFields draft={dd} />
         <IeFormFields draft={fd} />
 
         <SettingsSaveBar dirty={dirty} saving={mut.isPending} onSave={() => mut.mutate()} onReset={resetAll} />

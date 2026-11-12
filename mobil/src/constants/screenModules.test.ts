@@ -10,7 +10,7 @@ import { MOBILE_SCREENS } from '../types/permissions';
 describe('screenModules — ekran → modül aynası', () => {
   it('üretim modülünün beş ekranı tabloda; çekirdek/planlanan ekranlar tabloda DEĞİL', () => {
     expect(Object.keys(SCREEN_MODULE).sort()).toEqual(
-      ['Devere', 'Dokuma', 'FasonDokuma', 'HizliIsEmri', 'KK1', 'KursunDagitim', 'KursunQc', 'Muayene', 'Tambur', 'Uyarilar', 'GelenBelge', 'IsEmirleri'].sort()
+      ['Devere', 'Dokuma', 'FasonDokuma', 'HizliIsEmri', 'KK1', 'KursunDagitim', 'KursunQc', 'KaliteKontrol', 'Muayene', 'Tambur', 'Uyarilar', 'GelenBelge', 'IsEmirleri'].sort()
     );
     expect(SCREEN_MODULE.Dokuma).toBe('dokumaEnabled');
     expect(SCREEN_MODULE.Devere).toBe('devereEnabled');

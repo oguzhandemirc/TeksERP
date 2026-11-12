@@ -12,6 +12,7 @@ import android.util.Base64
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.gms.common.moduleinstall.ModuleInstall
+import com.google.android.gms.common.moduleinstall.ModuleInstallRequest
 import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions
 import com.google.mlkit.vision.documentscanner.GmsDocumentScanning
@@ -171,6 +172,10 @@ class TeksErpBelgeTarayiciModule : Module() {
     View(LiveCameraView::class) {
       Events("onText", "onStability", "onError")
 
+      Prop("torch") { view: LiveCameraView, value: Boolean ->
+        view.setTorch(value)
+      }
+
       AsyncFunction("captureStill") { view: LiveCameraView, promise: Promise ->
         view.captureStill(promise)
       }.runOnQueue(Queues.MAIN)
@@ -227,8 +232,8 @@ class TeksErpBelgeTarayiciModule : Module() {
       if (response.areModulesAvailable()) {
         verdict(true, "ok")
       } else {
-        // İnternet gelince Play Hizmetleri indirir; bu tarama kamerayla sürer.
-        installer.deferredInstall(scanner)
+        // Hemen indir (deferredInstall cihaz boşta+şarjda bekler, sahada hiç inmiyordu); bu tarama kamerayla sürer.
+        installer.installModules(ModuleInstallRequest.newBuilder().addApi(scanner).build())
         verdict(false, "module_missing")
       }
     } catch (e: TimeoutException) {
@@ -315,6 +320,6 @@ class TeksErpBelgeTarayiciModule : Module() {
     /** Sunucu okuma servisinin küçültme sınırıyla aynı (`okuma/app` uzun kenar 2600). */
     private const val OCR_LONG_EDGE = 2600
     /** Canlı kamera sözleşme sürümü (JS `isLiveCameraAvailable` en az bunu ister). */
-    private const val LIVE_CAMERA_VERSION = 1
+    private const val LIVE_CAMERA_VERSION = 2
   }
 }

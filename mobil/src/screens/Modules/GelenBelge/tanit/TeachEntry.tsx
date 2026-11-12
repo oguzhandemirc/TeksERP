@@ -1,4 +1,4 @@
-// Belge Tara okuma sonucunda tanıtmaya giriş (S1b): "Bu belgeyi tanıt" / "Şablonu güncelle"; belge tanınmadıysa "Bu belge hangi tip?"
+// Belge Tara okuma sonucunda tanıtmaya giriş (S1b): "Bu belgeyi tanıt" / "Tanımı düzenle"; belge tanınmadıysa "Bu belge hangi tip?"
 // (listeden seç = o şablonu bu belgeyle güncelle | yeni tip tanıt). `gelen-belge:template` + `gelen-belge:read` izniyle, okunmuş ve
 // bu cihazdaki fotoğrafı eşlenen sayfa varsa çizilir. K30-A: telefonda da açılır (rehberli kip dikey yerleşimde çalışır).
 import React, { useEffect, useRef, useState } from 'react';
@@ -31,7 +31,7 @@ export default function TeachEntry({ detail, localPages, autoOpen = false }: Pro
   const [picking, setPicking] = useState(false);
   const [open, setOpen] = useState<{ code: string | null } | null>(null);
   const list = useQuery({ queryKey: USER_TEMPLATES_KEY, queryFn: () => inboundDocService.listUserTemplates(), enabled: pages.length > 0, retry: false });
-  // Belgenin okunduğu şablon bir kullanıcı şablonuysa düğme "Şablonu güncelle" olur.
+  // Belgenin okunduğu şablon bir kullanıcı şablonuysa düğme "Tanımı düzenle" olur.
   const own = detail?.templateId ? (list.data ?? []).find((r) => r.id === detail.templateId) : undefined;
   const ready = pages.length > 0 && !list.isLoading;
   const autoDone = useRef(false);
@@ -57,7 +57,7 @@ export default function TeachEntry({ detail, localPages, autoOpen = false }: Pro
           </Button>
         )}
         <Button mode="contained-tonal" icon="creation" onPress={() => setOpen({ code: own?.code ?? null })} contentStyle={styles.btn} testID="tanit-ac">
-          {own ? 'Şablonu güncelle' : unknown ? 'Yeni tip tanıt' : 'Bu belgeyi tanıt'}
+          {own ? 'Tanımı düzenle' : unknown ? 'Yeni tip tanıt' : 'Yeniden tanıt'}
         </Button>
       </View>
       <PickerModal

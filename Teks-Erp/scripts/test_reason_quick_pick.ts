@@ -5,11 +5,14 @@
 //      öteki kind (WARP_RETURN) hiç true olmaz.
 //   §2 liste ucu: `list({kind: MACHINE_STOP})` işareti taşır; `includeInactive` işareti DEĞİŞTİRMEZ (pasif sayılmaz);
 //      `reorder` ile 5. sıraya alınan sebep işareti KAYBEDER, öne alınan KAZANIR (fabrika sırayla seçer, ayar yok).
+//   §2e (2026-11-09) `stationKind` süzgeci verilince işaret SÜZÜLMÜŞ listede türer (ilk 4 aktif); kapsam ayrıntısı
+//      `test_durus_istasyon_kapsami` §6.
+//   §2f (2026-11-09) reorder TAM permütasyon (pasif dahil, ters sıra): yanıt gönderilen sırada, DB sortOrder = indeks.
 // Negatif sondalar (kırmızı görüldü): pasif süzgeci kalkınca §1b ❌ · `QUICK_PICK_KINDS` boşalınca §1a/§2a ❌ ·
-//   `list` `markQuickPicks` çağırmayınca §2a ❌.
+//   `list` `markQuickPicks` çağırmayınca §2a ❌ · `reorder` update'inden `sortOrder: i` düşünce §2d/§2f ❌ (2026-11-09).
 // ⚠️ DB'ye YAZAR (kendi TEST-QP- preset'leri; sıralamayı fotoğraflayıp geri koyar) → `hedefDbEngeli()` ilk adım.
 // =============================================================================
-import { MachineStopLossClass, ReasonPresetKind } from "@prisma/client";
+import { MachineStopLossClass, ReasonPresetKind, StationKind } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { QUICK_PICK_COUNT } from "../src/constants/reason-presets";
@@ -61,6 +64,18 @@ async function main(): Promise<void> {
     const afterReorder = await ReasonPresetService.list({ kind: ReasonPresetKind.MACHINE_STOP });
     const fourthBefore = ids[QUICK_PICK_COUNT - 1]!;
     check("§2d ⭐ öne alınan sebep işaret KAZANIR, eski 4. sıradaki KAYBEDER — fabrika 'hızlı dörtlüyü' sırayla seçer", afterReorder[0]?.id === yeni.id && afterReorder[0]?.quickPick === true && afterReorder.find((r) => r.id === fourthBefore)?.quickPick === false);
+    const scoped = await ReasonPresetService.list({ kind: ReasonPresetKind.MACHINE_STOP, stationKind: StationKind.TAMBUR });
+    check("§2e süzülmüş liste (stationKind=TAMBUR): işaret süzülmüşün ilk 4 aktifinde", scoped.length >= QUICK_PICK_COUNT && scoped.slice(0, QUICK_PICK_COUNT).every((r) => r.quickPick) && scoped.slice(QUICK_PICK_COUNT).every((r) => !r.quickPick), `${scoped.length} satır`);
+    // §2f TAM permütasyon (pasif dahil, ters sıra): yanıt gönderilen sırayla AYNI, DB'de her satırın sortOrder'ı = indeksi.
+    // Demo raporu (2026-11-09) "200 ama sıra değişmiyor" — denetimde istemci ids'i ESKİ sırada göndermişti (audit `order`).
+    const pasif = await ReasonPresetService.create({ kind: ReasonPresetKind.MACHINE_STOP, label: `${TAG} pasif`, stopLossClass: MachineStopLossClass.UNPLANNED });
+    createdIds.push(pasif.id);
+    await ReasonPresetService.update(pasif.id, { isActive: false });
+    const tum = (await ReasonPresetService.list({ kind: ReasonPresetKind.MACHINE_STOP, includeInactive: true })).map((r) => r.id);
+    const ters = [...tum].reverse();
+    const yanit = (await ReasonPresetService.reorder(ReasonPresetKind.MACHINE_STOP, ters)).map((r) => r.id);
+    const db = new Map((await prisma.reasonPreset.findMany({ where: { kind: ReasonPresetKind.MACHINE_STOP }, select: { id: true, sortOrder: true } })).map((r) => [r.id, r.sortOrder]));
+    check("§2f ⭐ reorder tam permütasyon (pasif dahil): yanıt gönderilen sırada, DB sortOrder = indeks", tum.length >= 6 && JSON.stringify(yanit) === JSON.stringify(ters) && ters.every((id, i) => db.get(id) === i), `${tum.length} satır`);
   } finally {
     await prisma.systemLog.deleteMany({ where: { recordId: { in: createdIds } } }).catch(() => undefined);
     await prisma.reasonPreset.deleteMany({ where: { id: { in: createdIds } } }).catch(() => undefined);

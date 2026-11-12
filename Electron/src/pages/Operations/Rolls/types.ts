@@ -1,4 +1,4 @@
-import type { RollStatus, RollOperationType } from "@/types/enums";
+import type { RollStage, RollStatus, RollOperationType } from "@/types/enums";
 
 export interface RollColor {
   id: string;
@@ -87,6 +87,8 @@ export interface Roll {
   markedForKartela?: boolean;
   /** Etiket bayat mı — veri/metraj düzeltildi ama fiziksel etiket yeniden basılmadı. */
   labelDirty?: boolean;
+  /** Üretim aşaması (2026-11-10) — etiket türü buradan türer; eski sunucu göndermez. */
+  stage?: RollStage;
   /**
    * Etiketin BASILDIĞI an. `labelDirty` ile farklı soru: o "basılı etiket
    * veriyle uyuşuyor mu", bu "ortada fiziksel bir kâğıt VAR mı". İptal edilmiş
@@ -111,6 +113,9 @@ export interface Roll {
   foldType?: string | null;
   /** Müşterinin etikete istediği parti metni (J1/K30); NULL = yok. */
   labelBatchNo?: string | null;
+  /** Etikete basılan müşteri kumaş adı / rengi (tamburda topa yazılır); NULL = kumaşın kendi adı. */
+  labelItemName?: string | null;
+  labelColorName?: string | null;
   entrySource: string;
   /**
    * Elle eklenen topun sebebi — YALNIZ detay ucunda (`GET /rolls/:id`) döner,
@@ -155,6 +160,24 @@ export interface Roll {
   warehouse?: { id: string; code: string; name: string } | null;
   /** Emanet sahibi (liste include `ownerCustomer`) — "Sahibi" sütunu; eski sunucu göndermez → opsiyonel. */
   ownerCustomer?: { id: string; name: string } | null;
+  /** Müşterinin parti no'su — gelen belgeden, ata zinciriyle türetilir (liste + detay); yoksa null. */
+  customerBatchNo?: string | null;
+  /** Etiketteki müşteri — SAHİPLİK DEĞİL (yalnız detay). */
+  labelCustomer?: { id: string; name: string } | null;
+  /** Emanet topun etiketindeki alıcı (2026-11-10, detay ucu) — eski sunucu göndermez. */
+  labelConsignee?: { id: string; name: string } | null;
+  /** "Etiketi düzenle" ile elle yazılmış alanlar (yalnız gösterim) — eski sunucu göndermez. */
+  labelOverrides?: Record<string, string> | null;
+  /** Topun bir seferlik etiket şablonu (detay ucu) — eski sunucu göndermez. */
+  labelTemplate?: { id: string; name: string } | null;
+  /** Kg'nin kaynağı (2026-11-10) — kantar / elle / simüle; eski satırda null. */
+  weightSource?: "SCALE" | "MANUAL" | "SIMULATED" | null;
+  /** Ata top (Tambur kesimi vb.) — yalnız detay; metreleri top kartı tablosu için (eski sunucu göndermez). */
+  parent?: { id: string; barcode: string | null; initialQty?: number; currentQty?: number } | null;
+  /** Bizim parti + iş emri — yalnız detay. */
+  batch?: { id: string; batchNumber: string; workOrder: { id: string; workOrderNumber: string } | null } | null;
+  /** En yakın atanın gelen belge satırı — yalnız detay; `inherited` = satır atada. */
+  deliveryNote?: RollDeliveryNoteRef | null;
   warehouseId?: string | null;
   parentRollId: string | null;
   /** Açık kumaş Roll'lar için fason kabul referansı. */
@@ -199,6 +222,15 @@ export interface Roll {
   updatedAt: string;
 }
 
+export interface RollDeliveryNoteRef {
+  noteId: string;
+  noteNo: string;
+  senderDocNo: string | null;
+  customerBatchNo: string | null;
+  senderRollNo: string | null;
+  inherited: boolean;
+}
+
 /** Roll'a bağlı sevkiyatın durumu (rezerve rozetinin alt metni için).
  *  Çuval havuzu modelinde Shipment yalnız PLANNED | DISPATCHED | CANCELLED üretir. */
 export type RollShipmentStatus = "PLANNED" | "DISPATCHED" | "CANCELLED";
@@ -229,6 +261,23 @@ export interface RollLabelSnapshot {
   printedAt: string;
   operatorId: string | null;
   operatorName: string | null;
+  stock?: boolean;
+  /** Basım anı değerleri (2026-11-10) — eski snapshot'ta YOK; okuyucu üst düzey adlara düşer. */
+  printed?: RollLabelPrintedValues;
+}
+
+/** `lastLabelSnapshot.printed` — etikette basılan değerler (yalnız dolu alanlar yazılır). */
+export interface RollLabelPrintedValues {
+  lengthMeters?: number;
+  itemName?: string;
+  colorName?: string;
+  qualityGrade?: string;
+  batchNumber?: string;
+  labelBatchNo?: string;
+  weightKg?: number;
+  widthCm?: number;
+  foldType?: string;
+  consigneeName?: string;
 }
 
 export interface RollOperationLogEntry {

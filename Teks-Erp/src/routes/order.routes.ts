@@ -740,16 +740,27 @@ router.get("/:id", verifyToken, requirePermission("order:read"), orderDetailHand
  *                     width: { type: number, nullable: true }
  *                     customerItemName: { type: string, nullable: true }
  *                     customerColorName: { type: string, nullable: true }
+ *                     tolerancePct: { type: string, nullable: true, description: "Satır sevk toleransı % (0..50; sayı ya da noktalı metin; null temizler). Siparişin tamamlanma toleransına eklenir." }
  *     responses:
  *       201:
- *         description: Sipariş oluşturuldu
+ *         description: |
+ *           Sipariş oluşturuldu. İş kabulü risk kapısı (finance.riskLimitBlock.intake) KAPALIYKEN cari risk limitini aşıyorsa
+ *           `warnings[]` Türkçe uyarı taşır; tutar/bakiye yalnız `finance:read` izninde (aksi halde yalnız "limit aşıldı").
+ *           Kapı açıkken aşım 409 RISK_LIMIT_EXCEEDED (değişmedi).
  *       400:
  *         description: Geçersiz para birimi veya validasyon hatası
  */
 // Mobil "Yeni Sipariş" ekranı da bu ucu kullanır. `mobile:siparis` YALNIZ buraya
 // (yaratma) eklenir — iptal / manuel-kapatma / PATCH / DELETE hâlâ `order:write`
 // ister, yoksa saha kullanıcısına sipariş silme yetkisi de vermiş olurduk.
-router.post("/", verifyToken, requireAnyPermission("order:write", "mobile:siparis"), controller.create);
+// K3: risk limiti uyarısındaki tutar/bakiye yalnız bakiye görme izniyle (`finance:read`); diğerine yalnız "limit aşıldı".
+router.post("/", verifyToken, requireAnyPermission("order:write", "mobile:siparis"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(201).json(await orderService.create(req.body, req.user?.userId, { canSeeRiskAmounts: matchesPermission(req.user?.permissions ?? [], "finance:read") }));
+  } catch (error) {
+    next(error);
+  }
+});
 
 /**
  * @openapi
@@ -838,10 +849,17 @@ router.post(
  *               totalAmount: { type: number, nullable: true }
  *               deadline:    { type: string, format: date-time, nullable: true }
  *     responses:
- *       200: { description: Güncellendi }
+ *       200: { description: "Güncellendi. Müşteri başka cariye taşındıysa ve iş kabulü risk kapısı kapalıyken yeni cari limiti aşıyorsa `warnings[]` Türkçe uyarı (tutar yalnız `finance:read`); kapı açıkken 409 RISK_LIMIT_EXCEEDED." }
  *       409: { description: Tamamlanmış veya aktif WO bağı nedeniyle kilit }
  */
-router.patch("/:id", verifyToken, requirePermission("order:write"), controller.update);
+// K3 (Seyitoğlu L4): müşteri değişiminde risk uyarısının tutarı yalnız `finance:read` ile (POST / ile aynı kural).
+router.patch("/:id", verifyToken, requirePermission("order:write"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(200).json(await orderService.update(assertValidUuid(req.params.id as string, "id"), req.body, req.user?.userId, { canSeeRiskAmounts: matchesPermission(req.user?.permissions ?? [], "finance:read") }));
+  } catch (error) {
+    next(error);
+  }
+});
 
 /**
  * @openapi

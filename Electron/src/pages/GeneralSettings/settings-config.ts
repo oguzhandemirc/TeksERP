@@ -944,6 +944,14 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         desc: "Açıkken tablette Paketleme ekranında “Çuvalsız Sevk” düğmesi çıkar: toplar okutulur, yük “Dökme” ya da “Araba <no>” olarak seçilir ve irsaliyeye “Dökme – N top” / “Araba A-12 – N top” diye basılır. Kapalıyken (varsayılan) sevk yalnız çuvalla yapılır.",
       },
       {
+        key: "shipmentHandheldCreateEnabled",
+        title: "El terminalinden sevk kurma",
+        summary: "Sevk Çıkışı'nda (telefon/el terminali) cari seç → okut → çuval aç → sevk et; karışık yük; çuvalsız sevk açık olmalı.",
+        defaultOn: false,
+        audience: ["Sevkiyat"],
+        desc: "Açıkken telefon/el terminalinde Sevk Çıkışı ekranında önce cari seçilir, toplar okutulur (çuval seçiliyse çuvala, değilse çuvalsız), gerekirse yeni çuval açılıp elle kg girilir ve Sevk Et ile irsaliye o anda çıkar. Aynı sevkiyatta çuval ile çuvalsız top birlikte gidebilir (karışık yük); boş çuvallar sevkte düşer. Çalışması için “Çuvalsız sevk (dökme / araba)” açık, “sevk öncesi tartı zorunlu” kapalı olmalıdır. Kapalıyken (varsayılan) Sevk Çıkışı bugünkü gibidir.",
+      },
+      {
         key: "shipmentUndoSameDayOnly",
         title: "Sevk geri almayı aynı günle sınırla",
         summary: "Yalnız bugün sevk edilmiş sevkiyatlar geri alınabilir.",
@@ -1326,6 +1334,14 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         defaultOn: false,
         audience: ["Planlamacı"],
         get desc() { return `Kapalıyken ${TERIM.terbiyeIsEmri.tekilKucuk} formunda “hedef metraj” alanı gizlenir; üretim miktarını girilen kumaş belirler. Örgü/üretim eklenirse açılır.`; },
+      },
+      {
+        key: "targetWidthEnabled",
+        get title() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} hedef en alanını göster`; },
+        get summary() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} formunda 'hedef en' kutusu çizilir.`; },
+        defaultOn: true,
+        audience: ["Planlamacı"],
+        get desc() { return `Açıkken (varsayılan) tablet ${TERIM.terbiyeIsEmri.tekilKucuk} formunda hedef en (cm) kutusu görünür. Kapalıyken kutu çizilmez ve gövdeye en gönderilmez; belgedeki gelen en yalnız belge satırında kalır.`; },
       },
       {
         key: "partyCodeAuto",
@@ -1945,6 +1961,15 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         audience: ["Planlamacı", "Yönetim"],
         desc: "Açıkken dokuma iş emri en az bir sipariş satırına bağlanmadan kaydedilemez. Kapalıyken (varsayılan) stoka dokuma iş emri açılır ve hub'da ayrı sekmede durur.",
       },
+      {
+        // SY-3 I1: backend `readDokumaYarnReservationEnabled` (kayıt yok = false) ile birebir; engellemez, yalnız gösterir.
+        key: "dokumaYarnReservationEnabled",
+        get title() { return `Açık ${TERIM.dokumaIsEmri.cogulCekimKucuk.yonelme} iplik ayır (göster)`; },
+        get summary() { return `İplik ihtiyacı ve üretime gönder ekranı, açık ${TERIM.dokumaIsEmri.cogulCekimKucuk.ilgi} kalan metresi için gereken ipliği ayrılmış sayar.`; },
+        defaultOn: false,
+        audience: ["Planlamacı", "Yönetim"],
+        get desc() { return `Açıkken planlı ya da süren kendi tezgâh ${TERIM.dokumaIsEmri.cogulCekimKucuk.ilgi} kalan metresi için gereken iplik “ayrılan” sayılır: İplik İhtiyaç Planı'nda Ayrılan ve Serbest sütunları çıkar, eksik serbest miktara göre hesaplanır; hazır leventler önce bu işlere düşülür. Stok kilitlenmez, hiçbir kayıt engellenmez; ayrılan stoğu aşarsa yalnız uyarı verilir. Kapalıyken (varsayılan) ekranlar bugünkü gibidir.`; },
+      },
     ],
     enumFlags: [
       {
@@ -1962,6 +1987,20 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
           { value: "KK1_LABEL_ONLY", label: "Ham girişte: yalnız tezgah etiketi", hint: "Dokuma iş emri seçimi kapalıdır; her top tezgah etiketi okutularak kaydedilir." },
         ],
         gate: RollBirthGate,
+      },
+    ],
+    numberFlags: [
+      {
+        // Seyitoğlu temel: backend `readDokumaWeavingWastePct` (kayıt yok = 0) ve üst sınır 50 ile birebir.
+        key: "dokumaWeavingWastePct",
+        title: "Dokuma firesi (%)",
+        desc: "Siparişten üretim önerisinde ve iplik ihtiyacında dokunacak ham metre bu yüzde kadar büyütülür: ham = açık metre ÷ (1 − boy çekmesi) ÷ (1 − dokuma firesi). 0 (varsayılan) = fire eklenmez, bugünkü hesap. Önizleme uygulanan yüzdeyi gösterir.",
+        min: 0,
+        max: 50,
+        fallback: 0,
+        unit: "%",
+        step: 0.5,
+        audience: ["Planlamacı", "Yönetim"],
       },
     ],
   },
@@ -2476,6 +2515,11 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
           { value: "OUT", label: "Çıkış metresi (önerilen)", hint: "Okuma yoksa giriş, o da yoksa bildirilen metre." },
           { value: "IN", label: "Giriş metresi", hint: "Okuma yoksa bildirilen metre." },
           { value: "DECLARED", label: "Bildirilen metre", hint: "Sayaç okuması kullanılmaz." },
+          {
+            value: "MAX_DECLARED",
+            label: "Beyan ile ölçülenin büyüğü (parti bazında, %0,5 tolerans)",
+            hint: "Fark %0,5'ten azsa beyan; partide kurşun ve tambur varsa ikisi de en yüksek ölçümle.",
+          },
         ],
       },
       {

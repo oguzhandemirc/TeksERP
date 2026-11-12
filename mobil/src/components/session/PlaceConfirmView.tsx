@@ -34,8 +34,8 @@ import { useLogout } from '../../hooks/useLogout';
 import { useVisibleScreens } from '../../hooks/useVisibleScreens';
 import LogoutModals from '../LogoutModals';
 import { workSessionService, type ActiveWorkSession } from '../../services/workSession.service';
-import { SCREEN_BY_STATION_KIND, type SessionStationKind } from '../../constants/stationScreens';
-import { SCREEN_BY_KEY } from '../../types/permissions';
+import { STATION_KIND_BY_SCREEN, stationMatchesScreen, type SessionStationKind } from '../../constants/stationScreens';
+import { SCREEN_BY_KEY, type MobileScreenKey } from '../../types/permissions';
 import { rootNavigate, rootNavigateToModuleSelect } from '../../navigation/navigationRef';
 import { placesOfKind, suggestPlace, type PlaceSuggestion } from './placeSuggest';
 
@@ -57,8 +57,8 @@ interface OccupiedInfo {
 }
 
 interface Props {
-  /** Bu görünümün açacağı oturumun yer türü — ekran belirler (SessionGate/Chip). */
-  expectedKind: SessionStationKind;
+  /** Oturumu açılacak ekran — yer türü ve Kurşun/Kalite ayrımı buradan (SessionGate/Chip). */
+  screenKey: MobileScreenKey;
   /** Oturum açıldı — gate ekranı render eder / chip modalı kapanır. */
   onDone: (session: ActiveWorkSession) => void;
   /** Yalnız chip modalında: vazgeç (mevcut oturum sürer). Gate'te verilmez. */
@@ -80,10 +80,11 @@ interface Props {
 // kabul: cihaz-vs-panel yarışında saha işi kesintiye uğramasın).
 let lastAutoAttempt: { key: string; at: number } | null = null;
 
-export default function PlaceConfirmView({ expectedKind, onDone, onCancel, autoOpen = false }: Props) {
+export default function PlaceConfirmView({ screenKey, onDone, onCancel, autoOpen = false }: Props) {
+  const expectedKind = STATION_KIND_BY_SCREEN[screenKey] as SessionStationKind;
   const lastPlace = useSessionStore((s) => s.lastPlace);
   const openSession = useSessionStore((s) => s.openSession);
-  const screenLabel = SCREEN_BY_KEY[SCREEN_BY_STATION_KIND[expectedKind]]?.label ?? expectedKind;
+  const screenLabel = SCREEN_BY_KEY[screenKey]?.label ?? expectedKind;
   const insets = useSafeAreaInsets();
 
   // Profil / çıkış — gate'te (oturum ÖNCESİ) ScreenChrome yok; tek çıkış /
@@ -111,10 +112,10 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel, autoO
     staleTime: 5 * 60 * 1000,
   });
   const places = placesQ.data ?? [];
-  const kindPlaces = useMemo(() => placesOfKind(places, expectedKind), [places, expectedKind]);
+  const kindPlaces = useMemo(() => placesOfKind(places, expectedKind, screenKey), [places, expectedKind, screenKey]);
   const suggestion = useMemo(
-    () => suggestPlace(lastPlace, places, expectedKind),
-    [lastPlace, places, expectedKind],
+    () => suggestPlace(lastPlace, places, expectedKind, screenKey),
+    [lastPlace, places, expectedKind, screenKey],
   );
 
   // Drill-down: önce istasyon, sonra makine. Türde TEK istasyon varsa istasyon
@@ -200,7 +201,7 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel, autoO
     if (!autoOpen || autoTriedRef.current || placesQ.isLoading) return;
     autoTriedRef.current = true;
     if (suggestion) {
-      const key = `${expectedKind}:${suggestion.machineId ?? suggestion.stationId}`;
+      const key = `${screenKey}:${suggestion.machineId ?? suggestion.stationId}`;
       const now = Date.now();
       if (lastAutoAttempt && lastAutoAttempt.key === key && now - lastAutoAttempt.at < 6000) {
         // Az önce bu yeri otomatik açtık ve geri düştük → döngü. Otomatik açma, seçime düş.
@@ -221,7 +222,7 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel, autoO
     setScannerOpen(false);
     try {
       const machine = await workSessionService.resolveMachine(code.trim());
-      if (machine.station.kind !== expectedKind) {
+      if (!stationMatchesScreen(screenKey, machine.station)) {
         Toast.show({
           type: 'error',
           text1: 'Bu makine başka istasyonun',

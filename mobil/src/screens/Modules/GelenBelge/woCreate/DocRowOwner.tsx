@@ -1,4 +1,4 @@
-// Belge satırının "Müşteri" bölümü: şerit (✓ seçildi / ! kontrol et / ● seçin) + seçici düğmesi; belgede geçen ad için
+// Belge satırının "Müşteri" bölümü: toplu listede şerit (✓ seçildi / ! kontrol et / ● seçin) + seçici düğmesi, tek formda yalnız düğme; belgede geçen ad için
 // soru çipi ve "yeni müşteri kaydet" önerisi (gk-musteri-modal sözleşmesi) yerinde kalır.
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -38,7 +38,8 @@ export default function DocRowOwner({ row, wo, read, customers, locked, single, 
   const name = f.ownerCustomerId ? customers.find((o) => o.value === f.ownerCustomerId)?.label ?? f.ownerSuggested ?? 'Seçili müşteri' : null;
   return (
     <>
-      <SectionBand title="Müşteri" icon="account-outline" tone={tone} status={STATUS[tone as keyof typeof STATUS]} testID={single ? 'ie-serit-musteri' : `belge-serit-musteri-${no}`} />
+      {/* Tek formda şerit yok: durum (eksik kırmızı / kontrol sarı / belgeden) seçici düğmesinin çerçevesinde. */}
+      {!single && <SectionBand title="Müşteri" icon="account-outline" tone={tone} status={STATUS[tone as keyof typeof STATUS]} testID={`belge-serit-musteri-${no}`} />}
       <View testID={fromDoc ? `belgeden-musteri-${no}` : undefined}>
         <SelectButton label="Müşteri seç" caption="Müşteri" value={name} state={state} onPress={onPick} disabled={locked} testID={`belge-satir-musteri-${no}`} />
       </View>

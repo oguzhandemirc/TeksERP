@@ -1,7 +1,8 @@
 // Rehberli tanıtma saf çekirdeği (guided.ts): adım ↔ alan, başlık satırı aç/kapa, çok kelimeli değer, kutu tonları,
 // okunan değer durumları, çip durumu, ad önerisi.
 import type { ScanWord, ScanWords, SuggestResult } from '../../../../types/inboundDocTeach';
-import { chipStatus, fieldLabel, fieldReadout, FINISH_STEP, GUIDED_FIELDS, guidedMarks, stepField, suggestName, toggleFieldWord, toggleHeaderWord } from './guided';
+import { chipStatus, fieldLabel, fieldReadout, suggestName, identifierWordSet, toggleFieldWord, toggleHeaderWord } from './guided';
+import { stageMarks } from './stages';
 import { initialTeach, type TeachState } from './teachDraft';
 
 const w = (text: string, [x, y]: [number, number], lineNo: number, width = 60): ScanWord => ({
@@ -26,16 +27,14 @@ const result = (over: Partial<SuggestResult> = {}): SuggestResult =>
   }) as SuggestResult;
 
 describe('guided — adımlar', () => {
-  it('adım 0 başlık, 1..n sözleşme sırasındaki alanlar, son adım Bitir', () => {
-    expect(GUIDED_FIELDS).toEqual(['musteri', 'partiNo', 'hedefMetraj', 'toplamMetre', 'en', 'desen', 'renk', 'evrakNo']);
-    expect(stepField(0)).toBeNull();
-    expect(stepField(1)).toBe('musteri');
-    expect(stepField(2)).toBe('partiNo');
-    expect(stepField(GUIDED_FIELDS.length)).toBe('evrakNo');
-    expect(fieldLabel('evrakNo')).toBe('Evrak no');
-    expect(FINISH_STEP).toBe(GUIDED_FIELDS.length + 1);
-    expect(stepField(FINISH_STEP)).toBeNull();
-    expect(fieldLabel('partiNo')).toBe('Parti no');
+  it('etiketler İE karşılığının adıdır (alan-hedef aynası)', () => {
+    expect(fieldLabel('partiNo')).toBe('Gönderen parti no');
+    expect(fieldLabel('evrakNo')).toBe('İrsaliye no');
+    expect(fieldLabel('toplamKg')).toBe('Gelen kg');
+    expect(fieldLabel('hedefKg')).toBe('Hedef kg');
+    // 2026-11-09: kumaş adı/renk belgenin beyanı — İE hedefi değil.
+    expect(fieldLabel('desen')).toBe('Gelen kumaş');
+    expect(fieldLabel('renk')).toBe('Gelen renk');
     expect(fieldLabel('musteri')).toMatch(/Müşteri/);
   });
 
@@ -53,24 +52,28 @@ describe('guided — başlık adımı', () => {
     expect(on(s)).not.toContain('GÜLEÇSOY BOYA');
     s = toggleHeaderWord(s, SCAN.words, 0);
     expect(on(s)).toContain('GÜLEÇSOY BOYA');
-    // Öneride olmayan satır (sondaki ":" temizlenir) eklenir.
+    // Öneride olmayan satır eklenir — yalnız etiketi (değer kelimesi ve sondaki ":" atılır).
     const without: TeachState = { ...s, identifiers: s.identifiers.filter((d) => !/Ham/.test(d.text)) };
     s = toggleHeaderWord(without, SCAN.words, 5);
     expect(s.identifiers).toHaveLength(without.identifiers.length + 1);
-    expect(on(s)).toContain('Ham PartiNo: P2618733');
+    expect(on(s)).toContain('Ham PartiNo');
+    expect([...identifierWordSet(s, SCAN.words)].filter((i) => i >= 4 && i <= 6)).toEqual([4, 5]); // değer kelimesi "Başlık" boyanmaz
+    s = toggleHeaderWord(s, SCAN.words, 6); // değer kelimesine dokunmak aynı etiketi kapatır, yeni kimlik doğurmaz
+    expect(s.identifiers).toHaveLength(without.identifiers.length + 1);
+    expect(on(s)).not.toContain('Ham PartiNo');
   });
 
-  it('kutu tonları: başlık adımında açık kimlik satırları "Başlık"; alan adımında yalnız o alanın değeri seçili', () => {
+  it('kutu tonları: ①de açık kimlik satırları; ②de yalnız seçili alanın değeri seçili', () => {
     let s = start();
-    const m0 = guidedMarks(s, SCAN.words, 0);
-    expect(m0[0]).toMatchObject({ tone: 'identifier', label: 'Başlık' });
+    const m0 = stageMarks(s, SCAN.words, { stage: 'TANIMA', target: null });
+    expect(m0[0]).toMatchObject({ tone: 'identifier', label: 'Kimlik yazısı' });
     expect(m0[1]).toMatchObject({ tone: 'identifier' });
     s = toggleFieldWord(s, SCAN.words, 'partiNo', 6);
-    const m2 = guidedMarks(s, SCAN.words, 2);
-    expect(m2[6]).toMatchObject({ tone: 'selected', label: 'Parti no' });
+    const m2 = stageMarks(s, SCAN.words, { stage: 'ESLEME', target: { kind: 'field', key: 'partiNo' } });
+    expect(m2[6]).toMatchObject({ tone: 'selected', label: 'Gönderen parti no' });
     expect(m2[0].tone).toBe('word');
-    // Başka alan adımında parti no değeri "atanmış alan" tonunda kalır.
-    expect(guidedMarks(s, SCAN.words, 6)[6].tone).toBe('field');
+    // Başka alan seçiliyken parti no değeri "atanmış alan" tonunda kalır.
+    expect(stageMarks(s, SCAN.words, { stage: 'ESLEME', target: { kind: 'field', key: 'renk' } })[6].tone).toBe('field');
   });
 });
 

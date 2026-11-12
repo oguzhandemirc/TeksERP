@@ -14,6 +14,8 @@ import type { MobileScreenKey } from '../types/permissions';
 
 /** Ham renk skalaları — semantik `colors` bunların üstüne kurulur. */
 export const palette = {
+  // Tambur künye kartı zemini (2026-11-11): turuncu-600 üstünde siyah 5.9:1, blue-950 4.1:1.
+  orange: { 600: '#ea580c' },
   indigo: { 50: '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca' },
   slate: {
     50: '#f8fafc', 100: '#f1f5f9', 200: '#e2e8f0', 300: '#cbd5e1', 400: '#94a3b8',
@@ -23,7 +25,7 @@ export const palette = {
   red: { 50: '#fef2f2', 100: '#fee2e2', 300: '#fca5a5', 500: '#ef4444', 600: '#dc2626', 700: '#b91c1c', 800: '#991b1b', 900: '#7f1d1d' },
   amber: { 50: '#fffbeb', 100: '#fef3c7', 300: '#fcd34d', 500: '#f59e0b', 600: '#d97706', 700: '#b45309', 900: '#78350f' },
   violet: { 50: '#f5f3ff', 100: '#ede9fe', 500: '#8b5cf6', 600: '#7c3aed', 700: '#6d28d9' },
-  blue: { 50: '#eff6ff', 100: '#dbeafe', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8', 800: '#1e40af', 900: '#1e3a8a' },
+  blue: { 50: '#eff6ff', 100: '#dbeafe', 500: '#3b82f6', 600: '#2563eb', 700: '#1d4ed8', 800: '#1e40af', 900: '#1e3a8a', 950: '#172554' },
   cyan: { 100: '#cffafe', 700: '#0e7490', 900: '#164e63' },
   white: '#ffffff',
   black: '#000000',
@@ -173,6 +175,7 @@ export const typography = {
 export const moduleAccents: Record<MobileScreenKey, { tint: string; bg: string }> = {
   KK1: { tint: '#2563eb', bg: '#dbeafe' },
   KursunQc: { tint: '#d97706', bg: '#fef3c7' },
+  KaliteKontrol: { tint: '#0d9488', bg: '#ccfbf1' },
   Tambur: { tint: '#7c3aed', bg: '#ede9fe' },
   Depo: { tint: '#475569', bg: '#e2e8f0' },
   TartiPaket: { tint: '#059669', bg: '#d1fae5' },

@@ -1,4 +1,4 @@
-// İE formu "Hedef" bölümü — hedef kumaş seçici, tek satırda en/metraj/kg (+ kat tipi), hedef renk.
+// İE formu "Hedef" bölümü — hedef kumaş seçici, tek satırda en/metraj/kg (+ kat tipi), hedef renk seçici satırı.
 // Belgeden dolan değer sarı vurgulu (elle değişince kalkar); desen/renk önerisi "X mi? Evet" çipiyle onaylanır.
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -6,10 +6,10 @@ import { Text, TouchableRipple } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import ColorSelectField from '../../../../components/ColorSelectField';
 import { DocHighlight } from '../../../../components/DocHighlight';
-import { ChoiceChips } from '../../../../components/form/ChoiceChips';
+import { ChoiceRow } from '../../../../components/form/ChoiceRow';
+import { defaultChoiceText } from '../../../../components/form/defaultChoice';
 import { CompactNumberField } from '../../../../components/form/CompactNumberField';
 import { NoticeStrip } from '../../../../components/form/NoticeStrip';
-import { SectionBand } from '../../../../components/form/SectionBand';
 import type { BandTone } from '../../../../components/form/tone';
 import { SelectButton } from '../../../../components/form/SelectButton';
 import TruncatedText from '../../../../components/TruncatedText';
@@ -18,6 +18,7 @@ import { colors, radius, spacing, typography } from '../../../../theme';
 import type { DocFilledKey, WoFormExtras, WoFormState } from './woForm';
 import type { WoFieldKey } from './woFieldCatalog';
 import { useDefaultTargetHint } from './defaultTargetHint';
+import type { TargetHints } from './targetPrefill';
 
 export interface TargetFieldsProps {
   state: WoFormState;
@@ -25,8 +26,12 @@ export interface TargetFieldsProps {
   locked: boolean;
   show: (k: WoFieldKey) => boolean;
   showQuantity: boolean;
+  showWidth?: boolean;
+  hints?: TargetHints;
   targetDerived?: { value: string; derived: boolean };
   hasTambur: boolean;
+  /** Üst bölgede kat tipi sol sütunda (gramajın altında) çizilir; burada yalnız "Diğer alanlar"da. */
+  zone?: 'top' | 'other';
   foldValues: readonly FabricPropertyValue[];
   onPickItem: () => void;
   /** Hedef engellerinden (`bandTone`): sarı = sayı hatalı, kırmızı = kat tipi eksik. */
@@ -35,34 +40,39 @@ export interface TargetFieldsProps {
   customerId?: string | null;
 }
 
-const TONE_STATUS: Partial<Record<BandTone, { icon: 'alert-outline' | 'alert-circle-outline'; text: string }>> = {
-  warn: { icon: 'alert-outline', text: 'Sayıyı düzeltin' },
-  missing: { icon: 'alert-circle-outline', text: 'Eksik' },
+const TONE_STATUS: Partial<Record<BandTone, { text: string }>> = {
+  warn: { text: 'Sayıyı düzeltin' },
+  missing: { text: 'Eksik' },
 };
 
 export function TargetFields(p: TargetFieldsProps) {
   const { state, edit, locked, show } = p;
   const e = state.extras;
-  const qtyVisible = p.showQuantity || !!e.targetQuantity || !!e.targetWeight;
+  const qtyVisible = p.showQuantity;
   const itemSug = state.suggestions.targetItem;
-  const defaultHint = useDefaultTargetHint(p.customerId ?? null, show('hedefKumas') && !e.targetItemId);
+  const def = useDefaultTargetHint(p.customerId ?? null, show('hedefKumas') && !e.targetItemId);
   const colorSug = state.suggestions.targetColor;
-  const cols = { en: show('en'), metraj: qtyVisible && show('hedefMetraj'), kg: qtyVisible && show('hedefKg'), kat: p.hasTambur && show('katTipi') };
+  const cols = { en: show('en') && p.showWidth !== false, metraj: qtyVisible && show('hedefMetraj'), kg: qtyVisible && show('hedefKg'), kat: p.hasTambur && show('katTipi') && p.zone === 'other' };
   const anyNumber = cols.en || cols.metraj || cols.kg || cols.kat;
   if (!show('hedefKumas') && !anyNumber && !show('hedefRenk')) return null;
   const itemName = itemSug ? `${itemSug.name}${itemSug.code ? ` (${itemSug.code})` : ''}` : null;
   const itemAsk = !!itemSug && e.targetItemId !== itemSug.id;
-  const docHint = !itemAsk && state.docText.desen ? `Belgede: ${state.docText.desen}` : null;
-  const itemHint = [docHint, !e.targetItemId && !itemAsk ? defaultHint : null].filter(Boolean).join(' · ') || null;
+  // Hedef boşsa sunucu varsayılanı uygular: kutuda doğrudan o kumaş + "varsayılan" (uzun açıklama yok).
+  const defUsable = !e.targetItemId && !!def && !def.problem;
+  const itemValue = e.targetItemLabel ?? (defUsable ? `${def!.name} (varsayılan)` : null);
+  const itemHint = !e.targetItemId && def?.problem ? `Varsayılan kart kullanılamıyor (${def.name}) — hedef kumaş seçin` : null;
   return (
     <>
-      <SectionBand title="Hedef" icon="texture-box" tone={p.targetTone ?? 'idle'} status={TONE_STATUS[p.targetTone ?? 'idle'] ?? null} testID="ie-serit-hedef" />
+      {/* Bölüm şeridi yok; hedefte sorun varsa tek satır uyarı (sayı hatalı / kat tipi eksik). */}
+      {TONE_STATUS[p.targetTone ?? 'idle'] && (
+        <NoticeStrip tone={p.targetTone === 'missing' ? 'danger' : 'warn'} text={`Hedef: ${TONE_STATUS[p.targetTone ?? 'idle']!.text}`} testID="ie-hedef-uyari" />
+      )}
       {show('hedefKumas') && (
         <>
           <SelectButton
             label="Hedef kumaş seç"
             caption="Hedef kumaş"
-            value={e.targetItemLabel}
+            value={itemValue}
             hint={itemHint}
             optional
             onPress={p.onPickItem}
@@ -73,15 +83,21 @@ export function TargetFields(p: TargetFieldsProps) {
         </>
       )}
 
-      {anyNumber && <TargetNumbers {...p} cols={cols} />}
-
       {show('hedefRenk') && (
         <>
-          <FieldLabel label="Hedef renk" />
-          <ColorSelectField value={e.targetColorId} onChange={(id) => edit({ targetColorId: id })} disabled={locked} />
+          <ColorSelectField
+            value={e.targetColorId}
+            onChange={(id) => edit({ targetColorId: id })}
+            disabled={locked}
+            renderTrigger={({ label, open }) => (
+              <SelectButton label="Hedef renk" caption="Hedef renk" value={label} icon="palette-outline" quiet onPress={open} disabled={locked} testID="ie-form-hedef-renk" />
+            )}
+          />
           <Suggest kind="renk" docText={state.docText.renk} name={colorSug?.name ?? null} accepted={!colorSug || e.targetColorId === colorSug.id} locked={locked} onAccept={() => colorSug && edit({ targetColorId: colorSug.id })} withDocLine />
         </>
       )}
+
+      {anyNumber && <TargetNumbers {...p} cols={cols} />}
     </>
   );
 }
@@ -99,13 +115,14 @@ function TargetNumbers(p: TargetFieldsProps & { cols: Cols }) {
       {(cols.en || cols.metraj || cols.kg || cols.kat) && (
         <View style={styles.numbers} testID="ie-hedef-sayilar">
           {cols.en && (
-            <DocFilled k="width" state={state}>
-              <CompactNumberField label="En" unit="cm" value={e.width} onChangeText={(t) => edit({ width: t })} fromDoc={docOn('width')} placeholder="150" disabled={locked} testID="ie-form-en" />
+            <DocFilled k="width" state={state} grow>
+              <CompactNumberField grow label="En" unit="cm" value={e.width} onChangeText={(t) => edit({ width: t })} fromDoc={docOn('width')} placeholder={p.hints?.width ?? '150'} disabled={locked} testID="ie-form-en" />
             </DocFilled>
           )}
           {cols.metraj && (
-            <DocFilled k="targetQuantity" state={state}>
+            <DocFilled k="targetQuantity" state={state} grow>
               <CompactNumberField
+                grow
                 label="Metraj"
                 unit="m"
                 value={p.targetDerived?.derived ? p.targetDerived.value : e.targetQuantity}
@@ -113,23 +130,23 @@ function TargetNumbers(p: TargetFieldsProps & { cols: Cols }) {
                 fromDoc={docOn('targetQuantity')}
                 derivedNote={qtyDerived ? 'gelen metre' : null}
                 derivedTestID="gelen-metreden-targetQuantity"
-                placeholder="—"
-                width={170}
+                placeholder={p.hints?.targetQuantity ?? '—'}
                 disabled={locked}
                 testID="ie-form-hedef-metraj"
               />
             </DocFilled>
           )}
           {cols.kg && (
-            <DocFilled k="targetWeight" state={state}>
-              <CompactNumberField label="Kg" unit="kg" value={e.targetWeight} onChangeText={(t) => edit({ targetWeight: t })} fromDoc={docOn('targetWeight')} placeholder="—" disabled={locked} testID="ie-form-hedef-kg" />
+            <DocFilled k="targetWeight" state={state} grow>
+              <CompactNumberField grow label="Hedef kg" unit="kg" value={e.targetWeight} onChangeText={(t) => edit({ targetWeight: t })} fromDoc={docOn('targetWeight')} placeholder={p.hints?.targetWeight ?? '—'} disabled={locked} testID="ie-form-hedef-kg" />
             </DocFilled>
           )}
           {cols.kat && p.foldValues.length > 0 && (
             <View style={styles.fold}>
-              <Text style={styles.label}>Kat tipi</Text>
-              <ChoiceChips
-                options={p.foldValues.map((f) => ({ value: f.code, label: f.name, testID: `ie-form-kat-${f.code}` }))}
+              <ChoiceRow
+                label="Kat tipi"
+                rowTestID="ie-form-kat-baslikli"
+                options={p.foldValues.map((f) => ({ value: f.code, ...defaultChoiceText(f.name, f.isDefault), testID: `ie-form-kat-${f.code}` }))}
                 value={e.foldType}
                 onChange={(v) => v && edit({ foldType: v })}
                 disabled={locked}
@@ -140,7 +157,7 @@ function TargetNumbers(p: TargetFieldsProps & { cols: Cols }) {
         </View>
       )}
       {cols.kat && p.foldValues.length === 0 && (
-        <NoticeStrip tone="warn" text="Kat değeri tanımlı değil — panelden Kumaş Özellikleri → KAT ekleyin." testID="ie-form-kat-bos" />
+        <NoticeStrip tone="warn" text="Kat değeri tanımlı değil (seçmeden de kaydedilir) — panelden Kumaş Özellikleri → KAT ekleyin." testID="ie-form-kat-bos" />
       )}
     </>
   );
@@ -176,16 +193,12 @@ function Suggest(p: { kind: 'desen' | 'renk'; docText: string | null; name: stri
   return null;
 }
 
-export function FieldLabel({ label }: { label: string }) {
-  return <Text style={[styles.label, styles.labelGap]}>{label}</Text>;
-}
-
 /** Belgeden dolan değerin işareti (`belgeden-<k>`); `highlight` → sarı vurgu sarmalayıcıda (sayı kutuları vurguyu kendi çizer).
  *  `fromDoc` edit'te düştüğü için elle değişince kalkar. */
-export function DocFilled({ k, state, children, highlight }: { k: DocFilledKey; state: WoFormState; children: React.ReactNode; highlight?: boolean }) {
+export function DocFilled({ k, state, children, highlight, grow }: { k: DocFilledKey; state: WoFormState; children: React.ReactNode; highlight?: boolean; grow?: boolean }) {
   const on = state.fromDoc.includes(k);
   return (
-    <View testID={on ? `belgeden-${k}` : undefined}>
+    <View testID={on ? `belgeden-${k}` : undefined} style={grow ? styles.cell : undefined}>
       {highlight ? <DocHighlight active={on} style={styles.hl}>{children}</DocHighlight> : children}
     </View>
   );
@@ -193,12 +206,12 @@ export function DocFilled({ k, state, children, highlight }: { k: DocFilledKey; 
 
 const styles = StyleSheet.create({
   numbers: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, alignItems: 'flex-end' },
-  fold: { gap: spacing.xs },
-  label: { fontSize: typography.size.sm, color: colors.textSecondary, fontWeight: typography.weight.semibold },
-  labelGap: { marginTop: spacing.xs },
+  // Seçenek satırı eşit pay alır: sayı kutularının yanında en az 240dp, sığmazsa alt satıra tam genişlik.
+  fold: { flexGrow: 1, flexBasis: 240, alignSelf: 'stretch' },
   hint: { fontSize: typography.size.sm, color: colors.textSecondary },
   hl: { padding: 2 },
   grow: { flex: 1 },
+  cell: { flex: 1, minWidth: 100 },
   suggest: { minHeight: 56, borderRadius: radius.md, borderWidth: 1.5, borderColor: colors.brand, backgroundColor: colors.brandSoft, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, justifyContent: 'center' },
   suggestRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   suggestText: { fontSize: typography.size.base, fontWeight: typography.weight.bold, color: colors.text },

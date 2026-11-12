@@ -1,4 +1,4 @@
-// K30-D tablet İE formu — rota adımları: sade liste; ekle (istasyon seç), çıkar, yukarı/aşağı, fason adımda firma, adım
+// K30-D tablet İE formu — rota adımları: sade liste; ekle (istasyon seç), çıkar, yukarı/aşağı, fason (SUBCONTRACTOR) adımda firma, adım
 // notu; kurşun adımının satırında "Makine seç". Kullanıcı hiç değiştirmezse liste şablondur ve gövdeye gitmez.
 // Özel İE kısayolunda rota kilitli → salt okunur. Saf işlemler `woSteps.ts`te.
 import React, { useMemo, useRef, useState } from 'react';
@@ -7,13 +7,13 @@ import { Button, Chip, IconButton, Text, TextInput } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 import PickerModal from '../../../../components/PickerModal';
 import TruncatedText from '../../../../components/TruncatedText';
+import { useIsCompact } from '../../../../hooks/useDeviceType';
 import type { DeskKursunMachine } from '../../../../services/inboundDoc.service';
 import type { ProductionRoute } from '../../../../services/route.service';
 import { subcontractorService } from '../../../../services/subcontractor.service';
 import { colors, radius, spacing, typography } from '../../../../theme';
-import { SectionBand } from '../../../../components/form/SectionBand';
 import { MachineChips } from '../desk/DeskReview';
-import { addStep, isKursunStation, moveStep, patchStep, removeStep, stationsFromRoutes, stepCategoryId, type EditStep } from './woSteps';
+import { addStep, isFasonStation, isKursunStation, moveStep, patchStep, removeStep, stationsFromRoutes, stepCategoryId, type EditStep, type StepStation } from './woSteps';
 import { TERIM } from '../../../../lib/terim';
 
 export interface MachinePick {
@@ -35,6 +35,8 @@ interface Props {
   /** Kurşun adımı satırındaki makine seçici (⚙'de makine açık ve istasyonda makine varsa). */
   machine: MachinePick | null;
   locked: boolean;
+  /** ⚙ "Rota adımı notu" kapalı: boş not kutusu çizilmez; dolu not (şablondan / yazılmış) yine görünür (sessiz gönderim yok). */
+  hideEmptyNotes?: boolean;
 }
 
 export default function RouteStepsEditor(p: Props) {
@@ -45,28 +47,33 @@ export default function RouteStepsEditor(p: Props) {
   const kursunKey = p.steps.find((s) => isKursunStation(s.station))?.key ?? null;
   const can = p.editable && !p.locked;
   const change = (next: EditStep[]) => p.onChange(next);
+  const compact = useIsCompact();
+  // Bir kez dolu görülen adımın kutusu, metin silinse de yerinde kalır (yazarken kutu kaybolmasın).
+  const noted = useRef(new Set<string>());
+  for (const s of p.steps) if (s.notes.trim() !== '') noted.current.add(s.key);
+  const noteShown = (s: EditStep) => !p.hideEmptyNotes || noted.current.has(s.key);
 
   return (
     <View style={styles.root} testID="ie-rota-adimlari">
-      <View style={styles.head}>
-        <View style={styles.grow}>
-          <SectionBand title="Rota adımları" icon="format-list-numbered" testID="ie-serit-adimlar" />
+      {/* Ayrı başlık yok (adımlar "1. Kurşun" diye kendini anlatır); değişmemiş şablonda açıklama da yok. Değiştirilince
+          bunun kayda gideceği ve "Şablona dön" tek satırda. */}
+      {p.edited && (
+        <View style={styles.head}>
+          <Text style={[styles.hint, styles.grow]} testID="ie-adim-ipucu">
+            {`Adımları değiştirdiniz; ${TERIM.terbiyeIsEmri.tekilKucuk} bu adımlarla açılır.`}
+          </Text>
+          {can && (
+            <Button mode="text" onPress={() => p.onChange(null)} contentStyle={styles.btn} testID="ie-adim-sablona-don">
+              Şablona dön
+            </Button>
+          )}
         </View>
-        {p.edited && can && (
-          <Button mode="text" onPress={() => p.onChange(null)} contentStyle={styles.btn} testID="ie-adim-sablona-don">
-            Şablona dön
-          </Button>
-        )}
-      </View>
-      <Text style={styles.hint} testID="ie-adim-ipucu">
-        {p.edited
-          ? `Adımları değiştirdiniz; ${TERIM.terbiyeIsEmri.tekilKucuk} bu adımlarla açılır.`
-          : 'Değiştirmezseniz rota şablonu aynen kullanılır.'}
-      </Text>
+      )}
       {p.steps.map((s, i) => (
         <View key={s.key} style={styles.step} testID={`ie-adim-${i + 1}`}>
           <View style={styles.stepHead}>
             <TruncatedText style={styles.stepTitle} testID={`ie-adim-${i + 1}-ad`}>{`${i + 1}. ${s.station?.name ?? 'İstasyon'}`}</TruncatedText>
+            <KindTag station={s.station} testID={`ie-adim-${i + 1}-tur`} />
             {can && (
               <View style={styles.actions}>
                 <IconButton icon="arrow-up" size={26} style={styles.icon} disabled={i === 0} onPress={() => change(moveStep(p.steps, s.key, -1))} accessibilityLabel={`${i + 1}. adımı yukarı taşı`} testID={`ie-adim-${i + 1}-yukari`} />
@@ -76,9 +83,9 @@ export default function RouteStepsEditor(p: Props) {
             )}
           </View>
           <FirmRow step={s} index={i + 1} firms={firms} editable={can} onPick={(id) => change(patchStep(p.steps, s.key, { plannedSubcontractorId: id }))} />
-          {can ? (
+          {can && noteShown(s) ? (
             <TextInput value={s.notes} onChangeText={(t) => change(patchStep(p.steps, s.key, { notes: t }))} mode="outlined" dense placeholder="Adım notu (isteğe bağlı)" style={styles.input} testID={`ie-adim-${i + 1}-not`} />
-          ) : s.notes ? (
+          ) : !can && s.notes ? (
             <Text style={styles.hint}>{s.notes}</Text>
           ) : null}
           {s.key === kursunKey && p.machine && (
@@ -87,14 +94,14 @@ export default function RouteStepsEditor(p: Props) {
         </View>
       ))}
       {can && (
-        <Button mode="outlined" icon="plus" onPress={() => setAdding(true)} contentStyle={styles.btn} style={styles.add} testID="ie-adim-ekle">
+        <Button mode="contained" icon="plus" onPress={() => setAdding(true)} contentStyle={styles.btn} style={compact ? styles.addFull : styles.add} testID="ie-adim-ekle">
           Adım ekle
         </Button>
       )}
       <PickerModal
         visible={adding}
         title="Adım ekle — istasyon"
-        options={stations.map((x) => ({ value: x.id, label: x.name, sublabel: x.defaultCategory ? `Fason: ${x.defaultCategory.name}` : undefined }))}
+        options={stations.map((x) => ({ value: x.id, label: x.name, sublabel: stationKindTag(x).label }))}
         loading={p.routesLoading}
         onSelect={(id) => {
           setAdding(false);
@@ -109,11 +116,25 @@ export default function RouteStepsEditor(p: Props) {
   );
 }
 
+/** İç istasyon mavi "Fabrikada", dış işlem turuncu "Fason" — İş Emirleri alt tuşlarındaki mal sahibi etiketiyle aynı dil. */
+function stationKindTag(s: StepStation | null | undefined): { label: string; fason: boolean } {
+  return isFasonStation(s) ? { label: 'Fason', fason: true } : { label: 'Fabrikada', fason: false };
+}
+
+function KindTag({ station, testID }: { station: StepStation | null; testID: string }) {
+  const t = stationKindTag(station);
+  return (
+    <View style={[styles.tag, t.fason ? styles.tagFason : styles.tagOwn]} testID={testID}>
+      <Text style={[styles.tagText, { color: t.fason ? colors.warningDark : colors.infoDark }]}>{t.label}</Text>
+    </View>
+  );
+}
+
 type FirmsByCategory = { byCategory: Map<string, { id: string; name: string; isFavorite?: boolean }[]>; nameById: Map<string, string> };
 
 /** Fason firmaları (Hızlı İE ile aynı liste); yalnız fason adım varken çekilir. */
 function useFirms(steps: readonly EditStep[]): FirmsByCategory {
-  const enabled = steps.some((s) => stepCategoryId(s) !== null);
+  const enabled = steps.some((s) => isFasonStation(s.station) && stepCategoryId(s) !== null);
   const q = useQuery({
     queryKey: ['subcontractors', 'wo-favorites'],
     queryFn: () => subcontractorService.listSubcontractors({ page: 1, pageSize: 500, sortBy: 'name', sortOrder: 'asc', filters: { isActive: 'true' } }),
@@ -132,7 +153,7 @@ function useFirms(steps: readonly EditStep[]): FirmsByCategory {
 }
 
 function FirmRow(p: { step: EditStep; index: number; firms: FirmsByCategory; editable: boolean; onPick: (id: string | null) => void }) {
-  const cat = stepCategoryId(p.step);
+  const cat = isFasonStation(p.step.station) ? stepCategoryId(p.step) : null;
   if (!cat) return null;
   const options = p.firms.byCategory.get(cat) ?? [];
   const current = p.step.plannedSubcontractorId;
@@ -166,6 +187,10 @@ const styles = StyleSheet.create({
   stepHead: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
   stepTitle: { flex: 1, minWidth: 160, fontSize: typography.size.base, fontWeight: typography.weight.semibold, color: colors.text },
   actions: { flexDirection: 'row' },
+  tag: { borderRadius: 999, paddingHorizontal: spacing.sm, paddingVertical: 2 },
+  tagOwn: { backgroundColor: colors.infoContainer },
+  tagFason: { backgroundColor: colors.warningContainer },
+  tagText: { fontSize: typography.size.sm, fontWeight: typography.weight.bold },
   icon: { width: 56, height: 56, margin: 0 },
   input: { backgroundColor: colors.surface },
   firms: { gap: spacing.xs },
@@ -173,4 +198,5 @@ const styles = StyleSheet.create({
   chip: { minHeight: 56, justifyContent: 'center', alignSelf: 'flex-start' },
   btn: { minHeight: 56 },
   add: { alignSelf: 'flex-start' },
+  addFull: { alignSelf: 'stretch' },
 });

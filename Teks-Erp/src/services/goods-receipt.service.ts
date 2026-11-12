@@ -36,7 +36,7 @@ import {
   PurchaseOrderStatus,
   RollEntrySource,
   RollStatus,
-  YarnMovementKind, Currency } from "@prisma/client";
+  YarnMovementKind, Currency, RollStage } from "@prisma/client";
 import { unitLabel } from "../constants/item-unit";
 import { registerPrintedDocBuilder } from "./printed-document.service";
 import { renderGoodsReceiptHtml, type GoodsReceiptDoc } from "./document-render/warehouse-doc.html";
@@ -135,10 +135,13 @@ export function resolveReceiptLineClass(
 }
 
 /** Sınıf → topun doğacağı raf ve doğum kaynağı. Yarı mamul, elle yarı mamul girişinin (`inventory.controller`) ikizi. */
-export function receiptLineBirth(cls: ReceiptLineClass): { status: RollStatus; entrySource: RollEntrySource } {
+export function receiptLineBirth(cls: ReceiptLineClass): { status: RollStatus; entrySource: RollEntrySource; stage: RollStage } {
+  // Aşama satır sınıfının AYNISI (açık değer) — top aşaması 2026-11-10.
   return cls === "FINISHED"
-    ? { status: RollStatus.WAREHOUSE, entrySource: RollEntrySource.PURCHASE_RECEIPT }
-    : { status: RollStatus.STOCK, entrySource: cls === "SEMI_FINISHED" ? RollEntrySource.SEMI_FINISHED : RollEntrySource.PURCHASE_RECEIPT };
+    ? { status: RollStatus.WAREHOUSE, entrySource: RollEntrySource.PURCHASE_RECEIPT, stage: RollStage.FINISHED }
+    : cls === "SEMI_FINISHED"
+      ? { status: RollStatus.STOCK, entrySource: RollEntrySource.SEMI_FINISHED, stage: RollStage.SEMI_FINISHED }
+      : { status: RollStatus.STOCK, entrySource: RollEntrySource.PURCHASE_RECEIPT, stage: RollStage.RAW };
 }
 
 export interface GoodsReceiptCreateInput {
@@ -1150,6 +1153,7 @@ export class GoodsReceiptService {
             // girişte "F" — yani etiket de doğru şeyi söyler.
             forcedStatus: lineBirth(line).status,
             forcedEntrySource: lineBirth(line).entrySource,
+            stage: lineBirth(line).stage,
             warehouseId: receipt.warehouseId,
             goodsReceiptId: receipt.id,
             // J2 — "hangi sipariş KALEMİNİ karşılıyor" izi (kural: `claimStampLine`).

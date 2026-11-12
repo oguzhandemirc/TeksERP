@@ -51,6 +51,8 @@ export interface ReasonPreset {
   sortOrder: number;
   isActive: boolean;
   isSystem: boolean;
+  /** Duruş sebebinin istasyon türü kapsamı (boş = her istasyon). Eski sunucu göndermez. Süzme SUNUCUDADIR. */
+  stationKinds?: string[];
 }
 
 /**
@@ -102,6 +104,15 @@ export const reasonPresetService = {
   list: (includeInactive = false): Promise<ReasonPreset[]> =>
     apiClient
       .get<ReasonPreset[]>(`/reason-presets${includeInactive ? '?includeInactive=true' : ''}`)
+      .then((r) => r.data),
+
+  /**
+   * Oturum istasyonunun türüne süzülmüş AKTİF liste (duruş modalı). Süzme sunucuda; eski sunucu
+   * parametreyi yok sayar → tam liste (bugünkü davranış).
+   */
+  listForStation: (kind: ReasonPresetKind, stationKind: string): Promise<ReasonPreset[]> =>
+    apiClient
+      .get<ReasonPreset[]>('/reason-presets', { params: { kind, stationKind } })
       .then((r) => r.data),
 
   create: (input: {

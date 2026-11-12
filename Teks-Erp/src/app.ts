@@ -26,6 +26,7 @@ import itemRoutes from "./routes/item.routes";
 import serviceItemRoutes from "./routes/service-item.routes";
 import customerRoutes from "./routes/customer.routes";
 import customerBarcodeSeriesRoutes from "./routes/customer-barcode-series.routes";
+import customerConsigneeRoutes, { customerConsigneeOwnerRouter } from "./routes/customer-consignee.routes";
 import customerBranchListRoutes from "./routes/customer-branch-list.routes";
 import stationRoutes, { machineRouter } from "./routes/station.routes";
 import routeRoutes from "./routes/route.routes";
@@ -55,6 +56,7 @@ import subcontractorWeavingRoutes from "./routes/subcontractor-weaving.routes";
 import inventoryRoutes from "./routes/inventory.routes";
 import orderRoutes from "./routes/order.routes";
 import productionProposalRoutes from "./routes/production-proposal.routes";
+import itemComputedGsmRoutes from "./routes/item-computed-gsm.routes";
 import loomSuggestionRoutes from "./routes/loom-suggestion.routes";
 import recordInfoRoutes from "./routes/record-info.routes";
 import scanRoutes from "./routes/scan.routes";
@@ -542,11 +544,15 @@ app.use("/api", licenseGate);
 // API Routes
 // =============================================================================
 app.use("/api/auth", authRoutes);
+// Seyitoğlu temel: hesaplanan gramaj (kendi yoluna bağlı; salt okuma).
+app.use("/api/items/:id/computed-gsm", itemComputedGsmRoutes);
 app.use("/api/items", itemRoutes);
 // Hizmet kartları ayrı tabloda (`service_items`, D1b); izin ürün kartıyla aynı.
 app.use("/api/service-items", serviceItemRoutes);
 app.use("/api/customers", customerRoutes);
 app.use("/api/customers/:id/barcode-series", customerBarcodeSeriesRoutes); // D4-F2 (customer.routes boyut tavanında)
+app.use("/api/customers/:id/consignees", customerConsigneeOwnerRouter); // alıcı kataloğu (2026-11-10)
+app.use("/api/customer-consignees", customerConsigneeRoutes);
 app.use("/api/customer-branches", customerBranchListRoutes);
 app.use("/api/stations", stationRoutes);
 app.use("/api/machines", machineRouter);

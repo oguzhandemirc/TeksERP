@@ -29,6 +29,10 @@ export interface OverviewProgress {
   unmeasuredRunCount: number;
   doffCount: number;
   fasonReceivedM: number | null;
+  /** ÜRETİLEN metre (liste satırıyla aynı); eski backend göndermez. */
+  producedM?: number | null;
+  /** Kalan = hedef − ÜRETİLEN (sıfırın altına inmez); açık uçlu işte null; eski backend göndermez. */
+  remainingM?: number | null;
 }
 
 export interface OverviewMountedBeam {

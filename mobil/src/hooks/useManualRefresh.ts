@@ -1,5 +1,9 @@
 import { useCallback, useRef, useState } from 'react';
 import { onlineManager } from '@tanstack/react-query';
+import Toast from 'react-native-toast-message';
+
+/** Başarı toast'ı metni — sayfa özel metin vermezse. */
+export const DEFAULT_REFRESH_SUCCESS = 'Liste güncellendi';
 
 // =============================================================================
 // useManualRefresh — ekran başlığındaki RefreshButton (ve liste pull-to-refresh)
@@ -58,8 +62,8 @@ export interface ManualRefresh {
   isError: boolean;
   /** Hata mesajı (error toast'ta gösterilir). */
   errorMessage?: string;
-  /** Başarı toast'ı başlığı — RefreshButton'a iletilir. Verilmezse başarıda
-   *  toast çıkmaz (sadece haptic); error toast'ı her durumda çalışır. */
+  /** Başarı toast'ı metni (hook gösterir; varsayılan 'Liste güncellendi'). Header
+   *  RefreshButton'a iletmek zorunlu değil — toast burada tek yerden çıkar. */
   successMessage?: string;
   /** Header butonu ve liste onRefresh'ine bağlanır. */
   onRefresh: () => void;
@@ -71,7 +75,7 @@ export interface ManualRefresh {
  */
 export function useManualRefresh(
   refetch: Refetcher | Refetcher[],
-  successMessage?: string,
+  successMessage: string = DEFAULT_REFRESH_SUCCESS,
 ): ManualRefresh {
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | undefined>(undefined);
@@ -80,6 +84,8 @@ export function useManualRefresh(
   const refetchRef = useRef(refetch);
   refetchRef.current = refetch;
   const inFlight = useRef(false);
+  const successRef = useRef(successMessage);
+  successRef.current = successMessage;
 
   const run = useCallback(async () => {
     if (inFlight.current) return;
@@ -87,6 +93,7 @@ export function useManualRefresh(
     setRefreshing(true);
     setErrorMessage(undefined);
     const start = Date.now();
+    let ok = false;
     try {
       // Offline guard — paused refetch'in asılı kalmasını beklemeden net hata.
       if (!onlineManager.isOnline()) {
@@ -126,6 +133,8 @@ export function useManualRefresh(
       );
       if (failed) {
         setErrorMessage((failed.error as Error | undefined)?.message ?? 'Veri alınamadı');
+      } else {
+        ok = true;
       }
     } catch (err) {
       setErrorMessage((err as Error)?.message ?? 'Veri alınamadı');
@@ -134,6 +143,8 @@ export function useManualRefresh(
       if (remaining > 0) await new Promise<void>((r) => setTimeout(r, remaining));
       setRefreshing(false);
       inFlight.current = false;
+      // Yalnız kullanıcı tetiklemesi (çekme/Yenile) buraya gelir; otomatik yenileme hook'u kullanmaz.
+      if (ok) Toast.show({ type: 'success', text1: successRef.current });
     }
   }, []);
 

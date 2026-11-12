@@ -14,6 +14,7 @@ import {
   Icon,
 } from 'react-native-paper';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
+import { useRoute } from '@react-navigation/native';
 import {
   useQuery,
   useMutation,
@@ -25,6 +26,8 @@ import Toast from 'react-native-toast-message';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ScreenChrome from '../../../components/ScreenChrome';
+import StationActionBar from '../../../components/stationActions/StationActionBar';
+import type { StationAction } from '../../../components/stationActions/stationActionLayout';
 import StationActionButton from '../../../components/StationActionButton';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
 import { useSessionStore } from '../../../store/sessionStore';
@@ -32,6 +35,7 @@ import ScannerEntryBar from '../../../components/ScannerEntryBar';
 import { useDrawerActionQueue } from '../../../hooks/useDrawerActionQueue';
 import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
 import RefreshButton from '../../../components/RefreshButton';
+import PullToRefreshView from '../../../components/PullToRefreshView';
 import { useManualRefresh, type ManualRefresh } from '../../../hooks/useManualRefresh';
 import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
@@ -74,11 +78,13 @@ import PriorErrorBadge from '../../../components/inspection/PriorErrorBadge';
 import {
   composeStationPanels,
   flowScreenLabels,
+  withoutKursunProps,
   dativeTr,
   emptyRollHint,
   finishStepLabel,
   nextStationLabel,
 } from './stationPanels';
+import GoodsOwnerCard from './GoodsOwnerCard';
 import GramajTapPanel from './GramajTapPanel';
 import AllDoneFinishPanel from './AllDoneFinishPanel';
 import { useGramajTap } from './useGramajTap';
@@ -86,6 +92,10 @@ import { widthGatedTap } from './widthGatedTap';
 import { MachineStopBand, MachineStopChip, useMachineStopControl } from '../../../components/machine-stop/MachineStopChip';
 import MeterStrip from './MeterStrip';
 import MeterModals from './MeterModals';
+import ConfirmDialog from '../../../components/ConfirmDialog';
+import FinishStepConfirm from './FinishStepConfirm';
+import { finishSummaryOf, type FinishSummary } from './finishSummary';
+import { REOPEN_ROLL_QUESTION, completeWithExitMeter, defectNeedsReopen, exitMeterRequired, isRollAlreadyOpen } from './exitMeter';
 import { useMeterAcks } from './useMeterAcks';
 import { useMeterCapture } from './useMeterCapture';
 import MeasuredWidthField from './MeasuredWidthField';
@@ -98,8 +108,9 @@ import { kursunFinishRollId, type KursunFinishVars } from '../../../offline/kurs
 import { meterSettingsOf, pendingAcksFromError } from './meterCapture';
 import { primaryMeterFor, useMachinePeripherals } from '../../../hooks/useMachinePeripherals';
 import { findTarget, targetChipText } from './gramajTap';
+import { usePropAnswers } from './usePropAnswers';
 import { useAuthStore } from '../../../store/authStore';
-import { palette } from '../../../theme/tokens';
+import { palette, spacing } from '../../../theme/tokens';
 import PlannedMachineBadge from './PlannedMachineBadge';
 import StationDocLookupSheet from '../../../components/stationDocLookup/StationDocLookupSheet';
 import OpenCardSearchBar from '../../../components/stationDocLookup/OpenCardSearchBar';
@@ -179,6 +190,9 @@ function HeaderChip({
 }
 
 export default function KursunQcScreen() {
+  // Aynı ekran iki rotada: 'KaliteKontrol' = kurşun kipi KAPALI (kurşunsuz kalite istasyonu;
+  // SessionGate yalnız o istasyonun oturumuyla açar). Gramaj/kurşun özelliği/kurşun metni çizilmez.
+  const kursunEnabled = useRoute().name !== 'KaliteKontrol';
   // Telefon ekranında landscape kilidi kaldırılır + sağ panel drawer'a alınır.
   // Tabletlerde önceki davranış aynen korunur.
   const device = useDeviceType();
@@ -223,6 +237,12 @@ export default function KursunQcScreen() {
     preview: ReopenPreview;
   } | null>(null);
   const [reopening, setReopening] = useState(false);
+  /** GK: kontrolü tamamlanmış topa hata girişi → yeniden açma onayı (Hayır'da hiçbir şey yazılmaz). */
+  const [reopenRollPrompt, setReopenRollPrompt] = useState<{
+    cardId: string; rollId: string; stepId: string; startMeter: number; defectTypeId: string;
+  } | null>(null);
+  const [reopeningRoll, setReopeningRoll] = useState(false);
+  const [finishPrompt, setFinishPrompt] = useState<{ stepId: string; summary: FinishSummary } | null>(null);
   /** K16: okutulan iş başka makineye atanmış — "Yine de al" onayı bekleyen istem. */
   const [foreignPrompt, setForeignPrompt] = useState<(ForeignMachinePromptState & { step: KursunStepSummary }) | null>(null);
   const [takingForeign, setTakingForeign] = useState(false);
@@ -340,8 +360,11 @@ export default function KursunQcScreen() {
   // ── İSTASYON ÖZELLİKLERİ (mod sözleşmesi, 2026-08-10) ─────────────────────
   // AUTO → salt bilgi (backend her topa yazar) · OPSİYONEL/ZORUNLU → tuş.
   // Eski backend `properties` göndermez → hepsi boş → ekran bugünküyle aynı.
-  const stationProps = activeJob?.stepSummary.properties ?? [];
-  const autoProps = useMemo(() => stationProps.filter((p) => p.mode === 'AUTO'), [stationProps]);
+  const rawStationProps = activeJob?.stepSummary.properties ?? [];
+  const stationProps = useMemo(
+    () => (kursunEnabled ? rawStationProps : withoutKursunProps(rawStationProps)),
+    [kursunEnabled, rawStationProps],
+  );
   const pickableProps = useMemo(
     () => stationProps.filter((p) => p.mode !== 'AUTO'),
     [stationProps],
@@ -352,30 +375,14 @@ export default function KursunQcScreen() {
   // birini unutmasına açık olurdu.
   //
   // ⚠️ TOP BAŞINA sıfırlanır: bir topta işaretlenen özellik sıradaki topa
-  // taşınırsa operatör hiç dokunmadan ikinci topa da yazılır.
-  const [propAnswers, setPropAnswers] = useState<Record<string, true | string>>({});
-  useEffect(() => {
-    setPropAnswers({});
-  }, [activeJob?.selectedRollId, activeCardId]);
-
-  /** BAYRAK çipi: aç/kapa. */
-  const toggleFlagProp = (id: string) =>
-    setPropAnswers((prev) => {
-      const next = { ...prev };
-      if (next[id]) delete next[id];
-      else next[id] = true;
-      return next;
-    });
-
-  /** SEÇİM çipi: aynı değere tekrar basmak seçimi KALDIRIR (opsiyonelde
-   *  vazgeçebilmeli); farklı değere basmak DEĞİŞTİRİR (tek seçim). */
-  const pickValueProp = (id: string, code: string) =>
-    setPropAnswers((prev) => {
-      const next = { ...prev };
-      if (next[id] === code) delete next[id];
-      else next[id] = code;
-      return next;
-    });
+  // taşınırsa operatör hiç dokunmadan ikinci topa da yazılır. Sıfırlanınca SEÇİM
+  // özelliklerinde İE hedefi ön seçilir; operatörün dokunduğu özellik (touched)
+  // aynı topta hedef tazelense de ezilmez.
+  const {
+    answers: propAnswers,
+    toggleFlag: toggleFlagProp,
+    pickValue: pickValueProp,
+  } = usePropAnswers(pickableProps, activeJob?.stepSummary.targetValues, `${activeCardId ?? ''}|${activeJob?.selectedRollId ?? ''}`);
 
   const missingRequiredProps = useMemo(
     () => pickableProps.filter((p) => p.mode === 'REQUIRED' && !propAnswers[p.propertyId]),
@@ -400,7 +407,7 @@ export default function KursunQcScreen() {
     properties: stationProps,
   });
   // S4: metinler istasyon adından (kurşunsuz Detaylı KK aynı ekranı açar).
-  const labels = flowScreenLabels(activeJob?.stepSummary.stationName ?? activeSession?.station?.name);
+  const labels = flowScreenLabels(activeJob?.stepSummary.stationName ?? activeSession?.station?.name, kursunEnabled);
   // D4-E2b: en ölçen istasyonda isteğe bağlı "Ölçülen en"; eski backend alanı göndermez → gizli.
   const measuredWidth = useMeasuredWidth(
     widthCaptureEnabled(activeJob?.stepSummary),
@@ -1099,7 +1106,16 @@ export default function KursunQcScreen() {
       // yollamak, iki kaynağın ayrışması demekti.
       properties: propertySelections,
     });
-    if (vars) completeQc2Mutation.mutate(vars);
+    if (!vars) return;
+    // GK: kurşun/brode istasyonunda sayaç açıkken metre okunmadan tamamlanmaz; tek dokunuş kipiyle aynı yol.
+    completeWithExitMeter({
+      required: exitMeterRequired(activeJob.stepSummary),
+      meter,
+      piece: brodePiece,
+      roll: selectedRoll,
+      vars,
+      complete: (v) => completeQc2Mutation.mutate(v),
+    });
   };
 
   // KQ-D5: yalnız kurşunda tek dokunuş (gramaj = top bitti). Konak mutasyonu
@@ -1124,15 +1140,49 @@ export default function KursunQcScreen() {
   // Hata girişi: InspectionPanel metre/boy/mükerrer doğrulamasını yapıp geçerli
   // girdiyi verir; KONAK yazar. clientErrorId burada üretilip vars'a gömülür →
   // mutate variables persist edilir, online resume'da backend aynı id ile idempotent.
+  const writeDefect = (rollId: string, stepId: string, startMeter: number, defectTypeId: string) => {
+    reportErrorMutation.mutate({ rollId, stepId, startMeter, defectTypeId, clientErrorId: generateClientUuid() });
+  };
   const handleReportDefect = (input: InspectionDefectInput) => {
     if (!activeJob || !selectedRoll || input.meter === null) return;
-    reportErrorMutation.mutate({
-      rollId: selectedRoll.rollId,
-      stepId: activeJob.stepSummary.workOrderStepId,
-      startMeter: input.meter,
-      defectTypeId: input.defectTypeId,
-      clientErrorId: generateClientUuid(),
-    });
+    const stepId = activeJob.stepSummary.workOrderStepId;
+    // GK: kontrolü tamamlanmış topa hata = önce onaylı yeniden açma (backend kapısı yok; eski istemci serbest).
+    if (defectNeedsReopen(selectedRoll)) {
+      setReopenRollPrompt({ cardId: activeJob.cardId, rollId: selectedRoll.rollId, stepId, startMeter: input.meter, defectTypeId: input.defectTypeId });
+      return;
+    }
+    writeDefect(selectedRoll.rollId, stepId, input.meter, input.defectTypeId);
+  };
+
+  const confirmReopenRoll = async () => {
+    const p = reopenRollPrompt;
+    if (!p || reopeningRoll) return;
+    if (!onlineManager.isOnline()) {
+      Toast.show({ type: 'error', text1: 'Bağlantı yok', text2: 'Yeniden açmak için sunucu bağlantısı gerekli' });
+      return;
+    }
+    setReopeningRoll(true);
+    try {
+      try {
+        await kursunQcService.reopenRoll({ rollId: p.rollId, stepId: p.stepId });
+      } catch (err) {
+        if (!isRollAlreadyOpen(err)) throw err;
+      }
+      setOpenJobs((prev) =>
+        prev.map((j) =>
+          j.cardId === p.cardId
+            ? { ...j, stepSummary: { ...j.stepSummary, rolls: j.stepSummary.rolls.map((r) => (r.rollId === p.rollId ? { ...r, qc2Completed: false } : r)) } }
+            : j,
+        ),
+      );
+      setReopenRollPrompt(null);
+      writeDefect(p.rollId, p.stepId, p.startMeter, p.defectTypeId);
+      void qc.invalidateQueries({ queryKey: ['kursun-qc', 'open-cards'] });
+    } catch (err) {
+      if (!isWorkSessionLost(err)) showScreenError(err, 'Top yeniden açılamadı');
+    } finally {
+      setReopeningRoll(false);
+    }
   };
 
   const handleDeleteError = (errorId: string) => {
@@ -1164,9 +1214,15 @@ export default function KursunQcScreen() {
     deleteErrorMutation.mutate({ errorId });
   };
 
+  // GK: adım kapanışı özetli onaydan geçer (toplar sonraki istasyona taşınır); onaylanan adım sabitlenir.
   const handleFinishStep = () => {
     if (!activeJob) return;
-    finishStepMutation.mutate({ stepId: activeJob.stepSummary.workOrderStepId });
+    setFinishPrompt({ stepId: activeJob.stepSummary.workOrderStepId, summary: finishSummaryOf(activeJob.stepSummary) });
+  };
+  const confirmFinishStep = () => {
+    const p = finishPrompt;
+    setFinishPrompt(null);
+    if (p) finishStepMutation.mutate({ stepId: p.stepId });
   };
 
   // Card scan input event'lerinde defect-types boş ise ön-yükle (network bekletme)
@@ -1247,19 +1303,19 @@ export default function KursunQcScreen() {
         </Surface>
       )}
 
-      <DocSiblingsStrip
-        siblings={docSiblings.siblings}
-        activeCardBarcode={activeJob?.cardBarcode ?? null}
-        onSwitch={(w) => resolveCard(w.cardBarcode, false)}
-        onDismiss={docSiblings.clear}
-      />
-
       {/* Açık iş emri sekmeleri — Okut + Liste (Açık Kartlar) artık header'ın
           2. katında (phoneSecondRow), burada tekrar etmez. Telefonda KENDİ
           tam-genişlik satırı (tek satır çip); tablette de tek satır. */}
       {openJobs.length > 0 && (
         <View style={styles.topArea}>
           <View style={styles.tabRow}>
+            {/* Belgedeki diğer partiler İE çipiyle aynı satırda kompakt seçici (eski ayrı şerit kalktı). */}
+            <DocSiblingsStrip
+              siblings={docSiblings.siblings}
+              activeCardBarcode={activeJob?.cardBarcode ?? null}
+              onSwitch={(w) => resolveCard(w.cardBarcode, false)}
+              style={styles.partySelector}
+            />
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -1296,24 +1352,26 @@ export default function KursunQcScreen() {
       )}
 
       {!activeJob ? (
-        <View style={styles.paneEmpty}>
+        <PullToRefreshView refreshing={activeRefresh.refreshing} onRefresh={activeRefresh.onRefresh} contentContainerStyle={styles.paneEmpty}>
           <Icon source="package-variant-closed" size={48} color="#cbd5e1" />
           <Text style={styles.paneEmptyText}>Henüz açık iş yok</Text>
           <Text style={styles.paneEmptyHint}>
             Yukarıdan kart okutarak başlayın
           </Text>
-        </View>
+        </PullToRefreshView>
       ) : activeJob.stepSummary.rolls.length === 0 ? (
-        <View style={styles.paneEmpty}>
+        <PullToRefreshView refreshing={activeRefresh.refreshing} onRefresh={activeRefresh.onRefresh} contentContainerStyle={styles.paneEmpty}>
           <Text style={styles.paneEmptyText}>Bu adımda bekleyen top yok</Text>
           {!!activeJob.stepSummary.emptyStep && (
             <Text style={styles.paneEmptyHint}>{activeJob.stepSummary.emptyStep.message}</Text>
           )}
-        </View>
+        </PullToRefreshView>
       ) : (
         <FlashList
           data={activeJob.stepSummary.rolls}
           keyExtractor={(r) => r.rollId}
+          refreshing={activeRefresh.refreshing}
+          onRefresh={activeRefresh.onRefresh}
           // flex:1 — liste kalan alanı kaplar + KENDİ İÇİNDE kaydırır. Yoksa
           // (boş-durum panelleri flex:1 ama liste değildi) toplar çoğalınca liste
           // içeriği sağ paneli aşıp taşıyordu (satırların büyümesiyle görünür oldu).
@@ -1340,39 +1398,44 @@ export default function KursunQcScreen() {
   // etiketli chip (secondRow) — hepsi drawer açmadan doğrudan erişilir.
   // Açık Kartlar'da acil varsa rozet döner.
   const openCardsCount = openCardsQuery.data?.data?.length ?? 0;
-  const phoneSecondRow = (
-    <>
-      <HeaderChip
-        icon="clipboard-list-outline"
-        label={`Açık İşler · ${openJobs.length}`}
-        onPress={() => setRightDrawerOpen(true)}
-        fill
-      />
-      <HeaderChip
-        icon="format-list-bulleted"
-        label={`Açık Kartlar · ${openCardsCount}`}
-        onPress={() => drawerQueue.run(() => setListModalOpen(true))}
-        badge={<UrgentBadge count={urgentCount} />}
-        fill
-      />
-      {!hardware && (
-        <HeaderChip
-          icon="camera"
-          label="Tara"
-          onPress={() => drawerQueue.run(() => setScannerOpen(true))}
-          fill
-        />
-      )}
-      {docLookup.enabled && (
-        <HeaderChip
-          icon="file-document-outline"
-          label="Belge"
-          onPress={() => drawerQueue.run(() => docLookup.setOpen(true))}
-          fill
-        />
-      )}
-    </>
-  );
+  // Telefon 2. kat — TEK dizi, çubuk + "Diğer" StationActionBar'da türer (Tambur ile ortak).
+  const phoneActions: StationAction[] = [
+    {
+      id: 'openJobs',
+      icon: 'clipboard-list-outline',
+      label: 'Açık İşler',
+      count: openJobs.length,
+      priority: 1,
+      visible: true,
+      onPress: () => setRightDrawerOpen(true),
+    },
+    {
+      id: 'list',
+      icon: 'format-list-bulleted',
+      label: `Açık Kartlar · ${openCardsCount}`,
+      priority: 2,
+      visible: true,
+      badge: urgentCount,
+      onPress: () => drawerQueue.run(() => setListModalOpen(true)),
+    },
+    {
+      id: 'scan',
+      icon: 'camera',
+      label: 'Tara',
+      priority: 3,
+      visible: !hardware,
+      onPress: () => drawerQueue.run(() => setScannerOpen(true)),
+    },
+    {
+      id: 'doc',
+      icon: 'file-document-outline',
+      label: 'Belge okut',
+      priority: 4,
+      visible: docLookup.enabled,
+      onPress: () => drawerQueue.run(() => docLookup.setOpen(true)),
+    },
+  ];
+  const phoneSecondRow = <StationActionBar actions={phoneActions} testIDPrefix="kursun-bar" />;
 
   const headerExtras = (
     <View style={styles.headerExtrasRow}>
@@ -1513,9 +1576,10 @@ export default function KursunQcScreen() {
               {tapLayout && <GramajTapPanel state={gramajTap} hasRoll={false} />}
             </View>
           ) : (
-            // Tüm öğeler tek gap'li kolonda — cetvel · giriş · buton
-            // arası boşluk EŞİT (styles.rollPane gap). Flex-spacer yok.
+            // Tek gap'li kolon: cetvel üstte; giriş (hata metresi + tip ızgarası + çıkış metresi) ve
+            // Tamamla düğmesi en altta (başparmak erişimi) — artan yer giriş bloğunda (entryAtBottom), aralıklar eşit.
             <View style={styles.rollPane}>
+              <GoodsOwnerCard roll={selectedRoll} />
               {/* KQ-D3: hata girişi TEK bileşen (InspectionPanel; K4P ile ortak) —
                   cetvel + metre + tip ızgarası. Kalite paneli kapalı istasyonda
                   (yalnız kurşun) çizilmez; işlem paneli aynı sütunda kalır. */}
@@ -1524,26 +1588,20 @@ export default function KursunQcScreen() {
                   <>
                     {meter.outOn && <BrodePieceField state={brodePiece} hidden={selectedRoll.qc2Completed} />}
                     {meter.outOn && (
-                      <MeterStrip meter={meter} acks={meterAcks} roll={selectedRoll} stepId={activeJob.stepSummary.workOrderStepId} />
+                      <MeterStrip meter={meter} acks={meterAcks} roll={selectedRoll} stepId={activeJob.stepSummary.workOrderStepId} fill={!compact && panels.qualityPanel} />
                     )}
                     <GramajTapPanel state={gramajTap} hasRoll={!selectedRoll.qc2Completed} />
                   </>
                 ) : (
                   <>
                 {/* ── İSTASYON ÖZELLİKLERİ (mod güdümlü, 2026-08-10) ──
-                    OTOMATİK satırlar salt bilgi (operatöre sorulmaz, adım
-                    kapanınca yazılır); OPSİYONEL/ZORUNLU satırlar tuş olur.
-                    ZORUNLU işaretlenmeden "KK2 Tamamla" basılırsa backend ADIYLA
-                    400 döner — buradaki disable o hatanın istemci ikizidir.
-                    Kart yalnız gerçekten çizilecek satır varsa görünür. */}
-                {!selectedRoll.qc2Completed && (autoProps.length > 0 || pickableProps.length > 0) && (
-                  <Surface style={styles.section} elevation={1}>
-                    <Text style={styles.sectionTitle}>Bu istasyonun kazandırdıkları</Text>
-                    {autoProps.length > 0 && (
-                      <Text style={styles.propAutoLine}>
-                        Otomatik: {autoProps.map((p) => p.name).join(', ')}
-                      </Text>
-                    )}
+                    OTOMATİK özellikler ekranda GÖSTERİLMEZ (operatöre sorulmaz, adım
+                    kapanınca yazılır; GK 2026-11-10 kart başlığı + "Otomatik:" satırı
+                    kalktı). Yalnız OPSİYONEL/ZORUNLU özellikler kendi başlığıyla tuş olur;
+                    ZORUNLU işaretlenmeden "KK2 Tamamla" basılırsa backend ADIYLA 400
+                    döner — buradaki disable o hatanın istemci ikizidir. */}
+                {!selectedRoll.qc2Completed && pickableProps.length > 0 && (
+                  <Surface style={styles.section} elevation={1} testID="kursun-pickable-props">
                     {pickableProps.map((p) => {
                       // SEÇİM tipli özellik (GRAMAJ → 25GR/50GR/75GR): kendi
                       // başlığı + değer çipleri. Değerler KATALOGDAN gelir,
@@ -1632,6 +1690,14 @@ export default function KursunQcScreen() {
                     )}
                   </Surface>
                 )}
+                {/* GK: düğmeli kipte çıkış metresi yalnız kurşun/brode istasyonunda; tamamlanmış topta gizli; alt blokta Tamamla düğmesinin hemen üstünde. */}
+                {exitMeterRequired(activeJob.stepSummary) && selectedRoll.barcode && !selectedRoll.qc2Completed && (
+                  <>
+                    <BrodePieceField state={brodePiece} hidden={false} />
+                    {/* Tablet: şerit cetvel ile alt blok arasındaki boş alanı doldurur (InspectionPanel entryAtBottom). */}
+                    <MeterStrip meter={meter} acks={meterAcks} roll={selectedRoll} stepId={activeJob.stepSummary.workOrderStepId} fill={!compact && panels.qualityPanel} />
+                  </>
+                )}
                   </>
                 );
                 return panels.qualityPanel ? (
@@ -1644,7 +1710,13 @@ export default function KursunQcScreen() {
                     onDefect={handleReportDefect}
                     onDelete={handleDeleteError}
                     maxMeter={selectedRoll.currentQty}
+                    // Beyandan uzun top kurşunda ENGELLENMEZ: kayıt + sarı uyarı (fatura max(beyan, ölçülen)).
+                    overMaxMode="warn"
                     compact={compact}
+                    // Hata yokken de 0…top boyu cetveli (Tambur'daki ölçek gibi); boş durum yazısı yok.
+                    rulerAlways
+                    // Giriş + Tamamla en alta yaslanır; artan yer bloğun içinde (sayaç şeridi doldurur), aralıklar eşit.
+                    entryAtBottom
                   >
                     <MeasuredWidthField state={measuredWidth} hidden={selectedRoll.qc2Completed} />
                     {processCard}
@@ -1794,6 +1866,7 @@ export default function KursunQcScreen() {
         onDismiss={() => docLookup.setOpen(false)}
         onOpen={handleDocLookupOpen}
         readerConfigured={docLookup.readerConfigured}
+        deviceOcrAccepted={docLookup.deviceOcrAccepted}
         screen={{ screen: 'KURSUN_QC' }}
       />
 
@@ -1815,6 +1888,20 @@ export default function KursunQcScreen() {
       />
 
       <MeterModals meter={meter} acks={meterAcks} rolls={activeJob?.stepSummary.rolls ?? []} />
+
+      <FinishStepConfirm summary={finishPrompt?.summary ?? null} onConfirm={confirmFinishStep} onCancel={() => setFinishPrompt(null)} />
+
+      <ConfirmDialog
+        kind="simple"
+        visible={reopenRollPrompt != null}
+        onDismiss={() => { if (!reopeningRoll) setReopenRollPrompt(null); }}
+        title="Kontrol tamamlandı"
+        description={REOPEN_ROLL_QUESTION}
+        confirmLabel="Evet, yeniden aç"
+        cancelLabel="Hayır"
+        confirming={reopeningRoll}
+        onConfirm={() => void confirmReopenRoll()}
+      />
 
       <ForeignMachinePrompt prompt={foreignPrompt} busy={takingForeign} onConfirm={confirmForeign} onCancel={cancelForeign} />
 
@@ -1947,6 +2034,8 @@ function CameraScanModal({
               ref={listRef}
               data={cards}
               keyExtractor={(c) => c.cardId}
+              refreshing={refresh.refreshing}
+              onRefresh={refresh.onRefresh}
               contentContainerStyle={{ padding: 10 }}
               renderItem={({ item }) => (
                 <Surface
@@ -2549,24 +2638,22 @@ const styles = StyleSheet.create({
   // Sabit (sticky) hata giriş zonu — header ile scroll arasında, kaymaz.
   // Dış yatay boşluk minimal (8) → amber kutu kolon genişliğini neredeyse
   // tam kullanır; kart kenarı ekrana yapışmasın diye küçük pay bırakıldı.
-  // Seçili top içeriği — tüm öğeler arası boşluk EŞİT (tek gap). Flex-spacer yok;
-  // öğeler yukarıdan diziler, artan yer en altta kalır. paddingTop: koyu band
+  // Seçili top içeriği — öğeler arası boşluk EŞİT (tek gap token'ı); artan yer giriş bloğuna,
+  // tablette sayaç şeridine gider (InspectionPanel entryAtBottom + MeterStrip fill). paddingTop: koyu band
   // kalkınca cetvel navbara yapışmasın (sağ kolon şeridiyle simetrik pay).
-  rollPane: { flex: 1, gap: 10, paddingTop: 8 },
+  rollPane: { flex: 1, gap: spacing.md, paddingTop: spacing.sm },
   // Hata giriş alanı — dış boşluk rollPane gap'inden gelir; burada yalnız yatay
   // iç boşluk (amber kartı kenardan içeri al). Border/zemin YOK (hr çizgisi kalktı).
   entryFixed: { paddingHorizontal: 8 },
-  // İşlem paneli kartı ("Bu istasyonun kazandırdıkları") — flex YOK: InspectionPanel
-  // girişinin altında içerik kadar uzar (flex:1 onu 56 dp'ye ezip içini gizliyordu).
+  // Seçmeli özellik kartı (başlıksız; yalnız OPSİYONEL/ZORUNLU özellikler, her biri kendi başlığıyla) —
+  // flex YOK: giriş bloğunda içerik kadar uzar (flex:1 onu 56 dp'ye ezip içini gizliyordu).
   section: {
     backgroundColor: '#fff',
     borderRadius: 12,
     padding: 14,
     gap: 8,
   },
-  sectionTitle: { fontSize: 14, fontWeight: '700', color: '#0f172a' },
-  // İstasyon özellikleri (mod güdümlü) — AUTO satırı salt bilgi, gerisi tuş.
-  propAutoLine: { fontSize: 13, color: '#475569', marginTop: 6 },
+  // İstasyon özellikleri (mod güdümlü) — AUTO gösterilmez, gerisi tuş.
   propWarnLine: { fontSize: 12, color: '#b45309', marginTop: 6, fontWeight: '700' },
   propChipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
   // SEÇİM tipli özellik bloğu: kendi başlığı + değer çipleri.
@@ -2668,6 +2755,7 @@ const styles = StyleSheet.create({
   },
   // Sekme ScrollView'i kalan alanı kaplar — taşan sekmeler yatay kayar.
   tabScrollArea: { flex: 1 },
+  partySelector: { marginHorizontal: 6, marginTop: 0, alignSelf: 'center' },
   // flexGrow + flex-end: az sekme varken sağa dayanır (refresh'in soluna),
   // yeni sekme sağ uca eklenir; taştığında normal yatay kaydırma.
   tabScroll: {

@@ -106,7 +106,7 @@ describe('TeachEntry + TeachModal (tablet)', () => {
       scanId: 's1',
       name: 'Güleçsoy',
       assignments: [{ field: 'partiNo', rect: { x: 200, y: 300, width: 90, height: 20 } }],
-      identifiers: ['GÜLEÇSOY BOYA', 'ÇEKİ LİSTESİ'],
+      identifiers: ['GÜLEÇSOY BOYA', 'ÇEKİ LİSTESİ', 'Ham PartiNo'],
     });
     expect(r.getByTestId('tanit-onizleme-eslesme')).toHaveTextContent(/tanınıyor/);
     expect(r.getByTestId('tanit-onizleme-alanlar')).toHaveTextContent(/P2618733/);
@@ -141,7 +141,7 @@ describe('TeachEntry + TeachModal (tablet)', () => {
     await flush();
     expect(mockApi.suggestTemplate.mock.calls[0][0]).toMatchObject({
       assignments: [{ field: 'partiNo', section: true }],
-      sectionStartLabel: 'Ham PartiNo:', table: { columns: [{ key: 'm', header: 'Metre' }] },
+      sectionStartLabel: 'Ham PartiNo', table: { columns: [{ key: 'm', header: 'Metre' }] },
     });
   });
 
@@ -202,11 +202,11 @@ describe('TeachModal — deneme token\'ı', () => {
 });
 
 describe('TeachEntry + TeachModal — güncelle ve görünürlük', () => {
-  it('kullanıcı şablonuyla okunmuş belge → "Şablonu güncelle": eski kimlik hazır seçili, önizleme base ile, PUT önizlenen şablonu aynen gönderir', async () => {
+  it('kullanıcı şablonuyla okunmuş belge → "Tanımı düzenle": eski kimlik hazır seçili, önizleme base ile, PUT önizlenen şablonu aynen gönderir', async () => {
     const r = renderWithPaper(<TeachEntry detail={detail('t-u1')} localPages={LOCAL} />);
     await flush();
     expect(r.queryByTestId('tanit-taninmadi')).toBeNull();
-    await waitFor(() => expect(r.getByTestId('tanit-ac')).toHaveTextContent(/Şablonu güncelle/));
+    await waitFor(() => expect(r.getByTestId('tanit-ac')).toHaveTextContent(/Tanımı düzenle/));
     await openNew(r);
     expect(mockApi.getUserTemplate).toHaveBeenCalledWith('u-gulecsoy');
     expect(r.getByTestId('tanit-surum')).toHaveTextContent('v2 → 3');
@@ -216,8 +216,9 @@ describe('TeachEntry + TeachModal — güncelle ve görünürlük', () => {
     await press(r.getByTestId('tanit-alan-partiNo'));
     await press(r.getByTestId('tanit-onizle'));
     await flush();
-    expect(mockApi.suggestTemplate.mock.calls[0][0].identifiers[0]).toBe('ESKİ KİMLİK');
-    expect(mockApi.suggestTemplate.mock.calls[0][0].base).toEqual({ code: 'u-gulecsoy', keep: [] });
+    // Son çağrı: güncelle kipindeki kendiliğinden ilk önizleme (debounce) dokunuştan önce de düşebilir.
+    expect(mockApi.suggestTemplate.mock.lastCall?.[0].identifiers[0]).toBe('ESKİ KİMLİK');
+    expect(mockApi.suggestTemplate.mock.lastCall?.[0].base).toEqual({ code: 'u-gulecsoy', keep: [] });
     expect(r.getByTestId('tanit-eski-alanlar')).toHaveTextContent(/tarih/);
     await press(r.getByTestId('tanit-kaydet'));
     await flush();
@@ -231,7 +232,7 @@ describe('TeachEntry + TeachModal — güncelle kipi (s1b inceleme)', () => {
   it('eski tablo/bölüm varsayılan korunur; kutu kaldırılınca önizleme gövdesinin keep listesinden düşer', async () => {
     mockApi.getUserTemplate.mockResolvedValue({ ...USER_T, template: { ...USER_T.template, tables: [{ key: 'toplar' }], sections: { startLabels: ['X'], fields: ['tarih'] } }, versions: [] });
     const r = renderWithPaper(<TeachEntry detail={detail('t-u1')} localPages={LOCAL} />);
-    await waitFor(() => expect(r.getByTestId('tanit-ac')).toHaveTextContent(/Şablonu güncelle/));
+    await waitFor(() => expect(r.getByTestId('tanit-ac')).toHaveTextContent(/Tanımı düzenle/));
     await openNew(r);
     expect(r.getByTestId('tanit-eski-tables')).toBeTruthy();
     await press(r.getByTestId('tanit-eski-sections'));
@@ -239,7 +240,9 @@ describe('TeachEntry + TeachModal — güncelle kipi (s1b inceleme)', () => {
     await press(r.getByTestId('tanit-alan-partiNo'));
     await press(r.getByTestId('tanit-onizle'));
     await flush();
-    expect(mockApi.suggestTemplate.mock.calls[0][0].base).toEqual({ code: 'u-gulecsoy', keep: ['tables'] });
+    // Son çağrı = dokunuştan sonraki önizleme. Güncelle kipinde ilk önizleme PREVIEW_DEBOUNCE_MS (gerçek zaman) sonra
+    // kendiliğinden de gider; yük altında işaretlemeden önce düşüp calls[0] olabiliyordu (kararsızlığın kaynağı).
+    expect(mockApi.suggestTemplate.mock.lastCall?.[0].base).toEqual({ code: 'u-gulecsoy', keep: ['tables'] });
   });
 
   it('⭐ aynı tablette ikinci güncelleme yeni sürümle gider (kayıt şablon önbelleğini tazeler; s1b inceleme)', async () => {
@@ -252,9 +255,9 @@ describe('TeachEntry + TeachModal — güncelle kipi (s1b inceleme)', () => {
     });
     const r = renderWithPaper(<QueryClientProvider client={qc}><TeachEntry detail={detail('t-u1')} localPages={LOCAL} /></QueryClientProvider>);
     const round = async () => {
-      await waitFor(() => expect(r.getByTestId('tanit-ac')).toHaveTextContent(/Şablonu güncelle/));
+      await waitFor(() => expect(r.getByTestId('tanit-ac')).toHaveTextContent(/Tanımı düzenle/));
       await openNew(r);
-      expect(r.getByTestId('tanit-baslik')).toHaveTextContent(/Şablonu güncelle/);
+      expect(r.getByTestId('tanit-baslik')).toHaveTextContent(/Tanımı düzenle/);
       await press(r.getByTestId('tanit-kutu-6'));
       await press(r.getByTestId('tanit-alan-partiNo'));
       await press(r.getByTestId('tanit-onizle'));
@@ -278,7 +281,7 @@ describe('TeachEntry + TeachModal — giriş ve görünürlük', () => {
     await press(await r.findByText('Güleçsoy'));
     expect(await r.findByTestId('tanit-kutu-6')).toBeTruthy();
     expect(mockApi.getUserTemplate).toHaveBeenCalledWith('u-gulecsoy');
-    expect(r.getByTestId('tanit-baslik')).toHaveTextContent(/Şablonu güncelle — Güleçsoy/);
+    expect(r.getByTestId('tanit-baslik')).toHaveTextContent(/Tanımı düzenle — Güleçsoy/);
   });
 
   it('izinsizde ve eski sunucuda (tarama yok) giriş çizilmez; cihaz tipinden bağımsız (K30-A: telefonda da açılır)', async () => {

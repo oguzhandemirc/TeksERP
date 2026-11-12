@@ -167,6 +167,7 @@ const html = String.raw`<div class="sheet">
 {%- if ayar.sections.procedureCode and belge.gumruk_no != nil -%}<div class="ln">Gümrük/İhracat No: <b>{{ belge.gumruk_no }}</b></div>{%- endif -%}
 {%- if ayar.sections.orders and belge.siparisler != nil and belge.siparisler != "" -%}<div class="ln sub">Sipariş: {{ belge.siparisler }}</div>{%- endif -%}
 {%- if toplamlar.cuval_beyan_adedi != nil -%}<div class="ln">Çuval Adedi: <b>{{ toplamlar.cuval_beyan_adedi }}</b> <span class="sub">({{ toplamlar.cuval_adedi }} sistemde)</span></div>{%- endif -%}
+{%- if toplamlar.yuk_ozeti != nil -%}<div class="ln">Yük: <b>{{ toplamlar.yuk_ozeti }}</b></div>{%- endif -%}
 </div>
 </header>
 {%- if ayar.sections.vehicleInfo -%}

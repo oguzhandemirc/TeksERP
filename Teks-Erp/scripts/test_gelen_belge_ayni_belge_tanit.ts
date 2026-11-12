@@ -210,6 +210,10 @@ async function main(): Promise<void> {
     const u1 = await call("POST", "/api/gelen-belge/sablonlar/oneri", updBody([{ field: "musteri", rect: lineRect(OWNER_NAME) }]));
     const t1 = u1.data?.template as { fields: Spec[] } | undefined;
     check("§4 ⭐ yalnız müşteri yeniden atanınca diğer eski alanlar birebir korunur", u1.status === 200 && oldKeys.filter((k) => k !== "musteri").every((k) => specOf(t1?.fields, k) === specOf(before.template.fields, k)) && specOf(t1?.fields, "musteri") !== "null", `${u1.status} ${JSON.stringify(t1?.fields?.map((f) => f.key))}`);
+    const dropKey = oldKeys.find((k) => k !== "musteri" && k !== "evrakNo") ?? "";
+    const u3 = await call("POST", "/api/gelen-belge/sablonlar/oneri", { ...updBody([]), base: { code, keep: ["tables"], drop: [dropKey] }, rules: { multiParty: "PER_PARTY" } });
+    const t3 = u3.data?.template as { fields: Spec[]; rules?: { multiParty?: string } } | undefined;
+    check("§4 ⭐ güncellemede `base.drop` alanı düşer, diğerleri birebir; `rules` yazılır (B2)", u3.status === 200 && !!dropKey && specOf(t3?.fields, dropKey) === "null" && oldKeys.filter((k) => k !== dropKey).every((k) => specOf(t3?.fields, k) === specOf(before.template.fields, k)) && t3?.rules?.multiParty === "PER_PARTY", `${u3.status} ${u3.code ?? ""} ${dropKey} ${JSON.stringify(t3?.rules)}`);
     const u2 = await call("POST", "/api/gelen-belge/sablonlar/oneri", updBody([], false));
     check("§4 yeni belge tipinde (base'siz) atamasız öneri yine 400", u2.status === 400, `${u2.status} ${u2.code ?? ""}`);
     const put = await call("PUT", `/api/gelen-belge/sablonlar/ozel/${code}`, { expectedVersion: before.version, template: t0, name });

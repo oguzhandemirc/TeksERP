@@ -94,6 +94,7 @@ export function processSummaryKey(scope: ProcessSummaryScope) {
 export interface DeliveryNoteGramajSuggestion {
   /** Kapsanan bütün toplar tek çeşitte birleştiyse; aksi halde null (liste gösterilir). */
   suggested: { valueId: string; valueName: string } | null;
+  /** Girdi kökü sayısı ("Üretime giren" ile aynı birim; Tambur çıktıları ayrıca sayılmaz). */
   rollCount: number;
   coveredRollCount: number;
   entries: Array<{ valueId: string | null; valueName: string | null; processText: string | null; rollCount: number }>;
@@ -104,8 +105,6 @@ export interface DeliveryNoteGramajSuggestion {
     suggested: { valueId: string; valueName: string } | null;
     entries: Array<{ valueId: string | null; valueName: string | null; processText: string | null; rollCount: number }>;
   }>;
-  /** Partili gelen belge yoksa / eski backend → anahtar yok (D4-D2). */
-  customerBatches?: WorkOrderCustomerBatch[];
 }
 
 /** Kurşun DIŞI aktif hedef (brode deseni vb., D4-D2); İE'de böyle hedef yoksa / eski backend → anahtar yok. */
@@ -114,15 +113,6 @@ export interface VariantTarget {
   propertyName: string;
   valueId: string;
   valueName: string;
-}
-
-/** Topların türetilmiş müşteri partisi (D4-D2; gelen belge partisi). */
-export interface WorkOrderCustomerBatch {
-  key: string;
-  ownerCustomerId: string;
-  ownerName: string;
-  batchNo: string;
-  rollCount: number;
 }
 
 export interface ProcessSummaryData {

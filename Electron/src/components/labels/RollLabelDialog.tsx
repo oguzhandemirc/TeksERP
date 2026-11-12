@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Printer, Pencil, X, AlertTriangle } from "lucide-react";
+import { Printer, Pencil, AlertTriangle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -11,18 +11,18 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PermissionGate } from "@/components/PermissionGate";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { labelService } from "@/services/labelService";
 import type { PrintJobAttachment } from "@/services/printJobService";
+import type { LabelPreviewResult } from "@/services/rollLabelEditService";
 import { printTracked } from "@/lib/print";
 import { useLabelPrinter } from "@/hooks/useLabelPrinter";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { qualityGradeService } from "@/pages/QualityGrades/service";
-import { relabelService } from "@/pages/Operations/RelabelStation/service";
-import { RelabelPrintForCustomer as PrintForCustomerCard } from "./PrintForCustomerCard";
+import { LabelPreviewZoom } from "./LabelPreviewZoom";
+import { RollLabelEditPanel } from "./RollLabelEditPanel";
 import { DesktopOnlyAction } from "@/components/ui/DesktopOnlyAction";
 
 interface Props {
@@ -35,7 +35,7 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
   const qc = useQueryClient();
   const { hasPermission } = useRoleAccess();
 
-  // Payload — orderLineId (Edit gating) ve LabelEditDialog için master adlar.
+  // Payload — barkod/kalite (fire kapısı) için; düzenleme formu kendi ucundan gelir.
   const payloadQuery = useQuery({
     queryKey: ["label-roll", rollId],
     queryFn: () => labelService.getRollLabel(rollId!),
@@ -93,15 +93,6 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
   });
   const preview = previewQuery.data;
 
-  // Müşteri adayları + son baskı bilgisi için relabel bağlamı (aynı payload, rollId ile).
-  const relabelCtxQuery = useQuery({
-    queryKey: ["relabel-context", "roll", rollId],
-    queryFn: () => relabelService.getContextByRollId(rollId!),
-    enabled: open,
-    staleTime: 0,
-  });
-  const relabelCtx = relabelCtxQuery.data?.data ?? null;
-
   const [editOpen, setEditOpen] = useState(false);
   const [sending, setSending] = useState(false);
 
@@ -115,7 +106,8 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
     },
   });
 
-  const handlePrint = async () => {
+  // `fresh`: "Kaydet ve bas" sonrası kayıtlı hâlin önizlemesi (sistem penceresi yolu bunu basar).
+  const handlePrint = async (fresh?: LabelPreviewResult) => {
     if (directEnabled) {
       if (sending) return; // çift-tık koruması — seri/BT gönderim ~1sn sürebilir.
       setSending(true);
@@ -134,109 +126,122 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
     }
     // Sistem penceresi yedeği: önizleme HTML'i boğazdan basılır. Ham komut önizlemesi (text)
     // OS penceresinden basılamaz — kâğıt çıkmadan "basıldı" damgası atılmaz.
-    if (!preview || preview.mode === "text") {
+    const doc = fresh ?? preview;
+    if (!doc || doc.mode === "text") {
       toast.error("Bu etiket dili yazdırma penceresinden basılamaz; etiket yazıcısını ayarlayın.");
       return;
     }
     const out = await printTracked({
       subject: { kind: "ETIKET_TOP", table: "rolls", id: rollId! },
-      html: preview.content,
+      html: doc.content,
       workEndpoint: true,
     });
     if (out.proceed) printMut.mutate(out.printJob);
   };
 
   const payload = payloadQuery.data?.data;
-  const canEdit = Boolean(payload?.orderLineId) && hasPermission("label:edit");
+  // Kaydetme ucu `label:edit` ya da `roll:write` ister (backend requireAnyPermission ile aynı liste).
+  const canEdit = hasPermission("label:edit") || hasPermission("roll:write");
   const canPrint = hasPermission("label:print");
   const hasBarcode = Boolean(payload?.barcode);
 
-  return (
-    <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Top Etiketi</DialogTitle>
-            <DialogDescription>
-              Bas tuşuna basınca bu etiket olduğu gibi yazıcıya gider.
-            </DialogDescription>
-          </DialogHeader>
+  const handleSaved = async (print: boolean) => {
+    setEditOpen(false);
+    if (!print) return;
+    // Kayıtlı hâlin önizlemesi taze çekilir: sistem penceresi yolu tam bunu basar.
+    const fresh = await qc.fetchQuery({
+      queryKey: ["label-roll-preview", rollId, peripheralId, scrapGateOpen],
+      queryFn: () => labelService.getRollPreview(rollId!, scrapConfirmed ? { confirmScrap: true } : undefined, peripheralId),
+      staleTime: 0,
+    });
+    await handlePrint(fresh);
+  };
 
-          <PermissionGate
-            permission="label:read"
-            fallback={
-              <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
-                Bu top için etiket görüntüleme yetkisi yok.
+  const close = (o: boolean) => {
+    if (!o) setEditOpen(false);
+    onOpenChange(o);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={close}>
+      <DialogContent className={editOpen ? "max-w-6xl" : "max-w-3xl"}>
+        <DialogHeader>
+          <DialogTitle>{editOpen ? "Etiketi Düzenle" : "Top Etiketi"}</DialogTitle>
+          <DialogDescription>
+            {editOpen
+              ? "Değişiklikler yalnız bu topun etiketinde görünür; kayıtlar (ölçü, cari, katalog) değişmez."
+              : "Bas tuşuna basınca bu etiket olduğu gibi yazıcıya gider."}
+          </DialogDescription>
+        </DialogHeader>
+
+        <PermissionGate
+          permission="label:read"
+          fallback={
+            <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
+              Bu top için etiket görüntüleme yetkisi yok.
+            </div>
+          }
+        >
+          {!scrapGateOpen ? (
+            /* FİRE ONAY PANELİ — önizleme yerine. Engelleme DEĞİL, onaylatma:
+               fire topun fiziksel tanımlanması gerekebilir ve baskı yolunu
+               tamamen kapatmak sahayı çıkışsız bırakır. */
+            <div className="flex h-[560px] flex-col items-center justify-center gap-4 rounded-md border border-dashed border-amber-500/60 bg-amber-50/50 p-8 text-center dark:bg-amber-950/20">
+              <AlertTriangle className="h-10 w-10 text-amber-600" />
+              <div className="space-y-2">
+                <p className="text-base font-semibold">Bu top fire kalitede</p>
+                <p className="mx-auto max-w-md text-sm text-muted-foreground">
+                  Fire mala otomatik etiket basılmaz — etiket bir <em>satılabilirlik</em> işaretidir ve fire
+                  malın akışa geri girmesini kolaylaştırır. Yine de gerekiyorsa etiketi görüp basabilirsiniz.
+                </p>
               </div>
-            }
-          >
-            {preview && (
-              <div className="text-[11px] text-muted-foreground">
-                Aktif dil: <strong>{preview.language}</strong> ·{" "}
-                {preview.mode === "text" ? "ham komut (görsel yok)" : "önizleme = baskı"}
-              </div>
-            )}
-            {previewQuery.isLoading ? (
-              <Skeleton className="h-[640px] w-full" />
-            ) : !scrapGateOpen ? (
-              /* FİRE ONAY PANELİ — önizleme yerine. Engelleme DEĞİL, onaylatma:
-                 fire topun fiziksel tanımlanması gerekebilir ve baskı yolunu
-                 tamamen kapatmak sahayı çıkışsız bırakır. */
-              <div className="flex h-[640px] flex-col items-center justify-center gap-4 rounded-md border border-dashed border-amber-500/60 bg-amber-50/50 p-8 text-center dark:bg-amber-950/20">
-                <AlertTriangle className="h-10 w-10 text-amber-600" />
-                <div className="space-y-2">
-                  <p className="text-base font-semibold">Bu top fire kalitede</p>
-                  <p className="mx-auto max-w-md text-sm text-muted-foreground">
-                    Fire mala otomatik etiket basılmaz — etiket bir{" "}
-                    <em>satılabilirlik</em> işaretidir ve fire malın akışa geri
-                    girmesini kolaylaştırır. Yine de gerekiyorsa etiketi görüp
-                    basabilirsiniz.
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="gap-1 border-amber-600 text-amber-700 hover:bg-amber-100 dark:text-amber-400"
-                  onClick={() => setScrapConfirmed(true)}
-                >
-                  <AlertTriangle className="h-3.5 w-3.5" /> Yine de göster ve bas
-                </Button>
-              </div>
-            ) : previewQuery.isError ? (
-              <div className="rounded-md border border-dashed p-6 text-center text-sm text-destructive">
-                Etiket alınamadı: {(previewQuery.error as Error).message}
-              </div>
-            ) : preview?.mode === "text" ? (
-              <pre className="h-[640px] w-full overflow-auto whitespace-pre-wrap break-all rounded border bg-muted/20 p-3 font-mono text-[11px] leading-relaxed">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="gap-1 border-amber-600 text-amber-700 hover:bg-amber-100 dark:text-amber-400"
+                onClick={() => setScrapConfirmed(true)}
+              >
+                <AlertTriangle className="h-3.5 w-3.5" /> Yine de göster ve bas
+              </Button>
+            </div>
+          ) : editOpen && rollId ? (
+            <RollLabelEditPanel
+              rollId={rollId}
+              peripheralId={peripheralId}
+              confirmScrap={scrapConfirmed}
+              canSave={canEdit}
+              canPrint={canPrint && hasBarcode}
+              onCancel={() => setEditOpen(false)}
+              onSaved={(print) => void handleSaved(print)}
+            />
+          ) : previewQuery.isLoading ? (
+            <Skeleton className="h-[560px] w-full" />
+          ) : previewQuery.isError ? (
+            <div className="rounded-md border border-dashed p-6 text-center text-sm text-destructive">
+              Etiket alınamadı: {(previewQuery.error as Error).message}
+            </div>
+          ) : preview?.mode === "text" ? (
+            /* Ham komut dili (görsel yok) — yazıcı dili ipucu yalnız burada. */
+            <div className="space-y-1">
+              <p className="text-[11px] text-muted-foreground">Yazıcı dili {preview.language}: görsel önizleme yok, ham komut gösteriliyor.</p>
+              <pre className="h-[560px] w-full overflow-auto whitespace-pre-wrap break-all rounded border bg-muted/20 p-3 font-mono text-[11px] leading-relaxed">
                 {preview.content}
               </pre>
-            ) : (
-              <iframe
-                title="Top etiketi"
-                srcDoc={preview?.content ?? ""}
-                sandbox="allow-same-origin allow-modals"
-                className="h-[640px] w-full rounded border bg-white"
-              />
-            )}
+            </div>
+          ) : (
+            <LabelPreviewZoom content={preview?.content ?? ""} title="Top etiketi" />
+          )}
 
-            {/* "B müşterisi için bas" — etiket A'ya basılmış ama mal B'ye gidecek.
-                2026-07-30: eskiden "Yeniden Etiketle/Düzenle" diyaloğundaydı; TÜM
-                baskı işleri tek yerde toplansın diye buraya taşındı (veri düzeltme
-                artık "Düzelt" diyaloğunda, baskı burada). */}
-            {relabelCtx && <PrintForCustomerCard ctx={relabelCtx} />}
-
-            <DialogFooter className="flex flex-wrap items-center justify-end gap-2">
+          {!editOpen && (
+            <DialogFooter className="flex flex-row flex-wrap items-center gap-2 sm:justify-between">
+              <Button type="button" size="sm" variant="outline" onClick={() => close(false)}>
+                Kapat
+              </Button>
               <div className="flex gap-2">
-                {canEdit && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setEditOpen(true)}
-                    className="gap-1"
-                  >
-                    <Pencil className="h-3.5 w-3.5" /> Düzenle
+                {canEdit && scrapGateOpen && (
+                  <Button type="button" size="sm" variant="outline" onClick={() => setEditOpen(true)} className="gap-1" disabled={!payload}>
+                    <Pencil className="h-3.5 w-3.5" /> Etiketi düzenle
                   </Button>
                 )}
                 {canPrint && payload && (
@@ -245,130 +250,17 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
                       type="button"
                       size="sm"
                       disabled={!hasBarcode || !scrapGateOpen || previewQuery.isLoading || printMut.isPending || sending}
-                      onClick={handlePrint}
+                      onClick={() => void handlePrint()}
                       className="gap-1"
                     >
                       <Printer className="h-3.5 w-3.5" /> Bas
                     </Button>
                   </DesktopOnlyAction>
                 )}
-                <Button type="button" size="sm" variant="outline" onClick={() => onOpenChange(false)}>
-                  Kapat
-                </Button>
               </div>
             </DialogFooter>
-          </PermissionGate>
-        </DialogContent>
-      </Dialog>
-
-      {payload?.orderLineId && (
-        <LabelEditDialog
-          open={editOpen}
-          onOpenChange={setEditOpen}
-          orderLineId={payload.orderLineId}
-          initialItemName={
-            payload.itemNameSource === "OVERRIDE" ? payload.itemName : ""
-          }
-          initialColorName={
-            payload.colorNameSource === "OVERRIDE" ? payload.colorName ?? "" : ""
-          }
-          masterItemName={payload.itemName}
-          masterColorName={payload.colorName}
-          onSaved={() => {
-            void qc.invalidateQueries({ queryKey: ["label-roll", rollId] });
-            void qc.invalidateQueries({ queryKey: ["label-roll-preview", rollId] });
-          }}
-        />
-      )}
-    </>
-  );
-}
-
-function LabelEditDialog({
-  open,
-  onOpenChange,
-  orderLineId,
-  initialItemName,
-  initialColorName,
-  masterItemName,
-  masterColorName,
-  onSaved,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  orderLineId: string;
-  initialItemName: string;
-  initialColorName: string;
-  masterItemName: string;
-  masterColorName: string | null;
-  onSaved: () => void;
-}) {
-  const [itemName, setItemName] = useState(initialItemName);
-  const [colorName, setColorName] = useState(initialColorName);
-
-  const mut = useMutation({
-    mutationFn: () =>
-      labelService.updateOrderLineOverride(orderLineId, {
-        customerItemName: itemName.trim() === "" ? null : itemName.trim(),
-        customerColorName: colorName.trim() === "" ? null : colorName.trim(),
-      }),
-    onSuccess: () => {
-      toast.success("Etiket adı güncellendi.");
-      onSaved();
-      onOpenChange(false);
-    },
-  });
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Etiket Adlarını Düzenle</DialogTitle>
-          <DialogDescription>
-            Bu siparişe özel ad sabitlenir. Boş bırakırsanız master alias veya standart ad'a düşer.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-3">
-          <div>
-            <label className="text-xs font-medium">Müşterideki kumaş adı</label>
-            <Input
-              value={itemName}
-              onChange={(e) => setItemName(e.target.value)}
-              placeholder={masterItemName}
-            />
-            <p className="mt-1 text-[10px] text-muted-foreground">
-              Boş bırakırsan etiketteki ad "{masterItemName}" olur.
-            </p>
-          </div>
-          <div>
-            <label className="text-xs font-medium">Müşterideki renk adı</label>
-            <Input
-              value={colorName}
-              onChange={(e) => setColorName(e.target.value)}
-              placeholder={masterColorName ?? "(renk yok)"}
-              disabled={!masterColorName}
-            />
-            {masterColorName && (
-              <p className="mt-1 text-[10px] text-muted-foreground">
-                Boş bırakırsan etiketteki ad "{masterColorName}" olur.
-              </p>
-            )}
-          </div>
-        </div>
-
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            <X className="h-3.5 w-3.5" /> İptal
-          </Button>
-          <Button
-            type="button"
-            disabled={mut.isPending}
-            onClick={() => mut.mutate()}
-          >
-            {mut.isPending ? "Kaydediliyor..." : "Kaydet"}
-          </Button>
-        </DialogFooter>
+          )}
+        </PermissionGate>
       </DialogContent>
     </Dialog>
   );

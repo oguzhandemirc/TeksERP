@@ -176,6 +176,9 @@ function makeCandidate(elements: OcrElement[], direction: "right" | "below", fir
   return { raw, elements, rect: unionRect(elements.map((e) => e.rect)), direction };
 }
 
+/** Tanıtmada öğrenilen atlama: aynı etiketin sağında birden çok değer varken ("TOPLAM 241,00 MT 734,00 KG") dokunulan değere kadar. */
+const skipOf = (s: AnchorStrategy): number => (typeof s.skipWords === "number" && Number.isInteger(s.skipWords) && s.skipWords > 0 ? s.skipWords : 0);
+
 /** Değer metninin başındaki ayraçları ayıklar (": 12345" → "12345"). */
 function stripLeadingSeparators(elements: OcrElement[]): OcrElement[] {
   let i = 0;
@@ -197,17 +200,22 @@ export function findValueRight(m: LabelMatch, ctx: AnchorContext, strategy: Anch
     rest = [{ ...lastEl, text: m.remainder }, ...els.slice(m.elementEnd)];
     firstOverride = m.remainder;
   } else rest = stripLeadingSeparators(els.slice(m.elementEnd));
+  let skip = skipOf(strategy);
+  let labelRight = right(m.rect);
   if (rest.length > 0) {
     const cut = stop ? findStopIndex(rest, ctx.otherLabels) : rest.length;
-    const c = makeCandidate(limitValueElements(rest.slice(0, cut), strategy, firstOverride), "right", firstOverride);
+    const own = skip ? undefined : firstOverride;
+    const c = makeCandidate(limitValueElements(rest.slice(0, cut).slice(skip), strategy, own), "right", own);
     if (c) return c;
     // Değer başka bir etiketle kesildi ve boş kaldı → sağdaki satırlara bakma, alt arama denenmeli
     if (cut === 0) return null;
+    // Atlama tek kelime dizisidir: aynı satırda tüketilen kelimeler ("T.Adet 5 | 141,70 | 586,00" → "5") bantta yeniden sayılmaz.
+    skip = Math.max(0, skip - cut);
+    labelRight = Math.max(labelRight, ...rest.slice(0, cut).map((e) => right(e.rect)));
   }
   // 2) Etiket kutusunun dikey bandında, sağında başlayan en yakın satırlar
   const labelH = Math.max(m.rect.height, 1);
   const labelCy = centerY(m.rect);
-  const labelRight = right(m.rect);
   const maxGap = maxDistance * labelH * 4;
   const band: Array<{ line: OcrLine; gap: number }> = [];
   for (const row of ctx.rows) {
@@ -215,7 +223,7 @@ export function findValueRight(m: LabelMatch, ctx: AnchorContext, strategy: Anch
       if (line === m.line) continue;
       if (Math.abs(centerY(line.rect) - labelCy) > 0.6 * labelH) continue;
       const gap = line.rect.x - labelRight;
-      if (gap < -0.3 * labelH || gap > maxGap) continue;
+      if (gap < -0.3 * labelH || (!skip && gap > maxGap)) continue;
       band.push({ line, gap });
     }
   }
@@ -224,13 +232,15 @@ export function findValueRight(m: LabelMatch, ctx: AnchorContext, strategy: Anch
   const taken: OcrElement[] = [];
   let prevRight = labelRight;
   for (const b of band) {
-    if (taken.length > 0 && b.line.rect.x - prevRight > 1.5 * labelH) break;
+    // Atlanan kelimeler (`skipWords`) dolana dek sütun aralığı kadar boşluk geçilir ("TOPLAM 241,00 MT   734,00 KG"); sonra bitişik.
+    const limit = taken.length > skip ? 1.5 * labelH : maxGap;
+    if ((taken.length > 0 || skip > 0) && b.line.rect.x - prevRight > limit) break;
     taken.push(...lineElements(b.line));
     prevRight = right(b.line.rect);
   }
   const cleaned = stripLeadingSeparators(taken);
   const cut = stop ? findStopIndex(cleaned, ctx.otherLabels) : cleaned.length;
-  return makeCandidate(limitValueElements(cleaned.slice(0, cut), strategy), "right");
+  return makeCandidate(limitValueElements(cleaned.slice(0, cut).slice(skip), strategy), "right");
 }
 
 /** below: etiketin altında, yatayda etiketle çakışan ya da sol kenarı etiket soluna yakın ilk takeLines satır. */
@@ -270,5 +280,5 @@ export function findValueBelow(m: LabelMatch, ctx: AnchorContext, strategy: Anch
     }
     if (cut < els.length) break; // bu satırda başka bir etiket başladı
   }
-  return makeCandidate(limitValueElements(collected, strategy), "below");
+  return makeCandidate(limitValueElements(collected.slice(skipOf(strategy)), strategy), "below");
 }

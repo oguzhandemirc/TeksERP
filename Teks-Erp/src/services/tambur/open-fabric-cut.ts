@@ -7,6 +7,7 @@
 // =============================================================================
 /* eslint-disable max-lines -- devralınan gövde kelimesi kelimesine taşındı; ailenin max-lines katkısı bölme öncesi gibi TEK (tambur/finalize.ts sayılır) */
 
+import { rollLabelKindOf, stageForProductionExit } from "../helpers/roll-stage.helper";
 import { ACTIVE_OPERATION } from "../helpers/roll-operation.helper";
 import { ACTIVE_ROLL_PROPERTY, inheritRollPropertiesTx } from "../helpers/property-revoke.helper";
 import {
@@ -22,7 +23,7 @@ import {
   loadQualityRoles,
 } from "../helpers/quality-role.helper";
 import { resolveEntryStationId } from "../helpers/roll-entry-station.helper";
-import { resolveTargetWarehouseId } from "../helpers/warehouse.helper";
+import { resolveBirthWarehouseIdTx } from "../helpers/emanet-warehouse.helper";
 import {
   resolveTamburOverQuantityEnabled,
 } from "../system-setting.service";
@@ -56,9 +57,12 @@ import { buildIntentSnapshot } from "../label.service";
 import { resolveLabelIntent, labelCustomerIdOf } from "../helpers/label-intent.helper";
 import { generateRollBarcodeTx } from "../helpers/roll-barcode.helper";
 import { TERIM } from "../../constants/terim";
-import { resolveTamburCutWeight, resolveTamburLabelBatchNo } from "../helpers/tambur-customer-settings.helper";
+import { resolveTamburConsignee, resolveTamburCutWeight, resolveTamburLabelBatchNo, resolveTamburWeightSource } from "../helpers/tambur-customer-settings.helper";
+import { inheritedChildWidth, resolveTamburChildWidth } from "../helpers/tambur-child-label.helper";
+import { resolveRollLabelTexts } from "../helpers/label-batch-no.helper";
 import type { TamburService } from "../tambur.service";
 import { applyTamburCapabilitiesTx, cutReplay, type TamburServiceThis } from "./shared";
+import { resolveTamburLabelTemplate } from "../helpers/tambur-label-template.helper";
 
 export async function cutOpenFabric(this: TamburServiceThis, 
     ...args: Parameters<TamburService["cutOpenFabricInner"]>
@@ -100,6 +104,18 @@ export async function cutOpenFabricInner(
       weightKg?: number | null;
       /** Müşterinin etikete istediği parti metni — çocuğa yazılır (miras yok). */
       labelBatchNo?: string | null;
+      labelItemName?: string | null;
+      labelColorName?: string | null;
+      /** Emanet top etiket alıcısı (sahibin alıcısı; boş = sahibin kendisi). */
+      labelConsigneeId?: string | null;
+      /** Kesimde seçilen etiket şablonu (çoklu etiket seti); boş/varsayılan = null yazılır. */
+      labelTemplateId?: string | null;
+      /** Teklif hesabının cihaz bağlamı (controller `req.device.id`). */
+      labelDeviceId?: string | null;
+      /** Etikette kartında ölçülen en (cm) — mirası ezer (K7). */
+      widthCm?: number | null;
+      /** Kg kaynağı beyanı (SCALE | MANUAL | SIMULATED); kaynaksız kg MANUAL yazılır. */
+      weightSource?: "SCALE" | "MANUAL" | "SIMULATED" | null;
     },
     userId?: string,
     /** Kesimin makinesi — "Bu makine" süzgeci + makine raporları (2026-08-12). */
@@ -138,6 +154,14 @@ export async function cutOpenFabricInner(
       targetCustomerId: data.targetCustomerId,
       ownerCustomerId: parent.ownerCustomerId,
     });
+    // Etikete basılacak kumaş adı / renk — topun kendi değeri (miras yok), ayara bağlı değil.
+    const labelTexts = resolveRollLabelTexts(data);
+    // Kg kaynağı (tek boğaz) + emanet alıcısı + en (miras/belge/ölçülen, K7) — tx'ten önce.
+    const cutWeightSource = await resolveTamburWeightSource({ weightKg: cutWeightKg, weightSource: data.weightSource, stamp: { machineId: sessionMachineId } });
+    const cutConsigneeId = await resolveTamburConsignee({
+      labelConsigneeId: data.labelConsigneeId, targetCustomerId: data.targetCustomerId, ownerCustomerId: parent.ownerCustomerId,
+    });
+    const cutWidth = await resolveTamburChildWidth(await inheritedChildWidth(parent.id, parent.width), data.widthCm);
     // Barkod-reddi KALDIRILDI (2026-07-16): Tambur adımındaki HER top kesilebilir —
     // barkodsuz açık kumaş VE Konumu-Düzelt ile buraya gelmiş barkodlu TOP. Barkod artık
     // dispatch anahtarı değil, yalnız çocuk-etiketleme semantiği (çocuk hep taze "F" barkod).
@@ -221,9 +245,17 @@ export async function cutOpenFabricInner(
     // Açık kumaş child her zaman WAREHOUSE → "F" (final). Barkod sunucudan (atomik sayaç).
     const childBarcode = await generateRollBarcodeTx(prisma, "F");
     // Etiket niyeti (pre-tx çözüm) — açık kumaş child her zaman WAREHOUSE.
-    const cutIntent = await resolveLabelIntent(data);
+    const cutIntent = await resolveLabelIntent({ ...data, ownerCustomerId: parent.ownerCustomerId });
     const cutIntentSnapshot = buildIntentSnapshot(cutIntent);
     const cutLabelCustomerId = labelCustomerIdOf(cutIntent);
+    const cutTemplate = await resolveTamburLabelTemplate({
+      labelTemplateId: data.labelTemplateId,
+      kind: rollLabelKindOf(stageForProductionExit(parent.currentStep?.outputStage)),
+      customerId: cutLabelCustomerId,
+      consigneeId: cutConsigneeId,
+      deviceId: data.labelDeviceId,
+      machineId: sessionMachineId,
+    });
 
     // Operatör explicit kod verdiyse SIKI doğrula (katalog+aktif); rolden çözülen
     // kod ZATEN aktif katalog satırından geldiği için lenient yol yeterli
@@ -275,7 +307,7 @@ export async function cutOpenFabricInner(
         clientToken: data.clientToken ?? null,
         itemId: parent.itemId,
         colorId: parent.colorId,
-        width: parent.width,
+        width: cutWidth.width,
         // KAT — kesim anında seçilen değer KAZANIR (kullanıcı kararı: "top
         // kesilerek yeni bir kat değeri kazanabilir"). `undefined` = istemci
         // alanı hiç GÖNDERMEDİ → parent, o da yoksa iş emri planı (eski APK
@@ -287,7 +319,13 @@ export async function cutOpenFabricInner(
         initialQty: data.lengthMeters,
         currentQty: data.lengthMeters,
         weightKg: cutWeightKg,
+        weightSource: cutWeightSource,
+        labelConsigneeId: cutConsigneeId,
+        labelTemplateId: cutTemplate.labelTemplateId,
+        labelTemplateKind: cutTemplate.labelTemplateKind,
         labelBatchNo: cutLabelBatchNo,
+        labelItemName: labelTexts.labelItemName,
+        labelColorName: labelTexts.labelColorName,
         status: childStatus,
         qualityGrade: resolvedQualityGrade,
         qualityGradeId: resolvedQualityGradeId,
@@ -297,13 +335,14 @@ export async function cutOpenFabricInner(
         ownerCustomerId: parent.ownerCustomerId ?? null,
         // Parti (batch) kimliğini parent'tan kalıt → bölünen top depoya gitse bile partisi lane'de izlenir.
         batchId: parent.batchId,
-        // DEPO parent'tan MİRAS ALINIR — kesmek malı taşımaz (bkz. kesim çocuğu).
-        warehouseId: parent.warehouseId ?? (await resolveTargetWarehouseId(tx)),
+        // DEPO: üretim çıktısı — sahipli ise emanet deposu (açıkken), yoksa ebeveynin kayıtlı deposu (fason.md F1b).
+        warehouseId: await resolveBirthWarehouseIdTx(tx, null, parent.ownerCustomerId, parent.warehouseId),
         // GİRİŞ İSTASYONU — kesim hangi Tambur adımındaysa çocuk orada doğdu.
         // Parent'tan MİRAS ALINMAZ: parent başka bir istasyonda girmiş olabilir
         // (depo topu yeni bir iş emrine sokulabiliyor); doğru cevap KESİMİN yeri.
         entryStationId: resolveEntryStationId({ stepStationId: parent.currentStep?.stationId }),
         entrySource: RollEntrySource.TAMBUR_SPLIT,
+        stage: stageForProductionExit(parent.currentStep?.outputStage),
         createdById: userId ?? null,
         createdMachineId: sessionMachineId ?? null,
         // Sadece depoya giden (WAREHOUSE) çıktı kartelalık işaretlenir.
@@ -323,7 +362,7 @@ export async function cutOpenFabricInner(
     if (propertySnapshot.length > 0) {
       await inheritRollPropertiesTx(tx, { childId: child.id, rows: propertySnapshot });
     }
-    await applyTamburCapabilitiesTx(tx, { caps: tamburCaps, stationId: tamburStationId, rollId: child.id, userId });
+    await applyTamburCapabilitiesTx(tx, { caps: tamburCaps, stationId: tamburStationId, rollId: child.id, userId, birth: "OUTPUT" });
 
     // KURSUN_APPLIED + QC2_COMPLETED kalıtım — parent açık kumaşta yapılan
     // işlemler child top'a `inheritedFromParentRollId=parent.id` ile kopyalanır.
@@ -475,6 +514,8 @@ export async function cutOpenFabricInner(
         barcode: result.child.barcode,
         parentRemainingQty: result.newParentQty,
         notes: data.notes ?? null,
+        ...(cutWidth.trace ? { measuredWidth: cutWidth.trace } : {}),
+        ...(labelTexts.labelItemName || labelTexts.labelColorName ? labelTexts : {}),
       },
     });
 

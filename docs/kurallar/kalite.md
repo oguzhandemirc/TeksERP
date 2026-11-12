@@ -100,7 +100,8 @@
 ### Değişmezler
 
 - **[ÇEKİRDEK]** Mobil oturumlu ekran türden seçilir: `SCREEN_BY_STATION_KIND` (RAW_QC→KK1, PROCESS_QC→KursunQc, TAMBUR→Tambur, SHIPPING→TartiPaket) backend `SESSIONABLE_STATION_KINDS` aynası, bijektif; bu tabloya yetenek sokma (Faz B R4).
-- **[PROFİL]** Kurşunsuz kalite istasyonunu (Detaylı KK) ayrı ekran/tür açmadan kur: INTERNAL/PROCESS_QC + `appliesQuality` + `inspectionEnabled`, özellik yeteneği/makine yok; panel yetenekten, metin `flowScreenLabels`; kurulum `scripts/detayli-kk-kurulum.ts` (kuru koşu varsayılan).
+- **[PROFİL]** Kurşunsuz kalite istasyonunu (Detaylı KK) ayrı tür açmadan kur: INTERNAL/PROCESS_QC + `appliesQuality` + `inspectionEnabled`, özellik yeteneği/makine yok; panel yetenekten, metin `flowScreenLabels`; kurulum `scripts/detayli-kk-kurulum.ts` (kuru koşu varsayılan).
+- **[PROFİL]** Kurşun vermeyen muayeneli PROCESS_QC istasyonunu tablette "Kalite Kontrol" ekranında (KursunQc, kurşun kipi kapalı; izin `mobile:kk2-kursun`) aç: sunucu yer nesnesine `isKursunStation` (`KURSUN_DISPATCH_STATION_WHERE`, `kursunStationIdSet`) yazar, tablet TEK yüklem `isQualityOnlyStation` (`stationScreens.ts`) ile ayırır; alanı göndermeyen eski sunucuda Kurşun ekranı kalır. · bekçi: `test_work_session` §14 · `stationScreens.test.ts` · `kaliteKontrolKipi.test.ts` <sub>(arşiv:2026-11-10)</sub>
 - **[ÇEKİRDEK]** Tambur 'Boyahaneye Geri Gönder': hedef adımı SUNUCU çözer (`/tambur/manual/send-to-dye-preview`, `stepCanApplyColor`); tablette yüklem yazma; önizlemesiz uygulama YOK, sebep ≥3; fason adımına taşıma AT_SUBCONTRACTOR yapmaz, çıkış Fason Sevk'ten.
 
 ### Yasaklar

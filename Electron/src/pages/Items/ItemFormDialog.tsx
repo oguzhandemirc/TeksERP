@@ -28,12 +28,14 @@ import {
   makeItemFormSchema,
   type ItemFormValues,
 } from "./schema";
-import { buildItemPayload, itemCarriesAllowedLists } from "./itemPayload.helper";
+import { buildItemPayload, fabricDetailPayload, fabricDetailToFormText, itemCarriesAllowedLists, yarnWastePayload } from "./itemPayload.helper";
+import { ItemYarnWasteField } from "./ItemYarnWasteField";
+import { ItemWeavingDetails } from "./ItemWeavingDetails";
 import { AllowedColorsDialog } from "./AllowedColorsDialog";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { warpSpecService } from "@/pages/WarpSpecs/service";
 import type { WarpSpec } from "@/pages/WarpSpecs/types";
-import { useDevereEnabled, useKaliteGuvenceEnabled } from "@/hooks/usePricingEnabled";
+import { useDevereEnabled, useKaliteGuvenceEnabled, useMaliyetEnabled } from "@/hooks/usePricingEnabled";
 import { AllowedPropertiesDialog } from "./AllowedPropertiesDialog";
 import { ItemCardTabs } from "./ItemCardTabs";
 import { ItemConstructionPickers, constructionPayload, useConstructionPickersVisible } from "./ItemConstructionPickers";
@@ -71,7 +73,11 @@ export function ItemFormDialog({
         itemType: initial.itemType as ProductItemType,
         unit: initial.unit,
         linearDensityDen: decimalToFormText(initial.linearDensityDen),
+        yarnWastePct: fabricDetailToFormText(initial.yarnWastePct),
         widthCm: initial.widthCm == null ? "" : String(Number(initial.widthCm)).replace(".", ","),
+        rawWidthCm: fabricDetailToFormText(initial.rawWidthCm),
+        rawGsm: fabricDetailToFormText(initial.rawGsm),
+        finishedGsm: fabricDetailToFormText(initial.finishedGsm),
         warpSpecId: initial.warpSpecId ?? "",
         weftSpecId: initial.weftSpecId ?? "",
         weaveDesignId: initial.weaveDesignId ?? "",
@@ -98,6 +104,8 @@ export function ItemFormDialog({
   const itemType = form.watch("itemType");
   const devereEnabled = useDevereEnabled();
   const kaliteGuvenceEnabled = useKaliteGuvenceEnabled();
+  const maliyetEnabled = useMaliyetEnabled();
+  const yarnWasteVisible = maliyetEnabled && itemType === ItemType.YARN;
   const constructionVisible = useConstructionPickersVisible(itemType);
   const derivedUnit = unitForItemType[itemType] ?? "MT";
 
@@ -159,7 +167,7 @@ export function ItemFormDialog({
   }, [allowedPropertyIds, propsQ.data?.data]);
 
   const handleSubmit = form.handleSubmit(async (v) => {
-    await onSubmit({ ...buildItemPayload(v, isEdit, kaliteGuvenceEnabled), ...constructionPayload(v, initial, constructionVisible) });
+    await onSubmit({ ...buildItemPayload(v, isEdit, kaliteGuvenceEnabled), ...constructionPayload(v, initial, constructionVisible), ...fabricDetailPayload(v, initial), ...yarnWastePayload(v, initial, yarnWasteVisible) });
   });
 
   return (
@@ -263,6 +271,8 @@ export function ItemFormDialog({
             </FormField>
           )}
 
+          {yarnWasteVisible && <ItemYarnWasteField form={form} />}
+
           {/* K4P: ürün kartı eni — muayene puan/100 m² kaynağı #1; modül kapalıyken alan hiç yok (bugünkü form). */}
           {itemType === ItemType.FABRIC && kaliteGuvenceEnabled && (
             <FormField label="En (cm)" htmlFor="widthCm" error={form.formState.errors.widthCm} hint="4 puan muayenesinde puan/100 m² bu enden hesaplanır; boşsa KK1'de ölçülen en kullanılır">
@@ -336,6 +346,15 @@ export function ItemFormDialog({
             <p role="note" className="text-xs text-amber-700 dark:text-amber-300">
               {itemTypeLabels[itemType]} kartında renk/özellik listesi tutulmaz, kaydedince kaldırılır.
             </p>
+          )}
+
+          {/* Az kullanılan dokuma alanları katlanır bölümde, kapalı gelir (dolu değer varsa açık). */}
+          {itemType === ItemType.FABRIC && (
+            <ItemWeavingDetails
+              form={form}
+              itemId={initial?.id ?? null}
+              hasSavedValues={Boolean(defaults.rawWidthCm || defaults.rawGsm || defaults.finishedGsm)}
+            />
           )}
 
           <StockCodeRow

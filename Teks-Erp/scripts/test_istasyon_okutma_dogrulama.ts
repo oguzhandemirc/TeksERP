@@ -11,8 +11,13 @@
 //   §3 ⭐ (HTTP) top listesiz fotoğraf (parti no ile bulunan) → UNVERIFIED + "doğrulanamadı", workOrders boş; eşik 0 → SINGLE
 //   §4 ⭐ açılan İE bildirimi tek sefer (CONFIRMED → 200, ikinci 409); "son okutmalar" listesi puan + onayı gösterir
 //   §5 ⭐ ayar: varsayılan 80 · PUT 70 yazılır · 150 → 400 · null → varsayılan; ham ayar ucuna kapalı
+//   §6 ⭐ tek parça (2026-11-10): iki taraf top listesizken TOPLAM METRE güçlü kanıttır — doğru metre geçer (VERIFIED),
+//      yanlış metre geçmez (UNSURE); yalnız bir taraf tek parçaysa bileşen doğmaz (top'lu davranış aynı); satır `arrival`
+//      SINGLE_PIECE + gelen metre (DB: kalemsiz belge → ARABA satırı → İE)
 // Negatif sonda (2026-11-06 ölçüldü): `isScanVerified` her zaman true → 10 kırmızı (§1 ×4, §2 ×2, §3 ×2, §4 ×2);
 // `strongEvidence` şartı kaldırılınca §1 "top listesi okunamadı" kırmızı (§3'te anahtar hariç tutulunca puan zaten yok).
+// 2026-11-10 §6: TOTAL_METERS güçlü kanıttan çıkınca 4 ❌; tek parça şartı kalkınca 3 ❌; hedef tek parça sayılmayınca 1 ❌;
+// satırın gelen kök geri dönüşü kapatılınca 1 ❌.
 // =============================================================================
 import { randomUUID, createHash } from "crypto";
 import type { AddressInfo } from "net";
@@ -25,7 +30,8 @@ import { INCOMING_DOC_DEDICATED_SETTING_KEYS } from "../src/services/gelen-belge
 import { stopNotificationJobs } from "../src/jobs/notification-dispatch.job";
 import { setReaderUrlForTests } from "../src/lib/gelen-belge/url";
 import { isScanVerified, scoreScan, type ScanEvidence, type TargetRecord } from "../src/services/helpers/station-scan-score.helper";
-import { verifyScanCandidates } from "../src/services/helpers/station-scan-verify.helper";
+import { scanEvidenceOf, verifyScanCandidates } from "../src/services/helpers/station-scan-verify.helper";
+import type { DraftHeader, DraftLine } from "../src/lib/gelen-belge/taslak";
 import { loadWorkOrders } from "../src/services/helpers/station-lookup-rows.helper";
 import { ensureTestAdmin, kosumaOzguParola } from "./fixture-test-user";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
@@ -79,6 +85,38 @@ function pureChecks(): void {
   check("§1 bileşen ayrıntısı görevliye 'top no 2/4' der", detail?.detail === "2/4" && detail.matched === false, JSON.stringify(detail));
 }
 
+// ── §6 saf: tek parça ─────────────────────────────────────────────────────────
+const singleTarget: TargetRecord = { rollNos: [], meters: [], batchNos: ["ISM1439770"], orderNos: [], ownerNames: ["Akdeniz Perdecilik"], senderNames: [], docDays: [], singlePiece: true, pieceMeters: 241 };
+const singleEv = (o: Partial<ScanEvidence> = {}): ScanEvidence => ({
+  rollNos: [], meters: [], rollCount: null, batchNos: ["ISM1439770"], orderNo: null, ownerText: "AKDENİZ PERDECİLİK", senderText: null, docDay: null,
+  singlePiece: true, totalMeters: 241, ...o,
+});
+
+function singlePieceChecks(): void {
+  console.log("§6 tek parça (saf)");
+  const ok = scoreScan(singleEv(), singleTarget, ["BATCH_NO"]);
+  check("§6 ⭐ tek parça + doğru toplam metre (parti no ile bulundu) → güçlü kanıt, %100, eşiği geçer",
+    ok.strongEvidence && ok.score === 100 && isScanVerified(ok, 80) && ok.components.some((c) => c.key === "TOTAL_METERS" && c.matched), JSON.stringify(ok.components.map((c) => [c.key, c.ratio])));
+  const near = scoreScan(singleEv({ totalMeters: 242.5 }), singleTarget, ["BATCH_NO"]);
+  check("§6 metre toleransı top metresiyle aynı (%1 → 241'e 242,5 tutar)", isScanVerified(near, 80), `${near.score}`);
+  const bad = scoreScan(singleEv({ totalMeters: 300 }), singleTarget, ["BATCH_NO"]);
+  check("§6 ⭐ tek parça + yanlış toplam metre → geçmez", bad.strongEvidence && !isScanVerified(bad, 80) && (bad.score ?? 100) < 80, `${bad.score}`);
+  const rollsTarget = scoreScan(singleEv(), { ...singleTarget, singlePiece: false, pieceMeters: 241 }, ["BATCH_NO"]);
+  check("§6 ⭐ kayıt top'lu (ARABA değil) → bileşen doğmaz, bugünkü gibi doğrulanamaz", !rollsTarget.strongEvidence && !rollsTarget.components.some((c) => c.key === "TOTAL_METERS") && !isScanVerified(rollsTarget, 80));
+  const rollsRead = scoreScan(singleEv({ singlePiece: false }), singleTarget, ["BATCH_NO"]);
+  check("§6 okuma top dökümlü → bileşen doğmaz (iki taraf da tek parça olmalı)", !rollsRead.strongEvidence && !isScanVerified(rollsRead, 80));
+  const topSame = scoreScan({ ...ev(), singlePiece: true, totalMeters: 407 }, { ...target, singlePiece: false, pieceMeters: 407 });
+  const topBase = scoreScan(ev(), target);
+  check("§6 ⭐ top'lu belgede puan/bileşen birebir aynı (tek parça alanları etkisiz)", JSON.stringify(topSame) === JSON.stringify(topBase), `${topSame.score}`);
+  const header = { ownerText: null, senderText: null, senderDocNo: null, senderDocDate: null, customerOrderNo: null, declaredTopCount: null, kursun: { meters: "241.00" } } as unknown as DraftHeader;
+  const line = (rollNo: string | null, m: string) => ({ lineKind: "TOP", senderRollNo: rollNo, meters: m }) as unknown as DraftLine;
+  const e0 = scanEvidenceOf(header, [], []);
+  const e1 = scanEvidenceOf(header, [line(null, "241")], []);
+  const e2 = scanEvidenceOf(header, [line("1", "120"), line("2", "121")], []);
+  check("§6 okumadan kanıt: top dökümsüz (satırsız / tek başlık satırı) tek parça adayı + kurşun metresi; top no'lu okuma değil",
+    e0.singlePiece === true && e0.totalMeters === 241 && e1.singlePiece === true && e2.singlePiece === false, JSON.stringify([e0.singlePiece, e0.totalMeters, e1.singlePiece, e2.singlePiece]));
+}
+
 // ── fikstür ──────────────────────────────────────────────────────────────────
 type Resp = { status: number; code?: string; data?: Record<string, unknown> & { workOrders?: Array<{ id: string; workOrderNumber: string }>; unverifiedWorkOrders?: Array<{ id: string }>; outcome?: string; message?: string; checkId?: string | null } };
 const SETTINGS = [
@@ -128,7 +166,7 @@ function startFakeSidecar(): Promise<{ server: Server; url: string }> {
   return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve({ server, url: `http://127.0.0.1:${(server.address() as AddressInfo).port}` })));
 }
 
-type Ctx = { call: (m: string, p: string, t: string, b?: unknown) => Promise<Resp>; tk: string; op: string; woId: string; noteId: string };
+type Ctx = { call: (m: string, p: string, t: string, b?: unknown) => Promise<Resp>; tk: string; op: string; woId: string; noteId: string; url: string; adminId: string };
 
 async function login(url: string, username: string, password: string, clientType?: "electron"): Promise<string> {
   const r = await fetch(`${url}/api/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, password, ...(clientType ? { clientType } : {}) }) });
@@ -186,7 +224,7 @@ async function setup(url: string): Promise<Ctx> {
   const tplRow = await prisma.senderTemplate.findUnique({ where: { code: (tpl.data as { code?: string } | undefined)?.code ?? "" }, select: { id: true } });
   if (tplRow) made.templates.push(tplRow.id);
   check("fikstür: başlık-only kullanıcı şablonu", tpl.status === 201 && !!tplRow, `${tpl.status} ${tpl.code ?? ""}`);
-  return { call, tk, op, woId, noteId };
+  return { call, tk, op, woId, noteId, url, adminId: admin.id };
 }
 
 // ── §2 DB: gerçek kayıtla puan + bölme + iz ───────────────────────────────────
@@ -239,6 +277,52 @@ async function httpChecks(c: Ctx, sidecarUrl: string): Promise<void> {
   check("§4 son okutmalar istasyon kullanıcısına kapalı (gelen-belge:read)", denied.status === 403, `${denied.status}`);
 }
 
+// ── §6 DB: kalemsiz belge → ARABA satırı → İE ─────────────────────────
+async function singlePieceDbChecks(c: Ctx): Promise<void> {
+  console.log("§6 tek parça (DB)");
+  const owner = made.customers[0]!;
+  const woUser = await mkUser(c.url, c.adminId, "W2", ["gelen-belge:read", "gelen-belge:write", "mobile:hizli-is-emri"]);
+  const batch = `ISM${D}`;
+  const r = await c.call("POST", "/api/gelen-belge/irsaliyeler", c.tk, { sourceKind: "MANUAL", customerBatchNo: batch, lines: [] });
+  const noteId = (r.data as { id?: string } | undefined)?.id ?? "";
+  if (noteId) made.notes.push(noteId);
+  else { check("§6 fikstür: kalemsiz belge", false, `${r.status} ${r.code ?? ""}`); return; }
+  const w = await c.call("POST", `/api/gelen-belge/irsaliyeler/${noteId}/is-emri`, woUser, { clientToken: randomUUID(), ownerCustomerId: owner, kursunMeters: "241", routeTemplateId: made.routes[0], stepPlanning: [{ sequence: 1 }] });
+  const woId = (w.data as { workOrderId?: string } | undefined)?.workOrderId ?? "";
+  if (woId) made.workOrders.push(woId);
+  else { check("§6 fikstür: tek parça İE", false, `${w.status} ${w.code ?? ""}`); return; }
+  const kinds = await prisma.customerDeliveryNoteLine.findMany({ where: { noteId }, select: { lineKind: true, meters: true } });
+  check("§6 fikstür: kalemsiz belge + 241 m → yalnız ARABA satırı + İE", r.status === 201 && w.status === 201 && kinds.length === 1 && kinds[0]!.lineKind === "ARABA", `${r.status} ${w.status} ${w.code ?? ""} ${JSON.stringify(kinds)}`);
+  const { workOrders } = await loadWorkOrders({ id: woId }, null);
+  const row = workOrders[0] as (typeof workOrders)[number] & { arrival?: { form: string; meters: number } | null };
+  check("§6 ⭐ satır: arrival SINGLE_PIECE + gelen metre 241; 1 top · 241 m", row?.arrival?.form === "SINGLE_PIECE" && row.arrival.meters === 241 && row.rollCount === 1 && row.meters === 241, JSON.stringify([row?.arrival, row?.rollCount, row?.meters]));
+  // Adımda canlı top yokken (rotasız / başlamamış) satır gelen kökü sayar — "0 top · 0 m" demez.
+  await prisma.roll.updateMany({ where: { batch: { workOrderId: woId } }, data: { currentStepId: null } });
+  const idle = (await loadWorkOrders({ id: woId }, null)).workOrders[0];
+  check("§6 ⭐ adımda canlı top yok → satır gelen kökten: 1 top · 241 m", idle?.rollCount === 1 && idle.meters === 241, JSON.stringify([idle?.rollCount, idle?.meters, idle?.locationText]));
+  // "Toplar ayrı geldi" (rollMode SEPARATE): her top ayrı top → ROLLS; tablet bugünkü "N top · M m"yi yazar.
+  const r2 = await c.call("POST", "/api/gelen-belge/irsaliyeler", c.tk, { sourceKind: "MANUAL", customerBatchNo: `${batch}R`, lines: [] });
+  const note2 = (r2.data as { id?: string } | undefined)?.id ?? "";
+  if (note2) made.notes.push(note2);
+  const w2 = await c.call("POST", `/api/gelen-belge/irsaliyeler/${note2}/is-emri`, woUser, { clientToken: randomUUID(), ownerCustomerId: owner, kursunMeters: "241", rollMode: "SEPARATE", rolls: [{ meters: 120, senderRollNo: "1" }, { meters: 121, senderRollNo: "2" }], routeTemplateId: made.routes[0] });
+  const wo2 = (w2.data as { workOrderId?: string } | undefined)?.workOrderId ?? "";
+  if (wo2) made.workOrders.push(wo2);
+  const top = wo2 ? (await loadWorkOrders({ id: wo2 }, null)).workOrders[0] as (typeof workOrders)[number] & { arrival?: { form: string; meters: number } | null } : undefined;
+  check("§6 top top gelen İE satırı ROLLS (tablet bugünkü metni yazar)", top?.arrival?.form === "ROLLS" && top.arrival.meters === 241, `${w2.status} ${w2.code ?? ""} ${JSON.stringify(top?.arrival)}`);
+  const base = { workOrders, noteIds: [noteId], source: "DEVICE", screen: "KURSUN_QC" };
+  const right: ScanEvidence = { ...singleEv(), batchNos: [batch], ownerText: null };
+  const okV = await verifyScanCandidates(base, { evidence: right, key: "BATCH_NO" });
+  if (okV.checkId) made.checks.push(okV.checkId);
+  const okRow = okV.checkId ? await prisma.stationScanCheck.findUnique({ where: { id: okV.checkId } }) : null;
+  check("§6 ⭐ tek parça + doğru metre → workOrders'ta (kendiliğinden açılır), bestStrong, iz VERIFIED",
+    okV.workOrders.length === 1 && okV.verification.bestStrong && okRow?.decision === "VERIFIED", `${okV.verification.bestScore} ${okV.verification.bestStrong} ${okRow?.decision}`);
+  const badV = await verifyScanCandidates(base, { evidence: { ...right, totalMeters: 180 }, key: "BATCH_NO" });
+  if (badV.checkId) made.checks.push(badV.checkId);
+  const badRow = badV.checkId ? await prisma.stationScanCheck.findUnique({ where: { id: badV.checkId } }) : null;
+  check("§6 ⭐ tek parça + yanlış metre → workOrders BOŞ, aday unverified'da, iz UNSURE",
+    badV.workOrders.length === 0 && badV.unverifiedWorkOrders.length === 1 && badRow?.decision === "UNSURE", `${badV.verification.bestScore} ${badRow?.decision}`);
+}
+
 async function settingChecks(c: Ctx): Promise<void> {
   console.log("§5 ayar");
   const g = await c.call("GET", "/api/gelen-belge/ayarlar", c.tk);
@@ -286,6 +370,7 @@ async function cleanup(): Promise<void> {
 async function main(): Promise<void> {
   console.log("=== İstasyonda belge okut: doğrulama puanı bekçisi ===\n");
   pureChecks();
+  singlePieceChecks();
   if (engel) return;
   const prior = await prisma.systemSetting.findMany({ where: { key: { in: SETTINGS } }, select: { key: true, value: true } });
   const server = await new Promise<Server>((resolve) => { const s = app.listen(0, "127.0.0.1", () => resolve(s)); });
@@ -294,6 +379,7 @@ async function main(): Promise<void> {
     const ctx = await setup(`http://127.0.0.1:${(server.address() as AddressInfo).port}`);
     await dbChecks(ctx);
     await httpChecks(ctx, sidecar.url);
+    await singlePieceDbChecks(ctx);
     await settingChecks(ctx);
   } catch (e) {
     fail++;

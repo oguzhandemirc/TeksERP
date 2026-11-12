@@ -18,6 +18,30 @@ export interface UcEylemi {
 const e = (fiil: string, deneme: string): UcEylemi => ({ fiil, deneme });
 
 export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
+  // ── Top etiketi elle düzenleme (2026-11-10)
+  "PUT /api/labels/rolls/:id/overrides": e("topun etiketini elle düzenledi", "topun etiketini elle düzenlemeye çalıştı"),
+  "POST /api/labels/rolls/:id/preview": e("etiket taslağını önizledi", "etiket taslağını önizlemeye çalıştı"),
+  // ── Etiket şablonu seçimi + etiket setleri (2026-11-11)
+  "PUT /api/labels/rolls/:id/template": e("topun etiket şablonunu değiştirdi", "topun etiket şablonunu değiştirmeye çalıştı"),
+  "POST /api/tambur/label-preview": e("tambur etiketini önizledi", "tambur etiketini önizlemeye çalıştı"),
+  "PUT /api/label-templates/global-options": e("genel etiket setini değiştirdi", "genel etiket setini değiştirmeye çalıştı"),
+  "PUT /api/customers/:customerId/label-template-options": e("müşterinin etiket setini değiştirdi", "müşterinin etiket setini değiştirmeye çalıştı"),
+  // ── El terminaliyle sevk (A6)
+  "POST /api/shipping/shipments/handheld": e("el terminaliyle sevkiyat açtı", "el terminaliyle sevkiyat açmaya çalıştı"),
+  "POST /api/shipping/shipments/:id/scan": e("el terminaliyle sevkiyata top okuttu", "el terminaliyle sevkiyata top okutmaya çalıştı"),
+  "POST /api/shipping/shipments/:id/sacks": e("el terminaliyle sevkiyatta çuval açtı", "el terminaliyle sevkiyatta çuval açmaya çalıştı"),
+  "PUT /api/shipping/shipments/:id/sacks/:sackId/weight": e("el terminaliyle çuvalı tarttı", "el terminaliyle çuvalı tartmaya çalıştı"),
+  "POST /api/shipping/shipments/:id/handheld-dispatch": e("el terminaliyle sevkiyatı onayladı", "el terminaliyle sevkiyatı onaylamaya çalıştı"),
+  // ── Kurşun: kontrolü bitmiş topu yeniden açma · gelen irsaliye künye düzeltmesi
+  "POST /api/kursun-qc/reopen-roll": e("kurşun kontrolü bitmiş bir topu yeniden açtı", "kurşun kontrolü bitmiş bir topu yeniden açmaya çalıştı"),
+  "PATCH /api/gelen-belge/irsaliyeler/:id/kunye": e("gelen irsaliyenin künyesini düzeltti", "gelen irsaliyenin künyesini düzeltmeye çalıştı"),
+  // ── Etiket alıcısı kataloğu (tambur emanet, 2026-11-10)
+  "POST /api/customers/:id/consignees/ensure": e("bir etiket alıcısı ekledi", "bir etiket alıcısı eklemeye çalıştı"),
+  "PATCH /api/customer-consignees/:id": e("bir etiket alıcısını yeniden adlandırdı", "bir etiket alıcısını yeniden adlandırmaya çalıştı"),
+  "POST /api/customer-consignees/:id/deactivate": e("bir etiket alıcısını pasife aldı", "bir etiket alıcısını pasife almaya çalıştı"),
+  "POST /api/customer-consignees/:id/activate": e("bir etiket alıcısını aktifleştirdi", "bir etiket alıcısını aktifleştirmeye çalıştı"),
+  "PUT /api/customer-consignees/:id/label-template": e("bir etiket alıcısının şablonunu değiştirdi", "bir etiket alıcısının şablonunu değiştirmeye çalıştı"),
+  "POST /api/customer-consignees/:id/merge": e("iki etiket alıcısını birleştirdi", "iki etiket alıcısını birleştirmeye çalıştı"),
   // ── Emanet çıkış belgesi (genel fason F5, 2026-11-08)
   "POST /api/consignment-dispatches/preview": e("emanet çıkış önizlemesi aldı", "emanet çıkış önizlemesi almaya çalıştı"),
   "POST /api/consignment-dispatches": e("emanet levent/ipliği sahibine çıkardı", "emanet levent/ipliği sahibine çıkarmaya çalıştı"),
@@ -77,12 +101,14 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "PUT /api/station-capabilities/:stationId/kursun": e("kurşun istasyonunun gramaj/fiyat ayarını değiştirdi", "kurşun istasyonunun gramaj/fiyat ayarını değiştirmeye çalıştı"),
   get "POST /api/work-orders/:id/split"() { return e(`${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} böldü`, `${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} bölmeye çalıştı`); },
   "POST /api/work-orders/:id/manual-move": e("topları elle taşıdı", "topları elle taşımaya çalıştı"),
+  get "PATCH /api/work-orders/:id/fold-type"() { return e(`${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} kat tipini değiştirdi`, `${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} kat tipini değiştirmeye çalıştı`); },
   get "DELETE /api/work-orders/:id"() { return e(`${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} sildi`, `${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} silmeye çalıştı`); },
   // ── Top
   "POST /api/rolls/initial-entry": e("top girişi yaptı", "top girişi yapmaya çalıştı"),
   "POST /api/rolls/:id/scrap": e("topu hurdaya ayırdı", "topu hurdaya ayırmaya çalıştı"),
   "POST /api/rolls/:id/customer-code": e("topa müşteri barkodu bağladı", "topa müşteri barkodu bağlamaya çalıştı"),
   "POST /api/rolls/:id/customer-code/revoke": e("topun müşteri barkodunu kaldırdı", "topun müşteri barkodunu kaldırmaya çalıştı"),
+  "PATCH /api/rolls/:id/label-texts": e("topun etiket adını/rengini/parti nosunu düzeltti", "topun etiket adını/rengini/parti nosunu düzeltmeye çalıştı"),
   "POST /api/customers/:id/barcode-series": e("müşteri barkod serisi tanımladı", "müşteri barkod serisi tanımlamaya çalıştı"),
   "PUT /api/customers/:id/barcode-series": e("müşteri barkod serisini değiştirdi", "müşteri barkod serisini değiştirmeye çalıştı"),
   "POST /api/customers/:id/barcode-series/preview": e("müşteri barkod serisini önizledi", "müşteri barkod serisini önizlemeye çalıştı"),
@@ -150,6 +176,8 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "PATCH /api/gelen-belge/sablonlar/:code": e("gönderen şablonunu düzenledi", "gönderen şablonunu düzenlemeye çalıştı"),
   "POST /api/gelen-belge/sablonlar/ozel": e("gelen belge tipi tanıttı (kullanıcı şablonu)", "gelen belge tipi tanıtmaya çalıştı"),
   "PUT /api/gelen-belge/sablonlar/ozel/:code": e("kullanıcı belge şablonunu güncelledi", "kullanıcı belge şablonunu güncellemeye çalıştı"),
+  "PATCH /api/gelen-belge/sablonlar/ozel/:code/tanim": e("belge tipini fotoğrafsız düzenledi", "belge tipini fotoğrafsız düzenlemeye çalıştı"),
+  "POST /api/gelen-belge/sablonlar/ozel/sifirla": e("belge tiplerini sıfırladı (pasife aldı)", "belge tiplerini sıfırlamaya çalıştı"),
   "POST /api/gelen-belge/sablonlar/oneri": e("belge tipi için şablon önerisi aldı", "belge tipi için şablon önerisi almaya çalıştı"),
   "PUT /api/gelen-belge/varsayilan-urunler/:customerId": e("müşterinin gelen belge varsayılan ürününü yazdı", "müşterinin gelen belge varsayılan ürününü yazmaya çalıştı"),
   "DELETE /api/gelen-belge/varsayilan-urunler/:customerId": e("müşterinin gelen belge varsayılan ürününü kaldırdı", "müşterinin gelen belge varsayılan ürününü kaldırmaya çalıştı"),

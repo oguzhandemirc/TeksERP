@@ -150,7 +150,16 @@ function qualityColumn(grades: readonly QualityGrade[]): ColumnDef<Roll> {
   );
 }
 
+export const CUSTOMER_BATCH_HINT = "Müşterinin kendi parti numarası (gelen belge / etiket)";
+/** Etikete basılan parti önce; yoksa gelen belgeden türetilen (sunucu `customerBatchNo`). */
+export const customerBatchOf = (r: Pick<Roll, "labelBatchNo" | "customerBatchNo">): string | null =>
+  r.labelBatchNo?.trim() || r.customerBatchNo?.trim() || null;
+
 /** SEÇİM tipli özellikte DEĞER de yazılır (RollDetailSheet ile aynı kural) — hücre + dışa aktarım. */
+/** "PANOS · MAVİ"; biri boşsa yalnız diğeri; ikisi de boşsa null. */
+export const labelNameOf = (r: Pick<Roll, "labelItemName" | "labelColorName">): string | null =>
+  [r.labelItemName, r.labelColorName].map((v) => v?.trim()).filter(Boolean).join(" · ") || null;
+
 const rollPropertyText = (p: NonNullable<Roll["properties"]>[number]): string =>
   p.value ? `${p.property.name}: ${p.value.name}` : p.property.name;
 
@@ -172,11 +181,8 @@ const BASE_ROLL_COLUMNS: ColumnDef<Roll>[] = [
     id: "item",
     header: "Kumaş",
     meta: { label: "Kumaş", exportValue: (r) => r.item?.name ?? "" },
-    cell: ({ row }) => (
-      <span className="text-xs font-medium">
-        {row.original.item?.name ?? "—"}
-      </span>
-    ),
+    // Sahip yalnız "Sahibi" sütununda; ad hücresinde tekrar edilmez (kullanıcı 2026-11-10).
+    cell: ({ row }) => <span className="text-xs font-medium">{row.original.item?.name ?? "—"}</span>,
   },
   {
     id: "color",
@@ -196,6 +202,16 @@ const BASE_ROLL_COLUMNS: ColumnDef<Roll>[] = [
       ) : (
         <span className="text-muted-foreground text-xs">—</span>
       ),
+  },
+  {
+    // Etikete basılan ad/renk (tambur operatörünün yazdığı) — kumaş kartı adından farklı olabilir.
+    id: "labelName",
+    header: "Etiketteki ad",
+    meta: { label: "Etiketteki ad", exportValue: (r) => labelNameOf(r) ?? "" },
+    cell: ({ row }) => {
+      const v = labelNameOf(row.original);
+      return v ? <span className="text-xs">{v}</span> : <span className="text-muted-foreground text-xs">—</span>;
+    },
   },
   {
     id: "properties",
@@ -333,16 +349,14 @@ const BASE_ROLL_COLUMNS: ColumnDef<Roll>[] = [
       ),
   },
   {
-    // Müşteri parti no (etikete basılan J1/K30); yalnız ayarı açık müşterinin toplarında dolu.
+    // Müşterinin parti no'su: etikete basılan (J1/K30) yoksa gelen belgeden türetilen (ata zinciri, sunucu).
     accessorKey: "labelBatchNo",
-    header: "Müşteri Parti",
-    meta: { label: "Müşteri Parti" },
-    cell: ({ row }) =>
-      row.original.labelBatchNo ? (
-        <span className="text-xs">{row.original.labelBatchNo}</span>
-      ) : (
-        <span className="text-muted-foreground">—</span>
-      ),
+    header: () => <span title={CUSTOMER_BATCH_HINT}>Müşteri parti no</span>,
+    meta: { label: "Müşteri parti no", exportValue: (r) => customerBatchOf(r) ?? "" },
+    cell: ({ row }) => {
+      const v = customerBatchOf(row.original);
+      return v ? <span className="text-xs">{v}</span> : <span className="text-muted-foreground">—</span>;
+    },
   },
   {
     // BULUNDUĞU İSTASYON (2026-08-05 saha talebi: "Üretimde sekmesi hangi

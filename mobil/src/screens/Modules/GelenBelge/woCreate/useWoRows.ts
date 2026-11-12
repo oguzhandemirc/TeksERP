@@ -10,13 +10,15 @@ import type { ProductionRoute } from '../../../../services/route.service';
 import { printTravelerCardForWorkOrder } from '../../../../services/travelerCardPrint';
 import { kursunStepOf } from '../desk/deskPlan';
 import { duplicateDocNoConflict, type DuplicateDocNoConflict } from '../DuplicateDocNoDialog';
+import { duplicateBatchNoConflict, duplicateConfirmFlags as confirmFlags, type DuplicateBatchNoConflict, type DuplicateConfirms as RowConfirms } from '../DuplicateBatchNoDialog';
 import type { MultiPartyDraft } from './partyDraft';
 import { mergeExtra } from './woSteps';
 import { sameDocOnSave } from './sameDocOnSave';
-import { applyMulti, applyParties, isDone, isPartial, keptResult, taughtRow, type DocRow, type SavedRow } from './docRow';
+import { applyMulti, applyParties, fillEmptyRowForm, isDone, isPartial, keptResult, taughtRow, type DocRow, type SavedRow } from './docRow';
 import { loadRecentOwners, rememberOwner } from './recentOwners';
-import { applyLiveLocks, liveLocksFor } from '../live/liveLocks';
+import { applyLiveLocks, liveLocksFor, liveUserKeysFor } from '../live/liveLocks';
 import { useGramajCatalog, useGramajReseed, type GramajFor } from './useWoGramaj';
+import { useDeviceSettingsStore } from '../../../../store/deviceSettingsStore';
 import {
   buildCreateBody,
   buildDraftPatch,
@@ -50,8 +52,8 @@ interface SaveCtx {
   kursunSequence: number | null;
   /** Satır anahtarlı deneme token'ı (belirsiz hatada yapışır). */
   token: string;
-  /** K27 WARN: kullanıcı "Yine de onayla" dedi → gövdeye bayrak. */
-  confirmDuplicateDocNo?: boolean;
+  /** Kullanıcının onayladığı mükerrer kapıları (K27 "Yine de onayla" · parti no "Yine de aç") → gövdeye bayrak. */
+  confirms?: RowConfirms;
   /** S16b tek form: formun ek alanları (hedef kumaş, en, metraj…); yok = bugünkü gövde. */
   extra?: ExtraFormBody;
 }
@@ -63,6 +65,12 @@ export type ExtraFormBody = Partial<Omit<CreateWorkOrderFromNoteBody, 'clientTok
 export interface DuplicateRow {
   noteId: string;
   conflict: DuplicateDocNoConflict;
+}
+
+/** Aynı müşteri parti no 409'u bekleyen satır (WARN'da sorulur, BLOCK'ta yalnız bildirilir). */
+export interface DuplicateBatchRow {
+  noteId: string;
+  conflict: DuplicateBatchNoConflict;
 }
 
 async function saveDraft(r: DocRow, form: RowForm, disabledByServer: boolean): Promise<RowResult> {
@@ -89,9 +97,10 @@ async function saveRowOnce(ctx: SaveCtx, r: DocRow, form: RowForm): Promise<{ re
       gramajPropertyId: ctx.gramajPropertyId,
       passThrough: ctx.passThrough,
       kursunSequence: ctx.kursunSequence,
+      hiddenIncoming: useDeviceSettingsStore.getState().docHiddenIncoming,
     });
     const full = mergeExtra(body, ctx.extra);
-    const opened = await inboundDocService.createWorkOrder(r.noteId, ctx.confirmDuplicateDocNo ? { ...full, confirmDuplicateDocNo: true } : full);
+    const opened = await inboundDocService.createWorkOrder(r.noteId, { ...full, ...confirmFlags(ctx.confirms) });
     // Kayıt yapıldı ama sunucu uyardı (ör. müşteri malı → Fason Belge Okut): ekran listeye dönse de görülsün.
     if (opened.warnings?.length) Toast.show({ type: 'info', text1: `${opened.workOrderNo} açıldı — dikkat`, text2: opened.warnings.join(' · '), visibilityTime: 8000 });
     return { result: openedResult(opened) };
@@ -116,6 +125,34 @@ export async function printCard(workOrderId: string): Promise<boolean> {
   }
 }
 
+/** Kayıt 409'larının diyalog durumları (K27 belge no WARN/BLOCK, aynı müşteri parti no) + satır başına onaylar. */
+function useDuplicateGates() {
+  // K27 WARN: işi süren aynı belge no'lu eş → satır FAILED kalır, diyalog sorar; onay yalnız o satırı bayrakla gönderir.
+  const [duplicate, setDuplicate] = useState<DuplicateRow | null>(null);
+  // K27 BLOCK: aynı belge no'lu eş → kısayol kartı (satır FAILED kalır).
+  const [sameDoc, setSameDoc] = useState<SameDocumentMatch | null>(null);
+  // Aynı müşteri parti no: WARN → "Yine de aç" yalnız o satırı bayrakla gönderir; BLOCK → yalnız "Tamam".
+  const [duplicateBatch, setDuplicateBatch] = useState<DuplicateBatchRow | null>(null);
+  const confirmsRef = useRef(new Map<string, RowConfirms>());
+  const reset = () => {
+    setDuplicate(null);
+    setDuplicateBatch(null);
+  };
+  /** Satır hatasını diyaloglara dağıtır; her diyalog ilk çakışan satırı tutar. */
+  const noteError = async (r: DocRow, error: unknown) => {
+    const conflict = duplicateDocNoConflict(error);
+    if (conflict) setDuplicate((d) => d ?? { noteId: r.noteId, conflict });
+    const batchConflict = duplicateBatchNoConflict(error);
+    if (batchConflict) setDuplicateBatch((d) => d ?? { noteId: r.noteId, conflict: batchConflict });
+    const same = await sameDocOnSave(inboundDocService, error, { noteId: r.noteId, ownerCustomerId: r.form!.ownerCustomerId, senderDocNo: r.detail?.senderDocNo });
+    if (same) setSameDoc((m) => m ?? same);
+  };
+  const confirm = (noteId: string, gate: keyof RowConfirms) => confirmsRef.current.set(noteId, { ...confirmsRef.current.get(noteId), [gate]: true });
+  const confirmsFor = (noteId: string) => confirmsRef.current.get(noteId);
+  const dialogs = { duplicate, dismissDuplicate: () => setDuplicate(null), sameDoc, dismissSameDoc: () => setSameDoc(null), duplicateBatch, dismissDuplicateBatch: () => setDuplicateBatch(null) };
+  return { dialogs, reset, noteError, confirm, confirmsFor };
+}
+
 function rowCounts(rows: DocRow[], ready: number) {
   return {
     total: rows.length,
@@ -128,7 +165,7 @@ function rowCounts(rows: DocRow[], ready: number) {
 }
 
 /** Satır düzenleyicileri (okuma → form, kullanıcı düzenlemesi, parti listesi); kayıt döngüsünden ayrı. */
-function useRowMutators(setRows: Dispatch<SetStateAction<DocRow[]>>, gramajFor: GramajFor) {
+function useRowMutators(setRows: Dispatch<SetStateAction<DocRow[]>>, gramajFor: GramajFor, manual: ReadonlySet<string>) {
   const addNote = useCallback((note: { id: string; noteNo: string }, runKey: number) => {
     setRows((rs) =>
       rs.some((r) => r.noteId === note.id)
@@ -139,11 +176,13 @@ function useRowMutators(setRows: Dispatch<SetStateAction<DocRow[]>>, gramajFor: 
 
   const setDetail = useCallback(
     (noteId: string, detail: InboundNoteDetail) => {
-      // Canlı okumanın kilitli değerleri okumayı ezer (operatör değeri) — forma giriş sınırı burası.
-      const d = applyLiveLocks(detail, liveLocksFor(noteId));
-      setRows((rs) => rs.map((r) => (r.noteId === noteId ? { ...r, detail: d, form: r.form ?? initialRowForm(d, gramajFor) } : r)));
+      // Canlı okuma kilitleri forma burada girer; fotoğraf okumasıyla çelişen alan "Kontrol edin" işaretli gelir.
+      const d = applyLiveLocks(detail, liveLocksFor(noteId), liveUserKeysFor(noteId));
+      // Belgesiz taslağa sonradan belge eklendiyse okuma yalnız boş alanlara düşer (elle yazılan ezilmez).
+      const formFor = (r: DocRow) => (!r.form ? initialRowForm(d, gramajFor) : manual.has(noteId) ? fillEmptyRowForm(r.form, initialRowForm(d, gramajFor)) : r.form);
+      setRows((rs) => rs.map((r) => (r.noteId === noteId ? { ...r, detail: d, form: formFor(r) } : r)));
     },
-    [setRows, gramajFor],
+    [setRows, gramajFor, manual],
   );
 
   const updateForm = useCallback(
@@ -198,7 +237,14 @@ export function useWoRows(route: ProductionRoute, opts?: { extraBody?: (r: DocRo
 
   useGramajReseed(setRows, gramajFor);
 
-  const { addNote, setDetail, updateForm, setParties, setMulti, removeRow, rereadRow, applyTaught } = useRowMutators(setRows, gramajFor);
+  // Belgesiz (elle) açılan taslaklar: sonradan eklenen belgenin okuması yalnız boş alanları doldurur.
+  const manualRef = useRef(new Set<string>());
+  const [manualIds, setManualIds] = useState<ReadonlySet<string>>(manualRef.current);
+  const markManual = useCallback((noteId: string) => {
+    manualRef.current = new Set(manualRef.current).add(noteId);
+    setManualIds(manualRef.current);
+  }, []);
+  const { addNote, setDetail, updateForm, setParties, setMulti, removeRow, rereadRow, applyTaught } = useRowMutators(setRows, gramajFor, manualIds);
   const setResult = (noteId: string, result: RowResult) => setRows((rs) => rs.map((r) => (r.noteId === noteId ? { ...r, result } : r)));
 
   const printFor = async (noteId: string, workOrderId: string) => {
@@ -207,13 +253,11 @@ export function useWoRows(route: ProductionRoute, opts?: { extraBody?: (r: DocRo
   };
 
   const pending = rows.filter((r) => r.form && r.detail && !isDone(r));
-  // K27 WARN: işi süren aynı belge no'lu eş → satır FAILED kalır, diyalog sorar; onay yalnız o satırı bayrakla gönderir.
-  const [duplicate, setDuplicate] = useState<DuplicateRow | null>(null);
-  // K27 BLOCK: aynı belge no'lu eş → kısayol kartı (satır FAILED kalır).
-  const [sameDoc, setSameDoc] = useState<SameDocumentMatch | null>(null);
+  const gates = useDuplicateGates();
+  const { duplicate, duplicateBatch } = gates.dialogs;
 
   /** Dönüş: bu çağrıda kaydedilen satırların sonucu (çift dokunuşta / çevrimdışıyken boş). */
-  const saveRows = async (targets: DocRow[], confirmNoteId: string | null): Promise<SavedRow[]> => {
+  const saveRows = async (targets: DocRow[]): Promise<SavedRow[]> => {
     // Ref: çift dokunuşta `saving` durumu henüz güncellenmemiş olur — ikinci çağrı aynı satırı yeniden göndermesin.
     if (savingRef.current || targets.length === 0) return [];
     if (!onlineManager.isOnline()) {
@@ -227,17 +271,16 @@ export function useWoRows(route: ProductionRoute, opts?: { extraBody?: (r: DocRo
     let owners = recent;
     try {
       // Sırayla: her satır ayrı tx; biri düşerse diğerleri etkilenmez, sonuç satırda kalır.
-      setDuplicate(null);
+      gates.reset();
       for (const r of targets) {
         const ptNow = passThroughFor(r.form!.ownerCustomerId);
         const passThrough = Array.isArray(ptNow) ? ptNow : await ptNow;
-        const ctx = { mode, routeId: isScanRoute(route) ? null : route.id, gramajPropertyId: catalog.propertyId, passThrough, kursunSequence: kursunStepOf(route)?.sequence ?? null, token: attempt.keyed(r.noteId), confirmDuplicateDocNo: r.noteId === confirmNoteId, extra: opts?.extraBody?.(r) };
+        const ctx = { mode, routeId: isScanRoute(route) ? null : route.id, gramajPropertyId: catalog.propertyId, passThrough, kursunSequence: kursunStepOf(route)?.sequence ?? null, token: attempt.keyed(r.noteId), confirms: gates.confirmsFor(r.noteId), extra: opts?.extraBody?.(r) };
         const { result, error } = await saveRowOnce(ctx, r, r.form!);
-        if (error !== undefined) errors.push(error);
-        const conflict = error === undefined ? null : duplicateDocNoConflict(error);
-        if (conflict) setDuplicate((d) => d ?? { noteId: r.noteId, conflict });
-        const same = error === undefined ? null : await sameDocOnSave(inboundDocService, error, { noteId: r.noteId, ownerCustomerId: r.form!.ownerCustomerId, senderDocNo: r.detail?.senderDocNo });
-        if (same) setSameDoc((m) => m ?? same);
+        if (error !== undefined) {
+          errors.push(error);
+          await gates.noteError(r, error);
+        }
         setResult(r.noteId, result);
         saved.push({ noteId: r.noteId, noteNo: r.noteNo, result });
         if (result.kind !== 'FAILED' && r.form!.ownerCustomerId) owners = await rememberOwner(owners, r.form!.ownerCustomerId);
@@ -254,7 +297,12 @@ export function useWoRows(route: ProductionRoute, opts?: { extraBody?: (r: DocRo
     return saved;
   };
 
-  const saveAll = (): Promise<SavedRow[]> => saveRows(pending, null);
+  const saveAll = (): Promise<SavedRow[]> => saveRows(pending);
+  /** Onaylı yeniden gönderim: önceki 409 belirsiz değildi → token zaten döndü, bu YENİ mantıksal denemedir. */
+  const confirmRow = (noteId: string, gate: keyof RowConfirms): Promise<SavedRow[]> => {
+    gates.confirm(noteId, gate);
+    return saveRows(pending.filter((r) => r.noteId === noteId));
+  };
 
   const counts = useMemo(() => rowCounts(rows, pending.length), [rows, pending.length]);
 
@@ -262,13 +310,13 @@ export function useWoRows(route: ProductionRoute, opts?: { extraBody?: (r: DocRo
     rows, mode, showGramaj, catalog, saving, recent, counts, autoPrint,
     /** İE partisinin numara kaynağı (ayar okunamadı/eski sunucu → null = "otomatik" gösterilir). */
     batchSource: settings.data?.batchNumberSource ?? null,
-    addNote, setDetail, setParties, setMulti, updateForm, removeRow, rereadRow, applyTaught, saveAll,
-    duplicate,
-    dismissDuplicate: () => setDuplicate(null),
-    sameDoc,
-    dismissSameDoc: () => setSameDoc(null),
+    addNote, setDetail, setParties, setMulti, updateForm, removeRow, rereadRow, applyTaught, saveAll, markManual,
+    isManual: (noteId: string) => manualIds.has(noteId),
+    ...gates.dialogs,
     /** Diyalogdaki "Yine de onayla": yalnız o satır, `confirmDuplicateDocNo: true` ile. */
-    confirmDuplicate: (): Promise<SavedRow[]> => (duplicate ? saveRows(pending.filter((r) => r.noteId === duplicate.noteId), duplicate.noteId) : Promise.resolve([])),
+    confirmDuplicate: (): Promise<SavedRow[]> => (duplicate ? confirmRow(duplicate.noteId, 'docNo') : Promise.resolve([])),
+    /** Parti kartındaki "Yine de aç" (yalnız WARN): o satır `confirmDuplicateBatchNo: true` ile. */
+    confirmDuplicateBatch: (): Promise<SavedRow[]> => (duplicateBatch?.conflict.confirmable ? confirmRow(duplicateBatch.noteId, 'batchNo') : Promise.resolve([])),
     print: (noteId: string, workOrderId: string) => void printFor(noteId, workOrderId),
   };
 }

@@ -97,6 +97,19 @@ describe('woSteps', () => {
   });
 });
 
+describe('çıktı aşaması (outputStage, 2026-11-10)', () => {
+  it('⭐ şablon adımının açık aşaması düzenlenmiş gövdede taşınır; otomatik (null) anahtarsız; eklenen adım otomatik', () => {
+    const r = { ...route, steps: route.steps!.map((x) => (x.id === 's2' ? { ...x, outputStage: 'SEMI_FINISHED' } : x)) } as ProductionRoute;
+    let s = stepsFromRoute(r);
+    s = addStep(s, st('kk') as never, 'n1');
+    const body = buildStepsBody(s);
+    expect(body[1]).toMatchObject({ stationId: 'fas', outputStage: 'SEMI_FINISHED' });
+    expect('outputStage' in body[0]!).toBe(false);
+    expect('outputStage' in body[3]!).toBe(false);
+    expect(effectiveRoute(r, s).steps![1]!.outputStage).toBe('SEMI_FINISHED');
+  });
+});
+
 describe('K30-D ek gövde (buildExtraBody)', () => {
   it('⭐ dokunulmayan tür / özellik / adım / makine gövdeye GİTMEZ', () => {
     const b = buildExtraBody(extras({ steps: stepsFromRoute(route) }), { hasTambur: true, route });
@@ -122,6 +135,13 @@ describe('K30-D ek gövde (buildExtraBody)', () => {
     expect(buildExtraBody(extras({ machineId: 'm2' }), { hasTambur: true, route }).stepPlanning).toEqual([{ sequence: 1, plannedMachineId: 'm2' }]);
     expect(buildExtraBody(extras({ machineId: null }), { hasTambur: true, route }).stepPlanning).toEqual([{ sequence: 1, plannedMachineId: null }]);
     expect(buildExtraBody(extras({ machineId: 'm2' }), { hasTambur: true, route, perParty: true })).not.toHaveProperty('stepPlanning');
+  });
+
+  it('⭐ tür gövdesi: bağ yoksa ve "Kendi Üretimimiz" açıkça seçiliyse STOCK; kalem varsa type yok; kart yoksa type yok; Fason aynen', () => {
+    expect(buildExtraBody(extras(), { hasTambur: false, ownGoods: true }).type).toBe('STOCK_PRODUCTION');
+    expect(buildExtraBody(extras({ orderLineIds: ['l1'] }), { hasTambur: false, ownGoods: true })).not.toHaveProperty('type');
+    expect(buildExtraBody(extras(), { hasTambur: false })).not.toHaveProperty('type');
+    expect(buildExtraBody(extras({ woType: 'CUSTOMER_GOODS_SERVICE' }), { hasTambur: false, ownGoods: false }).type).toBe('CUSTOMER_GOODS_SERVICE');
   });
 
   it('⭐ ORDER + sipariş kalemsiz → engel; kalem varken ya da otomatikte engel yok; boş adım listesi engel', () => {

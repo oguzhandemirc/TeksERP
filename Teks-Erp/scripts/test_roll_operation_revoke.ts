@@ -297,6 +297,7 @@ const OPERASYON_ISTISNA_DOSYALARI = new Set<string>([
   "src/services/license-sync.service.ts", // lisans yüksek suyu: defterde YAZILMIŞ en geç an
   "src/services/helpers/consumable-stock.helper.ts", // sarf düşümü: aynı tx'te yeni yazılan iz, id ile
   "src/services/consumable-stock.service.ts", // sarf hareket geçmişi geri alınmış izin tüketimini de gösterir
+  "src/services/consumable-usage.service.ts", // İE sarfiyatı: geri alınan izin tüketimi ters kayıtla düşer (reversedBy: null), iz yalnız okunur
 ]);
 
 async function cleanup(): Promise<void> {

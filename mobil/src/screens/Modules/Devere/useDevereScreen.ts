@@ -6,6 +6,7 @@
 // =============================================================================
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useManualRefresh } from '../../../hooks/useManualRefresh';
 import { warpBeamService, type WarpBeam } from '../../../services/warpBeam.service';
 import { usePermissions } from '../../../hooks/usePermission';
 import { useIsOnline, useOfflineReason } from '../../../offline/hooks';
@@ -64,6 +65,10 @@ export function useDevereScreen() {
     forms.clearFormError();
   }, [forms]);
 
+  const manualRefresh = useManualRefresh(
+    [() => planned.refetch(), () => ready.refetch(), () => context.refetch(), () => (mountTracking ? live.refetch() : undefined)],
+    'Beam listesi güncellendi',
+  );
   const busy = mutations.plan.isPending || mutations.wind.isPending || mutations.deleteDraft.isPending || mutations.cancel.isPending || mountForm.pending;
   return {
     ...forms,
@@ -77,12 +82,8 @@ export function useDevereScreen() {
     todayWound,
     physicalBusyBeams,
     readyLoading: ready.isLoading,
-    refresh: () => {
-      void planned.refetch();
-      void ready.refetch();
-      void context.refetch();
-      if (mountTracking) void live.refetch();
-    },
+    refreshing: manualRefresh.refreshing,
+    refresh: manualRefresh.onRefresh,
     mountTracking,
     liveBeams: live.data ?? [],
     liveLoading: live.isLoading,

@@ -4,6 +4,8 @@ import { useVisibleScreens } from "./useVisibleScreens";
 import { useAuthStore } from "../store/authStore";
 import { MOBILE_SCREENS } from "../types/permissions";
 import { SCREEN_MODULE } from "../constants/screenModules";
+import { useQualityStationStore } from "../store/qualityStationStore";
+import { useSessionStore } from "../store/sessionStore";
 
 // Bayrak hook'u MOCK: gerçek hook React Query ister; burada ölçülen şey koşul
 // elemesinin bayrağa NASIL bağlandığıdır, sorgunun kendisi değil.
@@ -41,6 +43,8 @@ const KALITE = Object.entries(SCREEN_MODULE).filter(([, m]) => m === "kaliteGuve
 describe("useVisibleScreens (izin ∖ modülü kapalı ekranlar)", () => {
   beforeEach(() => {
     mockFlagsData = { productionEnabled: true, dokumaEnabled: true, devereEnabled: true, tezgahEnabled: true, kaliteGuvenceEnabled: true, gelenBelgeEnabled: true };
+    // Modül kapısı ölçülürken Kalite Kontrol'ün yer koşulu sağlanmış sayılır (ayrı blokta ölçülür).
+    act(() => useQualityStationStore.setState({ hasQualityStation: true }));
   });
   afterEach(() => {
     act(() => useAuthStore.setState({ user: null }));
@@ -148,5 +152,40 @@ describe("useVisibleScreens — Belge Tara (gelen belge modülü)", () => {
     setPerms(["mobile:*"]);
     mockFlagsData = { gelenBelgeEnabled: true };
     expect(keys()).not.toContain("GelenBelge");
+  });
+});
+
+// Kalite Kontrol kartı: yalnız kurşunsuz muayeneli PROCESS_QC istasyonu varken (yer listesi ya da oturum/son yer).
+describe("Kalite Kontrol kartı — yer koşulu", () => {
+  const PROC = (isKursunStation?: boolean) => ({ kind: "PROCESS_QC", ...(isKursunStation === undefined ? {} : { isKursunStation }), canInspect: true });
+  beforeEach(() => {
+    mockFlagsData = { productionEnabled: true };
+    act(() => useQualityStationStore.setState({ hasQualityStation: false }));
+    act(() => useSessionStore.setState({ active: null, lastPlace: null }));
+    setPerms(["mobile:kk2-kursun"]);
+  });
+  afterEach(() => {
+    act(() => useAuthStore.setState({ user: null }));
+  });
+
+  it("⭐ kalite istasyonu yokken kart GİZLİ, Kurşun kartı durur (bugünkü düzen)", () => {
+    act(() => useQualityStationStore.getState().setFromPlaces([PROC(true), PROC()]));
+    expect(keys()).toEqual(["KursunQc"]);
+  });
+
+  it("⭐ yer listesinde kurşunsuz PROCESS_QC varsa kart görünür", () => {
+    act(() => useQualityStationStore.getState().setFromPlaces([PROC(true), PROC(false)]));
+    expect(keys()).toEqual(["KursunQc", "KaliteKontrol"]);
+  });
+
+  it("liste gelmeden son yer kalite istasyonuysa kart görünür (açılış rotası düşmesin)", () => {
+    act(() => useSessionStore.setState({ lastPlace: { machine: null, station: { id: "d", code: "D", name: "D", ...PROC(false), isActive: true } } as never }));
+    expect(keys()).toContain("KaliteKontrol");
+  });
+
+  it("izin yoksa kart yok (aynı izin: mobile:kk2-kursun)", () => {
+    act(() => useQualityStationStore.getState().setFromPlaces([PROC(false)]));
+    setPerms(["mobile:tambur"]);
+    expect(keys()).not.toContain("KaliteKontrol");
   });
 });

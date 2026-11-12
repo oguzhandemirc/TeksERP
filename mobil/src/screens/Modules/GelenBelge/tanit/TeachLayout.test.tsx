@@ -1,4 +1,4 @@
-// "Şablonu güncelle" yeniden tasarımı — dört pencere boyunda (telefon dik/yatay, tablet yatay/dik) doğru düzen; alan listesinde
+// "Tanımı düzenle" yeniden tasarımı — dört pencere boyunda (telefon dik/yatay, tablet yatay/dik) doğru düzen; alan listesinde
 // kayıtlı alan ✓ + belgeden okunan değer + fosforlu vurgu, atanmamış alan "Ata"; Kaydet çubuğu kaydırmanın dışında.
 import React from 'react';
 import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
@@ -90,7 +90,7 @@ describe('teachLayout (saf)', () => {
   });
 });
 
-describe('Şablonu güncelle — dört boyutta düzen + kayıtlı alanlar', () => {
+describe('Tanımı düzenle — dört boyutta düzen + kayıtlı alanlar', () => {
   it.each([
     [390, 844, 'tanit-duzen-ust'],
     [844, 390, 'tanit-duzen-ust'],
@@ -100,7 +100,7 @@ describe('Şablonu güncelle — dört boyutta düzen + kayıtlı alanlar', () =
     Object.assign(mockWindow, { width, height });
     const r = renderWithPaper(<TeachEntry detail={DETAIL} localPages={LOCAL} />);
     await flush();
-    await waitFor(() => expect(r.getByTestId('tanit-ac')).toHaveTextContent(/Şablonu güncelle/));
+    await waitFor(() => expect(r.getByTestId('tanit-ac')).toHaveTextContent(/Tanımı düzenle/));
     fireEvent.press(r.getByTestId('tanit-ac'));
     await flush();
     expect(await r.findByTestId('tanit-kutu-6')).toBeTruthy();
@@ -113,7 +113,7 @@ describe('Şablonu güncelle — dört boyutta düzen + kayıtlı alanlar', () =
 
     // Kayıtlı alan: ✓ (kayıtlı) + okunan değer, fosforlu kalem vurgusu içinde.
     const row = r.getByTestId('tanit-adim-partiNo');
-    expect(row).toHaveProp('accessibilityLabel', 'Parti no: kayıtlı');
+    expect(row).toHaveProp('accessibilityLabel', 'Gönderen parti no: önceki tanımdan');
     expect(r.getByTestId('tanit-deger-partiNo')).toHaveTextContent('P2618733');
     const hl = r.UNSAFE_getAllByType(DocHighlight).find((n) => within(n).queryByTestId('tanit-deger-partiNo'));
     expect(hl?.props.active).toBe(true);
@@ -130,6 +130,6 @@ describe('Şablonu güncelle — dört boyutta düzen + kayıtlı alanlar', () =
     // Kaydet çubuğu kaydırılan panelin dışında, ilk adımda da etkin.
     const bar = r.getByTestId('tanit-kaydet-cubugu');
     expect(within(bar).getByTestId('tanit-kaydet')).not.toBeDisabled();
-    expect(within(bar).getByTestId('tanit-kaydet')).toHaveTextContent(/Şablonu güncelle/);
+    expect(within(bar).getByTestId('tanit-kaydet')).toHaveTextContent(/Tanımı kaydet/);
   });
 });

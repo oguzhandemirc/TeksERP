@@ -224,20 +224,21 @@ export function NumpadModalHost() {
   return (
     <AppModal visible={!!target} onDismiss={() => closeTarget()} position="bottom">
       <Surface style={modalStyles.sheet} elevation={4}>
-        <View style={modalStyles.header}>
-          <View style={{ flex: 1 }}>
-            {target?.label ? (
-              <Text style={modalStyles.label}>{target.label}</Text>
-            ) : null}
-            <Text style={modalStyles.value} numberOfLines={1}>
-              {value || '0'}
-            </Text>
-          </View>
-          <Button mode="contained" icon="check" onPress={() => closeTarget()}>
-            Tamam
-          </Button>
-        </View>
+        {/* Başlık tuş takımıyla aynı sütunda: değer ilk tuşun hizasında, Tamam son tuşun hizasında (GK 2026-11-11). */}
         <View style={modalStyles.numpadWrap}>
+          <View style={modalStyles.header}>
+            <View style={{ flex: 1 }}>
+              {target?.label ? (
+                <Text style={modalStyles.label}>{target.label}</Text>
+              ) : null}
+              <Text style={modalStyles.value} numberOfLines={1}>
+                {value || '0'}
+              </Text>
+            </View>
+            <Button mode="contained" icon="check" onPress={() => closeTarget()}>
+              Tamam
+            </Button>
+          </View>
           <Numpad
             value={value}
             onChange={onChange}

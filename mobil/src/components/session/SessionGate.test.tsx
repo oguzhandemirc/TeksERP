@@ -18,8 +18,8 @@ jest.mock('./PlaceConfirmView', () => {
   const { Text: T } = require('react-native');
   return {
     __esModule: true,
-    default: ({ expectedKind, autoOpen }: { expectedKind: string; autoOpen?: boolean }) => (
-      <T>{`PCV:${expectedKind}:${autoOpen ? 'auto' : 'manual'}`}</T>
+    default: ({ screenKey, autoOpen }: { screenKey: string; autoOpen?: boolean }) => (
+      <T>{`PCV:${screenKey}:${autoOpen ? 'auto' : 'manual'}`}</T>
     ),
   };
 });
@@ -61,7 +61,7 @@ describe('SessionGate — yer-onayı kapısının odak invariantı', () => {
 
   it('tür uyuşmazlığı + ODAKTA → PlaceConfirmView autoOpen ile mount edilir', () => {
     const { getByText, queryByText } = render(<Gated />);
-    expect(getByText('PCV:RAW_QC:auto')).toBeTruthy();
+    expect(getByText('PCV:KK1:auto')).toBeTruthy();
     expect(queryByText('EKRAN')).toBeNull();
   });
 
@@ -92,6 +92,25 @@ describe('SessionGate — yer-onayı kapısının odak invariantı', () => {
 
     mockUseIsFocused.mockReturnValue(true); // kullanıcı ekrana döndü
     rerender(<Gated />);
-    expect(getByText('PCV:RAW_QC:auto')).toBeTruthy(); // taze onay/oto-açılış hakkı
+    expect(getByText('PCV:KK1:auto')).toBeTruthy(); // taze onay/oto-açılış hakkı
+  });
+});
+
+describe('SessionGate — Kurşun ↔ Kalite Kontrol (aynı PROCESS_QC türü)', () => {
+  const qc = (isKursunStation: boolean) =>
+    ({ id: 'ws-q', station: { id: 'st-q', code: 'Q', name: 'Q', kind: 'PROCESS_QC', isKursunStation, canInspect: true }, machine: null }) as unknown as ActiveWorkSession;
+  const GatedKursun = withWorkSession('KursunQc', () => ScreenStub);
+  const GatedKalite = withWorkSession('KaliteKontrol', () => ScreenStub);
+
+  it('⭐ kurşunsuz kalite istasyonu oturumu Kurşun ekranını AÇMAZ, Kalite Kontrol ekranını açar', () => {
+    useSessionStore.setState({ active: qc(false) });
+    expect(render(<GatedKursun />).getByText('PCV:KursunQc:auto')).toBeTruthy();
+    expect(render(<GatedKalite />).getByText('EKRAN')).toBeTruthy();
+  });
+
+  it('kurşun istasyonu oturumu Kalite Kontrol ekranını açmaz', () => {
+    useSessionStore.setState({ active: qc(true) });
+    expect(render(<GatedKalite />).getByText('PCV:KaliteKontrol:auto')).toBeTruthy();
+    expect(render(<GatedKursun />).getByText('EKRAN')).toBeTruthy();
   });
 });

@@ -9,7 +9,7 @@ import { EMPTY_EXTRAS, initialFormState } from './woForm';
 
 const mockGet = jest.fn();
 jest.mock('../../../../services/api', () => ({ apiClient: { get: (...a: unknown[]) => mockGet(...a) } }));
-let mockHint: string | null = null;
+let mockHint: { name: string; problem: boolean } | null = null;
 const mockHintArgs: [string | null, boolean][] = [];
 jest.mock('./defaultTargetHint', () => {
   const real = jest.requireActual('./defaultTargetHint');
@@ -41,16 +41,18 @@ describe('defaultTargetHint', () => {
     edit: jest.fn(), locked: false, show: () => true, showQuantity: false, hasTambur: false, foldValues: [], onPickItem: jest.fn(), customerId: 'c7',
   });
 
-  it('hedef boşken ipucu çizilir, müşteri hook\'a gider', () => {
-    mockHint = 'Boş bırakılırsa: Ham Tül (müşteri varsayılanı)';
+  it('hedef boşken varsayılan kumaş kutuya "varsayılan" ekiyle yazılır, müşteri hook\'a gider', () => {
+    mockHint = { name: 'Ham Tül', problem: false };
     const r = renderWithPaper(<TargetFields {...props(null)} />);
-    expect(r.getByText('Boş bırakılırsa: Ham Tül (müşteri varsayılanı)')).toBeTruthy();
+    expect(r.getByText('Ham Tül (varsayılan)')).toBeTruthy();
+    expect(r.queryByText(/Boş bırakılırsa/)).toBeNull();
     expect(mockHintArgs[0]).toEqual(['c7', true]);
   });
 
-  it('hedef seçiliyse ipucu yok (elle seçim yener)', () => {
-    mockHint = 'Boş bırakılırsa: Ham Tül (İE varsayılanı)';
+  it('hedef seçiliyse seçilen yazar (elle seçim yener)', () => {
+    mockHint = { name: 'Ham Tül', problem: false };
     const r = renderWithPaper(<TargetFields {...props('i9')} />);
-    expect(r.queryByText(/Boş bırakılırsa/)).toBeNull();
+    expect(r.getByText('Seçili')).toBeTruthy();
+    expect(r.queryByText(/varsayılan/)).toBeNull();
   });
 });

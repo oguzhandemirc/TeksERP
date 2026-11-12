@@ -13,6 +13,8 @@ import { queryProblem, QUERY_PROBLEM_TEXT } from '../../../utils/queryState';
 import { colors, spacing, radius } from '../../../theme';
 import { formatCalendarDay } from '../../../lib/factory-time';
 import TruncatedText from '../../../components/TruncatedText';
+import PullToRefreshView from '../../../components/PullToRefreshView';
+import { useManualRefresh } from '../../../hooks/useManualRefresh';
 
 // =============================================================================
 // Sipariş listesi — cursor + infinite scroll (mobil sayfalama standardı).
@@ -79,6 +81,7 @@ export default function OrderListView({ onOpen, refreshKey = 0 }: Props) {
     placeholderData: keepPreviousData,
   });
 
+  const refresh = useManualRefresh(() => q.refetch(), 'Sipariş listesi güncellendi');
   const items = useMemo(() => q.data?.pages.flatMap((p) => p.data) ?? [], [q.data]);
   const total = q.data?.pages[0]?.pagination.totalEstimate;
   // Elde veri VARSA sorunu gösterme — bayat liste, boş ekrandan iyidir.
@@ -185,7 +188,7 @@ export default function OrderListView({ onOpen, refreshKey = 0 }: Props) {
         // BAŞINA YETMEZ: cihaz çevrimdışıyken React Query sorguyu duraklatır
         // (isPaused), hata VERMEZ — o hâlde bu dal atlanır ve ekran "hiç sipariş
         // yok" yalanını söylerdi (2026-08-05 saha vakası). Bkz. utils/queryState.
-        <View style={styles.center}>
+        <PullToRefreshView refreshing={refresh.refreshing} onRefresh={refresh.onRefresh} contentContainerStyle={styles.center}>
           <Icon source="wifi-off" size={44} color={colors.dangerText} />
           <Text style={styles.errorTitle}>
             {problem === 'offline' ? 'Çevrimdışısınız' : 'Liste alınamadı'}
@@ -194,14 +197,14 @@ export default function OrderListView({ onOpen, refreshKey = 0 }: Props) {
           <TouchableRipple onPress={() => void q.refetch()} style={styles.retryBtn} borderless>
             <Text style={styles.retryText}>Tekrar dene</Text>
           </TouchableRipple>
-        </View>
+        </PullToRefreshView>
       ) : items.length === 0 ? (
-        <View style={styles.center}>
+        <PullToRefreshView refreshing={refresh.refreshing} onRefresh={refresh.onRefresh} contentContainerStyle={styles.center}>
           <Icon source="clipboard-text-outline" size={48} color={colors.textMuted} />
           <Text style={styles.empty}>
             {effectiveSearch || status ? 'Bu filtreye uyan sipariş yok' : 'Henüz sipariş yok'}
           </Text>
-        </View>
+        </PullToRefreshView>
       ) : (
         <FlashList
           data={items}
@@ -212,8 +215,8 @@ export default function OrderListView({ onOpen, refreshKey = 0 }: Props) {
           onEndReached={() => {
             if (q.hasNextPage && !q.isFetchingNextPage) q.fetchNextPage();
           }}
-          refreshing={q.isRefetching && !q.isFetchingNextPage}
-          onRefresh={() => void q.refetch()}
+          refreshing={refresh.refreshing}
+          onRefresh={refresh.onRefresh}
           ListFooterComponent={
             q.isFetchingNextPage ? (
               <View style={styles.footerLoader}>

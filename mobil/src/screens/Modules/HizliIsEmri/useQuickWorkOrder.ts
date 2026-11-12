@@ -11,7 +11,7 @@ import { workOrderService, type QuickStartRequest } from '../../../services/work
 import { fabricPropertyService } from '../../../services/fabricProperty.service';
 import { signalScan } from '../../../services/scanFeedback';
 import { useScanFeedback } from '../../../hooks/useScanFeedback';
-import { useFoldValues } from '../../../hooks/useFoldValues';
+import { preferredFoldCode, useFoldValues } from '../../../hooks/useFoldValues';
 import { useSubcontractorDefault } from '../../../hooks/useSubcontractorDefault';
 import type { AvailableOrderLine } from '../../../services/order.service';
 import { useAttemptToken } from '../../../offline/attemptToken';
@@ -36,6 +36,7 @@ import { scanMatchOf, type ScanMatchExtras } from '../../../components/customerC
 import { TERIM } from '../../../lib/terim';
 import { addPicked, prunePicked, type PickedOrderLines } from './orderLinkAnchor';
 import { SCAN_NOT_FOUND_REASON, scanLookupReason } from './scanLookupReason';
+import { routeApplyCaps } from './routeCaps';
 
 export interface ScannedRoll {
   id: string;
@@ -108,44 +109,6 @@ const errMessage = (err: unknown): string => {
   return e?.response?.data?.message ?? e?.message ?? 'Bilinmeyen hata';
 };
 
-type RouteLike = {
-  steps?: {
-    station?: {
-      appliesColor?: boolean;
-      appliesProperty?: boolean;
-      defaultCategory?: { id: string; appliesColor?: boolean; appliesProperty?: boolean } | null;
-    } | null;
-  }[];
-} | null;
-
-/**
- * Rota hedef renk / özellik uygulayabilir mi + fason kategorileri hangileri.
- *
- * ⚠️ 2026-08-10: İSTASYONUN KENDİ bayrakları da okunur. Eskiden yalnız fason
- * kategorisine bakılıyordu — backend guard'ı da öyleydi; ikisi birlikte
- * değişti. Renk/özellik uygulayan bir İÇ istasyon içeren rota, eski hâlde
- * "uygulayamaz" görünüp ekranda alanı gizlerdi (backend kabul etse bile).
- *
- * Eski backend `appliesColor` göndermez → `undefined` → eski davranış (yalnız
- * kategori) sürer. Yani bu değişiklik APK'yı ZORUNLU kılmaz.
- */
-function routeApplyCaps(route: RouteLike) {
-  const ids = new Set<string>();
-  let color = false;
-  let props = false;
-  for (const s of route?.steps ?? []) {
-    const st = s.station;
-    if (!st) continue;
-    if (st.appliesColor) color = true;
-    if (st.appliesProperty) props = true;
-    const cat = st.defaultCategory;
-    if (!cat) continue;
-    ids.add(cat.id);
-    if (cat.appliesColor) color = true;
-    if (cat.appliesProperty) props = true;
-  }
-  return { fasonCategoryIds: [...ids], canApplyColor: color, canApplyProps: props };
-}
 
 /**
  * Hızlı İş Emri sihirbazının tüm durumu ve iş mantığı.
@@ -282,7 +245,7 @@ export function useQuickWorkOrder(opts: { initialRouteTemplateId?: string | null
   // ── Master data ───────────────────────────────────────────────────────────
   const routesQuery = useQuery({
     queryKey: ['routes', 'wo-picker'],
-    queryFn: () => routeService.getAll({ page: 1, pageSize: 200, sortBy: 'name', sortOrder: 'asc' }),
+    queryFn: () => routeService.getActive(),
     staleTime: 10 * 60 * 1000,
   });
 
@@ -330,8 +293,8 @@ export function useQuickWorkOrder(opts: { initialRouteTemplateId?: string | null
       return;
     }
     if (foldType) return;
-    const first = foldValues[0];
-    if (first) setFoldType(first.code);
+    const preferred = preferredFoldCode(foldValues);
+    if (preferred) setFoldType(preferred);
   }, [hasTambur, foldValues, foldType]);
 
   /** Rota adım şeridi ("KK1 → Boyahane → Tambur") — ⓘ açmadan ne olacağı görünsün. */

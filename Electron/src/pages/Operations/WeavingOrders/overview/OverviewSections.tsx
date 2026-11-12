@@ -48,6 +48,7 @@ export function OverviewKpis({ progress, kind }: { progress: OverviewProgress; k
         ) : (
           <div className="big">{view.kind === "open-ended" ? "açık uçlu" : "ölçülemedi"}</div>
         )}
+        {progress.remainingM != null && <div className="kpi-sub" data-testid="wo-ov-remaining">Kalan: {formatNumber(progress.remainingM, 0)} m</div>}
       </div>
     </div>
   );

@@ -137,7 +137,9 @@ describe("WeavingOrderDetailSheet", () => {
     renderSheet({ ...ROW, plannedM: null });
     expect(await screen.findByTestId("wo-ov-progress")).toHaveTextContent("açık uçlu");
     expect(screen.getByTestId("wo-ov-progress")).not.toHaveTextContent("%");
+    expect(screen.queryByTestId("wo-ov-remaining")).toBeNull();
   });
+
 
   it("kırpılmış liste → 'son N / toplam M'; kapalı işte eylem yok", async () => {
     const doff = { id: "d1", code: "IND-1", machine: { id: "m1", code: "T1", name: "T1" }, productionLineNo: 1, doffedAt: "2026-10-19T10:00:00Z", pieceCount: 1, rolls: [{ id: "r1", barcode: "TOP-1", initialQty: 120, status: "IN_STOCK" }] };
@@ -159,5 +161,19 @@ describe("WeavingOrdersPage — satır tıklaması", () => {
     fireEvent.click(await screen.findByText("DK-0099"));
     expect(await screen.findByTestId("weaving-order-sheet")).toBeTruthy();
     expect(overview).toHaveBeenCalledWith("wo2");
+  });
+});
+
+describe("WeavingOrderDetailSheet — kalan metre", () => {
+  it.each([
+    ["dolu", { producedM: 378, remainingM: 622 }, "Kalan: 622 m"],
+    ["null", { remainingM: null }, null],
+    ["alan yok (eski backend)", {}, null],
+  ] as const)("kalan metre: %s", async (_ad, extra, text) => {
+    overview.mockReturnValue(ok({ progress: { ...PROGRESS, ...extra }, liveRuns: EMPTY }));
+    renderSheet(ROW);
+    await screen.findByTestId("wo-ov-progress");
+    if (text) expect(screen.getByTestId("wo-ov-remaining")).toHaveTextContent(text);
+    else expect(screen.queryByTestId("wo-ov-remaining")).toBeNull();
   });
 });

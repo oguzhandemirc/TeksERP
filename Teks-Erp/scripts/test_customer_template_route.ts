@@ -60,6 +60,7 @@ async function main() {
       itemId: item.id,
       colorId: color.id,
       status: "WAREHOUSE",
+      stage: "FINISHED", // etiket türü aşamadan (2026-11-10) — bitmiş top ROLL_FINISHED basar
       currentQty: 50,
       initialQty: 50,
       width: 150,

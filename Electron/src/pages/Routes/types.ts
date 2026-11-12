@@ -1,3 +1,5 @@
+import type { RollStage } from "@/types/enums";
+
 export interface RouteStep {
   id: string;
   routeId: string;
@@ -12,6 +14,8 @@ export interface RouteStep {
   dispatchWithoutColor?: boolean;
   /** Önerilen makine (Gülkesim 2026-11-02, yalnız öneri) — İE adımına klonlanır. */
   plannedMachineId?: string | null;
+  /** Çıktı aşaması (2026-11-10) — null = otomatik; İE adımına klonlanır. */
+  outputStage?: RollStage | null;
   /** 2026-08-06: adımın şablon hedefi — WO açılışında hedef alanlara kopyalanır. */
   plannedColorId?: string | null;
   plannedColor?: { id: string; code: string; name: string; hex: string | null } | null;

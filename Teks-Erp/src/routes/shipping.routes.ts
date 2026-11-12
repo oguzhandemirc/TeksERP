@@ -1,9 +1,11 @@
 import { Router } from "express";
 import { ShippingController } from "../controllers/shipping.controller";
+import { ShippingHandheldController } from "../controllers/shipping-handheld.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 
 const controller = new ShippingController();
+const handheld = new ShippingHandheldController();
 const router = Router();
 
 // Okuma: web sevkiyat yetkisi veya mobil paket/sevkiyat ekranları
@@ -925,6 +927,149 @@ router.post("/shipments/:id/manual-sack-count", verifyToken, WRITE, controller.s
 router.post("/shipments/:id/dispatch", verifyToken, WRITE, controller.dispatchShipment);
 router.get("/shipments/:id/cancel-preview", verifyToken, READ, controller.cancelPreview);
 router.post("/shipments/:id/cancel", verifyToken, WRITE, controller.cancelShipment);
+
+// ── El terminali sevkiyat (v2) — bayrak `shipping.handheldCreateEnabled`; kapalıyken hepsi 403 HANDHELD_DISABLED.
+// YENİ İZİN KODU YOK: okuma READ, yazma WRITE (mobil:sevkiyat dahil). Sözleşme: PLAN-elt-sevk-v2 §a A1–A6.
+/**
+ * @openapi
+ * /api/shipping/shipments/handheld:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: El terminali — boş PLANNED sevkiyat aç (A1)
+ *     description: Sevkiyat çekirdeğinin boş küme çağrısı; onay bayrağından bağımsız PLANNED doğar. Aynı token + aynı cari/şube → 200 aynı durum.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [customerId, clientToken]
+ *             properties:
+ *               customerId: { type: string, format: uuid }
+ *               branchId: { type: string, format: uuid, nullable: true }
+ *               clientToken: { type: string, format: uuid }
+ *     responses:
+ *       201: { description: "Açıldı — data HandheldLoadState" }
+ *       200: { description: "Replay — data HandheldLoadState" }
+ *       400: { description: "VALIDATION · LOOSE_LOAD_DISABLED · ORDER_REQUIRED · QUICK_SHIP_EXPORT_UNSUPPORTED" }
+ *       403: { description: HANDHELD_DISABLED }
+ *       404: { description: Cari yok ya da pasif }
+ *       409: { description: "CARI_HOLD · CLIENT_TOKEN_COLLISION · SHIPMENT_CANCELLED" }
+ */
+router.post("/shipments/handheld", verifyToken, WRITE, handheld.open);
+/**
+ * @openapi
+ * /api/shipping/shipments/{id}/handheld:
+ *   get:
+ *     tags: [Shipping]
+ *     summary: El terminali — sevkiyat yük durumu (A2)
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: HandheldLoadState (PLANNED ve DISPATCHED; sevk edilmişte iade topları brüt) }
+ *       403: { description: HANDHELD_DISABLED }
+ *       404: { description: Sevkiyat bulunamadı }
+ *       409: { description: SHIPMENT_CANCELLED }
+ * /api/shipping/shipments/{id}/scan:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: El terminali — tek okutma ucu (A3)
+ *     description: Sınıflandırma sunucuda; iş kararları 200 + outcome (added · transferred · needsRemoveConfirm · removed · needsNotReadyConfirm · sackSelected · rejected).
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [barcode, targetSackId, clientToken]
+ *             properties:
+ *               barcode: { type: string, minLength: 1, maxLength: 64 }
+ *               targetSackId: { type: string, format: uuid, nullable: true }
+ *               confirmRemove: { type: boolean }
+ *               confirmNotReady: { type: boolean }
+ *               isRetry: { type: boolean }
+ *               clientToken: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: "{ outcome, state }" }
+ *       400: { description: "VALIDATION · LOOSE_LOAD_DISABLED · QUICK_SHIP_EXPORT_UNSUPPORTED · WEIGH_REQUIRED" }
+ *       403: { description: HANDHELD_DISABLED }
+ *       404: { description: Sevkiyat bulunamadı }
+ *       409: { description: "SHIPMENT_NOT_PLANNED · TARGET_SACK_GONE · ROLL_TAKEN · ROLL_MOVED · CLIENT_TOKEN_COLLISION" }
+ * /api/shipping/shipments/{id}/sacks:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: El terminali — sevkiyat içinde çuval aç (A4)
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [clientToken]
+ *             properties:
+ *               clientToken: { type: string, format: uuid }
+ *     responses:
+ *       201: { description: "{ sack: {id, sackNo, seq, seqLabel}, state }" }
+ *       200: { description: Replay }
+ *       403: { description: HANDHELD_DISABLED }
+ *       404: { description: Sevkiyat bulunamadı }
+ *       409: { description: "SHIPMENT_NOT_PLANNED · CLIENT_TOKEN_COLLISION" }
+ * /api/shipping/shipments/{id}/sacks/{sackId}/weight:
+ *   put:
+ *     tags: [Shipping]
+ *     summary: El terminali — çuvala elle kg (A5)
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *       - { in: path, name: sackId, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [weightKg]
+ *             properties:
+ *               weightKg: { type: number, minimum: 0, exclusiveMinimum: true, maximum: 9999.999, nullable: true }
+ *     responses:
+ *       200: { description: "{ state } — null kg'yi kaldırır (CLEARED)" }
+ *       400: { description: VALIDATION }
+ *       403: { description: "HANDHELD_DISABLED · MANUAL_WEIGHT_RESTRICTED" }
+ *       404: { description: Sevkiyat bulunamadı }
+ *       409: { description: "SHIPMENT_NOT_PLANNED · SACK_NOT_IN_SHIPMENT" }
+ * /api/shipping/shipments/{id}/handheld-dispatch:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: El terminali — sevk et (A6)
+ *     description: Boş çuvallar düşer; expectedRollCount tutmazsa sevk durur. Aynı kullanıcı tekrarında 200 + replayed.
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [expectedRollCount]
+ *             properties:
+ *               plateNumber: { type: string, maxLength: 20, nullable: true }
+ *               driverName: { type: string, maxLength: 100, nullable: true }
+ *               expectedRollCount: { type: integer, minimum: 0 }
+ *     responses:
+ *       200: { description: "{ shipmentId, shipmentNo, documentNo, rollCount, sackCount, looseRollCount, droppedEmptySacks, state, replayed? }" }
+ *       400: { description: "SHIPMENT_EMPTY · WEIGH_REQUIRED · hayalet/depo" }
+ *       403: { description: HANDHELD_DISABLED }
+ *       404: { description: Sevkiyat bulunamadı }
+ *       409: { description: "LOAD_CHANGED · CARI_HOLD · OWNER_MISMATCH · SHIPMENT_NOT_PLANNED" }
+ */
+router.get("/shipments/:id/handheld", verifyToken, READ, handheld.state);
+router.post("/shipments/:id/scan", verifyToken, WRITE, handheld.scan);
+router.post("/shipments/:id/sacks", verifyToken, WRITE, handheld.openSack);
+router.put("/shipments/:id/sacks/:sackId/weight", verifyToken, WRITE, handheld.weight);
+router.post("/shipments/:id/handheld-dispatch", verifyToken, WRITE, handheld.dispatch);
 
 /**
  * @openapi

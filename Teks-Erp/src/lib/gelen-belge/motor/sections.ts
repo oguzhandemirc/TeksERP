@@ -2,8 +2,8 @@
 // etiketi ("Sipariş No") her geçtiği yerde yeni bölüm açar; bölümün alanları kendi bandından okunur, tablo satırları
 // konumla bölüme düşer. Başlıksız başlayan sayfa (devam sayfası) satırları "devam" bölümüdür: taslak onları SON bölüme ekler.
 import type { DocumentTemplate, FieldResult, FieldSpec, OcrBlock, OcrLine, OcrRect, OcrResult, SectionSpec, TableResult } from "./types";
-import { collectLines } from "./geometry";
-import { labelSimilarity } from "./labels";
+import { buildRows, collectLines } from "./geometry";
+import { labelSimilarity, sectionStartLabel } from "./labels";
 import { normalizeForMatch } from "./text-normalize";
 import { canonicalEquals, sumCanonical } from "./totals";
 import { extractFields } from "./extract";
@@ -40,28 +40,36 @@ export interface SectionsResult {
 
 export const rowKey = (blockNo: number, index: number): string => `${blockNo}:${index}`;
 
-/** Satır merkezi [top, bottom) bandına düşen OCR satırlarıyla sınırlı sonuç (koordinatlar kaymaz). */
-export function sliceBand(ocr: OcrResult, top: number, bottom: number): OcrResult {
+/**
+ * Satır merkezi [top, bottom) bandına düşen OCR satırlarıyla sınırlı sonuç (koordinatlar kaymaz). `rowCenter` verilirse
+ * satırın kendi merkezi yerine basılı SATIRININ merkezi ölçülür: sınırdaki "T.Adet 5 | 141,70 | 586,00" iki banda bölünmez.
+ */
+export function sliceBand(ocr: OcrResult, top: number, bottom: number, rowCenter?: ReadonlyMap<OcrLine, number>): OcrResult {
   const blocks: OcrBlock[] = [];
   for (const b of ocr.blocks) {
     const lines = b.lines.filter((l) => {
-      const cy = l.rect.y + l.rect.height / 2;
+      const cy = rowCenter?.get(l) ?? l.rect.y + l.rect.height / 2;
       return cy >= top && cy < bottom;
     });
     if (lines.length > 0) blocks.push({ ...b, text: lines.map((l) => l.text).join("\n"), lines });
   }
-  return { ...ocr, text: blocks.map((b) => b.text).join("\n"), blocks };
+  // Barkod sayfa genelidir: blok/bölüm bandına taşınmaz (her partinin kendi değeri banttan okunur).
+  return { ...ocr, text: blocks.map((b) => b.text).join("\n"), blocks, barcodes: undefined };
 }
 
-/** Satır bölüm başlangıcı mı: metin etiketle BAŞLAR ya da (kısa satırda) etikete bulanık benzer. */
+/**
+ * Satır bölüm başlangıcı mı: metin etiketle BAŞLAR ya da (kısa satırda) etikete bulanık benzer. Etiket hem kayıtlı hâliyle
+ * hem etiket kısmıyla (`sectionStartLabel`; değeriyle kaydedilmiş eski şablon "Ham PartiNo: P2618733") denenir.
+ */
 function isStartLine(line: OcrLine, labels: string[]): boolean {
   const norm = normalizeForMatch(line.text);
   if (!norm) return false;
-  for (const l of labels) {
+  const all = [...new Set(labels.flatMap((l) => [l, sectionStartLabel(l)]))];
+  for (const l of all) {
     const ln = normalizeForMatch(l);
     if (ln && (norm === ln || norm.startsWith(ln + " "))) return true;
   }
-  return labelSimilarity(line.text, labels) >= 0.85;
+  return labelSimilarity(line.text, all) >= 0.85;
 }
 
 export function findPageMarker(ocr: OcrResult, pattern = DEFAULT_PAGE_PATTERN): { no: number; of: number } | null {
@@ -96,9 +104,13 @@ function sectionWarnings(s: SectionResult, isLast: boolean, page: SectionsResult
   } else if (isLast && pageOpen) {
     out.push(`SECTION_CONTINUES: Parti ${name}: sayfa ${page!.no}/${page!.of} — bölüm sonraki sayfada sürebilir; sayfaları birlikte okutun`);
   }
-  if (s.declared?.m && s.rowCount > 0 && !canonicalEquals(s.declared.m, s.meterSum)) {
-    out.push(`SECTION_SUBTOTAL_MISMATCH: Parti ${name}: ara toplam ${s.declared.m} m, satırların toplamı ${s.meterSum} m`);
-  }
+  // Basılı toplam birincil, tablo teyittir: fark sessiz geçmez (2026-11-10, 214279)
+  const d = s.declared;
+  const diff: string[] = [];
+  if (d?.count && Number(d.count) !== s.rowCount) diff.push(`tablo ${s.rowCount} top / belge ${d.count} top`);
+  if (d?.m && !canonicalEquals(d.m, s.meterSum)) diff.push(`tablo ${s.meterSum} m / belge ${d.m} m`);
+  if (d?.kg && !canonicalEquals(d.kg, s.kgSum)) diff.push(`tablo ${s.kgSum} kg / belge ${d.kg} kg`);
+  if (s.rowCount > 0 && diff.length > 0) out.push(`SECTION_SUBTOTAL_MISMATCH: PARTİ TOPLAMI TUTMUYOR: ${name} ${diff.join(", ")}`);
   return out;
 }
 
@@ -183,9 +195,14 @@ export function extractSections(ocr: OcrResult, template: DocumentTemplate, spec
   const count = tops.length + offset;
   // Bölüm alanı her bantta ayrı okunur: etiket penceresi (tanıtmada başlık alanına konur) onu ilk bölüme çivilemesin.
   const sub: DocumentTemplate = { ...template, fields: template.fields.filter((f) => spec.fields.includes(f.key)).map(unpinned) };
+  const rowCenter = new Map<OcrLine, number>();
+  for (const row of buildRows(ocr)) {
+    const cy = row.lines.reduce((a, l) => a + l.rect.y + l.rect.height / 2, 0) / row.lines.length;
+    for (const l of row.lines) rowCenter.set(l, cy);
+  }
   const sections: SectionResult[] = Array.from({ length: count }, (_, i) => {
     const k = i - offset;
-    const fields = k >= 0 ? extractFields(sliceBand(ocr, tops[k]!, tops[k + 1] ?? Infinity), sub).fields : {};
+    const fields = k >= 0 ? extractFields(sliceBand(ocr, tops[k]!, tops[k + 1] ?? Infinity, rowCenter), sub).fields : {};
     const v = (key: string | undefined) => (key ? fields[key]?.value ?? null : null);
     return {
       // Başlangıç etiketi hiç yoksa sayfanın tamamı önceki sayfanın devamıdır (tek sayfalık belgede etkisiz: önceki blok yok).

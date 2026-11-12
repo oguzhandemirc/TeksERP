@@ -105,6 +105,7 @@ export const MENU_PRESETS: readonly MenuPreset[] = [
  */
 export const MENU_PRESET_FORBIDDEN_KEYS: ReadonlySet<string> = new Set([
   "KursunQc",
+  "KaliteKontrol",
   "KursunDagitim",
   "Tambur",
   "TartiPaket",

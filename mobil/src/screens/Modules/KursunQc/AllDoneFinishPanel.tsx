@@ -46,7 +46,7 @@ const styles = StyleSheet.create({
   wrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 12 },
   title: { fontSize: 22, fontWeight: '700', color: colors.text, textAlign: 'center' },
   hint: { fontSize: 16, color: colors.textSecondary, textAlign: 'center' },
-  btn: { marginTop: 8, alignSelf: 'stretch', maxWidth: 520, width: '100%' },
+  btn: { marginTop: 8, alignSelf: 'center', maxWidth: 520, width: '100%' },
   btnContent: { minHeight: 64 },
   btnLabel: { fontSize: 18, fontWeight: '700' },
 });

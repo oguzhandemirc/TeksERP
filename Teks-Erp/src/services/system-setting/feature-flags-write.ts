@@ -39,7 +39,7 @@ import { effectiveIncomingDocsEnabled } from "./incoming-docs";
 import { SETTING_KEYS } from "./keys";
 import { readKursunMeterCapture } from "./kursun-batch";
 import { LABEL_COPIES_MAX, readNotificationInboxEnabled, type DefaultLabelMedia } from "./labels";
-import { readDepoMultiEnabledRaw, readDevereEnabledRaw, readDokumaEnabledRaw, readEmanetEnabledRaw, readGelenBelgeEnabledRaw, readIplikEnabledRaw, readKaliteGuvenceEnabledRaw, readKumasTeknikEnabledRaw, readMaliyetEnabledRaw, readProductionEnabledRaw, readTezgahEnabledRaw, readTicaretEnabledRaw } from "./modules";
+import { DEFAULT_DOKUMA_WEAVING_WASTE_PCT, DOKUMA_WEAVING_WASTE_PCT_MAX, readDepoMultiEnabledRaw, readDevereEnabledRaw, readDokumaEnabledRaw, readEmanetEnabledRaw, readGelenBelgeEnabledRaw, readIplikEnabledRaw, readKaliteGuvenceEnabledRaw, readKumasTeknikEnabledRaw, readMaliyetEnabledRaw, readProductionEnabledRaw, readTezgahEnabledRaw, readTicaretEnabledRaw } from "./modules";
 import { readTezgahAlarmEnabled, readTezgahAlarmNoShiftMode, readTezgahAlarmUnclassifiedTargetMinutes } from "./packing-loom";
 import { readPartyCodeAuto } from "./production";
 import { readItemPhaseOutNewOrder, readShippingOrderRequirement, readShippingReadyNotifyUnits, resetReadyBaselineOnIncomingDocOpen } from "./shipping";
@@ -219,12 +219,14 @@ export async function setFeatureFlags(
     // 400'e düşürür ya da API sözleşmesine olmayan bir null sokar.
     input: Omit<
       Partial<FeatureFlags>,
-      "fasonShrinkTolerancePct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "shippingReadyTolerancePct" | "tamburPlanGateWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "financeWithholdingNumerator" | "financeWithholdingDenominator" | "financePurchaseWithholdingNumerator" | "financePurchaseWithholdingDenominator" | "shippingSackSeqStart" | "tezgahEscalationGraceMinutes" | "tezgahAlarmRenotifyMinutes" | "tezgahMaxOpenStopHours" | "tezgahCollectorSilenceMinutes" | "license"
+      "fasonShrinkTolerancePct" | "dokumaWeavingWastePct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "shippingReadyTolerancePct" | "tamburPlanGateWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "financeWithholdingNumerator" | "financeWithholdingDenominator" | "financePurchaseWithholdingNumerator" | "financePurchaseWithholdingDenominator" | "shippingSackSeqStart" | "tezgahEscalationGraceMinutes" | "tezgahAlarmRenotifyMinutes" | "tezgahMaxOpenStopHours" | "tezgahCollectorSilenceMinutes" | "license"
     > & {
       /** null = fabrika varsayılanına dön (1). */
       shippingSackSeqStart?: number | null;
       /** null = fabrika varsayılanına dön (0 dk). */
       tezgahEscalationGraceMinutes?: number | null;
+      /** null = fabrika varsayılanına dön (%0). */
+      dokumaWeavingWastePct?: number | null;
       /** null = varsayılana dön (10 dk). */
       tezgahAlarmRenotifyMinutes?: number | null;
       /** null = varsayılana dön (12 sa). */
@@ -401,7 +403,7 @@ export async function setFeatureFlags(
       if (typeof v !== "string" || !SERVICE_BILLING_METER_BASES.includes(v as ServiceBillingMeterBasis)) {
         throw AppError.badRequest(`financeServiceBillingMeterBasis şunlardan biri olmalı: ${SERVICE_BILLING_METER_BASES.join(", ")}`);
       }
-      await this.set(SETTING_KEYS.FINANCE_SERVICE_BILLING_METER_BASIS, v, "Hizmet faturası metre tabanı — çıkış · giriş · bildirilen", userId);
+      await this.set(SETTING_KEYS.FINANCE_SERVICE_BILLING_METER_BASIS, v, "Hizmet faturası metre tabanı — çıkış · giriş · bildirilen · parti beyanı/ölçülenin büyüğü", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "financeServiceBillingMissingMeter")) {
       const v = input.financeServiceBillingMissingMeter;
@@ -835,6 +837,12 @@ export async function setFeatureFlags(
       }
       await this.set(SETTING_KEYS.DOKUMA_RUN_WEAVING_ORDER_REQUIRED, input.dokumaRunWeavingOrderRequired, "Dokuma: tezgah koşumu dokuma iş emrine bağlı açılır", userId);
     }
+    if (Object.prototype.hasOwnProperty.call(input, "dokumaYarnReservationEnabled")) {
+      if (typeof input.dokumaYarnReservationEnabled !== "boolean") {
+        throw AppError.badRequest("dokumaYarnReservationEnabled boolean olmalı");
+      }
+      await this.set(SETTING_KEYS.DOKUMA_YARN_RESERVATION_ENABLED, input.dokumaYarnReservationEnabled, `Dokuma: açık ${TERIM.dokumaIsEmri.cogulCekimKucuk.ilgi} kalan ipliği ayrılmış sayılır (görünürlük, engellemez)`, userId);
+    }
     if (Object.prototype.hasOwnProperty.call(input, "dokumaOrderLineLinkRequired")) {
       if (typeof input.dokumaOrderLineLinkRequired !== "boolean") {
         throw AppError.badRequest("dokumaOrderLineLinkRequired boolean olmalı");
@@ -895,6 +903,18 @@ export async function setFeatureFlags(
         SETTING_KEYS.WORKORDER_TARGET_QUANTITY_ENABLED,
         input.targetQuantityEnabled,
         `${TERIM.terbiyeIsEmri.cumleBasi.yalin} formunda hedef metraj alanını göster`,
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "targetWidthEnabled")) {
+      if (typeof input.targetWidthEnabled !== "boolean") {
+        throw AppError.badRequest("targetWidthEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.WORKORDER_TARGET_WIDTH_ENABLED,
+        input.targetWidthEnabled,
+        `${TERIM.terbiyeIsEmri.cumleBasi.yalin} formunda hedef en alanını göster`,
         userId
       );
     }
@@ -1228,6 +1248,18 @@ export async function setFeatureFlags(
         SETTING_KEYS.SHIPMENT_LOOSE_LOAD_ENABLED,
         input.shipmentLooseLoadEnabled,
         "Çuvalsız sevk: toplar çuvala konmadan dökme ya da araba ile sevk edilebilsin",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "shipmentHandheldCreateEnabled")) {
+      if (typeof input.shipmentHandheldCreateEnabled !== "boolean") {
+        throw AppError.badRequest("shipmentHandheldCreateEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.SHIPMENT_HANDHELD_CREATE_ENABLED,
+        input.shipmentHandheldCreateEnabled,
+        "Sevk Çıkışı'nda (el terminali) cari seç → okut → çuval aç → sevk et",
         userId
       );
     }
@@ -1620,6 +1652,14 @@ export async function setFeatureFlags(
         }
       }
       await this.set(SETTING_KEYS.SHIPPING_SACK_SEQ_START, v === null ? DEFAULT_SHIPPING_SACK_SEQ_START : v, "Sevkiyat içi çuval sırası başlangıç numarası", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "dokumaWeavingWastePct")) {
+      const v = input.dokumaWeavingWastePct;
+      // `null` = alan temizlendi → varsayılan 0 (fire çarpanı yok = bugünkü davranış).
+      if (v !== null && (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > DOKUMA_WEAVING_WASTE_PCT_MAX)) {
+        throw AppError.badRequest(`Dokuma firesi 0 ile ${DOKUMA_WEAVING_WASTE_PCT_MAX} arasında olmalı (yüzde)`);
+      }
+      await this.set(SETTING_KEYS.DOKUMA_WEAVING_WASTE_PCT, v === null ? DEFAULT_DOKUMA_WEAVING_WASTE_PCT : v, "Dokuma firesi (%) — üretim önerisi ve iplik ihtiyacında ham metre = … ÷ (1 − fire)", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "tezgahEscalationGraceMinutes")) {
       const v = input.tezgahEscalationGraceMinutes;

@@ -19,7 +19,7 @@
 // kodu düzeltmek geçmiş kayıtları öksüz bırakır.
 // =============================================================================
 
-import { ReasonPresetKind } from "@prisma/client";
+import { ReasonPresetKind, StationKind } from "@prisma/client";
 
 import { SCRAP_REASONS, RECORD_CORRECTION_REASONS } from "./variance-reasons";
 import { TERIM } from "./terim";
@@ -44,6 +44,11 @@ export type ReasonPresetSeed = {
    * ile düşer ⇒ CHECK + bu katalog + job AYNI commit'te değişir.
    */
   readonly stopLossClass?: "UNPLANNED" | "SETUP" | "PLANNED" | "NON_SCHEDULED";
+  /**
+   * İSTASYON TÜRÜ KAPSAMI — yalnız `MACHINE_STOP` (CHECK `reason_presets_station_kinds_chk`). Boş/yok = her
+   * istasyon. Job yalnız DOĞUŞTA yazar; fabrikanın panelden değiştirdiği kapsam ezilmez (etiket ilkesi).
+   */
+  readonly stationKinds?: readonly StationKind[];
 };
 
 /**
@@ -223,6 +228,9 @@ export const ORDER_CANCEL_REASONS: readonly ReasonPresetSeed[] = [
   { code: "DIGER", label: "Diğer", requiresText: true },
 ] as const;
 
+/** Dokumaya özgü sebeplerin kapsamı — migration `20261109165544_station_machine_stop_scope` aynı kod listesini işaretler. */
+const WEAVING_ONLY: readonly StationKind[] = [StationKind.WEAVING];
+
 /**
  * TEZGAH DURUŞU — 23 sistem sebebi, dört kayıp sınıfında (dokuma P2b-2, tasarım §2.7).
  *
@@ -244,25 +252,25 @@ export const ORDER_CANCEL_REASONS: readonly ReasonPresetSeed[] = [
  */
 export const MACHINE_STOP_REASONS: readonly ReasonPresetSeed[] = [
   // ── Kopuşlar ve malzeme (UNPLANNED) — makine kendi kendine durdu
-  { code: "COZGU_KOPUSU", label: "Çözgü kopuşu", stopLossClass: "UNPLANNED" },
-  { code: "ATKI_KOPUSU", label: "Atkı kopuşu", stopLossClass: "UNPLANNED" },
-  { code: "KENAR_KOPUSU", label: "Kenar kopuşu", stopLossClass: "UNPLANNED" },
-  { code: "IPLIK_BITTI", label: "İplik bitti", stopLossClass: "UNPLANNED" },
+  { code: "COZGU_KOPUSU", label: "Çözgü kopuşu", stopLossClass: "UNPLANNED", stationKinds: WEAVING_ONLY },
+  { code: "ATKI_KOPUSU", label: "Atkı kopuşu", stopLossClass: "UNPLANNED", stationKinds: WEAVING_ONLY },
+  { code: "KENAR_KOPUSU", label: "Kenar kopuşu", stopLossClass: "UNPLANNED", stationKinds: WEAVING_ONLY },
+  { code: "IPLIK_BITTI", label: "İplik bitti", stopLossClass: "UNPLANNED", stationKinds: WEAVING_ONLY },
   // ── Arıza ve dış etken (UNPLANNED)
   { code: "MEKANIK_ARIZA", label: "Mekanik arıza", stopLossClass: "UNPLANNED" },
   { code: "ELEKTRIK_ARIZA", label: "Elektrik arızası", stopLossClass: "UNPLANNED" },
   { code: "ELEKTRIK_KESINTISI", label: "Elektrik kesintisi", stopLossClass: "UNPLANNED" },
   { code: "HAVA_BASINCI", label: "Hava basıncı düştü", stopLossClass: "UNPLANNED" },
-  { code: "JAKAR_ARIZA", label: "Jakar arızası", stopLossClass: "UNPLANNED" },
+  { code: "JAKAR_ARIZA", label: "Jakar arızası", stopLossClass: "UNPLANNED", stationKinds: WEAVING_ONLY },
   { code: "OPERATOR_YOK", label: "Operatör yok", stopLossClass: "UNPLANNED" },
-  { code: "KUMAS_TAMIR", label: "Kumaş tamiri", stopLossClass: "UNPLANNED" },
+  { code: "KUMAS_TAMIR", label: "Kumaş tamiri", stopLossClass: "UNPLANNED", stationKinds: WEAVING_ONLY },
   { code: "TESPIT_EDILEMEDI", label: "Sebep tespit edilemedi", stopLossClass: "UNPLANNED" },
   // ── Kurulum (SETUP) — levent değişimi ile desen değişimi AYRI kodlar
-  { code: "LEVENT_BAGLAMA", label: "Levent bağlama", stopLossClass: "SETUP" },
-  { code: "TAHAR", label: "Tahar", stopLossClass: "SETUP" },
-  { code: "TARAK_DEGISIMI", label: "Tarak değişimi", stopLossClass: "SETUP" },
-  { code: "DESEN_DEGISIMI", label: "Desen değişimi", stopLossClass: "SETUP" },
-  { code: "TOP_ALMA", label: "Top alma", stopLossClass: "SETUP" },
+  { code: "LEVENT_BAGLAMA", label: "Levent bağlama", stopLossClass: "SETUP", stationKinds: WEAVING_ONLY },
+  { code: "TAHAR", label: "Tahar", stopLossClass: "SETUP", stationKinds: WEAVING_ONLY },
+  { code: "TARAK_DEGISIMI", label: "Tarak değişimi", stopLossClass: "SETUP", stationKinds: WEAVING_ONLY },
+  { code: "DESEN_DEGISIMI", label: "Desen değişimi", stopLossClass: "SETUP", stationKinds: WEAVING_ONLY },
+  { code: "TOP_ALMA", label: "Top alma", stopLossClass: "SETUP", stationKinds: WEAVING_ONLY },
   // ── Planlı (PLANNED)
   { code: "PLANLI_BAKIM", label: "Planlı bakım", stopLossClass: "PLANNED" },
   { code: "TEMIZLIK", label: "Temizlik", stopLossClass: "PLANNED" },
@@ -270,7 +278,7 @@ export const MACHINE_STOP_REASONS: readonly ReasonPresetSeed[] = [
   { code: "VARDIYA_DEVRI", label: "Vardiya devri", stopLossClass: "PLANNED" },
   // ── Çalışma dışı (NON_SCHEDULED) — POT'tan düşülür
   { code: "SIPARIS_YOK", label: "Sipariş yok", stopLossClass: "NON_SCHEDULED" },
-  { code: "TEZGAH_KAPALI", label: "Tezgah kapalı", stopLossClass: "NON_SCHEDULED" },
+  { code: "TEZGAH_KAPALI", label: "Tezgah kapalı", stopLossClass: "NON_SCHEDULED", stationKinds: WEAVING_ONLY },
 ] as const;
 
 /**

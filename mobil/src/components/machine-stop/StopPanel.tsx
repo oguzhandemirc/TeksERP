@@ -14,6 +14,8 @@ import { useStopPanel, type StopPanelState } from './useStopPanel';
 import { formatElapsed } from './stopPayload';
 import StopReasonModal from './StopReasonModal';
 import RevokeReasonModal from '../../screens/Modules/Dokuma/RevokeReasonModal';
+import { useSessionStore } from '../../store/sessionStore';
+import { stationAllowsStopOpen } from './stationStopGate';
 
 function reasonLabel(code: string | null): string {
   if (!code) return 'Sebep bekliyor';
@@ -28,9 +30,11 @@ export interface StopPanelBodyProps {
   runningLabel?: string;
   /** true: çalışırken kart çizilmez, yalnız modallar bağlı kalır (Kurşun/Tambur bandı). */
   hideWhenRunning?: boolean;
+  /** false: istasyonda duruş bildirimi kapalı — "Duruş Bildir" çizilmez (açık duruş yine kapatılır). Varsayılan true. */
+  canOpen?: boolean;
 }
 
-export function StopPanelBody({ state, isOnline, canRevoke, runningLabel = 'Tezgah çalışıyor', hideWhenRunning = false }: StopPanelBodyProps) {
+export function StopPanelBody({ state, isOnline, canRevoke, runningLabel = 'Tezgah çalışıyor', hideWhenRunning = false, canOpen = true }: StopPanelBodyProps) {
   const [revokeId, setRevokeId] = useState<string | null>(null);
   const stop = state.openStop;
   const showCard = stop !== null || !hideWhenRunning;
@@ -41,7 +45,7 @@ export function StopPanelBody({ state, isOnline, canRevoke, runningLabel = 'Tezg
         <View style={styles.row}>
           <View style={styles.grow}>
             <Text style={styles.heading}>{stop ? `DURUŞTA · ${formatElapsed(stop.startedAt, state.now)}` : runningLabel}</Text>
-            <Text style={styles.meta}>{stop ? reasonLabel(stop.reasonCode) : 'Duruş bildirilmedi'}</Text>
+            <Text style={styles.meta}>{stop ? reasonLabel(stop.reasonCode) : canOpen ? 'Duruş bildirilmedi' : 'Bu istasyonda duruş bildirimi kapalı'}</Text>
           </View>
           {stop ? (
             <>
@@ -49,7 +53,7 @@ export function StopPanelBody({ state, isOnline, canRevoke, runningLabel = 'Tezg
               <Button mode="contained-tonal" icon="play" onPress={() => state.close(stop.id)} loading={state.closing} disabled={!isOnline || state.closing}>Çalıştı</Button>
               {canRevoke ? <Button compact icon="undo" onPress={() => setRevokeId(stop.id)}>Geri al</Button> : null}
             </>
-          ) : (
+          ) : !canOpen ? null : (
             <Button mode="contained" icon="pause-circle-outline" buttonColor={colors.warning} onPress={state.openModal} disabled={!isOnline || state.stopsLoading}>Duruş Bildir</Button>
           )}
         </View>
@@ -87,7 +91,8 @@ export function StopPanelBody({ state, isOnline, canRevoke, runningLabel = 'Tezg
 
 export default function StopPanel({ machineId, isOnline, canRevoke }: { machineId: string | null; isOnline: boolean; canRevoke: boolean }) {
   const state = useStopPanel({ machineId, isOnline });
-  return <StopPanelBody state={state} isOnline={isOnline} canRevoke={canRevoke} />;
+  const canOpen = useSessionStore((s) => stationAllowsStopOpen(s.active?.station));
+  return <StopPanelBody state={state} isOnline={isOnline} canRevoke={canRevoke} canOpen={canOpen} />;
 }
 
 const styles = StyleSheet.create({

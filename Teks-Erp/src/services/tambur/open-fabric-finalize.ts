@@ -7,6 +7,7 @@
 // =============================================================================
 /* eslint-disable max-lines -- devralınan gövde kelimesi kelimesine taşındı; ailenin max-lines katkısı bölme öncesi gibi TEK (tambur/finalize.ts sayılır) */
 
+import { rollLabelKindOf, stageForProductionExit } from "../helpers/roll-stage.helper";
 import { consumeForOperationTx } from "../helpers/consumable-stock.helper";
 import { ACTIVE_OPERATION } from "../helpers/roll-operation.helper";
 import { ACTIVE_ROLL_PROPERTY, inheritRollPropertiesTx } from "../helpers/property-revoke.helper";
@@ -25,7 +26,7 @@ import {
   type RemainingAction,
 } from "../helpers/quality-role.helper";
 import { resolveEntryStationId } from "../helpers/roll-entry-station.helper";
-import { resolveTargetWarehouseId } from "../helpers/warehouse.helper";
+import { resolveBirthWarehouseIdTx } from "../helpers/emanet-warehouse.helper";
 import { recordVarianceTx } from "../helpers/roll-variance.helper";
 import {
   cutChildrenMeasureSourceTx,
@@ -52,8 +53,11 @@ import {
 import { touchWorkOrderTx } from "../helpers/workorder-locks.helper";
 import { reserveRollBarcodesInOrderTx } from "../helpers/roll-barcode.helper";
 import { TERIM } from "../../constants/terim";
-import { resolveTamburCutWeight, resolveTamburLabelBatchNo } from "../helpers/tambur-customer-settings.helper";
+import { resolveTamburConsignee, resolveTamburCutWeight, resolveTamburLabelBatchNo, resolveTamburWeightSource } from "../helpers/tambur-customer-settings.helper";
+import { inheritedChildWidth, ownerTailIntent, resolveTamburChildWidth } from "../helpers/tambur-child-label.helper";
+import { resolveRollLabelTexts } from "../helpers/label-batch-no.helper";
 import { applyTamburCapabilitiesTx, closeOrphanRollErrors, liveCutChildIdsTx } from "./shared";
+import { resolveTamburLabelTemplate } from "../helpers/tambur-label-template.helper";
 
 export async function finalizeOpenFabric(
     openFabricRollId: string,
@@ -78,6 +82,18 @@ export async function finalizeOpenFabric(
       weightKg?: number | null;
       /** Kalan topun etiket parti no'su (müşteri ayarı açıksa). */
       labelBatchNo?: string | null;
+      labelItemName?: string | null;
+      labelColorName?: string | null;
+      /** Emanet top etiket alıcısı (sahibin alıcısı; boş = sahibin kendisi). */
+      labelConsigneeId?: string | null;
+      /** Kesimde seçilen etiket şablonu (çoklu etiket seti); boş/varsayılan = null yazılır. */
+      labelTemplateId?: string | null;
+      /** Teklif hesabının cihaz bağlamı (controller `req.device.id`). */
+      labelDeviceId?: string | null;
+      /** Etikette kartında ölçülen en (cm) — mirası ezer (K7). */
+      widthCm?: number | null;
+      /** Kg kaynağı beyanı (SCALE | MANUAL | SIMULATED); kaynaksız kg MANUAL yazılır. */
+      weightSource?: "SCALE" | "MANUAL" | "SIMULATED" | null;
     },
     userId?: string,
     /** TAMBUR makine atfı — aktif çalışma oturumundan (controller çözer). */
@@ -184,6 +200,33 @@ export async function finalizeOpenFabric(
       action !== "discard" && Number(parent.currentQty) > 0
         ? await resolveTamburLabelBatchNo({ labelBatchNo: data.labelBatchNo, targetCustomerId: null, ownerCustomerId: parent.ownerCustomerId })
         : null;
+    // Kalan topun etiket kumaş adı / rengi — yalnız top doğuyorsa; miras yok, ayara bağlı değil.
+    const labelTexts =
+      action !== "discard" && Number(parent.currentQty) > 0
+        ? resolveRollLabelTexts(data)
+        : { labelItemName: null, labelColorName: null };
+    // Kalan topun kg kaynağı + emanet alıcısı + en (K7) + niyet (emanet → sahip) — yalnız top doğuyorsa.
+    const remainingBorn = action !== "discard" && Number(parent.currentQty) > 0;
+    const remainingWeightSource = remainingBorn
+      ? await resolveTamburWeightSource({ weightKg: remainingWeightKg, weightSource: data.weightSource, stamp: { machineId: machineId } })
+      : null;
+    const remainingConsigneeId = remainingBorn
+      ? await resolveTamburConsignee({ labelConsigneeId: data.labelConsigneeId, targetCustomerId: null, ownerCustomerId: parent.ownerCustomerId })
+      : null;
+    const remainingWidth = remainingBorn
+      ? await resolveTamburChildWidth(await inheritedChildWidth(parent.id, parent.width), data.widthCm)
+      : { width: parent.width, trace: null };
+    const remainingIntent = ownerTailIntent(parent.ownerCustomerId);
+    const remainingTemplate = remainingBorn
+      ? await resolveTamburLabelTemplate({
+          labelTemplateId: data.labelTemplateId,
+          kind: rollLabelKindOf(stageForProductionExit(parent.currentStep?.outputStage)),
+          customerId: remainingIntent.labelCustomerId,
+          consigneeId: remainingConsigneeId,
+          deviceId: data.labelDeviceId,
+          machineId,
+        })
+      : { labelTemplateId: null, labelTemplateKind: null };
     // Kod KATALOGDAN (karar ①) — `finalizeWarehouseCut` ile AYNI kapı; eşleme
     // burada ikinci kez yazılsaydı iki yüzey sessizce ayrışırdı.
     const childQualityGrade: string = await resolveRemainingGradeCode(
@@ -282,7 +325,7 @@ export async function finalizeOpenFabric(
             barcode: childBarcode,
             itemId: parent.itemId,
             colorId: parent.colorId,
-            width: parent.width,
+            width: remainingWidth.width,
             // KAT — `actualFoldType` bu fonksiyonda zaten hesaplı (operatör
             // kararı, yoksa WO planı); eskiden YALNIZ RollOperation.metadata'ya
             // yazılıyordu, artık topun kendi kolonuna da yazılır.
@@ -290,7 +333,13 @@ export async function finalizeOpenFabric(
             initialQty: remainingQty,
             currentQty: remainingQty,
             weightKg: remainingWeightKg,
+            weightSource: remainingWeightSource,
+            labelConsigneeId: remainingConsigneeId,
+            labelTemplateId: remainingTemplate.labelTemplateId,
+            labelTemplateKind: remainingTemplate.labelTemplateKind,
             labelBatchNo: remainingLabelBatchNo,
+            labelItemName: labelTexts.labelItemName,
+            labelColorName: labelTexts.labelColorName,
             status: RollStatus.WAREHOUSE,
             qualityGrade: childQualityGrade,
             qualityGradeId: childQualityGradeId,
@@ -300,23 +349,25 @@ export async function finalizeOpenFabric(
             ownerCustomerId: parent.ownerCustomerId ?? null,
             // Parti (batch) kimliğini parent'tan kalıt → bölünen top depoya gitse bile partisi lane'de izlenir.
             batchId: parent.batchId,
-            // DEPO parent'tan MİRAS ALINIR — kesmek malı taşımaz (bkz. kesim çocuğu).
-            warehouseId: parent.warehouseId ?? (await resolveTargetWarehouseId(tx)),
+            // DEPO: üretim çıktısı — sahipli ise emanet deposu (açıkken), yoksa ebeveynin kayıtlı deposu (fason.md F1b).
+            warehouseId: await resolveBirthWarehouseIdTx(tx, null, parent.ownerCustomerId, parent.warehouseId),
             // GİRİŞ İSTASYONU — kalan parça da aynı kesimin ürünü.
             // Parent'tan MİRAS ALINMAZ: parent başka bir istasyonda girmiş olabilir
             // (depo topu yeni bir iş emrine sokulabiliyor); doğru cevap KESİMİN yeri.
             entryStationId: resolveEntryStationId({ stepStationId: parent.currentStep?.stationId }),
             entrySource: RollEntrySource.TAMBUR_SPLIT,
+            stage: stageForProductionExit(parent.currentStep?.outputStage),
             createdById: userId ?? null,
             createdMachineId: machineId ?? null,
-            // Kalan (leftover) parça — müşteri niyeti yok → stok etiketi.
-            lastLabelSnapshot: { stock: true },
+            // Kalan (leftover) parça — müşteri niyeti yok → stok etiketi; emanet topta sahip (sahip kilidi).
+            lastLabelSnapshot: remainingIntent.lastLabelSnapshot,
+            labelCustomerId: remainingIntent.labelCustomerId,
             },
         });
         if (propertySnapshot.length > 0) {
           await inheritRollPropertiesTx(tx, { childId: child.id, rows: propertySnapshot });
         }
-        await applyTamburCapabilitiesTx(tx, { caps: tamburCaps, stationId: tamburStationId, rollId: child.id, userId });
+        await applyTamburCapabilitiesTx(tx, { caps: tamburCaps, stationId: tamburStationId, rollId: child.id, userId, birth: "OUTPUT" });
         remainingChildId = child.id;
         // STOK DEFTERİ — kalan parça da depoda doğar: `cutOpenFabric` çocuğuyla AYNI
         // giriş (2026-09-14'e kadar satırsızdı; tipli `rollData` yüzünden K
@@ -417,6 +468,7 @@ export async function finalizeOpenFabric(
             remainingChildQuality: wantChild ? childQualityGrade : null,
             remainingQty,
             notes: data.notes ?? null,
+            ...(remainingWidth.trace ? { measuredWidth: remainingWidth.trace } : {}),
             plannedFoldType,
             actualFoldType,
             overriddenFoldType,
@@ -468,6 +520,7 @@ export async function finalizeOpenFabric(
         remainingChildQuality: result.wantChild ? childQualityGrade : null,
         remainingQty: result.remainingQty,
         notes: data.notes ?? null,
+        ...(labelTexts.labelItemName || labelTexts.labelColorName ? labelTexts : {}),
       },
     });
 

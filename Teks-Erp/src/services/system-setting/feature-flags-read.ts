@@ -6,25 +6,24 @@
 // dışa açık ad yalnız cepheden (`../system-setting.service`) okunur.
 // =============================================================================
 
-import { terimDokumaAyarla } from "../../constants/terim";
 import { isHostedInstallation } from "../helpers/install-class.helper";
 import { ApiResponse } from "../../types/api.types";
 import prisma from "../../lib/prisma";
 import { readConsumableStockEnabled, readCostFinishingKgBasis, readCostPresentationCurrency, readCostProfitCategoryClasses, readCostProfitConsumablePriceSource, readCostProfitMachineTime, readCostProfitOverheadKey, readCostProfitSubcontractSource, readCostWeavingStandardMethod, readFinanceAllowZeroPriceLineEnabled, readFinanceAutoAllocateOnPaymentEnabled, readFinanceCariHoldEmanetShipment, readFinanceCariHoldReleaseBySamePerson, readFinanceFutureDatedDocumentBlockEnabled, readFinanceRiskLimitCurrencyMode, readFinanceYarnOutOnInvoiceEnabled, readGoodsReceiptRequirePriceEnabled, readGoodsReceiptYarnQualityHoldEnabled, readOrderProductionProposal, readProductionCancelReasonRequired, readPurchaseBlockOverReceiptEnabled, readYarnBlockNegativeBalanceEnabled } from "./cost-purchase";
 import { readDevicePairingRequired, readDeviceProofRequired, readDeviceUnpairedPasswordLogin, readShortCredentialApprovedDeviceOnly, readShortCredentialTotpRequired, readTrustedDeviceDays, readWebTotpPolicy } from "./device-auth";
 import { readCompanyLegalIdentity, readCompanyLetterhead, readDocumentsConfig, readEIrsaliyeConfig } from "./documents";
+import { applyTermRegime, settingMapClient } from "./feature-flags-read-helpers";
 import { withLicenseBlock, type CachedFeatureFlags, type FeatureFlags } from "./feature-flags-types";
 import { readFinanceAutoDraftFromShipmentEnabled, readFinanceBlockNegativeCashEnabled, readFinanceCariHoldDefaultScope, readFinanceChequeNoteMovementEnabled, readFinanceDefaultVatRate, readFinanceEnabledRaw, readFinanceExpenseAllocationClosedWorkOrder, readFinanceExpenseAllocationField, readFinanceExpenseCategorySuggestions, readFinanceInvoiceMatchTolerance, readFinanceInvoicePriceTolerancePct, readFinanceInvoiceQtyTolerancePct, readFinanceKursunGramPriceBasis, readFinanceRiskLimitBlockEnabled, readFinanceRiskLimitBlockIntake, readFinanceRiskLimitBlockShipment, readFinanceServiceBillingBrodeUnit, readFinanceServiceBillingStepWorks, readFinanceServiceBillingWeavingWorks, readFinanceServiceBillingEnabled, readFinanceServiceBillingMeterBasis, readFinanceServiceBillingMissingMeter, readFinanceServiceBillingPriceDate, readFinanceServiceBillingTrigger, readFinanceWithholdingDenominator, readFinanceWithholdingEnabled, readFinanceWithholdingNumerator, readFinancePurchaseWithholdingDenominator, readFinancePurchaseWithholdingEnabled, readFinancePurchaseWithholdingNumerator, readPricingEnabled } from "./finance";
 import { publicTimezoneWarning, readCompanyName, readFactoryTimezonePeriods } from "./general";
-import { SETTING_KEYS } from "./keys";
 import { readBatchAutoCreateEnabled, readBatchLastNumberHintEnabled, readBatchShortNumberEnabled, readKursunBypassEnabled, readKursunMachineAssignMode, readKursunMeterCapture, readKursunMeterStockMode, readKursunMeterVarianceApproval, readKursunMeterVarianceBasis, readKursunMeterVarianceThresholdM, readKursunMeterVarianceThresholdPct, readKursunSimulatedMeterEnabled, readProductionRouteMode, readProductionScanRouteStations, readQualityGradeRequiredEnabled, readScanCustomerCodeLookupEnabled } from "./kursun-batch";
 import { readDefaultLabelMedia, readDocumentDesignerEnabled, readDocumentPublishSodEnabled, readLabelCopies, readLabelCopiesSource, readLabelCustomerCodeAt, readLabelCustomerCodeMissing, readLabelNativeSendEnabled, readMobileRasterEnabled, readNotificationInboxEnabled, readPatronBulutOlayGudumluEnabled, readScrapGradeLabelEnabled } from "./labels";
-import { readDepoMultiEnabledRaw, readDevereAutoConsume, readDevereBeamWeavingLinkRequired, readDevereEnabledRaw, readDevereLotRequired, readDevereMountTracking, readDevereMountTrackingRequired, readDokumaEnabledRaw, readDokumaOrderLineLinkRequired, readDokumaRollBirth, readDokumaRunWeavingOrderRequired, readEmanetEnabledRaw, readGelenBelgeEnabledRaw, readIplikEnabledRaw, readKaliteGuvenceEnabledRaw, readKumasTeknikEnabledRaw, readMaliyetEnabledRaw, readProductionEnabledRaw, readReportsClosedKeys, readReportsV2Enabled, readTezgahEnabledRaw, readTicaretEnabledRaw } from "./modules";
+import { readDepoMultiEnabledRaw, readDevereAutoConsume, readDevereBeamWeavingLinkRequired, readDevereEnabledRaw, readDevereLotRequired, readDevereMountTracking, readDevereMountTrackingRequired, readDokumaEnabledRaw, readDokumaOrderLineLinkRequired, readDokumaRollBirth, readDokumaRunWeavingOrderRequired, readDokumaWeavingWastePct, readDokumaYarnReservationEnabled, readEmanetEnabledRaw, readGelenBelgeEnabledRaw, readIplikEnabledRaw, readKaliteGuvenceEnabledRaw, readKumasTeknikEnabledRaw, readMaliyetEnabledRaw, readProductionEnabledRaw, readReportsClosedKeys, readReportsV2Enabled, readTezgahEnabledRaw, readTicaretEnabledRaw } from "./modules";
 import { readPackageNoMode, readPackageNoStartsAtZero, readPackageNumbering, readPackingGroupMode, readPackingGroupNumbering, readPackingGroupsEnabled, readPackingLotPartialDispatch, readPackingLotRequired, readPackingPoolPackageNo, readSackDumpNameMode, readShippingDocPackingLot, readShippingReturnFootnote, readShippingSackSeqOnDoc, readShippingSackSeqPrefix, readShippingSackSeqPrefixLive, readShippingSackSeqShowTotal, readShippingSackSeqStart, readTezgahAlarmEnabled, readTezgahAlarmEscalateWhenAcked, readTezgahAlarmNoShiftMode, readTezgahAlarmRenotifyMinutes, readTezgahAlarmUnclassifiedEnabled, readTezgahAlarmUnclassifiedTargetMinutes, readTezgahCollectorSilenceMinutes, readTezgahEscalationGraceMinutes, readTezgahMaxOpenStopHours } from "./packing-loom";
 import { readBackupHour, readLoginMethods, readPinLockoutAttempts, readPinLockoutEnabled, readPinLockoutEscalateAfter, readPinLockoutLongPenaltyMin, readPinLockoutPenaltySec } from "./pin-backup";
-import { readFasonNoteMobileEntry, readKartelaMeasurementEnabled, readKk1DuplicateGuardEnabled, readKk1HistoryAllEntriesEnabled, readKk1LabelScanVerifyEnabled, readKk1OnlineOnlyEnabled, readKk1WeightEntryEnabled, readPartyCodeAuto, readRawWidthEnabled, readReturnGradingEnabled, readSimulatedWeightEnabled, readSupportOwnTicketsOnlyEnabled, readTargetQuantityEnabled, readWorkOrderQuickOwnOnlyEnabled } from "./production";
+import { readFasonNoteMobileEntry, readKartelaMeasurementEnabled, readKk1DuplicateGuardEnabled, readKk1HistoryAllEntriesEnabled, readKk1LabelScanVerifyEnabled, readKk1OnlineOnlyEnabled, readKk1WeightEntryEnabled, readPartyCodeAuto, readRawWidthEnabled, readReturnGradingEnabled, readSimulatedWeightEnabled, readSupportOwnTicketsOnlyEnabled, readTargetQuantityEnabled, readTargetWidthEnabled, readWorkOrderQuickOwnOnlyEnabled } from "./production";
 import { readAbsoluteSessionCapDays, readAutoLogoutOnExpiry, readIdleTimeoutMinutes, readMobileIdleLockEnabled, readMobileIdleLockMinutes, readMobileLockOnBackground, readMobileOfflineLockDefer, readRememberLastUser, readSameTypeSessionPolicy, readSessionDurationMinutes, readWorkSessionIdleTimeoutMinutes } from "./session";
-import { readItemPhaseOutLineQty, readItemPhaseOutNewOrder, readItemPhaseOutNewPlan, readShipmentConfirmationEnabled, readShipmentLooseLoadEnabled, readShipmentManualSackCountEnabled, readShipmentUndoSameDayOnly, readShippingAllocWidthToleranceCm, readShippingAllocWidthToleranceEnabled, readShippingAllowOverAllocation, readShippingDocCekiNameMode, readShippingDocItemNameMode, readShippingDocProductColorSplit, readShippingInvoiceMode, readShippingManualWeightRestrictedEnabled, readShippingOrderCoverage, readShippingOrderRequirement, readShippingReadyNotifyUnits, readShippingReadyRule, readShippingReadyScanMinutes, readShippingReadyTolerancePct, readShippingWeighRequiredEnabled } from "./shipping";
+import { readItemPhaseOutLineQty, readItemPhaseOutNewOrder, readItemPhaseOutNewPlan, readShipmentConfirmationEnabled, readShipmentHandheldCreateEnabled, readShipmentLooseLoadEnabled, readShipmentManualSackCountEnabled, readShipmentUndoSameDayOnly, readShippingAllocWidthToleranceCm, readShippingAllocWidthToleranceEnabled, readShippingAllowOverAllocation, readShippingDocCekiNameMode, readShippingDocItemNameMode, readShippingDocProductColorSplit, readShippingInvoiceMode, readShippingManualWeightRestrictedEnabled, readShippingOrderCoverage, readShippingOrderRequirement, readShippingReadyNotifyUnits, readShippingReadyRule, readShippingReadyScanMinutes, readShippingReadyTolerancePct, readShippingWeighRequiredEnabled } from "./shipping";
 import { readCustomerBranchesEnabled, readDemoModeEnabled, readDuplicatesFuzzyEnabled, readDuplicatesFuzzyThresholdPct, readFasonReceiptApplyTargetVariant, readFasonExpectedReturnDays, readFasonShrinkTolerancePct, readFasonShrinkWarnEnabled, readMachineStopOpenWarningEnabled, readMachineStopTrackingEnabled, readTamburCalibrationCheck, readTamburChildWidthSource, readTamburLabelPrintTiming, readTamburListByStationEnabled, readTamburMeasureSourceRequired, readTamburOverQuantityEnabled, readTamburPlanGateWidthCheck, readTamburPlanGateWidthToleranceCm, readTamburShortCutA1Enabled, readTamburShortCutA1ThresholdM, readTamburSimulatedMeterEnabled, readTamburUndoFullSameDayOnly } from "./tambur-fason";
 import { readTravelerCardConfig } from "./traveler-card";
 
@@ -52,13 +51,6 @@ let cacheGeneration = 0;
 export function invalidateFeatureFlagsCache(): void {
   featureFlagsCache = null;
   cacheGeneration++;
-}
-
-/** K20: iş emri adı rejimi (`TERIM.terbiyeIsEmri`) etkin dokumadan — üretim ∧ dokuma ∧ lisans tavanı açık. */
-function applyTermRegime(flags: FeatureFlags): FeatureFlags {
-  const licenseClosed = flags.license?.kapaliModuller?.some((m) => m.anahtar === SETTING_KEYS.DOKUMA_ENABLED) ?? false;
-  terimDokumaAyarla(flags.productionEnabled && flags.dokumaEnabled && !licenseClosed);
-  return flags;
 }
 
 // Her tablet isteğinde okunur: kısa TTL'li önbellek; bayrak yazımı (invalidateFeatureFlagsCache)
@@ -94,12 +86,7 @@ export async function getFeatureFlags(): Promise<ApiResponse<FeatureFlags>> {
     // DB yerine map olur (system_settings tablosu küçük → tüm satırları çekmek ucuz).
     const rows = await prisma.systemSetting.findMany({ select: { key: true, value: true } });
     const valueByKey = new Map(rows.map((r) => [r.key, r.value] as const));
-    const cacheClient = {
-      systemSetting: {
-        findUnique: (args: { where: { key: string } }) =>
-          Promise.resolve(valueByKey.has(args.where.key) ? { value: valueByKey.get(args.where.key) } : null),
-      },
-    } as unknown as Pick<typeof prisma, "systemSetting">;
+    const cacheClient = settingMapClient(valueByKey);
 
     // Oturum ömrü tek kaynaktan (dakika); saat alanı geriye-uyum için aynı değerden türetilir.
     const sessionMinutes = await readSessionDurationMinutes(cacheClient);
@@ -187,6 +174,8 @@ export async function getFeatureFlags(): Promise<ApiResponse<FeatureFlags>> {
       dokumaRunWeavingOrderRequired: await readDokumaRunWeavingOrderRequired(cacheClient),
       dokumaOrderLineLinkRequired: await readDokumaOrderLineLinkRequired(cacheClient),
       dokumaRollBirth: await readDokumaRollBirth(cacheClient),
+      dokumaWeavingWastePct: await readDokumaWeavingWastePct(cacheClient),
+      dokumaYarnReservationEnabled: await readDokumaYarnReservationEnabled(cacheClient),
       dokumaEnabled: await readDokumaEnabledRaw(cacheClient),
       maliyetEnabled: await readMaliyetEnabledRaw(cacheClient),
       gelenBelgeEnabled: await readGelenBelgeEnabledRaw(cacheClient),
@@ -198,6 +187,7 @@ export async function getFeatureFlags(): Promise<ApiResponse<FeatureFlags>> {
       })(),
       reportsV2Enabled: await readReportsV2Enabled(cacheClient),
       targetQuantityEnabled: await readTargetQuantityEnabled(cacheClient),
+      targetWidthEnabled: await readTargetWidthEnabled(cacheClient),
       rawWidthEnabled: await readRawWidthEnabled(cacheClient),
       kk1WeightEntryEnabled: await readKk1WeightEntryEnabled(cacheClient),
       kk1DuplicateGuardEnabled: await readKk1DuplicateGuardEnabled(cacheClient),
@@ -221,6 +211,7 @@ export async function getFeatureFlags(): Promise<ApiResponse<FeatureFlags>> {
       shipmentConfirmationEnabled: await readShipmentConfirmationEnabled(cacheClient),
       shipmentManualSackCountEnabled: await readShipmentManualSackCountEnabled(cacheClient),
       shipmentLooseLoadEnabled: await readShipmentLooseLoadEnabled(cacheClient),
+      shipmentHandheldCreateEnabled: await readShipmentHandheldCreateEnabled(cacheClient),
       shipmentUndoSameDayOnly: await readShipmentUndoSameDayOnly(cacheClient),
       shippingOrderRequirement: await readShippingOrderRequirement(cacheClient),
       itemPhaseOutNewOrder: await readItemPhaseOutNewOrder(cacheClient),

@@ -15,8 +15,9 @@ import { errorText, Footer, useAfterSave, type FixWo } from './fixSheetParts';
 import WorkOrderDetachSheet from './WorkOrderDetachSheet';
 import WorkOrderAddBatchSheet from './WorkOrderAddBatchSheet';
 import GramajFixSheet from './GramajFixSheet';
+import FoldFixSheet from './FoldFixSheet';
 
-export type FixKind = 'color' | 'width' | 'reprint' | 'detach' | 'addBatch' | 'gramaj';
+export type FixKind = 'color' | 'width' | 'reprint' | 'detach' | 'addBatch' | 'gramaj' | 'fold';
 
 
 interface Props {
@@ -166,6 +167,7 @@ export default function WorkOrderFixSheet({ kind, wo, onDismiss, onDone }: Props
   if (kind === 'width') return <WidthFix wo={wo} onDismiss={onDismiss} onDone={onDone} />;
   if (kind === 'detach') return <WorkOrderDetachSheet wo={wo} onDismiss={onDismiss} onDone={onDone} />;
   if (kind === 'gramaj') return <GramajFixSheet wo={wo} onDismiss={onDismiss} onDone={onDone} />;
+  if (kind === 'fold') return <FoldFixSheet wo={wo} onDismiss={onDismiss} onDone={onDone} />;
   if (kind === 'addBatch') return <WorkOrderAddBatchSheet wo={wo} onDismiss={onDismiss} onDone={onDone} />;
   return <ReprintFix wo={wo} onDismiss={onDismiss} onDone={onDone} />;
 }

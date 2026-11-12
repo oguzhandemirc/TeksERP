@@ -5,7 +5,7 @@ import { splitDefFilters } from "./def-row-filters";
 
 export interface DefFilterRowProps {
   filters: readonly FilterDef[];
-  /** Satırda hep duranlar (sırasıyla; tarih varsa önde); geri kalanı "+ Filtre"de. */
+  /** İlk açılışta satırda görünenler (sırasıyla; tarih varsa önde); geri kalanı "+ Filtre"de. Kullanıcı tikle değiştirir. */
   primaryKeys: readonly string[];
   search: string;
   onSearchChange: (v: string) => void;

@@ -6,3 +6,5 @@ export { ChoiceChips, type ChoiceChipsProps, type ChoiceOption } from './ChoiceC
 export { NoticeStrip, type NoticeStripProps } from './NoticeStrip';
 export { splitCommonPrefix } from './commonPrefix';
 export { pillColors, type BandTone, type PillTone } from './tone';
+export { defaultChoiceText, type DefaultChoiceText } from './defaultChoice';
+export { ChoiceRow, InlineField } from './ChoiceRow';

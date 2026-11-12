@@ -246,6 +246,8 @@ const PARTIAL_INDEXES: Array<{
   { table: "customer_lab_specs", index: "customer_lab_specs_customer_item_uq", uniq: true, predicate: `(("isActive" = true) AND ("itemId" IS NOT NULL))`, why: "(müşteri, ürün, test türü) başına tek aktif lab spesifikasyonu (K4P-SERT)" },
   // customer_delivery_notes (sahip, gönderen belge no) partial UNIQUE K27'de (migration 20261103093156) DÜZ index'e döndü —
   // tekillik fabrika ayarı `gelenBelge.duplicateDocNo` (BLOCK: 8044 kilidi + kontrol; bekçi test_gelen_belge_mukerrer_belge_no).
+  // Parti satırı müşteri parti no araması (migration 20261109121734): kolon yalnız özet/parti satırında dolu.
+  { table: "customer_delivery_note_lines", index: "customer_delivery_note_lines_customer_batch_idx", uniq: false, predicate: `("customerBatchNo" IS NOT NULL)`, why: "null-yoğun: Gelen Belgeler araması yalnız parti satırlarını tarar (EXPLAIN 300k: 72 → 2 ms)" },
   // H1 kurşun metre defteri (migration 20261029005529) — top × adım × evre ve okuma başına TEK aktif satır; damgalı geçmiş serbest.
   { table: "roll_meter_readings", index: "roll_meter_readings_active_uq", uniq: true, predicate: `("revokedAt" IS NULL)`, why: "düzeltme = damga + yeni satır; ikinci aktif okuma/onay seddi (bekçi test_kursun_metre §8)" },
   { table: "roll_meter_acks", index: "roll_meter_acks_active_uq", uniq: true, predicate: `("revokedAt" IS NULL)`, why: "okuma başına tek aktif sapma onayı (H2)" },
@@ -254,7 +256,7 @@ const PARTIAL_INDEXES: Array<{
   { table: "cari_holds", index: "cari_holds_active_cariId_key", uniq: true, predicate: `("releasedAt" IS NULL)`, why: "hesap başına tek AKTİF cari kilidi; açmak damga, yeniden kilit yeni satır (D4-I1a, bekçi test_cari_kilit)" },
   { table: "machine_cost_rates", index: "machine_cost_rates_active_machine_uq", uniq: true, predicate: `("revokedAt" IS NULL)`, why: "makine başına TEK AKTİF saat ücreti; değişim damga + yeni satır (D4-G1a, bekçi test_makine_ucreti_sarf_normu)" },
   { table: "expense_allocations", index: "expense_allocations_active_txn_idx", uniq: false, predicate: `("revokedAt" IS NULL)`, why: "masrafın AKTİF bağları (Σ pay ≤ 100 kilitli okuması + as-of); damgalı satır tarihçe (D4-H3)" },
-  { table: "service_consumable_norms", index: "service_consumable_norms_active_pair_uq", uniq: true, predicate: `("revokedAt" IS NULL)`, why: "(hizmet, sarf) çifti başına TEK AKTİF norm (D4-G1a, bekçi test_makine_ucreti_sarf_normu)" },
+  { table: "service_consumable_norms", index: "service_consumable_norms_active_pair_uq", uniq: true, predicate: `("revokedAt" IS NULL)`, why: "(hizmet, sarf, çeşit) NULLS NOT DISTINCT başına TEK AKTİF norm (D4-G1a; çeşit 2026-11-10 sarf tüketimi; bekçiler test_makine_ucreti_sarf_normu, test_sarf_tuketim_taban)" },
   // H7 hizmet faturası bağı (migration 20261029140000) — iş (top × kalem × adım, NULLS NOT DISTINCT) başına TEK aktif bağ.
   { table: "service_billing_links", index: "service_billing_links_active_uq", uniq: true, predicate: `("revokedAt" IS NULL)`, why: "aynı iş iki faturaya bağlanamaz; iptal damgası yeri boşaltır (bekçi test_hizmet_fatura)" },
   // roll_returns — çok kalemli iade grubu (migration 20260805100000)
@@ -438,6 +440,8 @@ const PARTIAL_INDEXES: Array<{
   { table: "service_items", index: "service_items_nameFold_key", uniq: true, predicate: `("mergedIntoId" IS NULL)`, why: "hizmet adı mükerreri DB seddi — tombstone hariç" },
   { table: "service_items", index: "service_items_mergedIntoId_idx", uniq: false, predicate: `("mergedIntoId" IS NOT NULL)`, why: "null-yoğun FK (taşınan birleşme soyu seyrek)" },
   { table: "subcontractors", index: "subcontractors_nameFold_key", uniq: true, predicate: `("mergedIntoId" IS NULL)`, why: "ad mükerreri DB seddi — tombstone hariç (prod'da eksikse: temizlik + enforce bekliyor)" },
+  // Alıcı kataloğu (20261110150000): sahip başına katlanmış ad tekil, mezar taşı hariç (customers emsali).
+  { table: "customer_consignees", index: "customer_consignees_customerId_nameFold_key", uniq: true, predicate: `("mergedIntoId" IS NULL)`, why: "alıcı adı mükerreri DB seddi (sahip başına) — tombstone hariç; ensure ON CONFLICT bu index'e dayanır" },
   // quality_grades — üretim rolü seddi (2026-09-13, karar ①, migration
   // 20260913120000). PREDICATE'te `isActive` VAR: pasif satır rolünü TARİH
   // olarak taşır, yoksa "1.KALITE'yi pasifleştirip 1K koy" geçişi önce eski
@@ -738,6 +742,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "stations", name: "stations_default_label_copies_range" },
   { table: "order_lines", name: "order_lines_quantity_pos" },
   { table: "order_lines", name: "order_lines_shippedQty_nonneg" },
+  // 2026-11-11 (K4): satır sevk toleransı NULL ya da 0..50 (`order-status.helper.ts`).
+  { table: "order_lines", name: "order_lines_tolerance_pct_range" },
   { table: "manifests", name: "manifests_source_shape" },
   { table: "sacks", name: "sacks_weightKg_nonneg" },
   // Çuvalsız sevk: SACK-dışı birim tartı/parti taşımaz, araba no yalnız CART'ta, SACK çözülmez.
@@ -832,6 +838,12 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // `test_production_line` §1 onun DAVRANIŞINI ölçer (varlığını değil).
   { table: "machines", name: "machines_productionLineCount_pos" },
   { table: "machines", name: "machines_warp_beam_slots_nonneg" },
+  // 2026-11-11 (Seyitoğlu temel) — migration 20261111170000: tezgâh plan alanları (NULL serbest).
+  { table: "machines", name: "machines_plan_rpm_pos" },
+  { table: "machines", name: "machines_plan_efficiency_range" },
+  { table: "machines", name: "machines_max_working_width_pos" },
+  // 2026-11-12 (Seyitoğlu 3. bölüm I2) — migration 20261112100000: iplik başına fire (0..50, yalnız YARN).
+  { table: "items", name: "items_yarn_waste_pct_ck" },
   // 2026-09-13 (dokuma yazma yüzeyi) — migration 20260913241000. P1 bilerek
   // erteledi ("kapısız CHECK, yazanı olmayan kısıt"); servisin 400'ü ilk hat,
   // bu CHECK son hat (çift yüklem). SUBCONTRACTED ⇔ subcontractorId DOLU.
@@ -854,6 +866,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // Tezgah Salonu (2026-10-10, migration 20261010130000): hedef süre yalnız MACHINE_STOP ∧
   // NON_SCHEDULED dışı ∧ 1..1440; duruşa donan hedef 1..1440 · pay 0..1440.
   { table: "reason_presets", name: "reason_presets_stop_target_chk" },
+  // 2026-11-09 (migration 20261109165544): dolu istasyon türü kapsamı yalnız MACHINE_STOP (servis ikizi `resolveStationKinds`).
+  { table: "reason_presets", name: "reason_presets_station_kinds_chk" },
   { table: "machine_stop_events", name: "machine_stop_events_escalation_chk" },
   // Dokuma alarm motoru (Faz A1, migration 20261011090000): kademe · plan aralıkları ·
   // üstlenme çift yüklemi (OPEN⇒yok, ACKED⇒var) · susturma çifti · terminal⇔closedAt ·

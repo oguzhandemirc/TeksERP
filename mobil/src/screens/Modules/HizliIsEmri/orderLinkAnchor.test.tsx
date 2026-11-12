@@ -80,3 +80,16 @@ describe('Hızlı İş Emri — çapa hook içinde yaşar', () => {
     expect(src('wizard/StepRolls.tsx')).toMatch(/picked=\{wo\.pickedOrderLines\}/);
   });
 });
+
+describe('OrderLinkPicker — tek satır "isteğe bağlı" tetiği', () => {
+  it('optionalInline: boşken "Sipariş Bağla (isteğe bağlı)" tek satır, ikincil satır yok; bağlıyken bugünkü iki satır', () => {
+    const base = { itemId: null, onChange: jest.fn(), open: false, onOpenChange: jest.fn() };
+    const empty = renderWithPaper(<OrderLinkPicker {...base} value={[]} optionalInline />);
+    expect(screen.getByLabelText('Sipariş bağla')).toHaveTextContent(/Sipariş Bağla \(isteğe bağlı\)/);
+    expect(screen.queryByText(/Opsiyonel/)).toBeNull();
+    empty.unmount();
+    renderWithPaper(<OrderLinkPicker {...base} value={['l1']} picked={addPicked({}, BYZ)} optionalInline />);
+    expect(screen.getByText('Değiştirmek için dokun')).toBeTruthy();
+    expect(screen.queryByText(/isteğe bağlı/)).toBeNull();
+  });
+});

@@ -20,6 +20,8 @@
 //   C) WO rollup'ında adım→istasyon haritası bozuldu         → 2 ❌
 //   D) (K2a 2026-10-29) numara serisi tazelemesi eski N+1'e + ısıtma sonrası bekleme kaldırıldı → pencerede
 //      seri turu 7–9, 1 ❌ (bütçe dalgası CI'da 92'ye çıkmıştı; düzeltme sonrası 5/5 koşum ölçülen=64)
+//   E) (2026-11-10) LIST_ONLY_DERIVED'a listede olmayan anahtar eklendi → 1 ❌ (ölü beyan); beyan kaldırılınca
+//      customerBatchNo yine "yalnız listede" ❌ verir (87f6ee95f/1d3497a9c kırmızısı)
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
 import { InventoryService } from "../src/services/inventory.service";
@@ -61,8 +63,11 @@ const RELATION_KEYS = [
   // P1a: emanet sahibi — listenin "Sahibi" sütunu; kart taşımaz (sorgu bütçesi, panel detaydan okur).
   "ownerCustomer",
 ];
+// Yalnız LİSTEDE türetilen skalerler (beyanlı): liste sütunu için ata zinciri sorgusuyla eklenir; kart taşımaz
+// (kolon başına ek tur), panel kartı aynı bilgiyi detay yanıtından (`deliveryNote`) okur. Ölü beyan da kırmızı.
+const LIST_ONLY_DERIVED = ["customerBatchNo"];
 const scalarKeys = (o: object): string[] =>
-  Object.keys(o).filter((k) => !RELATION_KEYS.includes(k)).sort();
+  Object.keys(o).filter((k) => !RELATION_KEYS.includes(k) && !LIST_ONLY_DERIVED.includes(k)).sort();
 
 const req = (q: Record<string, string>) => ({ query: q, params: {}, body: {} }) as never;
 
@@ -127,6 +132,8 @@ async function main(): Promise<void> {
     check("kart/liste karşılaştırması için veri var", false, "liste ya da kolon boş");
   } else {
     const a = scalarKeys(listRoll), b = scalarKeys(cardRoll);
+    const deadDecl = LIST_ONLY_DERIVED.filter((k) => !(k in listRoll) || k in cardRoll);
+    check("liste-yalnız türetilmiş beyanı canlı (listede var, kartta yok)", deadDecl.length === 0, `ölü/yanlış beyan: [${deadDecl}]`);
     check(
       "kart ile liste AYNI skaler kümeyi döndürüyor (ayrışan yüzey seddi)",
       a.join(",") === b.join(","),

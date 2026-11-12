@@ -8,7 +8,7 @@
 // Bilinmeyen/eksik driver → RASTER_HTML failsafe.
 // =============================================================================
 
-import { readLabelUnitSettings } from "../../config/label-units";
+import { payloadWithTemplateUnits } from "../../config/label-units";
 import { PrinterLanguage, type LabelTemplate, type LabelTemplateVariant } from "@prisma/client";
 import type { LabelPayload } from "../../types/label.types";
 import type { ResolvedLabelFormat } from "./label-format.resolver";
@@ -163,10 +163,10 @@ export async function renderLabel(language: PrinterLanguage, rawInput: LabelRend
 /** Şablonun birim sistemi payload'a taşınır — tüm diller değeri `fieldDisplayValue`den aynı
  *  biçimle okur. Payload zaten taşıyorsa (stüdyo önizlemesi) o kazanır; ayarsız şablon bayt-aynı. */
 export function withTemplateUnits(input: LabelRenderInput): LabelRenderInput {
-  if (input.payload.unitSettings !== undefined) return input;
-  const units = readLabelUnitSettings(input.template?.unitSettings);
-  return units ? { ...input, payload: { ...input.payload, unitSettings: units } } : input;
+  const payload = payloadWithTemplateUnits(input.payload, input.template);
+  return payload === input.payload ? input : { ...input, payload };
 }
+
 
 /** Önizleme + baskı AYNI raster kararını paylaşır (drift imkânsız): raster modu açık +
  *  raster dili + rawCode YOK + kanvas varyantı var. (Envelope'un fiilen üretilip

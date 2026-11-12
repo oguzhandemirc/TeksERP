@@ -54,6 +54,14 @@ describe("Partiler kartı", () => {
     expect(partyFacts(party(1, { weightKg: 512.5, batchNo: null })).at(-1)).toMatch(/kg$/);
   });
 
+  it("⭐ gelen kg: satır kg toplamı yoksa sunucu önerisi (belge toplamı) yazılır; ikisi de yoksa kg kutusu yok", () => {
+    // Negatif sonda: partyKgFact'ten suggestedKg dalı kaldırılınca ilk beklenti kırmızı.
+    expect(partyFacts(party(2, { suggestedKg: 180, kgSource: "TOTAL" })).at(-1)).toBe("180 kg (belge toplamı)");
+    expect(partyFacts(party(2, { suggestedKg: 180, kgSource: "LINE_SUM" })).at(-1)).toBe("180 kg");
+    expect(partyFacts(party(2, { weightKg: 175, suggestedKg: 180, kgSource: "TOTAL" })).at(-1)).toBe("175 kg");
+    expect(partyFacts(party(2)).some((t) => t.endsWith("kg"))).toBe(false);
+  });
+
   it("eksik bilgi uyarı tonunda: metre yok kutusu warn, parti no yok başlıkta", async () => {
     expect(partyFactItems(party(1, { meters: 0 })).find((f) => f.text === "metre yok")).toEqual({ text: "metre yok", warn: true });
     expect(partyFactItems(party(1)).some((f) => f.warn)).toBe(false);

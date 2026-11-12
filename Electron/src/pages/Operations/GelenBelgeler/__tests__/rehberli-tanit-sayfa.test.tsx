@@ -1,12 +1,11 @@
-// K30-T A2/A3 panel rehberli tanıtma sayfası: varsayılan adım adım; değere dokun → otomatik önizleme → "Okunan: …";
-// Bitir'de ad başlıktan; kaydet tek tık; benzer şablon diyaloğu (Yeni tip → POST, Aynı tip → o şablonu base ile sürümlü PUT).
+// Panel rehberli tanıtma sayfası (belge tanıt 3 aşama): ① Tanıma → ② Eşleme (satır seç → değere dokun → otomatik önizleme → "Okunan: …")
+// → ③ Kurallar; ad ①'de başlıktan; kaydet tek tık; benzer şablon diyaloğu (Yeni tip → POST, Aynı tip → o şablonu base ile sürümlü PUT).
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/render";
 import type { ScanWord, ScanWords } from "../tanit/types";
-import { GUIDED_FIELDS } from "../tanit/guidedTeach";
 
 const perms = { list: ["gelen-belge:read", "gelen-belge:template"] };
 vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ hasPermission: (p: string) => perms.list.includes(p) }) }));
@@ -30,6 +29,8 @@ vi.mock("../tanit/service", () => ({
   getUserTemplate: (...a: unknown[]) => api.getUserTemplate(...a),
   listUserTemplates: (...a: unknown[]) => api.listUserTemplates(...a),
 }));
+
+vi.mock("../service", async (orig) => ({ ...(await orig<typeof import("../service")>()), getIncomingDocumentSettings: () => Promise.resolve({ multiPartyWorkOrder: "SINGLE" }) }));
 
 const { TeachTemplatePage } = await import("../tanit/TanitPage");
 const { TeachStartPage } = await import("../tanit/TanitStartPage");
@@ -66,7 +67,7 @@ beforeEach(() => {
 async function tapPartiNo() {
   renderWithProviders(<TeachTemplatePage />);
   expect(await screen.findByTestId("guided-identifiers")).toHaveTextContent("GÜLEÇSOY BOYA");
-  await userEvent.click(screen.getByTestId("guided-next"));
+  await userEvent.click(screen.getByTestId("stage-next"));
   expect(screen.getByTestId("guided-step-musteri")).toBeInTheDocument();
   await userEvent.click(screen.getByTestId("guided-skip"));
   expect(screen.getByTestId("guided-step-partiNo")).toBeInTheDocument();
@@ -75,12 +76,12 @@ async function tapPartiNo() {
 }
 
 describe("rehberli tanıtma sayfası", () => {
-  it("değere dokun → önizleme kendiliğinden → Okunan; Bitir'de ad başlıktan; benzer yoksa tek tıkla yeni tip", async () => {
+  it("değere dokun → önizleme kendiliğinden → Okunan; ①'de ad başlıktan; benzer yoksa tek tıkla yeni tip", async () => {
     await tapPartiNo();
     expect(await screen.findByTestId("guided-readout-ok")).toHaveTextContent("Okunan: P2618733");
     expect(api.suggestTemplate).toHaveBeenCalledTimes(1);
     expect(api.suggestTemplate.mock.calls[0]![0]).toMatchObject({ scanId: "s1", assignments: [{ field: "partiNo", rect: { x: 200, y: 300 } }] });
-    await userEvent.click(screen.getByTestId("guided-chip-9"));
+    await userEvent.click(screen.getByTestId("stage-TANIMA"));
     expect(screen.getByTestId("guided-name")).toHaveValue("GÜLEÇSOY BOYA");
     await userEvent.click(screen.getByTestId("teach-save"));
     await waitFor(() => expect(api.createUserTemplate).toHaveBeenCalledTimes(1));
@@ -94,7 +95,7 @@ describe("rehberli tanıtma sayfası", () => {
     await tapPartiNo();
     expect(await screen.findByTestId("guided-readout-fail")).toHaveTextContent("Okunamadı");
     await userEvent.click(screen.getByTestId("guided-relabel"));
-    expect(screen.getByTestId("guided-step-partiNo")).toHaveTextContent("Henüz dokunulmadı.");
+    expect(screen.getByTestId("guided-step-partiNo")).toHaveTextContent("Henüz dokunulmadı");
   });
 
   it("benzer şablon: Yeni tip → POST; Aynı tip → o şablon base ile önizlenip sürümlü PUT", async () => {
@@ -118,14 +119,16 @@ describe("rehberli tanıtma sayfası", () => {
 });
 
 describe("rehberli tanıtma — inceleme düzeltmeleri", () => {
-  it("Bitir'de ad yazmak önizleme isteği atmaz (sabit önizleme adı); kayıtta gerçek ad gider", async () => {
+  it("①'de ad yazmak önizleme isteği atmaz (sabit önizleme adı); kayıtta gerçek ad gider", async () => {
     await tapPartiNo();
     await screen.findByTestId("guided-readout-ok");
-    await userEvent.click(screen.getByTestId("guided-chip-9"));
+    await userEvent.click(screen.getByTestId("stage-TANIMA"));
     await userEvent.clear(screen.getByTestId("guided-name"));
     await userEvent.type(screen.getByTestId("guided-name"), "Güleçsoy çeki");
     await new Promise((r) => setTimeout(r, 600));
     expect(api.suggestTemplate).toHaveBeenCalledTimes(1);
+    await userEvent.click(screen.getByTestId("stage-next"));
+    await userEvent.click(screen.getByTestId("map-row-partiNo"));
     expect(screen.getByTestId("guided-readout-ok")).toHaveTextContent("P2618733");
     await userEvent.click(screen.getByTestId("teach-save"));
     await waitFor(() => expect(api.createUserTemplate).toHaveBeenCalledTimes(1));
@@ -143,21 +146,23 @@ describe("rehberli tanıtma — inceleme düzeltmeleri", () => {
     await userEvent.click(await screen.findByTestId("teach-similar-same-u-a"));
     await waitFor(() => expect(api.suggestTemplate).toHaveBeenCalledTimes(2));
     expect(api.updateUserTemplate).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByTestId("guided-chip-0"));
+    await userEvent.click(screen.getByTestId("stage-TANIMA"));
     expect(screen.getByTestId("guided-identifiers")).not.toHaveTextContent("A BOYA SAN");
-    await userEvent.click(screen.getByTestId("guided-chip-9"));
     expect(screen.getByTestId("guided-name")).toHaveValue("GÜLEÇSOY BOYA");
   });
 
-  it("güncelle kipi: eski şablonda olan alan işaretlenmezse 'eski tanım korunur' denir", async () => {
+  it("güncelle kipi: önceki tanımdan gelen alan çipli; Kaldır → base.drop ile önizlenir, Geri al geri koyar", async () => {
     nav.search = "sablon=u-a";
-    api.getUserTemplate.mockResolvedValue({ id: "t1", code: "u-a", name: "A Boya", version: 4, isActive: true, updatedAt: "", versions: [], template: { identifiers: { keywords: ["GÜLEÇSOY BOYA"] }, fields: [{ key: "musteri", label: "Müşteri" }] } });
+    api.getUserTemplate.mockResolvedValue({ id: "t1", code: "u-a", name: "A Boya", version: 4, isActive: true, updatedAt: "", versions: [], template: { identifiers: { keywords: ["GÜLEÇSOY BOYA"] }, fields: [{ key: "musteri", label: "Müşteri" }, { key: "partiNo", label: "Parti No" }] } });
     renderWithProviders(<TeachTemplatePage />);
-    await userEvent.click(await screen.findByTestId("guided-next"));
-    expect(screen.getByTestId("guided-step-musteri")).toBeInTheDocument();
-    expect(screen.getByTestId("guided-kept-old")).toHaveTextContent("Eski şablondaki “Müşteri” tanımı korunur");
-    await userEvent.click(screen.getByTestId("guided-skip"));
-    expect(screen.queryByTestId("guided-kept-old")).toBeNull();
+    await userEvent.click(await screen.findByTestId("stage-next"));
+    expect(screen.getByTestId("map-kept-musteri")).toHaveTextContent("Önceki tanımdan");
+    await userEvent.click(screen.getByTestId("map-drop-musteri"));
+    expect(screen.queryByTestId("map-kept-musteri")).toBeNull();
+    await waitFor(() => expect(api.suggestTemplate.mock.calls.at(-1)![0]).toMatchObject({ base: { code: "u-a", drop: ["musteri"] } }));
+    await userEvent.click(screen.getByTestId("map-undrop-musteri"));
+    expect(screen.getByTestId("map-kept-musteri")).toBeInTheDocument();
+    await waitFor(() => expect(api.suggestTemplate.mock.calls.at(-1)![0].base).toEqual({ code: "u-a", keep: [] }));
   });
 
   it("güncelle kipi: kayıtlı alan ✓ ve değeriyle görünür, alan atanmadan Kaydet açık, atama olarak gitmez", async () => {
@@ -166,9 +171,9 @@ describe("rehberli tanıtma — inceleme düzeltmeleri", () => {
     renderWithProviders(<TeachTemplatePage />);
     await waitFor(() => expect(api.suggestTemplate).toHaveBeenCalledTimes(1));
     expect(api.suggestTemplate.mock.calls[0]![0]).toMatchObject({ assignments: [], base: { code: "u-a" } });
-    const chip = screen.getByTestId(`guided-chip-${1 + GUIDED_FIELDS.indexOf("partiNo")}`);
-    expect(chip.querySelector("svg")).not.toBeNull();
-    await userEvent.click(chip);
+    await userEvent.click(screen.getByTestId("stage-next"));
+    expect(screen.getByTestId("map-kept-partiNo")).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId("map-row-partiNo"));
     expect(await screen.findByTestId("guided-readout-ok")).toHaveTextContent("P2618733");
     expect(screen.getByTestId("teach-save")).toBeEnabled();
     await userEvent.click(screen.getByTestId("teach-save"));
@@ -185,6 +190,48 @@ describe("rehberli tanıtma — inceleme düzeltmeleri", () => {
     await userEvent.click(await screen.findByTestId("teach-similar-new"));
     await waitFor(() => expect(api.createUserTemplate).toHaveBeenCalledTimes(1));
     expect(api.updateUserTemplate).not.toHaveBeenCalled();
+  });
+});
+
+describe("rehberli tanıtma — ③ Kurallar ve ① benzer tip", () => {
+  it("③: Fabrika ayarı varsayılan (gövdede rules yok); 'Her parti ayrı' seçilince önizleme rules taşır; metre kaynağı + özet", async () => {
+    api.suggestTemplate.mockResolvedValue(okResult({ template: { id: "u-g", meterSources: { total: ["toplamMetre"] } }, preview: { matched: true, score: 1, fields: { partiNo: "P2618733", toplamMetre: "241" }, lineCount: 4, warnings: [] } }));
+    await tapPartiNo();
+    await screen.findByTestId("guided-readout-ok");
+    expect(api.suggestTemplate.mock.calls[0]![0]).not.toHaveProperty("rules");
+    await userEvent.click(screen.getByTestId("stage-next"));
+    expect(screen.getByTestId("stage-kurallar")).toBeInTheDocument();
+    expect(await screen.findByRole("radio", { name: /^Fabrika ayarı \(şu an: Tek / })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByTestId("rule-meter-source")).toHaveTextContent('"Gelen metre" alanından (241 m)');
+    expect(screen.getByTestId("rule-totals")).toHaveTextContent("önce ② Eşleme'de");
+    await userEvent.click(screen.getByRole("radio", { name: /^Her parti ayrı/ }));
+    await waitFor(() => expect(api.suggestTemplate.mock.calls.at(-1)![0]).toMatchObject({ rules: { multiParty: "PER_PARTY" } }));
+    expect(screen.getByTestId("teach-summary")).toHaveTextContent("1 alan · 1 kural");
+  });
+
+  it("③ tekrar eden bölüm: Evet → başlangıç yazısına dokun → gövdede sectionStartLabel; Metre sütunu yoksa eksik yazar", async () => {
+    await tapPartiNo();
+    await screen.findByTestId("guided-readout-ok");
+    await userEvent.click(screen.getByTestId("stage-next"));
+    await userEvent.click(screen.getByTestId("rule-repeats-yes"));
+    expect(screen.getByTestId("rule-section-start")).toHaveAttribute("aria-pressed", "true");
+    await userEvent.clear(screen.getByLabelText("Kelime ara"));
+    await userEvent.type(screen.getByLabelText("Kelime ara"), "PartiNo");
+    await userEvent.click(screen.getByTestId("teach-word-5"));
+    expect(screen.getByTestId("rule-section-info")).toHaveTextContent("‘Ham PartiNo’ ile başlıyor");
+    expect(screen.getByTestId("teach-problems")).toHaveTextContent("Metre sütun başlığını");
+    expect(screen.getByTestId("teach-save")).toBeDisabled();
+  });
+
+  it("① benzeyen tip bağlantısı o tipin düzenle kipini açar", async () => {
+    nav.search = "sablon=u-b";
+    api.getUserTemplate.mockResolvedValue({ id: "t2", code: "u-b", name: "B Boya", version: 1, isActive: true, updatedAt: "", versions: [], template: { identifiers: { keywords: ["GÜLEÇSOY BOYA"] }, fields: [{ key: "partiNo", label: "Parti No" }] } });
+    api.suggestTemplate.mockResolvedValue(okResult({ benzerSablonlar: [{ kod: "u-b", ad: "B Boya", skor: 1 }, { kod: "u-a", ad: "A Boya", skor: 0.9 }] }));
+    renderWithProviders(<TeachTemplatePage />);
+    expect(await screen.findByTestId("guided-similar")).toHaveTextContent("Benzeyen tip: A Boya");
+    expect(screen.getByTestId("guided-confidence")).toHaveTextContent("Bu yazılarla tanınıyor: %100");
+    await userEvent.click(screen.getByTestId("guided-similar-edit"));
+    expect(navigateActive).toHaveBeenCalledWith("/operations/gelen-belgeler/n1/tanit?sablon=u-a");
   });
 });
 

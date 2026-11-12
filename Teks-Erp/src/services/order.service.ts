@@ -12,7 +12,7 @@
 // =============================================================================
 
 import { assertCariNotHeldTx } from "./helpers/cari-hold.helper";
-import { assertCustomerRiskLimitTx } from "./helpers/risk-exposure.helper";
+import { assertCustomerRiskLimitTx, customerRiskLimitIntakeWarningTx, riskLimitIntakeWarningText } from "./helpers/risk-exposure.helper";
 import prisma from "../lib/prisma";
 import { setWorkOrderTypeTx } from "./helpers/workorder-event.helper";
 import type { ItemUnit } from "@prisma/client";
@@ -75,6 +75,7 @@ import { manualComplete as manualCompleteImpl, reopen as reopenImpl } from "./or
 import type { OrderStats } from "./order/list";
 import type { OrderShipmentsResult } from "./order/detail";
 import type { OrderActor, PreparedOrderCreate } from "./order/create";
+import { voidOrderConfirmationTx } from "./order-documents.service";
 import { ORDER_HEADER_WRITABLE, ORDER_LINE_WRITABLE, computeAllowedActions, computeTotalAmount, pickDefaultAction, withExtraWarnings, type CancelAction, type OrderServiceThis, type OrderWithLines } from "./order/shared";
 
 export type { OrderStats } from "./order/list";
@@ -555,8 +556,8 @@ export class OrderService extends BaseService {
     return getOrderShipmentsImpl(orderId);
   }
 
-  async create(data: Record<string, unknown>, userId?: string): Promise<ApiResponse<unknown>> {
-    return createImpl.call(this as unknown as OrderServiceThis, data, userId);
+  async create(data: Record<string, unknown>, userId?: string, opts?: { canSeeRiskAmounts?: boolean }): Promise<ApiResponse<unknown>> {
+    return createImpl.call(this as unknown as OrderServiceThis, data, userId, opts);
   }
 
   /**
@@ -698,7 +699,8 @@ export class OrderService extends BaseService {
   async update(
     id: string,
     data: Record<string, unknown>,
-    userId?: string
+    userId?: string,
+    opts?: { canSeeRiskAmounts?: boolean },
   ): Promise<ApiResponse<unknown>> {
     const current = await prisma.order.findUnique({
       where: { id },
@@ -801,6 +803,7 @@ export class OrderService extends BaseService {
     const customerChanging = Object.prototype.hasOwnProperty.call(cleanData, "customerId");
     // Sipariş AÇIKÇA başka cariye/şubeye taşınırsa yön yeniden çözülür (o cariye açılmadı; eski değer audit'te).
     let retarget: { customerId: string; branchId: string | null } | null = null;
+    const riskWarnings: string[] = [];
 
     if (branchChanging || customerChanging) {
       const blockingStatuses = new Set(["IN_PROGRESS", "COMPLETED"]);
@@ -830,6 +833,9 @@ export class OrderService extends BaseService {
         if (finalCustomerId !== current.customerId) {
           await assertCariNotHeldTx(prisma, finalCustomerId, "INTAKE");
           await assertCustomerRiskLimitTx(prisma, finalCustomerId, "INTAKE");
+          // K3 (Seyitoğlu L4): kapı kapalıyken taşıma engellenmez, yanıta uyarı olur (yaratmayla aynı çekirdek).
+          const risk = await customerRiskLimitIntakeWarningTx(prisma, finalCustomerId);
+          if (risk) riskWarnings.push(riskLimitIntakeWarningText(risk, opts?.canSeeRiskAmounts === true, "güncellendi"));
         }
 
         // Lines payload'ı yoksa MEVCUT satır renkleri yeni müşteriye karşı
@@ -1126,7 +1132,7 @@ export class OrderService extends BaseService {
 
     return withExtraWarnings(
       this.withUnitWarnings({ success: true, data: updated, message: "Sipariş güncellendi" }),
-      lineCheck?.warnings ?? [],
+      [...(lineCheck?.warnings ?? []), ...riskWarnings],
     );
   }
 
@@ -1346,6 +1352,8 @@ export class OrderService extends BaseService {
           }, tekrar iptal edilemez. Sayfayı yenileyin.`
         );
       }
+      // Donmuş sipariş teyidi iptalle birlikte VOIDED (birlikte ya da hiç).
+      await voidOrderConfirmationTx(tx, orderId, cancelReasonText ?? "Sipariş iptal edildi");
       // F145: preview↔apply arası WO status yarışını kapat. Etkilenen WO'ları
       // SIRALI kilitle (WO start/dispatch/finalize/cancel yolları da bu satırı
       // kilitler → serileşir), sonra TAZE status + TAZE sole-order oku ve her

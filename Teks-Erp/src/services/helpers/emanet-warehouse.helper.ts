@@ -51,10 +51,15 @@ export async function resolveEmanetBirthWarehouseIdTx(db: Db, ownerCustomerId: s
 }
 
 /**
- * Doğan topun deposu — `createInitialEntry`in TEK depo sorusu. Açık seçim (mal kabul) her zaman kazanır; yoksa sahipli
- * doğum emanet deposuna, o da yoksa bugünkü varsayılana.
+ * Doğan topun deposu — sahipli doğumun TEK depo sorusu. Sıra: açık seçim (mal kabul) > emanet deposu (sahipli, emanet
+ * açık, ayar dolu) > `inheritedId` (üretim kesiminde ebeveynin kayıtlı deposu; doğrulanmaz, bugünkü miras) > varsayılan.
  */
-export async function resolveBirthWarehouseIdTx(db: Db, explicitId: string | null | undefined, ownerCustomerId: string | null | undefined): Promise<string> {
+export async function resolveBirthWarehouseIdTx(
+  db: Db,
+  explicitId: string | null | undefined,
+  ownerCustomerId: string | null | undefined,
+  inheritedId?: string | null,
+): Promise<string> {
   if (explicitId) return resolveTargetWarehouseId(db, explicitId);
-  return (await resolveEmanetBirthWarehouseIdTx(db, ownerCustomerId)) ?? resolveTargetWarehouseId(db);
+  return (await resolveEmanetBirthWarehouseIdTx(db, ownerCustomerId)) ?? inheritedId ?? resolveTargetWarehouseId(db);
 }

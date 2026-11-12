@@ -121,7 +121,7 @@ async function db(adminId: string, made: Made): Promise<void> {
   const up = async (salt: string, ocr: OcrResult, read: Parameters<typeof serverCompleter>[0], readerUrl: () => string | null = url, noteId: string | null = null, pageNo = 1) => {
     const b = jpeg(salt);
     made.shas.push(sha(b));
-    const r = await uploadScanWithDeviceRead({ contentBase64: b.toString("base64"), noteId, pageNo, clientOcr: asClient(ocr) }, adminId, undefined, serverCompleter(read, readerUrl));
+    const r = await uploadScanWithDeviceRead({ contentBase64: b.toString("base64"), noteId, pageNo, clientOcr: asClient(ocr) }, adminId, undefined, serverCompleter(read, async () => ({ url: readerUrl(), enabled: true })));
     const scan = await prisma.documentScan.findUniqueOrThrow({ where: { id: r.scan.id }, select: { status: true, noteId: true, ocrResult: true } });
     if (scan.noteId && !made.notes.includes(scan.noteId)) made.notes.push(scan.noteId);
     const note = scan.noteId ? await prisma.customerDeliveryNote.findUnique({ where: { id: scan.noteId }, select: { ownerText: true, customerBatchNo: true, warnings: true } }) : null;

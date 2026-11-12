@@ -29,6 +29,7 @@ export const PANEL_EKRAN = {
   kumasOzellikleri: { menu: "Tanımlar", karo: "Kumaş Özellikleri" },
   kaliteSiniflari: { menu: "Tanımlar", karo: "Kalite Sınıfları" },
   hataTipleri: { menu: "Tanımlar", karo: "Hata Tipleri" },
+  uretimIstasyonlari: { menu: "Tanımlar", karo: "Üretim İstasyonları" },
   vardiyaTanimlari: { menu: "Tanımlar", karo: "Vardiya Tanımları" },
   donanim: { menu: "Tanımlar", karo: "Donanım" },
   etiketDuzenleri: { menu: "Belgeler", karo: "Etiketler", alt: "Etiket Düzenleri" },

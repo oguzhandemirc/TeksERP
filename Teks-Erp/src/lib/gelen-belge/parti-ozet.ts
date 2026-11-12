@@ -5,6 +5,7 @@
 // CANLI satırlardan sayılır — operatör eksik satırı girince uyarı kendiliğinden düşer (kayıtlı OCR uyarısı bayatlar, gösterilmez).
 // =============================================================================
 import { resolvePartyMeters } from "./kursun-metre";
+import { resolvePartyKg } from "./gelen-kg";
 
 export interface PartyLineInput {
   blockNo: number;
@@ -39,7 +40,15 @@ export interface NoteParty {
    * Onaysız belgede null (2026-11-06 2. prova ek alanı; eski istemci yok sayar). Doldurucu `getNoteParties`.
    */
   recordedMeters: number | null;
+  /** Σ satır kg (kg'li satırlar; kısmi olabilir — bilgi). */
   weightKg: number | null;
+  /** Forma önerilecek parti GELEN kg'si (`resolvePartyKg`): bölüm beyanı kg → Σ satır kg (hepsi doluysa); 2026-11-09 ek alan. */
+  suggestedKg: number | null;
+  kgSource: "TOTAL" | "LINE_SUM" | null;
+  /** Bölümün gelen kumaş adı / gelen rengi (müşteri BEYANI; İE hedefi değil). Bölüm alanı yoksa null — belge geneli
+   *  beyan okuma özetinin `incomingDeclared`ındadır. 2026-11-09 ek alan; eski istemci yok sayar. */
+  incomingItemText: string | null;
+  incomingColorText: string | null;
   warnings: string[];
 }
 
@@ -105,6 +114,7 @@ export function noteParties(lines: ReadonlyArray<PartyLineInput>, totalsDeclared
     const declaredMeters = num(d?.m);
     const suggested = resolvePartyMeters(declaredMeters, ls.map((l) => (num(l.meters) ?? 0)));
     const kgs = ls.map((l) => num(l.weightKg)).filter((x): x is number => x !== null);
+    const kg = resolvePartyKg(num(d?.kg), ls.map((l) => num(l.weightKg)));
     const p: NoteParty = {
       blockNo,
       batchNo: str(d?.batchNo),
@@ -119,11 +129,25 @@ export function noteParties(lines: ReadonlyArray<PartyLineInput>, totalsDeclared
       suggestedMetersSource: suggested.source === "TOTAL" || suggested.source === "LINE_SUM" ? suggested.source : null,
       recordedMeters: null,
       weightKg: kgs.length ? r3(kgs.reduce((s, x) => s + x, 0)) : null,
+      suggestedKg: kg.kg,
+      kgSource: kg.source === "TOTAL" || kg.source === "LINE_SUM" ? kg.source : null,
+      incomingItemText: str(d?.itemText),
+      incomingColorText: str(d?.colorText),
       warnings: [],
     };
     const name = p.batchNo ?? `${blockNo}. parti`;
     if (p.declaredTopCount !== null && p.declaredTopCount !== p.lineCount) p.warnings.push(`Parti ${name}: belgede ${p.declaredTopCount} TOP yazıyor, ${p.lineCount} satır var.`);
-    if (p.declaredMeters !== null && Math.abs(p.declaredMeters - meters) > Math.max(0.001, p.declaredMeters * TOL)) p.warnings.push(`Parti ${name}: ara toplam ${p.declaredMeters} m, satırların toplamı ${meters} m.`);
+    // Basılı toplam birincil, satırlar teyit: fark "PARTİ TOPLAMI TUTMUYOR" olarak görünür (2026-11-10)
+    const off = (d: number | null, v: number | null) => d !== null && v !== null && Math.abs(d - v) > Math.max(0.001, d * TOL);
+    // Basılı adet ↔ satır (metresi okunamayan satır taslağa girmez; 214279): başlık TOP'u aynı sayıyı zaten söylediyse tekrarlanmaz
+    const declaredCount = num(d?.count);
+    const countOff = declaredCount !== null && declaredCount !== p.lineCount && p.declaredTopCount !== declaredCount;
+    const diff = [
+      ...(countOff ? [`tablo ${p.lineCount} top / belge ${declaredCount} top`] : []),
+      ...(off(p.declaredMeters, meters) ? [`tablo ${meters} m / belge ${p.declaredMeters} m`] : []),
+      ...(off(num(d?.kg), p.weightKg) ? [`tablo ${p.weightKg} kg / belge ${num(d?.kg)} kg`] : []),
+    ];
+    if (diff.length > 0) p.warnings.push(`PARTİ TOPLAMI TUTMUYOR: ${name} ${diff.join(", ")}.`);
     return p;
   });
   const warnings: string[] = [];

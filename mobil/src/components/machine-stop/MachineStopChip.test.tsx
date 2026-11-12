@@ -8,6 +8,8 @@
 //   §5 izin (`mobile:makine-durus`) yoksa → çip yok, uca istek atılmaz
 //   §6 D4-A2b `uretim.makineDurusAcikUyarisi`: kapalı (varsayılan) / alan yok → açık duruşta da giriş uyarısı YOK;
 //      açık → giriş uyarısı VAR; çalışırken ayar açık olsa da yok. Çip/bant ayardan bağımsız.
+//   §7 (2026-11-09) istasyonda duruş bildirimi KAPALI (`station.machineStopEnabled=false`): çalışırken çip YOK;
+//      açık duruş varsa çip + bant yine görünür (kapatılabilsin).
 // =============================================================================
 import React from 'react';
 import { Text } from 'react-native';
@@ -46,9 +48,10 @@ function Screen() {
   );
 }
 
-function setup(p: { perms?: string[]; tracking?: boolean | undefined; warn?: boolean; stops?: unknown }) {
+function setup(p: { perms?: string[]; tracking?: boolean | undefined; warn?: boolean; stops?: unknown; stationStop?: boolean }) {
   useAuthStore.setState({ token: 't', user: { id: 'u', username: 'op', permissions: p.perms ?? ['mobile:kk2-kursun', 'mobile:makine-durus'] } as never });
-  useSessionStore.setState({ active: { machine: { id: 'm1', name: 'K-1' } } as never });
+  const station = p.stationStop === undefined ? undefined : { id: 'st1', kind: 'TAMBUR', machineStopEnabled: p.stationStop };
+  useSessionStore.setState({ active: { machine: { id: 'm1', name: 'K-1' }, station } as never });
   const flags: Record<string, unknown> = { productionEnabled: true };
   if (p.tracking !== undefined) flags.machineStopTrackingEnabled = p.tracking;
   if (p.warn !== undefined) flags.machineStopOpenWarningEnabled = p.warn;
@@ -141,5 +144,27 @@ describe('Açık duruş giriş uyarısı ayarı (D4-A2b)', () => {
     const r = setup({ tracking: true, warn: true, stops: [] });
     await settle(() => expect(mockListOpen).toHaveBeenCalled());
     expect(r.getByTestId('entry-warning').props.children).toBe('YOK');
+  });
+});
+
+describe('İstasyon duruş kapısı (2026-11-09)', () => {
+  it('§7a ⭐ istasyonda kapalı + çalışıyor → çip YOK', async () => {
+    const r = setup({ tracking: true, stops: [], stationStop: false });
+    await settle(() => expect(mockListOpen).toHaveBeenCalled());
+    expect(r.queryByTestId('machine-stop-chip')).toBeNull();
+    expect(r.getByText('Kurşun ekranı')).toBeTruthy();
+  });
+
+  it('§7b istasyonda kapalı ama açık duruş var → çip + bant görünür (kapatılabilsin)', async () => {
+    const r = setup({ tracking: true, stops: [OPEN_STOP], stationStop: false });
+    await settle(() => expect(r.getByTestId('machine-stop-band')).toBeTruthy());
+    expect(r.getByTestId('machine-stop-chip')).toBeTruthy();
+    expect(r.getByText('Çalıştı')).toBeTruthy();
+  });
+
+  it('§7c istasyonda açık → bugünkü gibi çip çizilir', async () => {
+    const r = setup({ tracking: true, stops: [], stationStop: true });
+    await settle(() => expect(mockListOpen).toHaveBeenCalled());
+    expect(r.getByTestId('machine-stop-chip')).toBeTruthy();
   });
 });

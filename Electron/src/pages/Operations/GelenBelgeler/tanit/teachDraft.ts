@@ -3,18 +3,20 @@
 // Belgeler basılıdır (fabrika cevabı 38): kelime kutusu güvenilir, el yazısı yolu yok. Mobil aynası `mobil/.../tanit/teachDraft.ts`.
 import { lowerTr } from "@/lib/tr-case";
 import type { ScanMark } from "../ZoomableScan";
-import type { Rect, ScanWord, ScanWords, SuggestBody, TemplateJson } from "./types";
+import type { MultiPartyRule, Rect, ScanWord, ScanWords, SuggestBody, TemplateJson } from "./types";
 
 export const FIELD_OPTIONS = [
   { key: "musteri", label: "Müşteri" },
   { key: "partiNo", label: "Parti No" },
   { key: "toplamMetre", label: "Gelen metre" },
+  // 2026-11-09: belgedeki gelen kg (hedef kg DEĞİL) — İE "Gelen kg"ye gider (backend ASSIGNABLE_FIELDS aynası).
+  { key: "toplamKg", label: "Gelen kg" },
   { key: "evrakNo", label: "Evrak No" },
   { key: "tarih", label: "Tarih" },
   { key: "siparisNo", label: "Sipariş No" },
   { key: "topAdet", label: "Top adedi" },
-  { key: "desen", label: "Hedef kumaş (desen)" },
-  { key: "renk", label: "Hedef renk" },
+  { key: "desen", label: "Gelen kumaş" },
+  { key: "renk", label: "Gelen renk" },
   { key: "en", label: "En (cm)" },
   { key: "hedefMetraj", label: "Hedef metraj" },
   { key: "hedefKg", label: "Hedef kg" },
@@ -52,10 +54,15 @@ export interface TeachState {
   repeats: boolean;
   sectionStart: string;
   sectionFields: FieldKey[];
-  /** "Şablonu güncelle": yeni öneride yoksa eski şablondan taşınacak yapılar (sunucu birleştirir; önizleme = kaydedilen). */
+  /** "Tanımı düzenle": yeni öneride yoksa eski şablondan taşınacak yapılar (sunucu birleştirir; önizleme = kaydedilen). */
   keepOld: OldPart[];
-  /** "Şablonu güncelle": eski şablonda kayıtlı alanlar. Yeniden atanmayan aynen korunur (sunucu birleştirir), gövdeye ATAMA olarak gitmez. */
+  /** "Tanımı düzenle": eski şablonda kayıtlı alanlar. Yeniden atanmayan aynen korunur (sunucu birleştirir), gövdeye ATAMA olarak gitmez. */
   kept: FieldKey[];
+  /** ② Eşleme "Kaldır": eski tanımdan gelip bu sürümde çıkarılan alanlar → öneri gövdesinde `base.drop`. */
+  drop: FieldKey[];
+  /** ③ Kurallar: çok parti kuralı; null = fabrika ayarı (gövdeye yazılmaz). `oldMultiParty` güncellenen tipin kayıtlı kuralı. */
+  multiParty: MultiPartyRule | null;
+  oldMultiParty: MultiPartyRule | null;
 }
 
 /** Eski şablondan taşınabilen yapılar (backend `UPDATE_KEEP_PARTS` aynası). */
@@ -71,7 +78,7 @@ export interface Pt {
 }
 
 export const emptyTeach = (name = ""): TeachState => ({
-  name, selected: [], fields: {}, columns: {}, totalsLabel: null, identifiers: [], repeats: false, sectionStart: "", sectionFields: [], keepOld: [], kept: [],
+  name, selected: [], fields: {}, columns: {}, totalsLabel: null, identifiers: [], repeats: false, sectionStart: "", sectionFields: [], keepOld: [], kept: [], drop: [], multiParty: null, oldMultiParty: null,
 });
 
 const PAD = 3;
@@ -88,7 +95,7 @@ export function wordAt(words: readonly ScanWord[], p: Pt): number | null {
   return best;
 }
 
-const byReading = (words: readonly ScanWord[]) => (a: number, b: number) =>
+export const byReading = (words: readonly ScanWord[]) => (a: number, b: number) =>
   words[a]!.lineNo - words[b]!.lineNo || words[a]!.rect.x - words[b]!.rect.x;
 
 /** Kelimelerin okuma sırasıyla birleşik yazısı. */
@@ -111,7 +118,7 @@ export function toggleWord(s: TeachState, i: number): TeachState {
   return { ...s, selected: s.selected.includes(i) ? s.selected.filter((x) => x !== i) : [...s.selected, i] };
 }
 
-const without = <K extends string>(m: Partial<Record<K, number[]>>, idx: readonly number[]) =>
+export const without = <K extends string>(m: Partial<Record<K, number[]>>, idx: readonly number[]) =>
   Object.fromEntries(Object.entries(m).map(([k, v]) => [k, (v as number[]).filter((i) => !idx.includes(i))]).filter(([, v]) => (v as number[]).length > 0)) as Partial<Record<K, number[]>>;
 
 const norm = (t: string) => lowerTr(t).replace(/\s+/g, " ").trim();
@@ -180,7 +187,6 @@ export function toggleSectionField(s: TeachState, key: FieldKey): TeachState {
 }
 
 const letters = (t: string) => (t.match(/\p{L}/gu) ?? []).length;
-const digits = (t: string) => (t.match(/\d/g) ?? []).length;
 
 /** Satır yazıları (OCR satır no'suyla gruplu). */
 export function lineTexts(words: readonly ScanWord[]): Array<{ lineNo: number; text: string; y: number; idx: number[] }> {
@@ -189,12 +195,19 @@ export function lineTexts(words: readonly ScanWord[]): Array<{ lineNo: number; t
   return [...map.entries()].map(([lineNo, idx]) => ({ lineNo, idx, text: textOf(words, idx), y: Math.min(...idx.map((i) => words[i]!.rect.y)) }));
 }
 
-/** Kimlik yazısı önerisi: sayfanın üst üçte birindeki yazı satırları (rakamdan çok harf, 3–40 karakter), en çok `max` tane. */
+/** Satır yazısının kimlik metni: rakamlı kelime (değer, belgeden belgeye değişir) atılır, yapışık "No:123" → "No"; öneri + ① dokunuş + ① boyama tek kaynak; backend `motor/labels.ts` aynası (bekçi `test_gelen_belge_motor` §12i). */
+export const identifierText = (text: string): string =>
+  text.split(/\s+/).map((x) => (/\d/.test(x) ? (/^[^\d:]+:/.exec(x)?.[0] ?? "") : x)).filter(Boolean).join(" ").replace(/^[\s:.,;|/#–-]+|[\s:.,;|/#–-]+$/gu, "");
+
+/** Bölüm başlangıç yazısı: etiket kısmı (`identifierText`) ≥3 harfse o, değilse tam metin — backend `sectionStartLabel` aynası. */
+export const sectionStartText = (text: string, part = identifierText(text)): string => ((part.match(/\p{L}/gu)?.length ?? 0) >= 3 ? part : text.trim());
+
+/** Kimlik yazısı önerisi: sayfanın üst üçte birindeki yazı satırlarının etiket kısmı (`identifierText`, 3–40 karakter, ≥3 harf), en çok `max` tane. */
 export function suggestIdentifiers(scan: ScanWords, max = 5): string[] {
   const out: string[] = [];
   for (const l of lineTexts(scan.words).sort((a, b) => a.y - b.y)) {
-    const t = l.text.replace(/[:.\s]+$/u, "").trim();
-    if (l.y > scan.imageHeight / 3 || t.length < 3 || t.length > 40 || letters(t) < 3 || digits(t) > letters(t)) continue;
+    const t = identifierText(l.text);
+    if (l.y > scan.imageHeight / 3 || t.length < 3 || t.length > 40 || letters(t) < 3) continue;
     if (!out.some((o) => norm(o) === norm(t))) out.push(t);
     if (out.length >= max) break;
   }
@@ -202,23 +215,41 @@ export function suggestIdentifiers(scan: ScanWords, max = 5): string[] {
 }
 
 /** Ekran açılınca: ad + hazır seçili kimlik önerileri. */
-export function initialTeach(scan: ScanWords, name = "", keep: readonly string[] = [], old: { keepOld?: readonly OldPart[]; kept?: readonly FieldKey[] } = {}): TeachState {
-  let s: TeachState = { ...emptyTeach(name), keepOld: [...(old.keepOld ?? [])], kept: [...(old.kept ?? [])] };
+export function initialTeach(scan: ScanWords, name = "", keep: readonly string[] = [], old: { keepOld?: readonly OldPart[]; kept?: readonly FieldKey[]; multiParty?: MultiPartyRule | null } = {}): TeachState {
+  const multiParty = old.multiParty ?? null;
+  let s: TeachState = { ...emptyTeach(name), keepOld: [...(old.keepOld ?? [])], kept: [...(old.kept ?? [])], multiParty, oldMultiParty: multiParty };
   for (const t of [...keep, ...suggestIdentifiers(scan)]) s = addIdentifier(s, t);
   return s;
 }
 
 /** Kaydetmeden/önizlemeden önce eksikler (Türkçe); boş = hazır. */
 export function teachProblems(s: TeachState, words?: readonly ScanWord[]): string[] {
+  return [...identityProblems(s), ...mappingProblems(s, words), ...ruleProblems(s)];
+}
+
+/** ① Tanıma aşamasının eksikleri (ad + kimlik yazısı). */
+export function identityProblems(s: TeachState): string[] {
   const p: string[] = [];
   if (s.name.trim().length < 2) p.push("Belge tipine bir ad verin (en az 2 karakter).");
-  if (Object.keys(s.fields).length === 0 && s.kept.length === 0) p.push("En az bir alan atayın (ör. Parti No).");
   if (!s.identifiers.some((d) => d.on)) p.push("En az bir kimlik yazısı işaretleyin (başlık, firma adı).");
+  return p;
+}
+
+/** ② Eşleme aşamasının eksikleri: en az bir alan (kaldırılmayan kayıtlı alan da sayılır) + adet satırı tuzağı. */
+export function mappingProblems(s: TeachState, words?: readonly ScanWord[]): string[] {
+  const p: string[] = [];
+  if (Object.keys(s.fields).length === 0 && !s.kept.some((k) => isKept(s, k))) p.push("En az bir alan atayın (ör. Parti No).");
+  if (words && meterOnCountRow(s, words)) p.push('"Gelen metre" adet satırına atanmış (T.Adet\'in sağındaki sayı top adedidir) — tablonun Metre sütununu işaretleyin, "Gelen metre"yi kaldırın.');
+  return p;
+}
+
+/** ③ Kurallar aşamasının eksikleri (tekrar eden bölüm). */
+export function ruleProblems(s: TeachState): string[] {
+  const p: string[] = [];
   if (s.repeats && !s.sectionStart.trim()) p.push("Tekrar eden bölümün başlangıç yazısını seçin.");
   if (s.repeats && s.sectionFields.length === 0) p.push("Tekrar eden bölümde en az bir alan bölüm başına okunmalı.");
-  // Çok blok: her bölümün satırları ve metresi tablodan okunur ("Şablonu güncelle" eski tabloyu taşıyabilir).
+  // Çok blok: her bölümün satırları ve metresi tablodan okunur ("Tanımı düzenle" eski tabloyu taşıyabilir).
   if (s.repeats && !s.columns.m?.length && !s.keepOld.includes("tables")) p.push("Tekrar eden bölümde top tablosu gerekli: tablonun Metre sütun başlığını işaretleyin.");
-  if (words && meterOnCountRow(s, words)) p.push('"Gelen metre" adet satırına atanmış (T.Adet\'in sağındaki sayı top adedidir) — tablonun Metre sütununu işaretleyin, "Gelen metre"yi kaldırın.');
   return p;
 }
 
@@ -246,8 +277,14 @@ export function suggestBody(s: TeachState, words: readonly ScanWord[], scanId: s
     identifiers: s.identifiers.filter((d) => d.on).map((d) => d.text),
   };
   if (columns.length) body.table = { columns, totalsLabel: s.totalsLabel?.length ? textOf(words, s.totalsLabel).slice(0, 40) : null };
-  if (s.repeats && s.sectionStart.trim()) body.sectionStartLabel = s.sectionStart.trim().slice(0, 40);
-  if (baseCode) body.base = { code: baseCode, keep: OLD_PARTS.map((p) => p.key).filter((k) => s.keepOld.includes(k)) };
+  if (s.repeats && s.sectionStart.trim()) body.sectionStartLabel = sectionStartText(s.sectionStart).slice(0, 40);
+  if (baseCode) {
+    const drop = s.drop.filter((k) => s.kept.includes(k) && !s.fields[k]?.length);
+    body.base = { code: baseCode, keep: OLD_PARTS.map((p) => p.key).filter((k) => s.keepOld.includes(k)), ...(drop.length ? { drop } : {}) };
+  }
+  // Fabrika ayarı = alan YOK (bugünkü davranış); güncellemede kayıtlı kural kaldırılırsa açıkça null.
+  if (s.multiParty) body.rules = { multiParty: s.multiParty };
+  else if (baseCode && s.oldMultiParty) body.rules = { multiParty: null };
   return body;
 }
 
@@ -287,7 +324,20 @@ export function templateFieldKeys(t: TemplateJson | null | undefined): FieldKey[
 }
 
 /** Alan eski şablondan aynen korunuyor mu (kayıtlı ve bu ekranda yeniden atanmadı)? */
-export const isKept = (s: TeachState, k: FieldKey): boolean => s.kept.includes(k) && !s.fields[k]?.length;
+export const isKept = (s: TeachState, k: FieldKey): boolean => s.kept.includes(k) && !s.fields[k]?.length && !s.drop.includes(k);
+
+/** Şablonun çok parti kuralı; bilinmeyen değer kural sayılmaz (backend `multiPartyRuleOf` aynası). */
+export function multiPartyRuleOf(t: TemplateJson | null | undefined): MultiPartyRule | null {
+  const r = t?.rules;
+  const v = r && typeof r === "object" && !Array.isArray(r) ? (r as TemplateJson).multiParty : undefined;
+  return v === "SINGLE" || v === "PER_PARTY" ? v : null;
+}
+
+/** ② "Kaldır" / "Geri al": kayıtlı alan bu sürümde çıkarılır (sunucu birleştirmesinde `base.drop`). */
+export function setDropped(s: TeachState, key: FieldKey, on: boolean): TeachState {
+  const drop = s.drop.filter((k) => k !== key);
+  return on && s.kept.includes(key) ? { ...clearField({ ...s, drop }, key), drop: [...drop, key] } : { ...s, drop };
+}
 
 /** Korunan alanların belge üstündeki kelimeleri: önizlemenin okuduğu değer kutusuna (OCR çerçevesi) merkezi düşen kelimeler. */
 export function locateKept(s: TeachState, words: readonly ScanWord[], rects: Record<string, Rect> | undefined): Partial<Record<FieldKey, number[]>> {
@@ -323,8 +373,10 @@ export function teachMarks(s: TeachState, words: readonly ScanWord[], located: P
 }
 
 /** "Aynı tip (güncelle)" seçilince: işaretleme korunur, benzer şablonun adı/kimlik yazıları/eski yapıları eklenir (tablet aynası). */
+// Kural: kullanıcı seçtiyse o, seçmediyse (fabrika ayarı) benimsenen tipin kayıtlı kuralı korunur — sessizce silinmez.
 export function adoptTemplate(s: TeachState, t: { name: string; template: TemplateJson }): TeachState {
-  let out: TeachState = { ...s, name: t.name, keepOld: oldParts(t.template), kept: templateFieldKeys(t.template) };
+  const old = multiPartyRuleOf(t.template);
+  let out: TeachState = { ...s, name: t.name, keepOld: oldParts(t.template), kept: templateFieldKeys(t.template), drop: [], oldMultiParty: old, multiParty: s.multiParty ?? old };
   for (const k of templateKeywords(t.template)) out = addIdentifier(out, k);
   return out;
 }

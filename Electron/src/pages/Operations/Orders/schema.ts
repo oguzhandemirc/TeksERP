@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parseTolerancePct } from "./lineTolerance";
 
 export const orderLineSchema = z.object({
   clientId: z.string(),
@@ -16,6 +17,14 @@ export const orderLineSchema = z.object({
     .optional()
     .nullable(),
   unitPrice: z.string().optional().or(z.literal("")),
+  // K4: boş = fabrika ayarı; virgül kabul, gövdede noktaya çevrilir (lineTolerance.ts).
+  tolerancePct: z
+    .string()
+    .optional()
+    .superRefine((v, ctx) => {
+      const { error } = parseTolerancePct(v);
+      if (error) ctx.addIssue({ code: "custom", message: error });
+    }),
   customerItemName: z
     .string()
     .max(200, "Müşterideki kumaş adı en fazla 200 karakter olabilir")

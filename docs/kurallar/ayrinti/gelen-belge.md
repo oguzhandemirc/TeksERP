@@ -70,3 +70,89 @@
 - **[PROFİL]** Belge masasında kurşun planını çok parti kipine göre çiz ve gönder: "Tek iş emri" (SINGLE) kipinde TEK makine + ortak gramaj üst düzeyde, "Her parti ayrı" (PER_PARTY) kipinde yalnız parti başına (`withDeskPlan`); otomatik çekim durumunu kamerayı söken `DeskView`de tut (boş masa referansı inceleme sonrası korunur).
 - **[PROFİL]** Belge fotoğrafının baytını yalnız `gelenBelge.photoRetention` (FULL varsayılan = bugünkü · SHRINK_ON_APPROVAL · DELETE_ON_APPROVAL · DELETE_ON_DISPATCH; tek yazar `PUT /ayarlar`, geçmiş onaylılara da uygulanır) ile ve yalnız onay/sevk commit olduktan SONRA iş kuyruğunda (`gelen-belge-foto-saklama.service.ts`, claim `updateMany WHERE {id, contentState}`) küçült ya da sil; satır, sha256, `ocrResult` ve künye KALIR (bayt defter değildir), CHECK `document_scans_content_state_ck` SİLİNDİ ⇔ content NULL; küçültme yalnız okuma servisinin `/kucult` ucuyla (servis yok → TAM kalır, yeniden denenir); SİLİNDİ fotoğrafı isteyen uç 410 `DOCUMENT_SCAN_PURGED`, okuma kuyruğu claim etmez; sevkte silme aday turu takılı belge sayısından bağımsız sabit sorgudur (belge üyeliği tek `uuid[]` parametresi, sayfa `NOTE_PAGE`). · bekçi: `test_gelen_belge_foto_saklama` · `test_gelen_belge_foto_saklama_sorgu_butcesi`
 - **[ÇEKİRDEK]** Fotoğraf üstüne kutu çizen her panel yüzeyi (`ZoomableScan` · `CellCrop`) kutunun ÇERÇEVESİNİ alır, görüntünün piksel boyutunu çerçeve saymaz: KÜÇÜK taramada çerçeve satırdaki `rectFrameWidth/Height` (küçültme anında okuma zarfından yazılır, CHECK `document_scans_rect_frame_ck`), tanıtmada kelime yanıtının `imageWidth/imageHeight/rotation`ı; okuma servisi adresi yoksa PENDING tarama da saklama adayıdır (READING asla). · bekçi: `test_gelen_belge_foto_saklama (§2, §3b)` · Electron `kutu-cercevesi.test.tsx` <sub>(arşiv:2026-11-03 s13b inceleme)</sub>
+
+
+## Tablet hedef kutuları (2026-11-09)
+
+Tablet İE formunda belgedeki gelen en/metre/kg hedef kutularına KOPYALANMAZ (kutu boş, silik ipucu "belgede 241 m"); kopyalama yalnız kişisel ⚙ anahtarı `tabletIeForm.hedefDoldur` açıkken; `workorder.targetQuantityEnabled` kapalıysa hedef metraj/kg kutusu hiç çizilmez, `workorder.targetWidthEnabled` (varsayılan AÇIK) kapalıysa hedef En kutusu çizilmez ve gövdeye width gitmez; sunucunun gelen-metre türetmesi değişmez.
+
+## Dönük okuma (2026-11-09)
+
+Cihaz OCR karesini çıkarımdan ÖNCE baskın okuma yönüne göre dikleştir (`lib/gelen-belge/sayfa-yonu.ts` `uprightClientOcr`, çerçeve dönüşümünün tek kaynağı; canlı okuma her açıyı düzeltir ve değer kutusunu kareye geri çevirir, fotoğraf yüklemesi yalnız çeyreğe yuvarlar — `rotation` sözleşmesi); çıkarılan değer etiket metniyse (`motor/label-guard.ts`; son işlemden ÖNCEKİ ham metin yalnız etiket parçalarından oluşuyorsa da — konum yedeği iki etiketi kapınca `stripSpaces` "TARİHMÜŞTERİ" yapıyordu) ya da makul değilse (`motor/value-guard.ts`: sayısal alanda tarih, `PLAUSIBLE_RANGES` dışı, parti no'da virgüllü ondalık) alanı BOŞ bırak — kilide/forma girmez. · bekçi: `test_gelen_belge_sayfa_yonu` <sub>(2026-11-09 dönük canlı okuma · GB0911260050 etiket birleşimi)</sub>
+
+## Fotoğraf barkodu (2026-11-09)
+
+- **[ÇEKİRDEK]** Belge fotoğrafındaki barkodu tablette expo-camera'nın paketli ML Kit'iyle (`scanFromURLAsync`, `services/deviceBarcode.ts`; yeni paket/native YOK) oku ve yüklemeye `barcodes: [{format, value}]` (≤ 10 × 120) olarak ekle; okuma hatası/zaman aşımı (2,5 sn) yüklemeyi durdurmaz, 400'de (eski sunucunun katı gövdesi) sayfa barkodsuz yeniden gider. · bekçi: `docScan.barcode.test.ts`
+- **[PROFİL]** Hangi alanın barkoddan geleceği ŞABLON VERİSİDİR: alan seçeneği `fromBarcode: true` (panel Belge Tipleri → Düzenle → "Barkoddan al"; `PATCH /sablonlar/ozel/:code/tanim` `barcodeFields` tam liste). İşaretli alanda yıldız/boşluk temizlenmiş barkod, alanın biçimine (anchor `valueShape` + tip/pattern + makullük) uyuyorsa KESİN değerdir ve OCR'ı geçer (`source.strategy: "barcode"`); uymayan barkod yok sayılır; birden çok farklı uyan barkodda OCR'a eşit olan, yoksa ilki + `barcode-ambiguous` gözden geçirme. İşaretsiz alanda OCR değerine EŞİT barkod alanı teyitli yapar (`barcodeConfirmed`, güven 1); farklı barkod dokunmaz. Barkod yokken çıkarım birebir eskidir. Barkod sayfa genelidir: blok/bölüm bandına taşınmaz. · bekçi: `test_gelen_belge_barkod`
+- **[ÇEKİRDEK]** Barkod yalnız cihaz okumasıyla (`clientOcr`) gelen sayfada motora girer ve zarfta (`ocrResult.ocr.barcodes`) saklanır — yeniden okuma kaybetmez; cihaz okumasız (sunucu OCR) yüklemede barkod saklanmaz (açık iş).
+
+## Canlı okuma kilidi (2026-11-09)
+
+Tablet canlı okumasında oy kilidini kendini düzelten tut (`live/liveVote.ts`: pencerede kilitten farklı aynı değer ≥`LIVE_VOTE_RELOCK` → kilit geçer, "Düzeltildi"; elle kilide oylama dokunmaz), şablon tanındıktan sonra son N yanıtı boş alanı "Belgede yok" say (otomatik çekim bekletmez, forma değer yazmaz), etiket-benzeri değeri ve `LIVE_VOTE_MIN_SHARPNESS` altı karenin yanıtını oylamaya sokma; sunucu canlı okumada biçim ihlalli (`pattern-mismatch` vb.) değeri null döndürür. Forma girişte (`applyLiveLocks`) kilit fotoğraf okumasını SESSİZCE ezmez: ikisi dolu ve farklıysa `liveConflicts` ("Kontrol edin" şeridi, metre çelişkisi `kursunMetersReview`), seçim elle kilitte kilit, oy kilidinde fotoğraf. · bekçi: `live/liveVote.test.ts` · `live/liveLocks.test.ts` · `test_gelen_belge_canli_okuma §g` <sub>(2026-11-09 canlı okuma kilit iyileştirmesi)</sub>
+
+Canlı okuma ekranını dar genişlikte (`useIsCompact`, <600dp: el terminali, telefon dikey) yan panelle çizme: kamera tam genişlik, "Çek ve bitir"in üstünde tek satır özet şeridi (`LiveSummaryStrip`), dokununca AYNI `LiveFieldPanel` alt yarım sayfada (kamera ve okuma döngüsü arkada sürer); şeridin sayımı/işaretleri ve panel başlığı yalnız `live/liveSummary.ts`ten (`liveProgress`, `liveStripMark`) türer; geniş ekran yan panelde kalır. · bekçi: `live/LiveReadModal.compact.test.tsx` <sub>(arşiv:2026-11-10 canlı okuma dar ekran)</sub>
+
+## Yeniden okuma (2026-11-04)
+
+Okunmuş tarama bağlanınca satırlar saklı zarftan AYNI tx'te; `POST /taramalar/:id/oku` okunmuş sayfayı yalnız DRAFT'ta taslak claim'inden sonra READ→PENDING yapsın: satırsız sayfa doğrudan, taslağın TÜM satırları bu taramadan PENDING/topsuz/düzeltilmemiş (`createdAt == updatedAt`) ise satırlar aynı tx'te silinerek; elle eklenmiş ya da düzeltilmiş satır varsa 409 `DOCUMENT_SCAN_ALREADY_READ`; fotoğraflı satırsız MANUAL taslak OCR olur (PDF hariç). · bekçi: `test_gelen_belge_ayni_belge_tanit` · `test_gelen_belge_yeniden_oku` <sub>(arşiv:2026-11-04)</sub>
+
+## İstasyon okutması "burada" (2026-11-09 kısa dosyadan taşındı)
+
+**[PROFİL]** İstasyon okutmasında "burada" cevabını YALNIZ `helpers/station-open-step.helper.ts` (ekranın açık kart listesi yüklemi; kurşunda istasyon düzeyi, makine süzgeci yok) ve rotasız İE için `scanRouteStartableWorkOrderIds` (açık listenin "Sahada belirlenecek" kapısı, oturum istasyonu) ile ver, konumu `workorder-location.helper`dan; ekran sorgu dizgisinde (`screen`, tambur `stationId`), yoksa `atStation` null; tablet HERE|STARTABLE_HERE olan TEK İE'yi açar + kardeş şeridi, aksi seçtirir; rotasız İE'ye "rotasında yok" deme. · bekçi: `test_istasyon_okutma_cok_ie`
+
+## İstasyon okutması doğrulama (2026-11-10 kısa dosyadan taşındı)
+
+**[PROFİL]** İstasyon fotoğraf okutmasında "kendiliğinden açılabilir mi"yi YALNIZ `isScanVerified` (`helpers/station-scan-score.helper.ts`; eşik `gelenBelge.stationVerifyThreshold`, vars. 80, 0 = kapalı, yazar `PUT /ayarlar`) cevaplasın: `workOrders` yalnız eşiği geçeni, geçemeyen `unverifiedWorkOrders` (`UNVERIFIED`); karşılaştırılamayan top listesi geçemez; tablet yalnız `passed` okur, düşük puanı görevli onayıyla açar; iz `StationScanCheck` TELEMETRİ. · bekçi: `test_istasyon_okutma_dogrulama` · `decide.test.ts` <sub>(arşiv:2026-11-06)</sub>
+
+**[PROFİL]** Tek parça belgede (kayıt satırları `isSinglePieceLines` = hepsi ARABA, okuma top dökümsüz) top listesini uygulanamaz say, güçlü kanıt olarak TOPLAM METREYİ (okunan kurşun metresi ↔ ARABA metresi, top metresi toleransı) kullan; top'lu belgede bileşen doğmaz. İstasyon satırı adımda canlı top yoksa gelen kökleri sayar, `arrival` (biçim + gelen metre) taşır; tablet tek parçada "Tek parça · N m" yazar. · bekçi: `test_istasyon_okutma_dogrulama` §6 · `decide.test.ts` <sub>(arşiv:2026-11-10 istasyon okutması tek parça)</sub>
+
+## Sunucu tamamlaması (2026-11-10 kısa dosyadan taşındı)
+
+**[PROFİL]** Cihaz okumasında başlık alanı boş kaldıysa aynı fotoğrafı sunucu okuyucusuyla YALNIZ bir kez oku ve yalnız boş alanı doldur (`lib/gelen-belge/sunucu-tamamlama.ts` `completeExtraction`; dolu alanı ezme, tam okunmuş sayfada okuyucuyu çağırma, okuyucu yok/hatalıysa cihaz sonucu kalır ve zarfa `failed` künyesi yazılır); cihaz ile sunucu ya da aynı taslağın sayfaları parti no'yu farklı okursa ilk değeri koru ve `BATCH_NO_DIFFERS` uyarısı düşür. · bekçi: `test_gelen_belge_sunucu_tamamlama` <sub>(arşiv:2026-11-05 sunucu tamamlaması)</sub>
+
+## Çok parti metre + parti no (2026-11-10 kısa dosyadan taşındı)
+
+**[ÇEKİRDEK]** Çok partide partinin metre önerisini YALNIZ `resolvePartyMeters` (`kursun-metre.ts`, belge yoluyla aynı `pickKursunMeters` önceliği: beyan ara toplamı → Σ satır) versin, `/partiler` `suggestedMeters` taşısın, istemci seçmesin; kağıttaki parti no'yu `batchNumberSource`tan bağımsız İE künyesine (`parameters.customerBatchNo`) yaz, istasyon + panel İE araması `workOrderParameterSearch`ten bulsun. · bekçi: `test_gelen_belge_cok_parti` §15 <sub>(arşiv:2026-11-06 214279 parti no + metre)</sub>
+
+## Tanıtma konum yedeği (2026-11-09 kısa dosyadan taşındı)
+
+**[ÇEKİRDEK]** Tanıtmada etiketli, bölüm dışı alana `[anchor, roi(fallback)]` öğret (`suggest.ts` `addPositionFallbacks`); konum yedeğini yalnız önceki stratejiler kullanılabilir değer bulamadıysa koştur, yalnız kutu içi kelimeyi al ve `position-fallback` + gözden geçirme ile işaretle; okunan müşteri adı karta çözülemezse tablette teklifi not başına BİR KEZ kendiliğinden modal aç (tek teklif; benzer varsa önce ad + kod listesi, yoksa "Yeni müşteri kaydedilsin mi?"). Bekçi: `test_gelen_belge_motor` §15, `test_musteri_hizli_kayit` §1c, `CustomerFromDocSheet.test.tsx`.
+
+## Karakter düzeltme + ana veri eşleme + çapraz doğrulama (2026-11-09)
+
+**[ÇEKİRDEK]** Kod alanında (alnum/code) karakter düzeltmesini yalnız `motor/char-fix.ts` `canonicalizeField` ile yap (`extract.ts` tek çağrı): küçük `l`/`|` komşusuna göre I/1; biçim kuralı (`pattern` ya da öğrenilmiş `valueShape`) tutmuyorsa yalnız BAĞLAMA uyan değişikliklerle (rakamlar arası O→0, harfler arası 1→I, ≤ 2) kurala uyan TEK aday alınır, değilse değere dokunma; çapraz doğrulamayı (`motor/cross-check.ts`: etiketli ikinci metre `METER_VALUES_DIFFER`, kg/metre oranı `KG_METER_RATIO` — en varsa 15–1500 g/m², yoksa 20–5000 g/m) yalnız UYARI olarak üret, değeri değiştirme; ana veri eşlemesinde OCR anahtarı eşitliği (`helpers/master-match.helper.ts`) 0,92 sayılır — sahip alanına sessiz atama yapmaz (0,95 altı).
+
+## Mükerrer kapıları (2026-11-10 kısa dosyadan taşındı)
+
+**[PROFİL]** Mükerrer belge no `gelenBelge.duplicateDocNo`: BLOCK (varsayılan) · WARN = işi süren eşte 409 `DELIVERY_NOTE_DUPLICATE_DOC_NO_ACTIVE` + `details.peers`, `confirmDuplicateDocNo` ile geçer · ALLOW; BLOCK'ta bayrak yok sayılmaz.
+
+**[PROFİL]** `gelenBelge.duplicateBatchNo`: ALLOW (varsayılan, bugünkü) · WARN = aynı sahipte işi süren (`NOTE_WORK_ONGOING_WHERE`) eşte onay 409 `DELIVERY_NOTE_DUPLICATE_BATCH_NO_ACTIVE` + `details.peers` [noteNo, workOrderNumber, customerBatchNo], `confirmDuplicateBatchNo` ile geçer · BLOCK 409 `DELIVERY_NOTE_DUPLICATE_BATCH_NO`, bayrak yok sayılır. Karşılaştırma katlı ve boşluksuz (`batchNoFoldKey`), belge kendi partileriyle çakışmaz; yüklem yalnız `helpers/gelen-belge-mukerrer.helper.ts`. Kapıyı (`duplicateBatchNoGateTx`) onay claim tx'inde koştur: İLK ifade 8046 kilidi (`hashtext(sahip:anahtar)`, sıralı), sonra claim ve PER_DOCUMENT özet/parti satırları AYNI tx'te (`gelen-belge-onay-claim.service.ts`) — kilit satırlar yazılana dek tutulur. İstemciler 409'u tek desenle gösterir: panel `DuplicateGateConfirm` (onay diyaloğu, tekli/toplu İE formu; formdan okutmada toast), tablet `DuplicateBatchNoDialog` (onay kartı, belgeden İE, belge masası); "Yine de" önceki kapının onayını da taşır, BLOCK yalnız bilgi. · bekçi: `test_gelen_belge_mukerrer_parti_no` §1–§6 · `DuplicateBatchNoDialog.test.tsx` · `ApprovalCard.test.tsx` · `useWoRows.test.tsx` · `mukerrer-belge-no.test.tsx` · `mukerrer-is-emri.test.tsx` <sub>(arşiv:2026-11-10 aynı müşteri parti no)</sub>
+
+## Basılı toplam satırı (2026-11-10 kısa dosyadan taşındı)
+
+**[ÇEKİRDEK]** Partinin gelen metre/kg/adedini BASILI toplam satırından al, konuma güvenme: etiket YALNIZ şablondan (`totals.labels` = tanıtmadaki "Toplam satırı", adet atılarak `totalsLabelOf`; koda sabit etiket yok), değerler etiketin sağında sayfa eğimi boyunca (`motor/table.ts` `findTotals`), sıra `totals.valueOrder` (varsayılan adet + tablonun ölçü kolonları sırası); toplamı partiye YALNIZ adet = tablo satır sayısıyla bağla, tutmazsa okuma sırası + `TABLE_TOTALS_BY_ORDER`; tablo Σ teyittir (`PARTİ TOPLAMI TUTMUYOR`). · bekçi: `test_gelen_belge_motor` §19 · `test_gelen_belge_cok_parti` §16 <sub>(arşiv:2026-11-10 basılı toplam satırı)</sub>
+
+**[ÇEKİRDEK]** Kelimeleri ayrı tablo kolonlarına düşen OCR satırını (başlık "Kilo Metre", hücre "13,70 54,4") kelimelerine böl; tablo hücresi kenarındaki "|" çizgidir, rakam sayma. · bekçi: `test_gelen_belge_motor` §19b
+
+**[ÇEKİRDEK]** Tablo hücresinin baş/sonundaki çizgi gürültüsünü (`| ¦ [ ]`) YALNIZ `motor/table.ts` `cellText`ten sil (sayı içi yutulmaz); basılı adet ≠ satır ve metresi okunamayan toplam satırı sessiz geçmez (parti kartı "PARTİ TOPLAMI TUTMUYOR … top" · `TOTAL_UNVERIFIED`), parti metresi basılı toplam kalır. · bekçi: `test_gelen_belge_motor` §19h–§19j <sub>(arşiv:2026-11-10 toplam satırı çizgi gürültüsü)</sub>
+
+**[ÇEKİRDEK]** Top satırı ve toplam satırı kg/metre hücresinde sayıdan BOŞLUKLA ayrık baş tireyi (`- 212,30`) çizgi say, YALNIZ `motor/table.ts` `measureText`ten sil; bitişik eksi (`-212,30`) ve diğer alanlar genel ayrıştırıcıda kalır. · bekçi: `test_gelen_belge_motor` §19k–§19k3 <sub>(arşiv:2026-11-10 top satırı baş tire)</sub>
+
+## Canlı kare okuması (2026-11-10 kısa dosyadan taşındı)
+
+**[ÇEKİRDEK]** Canlı kare okumasını (`POST /api/gelen-belge/canli-okuma`, `gelen-belge-canli-okuma.service.ts`) SALT OKUMA tut: `clientOcr` tel biçimini katı doğrula (ihlal 400 `LIVE_FRAME_INVALID`), bugünkü motorla yalnız şablonun başlık alanlarını + değer kutusunu (karenin piksel çerçevesi) + `engineMs` döndür; tarama/taslak/şablon isabeti/audit YAZMA, GENEL yedeği "tanındı" sayma (template null), izni yükleme ucuyla aynı tut (`gelen-belge:write`), uç request-trace dışlamasında kalsın · bekçi: test_gelen_belge_canli_okuma <sub>(arşiv:2026-11-05 canlı okuma L1)</sub>
+
+## Kimlik gücü + liste İE + detay (2026-11-10)
+
+**[ÇEKİRDEK]** Şablonu yalnız en az bir GÜÇLÜ kimlik yazısı (başlık / firma adı; genel etiket ve "X No" değil — `motor/kimlik-gucu.ts`, tablet aynası `identityStrength.ts`) ya da regex'i tutunca aday say (`classify.ts` `templateMatches`: sınıflandırma + benzer şablon + ikinci belge izi); tanıtma güçlüyü önce önersin, yalnız-zayıf seçimi uyarsın; "Tanımı düzenle — X"te "Yeni tip olarak tanıt" X'e dokunmasın. · bekçi: `test_gelen_belge_kimlik_gucu` · `identityStrength.test.ts` · `TeachBanner.test.tsx` <sub>(arşiv:2026-11-10 kimlik gücü)</sub>
+
+**[PROFİL]** Liste kalemi `workOrders`ı (iptal hariç, İE no sıralı, tekil) YALNIZ `loadNoteWorkOrders`ten ver: sayfa başına tek SQL, bağ `rollWorkOrderEdgesSql` (`whereRollsOfWorkOrder`un SQL ikizi); panel ilk 2 çip + "+N", "Kaynak" yalnız detayda. · bekçi: `test_gelen_belge_liste_is_emri`, `liste-is-emri.test.tsx` <sub>(arşiv:2026-11-10 liste İE sütunu)</sub>
+
+**[PROFİL]** Panel detayında uyarıları tek Dikkat kutusunda topla (yoksa çizme); başlıkta yalnız birincil eylem, diğerleri ⋯ Diğer menüsünde. · bekçi: `detay-sade.test.tsx` <sub>(arşiv:2026-11-10 detay sadeleştirme)</sub>
+
+## Çok partide parti no → İE
+- Okutma parti yedeği, istasyon elle araması ve İE liste aramasının belge dalı parti alanlarında `helpers/workorder-doc-search.helper.ts` `workOrdersOfNoteBatchWhere(filtre)`ini kullanır: satır `customerBatchNo`su o satırın topunun İE'sine; başlık `customerBatchNo`/`ourBatchNo` yalnız satırında parti no (boş metin hariç) olmayan belgede bütün belgenin toplarına.
+- İE'nin belge partisi (istasyon kartı `documents[].customerBatchNo`, fotoğraf doğrulamasının parti bileşeni) bellek-içi ikiz `noteBatchNosForWorkOrder`den. Gerekçe: arşiv 2026-11-10 "İstasyon Belgeden iş bul". Bekçi: `test_istasyon_belge_arama_parti` §7.
+
+## Künye düzeltmesi (2026-11-10)
+**[ÇEKİRDEK]** Onaylı belgede (APPROVED/PARTIAL, `NOTE_IDENTITY_FIX_STATUSES`) YALNIZ fiş no + fiş tarihini `PATCH /irsaliyeler/:id/kunye` (`gelen-belge:write`, `fixNoteIdentity`) ile düzelt: katı gövde başka anahtarı 400'ler; claim `{id, durum kümesi, eski no, eski tarih}` → eşzamanlı ikinci düzeltme 409 `DELIVERY_NOTE_CHANGED` (son yazan ezmez), taslak/iptal/onaylanıyor 409 `DELIVERY_NOTE_IDENTITY_NOT_FIXABLE`; mükerrer no onay kapısının AYNI helper'ından (`duplicateDocNoApprovalGate`; BLOCK'ta 8044 kilidi + `assertDocNoUniqueTx`, WARN 409 + `confirmDuplicateDocNo`); audit eski→yeni tx dışında; değişiklik yoksa yazma. Panel: detayda "Fiş no / tarih düzelt" (izinli + onaylı) → `FisNoDuzeltDialog`. · bekçi: `test_gelen_belge_kunye_duzelt` · `fis-no-duzelt.test.tsx` <sub>(arşiv:2026-11-10 künye düzeltmesi)</sub>

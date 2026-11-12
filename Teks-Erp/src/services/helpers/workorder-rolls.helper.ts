@@ -10,7 +10,7 @@
 // bekçisi (`workorder-target-color.helper`) de aynı kümeyi sayınca buraya alındı.
 // İki yerde iki tanım yaşasaydı bant "12 top kırmızı" derken bekçi 9 sayardı.
 // =============================================================================
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 export function whereRollsOfWorkOrder(workOrderId: string): Prisma.RollWhereInput {
   return {
@@ -35,4 +35,15 @@ export function whereWorkOrdersOfRolls(rollWhere: Prisma.RollWhereInput): Prisma
       { batches: { some: { rolls: { some: rollWhere } } } },
     ],
   };
+}
+
+/**
+ * SQL ikizi — top ↔ iş emri kenarları (`roll_id`, `wo_id`), aynı üç bağ (parti · durduğu adım · üretildiği adım).
+ * `rollCond` her dalın WHERE'ine eklenir (top takma adı `r`). Sayfa başına tek sorguda "hangi top hangi İE" eşlemesi
+ * gerektiğinde kullanılır; ikizlik `test_gelen_belge_liste_is_emri` §5'te `whereWorkOrdersOfRolls` ile ölçülür.
+ */
+export function rollWorkOrderEdgesSql(rollCond: Prisma.Sql): Prisma.Sql {
+  return Prisma.sql`SELECT r.id AS roll_id, b."workOrderId" AS wo_id FROM rolls r JOIN batches b ON b.id = r."batchId" WHERE ${rollCond}
+      UNION SELECT r.id AS roll_id, s."workOrderId" AS wo_id FROM rolls r JOIN work_order_steps s ON s.id = r."currentStepId" WHERE ${rollCond}
+      UNION SELECT r.id AS roll_id, s."workOrderId" AS wo_id FROM rolls r JOIN work_order_steps s ON s.id = r."producedInStepId" WHERE ${rollCond}`;
 }

@@ -2,13 +2,14 @@
 // H3 sayaç şeridi — GİRİŞ / ÇIKIŞ / FARK + kaynak rengi + bekleyen onay bantları
 // =============================================================================
 // Yeşil = bağlı sayaç, amber = elle, kırmızı = SİMÜLASYON. Gramaj panelinin ÜSTÜNDE
-// durur; telefon dikeyinde hücreler alt alta kırılır (flexWrap).
+// durur; telefon dikeyinde hücreler alt alta kırılır (flexWrap). `fill` (tablet, GK 2026-11-11): şerit sol sütunun artan
+// dikey alanını doldurur, rakamlar kritik boyda (32) — bloklar arasında ölü boşluk kalmasın.
 // =============================================================================
 
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Button, Surface, Text } from 'react-native-paper';
-import { colors, radius, spacing } from '../../../theme/tokens';
+import { Button, Text } from 'react-native-paper';
+import { colors, radius, shadow, spacing, typography } from '../../../theme/tokens';
 import { fmtMeters, stripToneOf } from './meterCapture';
 import type { MeterAcksState } from './useMeterAcks';
 import type { MeterCaptureState, MeterRoll } from './useMeterCapture';
@@ -18,6 +19,8 @@ interface Props {
   acks: MeterAcksState;
   roll: MeterRoll | null;
   stepId: string | null;
+  /** Tablet: artan dikey alana yayıl (flexGrow) + büyük rakam. Telefonda verilmez (taşma yok). */
+  fill?: boolean;
 }
 
 const TONE = {
@@ -27,11 +30,11 @@ const TONE = {
   NONE: { bg: colors.surfaceMuted, fg: colors.textSecondary, label: '' },
 } as const;
 
-function Cell({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+function Cell({ label, value, strong, big }: { label: string; value: string; strong?: boolean; big?: boolean }) {
   return (
     <View style={s.cell}>
       <Text style={s.cellLabel}>{label}</Text>
-      <Text style={[s.cellValue, strong && s.cellStrong]}>{value}</Text>
+      <Text style={[s.cellValue, big && s.cellValueBig, strong && s.cellStrong]}>{value}</Text>
     </View>
   );
 }
@@ -56,37 +59,41 @@ function AckBands({ acks }: { acks: MeterAcksState }) {
   );
 }
 
-export default function MeterStrip({ meter, acks, roll, stepId }: Props) {
+export default function MeterStrip({ meter, acks, roll, stepId, fill }: Props) {
   const last = meter.last;
   const inMeters = meter.inMetersOf(roll);
   const declared = meter.declaredOf(roll);
   const tone = TONE[stripToneOf(last?.source ?? null)];
   return (
-    <Surface style={[s.root, { backgroundColor: tone.bg }]} elevation={1} testID="metre-serit">
+    <View style={[s.root, fill && s.rootFill, { backgroundColor: tone.bg }]} testID="metre-serit">
       <View style={s.row}>
-        <Cell label={inMeters != null ? 'GİRİŞ' : 'GİRİŞ (irsaliye)'} value={fmtMeters(inMeters ?? declared)} />
+        <Cell label={inMeters != null ? 'GİRİŞ' : 'GİRİŞ (irsaliye)'} value={fmtMeters(inMeters ?? declared)} big={fill} />
         {meter.inOn && roll && stepId && (
-          <Button mode="outlined" compact onPress={() => meter.readIn(roll, stepId)} testID="metre-giris-oku">
+          <Button mode="contained" compact onPress={() => meter.readIn(roll, stepId)} testID="metre-giris-oku">
             GİRİŞ OKU
           </Button>
         )}
-        <Cell label={last ? `ÇIKIŞ · top ${last.barcode ? last.barcode.slice(-4) : '—'}` : 'ÇIKIŞ'} value={fmtMeters(last?.outMeters)} strong />
-        <Cell label="FARK" value={last?.diff != null ? fmtMeters(last.diff) : '—'} strong={!!last?.deviated} />
+        <Cell label={last ? `ÇIKIŞ · top ${last.barcode ? last.barcode.slice(-4) : '—'}` : 'ÇIKIŞ'} value={fmtMeters(last?.outMeters)} strong big={fill} />
+        <Cell label="FARK" value={last?.diff != null ? fmtMeters(last.diff) : '—'} strong={!!last?.deviated} big={fill} />
         {!!tone.label && <Text style={[s.tag, { color: tone.fg }]} testID="metre-kaynak">{tone.label}</Text>}
       </View>
       <AckBands acks={acks} />
-    </Surface>
+    </View>
   );
 }
 
 const s = StyleSheet.create({
-  root: { borderRadius: radius.lg, padding: spacing.md, gap: spacing.sm },
+  // Paper Surface değil düz View: Surface flexGrow'u dış katmana verip zemini içerikte bırakıyordu.
+  root: { borderRadius: radius.lg, padding: spacing.lg, gap: spacing.sm, ...shadow.sm },
+  // Sol sütunun artan dikey alanını doldurur (bloklar arası aralık sabit kalsın); içerik dikeyde ortalı.
+  rootFill: { flexGrow: 1, minHeight: 112, justifyContent: 'center' },
   row: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.lg },
-  cell: { minWidth: 110 },
-  cellLabel: { fontSize: 12, color: colors.textSecondary, fontWeight: '600' },
-  cellValue: { fontSize: 20, fontWeight: '700', color: colors.text },
+  cell: { flex: 1, minWidth: 110, gap: spacing.xs },
+  cellLabel: { fontSize: typography.size.sm, color: colors.textSecondary, fontWeight: typography.weight.bold, letterSpacing: 0.5 },
+  cellValue: { fontSize: typography.size.xxl, fontWeight: typography.weight.bold, color: colors.text, fontVariant: ['tabular-nums'] },
+  cellValueBig: { fontSize: typography.size.display },
   cellStrong: { color: colors.dangerDark },
-  tag: { fontSize: 14, fontWeight: '800', marginLeft: 'auto' },
+  tag: { fontSize: typography.size.sm, fontWeight: typography.weight.bold, marginLeft: 'auto' },
   band: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, padding: spacing.sm, borderRadius: radius.md },
   bandDanger: { backgroundColor: colors.dangerContainer },
   bandWarn: { backgroundColor: colors.warningContainer },

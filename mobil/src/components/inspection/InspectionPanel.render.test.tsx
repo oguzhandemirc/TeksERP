@@ -1,7 +1,8 @@
 // K4P-TABLET — InspectionPanel 4 puan modu render bekçisi: boyut şeridi, sabit puan tek dokunuş,
 // konumsuz kayıt, önceki hatalar gri, özet/çevrimdışı/en-yok şeritleri, numpad'i kendiliğinden almaz.
 import React from 'react';
-import { act, fireEvent } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
+import { act, fireEvent, within } from '@testing-library/react-native';
 import { renderWithPaper } from '../../test/render';
 import InspectionPanel from './InspectionPanel';
 import type { DefectType } from '../../types/models';
@@ -99,5 +100,92 @@ describe('InspectionPanel — 4 puan modu', () => {
     const { r } = setup({ sizeClassMode: true, summary: { defectCount: 0, totalPoints: 0, per100M2: null, widthSource: 'UNKNOWN' } });
     await act(async () => {});
     expect(r.getByTestId('inspection-no-width')).toHaveTextContent('Ürün kartında en yok; puan/100 hesaplanmaz');
+  });
+});
+
+describe('InspectionPanel — hata yokken cetvel (rulerAlways)', () => {
+  it('⭐ rulerAlways: boş cetvel + "Hata Noktaları (0)", boş durum yazısı yok', async () => {
+    const { r } = setup({ rulerAlways: true, maxMeter: 3935 });
+    await act(async () => {});
+    expect(r.getByTestId('inspection-ruler')).toBeOnTheScreen();
+    expect(r.getByText('Hata Noktaları (0)')).toBeOnTheScreen();
+    expect(r.queryByText('Henüz hata yok')).toBeNull();
+  });
+
+  it('varsayılan konak (rulerAlways yok): bugünkü "Henüz hata yok" boş durumu', async () => {
+    const { r } = setup();
+    await act(async () => {});
+    expect(r.queryByTestId('inspection-ruler')).toBeNull();
+    expect(r.getByText('Henüz hata yok')).toBeOnTheScreen();
+  });
+});
+
+describe('InspectionPanel — top boyunu aşan metre', () => {
+  it('⭐ warn: kayıt gider + sarı satır, engel yok', async () => {
+    const { r, onDefect } = setup({ meterInput: '540', maxMeter: 500, overMaxMode: 'warn' });
+    await act(async () => {});
+    expect(r.getByText('Top beyandan uzun görünüyor (540 > 500 m)')).toBeOnTheScreen();
+    fireEvent.press(r.getByTestId('inspection-type-t-leke'));
+    expect(onDefect).toHaveBeenCalledWith({ meter: 540, defectTypeId: 't-leke' });
+  });
+  it('negatif sonda: varsayılan kip engeller, uyarı satırı yok', async () => {
+    const { r, onDefect } = setup({ meterInput: '540', maxMeter: 500 });
+    await act(async () => {});
+    expect(r.queryByTestId('inspection-over-max')).toBeNull();
+    fireEvent.press(r.getByTestId('inspection-type-t-leke'));
+    expect(onDefect).not.toHaveBeenCalled();
+  });
+});
+
+describe('overMaxMode konak bağı', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const fs = require('fs') as typeof import('fs');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const path = require('path') as typeof import('path');
+  const read = (rel: string) => fs.readFileSync(path.join(__dirname, '..', '..', 'screens', 'Modules', rel), 'utf8');
+  it('kurşun warn taşır; Tambur çekmecesi ve Muayene bugünkü engeli korur', () => {
+    expect(read('KursunQc/KursunQcScreen.tsx')).toMatch(/overMaxMode="warn"/);
+    expect(read('Tambur/TamburDefectDrawer.tsx')).not.toMatch(/overMaxMode/);
+    expect(read('Muayene/InspectionScreen.tsx')).not.toMatch(/overMaxMode/);
+  });
+});
+
+describe('InspectionPanel — giriş alta yaslı (GK kurşun, 2026-11-10)', () => {
+  it('varsayılan: ayrı boşluk görünümü yok (diğer ekranlar bugünkü gibi yukarıdan dizer)', () => {
+    const { r } = setup();
+    expect(r.queryByTestId('inspection-entry-spacer')).toBeNull();
+  });
+  it('entryAtBottom: artan yerin TAMAMI giriş bloğunda (alta yaslı); ayrı boşluk görünümü yok — çift aralık olmaz', () => {
+    const { r } = setup({ entryAtBottom: true, rulerAlways: true });
+    expect(r.queryByTestId('inspection-entry-spacer')).toBeNull();
+    expect(StyleSheet.flatten(r.getByTestId('inspection-entry-block').props.style)).toMatchObject({ flexGrow: 1, justifyContent: 'flex-end' });
+    // Sıra: cetvel → metre girişi (başparmak erişimi alt blokta).
+    const json = JSON.stringify(r.toJSON());
+    const iRuler = json.indexOf('inspection-ruler');
+    const iMeter = json.indexOf('"testID":"meter"');
+    expect(iRuler).toBeGreaterThanOrEqual(0);
+    expect(iRuler < iMeter).toBe(true);
+  });
+  it('varsayılan: giriş bloğu büyümez', () => {
+    const { r } = setup();
+    expect(StyleSheet.flatten(r.getByTestId('inspection-entry-block').props.style).flexGrow).toBeUndefined();
+  });
+});
+
+describe('InspectionPanel — birimli metre kutusu (GK 2026-11-11)', () => {
+  it('birim "m" kutunun içinde; kutu tür düğmeleriyle aynı satırda (ilk hücre) ve aynı yükseklikte', () => {
+    const { r } = setup();
+    const box = r.getByTestId('inspection-meter-kutu');
+    expect(within(box).getByText('m')).toBeOnTheScreen();
+    expect(within(box).getByTestId('meter')).toBeOnTheScreen();
+    const grid = r.getByTestId('inspection-type-grid');
+    expect(within(grid).getByTestId('inspection-meter-kutu')).toBeTruthy();
+    expect(within(grid).getByTestId('inspection-type-t-leke')).toBeTruthy();
+    expect(StyleSheet.flatten(box.props.style).minHeight).toBe(64);
+    expect(r.queryByText('Hata metresi (mt)')).toBeNull();
+  });
+  it('tip tanımsızken de metre kutusu çizilir', () => {
+    const { r } = setup({ defectTypes: [] });
+    expect(r.getByTestId('inspection-meter-kutu')).toBeOnTheScreen();
   });
 });

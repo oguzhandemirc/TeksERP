@@ -4,7 +4,9 @@ import { formatFactory } from "@/lib/factory-time";
 import { FileX } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { isDeletable, NOTE_STATUS_LABEL, NOTE_STATUS_VARIANT, SOURCE_LABEL } from "./noteStatus";
+import { TERIM } from "@/lib/terim";
+import { isDeletable, NOTE_STATUS_LABEL, NOTE_STATUS_VARIANT } from "./noteStatus";
+import { NoteWorkOrdersCell } from "./NoteWorkOrdersCell";
 import type { DeliveryNoteHeader } from "./types";
 
 export const NOTE_COLUMNS: ColumnDef<DeliveryNoteHeader>[] = [
@@ -36,7 +38,14 @@ export const NOTE_COLUMNS: ColumnDef<DeliveryNoteHeader>[] = [
   },
   // Belgenin top satırları; onayda doğan parti kaydı (özet satırı) sayılmaz. Eski sunucu `docLineCount` göndermez.
   { id: "lines", header: "Top", accessorFn: (r) => r.docLineCount ?? r._count.lines, cell: ({ getValue }) => <span className="tabular-nums">{String(getValue())}</span> },
-  { id: "sourceKind", header: "Kaynak", accessorFn: (r) => SOURCE_LABEL[r.sourceKind], cell: ({ getValue }) => <span className="text-xs">{String(getValue())}</span> },
+  // "Kaynak" listede yok (hep "Fotoğraf" diyordu; belge detayında kalır). İE adı rejimden okuma anında çözülür.
+  {
+    id: "workOrders",
+    header: () => TERIM.terbiyeIsEmri.tekil,
+    meta: { get label() { return TERIM.terbiyeIsEmri.tekil; } },
+    accessorFn: (r) => (r.workOrders ?? []).map((w) => w.workOrderNumber).join(", "),
+    cell: ({ row }) => <NoteWorkOrdersCell workOrders={row.original.workOrders} />,
+  },
   {
     id: "status",
     header: "Durum",

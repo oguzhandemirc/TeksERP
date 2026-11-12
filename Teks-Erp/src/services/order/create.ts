@@ -8,7 +8,7 @@
 
 import { sequentialTx } from "../helpers/tx-sequential-relations.helper";
 import { assertCariNotHeldTx } from "../helpers/cari-hold.helper";
-import { assertCustomerRiskLimitTx } from "../helpers/risk-exposure.helper";
+import { assertCustomerRiskLimitTx, customerRiskLimitIntakeWarningTx, riskLimitIntakeWarningText } from "../helpers/risk-exposure.helper";
 import prisma from "../../lib/prisma";
 import { followAsCreatorTx } from "../helpers/record-follow.helper";
 import { AuditService } from "../audit.service";
@@ -41,6 +41,8 @@ export interface PreparedOrderCreate {
   /** Oluşturan — insert (`createdById`) ve audit AYNI alandan okur; doğuş yolu başına bir kez verilir. */
   actorUserId: string | undefined;
   lineCheck: { checks: ItemUsageCheck[]; warnings: string[] };
+  /** K3: iş kabulü kapısı kapalıyken risk limiti aşımı uyarısı (Türkçe; tutar yalnız `actor.canSeeRiskAmounts`). */
+  riskWarnings: string[];
   destination: Awaited<ReturnType<typeof resolveShipmentDestination>>["destination"];
   manualOrderNumber: string | null;
   today: Date;
@@ -50,6 +52,8 @@ export interface PreparedOrderCreate {
 /** Sipariş doğuşunun aktörü: her doğuş yolu (uç · hızlı sipariş · gelen kutusu · içe aktarma) AÇIKÇA verir. */
 export interface OrderActor {
   userId: string | undefined;
+  /** Risk uyarısında tutar/bakiye gösterilsin mi (bakiye görme izni `finance:read`); verilmezse ayrıntısız. */
+  canSeeRiskAmounts?: boolean;
 }
 
 /** İdempotency anahtarı (Roll emsali) — route-level zod yok (BaseController ham body), burada doğrulanır. */
@@ -62,12 +66,12 @@ function parseOrderClientToken(raw: unknown): string | null {
 const parseManualOrderNumber = (raw: unknown): string | null =>
   typeof raw === "string" && raw.trim() ? raw.trim() : null;
 
-export async function create(this: OrderServiceThis, data: Record<string, unknown>, userId?: string): Promise<ApiResponse<unknown>> {
+export async function create(this: OrderServiceThis, data: Record<string, unknown>, userId?: string, opts?: { canSeeRiskAmounts?: boolean }): Promise<ApiResponse<unknown>> {
     const clientToken = parseOrderClientToken(data.clientToken);
     // R: token HER iş kuralından (elle numara çakışması dahil) ÖNCE okunur ve iş hangi hatayla düşerse
     // düşsün yeniden okunur — sıralı tekrar da eşzamanlı kaybeden de önceki siparişi alır.
     return this.orderReplay(data).run(clientToken, async () => {
-      const prepared = await this.prepareOrderCreate(data, clientToken, { userId });
+      const prepared = await this.prepareOrderCreate(data, clientToken, { userId, canSeeRiskAmounts: opts?.canSeeRiskAmounts });
       const record = await this.insertPreparedOrder(prepared);
       return this.finishOrderCreate(record, data, prepared);
     });
@@ -99,7 +103,7 @@ export async function finishOrderCreate(this: OrderServiceThis,
     );
     return withExtraWarnings(
       this.withUnitWarnings({ success: true, data: record, message: "Sipariş oluşturuldu" }),
-      prepared.lineCheck.warnings,
+      [...prepared.lineCheck.warnings, ...prepared.riskWarnings],
     );
   }
 
@@ -119,6 +123,7 @@ export async function prepareOrderCreate(this: OrderServiceThis,
     await this.prepareLineVariants(data.lines);
     const lineCheck = await this.validateLineItems(data.lines, { fromScannedRolls: opts?.fromScannedRolls });
     const unitByItem = lineCheck.unitByItem;
+    const riskWarnings: string[] = [];
 
     if (data.customerId) {
       await this.validateCustomer(data.customerId as string);
@@ -126,6 +131,9 @@ export async function prepareOrderCreate(this: OrderServiceThis,
       await assertCariNotHeldTx(prisma, data.customerId as string, "INTAKE");
       // Risk limiti (D4-I2, finance.riskLimitBlock.intake) — kilit kapısının yanında.
       await assertCustomerRiskLimitTx(prisma, data.customerId as string, "INTAKE");
+      // K3: kapı kapalıyken aşım engellemez, yanıta uyarı olur (aynı çekirdek; kapı açıksa null).
+      const risk = await customerRiskLimitIntakeWarningTx(prisma, data.customerId as string);
+      if (risk) riskWarnings.push(riskLimitIntakeWarningText(risk, actor.canSeeRiskAmounts === true));
     }
 
     if (data.branchId && data.customerId) {
@@ -243,7 +251,7 @@ export async function prepareOrderCreate(this: OrderServiceThis,
         throw AppError.conflict(`'${manualOrderNumber}' numaralı sipariş zaten var`);
       }
     }
-    return { prismaData, actorUserId: actor.userId, lineCheck, destination, manualOrderNumber, today, fmt };
+    return { prismaData, actorUserId: actor.userId, lineCheck, riskWarnings, destination, manualOrderNumber, today, fmt };
   }
 
 export function insertPreparedOrder(this: OrderServiceThis, p: PreparedOrderCreate): Promise<Record<string, unknown>> {

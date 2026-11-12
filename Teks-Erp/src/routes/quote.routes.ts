@@ -321,7 +321,7 @@ router.post("/:id/revise", requirePermission("quote:write"), wrap(async (req, re
  *       required: true
  *       content: { application/json: { schema: { type: object, required: [clientToken], properties: { clientToken: { type: string, format: uuid }, lineItems: { type: array, description: "Ürünsüz kaleme yalnız siparişte ürün bağla", items: { type: object, properties: { lineNo: { type: integer }, itemId: { type: string, format: uuid } } } } } } } }
  *     responses:
- *       201: { description: "Sipariş oluşturuldu (data = teklif, orderId, orderNumber)" }
+ *       201: { description: "Sipariş oluşturuldu (data = teklif, orderId, orderNumber; sipariş uyarıları varsa `warnings[]` — iş kabulü risk kapısı kapalıyken limit aşımı dahil, tutar yalnız `finance:read`)" }
  *       400: { description: QUOTE_LINE_ITEM_MISSING }
  *       403: { description: "PERMISSION_DENIED (details.required: [order:write])" }
  *       409: { description: QUOTE_STATUS_CONFLICT }
@@ -330,7 +330,7 @@ router.post("/:id/convert", requirePermission("quote:convert"), wrap(async (req,
   const { id } = idParam.parse(req.params);
   const user = { userId: req.user?.userId, permissions: req.user?.permissions };
   const out = await convertQuoteToOrder(id, body(req), user);
-  sendQuoteJson(req, res)(out.replay ? 200 : 201, out.quote, { orderId: out.orderId, orderNumber: out.orderNumber, message: "Teklif siparişe dönüştürüldü." });
+  sendQuoteJson(req, res)(out.replay ? 200 : 201, out.quote, { orderId: out.orderId, orderNumber: out.orderNumber, message: "Teklif siparişe dönüştürüldü.", ...(out.warnings.length ? { warnings: out.warnings } : {}) });
 }));
 
 export default router;

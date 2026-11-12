@@ -37,6 +37,8 @@ jest.mock('../../../../components/PickerModal', () => {
   };
 });
 
+// Çok partide parti panoları sekmelidir (2026-11-09); gizli sekmenin içeriği de sınanır.
+const HIDDEN = { includeHiddenElements: true };
 const machines: DeskKursunMachine[] = [
   { id: 'm1', code: 'K1', name: 'Kurşun 1', stationId: 'stK' },
   { id: 'm2', code: 'K2', name: 'Kurşun 2', stationId: 'stK' },
@@ -135,13 +137,13 @@ describe('PartyRows + plan (tablet kartı)', () => {
     const wo = { setMulti } as unknown as WoRowsState;
     const multi = multiOf();
     const ui = renderWithPaper(<PartyRows row={rowOf(multi)} wo={wo} locked={false} plan={ctx} />);
-    expect(ui.getByTestId('belge-parti-makine-GB-1-1')).toHaveTextContent(/Kurşun makinesi\s*2/);
-    expect(ui.getByTestId('belge-parti-gramaj-GB-1-2')).toHaveTextContent(/40 gr/);
-    fireEvent.press(ui.getByTestId('belge-parti-gramaj-GB-1-2'));
-    fireEvent.press(ui.getByTestId('secim-g2'));
+    expect(ui.getByTestId('belge-parti-makine-GB-1-1', HIDDEN)).toHaveTextContent(/Kurşun makinesi\s*2/);
+    expect(ui.getByTestId('belge-parti-gramaj-GB-1-2', HIDDEN)).toHaveTextContent(/40 gr/);
+    fireEvent.press(ui.getByTestId('belge-parti-gramaj-GB-1-2', HIDDEN));
+    fireEvent.press(ui.getByTestId('secim-g2', HIDDEN));
     expect(setMulti).toHaveBeenLastCalledWith('n1', { ...multi, rows: [multi.rows[0], { ...multi.rows[1], gramajValueId: 'g2' }] });
-    fireEvent.press(ui.getByTestId('belge-parti-makine-GB-1-1'));
-    fireEvent.press(ui.getByTestId('secim-__sonra__'));
+    fireEvent.press(ui.getByTestId('belge-parti-makine-GB-1-1', HIDDEN));
+    fireEvent.press(ui.getByTestId('secim-__sonra__', HIDDEN));
     expect(setMulti).toHaveBeenLastCalledWith('n1', { ...multi, rows: [{ ...multi.rows[0], machineId: null }, multi.rows[1]] });
   });
   it('plan yoksa (belge masası / SINGLE) kart bugünkü gibi', () => {
@@ -152,8 +154,8 @@ describe('PartyRows + plan (tablet kartı)', () => {
   it('⭐ kısmi sonuçta açılan partinin seçicileri kilitli, düşen parti düzenlenebilir', () => {
     const partial = { workOrderId: 'w1', workOrderNo: 'IE-1', batchNumber: 'P1', rollId: 'r', workOrders: [{ blockNos: [1], workOrderId: 'w1', workOrderNo: 'IE-1', batchNumber: 'P1' }], failed: [{ blockNo: 2, code: null, message: 'x' }] };
     const ui = renderWithPaper(<PartyRows row={rowOf(multiOf(), openedResult(partial))} wo={{ setMulti: jest.fn() } as unknown as WoRowsState} locked={false} plan={ctx} />);
-    expect(ui.getByTestId('belge-parti-makine-GB-1-1')).toBeDisabled();
-    expect(ui.getByTestId('belge-parti-makine-GB-1-2')).not.toBeDisabled();
+    expect(ui.getByTestId('belge-parti-makine-GB-1-1', HIDDEN)).toBeDisabled();
+    expect(ui.getByTestId('belge-parti-makine-GB-1-2', HIDDEN)).not.toBeDisabled();
   });
 });
 

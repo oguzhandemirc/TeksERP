@@ -1,11 +1,13 @@
-// K30-D ⚙ "Alanlar": kullanıcı formda fazlalık gördüğü alanları kapatır (kişisel tercih). Zorunlular kilitli; kapatılan
+// K30-D ⚙ "Alanlar": kullanıcı formda fazlalık gördüğü alanları kapatır (kişisel tercih) + "Gelen değerler" (cihaz). Zorunlular kilitli; kapatılan
 // alan kaybolmaz, altta kapalı "Diğer alanlar (n)" bölümüne iner ve dokununca açılır.
 import React from 'react';
 import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
-import { Button, Icon, Switch, Text, TouchableRipple } from 'react-native-paper';
+import { Appbar, Button, Icon, Switch, Text, TouchableRipple } from 'react-native-paper';
 import ModuleSheet from '../../../../components/ModuleSheet';
 import { colors, radius, spacing, typography } from '../../../../theme';
 import { fieldLabel, selectorSections, type WoFieldDef, type WoFieldKey } from './woFieldCatalog';
+import { useDeviceSettingsStore } from '../../../../store/deviceSettingsStore';
+import { DOC_INCOMING_FIELDS } from '../../../../store/docIncomingFields';
 
 export function FieldsButton({ onPress }: { onPress: () => void }) {
   return (
@@ -17,6 +19,11 @@ export function FieldsButton({ onPress }: { onPress: () => void }) {
   );
 }
 
+/** Başlık çubuğunda profil tuşunun solunda yalnız ikon (ScreenChrome `profileExtras`); dokunma hedefi 56dp. */
+export function FieldsHeaderIcon({ onPress }: { onPress: () => void }) {
+  return <Appbar.Action icon="cog-outline" color={colors.textOnDark} size={26} onPress={onPress} style={styles.headerIcon} accessibilityLabel="Alanlar" testID="ie-alanlar" />;
+}
+
 interface SheetProps {
   visible: boolean;
   hidden: readonly WoFieldKey[];
@@ -25,9 +32,18 @@ interface SheetProps {
   onDismiss: () => void;
   /** Son seçim sunucuya yazılamadı (yerelde tutuluyor). */
   pending: boolean;
+  /** "Belgedeki gelen değerleri hedefe yaz" (kişisel, varsayılan kapalı). */
+  fillTarget?: boolean;
+  onFillTarget?: (on: boolean) => void;
+  /** "Diğer alanlar" bölümü görünsün (kişisel, varsayılan açık). */
+  otherShown?: boolean;
+  onOtherShown?: (on: boolean) => void;
+  /** Rota adımlarında boş not kutusu görünsün (kişisel, varsayılan açık). */
+  stepNotesShown?: boolean;
+  onStepNotesShown?: (on: boolean) => void;
 }
 
-export function FieldSelectorSheet({ visible, hidden, onToggle, onReset, onDismiss, pending }: SheetProps) {
+export function FieldSelectorSheet({ visible, hidden, onToggle, onReset, onDismiss, pending, fillTarget = false, onFillTarget, otherShown = true, onOtherShown, stepNotesShown = true, onStepNotesShown }: SheetProps) {
   return (
     <ModuleSheet
       visible={visible}
@@ -47,6 +63,26 @@ export function FieldSelectorSheet({ visible, hidden, onToggle, onReset, onDismi
       }
     >
       {pending && <Text style={styles.hint} testID="ie-alanlar-bekliyor">Seçim bu tablette tutuluyor; bağlantı gelince kaydedilecek.</Text>}
+      {onFillTarget && (
+        <TouchableRipple onPress={() => onFillTarget(!fillTarget)} style={styles.row} testID="ie-hedef-doldur" accessibilityLabel="Belgedeki gelen değerleri hedefe yaz">
+          <View style={styles.rowInner}>
+            <View style={styles.rowText}>
+              <Text style={styles.rowTitle}>Belgedeki gelen değerleri hedefe yaz</Text>
+              <Text style={styles.rowSub}>Kapalıyken hedef kutuları boş kalır, belgedeki değer silik ipucu olarak görünür.</Text>
+            </View>
+            <Switch value={fillTarget} onValueChange={onFillTarget} testID="ie-hedef-doldur-anahtar" />
+          </View>
+        </TouchableRipple>
+      )}
+      {onOtherShown && (
+        <SwitchRow title="“Diğer alanlar” bölümü" sub="Kapalıyken kapattığınız alanlar formda hiç görünmez (dolu alan varsa bölüm yine çıkar)."
+          value={otherShown} onChange={onOtherShown} testID="ie-diger-alanlar-goster" />
+      )}
+      {onStepNotesShown && (
+        <SwitchRow title="Rota adımı notu" sub="Kapalıyken adımların boş not kutusu çizilmez (dolu not yine görünür)."
+          value={stepNotesShown} onChange={onStepNotesShown} testID="ie-adim-notu-goster" />
+      )}
+      <IncomingFieldsSection />
       {selectorSections().map(({ section, fields }) => (
         <View key={section} style={styles.group}>
           <Text style={styles.section}>{section}</Text>
@@ -56,6 +92,35 @@ export function FieldSelectorSheet({ visible, hidden, onToggle, onReset, onDismi
         </View>
       ))}
     </ModuleSheet>
+  );
+}
+
+/** "Gelen değerler" (CİHAZ ayarı, 2026-11-10): kapalı gelen alan formda çizilmez, kayda girmez, sunucu belgeden de yazmaz. */
+function IncomingFieldsSection() {
+  const hidden = useDeviceSettingsStore((s) => s.docHiddenIncoming);
+  const setShown = useDeviceSettingsStore((s) => s.setDocIncomingShown);
+  return (
+    <View style={styles.group} testID="ie-gelen-degerler">
+      <Text style={styles.section}>Gelen değerler (bu cihaz)</Text>
+      <Text style={styles.rowSub}>Kapalı alan formda görünmez ve kayda girmez; belgede yazsa da kaydedilmez. Parti no ve metre hep açık.</Text>
+      {DOC_INCOMING_FIELDS.map((f) => (
+        <SwitchRow key={f.key} title={f.label} value={!hidden.includes(f.key)} onChange={(on) => void setShown(f.key, on)} testID={`ie-gelen-${f.key}`} />
+      ))}
+    </View>
+  );
+}
+
+function SwitchRow({ title, sub, value, onChange, testID }: { title: string; sub?: string; value: boolean; onChange: (on: boolean) => void; testID: string }) {
+  return (
+    <TouchableRipple onPress={() => onChange(!value)} style={styles.row} testID={testID} accessibilityLabel={title}>
+      <View style={styles.rowInner}>
+        <View style={styles.rowText}>
+          <Text style={styles.rowTitle}>{title}</Text>
+          {sub ? <Text style={styles.rowSub}>{sub}</Text> : null}
+        </View>
+        <Switch value={value} onValueChange={onChange} testID={`${testID}-anahtar`} />
+      </View>
+    </TouchableRipple>
   );
 }
 
@@ -115,6 +180,7 @@ export function OtherFields({ count, valued = [], open, onToggle, onLayout, chil
 }
 
 const styles = StyleSheet.create({
+  headerIcon: { width: 56, height: 56, margin: 0 },
   gearRow: { flexDirection: 'row', justifyContent: 'flex-end' },
   btn: { minHeight: 56 },
   group: { gap: spacing.xs, marginBottom: spacing.sm },

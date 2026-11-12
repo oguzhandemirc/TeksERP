@@ -30,6 +30,8 @@ import type { LabelKind } from "@prisma/client";
 import type { ColorNameScope, NameSource } from "../services/helpers/customer-name.helper";
 
 export type { ColorNameScope, NameSource };
+/** Top etiketindeki ad kaynağı: müşteri ad zinciri + topun kendi değeri. */
+export type LabelNameSource = NameSource | "ROLL";
 
 import type { LabelUnitSettings } from "../config/label-units";
 
@@ -50,11 +52,12 @@ export interface LabelPayload {
   itemCode: string;
   itemName: string; // effective (cascade)
   itemNameDefault: string; // bizim isim (Item.name)
-  itemNameSource: NameSource;
+  /** ROLL = topun kendi etiket adı (`Roll.labelItemName`, tamburda kesimde seçilir) — zincirin önünde. */
+  itemNameSource: LabelNameSource;
   colorCode: string | null;
   colorName: string | null; // effective (cascade) — colorId null ise null
   colorNameDefault: string | null;
-  colorNameSource: NameSource | null;
+  colorNameSource: LabelNameSource | null;
   /** Renk adı ana veriden geldiyse hangi kademeden: kumaşa özel ya da genel; aksi hâlde null. */
   colorNameScope?: ColorNameScope | null;
 
@@ -90,10 +93,24 @@ export interface LabelPayload {
   deliveryNoteColorText?: string | null;
   /** Gelen belge satırındaki müşteri top numarası (H9 `musteriTopNo`; Tambur çocuğu atanınkini taşır). Yoksa ALAN YOK. */
   deliveryNoteRollNo?: string | null;
+  /** Emanet topun etiket alıcısı (`Roll.labelConsignee.name`); alıcısız topta yok. */
+  consigneeName?: string | null;
+  /** İç alan (basılmaz): alıcı id'si — denormalize snapshot'a yazılır. */
+  consigneeId?: string | null;
+  /** Gelen belgenin müşteri parti no'su (ata zinciriyle, tek çözücü). Yoksa ALAN YOK (payload bayt-aynı). */
+  deliveryNoteBatchNo?: string | null;
   /** Topa bağlı AKTİF müşteri barkodu (D4-F1 `RollCustomerCode`, revokedAt null). Kodsuz topta ALAN YOK (payload bayt-aynı). */
   customerCode?: string | null;
   /** Şablonun birim sistemi (Gülkesim S5) — `renderLabel` şablondan taşır; yok = bugünkü metrik biçim. */
   unitSettings?: LabelUnitSettings | null;
+  /** Topa ELLE yazılan etiket alanları (bind anahtarı → metin; "" = boş bas) — `fieldDisplayValue` önce okur.
+   *  Yalnız gösterim; düzenlenmemiş topta ALAN YOK (payload bayt-aynı). Kaynak `Roll.labelOverrides`. */
+  displayOverrides?: Record<string, string>;
+  /** Topun bir seferlik şablonu (`Roll.labelTemplateId`); seçilmemişse ALAN YOK. */
+  rollLabelTemplateId?: string;
+  /** Seçimin bağlamı (`Roll.labelTemplateKind`); null = her bağlamda uygulanır. Uygulanma kararı yalnız
+   *  `rollTemplateApplies` (helpers/roll-label-template.helper.ts). Seçim yoksa ALAN YOK. */
+  rollLabelTemplateKind?: LabelKind | null;
 
   // --- SWATCH (kartela) için opsiyonel alanlar — roll payload'unda undefined.
   //     Builder'lar yalnız `kind === SWATCH` iken basar; roll çağrıları dokunmaz. ---

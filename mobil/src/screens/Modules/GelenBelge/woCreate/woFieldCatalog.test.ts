@@ -5,10 +5,14 @@ import {
   WO_FIELDS,
   docFilledFields,
   fieldApplicable,
+  fieldLabel,
   isRequiredField,
   mergePrefBlob,
   otherFields,
+  otherSectionShown,
   parseHidden,
+  parseOtherHidden,
+  parseStepNotesHidden,
   placement,
   selectorSections,
   toggleHidden,
@@ -17,7 +21,7 @@ import {
 } from './woFieldCatalog';
 
 const ctx: FieldContext = { showQuantity: true, hasTambur: true, hasKursun: true, hasRouteSteps: true, hasMachine: true };
-const noDoc = { docShown: [], suggestions: {}, docText: { desen: null, renk: null } };
+const noDoc = { docShown: [] };
 
 describe('woFieldCatalog', () => {
   it('zorunlu ve kilitli dört alan: Müşteri, Rota, Parti no, Kurşun metresi', () => {
@@ -25,9 +29,10 @@ describe('woFieldCatalog', () => {
     expect(new Set(WO_FIELDS.map((f) => f.key)).size).toBe(WO_FIELDS.length);
   });
 
-  it('dilim 2 alanları (adımlar, makine, tür, hedef özellik) artık ⚙ listesinde', () => {
+  it('dilim 2 alanları (adımlar, makine, hedef özellik) ⚙ listesinde; iş emri türü formda sorulmaz (bağdan türer)', () => {
     const listed = selectorSections().flatMap((s) => s.fields.map((f) => f.key));
-    for (const k of ['hedefOzellik', 'isEmriTuru', 'makine', 'rotaAdimlari'] as const) {
+    expect(listed).not.toContain('isEmriTuru');
+    for (const k of ['hedefOzellik', 'makine', 'rotaAdimlari'] as const) {
       expect(WO_FIELDS.find((f) => f.key === k)?.planned).toBeUndefined();
       expect(listed).toContain(k);
     }
@@ -64,11 +69,13 @@ describe('woFieldCatalog', () => {
     expect(placement('rota', ['rota' as never], [])).toBe('top');
   });
 
-  it('docFilledFields: rozetli alanlar + belgede yazan desen/renk', () => {
+  it('docFilledFields: yalnız belgeden DEĞER dolan alanlar; öneri/yazı gizli alanı üste çıkarmaz', () => {
     expect(docFilledFields(noDoc)).toEqual([]);
-    expect(docFilledFields({ docShown: ['width', 'note'], suggestions: { targetColor: { id: 'c', name: 'Ekru' } }, docText: { desen: 'D-1', renk: null } }).sort()).toEqual(
-      ['en', 'hedefKumas', 'hedefRenk', 'not'].sort(),
-    );
+    expect(docFilledFields({ docShown: ['width', 'note'] }).sort()).toEqual(['en', 'not'].sort());
+    // Gizli hedef renk/kumaş belgede yazsa da "Diğer alanlar"da kalır; değer dolan gizli alan (en) üste çıkar.
+    const docKeys = docFilledFields({ docShown: ['width'] });
+    expect(placement('hedefRenk', ['hedefRenk', 'en'], docKeys)).toBe('other');
+    expect(placement('en', ['hedefRenk', 'en'], docKeys)).toBe('top');
   });
 
   it('koşullu alanlar: metraj/kg bayrakla, kat tipi tamburla, gramaj/makine kurşunla, adımlar rotayla', () => {
@@ -78,7 +85,6 @@ describe('woFieldCatalog', () => {
       expect(fieldApplicable(k, ctx)).toBe(true);
     }
     expect(fieldApplicable('en', off)).toBe(true);
-    expect(fieldApplicable('isEmriTuru', off)).toBe(true);
     // Makine kurşun adımından değil, o istasyonda makine olmasından: kurşun var + makine yok → çizilmez.
     expect(fieldApplicable('makine', { ...ctx, hasMachine: false })).toBe(false);
     // "Diğer alanlar (n)": koşulu tutmayan ve belgeden dolan gizli alan sayılmaz.
@@ -91,7 +97,31 @@ describe('woFieldCatalog', () => {
     expect(valuedFields(e, { stepsEdited: false })).toEqual([]);
     expect(valuedFields({ ...e, foldType: 'A' }, { stepsEdited: false })).toEqual([]);
     expect(
-      valuedFields({ ...e, woType: 'STOCK_PRODUCTION', propertyIds: [], machineId: null, width: '150', note: ' ' }, { stepsEdited: true }).sort(),
-    ).toEqual(['en', 'hedefOzellik', 'isEmriTuru', 'makine', 'rotaAdimlari'].sort());
+      valuedFields({ ...e, woType: 'CUSTOMER_GOODS_SERVICE', propertyIds: [], machineId: null, width: '150', note: ' ' }, { stepsEdited: true }).sort(),
+    ).toEqual(['en', 'hedefOzellik', 'makine', 'rotaAdimlari'].sort());
+  });
+});
+
+describe('woFieldCatalog — etiket ve kişisel anahtarlar (2026-11-09)', () => {
+  it('Üretim notu: ⚙ listesi ve "Diğer alanlar" etiketi', () => {
+    expect(fieldLabel('not')).toBe('Üretim notu');
+  });
+
+  it('kişisel anahtarlar: digerGizli / adimNotuGizli — varsayılan yazılmaz, diğer anahtarlar korunur', () => {
+    const blob = { tema: 'koyu', tabletIeForm: { gizli: ['en'], baska: 1 } };
+    expect(parseOtherHidden(blob)).toBe(false);
+    expect(parseStepNotesHidden(blob)).toBe(false);
+    const off = mergePrefBlob(blob, ['en'], false, { digerGizli: true, adimNotuGizli: true });
+    expect(off).toEqual({ tema: 'koyu', tabletIeForm: { gizli: ['en'], baska: 1, digerGizli: true, adimNotuGizli: true } });
+    expect(parseOtherHidden(off)).toBe(true);
+    expect(parseStepNotesHidden(off)).toBe(true);
+    expect(mergePrefBlob(off, ['en'])).toEqual({ tema: 'koyu', tabletIeForm: { gizli: ['en'], baska: 1 } });
+  });
+
+  it('otherSectionShown: anahtar kapalıyken gizlenir; değerli gizli alan ya da yönlendirme varken yine çizilir', () => {
+    expect(otherSectionShown(false, [])).toBe(true);
+    expect(otherSectionShown(true, [])).toBe(false);
+    expect(otherSectionShown(true, ['en'])).toBe(true);
+    expect(otherSectionShown(true, [], true)).toBe(true);
   });
 });

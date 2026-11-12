@@ -8,7 +8,7 @@ import type { PickerOption } from '../../../../components/PickerModal';
 import { TERIM } from '../../../../lib/terim';
 import type { DeskKursunMachine } from '../../../../services/inboundDoc.service';
 import type { ProductionRoute } from '../../../../services/route.service';
-import { ChoiceChips } from '../../../../components/form/ChoiceChips';
+import { ChoiceRow } from '../../../../components/form/ChoiceRow';
 import { colors, radius, spacing, typography } from '../../../../theme';
 import DocRowCard from '../woCreate/DocRowCard';
 import type { DocRow, WoRowsState } from '../woCreate/useWoRows';
@@ -135,14 +135,10 @@ function PlanSection({ row, wo, route, machines, locked }: PlanProps) {
 export function MachineChips(p: { list: readonly DeskKursunMachine[]; value: string | null; locked: boolean; testID: string; onChange: (id: string | null) => void; label?: string }) {
   const { list, value, locked, testID, onChange } = p;
   const mc = machineChoice(list, testID);
+  // Tek ortak seçenek satırı: başlık (ad · önek) üstte, düğmeler eşit genişlikte.
   return (
-    <View style={styles.party}>
-      <View style={styles.labelRow}>
-        <Text style={styles.label}>{p.label ?? 'Kurşun makinesi'}</Text>
-        {mc.prefix ? <Text style={styles.prefix} testID={`${testID}-onek`}>{mc.prefix}</Text> : null}
-      </View>
-      <ChoiceChips options={mc.options} value={value} onChange={onChange} disabled={locked} size={mc.square ? 'square' : 'md'} testID={testID} />
-    </View>
+    <ChoiceRow label={p.label ?? 'Kurşun makinesi'} aside={mc.prefix} asideTestID={`${testID}-onek`} rowTestID={`${testID}-satir`}
+      options={mc.options} value={value} onChange={onChange} disabled={locked} size={mc.square ? 'square' : 'md'} testID={testID} />
   );
 }
 
@@ -170,10 +166,7 @@ const styles = StyleSheet.create({
   block: { gap: spacing.sm, padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.surface },
   party: { gap: spacing.xs },
   title: { fontSize: typography.size.lg, fontWeight: typography.weight.semibold, color: colors.text },
-  label: { fontSize: typography.size.sm, color: colors.textSecondary, fontWeight: typography.weight.semibold },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  labelRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.sm },
-  prefix: { fontSize: typography.size.sm, color: colors.textMuted, fontWeight: typography.weight.semibold },
   chip: { minHeight: 56, justifyContent: 'center' },
   bar: {
     flexDirection: 'row',

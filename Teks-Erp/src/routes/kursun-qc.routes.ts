@@ -4,6 +4,7 @@
 
 import { Router } from "express";
 import { KursunQcController } from "../controllers/kursun-qc.controller";
+import { reopenKursunRoll } from "../controllers/kursun-roll-reopen.controller";
 import { takeForeignMachine } from "../controllers/kursun-foreign-machine.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requireProductionEnabled } from "../middlewares/module.middleware";
@@ -462,6 +463,38 @@ router.post(
   verifyToken,
   requireAnyPermission("quality:write", "mobile:kk2-kursun"),
   controller.reopenStep
+);
+
+/**
+ * @openapi
+ * /api/kursun-qc/reopen-roll:
+ *   post:
+ *     tags: [KursunQc]
+ *     summary: Açık adımda kontrolü tamamlanmış tek topu yeniden aç
+ *     description: |
+ *       QC2_COMPLETED izi ve bu adımdaki çıkış metresi okuması damgalanır (stok etkisi terslenir);
+ *       top yeniden tamamlanınca metre yeniden okunur. Kapalı adım için reopen-step.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [rollId, stepId]
+ *             properties:
+ *               rollId: { type: string, format: uuid }
+ *               stepId: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Top yeniden açıldı }
+ *       400: { description: Top bu adımda değil veya adım kapalı }
+ *       409: { description: "Top zaten açık (details.code KURSUN_ROLL_NOT_COMPLETED) veya iş faturalı" }
+ */
+router.post(
+  "/reopen-roll",
+  verifyToken,
+  requireAnyPermission("quality:write", "mobile:kk2-kursun"),
+  reopenKursunRoll
 );
 
 /**

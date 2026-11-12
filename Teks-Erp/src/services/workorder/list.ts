@@ -52,6 +52,7 @@ import { loadProducedBuckets } from "../helpers/roll-finalize.helper";
 import { OPEN_OUTSTANDING } from "../helpers/fason-open-dispatch.helper";
 import { workOrderBoundOnly } from "../helpers/dispatch-header.helper";
 import type { WorkOrderServiceThis } from "./shared";
+import { meterCheckWhere, readMeterCheckFilter, workOrderMeterSummaries } from "../meter-comparison.service";
 
 // WO listesinde sıralanabilir kolonlar (UI SortableHeader'larıyla eşleşir) + güvenli
 // ekler. Whitelist dışı sortBy → createdAt (bilinmeyen kolon 500'ünü + indekssiz sortu engeller).
@@ -116,6 +117,9 @@ export async function buildListWhere(req: Request, params: QueryParams): Promise
     // Tür süzgeci (2026-11-06): CSV, tanınmayan değer 400 (fail-closed; eskiden ham Prisma'ya sızıp 500 veriyordu).
     const typeCond = readWorkOrderTypeFilter(params.filters.type);
     delete params.filters.type;
+    // "Beyandan uzun" (2026-11-10, GK): hesaplanmış değer — taban where kurulduktan sonra `id IN` olarak eklenir.
+    const meterCheck = readMeterCheckFilter(params.filters.meterCheck);
+    delete params.filters.meterCheck;
     // "Şu an nerede" süzgeçleri (2026-10-24): istasyon + konum sınıfı; filtre kümesinden
     // helper çıkarır, tanınmayan değer 400. Liste + cursor + sayım AYNI where'i görür.
     const locationConds = await readWorkOrderLocationFilters(params.filters);
@@ -199,6 +203,11 @@ export async function buildListWhere(req: Request, params: QueryParams): Promise
         },
       };
     }
+    if (meterCheck) {
+      const meterCond = await meterCheckWhere(where as Prisma.WorkOrderWhereInput);
+      const w = where as { AND?: Prisma.WorkOrderWhereInput[] };
+      w.AND = [...(w.AND ?? []), meterCond];
+    }
     return where as Prisma.WorkOrderWhereInput;
   }
 
@@ -217,6 +226,13 @@ export async function findAll(this: WorkOrderServiceThis,
     params.sortBy = resolveSortBy(params.sortBy, WO_SORTABLE_FIELDS);
     const where = await this.buildListWhere(req, params);
     const withOrderDetail = req.query.withOrderDetail === "true";
+    // Metre özeti OPT-IN (panel listesi ister); parametresiz yanıt bayt-aynı (tablet, eski panel).
+    const withMeterSummary = req.query.withMeterSummary === "true";
+    const attachMeter = async <T extends { id: string }>(rows: T[]): Promise<Array<T & { meterSummary?: unknown }>> => {
+      if (!withMeterSummary) return rows;
+      const sums = await workOrderMeterSummaries(rows.map((r) => r.id));
+      return rows.map((r) => ({ ...r, meterSummary: sums.get(r.id) ?? null }));
+    };
 
     const select = {
       id: true,
@@ -315,9 +331,9 @@ export async function findAll(this: WorkOrderServiceThis,
       ]);
 
       const hasMore = items.length > limit;
-      const data = await withWorkOrderLocation(
+      const data = await attachMeter(await withWorkOrderLocation(
         await this.withProductionMeters(hasMore ? items.slice(0, limit) : items),
-      );
+      ));
       const last = data[data.length - 1] as Record<string, unknown> | undefined;
       const nextCursor = hasMore ? buildNextDynamicCursor(last, sortBy) : null;
 
@@ -341,7 +357,7 @@ export async function findAll(this: WorkOrderServiceThis,
       prisma.workOrder.findMany({ where, orderBy, skip, take, select }),
       prisma.workOrder.count({ where }),
     ]);
-    const data = await withWorkOrderLocation(await this.withProductionMeters(rawData));
+    const data = await attachMeter(await withWorkOrderLocation(await this.withProductionMeters(rawData)));
 
     return {
       success: true,

@@ -10,6 +10,8 @@ import WoCreateScreen from './WoCreateScreen';
 const mockShortcuts = jest.fn();
 let mockEntry: { entry: 'IKISI' | 'BELGE' | 'TOP'; ready: boolean } = { entry: 'BELGE', ready: true };
 let mockScan = false;
+const mockNavigate = jest.fn();
+jest.mock('@react-navigation/native', () => ({ useNavigation: () => ({ navigate: mockNavigate }) }));
 jest.mock('./useWoEntry', () => ({ useTabletWoEntry: () => mockEntry }));
 jest.mock('../../../../hooks/useFeatureFlags', () => ({ ...jest.requireActual('../../../../hooks/useFeatureFlags'), useScanRouteMode: () => mockScan }));
 jest.mock('../../../../services/route.service', () => ({ routeService: { getShortcuts: () => mockShortcuts() } }));
@@ -18,10 +20,10 @@ jest.mock('../../../../components/ScreenChrome', () => {
   const { Text, View } = jest.requireActual('react-native');
   return {
     __esModule: true,
-    default: ({ title, children, headerExtras }: { title: string; children: ReactNode; headerExtras?: ReactNode }) => (
+    default: ({ title, children, profileExtras }: { title: string; children: ReactNode; profileExtras?: ReactNode }) => (
       <View>
         <Text testID="baslik">{title}</Text>
-        <View testID="baslik-ekleri">{headerExtras}</View>
+        <View testID="baslik-ekleri">{profileExtras}</View>
         {children}
       </View>
     ),

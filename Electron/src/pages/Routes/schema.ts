@@ -18,6 +18,8 @@ export const routeStepSchema = z.object({
   // stationKind yalnız UI koşuludur (payload'a girmez).
   stationKind: z.string().nullable().optional(),
   plannedMachineId: z.string().nullable().optional(),
+  // 2026-11-10: adımın çıktı aşaması (top etiketi türü); null = otomatik.
+  outputStage: z.enum(["RAW", "SEMI_FINISHED", "FINISHED"]).nullable().optional(),
   // 2026-08-06: adımın şablon HEDEFİ. Rota iş emrine uygulanınca hedef renk /
   // özellik alanlarını ön-doldurur; boş bırakmak meşru (renksiz rota her renkte
   // yeniden kullanılır). İstasyonun gerçekten uygulayıp uygulayamadığı
