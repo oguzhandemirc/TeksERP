@@ -68,8 +68,8 @@ export const labTestService = {
 };
 
 export const labTestTypeService = {
-  list: (activeOnly = false) =>
-    apiClient.get<ApiResponse<LabTestType[]>>("/api/lab-test-types", { params: activeOnly ? { activeOnly: "1" } : {} }).then((r) => r.data.data),
+  list: (activeOnly = false, search?: string) =>
+    apiClient.get<ApiResponse<LabTestType[]>>("/api/lab-test-types", { params: { ...(activeOnly ? { activeOnly: "1" } : {}), ...(search ? { search } : {}) } }).then((r) => r.data.data),
   create: (body: LabTestTypeInput) => apiClient.post<ApiResponse<LabTestType>>("/api/lab-test-types", body).then((r) => r.data.data),
   update: (id: string, body: LabTestTypeInput) => apiClient.put<ApiResponse<LabTestType>>(`/api/lab-test-types/${id}`, body).then((r) => r.data.data),
   presets: () => apiClient.get<ApiResponse<LabPreset[]>>("/api/lab-test-types/presets").then((r) => r.data.data),

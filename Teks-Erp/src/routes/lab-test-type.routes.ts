@@ -9,6 +9,7 @@ import { z } from "zod";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requireKaliteGuvenceEnabled } from "../middlewares/module.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
+import { listSearchParam } from "../utils/list-search";
 import { addLabTestPresets, createLabTestType, listLabTestTypes, previewLabTestPresets, updateLabTestType } from "../services/lab-test-type.service";
 
 const router = Router();
@@ -36,6 +37,8 @@ const TypeBody = z.strictObject({
   sortOrder: z.number().int().min(0).max(100000).optional(),
   isActive: z.boolean().optional(),
 });
+// Liste sorgusu katı: tanınmayan parametre 400 (fail-closed); arama kod/ad/yöntem.
+const ListQuery = z.strictObject({ activeOnly: z.enum(["0", "1"]).optional(), search: listSearchParam });
 const PresetBody = z.strictObject({ codes: z.array(z.string().max(32)).min(1, "En az bir satır seçin").max(50) });
 
 /**
@@ -45,8 +48,15 @@ const PresetBody = z.strictObject({ codes: z.array(z.string().max(32)).min(1, "E
  *     tags: [Kalite]
  *     summary: Lab test türleri (activeOnly=1 → yalnız etkin)
  *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: activeOnly, schema: { type: string, enum: ["0", "1"] } }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string, maxLength: 100 }
+ *         description: "Metin araması — tür kodu, adı ya da yöntemi; boş = arama yok"
  *     responses:
  *       200: { description: Türler }
+ *       400: { description: Tanınmayan parametre ya da 100 karakteri aşan arama }
  *   post:
  *     tags: [Kalite]
  *     summary: Lab test türü ekle
@@ -77,7 +87,10 @@ const PresetBody = z.strictObject({ codes: z.array(z.string().max(32)).min(1, "E
  *     responses:
  *       200: { description: Tür }
  */
-router.get("/", requirePermission("labtest:read"), wrap(async (req) => ({ status: 200, data: await listLabTestTypes({ activeOnly: req.query.activeOnly === "1" }) })));
+router.get("/", requirePermission("labtest:read"), wrap(async (req) => {
+  const q = ListQuery.parse(req.query);
+  return { status: 200, data: await listLabTestTypes({ activeOnly: q.activeOnly === "1", search: q.search }) };
+}));
 router.post("/", requirePermission("labtest:write"), wrap(async (req) => ({ status: 201, data: await createLabTestType(TypeBody.parse(req.body), req.user!.userId) })));
 router.get("/presets", requirePermission("labtest:write"), wrap(async () => ({ status: 200, data: await previewLabTestPresets() })));
 router.post("/presets", requirePermission("labtest:write"), wrap(async (req) => ({ status: 201, data: await addLabTestPresets(PresetBody.parse(req.body).codes, req.user!.userId) })));

@@ -24,6 +24,10 @@ import { listLoomAlarms } from "../src/services/loom-alarm-read.service";
 import { listFinishingRates } from "../src/services/finishing-rate.service";
 import { listYarnCostPrices } from "../src/services/yarn-cost-price.service";
 import { listConsumableNorms } from "../src/services/consumable-norm.service";
+import { listLabTestTypes } from "../src/services/lab-test-type.service";
+import { listCustomerLabSpecs } from "../src/services/customer-lab-spec.service";
+import { listSenderTemplates, USER_TEMPLATE_PREFIX } from "../src/services/gelen-belge-sablon.service";
+import { listSeriesMatching } from "../src/services/helpers/series-panel.helper";
 
 let pass = 0;
 let fail = 0;
@@ -274,6 +278,71 @@ async function maliyet(): Promise<void> {
   check("§M4 maliyet: kapı toplu (verifyToken + requireMaliyetEnabled) ve üç uç cost:read aynen", costSrc.includes("router.use(verifyToken, requireMaliyetEnabled)") && ["/yarn-prices", "/finishing-rates", "/consumable-norms"].every((p) => guardOf("cost.routes.ts", p).includes('requirePermission("cost:read")')));
 }
 
+async function tanimKalite(): Promise<void> {
+  console.log("\n— §T tanımlar/kalite —");
+  const ek = TAG.slice(-6);
+  const ids = { types: [] as string[], specs: [] as string[], customers: [] as string[], items: [] as string[], tpl: [] as string[] };
+  cleanup.push(async () => {
+    await prisma.senderTemplate.deleteMany({ where: { id: { in: ids.tpl } } });
+    await prisma.customerLabSpec.deleteMany({ where: { id: { in: ids.specs } } });
+    await prisma.labTestType.deleteMany({ where: { id: { in: ids.types } } });
+    await prisma.item.deleteMany({ where: { id: { in: ids.items } } });
+    await prisma.customer.deleteMany({ where: { id: { in: ids.customers } } });
+  });
+  const t1 = await prisma.labTestType.create({ data: { code: `LA${ek}G`, name: `${TAG} Gramaj Ölçümü`, method: "TS 251", resultKind: "NUMERIC" }, select: { id: true } });
+  ids.types.push(t1.id);
+  const t2 = await prisma.labTestType.create({ data: { code: `LA${ek}H`, name: `${TAG} Yıkama Haslığı`, resultKind: "NUMERIC" }, select: { id: true } });
+  ids.types.push(t2.id);
+  const c1 = await prisma.customer.create({ data: { code: `${TAG}-K1`, name: `${TAG} Şimşek Tekstil` }, select: { id: true } });
+  const c2 = await prisma.customer.create({ data: { code: `${TAG}-K2`, name: `${TAG} Yıldız Örme` }, select: { id: true } });
+  ids.customers.push(c1.id, c2.id);
+  const it = await prisma.item.create({ data: { code: `${TAG}-U1`, name: `${TAG} Penye Kumaş`, itemType: "FABRIC", unit: "MT" }, select: { id: true } });
+  ids.items.push(it.id);
+  ids.specs.push((await prisma.customerLabSpec.create({ data: { customerId: c1.id, testTypeId: t1.id, itemId: it.id, specMin: 1 }, select: { id: true } })).id);
+  ids.specs.push((await prisma.customerLabSpec.create({ data: { customerId: c2.id, testTypeId: t2.id, specMin: 1 }, select: { id: true } })).id);
+
+  // §T1 Test türleri — kod (küçük harf), ad (gölgesiz), yöntem.
+  const mineT = (r: Array<{ id: string }>) => r.filter((x) => ids.types.includes(x.id)).length;
+  // Ad/yöntem gölgesiz yoldadır: büyük-küçük + i-ailesi katlanır, ö/ç katlanmaz (küçük katalogda bilinçli).
+  check("§T1a test türü: boş = ikisi; 'GRAMAJ' yalnız biri", mineT(await listLabTestTypes({})) === 2 && mineT(await listLabTestTypes({ search: "GRAMAJ" })) === 1);
+  check("§T1b test türü: kod küçük harfle ve yöntemle yalnız biri", mineT(await listLabTestTypes({ search: `la${ek}h` })) === 1 && mineT(await listLabTestTypes({ search: "ts 251" })) === 1);
+  check("§T1c test türü: eşleşmeyen 0", mineT(await listLabTestTypes({ search: `${TAG} zzqq` })) === 0);
+  const ltSrc = readFileSync(join(ROUTES, "lab-test-type.routes.ts"), "utf8");
+  check("§T1d test türü: sorgu katı (search) + izin aynen", /ListQuery = z\.strictObject\(\{ activeOnly: [^}]*search: listSearchParam/.test(ltSrc) && guardOf("lab-test-type.routes.ts", "/").includes('requirePermission("labtest:read")'));
+
+  // §T2 Müşteri spesifikasyonları — müşteri adı (Fold), müşteri/ürün/tür kodu, ürün adı, tür adı.
+  const mineS = (r: Array<{ id: string }>) => r.filter((x) => ids.specs.includes(x.id)).length;
+  const sq = (search?: string) => listCustomerLabSpecs({ search });
+  check("§T2a spesifikasyon: boş = ikisi; müşteri adı katlanarak ('simsek') yalnız biri", mineS(await sq()) === 2 && mineS(await sq("simsek")) === 1);
+  check("§T2b spesifikasyon: ürün adı ve müşteri kodu (küçük harf) yalnız biri", mineS(await sq("penye")) === 1 && mineS(await sq(`${TAG}-k2`.toLowerCase())) === 1);
+  check("§T2c spesifikasyon: test türü adı (gölgesiz) yalnız biri; eşleşmeyen 0", mineS(await sq("YIKAMA")) === 1 && mineS(await sq(`${TAG} zzqq`)) === 0);
+  check("§T2d spesifikasyon: müşteri süzgeci + arama AND", mineS(await listCustomerLabSpecs({ customerId: c1.id, search: "yildiz" })) === 0 && mineS(await listCustomerLabSpecs({ customerId: c1.id, search: "simsek" })) === 1);
+  const csSrc = readFileSync(join(ROUTES, "customer-lab-spec.routes.ts"), "utf8");
+  check("§T2e spesifikasyon: sorgu katı (search) + izin aynen", /search: listSearchParam,\n\}\)\.strict\(\)/.test(csSrc) && guardOf("customer-lab-spec.routes.ts", "/").includes('requirePermission("labtest:read")'));
+
+  // §T3 Gönderen şablonları — dosya ∪ DB birleşimi bellekte; kod, ad, bağlı cari ad/kod.
+  for (const [i, cust] of [[1, c1.id], [2, null]] as const) {
+    const code = `${USER_TEMPLATE_PREFIX}la${ek.toLowerCase()}${i}`;
+    ids.tpl.push((await prisma.senderTemplate.create({ data: { code, template: { name: `${TAG} Tanıt ${i === 1 ? "Çeki" : "Fiş"}` }, senderCustomerId: cust }, select: { id: true } })).id);
+  }
+  const mineG = (r: Array<{ id: string | null }>) => r.filter((x) => x.id !== null && ids.tpl.includes(x.id)).length;
+  const gAll = await listSenderTemplates();
+  check("§T3a şablon: boş = ikisi (dosya şablonlarıyla birlikte)", mineG(gAll) === 2, `toplam ${gAll.length}`);
+  check("§T3b şablon: ad katlanarak ('ceki') yalnız biri", mineG(await listSenderTemplates(`${TAG} ceki`)) === 1);
+  check("§T3c şablon: bağlı gönderen cari adıyla yalnız biri; eşleşmeyen 0", mineG(await listSenderTemplates(`${TAG} simsek`)) === 1 && (await listSenderTemplates(`${TAG} zzqq`)).length === 0);
+  const gbSrc = readFileSync(join(ROUTES, "gelen-belge.routes.ts"), "utf8");
+  check("§T3d şablon: sorgu katı (search) + izin aynen", gbSrc.includes("const SenderTemplateListQuery = z.strictObject({ search: listSearchParam });") && guardOf("gelen-belge.routes.ts", "/sablonlar").includes('requirePermission("gelen-belge:template")'));
+
+  // §T4 Numaralandırma — kod kataloğu bellekte; anahtar, ad, ön ek.
+  const nAll = listSeriesMatching();
+  const nSack = listSeriesMatching("sack");
+  const nLabel = nAll[0] ? listSeriesMatching(nAll[0].label.toUpperCase()) : [];
+  check("§T4a seri: boş = tüm katalog; anahtar 'sack' daraltır ve içerir", nAll.length > 3 && nSack.length >= 1 && nSack.length < nAll.length && nSack.some((r) => r.key === "sack"));
+  check("§T4b seri: ad büyük harfle bulur; eşleşmeyen 0", nLabel.some((r) => r.key === nAll[0]?.key) && listSeriesMatching("zzqq xxyy").length === 0);
+  const nsSrc = readFileSync(join(ROUTES, "number-series.routes.ts"), "utf8");
+  check("§T4c seri: sorgu katı (search) + kapı toplu aynen", nsSrc.includes("const listQuerySchema = z.object({ search: listSearchParam }).strict();") && nsSrc.includes('router.use(verifyToken, requirePermission("settings:numbering"))'));
+}
+
 async function main(): Promise<void> {
   const engel = hedefDbEngeli();
   if (engel) {
@@ -288,6 +357,7 @@ async function main(): Promise<void> {
     await satinAlma();
     await dokuma();
     await maliyet();
+    await tanimKalite();
   } finally {
     for (const fn of cleanup.reverse()) await fn().catch((e: unknown) => check("temizlik", false, String(e)));
   }

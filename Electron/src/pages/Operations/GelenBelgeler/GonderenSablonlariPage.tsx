@@ -18,6 +18,8 @@ import { ContextMenuItem } from "@/components/ui/context-menu";
 import { INCOMING_DOCUMENT_QUERY_KEY, listSenderTemplates, updateSenderTemplate } from "./service";
 import type { SenderTemplatePatch, SenderTemplateView } from "./types";
 import { listUserTemplates, USER_TEMPLATES_QUERY_KEY } from "./tanit/service";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { useListSearch } from "@/hooks/useListSearch";
 import { SablonSifirlaDialog } from "./tanit/SablonSifirlaDialog";
 import { isUserTemplate } from "./BelgeTipiKarti";
 import { belgeTipiColumns, isInUse } from "./belgeTipiColumns";
@@ -27,9 +29,9 @@ export const SENDER_TEMPLATES_PATH = "/operations/gelen-belgeler/sablonlar";
 export const DOCUMENT_TYPES_TITLE = "Belge Tipleri";
 const QUERY_KEY = [INCOMING_DOCUMENT_QUERY_KEY, "sablonlar"] as const;
 
-function useTemplates() {
+function useTemplates(term: string | undefined) {
   const qc = useQueryClient();
-  const list = useQuery({ queryKey: QUERY_KEY, queryFn: listSenderTemplates });
+  const list = useQuery({ queryKey: [...QUERY_KEY, term ?? ""], queryFn: () => listSenderTemplates(term) });
   const user = useQuery({ queryKey: USER_TEMPLATES_QUERY_KEY, queryFn: listUserTemplates });
   const update = useMutation({
     mutationFn: ({ code, patch }: { code: string; patch: SenderTemplatePatch }) => updateSenderTemplate(code, patch),
@@ -40,7 +42,8 @@ function useTemplates() {
   return { list, update, templates };
 }
 
-function Toolbar({ showUnused, setShowUnused, unusedCount, noUserHint, table }: { showUnused: boolean; setShowUnused: (v: boolean) => void; unusedCount: number; noUserHint: boolean; table: Table<SenderTemplateView> }) {
+type ToolbarProps = { showUnused: boolean; setShowUnused: (v: boolean) => void; unusedCount: number; noUserHint: boolean; table: Table<SenderTemplateView>; search: string; setSearch: (v: string) => void };
+function Toolbar({ showUnused, setShowUnused, unusedCount, noUserHint, table, search, setSearch }: ToolbarProps) {
   return (
     <div className="flex flex-wrap items-center gap-3 border-b px-4 py-2">
       <ToolbarToggle checked={showUnused} onCheckedChange={setShowUnused} label={`Kullanılmayanları göster (${unusedCount})`} title="Pasife alınmış, sıfırlanmış ya da okuma motorunda artık olmayan tipler" />
@@ -50,6 +53,7 @@ function Toolbar({ showUnused, setShowUnused, unusedCount, noUserHint, table }: 
         </span>
       )}
       <div className="ml-auto flex items-center gap-1.5">
+        <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Tip kodu, adı ya da bağlı cari (ad/kod) ara" />
         <DataTableTools table={table} compact exportName={DOCUMENT_TYPES_TITLE} />
       </div>
     </div>
@@ -57,7 +61,8 @@ function Toolbar({ showUnused, setShowUnused, unusedCount, noUserHint, table }: 
 }
 
 export function SenderTemplatesPage() {
-  const { list, update, templates } = useTemplates();
+  const { search, setSearch, term } = useListSearch();
+  const { list, update, templates } = useTemplates(term);
   const [reset, setReset] = useState<{ codes: string[]; multi: boolean } | null>(null);
   const [showUnused, setShowUnused] = useState(false);
   const [openCode, setOpenCode] = useState<string | null>(null);
@@ -99,14 +104,14 @@ export function SenderTemplatesPage() {
           </div>
         }
       />
-      <Toolbar showUnused={showUnused} setShowUnused={setShowUnused} unusedCount={unused.length} noUserHint={!list.isLoading && !list.isError && userRows.length === 0} table={table} />
+      <Toolbar showUnused={showUnused} setShowUnused={setShowUnused} unusedCount={unused.length} noUserHint={!term && !list.isLoading && !list.isError && userRows.length === 0} table={table} search={search} setSearch={setSearch} />
       <DataTable<SenderTemplateView>
         table={table}
         isLoading={list.isLoading}
         isError={list.isError}
         onRetry={() => void list.refetch()}
         errorText="Belge tipleri yüklenemedi — istek reddedildi ya da sunucuya ulaşamadı."
-        emptyText={showUnused ? "Belge tipi yok." : "Kullanılan belge tipi yok."}
+        emptyText={term ? "Aramaya uyan belge tipi yok." : showUnused ? "Belge tipi yok." : "Kullanılan belge tipi yok."}
         exportName={DOCUMENT_TYPES_TITLE}
         onRowClick={(r) => setOpenCode(r.code)}
         rowContextMenu={(r) => (

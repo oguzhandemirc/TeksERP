@@ -18,8 +18,8 @@ import type {
  * Yük sarmalayıcının DIŞINDA bir kez kurulur — şifreyle tekrar AYNI yükü gönderir.
  */
 export const numberingService = {
-  async list(): Promise<NumberSeriesRow[]> {
-    const r = await apiClient.get<{ data: NumberSeriesRow[] }>("/api/number-series");
+  async list(search?: string): Promise<NumberSeriesRow[]> {
+    const r = await apiClient.get<{ data: NumberSeriesRow[] }>("/api/number-series", { params: search ? { search } : {} });
     return r.data?.data ?? [];
   },
 

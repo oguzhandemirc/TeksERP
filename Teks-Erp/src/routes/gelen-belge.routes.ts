@@ -35,6 +35,7 @@ import { suggestForNote } from "../services/gelen-belge-eslestirme.service";
 import { buildWorkOrderPlan } from "../services/gelen-belge-is-emri.service";
 import { searchProcessChoiceValues } from "../services/helpers/process-choice-catalog.helper";
 import { listSenderTemplates, updateSenderTemplate } from "../services/gelen-belge-sablon.service";
+import { listSearchParam } from "../utils/list-search";
 import { loadUserTemplates } from "../services/gelen-belge-ozel-sablon.service";
 import { listCustomerDefaults, removeCustomerDefault, setCustomerDefault } from "../services/gelen-belge-varsayilan.service";
 import { assertScanReadable, readerQueueCounts, requeueScanForReading } from "../services/gelen-belge-okuma.service";
@@ -752,6 +753,8 @@ const TemplatePatch = z.strictObject({
   defaultOwnerCustomerId: Id.nullable().optional(),
   batchNoKey: BatchNoKey.nullable().optional(),
 }).refine((v) => Object.keys(v).length > 0, "Değiştirilecek alan yok");
+// Liste sorgusu katı (tanınmayan parametre 400); arama bellek ikiziyle (dosya ∪ DB şablonu).
+const SenderTemplateListQuery = z.strictObject({ search: listSearchParam });
 /**
  * @openapi
  * /api/gelen-belge/sablonlar:
@@ -759,7 +762,13 @@ const TemplatePatch = z.strictObject({
  *     tags: [Gelen belge]
  *     summary: Gönderen şablonları — dosyadaki motor şablonları + DB bağı (kod, sürüm, aktif, gönderen, varsayılan sahip, isabet); salt okunur
  *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema: { type: string, maxLength: 100 }
+ *         description: "Metin araması — şablon kodu/adı, gönderen ya da varsayılan sahip cari adı/kodu; boş = arama yok"
  *     responses:
+ *       400: { description: "Tanınmayan parametre ya da 100 karakteri aşan arama" }
  *       200: { description: "SenderTemplateView[] (satırı olmayan şablon id null)" }
  *       403: { description: "MODULE_DISABLED ya da izin yok" }
  * /api/gelen-belge/sablonlar/{code}:
@@ -775,7 +784,7 @@ const TemplatePatch = z.strictObject({
  *       404: { description: "SENDER_TEMPLATE_NOT_FOUND (yedek sözlük dahil)" }
  *       409: { description: "SENDER_TEMPLATE_CHANGED (araya başka yazım girdi)" }
  */
-router.get("/sablonlar", requirePermission("gelen-belge:template"), wrap(async () => ({ status: 200, data: await listSenderTemplates() })));
+router.get("/sablonlar", requirePermission("gelen-belge:template"), wrap(async (req) => ({ status: 200, data: await listSenderTemplates(SenderTemplateListQuery.parse(req.query).search) })));
 router.patch("/sablonlar/:code", requirePermission("gelen-belge:template"), wrap(async (req) => {
   const view = await updateSenderTemplate(TemplateCode.parse(req.params.code), TemplatePatch.parse(req.body), req.user!.userId);
   // Kullanıcı şablonunun aktifliği (sıfırla → geri al) motor önbelleğine hemen yansısın.

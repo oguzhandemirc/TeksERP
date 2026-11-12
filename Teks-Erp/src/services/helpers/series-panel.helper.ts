@@ -39,6 +39,7 @@ import {
 } from "../number-series.service";
 import { codeCountsForCounter, matchesSeries, type NumberSeriesFormat } from "./series-format.helper";
 import { fixedShapeCounterCaps, fixedShapeLock } from "./series-fixed-shape.helper";
+import { matchesListSearch } from "../../utils/list-search";
 
 /**
  * Serinin BUGÜN düzenlenebilir olup olmadığı ve OLMADIYSA neden.
@@ -425,6 +426,14 @@ export async function previewNextNumber(key: string, draft?: SeriesDraftAxes): P
     // Sıra tükenmesi gibi hâller ÖNİZLEMEYİ düşürmez: "—" gösterilir.
     return null;
   }
+}
+
+/**
+ * Liste ucu araması — katalog koddan geldiği için bellek ikiziyle; aranan alanlar
+ * anahtar, ad, bölüm başlığı, ön ek ve örnek kod. Boş arama = tüm katalog.
+ */
+export function listSeriesMatching(search?: string): ReturnType<typeof listSeries> {
+  return listSeries().filter((r) => matchesListSearch(search, [r.key, r.label, r.panelGroupLabel, r.prefix, r.preview]));
 }
 
 /** Liste ucu — katalog kimliği + yürürlükteki biçim + örnek. */

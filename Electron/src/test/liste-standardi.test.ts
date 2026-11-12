@@ -197,6 +197,7 @@ const TOOLS_HOST: Record<string, string[]> = {
   "System/PrintHistory/PrintHistoryTable.tsx": ["System/PrintHistory/PrintHistoryPage.tsx", "System/PrintHistory/PrintHistoryFilters.tsx"],
   "Stations/StationListView.tsx": ["Stations/ProductionStationsPage.tsx", "Stations/StationFilterBar.tsx"],
   "Operations/PurchaseOrders/PurchaseOrderTable.tsx": ["Operations/PurchaseOrders/PurchaseOrdersPage.tsx", "Operations/PurchaseOrders/PurchaseOrderFilterBar.tsx"],
+  "GeneralSettings/Numbering/NumberingTable.tsx": ["GeneralSettings/Numbering/NumberingPage.tsx"],
 };
 
 /** Sütun menüsü OLMAYAN DataTable — gerekçeli. */
@@ -205,15 +206,12 @@ const NO_COLUMN_MENU: Record<string, string> = {
     "çuval düzenleyicisine gömülü 7 sütunlu içerik; düzen salt-okunur görünümle ortak `sack-contents` kaydında (menü orada)",
 };
 
-const KATALOG = "küçük katalog, liste ucu arama parametresi almıyor (backend gerekiyor); istemci süzmesi yazılmaz";
 const COST_ACTIVE = "makine saat ücretleri: satırlar makine listesi ∪ aktif ücretlerden istemcide birleşir (ücretsiz makine de satır); tek uca arama iki kaynağı tutarsız süzerdi";
 /** Arama kutusu OLMAYAN DataTable sayfası — gerekçeli. */
 const NO_SEARCH: Record<string, string> = {
-  "Quality/Certificates/CustomerSpecsPanel.tsx": "müşteri spesifikasyon kataloğu (müşteri süzgeçli, tek istek); uçta metin araması yok (backend gerekiyor)",
-  "Quality/LabTests/LabTypesPanel.tsx": KATALOG,
-  "Definitions/DocumentDesigner/assignments/AssignmentsView.tsx": "seçili belge türünün profil ataması (belge profili sayısı kadar satır, atama ucundan tek istekte); arama yok (backend gerekiyor)",
+  "Definitions/DocumentDesigner/assignments/AssignmentsView.tsx":
+    "kalıcı: atama ucu tek bileşik yanıt; profil kataloğu tür varsayılanı değişikliğinin etki önizlemesini (kalkanlı profiller) de besler — sunucuda süzmek önizlemeyi eksik gösterir; satır = belge profili sayısı",
   "Cost/MachineRates/MachineRatesPage.tsx": COST_ACTIVE,
-  "Operations/GelenBelgeler/GonderenSablonlariPage.tsx": KATALOG,
   "Operations/KursunMeterDeviations/MeterDeviationsPage.tsx": "sapma ucu durum/makine/müşteri/tarih süzgeçli; metin araması yok (backend gerekiyor)",
   "Operations/ReadyWorks/ReadyWorksPage.tsx": "hazır iş ucu gruplama + durum süzgeçli; metin araması yok (backend gerekiyor)",
   "Operations/ConsignedWork/ConsignedWorkPage.tsx": "müşteri başına emanet özeti (tek istek, sahip başına bir satır); uçta metin araması yok (backend gerekiyor)",
@@ -221,12 +219,12 @@ const NO_SEARCH: Record<string, string> = {
   "Operations/AllocationRepair/RepairTable.tsx": "onarım ucu parametresiz tek liste (yalnız eksikli sevkiyatlar); metin araması yok (backend gerekiyor)",
   "Operations/FasonCockpit/FasonCockpitPage.tsx": "kokpit ucu durum/firma/süreç türü süzgeçli; metin araması yok (backend gerekiyor)",
   "Operations/SackContentEdit/SackContentsTable.tsx": "çuval içi gömülü tablo (onlarca top); arama salt-okunur görünümde",
-  "Operations/SackContentEdit/SackContentsReadonlyTable.tsx": "çuval içi gömülü tablo; tek çuvalın topları bellekte süzülür (sayfalı liste değil)",  "Access/PatronCloud/PatronCloudPage.tsx": "bulut hesapları buluttan eşitlenen kısa liste (durum ucunun parçası, parametresiz); arama yok (backend gerekiyor)",
+  "Operations/SackContentEdit/SackContentsReadonlyTable.tsx": "çuval içi gömülü tablo; tek çuvalın topları bellekte süzülür (sayfalı liste değil)",
+  "Access/PatronCloud/PatronCloudPage.tsx": "bulut hesapları buluttan eşitlenen kısa liste (durum ucunun parçası, parametresiz); arama yok (backend gerekiyor)",
   "System/WorkSessions/HistoryTable.tsx": "oturum geçmişi ucu kullanıcı/istasyon/makine/cihaz/tarih süzgeçli, offset sayfalı; metin araması yok (backend gerekiyor)",
   "System/Clients/ClientsPage.tsx": "sunucu belleğindeki istemci envanteri (tek istek, parametresiz, birkaç kurulum); arama yok (backend gerekiyor)",
   "System/PrintHistory/PrintHistoryTable.tsx": "baskı ucu gün/kişi/yazıcı/cihaz/tür/durum/kaynak süzgeçli; metin araması yok (backend gerekiyor)",
   "Notifications/NotificationsPage.tsx": "kişisel gelen kutusu sekme + alan süzgeçli (sunucuda); `/api/bildirim` metin araması almıyor (backend gerekiyor)",
-  "GeneralSettings/Numbering/NumberingTable.tsx": "numara serisi kataloğu (kod kataloğundaki seriler, bölümlü, tek istek); `/api/number-series` arama almıyor (backend gerekiyor)",
   "System/Events/SystemEventsPage.tsx": "AUTH/SYSTEM olay ucu kategori/olay/tarih süzgeçli; `q` iş kaydı numarası arar, kullanıcı/IP/hedef araması yok (backend gerekiyor)",
 };
 
