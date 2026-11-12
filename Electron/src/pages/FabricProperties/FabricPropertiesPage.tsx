@@ -49,7 +49,7 @@ export function FabricPropertiesPage() {
       rowClassName={rowClassName}
       rowSelectable={rowSelectable}
       writePermission="property:write"
-      searchPlaceholder="Ad veya kategori ara..."
+      searchHint="Ad veya kategori"
       renderForm={({ open, onOpenChange, initial, onSubmit, isSubmitting, openEdit }) => (
         <FabricPropertyFormDialog
           // Ebeveyn → çeşit geçişinde form yeni kayıtla yeniden kurulur (reset yalnız açılışta koşar).

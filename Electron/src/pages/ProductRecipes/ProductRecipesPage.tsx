@@ -48,7 +48,7 @@ export function ProductRecipesPage() {
       service={productRecipeService}
       columns={recipeColumns}
       writePermission="station:write"
-      searchPlaceholder="Şablon adı veya kodu ara..."
+      searchHint="Şablon adı veya kodu"
       renderForm={({ open, onOpenChange, initial, onSubmit, isSubmitting }) => (
         <ProductRecipeFormDialog
           open={open}

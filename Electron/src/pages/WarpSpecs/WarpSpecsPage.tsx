@@ -38,7 +38,7 @@ export function WarpSpecsPage() {
       service={warpSpecService}
       columns={warpSpecColumns}
       writePermission="warpspec:write"
-      searchPlaceholder="Kod veya ad ara..."
+      searchHint="Kod veya ad"
       renderForm={({ open, onOpenChange, initial, onSubmit, isSubmitting }) => (
         <WarpSpecFormDialog
           open={open}

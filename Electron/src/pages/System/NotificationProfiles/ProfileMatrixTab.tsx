@@ -114,16 +114,17 @@ interface RowProps {
 function MatrixRow({ kind: k, value: v, blind, readOnly, onSet }: RowProps) {
   return (
     <tr className="border-t" data-testid={`matris-${k.tur}`}>
-      <td className="px-3 py-1.5">
+      <td className="whitespace-nowrap px-3 py-1.5">
+        {/* Liste standardı: tek satır — izin uyarısı adın yanında, satırı büyütmez. */}
         <div className="flex items-center gap-1.5">
           <span>{k.ad}</span>
           {k.kilit === "HER_ZAMAN" && <Lock className="h-3 w-3 text-muted-foreground" aria-label="Katalogda her zaman kilitli" />}
+          {blind > 0 && (
+            <span className="ml-1 flex items-center gap-1 text-xs text-amber-700 dark:text-amber-400" title={`Bu türü ${blind} üye alamaz: izinleri yok`}>
+              <AlertTriangle className="h-3 w-3 shrink-0" /> Bu türü {blind} üye alamaz: izinleri yok
+            </span>
+          )}
         </div>
-        {blind > 0 && (
-          <div className="mt-0.5 flex items-center gap-1 text-xs text-amber-700 dark:text-amber-400">
-            <AlertTriangle className="h-3 w-3 shrink-0" /> Bu türü {blind} üye alamaz: izinleri yok
-          </div>
-        )}
       </td>
       {STATES.map((s) => {
         const off = s === "KAPALI" && !allowsOff(k.kilit);

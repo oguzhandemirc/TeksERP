@@ -234,28 +234,30 @@ const NO_SEARCH: Record<string, string> = {
 };
 
 const LISTE = "liste tablosu elle çiziliyor — ortak DataTable'a geçirilecek";
-/** Cırcır: liste tablosunu elle çizen dosyalar (yalnız daralır). */
-const HAND_TABLES: Record<string, string> = Object.fromEntries(
-  [
-    "Access/PatronCloud/PatronCloudPage.tsx",
-    "Access/Permissions/PermissionsCatalogPage.tsx",
-    "Access/Templates/TemplatesPage.tsx",
-    "Access/Users/AccessUsersPage.tsx",
-    "Devices/DevicesPage.tsx",
-    "Finance/InvoicesPage.tsx",
-    "Finance/PeriodClose/PeriodClosePage.tsx",
-    "GeneralSettings/Numbering/NumberingTable.tsx",
-    "Notifications/NotificationTable.tsx",
-    "Operations/ProductBalance/ProductBalancePage.tsx",
-    "Stations/StationListView.tsx",
-    "System/Clients/ClientsPage.tsx",
-    "System/Duplicates/DuplicatesPage.tsx",
-    "System/Events/SystemEventsList.tsx",
-    "System/NotificationProfiles/ProfileMatrixTab.tsx",
-    "System/PrintHistory/PrintHistoryTable.tsx",
-    "System/WorkSessions/HistoryTable.tsx",
-  ].map((f) => [f, LISTE]),
-);
+const EXPAND = "genişleyen satır (satır altında detay gövdesi) — DataTable'a genel 'genişleyen satır' yeteneği gelince geçer";
+const INLINE = "satır içi düzenleme + seçim — DataTable'a genel satır içi düzenleme yeteneği gelince geçer";
+/** KALICI muaf: sütunu veri olan matris/gruplu katalog — sütun menüsü anlamsız; tek satır hücre + ince ayraç uygulanır. */
+const MATRIX = "kalıcı muaf: matris/gruplu katalog (sütunlar sabit durum ya da grup başlıkları) — tek satır hücre + ince ayraç";
+/** Cırcır: liste tablosunu elle çizen dosyalar (yalnız daralır) — her biri gerekçeli. */
+const HAND_TABLES: Record<string, string> = {
+  "Access/PatronCloud/PatronCloudPage.tsx": LISTE,
+  "Access/Permissions/PermissionsCatalogPage.tsx": MATRIX,
+  "Access/Templates/TemplatesPage.tsx": LISTE,
+  "Access/Users/AccessUsersPage.tsx": LISTE,
+  "Devices/DevicesPage.tsx": EXPAND,
+  "Finance/InvoicesPage.tsx": INLINE,
+  "Finance/PeriodClose/PeriodClosePage.tsx": INLINE,
+  "GeneralSettings/Numbering/NumberingTable.tsx": INLINE,
+  "Notifications/NotificationTable.tsx": LISTE,
+  "Operations/ProductBalance/ProductBalancePage.tsx": EXPAND,
+  "Stations/StationListView.tsx": EXPAND,
+  "System/Clients/ClientsPage.tsx": LISTE,
+  "System/Duplicates/DuplicatesPage.tsx": MATRIX,
+  "System/Events/SystemEventsList.tsx": LISTE,
+  "System/NotificationProfiles/ProfileMatrixTab.tsx": MATRIX,
+  "System/PrintHistory/PrintHistoryTable.tsx": LISTE,
+  "System/WorkSessions/HistoryTable.tsx": LISTE,
+};
 
 const HAS_TOOLS = /<DataTableTools\b|\btools=\{|<DataTableToolbar\b[^>]*\btable=\{/;
 const HAS_SEARCH = /\bonSearchChange=|<ScanField\b|\b(?:set|on)\w*(?:Search|Query)\w*\(e\.target\.value\)|\bset\("(?:search|q)", e\.target\.value\)|\bsearch: e\.target\.value\b|\bq: e\.target\.value\b/;
@@ -277,7 +279,9 @@ export function missingListTools(files: Record<string, string>, opts = { host: T
 /** Arama kutusu yer tutucuları (ara/okut ile biten literal) 20 karakteri aşanlar. */
 export function longSearchPlaceholders(src: string): string[] {
   const out: string[] = [];
-  for (const m of src.matchAll(/placeholder="([^"]+)"/g)) {
+  // `searchPlaceholder` (CrudPage) her zaman arama kutusudur → biçimden bağımsız ölçülür; açıklama `searchHint`e.
+  for (const m of src.matchAll(/\bsearchPlaceholder="([^"]+)"/g)) if ((m[1] ?? "").length > 20) out.push(m[1] ?? "");
+  for (const m of src.matchAll(/(?<![\w])placeholder="([^"]+)"/g)) {
     const text = m[1] ?? "";
     if (!/(^|[\s/·,])(ara|okut)(\.\.\.|…)?$/i.test(text)) continue;
     // Etiketin açılışı: önünde tanımlayıcı karakteri olmayan "<" (jenerik `<Select<Row>`in iç "<"i değil).
@@ -342,5 +346,7 @@ describe("liste araçları standardı — sütun menüsü + arama + kısa yer tu
     expect(longSearchPlaceholders(`<Input placeholder="Ara…" title="Dokuma no, kumaş ya da fasoncu" />`)).toEqual([]);
     expect(longSearchPlaceholders(`<ReferenceSelect<CariRow> placeholder="Müşteri / fason ara..." />`)).toEqual([]);
     expect(longSearchPlaceholders(`<Input placeholder="Kâğıdın üzerindeki numara" />`)).toEqual([]);
+    expect(longSearchPlaceholders(`<CrudPage searchPlaceholder="Kod, ad veya vergi numarası" />`)).toHaveLength(1);
+    expect(longSearchPlaceholders(`<CrudPage searchPlaceholder="Kod ara…" searchHint="Kod, ad veya vergi no" />`)).toEqual([]);
   });
 });
