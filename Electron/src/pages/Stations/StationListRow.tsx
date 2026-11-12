@@ -1,13 +1,9 @@
-// Liste görünümü SATIRI — bir satır = bir İSTASYON; tıklama/Enter sağdaki istasyon panelini açar.
-import { ChevronRight, Star } from "lucide-react";
+// İstasyon liste/panel ortak parçaları — yetenek rozetleri, kurşun rozeti, durum rozeti (liste sütunları ve yan panel).
+import { Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { TableCell, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { toneFor } from "@/lib/station-colors";
-import { stationTypeLabels } from "@/types/enums";
 import type { Station } from "./types";
-import type { StationListItem, StationKursunInfo } from "./stationListItems";
-import { plainStationKindLabel } from "./stationPlainLabels";
+import type { StationKursunInfo } from "./stationListItems";
 
 /** Yetenek rozetleri — dışa aktarımdaki Evet/Hayır sütunlarının satır içi karşılığı. */
 export function capabilityChips(s: Station): string[] {
@@ -51,74 +47,5 @@ export function StationStatusBadge({ active }: { active: boolean }) {
       <span className={cn("h-1.5 w-1.5 rounded-full", active ? "bg-emerald-500" : "bg-muted-foreground/50")} />
       {active ? "Aktif" : "Pasif"}
     </Badge>
-  );
-}
-
-interface Props {
-  item: StationListItem;
-  selected: boolean;
-  showType: boolean;
-  onSelect: (s: Station) => void;
-}
-
-export function StationListRow({ item, selected, showType, onSelect }: Props) {
-  const s = item.station;
-  const tone = toneFor(s.type, s.kind);
-  const chips = capabilityChips(s);
-  const inactiveMachines = item.machines.filter((m) => m.isActive === false).length;
-  return (
-    <TableRow
-      data-testid="station-row"
-      data-state={selected ? "selected" : undefined}
-      aria-selected={selected}
-      tabIndex={0}
-      onClick={() => onSelect(s)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onSelect(s);
-        }
-      }}
-      className={cn(
-        "cursor-pointer focus-visible:bg-muted/60 focus-visible:outline-none data-[state=selected]:bg-primary/10",
-        !s.isActive && "text-muted-foreground",
-      )}
-    >
-      <TableCell className={cn("border-l-2 py-2", selected ? "border-l-primary" : "border-l-transparent")}>
-        <div className="flex items-center gap-2">
-          <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", tone.solid)} />
-          <div className="min-w-0">
-            <div className="flex items-baseline gap-2">
-              <span className="truncate font-medium">{s.name}</span>
-              {s.code && <span className="shrink-0 font-mono text-xs text-muted-foreground">{s.code}</span>}
-            </div>
-            <div className="text-xs text-muted-foreground">{plainStationKindLabel(s.kind)}</div>
-          </div>
-        </div>
-      </TableCell>
-      <TableCell className="py-2 text-sm">{s.defaultCategory?.name ?? <span className="text-muted-foreground">—</span>}</TableCell>
-      <TableCell className="py-2">
-        <div className="flex flex-wrap items-center gap-1">
-          <KursunBadge kursun={item.kursun} />
-          {chips.map((c) => (
-            <Badge key={c} variant="muted" className="text-[10px]">
-              {c}
-            </Badge>
-          ))}
-          {chips.length === 0 && !item.kursun?.enabled && <span className="text-xs text-muted-foreground">—</span>}
-        </div>
-      </TableCell>
-      {showType && <TableCell className="py-2 text-xs">{stationTypeLabels[s.type]}</TableCell>}
-      <TableCell className="py-2 text-right tabular-nums" title={inactiveMachines > 0 ? `${inactiveMachines} pasif makine dahil` : undefined}>
-        {item.machines.length > 0 ? item.machines.length : <span className="text-muted-foreground">0</span>}
-        {inactiveMachines > 0 && <span className="ml-1 text-xs text-muted-foreground">({inactiveMachines} pasif)</span>}
-      </TableCell>
-      <TableCell className="py-2">
-        <StationStatusBadge active={s.isActive} />
-      </TableCell>
-      <TableCell className="w-8 py-2 pr-3">
-        <ChevronRight className={cn("h-4 w-4 text-muted-foreground", selected && "text-primary")} />
-      </TableCell>
-    </TableRow>
   );
 }

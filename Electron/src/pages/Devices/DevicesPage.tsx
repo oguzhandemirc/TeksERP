@@ -6,13 +6,12 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { RefreshButton } from "@/components/RefreshButton";
 import { ListExportMenu } from "@/components/data-table/ListExportMenu";
-import type { ExportColumn } from "@/lib/list-export";
-import { safeFormat } from "@/lib/format";
 import { deviceService } from "./service";
 import type { DeviceListItem } from "./types";
 import { ApproveAssignDialog } from "./ApproveAssignDialog";
@@ -23,7 +22,9 @@ import { ProofLostPanel } from "./ProofLostPanel";
 import { PendingBulkReject } from "./PendingBulkReject";
 import { DevicesEmptyState as EmptyState } from "./DevicesEmptyState";
 import { useProofLost } from "./proof";
-import { DeviceRow, deviceKindLabel } from "./DeviceRow";
+import { DeviceContextItems } from "./DeviceRow";
+import { DEVICE_EXPORT_COLUMNS, useDevicesTable } from "./deviceColumns";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 import {
   DeviceFilterBar,
   type DeviceKindFilter,
@@ -32,23 +33,6 @@ import {
 import { foldSearchText } from "@/lib/search-fold";
 
 const QUERY_KEY = "admin-devices";
-
-/** Satırdaki rozetle AYNI sıra: pasiflik onay durumunun önüne geçer. */
-const deviceStatusLabel = (d: DeviceListItem): string =>
-  !d.isActive ? "Pasif" : d.status === "APPROVED" ? "Onaylı" : "Onay bekliyor";
-
-// Dışa aktarım sütunları — ekrandaki kolonların (Cihaz · Tür · Durum · Son
-// aktivite · Kimlik) karşılığı; kimlik tabloda kısaltılır, dosyada TAM yazılır
-// (cihaz eşleştirmesi ancak tam kimlikle yapılabilir).
-const DEVICE_EXPORT_COLUMNS: ExportColumn<DeviceListItem>[] = [
-  { label: "Cihaz Adı", value: (d) => d.name },
-  { label: "Tür", value: (d) => deviceKindLabel(d.kind) },
-  { label: "Durum", value: deviceStatusLabel },
-  { label: "Makine", value: (d) => (d.machine ? `${d.machine.name} (${d.machine.code})` : "") },
-  { label: "İstasyon", value: (d) => d.machine?.station.name ?? "" },
-  { label: "Son Aktivite", value: (d) => (d.lastSeenAt ? safeFormat(d.lastSeenAt, "dd.MM.yyyy HH:mm") : "") },
-  { label: "Cihaz Kimliği", value: (d) => d.deviceId },
-];
 
 export function DevicesPage() {
   const qc = useQueryClient();
@@ -110,6 +94,16 @@ export function DevicesPage() {
   const anyFilterActive = debouncedSearch.trim() !== "" || statusFilter !== "all" || kindFilter !== "all";
   const clearFilters = () => { setSearch(""); setStatusFilter("all"); setKindFilter("all"); };
   const rowPending = revoke.isPending || deactivate.isPending || reactivate.isPending || hardDelete.isPending;
+  const { hasPermission } = useRoleAccess();
+  const canManage = hasPermission("admin:settings");
+  const { table, handlers } = useDevicesTable(filtered, proofLostIds, {
+    onAssign: setAssignTarget,
+    onRevoke: (d) => revoke.mutate(d.id),
+    onDeactivate: (d) => deactivate.mutate(d.id),
+    onReactivate: (d) => reactivate.mutate(d.id),
+    onDelete: setDeleteTarget,
+    isPending: rowPending,
+  });
 
   return (
     <PageShell>
@@ -148,6 +142,7 @@ export function DevicesPage() {
         totalCount={devices.length}
         anyFilterActive={anyFilterActive}
         onClear={clearFilters}
+        tools={<DataTableTools table={table} hideExport />}
       />
 
       <ListBody>
@@ -162,41 +157,12 @@ export function DevicesPage() {
         ) : devices.length === 0 ? (
           <ListMessage><EmptyState /></ListMessage>
         ) : (
-          <Table containerClassName="overflow-visible">
-            <TableHeader className="sticky top-0 z-10 bg-card">
-              <TableRow className="hover:bg-transparent">
-                <TableHead>Cihaz</TableHead>
-                <TableHead className="w-24">Tür</TableHead>
-                <TableHead className="w-36">Durum</TableHead>
-                <TableHead className="w-40">Son aktivite</TableHead>
-                <TableHead className="w-40">Kimlik</TableHead>
-                <TableHead className="w-12" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.length === 0 ? (
-                <TableRow className="hover:bg-transparent">
-                  <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
-                    Filtreye uyan cihaz yok.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filtered.map((d) => (
-                  <DeviceRow
-                    key={d.id}
-                    device={d}
-                    onAssign={() => setAssignTarget(d)}
-                    onRevoke={() => revoke.mutate(d.id)}
-                    onDeactivate={() => deactivate.mutate(d.id)}
-                    onReactivate={() => reactivate.mutate(d.id)}
-                    onDelete={() => setDeleteTarget(d)}
-                    isPending={rowPending}
-                    proofLost={proofLostIds.has(d.id)}
-                  />
-                ))
-              )}
-            </TableBody>
-          </Table>
+          <DataTable
+            table={table}
+            emptyText="Filtreye uyan cihaz yok."
+            rowClassName={(d) => (d.isActive ? undefined : "opacity-60")}
+            rowContextMenu={canManage ? (d) => <DeviceContextItems device={d} handlers={handlers.current} /> : undefined}
+          />
         )}
       </ListBody>
       <ListFooter loaded={filtered.length} total={devices.length} />

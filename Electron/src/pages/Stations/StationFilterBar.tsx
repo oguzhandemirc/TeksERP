@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Search, X, Eye, EyeOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,8 @@ interface Props {
   onClear: () => void;
   showInactive: boolean;
   onToggleInactive: () => void;
+  /** Liste görünümünün Sütunlar menüsü (kart görünümünde yok). */
+  tools?: ReactNode;
 }
 
 /** Üretim İstasyonları kart listesi için istemci-tarafı filtre çubuğu (PageHeader'ın altında). */
@@ -38,6 +41,7 @@ export function StationFilterBar({
   onClear,
   showInactive,
   onToggleInactive,
+  tools,
 }: Props) {
   return (
     <div className="flex flex-wrap items-center gap-2 border-b px-6 py-3 text-xs">
@@ -109,6 +113,7 @@ export function StationFilterBar({
           {showInactive ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
           {showInactive ? "Pasifleri gizle" : "Pasifleri göster"}
         </Button>
+        {tools}
       </div>
     </div>
   );

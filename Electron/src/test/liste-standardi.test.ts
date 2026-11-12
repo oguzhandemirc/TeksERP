@@ -193,6 +193,8 @@ const TOOLS_HOST: Record<string, string[]> = {
   "Cost/Quotes/QuotesPage.tsx": ["Cost/Quotes/QuoteFilters.tsx"],
   "Operations/ConsignmentDispatches/ConsignmentDispatchesPage.tsx": ["Operations/ConsignmentDispatches/ConsignmentDispatchFilters.tsx"],
   "Operations/Yarn/YarnStockTable.tsx": ["Operations/Yarn/YarnStockPage.tsx", "Operations/Yarn/YarnFilterBar.tsx"],
+  "Devices/DevicesPage.tsx": ["Devices/DeviceFilterBar.tsx"],
+  "Stations/StationListView.tsx": ["Stations/ProductionStationsPage.tsx", "Stations/StationFilterBar.tsx"],
   "Operations/PurchaseOrders/PurchaseOrderTable.tsx": ["Operations/PurchaseOrders/PurchaseOrdersPage.tsx", "Operations/PurchaseOrders/PurchaseOrderFilterBar.tsx"],
 };
 
@@ -243,13 +245,11 @@ const MATRIX = "kalıcı muaf: matris/gruplu katalog (sütunlar sabit durum ya d
 /** Cırcır: liste tablosunu elle çizen dosyalar (yalnız daralır) — her biri gerekçeli. */
 const HAND_TABLES: Record<string, string> = {
   "Access/Permissions/PermissionsCatalogPage.tsx": MATRIX,
-  "Devices/DevicesPage.tsx": EXPAND,
   "Finance/InvoicesPage.tsx": INLINE,
   "Finance/PeriodClose/PeriodClosePage.tsx": INLINE,
   "GeneralSettings/Numbering/NumberingTable.tsx": INLINE,
   "Notifications/NotificationTable.tsx": CONTROLLED_SELECT,
   "Operations/ProductBalance/ProductBalancePage.tsx": EXPAND,
-  "Stations/StationListView.tsx": EXPAND,
   "System/Duplicates/DuplicatesPage.tsx": MATRIX,
   "System/NotificationProfiles/ProfileMatrixTab.tsx": MATRIX,
   "System/PrintHistory/PrintHistoryTable.tsx": `${EXPAND} (HATA satırının altında neden + ipucu satırı)`,

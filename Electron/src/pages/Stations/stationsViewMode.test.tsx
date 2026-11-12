@@ -3,7 +3,7 @@
 // iki görünüm aynı süzülmüş kümeden (kullanıcı isteği #3, 2026-09-16)
 // =============================================================================
 import { describe, it, expect, vi } from "vitest";
-import { renderHook, act, screen } from "@testing-library/react";
+import { renderHook, act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/render";
 import { StationKind, StationType } from "@/types/enums";
@@ -11,6 +11,8 @@ import { DEFAULT_STATIONS_VIEW_MODE, STATIONS_VIEW_MODE_KEY, readStationsViewMod
 import { StationsViewToggle } from "./StationsViewToggle";
 import { buildStationListItems } from "./stationListItems";
 import { StationListView } from "./StationListView";
+import { useStationListTable } from "./stationListColumns";
+import type { StationListItem } from "./stationListItems";
 import { visibleStationKinds } from "./visibleStationKinds";
 import type { Station } from "./types";
 import type { Machine } from "@/pages/Machines/types";
@@ -23,6 +25,16 @@ function fakeStorage(init: Record<string, string> = {}) {
 const station = (over: Partial<Station>): Station =>
   ({ id: "s1", code: "IST1", name: "İstasyon", type: StationType.INTERNAL, kind: StationKind.RAW_QC, department: null, isActive: true, appliesColor: false, appliesProperty: false, appliesQuality: false, inspectionEnabled: false, producesWarpBeam: false, consumesWarpBeam: false, ...over }) as Station;
 const machine = (id: string, stationId: string): Machine => ({ id, code: id, name: `Makine ${id}`, stationId, isActive: true }) as unknown as Machine;
+
+/** Tablo sayfada kurulur (Sütunlar menüsü filtre çubuğunda) — testte aynı kurulum. */
+function ListView({ items, selectedId, onSelect }: { items: StationListItem[]; selectedId: string | null; onSelect: (s: Station) => void }) {
+  const table = useStationListTable(items);
+  return <StationListView table={table} selectedId={selectedId} onSelect={onSelect} />;
+}
+// DataTable kayıt satırı (activeRowId verili) — satır = istasyon.
+const stationRows = () => Array.from(document.querySelectorAll("tr[data-record-row]"));
+// DataTable başlıkları sürüklenebilir (`role=button`) → başlık metniyle bulunur.
+const headerCell = (name: string) => Array.from(document.querySelectorAll("thead th")).find((th) => th.textContent === name) ?? null;
 
 describe("Görünüm tercihi", () => {
   it("⭐ varsayılan LİSTE — depo boş, bozuk ya da erişilemez", () => {
@@ -74,31 +86,32 @@ describe("Liste görünümü — satır = istasyon, kart ve dosya ile aynı küm
     expect(stations).toHaveLength(3);
     const list = items(stations, new Map([["s2", [machine("m1", "s2"), machine("m2", "s2"), machine("m3", "s2")]]]));
     expect(list.map((r) => `${r.station.id}:${r.machines.length}`)).toEqual(["s1:0", "s2:3", "s3:0"]);
-    renderWithProviders(<StationListView items={list} selectedId={null} onSelect={() => {}} />);
-    expect(screen.getAllByTestId("station-row")).toHaveLength(3);
+    renderWithProviders(<ListView items={list} selectedId={null} onSelect={() => {}} />);
+    expect(stationRows()).toHaveLength(3);
     expect(screen.getAllByText("Levent tüketir")).toHaveLength(1);
     expect(screen.getByText("3")).toBeInTheDocument();
     expect(screen.getByText("Giriş kontrolü (KK1)")).toBeInTheDocument();
     // Hepsi dahili → "Tip" sütunu çizilmez.
-    expect(screen.queryByRole("columnheader", { name: "Tip" })).toBeNull();
+    expect(headerCell("Tip")).toBeNull();
   });
 
   it("⭐ K22: istasyon KODU listede görünür; fason istasyon varsa Tip sütunu çıkar; tıklama seçer", async () => {
     const s1 = station({ id: "s1", name: "KK1", code: "IST2309260007" });
     const s2 = station({ id: "s2", name: "Boyahane", type: StationType.EXTERNAL, kind: StationKind.SUBCONTRACTOR });
     const onSelect = vi.fn();
-    renderWithProviders(<StationListView items={items([s1, s2])} selectedId="s1" onSelect={onSelect} />);
+    renderWithProviders(<ListView items={items([s1, s2])} selectedId="s1" onSelect={onSelect} />);
     expect(screen.getByText("IST2309260007")).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Tip" })).toBeInTheDocument();
-    expect(screen.getAllByTestId("station-row")[0]).toHaveAttribute("aria-selected", "true");
+    expect(headerCell("Tip")).not.toBeNull();
+    expect(stationRows()[0]).toHaveAttribute("aria-selected", "true");
     await userEvent.click(screen.getByText("Boyahane"));
-    expect(onSelect).toHaveBeenCalledWith(s2);
+    // DataTable satır açılışı 160 ms gecikmeli (çift tıkla seçim ayrımı).
+    await waitFor(() => expect(onSelect).toHaveBeenCalledWith(s2));
   });
 
   it("kurşun rozeti varsayılan gramajla görünür", () => {
     const s1 = station({ id: "s1", name: "KURŞUN", kind: StationKind.PROCESS_QC });
     const list = buildStationListItems([s1], { machinesByStation: new Map(), peripheralsByMachine: new Map(), capByStation: new Map(), kursunByStation: new Map([["s1", { enabled: true, defaultGramaj: "25 gr" }]]) });
-    renderWithProviders(<StationListView items={list} selectedId={null} onSelect={() => {}} />);
+    renderWithProviders(<ListView items={list} selectedId={null} onSelect={() => {}} />);
     expect(screen.getByTestId("kursun-badge")).toHaveTextContent("Kurşun25 gr");
   });
 });

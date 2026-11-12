@@ -47,6 +47,8 @@ import { StationDetailPanel } from "./StationDetailPanel";
 import { useStationsViewMode } from "./stationsViewMode";
 import { StationsViewToggle } from "./StationsViewToggle";
 import { StationListView } from "./StationListView";
+import { useStationListTable } from "./stationListColumns";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
 
 // Perf: makinesiz kartlar için sabit boş dizi referansı (her render'da yeni `[]`
 // StationCard'ın React.memo'sunu bozardı).
@@ -218,6 +220,7 @@ export function ProductionStationsPage() {
     () => buildStationListItems(stations, { machinesByStation, peripheralsByMachine, capByStation, kursunByStation }),
     [stations, machinesByStation, peripheralsByMachine, capByStation, kursunByStation],
   );
+  const listTable = useStationListTable(listItems);
   const selectedStation = selectedStationId ? (allStations.find((s) => s.id === selectedStationId) ?? null) : null;
   // Görünüm tercihi (kart ⇄ liste) — varsayılan liste, cihaza kayıtlı (`stationsViewMode.ts`).
   const [viewMode, setViewMode] = useStationsViewMode();
@@ -338,13 +341,14 @@ export function ProductionStationsPage() {
         onClear={clearFilters}
         showInactive={showInactive}
         onToggleInactive={() => setShowInactive((v) => !v)}
+        tools={viewMode === "list" ? <DataTableTools table={listTable} hideExport /> : undefined}
       />
 
       {/* Liste görünümü liste standardında (kenardan kenara, yapışkan başlık); kart ızgarası dolgulu gövdede kalır. */}
       {stations.length > 0 && viewMode === "list" ? (
         <>
           <ListBody>
-            <StationListView items={listItems} selectedId={selectedStationId} onSelect={(st) => setSelectedStationId(st.id)} />
+            <StationListView table={listTable} selectedId={selectedStationId} onSelect={(st) => setSelectedStationId(st.id)} />
           </ListBody>
           <ListFooter loaded={listItems.length} label={`${stations.length} istasyon`} />
         </>
