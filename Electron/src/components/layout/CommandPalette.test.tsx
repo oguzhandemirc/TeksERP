@@ -89,7 +89,7 @@ describe("CommandPalette", () => {
     open();
     // T5: "Üretim" menü kökü + bölüm başlığı + rapor kategorisi (3) — rapor kategorisi düşerse 2 kalır.
     expect(screen.getAllByText("Üretim").length).toBeGreaterThanOrEqual(3);
-    expect(screen.getByText("Eski: Parti İzleme")).toBeInTheDocument();
+    expect(screen.getByText("Operasyon · İz Sürme · Parti")).toBeInTheDocument();
   });
 
   // D4-A3: dokumasız + ayar açık (rejim alanı) → giriş "Makine Duruşları" adıyla VAR; rejim kapalıyken YOK.
@@ -151,16 +151,17 @@ describe("CommandPalette", () => {
    * yazılan sayfayı açmıyorsa palet değildir.
    */
   it("tam ad eşleşmesi ilk sırada — açıklamadan eşleşen kaydın ÖNÜNDE", async () => {
-    // "Eski: Müşteri Sipariş Profili" adı ifadeyi taşır (eski yaprak palette "Eski:" ikiziyle); "Müşteri" kategori girişi aynı ifadeyi AÇIKLAMASINDA taşır.
-    permissions = ["report:customer"];
+    // "Kasa & Banka Defteri" adı ifadeyi taşır (muhasebe uzman aracı kendi adıyla); "Ön Muhasebe" kategori girişi aynı ifadeyi AÇIKLAMASINDA taşır.
+    permissions = ["report:finance"];
+    regime = { ...regime, financeEnabled: true };
     open();
-    type("müşteri sipariş profili");
+    type("kasa & banka defteri");
 
     const items = await screen.findAllByRole("option");
     const labels = items.map((el) => el.textContent ?? "");
     // İkisi de eşleşmeli (küme değişmedi) ...
-    const exact = labels.findIndex((l) => l.startsWith("Eski: Müşteri Sipariş Profili"));
-    const viaDescription = labels.findIndex((l) => l.startsWith("Müşteri") && !l.includes("Sipariş Profili"));
+    const exact = labels.findIndex((l) => l.startsWith("Kasa & Banka Defteri"));
+    const viaDescription = labels.findIndex((l) => l.startsWith("Ön Muhasebe"));
     expect(exact).toBeGreaterThanOrEqual(0);
     expect(viaDescription).toBeGreaterThanOrEqual(0);
     // ... ama SIRA: tam ad önce.
@@ -189,7 +190,7 @@ describe("CommandPalette", () => {
 
   it("seçim hedefi sekme olarak açar — varsa odaklar (yeni PENCERE açmaz)", () => {
     open();
-    fireEvent.click(screen.getByText("Eski: Parti İzleme"));
+    fireEvent.click(screen.getByText("Operasyon · İz Sürme · Parti"));
     expect(openTab).toHaveBeenCalledWith("/reports/production/batch-trace");
   });
 });
@@ -215,16 +216,17 @@ describe("CommandPalette — K19 menü düzeni", () => {
     expect(screen.queryByText("Parti İzleme")).not.toBeInTheDocument();
   });
 
-  it("⭐ K19: rapor KATEGORİSİ gizlenince alt raporu da aramada çıkmaz (Talep Analizi)", () => {
-    permissions = [...permissions, "report:sales"];
+  it("⭐ K19: rapor KATEGORİSİ gizlenince alt raporu da aramada çıkmaz (Kasa & Banka Defteri)", () => {
+    permissions = [...permissions, "report:finance"];
+    regime = { ...regime, financeEnabled: true };
     const a = open();
-    type("talep analizi");
-    expect(screen.getByText("Eski: Talep Analizi")).toBeInTheDocument();
+    type("kasa & banka defteri");
+    expect(screen.getByText("Kasa & Banka Defteri")).toBeInTheDocument();
     a.unmount();
-    menu = toMenuLayoutState({ hiddenScreens: ["reports/sales"], advancedGroup: false, advancedScreens: [] });
+    menu = toMenuLayoutState({ hiddenScreens: ["reports/finance"], advancedGroup: false, advancedScreens: [] });
     open();
-    type("talep analizi");
-    expect(screen.queryByText("Eski: Talep Analizi")).not.toBeInTheDocument();
+    type("kasa & banka defteri");
+    expect(screen.queryByText("Kasa & Banka Defteri")).not.toBeInTheDocument();
   });
 });
 
@@ -232,7 +234,7 @@ describe("CommandPalette satır düzeni", () => {
   it("statik giriş etiketi kesilmez (shrink-0), açıklama kalan yeri alır (min-w-0)", () => {
     permissions = ["report:production", "roll:read", "workorder:read", "admin:settings", "admin:users"];
     open();
-    const label = screen.getByText("Eski: Parti İzleme");
+    const label = screen.getByText("Operasyon · İz Sürme · Parti");
     expect(label.className).toContain("shrink-0");
     const desc = label.nextElementSibling as HTMLElement | null;
     if (desc) expect(desc.className).toContain("min-w-0");

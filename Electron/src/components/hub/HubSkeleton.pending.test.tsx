@@ -38,7 +38,7 @@ import { OperationsHubPage } from "@/pages/Operations/OperationsHubPage";
 import { DefinitionsHubPage } from "@/pages/Definitions/DefinitionsHubPage";
 import { ReportsHubPage } from "@/pages/Reports/ReportsHubPage";
 import { ReportHubGrid } from "@/pages/Reports/_components/ReportHubGrid";
-import { salesReportTiles } from "@/pages/Reports/Sales/tile-config";
+import { auditReportTiles } from "@/pages/Reports/Audit/tile-config";
 
 // HubCard kökü `<button class="group block …">`; başlık düğmeleri (yenile · favori) bu sınıfı taşımaz.
 const cards = (c: HTMLElement) => c.querySelectorAll("button.group.block");
@@ -76,5 +76,5 @@ describe("Hub bayrak bekleme — iskelet", () => {
     expect(skeleton(), "ready'de iskelet").toBeNull();
     expect(screen.getByRole("heading", { name: "Rapor Merkezi" })).toBeInTheDocument();
   });
-  both("§4 rapor kategorisi (ReportHubGrid)", () => <ReportHubGrid title="Satış" tiles={salesReportTiles} />);
+  both("§4 rapor kategorisi (ReportHubGrid)", () => <ReportHubGrid title="Denetim" tiles={auditReportTiles} />);
 });

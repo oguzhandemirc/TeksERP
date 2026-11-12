@@ -245,9 +245,13 @@ function main(): void {
     if (ic) yolBilesen.set(m[1]!, ic[1]!);
   }
   const duzen = readFileSync(join(ELECTRON, "src/pages/Reports/_components/ReportPageLayout.tsx"), "utf8");
+  // Zemin envanterle ölçeklenir (eski rapor emekli oldukça mutlak sayı düşer): yollu HER panel v1
+  // satırının yaprağı ve bileşen dosyası çözülmeli — sabit eşik değil, tamlık.
+  const v1Yollu = CIZILEN_V1.filter((r) => r.panelYolu !== "");
+  const cozulmeyen = v1Yollu.filter((r) => !bilesenYolu.has(yolBilesen.get(r.panelYolu) ?? "")).map((r) => r.key);
   check("§7dz körlük zemini: yaprak→bileşen→dosya zinciri çözüldü ve düzen katalog dışı gün taşımıyor",
-    yolBilesen.size > 20 && bilesenYolu.size > 20 && !/defaultDays/.test(duzen) && duzen.includes("<ReportDateFilter"),
-    `${yolBilesen.size} yaprak · ${bilesenYolu.size} bileşen · düzen: ${/defaultDays/.test(duzen) ? "defaultDays VAR" : "fallback yok"}`);
+    v1Yollu.length > 0 && cozulmeyen.length === 0 && !/defaultDays/.test(duzen) && duzen.includes("<ReportDateFilter"),
+    `${yolBilesen.size} yaprak · ${bilesenYolu.size} bileşen · yollu v1 ${v1Yollu.length}${cozulmeyen.length ? ` ÇÖZÜLMEDİ: ${cozulmeyen.join(", ")}` : " hepsi çözüldü"} · düzen: ${/defaultDays/.test(duzen) ? "defaultDays VAR" : "fallback yok"}`);
   const ciftSapan: string[] = [];
   const ARALIK_HOOKLARI = /\b(useReportDateRange|useFactoryRange)\(([^)]*)\)/g;
   for (const r of CIZILEN_V1) {

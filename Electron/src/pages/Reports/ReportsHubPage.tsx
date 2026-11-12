@@ -1,36 +1,11 @@
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
-import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useOperationsVisibilityContext } from "@/pages/Operations/useOperationsVisibility";
-import { categoryHasOpenReport } from "@/lib/report-gate";
-import { reportTiles } from "./tile-config";
 import { HubSkeleton } from "@/components/hub/HubSkeleton";
 import { ReportCenterPage } from "./_v2/ReportCenterPage";
-import { useMenuLayout } from "@/hooks/useMenuLayout";
-import { isHubTileHidden } from "@/lib/menu-layout";
 
 export function ReportsHubPage() {
-  const { isAdmin, hasPermission } = useRoleAccess();
-  // ⚠️ REJİM KAPISI, İZİN KAPISINDAN AYRI ve İKİSİ DE GEREKLİ. Aşağıdaki izin
-  // süzgeci `isAdmin ||` ile kısa devre yapıyor → `report:finance` taşımayan bir
-  // ADMİN bile "Ön Muhasebe" karosunu görürdü ve tıklayınca üç ucun üçü de
-  // `requireFinanceEnabled` ile 403 dönerdi (sebebi ekranda yazmaz).
-  //
-  // ⚠️ 2026-09-03: karar artık KARO BAĞLAMINDAN okunuyor, `useFeatureFlags`ten
-  // DEĞİL. Eski satır `?? false` ile TEK bir bayrağa gömülüydü; üretim raporları
-  // bağlandığında o varsayılan YANLIŞ yöne düşerdi (`production.enabled` backend
-  // varsayılanı AÇIK) ve fabrikada karolar bir an kaybolup geri gelirdi. Yön
-  // bilgisi tek yerde yaşar: `useOperationsVisibilityContext`.
   const ctx = useOperationsVisibilityContext();
-  const menu = useMenuLayout();
-  const tiles = reportTiles.filter(
-    (t) =>
-      !isHubTileHidden(menu, t.to) &&
-      (isAdmin || !t.permission || hasPermission(t.permission)) &&
-      (!t.featureFlag || ctx[t.featureFlag]) &&
-      // Bütün raporları kapatılmış kategori karosu boş bir hub'a götürürdü (K5).
-      categoryHasOpenReport(ctx.reportsClosedKeys, t.key),
-  );
   // Bayraklar gelene dek Merkez çizilmez (bölümler bir an kaybolup BELİRMESİN) — iskelet.
   if (!ctx.flagsReady) {
     return (
@@ -40,6 +15,6 @@ export function ReportsHubPage() {
       </PageShell>
     );
   }
-  // Rapor Merkezi tek yol (bayrak 2026-11-12 emekli); karolar "Eski raporlar" bölümünün kategori sırası.
-  return <ReportCenterPage legacyTiles={tiles} />;
+  // Rapor Merkezi tek yol (bayrak 2026-11-12 emekli); "Eski raporlar" bölümü son eski raporla kalktı.
+  return <ReportCenterPage />;
 }

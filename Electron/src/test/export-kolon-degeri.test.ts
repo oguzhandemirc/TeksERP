@@ -37,7 +37,6 @@ const BASELINE: Record<string, string[]> = {
   "ProductRecipes/columns.tsx": ["color", "item", "props", "route"],
   "QualityGrades/columns.tsx": ["color"],
   "Reports/Dokuma/leventColumns.tsx": ["kaynak"],
-  "Reports/Sales/destinationMixColumns.tsx": ["kapsam", "ort", "tutar", "tutar"],
   "Reports/_components/BreakdownTable.tsx": ["delta", "prevQty", "share"],
   "ReturnReasons/columns.tsx": ["swatch"],
   "Routes/columns.tsx": ["customer", "stepCount"],

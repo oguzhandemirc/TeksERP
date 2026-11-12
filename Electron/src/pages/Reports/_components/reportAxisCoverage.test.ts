@@ -13,9 +13,8 @@
 // BAKAMAZ (import bekçiyi çökertir), bu yüzden beyan ELLE yazılır ve sunucu
 // sözleşmesiyle hizası sürüm notu geri-okumasında denetlenir.
 //
-// Negatif sondalar (bir kezlik, cp+sha256 ile geri alındı): bir yapraktan
-// `<ReportAxisBar` kaldırıldı → ⭐① ❌ · beyandaki `colorId` şeritten düşürüldü → ⭐② ❌ ·
-// KDV özetine cari seçicisi sızdırıldı → ⭐⑥ ❌. (⭐③④ levent/lot ve diyalog/taşıyıcı zeminleri
+// Negatif sonda (bir kezlik, cp+sha256 ile geri alındı): KDV özetine cari seçicisi sızdırıldı → ⭐⑥ ❌.
+// (⭐①② `<ReportAxisBar` beyanı son yapraklarıyla 2026-11-12'de kalktı.) (⭐③④ levent/lot ve diyalog/taşıyıcı zeminleri
 // sayfalarıyla birlikte kalktı — eski raporların kaldırılması, 2026-11-12.)
 // =============================================================================
 import { readFileSync } from "node:fs";
@@ -25,11 +24,8 @@ import { describe, expect, it } from "vitest";
 const SRC = resolve(__dirname, "../../..");
 const ROUTES = readFileSync(resolve(SRC, "routes/content-routes.tsx"), "utf8");
 
-/** Sunucu sözleşmesinin (6e `_filters.ts`) panel aynası — her yaprak kendi eksenlerini beyan eder. */
-const AXES_BY_REPORT: Record<string, readonly string[]> = {
-  "sales/demand-analysis": ["customerId", "itemId", "colorId", "destination"],
-  "customer/order-profile": ["customerId", "destination"],
-};
+// Satış/müşteri eksen beyanı (`AXES_BY_REPORT`, `<ReportAxisBar`) son iki yaprağı — Talep Analizi ve Müşteri
+// Sipariş Profili — emekli olup sayfaları silinince kalktı (2026-11-12); şerit bileşeni de onlarla gitti.
 
 // Levent/lot ekseni beyanı (R5b-b2) dokuma üçlüsü + kalite/fire ikizi emekli olup sayfaları silinince
 // kalktı (2026-11-12); yeni nesil raporlarda eksen `varyantBoyutlari`ndan çizilir (`reportV2.test`).
@@ -63,32 +59,9 @@ function kaynak(anahtar: string): string {
   return readFileSync(dosya, "utf8");
 }
 
-describe("eksen süzgeci kapsamı — beyan ↔ ekran", () => {
-  it("zemin: yaprak route'ları okundu ve beyan edilen yaprakların hepsi route'ta var", () => {
+describe("yaprak route'ları", () => {
+  it("zemin: yaprak route'ları okundu", () => {
     expect(yapraklar.size).toBeGreaterThan(5);
-    expect(Object.keys(AXES_BY_REPORT).filter((k) => !yapraklar.has(k))).toEqual([]);
-  });
-
-  it("⭐① eksen beyan eden her yaprak <ReportAxisBar çizer", () => {
-    const eksik = Object.keys(AXES_BY_REPORT).filter((k) => !kaynak(k).includes("<ReportAxisBar"));
-    expect(eksik).toEqual([]);
-  });
-
-  it("⭐② şeridin eksen listesi BEYANLA birebir (fazlası da eksiği de kırmızı)", () => {
-    const sapma: string[] = [];
-    for (const [anahtar, beklenen] of Object.entries(AXES_BY_REPORT)) {
-      const src = kaynak(anahtar);
-      const liste = src.match(/const AXIS_KEYS = \[([^\]]*)\]/);
-      if (!liste) { sapma.push(`${anahtar}: AXIS_KEYS bulunamadı`); continue; }
-      const gercek = [...liste[1]!.matchAll(/"([a-zA-Z]+)"/g)].map((m) => m[1]!);
-      // `destination` ayrı bir seçicidir: şeride `destination` propuyla girer (çıplak = sipariş yönü,
-      // `destination="shipment"` = sevkiyatın donmuş yönü — ikisi de yön ekseni sayılır).
-      if (/<ReportAxisBar[^>]*\sdestination(\s|\/|>|=)/.test(src)) gercek.push("destination");
-      const b = [...beklenen].sort().join(",");
-      const g = [...gercek].sort().join(",");
-      if (b !== g) sapma.push(`${anahtar}: beyan [${b}] ≠ ekran [${g}]`);
-    }
-    expect(sapma).toEqual([]);
   });
 });
 

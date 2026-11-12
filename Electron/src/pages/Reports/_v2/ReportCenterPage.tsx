@@ -12,12 +12,9 @@ import { foldedIncludes } from "@/lib/search-fold";
 import { useOperationsVisibilityContext } from "@/pages/Operations/useOperationsVisibility";
 import { fetchPano } from "@/pages/Dashboard/dashboardService";
 import { PANO_UC_IZINLERI, type PanoDonem } from "@/pages/Dashboard/pano/types";
-import type { ReportTile } from "../tile-config";
 import { centerGroups, type CenterGroup } from "./center-model";
 import { useReportFavorites } from "./favorites";
 import { useOpenedReports } from "./opened";
-import { legacyGroups } from "./legacy-model";
-import { LegacyReportsSection } from "./ReportCenterSections";
 import { CustomReportsSection } from "./custom/CustomReportsSection";
 import { REPORT_BUILDER_PERMISSION, useCustomReportList } from "./custom/custom-api";
 import { DEFAULT_PERIOD } from "../_hub/hub-meta";
@@ -26,11 +23,6 @@ import { HubTopPanel } from "../_hub/HubTopPanel";
 import { HubInsightsRow } from "../_hub/HubInsightsRow";
 import { HubReportList } from "../_hub/HubReportList";
 import type { VisibleEntry } from "../_hub/HubPersonal";
-
-interface Props {
-  /** Eski hub'ın AYNI süzgeçten geçmiş kategori karoları — "Eski raporlar" bölümünün kategori sırası ve adı. */
-  legacyTiles: readonly ReportTile[];
-}
 
 const scrollTo = (el: HTMLElement | null) => el?.scrollIntoView?.({ behavior: "smooth", block: "start" });
 
@@ -41,7 +33,7 @@ function spotlightCategory(spot: SpotlightController, groups: readonly CenterGro
 }
 
 /** Rapor Merkezi (plan §4.2) — `/reports`un tek yüzü. */
-export function ReportCenterPage({ legacyTiles }: Props) {
+export function ReportCenterPage() {
   const { isAdmin, hasPermission } = useRoleAccess();
   const ctx = useOperationsVisibilityContext();
   const { favorites, isFavorite, toggle } = useReportFavorites();
@@ -60,7 +52,6 @@ export function ReportCenterPage({ legacyTiles }: Props) {
   );
   const narrowed = useMemo(() => narrowGroups(all, filter, foldedIncludes).filter((g) => g.entries.length > 0), [all, filter]);
   const groups = useMemo(() => visibleGroups(all, filter, foldedIncludes), [all, filter]);
-  const legacy = useMemo(() => legacyGroups(legacyTiles, access, { term: filter.term, includes: foldedIncludes }), [legacyTiles, access, filter.term]);
 
   const insightsAllowed = isAdmin || PANO_UC_IZINLERI.some((p) => hasPermission(p));
   const pano = useQuery({ queryKey: ["dashboard", "pano", period], queryFn: () => fetchPano(period), enabled: insightsAllowed, staleTime: 60_000 });
@@ -112,23 +103,22 @@ export function ReportCenterPage({ legacyTiles }: Props) {
               Tüm raporlar <span className="text-sm font-normal text-muted-foreground">({groups.reduce((n, g) => n + g.entries.length, 0)})</span>
             </h2>
             <HubReportList groups={groups} isFavorite={isFavorite} onToggleFavorite={toggle} regionProps={spot.regionProps} />
-            {groups.length === 0 ? <EmptyListNote filter={filter} legacyCount={legacy.length} /> : null}
+            {groups.length === 0 ? <EmptyListNote filter={filter} /> : null}
           </div>
           <div ref={customRef} {...spot.dimProps()} className={`scroll-mt-4 ${SPOTLIGHT_CLASS}`}>
             <CustomReportsSection term={filter.term} />
           </div>
-          {legacy.length > 0 ? <div {...spot.dimProps()} className={SPOTLIGHT_CLASS}><LegacyReportsSection groups={legacy} /></div> : null}
         </SpotlightGroup>
       </PageBody>
     </PageShell>
   );
 }
 
-function EmptyListNote({ filter, legacyCount }: { filter: HubFilter; legacyCount: number }) {
+function EmptyListNote({ filter }: { filter: HubFilter }) {
   const term = filter.term.trim();
   let text: string;
   if (filter.category || filter.persona) text = "Seçili süzgeçlerle eşleşen rapor yok; “Sıfırla” ile hepsini görün.";
-  else if (term) text = legacyCount > 0 ? `“${term}” ile eşleşen yeni rapor yok; eski raporlarda eşleşenler aşağıda.` : `“${term}” ile eşleşen rapor yok.`;
-  else text = legacyCount > 0 ? "Size açık yeni rapor henüz yok; önceki raporlar aşağıda." : "Size açık rapor henüz yok.";
+  else if (term) text = `“${term}” ile eşleşen rapor yok.`;
+  else text = "Size açık rapor henüz yok.";
   return <p className="text-sm text-muted-foreground">{text}</p>;
 }

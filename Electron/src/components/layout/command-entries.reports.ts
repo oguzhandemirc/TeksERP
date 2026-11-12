@@ -20,6 +20,12 @@ export function leafPermission(to: string, categoryPermission: string | undefine
   return row?.nesil === "v2" ? row.izin : categoryPermission;
 }
 
+/** Alt karonun raporu palette başka bir girişle mi duruyor (v2 yaprağı ya da yeni yerine taşınan araç)? */
+function hasOwnEntry(to: string): boolean {
+  const key = reportKeyOfPath(to);
+  return key !== null && (REPORT_BY_KEY.get(key)?.nesil === "v2" || relocatedHostOf(key) !== null);
+}
+
 /**
  * Raporlar bölümleri — kategori hub'ı + o kategorinin TÜM alt raporları.
  *
@@ -70,22 +76,16 @@ export const reportCommandSections: CommandSection[] = reportTiles.map((cat) => 
     keywords: `rapor ${cat.title}`,
   }));
 
-  // Eski yapraklar palette "Eski:" önekli İKİZLE görünür; özgün giriş palette çizilmez ama İLK eşleşme
-  // olarak sekme başlığını (`tab-meta`) özgün adla verir — ikiz bu yüzden SONDA durur.
-  const legacyTwins: CommandEntry[] = subs.map((sub) => ({
-    ...sub,
-    key: `${sub.key}:legacy`,
-    get label() { return `Eski: ${sub.label}`; },
-    keywords: `${sub.keywords} eski geçiş`,
-  }));
-  const currentSubs = subs.map((sub) => ({ ...sub, visibleWhen: () => false }));
+  // Taşınan araç (`relocated:`) ve v2 yaprak (`report-v2:`) palette kendi girişiyle çıkar: buradaki ikizi
+  // çizilmez ama sekme başlığını (`tab-meta`) verir. Kalanlar (muhasebe uzman araçları) kendi adıyla görünür.
+  const shownSubs = subs.map((sub) => (hasOwnEntry(sub.to) ? { ...sub, visibleWhen: () => false } : sub));
 
   return {
     heading: `Raporlar · ${cat.title}`,
     // Alt raporun breadcrumb'ı kategori hub'ına çıkar (eskiden hiç yoktu —
     // rapor sayfasından geri dönüş yalnız sekme/geçmiş ile mümkündü).
     parent: { label: cat.title, to: cat.to },
-    entries: [hub, ...currentSubs, ...legacyTwins],
+    entries: [hub, ...shownSubs],
   };
 });
 

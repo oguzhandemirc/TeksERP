@@ -11,7 +11,8 @@
  * Raporlarda kullanılabilen sayı biçimleri — kapalı küme. Eşitlik bekçisi bu kümenin
  * HER elemanını ölçer; rapor spec'lerini tarayan bekçi kümede olmayan biçimi reddeder.
  */
-export const REPORT_NUM_FMTS = ["#,##0", "#,##0.#", "#,##0.0", "#,##0.00", "0.0", "#,##0.0000"] as const;
+// "#,##0.#" son kullanıcısı (Talep Analizi dışa aktarımı) 2026-11-12'de kalktı; davranış kuralı değişmedi.
+export const REPORT_NUM_FMTS = ["#,##0", "#,##0.0", "#,##0.00", "0.0", "#,##0.0000"] as const;
 
 /** Excel sayı biçimi — sabit ya da hücre değerine göre seçilen. */
 export type ExcelNumFmt = string | ((value: unknown) => string | undefined);

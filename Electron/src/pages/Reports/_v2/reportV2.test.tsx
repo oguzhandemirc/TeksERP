@@ -81,10 +81,8 @@ describe("§2 ReportsHubPage = Rapor Merkezi (tek yol)", () => {
     expect(within(tools).getAllByRole("link")).toHaveLength(3);
     const fav = screen.getByRole("region", { name: "Favorilerim" });
     expect(within(fav).getByText("Kasa & Banka Defteri")).toBeInTheDocument();
-    const legacy = screen.getByRole("region", { name: "Eski raporlar (geçiş dönemi)" });
-    // 2026-11-12: yalnız panelden henüz kalkmamış eski raporlar (satış 2 + müşteri 1), kendi kategorilerinde.
-    expect(within(legacy).getAllByRole("listitem")).toHaveLength(3);
-    expect(within(legacy).getAllByRole("group")).toHaveLength(2);
+    // 2026-11-12: birleşen eski raporların hepsi panelden kalktı — "Eski raporlar" bölümü çizilmez.
+    expect(screen.queryByRole("region", { name: "Eski raporlar (geçiş dönemi)" })).toBeNull();
     // `hazir:true` satır Merkez'de çizilir, `hazir:false` çizilmez (ilk hazır satır KQ-D6 kurşun gramajı).
     const readyRows = V2_ROWS.filter((e) => e.hazir);
     expect(readyRows.length, "körlük zemini: hazır v2 satırı yok").toBeGreaterThan(0);

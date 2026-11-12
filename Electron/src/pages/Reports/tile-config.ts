@@ -12,8 +12,6 @@ import {
 } from "lucide-react";
 import type { HubTile } from "./_components/ReportHubGrid";
 import { productionReportTiles } from "./Production/tile-config";
-import { salesReportTiles } from "./Sales/tile-config";
-import { customerReportTiles } from "./Customer/tile-config";
 import { auditReportTiles } from "./Audit/tile-config";
 import { financeReportTiles } from "./Finance/tile-config";
 import { dokumaReportTiles } from "./Dokuma/tile-config";
@@ -51,12 +49,12 @@ export interface ReportTile {
  */
 export const reportCategoryTiles: Record<string, HubTile[]> = {
   production: productionReportTiles,
-  sales: salesReportTiles,
+  sales: [],
   // Eski yaprakları panelden kalktı (2026-11-12); kategori ekranı menü düzeninde v2 raporlarını da kapsar.
   quality: [],
   inventory: [],
   subcontract: [],
-  customer: customerReportTiles,
+  customer: [],
   audit: auditReportTiles,
   finance: financeReportTiles,
   dokuma: dokumaReportTiles,

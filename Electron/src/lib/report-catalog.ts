@@ -53,7 +53,7 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
   { key: "sales/demand-analysis", baslik: "Talep Analizi", soru: "Hangi ürün ve renkler bu dönemde ne kadar talep gördü, önceki döneme göre nasıl değişti?",
     sinif: "gelismis", izin: "report:sales", modul: "cekirdek:siparis-musteri", varsayilanGun: 90, tarih: "aralik-iso",
     panelYolu: "reports/sales/demand-analysis", uc: "/api/reports/sales/demand-analysis", kapiTasiyici: [{ dosya: "src/routes/reports/sales.routes.ts", yol: "/demand-analysis" }], yuzey: "yaprak",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "sales/siparis-talep" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "sales/siparis-talep" }, emekli: true },
   { key: "sales/order-intake", baslik: "Sipariş Karnesi", soru: "Bu dönemde ne kadar sipariş girdi ve önceki döneme göre nasıl değişti?",
     sinif: "gelismis", izin: "report:sales", modul: "cekirdek:siparis-musteri", varsayilanGun: 30, tarih: "aralik-iso",
     panelYolu: "reports/sales/order-intake", uc: "/api/reports/sales/order-intake", kapiTasiyici: [{ dosya: "src/routes/reports/sales.routes.ts", yol: "/order-intake" }], yuzey: "yaprak",
@@ -69,7 +69,7 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
   { key: "sales/destination-mix", baslik: "Yurtiçi / Yurtdışı Satış", soru: "Satışların ne kadarı yurtiçi, ne kadarı yurtdışı; ihracatta kime, nereye, ne kadar ve hangi fiyatla gidiyor?",
     sinif: "gelismis", izin: "report:sales", modul: "cekirdek:siparis-musteri", varsayilanGun: 30, tarih: "aralik-iso",
     panelYolu: "reports/sales/destination-mix", uc: "/api/reports/sales/destination-mix", kapiTasiyici: [{ dosya: "src/routes/reports/sales.routes.ts", yol: "/destination-mix" }], yuzey: "yaprak",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "sales/sevkiyat" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "sales/sevkiyat" }, emekli: true },
   { key: "sales/return-scorecard", baslik: "İade Karnesi", soru: "Bu dönemde ne kadar mal iade edildi ve önceki döneme göre nasıl değişti?",
     sinif: "gelismis", izin: "report:sales", modul: "cekirdek:siparis-musteri", varsayilanGun: 30, tarih: "aralik-iso",
     panelYolu: "reports/sales/return-scorecard", uc: "/api/reports/sales/return-scorecard", kapiTasiyici: [{ dosya: "src/routes/reports/sales.routes.ts", yol: "/return-scorecard" }], yuzey: "yaprak",
@@ -174,7 +174,7 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
   { key: "customer/order-profile", baslik: "Müşteri Sipariş Profili", soru: "Bu müşteri genelde hangi ürün ve renkleri sipariş ediyor?",
     sinif: "basit", izin: "report:customer", modul: "cekirdek:siparis-musteri", varsayilanGun: null, tarih: "yok",
     panelYolu: "reports/customer/order-profile", uc: "/api/reports/customer/order-profile", kapiTasiyici: [{ dosya: "src/routes/reports/customer.routes.ts", yol: "/order-profile" }], yuzey: "yaprak",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "sales/siparis-talep" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "sales/siparis-talep" }, emekli: true },
 
   // ── DENETİM ───────────────────────────────────────────────────────────────
   { key: "audit/system-log-summary", baslik: "Denetim Kaydı Özeti", soru: "Bu dönemde sistemde hangi işlemler kaç kez yapıldı?",

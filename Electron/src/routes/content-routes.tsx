@@ -175,11 +175,6 @@ import { customReportRoutes } from "@/pages/Reports/_v2/custom/routes";
 import { ProductionReportsHubPage } from "@/pages/Reports/Production/ProductionReportsHubPage";
 import { TravelerTracePage } from "@/pages/Reports/Production/TravelerTracePage";
 import { BatchTracePage } from "@/pages/Reports/Production/BatchTracePage";
-import { SalesReportsHubPage } from "@/pages/Reports/Sales/SalesReportsHubPage";
-import { DestinationMixPage } from "@/pages/Reports/Sales/DestinationMixPage";
-import { DemandAnalysisPage } from "@/pages/Reports/Sales/DemandAnalysisPage";
-import { CustomerReportsHubPage } from "@/pages/Reports/Customer/CustomerReportsHubPage";
-import { OrderProfilePage } from "@/pages/Reports/Customer/OrderProfilePage";
 import { AuditReportsHubPage } from "@/pages/Reports/Audit/AuditReportsHubPage";
 import { SystemLogSummaryPage } from "@/pages/Reports/Audit/SystemLogSummaryPage";
 import { UserActivityPage } from "@/pages/Reports/Audit/UserActivityPage";
@@ -1652,27 +1647,12 @@ export const contentRoutes: RouteObject[] = [
       </ProtectedRoute>
     ),
   },
+  // Satış kategori hub'ı (2026-11-12, son eski raporu panelden kalktı): ekran anahtarı yaşadığı için Rapor Merkezi'ne yönlenir.
   {
     path: "reports/sales",
     element: (
       <ProtectedRoute requirePermission="report:sales">
-        <SalesReportsHubPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "reports/sales/destination-mix",
-    element: (
-      <ProtectedRoute requirePermission="report:sales">
-        <DestinationMixPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "reports/sales/demand-analysis",
-    element: (
-      <ProtectedRoute requirePermission="report:sales">
-        <DemandAnalysisPage />
+        <Navigate to="/reports" replace />
       </ProtectedRoute>
     ),
   },
@@ -1781,19 +1761,12 @@ export const contentRoutes: RouteObject[] = [
       </ProtectedRoute>
     ),
   },
+  // Müşteri kategori hub'ı (2026-11-12, son eski raporu panelden kalktı): ekran anahtarı yaşadığı için Rapor Merkezi'ne yönlenir.
   {
     path: "reports/customer",
     element: (
       <ProtectedRoute requirePermission="report:customer">
-        <CustomerReportsHubPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "reports/customer/order-profile",
-    element: (
-      <ProtectedRoute requirePermission="report:customer">
-        <OrderProfilePage />
+        <Navigate to="/reports" replace />
       </ProtectedRoute>
     ),
   },

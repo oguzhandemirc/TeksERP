@@ -14,6 +14,7 @@
 import prisma from "../../lib/prisma";
 import { Prisma } from "@prisma/client";
 import type { DateRange } from "./_shared";
+import { shippedBucketOf as bucketOf } from "./_destination";
 import { collectShipped, collectShippedWeight, type ShippedCell } from "./_shipped";
 import { aggregateMoney, collectMoneyRows, type MixBucket, type MoneyAgg, type MoneyRow } from "./_destination-mix-money";
 import { collectBacklog, collectFulfillment, type BacklogRow, type FulfillmentBucket, type OrderBucket } from "./_destination-mix-orders";
@@ -26,7 +27,6 @@ export const MIX_BUCKET_LABELS: Record<MixBucket | OrderBucket, string> = {
 };
 export const KUR_KAYNAGI = "Kayıtlı kur tablosunun SEVK GÜNÜ (fabrika günü) satırı; satır yoksa TL karşılığı verilmez (\"kur yok\")";
 const BUCKETS: MixBucket[] = ["DOMESTIC", "EXPORT", "NONE"];
-const bucketOf = (d: string | null): MixBucket => (d === "DOMESTIC" || d === "EXPORT" ? d : "NONE");
 const r1 = (n: number): number => Math.round(n * 10) / 10;
 
 export interface MixBucketSummary {
