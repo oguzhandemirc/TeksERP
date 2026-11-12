@@ -13,6 +13,8 @@ interface Props {
   /** Spec bir FONKSİYON — veri yüklendiğinde değil, TIKLANDIĞINDA üretilir. */
   buildSpec: () => ReportExportSpec | null;
   disabled?: boolean;
+  /** Başlık satırında az yer kaplayan bitişik düğme grubu (etiket geniş ekranda). */
+  compact?: boolean;
 }
 
 /** Rapor çıktısı geçmişe "Rapor" türüyle, başlığıyla düşer (içerik gitmez). */
@@ -27,7 +29,7 @@ const reportSubject = (title: string): PrintSubject => ({ kind: "RAPOR", no: tit
  * `null` dönmesi "henüz veri yok" demektir ve butonlar sessizce iş yapmaz —
  * boş bir Excel indirmek, hiç indirmemekten kötüdür (kullanıcı onu veri sanır).
  */
-export function ReportExportBar({ buildSpec, disabled }: Props) {
+export function ReportExportBar({ buildSpec, disabled, compact = false }: Props) {
   const [busy, setBusy] = useState<null | "xlsx" | "pdf">(null);
   const pdfApi = typeof window !== "undefined" ? window.api?.pdf : undefined;
   const webPdf = !pdfApi && isWebPdf();
@@ -82,6 +84,9 @@ export function ReportExportBar({ buildSpec, disabled }: Props) {
     void printTracked({ subject: reportSubject(spec.title), html: buildReportHtml(await grafikleriDoldur(spec)) });
   };
 
+  if (compact) {
+    return <CompactExportGroup off={disabled || busy !== null} busy={busy} showPdf={Boolean(pdfApi || webPdf)} onExcel={onExcel} onPdf={onPdf} onPrint={onPrint} />;
+  }
   return (
     <div className="flex items-center gap-1.5">
       <Button type="button" variant="outline" size="sm" className="gap-1.5" disabled={disabled || busy !== null} onClick={onExcel}>
@@ -95,6 +100,35 @@ export function ReportExportBar({ buildSpec, disabled }: Props) {
       ) : null}
       <Button type="button" variant="outline" size="sm" className="gap-1.5" disabled={disabled || busy !== null} onClick={onPrint}>
         <Printer className="h-4 w-4" /> Yazdır
+      </Button>
+    </div>
+  );
+}
+
+interface CompactProps {
+  off: boolean;
+  busy: null | "xlsx" | "pdf";
+  showPdf: boolean;
+  onExcel: () => void;
+  onPdf: () => void;
+  onPrint: () => void;
+}
+
+/** Başlık satırı için bitişik düğme grubu; etiket yalnız geniş ekranda. */
+function CompactExportGroup({ off, busy, showPdf, onExcel, onPdf, onPrint }: CompactProps) {
+  const seg = "h-8 gap-1.5 rounded-none border-0 px-2.5";
+  return (
+    <div className="flex items-center divide-x divide-border overflow-hidden rounded-md border bg-card" role="group" aria-label="Dışa aktar">
+      <Button type="button" variant="ghost" size="sm" className={seg} disabled={off} onClick={onExcel} title="Excel" aria-label="Excel">
+        <FileSpreadsheet className="h-4 w-4 text-success" /> <span className="hidden xl:inline">{busy === "xlsx" ? "Excel…" : "Excel"}</span>
+      </Button>
+      {showPdf ? (
+        <Button type="button" variant="ghost" size="sm" className={seg} disabled={off} onClick={onPdf} title="PDF" aria-label="PDF">
+          <FileDown className="h-4 w-4 text-destructive" /> <span className="hidden xl:inline">{busy === "pdf" ? "PDF…" : "PDF"}</span>
+        </Button>
+      ) : null}
+      <Button type="button" variant="ghost" size="sm" className={seg} disabled={off} onClick={onPrint} title="Yazdır" aria-label="Yazdır">
+        <Printer className="h-4 w-4" /> <span className="hidden xl:inline">Yazdır</span>
       </Button>
     </div>
   );

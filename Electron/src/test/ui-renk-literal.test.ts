@@ -4,7 +4,7 @@
 // Kişiselleştirme (hazır tema, özel renk, menü stili, zemin tonu) yalnız CSS değişkenleri üzerinden
 // çalışır. Ortak bileşende ham `#hex`, `rgb()/hsl(<sayı>)` ya da Tailwind'in sabit paleti
 // (`bg-amber-500`, `text-sky-600`…) seçilen temayı DELER: o parça hep aynı renkte kalır.
-// Ölçülen kökler: components/ui · layout · data-table · hub · insight · record · pages/Dashboard · pages/Reports/_hub · pages/Definitions/cariler. `hsl(var(--…))` serbest; perde (scrim)
+// Ölçülen kökler: components/ui · layout · data-table · hub · insight · record · pages/Dashboard · pages/Reports/_hub · pages/Reports/_v2/view (+ FILES) · pages/Definitions/cariler. `hsl(var(--…))` serbest; perde (scrim)
 // için `bg-black/NN` serbest (karartma temadan bağımsız siyahtır).
 // =============================================================================
 import { describe, it, expect } from "vitest";
@@ -13,7 +13,9 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 const SRC = path.dirname(fileURLToPath(import.meta.url)).replace(/\/test$/, "");
-const ROOTS = ["components/ui", "components/layout", "components/data-table", "components/hub", "components/insight", "components/record", "pages/Dashboard", "pages/Reports/_hub", "pages/Definitions/cariler"];
+const ROOTS = ["components/ui", "components/layout", "components/data-table", "components/hub", "components/insight", "components/record", "pages/Dashboard", "pages/Reports/_hub", "pages/Reports/_v2/view", "pages/Definitions/cariler"];
+/** Kökü taranmayan dizindeki tek dosyalar (rapor v2 ekran iskeleti; PDF/baskı paleti `_v2/grafik/tema.ts` bilerek dışarıda). */
+const FILES = ["pages/Reports/_v2/ReportV2Page.tsx", "pages/Reports/_v2/ParamChips.tsx", "pages/Reports/_components/ReportExportBar.tsx"];
 
 /** Bilinçli istisnalar — yol `src`ye göre; gerekçesiyle. Liste yalnız DARALIR. */
 const EXEMPT: Record<string, string> = {};
@@ -47,7 +49,7 @@ export function colorLiterals(source: string): string[] {
 }
 
 describe("ortak bileşenlerde sabit renk yok", () => {
-  const files = ROOTS.flatMap((r) => walk(path.join(SRC, r)));
+  const files = [...ROOTS.flatMap((r) => walk(path.join(SRC, r))), ...FILES.map((f) => path.join(SRC, f))];
   const found = new Map<string, string[]>();
   for (const f of files) {
     const rel = path.relative(SRC, f);

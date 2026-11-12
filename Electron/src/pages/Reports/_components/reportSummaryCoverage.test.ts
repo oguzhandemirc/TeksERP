@@ -31,8 +31,8 @@ const TABLE_TAGS = ["<DetailTable", "<AgingBlockTable", "<CashLedgerTable", "<Ka
  * böyle sustu). Sınırını beyan etmeyen yüklem alakasızla eşleşir.
  */
 const METRIC_RE = /<MetricCard[\s/>]/;
-/** v2 zarfını çizen yaprak (D4-H1 Masraf Özeti): özet şeridi `ReportBody` içindeki ana sayı kartıdır (`HeadlineCard`). */
-const V2_BODY_RE = /<ReportBody[\s/>]/;
+/** v2 zarfını çizen yaprak (D4-H1 Masraf Özeti): özet şeridi `ReportBody` içindeki ana sayı kartıdır (`HeadlineCard`); v2 çerçevesi `ReportV2Frame` gövdeyi kendisi çizer. */
+const V2_BODY_RE = /<(?:ReportBody|ReportV2Frame)[\s/>]/;
 /** `<ReportBody` istisnası YALNIZ kendi yaprak sayfası beyanlı v2 anahtarlarına (`V2_KEYS_WITH_OWN_PAGE`) açıktır. */
 const OWN_PAGE_PATHS = new Set(REPORT_CATALOG.filter((e) => V2_KEYS_WITH_OWN_PAGE.has(e.key)).map((e) => e.panelYolu));
 const v2BodyExempt = (y: { yol: string; src: string }): boolean => OWN_PAGE_PATHS.has(y.yol) && V2_BODY_RE.test(y.src);

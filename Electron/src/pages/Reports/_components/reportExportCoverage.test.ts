@@ -48,7 +48,9 @@ describe("rapor çıktı kapsamı — her yaprak sayfa ReportExportBar çizer", 
       .filter((y) => {
         const dosya = dosyaBul(y.bilesen);
         if (!dosya) return false; // ayrı testte kırmızı
-        return !readFileSync(dosya, "utf8").includes("<ReportExportBar");
+        // v2 çerçevesi (`_v2/view/ReportV2Frame`) şeridi kendisi çizer.
+        const src = readFileSync(dosya, "utf8");
+        return !src.includes("<ReportExportBar") && !src.includes("<ReportV2Frame");
       })
       .map((y) => `${y.yol} (${y.bilesen})`);
     expect(eksik).toEqual([]);
