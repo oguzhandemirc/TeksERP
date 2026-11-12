@@ -52,8 +52,6 @@ describe("özet şeridi kova etiketi", () => {
           totalOrderedQty: 0,
           totalShippedQty: 0,
           totalOpenQty: 0,
-          overdueCount: 0,
-          dueThisWeekCount: 0,
           noWorkOrderCount: 0,
           amountByCurrency: {},
         }}

@@ -1,6 +1,4 @@
 import {
-  AlertTriangle,
-  CalendarClock,
   ClipboardList,
   Factory,
   Ruler,
@@ -25,8 +23,8 @@ export type OrderStatsView = "sade" | "onerilen" | "genis";
 
 export const ORDER_STATS_VIEWS: Array<{ key: OrderStatsView; label: string; hint: string }> = [
   { key: "sade", label: "Sade", hint: "Adet ve durum rozetleri" },
-  { key: "onerilen", label: "Önerilen", hint: "+ metraj ve geciken" },
-  { key: "genis", label: "Geniş", get hint() { return `+ ${TERIM.terbiyeIsEmri.tekilKucuk}, termin, tutar`; } },
+  { key: "onerilen", label: "Önerilen", hint: "+ metraj" },
+  { key: "genis", label: "Geniş", get hint() { return `+ ${TERIM.terbiyeIsEmri.tekilKucuk}, tutar`; } },
 ];
 
 // Envanter şeridiyle AYNI biçim: özet bantlarının ortak gösterim biçimi (`lib/format`, binlik ayracı yok).
@@ -48,9 +46,6 @@ const STATUS_TONE: Record<string, string> = {
   // İptal bilerek SOLUK: listede zaten varsayılan gizli, göze girmemeli.
   CANCELLED: "text-muted-foreground",
 };
-
-/** Sevk bekleyen (terminal olmayan) durumlar — "geciken" kümesinin tanımı. */
-const OPEN_STATUSES = "PENDING,APPROVED,PARTIAL_SHIPPED";
 
 export interface OrdersStatsProps {
   data: OrderStats | undefined;
@@ -82,7 +77,7 @@ export interface OrdersStatsProps {
  *  - Ayar açılırı (`ml-auto`) satırın EN SAĞINDA kalır.
  *  - İçerik İKİ EKSENDE çözülür: **görünüm modu TAVAN, pencere genişliği
  *    TABAN.** Kullanıcı "Geniş" seçse de dar pencerede ayrıntı grupları
- *    gizlenir (`lg` = metraj, `2xl` = tutar/termin/iş emri). Böylece şerit
+ *    gizlenir (`lg` = metraj, `2xl` = tutar/iş emri). Böylece şerit
  *    dar pencerede üç satıra taşmaz. Gizlenen şey yalnız GÖRÜNÜM — sayılar
  *    aynı sorgudan gelir, hiçbir rakamın tanımı değişmez.
  */
@@ -163,57 +158,20 @@ export function OrdersStats({
         />
       ))}
 
-      {showQty && data.overdueCount > 0 && (
-        <Chip
-          icon={AlertTriangle}
-          label="Geciken"
-          count={data.overdueCount}
-          tone="text-destructive"
-          // Backend sayacın tanımıyla BİREBİR aynı küme: açık statüler +
-          // termini bugünden önce. Var olmayan bir filtre uydurulmuyor.
-          onClick={() =>
-            onApplyFilter({
-              "filter[status]": OPEN_STATUSES,
-              dateField: "deadline",
-              dateFrom: null,
-              dateTo: new Date().toISOString(),
-            })
-          }
-        />
-      )}
-
-      {/* TERMİN + İŞ EMRİ kademesi — tutarla aynı eşik (`2xl`). Her iki sayaç
-          da 0 ise grup HİÇ doğmaz: boş bir flex çocuğu bile `gap` üretir. */}
-      {showExtras && (data.dueThisWeekCount > 0 || data.noWorkOrderCount > 0) && (
+      {/* İŞ EMRİ kademesi — tutarla aynı eşik (`2xl`). Sayaç 0 ise grup HİÇ doğmaz:
+          boş bir flex çocuğu bile `gap` üretir. Termin sayaçları yok (kullanıcı kararı 2026-11-12). */}
+      {showExtras && data.noWorkOrderCount > 0 && (
         <div
           data-testid="orders-stats-extra"
           className="hidden items-center gap-x-2.5 2xl:flex"
         >
-          {data.dueThisWeekCount > 0 && (
-            <Chip
-              icon={CalendarClock}
-              label="Bu hafta"
-              count={data.dueThisWeekCount}
-              tone="text-amber-600 dark:text-amber-400"
-              onClick={() =>
-                onApplyFilter({
-                  "filter[status]": OPEN_STATUSES,
-                  dateField: "deadline",
-                  dateFrom: new Date().toISOString(),
-                  dateTo: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-                })
-              }
-            />
-          )}
-          {data.noWorkOrderCount > 0 && (
-            <Chip
-              icon={Factory}
-              label={`${TERIM.terbiyeIsEmri.cumleBasi.yalin} yok`}
-              count={data.noWorkOrderCount}
-              tone="text-muted-foreground"
-              onClick={() => onApplyFilter({ "filter[woState]": "NONE" })}
-            />
-          )}
+          <Chip
+            icon={Factory}
+            label={`${TERIM.terbiyeIsEmri.cumleBasi.yalin} yok`}
+            count={data.noWorkOrderCount}
+            tone="text-muted-foreground"
+            onClick={() => onApplyFilter({ "filter[woState]": "NONE" })}
+          />
         </div>
       )}
 

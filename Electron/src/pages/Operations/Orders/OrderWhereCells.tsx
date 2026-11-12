@@ -1,10 +1,9 @@
-import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/operations/StatusBadge";
-import { OVERDUE_TEXT, orderShipView, orderWhereView } from "./order-where-text";
+import { orderShipView, orderWhereView } from "./order-where-text";
 import type { Order } from "./types";
 
 /**
- * "Nerede?" hücresi — renkli rozet + termin geçtiyse kırmızı ek rozet. Metin
+ * "Nerede?" hücresi — renkli rozet; termin vurgusu yok (kullanıcı kararı 2026-11-12). Metin
  * `orderWhereView`dan (Excel/PDF ile aynı); alan yoksa (üretim kapalı / eski backend) "—".
  */
 export function WhereCell({ order }: { order: Pick<Order, "nerede" | "manualClosedById"> }) {
@@ -13,11 +12,6 @@ export function WhereCell({ order }: { order: Pick<Order, "nerede" | "manualClos
   return (
     <div className="flex flex-wrap items-center gap-1">
       <StatusBadge status={view.text} tones={{ [view.text]: view.tone }} className="whitespace-normal text-left" />
-      {view.overdue && (
-        <Badge variant="destructive" className="text-[10px]" data-testid="where-overdue">
-          {OVERDUE_TEXT}
-        </Badge>
-      )}
     </div>
   );
 }

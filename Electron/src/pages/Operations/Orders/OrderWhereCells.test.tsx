@@ -7,12 +7,11 @@ import type { Order, OrderLine, OrderWhere } from "./types";
 const nerede: OrderWhere = {
   durum: "YERLER",
   yerler: [{ tur: "FASON", id: "f1", ad: "Akın Boya", topSayisi: 8, metre: 400, gun: 3 }],
-  terminGecti: true,
   sonHareket: null,
 };
 
 describe("Nerede? / Sevk hücreleri", () => {
-  it("ekrandaki metin = Excel/PDF metni (rozetler ' · ' ile birleşir)", () => {
+  it("ekrandaki metin = Excel/PDF metni; termin rozeti yok", () => {
     const row = { nerede, manualClosedById: null };
     const { container } = render(<WhereCell order={row} />);
     const shown = Array.from(container.firstElementChild!.children)
@@ -20,12 +19,7 @@ describe("Nerede? / Sevk hücreleri", () => {
       .join(" · ");
     expect(shown).toBe(orderWhereExportText(row));
     expect(screen.getByText("Fasonda – Akın Boya · 8 top · 3 gündür").className).toMatch(/warning/);
-    expect(screen.getByTestId("where-overdue")).toHaveTextContent("Termini geçti");
-  });
-
-  it("termin geçmediyse ek rozet çizilmez", () => {
-    render(<WhereCell order={{ nerede: { ...nerede, terminGecti: false }, manualClosedById: null }} />);
-    expect(screen.queryByTestId("where-overdue")).toBeNull();
+    expect(screen.queryByText(/Termin/)).toBeNull();
   });
 
   it("alan yok (üretim kapalı / eski backend) → '—'", () => {

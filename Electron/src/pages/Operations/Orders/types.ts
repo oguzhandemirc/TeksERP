@@ -155,7 +155,7 @@ export interface OrderWhere {
   durum: OrderWhereState;
   /** Sunucu sıralı: top sayısı çoktan aza. */
   yerler: OrderWherePlace[];
-  terminGecti: boolean;
+  // Sunucu `terminGecti` de gönderir; panel okumaz (termin vurgusu kalktı, 2026-11-12).
   sonHareket: string | null;
 }
 

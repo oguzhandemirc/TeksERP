@@ -1,11 +1,8 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { AlertTriangle } from "lucide-react";
 import { safeFormat } from "@/lib/format";
 import { formatCalendarDay } from "@/lib/factory-time";
-import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/operations/StatusBadge";
-import { DeadlineBadge } from "@/components/operations/DeadlineBadge";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
 import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
 import {
@@ -15,7 +12,6 @@ import {
   woRollupLabels,
   woRollupTones,
 } from "./work-order-rollup";
-import { deriveDeadlineRisk } from "./deadline-risk";
 import type { Order, OrderLine } from "./types";
 import {
   distinctLineLabels,
@@ -150,28 +146,10 @@ function MetreCell({ order }: { order: Order }) {
   );
 }
 
-/**
- * Termin hücresi — DeadlineBadge'in soluna koşullu risk üçgeni. DeadlineBadge'e
- * dokunulmaz (WorkOrders ile paylaşılan saf tarih bileşeni); risk sinyali
- * termin + üretim durumu birleşimidir, burada türetilir.
- */
+/** Termin hücresi — düz tarih (fabrika günü); kalan/geçen gün rozeti yok (kullanıcı kararı 2026-11-12). */
 function DeadlineCell({ order }: { order: Order }) {
-  const risk = deriveDeadlineRisk(order);
-  return (
-    <div className="flex items-center gap-1.5">
-      {risk && (
-        <span title={risk.label} className="inline-flex shrink-0">
-          <AlertTriangle
-            className={cn(
-              "h-3.5 w-3.5",
-              risk.overdue ? "text-destructive" : "text-warning",
-            )}
-          />
-        </span>
-      )}
-      <DeadlineBadge deadline={order.deadline} />
-    </div>
-  );
+  if (!order.deadline) return <span className="text-muted-foreground text-xs">—</span>;
+  return <span className="text-xs tabular-nums">{formatCalendarDay(order.deadline, "dd.MM.yyyy")}</span>;
 }
 
 /**
