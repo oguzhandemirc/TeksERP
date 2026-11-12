@@ -1,12 +1,13 @@
 import type { ReactNode } from "react";
 import { ArrowDownRight, ArrowUpRight, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatDisplay } from "@/lib/format";
 import { IconTile, type IconTileTone } from "./icon-tile";
 
 export interface StatCardProps {
   /** Küçük gri etiket ("Açık sipariş"). */
   label: ReactNode;
-  /** Kalın büyük değer — biçimlenmiş metin ya da düğüm. */
+  /** Kalın büyük değer — biçimlenmiş metin ya da düğüm; ham sayı ortak gösterim biçimiyle basılır ("4.295"). */
   value: ReactNode;
   icon?: LucideIcon;
   tone?: IconTileTone;
@@ -53,7 +54,7 @@ export function StatCard({ label, value, icon, tone = "primary", delta, trend = 
           <p className="truncate text-xs font-medium text-muted-foreground">{label}</p>
         )}
         <p className={cn("mt-0.5 truncate font-bold leading-tight tabular-nums", layout === "stacked" ? "text-2xl" : "text-xl")}>
-          {loading ? <span className="skeleton-shimmer inline-block h-6 w-20 rounded-md bg-muted align-middle" /> : value}
+          {loading ? <span className="skeleton-shimmer inline-block h-6 w-20 rounded-md bg-muted align-middle" /> : typeof value === "number" ? formatDisplay(value) : value}
         </p>
         {delta != null && (
           <p

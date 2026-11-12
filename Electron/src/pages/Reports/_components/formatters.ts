@@ -1,8 +1,10 @@
+import { formatDisplay } from "@/lib/format";
 import { factoryLocaleDateString, factoryLocaleString, formatCalendarDay } from "@/lib/factory-time";
 // Rapor sayfalarında tekrar tekrar kullanılan formatlayıcılar.
 
-const trNum = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
-const trInt = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 0 });
+// Rapor Merkezi gösterim biçimi = `lib/format` ortak biçimi (binlik nokta, ondalık virgül).
+const trNum = { format: (n: number) => formatDisplay(n, 1) };
+const trInt = { format: (n: number) => formatDisplay(n, 0) };
 
 export const fmtNum = (n: number | null | undefined): string => {
   if (n === null || n === undefined || Number.isNaN(n)) return "—";

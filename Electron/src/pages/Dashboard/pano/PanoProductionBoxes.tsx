@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { ChevronRight, ShieldCheck, Users, Workflow } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatNumber } from "@/lib/format";
+import { formatDisplay, formatPercent } from "@/lib/format";
 import { upperTr } from "@/lib/tr-case";
 import type { OpenWorkOrdersBox, QualityBox, StationOutputBox, TopCustomersBox } from "./box-types";
 import { formatCount, metre } from "./pano-bicim";
@@ -105,7 +105,7 @@ export function PanoOpenWorkOrders({ d, erisim }: { d: OpenWorkOrdersBox; erisim
   );
 }
 
-const pct = (n: number | null): string => (n === null ? "—" : `%${formatNumber(n, 1)}`);
+const pct = (n: number | null): string => formatPercent(n);
 
 /** Kalite özeti — 1. kalite payı halkası, kalite kırılımı ve fire satırı. */
 export function PanoQuality({ d, erisim }: { d: QualityBox; erisim: PanoErisim }) {
@@ -139,7 +139,7 @@ export function PanoQuality({ d, erisim }: { d: QualityBox; erisim: PanoErisim }
           <span className="flex-1 text-muted-foreground">Fire (hurda)</span>
           <span className="flex flex-col items-end leading-tight">
             <span className={cn("font-semibold tabular-nums", (d.fire.hurdaYuzde ?? 0) > 0 && "text-warning")}>{metre(d.fire.hurdaMetre)} · {pct(d.fire.hurdaYuzde)}</span>
-            <span className="text-[11px] tabular-nums text-muted-foreground">{formatCount(d.fire.tespitEdilenHata)} hata{d.fire.binMetredeHata !== null ? ` · ${formatNumber(d.fire.binMetredeHata, 1)}/1000 m` : ""}</span>
+            <span className="text-[11px] tabular-nums text-muted-foreground">{formatCount(d.fire.tespitEdilenHata)} hata{d.fire.binMetredeHata !== null ? ` · ${formatDisplay(d.fire.binMetredeHata, 1)}/1.000 m` : ""}</span>
           </span>
         </RowLink>
       </div>

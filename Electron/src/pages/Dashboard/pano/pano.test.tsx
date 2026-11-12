@@ -234,8 +234,8 @@ describe("Pano — yeni kutular", () => {
     renderPano();
     const ciroEl = await screen.findByTestId("pano-para-ciro");
     const ciro = within(ciroEl);
-    expect(ciro.getByText("1000 TRY")).toBeTruthy();
-    expect(ciro.getByText("50 USD")).toBeTruthy();
+    expect(ciro.getByText("1.000,00 TRY")).toBeTruthy();
+    expect(ciro.getByText("50,00 USD")).toBeTruthy();
     expect(ciro.queryByText(/Toplam/i)).toBeNull();
     const alacak = within((await screen.findByText("Alacaklar")).closest("section")!);
     expect(alacak.getByText("TRY")).toBeTruthy();

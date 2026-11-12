@@ -1,6 +1,6 @@
 // Cari hareketleri — kaynak satırlarını tek biçime çeviren SAF eşleyiciler + birleştirme (zaman azalan).
 // Sevk metresi BRÜT (liste alanı `totalMeters` zaten brüttür); para birimleri toplanmaz, satır kendi biriminde.
-import { formatNumber } from "@/lib/format";
+import { formatMeasure } from "@/lib/format";
 import { orderStatusLabels } from "@/types/enums";
 import { money } from "@/pages/Finance/service";
 import { shipmentStatusLabels, type ShipmentListItem } from "@/pages/Operations/Shipments/types";
@@ -9,7 +9,7 @@ import { orderPath, shipmentPath, type CariMovement, type FasonDispatchRow, type
 
 export const metre = (v: number | string | null | undefined): string | null => {
   const n = typeof v === "string" ? Number(v) : v;
-  return n == null || !Number.isFinite(n) ? null : `${formatNumber(n, 0)} m`;
+  return n == null || !Number.isFinite(n) ? null : formatMeasure(n, "m", 0);
 };
 
 const PAYMENT_METHOD: Record<PaymentRow["method"], string> = { CASH: "Nakit", BANK_TRANSFER: "Havale/EFT", CREDIT_CARD: "Kredi kartı", OTHER: "Diğer" };

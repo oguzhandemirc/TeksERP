@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { cn } from "@/lib/utils";
-import { formatNumber } from "@/lib/format";
+import { formatDisplay } from "@/lib/format";
 import { EChart, type ChartTheme } from "./EChart";
 import { SERIES_DOT } from "./chart-parts";
 
@@ -36,7 +36,7 @@ export function DonutBreakdown({ slices, formatValue, centerCaption, label, empt
       textStyle: { fontFamily: t.yaziTipi, color: t.metin },
       tooltip: { show: !empty, trigger: "item", valueFormatter: (v: unknown) => (typeof v === "number" ? formatValue(v) : "—") },
       title: {
-        text: formatNumber(total, 0),
+        text: formatDisplay(total, 0),
         subtext: centerCaption,
         left: "center",
         top: "38%",
@@ -69,7 +69,7 @@ export function DonutBreakdown({ slices, formatValue, centerCaption, label, empt
                 <span className={cn("h-2.5 w-2.5 shrink-0 rounded-full", SERIES_DOT[i % SERIES_DOT.length])} aria-hidden />
                 <span className="min-w-0 flex-1 truncate" title={d.name}>{d.name}</span>
                 <span className="tabular-nums text-muted-foreground">{formatValue(d.value)}</span>
-                <span className="w-9 text-right font-semibold tabular-nums">%{formatNumber(pct(d), 0)}</span>
+                <span className="w-9 text-right font-semibold tabular-nums">%{formatDisplay(pct(d), 0)}</span>
               </li>
             ))}
           </ul>

@@ -1,5 +1,5 @@
-// Pano metin biçimleri — sayı `lib/format` (tr, program kuralı: binlik ayıracı yok), saat `lib/factory-time`.
-import { formatNumber } from "@/lib/format";
+// Pano metin biçimleri — sayı `lib/format` gösterim biçimi (binlik nokta, ondalık virgül), saat `lib/factory-time`.
+import { formatDisplay, formatMeasure, formatMoney, formatPercent } from "@/lib/format";
 import { factoryDayKey, formatFactory } from "@/lib/factory-time";
 import type { PanoDonem, PanoKova, PanoKpi } from "./types";
 
@@ -13,10 +13,10 @@ const KIYAS_ETIKETI: Record<PanoDonem, string> = {
   yil: "önceki 12 aya göre",
 };
 
-export const metre = (n: number): string => `${formatNumber(n, 0)} m`;
-export const formatCount = (n: number): string => formatNumber(n, 0);
-export const kg = (n: number): string => `${formatNumber(n, 0)} kg`;
-export const para = (n: number, birim: string): string => `${formatNumber(n, 2)} ${birim}`;
+export const metre = (n: number): string => formatMeasure(n, "m");
+export const formatCount = (n: number): string => formatDisplay(n, 0);
+export const kg = (n: number): string => formatMeasure(n, "kg");
+export const para = (n: number, birim: string): string => formatMoney(n, birim);
 
 export interface DegisimRozeti {
   metin: string;
@@ -31,7 +31,7 @@ export function degisimRozeti(k: PanoKpi | null | undefined, donem: PanoDonem): 
   if (!k || k.degisimYuzde === null) return null;
   const y = k.degisimYuzde;
   const trend = y > 0 ? "up" : y < 0 ? "down" : "neutral";
-  const yuzde = `%${formatNumber(Math.abs(y), 1)}`;
+  const yuzde = formatPercent(Math.abs(y));
   // Kartta kısa kıyas (dar kartta "önceki 30 güne göre" kırpılıyordu); kesin pencere `metin`de (ipucu).
   return { metin: `${yuzde} ${KIYAS_ETIKETI[donem]}`, yuzde, kiyas: donem === "bugun" ? "düne göre" : "önceki döneme göre", trend };
 }

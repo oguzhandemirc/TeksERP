@@ -2,13 +2,14 @@
 // Oran "%78", para kuruşlu sabit 2 ondalık (`MONEY_NUM_FMT`, tablo hücresiyle aynı), diğerleri en çok 1 ondalık
 // (sunucu anlatısı `anlati/sayi-bicim.ts` cümlede tam TL yazar). Ölçülemeyen değer "0" YAZILMAZ — "Ölçülemedi" yazılır.
 import { reportCellText } from "@/lib/number-format";
+import { formatDisplay } from "@/lib/format";
 import { BIRIM_METNI, PARA_BIRIMLERI, type AnaSayi, type Birim, type ComparisonTone } from "./sunum";
 import { MONEY_NUM_FMT } from "./table-model";
 
 export const NOT_MEASURED_TEXT = "Ölçülemedi";
 
 function numberText(n: number, maxDecimals: number): string {
-  return n.toLocaleString("tr-TR", { maximumFractionDigits: maxDecimals });
+  return formatDisplay(n, maxDecimals);
 }
 
 /** Değer + birim: "%78" · "42.300 m" · "1.200,00 TL"; `null` → "Ölçülemedi". */

@@ -5,7 +5,7 @@ import { Factory, ShoppingBag, Truck, Users2, type LucideIcon } from "lucide-rea
 import { StatCard } from "@/components/ui/stat-card";
 import type { IconTileTone } from "@/components/ui/icon-tile";
 import { cn } from "@/lib/utils";
-import { formatNumber } from "@/lib/format";
+import { formatDisplay } from "@/lib/format";
 import { partnerRoleLabels, type DirectionFilter, type SubcontractorFilter } from "@/lib/partnerRoles";
 import type { CariFilters } from "../carilerPaging";
 import type { CariRoleCounts } from "./useCariRoleCounts";
@@ -45,7 +45,7 @@ export function CariRoleStrip({ filters, counts, loading }: { filters: CariFilte
         <StatCard
           key={c.key}
           label={c.label}
-          value={counts ? formatNumber(counts[c.key], 0) : "—"}
+          value={counts ? formatDisplay(counts[c.key], 0) : "—"}
           loading={loading}
           icon={c.icon}
           tone={c.tone}

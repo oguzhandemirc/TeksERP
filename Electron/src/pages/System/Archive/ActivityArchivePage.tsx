@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { systemLogService } from "@/services/systemLogService";
 import { factoryLocaleDateString, factoryLocaleString } from "@/lib/factory-time";
+import { formatDisplay } from "@/lib/format";
 
 const STATS_KEY = "system-log-stats";
 
@@ -190,6 +191,5 @@ function StatCard({
 }
 
 function formatCount(n: number | undefined): string {
-  if (n === undefined) return "—";
-  return n.toLocaleString("tr-TR", { useGrouping: false });
+  return formatDisplay(n, 0);
 }

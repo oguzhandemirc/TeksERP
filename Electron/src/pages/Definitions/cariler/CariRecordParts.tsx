@@ -7,7 +7,7 @@ import { StatCard } from "@/components/ui/stat-card";
 import { SectionCard } from "@/components/ui/section-card";
 import { RecordActivityList } from "@/components/record/RecordActivityList";
 import { RecordFacts } from "@/components/record/RecordBits";
-import { formatNumber } from "@/lib/format";
+import { formatDisplay } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { money, type CariRow } from "@/pages/Finance/service";
 import type { OrderStats } from "@/pages/Operations/Orders/service";
@@ -50,9 +50,9 @@ export function cariStatCards({ account, stats }: { account: CariRow | null | un
   }
   if (stats) {
     const open = openOrderCount(stats);
-    if (open > 0) cards.push(<StatCard key="open" label="Açık sipariş" icon={ClipboardList} tone="blue" value={`${formatNumber(open, 0)} sipariş`} hint={`Kalan ${metre(stats.totalOpenQty) ?? "0 m"}`} />);
+    if (open > 0) cards.push(<StatCard key="open" label="Açık sipariş" icon={ClipboardList} tone="blue" value={`${formatDisplay(open, 0)} sipariş`} hint={`Kalan ${metre(stats.totalOpenQty) ?? "0 m"}`} />);
     if (stats.totalCount > 0 && stats.totalOrderedQty > 0) {
-      cards.push(<StatCard key="ordered" label="Sipariş metresi" icon={Ruler} tone="teal" value={metre(stats.totalOrderedQty) ?? "—"} hint={`Siparişten sevk: ${metre(stats.totalShippedQty) ?? "0 m"} · ${formatNumber(stats.totalCount, 0)} sipariş`} />);
+      cards.push(<StatCard key="ordered" label="Sipariş metresi" icon={Ruler} tone="teal" value={metre(stats.totalOrderedQty) ?? "—"} hint={`Siparişten sevk: ${metre(stats.totalShippedQty) ?? "0 m"} · ${formatDisplay(stats.totalCount, 0)} sipariş`} />);
     }
   }
   return cards;

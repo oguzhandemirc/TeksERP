@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { cn } from "@/lib/utils";
-import { formatNumber } from "@/lib/format";
+import { formatDisplay } from "@/lib/format";
 import { EChart, withAlpha, type ChartTheme } from "./EChart";
 import { ChartEmptyNote, SERIES_DOT } from "./chart-parts";
 
@@ -59,7 +59,7 @@ export function TrendAreaChart({ labels, series, formatValue, label, height = 22
         yAxis: {
           type: "value",
           ...(empty ? { min: 0, max: 1000, interval: 250 } : {}),
-          axisLabel: { color: t.ikincil, formatter: (v: number) => formatNumber(v, 0) },
+          axisLabel: { color: t.ikincil, formatter: (v: number) => formatDisplay(v, 0) },
           splitLine: { lineStyle: { color: t.izgara, type: "dashed" } },
         },
         series: series.map(build),

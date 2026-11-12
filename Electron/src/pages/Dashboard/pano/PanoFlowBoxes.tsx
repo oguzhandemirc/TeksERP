@@ -1,7 +1,7 @@
 // Yeni kutular (akış): stok giriş–çıkış ve nakit giriş–çıkış — çift çubuk grafik; nakitte para birimi sekmesi.
 import { useCallback, useState } from "react";
 import { cn } from "@/lib/utils";
-import { formatNumber } from "@/lib/format";
+import { formatDisplay } from "@/lib/format";
 import { EChart, type ChartTheme } from "@/components/insight/EChart";
 import type { CashFlowBox, StockFlowBox } from "./box-types";
 import { kg, kovaEtiketi, metre, para } from "./pano-bicim";
@@ -27,7 +27,7 @@ function barOption(t: ChartTheme, labels: string[], series: Series[], fmt: (v: n
     grid: { left: 4, right: 8, top: 10, bottom: 4, containLabel: true },
     tooltip: { trigger: "axis", axisPointer: { type: "shadow" }, valueFormatter: (v: unknown) => (typeof v === "number" ? fmt(v) : "—") },
     xAxis: { type: "category", data: labels, axisLabel: { color: t.ikincil, hideOverlap: true }, axisLine: { show: false }, axisTick: { show: false } },
-    yAxis: { type: "value", axisLabel: { color: t.ikincil, formatter: (v: number) => formatNumber(v, 0) }, splitLine: { lineStyle: { color: t.izgara, type: "dashed" } } },
+    yAxis: { type: "value", axisLabel: { color: t.ikincil, formatter: (v: number) => formatDisplay(v, 0) }, splitLine: { lineStyle: { color: t.izgara, type: "dashed" } } },
     series: series.map((s) => ({ name: s.name, type: "bar", barMaxWidth: 12, barGap: "20%", data: s.data, itemStyle: { color: s.color(t), borderRadius: [4, 4, 0, 0] } })),
   };
 }

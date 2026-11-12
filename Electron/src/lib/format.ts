@@ -60,3 +60,55 @@ export function formatFixed(n: number | string | null | undefined, fractionDigit
   if (!Number.isFinite(num)) return "—";
   return num.toLocaleString("tr-TR", { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits, useGrouping: false });
 }
+
+// =============================================================================
+// GÖSTERİM SAYISI — özet yüzeylerinin (pano kutuları, KPI kartı, insight/record bileşenleri, Rapor Merkezi,
+// liste özet bantları) TEK biçimi: binlik nokta, ondalık virgül, sabit "tr-TR" (süreç yerel ayarından bağımsız).
+// Tablo/form/etiket hücreleri `formatNumber` (gruplamasız) ile kalır; bu ayrım bilinçli (2026-11-12 cila turu).
+// =============================================================================
+const groupedCache = new Map<string, Intl.NumberFormat>();
+
+function grouped(min: number, max: number): Intl.NumberFormat {
+  const key = `${min}:${max}`;
+  let f = groupedCache.get(key);
+  if (!f) {
+    f = new Intl.NumberFormat("tr-TR", { minimumFractionDigits: min, maximumFractionDigits: max, useGrouping: true });
+    groupedCache.set(key, f);
+  }
+  return f;
+}
+
+function toFinite(n: number | string | null | undefined): number | null {
+  if (n == null || n === "") return null;
+  const num = typeof n === "number" ? n : Number(n);
+  return Number.isFinite(num) ? num : null;
+}
+
+/** Gösterim sayısı: 4295 → "4.295", 10500,25 → "10.500,3" (en çok `maxFractionDigits` hane, tam sayıda hanesiz). */
+export function formatDisplay(n: number | string | null | undefined, maxFractionDigits = 1, fallback = "—"): string {
+  const num = toFinite(n);
+  if (num === null) return fallback;
+  // Yuvarlamada "-0" basılmasın.
+  const out = grouped(0, maxFractionDigits).format(num);
+  return out === "-0" ? "0" : out;
+}
+
+/** Ölçü: metre/kg en çok 1 hane — `formatMeasure(4295, "m")` → "4.295 m". */
+export function formatMeasure(n: number | string | null | undefined, unit: string, maxFractionDigits = 1, fallback = "—"): string {
+  const num = toFinite(n);
+  return num === null ? fallback : `${formatDisplay(num, maxFractionDigits)} ${unit}`;
+}
+
+/** Para: HEP 2 hane — `formatMoney(325684.9, "TRY")` → "325.684,90 TRY"; birimsiz çağrıda yalnız sayı. */
+export function formatMoney(n: number | string | null | undefined, currency?: string | null, fallback = "—"): string {
+  const num = toFinite(n);
+  if (num === null) return fallback;
+  const text = grouped(2, 2).format(num);
+  return currency ? `${text} ${currency}` : text;
+}
+
+/** Yüzde: "%12,5" (Türkçe ön ek), en çok 1 hane. */
+export function formatPercent(n: number | string | null | undefined, maxFractionDigits = 1, fallback = "—"): string {
+  const num = toFinite(n);
+  return num === null ? fallback : `%${formatDisplay(num, maxFractionDigits)}`;
+}
