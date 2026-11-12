@@ -30,7 +30,11 @@
 - **[ÇEKİRDEK]** Toplam/özet listeyi sınırlayan tavandan ÖNCE tam kümeden hesaplanır; tavan yalnız satırlara; tanınmayan imleç 400.
 - **[ÇEKİRDEK]** Katalogla büyüyen kırılım listesi `capReportLists` (`REPORT_MAX_ROWS`) tavanından geçer, kesme `warnings`le söylenir; yeni dizi alanı liste beyanına ya da bekçi muafına yazılır.
 - **[ÇEKİRDEK]** Rapor yorum cümlesini yalnız `services/reports/anlati/` üretir; ekran/PDF/Excel/patron aynı `anlati[]`yı basar; formül dili (Σ, P90, ABC/RFM…) cümleye girmez.
-- **[ÇEKİRDEK]** Her v1 satırı `yeniHali` taşır (`birlesti → <v2>`·`uzman`·`tasindi → <yol>`); v2 satırı panel yüzeyi inene dek `hazir:false`, hiçbir yüzeyde çizilmez; tek süzgeç `isReportSurfaced`; "uzman" `sinif` değil `yeniHali`dir.
+- **[ÇEKİRDEK]** Her v1 satırı `yeniHali` taşır (`birlesti → <v2>`·`uzman`·`tasindi → <yol>`); v2 satırı panel yüzeyi inene dek `hazir:false`, hiçbir yüzeyde çizilmez; "uzman" `sinif` değil `yeniHali`dir.
+- **[ÇEKİRDEK]** Yüzey yüklemi üçtür, yüzey kendi süzgecini yazmaz: uç/kapı `isReportSurfaced` · panel `isReportOnPanel` (emekli v1 çizilmez) · patron bulutu `isReportCloudSurfaced` (`CLOUD_HELD_REPORT_KEYS` hariç).
+- **[ÇEKİRDEK]** Eski raporu panelden kaldırırken katalog satırını SİLME, `emekli:true` yap; ucu ve bulut anahtarı bir sürüm açık kalır; silme 2. aşamada `DELETED_REPORT_KEYS`e yazılarak yapılır.
+- **[ÇEKİRDEK]** Panelde açılan raporu buluta sunmak ayrı iştir: `hazir:true` yaparken bulut listesinde olan satırı `CLOUD_HELD_REPORT_KEYS`e yaz; bulut işi onu kümeden çıkarır.
+- **[ÇEKİRDEK]** Rapor Merkezi `/reports`un tek yüzüdür; `reportsV2Enabled` emeklidir (yanıtta sabit `true`, yazılmaz); panelde bayrak dalı yazma.
 - **[ÇEKİRDEK]** Ölçü adı ve günlük dil açıklaması yalnız `services/reports/semantik/tanimlar.ts`te; "fire", "iptal oranı", "zamanında teslim" tek tanımlı; açıklama formül içermez.
 - **[ÇEKİRDEK]** Temel rapor sayısı mevcut rapor servisinden okunur; temel serviste yeni SQL yazma, eksik alanı kaynağa EK alan ekle; kıyas varsayılanı sunucuda (`temel/_common.resolveCoreCompare`).
 - **[ÇEKİRDEK]** Fire tek tanımlı; kaynak oranları kendi paydasıyla, toplam fire oranı basılmaz; temel raporun her sayısı kaynak karnenin alanından.
