@@ -137,11 +137,34 @@ export function appearanceAttributes(a: Appearance): Record<string, string> {
   };
 }
 
-/** Görünümü elemana uygular (varsayılan: <html>). */
-export function applyAppearance(a: Appearance, el: HTMLElement = document.documentElement): void {
-  for (const [k, v] of Object.entries(appearanceAttributes(a))) el.setAttribute(k, v);
-  for (const v of LEGACY_INLINE) el.style.removeProperty(v);
+export const THEME_TRANSITION_ATTR = "data-theme-transition";
+export const THEME_TRANSITION_MS = 400;
+let transitionTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Renk geçişi penceresi: <html>e kısa süreli öznitelik koyar, index.css renkleri yumuşatır. Kalıcı
+ * `* { transition }` her hover'ı yavaşlatırdı; pencere yalnız değişim anında açık. Azaltılmış harekette yok.
+ */
+export function beginThemeTransition(root: HTMLElement = document.documentElement): void {
+  if (typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  root.setAttribute(THEME_TRANSITION_ATTR, "");
+  if (transitionTimer) clearTimeout(transitionTimer);
+  transitionTimer = setTimeout(() => {
+    root.removeAttribute(THEME_TRANSITION_ATTR);
+    transitionTimer = null;
+  }, THEME_TRANSITION_MS);
+}
+
+/** Görünümü elemana uygular (varsayılan: <html>). `animate` + gerçek bir değişim varsa renkler yumuşak geçer. */
+export function applyAppearance(a: Appearance, el: HTMLElement = document.documentElement, opts: { animate?: boolean } = {}): void {
+  const attrs = Object.entries(appearanceAttributes(a));
   const vars = a.preset === "custom" ? customColorVars(a.customColor) : null;
+  const changed =
+    attrs.some(([k, v]) => el.getAttribute(k) !== v) ||
+    CUSTOM_VARS.some((v) => (el.style.getPropertyValue(v) || "") !== (vars?.[v] ?? ""));
+  if (opts.animate && changed) beginThemeTransition(el);
+  for (const [k, v] of attrs) el.setAttribute(k, v);
+  for (const v of LEGACY_INLINE) el.style.removeProperty(v);
   for (const v of CUSTOM_VARS) {
     if (vars?.[v]) el.style.setProperty(v, vars[v]);
     else el.style.removeProperty(v);

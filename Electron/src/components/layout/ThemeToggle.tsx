@@ -1,4 +1,5 @@
 import { Moon, Sun } from "lucide-react";
+import { beginThemeTransition } from "@/lib/theme/appearance";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { useOptionalPreferences } from "@/providers/PreferencesProvider";
@@ -11,6 +12,7 @@ export function ThemeToggle() {
   const label = dark ? "Açık temaya geç" : "Koyu temaya geç";
   const toggle = () => {
     const next = dark ? "light" : "dark";
+    beginThemeTransition();
     setTheme(next);
     prefs?.setPreference({ theme: next });
   };

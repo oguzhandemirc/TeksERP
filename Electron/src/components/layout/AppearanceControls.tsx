@@ -1,4 +1,5 @@
 import { useTheme } from "next-themes";
+import { beginThemeTransition } from "@/lib/theme/appearance";
 import { useOptionalPreferences } from "@/providers/PreferencesProvider";
 import { useAppearance } from "@/lib/theme/use-appearance";
 import type { ThemePref } from "@/types/preferences";
@@ -58,6 +59,7 @@ export function AppearanceControls({ variant = "full" }: { variant?: "quick" | "
   const { appearance: a, setAppearance } = useAppearance();
   const mode = (prefs?.prefs.theme ?? theme ?? "system") as ThemePref;
   const chooseMode = (t: ThemePref) => {
+    beginThemeTransition();
     setTheme(t);
     prefs?.setPreference({ theme: t });
   };
