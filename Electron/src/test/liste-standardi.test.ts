@@ -187,6 +187,9 @@ const TOOLS_HOST: Record<string, string[]> = {
   "Operations/GelenBelgeler/NoteListTable.tsx": ["Operations/GelenBelgeler/GelenBelgelerPage.tsx", "Operations/GelenBelgeler/NoteListFilters.tsx"],
   "Operations/Rolls/RollsTableBody.tsx": ["Operations/Rolls/RollsPage.tsx", "Operations/Rolls/RollScanBar.tsx"],
   "Operations/MachineStops/StopsTable.tsx": ["Operations/MachineStops/MachineStopsPage.tsx"],
+  "Finance/CashTransactions/CashTxnTable.tsx": ["Finance/CashTransactions/CashTransactionsPage.tsx", "Finance/CashTransactions/CashTxnFilterBar.tsx"],
+  "Finance/Cheques/ChequeTable.tsx": ["Finance/Cheques/ChequesPage.tsx", "Finance/Cheques/ChequeFilterBar.tsx"],
+  "Finance/PaymentsPage.tsx": ["Finance/PaymentsFilterBar.tsx"],
 };
 
 /** Sütun menüsü OLMAYAN DataTable — gerekçeli. */
@@ -201,6 +204,8 @@ const NO_SEARCH: Record<string, string> = {
   "Operations/GelenBelgeler/GonderenSablonlariPage.tsx": KATALOG,
   "Operations/MachineStops/StopsTable.tsx": "gün + makine süzgeçli duruş listesi; uçta metin araması yok (backend gerekiyor)",
   "ShiftDefinitions/ShiftDefinitionsPage.tsx": KATALOG,
+  "Finance/RatesPage.tsx": KATALOG,
+  "Finance/AccountsPage.tsx": "kasa + banka hesabı tanımları (birkaç satır, iki bölüm); liste uçları arama almıyor (backend gerekiyor)",
   "Operations/SackContentEdit/SackContentsTable.tsx": "çuval içi gömülü tablo (onlarca top); arama salt-okunur görünümde",
   "Operations/SackContentEdit/SackContentsReadonlyTable.tsx": "çuval içi gömülü tablo; tek çuvalın topları bellekte süzülür (sayfalı liste değil)",
 };
@@ -222,13 +227,8 @@ const HAND_TABLES: Record<string, string> = Object.fromEntries(
     "Cost/YarnPrices/YarnPricesPage.tsx",
     "Definitions/DocumentDesigner/assignments/AssignmentsView.tsx",
     "Devices/DevicesPage.tsx",
-    "Finance/AccountsPage.tsx",
-    "Finance/CashTransactions/CashTxnTable.tsx",
-    "Finance/Cheques/ChequeTable.tsx",
     "Finance/InvoicesPage.tsx",
-    "Finance/PaymentsPage.tsx",
     "Finance/PeriodClose/PeriodClosePage.tsx",
-    "Finance/RatesPage.tsx",
     "GeneralSettings/Numbering/NumberingTable.tsx",
     "MachineCollectors/CollectorTable.tsx",
     "Notifications/NotificationTable.tsx",
@@ -268,7 +268,7 @@ const HAND_TABLES: Record<string, string> = Object.fromEntries(
 );
 
 const HAS_TOOLS = /<DataTableTools\b|\btools=\{|<DataTableToolbar\b[^>]*\btable=\{/;
-const HAS_SEARCH = /\bonSearchChange=|<ScanField\b|\bset\w*Search\w*\(e\.target\.value\)/;
+const HAS_SEARCH = /\bonSearchChange=|<ScanField\b|\bset\w*Search\w*\(e\.target\.value\)|\bset\("search", e\.target\.value\)/;
 const HAND_TABLE_TAG = /<(table|Table)\b/;
 
 /** Ortak DataTable'ı çizen sayfa dosyaları için eksikler: `dosya: sütun-menüsü|arama`. */

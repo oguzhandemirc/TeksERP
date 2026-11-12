@@ -15,6 +15,7 @@
 // ve o servis `isActive` süzgecini bilerek DÜŞÜRÜR — pasifleştirilmiş bir
 // carinin geçmiş tahsilatı hâlâ aranır (cariyi kapatmak geçmişini kilitlemez).
 // =============================================================================
+import type { ReactNode } from "react";
 import { RotateCcw, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -30,11 +31,13 @@ import {
 } from "./paymentFilters";
 
 interface Props {
+  /** Sağ uçtaki standart tablo araçları (Sütunlar + Dışa aktar). */
+  tools?: ReactNode;
   value: PaymentFilterState;
   onChange: (next: PaymentFilterState) => void;
 }
 
-export function PaymentsFilterBar({ value, onChange }: Props) {
+export function PaymentsFilterBar({ value, onChange, tools }: Props) {
   const set = <K extends keyof PaymentFilterState>(key: K, v: PaymentFilterState[K]) =>
     onChange({ ...value, [key]: v });
 
@@ -115,6 +118,7 @@ export function PaymentsFilterBar({ value, onChange }: Props) {
           Filtreleri temizle
         </Button>
       )}
+      {tools ? <div className="ml-auto flex items-center gap-1.5">{tools}</div> : null}
     </div>
   );
 }

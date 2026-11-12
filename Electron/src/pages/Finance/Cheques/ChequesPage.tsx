@@ -51,7 +51,8 @@ import {
   type ChequeDueFilterPatch,
   type ChequeDueSelection,
 } from "./ChequeSummaryCards";
-import { ChequeTable } from "./ChequeTable";
+import { ChequeTable, useChequeTable } from "./ChequeTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { ChequeFormDialog } from "./ChequeFormDialog";
 import { ChequeActionDialog } from "./ChequeActionDialog";
 import { ChequeDetailDialog } from "./ChequeDetailDialog";
@@ -177,6 +178,19 @@ export function ChequesPage() {
     setFormOpen(true);
   };
 
+  const table = useChequeTable(rows, {
+    onDetail: (r) => setDetailId(r.id),
+    onAction: (row, def) => setActionTarget({ row, def }),
+    selection: {
+      selectedIds,
+      onToggle: toggleRow,
+      blockReason: (row) => selectionBlockReason(row, lockedKind),
+      allChecked: pageSelectable.ids.length > 0 && pageSelectable.ids.every((id) => selectedIds.has(id)),
+      someChecked: selectedRows.length > 0,
+      onToggleAll: toggleAll,
+    },
+  });
+
   // DIŞA AKTARIM — spec TIKLANDIĞINDA kurulur ve EKRANDAKİ satırlardan beslenir
   // (yeni istek YOK): dosyadaki liste, ekrandaki listeden farklı olamaz. Aktif
   // süzgeçler dosyanın kapağına yazılır — varsayılan "canlı olanlar" da bir
@@ -263,39 +277,16 @@ export function ChequesPage() {
         />
       </ListToolbar>
 
-      <ChequeFilterBar value={filters} onChange={setFilters} />
+      {/* Dışa aktarma üst bantta (süzgeç özetli ReportExportBar) — burada yalnız Sütunlar. */}
+      <ChequeFilterBar value={filters} onChange={setFilters} tools={<DataTableTools table={table} compact hideExport />} />
 
-      <ListBody>
-        {q.isLoading ? (
-          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
-        ) : q.isError ? (
-          <ListMessage>
-            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-              <p className="font-medium text-destructive">Portföy listesi yüklenemedi.</p>
-              <p className="mt-1 text-muted-foreground">
-                Bu bir “kayıt yok” cevabı DEĞİLDİR — istek sunucuya ulaşamadı ya da reddedildi. Kayıtlarınız
-                yerinde duruyor; yeni giriş yapmadan önce tekrar deneyin.
-              </p>
-              <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
-                Tekrar dene
-              </Button>
-            </div>
-          </ListMessage>
-        ) : rows.length === 0 ? (
-          <ListMessage>
-            <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-              {dirty
-                ? "Bu filtreyle kayıt yok. Geçmiş kayıtlar için durum filtresini “Tümü” yapın."
-                : "Portföyde canlı çek/senet yok. “Çek Girişi” ile müşteriden aldığınız çeki kaydedebilirsiniz."}
-            </div>
-          </ListMessage>
-        ) : (
+      {!q.isLoading && !q.isError && rows.length > 0 ? (
           <>
             {selectedRows.length > 0 && (
               // SEÇİM ŞERİDİ — ne seçildiği, hangi yönde ve ne kadar. Sayıyı
               // burada göstermezsek kullanıcı bordroyu basana kadar seçiminin
               // ne olduğunu göremez.
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b bg-muted/40 px-4 py-2 text-xs">
+              <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b bg-muted/40 px-4 py-2 text-xs">
                 <strong>{selectedRows.length} kayıt seçili</strong>
                 {lockedKind && <span className="text-muted-foreground">{KIND_LABEL[lockedKind]}</span>}
                 {selectedTotals.map((b) => (
@@ -320,30 +311,42 @@ export function ChequesPage() {
                 </Button>
               </div>
             )}
-            <ChequeTable
-              rows={rows}
-              onDetail={(r) => setDetailId(r.id)}
-              onAction={(row, def) => setActionTarget({ row, def })}
-              selection={{
-                selectedIds,
-                onToggle: toggleRow,
-                blockReason: (row) => selectionBlockReason(row, lockedKind),
-                allChecked:
-                  pageSelectable.ids.length > 0 &&
-                  pageSelectable.ids.every((id) => selectedIds.has(id)),
-                someChecked: selectedRows.length > 0,
-                onToggleAll: toggleAll,
-              }}
-            />
+            <ChequeTable table={table} />
             {total > rows.length && (
-              <p className="border-t px-4 py-2 text-xs text-amber-700 dark:text-amber-500">
+              <p className="shrink-0 border-t px-4 py-2 text-xs text-amber-700 dark:text-amber-500">
                 {total} kaydın ilk {rows.length} tanesi gösteriliyor (vade sırasına göre). Aradığınızı bulmak
                 için arama ya da vade aralığı filtresini kullanın.
               </p>
             )}
           </>
-        )}
+      ) : (
+      <ListBody>
+        {q.isLoading ? (
+          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
+        ) : q.isError ? (
+          <ListMessage>
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
+              <p className="font-medium text-destructive">Portföy listesi yüklenemedi.</p>
+              <p className="mt-1 text-muted-foreground">
+                Bu bir “kayıt yok” cevabı DEĞİLDİR — istek sunucuya ulaşamadı ya da reddedildi. Kayıtlarınız
+                yerinde duruyor; yeni giriş yapmadan önce tekrar deneyin.
+              </p>
+              <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
+                Tekrar dene
+              </Button>
+            </div>
+          </ListMessage>
+        ) : rows.length === 0 ? (
+          <ListMessage>
+            <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
+              {dirty
+                ? "Bu filtreyle kayıt yok. Geçmiş kayıtlar için durum filtresini “Tümü” yapın."
+                : "Portföyde canlı çek/senet yok. “Çek Girişi” ile müşteriden aldığınız çeki kaydedebilirsiniz."}
+            </div>
+          </ListMessage>
+        ) : null}
       </ListBody>
+      )}
       <ListFooter loaded={rows.length} total={q.data ? total : null} />
 
       {/* Diyaloglar KOŞULLU mount edilir: her açılış taze bileşen demektir ve
