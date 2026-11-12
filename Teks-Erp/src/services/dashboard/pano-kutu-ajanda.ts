@@ -3,14 +3,15 @@
 // =============================================================================
 // "O gün ne planlı": beklenen alış teslimi (açık alış siparişi `expectedDate`), planlı başlangıcı o
 // gün olan açık iş emri ve dokuma işi. Açıklık yüklemleri tek kaynaktan (`live-ref-where.helper`).
-// GECİKME listesi/sayacı ÜRETİLMEZ (kullanıcı kararı: termin önemsiz). Sevkiyatın planlanan tarihi
-// alanı YOK → planlı sevkiyatlar tarihsiz liste olarak döner, güne yerleştirilmez (uydurulmaz).
+// GECİKME listesi/sayacı ÜRETİLMEZ (kullanıcı kararı: termin önemsiz). Planlı sevkiyat `plannedDate`
+// verilmişse o güne ve ay takvimine düşer (geçmiş gün yalnız kendi gününde), verilmemişse tarihsiz listede.
 // Gün sınırları fabrika diliminde (`constants/time.ts`).
 // =============================================================================
 import { ShipmentStatus } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { factoryDayStartOfKey, factoryYmd } from "../../constants/time";
 import { OPEN_PURCHASE_ORDER, OPEN_WEAVING_ORDER, OPEN_WORK_ORDER } from "../helpers/live-ref-where.helper";
+import { formatPlannedDate, parsePlannedDate, plannedDateMonthRange } from "../helpers/shipment-planned-date.helper";
 import { shiftDayKey } from "./pano-donem";
 import type { PanoGates } from "./pano-kaynak";
 
@@ -22,7 +23,9 @@ const MONTH_ROW_CAP = 2000;
 export interface AgendaParams { gun: string; ay: string }
 
 interface Range { from: Date; to: Date }
-interface Dated { at: Date | null }
+interface Dated { day: string | null }
+type AgendaKey = "alis" | "isEmri" | "dokuma" | "sevk";
+type DayCounts = Record<AgendaKey, number>;
 
 function dayRange(dayKey: string): Range {
   return { from: factoryDayStartOfKey(dayKey), to: factoryDayStartOfKey(shiftDayKey(dayKey, 1)) };
@@ -71,7 +74,18 @@ function weavingRows(r: Range) {
   });
 }
 
+/** Tarihli planlı sevkiyatlar — DATE kolonu, gün anahtarı kolonun kendisi (dilim dönüşümü yok). */
+function plannedShipmentRows(where: { gte: Date; lt: Date } | Date) {
+  return prisma.shipment.findMany({
+    where: { status: ShipmentStatus.PLANNED, plannedDate: where },
+    select: { id: true, shipmentNo: true, plannedDate: true, customer: { select: { name: true } } },
+    orderBy: [{ plannedDate: "asc" }, { shipmentNo: "asc" }],
+    take: MONTH_ROW_CAP,
+  });
+}
+
 type PurchaseRow = Awaited<ReturnType<typeof purchaseRows>>[number];
+type ShipRow = Awaited<ReturnType<typeof plannedShipmentRows>>[number];
 type WorkRow = Awaited<ReturnType<typeof workOrderRows>>[number];
 type WeavingRow = Awaited<ReturnType<typeof weavingRows>>[number];
 
@@ -89,28 +103,38 @@ function listOf<T, U>(rows: T[] | null, map: (r: T) => U): { toplam: number; kal
   return rows === null ? null : { toplam: rows.length, kalemler: rows.slice(0, AGENDA_LIST_CAP).map(map) };
 }
 
-function monthDays(params: AgendaParams, groups: Array<{ key: "alis" | "isEmri" | "dokuma"; rows: Dated[] | null }>) {
-  const counts = new Map<string, { alis: number; isEmri: number; dokuma: number }>();
+const zeroCounts = (): DayCounts => ({ alis: 0, isEmri: 0, dokuma: 0, sevk: 0 });
+const factoryDay = (d: Date | null): string | null => (d ? factoryYmd(d) : null);
+
+function monthDays(params: AgendaParams, groups: Array<{ key: AgendaKey; rows: Dated[] | null }>) {
+  const counts = new Map<string, DayCounts>();
   for (const g of groups) {
     for (const r of g.rows ?? []) {
-      if (!r.at) continue;
-      const day = factoryYmd(r.at);
-      const c = counts.get(day) ?? { alis: 0, isEmri: 0, dokuma: 0 };
+      if (!r.day) continue;
+      const c = counts.get(r.day) ?? zeroCounts();
       c[g.key]++;
-      counts.set(day, c);
+      counts.set(r.day, c);
     }
   }
-  const days: Array<{ gun: string; alis: number; isEmri: number; dokuma: number; toplam: number }> = [];
+  const days: Array<DayCounts & { gun: string; toplam: number }> = [];
   for (let d = `${params.ay}-01`; d.startsWith(params.ay); d = shiftDayKey(d, 1)) {
-    const c = counts.get(d) ?? { alis: 0, isEmri: 0, dokuma: 0 };
-    days.push({ gun: d, ...c, toplam: c.alis + c.isEmri + c.dokuma });
+    const c = counts.get(d) ?? zeroCounts();
+    days.push({ gun: d, ...c, toplam: c.alis + c.isEmri + c.dokuma + c.sevk });
   }
   return days;
 }
 
+/** Günün tarihli planlı sevkiyatları — gün ayın içindeyse ay satırlarından süzülür. */
+async function shipmentsOfDay(params: AgendaParams, monthRows: ShipRow[] | null): Promise<ShipRow[] | null> {
+  if (monthRows === null) return null;
+  if (params.gun.slice(0, 7) === params.ay) return monthRows.filter((r) => formatPlannedDate(r.plannedDate) === params.gun);
+  return plannedShipmentRows(parsePlannedDate(params.gun) as Date);
+}
+
 function plannedShipments(open: boolean) {
   if (!open) return Promise.resolve(null);
-  const where = { status: ShipmentStatus.PLANNED };
+  // Tarihsiz liste: planlanan günü verilmemiş PLANNED sevkiyatlar (tarihliler gün/ay görünümünde).
+  const where = { status: ShipmentStatus.PLANNED, plannedDate: null };
   return Promise.all([
     prisma.shipment.count({ where }),
     prisma.shipment.findMany({
@@ -125,16 +149,18 @@ function plannedShipments(open: boolean) {
 
 export async function agendaBox(can: PanoGates, params: AgendaParams) {
   const month = monthRange(params.ay);
-  const [po, wo, wv, sevkiyat] = await Promise.all([
+  const [po, wo, wv, sevkiyat, sh] = await Promise.all([
     can.alis ? purchaseRows(month) : Promise.resolve(null),
     can.isEmri ? workOrderRows(month) : Promise.resolve(null),
     can.dokumaIsi ? weavingRows(month) : Promise.resolve(null),
     plannedShipments(can.sevkeHazir),
+    can.sevkeHazir ? plannedShipmentRows(plannedDateMonthRange(params.ay)) : Promise.resolve(null),
   ]);
-  const [poDay, woDay, wvDay] = await Promise.all([
+  const [poDay, woDay, wvDay, shDay] = await Promise.all([
     rowsOfDay<PurchaseRow>(params, po, (r) => r.expectedDate, purchaseRows),
     rowsOfDay<WorkRow>(params, wo, (r) => r.plannedStartDate, workOrderRows),
     rowsOfDay<WeavingRow>(params, wv, (r) => r.plannedStartDate, weavingRows),
+    shipmentsOfDay(params, sh),
   ]);
   return {
     gun: params.gun,
@@ -143,13 +169,15 @@ export async function agendaBox(can: PanoGates, params: AgendaParams) {
       alisTeslim: listOf(poDay, (r) => ({ id: r.id, no: r.orderNo, durum: r.status, taraf: r.supplier?.name ?? r.subcontractorSupplier?.name ?? null, zaman: iso(r.expectedDate) })),
       isEmriBaslangic: listOf(woDay, (r) => ({ id: r.id, no: r.workOrderNumber, durum: r.status, hedefMetre: num(r.targetQuantity), zaman: iso(r.plannedStartDate) })),
       dokumaBaslangic: listOf(wvDay, (r) => ({ id: r.id, no: r.weavingOrderNumber, durum: r.status, kumas: r.item.name, planlananMetre: num(r.plannedM), zaman: iso(r.plannedStartDate) })),
+      sevkiyat: listOf(shDay, (r) => ({ id: r.id, no: r.shipmentNo, musteri: r.customer.name, gun: formatPlannedDate(r.plannedDate) })),
     },
     planliSevkiyat: sevkiyat,
     ayGunleri: monthDays(params, [
-      { key: "alis", rows: po?.map((r) => ({ at: r.expectedDate })) ?? null },
-      { key: "isEmri", rows: wo?.map((r) => ({ at: r.plannedStartDate })) ?? null },
-      { key: "dokuma", rows: wv?.map((r) => ({ at: r.plannedStartDate })) ?? null },
+      { key: "alis", rows: po?.map((r) => ({ day: factoryDay(r.expectedDate) })) ?? null },
+      { key: "isEmri", rows: wo?.map((r) => ({ day: factoryDay(r.plannedStartDate) })) ?? null },
+      { key: "dokuma", rows: wv?.map((r) => ({ day: factoryDay(r.plannedStartDate) })) ?? null },
+      { key: "sevk", rows: sh?.map((r) => ({ day: formatPlannedDate(r.plannedDate) })) ?? null },
     ]),
-    kesildi: [po, wo, wv].some((r) => (r?.length ?? 0) >= MONTH_ROW_CAP),
+    kesildi: [po, wo, wv, sh].some((r) => (r?.length ?? 0) >= MONTH_ROW_CAP),
   };
 }

@@ -54,6 +54,7 @@ import {
   type ShipmentDestinationSource,
 } from "../helpers/shipment-destination.helper";
 import { resolveDeliveryToTx, type DeliveryToInput } from "../helpers/shipment-delivery.helper";
+import { type PlannedDateInput } from "../helpers/shipment-planned-date.helper";
 import { emanetShipmentReleaseTx } from "../helpers/emanet-shipment.helper";
 import { assertShipmentNotHeldTx } from "../helpers/cari-hold.helper";
 import { assertCustomerRiskLimitTx } from "../helpers/risk-exposure.helper";
@@ -84,7 +85,7 @@ export async function createShipment(this: ShippingServiceThis,
   }
 
 export async function createShipmentInner(this: ShippingServiceThis, 
-    data: { sackIds: string[]; customerId: string; branchId?: string | null; orderIds?: string[]; orderless?: boolean; destination?: ShipmentDestination; destinationChosen?: boolean; procedureCode?: string | null; plateNumber?: string | null; driverName?: string | null; carrier?: string | null; clientToken?: string | null } & DeliveryToInput,
+    data: { sackIds: string[]; customerId: string; branchId?: string | null; orderIds?: string[]; orderless?: boolean; destination?: ShipmentDestination; destinationChosen?: boolean; procedureCode?: string | null; plateNumber?: string | null; driverName?: string | null; carrier?: string | null; clientToken?: string | null } & DeliveryToInput & PlannedDateInput,
     userId?: string
   ): Promise<ApiResponse<unknown>> {
     const sackIds = [...new Set(data.sackIds)];
@@ -119,6 +120,7 @@ export async function createShipmentInner(this: ShippingServiceThis,
         procedureCode: data.procedureCode,
         deliveryCustomerId: data.deliveryCustomerId,
         deliveryAddress: data.deliveryAddress,
+        plannedDate: data.plannedDate ?? null,
         plateNumber: data.plateNumber,
         driverName: data.driverName,
         carrier: data.carrier,
@@ -200,6 +202,8 @@ export async function createShipmentCoreTx(this: ShippingServiceThis,
       /** Teslim yeri (K18) — yoksa null; belge snapshot'ı aynı tx'te doğarsa donar. */
       deliveryCustomerId?: string | null;
       deliveryAddress?: string | null;
+      /** Planlanan sevk günü (takvim günü) — yoksa null. */
+      plannedDate?: Date | null;
       plateNumber?: string | null;
       driverName?: string | null;
       carrier?: string | null;
@@ -248,6 +252,7 @@ export async function createShipmentCoreTx(this: ShippingServiceThis,
         procedureCode: p.procedureCode?.trim() || null,
         deliveryCustomerId: teslim.deliveryCustomerId,
         deliveryAddress: teslim.deliveryAddress,
+        plannedDate: p.plannedDate ?? null,
         // Araç bilgisi PLANLI doğuşta da saklanır (onay açıkken sessizce düşüyordu); sevk anı yalnız GELENİ yazar.
         plateNumber: p.plateNumber?.trim() || null,
         driverName: p.driverName?.trim() || null,

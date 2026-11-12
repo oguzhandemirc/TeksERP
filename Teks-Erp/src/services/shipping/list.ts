@@ -43,6 +43,7 @@ import {
   buildNextDynamicCursor,
 } from "../../utils/cursor";
 import type { ShippingServiceThis } from "./shared";
+import { formatPlannedDate } from "../helpers/shipment-planned-date.helper";
 
 // Sevkiyat liste filtreleri (Electron FilterBar + arama).
 // `orders.some.order.orderNumber`: muhasebeci müşteriden gelen soruyu SİPARİŞ NO ile
@@ -198,6 +199,7 @@ export async function listShipments(this: ShippingServiceThis,
       // vardı) ve operatörün beyan ettiği gerçek çuval adedi.
       dispatchNote: true,
       manualSackCount: true,
+      plannedDate: true,
       // ── İÇ FATURA BAĞI (2026-08-15) ────────────────────────────────────────
       // ⚠️ `invoiceNo` DIŞ muhasebe programındaki belgenin izidir ("ERP fatura
       // KESMEZ", `schema.prisma`), iç fatura bağı ise `Invoice.shipmentId`dir.
@@ -256,6 +258,7 @@ export async function listShipments(this: ShippingServiceThis,
     const mapShip = ({ eIrsaliyeler, ...s }: ShipRow) => ({
       kind: "SHIPMENT" as const,
       ...s,
+      plannedDate: formatPlannedDate(s.plannedDate),
       ...eIrsaliyeListFields(eIrsaliyeler),
       totalMeters: 0,
       totalKg: 0,
@@ -280,6 +283,7 @@ export async function listShipments(this: ShippingServiceThis,
       // iki tarafı aynı alan kümesini taşımalı, yoksa liste satırı tipi ayrışır.
       dispatchNote: null,
       manualSackCount: null,
+      plannedDate: null,
       totalMeters: Number(d.totalQty),
       totalKg: 0, // doğrudan sevkte çuval/tartı yok
       _count: { sacks: 0, rolls: d.rollCount, orders: d._count.allocations, returns: 0 },

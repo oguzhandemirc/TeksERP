@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from "express";
+import { parsePlannedDate, plannedDateField, plannedDateValue } from "../services/helpers/shipment-planned-date.helper";
 import { z } from "zod";
 import { ShippingService } from "../services/shipping.service";
 import { sackSearchService, isSackCustomerSortKey, type SackSearchScope } from "../services/sack-search.service";
@@ -161,6 +162,8 @@ const destinationChosenField = z.literal(true, { error: "destinationChosen yaln�
 const deliveryToFields = {
   deliveryCustomerId: z.string().uuid("Geçersiz teslim yeri cari ID").nullable().optional(),
   deliveryAddress: z.string().trim().max(500, "Teslim adresi en fazla 500 karakter olabilir").nullable().optional(),
+  // Planlanan sevk günü — opsiyonel; gelmezse null (eski panel/tablet göndermez).
+  plannedDate: plannedDateField,
 };
 export const createShipmentSchema = z.object({
   // .max(500) — önizleme (previewShipmentSchema) ve sackIdsSchema zaten 500'de
@@ -265,7 +268,9 @@ const loadPreviewSchema = z.object({
 }).refine((b) => !!b.shipmentId || (b.sackIds?.length ?? 0) > 0 || (b.rollIds?.length ?? 0) > 0, { message: "Sevkiyat, çuval ya da top seçilmeli" });
 export const destinationSchema = z.object({ destination: z.enum(["DOMESTIC", "EXPORT"]), destinationChosen: destinationChosenField });
 const procedureCodeSchema = z.object({ procedureCode: z.string().trim().max(64).nullable().optional() });
-export const deliveryToSchema = z.object(deliveryToFields);
+export const deliveryToSchema = z.object({ deliveryCustomerId: deliveryToFields.deliveryCustomerId, deliveryAddress: deliveryToFields.deliveryAddress });
+// Uçta alan ZORUNLU (null = temizle) — boş gövde sessizce tarihi silmesin.
+export const plannedDateSchema = z.object({ plannedDate: plannedDateValue });
 const dispatchNoteSchema = z.object({ dispatchNote: z.string().trim().max(500).nullable().optional() });
 // Araca yüklenen gerçek çuval adedi (operatör beyanı). `null` = beyanı kaldır.
 const manualSackCountSchema = z.object({
@@ -638,7 +643,7 @@ export class ShippingController {
   createShipment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = createShipmentSchema.parse(req.body);
-      const result = await this.service.createShipment({ sackIds: body.sackIds, customerId: body.customerId, branchId: body.branchId ?? null, orderIds: body.orderIds, destination: body.destination, destinationChosen: body.destinationChosen === true, procedureCode: body.procedureCode ?? null, deliveryCustomerId: body.deliveryCustomerId ?? null, deliveryAddress: body.deliveryAddress ?? null, plateNumber: body.plateNumber ?? null, driverName: body.driverName ?? null, carrier: body.carrier ?? null, clientToken: body.clientToken ?? null, orderless: body.orderless }, req.user?.userId);
+      const result = await this.service.createShipment({ sackIds: body.sackIds, customerId: body.customerId, branchId: body.branchId ?? null, orderIds: body.orderIds, destination: body.destination, destinationChosen: body.destinationChosen === true, procedureCode: body.procedureCode ?? null, deliveryCustomerId: body.deliveryCustomerId ?? null, deliveryAddress: body.deliveryAddress ?? null, plannedDate: parsePlannedDate(body.plannedDate), plateNumber: body.plateNumber ?? null, driverName: body.driverName ?? null, carrier: body.carrier ?? null, clientToken: body.clientToken ?? null, orderless: body.orderless }, req.user?.userId);
       res.status(201).json(result);
     } catch (e) { next(e); }
   };
@@ -667,6 +672,7 @@ export class ShippingController {
           procedureCode: body.procedureCode ?? null,
           deliveryCustomerId: body.deliveryCustomerId ?? null,
           deliveryAddress: body.deliveryAddress ?? null,
+          plannedDate: parsePlannedDate(body.plannedDate),
           plateNumber: body.plateNumber ?? null,
           driverName: body.driverName ?? null,
           carrier: body.carrier ?? null,
@@ -762,6 +768,13 @@ export class ShippingController {
       const body = deliveryToSchema.parse(req.body);
       const result = await this.service.setDeliveryTo(req.params.id as string, { deliveryCustomerId: body.deliveryCustomerId ?? null, deliveryAddress: body.deliveryAddress ?? null }, req.user?.userId);
       res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  setPlannedDate = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = plannedDateSchema.parse(req.body);
+      res.status(200).json(await this.service.setPlannedDate(req.params.id as string, parsePlannedDate(body.plannedDate), req.user?.userId));
     } catch (e) { next(e); }
   };
 
