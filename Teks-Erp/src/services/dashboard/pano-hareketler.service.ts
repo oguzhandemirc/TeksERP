@@ -180,16 +180,27 @@ async function deliveryNotes(): Promise<PanoHareket[]> {
   }));
 }
 
+/** Hareket türü kapılarının izin kodları — tek tablo (izin kataloğu bekçisi bu sabiti okur). */
+const GATE_PERMISSIONS = {
+  SIPARIS: "order:read",
+  SEVK: "shipping:read",
+  DOGRUDAN_SEVK: "shipping:read",
+  FASON_GIDEN: "workorder:read",
+  FASON_DONEN: "workorder:read",
+  MAL_KABUL: "goods-receipt:read",
+  GELEN_BELGE: "gelen-belge:read",
+} as const satisfies Record<HareketTuru, string>;
+
 /** Tür başına kapı — kutu kataloğu da bunu okur (tek kaynak). */
 export function movementGates(ctx: AccessContext): Record<HareketTuru, boolean> {
   return {
-    SIPARIS: gate(ctx, "order:read"),
-    SEVK: gate(ctx, "shipping:read"),
-    DOGRUDAN_SEVK: gate(ctx, "shipping:read"),
-    FASON_GIDEN: gate(ctx, "workorder:read"),
-    FASON_DONEN: gate(ctx, "workorder:read"),
-    MAL_KABUL: gate(ctx, "goods-receipt:read", "ticaretEnabled"),
-    GELEN_BELGE: gate(ctx, "gelen-belge:read", "gelenBelgeEnabled"),
+    SIPARIS: gate(ctx, GATE_PERMISSIONS.SIPARIS),
+    SEVK: gate(ctx, GATE_PERMISSIONS.SEVK),
+    DOGRUDAN_SEVK: gate(ctx, GATE_PERMISSIONS.DOGRUDAN_SEVK),
+    FASON_GIDEN: gate(ctx, GATE_PERMISSIONS.FASON_GIDEN),
+    FASON_DONEN: gate(ctx, GATE_PERMISSIONS.FASON_DONEN),
+    MAL_KABUL: gate(ctx, GATE_PERMISSIONS.MAL_KABUL, "ticaretEnabled"),
+    GELEN_BELGE: gate(ctx, GATE_PERMISSIONS.GELEN_BELGE, "gelenBelgeEnabled"),
   };
 }
 

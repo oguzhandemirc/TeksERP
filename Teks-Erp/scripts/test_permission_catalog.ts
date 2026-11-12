@@ -108,6 +108,9 @@ const TANIM_DOSYALARI = ["src/middlewares/rbac.middleware.ts"] as const;
 const DELEGE = "delege:";
 
 const DINAMIK_IZIN_KAYNAKLARI: Record<string, readonly string[]> = {
+  // Açılış panosu kutu/hareket kapıları: `gate(ctx, GATE_PERMISSIONS.x, ...modüller)` → matchesPermission(perms, permission).
+  "src/services/dashboard/pano-kaynak.ts": ["GATE_PERMISSIONS"],
+  "src/services/dashboard/pano-hareketler.service.ts": ["GATE_PERMISSIONS"],
   // requireAnyPermission(...entry[kind]) — entry = DOC_PERMISSIONS[docType]
   "src/routes/printed-document.routes.ts": ["DOC_PERMISSIONS"],
   // matchesPermission(perms, p) — p ∈ DOC_PERMISSIONS[docType].read (belge tasarımcısı önizlemesinin
