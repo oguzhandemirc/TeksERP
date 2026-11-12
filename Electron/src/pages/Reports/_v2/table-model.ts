@@ -1,5 +1,6 @@
 // Rapor v2 tablosu — ekran hücresi ile PDF/Excel hücresi AYNI biçimden (`REPORT_NUM_FMTS`) basılır.
 import type { ReportColumn, ReportTableSpec } from "@/pages/Reports/_components/reportExport";
+import { formatDisplay } from "@/lib/format";
 import { reportCellText } from "@/lib/number-format";
 import { BIRIM_METNI, PARA_BIRIMLERI, type TabloBlok, type TabloKolonu } from "./sunum";
 
@@ -37,7 +38,7 @@ export function cellText(value: unknown, format: Pick<ReportColumn, "numFmt">): 
 export function truncationNote(table: TabloBlok): string | null {
   const k = table.kesildi;
   if (!k) return null;
-  return `İlk ${k.gosterilen.toLocaleString("tr-TR")} satır gösteriliyor (toplam ${k.toplam.toLocaleString("tr-TR")}).`;
+  return `İlk ${formatDisplay(k.gosterilen, 0)} satır gösteriliyor (toplam ${formatDisplay(k.toplam, 0)}).`;
 }
 
 /** Dışa aktarım tablosu — ekranla aynı başlık, aynı biçim. */

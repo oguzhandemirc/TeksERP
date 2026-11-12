@@ -2,11 +2,11 @@
 // RAPOR MERKEZİ ANA SAYFASI (hedef görsel) — kategori kartı kapısı · süzgeç · boş durumlar · tıklama hedefi
 // =============================================================================
 // Kartlar ve liste görünürlüğü `centerGroups`tan okur (izin · yüzey · modül · rapor kapısı); burada
-// ölçülen: kapalı kategori kart ÜRETMEZ, sayaç görünen rapor sayısıdır, süzgeç listeyi daraltır,
+// ölçülen: kapalı kategori kart ÜRETMEZ, sayaç görünen rapor sayısıdır, kart SÜZMEZ (spot ışığı), açılır süzgeç daraltır,
 // pano izni yokken analiz kutusu (ve isteği) yoktur, kişisel kutular yalnız görünen raporu çizer.
 // =============================================================================
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
 import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
 import { REPORT_CATALOG } from "@/lib/report-catalog";
@@ -52,6 +52,7 @@ vi.mock("@/components/insight/EChart", () => ({
 
 import { ReportCenterPage } from "../_v2/ReportCenterPage";
 import { narrowGroups, personasIn, visibleGroups } from "./hub-model";
+import { SPOTLIGHT_DEFAULT_MS } from "@/components/insight/useSpotlight";
 
 const READY = REPORT_CATALOG.filter((e) => e.kategoriV2 !== null && (e.nesil === "v1" || e.hazir));
 const inCategory = (k: string) => READY.filter((e) => e.kategoriV2 === k);
@@ -101,13 +102,41 @@ describe("kategori kartları — kapı ve sayaç", () => {
 });
 
 describe("süzgeç", () => {
-  it("kategori kartı listeyi o gruba daraltır; ikinci tık ve Sıfırla geri açar", () => {
+  it("⭐ kategori kartı SÜZMEZ: bölüm vurgulanır, diğerleri solar, kart seçili; süre dolunca normal", () => {
+    vi.useFakeTimers();
+    try {
+      Element.prototype.scrollIntoView = vi.fn();
+      render();
+      const card = categoryCards().getByRole("button", { name: /Dokuma/ });
+      fireEvent.click(card);
+      expect(card).toHaveAttribute("aria-pressed", "true");
+      expect(screen.getByRole("region", { name: "Dokuma" })).toHaveAttribute("data-spotlight", "lit");
+      expect(screen.getByRole("region", { name: "Muhasebe araçları" })).toHaveAttribute("data-spotlight", "dim");
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+      expect(screen.getByRole("status")).toHaveTextContent(/Dokuma bölümü vurgulandı/);
+      // Açılır süzgeç kart tıklamasından etkilenmez.
+      expect(screen.getByRole("button", { name: /Sıfırla/ })).toBeDisabled();
+      act(() => {
+        vi.advanceTimersByTime(SPOTLIGHT_DEFAULT_MS);
+      });
+      expect(card).toHaveAttribute("aria-pressed", "false");
+      expect(screen.getByRole("region", { name: "Dokuma" })).not.toHaveAttribute("data-spotlight");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("açılır kategori süzgeci gerçek süzgeçtir; süzülmüş kategorinin kartı ışık yakmaz, neden duyurulur", async () => {
+    Element.prototype.scrollIntoView = vi.fn();
     render();
-    const card = categoryCards().getByRole("button", { name: /Dokuma/ });
-    fireEvent.click(card);
-    expect(card).toHaveAttribute("aria-pressed", "true");
+    fireEvent.keyDown(screen.getByRole("button", { name: /^Kategori:/ }), { key: "Enter" });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Dokuma" }));
     expect(screen.getByRole("region", { name: "Dokuma" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Muhasebe araçları" })).toBeNull();
+    fireEvent.click(categoryCards().getByRole("button", { name: /Muhasebe araçları/ }));
+    expect(screen.getByRole("region", { name: "Dokuma" })).not.toHaveAttribute("data-spotlight");
+    expect(screen.getByRole("status")).toHaveTextContent(/Muhasebe araçları raporları seçili süzgeçle gizli/);
+    expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: /Sıfırla/ }));
     expect(screen.getByRole("region", { name: "Muhasebe araçları" })).toBeInTheDocument();
   });

@@ -23,19 +23,17 @@ interface Props {
   canBuild: boolean;
   /** Özel rapor sayısı (kendi + paylaşılan); `null` = kart yok (görecek/kuracak rapor yok). */
   customCount: number | null;
-  onCategoryPicked: () => void;
+  /** Kart tıklaması SÜZMEZ: liste o kategoriye kayar ve bölüm spot ışığıyla vurgulanır (süzgeç yalnız açılır çipte). */
+  onCategoryPicked: (key: ReportKategoriV2, title: string) => void;
+  /** Spot ışığı yanan kategori — kart vurgu süresince seçili görünür. */
+  spotKey: string | null;
   onShowCustom: () => void;
 }
 
 /** Üst panel (hedef görsel): süzgeç çipleri + Sıfırla + "Özel rapor", altında kategori kartları. */
-export function HubTopPanel({ groups, personas, filter, onFilter, onReset, period, onPeriod, canBuild, customCount, onCategoryPicked, onShowCustom }: Props) {
+export function HubTopPanel({ groups, personas, filter, onFilter, onReset, period, onPeriod, canBuild, customCount, onCategoryPicked, spotKey, onShowCustom }: Props) {
   const categoryOptions = groups.map((g) => ({ value: g.key, label: g.title }));
   const personaOptions = personas.map((p) => ({ value: p, label: PERSONA_LABEL[p] }));
-  const pickCategory = (key: ReportKategoriV2) => {
-    const next = filter.category === key ? null : key;
-    onFilter({ ...filter, category: next });
-    if (next) onCategoryPicked();
-  };
   return (
     <section aria-label="Rapor kategorileri" className="flex flex-col gap-4 rounded-xl border border-card-border bg-card p-4 shadow-card">
       <FilterChipBar
@@ -60,7 +58,7 @@ export function HubTopPanel({ groups, personas, filter, onFilter, onReset, perio
           const look = CATEGORY_LOOK[g.key];
           return (
             <CategoryCard key={g.key} icon={look.icon} tone={look.tone} title={g.title} description={look.description}
-              countText={`${g.entries.length} rapor`} active={filter.category === g.key} onClick={() => pickCategory(g.key)} />
+              countText={`${g.entries.length} rapor`} active={spotKey === g.key} onClick={() => onCategoryPicked(g.key, g.title)} />
           );
         })}
         {customCount !== null && (

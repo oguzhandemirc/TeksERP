@@ -4,6 +4,8 @@ import { Search } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageBody, PageShell } from "@/components/layout/PageShell";
 import { Input } from "@/components/ui/input";
+import { SPOTLIGHT_CLASS, SpotlightGroup } from "@/components/insight/SpotlightGroup";
+import { useSpotlight, type SpotlightController } from "@/components/insight/useSpotlight";
 import { useMenuLayout } from "@/hooks/useMenuLayout";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { foldedIncludes } from "@/lib/search-fold";
@@ -11,7 +13,7 @@ import { useOperationsVisibilityContext } from "@/pages/Operations/useOperations
 import { fetchPano } from "@/pages/Dashboard/dashboardService";
 import { PANO_UC_IZINLERI, type PanoDonem } from "@/pages/Dashboard/pano/types";
 import type { ReportTile } from "../tile-config";
-import { centerGroups } from "./center-model";
+import { centerGroups, type CenterGroup } from "./center-model";
 import { useReportFavorites } from "./favorites";
 import { useOpenedReports } from "./opened";
 import { legacyGroups } from "./legacy-model";
@@ -32,6 +34,12 @@ interface Props {
 
 const scrollTo = (el: HTMLElement | null) => el?.scrollIntoView?.({ behavior: "smooth", block: "start" });
 
+/** Kategori kartı süzmez: bölümü spot ışığıyla öne çıkarır; açılır süzgeç onu gizlemişse nedenini duyurur. */
+function spotlightCategory(spot: SpotlightController, groups: readonly CenterGroup[], key: string, title: string) {
+  const n = groups.find((g) => g.key === key)?.entries.length ?? 0;
+  spot.spotlight(key, `${title} bölümü vurgulandı, ${n} rapor.`, `${title} raporları seçili süzgeçle gizli; “Sıfırla” ile görünür.`);
+}
+
 /** Rapor Merkezi (plan §4.2) — `reports.v2Enabled` açıkken `/reports`un yerini alır. */
 export function ReportCenterPage({ legacyTiles }: Props) {
   const { isAdmin, hasPermission } = useRoleAccess();
@@ -40,7 +48,7 @@ export function ReportCenterPage({ legacyTiles }: Props) {
   const { opened } = useOpenedReports();
   const [filter, setFilter] = useState<HubFilter>(EMPTY_FILTER);
   const [period, setPeriod] = useState<PanoDonem>(DEFAULT_PERIOD);
-  const listRef = useRef<HTMLDivElement>(null);
+  const spot = useSpotlight();
   const customRef = useRef<HTMLDivElement>(null);
   const access = useMemo(() => ({ isAdmin, hasPermission, ctx }), [isAdmin, hasPermission, ctx]);
   const menu = useMenuLayout();
@@ -75,7 +83,7 @@ export function ReportCenterPage({ legacyTiles }: Props) {
         }
       />
       <PageBody className="p-6">
-        <div className="@container mx-auto flex max-w-[96rem] flex-col gap-5">
+        <SpotlightGroup controller={spot} className="@container mx-auto flex max-w-[96rem] flex-col gap-5">
           <HubTopPanel
             groups={narrowed}
             personas={personasIn(all)}
@@ -86,10 +94,11 @@ export function ReportCenterPage({ legacyTiles }: Props) {
             onPeriod={setPeriod}
             canBuild={canBuild}
             customCount={canBuild || customTotal > 0 ? customTotal : null}
-            onCategoryPicked={() => scrollTo(listRef.current)}
+            onCategoryPicked={(key, title) => spotlightCategory(spot, groups, key, title)}
+            spotKey={spot.activeKey}
             onShowCustom={() => scrollTo(customRef.current)}
           />
-          <HubInsightsRow
+          <div {...spot.dimProps()} className={SPOTLIGHT_CLASS}><HubInsightsRow
             pano={insightsAllowed ? pano : null}
             period={period}
             opened={opened}
@@ -97,19 +106,19 @@ export function ReportCenterPage({ legacyTiles }: Props) {
             visible={visible}
             onToggleFavorite={toggle}
             onShowCustom={() => scrollTo(customRef.current)}
-          />
-          <div ref={listRef} className="flex scroll-mt-4 flex-col gap-3">
+          /></div>
+          <div className="flex flex-col gap-3">
             <h2 className="text-base font-bold tracking-tight">
               Tüm raporlar <span className="text-sm font-normal text-muted-foreground">({groups.reduce((n, g) => n + g.entries.length, 0)})</span>
             </h2>
-            <HubReportList groups={groups} isFavorite={isFavorite} onToggleFavorite={toggle} />
+            <HubReportList groups={groups} isFavorite={isFavorite} onToggleFavorite={toggle} regionProps={spot.regionProps} />
             {groups.length === 0 ? <EmptyListNote filter={filter} legacyCount={legacy.length} /> : null}
           </div>
-          <div ref={customRef} className="scroll-mt-4">
+          <div ref={customRef} {...spot.dimProps()} className={`scroll-mt-4 ${SPOTLIGHT_CLASS}`}>
             <CustomReportsSection term={filter.term} />
           </div>
-          {legacy.length > 0 ? <LegacyReportsSection groups={legacy} /> : null}
-        </div>
+          {legacy.length > 0 ? <div {...spot.dimProps()} className={SPOTLIGHT_CLASS}><LegacyReportsSection groups={legacy} /></div> : null}
+        </SpotlightGroup>
       </PageBody>
     </PageShell>
   );
