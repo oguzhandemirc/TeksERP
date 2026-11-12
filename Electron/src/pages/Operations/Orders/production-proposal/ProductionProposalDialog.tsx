@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
 import { isAmbiguousFailure, useAttemptToken } from "@/lib/attemptToken";
 import { apiErrorMessage } from "@/services/apiClient";
 import type { OrderLine } from "../types";
@@ -92,12 +93,12 @@ export function ProductionProposalDialog({ open, onOpenChange, orderId, orderNum
         {f.result ? (
           <ResultList result={f.result} />
         ) : f.preview.isLoading ? (
-          <p className="text-sm text-muted-foreground">Öneri hazırlanıyor…</p>
+          <p className="py-6 text-center text-sm text-muted-foreground">Öneri hazırlanıyor…</p>
         ) : f.preview.isError ? (
-          <p role="alert" className="text-sm text-destructive">{apiErrorMessage(f.preview.error, "Üretim önerisi alınamadı")}</p>
+          <div role="alert"><Callout tone="danger">{apiErrorMessage(f.preview.error, "Üretim önerisi alınamadı")}</Callout></div>
         ) : p ? (
           <div className="space-y-4">
-            {empty && <p className="text-sm text-muted-foreground">Bu sipariş için oluşturulacak yeni kayıt yok.</p>}
+            {empty && <Callout tone="muted">Bu sipariş için oluşturulacak yeni kayıt yok.</Callout>}
             <WeavingSection rows={p.weavingOrders} sel={f.sel} canCreate={p.canCreate.weaving} lineLabel={lineLabel} wastePct={p.weavingWastePct}
               onToggle={(k) => f.setSel((s) => ({ ...s, weaving: toggled(s.weaving, k) }))}
               onPlannedM={(k, t) => f.setSel((s) => ({ ...s, plannedM: new Map(s.plannedM).set(k, t) }))} />
@@ -128,25 +129,27 @@ export function ProductionProposalDialog({ open, onOpenChange, orderId, orderNum
 function ApplyError({ error, lineLabel }: { error: unknown; lineLabel: LineLabel }) {
   const ids = conflictLineIds(error);
   return (
-    <div role="alert" className="space-y-1 text-sm text-destructive">
-      <p>
-        {apiErrorMessage(error)}
-        {isConflict(error)
-          ? " Önizlemeyi yenileyip yeniden seçin."
-          : isAmbiguousFailure(error)
-            ? " Aynı seçimle tekrar gönderebilirsiniz; çift kayıt açılmaz."
-            : ""}
-      </p>
-      {ids.length > 0 && <ul className="list-disc pl-5 text-xs">{ids.map((id) => <li key={id}>{lineLabel(id)}</li>)}</ul>}
+    <div role="alert">
+      <Callout tone="danger">
+        <p>
+          {apiErrorMessage(error)}
+          {isConflict(error)
+            ? " Önizlemeyi yenileyip yeniden seçin."
+            : isAmbiguousFailure(error)
+              ? " Aynı seçimle tekrar gönderebilirsiniz; çift kayıt açılmaz."
+              : ""}
+        </p>
+        {ids.length > 0 && <ul className="mt-1 list-disc pl-5">{ids.map((id) => <li key={id}>{lineLabel(id)}</li>)}</ul>}
+      </Callout>
     </div>
   );
 }
 
 function ResultList({ result }: { result: ProposalApplyResult }) {
   return (
-    <div className="space-y-2 text-sm">
+    <Callout tone="success" title="Kayıtlar oluşturuldu">
       {result.weavingOrders.length > 0 && <p>Dokuma iş emirleri: <span className="font-mono">{result.weavingOrders.map((w) => w.number).join(", ")}</span></p>}
       {result.workOrders.length > 0 && <p>{TERIM.terbiyeIsEmri.cumleBasiCogul.yalin}: <span className="font-mono">{result.workOrders.map((w) => w.number).join(", ")}</span></p>}
-    </div>
+    </Callout>
   );
 }
