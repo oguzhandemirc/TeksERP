@@ -323,11 +323,6 @@ const EXEMPT: { screen: string; path: string; why: string }[] = [
     why: "Dokuma satır ayrıntısı; listeyle aynı kapı (`dokumaAnahtariGorunur`) — liste görünmüyorsa satır da yok. `mobile:kk1` listeyi açar ama genel bakışı açmaz; bu yüzden kapı kümesine kk1 ALINMADI.",
   },
   {
-    screen: "mobile:hizli-is-emri",
-    path: "GET /gelen-belge/tablet-baglam",
-    why: "İş Emirleri › Fason Belge Okut önizlemesi (`ScanStage`) taslaktaki müşterinin adını cari listesinden çözer. ScanStage yalnız `useScanAction().available` iken açılır: GelenBelge ekranı görünür (`gelen-belge:write` + modül) — uç guard'ının aynısı. Okunamazsa ad 'Seçili müşteri' olarak kalır, akış sürer.",
-  },
-  {
     screen: "gelen-belge:write",
     path: "GET /gelen-belge/irsaliyeler/:p",
     why: "Belge Tara onay kartı (T2) detayı okur; okunamazsa (gelen-belge:read yok → 403) kart çizilmez, tarama yolu aynen çalışır (fail-closed, `useApprovalDetail`). Belgeden iş emri satırı (`DocRowCard`) izin yoksa detayı hiç istemez, 403'te de formu okuma özetinden (`detailFromSummary`, gelen-belge:write) kurar.",
