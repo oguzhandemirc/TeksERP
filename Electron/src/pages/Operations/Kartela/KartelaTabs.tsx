@@ -1,7 +1,7 @@
 import { DataTable } from "@/components/data-table/DataTable";
 import type { FilterDef } from "@/components/data-table/FilterBar";
 import { SavedViewsMenu } from "@/components/data-table/SavedViewsMenu";
-import { FilterRow } from "@/components/data-table/filter-row/FilterRow";
+import { FilterRow, type ListTools } from "@/components/data-table/filter-row/FilterRow";
 import { persistConfigOf, splitDefFilters } from "@/components/data-table/filter-row/def-row-filters";
 import type { TableFilterPersistConfig } from "@/components/data-table/filter-row/filter-persist";
 import { ScanField } from "@/components/scanner/ScanField";
@@ -57,6 +57,7 @@ interface DocRowProps {
   setSearch: (v: string) => void;
   onScan: (code: string) => void;
   busy: boolean;
+  tools: ListTools;
 }
 
 /** TEK SATIR: `[Ara·okut][Tarih][Durum][Firma] … [Temizle][Kayıtlı]` (araçlar bugünkü gibi). */
@@ -69,7 +70,8 @@ function KartelaDocFilterRow(p: DocRowProps) {
           value={p.search}
           onChange={p.setSearch}
           onScan={p.onScan}
-          placeholder="Ara ya da barkod okut..."
+          placeholder="Ara / okut…"
+          hint="Ara ya da kartela/sevk barkodu okut"
           expectPrefix={["SWATCH", "DISPATCH_DOC"]}
           busy={p.busy}
           className="w-44 min-w-[8rem] shrink 2xl:w-72"
@@ -80,6 +82,7 @@ function KartelaDocFilterRow(p: DocRowProps) {
       primary={primary}
       more={more}
       trailing={<SavedViewsMenu compact />}
+      tools={p.tools}
     />
   );
 }
@@ -114,7 +117,7 @@ export function DispatchesTab({ onSelect, onScanSwatch, swatchLookupPending }: T
 
   return (
     <>
-      <KartelaDocFilterRow filters={DISPATCH_FILTERS} search={search} setSearch={setSearch} onScan={handleScan} busy={swatchLookupPending} />
+      <KartelaDocFilterRow filters={DISPATCH_FILTERS} search={search} setSearch={setSearch} onScan={handleScan} busy={swatchLookupPending} tools={{ table, exportName: "Kartela sevkleri" }} />
       <DataTable<KartelaDispatchListItem>
         table={table}
         isLoading={query.isLoading}
@@ -147,7 +150,7 @@ export function ReceiptsTab({ onSelect, onScanSwatch, swatchLookupPending }: Tab
 
   return (
     <>
-      <KartelaDocFilterRow filters={RECEIPT_FILTERS} search={search} setSearch={setSearch} onScan={handleScan} busy={swatchLookupPending} />
+      <KartelaDocFilterRow filters={RECEIPT_FILTERS} search={search} setSearch={setSearch} onScan={handleScan} busy={swatchLookupPending} tools={{ table, exportName: "Kartela dönüşleri" }} />
       <DataTable<KartelaReceiptListItem>
         table={table}
         isLoading={query.isLoading}

@@ -1,29 +1,39 @@
 import { useMemo } from "react";
-import { getCoreRowModel, useReactTable } from "@tanstack/react-table";
+import type { Table } from "@tanstack/react-table";
+import { useLocalTable } from "@/hooks/useLocalTable";
 import { DataTable } from "@/components/data-table/DataTable";
 import { stopColumns } from "./columns";
 import { StopRowMenu, type StopActions } from "./StopRowMenu";
 import type { MachineStop } from "./types";
 
 interface Props {
-  rows: MachineStop[];
+  table: Table<MachineStop>;
   isLoading: boolean;
   isError: boolean;
   onRetry: () => void;
-  labelOf: (code: string | null) => string;
-  nowMs: number;
-  actions: StopActions;
   /** "Tezgah" (dokuma) | "Makine" (dokumasız rejim). */
   noun?: string;
 }
 
-/** Sayfalama YOK: gün + makine süzgeciyle liste sınırlı (uç 500 tavanı). */
-export function StopsTable({ rows, isLoading, isError, onRetry, labelOf, nowMs, actions, noun = "Tezgah" }: Props) {
+interface TableArgs {
+  rows: MachineStop[];
+  labelOf: (code: string | null) => string;
+  nowMs: number;
+  actions: StopActions;
+  noun: string;
+}
+
+/** Tablo örneği sayfada kurulur: standart "Sütunlar" menüsü süzgeç şeridinin sağ ucunda durur. */
+export function useStopsTable({ rows, labelOf, nowMs, actions, noun }: TableArgs) {
   const columns = useMemo(
     () => stopColumns({ labelOf, nowMs, actions: (r) => <StopRowMenu row={r} a={actions} />, noun }),
     [labelOf, nowMs, actions, noun],
   );
-  const table = useReactTable({ data: rows, columns, getCoreRowModel: getCoreRowModel(), enableRowSelection: false });
+  return useLocalTable({ tableKey: "machine-stops", data: rows, columns });
+}
+
+/** Sayfalama YOK: gün + makine süzgeciyle liste sınırlı (uç 500 tavanı). */
+export function StopsTable({ table, isLoading, isError, onRetry, noun = "Tezgah" }: Props) {
   return (
     <DataTable<MachineStop>
       table={table}

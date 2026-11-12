@@ -75,7 +75,7 @@ export function ShipmentOrderSelect({ customerId, branchId, selectedIds, onToggl
       <Input
         value={searchInput}
         onChange={(e) => setSearchInput(e.target.value)}
-        placeholder="Sipariş no, kumaş veya renk ara…"
+        placeholder="Ara…" title="Sipariş no, kumaş veya renk ara" aria-label="Sipariş no, kumaş veya renk ara"
         className="h-8 pl-8 pr-8 text-sm"
       />
       {searchInput && (

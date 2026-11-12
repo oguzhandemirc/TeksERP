@@ -1,74 +1,38 @@
-// Cariler — sıkı liste tablosu: avatar + ad/kod, pastel rol rozetleri, şehir, telefon, vergi no, durum;
-// satır tıkı yan paneli açar (seçili satır vurgulu), satır içi hızlı eylemler üzerine gelince görünür.
-import { useEffect, useRef } from "react";
+// Cariler — ortak DataTable: avatar + ad/kod, pastel rol rozetleri, şehir, telefon, vergi no, durum; satır tıkı yan
+// paneli açar (etkin satır vurgulu, tablo odaktayken ↑/↓), satır içi hızlı eylemler üzerine gelince görünür.
+// Panel açıkken ikincil sütunlar GEÇİCİ gizlenir (liste daralır, ad kırpılmasın) — kullanıcının sütun tercihine yazılmaz.
+import { useMemo } from "react";
+import type { ColumnDef, Table } from "@tanstack/react-table";
 import { Maximize2, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
 import { toneForKey } from "@/components/ui/icon-tile";
 import { RecordAvatar, ToneChip } from "@/components/record/RecordBits";
+import { DataTable } from "@/components/data-table/DataTable";
+import { useLocalTable } from "@/hooks/useLocalTable";
 import { partnerRoleLabels } from "@/lib/partnerRoles";
-import { cn } from "@/lib/utils";
 import { ROLE_KEYS, ROLE_TONE, roleOn, rowKey, type CariRowItem } from "./cari-row";
 
-interface Props {
-  rows: CariRowItem[];
-  selectedKey: string | null;
-  onSelect: (row: CariRowItem) => void;
+interface Handlers {
   onEdit: (row: CariRowItem) => void;
   onOpenFull: (row: CariRowItem) => void;
-  /** Panel açıkken ikincil kolonlar gizlenir (liste daralır, ad kırpılmasın). */
-  compact: boolean;
 }
 
-const TH = "px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground";
+/** Panel açıkken gizlenen ikincil sütunlar. */
+export const CARI_COMPACT_HIDDEN = ["city", "phone", "taxNumber"] as const;
+export const CARI_TABLE_KEY = "definitions:cariler";
+
 const dash = <span className="text-muted-foreground">—</span>;
 
-export function CariListTable({ rows, selectedKey, onSelect, onEdit, onOpenFull, compact }: Props) {
-  const ref = useRef<HTMLTableElement>(null);
-  // Klavyeyle (↑/↓) değişen seçim görünür kalsın.
-  useEffect(() => {
-    if (selectedKey) ref.current?.querySelector(`[data-row-key="${selectedKey}"]`)?.scrollIntoView?.({ block: "nearest" });
-  }, [selectedKey]);
-  return (
-    <table ref={ref} className="w-full text-sm">
-      <thead>
-        <tr>
-          <th className={cn(TH, "pl-4")}>Cari</th>
-          <th className={TH}>Rol</th>
-          {!compact && <th className={TH}>Şehir</th>}
-          {!compact && <th className={TH}>Telefon</th>}
-          {!compact && <th className={TH}>Vergi no</th>}
-          <th className={TH}>Durum</th>
-          <th className={cn(TH, "w-24")}><span className="sr-only">Eylemler</span></th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r) => (
-          <CariRow key={rowKey(r)} row={r} selected={selectedKey === rowKey(r)} compact={compact} onSelect={onSelect} onEdit={onEdit} onOpenFull={onOpenFull} />
-        ))}
-      </tbody>
-    </table>
-  );
-}
-
-function CariRow({ row: r, selected, compact, onSelect, onEdit, onOpenFull }: { row: CariRowItem; selected: boolean } & Omit<Props, "rows" | "selectedKey">) {
-  return (
-    <tr
-      data-record-row=""
-      data-row-key={rowKey(r)}
-      aria-selected={selected}
-      tabIndex={0}
-      onClick={() => onSelect(r)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" && e.target === e.currentTarget) onSelect(r);
-      }}
-      className={cn(
-        "group cursor-pointer border-t border-border/60 transition-colors hover:bg-muted/50 focus-visible:bg-muted/60 focus-visible:outline-none",
-        selected && "bg-primary-soft hover:bg-primary-soft",
-        !r.isActive && "text-muted-foreground",
-      )}
-    >
-      <td className="py-1.5 pl-4 pr-3">
+function cariColumns({ onEdit, onOpenFull }: Handlers): ColumnDef<CariRowItem>[] {
+  return [
+    {
+      id: "cari",
+      header: "Cari",
+      meta: { label: "Cari", exportValue: (r) => `${r.name} (${r.code})` },
+      enableHiding: false,
+      size: 320,
+      cell: ({ row: { original: r } }) => (
         <span className="flex min-w-0 items-center gap-3">
           <RecordAvatar name={r.name} tone={toneForKey(r.id)} size="sm" />
           <span className="flex min-w-0 flex-col leading-tight">
@@ -76,21 +40,49 @@ function CariRow({ row: r, selected, compact, onSelect, onEdit, onOpenFull }: { 
             <span className="truncate font-mono text-[11px] text-muted-foreground">{r.code}</span>
           </span>
         </span>
-      </td>
-      <td className="px-3 py-1.5">
+      ),
+    },
+    {
+      id: "roles",
+      header: "Rol",
+      meta: {
+        label: "Rol",
+        exportValue: (r) => ROLE_KEYS.filter((k) => roleOn(r.roles, k)).map((k) => partnerRoleLabels[k]).join(", "),
+      },
+      cell: ({ row: { original: r } }) => (
         <span className="flex flex-nowrap gap-1 whitespace-nowrap">
           {ROLE_KEYS.filter((k) => roleOn(r.roles, k)).map((k) => (
             <ToneChip key={k} tone={ROLE_TONE[k]}>{partnerRoleLabels[k]}</ToneChip>
           ))}
           {r.kind === "SUBCONTRACTOR" && <ToneChip tone="rose" title="Cari kartına bağlı olmayan eski fason kaydı">Kartsız</ToneChip>}
         </span>
-      </td>
-      {!compact && <td className="px-3 py-1.5">{r.city ?? dash}</td>}
-      {!compact && <td className="px-3 py-1.5 tabular-nums">{r.phone ?? dash}</td>}
-      {!compact && <td className="px-3 py-1.5 font-mono text-xs tabular-nums">{r.taxNumber ?? dash}</td>}
-      <td className="px-3 py-1.5">{r.isActive ? <ToneChip tone="green">Aktif</ToneChip> : <ToneChip tone="rose">Pasif</ToneChip>}</td>
-      <td className="px-2 py-1.5 text-right" onClick={(e) => e.stopPropagation()}>
-        <span className="inline-flex gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 group-aria-selected:opacity-100">
+      ),
+    },
+    { id: "city", header: "Şehir", accessorFn: (r) => r.city ?? "", cell: ({ row }) => row.original.city ?? dash },
+    { id: "phone", header: "Telefon", accessorFn: (r) => r.phone ?? "", cell: ({ row }) => <span className="tabular-nums">{row.original.phone ?? dash}</span> },
+    {
+      id: "taxNumber",
+      header: "Vergi no",
+      accessorFn: (r) => r.taxNumber ?? "",
+      cell: ({ row }) => <span className="font-mono text-xs tabular-nums">{row.original.taxNumber ?? dash}</span>,
+    },
+    {
+      id: "status",
+      header: "Durum",
+      meta: { label: "Durum", exportValue: (r) => (r.isActive ? "Aktif" : "Pasif") },
+      cell: ({ row }) => (row.original.isActive ? <ToneChip tone="green">Aktif</ToneChip> : <ToneChip tone="rose">Pasif</ToneChip>),
+    },
+    {
+      id: "actions",
+      header: () => <span className="sr-only">Eylemler</span>,
+      enableHiding: false,
+      size: 88,
+      meta: { align: "right", label: "Eylemler" },
+      cell: ({ row: { original: r } }) => (
+        <span
+          className="inline-flex gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100 group-aria-selected:opacity-100"
+          onClick={(e) => e.stopPropagation()}
+        >
           {r.kind === "CUSTOMER" && (
             <Button variant="ghost" size="icon" className="h-7 w-7" aria-label={`${r.name} — tam sayfa aç`} title="Tam sayfa aç" onClick={() => onOpenFull(r)}>
               <Maximize2 className="h-3.5 w-3.5" />
@@ -102,7 +94,38 @@ function CariRow({ row: r, selected, compact, onSelect, onEdit, onOpenFull }: { 
             </Button>
           </PermissionGate>
         </span>
-      </td>
-    </tr>
+      ),
+    },
+  ];
+}
+
+/** Tablo örneği sayfada kurulur: standart "Sütunlar" menüsü süzgeç satırında, tablo gövdede. */
+export function useCariTable(rows: CariRowItem[], compact: boolean, handlers: Handlers) {
+  const { onEdit, onOpenFull } = handlers;
+  const columns = useMemo(() => cariColumns({ onEdit, onOpenFull }), [onEdit, onOpenFull]);
+  return useLocalTable({
+    tableKey: CARI_TABLE_KEY,
+    data: rows,
+    columns,
+    getRowId: rowKey,
+    hiddenColumns: compact ? CARI_COMPACT_HIDDEN : undefined,
+  });
+}
+
+interface Props {
+  table: Table<CariRowItem>;
+  selectedKey: string | null;
+  onSelect: (row: CariRowItem) => void;
+}
+
+export function CariListTable({ table, selectedKey, onSelect }: Props) {
+  return (
+    <DataTable<CariRowItem>
+      table={table}
+      activeRowId={selectedKey}
+      onRowClick={onSelect}
+      exportName="Cariler"
+      rowClassName={(r) => (r.isActive ? "group" : "group text-muted-foreground")}
+    />
   );
 }

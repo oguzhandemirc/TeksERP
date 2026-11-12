@@ -390,7 +390,7 @@ export function OrderPickerDialog({
               <Input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Sipariş no, müşteri veya kumaş ara..."
+                placeholder="Ara…" title="Sipariş no, müşteri veya kumaş ara" aria-label="Sipariş no, müşteri veya kumaş ara"
                 className="h-10 pl-9"
               />
             </div>

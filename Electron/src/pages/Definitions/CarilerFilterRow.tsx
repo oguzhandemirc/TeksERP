@@ -3,7 +3,7 @@
 import { useMemo, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { FilterDef } from "@/components/data-table/FilterBar";
-import { FilterRow } from "@/components/data-table/filter-row/FilterRow";
+import { FilterRow, type ListTools } from "@/components/data-table/filter-row/FilterRow";
 import { persistConfigOf, splitDefFilters } from "@/components/data-table/filter-row/def-row-filters";
 import { usePersistedTableFilters } from "@/hooks/usePersistedTableFilters";
 import { DIRECTION_OPTIONS, SUBCONTRACTOR_OPTIONS, type DirectionFilter, type SubcontractorFilter } from "@/lib/partnerRoles";
@@ -42,7 +42,7 @@ export function useCariFilters() {
 }
 
 /** Cariler — TEK SATIR: `[Ara][Yön][Fason] … [Temizle][N kart]`. */
-export function CarilerFilterRow({ search, onSearchChange, trailing }: { search: string; onSearchChange: (v: string) => void; trailing?: ReactNode }) {
+export function CarilerFilterRow({ search, onSearchChange, trailing, tools }: { search: string; onSearchChange: (v: string) => void; trailing?: ReactNode; tools?: ListTools }) {
   const split = useMemo(() => splitDefFilters(CARI_ROW_FILTERS, ["direction", "subcontractor"]), []);
-  return <FilterRow search={search} onSearchChange={onSearchChange} placeholder="Ad / kod / vergi no ara…" primary={split.primary} more={split.more} trailing={trailing} />;
+  return <FilterRow search={search} onSearchChange={onSearchChange} placeholder="Ara…" searchHint="Ad / kod / vergi no ara" primary={split.primary} more={split.more} trailing={trailing} tools={tools} />;
 }

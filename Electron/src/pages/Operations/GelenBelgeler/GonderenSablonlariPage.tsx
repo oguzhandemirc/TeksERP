@@ -3,7 +3,9 @@
 // Tablo iş emri listesiyle aynı DataTable; satır tıkı ayrıntı panelini açar. Hazır tipler yalnız varsa listelenir. İzin `gelen-belge:template`.
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getCoreRowModel, useReactTable } from "@tanstack/react-table";
+import type { Table } from "@tanstack/react-table";
+import { useLocalTable } from "@/hooks/useLocalTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { Link } from "react-router-dom";
 import { ArrowLeft, Copy, PanelRight, RotateCcw } from "lucide-react";
 import { PageShell } from "@/components/layout/PageShell";
@@ -38,7 +40,7 @@ function useTemplates() {
   return { list, update, templates };
 }
 
-function Toolbar({ showUnused, setShowUnused, unusedCount, noUserHint }: { showUnused: boolean; setShowUnused: (v: boolean) => void; unusedCount: number; noUserHint: boolean }) {
+function Toolbar({ showUnused, setShowUnused, unusedCount, noUserHint, table }: { showUnused: boolean; setShowUnused: (v: boolean) => void; unusedCount: number; noUserHint: boolean; table: Table<SenderTemplateView> }) {
   return (
     <div className="flex flex-wrap items-center gap-3 border-b px-4 py-2">
       <ToolbarToggle checked={showUnused} onCheckedChange={setShowUnused} label={`Kullanılmayanları göster (${unusedCount})`} title="Pasife alınmış, sıfırlanmış ya da okuma motorunda artık olmayan tipler" />
@@ -47,6 +49,9 @@ function Toolbar({ showUnused, setShowUnused, unusedCount, noUserHint }: { showU
           Henüz tanıtılmış belge tipi yok. Yeni tip: menüden "Belge Tanıt" ya da okunmuş bir belgenin detayında "Bu belgeyi tanıt".
         </span>
       )}
+      <div className="ml-auto flex items-center gap-1.5">
+        <DataTableTools table={table} compact exportName={DOCUMENT_TYPES_TITLE} />
+      </div>
     </div>
   );
 }
@@ -73,7 +78,7 @@ export function SenderTemplatesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- update.mutate kararlı; yalnız meşgul satır değişince sütun yenilenir
     [busyCode],
   );
-  const table = useReactTable({ data, columns, getCoreRowModel: getCoreRowModel(), getRowId: (r) => r.code, enableRowSelection: false });
+  const table = useLocalTable({ tableKey: "gelen-belge:document-types", data, columns, getRowId: (r) => r.code });
   const openRow = openCode ? (rows.find((r) => r.code === openCode) ?? null) : null;
 
   return (
@@ -94,7 +99,7 @@ export function SenderTemplatesPage() {
           </div>
         }
       />
-      <Toolbar showUnused={showUnused} setShowUnused={setShowUnused} unusedCount={unused.length} noUserHint={!list.isLoading && !list.isError && userRows.length === 0} />
+      <Toolbar showUnused={showUnused} setShowUnused={setShowUnused} unusedCount={unused.length} noUserHint={!list.isLoading && !list.isError && userRows.length === 0} table={table} />
       <DataTable<SenderTemplateView>
         table={table}
         isLoading={list.isLoading}

@@ -25,7 +25,7 @@ describe("RollPickerDialog", () => {
     expect(await screen.findByText("PATOS")).toBeTruthy();
     expect(screen.queryByText("POLAR")).toBeNull();
     expect(listPickableRolls).toHaveBeenCalledWith({ "filter[rollScope]": "RAW_STOCK" }, { search: undefined });
-    await userEvent.type(screen.getByPlaceholderText("Barkod / kumaş / renk ara..."), "B-1");
+    await userEvent.type(screen.getByLabelText("Barkod / kumaş / renk ara"), "B-1");
     await waitFor(() => expect(listPickableRolls).toHaveBeenLastCalledWith({ "filter[rollScope]": "RAW_STOCK" }, { search: "B-1" }));
     await userEvent.click(await screen.findByText("PATOS"));
     await userEvent.click(screen.getByRole("button", { name: "Ekle (1)" }));

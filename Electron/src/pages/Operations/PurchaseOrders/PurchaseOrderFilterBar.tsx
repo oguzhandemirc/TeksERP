@@ -99,7 +99,7 @@ export function PurchaseOrderFilterBar({ value, onChange, scope = "orders" }: Pr
           <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="pl-8"
-            placeholder="Sipariş no / tedarikçi / not ara…"
+            placeholder="Ara…" title="Sipariş no / tedarikçi / not ara" aria-label="Sipariş no / tedarikçi / not ara"
             value={value.search}
             onChange={(e) => set("search", e.target.value)}
           />

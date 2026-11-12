@@ -203,7 +203,7 @@ export function AccessUsersPage() {
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Kullanıcı adı veya ad soyad ara..."
+          placeholder="Ara…" title="Kullanıcı adı veya ad soyad ara" aria-label="Kullanıcı adı veya ad soyad ara"
           className="h-8 w-64 text-sm"
         />
         <div className="ml-auto">

@@ -4,8 +4,6 @@ import {
   getCoreRowModel,
   useReactTable,
   type ColumnDef,
-  type ColumnSizingState,
-  type OnChangeFn,
   type Row,
   type RowSelectionState,
   type VisibilityState,
@@ -13,7 +11,7 @@ import {
 import { useInfiniteQuery } from "@tanstack/react-query";
 import type { CursorPaginatedResponse, CursorParams } from "@/types/api";
 import { parseUrlToQueryParams } from "@/lib/query-builder";
-import { usePreferences } from "@/providers/PreferencesProvider";
+import { roundSizing, useTablePrefs, withTableEntry } from "@/hooks/useTablePrefs";
 import { usePersistedTableFilters } from "@/hooks/usePersistedTableFilters";
 import type { TableFilterPersistConfig } from "@/components/data-table/filter-row/filter-persist";
 import { drainCursor, EXPORT_PAGE_LIMIT, ExportCancelledError } from "@/lib/export-drain";
@@ -60,20 +58,7 @@ interface Options<T> {
   persistFilters?: TableFilterPersistConfig;
 }
 
-/** Tablo-başı tercih haritasına yaz; `null` = anahtarı düşür ("Sütunları sıfırla", 64KB tavanı). */
-export function withTableEntry<V>(map: Record<string, V> | undefined, key: string, value: V | null): Record<string, V> {
-  const next = { ...(map ?? {}) };
-  if (value === null) delete next[key];
-  else next[key] = value;
-  return next;
-}
-
-/** Genişlikler tam px; geçersiz/sıfır değer saklanmaz; hiç kalmazsa `null` (anahtar düşer). */
-export function roundSizing(sizing: ColumnSizingState): ColumnSizingState | null {
-  const out: ColumnSizingState = {};
-  for (const [id, w] of Object.entries(sizing)) if (Number.isFinite(w) && w > 0) out[id] = Math.round(w);
-  return Object.keys(out).length ? out : null;
-}
+export { withTableEntry, roundSizing };
 
 /**
  * Cursor pagination'lı tablo hook'u.
@@ -121,38 +106,9 @@ export function useDataTable<T>({
   // etmek için — aksi halde geri-senkron, kullanıcı yazarken input'u ezerdi.
   const lastPushedSearchRef = useRef(urlParams.search ?? "");
 
-  // Sütun sırası + görünürlüğü — kullanıcı tercihlerinde (backend) saklanır,
-  // cihazdan bağımsız. Boş = varsayılan.
-  const { prefs, setPreference } = usePreferences();
-  const columnOrder = useMemo(
-    () => prefs.tableOrder?.[queryKey] ?? [],
-    [prefs.tableOrder, queryKey],
-  );
-  const initialVisibilityStr = JSON.stringify(initialVisibility);
-  const columnVisibility = useMemo<VisibilityState>(
-    () => ({
-      ...initialVisibility,
-      ...(prefs.tableVisibility?.[queryKey] ?? {}),
-    }),
-    [prefs.tableVisibility, queryKey, initialVisibilityStr],
-  );
-  // Elle verilen sütun genişlikleri (px) — sürükle-bırak ya da çift tık "sığdır" (DataTable).
-  const columnSizing = useMemo<ColumnSizingState>(
-    () => prefs.tableSizing?.[queryKey] ?? {},
-    [prefs.tableSizing, queryKey],
-  );
-  const onColumnOrderChange: OnChangeFn<string[]> = (updater) => {
-    const next = typeof updater === "function" ? updater(columnOrder) : updater;
-    setPreference({ tableOrder: withTableEntry(prefs.tableOrder, queryKey, next.length ? next : null) });
-  };
-  const onColumnVisibilityChange: OnChangeFn<VisibilityState> = (updater) => {
-    const next = typeof updater === "function" ? updater(columnVisibility) : updater;
-    setPreference({ tableVisibility: withTableEntry(prefs.tableVisibility, queryKey, Object.keys(next).length ? next : null) });
-  };
-  const onColumnSizingChange: OnChangeFn<ColumnSizingState> = (updater) => {
-    const next = typeof updater === "function" ? updater(columnSizing) : updater;
-    setPreference({ tableSizing: withTableEntry(prefs.tableSizing, queryKey, roundSizing(next)) });
-  };
+  // Sütun sırası + görünürlüğü + genişliği — kullanıcı tercihinde (tablo anahtarı = queryKey).
+  const { columnOrder, columnVisibility, columnSizing, onColumnOrderChange, onColumnVisibilityChange, onColumnSizingChange } =
+    useTablePrefs(queryKey, initialVisibility);
 
   // ⚠️ TAZE URL — LOAD-BEARING (2026-09-06). Effect'in bağımlılığı yalnız [search]
   // olduğu için kapanışındaki `searchParams` MOUNT anındaki değerde DONAR. Zamanlayıcı

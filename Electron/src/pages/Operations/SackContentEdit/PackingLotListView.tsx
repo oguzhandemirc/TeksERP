@@ -143,7 +143,7 @@ function LotToolbar(p: {
     <div className="flex shrink-0 flex-wrap items-center gap-2 border-b bg-muted/30 px-4 py-2">
       <div className="relative">
         <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-        <Input value={p.query} onChange={(e) => p.onQuery(e.target.value)} placeholder="Parti adı / kod / not ara…" className="h-9 w-72 pl-7" />
+        <Input value={p.query} onChange={(e) => p.onQuery(e.target.value)} placeholder="Ara…" title="Parti adı / kod / not ara" aria-label="Parti adı / kod / not ara" className="h-9 w-72 pl-7" />
       </div>
       <Button size="sm" className="ml-auto h-8 gap-1" disabled={p.creating} onClick={p.onCreate}>
         <Plus className="h-3.5 w-3.5" /> {p.creating ? "Açılıyor…" : "Sevk Partisi Oluştur"}

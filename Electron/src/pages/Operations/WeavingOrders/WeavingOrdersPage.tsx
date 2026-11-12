@@ -98,7 +98,7 @@ export function WeavingOrdersPage() {
     setCancelling(null);
   };
   const { save, close, cancel } = useWeavingOrderMutations(closeAll);
-  const { table, query, search, setSearch, pagination } = useDataTable<WeavingOrder>({
+  const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<WeavingOrder>({
     queryKey: WEAVING_ORDERS_QUERY_KEY,
     fetchFn: weavingOrderService.listCursor,
     columns: useWeavingOrderColumns(),
@@ -114,7 +114,7 @@ export function WeavingOrdersPage() {
         description="Ne dokunacak, ne kadar, kim dokuyacak. Koşum ve top indirme tabletten; 'devam ediyor' tezgahta koşum var demektir."
         actions={<HeaderActions onNew={() => setFormTarget("new")} />}
       />
-      <DefFilterRow filters={FILTERS} primaryKeys={PRIMARY} search={search} onSearchChange={setSearch} placeholder="Dokuma no, kumaş veya fasoncu ara..." trailing={<SavedViewsMenu compact />} />
+      <DefFilterRow filters={FILTERS} primaryKeys={PRIMARY} search={search} onSearchChange={setSearch} searchHint="Dokuma no, kumaş ya da fasoncu adıyla ara" trailing={<SavedViewsMenu compact />} tools={{ table, fetchAll, exportName: TERIM.dokumaIsEmri.cogul }} />
       <DataTable<WeavingOrder>
         table={table}
         isLoading={query.isLoading}

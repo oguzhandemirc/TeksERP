@@ -47,7 +47,7 @@ describe("TransferPickerDialog — davranış karakterizasyonu", () => {
   it("arama sunucuya gider (depo + arama metni)", async () => {
     render();
     await screen.findByText("PATOS · Mavi");
-    await userEvent.type(screen.getByPlaceholderText("Kumaş / renk / kod ara..."), "pat");
+    await userEvent.type(screen.getByLabelText("Kumaş / renk / kod ara"), "pat");
     await waitFor(() => expect(listWarehouseRolls).toHaveBeenLastCalledWith({ warehouseId: "w1", search: "pat" }));
     expect(listWarehouseSacks).toHaveBeenLastCalledWith({ warehouseId: "w1", search: "pat" });
   });

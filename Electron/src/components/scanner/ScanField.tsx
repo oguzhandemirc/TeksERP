@@ -25,6 +25,8 @@ interface ScanFieldProps {
   /** Enter / butona basınca (veya wedge burst'ü tamamlanınca) doğrulanmış kodla çağrılır. */
   onScan: (code: string) => void;
   placeholder?: string;
+  /** Neyin arandığı/okutulduğunun tam cümlesi — `title` + `aria-label` (yer tutucu kısa kalır). */
+  hint?: string;
   autoFocus?: boolean;
   /**
    * Beklenen tür(ler). Tanımlıysa, okunan kod farklı bir BİLİNEN türe aitse
@@ -64,6 +66,7 @@ export function ScanField({
   onChange,
   onScan,
   placeholder,
+  hint,
   autoFocus,
   expectPrefix,
   submitLabel,
@@ -111,6 +114,8 @@ export function ScanField({
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && submit()}
             placeholder={placeholder}
+            title={hint}
+            aria-label={hint}
             className={cn("pl-8", clearable && value && "pr-8", inputClassName)}
             autoFocus={autoFocus}
           />

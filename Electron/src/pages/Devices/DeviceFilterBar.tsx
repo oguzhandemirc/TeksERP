@@ -48,7 +48,7 @@ export function DeviceFilterBar({
         <Input
           value={search}
           onChange={(e) => onSearch(e.target.value)}
-          placeholder="Cihaz adı / kimlik ara..."
+          placeholder="Ara…" title="Cihaz adı / kimlik ara" aria-label="Cihaz adı / kimlik ara"
           className="h-8 pl-8 text-sm"
         />
       </div>

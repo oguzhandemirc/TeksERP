@@ -10,7 +10,7 @@ export function AccountingFilterRow({ search, onSearchChange, trailing }: { sear
     <FilterRow
       search={search}
       onSearchChange={onSearchChange}
-      placeholder="Sevkiyat no, sipariş no, firma, plaka, sürücü ara..."
+      placeholder="Ara…" searchHint="Sevkiyat no, sipariş no, firma, plaka, sürücü ara"
       primary={split.primary}
       more={split.more}
       trailing={trailing}

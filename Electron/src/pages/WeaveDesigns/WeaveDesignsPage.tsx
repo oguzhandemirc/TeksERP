@@ -48,7 +48,7 @@ export function WeaveDesignsPage() {
         }
       />
       <ListToolbar className="flex-row flex-wrap items-center gap-3">
-        <Input className="max-w-xs" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Desen kodu veya adı ara..." aria-label="Desen ara" />
+        <Input className="max-w-xs" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Ara…" title="Desen kodu veya adı ara" aria-label="Desen ara" />
         <label className="flex items-center gap-2 text-sm text-muted-foreground">
           <Switch checked={includeInactive} onCheckedChange={setIncludeInactive} aria-label="Pasifleri göster" />
           Pasifleri göster

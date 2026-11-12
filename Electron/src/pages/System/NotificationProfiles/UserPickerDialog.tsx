@@ -45,7 +45,7 @@ export function UserPickerDialog({ open, onOpenChange, title, candidates, exclud
         </DialogHeader>
         <div className="relative">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input autoFocus value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Ad ya da kullanıcı adı ara…" className="pl-8" />
+          <Input autoFocus value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Ara…" title="Ad ya da kullanıcı adı ara" aria-label="Ad ya da kullanıcı adı ara" className="pl-8" />
         </div>
         <ul className="max-h-80 space-y-0.5 overflow-y-auto" aria-label="Kişiler">
           {shown.length === 0 && <li className="py-6 text-center text-sm text-muted-foreground">Eşleşen kişi yok.</li>}

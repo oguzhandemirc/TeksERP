@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, type MutableRefObject, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useRef, type KeyboardEvent, type MutableRefObject, type ReactNode } from "react";
 import { flexRender, type ColumnDef, type Row, type Table as TanstackTable } from "@tanstack/react-table";
 import { toast } from "sonner";
 import {
@@ -96,6 +96,13 @@ interface Props<T> {
   paginationActions?: ReactNode;
   /** Satıra ek sınıf (ağaç görünümünde bağlam satırı soluk, daraltılan çeşit gizli — Kumaş Özellikleri). */
   rowClassName?: (row: T) => string | undefined;
+  /**
+   * Etkin (yan panelde açık) satırın kimliği. Verilirse (null dahil) satırlar kayıt satırıdır: vurgulanır
+   * (`aria-selected`), görünür tutulur ve tablo odaktayken ↑/↓ komşu satırı `onRowClick` ile hemen açar.
+   */
+  activeRowId?: string | null;
+  /** Sayfanın kendi sorgusuyla sonsuz kaydırma — altlığı sayfa çizer (`ListFooter`), tablo yalnız dibi izler. */
+  loadMore?: { hasMore: boolean; isFetchingMore: boolean; onLoadMore: () => unknown };
 }
 
 export function DataTable<T>({
@@ -115,6 +122,8 @@ export function DataTable<T>({
   selectionBlockedReason,
   paginationActions,
   rowClassName,
+  activeRowId,
+  loadMore,
 }: Props<T>) {
   const rows = table.getRowModel().rows;
   const selectable = Boolean(table.options.enableRowSelection);
@@ -154,16 +163,49 @@ export function DataTable<T>({
   // Sonsuz kaydırma: liste dibine gelince pagination.loadMore otomatik tetiklenir
   // ("Daha Fazla Yükle" butonu kaldırıldı). rootRef = kaydırma kapsayıcısı,
   // sentinelRef = tablonun sonundaki görünmez eleman.
+  const more = pagination
+    ? { hasMore: pagination.hasMore, isFetchingMore: pagination.isFetchingMore, onLoadMore: pagination.loadMore }
+    : loadMore;
   const { rootRef, sentinelRef } = useInfiniteScroll({
-    hasMore: pagination?.hasMore ?? false,
-    isLoading: pagination?.isFetchingMore ?? false,
-    onLoadMore: pagination?.loadMore ?? (() => {}),
-    enabled: Boolean(pagination),
+    hasMore: more?.hasMore ?? false,
+    isLoading: more?.isFetchingMore ?? false,
+    onLoadMore: more?.onLoadMore ?? (() => {}),
+    enabled: Boolean(more),
   });
+  const scrollEl = useRef<HTMLDivElement | null>(null);
+  const setScrollEl = useCallback(
+    (node: HTMLDivElement | null) => {
+      scrollEl.current = node;
+      rootRef(node);
+    },
+    [rootRef],
+  );
+  const recordRows = activeRowId !== undefined;
+  // Etkin satır (↑/↓ ya da panelin önceki/sonraki düğmesi) görünür kalsın.
+  useEffect(() => {
+    if (!activeRowId) return;
+    scrollEl.current?.querySelector(`[data-row-key="${activeRowId.replace(/"/g, '\\"')}"]`)?.scrollIntoView?.({ block: "nearest" });
+  }, [activeRowId]);
+  const onNavKey = recordRows && onRowClick ? (e: KeyboardEvent) => {
+    if ((e.key !== "ArrowDown" && e.key !== "ArrowUp") || e.altKey || e.ctrlKey || e.metaKey) return;
+    if (rows.length === 0) return;
+    const at = rows.findIndex((r) => r.id === activeRowId);
+    const next = at < 0 ? 0 : at + (e.key === "ArrowDown" ? 1 : -1);
+    const target = rows[next];
+    // Kenarda da tuşu yut: belgeye kabarıp yan panelin kendi ↑/↓'ını ikinci kez tetiklemesin.
+    e.preventDefault();
+    if (target && next !== at) onRowClick(target.original);
+  } : undefined;
 
   return (
     <div data-list-surface="table" className="flex min-h-0 flex-1 flex-col">
-      <div ref={rootRef} className="flex-1 overflow-auto" onMouseOver={handleClipHover}>
+      <div
+        ref={setScrollEl}
+        className="flex-1 overflow-auto focus-visible:outline-none"
+        onMouseOver={handleClipHover}
+        tabIndex={onNavKey ? -1 : undefined}
+        onKeyDown={onNavKey}
+      >
         <DndContext sensors={sensors} collisionDetection={columnCollision} onDragEnd={handleDragEnd}>
           {/* containerClassName="overflow-visible": Table'ın kendi overflow-auto
               sarmalayıcısı sticky başlığı yutuyordu (thead dış scroll kabına değil
@@ -295,6 +337,7 @@ export function DataTable<T>({
                         row={row}
                         index={i}
                         isSelected={row.getIsSelected()}
+                        isActive={recordRows ? row.id === activeRowId : undefined}
                         selectable={selectable}
                         onRowClick={onRowClick}
                         rowContextMenu={rowContextMenu}
@@ -310,7 +353,7 @@ export function DataTable<T>({
           </Table>
         </DndContext>
         {/* Sonsuz kaydırma sentinel'i — görünür olunca sonraki sayfa otomatik yüklenir. */}
-        {pagination ? <div ref={sentinelRef} aria-hidden className="h-px w-full shrink-0" /> : null}
+        {more ? <div ref={sentinelRef} aria-hidden className="h-px w-full shrink-0" /> : null}
       </div>
 
       {/* Seçim çubuğu kalıcı: satır varsa (ve seçim açıksa) hep görünür. İKİ DURUMDA
@@ -393,6 +436,8 @@ interface DataTableRowProps<T> {
   row: Row<T>;
   index: number;
   isSelected: boolean;
+  /** undefined → kayıt satırı değil; true/false → etkin satır vurgusu (`activeRowId`). */
+  isActive?: boolean;
   selectable: boolean;
   onRowClick?: (row: T) => void;
   rowContextMenu?: (row: T) => ReactNode;
@@ -420,6 +465,7 @@ function DataTableRowInner<T>({
   row,
   index,
   isSelected,
+  isActive,
   selectable,
   onRowClick,
   rowContextMenu,
@@ -432,7 +478,13 @@ function DataTableRowInner<T>({
   const rowEl = (
     <TableRow
       data-state={isSelected ? "selected" : undefined}
-      className={cn("row-enter", onRowClick && "cursor-pointer", rowClassName?.(row.original))}
+      {...(isActive === undefined ? {} : { "data-record-row": "", "data-row-key": row.id, "aria-selected": isActive })}
+      className={cn(
+        "row-enter",
+        onRowClick && "cursor-pointer",
+        isActive && "bg-primary-soft hover:bg-primary-soft",
+        rowClassName?.(row.original),
+      )}
       style={{ animationDelay: `${Math.min(index, 10) * 25}ms` }}
       onClick={(e) => {
         if (!onRowClick) return;

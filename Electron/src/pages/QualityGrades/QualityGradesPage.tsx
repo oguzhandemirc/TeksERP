@@ -34,6 +34,7 @@ export function QualityGradesPage() {
       </div>
 
       <DataTableToolbar
+        table={table}
         fetchAll={fetchAll}
         search={search}
         onSearchChange={setSearch}

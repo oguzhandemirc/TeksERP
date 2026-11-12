@@ -7,7 +7,7 @@
 // (`definitions/cariler/:id`). Arama + sayfalama + rol sayıları SUNUCUDA (`useCariList`, `useCariRoleCounts`).
 // Düzenleme sahiplerinin diyaloglarıyla (`useCariEditing`) — payload eşlemesi kopyalanmaz.
 // =============================================================================
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Plus, Users2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -27,7 +27,7 @@ import { useCariRoleCounts } from "./cariler/useCariRoleCounts";
 import { useCariSelection } from "./cariler/useCariSelection";
 import { useCariEditing } from "./cariler/CariEditDialogs";
 import { CariRoleStrip } from "./cariler/CariRoleStrip";
-import { CariListTable } from "./cariler/CariListTable";
+import { CariListTable, useCariTable } from "./cariler/CariListTable";
 import { CariSidePanel } from "./cariler/CariSidePanel";
 
 export function CarilerPage() {
@@ -40,27 +40,25 @@ export function CarilerPage() {
   const editing = useCariEditing();
   const { rows, pageInfo, page, setPage } = list;
   const paged = rows.length > 0 && (pageInfo.hasPrev || pageInfo.hasNext);
+  // Düzenle kancası her çizimde yeni nesne döner; sütunlar yeniden kurulmasın diye ref üzerinden.
+  const editRef = useRef(editing.openEdit);
+  editRef.current = editing.openEdit;
+  const onEdit = useCallback((r: Parameters<typeof editing.openEdit>[0]) => editRef.current(r), []);
+  const onOpenFull = useCallback((r: { id: string }) => navigate(cariRecordPath(r.id)), [navigate]);
+  const table = useCariTable(rows, Boolean(sel.selected), { onEdit, onOpenFull });
+  const showTable = !list.loading && !list.isError && rows.length > 0;
 
   const body = list.loading ? (
     <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
   ) : list.isError ? (
     <CariListError error={list.error} onRetry={list.retry} />
-  ) : rows.length === 0 ? (
+  ) : (
     <ListMessage>
       <RecordEmpty
         icon={Users2}
         text={list.debouncedSearch || isCariFilterDirty(filters) ? "Bu aramayla eşleşen cari yok. Aramayı ya da rol seçimini değiştirin." : "Henüz cari kartı yok. Sağ üstten yeni cari ekleyebilirsiniz."}
       />
     </ListMessage>
-  ) : (
-    <CariListTable
-      rows={rows}
-      selectedKey={sel.selected ? sel.selectedKey : null}
-      compact={Boolean(sel.selected)}
-      onSelect={(r) => sel.select(sel.selectedKey === rowKey(r) ? null : r)}
-      onEdit={(r) => editing.openEdit(r)}
-      onOpenFull={(r) => navigate(cariRecordPath(r.id))}
-    />
   );
 
   return (
@@ -83,8 +81,16 @@ export function CarilerPage() {
       <RecordSplit
         list={
           <>
-            <CarilerFilterRow search={search} onSearchChange={setSearch} trailing={<span className="whitespace-nowrap px-1 text-xs text-muted-foreground">{pageInfo.total} kart</span>} />
-            <ListBody>{body}</ListBody>
+            <CarilerFilterRow search={search} onSearchChange={setSearch} trailing={<span className="whitespace-nowrap px-1 text-xs text-muted-foreground">{pageInfo.total} kart</span>} tools={{ table, exportName: "Cariler" }} />
+            {showTable ? (
+              <CariListTable
+                table={table}
+                selectedKey={sel.selected ? sel.selectedKey : null}
+                onSelect={(r) => sel.select(sel.selectedKey === rowKey(r) ? null : r)}
+              />
+            ) : (
+              <ListBody>{body}</ListBody>
+            )}
             <ListFooter loaded={rows.length} total={pageInfo.total} label={paged ? `Sayfa ${page} · ${rows.length} / ${pageInfo.total} kart` : undefined}>
               {paged && (
                 <div className="flex gap-2">

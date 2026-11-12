@@ -198,7 +198,7 @@ export function SackStorePage() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Çuval kodu, sevk no veya müşteri ara..."
+            placeholder="Ara…" title="Çuval kodu, sevk no veya müşteri ara" aria-label="Çuval kodu, sevk no veya müşteri ara"
             className="pl-8"
           />
         </div>

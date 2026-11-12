@@ -160,7 +160,7 @@ export function ReturnsModal({
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Barkod, kumaş, renk, çuval no, neden ara..."
+              placeholder="Ara…" title="Barkod, kumaş, renk, çuval no, neden ara" aria-label="Barkod, kumaş, renk, çuval no, neden ara"
               className="h-8 pl-8 text-sm"
             />
           </div>

@@ -43,5 +43,5 @@ function noteRowFilters(filter: NoteListFilter, set: Patch, summary: Props["summ
 
 export function NoteListFilters({ filter, onChange, summary, trailing }: Props) {
   const set: Patch = (patch) => onChange((f) => ({ ...f, ...patch }));
-  return <FilterRow search={filter.q} onSearchChange={(q) => set({ q })} placeholder="No, belge no, gönderen, parti/sipariş no ara…" primary={noteRowFilters(filter, set, summary)} trailing={trailing} />;
+  return <FilterRow search={filter.q} onSearchChange={(q) => set({ q })} placeholder="Ara…" searchHint="No, belge no, gönderen, parti/sipariş no ara" primary={noteRowFilters(filter, set, summary)} trailing={trailing} />;
 }
