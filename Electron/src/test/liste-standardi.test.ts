@@ -230,33 +230,31 @@ const NO_SEARCH: Record<string, string> = {
   "Operations/PurchaseOrders/OpenLinesPanel.tsx": "açık kalem ucu (tedarikçi/ürün/gecikme süzgeçli) metin araması almıyor — şerit bu sekmede aramayı bilinçli gizler (backend gerekiyor)",
   "Finance/AccountsPage.tsx": "kasa + banka hesabı tanımları (birkaç satır, iki bölüm); liste uçları arama almıyor (backend gerekiyor)",
   "Operations/SackContentEdit/SackContentsTable.tsx": "çuval içi gömülü tablo (onlarca top); arama salt-okunur görünümde",
-  "Operations/SackContentEdit/SackContentsReadonlyTable.tsx": "çuval içi gömülü tablo; tek çuvalın topları bellekte süzülür (sayfalı liste değil)",
+  "Operations/SackContentEdit/SackContentsReadonlyTable.tsx": "çuval içi gömülü tablo; tek çuvalın topları bellekte süzülür (sayfalı liste değil)",  "Access/PatronCloud/PatronCloudPage.tsx": "bulut hesapları buluttan eşitlenen kısa liste (durum ucunun parçası, parametresiz); arama yok (backend gerekiyor)",
+  "System/WorkSessions/HistoryTable.tsx": "oturum geçmişi ucu kullanıcı/istasyon/makine/cihaz/tarih süzgeçli, offset sayfalı; metin araması yok (backend gerekiyor)",
+  "System/Clients/ClientsPage.tsx": "sunucu belleğindeki istemci envanteri (tek istek, parametresiz, birkaç kurulum); arama yok (backend gerekiyor)",
+  "System/Events/SystemEventsPage.tsx": "AUTH/SYSTEM olay ucu kategori/olay/tarih süzgeçli; `q` iş kaydı numarası arar, kullanıcı/IP/hedef araması yok (backend gerekiyor)",
 };
 
-const LISTE = "liste tablosu elle çiziliyor — ortak DataTable'a geçirilecek";
 const EXPAND = "genişleyen satır (satır altında detay gövdesi) — DataTable'a genel 'genişleyen satır' yeteneği gelince geçer";
+/** Seçimi sayfa durumu sahiplenir (toplu eylem, süzgeçte sıfırlanır) — DataTable seçimi dışarıdan denetlenemiyor. */
+const CONTROLLED_SELECT = "dış durumlu satır seçimi (toplu 'okundu say', süzgeç değişince sıfırlanır) + başlık/gövde/sebep üç satır — DataTable'a denetimli seçim yeteneği gelince geçer";
 const INLINE = "satır içi düzenleme + seçim — DataTable'a genel satır içi düzenleme yeteneği gelince geçer";
 /** KALICI muaf: sütunu veri olan matris/gruplu katalog — sütun menüsü anlamsız; tek satır hücre + ince ayraç uygulanır. */
 const MATRIX = "kalıcı muaf: matris/gruplu katalog (sütunlar sabit durum ya da grup başlıkları) — tek satır hücre + ince ayraç";
 /** Cırcır: liste tablosunu elle çizen dosyalar (yalnız daralır) — her biri gerekçeli. */
 const HAND_TABLES: Record<string, string> = {
-  "Access/PatronCloud/PatronCloudPage.tsx": LISTE,
   "Access/Permissions/PermissionsCatalogPage.tsx": MATRIX,
-  "Access/Templates/TemplatesPage.tsx": LISTE,
-  "Access/Users/AccessUsersPage.tsx": LISTE,
   "Devices/DevicesPage.tsx": EXPAND,
   "Finance/InvoicesPage.tsx": INLINE,
   "Finance/PeriodClose/PeriodClosePage.tsx": INLINE,
   "GeneralSettings/Numbering/NumberingTable.tsx": INLINE,
-  "Notifications/NotificationTable.tsx": LISTE,
+  "Notifications/NotificationTable.tsx": CONTROLLED_SELECT,
   "Operations/ProductBalance/ProductBalancePage.tsx": EXPAND,
   "Stations/StationListView.tsx": EXPAND,
-  "System/Clients/ClientsPage.tsx": LISTE,
   "System/Duplicates/DuplicatesPage.tsx": MATRIX,
-  "System/Events/SystemEventsList.tsx": LISTE,
   "System/NotificationProfiles/ProfileMatrixTab.tsx": MATRIX,
-  "System/PrintHistory/PrintHistoryTable.tsx": LISTE,
-  "System/WorkSessions/HistoryTable.tsx": LISTE,
+  "System/PrintHistory/PrintHistoryTable.tsx": `${EXPAND} (HATA satırının altında neden + ipucu satırı)`,
 };
 
 const HAS_TOOLS = /<DataTableTools\b|\btools=\{|<DataTableToolbar\b[^>]*\btable=\{/;

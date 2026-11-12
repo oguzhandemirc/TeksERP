@@ -2,17 +2,18 @@ import { useSearchParams } from "react-router-dom";
 import { useMemo, useState } from "react";
 import { foldedIncludes } from "@/lib/search-fold";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, UserCog, Trash2, Power, PowerOff, History, KeyRound } from "lucide-react";
+import { Plus, KeyRound } from "lucide-react";
 import { safeFormat } from "@/lib/format";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { PageShell, PageBody } from "@/components/layout/PageShell";
+import { PageShell } from "@/components/layout/PageShell";
+import { ListBody, ListMessage, ListToolbar } from "@/components/layout/ListPage";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { RefreshButton } from "@/components/RefreshButton";
 import { ListExportMenu } from "@/components/data-table/ListExportMenu";
@@ -28,6 +29,7 @@ import { UserFormDialog, type UserFormValues } from "./UserFormDialog";
 import { UserDetailDialog } from "./UserDetailDialog";
 import { NewUserCredentialsDialog } from "./NewUserCredentialsDialog";
 import { ShortCredentialsDialog } from "./ShortCredentialsDialog";
+import { useAccessUsersTable } from "./userColumns";
 import { PendingCredentialResets } from "./PendingCredentialResets";
 import { LoginLockoutsButton } from "./LoginLockoutsDialog";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
@@ -162,6 +164,19 @@ export function AccessUsersPage() {
     },
   });
 
+  const table = useAccessUsersTable(filtered, {
+    onFootprint: (u, e) => openTarget(`/access/users/${u.id}`, e),
+    onManage: (u) => {
+      setDetailTab("permissions");
+      setPermissionsFor(u);
+    },
+    onDeactivate: (u) => deactivateMut.mutate(u.id),
+    onReactivate: (u) => reactivateMut.mutate(u.id),
+    onDelete: setDeletingUser,
+    deactivating: deactivateMut.isPending,
+    reactivating: reactivateMut.isPending,
+  });
+
   const onSubmit = async (values: UserFormValues) => {
     // isActive ARTIK formdan yönetilmez — aktiflik yalnız Pasife Al / Aktifleştir
     // butonlarından (guard'lı uçlar). Yeni kullanıcı zaten aktif doğar. Varsayılan
@@ -199,14 +214,16 @@ export function AccessUsersPage() {
         }
       />
 
-      <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-b">
+      <ListToolbar className="flex-row flex-wrap items-center">
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Ara…" title="Kullanıcı adı veya ad soyad ara" aria-label="Kullanıcı adı veya ad soyad ara"
           className="h-8 w-64 text-sm"
         />
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-1.5">
+          {/* Dosya kendi sütunlarıyla iner (kimlik bilgisi asla) — tablo menüsünde ikinci indirme yok. */}
+          <DataTableTools table={table} compact hideExport />
           <ListExportMenu
             name="Kullanıcılar"
             rows={filtered}
@@ -226,127 +243,25 @@ export function AccessUsersPage() {
           />
           Pasifleri göster
         </label>
-      </div>
+      </ListToolbar>
 
       {hasPermission("admin:users") && <PendingCredentialResets />}
 
-      <PageBody>
-        <Table containerClassName="overflow-visible">
-          <TableHeader className="sticky top-0 z-10 bg-card">
-            <TableRow>
-              <TableHead>Kullanıcı</TableHead>
-              <TableHead>Ad Soyad</TableHead>
-              <TableHead>Yetki</TableHead>
-              <TableHead>Durum</TableHead>
-              <TableHead>Oluşturma</TableHead>
-              <TableHead className="text-right">İşlem</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {query.isLoading ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={i}>
-                  {Array.from({ length: 6 }).map((_, j) => (
-                    <TableCell key={j}>
-                      <Skeleton className="h-4 w-full" />
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
-            ) : filtered.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                  Kullanıcı bulunamadı.
-                </TableCell>
-              </TableRow>
-            ) : (
-              filtered.map((user) => (
-                <TableRow key={user.id} className={user.isActive ? undefined : "opacity-60"}>
-                  <TableCell className="font-mono text-xs">{user.username}</TableCell>
-                  <TableCell>{user.fullName}</TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={
-                        user.isSystemAccount
-                          ? "default"
-                          : user._count.permissions === 0
-                            ? "secondary"
-                            : "muted"
-                      }
-                    >
-                      {user.isSystemAccount ? "Tüm yetkiler" : `${user._count.permissions} yetki`}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    {user.isActive ? <Badge>Aktif</Badge> : <Badge variant="muted">Pasif</Badge>}
-                  </TableCell>
-                  <TableCell>{safeFormat(user.createdAt, "dd.MM.yyyy")}</TableCell>
-                  <TableCell>
-                    <div className="flex justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 gap-1"
-                        title="Ayak izi (çalışma oturumları + işlem dökümü)"
-                        onClick={(e) => openTarget(`/access/users/${user.id}`, e)}
-                        onAuxClick={(e) => {
-                          if (e.button === 1) { e.preventDefault(); openTarget(`/access/users/${user.id}`, e); }
-                        }}
-                      >
-                        <History className="h-3.5 w-3.5" /> Ayak İzi
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 gap-1"
-                        onClick={() => {
-                          setDetailTab("permissions");
-                          setPermissionsFor(user);
-                        }}
-                      >
-                        <UserCog className="h-3.5 w-3.5" /> Yönet
-                      </Button>
-                      {/* Pasife Al (aktifse) / Aktifleştir (pasifse) — GERİ ALINABİLİR */}
-                      {user.isActive ? (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          title="Pasife al (geri alınabilir)"
-                          disabled={deactivateMut.isPending}
-                          onClick={() => deactivateMut.mutate(user.id)}
-                        >
-                          <PowerOff className="h-3.5 w-3.5" />
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-emerald-600"
-                          title="Aktifleştir"
-                          disabled={reactivateMut.isPending}
-                          onClick={() => reactivateMut.mutate(user.id)}
-                        >
-                          <Power className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-destructive"
-                        title="Kalıcı sil (geri alınamaz)"
-                        onClick={() => setDeletingUser(user)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </PageBody>
+      {!query.isLoading && filtered.length > 0 ? (
+        <DataTable table={table} exportName="Kullanıcılar" rowClassName={(u) => (u.isActive ? undefined : "opacity-60")} />
+      ) : (
+        <ListBody>
+          {query.isLoading ? (
+            <ListMessage className="space-y-2">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-8 w-full" />
+              ))}
+            </ListMessage>
+          ) : (
+            <p className="py-10 text-center text-muted-foreground">Kullanıcı bulunamadı.</p>
+          )}
+        </ListBody>
+      )}
 
       <UserFormDialog
         open={formOpen}
