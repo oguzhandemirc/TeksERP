@@ -67,7 +67,7 @@ export function PanoKpiCard<K extends CountKpiKey>({ boxKey, data, donem, erisim
   const rozet = degisimRozeti(c.kpi, donem);
   // Yüzde yokken de değişim satırı durur (kısa nötr metin): kartlar aynı yükseklikte kalır.
   // Anlık ölçüde (stok) değişim yok — ek bilgi o satıra iner, değer satırı kısa kalır.
-  const bosKiyas = c.kpi ? (c.kpi.deger > 0 ? "Önceki dönemde yok" : "Değişim yok") : c.hint;
+  const bosKiyas = c.kpi ? (c.kpi.deger > 0 ? "Öncesi yok" : "Değişim yok") : c.hint;
   const target = KPI_TARGETS[boxKey];
   return (
     <StatCard
@@ -86,8 +86,8 @@ export function PanoKpiCard<K extends CountKpiKey>({ boxKey, data, donem, erisim
 }
 
 const MONEY_HEAD: Record<MoneyKpiKey, { label: string; icon: LucideIcon; tone: IconTileTone; empty: string }> = {
-  ciro: { label: "Ciro", icon: Coins, tone: "amber", empty: "Bu dönemde sevk tutarı yok" },
-  tahsilat: { label: "Tahsilat", icon: Wallet, tone: "sky", empty: "Bu dönemde tahsilat yok" },
+  ciro: { label: "Ciro", icon: Coins, tone: "amber", empty: "Sevk tutarı yok" },
+  tahsilat: { label: "Tahsilat", icon: Wallet, tone: "sky", empty: "Tahsilat yok" },
 };
 
 /** Para KPI'ı — para birimi başına satır; birimler TOPLANMAZ. */
@@ -103,9 +103,9 @@ export function PanoMoneyKpi({ boxKey, data, donem, erisim }: { boxKey: MoneyKpi
   return (
     <div className="@container h-full" data-testid={`pano-para-${boxKey}`}>
       <StatCard layout="compact" className="h-full" label={head.label} icon={head.icon} tone={head.tone} onClick={go}
-        value={first ? <span title={para(first.deger, first.paraBirimi)}>{para(first.deger, first.paraBirimi)}</span> : <span className="text-sm font-normal text-muted-foreground">{head.empty}</span>}
+        value={first ? <span title={para(first.deger, first.paraBirimi)}>{para(first.deger, first.paraBirimi)}</span> : "—"}
         trend={r?.trend ?? "neutral"}
-        delta={<>{r ? <span title={r.metin} className="font-semibold">{r.yuzde}</span> : null}
+        delta={<>{r ? <span title={r.metin} className="font-semibold">{r.yuzde}</span> : first ? null : <span className="font-normal">{head.empty}</span>}
           {rest.map((t) => <MoneyLine key={t.paraBirimi} t={t} donem={donem} />)}
           {unpriced > 0 && <span className="ml-1 text-warning">{formatCount(unpriced)} fiyatsız</span>}</>} />
     </div>

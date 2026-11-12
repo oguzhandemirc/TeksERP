@@ -56,7 +56,7 @@ export function DashboardPage() {
         ) : (
           <PanoBoard boxes={layout.boxes} states={states} editing={editing}
             ctx={{ donem, erisim, onAgenda: setAgenda, agendaLoading: states.ajanda?.fetching ?? false }}
-            onRemove={layout.remove} onReorder={layout.reorder} />
+            onRemove={layout.remove} onReorder={layout.reorder} onResize={layout.resize} />
         )}
         {editing && layout.boxes.length === 0 && (
           <p className="rounded-xl border-2 border-dashed border-card-border py-10 text-center text-sm text-muted-foreground">Panoda kutu yok — “Kutu ekle” ile başla.</p>

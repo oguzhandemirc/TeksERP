@@ -115,8 +115,9 @@ export interface AppPreferences {
   raporlar?: { favoriler?: string[]; opened?: ReportOpenRecord[]; charts?: Record<string, unknown> };
   /** Açılış panosu — seçili dönem (`bugun|hafta|ay|yil`; tanınmayan → hafta) ve kutu düzeni (`boxes`: sıralı
    *  kutu anahtarları; yoksa katalog varsayılanı). Eski pano düzeni alanları (`hidden`/`groupOrder`/`itemOrders`)
-   *  kayıtlı blob'da kalabilir; okunmaz. */
-  dashboard?: { donem?: string; boxes?: string[] };
+   *  kayıtlı blob'da kalabilir; okunmaz. `boxSizes`: kutu → `kucuk|orta|genis` (yoksa katalog boyutu);
+   *  `boxOptions`: kutu → kutuya özgü gösterim ayarı (şekli `pano/box-options.ts` süzer). */
+  dashboard?: { donem?: string; boxes?: string[]; boxSizes?: Record<string, string>; boxOptions?: Record<string, unknown> };
   // NOT: `scanner`, `labelPrinter`, `scaleDevice` — makineye bağlı donanım
   // ayarları — bilerek burada DEĞİL. `@/lib/machine-config` (secure-store,
   // per-machine) içindeler; `useMachineConfig` ile okunur/yazılır.

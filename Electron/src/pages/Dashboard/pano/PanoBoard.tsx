@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from "react";
+import { useMemo, type CSSProperties, type ReactNode } from "react";
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, rectSortingStrategy, sortableKeyboardCoordinates, useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -9,7 +9,9 @@ import type { PanoBoxDef } from "./box-types";
 import { metaOf } from "./box-meta";
 import { hasContent, hasRenderer, renderBox, type RenderCtx } from "./box-render";
 import { BoxChrome, BoxFailed, BoxLoading, BoxMenu, PreviewSkeleton } from "./PanoBoxFrame";
-import { LOCAL_BOX_KEYS, moveBox, packRows } from "./pano-layout";
+import { BASE_SPAN, LOCAL_BOX_KEYS, moveBox, packRows, type SizeChoice } from "./pano-layout";
+import { useMasonry } from "./pano-masonry";
+import { SizePicker } from "./PanoSizePicker";
 import type { BoxState } from "./usePanoBoxData";
 
 /** 12 sütunlu ızgarada genişlik — Tailwind sınıfları statik kalsın diye tablo. Aralıklar çakışmaz: `md` (rem) ile
@@ -20,8 +22,6 @@ const SPAN: Record<number, string> = {
   9: "min-[1101px]:col-span-9", 10: "min-[1101px]:col-span-10", 11: "min-[1101px]:col-span-11", 12: "min-[1101px]:col-span-12",
 };
 
-const MONEY_KPIS: ReadonlySet<string> = new Set(["ciro", "tahsilat"]);
-
 interface Props {
   boxes: PanoBoxDef[];
   states: Record<string, BoxState>;
@@ -29,6 +29,7 @@ interface Props {
   ctx: RenderCtx;
   onRemove: (key: string) => void;
   onReorder: (visibleOrder: string[]) => void;
+  onResize: (key: string, size: SizeChoice) => void;
 }
 
 /** Kip dışında çizilecek mi: yerel kutu hep; uzak kutu yüklenirken/hatada iskelet, veri null/boşsa yok. */
@@ -39,7 +40,7 @@ function isShown(b: PanoBoxDef, s: BoxState | undefined, editing: boolean): bool
   return s.loading || s.error || hasContent(b.anahtar, s.data);
 }
 
-export function PanoBoard({ boxes, states, editing, ctx, onRemove, onReorder }: Props) {
+export function PanoBoard({ boxes, states, editing, ctx, onRemove, onReorder, onResize }: Props) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -48,6 +49,11 @@ export function PanoBoard({ boxes, states, editing, ctx, onRemove, onReorder }: 
   const kpis = shown.filter((b) => b.boyut === "kpi");
   const body = shown.filter((b) => b.boyut !== "kpi");
   const spans = new Map(packRows(body.map((b) => ({ key: b.anahtar, size: b.boyut as Exclude<PanoBoxDef["boyut"], "kpi"> }))).flat().map((p) => [p.key, p.span]));
+  const bodyKey = body.map((b) => `${b.anahtar}:${b.boyut}:${spans.get(b.anahtar)}`).join(",");
+  // Sütun akışında temel genişlik (gerilmemiş): satır artığını akış zaten dolduruyor. `bodyKey` kutu/boyut özeti.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const flow = useMemo(() => body.map((b) => ({ key: b.anahtar, span: spanAt(BASE_SPAN[b.boyut as SizeChoice] ?? 4, b.boyut === "genis") })), [bodyKey]);
+  const masonry = useMasonry(flow);
 
   const onDragEnd = (e: DragEndEvent) => {
     if (!e.over || e.active.id === e.over.id) return;
@@ -57,7 +63,7 @@ export function PanoBoard({ boxes, states, editing, ctx, onRemove, onReorder }: 
 
   const cell = (b: PanoBoxDef) => {
     const s = states[b.anahtar];
-    if (editing) return <EditCard def={b} onRemove={() => onRemove(b.anahtar)} />;
+    if (editing) return <EditCard def={b} onRemove={() => onRemove(b.anahtar)} onResize={(s) => onResize(b.anahtar, s)} />;
     const menu = <BoxMenu title={b.baslik} onRemove={() => onRemove(b.anahtar)} className={b.boyut === "kpi" ? "absolute right-3 top-3 z-10 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100" : undefined} />;
     let content: ReactNode;
     if (LOCAL_BOX_KEYS.has(b.anahtar)) content = renderBox(b.anahtar, null, ctx);
@@ -73,22 +79,23 @@ export function PanoBoard({ boxes, states, editing, ctx, onRemove, onReorder }: 
       <div className="space-y-[var(--space-gap)]" data-testid="pano-board" data-editing={editing || undefined}>
         {kpis.length > 0 && (
           <SortableContext items={kpis.map((b) => b.anahtar)} strategy={rectSortingStrategy}>
-            {/* Esnek şerit: beş kompakt kart 1280 genişlikte tek sıra; para kartı biraz daha geniş tabanla. */}
-            <div className="flex flex-wrap gap-[var(--space-gap)]" data-testid="pano-kpi-seridi">
+            {/* Eşit hücreli şerit: beş kompakt kart 1280 genişlikte tek sıra; taşan kart alt sıraya eşit genişlikte iner. */}
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] gap-[var(--space-gap)]" data-testid="pano-kpi-seridi">
               {kpis.map((b) => (
-                <Cell key={b.anahtar} id={b.anahtar} editing={editing}
-                  className={MONEY_KPIS.has(b.anahtar) ? "flex-[1_1_12rem]" : "flex-[1_1_10.5rem]"}>{cell(b)}</Cell>
+                <Cell key={b.anahtar} id={b.anahtar} editing={editing}>{cell(b)}</Cell>
               ))}
             </div>
           </SortableContext>
         )}
         {body.length > 0 && (
           <SortableContext items={body.map((b) => b.anahtar)} strategy={rectSortingStrategy}>
-            <div className="grid gap-[var(--space-gap)] min-[768px]:max-[1100px]:grid-flow-row-dense min-[768px]:max-[1100px]:grid-cols-2 min-[1101px]:grid-cols-12">
-              {body.map((b) => (
-                <Cell key={b.anahtar} id={b.anahtar} editing={editing}
+            {/* Sütun akışı: 4 px satır birimi + ölçülen boy → kısa kutunun altı boş kalmaz; boşluk hücre dolgusunda. */}
+            <div ref={masonry.gridRef} className="grid auto-rows-[4px] gap-x-[var(--space-gap)] gap-y-0 min-[768px]:max-[1100px]:grid-cols-2 min-[1101px]:grid-cols-12" data-testid="pano-izgara">
+              {flow.map((f, i) => { const b = body[i]!; return (
+                <Cell key={b.anahtar} id={b.anahtar} editing={editing} measureRef={masonry.measure(b.anahtar)} place={masonry.styleOf(f.key)}
                   className={cn(b.boyut === "genis" && "min-[768px]:max-[1100px]:col-span-2", SPAN[spans.get(b.anahtar) ?? 4])}>{cell(b)}</Cell>
-              ))}
+              ); })}
+              
             </div>
           </SortableContext>
         )}
@@ -97,14 +104,21 @@ export function PanoBoard({ boxes, states, editing, ctx, onRemove, onReorder }: 
   );
 }
 
-function Cell({ id, editing, className, children }: { id: string; editing: boolean; className?: string; children: ReactNode }) {
+/** Sütun sayısına göre genişlik: 12'de paketlenmiş genişlik, 2'de geniş kutu iki sütun, tek sütunda 1. */
+function spanAt(span12: number, wide: boolean): (cols: number) => number {
+  return (cols) => (cols >= 12 ? span12 : cols === 2 && wide ? 2 : 1);
+}
+
+interface CellProps { id: string; editing: boolean; measureRef?: (el: HTMLDivElement | null) => void; place?: CSSProperties; className?: string; children: ReactNode }
+
+function Cell({ id, editing, measureRef, place, className, children }: CellProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled: !editing });
-  const style: CSSProperties = { transform: CSS.Translate.toString(transform), transition };
+  const style: CSSProperties = { transform: CSS.Translate.toString(transform), transition, ...place };
   return (
     <div ref={setNodeRef} style={style} data-box={id}
       className={cn("min-w-0", isDragging && "z-20 opacity-80", className)}
       {...(editing ? { ...attributes, ...listeners, "aria-roledescription": "taşınabilir kutu" } : {})}>
-      {children}
+      {measureRef ? <div ref={measureRef} className="pb-[var(--space-gap)]">{children}</div> : children}
     </div>
   );
 }
@@ -119,7 +133,7 @@ function KpiLoading() {
 }
 
 /** Düzenleme kipindeki kutu: tutamak + simge + başlık + ×, gövdede veri istemeyen önizleme iskeleti. */
-function EditCard({ def, onRemove }: { def: PanoBoxDef; onRemove: () => void }) {
+function EditCard({ def, onRemove, onResize }: { def: PanoBoxDef; onRemove: () => void; onResize: (s: SizeChoice) => void }) {
   const meta = metaOf(def.anahtar);
   const kpi = def.boyut === "kpi";
   return (
@@ -138,6 +152,7 @@ function EditCard({ def, onRemove }: { def: PanoBoxDef; onRemove: () => void }) 
         </button>
       </header>
       <div className={cn("mt-3 flex-1", kpi && "mt-2")}><PreviewSkeleton kind={meta.preview} large={!kpi} /></div>
+      {!kpi && <SizePicker title={def.baslik} value={def.boyut as SizeChoice} onChange={onResize} />}
     </section>
   );
 }
