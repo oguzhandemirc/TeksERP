@@ -20,12 +20,10 @@ vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
 vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ isAdmin: true, hasPermission: () => true, hasAnyPermission: () => true, hasAllPermissions: () => true }) }));
 vi.mock("@/hooks/useFavorites", () => ({ useFavorites: () => ({ favorites: [], isFavorite: () => false, toggleFavorite: vi.fn(), reorderFavorites: vi.fn() }) }));
 vi.mock("@/components/layout/tabs/use-tab-target", () => ({ useDrillTarget: () => ({ onClick: () => {}, onAuxClick: () => {}, onContextMenu: () => {} }), useTabTarget: () => ({ onClick: () => {} }) }));
-import { DemandAnalysisPage } from "@/pages/Reports/Sales/DemandAnalysisPage";
 import { OrderProfilePage } from "@/pages/Reports/Customer/OrderProfilePage";
 
 /** reportAxisCoverage `AXES_BY_REPORT` aynası: yaprak · bileşen · denenecek eksen (o yaprağın beyan ettiği ilk eksen). */
 const YAPRAKLAR: Array<{ key: string; page: ReactElement; eksen: string; deger: string }> = [
-  { key: "sales/demand-analysis", page: <DemandAnalysisPage />, eksen: "customerId", deger: "c1" },
   { key: "customer/order-profile", page: <OrderProfilePage />, eksen: "customerId", deger: "c1" },
 ];
 

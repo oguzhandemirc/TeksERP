@@ -8,6 +8,7 @@ import type { ShipmentDestination } from "@prisma/client";
 import { factoryYmd } from "../../../constants/time";
 import type { CompareMode, DateRange } from "../_shared";
 import { buildOrderDemandReport } from "./siparis-talep.temel";
+import type { OrderDemandView } from "./siparis-talep.views";
 import { buildShippedReport } from "./sevkiyat.temel";
 import { buildDeadlineReport } from "./termin.temel";
 import { buildOpenOrderReport } from "./acik-siparisler.temel";
@@ -46,10 +47,10 @@ type Cell = Parameters<CoreRunner>[2];
 const only = (cell: Cell, boyut: string): string[] | undefined => (cell && cell.boyut === boyut ? [cell.deger] : undefined);
 
 export interface OrderDemandFilters { customerId?: string[]; destination?: ShipmentDestination; itemId?: string[] }
-export function orderDemandRunner(filters: OrderDemandFilters, compareMode: CompareMode): CoreRunner {
+export function orderDemandRunner(filters: OrderDemandFilters, compareMode: CompareMode, view?: OrderDemandView): CoreRunner {
   return (range, compareRange, cell) =>
     buildOrderDemandReport({
-      range, compareRange, compareMode,
+      range, compareRange, compareMode, view: cell ? undefined : view,
       filters: {
         customerId: only(cell, "musteri") ?? filters.customerId,
         itemId: only(cell, "urun") ?? filters.itemId,

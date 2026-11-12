@@ -16,6 +16,7 @@ import { reportEnvelope, resolveDateRange } from "../../services/reports/_shared
 import { coreRangeQuerySchema, resolveCoreCompare, viewQueryKey } from "../../services/reports/temel/_common";
 import { kalemEkseni, musteriEkseni } from "../../services/reports/_filters";
 import { buildLostWorkReport, LOST_WORK_VIEWS } from "../../services/reports/temel/vazgecilen-is.temel";
+import { ORDER_DEMAND_VIEWS } from "../../services/reports/temel/siparis-talep.views";
 import { runCoreWithExtras, variantQueryKeys } from "../../services/reports/temel/_variant";
 import {
   DEADLINE_DIMS, OPEN_ORDER_DIMS, ORDER_DEMAND_DIMS, SHIPPED_DIMS,
@@ -30,7 +31,9 @@ const reportGate = (key: ReportKey) => [requireReportOpen(key), requirePermissio
 
 // Şemalar bekçi için DIŞA AÇIK; her biri `.strict()` (tanınmayan anahtar 400).
 // `varyant` yalnız ucun beyanlı boyutlarından (dışı 400), `donemler` "ay:6" biçimi (R1-VARYANT).
-export const coreOrderDemandQuerySchema = coreRangeQuerySchema.extend({ ...musteriEkseni, itemId: kalemEkseni.itemId, ...variantQueryKeys(ORDER_DEMAND_DIMS) }).strict();
+export const coreOrderDemandQuerySchema = coreRangeQuerySchema
+  .extend({ ...musteriEkseni, itemId: kalemEkseni.itemId, ...variantQueryKeys(ORDER_DEMAND_DIMS), ...viewQueryKey(ORDER_DEMAND_VIEWS) })
+  .strict();
 export const coreShippedQuerySchema = coreRangeQuerySchema.extend({ destination: musteriEkseni.destination, ...variantQueryKeys(SHIPPED_DIMS) }).strict();
 export const coreDeadlineQuerySchema = coreRangeQuerySchema.extend({ destination: musteriEkseni.destination, ...variantQueryKeys(DEADLINE_DIMS) }).strict();
 export const coreOpenOrderQuerySchema = z.object({ itemId: kalemEkseni.itemId, ...variantQueryKeys(OPEN_ORDER_DIMS) }).strict();
@@ -46,6 +49,7 @@ export const coreLostWorkQuerySchema = coreRangeQuerySchema.extend({ ...variantQ
  *       Sipariş Karnesi'nin sayılarıyla (aynı parametre) kurulan sunum zarfı: ana sayı alınan
  *       sipariş metresi (iptaller hariç), yan sayılar sipariş adedi, müşteri sayısı, tutar
  *       (tek para birimiyse; fiyatsız satır sayılmaz). Grafik günlük sipariş metresi (fabrika günü).
+ *       `gorunum` tabloyu eski Talep Analizi listelerine çevirir (aynı süzgeç; aylık = son 24 ay).
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: query, name: dateFrom, schema: { type: string, format: date-time } }
@@ -54,6 +58,7 @@ export const coreLostWorkQuerySchema = coreRangeQuerySchema.extend({ ...variantQ
  *       - { in: query, name: customerId, schema: { type: string }, description: "Müşteri süzgeci (uuid; CSV ya da tekrarlı anahtar; en fazla 50)" }
  *       - { in: query, name: destination, schema: { type: string, enum: [DOMESTIC, EXPORT] }, description: "Siparişin yönü (Sipariş Karnesi ile aynı)" }
  *       - { in: query, name: itemId, schema: { type: string }, description: "Kumaş süzgeci (uuid; CSV ya da tekrarlı anahtar)" }
+ *       - { in: query, name: gorunum, schema: { type: string, enum: [ozet, cesit, kumas, renk, aylik] }, description: "Tablo görünümü (varsayılan ozet = müşteri)" }
  *       - { in: query, name: varyant, schema: { type: string, enum: [musteri, urun, yon] }, description: "Küçük çoklu kırılımı — en büyük ≤ 6 değer, her hücre ucun kendi süzgeciyle süzülmüş ana koşu (R1-VARYANT)" }
  *       - { in: query, name: donemler, schema: { type: string, example: "ay:6" }, description: "Çok dönemli kıyas (birim ay|hafta|gun, adet 2–12; alt koşular sıralı). Kesit raporunda dönem değerleri ölçülemedi döner" }
  *     responses:
@@ -66,7 +71,7 @@ router.get("/sales/siparis-talep", ...reportGate("sales/siparis-talep"), async (
     const { mode: compareMode, compareRange } = resolveCoreCompare(input, range);
     const { sunum, suzgec } = await runCoreWithExtras({
       range, compareRange, dims: ORDER_DEMAND_DIMS, varyant: input.varyant, donemler: input.donemler,
-      run: orderDemandRunner({ customerId: input.customerId, destination: input.destination, itemId: input.itemId }, compareMode),
+      run: orderDemandRunner({ customerId: input.customerId, destination: input.destination, itemId: input.itemId }, compareMode, input.gorunum),
     });
     res.status(200).json(reportEnvelope(sunum, range, compareRange, { suzgec, warnings: sunum.uyarilar }));
   } catch (e) {

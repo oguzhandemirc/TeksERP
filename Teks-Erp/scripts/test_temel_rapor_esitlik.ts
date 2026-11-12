@@ -45,6 +45,8 @@
 // NEGATİF SONDALAR (md5 ile geri alındı → 135/0): iade kumaş ← byColor (S5v5) · hız payı ← çalışma payı (§G1s) ·
 //   hol ← tezgahlar (§G2t) · otomatik/elle takası (§G3s) · sıfır açık satır süzgeci kaldırıldı (§G4s) → ❌ 5.
 // ⚠️ KÖR: RAPC penceresinde tezgah/alarm/levent/alacak verisi yok → gerçek DB kıyası boş kümede; eşleme sentetik satırla.
+// S1v (2026-11-12, Talep Analizi emekli): sipariş-talep görünümleri = `getDemandAnalysis` listeleri; sonda kumaş ← byColor
+//   + çeşit müşteri ← kalem → ❌ 2 (S1v1 · S1v3), md5 ile geri alındı.
 //
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. Pencere 2097-07 (kıyas 2097-06), etiket TEST-TRE-<pid>.
 // Koşum: npx tsx scripts/test_temel_rapor_esitlik.ts
@@ -83,6 +85,8 @@ import { getOpenOrderCoverage } from "../src/services/reports/open-order-coverag
 import { getReturnScorecard } from "../src/services/reports/return-scorecard.report.service";
 import { getOrderCancellationScorecard } from "../src/services/reports/order-cancellation.report.service";
 import { buildOrderDemandReport } from "../src/services/reports/temel/siparis-talep.temel";
+import { ORDER_DEMAND_VIEWS, type OrderDemandView } from "../src/services/reports/temel/siparis-talep.views";
+import { getDemandAnalysis } from "../src/services/reports/demand-analysis.report.service";
 import { buildShippedReport } from "../src/services/reports/temel/sevkiyat.temel";
 import { buildDeadlineReport } from "../src/services/reports/temel/termin.temel";
 import { buildOpenOrderReport } from "../src/services/reports/temel/acik-siparisler.temel";
@@ -109,7 +113,7 @@ import { chequeService } from "../src/services/cheque.service";
 import { yasakSozcukBul } from "../src/services/reports/anlati/yasak-sozcuk";
 import { periodRanges, runCoreWithExtras } from "../src/services/reports/temel/_variant";
 import { factoryDateTr, factoryDayEndOfKey } from "../src/constants/time";
-import { ORDER_DEMAND_DIMS, OPEN_ORDER_DIMS, SHIPPED_DIMS, SUBCONTRACTOR_DIMS, openOrderRunner, orderDemandRunner, shippedRunner, subcontractorRunner } from "../src/services/reports/temel/core-runs";
+import { ORDER_DEMAND_DIMS, OPEN_ORDER_DIMS, SHIPPED_DIMS, SUBCONTRACTOR_DIMS, openOrderRunner, orderDemandRunner, shippedRunner, subcontractorRunner, type OrderDemandFilters } from "../src/services/reports/temel/core-runs";
 
 let pass = 0;
 let fail = 0;
@@ -665,9 +669,12 @@ const salesDay = (s: string) => new Date(`${s}T09:00:00.000Z`);
 
 const salesIds = { customers: [] as string[], orders: [] as string[], shipments: [] as string[], sacks: [] as string[], rolls: [] as string[], returns: [] as string[] };
 let salesItemId = "";
+let salesColorId = "";
 
 async function customer(n: string, d: ShipmentDestination): Promise<string> {
-  const c = await prisma.customer.create({ data: { code: `${SALES_TAG}-${n}`, name: `${SALES_TAG} ${n}`, defaultDestination: d }, select: { id: true } });
+  const c = await prisma.customer.create({
+    data: { code: `${SALES_TAG}-${n}`, name: `${SALES_TAG} ${n}`, defaultDestination: d, country: d === "EXPORT" ? "Almanya" : null }, select: { id: true },
+  });
   salesIds.customers.push(c.id);
   return c.id;
 }
@@ -705,6 +712,10 @@ async function salesSetup(): Promise<{ cD: string; cE: string }> {
   // Mart: zamanında (yurtiçi) · geç (yurtdışı) · terminsiz · dönemde alınıp iptal · açık (termini geçmiş)
   const lD1 = await order(cD, 100, { orderDate: "2097-03-02", unitPrice: 10, deadline: "2097-03-10", status: "COMPLETED", completedAt: "2097-03-08", shippedQty: 100 });
   const lE1 = await order(cE, 200, { orderDate: "2097-03-02", currency: "USD", unitPrice: 5, deadline: "2097-03-05", status: "COMPLETED", completedAt: "2097-03-09", shippedQty: 200 });
+  // Talep görünümü (§S1v): aynı siparişe renkli + enli ikinci kalem — kumaş+renk+en çeşidi ve renk kırılımı ayrışsın.
+  salesColorId = (await prisma.color.create({ data: { code: `${SALES_TAG}-C`, name: `${SALES_TAG} RENK` }, select: { id: true } })).id;
+  const e1Order = (await prisma.orderLine.findUniqueOrThrow({ where: { id: lE1 }, select: { orderId: true } })).orderId;
+  await prisma.orderLine.create({ data: { orderId: e1Order, itemId: salesItemId, colorId: salesColorId, width: 280, quantity: 70, unitPrice: 5, shippedQty: 70 } });
   const lD2 = await order(cD, 50, { orderDate: "2097-03-03", status: "COMPLETED", completedAt: "2097-03-12", shippedQty: 50 });
   await order(cD, 30, { orderDate: "2097-03-02", unitPrice: 10, status: "CANCELLED", cancelledAt: "2097-03-15" });
   await order(cD, 80, { orderDate: "2097-03-04", unitPrice: 12, deadline: "2020-01-01" });
@@ -865,6 +876,35 @@ async function salesSection(cD: string): Promise<void> {
     cellsMatch("S5v7 iade sebep = `byReason[]`", await run("iadeSebep"), iade(ret.byReason));
   }
 
+  console.log("── S1v sipariş-talep tablo görünümleri = Talep Analizi listeleri ──");
+  {
+    const da = await getDemandAnalysis(SALES_RANGE, SALES_PREV, {});
+    const run = async (view: OrderDemandView, filters: OrderDemandFilters = {}) =>
+      (await buildOrderDemandReport({ range: SALES_RANGE, compareRange: SALES_PREV, compareMode: "prev", filters, view })).sunum;
+    const cesit = await run("cesit");
+    const decl = viewDecl(cesit);
+    const base = (await buildOrderDemandReport({ range: SALES_RANGE, compareRange: SALES_PREV, compareMode: "prev", filters: {} })).sunum;
+    check("S1v0 `gorunum` beyanı = ORDER_DEMAND_VIEWS · ana sayı görünümle değişmez",
+      decl?.deger === "cesit" && JSON.stringify(decl.secenekler?.map((o) => o.deger)) === JSON.stringify(ORDER_DEMAND_VIEWS) && cesit.anaSayi.deger === base.anaSayi.deger && viewDecl(base)?.deger === "ozet");
+    cellsMatch("S1v1 ⭐ kumaş + renk + en = `specs[]` (renk · en · kalem · müşteri · metre · pay · önceki)", cesit, da.specs.map((r) => ({
+      kumas: r.itemName, renk: r.colorName ?? "Renk belirtilmemiş", en: r.width, kalem: r.lineCount, musteri: r.customerCount, metre: r.qty, pay: r.sharePct, onceki: r.prevQty ?? null,
+    })), true);
+    check("S1v2 çeşit toplamı: kalem = lineCount · metre = totalQty · çekirdek çeşit sayısı etikette",
+      cesit.tablo?.toplam?.kalem === da.summary.lineCount && cesit.tablo?.toplam?.metre === da.summary.totalQty && da.specs.length === 2
+        && String(cesit.tablo?.toplam?.kumas).includes(`${da.summary.specCount} çeşit`) && String(cesit.tablo?.toplam?.kumas).includes(`ilk ${da.summary.coreSpecCount} çeşitte`),
+      JSON.stringify(cesit.tablo?.toplam));
+    const bd = (rows: typeof da.byItem) => rows.map((r) => ({ ad: r.label, kalem: r.count, metre: r.qty, onceki: r.prevQty ?? null }));
+    cellsMatch("S1v3 kumaş = `byItem[]`", await run("kumas"), bd(da.byItem), true);
+    const renk = await run("renk");
+    cellsMatch("S1v4 renk = `byColor[]` (renksiz talep kendi satırında)", renk, bd(da.byColor), true);
+    check("S1v4b renksiz talep satırı = summary.colorlessQty", renk.tablo?.satirlar.find((r) => r.ad === "Renk belirtilmemiş")?.metre === da.summary.colorlessQty && da.summary.colorlessQty > 0);
+    const aylik = await run("aylik");
+    cellsMatch("S1v5 aylık = `monthly[]` (son 24 ay)", aylik, da.monthly.map((m) => ({ ay: m.month, kalem: m.lineCount, metre: m.qty })));
+    check("S1v5b aylık görünüm dönemden bağımsız olduğunu uyarıda söyler", aylik.uyarilar.some((u) => u.includes("son 24 ay")));
+    const daF = await getDemandAnalysis(SALES_RANGE, SALES_PREV, { destination: "EXPORT" });
+    cellsMatch("S1v6 süzgeçli (yön EXPORT) = aynı süzgeçli Talep Analizi", await run("cesit", { destination: "EXPORT" }), daF.specs.map((r) => ({ kumas: r.itemName, renk: r.colorName ?? "Renk belirtilmemiş", metre: r.qty })), true);
+  }
+
   console.log("── S6 K-KIYAS: parametresiz çağrı = önceki dönem ──");
   {
     const { mode, compareRange } = resolveCoreCompare({}, SALES_RANGE);
@@ -953,6 +993,7 @@ async function cleanupSales(): Promise<void> {
   await prisma.orderLine.deleteMany({ where: { orderId: { in: salesIds.orders } } });
   await prisma.order.deleteMany({ where: { id: { in: salesIds.orders } } });
   if (salesItemId) await prisma.item.deleteMany({ where: { id: salesItemId } });
+  if (salesColorId) await prisma.color.deleteMany({ where: { id: salesColorId } });
   await prisma.customer.deleteMany({ where: { id: { in: salesIds.customers } } });
 }
 

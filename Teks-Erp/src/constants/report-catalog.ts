@@ -53,7 +53,7 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
   { key: "sales/demand-analysis", baslik: "Talep Analizi", soru: "Hangi ürün ve renkler bu dönemde ne kadar talep gördü, önceki döneme göre nasıl değişti?",
     sinif: "gelismis", izin: "report:sales", modul: "cekirdek:siparis-musteri", varsayilanGun: 90, tarih: "aralik-iso",
     panelYolu: "reports/sales/demand-analysis", uc: "/api/reports/sales/demand-analysis", kapiTasiyici: [{ dosya: "src/routes/reports/sales.routes.ts", yol: "/demand-analysis" }], yuzey: "yaprak",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "sales/siparis-talep" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "sales/siparis-talep" }, emekli: true },
   { key: "sales/order-intake", baslik: "Sipariş Karnesi", soru: "Bu dönemde ne kadar sipariş girdi ve önceki döneme göre nasıl değişti?",
     sinif: "gelismis", izin: "report:sales", modul: "cekirdek:siparis-musteri", varsayilanGun: 30, tarih: "aralik-iso",
     panelYolu: "reports/sales/order-intake", uc: "/api/reports/sales/order-intake", kapiTasiyici: [{ dosya: "src/routes/reports/sales.routes.ts", yol: "/order-intake" }], yuzey: "yaprak",

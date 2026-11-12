@@ -1,4 +1,4 @@
-import { Globe2, Target } from "lucide-react";
+import { Globe2 } from "lucide-react";
 import type { HubTile } from "../_components/ReportHubGrid";
 
 /**
@@ -11,13 +11,6 @@ import type { HubTile } from "../_components/ReportHubGrid";
  *     sorusu cevapsızdı. Yeni karne hem trendi hem anlık geciken listesini verir.
  */
 export const salesReportTiles: HubTile[] = [
-  {
-    key: "demand-analysis",
-    title: "Talep Analizi",
-    description: "En çok istenen kumaş-renk-en üçlüleri ve aylık mevsimsellik",
-    icon: Target,
-    to: "/reports/sales/demand-analysis",
-  },
   {
     key: "destination-mix",
     title: "Yurtiçi / Yurtdışı Satış",

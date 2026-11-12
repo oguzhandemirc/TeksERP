@@ -27,7 +27,6 @@ const ROUTES = readFileSync(resolve(SRC, "routes/content-routes.tsx"), "utf8");
 
 /** Sunucu sözleşmesinin (6e `_filters.ts`) panel aynası — her yaprak kendi eksenlerini beyan eder. */
 const AXES_BY_REPORT: Record<string, readonly string[]> = {
-  "sales/demand-analysis": ["customerId", "itemId", "colorId", "destination"],
   "customer/order-profile": ["customerId", "destination"],
 };
 

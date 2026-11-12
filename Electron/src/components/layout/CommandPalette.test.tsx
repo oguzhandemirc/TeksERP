@@ -215,16 +215,16 @@ describe("CommandPalette — K19 menü düzeni", () => {
     expect(screen.queryByText("Parti İzleme")).not.toBeInTheDocument();
   });
 
-  it("⭐ K19: rapor KATEGORİSİ gizlenince alt raporu da aramada çıkmaz (Talep Analizi)", () => {
+  it("⭐ K19: rapor KATEGORİSİ gizlenince alt raporu da aramada çıkmaz (Yurtiçi / Yurtdışı Satış)", () => {
     permissions = [...permissions, "report:sales"];
     const a = open();
-    type("talep analizi");
-    expect(screen.getByText("Eski: Talep Analizi")).toBeInTheDocument();
+    type("yurtdışı satış");
+    expect(screen.getByText("Eski: Yurtiçi / Yurtdışı Satış")).toBeInTheDocument();
     a.unmount();
     menu = toMenuLayoutState({ hiddenScreens: ["reports/sales"], advancedGroup: false, advancedScreens: [] });
     open();
-    type("talep analizi");
-    expect(screen.queryByText("Eski: Talep Analizi")).not.toBeInTheDocument();
+    type("yurtdışı satış");
+    expect(screen.queryByText("Eski: Yurtiçi / Yurtdışı Satış")).not.toBeInTheDocument();
   });
 });
 

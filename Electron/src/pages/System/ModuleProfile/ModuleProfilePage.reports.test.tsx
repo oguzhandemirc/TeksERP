@@ -95,7 +95,7 @@ describe("Modüller → Raporlar bölümü", () => {
   it("§2 fabrika yöneticisi (canWrite=false): satırlar görünür, hepsi PASİF, yazma yok", () => {
     renderWithProviders(<ReportVisibilitySection canWrite={false} />);
     for (const r of SURFACED) expect(checkboxOf(r.key)).toBeDisabled();
-    fireEvent.click(checkboxOf("sales/demand-analysis"));
+    fireEvent.click(checkboxOf("sales/siparis-talep"));
     expect(update).not.toHaveBeenCalled();
   });
 
@@ -110,8 +110,8 @@ describe("Modüller → Raporlar bölümü", () => {
       expect(checkboxOf(k)).toBeDisabled();
     }
     // kontrol grubu: çekirdek (siparis-musteri) rapor kilitsiz ve etkin
-    expect(screen.queryByTestId("rapor-kilit:sales/demand-analysis")).toBeNull();
-    expect(checkboxOf("sales/demand-analysis")).toBeEnabled();
+    expect(screen.queryByTestId("rapor-kilit:sales/siparis-talep")).toBeNull();
+    expect(checkboxOf("sales/siparis-talep")).toBeEnabled();
     // üretim AÇIK: üretim raporu kilitsiz
     expect(screen.queryByTestId("rapor-kilit:production/batch-trace")).toBeNull();
   });
@@ -132,14 +132,14 @@ describe("Modüller → Raporlar bölümü", () => {
   });
 
   it("§4 ⭐ toggle TEK listeye yazar: kapat → anahtar sıralı kümeye girer; aç → çıkar; null gönderilmez", async () => {
-    flagsData = { reportsClosedKeys: ["sales/destination-mix"] };
+    flagsData = { reportsClosedKeys: ["sales/sevkiyat"] };
     renderWithProviders(<ReportVisibilitySection canWrite />);
-    expect(isChecked("sales/destination-mix")).toBe(false);
-    expect(isChecked("sales/demand-analysis")).toBe(true);
-    fireEvent.click(checkboxOf("sales/demand-analysis"));
+    expect(isChecked("sales/sevkiyat")).toBe(false);
+    expect(isChecked("sales/siparis-talep")).toBe(true);
+    fireEvent.click(checkboxOf("sales/siparis-talep"));
     await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
-    expect(update).toHaveBeenLastCalledWith({ reportsClosedKeys: ["sales/demand-analysis", "sales/destination-mix"] });
-    fireEvent.click(checkboxOf("sales/destination-mix"));
+    expect(update).toHaveBeenLastCalledWith({ reportsClosedKeys: ["sales/sevkiyat", "sales/siparis-talep"] });
+    fireEvent.click(checkboxOf("sales/sevkiyat"));
     await waitFor(() => expect(update).toHaveBeenCalledTimes(2));
     expect(update).toHaveBeenLastCalledWith({ reportsClosedKeys: [] });
     for (const c of update.mock.calls) expect((c[0] as { reportsClosedKeys: unknown }).reportsClosedKeys).not.toBeNull();
@@ -149,7 +149,7 @@ describe("Modüller → Raporlar bölümü", () => {
     flagsData = { reportsClosedKeys: null };
     const { unmount } = renderWithProviders(<ReportVisibilitySection canWrite />);
     expect(screen.getByText("Rapor listesi okunamadı")).toBeInTheDocument();
-    expect(screen.queryByTestId("rapor-satir:sales/demand-analysis")).toBeNull();
+    expect(screen.queryByTestId("rapor-satir:sales/siparis-talep")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Listeyi sıfırla (hepsini aç)" }));
     await waitFor(() => expect(update).toHaveBeenCalledWith({ reportsClosedKeys: [] }));
     unmount();
