@@ -7,13 +7,12 @@ import { fireEvent } from '@testing-library/react-native';
 import { DOC_HIGHLIGHT_BG } from '../../../../components/DocHighlight';
 import { renderWithPaper } from '../../../../test/render';
 import type { ReadWatch } from '../readResult';
-import { clearLocalPages, rememberLocalPages } from '../tanit/localPages';
+import { clearLocalPages } from '../tanit/localPages';
 import DocRowCard from './DocRowCard';
-import { incomingKgNote } from './DocRowKg';
 import { initialMultiParty, type MultiPartyDraft } from './partyDraft';
 import { buildCreateBody, initialRowForm, type RowForm } from './woFromDoc';
 import type { DocRow, WoRowsState } from './useWoRows';
-import type { NotePartiesView, Tanima } from '../../../../services/inboundDoc.service';
+import type { NotePartiesView } from '../../../../services/inboundDoc.service';
 
 let mockWatch: ReadWatch | null = null;
 jest.mock('../useReadResult', () => ({ useReadResult: () => ({ watch: mockWatch, recheck: jest.fn() }) }));
@@ -29,20 +28,6 @@ jest.mock('../../../../components/ModuleSheet', () => {
   const { Text } = jest.requireActual('react-native');
   return { ...actual, __esModule: true, default: (p: { visible: boolean; subtitle?: string; children: React.ReactNode; footer?: React.ReactNode }) => (p.visible ? <>{p.subtitle ? <Text>{p.subtitle}</Text> : null}{p.children}{p.footer}</> : null) };
 });
-
-const SUMMARY = { noteId: 'n1', noteNo: 'GB-1', noteStatus: 'DRAFT', state: 'READ', reason: null, pages: { total: 1, waiting: 0, read: 1, failed: 0 }, lineCount: 3, reviewCount: 0, totals: { declared: false, ok: null, mismatches: [] }, warnings: [] };
-const done = (x: Record<string, unknown>): ReadWatch => ({ phase: 'done', summary: { ...SUMMARY, ...x } } as unknown as ReadWatch);
-
-const rule = (key: string, text: string, source = 'TEMPLATE') => ({ key, value: 'x', source, text, sourceText: source === 'TEMPLATE' ? 'şablon kuralı' : 'fabrika ayarı' });
-const TAUGHT: Tanima = {
-  template: { code: 'u-komurhan', name: 'Kömürhan Çeki Listesi', version: 2, score: 0.9375 },
-  durum: 'TANITILDI',
-  mapping: [
-    { field: 'partiNo', label: 'PARTİ NO', value: '2008-58', woTarget: 'customerBatchNo', woLabel: 'Gönderen parti no', group: 'KIMLIK' },
-    { field: 'toplamMetre', label: 'T.Metre', value: '241', woTarget: 'kursunMeters', woLabel: 'Gelen metre', group: 'GELEN' },
-  ],
-  rules: [rule('multiParty', 'Birden çok parti gelirse: tek iş emri', 'FACTORY'), rule('totalsRow', 'Toplam satırı: T.Adet')] as Tanima['rules'],
-};
 
 const baseForm: RowForm = {
   ownerCustomerId: 'c1', ownerSuggested: null, ownerAsk: null, ourBatchNo: null, ourBatchNoKey: null,

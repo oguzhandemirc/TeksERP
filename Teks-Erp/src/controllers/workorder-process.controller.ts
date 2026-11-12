@@ -13,7 +13,7 @@ import {
   replaceWorkOrderTargetValues,
 } from "../services/workorder-target-value.service";
 import { updateStepPlannedMachine } from "../services/step-planned-machine.service";
-import { changeWorkOrderFoldType } from "../services/workorder/fold-change";
+import { changeWorkOrderFoldType } from "../services/workorder-fold-change.service";
 import { normalizeFoldType } from "../services/helpers/fold-type";
 
 /** Yalnız gövdedeki özellikler değişir; `valueId: null` = o özelliğin hedefini kaldır.

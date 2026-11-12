@@ -10,6 +10,7 @@ import type { LabelTemplateOption } from "../helpers/label-template-options.help
 import { elementSupported, prepareElements, type LabelElement } from "../../config/label-elements";
 import { elementText } from "../helpers/label-canvas-native.helper";
 import { bannerValueText, qrFootprintDots } from "../helpers/native-label.shared";
+import { previewSeriesCode, resolveSeriesFormat } from "../number-series.service";
 
 export interface TamburLabelDraft {
   /** Boş = kalanı kes → ana topun kalanı basılır. */
@@ -54,8 +55,8 @@ export const SYSTEM_ASSIGNED_BINDS: ReadonlySet<string> = new Set(["barcode", "q
 
 /** Eski kademeli font yüksekliği (mm, ~203 dpi) — `hMm` olmayan eski elemanlar için yaklaşık. */
 const LEGACY_FONT_MM: Record<string, number> = { sm: 1.5, md: 2.2, lg: 3.0, xl: 4.2 };
-/** QR ayak izi için örnek çocuk barkodu uzunluğu (T + 12 hane). */
-const SAMPLE_CODE = "T000000000000";
+/** QR/barkod ayak izi için örnek çocuk barkodu — top serisinden türetilir (biçim veri; literal bayatlar). */
+const sampleRollCode = (): string => previewSeriesCode(resolveSeriesFormat("roll"), 1);
 
 /** Taslak değerleri payload'a uygular — çocuğun kesimde alacağı ölçüler. Saf. */
 export function applyTamburDraft(payload: LabelPayload, draft: TamburLabelDraft): LabelPayload {
@@ -117,12 +118,12 @@ export function composeCanvasElements(
         // Code128-B genişliği ≈ (11·karakter + 35) modül × modül dot'u; çocuk barkodu henüz yok → örnek uzunluk.
         out.push({
           type: "code128", x: el.x, y: el.y,
-          wMm: ((SAMPLE_CODE.length * 11 + 35) * (el.mw ?? 2)) / dotsPerMm,
+          wMm: ((sampleRollCode().length * 11 + 35) * (el.mw ?? 2)) / dotsPerMm,
           hMm: el.hMm ?? 9, human: el.human !== false, humanHMm: el.humanHMm ?? 1.5, value: null,
         });
         break;
       case "qr":
-        out.push({ type: "qr", x: el.x, y: el.y, sizeMm: qrFootprintDots(SAMPLE_CODE, el.scale ?? 5) / dotsPerMm });
+        out.push({ type: "qr", x: el.x, y: el.y, sizeMm: qrFootprintDots(sampleRollCode(), el.scale ?? 5) / dotsPerMm });
         break;
       case "lengthBanner":
         out.push({

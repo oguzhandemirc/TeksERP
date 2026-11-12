@@ -39,6 +39,7 @@ export const PANEL_SETTING_ROW = {
   shipmentUndoSameDayOnly: { ekran: "shipping", baslik: "Sevk geri almayı aynı günle sınırla" },
   shipmentManualSackCountEnabled: { ekran: "shipping", baslik: "Çuval sayısını elle gir" },
   shipmentLooseLoadEnabled: { ekran: "shipping", baslik: "Çuvalsız sevk (dökme / araba)" },
+  shipmentHandheldCreateEnabled: { ekran: "shipping", baslik: "El terminalinden sevk kurma" },
   devereMountTracking: { ekran: "devere", baslik: "Levent tezgah bağı defteri" },
   yarnBlockNegativeBalanceEnabled: { ekran: "yarn", baslik: "İplik stoğu eksi bakiyeye düşemesin" },
   goodsReceiptRequirePriceEnabled: { ekran: "warehouse", baslik: "Mal kabul satırında birim fiyat zorunlu olsun" },

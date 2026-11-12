@@ -9,6 +9,7 @@ import { LoadUnitKind, PrintedDocType, Prisma, RollStatus, ShipmentStatus } from
 
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
+import { settingRowPath } from "../../constants/panel-ayar-yolu";
 import { LIVE_LOAD_UNIT_WHERE } from "../helpers/load-unit.helper";
 import { formatSackSeqLabel, readSackSeqFormat } from "../helpers/sack-seq.helper";
 import { readinessClassOf } from "../helpers/ship-readiness.helper";
@@ -55,7 +56,7 @@ export interface HandheldLoadState {
 /** Bayrak kapısı — tüm A-uçlarının ilk adımı (fail-closed; eski uçlar etkilenmez). */
 export async function assertHandheldEnabled(): Promise<void> {
   if (await readShipmentHandheldCreateEnabled()) return;
-  throw AppError.forbidden("El terminalinden sevk kurma bu kurulumda kapalı (Ayarlar → Özellik Anahtarları → “El terminalinden sevk kurma”).", { code: "HANDHELD_DISABLED" });
+  throw AppError.forbidden(`El terminalinden sevk kurma bu kurulumda kapalı (${settingRowPath("shipmentHandheldCreateEnabled")}).`, { code: "HANDHELD_DISABLED" });
 }
 
 /** Dökme birimin ve taşıma bildiriminin etiketi. */
