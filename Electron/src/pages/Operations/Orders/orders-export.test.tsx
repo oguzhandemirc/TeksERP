@@ -5,8 +5,8 @@
 // Burada GERÇEK tablo adaptörü (`buildCsv`) ve gerçek kolonlar ölçülür.
 // =============================================================================
 import { describe, it, expect } from "vitest";
-import { renderHook } from "@testing-library/react";
-import { getCoreRowModel, useReactTable } from "@tanstack/react-table";
+import { render, renderHook } from "@testing-library/react";
+import { flexRender, getCoreRowModel, useReactTable } from "@tanstack/react-table";
 import { buildCsv } from "@/lib/table-export";
 import { buildOrderColumns } from "./columns";
 import { lineLabelsText } from "./order-cell-text";
@@ -138,7 +138,6 @@ describe("Üretim / Sevk durumu / Nerede? sütunları", () => {
           { tur: "FASON", id: "f1", ad: "Akın Boya", topSayisi: 8, metre: 400, gun: 3 },
           { tur: "HAZIR", id: null, ad: null, topSayisi: 2, metre: 100, gun: null },
         ],
-        terminGecti: true,
         sonHareket: null,
       },
       lines: [line({ id: "l1", workOrderLinks: [wol("w1", "COMPLETED"), wol("w2", "COMPLETED")] }), line({ id: "l2", workOrderLinks: [wol("w3", "SUPERSEDED")] })],
@@ -151,7 +150,7 @@ describe("Üretim / Sevk durumu / Nerede? sütunları", () => {
     expect(at("İE sayısı")).toBe("2");
     expect(at("Sevk durumu")).toBe("Bir kısmı gönderildi (40 / 200 m)");
     expect(head).not.toContain("Genel durum");
-    expect(at("Nerede?")).toBe("Fasonda – Akın Boya · 8 top · 3 gündür · +1 yerde daha · Termini geçti");
+    expect(at("Nerede?")).toBe("Fasonda – Akın Boya · 8 top · 3 gündür · +1 yerde daha");
   });
 
   it("iş emirsiz sipariş: Üretim '—', İE sayısı 0", () => {
@@ -171,5 +170,28 @@ describe("Üretim / Sevk durumu / Nerede? sütunları", () => {
     expect(ids).not.toContain("where");
     expect(ids).toContain("shipped");
     expect(ids).not.toContain("status");
+  });
+});
+
+describe("Termin sütunu — düz tarih (kullanıcı kararı 2026-11-12)", () => {
+  const deadlineCellText = (o: Order) => {
+    const { result } = renderHook(() =>
+      useReactTable({ data: [o], columns: buildOrderColumns(true, true), getCoreRowModel: getCoreRowModel() }),
+    );
+    const cell = result.current.getRowModel().rows[0]!.getVisibleCells().find((c) => c.column.id === "deadline")!;
+    return render(<>{flexRender(cell.column.columnDef.cell, cell.getContext())}</>).container.textContent;
+  };
+
+  it("geçmiş termin: hücre ve Excel yalnız tarih; gün rozeti yok", () => {
+    const o = order({ deadline: "2020-01-15T12:00:00.000Z", status: "APPROVED" });
+    const text = deadlineCellText(o);
+    expect(text).toMatch(/^\d{2}\.\d{2}\.2020$/);
+    expect(text).not.toMatch(/gün|bugün/);
+    const [head = [], row = []] = csvOf([o]);
+    expect(row[head.indexOf("Termin")]).toBe(text);
+  });
+
+  it("termin yoksa '—'", () => {
+    expect(deadlineCellText(order({ deadline: null }))).toBe("—");
   });
 });

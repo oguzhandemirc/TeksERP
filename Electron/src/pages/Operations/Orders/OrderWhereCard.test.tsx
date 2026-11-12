@@ -30,7 +30,6 @@ const DETAIL: OrderWhereDetail = {
       { tur: "FASON", id: "f1", ad: "Akın Boya", topSayisi: 8, metre: 1600, gun: 3 },
       { tur: "ASAMA", id: "st3", ad: "Tambur", topSayisi: 4, metre: 1250, gun: null },
     ],
-    terminGecti: true,
     sonHareket: "2026-11-04T11:32:00.000Z",
   },
   isEmirleri: [
@@ -90,7 +89,7 @@ describe("OrderWhereCard — yan panel", () => {
     expect(screen.getByText("Son hareket: kayıt yok")).toBeInTheDocument();
     expect(screen.getByText("Saten · 1234 Ekru · hedef 2400 m")).toBeInTheDocument();
     expect(screen.getByText("Fasonda – Akın Boya · 8 top · 3 gündür · +1 yerde daha")).toBeInTheDocument();
-    expect(screen.getByText("Termini geçti")).toBeInTheDocument();
+    expect(screen.queryByText(/Termin/)).toBeNull();
     expect(screen.getByText("Henüz gönderilmedi")).toBeInTheDocument();
   });
 

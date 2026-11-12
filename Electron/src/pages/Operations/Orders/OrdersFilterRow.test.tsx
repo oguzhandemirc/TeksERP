@@ -89,7 +89,7 @@ describe("Görünüm — hızlı sekmeler tek açılırda", () => {
     fireEvent.click(screen.getByRole("option", { name: /Tümü/ }));
     expect(url()).toBe("?filter[status]=APPROVED");
     cleanup();
-    const second = setup("/?filter[nerede]=GECIKEN&filter[status]=APPROVED");
+    const second = setup("/?filter[nerede]=BEKLEYEN&filter[status]=APPROVED");
     fireEvent.click(screen.getByRole("button", { name: "Görünüm filtresini kaldır" }));
     expect(second.url()).toBe("?filter[status]=APPROVED");
   });
@@ -100,7 +100,7 @@ describe("Görünüm — hızlı sekmeler tek açılırda", () => {
     openView();
     await waitFor(() => expect(within(screen.getByRole("option", { name: /Fasonda/ })).getByText("4")).toBeInTheDocument());
     const calls = getStats.mock.calls.map((c) => c[0] as { filters: Record<string, string>; search?: string });
-    expect(calls).toHaveLength(6);
+    expect(calls).toHaveLength(5);
     for (const c of calls) {
       expect(c.filters.customerId).toBe("c1");
       expect(c.filters.hideCancelled).toBe("true");
@@ -116,7 +116,8 @@ describe("Görünüm — hızlı sekmeler tek açılırda", () => {
     openView();
     expect(screen.queryByRole("option", { name: /Fasonda/ })).toBeNull();
     expect(screen.queryByRole("option", { name: /Sevke hazır/ })).toBeNull();
-    expect(screen.getByRole("option", { name: /Gecikenler/ })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /Kısmen gidenler/ })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /Gecikenler/ })).toBeNull();
     fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
     fireEvent.click(screen.getByRole("button", { name: "Filtre ekle" }));
     const menu = within(screen.getByRole("menu"));

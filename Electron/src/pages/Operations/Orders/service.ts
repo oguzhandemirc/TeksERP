@@ -77,7 +77,8 @@ export interface OrderCancelPreview {
  * ⚠️ Kapsam ayrımı bilinçli: ADET alanları listenin BİREBİR aynasıdır
  * (iptaller panel varsayılanında gizli → `byStatus.CANCELLED` yalnız
  * "İptalleri göster" açıkken dolar), METRAJ alanları iptalleri HER ZAMAN
- * dışlar. İkisini birbirine uydurma.
+ * dışlar. İkisini birbirine uydurma. Sunucunun `overdueCount`/`dueThisWeekCount`
+ * alanları panelde OKUNMAZ (termin vurgusu kalktı, 2026-11-12).
  */
 export interface OrderStats {
   totalCount: number;
@@ -85,8 +86,6 @@ export interface OrderStats {
   totalOrderedQty: number;
   totalShippedQty: number;
   totalOpenQty: number;
-  overdueCount: number;
-  dueThisWeekCount: number;
   noWorkOrderCount: number;
   amountByCurrency: Record<string, number>;
 }

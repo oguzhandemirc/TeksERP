@@ -20,8 +20,6 @@ export const fmtNum = (n: number): string => NUM.format(n);
 /** Fason gün ifadesi: 0 → aynı fabrika günü gönderildi. */
 export const daysText = (d: number): string => (d <= 0 ? "bugün gönderildi" : `${fmtNum(d)} gündür`);
 
-export const OVERDUE_TEXT = "Termini geçti";
-
 /** Elle kapatılan sipariş (COMPLETED + manualClosedById) — "Nerede?" ve "Sevk durumu" aynı sözcük. */
 export const ORDER_MANUAL_CLOSED_TEXT = "Sipariş elle kapatıldı";
 
@@ -41,8 +39,6 @@ const PLACE_TONE: Record<OrderWherePlace["tur"], Tone> = { ASAMA: "info", FASON:
 export interface OrderWhereView {
   text: string;
   tone: Tone;
-  /** Ek kırmızı rozet ("Termini geçti"). */
-  overdue: boolean;
 }
 
 /**
@@ -52,7 +48,7 @@ export interface OrderWhereView {
 export function orderWhereView(order: Pick<Order, "nerede" | "manualClosedById">): OrderWhereView | null {
   const n = order.nerede;
   if (!n) return null;
-  const v = (text: string, tone: Tone): OrderWhereView => ({ text, tone, overdue: n.terminGecti });
+  const v = (text: string, tone: Tone): OrderWhereView => ({ text, tone });
   switch (n.durum) {
     case "IPTAL":
       return v("Sipariş iptal edildi", "muted");
@@ -76,11 +72,11 @@ export function orderWhereView(order: Pick<Order, "nerede" | "manualClosedById">
   }
 }
 
-/** Excel/PDF "Nerede?" hücresi = ekrandaki rozet(ler) " · " ile. */
+/** Excel/PDF "Nerede?" hücresi = ekrandaki rozet metni. */
 export function orderWhereExportText(order: Pick<Order, "nerede" | "manualClosedById">): string {
   const view = orderWhereView(order);
   if (!view) return "—";
-  return view.overdue ? `${view.text} · ${OVERDUE_TEXT}` : view.text;
+  return view.text;
 }
 
 // ── Sevk durumu — TEK kaynak ─────────────────────────────────────────────────
@@ -178,7 +174,7 @@ export const WHERE_FILTER_KEY = "filter[nerede]";
 export const FASON_FIRMA_KEY = "filter[fasonFirmaId]";
 export const FASON_GUN_KEY = "filter[fasondaGunden]";
 
-export type WhereTabValue = "BEKLEYEN" | "FASONDA" | "SEVKE_HAZIR" | "KISMEN" | "GECIKEN";
+export type WhereTabValue = "BEKLEYEN" | "FASONDA" | "SEVKE_HAZIR" | "KISMEN";
 
 export interface WhereTab {
   value: WhereTabValue | null;
@@ -193,7 +189,6 @@ export const WHERE_TABS: readonly WhereTab[] = [
   { value: "FASONDA", label: "Fasonda", production: true },
   { value: "SEVKE_HAZIR", label: "Sevke hazır", production: true },
   { value: "KISMEN", label: "Kısmen gidenler" },
-  { value: "GECIKEN", label: "Gecikenler" },
 ];
 
 export function whereTabs(productionEnabled: boolean): WhereTab[] {

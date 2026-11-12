@@ -30,7 +30,7 @@ function useApply(): [URLSearchParams, Apply] {
 
 /**
  * "Görünüm" — "Nerede?" hızlı sekmeleri TEK açılırda (Tümü · Bekleyenler · Fasonda · Sevke hazır ·
- * Kısmen gidenler · Gecikenler) + sayılar. Süzme SUNUCUDA (`filter[nerede]`); üretim kapalıyken
+ * Kısmen gidenler) + sayılar. Süzme SUNUCUDA (`filter[nerede]`); üretim kapalıyken
  * fason/hazır seçenekleri düşer (sunucu da 403 verir).
  */
 export function OrdersViewSelect({ productionEnabled, forceFilters, autoOpen }: { productionEnabled: boolean; forceFilters: Record<string, string>; autoOpen?: boolean }) {

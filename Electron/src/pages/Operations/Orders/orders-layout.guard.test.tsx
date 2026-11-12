@@ -12,7 +12,7 @@
 //    sessizce eski hâline döner: hata yok, log yok, yalnız kaybolan alan.
 //
 // ⭐ İÇERİK İKİ EKSENDE ÇÖZÜLÜR: görünüm modu TAVAN, pencere genişliği TABAN.
-//    "Geniş" seçili olsa bile metraj `lg` (≥1024px), tutar/termin/iş emri
+//    "Geniş" seçili olsa bile metraj `lg` (≥1024px), tutar/iş emri
 //    `2xl` (≥1536px) altında gizlenir. Ölçülen şey bu kademelerin RENDER'a
 //    gerçekten yansıdığı; jsdom CSS hesaplamaz, o yüzden sınıf sözleşmesi
 //    ölçülür — kademeyi silmek testi kırar.
@@ -49,8 +49,6 @@ const STATS: OrderStats = {
   totalOrderedQty: 1000,
   totalShippedQty: 400,
   totalOpenQty: 600,
-  overdueCount: 2,
-  dueThisWeekCount: 1,
   noWorkOrderCount: 3,
   amountByCurrency: { TRY: 125000 },
 };
@@ -89,7 +87,7 @@ describe("Siparişler — özet şerit yerleşimi", () => {
     expect(PAGE_SRC).not.toContain("justify-end");
   });
 
-  it("⭐ METRAJ kademesi lg (≥1024px), TUTAR/TERMİN kademesi 2xl (≥1536px)", () => {
+  it("⭐ METRAJ kademesi lg (≥1024px), TUTAR/İŞ EMRİ kademesi 2xl (≥1536px)", () => {
     const { getByTestId } = renderStrip("genis");
     const qty = getByTestId("orders-stats-qty").className;
     expect(qty).toContain("hidden");
@@ -107,6 +105,15 @@ describe("Siparişler — özet şerit yerleşimi", () => {
     expect(queryByTestId("orders-stats-money")).toBeNull();
     // Ayar açılırı her modda durur (şeridin tek sabit sağ ucu).
     expect(queryByTestId("orders-stats-view")).not.toBeNull();
+  });
+
+  it("termin sayaçları yok: 'Geciken' / 'Bu hafta' çipi hiçbir modda doğmaz (kullanıcı kararı 2026-11-12)", () => {
+    for (const v of ["sade", "onerilen", "genis"] as const) {
+      const { queryByText, unmount } = renderStrip(v);
+      expect(queryByText("Geciken")).toBeNull();
+      expect(queryByText("Bu hafta")).toBeNull();
+      unmount();
+    }
   });
 
   it("KÖRLÜK ZEMİNİ: 'onerilen' modda metraj VAR, tutar YOK", () => {

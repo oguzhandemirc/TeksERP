@@ -16,7 +16,7 @@ import {
 } from "./order-where-text";
 import type { Order, OrderLine, OrderWhere, OrderWherePlace, OrderWhereWorkOrder } from "./types";
 
-const where = (p: Partial<OrderWhere>): OrderWhere => ({ durum: "YERLER", yerler: [], terminGecti: false, sonHareket: null, ...p });
+const where = (p: Partial<OrderWhere>): OrderWhere => ({ durum: "YERLER", yerler: [], sonHareket: null, ...p });
 const asama = (ad: string, n: number): OrderWherePlace => ({ tur: "ASAMA", id: ad, ad, topSayisi: n, metre: n * 50, gun: null });
 const fason = (ad: string | null, n: number, gun: number | null): OrderWherePlace => ({ tur: "FASON", id: ad, ad, topSayisi: n, metre: n * 50, gun });
 const hazir = (n: number): OrderWherePlace => ({ tur: "HAZIR", id: null, ad: null, topSayisi: n, metre: n * 50, gun: null });
@@ -37,7 +37,7 @@ describe("Nerede? — durum tablosu", () => {
     [where({ yerler: [asama("Tambur", 1200)] }), "Tambur aşamasında · 1200 top", "info"],
     [where({ yerler: [hazir(9), asama("Tambur", 4), fason("Akın Boya", 2, 1)] }), "Sevke hazır · 9 top · +2 yerde daha", "success"],
   ] as const)("%j → %s", (n, text, tone) => {
-    expect(view(n)).toEqual({ text, tone, overdue: false });
+    expect(view(n)).toEqual({ text, tone });
   });
 
   it("hazır yerde 'paketli' sözcüğü yok (Ek karar 3)", () => {
@@ -45,14 +45,13 @@ describe("Nerede? — durum tablosu", () => {
   });
 
   it("elle kapatılan tamam sipariş 'Hepsi gönderildi' demez", () => {
-    expect(view(where({ durum: "TAMAM" }), "u1")).toEqual({ text: "Sipariş elle kapatıldı", tone: "muted", overdue: false });
+    expect(view(where({ durum: "TAMAM" }), "u1")).toEqual({ text: "Sipariş elle kapatıldı", tone: "muted" });
   });
 
-  it("termin geçtiyse ek rozet; Excel metni ekranla aynı sırada birleşir", () => {
-    const n = where({ yerler: [fason("Akın Boya", 8, 3), hazir(1)], terminGecti: true });
-    expect(view(n)?.overdue).toBe(true);
+  it("Excel metni ekrandaki rozet metniyle aynı; termin eki yok", () => {
+    const n = where({ yerler: [fason("Akın Boya", 8, 3), hazir(1)] });
     expect(orderWhereExportText({ nerede: n, manualClosedById: null })).toBe(
-      "Fasonda – Akın Boya · 8 top · 3 gündür · +1 yerde daha · Termini geçti",
+      "Fasonda – Akın Boya · 8 top · 3 gündür · +1 yerde daha",
     );
   });
 
@@ -178,8 +177,8 @@ describe("yan panel metinleri", () => {
 
 describe("hızlı sekmeler + gün girdisi", () => {
   it("üretim kapalıyken Fasonda / Sevke hazır sekmeleri düşer", () => {
-    expect(whereTabs(true).map((t) => t.label)).toEqual(["Tümü", "Bekleyenler", "Fasonda", "Sevke hazır", "Kısmen gidenler", "Gecikenler"]);
-    expect(whereTabs(false).map((t) => t.label)).toEqual(["Tümü", "Bekleyenler", "Kısmen gidenler", "Gecikenler"]);
+    expect(whereTabs(true).map((t) => t.label)).toEqual(["Tümü", "Bekleyenler", "Fasonda", "Sevke hazır", "Kısmen gidenler"]);
+    expect(whereTabs(false).map((t) => t.label)).toEqual(["Tümü", "Bekleyenler", "Kısmen gidenler"]);
   });
 
   it("tanınmayan URL değeri 'Tümü' görünür", () => {
