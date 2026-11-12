@@ -12,7 +12,7 @@ import { buildShippedReport } from "./sevkiyat.temel";
 import { buildDeadlineReport } from "./termin.temel";
 import { buildOpenOrderReport } from "./acik-siparisler.temel";
 import { buildSubcontractorsReport } from "./fasoncular.temel";
-import { buildLoomStopsReport } from "./duruslar.temel";
+import { buildLoomStopsReport, type LoomStopView } from "./duruslar.temel";
 import type { ResolvedDayRange } from "./_day-range";
 import { DESTINATION_DIMENSION, declaredOptionsDimension, rankedDimension, type CoreRunner, type VariantDimension } from "./_variant";
 
@@ -90,7 +90,7 @@ export function dayWindowOf(range: DateRange, compareRange: DateRange | null, mo
   };
 }
 
-export function loomStopsRunner(shiftDefinitionId: string[] | undefined, mode: CompareMode): CoreRunner {
+export function loomStopsRunner(shiftDefinitionId: string[] | undefined, mode: CompareMode, view?: LoomStopView): CoreRunner {
   return (range, compareRange, cell) =>
-    buildLoomStopsReport({ window: dayWindowOf(range, compareRange, mode), shiftDefinitionId: only(cell, "vardiya") ?? shiftDefinitionId });
+    buildLoomStopsReport({ window: dayWindowOf(range, compareRange, mode), shiftDefinitionId: only(cell, "vardiya") ?? shiftDefinitionId, view });
 }

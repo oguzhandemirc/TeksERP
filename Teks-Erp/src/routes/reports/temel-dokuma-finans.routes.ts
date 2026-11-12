@@ -20,11 +20,13 @@ import { reportEnvelope } from "../../services/reports/_shared";
 import { vardiyaEkseni } from "../../services/reports/_filters";
 import { AppError } from "../../utils/app-error";
 import { coreDayRangeQuerySchema, resolveCoreDayRange } from "../../services/reports/temel/_day-range";
-import { buildLoomEfficiencyReport } from "../../services/reports/temel/tezgah-randimani.temel";
+import { buildLoomEfficiencyReport, LOOM_EFFICIENCY_VIEWS } from "../../services/reports/temel/tezgah-randimani.temel";
+import { viewQueryKey } from "../../services/reports/temel/_common";
+import { LOOM_STOP_VIEWS } from "../../services/reports/temel/duruslar.temel";
 import { runCoreWithExtras, variantQueryKeys } from "../../services/reports/temel/_variant";
 import { LOOM_STOP_DIMS, dayWindowOf, loomStopsRunner } from "../../services/reports/temel/core-runs";
-import { buildBeamBalanceReport } from "../../services/reports/temel/levent-dengesi.temel";
-import { buildReceivablesReport } from "../../services/reports/temel/alacaklar.temel";
+import { BEAM_BALANCE_VIEWS, buildBeamBalanceReport } from "../../services/reports/temel/levent-dengesi.temel";
+import { RECEIVABLE_VIEWS, buildReceivablesReport } from "../../services/reports/temel/alacaklar.temel";
 
 const router = Router();
 // Kimlik dosya başında (R0-RAPA/RAPB kalıbı): kimliksiz istek 401, kapalı raporun varlığı sızmaz.
@@ -48,10 +50,10 @@ function defaultDaysOf(key: ReportKey): number {
 }
 
 // Şemalar bekçi için DIŞA AÇIK; her biri `.strict()` (tanınmayan anahtar 400).
-export const coreLoomEfficiencyQuerySchema = coreDayRangeQuerySchema.extend({ ...variantQueryKeys([]) }).strict();
-export const coreLoomStopsQuerySchema = coreDayRangeQuerySchema.extend({ ...vardiyaEkseni, ...variantQueryKeys(LOOM_STOP_DIMS) }).strict();
-export const coreBeamBalanceQuerySchema = coreDayRangeQuerySchema.extend({ ...variantQueryKeys([]) }).strict();
-export const coreReceivablesQuerySchema = z.object({ asOf: z.string().datetime({ offset: true }).optional(), ...variantQueryKeys([]) }).strict();
+export const coreLoomEfficiencyQuerySchema = coreDayRangeQuerySchema.extend({ ...variantQueryKeys([]), ...viewQueryKey(LOOM_EFFICIENCY_VIEWS) }).strict();
+export const coreLoomStopsQuerySchema = coreDayRangeQuerySchema.extend({ ...vardiyaEkseni, ...variantQueryKeys(LOOM_STOP_DIMS), ...viewQueryKey(LOOM_STOP_VIEWS) }).strict();
+export const coreBeamBalanceQuerySchema = coreDayRangeQuerySchema.extend({ ...variantQueryKeys([]), ...viewQueryKey(BEAM_BALANCE_VIEWS) }).strict();
+export const coreReceivablesQuerySchema = z.object({ asOf: z.string().datetime({ offset: true }).optional(), ...variantQueryKeys([]), ...viewQueryKey(RECEIVABLE_VIEWS) }).strict();
 
 /**
  * @openapi
@@ -68,6 +70,7 @@ export const coreReceivablesQuerySchema = z.object({ asOf: z.string().datetime({
  *       - { in: query, name: to, schema: { type: string, format: date } }
  *       - { in: query, name: kiyas, schema: { type: string, enum: [none, prev, prevYear] }, description: "Verilmezse önceki dönem (K-KIYAS, K-TEL)" }
  *       - { in: query, name: donemler, schema: { type: string, example: "ay:6" }, description: "Çok dönemli kıyas (birim ay|hafta|gun, adet 2–12; alt koşular sıralı). Kesit raporunda dönem değerleri ölçülemedi döner" }
+ *       - { in: query, name: gorunum, schema: { type: string, enum: [ozet, vardiyalar] }, description: "Tablo görünümü (varsayılan ozet; eski raporun listesi)" }
  *     responses:
  *       200: { description: "RaporSunumu (data)" }
  *       403: { description: Dokuma modülü kapalı (MODULE_DISABLED), rapor kapalı ya da yetki yok }
@@ -78,7 +81,7 @@ router.get("/dokuma/tezgah-randimani", requireDokumaEnabled, ...reportGate("doku
     const window = resolveCoreDayRange(input, defaultDaysOf("dokuma/tezgah-randimani"));
     const { sunum } = await runCoreWithExtras({
       range: window.range, compareRange: window.compareRange, dims: [], donemler: input.donemler,
-      run: (r, c) => buildLoomEfficiencyReport({ window: r === window.range ? window : dayWindowOf(r, c, window.mode) }),
+      run: (r, c) => buildLoomEfficiencyReport({ window: r === window.range ? window : dayWindowOf(r, c, window.mode), view: input.gorunum }),
     });
     res.status(200).json(reportEnvelope(sunum, window.range, window.compareRange, { warnings: sunum.uyarilar }));
   } catch (e) {
@@ -103,6 +106,7 @@ router.get("/dokuma/tezgah-randimani", requireDokumaEnabled, ...reportGate("doku
  *       - { in: query, name: shiftDefinitionId, schema: { type: string }, description: "Vardiya tanımı (uuid; CSV ya da tekrarlı anahtar)" }
  *       - { in: query, name: varyant, schema: { type: string, enum: [vardiya] }, description: "Küçük çoklu kırılımı — en büyük ≤ 6 değer, her hücre ucun kendi süzgeciyle süzülmüş ana koşu (R1-VARYANT)" }
  *       - { in: query, name: donemler, schema: { type: string, example: "ay:6" }, description: "Çok dönemli kıyas (birim ay|hafta|gun, adet 2–12; alt koşular sıralı). Kesit raporunda dönem değerleri ölçülemedi döner" }
+ *       - { in: query, name: gorunum, schema: { type: string, enum: [ozet, mudahaleSebep, mudahaleTezgah, mudahaleVardiya] }, description: "Tablo görünümü (varsayılan ozet; eski raporun listesi)" }
  *     responses:
  *       200: { description: "RaporSunumu (data)" }
  *       403: { description: Dokuma modülü kapalı (MODULE_DISABLED), rapor kapalı ya da yetki yok }
@@ -114,7 +118,7 @@ router.get("/dokuma/duruslar", requireDokumaEnabled, ...reportGate("dokuma/durus
     const window = resolveCoreDayRange(input, defaultDaysOf("dokuma/duruslar"));
     const { sunum } = await runCoreWithExtras({
       range: window.range, compareRange: window.compareRange, dims: LOOM_STOP_DIMS, varyant: input.varyant, donemler: input.donemler,
-      run: loomStopsRunner(input.shiftDefinitionId, window.mode),
+      run: loomStopsRunner(input.shiftDefinitionId, window.mode, input.gorunum),
     });
     res.status(200).json(reportEnvelope(sunum, window.range, window.compareRange, { warnings: sunum.uyarilar }));
   } catch (e) {
@@ -137,6 +141,7 @@ router.get("/dokuma/duruslar", requireDokumaEnabled, ...reportGate("dokuma/durus
  *       - { in: query, name: to, schema: { type: string, format: date } }
  *       - { in: query, name: kiyas, schema: { type: string, enum: [none, prev, prevYear] } }
  *       - { in: query, name: donemler, schema: { type: string, example: "ay:6" }, description: "Çok dönemli kıyas (birim ay|hafta|gun, adet 2–12; alt koşular sıralı). Kesit raporunda dönem değerleri ölçülemedi döner" }
+ *       - { in: query, name: gorunum, schema: { type: string, enum: [ozet, acik] }, description: "Tablo görünümü (varsayılan ozet; eski raporun listesi)" }
  *     responses:
  *       200: { description: "RaporSunumu (data)" }
  *       403: { description: Dokuma ya da devere modülü kapalı (MODULE_DISABLED), rapor kapalı ya da yetki yok }
@@ -147,7 +152,7 @@ router.get("/dokuma/levent-dengesi", requireDokumaEnabled, requireDevereEnabled,
     const window = resolveCoreDayRange(input, defaultDaysOf("dokuma/levent-dengesi"));
     const { sunum } = await runCoreWithExtras({
       range: window.range, compareRange: window.compareRange, dims: [], donemler: input.donemler,
-      run: (r, c) => buildBeamBalanceReport({ window: r === window.range ? window : dayWindowOf(r, c, window.mode) }),
+      run: (r, c) => buildBeamBalanceReport({ window: r === window.range ? window : dayWindowOf(r, c, window.mode), view: input.gorunum }),
     });
     res.status(200).json(reportEnvelope(sunum, window.range, window.compareRange, { warnings: sunum.uyarilar }));
   } catch (e) {
@@ -169,6 +174,7 @@ router.get("/dokuma/levent-dengesi", requireDokumaEnabled, requireDevereEnabled,
  *     parameters:
  *       - { in: query, name: asOf, schema: { type: string, format: date-time }, description: "Kesit anı (verilmezse şimdi)" }
  *       - { in: query, name: donemler, schema: { type: string, example: "ay:6" }, description: "Çok dönemli kıyas (birim ay|hafta|gun, adet 2–12; alt koşular sıralı). Kesit raporunda dönem değerleri ölçülemedi döner" }
+ *       - { in: query, name: gorunum, schema: { type: string, enum: [ozet, kovalar] }, description: "Tablo görünümü (varsayılan ozet; eski raporun listesi)" }
  *     responses:
  *       200: { description: "RaporSunumu (data)" }
  *       403: { description: Ön muhasebe kapalı (MODULE_DISABLED), rapor kapalı ya da yetki yok }
@@ -179,7 +185,7 @@ router.get("/finance/alacaklar", requireFinanceEnabled, ...reportGate("finance/a
     const asOf = input.asOf ? new Date(input.asOf) : new Date();
     if (Number.isNaN(asOf.getTime())) throw AppError.badRequest("Geçersiz asOf tarihi");
     // Alacak yürüyen bakiyedir: geçmiş kesit `asOf` ile ölçülür → dönem sütunu = dönem SONUNDAKİ bakiye.
-    const { sunum } = await runCoreWithExtras({ range: { from: asOf, to: asOf }, compareRange: null, dims: [], donemler: input.donemler, run: (r) => buildReceivablesReport(r.to) });
+    const { sunum } = await runCoreWithExtras({ range: { from: asOf, to: asOf }, compareRange: null, dims: [], donemler: input.donemler, run: (r) => buildReceivablesReport(r.to, input.gorunum) });
     res.status(200).json(reportEnvelope(sunum, { from: asOf, to: asOf }, null, { warnings: sunum.uyarilar }));
   } catch (e) {
     next(e);

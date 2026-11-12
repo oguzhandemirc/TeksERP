@@ -10,7 +10,32 @@ import { anlatiUret } from "../anlati/anlati";
 import { roundM, shareOfPct } from "../../helpers/dokuma-levent-rapor.helper";
 import { beamResultReport, type BeamResultRow } from "../levent-sonucu.report.service";
 import type { GrafikBlok, TabloBlok } from "../sunum/sunum.types";
-import { capTable, catalogHeader, definitionsOf, metricFigure, periodOf, plainFigure, type CoreReportResult } from "./_common";
+import { capTable, catalogHeader, definitionsOf, metricFigure, periodOf, plainFigure, viewParameter, type CoreReportResult } from "./_common";
+
+/** Tablo görünümleri — eski Levent Sonucu'nun "açık leventler (kesit)" listesi (aynı `beamResultReport`). */
+export const BEAM_BALANCE_VIEWS = ["ozet", "acik"] as const;
+export type BeamBalanceView = (typeof BEAM_BALANCE_VIEWS)[number];
+const BEAM_BALANCE_VIEW_LABEL: Readonly<Record<BeamBalanceView, string>> = { ozet: "Biten leventler", acik: "Tezgahtaki leventler" };
+
+/** Açık levent kesiti: her hücre `BeamResultRow`un aynı alanı. */
+export function openBeamTable(open: readonly BeamResultRow[]): TabloBlok {
+  return {
+    kolonlar: [
+      { anahtar: "levent", baslik: "Levent", hiza: "sol" },
+      { anahtar: "cozgu", baslik: "Çözgü kartı", hiza: "sol" },
+      { anahtar: "sarilan", baslik: "Sarılan", birim: "m", hiza: "sag" },
+      { anahtar: "kalan", baslik: "Kalan", birim: "m", hiza: "sag" },
+      { anahtar: "dokunan", baslik: "Dokunan", birim: "m", hiza: "sag" },
+      { anahtar: "kullanim", baslik: "Kullanılan", birim: "yuzde", hiza: "sag" },
+      { anahtar: "tezgah", baslik: "Tezgah", hiza: "sol" },
+    ],
+    satirlar: open.map((r) => ({
+      levent: r.physicalBeamNo ? `${r.beamNo} (${r.physicalBeamNo})` : r.beamNo,
+      cozgu: `${r.warpSpec.code} · ${r.warpSpec.name}`,
+      sarilan: r.sarilanM, kalan: r.kalanM, dokunan: r.gercekKumasM, kullanim: r.kullanimPct ?? null, tezgah: r.tezgahlar.join(", ") || null,
+    })),
+  };
+}
 import { dayRangeParameters, type ResolvedDayRange } from "./_day-range";
 
 export interface BeamBalance {
@@ -33,6 +58,8 @@ export function beamBalance(closed: ReadonlyArray<Pick<BeamResultRow, "beklenenK
 
 export interface BeamBalanceInput {
   window: ResolvedDayRange;
+  /** Tablo görünümü; yoksa `ozet`. */
+  view?: BeamBalanceView;
 }
 
 function beamTable(closed: BeamResultRow[], bal: BeamBalance, fireM: number): TabloBlok {
@@ -84,8 +111,9 @@ export async function buildBeamBalanceReport(input: BeamBalanceInput): Promise<C
     plainFigure("levent.biten", "Biten levent", o.leventSayisi, { unit: "levent", ...(prev ? { previous: prev.data.ozet.leventSayisi } : {}) }),
   ];
 
-  const table = beamTable(closed, bal, o.fireM);
-  const capped = capTable(table, "Biten leventler");
+  const view = input.view ?? "ozet";
+  const table = view === "acik" ? openBeamTable(now.data.acikLeventler) : beamTable(closed, bal, o.fireM);
+  const capped = capTable(table, BEAM_BALANCE_VIEW_LABEL[view]);
 
   const measurable = closed.filter((r) => r.beklenenKumasM !== null).slice(0, 20);
   const chart: GrafikBlok | null = measurable.length
@@ -120,7 +148,7 @@ export async function buildBeamBalanceReport(input: BeamBalanceInput): Promise<C
       grafik: chart,
       tablo: capped.tablo,
       tanimlar: definitionsOf(["levent.dengeYuzde", "fire.leventMetre"]),
-      parametreler: dayRangeParameters(days, mode),
+      parametreler: [...dayRangeParameters(days, mode), viewParameter(BEAM_BALANCE_VIEW_LABEL, view)],
       uyarilar: capped.uyarilar,
     },
   };
