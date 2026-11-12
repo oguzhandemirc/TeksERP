@@ -111,6 +111,13 @@ describe('StationActionBar', () => {
     }
   });
 
+});
+
+describe('StationActionBar — geniş düzen, görünürlük ve rozet', () => {
+  beforeEach(() => {
+    mockDims = { width: 480, height: 800, scale: 1, fontScale: 1 };
+  });
+
   it('geniş (800 dp): bugünkü düzen — hepsi satırda, Diğer yok', async () => {
     mockDims = { width: 800, height: 480, scale: 1, fontScale: 1 };
     const r = renderWithPaper(<StationActionBar actions={build()} testIDPrefix="b" />);

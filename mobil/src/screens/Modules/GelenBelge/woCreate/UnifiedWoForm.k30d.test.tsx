@@ -1,140 +1,13 @@
 // K30-D dilim 2: rota adımları (ekle/çıkar/sırala, kilitli rotada salt okunur), makine önerisi, iş emri türünün bağdan
 // türemesi ve hedef özellikler. Kural: kullanıcının dokunmadığı alan form ucunun gövdesine GİTMEZ (sunucu bugünkü yolu türetir).
 import React from 'react';
+// Taklitler önce kaydolmalı (fikstür UnifiedWoForm'u kendisi yükler).
+import { mockFx, mockSaveAll, mockQuickStart, form, row, body, openFree, route } from '../../../../test/unifiedWoFormK30dFixture';
 import { fireEvent, waitFor } from '@testing-library/react-native';
 import { renderWithPaper } from '../../../../test/render';
-import type { ProductionRoute } from '../../../../services/route.service';
-import type { DocRow, ExtraFormBody } from './useWoRows';
+import type { DocRow } from './useWoRows';
 import UnifiedWoForm from './UnifiedWoForm';
 import { TERIM } from '../../../../lib/terim';
-import { useAuthStore } from '../../../../store/authStore';
-// Kendi üretim kipinin top okutma kancası ses/titreşim katmanını çeker (expo-audio jest'te yüklenmez).
-jest.mock('../../../../services/scanFeedback', () => ({ signalScan: jest.fn() }));
-
-let mockRows: DocRow[] = [];
-let mockOpts: { extraBody?: (r: DocRow) => ExtraFormBody } | undefined;
-const mockSaveAll = jest.fn();
-const mockQuickStart = jest.fn(async (_b: Record<string, unknown>) => ({ data: { workOrder: { id: 'w1', workOrderNumber: 'IE-9' }, attached: 0, batch: null } }));
-jest.mock('../../../../services/workOrder.service', () => ({
-  ...jest.requireActual('../../../../services/workOrder.service'),
-  workOrderService: { quickStart: (b: Record<string, unknown>) => mockQuickStart(b) },
-}));
-jest.mock('../../../../components/BarcodeScannerModal', () => ({ BarcodeScannerModal: () => null }));
-jest.mock('../../../../components/RollPickerModal', () => ({ __esModule: true, default: () => null }));
-jest.mock('./useWoRows', () => ({
-  useWoRows: (_r: unknown, opts: typeof mockOpts) => {
-    mockOpts = opts;
-    return {
-      rows: mockRows,
-      mode: 'WITH_WORK_ORDER',
-      saving: false,
-      counts: { ready: mockRows.filter((r) => r.form && !r.result).length },
-      saveAll: mockSaveAll,
-      removeRow: jest.fn(),
-      addNote: jest.fn(),
-      duplicate: null,
-      dismissDuplicate: jest.fn(),
-      confirmDuplicate: jest.fn(),
-    };
-  },
-}));
-jest.mock('./DocRowCard', () => ({ __esModule: true, default: () => null }));
-jest.mock('../useDocScan', () => ({
-  useDocScan: () => ({ pages: [], progress: { uploaded: new Set() }, sending: false, headerLocked: false, done: null, finish: jest.fn(), reset: jest.fn(), setPages: jest.fn(), capture: jest.fn(), captureMany: jest.fn(), send: jest.fn(), remaining: 0 }),
-}));
-jest.mock('../usePageSource', () => ({ usePageSource: () => ({ add: jest.fn(), busy: false, camera: { visible: false, capacity: 20, firstPageNo: 1, onDone: jest.fn(), onDismiss: jest.fn() } }) }));
-jest.mock('../PageCameraModal', () => ({ __esModule: true, default: () => null }));
-jest.mock('../MultiPageCameraModal', () => ({ __esModule: true, default: () => null }));
-jest.mock('../PagePreviewModal', () => ({ __esModule: true, default: () => null }));
-jest.mock('../../../../services/inboundDoc.service', () => ({
-  inboundDocService: { tabletContext: async () => ({ data: { customers: [], kursunMachines: [{ id: 'm1', code: 'K1', name: 'Kurşun 1', stationId: 'stK' }] } }) },
-}));
-jest.mock('../../../../components/ModuleSheet', () => {
-  const actual = jest.requireActual('../../../../components/ModuleSheet');
-  return {
-    ...actual,
-    __esModule: true,
-    default: (p: { visible: boolean; children: React.ReactNode; footer: React.ReactNode }) => (p.visible ? <>{p.children}{p.footer}</> : null),
-  };
-});
-let mockBlob: Record<string, unknown> = {};
-jest.mock('../../../../services/preferences.service', () => ({
-  preferencesService: { get: async () => mockBlob, save: async (b: Record<string, unknown>) => (mockBlob = b) },
-}));
-// Seçici: görünürken her seçenek bir düğme (`secim-<başlık>-<değer>`).
-jest.mock('../../../../components/PickerModal', () => {
-  const { Pressable, Text, View } = jest.requireActual('react-native');
-  return {
-    __esModule: true,
-    default: (p: { visible: boolean; title: string; options: { value: string; label: string }[]; onSelect: (v: string) => void }) =>
-      p.visible ? (
-        <View>
-          {p.options.map((o) => (
-            <Pressable key={o.value} onPress={() => p.onSelect(o.value)} testID={`secim-${p.title}-${o.value}`}>
-              <Text>{o.label}</Text>
-            </Pressable>
-          ))}
-        </View>
-      ) : null,
-  };
-});
-jest.mock('../../../../services/fabricProperty.service', () => ({
-  fabricPropertyService: { getAll: async () => ({ data: [{ id: 'p1', name: 'Yanmaz' }, { id: 'p2', name: 'Antibakteriyel' }] }) },
-}));
-// Rotanın varsayılan hedefleri: p1 (BAYRAK) + bir SEÇİM (tablet listesine girmez).
-const mockDefaultsLoaded = () => new Map([['cu1', [{ stationId: 'stK', targets: [{ propertyId: 'p1', valueType: 'FLAG' }, { propertyId: 'pc', valueType: 'CHOICE' }] }]]]);
-let mockDefaults: Map<string, unknown> = mockDefaultsLoaded();
-jest.mock('../../../../hooks/useRouteDefaultTargets', () => ({ useRouteDefaultTargets: () => ({ byCustomer: mockDefaults }) }));
-jest.mock('../../../../services/subcontractor.service', () => ({
-  subcontractorService: { listSubcontractors: async () => ({ data: [{ id: 'f1', name: 'Boyacı A', categories: [{ categoryId: 'catB' }] }] }) },
-}));
-const station = (id: string, name: string, x: Record<string, unknown> = {}) => ({ id, name, kind: 'PROCESS', ...x });
-const route = {
-  id: 'r1',
-  name: 'Kurşun → Boya',
-  steps: [
-    { id: 's1', stationId: 'stK', sequence: 1, station: station('stK', 'Kurşun', { isKursunStation: true, defaultCategory: { id: 'catK', name: 'Kurşun' } }) },
-    { id: 's2', stationId: 'stB', sequence: 2, requiredCategoryId: 'catB', station: station('stB', 'Boya', { kind: 'SUBCONTRACTOR', defaultCategory: { id: 'catB', name: 'Boyahane' } }) },
-  ],
-} as unknown as ProductionRoute;
-const other = { id: 'r2', name: 'Paket', steps: [{ id: 's9', stationId: 'stP', sequence: 1, station: station('stP', 'Paketleme') }] } as unknown as ProductionRoute;
-jest.mock('../../../../services/route.service', () => ({ routeService: { getActive: async () => ({ data: [mockRoute, mockOther] }) } }));
-const mockRoute = route;
-const mockOther = other;
-jest.mock('../../../../hooks/useFoldValues', () => ({ useFoldValues: () => ({ values: [], isLoading: false, isEmpty: true }) }));
-jest.mock('../../../../hooks/useFeatureFlags', () => ({
-  useFeatureFlags: () => ({ data: { targetQuantityEnabled: false } }),
-  useScanRouteMode: () => false,
-  usePickableLifecycle: () => ['ACTIVE'],
-}));
-jest.mock('../../HizliIsEmri/OrderLinkPicker', () => {
-  const { Pressable } = jest.requireActual('react-native');
-  return { __esModule: true, default: (p: { onChange: (ids: string[]) => void }) => <Pressable testID="mock-siparis-bagla" onPress={() => p.onChange(['l1'])} /> };
-});
-jest.mock('../../../../components/ColorSelectField', () => ({ __esModule: true, default: () => null }));
-
-const form = { ownerCustomerId: 'cu1', ownerSuggested: null, ourBatchNo: 'P-1', meters: 100, metersReview: false, multi: null };
-const row = { noteId: 'n1', noteNo: 'GB-1', runKey: 1, gramajTouched: false, result: null, form, detail: { id: 'n1', noteNo: 'GB-1', status: 'DRAFT', formFields: {}, suggestions: {} } } as unknown as DocRow;
-const body = () => mockOpts?.extraBody?.(mockRows[0]) ?? {};
-
-/** Düz karo: rota seçilmedi → seçiciden r1 seçilir (adımlar düzenlenebilir). */
-async function openFree() {
-  const s = renderWithPaper(<UnifiedWoForm initialRoute={null} routeLocked={false} onNew={jest.fn()} />);
-  fireEvent.press(s.getByText('Üretim Rotası seç'));
-  fireEvent.press(await s.findByTestId('secim-Üretim Rotası-r1'));
-  await s.findByTestId('ie-rota-adimlari');
-  return s;
-}
-
-// Parti no tahmini ve kendi üretim kaydı ucun iznine kapılı (useOurBatchPreview · useOwnGoodsCreate).
-beforeEach(() => {
-  useAuthStore.setState({ user: { permissions: ['mobile:hizli-is-emri', 'workorder:read'] } as never });
-  mockBlob = { tabletIeForm: { hedefDoldur: true } };
-  mockDefaults = mockDefaultsLoaded();
-  mockRows = [row];
-  mockOpts = undefined;
-  jest.clearAllMocks();
-});
 
 describe('UnifiedWoForm — rota adımları (K30-D)', () => {
   it('⭐ kilitli rota (özel İE kısayolu): editör çizilmez, adımlar yol satırında; makine kendi şeridinde; gövdede steps yok', async () => {
@@ -170,7 +43,7 @@ describe('UnifiedWoForm — rota adımları (K30-D)', () => {
   });
 
   it('⭐ ⚙ "Rota adımı notu" kapalı: boş not kutusu çizilmez, şablondan dolu not kutusu görünür; blob\'a adimNotuGizli yazılır', async () => {
-    mockBlob = { tabletIeForm: { hedefDoldur: true, adimNotuGizli: true } };
+    mockFx.blob = { tabletIeForm: { hedefDoldur: true, adimNotuGizli: true } };
     const s = await openFree();
     await waitFor(() => expect(s.queryByTestId('ie-adim-1-not')).toBeNull());
     expect(s.queryByTestId('ie-adim-2-not')).toBeNull();
@@ -178,11 +51,11 @@ describe('UnifiedWoForm — rota adımları (K30-D)', () => {
     fireEvent.press(s.getByTestId('ie-alanlar'));
     fireEvent.press(await s.findByTestId('ie-adim-notu-goster'));
     await waitFor(() => expect(s.getByTestId('ie-adim-1-not')).toBeTruthy());
-    expect(mockBlob).toEqual({ tabletIeForm: { gizli: [], hedefDoldur: true } });
+    expect(mockFx.blob).toEqual({ tabletIeForm: { gizli: [], hedefDoldur: true } });
   });
 
   it('⭐ "Rota adımı notu" kapalı ama adımın notu dolu (şablondan) → o adımın kutusu görünür (sessiz gönderim yok)', async () => {
-    mockBlob = { tabletIeForm: { hedefDoldur: true, adimNotuGizli: true } };
+    mockFx.blob = { tabletIeForm: { hedefDoldur: true, adimNotuGizli: true } };
     // Rota listesi (seçici kaynağı) modül sabiti: şablon notu bu test için verilir, sonda geri alınır.
     const first = route.steps![0] as unknown as { defaultNotes?: string | null };
     first.defaultNotes = 'yavaş sar';
@@ -298,7 +171,9 @@ describe('UnifiedWoForm — iş emri türü ve hedef özellikler (K30-D)', () =>
     fireEvent.press(b.getByTestId('ie-mal-sahibi-STANDARD'));
     expect(b.getByTestId('ie-kendi-toplar')).toBeTruthy();
   });
+});
 
+describe('UnifiedWoForm — hedef özellikler ve ⚙ rota adımları (K30-D)', () => {
   it('⭐ hedef özellik: varsayılan (BAYRAK) seçili görünür ve gitmez; çipe dokununca tüm küme targetPropertyIds olarak gider', async () => {
     const s = renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} />);
     const p2 = await s.findByTestId('ie-form-ozellik-p2');
@@ -314,7 +189,7 @@ describe('UnifiedWoForm — iş emri türü ve hedef özellikler (K30-D)', () =>
   });
 
   it('⭐ rotanın AUTO verdiği özellik sorulmaz (OPTIONAL/REQUIRED kalır); seçili AUTO kümede kalır (gövde bugünkü gibi)', async () => {
-    mockDefaults = new Map([['cu1', [{ stationId: 'stK', targets: [{ propertyId: 'p1', valueType: 'FLAG', mode: 'AUTO' }, { propertyId: 'p2', valueType: 'FLAG', mode: 'REQUIRED' }] }]]]);
+    mockFx.defaults = new Map([['cu1', [{ stationId: 'stK', targets: [{ propertyId: 'p1', valueType: 'FLAG', mode: 'AUTO' }, { propertyId: 'p2', valueType: 'FLAG', mode: 'REQUIRED' }] }]]]);
     const s = renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} />);
     const p2 = await s.findByTestId('ie-form-ozellik-p2');
     expect(s.queryByTestId('ie-form-ozellik-p1')).toBeNull();
@@ -323,17 +198,17 @@ describe('UnifiedWoForm — iş emri türü ve hedef özellikler (K30-D)', () =>
   });
 
   it('⭐ AUTO elemesinden sonra özellik kalmazsa "Hedef özellikler" çizilmez ve "Diğer alanlar"a da girmez', async () => {
-    mockDefaults = new Map([['cu1', [{ stationId: 'stK', targets: [{ propertyId: 'p1', valueType: 'FLAG', mode: 'AUTO' }] }, { stationId: 'stB', targets: [{ propertyId: 'p2', valueType: 'FLAG', mode: 'AUTO' }] }]]]);
+    mockFx.defaults = new Map([['cu1', [{ stationId: 'stK', targets: [{ propertyId: 'p1', valueType: 'FLAG', mode: 'AUTO' }] }, { stationId: 'stB', targets: [{ propertyId: 'p2', valueType: 'FLAG', mode: 'AUTO' }] }]]]);
     const s = renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} />);
     await s.findByTestId('ie-serit-makine');
     await waitFor(() => expect(s.queryByTestId('ie-form-ozellik')).toBeNull());
-    mockBlob = { tabletIeForm: { gizli: ['hedefOzellik', 'planBitis'] } };
+    mockFx.blob = { tabletIeForm: { gizli: ['hedefOzellik', 'planBitis'] } };
     const g = renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} />);
     await waitFor(() => expect(g.getByTestId('ie-diger-alanlar-baslik')).toHaveTextContent('Diğer alanlar (1)'));
   });
 
   it('⚙ ile rota adımları kapatılınca editör çizilmez, makine önerisi tek başına kalır', async () => {
-    mockBlob = { tabletIeForm: { gizli: ['rotaAdimlari', 'isEmriTuru', 'hedefOzellik'] } };
+    mockFx.blob = { tabletIeForm: { gizli: ['rotaAdimlari', 'isEmriTuru', 'hedefOzellik'] } };
     const s = renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} />);
     // Eski tercihteki 'isEmriTuru' tanınmaz → sayılmaz.
     await waitFor(() => expect(s.getByTestId('ie-diger-alanlar-baslik')).toHaveTextContent('Diğer alanlar (2)'));
@@ -343,7 +218,7 @@ describe('UnifiedWoForm — iş emri türü ve hedef özellikler (K30-D)', () =>
   });
 
   it('varsayılanlar yüklenirken özellik çipleri kapalı (boş kümeden yanlış targetPropertyIds kurulmaz)', async () => {
-    mockDefaults = new Map();
+    mockFx.defaults = new Map();
     const s = renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} />);
     const p2 = await s.findByTestId('ie-form-ozellik-p2');
     expect(p2).toBeDisabled();
@@ -383,7 +258,7 @@ describe('UnifiedWoForm — gizli ama dolu alan / makine tutarlılığı (K30-D 
   });
 
   it('her parti ayrı İE kipinde makine seçilmez ve form bunu söyler', async () => {
-    mockRows = [{ ...row, form: { ...form, multi: { mode: 'PER_PARTY', rows: [] } } } as unknown as DocRow];
+    mockFx.rows = [{ ...row, form: { ...form, multi: { mode: 'PER_PARTY', rows: [] } } } as unknown as DocRow];
     const s = renderWithPaper(<UnifiedWoForm initialRoute={route} routeLocked onNew={jest.fn()} />);
     expect(await s.findByTestId('ie-form-makine-not')).toHaveTextContent(`Her parti ayrı ${TERIM.terbiyeIsEmri.tekilKucuk} olur; makine parti kartlarında seçilir.`);
     expect(s.queryByTestId('ie-form-makine')).toBeNull();

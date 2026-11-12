@@ -172,7 +172,8 @@ describe('shortPropertyLabel', () => {
   });
 });
 
-describe('targetView adım eşlemesi ve kalemler', () => {
+/** targetView vakalarının ortak rota/değer kurgusu (iki describe paylaşır). */
+const targetFx = () => {
   const base = { propertyNames: [] as string[], fmtDate };
   const allow = { color: true, width: true, gramaj: true };
   const steps = [
@@ -182,6 +183,11 @@ describe('targetView adım eşlemesi ve kalemler', () => {
   // Adım eşlemesi SUNUCUDAN (`edit.stepId`, yazma kapısıyla aynı fonksiyon) — istemci yetenek listesinden eşleme yapmaz.
   const gramajTv = { propertyId: 'gr', property: { name: 'KURŞUN GRAMAJI', variantOfPropertyId: 'kursun' }, value: { name: '50 gr' }, edit: { stepId: 's1', locked: false } };
   const w = (o: Partial<WorkOrder> = {}) => wo({ width: 280, foldType: '4-KAT', steps: steps as never, targetValues: [gramajTv], ...o });
+  return { base, allow, steps, gramajTv, w };
+};
+
+describe('targetView adım eşlemesi ve kalemler', () => {
+  const { base, allow, steps, gramajTv, w } = targetFx();
 
   it('gramaj sunucunun eşlediği KURŞUN adımına, kat tipi TAMBUR adımına düşer; Hedef kartından kalkar', () => {
     const v = targetView({ ...base, wo: w(), gramajPropertyId: 'gr', fixAllowed: allow });
@@ -226,6 +232,11 @@ describe('targetView adım eşlemesi ve kalemler', () => {
     const v = targetView({ ...base, wo: w({ steps: started as never }), gramajPropertyId: 'gr', fixAllowed: { ...allow, fold: true } });
     expect(v.byStep.s2).toEqual([{ label: '', value: '4-KAT', fix: null }]);
   });
+});
+
+describe('targetView kat ve desen kalemleri', () => {
+  const { base, allow, steps, gramajTv, w } = targetFx();
+
   it('kat boşsa ve izinliyse TAMBUR altında "Kat Belirtilmedi" kalemle açılır; izinsizse hiç çıkmaz', () => {
     const v = targetView({ ...base, wo: w({ foldType: null }), gramajPropertyId: 'gr', fixAllowed: { ...allow, fold: true } });
     expect(v.byStep.s2).toEqual([{ label: 'Kat', value: 'Belirtilmedi', fix: 'fold' }]);

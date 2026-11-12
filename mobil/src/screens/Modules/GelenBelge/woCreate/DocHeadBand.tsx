@@ -113,30 +113,8 @@ export default function DocHeadBand({ row, wo, read, detailFailed, variant, onRe
           )}
         </View>
       ) : (
-        <>
-          <SectionBand
-            title="Belge"
-            aside={no}
-            icon="file-document-outline"
-            tone={BAND_TONE[pill.tone]}
-            status={{ icon: pill.icon, text: pill.text }}
-            testID={`belge-serit-${no}`}
-          />
-          <View style={styles.sub} testID={`belge-serit-alt-${no}`}>
-            {busy ? <ActivityIndicator size="small" /> : null}
-            {name}
-            <View style={styles.flex} />
-            <TemplateUpdateButton entry={teach} />
-            {!done && (
-              <Button mode="outlined" icon="close" onPress={() => wo.removeRow(row.noteId)} disabled={wo.saving} contentStyle={styles.btn} testID={`belge-satir-cikar-${no}`}>
-                Listeden çıkar
-              </Button>
-            )}
-            {cancellable && (
-              <CancelDraftButton note={{ id: row.noteId, noteNo: no }} onCancelled={onDraftCancelled ?? (() => wo.removeRow(row.noteId))} disabled={wo.saving} testID={`belge-taslak-iptal-${no}`} />
-            )}
-          </View>
-        </>
+        <ListBand no={no} pill={pill} busy={busy} name={name} teach={teach} done={done} cancellable={cancellable}
+          saving={wo.saving} onRemove={() => wo.removeRow(row.noteId)} onCancelled={onDraftCancelled ?? (() => wo.removeRow(row.noteId))} noteId={row.noteId} />
       )}
       <RecognitionStrip model={shownStrip(strip, row.form?.multi, wo.saving || !!row.result)} noteNo={no} multi={row.form?.multi} onMode={(m) => wo.setMulti(row.noteId, m)} />
       <TeachStrip entry={teach} />
@@ -300,3 +278,39 @@ const styles = StyleSheet.create({
   menuItem: { minHeight: 56 },
   menuDanger: { color: colors.dangerDark },
 });
+
+interface ListBandProps {
+  no: string; pill: ReturnType<typeof docReadPill>; busy: boolean; name: React.ReactNode;
+  teach: ReturnType<typeof useTeachEntry>; done: boolean; cancellable: boolean; saving: boolean;
+  noteId: string; onRemove: () => void; onCancelled: () => void;
+}
+
+/** Toplu liste satırının belge şeridi: bant + alt eylem satırı (Listeden çıkar · taslak iptal). */
+function ListBand({ no, pill, busy, name, teach, done, cancellable, saving, noteId, onRemove, onCancelled }: ListBandProps) {
+  return (
+    <>
+      <SectionBand
+        title="Belge"
+        aside={no}
+        icon="file-document-outline"
+        tone={BAND_TONE[pill.tone]}
+        status={{ icon: pill.icon, text: pill.text }}
+        testID={`belge-serit-${no}`}
+      />
+      <View style={styles.sub} testID={`belge-serit-alt-${no}`}>
+        {busy ? <ActivityIndicator size="small" /> : null}
+        {name}
+        <View style={styles.flex} />
+        <TemplateUpdateButton entry={teach} />
+        {!done && (
+          <Button mode="outlined" icon="close" onPress={onRemove} disabled={saving} contentStyle={styles.btn} testID={`belge-satir-cikar-${no}`}>
+            Listeden çıkar
+          </Button>
+        )}
+        {cancellable && (
+          <CancelDraftButton note={{ id: noteId, noteNo: no }} onCancelled={onCancelled} disabled={saving} testID={`belge-taslak-iptal-${no}`} />
+        )}
+      </View>
+    </>
+  );
+}
