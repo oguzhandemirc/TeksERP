@@ -8,7 +8,7 @@ import type { IncomingDocumentSettings } from "@/pages/Operations/GelenBelgeler/
 import type { DesenRenkEslesmeMode, TabletIeGirisiMode, TanitimGuveniMode } from "@/pages/Operations/GelenBelgeler/ieFormTypes";
 
 export const desenRenkEslesmeOptions = (): ReadonlyArray<{ value: DesenRenkEslesmeMode; label: string; hint: string }> => [
-  { value: "KAPALI", label: "Kullanma", hint: `Belgeden okunan desen ve renk yazısı ${TERIM.terbiyeIsEmri.tekilKucuk} formuna taşınmaz.` },
+  { value: "KAPALI", label: "Kullanma", hint: `Belgeden okunan desen ve renk yazısı ${TERIM.terbiyeIsEmri.tekilKucuk} formuna taşınmaz (varsayılan).` },
   { value: "ONER", label: "Kayıt öner", hint: "Adı ya da kodu birebir tutan kumaş ve renk kaydı formda önerilir; görevli kontrol edip onaylar. Tutan kayıt yoksa alan boş kalır." },
   { value: "NOT", label: "Nota ekle", hint: `Okunan desen ve renk yazısı ${TERIM.terbiyeIsEmri.tekilKucuk} notunun sonuna eklenir; kumaş ve renk elle seçilir.` },
 ];
@@ -58,9 +58,9 @@ export function IeFormFields({ draft }: { draft: ReturnType<typeof useIeFormDraf
             desc={`${TERIM.terbiyeIsEmri.cumleBasi.yalin} formunda belge okutulunca, belgede okunan desen (kumaş) ve renk yazısıyla ne yapılsın. Öneri yalnız adı ya da kodu birebir tutan kayıtta gelir; işi yavaşlatmaz.`}
           />
           <div id="gb-desen-renk-eslesme-radios" className="mt-2">
-            <EnumRadioOptions name="Belgedeki desen ve renk yazısı" value={draft.desen ?? "ONER"} options={desenRenkEslesmeOptions()} onChange={(v) => draft.setDesen(v as DesenRenkEslesmeMode)} />
+            <EnumRadioOptions name="Belgedeki desen ve renk yazısı" value={draft.desen ?? "KAPALI"} options={desenRenkEslesmeOptions()} onChange={(v) => draft.setDesen(v as DesenRenkEslesmeMode)} />
           </div>
-          <p className="mt-1 text-xs text-muted-foreground">Varsayılan: {desenRenkEslesmeOptions().find((o) => o.value === (draft.desenFallback ?? "ONER"))?.label}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Varsayılan: {desenRenkEslesmeOptions().find((o) => o.value === (draft.desenFallback ?? "KAPALI"))?.label}</p>
         </div>
       )}
       {draft.serverGiris !== undefined && (

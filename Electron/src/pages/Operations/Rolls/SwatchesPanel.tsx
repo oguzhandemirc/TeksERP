@@ -13,8 +13,9 @@ import { colorService } from "@/pages/Colors/service";
 import { swatchService, type KartelaStockGroup } from "./swatchService";
 import { ReduceKartelaStockDialog } from "./ReduceKartelaStockDialog";
 import { KartelaReductionHistoryDialog } from "./KartelaReductionHistoryDialog";
+import { qtyFormatter } from "@/lib/format";
 
-const NUM_FMT = new Intl.NumberFormat("tr-TR", { useGrouping: false });
+const NUM_FMT = qtyFormatter(3);
 
 // ÇOKLU: kartela stoğu ürün+renk kırılımında sayılır; birkaç kumaşı yan yana
 // görmek tam da bu ekranın sorusu. Backend `kartela.getStock` CSV'yi `in`'e

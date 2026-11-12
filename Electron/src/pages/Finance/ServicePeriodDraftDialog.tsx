@@ -14,6 +14,7 @@ import { getCariByCustomer, money } from "./service";
 import { ServiceWorksBreakdown } from "./ServiceWorksBreakdown";
 import { createServicePeriodDraft, previewServicePeriodDraft, type ServicePeriodPreview } from "./servicePeriodApi";
 import { canCreateServicePeriodDraft, defaultServicePeriod, isValidServicePeriod, recentServicePeriods, servicePeriodLabel } from "./servicePeriodDraft";
+import { formatQty } from "@/lib/format";
 
 interface Props {
   open: boolean;
@@ -117,7 +118,7 @@ function PreviewBody({ preview }: { preview: ServicePeriodPreview }) {
         <span><b>{servicePeriodLabel(preview.period)}</b></span>
         <span>{preview.shipmentCount} sevkiyat</span>
         <span>{preview.workCount} iş</span>
-        <span>{Number(preview.totalMeters).toLocaleString("tr-TR", { maximumFractionDigits: 3 })} m</span>
+        <span>{formatQty(Number(preview.totalMeters), 3)} m</span>
         <span>Ara toplam (KDV hariç): <b>{money(preview.subtotal, preview.currency)}</b></span>
       </div>
       {preview.lines.length > 0 && (
@@ -130,7 +131,7 @@ function PreviewBody({ preview }: { preview: ServicePeriodPreview }) {
               {preview.lines.map((l) => (
                 <tr key={`${l.serviceItemId ?? l.itemId}:${l.unitPrice}`} className="border-t">
                   <td className="py-1 pr-2">{l.description}</td>
-                  <td className="py-1 pr-2 text-right tabular-nums whitespace-nowrap">{Number(l.qty).toLocaleString("tr-TR", { maximumFractionDigits: 3 })} {l.unit}</td>
+                  <td className="py-1 pr-2 text-right tabular-nums whitespace-nowrap">{formatQty(Number(l.qty), 3)} {l.unit}</td>
                   <td className="py-1 pr-2 text-right tabular-nums whitespace-nowrap">{money(l.unitPrice, preview.currency)}</td>
                   <td className="py-1 text-right tabular-nums whitespace-nowrap">{money(l.amount, preview.currency)}</td>
                 </tr>

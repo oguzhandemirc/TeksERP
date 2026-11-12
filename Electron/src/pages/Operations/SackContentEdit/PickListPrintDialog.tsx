@@ -19,8 +19,9 @@ import { sackHubService } from "./service";
 import { shipmentStatusLabels, type PickListPrint, type PickListRow } from "./types";
 import { factoryLocaleString } from "@/lib/factory-time";
 import { visibleContents } from "./pickListContents";
+import { formatQty } from "@/lib/format";
 
-const fmtM = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
+const fmtM = (n: number) => formatQty(n, 1);
 const locLabel = (r: PickListRow) => (r.shipment ? shipmentStatusLabels[r.shipment.status] : "Depoda");
 
 interface Props {

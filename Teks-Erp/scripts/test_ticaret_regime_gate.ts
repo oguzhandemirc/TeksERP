@@ -186,6 +186,13 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
       "ticaretten bağımsız açılabilen bir modüldür (MODULE_DEPENDENCIES'te böyle bir bağ " +
       "YOK) ve fatura kesmek fiyat kartı olmadan da mümkündür (birim fiyat elle girilir).",
   },
+  {
+    dosya: "routes/dashboard.routes.ts",
+    neden:
+      "AÇILIŞ PANOSU (çekirdek, pano kutu mimarisi 2026-11). Router SALT-OKUMADIR (CUD yok). Ajanda kutusu açık alış siparişlerinin teslim tarihini OKUR (pano-kutu-ajanda.ts:48), yalnız `can.alis` doğruyken (pano-kutu-ajanda.ts:129). " +
+      "Kapı KUTU düzeyinde sunucudadır: `alis` = purchase-order:read izni + ticaretEnabled (pano-kaynak.ts:87); kapalı modülde kutu katalogda yoktur, veri ucu `null` döner " +
+      "(pano-kutular.service.ts:50). Router kapısı KONULAMAZ: pano her kurulumun açılış ekranıdır, modülden bağımsızdır.",
+  },
 ];
 
 function main(): void {

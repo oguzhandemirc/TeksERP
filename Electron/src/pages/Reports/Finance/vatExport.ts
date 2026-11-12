@@ -30,7 +30,7 @@ const COLUMNS: ReportColumn[] = [
   { header: "Para", key: "currency", width: 7 },
   { header: "Tür", key: "kind", width: 14 },
   { header: "KDV Oranı", key: "rate", width: 10 },
-  { header: "Belge", key: "docCount", width: 8, numFmt: "#,##0", align: "right" },
+  { header: "Belge", key: "docCount", width: 8, numFmt: "0", align: "right" },
   { header: "Matrah", key: "base", width: 14, numFmt: MONEY, align: "right" },
   { header: "KDV", key: "vat", width: 13, numFmt: MONEY, align: "right" },
   { header: "Tevkifat", key: "withholding", width: 12, numFmt: MONEY, align: "right" },

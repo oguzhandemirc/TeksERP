@@ -55,6 +55,7 @@ import { dayStartIso, ymd } from "./dates";
 import {
   PurchaseOrderLineRows, emptyPoLine, poTotals, toLineInputs, type PoDraftLine,
 } from "./PurchaseOrderLineRows";
+import { formatAmount } from "@/lib/format";
 
 interface Props {
   open: boolean;
@@ -328,10 +329,7 @@ export function PurchaseOrderFormDialog({ open, orderId, onOpenChange, onSaved }
                   <>
                     {" · "}
                     <b className="text-foreground">
-                      {totals.amount.toLocaleString("tr-TR", {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
+                      {formatAmount(totals.amount, 2, 2)}
                     </b>{" "}
                     {currency}
                     {/* Fiyat OPSİYONEL — eksik fiyatlı kalem varken tutarı tek

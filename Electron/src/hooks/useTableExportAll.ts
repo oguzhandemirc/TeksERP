@@ -10,6 +10,7 @@ import {
 import { useExportRange } from "./useExportRange";
 import { useExportConfirm } from "./useExportConfirm";
 import { isExportCancelled } from "@/lib/export-drain";
+import { formatQty } from "@/lib/format";
 
 /**
  * "Tümünü İndir" — aktif filtreye uyan SUNUCUDAKİ tüm kayıtları çekip PDF/Excel/CSV
@@ -60,8 +61,8 @@ export function useTableExportAll<T>(opts: {
 
   return {
     busyLabel: progress
-      ? `${progress.loaded.toLocaleString("tr-TR")}${
-          progress.total ? ` / ~${progress.total.toLocaleString("tr-TR")}` : ""
+      ? `${formatQty(progress.loaded)}${
+          progress.total ? ` / ~${formatQty(progress.total)}` : ""
         } indiriliyor…`
       : undefined,
     onPdf: () => run("pdf"),

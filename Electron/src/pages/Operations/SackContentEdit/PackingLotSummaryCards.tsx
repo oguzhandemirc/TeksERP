@@ -3,8 +3,9 @@ import { Boxes, ClipboardList, Scale, Warehouse } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { sackHubService } from "./service";
 import type { PackingGroup, PackingLotCustomerSummary } from "./types";
+import { formatQty } from "@/lib/format";
 
-const fmtQty = (n: number): string => n.toLocaleString("tr-TR", { maximumFractionDigits: 1 });
+const fmtQty = (n: number): string => formatQty(n, 1);
 
 /**
  * CARİ ÖZETİ — dört kart, her biri tablonun TEKRARI DEĞİL bir karar rakamı (saha

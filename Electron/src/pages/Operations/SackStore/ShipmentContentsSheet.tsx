@@ -19,10 +19,11 @@ import {
   type SackStoreShipment,
 } from "./types";
 import { PROCEDURE_CODE_BOS, procedureCodeView } from "./procedureCode";
+import { formatQty } from "@/lib/format";
 
-const fmtKg = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
-const fmtM = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 2 });
-const fmtInt = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 0 });
+const fmtKg = (n: number) => formatQty(n, 1);
+const fmtM = (n: number) => formatQty(n, 2);
+const fmtInt = (n: number) => formatQty(n, 0);
 
 interface Props {
   /** Açılan sevkiyat (board kartı) — null ise sheet kapalı. */

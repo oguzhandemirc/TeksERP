@@ -2,12 +2,13 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
 import type { WarpSpec } from "./types";
+import { formatQty } from "@/lib/format";
 
 /** Sayıyı Türkçe biçimde bas; boş/parse edilemez değer için tire. */
 function num(v: string | number | null | undefined, digits = 0): string {
   if (v === null || v === undefined || v === "") return "—";
   const n = Number(v);
-  return Number.isFinite(n) ? n.toLocaleString("tr-TR", { maximumFractionDigits: digits }) : "—";
+  return Number.isFinite(n) ? formatQty(n, digits) : "—";
 }
 
 export const warpSpecColumns: ColumnDef<WarpSpec>[] = [

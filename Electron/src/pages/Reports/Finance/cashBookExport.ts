@@ -92,7 +92,7 @@ function categoriesTable(rep: CashBookReport, account: CashBookAccountSummary | 
       { header: "Giren", key: "totalIn", width: 15, numFmt: MONEY, align: "right" },
       { header: "Çıkan", key: "totalOut", width: 15, numFmt: MONEY, align: "right" },
       { header: "Net", key: "net", width: 15, numFmt: MONEY, align: "right" },
-      { header: "Hareket", key: "movementCount", width: 9, numFmt: "#,##0", align: "right" },
+      { header: "Hareket", key: "movementCount", width: 9, numFmt: "0", align: "right" },
     ],
     rows: rows.map((c) => ({
       currency: c.currency,
@@ -139,7 +139,7 @@ function accountsTable(rep: CashBookReport): ReportTableSpec {
       { header: "Kapanış", key: "closing", width: 15, numFmt: MONEY, align: "right" },
       { header: "Kayıtlı bakiye", key: "storedBalance", width: 15, numFmt: MONEY, align: "right" },
       { header: "Fark", key: "storedDiff", width: 12, numFmt: MONEY, align: "right" },
-      { header: "Hareket", key: "movementCount", width: 9, numFmt: "#,##0", align: "right" },
+      { header: "Hareket", key: "movementCount", width: 9, numFmt: "0", align: "right" },
     ],
     rows: rep.accounts.map((a) => ({
       kind: ACCOUNT_KIND_LABEL[a.accountKind],

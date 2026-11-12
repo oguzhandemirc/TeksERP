@@ -19,6 +19,7 @@ import type { AnlatiCumlesi } from "../_v2/sunum";
 
 import apiClient from "@/services/apiClient";
 import type { ReportResponse } from "../_services/types";
+import { formatQty } from "@/lib/format";
 
 export type VatBlockKind = "SALES" | "PURCHASE";
 
@@ -134,5 +135,5 @@ export function vatRowKindLabel(block: VatBlockKind, isReturn: boolean): string 
 export function vatRateLabel(rate: string): string {
   const n = Number(rate);
   if (!Number.isFinite(n)) return `%${rate}`;
-  return `%${n.toLocaleString("tr-TR", { maximumFractionDigits: 2 })}`;
+  return `%${formatQty(n, 2)}`;
 }

@@ -16,8 +16,9 @@ import { Input } from "@/components/ui/input";
 import { listAvailableOrderLines, num, type AvailableOrderLine } from "@/pages/Operations/Orders/availableLines";
 import { formatDay } from "./types";
 import { TERIM } from "@/lib/terim";
+import { formatQty } from "@/lib/format";
 
-const fmt = (n: number | null) => (n === null ? "ölçülmüyor" : `${n.toLocaleString("tr-TR", { maximumFractionDigits: 0 })} m`);
+const fmt = (n: number | null) => (n === null ? "ölçülmüyor" : `${formatQty(n, 0)} m`);
 
 interface Props {
   open: boolean;

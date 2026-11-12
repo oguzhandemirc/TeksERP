@@ -20,7 +20,7 @@ describe("useExportConfirm", () => {
       p = hook.result.current.confirmTotal(123456);
     });
     rerender();
-    expect(screen.getByText(/123\.456 kayıt/)).toBeInTheDocument();
+    expect(screen.getByText(/123456 kayıt/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "İndir" }));
     await expect(p).resolves.toBe(true);
   });

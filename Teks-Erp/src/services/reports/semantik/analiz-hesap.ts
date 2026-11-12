@@ -44,11 +44,11 @@ const OTHERS_NOTE = "Grup sayısı tavanı aştı; en büyük gruplar dışında
 const UNIT_OF: Record<string, Birim> = { metre: "m", yuzde: "yuzde", adet: "adet", gun: "gun", dakika: "dakika", para: "TRY" };
 const unitOf = (m: SemanticMeasure): Birim => UNIT_OF[measureDictionaryEntry(m.id)?.birim ?? "adet"] ?? "adet";
 
-/** Oran ölçeği: "1.000 m'de", "saatte"… — maruziyetin biriminden. */
+/** Oran ölçeği: "1000 m'de", "saatte"… — maruziyetin biriminden. */
 function rateScale(exposure: SemanticMeasure): { k: number; soz: string } {
   switch (measureDictionaryEntry(exposure.id)?.birim) {
     case "metre":
-      return { k: 1000, soz: "1.000 m'de" };
+      return { k: 1000, soz: "1000 m'de" };
     case "dakika":
       return { k: 60, soz: "saatte" };
     case "gun":

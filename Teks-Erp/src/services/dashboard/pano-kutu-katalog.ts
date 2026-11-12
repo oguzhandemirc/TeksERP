@@ -6,6 +6,7 @@
 // ucunda istenirse `null` döner. Kutu yalnız istenince hesaplanır (bellekli kaynak paylaşılır).
 // =============================================================================
 import type { PanoGates, PanoKullanici } from "./pano-kaynak";
+import { TERIM } from "../../constants/terim";
 import type { AgendaParams } from "./pano-kutu-ajanda";
 import { agendaBox } from "./pano-kutu-ajanda";
 import { cashFlowBox, stockFlowBox } from "./pano-kutu-akis";
@@ -53,7 +54,7 @@ export const PANO_BOXES: readonly PanoBoxDef[] = [
   { key: "enCok", title: "En çok üretilen / sevk edilen", description: "Dönemde en çok üretilen ve sevk edilen 5 kumaş.", group: "uretim", periodic: true, byDefault: true, size: "orta", visible: anyOf("uretim", "sevk"), compute: topItemsBox },
   { key: "enCokMusteri", title: "En çok müşteri", description: "Dönemde en çok sipariş veren ve en çok sevk edilen 5 müşteri.", group: "satis", periodic: true, byDefault: false, size: "orta", visible: anyOf("siparis", "sevk"), compute: topCustomersBox },
   { key: "uretimIstasyon", title: "İstasyon bazında üretim", description: "Dönemde her istasyondan geçen metre ve top.", group: "uretim", periodic: true, byDefault: false, size: "orta", visible: anyOf("istasyon"), compute: stationOutputBox },
-  { key: "isEmriDurum", title: "Açık iş emirleri", description: "Planlı ve üretimdeki iş emri sayısı.", group: "uretim", periodic: false, byDefault: false, size: "kucuk", visible: anyOf("isEmri"), compute: openWorkOrdersBox },
+  { key: "isEmriDurum", get title() { return `Açık ${TERIM.terbiyeIsEmri.cogulKucuk}`; }, get description() { return `Planlı ve üretimdeki ${TERIM.terbiyeIsEmri.tekilKucuk} sayısı.`; }, group: "uretim", periodic: false, byDefault: false, size: "kucuk", visible: anyOf("isEmri"), compute: openWorkOrdersBox },
   { key: "kalite", title: "Kalite özeti", description: "Dönemde biten kumaşın kalite payları ve hurda oranı.", group: "uretim", periodic: true, byDefault: false, size: "orta", visible: anyOf("uretim"), compute: qualityBox },
   { key: "tezgah", title: "Tezgahlar", description: "Şu an çalışan, duran ve işsiz tezgah sayısı.", group: "uretim", periodic: false, byDefault: true, size: "kucuk", visible: anyOf("tezgah"), compute: loomBox },
   { key: "stokOzeti", title: "Stok özeti", description: "Şu an depodaki mamul, ham, yarı mamul ve iplik.", group: "stok", periodic: false, byDefault: true, size: "orta", visible: anyOf("stok"), compute: stockSummaryBox },

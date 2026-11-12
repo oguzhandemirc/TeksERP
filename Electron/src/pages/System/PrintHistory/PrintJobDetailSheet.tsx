@@ -20,6 +20,7 @@ import {
   printUserText,
 } from "@/lib/print-job-format";
 import { printHistoryService, type PrintJobRow } from "@/services/printHistoryService";
+import { formatQty } from "@/lib/format";
 
 interface Props {
   jobId: string | null;
@@ -135,7 +136,7 @@ function DetailBody({ job }: { job: PrintJobRow }) {
         <Row label="Gönderim yolu">{job.transport ? (PRINT_TRANSPORT_LABELS[job.transport] ?? job.transport) : "—"}</Row>
         {job.language && <Row label="Yazıcı dili">{job.language}</Row>}
         <Row label="Süre">{job.durationMs != null ? `${job.durationMs} ms` : "—"}</Row>
-        <Row label="Boyut">{job.bytes != null ? `${job.bytes.toLocaleString("tr-TR")} bayt` : "—"}</Row>
+        <Row label="Boyut">{job.bytes != null ? `${formatQty(job.bytes)} bayt` : "—"}</Row>
         {job.errorCode && (
           <Row label="Hata kodu">
             <span className="font-mono text-xs">{job.errorCode}</span>

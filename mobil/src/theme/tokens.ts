@@ -208,9 +208,9 @@ export const moduleAccents: Record<MobileScreenKey, { tint: string; bg: string }
  * `stationTone.ts`te. İki uç eşitliği `stationTone.test.ts` Electron dosyasını okuyarak ölçer — biri değişirse jest düşer.
  */
 export const stationTonesHsl = {
-  kk1: [199, 89, 48],
-  fason: [25, 95, 53],
-  process: [262, 83, 58],
-  tambur: [160, 84, 39],
-  depo: [43, 96, 50],
+  kk1: [195, 85, 40],
+  fason: [22, 90, 48],
+  process: [258, 70, 56],
+  tambur: [165, 75, 32],
+  depo: [40, 92, 44],
 } as const;

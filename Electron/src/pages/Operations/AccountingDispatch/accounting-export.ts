@@ -3,9 +3,10 @@
 // Türkçe başlıklar. Fiyat YOK (miktar-odaklı).
 import type { SheetSpec } from "@/lib/xlsx-export";
 import type { AccountingExportData, DispatchReport } from "./types";
+import { formatQty } from "@/lib/format";
 
-const NUM1 = "#,##0.0"; // metre/kg (1 ondalık)
-const INT = "#,##0"; // adet
+const NUM1 = "0.0"; // metre/kg (1 ondalık)
+const INT = "0"; // adet
 const DATE = "dd.mm.yyyy hh:mm";
 
 /** null = yön kaydı yok (fasondan doğrudan sevk) — yurtiçi sayılmaz. */
@@ -168,7 +169,7 @@ export function dispatchReportNotes(report: DispatchReport): string[] {
   if (report.returns.count > 0) {
     notes.push(
       `* Bu sevkiyattan sonra ${report.returns.count} top / ` +
-        `${report.returns.meters.toLocaleString("tr-TR", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} m ` +
+        `${formatQty(report.returns.meters, 1, 1)} m ` +
         `iade alınmıştır. İade yukarıdaki rakamlardan DÜŞÜLMEMİŞTİR.`,
     );
     notes.push(

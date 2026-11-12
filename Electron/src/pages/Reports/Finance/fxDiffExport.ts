@@ -32,7 +32,7 @@ import {
 } from "./fxDiffService";
 
 const MONEY = "#,##0.00";
-const COUNT = "#,##0";
+const COUNT = "0";
 /** Kur 4 hane — 2 haneye yuvarlamak raporun ölçtüğü farkı görünmez yapardı. */
 const RATE = "#,##0.0000";
 

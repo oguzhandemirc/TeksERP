@@ -4,6 +4,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import type { MergePreview } from "@/services/mergeService";
 import { MergeShadowingList } from "./MergeShadowingList";
+import { formatQty } from "@/lib/format";
 
 /**
  * ONAY KAPISI — DÖRT KATMAN.
@@ -97,7 +98,7 @@ export function MergeConfirmGate({
               <li key={`${m.table}.${m.column}`} className="flex justify-between gap-4">
                 <span>{m.label}</span>
                 <span className={m.count === null ? "text-amber-600" : "font-medium"}>
-                  {m.count === null ? "ölçülemedi" : m.count.toLocaleString("tr-TR")}
+                  {m.count === null ? "ölçülemedi" : formatQty(m.count)}
                 </span>
               </li>
             ))}

@@ -90,10 +90,10 @@ describe("emanet ekstresi — tek model", () => {
     expect(spec.tables.map((t) => t.name)).toEqual(["Top Özeti", "Top Hareketleri", "İplik lotu Özeti", "İplik lotu Hareketleri"]);
   });
 
-  it("§3 toplam satırı sunucu toplamı; kg iki hane", () => {
+  it("§3 toplam satırı sunucu toplamı; kg iki hane, grupsuz", () => {
     const spec = buildConsignedStatementExport(statement);
     expect(spec.tables[0]!.totalRow).toMatchObject({ opening: 100, in: 250, out: 120, dsk: 30, scrap: 5, closing: 195 });
-    expect(spec.tables[2]!.columns.find((c) => c.key === "closing")?.numFmt).toBe("#,##0.00");
+    expect(spec.tables[2]!.columns.find((c) => c.key === "closing")?.numFmt).toBe("0.00");
   });
 });
 

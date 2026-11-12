@@ -17,6 +17,7 @@ import { TERIM } from "@/lib/terim";
 import { workOrderService } from "./service";
 import type { WorkOrder } from "./types";
 import { LAST_LINK_REASON, isRowLocked, lastLinkLocked, remainingSingleColor, unlinkRows, type UnlinkRow } from "./unlink-order";
+import { formatQty } from "@/lib/format";
 
 interface Props {
   open: boolean;
@@ -26,7 +27,7 @@ interface Props {
   onSuggestColor: (colorId: string) => void;
 }
 
-const fmt = (n: number) => n.toLocaleString("tr-TR", { maximumFractionDigits: 1 });
+const fmt = (n: number) => formatQty(n, 1);
 
 /**
  * "Sipariş Bağını Kopar" — bağlı kalemleri listeler, kayıt başına seçim; son-bağ kilidi

@@ -164,7 +164,7 @@ async function fixtureSections(): Promise<void> {
   near("§4 uyum istatistiği = elle Σ(O−E)²/E", r.istatistik?.istatistik, hand);
   check("§4 n = 90 ≥ 30 → uyarı yok", r.istatistik?.n === n && r.istatistik.uyarilar.length === 0, JSON.stringify(r.istatistik?.uyarilar));
   const t = texts(r);
-  const want = `Gece vardiyasında bulunan hata 1.000 m'de ${(Math.round(rNight * 10) / 10).toString().replace(".", ",")}; diğerlerinde ${(Math.round(rDay * 10) / 10).toString().replace(".", ",")} — yaklaşık ${(Math.round((rNight / rDay) * 10) / 10).toString().replace(".", ",")} katı. Bu fark tesadüf olmayacak kadar büyük (güçlü kanıt; 90 kayıt üzerinden ölçüldü). ${CAUSALITY_NOTE}`;
+  const want = `Gece vardiyasında bulunan hata 1000 m'de ${(Math.round(rNight * 10) / 10).toString().replace(".", ",")}; diğerlerinde ${(Math.round(rDay * 10) / 10).toString().replace(".", ",")} — yaklaşık ${(Math.round((rNight / rDay) * 10) / 10).toString().replace(".", ",")} katı. Bu fark tesadüf olmayacak kadar büyük (güçlü kanıt; 90 kayıt üzerinden ölçüldü). ${CAUSALITY_NOTE}`;
   check("§4 anlatı: bilinen ilişki günlük dilde", t[0] === want, `gelen ${JSON.stringify(t)}`);
   check("§4 grafik: çubuk, iki vardiya", r.sunum.grafik?.tur === "cubuk" && r.sunum.grafik.kategoriler.length === 2);
   check("§4 vardiya sunumu kişi adı taşımaz", r.sunum.kisiAdi === undefined);

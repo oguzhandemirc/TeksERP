@@ -14,6 +14,7 @@ import { dumpRowCount, type SackDump, type SackDumpOptions } from "./types";
 import { factoryDayKey } from "@/lib/factory-time";
 import { PDF_MAX_ROWS } from "@shared/pdf-limits";
 import { isWebPdf, printAsPdf } from "@/lib/web-pdf";
+import { formatQty } from "@/lib/format";
 
 // Yazdır/PDF üst sınırı ortak PDF kapısının satır aynasıdır: 200 çuval × onlarca top
 // bu sınıra ulaşabilir → Excel'e yönlendir.
@@ -39,7 +40,7 @@ function withinPrintLimit(dumps: SackDump[]): boolean {
   const rows = dumpRowCount(dumps);
   if (rows <= PDF_MAX_ROWS) return true;
   toast.error(
-    `Döküm çok büyük (${rows.toLocaleString("tr-TR")} satır) — yazdırma/PDF yerine Excel indirin.`,
+    `Döküm çok büyük (${formatQty(rows)} satır) — yazdırma/PDF yerine Excel indirin.`,
   );
   return false;
 }

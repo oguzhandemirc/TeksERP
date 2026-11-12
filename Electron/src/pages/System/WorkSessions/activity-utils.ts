@@ -1,5 +1,6 @@
 import type { ActivityRoll, SessionActivityEvent, SessionActivitySummary } from "./types";
 import { factoryDayKey } from "@/lib/factory-time";
+import { formatQty } from "@/lib/format";
 
 /** RollOperationType → insan-okur Türkçe etiket. */
 export const operationTypeLabels: Record<string, string> = {
@@ -68,7 +69,7 @@ export function rollSubLabel(r: ActivityRoll): string {
   return r.itemName && r.barcode ? r.barcode : "";
 }
 
-const trNum = (v: number): string => v.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 2 });
+const trNum = (v: number): string => formatQty(v, 2);
 
 /**
  * Operasyon metadata'sının kompakt özeti — bilinen anahtarlar seçilir

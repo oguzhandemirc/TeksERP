@@ -27,6 +27,7 @@ import { consumableIdsFrom, useItemTypes, yarnIdsFrom } from "./useItemTypes";
 import { GoodsReceiptOrderSection } from "../PurchaseOrders/GoodsReceiptOrderSection";
 import { mergeFilledLines } from "../PurchaseOrders/receiptOrderFields";
 import type { ReceiptPurchaseOrderSync } from "../PurchaseOrders/receiptSync";
+import { formatAmount, formatQty } from "@/lib/format";
 
 interface Props {
   open: boolean;
@@ -269,13 +270,13 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
                 kaydetmeden görsün — yanlış çarpan en pahalı hatadır. */}
             <p className="text-sm text-muted-foreground">
               Toplam: <b className="text-foreground">{totals.rolls}</b> top ·{" "}
-              <b className="text-foreground">{totals.meters.toLocaleString("tr-TR")}</b> m
+              <b className="text-foreground">{formatQty(totals.meters)}</b> m
               {/* İplik AYRI birimde eklenir — kg metreye TOPLANMAZ (backend
                   `ReceiptTotals` sözleşmesi). İplik yokken çıktı bayt-bayt eski. */}
               {totals.yarnLines > 0 && (
                 <>
                   {" + "}
-                  <b className="text-foreground">{totals.yarnKg.toLocaleString("tr-TR")}</b> kg iplik
+                  <b className="text-foreground">{formatQty(totals.yarnKg)}</b> kg iplik
                 </>
               )}
               {totals.consumableLines > 0 && <>{" + "}<b className="text-foreground">{totals.consumableLines}</b> sarf satırı</>}
@@ -283,7 +284,7 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
                 <>
                   {" · "}
                   <b className="text-foreground">
-                    {totals.amount.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {formatAmount(totals.amount, 2, 2)}
                   </b>{" "}
                   {currency}
                 </>

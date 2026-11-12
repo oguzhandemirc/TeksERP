@@ -20,6 +20,7 @@ import type { WarpBeam } from "@/pages/Operations/WarpBeams/types";
 import { warpSpecService } from "@/pages/WarpSpecs/service";
 import type { WeavingOrderFormValues } from "./schema";
 import { beamPrefillForOrder, fabricSuggestionM } from "./prefill";
+import { formatQty } from "@/lib/format";
 
 type Form = UseFormReturn<WeavingOrderFormValues>;
 
@@ -34,7 +35,7 @@ export interface PlannedMSuggestion {
 const beamPicker = warpBeamService as unknown as CrudService<WarpBeam>;
 /** Canlı leventler (bitmiş/hurda/iptal dışı). */
 const LIVE_BEAMS = { status: "PLANNED,READY,SHIPPED_OUT,MOUNTED" } as const;
-const fmtM = (n: number) => n.toLocaleString("tr-TR", { maximumFractionDigits: 0 });
+const fmtM = (n: number) => formatQty(n, 0);
 
 export function BeamPrefillField({ form, onSuggestion }: { form: Form; onSuggestion: (s: PlannedMSuggestion | null) => void }) {
   const qc = useQueryClient();
@@ -86,7 +87,7 @@ export function PlannedMHint({ suggestion, onApply }: { suggestion: PlannedMSugg
   return (
     <div className="mt-1 flex flex-wrap items-center gap-2 rounded-md border border-dashed border-sky-300 bg-sky-50 px-2 py-1 text-xs text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-200" data-testid="wo-plannedM-oneri">
       <span>
-        Öneri: ~{fmtM(suggestedM)} m <span className="text-muted-foreground">({beamNo} {fmtM(warpM)} m çözgü × (1 − %{takeUpPct.toLocaleString("tr-TR")} take-up))</span>
+        Öneri: ~{fmtM(suggestedM)} m <span className="text-muted-foreground">({beamNo} {fmtM(warpM)} m çözgü × (1 − %{formatQty(takeUpPct)} take-up))</span>
       </span>
       <Button type="button" variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => onApply(suggestedM)} data-testid="wo-plannedM-uygula">
         Uygula

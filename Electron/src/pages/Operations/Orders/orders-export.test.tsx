@@ -121,7 +121,7 @@ describe("sipariş listesi dışa aktarımı", () => {
     expect(head.filter((h) => h === "Sevk durumu")).toHaveLength(1);
     expect(at("Sevk durumu")).toBe("Bir kısmı gönderildi (40 / 300 m)");
     expect(at("Sipariş Tarihi")).toMatch(/^\d{2}\.\d{2}\.2026$/);
-    expect(at("Tutar")).toBe("1500,00 TRY");
+    expect(at("Tutar")).toBe("1.500,00 TRY");
   });
 });
 

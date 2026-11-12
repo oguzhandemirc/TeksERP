@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { formatDisplay, formatMeasure, formatMoney, formatNumber, formatPercent } from "./format";
 
-describe("gösterim sayısı (binlik ayracı yok, ondalık virgül)", () => {
+describe("gösterim sayısı (ölçü ayırıcısız, para binlik ayırıcılı, ondalık virgül)", () => {
   it("tam sayıda gruplamasız, hanesiz", () => {
     expect(formatDisplay(4295)).toBe("4295");
     expect(formatMeasure(4295, "m")).toBe("4295 m");
@@ -13,9 +13,9 @@ describe("gösterim sayısı (binlik ayracı yok, ondalık virgül)", () => {
     expect(formatMeasure(12.04, "m")).toBe("12 m");
   });
   it("para hep 2 hane", () => {
-    expect(formatMoney(325684.9, "TRY")).toBe("325684,90 TRY");
+    expect(formatMoney(325684.9, "TRY")).toBe("325.684,90 TRY");
     expect(formatMoney(0, "USD")).toBe("0,00 USD");
-    expect(formatMoney(1500)).toBe("1500,00");
+    expect(formatMoney(1500)).toBe("1.500,00");
   });
   it("yüzde ön ekli", () => {
     expect(formatPercent(12.54)).toBe("%12,5");

@@ -21,6 +21,7 @@ import type {
   SeriesExhaustion,
   SeriesFormatInput,
 } from "./types";
+import { formatQty } from "@/lib/format";
 
 
 /** Kilit rozeti + ⓘ — cümle SUNUCUDAN, tooltip'te (satırı taşırmasın). */
@@ -49,7 +50,7 @@ function EtkiCumlesi({ etkiSayisi, birim }: { etkiSayisi: number | null; birim: 
       Yalnız bundan sonra açılacak kayıtları etkiler.{" "}
       {etkiSayisi === null
         ? "Bugüne kadarki kayıtların numarası değişmez"
-        : `Bugüne kadarki ${etkiSayisi.toLocaleString("tr-TR")} ${birim} numarası değişmez`}
+        : `Bugüne kadarki ${formatQty(etkiSayisi)} ${birim} numarası değişmez`}
       , eski etiketler okunmaya devam eder.
     </p>
   );

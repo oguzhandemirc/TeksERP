@@ -13,6 +13,7 @@ import { LiveTable } from "./LiveTable";
 import { SlowList } from "./SlowList";
 import { TrendChart } from "./TrendChart";
 import { factoryLocaleString } from "@/lib/factory-time";
+import { formatQty } from "@/lib/format";
 
 const trStamp = (ms: number): string => factoryLocaleString(ms, "tr-TR");
 
@@ -75,7 +76,7 @@ export function PerfPage() {
         // Veri taşıyan cümle ⓘ içinde saklanmaz — başlığın altında görünür (S12).
         statusLine={
           snap
-            ? `${factoryLocaleString(snap.sinceAt, "tr-TR")} tarihinden beri ${snap.totalCount.toLocaleString("tr-TR")} istek ölçüldü.`
+            ? `${factoryLocaleString(snap.sinceAt, "tr-TR")} tarihinden beri ${formatQty(snap.totalCount)} istek ölçüldü.`
             : undefined
         }
         actions={
@@ -124,7 +125,7 @@ export function PerfPage() {
               columns={PERF_ROUTE_EXPORT_COLUMNS}
               notes={[
                 snap
-                  ? `Canlı sayaçlar: ${trStamp(snap.sinceAt)} tarihinden beri ${snap.totalCount.toLocaleString("tr-TR")} istek (${(snap.routes ?? []).length} uç).`
+                  ? `Canlı sayaçlar: ${trStamp(snap.sinceAt)} tarihinden beri ${formatQty(snap.totalCount)} istek (${(snap.routes ?? []).length} uç).`
                   : "Canlı sayaçlar.",
                 "Ölçüm süreç belleğindedir — sunucu yeniden başlarsa veya sayaçlar sıfırlanırsa sıfırdan başlar; kalıcı günlük trend ayrıdır.",
                 "p50 / p95 / max birer gecikme ölçüsüdür — toplanmaz; TOPLAM satırı yalnız istek ve hata adedini toplar.",

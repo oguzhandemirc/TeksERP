@@ -28,8 +28,9 @@ import { SackContentDumpMenu } from "./SackContentDumpMenu";
 import { SackTagsBulkMenu } from "./SackTagsBulkMenu";
 import { fromDumpRows } from "./sackDump";
 import { UNGROUPED_FILTER_VALUE, type PackingGroup } from "./types";
+import { formatQty } from "@/lib/format";
 
-const fmtQty = (n: number): string => n.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
+const fmtQty = (n: number): string => formatQty(n, 2);
 
 /**
  * PAKETLEME GRUBU ŞERİDİ — çuval listesinin üstünde "P1 · P2 · Gruplanmamış" çipleri.

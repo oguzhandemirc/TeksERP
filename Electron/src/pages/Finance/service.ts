@@ -11,6 +11,7 @@ import { isOverdue, toKurus } from "./Allocations/allocationMath";
 import { PICKER_MAX_PAGE_SIZE } from "@/lib/picker-loader";
 import type { InvoiceLineType } from "./invoiceLineSubject";
 import type { ServiceDraftWorkRow } from "./serviceWorks";
+import { formatAmount } from "@/lib/format";
 
 export type Currency = "TRY" | "USD" | "EUR" | "GBP" | "RUB";
 export type InvoiceType = "SALES" | "PURCHASE" | "SALES_RETURN" | "PURCHASE_RETURN";
@@ -194,7 +195,7 @@ export function partyName(c: { customer: { name: string } | null; subcontractor:
 export function money(value: number | string | null | undefined, currency: Currency): string {
   const n = typeof value === "number" ? value : Number(value);
   if (value === null || value === undefined || value === "" || !Number.isFinite(n)) return "—";
-  return `${n.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${CURRENCY_SYMBOL[currency]}`;
+  return `${formatAmount(n, 2, 2)} ${CURRENCY_SYMBOL[currency]}`;
 }
 
 // -----------------------------------------------------------------------------

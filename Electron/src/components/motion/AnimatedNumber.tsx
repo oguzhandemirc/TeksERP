@@ -7,6 +7,7 @@ import {
   useTransform,
 } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { formatQty } from "@/lib/format";
 
 interface Props {
   value: number;
@@ -29,10 +30,7 @@ export function AnimatedNumber({ value, className, decimals = 0, flash = false, 
   const reduce = useReducedMotion();
   const mv = useMotionValue(0);
   const text = useTransform(mv, (v) =>
-    format ? format(v) : v.toLocaleString("tr-TR", { useGrouping: false,
-      minimumFractionDigits: decimals,
-      maximumFractionDigits: decimals,
-    }),
+    format ? format(v) : formatQty(v, decimals, decimals),
   );
 
   const [flashing, setFlashing] = useState(false);

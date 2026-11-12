@@ -5,11 +5,12 @@ import { cn } from "@/lib/utils";
 import { toneFor } from "@/lib/station-colors";
 import type { WorkOrderStatus } from "@/types/enums";
 import { locationView, stationDetail, type WorkOrderLocation, type WorkOrderLocationStation } from "./location";
+import { formatQty } from "@/lib/format";
 
 // "Şu an nerede" sütunu: TEK satır yüksekliği (çip + "+N" rozeti); dağılım tıkla açılan
 // küçük kartta. Satır tıklaması detay panelini açtığı için tetik olayı yukarı taşımaz.
 
-const fmt = (n: number) => n.toLocaleString("tr-TR", { maximumFractionDigits: 0, useGrouping: false });
+const fmt = (n: number) => formatQty(n, 0);
 const stop = (e: MouseEvent) => e.stopPropagation();
 
 function Dot({ s }: { s: Pick<WorkOrderLocationStation, "dis" | "tur"> }) {

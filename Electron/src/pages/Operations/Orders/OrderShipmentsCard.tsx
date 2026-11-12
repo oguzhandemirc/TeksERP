@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Truck } from "lucide-react";
-import { safeFormat } from "@/lib/format";
+import { formatQty, safeFormat } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge } from "@/components/operations/StatusBadge";
@@ -20,7 +20,7 @@ interface Props {
 }
 
 function fmtM(n: number): string {
-  return Math.round(n).toLocaleString("tr-TR", { useGrouping: true });
+  return formatQty(Math.round(n));
 }
 
 /**

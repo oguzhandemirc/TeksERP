@@ -3,6 +3,7 @@
 import { toast } from "sonner";
 import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
+import { formatQty } from "@/lib/format";
 
 export interface MeterDefectBeyond {
   rollId: string;
@@ -71,7 +72,7 @@ export const METER_TONE_CLASS: Record<MeterDiffTone, string> = {
   shorter: "font-medium text-amber-700 dark:text-amber-400",
 };
 
-const num = (v: number, digits = 2) => v.toLocaleString("tr-TR", { maximumFractionDigits: digits });
+const num = (v: number, digits = 2) => formatQty(v, digits);
 
 export const meterText = (v: number | null | undefined): string => (v == null ? "—" : `${num(v)} m`);
 

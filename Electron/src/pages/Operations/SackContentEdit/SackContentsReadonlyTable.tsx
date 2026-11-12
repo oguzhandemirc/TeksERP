@@ -8,9 +8,10 @@ import { DataTable } from "@/components/data-table/DataTable";
 import { sackContentsColumns } from "./sackContentsColumns";
 import type { SackContentRoll } from "./types";
 import { foldSearchText } from "@/lib/search-fold";
+import { formatQty } from "@/lib/format";
 
 const fmtQty = (n: number) =>
-  `${n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 })} m`;
+  `${formatQty(n, 1)} m`;
 
 /** Arama eşleşmesi — barkod / kumaş / renk / en (Türkçe küçültme). */
 function matches(r: SackContentRoll, q: string): boolean {

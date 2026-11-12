@@ -1,5 +1,6 @@
 // K4P-LAB — saf görünüm kuralları (React'siz; birim testine açık).
 import type { LabResult, LabResultKind, LabTestStatus, LabTestType, LabVerdict } from "./service";
+import { formatQty } from "@/lib/format";
 
 export const STATUS_LABEL: Record<LabTestStatus, string> = { DRAFT: "Taslak", APPROVED: "Onaylı", VOIDED: "İptal" };
 export const STATUS_BADGE: Record<LabTestStatus, "secondary" | "default" | "muted"> = { DRAFT: "secondary", APPROVED: "default", VOIDED: "muted" };
@@ -22,13 +23,13 @@ export function resultValueText(r: Pick<LabResult, "resultKind" | "value" | "uni
   const v = num(r.value);
   if (r.resultKind === "PASS_FAIL" || v === null) return VERDICT_LABEL[r.verdict];
   if (r.resultKind === "SCALE") return formatScaleValue(v);
-  return `${v.toLocaleString("tr-TR", { maximumFractionDigits: 3 })}${r.unit ? ` ${r.unit}` : ""}`;
+  return `${formatQty(v, 3)}${r.unit ? ` ${r.unit}` : ""}`;
 }
 
 /** Sınır aralığı metni ("200–220", "≥ 4", "≤ 3"); sınır yoksa null. */
 export function specRangeText(min: string | number | null, max: string | number | null, kind: LabResultKind): string | null {
   const a = num(min), b = num(max);
-  const f = (x: number) => (kind === "SCALE" ? formatScaleValue(x) : x.toLocaleString("tr-TR", { maximumFractionDigits: 3 }));
+  const f = (x: number) => (kind === "SCALE" ? formatScaleValue(x) : formatQty(x, 3));
   if (a !== null && b !== null) return `${f(a)}–${f(b)}`;
   if (a !== null) return `≥ ${f(a)}`;
   if (b !== null) return `≤ ${f(b)}`;

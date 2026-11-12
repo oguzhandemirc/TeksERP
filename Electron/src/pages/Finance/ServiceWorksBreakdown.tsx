@@ -6,9 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { money, type Currency } from "./service";
 import { basisLabel, meterCompareText, sortServiceWorks, sourceLabel, subjectKindLabel, summarizeServiceWorks, unitLabel, type ServiceDraftWorkRow } from "./serviceWorks";
+import { formatQty } from "@/lib/format";
 
 const qtyText = (r: ServiceDraftWorkRow) =>
-  `${Number(r.qty).toLocaleString("tr-TR", { maximumFractionDigits: 3 })} ${unitLabel(r.unit)}`.trim();
+  `${formatQty(Number(r.qty), 3)} ${unitLabel(r.unit)}`.trim();
 
 function MeterCompareLine({ row }: { row: ServiceDraftWorkRow }) {
   const text = meterCompareText(row.meterCompare);

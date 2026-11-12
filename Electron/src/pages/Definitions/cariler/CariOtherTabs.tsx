@@ -6,6 +6,7 @@ import type { IconTileTone } from "@/components/ui/icon-tile";
 import { SectionCard } from "@/components/ui/section-card";
 import { RecordTable } from "@/components/record/RecordTable";
 import { ToneChip } from "@/components/record/RecordBits";
+import { TERIM } from "@/lib/terim";
 import { systemLogService } from "@/services/systemLogService";
 import type { SystemLogListItem } from "@/types/systemLog";
 import { listGoodsReceipts } from "@/pages/Operations/GoodsReceipts/service";
@@ -51,7 +52,7 @@ export function CariFasonTab({ subcontractorId, canOpenWorkOrder }: { subcontrac
         columns={[
           { key: "no", label: "Sevk", render: (d) => <span className="font-semibold tabular-nums">{d.dispatchNo}</span> },
           { key: "date", label: "Tarih", render: (d) => gunCari(d.dispatchedAt) },
-          { key: "wo", label: "İş emri", render: (d) => d.workOrder?.workOrderNumber ?? "—" },
+          { key: "wo", label: TERIM.terbiyeIsEmri.cumleBasi.yalin, render: (d) => d.workOrder?.workOrderNumber ?? "—" },
           { key: "status", label: "Durum", render: (d) => (d.cancelledAt ? <ToneChip tone="rose">İptal</ToneChip> : <ToneChip tone="amber">Gönderildi</ToneChip>) },
           { key: "qty", label: "Miktar", align: "right", render: (d) => metre(d.totalQty) ?? "—" },
         ]}

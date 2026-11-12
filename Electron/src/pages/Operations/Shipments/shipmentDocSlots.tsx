@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { FileSpreadsheet, Tags, Undo2 } from "lucide-react";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import { formatQty } from "@/lib/format";
 
 // =============================================================================
 // Sevk irsaliyesi diyaloğunun SLOT parçaları — jenerik PrintedDocDialog'a
@@ -8,7 +9,7 @@ import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 // =============================================================================
 
 const fmtM = (v: number) =>
-  v.toLocaleString("tr-TR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  formatQty(v, 1, 1);
 
 /**
  * "Sevk sonrası iade" bandı — belge ile CANLI durumun neden ayrıştığını söyler.

@@ -12,6 +12,7 @@ import { fmtFactoryDate } from "@/lib/factory-time";
 import { cn } from "@/lib/utils";
 import { money, type Currency } from "@/pages/Finance/service";
 import { PURCHASE_UNIT_LABEL, canCreatePurchaseDraft, createPurchaseDraft, listWorkOrderReceipts, previewPurchaseDraft, type SubcontractorPurchaseDraftPreview } from "./service";
+import { formatQty } from "@/lib/format";
 
 const INVOICE_STATUS: Record<string, string> = { DRAFT: "taslak", CONFIRMED: "onaylı", CANCELLED: "iptal" };
 
@@ -110,7 +111,7 @@ function PreviewBody({ p }: { p: SubcontractorPurchaseDraftPreview }) {
             {p.lines.map((l, i) => (
               <tr key={`${l.serviceItemId ?? "x"}:${i}`} className="border-t">
                 <td className={cn("py-1 pr-2", !l.serviceItemId && "text-amber-700 dark:text-amber-400")}>{l.description}</td>
-                <td className="py-1 pr-2 text-right tabular-nums whitespace-nowrap">{Number(l.qty).toLocaleString("tr-TR", { maximumFractionDigits: 3 })} {PURCHASE_UNIT_LABEL[l.unit] ?? ""}</td>
+                <td className="py-1 pr-2 text-right tabular-nums whitespace-nowrap">{formatQty(Number(l.qty), 3)} {PURCHASE_UNIT_LABEL[l.unit] ?? ""}</td>
                 <td className="py-1 pr-2 text-right tabular-nums whitespace-nowrap">{money(l.unitPrice, cur)}</td>
                 <td className="py-1 text-right tabular-nums">%{l.vatRate}{l.withholdingRate > 0 ? ` · tevk. ${l.withholdingRate}` : ""}</td>
               </tr>

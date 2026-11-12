@@ -8,8 +8,8 @@ import type { ReportExportSpec } from "../_components/reportExport";
 import { horizonNote } from "./leventShared";
 import type { FinishForecastReport } from "./leventReportTypes";
 
-const M = "#,##0.0";
-const INT = "#,##0";
+const M = "0.0";
+const INT = "0";
 const metin = (xs: Array<string | null>): string[] => xs.filter((x): x is string => Boolean(x));
 const sayiYaDa = (v: number | null, beyan: string): number | string => (v === null ? beyan : v);
 

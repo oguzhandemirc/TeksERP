@@ -11,7 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { safeFormat } from "@/lib/format";
+import { formatQty, safeFormat } from "@/lib/format";
 import { PartyCard } from "@/components/operations/PartyCard";
 import { StatusBadge } from "@/components/operations/StatusBadge";
 import { sackHubService } from "./service";
@@ -28,7 +28,7 @@ import {
 import { PrintHistoryLink } from "@/components/print/PrintHistoryLink";
 
 const fmtQty = (n: number) =>
-  `${n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 })} m`;
+  `${formatQty(n, 1)} m`;
 
 interface Props {
   /** Görüntülenecek (sevkteki) çuval; null → kapalı. Depo çuvalları editöre gider. */
@@ -114,7 +114,7 @@ export function SackDetailSheet({ sack, onOpenChange }: Props) {
                   <div className="text-xs text-muted-foreground">Brüt Tartı</div>
                   <div className="font-medium tabular-nums">
                     {sack.weightKg != null ? (
-                      `${sack.weightKg.toLocaleString("tr-TR")} kg`
+                      `${formatQty(sack.weightKg)} kg`
                     ) : (
                       <span className="text-xs font-normal text-muted-foreground">tartılmadı</span>
                     )}

@@ -162,10 +162,10 @@ async function run(url: string): Promise<void> {
   const raw = `${TAG} KOD-77`;
   made.aliases.push((await prisma.deliveryNoteAlias.create({ data: { scope: "COLOR", senderCustomerId: null, rawKey: aliasKey("COLOR", raw), targetId: color }, select: { id: true } })).id);
   const n5 = await mkNote([{ meters: 10 }], undefined, { desen: "Beyan Kumaş", renk: raw });
-  // Varsayılan 2026-11-09'dan beri ONER (3632b6e39); KAPALI dalı ayar AÇIKÇA seçilerek ölçülür.
-  await setSetting(SETTING_KEYS.GELEN_BELGE_DESEN_RENK_ESLESME, "KAPALI");
+  // Varsayılan KAPALI (2026-11-12, bugünkü davranış): KAPALI dalı ayar YAZILMADAN (null = varsayılan) ölçülür.
+  await setSetting(SETTING_KEYS.GELEN_BELGE_DESEN_RENK_ESLESME, null);
   const kapali = await noteFormFields(n5, "NORMAL");
-  check("§5 ⭐ KAPALI: incomingDeclared metinleri var, eşleme önerisi yok", kapali.incomingDeclared?.itemText === "Beyan Kumaş" && kapali.incomingDeclared.colorText === raw && kapali.incomingDeclared.suggestedColor === null && !kapali.suggestions.targetColor, JSON.stringify(kapali.incomingDeclared));
+  check("§5 ⭐ KAPALI (varsayılan): incomingDeclared metinleri var, eşleme önerisi yok", kapali.incomingDeclared?.itemText === "Beyan Kumaş" && kapali.incomingDeclared.colorText === raw && kapali.incomingDeclared.suggestedColor === null && !kapali.suggestions.targetColor, JSON.stringify(kapali.incomingDeclared));
   await setSetting(SETTING_KEYS.GELEN_BELGE_DESEN_RENK_ESLESME, "ONER");
   const oner = await noteFormFields(n5, "NORMAL");
   check("§5 ⭐ ONER: öğrenilmiş eşleme (alias) kartı önerir; beyan metni ayrı alanda kalır", oner.incomingDeclared?.suggestedColor?.id === color && oner.suggestions.targetColor?.id === color && oner.incomingDeclared.colorText === raw, JSON.stringify(oner.incomingDeclared));

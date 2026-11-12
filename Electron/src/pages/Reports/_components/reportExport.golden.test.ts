@@ -39,7 +39,8 @@ const ALTIN = {
   dikey: "4604a9f250a7843c175f3320c4c068830f919016395fc44d787c6575eba2cca1",
   yatay: "f88b738d6d5fbd2ba287e835d2988194b78aea27a939f561a94a36d57bc808ae",
   sade: "663918f8666b8560470bd3d3eda18b6249b2e63f09084fe87794905912cdfa70",
-  excel: "9946fc424d0d2771142a75aaccd79ea85ffe5ba6500f8a2f6fca500cafb3cd19",
+  // 2026-11-12: "0.0" (yüzde) kolonunun Excel biçimi artık grupsuz "0.0" (sayı biçimi kuralı; önce "#,##0.0").
+  excel: "d5dd9f98313e46fbb5b5e425f7fb05cba50355d92ecdb48a0ed735db2ca1cedb",
 };
 
 describe("eski spec çıktısı bayt bayt aynı (bloklar yok)", () => {

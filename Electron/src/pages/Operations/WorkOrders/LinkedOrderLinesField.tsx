@@ -18,6 +18,7 @@ import { cn } from "@/lib/utils";
 import { OrderPickerDialog, type PickedOrderLine } from "./OrderPickerDialog";
 import { calendarLocaleDateString } from "@/lib/factory-time";
 import { TERIM } from "@/lib/terim";
+import { formatQty } from "@/lib/format";
 
 interface Props {
   lines: PickedOrderLine[];
@@ -35,7 +36,7 @@ interface Props {
   lockedReason?: string;
 }
 
-const fmt = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false });
+const fmt = (n: number) => formatQty(n);
 
 /**
  * Bağlı sipariş kalemleri için sol panel. Kendi header + scroll body'sini taşır

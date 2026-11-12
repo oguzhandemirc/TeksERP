@@ -60,7 +60,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
-import { safeFormat } from "@/lib/format";
+import { formatQty, safeFormat } from "@/lib/format";
 import {
   PRICE_KIND_LABEL,
   listItemPrices,
@@ -321,7 +321,7 @@ export function ItemPricesPanel({ itemId, itemLabel, unit, isService, hideResolv
                           {v.deltaPct !== null && (
                             <Badge variant="muted" className="ml-2">
                               {v.deltaPct > 0 ? "+" : ""}
-                              {v.deltaPct.toLocaleString("tr-TR", { maximumFractionDigits: 1 })}%
+                              {formatQty(v.deltaPct, 1)}%
                             </Badge>
                           )}
                         </span>

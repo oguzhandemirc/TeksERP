@@ -3,6 +3,7 @@
 import { CalendarDays, ChevronLeft, ChevronRight, Factory, PackageCheck, Truck, Waves, type LucideIcon } from "lucide-react";
 import { IconTile, type IconTileTone } from "@/components/ui/icon-tile";
 import { cn } from "@/lib/utils";
+import { TERIM } from "@/lib/terim";
 import { factoryDayKey, fmtDayKey } from "@/lib/factory-time";
 import type { AgendaBox } from "./box-types";
 import { formatCount, metre } from "./pano-bicim";
@@ -78,7 +79,7 @@ function daySections(d: AgendaBox): Section[] {
   const { alisTeslim, isEmriBaslangic, dokumaBaslangic } = d.isler;
   if (alisTeslim) out.push({ key: "alis", label: "Alış teslimi", icon: PackageCheck, tone: "teal", total: alisTeslim.toplam,
     items: alisTeslim.kalemler.map((r) => ({ id: r.id, title: r.no, sub: r.taraf, amount: null, target: BOX_TARGETS.alis })) });
-  if (isEmriBaslangic) out.push({ key: "isEmri", label: "İş emri başlangıcı", icon: Factory, tone: "orange", total: isEmriBaslangic.toplam,
+  if (isEmriBaslangic) out.push({ key: "isEmri", label: `${TERIM.terbiyeIsEmri.cumleBasi.yalin} başlangıcı`, icon: Factory, tone: "orange", total: isEmriBaslangic.toplam,
     items: isEmriBaslangic.kalemler.map((r) => ({ id: r.id, title: r.no, sub: null, amount: r.hedefMetre !== null ? metre(r.hedefMetre) : null,
       target: { to: `/operations/work-orders/${encodeURIComponent(r.id)}`, izin: ["workorder:read"] } })) });
   if (dokumaBaslangic) out.push({ key: "dokuma", label: "Dokuma başlangıcı", icon: Waves, tone: "violet", total: dokumaBaslangic.toplam,

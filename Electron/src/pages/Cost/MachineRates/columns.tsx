@@ -4,7 +4,7 @@ import { History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
 import { fmtFactoryDate } from "@/lib/factory-time";
-import { fmtDecFull } from "../shared/format";
+import { fmtDecFull, fmtQtyDecFull } from "../shared/format";
 import type { MachineCostRate } from "./service";
 import type { MachineRateRow } from "./MachineRatesPage";
 
@@ -24,7 +24,7 @@ const BASE: ColumnDef<MachineRateRow>[] = [
     meta: { ...right("Saat ücreti"), exportValue: (r) => (r.rate ? `${fmtDecFull(r.rate.hourRateTry)} TL` : "ücret yok") },
     cell: ({ row: { original: r } }) => (r.rate ? `${fmtDecFull(r.rate.hourRateTry)} TL` : <span className="text-amber-600 dark:text-amber-400">ücret yok</span>),
   },
-  { id: "normM", header: "Beklenen m/saat", meta: { ...right("Beklenen m/saat"), exportValue: (r) => (r.rate ? fmtDecFull(r.rate.normMPerHour, 2) : "—") }, cell: ({ row: { original: r } }) => (r.rate ? fmtDecFull(r.rate.normMPerHour, 2) : "—") },
+  { id: "normM", header: "Beklenen m/saat", meta: { ...right("Beklenen m/saat"), exportValue: (r) => (r.rate ? fmtQtyDecFull(r.rate.normMPerHour, 2) : "—") }, cell: ({ row: { original: r } }) => (r.rate ? fmtQtyDecFull(r.rate.normMPerHour, 2) : "—") },
   { id: "createdAt", header: "Geçerli olduğu an", meta: { label: "Geçerli olduğu an", exportValue: (r) => (r.rate ? fmtFactoryDate(r.rate.createdAt) : "—") }, accessorFn: (r) => r.rate?.createdAt ?? null, cell: ({ row: { original: r } }) => (r.rate ? fmtFactoryDate(r.rate.createdAt) : "—") },
 ];
 

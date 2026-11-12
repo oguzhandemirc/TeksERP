@@ -14,7 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { SECTION_TONE, type SectionTone } from "@/components/forms/FormSection";
-import { safeFormat } from "@/lib/format";
+import { formatQty, safeFormat } from "@/lib/format";
 import { itemService } from "@/pages/Items/service";
 import { colorService } from "@/pages/Colors/service";
 import { fabricPropertyService } from "@/pages/FabricProperties/service";
@@ -210,9 +210,9 @@ export function WorkOrderLivePreview({
           {showQuantity && (
             <Row label="Metraj · Kg">
               <span className="tabular-nums">
-                {qtyVal != null ? `${qtyVal.toLocaleString("tr-TR", { useGrouping: false })} m` : "—"}
+                {qtyVal != null ? `${formatQty(qtyVal)} m` : "—"}
                 <span className="text-muted-foreground"> · </span>
-                {weightVal != null ? `${weightVal.toLocaleString("tr-TR", { useGrouping: false })} kg` : "—"}
+                {weightVal != null ? `${formatQty(weightVal)} kg` : "—"}
               </span>
             </Row>
           )}
@@ -297,7 +297,7 @@ export function WorkOrderLivePreview({
               </span>
               <span className="tabular-nums">
                 <span className="text-sm font-bold text-foreground">
-                  {totalOpen.toLocaleString("tr-TR", { useGrouping: false })}
+                  {formatQty(totalOpen)}
                 </span>{" "}
                 m açık
               </span>

@@ -65,7 +65,28 @@ const ARGUMANSIZ =
 /** Ham katlama çağrısı — yardımcıya alınmamış her `toLocale*Case`. */
 const HAM_FOLD = /toLocale(Upper|Lower)Case\(/g;
 
-export type Bulgu = { urunArgumansiz: string[]; aletArgumansiz: string[]; hamFold: number; dosya: number };
+/**
+ * §5 SAYI BİÇİMİ KURALI (kullanıcı 2026-11-12): para binlik ayırıcılı, ölçü/sayım/yüzde ayırıcısız. Panelde
+ * bu ayrımı TEK yer uygular (`Electron/src/lib/format.ts`); ortak biçimleyici dışında sayı biçimleyen çağrı
+ * (açık locale'li `toLocaleString`, çıplak `Intl.NumberFormat`, `useGrouping: true`) kuralı sessizce deler.
+ */
+const PANEL_ONEKI = "Electron/src/";
+const PANEL_BICIM = /\.toLocaleString\(\s*["'`]|new Intl\.NumberFormat\(|useGrouping:\s*true/;
+/** Muafiyet: biçimleyicinin kendisi + tarih yardımcısı + maliyetin tam-ondalık (metin girdili) sınıflı biçimleyicisi. */
+export const PANEL_BICIM_MUAF = new Set([
+  "Electron/src/lib/format.ts",
+  "Electron/src/lib/number-format.ts",
+  "Electron/src/lib/factory-time.ts",
+  "Electron/src/pages/Cost/shared/format.ts",
+]);
+
+export function panelBicimIhlaliMi(dosya: string, satir: string): boolean {
+  if (!dosya.startsWith(PANEL_ONEKI) || /\.test\.tsx?$/.test(dosya) || PANEL_BICIM_MUAF.has(dosya)) return false;
+  const kod = koduAyikla(satir);
+  return kod !== null && PANEL_BICIM.test(kod);
+}
+
+export type Bulgu = { urunArgumansiz: string[]; aletArgumansiz: string[]; hamFold: number; dosya: number; panelBicim: string[] };
 
 /** Satırdaki kodu yorumlardan arındırır (blok gövdesi + satır sonu yorumu). */
 export function koduAyikla(satir: string): string | null {
@@ -97,6 +118,7 @@ export function taranacakDosyalar(repo: string): string[] {
 export function tara(repo: string): Bulgu {
   const urunArgumansiz: string[] = [];
   const aletArgumansiz: string[] = [];
+  const panelBicim: string[] = [];
   let hamFold = 0;
   const dosyalar = taranacakDosyalar(repo);
   for (const f of dosyalar) {
@@ -107,10 +129,11 @@ export function tara(repo: string): Bulgu {
         const kod = koduAyikla(l);
         if (kod === null) return;
         if (ARGUMANSIZ.test(kod)) (alet ? aletArgumansiz : urunArgumansiz).push(`${f}:${i + 1}`);
+        if (panelBicimIhlaliMi(f, l)) panelBicim.push(`${f}:${i + 1}`);
         hamFold += [...kod.matchAll(HAM_FOLD)].length;
       });
   }
-  return { urunArgumansiz, aletArgumansiz, hamFold, dosya: dosyalar.length };
+  return { urunArgumansiz, aletArgumansiz, hamFold, dosya: dosyalar.length, panelBicim };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -193,6 +216,27 @@ function main(): void {
     b.hamFold,
     HAM_FOLD_TABAN,
   );
+  console.log("");
+
+  // ── §5 SERT — panelde ortak biçimleyici dışı sayı biçimi YOK ────────────────
+  console.log("§5 — panel sayı biçimi tek yerden (para gruplu, ölçü grupsuz; SERT, taban 0)");
+  check(
+    "§5 ⭐ panelde ortak biçimleyici dışı sayı biçimi YOK",
+    b.panelBicim.length === 0,
+    b.panelBicim.length === 0
+      ? "0 çağrı (Electron/src, muaf: lib/format · lib/number-format · lib/factory-time · Cost/shared/format)"
+      : `${b.panelBicim.join(" · ")} ⇒ \`@/lib/format\` kullan: ölçü/sayım \`formatQty\`/\`formatDisplay\`/\`qtyFormatter\`, para \`formatMoney\`/\`formatAmount\`/\`amountFormatter\``,
+  );
+  check("§5a sonda: açık locale'li sayı toLocaleString YAKALANIR", panelBicimIhlaliMi("Electron/src/x.tsx", 'const s = n.toLocaleString("tr-TR", { maximumFractionDigits: 1 });'));
+  check("§5b sonda: çıplak Intl.NumberFormat YAKALANIR", panelBicimIhlaliMi("Electron/src/x.ts", 'const NUM = new Intl.NumberFormat("tr-TR");'));
+  check("§5c sonda: useGrouping:true YAKALANIR", panelBicimIhlaliMi("Electron/src/x.ts", "const o = { useGrouping: true };"));
+  check("§5d sonda: muaf biçimleyici + test dosyası + backend sayılmaz",
+    !panelBicimIhlaliMi("Electron/src/lib/format.ts", 'new Intl.NumberFormat("tr-TR")') &&
+      !panelBicimIhlaliMi("Electron/src/x.test.ts", 'n.toLocaleString("tr-TR")') &&
+      !panelBicimIhlaliMi("Teks-Erp/src/x.ts", 'n.toLocaleString("tr-TR")'));
+  check("§5e sonda: ortak biçimleyici çağrısı ve yorum temiz",
+    !panelBicimIhlaliMi("Electron/src/x.tsx", "const s = formatQty(n, 1);") && !panelBicimIhlaliMi("Electron/src/x.tsx", '// n.toLocaleString("tr-TR") kullanma'));
+  check("§5f körlük zemini: muaf biçimleyicide desen GERÇEKTEN eşleşir", PANEL_BICIM.test(readFileSync(path.join(REPO, "Electron/src/lib/format.ts"), "utf8")));
   console.log("");
 
   // ── §4 SONDALAR — sınıflandırıcının kendisi ───────────────────────────────

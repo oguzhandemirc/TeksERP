@@ -1,9 +1,9 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { safeFormat } from "@/lib/format";
+import { qtyFormatter, safeFormat } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import type { KartelaDispatchListItem, KartelaReceiptListItem } from "./service";
 
-const DEC = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
+const DEC = qtyFormatter(1);
 
 export const kartelaDispatchColumns: ColumnDef<KartelaDispatchListItem>[] = [
   {

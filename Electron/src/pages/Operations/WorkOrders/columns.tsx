@@ -4,7 +4,7 @@ import { StatusBadge, workOrderStatusTones } from "@/components/operations/Statu
 import { DeadlineBadge } from "@/components/operations/DeadlineBadge";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
 import { workOrderStatusLabels, workOrderTypeLabels } from "@/types/enums";
-import { safeFormat } from "@/lib/format";
+import { formatQty, safeFormat } from "@/lib/format";
 import { formatCalendarDay } from "@/lib/factory-time";
 import type { WorkOrder } from "./types";
 import { customerCellView } from "./customer-cell";
@@ -26,7 +26,7 @@ function progressOf(wo: WorkOrder): { input: number; output: number; pct: number
   return { input, output, pct, hasFlow };
 }
 
-const fmtM = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 0 });
+const fmtM = (n: number) => formatQty(n, 0);
 
 // Dışa aktarım metinleri — hücreyle aynı kaynaktan (`progressOf`, `fmtM`).
 const progressText = (wo: WorkOrder): string => {
@@ -244,7 +244,7 @@ export const workOrderColumns: ColumnDef<WorkOrder>[] = [
     cell: ({ row }) =>
       row.original.targetQuantity != null ? (
         <span className="tabular-nums text-xs">
-          {row.original.targetQuantity.toLocaleString("tr-TR", { useGrouping: false })} m
+          {formatQty(row.original.targetQuantity)} m
         </span>
       ) : (
         <span className="text-muted-foreground">—</span>

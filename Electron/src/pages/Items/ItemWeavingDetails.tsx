@@ -14,11 +14,12 @@ import type { ItemFormValues } from "./schema";
 import type { ItemComputedGsm } from "./types";
 import { itemService } from "./service";
 import { FABRIC_DETAIL_KEYS } from "./itemPayload.helper";
+import { qtyFormatter } from "@/lib/format";
 
 /** Girilen ham gramaj hesaplanandan bu oranı (mutlak) AŞARSA uyarı çıkar. */
 export const GSM_DIFF_WARN_PCT = 10;
 
-const fmt = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 });
+const fmt = qtyFormatter(1);
 const num = (n: number | null): string => (n == null || !Number.isFinite(n) ? "—" : fmt.format(n));
 
 export function ItemWeavingDetails({

@@ -1,3 +1,4 @@
+import { formatQty } from "@/lib/format";
 // Hizmet taslağının iş kırılımı (fason F4/F9 `serviceWorks?`) — backend `service-billing/types.ts`
 // `ServiceDraftWorkRow` aynası. Hesap SUNUCUDA; panel yalnız gösterir. Eski backend alanı yollamaz ⇒ bölüm çizilmez.
 
@@ -82,7 +83,7 @@ export function sortServiceWorks(rows: readonly ServiceDraftWorkRow[]): ServiceD
   );
 }
 
-const m = (v: number | null) => (v == null ? "—" : `${v.toLocaleString("tr-TR", { maximumFractionDigits: 2 })} m`);
+const m = (v: number | null) => (v == null ? "—" : `${formatQty(v, 2)} m`);
 
 /** "Beyan 500 m · Ölçülen 540 m · Faturalanan 540 m (ölçülen)"; alan yoksa null (satır bugünkü gibi). */
 export function meterCompareText(c: ServiceMeterCompare | undefined): string | null {

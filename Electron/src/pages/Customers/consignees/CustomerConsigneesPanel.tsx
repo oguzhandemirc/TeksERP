@@ -15,6 +15,7 @@ import { labelTemplateService, type LabelTemplateListRow } from "@/services/labe
 import { consigneeService, type ConsigneeRow } from "./consigneeService";
 import { consigneeIssueOf, type ConsigneeIssue } from "./consigneeErrors";
 import { ConsigneeMergeDialog } from "./ConsigneeMergeDialog";
+import { formatQty } from "@/lib/format";
 
 const NO_TEMPLATE = "__none__";
 
@@ -158,7 +159,7 @@ function IssueBox({ issue, onMerge }: { issue: ConsigneeIssue; onMerge: (targetI
       <p>{issue.message}</p>
       {issue.kind === "in-use" && (
         <ul className="mt-1 max-h-40 overflow-y-auto font-mono text-xs" data-testid="consignee-blocking-rolls">
-          {issue.rolls.map((r) => <li key={r.id}>{r.barcode ?? "barkodsuz"} · {r.meters.toLocaleString("tr-TR")} m</li>)}
+          {issue.rolls.map((r) => <li key={r.id}>{r.barcode ?? "barkodsuz"} · {formatQty(r.meters)} m</li>)}
         </ul>
       )}
       <Button size="sm" variant="outline" className="mt-2" onClick={() => onMerge(issue.kind === "name-taken" ? issue.conflictId : null)} data-testid="consignee-issue-merge">

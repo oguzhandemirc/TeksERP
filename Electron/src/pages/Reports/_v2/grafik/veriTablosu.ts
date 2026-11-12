@@ -6,7 +6,7 @@ import type { GrafikBlok } from "../sunum";
 
 /** Hepsi tam sayıysa ondalıksız, değilse tek hane; literal yazılır ki biçim bekçisi okuyabilsin. */
 function bicim(values: unknown[]): Pick<ReportColumn, "numFmt"> {
-  return values.filter(sonlu).every((v) => Number.isInteger(v)) ? { numFmt: "#,##0" } : { numFmt: "#,##0.0" };
+  return values.filter(sonlu).every((v) => Number.isInteger(v)) ? { numFmt: "0" } : { numFmt: "0.0" };
 }
 
 export function grafikVeriTablosu(blok: GrafikBlok, ad: string): ReportTableSpec {
@@ -21,7 +21,7 @@ export function grafikVeriTablosu(blok: GrafikBlok, ad: string): ReportTableSpec
       columns: [
         { header: blok.eksen.x.ad || "Grup", key: "g" },
         ...headers.map((h, i) => ({ header: `${h}${ek}`, key: `k${i}`, ...fmt, align: "right" as const })),
-        { header: "Kayıt sayısı", key: "n", numFmt: "#,##0", align: "right" as const },
+        { header: "Kayıt sayısı", key: "n", numFmt: "0", align: "right" as const },
       ],
       rows: blok.seriler.map((s, j) => ({
         g: s.ad,

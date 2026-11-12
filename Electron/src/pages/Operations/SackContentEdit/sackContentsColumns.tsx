@@ -2,8 +2,9 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { AlertTriangle } from "lucide-react";
 import { isSackAbsent, sackAbsentLabels, type SackContentRoll } from "./types";
 import { factoryLocaleString } from "@/lib/factory-time";
+import { formatQty } from "@/lib/format";
 
-const fmtM = (n: number) => `${n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 })} m`;
+const fmtM = (n: number) => `${formatQty(n, 1)} m`;
 
 /**
  * Çuval içeriği (TOP) sütunları — seçilebilir DataTable. Kartelalar ayrı listede.

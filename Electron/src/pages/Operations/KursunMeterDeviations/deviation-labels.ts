@@ -1,5 +1,6 @@
 // Saf etiketler: durum · kaynak rozeti · onay kipi · eşik metni. SIMULATED canlı veri gibi görünmez (kesif-cihaz).
 import type { ApprovalMode, DeviationStatus, MeterDeviationRow, MeterSource } from "./types";
+import { qtyFormatter } from "@/lib/format";
 
 export const STATUS_LABEL: Record<DeviationStatus, string> = {
   PENDING: "İmza bekliyor",
@@ -42,7 +43,7 @@ export function sourceBadge(s: string): { label: string; className: string; hint
   return SOURCE[s as MeterSource] ?? { label: s, className: SOURCE.INFERRED.className, hint: "Tanınmayan kaynak." };
 }
 
-const nf = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 3 });
+const nf = qtyFormatter(3);
 
 export function fmtMeters(v: number | null): string {
   return v == null ? "—" : `${nf.format(v)} m`;

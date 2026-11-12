@@ -36,7 +36,7 @@ describe("drainCursor", () => {
     expect(r).toEqual({ rows: [0, 1, 2, 3, 4, 5], truncated: false });
   });
   it("§4 uyarı metni sayıyı ve 'TAMAMI DEĞİL'i taşır", () => {
-    expect(truncatedExportNote(500000)).toContain("500.000");
+    expect(truncatedExportNote(500000)).toContain("500000");
     expect(truncatedExportNote(1)).toContain("TAMAMI DEĞİL");
   });
 

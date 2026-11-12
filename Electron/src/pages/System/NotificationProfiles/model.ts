@@ -2,6 +2,7 @@
 import { NOTIFICATION_GROUP_ORDER } from "@/pages/Notifications/group-order";
 import type { NotificationGroup } from "@/lib/bildirim/types";
 import type { FactoryDefaultInput, FactoryDefaultKind, ProfileCell, ProfileCellState } from "@/services/bildirimProfilService";
+import { formatQty } from "@/lib/format";
 
 /** Taslak matris: tür → durum; anahtarı olmayan tür profilde YOK (katmana katılmaz). */
 export type CellDraft = Readonly<Record<string, ProfileCellState>>;
@@ -57,7 +58,7 @@ export function parseTrNumber(raw: string): number | null {
 }
 
 export function formatTrNumber(v: unknown): string {
-  return typeof v === "number" && Number.isFinite(v) ? v.toLocaleString("tr-TR", { maximumFractionDigits: 3 }) : "";
+  return typeof v === "number" && Number.isFinite(v) ? formatQty(v, 3) : "";
 }
 
 export interface FactoryDraftRow {

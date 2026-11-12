@@ -48,6 +48,22 @@ function gate(ctx: AccessContext, permission: string, ...modules: string[]): boo
   return matchesPermission(ctx.permissions, permission) && modules.every((m) => isModuleOpen(m, ctx));
 }
 
+/** Kutu kapılarının izin kodları — tek tablo (izin kataloğu bekçisi bu sabiti okur). */
+const GATE_PERMISSIONS = {
+  iplik: "warehouse:read",
+  fasonOzeti: "roll:read",
+  emanet: "report:inventory",
+  tezgah: "loom:live-view",
+  gelenBelge: "gelen-belge:read",
+  sevkeHazir: "shipping:read",
+  uretimeBekleyen: "order:read",
+  finans: "finance:read",
+  nakit: "report:finance",
+  isEmri: "workorder:read",
+  alis: "purchase-order:read",
+  dokumaIsi: "weavingorder:read",
+} as const;
+
 export function panoGates(ctx: AccessContext) {
   return {
     uretim: measureGate(ctx, "uretim", "kalite.bitenMetre"),
@@ -57,19 +73,19 @@ export function panoGates(ctx: AccessContext) {
     fason: measureGate(ctx, "fason", "fason.gonderilenMetre"),
     stok: measureGate(ctx, "stok", "stok.bitmisMetre"),
     istasyon: measureGate(ctx, "istasyon", "uretim.gecenMetre"),
-    iplik: gate(ctx, "warehouse:read", "ticaretEnabled", "iplikEnabled"),
-    fasonOzeti: gate(ctx, "roll:read"),
-    emanet: gate(ctx, "report:inventory", "emanetEnabled"),
-    tezgah: gate(ctx, "loom:live-view", "tezgahEnabled"),
-    gelenBelge: gate(ctx, "gelen-belge:read", "gelenBelgeEnabled"),
-    sevkeHazir: gate(ctx, "shipping:read"),
-    uretimeBekleyen: gate(ctx, "order:read", "productionEnabled"),
-    finans: gate(ctx, "finance:read", "financeEnabled"),
+    iplik: gate(ctx, GATE_PERMISSIONS.iplik, "ticaretEnabled", "iplikEnabled"),
+    fasonOzeti: gate(ctx, GATE_PERMISSIONS.fasonOzeti),
+    emanet: gate(ctx, GATE_PERMISSIONS.emanet, "emanetEnabled"),
+    tezgah: gate(ctx, GATE_PERMISSIONS.tezgah, "tezgahEnabled"),
+    gelenBelge: gate(ctx, GATE_PERMISSIONS.gelenBelge, "gelenBelgeEnabled"),
+    sevkeHazir: gate(ctx, GATE_PERMISSIONS.sevkeHazir),
+    uretimeBekleyen: gate(ctx, GATE_PERMISSIONS.uretimeBekleyen, "productionEnabled"),
+    finans: gate(ctx, GATE_PERMISSIONS.finans, "financeEnabled"),
     // Kasa/banka hareketi Kasa-Banka Defteri'nin kapısıyla (rapor izni + finans modülü).
-    nakit: gate(ctx, "report:finance", "financeEnabled"),
-    isEmri: gate(ctx, "workorder:read"),
-    alis: gate(ctx, "purchase-order:read", "ticaretEnabled"),
-    dokumaIsi: gate(ctx, "weavingorder:read", "dokumaEnabled"),
+    nakit: gate(ctx, GATE_PERMISSIONS.nakit, "financeEnabled"),
+    isEmri: gate(ctx, GATE_PERMISSIONS.isEmri),
+    alis: gate(ctx, GATE_PERMISSIONS.alis, "ticaretEnabled"),
+    dokumaIsi: gate(ctx, GATE_PERMISSIONS.dokumaIsi, "dokumaEnabled"),
     hareket: Object.values(movementGates(ctx)).some(Boolean),
   };
 }

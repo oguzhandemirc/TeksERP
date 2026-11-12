@@ -17,8 +17,9 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { sackHubService } from "./service";
 import { invalidateSackHub } from "./useSackData";
 import type { SackSearchRow } from "./types";
+import { formatQty } from "@/lib/format";
 
-const fmtM = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
+const fmtM = (n: number) => formatQty(n, 1);
 
 interface Props {
   sackId: string;

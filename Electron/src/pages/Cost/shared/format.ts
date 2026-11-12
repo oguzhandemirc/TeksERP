@@ -1,15 +1,17 @@
 // MAL-3 — maliyet sayılarının SUNUM katmanı. Sayı sunucudan Decimal metni olarak gelir ("77.0395");
 // burada yalnız TR biçimine çevrilir: string girdi Intl'e TAM ondalık olarak verilir (float'a çevrilmez),
 // toplama/çarpma YOK — hesap tek yerde, `POST /api/cost/preview` (kural: istemci hesap yapmaz).
+// Birim sınıfı (sayı biçimi kuralı 2026-11-12, `lib/format.ts`): `fmtDec`/`fmtDecFull` PARA (binlik ayırıcılı);
+// ölçü/oran (kg/m, denye, metre, fire %) `fmtQtyDec`/`fmtQtyDecFull`/`fmtPct` (ayırıcısız).
 
 type DecText = string | number | null | undefined;
 
 const cache = new Map<string, Intl.NumberFormat>();
-function nf(min: number, max: number): Intl.NumberFormat {
-  const key = `${min}:${max}`;
+function nf(min: number, max: number, grouping = true): Intl.NumberFormat {
+  const key = `${min}:${max}:${grouping ? 1 : 0}`;
   let f = cache.get(key);
   if (!f) {
-    f = new Intl.NumberFormat("tr-TR", { minimumFractionDigits: min, maximumFractionDigits: max });
+    f = new Intl.NumberFormat("tr-TR", { minimumFractionDigits: min, maximumFractionDigits: max, useGrouping: grouping });
     cache.set(key, f);
   }
   return f;
@@ -28,7 +30,19 @@ export function fmtDecFull(v: DecText, max = 4, fallback = "—"): string {
   return (nf(0, max).format as (x: string | number) => string)(v);
 }
 
-export const fmtPct = (v: DecText, fallback = "—"): string => (v === null || v === undefined || v === "" ? fallback : `%${fmtDecFull(v, 2)}`);
+/** Ölçü sınıfı `fmtDec` (ayırıcısız): "14700,50". */
+export function fmtQtyDec(v: DecText, digits = 2, fallback = "—"): string {
+  if (v === null || v === undefined || v === "") return fallback;
+  return (nf(digits, digits, false).format as (x: string | number) => string)(v);
+}
+
+/** Ölçü sınıfı `fmtDecFull` (ayırıcısız): sunucunun hanesi kadar, en çok `max`. */
+export function fmtQtyDecFull(v: DecText, max = 4, fallback = "—"): string {
+  if (v === null || v === undefined || v === "") return fallback;
+  return (nf(0, max, false).format as (x: string | number) => string)(v);
+}
+
+export const fmtPct = (v: DecText, fallback = "—"): string => (v === null || v === undefined || v === "" ? fallback : `%${fmtQtyDecFull(v, 2)}`);
 
 /** Formdan gelen TR yazımını sunucunun Decimal metnine çevirir ("1.234,5" → "1234.5"); sayıya ÇEVİRMEZ. */
 export function toDecimalText(raw: string): string | null {

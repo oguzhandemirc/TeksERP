@@ -56,7 +56,7 @@ describe("İplik İhtiyaç Planı (MAL-7)", () => {
 describe("İplik İhtiyaç Planı — ham metre esası (K5)", () => {
   it("HAM + sipariş metresi → ikisi ayrı yazılır, fire dahil", () => {
     expect(rawBasisText({ metreEsasi: "HAM", dokumaFiresiPct: 2 }, { kumasMetre: "1133.8", siparisMetre: "1000.0" }))
-      .toBe("Kg'lar ham metreye göre: sipariş 1.000 m → dokunacak ham 1.134 m (çekme ve %2 dokuma firesi dahil).");
+      .toBe("Kg'lar ham metreye göre: sipariş 1000 m → dokunacak ham 1134 m (çekme ve %2 dokuma firesi dahil).");
   });
   it("HAM, fire 0, sipariş metresi yok → yalnız esas cümlesi", () => {
     expect(rawBasisText({ metreEsasi: "HAM", dokumaFiresiPct: 0 })).toBe("Kg'lar ham metreye göre hesaplanır (çekme dahil).");
@@ -85,7 +85,7 @@ describe("İplik İhtiyaç Planı — iplik ayırma (SY-3 I1)", () => {
     expect(reservationText({})).toBeNull();
   });
   it("açık: iş sayısı ve talepten düşülen ham metre", () => {
-    expect(reservationText({ ayirma: ay() })).toBe("İplik ayırma açık: 3 açık dokuma iş emrinin kalan metresi için iplik ayrıldı; bu işlerin 1.251 m kalanı ihtiyaçtan düşüldü.");
+    expect(reservationText({ ayirma: ay() })).toBe("İplik ayırma açık: 3 açık dokuma iş emrinin kalan metresi için iplik ayrıldı; bu işlerin 1251 m kalanı ihtiyaçtan düşüldü.");
   });
   it("müşteri süzgecinde (talep netlenmedi) düşüm cümlesi yok; iş yoksa ayrı cümle", () => {
     expect(reservationText({ ayirma: ay({ talepNetlendi: false }) })).toBe("İplik ayırma açık: 3 açık dokuma iş emrinin kalan metresi için iplik ayrıldı.");

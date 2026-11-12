@@ -30,8 +30,8 @@ export async function downloadInventorySummary(tabs: SummaryTab[]): Promise<bool
       name: "Kumaş Stoğu Özeti",
       columns: [
         { header: "Kategori", key: "label", width: 24 },
-        { header: "Top Sayısı", key: "count", width: 14, numFmt: "#,##0" },
-        { header: "Toplam Metre", key: "qty", width: 16, numFmt: "#,##0.###" },
+        { header: "Top Sayısı", key: "count", width: 14, numFmt: "0" },
+        { header: "Toplam Metre", key: "qty", width: 16, numFmt: "0.###" },
       ],
       rows,
     },

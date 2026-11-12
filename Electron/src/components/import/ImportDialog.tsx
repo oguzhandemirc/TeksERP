@@ -61,6 +61,7 @@ import { foldSearchText } from "@/lib/search-fold";
 import type { CreatedLookup } from "@/lib/import/lookup-create";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { importOutcomeTitle } from "./import-outcome";
+import { formatQty } from "@/lib/format";
 
 // Sunucu tavanıyla hizalı (import-coerce.MAX_IMPORT_ROWS). Panelde de kontrol
 // edilir ki kullanıcı 40.000 satırlık bir dosyayı yükleyip 30 sn bekledikten
@@ -202,7 +203,7 @@ export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
     }
     if (parsed.rows.length > MAX_ROWS) {
       setParseErrors([
-        `${parsed.rows.length.toLocaleString("tr-TR")} satır var — tek seferde en fazla ${MAX_ROWS.toLocaleString("tr-TR")} satır aktarılabilir. Bölerek yükleyin.`,
+        `${formatQty(parsed.rows.length)} satır var — tek seferde en fazla ${formatQty(MAX_ROWS)} satır aktarılabilir. Bölerek yükleyin.`,
       ]);
       resetSource();
       return;
@@ -625,7 +626,7 @@ function FileStep({
       {rowCount > 0 && (
         <p className="flex items-center gap-2 text-sm text-success">
           <CheckCircle2 className="h-4 w-4" />
-          {rowCount.toLocaleString("tr-TR")} satır okundu.
+          {formatQty(rowCount)} satır okundu.
         </p>
       )}
       {warnings.map((w) => (
@@ -992,7 +993,7 @@ function Stat({ label, value, className }: { label: string; value: number; class
   return (
     <div className="rounded-md border p-2 text-center">
       <div className={`text-lg font-semibold tabular-nums ${className ?? ""}`}>
-        {value.toLocaleString("tr-TR")}
+        {formatQty(value)}
       </div>
       <div className="text-[11px] text-muted-foreground">{label}</div>
     </div>

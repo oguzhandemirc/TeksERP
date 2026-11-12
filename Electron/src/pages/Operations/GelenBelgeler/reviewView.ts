@@ -1,6 +1,7 @@
 // Gözden geçirme yüzeyi (saf, yalnız GÖSTERİM): sorun ve toplam hükmü backend'den gelir (`problems`, `totalsCheck`
 // — onay ön kontrolüyle aynı yüklem); burada kural yok, yalnız süzme ve Türkçe metin.
 import type { BlockCheck, LineProblem, TotalDiff, TotalsCheck } from "./reviewTypes";
+import { formatQty } from "@/lib/format";
 
 export const PROBLEM_LABEL: Record<LineProblem, string> = {
   FAILED: "Girilemedi",
@@ -19,7 +20,7 @@ export function visibleLines<T extends ProblemLine>(lines: readonly T[], onlyPro
   return { rows: onlyProblems ? problemRows : [...lines], problemCount: problemRows.length, total: lines.length };
 }
 
-const qty = (n: number) => n.toLocaleString("tr-TR", { maximumFractionDigits: 3 });
+const qty = (n: number) => formatQty(n, 3);
 const signed = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${qty(Math.abs(n))}`;
 const FIELD: Record<TotalDiff["field"], { label: string; unit: string }> = {
   count: { label: "Top", unit: " top" },

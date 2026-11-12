@@ -34,7 +34,7 @@ export function buildSystemLogSummaryExport(opts: {
         name: "İşlem Türü",
         columns: [
           { header: "İşlem", key: "action", width: 22 },
-          { header: "Kayıt", key: "count", width: 12, numFmt: "#,##0", align: "right" },
+          { header: "Kayıt", key: "count", width: 12, numFmt: "0", align: "right" },
         ],
         rows: s.byAction.map((a) => ({ action: actionLabel(a.action), count: a.count })),
         totalRow: { action: "TOPLAM", count: s.totalLogs },
@@ -43,9 +43,9 @@ export function buildSystemLogSummaryExport(opts: {
         name: "Günlük Aktivite",
         columns: [
           { header: "Gün", key: "day", width: 14 },
-          { header: "Oluştur", key: "create", width: 12, numFmt: "#,##0", align: "right" },
-          { header: "Güncelle", key: "update", width: 12, numFmt: "#,##0", align: "right" },
-          { header: "Sil", key: "delete", width: 12, numFmt: "#,##0", align: "right" },
+          { header: "Oluştur", key: "create", width: 12, numFmt: "0", align: "right" },
+          { header: "Güncelle", key: "update", width: 12, numFmt: "0", align: "right" },
+          { header: "Sil", key: "delete", width: 12, numFmt: "0", align: "right" },
         ],
         // Etiket API'den geldiği gibi (YYYY-AA-GG) — bkz. dosya başlığındaki uyarı.
         rows: s.daily.map((d) => ({ day: d.day, create: d.create, update: d.update, delete: d.delete })),
@@ -67,7 +67,7 @@ export function buildSystemLogSummaryExport(opts: {
         name: "Tabloya Göre Kayıt Sayısı",
         columns: [
           { header: "Tablo", key: "tableName", width: 32 },
-          { header: "Kayıt", key: "count", width: 12, numFmt: "#,##0", align: "right" },
+          { header: "Kayıt", key: "count", width: 12, numFmt: "0", align: "right" },
         ],
         rows: s.byTable.map((t) => ({ tableName: tableLabel(t.tableName), count: t.count })),
         totalRow: {
