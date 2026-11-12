@@ -102,7 +102,7 @@ describe("komut paleti kataloğu", () => {
     // 2026-08-09: "/reports/production/scrap" KALDIRILDI (Fire Karnesi Kalite
     // altında). Örnek, hâlâ var olan bir alt raporla değiştirildi — silinmiş bir
     // rotayla test etmek, breadcrumb kuralını değil yokluğu doğrulardı.
-    expect(findBreadcrumbParent("/reports/production/wip")).toEqual({
+    expect(findBreadcrumbParent("/reports/production/batch-trace")).toEqual({
       label: "Üretim",
       to: "/reports/production",
     });

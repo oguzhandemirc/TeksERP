@@ -55,7 +55,7 @@ const yapraklar = [...ROUTES.matchAll(LEAF_RE)]
 
 describe("rapor özet şeridi kapsamı", () => {
   it("zemin: yaprak sayfalar okundu", () => {
-    expect(yapraklar.length).toBeGreaterThan(20);
+    expect(yapraklar.length).toBeGreaterThan(10); // eski raporlar panelden kalktı (2026-11-12): 16 yaprak
   });
 
   it("⭐ her yaprak rapor sayfası <MetricCard çizer", () => {

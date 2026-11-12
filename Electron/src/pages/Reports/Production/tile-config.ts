@@ -1,6 +1,5 @@
-import { Gauge, UserCog, ScanBarcode, GitBranch, TimerOff } from "lucide-react";
+import { ScanBarcode, GitBranch, TimerOff } from "lucide-react";
 import type { HubTile } from "../_components/ReportHubGrid";
-import { TERIM } from "@/lib/terim";
 
 /**
  * Üretim raporları — 2026-08-09 sadeleştirmesi.
@@ -33,13 +32,6 @@ import { TERIM } from "@/lib/terim";
  */
 export const productionReportTiles: HubTile[] = [
   {
-    key: "wip",
-    title: "Nerede Takıldı (WIP)",
-    get description() { return `İstasyonlarda bekleyen mal, en uzun bekleyen işler, başlamamış ${TERIM.terbiyeIsEmri.cogulKucuk}`; },
-    icon: Gauge,
-    to: "/reports/production/wip",
-  },
-  {
     key: "batch-trace",
     title: "Parti İzleme",
     description: "Bu partiden hangi müşteriye ne gitti — şikâyette etki kümesi",
@@ -52,13 +44,6 @@ export const productionReportTiles: HubTile[] = [
     description: "Bir topun istasyon adımları, operatör ve süre geçmişi",
     icon: ScanBarcode,
     to: "/reports/production/traveler-trace",
-  },
-  {
-    key: "operator-performance",
-    title: "Operatör İş Hacmi",
-    description: "Operatör başına işlenen top adedi — sıralama/performans ölçüsü DEĞİL",
-    icon: UserCog,
-    to: "/reports/production/operator-performance",
   },
   {
     // D4-A4: v2 zarflı, kendi sayfası rapor v2 bayrağından bağımsız (`V2_KEYS_WITH_OWN_PAGE`; `test_rapor_katalogu §3`).

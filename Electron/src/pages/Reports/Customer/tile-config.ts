@@ -1,4 +1,4 @@
-import { Crown, UserSquare2 } from "lucide-react";
+import { UserSquare2 } from "lucide-react";
 import type { HubTile } from "../_components/ReportHubGrid";
 
 /**
@@ -10,13 +10,6 @@ import type { HubTile } from "../_components/ReportHubGrid";
  * güveni de seyreltir.
  */
 export const customerReportTiles: HubTile[] = [
-  {
-    key: "scorecard",
-    title: "Müşteri Karnesi",
-    description: "En çok veren, en sık veren ve kaybolmakta olan müşteri (ABC + RFM)",
-    icon: Crown,
-    to: "/reports/customer/scorecard",
-  },
   {
     key: "order-profile",
     title: "Müşteri Sipariş Profili",

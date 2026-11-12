@@ -20,7 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { FEATURE_FLAGS_QUERY_KEY, useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { MODULE_LABELS, type ModuleFlagKey } from "@/lib/module-flags";
 import { REPORT_CATALOG, type ReportCatalogEntry } from "@/lib/report-catalog";
-import { isReportSurfaced } from "@/lib/report-gate";
+import { isReportOnPanel } from "@/lib/report-gate";
 import { useOperationsVisibilityContext } from "@/pages/Operations/useOperationsVisibility";
 import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
 import { FlagToggle } from "@/pages/GeneralSettings/SettingRow";
@@ -43,8 +43,8 @@ export function isReportModuleClosed(entry: ReportCatalogEntry, ctx: OperationsV
   return value === false;
 }
 
-/** Bu bölümün satırları — ucu inmemiş v2 satırı kapatılacak bir şey değildir, çizilmez. */
-const SURFACED = REPORT_CATALOG.filter(isReportSurfaced);
+/** Bu bölümün satırları — ucu inmemiş v2 ve panelden kalkmış (emekli) v1 kapatılacak bir şey değildir, çizilmez. */
+const SURFACED = REPORT_CATALOG.filter(isReportOnPanel);
 
 /** Kategori sırası katalogdaki ilk görünüm sırasıdır (elle liste yok). */
 export function reportCategories(): string[] {

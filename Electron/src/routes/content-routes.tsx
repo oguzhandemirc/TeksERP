@@ -80,18 +80,9 @@ import { DokumaReportsHubPage } from "@/pages/Reports/Dokuma/DokumaReportsHubPag
 import { MaliyetReportsHubPage } from "@/pages/Reports/Maliyet/MaliyetReportsHubPage";
 import { WeavingEfficiencyPage } from "@/pages/Reports/Maliyet/WeavingEfficiencyPage";
 import { ProfitabilityReportPage } from "@/pages/Reports/Maliyet/ProfitabilityReportPage";
-import { RandimanPage } from "@/pages/Reports/Dokuma/RandimanPage";
-import { DurusParetoPage } from "@/pages/Reports/Dokuma/DurusParetoPage";
-import { MudahalePage } from "@/pages/Reports/Dokuma/MudahalePage";
-import { VardiyaKarnesiPage } from "@/pages/Reports/Dokuma/VardiyaKarnesiPage";
 import { KarnePage } from "@/pages/Reports/Dokuma/KarnePage";
-import { ProductionChainPage } from "@/pages/Reports/Dokuma/ProductionChainPage";
-import { LeventSonucuPage } from "@/pages/Reports/Dokuma/LeventSonucuPage";
-import { KapasiteKullanimiPage } from "@/pages/Reports/Dokuma/KapasiteKullanimiPage";
 import { LeventBitisTahminiPage } from "@/pages/Reports/Dokuma/LeventBitisTahminiPage";
-import { AgingReportPage } from "@/pages/Reports/Finance/AgingReportPage";
 import { CashBookPage } from "@/pages/Reports/Finance/CashBookPage";
-import { ChequeDuePage } from "@/pages/Reports/Finance/ChequeDuePage";
 import { VatSummaryPage } from "@/pages/Reports/Finance/VatSummaryPage";
 import { FxDiffPage } from "@/pages/Reports/Finance/FxDiffPage";
 // Paket D (2026-08-14) — hepsi NAMED export.
@@ -182,30 +173,13 @@ import { ReportsHubPage } from "@/pages/Reports/ReportsHubPage";
 import { V2_KEYS_WITH_OWN_PAGE, reportV2Routes } from "@/pages/Reports/_v2/routes";
 import { customReportRoutes } from "@/pages/Reports/_v2/custom/routes";
 import { ProductionReportsHubPage } from "@/pages/Reports/Production/ProductionReportsHubPage";
-import { WipScorecardPage } from "@/pages/Reports/Production/WipScorecardPage";
-import { OperatorPerformancePage } from "@/pages/Reports/Production/OperatorPerformancePage";
 import { TravelerTracePage } from "@/pages/Reports/Production/TravelerTracePage";
 import { BatchTracePage } from "@/pages/Reports/Production/BatchTracePage";
 import { SalesReportsHubPage } from "@/pages/Reports/Sales/SalesReportsHubPage";
-import { ReturnScorecardPage } from "@/pages/Reports/Sales/ReturnScorecardPage";
-import { ShipmentScorecardPage } from "@/pages/Reports/Sales/ShipmentScorecardPage";
 import { DestinationMixPage } from "@/pages/Reports/Sales/DestinationMixPage";
-import { OpenOrderCoveragePage } from "@/pages/Reports/Sales/OpenOrderCoveragePage";
-import { OrderIntakePage } from "@/pages/Reports/Sales/OrderIntakePage";
 import { DemandAnalysisPage } from "@/pages/Reports/Sales/DemandAnalysisPage";
-import { OrderLeadTimePage } from "@/pages/Reports/Sales/OrderLeadTimePage";
-import { OrderCancellationPage } from "@/pages/Reports/Sales/OrderCancellationPage";
-import { QualityReportsHubPage } from "@/pages/Reports/Quality/QualityReportsHubPage";
-import { QualityScorecardPage } from "@/pages/Reports/Quality/QualityScorecardPage";
-import { ScrapScorecardPage } from "@/pages/Reports/Quality/ScrapScorecardPage";
-import { PlanDeviationScorecardPage } from "@/pages/Reports/Quality/PlanDeviationScorecardPage";
-import { InventoryReportsHubPage } from "@/pages/Reports/Inventory/InventoryReportsHubPage";
-import { StockScorecardPage } from "@/pages/Reports/Inventory/StockScorecardPage";
-import { SubcontractReportsHubPage } from "@/pages/Reports/Subcontract/SubcontractReportsHubPage";
-import { SubcontractScorecardPage } from "@/pages/Reports/Subcontract/SubcontractScorecardPage";
 import { CustomerReportsHubPage } from "@/pages/Reports/Customer/CustomerReportsHubPage";
 import { OrderProfilePage } from "@/pages/Reports/Customer/OrderProfilePage";
-import { CustomerScorecardPage } from "@/pages/Reports/Customer/CustomerScorecardPage";
 import { AuditReportsHubPage } from "@/pages/Reports/Audit/AuditReportsHubPage";
 import { SystemLogSummaryPage } from "@/pages/Reports/Audit/SystemLogSummaryPage";
 import { UserActivityPage } from "@/pages/Reports/Audit/UserActivityPage";
@@ -1636,19 +1610,29 @@ export const contentRoutes: RouteObject[] = [
       </ProtectedRoute>
     ),
   },
+  // Eski kategori hub'ları (2026-11-12, raporları panelden kalktı): ekran anahtarı (`screen-catalog`, bildirim
+  // `panelEkran`) yaşadığı için adres Rapor Merkezi'ne yönlenir; izin aynı kalır.
   {
-    path: "reports/production/wip",
+    path: "reports/quality",
     element: (
-      <ProtectedRoute requirePermission="report:production">
-        <WipScorecardPage />
+      <ProtectedRoute requirePermission="report:quality">
+        <Navigate to="/reports" replace />
       </ProtectedRoute>
     ),
   },
   {
-    path: "reports/production/operator-performance",
+    path: "reports/inventory",
     element: (
-      <ProtectedRoute requirePermission="report:production">
-        <OperatorPerformancePage />
+      <ProtectedRoute requirePermission="report:inventory">
+        <Navigate to="/reports" replace />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "reports/subcontract",
+    element: (
+      <ProtectedRoute requirePermission="report:subcontract">
+        <Navigate to="/reports" replace />
       </ProtectedRoute>
     ),
   },
@@ -1685,106 +1669,10 @@ export const contentRoutes: RouteObject[] = [
     ),
   },
   {
-    path: "reports/sales/shipment-scorecard",
-    element: (
-      <ProtectedRoute requirePermission="report:sales">
-        <ShipmentScorecardPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "reports/sales/order-cancellation",
-    element: (
-      <ProtectedRoute requirePermission="report:sales">
-        <OrderCancellationPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "reports/sales/order-leadtime",
-    element: (
-      <ProtectedRoute requirePermission="report:sales">
-        <OrderLeadTimePage />
-      </ProtectedRoute>
-    ),
-  },
-  {
     path: "reports/sales/demand-analysis",
     element: (
       <ProtectedRoute requirePermission="report:sales">
         <DemandAnalysisPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "reports/sales/order-intake",
-    element: (
-      <ProtectedRoute requirePermission="report:sales">
-        <OrderIntakePage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "reports/sales/open-order-coverage",
-    element: (
-      <ProtectedRoute requirePermission="report:sales">
-        <OpenOrderCoveragePage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "reports/sales/return-scorecard",
-    element: (
-      <ProtectedRoute requirePermission="report:sales">
-        <ReturnScorecardPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "reports/quality",
-    element: (
-      <ProtectedRoute requirePermission="report:quality">
-        <QualityReportsHubPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "reports/quality/scorecard",
-    element: (
-      <ProtectedRoute requirePermission="report:quality">
-        <QualityScorecardPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "reports/quality/scrap-scorecard",
-    element: (
-      <ProtectedRoute requirePermission="report:quality">
-        <ScrapScorecardPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "reports/quality/plan-deviation-scorecard",
-    element: (
-      <ProtectedRoute requirePermission="report:quality">
-        <PlanDeviationScorecardPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "reports/inventory",
-    element: (
-      <ProtectedRoute requirePermission="report:inventory">
-        <InventoryReportsHubPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "reports/inventory/scorecard",
-    element: (
-      <ProtectedRoute requirePermission="report:inventory">
-        <StockScorecardPage />
       </ProtectedRoute>
     ),
   },
@@ -1846,66 +1734,10 @@ export const contentRoutes: RouteObject[] = [
     ),
   },
   {
-    path: "reports/dokuma/randiman",
-    element: (
-      <ProtectedRoute requirePermission="report:production">
-        <RandimanPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "reports/dokuma/durus-pareto",
-    element: (
-      <ProtectedRoute requirePermission="report:production">
-        <DurusParetoPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "reports/dokuma/mudahale",
-    element: (
-      <ProtectedRoute requirePermission="report:production">
-        <MudahalePage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "reports/dokuma/vardiya-karnesi",
-    element: (
-      <ProtectedRoute requirePermission="report:production">
-        <VardiyaKarnesiPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
     path: "reports/dokuma/karne",
     element: (
       <ProtectedRoute requirePermission="report:production">
         <KarnePage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "reports/dokuma/zincir",
-    element: (
-      <ProtectedRoute requirePermission="report:production">
-        <ProductionChainPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "reports/dokuma/levent-sonucu",
-    element: (
-      <ProtectedRoute requirePermission="report:production">
-        <LeventSonucuPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "reports/dokuma/kapasite-kullanimi",
-    element: (
-      <ProtectedRoute requirePermission="report:production">
-        <KapasiteKullanimiPage />
       </ProtectedRoute>
     ),
   },
@@ -1926,26 +1758,10 @@ export const contentRoutes: RouteObject[] = [
     ),
   },
   {
-    path: "reports/finance/aging",
-    element: (
-      <ProtectedRoute requirePermission="report:finance">
-        <AgingReportPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
     path: "reports/finance/cash-book",
     element: (
       <ProtectedRoute requirePermission="report:finance">
         <CashBookPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "reports/finance/cheque-due",
-    element: (
-      <ProtectedRoute requirePermission="report:finance">
-        <ChequeDuePage />
       </ProtectedRoute>
     ),
   },
@@ -1966,34 +1782,10 @@ export const contentRoutes: RouteObject[] = [
     ),
   },
   {
-    path: "reports/subcontract",
-    element: (
-      <ProtectedRoute requirePermission="report:subcontract">
-        <SubcontractReportsHubPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "reports/subcontract/scorecard",
-    element: (
-      <ProtectedRoute requirePermission="report:subcontract">
-        <SubcontractScorecardPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
     path: "reports/customer",
     element: (
       <ProtectedRoute requirePermission="report:customer">
         <CustomerReportsHubPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "reports/customer/scorecard",
-    element: (
-      <ProtectedRoute requirePermission="report:customer">
-        <CustomerScorecardPage />
       </ProtectedRoute>
     ),
   },

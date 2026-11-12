@@ -104,10 +104,9 @@ describe("§1–§2 bayrak okuyucusu — ReportsHubPage", () => {
     const fav = screen.getByRole("region", { name: "Favorilerim" });
     expect(within(fav).getByText("Kasa & Banka Defteri")).toBeInTheDocument();
     const legacy = screen.getByRole("region", { name: "Eski raporlar (geçiş dönemi)" });
-    // R0-GECIS: yer tutucu yerine 36 v1 rapor, eski hub'ın kategorileriyle (`legacy-model.ts`).
-    expect(within(legacy).getAllByRole("listitem")).toHaveLength(36);
-    // Maliyet kategorisinin v1 raporu yok (MAL-7 yalnız v2) → eski raporlar grubu da yok.
-    expect(within(legacy).getAllByRole("group")).toHaveLength(reportTiles.length - 1);
+    // 2026-11-12: yalnız panelden henüz kalkmamış eski raporlar (satış 2 + müşteri 1), kendi kategorilerinde.
+    expect(within(legacy).getAllByRole("listitem")).toHaveLength(3);
+    expect(within(legacy).getAllByRole("group")).toHaveLength(2);
     // `hazir:true` satır Merkez'de çizilir, `hazir:false` çizilmez (ilk hazır satır KQ-D6 kurşun gramajı).
     const readyRows = V2_ROWS.filter((e) => e.hazir);
     expect(readyRows.length, "körlük zemini: hazır v2 satırı yok").toBeGreaterThan(0);

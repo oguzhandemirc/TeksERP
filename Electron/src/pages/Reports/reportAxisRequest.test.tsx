@@ -20,31 +20,13 @@ vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
 vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ isAdmin: true, hasPermission: () => true, hasAnyPermission: () => true, hasAllPermissions: () => true }) }));
 vi.mock("@/hooks/useFavorites", () => ({ useFavorites: () => ({ favorites: [], isFavorite: () => false, toggleFavorite: vi.fn(), reorderFavorites: vi.fn() }) }));
 vi.mock("@/components/layout/tabs/use-tab-target", () => ({ useDrillTarget: () => ({ onClick: () => {}, onAuxClick: () => {}, onContextMenu: () => {} }), useTabTarget: () => ({ onClick: () => {} }) }));
-import { OrderIntakePage } from "@/pages/Reports/Sales/OrderIntakePage";
 import { DemandAnalysisPage } from "@/pages/Reports/Sales/DemandAnalysisPage";
-import { OrderLeadTimePage } from "@/pages/Reports/Sales/OrderLeadTimePage";
-import { OrderCancellationPage } from "@/pages/Reports/Sales/OrderCancellationPage";
-import { ShipmentScorecardPage } from "@/pages/Reports/Sales/ShipmentScorecardPage";
-import { ReturnScorecardPage } from "@/pages/Reports/Sales/ReturnScorecardPage";
-import { OpenOrderCoveragePage } from "@/pages/Reports/Sales/OpenOrderCoveragePage";
-import { CustomerScorecardPage } from "@/pages/Reports/Customer/CustomerScorecardPage";
 import { OrderProfilePage } from "@/pages/Reports/Customer/OrderProfilePage";
-import { SubcontractScorecardPage } from "@/pages/Reports/Subcontract/SubcontractScorecardPage";
-import { ProductionChainPage } from "@/pages/Reports/Dokuma/ProductionChainPage";
 
 /** reportAxisCoverage `AXES_BY_REPORT` aynası: yaprak · bileşen · denenecek eksen (o yaprağın beyan ettiği ilk eksen). */
 const YAPRAKLAR: Array<{ key: string; page: ReactElement; eksen: string; deger: string }> = [
-  { key: "sales/order-intake", page: <OrderIntakePage />, eksen: "customerId", deger: "c1" },
   { key: "sales/demand-analysis", page: <DemandAnalysisPage />, eksen: "customerId", deger: "c1" },
-  { key: "sales/order-leadtime", page: <OrderLeadTimePage />, eksen: "customerId", deger: "c1" },
-  { key: "sales/order-cancellation", page: <OrderCancellationPage />, eksen: "customerId", deger: "c1" },
-  { key: "sales/shipment-scorecard", page: <ShipmentScorecardPage />, eksen: "destination", deger: "EXPORT" },
-  { key: "sales/return-scorecard", page: <ReturnScorecardPage />, eksen: "destination", deger: "EXPORT" },
-  { key: "sales/open-order-coverage", page: <OpenOrderCoveragePage />, eksen: "itemId", deger: "i1" },
-  { key: "customer/scorecard", page: <CustomerScorecardPage />, eksen: "customerId", deger: "c1" },
   { key: "customer/order-profile", page: <OrderProfilePage />, eksen: "customerId", deger: "c1" },
-  { key: "subcontract/scorecard", page: <SubcontractScorecardPage />, eksen: "subcontractorId", deger: "f1" },
-  { key: "dokuma/zincir", page: <ProductionChainPage />, eksen: "customerId", deger: "c1" },
 ];
 
 function renderAt(ui: ReactElement, url: string) {

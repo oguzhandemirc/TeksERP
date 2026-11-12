@@ -149,14 +149,14 @@ const IZINLI_ISTEMCI_DOSYALARI: ReadonlyArray<{ dosya: string; ekranKey: string;
   { dosya: "Electron/src/pages/Operations/WeavingOrders/service.ts", ekranKey: "operations/weaving-orders", izinler: ["weavingorder:read"], karo: "operations" },
   // Fason dokuma (G2p, 2026-09-14): aynı ekranın "Fason" bölümü — dokuma işi detayı, ayrı karo/route yok.
   { dosya: "Electron/src/pages/Operations/WeavingOrders/fason/service.ts", ekranKey: "operations/weaving-orders", izinler: ["weavingorder:read"], karo: "operations" },
+  // Tezgâh Yükü (`0d62fc9e4`): iş emri ucunu okur; ekran manifestoda `dokumaEnabled` + `weavingorder:read`.
+  { dosya: "Electron/src/pages/Operations/LoomLoad/service.ts", ekranKey: "operations/loom-load", izinler: ["weavingorder:read"], karo: "operations" },
   // Tezgah Duruşları (2026-09-14): iki izinden BİRİ açar — route `requireAnyPermission`, manifesto `requires` ikisini de anar.
   { dosya: "Electron/src/pages/Operations/MachineStops/service.ts", ekranKey: "operations/machine-stops", izinler: ["loom:manual-entry", "loom:classify"], karo: "operations", rejimAlani: "machineStopEnabled" },
   // Vardiya tanımları (2026-10-10): Tanımlar hub'ı karosu; yazma/okuma `loom:spec-manage`.
   { dosya: "Electron/src/pages/ShiftDefinitions/service.ts", ekranKey: "definitions/shift-definitions", izinler: ["loom:spec-manage"], karo: "definitions", rejimAlani: "machineStopEnabled" },
   // Dokuma raporları (Dilim 5, 2026-09-14): Raporlar hub'ı karosu; okuma `report:production` (1e hükmü ③).
   { dosya: "Electron/src/pages/Reports/Dokuma/service.ts", ekranKey: "reports/dokuma", izinler: ["report:production"], karo: "reports" },
-  // Üretim Zinciri hub'ı (Z3, 2026-09-18): aynı Dokuma Raporları karosu; tek okuma ucu `/api/reports/dokuma/zincir`, izin `report:production`.
-  { dosya: "Electron/src/pages/Reports/Dokuma/productionChain.ts", ekranKey: "reports/dokuma", izinler: ["report:production"], karo: "reports" },
 ];
 
 /**

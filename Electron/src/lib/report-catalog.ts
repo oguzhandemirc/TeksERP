@@ -110,7 +110,7 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
   { key: "production/wip", baslik: "Nerede Takıldı (WIP)", soru: "Yarı mamul şu an hangi adımda bekliyor ve ne kadar süredir orada?",
     sinif: "basit", izin: "report:production", modul: "productionEnabled", varsayilanGun: 30, tarih: "aralik-iso",
     panelYolu: "reports/production/wip", uc: "/api/reports/production/wip", kapiTasiyici: [{ dosya: "src/routes/reports/production.routes.ts", yol: "/wip" }], yuzey: "yaprak",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "production/uretim-akisi" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "production/uretim-akisi" }, emekli: true },
   { key: "production/batch-trace", baslik: "Parti İzleme", soru: "Bu parti hangi adımlardan geçti ve şu an nerede?",
     sinif: "basit", izin: "report:production", modul: "productionEnabled", varsayilanGun: null, tarih: "yok",
     panelYolu: "reports/production/batch-trace",
@@ -123,17 +123,17 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
   { key: "production/operator-performance", baslik: "Operatör İş Hacmi", soru: "Hangi operatör bu dönemde kaç iş kaydı üretti?",
     sinif: "basit", izin: "report:production", modul: "productionEnabled", varsayilanGun: 30, tarih: "aralik-iso",
     panelYolu: "reports/production/operator-performance", uc: "/api/reports/production/operator-performance", kapiTasiyici: [{ dosya: "src/routes/reports/production.routes.ts", yol: "/operator-performance" }], yuzey: "yaprak",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "production/uretim-akisi" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "production/uretim-akisi" }, emekli: true },
 
   // ── SİPARİŞ & SEVKİYAT ────────────────────────────────────────────────────
   { key: "sales/order-cancellation", baslik: "Sipariş İptal Karnesi", soru: "Bu dönemde kaç sipariş satırı iptal edildi ve hangi sebeple?",
     sinif: "basit", izin: "report:sales", modul: "cekirdek:siparis-musteri", varsayilanGun: 90, tarih: "aralik-iso",
     panelYolu: "reports/sales/order-cancellation", uc: "/api/reports/sales/order-cancellation", kapiTasiyici: [{ dosya: "src/routes/reports/sales.routes.ts", yol: "/order-cancellation" }], yuzey: "yaprak",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "sales/vazgecilen-is" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "sales/vazgecilen-is" }, emekli: true },
   { key: "sales/order-leadtime", baslik: "Sipariş → Teslim Süresi", soru: "Sipariş girişinden sevke kadar kaç gün geçiyor?",
     sinif: "basit", izin: "report:sales", modul: "cekirdek:siparis-musteri", varsayilanGun: 180, tarih: "aralik-iso",
     panelYolu: "reports/sales/order-leadtime", uc: "/api/reports/sales/order-leadtime", kapiTasiyici: [{ dosya: "src/routes/reports/sales.routes.ts", yol: "/order-leadtime" }], yuzey: "yaprak",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "sales/termin" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "sales/termin" }, emekli: true },
   { key: "sales/demand-analysis", baslik: "Talep Analizi", soru: "Hangi ürün ve renkler bu dönemde ne kadar talep gördü, önceki döneme göre nasıl değişti?",
     sinif: "gelismis", izin: "report:sales", modul: "cekirdek:siparis-musteri", varsayilanGun: 90, tarih: "aralik-iso",
     panelYolu: "reports/sales/demand-analysis", uc: "/api/reports/sales/demand-analysis", kapiTasiyici: [{ dosya: "src/routes/reports/sales.routes.ts", yol: "/demand-analysis" }], yuzey: "yaprak",
@@ -141,15 +141,15 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
   { key: "sales/order-intake", baslik: "Sipariş Karnesi", soru: "Bu dönemde ne kadar sipariş girdi ve önceki döneme göre nasıl değişti?",
     sinif: "gelismis", izin: "report:sales", modul: "cekirdek:siparis-musteri", varsayilanGun: 30, tarih: "aralik-iso",
     panelYolu: "reports/sales/order-intake", uc: "/api/reports/sales/order-intake", kapiTasiyici: [{ dosya: "src/routes/reports/sales.routes.ts", yol: "/order-intake" }], yuzey: "yaprak",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "sales/siparis-talep" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "sales/siparis-talep" }, emekli: true },
   { key: "sales/open-order-coverage", baslik: "Açık Sipariş Karşılanma", soru: "Açık sipariş satırlarının ne kadarı bugün stoktan karşılanabiliyor?",
     sinif: "basit", izin: "report:sales", modul: "cekirdek:siparis-musteri", varsayilanGun: null, tarih: "yok",
     panelYolu: "reports/sales/open-order-coverage", uc: "/api/reports/sales/open-order-coverage", kapiTasiyici: [{ dosya: "src/routes/reports/sales.routes.ts", yol: "/open-order-coverage" }], yuzey: "yaprak",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "sales/acik-siparisler" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "sales/acik-siparisler" }, emekli: true },
   { key: "sales/shipment-scorecard", baslik: "Sevk & Termin Karnesi", soru: "Sevkler termine uydu mu, önceki döneme göre nasıl değişti?",
     sinif: "gelismis", izin: "report:sales", modul: "cekirdek:siparis-musteri", varsayilanGun: 30, tarih: "aralik-iso",
     panelYolu: "reports/sales/shipment-scorecard", uc: "/api/reports/sales/shipment-scorecard", kapiTasiyici: [{ dosya: "src/routes/reports/sales.routes.ts", yol: "/shipment-scorecard" }], yuzey: "yaprak",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "sales/termin" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "sales/termin" }, emekli: true },
   { key: "sales/destination-mix", baslik: "Yurtiçi / Yurtdışı Satış", soru: "Satışların ne kadarı yurtiçi, ne kadarı yurtdışı; ihracatta kime, nereye, ne kadar ve hangi fiyatla gidiyor?",
     sinif: "gelismis", izin: "report:sales", modul: "cekirdek:siparis-musteri", varsayilanGun: 30, tarih: "aralik-iso",
     panelYolu: "reports/sales/destination-mix", uc: "/api/reports/sales/destination-mix", kapiTasiyici: [{ dosya: "src/routes/reports/sales.routes.ts", yol: "/destination-mix" }], yuzey: "yaprak",
@@ -157,41 +157,41 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
   { key: "sales/return-scorecard", baslik: "İade Karnesi", soru: "Bu dönemde ne kadar mal iade edildi ve önceki döneme göre nasıl değişti?",
     sinif: "gelismis", izin: "report:sales", modul: "cekirdek:siparis-musteri", varsayilanGun: 30, tarih: "aralik-iso",
     panelYolu: "reports/sales/return-scorecard", uc: "/api/reports/sales/return-scorecard", kapiTasiyici: [{ dosya: "src/routes/reports/sales.routes.ts", yol: "/return-scorecard" }], yuzey: "yaprak",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "sales/vazgecilen-is" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "sales/vazgecilen-is" }, emekli: true },
 
   // ── KALİTE ────────────────────────────────────────────────────────────────
   { key: "quality/scorecard", baslik: "Kalite Karnesi", soru: "Kalite kademeleri bu dönemde nasıl dağıldı, önceki döneme göre nasıl değişti?",
     sinif: "gelismis", izin: "report:quality", modul: "productionEnabled", varsayilanGun: 30, tarih: "aralik-iso",
     panelYolu: "reports/quality/scorecard", uc: "/api/reports/quality/scorecard", kapiTasiyici: [{ dosya: "src/routes/reports/quality.routes.ts", yol: "/scorecard" }], yuzey: "yaprak",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "quality/kalite" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "quality/kalite" }, emekli: true },
   { key: "quality/scrap-scorecard", baslik: "Fire Karnesi", soru: "Bu dönemde ne kadar fire verildi ve oranı önceki döneme göre nasıl değişti?",
     sinif: "gelismis", izin: "report:quality", modul: "productionEnabled", varsayilanGun: 30, tarih: "aralik-iso",
     panelYolu: "reports/quality/scrap-scorecard", uc: "/api/reports/quality/scrap-scorecard", kapiTasiyici: [{ dosya: "src/routes/reports/quality.routes.ts", yol: "/scrap-scorecard" }], yuzey: "yaprak",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "quality/kayip" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "quality/kayip" }, emekli: true },
   { key: "quality/plan-deviation-scorecard", baslik: "Plan-Sapma Karnesi", soru: "Üretim planından ne kadar sapıldı ve sapma önceki döneme göre nasıl değişti?",
     sinif: "gelismis", izin: "report:quality", modul: "productionEnabled", varsayilanGun: 30, tarih: "aralik-iso",
     panelYolu: "reports/quality/plan-deviation-scorecard", uc: "/api/reports/quality/plan-deviation-scorecard", kapiTasiyici: [{ dosya: "src/routes/reports/quality.routes.ts", yol: "/plan-deviation-scorecard" }], yuzey: "yaprak",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "quality/kalite" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "quality/kalite" }, emekli: true },
 
   // ── STOK & DEPO ───────────────────────────────────────────────────────────
   { key: "inventory/scorecard", baslik: "Stok & Ölü Stok", soru: "Depoda bugün ne kadar mal var ve ne kadarı ölü stok?",
     sinif: "basit", izin: "report:inventory", modul: "cekirdek:stok-giris", varsayilanGun: null, tarih: "yok",
     panelYolu: "reports/inventory/scorecard", uc: ["/api/reports/inventory/scorecard", "/api/reports/inventory/scorecard/kalem"], kapiTasiyici: [{ dosya: "src/routes/reports/inventory.routes.ts", yol: "/scorecard" }, { dosya: "src/routes/reports/inventory.routes.ts", yol: "/scorecard/kalem" }], yuzey: "yaprak",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "inventory/depo" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "inventory/depo" }, emekli: true },
 
   // ── DOKUMA ────────────────────────────────────────────────────────────────
   { key: "dokuma/randiman", baslik: "Randıman", soru: "Tezgahlar bu dönemde ne kadar verimli çalıştı?",
     sinif: "gelismis", izin: "report:production", modul: "dokumaEnabled", varsayilanGun: 7, tarih: "aralik-gun",
     panelYolu: "reports/dokuma/randiman", uc: "/api/reports/dokuma/randiman", kapiTasiyici: [{ dosya: "src/routes/reports/dokuma.report.routes.ts", yol: "/randiman" }], yuzey: "yaprak",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "dokuma/tezgah-randimani" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "dokuma/tezgah-randimani" }, emekli: true },
   { key: "dokuma/durus-pareto", baslik: "Duruş Pareto", soru: "Tezgahları en çok hangi sebepler durdurdu?",
     sinif: "gelismis", izin: "report:production", modul: "dokumaEnabled", varsayilanGun: 7, tarih: "aralik-gun",
     panelYolu: "reports/dokuma/durus-pareto", uc: "/api/reports/dokuma/durus-pareto", kapiTasiyici: [{ dosya: "src/routes/reports/dokuma.report.routes.ts", yol: "/durus-pareto" }], yuzey: "yaprak",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "dokuma/duruslar" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "dokuma/duruslar" }, emekli: true },
   { key: "dokuma/vardiya-karnesi", baslik: "Vardiya Karnesi", soru: "Bu vardiyada tezgahlar ne üretti, ne kadar durdu?",
     sinif: "gelismis", izin: "report:production", modul: "dokumaEnabled", varsayilanGun: null, tarih: "tek-gun",
     panelYolu: "reports/dokuma/vardiya-karnesi", uc: "/api/reports/dokuma/vardiya-karnesi", kapiTasiyici: [{ dosya: "src/routes/reports/dokuma.report.routes.ts", yol: "/vardiya-karnesi" }], yuzey: "yaprak",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "dokuma/tezgah-randimani" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "dokuma/tezgah-randimani" }, emekli: true },
   { key: "dokuma/karne", baslik: "Karne Listesi ve Mühür", soru: "Hangi vardiya karneleri mühürlendi, hangileri hâlâ açık?",
     sinif: "gelismis", izin: "report:production", modul: "dokumaEnabled", varsayilanGun: 7, tarih: "aralik-gun",
     panelYolu: "reports/dokuma/karne", uc: null, kapiTasiyici: null, yuzey: "yaprak-yabanci-uc",
@@ -199,20 +199,20 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
   { key: "dokuma/zincir", baslik: "Üretim Zinciri", soru: "Hangi sipariş kalemi zincirin neresinde ve nerede takıldı?",
     sinif: "basit", izin: "report:production", modul: "dokumaEnabled", varsayilanGun: null, tarih: "yok",
     panelYolu: "reports/dokuma/zincir", uc: "/api/reports/dokuma/zincir", kapiTasiyici: [{ dosya: "src/routes/reports/dokuma.report.routes.ts", yol: "/zincir" }], yuzey: "yaprak",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "sales/acik-siparisler" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "sales/acik-siparisler" }, emekli: true },
   { key: "dokuma/mudahale", baslik: "Müdahale ve Çözüm Süresi", soru: "Tezgah alarmları ne kadar sürede üstlenildi, ne kadar sürede çözüldü?",
     sinif: "gelismis", izin: "report:production", modul: "dokumaEnabled", varsayilanGun: 7, tarih: "aralik-gun",
     panelYolu: "reports/dokuma/mudahale", uc: "/api/reports/dokuma/mudahale", kapiTasiyici: [{ dosya: "src/routes/reports/dokuma.report.routes.ts", yol: "/mudahale" }], yuzey: "yaprak",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "dokuma/duruslar" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "dokuma/duruslar" }, emekli: true },
   // S1c uçları + S4a yaprakları (levent sonucu · kapasite · bitiş tahmini); levent karoları hub'da ayrıca devere ister.
   { key: "dokuma/levent-sonucu", baslik: "Levent Sonucu", soru: "Her leventten beklenen kumaş çıktı mı, fire ne kadar?",
     sinif: "basit", izin: "report:production", modul: "dokumaEnabled", varsayilanGun: 30, tarih: "aralik-gun",
     panelYolu: "reports/dokuma/levent-sonucu", uc: "/api/reports/dokuma/levent-sonucu", kapiTasiyici: [{ dosya: "src/routes/reports/dokuma.report.routes.ts", yol: "/levent-sonucu" }], yuzey: "yaprak",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "dokuma/levent-dengesi" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "dokuma/levent-dengesi" }, emekli: true },
   { key: "dokuma/kapasite-kullanimi", baslik: "Kapasite Kullanımı", soru: "Tezgahlar haftada teorik kapasitelerinin ne kadarını kumaşa çevirdi?",
     sinif: "gelismis", izin: "report:production", modul: "dokumaEnabled", varsayilanGun: 30, tarih: "aralik-gun",
     panelYolu: "reports/dokuma/kapasite-kullanimi", uc: "/api/reports/dokuma/kapasite-kullanimi", kapiTasiyici: [{ dosya: "src/routes/reports/dokuma.report.routes.ts", yol: "/kapasite-kullanimi" }], yuzey: "yaprak",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "dokuma/tezgah-randimani" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "dokuma/tezgah-randimani" }, emekli: true },
   { key: "dokuma/levent-bitis-tahmini", baslik: "Levent Bitiş Tahmini", soru: "Tezgahtaki leventler günlük hızla ne zaman biter?",
     sinif: "basit", izin: "report:production", modul: "dokumaEnabled", varsayilanGun: null, tarih: "yok",
     panelYolu: "reports/dokuma/levent-bitis-tahmini", uc: "/api/reports/dokuma/levent-bitis-tahmini", kapiTasiyici: [{ dosya: "src/routes/reports/dokuma.report.routes.ts", yol: "/levent-bitis-tahmini" }], yuzey: "yaprak",
@@ -222,7 +222,7 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
   { key: "finance/aging", baslik: "Cari Yaşlandırma", soru: "Cari bakiyeler bu tarihte hangi vade kovalarında duruyor?",
     sinif: "gelismis", izin: "report:finance", modul: "financeEnabled", varsayilanGun: null, tarih: "kesit",
     panelYolu: "reports/finance/aging", uc: "/api/reports/finance/aging", kapiTasiyici: [{ dosya: "src/routes/reports/finance.report.routes.ts", yol: "/aging" }], yuzey: "yaprak",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "finance/alacaklar" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "finance/alacaklar" }, emekli: true },
   { key: "finance/cash-book", baslik: "Kasa & Banka Defteri", soru: "Bu dönemde kasaya ve bankaya ne girdi, ne çıktı?",
     sinif: "gelismis", izin: "report:finance", modul: "financeEnabled", varsayilanGun: 30, tarih: "aralik-iso",
     panelYolu: "reports/finance/cash-book", uc: "/api/reports/finance/cash-book", kapiTasiyici: [{ dosya: "src/routes/reports/finance.report.routes.ts", yol: "/cash-book" }], yuzey: "yaprak",
@@ -230,7 +230,7 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
   { key: "finance/cheque-due", baslik: "Çek Vade Takvimi", soru: "Önümüzdeki günlerde hangi çekler vadesi geliyor?",
     sinif: "basit", izin: "report:finance", modul: "financeEnabled", varsayilanGun: null, tarih: "ileri-pencere",
     panelYolu: "reports/finance/cheque-due", uc: null, kapiTasiyici: null, yuzey: "yaprak-yabanci-uc",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "finance/alacaklar" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "finance/alacaklar" }, emekli: true },
   { key: "finance/vat-summary", baslik: "KDV Dönem Özeti", soru: "Bu dönemde ne kadar KDV hesaplandı ve indirildi?",
     sinif: "basit", izin: "report:finance", modul: "financeEnabled", varsayilanGun: 30, tarih: "aralik-iso",
     panelYolu: "reports/finance/vat-summary", uc: "/api/reports/finance/vat-summary", kapiTasiyici: [{ dosya: "src/routes/reports/finance.report.routes.ts", yol: "/vat-summary" }], yuzey: "yaprak",
@@ -248,13 +248,13 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
   { key: "subcontract/scorecard", baslik: "Fason Karnesi", soru: "Fasoncular bu dönemde ne kadar iş aldı, ne kadarı zamanında döndü?",
     sinif: "gelismis", izin: "report:subcontract", modul: "planlanan:fason", varsayilanGun: 90, tarih: "aralik-iso",
     panelYolu: "reports/subcontract/scorecard", uc: "/api/reports/subcontract/scorecard", kapiTasiyici: [{ dosya: "src/routes/reports/subcontract.routes.ts", yol: "/scorecard" }], yuzey: "yaprak",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "subcontract/fasoncular" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "subcontract/fasoncular" }, emekli: true },
 
   // ── MÜŞTERİ ───────────────────────────────────────────────────────────────
   { key: "customer/scorecard", baslik: "Müşteri Karnesi", soru: "Hangi müşteri bu dönemde ne kadar aldı, önceki döneme göre nasıl değişti?",
     sinif: "gelismis", izin: "report:customer", modul: "cekirdek:siparis-musteri", varsayilanGun: 90, tarih: "aralik-iso",
     panelYolu: "reports/customer/scorecard", uc: "/api/reports/customer/scorecard", kapiTasiyici: [{ dosya: "src/routes/reports/customer.routes.ts", yol: "/scorecard" }], yuzey: "yaprak",
-    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "sales/siparis-talep" } },
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "birlesti", anahtar: "sales/siparis-talep" }, emekli: true },
   { key: "customer/order-profile", baslik: "Müşteri Sipariş Profili", soru: "Bu müşteri genelde hangi ürün ve renkleri sipariş ediyor?",
     sinif: "basit", izin: "report:customer", modul: "cekirdek:siparis-musteri", varsayilanGun: null, tarih: "yok",
     panelYolu: "reports/customer/order-profile", uc: "/api/reports/customer/order-profile", kapiTasiyici: [{ dosya: "src/routes/reports/customer.routes.ts", yol: "/order-profile" }], yuzey: "yaprak",
@@ -390,11 +390,19 @@ export function isRetiredReportKey(key: string): boolean {
 }
 
 /**
- * Satır bugün bir yüzeyde (karo · route · palet · Sistem → Modüller) çizilir mi — TEK yüklem.
- * v2 satırı ucu inene kadar (`hazir:false`) çizilmez; listeyi kendi süzen yüzey yazılmaz.
+ * Satırın ucu sunulur mu (rapor kapısı · patron bulutu) — TEK yüklem; panel çizimi `isReportOnPanel`.
+ * v2 satırı ucu inene kadar (`hazir:false`) sunulmaz; listeyi kendi süzen yüzey yazılmaz.
  */
 export function isReportSurfaced(entry: ReportCatalogEntry): boolean {
   return entry.nesil === "v1" || entry.hazir;
+}
+
+/**
+ * Satır PANELDE (karo · route · palet · Rapor Merkezi · Sistem → Modüller) çizilir mi. Emekli v1 satırı panelden
+ * kalkmıştır ama ucu bir sürüm daha açıktır; uç/bulut kapısı `isReportSurfaced`i okumaya devam eder.
+ */
+export function isReportOnPanel(entry: ReportCatalogEntry): boolean {
+  return isReportSurfaced(entry) && !(entry.nesil === "v1" && entry.emekli === true);
 }
 
 /**
@@ -424,7 +432,7 @@ export const VARSAYILAN_GUN_MUAFLARI: ReadonlyArray<{
   {
     key: "finance/statement",
     neden: "Diyalog AY aritmetiğiyle geriye bakıyor (3 ay); 3 ay sabit bir gün sayısı DEĞİL (28–31 gün) — buraya 90 yazmak ölçülmemiş bir sayı uydurmak olur.",
-    kanit: "Electron/src/pages/Reports/Finance/CariStatementDialog.tsx",
+    kanit: "Electron/src/pages/Finance/StatementDialog.tsx",
     desen: "setMonth(",
   },
 ] as const;

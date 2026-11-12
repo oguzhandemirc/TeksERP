@@ -154,7 +154,8 @@ export function legacyGroups(
       key: c.key,
       title: c.title,
       cards: REPORT_CATALOG
-        .filter((e): e is ReportCatalogEntryV1 => e.nesil === "v1" && e.key.startsWith(`${c.key}/`))
+        // Yalnız henüz panelden kalkmamış eski RAPORLAR (araçlar yeni yerlerinde, uzmanlar Rapor Merkezi'nde).
+        .filter((e): e is ReportCatalogEntryV1 => e.nesil === "v1" && e.emekli !== true && e.yeniHali.tur === "birlesti" && e.key.startsWith(`${c.key}/`))
         .filter((e) => !q || includes(`${e.baslik} ${e.soru}`, q))
         .map((e) => legacyCardOf(e, a))
         .filter((x): x is LegacyCard => x !== null),

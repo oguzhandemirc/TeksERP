@@ -54,7 +54,6 @@ const ISTISNA: Record<string, Partial<Record<Rule, [number, string]>>> = {
   "Electron/src/pages/Finance/Cheques/dates.ts": { g: [3, "`parseYmdLocal` yalnız yyyy-MM-dd geçerliliğini denetler (31 Şubat taşması)"] },
   "Electron/src/pages/Operations/WorkOrders/OrderPickerDialog.tsx": { g: [2, "termin penceresi aritmetiği (an + 7/30 gün); gösterim değil"] },
   "Electron/src/pages/Finance/StatementDialog.tsx": { g: [2, "varsayılan aralık aritmetiği (an − 3 ay); gün anahtarı sonra fabrika diliminden"] },
-  "Electron/src/pages/Reports/Finance/CariStatementDialog.tsx": { g: [2, "varsayılan aralık aritmetiği (an − 3 ay); gün anahtarı sonra fabrika diliminden"] },
   "mobil/src/components/filters/rollHistoryFilter.ts": {
     g: [10, "takvim modeli (seçicinin yerel gece yarısı); ana çeviri sorgu sınırında factoryDayStartIso/EndIso ile"],
   },

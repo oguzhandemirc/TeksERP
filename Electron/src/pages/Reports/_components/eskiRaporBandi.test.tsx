@@ -58,7 +58,8 @@ import { allCommandEntries } from "@/components/layout/command-entries";
 import { foldedIncludes } from "@/lib/search-fold";
 
 const access = () => ({ isAdmin: false, hasPermission, ctx: ctx() });
-const v1Entries = REPORT_CATALOG.filter((e): e is ReportCatalogEntryV1 => e.nesil === "v1");
+// Panelde kalan v1 satırları (emekli olanlar 2026-11-12'de panelden kalktı; ucu bir sürüm açık).
+const v1Entries = REPORT_CATALOG.filter((e): e is ReportCatalogEntryV1 => e.nesil === "v1" && e.emekli !== true);
 const MERGE_TARGET = "production/uretim-akisi";
 
 // v2 satırlarının hepsi bugün `hazir:false` — "hedef çizilir" durumu için birini geçici açarız.
@@ -121,19 +122,16 @@ function sources(dir: string): Array<{ path: string; text: string }> {
   });
 }
 
-describe("§2 band yalnız ReportPageLayout'ta — 36/36", () => {
+describe("§2 band yalnız ReportPageLayout'ta — panelde kalan v1", () => {
   const files = sources(REPORTS_DIR);
-  it("⭐ her v1 yaprak `ReportPageLayout`u kendi anahtarıyla çizer; adressiz diyalog bandı kendisi bağlar", () => {
-    const missing = v1Entries.filter((e) => {
-      if (e.yuzey === "diyalog") return !files.some((f) => f.text.includes(`<LegacyReportBanner reportKey="${e.key}"`));
-      return !files.some((f) => f.text.includes("<ReportPageLayout") && f.text.includes(`reportKey="${e.key}"`));
-    });
-    expect(v1Entries).toHaveLength(36);
+  it("⭐ her v1 yaprak `ReportPageLayout`u kendi anahtarıyla çizer (adressiz diyalog — Cari Ekstre — kendi ekranında, bandsız)", () => {
+    const missing = v1Entries.filter((e) => e.yuzey !== "diyalog" && !files.some((f) => f.text.includes("<ReportPageLayout") && f.text.includes(`reportKey="${e.key}"`)));
+    expect(v1Entries).toHaveLength(13);
     expect(missing.map((e) => e.key)).toEqual([]);
   });
   it("band sayfa sayfa elle eklenmez; bileşen yönlendirme yapmaz", () => {
     const users = files.filter((f) => f.text.includes("<LegacyReportBanner")).map((f) => f.path.slice(REPORTS_DIR.length + 1)).sort();
-    expect(users).toEqual(["Finance/CariStatementDialog.tsx", "_components/ReportPageLayout.tsx"]);
+    expect(users).toEqual(["_components/ReportPageLayout.tsx"]);
     const src = readFileSync(resolve(__dirname, "LegacyReportBanner.tsx"), "utf8");
     expect(src).not.toMatch(/useNavigate|<Navigate|location\.(assign|replace|href)/);
   });
@@ -168,21 +166,22 @@ describe("§3 bayrak kapalıyken DOM bayt-eşit", () => {
 });
 
 describe("§4 Eski raporlar bölümü", () => {
-  it("⭐ açıkken 36 v1 rapor eski kategorilerinde; kapalıyken boş", () => {
+  it("⭐ açıkken yalnız panelden henüz kalkmamış eski RAPORLAR (araç/uzman yok); kapalıyken boş", () => {
     const groups = legacyGroups(reportTiles, access());
-    expect(groups.reduce((n, g) => n + g.cards.length, 0)).toBe(36);
+    const want = v1Entries.filter((e) => e.yeniHali.tur === "birlesti").map((e) => e.key).sort();
+    expect(groups.flatMap((g) => g.cards.map((c) => c.entry.key)).sort()).toEqual(want);
+    expect(want).toEqual(["customer/order-profile", "sales/demand-analysis", "sales/destination-mix"]);
     v2 = false;
     expect(legacyGroups(reportTiles, access())).toEqual([]);
   });
-  it("izinsiz / kapalı rapor çizilmez; arama başlık + soruyu kapsar; uzman işaretli", () => {
-    perms = ["report:finance", "finance:read"];
-    closed = ["finance/fx-diff"];
+  it("izinsiz / kapalı rapor çizilmez; arama başlık + soruyu kapsar", () => {
+    perms = ["report:sales"];
+    closed = ["sales/destination-mix"];
     const cards = legacyGroups(reportTiles, access()).flatMap((g) => g.cards);
-    expect(cards.map((c) => c.entry.key).sort()).toEqual(["finance/aging", "finance/cash-book", "finance/cheque-due", "finance/statement", "finance/vat-summary"]);
-    expect(cards.find((c) => c.entry.key === "finance/statement")?.to).toBe("/finance/cari");
-    expect(cards.find((c) => c.entry.key === "finance/cash-book")?.expert).toBe(true);
-    const hit = legacyGroups(reportTiles, access(), { term: "kdv", includes: foldedIncludes }).flatMap((g) => g.cards);
-    expect(hit.map((c) => c.entry.key)).toEqual(["finance/vat-summary"]);
+    expect(cards.map((c) => c.entry.key)).toEqual(["sales/demand-analysis"]);
+    closed = [];
+    const hit = legacyGroups(reportTiles, access(), { term: "talep", includes: foldedIncludes }).flatMap((g) => g.cards);
+    expect(hit.map((c) => c.entry.key)).toEqual(["sales/demand-analysis"]);
   });
 });
 
@@ -224,9 +223,10 @@ describe("§6 palet", () => {
   });
   it("açıkken eski yaprak 'Eski:' ikiziyle görünür, özgünü gizlenir; taşınan araç yeni yerinin adıyla", () => {
     const keys = new Set(visible().map((e) => e.key));
-    expect(keys.has("report:production:wip")).toBe(false);
-    expect(keys.has("report:production:wip:legacy")).toBe(true);
-    expect(allCommandEntries.find((e) => e.key === "report:production:wip:legacy")?.label).toBe("Eski: Nerede Takıldı (WIP)");
+    expect(keys.has("report:sales:demand-analysis")).toBe(false);
+    expect(keys.has("report:sales:demand-analysis:legacy")).toBe(true);
+    expect(allCommandEntries.find((e) => e.key === "report:sales:demand-analysis:legacy")?.label).toBe("Eski: Talep Analizi");
+    expect(keys.has("report:production:wip:legacy")).toBe(false); // emekli: panelden kalktı
     const moved = visible().filter((e) => e.key.startsWith("relocated:"));
     expect(moved).toHaveLength(7);
     expect(moved.find((e) => e.key === "relocated:dokuma/karne")?.label).toBe("Tezgah Salonu · Karne Listesi ve Mühür");

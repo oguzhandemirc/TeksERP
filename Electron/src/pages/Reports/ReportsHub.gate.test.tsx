@@ -15,7 +15,7 @@ import { screen } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
 import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
 import { REPORT_CATALOG } from "@/lib/report-catalog";
-import { isReportOpenWith, isReportSurfaced } from "@/lib/report-gate";
+import { isReportOpenWith, isReportOnPanel } from "@/lib/report-gate";
 
 let closed: string[] | null = [];
 const ctx = (): OperationsVisibilityContext => ({
@@ -45,10 +45,10 @@ import { reportCommandSections } from "@/components/layout/command-entries.repor
 
 // Karo taşıyan satırlar: ucu inmemiş v2 satırı (`hazir:false`) bugün hiçbir yüzeyde çizilmez.
 // Satış hub karoları yalnız v1 satırlarıdır; hazır v2 satırları Rapor Merkezi'nde (genel v2 yaprağı) çizilir.
-const SALES_KEYS = REPORT_CATALOG.filter((r) => r.key.startsWith("sales/") && r.nesil !== "v2" && isReportSurfaced(r)).map((r) => r.key);
+const SALES_KEYS = REPORT_CATALOG.filter((r) => r.key.startsWith("sales/") && r.nesil !== "v2" && isReportOnPanel(r)).map((r) => r.key);
 /** Kategori kapısı ve palet v2 satırlarını da sayar: "hepsi kapalı" bu kümedir. */
-const SALES_ALL = REPORT_CATALOG.filter((r) => r.key.startsWith("sales/") && isReportSurfaced(r)).map((r) => r.key);
-const INTAKE = "sales/order-intake";
+const SALES_ALL = REPORT_CATALOG.filter((r) => r.key.startsWith("sales/") && isReportOnPanel(r)).map((r) => r.key);
+const INTAKE = "sales/demand-analysis";
 const intakeTile = salesReportTiles.find((t) => t.to.endsWith(INTAKE))!;
 
 describe("Rapor kapısı — karo · şerit · palet", () => {
@@ -91,12 +91,12 @@ describe("Rapor kapısı — karo · şerit · palet", () => {
     const { MemoryRouter } = await import("react-router-dom");
     const { render } = await import("@testing-library/react");
     render(
-      <MemoryRouter initialEntries={["/reports/sales/order-cancellation"]}>
+      <MemoryRouter initialEntries={["/reports/sales/destination-mix"]}>
         <ReportSideRail />
       </MemoryRouter>,
     );
     expect(screen.queryByText(intakeTile.title)).toBeNull();
-    expect(screen.getByText(salesReportTiles.find((t) => t.to.endsWith("order-cancellation"))!.title)).toBeInTheDocument();
+    expect(screen.getByText(salesReportTiles.find((t) => t.to.endsWith("destination-mix"))!.title)).toBeInTheDocument();
   });
 
   it("§4 ⭐ palet: kapalı raporun girişi görünmez; kategorinin hepsi kapalıysa başlık girişi de görünmez", () => {

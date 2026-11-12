@@ -35,7 +35,7 @@ const SURFACE = [
   "src/pages/GeneralSettings/settings-config.ts",
 ].map((p) => resolve(process.cwd(), p));
 /** Evren DIŞI (dokunulmadı, beyanlı): Raporlar hub'ı — "envanter" rapor terimi ayrı dilim. */
-const EVREN_DISI_RAPOR = ["src/pages/Reports/Inventory/StockScorecardPage.tsx", "src/pages/Reports/Inventory/stockScorecard.ts"];
+const EVREN_DISI_RAPOR: string[] = []; // Stok raporu sayfaları panelden kalktı (2026-11-12)
 const ESKI_AD = /Envanter|Kg-Stok/;
 
 describe("stok karoları — Kumaş Stoğu · İplik Stoğu", () => {

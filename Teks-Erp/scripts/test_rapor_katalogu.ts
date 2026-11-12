@@ -34,7 +34,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import {
-  REPORT_CATALOG, GUNSUZ_TARIH_SOZLESMELERI, VARSAYILAN_GUN_MUAFLARI, isReportSurfaced,
+  REPORT_CATALOG, GUNSUZ_TARIH_SOZLESMELERI, VARSAYILAN_GUN_MUAFLARI, isReportSurfaced, isReportOnPanel,
   RAPOR_KATEGORILERI_V2, RAPOR_PERSONALARI, RAPOR_VARYANT_BOYUTLARI,
 } from "../src/constants/report-catalog";
 import type { ReportTarih } from "../src/constants/report-catalog";
@@ -64,7 +64,9 @@ function main(): void {
   const CIZILEN = REPORT_CATALOG.filter(isReportSurfaced);
   // Hazır v2 yaprağının yüzeyi ELLE yazılmaz: route `_v2/routes.tsx` katalogdan üretir, karo yerine
   // Rapor Merkezi kategorisi çizer (KQ-D6, ilk `hazir:true`). §2v/§3v/§7dv o üretimi ölçer.
-  const CIZILEN_V1 = CIZILEN.filter((r) => r.nesil === "v1");
+  // Emekli v1 (2026-11-12): ucu bir sürüm açık (§1 CIZILEN sayar) ama panelde YOK — §2/§3/§7d panel kümesini okur.
+  const PANEL = REPORT_CATALOG.filter(isReportOnPanel);
+  const CIZILEN_V1 = PANEL.filter((r) => r.nesil === "v1");
   const CIZILEN_V2 = CIZILEN.filter((r) => r.nesil === "v2");
 
   // ── §0 körlük zemini ──────────────────────────────────────────────────────
@@ -113,7 +115,7 @@ function main(): void {
   if (v2Yayildi) for (const r of CIZILEN) if (r.nesil === "v2") yapraklar.add(r.panelYolu);   // çizilmeyenin route'u kapıda boş döner
   check("§2z körlük zemini: panel route taraması dolu", panelYollari.size > 20,
     `${panelYollari.size} yol · ${yapraklar.size} yaprak · ${panelYollari.size - yapraklar.size} kategori hub'ı`);
-  const katalogPanel = new Set(CIZILEN.filter((r) => r.panelYolu !== "").map((r) => r.panelYolu));
+  const katalogPanel = new Set(PANEL.filter((r) => r.panelYolu !== "").map((r) => r.panelYolu));
   const v2RouteKaynak = readFileSync(join(ELECTRON, "src/pages/Reports/_v2/routes.tsx"), "utf8");
   const v2Uretiliyor = icerik.includes("...reportV2Routes")
     && /REPORT_CATALOG\.filter\(\(e\) => e\.nesil === "v2"\)/.test(v2RouteKaynak) && /path:\s*e\.panelYolu/.test(v2RouteKaynak)
@@ -133,7 +135,7 @@ function main(): void {
     try { kaynak = readFileSync(yol, "utf8"); } catch { continue; }
     for (const m of kaynak.matchAll(/to:\s*"\/(reports\/[^"]+)"/g)) karoYollari.add(m[1]!);
   }
-  check("§3z körlük zemini: karo taraması dolu", karoYollari.size > 20, `${karoYollari.size} karo`);
+  check("§3z körlük zemini: karo taraması dolu (emekli sonrası 16)", karoYollari.size > 10, `${karoYollari.size} karo`);
   // Karo yalnız v1 hub'ındadır; v2 yaprağına giden karo bayrak kapalıyken /forbidden'a düşerdi (fazla = kırmızı).
   // SONDA (D4-H1): kümede olmayan v2 yaprağına (`reports/sales/siparis-talep`) karo → §3 ❌ KATALOGDA YOK; küme boşaltıldı → §3k ❌.
   // DAR istisna (D4-H1, 1e kararı): `V2_KEYS_WITH_OWN_PAGE` satırının sayfası bayraktan BAĞIMSIZ çizilir; v2 kapalıyken
@@ -361,6 +363,19 @@ function main(): void {
   }
   check("§8f ⭐ `hazir:false` satırın inmiş ucu KAPILI, ucu olmayanda kapı yok (aşamalı iniş, K-KAPI)", hazirSapan.length === 0,
     hazirSapan.join(" · ") || `${v2.filter((r) => !r.hazir).length} hazır değil (${inmisUc} uç inmiş) · ${v2.filter((r) => r.hazir).length} hazır`);
+
+  // §8h ⭐ PANELDEN KALKAN eski rapor (emekli, 2026-11-12): yalnız `birlesti` satırı emekli olur ve hedefi HAZIR bir v2
+  // satırıdır (karşılıksız rapor da en yakın v2'ye bağlıdır); araç (`tasindi`) ve uzman emekli OLAMAZ. Panel izi
+  // §2/§3 iki taraflı ölçer (emekli satırın route'u/karosu kalırsa KATALOGDA YOK).
+  // SONDA (2026-11-12, md5 ile geri alındı): `production/batch-trace` satırına `emekli: true` → §8h ❌ (+§2/§3 ❌).
+  const emekliSapan = v1.filter((r) => (r as { emekli?: true }).emekli === true).filter((r) => {
+    const hal = halOf(r);
+    const hedef = hal?.tur === "birlesti" ? REPORT_CATALOG.find((x) => x.key === hal.anahtar) : undefined;
+    return hedef?.nesil !== "v2" || !hedef.hazir;
+  }).map((r) => r.key);
+  const emekliSayisi = v1.filter((r) => (r as { emekli?: true }).emekli === true).length;
+  check("§8h ⭐ emekli satır yalnız `birlesti` ve hedefi hazır v2 (araç/uzman emekli olamaz)", emekliSapan.length === 0 && emekliSayisi > 0,
+    emekliSapan.join(", ") || `${emekliSayisi} emekli · ${v1.length - emekliSayisi} panelde kalan v1`);
 
   // §8g v2 satırının biçimi: adres anahtardan türer, kategori/persona/varyant kapalı kümeden.
   const KATEGORI = new Set<string>(RAPOR_KATEGORILERI_V2);

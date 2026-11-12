@@ -3,7 +3,7 @@
 //   "ölçülemedi" beyanı (0 değil) ekranda ve çıktıda · kaynak kırılımı + ufuk görünür
 // =============================================================================
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { screen, within } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
 import { REPORT_CATALOG } from "@/lib/report-catalog";
 import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
@@ -19,10 +19,9 @@ vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
 }));
 vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ isAdmin: true, hasPermission: () => true }) }));
 vi.mock("@/hooks/useFavorites", () => ({ useFavorites: () => ({ favorites: [], isFavorite: () => false, toggleFavorite: vi.fn(), reorderFavorites: vi.fn() }) }));
-import { LeventSonucuPage } from "./LeventSonucuPage";
 import { LeventBitisTahminiPage } from "./LeventBitisTahminiPage";
 
-const YENI = ["levent-sonucu", "kapasite-kullanimi", "levent-bitis-tahmini"];
+const YENI = ["levent-bitis-tahmini"];
 const row = (over: Partial<BeamResultReport["kapananlar"][number]> = {}) => ({
   beamId: "b1", beamNo: "LV-7", physicalBeamNo: null, warpSpec: { id: "w1", code: "CZ-1", name: "Siyah", takeUpPct: null },
   sarilanM: 1000, sarilanKg: null, kgKaynak: null, beklenenKumasM: null, gercekKumasM: 190, gercekKaynak: { otomatik: 150, elle: 40 },
@@ -37,18 +36,17 @@ const rapor: BeamResultReport = {
 beforeEach(() => { leventSonucu.mockReset(); leventBitisTahmini.mockReset(); });
 
 describe("karo ↔ katalog", () => {
-  it("⭐ üç yeni karo katalogda kendi panelYolu ile, üç segmentli", () => {
+  it("⭐ kalan levent karosu katalogda kendi panelYolu ile, üç segmentli", () => {
     for (const k of YENI) {
       const t = dokumaReportTiles.find((x) => x.key === k)!;
       expect(t.to).toBe(`/reports/dokuma/${k}`);
       expect(REPORT_CATALOG.find((r) => r.key === `dokuma/${k}`)?.panelYolu).toBe(`reports/dokuma/${k}`);
     }
   });
-  it("⭐ devere kapalı → levent karoları gizli, kapasite görünür; açık → hepsi", () => {
+  it("⭐ devere kapalı → levent karosu gizli, karne görünür; açık → hepsi", () => {
     const kapali = visibleDokumaTiles(dokumaReportTiles, false).map((t) => t.key);
-    expect(kapali).not.toContain("levent-sonucu");
     expect(kapali).not.toContain("levent-bitis-tahmini");
-    expect(kapali).toContain("kapasite-kullanimi");
+    expect(kapali).toContain("karne");
     expect(visibleDokumaTiles(dokumaReportTiles, true)).toHaveLength(dokumaReportTiles.length);
   });
 });
@@ -79,16 +77,6 @@ describe("saf yardımcılar", () => {
 });
 
 describe("sayfa render", () => {
-  it("⭐ Levent Sonucu: şerit · ölçülemedi hücresi · kaynak kırılımı · ufuk · düzeltilmiş top notu", async () => {
-    leventSonucu.mockResolvedValue({ success: true, data: rapor });
-    renderWithProviders(<LeventSonucuPage />);
-    const satir = (await screen.findByText("LV-7")).closest("tr")!;
-    expect(within(satir).getAllByText("ölçülemedi").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText("Kapanan levent")).toBeInTheDocument();
-    expect(screen.getByText(/Gerçek kumaş kaynağı/)).toBeInTheDocument();
-    expect(screen.getByText(/Ölçüm ufku: 2026-09-14/)).toBeInTheDocument();
-    expect(screen.getByText(/2 topun metresi tüketimden sonra düzeltildi/)).toBeInTheDocument();
-  });
   it("⭐ Bitiş Tahmini: tarih süzgeci yok, tahmin yoksa gerekçe, uydurulmuş gün yok", async () => {
     leventBitisTahmini.mockResolvedValue({ success: true, data: {
       satirlar: [{ beamId: "b1", beamNo: "LV-9", machine: { id: "m1", code: "T-07", name: "Tezgah 7" }, position: 1, kalanM: 412, gunlukOrtM: null, kaynak: { otomatik: 0, elle: 0 }, tahminiBitisGun: null, kalanGun: null, hesaplanamadi: "son 7 günde tüketim yok" }],

@@ -35,7 +35,7 @@ const yapraklar = [...ROUTES.matchAll(LEAF_RE)].map(([, yol, bilesen]) => ({ yol
 describe("rapor çıktı kapsamı — her yaprak sayfa ReportExportBar çizer", () => {
   it("zemin: yaprak rapor route'ları okundu", () => {
     // Sıfır yaprak "hepsi temiz" DEĞİL, tarayıcı bozuk demektir.
-    expect(yapraklar.length).toBeGreaterThan(20);
+    expect(yapraklar.length).toBeGreaterThan(10); // eski raporlar panelden kalktı (2026-11-12): 16 yaprak
   });
 
   it("zemin: her yaprağın kaynak dosyası bulundu", () => {

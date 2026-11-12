@@ -41,7 +41,6 @@ function tableHeaders(relPath: string): string[] {
     .filter(Boolean);
 }
 
-const REPORT_HEADERS = tableHeaders("./CariStatementDialog.tsx");
 const FINANCE_HEADERS = tableHeaders("../../Finance/StatementDialog.tsx");
 
 const INPUT = (over: Partial<StatementExportInput> = {}): StatementExportInput => ({
@@ -114,15 +113,10 @@ describe("cari ekstre dışa aktarımı", () => {
   // ---------------------------------------------------------------------------
   // §2 — EKRAN ↔ SPEC. Körlük zemini: regex boşa düşerse "ihlal yok" ile
   // "hiçbir şeye bakılmadı" aynı yeşile çıkar.
-  it("§2 iki ekstre ekranının başlıkları gerçekten okundu (körlük zemini)", () => {
-    expect(REPORT_HEADERS.length).toBeGreaterThanOrEqual(6);
+  // Rapor yüzeyindeki ekstre diyaloğu (Yaşlandırma sayfasından açılırdı) 2026-11-12'de panelden kalktı; tek ekran ön muhasebe.
+  it("§2 ekstre ekranının başlıkları gerçekten okundu (körlük zemini)", () => {
     expect(FINANCE_HEADERS.length).toBeGreaterThanOrEqual(6);
-    expect(REPORT_HEADERS).toContain("Bakiye");
     expect(FINANCE_HEADERS).toContain("Bakiye");
-  });
-
-  it("§2a rapor yüzeyindeki tablo ile spec kolonları BİREBİR aynı", () => {
-    expect(headers()).toEqual(REPORT_HEADERS);
   });
 
   it("§2b ön muhasebe yüzeyiyle TEK fark 'Kaynak' — ve o kolon bilinçli olarak dosyada VAR", () => {

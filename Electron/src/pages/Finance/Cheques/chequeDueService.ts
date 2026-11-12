@@ -1,5 +1,5 @@
 // =============================================================================
-// ÇEK VADE TAKVİMİ — tipler + API çağrısı (backend `cheque.service.dueSummary` aynası)
+// ÇEK VADE ÖZETİ — Çekler ekranının özet kartları (backend `cheque.service.dueSummary` aynası)
 // =============================================================================
 // ⚠️ Yol TAM yazılır ("/api/finance/cheques/due-summary") — `apiClient.baseURL`
 // `/api` İÇERMEZ; öneksiz yol 404 alır ve çağıran hatayı yutarsa ekran "vadesi
@@ -25,8 +25,8 @@
 // =============================================================================
 
 import apiClient from "@/services/apiClient";
-import type { ChequeKind, ChequeStatus } from "@/pages/Finance/Cheques/service";
-import type { Currency } from "./service";
+import type { ChequeKind, ChequeStatus } from "./service";
+import type { Currency } from "@/pages/Finance/service";
 
 /** Backend `CHEQUE_DUE_BUCKETS` aynası — SIRA anlamlıdır (geçmiş → uzak). */
 export type ChequeDueBucket = "OVERDUE" | "SOON" | "MONTH" | "LATER" | "NO_DUE";
