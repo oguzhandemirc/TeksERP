@@ -182,6 +182,7 @@ describe("liste standardı — tablo kart içinde çizilmez", () => {
 
 /** Tabloyu çizen çocuk dosya → standart araçların (menü + arama) durduğu sayfa/araç çubuğu dosyaları. */
 const TOOLS_HOST: Record<string, string[]> = {
+  "Finance/CariTable.tsx": ["Finance/CariPage.tsx"],
   "Definitions/cariler/CariListTable.tsx": ["Definitions/CarilerPage.tsx", "Definitions/CarilerFilterRow.tsx"],
   "Operations/GelenBelgeler/NoteListTable.tsx": ["Operations/GelenBelgeler/GelenBelgelerPage.tsx", "Operations/GelenBelgeler/NoteListFilters.tsx"],
   "Operations/Rolls/RollsTableBody.tsx": ["Operations/Rolls/RollsPage.tsx", "Operations/Rolls/RollScanBar.tsx"],
@@ -222,7 +223,6 @@ const HAND_TABLES: Record<string, string> = Object.fromEntries(
     "Definitions/DocumentDesigner/assignments/AssignmentsView.tsx",
     "Devices/DevicesPage.tsx",
     "Finance/AccountsPage.tsx",
-    "Finance/CariTable.tsx",
     "Finance/CashTransactions/CashTxnTable.tsx",
     "Finance/Cheques/ChequeTable.tsx",
     "Finance/InvoicesPage.tsx",
@@ -268,7 +268,7 @@ const HAND_TABLES: Record<string, string> = Object.fromEntries(
 );
 
 const HAS_TOOLS = /<DataTableTools\b|\btools=\{|<DataTableToolbar\b[^>]*\btable=\{/;
-const HAS_SEARCH = /\bonSearchChange=|<ScanField\b/;
+const HAS_SEARCH = /\bonSearchChange=|<ScanField\b|\bset\w*Search\w*\(e\.target\.value\)/;
 const HAND_TABLE_TAG = /<(table|Table)\b/;
 
 /** Ortak DataTable'ı çizen sayfa dosyaları için eksikler: `dosya: sütun-menüsü|arama`. */

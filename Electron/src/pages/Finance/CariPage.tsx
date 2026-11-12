@@ -14,7 +14,8 @@ import { StatementDialog } from "./StatementDialog";
 import { activityFilters, CARI_ACTIVITY_DEFAULT, CARI_ACTIVITY_OPTIONS, CARI_EMPTY_ACTIVE_HINT, CARI_EMPTY_ALL_HINT, CARI_EMPTY_HELD_HINT, CARI_HOLD_FILTER_OPTIONS, holdFilters, useHoldFilter, type CariActivityFilter, type CariHoldFilter } from "./cariListFilters";
 import { CariHoldDialog } from "./CariRowExtras";
 import { CariEditDialog } from "./CariEditDialog";
-import { CariTable } from "./CariTable";
+import { CariTable, useFinanceCariTable } from "./CariTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { useCariFocus } from "./useCariFocus";
 import { RefreshButton } from "@/components/RefreshButton";
 
@@ -50,6 +51,8 @@ export function CariPage() {
 
   const rows = q.data?.data ?? [];
   const total = q.data?.pagination?.total ?? 0;
+  const table = useFinanceCariTable(rows, { onStatement: setStatementFor, onHold: setHoldFor, onEdit: setEditFor });
+  const showTable = !q.isLoading && rows.length > 0;
 
   return (
     <PageShell>
@@ -86,9 +89,25 @@ export function CariPage() {
         >
           Yalnız bakiyesi olanlar
         </Button>
+        <div className="ml-auto flex items-center gap-1.5">
+          <DataTableTools table={table} compact exportName="Cari hesaplar" />
+        </div>
       </div>
       <RelocatedToolStrip host="/finance/cari" />
 
+      {showTable ? (
+        <>
+          <CariTable table={table} isError={q.isError} onRetry={() => void q.refetch()} />
+          {/* KIRPMA SESSİZ DEĞİL (norm: CashTransactionsPage). Kesilen liste bu
+              üründe "o cari yok" diye okunur ve mükerrer karta yol açar. */}
+          {total > rows.length && (
+            <p className="shrink-0 border-t px-4 py-2 text-xs text-amber-700 dark:text-amber-500">
+              {total} carinin ilk {rows.length} tanesi gösteriliyor. Aradığınızı bulmak için
+              arama kutusunu ya da tür/bakiye süzgecini kullanın.
+            </p>
+          )}
+        </>
+      ) : (
       <ListBody>
         {q.isLoading ? (
           <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
@@ -110,31 +129,13 @@ export function CariPage() {
               </Button>
             </div>
           </ListMessage>
-        ) : rows.length === 0 ? (
+        ) : (
           <ListMessage>
             <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">{held === "held" ? CARI_EMPTY_HELD_HINT : activity === "active" ? CARI_EMPTY_ACTIVE_HINT : CARI_EMPTY_ALL_HINT}</div>
           </ListMessage>
-        ) : (
-          <>
-            {/* İKİNCİ KATMAN — bayat satırlar duruyor: liste gizlenmez, uyarılır. */}
-            {q.isError && (
-              <p className="border-b bg-amber-100 px-4 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
-                Liste tazelenemedi — aşağıdaki bakiyeler son başarılı okumaya aittir ve eski
-                olabilir.
-              </p>
-            )}
-            <CariTable rows={rows} onStatement={setStatementFor} onHold={setHoldFor} onEdit={setEditFor} />
-            {/* KIRPMA SESSİZ DEĞİL (norm: CashTransactionsPage). Kesilen liste bu
-                üründe "o cari yok" diye okunur ve mükerrer karta yol açar. */}
-            {total > rows.length && (
-              <p className="border-t px-4 py-2 text-xs text-amber-700 dark:text-amber-500">
-                {total} carinin ilk {rows.length} tanesi gösteriliyor. Aradığınızı bulmak için
-                arama kutusunu ya da tür/bakiye süzgecini kullanın.
-              </p>
-            )}
-          </>
         )}
       </ListBody>
+      )}
       <ListFooter loaded={rows.length} total={q.data ? total : null} />
 
       {statementFor && (
