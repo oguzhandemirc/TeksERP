@@ -259,6 +259,8 @@ export interface ShipmentDetail {
   deliveryCustomer?: { id: string; code: string; name: string; address: string | null } | null;
   /** Kayıtlı serbest teslim adresi; boşsa belgeye kart adresi basılır. */
   deliveryAddress?: string | null;
+  /** Planlanan sevk günü "YYYY-AA-GG"; eski sunucuda alan yok (undefined). */
+  plannedDate?: string | null;
   orders: ShipmentDetailOrder[];
   rolls: ShipmentDetailRoll[];
   swatches: { id: string; barcode: string | null; length: number | null; width: number | null }[];

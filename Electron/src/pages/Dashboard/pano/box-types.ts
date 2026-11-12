@@ -73,9 +73,11 @@ export interface AgendaBox {
     alisTeslim: AgendaList<{ id: string; no: string; durum: string; taraf: string | null; zaman: string | null }> | null;
     isEmriBaslangic: AgendaList<{ id: string; no: string; durum: string; hedefMetre: number | null; zaman: string | null }> | null;
     dokumaBaslangic: AgendaList<{ id: string; no: string; durum: string; kumas: string; planlananMetre: number | null; zaman: string | null }> | null;
+    /** Planlanan sevk günü bu gün olan PLANNED sevkiyatlar; eski sunucuda alan yok. */
+    sevkiyat?: AgendaList<{ id: string; no: string; musteri: string; gun: string | null }> | null;
   };
   planliSevkiyat: AgendaList<{ id: string; no: string; musteri: string; olusturuldu: string }> | null;
-  ayGunleri: Array<{ gun: string; alis: number; isEmri: number; dokuma: number; toplam: number }>;
+  ayGunleri: Array<{ gun: string; alis: number; isEmri: number; dokuma: number; sevk?: number; toplam: number }>;
   kesildi: boolean;
 }
 

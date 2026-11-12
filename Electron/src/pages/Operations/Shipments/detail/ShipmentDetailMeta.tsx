@@ -1,3 +1,4 @@
+import { PlannedDateEditor } from "../planned-date/PlannedDateEditor";
 import { useState, type ReactNode } from "react";
 import { ClipboardList, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -83,6 +84,7 @@ export function ShipmentDetailMeta({ d }: { d: ShipmentDetail }) {
 
         {/* Teslim yeri (K18) — carinin değil başka adrese teslim; PLANNED'de düzenlenir. */}
         <DeliveryToEditor d={d} />
+        <PlannedDateEditor d={d} />
 
         {/* İrsaliye açıklaması — sevkiyata kayıtlı not (annotation); her an düzenlenir,
             irsaliyeye basılır. Opsiyonel, boşsa uyarı yok. */}

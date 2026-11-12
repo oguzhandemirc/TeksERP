@@ -100,6 +100,8 @@ export async function quickShip(payload: {
   /** Teslim yeri (K18) — `deliveryToBody` çıktısı; boşken anahtar gitmez. */
   deliveryCustomerId?: string;
   deliveryAddress?: string;
+  /** Planlanan sevk günü "YYYY-AA-GG" — yalnız sevk onayı açıkken (PLANNED doğar) gönderilir. */
+  plannedDate?: string;
   /** Çuvalsız sevk (`shipping.looseLoadEnabled`): dökme ya da araba; yoksa görünmez çuval. */
   loadUnits?: QuickShipLoadUnit[];
   clientToken?: string;

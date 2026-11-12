@@ -32,4 +32,10 @@ describe("sackHubService.createShipment gövdesi", () => {
     expect("deliveryCustomerId" in govde()).toBe(false);
     expect("deliveryAddress" in govde()).toBe(false);
   });
+  it("planlanan sevk günü gövdeye girer; boşken anahtar gitmez (eski gövde aynı)", async () => {
+    await sackHubService.createShipment({ sackIds: ["k1"], customerId: "c1", plannedDate: "2026-11-20" });
+    expect(govde().plannedDate).toBe("2026-11-20");
+    await sackHubService.createShipment({ sackIds: ["k1"], customerId: "c1" });
+    expect("plannedDate" in govde()).toBe(false);
+  });
 });
