@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import { Menu, PanelLeft, RotateCw } from "lucide-react";
 import { PencereKontrolleri } from "./PencereKontrolleri";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,8 @@ import { TopbarActivityButton, TopbarSearch, TopbarUserMenu } from "./topbar-par
 import { LoomAlarmBell } from "@/pages/Operations/LoomAlarms/LoomAlarmBell";
 import { GuncellemeDugmesi } from "./GuncellemeDugmesi";
 import { BildirimZili } from "./BildirimZili";
+import { useShellReload } from "@/store/shell-reload";
+import { useSpinWhile } from "@/hooks/useSpinWhile";
 import { MasaustuBildirimKoprusu } from "@/components/bildirim/MasaustuBildirimKoprusu";
 
 interface Props {
@@ -21,6 +24,9 @@ interface Props {
 }
 
 export function Topbar({ onToggleSidebar, onOpenCommand, narrow = false, drawerOpen = false }: Props) {
+  const reloading = useShellReload((s) => s.busy);
+  const reload = useShellReload((s) => s.reload);
+  const spinning = useSpinWhile(reloading);
   return (
     <header className="app-drag flex h-16 shrink-0 select-none items-center gap-2 border-b border-chrome-border bg-chrome pr-1 sm:gap-3 sm:pr-3">
       {/* Dar kabukta (menü çekmece) mac trafik ışıkları bu çubuğun solundadır → `topbar-leading` boşluğu. */}
@@ -58,9 +64,10 @@ export function Topbar({ onToggleSidebar, onOpenCommand, narrow = false, drawerO
           aria-label="Sayfayı yeniden yükle"
           title="Sayfayı yeniden yükle (Ctrl+Shift+R)"
           className="hidden sm:inline-flex"
-          onClick={() => window.location.reload()}
+          disabled={reloading}
+          onClick={reload}
         >
-          <RotateCw className="h-4 w-4" />
+          <RotateCw className={cn("h-4 w-4", spinning && "animate-spin motion-reduce:animate-none")} />
         </Button>
 
         {/* Güncelleme denetleme — durum eşlemesi tek kaynaktan (`@/lib/updater-durum`); web panelinde hiç çizilmez. */}

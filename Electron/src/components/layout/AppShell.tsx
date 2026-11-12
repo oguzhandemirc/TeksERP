@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import "./shell-motion.css";
+import { useShellReload } from "@/store/shell-reload";
 import { ShellSidebar } from "./ShellSidebar";
 import { useShellSidebar } from "@/hooks/useShellSidebar";
 import { Topbar } from "./Topbar";
@@ -45,6 +47,7 @@ function MenuShell() {
   const { narrow, collapsed, drawerOpen, closeDrawer, toggleSidebar } = useShellSidebar();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const reloading = useShellReload((s) => s.busy);
 
   // Barkod tabancası — "her yerde okut" (opt-in, default kapalı). Wedge global
   // keydown'ı dinler, nitelikli burst'ü store'a iter; overlay sonucu gösterir.
@@ -108,7 +111,15 @@ function MenuShell() {
           onOpenCommand={() => setPaletteOpen(true)}
         />
         <ShellBanners />
-        <main className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+        <main
+          data-reloading={reloading || undefined}
+          className={`relative min-h-0 min-w-0 flex-1 overflow-hidden${reloading ? " shell-reload-fade" : ""}`}
+        >
+          {reloading && (
+            <div role="progressbar" aria-label="Sayfa yenileniyor" className="pointer-events-none absolute inset-x-0 top-0 z-20 h-0.5 overflow-hidden">
+              <div className="shell-reload-bar h-full w-2/5 rounded-full bg-primary" />
+            </div>
+          )}
           <TabHost />
         </main>
       </div>

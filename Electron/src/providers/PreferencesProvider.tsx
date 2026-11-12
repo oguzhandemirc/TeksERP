@@ -60,9 +60,12 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
   // Görünüm (tema rengi, menü, zemin, köşe, yoğunluk, yazı, simge) → <html data-*>.
   const appearance = resolveAppearance(prefs);
   const appearanceKey = JSON.stringify(appearance);
+  // Geçiş yalnız tercih yüklendikten SONRAKİ değişimde (açılışta/girişte renk kayması olmasın).
+  const settledRef = useRef(false);
   useEffect(() => {
-    applyAppearance(JSON.parse(appearanceKey));
-  }, [appearanceKey]);
+    applyAppearance(JSON.parse(appearanceKey), document.documentElement, { animate: settledRef.current });
+    settledRef.current = ready;
+  }, [appearanceKey, ready]);
 
   // Sekme davranışı aynası — tıklama anında okunur, değişiklik bir sonraki tıkta etkili.
   const tabOpenMode = readTabOpenMode(prefs);

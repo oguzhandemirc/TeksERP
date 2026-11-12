@@ -45,7 +45,8 @@ import { useLicenseScreenVisible } from "@/hooks/useLicenseStatus";
 import { lowerTr } from "../../lib/tr-case";
 import { useMenuLayout } from "@/hooks/useMenuLayout";
 import { isMenuHidden } from "@/lib/menu-layout";
-import { appearancePatch, resolveAppearance } from "@/lib/theme/appearance";
+import { useShellReload } from "@/store/shell-reload";
+import { appearancePatch, beginThemeTransition, resolveAppearance } from "@/lib/theme/appearance";
 
 interface Props {
   open: boolean;
@@ -159,6 +160,7 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
       label: theme === "dark" ? "Açık temaya geç" : "Koyu temaya geç",
       icon: Moon,
       run: () => {
+        beginThemeTransition();
         setTheme(nextTheme);
         setPreference({ theme: nextTheme });
       },
@@ -169,7 +171,7 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
       icon: Rows3,
       run: () => setPreference((cur) => appearancePatch(cur, { density: nextDensity })),
     },
-    { key: "reload", label: "Sayfayı yenile", icon: RotateCw, run: () => window.location.reload() },
+    { key: "reload", label: "Sayfayı yenile", icon: RotateCw, run: () => useShellReload.getState().reload() },
     { key: "help", label: "Klavye kısayolları", icon: Keyboard, run: () => onShowHelp?.() },
     {
       key: "logout",

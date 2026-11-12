@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/context-menu";
 import { useTabsStore } from "@/store/tabs";
 import { useFavorites } from "@/hooks/useFavorites";
+import { useSidebarHold } from "./sidebar-hover";
 
 const MOD = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform) ? "⌘" : "Ctrl";
 
@@ -28,9 +29,10 @@ function openFromKeyboard(e: KeyboardEvent<HTMLElement>) {
 export function NavContextMenu({ to, label, disabled, children }: { to: string; label: string; disabled?: boolean; children: ReactNode }) {
   const openTab = useTabsStore((s) => s.openTab);
   const navigateActive = useTabsStore((s) => s.navigateActive);
+  const hold = useSidebarHold();
   if (disabled) return <>{children}</>;
   return (
-    <ContextMenu>
+    <ContextMenu onOpenChange={hold}>
       <ContextMenuTrigger asChild onKeyDown={openFromKeyboard}>
         {children}
       </ContextMenuTrigger>
