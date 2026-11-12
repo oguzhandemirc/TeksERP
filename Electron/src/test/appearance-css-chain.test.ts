@@ -40,12 +40,16 @@ function declsFor(attr: string, value: string): Record<string, string> {
   return out;
 }
 
+const DENSITY_SPACE_VARS = ["--space-card", "--space-gap", "--space-section", "--space-page", "--control-h", "--control-h-sm", "--kpi-px", "--kpi-py"];
+
 const AXES: { key: keyof Appearance; values: readonly string[]; vars: string[] }[] = [
   { key: "preset", values: PRESETS.map((o) => o.value), vars: ["--primary", "--ring"] },
   { key: "sidebar", values: SIDEBARS.map((o) => o.value), vars: ["--sidebar"] },
   { key: "surface", values: SURFACES.map((o) => o.value), vars: ["--background", "--chrome", "--chrome-border", "--tabstrip", "--band"] },
   { key: "radius", values: RADII.map((o) => o.value), vars: ["--radius-card", "--radius-control"] },
   { key: "density", values: DENSITIES.map((o) => o.value), vars: ["--cell-py", "--head-h", "--cell-wrap"] },
+  // Kullanıcı 2026-11-12: "sıkı/ferah hiçbir şeyi değiştirmiyor" — genel boşluk da yoğunluk ekseninde.
+  ...DENSITY_SPACE_VARS.map((v) => ({ key: "density" as const, values: DENSITIES.map((o) => o.value), vars: [v] })),
 ];
 
 describe("görünüm zinciri", () => {
@@ -62,7 +66,7 @@ describe("görünüm zinciri", () => {
   });
 
   for (const axis of AXES) {
-    it(`${axis.key}: her seçeneğin kendi seçicisi var ve değişkenleri yazıyor`, () => {
+    it(`${axis.key} (${axis.vars.join(", ")}): her seçeneğin kendi seçicisi var ve değişkenleri yazıyor`, () => {
       const seen = new Map<string, string>();
       for (const v of axis.values) {
         const d = declsFor(`data-${axis.key}`, v);
@@ -106,6 +110,41 @@ describe("görünüm zinciri", () => {
     expect(table).toContain("py-[var(--cell-py)]");
     expect(table).toContain("var(--cell-wrap");
     expect(table).toContain("h-[var(--head-h)]");
+  });
+});
+
+describe("yoğunluk boşluk zinciri", () => {
+  const read = (f: string) => readFileSync(resolve(process.cwd(), f), "utf-8");
+  const rem = (v: string) => Number(v.replace("rem", ""));
+
+  it("ferah her boşluk/yükseklik belirtecinde sıkıdan belirgin büyük (≥ %15)", () => {
+    const c = declsFor("data-density", "compact");
+    const w = declsFor("data-density", "comfortable");
+    for (const v of DENSITY_SPACE_VARS) expect(rem(w[v]!), v).toBeGreaterThanOrEqual(rem(c[v]!) * 1.15);
+  });
+
+  it("varsayılan (:root) değerleri sıkıyla aynı — öznitelik gelmeden de sıkı görünür", () => {
+    const root: Record<string, string> = {};
+    css.walkRules((r) => {
+      if (r.selectors.some((s) => s.trim() === ":root")) r.walkDecls((d) => { if (DENSITY_SPACE_VARS.includes(d.prop)) root[d.prop] = d.value; });
+    });
+    const c = declsFor("data-density", "compact");
+    for (const v of DENSITY_SPACE_VARS) expect(root[v], `:root ${v}`).toBe(c[v]);
+  });
+
+  it("ortak bileşenler boşluk/yükseklik belirtecini okur", () => {
+    const uses: [string, string[]][] = [
+      ["src/components/ui/section-card.tsx", ["var(--space-card)"]],
+      ["src/components/ui/stat-card.tsx", ["var(--space-card)"]],
+      ["src/components/ui/stat-card-compact.tsx", ["var(--kpi-px)", "var(--kpi-py)"]],
+      ["src/components/ui/button.tsx", ["var(--control-h)", "var(--control-h-sm)"]],
+      ["src/components/ui/input.tsx", ["var(--control-h)"]],
+      ["src/components/ui/select.tsx", ["var(--control-h)"]],
+      ["src/components/record/RecordPageShell.tsx", ["var(--space-page)", "var(--space-gap)"]],
+      ["src/pages/Dashboard/DashboardPage.tsx", ["var(--space-page)", "var(--space-section)"]],
+      ["src/pages/Dashboard/pano/PanoBoard.tsx", ["var(--space-gap)"]],
+    ];
+    for (const [f, vars] of uses) for (const v of vars) expect(read(f), `${f} ${v}`).toContain(v);
   });
 });
 

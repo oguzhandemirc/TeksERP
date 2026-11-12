@@ -3,6 +3,7 @@ import { ArrowDownRight, ArrowUpRight, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDisplay } from "@/lib/format";
 import { IconTile, type IconTileTone } from "./icon-tile";
+import { CompactStatCard } from "./stat-card-compact";
 
 export interface StatCardProps {
   /** Küçük gri etiket ("Açık sipariş"). */
@@ -21,13 +22,19 @@ export interface StatCardProps {
   hint?: ReactNode;
   onClick?: () => void;
   loading?: boolean;
-  /** `stacked`: simge + etiket üst satırda, değer ve değişim tam genişlikte (dar, çok kartlı şeritler). */
-  layout?: "row" | "stacked";
+  /** `stacked`: simge + etiket üst satırda, değer ve değişim tam genişlikte (dar, çok kartlı şeritler).
+   *  `compact` (hedef görsel): solda simge karesi; sağda etiket / değer (+ ek) / değişim — sabit yükseklik, dar boşluk. */
+  layout?: "row" | "stacked" | "compact";
   className?: string;
 }
 
 /** KPI kartı (hedef görsel): solda renkli simge karesi, etiket, kalın değer, altında değişim satırı. */
-export function StatCard({ label, value, icon, tone = "primary", delta, trend = "neutral", invertTrend, hint, onClick, loading, layout = "row", className }: StatCardProps) {
+export function StatCard(props: StatCardProps) {
+  if (props.layout === "compact") return <CompactStatCard {...props} />;
+  return <RegularStatCard {...props} />;
+}
+
+function RegularStatCard({ label, value, icon, tone = "primary", delta, trend = "neutral", invertTrend, hint, onClick, loading, layout = "row", className }: StatCardProps) {
   const good = trend === "neutral" ? null : (trend === "up") !== Boolean(invertTrend);
   const Arrow = trend === "up" ? ArrowUpRight : trend === "down" ? ArrowDownRight : null;
   const Comp = onClick ? "button" : "div";
@@ -37,7 +44,7 @@ export function StatCard({ label, value, icon, tone = "primary", delta, trend = 
       onClick={onClick}
       data-slot="card"
       className={cn(
-        "flex w-full min-w-0 gap-3 rounded-xl border border-card-border bg-card p-4 text-left text-card-foreground shadow-card",
+        "flex w-full min-w-0 gap-3 rounded-xl border border-card-border bg-card p-[var(--space-card)] text-left text-card-foreground shadow-card",
         layout === "row" && "items-center",
         onClick && "transition-colors hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         className,

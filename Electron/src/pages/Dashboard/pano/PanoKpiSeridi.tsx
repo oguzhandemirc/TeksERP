@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
-import { ArrowDownRight, ArrowUpRight, Boxes, ClipboardList, Coins, Factory, Send, Truck, Wallet, type LucideIcon } from "lucide-react";
+import { Boxes, ClipboardList, Coins, Factory, Send, Truck, Wallet, type LucideIcon } from "lucide-react";
 import { StatCard } from "@/components/ui/stat-card";
-import { IconTile, type IconTileTone } from "@/components/ui/icon-tile";
-import { cn } from "@/lib/utils";
+import type { IconTileTone } from "@/components/ui/icon-tile";
+import { trendTone } from "@/components/ui/stat-card-compact";
 import { useTabsStore } from "@/store/tabs";
 import type { CollectionBox, PanoBoxData, RevenueBox } from "./box-types";
 import { formatCount, degisimRozeti, kg, metre, para } from "./pano-bicim";
@@ -43,8 +43,7 @@ export function kpiCardOf<K extends CountKpiKey>(key: K, d: PanoBoxData[K]): Kar
     }
     default: {
       const k = d as PanoBoxData["stok"];
-      // İki kısa satır: tek satırda "Ham … · İplik …" dar kartta kırpılıyordu.
-      const ek = <>Ham {metre(k.hamMetre)}{k.iplikKg !== null && <><br />İplik {kg(k.iplikKg)}</>}</>;
+      const ek = `Ham ${metre(k.hamMetre)}${k.iplikKg !== null ? ` · İplik ${kg(k.iplikKg)}` : ""}`;
       return { label: "Mamul stok", icon: Boxes, tone: "teal", value: metre(k.mamulMetre), kpi: null, hint: ek };
     }
   }
@@ -66,8 +65,9 @@ export function PanoKpiCard<K extends CountKpiKey>({ boxKey, data, donem, erisim
   const navigateActive = useTabsStore((s) => s.navigateActive);
   const c = kpiCardOf(boxKey, data);
   const rozet = degisimRozeti(c.kpi, donem);
-  // Yüzde yokken de değişim satırı durur: kartlar aynı iskelette kalır (0 değerli kart kısa/boş görünmesin).
-  const bosKiyas = c.kpi ? (c.kpi.deger > 0 ? "Önceki dönemde yok" : "Değişim yok") : "Anlık durum";
+  // Yüzde yokken de değişim satırı durur (kısa nötr metin): kartlar aynı yükseklikte kalır.
+  // Anlık ölçüde (stok) değişim yok — ek bilgi o satıra iner, değer satırı kısa kalır.
+  const bosKiyas = c.kpi ? (c.kpi.deger > 0 ? "Öncesi yok" : "Değişim yok") : c.hint;
   const target = KPI_TARGETS[boxKey];
   return (
     <StatCard
@@ -75,10 +75,10 @@ export function PanoKpiCard<K extends CountKpiKey>({ boxKey, data, donem, erisim
       value={c.value}
       icon={c.icon}
       tone={c.tone}
-      delta={rozet ? <span title={rozet.metin}><span className="font-semibold">{rozet.yuzde}</span> <span className="hidden font-normal text-muted-foreground @[11rem]:inline">{rozet.kiyas}</span></span> : <span data-kpi-bos-kiyas="" className="font-normal">{bosKiyas}</span>}
+      delta={rozet ? <span title={rozet.metin}><span className="font-semibold">{rozet.yuzde}</span> <span className="hidden font-normal text-muted-foreground @[13rem]:inline">{rozet.kiyas}</span></span> : <span data-kpi-bos-kiyas="" className="font-normal">{bosKiyas}</span>}
       trend={rozet?.trend ?? "neutral"}
-      hint={c.hint}
-      layout="stacked"
+      hint={c.kpi ? c.hint : undefined}
+      layout="compact"
       className="@container h-full"
       onClick={erisim.canGo(target) ? () => navigateActive(target.to) : undefined}
     />
@@ -86,8 +86,8 @@ export function PanoKpiCard<K extends CountKpiKey>({ boxKey, data, donem, erisim
 }
 
 const MONEY_HEAD: Record<MoneyKpiKey, { label: string; icon: LucideIcon; tone: IconTileTone; empty: string }> = {
-  ciro: { label: "Ciro", icon: Coins, tone: "amber", empty: "Bu dönemde sevk tutarı yok" },
-  tahsilat: { label: "Tahsilat", icon: Wallet, tone: "sky", empty: "Bu dönemde tahsilat yok" },
+  ciro: { label: "Ciro", icon: Coins, tone: "amber", empty: "Sevk tutarı yok" },
+  tahsilat: { label: "Tahsilat", icon: Wallet, tone: "sky", empty: "Tahsilat yok" },
 };
 
 /** Para KPI'ı — para birimi başına satır; birimler TOPLANMAZ. */
@@ -96,36 +96,28 @@ export function PanoMoneyKpi({ boxKey, data, donem, erisim }: { boxKey: MoneyKpi
   const head = MONEY_HEAD[boxKey];
   const target = KPI_TARGETS[boxKey];
   const go = erisim.canGo(target) ? () => navigateActive(target.to) : undefined;
-  const Comp = go ? "button" : "div";
   const unpriced = "fiyatsizSatir" in data ? data.fiyatsizSatir : 0;
+  const [first, ...rest] = data.tutarlar;
+  const r = first ? degisimRozeti(first, donem) : null;
+  // Birimler toplanmaz: ilk birim değer satırında, diğerleri değişim satırının altında kısa satır.
   return (
-    <Comp type={go ? "button" : undefined} onClick={go} data-slot="card" data-testid={`pano-para-${boxKey}`}
-      className={cn("@container flex h-full w-full min-w-0 flex-col rounded-xl border border-card-border bg-card p-4 text-left text-card-foreground shadow-card",
-        go && "transition-colors hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring")}>
-      <div className="mb-2 flex items-center gap-2.5">
-        <IconTile icon={head.icon} tone={head.tone} size="sm" />
-        <p className="truncate text-sm font-semibold text-muted-foreground">{head.label}</p>
-      </div>
-      {data.tutarlar.length === 0 ? <p className="text-sm text-muted-foreground">{head.empty}</p> : (
-        <ul className="space-y-1">
-          {data.tutarlar.map((t, i) => {
-            const r = degisimRozeti(t, donem);
-            const Arrow = r?.trend === "up" ? ArrowUpRight : r?.trend === "down" ? ArrowDownRight : null;
-            return (
-              <li key={t.paraBirimi} className="flex min-w-0 items-baseline justify-between gap-2">
-                <span className={cn("min-w-0 truncate font-bold tabular-nums", i === 0 ? "text-xl" : "text-sm")} title={para(t.deger, t.paraBirimi)}>{para(t.deger, t.paraBirimi)}</span>
-                {r && (
-                  <span data-trend={r.trend} title={r.metin}
-                    className={cn("inline-flex shrink-0 items-center text-xs font-semibold", r.trend === "up" ? "text-success" : r.trend === "down" ? "text-destructive" : "text-muted-foreground")}>
-                    {Arrow && <Arrow className="h-3.5 w-3.5" aria-hidden />}{r.yuzde}
-                  </span>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      {unpriced > 0 && <p className="mt-1 truncate text-xs text-warning">{formatCount(unpriced)} satır fiyatsız</p>}
-    </Comp>
+    <div className="@container h-full" data-testid={`pano-para-${boxKey}`}>
+      <StatCard layout="compact" className="h-full" label={head.label} icon={head.icon} tone={head.tone} onClick={go}
+        value={first ? <span title={para(first.deger, first.paraBirimi)}>{para(first.deger, first.paraBirimi)}</span> : "—"}
+        trend={r?.trend ?? "neutral"}
+        delta={<>{r ? <span title={r.metin} className="font-semibold">{r.yuzde}</span> : first ? null : <span className="font-normal">{head.empty}</span>}
+          {rest.map((t) => <MoneyLine key={t.paraBirimi} t={t} donem={donem} />)}
+          {unpriced > 0 && <span className="ml-1 text-warning">{formatCount(unpriced)} fiyatsız</span>}</>} />
+    </div>
+  );
+}
+
+function MoneyLine({ t, donem }: { t: RevenueBox["tutarlar"][number]; donem: PanoDonem }) {
+  const r = degisimRozeti(t, donem);
+  return (
+    <span className="ml-1.5 inline-flex items-center gap-0.5 font-semibold text-foreground" title={r?.metin}>
+      <span className="tabular-nums">{para(t.deger, t.paraBirimi)}</span>
+      {r && <span data-trend={r.trend} className={trendTone(r.trend)}>{r.yuzde}</span>}
+    </span>
   );
 }

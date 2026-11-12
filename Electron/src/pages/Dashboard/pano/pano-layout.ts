@@ -43,6 +43,17 @@ export function applySubsetOrder(full: readonly string[], subsetOrdered: readonl
   return full.map((k) => (subset.has(k) ? subsetOrdered[i++]! : k));
 }
 
+export type SizeChoice = Exclude<PanoBoxSize, "kpi">;
+export const SIZE_CHOICES: readonly SizeChoice[] = ["kucuk", "orta", "genis"];
+
+/** Kayıtlı boyut tercihi → yalnız tanınan boyutlar (bilinmeyen değer/şekil sessizce düşer). */
+export function cleanSizes(saved: unknown): Record<string, SizeChoice> {
+  if (!saved || typeof saved !== "object" || Array.isArray(saved)) return {};
+  const out: Record<string, SizeChoice> = {};
+  for (const [k, v] of Object.entries(saved)) if ((SIZE_CHOICES as readonly unknown[]).includes(v)) out[k] = v as SizeChoice;
+  return out;
+}
+
 /** Geniş ekranda (12 sütun) temel genişlik. */
 export const BASE_SPAN: Record<Exclude<PanoBoxSize, "kpi">, number> = { kucuk: 3, orta: 4, genis: 8 };
 

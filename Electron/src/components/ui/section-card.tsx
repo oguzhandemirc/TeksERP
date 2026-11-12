@@ -23,7 +23,7 @@ export function SectionCard({ title, description, titleExtra, action, children, 
       data-slot="card"
       className={cn("flex min-w-0 flex-col rounded-xl border border-card-border bg-card text-card-foreground shadow-card", className)}
     >
-      <header className="flex items-start justify-between gap-3 px-5 pb-3 pt-4">
+      <header className="flex items-start justify-between gap-3 px-[var(--space-card)] pb-3 pt-[var(--space-card)]">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
             <h2 className="truncate text-sm font-bold tracking-tight">{title}</h2>
@@ -33,7 +33,7 @@ export function SectionCard({ title, description, titleExtra, action, children, 
         </div>
         {action && <div className="flex shrink-0 items-center gap-2">{action}</div>}
       </header>
-      <div className={cn("min-h-0 flex-1", flush ? "pb-2" : "px-5 pb-5", contentClassName)}>{children}</div>
+      <div className={cn("min-h-0 flex-1", flush ? "pb-2" : "px-[var(--space-card)] pb-[var(--space-card)]", contentClassName)}>{children}</div>
     </section>
   );
 }

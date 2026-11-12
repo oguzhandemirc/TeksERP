@@ -21,12 +21,12 @@ export function orderStatCards(order: Order, pricing: boolean): ReactNode[] {
   const cards: ReactNode[] = [];
   const f = orderMetreFigures(order);
   if (f) {
-    cards.push(<StatCard key="req" label="İstenen" icon={Ruler} tone="violet" value={formatMeasure(f.requested, "m")} />);
-    cards.push(<StatCard key="ship" label="Sevk edilen" icon={Truck} tone="blue" value={formatMeasure(f.shipped, "m")} hint={`%${f.pct}`} />);
-    cards.push(<StatCard key="rem" label="Kalan" icon={PackageCheck} tone="teal" value={formatMeasure(f.remaining, "m")} />);
+    cards.push(<StatCard key="req" layout="compact" label="İstenen" icon={Ruler} tone="violet" value={formatMeasure(f.requested, "m")} />);
+    cards.push(<StatCard key="ship" layout="compact" label="Sevk edilen" icon={Truck} tone="blue" value={formatMeasure(f.shipped, "m")} hint={`%${f.pct}`} />);
+    cards.push(<StatCard key="rem" layout="compact" label="Kalan" icon={PackageCheck} tone="teal" value={formatMeasure(f.remaining, "m")} />);
   }
   if (pricing && order.totalAmount && Number(order.totalAmount) > 0) {
-    cards.push(<StatCard key="amount" label="Tutar" icon={Coins} tone="amber" value={formatMoney(order.totalAmount, order.currency)} />);
+    cards.push(<StatCard key="amount" layout="compact" label="Tutar" icon={Coins} tone="amber" value={formatMoney(order.totalAmount, order.currency)} />);
   }
   return cards;
 }

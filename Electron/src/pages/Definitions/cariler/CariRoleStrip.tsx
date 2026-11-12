@@ -49,8 +49,9 @@ export function CariRoleStrip({ filters, counts, loading }: { filters: CariFilte
           loading={loading}
           icon={c.icon}
           tone={c.tone}
+          layout="compact"
           onClick={() => pick(c)}
-          className={cn("py-3", active === c.key && "border-primary/60 ring-2 ring-primary/25")}
+          className={cn(active === c.key && "border-primary/60 ring-2 ring-primary/25")}
         />
       ))}
     </div>

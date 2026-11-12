@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from "react";
 import { useOptionalPreferences } from "@/providers/PreferencesProvider";
 import type { PanoBoxDef } from "./box-types";
-import { applySubsetOrder, cleanLayout, defaultLayout, LOCAL_BOXES, LOCAL_BOX_KEYS } from "./pano-layout";
+import { applySubsetOrder, cleanLayout, cleanSizes, defaultLayout, LOCAL_BOXES, LOCAL_BOX_KEYS, type SizeChoice } from "./pano-layout";
 
 export interface PanoLayout {
   /** Çizilecek kutular (sıralı; katalogda/erişimde olmayan anahtar düşmüş). */
@@ -14,6 +14,9 @@ export interface PanoLayout {
   remove: (key: string) => void;
   /** Görünen kutuların yeni sırası. */
   reorder: (visibleOrder: string[]) => void;
+  /** Kutu boyutunu değiştirir (katalog boyutuna dönünce kayıttan düşer). */
+  resize: (key: string, size: SizeChoice) => void;
+  /** Düzen + boyut + kutu ayarları varsayılana. */
   reset: () => void;
 }
 
@@ -24,6 +27,7 @@ export interface PanoLayout {
 export function usePanoLayout(catalog: readonly PanoBoxDef[] | undefined, localAvailable: ReadonlySet<string>): PanoLayout {
   const ctx = useOptionalPreferences();
   const saved = ctx?.prefs.dashboard?.boxes;
+  const savedSizes = ctx?.prefs.dashboard?.boxSizes;
   const setPreference = ctx?.setPreference;
 
   const { known, available, byKey } = useMemo(() => {
@@ -41,7 +45,13 @@ export function usePanoLayout(catalog: readonly PanoBoxDef[] | undefined, localA
     () => (catalog ? cleanLayout(saved, known) ?? defaultLayout(catalog, new Set(LOCAL_BOX_KEYS)) : []),
     [catalog, saved, known],
   );
-  const boxes = useMemo(() => full.map((k) => byKey.get(k)).filter((b): b is PanoBoxDef => b !== undefined), [full, byKey]);
+  const sizes = useMemo(() => cleanSizes(savedSizes), [savedSizes]);
+  // Kullanıcı boyutu katalog tanımının yerine geçer (KPI boyutu değişmez).
+  const boxes = useMemo(
+    () => full.map((k) => byKey.get(k)).filter((b): b is PanoBoxDef => b !== undefined)
+      .map((b) => (b.boyut !== "kpi" && sizes[b.anahtar] ? { ...b, boyut: sizes[b.anahtar]! } : b)),
+    [full, byKey, sizes],
+  );
 
   const write = useCallback(
     (next: string[] | undefined) => setPreference?.((cur) => ({ dashboard: { ...(cur.dashboard ?? {}), boxes: next } })),
@@ -50,7 +60,19 @@ export function usePanoLayout(catalog: readonly PanoBoxDef[] | undefined, localA
   const add = useCallback((key: string) => { if (!full.includes(key)) write([...full, key]); }, [full, write]);
   const remove = useCallback((key: string) => write(full.filter((k) => k !== key)), [full, write]);
   const reorder = useCallback((visibleOrder: string[]) => write(applySubsetOrder(full, visibleOrder)), [full, write]);
-  const reset = useCallback(() => write(undefined), [write]);
+  const resize = useCallback((key: string, size: SizeChoice) => {
+    const def = byKey.get(key);
+    if (!def || def.boyut === "kpi") return;
+    const next = { ...sizes };
+    if (def.boyut === size) delete next[key];
+    else next[key] = size;
+    setPreference?.((cur) => ({ dashboard: { ...(cur.dashboard ?? {}), boxSizes: Object.keys(next).length ? next : undefined } }));
+  }, [byKey, sizes, setPreference]);
+  const reset = useCallback(
+    () => setPreference?.((cur) => ({ dashboard: { ...(cur.dashboard ?? {}), boxes: undefined, boxSizes: undefined, boxOptions: undefined } })),
+    [setPreference],
+  );
+  const isDefault = saved === undefined && savedSizes === undefined && ctx?.prefs.dashboard?.boxOptions === undefined;
 
-  return { boxes, available, isDefault: saved === undefined, add, remove, reorder, reset };
+  return { boxes, available, isDefault, add, remove, reorder, resize, reset };
 }
