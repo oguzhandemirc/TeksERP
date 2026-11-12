@@ -35,7 +35,7 @@ import { isReportOnPanel } from "@/lib/report-gate";
 const ROOT = join(__dirname, "..", "..");
 const REPORTS = join(ROOT, "pages", "Reports");
 const ALLOWED_RAW = "pages/Reports/_components/ReportDateFilter.tsx";
-const DATE_HOOKS = ["useReportDateRange", "useFactoryRange", "useFactoryDay", "useAsOfDay", "useForwardWindow"];
+const DATE_HOOKS = ["useReportDateRange", "useFactoryRange", "useForwardWindow"];
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {

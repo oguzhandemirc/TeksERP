@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { REPORT_BY_KEY, type ReportKey, type ReportTarih } from "@/lib/report-catalog";
-import { asOfParams, toYmd, YMD_RE } from "../_lib/report-date";
+import { toYmd, YMD_RE } from "../_lib/report-date";
 
 /**
  * TEK GÜN sözleşmeleri — `tek-gun` (URL `factoryDay`, fabrika günü) ve `kesit` (URL `asOf`,
@@ -31,18 +31,4 @@ export function useReportDayState(reportKey: ReportKey, expected?: ReportTarih) 
   };
 
   return { contract, ymd, todayYmd, setYmd, isToday: ymd === todayYmd };
-}
-
-/** `tek-gun`: backend `factoryDay` (fabrika günü `YYYY-MM-DD`). */
-export function useFactoryDay(reportKey: ReportKey) {
-  const state = useReportDayState(reportKey, "tek-gun");
-  const params = useMemo(() => ({ factoryDay: state.ymd }), [state.ymd]);
-  return { ...state, params };
-}
-
-/** `kesit`: backend `asOf` — seçilen günün SONU (ISO). */
-export function useAsOfDay(reportKey: ReportKey) {
-  const state = useReportDayState(reportKey, "kesit");
-  const params = useMemo(() => asOfParams(state.ymd), [state.ymd]);
-  return { ...state, params };
 }
