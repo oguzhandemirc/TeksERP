@@ -1,6 +1,6 @@
 // Dokuma grubunun altındaki en çok üç kısa karar satırı (tezgâh · iplik · süre) + aynı diyalogda açılıp kapanan ayrıntı.
 // Null özet satır çizmez; üçü de yoksa bileşen hiç çizilmez (eski backend dahil).
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { WidthWarningBadge } from "@/pages/Operations/WeavingOrders/loom-suggestion/LoomSuggestionParts";
 import { durationInputsText, durationLine, formatKg, loomCountsText, loomLine, yarnLine } from "./insight-text";
@@ -22,26 +22,23 @@ export function ProposalInsights({ w }: { w: WeavingProposal }) {
   const shortTone = (w.yarnSummary?.totalShortKg ?? 0) > 0;
   const machineCode = d && w.loomSummary?.best.machineId === d.machineId ? w.loomSummary.best.code : null;
   return (
-    <div className="mt-1 space-y-0.5 text-xs" data-testid="proposal-insights">
+    <div className="mt-1.5 space-y-1 text-xs" data-testid="proposal-insights">
       {loom && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-muted-foreground">Tezgâh:</span>
+        <InsightRow label="Tezgâh:">
           <span className={w.loomSummary?.best.tier === "READY" ? "" : "text-warning"}>{loom}</span>
           {w.loomSummary?.best.widthWarning && <WidthWarningBadge />}
           {counts && <span className="text-muted-foreground">({counts})</span>}
-        </div>
+        </InsightRow>
       )}
       {yarn && (
-        <div>
-          <span className="text-muted-foreground">İplik: </span>
+        <InsightRow label="İplik:">
           <span className={shortTone ? "text-warning" : ""}>{yarn}</span>
-        </div>
+        </InsightRow>
       )}
       {duration && (
-        <div>
-          <span className="text-muted-foreground">Süre: </span>
+        <InsightRow label="Süre:">
           <span className={d?.weavingOnlyFitsDeadline === false ? "text-warning" : ""}>{duration}</span>
-        </div>
+        </InsightRow>
       )}
       {hasDetail && (
         <Button type="button" variant="link" className="h-auto p-0 text-xs" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
@@ -49,7 +46,7 @@ export function ProposalInsights({ w }: { w: WeavingProposal }) {
         </Button>
       )}
       {open && (
-        <div className="space-y-1.5 rounded-md border bg-muted/20 p-2" data-testid="proposal-insights-detail">
+        <div className="space-y-1.5 rounded-lg border border-card-border bg-muted/30 p-2.5" data-testid="proposal-insights-detail">
           {yarns.length > 0 && (
             <table className="w-full text-xs">
               <thead className="text-muted-foreground">
@@ -81,6 +78,16 @@ export function ProposalInsights({ w }: { w: WeavingProposal }) {
           {d && <p className="text-muted-foreground">Süre hesabı: {durationInputsText(d, machineCode)}</p>}
         </div>
       )}
+    </div>
+  );
+}
+
+// Etiket sütunu sabit genişlikte: üç karar satırı alt alta hizalı okunur.
+function InsightRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex items-baseline gap-2">
+      <span className="w-12 shrink-0 text-muted-foreground">{label}</span>
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">{children}</div>
     </div>
   );
 }

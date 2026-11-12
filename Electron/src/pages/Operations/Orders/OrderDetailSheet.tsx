@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
 import { safeFormat } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { fireConfetti } from "@/lib/confetti";
 import { Lock, Pencil, Ban, Factory, Undo2, Info, AlertTriangle } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -11,16 +9,7 @@ import { FollowButton } from "@/components/bildirim/FollowButton";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { AnimatedProgress } from "@/components/motion";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { PermissionGate } from "@/components/PermissionGate";
 import { DeadlineBadge } from "@/components/operations/DeadlineBadge";
 import { ShipCell } from "./OrderWhereCells";
@@ -28,12 +17,12 @@ import { ShipCell } from "./OrderWhereCells";
 import { fmtNum } from "./order-where-text";
 import { orderMetreParts, orderMetreProgress } from "./order-cell-text";
 import { CoveragePanel } from "@/pages/Operations/WorkOrders/CoveragePanel";
-import { lineOpenMeasured } from "@/pages/Operations/WorkOrders/order-fulfillment";
+import { diffLabel, lineRem, lineSig } from "./line-wo-selection";
 import { isMeasuredUnit, unitLabel } from "@/lib/item-unit";
 import { buildPicked, type PickedOrderLine } from "@/pages/Operations/WorkOrders/OrderPickerDialog";
-import { orderService } from "./service";
 import { returnsService } from "@/pages/Operations/Returns/service";
 import { OrderCancelDialog } from "./OrderCancelDialog";
+import { OrderManualCloseDialog } from "./OrderManualCloseDialog";
 import { OrderLineCancelDialog } from "./OrderLineCancelDialog";
 import { PartyCard } from "@/components/operations/PartyCard";
 import { LinkedWorkOrdersCard } from "./LinkedWorkOrdersCard";
@@ -43,34 +32,9 @@ import { OrderConfirmationButton } from "./OrderConfirmationButton";
 import { OrderLineWoChips } from "./OrderLineWoChips";
 import { OrderShipmentsCard } from "./OrderShipmentsCard";
 import { ProductionProposalButton } from "./production-proposal/ProductionProposalButton";
-import type { Order, OrderLine } from "./types";
+import type { Order } from "./types";
 import { useOrderLineCustomerNames } from "./useOrderLineCustomerNames";
 import { TERIM } from "@/lib/terim";
-
-/** Tek iş emri = tek kumaş+renk+en. Kalem imzası bu üçlüden türer. */
-const lineSig = (l: OrderLine) => `${l.itemId}::${l.colorId ?? ""}::${l.width ?? ""}`;
-/**
- * Açık (sevk edilmemiş) metre — 0 ise kalem iş emrine alınamaz.
- *
- * Formül TEK YERDE: `order-fulfillment.lineOpenMeasured` (kanonik; KG/ADET → null). Buradaki yerel kopya
- * clamp'siz olduğu için aşırı sevkte NEGATİF dönüyordu; iki çağrı yeri de sonucu
- * ya `> 0` ile karşılaştırdığı ya da yalnız açık kalemde kullandığı için görünür
- * bir fark yok — ama kopya kalsaydı üçüncü çağrı yerinde "−12 m açık" basardı.
- */
-// İptal edilmiş kalemin AÇIĞI YOKTUR: iş emri seçimine girmemeli ve
-// "sevk bekliyor" gibi görünmemeli (2026-08-27).
-// KG/ADET satırda açık metraj ÖLÇÜLMEZ (null): satır yine iş emrine alınabilir,
-// picker "ölçülmüyor" basar — metreye düşülmez.
-const lineRem = (l: OrderLine): number | null =>
-  l.cancelledAt != null ? 0 : lineOpenMeasured(l);
-/** Çapaya göre hangi nitelikler farklı — overlay'de "neden seçilemez" metni için. */
-const diffLabel = (anchor: OrderLine, line: OrderLine) => {
-  const parts: string[] = [];
-  if (anchor.itemId !== line.itemId) parts.push("kumaş");
-  if ((anchor.colorId ?? "") !== (line.colorId ?? "")) parts.push("renk");
-  if ((anchor.width ?? "") !== (line.width ?? "")) parts.push("en");
-  return parts.length ? `Farklı ${parts.join(" + ")}` : "Farklı spec";
-};
 
 interface Props {
   order: Order | null;
@@ -94,30 +58,16 @@ export function OrderDetailSheet({
   side = "right",
   hideOverlay,
 }: Props) {
-  const qc = useQueryClient();
   const [closeOpen, setCloseOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   /** Açık kalem-iptal diyaloğunun hedefi (null = kapalı). */
   const [cancelLineId, setCancelLineId] = useState<string | null>(null);
-  const [reason, setReason] = useState("");
   const [selectedLineIds, setSelectedLineIds] = useState<Set<string>>(new Set());
 
   // Panel başka siparişe geçince veya kapanınca kalem seçimini sıfırla.
   useEffect(() => {
     setSelectedLineIds(new Set());
   }, [order?.id, open]);
-
-  const closeMut = useMutation({
-    mutationFn: ({ id, r }: { id: string; r: string }) => orderService.manualClose(id, r),
-    onSuccess: () => {
-      toast.success("Sipariş elle kapatıldı.");
-      fireConfetti();
-      void qc.invalidateQueries({ queryKey: ["orders"] });
-      setCloseOpen(false);
-      setReason("");
-      onOpenChange(false);
-    },
-  });
 
   // Bu siparişe gelen (aktif) iade özeti — bilgilendirici (sevk muhasebesini değiştirmez).
   const returnsSummary = useQuery({
@@ -574,48 +524,12 @@ export function OrderDetailSheet({
           onCancelled={() => onOpenChange(false)}
         />
 
-        <Dialog
+        <OrderManualCloseDialog
           open={closeOpen}
-          onOpenChange={(open) => {
-            setCloseOpen(open);
-            if (!open) setReason("");
-          }}
-        >
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>Siparişi manuel kapat</DialogTitle>
-              <DialogDescription>
-                Bu işlem siparişi "Tamamlandı" duruma alır ve audit log'a düşer. Sebep zorunludur.
-              </DialogDescription>
-            </DialogHeader>
-            <Input
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="Örn: müşteri talebi, fire kabul edildi..."
-              autoFocus
-            />
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setCloseOpen(false);
-                  setReason("");
-                }}
-              >
-                İptal
-              </Button>
-              <Button
-                disabled={!reason.trim() || closeMut.isPending}
-                onClick={() => {
-                  if (!order) return;
-                  closeMut.mutate({ id: order.id, r: reason.trim() });
-                }}
-              >
-                {closeMut.isPending ? "Kapatılıyor..." : "Kapat"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+          onOpenChange={setCloseOpen}
+          orderId={order?.id ?? null}
+          onClosed={() => onOpenChange(false)}
+        />
       </SheetContent>
     </Sheet>
   );

@@ -1,8 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { Ban, PanelRight, Pencil, Plus, Wrench } from "lucide-react";
+import { useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { Ban, Maximize2, PanelRight, Pencil, Plus, Wrench } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { ListBand } from "@/components/layout/ListPage";
@@ -15,6 +13,7 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { useDataTable } from "@/hooks/useDataTable";
 import { SHOW_CANCELLED_PARAM, useHideCancelledInUrl } from "@/hooks/useHideCancelled";
 import { usePricingEnabled, useFeatureFlags } from "@/hooks/usePricingEnabled";
+import { RecordSplit } from "@/components/record/RecordSidePanel";
 import { OrdersFilterRow } from "./OrdersFilterRow";
 import { ORDER_FILTERS, orderPersistConfig } from "./orders-filter-defs";
 import { DataTableTools, type ExtraExportOption } from "@/components/data-table/DataTableTools";
@@ -23,16 +22,10 @@ import { StockLineExportDialog } from "./stock-line-export/StockLineExportDialog
 import { buildOrderColumns } from "./columns";
 import { resolveOrderFilters, canBulkCreateWorkOrder } from "./orders-regime";
 import { orderService } from "./service";
-import { OrderDetailSheet } from "./OrderDetailSheet";
-import { OrderFormDialog } from "./OrderFormDialog";
 import { OrderCancelDialog } from "./OrderCancelDialog";
 import { BulkCreateWorkOrderAction } from "./BulkCreateWorkOrderAction";
-import { useTabsStore } from "@/store/tabs";
-import { useOpenTopLevel } from "@/components/layout/tabs/use-tab-target";
-import { useIsTabActive } from "@/components/layout/tabs/tab-active";
+import { useOpenTarget, useOpenTopLevel } from "@/components/layout/tabs/use-tab-target";
 import type { Order } from "./types";
-import { buildCreatePayload, buildUpdatePayload, type CreatePayload, type UpdatePayload } from "./orderPayload";
-import { useAttemptToken } from "@/lib/attemptToken";
 import { useDeepLinkParam } from "@/hooks/useDeepLinkParam";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { usePreferences } from "@/providers/PreferencesProvider";
@@ -41,67 +34,25 @@ import { useOrderStats } from "./useOrderStats";
 import { TERIM } from "@/lib/terim";
 import { OrderPlanView, ORDER_PLAN_QUERY_KEY } from "./OrderPlanView";
 import { OrdersViewTabs, readOrdersView } from "./OrdersViewTabs";
-import { opensProposalOnApprove, useProposalGates } from "./production-proposal/gates";
-import { ProductionProposalDialog } from "./production-proposal/ProductionProposalDialog";
+import { orderRecordPath } from "./record/order-record";
+import { useOrderSelection } from "./record/useOrderSelection";
+import { useOrderFormHost } from "./record/useOrderFormHost";
+import { OrderSidePanel } from "./record/OrderSidePanel";
 
 const QUERY_KEY = "orders";
 
 export function OrdersPage() {
-  const qc = useQueryClient();
-  const openTab = useTabsStore((s) => s.openTab);
+  const navigate = useNavigate();
   const openTarget = useOpenTopLevel();
-  // Panel Radix portal'ı (document.body) — pasif sekme `invisible` olsa da portal
-  // kaçar. Yalnız Siparişler sekmesi aktifken göster; `selected` korunur, kullanıcı
-  // sekmeye dönünce panel yeniden açılır.
-  const isTabActive = useIsTabActive();
-  const [selected, setSelected] = useState<Order | null>(null);
+  const openInPage = useOpenTarget();
   const [cancelOrder, setCancelOrder] = useState<Order | null>(null);
-  const [formOpen, setFormOpen] = useState(false);
   const [stockLineOpen, setStockLineOpen] = useState(false);
-  const [editing, setEditing] = useState<Order | null>(null);
   const { hasPermission } = useRoleAccess();
+  // Form (yeni + düzenle) ve mutasyonları tek sahipte — kayıt sayfası da aynısını kullanır.
+  const form = useOrderFormHost();
   // Pano hızlı işlemi `?action=new` → yeni sipariş formu (buton gibi `order:write` ister; düğme de PermissionGate'li).
-  useDeepLinkParam("action", (v) => { if (v === "new" && hasPermission("order:write")) setFormOpen(true); });
-  // İdempotency anahtarı — create mantıksal deneme kimliği (kk1.md). Form create modunda
-  // her açılışta, başarılı create'te ve kesin 4xx'te yenilenir; belirsiz hatada SABİT kalır
-  // → timeout sonrası elle tekrar gönderim aynı token'ı taşır (mükerrer önlenir).
-  // Update yoluna GİRMEZ (PATCH doğal idempotent).
-  const createAttempt = useAttemptToken();
-  useEffect(() => {
-    if (formOpen && !editing) createAttempt.renew();
-  }, [formOpen, editing, createAttempt]);
-
-  // Deep-link: `?focus=<orderId>` (İE detayından "bağlı sipariş" tıklaması, Dashboard
-  // yaklaşan siparişler vb.) → siparişi çekip detay panelini otomatik aç. Param sonra
-  // temizlenir ki refresh/re-render tekrar tetiklemesin; 404'te sessizce geç.
+  useDeepLinkParam("action", (v) => { if (v === "new" && hasPermission("order:write")) form.openCreate(); });
   const [searchParams, setSearchParams] = useSearchParams();
-  useEffect(() => {
-    const focusId = searchParams.get("focus");
-    if (!focusId) return;
-    let cancelled = false;
-    orderService
-      .getById(focusId)
-      .then((res) => {
-        if (!cancelled && res.data) setSelected(res.data);
-      })
-      .catch(() => {
-        /* 404 / silinmiş sipariş — sessiz, panel açılmaz */
-      })
-      .finally(() => {
-        if (cancelled) return;
-        setSearchParams(
-          (prev) => {
-            const next = new URLSearchParams(prev);
-            next.delete("focus");
-            return next;
-          },
-          { replace: true },
-        );
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [searchParams, setSearchParams]);
 
   const pricingEnabled = usePricingEnabled();
   // TİCARET REJİMİ — üretim yüzeyleri (iş emri kolonu · filtresi · toplu
@@ -171,35 +122,6 @@ export function OrdersPage() {
 
   const isEmpty = query.isSuccess && !search && pagination.total === 0;
 
-  const proposalGates = useProposalGates();
-  const [proposalOrder, setProposalOrder] = useState<Order | null>(null);
-  const createMut = useMutation({
-    mutationFn: (payload: CreatePayload) =>
-      orderService.create(payload as unknown as Partial<Order>),
-    // Sunucu `warnings` (kg/adet satırda karşılama ölçülmüyor) apiClient interceptor'ında basılır.
-    onError: (e) => createAttempt.onFailure(e),
-    onSuccess: (r) => {
-      createAttempt.onSuccess();
-      toast.success("Sipariş oluşturuldu.");
-      void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
-      setFormOpen(false);
-      // SY-M3: ONAYDA_TASLAK — sipariş doğuşta onaylıdır; önizleme kendiliğinden açılır (sessiz yaratma yok).
-      if (opensProposalOnApprove(proposalGates.mode, proposalGates.buttonVisible, r.data)) setProposalOrder(r.data);
-    },
-  });
-
-  const updateMut = useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: UpdatePayload }) =>
-      orderService.update(id, payload as unknown as Partial<Order>),
-    onSuccess: () => {
-      toast.success("Sipariş güncellendi.");
-      void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
-      setFormOpen(false);
-      setEditing(null);
-      setSelected(null);
-    },
-  });
-
   // "Dışa aktar ▾" menüsünde Excel'in altında (eski başlık düğmesinin yerine, #602).
   const stockLineExports: ExtraExportOption[] = [
     {
@@ -210,15 +132,11 @@ export function OrdersPage() {
     },
   ];
 
-  const handleEdit = (order: Order) => {
-    setEditing(order);
-    setSelected(null);
-    setFormOpen(true);
-  };
-
-  const handleFormClose = (open: boolean) => {
-    setFormOpen(open);
-    if (!open) setEditing(null);
+  // Satır seçimi URL'de (`?kayit=`); eski `?focus=` derin bağı çevrilir. ⌘/Ctrl+tık tam sayfayı yeni sekmede açar.
+  const sel = useOrderSelection(table.getRowModel().rows.map((r) => r.original));
+  const onRowClick = (order: Order, click?: { ctrlKey: boolean; metaKey: boolean; shiftKey: boolean; button: number }) => {
+    if (click && (click.ctrlKey || click.metaKey || click.shiftKey || click.button === 1)) openInPage(orderRecordPath(order.id), click);
+    else sel.select(sel.selectedId === order.id ? null : order.id);
   };
 
   return (
@@ -248,7 +166,7 @@ export function OrdersPage() {
               <Button
                 size="sm"
                 className={isEmpty ? "animate-pulse" : undefined}
-                onClick={() => setFormOpen(true)}
+                onClick={form.openCreate}
               >
                 <Plus className="h-4 w-4" />
                 Yeni Sipariş
@@ -291,6 +209,9 @@ export function OrdersPage() {
       {/* 30 günlük varsayılan pencere KALDIRILDI (2026-08-26, kullanıcı kararı). Filtreler TEK SATIR
           (2026-11-06): arama + Görünüm ("Nerede?" sekmeleri) + Termin penceresi + kutular + "+ Filtre".
           ⚠️ Rejim-duyarlı `filters` verilir, ham `ORDER_FILTERS` DEĞİL (ticarette üretim süzgeci düşer). */}
+      <RecordSplit
+        list={
+          <>
       <OrdersFilterRow
         filters={filters}
         productionEnabled={productionEnabled}
@@ -320,14 +241,18 @@ export function OrdersPage() {
         isLoading={query.isLoading}
         pagination={pagination}
         emptyText="Sipariş bulunamadı."
-        onRowClick={setSelected}
+        activeRowId={sel.selected ? sel.selectedId : null}
+        onRowClick={onRowClick}
         rowContextMenu={(order) => (
           <>
-            <ContextMenuItem onSelect={() => setSelected(order)}>
-              <PanelRight /> Detayı aç (panel)
+            <ContextMenuItem onSelect={() => sel.select(order.id)}>
+              <PanelRight /> Yan panelde aç
+            </ContextMenuItem>
+            <ContextMenuItem onSelect={() => navigate(orderRecordPath(order.id))}>
+              <Maximize2 /> Tam sayfa aç
             </ContextMenuItem>
             <PermissionGate permission="order:write">
-              <ContextMenuItem onSelect={() => handleEdit(order)}>
+              <ContextMenuItem onSelect={() => form.openEdit(order)}>
                 <Pencil /> Düzenle
               </ContextMenuItem>
               {order.status !== "COMPLETED" && order.status !== "CANCELLED" && (
@@ -359,25 +284,24 @@ export function OrdersPage() {
             : undefined
         }
       />
+          </>
+        }
+        panel={
+          sel.selected && (
+            <OrderSidePanel
+              key={sel.selected.id}
+              order={sel.selected}
+              onClose={() => sel.select(null)}
+              onPrev={sel.prev}
+              onNext={sel.next}
+              onEdit={form.openEdit}
+            />
+          )
+        }
+      />
 
       </>
       )}
-
-      <OrderDetailSheet
-        order={selected}
-        open={Boolean(selected) && isTabActive}
-        onOpenChange={(open) => !open && setSelected(null)}
-        onEdit={handleEdit}
-        onCreateWorkOrder={(lines) => {
-          // Açılan iş emri sekmesine yönlendir. Panel kapatılmaz — state'i
-          // Siparişler sekmesinde açık kalır; başka kumaş için kullanıcı bu
-          // sekmeye geri dönüp ilgili kalemin "İş emri"ne basabilir.
-          openTab("/operations/work-orders/new", {
-            forceNew: true,
-            state: { seedPickedLines: lines },
-          });
-        }}
-      />
 
       <OrderCancelDialog
         open={Boolean(cancelOrder)}
@@ -387,25 +311,7 @@ export function OrdersPage() {
         onCancelled={() => setCancelOrder(null)}
       />
 
-      <OrderFormDialog
-        open={formOpen}
-        onOpenChange={handleFormClose}
-        order={editing}
-        onSubmit={async (v) => {
-          if (editing) {
-            await updateMut.mutateAsync({
-              id: editing.id,
-              payload: buildUpdatePayload(v, pricingEnabled, editing),
-            });
-          } else {
-            await createMut.mutateAsync(buildCreatePayload(v, pricingEnabled, createAttempt.token()));
-          }
-        }}
-        isSubmitting={createMut.isPending || updateMut.isPending}
-      />
-      {proposalOrder && (
-        <ProductionProposalDialog open onOpenChange={(o) => !o && setProposalOrder(null)} orderId={proposalOrder.id} orderNumber={proposalOrder.orderNumber} lines={proposalOrder.lines} />
-      )}
+      {form.dialogs}
     </PageShell>
   );
 }
