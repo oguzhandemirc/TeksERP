@@ -80,7 +80,7 @@ export function PanoBoard({ boxes, states, editing, ctx, onRemove, onReorder, on
         {kpis.length > 0 && (
           <SortableContext items={kpis.map((b) => b.anahtar)} strategy={rectSortingStrategy}>
             {/* Eşit hücreli şerit: beş kompakt kart 1280 genişlikte tek sıra; taşan kart alt sıraya eşit genişlikte iner. */}
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(10.5rem,1fr))] gap-[var(--space-gap)]" data-testid="pano-kpi-seridi">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(11.5rem,1fr))] gap-[var(--space-gap)]" data-testid="pano-kpi-seridi">
               {kpis.map((b) => (
                 <Cell key={b.anahtar} id={b.anahtar} editing={editing}>{cell(b)}</Cell>
               ))}
