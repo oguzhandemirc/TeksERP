@@ -1,8 +1,8 @@
 // Geçiş yüzeyi (R0-GECIS) — SAF. Eski (v1) rapor nereye gitti, bu kişiye gösterilebilir mi:
-// band, Merkez'in "Eski raporlar" bölümü, taşınan araç karoları ve palet AYNI yüklemleri okur.
+// band, taşınan araç karoları ve palet AYNI yüklemleri okur ("Eski raporlar" bölümü 2026-11-12 kalktı).
 import type { LucideIcon } from "lucide-react";
 import { CalendarClock, ClipboardList, FileSearch, Footprints, ScrollText, UserRoundSearch, Waypoints } from "lucide-react";
-import { REPORT_BY_KEY, REPORT_CATALOG, type ReportCatalogEntryV1 } from "@/lib/report-catalog";
+import { REPORT_BY_KEY } from "@/lib/report-catalog";
 import { isRouteModuleOpen } from "@/lib/route-modules";
 import { reportKeyOfPath } from "@/lib/report-gate";
 import { SYSTEM_ACTIVITY_ACCESS } from "@/lib/permissions";
@@ -107,55 +107,4 @@ export function legacyBannerModel(reportKey: string | undefined, a: LegacyAccess
     return { kind: "moved", place: next.aciklama, hostLabel: tool.hostLabel, to: `/${next.panelYolu}` };
   }
   return null; // uzman: muhasebe aracı olarak kalır, yeni hâli yok
-}
-
-export interface LegacyCard {
-  entry: ReportCatalogEntryV1;
-  /** Kartın açtığı adres; açılamıyorsa kart çizilmez. */
-  to: string;
-  banner: LegacyBannerModel | null;
-  expert: boolean;
-}
-
-export interface LegacyGroup {
-  key: string;
-  title: string;
-  cards: LegacyCard[];
-}
-
-function legacyCardOf(entry: ReportCatalogEntryV1, a: LegacyAccess): LegacyCard | null {
-  if (!isCenterEntryVisible(entry, a)) return null;
-  let to = entry.panelYolu ? `/${entry.panelYolu}` : null;
-  if (to === null) {
-    // Diyalog raporu (Cari Ekstre): kendi adresi yok, aracın bugünkü evine gider.
-    const tool = RELOCATED_TOOLS.find((t) => t.reportKey === entry.key);
-    to = tool && isHostReachable(tool, a) ? tool.to : null;
-  }
-  if (to === null) return null;
-  return { entry, to, banner: legacyBannerModel(entry.key, a), expert: entry.yeniHali.tur === "uzman" };
-}
-
-/**
- * "Eski raporlar" bölümü — eski hub'ın kategori sırası/adıyla (`categories` = eski hub'ın AYNI
- * süzgeçten geçmiş karoları), içinde v1 satırları. Arama başlık + soru üzerinde.
- */
-export function legacyGroups(
-  categories: ReadonlyArray<{ key: string; title: string }>,
-  a: LegacyAccess,
-  search: { term: string; includes: (hay: string, needle: string) => boolean } = { term: "", includes: (h, n) => h.includes(n) },
-): LegacyGroup[] {
-  const q = search.term.trim();
-  const { includes } = search;
-  return categories
-    .map((c) => ({
-      key: c.key,
-      title: c.title,
-      cards: REPORT_CATALOG
-        // Yalnız henüz panelden kalkmamış eski RAPORLAR (araçlar yeni yerlerinde, uzmanlar Rapor Merkezi'nde).
-        .filter((e): e is ReportCatalogEntryV1 => e.nesil === "v1" && e.emekli !== true && e.yeniHali.tur === "birlesti" && e.key.startsWith(`${c.key}/`))
-        .filter((e) => !q || includes(`${e.baslik} ${e.soru}`, q))
-        .map((e) => legacyCardOf(e, a))
-        .filter((x): x is LegacyCard => x !== null),
-    }))
-    .filter((g) => g.cards.length > 0);
 }

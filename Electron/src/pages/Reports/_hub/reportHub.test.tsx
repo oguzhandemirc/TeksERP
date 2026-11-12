@@ -56,7 +56,7 @@ import { SPOTLIGHT_DEFAULT_MS } from "@/components/insight/useSpotlight";
 
 const READY = REPORT_CATALOG.filter((e) => e.kategoriV2 !== null && (e.nesil === "v1" || e.hazir));
 const inCategory = (k: string) => READY.filter((e) => e.kategoriV2 === k);
-const render = () => renderWithProviders(<ReportCenterPage legacyTiles={[]} />);
+const render = () => renderWithProviders(<ReportCenterPage />);
 const categoryCards = () => within(screen.getByRole("group", { name: "Kategoriler" }));
 
 const summary = (): PanoSummary => ({

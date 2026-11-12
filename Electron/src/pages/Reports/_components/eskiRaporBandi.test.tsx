@@ -2,7 +2,7 @@
 // RAPORLAR v2 GEÇİŞ YÜZEYİ (R0-GECIS) — "yeni hâli" bandı, "Eski raporlar", taşınan araçlar, palet
 // =============================================================================
 // §1 band modeli: birlesti / tasindi / uzman / hedef çizilmiyor · §2 band YALNIZ `ReportPageLayout`ta,
-// yönlendirme yok · §3 band çizimi · §4 "Eski raporlar" bölümü + arama · §5 taşınan yedi araç katalogla
+// yönlendirme yok · §3 band çizimi · §4 "Eski raporlar" bölümü kalktı · §5 taşınan yedi araç katalogla
 // eşit, karo/şerit · §6 palet: "Eski:" ikizi özgünün yerini alır. Bayrak dalı 2026-11-12 kalktı (tek yol).
 //
 // Negatif sonda (2026-10-24, md5 ile geri alındı): hedef için `isCenterEntryVisible` (`isReportSurfaced`
@@ -47,11 +47,9 @@ vi.mock("@/hooks/useFavorites", () => ({
 
 import { ReportPageLayout } from "./ReportPageLayout";
 import { LegacyReportBanner } from "./LegacyReportBanner";
-import { RELOCATED_TOOLS, legacyBannerModel, legacyGroups, relocatedHostOf } from "../_v2/legacy-model";
+import { RELOCATED_TOOLS, legacyBannerModel, relocatedHostOf } from "../_v2/legacy-model";
 import { RelocatedToolStrip, RelocatedToolsSection } from "../_v2/RelocatedTools";
-import { reportTiles } from "../tile-config";
 import { allCommandEntries } from "@/components/layout/command-entries";
-import { foldedIncludes } from "@/lib/search-fold";
 
 const access = () => ({ isAdmin: false, hasPermission, ctx: ctx() });
 // Panelde kalan v1 satırları (emekli olanlar 2026-11-12'de panelden kalktı; ucu bir sürüm açık).
@@ -141,12 +139,9 @@ describe("§3 band çizimi", () => {
   });
 });
 
-describe("§4 Eski raporlar bölümü", () => {
-  it("⭐ birleşen eski raporların hepsi panelden kalktı: bölüm boş (araç/uzman yok)", () => {
-    const want = v1Entries.filter((e) => e.yeniHali.tur === "birlesti").map((e) => e.key);
-    expect(want).toEqual([]);
-    expect(legacyGroups(reportTiles, access()).flatMap((g) => g.cards)).toEqual([]);
-    expect(legacyGroups(reportTiles, access(), { term: "ihracat", includes: foldedIncludes })).toEqual([]);
+describe("§4 Eski raporlar bölümü kalktı (2026-11-12)", () => {
+  it("⭐ panelde birleşen (yeni hâli olan) eski rapor kalmadı — kalan v1 yalnız taşınan araç ve muhasebe uzmanı", () => {
+    expect(v1Entries.filter((e) => e.yeniHali.tur === "birlesti").map((e) => e.key)).toEqual([]);
   });
 });
 
@@ -179,10 +174,10 @@ describe("§5 taşınan yedi araç", () => {
 
 describe("§6 palet", () => {
   const visible = () => allCommandEntries.filter((e) => !e.visibleWhen || e.visibleWhen(ctx()));
-  it("eski yaprak 'Eski:' ikiziyle görünür, özgünü gizlenir; taşınan araç yeni yerinin adıyla", () => {
+  it("'Eski:' ikizi yok; taşınan araç yeni yerinin adıyla, kategori ikizi gizli", () => {
+    expect(allCommandEntries.filter((e) => e.key.endsWith(":legacy") || e.label.startsWith("Eski:")).map((e) => e.key)).toEqual([]);
     const keys = new Set(visible().map((e) => e.key));
-    expect(keys.has("report:sales:destination-mix:legacy")).toBe(false); // emekli: panelden kalktı
-    expect(keys.has("report:production:wip:legacy")).toBe(false); // emekli: panelden kalktı
+    expect(keys.has("report:dokuma:karne")).toBe(false); // taşındı: `relocated:` girişi görünür
     const moved = visible().filter((e) => e.key.startsWith("relocated:"));
     expect(moved).toHaveLength(7);
     expect(moved.find((e) => e.key === "relocated:dokuma/karne")?.label).toBe("Tezgah Salonu · Karne Listesi ve Mühür");

@@ -68,7 +68,7 @@ interface ReportCatalogBase {
    */
   kapiTasiyici: Array<{ dosya: string; yol: string }> | null;
   nesil: ReportNesil;
-  /** Rapor Merkezi kategorisi; v1 satırı menüden çıkıyorsa `null` ("Eski raporlar"da kalır). */
+  /** Rapor Merkezi kategorisi; v1 satırında `null` (eski rapor Merkez'de kategori almaz). */
   kategoriV2: ReportKategoriV2 | null;
   persona: readonly ReportPersona[];
   varyantBoyutlari: readonly ReportVaryantBoyutu[];

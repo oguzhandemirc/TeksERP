@@ -92,8 +92,8 @@ describe("Rapor kapısı — karo · şerit · palet", () => {
   it("§4 ⭐ palet: kapalı raporun girişi görünmez; kategorinin hepsi kapalıysa başlık girişi de görünmez", () => {
     const sales = reportCommandSections.find((s) => s.heading.endsWith("Ön Muhasebe"))!;
     const hub = sales.entries[0]!;
-    // Palette eski yaprak "Eski:" ikiziyle görünür (özgün giriş yalnız sekme başlığı kaynağı).
-    const twins = sales.entries.filter((e) => e.key.endsWith(":legacy"));
+    // Muhasebe uzman araçları palette kendi adıyla görünür (v2 yaprağının ikizi gizli, kendi girişi var).
+    const twins = sales.entries.filter((e) => e !== hub && e.visibleWhen?.(ctx()) !== false);
     const intake = twins.find((e) => e.to.endsWith(INTAKE))!;
     closed = [INTAKE];
     expect(intake.visibleWhen?.(ctx())).toBe(false);
@@ -108,9 +108,9 @@ describe("Rapor kapısı — karo · şerit · palet", () => {
     const dokuma = reportCommandSections.find((s) => s.heading.endsWith("Dokuma"))!;
     const off: OperationsVisibilityContext = { ...ctx(), dokumaEnabled: false };
     for (const e of dokuma.entries) expect(e.visibleWhen?.(off)).toBe(false);
-    // Palette eski yaprak yalnız "Eski:" ikiziyle görünür (özgün giriş sekme başlığı kaynağı); ikiz modül kapısını taşır.
-    const isLeaf = (k: string) => k.split(":").length >= 3 && !k.endsWith(":legacy");
+    // Dokuma yaprakları yeni yerlerine taşındı (`relocated:` girişi): kategori ikizi palette çizilmez, sekme başlığı kaynağıdır.
+    const isLeaf = (k: string) => k.split(":").length >= 3;
     for (const e of dokuma.entries) expect(e.visibleWhen?.(ctx())).toBe(!isLeaf(e.key));
-    expect(dokuma.entries.some((e) => e.key.endsWith(":legacy"))).toBe(true);
+    expect(dokuma.entries.some((e) => isLeaf(e.key))).toBe(true);
   });
 });
