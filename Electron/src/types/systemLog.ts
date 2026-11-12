@@ -146,6 +146,8 @@ export interface SystemLogListParams {
   gorunum?: "satir" | "islem";
   /** Kayıt numarası araması (SP-…, CV…, barkod) — sunucuda. */
   q?: string;
+  /** Satır görünümü metin araması (hedef, IP, kullanıcı) — sunucuda; `q`/işlem görünümüyle birlikte gönderilmez. */
+  search?: string;
   /** Fabrika günü kısayolu — aralığı SUNUCU hesaplar. */
   gun?: SystemLogGun;
 }

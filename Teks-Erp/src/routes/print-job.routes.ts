@@ -74,8 +74,13 @@ export const PRINT_HISTORY_READ = ["admin:settings", "system:print-history"] as 
  *       - { in: query, name: cursor, schema: { type: string } }
  *       - { in: query, name: limit, schema: { type: integer } }
  *       - { in: query, name: ozet, schema: { type: string, enum: ["1"] } }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string, maxLength: 100 }
+ *         description: "Metin araması — kayıt/belge no, yazıcı adı, hata kodu; liste + özet aynı where; boş = arama yok"
  *     responses:
  *       200: { description: "{ data, nextCursor, ozet? }" }
+ *       400: { description: Geçersiz süzgeç ya da 100 karakteri aşan arama }
  *       403: { description: İzin yok }
  */
 router.post("/", controller.report);

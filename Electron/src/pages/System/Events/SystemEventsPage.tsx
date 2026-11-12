@@ -17,6 +17,8 @@ import {
 } from "./SystemEventsFilters";
 import { useSystemEventsTable } from "./SystemEventsList";
 import { SystemEventDetailSheet } from "./SystemEventDetailSheet";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { useListSearch } from "@/hooks/useListSearch";
 
 const QUERY_KEY = "system-events";
 const PAGE_SIZE = 50;
@@ -26,13 +28,14 @@ const INITIAL_FILTERS: SystemEventsFilterState = { category: "ALL" };
 export function SystemEventsPage() {
   const [filters, setFilters] = useState<SystemEventsFilterState>(INITIAL_FILTERS);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const { search, setSearch, term } = useListSearch();
 
   // Category filter "ALL" → AUTH+SYSTEM; aksi halde tek kategori.
   const categoryParam =
     filters.category === "ALL" ? "AUTH,SYSTEM" : filters.category;
 
   const query = useInfiniteQuery({
-    queryKey: [QUERY_KEY, filters],
+    queryKey: [QUERY_KEY, filters, term ?? ""],
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam }) =>
       systemLogService.list({
@@ -40,6 +43,7 @@ export function SystemEventsPage() {
         action: filters.action,
         dateFrom: filters.dateFrom,
         dateTo: filters.dateTo,
+        search: term,
         cursor: pageParam,
         limit: PAGE_SIZE,
       }),
@@ -64,7 +68,12 @@ export function SystemEventsPage() {
       <SystemEventsFilters
         value={filters}
         onChange={setFilters}
-        tools={<DataTableTools table={table} compact exportName="Sistem kayıtları" />}
+        tools={
+          <>
+            <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Hedef (kullanıcı adı, hata kodu), IP ya da kullanıcı ara" />
+            <DataTableTools table={table} compact exportName="Sistem kayıtları" />
+          </>
+        }
       />
 
       {items.length > 0 ? (
@@ -86,7 +95,7 @@ export function SystemEventsPage() {
             </div>
           ) : (
             <div className="flex flex-1 items-center justify-center p-12 text-sm text-muted-foreground">
-              Filtreye uyan sistem kaydı bulunamadı.
+              {term ? "Aramaya uyan sistem kaydı bulunamadı." : "Filtreye uyan sistem kaydı bulunamadı."}
             </div>
           )}
         </ListBody>

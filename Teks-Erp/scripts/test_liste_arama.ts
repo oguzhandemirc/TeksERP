@@ -28,6 +28,13 @@ import { listLabTestTypes } from "../src/services/lab-test-type.service";
 import { listCustomerLabSpecs } from "../src/services/customer-lab-spec.service";
 import { listSenderTemplates, USER_TEMPLATE_PREFIX } from "../src/services/gelen-belge-sablon.service";
 import { listSeriesMatching } from "../src/services/helpers/series-panel.helper";
+import { SystemLogService } from "../src/services/system-log.service";
+import { systemLogListQuerySchema } from "../src/routes/admin.routes";
+import { ClientRegistryService, filterClientSnapshot } from "../src/services/client-registry.service";
+import { touchClient } from "../src/lib/client-registry";
+import { WorkSessionService } from "../src/services/work-session.service";
+import { buildPrintJobWhere } from "../src/services/helpers/print-job-filter.helper";
+import { listPrintJobs, summarizePrintJobs } from "../src/services/print-job.service";
 
 let pass = 0;
 let fail = 0;
@@ -343,6 +350,86 @@ async function tanimKalite(): Promise<void> {
   check("§T4c seri: sorgu katı (search) + kapı toplu aynen", nsSrc.includes("const listQuerySchema = z.object({ search: listSearchParam }).strict();") && nsSrc.includes('router.use(verifyToken, requirePermission("settings:numbering"))'));
 }
 
+async function sistem(): Promise<void> {
+  console.log("\n— §Y sistem —");
+  const ek = TAG.slice(-6).toLowerCase();
+  const ids = { logs: [] as string[], users: [] as string[], devices: [] as string[], sessions: [] as string[], jobs: [] as string[], station: "" , machines: [] as string[] };
+  cleanup.push(async () => {
+    await prisma.printJob.deleteMany({ where: { id: { in: ids.jobs } } });
+    await prisma.workSession.deleteMany({ where: { id: { in: ids.sessions } } });
+    await prisma.systemLog.deleteMany({ where: { OR: [{ id: { in: ids.logs } }, { userId: { in: ids.users } }] } });
+    await prisma.device.deleteMany({ where: { id: { in: ids.devices } } });
+    await prisma.machine.deleteMany({ where: { id: { in: ids.machines } } });
+    if (ids.station) await prisma.station.deleteMany({ where: { id: ids.station } });
+    await prisma.user.deleteMany({ where: { id: { in: ids.users } } });
+  });
+  const u1 = await prisma.user.create({ data: { username: `la-${ek}-sevgi`, passwordHash: "x", fullName: `${TAG} Sevgi Işık` }, select: { id: true } });
+  const u2 = await prisma.user.create({ data: { username: `la-${ek}-kemal`, passwordHash: "x", fullName: `${TAG} Kemal Öz` }, select: { id: true } });
+  ids.users.push(u1.id, u2.id);
+
+  // §Y1 Sistem olayları — hedef, IP, kullanıcı; kategori + tarih süzgeciyle AND; q/işlem ile 400.
+  const at = new Date(Date.UTC(1991, 2, 3, 10));
+  for (const [userId, recordId, ip] of [[u1.id, `${TAG}-hedef-a`, "10.91.3.1"], [u2.id, `${TAG}-hedef-b`, "10.91.3.2"]] as const) {
+    ids.logs.push((await prisma.systemLog.create({ data: { userId, category: "AUTH", action: "LOGIN_FAILED", tableName: "AUTH", recordId, ipAddress: ip, createdAt: at }, select: { id: true } })).id);
+  }
+  const lq = async (search?: string) => {
+    const r = await SystemLogService.list({ category: "AUTH,SYSTEM", dateFrom: new Date(at.getTime() - 60_000).toISOString(), dateTo: new Date(at.getTime() + 60_000).toISOString(), search, limit: 100 });
+    return (r.data as Array<{ id: string }>).filter((x) => ids.logs.includes(x.id)).length;
+  };
+  check("§Y1a olay: boş = ikisi; hedef metniyle yalnız biri", (await lq()) === 2 && (await lq(`${TAG}-hedef-b`)) === 1);
+  check("§Y1b olay: IP ve kullanıcı tam adıyla (Türkçe varyant) yalnız biri", (await lq("10.91.3.1")) === 1 && (await lq(`${TAG} sevgi ışık`)) === 1);
+  check("§Y1c olay: eşleşmeyen 0", (await lq(`${TAG} zzqq`)) === 0);
+  check("§Y1d olay: search + q / işlem görünümü 400; uzun arama 400",
+    !systemLogListQuerySchema.safeParse({ search: "a", q: "SP-1" }).success && !systemLogListQuerySchema.safeParse({ search: "a", gorunum: "islem" }).success && !systemLogListQuerySchema.safeParse({ search: LONG }).success && systemLogListQuerySchema.safeParse({ search: "a" }).success);
+  const adminSrc = readFileSync(join(ROUTES, "admin.routes.ts"), "utf8");
+  check("§Y1e olay: izin kapısı aynen", /"\/system-logs",\s*\n\s*verifyToken,\s*\n\s*requireAnyPermission\("admin:settings", "system:activity"\)/.test(adminSrc));
+
+  // §Y2 Bağlı istemciler — süreç belleği, çözülmüş adlarla bellek ikizi.
+  const inst = (n: number) => `${randomUUID()}`.replace(/.$/, String(n));
+  const [i1, i2] = [inst(1), inst(2)];
+  touchClient({ instanceId: i1, kind: "electron", version: "9.8.7", userId: u1.id });
+  touchClient({ instanceId: i2, kind: "electron", version: "9.8.6", userId: u2.id });
+  const snap = await ClientRegistryService.snapshot();
+  const mineC = (s: typeof snap) => s.clients.filter((c) => c.instanceId === i1 || c.instanceId === i2).length;
+  check("§Y2a istemci: boş = ikisi; son kullanıcı tam adıyla yalnız biri", mineC(filterClientSnapshot(snap, undefined)) === 2 && mineC(filterClientSnapshot(snap, `${TAG} kemal`)) === 1);
+  check("§Y2b istemci: sürümle yalnız biri; eşleşmeyen 0; eşikler aynen", mineC(filterClientSnapshot(snap, "9.8.7")) === 1 && filterClientSnapshot(snap, `${TAG} zzqq`).clients.length === 0 && filterClientSnapshot(snap, "x").activeWindowMs === snap.activeWindowMs);
+  check("§Y2c istemci: sorgu katı + izin aynen", adminSrc.includes("const clientsQuerySchema = z.object({ search: listSearchParam }).strict();") && /"\/clients",\s*\n\s*verifyToken,\s*\n\s*requireAnyPermission\("admin:settings", "system:clients"\)/.test(adminSrc));
+
+  // §Y3 Oturum geçmişi — kullanıcı/cihaz/makine/istasyon; toplam aynı where.
+  const st = await prisma.station.create({ data: { name: `${TAG} Sevk Holü`, code: `${TAG}-SV`.slice(0, 32), type: "INTERNAL", kind: "WEAVING", isActive: true }, select: { id: true } });
+  ids.station = st.id;
+  const m = await prisma.machine.create({ data: { stationId: st.id, name: `${TAG} Tezgâh Çınar`, code: `LA${ek.toUpperCase()}-W1`, isActive: true }, select: { id: true } });
+  ids.machines.push(m.id);
+  const d1 = await prisma.device.create({ data: { deviceId: `${TAG}-d1`, name: `${TAG} Tablet Mavi`, status: "APPROVED", kind: "TABLET" }, select: { id: true } });
+  const d2 = await prisma.device.create({ data: { deviceId: `${TAG}-d2`, name: `${TAG} Tablet Yeşil`, status: "APPROVED", kind: "TABLET" }, select: { id: true } });
+  ids.devices.push(d1.id, d2.id);
+  const t0 = new Date(Date.UTC(1991, 2, 3, 8));
+  ids.sessions.push((await prisma.workSession.create({ data: { userId: u1.id, deviceId: d1.id, machineId: m.id, stationId: st.id, startedAt: t0, endedAt: new Date(t0.getTime() + 3_600_000), endReason: "LOGOUT", lastActivityAt: t0 }, select: { id: true } })).id);
+  ids.sessions.push((await prisma.workSession.create({ data: { userId: u2.id, deviceId: d2.id, machineId: null, stationId: st.id, startedAt: t0, endedAt: new Date(t0.getTime() + 3_600_000), endReason: "LOGOUT", lastActivityAt: t0 }, select: { id: true } })).id);
+  const wq = (search?: string) => WorkSessionService.history({ stationId: st.id, search, pageSize: 100 });
+  const mineW = (r: Awaited<ReturnType<typeof wq>>) => (r.data as Array<{ id: string }>).filter((x) => ids.sessions.includes(x.id)).length;
+  const w0 = await wq();
+  const wMach = await wq(`la${ek}-w1`);
+  check("§Y3a oturum: boş = ikisi (toplam 2)", mineW(w0) === 2 && w0.pagination.total === 2);
+  check("§Y3b oturum: cihaz adı (gölgesiz: 'Yeşil' yazımıyla) yalnız biri, toplam aynı where", mineW(await wq("Tablet Yeşil")) === 1 && (await wq("Tablet Yeşil")).pagination.total === 1);
+  check("§Y3c oturum: makine kodu küçük harfle yalnız biri; kullanıcı adıyla yalnız biri", mineW(wMach) === 1 && mineW(await wq(`la-${ek}-kemal`)) === 1);
+  check("§Y3d oturum: eşleşmeyen 0 (toplam 0)", (await wq(`${TAG} zzqq`)).pagination.total === 0);
+  const wsCtl = readFileSync(join(__dirname, "..", "src", "controllers", "work-session.controller.ts"), "utf8");
+  check("§Y3e oturum: sorgu katı (search) + izin aynen", /search: listSearchParam,\n\}\)\.strict\(\)/.test(wsCtl) && /requireAnyPermission\("admin:settings", "admin:users", "system:work-sessions"\),\n\s*WorkSessionController\.history/.test(readFileSync(join(ROUTES, "work-session.routes.ts"), "utf8")));
+
+  // §Y4 Baskı geçmişi — kayıt no, yazıcı, hata kodu; liste + özet aynı where.
+  for (const [subjectNo, printerName, status, errorCode] of [[`${TAG}-TOP1`, `${TAG} Zebra Ön`, "ILETILDI", null], [`${TAG}-TOP2`, `${TAG} Zebra Arka`, "HATA", "LA_KAGIT_BITTI"]] as const) {
+    ids.jobs.push((await prisma.printJob.create({ data: { userId: u1.id, source: "PANEL_MASAUSTU", subjectKind: "ETIKET_TOP", subjectNo, printerName, status, errorCode, createdAt: at }, select: { id: true } })).id);
+  }
+  const pw = (search?: string) => buildPrintJobWhere({ userId: u1.id, gunBas: "1991-03-01", gunBit: "1991-03-05", search });
+  const mineP = async (search?: string) => (await listPrintJobs(pw(search), { limit: 200 })).data.filter((x: { id: string }) => ids.jobs.includes(x.id)).length;
+  const sumP = async (search?: string) => (await summarizePrintJobs(pw(search))).toplam;
+  check("§Y4a baskı: boş = ikisi; özet 2", (await mineP()) === 2 && (await sumP()) === 2);
+  check("§Y4b baskı: kayıt no küçük harfle yalnız biri; özet 1", (await mineP(`${TAG}-top2`.toLowerCase())) === 1 && (await sumP(`${TAG}-top2`.toLowerCase())) === 1);
+  check("§Y4c baskı: yazıcı adı ve hata kodu yalnız biri; eşleşmeyen 0 (özet 0)", (await mineP("zebra ön")) === 1 && (await mineP("la_kagit")) === 1 && (await sumP(`${TAG} zzqq`)) === 0);
+  check("§Y4d baskı: uzun arama 400 (controller readListSearch) + izin aynen", readFileSync(join(__dirname, "..", "src", "controllers", "print-job.controller.ts"), "utf8").includes("search: readListSearch(q.search)") && guardOf("print-job.routes.ts", "/").includes("requireAnyPermission(...PRINT_HISTORY_READ)"));
+}
+
 async function main(): Promise<void> {
   const engel = hedefDbEngeli();
   if (engel) {
@@ -358,6 +445,7 @@ async function main(): Promise<void> {
     await dokuma();
     await maliyet();
     await tanimKalite();
+    await sistem();
   } finally {
     for (const fn of cleanup.reverse()) await fn().catch((e: unknown) => check("temizlik", false, String(e)));
   }

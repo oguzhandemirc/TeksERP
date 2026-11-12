@@ -13,8 +13,10 @@ import prisma from "../lib/prisma";
 import { resolveChangeValues, attachLabels } from "./helpers/audit-value-resolver";
 import { Prisma, SystemLogCategory } from "@prisma/client";
 import { decodeCursor, cursorWhere, buildNextCursor } from "../utils/cursor";
+import { listSearchWhere } from "../utils/list-search";
+import { SYSTEM_LOG_SEARCH } from "./helpers/list-search-paths.helper";
 import { ACTOR_SELECT } from "./helpers/system-account.helper";
-import { LIST_SELECT, RECORD_HISTORY_SELECT, REQUEST_ID_RE, parseCategories, readRequestId, dropdownCache } from "./helpers/system-log-select.helper";
+import { LIST_SELECT, RECORD_HISTORY_SELECT, REQUEST_ID_RE, parseCategories, readRequestId, dropdownCache, type SystemLogListParams } from "./helpers/system-log-select.helper";
 import { getTracesByIds, listRejectedTraces } from "./request-trace.service";
 import { findRecords } from "./helpers/audit-record-resolver.helper";
 import { type Gun, grupSirasi, imlecOku, imlecYaz, islemKosullari } from "./helpers/system-log-islem.helper";
@@ -23,35 +25,7 @@ import {
   islemdeReddedilenGorunur, recordSearchResult, rejectedTracePage, tekAnlati,
 } from "./helpers/system-log-islem-kur.helper";
 
-export interface SystemLogListParams {
-  cursor?: string;
-  limit?: number;
-  userId?: string;
-  tableName?: string;
-  /**
-   * TEK KAYDIN geçmişi (Faz B1, 2026-08-19) — "bu iş emrini kim ne zaman
-   * değiştirmiş" sorusu bugüne kadar API'den SORULAMIYORDU; oysa DB'de
-   * `@@index([tableName, recordId])` zaten vardı. `tableName` ile BİRLİKTE
-   * verilmelidir, yoksa index'in ilk kolonu boş kalır ve sorgu seq scan'e döner.
-   */
-  recordId?: string;
-  // "DOMAIN" — CUD audit (Activity Page). "AUTH" / "SYSTEM" — Sistem Kayıtları sayfası.
-  // Birden fazla kategori için virgülle ayrılmış string kabul edilir.
-  category?: string;
-  action?: string;
-  dateFrom?: string;
-  dateTo?: string;
-  /**
-   * TEK İSTEĞİN tüm satırları (2026-08-19) — "bu üç değişiklik aynı kaydetme
-   * tuşundan mı çıktı?" sorusunun cevabı. Değer UUID'dir ve `readRequestId`
-   * ile elenir: kolon `@db.Uuid` olduğu için ham metin P2023 → 500 üretirdi.
-   */
-  requestId?: string;
-  /** B4 "Reddedilenler" süzgeci: "1" = yalnız trace status ≥ 400 (yalnız işlem görünümü). */
-  reddedilen?: "0" | "1";
-  /** Fabrika günü kısayolu (B2): verilirse `dateFrom/dateTo`yu ezer. */
-  gun?: Gun;
-}
+export type { SystemLogListParams };
 
 
 
@@ -70,6 +44,8 @@ export class SystemLogService {
     if (reqId) where.requestId = reqId;
     const cats = parseCategories(params.category);
     if (cats) where.category = cats.length === 1 ? cats[0] : { in: cats };
+    const search = listSearchWhere<Prisma.SystemLogWhereInput>(params.search, SYSTEM_LOG_SEARCH);
+    if (search) where.AND = [search];
 
     if (params.dateFrom || params.dateTo) {
       where.createdAt = {};

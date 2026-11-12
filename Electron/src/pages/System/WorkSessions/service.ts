@@ -15,6 +15,8 @@ export interface WorkSessionHistoryParams {
   to?: string;
   page?: number;
   pageSize?: number;
+  /** Metin araması (kullanıcı, cihaz, makine, istasyon) — sunucuda, toplam aynı süzgeçten. */
+  search?: string;
 }
 
 export const workSessionService = {

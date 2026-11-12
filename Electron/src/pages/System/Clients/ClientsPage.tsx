@@ -11,6 +11,8 @@ import { useConnectedClients } from "./hooks";
 import { activeWindowLabel } from "./clients-utils";
 import { clientStamp as stamp, useClientsTable } from "./clientsColumns";
 import type { ConnectedClient } from "./service";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { useListSearch } from "@/hooks/useListSearch";
 
 const NO_CLIENTS: ConnectedClient[] = [];
 
@@ -27,7 +29,8 @@ const NO_CLIENTS: ConnectedClient[] = [];
  * (kullanıcı kararı) — liste bir envanterdir, canlı gösterge değil.
  */
 export function ClientsPage() {
-  const q = useConnectedClients();
+  const { search, setSearch, term } = useListSearch();
+  const q = useConnectedClients(term);
   const snap = q.data;
   const esik = snap ? activeWindowLabel(snap.activeWindowMs) : null;
   const clients = snap?.clients ?? NO_CLIENTS;
@@ -52,6 +55,7 @@ export function ClientsPage() {
 
       <ListToolbar className="flex-row items-center">
         <div className="ml-auto flex items-center gap-1.5">
+          <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Tür, sürüm, cihaz adı ya da son kullanıcı ara" />
           <DataTableTools table={table} compact exportName="Bağlı istemciler" />
         </div>
       </ListToolbar>
@@ -76,7 +80,10 @@ export function ClientsPage() {
           </Callout>
         )}
 
-        {snap && snap.clients.length === 0 && (
+        {snap && snap.clients.length === 0 && term && (
+          <p className="py-6 text-center text-sm text-muted-foreground">Aramaya uyan istemci yok.</p>
+        )}
+        {snap && snap.clients.length === 0 && !term && (
           <EmptyState
             icon={MonitorSmartphone}
             title="Henüz künye bildiren istemci yok"

@@ -12,6 +12,7 @@ import { WorkSessionService } from "../services/work-session.service";
 import { WorkSessionActivityService } from "../services/work-session-activity.service";
 import { AppError } from "../utils/app-error";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
+import { listSearchParam } from "../utils/list-search";
 
 const openSchema = z
   .object({
@@ -32,7 +33,8 @@ const historySchema = z.object({
   to: z.coerce.date().optional(),
   page: z.coerce.number().int().min(1).optional(),
   pageSize: z.coerce.number().int().min(1).max(100).optional(),
-});
+  search: listSearchParam,
+}).strict(); // tanınmayan parametre 400 (fail-closed)
 
 /** req.device zorunlu — oturum yalnız ONAYLI kayıtlı cihazdan açılır/yönetilir. */
 function requireDevice(req: Request): { id: string } {
