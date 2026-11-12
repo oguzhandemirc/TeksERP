@@ -73,11 +73,11 @@ export function PanoBoard({ boxes, states, editing, ctx, onRemove, onReorder }: 
       <div className="space-y-4" data-testid="pano-board" data-editing={editing || undefined}>
         {kpis.length > 0 && (
           <SortableContext items={kpis.map((b) => b.anahtar)} strategy={rectSortingStrategy}>
-            {/* Esnek şerit: son satırdaki kart da genişler; para kartı (çok satırlı tutar) daha geniş tabanla. */}
+            {/* Esnek şerit: beş kompakt kart 1280 genişlikte tek sıra; para kartı biraz daha geniş tabanla. */}
             <div className="flex flex-wrap gap-4" data-testid="pano-kpi-seridi">
               {kpis.map((b) => (
                 <Cell key={b.anahtar} id={b.anahtar} editing={editing}
-                  className={MONEY_KPIS.has(b.anahtar) ? "flex-[1_1_15rem]" : "flex-[1_1_10.5rem]"}>{cell(b)}</Cell>
+                  className={MONEY_KPIS.has(b.anahtar) ? "flex-[1_1_12rem]" : "flex-[1_1_10.5rem]"}>{cell(b)}</Cell>
               ))}
             </div>
           </SortableContext>
@@ -111,8 +111,9 @@ function Cell({ id, editing, className, children }: { id: string; editing: boole
 
 function KpiLoading() {
   return (
-    <div className="h-full rounded-xl border border-card-border bg-card p-4 shadow-card" data-testid="pano-kpi-iskelet">
-      <div className="skeleton-shimmer"><PreviewSkeleton kind="kpi" /></div>
+    <div className="flex h-full items-center gap-3 rounded-xl border border-card-border bg-card px-[var(--kpi-px)] py-[var(--kpi-py)] shadow-card" data-testid="pano-kpi-iskelet">
+      <div className="skeleton-shimmer h-10 w-10 shrink-0 rounded-xl bg-muted" />
+      <div className="skeleton-shimmer min-w-0 flex-1"><PreviewSkeleton kind="kpi" /></div>
     </div>
   );
 }

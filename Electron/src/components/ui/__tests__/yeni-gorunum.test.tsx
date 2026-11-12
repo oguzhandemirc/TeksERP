@@ -45,6 +45,22 @@ describe("StatCard", () => {
   });
 });
 
+describe("StatCard compact", () => {
+  it("simge solda, etiket/değer/değişim sağda; değişim rengi aynı kural", () => {
+    const { container } = render(<StatCard layout="compact" label="Üretim" value="1.200 m" hint="30 top" icon={Package} delta="%12" trend="down" />);
+    const card = container.querySelector('[data-layout="compact"]')!;
+    expect(card.firstElementChild?.className).toContain("icon-tile");
+    expect(card.className).toContain("py-[var(--kpi-py)]");
+    expect(screen.getByText("30 top")).toBeTruthy();
+    expect(screen.getByText("%12").parentElement!.className).toContain("text-destructive");
+  });
+
+  it("değişim verilmezse değişim satırı yok", () => {
+    const { container } = render(<StatCard layout="compact" label="Kalan" value="5 m" />);
+    expect(container.querySelector("[data-trend]")).toBeNull();
+  });
+});
+
 describe("SectionCard", () => {
   it("başlık, eylem ve içerik", () => {
     render(

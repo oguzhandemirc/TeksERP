@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components -- yalnız test düzeneği */
 import { useSyncExternalStore } from "react";
 import { render } from "@testing-library/react";
 import { vi } from "vitest";
