@@ -32,7 +32,7 @@
 // bir `yarn:read` açmak, kurulumda atanması unutulacak bir adım daha demekti.
 // YAZMA ayrı yetkidir (`yarn:write`): hareket yazmak defteri değiştirir.
 // =============================================================================
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -50,7 +50,8 @@ import {
   yarnEmptyStateMessage,
   type YarnFilterState,
 } from "./YarnFilterBar";
-import { YarnStockTable } from "./YarnStockTable";
+import { YarnStockTable, useYarnStockTable } from "./YarnStockTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { YarnMovementsSheet } from "./YarnMovementsSheet";
 import { YarnMovementDialog } from "./YarnMovementDialog";
 import { YarnLotsPanel } from "./YarnLotsPanel";
@@ -104,7 +105,11 @@ export function YarnStockPage() {
   // yarısını bayat bırakır (kullanıcı yeni satırı görür, bakiye eskidir).
   const invalidate = () => void qc.invalidateQueries({ queryKey: ["yarn"] });
 
-  const rows = q.data?.data ?? [];
+  const rows = useMemo(() => q.data?.data ?? [], [q.data]);
+  const table = useYarnStockTable(rows, multiWarehouse, {
+    onOpenMovements: setDetailRow,
+    onAddMovement: (r) => setDraft({ itemId: r.item.id, warehouseId: r.warehouse.id }),
+  });
   const total = q.data?.pagination.total ?? 0;
   const totalPages = q.data?.pagination.totalPages ?? 1;
   const negativeCount = rows.filter((r) => isNegative(r.balanceKg)).length;
@@ -137,8 +142,23 @@ export function YarnStockPage() {
           <YarnLotsPanel />
         </TabsContent>
         <TabsContent value="stok" className={TAB_PANE}>
-      <YarnFilterBar value={filters} onChange={applyFilters} />
+      <YarnFilterBar value={filters} onChange={applyFilters} tools={<DataTableTools table={table} compact exportName="İplik stoğu" />} />
 
+      {!q.isLoading && !q.isError && rows.length > 0 ? (
+        <>
+          <YarnStockTable table={table} onOpenMovements={setDetailRow} />
+          {negativeCount > 0 && (
+            <div className="m-4 flex shrink-0 items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>
+                Bu sayfada <b>{negativeCount}</b> satırın bakiyesi eksi. Bu bir sistem hatası değildir:
+                açılış ya da sayım girilmeden çıkış yazıldığında defter gerçekten eksiye düşer. Düzeltmek
+                için sayım sonucunu “Sayım düzeltmesi (+)” hareketi olarak girin.
+              </span>
+            </div>
+          )}
+        </>
+      ) : (
       <ListBody>
         {q.isLoading ? (
           <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
@@ -164,29 +184,9 @@ export function YarnStockPage() {
               {yarnEmptyStateMessage(filters)}
             </div>
           </ListMessage>
-        ) : (
-          <>
-            <YarnStockTable
-              rows={rows}
-              showWarehouse={multiWarehouse}
-              onOpenMovements={setDetailRow}
-              onAddMovement={(r) => setDraft({ itemId: r.item.id, warehouseId: r.warehouse.id })}
-            />
-
-            {negativeCount > 0 && (
-              <div className="m-4 flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                <span>
-                  Bu sayfada <b>{negativeCount}</b> satırın bakiyesi eksi. Bu bir sistem hatası değildir:
-                  açılış ya da sayım girilmeden çıkış yazıldığında defter gerçekten eksiye düşer. Düzeltmek
-                  için sayım sonucunu “Sayım düzeltmesi (+)” hareketi olarak girin.
-                </span>
-              </div>
-            )}
-
-          </>
-        )}
+        ) : null}
       </ListBody>
+      )}
       {rows.length > 0 && (
         <ListFooter
           loaded={rows.length}

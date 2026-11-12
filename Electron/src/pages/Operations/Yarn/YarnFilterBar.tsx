@@ -19,6 +19,7 @@
 // ikinci depo yokken seçici yalnız gürültüdür. İkinci depo açıldığı gün
 // kendiliğinden belirir.
 // =============================================================================
+import type { ReactNode } from "react";
 import { RotateCcw, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -84,11 +85,13 @@ export function yarnEmptyStateMessage(f: YarnFilterState): string {
 export const YARN_ITEM_FILTER = { itemType: "YARN" } as const;
 
 interface Props {
+  /** Sağ uçtaki standart tablo araçları (Sütunlar + Dışa aktar). */
+  tools?: ReactNode;
   value: YarnFilterState;
   onChange: (next: YarnFilterState) => void;
 }
 
-export function YarnFilterBar({ value, onChange }: Props) {
+export function YarnFilterBar({ value, onChange, tools }: Props) {
   const { multiWarehouse, warehouses } = useMultiWarehouse();
 
   const set = <K extends keyof YarnFilterState>(key: K, v: YarnFilterState[K]) =>
@@ -152,6 +155,7 @@ export function YarnFilterBar({ value, onChange }: Props) {
           Filtreleri temizle
         </Button>
       )}
+      {tools ? <div className="ml-auto flex items-center gap-1.5">{tools}</div> : null}
     </div>
   );
 }

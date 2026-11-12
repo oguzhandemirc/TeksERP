@@ -46,6 +46,14 @@ import type { DataTablePagination as Pagination } from "@/hooks/useDataTable";
 // Daha düşük = daha çevik tek-tık ama çok hızlı çift-tıkları kaçırma riski artar.
 const ROW_OPEN_DELAY_MS = 160;
 
+/** Satır tıklamasının değiştirici tuşları — `useOpenTarget()(yol, click)` Ctrl/⌘/orta tıkla yeni sekme kararını verir. */
+export interface RowClick {
+  button: number;
+  shiftKey: boolean;
+  ctrlKey: boolean;
+  metaKey: boolean;
+}
+
 interface Props<T> {
   table: TanstackTable<T>;
   isLoading?: boolean;
@@ -65,7 +73,8 @@ interface Props<T> {
   errorText?: string;
   pagination?: Pagination;
   emptyText?: string;
-  onRowClick?: (row: T) => void;
+  /** Satır açılışı; ikinci argüman tıklamanın değiştiricileri (klavye ↑/↓ ile açılışta yok). */
+  onRowClick?: (row: T, click?: RowClick) => void;
   /** Seçim çubuğuna sayfa-özel toplu aksiyon enjekte eder (seçili satırları alır). */
   bulkActions?: (rows: T[]) => ReactNode;
   /**
@@ -439,7 +448,7 @@ interface DataTableRowProps<T> {
   /** undefined → kayıt satırı değil; true/false → etkin satır vurgusu (`activeRowId`). */
   isActive?: boolean;
   selectable: boolean;
-  onRowClick?: (row: T) => void;
+  onRowClick?: (row: T, click?: RowClick) => void;
   rowContextMenu?: (row: T) => ReactNode;
   selectionBlockedReason?: (row: T) => string | null;
   rowClassName?: (row: T) => string | undefined;
@@ -500,9 +509,11 @@ function DataTableRowInner<T>({
         // 2./3. tık (çift-tık) → boş hücrede bile açma.
         if (e.detail > 1) return;
         const data = row.original;
+        // Olay zamanlayıcıdan önce okunur: değiştiriciler (Ctrl/⌘ → yeni sekme) açılışa taşınır.
+        const click: RowClick = { button: e.button, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey };
         openTimer.current = setTimeout(() => {
           openTimer.current = null;
-          onRowClick(data);
+          onRowClick(data, click);
         }, ROW_OPEN_DELAY_MS);
       }}
     >

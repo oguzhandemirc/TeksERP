@@ -59,6 +59,26 @@ describe("DataTable — kayıt satırı", () => {
     expect(rowOf("Birinci")).toHaveAttribute("aria-selected", "true");
   });
 
+  it("satır tıklaması değiştirici tuşları açılışa taşır (Ctrl/⌘ → yeni sekme kararı sayfada)", () => {
+    vi.useFakeTimers();
+    try {
+      const onRowClick = vi.fn();
+      function Clicky() {
+        const table = useLocalTable({ tableKey: "test:tik", data: ROWS, columns: COLUMNS });
+        return <DataTable table={table} onRowClick={onRowClick} />;
+      }
+      renderWithProviders(<Clicky />);
+      fireEvent.click(rowOf("İkinci"), { ctrlKey: true });
+      expect(onRowClick).not.toHaveBeenCalled(); // tek/çift tık ayrımı için kısa gecikme
+      act(() => {
+        vi.runAllTimers();
+      });
+      expect(onRowClick).toHaveBeenCalledWith(ROWS[1], { button: 0, shiftKey: false, ctrlKey: true, metaKey: false });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("activeRowId verilmezse satır kayıt satırı değildir, ↑/↓ dinlenmez", () => {
     function Plain() {
       const table = useLocalTable({ tableKey: "test:duz", data: ROWS, columns: COLUMNS });

@@ -17,16 +17,18 @@
 // diye basmak yalandır — kullanıcı açık bir sayım varken ikincisini açmaya
 // çalışır ve 409'un sebebini anlamaz.
 // =============================================================================
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { formatFactory } from "@/lib/factory-time";
 import { ClipboardList, Plus, RotateCcw, Search } from "lucide-react";
 import { PageShell } from "@/components/layout/PageShell";
 import { RefreshButton } from "@/components/RefreshButton";
 import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { useLocalTable } from "@/hooks/useLocalTable";
+import { STOCK_COUNT_COLUMNS } from "./StockCountTable";
 import { Input } from "@/components/ui/input";
 import { PermissionGate } from "@/components/PermissionGate";
 import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
@@ -37,8 +39,6 @@ import { stockCountPath } from "./stockCount-regime";
 import { DateRangeInput } from "@/components/forms/DateRangeInput";
 import {
   EMPTY_STOCK_COUNT_FILTERS,
-  STATUS_BADGE,
-  STATUS_LABEL,
   buildListQuery,
   isStockCountFilterDirty,
   stockCountEmptyMessage,
@@ -72,7 +72,8 @@ export function StockCountsPage() {
   const set = <K extends keyof StockCountFilterState>(key: K, v: StockCountFilterState[K]) =>
     apply({ ...filters, [key]: v });
 
-  const rows = q.data?.data ?? [];
+  const rows = useMemo(() => q.data?.data ?? [], [q.data]);
+  const table = useLocalTable({ tableKey: "stock-count:list", data: rows, columns: STOCK_COUNT_COLUMNS });
   const total = q.data?.pagination.total ?? 0;
   const totalPages = q.data?.pagination.totalPages ?? 1;
 
@@ -143,8 +144,14 @@ export function StockCountsPage() {
             Filtreleri temizle
           </Button>
         )}
+        <div className="ml-auto flex items-center gap-1.5">
+          <DataTableTools table={table} compact exportName="Stok sayımları" />
+        </div>
       </div>
 
+      {!q.isLoading && !q.isError && rows.length > 0 ? (
+        <DataTable table={table} onRowClick={(r, click) => openTarget(stockCountPath(r.id), click)} exportName="Stok sayımları" />
+      ) : (
       <ListBody>
         {q.isLoading ? (
           <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
@@ -168,56 +175,9 @@ export function StockCountsPage() {
               {stockCountEmptyMessage(filters)}
             </div>
           </ListMessage>
-        ) : (
-          <>
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
-                <tr>
-                  <th className="p-3 text-left">Sayım No</th>
-                  <th className="p-3 text-left">Açılış</th>
-                  <th className="p-3 text-left">Depo</th>
-                  <th className="p-3 text-right">Satır</th>
-                  <th className="p-3 text-left">Durum</th>
-                  <th className="p-3 text-left">Kapanış</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => {
-                  const closedAt = r.completedAt ?? r.cancelledAt;
-                  return (
-                    <tr
-                      key={r.id}
-                      className="cursor-pointer border-t hover:bg-muted/40"
-                      onClick={(e) => openTarget(stockCountPath(r.id), e)}
-                    >
-                      <td className="p-3 font-mono text-xs">{r.countNo}</td>
-                      <td className="p-3">
-                        {formatFactory(r.createdAt, "dd MMM yyyy HH:mm")}
-                      </td>
-                      <td className="p-3">{r.warehouse?.name ?? "—"}</td>
-                      {/* Kırılım (top/iplik) DETAYDA — listede tek sayı yeterli ve
-                          iki birimi tek hücrede toplamak zaten yanlış olurdu. */}
-                      <td className="p-3 text-right tabular-nums">{r._count.lines}</td>
-                      <td className="p-3">
-                        <Badge variant={STATUS_BADGE[r.status]}>{STATUS_LABEL[r.status]}</Badge>
-                        {r.reversedAt && (
-                          <Badge variant="outline" className="ml-1">
-                            Stornolandı
-                          </Badge>
-                        )}
-                      </td>
-                      <td className="p-3 text-xs text-muted-foreground">
-                        {closedAt ? formatFactory(closedAt, "dd MMM yyyy HH:mm") : "—"}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-
-          </>
-        )}
+        ) : null}
       </ListBody>
+      )}
       {rows.length > 0 && (
         <ListFooter
           loaded={rows.length}

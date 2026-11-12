@@ -190,6 +190,7 @@ const TOOLS_HOST: Record<string, string[]> = {
   "Finance/CashTransactions/CashTxnTable.tsx": ["Finance/CashTransactions/CashTransactionsPage.tsx", "Finance/CashTransactions/CashTxnFilterBar.tsx"],
   "Finance/Cheques/ChequeTable.tsx": ["Finance/Cheques/ChequesPage.tsx", "Finance/Cheques/ChequeFilterBar.tsx"],
   "Finance/PaymentsPage.tsx": ["Finance/PaymentsFilterBar.tsx"],
+  "Operations/Yarn/YarnStockTable.tsx": ["Operations/Yarn/YarnStockPage.tsx", "Operations/Yarn/YarnFilterBar.tsx"],
   "Operations/PurchaseOrders/PurchaseOrderTable.tsx": ["Operations/PurchaseOrders/PurchaseOrdersPage.tsx", "Operations/PurchaseOrders/PurchaseOrderFilterBar.tsx"],
 };
 
@@ -237,7 +238,6 @@ const HAND_TABLES: Record<string, string> = Object.fromEntries(
     "Operations/AllocationRepair/RepairTable.tsx",
     "Operations/ConsignedWork/ConsignedWorkTable.tsx",
     "Operations/ConsignmentDispatches/ConsignmentDispatchTable.tsx",
-    "Operations/ConsumableStock/ConsumableStockPage.tsx",
     "Operations/FasonCockpit/CockpitTable.tsx",
     "Operations/Kartela/OutstandingTab.tsx",
     "Operations/KursunMeterDeviations/DeviationTable.tsx",
@@ -245,11 +245,6 @@ const HAND_TABLES: Record<string, string> = Object.fromEntries(
     "Operations/Orders/OrderPlanView.tsx",
     "Operations/ProductBalance/ProductBalancePage.tsx",
     "Operations/ReadyWorks/ReadyWorksTable.tsx",
-    "Operations/SackContentEdit/PackingLotListView.tsx",
-    "Operations/StockCounts/StockCountsPage.tsx",
-    "Operations/WarehouseTransfers/WarehouseTransfersPage.tsx",
-    "Operations/Yarn/YarnLotsPanel.tsx",
-    "Operations/Yarn/YarnStockTable.tsx",
     "Quality/Certificates/CertificateList.tsx",
     "Quality/Certificates/CustomerSpecsPanel.tsx",
     "Quality/Inspections/InspectionList.tsx",
@@ -267,7 +262,7 @@ const HAND_TABLES: Record<string, string> = Object.fromEntries(
 );
 
 const HAS_TOOLS = /<DataTableTools\b|\btools=\{|<DataTableToolbar\b[^>]*\btable=\{/;
-const HAS_SEARCH = /\bonSearchChange=|<ScanField\b|\bset\w*Search\w*\(e\.target\.value\)|\bset\("search", e\.target\.value\)/;
+const HAS_SEARCH = /\bonSearchChange=|<ScanField\b|\b(?:set|on)\w*(?:Search|Query)\w*\(e\.target\.value\)|\bset\("search", e\.target\.value\)/;
 const HAND_TABLE_TAG = /<(table|Table)\b/;
 
 /** Ortak DataTable'ı çizen sayfa dosyaları için eksikler: `dosya: sütun-menüsü|arama`. */
@@ -320,7 +315,8 @@ describe("liste araçları standardı — sütun menüsü + arama + kısa yer tu
 
   it("⭐ elle çizilen liste tablosu cırcırı: yeni yok, geçirilen listeden düşer", () => {
     const hand = Object.keys(files).filter(
-      (f) => !OVERLAY_FILE.test(f) && HAND_TABLE_TAG.test(files[f] ?? "") && /<ListBody\b/.test(files[f] ?? ""),
+      // Ana listesi DataTable olan dosyadaki <table> yan panel/detay gövdesidir (geçirilmiş sayılır — bayat kuralıyla aynı).
+      (f) => !OVERLAY_FILE.test(f) && HAND_TABLE_TAG.test(files[f] ?? "") && /<ListBody\b/.test(files[f] ?? "") && !/<DataTable\b/.test(files[f] ?? ""),
     );
     expect(hand.filter((f) => !(f in HAND_TABLES))).toEqual([]);
     const stale = Object.keys(HAND_TABLES).filter((f) => !HAND_TABLE_TAG.test(files[f] ?? "") || /<DataTable\b/.test(files[f] ?? ""));
@@ -344,6 +340,8 @@ describe("liste araçları standardı — sütun menüsü + arama + kısa yer tu
         { host: { "X/T.tsx": ["X/P.tsx"] }, noMenu: {}, noSearch: {} },
       ),
     ).toEqual([]);
+    expect(missingListTools({ "X/A.tsx": `<Input onChange={(e) => set("search", e.target.value)} /><DataTableTools table={t} /><DataTable table={t} />` })).toEqual([]);
+    expect(missingListTools({ "X/A.tsx": `<Input onChange={(e) => set("status", e.target.value)} /><DataTableTools table={t} /><DataTable table={t} />` })).toEqual(["X/A.tsx: arama"]);
     expect(longSearchPlaceholders(`<Input placeholder="Dokuma no, kumaş veya fasoncu ara..." />`)).toHaveLength(1);
     expect(longSearchPlaceholders(`<Input placeholder="Ara…" title="Dokuma no, kumaş ya da fasoncu" />`)).toEqual([]);
     expect(longSearchPlaceholders(`<ReferenceSelect<CariRow> placeholder="Müşteri / fason ara..." />`)).toEqual([]);
