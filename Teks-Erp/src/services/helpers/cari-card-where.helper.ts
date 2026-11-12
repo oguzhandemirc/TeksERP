@@ -16,3 +16,8 @@ export function cariAccountWhereForCard(card: CardRef): Prisma.CariAccountWhereI
   if (card.customerId) return { mergedIntoId: null, OR: [{ customerId: card.customerId }, { subcontractor: { customerId: card.customerId } }] };
   return { mergedIntoId: null, subcontractorId: card.subcontractorId as string };
 }
+
+/** Toplu ikiz (liste bakiyesi): aynı iki bacak, kart başına ilk hesap `CARD_ACCOUNT_ORDER` ile tekil çözücüyle aynı seçilir. */
+export function cariAccountWhereForCustomers(customerIds: string[]): Prisma.CariAccountWhereInput {
+  return { mergedIntoId: null, OR: [{ customerId: { in: customerIds } }, { subcontractor: { customerId: { in: customerIds } } }] };
+}

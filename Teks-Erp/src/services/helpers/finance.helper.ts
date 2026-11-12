@@ -271,7 +271,7 @@ export type CariAccountParty = { customerId?: string | null; subcontractorId?: s
 // Kart → hesap where'i `cari-card-where.helper`da (cari kilidi kapısı da aynı parçayı okur).
 // Onarım öncesi çift varsa: kartın KENDİ hesabı önce (pasifse de — pasiflik eski bacağa kaçarak aşılmaz, yazım 409),
 // sonra aktif, eşitlikte id. PG DESC varsayılanı NULLS FIRST — `nulls: "last"` şart.
-const CARD_ACCOUNT_ORDER = [{ customerId: { sort: "desc", nulls: "last" } }, { isActive: "desc" }, { id: "asc" }] satisfies Prisma.CariAccountOrderByWithRelationInput[];
+export const CARD_ACCOUNT_ORDER = [{ customerId: { sort: "desc", nulls: "last" } }, { isActive: "desc" }, { id: "asc" }] satisfies Prisma.CariAccountOrderByWithRelationInput[];
 
 /**
  * KART → HESAP TEK ÇÖZÜCÜ (K3a): kartın kimliğine bağlı MEVCUT hesap, hangi bacaktan olursa olsun. Yaratmaz.

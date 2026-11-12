@@ -13,6 +13,7 @@ import { SETTING_KEYS, readFinanceEnabled } from "../services/system-setting.ser
 import { licenseModuleError } from "../lib/license/module-ceiling";
 import { AppError } from "../utils/app-error";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
+import { withCustomerListBalances } from "../services/helpers/customer-list-balance.helper";
 
 const MOBILE_CUSTOMER_READ = ["mobile:tarti-paket", "mobile:sevkiyat", "mobile:fason-sevk", "mobile:fason-kabul", "mobile:tambur", "mobile:siparis", "mobile:hizli-is-emri"] as const;
 import branchRoutes from "./customer-branch.routes";
@@ -119,9 +120,16 @@ router.use("/:customerId", standaloneLabelRoutes);
  *         schema: { type: string, enum: [true, false] }
  *     responses:
  *       200:
- *         description: Sayfalanmış müşteri listesi
+ *         description: "Sayfalanmış müşteri listesi; `finance:read` ∧ finans modülü açıkken satırda `balances: [{currency, balance}]` (sıfır olmayan, para birimi başına), değilse alan yok"
  */
-router.get("/", verifyToken, requireAnyPermission("customer:read", ...MOBILE_CUSTOMER_READ), controller.findAll);
+router.get("/", verifyToken, requireAnyPermission("customer:read", ...MOBILE_CUSTOMER_READ), async (req, res, next) => {
+  try {
+    const canReadFinance = matchesPermission(req.user?.permissions ?? [], "finance:read");
+    res.status(200).json(await withCustomerListBalances(await customerService.findAll(req), canReadFinance));
+  } catch (error) {
+    next(error);
+  }
+});
 
 /**
  * @openapi
