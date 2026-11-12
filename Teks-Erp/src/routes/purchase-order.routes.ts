@@ -44,6 +44,7 @@ import { requireAnyPermission, requirePermission } from "../middlewares/rbac.mid
 import { requireTicaretEnabled } from "../middlewares/module.middleware";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import { isCursorRequested, parseQueryParams, assertNoBareFilterParams } from "../utils/query-parser";
+import { listSearchParam } from "../utils/list-search";
 
 const router = Router();
 
@@ -172,6 +173,10 @@ router.get("/", requireAnyPermission(...READ_PERMS), async (req: Request, res: R
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: query
+ *         name: search
+ *         schema: { type: string, maxLength: 100 }
+ *         description: "Metin araması — sipariş no, ürün adı/kodu, tedarikçi adı/kodu; boş = arama yok"
+ *       - in: query
  *         name: supplierId
  *         schema: { type: string, format: uuid }
  *       - in: query
@@ -201,6 +206,7 @@ router.get("/open-lines", requireAnyPermission(...READ_PERMS), async (req: Reque
           .union([z.literal("true"), z.literal("false"), z.boolean()])
           .optional()
           .transform((v) => v === true || v === "true"),
+        search: listSearchParam,
         limit: z.coerce.number().int().min(1).max(500).optional(),
       })
       .parse(req.query);

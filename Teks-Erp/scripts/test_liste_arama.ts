@@ -15,6 +15,7 @@ import { AppError } from "../src/utils/app-error";
 import { LIST_SEARCH_MAX, listSearchParam, matchesListSearch, readListSearch } from "../src/utils/list-search";
 import { cashBoxService, exchangeRateService } from "../src/routes/finance.routes";
 import { periodCloseService } from "../src/services/period-close.service";
+import { purchaseOrderService } from "../src/services/purchase-order.service";
 
 let pass = 0;
 let fail = 0;
@@ -114,6 +115,38 @@ async function finans(): Promise<void> {
   check("§F3f kapanış: route şeması search alır, izin aynen finance:read", /search: listSearchParam/.test(readFileSync(join(ROUTES, "finance-period.routes.ts"), "utf8")) && guardOf("finance-period.routes.ts", "/").includes('requirePermission("finance:read")'));
 }
 
+async function satinAlma(): Promise<void> {
+  console.log("\n— §S satın alma —");
+  // §S1 Bekleyen kalemler — sipariş no (kod), ürün adı (Fold)/kodu, tedarikçi adı.
+  const sup = await prisma.customer.create({ data: { code: `${TAG}-TD`, name: `${TAG} Çınar İplik` }, select: { id: true } });
+  const it1 = await prisma.item.create({ data: { code: `${TAG}-K1`, name: `${TAG} Gömleklik Poplin`, itemType: "FABRIC", unit: "MT" }, select: { id: true } });
+  const it2 = await prisma.item.create({ data: { code: `${TAG}-K2`, name: `${TAG} Astar`, itemType: "FABRIC", unit: "MT" }, select: { id: true } });
+  const po = await prisma.purchaseOrder.create({
+    data: { orderNo: `${TAG}-PO`, orderDate: new Date(), status: "OPEN", supplierId: sup.id, lines: { create: [{ lineNo: 1, itemId: it1.id, qty: 100 }, { lineNo: 2, itemId: it2.id, qty: 50 }] } },
+    select: { id: true },
+  });
+  cleanup.push(async () => {
+    await prisma.purchaseOrderLine.deleteMany({ where: { purchaseOrderId: po.id } });
+    await prisma.purchaseOrder.deleteMany({ where: { id: po.id } });
+    await prisma.item.deleteMany({ where: { id: { in: [it1.id, it2.id] } } });
+    await prisma.customer.deleteMany({ where: { id: sup.id } });
+  });
+  const ol = (search?: string) => purchaseOrderService.openLines({ supplierId: sup.id, search, limit: 500 });
+  const oAll = await ol();
+  const oItem = await ol("gomleklik");
+  const oNo = await ol(`${TAG}-po`);
+  const oSup = await purchaseOrderService.openLines({ search: "cinar iplik", limit: 500 });
+  const oMiss = await ol("zzqq");
+  const supHits = (oSup.rows as Array<{ purchaseOrder: { id: string } }>).filter((r) => r.purchaseOrder.id === po.id).length;
+  check("§S1a kalem: boş arama = iki kalem", oAll.rows.length === 2 && oAll.total === 2);
+  check("§S1b kalem: ürün adı katlanarak yalnız eşleşen; toplam süzülür", oItem.rows.length === 1 && oItem.total === 1);
+  check("§S1c kalem: sipariş no (küçük harf) ikisini bulur", oNo.rows.length === 2);
+  check("§S1d kalem: tedarikçi adı ('cinar iplik') ikisini bulur", supHits === 2);
+  check("§S1e kalem: eşleşmeyen 0 (toplam 0)", oMiss.rows.length === 0 && oMiss.total === 0);
+  const poSrc = readFileSync(join(ROUTES, "purchase-order.routes.ts"), "utf8");
+  check("§S1f kalem: route şeması search alır, izin aynen READ_PERMS", /search: listSearchParam/.test(poSrc) && guardOf("purchase-order.routes.ts", "/open-lines").includes("requireAnyPermission(...READ_PERMS)"));
+}
+
 async function main(): Promise<void> {
   const engel = hedefDbEngeli();
   if (engel) {
@@ -125,6 +158,7 @@ async function main(): Promise<void> {
   try {
     await ortak();
     await finans();
+    await satinAlma();
   } finally {
     for (const fn of cleanup.reverse()) await fn().catch((e: unknown) => check("temizlik", false, String(e)));
   }

@@ -24,3 +24,9 @@ export function mergeSearchPaths(...sets: ListSearchPaths[]): ListSearchPaths {
     plain: sets.flatMap((s) => s.plain ?? []),
   };
 }
+
+/** Satın alma bekleyen kalemi — sipariş no, ürün ad/kod, tedarikçi (müşteri kartı ya da fason) ad/kod. */
+export const PURCHASE_OPEN_LINE_SEARCH: ListSearchPaths = {
+  text: ["item.name", "purchaseOrder.supplier.name", "purchaseOrder.subcontractorSupplier.name"],
+  code: ["purchaseOrder.orderNo", "item.code", "purchaseOrder.supplier.code", "purchaseOrder.subcontractorSupplier.code"],
+};

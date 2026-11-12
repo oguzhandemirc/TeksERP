@@ -227,7 +227,6 @@ const NO_SEARCH: Record<string, string> = {
   "Operations/Orders/OrderPlanView.tsx": "plan-lines ucu renk/durum/müşteri/ürün süzgeçli; metin araması yok (backend gerekiyor)",
   "Operations/AllocationRepair/RepairTable.tsx": "onarım ucu parametresiz tek liste (yalnız eksikli sevkiyatlar); metin araması yok (backend gerekiyor)",
   "Operations/FasonCockpit/FasonCockpitPage.tsx": "kokpit ucu durum/firma/süreç türü süzgeçli; metin araması yok (backend gerekiyor)",
-  "Operations/PurchaseOrders/OpenLinesPanel.tsx": "açık kalem ucu (tedarikçi/ürün/gecikme süzgeçli) metin araması almıyor — şerit bu sekmede aramayı bilinçli gizler (backend gerekiyor)",
   "Operations/SackContentEdit/SackContentsTable.tsx": "çuval içi gömülü tablo (onlarca top); arama salt-okunur görünümde",
   "Operations/SackContentEdit/SackContentsReadonlyTable.tsx": "çuval içi gömülü tablo; tek çuvalın topları bellekte süzülür (sayfalı liste değil)",  "Access/PatronCloud/PatronCloudPage.tsx": "bulut hesapları buluttan eşitlenen kısa liste (durum ucunun parçası, parametresiz); arama yok (backend gerekiyor)",
   "System/WorkSessions/HistoryTable.tsx": "oturum geçmişi ucu kullanıcı/istasyon/makine/cihaz/tarih süzgeçli, offset sayfalı; metin araması yok (backend gerekiyor)",

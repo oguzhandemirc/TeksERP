@@ -7,7 +7,8 @@
 //   • **Siparişler** → `GET /purchase-orders` — arama, durum, tarih aralığı,
 //     tedarikçi.
 //   • **Ne bekliyorum?** → `GET /purchase-orders/open-lines` — YALNIZ tedarikçi,
-//     ürün ve "gecikmişler". Arama/durum/tarih o uçta YOKTUR.
+//     ürün, "gecikmişler" ve kendi `search`ü (kalem paneli KENDİ kutusunu çizer;
+//     şeridin sipariş araması orada görünmez). Durum/tarih o uçta YOKTUR.
 //
 // ⚠️ ÖLÜ FİLTRE ÇİZİLMEZ. Şerit iki sekmenin de üstünde durduğu için, kural
 // olmasa arama ve tarih kutuları kalem sekmesinde de görünür ve HİÇBİR ŞEY
@@ -25,7 +26,7 @@
 export type PoFilterScope = "orders" | "open-lines";
 
 export interface PoFilterControls {
-  /** Serbest metin arama — yalnız sipariş ucunda var. */
+  /** Şeridin sipariş araması — kalem sekmesinde gizli (kalem paneli kendi kutusunu çizer). */
   search: boolean;
   /** Durum daraltması — kalem ucu zaten yalnız OPEN/PARTIAL döner. */
   status: boolean;
