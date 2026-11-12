@@ -222,7 +222,7 @@ export function InvoicesPage() {
 
       {hasRows ? (
         <>
-          <DataTable table={table} rowClassName={(inv) => (inv.status === "CANCELLED" ? "opacity-60" : undefined)} />
+          <DataTable table={table} markEntity="invoice" rowClassName={(inv) => (inv.status === "CANCELLED" ? "opacity-60" : undefined)} />
           {/* ⚠️ SESSİZ KIRPMA YOK: sunucu sayfası (100) dolduğunda kullanıcı
               bulamadığı faturayı "yok" sayıp ikinci kez kesebilir. */}
           {trimBand && (

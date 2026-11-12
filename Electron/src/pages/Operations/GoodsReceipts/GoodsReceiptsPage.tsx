@@ -82,7 +82,7 @@ export function GoodsReceiptsPage() {
 
       {!q.isLoading && rows.length > 0 ? (
         <>
-          <DataTable table={table} isError={q.isError} onRetry={() => void q.refetch()} onRowClick={(r) => setDetailId(r.id)} exportName="Mal kabul fişleri" />
+          <DataTable table={table} markEntity="goodsReceipt" isError={q.isError} onRetry={() => void q.refetch()} onRowClick={(r) => setDetailId(r.id)} exportName="Mal kabul fişleri" />
           {/* KIRPMA SESSİZ DEĞİL (norm: CashTransactionsPage). */}
           {total > rows.length && (
             <p className="shrink-0 border-t px-4 py-2 text-xs text-amber-700 dark:text-amber-500">

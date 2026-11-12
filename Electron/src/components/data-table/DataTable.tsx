@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef, type KeyboardEvent, type MouseEvent, type MutableRefObject, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, type KeyboardEvent, type MouseEvent, type MutableRefObject, type ReactNode } from "react";
 import { flexRender, type ColumnDef, type Row, type Table as TanstackTable } from "@tanstack/react-table";
 import { toast } from "sonner";
 import {
@@ -32,6 +32,10 @@ import { columnCollision, currentOrder, reorderColumns } from "./column-arrange"
 import type { DataTablePagination as Pagination } from "@/hooks/useDataTable";
 import { SelectionBar } from "./SelectionBar";
 import { ExpandHeadCell, ExpandToggleCell, ExpandedRow, expandKey, useRowExpansion, type RowExpandProps } from "./row-expand";
+import type { RowMarkEntity } from "@/lib/row-mark-entities";
+import { RowMarkGutter, RowMarkHeadCell, RowMarkMenuItems } from "./row-marks/RowMarkParts";
+import { defaultMarkRecordId, openRowMenuByKey, useRowMarkFeature, type RowMarkActions, type RowMarkEntry } from "./row-marks/useRowMarkFeature";
+import { noteTitle } from "./row-marks/useRowMarks";
 
 // Satır açılışı bu kadar geciktirilir; bu süre içinde 2. tık gelirse (çift-tık)
 // açılış iptal edilir. Çift-tıkla kelime seçerken satır detayı açılmasın diye.
@@ -116,6 +120,10 @@ interface Props<T> extends RowExpandProps<T> {
   showSelectionBar?: boolean;
   /** Sayfanın kendi sorgusuyla sonsuz kaydırma — altlığı sayfa çizer (`ListFooter`), tablo yalnız dibi izler. */
   loadMore?: { hasMore: boolean; isFetchingMore: boolean; onLoadMore: () => unknown };
+  /** Satır işareti + not (kişisel): kayıt TÜRÜ verilirse açılır — sol şerit, sağ tık menüsü, `m`, not ipucu. */
+  markEntity?: RowMarkEntity;
+  /** İşaretin bağlandığı kayıt kimliği (varsayılan `row.id`); null → o satır işaretlenmez. */
+  markRecordId?: (row: T) => string | null;
 }
 
 export function DataTable<T>({
@@ -145,8 +153,12 @@ export function DataTable<T>({
   renderSubRow,
   selectionLabel,
   showSelectionBar = true,
+  markEntity,
+  markRecordId = defaultMarkRecordId,
 }: Props<T>) {
   const rows = table.getRowModel().rows;
+  const markIds = useMemo(() => (markEntity ? rows.flatMap((r) => markRecordId(r.original) ?? []) : []), [rows, markEntity, markRecordId]);
+  const marks = useRowMarkFeature(markEntity, markIds);
   const selectable = Boolean(table.options.enableRowSelection);
   const selected = table.getSelectedRowModel().rows;
   // 8px eşik: küçük hareketler sürükleme değil → başlık sıralama tıklaması bozulmaz.
@@ -169,7 +181,7 @@ export function DataTable<T>({
 
   const expandable = Boolean(renderExpanded);
   const { expanded, toggle: toggleExpanded } = useRowExpansion(expandedIds, onExpandedChange);
-  const colCount = table.getVisibleLeafColumns().length + (selectable ? 1 : 0) + (expandable ? 1 : 0);
+  const colCount = table.getVisibleLeafColumns().length + (selectable ? 1 : 0) + (expandable ? 1 : 0) + (marks.enabled ? 1 : 0);
 
   // DataTableRow memo geçersizleştirme sinyalleri — bunlar OLMADAN memo satır
   // gövdesini fazla iyi tutar: sütun görünürlük/sıra veya sütun TANIMI değişince
@@ -243,6 +255,7 @@ export function DataTable<T>({
             <TableHeader className="sticky top-0 z-10 bg-card [&_th]:bg-[linear-gradient(to_top,hsl(var(--border))_1px,transparent_1px)]">
               {table.getHeaderGroups().map((hg) => (
                 <TableRow key={hg.id}>
+                  {marks.enabled && <RowMarkHeadCell />}
                   {expandable && <ExpandHeadCell />}
                   {selectable && (
                     <TableHead className="w-9">
@@ -299,6 +312,7 @@ export function DataTable<T>({
               {isLoading && rows.length === 0
                 ? Array.from({ length: 8 }).map((_, i) => (
                     <TableRow key={`sk-${i}`}>
+                      {marks.enabled && <TableCell className="w-2 px-0" />}
                       {expandable && <TableCell className="w-8" />}
                       {selectable && (
                         <TableCell className="w-9">
@@ -380,6 +394,9 @@ export function DataTable<T>({
                         canExpand={canExpand}
                         renderSubRow={renderSubRow}
                         selectionLabel={selectionLabel}
+                        markActions={marks.actions}
+                        markId={markEntity ? markRecordId(row.original) : null}
+                        markEntry={marks.enabled ? marks.entries[markRecordId(row.original) ?? ""] : undefined}
                       />
                     ))}
             </TableBody>
@@ -394,6 +411,7 @@ export function DataTable<T>({
       )}
 
       {pagination ? <DataTablePagination pagination={pagination} actions={paginationActions} /> : null}
+      {marks.dialog}
     </div>
   );
 }
@@ -425,6 +443,10 @@ interface DataTableRowProps<T> {
   canExpand?: (row: T) => boolean;
   renderSubRow?: (row: T) => ReactNode;
   selectionLabel?: (row: T) => string;
+  /** Verilirse işaret yeteneği açık: şerit hücresi çizilir; `markId` yoksa satır işaretlenmez. */
+  markActions?: RowMarkActions;
+  markId: string | null;
+  markEntry?: RowMarkEntry;
 }
 
 /**
@@ -455,6 +477,9 @@ function DataTableRowInner<T>({
   canExpand,
   renderSubRow,
   selectionLabel,
+  markActions,
+  markId,
+  markEntry,
 }: DataTableRowProps<T>) {
   const blocked = selectable && !row.getCanSelect() ? (selectionBlockedReason?.(row.original) ?? null) : null;
   const expandable = Boolean(renderExpanded);
@@ -463,6 +488,8 @@ function DataTableRowInner<T>({
   // Satır açılışı yoksa tık/Enter ayrıntıyı açıp kapar (genişleyen satırın tek eylemi odur).
   const activate = onRowClick ?? (can ? () => onToggleExpand(row.id) : undefined);
   const detailId = `row-detail-${row.id}`;
+  const markMenu = markActions && markId ? <RowMarkMenuItems recordId={markId} entry={markEntry} {...markActions} /> : null;
+  const title = [rowTitle?.(row.original), noteTitle(markEntry)].filter(Boolean).join("\n") || undefined;
   const handleClick = (e: MouseEvent<HTMLElement>) => {
     if (!activate) return;
     // Bekleyen açılışı HER tıkta iptal et — çift-tıkın 2. tıkı (aşağıdaki guard'lardan erken çıksa bile) 1. tıkın
@@ -497,11 +524,12 @@ function DataTableRowInner<T>({
         rowClassName?.(row.original),
       )}
       style={{ animationDelay: `${Math.min(index, 10) * 25}ms` }}
-      title={rowTitle?.(row.original)}
+      title={title}
       // Klavye erişimi: tıklanabilir satır Tab ile odaklanır, Enter/Space açar (hücre içi düğmeler hariç); →/← ayrıntı.
-      tabIndex={activate || can ? 0 : undefined}
-      onKeyDown={activate || can ? (e) => {
+      tabIndex={activate || can || markMenu ? 0 : undefined}
+      onKeyDown={activate || can || markMenu ? (e) => {
         if (e.target !== e.currentTarget) return;
+        if (markMenu && openRowMenuByKey(e)) return;
         if (expandKey(e.key, can, isExpanded, (open) => onToggleExpand(row.id, open))) {
           e.preventDefault();
           return;
@@ -512,6 +540,7 @@ function DataTableRowInner<T>({
       } : undefined}
       onClick={handleClick}
     >
+      {markActions && <RowMarkGutter entry={markEntry} />}
       {expandable && <ExpandToggleCell can={can} open={isExpanded} onToggle={() => onToggleExpand(row.id)} controls={detailId} />}
       {selectable && (
         <TableCell className="w-9" onClick={(e) => e.stopPropagation()}>
@@ -551,7 +580,7 @@ function DataTableRowInner<T>({
       {isExpanded && can ? <ExpandedRow id={detailId} colSpan={colCount} className="bg-muted/20">{renderExpanded?.(row.original)}</ExpandedRow> : null}
     </>
   );
-  if (!menu) return <>{rowEl}{extra}</>;
+  if (!menu && !markMenu) return <>{rowEl}{extra}</>;
   return (
     <>
     <ContextMenu>
@@ -566,6 +595,8 @@ function DataTableRowInner<T>({
       </ContextMenuTrigger>
       <ContextMenuContent>
         <SelectionCopyItem getText={() => selRef.current} />
+        {markMenu}
+        {markMenu && menu ? <ContextMenuSeparator /> : null}
         {menu}
       </ContextMenuContent>
     </ContextMenu>

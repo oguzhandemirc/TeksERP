@@ -54,6 +54,7 @@ export function NoteListTable({ table, isLoading, isError, onRetry, pagination, 
     <>
       <DataTable<DeliveryNoteHeader>
         table={table}
+        markEntity="incomingDocument"
         isLoading={isLoading}
         isError={isError}
         onRetry={onRetry}

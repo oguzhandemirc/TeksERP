@@ -66,7 +66,7 @@ export function QuotesPage() {
         </div>
       </ListToolbar>
       {!q.isLoading && !q.isError && rows.length > 0 ? (
-        <DataTable table={table} onRowClick={(r) => nav(`/cost/quotes/${r.id}`)} exportName="Teklifler" />
+        <DataTable table={table} markEntity="quote" onRowClick={(r) => nav(`/cost/quotes/${r.id}`)} exportName="Teklifler" />
       ) : (
       <ListBody>
         {q.isLoading ? (

@@ -116,7 +116,7 @@ export function WeavingOrdersPage() {
       />
       <DefFilterRow filters={FILTERS} primaryKeys={PRIMARY} search={search} onSearchChange={setSearch} searchHint="Dokuma no, kumaş ya da fasoncu adıyla ara" trailing={<SavedViewsMenu compact />} tools={{ table, fetchAll, exportName: TERIM.dokumaIsEmri.cogul }} />
       <DataTable<WeavingOrder>
-        table={table}
+        table={table} markEntity="weavingOrder"
         isLoading={query.isLoading}
         isError={query.isError}
         onRetry={() => void query.refetch()}

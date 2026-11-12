@@ -133,6 +133,7 @@ export function RollsTableBody({
       )}
       <DataTable<Roll>
         table={table}
+        markEntity="roll"
         isLoading={isLoading}
         pagination={pagination}
         paginationActions={paginationActions}
