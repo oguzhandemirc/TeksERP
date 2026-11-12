@@ -10,6 +10,7 @@ import { verifyToken } from "../middlewares/auth.middleware";
 import { matchesPermission, requirePermission } from "../middlewares/rbac.middleware";
 import { requireEmanetEnabled } from "../middlewares/module.middleware";
 import { getConsignedWorkSummary } from "../services/roll-owner.service";
+import { listSearchParam } from "../utils/list-search";
 import { getConsignedStatement } from "../services/consigned-statement.service";
 
 const router = Router();
@@ -31,21 +32,25 @@ router.use(requirePermission("roll:read"));
  *         name: onlyReady
  *         schema: { type: string, enum: ["true", "false"] }
  *         description: Yalnız sevke hazır (WAREHOUSE/A1_STOCK) emaneti olan sahipler; toplamlar aynı kapsamdan
+ *       - in: query
+ *         name: search
+ *         schema: { type: string, maxLength: 100 }
+ *         description: "Metin araması — sahip (müşteri) adı ya da kodu; toplamlar süzülen satırlardan; boş = arama yok"
  *     responses:
  *       200: { description: Sahip satırları + toplam }
- *       400: { description: Tanınmayan süzgeç (CONSIGNED_WORK_FILTER_INVALID) }
+ *       400: { description: Tanınmayan süzgeç ya da 100 karakteri aşan arama (CONSIGNED_WORK_FILTER_INVALID) }
  *       403: { description: Emanet modülü kapalı (MODULE_DISABLED) ya da roll:read yok }
  */
 /** Fail-closed: tanınmayan parametre/değer 400 (eski istemci parametre göndermez → bugünkü liste). */
-const consignedWorkQuery = z.object({ onlyReady: z.enum(["true", "false"]).optional() }).strict();
+const consignedWorkQuery = z.object({ onlyReady: z.enum(["true", "false"]).optional(), search: listSearchParam }).strict();
 
 router.get("/", async (req, res, next) => {
   try {
     const parsed = consignedWorkQuery.safeParse(req.query);
     if (!parsed.success) {
-      throw AppError.badRequest("Geçersiz süzgeç: yalnız onlyReady=true|false kabul edilir.", { code: "CONSIGNED_WORK_FILTER_INVALID" });
+      throw AppError.badRequest("Geçersiz süzgeç: yalnız onlyReady=true|false ve search (≤100 karakter) kabul edilir.", { code: "CONSIGNED_WORK_FILTER_INVALID" });
     }
-    res.json(await getConsignedWorkSummary({ onlyReady: parsed.data.onlyReady === "true" }));
+    res.json(await getConsignedWorkSummary({ onlyReady: parsed.data.onlyReady === "true", search: parsed.data.search }));
   } catch (e) {
     next(e);
   }

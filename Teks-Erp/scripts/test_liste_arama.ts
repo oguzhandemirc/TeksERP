@@ -35,6 +35,7 @@ import { touchClient } from "../src/lib/client-registry";
 import { WorkSessionService } from "../src/services/work-session.service";
 import { buildPrintJobWhere } from "../src/services/helpers/print-job-filter.helper";
 import { listPrintJobs, summarizePrintJobs } from "../src/services/print-job.service";
+import { getConsignedWorkSummary } from "../src/services/roll-owner.service";
 
 let pass = 0;
 let fail = 0;
@@ -430,6 +431,35 @@ async function sistem(): Promise<void> {
   check("§Y4d baskı: uzun arama 400 (controller readListSearch) + izin aynen", readFileSync(join(__dirname, "..", "src", "controllers", "print-job.controller.ts"), "utf8").includes("search: readListSearch(q.search)") && guardOf("print-job.routes.ts", "/").includes("requireAnyPermission(...PRINT_HISTORY_READ)"));
 }
 
+async function uretim(): Promise<void> {
+  console.log("\n— §U üretim özetleri —");
+  const ids = { customers: [] as string[], rolls: [] as string[], item: "" };
+  cleanup.push(async () => {
+    await prisma.roll.deleteMany({ where: { id: { in: ids.rolls } } });
+    if (ids.item) await prisma.item.deleteMany({ where: { id: ids.item } });
+    await prisma.customer.deleteMany({ where: { id: { in: ids.customers } } });
+  });
+  // §U1 İçerideki işler — sahip başına toplanmış satır; arama bellek ikiziyle, toplamlar süzülen satırlardan.
+  const ca = await prisma.customer.create({ data: { code: `${TAG}-EA`, name: `${TAG} Gökçe Dokuma` }, select: { id: true } });
+  const cb = await prisma.customer.create({ data: { code: `${TAG}-EB`, name: `${TAG} Ilgaz Örme` }, select: { id: true } });
+  ids.customers.push(ca.id, cb.id);
+  ids.item = (await prisma.item.create({ data: { code: `${TAG}-EI`, name: `${TAG} Emanet Kumaş`, itemType: "FABRIC", unit: "MT" }, select: { id: true } })).id;
+  for (const [owner, qty] of [[ca.id, 10], [ca.id, 15], [cb.id, 40]] as const) {
+    ids.rolls.push((await prisma.roll.create({ data: { barcode: `${TAG}-E${ids.rolls.length}`, itemId: ids.item, status: "STOCK", initialQty: qty, currentQty: qty, entrySource: "SUPPLIER_RECEIPT", ownerCustomerId: owner }, select: { id: true } })).id);
+  }
+  const all = (await getConsignedWorkSummary()).data!;
+  const hitA = (await getConsignedWorkSummary({ search: "gokce dokuma" })).data!;
+  const hitB = (await getConsignedWorkSummary({ search: `${TAG}-eb`.toLowerCase() })).data!;
+  const miss = (await getConsignedWorkSummary({ search: `${TAG} zzqq` })).data!;
+  const mineU = (d: typeof all) => d.rows.filter((r) => ids.customers.includes(r.ownerCustomerId)).length;
+  check("§U1a içeride: boş = iki sahip", mineU(all) === 2);
+  check("§U1b içeride: sahip adı katlanarak yalnız A; toplam = A'nın toplamı (2 top, 25 m)", mineU(hitA) === 1 && hitA.rows.length === 1 && hitA.totals.total.count === 2 && hitA.totals.total.qty === 25);
+  check("§U1c içeride: sahip kodu küçük harfle yalnız B; toplam 40 m", mineU(hitB) === 1 && hitB.totals.total.qty === 40);
+  check("§U1d içeride: eşleşmeyen 0 satır, toplam 0", miss.rows.length === 0 && miss.totals.total.count === 0);
+  const cwSrc = readFileSync(join(ROUTES, "consigned-work.routes.ts"), "utf8");
+  check("§U1e içeride: sorgu katı (search) + kapılar aynen", cwSrc.includes('z.object({ onlyReady: z.enum(["true", "false"]).optional(), search: listSearchParam }).strict()') && cwSrc.includes("router.use(verifyToken, requireEmanetEnabled);") && cwSrc.includes('router.use(requirePermission("roll:read"));'));
+}
+
 async function main(): Promise<void> {
   const engel = hedefDbEngeli();
   if (engel) {
@@ -446,6 +476,7 @@ async function main(): Promise<void> {
     await maliyet();
     await tanimKalite();
     await sistem();
+    await uretim();
   } finally {
     for (const fn of cleanup.reverse()) await fn().catch((e: unknown) => check("temizlik", false, String(e)));
   }
