@@ -110,7 +110,9 @@ export interface AppPreferences {
    * Rapor Merkezi (Raporlar v2) — favori rapor anahtarları ("sales/termin") ve kişinin rapor açılış kaydı
    * (`opened`: anahtar · açılış sayısı · son açılış; en çok 20, `_v2/opened.ts`). Tablo YOK, blob alanı.
    */
-  raporlar?: { favoriler?: string[]; opened?: ReportOpenRecord[] };
+  /** `charts`: rapor anahtarı → ekran görünüm tercihi (grafik türü, etiket, yerleşim, gizli kolon);
+   *  şekli `pages/Reports/_v2/view/view-pref.ts` sahiplenir ve okurken süzer. */
+  raporlar?: { favoriler?: string[]; opened?: ReportOpenRecord[]; charts?: Record<string, unknown> };
   /** Açılış panosu — seçili dönem (`bugun|hafta|ay|yil`; tanınmayan → hafta) ve kutu düzeni (`boxes`: sıralı
    *  kutu anahtarları; yoksa katalog varsayılanı). Eski pano düzeni alanları (`hidden`/`groupOrder`/`itemOrders`)
    *  kayıtlı blob'da kalabilir; okunmaz. */

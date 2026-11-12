@@ -106,7 +106,7 @@ function FigureCard({ figure, comparisonLabel, tone, primary }: { figure: AnaSay
 export function HeadlineCard({ headline, sideFigures, comparisonLabel }: Props) {
   const sides = sideFigures.slice(0, SIDE_FIGURE_LIMIT);
   return (
-    <section className="grid h-full auto-rows-fr grid-cols-1 gap-3 sm:grid-cols-2" aria-label="Ana sayı">
+    <section className="grid grid-cols-1 content-start gap-3 sm:grid-cols-2" aria-label="Ana sayı">
       <FigureCard figure={headline} comparisonLabel={comparisonLabel} tone="primary" primary />
       {sides.map((f, i) => (
         <FigureCard key={f.olcu} figure={f} comparisonLabel={comparisonLabel} tone={SIDE_TONES[i % SIDE_TONES.length]!} primary={false} />

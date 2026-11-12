@@ -1,12 +1,21 @@
 import { AlertCircle } from "lucide-react";
 import { fmtFactoryDateTime } from "@/lib/factory-time";
-import { RaporGrafik } from "./grafik/RaporGrafik";
+import { ReportChartCard } from "./grafik/ekran/ReportChartCard";
 import type { RaporSunumu } from "./sunum";
 import { HeadlineCard } from "./HeadlineCard";
 import { NarrativeBox } from "./NarrativeBox";
 import { PeriodCompareTable } from "./PeriodCompareTable";
 import { SmallMultiples } from "./SmallMultiples";
 import { ReportTable, type ReportRowLink } from "./ReportTable";
+import { useReportViewPref, type ReportLayout } from "./view/view-pref";
+
+/** Bu kolon sayısını aşan tablo varsayılan olarak grafiğin ALTINA iner (yan yana sıkışmasın). */
+export const SIDE_BY_SIDE_MAX_COLUMNS = 6;
+
+/** Yerleşim: kullanıcı seçtiyse o; yoksa geniş tablo üst üste, dar tablo yan yana. */
+export function layoutOf(pref: ReportLayout | undefined, columns: number): ReportLayout {
+  return pref ?? (columns > SIDE_BY_SIDE_MAX_COLUMNS ? "stacked" : "side");
+}
 
 /** Gövdedeki anlatı kartının başlığı (ekran); belge kendi başlığını basar. */
 export const HIGHLIGHTS_TITLE = "Öne çıkanlar";
@@ -24,6 +33,9 @@ interface Props {
  * dönem kıyası → grafik + tablo ızgarası (geniş kapta iki sütun) → tanımlar + veri satırı.
  */
 export function ReportBody({ presentation: p, fetchedAt, rowLink }: Props) {
+  const { pref, update } = useReportViewPref(p.anahtar);
+  const layout = layoutOf(pref.layout, p.tablo?.kolonlar.length ?? 0);
+  const both = Boolean(p.grafik && p.tablo);
   return (
     <div className="@container flex flex-col gap-4">
       <div className="grid gap-4 @5xl:grid-cols-12">
@@ -46,11 +58,16 @@ export function ReportBody({ presentation: p, fetchedAt, rowLink }: Props) {
       ) : null}
       {p.varyant?.hucreler?.length ? <SmallMultiples block={p.varyant} comparisonLabel={p.kiyasDonemi?.etiket} /> : null}
       {p.donemler?.length ? <PeriodCompareTable periods={p.donemler} /> : null}
-      <div className={p.grafik && p.tablo ? "grid items-start gap-4 @5xl:grid-cols-2" : "grid gap-4"}>
+      <div className={both && layout === "side" ? "grid items-start gap-4 @5xl:grid-cols-2" : "grid gap-4"} data-layout={both ? layout : undefined}>
         {p.grafik ? (
-          <section className="min-w-0 rounded-xl border border-card-border bg-card p-4 shadow-card" aria-label="Grafik">
-            <RaporGrafik blok={p.grafik} baslik={p.baslik} />
-          </section>
+          <ReportChartCard
+            blok={p.grafik}
+            title={p.baslik}
+            view={{ ...pref, layout }}
+            onView={update}
+            hasTable={both}
+            height={layout === "side" ? 320 : 360}
+          />
         ) : null}
         {p.tablo ? <ReportTable table={p.tablo} rowLink={rowLink} /> : null}
       </div>
