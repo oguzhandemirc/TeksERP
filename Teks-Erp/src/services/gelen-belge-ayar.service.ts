@@ -24,7 +24,7 @@
 //   · `gelenBelge.stationDocLookup` — istasyon tabletinde "Belge okut" ile iş emri bulma (K17; varsayılan false)
 //   · `gelenBelge.stationVerifyThreshold` — okutmada doğrulama eşiği % (0 = kapalı; varsayılan 80, yalnız okutma açıkken etkili)
 //   · `gelenBelge.photoRetention` — belge fotoğrafı saklama (K28): FULL (varsayılan) | onayda küçült/sil | sevkte sil
-//   · `gelenBelge.desenRenkEslesme` — okunan desen/renk: KAPALI kullanılmaz | ONER kayıt önerilir (varsayılan) | NOT nota eklenir (K30)
+//   · `gelenBelge.desenRenkEslesme` — okunan desen/renk: KAPALI kullanılmaz (varsayılan) | ONER kayıt önerilir | NOT nota eklenir (K30)
 //   · `gelenBelge.tabletIeGirisi` — tablet iş emri girişi: IKISI (varsayılan) | BELGE | TOP (K30)
 //   · `gelenBelge.tanitimGuveni` — tanıtılan belgeye güven: SOR (varsayılan) | SORMA sorusuz doldur (K30-B)
 //   · `gelenBelge.serverOcrEnabled` — bilgisayarda ikinci okuma (sunucu OCR): açık (varsayılan) | kapalı = yalnız cihaz okur
@@ -256,7 +256,7 @@ async function updateEntryOptions(input: IncomingDocSettingsInput, userId: strin
   await setClosed(SETTING_KEYS.GELEN_BELGE_AUTO_WORK_ORDER_PATTERNLESS, input.autoWorkOrderPatternless, { values: AUTO_WORK_ORDER_PATTERNLESS_VALUES, label: `Gelen belge: işlem değeri çözülemeyen grupta ${ie} (SKIP atla / OPEN hedefsiz aç)` }, userId);
   await setClosed(SETTING_KEYS.GELEN_BELGE_FORM_APPROVAL, input.formApproval, { values: FORM_APPROVAL_VALUES, label: `Gelen belge: ${ie} formundan okutulan belgenin kaydı (SEPARATE ayrı onay / WITH_WORK_ORDER ${ie} açan kaydeder)` }, userId);
   await setClosed(SETTING_KEYS.GELEN_BELGE_MULTI_PARTY_WORK_ORDER, input.multiPartyWorkOrder, { values: MULTI_PARTY_WORK_ORDER_VALUES, label: `Gelen belge: çok partili belgeden ${ie} (SINGLE tek / PER_PARTY her parti ayrı)` }, userId);
-  await setClosed(SETTING_KEYS.GELEN_BELGE_DESEN_RENK_ESLESME, input.desenRenkEslesme, { values: DESEN_RENK_ESLESME_VALUES, label: "Gelen belge: okunan desen/renk yazısı (KAPALI / ONER kayıt öner, varsayılan / NOT nota ekle)" }, userId);
+  await setClosed(SETTING_KEYS.GELEN_BELGE_DESEN_RENK_ESLESME, input.desenRenkEslesme, { values: DESEN_RENK_ESLESME_VALUES, label: "Gelen belge: okunan desen/renk yazısı (KAPALI varsayılan / ONER kayıt öner / NOT nota ekle)" }, userId);
   await setClosed(SETTING_KEYS.GELEN_BELGE_TABLET_IE_GIRISI, input.tabletIeGirisi, { values: TABLET_IE_GIRISI_VALUES, label: `Gelen belge: tablet ${ie} girişi (IKISI / BELGE yalnız belge / TOP yalnız top)` }, userId);
   await setClosed(SETTING_KEYS.GELEN_BELGE_TANITIM_GUVENI, input.tanitimGuveni, { values: TANITIM_GUVENI_VALUES, label: "Gelen belge: tanıtılan belgeye güven (SOR okunanları onaylat / SORMA sormadan doldur)" }, userId);
   await setClosed(SETTING_KEYS.GELEN_BELGE_DUPLICATE_DOC_NO, input.duplicateDocNo, { values: DUPLICATE_DOC_NO_VALUES, label: "Gelen belge: aynı gönderen belge no tekrar gelirse (BLOCK engelle / WARN işi sürüyorsa uyar / ALLOW serbest)" }, userId);
