@@ -2,6 +2,7 @@
 // max-lines tavanı için ayrıldı (B2); davranış aynıdır, tek kaynak burasıdır.
 import { SystemLogCategory } from "@prisma/client";
 import { ACTOR_SELECT } from "./system-account.helper";
+import type { Gun } from "./system-log-islem.helper";
 
 export const LIST_SELECT = {
   id: true,
@@ -87,3 +88,36 @@ class DropdownCache {
 }
 
 export const dropdownCache = new DropdownCache();
+
+/** Liste ucu parametreleri — servisin dosya boyu sınırı için burada (servis yeniden dışa verir). */
+export interface SystemLogListParams {
+  cursor?: string;
+  limit?: number;
+  userId?: string;
+  tableName?: string;
+  /**
+   * TEK KAYDIN geçmişi (Faz B1, 2026-08-19) — "bu iş emrini kim ne zaman
+   * değiştirmiş" sorusu bugüne kadar API'den SORULAMIYORDU; oysa DB'de
+   * `@@index([tableName, recordId])` zaten vardı. `tableName` ile BİRLİKTE
+   * verilmelidir, yoksa index'in ilk kolonu boş kalır ve sorgu seq scan'e döner.
+   */
+  recordId?: string;
+  // "DOMAIN" — CUD audit (Activity Page). "AUTH" / "SYSTEM" — Sistem Kayıtları sayfası.
+  // Birden fazla kategori için virgülle ayrılmış string kabul edilir.
+  category?: string;
+  action?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  /**
+   * TEK İSTEĞİN tüm satırları (2026-08-19) — "bu üç değişiklik aynı kaydetme
+   * tuşundan mı çıktı?" sorusunun cevabı. Değer UUID'dir ve `readRequestId`
+   * ile elenir: kolon `@db.Uuid` olduğu için ham metin P2023 → 500 üretirdi.
+   */
+  requestId?: string;
+  /** B4 "Reddedilenler" süzgeci: "1" = yalnız trace status ≥ 400 (yalnız işlem görünümü). */
+  reddedilen?: "0" | "1";
+  /** Fabrika günü kısayolu (B2): verilirse `dateFrom/dateTo`yu ezer. */
+  gun?: Gun;
+  /** Satır görünümü metin araması (`SYSTEM_LOG_SEARCH`); route `q`/işlem görünümüyle birlikteliği 400'ler. */
+  search?: string;
+}

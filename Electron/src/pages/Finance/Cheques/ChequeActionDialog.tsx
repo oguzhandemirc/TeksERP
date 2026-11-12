@@ -76,12 +76,12 @@ export function ChequeActionDialog({ row, def, open, onOpenChange, onDone }: Pro
 
   const cashQ = useQuery({
     queryKey: ["finance", "cash-boxes"],
-    queryFn: listCashBoxes,
+    queryFn: () => listCashBoxes(),
     enabled: needsAccount,
   });
   const bankQ = useQuery({
     queryKey: ["finance", "bank-accounts"],
-    queryFn: listBankAccounts,
+    queryFn: () => listBankAccounts(),
     enabled: needsAccount,
   });
 

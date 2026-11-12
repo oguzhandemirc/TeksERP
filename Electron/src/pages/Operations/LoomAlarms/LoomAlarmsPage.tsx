@@ -23,6 +23,8 @@ import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { loomAlarmService } from "./service";
 import { LOOM_ALARMS_QUERY_ROOT } from "./useLoomAlarmActions";
 import { useIsTabActive } from "@/components/layout/tabs/tab-active";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { useListSearch } from "@/hooks/useListSearch";
 
 const PAGE_SIZE = 50;
 const LIST_KEY = [LOOM_ALARMS_QUERY_ROOT, "list"];
@@ -35,7 +37,8 @@ export function LoomAlarmsPage() {
   const [filters, setFilters] = useState<AlarmFilterState>(INITIAL_ALARM_FILTERS);
   const navigate = useNavigate();
   const now = useServerNow(15_000);
-  const params = useMemo(() => toListParams(filters), [filters]);
+  const { search, setSearch, term } = useListSearch();
+  const params = useMemo(() => ({ ...toListParams(filters), ...(term ? { search: term } : {}) }), [filters, term]);
   const tabActive = useIsTabActive();
   const q = useInfiniteQuery({
     queryKey: [...LIST_KEY, params],
@@ -66,6 +69,7 @@ export function LoomAlarmsPage() {
       <ListToolbar className="flex-row flex-wrap items-end">
         <LoomAlarmsFilters value={filters} onChange={setFilters} />
         <div className="ml-auto flex items-center gap-1.5">
+          <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Tezgah kodu/adı, hol ya da sebep kodu ara" />
           <DataTableTools table={table} compact exportName="Tezgah alarmları" />
         </div>
       </ListToolbar>
@@ -87,7 +91,7 @@ export function LoomAlarmsPage() {
         ) : q.isPending ? (
           <p className="py-16 text-center text-muted-foreground">Yükleniyor…</p>
         ) : items.length === 0 ? (
-          <p className="py-16 text-center text-muted-foreground">{emptyText(filters.scope)}</p>
+          <p className="py-16 text-center text-muted-foreground">{term ? "Aramaya uyan alarm yok." : emptyText(filters.scope)}</p>
         ) : null}
       </ListBody>
       )}

@@ -57,7 +57,7 @@ import { runOffsiteSweepNow } from "../jobs/offsite-sweeper";
 import { getRestoreImpact } from "../services/backup-impact.service";
 import { unlockBackupForRequest } from "../middlewares/backup-password";
 import { latencySnapshot, resetLatencyStats } from "../services/latency-stats.service";
-import { ClientRegistryService } from "../services/client-registry.service";
+import { ClientRegistryService, filterClientSnapshot } from "../services/client-registry.service";
 import {
   getLatencyPersistHealth,
   latencyHistory,
@@ -66,6 +66,7 @@ import {
 import { SessionRegistryService } from "../services/session-registry.service";
 import { AppError } from "../utils/app-error";
 import { z } from "zod";
+import { listSearchParam } from "../utils/list-search";
 import { TrustedDeviceService, parseTrustedDeviceIds, emptyBodySchema } from "../services/trusted-device.service";
 import "../types/express-augment";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
@@ -1182,6 +1183,8 @@ router.get(
 // =============================================================================
 // BAĞLI İSTEMCİLER — hangi kurulum, hangi sürüm, en son ne zaman, kim
 // =============================================================================
+// Sorgu katı (tanınmayan parametre 400); arama bellek ikiziyle (`filterClientSnapshot`).
+const clientsQuerySchema = z.object({ search: listSearchParam }).strict();
 /**
  * @openapi
  * /api/admin/clients:
@@ -1195,14 +1198,23 @@ router.get(
  *       KAYNAĞIDIR — arayüz kendi eşiğini yazmaz, bu değeri basar.
  *       `serverStartedAt`: defter süreçle birlikte doğar, restart'ta boşalır.
  *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema: { type: string, maxLength: 100 }
+ *         description: "Metin araması — tür, sürüm, cihaz adı, son kullanıcı, kurulum kimliği; boş = arama yok"
+ *     responses:
+ *       200: { description: Defter görüntüsü }
+ *       400: { description: Tanınmayan parametre ya da 100 karakteri aşan arama }
  */
 router.get(
   "/clients",
   verifyToken,
   requireAnyPermission("admin:settings", "system:clients"),
-  async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      res.status(200).json({ success: true, data: await ClientRegistryService.snapshot() });
+      const { search } = clientsQuerySchema.parse(req.query);
+      res.status(200).json({ success: true, data: filterClientSnapshot(await ClientRegistryService.snapshot(), search) });
     } catch (error) {
       next(error);
     }
@@ -1467,6 +1479,8 @@ export const systemLogListQuerySchema = z.object({
   gun: z.enum(["bugun", "dun", "hafta"]).optional(),
   // B4 "Reddedilenler" süzgeci (yalnız işlem görünümü): "1" = trace status ≥ 400. Bilinmeyen değer 400.
   reddedilen: z.enum(["0", "1"]).optional(),
+  // Satır görünümü metin araması (hedef, IP, kullanıcı) — dar; tarih/kategori süzgeciyle AND.
+  search: listSearchParam,
 })
   // FAIL-CLOSED KAPI (2026-09-05 perf turu): `recordId` composite index'in İKİNCİ
   // kolonudur; ilk kolon (`tableName`) boş gelirse plan "Index Scan" YAZAR ama
@@ -1481,6 +1495,10 @@ export const systemLogListQuerySchema = z.object({
         path: ["tableName"],
         message: "Kayıt geçmişi için 'tableName' de gönderilmelidir (yalnız 'recordId' yetmez).",
       });
+    }
+    // Metin araması yalnız satır görünümünde: `q` ve işlem görünümü başka yoldan sayfalanır, sessiz yok sayma yerine 400.
+    if (v.search && (v.q || v.gorunum === "islem")) {
+      ctx.addIssue({ code: "custom", path: ["search"], message: "Metin araması yalnız satır görünümünde kullanılabilir ('q' ve işlem görünümüyle birlikte olmaz)." });
     }
   });
 
@@ -1502,6 +1520,13 @@ export const systemLogListQuerySchema = z.object({
  *       - { in: query, name: q, schema: { type: string } }
  *       - { in: query, name: gun, schema: { type: string, enum: [bugun, dun, hafta] } }
  *       - { in: query, name: reddedilen, schema: { type: string, enum: ["0", "1"] } }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string, maxLength: 100 }
+ *         description: "Satır görünümü metin araması — hedef (kullanıcı adı/hata kodu/kayıt), IP, kullanıcı adı/tam adı; boş = arama yok; `q` ya da `gorunum=islem` ile 400"
+ *     responses:
+ *       200: { description: Liste }
+ *       400: { description: Geçersiz parametre (search + q/islem, 100 karakteri aşan arama) }
  */
 router.get(
   "/system-logs",

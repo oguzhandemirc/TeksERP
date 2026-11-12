@@ -19,9 +19,12 @@ import { YarnPriceDialog } from "./YarnPriceDialog";
 import { YarnPriceHistorySheet } from "./YarnPriceHistorySheet";
 import { yarnPriceService, type YarnCostPrice } from "./service";
 import { RefreshButton } from "@/components/RefreshButton";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { useListSearch } from "@/hooks/useListSearch";
 
 export function YarnPricesPage() {
-  const q = useQuery({ queryKey: ["cost-yarn-prices", "active"], queryFn: yarnPriceService.listActive });
+  const { search, setSearch, term } = useListSearch();
+  const q = useQuery({ queryKey: ["cost-yarn-prices", "active", term ?? ""], queryFn: () => yarnPriceService.listActive(term) });
   const [edit, setEdit] = useState<{ row: YarnCostPrice | null } | null>(null);
   const [history, setHistory] = useState<YarnCostPrice | null>(null);
   const rows = q.data ?? [];
@@ -40,7 +43,8 @@ export function YarnPricesPage() {
           </div>
         }
       />
-      <ListToolbar className="flex-row items-center justify-end">
+      <ListToolbar className="flex-row items-center justify-end gap-1.5">
+        <ListSearchBox value={search} onSearchChange={setSearch} searchHint="İplik adı ya da kodu ara" />
         <DataTableTools table={table} compact exportName="İplik fiyatları" />
       </ListToolbar>
       {!q.isLoading && !q.isError && rows.length > 0 ? (
@@ -53,6 +57,8 @@ export function YarnPricesPage() {
           <ListMessage>
             <CostQueryError error={q.error} what="İplik fiyatları" onRetry={() => void q.refetch()} />
           </ListMessage>
+        ) : term ? (
+          <ListMessage className="text-sm text-muted-foreground">Aramaya uyan kayıt yok.</ListMessage>
         ) : (
           <ListMessage>
             <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">

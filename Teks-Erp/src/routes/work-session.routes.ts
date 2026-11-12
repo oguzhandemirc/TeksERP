@@ -92,7 +92,14 @@ router.get(
  *     summary: Oturum geçmişi (ayak izi) — kullanıcı/cihaz/makine/istasyon/tarih filtreli
  *     description: Cihaz ayak izi (admin:settings) + kullanıcı ayak izi (admin:users) paylaşır.
  *     security: [{ bearerAuth: [] }]
- *     responses: { 200: { description: Sayfalı oturum listesi } }
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema: { type: string, maxLength: 100 }
+ *         description: "Metin araması — kullanıcı adı, cihaz adı, makine kod/ad, istasyon kod/ad; diğer süzgeçlerle AND, toplam aynı where; boş = arama yok"
+ *     responses:
+ *       200: { description: Sayfalı oturum listesi }
+ *       400: { description: Geçersiz parametre ya da 100 karakteri aşan arama }
  */
 router.get(
   "/",

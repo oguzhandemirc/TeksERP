@@ -46,7 +46,7 @@ function ItemSource({ value, onChange, customerId }: Props) {
 }
 
 function AdHocSource({ value, onChange }: Props) {
-  const rates = useQuery({ queryKey: ["cost-finishing-rates", "active"], queryFn: finishingRateService.listActive });
+  const rates = useQuery({ queryKey: ["cost-finishing-rates", "active"], queryFn: () => finishingRateService.listActive() });
   return (
     <div className="space-y-3">
       <label className="block text-sm">

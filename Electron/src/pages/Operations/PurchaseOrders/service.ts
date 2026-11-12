@@ -270,6 +270,7 @@ export async function listOpenLines(params: {
   subcontractorId?: string;
   itemId?: string;
   overdueOnly?: boolean;
+  search?: string;
   limit?: number;
 }): Promise<{ rows: OpenLineRow[]; total: number }> {
   const res = await apiClient.get("/api/purchase-orders/open-lines", {
@@ -280,6 +281,7 @@ export async function listOpenLines(params: {
       // Backend `"true"`/`"false"` literal'i bekliyor; `false` göndermek gereksiz
       // ama zararsız — yine de yalnız açıkken gönderiyoruz ki istek sade kalsın.
       ...(params.overdueOnly ? { overdueOnly: "true" } : {}),
+      ...(params.search ? { search: params.search } : {}),
       ...(params.limit ? { limit: params.limit } : {}),
     },
   });

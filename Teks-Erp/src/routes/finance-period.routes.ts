@@ -35,6 +35,7 @@ import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { requireFinanceEnabled } from "../middlewares/finance.middleware";
 import { periodCloseService } from "../services/period-close.service";
+import { listSearchParam } from "../utils/list-search";
 
 const router = Router();
 
@@ -58,6 +59,11 @@ const isoDate = z.string().datetime({ offset: true }).or(z.string().date());
  *       yeniden açılmış kayıtları da getirir (denetim görünümü — satır silinmez,
  *       işaretlenir).
  *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema: { type: string, maxLength: 100 }
+ *         description: "Metin araması — cari adı/kodu ya da not; boş = arama yok"
  *     responses:
  *       200: { description: Sayfalanmış kapanış listesi }
  */
@@ -69,6 +75,7 @@ router.get("/", requirePermission("finance:read"), async (req, res, next) => {
         cariId: z.string().uuid().optional(),
         currency: currencyEnum.optional(),
         includeReopened: z.enum(["true", "false"]).optional(),
+        search: listSearchParam,
         page: z.coerce.number().int().min(1).optional(),
         pageSize: z.coerce.number().int().min(1).max(200).optional(),
       })
@@ -77,6 +84,7 @@ router.get("/", requirePermission("finance:read"), async (req, res, next) => {
       cariId: parsed.cariId,
       currency: parsed.currency,
       includeReopened: parsed.includeReopened === "true",
+      search: parsed.search,
       page: parsed.page,
       pageSize: parsed.pageSize,
     });

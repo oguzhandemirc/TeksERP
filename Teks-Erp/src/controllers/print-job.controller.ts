@@ -18,6 +18,7 @@ import {
 } from "../services/print-job.service";
 import { resolvePrintJobContext } from "../services/helpers/print-job-context.helper";
 import { AppError } from "../utils/app-error";
+import { readListSearch } from "../utils/list-search";
 import "../types/express-augment";
 
 const idSchema = z.string().uuid("Geçersiz basım kaydı ID");
@@ -64,6 +65,7 @@ function readQuery(q: Request["query"]): PrintJobQuery {
     subjectId: one(q.subjectId),
     gunBas: one(q.gunBas),
     gunBit: one(q.gunBit),
+    search: readListSearch(q.search),
   };
 }
 

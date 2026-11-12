@@ -16,6 +16,8 @@ import { stationService } from "@/pages/Stations/service";
 import { adminUserService } from "@/services/adminUserService";
 import { workSessionService } from "./service";
 import { DateRangeInput } from "@/components/forms/DateRangeInput";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { useListSearch } from "@/hooks/useListSearch";
 import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
 import { endReasonLabels, formatDurationMinutes, sessionDurationMinutes, type WorkSessionItem } from "./types";
 import { useSessionHistoryTable } from "./historyColumns";
@@ -60,6 +62,7 @@ export function HistoryTable() {
   const [to, setTo] = useState("");
   const [page, setPage] = useState(1);
   const openTarget = useOpenTarget();
+  const { search, setSearch, term } = useListSearch();
 
   const usersQ = useQuery({ queryKey: ["admin-users", "picker"], queryFn: adminUserService.list });
   const devicesQ = useQuery({ queryKey: ["admin-devices", "picker"], queryFn: deviceService.list });
@@ -73,7 +76,7 @@ export function HistoryTable() {
   });
 
   const q = useQuery({
-    queryKey: ["work-sessions", "history", { userId, deviceId, machineId, stationId, from, to, page }],
+    queryKey: ["work-sessions", "history", { userId, deviceId, machineId, stationId, from, to, page, term: term ?? "" }],
     queryFn: () =>
       workSessionService.history({
         userId: userId || undefined,
@@ -82,6 +85,7 @@ export function HistoryTable() {
         stationId: stationId || undefined,
         from: from ? new Date(`${from}T00:00:00`).toISOString() : undefined,
         to: to ? new Date(`${to}T23:59:59.999`).toISOString() : undefined,
+        search: term,
         page,
         pageSize: PAGE_SIZE,
       }),
@@ -172,6 +176,14 @@ export function HistoryTable() {
           toLabel="Oturum tarihi bitişi"
         />
         <div className="ml-auto flex items-center gap-1.5">
+          <ListSearchBox
+            value={search}
+            onSearchChange={(v) => {
+              setSearch(v);
+              resetPage();
+            }}
+            searchHint="Kullanıcı, cihaz, makine ya da istasyon (ad/kod) ara"
+          />
           {/* Dosya kendi sütunlarıyla iner (İstasyon/Makine ayrı, toplanabilir dakika) — tablo menüsünde ikinci indirme yok. */}
           <DataTableTools table={table} compact hideExport />
           <ListExportMenu
@@ -184,7 +196,7 @@ export function HistoryTable() {
               pagination && pagination.totalPages > 1
                 ? `Yalnız görüntülenen sayfa: ${rows.length} oturum (sayfa ${pagination.page}/${pagination.totalPages}, filtreye uyan toplam ${pagination.total}). Diğer sayfalar dosyaya girmez.`
                 : `Filtreye uyan ${rows.length} oturum.`,
-              "Filtreler (kullanıcı / istasyon / makine / cihaz / tarih) dosyaya birebir yansır.",
+              "Filtreler (kullanıcı / istasyon / makine / cihaz / tarih / arama) dosyaya birebir yansır.",
               "Açık oturumlarda bitiş boştur; süre indirme anına göre hesaplanır.",
             ]}
           />
@@ -200,7 +212,7 @@ export function HistoryTable() {
               <Skeleton className="h-64 w-full" />
             </ListMessage>
           ) : (
-            <p className="py-8 text-center text-sm text-muted-foreground">Filtrelere uyan oturum yok.</p>
+            <p className="py-8 text-center text-sm text-muted-foreground">{term ? "Aramaya uyan oturum yok." : "Filtrelere uyan oturum yok."}</p>
           )}
         </ListBody>
       )}

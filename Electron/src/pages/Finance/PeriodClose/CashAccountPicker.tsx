@@ -50,12 +50,12 @@ export interface CashAccountOption {
 export function useCashAccountOptions() {
   const boxes = useQuery({
     queryKey: ["finance", "cash-accounts", "boxes"],
-    queryFn: listCashBoxes,
+    queryFn: () => listCashBoxes(),
     staleTime: 30_000,
   });
   const banks = useQuery({
     queryKey: ["finance", "cash-accounts", "banks"],
-    queryFn: listBankAccounts,
+    queryFn: () => listBankAccounts(),
     staleTime: 30_000,
   });
 

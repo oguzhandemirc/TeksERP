@@ -19,9 +19,12 @@ import { FinishingRateDialog } from "./FinishingRateDialog";
 import { FinishingRateHistorySheet } from "./FinishingRateHistorySheet";
 import { finishingRateService, type FinishingRate } from "./service";
 import { RefreshButton } from "@/components/RefreshButton";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { useListSearch } from "@/hooks/useListSearch";
 
 export function FinishingRatesPage() {
-  const q = useQuery({ queryKey: ["cost-finishing-rates", "active"], queryFn: finishingRateService.listActive });
+  const { search, setSearch, term } = useListSearch();
+  const q = useQuery({ queryKey: ["cost-finishing-rates", "active", term ?? ""], queryFn: () => finishingRateService.listActive(term) });
   const [edit, setEdit] = useState<{ row: FinishingRate | null } | null>(null);
   const [history, setHistory] = useState<FinishingRate | null>(null);
   const rows = q.data ?? [];
@@ -40,7 +43,8 @@ export function FinishingRatesPage() {
           </div>
         }
       />
-      <ListToolbar className="flex-row items-center justify-end">
+      <ListToolbar className="flex-row items-center justify-end gap-1.5">
+        <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Tarife kodu/adı ya da fason firma ara" />
         <DataTableTools table={table} compact exportName="Terbiye tarifeleri" />
       </ListToolbar>
       {!q.isLoading && !q.isError && rows.length > 0 ? (
@@ -53,6 +57,8 @@ export function FinishingRatesPage() {
           <ListMessage>
             <CostQueryError error={q.error} what="Tarifeler" onRetry={() => void q.refetch()} />
           </ListMessage>
+        ) : term ? (
+          <ListMessage className="text-sm text-muted-foreground">Aramaya uyan kayıt yok.</ListMessage>
         ) : (
           <ListMessage>
             <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">

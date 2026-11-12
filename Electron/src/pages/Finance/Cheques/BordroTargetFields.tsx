@@ -73,7 +73,7 @@ export function BordroTargetFields({ target, onTargetChange, targetLabel, onTarg
 }
 
 function BankTarget({ value, currency, onChange }: { value: string | null; currency: string | null; onChange: (id: string | null) => void }) {
-  const bankQ = useQuery({ queryKey: ["finance", "bank-accounts"], queryFn: listBankAccounts });
+  const bankQ = useQuery({ queryKey: ["finance", "bank-accounts"], queryFn: () => listBankAccounts() });
   const banks = useMemo(
     () => (bankQ.data?.data ?? []).filter((a) => a.isActive && (!currency || a.currency === currency)),
     [bankQ.data, currency],

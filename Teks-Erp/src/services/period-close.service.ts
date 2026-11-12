@@ -34,6 +34,8 @@ import {
   formatDayKeyTr,
 } from "./helpers/period-guard.helper";
 import type { ApiResponse } from "../types/api.types";
+import { listSearchWhere } from "../utils/list-search";
+import { cariSearchPaths, mergeSearchPaths } from "./helpers/list-search-paths.helper";
 
 /** Bir dönemin ölçülmüş fotoğrafı — hem önizleme hem doğrulama bunu döner. */
 export interface PeriodSnapshot {
@@ -382,6 +384,8 @@ export class PeriodCloseService {
     currency?: Currency;
     /** Yeniden açılmışlar da gelsin mi — denetim görünümü. */
     includeReopened?: boolean;
+    /** Cari adı/kodu ya da not — liste ve toplam aynı where. */
+    search?: string;
     page?: number;
     pageSize?: number;
   }): Promise<{
@@ -395,6 +399,11 @@ export class PeriodCloseService {
     if (params.cariId) where.cariId = params.cariId;
     if (params.currency) where.currency = params.currency;
     if (!params.includeReopened) where.reopenedAt = null;
+    const searchWhere = listSearchWhere<Prisma.CariPeriodCloseWhereInput>(
+      params.search,
+      mergeSearchPaths(cariSearchPaths("cari"), { plain: ["notes"] })
+    );
+    if (searchWhere) where.AND = [searchWhere];
 
     const [rows, total] = await Promise.all([
       prisma.cariPeriodClose.findMany({

@@ -61,9 +61,9 @@ describe("İçerideki İşler", () => {
     get.mockImplementation(async (onlyReady?: boolean) => (onlyReady ? { ...summary, rows: [rowA, notReady] } : summary));
     renderWithProviders(<ConsignedWorkPage />);
     await screen.findByText("Gül Perde");
-    expect(get).toHaveBeenLastCalledWith(false);
+    expect(get).toHaveBeenLastCalledWith(false, undefined);
     fireEvent.click(screen.getByRole("button", { name: "Yalnız sevke hazır" }));
-    await waitFor(() => expect(get).toHaveBeenLastCalledWith(true));
+    await waitFor(() => expect(get).toHaveBeenLastCalledWith(true, undefined));
     expect(await screen.findByText("Hazırsız Müşteri")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Yalnız sevke hazır" })).toHaveAttribute("aria-pressed", "true");
   });

@@ -161,6 +161,7 @@ export async function listPeriodCloses(params: {
   cariId?: string;
   currency?: Currency;
   includeReopened?: boolean;
+  search?: string;
 }): Promise<Paged<PeriodCloseRow>> {
   const res = await apiClient.get("/api/finance/period-closes", {
     params: {
@@ -169,6 +170,7 @@ export async function listPeriodCloses(params: {
       cariId: params.cariId || undefined,
       currency: params.currency || undefined,
       includeReopened: params.includeReopened ? "true" : undefined,
+      search: params.search || undefined,
     },
   });
   return res.data;

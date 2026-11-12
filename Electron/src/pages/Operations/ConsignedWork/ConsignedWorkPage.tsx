@@ -17,6 +17,8 @@ import { TotalsStrip, type ReadinessStatus } from "./ConsignedWorkTable";
 import { ownerColumns } from "./consignedColumns";
 import { DataTable } from "@/components/data-table/DataTable";
 import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { useListSearch } from "@/hooks/useListSearch";
 import { useLocalTable } from "@/hooks/useLocalTable";
 import { PageTabs } from "@/components/layout/PageTabs";
 import { CONSIGNED_STATEMENT_QUERY_KEY } from "./statement/service";
@@ -48,7 +50,7 @@ function ViewTabs({ value, onChange }: { value: "anlik" | "ekstre"; onChange: (v
 }
 
 /** Tablo yokken gövde: yükleniyor / hata (boş sanılmaz) / boş. */
-function ConsignedState({ isLoading, isError, onlyReady, onRetry }: { isLoading: boolean; isError: boolean; onlyReady: boolean; onRetry: () => void }) {
+function ConsignedState({ isLoading, isError, onlyReady, searching, onRetry }: { isLoading: boolean; isError: boolean; onlyReady: boolean; searching: boolean; onRetry: () => void }) {
   if (isLoading) return <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>;
   if (isError) {
     return (
@@ -66,7 +68,9 @@ function ConsignedState({ isLoading, isError, onlyReady, onRetry }: { isLoading:
   return (
     <ListMessage>
       <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-        {onlyReady
+        {searching
+          ? "Aramaya uyan müşteri yok."
+          : onlyReady
           ? "Sevke hazır emaneti olan müşteri yok."
           : "İçeride emanet mal yok. Emanet top, girişte “Sahibi” seçilerek ya da gelen belge onayıyla doğar."}
       </div>
@@ -77,7 +81,8 @@ function ConsignedState({ isLoading, isError, onlyReady, onRetry }: { isLoading:
 function ConsignedNowView({ onStatement }: { onStatement: (customerId: string | null) => void }) {
   const navigate = useNavigate();
   const [onlyReady, setOnlyReady] = useState(false);
-  const q = useQuery({ queryKey: [CONSIGNED_WORK_QUERY_KEY, onlyReady ? "ready" : "all"], queryFn: () => getConsignedWork(onlyReady) });
+  const { search, setSearch, term } = useListSearch();
+  const q = useQuery({ queryKey: [CONSIGNED_WORK_QUERY_KEY, onlyReady ? "ready" : "all", term ?? ""], queryFn: () => getConsignedWork(onlyReady, term) });
   const rows = q.data?.rows ?? [];
   const open = (row: ConsignedOwnerRow) => navigate(rollsLinkFor(row.ownerCustomerId, primaryBucket(row)));
   const canReadShipping = useRoleAccess().hasPermission("shipping:read");
@@ -123,14 +128,15 @@ function ConsignedNowView({ onStatement }: { onStatement: (customerId: string | 
           <TotalsStrip totals={q.data.totals} />
         </ListBand>
       )}
-      <ListToolbar className="flex-row items-center justify-end">
+      <ListToolbar className="flex-row items-center justify-end gap-1.5">
+        <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Müşteri adı ya da kodu ara (toplamlar da süzülür)" />
         <DataTableTools table={table} compact exportName="İçerideki işler" />
       </ListToolbar>
       {!q.isLoading && !q.isError && rows.length > 0 ? (
         <DataTable table={table} onRowClick={open} rowTitle={(r) => `${r.ownerName} toplarını aç`} exportName="İçerideki işler" />
       ) : (
       <ListBody>
-        <ConsignedState isLoading={q.isLoading} isError={q.isError} onlyReady={onlyReady} onRetry={() => void q.refetch()} />
+        <ConsignedState isLoading={q.isLoading} isError={q.isError} onlyReady={onlyReady} searching={!!term} onRetry={() => void q.refetch()} />
       </ListBody>
       )}
       {rows.length > 0 && <ListFooter loaded={rows.length} />}

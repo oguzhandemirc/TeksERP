@@ -4,6 +4,7 @@
 import { Prisma } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { readFilterList, readIdCondition } from "../../utils/query-parser";
+import { listSearchWhere } from "../../utils/list-search";
 import { resolveRangeEnd, resolveRangeStart } from "../../constants/time";
 import {
   PRINT_OUTPUT_KINDS,
@@ -68,7 +69,12 @@ export interface PrintJobQuery {
   subjectId?: string;
   gunBas?: string;
   gunBit?: string;
+  /** Metin araması — `PRINT_JOB_SEARCH` yolları; liste ve özet şeridi aynı where'den. */
+  search?: string;
 }
+
+/** Baskı geçmişi arama yolları — kayıt/belge no, yazıcı adı, hata kodu (dar; tablo büyür, gün süzgeciyle AND). */
+export const PRINT_JOB_SEARCH = { plain: ["subjectNo", "printerName", "errorCode"] } as const;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -117,6 +123,7 @@ export function buildPrintJobWhere(q: PrintJobQuery): Prisma.PrintJobWhereInput 
     }
     and.push({ createdAt: { ...(gte ? { gte } : {}), ...(lte ? { lte } : {}) } });
   }
+  push(listSearchWhere<Prisma.PrintJobWhereInput>(q.search, PRINT_JOB_SEARCH) ?? null);
   return and.length > 0 ? { AND: and } : {};
 }
 

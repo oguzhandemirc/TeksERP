@@ -49,9 +49,10 @@ export interface ConnectedClientsSnapshot {
 }
 
 /** Bağlı istemci envanteri — saf veri erişimi (React'e bağlı değil). */
-export async function fetchConnectedClients(): Promise<ConnectedClientsSnapshot> {
+export async function fetchConnectedClients(search?: string): Promise<ConnectedClientsSnapshot> {
   const res = await apiClient.get<{ success: boolean; data: ConnectedClientsSnapshot }>(
     "/api/admin/clients",
+    { params: search ? { search } : {} },
   );
   return res.data.data;
 }

@@ -19,9 +19,12 @@ import { ConsumableNormDialog } from "./ConsumableNormDialog";
 import { ConsumableNormHistorySheet } from "./ConsumableNormHistorySheet";
 import { consumableNormService, type ConsumableNorm } from "./service";
 import { RefreshButton } from "@/components/RefreshButton";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { useListSearch } from "@/hooks/useListSearch";
 
 export function ConsumableNormsPage() {
-  const q = useQuery({ queryKey: ["cost-consumable-norms", "active"], queryFn: consumableNormService.listActive });
+  const { search, setSearch, term } = useListSearch();
+  const q = useQuery({ queryKey: ["cost-consumable-norms", "active", term ?? ""], queryFn: () => consumableNormService.listActive(term) });
   const [edit, setEdit] = useState<{ current: ConsumableNorm | null } | null>(null);
   const [history, setHistory] = useState<ConsumableNorm | null>(null);
   const rows = q.data ?? [];
@@ -41,7 +44,8 @@ export function ConsumableNormsPage() {
           </div>
         }
       />
-      <ListToolbar className="flex-row items-center justify-end">
+      <ListToolbar className="flex-row items-center justify-end gap-1.5">
+        <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Hizmet ya da sarf adı/kodu ara" />
         <DataTableTools table={table} compact exportName="Sarf normları" />
       </ListToolbar>
       {!q.isLoading && !q.isError && rows.length > 0 ? (
@@ -54,6 +58,8 @@ export function ConsumableNormsPage() {
           <ListMessage>
             <CostQueryError error={q.error} what="Sarf normları" onRetry={() => void q.refetch()} />
           </ListMessage>
+        ) : term ? (
+          <ListMessage className="text-sm text-muted-foreground">Aramaya uyan kayıt yok.</ListMessage>
         ) : (
           <ListMessage>
             <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">

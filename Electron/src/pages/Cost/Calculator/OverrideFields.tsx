@@ -18,7 +18,7 @@ interface Props {
 }
 
 export function OverrideFields({ value, onChange, rateCode, onRateCode, noRateLabel, flagged }: Props) {
-  const rates = useQuery({ queryKey: ["cost-finishing-rates", "active"], queryFn: finishingRateService.listActive });
+  const rates = useQuery({ queryKey: ["cost-finishing-rates", "active"], queryFn: () => finishingRateService.listActive() });
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 2xl:grid-cols-4">
       {STRUCTURE_FIELDS.map((fd) => (

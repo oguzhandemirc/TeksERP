@@ -13,6 +13,7 @@ import { ApiResponse } from "../types/api.types";
 import { NO_LIVE_MATERIAL_STATUSES } from "./batch.service";
 import { readEmanetEnabled } from "./system-setting.service";
 import { holdViewsByCustomer, NO_HOLD_VIEW } from "./helpers/cari-hold-badge.helper";
+import { matchesListSearch } from "../utils/list-search";
 
 /**
  * "İÇERİDE DEĞİL" kümesi — canlı malzemesi kalmamış top (K18 + SHIPPED + SCRAP; batch.service tek kaynağı) +
@@ -77,6 +78,8 @@ export async function listRollOwnerCustomers(): Promise<ApiResponse<{ id: string
 export interface ConsignedWorkQuery {
   /** "Yalnız sevke hazır" (D4-KUC2 b): yalnız hazır kovası dolu sahipler; satırlar VE toplamlar aynı WHERE'den. */
   onlyReady?: boolean;
+  /** Metin araması — sahip adı/kodu; satırlar sahip başına toplandığı için bellek ikiziyle, toplamlar süzülen satırlardan. */
+  search?: string;
 }
 
 /** Sahip kapsamı — liste ile özet şeridi (`totals`) AYNI sorgudan doğar; süzme sunucuda (filtre-liste.md). */
@@ -93,11 +96,12 @@ export async function getConsignedWorkSummary(q: ConsignedWorkQuery = {}): Promi
   // (adımda; SHIPPED/KARTELA_CONSUMED adımlı top sekmede görünür ama içeride sayılmaz — bilinçli fark),
   // waiting = RAW_STOCK_PURE, waitingSemi = SEMI_FINISHED. Hücre o sekmeyi sahip süzgeciyle açar.
   const rows = await prisma.$queryRaw<
-    Array<{ ownerCustomerId: string; ownerName: string; bucket: BucketKey; cnt: bigint; qty: Prisma.Decimal | null }>
+    Array<{ ownerCustomerId: string; ownerName: string; ownerCode: string; bucket: BucketKey; cnt: bigint; qty: Prisma.Decimal | null }>
   >(Prisma.sql`
     SELECT
       r."ownerCustomerId" AS "ownerCustomerId",
       c.name              AS "ownerName",
+      c.code              AS "ownerCode",
       CASE
         WHEN r.status = ANY(${[...READY_STATUSES]}::"RollStatus"[]) THEN 'ready'
         WHEN r."currentStepId" IS NOT NULL                       THEN 'inProcess'
@@ -113,7 +117,7 @@ export async function getConsignedWorkSummary(q: ConsignedWorkQuery = {}): Promi
     WHERE r."ownerCustomerId" IS NOT NULL
       AND r.status <> ALL(${[...NOT_INSIDE_STATUSES]}::"RollStatus"[])
       ${consignedOwnerScope(q)}
-    GROUP BY 1, 2, 3
+    GROUP BY 1, 2, 3, 4
   `);
 
   const byOwner = new Map<string, ConsignedOwnerRow>();
@@ -126,6 +130,7 @@ export async function getConsignedWorkSummary(q: ConsignedWorkQuery = {}): Promi
     return Number(next);
   };
   for (const r of rows) {
+    if (!matchesListSearch(q.search, [r.ownerName, r.ownerCode])) continue;
     let row = byOwner.get(r.ownerCustomerId);
     if (!row) {
       row = {

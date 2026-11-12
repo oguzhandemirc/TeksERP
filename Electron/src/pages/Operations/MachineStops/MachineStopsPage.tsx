@@ -33,12 +33,16 @@ import { todayKey } from "./types";
 import { machineNoun, machineStopsTitle } from "./stop-regime";
 import { useOperationsVisibilityContext } from "@/pages/Operations/useOperationsVisibility";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { useListSearch } from "@/hooks/useListSearch";
 
 export function MachineStopsPage() {
   const [day, setDay] = useState(todayKey());
   const [dialog, setDialog] = useState<DialogState>(null);
   const nowMs = useMinuteTick();
-  const { params, dayFree } = useStopListParams(day);
+  const { params: baseParams, dayFree } = useStopListParams(day);
+  const { search, setSearch, term } = useListSearch();
+  const params = useMemo(() => ({ ...baseParams, search: term }), [baseParams, term]);
   const query = useQuery({ queryKey: [MACHINE_STOPS_QUERY_KEY, params], queryFn: () => machineStopService.list(params) });
   const rows = useMemo(() => query.data?.data ?? [], [query.data]);
   const { dokumaEnabled } = useOperationsVisibilityContext();
@@ -80,7 +84,12 @@ export function MachineStopsPage() {
             <DatePickerInput id="stops-day" value={day} onChange={setDay} disabled={dayFree} className="h-7 w-40 text-xs" />
           </div>
         }
-        trailing={<DataTableTools table={table} compact exportName={`${noun} duruşları`} />}
+        trailing={
+          <div className="flex items-center gap-1.5">
+            <ListSearchBox value={search} onSearchChange={setSearch} searchHint={`${noun} kodu/adı ya da sebep kodu ara`} />
+            <DataTableTools table={table} compact exportName={`${noun} duruşları`} />
+          </div>
+        }
       />
       <StopsTable table={table} isLoading={query.isLoading} isError={query.isError} onRetry={() => void query.refetch()} noun={noun} />
       {/* Diyaloglar KOŞULLU mount: her açılış taze bileşen ve taze `clientToken`. */}

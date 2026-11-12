@@ -19,6 +19,22 @@ import {
 } from "../lib/client-registry";
 import prisma from "../lib/prisma";
 import { ACTOR_SELECT } from "./helpers/system-account.helper";
+import { matchesListSearch } from "../utils/list-search";
+
+type ClientSnapshot = Awaited<ReturnType<(typeof ClientRegistryService)["snapshot"]>>;
+
+/**
+ * Liste araması — defter süreç belleğinde, satırlar çözülmüş adlarla birlikte bellek ikiziyle
+ * süzülür: tür, sürüm, cihaz adı, son kullanıcı adı/tam adı, kurulum kimliği. Eşikler/saatler aynen.
+ */
+export function filterClientSnapshot(snap: ClientSnapshot, search: string | undefined): ClientSnapshot {
+  if (!search) return snap;
+  return {
+    ...snap,
+    clients: snap.clients.filter((c) =>
+      matchesListSearch(search, [c.kind, c.version, c.deviceName, c.lastUser?.username, c.lastUser?.fullName, c.instanceId])),
+  };
+}
 
 export const ClientRegistryService = {
   async snapshot(now = Date.now()) {

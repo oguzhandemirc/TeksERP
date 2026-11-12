@@ -5,6 +5,8 @@ import { PageBody, PageShell } from "@/components/layout/PageShell";
 import { RefreshButton } from "@/components/RefreshButton";
 import { NumberingFormDialog } from "./NumberingFormDialog";
 import { NumberingTable } from "./NumberingTable";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { useListSearch } from "@/hooks/useListSearch";
 import { numberingService } from "./service";
 import type { NumberSeriesRow, SeriesExhaustion } from "./types";
 
@@ -36,9 +38,10 @@ function bolumlereAyir(rows: NumberSeriesRow[]): Array<{ key: string; label: str
  */
 export function NumberingPage() {
   const qc = useQueryClient();
-  const { data: rows = [] } = useQuery({
-    queryKey: NUMBERING_KEY,
-    queryFn: numberingService.list,
+  const { search, setSearch, term } = useListSearch();
+  const { data: rows = [], isLoading } = useQuery({
+    queryKey: [...NUMBERING_KEY, term ?? ""],
+    queryFn: () => numberingService.list(term),
     staleTime: 60_000,
   });
   const [secili, setSecili] = useState<NumberSeriesRow | null>(null);
@@ -66,7 +69,11 @@ export function NumberingPage() {
         actions={<RefreshButton queryKey={[...NUMBERING_KEY]} successMessage="Seriler yenilendi" />}
       />
       <PageBody>
+        <div className="flex justify-end pb-2">
+          <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Seri adı, anahtarı, ön eki ya da örnek kodu ara" />
+        </div>
         <div>
+          {term && !isLoading && bolumler.length === 0 && <p className="py-6 text-center text-sm text-muted-foreground">Aramaya uyan seri yok.</p>}
           {bolumler.map((b) => (
             <NumberingTable key={b.key} title={b.label} rows={b.rows} onEdit={setSecili} />
           ))}

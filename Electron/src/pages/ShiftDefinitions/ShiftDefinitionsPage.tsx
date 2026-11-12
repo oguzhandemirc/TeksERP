@@ -24,15 +24,18 @@ import { ShiftDefinitionFormDialog } from "./ShiftDefinitionFormDialog";
 import { ShiftActiveDialog } from "./ShiftActiveDialog";
 import { SHIFT_DEFINITIONS_QUERY_KEY, useShiftDefinitionMutations } from "./useShiftDefinitionMutations";
 import type { ShiftDefinition } from "./types";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { useListSearch } from "@/hooks/useListSearch";
 
 type DialogState = { kind: "form"; target: ShiftDefinition | null } | { kind: "active"; target: ShiftDefinition } | null;
 
 export function ShiftDefinitionsPage() {
   const [includeInactive, setIncludeInactive] = useState(false);
   const [dialog, setDialog] = useState<DialogState>(null);
+  const { search, setSearch, term } = useListSearch();
   const query = useQuery({
-    queryKey: [SHIFT_DEFINITIONS_QUERY_KEY, includeInactive],
-    queryFn: () => shiftDefinitionService.list(includeInactive),
+    queryKey: [SHIFT_DEFINITIONS_QUERY_KEY, includeInactive, term ?? ""],
+    queryFn: () => shiftDefinitionService.list(includeInactive, term),
   });
   const rows = useMemo(() => query.data?.data ?? [], [query.data]);
   const { create, update, setActive } = useShiftDefinitionMutations(() => setDialog(null));
@@ -73,11 +76,12 @@ export function ShiftDefinitionsPage() {
           </div>
         }
       />
-      {/* Katalog küçük, sunucuda arama yok: araç çubuğunda yalnız arşiv anahtarı + standart tablo araçları. */}
+      {/* Arama sunucuda (kod/ad); arşiv anahtarı + standart tablo araçları. */}
       <div data-list-surface="toolbar" className="flex shrink-0 items-center gap-2 border-b px-3 py-2">
         <Switch id="shift-inactive" checked={includeInactive} onCheckedChange={setIncludeInactive} />
         <Label htmlFor="shift-inactive">Arşivdekileri göster</Label>
         <div className="ml-auto flex items-center gap-1.5">
+          <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Vardiya kodu ya da adı ara" />
           <DataTableTools table={table} compact exportName="Vardiya tanımları" />
         </div>
       </div>
@@ -87,7 +91,7 @@ export function ShiftDefinitionsPage() {
         isError={query.isError}
         onRetry={() => void query.refetch()}
         errorText="Bu bir “kayıt yok” cevabı DEĞİLDİR — istek reddedildi ya da sunucuya ulaşamadı (modül kapalı, yetki yok, ağ)."
-        emptyText="Henüz vardiya tanımı yok."
+        emptyText={term ? "Aramaya uyan vardiya yok." : "Henüz vardiya tanımı yok."}
         exportName="Vardiya tanımları"
       />
       {/* Diyaloglar KOŞULLU mount: her açılış taze durum. */}

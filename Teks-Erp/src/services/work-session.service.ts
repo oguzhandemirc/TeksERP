@@ -16,6 +16,8 @@
 
 import { sequentialTx } from "./helpers/tx-sequential-relations.helper";
 import prisma from "../lib/prisma";
+import { listSearchWhere } from "../utils/list-search";
+import { WORK_SESSION_SEARCH } from "./helpers/list-search-paths.helper";
 import { Prisma } from "@prisma/client";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
@@ -555,7 +557,9 @@ export class WorkSessionService {
     to?: Date;
     page?: number;
     pageSize?: number;
+    search?: string;
   }): Promise<PaginatedResponse<unknown>> {
+    const search = listSearchWhere<Prisma.WorkSessionWhereInput>(q.search, WORK_SESSION_SEARCH);
     const page = Math.max(1, q.page ?? 1);
     const pageSize = Math.min(100, Math.max(1, q.pageSize ?? 25));
     const where: Prisma.WorkSessionWhereInput = {
@@ -568,6 +572,7 @@ export class WorkSessionService {
       ...(q.from || q.to
         ? { startedAt: { ...(q.from ? { gte: q.from } : {}), ...(q.to ? { lte: q.to } : {}) } }
         : {}),
+      ...(search ? { AND: [search] } : {}),
     };
     // F275: MAX_OFFSET guard (skip>10K → Türkçe 400). WorkSession her login/vardiyada
     // büyür; ham (page-1)*pageSize sınırsız derin OFFSET taramasına açıktı.

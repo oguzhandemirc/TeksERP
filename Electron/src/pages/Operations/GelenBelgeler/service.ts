@@ -158,8 +158,8 @@ export async function listStationScanChecks(take = 50): Promise<StationScanCheck
 }
 
 /** Gönderen şablonları (E2, `gelen-belge:template`): motor şablonları + DB bağı; satırı olmayan şablon `id: null`. */
-export async function listSenderTemplates(): Promise<SenderTemplateView[]> {
-  return (await apiClient.get<ApiResponse<SenderTemplateView[]>>(`${BASE}/sablonlar`)).data.data;
+export async function listSenderTemplates(search?: string): Promise<SenderTemplateView[]> {
+  return (await apiClient.get<ApiResponse<SenderTemplateView[]>>(`${BASE}/sablonlar`, { params: search ? { search } : {} })).data.data;
 }
 
 /** Şablon bağını güncelle; yalnız verilen alanlar yazılır. Pasif cari 400; araya giren yazım 409. */
