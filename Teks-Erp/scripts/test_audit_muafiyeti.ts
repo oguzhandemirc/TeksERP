@@ -204,7 +204,10 @@ function main(): void {
   // 39 → 40 (2026-11-01, sarf stok defteri): `helpers/consumable-stock.helper.ts` — ConsumableMovement TEK yazarı
   // (mal kabul girişi/iptali, kurşun/tambur tüketimi ve ters kaydı, tx İÇİNDE); audit'i çağıran eylem basar
   // (mal kabul `CONSUMABLE_MOVEMENT`; iptal/kurşun/tambur kendi audit'inde) — EBEVEYN_EYLEMDE.
-  const AUDITSIZ_YAZICI_TABAN = 40;
+  // 40 → 41 (2026-11-13, V4a bayat veri): `helpers/stale-record.helper.ts` — sipariş sürüm claim'i
+  // (`claimOrderVersionTx`, kalem FOR UPDATE + atomik `updateMany` yalnız `updatedAt`, tx İÇİNDE); audit'i
+  // çağıran eylem basar (`OrderService.update` başlık/kalem farkıyla) — EBEVEYN_EYLEMDE.
+  const AUDITSIZ_YAZICI_TABAN = 41;
   const auditsizYazici: string[] = [];
   for (const [rel, s] of metin) {
     if (auditDosya.has(rel) || /tableName:\s*"/.test(s)) continue;

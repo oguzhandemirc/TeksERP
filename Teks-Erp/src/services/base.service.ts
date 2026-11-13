@@ -31,6 +31,7 @@ import { nextSeriesNo } from "./number-series.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 
 import { diffFields } from "./helpers/audit-diff.helper";
+import { staleRecordError } from "./helpers/stale-record.helper";
 import { baseWriteClosedFields } from "../constants/write-guard";
 // =============================================================================
 // KAYIT KÜNYESİ — kim oluşturdu / kim son değiştirdi (2026-08-19)
@@ -278,6 +279,7 @@ type PrismaDelegate = {
   findFirst: (args: Record<string, unknown>) => Promise<unknown | null>;
   create: (args: Record<string, unknown>) => Promise<unknown>;
   update: (args: Record<string, unknown>) => Promise<unknown>;
+  updateMany: (args: Record<string, unknown>) => Promise<{ count: number }>;
   delete: (args: Record<string, unknown>) => Promise<unknown>;
   count: (args: Record<string, unknown>) => Promise<number>;
 };
@@ -1176,6 +1178,19 @@ export class BaseService {
     rawData: Record<string, unknown>,
     userId?: string
   ): Promise<ApiResponse<unknown>> {
+    return this.updateCore(id, rawData, userId);
+  }
+
+  /**
+   * `update` gövdesi. `versionWhere` verilirse yazım tek atomik `updateMany WHERE {id, …sürüm}`
+   * olur ve 0 satır → 409 `STALE_RECORD` (bayat veri koruması); verilmezse bayt aynı yol.
+   */
+  protected async updateCore(
+    id: string,
+    rawData: Record<string, unknown>,
+    userId?: string,
+    versionWhere?: Record<string, unknown>,
+  ): Promise<ApiResponse<unknown>> {
     const data = this.normalizeNameFields(this.sanitizeWriteData(rawData));
     // Fetch old data for audit
     const oldRecord = await this.delegate.findUnique({ where: { id } });
@@ -1241,13 +1256,15 @@ export class BaseService {
       }
     }
 
-    const updated = await this.delegate.update({
-      where: { id },
-      data: withActor(data, userId, "UPDATE", this.config.modelName),
-      ...(this.config.defaultInclude
-        ? { include: this.config.defaultInclude }
-        : {}),
-    });
+    const updated = versionWhere
+      ? await this.versionedWrite(id, oldRecord, withActor(data, userId, "UPDATE", this.config.modelName), versionWhere)
+      : await this.delegate.update({
+          where: { id },
+          data: withActor(data, userId, "UPDATE", this.config.modelName),
+          ...(this.config.defaultInclude
+            ? { include: this.config.defaultInclude }
+            : {}),
+        });
 
     // ── ALAN-BAZLI DEĞİŞİKLİK (Faz B2) ────────────────────────────────────
     // Diff BURADA hesaplanır çünkü `oldRecord` zaten okunmuş durumda — 14
@@ -1271,6 +1288,22 @@ export class BaseService {
     }
 
     return { success: true, data: updated, message: "Kayıt güncellendi" };
+  }
+
+  /** Sürüm koşullu yazım: tek atomik UPDATE; kayıt yoksa eski yolun not-found'u, varsa bayat → 409. */
+  private async versionedWrite(
+    id: string,
+    oldRecord: unknown,
+    data: Record<string, unknown>,
+    versionWhere: Record<string, unknown>,
+  ): Promise<unknown> {
+    if (!oldRecord) throw AppError.notFound("Kayıt bulunamadı");
+    const claimed = await this.delegate.updateMany({ where: { ...versionWhere, id }, data });
+    if (claimed.count === 0) throw staleRecordError();
+    return this.delegate.findUnique({
+      where: { id },
+      ...(this.config.defaultInclude ? { include: this.config.defaultInclude } : {}),
+    });
   }
 
   /**

@@ -848,9 +848,10 @@ router.post(
  *               currency:    { type: string, enum: [TRY, USD, EUR, GBP] }
  *               totalAmount: { type: number, nullable: true }
  *               deadline:    { type: string, format: date-time, nullable: true }
+ *               expectedUpdatedAt: { type: string, format: date-time, description: "İsteğe bağlı bayat veri koruması — detay yanıtındaki `contentUpdatedAt` (başlık + kalemlerin en büyük updatedAt'i) aynen geri yollanır; kayıt arada değiştiyse 409 STALE_RECORD. Gönderilmezse davranış değişmez; DB'ye yazılmaz." }
  *     responses:
- *       200: { description: "Güncellendi. Müşteri başka cariye taşındıysa ve iş kabulü risk kapısı kapalıyken yeni cari limiti aşıyorsa `warnings[]` Türkçe uyarı (tutar yalnız `finance:read`); kapı açıkken 409 RISK_LIMIT_EXCEEDED." }
- *       409: { description: Tamamlanmış veya aktif WO bağı nedeniyle kilit }
+ *       200: { description: "Güncellendi (yanıtta yeni `contentUpdatedAt`). Müşteri başka cariye taşındıysa ve iş kabulü risk kapısı kapalıyken yeni cari limiti aşıyorsa `warnings[]` Türkçe uyarı (tutar yalnız `finance:read`); kapı açıkken 409 RISK_LIMIT_EXCEEDED." }
+ *       409: { description: "Tamamlanmış veya aktif WO bağı nedeniyle kilit · STALE_RECORD (expectedUpdatedAt tutmadı)" }
  */
 // K3 (Seyitoğlu L4): müşteri değişiminde risk uyarısının tutarı yalnız `finance:read` ile (POST / ile aynı kural).
 router.patch("/:id", verifyToken, requirePermission("order:write"), async (req: Request, res: Response, next: NextFunction) => {
