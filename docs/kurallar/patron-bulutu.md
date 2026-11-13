@@ -50,6 +50,7 @@
 - **[ÇEKİRDEK]** ERP izni → bulut okuma kodu eşlemesini yalnız `services/patron-read/izin-esleme.ts` `ERP_TO_CLOUD`ta tut; izinsiz kök 403 `PATRON_SET_FORBIDDEN`, izinsiz alt satır anahtarsız, sunulmayan küme 404; yazma/hesap kodu verme.
 - **[ÇEKİRDEK]** Anlık önbelleği (20 sn, anahtar `kullanıcı|küme`) yalnız tazelik say: izin ve modül kapısını her istekte önbellekten ÖNCE uygula.
 - **[ÇEKİRDEK]** Yeni küme yalnız `PATRON_RECORD_SETS`/`PATRON_SNAPSHOT_SETS` + `test_patron_okuma_ucu` §1e/§1f ile eklenir.
+- **[ÇEKİRDEK]** Ticaret tablosu okuyan kümeyi `TICARET_SETS`e yaz (kapısı `MODULE_GATES["ticaret.enabled"]`, küme başına); okuma ucuna router düzeyinde modül kapısı koyma.
 
 ## Gelen kutusu (fabrika)
 
