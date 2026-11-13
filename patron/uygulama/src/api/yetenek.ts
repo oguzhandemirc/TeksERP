@@ -15,6 +15,8 @@ export interface Yetenek {
   /** Rapor İSTEK ÜZERİNE eşzamanlı oluşturulur, saklanır ve geçmişi tutulur (ERP `patronReportApi`); değilse bulutun
    *  istek → yoklama akışı. Ekran bu yeteneğe bakar, kipe değil. */
   readonly raporAnlik: boolean;
+  /** Koşum dosyası (Excel + PDF'e çevrilecek HTML; ERP `patronReportExport`) — sunucu her koşum için `dosyaBicimleri` de bildirir. */
+  readonly raporDisaAktar: boolean;
   readonly bildirim: boolean;
   /** Kişisel gelen bildirim kutusu (ERP `/api/bildirim/*`: liste, okunmamış sayısı, okundu); açıklık `/ozet`ten. */
   readonly bildirimKutusu: boolean;
@@ -36,6 +38,7 @@ export const BULUT_YETENEK: Yetenek = {
   gelenKutusu: true,
   rapor: true,
   raporAnlik: false,
+  raporDisaAktar: false,
   bildirim: true,
   bildirimKutusu: false,
   tazele: true,
@@ -52,7 +55,7 @@ const dizeler = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is
  * ERP sunucusu: sunulan kümeler sunucunun beyanından (eski sunucu beyan etmezse BOŞ — fail-closed). Bulut yazma
  * kanalı (gelen kutusu, `:yaz` kodları) yok; ERP yazma işlemleri ham ERP izinlerinden (`islemVar`).
  */
-export function erpYetenek(patronReadSets: unknown, erpPermissions?: unknown, patronReportApi?: unknown, bildirimKutusu?: unknown): Yetenek {
+export function erpYetenek(patronReadSets: unknown, erpPermissions?: unknown, patronReportApi?: unknown, bildirimKutusu?: unknown, patronReportExport?: unknown): Yetenek {
   const kumeler = new Set(dizeler(patronReadSets));
   // Rapor ucu (V5a) yalnız sürümünü beyan eden sunucuda; eski sunucu beyan etmez → rapor gizli (fail-closed).
   const rapor = typeof patronReportApi === "number" && patronReportApi >= 1;
@@ -64,6 +67,8 @@ export function erpYetenek(patronReadSets: unknown, erpPermissions?: unknown, pa
     gelenKutusu: false,
     rapor,
     raporAnlik: rapor,
+    // Dosya ucu yalnız sürümünü beyan eden sunucuda (eski fabrika → düğme gizli, fail-closed).
+    raporDisaAktar: rapor && typeof patronReportExport === "number" && patronReportExport >= 1,
     bildirim: false,
     // Fabrika `/api/bildirim/ozet` `enabled:true` dediyse (yalnız gerçek `true` açar — fail-closed).
     bildirimKutusu: bildirimKutusu === true,

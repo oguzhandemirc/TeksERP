@@ -210,8 +210,8 @@ export function SessionProvider({ children, platform = "mobil" }: { children: Re
     };
   }, []);
 
-  const applyCaps = useCallback((sets: unknown, perms: unknown, reportApi: unknown, inbox: boolean) => {
-    const y = erpYetenek(sets, perms, reportApi, inbox);
+  const applyCaps = useCallback((sets: unknown, perms: unknown, reportApi: unknown, inbox: boolean, reportExport: unknown) => {
+    const y = erpYetenek(sets, perms, reportApi, inbox, reportExport);
     capsRef.current = y;
     setYetenek(y);
     setErpCaps(y);
@@ -227,7 +227,7 @@ export function SessionProvider({ children, platform = "mobil" }: { children: Re
   const loadErpCaps = useCallback(
     async (c: Cache) => {
       const me = (await c.load("ben", () => erpBen(client))).data;
-      applyCaps(me.patronReadSets, me.permissions, me.patronReportApi, await bildirimAcik(c));
+      applyCaps(me.patronReadSets, me.permissions, me.patronReportApi, await bildirimAcik(c), me.patronReportExport);
       return me;
     },
     [client, applyCaps, bildirimAcik],
@@ -276,13 +276,13 @@ export function SessionProvider({ children, platform = "mobil" }: { children: Re
         const s = `erp|${adres}|${me.userId}`;
         const c = makeCache(s);
         await c.load("ben", () => Promise.resolve(me));
-        applyCaps(me.patronReadSets, me.permissions, me.patronReportApi, false);
+        applyCaps(me.patronReadSets, me.permissions, me.patronReportApi, false, me.patronReportExport);
         await secretStore.set(TOKEN_KEY, r.token).catch(() => undefined);
         await secretStore.set(SCOPE_KEY, s).catch(() => undefined);
         setScope(s);
         await loadFacility(c);
         // Gelen kutusu açıklığı oturum kurulduktan sonra (hata girişi bozmaz; kapalı kalır).
-        applyCaps(me.patronReadSets, me.permissions, me.patronReportApi, await bildirimAcik(c));
+        applyCaps(me.patronReadSets, me.permissions, me.patronReportApi, await bildirimAcik(c), me.patronReportExport);
       } catch (err) {
         // Yarım giriş kalmaz: belirteç düşer, sonraki deneme baştan.
         await reset();
