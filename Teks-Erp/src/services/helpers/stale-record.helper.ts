@@ -75,6 +75,7 @@ export async function claimOrderVersionTx(
   expected: Date,
 ): Promise<void> {
   // Kilit sırası sevk yoluyla aynı (kalemler id sırasıyla → başlık); `updatedAt`e dokunmadan kilitler.
+  // aktif-kalem-muaf: satır KİLİDİ (FOR UPDATE), talep sorgusu değil — sürüm iptal edilmiş kalemi de kapsar.
   await tx.$queryRaw`SELECT id FROM order_lines WHERE "orderId" = ${id}::uuid ORDER BY id FOR UPDATE`;
   const claimed = await tx.order.updateMany({
     where: { id, status, ...orderContentVersionWhere(expected) },
