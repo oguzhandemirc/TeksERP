@@ -24,6 +24,7 @@ import { StatusBadge } from "./StatusBadge";
 import { makeStyles, useTokens } from "./theme-context";
 import { TOUCH, radius, space, typography } from "./tokens";
 import { useWrite } from "./useWrite";
+import { BildirimSatiri } from "./bildirim/BildirimSatiri";
 import { EMPTY_ICON } from "./icons";
 
 /** Deneme sonucu: kaç cihaza gitti, kayıtsız cihaz çıkarıldı mı. */
@@ -161,8 +162,6 @@ export function NotificationDevices({ vapidKey, pushHere = pushAvailable(Platfor
 export function NotificationHistory() {
   const { api } = useSession();
   const router = useRouter();
-  const t = useTokens();
-  const s = useStyles();
   const list = useRemote("bildirimler", () => api.notificationHistory({ limit: 20 }));
   const items = list.data?.kayitlar ?? [];
   return (
@@ -176,19 +175,9 @@ export function NotificationHistory() {
             const look = notificationKind(n.tur);
             const why = n.atlamaNedeni ? NOTIFICATION_SKIP[n.atlamaNedeni] ?? n.atlamaNedeni : null;
             return (
-              <Pressable key={n.id} disabled={!route} onPress={() => route && router.push(route as never)} accessibilityRole={route ? "link" : undefined}
-                style={({ pressed }) => [s.hist, pressed && route ? { backgroundColor: t.surfaceAlt } : null]}>
-                <IconChip domain={look.domain} icon={look.icon} size={36} />
-                <View style={s.flex}>
-                  <Text style={s.histTitle}>{n.baslik}</Text>
-                  <Text style={s.histBody}>{n.metin}</Text>
-                  <View style={s.histMeta}>
-                    <StatusBadge value={n.durum} size="sm" />
-                    <Text style={s.histTime}>{why ? `${formatAgo(n.olusturulma)} · ${why}` : formatAgo(n.olusturulma)}</Text>
-                  </View>
-                </View>
-                {route ? <Ionicons name="chevron-forward" size={18} color={t.textMuted} /> : null}
-              </Pressable>
+              <BildirimSatiri key={n.id} look={look} title={n.baslik} body={n.metin} badge={<StatusBadge value={n.durum} size="sm" />}
+                time={why ? `${formatAgo(n.olusturulma)} · ${why}` : formatAgo(n.olusturulma)}
+                onPress={route ? () => router.push(route as never) : undefined} chevron={route !== null} accessibilityRole="link" />
             );
           })}
         </ListGroup>
@@ -212,9 +201,4 @@ const useStyles = makeStyles((t) => ({
   askRow: { flexDirection: "row" as const, gap: space.s },
   remove: { minHeight: TOUCH, justifyContent: "center" as const, paddingHorizontal: space.xs },
   removeText: { ...typography.subhead, fontWeight: "600" as const },
-  hist: { flexDirection: "row" as const, alignItems: "flex-start" as const, gap: space.m, paddingHorizontal: space.l, paddingVertical: space.m },
-  histTitle: { ...typography.headline, color: t.text },
-  histBody: { ...typography.subhead, color: t.textSecondary, marginTop: 2 },
-  histMeta: { flexDirection: "row" as const, alignItems: "center" as const, gap: space.s, marginTop: space.s, flexWrap: "wrap" as const },
-  histTime: { ...typography.footnote, color: t.textMuted },
 }));

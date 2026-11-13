@@ -16,6 +16,8 @@ export interface Yetenek {
    *  istek → yoklama akışı. Ekran bu yeteneğe bakar, kipe değil. */
   readonly raporAnlik: boolean;
   readonly bildirim: boolean;
+  /** Kişisel gelen bildirim kutusu (ERP `/api/bildirim/*`: liste, okunmamış sayısı, okundu); açıklık `/ozet`ten. */
+  readonly bildirimKutusu: boolean;
   /** Açılış zili (`POST /tazele`) ve değişim akışı (`GET /degisim`). */
   readonly tazele: boolean;
   readonly hesapYonetimi: boolean;
@@ -35,6 +37,7 @@ export const BULUT_YETENEK: Yetenek = {
   rapor: true,
   raporAnlik: false,
   bildirim: true,
+  bildirimKutusu: false,
   tazele: true,
   hesapYonetimi: true,
   parolaDegistir: true,
@@ -49,7 +52,7 @@ const dizeler = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is
  * ERP sunucusu: sunulan kümeler sunucunun beyanından (eski sunucu beyan etmezse BOŞ — fail-closed). Bulut yazma
  * kanalı (gelen kutusu, `:yaz` kodları) yok; ERP yazma işlemleri ham ERP izinlerinden (`islemVar`).
  */
-export function erpYetenek(patronReadSets: unknown, erpPermissions?: unknown, patronReportApi?: unknown): Yetenek {
+export function erpYetenek(patronReadSets: unknown, erpPermissions?: unknown, patronReportApi?: unknown, bildirimKutusu?: unknown): Yetenek {
   const kumeler = new Set(dizeler(patronReadSets));
   // Rapor ucu (V5a) yalnız sürümünü beyan eden sunucuda; eski sunucu beyan etmez → rapor gizli (fail-closed).
   const rapor = typeof patronReportApi === "number" && patronReportApi >= 1;
@@ -62,6 +65,8 @@ export function erpYetenek(patronReadSets: unknown, erpPermissions?: unknown, pa
     rapor,
     raporAnlik: rapor,
     bildirim: false,
+    // Fabrika `/api/bildirim/ozet` `enabled:true` dediyse (yalnız gerçek `true` açar — fail-closed).
+    bildirimKutusu: bildirimKutusu === true,
     tazele: false,
     hesapYonetimi: false,
     parolaDegistir: false,

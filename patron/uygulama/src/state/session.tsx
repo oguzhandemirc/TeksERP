@@ -15,6 +15,7 @@ import { createErpApi, erpBen, erpGiris } from "../api/erp";
 import { BULUT_YETENEK, erpYetenek, izinleriSuz, setYetenek, type Yetenek } from "../api/yetenek";
 import { createBulutYazici, createErpYazici, type Yazici } from "../api/yazma";
 import { createBulutRaporcu, createErpRaporcu, type Raporcu } from "../api/rapor";
+import { createBulutBildirimci, createErpBildirimci, erpBildirimAcik, type Bildirimci } from "../api/bildirim";
 import type { FacilityChoice, FacilityStatus, LoginResponse } from "../api/wire";
 import { apiBaseUrl } from "../lib/config";
 import { clearCache, createCache, ERP_CACHE_MAX_AGE_MS, openingCacheHygiene, purgeExpired, type Cache } from "./cache";
@@ -38,6 +39,8 @@ export interface SessionValue {
   readonly yazici: Yazici;
   /** İstek üzerine rapor (yalnız `yetenek().raporAnlik` açıkken çağrılır; bulutta ağa gitmez). */
   readonly raporcu: Raporcu;
+  /** Gelen bildirim kutusu (yalnız `yetenek().bildirimKutusu` açıkken çağrılır; bulutta ağa gitmez). */
+  readonly bildirimci: Bildirimci;
   readonly cache: Cache | null;
   readonly facility: FacilityStatus | null;
   /** Etkin tesis (kapsamdan); oturumsuzken null. */
@@ -146,6 +149,7 @@ export function SessionProvider({ children, platform = "mobil" }: { children: Re
   const api = useMemo(() => (isErp ? createErpApi(client, () => capsRef.current) : createApi(client)), [client, isErp]);
   const yazici = useMemo(() => (isErp ? createErpYazici(client) : createBulutYazici(api)), [client, isErp, api]);
   const raporcu = useMemo(() => (isErp ? createErpRaporcu(client) : createBulutRaporcu()), [client, isErp]);
+  const bildirimci = useMemo(() => (isErp ? createErpBildirimci(client) : createBulutBildirimci()), [client, isErp]);
   const makeCache = useCallback((s: string) => createCache(plainStore, s, undefined, isErp ? ERP_CACHE_MAX_AGE_MS : undefined), [isErp]);
   const cache = useMemo(() => (scope ? makeCache(scope) : null), [scope, makeCache]);
 
@@ -206,21 +210,27 @@ export function SessionProvider({ children, platform = "mobil" }: { children: Re
     };
   }, []);
 
-  const applyCaps = useCallback((sets: unknown, perms: unknown, reportApi: unknown) => {
-    const y = erpYetenek(sets, perms, reportApi);
+  const applyCaps = useCallback((sets: unknown, perms: unknown, reportApi: unknown, inbox: boolean) => {
+    const y = erpYetenek(sets, perms, reportApi, inbox);
     capsRef.current = y;
     setYetenek(y);
     setErpCaps(y);
   }, []);
 
+  /** ERP gelen kutusu açık mı (`/bildirim/ozet`, saklı kopyalı; 404/kapalı/hata → kapalı). */
+  const bildirimAcik = useCallback(
+    (c: Cache) => erpBildirimAcik(async () => (await c.load("bildirim-ozet", () => bildirimci.ozet())).data),
+    [bildirimci],
+  );
+
   /** ERP: kullanıcı + sunulan kümeler (`/auth/me`, saklı kopyalı — çevrimdışı açılışta da yetenek bilinir). */
   const loadErpCaps = useCallback(
     async (c: Cache) => {
       const me = (await c.load("ben", () => erpBen(client))).data;
-      applyCaps(me.patronReadSets, me.permissions, me.patronReportApi);
+      applyCaps(me.patronReadSets, me.permissions, me.patronReportApi, await bildirimAcik(c));
       return me;
     },
-    [client, applyCaps],
+    [client, applyCaps, bildirimAcik],
   );
 
   const booted = useRef(false);
@@ -266,11 +276,13 @@ export function SessionProvider({ children, platform = "mobil" }: { children: Re
         const s = `erp|${adres}|${me.userId}`;
         const c = makeCache(s);
         await c.load("ben", () => Promise.resolve(me));
-        applyCaps(me.patronReadSets, me.permissions, me.patronReportApi);
+        applyCaps(me.patronReadSets, me.permissions, me.patronReportApi, false);
         await secretStore.set(TOKEN_KEY, r.token).catch(() => undefined);
         await secretStore.set(SCOPE_KEY, s).catch(() => undefined);
         setScope(s);
         await loadFacility(c);
+        // Gelen kutusu açıklığı oturum kurulduktan sonra (hata girişi bozmaz; kapalı kalır).
+        applyCaps(me.patronReadSets, me.permissions, me.patronReportApi, await bildirimAcik(c));
       } catch (err) {
         // Yarım giriş kalmaz: belirteç düşer, sonraki deneme baştan.
         await reset();
@@ -279,7 +291,7 @@ export function SessionProvider({ children, platform = "mobil" }: { children: Re
       setChoices([]);
       setPhase("hazir");
     },
-    [client, makeCache, applyCaps, loadFacility, reset],
+    [client, makeCache, applyCaps, bildirimAcik, loadFacility, reset],
   );
 
   const login = useCallback(
@@ -396,6 +408,7 @@ export function SessionProvider({ children, platform = "mobil" }: { children: Re
     api,
     yazici,
     raporcu,
+    bildirimci,
     cache,
     facility,
     facilityId,
