@@ -227,7 +227,7 @@ export class OrderService extends BaseService {
     orderId: string,
     lineId: string,
     userId?: string,
-    reason?: { reasonCode?: string | null; reasonText?: string | null },
+    reason?: { reasonCode?: string | null; reasonText?: string | null; expectedPreviewToken?: string | null },
   ): Promise<ApiResponse<unknown>> {
     return cancelOrderLineImpl.call(this as unknown as OrderServiceThis, orderId, lineId, userId, reason);
   }
