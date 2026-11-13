@@ -1009,6 +1009,14 @@ export const SETTING_KEYS = {
   SYSTEM_INSTALLATION_ID: "system.installationId",
   /** Patron bulutu olay güdümlü tur (default false = yalnız kira aralığında tur). */
   PATRON_BULUT_OLAY_GUDUMLU: "patronBulut.olayGudumluEnabled",
+  /** Patron bulutu fabrika seddi (G1): tek yazar `PUT /api/patron-bulut/ayarlar` (ayar şifreli); flag yükünde DÖNMEZ.
+   *  Gelen kutusu anahtarı — varsayılan TRUE (bugünkü davranış), yalnız açık `false` `al`ı durdurur. */
+  PATRON_BULUT_INBOX_ENABLED: "patronBulut.gelenKutusuEnabled",
+  /** Buluttan gelen kayıt tavanı: son 60 dk / son 24 sa makbuz sayısı (kayan pencere). */
+  PATRON_BULUT_INBOX_HOURLY_MAX: "patronBulut.gelenKutusuSaatlikTavan",
+  PATRON_BULUT_INBOX_DAILY_MAX: "patronBulut.gelenKutusuGunlukTavan",
+  /** Buluttan istenen rapor hesabı tavanı: son 60 dk. */
+  PATRON_BULUT_REPORT_HOURLY_MAX: "patronBulut.raporSaatlikTavan",
   // bildirim: gelen kutusu davranış bayrağı (modül anahtarı DEĞİL — plan Karar Y1); default false.
   BILDIRIM_GELEN_KUTUSU_ENABLED: "bildirim.gelenKutusuEnabled",
   // belge-sablon T1C: davranış bayrakları (modül DEĞİL, profile girmez); ikisi de default false.

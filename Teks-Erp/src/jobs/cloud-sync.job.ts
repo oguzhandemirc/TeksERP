@@ -18,7 +18,9 @@ import { cloudEligibility, type CloudBlockReason } from "../cloud-sync/eligibili
 import { getCloudUrl } from "../cloud-sync/cloud-url";
 import { egressCloudTransport, type CloudTransport } from "../cloud-sync/cloud-client";
 import { runSyncRound, type RoundOutcome } from "../cloud-sync/sync-round";
-import { claimAndRunReportRequests, computeReportResult, reportDigest, sendReportResult, standardReportPlan } from "../cloud-sync/report-requests";
+import { pushStandardReportSnapshots } from "../cloud-sync/report-requests";
+import { reportGate, runGatedReportClaims } from "../cloud-sync/report-gate";
+import { readPatronCloudGuardSettings } from "../services/patron-cloud-guard.service";
 import { pruneSyncMarks } from "../cloud-sync/marks-pruning";
 import { loadWatermarks, saveWatermarks, wmKey } from "../cloud-sync/watermarks";
 import type { SnapshotCadence } from "../cloud-sync/projections";
@@ -121,22 +123,16 @@ async function exclusive(fn: () => Promise<void>): Promise<void> {
 
 async function pushStandardReports(nowMs: number): Promise<void> {
   const elig = cloudEligibility(nowMs);
-  if (!elig.ok) return;
-  const ctx = { baseUrl: elig.baseUrl, installationId: elig.installationId, transport };
-  const stored = await loadWatermarks();
-  for (const plan of standardReportPlan(new Date(nowMs))) {
-    const result = await computeReportResult({ istekId: null, key: plan.key, params: plan.params, donem: plan.donem, nowMs });
-    const key = wmKey.standardReport(plan.key, plan.donem ?? "kesit");
-    const digest = reportDigest(result);
-    if (stored.get(key)?.digest === digest) continue;
-    if (await sendReportResult(ctx, result)) await saveWatermarks([{ source: key, digest, at: new Date(nowMs) }]);
-  }
+  if (elig.ok) await pushStandardReportSnapshots({ baseUrl: elig.baseUrl, installationId: elig.installationId, transport }, nowMs);
 }
 
+/** Rapor isteği yoklaması fabrika seddinden geçer (G1, `report-gate.ts`); aralık yüzünden ertelenen zil sonraki tıkta. */
 async function runReportClaims(nowMs: number): Promise<void> {
   const elig = cloudEligibility(nowMs);
   if (!elig.ok) return;
-  await claimAndRunReportRequests({ baseUrl: elig.baseUrl, installationId: elig.installationId, transport });
+  const { raporSaatlikTavan } = await readPatronCloudGuardSettings();
+  const r = await runGatedReportClaims({ baseUrl: elig.baseUrl, installationId: elig.installationId, transport }, nowMs, raporSaatlikTavan);
+  if (r === "ARALIK") pendingReports = true;
 }
 
 /** Günde bir: eski eşitleme işaretleri budanır — ön koşuldan BAĞIMSIZ (tetikleyiciler her kurulumda yazar). */
@@ -366,5 +362,6 @@ export function __configureCloudSyncForTests(p: { transport?: CloudTransport; re
     lastEventAttemptAt = 0;
     ineligibleUntil = 0;
     status = INITIAL_STATUS;
+    reportGate.reset();
   }
 }
