@@ -171,6 +171,7 @@
 - **[ÇEKİRDEK]** Yazmayı yalnız `src/api/yazma.ts` `Yazici` üzerinden yap, açıklığı `islemVar`dan sor; bulut yaratması `inboxCreate` olarak bayt aynı kalır, ERP panelin uçlarına gider <sub>(arşiv:2026-11-13 V4b)</sub>.
 - **[ÇEKİRDEK]** ERP düzenlemesinde önce gerçek ERP kaydını oku, yalnız farkı `expectedUpdatedAt` ile yolla; 409 `STALE_RECORD`'da formu koru, sürümü "Yenile" ile al <sub>(arşiv:2026-11-13 V4b)</sub>.
 - **[ÇEKİRDEK]** Telefonda sipariş kalemi düzenleme ve İE/aktif sevkiyat taşıyan siparişi iptal etme; iptalden hemen önce önizlemeyi yeniden oku <sub>(arşiv:2026-11-13 V4b)</sub>.
+- **[ÇEKİRDEK]** ERP cari doğuşuna deneme kimliğini `clientToken` olarak, iptale görülen önizlemenin `previewToken`ını `expectedPreviewToken` olarak koy (yoksa gönderme); 409 `CANCEL_PREVIEW_STALE`de önizlemeyi yeniden çek, onayı baştan al <sub>(arşiv:2026-11-13 V4d)</sub>.
 
 ### Kararlar
 

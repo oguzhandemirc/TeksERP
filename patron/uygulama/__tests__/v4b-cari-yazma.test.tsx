@@ -78,7 +78,7 @@ describe("§2 tel → ERP gövdesi ve uçlar", () => {
     const f = fakeClient();
     const y = createErpYazici(f.c);
     expect(await y.cariEkle("t1", { ad: "A", roller: { musteri: true, tedarikci: false } })).toEqual({ tur: "kayit", id: "c1" });
-    expect(f.calls[0]).toEqual({ m: "POST", path: "/customers", body: { name: "A", isCustomerRole: true, isSupplierRole: false } });
+    expect(f.calls[0]).toEqual({ m: "POST", path: "/customers", body: { name: "A", isCustomerRole: true, isSupplierRole: false, clientToken: "t1" } });
     await y.cariGuncelle("c1", KAYIT.surum, { city: "İzmir" });
     expect(f.calls[1]).toEqual({ m: "PATCH", path: "/customers/c1", body: { city: "İzmir", expectedUpdatedAt: "2026-11-13T09:00:00.000Z" } });
     await y.cariPasif("c1");

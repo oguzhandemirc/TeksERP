@@ -48,7 +48,12 @@ export interface IptalOnizleme {
   readonly isEmirleri: readonly { readonly id: string; readonly no: string; readonly durum: string; readonly uretilenTop: number }[];
   readonly sevkiyatlar: readonly { readonly no: string; readonly durum: string }[];
   readonly iptalEdilebilir: boolean;
+  /** Fabrikanın önizleme belirteci (V4c); eski sunucuda null → iptal gövdesine konmaz. */
+  readonly belirtec: string | null;
 }
+
+/** Önizleme belirteci tutmadı: sipariş kullanıcı bakarken değişti, hiçbir şey uygulanmadı. */
+export const CANCEL_PREVIEW_STALE = "CANCEL_PREVIEW_STALE";
 
 export interface Yazici {
   /** Yaratma nereye gider: gelen kutusu MESAJI (fabrika sonra işler) ya da doğrudan fabrika kaydı. */
@@ -63,7 +68,8 @@ export interface Yazici {
   siparisOku(id: string): Promise<SiparisKaydi>;
   siparisGuncelle(id: string, surum: string, patch: Readonly<Record<string, unknown>>): Promise<SiparisKaydi>;
   siparisIptalOnizleme(id: string): Promise<IptalOnizleme>;
-  siparisIptal(id: string): Promise<void>;
+  /** `belirtec`: kullanıcının onayladığı önizlemenin belirteci (yoksa gönderilmez). */
+  siparisIptal(id: string, belirtec?: string | null): Promise<void>;
 }
 
 const seg = (v: string) => encodeURIComponent(v);
@@ -106,8 +112,11 @@ export function siparisGovdesi(g: OrderMessageBody, clientToken: string): Record
   });
 }
 
-/** Cari tel gövdesi → `POST /api/customers` gövdesi (kod fabrikada doğar; finans alt nesnesi gönderilmez). */
-export function cariGovdesi(g: CustomerMessageBody): Record<string, unknown> {
+/**
+ * Cari tel gövdesi → `POST /api/customers` gövdesi (kod fabrikada doğar; finans alt nesnesi gönderilmez).
+ * `clientToken` = deneme kimliği: yeni fabrika aynı token'a ilk kartı döner, eski fabrika gövde süzgecinde düşürür.
+ */
+export function cariGovdesi(g: CustomerMessageBody, clientToken?: string): Record<string, unknown> {
   return tanimli({
     name: g.ad,
     isCustomerRole: g.roller.musteri,
@@ -120,6 +129,7 @@ export function cariGovdesi(g: CustomerMessageBody): Record<string, unknown> {
     contactName: g.yetkili,
     contactPhone: g.telefon,
     email: g.eposta,
+    clientToken,
   });
 }
 
@@ -162,6 +172,7 @@ export function iptalOnizleme(h: Ham | null | undefined): IptalOnizleme {
     isEmirleri: (h.affectedWorkOrders as Ham[]).map((w) => ({ id: s(w.id), no: s(w.workOrderNumber), durum: s(w.status), uretilenTop: typeof w.producedRollCount === "number" ? w.producedRollCount : 0 })),
     sevkiyatlar: (h.activeShipments as Ham[]).map((x) => ({ no: s(x.shipmentNo), durum: s(x.status) })),
     iptalEdilebilir: h.canCancel === true,
+    belirtec: typeof h.previewToken === "string" && h.previewToken !== "" ? h.previewToken : null,
   };
 }
 
@@ -178,9 +189,8 @@ export function createErpYazici(c: ApiClient): Yazici {
   return {
     kanal: "dogrudan",
     siparisNotu: false,
-    cariEkle: async (_id, g) => {
-      // Fabrika bu uçta işlem kimliği almaz; çift kaydı ad tekilliği (409 CUSTOMER_NAME_DUPLICATE) önler.
-      const r = await c.post<Ham>("/customers", cariGovdesi(g));
+    cariEkle: async (id, g) => {
+      const r = await c.post<Ham>("/customers", cariGovdesi(g, id));
       if (typeof r?.id !== "string") throw beklenmeyen();
       return { tur: "kayit", id: r.id };
     },
@@ -197,11 +207,12 @@ export function createErpYazici(c: ApiClient): Yazici {
     siparisOku: async (id) => siparisKaydi(await c.get<Ham>(`/orders/${seg(id)}`)),
     siparisGuncelle: async (id, surum, patch) => siparisKaydi(await c.patch<Ham>(`/orders/${seg(id)}`, { ...patch, expectedUpdatedAt: surum })),
     siparisIptalOnizleme: onizle,
-    siparisIptal: async (id) => {
+    siparisIptal: async (id, belirtec) => {
       // Uygulama anında önizleme YENİDEN okunur: arada İE bağlandıysa sunucu ona varsayılan eylem uygulardı → dur.
       const karar = iptalKarari(await onizle(id));
       if (karar !== "SERBEST") throw new ApiError(409, karar === "URETIMDE" ? "SIPARIS_URETIMDE" : "AKTIF_SEVKIYAT", IPTAL_ILETISI[karar]);
-      await c.post<unknown>(`/orders/${seg(id)}/cancel`, { workOrderActions: [] });
+      // Belirteç kullanıcının GÖRDÜĞÜ önizlemeden: arada değiştiyse fabrika 409 CANCEL_PREVIEW_STALE verir, uygulamaz.
+      await c.post<unknown>(`/orders/${seg(id)}/cancel`, belirtec ? { workOrderActions: [], expectedPreviewToken: belirtec } : { workOrderActions: [] });
     },
   };
 }
