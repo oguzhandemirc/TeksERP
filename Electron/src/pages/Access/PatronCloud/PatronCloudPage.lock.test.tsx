@@ -31,6 +31,12 @@ beforeEach(() => {
     etkin: true, teknikKullanici: null, uygunluk: { ok: true, neden: null }, adres: "varsayilan",
     hesaplar: [hesap("a1", "Ayşe Patron", "AKTIF"), hesap("k1", "Kilitli Kişi", "KILITLI"), hesap("d1", "Davetli", "DAVETLI")],
     hesaplarAlinma: null, sonTur: null,
+    sed: {
+      ayarlar: { gelenKutusuAcik: true, saatlikTavan: 60, gunlukTavan: 300, raporSaatlikTavan: 60 },
+      gelenKutusu: { saatlik: { sayi: 0, tavan: 60 }, gunluk: { sayi: 0, tavan: 300 }, kalan: 60, dolu: null },
+      rapor: { sonSaat: 0, tavan: 60, enAzAralikSn: 30, sonYoklama: null },
+    },
+    makbuzlar: [],
   });
   lock.mockReset();
 });

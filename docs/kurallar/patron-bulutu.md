@@ -49,6 +49,10 @@
 - **[ÇEKİRDEK]** İdempotency makbuzda: varlık + `CloudInboxReceipt` AYNI tx; 8036 kilidi ilk ifade; kesin ret makbuz yazar, belirsiz hata yazmaz; Order/Customer'a kaynak kolonu ekleme.
 - **[ÇEKİRDEK]** Teknik kullanıcının giriş yöntemi YOK: izin yalnız `order:write` + `customer:write`, kimlik `patronBulutu.teknikKullaniciId` ayarında (`User`a kolon yok); `issueToken` onu reddeder; `mobile-users` listesinden beyanlı hariç.
 - **[ÇEKİRDEK]** Gelen kutusu işi aynı `cloudEligibility` + teknik kullanıcı ister, eksikse HİÇ dış istek yok; `zorla` kademesi sipariş/cari yazmasını kapatıyorsa `al` çağrılmaz, kayıt BEKLIYOR kalır.
+- **[ÇEKİRDEK]** Gelen kutusunu yalnız `patronBulut.gelenKutusuEnabled` açıkken yokla (varsayılan AÇIK, yalnız açık `false` kapatır); kapalıyken `al` çağırma, tur `DURDURULDU`, kayıt bulutta BEKLIYOR kalır.
+- **[ÇEKİRDEK]** Gelen kutusu tavanını makbuzdan kayan pencereyle say (son 60 dk / 24 saat; varsayılan 60 / 300); `al`ın `enFazla`sını kalanla kırp, kalan 0 ise `al` çağırma (`TAVAN_DOLU:SAATLIK|GUNLUK`), bulutun fazladan verdiğini İŞLEME.
+- **[ÇEKİRDEK]** Rapor isteği yoklamasını yalnız `cloud-sync/report-gate.ts::runGatedReportClaims`ten geçir (≥30 sn aralık + `raporSaatlikTavan`, varsayılan 60/saat; `enFazla` kırpılır); iş `claimAndRunReportRequests`i doğrudan çağırmaz.
+- **[ÇEKİRDEK]** Seddin dört ayarını yalnız `PUT /api/patron-bulut/ayarlar` (`admin:users` + ayar şifresi) yazar; ham `PUT /api/admin/settings/:key` onları reddeder.
 - **[ÇEKİRDEK]** Tel sözleşmesi TEK `patron/sunucu/src/wire/esitleme.ts` (yalnız `zod`); fabrika `Teks-Erp/src/cloud-sync/wire/esitleme.ts` bayt-eşit (`cp -p`); iki katalog birebir.
 
 ## Bulut sunucusu (`patron/sunucu`)
@@ -186,7 +190,7 @@
 
 Fabrika: `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>`; bulut: `cd patron/sunucu && node ../../scripts/agir-is.mjs -- npx tsx scripts/run-all-tests.ts`; protokol aynası `scripts/test_lisans_protokol_aynasi.ts`. Ayrıntı: `Teks-Erp/docs/BEKCI-HARITASI.md` → `## patron-bulutu`.
 
-Fabrika: `test_makine_durus_raporu`, `test_bulut_filigran`, `test_bulut_gunluk_ret`, `test_bulut_silme_damgasi`, `test_bulut_teklif_projeksiyon`, `test_bulut_uzlastirma`, `test_bulut_projeksiyon_allowlist`, `test_bulut_cari_kilit`, `test_bulut_fatura_birlesik_cari`, `test_bulut_sevke_hazir`, `test_bulut_masraf_ozeti`, `test_bulut_karlilik_ozeti`, `test_bulut_fason_ozeti`, `test_bulut_ham_update`, `test_bulut_gelen_kutusu`, `test_bulut_tel_aynasi`, `test_bulut_hesap_kilitle`, `test_bulut_ozet_mutabakat`, `test_bulut_olay_gudumlu`, `test_bulut_hizmet_karti`, `test_telemetri_defter_degil`, `test_rapor_sunum_aynasi`, `test_db_invariants`
+Fabrika: `test_makine_durus_raporu`, `test_bulut_filigran`, `test_bulut_gunluk_ret`, `test_bulut_silme_damgasi`, `test_bulut_teklif_projeksiyon`, `test_bulut_uzlastirma`, `test_bulut_projeksiyon_allowlist`, `test_bulut_cari_kilit`, `test_bulut_fatura_birlesik_cari`, `test_bulut_sevke_hazir`, `test_bulut_masraf_ozeti`, `test_bulut_karlilik_ozeti`, `test_bulut_fason_ozeti`, `test_bulut_ham_update`, `test_bulut_gelen_kutusu`, `test_bulut_tel_aynasi`, `test_bulut_hesap_kilitle`, `test_bulut_fabrika_seddi`, `test_bulut_ozet_mutabakat`, `test_bulut_olay_gudumlu`, `test_bulut_hizmet_karti`, `test_telemetri_defter_degil`, `test_rapor_sunum_aynasi`, `test_db_invariants`
 
 Bulut sunucusu: `test_rls_sizinti`, `test_izin_suzmesi`, `test_gelen_kutusu_claim`, `test_esitleme_idempotency`, `test_totp_zorunlu`, `test_rapor_istegi`, `test_saklama`, `test_kurulum_dizini`, `test_cihaz_kaydi`, `test_bildirim_kurallari`, `test_bildirim_cari_kilit`, `test_bildirim_gonderim`, `test_patron_kapilari`, `test_uzlastirma_kumesi`, `test_tazele_zili`, `test_web_sunumu`, `test_katalog_ozeti`, `test_liste_arama`, `test_kasa_kategori_suzgeci`, `test_bildirim_makbuz`, `test_hesap_kilitle_fabrika`, `test_hizmet_sonu`, `test_kimlik_silme`, `test_ip_saklama`, `test_destek_rolu`, `test_eposta_tekilligi`, `test_coklu_tesis`, `test_hesap_kendini_silme`, `test_yonetici_kurtarma`, `test_vekil_guveni`, `test_tesis_db_hazirlik`, `test_tesis_db_yalitimi`, `test_tesis_goc`, `test_compose_sirlari`, `test_degisim_sayaci`, `test_tesis_saati`, `test_guvenlik_bildirimi`, `test_kimlik_ozet_yenile`, `test_tesis_rol_hizasi`, `test_bildirim_patron_push`, `test_gizlilik_sayfasi`
 
@@ -202,4 +206,5 @@ Yeni bekçi doğduğu commit'te bu listeye VE haritanın `## patron-bulutu` böl
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
+- `docs/history/arsiv/2026-11.md` "G1 fabrika seddi" (tavan varsayılanlarının gerekçesi).
 - `docs/history/arsiv/2026-09.md` ve `2026-10.md` patron bulutu notları (B1–B6, I3/I6/I12, F1, PU, G19, tesis başına DB, tek kimlik, SWR); başlık listesi ayrıntı dosyasında.

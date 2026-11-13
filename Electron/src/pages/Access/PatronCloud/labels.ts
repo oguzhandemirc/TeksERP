@@ -1,4 +1,4 @@
-import type { CloudAccount, CloudIneligibleReason, CloudUrlSource } from "./service";
+import type { CloudAccount, CloudIneligibleReason, CloudUrlSource, InboxReceiptRow } from "./service";
 import { factoryLocaleString } from "@/lib/factory-time";
 
 /** Ön koşulun (fail-closed) neden düştüğü — kullanıcıya ne eksik olduğunu söyler. */
@@ -38,13 +38,23 @@ const RUN_OUTCOME_LABELS: Record<string, string> = {
   TEKNIK_KULLANICI_YOK: "Etkinleştirilmemiş",
   LISANS_KISITLI: "Lisans kısıtlı kipte — kayıtlar bulutta bekliyor",
   MESGUL: "Meşgul",
+  DURDURULDU: "Buluttan yazma durduruldu — kayıtlar bulutta bekliyor",
+  TAVAN_DOLU: "Tavan doldu — kayıtlar bulutta bekliyor",
 };
+
+const QUOTA_REASON_LABELS: Record<string, string> = {
+  SAATLIK: "son 60 dakika",
+  GUNLUK: "son 24 saat",
+};
+
+export const RECEIPT_KIND_LABELS: Record<InboxReceiptRow["tur"], string> = { SIPARIS: "Sipariş", CARI: "Cari kart" };
+export const RECEIPT_OUTCOME_LABELS: Record<InboxReceiptRow["sonuc"], string> = { ISLENDI: "İşlendi", REDDEDILDI: "Reddedildi" };
 
 /** `KAPALI:PATRON_BULUT_HAKKI_YOK` biçimindeki tur sonucunu Türkçe cümleye çevirir. */
 export function runOutcomeLabel(outcome: string): string {
   const [head, reason] = outcome.split(":");
   const base = RUN_OUTCOME_LABELS[head ?? ""] ?? outcome;
-  const why = reason ? INELIGIBLE_LABELS[reason as CloudIneligibleReason] : undefined;
+  const why = reason ? (QUOTA_REASON_LABELS[reason] ?? INELIGIBLE_LABELS[reason as CloudIneligibleReason]) : undefined;
   return why ? `${base} — ${why}` : base;
 }
 

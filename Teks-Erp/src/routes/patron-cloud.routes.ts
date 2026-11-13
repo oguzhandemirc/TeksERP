@@ -1,10 +1,12 @@
 // =============================================================================
 // TeksERP — Patron bulutu fabrika yüzeyi (`/api/patron-bulut/*`)
 // =============================================================================
-// Üç uç, hepsi `admin:users` (teknik kullanıcı bir HESAPTIR; bulut hesapları listesi hesap yönetimidir):
-//   · GET  /                  durum: teknik kullanıcı, ön koşul (fail-closed), bulut hesapları (salt okunur), son tur
+// Dört uç, hepsi `admin:users` (teknik kullanıcı bir HESAPTIR; bulut hesapları listesi hesap yönetimidir):
+//   · GET  /                  durum: teknik kullanıcı, ön koşul (fail-closed), bulut hesapları (salt okunur), son tur,
+//                              fabrika seddi (anahtar + tavan sayaçları) ve buluttan gelen son makbuzlar
 //   · POST /etkinlestir        teknik kullanıcıyı normal kullanıcı servisinden audit'li doğurur (idempotent)
 //   · POST /hesap/:id/kilitle  bulut hesabını kilitler — buluta imzalı istek, bulut tek yazar (B6)
+//   · PUT  /ayarlar            fabrika seddi ayarları (G1) — bu anahtarların TEK yazarı; ham ayar ucu reddeder
 // Lisans kapısı app düzeyinde: POST bir YAZMADIR (kısıtlı kipte kapalı), GET okumadır.
 // =============================================================================
 import { Router } from "express";
@@ -14,6 +16,8 @@ import { requirePermission } from "../middlewares/rbac.middleware";
 import { requireSettingsPassword } from "../middlewares/settings-password.middleware";
 import { activatePatronCloud, getPatronCloudStatus, lockCloudAccount } from "../services/patron-cloud.service";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
+import { updatePatronCloudGuardSettings } from "../services/patron-cloud-guard.service";
+import { requestImmediateCloudInboxRun } from "../jobs/cloud-inbox.job";
 
 const router = Router();
 // Toplu kapı (BE-30): iki uç da hesap yönetimidir.
@@ -97,6 +101,56 @@ router.post("/hesap/:id/kilitle", requireSettingsPassword, async (req, res, next
     const body = lockSchema.parse(req.body);
     const hesap = await lockCloudAccount({ hesapId, islemKimligi: body.islemKimligi, actorUserId: req.user?.userId });
     res.json({ success: true, data: hesap, message: `Bulut hesabı kilitlendi: ${hesap.ad}` });
+  } catch (e) {
+    next(e);
+  }
+});
+
+const guardSchema = z
+  .strictObject({
+    gelenKutusuAcik: z.boolean({ error: "Gelen kutusu anahtarı açık ya da kapalı olmalı" }).optional(),
+    saatlikTavan: z.number({ error: "Saatlik tavan sayı olmalı" }).optional(),
+    gunlukTavan: z.number({ error: "Günlük tavan sayı olmalı" }).optional(),
+    raporSaatlikTavan: z.number({ error: "Saatlik rapor tavanı sayı olmalı" }).optional(),
+  })
+  .refine((b) => Object.keys(b).length > 0, { message: "Değiştirilecek ayar yok" });
+
+/**
+ * @openapi
+ * /api/patron-bulut/ayarlar:
+ *   put:
+ *     tags: [PatronBulutu]
+ *     summary: Fabrika seddi ayarları — buluttan yazma anahtarı ve gelen kutusu / rapor tavanları
+ *     description: Kapalı anahtar ya da dolu tavan gelen kutusunu çekmez (kayıtlar bulutta bekler); eşitleme ve rapor sürer. Ayar şifresi tanımlıysa ister.
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               gelenKutusuAcik: { type: boolean }
+ *               saatlikTavan: { type: integer, minimum: 1, maximum: 10000 }
+ *               gunlukTavan: { type: integer, minimum: 1, maximum: 10000 }
+ *               raporSaatlikTavan: { type: integer, minimum: 1, maximum: 1000 }
+ *     responses:
+ *       200: { description: Güncel durum }
+ *       400: { description: "PATRON_BULUT_AYAR_GECERSIZ — aralık dışı / tanınmayan alan" }
+ *       403: { description: İzin yok / ayar şifresi gerekli }
+ */
+router.put("/ayarlar", requireSettingsPassword, async (req, res, next) => {
+  try {
+    const body = guardSchema.parse(req.body);
+    const saved = await updatePatronCloudGuardSettings(body, req.user?.userId);
+    // Yeniden açılınca bekleyen kayıtlar kira aralığını beklemesin.
+    if (body.gelenKutusuAcik === true) requestImmediateCloudInboxRun();
+    res.json({
+      success: true,
+      data: await getPatronCloudStatus(),
+      message: saved.gelenKutusuAcik ? "Yönetim bulutu ayarları kaydedildi." : "Buluttan yazma durduruldu; kayıtlar bulutta bekleyecek.",
+    });
   } catch (e) {
     next(e);
   }

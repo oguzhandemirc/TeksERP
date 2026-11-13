@@ -18,6 +18,8 @@ export interface UcEylemi {
 const e = (fiil: string, deneme: string): UcEylemi => ({ fiil, deneme });
 
 export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
+  // ── Patron bulutu fabrika seddi (G1, 2026-11-13)
+  "PUT /api/patron-bulut/ayarlar": e("yönetim bulutu ayarlarını değiştirdi", "yönetim bulutu ayarlarını değiştirmeye çalıştı"),
   // ── Satır işareti + not (2026-11-13)
   "POST /api/row-marks/lookup": e("satır işaretlerini okudu", "satır işaretlerini okumaya çalıştı"),
   "PUT /api/row-marks": e("bir satıra işaret/not koydu", "bir satıra işaret/not koymaya çalıştı"),
