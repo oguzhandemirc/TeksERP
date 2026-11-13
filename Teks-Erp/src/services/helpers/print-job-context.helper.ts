@@ -29,6 +29,7 @@ const CLIENT_KIND_SOURCE: Record<ClientKind, PrintSource> = {
   electron: "PANEL_MASAUSTU",
   web: "PANEL_WEB",
   mobil: "TABLET",
+  patron: "TELEFON",
 };
 
 /**

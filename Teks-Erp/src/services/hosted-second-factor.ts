@@ -13,9 +13,12 @@ import { cookieLoginApplies } from "../lib/web-session-cookie";
 import { isHostedInstallation } from "./helpers/install-class.helper";
 import { webTotpWaived } from "./web-totp.service";
 
-/** Kuralın uygulanacağı giriş: barındırılan ∧ parola ∧ çerez kipi DEĞİL (çerez yolu kendi dalında). */
+/**
+ * Kuralın uygulanacağı giriş: barındırılan ∧ parola ∧ çerez kipi DEĞİL (çerez yolu kendi dalında) ∧ patron DEĞİL —
+ * patron türünde kod yalnız kullanıcı açtıysa sorulur (V1, kullanıcı kararı 2026-11-13; dal `assertSecondFactor`te).
+ */
 export function appliesHostedBearerRule(clientType: string | undefined, via: string): boolean {
-  return via === "password" && !cookieLoginApplies(clientType) && isHostedInstallation();
+  return via === "password" && clientType !== "patron" && !cookieLoginApplies(clientType) && isHostedInstallation();
 }
 
 /** Masaüstü sınıfı beyanı (electron / çerezsiz web) — cihaz muafiyeti ve "hatırla" kutusu buna bakar. */

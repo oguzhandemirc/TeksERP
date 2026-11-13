@@ -778,6 +778,8 @@ export const ROLE_COVERAGE_EXEMPT: Readonly<Record<string, string>> = {
     "Tezgah alarmının üst kademesi (K2 bildirimi + başkasının üstlenmesini bırakma) müdür/patron yetkisidir; hazır şablonlarda müdür rolü yok — fabrika panelden SEÇİLİ kişiye atar (dokuma alarm A1b, tasarım §A.9).",
   "web:access":
     "Ekran değil, giriş KANALI izni (bulut web paneli, BULUT-WEB-PANELI.md K4): fabrika dışından tarayıcıyla girişi açar → dar rollere varsayılan atanmaz, panelden SEÇİLİ kişiye verilir ('Admin (Tam Yetki)' katalogla eşitlendiği için taşır; TOTP yine zorunlu).",
+  "patron-app:login":
+    "Ekran değil, giriş KANALI izni (patron telefon uygulaması, V1 2026-11-13): internetten 30 günlük oturum açar → dar rollere varsayılan atanmaz, panelden SEÇİLİ kişiye verilir ('Admin (Tam Yetki)' katalogla eşitlendiği için paket olarak taşır).",
   "admin:*":
     "Global admin wildcard'ı — dar bir role konulsaydı o rolü sessizce süper kullanıcı yapardı. Yalnız 'Admin (Tam Yetki)' taşır.",
   "mobile:tambur-duzelt":

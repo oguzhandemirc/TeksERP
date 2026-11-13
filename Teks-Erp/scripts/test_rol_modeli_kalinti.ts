@@ -52,6 +52,8 @@ const ESIK: Record<ClientType, string> = {
   [ClientType.ELECTRON]: "1.3.2",
   [ClientType.WEB]: "1.3.2",
   [ClientType.MOBILE]: "1.0.7",
+  // Patron uygulaması (V1) eski rol modelini hiç konuşmadı → her sürümü uyumlu.
+  [ClientType.PATRON]: "0.0.0",
 };
 
 /** Migration klasör adındaki damgayı (YYYYMMDDHHMMSS) tarihe çevir; klasör yoksa null. */
