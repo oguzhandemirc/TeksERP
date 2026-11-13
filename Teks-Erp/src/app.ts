@@ -142,6 +142,7 @@ import { devicePublicRouter, deviceAdminRouter } from "./routes/device.routes";
 import workSessionRoutes from "./routes/work-session.routes";
 import { resolveDevice } from "./middlewares/device.middleware";
 import notificationRoutes from "./routes/bildirim.routes";
+import patronReadRoutes from "./routes/patron-read.routes";
 import { isNotificationBellPath } from "./constants/notification-stream";
 import { latencyMiddleware } from "./middlewares/latency.middleware";
 import { requestTraceMiddleware } from "./middlewares/request-trace.middleware";
@@ -763,6 +764,8 @@ app.use("/api/customer-lab-specs", customerLabSpecRoutes);
 app.use("/api/hata-raporlari", errorReportRoutes);
 // Patron bulutu (fabrika yüzeyi): teknik kullanıcı + salt okunur bulut hesapları. Gelen kutusu işi `jobs/cloud-inbox.job.ts`.
 app.use("/api/patron-bulut", patronCloudRoutes);
+// Patron telefon uygulaması okuma ucu (V3a): bulut okuma biçiminde canlı ERP verisi.
+app.use("/api/patron/v1", patronReadRoutes);
 // Bildirim zili + gelen kutusu (kişisel uçlar, verifyToken; bayrak `bildirim.gelenKutusuEnabled`).
 app.use("/api/bildirim", notificationRoutes);
 

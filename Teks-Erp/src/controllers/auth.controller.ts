@@ -4,6 +4,7 @@
 
 import { APP_VERSION } from "../lib/app-version";
 import { PATRON_API_VERSION } from "../constants/patron-app";
+import { PATRON_READ_SETS } from "../services/patron-read/izin-esleme";
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { AuthService } from "../services/auth.service";
@@ -780,6 +781,8 @@ export class AuthController {
           // (modül bayrakları) okur; ayrı uç açılmadı. İkisi de bilgi, kapı değil.
           backendVersion: APP_VERSION,
           patronApiVersion: PATRON_API_VERSION,
+          // V3a: `/api/patron/v1` altında bu sunucunun verdiği küme adları (yoksa uygulama ekranı gizler).
+          patronReadSets: PATRON_READ_SETS,
         },
       });
     } catch (error) {

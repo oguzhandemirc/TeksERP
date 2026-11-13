@@ -41,6 +41,16 @@
 - **[ÇEKİRDEK]** Ret alan GUNLUK anlıkla günü tamam sayma: yalnız reddedileni 1→2→4→8 sa geri çekilmeyle yeniden gönder; aynı KISMI log 6 sa içinde tekrarlanmaz (`cloud-sync/daily-retry.ts`).
 - **[PROFİL]** Olay güdümlü tur `patronBulut.olayGudumluEnabled` (varsayılan kapalı); kirli bayrak tek yazar `cloud-sync/dirty-flag.ts` (`lib/prisma.ts` Proxy); 3 sn birleştirme, ≥15 sn aralık, tek uçuş; hata yutulur, yazma her koşulda yapılır.
 
+## ERP okuma ucu (fabrika, V3a)
+
+### Değişmezler
+
+- **[ÇEKİRDEK]** Patron uygulamasının ERP okuma uçlarını yalnız `/api/patron/v1` altında aç (`oturum`, `veri/:p`, `veri/:p/:id`, `anlik/:p`); yanıtı bulut tel tipleriyle (`patron/sunucu/src/wire/api.ts`) AYNI biçimde ver.
+- **[ÇEKİRDEK]** Okuma ucunun verisini canlı ERP'den, eşitlemenin kullandığı fabrika kurucularıyla üret; bulut kopyasından ya da ayrı hesapla üretme.
+- **[ÇEKİRDEK]** ERP izni → bulut okuma kodu eşlemesini yalnız `services/patron-read/izin-esleme.ts` `ERP_TO_CLOUD`ta tut; izinsiz kök 403 `PATRON_SET_FORBIDDEN`, izinsiz alt satır anahtarsız, sunulmayan küme 404; yazma/hesap kodu verme.
+- **[ÇEKİRDEK]** Anlık önbelleği (20 sn, anahtar `kullanıcı|küme`) yalnız tazelik say: izin ve modül kapısını her istekte önbellekten ÖNCE uygula.
+- **[ÇEKİRDEK]** Yeni küme yalnız `PATRON_RECORD_SETS`/`PATRON_SNAPSHOT_SETS` + `test_patron_okuma_ucu` §1e/§1f ile eklenir.
+
 ## Gelen kutusu (fabrika)
 
 ### Değişmezler
@@ -190,7 +200,7 @@
 
 Fabrika: `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>`; bulut: `cd patron/sunucu && node ../../scripts/agir-is.mjs -- npx tsx scripts/run-all-tests.ts`; protokol aynası `scripts/test_lisans_protokol_aynasi.ts`. Ayrıntı: `Teks-Erp/docs/BEKCI-HARITASI.md` → `## patron-bulutu`.
 
-Fabrika: `test_makine_durus_raporu`, `test_bulut_filigran`, `test_bulut_gunluk_ret`, `test_bulut_silme_damgasi`, `test_bulut_teklif_projeksiyon`, `test_bulut_uzlastirma`, `test_bulut_projeksiyon_allowlist`, `test_bulut_cari_kilit`, `test_bulut_fatura_birlesik_cari`, `test_bulut_sevke_hazir`, `test_bulut_masraf_ozeti`, `test_bulut_karlilik_ozeti`, `test_bulut_fason_ozeti`, `test_bulut_ham_update`, `test_bulut_gelen_kutusu`, `test_bulut_tel_aynasi`, `test_bulut_hesap_kilitle`, `test_bulut_fabrika_seddi`, `test_bulut_ozet_mutabakat`, `test_bulut_olay_gudumlu`, `test_bulut_hizmet_karti`, `test_telemetri_defter_degil`, `test_rapor_sunum_aynasi`, `test_db_invariants`
+Fabrika: `test_makine_durus_raporu`, `test_bulut_filigran`, `test_bulut_gunluk_ret`, `test_bulut_silme_damgasi`, `test_bulut_teklif_projeksiyon`, `test_bulut_uzlastirma`, `test_bulut_projeksiyon_allowlist`, `test_bulut_cari_kilit`, `test_bulut_fatura_birlesik_cari`, `test_bulut_sevke_hazir`, `test_bulut_masraf_ozeti`, `test_bulut_karlilik_ozeti`, `test_bulut_fason_ozeti`, `test_bulut_ham_update`, `test_bulut_gelen_kutusu`, `test_bulut_tel_aynasi`, `test_bulut_hesap_kilitle`, `test_bulut_fabrika_seddi`, `test_bulut_ozet_mutabakat`, `test_bulut_olay_gudumlu`, `test_bulut_hizmet_karti`, `test_patron_okuma_ucu`, `test_telemetri_defter_degil`, `test_rapor_sunum_aynasi`, `test_db_invariants`
 
 Bulut sunucusu: `test_rls_sizinti`, `test_izin_suzmesi`, `test_gelen_kutusu_claim`, `test_esitleme_idempotency`, `test_totp_zorunlu`, `test_rapor_istegi`, `test_saklama`, `test_kurulum_dizini`, `test_cihaz_kaydi`, `test_bildirim_kurallari`, `test_bildirim_cari_kilit`, `test_bildirim_gonderim`, `test_patron_kapilari`, `test_uzlastirma_kumesi`, `test_tazele_zili`, `test_web_sunumu`, `test_katalog_ozeti`, `test_liste_arama`, `test_kasa_kategori_suzgeci`, `test_bildirim_makbuz`, `test_hesap_kilitle_fabrika`, `test_hizmet_sonu`, `test_kimlik_silme`, `test_ip_saklama`, `test_destek_rolu`, `test_eposta_tekilligi`, `test_coklu_tesis`, `test_hesap_kendini_silme`, `test_yonetici_kurtarma`, `test_vekil_guveni`, `test_tesis_db_hazirlik`, `test_tesis_db_yalitimi`, `test_tesis_goc`, `test_compose_sirlari`, `test_degisim_sayaci`, `test_tesis_saati`, `test_guvenlik_bildirimi`, `test_kimlik_ozet_yenile`, `test_tesis_rol_hizasi`, `test_bildirim_patron_push`, `test_gizlilik_sayfasi`
 
