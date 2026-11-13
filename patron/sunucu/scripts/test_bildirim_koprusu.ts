@@ -10,7 +10,7 @@
 //   §6 gönderim: metin temizlenir + kırpılır; yük anahtarları izinli kümede (`BRIDGE_PAYLOAD_KEYS`, data {bildirimId, rota})
 //   §7 ⭐ bilette `DeviceNotRegistered` → yanıtta `gecersiz`, bağ silinir
 //   §8 ⭐ makbuzda `DeviceNotRegistered` → bağ `invalidated_at`; sonraki dürt `gecersiz` + bağ silinir
-//   §9 ⭐ metin (sentinel) merkez DB'sinin hiçbir tablosunda ve süreç günlüğünde YOK (başarı + hata yolları)
+//   §9 ⭐ metin (sentinel) ve ham belirteç merkez DB'sinin hiçbir tablosunda ve süreç günlüğünde YOK (başarı + hata yolları)
 //   §10 hız sınırı 429 HIZ_SINIRI · belirteç tavanı 400 · sıkıştırılmış gövde 400
 //   §11 ⭐ gönderim kapalı (`BILDIRIM_KIPI=kapali`) → 200, `gonderim:"kapali"`, sonuç KAPALI (hata değil)
 //   §12 bırak → bağ silinir, sonraki dürt BAGSIZ
@@ -20,109 +20,20 @@
 //   N4 merkez nonce yazılmadı ⇒ §2a · §2b · N5 yüke `tesisId` eklendi ⇒ §6d · §6e · N6 geçersiz bağ silinmedi ⇒ §7a · §8c
 //   N7 başlık bilet satırına yazıldı ⇒ §9a
 // =============================================================================
-import { generateKeyPairSync, randomUUID, type KeyObject } from "node:crypto";
-import { gzipSync } from "node:zlib";
+import { generateKeyPairSync, randomUUID } from "node:crypto";
 import { Client } from "pg";
 import { CLOUD_TABLES, MERKEZ_TABLES } from "../src/lib/db-grants";
 import { databaseOf, facilityDbName } from "../src/lib/tesis-db-ad";
-import { REQUEST_HEADER, publicKeyX, signRequest } from "../src/lisans-protokol";
 import { BRIDGE_DATA_KEYS, BRIDGE_PAYLOAD_KEYS, ExpoTransport, RecordingTransport, bridgePushPayload } from "../src/push/transports";
 import { checkBridgeReceipts, tokenDigestOf } from "../src/services/push-bridge";
 import { PUSH_BRIDGE_PATHS, PUSH_TITLE_MAX } from "../src/wire/esitleme";
-import { kontrol, ortamKur, sonuc, type Ortam, type Yanit } from "./lib/test-ortam";
+import { SATICI_ORTAMI, SENTINEL, belirtec, birak, durt, gunlukYakala, istek, kaydet, kod, kurulum, saticiDurumu, sahteFetch, uretilenBelirtecler, veri, yabanciKurulum, type SahteKurulum } from "./lib/kopru-ortam";
+import { kontrol, ortamKur, sonuc, type Yanit } from "./lib/test-ortam";
 
-// ---------------------------------------------------------------- günlük yakalama (sunucu süreç içinde)
-const gunluk: string[] = [];
-for (const akis of [process.stdout, process.stderr]) {
-  const asil = akis.write.bind(akis) as (c: string | Uint8Array, ...r: unknown[]) => boolean;
-  akis.write = ((c: string | Uint8Array, ...r: unknown[]) => {
-    gunluk.push(typeof c === "string" ? c : Buffer.from(c).toString("utf8"));
-    return asil(c, ...r);
-  }) as typeof akis.write;
-}
-
-const BELIRTEC = "bekci-satici-ic-api-belirteci-0123456789abcdef";
-const SATICI = "http://satici.bekci.invalid";
-
-interface SahteKurulum {
-  readonly kurulumId: string;
-  readonly tesisId: string;
-  readonly privateKey: KeyObject;
-  gorunum: Record<string, unknown>;
-}
-
-const satici = new Map<string, SahteKurulum>();
-let saticiKapali = false;
-
-const sahteFetch: typeof fetch = async (input) => {
-  if (saticiKapali) throw new TypeError("fetch failed");
-  const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
-  const id = decodeURIComponent(url.pathname.replace("/ic/v1/kurulum/", ""));
-  const k = satici.get(id);
-  if (!k) return new Response(JSON.stringify({ success: false }), { status: 404 });
-  return new Response(JSON.stringify(k.gorunum), { status: 200, headers: { "Content-Type": "application/json" } });
-};
-
-function kurulum(g: Partial<{ durum: string; aktif: boolean; sinif: string; abonelik: boolean }> = {}): SahteKurulum {
-  const kurulumId = randomUUID();
-  const tesisId = randomUUID();
-  const { privateKey } = generateKeyPairSync("ed25519");
-  const k: SahteKurulum = {
-    kurulumId,
-    tesisId,
-    privateKey,
-    gorunum: {
-      v: 1,
-      kurulumId,
-      tesis: { id: tesisId, ad: `Köprü Bekçi ${tesisId.slice(0, 6)}` },
-      acikAnahtar: publicKeyX(privateKey),
-      anahtarKimligi: null,
-      durum: g.durum ?? "ETKIN",
-      sinif: g.sinif ?? "URETIM",
-      moduller: g.abonelik ? ["patron-bulut"] : [],
-      patronBulutBitis: g.abonelik ? new Date(Date.now() + 86_400_000).toISOString() : null,
-      devredildi: g.durum === "DEVREDILDI",
-      aktif: g.aktif ?? true,
-      saklamaAy: 13,
-    },
-  };
-  satici.set(kurulumId, k);
-  return k;
-}
-
-const SENTINEL = `GIZLI-METIN-${randomUUID()}`;
-const belirtec = (): string => `ExponentPushToken[${randomUUID().replace(/-/g, "").slice(0, 22)}]`;
-
-async function istek(
-  o: Ortam,
-  k: Pick<SahteKurulum, "kurulumId" | "privateKey">,
-  yol: string,
-  govde: unknown,
-  g: { amac?: "bildir" | "esitle"; baslik?: string; ham?: Buffer; gzip?: boolean } = {},
-): Promise<Yanit & { baslik: string }> {
-  const ham = g.ham ?? Buffer.from(JSON.stringify(govde), "utf8");
-  const tel = g.gzip ? gzipSync(ham) : ham;
-  const baslik = g.baslik ?? signRequest({ installationId: k.kurulumId, purpose: g.amac ?? "bildir", body: tel, key: { privateKey: k.privateKey, nowMs: o.saat.simdi() }, path: yol });
-  const res = await fetch(`${o.adres}${yol}`, {
-    method: "POST",
-    headers: { [REQUEST_HEADER]: baslik, "Content-Type": "application/json", ...(g.gzip ? { "Content-Encoding": "gzip" } : {}) },
-    body: new Uint8Array(tel),
-  });
-  const text = await res.text();
-  return { status: res.status, json: text ? (JSON.parse(text) as Yanit["json"]) : { success: false }, headers: res.headers, baslik };
-}
-
-const kaydet = (o: Ortam, k: SahteKurulum, ozetler: string[]) => istek(o, k, PUSH_BRIDGE_PATHS.REGISTER, { v: 1, ozetler });
-const birak = (o: Ortam, k: SahteKurulum, ozetler: string[]) => istek(o, k, PUSH_BRIDGE_PATHS.RELEASE, { v: 1, ozetler });
-const durt = (o: Ortam, k: SahteKurulum, belirtecler: string[], g: { baslik?: string; govde?: string } = {}) =>
-  istek(o, k, PUSH_BRIDGE_PATHS.NUDGE, { v: 1, belirtecler, baslik: g.baslik ?? `${SENTINEL} başlık`, govde: g.govde ?? `${SENTINEL} gövde`, data: { bildirimId: randomUUID(), rota: "/bildirimler" } });
-
-type DurtVeri = { gonderim: string; sonuclar: { ozet: string; sonuc: string; kod?: string }[]; gecersiz: string[] };
-const veri = (r: Yanit): DurtVeri => r.json as unknown as DurtVeri;
-const kod = (r: Yanit): string | undefined => r.json.details?.code;
+const gunluk = gunlukYakala();
 
 async function main(): Promise<void> {
-  const ortam = { KURULUM_KAYNAGI: "satici", SATICI_IC_API_URL: SATICI, SATICI_IC_API_BELIRTECI: BELIRTEC, KURULUM_ONBELLEK_DK: "5", KOPRU_DURT_DK: "6" };
+  const ortam = { ...SATICI_ORTAMI, KOPRU_DURT_DK: "6" };
   const tasiyici = new RecordingTransport({ tickets: true });
   const o = await ortamKur({ ...ortam, BILDIRIM_KIPI: "sahte" }, sahteFetch, undefined, { pushBridge: tasiyici });
   const kapali = await ortamKur({ ...ortam, BILDIRIM_KIPI: "kapali" }, sahteFetch);
@@ -143,7 +54,7 @@ async function main(): Promise<void> {
     kontrol("§1a imzasız → 401 ISTEK_GECERSIZ", imzasiz.status === 401 && ((await imzasiz.json()) as Yanit["json"]).details?.code === "ISTEK_GECERSIZ");
     const esitle = await istek(o, a, PUSH_BRIDGE_PATHS.REGISTER, { v: 1, ozetler: [ozetA] }, { amac: "esitle" });
     kontrol("§1b `esitle` amaçlı imza → 401 ISTEK_AMAC", esitle.status === 401 && kod(esitle) === "ISTEK_AMAC", `${esitle.status} ${kod(esitle)}`);
-    const bilinmeyen = await kaydet(o, { kurulumId: randomUUID(), tesisId: randomUUID(), privateKey: generateKeyPairSync("ed25519").privateKey, gorunum: {} }, [ozetA]);
+    const bilinmeyen = await kaydet(o, yabanciKurulum(), [ozetA]);
     kontrol("§1c satıcının bilmediği kurulum → 401 KURULUM_BILINMIYOR", bilinmeyen.status === 401 && kod(bilinmeyen) === "KURULUM_BILINMIYOR", `${bilinmeyen.status}`);
     const yabanci = await kaydet(o, { ...a, privateKey: generateKeyPairSync("ed25519").privateKey }, [ozetA]);
     kontrol("§1d yabancı anahtarla imza → 401 KURULUM_BILINMIYOR", yabanci.status === 401 && kod(yabanci) === "KURULUM_BILINMIYOR", `${yabanci.status}`);
@@ -158,9 +69,9 @@ async function main(): Promise<void> {
     }
     const test = await kaydet(o, yeni({ sinif: "TEST" }), [ozetA]);
     kontrol("§1f sınıf TEST → 403 SINIF_GONDEREMEZ", test.status === 403 && kod(test) === "SINIF_GONDEREMEZ", `${test.status} ${kod(test)}`);
-    saticiKapali = true;
+    saticiDurumu.kapali = true;
     const ulasilamaz = await kaydet(o, yeni(), [ozetA]);
-    saticiKapali = false;
+    saticiDurumu.kapali = false;
     kontrol("§1g satıcıya ulaşılamıyor + önbellek yok → 503 TEKRAR_DENEYIN (fail-closed)", ulasilamaz.status === 503 && kod(ulasilamaz) === "TEKRAR_DENEYIN", `${ulasilamaz.status}`);
 
     console.log("\n§2 nonce");
@@ -224,6 +135,7 @@ async function main(): Promise<void> {
     kontrol("§7a geçersiz özet yanıtın `gecersiz`inde, bağ silindi, öteki belirteç gitti", JSON.stringify(veri(olu).gecersiz) === JSON.stringify([tokenDigestOf(tokOlu)]) && kalanOlu.length === 0 && veri(olu).sonuclar[1]?.sonuc === "GONDERILDI", JSON.stringify(veri(olu)));
 
     console.log("\n§8 makbuzda DeviceNotRegistered");
+    o.saat.ilerlet(61_000); // hız sınırı kapıda: §6f'nin 400'leri de `a`nın dakikalık dürt tavanından düştü
     const tokMak = belirtec();
     await kaydet(o, a, [tokenDigestOf(tokMak)]);
     await durt(o, a, [tokMak]);
@@ -285,6 +197,13 @@ async function main(): Promise<void> {
     const gunlukte = gunluk.filter((l) => l.includes(SENTINEL));
     kontrol("§9b sentinel süreç günlüğünde yok (başarı · 400 · 429 · kapalı yolları koşuldu)", gunlukte.length === 0, `${gunluk.length} satır tarandı`);
     kontrol("§9c ✓K sonda: günlük yakalama çalışıyor (erişim günlüğü köprü yolunu yazdı)", gunluk.some((l) => l.includes("/v1/bildirim/durt")));
+    const hamIzli: string[] = [];
+    for (const t of merkez) {
+      const r = await goc.query(`SELECT 1 FROM ${t} x WHERE x::text LIKE ANY($1::text[]) LIMIT 1`, [uretilenBelirtecler.map((b) => `%${b}%`)]);
+      if ((r.rowCount ?? 0) > 0) hamIzli.push(t);
+    }
+    const hamGunlukte = gunluk.filter((l) => uretilenBelirtecler.some((b) => l.includes(b)));
+    kontrol(`§9d ham belirteç (${uretilenBelirtecler.length} adet) merkez tablolarında ve süreç günlüğünde YOK`, hamIzli.length === 0 && hamGunlukte.length === 0, hamIzli.join(",") || `${hamGunlukte.length} satır`);
   } finally {
     for (const k of kurulumlar) await goc.query("DELETE FROM push_bridge_links WHERE kurulum_id = $1", [k.kurulumId]).catch(() => undefined);
     for (const k of kurulumlar) await goc.query("DELETE FROM push_bridge_tickets WHERE kurulum_id = $1", [k.kurulumId]).catch(() => undefined);
