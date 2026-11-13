@@ -142,6 +142,7 @@ import { devicePublicRouter, deviceAdminRouter } from "./routes/device.routes";
 import workSessionRoutes from "./routes/work-session.routes";
 import { resolveDevice } from "./middlewares/device.middleware";
 import notificationRoutes from "./routes/bildirim.routes";
+import patronPushRoutes from "./routes/patron-push.routes";
 import patronReadRoutes from "./routes/patron-read.routes";
 import patronReportRoutes from "./routes/patron-rapor.routes";
 import { isNotificationBellPath } from "./constants/notification-stream";
@@ -769,6 +770,8 @@ app.use("/api/patron-bulut", patronCloudRoutes);
 app.use("/api/patron/v1/raporlar", patronReportRoutes);
 app.use("/api/patron/v1", patronReadRoutes);
 // Bildirim zili + gelen kutusu (kişisel uçlar, verifyToken; bayrak `bildirim.gelenKutusuEnabled`).
+// Patron push cihazı (köprü P2) — genel bildirim router'ından ÖNCE: kendi kapısı (`patron-app:login`) ve bayrağı var.
+app.use("/api/bildirim/cihaz", patronPushRoutes);
 app.use("/api/bildirim", notificationRoutes);
 
 // =============================================================================

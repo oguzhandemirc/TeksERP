@@ -21,6 +21,7 @@ import prisma from "../lib/prisma";
 import { ClientType, type Prisma } from "@prisma/client";
 import { AppError } from "../utils/app-error";
 import type { SameTypeSessionPolicy } from "./system-setting.service";
+import { releasePushTokensForSession, releasePushTokensForUser } from "./patron-push/lifecycle";
 
 /**
  * Oturum kaydı advisory lock namespace'i (2026-08-09, F-KIM-GUV-003).
@@ -173,6 +174,8 @@ export class SessionRegistryService {
       where: { jti, revokedAt: null },
       data: { revokedAt: new Date(), revokeReason: reason.slice(0, 32) },
     });
+    // Patron push belirteci oturumla yaşar; hata iptali bozmaz (iş turunun süpürmesi ikinci hattır).
+    await releasePushTokensForSession(jti).catch(() => 0);
     return { revoked: res.count > 0 };
   }
 
@@ -185,6 +188,7 @@ export class SessionRegistryService {
       where: { userId, revokedAt: null },
       data: { revokedAt: new Date(), revokeReason: reason.slice(0, 32) },
     });
+    await releasePushTokensForUser(userId).catch(() => 0);
     return { count: res.count };
   }
 
