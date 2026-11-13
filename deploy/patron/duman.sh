@@ -7,6 +7,8 @@
 #   deploy/patron/duman.sh sifirla <sha>  → compose down -v (YALNIZ bu proje) + durum dizini; imajlar KALIR
 #   deploy/patron/duman.sh kaldir <sha>   → sifirla + YALNIZ bu iki imaj
 # Durum dizini (sırlar, anahtar, yedek) $TMPDIR altında, 0700; sırlar ekrana basılmaz.
+# Çıkış: 0 temiz · 1 hata/ihlal · 2 kullanım · 3 ÖLÇÜLEMEDİ (uygulama/tarayıcı dumanı aracı yok → adım koşmadı;
+# "yeşil ama koşmadı" sayılmaz — patron/sunucu `npm ci` + Electron `npm ci` ile araçları kurup yeniden koş).
 # =============================================================================
 set -euo pipefail
 KOMUT=${1:?kullanım: duman.sh kur|kaldir <sha>}
@@ -105,15 +107,22 @@ olc "Traefik etiketi (konteyner)" "$(docker inspect tekserp-patron-duman --forma
 olc "telefon push (Expo sırrı yok → /dev/null)" "$(docker logs tekserp-patron-duman 2>&1 | grep -E 'expo_erisim_belirteci|PATRON_BILDIRIM' | tr '\n' ' ')"
 olc "ic-api'de 4620 dinlenmez (BIND)" "$(docker exec tekserp-patron-duman node -e "require('http').get('http://172.31.241.3:4620/saglik',r=>console.log(r.statusCode)).on('error',e=>console.log(e.code))")"
 
+OLCULEMEDI=()
 if [ -x "$KOK/patron/sunucu/node_modules/.bin/tsx" ]; then
   echo "→ uygulama dumanı (uygulamanın kendi istemcisi: davet → TOTP → giriş → pano → gelen kutusu)"
   (cd "$KOK/patron/uygulama" && ../sunucu/node_modules/.bin/tsx scripts/duman.ts --api="$URL" --davet="$(cat "$D/davet")")
+else
+  echo "⚠️  ÖLÇÜLEMEDİ: uygulama dumanı KOŞMADI — $KOK/patron/sunucu/node_modules/.bin/tsx yok (cd patron/sunucu && npm ci)" >&2
+  OLCULEMEDI+=("uygulama dumanı")
 fi
 
 PW="$KOK/Electron/node_modules/playwright"
 if [ -d "$PW" ]; then
   echo "→ gerçek tarayıcı (Chromium): CSP ihlali · konsol hatası · giriş ekranı"
   PW="$PW" node "$BURASI/tarayici-duman.cjs" "$URL" "$D/web-kok.png"
+else
+  echo "⚠️  ÖLÇÜLEMEDİ: tarayıcı dumanı (CSP ihlali · konsol hatası) KOŞMADI — $PW yok (cd Electron && npm ci)" >&2
+  OLCULEMEDI+=("tarayıcı dumanı")
 fi
 
 echo "→ yedek (tek) + Mac'te açma"
@@ -131,4 +140,8 @@ YB=$(docker inspect -f '{{.RestartCount}} {{.State.Status}}' tekserp-patron-duma
 olc "hazırlayıcı yeniden başlama · durum" "$YB"
 [ "$YB" = "0 running" ] || { echo "⛔ patron-hazirla yeniden başlıyor ya da ayakta değil ($YB)" >&2; exit 1; }
 docker stats --no-stream --format '{{.Name}} {{.MemUsage}} {{.CPUPerc}} {{.PIDs}}' tekserp-patron-duman tekserp-patron-duman-db tekserp-patron-duman-hazirla tekserp-patron-duman-yedek
+if [ ${#OLCULEMEDI[@]} -gt 0 ]; then
+  echo "⚠️  duman EKSİK (çıkış 3 = ölçülemedi): koşmayan adım(lar): ${OLCULEMEDI[*]} — yeşil sayılmaz; araçları kurup yeniden koş. Kaldırmak için: deploy/patron/duman.sh kaldir $SHA" >&2
+  exit 3
+fi
 echo "✅ duman tamam — kaldırmak için: deploy/patron/duman.sh kaldir $SHA"

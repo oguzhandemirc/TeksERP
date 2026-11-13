@@ -105,6 +105,8 @@ deploy/patron/duman.sh kaldir <sha>    # compose down -v YALNIZ bu proje + YALNI
 
 `docker-compose.duman.yml` örtüsü Traefik ve satıcı olmadan koşturur (kenar internal değil + `127.0.0.1` yayını; ic-api projenin kendi internal ağı; `KURULUM_KAYNAGI=kayit`) — compose-denetle bu örtüyü bilerek reddeder. `duman.sh kur`: göç + roller → `tesis.js tesis-ac` + `kurulum-kaydet` (URETIM + `patron-bulut`, yazma kanalı açık abonelik ister) + `yonetici-davet` → HTTP ölçümleri (web kökü · varlık önbelleği · CSP · API/iç ad alanı 404 · konteynerdeki Traefik etiketi · ic-api adresinde dinleyici yok) → gerçek Chromium (`tarayici-duman.cjs`: CSP ihlali 0 · konsol hatası 0 · giriş formu çizildi · `//` ve `//cariler//x` sayfa hatasız çizilir; playwright paneldeki e2e kurulumundan) → uygulamanın kendi istemcisiyle duman (`patron/uygulama/scripts/duman.ts`: davet → parola → TOTP onayı → giriş → oturum/pano → gelen kutusu → iptal → çıkış) → `yedek-dongusu.sh tek` + özel yarıyla açma + `pg_restore --list` → `docker stats`.
 
+Uygulama dumanı (`patron/sunucu/node_modules/.bin/tsx`) ya da tarayıcı dumanı (`Electron/node_modules/playwright`) aracı yoksa `duman.sh kur` adımı atladığını `ÖLÇÜLEMEDİ` diye yazar ve **çıkış 3** ile biter (0 temiz · 1 hata · 2 kullanım · 3 ölçülemedi) — çıkış 3 yeşil sayılmaz; iki ağaçta `npm ci` ile araçları kurup yeniden koş.
+
 ## 3. VDS'i ölç (salt okuma)
 
 ```bash
