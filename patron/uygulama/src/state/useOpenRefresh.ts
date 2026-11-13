@@ -7,6 +7,7 @@ import { useCallback, useRef } from "react";
 import type { SnapshotRefresh } from "../api/wire";
 import { openRefreshGate } from "../lib/refresh";
 import { ALL_TAGS, invalidate } from "./changes";
+import { yetenek } from "../api/yetenek";
 import { useSession } from "./session";
 
 /** Zil sonrası damga yoklaması (zilden itibaren ms). */
@@ -38,6 +39,7 @@ export function followDoorbell(before: string | null, check: () => Promise<strin
 
 export function useOpenRefresh(): void {
   const { api, refresh, factoryStamp } = useSession();
+  const tazele = yetenek().tazele;
   const live = useRef({ refresh, factoryStamp });
   live.current = { refresh, factoryStamp };
   useFocusEffect(
@@ -45,6 +47,8 @@ export function useOpenRefresh(): void {
       let cancel: (() => void) | null = null;
       let gone = false;
       let rang: SnapshotRefresh | null = null;
+      // Canlı veride (ERP) zil yok: sunucu her okumada güncel veriyi verir.
+      if (!tazele) return undefined;
       const before = live.current.factoryStamp;
       void openRefreshGate
         .request(Date.now(), () => api.refresh().then((r) => (rang = r)))
@@ -60,6 +64,6 @@ export function useOpenRefresh(): void {
         gone = true;
         cancel?.();
       };
-    }, [api]),
+    }, [api, tazele]),
   );
 }

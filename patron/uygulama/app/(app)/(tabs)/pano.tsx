@@ -3,7 +3,7 @@
 // "Görebildiğin alanlar" listesini görür. Sayılar fabrikanın; uygulama karşılaştırma hesaplamaz.
 import { useRouter } from "expo-router";
 import { Text, View } from "react-native";
-import { can, visibleCards, visibleModules, type ModuleKey } from "../../../src/lib/access";
+import { can, MODULES, moduleVisible, visibleCards, visibleModules, type ModuleKey } from "../../../src/lib/access";
 import { PERIOD_LABEL, UNIT } from "../../../src/lib/labels/uretim";
 import { TERIM } from "../../../src/lib/terim";
 import { useSession } from "../../../src/state/session";
@@ -56,6 +56,14 @@ export default function Dashboard() {
   const s = useStyles();
   useOpenRefresh();
   const cards = visibleCards(permissions);
+  // Kutucuk/satır yalnız açılabilen bölüme götürür (bölüm bu sunucuda yoksa dokunma bir şey yapmaz).
+  const reach = (route: string) => {
+    const m = MODULES.find((x) => x.route === route);
+    return m === undefined || moduleVisible(permissions, m.key);
+  };
+  const go = (route: string) => () => {
+    if (reach(route)) router.push(route as never);
+  };
   const on = (p: string) => cards.some((c) => c.projection === p);
   const orders = useSnapshot("ozet.siparis", on("ozet.siparis"));
   const shipping = useSnapshot("ozet.sevkiyat", on("ozet.sevkiyat"));
@@ -101,10 +109,10 @@ export default function Dashboard() {
           {firstLoad ? <LoadingSkeleton variant="kpi" rows={4} testID="pano-yukleniyor" /> : null}
           {production.data ? <TodayHero production={production.data} shipping={veri(shipping)} orders={veri(orders)} offline={production.offline} /> : null}
           <KpiGrid testID="pano-kpi">
-            {shipping.data ? <ShipTodayTile data={shipping.data.veri} onPress={() => router.push("/sevkiyat" as never)} /> : null}
-            {orders.data ? <OpenOrdersTile data={orders.data.veri} onPress={() => router.push("/siparisler" as never)} /> : null}
-            {finance.data ? <DueTile data={finance.data.veri} onPress={() => router.push("/finans" as never)} /> : null}
-            {production.data ? <QueueTile data={production.data.veri} onPress={() => router.push("/uretim" as never)} /> : null}
+            {shipping.data ? <ShipTodayTile data={shipping.data.veri} onPress={go("/sevkiyat")} /> : null}
+            {orders.data ? <OpenOrdersTile data={orders.data.veri} onPress={go("/siparisler")} /> : null}
+            {finance.data ? <DueTile data={finance.data.veri} onPress={go("/finans")} /> : null}
+            {production.data ? <QueueTile data={production.data.veri} onPress={go("/uretim")} /> : null}
           </KpiGrid>
           <SectionHeader title="Alanlar" testID="bolum-alanlar" />
           <ListGroup testID="alan-kartlari">
@@ -119,7 +127,7 @@ export default function Dashboard() {
                   subtitle={subtitle}
                   domain={target?.domain ?? "genel"}
                   icon={target ? DOMAIN_ICON[target.domain] : undefined}
-                  onPress={target ? () => router.push(target.route as never) : undefined}
+                  onPress={target && reach(target.route) ? go(target.route) : undefined}
                   testID={`anlik-${c.projection}`}
                 />
               );
