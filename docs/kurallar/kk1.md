@@ -34,6 +34,7 @@
 - **[ÇEKİRDEK]** İlk girişte kalite ÇİFT kolon birlikte dolar/boşalır: `qualityGrade` + `qualityGradeId` (`resolveQualityGradeIdStrict`); yok/""/whitespace → NULL/NULL ("1.KALITE" varsayılanı yazılmaz); bilinmeyen/PASİF kod 400, top doğmaz; panel boş seçimi düşürür (`"" → undefined`).
 - **[ÇEKİRDEK]** Top barkodunu (`generateRollBarcodeTx` · `reserveRollBarcodes*Tx`) yazma tx'i AÇILMADAN ÖNCE havuz client'ıyla al; başarısız tx'in yaktığı numara boşluk sayılır.
 - **[ÇEKİRDEK]** KK1 doğuş gövdesi (`dokuma.rollBirth` KK1_*): `machineCode` XOR `weavingOrderId`; `warpBeamId`/`productionLineNo` yalnız `machineCode` ile; hiçbiri `doffEventId`/`semiFinished` ile değil (zod `superRefine`, şema strict değil → alan listede olmalı).
+- **[ÇEKİRDEK]** Cari kart doğuşu (`POST /customers`) `clientToken`ı İSTEĞE BAĞLI alır (`customer-card-create.service.ts`, R kipi): kimlik katlanmış ad + vergi no, pasif/birleşik kart 409 `CUSTOMER_CREATE_GONE`; token route'ta gövdeden alınır, genel gövde yazamaz; token yoksa `CustomerService.create` aynen.
 - **[ÇEKİRDEK]** KK1 doğuş replay kimliğine `machineCode` ve `weavingOrderId` (`Roll.weavingOrderId ?? doff.machineRun.weavingOrderId`) girer, farklı → 409 `CLIENT_TOKEN_COLLISION`; `data.doffEvent {id, code}` yalnız bu yolda, alansız gövdede yanıt bayt bayt eski.
 - **[ÇEKİRDEK]** KK1 doğuşunda muayene topla aynı tx'te yazılır; modül/izin yok ya da istasyon muayene yeteneği kapalıysa top doğar, muayene yazılmaz, uyarı `STATION_NO_QUALITY`; 400 yalnız bozuk muayene verisine.
 

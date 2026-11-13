@@ -49,6 +49,7 @@
 
 ## Backend
 - **[ÇEKİRDEK]** Sipariş/cari PATCH'inde bayat veri koruması isteğe bağlıdır: gövdedeki `expectedUpdatedAt` (sipariş için detaydaki `contentUpdatedAt` = başlık + kalemlerin en büyük `updatedAt`i, cari için `updatedAt`) yazımın atomik claim'ine girer, tutmazsa 409 `STALE_RECORD`; alan yoksa davranış aynı, DB'ye yazılmaz; kalem-yalnız yazım da sürümü ilerletir (`helpers/stale-record.helper.ts`). · bekçi: `test_bayat_veri_korumasi`
+- **[ÇEKİRDEK]** Sipariş iptalinde (`POST /orders/:id/cancel`) önizleme koruması isteğe bağlıdır: `cancel-preview` yanıtındaki `previewToken` gövdede `expectedPreviewToken` olarak gelirse girdiyi ve özeti YALNIZ `order/cancel-preview-token.ts`ten (`readCancelPreviewState` + `cancelPreviewToken`) kur, CANCEL_WO adımından ÖNCE ve tx içinde kilitlerden SONRA kıyasla; tutmazsa 409 `CANCEL_PREVIEW_STALE`, hiçbir şey uygulanmaz; alan yoksa davranış aynı (kalem iptalinde YOK).
 - **[ÇEKİRDEK]** P2002 kolonu YALNIZ `src/utils/p2002.ts` ile okunur (`p2002OnField` · `p2002TargetParts` · `p2002UniqueColumn` · `p2002Mentions`); `meta.target` doğrudan okunmaz (pg adaptörü vermez). · bekçi: `test_p2002_hedef_tek_kaynak` + `test_numara_yarisi_levent_dokuma` ①
 
 
