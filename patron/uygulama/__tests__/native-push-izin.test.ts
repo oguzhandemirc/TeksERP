@@ -35,6 +35,9 @@ describe("derleme kapısı (app.config.js)", () => {
     const out = appConfig.withNativePush(appJson, { env: {}, root: kok, warn });
     expect(out).toBe(appJson);
     expect(warn).not.toHaveBeenCalled();
+    // Kapalı kapı: sahip ve proje kimliği ortamda olsa bile pakete girmez.
+    expect(appConfig.withNativePush(appJson, { env: { EXPO_OWNER: "sahte-sahip", PATRON_EAS_PROJECT_ID: EAS }, root: kok, warn })).toBe(appJson);
+    expect(appJson.owner).toBeUndefined();
     expect(JSON.stringify(appConfig({ config: appJson }))).toBe(JSON.stringify(appJson));
     expect((appJson.android as Android).blockedPermissions).toEqual(expect.arrayContaining(appConfig.NATIVE_PUSH_IZINLERI));
   });
@@ -79,6 +82,10 @@ describe("derleme kapısı (app.config.js)", () => {
       expect((out.android as Android).googleServicesFile).toBe("./google-services.json");
       expect(out.plugins).toEqual([...(appJson.plugins as unknown[]), "expo-notifications"]);
       expect(out.extra).toEqual({ nativePush: true, eas: { projectId: EAS } });
+      expect(out.owner).toBeUndefined();
+      const sahipli = appConfig.withNativePush(appJson, { env: { PATRON_NATIVE_PUSH: "1", PATRON_EAS_PROJECT_ID: EAS, EXPO_OWNER: "sahte-sahip" }, root: d, warn: jest.fn() });
+      expect(sahipli.owner).toBe("sahte-sahip");
+      expect(appConfig.withNativePush(appJson, { env: { PATRON_NATIVE_PUSH: "1", PATRON_EAS_PROJECT_ID: EAS, EXPO_OWNER: "a b;" }, root: d, warn: jest.fn() }).owner).toBeUndefined();
       expect((appJson.android as Android).googleServicesFile).toBeUndefined();
     } finally {
       rmSync(d, { recursive: true, force: true });

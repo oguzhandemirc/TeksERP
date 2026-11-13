@@ -1,7 +1,8 @@
 // Telefon push DERLEME KAPISI (bildirim v2 F5 + push köprüsü P4). Varsayılan: app.json BİREBİR (mağaza paketi bugünküyle
 // aynı — izin engeli, Firebase yok). Kapı yalnız ÜÇÜ birden varken açılır: `PATRON_NATIVE_PUSH=1` ∧ `google-services.json`
 // (uygulama köküne konur, repoya GİRMEZ, .gitignore) ∧ `PATRON_EAS_PROJECT_ID` (EAS proje kimliği, UUID). Biri eksikse tek
-// satır uyarı ve app.json aynen (fail-closed). `build-aab.mjs` aynı `pushKapisi`yı okur. Adımlar: docs/ops/PATRON-BILDIRIM-CANLI-DENEME.md.
+// satır uyarı ve app.json aynen (fail-closed). Açık kapıda `EXPO_OWNER` verilmişse `owner` da yazılır (kapalıda hiç yok).
+// Kimlik repoya SABİT YAZILMAZ (değerler repo dışı ortam dosyasında). `build-aab.mjs` aynı `pushKapisi`yı okur. Adımlar: docs/ops/PATRON-BILDIRIM-CANLI-DENEME.md.
 const fs = require("node:fs");
 const path = require("node:path");
 
@@ -9,6 +10,7 @@ const path = require("node:path");
 const NATIVE_PUSH_IZINLERI = ["android.permission.POST_NOTIFICATIONS", "com.google.android.c2dm.permission.RECEIVE", "android.permission.WAKE_LOCK"];
 const FIREBASE_DOSYASI = "google-services.json";
 const EAS_KIMLIGI = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const EXPO_SAHIBI = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
 
 /** Kapı kararı (tek kaynak): `{ acik, eksik }` — eksik = kapalılık nedeni (bayrak yoksa null: bilinçli kapalı, uyarı yok). */
 function pushKapisi({ env = process.env, root = __dirname } = {}) {
@@ -28,8 +30,10 @@ function withNativePush(config, { env = process.env, root = __dirname, warn = co
   }
   const android = config.android ?? {};
   const extra = config.extra ?? {};
+  const owner = (env.EXPO_OWNER ?? "").trim();
   return {
     ...config,
+    ...(EXPO_SAHIBI.test(owner) ? { owner } : {}),
     android: {
       ...android,
       googleServicesFile: `./${FIREBASE_DOSYASI}`,

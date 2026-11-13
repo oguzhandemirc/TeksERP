@@ -129,3 +129,14 @@ ya da kayıt düşerse yineleme yeniden gönderir (çift bildirim olasılığı 
   belirteç yerelde BIRAKILDI (`birak` yok) · BAGSIZ → belirteç BEKLIYOR + dürt yeniden · GECICI → yeniden · KALICI → vazgeç.
   HTTP 401/403 → tur durur, deneme sayılmaz, 5 dk · 429 → 60 sn duraklama · 5xx/ağ/409 → geri çekilme (30 sn × 2^n ≤ 1 sa) ·
   diğer 4xx → vazgeç. Terminal satır 7 gün sonra budanır. Bekçi `test_patron_push_durt`.
+
+## 8. Patron uygulaması (P4, 2026-11-13)
+
+- Derleme kapısı `app.config.js` `pushKapisi`: `PATRON_NATIVE_PUSH=1` ∧ uygulama köküne konmuş `google-services.json` ∧
+  `PATRON_EAS_PROJECT_ID`; kapalıyken paket bugünküyle aynı (`build-aab` izin kümesi/bileşen/dışlama `scripts/lib/push-kapisi.cjs`).
+- ERP kipi: yetenek `/auth/me` `patronPush` (yoksa her şey gizli). Bildirimler ekranında "Telefon bildirimlerini aç"
+  (izin yalnız burada), tür başına "Telefon bildirimi" anahtarı (yalnız PATRON_PUSH hücresi). Belirteç oturum başına
+  `POST /api/bildirim/cihaz`; çıkışta yalnız kaydedildiği fabrikadan `DELETE` (çevrimdışı sessiz).
+- Dokunuş: güvensiz/eksik rota → `/bildirimler`; `bildirimId` satırı vurgulanır ve okundu sayılır. **Sınır:** yükte tesis
+  yok ve uygulama tek fabrika bağlantısı tutar → bildirim etkin fabrikanın Bildirimler ekranında açılır; satır o fabrikada
+  yoksa liste normal açılır.
