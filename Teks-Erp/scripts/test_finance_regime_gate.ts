@@ -130,7 +130,7 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
     neden:
       "PATRON RAPORU (V5a, 2026-11-13). Router finans tablosuna YAZMAZ; dokunuş bulut uzaktan hesap boğazının " +
       "(`cloud-sync/report-requests.ts`) koşucu zinciridir (çek vadesi v1 koşucusu). Kapı RAPOR BAŞINADIR: finans raporu " +
-      "(`finance/alacaklar`) `remoteReportAvailability` → `module: finance.enabled` ile 403 MODULE_DISABLED; router kapısı bütün " +
+      "(`finance/alacaklar`) `remoteReportAvailability` → `module: finance.enabled` ile 403 MODULE_DISABLED (lisans kapattıysa LICENSE_MODULE); router kapısı bütün " +
       "patron raporlarını kapatırdı (`test_patron_rapor` §5f modül kapısını ölçer).",
   },
   {

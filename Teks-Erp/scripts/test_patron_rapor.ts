@@ -7,7 +7,7 @@
 //   §2 oluştur → sakla → katalogda son koşum → geçmiş → tek koşum sonucu (HAZIR, sonuc.veri = RaporSunumu)
 //   §3 çift dokunuş (aynı clientToken) tek koşum · farklı parametreyle aynı token 409
 //   §4 başkasının koşumu görünmez (GET/DELETE 404, liste boş) · silinen koşum listeden düşer, token'ı 409
-//   §5 kapılar: izin yok 403 · modül kapalı 403 MODULE_DISABLED · rapor kapalı 403 REPORT_DISABLED · izinli listede
+//   §5 kapılar: izin yok 403 · modül kapalı 403 MODULE_DISABLED (lisans kapattıysa LICENSE_MODULE) · rapor kapalı 403 REPORT_DISABLED · izinli listede
 //      olmayan 404 · bozuk parametre 400 · patron-app:login yok 403
 //   §6 yük: saatlik tavan 429 RAPOR_TAVAN · eşzamanlı ikinci hesap 429 RAPOR_SIRADA (elle açık tutulan tablo kilidi) ·
 //      zaman aşımı HATA ZAMAN_ASIMI olarak saklanır · yarım kalan koşum YARIM_KALDI olur
@@ -26,7 +26,8 @@ import { SETTING_KEYS, invalidateFeatureFlagsCache } from "../src/services/syste
 import { PATRON_LOGIN_PERMISSION, PERMISSION_CATALOG } from "../src/constants/permission-catalog";
 import { REPORT_CATALOG } from "../src/constants/report-catalog";
 import { CLOUD_HELD_REPORT_KEYS, REMOTE_REPORTS } from "../src/cloud-sync/report-requests";
-import { PATRON_REPORTS } from "../src/services/patron-rapor/katalog";
+import { PATRON_REPORTS, REPORT_GATE_MODULES } from "../src/services/patron-rapor/katalog";
+import { lisansKipKur, temizleLisansKipDizini } from "./lib/lisans-kip-fikstur";
 import { setPatronReportTimeoutForTest } from "../src/services/patron-rapor/kosum.service";
 import { prunePatronReportRuns } from "../src/services/patron-rapor/budama";
 import { reconcilePermissionCatalog } from "../src/jobs/permission-catalog.job";
@@ -66,6 +67,9 @@ function statik(): void {
   const known = new Set<string>(PERMISSION_CATALOG.map((p) => p.code));
   const unknownPerms = [...PATRON_REPORTS.values()].flatMap((r) => r.erpPermissions).filter((p) => !known.has(p));
   check("§1f her ERP izni izin kataloğunda", unknownPerms.length === 0, unknownPerms.join(","));
+  const gated = [...PATRON_REPORTS.values()].filter((r) => r.remote.gate).map((r) => r.remote.key).sort();
+  check("§1g gate'li her raporun modül satırı var, bayat satır yok (MODUL_KAPALI teşhisi)", gated.join("|") === Object.keys(REPORT_GATE_MODULES).sort().join("|"),
+    `gate=${gated.join(",")} harita=${Object.keys(REPORT_GATE_MODULES).join(",")}`);
 }
 
 async function main(): Promise<void> {
@@ -77,7 +81,7 @@ async function main(): Promise<void> {
   const T = `TEST-PRP-${Date.now()}`;
   const PASS = "Deneme-patron-rapor-12345";
   const userIds: string[] = [];
-  const settingKeys = [SETTING_KEYS.PRODUCTION_ENABLED, SETTING_KEYS.REPORTS_CLOSED_KEYS, SETTING_KEYS.PATRON_REPORT_HOURLY_MAX];
+  const settingKeys = [SETTING_KEYS.PRODUCTION_ENABLED, SETTING_KEYS.FINANCE_ENABLED, SETTING_KEYS.REPORTS_CLOSED_KEYS, SETTING_KEYS.PATRON_REPORT_HOURLY_MAX];
   const before = await prisma.systemSetting.findMany({ where: { key: { in: settingKeys } }, select: { key: true, value: true } });
   const setSetting = async (key: string, value: unknown) => {
     await prisma.systemSetting.upsert({ where: { key }, create: { key, value: value as never }, update: { value: value as never } });
@@ -175,6 +179,18 @@ async function main(): Promise<void> {
     await setSetting(SETTING_KEYS.PRODUCTION_ENABLED, true);
     check("§5f modül kapalı → 403 MODULE_DISABLED + katalogdan düşer", modOff.status === 403 && modOff.body.details?.code === "MODULE_DISABLED"
       && !((catOff.body.data?.raporlar as Array<{ anahtar: string }>) ?? []).some((r) => r.anahtar === "quality/kalite"), `${modOff.status}`);
+    // Lisans modülü kapatıyorsa bayrak DB'de açık olsa da 403 LICENSE_MODULE (adlı kapılarla aynı soru).
+    const fin = await makeUser("fin", [PATRON_LOGIN_PERMISSION, "report:finance"]);
+    await setSetting(SETTING_KEYS.FINANCE_ENABLED, true);
+    lisansKipKur({ zorlama: true, moduller: ["production.enabled"] });
+    const licOff = await create(fin.token, "finance/alacaklar");
+    temizleLisansKipDizini();
+    const finOn = await create(fin.token, "finance/alacaklar");
+    check("§5f2 bayrak açık + lisansta yok → 403 LICENSE_MODULE (finance.enabled); lisanssız kipte geçer", licOff.status === 403 && licOff.body.details?.code === "LICENSE_MODULE"
+      && (licOff.body.details as { modul?: string } | undefined)?.modul === "finance.enabled" && finOn.status === 201, `${licOff.status} ${String(licOff.body.details?.code)} / ${finOn.status}`);
+    await setSetting(SETTING_KEYS.FINANCE_ENABLED, false);
+    const finFlagOff = await create(fin.token, "finance/alacaklar");
+    check("§5f3 finans bayrağı kapalı (lisans yok) → 403 MODULE_DISABLED", finFlagOff.status === 403 && finFlagOff.body.details?.code === "MODULE_DISABLED", `${finFlagOff.status}`);
     await setSetting(SETTING_KEYS.REPORTS_CLOSED_KEYS, ["inventory/depo"]);
     const closed = await create(boss.token, "inventory/depo");
     await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.REPORTS_CLOSED_KEYS } });
@@ -235,6 +251,7 @@ async function main(): Promise<void> {
     const left2 = new Set((await prisma.patronReportRun.findMany({ where: { userId: other.id, reportKey: key }, select: { id: true } })).map((r) => r.id));
     check("§7d son 1 saat budanmaz (tavan sayımı korunur)", youngMany.every((y) => left2.has(y.id)) && left2.has(young.id));
   } finally {
+    temizleLisansKipDizini();
     setPatronReportTimeoutForTest(null);
     for (const key of settingKeys) {
       const b = before.find((f) => f.key === key);

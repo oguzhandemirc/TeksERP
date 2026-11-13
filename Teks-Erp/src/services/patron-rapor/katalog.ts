@@ -9,6 +9,10 @@ import { REPORT_BY_KEY, isReportSurfaced, type ReportCatalogEntry } from "../../
 import { REMOTE_REPORTS, remoteReportAvailability, type RemoteReport } from "../../cloud-sync/report-requests";
 import { matchesPermission } from "../../middlewares/rbac.middleware";
 import { AppError } from "../../utils/app-error";
+import { licenseModuleError } from "../../lib/license/module-ceiling";
+import {
+  SETTING_KEYS, readDevereEnabled, readDokumaEnabled, readFinanceEnabled, readMaliyetEnabled, readProductionEnabled,
+} from "../system-setting.service";
 
 export interface PatronReport {
   readonly remote: RemoteReport;
@@ -57,8 +61,47 @@ export async function reportOpen(r: PatronReport): Promise<"ACIK" | "RAPOR_KAPAL
   return remoteReportAvailability(r.remote, isReportSurfaced);
 }
 
+/** Raporun `gate`inin okuduğu modüller (bulut `report-requests.ts` gate'leriyle eş; `test_patron_rapor` §1g eksik/bayat satırı ölçer). */
+export const REPORT_GATE_MODULES: Readonly<Record<string, readonly ("dokuma" | "devere" | "finance")[]>> = {
+  "dokuma/tezgah-randimani": ["dokuma"],
+  "dokuma/duruslar": ["dokuma"],
+  "dokuma/levent-dengesi": ["dokuma", "devere"],
+  // Rejim = dokuma ∨ (üretim ∧ takip); panel `requireMachineStopRegime` gibi kapalıyken dokuma sorulur.
+  "production/makine-duruslari": ["dokuma"],
+  "maliyet/karlilik": ["finance"],
+};
+
+function reportModuleClosed(r: PatronReport, modul: string): AppError {
+  return AppError.forbidden(`"${r.entry.baslik}" raporunun modülü bu kurulumda kapalı.`, { code: "MODULE_DISABLED", modul, rapor: r.remote.key });
+}
+
+/** MODUL_KAPALI'nın hangi modülden geldiğini adlı kapılarla aynı sırada sorar; lisans kapattıysa 403 LICENSE_MODULE. */
+async function assertReportModules(r: PatronReport): Promise<void> {
+  const m = r.remote.module;
+  const g = REPORT_GATE_MODULES[r.remote.key] ?? [];
+  if ((m === "production.enabled" || m === "maliyet.enabled") && !(await readProductionEnabled())) {
+    throw licenseModuleError(SETTING_KEYS.PRODUCTION_ENABLED, "Üretim") ?? reportModuleClosed(r, "production");
+  }
+  if (m === "maliyet.enabled" && !(await readMaliyetEnabled())) {
+    throw licenseModuleError(SETTING_KEYS.MALIYET_ENABLED, "Maliyet & Teklif") ?? reportModuleClosed(r, "maliyet");
+  }
+  if ((m === "finance.enabled" || g.includes("finance")) && !(await readFinanceEnabled())) {
+    throw licenseModuleError(SETTING_KEYS.FINANCE_ENABLED, "Ön muhasebe") ?? reportModuleClosed(r, "finance");
+  }
+  if (g.includes("dokuma") && !(await readDokumaEnabled())) {
+    throw licenseModuleError(SETTING_KEYS.DOKUMA_ENABLED, "Dokuma") ?? reportModuleClosed(r, "dokuma");
+  }
+  if (g.includes("devere") && !(await readDevereEnabled())) {
+    throw licenseModuleError(SETTING_KEYS.DEVERE_ENABLED, "Devere / levent") ?? reportModuleClosed(r, "devere");
+  }
+}
+
 export async function assertReportOpen(r: PatronReport): Promise<void> {
   const state = await reportOpen(r);
-  if (state === "MODUL_KAPALI") throw AppError.forbidden(`"${r.entry.baslik}" raporunun modülü bu kurulumda kapalı.`, { code: "MODULE_DISABLED", rapor: r.remote.key });
+  if (state === "MODUL_KAPALI") {
+    await assertReportModules(r);
+    // Hiçbir modül kapalı çıkmadıysa durum okumalar arasında değişti (ya da genel rejim yarışı) — yeniden denenir.
+    throw AppError.conflict(`"${r.entry.baslik}" raporunun modül durumu az önce değişti; yeniden deneyin.`, { code: "RAPOR_MODUL_DEGISTI", rapor: r.remote.key });
+  }
   if (state === "RAPOR_KAPALI") throw AppError.forbidden(`"${r.entry.baslik}" raporu bu kurulumda kapalı.`, { code: "REPORT_DISABLED", rapor: r.remote.key });
 }
