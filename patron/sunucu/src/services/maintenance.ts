@@ -311,12 +311,14 @@ export async function pruneLoginRoutes(ctx: CloudContext, tesisId: string): Prom
 /** Push köprüsü bileti makbuz yoklaması bittikten sonra en çok bu kadar gün tutulur (Expo makbuzu bir gün saklar). */
 export const PUSH_BRIDGE_TICKET_DAYS = 2;
 
-/** Merkez push köprüsü telemetrisi: süresi geçen nonce + sonuçlanmış/eski bilet. Bağ (`push_bridge_links`) budanmaz. */
-export async function prunePushBridge(ctx: CloudContext, nowMs: number): Promise<number> {
+/** Merkez push köprüsü telemetrisi: süresi geçen nonce (`noncesOnly`: dakikalık tik, nonce penceresi 10 dk) + günlükte
+ *  sonuçlanmış/eski bilet. Bağ (`push_bridge_links`) budanmaz. */
+export async function prunePushBridge(ctx: CloudContext, nowMs: number, noncesOnly = false): Promise<number> {
   const now = new Date(nowMs);
   const old = new Date(nowMs - PUSH_BRIDGE_TICKET_DAYS * DAY_MS);
   return withCentral(ctx.sync, {}, async (tx) => {
     const nonces = await tx.pushBridgeNonce.deleteMany({ where: { expiresAt: { lt: now } } });
+    if (noncesOnly) return nonces.count;
     const tickets = await tx.pushBridgeTicket.deleteMany({ where: { OR: [{ result: { not: null } }, { sentAt: { lt: old } }] } });
     return nonces.count + tickets.count;
   });

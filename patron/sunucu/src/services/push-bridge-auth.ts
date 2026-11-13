@@ -1,4 +1,5 @@
-// PUSH KÖPRÜSÜ KAPISI — imzalı istek, amaç `bildir` (sıra protokol §4 ile aynı: kimlik → dizin → imza → nonce → hak).
+// PUSH KÖPRÜSÜ KAPISI — imzalı istek, amaç `bildir`. Sıra: kimlik → dizin → imza (+ `yol` ZORUNLU) → hak → hız → nonce;
+// hak ve hız nonce'tan ÖNCE: hakkı olmayan ya da tavanı aşan istek merkez tabloya satır yazdıramaz.
 // `esitle` kapısından (`installation-auth.ts`) üç farkı var, üçü de bilinçli:
 //   ① dizin `lookupForBridge`: satıcı cevabı YAZILMAZ — yönlendirme bağı yok, tesis DB'si istenmez/açılmaz;
 //   ② nonce MERKEZ tablosunda (`push_bridge_nonces`); ③ hak = LİSANS GEÇERLİ (aktif ∧ ETKIN ∧ devredilmemiş ∧
@@ -8,8 +9,10 @@ import { CloudError, requestRejected } from "../lib/errors";
 import { isUniqueViolation } from "../lib/prisma-errors";
 import { securityEvent } from "../lib/security-events";
 import { withCentral } from "../lib/tenant";
+import { PUSH_BRIDGE_PATHS } from "../wire/esitleme";
 import type { CloudContext } from "./context";
 import { safeKeyId, type InstallationRecord } from "./installation-directory";
+import { limitBridge } from "./push-bridge-limits";
 
 export interface BridgeCaller {
   readonly installationId: string;
@@ -61,8 +64,11 @@ async function authenticate(ctx: CloudContext, g: { header: unknown; rawBody: Bu
   }
   const verified = verifyRequest(g.header, { publicKeyX: record.publicKeyX, body: g.rawBody, nowMs: g.nowMs, purposes: ["bildir"], installationId, path: g.path });
   if (!verified.ok) throw requestRejected(verified.code, verified.message, g.nowMs);
-  await recordBridgeNonce(ctx, installationId, verified.value, g.nowMs);
+  // Protokol yolsuz (eski) imzayı denetlemez; köprüde yol bağı ZORUNLU (kaydet imzası bırak'a çevrilemesin).
+  if (verified.value.yol === undefined) throw new CloudError(401, "ISTEK_YOL", "Anlık bildirim köprüsü isteği uç yoluyla (yol) imzalanmalı");
   const denied = bridgeEntitlementError(record, found.kind === "ok" ? found.durum : undefined);
   if (denied) throw denied;
+  limitBridge(ctx, g.path === PUSH_BRIDGE_PATHS.NUDGE ? "nudge" : "register", installationId, g.nowMs);
+  await recordBridgeNonce(ctx, installationId, verified.value, g.nowMs);
   return { installationId, record, request: verified.value };
 }

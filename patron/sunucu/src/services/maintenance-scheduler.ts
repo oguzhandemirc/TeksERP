@@ -1,7 +1,7 @@
 // BAKIM ZAMANLAYICISI — süreç içi dakikalık tik + UTC gün başına bir kez günlük budama. İşlerin kendisi ve silme
 // beyanı (`PRUNED_TABLES`) `maintenance.ts`te; bu dosya yalnız sıra ve hata yalıtımı taşır, satır silmez.
 import type { CloudContext } from "./context";
-import { expireClaims, IDENTITY_PURGE_DAYS, listFacilities, perFacility, purgeCentralIdentities, purgeClosedIdentities, runDaily, stripAgedIps } from "./maintenance";
+import { expireClaims, IDENTITY_PURGE_DAYS, listFacilities, perFacility, prunePushBridge, purgeCentralIdentities, purgeClosedIdentities, runDaily, stripAgedIps } from "./maintenance";
 import { refreshAllServiceEnds } from "./service-lifecycle";
 
 export class MaintenanceScheduler {
@@ -28,6 +28,8 @@ export class MaintenanceScheduler {
     this.running = true;
     try {
       await expireClaims(this.ctx, nowMs);
+      // Köprü nonce'u her tikte: tablo nonce penceresinden (10 dk) uzun büyümesin (kimlikli sel bile günlük birikmez).
+      await perFacility("merkez", "push köprüsü nonce budaması", () => prunePushBridge(this.ctx, nowMs, true));
       const service = await refreshAllServiceEnds(this.ctx, nowMs);
       let purged = 0;
       for (const f of await listFacilities(this.ctx)) {

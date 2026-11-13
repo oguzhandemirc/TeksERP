@@ -54,6 +54,8 @@ export interface BridgeMessage {
 /** Köprü gönderimi: ham Expo belirtecine TAM METİNLİ yük (kullanıcı kararı 2026-11-13: kilit ekranında başlık + gövde). */
 export interface BridgeTransport {
   sendBridge(token: string, msg: BridgeMessage): Promise<PushOutcome>;
+  /** Toplu gönderim (tek istek, sonuç sırası = belirteç sırası); yoksa köprü sıralı gönderir. */
+  sendBridgeBatch?(tokens: readonly string[], msg: BridgeMessage): Promise<PushOutcome[]>;
   receipts?(tickets: readonly string[]): Promise<ReceiptBatch>;
 }
 
@@ -74,8 +76,15 @@ export class RecordingTransport implements PushTransport {
   readonly forcedReceipts = new Map<string, PushOutcome>();
   readonly receiptCalls: string[][] = [];
   readonly bridgeSent: { token: string; msg: BridgeMessage }[] = [];
+  readonly bridgeBatches: number[] = [];
   private seq = 0;
   constructor(private readonly opts: { tickets?: boolean } = {}) {}
+  async sendBridgeBatch(tokens: readonly string[], msg: BridgeMessage): Promise<PushOutcome[]> {
+    this.bridgeBatches.push(tokens.length);
+    const out: PushOutcome[] = [];
+    for (const t of tokens) out.push(await this.sendBridge(t, msg));
+    return out;
+  }
   sendBridge(token: string, msg: BridgeMessage): Promise<PushOutcome> {
     const forced = this.forced.get(token);
     if (!forced || forced.kind === "OK") this.bridgeSent.push({ token, msg });
@@ -131,20 +140,31 @@ export class ExpoTransport implements PushTransport {
     return this.post(bridgePushPayload(token, msg));
   }
 
+  /** Expo dizi kabul eder (≤ 100 ileti): tek istek, bilet sırası ileti sırasıdır. */
+  sendBridgeBatch(tokens: readonly string[], msg: BridgeMessage): Promise<PushOutcome[]> {
+    return this.postMany(tokens.map((t) => bridgePushPayload(t, msg)));
+  }
+
   private async post(payload: object): Promise<PushOutcome> {
-    const headers = this.headers();
+    return (await this.postMany([payload]))[0]!;
+  }
+
+  private async postMany(payloads: readonly object[]): Promise<PushOutcome[]> {
+    const all = (o: PushOutcome): PushOutcome[] => payloads.map(() => o);
     let res: Response;
     try {
-      res = await this.fetchImpl(this.config.EXPO_PUSH_URL, { method: "POST", headers, body: JSON.stringify([payload]), signal: AbortSignal.timeout(10_000) });
+      res = await this.fetchImpl(this.config.EXPO_PUSH_URL, { method: "POST", headers: this.headers(), body: JSON.stringify(payloads), signal: AbortSignal.timeout(10_000) });
     } catch {
-      return { kind: "GECICI", code: "AG_HATASI" };
+      return all({ kind: "GECICI", code: "AG_HATASI" });
     }
-    if (res.status === 429 || res.status >= 500) return { kind: "GECICI", code: `HTTP_${res.status}` };
-    if (!res.ok) return { kind: "KALICI", code: `HTTP_${res.status}` };
+    if (res.status === 429 || res.status >= 500) return all({ kind: "GECICI", code: `HTTP_${res.status}` });
+    if (!res.ok) return all({ kind: "KALICI", code: `HTTP_${res.status}` });
     const json = (await res.json().catch(() => null)) as { data?: { status?: string; id?: string; details?: { error?: string } }[] } | null;
-    const ticket = json?.data?.[0];
-    if (ticket?.status === "ok") return typeof ticket.id === "string" && /^[A-Za-z0-9-]{1,100}$/.test(ticket.id) ? { kind: "OK", ticket: ticket.id } : { kind: "OK" };
-    return expoErrorOutcome(ticket?.details?.error ?? "YANIT_BICIMSIZ");
+    return payloads.map((_, k): PushOutcome => {
+      const ticket = Array.isArray(json?.data) ? json.data[k] : undefined;
+      if (ticket?.status === "ok") return typeof ticket.id === "string" && /^[A-Za-z0-9-]{1,100}$/.test(ticket.id) ? { kind: "OK", ticket: ticket.id } : { kind: "OK" };
+      return expoErrorOutcome(ticket?.details?.error ?? "YANIT_BICIMSIZ");
+    });
   }
 
   private headers(): Record<string, string> {

@@ -386,8 +386,8 @@ export const PUSH_BODY_MAX = 400;
 export const PushTokenDigestSchema = z.string().regex(/^[0-9a-f]{64}$/);
 /** Expo belirteci biçimi (bulut `push/targets.ts` ile aynı desen). */
 export const PushTokenSchema = z.string().regex(/^Expo(nent)?PushToken\[[A-Za-z0-9_-]{8,200}\]$/);
-/** Uygulama içi rota: tek `/` ile başlar, dış adres/`//` yok (uygulama `safeRoute` ile ayrıca süzer). */
-export const PushRouteSchema = z.string().max(200).regex(/^\/(?!\/)[A-Za-z0-9/_\-?=&.%]*$/);
+/** Uygulama içi rota = uygulamanın `safeRoute` deseni: `/bolum` ya da `/bolum/kimlik`; `//`, `..`, `%`, `\`, şema, sorgu YOK. */
+export const PushRouteSchema = z.string().max(200).regex(/^\/[a-z-]+(\/[A-Za-z0-9-]{1,64})?$/);
 
 export const PushRegisterRequestSchema = z.strictObject({ v: z.literal(ENVELOPE_VERSION), ozetler: z.array(PushTokenDigestSchema).min(1).max(PUSH_BRIDGE_MAX_TOKENS) });
 export const PushRegisterResponseSchema = z.object({ v: z.literal(ENVELOPE_VERSION), bagli: z.array(PushTokenDigestSchema) });

@@ -125,12 +125,12 @@ export function createFactoryRouter(ctx: CloudContext): Router {
   // Push köprüsü (amaç `bildir`): bulut aboneliği aranmaz, tesis DB'si açılmaz; metin yalnız iletilir.
   router.post(PUSH_BRIDGE_PATHS.REGISTER.replace("/v1", ""), async (req: Request, res: Response) => {
     const r = await bridgeAuthenticated(ctx, req, PUSH_BRIDGE_PATHS.REGISTER);
-    res.json(await registerTokens(ctx, r.caller, strictJson(PushRegisterRequestSchema, r, req), r.nowMs));
+    res.json(await registerTokens(ctx, r.caller, strictJson(PushRegisterRequestSchema, r, req)));
   });
 
   router.post(PUSH_BRIDGE_PATHS.RELEASE.replace("/v1", ""), async (req: Request, res: Response) => {
     const r = await bridgeAuthenticated(ctx, req, PUSH_BRIDGE_PATHS.RELEASE);
-    res.json(await releaseTokens(ctx, r.caller, strictJson(PushReleaseRequestSchema, r, req), r.nowMs));
+    res.json(await releaseTokens(ctx, r.caller, strictJson(PushReleaseRequestSchema, r, req)));
   });
 
   router.post(PUSH_BRIDGE_PATHS.NUDGE.replace("/v1", ""), async (req: Request, res: Response) => {

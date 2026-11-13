@@ -20,12 +20,10 @@ type PushNudgeResponse = z.input<typeof PushNudgeResponseSchema>;
 import type { CloudContext } from "./context";
 import { RECEIPT_DELAY_MS, RECEIPT_GIVE_UP_MS } from "./notification-receipts";
 import type { BridgeCaller } from "./push-bridge-auth";
+import { sendWithBudget } from "./push-bridge-send";
 
 /** Kurulum başına bağ tavanı (sızmış bir kurulum anahtarı merkez tabloyu şişiremesin). */
 export const PUSH_BRIDGE_MAX_LINKS = 200;
-/** Kayıt/bırak için kurulum başına dakikalık tavan (dürt tavanı `KOPRU_DURT_DK`). */
-export const PUSH_BRIDGE_REGISTER_PER_MIN = 60;
-
 export const tokenDigestOf = (token: string): string => createHash("sha256").update(token, "utf8").digest("hex");
 
 // ---------------------------------------------------------------- gönderim kapısı
@@ -50,43 +48,12 @@ export function bridgeTransport(ctx: CloudContext): BridgeTransport | null {
   return expo;
 }
 
-// ---------------------------------------------------------------- hız sınırı (kurulum başına, süreç içi)
-
-class InstallationLimiter {
-  private readonly windows = new Map<string, { window: number; count: number }>();
-  /** null = geçti; sayı = kaç saniye sonra yeniden denenebilir. */
-  hit(key: string, nowMs: number, perMinute: number): number | null {
-    const window = Math.floor(nowMs / 60_000);
-    const cur = this.windows.get(key);
-    if (!cur || cur.window !== window) {
-      if (this.windows.size > 10_000) for (const [k, v] of this.windows) if (v.window !== window) this.windows.delete(k);
-      this.windows.set(key, { window, count: 1 });
-      return null;
-    }
-    if (cur.count >= perMinute) return Math.max(1, Math.ceil(((window + 1) * 60_000 - nowMs) / 1000));
-    cur.count += 1;
-    return null;
-  }
-}
-
-const limiters = new WeakMap<CloudContext, { nudge: InstallationLimiter; register: InstallationLimiter }>();
-
-function limit(ctx: CloudContext, kind: "nudge" | "register", installationId: string, nowMs: number): void {
-  let l = limiters.get(ctx);
-  if (!l) {
-    l = { nudge: new InstallationLimiter(), register: new InstallationLimiter() };
-    limiters.set(ctx, l);
-  }
-  const perMinute = kind === "nudge" ? ctx.config.KOPRU_DURT_DK : PUSH_BRIDGE_REGISTER_PER_MIN;
-  const wait = l[kind].hit(installationId, nowMs, perMinute);
-  if (wait !== null) throw new CloudError(429, "HIZ_SINIRI", "Bu kurulum için dakikalık anlık bildirim tavanı aşıldı", { retryAfterSn: wait });
-}
-
 // ---------------------------------------------------------------- metin temizliği
 
-// C0/C1 denetim karakterleri (sekme ve satır sonu ayrı ele alınır) + yön değiştiren biçim karakterleri (kilit ekranında
-// metni ters çevirip yanıltabilir).
-const CONTROL = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F‎‏‪-‮⁦-⁩]/g;
+// C0/C1 denetim karakterleri (sekme ve satır sonu ayrı ele alınır) + yön/biçim karakterleri: çift yönlü denetim
+// (U+200E/F, U+202A–202E, U+2066–2069, U+061C) kilit ekranında metni ters çevirip yanıltabilir; sıfır genişlikli
+// (U+200B–200D, U+FEFF) ve satır/paragraf ayırıcı (U+2028/2029) metni gizler ya da tek satır kuralını deler.
+const CONTROL = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F\u061C\u200B-\u200F\u2028-\u202E\u2066-\u2069\uFEFF]/g;
 
 /** Denetim karakteri temizliği + kırpma (kod noktası; vekil çift bölünmez). Başlık tek satır, gövde en çok çift boş satır. */
 export function cleanPushText(text: string, max: number, multiline: boolean): string {
@@ -101,11 +68,14 @@ export function cleanPushText(text: string, max: number, multiline: boolean): st
 
 const unique = <T>(xs: readonly T[]): T[] => [...new Set(xs)];
 
-export async function registerTokens(ctx: CloudContext, caller: BridgeCaller, req: PushRegisterRequest, nowMs: number): Promise<{ v: 1; bagli: string[] }> {
-  limit(ctx, "register", caller.installationId, nowMs);
+// Hız sınırı kapıda (`push-bridge-limits.ts`, nonce'tan önce); uçlar yalnız işi yapar.
+export async function registerTokens(ctx: CloudContext, caller: BridgeCaller, req: PushRegisterRequest): Promise<{ v: 1; bagli: string[] }> {
   const digests = unique(req.ozetler);
   const installationId = caller.installationId;
   await withCentral(ctx.sync, {}, async (tx) => {
+    // Tavan yarışı: kurulumun var olan bağları kilitlenir (belirlenimli sıra) → eşzamanlı kaydetler sıraya girer ve
+    // sayım bir öncekinin eklediğini görür. Sıfır bağdan başlayan yarış tavanı en çok eşzamanlı istek × 20 aşar (belge §5).
+    await tx.$queryRaw`SELECT id FROM push_bridge_links WHERE kurulum_id = ${installationId}::uuid ORDER BY id FOR UPDATE`;
     const existing = await tx.pushBridgeLink.count({ where: { installationId } });
     const known = await tx.pushBridgeLink.count({ where: { installationId, tokenDigest: { in: digests } } });
     if (existing - known + digests.length > PUSH_BRIDGE_MAX_LINKS) {
@@ -118,8 +88,7 @@ export async function registerTokens(ctx: CloudContext, caller: BridgeCaller, re
   return { v: ENVELOPE_VERSION, bagli: digests };
 }
 
-export async function releaseTokens(ctx: CloudContext, caller: BridgeCaller, req: PushRegisterRequest, nowMs: number): Promise<{ v: 1; birakilan: number }> {
-  limit(ctx, "register", caller.installationId, nowMs);
+export async function releaseTokens(ctx: CloudContext, caller: BridgeCaller, req: PushRegisterRequest): Promise<{ v: 1; birakilan: number }> {
   const digests = unique(req.ozetler);
   const n = await withCentral(ctx.sync, {}, async (tx) => (await tx.pushBridgeLink.deleteMany({ where: { installationId: caller.installationId, tokenDigest: { in: digests } } })).count);
   return { v: ENVELOPE_VERSION, birakilan: n };
@@ -129,7 +98,6 @@ const outcomeOf = (o: PushOutcome): { sonuc: PushNudgeOutcome; kod?: string } =>
   o.kind === "OK" ? { sonuc: "GONDERILDI" } : o.kind === "GECERSIZ_CIHAZ" ? { sonuc: "GECERSIZ", kod: o.code } : { sonuc: o.kind, kod: o.code };
 
 export async function nudge(ctx: CloudContext, caller: BridgeCaller, req: PushNudgeRequest, nowMs: number): Promise<PushNudgeResponse> {
-  limit(ctx, "nudge", caller.installationId, nowMs);
   const title = cleanPushText(req.baslik, PUSH_TITLE_MAX, false);
   if (title.length === 0) throw badRequest("Bildirim başlığı boş (denetim karakterleri temizlendikten sonra)");
   const body = cleanPushText(req.govde, PUSH_BODY_MAX, true);
@@ -143,14 +111,17 @@ export async function nudge(ctx: CloudContext, caller: BridgeCaller, req: PushNu
   const results: { ozet: string; sonuc: PushNudgeOutcome; kod?: string }[] = [];
   const tickets: { tokenDigest: string; ticket: string }[] = [];
   const msg = { title, body, bildirimId: req.data.bildirimId, rota: req.data.rota };
+  const live = tokens.filter((t) => linkOf.get(t.digest)?.invalidatedAt === null);
+  // Ağ çağrısı tx DIŞINDA; süre tavanlı + yineleme belleğiyle (`push-bridge-send.ts`). Sonuç sırası istek sırasıdır.
+  const sent = transport && live.length > 0 ? await sendWithBudget(ctx, transport, { installationId, items: live, msg, nowMs }) : [];
+  const outcomeByDigest = new Map(live.map((t, k) => [t.digest, sent[k]]));
   for (const t of tokens) {
     const link = linkOf.get(t.digest);
+    const o = outcomeByDigest.get(t.digest);
     if (!link) results.push({ ozet: t.digest, sonuc: "BAGSIZ" });
     else if (link.invalidatedAt) results.push({ ozet: t.digest, sonuc: "GECERSIZ", kod: "EXPO_CIHAZ_KAYITSIZ" });
-    else if (!transport) results.push({ ozet: t.digest, sonuc: "KAPALI" });
+    else if (!transport || !o) results.push({ ozet: t.digest, sonuc: "KAPALI" });
     else {
-      // Ağ çağrısı tx DIŞINDA; sıralı (Expo hız sınırı + belirlenimli sonuç sırası).
-      const o = await transport.sendBridge(t.token, msg);
       results.push({ ozet: t.digest, ...outcomeOf(o) });
       if (o.kind === "OK" && o.ticket) tickets.push({ tokenDigest: t.digest, ticket: o.ticket });
     }
