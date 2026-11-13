@@ -149,7 +149,7 @@ export {
   DEFAULT_LABEL_COPIES, readLabelCopies, LABEL_COPIES_MAX, readLabelCustomerCodeMissing, readLabelCustomerCodeAt,
   readLabelCopiesSource, CODE_DEFAULT_MEDIA, readDefaultLabelMedia, readLabelNativeSendEnabled, readMobileRasterEnabled,
   readScrapGradeLabelEnabled, readPatronBulutOlayGudumluEnabled, readNotificationInboxEnabled, readDocumentDesignerEnabled,
-  readDocumentPublishSodEnabled,
+  readDocumentPublishSodEnabled, readPatronPushEnabled,
 } from "./labels";
 export type {
   DefaultLabelMedia,

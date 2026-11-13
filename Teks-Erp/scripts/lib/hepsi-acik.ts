@@ -257,6 +257,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   scrapGradeLabelEnabled: A(true),
   // ── bildirim ───────────────────────────────────────────────────────────────
   bildirimGelenKutusuEnabled: A(true),
+  bildirimPatronPushEnabled: A(true),
   // ── belge-sablon ───────────────────────────────────────────────────────────
   documentDesignerEnabled: A(true),
   documentPublishSodEnabled: A(true),

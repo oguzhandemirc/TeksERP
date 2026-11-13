@@ -171,6 +171,7 @@
     "mobileRasterEnabled": true,
     "scrapGradeLabelEnabled": true,
     "bildirimGelenKutusuEnabled": true,
+    "bildirimPatronPushEnabled": true,
     "documentDesignerEnabled": true,
     "documentPublishSodEnabled": true
   }

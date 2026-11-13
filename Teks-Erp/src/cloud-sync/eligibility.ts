@@ -36,13 +36,13 @@ export type CloudEligibility =
     }
   | { readonly ok: false; readonly reason: CloudBlockReason };
 
-/** SAF — girdi lisans anlık görüntüsü + zaman + bulut adresi + lisans kimliği, çıktı karar. */
-export function evaluateCloudEligibility(
-  snap: LicenseSnapshot,
-  nowMs: number,
-  cloudUrl: string | null,
-  installationId: string | null,
-): CloudEligibility {
+type LicenseDocs = { readonly hak: NonNullable<LicenseSnapshot["entitlement"]>["document"]; readonly kira: NonNullable<LicenseSnapshot["lease"]>["document"] };
+
+/**
+ * Eşitleme ile push köprüsünün ORTAK öneki (tek kaynak): imza hazır ∧ HAK ∧ kira ∧ lisans GEÇERLİ ∧ kendi kurulumu ∧
+ * gönderici sınıf ∧ devredilmemiş. Sıra korunur: sebep kodu eşitleme için bugünküyle aynı kalır.
+ */
+function evaluateSenderBase(snap: LicenseSnapshot, installationId: string | null): { ok: true; docs: LicenseDocs } | { ok: false; reason: CloudBlockReason } {
   if (!snap.imzaHazir || !installationId) return { ok: false, reason: "HAZIR_DEGIL" };
   const hak = snap.entitlement?.document;
   if (!hak) return { ok: false, reason: "HAK_YOK" };
@@ -54,13 +54,53 @@ export function evaluateCloudEligibility(
   if (snap.state.gecerlilik !== "GECERLI" || hak.kurulumId !== installationId) return { ok: false, reason: "LISANS_GECERSIZ" };
   // Ad tarihsel (eski panel etiketi bu kodu tanır); anlamı "sınıf gönderici kümesinde değil".
   if (!isCloudSenderClass(hak.sinif)) return { ok: false, reason: "SINIF_URETIM_DEGIL" };
+  return { ok: true, docs: { hak, kira } };
+}
+
+/** SAF — girdi lisans anlık görüntüsü + zaman + bulut adresi + lisans kimliği, çıktı karar. */
+export function evaluateCloudEligibility(
+  snap: LicenseSnapshot,
+  nowMs: number,
+  cloudUrl: string | null,
+  installationId: string | null,
+): CloudEligibility {
+  const base = evaluateSenderBase(snap, installationId);
+  if (!base.ok) return base;
+  const { hak, kira } = base.docs;
   if (!hak.moduller.includes(PATRON_CLOUD_ENTITLEMENT)) return { ok: false, reason: "PATRON_BULUT_HAKKI_YOK" };
   if (kira.devredildi || snap.state.devredildi) return { ok: false, reason: "DEVREDILDI" };
   const ends = kira.patronBulutBitis === null ? null : isoToMs(kira.patronBulutBitis);
   if (ends === null || !(ends > nowMs)) return { ok: false, reason: "ABONELIK_YOK" };
   if (kira.esitlemeAraligiDk === null) return { ok: false, reason: "ARALIK_YOK" };
-  if (!cloudUrl) return { ok: false, reason: "BULUT_ADRESI_YOK" };
+  if (!cloudUrl || !installationId) return { ok: false, reason: "BULUT_ADRESI_YOK" };
   return { ok: true, installationId, baseUrl: cloudUrl, intervalMinutes: kira.esitlemeAraligiDk, subscriptionEndsAtMs: ends, snap };
+}
+
+export type PushBridgeEligibility =
+  | { readonly ok: true; readonly installationId: string; readonly baseUrl: string }
+  | { readonly ok: false; readonly reason: CloudBlockReason };
+
+/**
+ * Push köprüsü (amaç `bildir`) ön koşulu — SAF. Kullanıcı kararı 2026-11-13: lisansı geçerli her kurulum; bulut
+ * aboneliği, `patron-bulut` HAK'ı ve eşitleme aralığı ARANMAZ (bulut da aramaz, sözleşme §5). Gerisi eşitlemeyle ortak.
+ */
+export function evaluatePushBridgeEligibility(snap: LicenseSnapshot, cloudUrl: string | null, installationId: string | null): PushBridgeEligibility {
+  const base = evaluateSenderBase(snap, installationId);
+  if (!base.ok) return base;
+  if (base.docs.kira.devredildi || snap.state.devredildi) return { ok: false, reason: "DEVREDILDI" };
+  if (!cloudUrl || !installationId) return { ok: false, reason: "BULUT_ADRESI_YOK" };
+  return { ok: true, installationId, baseUrl: cloudUrl };
+}
+
+/** Canlı girdilerle köprü ön koşulu — anlık görüntü okunamazsa HAZIR_DEGIL (fail-closed). */
+export function pushBridgeEligibility(nowMs: number = Date.now()): PushBridgeEligibility {
+  let snap: LicenseSnapshot;
+  try {
+    snap = getLicenseSnapshot(nowMs);
+  } catch {
+    return { ok: false, reason: "HAZIR_DEGIL" };
+  }
+  return evaluatePushBridgeEligibility(snap, getCloudUrl().url, getLicenseInstallationId());
 }
 
 /** Canlı girdilerle ön koşul — anlık görüntü okunamazsa HAZIR_DEGIL (fail-closed). */
