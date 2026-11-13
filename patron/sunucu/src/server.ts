@@ -19,6 +19,8 @@ import { createDoorbell } from "./services/doorbell";
 import { InstallationDirectory } from "./services/installation-directory";
 import { MaintenanceScheduler } from "./services/maintenance-scheduler";
 import { createNotificationRuntime, NotificationScheduler } from "./services/notification-scheduler";
+import { BridgeReceiptScheduler } from "./services/push-bridge-receipts";
+import { bridgeGateSummary } from "./push/native-gate";
 import os from "node:os";
 import path from "node:path";
 import { SecretFileModeError } from "./lib/secret-file-mode";
@@ -67,6 +69,10 @@ async function main(): Promise<void> {
   const notifier = ctx.notifications ? new NotificationScheduler(ctx, ctx.notifications) : null;
   notifier?.start();
   console.log(`PATRON_BILDIRIM kip=${config.BILDIRIM_KIPI}`);
+  // Köprü kapısı kipten bağımsız (yalnız-kopru birleşimi dahil); makbuz döngüsü köprü kapalıyken DB'ye dokunmaz.
+  const bridgeReceipts = new BridgeReceiptScheduler(ctx);
+  bridgeReceipts.start();
+  console.log(bridgeGateSummary(config));
   const security = securityChannelFrom(process.env);
   const stopSecurityAlerts = startSecurityAlerts(security);
   (security.ok ? console.log : console.warn)(`[patron] ${securityChannelSummary(security)}`);
@@ -78,6 +84,7 @@ async function main(): Promise<void> {
     console.log(`[patron] ${signal}: kapanıyor`);
     maintenance.stop();
     notifier?.stop();
+    bridgeReceipts.stop();
     stopSecurityAlerts();
     changeHub.releaseAll(); // uzun yoklamalar 25 sn beklemeden yanıtlanır; dinleyici hemen kapanabilir
     await new Promise<void>((r) => server.close(() => r()));

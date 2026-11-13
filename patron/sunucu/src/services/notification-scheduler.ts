@@ -1,5 +1,5 @@
 // BİLDİRİM İŞİ — süreç içi zamanlayıcı (bakım işinin eşi): her turda hizmeti AÇIK tesisler için önce olay üretimi, sonra
-// gönderim, sonra makbuz yoklaması. `BILDIRIM_KIPI=kapali` (varsayılan = bugünkü davranış) iken iş KURULMAZ. Taşıyıcı kipten seçilir:
+// gönderim, sonra makbuz yoklaması (köprü makbuzları ayrı döngüde). `BILDIRIM_KIPI=kapali` (varsayılan = bugünkü davranış) iken iş KURULMAZ. Taşıyıcı kipten seçilir:
 // `sahte` → kayıtlı sahte gönderici (ağ yok) · `gercek` → Expo + web push (VAPID). Canlı deneme mağaza hesapları ve
 // patron VDS kurulumu sonrasına bırakıldı (runbook notu); yerelde gerçek gönderim DENENMEZ.
 import type { CloudConfig } from "../config";
@@ -11,7 +11,6 @@ import { VapidKeys } from "../push/vapid";
 import type { CloudContext } from "./context";
 import { generateForFacility } from "./notification-events";
 import { checkReceipts, type ReceiptTotals } from "./notification-receipts";
-import { bridgeTransport, checkBridgeReceipts } from "./push-bridge";
 import { deliverDue, type DeliveryTotals } from "./notification-sender";
 import { facilityServiceState } from "./service-lifecycle";
 
@@ -36,17 +35,7 @@ export function createNotificationRuntime(config: CloudConfig): NotificationRunt
 
 export async function runNotificationRound(ctx: CloudContext, transport: PushTransport, nowMs: number): Promise<{ created: number } & DeliveryTotals & ReceiptTotals> {
   const total = { created: 0, sent: 0, skipped: 0, deferred: 0, retried: 0, failed: 0, checked: 0, invalid: 0 };
-  // Push köprüsü makbuzları merkezdedir (kurulum başına, tesis DB'si yok): tesis döngüsünden ÖNCE, hatası turu durdurmaz.
-  const bridge = bridgeTransport(ctx);
-  if (bridge) {
-    try {
-      const b = await checkBridgeReceipts(ctx, bridge, nowMs);
-      total.checked += b.checked;
-      total.invalid += b.invalid;
-    } catch (err) {
-      console.error(`[patron] push köprüsü makbuz turu başarısız: ${(err as Error).name}`);
-    }
-  }
+  // Push köprüsü makbuzları bu turda DEĞİL: köprü kipten bağımsız, tek sahibi `push-bridge-receipts.ts`.
   for (const tesisId of await listReadyFacilities(ctx.app)) {
     await perFacility(tesisId, "bildirim", async () => {
       const f = await withTesis(ctx.app, { tesisId }, (tx) => tx.facility.findFirst({ where: { tesisId, status: "AKTIF" }, select: { tesisId: true } }));

@@ -3,7 +3,7 @@
 > Bulut tarafı `patron/sunucu` (uçlar `src/http/factory-routes.ts`, kapı `src/services/push-bridge-auth.ts`, servis
 > `src/services/push-bridge.ts`); tel şemaları `patron/sunucu/src/wire/esitleme.ts` ↔ fabrika aynası
 > `Teks-Erp/src/cloud-sync/wire/esitleme.ts` (bayt-eşit, `test_bulut_tel_aynasi`). Bekçiler `test_bildirim_koprusu`,
-> `test_bildirim_koprusu_sertlik` (inceleme düzeltmeleri 2026-11-13).
+> `test_bildirim_koprusu_sertlik` (inceleme düzeltmeleri 2026-11-13), `test_bildirim_koprusu_kip` (kipten ayrım 2026-11-13).
 > Plan ve kararlar: arşiv `docs/history/arsiv/2026-11.md` § "Patron push köprüsü P1". Fabrika tarafı §6 (P2) ve §7 (P3).
 
 ## 1. Model
@@ -65,6 +65,22 @@ başlık + gövde + ses + öncelik + `data {bildirimId, rota}` taşır (`BRIDGE_
 | `KALICI` | Bu ileti gönderilemez (`kod` gerekçe) | Yeniden deneme |
 
 `gecersiz` listesi bilette ve önceki makbuz turunda kayıtsız çıkan özetleri taşır; fabrika hepsini siler.
+
+**Gönderim kapısı (2026-11-13, kipten ayrıldı).** Köprü `bridgeGateState` (`src/push/native-gate.ts`) ile açılır:
+`BILDIRIM_NATIVE_PUSH=acik` ∧ `EXPO_ERISIM_BELIRTECI` → köprünün KENDİ Expo taşıyıcısı, `BILDIRIM_KIPI`den bağımsız
+(`ctx.notifications` gerekmez). `BILDIRIM_KIPI=sahte` → kayıtlı sahte taşıyıcı (bekçi/duman). Bulut kipi telefon push'u
+(`NotificationScheduler`) ayrıca `gercek` kip ister; o kapı açıkken köprü kapısı da açıktır.
+
+| `BILDIRIM_KIPI` | `BILDIRIM_NATIVE_PUSH=kapali` | `acik` + belirteç (belirteçsiz `acik` = kapalı) |
+|---|---|---|
+| `kapali` | köprü kapalı · bulut işi yok | köprü GERÇEK (`yalniz-kopru`) · bulut işi, web push, bulut kipi telefon push'u YOK |
+| `sahte` | köprü sahte · bulut işi sahte | köprü sahte · bulut işi sahte |
+| `gercek` | köprü kapalı · bulut işi + web push, telefon `NATIVE_PUSH_KAPALI` | köprü gerçek · bulut işi + web push + bulut kipi telefon push'u |
+
+Açılış günlüğü tek satır: `PATRON_KOPRU gonderim=<kapali|sahte|gercek> kip=<kip>[ birlesim=yalniz-kopru][ (eksik ayar adı)]`
+(sır değeri yok). Makbuz turu bulut bildirim işinden ayrıdır: `services/push-bridge-receipts.ts` (`BridgeReceiptScheduler`,
+`BILDIRIM_ARALIGI_SN`) her kipte koşar, köprü kapalıyken DB'ye dokunmaz; `DeviceNotRegistered` bağa `invalidated_at` yazar,
+silme sonraki dürtte (`push-bridge.ts`). Bekçi `test_bildirim_koprusu_kip`.
 
 **Gönderim süresi ve yineleme.** Bulut belirteçleri tek toplu Expo isteğinde gönderir (taşıyıcı toplu değilse sıralı);
 tek dürtün gönderim süresi `KOPRU_DURT_SURE_SN` (20 sn) ile sınırlıdır, dolunca kalanlar `GECICI SURE_DOLDU`. Aynı
