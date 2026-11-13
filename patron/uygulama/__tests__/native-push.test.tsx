@@ -21,7 +21,7 @@ jest.mock("../src/push/taps-native", () => {
   loaded.tapsNative++;
   return { listenNativeTaps: mockListen };
 });
-jest.mock("../src/state/session", () => ({ useSession: () => ({ api: { deviceList: jest.fn(), deviceRemove: jest.fn(), notificationTest: jest.fn() }, facilityId: "t1", switchFacility: jest.fn() }) }));
+jest.mock("../src/state/session", () => ({ useSession: () => ({ api: { deviceList: jest.fn(), deviceRemove: jest.fn(), notificationTest: jest.fn() }, facilityId: "t1", switchFacility: jest.fn(), yetenek: { bildirim: true, bildirimKutusu: false } }) }));
 jest.mock("../src/state/useRemote", () => ({ useRemote: () => ({ data: [], reload: jest.fn() }) }));
 jest.mock("expo-router", () => ({ useRouter: () => ({ push: jest.fn(), replace: jest.fn() }) }));
 

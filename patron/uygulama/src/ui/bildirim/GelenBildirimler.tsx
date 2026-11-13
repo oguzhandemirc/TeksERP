@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { View } from "react-native";
 import type { BildirimSekmesi, GelenBildirim } from "../../api/bildirim";
 import { errorMessage } from "../../api/client";
-import { erpBildirimGorunusu, okunmamisRozeti } from "../../lib/erp-bildirim";
+import { BILDIRIM_TAG, erpBildirimGorunusu, okunmamisRozeti } from "../../lib/erp-bildirim";
 import { formatAgo } from "../../lib/format";
 import { invalidate } from "../../state/changes";
 import { useSession } from "../../state/session";
@@ -23,8 +23,7 @@ import { StatusBadge } from "../StatusBadge";
 import { space } from "../tokens";
 import { BildirimSatiri } from "./BildirimSatiri";
 
-/** Geçersizleştirme etiketi: liste, özet ve Diğer rozeti birlikte tazelenir. */
-export const BILDIRIM_TAG = "bildirim-kutusu";
+export { BILDIRIM_TAG };
 /** Özet yoklaması: 60 sn aralık, odak başına 30 dk bütçe (yeniden odakta baştan). */
 export const BILDIRIM_YOKLAMA_MS: readonly number[] = Array.from({ length: 30 }, () => 60_000);
 const SAYFA = 30;

@@ -29,6 +29,7 @@ function fakeClient() {
     get: async (path, query) => { calls.push({ m: "GET", path, query }); return [{ ...HAM }, { ...HAM, id: "p2", customerId: "c1", customer: { id: "c1", name: "ACME" }, price: 1300 }] as never; },
     post: async (path, body) => { calls.push({ m: "POST", path, body }); return { id: "p3" } as never; },
     patch: async () => { throw new Error("yok"); },
+    put: async () => { throw new Error("yok"); },
     del: async () => { throw new Error("yok"); },
     download: async () => { throw new Error("yok"); },
   };

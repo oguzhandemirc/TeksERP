@@ -2,6 +2,9 @@
 // Ad/metin sunucuda render edilir; burada yalnız görünüş. Tanınmayan grup genel zil ikonuna düşer.
 import type { KindLabel } from "./labels/diger";
 
+/** Geçersizleştirme etiketi: liste, özet ve Diğer rozeti birlikte tazelenir (önde gelen telefon bildirimi de bunu tetikler). */
+export const BILDIRIM_TAG = "bildirim-kutusu";
+
 const GRUP: Readonly<Record<string, Omit<KindLabel, "ad">>> = {
   siparis: { domain: "siparisler", icon: "receipt-outline" },
   sevkiyat: { domain: "sevkiyat", icon: "cube-outline" },

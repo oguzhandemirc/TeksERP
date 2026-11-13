@@ -25,7 +25,7 @@ const G = { ad: "Deniz Tekstil", roller: { musteri: true, tedarikci: false } };
 function fakeClient(reply: (m: string, path: string, body?: unknown) => unknown) {
   const calls: { m: string; path: string; body?: unknown }[] = [];
   const go = async (m: string, path: string, body?: unknown) => { calls.push({ m, path, ...(body !== undefined ? { body } : {}) }); return reply(m, path, body) as never; };
-  const c: ApiClient = { get: (p) => go("GET", p), post: (p, b) => go("POST", p, b), patch: (p, b) => go("PATCH", p, b), del: (p) => go("DELETE", p), download: async () => { throw new Error("yok"); } };
+  const c: ApiClient = { get: (p) => go("GET", p), post: (p, b) => go("POST", p, b), patch: (p, b) => go("PATCH", p, b), put: async () => { throw new Error("yok"); }, del: (p) => go("DELETE", p), download: async () => { throw new Error("yok"); } };
   return { c, calls };
 }
 const tokenOf = (b: unknown) => (b as { clientToken?: string }).clientToken;

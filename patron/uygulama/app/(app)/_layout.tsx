@@ -1,8 +1,9 @@
 // Oturum kapısı: oturum yoksa girişe. İçerik bir yığındır (sekmeler + Diğer'den açılan bölümler); geniş ekranda
-// (≥ 768) solda kalıcı ray. Bildirime dokunma oturum hazırken dinlenir.
+// (≥ 768) solda kalıcı ray. Bildirime dokunma ve ERP telefon push kaydı oturum hazırken çalışır.
 import { Redirect, Stack } from "expo-router";
 import { View } from "react-native";
 import { useNotificationTaps } from "../../src/push/taps";
+import { useErpPushKaydi } from "../../src/push/useErpPush";
 import { useSession } from "../../src/state/session";
 import { SideNav, useWide } from "../../src/ui/Frame";
 import { Loading } from "../../src/ui/kit";
@@ -13,6 +14,7 @@ export default function AppLayout() {
   const wide = useWide();
   const t = useTokens();
   useNotificationTaps(phase === "hazir");
+  useErpPushKaydi(phase === "hazir");
   if (phase === "yukleniyor") return <Loading />;
   if (phase !== "hazir") return <Redirect href="/giris" />;
   return (

@@ -54,8 +54,10 @@ export interface ApiClient {
   /** `timeoutMs`: uzun süren eşzamanlı işlem (ERP rapor oluşturma); verilmezse istemcinin varsayılanı. */
   post<T>(path: string, body: unknown, o?: { readonly timeoutMs?: number }): Promise<T>;
   patch<T>(path: string, body: unknown): Promise<T>;
-  /** Yalnız ERP kipi (cari pasife alma `DELETE /api/customers/:id`); bulut uç tablosu DELETE kullanmaz. */
-  del<T>(path: string): Promise<T>;
+  /** Yalnız ERP kipi (tam gövde değişimi: bildirim tercihleri `PUT /api/bildirim/tercihler`); bulut uç tablosu PUT kullanmaz. */
+  put<T>(path: string, body: unknown): Promise<T>;
+  /** Yalnız ERP kipi (cari pasife alma `DELETE /api/customers/:id`; push cihazı `DELETE /api/bildirim/cihaz` gövdeli); bulut uç tablosu DELETE kullanmaz. */
+  del<T>(path: string, body?: unknown): Promise<T>;
   download(path: string, query?: Query): Promise<DownloadedFile>;
 }
 
@@ -143,7 +145,8 @@ export function createClient(opts: ClientOptions): ApiClient {
     get: (path, query) => request("GET", path, undefined, query),
     post: (path, body, o) => request("POST", path, body ?? {}, undefined, o?.timeoutMs),
     patch: (path, body) => request("PATCH", path, body ?? {}),
-    del: (path) => request("DELETE", path),
+    put: (path, body) => request("PUT", path, body ?? {}),
+    del: (path, body) => request("DELETE", path, body),
     download,
   };
 }
