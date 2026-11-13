@@ -25,6 +25,14 @@ export const SYNC_PATHS = {
 } as const;
 export type SyncPath = (typeof SYNC_PATHS)[keyof typeof SYNC_PATHS];
 
+/** Push köprüsü uçları — hepsi POST, kurulum imzalı, amaç `bildir` (`esitle` DEĞİL); bulut aboneliği aranmaz, gzip yok. */
+export const PUSH_BRIDGE_PATHS = {
+  REGISTER: "/v1/bildirim/kaydet",
+  RELEASE: "/v1/bildirim/birak",
+  NUDGE: "/v1/bildirim/durt",
+} as const;
+export type PushBridgePath = (typeof PUSH_BRIDGE_PATHS)[keyof typeof PUSH_BRIDGE_PATHS];
+
 /** Gövdesi gzip'li giden uçlar (S14); diğerleri küçük yoklamadır ve sıkıştırılmaz. Bulut ikisini de kabul eder. */
 export const GZIP_PATHS: readonly SyncPath[] = [SYNC_PATHS.SYNC, SYNC_PATHS.REPORT_RESULT];
 
@@ -53,6 +61,8 @@ export const FACTORY_CHANNEL_ERROR_CODES = [
   "RAPOR_BILINMIYOR",
   "ISLEM_KIMLIGI_CAKISTI",
   "SON_YONETICI",
+  "LISANS_GECERSIZ",
+  "BAG_TAVANI",
 ] as const;
 export type FactoryChannelErrorCode = (typeof FACTORY_CHANNEL_ERROR_CODES)[number];
 /** `ISTEK_ZAMAN`da `details.sunucuSaati` bulutun saatidir (İMZASIZ, D4): fabrika isteği yalnız BİR KEZ düzeltilmiş zamanla yeniden imzalar. */
@@ -366,3 +376,57 @@ export const CustomerMessageSchema = z.strictObject({
   eposta: z.email().max(200).optional(),
 });
 export type CustomerMessage = z.infer<typeof CustomerMessageSchema>;
+
+// ---------------------------------------------------------------- push köprüsü (amaç `bildir`)
+// Bulut kişiyi tanımaz: yalnız (kurulum, belirteç ÖZETİ) bağı. Özet = sha256(utf8(ham Expo belirteci)) küçük harf hex.
+// Ham belirteç yalnız dürt isteğinde gelir, saklanmaz; başlık/gövde yalnız İLETİLİR (DB'ye, günlüğe girmez).
+
+/** İstek başına belirteç/özet tavanı (Expo isteği 100 alır; patron sayısı küçüktür). */
+export const PUSH_BRIDGE_MAX_TOKENS = 20;
+/** Gönderilen başlık/gövde uzunluğu (kod noktası): uzunu bulut KIRPAR; ham sınırı aşan istek 400. */
+export const PUSH_TITLE_MAX = 80;
+export const PUSH_BODY_MAX = 400;
+const RAW_TITLE_MAX = 400;
+const RAW_BODY_MAX = 4000;
+
+export const PushTokenDigestSchema = z.string().regex(/^[0-9a-f]{64}$/);
+/** Expo belirteci biçimi (bulut `push/targets.ts` ile aynı desen). */
+export const PushTokenSchema = z.string().regex(/^Expo(nent)?PushToken\[[A-Za-z0-9_-]{8,200}\]$/);
+/** Uygulama içi rota: tek `/` ile başlar, dış adres/`//` yok (uygulama `safeRoute` ile ayrıca süzer). */
+export const PushRouteSchema = z.string().max(200).regex(/^\/(?!\/)[A-Za-z0-9/_\-?=&.%]*$/);
+
+export const PushRegisterRequestSchema = z.strictObject({
+  v: z.literal(ENVELOPE_VERSION),
+  ozetler: z.array(PushTokenDigestSchema).min(1).max(PUSH_BRIDGE_MAX_TOKENS),
+});
+export type PushRegisterRequest = z.infer<typeof PushRegisterRequestSchema>;
+export const PushRegisterResponseSchema = z.object({ v: z.literal(ENVELOPE_VERSION), bagli: z.array(PushTokenDigestSchema) });
+
+export const PushReleaseRequestSchema = PushRegisterRequestSchema;
+export const PushReleaseResponseSchema = z.object({ v: z.literal(ENVELOPE_VERSION), birakilan: z.number().int().min(0) });
+
+export const PushNudgeRequestSchema = z.strictObject({
+  v: z.literal(ENVELOPE_VERSION),
+  belirtecler: z.array(PushTokenSchema).min(1).max(PUSH_BRIDGE_MAX_TOKENS),
+  baslik: z.string().min(1).max(RAW_TITLE_MAX),
+  govde: z.string().max(RAW_BODY_MAX),
+  data: z.strictObject({ bildirimId: Uuid, rota: PushRouteSchema.nullable() }),
+});
+export type PushNudgeRequest = z.infer<typeof PushNudgeRequestSchema>;
+
+/**
+ * Belirteç başına sonuç: GONDERILDI (Expo bileti alındı; teslim makbuzda) · KAPALI (bulutta gönderim kapalı — bağ
+ * geçerli, fabrika belirteci SİLMEZ) · BAGSIZ (özet bu kuruluma bağlı değil — gönderilmedi) · GECERSIZ (cihaz kayıtsız;
+ * bağ silindi, fabrika belirteci siler) · GECICI (yeniden denenebilir) · KALICI (bu ileti gönderilemez).
+ */
+export const PUSH_NUDGE_OUTCOMES = ["GONDERILDI", "KAPALI", "BAGSIZ", "GECERSIZ", "GECICI", "KALICI"] as const;
+export type PushNudgeOutcome = (typeof PUSH_NUDGE_OUTCOMES)[number];
+export const PushNudgeResponseSchema = z.object({
+  v: z.literal(ENVELOPE_VERSION),
+  /** Bulutun gönderim kapısı: `kapali` iken hiçbir belirtece istek atılmaz (hata değil). */
+  gonderim: z.enum(["acik", "kapali"]),
+  sonuclar: z.array(z.object({ ozet: PushTokenDigestSchema, sonuc: z.enum(PUSH_NUDGE_OUTCOMES), kod: Code.optional() })),
+  /** Bağı silinen (cihaz kayıtsız) belirteçlerin özetleri — fabrika bunları kendi tablosundan siler. */
+  gecersiz: z.array(PushTokenDigestSchema),
+});
+export type PushNudgeResponse = z.input<typeof PushNudgeResponseSchema>;

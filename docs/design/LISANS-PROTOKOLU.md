@@ -141,7 +141,7 @@
 
 ### İSTEK (`tekserp-istek`) — KURULUM imzalı
 
-`kurulumId` · `zaman` (ISO) · `nonce` (base64url 22–64) · `amac` (`etkinlestir` · `yokla` · `zil` · `cevrimdisi` · `destek` · `esitle` · `tasima` · `dr-devral` · v2 `donanim`) · `govdeOzeti` (sha256, base64url 43) · v2 `yol?` (`/v1/<parça>[/<parça>…]`, en çok dört parça).
+`kurulumId` · `zaman` (ISO) · `nonce` (base64url 22–64) · `amac` (`etkinlestir` · `yokla` · `zil` · `cevrimdisi` · `destek` · `esitle` · `tasima` · `dr-devral` · v2 `donanim` · `bildir`) · `govdeOzeti` (sha256, base64url 43) · v2 `yol?` (`/v1/<parça>[/<parça>…]`, en çok dört parça).
 
 - **Yol bağı (v2, G4 §2.5):** `signRequest({path})` isteğin gittiği ucu imzaya koyar; `verifyRequest({path})` imzalı `yol` taşıyan isteği yalnız o uçta kabul eder (`ISTEK_YOL`). Doğrulayan yolu `ENDPOINTS`/`SYNC_PATHS` SABİTİNDEN verir (vekil, bağlama öneki ve sorgu dizgesinden bağımsız). Zarfla taşınan istekte (QR, panel aktarması) yol TAŞIYAN uçtur: `/v1/cevrimdisi`. `yol` taşımayan (eski) istek denetlenmez; alanın zorunlu olması ayrı karardır.
 
