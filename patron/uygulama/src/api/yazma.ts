@@ -71,6 +71,25 @@ export interface RenkGovdesi {
   readonly hex?: string;
 }
 
+/** ERP ürün kartı (V5c); `surum` = `updatedAt`. Kod ve tür doğuştan sonra değişmez. */
+export interface UrunKaydi {
+  readonly id: string;
+  readonly surum: string;
+  readonly kod: string;
+  readonly ad: string;
+  /** FABRIC · YARN · CONSUMABLE. */
+  readonly tur: string;
+  readonly birim: string;
+  readonly aktif: boolean;
+}
+
+export interface UrunGovdesi {
+  readonly ad: string;
+  readonly tur: "FABRIC" | "YARN" | "CONSUMABLE";
+  /** Türden türer (MT · KG · ADET). */
+  readonly birim: string;
+}
+
 /** Fiyat yönü (ERP `PriceKind`). */
 export type FiyatYonu = "SALE" | "PURCHASE";
 
@@ -115,6 +134,9 @@ export interface Yazici {
   renkOku(id: string): Promise<RenkKaydi>;
   renkGuncelle(id: string, surum: string, patch: Readonly<Record<string, unknown>>): Promise<RenkKaydi>;
   renkPasif(id: string): Promise<void>;
+  urunEkle(islemId: string, g: UrunGovdesi): Promise<YazmaSonucu>;
+  urunOku(id: string): Promise<UrunKaydi>;
+  urunGuncelle(id: string, surum: string, patch: Readonly<Record<string, unknown>>): Promise<UrunKaydi>;
   /** Ürünün yürürlükteki fiyatları (kart varsayılanı + cari istisnaları). */
   fiyatlar(urunId: string): Promise<FiyatKaydi[]>;
   /** Var olanı günceller, yoksa açar. `surum`: anahtarın görülen satırı (yoksa null → gönderilmez). */
@@ -144,6 +166,9 @@ export function createBulutYazici(api: Api): Yazici {
     renkPasif: yok,
     fiyatlar: yok,
     fiyatYaz: yok,
+    urunEkle: yok,
+    urunOku: yok,
+    urunGuncelle: yok,
   };
 }
 
@@ -210,6 +235,12 @@ export function renkKaydi(h: Ham | null | undefined): RenkKaydi {
   const surum = tarih(h?.updatedAt);
   if (!h || typeof h.id !== "string" || !surum) throw beklenmeyen();
   return { id: h.id, surum, kod: s(h.code), ad: s(h.name), hex: s(h.hex), aktif: h.isActive !== false };
+}
+
+export function urunKaydi(h: Ham | null | undefined): UrunKaydi {
+  const surum = tarih(h?.updatedAt);
+  if (!h || typeof h.id !== "string" || !surum) throw beklenmeyen();
+  return { id: h.id, surum, kod: s(h.code), ad: s(h.name), tur: s(h.itemType), birim: s(h.unit), aktif: h.isActive !== false };
 }
 
 const ondalik = (v: unknown): string => (typeof v === "number" && Number.isFinite(v) ? String(v) : s(v));
@@ -296,6 +327,14 @@ export function createErpYazici(c: ApiClient): Yazici {
     renkPasif: async (id) => {
       await c.del<unknown>(`/colors/${seg(id)}`);
     },
+    // Kod fabrikada doğar (STK-…); kart yapı alanları (en, gramaj…) panelde.
+    urunEkle: async (_id, g) => {
+      const r = await c.post<Ham>("/items", { name: g.ad, itemType: g.tur, unit: g.birim });
+      if (typeof r?.id !== "string") throw beklenmeyen();
+      return { tur: "kayit", id: r.id };
+    },
+    urunOku: async (id) => urunKaydi(await c.get<Ham>(`/items/${seg(id)}`)),
+    urunGuncelle: async (id, surum, patch) => urunKaydi(await c.patch<Ham>(`/items/${seg(id)}`, { ...patch, expectedUpdatedAt: surum })),
     // Fiyat ucu ticaret modülü kapısının arkasında: kapalıysa 403 MODULE_DISABLED, ileti aynen gösterilir.
     fiyatlar: async (urunId) => {
       const r = await c.get<unknown>("/item-prices", { "filter[itemId]": urunId, pageSize: 500 });

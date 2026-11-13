@@ -104,7 +104,7 @@ export function izinleriSuz(perms: readonly string[], y: Yetenek = etkin): reado
 export const ISLEMLER = [
   "siparis.ekle", "siparis.duzenle", "siparis.iptal", "cari.ekle", "cari.duzenle", "cari.pasif",
   // V5c tanımlar: yalnız ERP (bulutta gelen kutusu mesajı yok → kapalı).
-  "renk.ekle", "renk.duzenle", "renk.pasif", "fiyat.yaz",
+  "renk.ekle", "renk.duzenle", "renk.pasif", "fiyat.yaz", "urun.ekle", "urun.duzenle",
 ] as const;
 export type Islem = (typeof ISLEMLER)[number];
 
@@ -129,6 +129,8 @@ const ERP_ISLEM: Readonly<Record<Islem, { readonly izin: readonly (readonly stri
   "renk.pasif": { izin: [["property:write"]], kume: ["renk"] },
   // Fiyat ucu upsert (ekle = düzenle); liste `item:read` ister. Ticaret modülü kapısı sunucuda (403 aynen).
   "fiyat.yaz": { izin: [["price:write"], ["item:read"]], kume: ["urun"] },
+  "urun.ekle": { izin: [["item:write"]], kume: ["urun"] },
+  "urun.duzenle": { izin: [["item:write"], ["item:read"]], kume: ["urun"] },
 };
 
 /** Bulut: yalnız gelen kutusu yaratması, bugünkü kodlarla (`perms` = oturumun bulut izinleri). */

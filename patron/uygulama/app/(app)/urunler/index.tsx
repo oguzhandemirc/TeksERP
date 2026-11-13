@@ -1,5 +1,5 @@
 // Ürünler (V5c, yalnız ERP): arama ve tür süzgeci sunucuda (`LIST_SEARCH.urun`); satır ad · kod · tür. Dokununca
-// fiyatlar (ürün düzenleme açıksa düzenleme ekranı, oradan fiyatlar).
+// düzenleme (oradan fiyatlar); düzenleme kapalı, fiyat açıksa doğrudan fiyatlar.
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { View } from "react-native";
@@ -11,19 +11,23 @@ import { Screen } from "../../../src/ui/Frame";
 import { EMPTY_ICON } from "../../../src/ui/icons";
 import { ListGroup, ListRow } from "../../../src/ui/ListRow";
 import { useDebounced } from "../../../src/ui/Picker";
-import { ListStates, SearchField, StaleNote } from "../../../src/ui/siparis/parts";
+import { CapsuleButton, ListStates, SearchField, StaleNote } from "../../../src/ui/siparis/parts";
 import { useRemoteList } from "../../../src/ui/siparis/useRemoteList";
 import { space } from "../../../src/ui/tokens";
 
 export default function Items() {
-  const { permissions } = useSession();
+  const { permissions, offline } = useSession();
   const router = useRouter();
   const [term, setTerm] = useState("");
   const ara = useDebounced(term.trim(), 300);
   const list = useRemoteList("urun", { ara: ara || undefined });
   const fiyat = islemVar("fiyat.yaz", permissions);
+  const ekle = islemVar("urun.ekle", permissions);
+  const duzenle = islemVar("urun.duzenle", permissions);
   return (
-    <Screen module="urunler" onRefresh={list.reload} refreshing={list.refreshing} subtitle={<StaleNote stale={list.stale} savedAt={list.savedAt} />}>
+    <Screen module="urunler" onRefresh={list.reload} refreshing={list.refreshing} subtitle={<StaleNote stale={list.stale} savedAt={list.savedAt} />}
+      headerRight={ekle ? <CapsuleButton label="Yeni ürün" icon="add" disabled={offline} onPress={() => router.push("/urunler/yeni")} testID="yeni-urun" /> : undefined}
+    >
       <View style={{ marginBottom: space.m }}>
         <SearchField value={term} onChangeText={setTerm} placeholder="Ad ya da kod ara" testID="urun-ara" />
       </View>
@@ -36,7 +40,8 @@ export default function Items() {
               <ListRow
                 key={r.id} title={ad} subtitle={[str(k.kod), urunTuruEtiketi(str(k.tur))].filter(Boolean).join(" · ") || undefined}
                 icon="cube-outline" domain="stok" value={k.aktif === false ? "Pasif" : undefined} testID={`urun-${r.id}`}
-                onPress={fiyat ? () => router.push({ pathname: "/urunler/fiyat", params: { id: r.id, ad } } as never) : undefined}
+                onPress={duzenle ? () => router.push({ pathname: "/urunler/duzenle", params: { id: r.id } } as never)
+                  : fiyat ? () => router.push({ pathname: "/urunler/fiyat", params: { id: r.id, ad } } as never) : undefined}
               />
             );
           })}
