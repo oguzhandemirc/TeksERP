@@ -37,6 +37,8 @@
 //             §2 ve §2b YEŞİL kaldı, yani sıra kontrolü olmasa sızıntı sessiz geçerdi)
 //   SONDA-9 → çıkış 1 · 1 ❌ · §3 "KAPILANMIŞ: /api/rolls"
 //   SONDA-10 → çıkış 1 · 1 ❌ · §5 · SONDA-11 → çıkış 1 · 1 ❌ · §5b
+//   ⑤ küme bazlı kapı (§6, 2026-11-13): patron-read `MODULE_GATES`ten üretim satırı silinir → SONDA-12 ·
+//      `/veri/:projeksiyon` ucundan `moduleGate(` silinir → SONDA-13 (ikisi de çıkış 1 · 1 ❌ · §6)
 // =============================================================================
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -188,6 +190,23 @@ const UC_BAZLI: ReadonlyArray<{ dosya: string; kapili: readonly string[]; acik: 
   },
 ];
 
+/**
+ * Router seviyesinde kapısız, kapı KÜME BAŞINA: uç `:projeksiyon` parametresiyle birden çok modülün kümesini
+ * verir; adlı kapı `MODULE_GATES` haritasından kümenin modülüne göre seçilir (`moduleGate(...)`). Router
+ * seviyesi kapı modülsüz kümeleri de kapatırdı. Kapının ISIRDIĞINI HTTP ile `olcen` bekçi ölçer.
+ */
+const KUME_BAZLI: ReadonlyArray<{ dosya: string; mount: string; olcen: string; neden: string }> = [
+  {
+    dosya: "routes/patron-read.routes.ts",
+    mount: "/api/patron/v1",
+    olcen: "scripts/test_patron_okuma_ucu.ts",
+    neden:
+      "Patron okuma ucu (V3a): `ozet.uretim` üretim kümesi, `ozet.siparis`/`siparis`/`tesis` modülsüz — router kapısı " +
+      "patronun bütün ekranını üretim kapalı kurulumda kapatırdı. Kapı küme başına `MODULE_GATES` (§6); üretim kapalıyken " +
+      "`ozet.uretim` 403 MODULE_DISABLED, modülsüz küme 200 (`test_patron_okuma_ucu` §6).",
+  },
+];
+
 /** `router.<verb>("<yol>", ...)` kaydının argüman metni (ilk eşleşme); yoksa null. */
 function ucArgumanlari(src: string, yol: string): string | null {
   const esc = yol.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
@@ -205,7 +224,7 @@ function main(): void {
     BILINCLI_KAPISIZ.length >= 10,
     `kapısız=${BILINCLI_KAPISIZ.length}`,
   );
-  const eksikDosya = [...KAPILI, ...BILINCLI_KAPISIZ].filter(
+  const eksikDosya = [...KAPILI, ...BILINCLI_KAPISIZ, ...KUME_BAZLI].filter(
     (x) => !fs.existsSync(path.join(SRC, x.dosya)),
   );
   check(
@@ -240,7 +259,7 @@ function main(): void {
   const kapiTasiyan = tumRouteDosyalari.filter((rel) =>
     fs.readFileSync(path.join(SRC, rel), "utf8").includes(KAPI),
   );
-  const anilan = new Set([...KAPILI, ...BILINCLI_KAPISIZ].map((x) => x.dosya));
+  const anilan = new Set([...KAPILI, ...BILINCLI_KAPISIZ, ...KUME_BAZLI].map((x) => x.dosya));
   const listesiz = kapiTasiyan.filter((rel) => !anilan.has(rel));
   // KÖRLÜK ZEMİNİ: tarama hiç dosya görmezse "listesiz yok" VAKUMEN doğru olur.
   check(
@@ -338,6 +357,23 @@ function main(): void {
       check(`§5b ${u.dosya} ${yol} bilerek kapısız (çekirdek/kurtarma)`, ok,
         ok ? "" : args === null ? "uç bulunamadı" : "kapılanmış — bu bir KARARDI; önce UC_BAZLI listesini güncelle");
     }
+  }
+
+  // ── §6 ⭐ KÜME BAZLI KAPI ──────────────────────────────────────────────────
+  // Router kapısı YOK (modülsüz kümeler açık kalmalı); harita üretim modülünü adlı kapıya bağlar ve
+  // `:projeksiyon` alan HER uç `moduleGate(` taşır. Isırdığını HTTP ile `olcen` bekçi ölçer (§6 sondaları).
+  for (const k of KUME_BAZLI) {
+    const src = yorumlariSok(fs.readFileSync(path.join(SRC, k.dosya), "utf8"));
+    check(`§6 ⭐ ${k.mount} router seviyesinde üretim kapısı YOK`, !new RegExp(`router\\.use\\([^;]*\\b${KAPI}\\b`).test(src));
+    check(`§6b ⭐ ${k.mount} MODULE_GATES üretim modülünü \`${KAPI}\`a bağlıyor`,
+      new RegExp(`"production\\.enabled"\\s*:\\s*${KAPI}\\b`).test(src));
+    const ucler = [...src.matchAll(/router\.get\(\s*"([^"]*:projeksiyon[^"]*)"([^;]*)\);/g)];
+    const kapisiz = ucler.filter((m) => !/\bmoduleGate\(/.test(m[2]!)).map((m) => m[1]);
+    check(`§6c ⭐ ${k.mount} küme alan HER uç moduleGate taşıyor`, ucler.length >= 1 && kapisiz.length === 0,
+      ucler.length === 0 ? "körlük: `:projeksiyon` ucu bulunamadı" : kapisiz.length ? `KAPISIZ: ${kapisiz.join(", ")}` : `uç=${ucler.length}`);
+    check(`§6d ${k.mount} ölçen bekçi mevcut ve gerekçe yazılı`,
+      fs.existsSync(path.resolve(__dirname, "..", k.olcen)) && k.neden.trim().length >= 20, k.olcen);
+    check(`§6e ${k.mount} middleware başlığında yazılı`, mwSrc.includes(k.mount));
   }
 
   for (const b of BILINCLI_KAPISIZ) console.log(`   ℹ️  bilinçli kapısız: ${b.mount} — ${b.neden}`);

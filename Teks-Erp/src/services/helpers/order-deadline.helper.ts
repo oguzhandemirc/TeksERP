@@ -25,6 +25,14 @@ export function daysPastDeadline(deadline: Date | null | undefined, nowMs: numbe
   return Math.floor((nowMs - deadline.getTime()) / DAY_MS);
 }
 
+/**
+ * "Gecikmiş sipariş" Prisma parçası — `isDeadlineOpenStatus(status) ∧ daysPastDeadline(deadline, nowMs) !== null`
+ * yükleminin BOĞAZ-İKİZİ (patron okuma ucu `gecikmis` süzgeci; eşitliği `test_patron_okuma_ucu` ölçer).
+ */
+export function overdueOrderWhere(nowMs: number): { status: { in: OrderStatus[] }; deadline: { lt: Date } } {
+  return { status: { in: [...DEADLINE_OPEN_ORDER_STATUSES] }, deadline: { lt: new Date(nowMs) } };
+}
+
 /** Termin henüz geçmedi ve en geç `days` gün sonra (mutlak pencere; `daysPastDeadline` ile ayrık). */
 export function isDeadlineApproaching(deadline: Date | null | undefined, nowMs: number, days: number): boolean {
   // tz-ok: mutlak an farkı.
