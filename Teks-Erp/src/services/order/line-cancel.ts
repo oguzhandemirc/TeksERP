@@ -27,6 +27,7 @@ import { markTravelerCardDirtyTx } from "../helpers/traveler-card-dirty.helper";
 import { ACTIVE_ORDER_LINK, activeOrderLinkCount, unlinkOrderLinesTx } from "../helpers/order-link.helper";
 import { TERIM } from "../../constants/terim";
 import type { OrderServiceThis } from "./shared";
+import { guardLineCancelPreview, lineCancelTokenFor } from "./line-cancel-token";
 
 export async function loadLineForCancel(orderId: string, lineId: string) {
     const line = await prisma.orderLine.findUnique({
@@ -140,6 +141,8 @@ export async function getLineCancelPreview(this: OrderServiceThis, orderId: stri
           : null,
         blockers,
         canCancel: blockers.length === 0,
+        // Uygulamaya `expectedPreviewToken` olarak geri yollanır; tutmazsa 409 CANCEL_PREVIEW_STALE.
+        previewToken: await lineCancelTokenFor(orderId, lineId),
       },
     };
   }
@@ -149,8 +152,9 @@ export async function cancelOrderLine(this: OrderServiceThis,
     orderId: string,
     lineId: string,
     userId?: string,
-    reason?: { reasonCode?: string | null; reasonText?: string | null },
+    reason?: { reasonCode?: string | null; reasonText?: string | null; expectedPreviewToken?: string | null },
   ): Promise<ApiResponse<unknown>> {
+    const previewGuard = await guardLineCancelPreview(orderId, lineId, reason?.expectedPreviewToken); // token yoksa no-op
     const preview = (await this.getLineCancelPreview(orderId, lineId)).data as {
       canCancel: boolean;
       blockers: string[];
@@ -169,6 +173,7 @@ export async function cancelOrderLine(this: OrderServiceThis,
     const affectedWoIds = preview.affectedWorkOrders.map((w) => w.id);
 
     await prisma.$transaction(async (tx) => {
+      await previewGuard(tx);
       // ATOMİK CLAIM: iki paralel iptal isteğinde ikincisi 409 almalı
       // (check-then-act YASAK — CLAUDE.md durum geçişi kuralı).
       const claim = await tx.orderLine.updateMany({
