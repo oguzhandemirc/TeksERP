@@ -1,12 +1,13 @@
 // Sipariş iptali (ERP): önce fabrikanın önizlemesi, etkilenen HER kayıt listelenir. İş emri taşıyan sipariş telefonda
 // İPTAL EDİLMEZ (eylem kayıt başına panelde seçilir; boş eylem listesi sunucuda varsayılanı — stoğa çevirme — uygular).
-// Aktif sevkiyat varsa iptal yok. Temiz siparişte iki adımlı onay; yazıcı uygulamadan hemen önce önizlemeyi yeniden okur.
+// Aktif sevkiyat varsa iptal yok. Temiz siparişte iki adımlı onay; yazıcı uygulamadan hemen önce önizlemeyi yeniden okur,
+// iptal görülen önizlemenin belirteciyle gider: tutmazsa (409 CANCEL_PREVIEW_STALE) yeni önizleme gösterilir, onay BAŞTAN.
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { ApiError, errorMessage } from "../../../../src/api/client";
 import { islemVar } from "../../../../src/api/yetenek";
-import { IPTAL_ILETISI, iptalKarari, type IptalOnizleme } from "../../../../src/api/yazma";
+import { CANCEL_PREVIEW_STALE, IPTAL_ILETISI, iptalKarari, type IptalOnizleme } from "../../../../src/api/yazma";
 import { formatNumber, statusLabel } from "../../../../src/lib/format";
 import { TERIM } from "../../../../src/lib/terim";
 import { invalidate } from "../../../../src/state/changes";
@@ -30,6 +31,9 @@ export default function CancelOrder() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [degisti, setDegisti] = useState(false);
+  // Onay düğmesinin anahtarı: bayat önizlemeden sonra iki adımlı onay yeniden kurulur.
+  const [onayTuru, setOnayTuru] = useState(0);
   const belirsiz = useRef(false);
 
   const oku = useCallback(async () => {
@@ -48,11 +52,11 @@ export default function CancelOrder() {
   if (!izin) return <Screen title="Sipariş iptali" module="siparisler" back><Muted>Bu işlem için yetkiniz yok.</Muted></Screen>;
 
   async function iptalEt() {
-    if (offline) return;
+    if (offline || !onizleme) return;
     setBusy(true);
     setError(null);
     try {
-      await yazici.siparisIptal(String(id));
+      await yazici.siparisIptal(String(id), onizleme.belirtec);
       belirsiz.current = false;
       haptic("success");
       invalidate(["siparis", "ozet.siparis"]);
@@ -66,6 +70,15 @@ export default function CancelOrder() {
           router.back();
           return;
         }
+      }
+      if (err instanceof ApiError && err.code === CANCEL_PREVIEW_STALE) {
+        // Hiçbir şey uygulanmadı: eski önizleme kaldırılır (eski belirteçle onay verilemez), yenisi gelince onay baştan.
+        belirsiz.current = false;
+        setOnizleme(null);
+        setDegisti(true);
+        setOnayTuru((n) => n + 1);
+        await oku();
+        return;
       }
       belirsiz.current = err instanceof ApiError && err.ambiguous;
       setError(errorMessage(err));
@@ -82,6 +95,7 @@ export default function CancelOrder() {
       {loadError && !onizleme ? <ErrorState text={loadError} onRetry={() => void oku()} /> : null}
       {onizleme && karar ? (
         <>
+          {degisti ? <Banner tone="warn" text={`Sipariş siz bakarken değişti; güncel durum aşağıda.${karar === "SERBEST" ? " Yeniden onaylayın." : ""}`} testID="iptal-degisti" /> : null}
           <SectionHeader title="Etkilenen kayıtlar" />
           <FactGroup testID="iptal-etkilenen">
             <FactRow label="Sipariş" value={onizleme.siparisNo || "—"} />
@@ -100,7 +114,7 @@ export default function CancelOrder() {
               {belirsiz.current && error ? (
                 <Button label="Tekrar dene" tone="danger" busy={busy} disabled={offline} onPress={() => void iptalEt()} testID="iptal-tekrar" />
               ) : (
-                <ConfirmButton label="Siparişi iptal et" question={`${onizleme.siparisNo || "Sipariş"} iptal edilsin mi? Bu işlem geri alınamaz.`} busy={busy} disabled={offline} onConfirm={() => void iptalEt()} testID="siparis-iptal" />
+                <ConfirmButton key={onayTuru} label="Siparişi iptal et" question={`${onizleme.siparisNo || "Sipariş"} iptal edilsin mi? Bu işlem geri alınamaz.`} busy={busy} disabled={offline} onConfirm={() => void iptalEt()} testID="siparis-iptal" />
               )}
             </>
           )}

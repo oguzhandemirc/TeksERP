@@ -94,12 +94,24 @@ export function farkSatirlari<F extends object>(form: F, taze: F, etiket: Readon
   return out;
 }
 
+/** Cari doğuşu token'lı replay kodları (V4c fabrikası): kart pasif/birleşik · aynı token başka gövde. */
+export const CUSTOMER_CREATE_GONE = "CUSTOMER_CREATE_GONE";
+export const CLIENT_TOKEN_COLLISION = "CLIENT_TOKEN_COLLISION";
+
 /**
- * Yaratma hatası, önceki deneme belirsizse (ağ/5xx): cari ucu işlem kimliği almadığından tekrar 409
- * `CUSTOMER_NAME_DUPLICATE` olur — büyük olasılıkla ilk deneme yazılmıştır; kullanıcıya bunu söyle.
+ * Yaratma hatasını kullanıcı iletisine çevirir. `CLIENT_TOKEN_COLLISION` kesin 4xx'tir: kimlik düşer, sonraki basış
+ * yeni denemedir. Eski sunucu `clientToken`ı sessizce düşürür; orada belirsiz denemeden sonraki ad mükerreri büyük
+ * olasılıkla ilk denemenin kaydıdır (yeni sunucu aynı token'a kartı geri verir, bu ileti ona düşmez).
  */
 export function ekleHatasi(err: unknown, belirsizOnce: boolean): unknown {
-  if (belirsizOnce && err instanceof ApiError && err.code === "CUSTOMER_NAME_DUPLICATE") {
+  if (!(err instanceof ApiError)) return err;
+  if (err.code === CUSTOMER_CREATE_GONE) {
+    return new ApiError(409, err.code, "Bu cari kaydedilmiş ama sonradan pasife alınmış; listeden seçin.", err.details);
+  }
+  if (err.code === CLIENT_TOKEN_COLLISION) {
+    return new ApiError(409, err.code, "Önceki deneme farklı bilgilerle kaydedilmiş; yeniden göndermek için tekrar dokunun.", err.details);
+  }
+  if (belirsizOnce && err.code === "CUSTOMER_NAME_DUPLICATE") {
     return new ApiError(409, err.code, "Bu adda cari zaten var; önceki deneme kaydedilmiş olabilir. Cari listesini yenileyip kontrol edin.", err.details);
   }
   return err;
