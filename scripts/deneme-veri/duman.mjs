@@ -17,7 +17,7 @@ const arg = (ad, v) => { const i = process.argv.indexOf(ad); return i > 0 ? proc
 async function main() {
   const url = arg("--url"), sir = arg("--sir"), cap = arg("--cap", "2026-10-16");
   if (!url || !sir) throw new Error("kullanım: duman.mjs --url <adres> --sir <zincir servisi>");
-  const ist = istemciKur({ url, kullanici: "demoveri", parola: zincirOku(sir) ?? "" });
+  const ist = istemciKur({ url, kullanici: arg("--kullanici", "demoveri"), parola: zincirOku(sir, arg("--kullanici", "demoveri")) ?? "" });
   await ist.giris();
   const c = baglamKur({ api: ist.api, cap });
   await anaVeri(c); // kimlikleri okur (yazacak bir şey yoksa no-op)
