@@ -1,8 +1,9 @@
 // Giriş/davet kabuğu: her temada lacivert zemin + nötr marka ("TeksERP Yönetim"; firma adı/logo KODDA yok) + opak
 // form kartı. Lacivert zemindeki metin `onNavy` token'larındandır (zemin her temada koyu).
 import Ionicons from "@expo/vector-icons/Ionicons";
-import type { ReactNode } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from "react-native";
+import { useContext, type ReactNode } from "react";
+import { KeyboardAvoidingView, Platform, ScrollView, Text, useWindowDimensions, View } from "react-native";
+import { SafeAreaInsetsContext } from "react-native-safe-area-context";
 import { makeStyles, useTokens } from "../theme-context";
 import { FONT_SCALE, radius, space, typography } from "../tokens";
 
@@ -16,17 +17,23 @@ export function AuthShell({ title, subtitle, step, children, footer }: {
 }) {
   const t = useTokens();
   const s = useStyles();
+  // Sağlayıcısız çizimde (testler) inset sıfır.
+  const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, bottom: 0 };
+  // Kısa ekranda (el terminali, 640 dp) marka küçülür; içerik durum çubuğunun altından başlar.
+  const short = useWindowDimensions().height < 720;
   return (
     <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={[s.flex, { backgroundColor: t.navy }]}>
-      <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
-        <View style={s.brand}>
-          <View style={s.mark} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-            <Ionicons name="stats-chart" size={34} color={t.gold} />
-          </View>
+      <ScrollView contentContainerStyle={[s.scroll, short && s.scrollShort, { paddingTop: insets.top + (short ? space.m : space.xxl), paddingBottom: insets.bottom + (short ? space.m : space.xxl) }]} keyboardShouldPersistTaps="handled">
+        <View style={[s.brand, short && s.brandShort]}>
+          {short ? null : (
+            <View style={s.mark} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+              <Ionicons name="stats-chart" size={34} color={t.gold} />
+            </View>
+          )}
           <Text style={s.brandName} accessibilityRole="header" maxFontSizeMultiplier={FONT_SCALE.title}>TeksERP Yönetim</Text>
           <Text style={s.brandTag}>Fabrikanızın özeti, her an yanınızda</Text>
         </View>
-        <View style={[s.card, { backgroundColor: t.surface }]}>
+        <View style={[s.card, short && s.cardShort, { backgroundColor: t.surface }]}>
           {step ? (
             <View style={s.steps} accessible accessibilityLabel={`Adım ${step.at} / ${step.of}`}>
               {Array.from({ length: step.of }, (_, i) => (
@@ -39,8 +46,8 @@ export function AuthShell({ title, subtitle, step, children, footer }: {
           {subtitle ? <Text style={s.subtitle}>{subtitle}</Text> : null}
           <View style={s.body}>{children}</View>
         </View>
-        {footer ? <View style={s.footer}>{footer}</View> : null}
-        <View style={s.secure}>
+        {footer ? <View style={[s.footer, short && s.footerShort]}>{footer}</View> : null}
+        <View style={[s.secure, short && s.secureShort]}>
           <Ionicons name="lock-closed" size={13} color={t.onNavy.textMuted} />
           <Text style={s.secureText}>Parola + doğrulama kodu ile korunur</Text>
         </View>
@@ -52,7 +59,12 @@ export function AuthShell({ title, subtitle, step, children, footer }: {
 const useStyles = makeStyles((t) => ({
   flex: { flex: 1 },
   scroll: { flexGrow: 1, justifyContent: "center" as const, padding: space.l, paddingVertical: space.xxl, width: "100%" as const, maxWidth: 480, alignSelf: "center" as const },
+  scrollShort: { padding: space.m },
   brand: { alignItems: "center" as const, marginBottom: space.xl },
+  brandShort: { marginBottom: space.m },
+  cardShort: { padding: space.l },
+  footerShort: { marginTop: space.m },
+  secureShort: { marginTop: space.m },
   mark: { width: 72, height: 72, borderRadius: radius.card, backgroundColor: t.onNavy.surface, alignItems: "center" as const, justifyContent: "center" as const, marginBottom: space.l, borderWidth: 1, borderColor: t.onNavy.separator },
   brandName: { ...typography.largeTitle, fontSize: 30, lineHeight: 36, color: t.onNavy.text, textAlign: "center" as const },
   brandTag: { ...typography.subhead, color: t.onNavy.textSecondary, marginTop: space.xs, textAlign: "center" as const },

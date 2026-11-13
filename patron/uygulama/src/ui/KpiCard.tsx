@@ -2,7 +2,7 @@
 // fabrikanın verdiği yan değerler (iki dönem yan yana, döviz satırları; karşılaştırma HESAPLANMAZ) · eğilim + sparkline.
 // Ekran okuyucu tek etiket duyar: "Etiket: değer birim, eğilim, durum, açıklama, yan değerler".
 import Ionicons from "@expo/vector-icons/Ionicons";
-import type { ReactNode } from "react";
+import { Children, isValidElement, useState, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import { Sparkline } from "./charts/Sparkline";
 import type { IconName } from "./icons";
@@ -29,7 +29,7 @@ export interface KpiLine {
 
 export interface KpiCardProps {
   readonly label: string;
-  /** Biçimlenmiş değer ("12.480"). Uygulama aritmetik yapmaz; değer fabrikadan gelir. */
+  /** Biçimlenmiş değer ("12.480"); boş dize = yalnız satırlı kutu. Uygulama aritmetik yapmaz; değer fabrikadan gelir. */
   readonly value: string;
   readonly unit?: string;
   /** Sayının altındaki küçük açıklama ("Bugün", "3 top · brüt"). */
@@ -77,10 +77,12 @@ export function KpiCard(p: KpiCardProps) {
         <Text style={s.label} numberOfLines={2} maxFontSizeMultiplier={FONT_SCALE.title}>{p.label}</Text>
         {p.onPress ? <Ionicons name="chevron-forward" size={16} color={t.textMuted} /> : null}
       </View>
-      <View style={s.valueRow}>
-        <Text style={[s.value, valueSize(p.value, p.unit)]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} maxFontSizeMultiplier={FONT_SCALE.title}>{p.value}</Text>
-        {p.unit ? <Text style={s.unit} maxFontSizeMultiplier={FONT_SCALE.title}>{p.unit}</Text> : null}
-      </View>
+      {p.value !== "" ? (
+        <View style={s.valueRow}>
+          <Text style={[s.value, valueSize(p.value, p.unit)]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6} maxFontSizeMultiplier={FONT_SCALE.title}>{p.value}</Text>
+          {p.unit ? <Text style={s.unit} maxFontSizeMultiplier={FONT_SCALE.title}>{p.unit}</Text> : null}
+        </View>
+      ) : null}
       {p.caption ? <Text style={s.caption} numberOfLines={2}>{p.caption}</Text> : null}
       {p.status ? <View style={s.badge}><StatusBadge kind={p.status.kind} label={p.status.label} size="sm" /></View> : null}
       {p.lines && p.lines.length > 0 ? (
@@ -117,22 +119,40 @@ export function KpiCard(p: KpiCardProps) {
   );
 }
 
-/** KPI ızgarası: telefonda 2'li, genişte 4'lü (kart en az 150). */
+/** Sığan sütun sayısı, satırlar dengeli: 4 kart 3 sütuna sığıyorsa 2×2 olur (alt satırda tek, tam genişlik kart kalmaz). */
+export function balancedColumns(count: number, width: number, minWidth = KPI_MIN, gap = space.m): number {
+  if (count <= 0 || width <= 0) return 1;
+  const fit = Math.max(1, Math.min(count, Math.floor((width + gap) / (minWidth + gap))));
+  const rows = Math.ceil(count / fit);
+  return Math.ceil(count / rows);
+}
+
 export function KpiGrid({ children, testID }: { readonly children: ReactNode; readonly testID?: string }) {
   const s = useStyles();
-  return <View style={s.grid} testID={testID}>{children}</View>;
+  const [width, setWidth] = useState(0);
+  const items = Children.toArray(children).filter(isValidElement);
+  const cols = balancedColumns(items.length, width);
+  const cell = width > 0 ? (width - space.m * (cols - 1)) / cols : undefined;
+  return (
+    <View style={s.grid} testID={testID} onLayout={(e) => setWidth(Math.round(e.nativeEvent.layout.width))}>
+      {cell === undefined ? items : items.map((c, i) => <View key={c.key ?? i} style={[s.cell, { width: cell }]}>{c}</View>)}
+    </View>
+  );
 }
+
+const KPI_MIN = 150;
 
 const useStyles = makeStyles((t) => ({
   grid: { flexDirection: "row" as const, flexWrap: "wrap" as const, gap: space.m, marginBottom: space.m },
+  cell: { flexDirection: "row" as const },
   card: {
     flexGrow: 1,
-    flexBasis: 150,
-    minHeight: TOUCH * 2.5,
+    flexBasis: KPI_MIN,
+    minHeight: TOUCH * 2,
     backgroundColor: t.surface,
     borderRadius: radius.card,
-    padding: space.l,
-    paddingLeft: space.l + STRIPE,
+    padding: space.m,
+    paddingLeft: space.m + STRIPE,
     overflow: "hidden" as const,
     ...t.cardShadow,
   },
@@ -140,8 +160,8 @@ const useStyles = makeStyles((t) => ({
   stripe: { position: "absolute" as const, left: 0, top: 0, bottom: 0, width: STRIPE },
   head: { flexDirection: "row" as const, alignItems: "center" as const, gap: space.s },
   label: { ...typography.footnote, fontWeight: "600" as const, color: t.textSecondary, flex: 1 },
-  valueRow: { flexDirection: "row" as const, alignItems: "baseline" as const, gap: space.xs, marginTop: space.m },
-  value: { ...typography.kpi, fontSize: 34, lineHeight: 38, color: t.text, flexShrink: 1 },
+  valueRow: { flexDirection: "row" as const, alignItems: "baseline" as const, gap: space.xs, marginTop: space.s },
+  value: { ...typography.kpi, fontSize: 30, lineHeight: 34, color: t.text, flexShrink: 1 },
   unit: { ...typography.callout, fontWeight: "600" as const, color: t.textSecondary },
   caption: { ...typography.footnote, color: t.textSecondary, marginTop: 2 },
   badge: { marginTop: space.s },

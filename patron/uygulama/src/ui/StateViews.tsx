@@ -21,9 +21,10 @@ export function Empty({ text, domain = "genel", icon, actionLabel, onAction, tes
   const t = useTokens();
   const s = useStyles();
   return (
+    // Sıkı boş durum: tek satır ikon + metin (bölüm içinde yer kaplamaz); eylem varsa sağda.
     <View style={s.empty} testID={testID}>
       <View style={[s.emptyIcon, { backgroundColor: t.domain[domain].chip }]}>
-        <Ionicons name={icon ?? DOMAIN_ICON[domain]} size={32} color={t.domain[domain].fg} />
+        <Ionicons name={icon ?? DOMAIN_ICON[domain]} size={18} color={t.domain[domain].fg} />
       </View>
       <Text style={s.emptyText}>{text}</Text>
       {actionLabel && onAction ? <Button label={actionLabel} tone="secondary" onPress={onAction} /> : null}
@@ -72,9 +73,9 @@ export function SyncLateBand({ text, testID = "bant-gecikme" }: { readonly text:
 }
 
 const useStyles = makeStyles((t) => ({
-  empty: { alignItems: "center" as const, paddingVertical: space.xxl, paddingHorizontal: space.l, gap: space.m },
-  emptyIcon: { width: 64, height: 64, borderRadius: radius.card, alignItems: "center" as const, justifyContent: "center" as const },
-  emptyText: { ...typography.callout, color: t.textSecondary, textAlign: "center" as const },
+  empty: { flexDirection: "row" as const, alignItems: "center" as const, flexWrap: "wrap" as const, paddingVertical: space.s, paddingHorizontal: space.m, gap: space.m, borderRadius: radius.cardInner, backgroundColor: t.surface, marginBottom: space.s },
+  emptyIcon: { width: 32, height: 32, borderRadius: radius.control, alignItems: "center" as const, justifyContent: "center" as const },
+  emptyText: { ...typography.callout, color: t.textSecondary, flex: 1, minWidth: 140 },
   kpiGrid: { flexDirection: "row" as const, flexWrap: "wrap" as const, gap: space.m },
   kpiBlock: { flexGrow: 1, flexBasis: 150, height: 112, borderRadius: radius.card, backgroundColor: t.surfaceAlt },
   listBlock: { height: 56, borderRadius: radius.cardInner, backgroundColor: t.surfaceAlt, marginBottom: space.s },

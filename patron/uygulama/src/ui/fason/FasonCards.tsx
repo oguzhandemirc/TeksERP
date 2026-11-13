@@ -42,13 +42,16 @@ export function ConsignedSection({ scorecardOzet }: { readonly scorecardOzet: un
       ) : null}
       {view ? (
         <>
-          <FactoryStamp snap={remote.data} offline={remote.offline} note="saatlik güncellenir" />
+          {/* Boş bakiyede damga yok: sayfanın üstündeki fabrika damgası yeter (aynı satır iki kez görünüyordu). */}
           {view.rows.length === 0 ? (
             <Empty text="İçeride müşteri malı yok" domain="stok" icon={EMPTY_ICON.bekliyor} testID="emanet-bos" />
           ) : (
-            <ListGroup testID="emanet-cariler">
-              {view.rows.map((r) => <ListRow key={r.key} title={r.title} value={r.value} lines={r.lines} domain="stok" icon="person-outline" testID={`emanet-cari-${r.key}`} />)}
-            </ListGroup>
+            <>
+              <FactoryStamp snap={remote.data} offline={remote.offline} note="saatlik güncellenir" />
+              <ListGroup testID="emanet-cariler">
+                {view.rows.map((r) => <ListRow key={r.key} title={r.title} value={r.value} lines={r.lines} domain="stok" icon="person-outline" testID={`emanet-cari-${r.key}`} />)}
+              </ListGroup>
+            </>
           )}
         </>
       ) : null}
