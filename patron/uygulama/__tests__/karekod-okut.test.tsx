@@ -1,7 +1,10 @@
 // Fabrika sunucusu karekodu (ERP kipi): giriş → "Fabrika sunucusuna bağlan" → "Karekod okut". Geçerli karekod elle
 // girişle AYNI `connectServer` yolundan geçer; yabancı/yerel/yeni sürüm karekodu ağa gitmez, açık ileti; izin reddi elle
-// girişe döner; elle giriş aynen kalır. Kamera mock'lu (yerel modül yok).
+// girişe döner; elle giriş aynen kalır. Kamera mock'lu (yerel modül yok); jest-expo telefon gibi `KarekodOkut.native.tsx`i
+// çözer, web sürümü (`KarekodOkut.tsx`, kamerasız) açık yolla ayrıca sınanır.
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import path from "node:path";
 import { Platform } from "react-native";
 
 type Izin = { granted: boolean; canAskAgain: boolean } | null;
@@ -112,5 +115,32 @@ describe("karekodla fabrika sunucusu", () => {
     } finally {
       Object.defineProperty(Platform, "OS", { value: once, configurable: true });
     }
+  });
+
+  it("⭐ web sürümü (KarekodOkut.tsx) kamerasız: kamera çizilmez, elle girişe döner", () => {
+    const { KarekodOkut } = require("../src/ui/diger/KarekodOkut.tsx") as typeof import("../src/ui/diger/KarekodOkut");
+    const elle = jest.fn();
+    render(<KarekodOkut onAdres={mockConnect} onElle={elle} />);
+    expect(screen.queryByTestId("karekod-kamera")).toBeNull();
+    expect(screen.getByTestId("karekod-yalniz-telefon")).toBeTruthy();
+    fireEvent.press(screen.getByTestId("karekod-elle"));
+    expect(elle).toHaveBeenCalledTimes(1);
+  });
+
+  it("⭐ expo-camera yalnız *.native.tsx dosyalarında içe alınır (web paketine girmez — bulut CSP)", () => {
+    const kok = path.join(__dirname, "..");
+    const dosyalar: string[] = [];
+    const gez = (d: string) => {
+      for (const ad of readdirSync(d)) {
+        const y = path.join(d, ad);
+        if (statSync(y).isDirectory()) gez(y);
+        else if (/\.tsx?$/.test(ad)) dosyalar.push(y);
+      }
+    };
+    gez(path.join(kok, "src"));
+    gez(path.join(kok, "app"));
+    const ihlal = dosyalar.filter((y) => /(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\(\s*)["']expo-camera["']/.test(readFileSync(y, "utf8")) && !/\.native\.tsx?$/.test(y));
+    expect(ihlal.map((y) => path.relative(kok, y))).toEqual([]);
+    expect(dosyalar.some((y) => /KarekodOkut\.native\.tsx$/.test(y) && /["']expo-camera["']/.test(readFileSync(y, "utf8")))).toBe(true);
   });
 });
