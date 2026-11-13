@@ -6,7 +6,7 @@ const mockSession = {
   facilities: [] as { id: string; ad: string; hizmet: string }[], facilityId: null as string | null, switchError: null as string | null,
   switchFacility: jest.fn(async (_id: string) => true),
 };
-const mockRouter = { navigate: jest.fn(), push: jest.fn(), back: jest.fn(), canGoBack: () => false, replace: jest.fn() };
+const mockRouter = { navigate: jest.fn(), push: jest.fn(), back: jest.fn(), canGoBack: () => false, replace: jest.fn(), canDismiss: jest.fn(() => true), dismissAll: jest.fn() };
 jest.mock("../src/state/session", () => ({ useSession: () => mockSession }));
 jest.mock("expo-router", () => ({ useRouter: () => mockRouter, usePathname: () => "/pano" }));
 jest.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
@@ -59,6 +59,40 @@ describe("izinli menü", () => {
     expect(screen.getByText("Bu bölümü görme yetkiniz yok")).toBeTruthy();
     expect(screen.getByTestId("bant-cevrimdisi")).toBeTruthy();
     mockSession.offline = false;
+  });
+});
+
+describe("ray: daralt/genişlet, yanal gezinme, ERP rolü", () => {
+  it("düğme rayı daraltır (yalnız ikon, erişilebilir ad korunur) ve geri açar", () => {
+    mockSession.permissions = ["bulut:siparis:oku"];
+    render(<SideNav />);
+    expect(screen.getByText("Siparişler")).toBeTruthy();
+    fireEvent.press(screen.getByTestId("ray-dugme"));
+    expect(screen.queryByText("Siparişler")).toBeNull();
+    expect(screen.getByTestId("menu-siparisler").props.accessibilityLabel).toBe("Siparişler");
+    expect(screen.queryByTestId("rol-rozeti")).toBeNull();
+    fireEvent.press(screen.getByTestId("ray-dugme"));
+    expect(screen.getByText("Siparişler")).toBeTruthy();
+  });
+  it("raydan geçiş yığını köke indirir ve tek ekran açar; açık bölüme dokunmak bir şey yapmaz", () => {
+    mockSession.permissions = ["bulut:siparis:oku"];
+    mockRouter.navigate.mockClear();
+    mockRouter.dismissAll.mockClear();
+    render(<SideNav />);
+    fireEvent.press(screen.getByTestId("menu-siparisler"));
+    expect(mockRouter.dismissAll).toHaveBeenCalledTimes(1);
+    expect(mockRouter.navigate).toHaveBeenCalledWith("/siparisler");
+    fireEvent.press(screen.getByTestId("menu-pano")); // usePathname = /pano
+    expect(mockRouter.navigate).toHaveBeenCalledTimes(1);
+  });
+  it("ERP kipinde rol fabrikanın kullanıcı yönetimi izninden okunur", () => {
+    const { setYetenek, erpYetenek, BULUT_YETENEK } = require("../src/api/yetenek") as typeof import("../src/api/yetenek");
+    const { roleOf } = require("../src/ui/RoleBadge") as typeof import("../src/ui/RoleBadge");
+    setYetenek(erpYetenek([], ["*"]));
+    expect(roleOf([])).toBe("yonetici");
+    setYetenek(erpYetenek([], ["order:read"]));
+    expect(roleOf([])).toBe("ekip");
+    setYetenek(BULUT_YETENEK);
   });
 });
 

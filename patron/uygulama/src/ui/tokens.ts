@@ -232,3 +232,5 @@ export const BAR_HEIGHT = 44;
 export const TAB_BAR_HEIGHT = 64;
 /** Sol ray genişliği (≥ WIDE_MIN). */
 export const RAIL_WIDTH = 248;
+/** Daraltılmış ray (yalnız ikon). */
+export const RAIL_COLLAPSED = 64;
