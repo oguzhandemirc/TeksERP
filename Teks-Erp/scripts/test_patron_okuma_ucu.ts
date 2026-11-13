@@ -82,7 +82,7 @@ function statik(): void {
   const firstGet = route.indexOf("router.get(");
   check("§1a toplu kapı verifyToken + patron-app:login, ilk uçtan ÖNCE", firstUse > 0 && firstGet > firstUse);
   check("§1b yazma ucu YOK (post/put/patch/delete)", !/router\.(post|put|patch|delete)\(/.test(route));
-  const catalog = new Set(PERMISSION_CATALOG.map((p) => p.code));
+  const catalog = new Set<string>(PERMISSION_CATALOG.map((p) => p.code));
   const cloudRead = new Set<string>(CLOUD_READ_PERMISSIONS);
   const badErp = ERP_TO_CLOUD.filter((r) => !catalog.has(r.erp)).map((r) => r.erp);
   const badCloud = ERP_TO_CLOUD.flatMap((r) => r.cloud).filter((c) => !cloudRead.has(c));
