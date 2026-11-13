@@ -30,6 +30,12 @@ export const PATRON_REPORT_EXPORT_VERSION = 1;
 export const PATRON_PUSH_VERSION = 1;
 
 /**
+ * Patron panosu (`GET /api/patron/v1/pano/kutular` + `GET /api/patron/v1/pano?kutular=`) sözleşme sürümü — `/auth/me`
+ * `patronPano`. Panelin açılış panosu kutularıyla aynı kaynak; alan yoksa (eski backend) uygulama yerel özet panosunu çizer.
+ */
+export const PATRON_PANO_VERSION = 1;
+
+/**
  * Patron oturumunun mutlak ömrü (gün) — kullanıcı kararı "30 günde bir parola" (2026-11-13). Yenileme
  * belirteci YOK; süre bitince parola (+ kullanıcı açtıysa kod) yeniden istenir. Fabrikanın mutlak tavanı
  * (`auth.absoluteSessionCapDays`) daha kısaysa o kazanır.
