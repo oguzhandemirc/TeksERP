@@ -25,6 +25,7 @@
 //   S6 (2026-10-26) render'da `forText` yok sayıldı (String(v))      ⇒ 1 ❌ (§5d)
 //   S7 (2026-10-31, D4-I5) `cari.risk-limiti-asildi.payloadAlanlari`na `riskLimiti` eklendi ⇒ §8 ❌
 //   S8 (2026-10-31, D4-KUC3a) `cari.kilitlendi` izinlerinden [shipping:write] çıkarıldı ⇒ §3e ❌ (+ §3d: beyan DNF'de yok)
+//   S9 (2026-11-14, S1) `ORTAK.varsayilanKanallar` (satış dosyası) → ["UYGULAMA"]      ⇒ §10 ❌ (17 tür)
 // =============================================================================
 import { PERMISSION_CATALOG } from "../src/constants/permission-catalog";
 import { SCREEN_CATALOG } from "../src/constants/screen-catalog";
@@ -62,10 +63,10 @@ function main(): void {
   console.log("=== BİLDİRİM KATALOĞU ===\n");
 
   // ── §0 körlük zemini + kimlik ─────────────────────────────────────────────
-  check("§0 katalog: 23 tür (A4 yazici.hata, D5 cihaz.halka-kaybi, D4-I5 cari ×3, D4-J2 sevke-hazir, kimlik.yeni-cihaz-girisi, kimlik.supheli-giris-denemesi, G1 cari.patron-carisi)", girdiler.length === 23, `${girdiler.length} tür`);
+  check("§0 katalog: 40 tür (23 + S1 satış/teklif/planlama 17)", girdiler.length === 40, `${girdiler.length} tür`);
   kural("§0b `kod` = anahtar ve `<alan>.<tür>` kalıbında",
     girdiler.filter(([k, e]) => e.kod !== k || !/^[a-z0-9]+\.[a-z0-9-]+$/.test(k)).map(([k]) => k), "hepsi");
-  kural("§0c `grup` beyanlı dokuz gruptan", girdiler.filter(([, e]) => !NOTIFICATION_GRUPLARI.includes(e.grup))
+  kural("§0c `grup` beyanlı gruplardan (K8: 18 grup)", girdiler.filter(([, e]) => !NOTIFICATION_GRUPLARI.includes(e.grup))
     .map(([k, e]) => `${k}: ${e.grup}`), "hepsi");
   kural("§0d ALARM ⇔ altTur null", girdiler.filter(([, e]) => (e.sinif === "ALARM") !== (e.altTur === null))
     .map(([k]) => k), `${girdiler.filter(([, e]) => e.sinif === "ALARM").length} ALARM`);
@@ -186,6 +187,17 @@ function main(): void {
   const YASAK = /tutar|fiyat|bakiye|borc|alacak|limit|risk|amount|balance|price|exposure|parola|sifre|şifre|pin$|token|secret|password/i;
   kural("§8 payload alan adları tutar/sır taşımaz",
     girdiler.flatMap(([k, e]) => e.payloadAlanlari.filter((a) => YASAK.test(a)).map((a) => `${k}: ${a}`)), "hepsi");
+
+  // ── §10 patron telefonu varsayılanı (K1, kullanıcı kararı 2026-11-14) ─────
+  kural("§10 ⭐ her türün varsayılan kanallarında PATRON_PUSH var (\"her şey bildirim gelsin, gerekirse patron kapatır\")",
+    girdiler.filter(([, e]) => !e.varsayilanKanallar.includes("PATRON_PUSH")).map(([k]) => k), `${girdiler.length} tür`);
+  const onemliler = girdiler.filter(([, e]) => e.onemli === true);
+  check("§10b körlük zemini: \"Yalnız önemliler\" kümesi boş değil ve tüm katalog değil", onemliler.length >= 5 && onemliler.length < girdiler.length, `${onemliler.length} önemli tür`);
+  kural("§10c özet türü (`ozet`) OLAY'dır ve pencere 0 (birleştirme zamanlayıcının penceresidir)",
+    girdiler.filter(([, e]) => e.ozet !== undefined && (e.altTur !== "OLAY" || e.pencereSn !== 0)).map(([k]) => k), `${girdiler.filter(([, e]) => e.ozet).length} özet türü`);
+  kural("§10d S1 OLAY türlerinde birleştirme anahtarı kayıt kimliği + 10 dk pencere (K3)",
+    girdiler.filter(([k, e]) => /^(siparis|teklif|isemri)\./.test(k) && e.altTur === "OLAY" && !e.ozet && k !== "siparis.patron-siparisi"
+      && !(e.pencereSn === 600 && /^\{[A-Za-z]+Id\}$/.test(e.tekilKalibi))).map(([k, e]) => `${k}: ${e.tekilKalibi}/${e.pencereSn}`), "hepsi");
 
   // ── §9 patron bulutu eşlemesi ─────────────────────────────────────────────
   const bulutMetni = readFileSync(resolve(__dirname, "../../patron/sunucu/src/catalog/notifications.ts"), "utf8");

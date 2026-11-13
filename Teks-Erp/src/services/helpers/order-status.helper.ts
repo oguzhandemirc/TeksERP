@@ -17,6 +17,7 @@ import { Prisma, OrderStatus, ShipmentStatus, ItemUnit } from "@prisma/client";
 import { ACTIVE_SACK_ALLOCATION } from "./sack-allocation.helper";
 import { isMeasuredUnit, unitLabel } from "../../constants/item-unit";
 import { readShippingToleranceMeters } from "../system-setting.service";
+import { emitOrderTerminalTx } from "../notification-sources/satis";
 
 /**
  * Verilen OrderLine satırlarını write-kilitle (karşılanma yazımını serileştirmek için).
@@ -229,6 +230,10 @@ export async function recomputeOrderStatusTx(
     }
   }
   await tx.order.update({ where: { id: orderId }, data });
+  // S1: tam sevk → `siparis.tamamlandi`, son kalem iptali → `siparis.iptal` (aynı tx; aktör istek bağlamından).
+  if (changed && (newStatus === OrderStatus.COMPLETED || newStatus === OrderStatus.CANCELLED)) {
+    await emitOrderTerminalTx(tx, orderId, newStatus, null);
+  }
 
   return { changed, oldStatus: order.status, newStatus };
 }

@@ -25,7 +25,27 @@ const SUBJECT_KEY_MAX = 160;
 const DEDUPE_KEY_MAX = 200;
 const SUBJECT_TYPE_MAX = 32;
 
-export type EmitDb = Pick<Prisma.TransactionClient, "notificationOutbox" | "systemSetting" | "$executeRaw">;
+export type EmitDb = Pick<Prisma.TransactionClient, "notificationOutbox" | "systemSetting" | "$executeRaw">
+  // `{kullanici}` doldurmak için (K4); dar tip geçiren eski çağıranlar yer tutucuyu yükte kendisi verir.
+  & Partial<Pick<Prisma.TransactionClient, "user">>;
+
+/** K4 "kim yaptı": katalog `kullanici` beyanlıysa ve yük vermediyse aktörün adını aynı tx'ten okur; yoksa "Sistem". */
+async function withActorName(
+  tx: EmitDb,
+  fields: readonly string[],
+  payload: Record<string, unknown>,
+  actorUserId: string | null | undefined,
+): Promise<Record<string, unknown>> {
+  if (!fields.includes("kullanici")) return payload;
+  const given = payload.kullanici;
+  if (typeof given === "string" && given.trim() !== "") return payload;
+  let ad = "Sistem";
+  if (actorUserId && tx.user) {
+    const u = await tx.user.findUnique({ where: { id: actorUserId }, select: { fullName: true, username: true } });
+    ad = u?.fullName?.trim() || u?.username || ad;
+  }
+  return { ...payload, kullanici: ad };
+}
 
 export interface NotificationSubject {
   /** Konu türü (`order`, `work_order`, `system`…); görüntü/derin bağlantı için. */
@@ -79,7 +99,7 @@ export function notificationDedupeKey(
  * INSERT düşerse iş tx'i de düşer — bu yüzden yazım yalnız küçük bir INSERT'tir ve `kind`de CHECK yoktur.
  */
 export async function emitNotification(...args: EmitArgs): Promise<string | null> {
-  const [tx, kind, subject, payload, opts = {}] = args;
+  const [tx, kind, subject, rawPayload, opts = {}] = args;
   if (!(await readNotificationInboxEnabled(tx))) return null;
   const entry = NOTIFICATION_CATALOG[kind];
   if (!entry) {
@@ -87,6 +107,7 @@ export async function emitNotification(...args: EmitArgs): Promise<string | null
     uyari("bildirim", `katalog dışı tür yazılmadı: ${String(kind)}`);
     return null;
   }
+  const payload = await withActorName(tx, entry.payloadAlanlari, rawPayload, opts.actorUserId);
   const phase: NotificationPhase = opts.phase ?? (entry.altTur === "KOSUL" ? "ACILDI" : "OLAY");
   const subjectKey = subject.key.slice(0, SUBJECT_KEY_MAX);
   const row = await tx.notificationOutbox.create({

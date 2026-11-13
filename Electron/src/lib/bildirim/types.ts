@@ -3,7 +3,9 @@
 
 export type NotificationClass = "ALARM" | "BILDIRIM";
 export type NotificationSubtype = "OLAY" | "KOSUL" | null;
-export type NotificationGroup = "Sipariş" | "Üretim" | "Kalite" | "Sevkiyat" | "Fason" | "Stok" | "Finans" | "Dokuma" | "Sistem";
+export type NotificationGroup =
+  | "Sipariş" | "Üretim" | "Kalite" | "Sevkiyat" | "Fason" | "Stok" | "Finans" | "Dokuma" | "Sistem"
+  | "Satış" | "Planlama" | "Depo" | "Satınalma" | "Mal Kabul" | "Bakım" | "Personel" | "Ana Veri" | "Yetki";
 export type NotificationReason = "IZIN" | "TAKIPCI" | "OLUSTURAN" | "NOBET" | "LISTE" | "ALARM_ALICISI";
 /** Sunucunun kabul ettiği sekmeler; `alarmlar` F2 (N2-ALARM) ile açılır. */
 export type NotificationTab = "tumu" | "okunmamis" | "alarmlar" | "ertelenen";
@@ -66,6 +68,10 @@ export interface NotificationCatalogKind {
   kanallar?: NotificationChannel[];
   /** Katalogda beyanlı kapsam süzgeçleri (N4-PANEL sunucusu); yoksa/null → süzgeç yok. */
   kapsam?: NotificationScopeDecl | null;
+  /** "Yalnız önemliler" kümesi (S1, 2026-11-14); eski sunucu göndermez → false. */
+  onemli?: boolean;
+  /** Özet türü sıklığı; olay türünde null. */
+  ozet?: "SAATLIK" | "VARDIYA" | "GUN_SONU" | null;
 }
 
 /** Katalog kapsam beyanı (`notification-catalog.ts` `kapsam`). */

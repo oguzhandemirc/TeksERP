@@ -28,6 +28,7 @@ import { nextSeriesNo, resolveSeriesFormat } from "../number-series.service";
 import { readOrderDefaultDeadlineDays } from "../system-setting.service";
 import { assertManualNumberAllowed } from "../helpers/manual-number.helper";
 import { runItemUsageChecksTx, type ItemUsageCheck } from "../helpers/item-usage.helper";
+import { emitOrderCreatedTx } from "../notification-sources/satis";
 import {
   lineTargetValuesNestedCreate,
   preparedTargetValues,
@@ -269,10 +270,12 @@ export function insertPreparedOrder(this: OrderServiceThis, p: PreparedOrderCrea
     }, undefined, (err) => !isClientTokenP2002(err)) as Promise<Record<string, unknown>>;
   }
 
-export async function insertPreparedOrderTx(this: OrderServiceThis, tx: Prisma.TransactionClient, p: PreparedOrderCreate): Promise<Record<string, unknown>> {
+export async function insertPreparedOrderTx(this: OrderServiceThis, tx: Prisma.TransactionClient, p: PreparedOrderCreate, opts?: { notify?: boolean }): Promise<Record<string, unknown>> {
     await runItemUsageChecksTx(tx, p.lineCheck.checks);
     const orderNumber = p.manualOrderNumber ?? (await this.nextOrderNumber(tx, p));
     const created = await this.insertOrderTx(tx, p, orderNumber);
+    // `siparis.olusturuldu` (S1); bulut gelen kutusu kendi türünü (`siparis.patron-siparisi`) yazar → notify:false.
+    if (opts?.notify !== false) await emitOrderCreatedTx(tx, created.id as string, p.actorUserId);
     // Oluşturan otomatik takipçi (bildirim §5.3); dönüş aynen.
     await followAsCreatorTx(tx, p.actorUserId, { orderId: created.id as string });
     return created;

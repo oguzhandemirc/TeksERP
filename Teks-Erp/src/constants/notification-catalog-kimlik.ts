@@ -1,5 +1,5 @@
 // Kimlik/cihaz bildirimleri — ana katalogdan dosya boyu için ayrıldı (2026-11-01); sıra katalogdakiyle aynı.
-import { NOTIFICATION_DEFAULT_RETENTION as SAKLAMA, NOTIFICATION_DESKTOP_CHANNELS as KANAL_MASAUSTU, NOTIFICATION_IMPORTANT_DEFAULT_CHANNELS as KANAL_ONEMLI, type NotificationCatalogEntry } from "./notification-catalog.types";
+import { NOTIFICATION_DEFAULT_RETENTION as SAKLAMA, NOTIFICATION_DESKTOP_CHANNELS as KANAL_MASAUSTU, NOTIFICATION_DEFAULT_CHANNELS as KANAL_VARSAYILAN, type NotificationCatalogEntry } from "./notification-catalog.types";
 
 export const KIMLIK_NOTIFICATION_ENTRIES = {
   "cihaz.halka-kaybi": {
@@ -11,7 +11,7 @@ export const KIMLIK_NOTIFICATION_ENTRIES = {
     tekilKalibi: "halka",
     pencereSn: 0, varsayilan: "HERKES", kilit: "YOK",
     kanallar: KANAL_MASAUSTU,
-    varsayilanKanallar: ["UYGULAMA"],
+    varsayilanKanallar: KANAL_VARSAYILAN,
     baslik: "Cihaz anahtarı kayıp: {cihazSayisi} cihaz doğrulanamıyor",
     govde: "Anahtar halkası yeniden üretildi. Yedekten anahtarı geri yükleyin ya da cihazları yeniden bağlayın.",
     cozuldu: "Cihaz anahtar halkası sorunu giderildi",
@@ -34,7 +34,7 @@ export const KIMLIK_NOTIFICATION_ENTRIES = {
     tekilKalibi: "{kullaniciId}",
     pencereSn: 600, varsayilan: "HERKES", kilit: "YOK",
     kanallar: KANAL_MASAUSTU,
-    varsayilanKanallar: KANAL_ONEMLI,
+    varsayilanKanallar: KANAL_VARSAYILAN, onemli: true,
     baslik: "{kullanici} yeni bir cihazdan internetten giriş yaptı",
     govde: "{tarayici} · IP {ip} · {saat}",
     panelEkran: "access/users", panelYol: "/access/users",
@@ -55,7 +55,7 @@ export const KIMLIK_NOTIFICATION_ENTRIES = {
     tekilKalibi: "{kullaniciId}",
     pencereSn: 3600, varsayilan: "HERKES", kilit: "YOK",
     kanallar: KANAL_MASAUSTU,
-    varsayilanKanallar: KANAL_ONEMLI,
+    varsayilanKanallar: KANAL_VARSAYILAN, onemli: true,
     baslik: "{kullanici} hesabına son 1 saatte {hataSayisi} hatalı giriş denemesi",
     govde: "{kaynakSayisi} farklı adresten · {saat}. Tanımadığınız bir deneme ise parolayı değiştirin ve iki adımlı doğrulamayı açın.",
     panelEkran: "access/users", panelYol: "/access/users",

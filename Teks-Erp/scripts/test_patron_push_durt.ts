@@ -1,8 +1,8 @@
 // =============================================================================
 // BEKÇİ — PATRON TELEFONU DÜRTÜ: bildirim doğunca köprüye `durt` (push köprüsü P3, 2026-11-13)
 // =============================================================================
-//   §1 karar (`decideDeliveries`): önemli tür varsayılan dürter, önemsiz dürtmez · tercih açar/kapatır · yalnız özet
-//      dürtmez · sessiz saat susturur, nöbetteki ALARM deler · katalog: 4 önemli tür, her türde seçilebilir
+//   §1 karar (`decideDeliveries`): her tür varsayılan dürter (K1, 2026-11-14; `onemli` yalnız küme) · tercih açar/kapatır ·
+//      yalnız özet dürtmez · sessiz saat susturur, nöbetteki ALARM deler · katalog: her türde varsayılan + seçilebilir
 //   §2 kuyruk (dispatch tx): tx geri alınınca dürt yok · yalnız `pp` ∧ canlı belirteç · birleşen olay ikinci dürt doğurmaz ·
 //      push bayrağı kapalıyken yazılmaz
 //   §3 kapı kapalı (push ya da gelen kutusu) / lisans uygun değil → dışarı istek YOK, canlı dürt ATLANDI (birikme yok)
@@ -125,7 +125,7 @@ async function bolum1(): Promise<void> {
   const dy = await decideDeliveries({ tx: prisma, row, kind: YAZICI, entry: getNotificationEntry(YAZICI), env: ENV, grants, ctx: ctx(l) },
     [{ userId: prn, reason: "IZIN" }, { userId: on, reason: "IZIN" }, { userId: dig, reason: "IZIN" }]);
   const by = new Map([...dc, ...dy].map((d) => [d.userId, d]));
-  check("§1a önemli tür (cari kilidi) varsayılan dürter; önemsiz tür (yazıcı hatası) varsayılan dürtmez", by.get(fin)?.pp === true && by.get(prn)?.pp === false, `${by.get(fin)?.pp}/${by.get(prn)?.pp}`);
+  check("§1a K1: önemli tür (cari kilidi) de önemsiz tür (yazıcı hatası) de varsayılan dürter", by.get(fin)?.pp === true && by.get(prn)?.pp === true, `${by.get(fin)?.pp}/${by.get(prn)?.pp}`);
   check("§1b tercih: önemli türü kapatan almaz, önemsizi açan alır (masaüstü/tablet değişmez)",
     by.get(off)?.pp === false && by.get(on)?.pp === true && by.get(on)?.km === false && by.get(on)?.kt === false);
   check("§1c yalnız gün özeti teslimi dürtmez", by.get(dig)?.ozet === true && by.get(dig)?.pp === false, JSON.stringify(by.get(dig)));
@@ -140,9 +140,13 @@ async function bolum1(): Promise<void> {
   check("§1d sessiz saat PATRON_PUSH'u susturur; nöbetteki ALARM deler; sessiz kümesinde PATRON_PUSH yoksa susmaz",
     ba.get(nob)?.pp === true && ba.get(ali)?.pp === false && ba.get(acik)?.pp === true, JSON.stringify(da.map((d) => [d.reason, d.pp])));
   const defaults = NOTIFICATION_KINDS.filter((k) => (getNotificationEntry(k).varsayilanKanallar as readonly string[]).includes("PATRON_PUSH")).sort();
-  check("§1e varsayılan dürt yalnız 4 önemli türde; her tür PATRON_PUSH'u seçilebilir taşır",
-    JSON.stringify(defaults) === JSON.stringify(["cari.kilitlendi", "dokuma.tezgah-alarmi", "kimlik.supheli-giris-denemesi", "kimlik.yeni-cihaz-girisi"])
-      && NOTIFICATION_KINDS.every((k) => (getNotificationEntry(k).kanallar as readonly string[]).includes("PATRON_PUSH")), defaults.join(","));
+  const onemli = NOTIFICATION_KINDS.filter((k) => getNotificationEntry(k).onemli === true);
+  const eskiDort = ["cari.kilitlendi", "dokuma.tezgah-alarmi", "kimlik.supheli-giris-denemesi", "kimlik.yeni-cihaz-girisi"];
+  check("§1e K1: varsayılan dürt HER türde; her tür PATRON_PUSH'u seçilebilir taşır; eski 4 önemli tür `onemli` kümesinde",
+    defaults.length === NOTIFICATION_KINDS.length
+      && NOTIFICATION_KINDS.every((k) => (getNotificationEntry(k).kanallar as readonly string[]).includes("PATRON_PUSH"))
+      && eskiDort.every((k) => (onemli as string[]).includes(k)),
+    `varsayılan=${defaults.length}/${NOTIFICATION_KINDS.length} önemli=${onemli.join(",")}`);
 }
 
 async function main(): Promise<void> {
@@ -168,7 +172,8 @@ async function main(): Promise<void> {
   const makeUser = async (tag: string, pushPref: boolean) => {
     const u = await prisma.user.create({ data: { username: `${T}-${tag}`.slice(0, 50), passwordHash: "x", fullName: `TEST dürt ${tag}`, permissions: perm ? { create: [{ permissionId: perm.id }] } : undefined }, select: { id: true } });
     userIds.push(u.id);
-    if (pushPref) await prisma.notificationPreference.create({ data: { userId: u.id, kind: YAZICI, channel: "PATRON_PUSH", enabled: true } });
+    // K1: dürt varsayılan açık; "tercihsiz" kullanıcı açıkça kapatmış olandır.
+    await prisma.notificationPreference.create({ data: { userId: u.id, kind: YAZICI, channel: "PATRON_PUSH", enabled: pushPref } });
     return u.id;
   };
   const addToken = async (userId: string, belirtec: string, state: "KAYITLI" | "BEKLIYOR" = "KAYITLI") => {
@@ -212,7 +217,7 @@ async function main(): Promise<void> {
       && (await prisma.patronPushNudge.count({ where: { inbox: { userId: P } } })) === 0, `outbox=${outboxLeft}`);
     await dispatch();
     const [nP, nQ, nR] = [await nudgesOf(P, y1), await nudgesOf(Q, y1), await nudgesOf(R, y1)];
-    check("§2b yalnız tercihi açık ∧ belirteci olan kullanıcıya dürt (Q belirteçsiz, R tercihsiz)", nP.length === 1 && nP[0]!.state === "BEKLIYOR" && nQ.length === 0 && nR.length === 0,
+    check("§2b yalnız tercihi açık ∧ belirteci olan kullanıcıya dürt (Q belirteçsiz, R dürtüyü kapatmış)", nP.length === 1 && nP[0]!.state === "BEKLIYOR" && nQ.length === 0 && nR.length === 0,
       `${nP.length}/${nQ.length}/${nR.length}`);
     await emit(y1, { neden: "ikinci olay" });
     await dispatch();
