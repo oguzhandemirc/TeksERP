@@ -128,7 +128,7 @@ export default function Profile() {
       <GroupNote>Doğrulama uygulamanızı değiştirmek için tesis yöneticiniz daveti yeniler.</GroupNote>
       </>) : null}
 
-      {caps.bildirim ? (<>
+      {caps.bildirim || caps.bildirimKutusu ? (<>
       <GroupCaption>Bildirimler</GroupCaption>
       <ListGroup>
         <ListRow title={moduleTitle("bildirimler")} subtitle={moduleDef("bildirimler").hint} icon={MODULE_ICON.bildirimler.icon} domain={MODULE_ICON.bildirimler.domain}
