@@ -6,6 +6,8 @@ import type { Api } from "./endpoints";
 import { kipteYok } from "./baglanti";
 import type { CustomerMessageBody, OrderMessageBody } from "./wire";
 import { fmtCalendarDay } from "../lib/factory-time";
+import { kalemDurumu, type KalemDurumu } from "../lib/kalem";
+import { eylemlerTam, eylemMi, kalemIptalEt, kalemIptalOnizlemeOku, CANCEL_PREVIEW_STALE, type EylemSecimi, type IsEmriEylemi, type KalemIptalOnizleme } from "./kalem-yazma";
 
 export type YazmaSonucu = { readonly tur: "gelen-kutusu"; readonly mesajId: string } | { readonly tur: "kayit"; readonly id: string };
 
@@ -43,9 +45,21 @@ export interface SiparisKaydi {
   readonly kalemSayisi: number;
 }
 
+export interface IptalIsEmri {
+  readonly id: string;
+  readonly no: string;
+  readonly durum: string;
+  readonly uretilenTop: number;
+  /** Fabrikanın bu İE için izin verdiği eylemler ve önerisi (eski sunucu vermezse boş / null). */
+  readonly izinli: readonly IsEmriEylemi[];
+  readonly varsayilan: IsEmriEylemi | null;
+  /** Bu İE'ye bağlı DİĞER siparişlerin numaraları. */
+  readonly digerSiparisler: readonly string[];
+}
+
 export interface IptalOnizleme {
   readonly siparisNo: string;
-  readonly isEmirleri: readonly { readonly id: string; readonly no: string; readonly durum: string; readonly uretilenTop: number }[];
+  readonly isEmirleri: readonly IptalIsEmri[];
   readonly sevkiyatlar: readonly { readonly no: string; readonly durum: string }[];
   readonly iptalEdilebilir: boolean;
   /** Fabrikanın önizleme belirteci (V4c); eski sunucuda null → iptal gövdesine konmaz. */
@@ -53,7 +67,8 @@ export interface IptalOnizleme {
 }
 
 /** Önizleme belirteci tutmadı: sipariş kullanıcı bakarken değişti, hiçbir şey uygulanmadı. */
-export const CANCEL_PREVIEW_STALE = "CANCEL_PREVIEW_STALE";
+export { CANCEL_PREVIEW_STALE };
+export type { EylemSecimi, IsEmriEylemi, KalemIptalOnizleme };
 
 /** ERP renk kaydı (V5c); `surum` = `updatedAt`. Kod fabrikada doğar. */
 export interface RenkKaydi {
@@ -128,8 +143,18 @@ export interface Yazici {
   siparisOku(id: string): Promise<SiparisKaydi>;
   siparisGuncelle(id: string, surum: string, patch: Readonly<Record<string, unknown>>): Promise<SiparisKaydi>;
   siparisIptalOnizleme(id: string): Promise<IptalOnizleme>;
-  /** `belirtec`: kullanıcının onayladığı önizlemenin belirteci (yoksa gönderilmez). */
-  siparisIptal(id: string, belirtec?: string | null): Promise<void>;
+  /**
+   * `belirtec`: kullanıcının onayladığı önizlemenin belirteci (yoksa gönderilmez). `eylemler`: üretimdeki siparişte HER
+   * iş emri için kullanıcının seçtiği eylem; verilmezse İE taşıyan sipariş iptal edilmez.
+   */
+  siparisIptal(id: string, belirtec?: string | null, eylemler?: readonly EylemSecimi[]): Promise<void>;
+  /** Sipariş + kalemleri (kayıtlı alanlarıyla) ve kalem yazımının kilidi. */
+  kalemleriOku(id: string): Promise<KalemDurumu>;
+  /** `lines`: `kalemDizisi` çıktısı (tam dizi); `surum` = `contentUpdatedAt`. */
+  kalemleriYaz(id: string, surum: string, lines: readonly Readonly<Record<string, unknown>>[]): Promise<KalemDurumu>;
+  kalemIptalOnizleme(siparisId: string, kalemId: string): Promise<KalemIptalOnizleme>;
+  /** `gorulen`: kullanıcının onayladığı önizleme (belirteci ve İE kümesi uygulamada doğrulanır). */
+  kalemIptal(siparisId: string, kalemId: string, gorulen: KalemIptalOnizleme): Promise<void>;
   renkEkle(islemId: string, g: RenkGovdesi): Promise<YazmaSonucu>;
   renkOku(id: string): Promise<RenkKaydi>;
   renkGuncelle(id: string, surum: string, patch: Readonly<Record<string, unknown>>): Promise<RenkKaydi>;
@@ -160,6 +185,10 @@ export function createBulutYazici(api: Api): Yazici {
     siparisGuncelle: yok,
     siparisIptalOnizleme: yok,
     siparisIptal: yok,
+    kalemleriOku: yok,
+    kalemleriYaz: yok,
+    kalemIptalOnizleme: yok,
+    kalemIptal: yok,
     renkEkle: yok,
     renkOku: yok,
     renkGuncelle: yok,
@@ -271,14 +300,19 @@ export function iptalOnizleme(h: Ham | null | undefined): IptalOnizleme {
   if (!h || !Array.isArray(h.affectedWorkOrders) || !Array.isArray(h.activeShipments)) throw beklenmeyen();
   return {
     siparisNo: s(h.orderNumber),
-    isEmirleri: (h.affectedWorkOrders as Ham[]).map((w) => ({ id: s(w.id), no: s(w.workOrderNumber), durum: s(w.status), uretilenTop: typeof w.producedRollCount === "number" ? w.producedRollCount : 0 })),
+    isEmirleri: (h.affectedWorkOrders as Ham[]).map((w) => ({
+      id: s(w.id), no: s(w.workOrderNumber), durum: s(w.status), uretilenTop: typeof w.producedRollCount === "number" ? w.producedRollCount : 0,
+      izinli: Array.isArray(w.allowedActions) ? w.allowedActions.filter(eylemMi) : [],
+      varsayilan: eylemMi(w.defaultAction) ? w.defaultAction : null,
+      digerSiparisler: Array.isArray(w.otherOrderNumbers) ? w.otherOrderNumbers.filter((x): x is string => typeof x === "string") : [],
+    })),
     sevkiyatlar: (h.activeShipments as Ham[]).map((x) => ({ no: s(x.shipmentNo), durum: s(x.status) })),
     iptalEdilebilir: h.canCancel === true,
     belirtec: typeof h.previewToken === "string" && h.previewToken !== "" ? h.previewToken : null,
   };
 }
 
-/** Telefonda iptal yalnız İE ve aktif sevkiyat taşımayan siparişte: İE eylemi panelde kayıt başına seçilir. */
+/** Aktif sevkiyat varsa iptal yok; İE taşıyan (üretimdeki) siparişte eylem İE başına seçilir. */
 export type IptalKarari = "SEVKIYAT_VAR" | "URETIMDE" | "SERBEST";
 export function iptalKarari(o: IptalOnizleme): IptalKarari {
   if (!o.iptalEdilebilir || o.sevkiyatlar.length > 0) return "SEVKIYAT_VAR";
@@ -309,13 +343,28 @@ export function createErpYazici(c: ApiClient): Yazici {
     siparisOku: async (id) => siparisKaydi(await c.get<Ham>(`/orders/${seg(id)}`)),
     siparisGuncelle: async (id, surum, patch) => siparisKaydi(await c.patch<Ham>(`/orders/${seg(id)}`, { ...patch, expectedUpdatedAt: surum })),
     siparisIptalOnizleme: onizle,
-    siparisIptal: async (id, belirtec) => {
-      // Uygulama anında önizleme YENİDEN okunur: arada İE bağlandıysa sunucu ona varsayılan eylem uygulardı → dur.
-      const karar = iptalKarari(await onizle(id));
-      if (karar !== "SERBEST") throw new ApiError(409, karar === "URETIMDE" ? "SIPARIS_URETIMDE" : "AKTIF_SEVKIYAT", IPTAL_ILETISI[karar]);
+    siparisIptal: async (id, belirtec, eylemler) => {
+      // Uygulama anında önizleme YENİDEN okunur: seçilmemiş bir İE'ye sunucu varsayılan eylem uygulardı → dur.
+      const taze = await onizle(id);
+      const karar = iptalKarari(taze);
+      if (karar === "SEVKIYAT_VAR") throw new ApiError(409, "AKTIF_SEVKIYAT", IPTAL_ILETISI.SEVKIYAT_VAR);
+      if (karar === "URETIMDE" && !eylemler) throw new ApiError(409, "SIPARIS_URETIMDE", IPTAL_ILETISI.URETIMDE);
+      if (karar === "URETIMDE" && !eylemlerTam(taze.isEmirleri, eylemler ?? [])) throw new ApiError(409, CANCEL_PREVIEW_STALE, "Sipariş siz bakarken değişti. Önizlemeyi yenileyin.");
+      const ids = new Set(taze.isEmirleri.map((w) => w.id));
+      const workOrderActions = (eylemler ?? []).filter((x) => ids.has(x.isEmriId)).map((x) => ({ workOrderId: x.isEmriId, action: x.eylem }));
       // Belirteç kullanıcının GÖRDÜĞÜ önizlemeden: arada değiştiyse fabrika 409 CANCEL_PREVIEW_STALE verir, uygulamaz.
-      await c.post<unknown>(`/orders/${seg(id)}/cancel`, belirtec ? { workOrderActions: [], expectedPreviewToken: belirtec } : { workOrderActions: [] });
+      await c.post<unknown>(`/orders/${seg(id)}/cancel`, belirtec ? { workOrderActions, expectedPreviewToken: belirtec } : { workOrderActions });
     },
+    kalemleriOku: async (id) => {
+      const h = await c.get<Ham>(`/orders/${seg(id)}`);
+      return kalemDurumu(siparisKaydi(h), h);
+    },
+    kalemleriYaz: async (id, surum, lines) => {
+      const h = await c.patch<Ham>(`/orders/${seg(id)}`, { lines, expectedUpdatedAt: surum });
+      return kalemDurumu(siparisKaydi(h), h);
+    },
+    kalemIptalOnizleme: (o, l) => kalemIptalOnizlemeOku(c, o, l),
+    kalemIptal: (o, l, gorulen) => kalemIptalEt(c, o, l, gorulen),
     // `clientToken` = deneme kimliği: yeni fabrika aynı token'a ilk rengi döner, eski fabrika gövde süzgecinde düşürür.
     renkEkle: async (id, g) => {
       const r = await c.post<Ham>("/colors", tanimli({ name: g.ad, hex: g.hex, clientToken: id }));
@@ -351,5 +400,5 @@ export function createErpYazici(c: ApiClient): Yazici {
 
 export const IPTAL_ILETISI: Readonly<Record<Exclude<IptalKarari, "SERBEST">, string>> = {
   SEVKIYAT_VAR: "Siparişin aktif sevkiyatı var; iptal edilemez",
-  URETIMDE: "Bu sipariş üretimde; panelden iptal edin",
+  URETIMDE: "Bu sipariş üretimde; her iş emri için ne olacağını seçin",
 };

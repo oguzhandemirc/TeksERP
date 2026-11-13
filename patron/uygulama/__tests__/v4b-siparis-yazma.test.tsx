@@ -23,7 +23,7 @@ const SETS = ["siparis", "cari-kart", "urun", "renk"];
 const GOVDE = { cariKartId: "c1", doviz: "USD", termin: "2026-12-01", aciklama: "not", kalemler: [{ urunId: "u1", renkId: "r1", miktar: "1250.5", birimFiyat: "3.25" }, { urunId: "u2", miktar: "10" }] };
 const HAM = { id: "o1", orderNumber: "SIP1311260001", status: "APPROVED", customerId: "c1", customer: { name: "Deniz" }, currency: "TRY", deadline: "2026-12-01T00:00:00.000Z", contentUpdatedAt: "2026-11-13T09:00:00.000Z", updatedAt: "2026-11-13T08:00:00.000Z", lines: [{ id: "l1", cancelledAt: null }, { id: "l2", cancelledAt: "x" }] };
 const TEMIZ: IptalOnizleme = { siparisNo: "SIP1", isEmirleri: [], sevkiyatlar: [], iptalEdilebilir: true, belirtec: null };
-const URETIMDE: IptalOnizleme = { ...TEMIZ, isEmirleri: [{ id: "w1", no: "IE-7", durum: "IN_PROGRESS", uretilenTop: 3 }] };
+const URETIMDE: IptalOnizleme = { ...TEMIZ, isEmirleri: [{ id: "w1", no: "IE-7", durum: "IN_PROGRESS", uretilenTop: 3, izinli: ["UNLINK_ONLY", "CONVERT_TO_STOCK", "CANCEL_WO"], varsayilan: "CONVERT_TO_STOCK", digerSiparisler: [] }] };
 
 function fakeClient(reply: (m: string, path: string, body?: unknown) => unknown) {
   const calls: { m: string; path: string; body?: unknown }[] = [];
@@ -141,7 +141,7 @@ describe("§3 iptal önizleme kapısı", () => {
     const f = fakeClient((m) => (m === "GET" ? ((n += 1), ham(n === 1 ? {} : { affectedWorkOrders: [{ id: "w1", workOrderNumber: "IE-7", status: "PLANNED" }] })) : {}));
     const y = createErpYazici(f.c);
     expect(iptalKarari(await y.siparisIptalOnizleme("o1"))).toBe("SERBEST");
-    await expect(y.siparisIptal("o1")).rejects.toMatchObject({ status: 409, code: "SIPARIS_URETIMDE", message: "Bu sipariş üretimde; panelden iptal edin" });
+    await expect(y.siparisIptal("o1")).rejects.toMatchObject({ status: 409, code: "SIPARIS_URETIMDE", message: "Bu sipariş üretimde; her iş emri için ne olacağını seçin" });
     expect(f.calls.filter((c) => c.m === "POST")).toEqual([]);
   });
   it("temiz siparişte cancel boş eylem listesiyle gider", async () => {
