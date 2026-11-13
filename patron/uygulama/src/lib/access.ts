@@ -1,7 +1,12 @@
 // Modül görünürlüğü — izin kodları bulut kataloğundan (`patron/sunucu/src/catalog/permissions.ts`;
 // ayna bekçisi her literali orada arar). İstemci yalnız GİZLER; karar sunucudadır (403 yine gelir).
+// İzne ek olarak bağlanılan sunucunun YETENEĞİ (`api/yetenek.ts`): modülün ana kümesi ya da özelliği sunulmuyorsa
+// modül görünmez (bulutta her şey sunulur — bugünkü davranış).
 
+import { kumeSunuluyor, yetenek, type Yetenek } from "../api/yetenek";
 import { TERIM_AD } from "./terim";
+
+type Ozellik = { [K in keyof Yetenek]: Yetenek[K] extends boolean ? K : never }[keyof Yetenek];
 export type ModuleKey =
   | "pano"
   | "raporlar"
@@ -31,24 +36,28 @@ export interface ModuleDef {
   readonly anyOf: readonly string[];
   /** Ayrıca bunların HEPSİ gerekir (ör. maliyet ekranı: kök satır izni + maliyet izni). */
   readonly allOf?: readonly string[];
+  /** Modülün ekranı bu veri kümeleri olmadan çalışmaz (hepsi sunulmalı). */
+  readonly sets?: readonly string[];
+  /** Modül bu sunucu özelliğini ister (rapor, gelen kutusu…). */
+  readonly feature?: Ozellik;
 }
 
 export const FINANCE_READ = ["bulut:kasa:oku", "bulut:cek:oku", "bulut:fatura:oku", "bulut:tahsilat:oku"] as const;
 
 export const MODULES: readonly ModuleDef[] = [
   { key: "pano", title: "Pano", route: "/pano", anyOf: [] },
-  { key: "siparisler", title: "Siparişler", route: "/siparisler", anyOf: ["bulut:siparis:oku"] },
-  { key: "cariler", title: "Cariler", hint: "Müşteri ve tedarikçiler", route: "/cariler", anyOf: ["bulut:cari:oku", "bulut:cari-bakiye:oku", "bulut:cari:yaz"] },
-  { key: "sevkiyat", title: "Sevkiyat", hint: "Sevk edilen ve bekleyen", route: "/sevkiyat", anyOf: ["bulut:sevkiyat:oku"] },
-  { key: "uretim", title: "Üretim", route: "/uretim", anyOf: ["bulut:uretim:oku"] },
-  { key: "stok", title: "Stok", hint: "Ham ve bitmiş stok", route: "/stok", anyOf: ["bulut:stok:oku"] },
-  { key: "finans", title: TERIM_AD.onMuhasebe, navTitle: "Finans", route: "/finans", anyOf: [...FINANCE_READ, "bulut:cari-bakiye:oku", "bulut:maliyet:oku"] },
-  { key: "teklifler", title: "Teklifler", hint: "Müşteriye gönderilen teklifler", route: "/teklifler", anyOf: ["bulut:teklif:oku"] },
-  { key: "standart-maliyetler", title: "Standart Maliyetler", hint: "Ürün başına metre maliyeti", route: "/standart-maliyetler", anyOf: ["bulut:teklif:oku"], allOf: ["bulut:maliyet:oku"] },
-  { key: "raporlar", title: "Raporlar", hint: "Fabrikadan rapor isteyin", route: "/raporlar", anyOf: ["bulut:rapor:oku"] },
-  { key: "gelen-kutusu", title: "Gelen Kutusu", hint: "Fabrikaya gönderilen talepler", route: "/gelen-kutusu", anyOf: ["bulut:siparis:yaz", "bulut:cari:yaz"] },
-  { key: "hesaplar", title: "Hesaplar", hint: "Kim neyi görür, davetler", route: "/hesaplar", anyOf: ["bulut:hesap:yonet"] },
-  { key: "bildirimler", title: TERIM_AD.bildirimAyarlari, hint: "Bu cihazda izin, türler, sessiz saatler", route: "/bildirimler", anyOf: [] },
+  { key: "siparisler", title: "Siparişler", route: "/siparisler", anyOf: ["bulut:siparis:oku"], sets: ["siparis"] },
+  { key: "cariler", title: "Cariler", hint: "Müşteri ve tedarikçiler", route: "/cariler", anyOf: ["bulut:cari:oku", "bulut:cari-bakiye:oku", "bulut:cari:yaz"], sets: ["cari-kart"] },
+  { key: "sevkiyat", title: "Sevkiyat", hint: "Sevk edilen ve bekleyen", route: "/sevkiyat", anyOf: ["bulut:sevkiyat:oku"], sets: ["sevkiyat"] },
+  { key: "uretim", title: "Üretim", route: "/uretim", anyOf: ["bulut:uretim:oku"], sets: ["is-emri"] },
+  { key: "stok", title: "Stok", hint: "Ham ve bitmiş stok", route: "/stok", anyOf: ["bulut:stok:oku"], sets: ["stok-karnesi"] },
+  { key: "finans", title: TERIM_AD.onMuhasebe, navTitle: "Finans", route: "/finans", anyOf: [...FINANCE_READ, "bulut:cari-bakiye:oku", "bulut:maliyet:oku"], sets: ["kasa"] },
+  { key: "teklifler", title: "Teklifler", hint: "Müşteriye gönderilen teklifler", route: "/teklifler", anyOf: ["bulut:teklif:oku"], sets: ["teklif"] },
+  { key: "standart-maliyetler", title: "Standart Maliyetler", hint: "Ürün başına metre maliyeti", route: "/standart-maliyetler", anyOf: ["bulut:teklif:oku"], allOf: ["bulut:maliyet:oku"], sets: ["standart-maliyet"] },
+  { key: "raporlar", title: "Raporlar", hint: "Fabrikadan rapor isteyin", route: "/raporlar", anyOf: ["bulut:rapor:oku"], feature: "rapor" },
+  { key: "gelen-kutusu", title: "Gelen Kutusu", hint: "Fabrikaya gönderilen talepler", route: "/gelen-kutusu", anyOf: ["bulut:siparis:yaz", "bulut:cari:yaz"], feature: "gelenKutusu" },
+  { key: "hesaplar", title: "Hesaplar", hint: "Kim neyi görür, davetler", route: "/hesaplar", anyOf: ["bulut:hesap:yonet"], feature: "hesapYonetimi" },
+  { key: "bildirimler", title: TERIM_AD.bildirimAyarlari, hint: "Bu cihazda izin, türler, sessiz saatler", route: "/bildirimler", anyOf: [], feature: "bildirim" },
   { key: "profil", title: "Profil", hint: "Görünüm, parola ve çıkış", route: "/profil", anyOf: [] },
 ];
 
@@ -77,8 +86,13 @@ export function canAny(perms: readonly string[] | ReadonlySet<string>, codes: re
   return codes.length === 0 || codes.some((c) => can(perms, c));
 }
 
+/** Sunucu bu modülü karşılıyor mu (izinden bağımsız). */
+export function moduleServed(m: ModuleDef, y: Yetenek = yetenek()): boolean {
+  return (m.sets ?? []).every((k) => kumeSunuluyor(k, y)) && (m.feature === undefined || y[m.feature]);
+}
+
 function moduleAllowed(perms: readonly string[], m: ModuleDef): boolean {
-  return canAny(perms, m.anyOf) && (m.allOf ?? []).every((c) => can(perms, c));
+  return canAny(perms, m.anyOf) && (m.allOf ?? []).every((c) => can(perms, c)) && moduleServed(m);
 }
 
 export function visibleModules(perms: readonly string[]): ModuleDef[] {
@@ -101,5 +115,5 @@ export const DASHBOARD_CARDS: readonly { readonly projection: string; readonly t
 ];
 
 export function visibleCards(perms: readonly string[]) {
-  return DASHBOARD_CARDS.filter((c) => c.allOf.every((p) => can(perms, p)));
+  return DASHBOARD_CARDS.filter((c) => c.allOf.every((p) => can(perms, p)) && kumeSunuluyor(c.projection));
 }

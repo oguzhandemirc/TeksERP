@@ -5,9 +5,10 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { Text, View } from "react-native";
 import { errorMessage } from "../api/client";
 import type { Page, ProjectionRecord } from "../api/wire";
-import { formatAgo, formatDateTime, formatMoney, syncIsLate } from "../lib/format";
+import { formatAgo, formatDateTime, formatMoney, liveOfflineText, syncIsLate } from "../lib/format";
 import { FINANCE_FIELD, isMoneyField, moneyCurrencyOf } from "../lib/labels/finans";
 import { formatValue, humanize, isHiddenKey, nestedEntries, recordSubtitle, recordTitle, scalarEntries } from "../lib/present";
+import { yetenek } from "../api/yetenek";
 import { useSession } from "../state/session";
 import { useRemote } from "../state/useRemote";
 import { Banner, Button, Card, Muted } from "./kit";
@@ -159,19 +160,21 @@ const useFieldStyles = makeStyles((t) => ({
 /** Ekran üstü şerit: çevrimdışı (son veri) ve eşitleme gecikmesi. */
 export function StatusBands() {
   const { offline, offlineSince, facility } = useSession();
+  // Etkin yetenek oturum bağlamıyla birlikte kurulur (sahte oturumlu testlerde bulut varsayılanı).
+  const live = yetenek().canli;
   const last = facility?.esitleme?.sonEsitleme ?? null;
   // Eski sunucu/önbellek `hizmet` taşımayabilir → açık say (bugünkü davranış).
   const service = facility?.hizmet;
   const readOnly = service?.asama === "SALT_OKUNUR";
   return (
     <View>
-      {offline ? <OfflineBand text={`Çevrimdışı — son veri ${offlineSince ? formatAgo(offlineSince) : "bilinmiyor"}. Değişiklik yapılamaz.`} /> : null}
+      {offline ? <OfflineBand text={live ? liveOfflineText(offlineSince) : `Çevrimdışı — son veri ${offlineSince ? formatAgo(offlineSince) : "bilinmiyor"}. Değişiklik yapılamaz.`} /> : null}
       {readOnly ? (
         <ReadOnlyBand
           text={`TeksERP Yönetim hizmeti ${formatDateTime(service?.bitis)} tarihinde sona erdi — veriler ${formatDateTime(service?.saltOkunurBitis)} tarihine kadar yalnız görüntülenir ve dışa aktarılabilir (Hesaplar › Dışa aktar); yeni kayıt girilemez.`}
         />
       ) : null}
-      {facility && !readOnly && syncIsLate(last) ? (
+      {facility && !readOnly && !live && syncIsLate(last) ? (
         <SyncLateBand text={last ? `Fabrikadan eşitleme gecikti — son eşitleme ${formatAgo(last)}` : "Fabrikadan henüz veri gelmedi"} />
       ) : null}
     </View>

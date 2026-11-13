@@ -8,6 +8,7 @@ import { Modal, Platform, Pressable, ScrollView, Text, View } from "react-native
 import { moduleDef, moduleTitle } from "../../src/lib/access";
 import { MODULE_ICON } from "../../src/ui/icons";
 import { ROLE_LABEL, roleOf } from "../../src/ui/RoleBadge";
+import { yetenek } from "../../src/api/yetenek";
 import { useSession } from "../../src/state/session";
 import { initials, GroupCaption, GroupNote } from "../../src/ui/diger/parts";
 import { FacilitySwitchModal } from "../../src/ui/FacilitySwitcher";
@@ -72,6 +73,7 @@ export default function Profile() {
   const role = roleOf(permissions);
   const hesap = facility?.hesap;
   const many = facilities.length > 1;
+  const caps = yetenek();
   return (
     <Screen module="profil">
       <View style={[s.hero, { backgroundColor: t.navy, borderColor: t.scheme === "dark" ? t.onNavy.separator : t.navy }]} testID="profil-kart">
@@ -117,25 +119,31 @@ export default function Profile() {
       <GroupNote>Sistem seçiliyken telefonun açık/koyu ayarı izlenir. Seçim bu cihazda saklanır.</GroupNote>
 
       {ok ? <Banner tone="off" icon="checkmark-circle" text="Parola değişti" /> : null}
+      {caps.parolaDegistir ? (<>
       <GroupCaption>Güvenlik</GroupCaption>
       <ListGroup>
         <ListRow title="Parola değiştir" subtitle="Mevcut parola ve kod gerekir" icon="key-outline" domain="genel" onPress={() => { setOk(false); setSheet(true); }} testID="parola-degistir" />
         <ListRow title="Doğrulama kodu (TOTP)" subtitle="Her girişte istenir" icon="shield-checkmark-outline" domain="genel" />
       </ListGroup>
       <GroupNote>Doğrulama uygulamanızı değiştirmek için tesis yöneticiniz daveti yeniler.</GroupNote>
+      </>) : null}
 
+      {caps.bildirim ? (<>
       <GroupCaption>Bildirimler</GroupCaption>
       <ListGroup>
         <ListRow title={moduleTitle("bildirimler")} subtitle={moduleDef("bildirimler").hint} icon={MODULE_ICON.bildirimler.icon} domain={MODULE_ICON.bildirimler.domain}
           onPress={() => router.push("/bildirimler" as never)} testID="bildirim-ayarlari" />
       </ListGroup>
+      </>) : null}
 
+      {caps.hesapSil ? (<>
       <GroupCaption>Hesap</GroupCaption>
       <ListGroup>
         <ListRow title="Hesabımı sil" subtitle="Hesap ve bütün üyelikler kapanır" icon="trash-outline" domain="genel"
           onPress={() => router.push("/hesap-sil" as never)} testID="hesap-sil-git" />
       </ListGroup>
       <GroupNote>Hesabınızı ve bütün fabrika üyeliklerinizi kapatır; kişisel verileriniz 30. günde silinir.</GroupNote>
+      </>) : null}
       <View style={s.logout}>
         <ConfirmButton label="Çıkış yap" question="Bütün fabrikalardaki oturumunuz kapatılsın ve bu cihazdaki son veri silinsin mi?" onConfirm={() => void logout()} testID="cikis" />
       </View>

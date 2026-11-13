@@ -14,12 +14,27 @@ import {
 } from "../../cloud-sync/projections";
 
 /** Bu sunucunun verdiği KAYIT kümeleri (sıra = `/auth/me` `patronReadSets` sırası). */
-export const PATRON_RECORD_SETS = ["siparis", "siparis-kalemi", "cari-kart"] as const;
+export const PATRON_RECORD_SETS = [
+  "siparis", "siparis-kalemi", "cari-kart",
+  // V3c: kalan bulut KAYIT kökleri (boyutlar, sevk, üretim, finans, teklif/maliyet).
+  "urun", "hizmet", "renk", "depo", "istasyon", "sube", "fason-firma",
+  "sevkiyat", "dogrudan-sevk", "cuval", "is-emri",
+  "cari-hesap", "cari-hareket", "kasa", "banka", "kasa-hareketi", "cek-senet", "cek-hareketi",
+  "fatura", "fatura-kalemi", "tahsilat-odeme", "fiyat",
+  "teklif", "teklif-kalemi", "standart-maliyet",
+] as const;
 /** Bu sunucunun verdiği ANLIK kümeler (bölümlü `ozet` bölüm adıyla). */
 export const PATRON_SNAPSHOT_SETS = [
   "ozet.siparis", "ozet.sevkiyat", "ozet.uretim", "ozet.stok", "ozet.fason",
   "ozet-finans", "stok-karnesi", "acik-siparis-karsilama", "tesis",
+  "ozet-masraf", "karlilik-ozet", "emanet-bakiye", "fason-acik", "hizmet-geliri", "uretim-akisi", "saglik", "rapor-katalogu",
 ] as const;
+
+/**
+ * Ticaret paketi tablosu okuyan kümeler: modülüne EK olarak `requireTicaretEnabled`den geçer (ERP'de fiyat kartı
+ * router'ı ticaret kapısının arkasında). Kapı KÜME BAŞINA — router kapısı patronun bütün ekranını kapatırdı.
+ */
+export const TICARET_SETS: ReadonlySet<string> = new Set(["fiyat"]);
 
 /**
  * ERP izni → verdiği bulut okuma kodları. TEK tablo; `patron-app:login` girişin kendisidir (her
@@ -58,6 +73,8 @@ export interface SetDef {
   readonly requires: readonly string[];
   /** Kümeyi kapatan modül (adlı kapıdan geçer). */
   readonly module?: ModuleKey;
+  /** Kümenin bütün adlı kapıları sırayla (modül + ticaret tablosu okuyorsa ticaret). */
+  readonly gates: readonly GateKey[];
   /** ANLIK: fabrika kurucusunun kök adı (`ozet.stok` → `ozet`). */
   readonly builder?: string;
   /** KAYIT: alt satır adı → gereken bulut kodları. */
@@ -67,6 +84,11 @@ export interface SetDef {
 
 const uniq = (xs: readonly string[]): string[] => [...new Set(xs)];
 
+/** Adlı kapı anahtarı: projeksiyon modülü ya da ticaret paketi (route `MODULE_GATES` haritası). */
+export type GateKey = ModuleKey | "ticaret.enabled";
+const gatesOf = (name: string, module: ModuleKey | undefined): GateKey[] =>
+  [...(module ? [module] : []), ...(TICARET_SETS.has(name) ? (["ticaret.enabled"] as const) : [])];
+
 function recordDef(name: string): SetDef {
   const p = RECORD_PROJECTIONS.find((x) => x.name === name);
   if (!p) throw new Error(`Patron okuma: fabrika kataloğunda KAYIT yok (${name})`);
@@ -75,14 +97,15 @@ function recordDef(name: string): SetDef {
     const key = subRowName(p, cls).slice(p.name.length + 1) as "finans" | "kisisel";
     subRows[key] = uniq([p.permission, subRowPermission(p, cls)]);
   }
-  return { name, kind: "KAYIT", requires: [p.permission], module: p.module, subRows, projection: p };
+  return { name, kind: "KAYIT", requires: [p.permission], module: p.module, gates: gatesOf(name, p.module), subRows, projection: p };
 }
 
 function snapshotDef(name: string): SetDef {
   for (const s of SNAPSHOT_PROJECTIONS) {
     const sec = s.sections?.find((x) => x.name === name);
-    if (sec) return { name, kind: "ANLIK", requires: uniq([s.permission, sec.permission]), module: sec.module ?? s.module, builder: s.name };
-    if (!s.sections && s.name === name) return { name, kind: "ANLIK", requires: [s.permission], module: s.module, builder: s.name };
+    const module = sec ? sec.module ?? s.module : s.module;
+    if (sec) return { name, kind: "ANLIK", requires: uniq([s.permission, sec.permission]), module, gates: gatesOf(name, module), builder: s.name };
+    if (!s.sections && s.name === name) return { name, kind: "ANLIK", requires: [s.permission], module, gates: gatesOf(name, module), builder: s.name };
   }
   throw new Error(`Patron okuma: fabrika kataloğunda ANLIK yok (${name})`);
 }

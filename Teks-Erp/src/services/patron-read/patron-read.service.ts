@@ -13,7 +13,7 @@ import prisma from "../../lib/prisma";
 import {
   PATRON_RECORD_SETS, canRead, effectiveCloudPermissions, patronSet, readableSetNames, type SetDef,
 } from "./izin-esleme";
-import { ID_FILTER_KEYS, SEARCH, getRecord, idFiltersOf, listRecords, type PatronListQuery, type PatronRecord } from "./kayit-sayfasi";
+import { ID_FILTER_KEYS, KEY_FILTERS, SEARCH, getRecord, idFiltersOf, listRecords, type PatronListQuery, type PatronRecord } from "./kayit-sayfasi";
 import { getLicenseInstallationId } from "../../lib/license/runtime";
 
 /** Önbellek tazeliği (ms) — pahalı özetler (`ozet` = 9 rapor servisi) saniyede bir yeniden kurulmasın. */
@@ -40,9 +40,9 @@ const subRowsOf = (def: SetDef, cloud: ReadonlySet<string>) => ({
   kisisel: Boolean(def.subRows?.kisisel && canRead(cloud, def.subRows.kisisel)),
 });
 
-/** Route'un modül kapısını seçmesi için (adlı kapı `requireXEnabled`; kapalı → 403 MODULE_DISABLED). */
-export function setModule(name: string, kind: "KAYIT" | "ANLIK"): SetDef["module"] {
-  return patronSet(name, kind)?.module;
+/** Route'un adlı kapılarını seçmesi için (modül + ticaret; kapalı → 403 MODULE_DISABLED). Tanınmayan ad → boş. */
+export function setGates(name: string, kind: "KAYIT" | "ANLIK"): SetDef["gates"] {
+  return patronSet(name, kind)?.gates ?? [];
 }
 
 export async function listSet(user: PatronUser, name: string, q: PatronListQuery, nowMs = Date.now()) {
@@ -88,7 +88,9 @@ function listCapabilities() {
     const names = PATRON_RECORD_SETS.filter((n) => idFiltersOf(patronSet(n, "KAYIT")!.projection!).includes(key));
     if (names.length > 0) kimlikSuzgecleri[key] = names;
   }
-  return { kimlikSuzgecleri, aranabilir: Object.keys(SEARCH), anahtarSuzgecleri: {} };
+  const served = new Set<string>(PATRON_RECORD_SETS);
+  const anahtarSuzgecleri = Object.fromEntries(Object.entries(KEY_FILTERS).map(([k, v]) => [k, v.filter((n) => served.has(n))]).filter(([, v]) => v.length > 0));
+  return { kimlikSuzgecleri, aranabilir: Object.keys(SEARCH), anahtarSuzgecleri };
 }
 
 /** `GET /oturum` — bulut `FacilityStatus` biçimi; eşitleme yok (veri canlı), hizmet aşaması hep ACIK. */
