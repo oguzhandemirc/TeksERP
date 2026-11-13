@@ -20,6 +20,9 @@ export interface Yetenek {
   readonly bildirim: boolean;
   /** Kişisel gelen bildirim kutusu (ERP `/api/bildirim/*`: liste, okunmamış sayısı, okundu); açıklık `/ozet`ten. */
   readonly bildirimKutusu: boolean;
+  /** ERP telefon push köprüsü (`/auth/me` `patronPush` ≥ 1): belirteç kaydı + tür başına telefon bildirimi tercihi.
+   *  Bulutta false — bulutun telefon push yolu `bildirim` ayarlarındadır. */
+  readonly patronPush: boolean;
   /** Açılış zili (`POST /tazele`) ve değişim akışı (`GET /degisim`). */
   readonly tazele: boolean;
   readonly hesapYonetimi: boolean;
@@ -41,6 +44,7 @@ export const BULUT_YETENEK: Yetenek = {
   raporDisaAktar: false,
   bildirim: true,
   bildirimKutusu: false,
+  patronPush: false,
   tazele: true,
   hesapYonetimi: true,
   parolaDegistir: true,
@@ -55,7 +59,7 @@ const dizeler = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is
  * ERP sunucusu: sunulan kümeler sunucunun beyanından (eski sunucu beyan etmezse BOŞ — fail-closed). Bulut yazma
  * kanalı (gelen kutusu, `:yaz` kodları) yok; ERP yazma işlemleri ham ERP izinlerinden (`islemVar`).
  */
-export function erpYetenek(patronReadSets: unknown, erpPermissions?: unknown, patronReportApi?: unknown, bildirimKutusu?: unknown, patronReportExport?: unknown): Yetenek {
+export function erpYetenek(patronReadSets: unknown, erpPermissions?: unknown, patronReportApi?: unknown, bildirimKutusu?: unknown, patronReportExport?: unknown, patronPush?: unknown): Yetenek {
   const kumeler = new Set(dizeler(patronReadSets));
   // Rapor ucu (V5a) yalnız sürümünü beyan eden sunucuda; eski sunucu beyan etmez → rapor gizli (fail-closed).
   const rapor = typeof patronReportApi === "number" && patronReportApi >= 1;
@@ -72,6 +76,8 @@ export function erpYetenek(patronReadSets: unknown, erpPermissions?: unknown, pa
     bildirim: false,
     // Fabrika `/api/bildirim/ozet` `enabled:true` dediyse (yalnız gerçek `true` açar — fail-closed).
     bildirimKutusu: bildirimKutusu === true,
+    // Fabrika yalnız kapısı açıkken sürüm yayımlar; eski fabrika alanı vermez → push gizli (fail-closed). Kutu kapalıysa da gizli.
+    patronPush: bildirimKutusu === true && typeof patronPush === "number" && patronPush >= 1,
     tazele: false,
     hesapYonetimi: false,
     parolaDegistir: false,

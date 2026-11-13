@@ -13,8 +13,10 @@
 //   §5 adres tutarlılığı: ADRES kurulum/ölçüm betiğinde, kaynak notta, Play form belgesinde, sunucu envanterinde aynı;
 //      PATRON_ADRES kurulum/ölçüm betiğinde, kendi kaynağında, mağaza runbook'unda; #hesap-silme çapası sayfada ve runbook'ta
 //   §6 kablolama: commit kancası + CI bu bekçiyi koşar
-//   §7 Patron metni ↔ kod: saklama süreleri (patron/sunucu maintenance.ts + config.ts varsayılanları) ve native push
-//      cümlesi (patron/uygulama push/support.ts NATIVE_PUSH) metinde koddaki değerle yazılı
+//   §7 Patron metni ↔ kod: saklama süreleri (patron/sunucu maintenance.ts + config.ts varsayılanları) ve anlık bildirim
+//      metni (patron/uygulama push/support.ts NATIVE_PUSH): literal false → "yok" cümlesi · derleme kapısına bağlı
+//      (app.config.js pushKapisi + EAS kimliği) → politika + Play açıklaması push cümlelerini taşır, "yok" demez ·
+//      literal true YASAK (kapısız paket metni yalanlar)
 //   §8 vds-kur.sh: çok satırlı `sh -c '…'` gövdesi kesme işareti taşımaz (tırnağı erken kapatır, kalanını uzak bash koşar)
 // Köşeli parantezli yer tutucu bekçiyi KIRMIZI yapmaz (taslak meşru); yayını vds-kur.sh durdurur — burada ⏳ basılır.
 //
@@ -54,12 +56,27 @@ const MAGAZA_REL = 'docs/ops/PATRON-MAGAZA-ANDROID.md';
 const BAKIM_REL = 'patron/sunucu/src/services/maintenance.ts';
 const AYAR_REL = 'patron/sunucu/src/config.ts';
 const PUSH_REL = 'patron/uygulama/src/push/support.ts';
-/** NATIVE_PUSH kapalıyken metinde DURMASI, açıkken DURMAMASI gereken cümle. */
+const UYG_AYAR_REL = 'patron/uygulama/app.config.js';
+const METINLER_REL = 'patron/uygulama/magaza/metinler.json';
+/** NATIVE_PUSH literal false iken politikada DURMASI, kapıya bağlıyken DURMAMASI gereken cümle. */
 const PUSH_YOK_CUMLESI = 'Android uygulamasında anlık bildirim bu sürümde yoktur';
+const MAGAZA_PUSH_YOK = 'Bu sürümde telefonda anlık bildirim yoktur';
+/** Kapıya bağlı push: politikanın taşıması gereken cümleler (aracılar, tam metnin bulut geçişi, belirtecin şifreli saklanması). */
+export const PUSH_VAR_CUMLELERI = Object.freeze([
+  'Android uygulamasının anlık bildirim destekli sürümünde',
+  'fabrika sunucusunda şifreli olarak saklanır',
+  'Google Firebase Cloud Messaging (FCM) ve Expo push hizmeti üzerinden iletilir',
+  'bildirimin başlığı ve içeriği (tam metin;',
+  'Etkili Yazılım bulutundan geçer; bulutta saklanmaz ve günlüğe yazılmaz',
+  'Bildirim izni yalnız anlık bildirim destekli sürümde',
+]);
+const MAGAZA_PUSH_VAR = 'Anlık bildirim: izin verirseniz';
+const MAGAZA_PUSH_VAR_EN = 'Push notifications: if you allow them';
+const MAGAZA_PUSH_YOK_EN = 'Push notifications on the phone are not available';
 
 /** Commit tetiği: bekçinin okuduğu her dosya (§6 listenin kancada aynen geçtiğini ölçer). */
-export const TETIK = Object.freeze([KAYNAK_REL, HTML_REL, PATRON_KAYNAK_REL, PATRON_HTML_REL, COMPOSE_REL, NGINX_REL, URET_REL, KUR_REL, OLC_REL, FORM_REL, ENVANTER_REL, MAGAZA_REL, BAKIM_REL, AYAR_REL, PUSH_REL, CF_REL, ZINCIR_REL, BEN_REL]);
-const OKUNAN = [KAYNAK_REL, HTML_REL, PATRON_KAYNAK_REL, PATRON_HTML_REL, COMPOSE_REL, NGINX_REL, KUR_REL, OLC_REL, FORM_REL, ENVANTER_REL, MAGAZA_REL, BAKIM_REL, AYAR_REL, PUSH_REL, CF_REL, KANCA_REL, CI_REL];
+export const TETIK = Object.freeze([KAYNAK_REL, HTML_REL, PATRON_KAYNAK_REL, PATRON_HTML_REL, COMPOSE_REL, NGINX_REL, URET_REL, KUR_REL, OLC_REL, FORM_REL, ENVANTER_REL, MAGAZA_REL, BAKIM_REL, AYAR_REL, PUSH_REL, UYG_AYAR_REL, METINLER_REL, CF_REL, ZINCIR_REL, BEN_REL]);
+const OKUNAN = [KAYNAK_REL, HTML_REL, PATRON_KAYNAK_REL, PATRON_HTML_REL, COMPOSE_REL, NGINX_REL, KUR_REL, OLC_REL, FORM_REL, ENVANTER_REL, MAGAZA_REL, BAKIM_REL, AYAR_REL, PUSH_REL, UYG_AYAR_REL, METINLER_REL, CF_REL, KANCA_REL, CI_REL];
 
 function dosyalariOku() {
   const d = {};
@@ -224,7 +241,20 @@ export function olc(d) {
   const ip = sabit(d[BAKIM_REL], 'IP_RETENTION_DAYS');
   const giris = varsayilan('DENETIM_GIRIS_SAKLAMA_GUN');
   const denetim = varsayilan('DENETIM_SAKLAMA_GUN');
-  const pushM = /export const NATIVE_PUSH = (true|false);/.exec(d[PUSH_REL]);
+  const pushM = /export const NATIVE_PUSH(?:: boolean)? = (true|false|nativePushEnabled\()/.exec(d[PUSH_REL]);
+  let magazaAciklama = null;
+  try {
+    magazaAciklama = JSON.parse(d[METINLER_REL])?.listings?.['tr-TR']?.fullDescription ?? null;
+  } catch {
+    magazaAciklama = null;
+  }
+  let magazaIng = null;
+  try {
+    magazaIng = JSON.parse(d[METINLER_REL])?.listings?.['en-US']?.fullDescription ?? null;
+  } catch {
+    magazaIng = null;
+  }
+  if (typeof magazaAciklama !== 'string' || typeof magazaIng !== 'string') s.olculemedi.push(`§7 ${METINLER_REL} tr-TR/en-US fullDescription okunamadı`);
   if (silme === null || ip === null) s.olculemedi.push(`§7 ${BAKIM_REL} IDENTITY_PURGE_DAYS / IP_RETENTION_DAYS okunamadı`);
   if (giris === null || denetim === null) s.olculemedi.push(`§7 ${AYAR_REL} DENETIM_GIRIS_SAKLAMA_GUN / DENETIM_SAKLAMA_GUN varsayılanı okunamadı`);
   if (!pushM) s.olculemedi.push(`§7 ${PUSH_REL} NATIVE_PUSH okunamadı`);
@@ -241,11 +271,21 @@ export function olc(d) {
     `IP adresi ${ip} gün sonra çıkarılır`,
   ];
   for (const c of gerekli) if (!md.includes(c)) s.kirmizi.push(`§7 ${PATRON_KAYNAK_REL} koddaki süreyi yazmıyor: "${c}"`);
-  const pushKapali = pushM[1] === 'false';
-  if (pushKapali !== md.includes(PUSH_YOK_CUMLESI)) {
-    s.kirmizi.push(pushKapali
-      ? `§7 NATIVE_PUSH kapalı ama ${PATRON_KAYNAK_REL} "${PUSH_YOK_CUMLESI}" demiyor`
-      : `§7 NATIVE_PUSH AÇIK ama ${PATRON_KAYNAK_REL} hâlâ "${PUSH_YOK_CUMLESI}" diyor — §2/§4 (cihaz anahtarı, Google/Apple/Expo) + PATRON-MAGAZA-ANDROID §4.2 birlikte güncellenir`);
+  if (pushM[1] === 'true') {
+    s.kirmizi.push(`§7 ${PUSH_REL} NATIVE_PUSH literal true — kapı derlemeye bağlı olmalı (nativePushEnabled(extra, modül)); Firebase'siz pakette metin yalan söyler`);
+  } else if (pushM[1] === 'false') {
+    if (!md.includes(PUSH_YOK_CUMLESI)) s.kirmizi.push(`§7 NATIVE_PUSH kapalı ama ${PATRON_KAYNAK_REL} "${PUSH_YOK_CUMLESI}" demiyor`);
+    if (!magazaAciklama.includes(MAGAZA_PUSH_YOK)) s.kirmizi.push(`§7 NATIVE_PUSH kapalı ama ${METINLER_REL} "${MAGAZA_PUSH_YOK}" demiyor`);
+    if (!magazaIng.includes(MAGAZA_PUSH_YOK_EN)) s.kirmizi.push(`§7 NATIVE_PUSH kapalı ama ${METINLER_REL} en-US "${MAGAZA_PUSH_YOK_EN}" demiyor`);
+  } else {
+    // Kapıya bağlı: açık derleme push taşır → metinler push'u anlatır; kapının üç koşulu app.config.js'te durur.
+    if (md.includes(PUSH_YOK_CUMLESI)) s.kirmizi.push(`§7 NATIVE_PUSH derleme kapısına bağlı ama ${PATRON_KAYNAK_REL} hâlâ "${PUSH_YOK_CUMLESI}" diyor`);
+    for (const c of PUSH_VAR_CUMLELERI) if (!md.includes(c)) s.kirmizi.push(`§7 ${PATRON_KAYNAK_REL} anlık bildirim cümlesini yazmıyor: "${c}" (PATRON-MAGAZA-ANDROID §4.2 ile birlikte)`);
+    if (magazaIng.includes(MAGAZA_PUSH_YOK_EN) || !magazaIng.includes(MAGAZA_PUSH_VAR_EN)) s.kirmizi.push(`§7 ${METINLER_REL} en-US açıklaması anlık bildirimi anlatmıyor ("${MAGAZA_PUSH_VAR_EN}")`);
+    if (magazaAciklama.includes(MAGAZA_PUSH_YOK) || !magazaAciklama.includes(MAGAZA_PUSH_VAR)) s.kirmizi.push(`§7 ${METINLER_REL} Play açıklaması anlık bildirimi anlatmıyor ("${MAGAZA_PUSH_VAR}" olmalı, "${MAGAZA_PUSH_YOK}" olmamalı)`);
+    for (const parca of ['env.PATRON_NATIVE_PUSH !== "1"', 'google-services.json', 'env.PATRON_EAS_PROJECT_ID', 'nativePush: true']) {
+      if (!d[UYG_AYAR_REL].includes(parca)) s.kirmizi.push(`§7 ${UYG_AYAR_REL} derleme kapısı "${parca}" koşulunu taşımıyor`);
+    }
   }
   // §8 — 2026-10-16 canlıda ölçüldü: gövdedeki `onceki/'de` tırnağı kapattı, --uygula yarıda durdu.
   const govdeler = [...d[KUR_REL].matchAll(/-c '\n([\s\S]*?)\n'\n/g)];
@@ -302,8 +342,14 @@ function sondalar(taban) {
     ['N32 kimlik silme süresi kodda 45', 'kirmizi', deg(BAKIM_REL, (t) => t.replace('export const IDENTITY_PURGE_DAYS = 30;', 'export const IDENTITY_PURGE_DAYS = 45;')), '§7'],
     ['N33 IP saklama kodda 60', 'kirmizi', deg(BAKIM_REL, (t) => t.replace('export const IP_RETENTION_DAYS = 30;', 'export const IP_RETENTION_DAYS = 60;')), '§7'],
     ['N34 denetim saklama varsayılanı 1095', 'kirmizi', deg(AYAR_REL, (t) => t.replace(/(DENETIM_SAKLAMA_GUN:\s*positiveInt\([^)]*\)\.default\()\d+/, '$11095')), '§7'],
-    ['N35 native push açıldı, metin aynı', 'kirmizi', deg(PUSH_REL, (t) => t.replace('export const NATIVE_PUSH = false;', 'export const NATIVE_PUSH = true;')), '§7'],
-    ['N36 metinden push cümlesi silindi, kapı kapalı', 'kirmizi', (d) => { d[PATRON_KAYNAK_REL] = d[PATRON_KAYNAK_REL].replace(PUSH_YOK_CUMLESI, 'Android uygulaması bildirim gönderir'); d[PATRON_HTML_REL] = uret(d[PATRON_KAYNAK_REL]); }, '§7'],
+    ['N35 NATIVE_PUSH literal true (kapısız)', 'kirmizi', deg(PUSH_REL, (t) => t.replace(/export const NATIVE_PUSH: boolean = nativePushEnabled\([^;]*;/, 'export const NATIVE_PUSH = true;')), '§7'],
+    ['N36 metinden şifreli saklama cümlesi silindi', 'kirmizi', (d) => { d[PATRON_KAYNAK_REL] = d[PATRON_KAYNAK_REL].replace(/sunucusunda\s+şifreli\s+olarak/, 'sunucusunda'); d[PATRON_HTML_REL] = uret(d[PATRON_KAYNAK_REL]); }, '§7'],
+    ['N36b metne eski "yok" cümlesi geri girdi', 'kirmizi', (d) => { d[PATRON_KAYNAK_REL] = d[PATRON_KAYNAK_REL].replace('## 3. Amaçlar', `${PUSH_YOK_CUMLESI}.\n\n## 3. Amaçlar`); d[PATRON_HTML_REL] = uret(d[PATRON_KAYNAK_REL]); }, '§7'],
+    ['N36c metinden bulut geçiş cümlesi silindi', 'kirmizi', (d) => { d[PATRON_KAYNAK_REL] = d[PATRON_KAYNAK_REL].replace(/bulutta\s+saklanmaz\s+ve\s+günlüğe\s+yazılmaz/, 'iletilir'); d[PATRON_HTML_REL] = uret(d[PATRON_KAYNAK_REL]); }, '§7'],
+    ['N36d Play açıklaması hâlâ "yok" diyor', 'kirmizi', deg(METINLER_REL, (t) => t.replace(MAGAZA_PUSH_VAR, MAGAZA_PUSH_YOK)), '§7'],
+    ['N36g en-US açıklaması hâlâ "not available" diyor', 'kirmizi', deg(METINLER_REL, (t) => t.replace(MAGAZA_PUSH_VAR_EN, MAGAZA_PUSH_YOK_EN)), '§7'],
+    ['N36e kapı EAS kimliğini aramıyor', 'kirmizi', deg(UYG_AYAR_REL, (t) => t.replaceAll('env.PATRON_EAS_PROJECT_ID', 'env.X')), '§7'],
+    ['N36f kapı literal false\'a döndü, metin push diyor', 'kirmizi', deg(PUSH_REL, (t) => t.replace(/export const NATIVE_PUSH: boolean = nativePushEnabled\([^;]*;/, 'export const NATIVE_PUSH = false;')), '§7'],
     ['N37 mağaza runbook\'u silme adresini anmıyor', 'kirmizi', deg(MAGAZA_REL, (t) => t.replaceAll(`${PATRON_ADRES}#${SILME_CAPASI}`, `${PATRON_ADRES}#silme`)), '§5'],
     ['N38 kurulum betiği Patron sayfasını taşımıyor', 'kirmizi', deg(KUR_REL, (t) => t.replace('SAYFALAR="gizlilik yonetim-gizlilik"', 'SAYFALAR="gizlilik"')), '§5'],
     ['N39 ölçüm betiği Patron sayfasını ölçmüyor', 'kirmizi', deg(OLC_REL, (t) => t.replaceAll('html/yonetim-gizlilik.html', 'html/x.html')), '§5'],
@@ -311,11 +357,12 @@ function sondalar(taban) {
     ['N40 metin sürümü satırı yok', 'kirmizi', (d) => { d[PATRON_KAYNAK_REL] = d[PATRON_KAYNAK_REL].replace(/^\*\*Metin sürümü:\*\*.*\n/m, ''); d[PATRON_HTML_REL] = uret(d[PATRON_KAYNAK_REL]); }, '§5'],
     ['N41 kanca tetiği maintenance.ts kapsamıyor', 'kirmizi', deg(KANCA_REL, (t) => t.replace(`"${BAKIM_REL}"`, '"z"')), '§6'],
     ['N42 sh -c gövdesinde kesme işaretli yorum', 'kirmizi', deg(KUR_REL, (t) => t.replace("-c '\n", "-c '\n  # dosya onceki/'de kalır\n")), '§8'],
-    ['P2 native push açıldı + metin güncellendi + üretildi', 'yesil', (d) => { d[PUSH_REL] = d[PUSH_REL].replace('export const NATIVE_PUSH = false;', 'export const NATIVE_PUSH = true;'); d[PATRON_KAYNAK_REL] = d[PATRON_KAYNAK_REL].replace(PUSH_YOK_CUMLESI, 'Android uygulaması anlık bildirim için cihazın bildirim anahtarını kaydeder'); d[PATRON_HTML_REL] = uret(d[PATRON_KAYNAK_REL]); }],
+    ['P2 kapı literal false + "yok" metinleri (eski düzen) üretildi', 'yesil', (d) => { d[PUSH_REL] = d[PUSH_REL].replace(/export const NATIVE_PUSH: boolean = nativePushEnabled\([^;]*;/, 'export const NATIVE_PUSH = false;'); d[PATRON_KAYNAK_REL] = d[PATRON_KAYNAK_REL].replace('## 3. Amaçlar', `${PUSH_YOK_CUMLESI}.\n\n## 3. Amaçlar`); d[PATRON_HTML_REL] = uret(d[PATRON_KAYNAK_REL]); d[METINLER_REL] = d[METINLER_REL].replace(MAGAZA_PUSH_VAR, MAGAZA_PUSH_YOK).replace(MAGAZA_PUSH_VAR_EN, MAGAZA_PUSH_YOK_EN); }],
     ['O1 CF kaynağı okunamadı', 'olculemedi', deg(CF_REL, () => undefined)],
     ['O2 CLOUDFLARE_NETWORKS adı değişti', 'olculemedi', deg(CF_REL, (t) => t.replaceAll('CLOUDFLARE_NETWORKS', 'CF_AGLARI'))],
     ['O3 IDENTITY_PURGE_DAYS adı değişti', 'olculemedi', deg(BAKIM_REL, (t) => t.replaceAll('IDENTITY_PURGE_DAYS', 'KIMLIK_SILME_GUN'))],
     ['O4 push kapısı okunamadı', 'olculemedi', deg(PUSH_REL, () => undefined)],
+    ['O5 mağaza metinleri bozuk JSON', 'olculemedi', deg(METINLER_REL, (t) => t.slice(1))],
   ];
   let kotu = 0;
   for (const [ad, beklenen, boz, ileti] of liste) {
@@ -352,7 +399,7 @@ const s = olc(girdi);
 for (const x of s.olculemedi) console.log(`⛔ ÖLÇÜLEMEDİ ${x}`);
 for (const x of s.kirmizi) console.log(`❌ ${x}`);
 if (!s.olculemedi.length && !s.kirmizi.length) {
-  console.log('✅ yasal sayfalar (/gizlilik · /yonetim-gizlilik · eski /patron-gizlilik 301): kaynak ↔ html bayt-eşit · e-posta email_off içinde · compose ayrı ve salt-okunur · kenar zinciri CF birebir · nginx önbellek/always/404 · adres + #hesap-silme tutarlı · Patron süreleri/push koda eşit · kablolu');
+  console.log('✅ yasal sayfalar (/gizlilik · /yonetim-gizlilik · eski /patron-gizlilik 301): kaynak ↔ html bayt-eşit · e-posta email_off içinde · compose ayrı ve salt-okunur · kenar zinciri CF birebir · nginx önbellek/always/404 · adres + #hesap-silme tutarlı · Patron süreleri + anlık bildirim metni (politika + Play açıklaması) koda eşit · kablolu');
   const yt = SAYFALAR.flatMap(({ html }) => (typeof girdi[html] === 'string' ? yerTutucular(girdi[html]) : []));
   if (yt.length) console.log(`⏳ yayın öncesi doldurulacak yer tutucu (vds-kur.sh --uygula durdurur): ${yt.join(' ')}`);
 }

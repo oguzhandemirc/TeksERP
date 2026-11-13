@@ -1,12 +1,14 @@
 // Gelen bildirimler (ERP kipi, `yetenek().bildirimKutusu`): fabrikanın kişisel gelen kutusu — Okunmamış/Tümü, okunmamış
 // sayısı, dokununca okundu, tümünü okundu. Satır biçimi bulut "Geçmiş"iyle aynı (`BildirimSatiri`). Süzme SUNUCUDA.
 // Canlılık: `useRemote` (odak, öne gelme, aşağı çek) + odakta ve ön plandayken `/ozet` 60 sn'de bir; sürüm
-// (`epoch:rev`) değişince liste tazelenir.
+// (`epoch:rev`) değişince liste tazelenir. Telefon bildirimine dokunarak gelinirse (`?vurgu=<id>`, P4) "Tümü" açılır,
+// satır vurgulanır ve okundu sayılır (çevrimdışıyken yalnız vurgu). Üstte "Telefon bildirimleri" bölümü (P4).
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useLocalSearchParams } from "expo-router";
 import { View } from "react-native";
 import type { BildirimSekmesi, GelenBildirim } from "../../api/bildirim";
 import { errorMessage } from "../../api/client";
-import { erpBildirimGorunusu, okunmamisRozeti } from "../../lib/erp-bildirim";
+import { BILDIRIM_TAG, erpBildirimGorunusu, okunmamisRozeti } from "../../lib/erp-bildirim";
 import { formatAgo } from "../../lib/format";
 import { invalidate } from "../../state/changes";
 import { useSession } from "../../state/session";
@@ -21,10 +23,13 @@ import { SegmentedControl } from "../SegmentedControl";
 import { Empty, ErrorState, LoadingSkeleton } from "../StateViews";
 import { StatusBadge } from "../StatusBadge";
 import { space } from "../tokens";
+import { useTokens } from "../theme-context";
 import { BildirimSatiri } from "./BildirimSatiri";
+import { TelefonBildirimleri } from "./TelefonBildirimleri";
 
-/** Geçersizleştirme etiketi: liste, özet ve Diğer rozeti birlikte tazelenir. */
-export const BILDIRIM_TAG = "bildirim-kutusu";
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export { BILDIRIM_TAG };
 /** Özet yoklaması: 60 sn aralık, odak başına 30 dk bütçe (yeniden odakta baştan). */
 export const BILDIRIM_YOKLAMA_MS: readonly number[] = Array.from({ length: 30 }, () => 60_000);
 const SAYFA = 30;
@@ -42,7 +47,10 @@ function rozet(n: GelenBildirim) {
 
 export function GelenBildirimler() {
   const { bildirimci, offline } = useSession();
-  const [sekme, setSekme] = useState<BildirimSekmesi>("okunmamis");
+  const t = useTokens();
+  const { vurgu } = useLocalSearchParams<{ vurgu?: string }>();
+  const vurguId = typeof vurgu === "string" && UUID.test(vurgu) ? vurgu : null;
+  const [sekme, setSekme] = useState<BildirimSekmesi>(vurguId ? "tumu" : "okunmamis");
   const ozet = useRemote("bildirim-ozet", () => bildirimci.ozet(), { tags: [BILDIRIM_TAG] });
   const list = useRemote(`${BILDIRIM_TAG}:${sekme}`, () => bildirimci.liste({ sekme, limit: SAYFA }), { tags: [BILDIRIM_TAG] });
   const [more, setMore] = useState<{ items: GelenBildirim[]; next: string | null } | null>(null);
@@ -76,6 +84,13 @@ export function GelenBildirimler() {
     }
   }, [offline]);
 
+  // Dokunuşla gelinen satır: "Tümü"nde kalır (okundu sayılınca Okunmamış'tan düşerdi) ve okundu işaretlenir.
+  useEffect(() => {
+    if (!vurguId) return;
+    setSekme("tumu");
+    if (!offline) void run(vurguId, () => bildirimci.okundu(vurguId));
+  }, [vurguId]);
+
   async function loadMore(cursor: string) {
     setBusy("daha");
     try {
@@ -107,6 +122,7 @@ export function GelenBildirimler() {
   ];
   return shell(
     <>
+      <TelefonBildirimleri />
       <View style={{ marginBottom: space.m }}>
         <SegmentedControl items={tabs} value={sekme} onChange={setSekme} testIDPrefix="bildirim-sekme-" accessibilityLabel="Bildirim süzgeci" />
       </View>
@@ -118,13 +134,16 @@ export function GelenBildirimler() {
         <ListGroup testID="bildirim-kutusu">
           {items.map((n) => {
             const unread = n.okunduAn === null;
-            return (
+            const satir = (
               <BildirimSatiri key={n.id} look={erpBildirimGorunusu(n.tur)} title={n.baslik} body={n.govde} badge={rozet(n)}
                 time={n.sayac > 1 ? `${formatAgo(n.sonAn)} · ${n.sayac} kez` : formatAgo(n.sonAn)}
                 onPress={unread && !offline && busy === null ? () => void run(n.id, () => bildirimci.okundu(n.id)) : undefined}
                 accessibilityRole="button" accessibilityLabel={unread ? `${n.baslik}, okunmadı; okundu saymak için dokunun` : undefined}
                 testID={`bildirim-${n.id}`} />
             );
+            return n.id === vurguId ? (
+              <View key={n.id} style={{ backgroundColor: t.status.bilgi.bg }} testID="bildirim-vurgu" accessibilityLabel="Dokunduğunuz bildirim">{satir}</View>
+            ) : satir;
           })}
         </ListGroup>
       ) : null}

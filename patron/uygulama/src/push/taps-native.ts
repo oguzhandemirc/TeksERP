@@ -6,12 +6,25 @@ Notifications.setNotificationHandler({
   handleNotification: () => Promise.resolve({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false }),
 });
 
-/** Son dokunuşu ve sonrakileri `open`a verir; dönüş dinleyiciyi kaldırır. */
+/** İşlenmiş dokunuşlar: dinleyici yeniden kurulunca (yeniden giriş) son dokunuş ikinci kez açılmasın. */
+const islenen = new Set<string>();
+
+/** Son dokunuşu (uygulama kapalıyken açılış) ve sonrakileri (arka plan/ön) `open`a verir; dönüş dinleyiciyi kaldırır. */
 export function listenNativeTaps(open: (data: unknown) => void): () => void {
   const onResponse = (r: Notifications.NotificationResponse | null) => {
-    if (r) open(r.notification.request.content.data);
+    if (!r) return;
+    const id = r.notification.request.identifier;
+    if (id && islenen.has(id)) return;
+    if (id) islenen.add(id);
+    open(r.notification.request.content.data);
   };
   void Notifications.getLastNotificationResponseAsync().then(onResponse);
   const sub = Notifications.addNotificationResponseReceivedListener(onResponse);
+  return () => sub.remove();
+}
+
+/** Uygulama öndeyken gelen bildirim (dokunuş değil): liste/rozet tazelensin. */
+export function listenNativeReceived(onReceived: () => void): () => void {
+  const sub = Notifications.addNotificationReceivedListener(() => onReceived());
   return () => sub.remove();
 }

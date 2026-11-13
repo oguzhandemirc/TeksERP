@@ -32,6 +32,8 @@ export interface ErpMe {
   readonly patronReportApi?: number;
   /** Rapor koşumu dosyası ucu sürümü (`GET /patron/v1/raporlar/:id/dosya`); yoksa PDF/Excel düğmeleri gizli. */
   readonly patronReportExport?: number;
+  /** Push köprüsü sürümü (`POST/DELETE /api/bildirim/cihaz`); yalnız fabrikanın push kapısı açıkken gelir. */
+  readonly patronPush?: number;
 }
 
 export interface ErpLoginResult {

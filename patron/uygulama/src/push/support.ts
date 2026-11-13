@@ -1,11 +1,8 @@
-// Bu cihaz anlık bildirim alabilir mi? Mağaza paketinde telefonda native push YOK (kullanıcı kararı 2026-10-15).
-// İki kat: `NATIVE_PUSH` ANA ANAHTARDIR (literal; gizlilik metni bekçisi `scripts/test_gizlilik_sayfasi.mjs` §7 bu satırı
-// okur — açmak metni de değiştirir) · `NATIVE_PUSH_ETKIN` = ana anahtar ∧ derleme kapısı (`app.config.js` →
-// `extra.nativePush`) ∧ native modül bağlı (fail-closed). Native modüle dokunan kod yalnız etkin kapıyla `require` edilir.
+// Bu cihaz anlık bildirim alabilir mi? `NATIVE_PUSH` DERLEME KAPISINA bağlıdır (push köprüsü P4; literal değil — gizlilik
+// bekçisi `scripts/test_gizlilik_sayfasi.mjs` §7 bu satırı okur): `app.config.js` kapısı (`extra.nativePush`) ∧ native
+// modül bağlı (fail-closed). Kapı kapalı derlemede bugünkü gibi telefonda push yok. Native modüle dokunan kod yalnız bu kapıyla `require` edilir.
 import Constants from "expo-constants";
 import { requireOptionalNativeModule } from "expo";
-
-export const NATIVE_PUSH = false;
 
 export function nativePushEnabled(extra: unknown, moduleLinked: boolean): boolean {
   return moduleLinked && typeof extra === "object" && extra !== null && (extra as { nativePush?: unknown }).nativePush === true;
@@ -19,7 +16,9 @@ function moduleLinked(): boolean {
   }
 }
 
-export const NATIVE_PUSH_ETKIN: boolean = NATIVE_PUSH && nativePushEnabled(Constants.expoConfig?.extra, moduleLinked());
+export const NATIVE_PUSH: boolean = nativePushEnabled(Constants.expoConfig?.extra, moduleLinked());
+/** Çağıranların adı; `NATIVE_PUSH` ile aynı değer. */
+export const NATIVE_PUSH_ETKIN: boolean = NATIVE_PUSH;
 
 export function pushAvailable(os: string, nativePush: boolean = NATIVE_PUSH_ETKIN): boolean {
   return os === "web" || nativePush;

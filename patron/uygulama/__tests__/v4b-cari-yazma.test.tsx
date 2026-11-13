@@ -27,6 +27,7 @@ function fakeClient() {
     get: async (path) => { calls.push({ m: "GET", path }); return reply("GET", path) as never; },
     post: async (path, body) => { calls.push({ m: "POST", path, body }); return reply("POST", path, body) as never; },
     patch: async (path, body) => { calls.push({ m: "PATCH", path, body }); return reply("PATCH", path, body) as never; },
+    put: async () => { throw new Error("yok"); },
     del: async (path) => { calls.push({ m: "DELETE", path }); return reply("DELETE", path) as never; },
     download: async () => { throw new Error("yok"); },
   };

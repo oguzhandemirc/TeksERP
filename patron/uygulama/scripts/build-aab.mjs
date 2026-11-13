@@ -7,8 +7,11 @@
 // İmza: YÜKLEME anahtarı (scripts/lib/android-derleme.cjs; repo dışında, parola Anahtar Zinciri'nden — hiçbir çıktıya
 // basılmaz, yalnız Gradle/keytool alt sürecinin ortamına gider; Gradle daemon'da kalmasın diye --no-daemon).
 // Bulut adresi derlemeye açıkça gömülür (EXPO_PUBLIC_PATRON_API) ve `.env*` dosyaları okunmaz (EXPO_NO_DOTENV=1).
-// Doğrulama: birleşik manifest (paket · sürüm · izinler · Firebase/bildirim bileşeni yok), JS paketinde adres,
+// Doğrulama: birleşik manifest (paket · sürüm · izinler · bildirim bileşeni kapıya göre), JS paketinde adres,
 // imzanın yükleme sertifikası olması. Çıkış: 0 tamam · 1 hata.
+// Telefon push kapısı (`app.config.js` `pushKapisi`): `PATRON_NATIVE_PUSH=1` ∧ uygulama köküne konmuş `google-services.json`
+// ∧ `PATRON_EAS_PROJECT_ID`. Kapalıyken paket bugünküyle aynı; açıkken izin kümesine bildirim izinleri girer ve
+// package.json Android bağlama dışlaması derleme süresince kaldırılıp çıkışta AYNEN geri yazılır.
 // =============================================================================
 import { spawnSync } from "node:child_process";
 import crypto from "node:crypto";
@@ -16,7 +19,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 import derleme from "./lib/android-derleme.cjs";
+import pushDerleme from "./lib/push-kapisi.cjs";
 import { buildTool, dur, jdkBul, sdkBul } from "./lib/android-ortam.mjs";
 import { kasadanOku } from "../../../scripts/lib/parola-kasasi.mjs";
 
@@ -26,14 +31,13 @@ const ANDROID = path.join(UYGULAMA, "android");
 const APK = process.argv.includes("--apk");
 const GOREV = APK ? "assembleRelease" : "bundleRelease";
 const STORE = path.join(IMZA.dizin, IMZA.storeFile);
-/** Birleşik manifestte bulunmasına izin verilen tek izin kümesi (fazlası Play formu ve en az yetki ihlali). */
-const YASAK_BILESEN = /firebase|expo\.modules\.notifications|c2dm/i;
+const { pushKapisi, NATIVE_PUSH_IZINLERI } = createRequire(import.meta.url)("../app.config.js");
+const PUSH = pushKapisi({ env: process.env, root: UYGULAMA });
 
 const app = JSON.parse(fs.readFileSync(path.join(UYGULAMA, "app.json"), "utf8")).expo;
 const PAKET = app.android.package;
-// AndroidX'in uygulamaya özel imza izni paket adını taşır: literal yazılmaz, paketten türer (paket adı değişince kırılmasın).
-// CAMERA: yalnız sunucu bağlantı karekodunu okutmak için (expo-camera, mikrofon kapalı).
-const IZINLI_IZINLER = ["android.permission.INTERNET", "android.permission.CAMERA", `${PAKET}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`];
+/** Birleşik manifestte bulunmasına izin verilen tek izin kümesi (fazlası Play formu ve en az yetki ihlali). */
+const IZINLI_IZINLER = pushDerleme.izinliIzinler(PAKET, PUSH.acik, NATIVE_PUSH_IZINLERI);
 const SURUM = app.version;
 const KOD = app.android.versionCode;
 const baslik = (t) => console.log(`\n── ${t}`);
@@ -62,6 +66,16 @@ const SERTIFIKA = ((liste.stdout.match(/SHA256:\s*([0-9A-F:]+)/) ?? [])[1] ?? ""
 console.log(`Paket ${PAKET} · sürüm ${SURUM} (versionCode ${KOD}) · ${GOREV}`);
 console.log(`Bulut adresi: ${PATRON_API} · JDK ${jdk} · SDK ${sdk}`);
 console.log(`Yükleme sertifikası SHA-256: ${SERTIFIKA}`);
+console.log(`Telefon push: ${PUSH.acik ? "AÇIK (Firebase + bildirim izinleri pakete girer)" : PUSH.eksik ? `KAPALI (eksik: ${PUSH.eksik.join(" + ")})` : "KAPALI"}`);
+
+// Açık kapı: autolinking dışlaması yalnız package.json'dan okunur → derleme süresince kaldırılır, çıkışta bayt-eşit geri.
+const PKG = path.join(UYGULAMA, "package.json");
+if (PUSH.acik) {
+  const ozgun = fs.readFileSync(PKG, "utf8");
+  process.on("exit", () => fs.writeFileSync(PKG, ozgun));
+  for (const sinyal of ["SIGINT", "SIGTERM"]) process.on(sinyal, () => process.exit(130));
+  fs.writeFileSync(PKG, `${JSON.stringify(pushDerleme.autolinkingKapiya(JSON.parse(ozgun), true), null, 2)}\n`);
+}
 
 // (1) Prebuild — android/ git dışıdır; her derleme temiz üretilir (sürüm kimliği app.json'dan, elde kalan klasörden değil).
 // Metro dönüşüm önbelleği EXPO_PUBLIC_* değerini anahtarına katmaz: ortak $TMPDIR/metro-cache eski bulut adresini
@@ -99,8 +113,8 @@ if (manifestAday) {
   for (const [, ad] of m.matchAll(/<uses-permission(?:-sdk-23)?\s[^>]*android:name="([^"]+)"/g)) izinler.push(ad);
   const fazla = izinler.filter((i) => !IZINLI_IZINLER.includes(i));
   if (fazla.length) sorunlar.push(`izinli olmayan izin: ${fazla.join(", ")}`);
-  const bilesen = [...m.matchAll(/<(?:service|receiver|provider)\b[^>]*?android:name="([^"]+)"/g)].map((x) => x[1]).filter((ad) => YASAK_BILESEN.test(ad));
-  if (bilesen.length) sorunlar.push(`bildirim/Firebase bileşeni pakette: ${bilesen.join(", ")}`);
+  const bilesenler = [...m.matchAll(/<(?:service|receiver|provider)\b[^>]*?android:name="([^"]+)"/g)].map((x) => x[1]);
+  sorunlar.push(...pushDerleme.bilesenSorunlari(bilesenler, PUSH.acik));
   if (/android:allowBackup="true"/.test(m)) sorunlar.push("allowBackup açık (önbellek yedeğe girmemeli)");
   // Görünen ad: uygulama etiketi @string/app_name → prebuild'in yazdığı strings.xml (kaynak app.json expo.name).
   const etiketRef = m.match(/<application\b[^>]*android:label="([^"]+)"/)?.[1];

@@ -32,6 +32,10 @@ let calls: Call[] = [];
 let totpOn = false;
 let down = false;
 let sessionStatus = 200;
+/** Push köprüsü P4: `/auth/me` `patronPush` + gelen kutusu açıklığı + DELETE /bildirim/cihaz ağ hatası. */
+let mePush: number | undefined;
+let inboxOn = false;
+let pushDeleteDown = false;
 
 function reply(status: number, data: unknown, code?: string) {
   const body = status < 400 ? { success: true, data } : { success: false, message: "ret", details: code ? { code } : {} };
@@ -53,8 +57,10 @@ function server(url: string, init: RequestInit): Promise<Response> {
     return reply(200, { token: "jwt1", user: { id: "u1" }, mustChangePassword: false });
   }
   if (key === `GET ${ERP}/api/auth/me`) {
-    return reply(200, { userId: "u1", username: "ali", permissions: ["patron-app:login", "order:read"], backendVersion: "1.2.6", patronApiVersion: 1, patronReadSets: SETS });
+    return reply(200, { userId: "u1", username: "ali", permissions: ["patron-app:login", "order:read"], backendVersion: "1.2.6", patronApiVersion: 1, patronReadSets: SETS, ...(mePush === undefined ? {} : { patronPush: mePush }) });
   }
+  if (key === `GET ${ERP}/api/bildirim/ozet`) return inboxOn ? reply(200, { enabled: true, okunmamis: 0, epoch: 1, rev: 1 }) : reply(404, null, "BULUNAMADI");
+  if (key === `DELETE ${ERP}/api/bildirim/cihaz`) return pushDeleteDown ? Promise.reject(new TypeError("Network request failed")) : reply(200, { birakildi: true });
   if (key === `GET ${ERP}/api/patron/v1/oturum`) {
     if (sessionStatus !== 200) return reply(sessionStatus, null, "UNAUTHORIZED");
     return reply(200, {
@@ -88,6 +94,9 @@ beforeEach(() => {
   totpOn = false;
   down = false;
   sessionStatus = 200;
+  mePush = undefined;
+  inboxOn = false;
+  pushDeleteDown = false;
   (AppState as { currentState: unknown }).currentState = "active";
   (AppState.addEventListener as jest.Mock).mockImplementation(() => ({ remove: () => undefined }));
   globalThis.fetch = jest.fn(server) as unknown as typeof fetch;
@@ -187,6 +196,55 @@ describe("ERP kipi oturumu", () => {
     expect(cur.server).toBeNull();
     expect(mockSecret.m.has("patron.baglanti")).toBe(false);
     expect(cur.yetenek.kodHerZaman).toBe(true);
+  });
+
+  it("⭐ P4 yetenek: patronPush yalnız fabrika sürüm verdiyse ∧ gelen kutusu açıksa; eski fabrika → kapalı, hata yok", async () => {
+    inboxOn = true;
+    await connectAndLogin();
+    expect(cur.yetenek.patronPush).toBe(false);
+    expect(cur.pushCihazci).not.toBeNull();
+    expect(calls.some((c) => c.url.endsWith("/api/bildirim/cihaz"))).toBe(false);
+  });
+
+  it("P4 yetenek: patronPush 1 + kutu açık → açık; kutu kapalı → kapalı", async () => {
+    mePush = 1;
+    inboxOn = true;
+    await connectAndLogin();
+    expect(cur.yetenek.patronPush).toBe(true);
+    await act(async () => cur.logout());
+    inboxOn = false;
+    await act(async () => cur.login({ eposta: "ali", parola: PAROLA, totp: "" }));
+    expect(cur.yetenek.patronPush).toBe(false);
+  });
+
+  it("⭐ P4 çıkış: bu fabrikanın saklı push belirteci /auth/logout'tan ÖNCE DELETE ile bırakılır, kayıt silinir", async () => {
+    await connectAndLogin();
+    mockSecret.m.set("patron.pushBelirteci", JSON.stringify({ adres: ERP, belirtec: "ExponentPushToken[abc12345]" }));
+    calls = [];
+    await act(async () => cur.logout());
+    const del = calls.findIndex((c) => c.method === "DELETE" && c.url === `${ERP}/api/bildirim/cihaz`);
+    const out = calls.findIndex((c) => c.method === "POST" && c.url === `${ERP}/api/auth/logout`);
+    expect(del).toBeGreaterThanOrEqual(0);
+    expect(calls[del]!.body).toEqual({ belirtec: "ExponentPushToken[abc12345]" });
+    expect(calls[del]!.token).toBe("jwt1");
+    expect(del).toBeLessThan(out);
+    expect(mockSecret.m.has("patron.pushBelirteci")).toBe(false);
+  });
+
+  it("P4 çıkış: DELETE ağ hatası sessiz geçilir, çıkış tamamlanır; başka fabrikanın belirteci bu fabrikaya yollanmaz", async () => {
+    await connectAndLogin();
+    pushDeleteDown = true;
+    mockSecret.m.set("patron.pushBelirteci", JSON.stringify({ adres: ERP, belirtec: "ExponentPushToken[abc12345]" }));
+    await act(async () => cur.logout());
+    expect(cur.phase).toBe("giris");
+    expect(mockSecret.m.has("patron.pushBelirteci")).toBe(false);
+    pushDeleteDown = false;
+    await act(async () => cur.login({ eposta: "ali", parola: PAROLA, totp: "" }));
+    mockSecret.m.set("patron.pushBelirteci", JSON.stringify({ adres: "https://baska.fabrika.com", belirtec: "ExponentPushToken[zzz12345]" }));
+    calls = [];
+    await act(async () => cur.logout());
+    expect(calls.some((c) => c.method === "DELETE")).toBe(false);
+    expect(mockSecret.m.has("patron.pushBelirteci")).toBe(false);
   });
 
   it("çevrimdışı açılış: saklı oturum + yetenek ile hazır, çevrimdışı işaretli", async () => {

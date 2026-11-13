@@ -27,6 +27,7 @@ const appConfig = require("../app.config.js") as ((a: { config: Record<string, u
 };
 const appJson = (JSON.parse(readFileSync(path.join(kok, "app.json"), "utf8")) as { expo: Record<string, unknown> }).expo;
 type Android = { blockedPermissions: string[]; googleServicesFile?: string };
+const EAS = "0f3c2d1e-4b5a-4c6d-8e7f-9a0b1c2d3e4f";
 
 describe("derleme kapısı (app.config.js)", () => {
   it("⭐ bayrak yok → app.json BİREBİR (izin engeli, eklenti, extra aynı)", () => {
@@ -34,6 +35,9 @@ describe("derleme kapısı (app.config.js)", () => {
     const out = appConfig.withNativePush(appJson, { env: {}, root: kok, warn });
     expect(out).toBe(appJson);
     expect(warn).not.toHaveBeenCalled();
+    // Kapalı kapı: sahip ve proje kimliği ortamda olsa bile pakete girmez.
+    expect(appConfig.withNativePush(appJson, { env: { EXPO_OWNER: "sahte-sahip", PATRON_EAS_PROJECT_ID: EAS }, root: kok, warn })).toBe(appJson);
+    expect(appJson.owner).toBeUndefined();
     expect(JSON.stringify(appConfig({ config: appJson }))).toBe(JSON.stringify(appJson));
     expect((appJson.android as Android).blockedPermissions).toEqual(expect.arrayContaining(appConfig.NATIVE_PUSH_IZINLERI));
   });
@@ -50,18 +54,38 @@ describe("derleme kapısı (app.config.js)", () => {
     }
   });
 
-  it("bayrak + Firebase dosyası → yalnız bildirim izinleri engelden çıkar, eklenti + extra.nativePush", () => {
+  it("⭐ bayrak + Firebase dosyası var ama EAS proje kimliği yok/biçimsiz → kapalı + tek uyarı", () => {
+    const d = mkdtempSync(path.join(os.tmpdir(), "n5-eas-"));
+    try {
+      writeFileSync(path.join(d, "google-services.json"), "{}");
+      for (const id of [undefined, "", "proje-1"]) {
+        const warn = jest.fn();
+        const out = appConfig.withNativePush(appJson, { env: { PATRON_NATIVE_PUSH: "1", PATRON_EAS_PROJECT_ID: id }, root: d, warn });
+        expect(out).toBe(appJson);
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(warn.mock.calls[0]![0]).toContain("PATRON_EAS_PROJECT_ID");
+      }
+    } finally {
+      rmSync(d, { recursive: true, force: true });
+    }
+  });
+
+  it("bayrak + Firebase dosyası + EAS kimliği → yalnız bildirim izinleri engelden çıkar, eklenti + extra.nativePush + eas.projectId", () => {
     const d = mkdtempSync(path.join(os.tmpdir(), "n5-fb-"));
     try {
       writeFileSync(path.join(d, "google-services.json"), "{}");
-      const out = appConfig.withNativePush(appJson, { env: { PATRON_NATIVE_PUSH: "1" }, root: d, warn: jest.fn() });
+      const out = appConfig.withNativePush(appJson, { env: { PATRON_NATIVE_PUSH: "1", PATRON_EAS_PROJECT_ID: EAS }, root: d, warn: jest.fn() });
       const once = (appJson.android as Android).blockedPermissions;
       const sonra = (out.android as Android).blockedPermissions;
       expect(sonra).toEqual(once.filter((p) => !appConfig.NATIVE_PUSH_IZINLERI.includes(p)));
       expect(sonra).toEqual(expect.arrayContaining(["android.permission.SYSTEM_ALERT_WINDOW", "com.google.android.gms.permission.AD_ID"]));
       expect((out.android as Android).googleServicesFile).toBe("./google-services.json");
       expect(out.plugins).toEqual([...(appJson.plugins as unknown[]), "expo-notifications"]);
-      expect(out.extra).toEqual({ nativePush: true });
+      expect(out.extra).toEqual({ nativePush: true, eas: { projectId: EAS } });
+      expect(out.owner).toBeUndefined();
+      const sahipli = appConfig.withNativePush(appJson, { env: { PATRON_NATIVE_PUSH: "1", PATRON_EAS_PROJECT_ID: EAS, EXPO_OWNER: "sahte-sahip" }, root: d, warn: jest.fn() });
+      expect(sahipli.owner).toBe("sahte-sahip");
+      expect(appConfig.withNativePush(appJson, { env: { PATRON_NATIVE_PUSH: "1", PATRON_EAS_PROJECT_ID: EAS, EXPO_OWNER: "a b;" }, root: d, warn: jest.fn() }).owner).toBeUndefined();
       expect((appJson.android as Android).googleServicesFile).toBeUndefined();
     } finally {
       rmSync(d, { recursive: true, force: true });
