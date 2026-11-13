@@ -6,6 +6,8 @@
 > 1.0.1 · vc2; §7–§8) Play'e HİÇ YÜKLENMEDİ — emekli, kullanılmaz. iOS sonra (Xcode kurulumu).
 > Kararlar (kullanıcı 2026-10-15): önce yalnız Android · ilk sürümde telefonda ANLIK BİLDİRİM YOK (Firebase yok;
 > uygulama native push kaydı denemez, uyarı göstermez; bildirim ekranında "yakında" notu) · web push aynen.
+> Push köprüsü P4 (2026-11-13): telefon push DERLEME KAPISINA bağlandı (aşağıda "Native push kapısı"); kapı kapalı
+> derleme bugünkü paketle aynıdır. Metinler (politika YONETIM-GP-2026.4, Play açıklaması, §4.2) push'u anlatır — taslak, yayın kullanıcı onayıyla.
 > Tablet (ortak paket) Play yolu ayrıdır: `PLAY-STORE-YAYIN.md` · `PLAY-KONSOL-FORMLARI.md`.
 > Play geliştirici hesabı **KİŞİSEL** (Console ana sayfası "Etkili Yazılım LTD · Kişisel hesap", ölçüm 2026-10-20):
 > "12 test kullanıcısı × 14 gün kapalı test" şartı bu uygulamaya **uygulanır** (§3 madde 7). Düzeltme notu:
@@ -38,14 +40,17 @@ npm run build:apk:duman     # aynı imzalı release APK (yalnız emülatör duma
 okunur ve keytool ile anahtarı açtığı doğrulanır → `expo prebuild --platform android --clean` (android/ git dışı;
 her derleme temiz) → `./gradlew --no-daemon bundleRelease` (parola yalnız bu alt süreç ortamında) → DOĞRULAMA:
 birleşik manifestte paket/versionCode/versionName, uygulama etiketi (`@string/app_name` = `GORUNEN_AD`), izin kümesi yalnız
-`INTERNET` (+ AndroidX'in uygulamaya özel `<paket>.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`'ı; paketten türetilir), Firebase/bildirim bileşeni yok, `allowBackup` kapalı; JS paketinde
+`INTERNET` + `CAMERA` (+ AndroidX'in uygulamaya özel `<paket>.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`'ı; paketten türetilir) — push kapısı
+açıkken + `POST_NOTIFICATIONS`/c2dm/`WAKE_LOCK` —, bildirim bileşeni kapalıda YOK, açıkta `expo.modules.notifications` VAR (`scripts/lib/push-kapisi.cjs`), `allowBackup` kapalı; JS paketinde
 bulut adresi var, geliştirme adresi yok; AAB imzası yükleme sertifikası → kopya + sha256. Doğrulama kırmızıysa
 paket çıktı dizinine kopyalanmaz.
 
-Native push kapısı: `src/push/support.ts` `NATIVE_PUSH = false`; `expo-notifications` Android'de bağlanmaz
-(`package.json` `expo.autolinking.android.exclude`) ve eklentisi `app.json`'da yok. Açmak (sonraki sürüm):
-Firebase projesi + `google-services.json` + eklenti + autolinking dışlamasını kaldır + kapıyı aç + izinleri
-(`POST_NOTIFICATIONS`) `blockedPermissions`'tan çıkar + veri güvenliği formunu güncelle. Bekçi: `__tests__/native-push.test.tsx`.
+Native push kapısı (P4): `src/push/support.ts` `NATIVE_PUSH` = `extra.nativePush` ∧ native modül bağlı. Kapı
+(`app.config.js` `pushKapisi`) yalnız `PATRON_NATIVE_PUSH=1` ∧ uygulama köküne konmuş `google-services.json` (repoya
+GİRMEZ) ∧ `PATRON_EAS_PROJECT_ID` (UUID) varken açılır: eklenti + `googleServicesFile` + `extra.eas.projectId` + bildirim
+izinleri engelden çıkar; `build-aab` package.json Android dışlamasını (`expo-notifications`, `expo-application`)
+derleme süresince kaldırır, çıkışta aynen geri yazar. Biri eksikse tek satır uyarı, paket bugünkü. Bekçiler:
+`__tests__/native-push.test.tsx`, `native-push-izin.test.ts`, `push-derleme-kapisi.test.ts`.
 
 İzinler: `app.json` `android.permissions: []` + `blockedPermissions` (kütüphanelerin getirebileceği
 `POST_NOTIFICATIONS`, `RECEIVE_BOOT_COMPLETED`, `VIBRATE`, `WAKE_LOCK`, `AD_ID`, `c2dm.RECEIVE`, depolama,
@@ -94,17 +99,18 @@ izin bilerek eklenir, formu da güncellenir.
 - Tek kaynak `docs/legal/PATRON-GIZLILIK-POLITIKASI.md` → `node deploy/gizlilik-sayfasi/uret.mjs` →
   `deploy/gizlilik-sayfasi/html/yonetim-gizlilik.html` (tabletinkiyle aynı köken ve düzenek, ayrı sayfa; patron
   sunucusuna dokunmaz). Bekçi `scripts/test_gizlilik_sayfasi.mjs` bayt-eşitliği, `#hesap-silme` çapasını, saklama
-  sürelerini (`patron/sunucu` koduna karşı) ve native push cümlesini (`NATIVE_PUSH`) ölçer.
+  sürelerini (`patron/sunucu` koduna karşı) ve anlık bildirim metnini (`NATIVE_PUSH` kapısı + Play açıklaması) ölçer.
 - Kaynağı PBAM'dır (`docs/hukuk/PATRON-BULUTU-AYDINLATMA-METNI.md`, taslak, uygulamada gösterilecek aydınlatma
   metni) ama SADE bir uygulama politikasıdır: veri sorumlusu fabrika · veri işleyen Etkili Yazılım, toplanan veriler
-  (aşağıdaki §4.2 tablosuyla BİREBİR), amaç, aktarım (Cloudflare; native push kapalı), saklama, güvenlik, KVKK md. 11,
+  (aşağıdaki §4.2 tablosuyla BİREBİR), amaç, aktarım (Cloudflare; anlık bildirimde FCM + Expo, ERP kipinde tam metin bulut geçişli, saklanmaz), saklama, güvenlik, KVKK md. 11,
   18+, değişiklikler, iletişim, hesap silme. §4.2 değişirse politika §2 aynı commit'te değişir (ve tersi).
 - `https://tekserp.etkiliyazilim.com/gizlilik` TABLET uygulamasının politikasıdır ("Etkili Yazılım bu verileri
   toplamaz") — TeksERP Yönetim için YANLIŞTIR, kullanılmaz. `https://yonetim.etkiliyazilim.com/gizlilik` SPA giriş HTML'idir, metin değil.
 
 ### 4.2 Veri güvenliği formu — toplanan veri (koddan ölçüldü, 2026-10-15)
 
-Uygulamada analitik, reklam, çökme raporu SDK'sı YOK; Firebase YOK; reklam kimliği (`AD_ID`) engelli. Bütün
+Uygulamada analitik, reklam, çökme raporu SDK'sı YOK; Firebase yalnız push kapısı açık derlemede (yalnız FCM bildirim
+alımı); reklam kimliği (`AD_ID`) engelli. Bütün
 trafik HTTPS (`usesCleartextTraffic` varsayılan kapalı, adres `https://`). Veri yalnız `yonetim.etkiliyazilim.com`'a gider.
 
 | Play veri türü | Ne | Toplanır/Paylaşılır | Amaç | Zorunlu mu |
@@ -113,8 +119,8 @@ trafik HTTPS (`usesCleartextTraffic` varsayılan kapalı, adres `https://`). Ver
 | Kişisel bilgiler → E-posta adresi | giriş kimliği | Toplanır, paylaşılmaz | Hesap yönetimi, güvenlik | Zorunlu |
 | Kişisel bilgiler → Kullanıcı kimlikleri | hesap/tesis kimliği (UUID) | Toplanır | Uygulama işlevi | Zorunlu |
 | Uygulama etkinliği → Diğer kullanıcı içerikleri | girilen sipariş/cari talepleri (gelen kutusu), rapor istekleri | Toplanır; fabrikaya iletilir (veri sorumlusu fabrikadır — Play "paylaşım" sayılmaz: hizmet sağlayıcı/kullanıcının isteği) | Uygulama işlevi | Kullanıcı isterse |
-| Uygulama etkinliği → Diğer işlemler | bildirim tercihleri, tesis seçimi | Toplanır | Uygulama işlevi | İsteğe bağlı |
-| Cihaz veya diğer kimlikler | — (native push yok; cihaz satırı yalnız web aboneliği) | Toplanmaz | — | — |
+| Uygulama etkinliği → Diğer işlemler | bildirim tercihleri (telefon bildirimi türleri dahil), tesis seçimi | Toplanır | Uygulama işlevi | İsteğe bağlı |
+| Cihaz veya diğer kimlikler | Expo push belirteci + cihaz adı (yalnız push kapısı açık derlemede, kullanıcı telefon bildirimlerini açarsa; ERP kipinde fabrika sunucusunda şifreli, bulut kipinde bulut cihaz kaydı) | Toplanır; FCM/Expo iletim için hizmet sağlayıcıdır (Play "paylaşım" sayılmaz — ⚠ formda doğrula) | Uygulama işlevi (bildirim) | İsteğe bağlı |
 | Konum | — (IP yalnız sunucuda giriş güvenlik kaydında, 30 gün; konum türetilmez) | Toplanmaz* | Güvenlik | — |
 | Finansal bilgiler | fabrikanın cari/çek/stok verisi GÖSTERİLİR; kullanıcıdan toplanmaz | ⚠ değerlendir | — | — |
 
@@ -181,8 +187,8 @@ Kimler kullanabilir?
 TeksERP Yönetim yalnız TeksERP kullanan ve TeksERP Yönetim hizmeti açık olan fabrikaların davet ettiği hesaplarla
 çalışır. Hesabınızı tesis yöneticinizden davet bağlantısıyla alırsınız.
 
-Anlık bildirimler bu sürümde telefonda yoktur; bildirimleri web sürümünden alabilirsiniz. Telefon bildirimleri
-sonraki sürümde gelecek.
+Anlık bildirim: izin verirseniz önemli fabrika bildirimleri telefonunuza gelir; hangi türlerin geleceğini
+Bildirimler ekranından seçersiniz. (Kaynak `magaza/metinler.json`; bekçi §7 ölçer.)
 
 Destek: info@etkiliyazilim.com
 ```
@@ -216,7 +222,7 @@ Kategori **İş** · e-posta `info@etkiliyazilim.com` · web sitesi (varsa) · g
    incelemeci kodu kendi doğrulayıcısında üretir) yazılır. Sır (parola, TOTP sırrı) repoya, sürüm notuna, günlüğe
    GİRMEZ — yalnız Play Console'a. Gerçek fabrika verisi inceleme tesisinde bulunmaz.
 3. Uygulama içi görseller (ikon, uyarlanır ikon, açılış) yer tutucu; mağaza görselleri bunlardan üretildi (§10) — nihai marka görseli gelirse ikisi birlikte değişir.
-4. Native push (sonraki sürüm): Firebase/APNs + EAS proje kimliği + veri güvenliği formu güncellemesi (§1).
+4. Native push: kod P4'te hazır (derleme kapısı); kalan Firebase projesi + EAS proje kimliği (kullanıcı) + veri güvenliği formu (§4.2) + politika yürürlük tarihi (yayın onayı). iOS/APNs kapsam dışı.
 5. iOS: Xcode kurulumu sonrası ayrı runbook (bundle `com.etkiliyazilim.tekserp.yonetim` app.json'da hazır).
 6. Görseller/ekran görüntüleri "Patron" yazısı taşımamalı (yer tutucu ikonda yazı yok; ekran görüntüleri yeni adla alınır).
 
