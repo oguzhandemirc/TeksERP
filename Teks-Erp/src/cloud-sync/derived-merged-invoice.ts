@@ -70,3 +70,20 @@ async function rootTargets(cariIds: string[]): Promise<Map<string, string>> {
   return out;
 }
 const MAX_CHAIN = 16;
+
+/**
+ * `rootTargets`in tersi: tel görünümünde `cariHesapId = target` olan faturaların ham `cariId` kümesi (patron okuma ucu
+ * süzgeci). Birleşmiş hesap kendi adıyla görünmez → boş; aksi hâlde kendisi + zincirle ona akan bütün kaynaklar.
+ */
+export async function cariIdsResolvingTo(target: string): Promise<string[]> {
+  const self = await prisma.cariAccount.findUnique({ where: { id: target }, select: { mergedIntoId: true } });
+  if (!self || self.mergedIntoId) return [];
+  const seen = new Set<string>([target]);
+  let frontier = [target];
+  for (let depth = 0; frontier.length > 0 && depth < MAX_CHAIN; depth++) {
+    const rows = await prisma.cariAccount.findMany({ where: { mergedIntoId: { in: frontier } }, select: { id: true } });
+    frontier = rows.map((r) => r.id).filter((id) => !seen.has(id));
+    for (const id of frontier) seen.add(id);
+  }
+  return [...seen];
+}

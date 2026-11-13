@@ -13,8 +13,13 @@
 //   §5 önbellek yetkiyi delmez: aynı kullanıcı önbellekteki kümeye izni kalkınca 403 alır
 //   §6 modül kapısı (KÜME BAŞINA, router kapısı yok): ön muhasebe kapalı → `ozet-finans` 403 MODULE_DISABLED (lisans
 //      tavanıysa LICENSE_MODULE) · üretim kapalı → `ozet.uretim` 403 · ticaret kapalı → kümeler açık (ticaret kümesi yok)
-//   §1h/§1i küme kapısının kapsamı: sunulan küme ticaret tablosu okumaz · her kümenin modülü `MODULE_GATES`te
-//      (`test_ticaret_regime_gate` muafı ve `test_production_regime_gate` §6 bu ölçüme yaslanır)
+//   §1h/§1i küme kapısının kapsamı: ticaret tablosu okuyan küme TAM OLARAK `TICARET_SETS` (fiyat kartı) ve ticaret
+//      kapısını taşır · her kümenin bütün kapıları `MODULE_GATES`te (`test_ticaret_regime_gate` muafı ve
+//      `test_production_regime_gate` §6 bu ölçüme yaslanır)
+//   §7 (V3c) sunulan HER küme tam izinli patronla 200 + bulut biçimi (Page/ProjectionRecord · Snapshot)
+//   §8 (V3c) çözücülü süzgeç: birleşmiş carinin faturası hedef hesap süzgecinde, kaynak süzgecinde YOK · anahtar
+//      süzgeci (kategoriAnahtari) beyansız kümede 400, biçimsiz değerde boş · yeni aramalar (urun, teklif) ·
+//      modül kapısı yeni kümelerde (kasa, teklif, is-emri, fiyat ← ticaret)
 // NEGATİF SONDA (✓B, dosya dışı mutasyon, md5 ile geri): sonuçlar harita satırında ve commit mesajında.
 // Gerekçe: aşamalı geçişte uygulama yalnız adres değiştirir — biçim/izin farkı sahada sessiz boş ekrandır.
 // Koşum: npx tsx scripts/run-all-tests.ts patron_okuma_ucu   (kendi _test DB'si; ayar yazar → hedef DB kapısı)
@@ -28,7 +33,7 @@ import { AuthService } from "../src/services/auth.service";
 import { SETTING_KEYS, invalidateFeatureFlagsCache } from "../src/services/system-setting.service";
 import { PERMISSION_CATALOG, PATRON_LOGIN_PERMISSION } from "../src/constants/permission-catalog";
 import { CLOUD_READ_PERMISSIONS, SNAPSHOT_PROJECTIONS } from "../src/cloud-sync/projections";
-import { ERP_TO_CLOUD, PATRON_READ_SETS, patronSet } from "../src/services/patron-read/izin-esleme";
+import { ERP_TO_CLOUD, PATRON_READ_SETS, PATRON_RECORD_SETS, PATRON_SNAPSHOT_SETS, TICARET_SETS, patronSet } from "../src/services/patron-read/izin-esleme";
 import { SEARCH, idFiltersOf } from "../src/services/patron-read/kayit-sayfasi";
 import { clearPatronSnapshotCache, getSnapshot } from "../src/services/patron-read/patron-read.service";
 import { daysPastDeadline, isDeadlineOpenStatus } from "../src/services/helpers/order-deadline.helper";
@@ -102,7 +107,7 @@ function statik(): void {
     if (!sameSet(subs, cloud.subRows ?? [])) diffs.push(`${name} alt satır: ${subs} ≠ ${cloud.subRows ?? []}`);
     if ((def.kind === "ANLIK") !== (cloud.kind === "ANLIK")) diffs.push(`${name}: tür`);
   }
-  check("§1e küme izinleri + alt satırları bulut katalog özetiyle birebir", diffs.length === 0 && PATRON_READ_SETS.length >= 12, diffs.join(" · ") || `${PATRON_READ_SETS.length} küme`);
+  check("§1e küme izinleri + alt satırları bulut katalog özetiyle birebir", diffs.length === 0 && PATRON_READ_SETS.length >= 45, diffs.join(" · ") || `${PATRON_READ_SETS.length} küme`);
   const cloudSearch = constValue("LIST_SEARCH") as Record<string, { alanlar: string[]; suzgec: { secenekler: Array<{ deger: string; alan: string; esit: unknown }> } | null }>;
   const sDiffs: string[] = [];
   for (const [name, spec] of Object.entries(SEARCH)) {
@@ -124,8 +129,8 @@ function statik(): void {
     if (!sameSet(idFiltersOf(def.projection!), theirs)) iDiffs.push(`${name}: ${idFiltersOf(def.projection!)} ≠ ${theirs}`);
   }
   check("§1g kimlik süzgeçleri bulut LIST_ID_FILTERS ile birebir", iDiffs.length === 0 && cloudIds !== undefined, iDiffs.join(" · "));
-  // Ticaret kapısı küme başınadır ve bugün ticaret kümesi YOKTUR: biri eklenirse burada düşer → `MODULE_GATES`e
-  // `requireTicaretEnabled` + `ModuleKey` genişletmesi + §6 HTTP sondası gerekir (ticaret bekçisi muafı buna yaslanır).
+  // Ticaret kapısı küme başınadır: ticaret tablosu okuyan küme `TICARET_SETS`te OLMALI (ve ticaret kapısını taşımalı);
+  // listede olup okumayan küme de düşer (gereksiz kapı patron ekranını boşuna kapatır). Ticaret bekçisi muafı buna yaslanır.
   const TICARET_TABLE = /purchase_order|stock_count|item_price|PurchaseOrder|StockCount|ItemPrice/;
   const ticaretReaders: string[] = [];
   for (const name of PATRON_READ_SETS) {
@@ -133,11 +138,16 @@ function statik(): void {
     const src = rec ? rec.projection : SNAPSHOT_PROJECTIONS.find((s) => s.name === snap?.builder);
     if (!src || TICARET_TABLE.test(JSON.stringify(src))) ticaretReaders.push(name);
   }
-  check("§1h sunulan hiçbir küme ticaret tablosu okumaz (alış siparişi · sayım · fiyat kartı)", ticaretReaders.length === 0 && PATRON_READ_SETS.length >= 12, ticaretReaders.join(","));
+  const ungatedTicaret = ticaretReaders.filter((n) => !(patronSet(n, "KAYIT") ?? patronSet(n, "ANLIK"))?.gates.includes("ticaret.enabled"));
+  check("§1h ticaret tablosu okuyan küme = TICARET_SETS ve hepsi ticaret kapısında (alış siparişi · sayım · fiyat kartı)",
+    sameSet(ticaretReaders, [...TICARET_SETS]) && ungatedTicaret.length === 0 && ticaretReaders.includes("fiyat"), `okuyan [${ticaretReaders}] kapısız [${ungatedTicaret}]`);
   const gateKeys = [...route.matchAll(/"([a-z]+\.enabled)"\s*:\s*require\w+Enabled\b/g)].map((m) => m[1]!);
   const served = PATRON_READ_SETS.map((n) => patronSet(n, "KAYIT") ?? patronSet(n, "ANLIK"));
-  const ungated = served.filter((d) => d?.module && !gateKeys.includes(d.module)).map((d) => `${d!.name}→${d!.module}`);
-  check("§1i her kümenin modülü MODULE_GATES'te adlı kapıya bağlı (üretim kümesi dahil)", ungated.length === 0 && gateKeys.includes("production.enabled") && served.some((d) => d?.module === "production.enabled"), ungated.join(",") || gateKeys.join(","));
+  const ungated = served.flatMap((d) => [...(d?.module ? [d.module] : []), ...(d?.gates ?? [])].filter((g) => !gateKeys.includes(g)).map((g) => `${d!.name}→${g}`));
+  const lostModule = served.filter((d) => d?.module && !d.gates.includes(d.module)).map((d) => d!.name);
+  check("§1i her kümenin modülü + kapıları MODULE_GATES'te adlı kapıya bağlı (üretim + ticaret dahil)",
+    ungated.length === 0 && lostModule.length === 0 && gateKeys.includes("production.enabled") && gateKeys.includes("ticaret.enabled") && served.some((d) => d?.module === "production.enabled"),
+    [...ungated, ...lostModule].join(",") || gateKeys.join(","));
 }
 
 type Reply = { status: number; body: { data?: Record<string, unknown> & { kayitlar?: Array<Record<string, unknown>> }; details?: { code?: string } } };
@@ -151,9 +161,9 @@ async function main(): Promise<void> {
   const T = `TEST-POU-${Date.now()}`;
   const PASS = "Deneme-patron-oku-12345";
   const userIds: string[] = [];
-  const made: { customer?: string; item?: string; orders: string[] } = { orders: [] };
+  const made: { customer?: string; item?: string; orders: string[]; customers: string[]; caris: string[]; invoices: string[] } = { orders: [], customers: [], caris: [], invoices: [] };
   const finKey = SETTING_KEYS.FINANCE_ENABLED;
-  const flagKeys = [finKey, SETTING_KEYS.PRODUCTION_ENABLED, SETTING_KEYS.TICARET_ENABLED];
+  const flagKeys = [finKey, SETTING_KEYS.PRODUCTION_ENABLED, SETTING_KEYS.TICARET_ENABLED, SETTING_KEYS.MALIYET_ENABLED, SETTING_KEYS.EMANET_ENABLED];
   const flagsBefore = await prisma.systemSetting.findMany({ where: { key: { in: flagKeys } }, select: { key: true, value: true } });
   const setFlag = async (key: string, value: boolean) => {
     await prisma.systemSetting.upsert({ where: { key }, create: { key, value: value as never }, update: { value: value as never } });
@@ -222,7 +232,7 @@ async function main(): Promise<void> {
     check("§3c fiyat izni yok → kayıtta finans anahtarı YOK", salesRec.status === 200 && !("finans" in (salesRec.body.data ?? {})));
     const salesCari = await call(`/patron/v1/veri/cari-kart/${made.customer}`, sales.token);
     check("§3d cari izni yok → kisisel anahtarı YOK; boss'ta var", salesCari.status === 200 && !("kisisel" in (salesCari.body.data ?? {})) && "kisisel" in ((await call(`/patron/v1/veri/cari-kart/${made.customer}`, boss.token)).body.data ?? {}));
-    check("§3e tanınmayan küme 404 (veri + anlık), sunulmayan bulut kümesi de 404", (await call("/patron/v1/veri/yok-boyle", boss.token)).status === 404 && (await call("/patron/v1/anlik/yok", boss.token)).status === 404 && (await call("/patron/v1/veri/fatura", boss.token)).status === 404 && (await call("/patron/v1/anlik/siparis", boss.token)).status === 404);
+    check("§3e tanınmayan küme 404 (veri + anlık), sunulmayan bulut kümesi de 404", (await call("/patron/v1/veri/yok-boyle", boss.token)).status === 404 && (await call("/patron/v1/anlik/yok", boss.token)).status === 404 && (await call("/patron/v1/veri/ozet-finans", boss.token)).status === 404 && (await call("/patron/v1/anlik/siparis", boss.token)).status === 404);
     check("§3f beyansız süzgeç 400 (cari-kart?siparisId, bilinmeyen suzgec)", (await call(`/patron/v1/veri/cari-kart?siparisId=${late}`, boss.token)).status === 400 && (await call("/patron/v1/veri/siparis?suzgec=YOK", boss.token)).status === 400);
     check("§3g kimliksiz 401", (await call("/patron/v1/oturum")).status === 401);
 
@@ -266,6 +276,7 @@ async function main(): Promise<void> {
     clearPatronSnapshotCache();
     const tic = await Promise.all(["/patron/v1/oturum", "/patron/v1/anlik/ozet.siparis", "/patron/v1/anlik/acik-siparis-karsilama", "/patron/v1/veri/siparis?limit=1"].map((u) => call(u, boss.token)));
     check("§6d ticaret kapalı → kümeler AÇIK (router düzeyi ticaret kapısı yok)", tic.every((r) => r.status === 200), tic.map((r) => r.status).join(","));
+    await v3c({ call, makeUser, setFlag, T, made });
   } finally {
     for (const key of flagKeys) {
       const before = flagsBefore.find((f) => f.key === key);
@@ -273,6 +284,10 @@ async function main(): Promise<void> {
       else await prisma.systemSetting.deleteMany({ where: { key } });
     }
     invalidateFeatureFlagsCache();
+    await prisma.invoice.deleteMany({ where: { id: { in: made.invoices } } });
+    await prisma.cariAccount.updateMany({ where: { id: { in: made.caris } }, data: { mergedIntoId: null } });
+    await prisma.cariAccount.deleteMany({ where: { id: { in: made.caris } } });
+    await prisma.customer.deleteMany({ where: { id: { in: made.customers } } });
     await prisma.orderLine.deleteMany({ where: { orderId: { in: made.orders } } });
     await prisma.order.deleteMany({ where: { id: { in: made.orders } } });
     if (made.item) await prisma.item.deleteMany({ where: { id: made.item } });
@@ -282,6 +297,77 @@ async function main(): Promise<void> {
     server.closeAllConnections();
     await new Promise<void>((r) => server.close(() => r()));
   }
+}
+
+type Ctx = {
+  call: (path: string, token?: string, method?: string, body?: unknown) => Promise<Reply>;
+  makeUser: (tag: string, codes: string[]) => Promise<{ id: string; token: string }>;
+  setFlag: (key: string, value: boolean) => Promise<void>;
+  T: string;
+  made: { item?: string; customers: string[]; caris: string[]; invoices: string[] };
+};
+const MOD_OFF = ["MODULE_DISABLED", "LICENSE_MODULE"];
+
+/** V3c: ikinci parti kümeler — tarama, çözücülü/anahtar süzgeç, yeni aramalar, yeni kümelerde modül kapısı. */
+async function v3c({ call, makeUser, setFlag, T: tag, made }: Ctx): Promise<void> {
+  const T = tag;
+  for (const k of [SETTING_KEYS.FINANCE_ENABLED, SETTING_KEYS.PRODUCTION_ENABLED, SETTING_KEYS.TICARET_ENABLED, SETTING_KEYS.MALIYET_ENABLED, SETTING_KEYS.EMANET_ENABLED]) await setFlag(k, true);
+  clearPatronSnapshotCache();
+  const all = await makeUser("all", [PATRON_LOGIN_PERMISSION, "order:read", "customer:read", "finance:read", "report:inventory", "workorder:read", "shipping:read", "quote:read", "cost:read"]);
+
+  console.log("\n=== §7 her küme 200 + bulut biçimi ===");
+  const bad: string[] = [];
+  for (const name of PATRON_RECORD_SETS) {
+    const r = await call(`/patron/v1/veri/${name}?limit=2`, all.token);
+    const recs = r.body.data?.kayitlar ?? [];
+    const why = [shapeOk(r.body.data, "Page"), ...recs.map((x) => shapeOk(x, "ProjectionRecord"))].filter(([ok]) => !ok).map(([, w]) => w);
+    if (r.status !== 200 || why.length > 0) bad.push(`${name}:${r.status}:${r.body.details?.code ?? ""}:${why.join(";")}`);
+  }
+  check("§7a her KAYIT kümesi 200 + Page/ProjectionRecord", bad.length === 0 && PATRON_RECORD_SETS.length === 28, bad.join(" · ") || `${PATRON_RECORD_SETS.length} küme`);
+  const badSnap: string[] = [];
+  for (const name of PATRON_SNAPSHOT_SETS) {
+    const r = await call(`/patron/v1/anlik/${name}`, all.token);
+    const [ok, why] = shapeOk(r.body.data, "Snapshot");
+    if (r.status !== 200 || !ok || r.body.data?.projeksiyon !== name) badSnap.push(`${name}:${r.status}:${r.body.details?.code ?? ""}:${ok ? "" : why}`);
+  }
+  check("§7b her ANLIK küme 200 + Snapshot (emanet/maliyet/üretim açık)", badSnap.length === 0 && PATRON_SNAPSHOT_SETS.length === 17, badSnap.join(" · ") || `${PATRON_SNAPSHOT_SETS.length} küme`);
+  const ot = (await call("/patron/v1/oturum", all.token)).body.data as { liste?: { anahtarSuzgecleri?: Record<string, string[]>; kimlikSuzgecleri?: Record<string, string[]>; aranabilir?: string[] }; projeksiyonlar?: string[] } | undefined;
+  check("§7c oturum liste: kategoriAnahtari → kasa-hareketi, cariHesapId ∋ fatura, aranabilir ∋ urun/renk/teklif",
+    JSON.stringify(ot?.liste?.anahtarSuzgecleri) === JSON.stringify({ kategoriAnahtari: ["kasa-hareketi"] }) && (ot?.liste?.kimlikSuzgecleri?.cariHesapId ?? []).includes("fatura") && ["urun", "renk", "teklif"].every((n) => ot?.liste?.aranabilir?.includes(n)),
+    JSON.stringify(ot?.liste));
+
+  console.log("\n=== §8 süzgeçler ve yeni kümelerde modül kapısı ===");
+  const cust = async (n: number) => { const c = await prisma.customer.create({ data: { code: `${T}-K${n}`.slice(0, 32), name: `${T} CARİ ${n}` }, select: { id: true } }); made.customers.push(c.id); return c.id; };
+  const target = await prisma.cariAccount.create({ data: { kind: "CUSTOMER", customerId: await cust(1) }, select: { id: true } });
+  made.caris.push(target.id);
+  const source = await prisma.cariAccount.create({ data: { kind: "CUSTOMER", customerId: await cust(2), mergedIntoId: target.id, isActive: false }, select: { id: true } });
+  made.caris.push(source.id);
+  const inv = await prisma.invoice.create({ data: { docNo: `${T}-F`.slice(0, 32), type: "SALES", cariId: source.id, issueDate: new Date(), status: "CANCELLED", cancelledAt: new Date() }, select: { id: true } });
+  made.invoices.push(inv.id);
+  const byTarget = (await call(`/patron/v1/veri/fatura?cariHesapId=${target.id}`, all.token)).body.data?.kayitlar ?? [];
+  const bySource = await call(`/patron/v1/veri/fatura?cariHesapId=${source.id}`, all.token);
+  check("§8a birleşmiş carinin faturası HEDEF süzgecinde (kayit.cariHesapId = hedef)", byTarget.length === 1 && byTarget[0]?.id === inv.id && (byTarget[0]?.kayit as Record<string, unknown>)?.cariHesapId === target.id, JSON.stringify(byTarget.map((r) => r.id)));
+  check("§8b aynı fatura KAYNAK süzgecinde yok (tel görünümüyle aynı)", bySource.status === 200 && (bySource.body.data?.kayitlar ?? []).length === 0, String(bySource.status));
+  const keyBad = await call("/patron/v1/veri/fatura?kategoriAnahtari=CAT%3AKira", all.token);
+  const keyOdd = await call("/patron/v1/veri/kasa-hareketi?kategoriAnahtari=bozuk", all.token);
+  const keyOk = await call(`/patron/v1/veri/kasa-hareketi?kategoriAnahtari=${encodeURIComponent(`CAT:${T}`)}`, all.token);
+  check("§8c kategoriAnahtari: beyansız kümede 400 · biçimsiz değerde 200 boş · geçerli anahtarda 200",
+    keyBad.status === 400 && keyOdd.status === 200 && (keyOdd.body.data?.kayitlar ?? []).length === 0 && keyOk.status === 200, `${keyBad.status} ${keyOdd.status} ${keyOk.status}`);
+  const urun = (await call(`/patron/v1/veri/urun?ara=${encodeURIComponent(T)}&suzgec=FABRIC`, all.token)).body.data?.kayitlar ?? [];
+  const tek = await call("/patron/v1/veri/teklif?suzgec=SURESI_DOLDU", all.token);
+  check("§8d arama: urun ad/kod + tür süzgeci bulur · teklif SURESI_DOLDU 200", urun.some((r) => r.id === made.item) && tek.status === 200, `${urun.length} ${tek.status}`);
+  const offCase = async (flag: string, path: string) => { await setFlag(flag, false); const r = await call(path, all.token); await setFlag(flag, true); return r.status === 403 && MOD_OFF.includes(String(r.body.details?.code)) ? "" : `${path}:${r.status}`; };
+  const offs = [
+    await offCase(SETTING_KEYS.FINANCE_ENABLED, "/patron/v1/veri/kasa?limit=1"),
+    await offCase(SETTING_KEYS.MALIYET_ENABLED, "/patron/v1/veri/teklif?limit=1"),
+    await offCase(SETTING_KEYS.PRODUCTION_ENABLED, "/patron/v1/veri/is-emri?limit=1"),
+    await offCase(SETTING_KEYS.TICARET_ENABLED, "/patron/v1/veri/fiyat?limit=1"),
+  ].filter(Boolean);
+  check("§8e modül kapalı → kasa/teklif/is-emri 403, ticaret kapalı → fiyat 403 (MODULE_DISABLED|LICENSE_MODULE)", offs.length === 0, offs.join(" · "));
+  await setFlag(SETTING_KEYS.TICARET_ENABLED, false);
+  const ticOpen = await call("/patron/v1/veri/kasa?limit=1", all.token);
+  await setFlag(SETTING_KEYS.TICARET_ENABLED, true);
+  check("§8f ticaret kapalıyken ticaret dışı finans kümesi açık (kasa 200)", ticOpen.status === 200, String(ticOpen.status));
 }
 
 main()

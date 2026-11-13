@@ -9,12 +9,12 @@ import { Router, type NextFunction, type Request, type RequestHandler, type Resp
 import { z } from "zod";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
-import { requireMaliyetEnabled, requireProductionEnabled } from "../middlewares/module.middleware";
+import { requireMaliyetEnabled, requireProductionEnabled, requireTicaretEnabled } from "../middlewares/module.middleware";
 import { requireFinanceEnabled } from "../middlewares/finance.middleware";
 import { PATRON_LOGIN_PERMISSION } from "../constants/permission-catalog";
 import { AppError } from "../utils/app-error";
 import {
-  facilityStatus, getSetRecord, getSnapshot, listSet, setModule, type PatronUser,
+  facilityStatus, getSetRecord, getSnapshot, listSet, setGates, type PatronUser,
 } from "../services/patron-read/patron-read.service";
 import { ID_FILTER_KEYS } from "../services/patron-read/kayit-sayfasi";
 
@@ -26,13 +26,18 @@ const MODULE_GATES: Readonly<Record<string, RequestHandler>> = {
   "production.enabled": requireProductionEnabled,
   "finance.enabled": requireFinanceEnabled,
   "maliyet.enabled": requireMaliyetEnabled,
+  // Yalnız ticaret tablosu okuyan küme (`TICARET_SETS`, ör. fiyat kartı); router düzeyinde DEĞİL.
+  "ticaret.enabled": requireTicaretEnabled,
 };
 
-/** Kümenin modülü kapalıysa adlı kapı 403 MODULE_DISABLED verir; tanınmayan ad kapıdan geçer, servis 404 verir. */
+/** Kümenin adlı kapıları SIRAYLA; biri kapalıysa 403 MODULE_DISABLED. Tanınmayan ad kapıdan geçer, servis 404 verir. */
 const moduleGate = (kind: "KAYIT" | "ANLIK"): RequestHandler => (req, res, next) => {
-  const m = setModule(String(req.params.projeksiyon), kind);
-  if (!m) return next();
-  return MODULE_GATES[m]!(req, res, next);
+  const gates = setGates(String(req.params.projeksiyon), kind);
+  const step = (i: number): void => {
+    if (i >= gates.length) return next();
+    void MODULE_GATES[gates[i]!]!(req, res, (err?: unknown) => (err ? next(err) : step(i + 1)));
+  };
+  step(0);
 };
 
 const userOf = (req: Request): PatronUser => ({ userId: req.user!.userId, username: req.user!.username, permissions: req.user!.permissions });
@@ -44,6 +49,7 @@ const listQuerySchema = z.object({
   durum: optText(40),
   ara: optText(200),
   suzgec: optText(40),
+  kategoriAnahtari: optText(200),
   ...Object.fromEntries(ID_FILTER_KEYS.map((k) => [k, optText(40)])),
 });
 
@@ -53,6 +59,7 @@ function parseList(req: Request) {
   const q = r.data as z.infer<typeof listQuerySchema> & Record<string, string | undefined>;
   return {
     cursor: q.imlec, limit: q.limit, durum: q.durum, ara: q.ara, suzgec: q.suzgec,
+    anahtar: q.kategoriAnahtari === undefined ? {} : { kategoriAnahtari: q.kategoriAnahtari },
     kimlik: Object.fromEntries(ID_FILTER_KEYS.filter((k) => q[k] !== undefined).map((k) => [k, q[k]!])),
   };
 }
@@ -95,6 +102,7 @@ router.get("/oturum", send((req) => facilityStatus(userOf(req))));
  *       - { in: query, name: durum, schema: { type: string } }
  *       - { in: query, name: ara, schema: { type: string } }
  *       - { in: query, name: suzgec, schema: { type: string } }
+ *       - { in: query, name: kategoriAnahtari, schema: { type: string, maxLength: 200 } }
  *     responses:
  *       200: { description: "Page<ProjectionRecord>" }
  *       400: { description: Sorgu geçersiz }
