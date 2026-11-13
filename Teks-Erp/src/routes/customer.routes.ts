@@ -7,6 +7,7 @@ import { z } from "zod";
 import { BaseController } from "../controllers/base.controller";
 import { CustomerService } from "../services/customer.service";
 import { quickCreate } from "../services/customer-quick-create.service";
+import { createCustomerCard } from "../services/customer-card-create.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { matchesPermission, requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { SETTING_KEYS, readFinanceEnabled } from "../services/system-setting.service";
@@ -64,6 +65,14 @@ const financeSubSchema = z
     serviceBillingTrigger: z.string().max(20).nullable().optional(),
   })
   .strict();
+
+// V4c: kart doğuşunun OPSİYONEL deneme kimliği — gövdeden alınır (sanitize zaten düşürürdü); yoksa davranış aynı.
+function takeClientToken(body: Record<string, unknown> | undefined): string | undefined {
+  if (!body || !("clientToken" in body)) return undefined;
+  const token = z.string().uuid("Geçersiz işlem kimliği").optional().parse(body.clientToken ?? undefined);
+  delete body.clientToken;
+  return token;
+}
 
 async function takeFinanceSub(req: { body?: unknown; user?: { permissions: string[] } }): Promise<z.infer<typeof financeSubSchema> | null> {
   const body = (req.body ?? {}) as Record<string, unknown>;
@@ -272,16 +281,18 @@ router.get("/:id", verifyToken, requireAnyPermission("customer:read", ...MOBILE_
  *               contactPhone: { type: string }
  *               email: { type: string }
  *               notes: { type: string }
+ *               clientToken: { type: string, format: uuid, description: "Opsiyonel deneme kimliği — aynı token + aynı ad/vergi no → ilk kayıt (201); farklı → 409 CLIENT_TOKEN_COLLISION; kart sonradan pasif/birleşik → 409 CUSTOMER_CREATE_GONE" }
  *     responses:
  *       201:
- *         description: Müşteri oluşturuldu
+ *         description: Müşteri oluşturuldu (token replay'inde ilk kayıt)
  *       409:
- *         description: Kod zaten mevcut
+ *         description: Ad mükerreri (CUSTOMER_NAME_DUPLICATE) ya da token çakışması (CLIENT_TOKEN_COLLISION)
  */
 router.post("/", verifyToken, requirePermission("customer:write"), async (req, res, next) => {
   try {
     const finance = await takeFinanceSub(req);
-    res.status(201).json(await customerService.create(req.body, req.user?.userId, { finance }));
+    const clientToken = takeClientToken(req.body);
+    res.status(201).json(await createCustomerCard(customerService, req.body, req.user?.userId, { finance, clientToken }));
   } catch (e) {
     next(e);
   }
