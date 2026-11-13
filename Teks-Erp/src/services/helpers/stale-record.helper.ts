@@ -1,5 +1,5 @@
 /**
- * Bayat veri koruması (iyimser sürüm) — sipariş ve cari güncellemesi.
+ * Bayat veri koruması (iyimser sürüm) — sipariş, cari, renk, ürün güncellemesi ve fiyat yazımı (V5c).
  *
  * İstemci okuduğu kaydın sürümünü İSTEĞE BAĞLI `expectedUpdatedAt` ile geri yollar; yazım
  * atomik claim'ine bu koşul eklenir, tutmazsa 409 `STALE_RECORD`. Alan yoksa hiçbir şey
@@ -43,6 +43,20 @@ const nextMs = (d: Date): Date => new Date(d.getTime() + 1);
 /** JSON sürümü milisaniyeye keser, DB mikro saniye tutabilir: eşitlik [v, v+1ms) penceresidir. */
 export function updatedAtIs(expected: Date): Prisma.DateTimeFilter {
   return { gte: expected, lt: nextMs(expected) };
+}
+
+/** Tek satırlı ana veri (cari · renk · ürün) `updateCore` sürüm koşulu; sürüm yoksa undefined (bayt aynı yol). */
+export function updatedAtVersionWhere(expected: Date | null): { updatedAt: Prisma.DateTimeFilter } | undefined {
+  return expected ? { updatedAt: updatedAtIs(expected) } : undefined;
+}
+
+/**
+ * Kilitli okunan satırın sürümü (fiyat: anahtarın yürürlükteki satırı). Satır yoksa ya da `updatedAt` [v, v+1ms)
+ * dışındaysa 409 STALE_RECORD — çağıran satırı FOR UPDATE ile kilitlemiş olmalı.
+ */
+export function assertRowVersion(row: { updatedAt: Date } | null, expected: Date): void {
+  const t = row?.updatedAt.getTime();
+  if (t === undefined || t < expected.getTime() || t >= nextMs(expected).getTime()) throw staleRecordError();
 }
 
 /**

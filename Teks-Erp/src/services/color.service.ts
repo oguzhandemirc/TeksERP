@@ -23,6 +23,7 @@ import {
 } from "./helpers/name-normalize.helper";
 import { gatedSoftDelete, gatedUpdate } from "./helpers/master-data-archive.helper";
 import { COLOR_ARCHIVE } from "./helpers/archive-gate/color-archive.helper";
+import { takeExpectedUpdatedAt, updatedAtVersionWhere } from "./helpers/stale-record.helper";
 
 const TABLE_ALIAS = "CUSTOMER_COLOR_ALIAS";
 
@@ -117,6 +118,7 @@ export class ColorService extends BaseService {
   async create(
     data: Record<string, unknown>,
     userId?: string,
+    opts?: { clientToken?: string },
   ): Promise<ApiResponse<unknown>> {
     const { customerIds, customerAliases, rest } = splitCustomerIds(data);
 
@@ -144,7 +146,8 @@ export class ColorService extends BaseService {
       await this.assertCustomersAssignable(customerIds);
     }
 
-    const res = await super.create(rest, userId);
+    // Doğuş deneme kimliği yalnız token boğazından (`color-item-create.service.ts`); gövde yazamaz.
+    const res = await super.create(rest, userId, opts?.clientToken ? { clientToken: opts.clientToken } : undefined);
     const color = res.data as { id: string } | null;
 
     if (color && customerIds !== undefined) {
@@ -170,10 +173,11 @@ export class ColorService extends BaseService {
     data: Record<string, unknown>,
     userId?: string,
   ): Promise<ApiResponse<unknown>> {
+    const expected = takeExpectedUpdatedAt(data, { forbidDeactivate: true }); // bayat veri koruması (V5c); yoksa davranış aynı
     return gatedUpdate(COLOR_ARCHIVE, id, data, {
       userId,
       write: (tx) => tx.color.update({ where: { id }, data: { isActive: false } }),
-      next: (rest) => this.updateFields(id, rest, userId),
+      next: (rest) => this.updateFields(id, rest, userId, expected),
     });
   }
 
@@ -181,6 +185,7 @@ export class ColorService extends BaseService {
     id: string,
     data: Record<string, unknown>,
     userId?: string,
+    expected: Date | null = null,
   ): Promise<ApiResponse<unknown>> {
     const { customerIds, customerAliases, rest } = splitCustomerIds(data);
 
@@ -212,7 +217,7 @@ export class ColorService extends BaseService {
     // rest boşsa gereksiz audit/no-op update üretme — mevcut kaydı çek.
     const res =
       Object.keys(rest).length > 0
-        ? await super.update(id, rest, userId)
+        ? await this.updateCore(id, rest, userId, updatedAtVersionWhere(expected))
         : await super.findById(id);
 
     const color = res.data as { id: string } | null;

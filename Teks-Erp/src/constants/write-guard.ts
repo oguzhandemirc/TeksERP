@@ -15,6 +15,9 @@ export const BASE_WRITE_CLOSED_FIELDS: Readonly<Record<string, readonly string[]
   // İdempotency anahtarı yalnız hızlı kayıt boğazından (`customer-quick-create.service.ts` `quickCreate`, tokenReplay); genel gövde yazamaz.
   // Çoklu etiket seti: "herkes için seti göster" yalnız `PUT /customers/:id/label-template-options` boğazından.
   customer: ["clientToken", "labelShowGlobalTemplates"],
+  // Doğuş deneme kimliği yalnız token'lı doğuş boğazından (`color-item-create.service.ts`, tokenReplay); genel gövde yazamaz.
+  color: ["clientToken"],
+  item: ["clientToken"],
   // Hizmet kartı: genel gövde yalnız ad + birim yazar (servis allowlist'iyle aynı); kod doğuşta, durum yaşam döngüsü ucundan, birleştirme kendi boğazından.
   serviceItem: [
     "code", "isActive", "lifecycleStatus", "lifecycleChangedAt", "lifecycleChangedById", "lifecycleReason",

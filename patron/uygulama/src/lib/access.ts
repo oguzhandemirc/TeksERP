@@ -3,7 +3,7 @@
 // İzne ek olarak bağlanılan sunucunun YETENEĞİ (`api/yetenek.ts`): modülün ana kümesi ya da özelliği sunulmuyorsa
 // modül görünmez (bulutta her şey sunulur — bugünkü davranış).
 
-import { kumeSunuluyor, yetenek, type Yetenek } from "../api/yetenek";
+import { islemVar, kumeSunuluyor, yetenek, type Islem, type Yetenek } from "../api/yetenek";
 import { TERIM_AD } from "./terim";
 
 type Ozellik = { [K in keyof Yetenek]: Yetenek[K] extends boolean ? K : never }[keyof Yetenek];
@@ -14,6 +14,8 @@ export type ModuleKey =
   | "teklifler"
   | "standart-maliyetler"
   | "cariler"
+  | "renkler"
+  | "urunler"
   | "sevkiyat"
   | "uretim"
   | "stok"
@@ -40,6 +42,8 @@ export interface ModuleDef {
   readonly sets?: readonly string[];
   /** Modül bu sunucu özelliğini ister (rapor, gelen kutusu…). */
   readonly feature?: Ozellik;
+  /** Tanım ekranı: bu yazma işlemlerinden BİRİ açık olmalı (`islemVar`; bulutta kapalı). */
+  readonly islemler?: readonly Islem[];
 }
 
 export const FINANCE_READ = ["bulut:kasa:oku", "bulut:cek:oku", "bulut:fatura:oku", "bulut:tahsilat:oku"] as const;
@@ -48,6 +52,8 @@ export const MODULES: readonly ModuleDef[] = [
   { key: "pano", title: "Pano", route: "/pano", anyOf: [] },
   { key: "siparisler", title: "Siparişler", route: "/siparisler", anyOf: ["bulut:siparis:oku"], sets: ["siparis"] },
   { key: "cariler", title: "Cariler", hint: "Müşteri ve tedarikçiler", route: "/cariler", anyOf: ["bulut:cari:oku", "bulut:cari-bakiye:oku", "bulut:cari:yaz"], sets: ["cari-kart"] },
+  { key: "renkler", title: "Renkler", hint: "Renk tanımları", route: "/renkler", anyOf: [], sets: ["renk"], islemler: ["renk.ekle", "renk.duzenle"] },
+  { key: "urunler", title: "Ürünler", hint: "Ürün ve fiyatlar", route: "/urunler", anyOf: [], sets: ["urun"], islemler: ["fiyat.yaz", "urun.ekle", "urun.duzenle"] },
   { key: "sevkiyat", title: "Sevkiyat", hint: "Sevk edilen ve bekleyen", route: "/sevkiyat", anyOf: ["bulut:sevkiyat:oku"], sets: ["sevkiyat"] },
   { key: "uretim", title: "Üretim", route: "/uretim", anyOf: ["bulut:uretim:oku"], sets: ["is-emri"] },
   { key: "stok", title: "Stok", hint: "Ham ve bitmiş stok", route: "/stok", anyOf: ["bulut:stok:oku"], sets: ["stok-karnesi"] },
@@ -92,7 +98,8 @@ export function moduleServed(m: ModuleDef, y: Yetenek = yetenek()): boolean {
 }
 
 function moduleAllowed(perms: readonly string[], m: ModuleDef): boolean {
-  return canAny(perms, m.anyOf) && (m.allOf ?? []).every((c) => can(perms, c)) && moduleServed(m);
+  const islem = m.islemler === undefined || m.islemler.some((i) => islemVar(i, perms));
+  return canAny(perms, m.anyOf) && (m.allOf ?? []).every((c) => can(perms, c)) && moduleServed(m) && islem;
 }
 
 export function visibleModules(perms: readonly string[]): ModuleDef[] {

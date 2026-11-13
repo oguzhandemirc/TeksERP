@@ -7,6 +7,7 @@ import { z } from "zod";
 import { ItemLifecycleStatus } from "@prisma/client";
 import { BaseController } from "../controllers/base.controller";
 import { ItemService } from "../services/item.service";
+import { createItemRecord, takeCreateToken } from "../services/color-item-create.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { readFilterList } from "../utils/query-parser";
@@ -222,6 +223,7 @@ router.get("/:id", verifyToken, requireAnyPermission("item:read", "mobile:kk1"),
  *             properties:
  *               code: { type: string, example: "STK-000123", description: "Opsiyonel — boş bırakılırsa STK-NNNNNN otomatik üretilir" }
  *               name: { type: string, example: "Boyalı Saten Kumaş" }
+ *               clientToken: { type: string, format: uuid, description: "Opsiyonel deneme kimliği — aynı token + aynı ad/tür → ilk kart (201); farklı → 409 CLIENT_TOKEN_COLLISION; kart sonradan pasif/birleşik → 409 ITEM_CREATE_GONE" }
  *               itemType: { type: string, enum: [YARN, FABRIC, CONSUMABLE], description: "SERVICE → hizmet kartı açılır (service_items; eski istemci uyumu, yanıt itemType SERVICE)" }
  *               unit: { type: string, enum: [MT, KG, ADET], default: "MT" }
  *     responses:
@@ -233,7 +235,14 @@ router.get("/:id", verifyToken, requireAnyPermission("item:read", "mobile:kk1"),
 // Mobil "Kumaş Ekle" ekranı da bu ucu kullanır. `mobile:kumas` YALNIZ buraya
 // (yaratma) eklenir — PATCH/DELETE hâlâ `item:write` ister, yoksa saha
 // kullanıcısı mevcut kumaşı düzenleyip pasife de alabilirdi.
-router.post("/", verifyToken, requireAnyPermission("item:write", "mobile:kumas"), serviceCreateNeedsItemWrite, itemWidthGuard, controller.create);
+router.post("/", verifyToken, requireAnyPermission("item:write", "mobile:kumas"), serviceCreateNeedsItemWrite, itemWidthGuard, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const clientToken = takeCreateToken(req.body);
+    res.status(201).json(await createItemRecord(itemService, req.body, req.user?.userId, clientToken));
+  } catch (e) {
+    next(e);
+  }
+});
 
 /**
  * @openapi

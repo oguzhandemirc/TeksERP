@@ -2,7 +2,7 @@
 // yazıcıda eklenir. Bayat (409 STALE_RECORD) akışı: taze kayıt okunur, form KORUNUR; belirsiz hatadan sonraki
 // tekrarda taze kayıt zaten formdaysa (ilk deneme yazılmış) başarı sayılır.
 import { ApiError } from "../api/client";
-import { STALE_RECORD, terminAni, type CariKaydi, type SiparisKaydi } from "../api/yazma";
+import { STALE_RECORD, terminAni, type CariKaydi, type RenkGovdesi, type RenkKaydi, type SiparisKaydi } from "../api/yazma";
 import { buildCustomer, trDateToIso, type Built } from "./forms";
 
 export type Patch = Readonly<Record<string, unknown>>;
@@ -113,6 +113,60 @@ export function ekleHatasi(err: unknown, belirsizOnce: boolean): unknown {
   }
   if (belirsizOnce && err.code === "CUSTOMER_NAME_DUPLICATE") {
     return new ApiError(409, err.code, "Bu adda cari zaten var; önceki deneme kaydedilmiş olabilir. Cari listesini yenileyip kontrol edin.", err.details);
+  }
+  return err;
+}
+
+// ── Renk (V5c) ────────────────────────────────────────────────────────────────
+export interface RenkFormu {
+  readonly ad: string;
+  readonly hex: string;
+}
+
+export const renkFormu = (k: RenkKaydi): RenkFormu => ({ ad: k.ad, hex: k.hex });
+
+const HEX = /^#[0-9a-fA-F]{6}$/;
+
+/** Renk formu doğrulaması (panel şemasıyla aynı: ad 1–80, hex boş ya da #RRGGBB; '#' yazılmadıysa eklenir). */
+export function renkGovdesi(f: RenkFormu): Built<RenkGovdesi> {
+  const ad = f.ad.trim();
+  if (!ad) return { ok: false, error: "Renk adı girin" };
+  if (ad.length > 80) return { ok: false, error: "Renk adı en çok 80 karakter" };
+  const ham = f.hex.trim();
+  const hex = ham && !ham.startsWith("#") ? `#${ham}` : ham;
+  if (hex && !HEX.test(hex)) return { ok: false, error: "Renk kodu #RRGGBB biçiminde olmalı" };
+  return { ok: true, body: hex ? { ad, hex: hex.toUpperCase() } : { ad } };
+}
+
+/** Renk PATCH gövdesi: yalnız değişen alanlar (boşaltılan hex null). */
+export function renkPatch(k: RenkKaydi, f: RenkFormu): Built<Patch> {
+  const b = renkGovdesi(f);
+  if (!b.ok) return b;
+  const out: Record<string, unknown> = {};
+  if (b.body.ad !== k.ad) out.name = b.body.ad;
+  const hex = b.body.hex ?? null;
+  if (hex !== (k.hex ? k.hex.toUpperCase() : null)) out.hex = hex;
+  return { ok: true, body: out };
+}
+
+/** Renk/ürün doğuşu token'lı replay kodları (V5c fabrikası): kayıt sonradan pasif/birleşik. */
+export const TANIM_CREATE_GONE = ["COLOR_CREATE_GONE", "ITEM_CREATE_GONE"] as const;
+
+/**
+ * Tanım (renk/ürün) yaratma hatası → kullanıcı iletisi. Yeni fabrika aynı deneme kimliğine ilk kaydı döner; çakışma ve
+ * "sonradan pasif" kesin 409'dur. Eski fabrika kimliği düşürür: orada belirsiz denemeden sonraki ad mükerreri büyük
+ * olasılıkla ilk denemedir.
+ */
+export function tanimEkleHatasi(err: unknown, belirsizOnce: boolean, liste: string): unknown {
+  if (!(err instanceof ApiError)) return err;
+  if ((TANIM_CREATE_GONE as readonly string[]).includes(err.code)) {
+    return new ApiError(409, err.code, "Bu kayıt oluşturulmuş ama sonradan pasife alınmış; listeden bakın.", err.details);
+  }
+  if (err.code === CLIENT_TOKEN_COLLISION) {
+    return new ApiError(409, err.code, "Önceki deneme farklı bilgilerle kaydedilmiş; yeniden göndermek için tekrar dokunun.", err.details);
+  }
+  if (belirsizOnce && err.status === 409) {
+    return new ApiError(409, err.code, `Bu adda kayıt zaten var; önceki deneme kaydedilmiş olabilir. ${liste} listesini yenileyip kontrol edin.`, err.details);
   }
   return err;
 }

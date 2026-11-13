@@ -1064,9 +1064,11 @@ export class BaseService {
 
   async create(
     rawData: Record<string, unknown>,
-    userId?: string
+    userId?: string,
+    // Sunucunun koyduğu kapalı alanlar (ör. doğuş `clientToken`ı) — gövde süzgecinden SONRA eklenir, gövde yazamaz.
+    system?: Readonly<Record<string, unknown>>,
   ): Promise<ApiResponse<unknown>> {
-    const data = this.normalizeNameFields(this.sanitizeWriteData(rawData));
+    const data = this.normalizeNameFields({ ...this.sanitizeWriteData(rawData), ...system });
 
     // autoCode: backend-authoritative günlük kod. İstemci kodu DÜŞÜRÜLÜR; kod her
     // create'te taze üretildiğinden uniqueField reactivate yolu geçersiz — atlanır.

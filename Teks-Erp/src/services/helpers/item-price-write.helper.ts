@@ -16,6 +16,7 @@ import { AuditService } from "../audit.service";
 import { assertItemUsable, assertItemUsableTx, assertServiceItemUsable, assertServiceItemUsableTx, type ItemUsage } from "./item-usage.helper";
 import { ACTIVE_ITEM_PRICE, ITEM_PRICE_REVOKE_REASON } from "./item-price-validity.helper";
 import { pickServiceItemId } from "./service-item-pick.helper";
+import { assertRowVersion } from "./stale-record.helper";
 
 type Tx = Prisma.TransactionClient;
 
@@ -108,8 +109,8 @@ export async function assertTierWritable(
   }
 }
 
-type Row = { id: string; price: Prisma.Decimal; priceUnit: ServiceQtyUnit | null; validFrom: Date | null; revokedAt: Date | null };
-const SEL = { id: true, price: true, priceUnit: true, validFrom: true, revokedAt: true } as const;
+type Row = { id: string; price: Prisma.Decimal; priceUnit: ServiceQtyUnit | null; validFrom: Date | null; revokedAt: Date | null; updatedAt: Date };
+const SEL = { id: true, price: true, priceUnit: true, validFrom: true, revokedAt: true, updatedAt: true } as const;
 
 /** Anahtarın AÇIK satırını kilitler ve anahtar durumunu TAZE okur: yürürlükteki R + bekleyen P. */
 async function lockKeyState(tx: Tx, key: ItemPriceKey, now: Date): Promise<{ current: Row | null; pending: Row | null }> {
@@ -154,12 +155,14 @@ export interface PriceWriteOutcome {
  */
 export async function writeItemPriceVersionTx(
   tx: Tx,
-  args: { key: ItemPriceKey; price: Prisma.Decimal; requestedUnit: ServiceQtyUnit | null | undefined; validFrom: Date | null; at: Date; userId?: string; clientToken?: string | null },
+  args: { key: ItemPriceKey; price: Prisma.Decimal; requestedUnit: ServiceQtyUnit | null | undefined; validFrom: Date | null; at: Date; userId?: string; clientToken?: string | null; expectedUpdatedAt?: Date | null },
 ): Promise<PriceWriteOutcome> {
   const { key, price, validFrom, at } = args;
   const by = args.userId ?? null;
   await assertPriceSubjectUsable(tx, key, "DEFINITION", tx);
   const { current, pending } = await lockKeyState(tx, key, at);
+  // Bayat veri (V5c): sürüm = kilitli yürürlükteki satır; değişim yeni satır/damga olduğundan sürüm ilerler.
+  if (args.expectedUpdatedAt) assertRowVersion(current, args.expectedUpdatedAt);
   const priceUnit = args.requestedUnit === undefined ? (pending ?? current)?.priceUnit ?? null : args.requestedUnit;
   const same = (r: Row | null) => !!r && r.price.equals(price) && r.priceUnit === priceUnit;
 

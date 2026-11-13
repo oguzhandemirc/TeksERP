@@ -275,6 +275,9 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}cari-merge.service.ts::applyReplay`]: ["sourceId", "targetId"],
   [`${S}customer-quick-create.service.ts::quickCreateReplay`]: ["ad"],
   [`${S}customer-card-create.service.ts::cardCreateReplay`]: ["ad", "vergiNo"],
+  // V5c: patron telefonu renk/ürün doğuşu — kod fabrikada doğar, kimlik = katlanmış ad (+ ürün türü).
+  [`${S}color-item-create.service.ts::colorCreateReplay`]: ["ad"],
+  [`${S}color-item-create.service.ts::itemCreateReplay`]: ["ad", "tur"],
   [`${S}expense-allocation.service.ts::allocationReplay`]: ["cashTransactionId", "hedef", "sharePct"],
   [`${S}machine-cost-rate.service.ts::rateReplay`]: ["machineId", "hourRateTry"],
   [`${S}consumable-norm.service.ts::normReplay`]: ["serviceItemId", "consumableItemId", "propertyValueId", "qtyPerM", "basis"],

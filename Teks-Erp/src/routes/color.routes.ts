@@ -5,9 +5,10 @@
 // Item.colorId buradan FK alır; türetilmiş Item.code'unda da kullanılır.
 // =============================================================================
 
-import { Router } from "express";
+import { Router, type Request, type Response, type NextFunction } from "express";
 import { BaseController } from "../controllers/base.controller";
 import { ColorService } from "../services/color.service";
+import { createColorRecord, takeCreateToken } from "../services/color-item-create.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 
@@ -107,6 +108,7 @@ router.get("/:id", verifyToken, requireAnyPermission("property:read", "mobile:hi
  *               name:      { type: string, example: "Mavi" }
  *               hex:       { type: string, example: "#1d4ed8" }
  *               sortOrder: { type: integer, default: 0 }
+ *               clientToken: { type: string, format: uuid, description: "Opsiyonel deneme kimliği — aynı token + aynı ad → ilk kayıt (201); farklı ad → 409 CLIENT_TOKEN_COLLISION; renk sonradan pasif/birleşik → 409 COLOR_CREATE_GONE" }
  *               customerIds:
  *                 type: array
  *                 items: { type: string, format: uuid }
@@ -115,7 +117,14 @@ router.get("/:id", verifyToken, requireAnyPermission("property:read", "mobile:hi
  *       201: { description: Oluşturuldu }
  *       409: { description: Kod zaten mevcut }
  */
-router.post("/", verifyToken, requirePermission("property:write"), controller.create);
+router.post("/", verifyToken, requirePermission("property:write"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const clientToken = takeCreateToken(req.body);
+    res.status(201).json(await createColorRecord(colorService, req.body, req.user?.userId, clientToken));
+  } catch (e) {
+    next(e);
+  }
+});
 
 /**
  * @openapi

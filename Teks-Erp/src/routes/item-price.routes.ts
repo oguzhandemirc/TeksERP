@@ -85,6 +85,8 @@ const upsertSchema = z.object({
   price: z.number().nonnegative("Fiyat negatif olamaz").finite(),
   // Hizmet fiyatının birimi (brode fiyat birimi ayarı); atlanmış = metre (eski istemci).
   priceUnit: z.enum(["METER", "PIECE", "STITCH"], { message: "Fiyat birimi METER, PIECE ya da STITCH olmalı" }).nullish(),
+  // Bayat veri koruması (V5c): görülen yürürlükteki satırın `updatedAt`i; yoksa davranış aynı.
+  expectedUpdatedAt: z.iso.datetime({ offset: true, message: "expectedUpdatedAt ISO tarih olmalı (ör. 2026-11-13T10:00:00.000Z)." }).nullish(),
 });
 
 /**
@@ -180,20 +182,22 @@ router.get(
  *     description: >
  *       `customerId` YOKSA/`null` ise KART VARSAYILANI yazılır; doluysa o
  *       müşterinin İSTİSNASI. Fiyat yerinde EZİLMEZ: eski sürüm `revokedAt` ile
- *       damgalanır, yeni sürüm yazılır (tek tx; eşzamanlı ikinci yazım 409).
+ *       damgalanır, yeni sürüm yazılır (tek tx; eşzamanlı ikinci yazım 409). İsteğe bağlı
+ *       `expectedUpdatedAt` (görülen yürürlükteki satırın `updatedAt`i) tutmazsa ya da satır yoksa
+ *       409 `details.code = STALE_RECORD`; gönderilmezse davranış aynı.
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Yazıldı ("created" alanı ilk tanım mı, değişim/aynı fiyat mı olduğunu söyler) }
  *       400: { description: Kalem/cari yok ya da pasif · fiyat negatif/çok büyük }
- *       409: { description: Aynı anahtara eşzamanlı yazım }
+ *       409: { description: Aynı anahtara eşzamanlı yazım · STALE_RECORD (bayat sürüm) }
  */
 router.post(
   "/",
   requirePermission("price:write"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const input = upsertSchema.parse(req.body);
-      res.status(200).json(await itemPriceService.upsert(input, req.user?.userId));
+      const { expectedUpdatedAt, ...input } = upsertSchema.parse(req.body);
+      res.status(200).json(await itemPriceService.upsert({ ...input, expectedUpdatedAt: expectedUpdatedAt ? new Date(expectedUpdatedAt) : null }, req.user?.userId));
     } catch (e) {
       next(e);
     }

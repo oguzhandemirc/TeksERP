@@ -55,6 +55,66 @@ export interface IptalOnizleme {
 /** Önizleme belirteci tutmadı: sipariş kullanıcı bakarken değişti, hiçbir şey uygulanmadı. */
 export const CANCEL_PREVIEW_STALE = "CANCEL_PREVIEW_STALE";
 
+/** ERP renk kaydı (V5c); `surum` = `updatedAt`. Kod fabrikada doğar. */
+export interface RenkKaydi {
+  readonly id: string;
+  readonly surum: string;
+  readonly kod: string;
+  readonly ad: string;
+  /** "#RRGGBB" ya da "". */
+  readonly hex: string;
+  readonly aktif: boolean;
+}
+
+export interface RenkGovdesi {
+  readonly ad: string;
+  readonly hex?: string;
+}
+
+/** ERP ürün kartı (V5c); `surum` = `updatedAt`. Kod ve tür doğuştan sonra değişmez. */
+export interface UrunKaydi {
+  readonly id: string;
+  readonly surum: string;
+  readonly kod: string;
+  readonly ad: string;
+  /** FABRIC · YARN · CONSUMABLE. */
+  readonly tur: string;
+  readonly birim: string;
+  readonly aktif: boolean;
+}
+
+export interface UrunGovdesi {
+  readonly ad: string;
+  readonly tur: "FABRIC" | "YARN" | "CONSUMABLE";
+  /** Türden türer (MT · KG · ADET). */
+  readonly birim: string;
+}
+
+/** Fiyat yönü (ERP `PriceKind`). */
+export type FiyatYonu = "SALE" | "PURCHASE";
+
+/** ERP yürürlükteki fiyat satırı (V5c); `surum` = satırın `updatedAt`i (anahtarın bayat koruma sürümü). */
+export interface FiyatKaydi {
+  readonly id: string;
+  readonly surum: string;
+  /** null = kart varsayılanı; dolu = o carinin istisnası. */
+  readonly cariId: string | null;
+  readonly cariAdi: string;
+  readonly yon: FiyatYonu;
+  readonly doviz: string;
+  /** Ondalık dizi ("12.5"). */
+  readonly fiyat: string;
+}
+
+/** Fiyat anahtarı + değer; `fiyat` ondalık dizi. */
+export interface FiyatGovdesi {
+  readonly urunId: string;
+  readonly cariId: string | null;
+  readonly yon: FiyatYonu;
+  readonly doviz: string;
+  readonly fiyat: string;
+}
+
 export interface Yazici {
   /** Yaratma nereye gider: gelen kutusu MESAJI (fabrika sonra işler) ya da doğrudan fabrika kaydı. */
   readonly kanal: "gelen-kutusu" | "dogrudan";
@@ -70,6 +130,17 @@ export interface Yazici {
   siparisIptalOnizleme(id: string): Promise<IptalOnizleme>;
   /** `belirtec`: kullanıcının onayladığı önizlemenin belirteci (yoksa gönderilmez). */
   siparisIptal(id: string, belirtec?: string | null): Promise<void>;
+  renkEkle(islemId: string, g: RenkGovdesi): Promise<YazmaSonucu>;
+  renkOku(id: string): Promise<RenkKaydi>;
+  renkGuncelle(id: string, surum: string, patch: Readonly<Record<string, unknown>>): Promise<RenkKaydi>;
+  renkPasif(id: string): Promise<void>;
+  urunEkle(islemId: string, g: UrunGovdesi): Promise<YazmaSonucu>;
+  urunOku(id: string): Promise<UrunKaydi>;
+  urunGuncelle(id: string, surum: string, patch: Readonly<Record<string, unknown>>): Promise<UrunKaydi>;
+  /** Ürünün yürürlükteki fiyatları (kart varsayılanı + cari istisnaları). */
+  fiyatlar(urunId: string): Promise<FiyatKaydi[]>;
+  /** Var olanı günceller, yoksa açar. `surum`: anahtarın görülen satırı (yoksa null → gönderilmez). */
+  fiyatYaz(g: FiyatGovdesi, surum: string | null): Promise<void>;
 }
 
 const seg = (v: string) => encodeURIComponent(v);
@@ -89,6 +160,15 @@ export function createBulutYazici(api: Api): Yazici {
     siparisGuncelle: yok,
     siparisIptalOnizleme: yok,
     siparisIptal: yok,
+    renkEkle: yok,
+    renkOku: yok,
+    renkGuncelle: yok,
+    renkPasif: yok,
+    fiyatlar: yok,
+    fiyatYaz: yok,
+    urunEkle: yok,
+    urunOku: yok,
+    urunGuncelle: yok,
   };
 }
 
@@ -149,6 +229,28 @@ export function cariKaydi(h: Ham | null | undefined): CariKaydi {
     musteri: h.isCustomerRole === true, tedarikci: h.isSupplierRole === true, fason: h.isSubcontractorRole === true,
     il: s(h.city), vergiNo: s(h.taxNumber), telefon: s(h.contactPhone), eposta: s(h.email), aktif: h.isActive !== false,
   };
+}
+
+export function renkKaydi(h: Ham | null | undefined): RenkKaydi {
+  const surum = tarih(h?.updatedAt);
+  if (!h || typeof h.id !== "string" || !surum) throw beklenmeyen();
+  return { id: h.id, surum, kod: s(h.code), ad: s(h.name), hex: s(h.hex), aktif: h.isActive !== false };
+}
+
+export function urunKaydi(h: Ham | null | undefined): UrunKaydi {
+  const surum = tarih(h?.updatedAt);
+  if (!h || typeof h.id !== "string" || !surum) throw beklenmeyen();
+  return { id: h.id, surum, kod: s(h.code), ad: s(h.name), tur: s(h.itemType), birim: s(h.unit), aktif: h.isActive !== false };
+}
+
+const ondalik = (v: unknown): string => (typeof v === "number" && Number.isFinite(v) ? String(v) : s(v));
+
+export function fiyatKaydi(h: Ham | null | undefined): FiyatKaydi {
+  const surum = tarih(h?.updatedAt);
+  if (!h || typeof h.id !== "string" || !surum || (h.kind !== "SALE" && h.kind !== "PURCHASE")) throw beklenmeyen();
+  const cari = (h.customer ?? {}) as Ham;
+  const cariId = typeof h.customerId === "string" && h.customerId !== "" ? h.customerId : null;
+  return { id: h.id, surum, cariId, cariAdi: cariId ? s(cari.name) : "", yon: h.kind, doviz: s(h.currency) || "TRY", fiyat: ondalik(h.price) };
 }
 
 export function siparisKaydi(h: Ham | null | undefined): SiparisKaydi {
@@ -213,6 +315,36 @@ export function createErpYazici(c: ApiClient): Yazici {
       if (karar !== "SERBEST") throw new ApiError(409, karar === "URETIMDE" ? "SIPARIS_URETIMDE" : "AKTIF_SEVKIYAT", IPTAL_ILETISI[karar]);
       // Belirteç kullanıcının GÖRDÜĞÜ önizlemeden: arada değiştiyse fabrika 409 CANCEL_PREVIEW_STALE verir, uygulamaz.
       await c.post<unknown>(`/orders/${seg(id)}/cancel`, belirtec ? { workOrderActions: [], expectedPreviewToken: belirtec } : { workOrderActions: [] });
+    },
+    // `clientToken` = deneme kimliği: yeni fabrika aynı token'a ilk rengi döner, eski fabrika gövde süzgecinde düşürür.
+    renkEkle: async (id, g) => {
+      const r = await c.post<Ham>("/colors", tanimli({ name: g.ad, hex: g.hex, clientToken: id }));
+      if (typeof r?.id !== "string") throw beklenmeyen();
+      return { tur: "kayit", id: r.id };
+    },
+    renkOku: async (id) => renkKaydi(await c.get<Ham>(`/colors/${seg(id)}`)),
+    renkGuncelle: async (id, surum, patch) => renkKaydi(await c.patch<Ham>(`/colors/${seg(id)}`, { ...patch, expectedUpdatedAt: surum })),
+    renkPasif: async (id) => {
+      await c.del<unknown>(`/colors/${seg(id)}`);
+    },
+    // Kod fabrikada doğar (STK-…); kart yapı alanları (en, gramaj…) panelde.
+    urunEkle: async (id, g) => {
+      const r = await c.post<Ham>("/items", { name: g.ad, itemType: g.tur, unit: g.birim, clientToken: id });
+      if (typeof r?.id !== "string") throw beklenmeyen();
+      return { tur: "kayit", id: r.id };
+    },
+    urunOku: async (id) => urunKaydi(await c.get<Ham>(`/items/${seg(id)}`)),
+    urunGuncelle: async (id, surum, patch) => urunKaydi(await c.patch<Ham>(`/items/${seg(id)}`, { ...patch, expectedUpdatedAt: surum })),
+    // Fiyat ucu ticaret modülü kapısının arkasında: kapalıysa 403 MODULE_DISABLED, ileti aynen gösterilir.
+    fiyatlar: async (urunId) => {
+      const r = await c.get<unknown>("/item-prices", { "filter[itemId]": urunId, pageSize: 500 });
+      if (!Array.isArray(r)) throw beklenmeyen();
+      return (r as Ham[]).map(fiyatKaydi);
+    },
+    fiyatYaz: async (g, surum) => {
+      await c.post<unknown>("/item-prices", tanimli({
+        itemId: g.urunId, customerId: g.cariId, kind: g.yon, currency: g.doviz, price: Number(g.fiyat), expectedUpdatedAt: surum ?? undefined,
+      }));
     },
   };
 }
