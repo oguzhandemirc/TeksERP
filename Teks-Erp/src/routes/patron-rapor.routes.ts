@@ -13,6 +13,7 @@ import { AppError } from "../utils/app-error";
 import {
   createPatronReportRun, deletePatronReportRun, getPatronReportRun, listPatronReportRuns, patronReportCatalog, type PatronReportUser,
 } from "../services/patron-rapor/kosum.service";
+import { patronReportFile } from "../services/patron-rapor/disa-aktar/dosya.service";
 
 const router = Router();
 // ⚠️ Toplu kapı: bu satırdan ÖNCE tanımlanan uç kapısız kalır (Express kayıt sırası).
@@ -125,5 +126,33 @@ router.get("/", send(200, (req) => listPatronReportRuns(userOf(req), parse(listS
  */
 router.get("/:id", send(200, (req) => getPatronReportRun(userOf(req), parse(idSchema, req.params.id, "PATRON_RAPOR_KIMLIK"))));
 router.delete("/:id", send(200, (req) => deletePatronReportRun(userOf(req), parse(idSchema, req.params.id, "PATRON_RAPOR_KIMLIK"))));
+
+/**
+ * @openapi
+ * /api/patron/v1/raporlar/{id}/dosya:
+ *   get:
+ *     tags: [Patron]
+ *     summary: Kendi koşumunun dosyası (saklı sonuçtan; Excel ya da PDF'e çevrilecek HTML)
+ *     description: Rapor yeniden hesaplanmaz. İkisi de aynı spec'ten (PDF = Excel); HTML dış kaynak yüklemez. Saatler fabrika diliminde.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *       - { in: query, name: bicim, required: true, schema: { type: string, enum: [xlsx, html] } }
+ *     responses:
+ *       200: { description: Dosya (Content-Disposition attachment) }
+ *       400: { description: Biçim ya da kimlik geçersiz (PATRON_RAPOR_BICIM) }
+ *       404: { description: Koşum yok ya da başkasına ait }
+ *       409: { description: Koşum dosya olarak indirilemiyor — HATA'lı ya da sunum zarfsız (DISA_AKTARILAMAZ) }
+ */
+router.get("/:id/dosya", async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const id = parse(idSchema, req.params.id, "PATRON_RAPOR_KIMLIK");
+    const file = await patronReportFile(userOf(req), id, req.query.bicim);
+    res.set({ "Cache-Control": "no-store", "Content-Type": file.contentType, "Content-Disposition": `attachment; filename="${file.fileName}"`, "X-Content-Type-Options": "nosniff" });
+    res.status(200).send(file.body);
+  } catch (error) {
+    next(error);
+  }
+});
 
 export default router;

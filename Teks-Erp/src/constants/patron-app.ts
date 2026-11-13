@@ -18,6 +18,12 @@ export const PATRON_API_VERSION = 1;
 export const PATRON_REPORT_API_VERSION = 1;
 
 /**
+ * Rapor koşumu dosyası (`GET /api/patron/v1/raporlar/:id/dosya`, xlsx + html) sözleşme sürümü — `/auth/me`
+ * `patronReportExport`. Alan yoksa (eski backend) uygulama PDF/Excel düğmelerini gizler. Ekleme: sürüm artmaz.
+ */
+export const PATRON_REPORT_EXPORT_VERSION = 1;
+
+/**
  * Patron oturumunun mutlak ömrü (gün) — kullanıcı kararı "30 günde bir parola" (2026-11-13). Yenileme
  * belirteci YOK; süre bitince parola (+ kullanıcı açtıysa kod) yeniden istenir. Fabrikanın mutlak tavanı
  * (`auth.absoluteSessionCapDays`) daha kısaysa o kazanır.
