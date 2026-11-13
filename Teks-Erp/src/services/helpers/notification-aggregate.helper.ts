@@ -10,6 +10,8 @@ import type { InboxReason, OutboxRow } from "../notification-dispatch.service";
 export interface Agg {
   userId: string; kind: string; klass: string; subjectType: string; subjectId: string | null; groupKey: string;
   n: number; firstAt: Date; lastAt: Date; lastOutboxId: string; payload: string; reason: InboxReason; km: boolean; kt: boolean; ozet: boolean;
+  /** Patron telefonu dürtü istendi mi (teslim kararı; birleşen olaylarda VEYA). */
+  pp: boolean;
 }
 
 export interface BatchState {
@@ -86,7 +88,7 @@ export function settleAlarmUpdates(state: BatchState, rows: ReadonlyArray<{ user
 export function addRecipients(
   state: BatchState,
   src: { row: OutboxRow; entry: NotificationCatalogEntry; groupKey: string },
-  recipients: ReadonlyArray<{ userId: string; reason: InboxReason; km?: boolean; kt?: boolean; ozet?: boolean }>,
+  recipients: ReadonlyArray<{ userId: string; reason: InboxReason; km?: boolean; kt?: boolean; ozet?: boolean; pp?: boolean }>,
 ): number {
   const { row, entry, groupKey } = src;
   const kind = row.kind;
@@ -103,6 +105,7 @@ export function addRecipients(
       if (row.occurredAt >= prev.lastAt) prev.lastAt = row.occurredAt;
       prev.lastOutboxId = row.id;
       prev.payload = JSON.stringify(row.payload ?? {});
+      prev.pp = prev.pp || (r.pp ?? false);
     } else {
       state.agg.set(k, {
         userId: r.userId, kind, klass: entry.sinif, subjectType: row.subjectType, subjectId: row.subjectId, groupKey,
@@ -111,6 +114,8 @@ export function addRecipients(
         // Teslim kararı (tercih + sessiz saat) verildiyse o; yoksa katalog varsayılan kanalları (F1).
         km: r.km ?? entry.varsayilanKanallar.includes("MASAUSTU"), kt: r.kt ?? entry.varsayilanKanallar.includes("TABLET_SES"),
         ozet: r.ozet ?? false,
+        // Karar yoksa (F1 yolu) dürt YOK: patron telefonu yalnız teslim kararıyla açılır.
+        pp: r.pp ?? false,
       });
     }
   }

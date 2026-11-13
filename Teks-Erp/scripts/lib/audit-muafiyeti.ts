@@ -99,6 +99,8 @@ export const AUDIT_EXEMPT_MODELS: AuditMuafiyeti[] = [
     gerekce: "bildirim kuyruğu satırını iş tx'inde `helpers/notification-emit.helper` yazar, dağıtıcı damgalar, 7 günde budanır; \"ne oldu\" iş kaydının kendi audit'indedir, hiçbir rapor sayısı bu satırdan türemez" },
   { model: "NotificationInbox", sinif: "TELEMETRI",
     gerekce: "kişisel gelen kutusu (dağıtıcı birleştirir, okundu/ertele kişinin kendi işaretidir); okunmuş 90 / okunmamış 180 günde budanır, raporlanan hiçbir sayı ona bağlı değildir" },
+  { model: "PatronPushNudge", sinif: "TELEMETRI",
+    gerekce: "patron telefonu dürt kuyruğu (push köprüsü P3): dağıtıcı gelen kutusu tx'inde yazar, `patron-push` işi gönderip kapatır, terminal satır 7 günde budanır; metin/belirteç taşımaz, raporlanan hiçbir sayı ona bağlı değildir" },
   { model: "NotificationDailyStats", sinif: "TELEMETRI",
     gerekce: "tercih önizlemesinin günlük sayacı (Karar Y3); yalnız \"haftada ~N\" tahmini besler, 35 günde budanır" },
   { model: "NotificationCondition", sinif: "SISTEM_ISI",

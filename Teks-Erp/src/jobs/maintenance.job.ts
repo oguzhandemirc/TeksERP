@@ -132,8 +132,8 @@ export const MAINTENANCE_TASKS: ReadonlyArray<{ name: string; run: () => Promise
     name: "notification-prune",
     run: async () => {
       const r = await pruneNotifications();
-      const total = r.inbox + r.outbox + r.conditions + r.dailyStats;
-      return total > 0 ? `bildirim: kutu ${r.inbox} · outbox ${r.outbox} · koşul ${r.conditions} · sayaç ${r.dailyStats} satır budandı` : null;
+      const total = r.inbox + r.outbox + r.conditions + r.dailyStats + r.pushNudges;
+      return total > 0 ? `bildirim: kutu ${r.inbox} · outbox ${r.outbox} · koşul ${r.conditions} · sayaç ${r.dailyStats} · dürt ${r.pushNudges} satır budandı` : null;
     },
   },
   {

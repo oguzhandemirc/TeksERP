@@ -34,7 +34,11 @@ export const NOTIFICATION_DEFAULT_RETENTION: NotificationSaklama = { okunmusGun:
 
 // MASAUSTU seçilebilir ama varsayılanı KAPALI (N3 "varsayılan hiçbiri" = bugünkü davranış, patron kararı 2026-10-25);
 // kullanıcı Kullanıcı Tercihleri → Masaüstü bildirimleri'nden açar. Tezgah alarmı kendi kanalıyla ayrıdır.
-export const NOTIFICATION_DESKTOP_CHANNELS: readonly NotificationKanal[] = ["UYGULAMA", "OZET", "MASAUSTU"];
+// PATRON_PUSH (köprü P3) her türde seçilebilir; varsayılanı yalnız önemli türlerde açık (`..._IMPORTANT_DEFAULT_CHANNELS`).
+export const NOTIFICATION_DESKTOP_CHANNELS: readonly NotificationKanal[] = ["UYGULAMA", "OZET", "MASAUSTU", "PATRON_PUSH"];
+
+/** Patron telefonu varsayılanı AÇIK türlerin kanalları (kullanıcı kararı 2026-11-13: alarm · güvenlik · cari kilidi). */
+export const NOTIFICATION_IMPORTANT_DEFAULT_CHANNELS: readonly NotificationKanal[] = ["UYGULAMA", "PATRON_PUSH"];
 
 /**
  * Kişisel kapsam süzgeci beyanı (plan §5.2) — yalnız DARALTIR. Beyan edilmeyen anahtar o türde 400.

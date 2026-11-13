@@ -102,6 +102,9 @@ const BUDAMA = "src/services/notification-prune.service.ts";
 const KATALOG = "src/constants/notification-catalog.ts";
 /** N1-ZIL: kişinin kendi satırında okundu/okunmadı/ertele (yalnız readAt/snoozedUntil; userId WHERE'de). */
 const KUTU_OKUMA = "src/services/notification-inbox.service.ts";
+/** Köprü P3: dürt kuyruğu dağıtıcının tx'inde, dağıtıcının görme kararlı hedefleriyle yazılır; kendi alıcı kararı yok.
+ *  Muafiyet ŞARTLI: `enqueuePatronPushTx` yalnız dağıtıcıdan çağrılır (§4b2). */
+const DURT_KUYRUGU = "src/services/patron-push/nudge-enqueue.ts";
 
 /** Tablo × işlem → izinli dosyalar. READ'i olmayan tablo okuması serbesttir (görme kuralı §4'te). */
 export const IZINLI: Record<Tablo, Partial<Record<Islem, readonly string[]>>> = {
@@ -167,10 +170,12 @@ function main(): void {
 
   check("§4a ⭐ katalog `izinler` (görme DNF'si) yalnız görme helper'ında okunur", izinlerOkuyan.length === 0,
     izinlerOkuyan.join(" · ") || "tek okuyucu");
-  const kutuyaDokunan = [...new Set(sec("inbox").map((b) => b.dosya))].filter((d) => d !== BUDAMA);
+  const kutuyaDokunan = [...new Set(sec("inbox").map((b) => b.dosya))].filter((d) => d !== BUDAMA && d !== DURT_KUYRUGU);
   const importsuz = kutuyaDokunan.filter((d) => !/from\s+["'][^"']*notification-visibility\.helper["']/.test(kaynaklar.get(d) ?? ""));
   check("§4b ⭐ gelen kutusuna dokunan her dosya görme helper'ını import eder (budama hariç)", importsuz.length === 0 && kutuyaDokunan.length > 0,
     importsuz.length ? `IMPORTSUZ: ${importsuz.join(", ")}` : kutuyaDokunan.join(", "));
+  const durtCagiran = [...kaynaklar].filter(([d, src]) => d !== DURT_KUYRUGU && /\benqueuePatronPushTx\(/.test(src)).map(([d]) => d);
+  check("§4b2 dürt kuyruğu (görme muafiyeti) yalnız dağıtıcıdan çağrılır", durtCagiran.length === 1 && durtCagiran[0] === DAGITICI, durtCagiran.join(", ") || "çağıran yok");
   const dag = kaynaklar.get(DAGITICI) ?? "";
   check("§4c dağıtıcının alıcı kararı görme helper'ından (`visibleUsersFor`)", /\bvisibleUsersFor\(/.test(dag));
   const tercih = kaynaklar.get(TERCIH) ?? "";

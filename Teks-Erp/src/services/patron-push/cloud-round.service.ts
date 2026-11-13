@@ -1,8 +1,8 @@
 // =============================================================================
 // Patron push bulut turu — yerel durumu buluttaki bağa eşler (giden iş kuyruğu; harici yoklama DEĞİL)
 // =============================================================================
-// Sıra: süpürme (yerel, her tur) → kapı (iki bayrak) kapalı ya da kurulum uygun değilse DUR (dışarı istek YOK) → BEKLIYOR
-// partisi `kaydet` → BIRAKILACAK partisi `birak`. Sonuç yalnız satır hâlâ beklenen durumdaysa yazılır (koşullu
+// Sıra: süpürme (yerel, her tur) → kapı (iki bayrak) kapalı ya da kurulum uygun değilse DUR (dışarı istek YOK; canlı dürt
+// ATLANDI) → BEKLIYOR partisi `kaydet` → BIRAKILACAK partisi `birak` → dürt (`nudge-round.ts`). Sonuç yalnız satır hâlâ beklenen durumdaysa yazılır (koşullu
 // updateMany): arada çıkış yapılırsa `kaydet`in başarısı satırı KAYITLI yapmaz, sonraki tur bırakır. Hata kullanıcı
 // isteğine dokunmaz: satır başına geri çekilme (30 sn × 2^n, ≤ 1 sa) + kısa hata kodu; ham belirteç gövdeye girmez.
 // =============================================================================
@@ -13,13 +13,9 @@ import { registerDigests, releaseDigests, type BridgeResult } from "../../cloud-
 import { PUSH_BRIDGE_MAX_TOKENS } from "../../cloud-sync/wire";
 import { releaseOrphanPushTokens } from "./lifecycle";
 import { patronPushGateOpen } from "./device.service";
+import { pushBackoffMs } from "./states";
+import { runNudgePhase, skipLiveNudges, type NudgeRoundSummary } from "./nudge-round";
 
-const BACKOFF_BASE_MS = 30_000;
-const BACKOFF_MAX_MS = 60 * 60 * 1000;
-
-export function pushBackoffMs(attempts: number): number {
-  return Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * 2 ** Math.min(Math.max(attempts - 1, 0), 10));
-}
 
 export interface PushRoundDeps {
   readonly now?: Date;
@@ -30,8 +26,8 @@ export interface PushRoundDeps {
 }
 
 export type PushRoundSummary =
-  | { readonly durum: "KAPALI" | "UYGUN_DEGIL"; readonly sebep?: string; readonly suprulen: number }
-  | { readonly durum: "TAMAM"; readonly suprulen: number; readonly kaydedilen: number; readonly birakilan: number; readonly hata: number };
+  | { readonly durum: "KAPALI" | "UYGUN_DEGIL"; readonly sebep?: string; readonly suprulen: number; readonly atlananDurt: number }
+  | { readonly durum: "TAMAM"; readonly suprulen: number; readonly kaydedilen: number; readonly birakilan: number; readonly hata: number; readonly durt: NudgeRoundSummary };
 
 type Phase = { from: "BEKLIYOR"; to: "KAYITLI" } | { from: "BIRAKILACAK"; to: "BIRAKILDI" };
 
@@ -86,11 +82,14 @@ async function runPhase(ctx: CloudCallContext, phase: Phase, now: Date): Promise
 export async function runPatronPushRound(deps: PushRoundDeps = {}): Promise<PushRoundSummary> {
   const now = deps.now ?? new Date();
   const suprulen = await releaseOrphanPushTokens(now);
-  if (!(await patronPushGateOpen())) return { durum: "KAPALI", suprulen };
+  // Kapı/uygunluk yokken dürt kuyruğu BEKLEMEZ: canlı satırlar ATLANDI (birikme yok, dışarı istek yok).
+  if (!(await patronPushGateOpen())) return { durum: "KAPALI", suprulen, atlananDurt: await skipLiveNudges("KAPI_KAPALI", now) };
   const elig = (deps.eligibility ?? pushBridgeEligibility)();
-  if (!elig.ok) return { durum: "UYGUN_DEGIL", sebep: elig.reason, suprulen };
+  if (!elig.ok) return { durum: "UYGUN_DEGIL", sebep: elig.reason, suprulen, atlananDurt: await skipLiveNudges(`UYGUN_DEGIL:${elig.reason}`, now) };
   const ctx: CloudCallContext = { baseUrl: elig.baseUrl, installationId: elig.installationId, transport: deps.transport ?? egressCloudTransport };
   const reg = await runPhase(ctx, { from: "BEKLIYOR", to: "KAYITLI" }, now);
   const rel = await runPhase(ctx, { from: "BIRAKILACAK", to: "BIRAKILDI" }, now);
-  return { durum: "TAMAM", suprulen, kaydedilen: reg.done, birakilan: rel.done, hata: reg.failed + rel.failed };
+  // Dürt EN SONDA: aynı turda bağlanan belirteç hemen kullanılır.
+  const durt = await runNudgePhase(ctx, now);
+  return { durum: "TAMAM", suprulen, kaydedilen: reg.done, birakilan: rel.done, hata: reg.failed + rel.failed, durt };
 }

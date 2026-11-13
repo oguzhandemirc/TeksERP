@@ -659,6 +659,14 @@ const PARTIAL_INDEXES: Array<{
     predicate: `("resolvedAt" IS NULL)`,
     why: "açık koşul tür × konu başına tek — tarayıcının ON CONFLICT DO NOTHING seddi, çift ACILDI yok",
   },
+  // Push köprüsü P3 (migration 20261113170000): kutu satırı başına tek canlı dürt.
+  {
+    table: "patron_push_nudges",
+    index: "patron_push_nudges_live_inbox_uq",
+    uniq: true,
+    predicate: `((state)::text = ANY ((ARRAY['BEKLIYOR'::character varying, 'GONDERILIYOR'::character varying])::text[]))`,
+    why: "kutu satırı başına en çok bir canlı dürt — dağıtıcının ON CONFLICT DO NOTHING hedefi; düşerse birleşen her olay ayrı dürt doğurur",
+  },
   {
     table: "notification_outbox",
     index: "notification_outbox_pending_idx",
@@ -1228,6 +1236,9 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "patron_push_tokens", name: "patron_push_tokens_digest_ck" },
   { table: "patron_push_tokens", name: "patron_push_tokens_sealed_live_ck" },
   { table: "patron_push_tokens", name: "patron_push_tokens_released_ck" },
+  { table: "patron_push_nudges", name: "patron_push_nudges_state_ck" },
+  { table: "patron_push_nudges", name: "patron_push_nudges_finished_ck" },
+  { table: "patron_push_nudges", name: "patron_push_nudges_claimed_ck" },
   // bildirim: tercih katmanı (N4-SEMA, migration 20261025160000) — kapalı kümeler (TS aynası
   // `constants/notification-preference.ts`), sessiz saat biçimi + çift yüklem, takipte TEK hedef FK.
   { table: "notification_preferences", name: "notification_preferences_channel_ck" },

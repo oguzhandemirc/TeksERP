@@ -1,16 +1,17 @@
 // Tercih taslağı (N4-PANEL): kilitli satır kapatılamaz · grup toplu işlem kilitlileri atlar · arama tr-katlamalı
 // · tam gövde kilitli türde UYGULAMA'yı açık ve kapsamsız yollar · taslak YALNIZ sunucu hücrelerinden kurulur.
 import { describe, expect, it } from "vitest";
-import { draftFromCells, draftToBody, matchesKind, setGroupMode, setMode, setScope, lockReason } from "./tercih-taslak";
+import { draftFromCells, draftToBody, matchesKind, setChannel, setGroupMode, setMode, setScope, lockReason } from "./tercih-taslak";
 import type { NotificationPreferenceCell } from "./types";
 
-const cell = (kind: string, o: { app?: "ACIK" | "KAPALI" | "GIZLI"; ozet?: "ACIK" | "KAPALI"; kilit?: boolean; kaynak?: string; masaustu?: boolean; tablet?: boolean; kapsam?: unknown } = {}): NotificationPreferenceCell => ({
+const cell = (kind: string, o: { app?: "ACIK" | "KAPALI" | "GIZLI"; ozet?: "ACIK" | "KAPALI"; kilit?: boolean; kaynak?: string; masaustu?: boolean; tablet?: boolean; patron?: boolean; kapsam?: unknown } = {}): NotificationPreferenceCell => ({
   kind,
   kanallar: [
     { kanal: "UYGULAMA", durum: o.app ?? "ACIK", kilit: !!o.kilit, kaynak: o.kaynak ?? "katalog", kapsam: o.kapsam ?? null },
     ...(o.ozet ? [{ kanal: "OZET" as const, durum: o.ozet, kilit: false, kaynak: "katalog", kapsam: null }] : []),
     ...(o.masaustu !== undefined ? [{ kanal: "MASAUSTU" as const, durum: o.masaustu ? ("ACIK" as const) : ("KAPALI" as const), kilit: false, kaynak: "katalog", kapsam: null }] : []),
     ...(o.tablet !== undefined ? [{ kanal: "TABLET_SES" as const, durum: o.tablet ? ("ACIK" as const) : ("KAPALI" as const), kilit: false, kaynak: "katalog", kapsam: null }] : []),
+    ...(o.patron !== undefined ? [{ kanal: "PATRON_PUSH" as const, durum: o.patron ? ("ACIK" as const) : ("KAPALI" as const), kilit: false, kaynak: "katalog", kapsam: null }] : []),
   ],
 });
 
@@ -64,5 +65,15 @@ describe("tercih taslağı", () => {
     expect(matchesKind(k, "ışık")).toBe(true);
     expect(matchesKind({ kod: "x", ad: "İplik bitti", grup: "Stok" as const }, "iplik")).toBe(true);
     expect(matchesKind(k, "levent")).toBe(false);
+  });
+
+  // Panelde "Patron telefonu" anahtarı YOK (anahtar patron uygulamasında, P4): panelden kayıt bu değeri SİLMEMELİ.
+  it("PATRON_PUSH hücresi panelde gösterilmese de tam gövdede aynen geri gider", () => {
+    const p = draftFromCells([cell("e.patron", { masaustu: false, patron: true }), cell("f.patron", { patron: false })]);
+    const edited = setMode(setChannel(p, "e.patron", "MASAUSTU", true), "f.patron", "KAPALI");
+    const body = draftToBody(edited);
+    expect(body).toContainEqual({ tur: "e.patron", kanal: "PATRON_PUSH", acik: true });
+    expect(body).toContainEqual({ tur: "f.patron", kanal: "PATRON_PUSH", acik: false });
+    expect(body).toContainEqual({ tur: "e.patron", kanal: "MASAUSTU", acik: true });
   });
 });
