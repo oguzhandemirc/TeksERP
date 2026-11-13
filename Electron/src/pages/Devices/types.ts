@@ -20,6 +20,10 @@ export interface DeviceListItem {
   } | null;
   /** Duyurunun geldiği kaynak (IP, IPv6'da /64) — doğuş olayından. Eski backend/eski satır: yok. */
   announcedFrom?: string | null;
+  /** Son yeniden bağlanma (kaldır-kur sonrası aynı donanım) — defter `REBOUND`. Eski backend: yok. */
+  lastReboundAt?: string | null;
+  /** OTOMATIK (onaysız tanındı) · PANEL · YERINDE (yönetici onayıyla). */
+  lastReboundPath?: "OTOMATIK" | "PANEL" | "YERINDE" | null;
   /** Donanım özeti kaynağı (ANDROID_ID · WIN_MACHINE_GUID · …); özet değeri gösterilmez. */
   hwSource?: string | null;
   /** Birleşmiş kopya → ana kayıt (D4). Eski backend göndermez. */

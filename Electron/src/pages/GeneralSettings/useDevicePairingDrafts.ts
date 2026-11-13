@@ -9,7 +9,8 @@ type DeviceFlagKey =
   | "devicePairingRequired"
   | "shortCredentialApprovedDeviceOnly"
   | "deviceProofRequired"
-  | "deviceUnpairedPasswordLogin";
+  | "deviceUnpairedPasswordLogin"
+  | "deviceAutoReattach";
 type DeviceFlags = Record<DeviceFlagKey, boolean>;
 
 /** Sunucu değeri değişince (kayıt sonrası / geç yükleme) taslağı ona eşitler. */
@@ -20,7 +21,7 @@ function useServerDraft(server: boolean) {
 }
 
 /**
- * Cihaz eşleştirme bölümünün dört bayrağı için taslak + kaydet. Kısa kimlik kuralı açıkken
+ * Cihaz eşleştirme bölümünün beş bayrağı için taslak + kaydet. Kısa kimlik kuralı açıkken
  * eşleştirme etkin zorunludur — taslak da onu yansıtır; PATCH yalnız değişen alanı taşır.
  */
 export function useDevicePairingDrafts() {
@@ -32,17 +33,21 @@ export function useDevicePairingDrafts() {
     shortCredentialApprovedDeviceOnly: f?.shortCredentialApprovedDeviceOnly ?? false,
     deviceProofRequired: f?.deviceProofRequired ?? false,
     deviceUnpairedPasswordLogin: f?.deviceUnpairedPasswordLogin ?? false,
+    // Backend varsayılanı AÇIK (kayıt yok → true); eski sunucu alanı göndermezse de açık gösterilir.
+    deviceAutoReattach: f?.deviceAutoReattach ?? true,
   };
   const [pairing, setPairing] = useServerDraft(server.devicePairingRequired);
   const [short, setShort] = useServerDraft(server.shortCredentialApprovedDeviceOnly);
   const [proof, setProof] = useServerDraft(server.deviceProofRequired);
   const [unpaired, setUnpaired] = useServerDraft(server.deviceUnpairedPasswordLogin);
+  const [reattach, setReattach] = useServerDraft(server.deviceAutoReattach);
 
   const draft: DeviceFlags = {
     devicePairingRequired: pairing || short,
     shortCredentialApprovedDeviceOnly: short,
     deviceProofRequired: proof,
     deviceUnpairedPasswordLogin: unpaired,
+    deviceAutoReattach: reattach,
   };
   const changed = (Object.keys(draft) as DeviceFlagKey[]).filter((k) => draft[k] !== server[k]);
   const dirty = changed.length > 0;
@@ -61,13 +66,14 @@ export function useDevicePairingDrafts() {
     setShort(server.shortCredentialApprovedDeviceOnly);
     setProof(server.deviceProofRequired);
     setUnpaired(server.deviceUnpairedPasswordLogin);
+    setReattach(server.deviceAutoReattach);
   };
 
   return {
     isLoading: flagsQ.isLoading,
     server,
     draft,
-    set: { pairing: setPairing, short: setShort, proof: setProof, unpaired: setUnpaired },
+    set: { pairing: setPairing, short: setShort, proof: setProof, unpaired: setUnpaired, reattach: setReattach },
     dirty,
     mut,
     reset,

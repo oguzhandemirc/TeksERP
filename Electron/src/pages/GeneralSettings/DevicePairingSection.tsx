@@ -3,6 +3,7 @@ import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { FlagToggle, ReadOnlyRow } from "./SettingRow";
 import { SettingsSaveBar } from "./SettingsSaveBar";
 import { SETTINGS_ADMIN_PERMISSION } from "./settings-config";
+import { AutoReattachRow } from "./AutoReattachRow";
 import { UnpairedPasswordLoginRow, UnpairedPasswordLoginWarning } from "./UnpairedPasswordLoginRow";
 import { useDevicePairingDrafts } from "./useDevicePairingDrafts";
 
@@ -10,7 +11,7 @@ import { useDevicePairingDrafts } from "./useDevicePairingDrafts";
  * Cihaz eşleştirme zorunluluğu + "hızlı PIN / kart yalnız onaylı cihazdan" kuralı.
  * İkinci kural eşleştirmeyi de zorunlu kılar (otomatik onaylanan cihaz "onaylı" sayılmasın);
  * backend aynı kuralı ENFORCE eder ve kural açıkken eşleştirmeyi kapatmayı 409 ile reddeder.
- * Kısa kimlik kuralını, cihaz kanıtını ve onaysız parola girişini yalnız `admin:settings` yazar.
+ * Kısa kimlik kuralını, cihaz kanıtını, onaysız parola girişini ve otomatik yeniden tanımayı yalnız `admin:settings` yazar.
  */
 export function DevicePairingSection({
   writePermissions = [SETTINGS_ADMIN_PERMISSION],
@@ -63,6 +64,14 @@ export function DevicePairingSection({
         onChange={set.unpaired}
       />
       {draft.deviceUnpairedPasswordLogin && <UnpairedPasswordLoginWarning />}
+
+      <AutoReattachRow
+        canEdit={canEditAdmin}
+        draft={draft.deviceAutoReattach}
+        server={server.deviceAutoReattach}
+        disabled={busy}
+        onChange={set.reattach}
+      />
 
       <PairingNote />
 

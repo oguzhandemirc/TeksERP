@@ -137,6 +137,12 @@ function normalizeDeviceKind(k?: string | null): DeviceKind {
   return (Object.values(DeviceKind) as string[]).includes(v) ? (v as DeviceKind) : DeviceKind.TABLET;
 }
 
+/** REBOUND olayının yolu (OTOMATIK | PANEL | YERINDE); tanınmayan → null. */
+function reboundPath(meta: unknown): "OTOMATIK" | "PANEL" | "YERINDE" | null {
+  const y = meta && typeof meta === "object" ? (meta as Record<string, unknown>).yol : null;
+  return y === "OTOMATIK" || y === "PANEL" || y === "YERINDE" ? y : null;
+}
+
 export class DeviceService {
   /** Admin: tüm cihazları listele (aktifler önce, aktif içinde PENDING'ler önce). */
   static async list() {
@@ -155,7 +161,20 @@ export class DeviceService {
       // tavan aktif cihazları KESMEZ; kesilen taraf pasif (eski/reddedilmiş) kuyruktur.
       take: DEVICE_LIST_LIMIT,
     });
-    return rows.map(({ bindingEvents, ...d }) => ({ ...d, announcedFrom: registrationSource(bindingEvents[0]?.meta) }));
+    // "Yeniden bağlandı" izi: cihaz başına SON `REBOUND` olayı (defter; audit'ten türetilmez).
+    const rebounds = rows.length === 0 ? [] : await prisma.deviceBindingEvent.findMany({
+      where: { deviceRefId: { in: rows.map((r) => r.id) }, event: "REBOUND" },
+      orderBy: [{ deviceRefId: "asc" }, { createdAt: "desc" }, { id: "desc" }],
+      distinct: ["deviceRefId"],
+      select: { deviceRefId: true, createdAt: true, meta: true },
+    });
+    const lastRebound = new Map(rebounds.map((e) => [e.deviceRefId, { at: e.createdAt, yol: reboundPath(e.meta) }]));
+    return rows.map(({ bindingEvents, ...d }) => ({
+      ...d,
+      announcedFrom: registrationSource(bindingEvents[0]?.meta),
+      lastReboundAt: lastRebound.get(d.id)?.at ?? null,
+      lastReboundPath: lastRebound.get(d.id)?.yol ?? null,
+    }));
   }
 
   /**

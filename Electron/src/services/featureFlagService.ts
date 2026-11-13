@@ -495,6 +495,8 @@ export interface FeatureFlags {
   /** Onaysız (PENDING) tablet yalnız kullanıcı adı + parolayla girebilir mi (false=default;
    *  barındırılanda da zorlanmaz). Yalnız eşleştirme etkin zorunluyken anlamlıdır. */
   deviceUnpairedPasswordLogin: boolean;
+  /** Onaylı cihaz yeniden kurulunca donanım kimliğinden onaysız tanınsın (backend varsayılanı true). */
+  deviceAutoReattach: boolean;
   /** 2FA'sı açık hesabın PIN/kart girişinde de kod sorulur mu (varsayılan false; süperadminde hep). */
   shortCredentialTotpRequired: boolean;
   /** Web paneli (tarayıcı) girişi 2FA politikası: REQUIRED (varsayılan) | USER_CHOICE (kullanıcı kendi

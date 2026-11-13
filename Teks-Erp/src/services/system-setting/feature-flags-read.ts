@@ -11,7 +11,7 @@ import { isHostedInstallation } from "../helpers/install-class.helper";
 import { ApiResponse } from "../../types/api.types";
 import prisma from "../../lib/prisma";
 import { readConsumableStockEnabled, readCostFinishingKgBasis, readCostPresentationCurrency, readCostProfitCategoryClasses, readCostProfitConsumablePriceSource, readCostProfitMachineTime, readCostProfitOverheadKey, readCostProfitSubcontractSource, readCostWeavingStandardMethod, readFinanceAllowZeroPriceLineEnabled, readFinanceAutoAllocateOnPaymentEnabled, readFinanceCariHoldEmanetShipment, readFinanceCariHoldReleaseBySamePerson, readFinanceFutureDatedDocumentBlockEnabled, readFinanceRiskLimitCurrencyMode, readFinanceYarnOutOnInvoiceEnabled, readGoodsReceiptRequirePriceEnabled, readGoodsReceiptYarnQualityHoldEnabled, readOrderProductionProposal, readProductionCancelReasonRequired, readPurchaseBlockOverReceiptEnabled, readYarnBlockNegativeBalanceEnabled } from "./cost-purchase";
-import { readDevicePairingRequired, readDeviceProofRequired, readDeviceUnpairedPasswordLogin, readShortCredentialApprovedDeviceOnly, readShortCredentialTotpRequired, readTrustedDeviceDays, readWebTotpPolicy } from "./device-auth";
+import { readDeviceAutoReattach, readDevicePairingRequired, readDeviceProofRequired, readDeviceUnpairedPasswordLogin, readShortCredentialApprovedDeviceOnly, readShortCredentialTotpRequired, readTrustedDeviceDays, readWebTotpPolicy } from "./device-auth";
 import { readCompanyLegalIdentity, readCompanyLetterhead, readDocumentsConfig, readEIrsaliyeConfig } from "./documents";
 import { applyTermRegime, settingMapClient } from "./feature-flags-read-helpers";
 import { withLicenseBlock, type CachedFeatureFlags, type FeatureFlags } from "./feature-flags-types";
@@ -208,6 +208,7 @@ export async function getFeatureFlags(): Promise<ApiResponse<FeatureFlags>> {
       devicePairingRequired: await readDevicePairingRequired(cacheClient),
       deviceProofRequired: await readDeviceProofRequired(cacheClient),
       deviceUnpairedPasswordLogin: await readDeviceUnpairedPasswordLogin(cacheClient),
+      deviceAutoReattach: await readDeviceAutoReattach(cacheClient),
       shortCredentialApprovedDeviceOnly: await readShortCredentialApprovedDeviceOnly(cacheClient),
       shortCredentialTotpRequired: await readShortCredentialTotpRequired(cacheClient),
       webTotpPolicy: await readWebTotpPolicy(cacheClient),
