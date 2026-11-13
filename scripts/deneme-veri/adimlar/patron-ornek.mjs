@@ -41,7 +41,7 @@ export const SIPARISLER = [
 ];
 
 // [anahtar, sipariş, satır, top adedi, rota (STD: boya→KK2→tambur · BZ: boya→zımpara→KK2→tambur), hedef, top giriş günü]
-// hedef: SEVK (bitti, sevk edildi) · DEPO (bitti, tartılmış çuvalda) · TAMBUR · KK2 · FASON (son fason adımında) · BEKLER
+// hedef: SEVK (bitti, sevk edildi) · DEPO (bitti, tartılmış çuvalda) · TAMBUR (2 top kesilmiş) · KK2 · FASON (son fason adımında) · BEKLER
 export const ISLER = [
   ["W01", "S01", 0, 4, "STD", "SEVK", -27], ["W02", "S02", 0, 3, "STD", "SEVK", -25], ["W03", "S03", 0, 4, "STD", "SEVK", -23],
   ["W04", "S04", 0, 3, "BZ", "SEVK", -21], ["W05", "S05", 0, 4, "STD", "SEVK", -19], ["W06", "S06", 0, 3, "STD", "SEVK", -16],
@@ -63,6 +63,7 @@ const metre = (key, i) => +(92 + ((key.charCodeAt(1) * 7 + key.charCodeAt(2) * 1
 const yaz409 = async (c, modul, gerekli, fn) => {
   try { return await c.kosulluYaz(modul, gerekli, fn); } catch (e) { if (e.status === 409) { c.say(modul, "mevcut"); return null; } throw e; }
 };
+const liste0 = (j) => j.data?.rolls ?? j.data ?? [];
 const uyari = (c, ne, e) => { console.log(`  ⚠ ${ne}: ${String(e.message).slice(0, 260)}`); c.say("atlandi", "yeni"); };
 
 export async function patronOrnek(c) {
@@ -213,7 +214,9 @@ async function isEmri(c, k, [key, sk, satir, adet, rota, hedef, gun]) {
   // Tambur: her 3. topta 4–8 m A1 (2. kalite) parça; hedef TAMBUR ise yalnız ilk top kesilir
   const tb = await adimOf(k.ist.TAMBUR);
   const tbToplar = (await adimdakiler(tb)).filter((t) => t.status === "IN_PRODUCTION").sort((x, y) => String(x.barcode).localeCompare(String(y.barcode)));
-  for (const [i, t] of (hedef === "TAMBUR" ? tbToplar.slice(0, 1) : tbToplar).entries()) {
+  // hedef TAMBUR: adım yarım kalsın — iş emrinde 2 top kesilmişse yeniden koşum kesmez
+  const kesilmis = hedef === "TAMBUR" ? liste0(await c.api("GET", `/api/work-orders/${woId}/rolls`)).filter((t) => t.status === "TAMBUR_CONSUMED").length : 0;
+  for (const [i, t] of (hedef === "TAMBUR" ? tbToplar.slice(0, Math.max(0, 2 - kesilmis)) : tbToplar).entries()) {
     const m = Number(t.currentQty ?? t.initialQty);
     const a1 = i % 3 === 1 ? 4 + (i % 5) : 0;
     const cuts = a1 ? [{ length: +(m - a1).toFixed(1), qualityGrade: "1.KALITE", relatedErrorIds: [] }, { length: a1, qualityGrade: "A1", relatedErrorIds: [] }]
