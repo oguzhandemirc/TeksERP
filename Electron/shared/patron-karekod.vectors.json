@@ -22,7 +22,8 @@
     { "girdi": "https://172.20.1.1", "neden": "yerel" },
     { "girdi": "https://169.254.3.4", "neden": "yerel" },
     { "girdi": "https://100.100.1.1", "neden": "yerel" },
-    { "girdi": "https://sunucu.local", "neden": "yerel" }
+    { "girdi": "https://sunucu.local", "neden": "yerel" },
+    { "girdi": "https://nas.home.arpa", "neden": "yerel" }
   ],
   "karekod": [
     { "adres": "https://erp.fabrika.com", "metin": "tekserp-patron:1:https://erp.fabrika.com" },

@@ -36,6 +36,7 @@ import { UserFootprintPage } from "@/pages/Access/Users/footprint/UserFootprintP
 import { TemplatesPage } from "@/pages/Access/Templates/TemplatesPage";
 import { PermissionsCatalogPage } from "@/pages/Access/Permissions/PermissionsCatalogPage";
 import { PatronCloudPage } from "@/pages/Access/PatronCloud/PatronCloudPage";
+import { PatronPhonePage } from "@/pages/Access/PatronPhone/PatronPhonePage";
 import { ItemsPage } from "@/pages/Items/ItemsPage";
 import { CustomersPage } from "@/pages/Customers/CustomersPage";
 import { ProductionStationsPage } from "@/pages/Stations/ProductionStationsPage";
@@ -1113,6 +1114,15 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="admin:users">
         <PatronCloudPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Patron telefonu bağlantı karekodu (yalnız adres; sır yok) — Yönetim Bulutu ile aynı izin.
+    path: "access/patron-telefon",
+    element: (
+      <ProtectedRoute requirePermission="admin:users">
+        <PatronPhonePage />
       </ProtectedRoute>
     ),
   },

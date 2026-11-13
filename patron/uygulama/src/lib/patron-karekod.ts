@@ -20,7 +20,7 @@ const HOST = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/
 
 /** Telefonun dışarıdan ulaşamayacağı adresler: döngü, özel IPv4, link-local, CGNAT, mDNS/yerel adlar. */
 function yerelMi(host: string): boolean {
-  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".lan") || host.endsWith(".internal")) return true;
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".lan") || host.endsWith(".internal") || host.endsWith(".home.arpa")) return true;
   const ip = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
   if (!ip) return false;
   const [a, b] = [Number(ip[1]), Number(ip[2])];
