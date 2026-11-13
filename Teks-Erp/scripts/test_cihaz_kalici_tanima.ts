@@ -93,8 +93,8 @@ async function main(): Promise<void> {
     data: { username: `TST-ckt-${Date.now()}`, fullName: "Kalıcı tanıma bekçisi", passwordHash: "x", isActive: true },
     select: { id: true },
   });
-  const onayliCihaz = async (localId: string, H: string): Promise<{ id: string; name: string }> => {
-    await DeviceService.announce({ deviceId: localId, hw: hw(H), kind: "TABLET" });
+  const onayliCihaz = async (localId: string, digest: string): Promise<{ id: string; name: string }> => {
+    await DeviceService.announce({ deviceId: localId, hw: hw(digest), kind: "TABLET" });
     const row = await prisma.device.findUniqueOrThrow({ where: { deviceId: localId }, select: { id: true, name: true } });
     yaratilan.push(row.id);
     // Yönetici onayı + teyitli sır (onaylı, kanıtı çalışan cihazın hâli).
