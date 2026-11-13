@@ -101,7 +101,11 @@ export function izinleriSuz(perms: readonly string[], y: Yetenek = etkin): reado
 }
 
 /** Telefondan yapılabilen yazma işlemleri; ekran kipi değil işlemi sorar. */
-export const ISLEMLER = ["siparis.ekle", "siparis.duzenle", "siparis.iptal", "cari.ekle", "cari.duzenle", "cari.pasif"] as const;
+export const ISLEMLER = [
+  "siparis.ekle", "siparis.duzenle", "siparis.iptal", "cari.ekle", "cari.duzenle", "cari.pasif",
+  // V5c tanımlar: yalnız ERP (bulutta gelen kutusu mesajı yok → kapalı).
+  "renk.ekle", "renk.duzenle", "renk.pasif",
+] as const;
 export type Islem = (typeof ISLEMLER)[number];
 
 /** Fabrikanın `matchesPermission` aynası: `*` · `alan:*` · tam kod. */
@@ -120,6 +124,9 @@ const ERP_ISLEM: Readonly<Record<Islem, { readonly izin: readonly (readonly stri
   "cari.ekle": { izin: [["customer:write"]], kume: ["cari-kart"] },
   "cari.duzenle": { izin: [["customer:write"], ["customer:read"]], kume: ["cari-kart"] },
   "cari.pasif": { izin: [["customer:write"]], kume: ["cari-kart"] },
+  "renk.ekle": { izin: [["property:write"]], kume: ["renk"] },
+  "renk.duzenle": { izin: [["property:write"], ["property:read"]], kume: ["renk"] },
+  "renk.pasif": { izin: [["property:write"]], kume: ["renk"] },
 };
 
 /** Bulut: yalnız gelen kutusu yaratması, bugünkü kodlarla (`perms` = oturumun bulut izinleri). */
