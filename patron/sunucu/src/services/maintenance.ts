@@ -33,6 +33,8 @@ export const PRUNED_TABLES = {
   operation_receipts: "ISLEM_SAKLAMA_GUN (işlem kimliği penceresi)",
   account_audit: "ayak izi: başarısız giriş DENETIM_GIRIS_SAKLAMA_GUN · diğerleri DENETIM_SAKLAMA_GUN",
   notifications: "sonuçlanmış (GONDERILDI · BASARISIZ · ATLANDI) + BILDIRIM_SAKLAMA_GUN (telemetri; olay kimliği günlük/olay başına, pencere ondan uzun) · `cari-kilit` HARİÇ: durum bildirimi, satırı tekrar kimliği (kilit sayısıyla sınırlı)",
+  push_bridge_nonces: "merkez push köprüsü nonce'u: istek zamanı + 10 dk geçti (telemetri)",
+  push_bridge_tickets: "merkez push köprüsü bileti: makbuzu sonuçlanmış ya da gönderimden PUSH_BRIDGE_TICKET_DAYS geçmiş (telemetri; metin/ham belirteç taşımaz)",
   login_routes: "merkez giriş dizini: hedef hesap kendi tesis DB'sinde artık ETKİN değil (yönlendirme önbelleği, kişisel veri taşımaz) · kimliği silinen (kapanıştan IDENTITY_PURGE_DAYS sonra) merkez kimliğin bütün üyelikleri",
 } as const;
 
@@ -307,8 +309,27 @@ export async function pruneLoginRoutes(ctx: CloudContext, tesisId: string): Prom
   return withCentral(ctx.sync, {}, async (tx) => (await tx.loginRoute.deleteMany({ where: { id: { in: stale }, tesisId } })).count);
 }
 
+/** Push köprüsü bileti makbuz yoklaması bittikten sonra en çok bu kadar gün tutulur (Expo makbuzu bir gün saklar). */
+export const PUSH_BRIDGE_TICKET_DAYS = 2;
+
+/** Merkez push köprüsü telemetrisi: süresi geçen nonce + sonuçlanmış/eski bilet. Bağ (`push_bridge_links`) budanmaz. */
+export async function prunePushBridge(ctx: CloudContext, nowMs: number): Promise<number> {
+  const now = new Date(nowMs);
+  const old = new Date(nowMs - PUSH_BRIDGE_TICKET_DAYS * DAY_MS);
+  return withCentral(ctx.sync, {}, async (tx) => {
+    const nonces = await tx.pushBridgeNonce.deleteMany({ where: { expiresAt: { lt: now } } });
+    const tickets = await tx.pushBridgeTicket.deleteMany({ where: { OR: [{ result: { not: null } }, { sentAt: { lt: old } }] } });
+    return nonces.count + tickets.count;
+  });
+}
+
 export async function runDaily(ctx: CloudContext, nowMs: number): Promise<number> {
   let n = 0;
+  try {
+    n += await prunePushBridge(ctx, nowMs);
+  } catch (err) {
+    console.error(`[patron] bakım (push köprüsü budaması) başarısız: ${(err as Error).name}`);
+  }
   for (const f of await listFacilities(ctx)) {
     n += (await perFacility(f.tesisId, "eşitleme budaması", () => pruneSyncTables(ctx, f, nowMs))) ?? 0;
     n += (await perFacility(f.tesisId, "hesap budaması", () => pruneAccountTables(ctx, f, nowMs))) ?? 0;

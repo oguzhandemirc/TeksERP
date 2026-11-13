@@ -161,6 +161,50 @@ model InstallationRoute {
   @@map("installation_routes")
 }
 
+/// Push köprüsü bağı (merkez; kişi değil KURULUM): (kurulum, belirteç özeti). Ham belirteç SAKLANMAZ (CHECK: 64 hex).
+/// Fabrika kaydeder/bırakır (amaç `bildir`); makbuzdaki `DeviceNotRegistered` `invalidated_at` yazar, sonraki dürt siler.
+model PushBridgeLink {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  installationId String    @map("kurulum_id") @db.Uuid
+  tokenDigest    String    @map("token_digest") @db.VarChar(64)
+  invalidatedAt  DateTime? @map("invalidated_at") @db.Timestamptz
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@unique([installationId, tokenDigest])
+  @@map("push_bridge_links")
+}
+
+/// Push köprüsü Expo bileti (merkez, TELEMETRİ): makbuz yoklaması için; metin/ham belirteç taşımaz. Budanır.
+model PushBridgeTicket {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  installationId String    @map("kurulum_id") @db.Uuid
+  tokenDigest    String    @map("token_digest") @db.VarChar(64)
+  ticket         String    @unique @map("ticket") @db.VarChar(100)
+  receiptDueAt   DateTime? @map("receipt_due_at") @db.Timestamptz
+  result         String?   @map("result") @db.VarChar(60)
+  sentAt         DateTime  @map("sent_at") @db.Timestamptz
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([receiptDueAt])
+  @@map("push_bridge_tickets")
+}
+
+/// Push köprüsü imzalı istek nonce defteri (merkez, TELEMETRİ; tesis DB'si açılmadan tekrar oynatma engeli).
+model PushBridgeNonce {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  installationId String   @map("kurulum_id") @db.Uuid
+  nonce          String   @map("nonce") @db.VarChar(64)
+  expiresAt      DateTime @map("expires_at") @db.Timestamptz
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@unique([installationId, nonce])
+  @@index([expiresAt])
+  @@map("push_bridge_nonces")
+}
+
 /// Bulut KİMLİĞİ (merkez): tek e-posta (yalnız ANAHTARLI özet, HMAC-SHA256 `patron-tesis-db.key`) + tek parola + tek
 /// TOTP; birden çok tesise üyelikle (`login_routes`) erişir. Merkez düz e-posta TAŞIMAZ. TOTP sırrı kimlik id'siyle
 /// mühürlü. CHECK: AKTIF ⇒ parola + TOTP sırrı + son adım; PASIF ⇔ kapanış anı; silinmişte sır yok.
