@@ -122,7 +122,8 @@ ya da kayıt düşerse yineleme yeniden gönderir (çift bildirim olasılığı 
   kuyrukta YOK.
 - Gönderim `jobs/patron-push.job.ts` turunun son adımı (`services/patron-push/nudge-round.ts`): kapı ya da uygunluk yoksa
   canlı satırlar ATLANDI, dışarı istek yok. Açıkken bayat claim (5 dk) geri · 24 sa → VAZGECILDI · okunmuş/çözülmüş kutu →
-  IPTAL · hız bütçesi (120/dk, tur ≤ 60) kadar satır, her biri atomik claim. Gövde kutudan TAM METİN, `data {bildirimId,
+  IPTAL · hız bütçesi (120/dk, tur ≤ 60) kadar satır, her biri atomik claim; gönderim anında alıcı türü hâlâ görmüyorsa
+  (izin/modül/kapı kapandı) ATLANDI `GORMEZ`. Gövde kutudan TAM METİN, `data {bildirimId,
   rota: "/bildirimler"}`, en çok 20 KAYITLI belirteç.
 - Sonuç eşlemesi (§3 tablosunun fabrika karşılığı): GONDERILDI/KAPALI → satır GONDERILDI · GECERSIZ ve `gecersiz[]` →
   belirteç yerelde BIRAKILDI (`birak` yok) · BAGSIZ → belirteç BEKLIYOR + dürt yeniden · GECICI → yeniden · KALICI → vazgeç.

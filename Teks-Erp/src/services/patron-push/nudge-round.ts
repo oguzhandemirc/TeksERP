@@ -16,6 +16,7 @@ import { buildNudgeBody, isNotificationKind } from "./nudge-payload";
 import { noteNudgeSent, nudgeBudget, pauseNudges } from "./nudge-rate";
 import { LIVE_STATES, pushBackoffMs } from "./states";
 import { openPushToken } from "./token-seal";
+import { loadNotificationVisibilityEnv, visibleUsersFor } from "../helpers/notification-visibility.helper";
 
 /** Bir dürt bu süreden sonra gönderilmez (bayat bildirim telefonu yanıltır). */
 export const NUDGE_GIVE_UP_MS = 24 * 60 * 60 * 1000;
@@ -86,6 +87,11 @@ async function sendOne(ctx: CloudCallContext, row: { id: string; inboxId: string
   });
   if (!inbox || !inboxWantsNudge(inbox)) return "IPTAL";
   if (!isNotificationKind(inbox.kind)) return { kind: "FINISH", state: "ATLANDI", code: "BILINMEYEN_TUR" };
+  // Kuyruk ile gönderim arasında izin/modül/kapı kapanmış olabilir: tam metin yalnız türü HÂLÂ görene gider.
+  const env = await loadNotificationVisibilityEnv(prisma, [inbox.kind]);
+  if ((await visibleUsersFor(prisma, inbox.kind, env, { userIds: [inbox.userId], at: now })).length === 0) {
+    return { kind: "FINISH", state: "ATLANDI", code: "GORMEZ" };
+  }
   const tokens = await prisma.patronPushToken.findMany({
     where: { userId: inbox.userId, cloudState: { in: [...LIVE_STATES] } },
     orderBy: [{ lastSeenAt: "desc" }, { id: "asc" }],

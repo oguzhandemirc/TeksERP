@@ -12,6 +12,7 @@
 //   §7 HTTP: 401/403 (tur durur, deneme sayılmaz) · 429 (duraklama) · 503 · ağ (geri çekilme) · 400 (vazgeç)
 //   §8 çift tur aynı satırı iki kez göndermez (atomik claim) · §9 hız bütçesi dolunca sırada bekler
 //   §10 24 saatte vazgeçer · §11 budama yalnız terminal satır · §12 sır hijyeni (günlük, system_logs, kuyruk satırı)
+//   §13 kuyruk ile gönderim arasında türü görme izni kalkan kullanıcıya dürt gitmez (ATLANDI GORMEZ)
 // NEGATİF SONDA: harita satırında (`docs/bekci-harita/bildirim.md`). Gerçek bulut/Expo çağrısı YOK (sahte taşıyıcı).
 // Koşum: npx tsx scripts/run-all-tests.ts patron_push_durt   (kendi _test DB'si; ayar yazar → hedef DB kapısı)
 // =============================================================================
@@ -407,6 +408,18 @@ async function main(): Promise<void> {
     await pruneNotifications();
     check("§11 budama yalnız 7 günden eski TERMİNAL satırı siler, canlı eski satır kalır",
       (await prisma.patronPushNudge.findUnique({ where: { id: n10.id } })) === null && (await prisma.patronPushNudge.findUnique({ where: { id: live11.id } })) !== null);
+
+    console.log("\n=== §13 izin kaybı ===");
+    await closeMine();
+    const y13 = `${T}-y13`;
+    await emit(y13);
+    await dispatch();
+    await prisma.userPermission.deleteMany({ where: { userId: P, permissionId: perm.id } });
+    const b13 = nudgeCalls().length;
+    await round();
+    await prisma.userPermission.create({ data: { userId: P, permissionId: perm.id } });
+    const n13 = (await nudgesOf(P, y13))[0];
+    check("§13 izni kalkan kullanıcıya dürt gitmez (ATLANDI GORMEZ, istek yok)", n13?.state === "ATLANDI" && n13.lastErrorCode === "GORMEZ" && nudgeCalls().length === b13, `${n13?.state} ${n13?.lastErrorCode}`);
 
     console.log("\n=== §12 sır hijyeni ===");
     uyari("test-patron-durt", "yakalama-sondasi");
