@@ -9,7 +9,7 @@ import { createHash } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { CloudError, badRequest } from "../lib/errors";
 import { withCentral } from "../lib/tenant";
-import { nativePushState } from "../push/native-gate";
+import { bridgeGateState } from "../push/native-gate";
 import { ExpoTransport, RECEIPT_BATCH, RecordingTransport, type BridgeTransport, type PushOutcome, type ReceiptBatch } from "../push/transports";
 import type { z } from "zod";
 import { ENVELOPE_VERSION, PUSH_BODY_MAX, PUSH_TITLE_MAX, type PushNudgeOutcome, type PushNudgeRequestSchema, type PushNudgeResponseSchema, type PushRegisterRequestSchema } from "../wire/esitleme";
@@ -31,15 +31,14 @@ export const tokenDigestOf = (token: string): string => createHash("sha256").upd
 const expoByCtx = new WeakMap<CloudContext, ExpoTransport>();
 
 /**
- * Köprünün taşıyıcısı ya da null (= gönderim KAPALI; uçlar çalışır, sonuç `KAPALI`). Kapı bulut kipiyle AYNI:
- * `sahte` kipte kayıtlı sahte gönderici, `gercek` kipte yalnız `nativePushState` açıkken Expo.
+ * Köprünün taşıyıcısı ya da null (= gönderim KAPALI; uçlar çalışır, sonuç `KAPALI`). Kapı `bridgeGateState`: `sahte`
+ * kipte kayıtlı sahte gönderici; aksi hâlde `acik` + belirteçle kendi Expo taşıyıcısı (`BILDIRIM_KIPI`den bağımsız).
  */
 export function bridgeTransport(ctx: CloudContext): BridgeTransport | null {
   if (ctx.pushBridge !== undefined) return ctx.pushBridge;
-  const runtime = ctx.notifications;
-  if (!runtime) return null;
-  if (ctx.config.BILDIRIM_KIPI === "sahte") return runtime.transport instanceof RecordingTransport ? runtime.transport : null;
-  if (!nativePushState(ctx.config).acik) return null;
+  const gate = bridgeGateState(ctx.config);
+  if (gate.kip === "sahte") return ctx.notifications?.transport instanceof RecordingTransport ? ctx.notifications.transport : null;
+  if (gate.kip !== "gercek") return null;
   let expo = expoByCtx.get(ctx);
   if (!expo) {
     expo = new ExpoTransport(ctx.config);
