@@ -166,6 +166,21 @@ describe("oturum kancası (sessiz kayıt + belirteç değişimi)", () => {
   });
 });
 
+describe("belirteç olayı süzgeci (döngü sondası, 2026-11-14)", () => {
+  it("⭐ ilk olay ve aynı belirteçle tekrar eden olay kaydı TETİKLEMEZ; yalnız gerçek değişim tetikler", () => {
+    const cb = jest.fn();
+    const suz = ep.degisinceSuzgeci(cb);
+    suz("fcm-1"); // kayıt belirteci alınca yayılan ilk olay
+    suz("fcm-1"); // her yeniden alışta aynı değer
+    suz("fcm-1");
+    expect(cb).not.toHaveBeenCalled();
+    suz("fcm-2");
+    expect(cb).toHaveBeenCalledTimes(1);
+    suz("fcm-2");
+    expect(cb).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("dokunuş (ERP yedek yolu)", () => {
   const deps = (yedekRota: string | null) => ({ facilityId: "t1", yedekRota, switchFacility: jest.fn(async () => true), push: jest.fn() });
 
