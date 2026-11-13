@@ -71,6 +71,7 @@ import { quickOrderFromRolls as quickOrderFromRollsImpl, quickOrderTx as quickOr
 import { changeLineColor as changeLineColorImpl } from "./order/line-color";
 import { getActiveShipmentLinks as getActiveShipmentLinksImpl, assertNoActiveShipments as assertNoActiveShipmentsImpl, hardDelete as hardDeleteImpl, softDelete as softDeleteImpl } from "./order/lifecycle";
 import { getCancelPreview as getCancelPreviewImpl } from "./order/cancel";
+import { guardCancelPreview } from "./order/cancel-preview-token";
 import { manualComplete as manualCompleteImpl, reopen as reopenImpl } from "./order/status";
 import type { OrderStats } from "./order/list";
 import type { OrderShipmentsResult } from "./order/detail";
@@ -1252,8 +1253,9 @@ export class OrderService extends BaseService {
     orderId: string,
     workOrderActions: Array<{ workOrderId: string; action: CancelAction }>,
     userId?: string,
-    reason?: { reasonCode?: string | null; reasonText?: string | null }
+    reason?: { reasonCode?: string | null; reasonText?: string | null; expectedPreviewToken?: string | null }
   ): Promise<ApiResponse<unknown>> {
+    const previewGuard = await guardCancelPreview(orderId, reason?.expectedPreviewToken); // V4c: token yoksa no-op
     this.assertNoActiveShipments(await this.getActiveShipmentLinks(orderId), "İptal");
 
     // SEBEP ÇÖZÜMÜ TX DIŞINDA (top iptalindeki kural): `resolveReasonCode`
@@ -1328,6 +1330,7 @@ export class OrderService extends BaseService {
 
     // 2) Tek transaction: convert + unlink + order cancel.
     await prisma.$transaction(async (tx) => {
+      await previewGuard.lockTx(tx);
       // ATOMİK CLAIM (check-then-act DEĞİL): tx başında siparişi non-terminal
       // iddia et + write-kilitle. Yıkıcı işlem preview+per-record onayıyla korunuyor;
       // bu yalnız eşzamanlılık/replay sertleştirmesi (iki paralel iptal, ya da
@@ -1397,6 +1400,7 @@ export class OrderService extends BaseService {
           `Önizleme sonrası bu siparişe yeni ${TERIM.terbiyeIsEmri.tekilKucuk} bağlandı. Sayfayı yenileyip iptali tekrar onaylayın.`,
         );
       }
+      await previewGuard.verifyTx(tx, cancelWoIds);
 
       for (const wo of preview.affectedWorkOrders) {
         const action = actionByWO.get(wo.id)!;

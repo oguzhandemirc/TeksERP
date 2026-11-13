@@ -84,8 +84,12 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}tambur/warehouse-cut.ts::cutWarehouseRollInner`]: { giris: { [`${S}tambur/warehouse-cut.ts::cutWarehouseRoll`]: "R" } },
   [`${S}tambur/open-fabric-cut.ts::cutOpenFabricInner`]: { giris: { [`${S}tambur/open-fabric-cut.ts::cutOpenFabric`]: "R" } },
   // Gülkesim: belgeden İE formunda hızlı müşteri kaydı tabletten clientToken ile doğar; kimlik = katlanmış ad.
-  [`${S}customer.service.ts::createCardInTx`]: { giris: { [`${S}customer-quick-create.service.ts::quickCreate`]: "R" } },
+  [`${S}customer.service.ts::createCardInTx`]: {
+    giris: { [`${S}customer-quick-create.service.ts::quickCreate`]: "R", [`${S}customer-card-create.service.ts::createCustomerCard`]: "R" },
+  },
   [`${S}customer-quick-create.service.ts::quickCreate`]: { giris: { [`${S}customer-quick-create.service.ts::quickCreate`]: "R" } },
+  // V4c: kart yolunun (`POST /customers`) opsiyonel token'ı — hızlı kayıtla aynı dikiş, R kipi.
+  [`${S}customer-card-create.service.ts::createCustomerCard`]: { giris: { [`${S}customer-card-create.service.ts::createCustomerCard`]: "R" } },
   [`${S}cash-transaction.service.ts::createFresh`]: { giris: { [`${S}cash-transaction.service.ts::create`]: "R" } },
   [`${S}cash-transaction.service.ts::transferFresh`]: { giris: { [`${S}cash-transaction.service.ts::transfer`]: "R" } },
   // Tezgah alarmı kişi eylemleri (A1b): altı eylem tek boğazdan (`runActor` → `actionReplay(...).run`).
@@ -270,6 +274,7 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   // D4-K3e: token kaydı virman bacaklarının `transferGroupId`si; kimlik = birleşmenin yönü (kaynak → hedef).
   [`${S}cari-merge.service.ts::applyReplay`]: ["sourceId", "targetId"],
   [`${S}customer-quick-create.service.ts::quickCreateReplay`]: ["ad"],
+  [`${S}customer-card-create.service.ts::cardCreateReplay`]: ["ad", "vergiNo"],
   [`${S}expense-allocation.service.ts::allocationReplay`]: ["cashTransactionId", "hedef", "sharePct"],
   [`${S}machine-cost-rate.service.ts::rateReplay`]: ["machineId", "hourRateTry"],
   [`${S}consumable-norm.service.ts::normReplay`]: ["serviceItemId", "consumableItemId", "propertyValueId", "qtyPerM", "basis"],
