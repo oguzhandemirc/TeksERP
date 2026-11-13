@@ -143,7 +143,8 @@ async function main(): Promise<void> {
     check("⭐ renkli satırın topu da STOCK (forcedStatus; sezgi WAREHOUSE'a düşürürdü)", colored?.status === "STOCK", colored?.status ?? "renkli top yok");
     const entries = await prisma.warehouseMovement.count({ where: { rollId: { in: rl1 }, eventType: "ENTRY" } });
     check("16 giriş defter satırı (WarehouseMovement ENTRY)", entries === 16, String(entries));
-    const ls1 = (await prisma.customerDeliveryNoteLine.findMany({ where: { noteId: n1.id }, select: { id: true, status: true, rollId: true, meters: true } }));
+    // Sırasız okuma ls1[0]'ı bazen renkli satır yapıyordu (§3 replay colorId:null → CLIENT_TOKEN_COLLISION, CI aralıklı).
+    const ls1 = (await prisma.customerDeliveryNoteLine.findMany({ where: { noteId: n1.id }, orderBy: { lineNo: "asc" }, select: { id: true, status: true, rollId: true, meters: true } }));
     check("satırlar ENTERED + rollId", ls1.every((l) => l.status === "ENTERED" && l.rollId), "");
     check("satır token'ı = uuidv5(lineId)", ls1.every((l) => rolls1.find((r) => r.id === l.rollId)?.clientToken === lineRollToken(l.id)));
     const twoHundred = ls1.filter((l) => Number(l.meters) === 200);
@@ -153,7 +154,9 @@ async function main(): Promise<void> {
     console.log("§3 replay");
     const inv = new InventoryService();
     const l0 = ls1[0]!;
-    const rep = await inv.createInitialEntry({ itemId: fabric.id, colorId: null, initialQty: Number(l0.meters), clientToken: lineRollToken(l0.id) }, admin.id, null, false, { forcedEntrySource: "SEMI_FINISHED", forcedStatus: "STOCK", ownerCustomerId: owner, skipKk1WeightPolicy: true });
+    // Replay kimliği satırın KENDİ topundan: hangi satır seçilirse seçilsin aynı top (renk dahil) yeniden istenir.
+    const l0Color = rolls1.find((r) => r.id === l0.rollId)?.colorId ?? null;
+    const rep = await inv.createInitialEntry({ itemId: fabric.id, colorId: l0Color, initialQty: Number(l0.meters), clientToken: lineRollToken(l0.id) }, admin.id, null, false, { forcedEntrySource: "SEMI_FINISHED", forcedStatus: "STOCK", ownerCustomerId: owner, skipKk1WeightPolicy: true });
     check("aynı satır token'ı ile giriş → idempotent, aynı top", rep.idempotent === true && (rep.data as { id: string }).id === l0.rollId);
     check("ikinci top YOK", (await prisma.roll.count({ where: { ownerCustomerId: owner } })) === 16);
     const again = await onay(n1.id);

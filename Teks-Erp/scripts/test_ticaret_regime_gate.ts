@@ -43,10 +43,12 @@
 //   SONDA-1 → çıkış 1 · 1 ❌ · §2 "KAPISIZ: routes/stock-count.routes.ts"
 //   SONDA-2 → çıkış 1 · 2 ❌ · §2 + §4 (adla kilitli mal kabul kontrolü de düştü)
 //   SONDA-3 → çıkış 1 · 1 ❌ · §2 (jenerik `requireModule("ticaret")` AST'de kapı SAYILMAZ)
+//   ④ küme bazlı kapı (§5, V3c 2026-11-13, md5 ile geri): patron-read toplu `router.use`una ticaret kapısı eklenir →
+//      SONDA-4 çıkış 1 · 1 ❌ · §5 · haritada `"ticaret.enabled"` başka kapıya bağlanır → SONDA-5 çıkış 1 · 2 ❌ · §2 + §5b
 // =============================================================================
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { rejimTaramasiKur } from "./lib/regime-gate-scan";
+import { rejimTaramasiKur, yorumlariSok } from "./lib/regime-gate-scan";
 
 let pass = 0,
   fail = 0;
@@ -194,21 +196,29 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
       "(pano-kutular.service.ts:50). Router kapısı KONULAMAZ: pano her kurulumun açılış ekranıdır, modülden bağımsızdır.",
   },
   {
-    dosya: "routes/patron-read.routes.ts",
-    neden:
-      "PATRON OKUMA UCU (V3a, 2026-11-13). Router SALT-OKUMADIR (yazma ucu yok, test_patron_okuma_ucu §1b). Ticaret dokunuşu " +
-      "GEÇİŞLİ ve YANILTICIDIR: anlık kurucu (`cloud-sync/snapshots`) `DashboardService`i istasyon canlı durumu için import eder, " +
-      "aile cephesi `services/dashboard/pano-kutu-ajanda.ts`in alış siparişi okumasına uzanır; sunulan HİÇBİR küme o kutuyu çağırmaz. " +
-      "Kapı KÜME BAŞINADIR (`MODULE_GATES`, patron-read.routes.ts); sunulan kümelerin hiçbiri ticaret tablosu okumaz ve her kümenin " +
-      "modülü haritada adlı kapıya bağlıdır — test_patron_okuma_ucu §1h/§1i ölçer, ticaret kapalıyken kümelerin açık kaldığını §6d. " +
-      "Router kapısı KONULAMAZ: ticaret kapalı kurulumda patronun bütün ekranı kapanırdı.",
-  },
-  {
     dosya: "routes/customer-period-summary.routes.ts",
     neden:
       "MÜŞTERİ DÖNEM ÖZETİ (cari-be madde 3, 2026-11-12). Router SALT-OKUMADIR (CUD yok); ticaret dokunuşu yalnız GEÇİŞLİ importtur: kapı tek kaynağı " +
       "`panoGates` (pano-kaynak.ts) pano kutularının kaynak grafını taşır. Uç alış siparişi/mal kabul OKUMAZ: brüt sevk (`_shipped`), ciro (`collectMoneyRows`) " +
       "ve sipariş karnesi satış çekirdeğidir. Router kapısı KONULAMAZ: kartlar ticaret modülü kapalı kurulumda da görünür.",
+  },
+];
+
+/**
+ * KÜME BAZLI kapılı router'lar: kapı tanımlayıcısı dosyada VAR (tarayıcı "kapılı" sayar) ama router'a değil, yalnız
+ * ticaret tablosu okuyan kümeye bağlıdır. "Kapılı" sayımı burada yanıltıcı olurdu → §5 kapının YERİNİ ölçer, ısırdığını
+ * HTTP ile `olcen` bekçi ölçer (üretim bekçisinin `KUME_BAZLI` emsali).
+ */
+const KUME_BAZLI: ReadonlyArray<{ dosya: string; mount: string; olcen: string; neden: string }> = [
+  {
+    dosya: "routes/patron-read.routes.ts",
+    mount: "/api/patron/v1",
+    olcen: "scripts/test_patron_okuma_ucu.ts",
+    neden:
+      "PATRON OKUMA UCU (V3a/V3c, 2026-11-13). Salt-okunur (test_patron_okuma_ucu §1b). Ticaret tablosu okuyan tek küme fiyat kartıdır " +
+      "(`fiyat`): `TICARET_SETS` → `MODULE_GATES[\"ticaret.enabled\"]`; diğer kümeler (geçişli `DashboardService` importu dahil) ticaret " +
+      "okumaz — §1h/§1i ölçer, ticaret kapalıyken `fiyat` 403 (§8e), diğerleri açık (§6d/§8f). Router kapısı KONULAMAZ: ticaret " +
+      "kapalı kurulumda patronun bütün ekranı kapanırdı.",
   },
 ];
 
@@ -274,7 +284,17 @@ function main(): void {
     check(`§4b ${b.dosya} gerekçesi yazılı`, b.neden.trim().length >= 20);
   }
 
+  // ── §5 ⭐ KÜME BAZLI KAPI — yerini ölç (router düzeyinde değil, haritada) ────
+  for (const k of KUME_BAZLI) {
+    const f = path.join(SRC, k.dosya);
+    const src = fs.existsSync(f) ? yorumlariSok(fs.readFileSync(f, "utf8")) : "";
+    check(`§5 ⭐ ${k.mount} router seviyesinde ticaret kapısı YOK`, src.length > 0 && !new RegExp(`router\\.use\\([^;]*\\b${KAPI}\\b`).test(src));
+    check(`§5b ⭐ ${k.mount} MODULE_GATES ticaret anahtarını \`${KAPI}\`a bağlıyor`, new RegExp(`"ticaret\\.enabled"\\s*:\\s*${KAPI}\\b`).test(src));
+    check(`§5c ${k.mount} ölçen bekçi mevcut ve gerekçe yazılı`, fs.existsSync(path.resolve(__dirname, "..", k.olcen)) && k.neden.trim().length >= 20, k.olcen);
+  }
+
   for (const m of MUAF) console.log(`   ℹ️  muaf: ${m.dosya} — ${m.neden}`);
+  for (const k of KUME_BAZLI) console.log(`   ℹ️  küme bazlı: ${k.dosya} — ${k.neden}`);
   for (const b of ADLA_BEKLENEN_KAPILI) console.log(`   ℹ️  adla beklenen: ${b.dosya} — ${b.neden}`);
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

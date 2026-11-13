@@ -201,7 +201,7 @@ const KUME_BAZLI: ReadonlyArray<{ dosya: string; mount: string; olcen: string; n
     mount: "/api/patron/v1",
     olcen: "scripts/test_patron_okuma_ucu.ts",
     neden:
-      "Patron okuma ucu (V3a): `ozet.uretim` üretim kümesi, `ozet.siparis`/`siparis`/`tesis` modülsüz — router kapısı " +
+      "Patron okuma ucu (V3a/V3c): `ozet.uretim`/`is-emri`/`uretim-akisi` üretim kümesi, `ozet.siparis`/`siparis`/`tesis` modülsüz — router kapısı " +
       "patronun bütün ekranını üretim kapalı kurulumda kapatırdı. Kapı küme başına `MODULE_GATES` (§6); üretim kapalıyken " +
       "`ozet.uretim` 403 MODULE_DISABLED, modülsüz küme 200 (`test_patron_okuma_ucu` §6).",
   },

@@ -8,9 +8,11 @@
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { buildRecords } from "../../cloud-sync/record-builder";
-import { overdueOrderWhere } from "../helpers/order-deadline.helper";
 import { foldSearchTerm, foldSearchTokens } from "../../utils/search-fold";
 import type { RecordProjection } from "../../cloud-sync/projections";
+import { KEY_FILTERS, KEY_FILTER_MAX, RESOLVED_ID_FILTERS, SEARCH, keyFilterWhere, sortSourceOf, type Where } from "./kume-arama";
+
+export { SEARCH, KEY_FILTERS } from "./kume-arama";
 
 /** Bulut liste sorgusu (`patron/sunucu/src/services/data.service.ts` `ListQuery` ile aynı alanlar). */
 export interface PatronListQuery {
@@ -20,38 +22,13 @@ export interface PatronListQuery {
   readonly kimlik: Partial<Readonly<Record<IdFilterKey, string>>>;
   readonly ara?: string;
   readonly suzgec?: string;
+  /** Bulut `LIST_KEY_FILTERS` (`kategoriAnahtari`); beyansız kümede 400. */
+  readonly anahtar: Partial<Readonly<Record<keyof typeof KEY_FILTERS, string>>>;
 }
 
 /** Bulut `LIST_ID_FILTER_KEYS` ile aynı sıra; bir küme yalnız o adda KOLONU varsa kabul eder. */
 export const ID_FILTER_KEYS = ["cariKartId", "cariHesapId", "siparisId", "teklifId", "urunId"] as const;
 export type IdFilterKey = (typeof ID_FILTER_KEYS)[number];
-
-type Where = Record<string, unknown>;
-interface SearchOption { readonly deger: string; readonly alan: string; readonly esit: string | boolean; readonly where: (nowMs: number) => Where }
-interface SearchSpec { readonly alanlar: readonly string[]; readonly terim: (token: string) => Where[]; readonly secenekler: readonly SearchOption[] }
-
-const eq = (deger: string, alan: string, esit: string | boolean, source: string): SearchOption => ({ deger, alan, esit, where: () => ({ [source]: esit }) });
-
-/** Bulut `LIST_SEARCH`in sunulan kümelerdeki aynası — seçenek (deger, alan, esit) eşitliğini bekçi ölçer. */
-export const SEARCH: Readonly<Record<string, SearchSpec>> = {
-  "cari-kart": {
-    alanlar: ["ad", "kod"],
-    terim: (t) => [{ nameFold: { contains: t } }, { code: { contains: t, mode: "insensitive" } }],
-    secenekler: [eq("MUSTERI", "musteriRolu", true, "isCustomerRole"), eq("TEDARIKCI", "tedarikciRolu", true, "isSupplierRole"), eq("FASON", "fasonRolu", true, "isSubcontractorRole")],
-  },
-  siparis: {
-    alanlar: ["siparisNo", "musteriAdi"],
-    terim: (t) => [{ orderNumber: { contains: t, mode: "insensitive" } }, { customer: { nameFold: { contains: t } } }],
-    secenekler: [
-      { deger: "GECIKMIS", alan: "gecikmis", esit: true, where: overdueOrderWhere },
-      eq("BEKLEMEDE", "durum", "PENDING", "status"), eq("ONAYLANDI", "durum", "APPROVED", "status"),
-      eq("KISMI_SEVK", "durum", "PARTIAL_SHIPPED", "status"), eq("TAMAMLANDI", "durum", "COMPLETED", "status"), eq("IPTAL", "durum", "CANCELLED", "status"),
-    ],
-  },
-};
-
-/** Sıralama tel alanı (bulut `sortFields` ilk alanı; BOYUT'ta bulut ufku kullanır, burada doğuş anı). */
-const SORT_WIRE: Readonly<Record<string, string>> = { siparis: "siparisTarihi", "siparis-kalemi": "olusturulma", "cari-kart": "olusturulma" };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ARAMA_AZAMI = 60;
@@ -61,7 +38,7 @@ const sourceOf = (p: RecordProjection, wire: string): string | undefined => p.co
 
 /** Kümenin kabul ettiği kimlik süzgeçleri (bulut `LIST_ID_FILTERS` beyanının bu sunucudaki karşılığı). */
 export function idFiltersOf(p: RecordProjection): IdFilterKey[] {
-  return ID_FILTER_KEYS.filter((k) => sourceOf(p, k) !== undefined);
+  return ID_FILTER_KEYS.filter((k) => sourceOf(p, k) !== undefined || Object.hasOwn(RESOLVED_ID_FILTERS, `${p.name}.${k}`));
 }
 
 function decodeCursor(cursor: string): { at: Date; id: string } {
@@ -77,16 +54,21 @@ function decodeCursor(cursor: string): { at: Date; id: string } {
 const encodeCursor = (at: Date, id: string): string => Buffer.from(JSON.stringify([at.toISOString(), id])).toString("base64url");
 
 /** Süzgeçler → Prisma koşulları; beyansız süzgeç 400 (bulutla aynı fail-closed). `null` = sonuç kesin boş. */
-function filterWhere(p: RecordProjection, q: PatronListQuery, nowMs: number): Where[] | null {
+async function filterWhere(p: RecordProjection, q: PatronListQuery, nowMs: number): Promise<Where[] | null> {
   const and: Where[] = [];
   if (p.scope) and.push(p.scope.prismaWhere as Where);
   for (const key of ID_FILTER_KEYS) {
     const v = q.kimlik[key];
     if (v === undefined) continue;
     const src = sourceOf(p, key);
-    if (!src) throw bad(`Bu listede ${key} süzgeci yok`);
+    const resolved = Object.hasOwn(RESOLVED_ID_FILTERS, `${p.name}.${key}`) ? RESOLVED_ID_FILTERS[`${p.name}.${key}`] : undefined;
+    if (!src && !resolved) throw bad(`Bu listede ${key} süzgeci yok`);
     if (!UUID.test(v)) throw bad(`${key} biçimsiz`);
-    and.push({ [src]: v.toLowerCase() });
+    if (resolved) {
+      const w = await resolved(v.toLowerCase());
+      if (w === null) return null;
+      and.push(w);
+    } else and.push({ [src!]: v.toLowerCase() });
   }
   if (q.durum !== undefined) {
     if (!/^[A-Z][A-Z0-9_]{0,39}$/.test(q.durum)) throw bad("durum biçimsiz");
@@ -94,6 +76,15 @@ function filterWhere(p: RecordProjection, q: PatronListQuery, nowMs: number): Wh
     // Bulut `data->>'durum'` eşitler: alanı olmayan kümede sonuç boştur, hata değil.
     if (!src) return null;
     and.push({ [src]: q.durum });
+  }
+  for (const [key, sets] of Object.entries(KEY_FILTERS) as Array<[keyof typeof KEY_FILTERS, readonly string[]]>) {
+    const v = q.anahtar[key];
+    if (v === undefined) continue;
+    if (!sets.includes(p.name)) throw bad(`Bu listede ${key} süzgeci yok`);
+    if (v.length > KEY_FILTER_MAX) throw bad(`${key} en çok ${KEY_FILTER_MAX} karakter`);
+    const w = await keyFilterWhere(v);
+    if (w === null) return null;
+    and.push(w);
   }
   if (q.ara !== undefined || q.suzgec !== undefined) {
     const spec = Object.hasOwn(SEARCH, p.name) ? SEARCH[p.name] : undefined;
@@ -133,10 +124,9 @@ async function assemble(p: RecordProjection, ids: string[], sub: { finans: boole
 }
 
 export async function listRecords(p: RecordProjection, q: PatronListQuery, sub: { finans: boolean; kisisel: boolean }, nowMs: number): Promise<{ kayitlar: PatronRecord[]; sonraki: string | null }> {
-  const and = filterWhere(p, q, nowMs);
+  const and = await filterWhere(p, q, nowMs);
   if (and === null) return { kayitlar: [], sonraki: null };
-  const sortSrc = sourceOf(p, SORT_WIRE[p.name] ?? "");
-  if (!sortSrc) throw new Error(`Patron okuma: sıralama kolonu yok (${p.name})`);
+  const sortSrc = sortSourceOf(p.name);
   if (q.cursor) {
     const c = decodeCursor(q.cursor);
     and.push({ OR: [{ [sortSrc]: { lt: c.at } }, { [sortSrc]: c.at, id: { lt: c.id } }] });
