@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { WorkOrderDefaultItemSection } from "./WorkOrderDefaultItemSection";
 import { EmanetDefaultWarehouseSection } from "./EmanetDefaultWarehouseSection";
+import { TurnstileSettingsSection } from "./TurnstileSettingsSection";
 import { useSearchParams } from "react-router-dom";
 import { Search, X } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -305,6 +306,7 @@ export function SettingsSurfacePage({
                 )}
                 {cat.id === "work-orders" && <WorkOrderDefaultItemSection writePermissions={cat.permissionAny} />}
                 {cat.id === "warehouse" && <EmanetDefaultWarehouseSection writePermissions={cat.permissionAny} />}
+                {cat.id === "web-giris" && <TurnstileSettingsSection />}
                 {cat.kind === "device" && <DevicePairingSection writePermissions={cat.permissionAny} />}
                 {/* BU BİLGİSAYARA ÖZEL YEREL DONANIM — dördü de raydan seçilir.
                     ⚠️ İç içe sekme (eski `WorkstationTabs`) 2026-09-04'te

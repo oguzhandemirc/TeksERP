@@ -54,6 +54,8 @@ export interface LoginMethodsInfo {
   lisansDurduruldu?: boolean;
   /** G2 giriş sinyali: kurulum etkinleştirme kilidinde (yalnız korumalı derleme; eski backend göndermez). */
   lisansEtkinlesmedi?: boolean;
+  /** Tarayıcı girişi bot koruması açıksa Cloudflare Turnstile site anahtarı (V1c). */
+  turnstileSiteKey?: string;
 }
 
 /**

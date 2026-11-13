@@ -24,6 +24,7 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { channelPlugin, sharedIdentity } from "./build-identity";
 import { replaceConnectSrc, webConnectSources } from "./shared/connect-gate";
+import { addTurnstileSources } from "./shared/turnstile-csp";
 
 /** Renderer sürümü — `X-Client-Version` başlığına gömülür (`src/lib/client-info.ts`); dev ve build'de aynı. */
 const APP_VERSION = (JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf-8")) as { version: string }).version;
@@ -40,7 +41,10 @@ export default defineConfig(({ command }) => ({
     {
       name: "tekserp-web-connect-src",
       transformIndexHtml: (html: string) =>
-        replaceConnectSrc(html, webConnectSources({ dev: command !== "build", apiBaseUrl: process.env.VITE_WEB_API_BASE_URL })),
+        // Turnstile (V1c): giriş sayfası betiği yalnız koruma açıkken yükler; köken yalnız web derlemesinde açık.
+        addTurnstileSources(
+          replaceConnectSrc(html, webConnectSources({ dev: command !== "build", apiBaseUrl: process.env.VITE_WEB_API_BASE_URL })),
+        ),
     },
   ],
   resolve: {

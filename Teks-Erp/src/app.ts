@@ -134,6 +134,7 @@ import dbCopyRoutes from "./routes/db-copy.routes";
 import shortCredentialRoutes from "./routes/short-credential.routes";
 import credentialResetRoutes from "./routes/credential-reset.routes";
 import loginLockoutRoutes from "./routes/login-lockout.routes";
+import turnstileRoutes from "./routes/turnstile.routes";
 import readOnlyDbRoutes from "./routes/read-only-db.routes";
 import dashboardRoutes from "./routes/dashboard.routes";
 import reportsRoutes from "./routes/reports.routes";
@@ -215,6 +216,8 @@ if (hardening.trustProxy !== null) {
 // Kip kararı tek yerde (`isWebPanelMode`: boş/boşluk = kapalı); giriş, kimlik ve lisans kapısı aynı yüklemi okur.
 const webDistDir = isWebPanelMode() ? (process.env.WEB_DIST_DIR ?? "").trim() : null;
 const WEB_NO_STORE = "no-store";
+// Turnstile (V1c) betiği + çerçevesi yalnız panel kipinde; giriş sayfası yalnız koruma açıkken yükler.
+const TURNSTILE_ORIGIN = "https://challenges.cloudflare.com";
 const WEB_IMMUTABLE_CACHE = "public, max-age=31536000, immutable";
 
 // HSTS + CSP `upgrade-insecure-requests` yalnız operatör HTTPS beyan ettiğinde
@@ -238,11 +241,11 @@ function buildHelmet(httpsMode: boolean): express.RequestHandler {
         // varsayilanlari aynen kalir.
         ...(webDistDir
           ? {
-              scriptSrc: ["'self'", "'wasm-unsafe-eval'"],
+              scriptSrc: ["'self'", "'wasm-unsafe-eval'", TURNSTILE_ORIGIN],
               connectSrc: ["'self'", "data:"],
               imgSrc: ["'self'", "data:", "blob:"],
               fontSrc: ["'self'", "data:"],
-              frameSrc: ["'self'", "blob:"],
+              frameSrc: ["'self'", "blob:", TURNSTILE_ORIGIN],
               workerSrc: ["'self'", "blob:"],
               // Panel kimliği çerezde (BULUT-WEB-PANELI.md): başka sitenin çerçevesine gömülmez (clickjacking).
               frameAncestors: ["'none'"],
@@ -709,6 +712,7 @@ app.use("/api/admin/db-copies", dbCopyRoutes);
 app.use("/api/admin/short-credentials", shortCredentialRoutes);
 app.use("/api/admin/credential-reset-requests", credentialResetRoutes);
 app.use("/api/admin/login-lockouts", loginLockoutRoutes); // O4: kilitli giriş kovaları
+app.use("/api/admin/turnstile", turnstileRoutes); // V1c: tarayıcı girişi bot koruması
 app.use("/api/admin/read-only-db", readOnlyDbRoutes);
 // ZENGİN sağlık yükü — `/health`ten AYRILDI (F-CORE-GUV-002). adminRoutes'tan
 // ÖNCE kaydedilir ki aynı prefix altında bu özel yol önce eşleşsin. Guard'lar

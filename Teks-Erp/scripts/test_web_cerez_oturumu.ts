@@ -23,6 +23,7 @@
 //       (kurmamış kodsuz girer, 2026-11-01 kurmak = seçmek); süperadmin hep kod
 //       (CHECK + 403); kendi-uç kapatma parolasız/kodsuz 400, REQUIRED'da 409, başkası adına yazma yok,
 //       genel kullanıcı güncelleme ucu alanı yazamaz; politika yalnız süperadmin (403) ve ham uçtan rezerve.
+//   §14 satır yokken varsayılan USER_CHOICE (V1b 2026-11-13): kurmamış kodsuz, kurmuş kodlu, süperadmin hep kod.
 // Sonda (2026-11-01 kurmak=seçmek): webTotpWaived'den "kurulmamış → muaf" dalı çıkarılınca §13d ❌; dal sistem
 // hesabı denetiminden önceye alınınca §13e ❌; ikisi de geri alındı (md5 eşit).
 // İzolasyon: TEST kullanıcıları + giriş yöntemi ayarı anlık görüntüsü; finally geri yükler/siler. DB GEREKİR.
@@ -301,7 +302,8 @@ async function main(): Promise<void> {
     check("§4c Bearer olmayan Authorization + geçerli çerez → 401", r4c.status === 401, `status=${r4c.status}`);
 
     // ── §5 TOTP ─────────────────────────────────────────────────────────────
-    console.log("\n=== §5 TOTP zorunlu ===");
+    console.log("\n=== §5 TOTP zorunlu (politika REQUIRED) ===");
+    await politika("REQUIRED"); // V1b: satır yokken varsayılan USER_CHOICE — zorunluluk açık REQUIRED'la ölçülür
     const t5a = await giris(uTotpYok.username, "web");
     check("§5a TOTP kurulmamış → 403 TOTP_ENROLLMENT_REQUIRED, çerez yok",
       t5a.status === 403 && t5a.body.details?.code === "TOTP_ENROLLMENT_REQUIRED" && cerezDegeri(t5a.setCookie) === null,
@@ -514,6 +516,23 @@ async function webTotpIkiKatman(o: {
   check("§13t ham ayar ucu ikinci yazma yüzeyi açmaz → 400 MODULE_KEY_RESERVED", kodu(e4) === "400:MODULE_KEY_RESERVED", kodu(e4));
   const e5 = await call("GET", "/api/admin/web-totp-summary", { bearer: admT });
   check("§13u özet ucu politika + kapatan sayısı döner", e5.status === 200 && e5.body.data?.policy === "REQUIRED" && Number(e5.body.data?.optedOutCount) >= 2, kodu(e5));
+
+  // §14 (V1b, kullanıcı kararı 2026-11-13): ayar satırı YOKKEN varsayılan USER_CHOICE — kod yalnız kendi açana.
+  console.log("\n=== §14 varsayılan politika (satır yok) ===");
+  await prisma.systemSetting.deleteMany({ where: { key: o.policyKey } });
+  invalidateFeatureFlagsCache();
+  const uTaze = await kullanici("taze", ["roll:read", "web:access"]);
+  const f1 = await giris(uTaze.username, "web");
+  check("§14a ⭐ satır yok ∧ TOTP kurmamış → 200 + çerez (zorunluluk yok)", f1.status === 200 && cerezDegeri(f1.setCookie) !== null, kodu(f1));
+  const f2 = await giris(uKurulu.username, "web");
+  check("§14b satır yok ∧ TOTP kurulu → 409 TOTP_REQUIRED (açan kullanıcıya sorulur)", kodu(f2) === "409:TOTP_REQUIRED", kodu(f2));
+  const sa2 = await prisma.user.create({
+    data: { username: `TEST-webc-sa2-${Date.now()}`, passwordHash: await AuthService.hashPassword(PAROLA), fullName: "TEST web sa2", isSystemAccount: true },
+    select: { id: true, username: true },
+  });
+  ids.push(sa2.id);
+  const f3 = await giris(sa2.username, "web");
+  check("§14c ⭐ satır yok: süperadmin kurulumsuz → 403 TOTP_ENROLLMENT_REQUIRED (sistem hesabı hep kod)", kodu(f3) === "403:TOTP_ENROLLMENT_REQUIRED", kodu(f3));
 }
 
 main().catch(async (e) => {

@@ -237,8 +237,11 @@ export const DEFAULT_TAMBUR_CALIBRATION_CHECK: TamburCalibrationCheck = "KAPALI"
 /** Web paneli girişi TOTP politikası. USER_CHOICE: kullanıcı kendi hesabında kapatabilir (süperadmin hariç). */
 export type WebTotpPolicy = "REQUIRED" | "USER_CHOICE";
 export const WEB_TOTP_POLICIES: WebTotpPolicy[] = ["REQUIRED", "USER_CHOICE"];
-/** Varsayılan `REQUIRED` — BUGÜNKÜ davranış (K4: web girişinde TOTP herkese zorunlu). */
-export const DEFAULT_WEB_TOTP_POLICY: WebTotpPolicy = "REQUIRED";
+/** Varsayılan `USER_CHOICE` — kod yalnız kullanıcı kendisi açtıysa (kullanıcı kararı 2026-11-13, V1b);
+ *  "herkese zorunlu" yöneticinin açık `REQUIRED` seçimidir. Çöp değer `WEB_TOTP_POLICY_ON_JUNK`e düşer. */
+export const DEFAULT_WEB_TOTP_POLICY: WebTotpPolicy = "USER_CHOICE";
+/** FAIL-CLOSED: okunamayan (elle yazılmış çöp) değer güvenlik ayarını gevşetmez. */
+export const WEB_TOTP_POLICY_ON_JUNK: WebTotpPolicy = "REQUIRED";
 /** Güvenilir cihaz süresi (gün) — 0 = kapalı (BUGÜNKÜ davranış), tavan 90. */
 export const DEFAULT_TRUSTED_DEVICE_DAYS = 0;
 export const MAX_TRUSTED_DEVICE_DAYS = 90;

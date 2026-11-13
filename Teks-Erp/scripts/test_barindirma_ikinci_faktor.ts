@@ -9,6 +9,7 @@
 //      masaüstünde details.trustDeviceDays, mobilde yok.
 //   §3 USER_CHOICE + webTotpOptOut: kodsuz 200; tercihsiz kullanıcı 409; TOTP KURMAMIŞ kullanıcı kodsuz 200
 //      (kurmak = seçmek, 2026-11-01); TOTP'siz süperadmin yine 403 TOTP_ENROLLMENT_REQUIRED.
+//      §3g ayar satırı yokken varsayılan USER_CHOICE (V1b 2026-11-13): kurmamış kodsuz, süperadmin 403.
 //   §4 onaylı + kanıtlı tablet: mobil/boş kodsuz 200; aynı cihazdan electron beyanı 409; kanıtsız 401;
 //      kanıtlı DESKTOP kaydı + mobile beyanı 409 (muafiyet cihaz türüne bağlı).
 //   §5 süperadmin: üç kanal + onaylı tablet → 409 (opt-out ve cihaz muafiyeti yok).
@@ -185,6 +186,13 @@ async function main(): Promise<void> {
     await setting(SETTING_KEYS.AUTH_WEB_TOTP_POLICY, "REQUIRED");
     const reqAgain = await login(optOut.username, "mobile");
     check("§3c REQUIRED'a dönünce tercih etkisiz (409)", codeOf(reqAgain) === "409:TOTP_REQUIRED", codeOf(reqAgain));
+    // §3g (V1b 2026-11-13): satır YOKKEN varsayılan USER_CHOICE — Y1 kurmamışı zorlamaz, süperadmini zorlar.
+    await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.AUTH_WEB_TOTP_POLICY } });
+    invalidateFeatureFlagsCache();
+    const defPlain = await login(plain.username, "electron");
+    const defSa = await login(saBare.username, "electron");
+    check("§3g ⭐ satır yok: TOTP kurmamış kodsuz 200, süperadmin 403 enrollment", defPlain.status === 200 && codeOf(defSa) === "403:TOTP_ENROLLMENT_REQUIRED", `${codeOf(defPlain)} / ${codeOf(defSa)}`);
+    await setting(SETTING_KEYS.AUTH_WEB_TOTP_POLICY, "REQUIRED");
 
     // ── §4 onaylı + kanıtlı tablet ────────────────────────────────────────
     console.log("\n=== §4 onaylı + kanıtlı tablet cihazı ikinci faktör ===");
