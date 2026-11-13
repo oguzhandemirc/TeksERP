@@ -20,7 +20,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { Client } from "pg";
-import { APP_COLUMN_GRANTS, APP_GRANTS, CLOUD_TABLES, MERKEZ_APP_GRANTS, MERKEZ_SYNC_COLUMN_GRANTS, MERKEZ_SYNC_GRANTS, ROUTING_TABLES, SYNC_COLUMN_GRANTS, SYNC_GRANTS, type ColumnGrants } from "../src/lib/db-grants";
+import { APP_COLUMN_GRANTS, APP_GRANTS, CLOUD_TABLES, MERKEZ_APP_GRANTS, MERKEZ_SYNC_COLUMN_GRANTS, MERKEZ_SYNC_GRANTS, NO_RLS_TABLES, SYNC_COLUMN_GRANTS, SYNC_GRANTS, type ColumnGrants } from "../src/lib/db-grants";
 import { NO_TENANT, withTesis } from "../src/lib/tenant";
 import { PATRON_KOKU, hesapKur, imzali, kontrol, ortamKur, paket, girdi, sonuc, temizleTesis, tesisKur, tesisUrl, type Ortam } from "./lib/test-ortam";
 
@@ -63,7 +63,7 @@ async function semaBolumu(etiket: string, gocUrl: string, roller: readonly RolBe
     );
     const tables = t.rows.map((r) => r.relname);
     kontrol(`§1a ${etiket}: DB tablo kümesi = CLOUD_TABLES`, JSON.stringify(tables) === JSON.stringify([...CLOUD_TABLES].sort()), tables.length + " tablo");
-    const kiraci = t.rows.filter((r) => !ROUTING_TABLES.includes(r.relname));
+    const kiraci = t.rows.filter((r) => !NO_RLS_TABLES.includes(r.relname));
     const eksik = kiraci.filter((r) => !r.rls || !r.force).map((r) => r.relname);
     kontrol(`§1b ${etiket}: her kiracı tablosunda RLS ENABLE + FORCE`, eksik.length === 0, eksik.join(",") || "hepsi");
     const pol = await goc.query<{ tablename: string }>(`SELECT tablename FROM pg_policies WHERE policyname = 'tesis_yalitimi'`);
@@ -78,8 +78,8 @@ async function semaBolumu(etiket: string, gocUrl: string, roller: readonly RolBe
         return [...dizi.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]!);
       })
       .sort();
-    const kiraciTablolari = CLOUD_TABLES.filter((x) => !ROUTING_TABLES.includes(x)).sort();
-    kontrol("§1d migration RLS listeleri (birleşim) = CLOUD_TABLES − yönlendirme", JSON.stringify(migTables) === JSON.stringify(kiraciTablolari), `${migTables.length}/${kiraciTablolari.length}`);
+    const kiraciTablolari = CLOUD_TABLES.filter((x) => !NO_RLS_TABLES.includes(x)).sort();
+    kontrol("§1d migration RLS listeleri (birleşim) = CLOUD_TABLES − RLS'siz (yönlendirme + push köprüsü)", JSON.stringify(migTables) === JSON.stringify(kiraciTablolari), `${migTables.length}/${kiraciTablolari.length}`);
     for (const [label0, role, want, wantColumns] of roller) {
       const label = `${etiket} ${label0}`;
       const g = await goc.query<{ table_name: string; privilege_type: string }>(

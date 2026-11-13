@@ -43,6 +43,22 @@ export interface PushTransport {
 
 export const RECEIPT_BATCH = 1000;
 
+/** Push köprüsü iletisi (ERP kipi): metin fabrikadan gelir, bulut TEMİZLER + KIRPAR ve yalnız İLETİR (saklamaz, günlüğe yazmaz). */
+export interface BridgeMessage {
+  readonly title: string;
+  readonly body: string;
+  readonly bildirimId: string;
+  readonly rota: string | null;
+}
+
+/** Köprü gönderimi: ham Expo belirtecine TAM METİNLİ yük (kullanıcı kararı 2026-11-13: kilit ekranında başlık + gövde). */
+export interface BridgeTransport {
+  sendBridge(token: string, msg: BridgeMessage): Promise<PushOutcome>;
+  /** Toplu gönderim (tek istek, sonuç sırası = belirteç sırası); yoksa köprü sıralı gönderir. */
+  sendBridgeBatch?(tokens: readonly string[], msg: BridgeMessage): Promise<PushOutcome[]>;
+  receipts?(tickets: readonly string[]): Promise<ReceiptBatch>;
+}
+
 /** Expo makbuz/bilet hata adı → sonuç sınıfı (bilet ve makbuz AYNI sınıflamayı kullanır). */
 export function expoErrorOutcome(err: string): PushOutcome {
   if (err === "DeviceNotRegistered") return { kind: "GECERSIZ_CIHAZ", code: "EXPO_CIHAZ_KAYITSIZ" };
@@ -59,8 +75,23 @@ export class RecordingTransport implements PushTransport {
   /** `tickets` açıkken Expo platformlarına bilet verir; makbuz `forcedReceipts`ten (yoksa hazır değil). */
   readonly forcedReceipts = new Map<string, PushOutcome>();
   readonly receiptCalls: string[][] = [];
+  readonly bridgeSent: { token: string; msg: BridgeMessage }[] = [];
+  readonly bridgeBatches: number[] = [];
   private seq = 0;
   constructor(private readonly opts: { tickets?: boolean } = {}) {}
+  async sendBridgeBatch(tokens: readonly string[], msg: BridgeMessage): Promise<PushOutcome[]> {
+    this.bridgeBatches.push(tokens.length);
+    const out: PushOutcome[] = [];
+    for (const t of tokens) out.push(await this.sendBridge(t, msg));
+    return out;
+  }
+  sendBridge(token: string, msg: BridgeMessage): Promise<PushOutcome> {
+    const forced = this.forced.get(token);
+    if (!forced || forced.kind === "OK") this.bridgeSent.push({ token, msg });
+    if (forced) return Promise.resolve(forced);
+    const ticket = this.opts.tickets ? `sahte-bilet-${++this.seq}` : undefined;
+    return Promise.resolve(ticket ? { kind: "OK", ticket } : { kind: "OK" });
+  }
   send(target: PushTarget, msg: PushMessage): Promise<PushOutcome> {
     const forced = this.forced.get(target.token);
     if (!forced || forced.kind === "OK") this.sent.push({ target, msg });
@@ -86,6 +117,14 @@ export function nativePushPayload(target: PushTarget, msg: PushMessage) {
   return { to: target.token, title, sound: "default", priority: "high", data: { bildirimId: msg.id, rota: msg.route, tesisId: msg.tesisId } };
 }
 
+/** Köprü yükünün izinli anahtarları — bekçi (`test_bildirim_koprusu`) ölçer. İçerikli: `body` VAR, `tesisId` YOK (ERP kipi). */
+export const BRIDGE_PAYLOAD_KEYS = ["to", "title", "body", "sound", "priority", "data"] as const;
+export const BRIDGE_DATA_KEYS = ["bildirimId", "rota"] as const;
+
+export function bridgePushPayload(token: string, msg: BridgeMessage) {
+  return { to: token, title: msg.title, body: msg.body, sound: "default", priority: "high", data: { bildirimId: msg.bildirimId, rota: msg.rota } };
+}
+
 /** Expo push: gönderim bilet döner; asıl teslim sonucu makbuzda (`receipts`, ikinci aşama — `DeviceNotRegistered` çoğu kez orada). */
 export class ExpoTransport implements PushTransport {
   constructor(
@@ -93,21 +132,39 @@ export class ExpoTransport implements PushTransport {
     private readonly fetchImpl: typeof fetch = fetch,
   ) {}
 
-  async send(target: PushTarget, msg: PushMessage): Promise<PushOutcome> {
-    const headers = this.headers();
-    const payload = nativePushPayload(target, msg);
+  send(target: PushTarget, msg: PushMessage): Promise<PushOutcome> {
+    return this.post(nativePushPayload(target, msg));
+  }
+
+  sendBridge(token: string, msg: BridgeMessage): Promise<PushOutcome> {
+    return this.post(bridgePushPayload(token, msg));
+  }
+
+  /** Expo dizi kabul eder (≤ 100 ileti): tek istek, bilet sırası ileti sırasıdır. */
+  sendBridgeBatch(tokens: readonly string[], msg: BridgeMessage): Promise<PushOutcome[]> {
+    return this.postMany(tokens.map((t) => bridgePushPayload(t, msg)));
+  }
+
+  private async post(payload: object): Promise<PushOutcome> {
+    return (await this.postMany([payload]))[0]!;
+  }
+
+  private async postMany(payloads: readonly object[]): Promise<PushOutcome[]> {
+    const all = (o: PushOutcome): PushOutcome[] => payloads.map(() => o);
     let res: Response;
     try {
-      res = await this.fetchImpl(this.config.EXPO_PUSH_URL, { method: "POST", headers, body: JSON.stringify([payload]), signal: AbortSignal.timeout(10_000) });
+      res = await this.fetchImpl(this.config.EXPO_PUSH_URL, { method: "POST", headers: this.headers(), body: JSON.stringify(payloads), signal: AbortSignal.timeout(10_000) });
     } catch {
-      return { kind: "GECICI", code: "AG_HATASI" };
+      return all({ kind: "GECICI", code: "AG_HATASI" });
     }
-    if (res.status === 429 || res.status >= 500) return { kind: "GECICI", code: `HTTP_${res.status}` };
-    if (!res.ok) return { kind: "KALICI", code: `HTTP_${res.status}` };
+    if (res.status === 429 || res.status >= 500) return all({ kind: "GECICI", code: `HTTP_${res.status}` });
+    if (!res.ok) return all({ kind: "KALICI", code: `HTTP_${res.status}` });
     const json = (await res.json().catch(() => null)) as { data?: { status?: string; id?: string; details?: { error?: string } }[] } | null;
-    const ticket = json?.data?.[0];
-    if (ticket?.status === "ok") return typeof ticket.id === "string" && /^[A-Za-z0-9-]{1,100}$/.test(ticket.id) ? { kind: "OK", ticket: ticket.id } : { kind: "OK" };
-    return expoErrorOutcome(ticket?.details?.error ?? "YANIT_BICIMSIZ");
+    return payloads.map((_, k): PushOutcome => {
+      const ticket = Array.isArray(json?.data) ? json.data[k] : undefined;
+      if (ticket?.status === "ok") return typeof ticket.id === "string" && /^[A-Za-z0-9-]{1,100}$/.test(ticket.id) ? { kind: "OK", ticket: ticket.id } : { kind: "OK" };
+      return expoErrorOutcome(ticket?.details?.error ?? "YANIT_BICIMSIZ");
+    });
   }
 
   private headers(): Record<string, string> {

@@ -15,7 +15,7 @@ import { randomUUID } from "node:crypto";
 import { Client } from "pg";
 import type { PrismaClient } from "@prisma/client";
 import { tokenDigest } from "../src/auth/session.service";
-import { MERKEZ_TABLES, ROUTING_TABLES, TESIS_TABLES } from "../src/lib/db-grants";
+import { MERKEZ_TABLES, NO_RLS_TABLES, TESIS_TABLES } from "../src/lib/db-grants";
 import { ident, markDatabase } from "../src/lib/db-roles";
 import { CloudError } from "../src/lib/errors";
 import { DatabaseBindingError, withLookup, withTesis } from "../src/lib/tenant";
@@ -207,10 +207,10 @@ async function main(): Promise<void> {
     console.log("\n§5 tablolar doğru DB'de: boş ve yetkisiz");
     const kiraci = TESIS_TABLES.filter((t) => !MERKEZ_TABLES.includes(t));
     const merkezDolu = await tabloSayilari(GOC(), kiraci);
-    const tesisDolu = await tabloSayilari(tesisUrl(o, a.tesisId, "goc"), ROUTING_TABLES);
+    const tesisDolu = await tabloSayilari(tesisUrl(o, a.tesisId, "goc"), NO_RLS_TABLES);
     kontrol("§5a merkezde kiracı tablosu BOŞ · tesis DB'sinde yönlendirme tablosu BOŞ", Object.keys(merkezDolu).length === 0 && Object.keys(tesisDolu).length === 0, JSON.stringify({ merkezDolu, tesisDolu }));
     const merkezYetki = await yetkiliTablolar(GOC(), [kullanici(o.ctx.config.DATABASE_URL), kullanici(o.ctx.config.ESITLEME_DATABASE_URL)], kiraci);
-    const tesisYetki = await yetkiliTablolar(tesisUrl(o, a.tesisId, "goc"), [kullanici(tesisUrl(o, a.tesisId, "uygulama")), kullanici(tesisUrl(o, a.tesisId, "esitleme"))], ROUTING_TABLES);
+    const tesisYetki = await yetkiliTablolar(tesisUrl(o, a.tesisId, "goc"), [kullanici(tesisUrl(o, a.tesisId, "uygulama")), kullanici(tesisUrl(o, a.tesisId, "esitleme"))], NO_RLS_TABLES);
     kontrol("§5b merkez rolleri kiracı tablosunda, tesis rolleri yönlendirme tablosunda YETKİSİZ", merkezYetki.length === 0 && tesisYetki.length === 0, [...merkezYetki, ...tesisYetki].join(",") || "temiz");
 
     console.log("\n§N negatif sondalar (ölçüm ısırıyor mu)");

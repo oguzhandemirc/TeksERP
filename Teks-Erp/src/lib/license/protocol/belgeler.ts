@@ -43,6 +43,8 @@ export const REQUEST_PURPOSES = [
   "hata-raporu",
   /** Geçici açılış kodunun tüketim bildirimi — `POST /v1/gecici-kod/tuketildi`; etkinleşmemiş kurulum da gönderir. */
   "gecici-tuketim",
+  /** Patron bulutu push köprüsü (`/v1/bildirim/*`): belirteç bağı + dürt; bulut aboneliği aranmaz, tesis DB'si doğmaz. */
+  "bildir",
 ] as const;
 export type RequestPurpose = (typeof REQUEST_PURPOSES)[number];
 /**

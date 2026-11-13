@@ -90,6 +90,9 @@ export const CLOUD_TABLES: readonly string[] = [
   "installation_routes",
   "login_routes",
   "identities",
+  "push_bridge_links",
+  "push_bridge_tickets",
+  "push_bridge_nonces",
 ];
 
 /**
@@ -97,13 +100,32 @@ export const CLOUD_TABLES: readonly string[] = [
  * erişim kaydı). Tesis DB'sinde bu tablolar BOŞ ve hiçbir çalışma rolüne yetkisizdir; `support_access` iki tarafta
  * da yaşar (tesiste canlı kayıt, merkezde imha arşivi).
  */
-export const MERKEZ_TABLES: readonly string[] = ["facility_databases", "installation_routes", "login_routes", "identities", "facility_destructions", "support_access"];
+export const MERKEZ_TABLES: readonly string[] = [
+  "facility_databases",
+  "installation_routes",
+  "login_routes",
+  "identities",
+  "facility_destructions",
+  "support_access",
+  "push_bridge_links",
+  "push_bridge_tickets",
+  "push_bridge_nonces",
+];
+
+/**
+ * Push köprüsü tabloları (merkez): KURULUMA bağlıdır, tesise değil (bulut aboneliği olmayan kurulum da kullanır) ⇒ RLS
+ * TAŞIMAZ ve tesis imhasında DÜŞMEZ. Yalnız merkez eşitleme rolü erişir (fabrika kanalı + bakım budaması).
+ */
+export const PUSH_BRIDGE_TABLES: readonly string[] = ["push_bridge_links", "push_bridge_tickets", "push_bridge_nonces"];
 
 /**
  * Yönlendirme tabloları: kiracı verisi değildir, RLS TAŞIMAZ (merkezde çalışma rollerinin tek yetkisi bunlardır).
  * `identities` (bulut kimliği: e-posta özeti + parola + TOTP) da tesise ait değildir; tesis imhasında KALIR.
  */
 export const ROUTING_TABLES: readonly string[] = ["facility_databases", "installation_routes", "login_routes", "identities"];
+
+/** RLS taşımayan tablolar (bekçi `test_rls_sizinti` §1b–§1d): yönlendirme + push köprüsü. Kalanın hepsi kiracı tablosudur. */
+export const NO_RLS_TABLES: readonly string[] = [...ROUTING_TABLES, ...PUSH_BRIDGE_TABLES];
 
 /** Tesis DB'sinde yaşayan tablolar (CLOUD_TABLES − yalnız-merkez tabloları). */
 export const TESIS_TABLES: readonly string[] = CLOUD_TABLES.filter((t) => t === "support_access" || !MERKEZ_TABLES.includes(t));
@@ -120,6 +142,10 @@ export const MERKEZ_SYNC_GRANTS: Readonly<Record<string, readonly Privilege[]>> 
   facility_databases: ["SELECT"],
   installation_routes: ["SELECT", "INSERT"],
   login_routes: ["SELECT", "DELETE"],
+  // Push köprüsü: bağ fabrikanın kaydet/bırak'ıyla doğar/düşer; bilet makbuz turunda güncellenir; bilet ve nonce budanır.
+  push_bridge_links: ["SELECT", "INSERT", "UPDATE", "DELETE"],
+  push_bridge_tickets: ["SELECT", "INSERT", "UPDATE", "DELETE"],
+  push_bridge_nonces: ["SELECT", "INSERT", "DELETE"],
 };
 
 /** Hazırlık isteği yalnız kimlikle açılır; durum, ad, şema sürümü hazırlayıcınındır. */

@@ -81,6 +81,14 @@ const EnvSchema = z
     /** Web push VAPID `sub` (mailto: ya da https:) — `gercek` kipte zorunlu. Anahtar çifti ANAHTAR_DIZINI'nde. */
     // Boş değer = verilmedi: compose `${BILDIRIM_VAPID_KONU:-}` ile her zaman geçirir (kapali kipte boş kalır).
     BILDIRIM_VAPID_KONU: z.preprocess((v) => (v === "" ? undefined : v), z.string().regex(/^(mailto:|https:\/\/)\S+$/).optional()),
+    /** Push köprüsü (`/v1/bildirim/durt`) KURULUM başına dakikalık dürt tavanı (kayıt/bırak ayrı sabit tavanda). */
+    KOPRU_DURT_DK: positiveInt(1, 10_000).default(120),
+    /** Push köprüsünün satıcıya soru bütçesi (dakikalık, `KURULUM_SORGU_BUTCE_DK`ten AYRI): dolunca 503, eşitleme etkilenmez. */
+    KOPRU_SORGU_BUTCE_DK: positiveInt(1, 10_000).default(60),
+    /** Satıcıya ulaşılamazken köprünün bellek kaydı en çok bu kadar saat kullanılır; aşılınca 503 (yalnız köprü). */
+    KOPRU_BAYAT_AZAMI_SAAT: positiveInt(1, 720).default(24),
+    /** Tek dürt isteğinin Expo gönderim süresi tavanı; dolunca kalan belirteçler `GECICI` (`SURE_DOLDU`). */
+    KOPRU_DURT_SURE_SN: positiveInt(1, 60).default(20),
     EXPO_PUSH_URL: z.url().default("https://exp.host/--/api/v2/push/send"),
     EXPO_MAKBUZ_URL: z.url().default("https://exp.host/--/api/v2/push/getReceipts"),
     /** Expo erişim belirteci (isteğe bağlı "enhanced push security") — SIRdır, günlüğe yazılmaz. */

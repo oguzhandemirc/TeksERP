@@ -10,6 +10,7 @@
 import type { Installation } from "@prisma/client";
 import type { CloudConfig } from "../config";
 import { installationKeyId } from "../lisans-protokol";
+import { MinuteBudget } from "../lib/minute-budget";
 import { withCentral, withLookup, withTesis } from "../lib/tenant";
 import { VendorInstallationSchema, type VendorInstallation } from "../wire/satici-ic";
 import type { TesisDbRouter } from "../lib/tesis-db";
@@ -88,21 +89,42 @@ function vendorRecord(v: VendorInstallation): InstallationRecord {
 }
 
 const NEGATIVE_MAX = 10_000;
+const BRIDGE_CACHE_MAX = 10_000;
+
+/** Push köprüsü araması: satıcı cevabı YAZILMAZ (yönlendirme bağı, tesis DB isteği, önbellek satırı yok). */
+export type BridgeLookup =
+  | { readonly kind: "ok"; readonly record: InstallationRecord; readonly durum: VendorInstallation["durum"] }
+  | { readonly kind: "yok" }
+  | { readonly kind: "ulasilamadi" };
 
 type VendorAnswer = { readonly kind: "ok"; readonly value: VendorInstallation } | { readonly kind: "yok" } | { readonly kind: "ulasilamadi"; readonly reason: string };
 
 export class InstallationDirectory {
   /** Satıcının "yok" dediği kimlik → hatırlama bitişi (ms). */
   private readonly unknown = new Map<string, number>();
-  private budgetWindow = 0;
-  private budgetUsed = 0;
-  private budgetWarned = false;
+  /** Eşitleme (`lookup`) ve köprü (`lookupForBridge`) AYRI bütçe: kimliksiz trafik birinden ötekini aç bırakamaz. */
+  private readonly syncBudget: MinuteBudget;
+  private readonly bridgeBudget: MinuteBudget;
+  /** Push köprüsünün BELLEK önbelleği (tazelik `KURULUM_ONBELLEK_DK`, `fetchedAt` = satıcının son cevabı); DB'ye yazılmaz. */
+  private readonly bridgeCache = new Map<string, { readonly value: Extract<BridgeLookup, { kind: "ok" }>; readonly until: number; readonly fetchedAt: number }>();
 
   constructor(
     private readonly db: TesisDbRouter,
-    private readonly config: Pick<CloudConfig, "KURULUM_KAYNAGI" | "SATICI_IC_API_URL" | "SATICI_IC_API_BELIRTECI" | "KURULUM_ONBELLEK_DK" | "KURULUM_SORGU_BUTCE_DK">,
+    private readonly config: Pick<
+      CloudConfig,
+      "KURULUM_KAYNAGI" | "SATICI_IC_API_URL" | "SATICI_IC_API_BELIRTECI" | "KURULUM_ONBELLEK_DK" | "KURULUM_SORGU_BUTCE_DK" | "KOPRU_SORGU_BUTCE_DK" | "KOPRU_BAYAT_AZAMI_SAAT"
+    >,
     private readonly fetchImpl: typeof fetch = fetch,
-  ) {}
+  ) {
+    this.syncBudget = new MinuteBudget(
+      () => this.config.KURULUM_SORGU_BUTCE_DK,
+      (n) => console.warn(`[patron] kurulum sorgu bütçesi doldu (${n}/dk); bilinmeyen kimlikler bu dakika satıcıya sorulmuyor`),
+    );
+    this.bridgeBudget = new MinuteBudget(
+      () => this.config.KOPRU_SORGU_BUTCE_DK,
+      (n) => console.warn(`[patron] push köprüsü kurulum sorgu bütçesi doldu (${n}/dk); bilinmeyen kimliklere bu dakika 503`),
+    );
+  }
 
   private rememberUnknown(installationId: string, nowMs: number): void {
     this.unknown.delete(installationId);
@@ -118,23 +140,6 @@ export class InstallationDirectory {
     return false;
   }
 
-  /** Önbellekte olmayan kimlik için soru bütçesi (dakikalık pencere). */
-  private takeBudget(nowMs: number): boolean {
-    const window = Math.floor(nowMs / 60_000);
-    if (window !== this.budgetWindow) {
-      this.budgetWindow = window;
-      this.budgetUsed = 0;
-      this.budgetWarned = false;
-    }
-    if (this.budgetUsed >= this.config.KURULUM_SORGU_BUTCE_DK) {
-      if (!this.budgetWarned) console.warn(`[patron] kurulum sorgu bütçesi doldu (${this.config.KURULUM_SORGU_BUTCE_DK}/dk); bilinmeyen kimlikler bu dakika satıcıya sorulmuyor`);
-      this.budgetWarned = true;
-      return false;
-    }
-    this.budgetUsed += 1;
-    return true;
-  }
-
   private readCached(installationId: string): Promise<Installation | null> {
     return withLookup(this.db, { kind: "kurulum", value: installationId }, (tx) => tx.installation.findUnique({ where: { installationId } }));
   }
@@ -146,7 +151,7 @@ export class InstallationDirectory {
     if (this.config.KURULUM_KAYNAGI === "kayit") return cached ? { record: toRecord(cached, false), pending: null, cached: true } : none;
     const fresh = cached && cached.source === "SATICI" && cached.refreshedAt.getTime() + this.config.KURULUM_ONBELLEK_DK * 60_000 > nowMs;
     if (cached && fresh) return { record: toRecord(cached, false), pending: null, cached: true };
-    if (!cached && (this.knownUnknown(installationId, nowMs) || !this.takeBudget(nowMs))) return none;
+    if (!cached && (this.knownUnknown(installationId, nowMs) || !this.syncBudget.take(nowMs))) return none;
     const answer = await this.askVendor(installationId);
     if (answer.kind === "ok") return { record: vendorRecord(answer.value), pending: answer.value, cached: cached !== null };
     if (answer.kind === "yok") {
@@ -160,6 +165,41 @@ export class InstallationDirectory {
     }
     console.warn(`[patron] satıcı iç API'sine ulaşılamadı (${answer.reason}); önbellek hiç dolmadı → RED`);
     return none;
+  }
+
+  /**
+   * Push köprüsü (amaç `bildir`): `satici` kipinde YALNIZ satıcıya sorar ve bellekte tutar (tesis DB'sine dokunmaz);
+   * satıcıya ulaşılamazsa en çok `KOPRU_BAYAT_AZAMI_SAAT` yaşlı bellek kaydı, yoksa `ulasilamadi` (503). Köprü bütçesi
+   * doluysa da `ulasilamadi`: "yok" (401) yalnız satıcının cevabıdır. `kayit` kipinde yalnız buluta kayıtlı kurulum
+   * (var olan önbellek satırı, salt okuma) görünür. Hiçbir yolda `commit` YOK.
+   */
+  async lookupForBridge(installationId: string, nowMs: number): Promise<BridgeLookup> {
+    if (this.config.KURULUM_KAYNAGI === "kayit") {
+      const cached = await this.readCached(installationId);
+      return cached ? { kind: "ok", record: toRecord(cached, false), durum: undefined } : { kind: "yok" };
+    }
+    const hit = this.bridgeCache.get(installationId);
+    if (hit && hit.until > nowMs) return hit.value;
+    if (!hit && this.knownUnknown(installationId, nowMs)) return { kind: "yok" };
+    if (!hit && !this.bridgeBudget.take(nowMs)) return { kind: "ulasilamadi" };
+    const answer = await this.askVendor(installationId);
+    if (answer.kind === "ok") {
+      const value = { kind: "ok", record: vendorRecord(answer.value), durum: answer.value.durum } as const;
+      this.bridgeCache.delete(installationId);
+      this.bridgeCache.set(installationId, { value, until: nowMs + this.config.KURULUM_ONBELLEK_DK * 60_000, fetchedAt: nowMs });
+      while (this.bridgeCache.size > BRIDGE_CACHE_MAX) this.bridgeCache.delete(this.bridgeCache.keys().next().value!);
+      return value;
+    }
+    if (answer.kind === "yok") {
+      this.bridgeCache.delete(installationId);
+      this.rememberUnknown(installationId, nowMs);
+      return { kind: "yok" };
+    }
+    if (hit && nowMs - hit.fetchedAt <= this.config.KOPRU_BAYAT_AZAMI_SAAT * 3_600_000) {
+      console.warn(`[patron] satıcı iç API'sine ulaşılamadı (${answer.reason}); push köprüsü kurulumu bayat bellekten`);
+      return { ...hit.value, record: { ...hit.value.record, stale: true } };
+    }
+    return { kind: "ulasilamadi" };
   }
 
   /** İmza + hak doğrulandıktan SONRA: satıcı cevabını yazar (bağ → tesis DB isteği → önbellek). */

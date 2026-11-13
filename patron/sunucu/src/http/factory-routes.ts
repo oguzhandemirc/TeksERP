@@ -1,4 +1,4 @@
-// FABRİKA KANALI (`/v1/*`) — yalnız kurulum imzalı istek (amaç `esitle`), eşitleme ROLÜYLE. Sıra her
+// FABRİKA KANALI (`/v1/*`) — yalnız kurulum imzalı istek (amaç `esitle`; push köprüsü `/v1/bildirim/*` amaç `bildir`), eşitleme ROLÜYLE. Sıra her
 // uçta aynı: HAM gövde (≤ 4 MB) → imza + nonce + hak kapısı → (gzip ise) aç → KATI şema → servis.
 // Kiracı İMZADAN (kurulum kaydından) çözülür, gövdeden asla. Sıkıştırma ara katmanı yok.
 import express, { type Request, type Response, type Router } from "express";
@@ -9,6 +9,8 @@ import { listAccountsForFactory, lockAccountFromFactory } from "../services/acco
 import type { CloudContext } from "../services/context";
 import { claimInbox, recordInboxResults } from "../services/inbox.service";
 import { authenticateFactory, type FactoryCaller } from "../services/installation-auth";
+import { nudge, registerTokens, releaseTokens } from "../services/push-bridge";
+import { authenticateBridge, type BridgeCaller } from "../services/push-bridge-auth";
 import { claimReports, recordReportResult } from "../services/report.service";
 import { applyPackage, decodeBody } from "../services/sync.service";
 import {
@@ -17,6 +19,10 @@ import {
   InboxClaimRequestSchema,
   InboxResultRequestSchema,
   MAX_COMPRESSED_BYTES,
+  PUSH_BRIDGE_PATHS,
+  PushNudgeRequestSchema,
+  PushRegisterRequestSchema,
+  PushReleaseRequestSchema,
   ReportClaimRequestSchema,
   ReportResultRequestSchema,
   SYNC_PATHS,
@@ -37,7 +43,24 @@ async function authenticated(ctx: CloudContext, req: Request, path: string): Pro
   return { caller, raw, nowMs };
 }
 
-function strictJson<T>(schema: z.ZodType<T>, r: FactoryRequest, req: Request): T {
+/** Push köprüsü gövdesi küçüktür (≤ 20 belirteç + kırpılacak metin); sıkıştırma kabul edilmez. */
+const BRIDGE_MAX_BYTES = 64 * 1024;
+
+interface BridgeRequest {
+  readonly caller: BridgeCaller;
+  readonly raw: Buffer;
+  readonly nowMs: number;
+}
+
+async function bridgeAuthenticated(ctx: CloudContext, req: Request, path: string): Promise<BridgeRequest> {
+  if (req.get("content-encoding")) throw badRequest("Anlık bildirim köprüsü sıkıştırılmış gövde kabul etmez");
+  const raw = await readRawBody(req, BRIDGE_MAX_BYTES);
+  const nowMs = ctx.now();
+  const caller = await authenticateBridge(ctx, { header: req.get(REQUEST_HEADER), rawBody: raw, nowMs, path });
+  return { caller, raw, nowMs };
+}
+
+function strictJson<T>(schema: z.ZodType<T>, r: Pick<FactoryRequest, "raw">, req: Request): T {
   let value: unknown;
   try {
     value = JSON.parse(decodeBody(r.raw, req.get("content-encoding")).toString("utf8"));
@@ -97,6 +120,22 @@ export function createFactoryRouter(ctx: CloudContext): Router {
   router.post(SYNC_PATHS.REPORT_RESULT.replace("/v1", ""), async (req: Request, res: Response) => {
     const r = await authenticated(ctx, req, SYNC_PATHS.REPORT_RESULT);
     res.json(await recordReportResult(ctx, r.caller, strictJson(ReportResultRequestSchema, r, req), r.nowMs));
+  });
+
+  // Push köprüsü (amaç `bildir`): bulut aboneliği aranmaz, tesis DB'si açılmaz; metin yalnız iletilir.
+  router.post(PUSH_BRIDGE_PATHS.REGISTER.replace("/v1", ""), async (req: Request, res: Response) => {
+    const r = await bridgeAuthenticated(ctx, req, PUSH_BRIDGE_PATHS.REGISTER);
+    res.json(await registerTokens(ctx, r.caller, strictJson(PushRegisterRequestSchema, r, req)));
+  });
+
+  router.post(PUSH_BRIDGE_PATHS.RELEASE.replace("/v1", ""), async (req: Request, res: Response) => {
+    const r = await bridgeAuthenticated(ctx, req, PUSH_BRIDGE_PATHS.RELEASE);
+    res.json(await releaseTokens(ctx, r.caller, strictJson(PushReleaseRequestSchema, r, req)));
+  });
+
+  router.post(PUSH_BRIDGE_PATHS.NUDGE.replace("/v1", ""), async (req: Request, res: Response) => {
+    const r = await bridgeAuthenticated(ctx, req, PUSH_BRIDGE_PATHS.NUDGE);
+    res.json(await nudge(ctx, r.caller, strictJson(PushNudgeRequestSchema, r, req), r.nowMs));
   });
 
   return router;
