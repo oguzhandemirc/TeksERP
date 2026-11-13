@@ -74,6 +74,10 @@ export const BUDANAN_DEFTER_DISI: Array<{ model: string; sinif: "DURUM" | "TELEM
   { model: "ReportSnapshot", sinif: "TELEMETRI",
     gerekce: "rapor görüntüsü = o anki sonucun kopyası; YALNIZ `ZAMANLANMIS` + `expiresAt` geçmiş satır budanır (§7 ölçer), `KULLANICI` görüntüsü sahibi silene kadar kalır. Ay sonu kesit görüntüsü bu tablo DEĞİLDİR — o defter sınıfıdır (kullanıcı kararı bekliyor)",
     silen: ["src/services/report-prune.service.ts"] },
+  // patron raporu (V5a): istek üzerine koşum; sayı kaynak serviste yeniden hesaplanır.
+  { model: "PatronReportRun", sinif: "TELEMETRI",
+    gerekce: "patron uygulaması rapor koşumu = o anki sonucun kopyası (türetilmiş önbellek); kullanıcı başına rapor başına son N görünür koşum ve M günden eskiler istek anında budanır (`patronRapor.saklaAdet`/`saklaGun`), son 1 saat ve süren hesap dokunulmaz. Hiçbir rapor sayısı ya da karar bu satırdan okunmaz",
+    silen: ["src/services/patron-rapor/budama.ts"] },
 ];
 /** SQL'de yaşayan yaş budayıcıları (TS `deleteMany` taramasının göremediği yol). */
 const SQL_BUDAYICILAR: Array<{ model: string; dosya: string; desen: RegExp }> = [

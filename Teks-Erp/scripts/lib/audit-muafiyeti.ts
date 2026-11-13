@@ -88,6 +88,8 @@ export const AUDIT_EXEMPT_MODELS: AuditMuafiyeti[] = [
     gerekce: "semantik rapor koşu ölçümü + iptal kimliği (durum/süre/satır sayısı; budanır, R1-ZAMAN) — tek yazıcısı semantik çalıştırıcı, hiçbir rapor sayısı ona bağlı değil; silinince raporlanan sayı değişmez — `defter.md` § Telemetri ≠ defter" },
   { model: "ReportSnapshot", sinif: "TELEMETRI",
     gerekce: "kayıtlı raporun \"bu hâlini sakla\" kopyası (R1-KAYIT, tek yazıcısı `rapor-snapshot.service.ts`): sayılar semantik katmanda yeniden hesaplanır, görüntü yalnız o anki sonucun kopyasıdır; silinince raporlanan hiçbir sayı değişmez, budanır (R1-ZAMAN) — `defter.md` § Telemetri ≠ defter" },
+  { model: "PatronReportRun", sinif: "TELEMETRI",
+    gerekce: "patron uygulamasının istek üzerine oluşturduğu rapor koşumu + sonucu (V5a, tek yazıcısı `services/patron-rapor/kosum.service.ts`): sayı kaynak rapor servisinde yeniden hesaplanır, satır o anki sonucun kopyasıdır; kim/ne zaman/parametre satırın kendisidir, CUD'u ikinci bir iz üretmez; budanır — `defter.md` § Telemetri ≠ defter" },
   { model: "ShiftInstance", sinif: "SISTEM_ISI",
     gerekce: "vardiya takvimi `jobs/shift-calendar.job` tarafından üretilir; kullanıcı eylemi yok, audit'in öznesi olacak kullanıcı da yok" },
   // bildirim: çekirdek tablolar (plan §3.4) — yazarları N1-MOTOR'da doğdu.

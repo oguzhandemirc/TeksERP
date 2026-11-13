@@ -1220,6 +1220,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "report_runs", name: "report_runs_status_ck" },
   { table: "report_runs", name: "report_runs_counts_ck" },
   { table: "report_snapshots", name: "report_snapshots_kind_ck" },
+  // Patron raporu (V5a, migration 20261113140000): koşum durumu kapalı küme (HESAPLANIYOR · HAZIR · HATA).
+  { table: "patron_report_runs", name: "patron_report_runs_status_ck" },
   // bildirim: tercih katmanı (N4-SEMA, migration 20261025160000) — kapalı kümeler (TS aynası
   // `constants/notification-preference.ts`), sessiz saat biçimi + çift yüklem, takipte TEK hedef FK.
   { table: "notification_preferences", name: "notification_preferences_channel_ck" },

@@ -677,6 +677,7 @@ model User {
   reportShares                 ReportShare[]               @relation("ReportShareUser")
   reportRuns                   ReportRun[]                 @relation("ReportRunUser")
   reportSnapshotsCreated       ReportSnapshot[]            @relation("ReportSnapshotCreatedBy")
+  patronReportRuns             PatronReportRun[]           @relation("PatronReportRunUser")
   machineShiftStatsSealed      MachineShiftStat[]          @relation("MachineShiftStatSealedBy")
   machineShiftSealsActed       MachineShiftStatSeal[]      @relation("MachineShiftSealBy")
   createdPeripheralDevices     PeripheralDevice[]          @relation("PeripheralDeviceCreatedBy")
@@ -14276,6 +14277,33 @@ model ReportSnapshot {
   @@index([createdById])
   @@index([expiresAt])
   @@map("report_snapshots")
+}
+
+/// TELEMETRİ (türetilmiş önbellek, defter değil) — patron uygulamasının İSTEK ÜZERİNE oluşturduğu rapor koşumu + sonucu
+/// (V5a). Sahibi `userId`; başkası göremez. Silinince raporlanan sayı değişmez (sayı kaynak serviste yeniden hesaplanır).
+/// Tek budayıcı `services/patron-rapor/budama.ts`. `status` HESAPLANIYOR · HAZIR · HATA (VarChar + CHECK).
+model PatronReportRun {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @db.Uuid
+  reportKey   String    @db.VarChar(80)
+  params      Json
+  status      String    @default("HESAPLANIYOR") @db.VarChar(16)
+  errorCode   String?   @db.VarChar(64)
+  result      Json?
+  resultBytes Int?
+  durationMs  Int?
+  finishedAt  DateTime? @db.Timestamptz
+  /// İdempotency — "Oluştur"a çift dokunuş tek koşum (`clientToken @unique` sözleşmesi).
+  clientToken String?   @unique @db.Uuid
+  deletedAt   DateTime? @db.Timestamptz
+  createdAt   DateTime  @default(now()) @db.Timestamptz
+  updatedAt   DateTime  @updatedAt @db.Timestamptz
+
+  user User @relation("PatronReportRunUser", fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, reportKey, createdAt(sort: Desc)])
+  @@index([createdAt])
+  @@map("patron_report_runs")
 }
 
 // =============================================================================

@@ -126,6 +126,14 @@ const TICARET_MODELLERI = new Set([
 
 const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
   {
+    dosya: "routes/patron-rapor.routes.ts",
+    neden:
+      "PATRON RAPORU (V5a, 2026-11-13). Router finans tablosuna YAZMAZ; dokunuş bulut uzaktan hesap boğazının " +
+      "(`cloud-sync/report-requests.ts`) koşucu zinciridir (çek vadesi v1 koşucusu). Kapı RAPOR BAŞINADIR: finans raporu " +
+      "(`finance/alacaklar`) `remoteReportAvailability` → `module: finance.enabled` ile 403 MODULE_DISABLED (lisans kapattıysa LICENSE_MODULE); router kapısı bütün " +
+      "patron raporlarını kapatırdı (`test_patron_rapor` §5f modül kapısını ölçer).",
+  },
+  {
     dosya: "routes/service-item.routes.ts",
     neden:
       "HİZMET KARTI (çekirdek, 2026-11-07 service_items ayrımı). Finans dokunuşu SALT-OKUMADIR: Pasif'e geçiş kapısı ve " +

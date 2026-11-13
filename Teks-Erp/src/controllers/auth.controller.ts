@@ -3,7 +3,7 @@
 // =============================================================================
 
 import { APP_VERSION } from "../lib/app-version";
-import { PATRON_API_VERSION } from "../constants/patron-app";
+import { PATRON_API_VERSION, PATRON_REPORT_API_VERSION } from "../constants/patron-app";
 import { PATRON_READ_SETS } from "../services/patron-read/izin-esleme";
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
@@ -783,6 +783,7 @@ export class AuthController {
           patronApiVersion: PATRON_API_VERSION,
           // V3a: `/api/patron/v1` altında bu sunucunun verdiği küme adları (yoksa uygulama ekranı gizler).
           patronReadSets: PATRON_READ_SETS,
+          patronReportApi: PATRON_REPORT_API_VERSION,
         },
       });
     } catch (error) {

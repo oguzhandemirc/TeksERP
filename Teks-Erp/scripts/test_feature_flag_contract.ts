@@ -571,6 +571,21 @@ async function main() {
     string,
     { why: string; file: string; needle: string }
   > = {
+    PATRON_REPORT_HOURLY_MAX: {
+      why: "Patron raporu (V5a) işletme ayarı — kullanıcı başına saatlik koşum tavanı (1..1000); davranış bayrağı değil, ham anahtar PUT /api/admin/settings/:key ile yazılır, tek okuyucusu patron-rapor ayar okuyucusu",
+      file: "Teks-Erp/src/services/system-setting/patron-rapor.ts",
+      needle: "SETTING_KEYS.PATRON_REPORT_HOURLY_MAX",
+    },
+    PATRON_REPORT_KEEP_COUNT: {
+      why: "Patron raporu (V5a) işletme ayarı — rapor başına saklanan koşum (1..200); davranış bayrağı değil, ham anahtar PUT /api/admin/settings/:key ile yazılır, tek okuyucusu patron-rapor ayar okuyucusu",
+      file: "Teks-Erp/src/services/system-setting/patron-rapor.ts",
+      needle: "SETTING_KEYS.PATRON_REPORT_KEEP_COUNT",
+    },
+    PATRON_REPORT_KEEP_DAYS: {
+      why: "Patron raporu (V5a) işletme ayarı — koşum saklama günü (1..3650); davranış bayrağı değil, ham anahtar PUT /api/admin/settings/:key ile yazılır, tek okuyucusu patron-rapor ayar okuyucusu",
+      file: "Teks-Erp/src/services/system-setting/patron-rapor.ts",
+      needle: "SETTING_KEYS.PATRON_REPORT_KEEP_DAYS",
+    },
     REPORTS_STATEMENT_TIMEOUT_SEC: {
       why: "İşletme ayarı (sn, 5..45) — davranış bayrağı değil; ham anahtar PUT /api/admin/settings/:key ile yazılır, tek okuyucusu semantik çalıştırıcı",
       file: "Teks-Erp/src/services/reports/semantik/calistirici.ts",
