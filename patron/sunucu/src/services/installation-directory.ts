@@ -88,6 +88,13 @@ function vendorRecord(v: VendorInstallation): InstallationRecord {
 }
 
 const NEGATIVE_MAX = 10_000;
+const BRIDGE_CACHE_MAX = 10_000;
+
+/** Push köprüsü araması: satıcı cevabı YAZILMAZ (yönlendirme bağı, tesis DB isteği, önbellek satırı yok). */
+export type BridgeLookup =
+  | { readonly kind: "ok"; readonly record: InstallationRecord; readonly durum: VendorInstallation["durum"] }
+  | { readonly kind: "yok" }
+  | { readonly kind: "ulasilamadi" };
 
 type VendorAnswer = { readonly kind: "ok"; readonly value: VendorInstallation } | { readonly kind: "yok" } | { readonly kind: "ulasilamadi"; readonly reason: string };
 
@@ -97,6 +104,8 @@ export class InstallationDirectory {
   private budgetWindow = 0;
   private budgetUsed = 0;
   private budgetWarned = false;
+  /** Push köprüsünün BELLEK önbelleği (tazelik `KURULUM_ONBELLEK_DK`); DB'ye yazılmaz — bulut aboneliği olmayan kurulum tesis DB'si istetmez. */
+  private readonly bridgeCache = new Map<string, { readonly value: Extract<BridgeLookup, { kind: "ok" }>; readonly until: number }>();
 
   constructor(
     private readonly db: TesisDbRouter,
@@ -160,6 +169,39 @@ export class InstallationDirectory {
     }
     console.warn(`[patron] satıcı iç API'sine ulaşılamadı (${answer.reason}); önbellek hiç dolmadı → RED`);
     return none;
+  }
+
+  /**
+   * Push köprüsü (amaç `bildir`): `satici` kipinde YALNIZ satıcıya sorar ve bellekte tutar (tesis DB'sine dokunmaz);
+   * satıcıya ulaşılamazsa bayat bellek kaydı, o da yoksa `ulasilamadi`. `kayit` kipinde yalnız buluta kayıtlı kurulum
+   * (var olan önbellek satırı, salt okuma) görünür. Hiçbir yolda `commit` YOK.
+   */
+  async lookupForBridge(installationId: string, nowMs: number): Promise<BridgeLookup> {
+    if (this.config.KURULUM_KAYNAGI === "kayit") {
+      const cached = await this.readCached(installationId);
+      return cached ? { kind: "ok", record: toRecord(cached, false), durum: undefined } : { kind: "yok" };
+    }
+    const hit = this.bridgeCache.get(installationId);
+    if (hit && hit.until > nowMs) return hit.value;
+    if (!hit && (this.knownUnknown(installationId, nowMs) || !this.takeBudget(nowMs))) return { kind: "yok" };
+    const answer = await this.askVendor(installationId);
+    if (answer.kind === "ok") {
+      const value = { kind: "ok", record: vendorRecord(answer.value), durum: answer.value.durum } as const;
+      this.bridgeCache.delete(installationId);
+      this.bridgeCache.set(installationId, { value, until: nowMs + this.config.KURULUM_ONBELLEK_DK * 60_000 });
+      while (this.bridgeCache.size > BRIDGE_CACHE_MAX) this.bridgeCache.delete(this.bridgeCache.keys().next().value!);
+      return value;
+    }
+    if (answer.kind === "yok") {
+      this.bridgeCache.delete(installationId);
+      this.rememberUnknown(installationId, nowMs);
+      return { kind: "yok" };
+    }
+    if (hit) {
+      console.warn(`[patron] satıcı iç API'sine ulaşılamadı (${answer.reason}); push köprüsü kurulumu bayat bellekten`);
+      return { ...hit.value, record: { ...hit.value.record, stale: true } };
+    }
+    return { kind: "ulasilamadi" };
   }
 
   /** İmza + hak doğrulandıktan SONRA: satıcı cevabını yazar (bağ → tesis DB isteği → önbellek). */

@@ -1,4 +1,4 @@
-// BAKIM İŞİ — süreç içi zamanlayıcı (dakikalık tik + günde bir budama). Tesis listesi merkezden (HAZIR tesis
+// BAKIM İŞLERİ — tik + günlük budama (sıra: `maintenance-scheduler.ts`). Tesis listesi merkezden (HAZIR tesis
 // DB'leri), her satır işi o tesisin DB'sinde ve kiracı kapsamında (RLS) koşar; bir tesisin hatası ötekini durdurmaz.
 //   · Tik: süresi dolan claim'ler — gelen kutusu ISLENIYOR → BEKLIYOR (fabrikanın makbuzu tekrarı
 //     idempotent kılar); rapor HESAPLANIYOR → BEKLIYOR (bir kez), ikincide HATA `ZAMAN_ASIMI`; hizmet
@@ -17,7 +17,6 @@ import { listReadyFacilities, withCentral, withTesis } from "../lib/tenant";
 import type { CloudContext } from "./context";
 import { closeAndPurgeIdentities } from "./identity-purge";
 import { CARI_LOCK_KIND } from "./notification-cari-lock";
-import { refreshAllServiceEnds } from "./service-lifecycle";
 
 /** Yaşa göre hard delete izni olan tablolar (beyan) → gerekçe. Başka her silme yasak. */
 export const PRUNED_TABLES = {
@@ -116,7 +115,7 @@ export async function perFacility<T>(tesisId: string, label: string, fn: () => P
   }
 }
 
-async function listFacilities(ctx: CloudContext): Promise<{ tesisId: string; retentionMonths: number | null }[]> {
+export async function listFacilities(ctx: CloudContext): Promise<{ tesisId: string; retentionMonths: number | null }[]> {
   const out: { tesisId: string; retentionMonths: number | null }[] = [];
   for (const tesisId of await listReadyFacilities(ctx.sync)) {
     const f = await perFacility(tesisId, "liste", () => withTesis(ctx.sync, { tesisId }, (tx) => tx.facility.findUnique({ where: { tesisId }, select: { tesisId: true, retentionMonths: true } })));
@@ -325,11 +324,7 @@ export async function prunePushBridge(ctx: CloudContext, nowMs: number): Promise
 
 export async function runDaily(ctx: CloudContext, nowMs: number): Promise<number> {
   let n = 0;
-  try {
-    n += await prunePushBridge(ctx, nowMs);
-  } catch (err) {
-    console.error(`[patron] bakım (push köprüsü budaması) başarısız: ${(err as Error).name}`);
-  }
+  n += (await perFacility("merkez", "push köprüsü budaması", () => prunePushBridge(ctx, nowMs))) ?? 0;
   for (const f of await listFacilities(ctx)) {
     n += (await perFacility(f.tesisId, "eşitleme budaması", () => pruneSyncTables(ctx, f, nowMs))) ?? 0;
     n += (await perFacility(f.tesisId, "hesap budaması", () => pruneAccountTables(ctx, f, nowMs))) ?? 0;
@@ -337,56 +332,3 @@ export async function runDaily(ctx: CloudContext, nowMs: number): Promise<number
   }
   return n;
 }
-
-export class MaintenanceScheduler {
-  private timer: NodeJS.Timeout | null = null;
-  private running = false;
-  private lastDailyDay: string | null = null;
-
-  constructor(private readonly ctx: CloudContext) {}
-
-  start(): void {
-    if (this.timer) return;
-    this.timer = setInterval(() => void this.runOnce(), this.ctx.config.BAKIM_ARALIGI_SN * 1000);
-    this.timer.unref();
-  }
-
-  stop(): void {
-    if (this.timer) clearInterval(this.timer);
-    this.timer = null;
-  }
-
-  /** Tek tur (bekçi saati enjekte eder). Günlük budama UTC gün başına bir kez. */
-  async runOnce(nowMs: number = this.ctx.now()): Promise<void> {
-    if (this.running) return;
-    this.running = true;
-    try {
-      await expireClaims(this.ctx, nowMs);
-      const service = await refreshAllServiceEnds(this.ctx, nowMs);
-      let purged = 0;
-      for (const f of await listFacilities(this.ctx)) {
-        purged += (await perFacility(f.tesisId, "kimlik silme", () => purgeClosedIdentities(this.ctx, f.tesisId, nowMs))) ?? 0;
-        await perFacility(f.tesisId, "IP alanı", () => stripAgedIps(this.ctx, f.tesisId, nowMs));
-      }
-      if (purged > 0) console.log(`[patron] bakım: ${purged} kapanmış hesabın kimliği silindi (Ek-6/A §2.5)`);
-      const central = await purgeCentralIdentities(this.ctx, nowMs).catch((err: Error) => {
-        console.error(`[patron] bakım (merkez kimlik): ${(err as { code?: string }).code ?? err.message}`);
-        return { closed: 0, purged: 0 };
-      });
-      if (central.purged > 0) console.log(`[patron] bakım: ${central.purged} merkez kimliği silindi (kapanıştan ${IDENTITY_PURGE_DAYS} gün)`);
-      const day = new Date(nowMs).toISOString().slice(0, 10);
-      if (this.lastDailyDay !== day) {
-        const n = await runDaily(this.ctx, nowMs);
-        this.lastDailyDay = day;
-        if (n > 0) console.log(`[patron] bakım: ${n} satır budandı (saklama + telemetri)`);
-        // İmha insan işidir (tutanak): salt okuma süresi dolan tesis her gün hatırlatılır (Ek-6/A §4.3).
-        if (service.awaitingDestruction.length > 0) console.warn(`[patron] imha bekleyen tesis (salt okuma süresi doldu — scripts/tesis.ts imha): ${service.awaitingDestruction.join(", ")}`);
-      }
-    } catch (err) {
-      console.error(`[patron] bakım turu başarısız: ${(err as Error).message}`);
-    } finally {
-      this.running = false;
-    }
-  }
-}
-

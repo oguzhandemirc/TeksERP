@@ -10,7 +10,8 @@
 //      üç beyanlı dosyadan birinde: `maintenance.ts` (yaşa göre; hedef `PRUNED_TABLES`ta, ölü beyan da KIRMIZI) ·
 //      `facility-destruction.ts` (tesis imhası: tesis DB'si bütünüyle düşer, satır silmesi YALNIZ merkezin yönlendirme
 //      satırları; tutanak sayım listesi = TESIS_TABLES − RETAINED_TABLES İKİ YÖNLÜ — yeni tablo tutanaktan kaçamaz) ·
-//      `auth/membership.ts` (üyelik devri; YALNIZ `login_routes`)
+//      `auth/membership.ts` (üyelik devri; YALNIZ `login_routes`) · `services/push-bridge.ts` (push köprüsü bağı; YALNIZ
+//      `push_bridge_links` — fabrikanın bırak'ı + kayıtsız cihaz; saf yapılandırma pivotu, defter değil)
 //   §5 rota tablosu: yöntem+yol tekil · her yazma rotası işlem kimliği ya da GEREKÇELİ muafiyet beyan
 //      eder, her okuma rotası OKUMA · muafiyet gerekçesi boş olamaz
 //   §6 katalog: izin kodları tekil · her okuma izni en az bir projeksiyon/rapor açar · yazma ve
@@ -140,10 +141,15 @@ function budama(): void {
   const bakim = path.join(SRC, "services", "maintenance.ts");
   const imha = path.join(SRC, "services", "facility-destruction.ts");
   const uyelik = path.join(SRC, "auth", "membership.ts");
-  const baskaYer = kaynaklar.filter((f) => f !== bakim && f !== imha && f !== uyelik && silmeHedefleri(readFileSync(f, "utf8"), modeller).tablolar.size > 0).map(goreli);
-  kontrol("§4a silme YALNIZ services/maintenance.ts, services/facility-destruction.ts ve auth/membership.ts'te", baskaYer.length === 0, baskaYer.join(", ") || "temiz");
+  const kopru = path.join(SRC, "services", "push-bridge.ts");
+  const baskaYer = kaynaklar.filter((f) => f !== bakim && f !== imha && f !== uyelik && f !== kopru && silmeHedefleri(readFileSync(f, "utf8"), modeller).tablolar.size > 0).map(goreli);
+  kontrol("§4a silme YALNIZ services/maintenance.ts, services/facility-destruction.ts, auth/membership.ts ve services/push-bridge.ts'te", baskaYer.length === 0, baskaYer.join(", ") || "temiz");
   const uyelikHedef = silmeHedefleri(readFileSync(uyelik, "utf8"), modeller);
   kontrol("§4i auth/membership.ts YALNIZ üyelik satırı (`login_routes`) siler", [...uyelikHedef.tablolar].join(",") === "login_routes" && uyelikHedef.bilinmeyen.length === 0, [...uyelikHedef.tablolar].join(",") || "yok");
+  const koprHedef = silmeHedefleri(readFileSync(kopru, "utf8"), modeller);
+  kontrol("§4k services/push-bridge.ts YALNIZ push köprüsü bağını (`push_bridge_links`) siler", [...koprHedef.tablolar].join(",") === "push_bridge_links" && koprHedef.bilinmeyen.length === 0, [...koprHedef.tablolar].join(",") || "yok");
+  const koprSonda = silmeHedefleri("await tx.pushBridgeLink.deleteMany({}); await tx.pushBridgeTicket.deleteMany({});", modeller);
+  kontrol("§4l ✓K sonda: köprü dosyasında bilet silmesi beyan dışı tablo olarak ısırır", koprSonda.tablolar.has("push_bridge_tickets") && [...koprSonda.tablolar].join(",") !== "push_bridge_links");
   const merkezSonda = silmeHedefleri("await central.loginRoute.deleteMany({}); this.entries.delete(k);", modeller);
   kontrol("§4j ✓K sonda: merkez tx alıcısıyla (`central.`) silme `login_routes` olarak ısırır · Map `.delete(` susar", merkezSonda.tablolar.has("login_routes") && merkezSonda.tablolar.size === 1 && merkezSonda.bilinmeyen.length === 0);
   const h = silmeHedefleri(readFileSync(bakim, "utf8"), modeller);

@@ -43,6 +43,20 @@ export interface PushTransport {
 
 export const RECEIPT_BATCH = 1000;
 
+/** Push köprüsü iletisi (ERP kipi): metin fabrikadan gelir, bulut TEMİZLER + KIRPAR ve yalnız İLETİR (saklamaz, günlüğe yazmaz). */
+export interface BridgeMessage {
+  readonly title: string;
+  readonly body: string;
+  readonly bildirimId: string;
+  readonly rota: string | null;
+}
+
+/** Köprü gönderimi: ham Expo belirtecine TAM METİNLİ yük (kullanıcı kararı 2026-11-13: kilit ekranında başlık + gövde). */
+export interface BridgeTransport {
+  sendBridge(token: string, msg: BridgeMessage): Promise<PushOutcome>;
+  receipts?(tickets: readonly string[]): Promise<ReceiptBatch>;
+}
+
 /** Expo makbuz/bilet hata adı → sonuç sınıfı (bilet ve makbuz AYNI sınıflamayı kullanır). */
 export function expoErrorOutcome(err: string): PushOutcome {
   if (err === "DeviceNotRegistered") return { kind: "GECERSIZ_CIHAZ", code: "EXPO_CIHAZ_KAYITSIZ" };
@@ -59,8 +73,16 @@ export class RecordingTransport implements PushTransport {
   /** `tickets` açıkken Expo platformlarına bilet verir; makbuz `forcedReceipts`ten (yoksa hazır değil). */
   readonly forcedReceipts = new Map<string, PushOutcome>();
   readonly receiptCalls: string[][] = [];
+  readonly bridgeSent: { token: string; msg: BridgeMessage }[] = [];
   private seq = 0;
   constructor(private readonly opts: { tickets?: boolean } = {}) {}
+  sendBridge(token: string, msg: BridgeMessage): Promise<PushOutcome> {
+    const forced = this.forced.get(token);
+    if (!forced || forced.kind === "OK") this.bridgeSent.push({ token, msg });
+    if (forced) return Promise.resolve(forced);
+    const ticket = this.opts.tickets ? `sahte-bilet-${++this.seq}` : undefined;
+    return Promise.resolve(ticket ? { kind: "OK", ticket } : { kind: "OK" });
+  }
   send(target: PushTarget, msg: PushMessage): Promise<PushOutcome> {
     const forced = this.forced.get(target.token);
     if (!forced || forced.kind === "OK") this.sent.push({ target, msg });
@@ -86,6 +108,14 @@ export function nativePushPayload(target: PushTarget, msg: PushMessage) {
   return { to: target.token, title, sound: "default", priority: "high", data: { bildirimId: msg.id, rota: msg.route, tesisId: msg.tesisId } };
 }
 
+/** Köprü yükünün izinli anahtarları — bekçi (`test_bildirim_koprusu`) ölçer. İçerikli: `body` VAR, `tesisId` YOK (ERP kipi). */
+export const BRIDGE_PAYLOAD_KEYS = ["to", "title", "body", "sound", "priority", "data"] as const;
+export const BRIDGE_DATA_KEYS = ["bildirimId", "rota"] as const;
+
+export function bridgePushPayload(token: string, msg: BridgeMessage) {
+  return { to: token, title: msg.title, body: msg.body, sound: "default", priority: "high", data: { bildirimId: msg.bildirimId, rota: msg.rota } };
+}
+
 /** Expo push: gönderim bilet döner; asıl teslim sonucu makbuzda (`receipts`, ikinci aşama — `DeviceNotRegistered` çoğu kez orada). */
 export class ExpoTransport implements PushTransport {
   constructor(
@@ -93,9 +123,16 @@ export class ExpoTransport implements PushTransport {
     private readonly fetchImpl: typeof fetch = fetch,
   ) {}
 
-  async send(target: PushTarget, msg: PushMessage): Promise<PushOutcome> {
+  send(target: PushTarget, msg: PushMessage): Promise<PushOutcome> {
+    return this.post(nativePushPayload(target, msg));
+  }
+
+  sendBridge(token: string, msg: BridgeMessage): Promise<PushOutcome> {
+    return this.post(bridgePushPayload(token, msg));
+  }
+
+  private async post(payload: object): Promise<PushOutcome> {
     const headers = this.headers();
-    const payload = nativePushPayload(target, msg);
     let res: Response;
     try {
       res = await this.fetchImpl(this.config.EXPO_PUSH_URL, { method: "POST", headers, body: JSON.stringify([payload]), signal: AbortSignal.timeout(10_000) });

@@ -6,10 +6,12 @@ import type { CloudConfig } from "../config";
 import { listReadyFacilities, withTesis } from "../lib/tenant";
 import { perFacility } from "./maintenance";
 import { ExpoTransport, RecordingTransport, RoutingTransport, WebPushTransport, type PushTransport } from "../push/transports";
+import { nativePushState } from "../push/native-gate";
 import { VapidKeys } from "../push/vapid";
 import type { CloudContext } from "./context";
 import { generateForFacility } from "./notification-events";
 import { checkReceipts, type ReceiptTotals } from "./notification-receipts";
+import { bridgeTransport, checkBridgeReceipts } from "./push-bridge";
 import { deliverDue, type DeliveryTotals } from "./notification-sender";
 import { facilityServiceState } from "./service-lifecycle";
 
@@ -19,14 +21,7 @@ export interface NotificationRuntime {
   readonly webPushKey: string | null;
 }
 
-/** Telefon push kapısı: istenmiş ∧ gerçek kip ∧ Expo erişim belirteci (enhanced push security) var. Eksikse fail-closed
- *  KAPALI + neden (sırrın kendisi değil, yalnız adı günlüğe). */
-export function nativePushState(config: Pick<CloudConfig, "BILDIRIM_KIPI" | "BILDIRIM_NATIVE_PUSH" | "EXPO_ERISIM_BELIRTECI">): { acik: boolean; neden: string | null } {
-  if (config.BILDIRIM_NATIVE_PUSH !== "acik") return { acik: false, neden: null };
-  if (config.BILDIRIM_KIPI !== "gercek") return { acik: false, neden: "BILDIRIM_KIPI gercek degil" };
-  if (!config.EXPO_ERISIM_BELIRTECI) return { acik: false, neden: "EXPO_ERISIM_BELIRTECI yok" };
-  return { acik: true, neden: null };
-}
+export { nativePushState };
 
 /** Kipten çalışma zamanı: `kapali` → null. VAPID dosyası yoksa üretilir (0600). */
 export function createNotificationRuntime(config: CloudConfig): NotificationRuntime | null {
@@ -41,6 +36,17 @@ export function createNotificationRuntime(config: CloudConfig): NotificationRunt
 
 export async function runNotificationRound(ctx: CloudContext, transport: PushTransport, nowMs: number): Promise<{ created: number } & DeliveryTotals & ReceiptTotals> {
   const total = { created: 0, sent: 0, skipped: 0, deferred: 0, retried: 0, failed: 0, checked: 0, invalid: 0 };
+  // Push köprüsü makbuzları merkezdedir (kurulum başına, tesis DB'si yok): tesis döngüsünden ÖNCE, hatası turu durdurmaz.
+  const bridge = bridgeTransport(ctx);
+  if (bridge) {
+    try {
+      const b = await checkBridgeReceipts(ctx, bridge, nowMs);
+      total.checked += b.checked;
+      total.invalid += b.invalid;
+    } catch (err) {
+      console.error(`[patron] push köprüsü makbuz turu başarısız: ${(err as Error).name}`);
+    }
+  }
   for (const tesisId of await listReadyFacilities(ctx.app)) {
     await perFacility(tesisId, "bildirim", async () => {
       const f = await withTesis(ctx.app, { tesisId }, (tx) => tx.facility.findFirst({ where: { tesisId, status: "AKTIF" }, select: { tesisId: true } }));

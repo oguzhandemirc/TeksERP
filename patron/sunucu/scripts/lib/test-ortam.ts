@@ -24,6 +24,7 @@ import { expectedSchemaVersion } from "../../src/lib/tesis-goc";
 import { loadEnvFile } from "../../src/lib/env";
 import { withTesis } from "../../src/lib/tenant";
 import { REQUEST_HEADER, publicKeyX, signRequest } from "../../src/lisans-protokol";
+import type { BridgeTransport } from "../../src/push/transports";
 import type { CloudContext } from "../../src/services/context";
 import type { Doorbell, DoorbellTopic } from "../../src/services/doorbell";
 import { InstallationDirectory } from "../../src/services/installation-directory";
@@ -113,7 +114,7 @@ export async function ortamKur(
   ekOrtam: Record<string, string> = {},
   fetchImpl?: typeof fetch,
   doorbell?: Doorbell,
-  ezme: { anahtar?: FacilityDbKey; secrets?: SecretBox } = {},
+  ezme: { anahtar?: FacilityDbKey; secrets?: SecretBox; pushBridge?: BridgeTransport | null } = {},
 ): Promise<Ortam> {
   hedefDbKapisi();
   await applyRoles(process.env);
@@ -135,6 +136,7 @@ export async function ortamKur(
     doorbell: doorbell ?? zil,
     now: saat.simdi,
     notifications: createNotificationRuntime(config),
+    ...(ezme.pushBridge === undefined ? {} : { pushBridge: ezme.pushBridge }),
   };
   const server = http.createServer(createApp(ctx));
   await new Promise<void>((r) => server.listen(0, "127.0.0.1", () => r()));

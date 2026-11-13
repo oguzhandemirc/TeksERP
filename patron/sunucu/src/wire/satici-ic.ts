@@ -16,6 +16,8 @@ export const VendorInstallationSchema = z.object({
   patronBulutBitis: Iso.nullable(),
   devredildi: z.boolean(),
   aktif: z.boolean(),
+  /** Satıcının kurulum durumu (iç API hep gönderir; push köprüsünün "lisans geçerli" ölçüsü). Eski satıcı göndermezse yok. */
+  durum: z.enum(["ETKINLESMEDI", "ETKIN", "DEVREDILDI", "IPTAL"]).optional(),
   saklamaAy: z.union([z.literal(3), z.literal(13), z.literal(25), z.null()]).optional(),
 });
 export type VendorInstallation = z.infer<typeof VendorInstallationSchema>;

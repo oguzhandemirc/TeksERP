@@ -17,7 +17,7 @@ import { changeHub } from "./services/change-feed";
 import type { CloudContext } from "./services/context";
 import { createDoorbell } from "./services/doorbell";
 import { InstallationDirectory } from "./services/installation-directory";
-import { MaintenanceScheduler } from "./services/maintenance";
+import { MaintenanceScheduler } from "./services/maintenance-scheduler";
 import { createNotificationRuntime, NotificationScheduler } from "./services/notification-scheduler";
 import os from "node:os";
 import path from "node:path";

@@ -2,6 +2,7 @@
 // ve `sync` (fabrika kanalı + bakım budaması). Saat enjekte edilebilir (bekçiler `now`u kaydırır).
 import type { SecretBox } from "../auth/secret-box";
 import type { CloudConfig } from "../config";
+import type { BridgeTransport } from "../push/transports";
 import type { Doorbell } from "./doorbell";
 import type { InstallationDirectory } from "./installation-directory";
 import type { NotificationRuntime } from "./notification-scheduler";
@@ -17,4 +18,6 @@ export interface CloudContext {
   readonly now: () => number;
   /** Bildirim çalışma zamanı (`BILDIRIM_KIPI=kapali` iken yok). */
   readonly notifications?: NotificationRuntime | null;
+  /** Push köprüsü taşıyıcısı — verilmezse kipten türetilir (`push-bridge.ts` `bridgeTransport`); `null` = gönderim kapalı. */
+  readonly pushBridge?: BridgeTransport | null;
 }
