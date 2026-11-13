@@ -41,6 +41,16 @@
 - **[ÇEKİRDEK]** Ret alan GUNLUK anlıkla günü tamam sayma: yalnız reddedileni 1→2→4→8 sa geri çekilmeyle yeniden gönder; aynı KISMI log 6 sa içinde tekrarlanmaz (`cloud-sync/daily-retry.ts`).
 - **[PROFİL]** Olay güdümlü tur `patronBulut.olayGudumluEnabled` (varsayılan kapalı); kirli bayrak tek yazar `cloud-sync/dirty-flag.ts` (`lib/prisma.ts` Proxy); 3 sn birleştirme, ≥15 sn aralık, tek uçuş; hata yutulur, yazma her koşulda yapılır.
 
+## ERP okuma ucu (fabrika, V3a)
+
+### Değişmezler
+
+- **[ÇEKİRDEK]** Patron uygulamasının ERP okuma uçlarını yalnız `/api/patron/v1` altında aç (`oturum`, `veri/:p`, `veri/:p/:id`, `anlik/:p`); yanıtı bulut tel tipleriyle (`patron/sunucu/src/wire/api.ts`) AYNI biçimde ver.
+- **[ÇEKİRDEK]** Okuma ucunun verisini canlı ERP'den, eşitlemenin kullandığı fabrika kurucularıyla üret; bulut kopyasından ya da ayrı hesapla üretme.
+- **[ÇEKİRDEK]** ERP izni → bulut okuma kodu eşlemesini yalnız `services/patron-read/izin-esleme.ts` `ERP_TO_CLOUD`ta tut; izinsiz kök 403 `PATRON_SET_FORBIDDEN`, izinsiz alt satır anahtarsız, sunulmayan küme 404; yazma/hesap kodu verme.
+- **[ÇEKİRDEK]** Anlık önbelleği (20 sn, anahtar `kullanıcı|küme`) yalnız tazelik say: izin ve modül kapısını her istekte önbellekten ÖNCE uygula.
+- **[ÇEKİRDEK]** Yeni küme yalnız `PATRON_RECORD_SETS`/`PATRON_SNAPSHOT_SETS` + `test_patron_okuma_ucu` §1e/§1f ile eklenir.
+
 ## Gelen kutusu (fabrika)
 
 ### Değişmezler
