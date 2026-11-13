@@ -5,6 +5,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
+import { islemVar } from "../../../../src/api/yetenek";
 import { moduleVisible } from "../../../../src/lib/access";
 import { fmtFactoryDateTime } from "../../../../src/lib/factory-time";
 import { formatDate, formatMoney, formatNumber } from "../../../../src/lib/format";
@@ -13,6 +14,7 @@ import { useSession } from "../../../../src/state/session";
 import { useRemote } from "../../../../src/state/useRemote";
 import { Screen } from "../../../../src/ui/Frame";
 import { IconChip } from "../../../../src/ui/IconChip";
+import { Banner, Button } from "../../../../src/ui/kit";
 import { SectionHeader } from "../../../../src/ui/SectionHeader";
 import { ErrorState, LoadingSkeleton } from "../../../../src/ui/StateViews";
 import { StatusBadge } from "../../../../src/ui/StatusBadge";
@@ -27,7 +29,7 @@ const has = (v: unknown): boolean => (typeof v === "number" && Number.isFinite(v
 
 export default function OrderDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { api, permissions } = useSession();
+  const { api, permissions, offline } = useSession();
   const router = useRouter();
   const t = useTokens();
   const s = useStyles();
@@ -42,6 +44,10 @@ export default function OrderDetail() {
   const doviz = str(k.doviz) ?? "TRY";
   const cariId = str(k.cariKartId);
   const showOpen = isOpenOrder(k.durum) && has(k.acikMiktar);
+  // Tamamlanmış/iptal sipariş düzenlenemez ve iptal edilemez (fabrika 409 verir); düğme çizilmez.
+  const acik = k.durum !== "COMPLETED" && k.durum !== "CANCELLED";
+  const duzenle = acik && islemVar("siparis.duzenle", permissions);
+  const iptal = acik && islemVar("siparis.iptal", permissions);
   return (
     <Screen title={no ?? "Sipariş"} module="siparisler" back onRefresh={() => {
         r.reload();
@@ -92,6 +98,14 @@ export default function OrderDetail() {
             ) : null}
           </View>
 
+          {duzenle || iptal ? (
+            <View style={s.actions} testID="siparis-eylemler">
+              {offline ? <Banner tone="off" text="Sunucuya ulaşılamıyor; değişiklik yapılamaz" testID="yazma-kapali" /> : null}
+              {duzenle ? <Button label="Düzenle" tone="secondary" icon="create-outline" disabled={offline} testID="siparis-duzenle" onPress={() => router.push({ pathname: "/siparisler/duzenle", params: { id: String(id) } } as never)} /> : null}
+              {iptal ? <Button label="İptal et" tone="danger" icon="close-circle-outline" disabled={offline} testID="siparis-iptal-ac" onPress={() => router.push({ pathname: "/siparisler/iptal", params: { id: String(id) } } as never)} /> : null}
+            </View>
+          ) : null}
+
           <SectionHeader title="Teslim" />
           <FactGroup>
             <FactRow label="Termin" value={formatDate(k.termin)} tone={badge?.tone === "kritik" ? "kritik" : undefined} />
@@ -134,5 +148,6 @@ const useStyles = makeStyles((t) => ({
   figUnit: { ...typography.subhead, color: t.textSecondary },
   link: { minHeight: TOUCH - 8, flexDirection: "row" as const, alignItems: "center" as const, alignSelf: "flex-start" as const, gap: 2 },
   linkText: { ...typography.subhead, fontWeight: "600" as const, color: t.tint },
+  actions: { gap: space.s, marginBottom: space.s },
   foot: { ...typography.footnote, color: t.textMuted, textAlign: "center" as const, marginTop: space.m },
 }));
