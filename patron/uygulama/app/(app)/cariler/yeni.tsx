@@ -1,10 +1,13 @@
-// Yeni cari fabrikaya GELEN KUTUSU üzerinden gider; kod ve mükerrer denetimi fabrikada.
-// Gövde `buildCustomer` (forms.ts), gönderim `useWrite` (işlem kimliği kuralı) — yalnız görünüm yenilendi.
+// Yeni cari: bulutta GELEN KUTUSU mesajı, ERP'de doğrudan fabrika kaydı (`Yazici`); kod ve mükerrer denetimi fabrikada.
+// Gövde `buildCustomer` (forms.ts), gönderim `useWrite` (işlem kimliği kuralı); yönlendirme sonucun türüne bakar.
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
+import { ApiError } from "../../../src/api/client";
+import { ekleHatasi } from "../../../src/lib/duzenleme";
 import { buildCustomer } from "../../../src/lib/forms";
+import { invalidate } from "../../../src/state/changes";
 import { useSession } from "../../../src/state/session";
 import { Screen } from "../../../src/ui/Frame";
 import { haptic } from "../../../src/ui/haptics";
@@ -31,14 +34,26 @@ function RoleToggle(p: { label: string; on: boolean; onPress: () => void; testID
 }
 
 export default function NewCustomer() {
-  const { api } = useSession();
+  const { yazici, offline } = useSession();
   const router = useRouter();
   const t = useTokens();
   const s = useStyles();
   const [f, setF] = useState({ ad: "", musteri: true, tedarikci: false, il: "", vergiNo: "", telefon: "", eposta: "" });
   const [formError, setFormError] = useState<string | null>(null);
   const built = buildCustomer(f);
-  const send = useCallback((id: string) => (built.ok ? api.inboxCreate(id, "CARI", built.body) : Promise.reject(new Error(built.error))), [api, built]);
+  const belirsiz = useRef(false);
+  const send = useCallback(async (id: string) => {
+    if (!built.ok) throw new Error(built.error);
+    try {
+      const r = await yazici.cariEkle(id, built.body);
+      belirsiz.current = false;
+      return r;
+    } catch (err) {
+      const once = belirsiz.current;
+      belirsiz.current = err instanceof ApiError && err.ambiguous;
+      throw ekleHatasi(err, once);
+    }
+  }, [yazici, built]);
   const w = useWrite(send);
   const set = (patch: Partial<typeof f>) => setF((o) => ({ ...o, ...patch }));
 
@@ -46,15 +61,20 @@ export default function NewCustomer() {
     if (!built.ok) return setFormError(built.error);
     setFormError(null);
     const r = await w.run(JSON.stringify(built.body));
-    if (r) router.replace({ pathname: "/gelen-kutusu/[mesajId]", params: { mesajId: r.mesajId } } as never);
+    if (r?.tur === "gelen-kutusu") router.replace({ pathname: "/gelen-kutusu/[mesajId]", params: { mesajId: r.mesajId } } as never);
+    else if (r) {
+      invalidate(["cari-kart"]);
+      router.replace({ pathname: "/cariler/[id]", params: { id: r.id } } as never);
+    }
   }
   const shown = formError ?? w.error;
+  const dogrudan = yazici.kanal === "dogrudan";
 
   return (
     <Screen title="Yeni cari" module="cariler" back>
       <View style={s.intro}>
-        <IconChip domain="gelenKutusu" icon="paper-plane-outline" size={32} />
-        <Text style={s.introText}>Cari fabrikaya gelen kutusundan iletilir; kod ve mükerrer denetimi fabrikada yapılır.</Text>
+        <IconChip domain={dogrudan ? "cariler" : "gelenKutusu"} icon={dogrudan ? "business-outline" : "paper-plane-outline"} size={32} />
+        <Text style={s.introText}>{dogrudan ? "Cari fabrikaya hemen kaydedilir; kodu fabrika verir." : "Cari fabrikaya gelen kutusundan iletilir; kod ve mükerrer denetimi fabrikada yapılır."}</Text>
       </View>
       <View style={s.card}>
         <View style={[s.stripe, { backgroundColor: t.domain.cariler.fg }]} />
@@ -73,8 +93,9 @@ export default function NewCustomer() {
         <Field label="Telefon (isteğe bağlı)" value={f.telefon} onChangeText={(v) => set({ telefon: v })} keyboardType="phone-pad" />
         <Field label="E-posta (isteğe bağlı)" value={f.eposta} onChangeText={(v) => set({ eposta: v })} autoCapitalize="none" keyboardType="email-address" />
       </View>
+      {offline ? <Banner tone="off" text="Sunucuya ulaşılamıyor; değişiklik yapılamaz" testID="yazma-kapali" /> : null}
       {shown ? <Banner tone="error" text={shown} /> : null}
-      <Button label="Fabrikaya gönder" icon="paper-plane-outline" busy={w.busy} disabled={w.disabled} onPress={() => void submit()} testID="cari-gonder" />
+      <Button label={belirsiz.current && shown ? "Tekrar dene" : dogrudan ? "Kaydet" : "Fabrikaya gönder"} icon={dogrudan ? "checkmark-circle-outline" : "paper-plane-outline"} busy={w.busy} disabled={w.disabled} onPress={() => void submit()} testID="cari-gonder" />
     </Screen>
   );
 }
