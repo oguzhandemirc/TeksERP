@@ -905,6 +905,7 @@ router.patch("/:id", verifyToken, requirePermission("order:write"), async (req: 
  *       Etkilenecek iş emirlerini tek tek, koparılacak bağları ve bu kalem son
  *       aktif kalemse siparişin düşeceği statüyü döner. Engel varsa
  *       `canCancel:false` ve `blockers[]` ile sebebi yazılı gelir.
+ *       `previewToken`: belirlenimli özet (sır değil) — iptal gövdesine `expectedPreviewToken` olarak geri yollanır.
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Önizleme }
@@ -955,10 +956,13 @@ router.get(
  *             properties:
  *               reasonCode: { type: string }
  *               reasonText: { type: string }
+ *               expectedPreviewToken:
+ *                 type: string
+ *                 description: "Opsiyonel — kalem cancel-preview yanıtındaki previewToken. Sipariş içeriği ya da kalemin iş emri bağları arada değiştiyse 409 CANCEL_PREVIEW_STALE ve hiçbir şey uygulanmaz. Gönderilmezse davranış değişmez."
  *     responses:
  *       200: { description: Kalem iptal edildi, güncel sipariş döner }
  *       400: { description: Engel var (önizlemedeki blockers) }
- *       409: { description: Kalem bu sırada iptal edildi }
+ *       409: { description: "Kalem bu sırada iptal edildi · CANCEL_PREVIEW_STALE (expectedPreviewToken tutmadı)" }
  */
 router.post(
   "/:id/lines/:lineId/cancel",
@@ -969,13 +973,14 @@ router.post(
       const schema = z.object({
         reasonCode: z.string().max(64).nullish(),
         reasonText: z.string().max(1000).nullish(),
+        expectedPreviewToken: z.string().max(64).nullish(),
       });
       const body = schema.parse(req.body ?? {});
       const result = await orderService.cancelOrderLine(
         assertValidUuid(req.params.id),
         assertValidUuid(req.params.lineId),
         req.user?.userId,
-        { reasonCode: body.reasonCode, reasonText: body.reasonText },
+        { reasonCode: body.reasonCode, reasonText: body.reasonText, expectedPreviewToken: body.expectedPreviewToken },
       );
       res.status(200).json(result);
     } catch (e) {

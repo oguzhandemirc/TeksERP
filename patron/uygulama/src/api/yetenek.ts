@@ -16,6 +16,8 @@ export interface Yetenek {
    *  istek → yoklama akışı. Ekran bu yeteneğe bakar, kipe değil. */
   readonly raporAnlik: boolean;
   readonly bildirim: boolean;
+  /** Kişisel gelen bildirim kutusu (ERP `/api/bildirim/*`: liste, okunmamış sayısı, okundu); açıklık `/ozet`ten. */
+  readonly bildirimKutusu: boolean;
   /** Açılış zili (`POST /tazele`) ve değişim akışı (`GET /degisim`). */
   readonly tazele: boolean;
   readonly hesapYonetimi: boolean;
@@ -35,6 +37,7 @@ export const BULUT_YETENEK: Yetenek = {
   rapor: true,
   raporAnlik: false,
   bildirim: true,
+  bildirimKutusu: false,
   tazele: true,
   hesapYonetimi: true,
   parolaDegistir: true,
@@ -49,7 +52,7 @@ const dizeler = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is
  * ERP sunucusu: sunulan kümeler sunucunun beyanından (eski sunucu beyan etmezse BOŞ — fail-closed). Bulut yazma
  * kanalı (gelen kutusu, `:yaz` kodları) yok; ERP yazma işlemleri ham ERP izinlerinden (`islemVar`).
  */
-export function erpYetenek(patronReadSets: unknown, erpPermissions?: unknown, patronReportApi?: unknown): Yetenek {
+export function erpYetenek(patronReadSets: unknown, erpPermissions?: unknown, patronReportApi?: unknown, bildirimKutusu?: unknown): Yetenek {
   const kumeler = new Set(dizeler(patronReadSets));
   // Rapor ucu (V5a) yalnız sürümünü beyan eden sunucuda; eski sunucu beyan etmez → rapor gizli (fail-closed).
   const rapor = typeof patronReportApi === "number" && patronReportApi >= 1;
@@ -62,6 +65,8 @@ export function erpYetenek(patronReadSets: unknown, erpPermissions?: unknown, pa
     rapor,
     raporAnlik: rapor,
     bildirim: false,
+    // Fabrika `/api/bildirim/ozet` `enabled:true` dediyse (yalnız gerçek `true` açar — fail-closed).
+    bildirimKutusu: bildirimKutusu === true,
     tazele: false,
     hesapYonetimi: false,
     parolaDegistir: false,
@@ -102,7 +107,7 @@ export function izinleriSuz(perms: readonly string[], y: Yetenek = etkin): reado
 
 /** Telefondan yapılabilen yazma işlemleri; ekran kipi değil işlemi sorar. */
 export const ISLEMLER = [
-  "siparis.ekle", "siparis.duzenle", "siparis.iptal", "cari.ekle", "cari.duzenle", "cari.pasif",
+  "siparis.ekle", "siparis.duzenle", "siparis.iptal", "siparis.kalem", "siparis.kalem-iptal", "cari.ekle", "cari.duzenle", "cari.pasif",
   // V5c tanımlar: yalnız ERP (bulutta gelen kutusu mesajı yok → kapalı).
   "renk.ekle", "renk.duzenle", "renk.pasif", "fiyat.yaz", "urun.ekle", "urun.duzenle",
 ] as const;
@@ -121,6 +126,10 @@ const ERP_ISLEM: Readonly<Record<Islem, { readonly izin: readonly (readonly stri
   "siparis.ekle": { izin: [["order:write", "mobile:siparis"]], kume: ["cari-kart", "urun"] },
   "siparis.duzenle": { izin: [["order:write"], ["order:read"]], kume: ["siparis", "cari-kart"] },
   "siparis.iptal": { izin: [["order:write"]], kume: ["siparis"] },
+  // Kalem yazımı `PATCH /orders/:id` (order:write) + detay (order:read); yeni kalemin ürünü seçicide (`urun`).
+  "siparis.kalem": { izin: [["order:write"], ["order:read"]], kume: ["siparis", "urun"] },
+  // Kalem iptali önizlemesi order:read, uygulaması order:write ister.
+  "siparis.kalem-iptal": { izin: [["order:write"], ["order:read"]], kume: ["siparis"] },
   "cari.ekle": { izin: [["customer:write"]], kume: ["cari-kart"] },
   "cari.duzenle": { izin: [["customer:write"], ["customer:read"]], kume: ["cari-kart"] },
   "cari.pasif": { izin: [["customer:write"]], kume: ["cari-kart"] },

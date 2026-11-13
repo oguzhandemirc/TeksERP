@@ -1,8 +1,10 @@
 // Bildirim Ayarları — bölümler: Cihazlar (bu cihazın izni, EN ÜSTTE) · Ayarlar (ana anahtar · tür · sessiz saat) · Eşikler ·
 // Geçmiş; tesis varsayılanı (yönetici). Karar sunucudadır: ayar katı şemadan geçer, izni yetmeyen türe ayar açık olsa da gönderilmez.
+// Ayarı sunmayan sunucuda (ERP, `bildirimKutusu`) aynı ekran fabrikanın gelen bildirimlerini çizer (`GelenBildirimler`).
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { View } from "react-native";
 import type { NotificationSettingsView } from "../../src/api/wire";
+import { yetenek } from "../../src/api/yetenek";
 import { can } from "../../src/lib/access";
 import { fromForm, toForm, type NotificationForm } from "../../src/lib/notification-form";
 import { useSession } from "../../src/state/session";
@@ -17,6 +19,7 @@ import { Empty, ErrorState, LoadingSkeleton } from "../../src/ui/StateViews";
 import { space } from "../../src/ui/tokens";
 import { useWrite } from "../../src/ui/useWrite";
 import { EMPTY_ICON } from "../../src/ui/icons";
+import { GelenBildirimler } from "../../src/ui/bildirim/GelenBildirimler";
 
 const SOURCE: Readonly<Record<NotificationSettingsView["kaynak"], string>> = {
   HESAP: "Kendi ayarlarınız kullanılıyor.",
@@ -25,6 +28,11 @@ const SOURCE: Readonly<Record<NotificationSettingsView["kaynak"], string>> = {
 };
 
 export default function Notifications() {
+  const y = yetenek();
+  return !y.bildirim && y.bildirimKutusu ? <GelenBildirimler /> : <NotificationSettingsScreen />;
+}
+
+function NotificationSettingsScreen() {
   const { api, permissions } = useSession();
   const remote = useRemote("bildirim-ayarlar", () => api.notificationSettings());
   const [view, setView] = useState<NotificationSettingsView | null>(null);
