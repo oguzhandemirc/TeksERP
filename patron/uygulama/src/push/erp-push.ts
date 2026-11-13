@@ -50,6 +50,20 @@ export function erpPushAcik(patronPush: boolean, nativePush: boolean = NATIVE_PU
   return patronPush && nativePush && os !== "web";
 }
 
+/**
+ * Belirteç olayı süzgeci: expo-notifications belirteç HER alındığında (değişmese de) olay yayar; kayıt belirteci yeniden
+ * aldığı için süzgeçsiz dinleyici sonsuz döngü kurar (2026-11-14 cihazda ~1.400 istek/dk). İlk olay ve aynı değer yutulur.
+ */
+export function degisinceSuzgeci(cb: () => void): (veri: unknown) => void {
+  let son: string | null = null;
+  return (veri) => {
+    const d = typeof veri === "string" ? veri : JSON.stringify(veri ?? null);
+    const degisti = son !== null && d !== son;
+    son = d;
+    if (degisti) cb();
+  };
+}
+
 /** Gizli depo çağrı anında alınır: ekran modülü yüklenirken yerel depo modülü istenmesin. */
 const gizliDepo = (): KeyValue => (require("../state/store") as typeof import("../state/store")).secretStore;
 

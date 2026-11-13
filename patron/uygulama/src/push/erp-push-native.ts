@@ -3,7 +3,7 @@ import Constants from "expo-constants";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
-import type { IzinDurumu, PushPortlari } from "./erp-push";
+import { degisinceSuzgeci, type IzinDurumu, type PushPortlari } from "./erp-push";
 import { kanalAyariniAc, kanallariKur, sesiOnizle } from "./kanallar-native";
 import type { SesSecimi } from "./sesler";
 
@@ -30,7 +30,8 @@ export function erpPushPortlari(secim: () => Promise<SesSecimi>): PushPortlari {
       return projectId ? (await Notifications.getExpoPushTokenAsync({ projectId })).data : null;
     },
     belirtecDegisince: (cb) => {
-      const sub = Notifications.addPushTokenListener(() => cb());
+      const suz = degisinceSuzgeci(cb);
+      const sub = Notifications.addPushTokenListener((t) => suz(t.data));
       return () => sub.remove();
     },
     cihazAdi: () => Device.deviceName ?? null,
