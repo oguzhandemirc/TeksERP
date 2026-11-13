@@ -8,6 +8,7 @@ import { ApiError, errorMessage } from "../../../../src/api/client";
 import { islemVar } from "../../../../src/api/yetenek";
 import { IPTAL_ILETISI, iptalKarari, type IptalOnizleme } from "../../../../src/api/yazma";
 import { formatNumber, statusLabel } from "../../../../src/lib/format";
+import { TERIM } from "../../../../src/lib/terim";
 import { invalidate } from "../../../../src/state/changes";
 import { useSession } from "../../../../src/state/session";
 import { Screen } from "../../../../src/ui/Frame";
@@ -85,7 +86,7 @@ export default function CancelOrder() {
           <FactGroup testID="iptal-etkilenen">
             <FactRow label="Sipariş" value={onizleme.siparisNo || "—"} />
             {onizleme.isEmirleri.map((w) => (
-              <FactRow key={w.id} label={`İş emri ${w.no}`} value={`${statusLabel(w.durum)} · ${formatNumber(w.uretilenTop, 0)} top`} />
+              <FactRow key={w.id} label={`${TERIM.terbiyeIsEmri.tekil} ${w.no}`} value={`${statusLabel(w.durum)} · ${formatNumber(w.uretilenTop, 0)} top`} />
             ))}
             {onizleme.sevkiyatlar.map((x) => <FactRow key={x.no} label={`Sevkiyat ${x.no}`} value={statusLabel(x.durum)} tone="kritik" />)}
           </FactGroup>
@@ -93,7 +94,7 @@ export default function CancelOrder() {
             <Banner tone="warn" text={IPTAL_ILETISI[karar]} testID={`iptal-${karar}`} />
           ) : (
             <>
-              <Text style={s.note}>Yalnız bu sipariş iptal edilir; bağlı iş emri yok.</Text>
+              <Text style={s.note}>{`Yalnız bu sipariş iptal edilir; bağlı ${TERIM.terbiyeIsEmri.tekilKucuk} yok.`}</Text>
               {offline ? <Banner tone="off" text="Sunucuya ulaşılamıyor; değişiklik yapılamaz" testID="yazma-kapali" /> : null}
               {error ? <Banner tone="error" text={error} testID="iptal-hata" /> : null}
               {belirsiz.current && error ? (
