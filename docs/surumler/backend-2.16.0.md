@@ -62,6 +62,11 @@ imajını ve göçleri etkilemez (hiçbir göç `pg_stat_statements` istemez). `
 
 `dist-web` (web paneli) imaja girer ve bu turda büyük ölçüde değişti; masaüstü panel paketi bu turda YOK.
 
+**Sürüm turunda eklenenler (2026-11-13):** `test_backend_surum` elle küçük/büyük haneyi tanır (#698); korumalı imaj
+Dockerfile'ı iç içe `node_modules/*/.bin` bağlarını da siler — `exceljs`in getirdiği `exceljs/node_modules/.bin/uuid`
+bağı imaj bekçisinde (K9, imzalanamaz bağ) ilk korumalı paket koşusunu durdurmuştu. Arada inen #697 (doküman) ve
+#699 (`patron/uygulama`) backend imajına girmez.
+
 Tam döküm: Ek A.
 
 ## 3. Sözleşme
