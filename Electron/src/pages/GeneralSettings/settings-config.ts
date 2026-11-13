@@ -2916,7 +2916,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     id: "web-giris",
     label: "İnternetten Giriş",
     icon: ShieldCheck,
-    description: "Web panelinde (tarayıcıdan) girişte iki adımlı doğrulamanın herkese zorunlu mu, kullanıcının tercihine mi bırakıldığı.",
+    description: "İnternetten girişte iki adımlı doğrulama: kullanıcı seçer ya da herkese zorunlu.",
     keywords: "iki adımlı doğrulama 2fa totp kod web tarayıcı internet bulut giriş güvenlik parola kapat zorunlu tercih",
     kind: "flags",
     section: "system",
@@ -2925,20 +2925,16 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     enumFlags: [
       {
         enumKey: "webTotpPolicy",
-        title: "İnternetten girişte iki adımlı doğrulama",
-        summary: "Web panelinde girişte doğrulama kodu herkese zorunlu mu, yoksa her kullanıcı kendi hesabı için mi karar versin.",
-        defaultValue: "REQUIRED",
+        title: "İki adımlı doğrulama",
+        summary: "Tarayıcıdan ve uzak sunucuya girişte doğrulama kodu kimden istensin.",
+        defaultValue: "USER_CHOICE",
         options: [
-          { value: "REQUIRED", label: "Herkese zorunlu", hint: "Bugünkü davranış: tarayıcıdan girişte parola + doğrulama kodu istenir." },
-          {
-            value: "USER_CHOICE",
-            label: "Kullanıcının tercihine bırak",
-            hint: "Her kullanıcı Kullanıcı Tercihleri'nden kendi hesabında kodu kapatabilir (parola + kodla). Önerilmez.",
-          },
+          { value: "USER_CHOICE", label: "Kullanıcı seçer", hint: "Kod yalnız iki adımlı doğrulamayı kendi açan kullanıcıya sorulur." },
+          { value: "REQUIRED", label: "Herkese zorunlu", hint: "Herkes kurmak zorunda; girişte her zaman kod sorulur." },
         ],
         display: "radio",
         audience: ["Yönetim"],
-        desc: "“Herkese zorunlu” (varsayılan): web paneline girişte iki adımlı doğrulama kurulu olmalı ve kod istenir. “Kullanıcının tercihine bırak”: kodu kendi hesabında kapatan kullanıcı internetten yalnız parolayla girer — önerilmez; yalnız deneme/demo kurulumları için. Sistem hesabı her durumda kod verir; masaüstü ve tablet kuralları değişmez. Bu ayarı yalnız sistem yöneticisi değiştirir.",
+        desc: "Varsayılan “Kullanıcı seçer”. Sistem hesabı her durumda kod verir; fabrika içi (yerel ağ) girişler etkilenmez. Yalnız sistem yöneticisi değiştirir.",
       },
     ],
     numberFlags: [
