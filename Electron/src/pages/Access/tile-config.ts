@@ -1,4 +1,4 @@
-import { Users2, Layers, BookOpen, Tablet, ShieldCheck, Cpu, CloudCog, type LucideIcon } from "lucide-react";
+import { Users2, Layers, BookOpen, Tablet, ShieldCheck, Cpu, CloudCog, Smartphone, type LucideIcon } from "lucide-react";
 
 /** Yetkilendirme = "sisteme kim/ne girebilir": insanlar (kullanıcı erişimi) +
  *  saha tabletleri (cihaz erişimi). İki grup ayrı başlık altında sunulur. */
@@ -30,7 +30,7 @@ export const accessGroups: AccessGroup[] = [
   {
     key: "device",
     title: "Cihaz Erişimi",
-    description: "Sahadaki tabletlerin bağlantı onayı ve makine ataması",
+    description: "Saha tabletlerinin bağlantı onayı ve patron telefonunun bağlanması",
     icon: Cpu,
   },
 ];
@@ -77,6 +77,15 @@ export const accessTiles: AccessTile[] = [
     description: "Sahadaki tabletler, eşli makineler ve kopya kayıtların birleştirilmesi",
     icon: Tablet,
     to: "/access/devices",
+    group: "device",
+  },
+  {
+    // Karekod yalnız sunucu adresini taşır; giriş patron uygulamasında kullanıcı adı + parolayla.
+    key: "patron-telefon",
+    title: "Patron Telefonu",
+    description: "Patron uygulamasını karekodla bu sunucuya bağla",
+    icon: Smartphone,
+    to: "/access/patron-telefon",
     group: "device",
   },
 ];

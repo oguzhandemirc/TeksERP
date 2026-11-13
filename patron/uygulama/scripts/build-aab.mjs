@@ -32,7 +32,8 @@ const YASAK_BILESEN = /firebase|expo\.modules\.notifications|c2dm/i;
 const app = JSON.parse(fs.readFileSync(path.join(UYGULAMA, "app.json"), "utf8")).expo;
 const PAKET = app.android.package;
 // AndroidX'in uygulamaya özel imza izni paket adını taşır: literal yazılmaz, paketten türer (paket adı değişince kırılmasın).
-const IZINLI_IZINLER = ["android.permission.INTERNET", `${PAKET}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`];
+// CAMERA: yalnız sunucu bağlantı karekodunu okutmak için (expo-camera, mikrofon kapalı).
+const IZINLI_IZINLER = ["android.permission.INTERNET", "android.permission.CAMERA", `${PAKET}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`];
 const SURUM = app.version;
 const KOD = app.android.versionCode;
 const baslik = (t) => console.log(`\n── ${t}`);

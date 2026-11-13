@@ -1,14 +1,16 @@
 // Giriş: ① kimlik + parola → ② doğrulama kodu (TOTP). Bulutta kod HER girişte (iki ekran, tek istek); fabrika
 // sunucusunda kod yalnız sunucu isterse (409 TOTP_REQUIRED) sorulur. Hata iletisi hangi alanın yanlış olduğunu söylemez.
-// "Fabrika sunucusuna bağlan": adres elle yazılır, yoklanır, tanınırsa kaydedilir. Parola/kod hiçbir yere yazılmaz.
+// "Fabrika sunucusuna bağlan": adres elle yazılır ya da paneldeki karekoddan okunur (telefonda), yoklanır, tanınırsa
+// kaydedilir. Parola/kod hiçbir yere yazılmaz.
 // Web duman betiği giriş sayfasında `input` sayar (≥ 2): ① adımda iki alan kalır.
 import { Redirect, useRouter } from "expo-router";
 import { useState } from "react";
-import { View } from "react-native";
+import { Platform, View } from "react-native";
 import { ApiError, errorMessage } from "../src/api/client";
 import { TOTP_REQUIRED } from "../src/api/erp";
 import { useSession } from "../src/state/session";
 import { AuthShell } from "../src/ui/diger/AuthShell";
+import { KarekodOkut } from "../src/ui/diger/KarekodOkut";
 import { Banner, Button, Field } from "../src/ui/kit";
 import { space } from "../src/ui/tokens";
 
@@ -19,6 +21,7 @@ function ServerStep({ onDone }: { readonly onDone: () => void }) {
   const [adres, setAdres] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [scan, setScan] = useState(false);
   async function connect() {
     setBusy(true);
     setError(null);
@@ -27,12 +30,21 @@ function ServerStep({ onDone }: { readonly onDone: () => void }) {
     if (msg) setError(msg);
     else onDone();
   }
+  async function connectScanned(scanned: string): Promise<string | null> {
+    const msg = await connectServer(scanned);
+    if (!msg) onDone();
+    return msg;
+  }
+  if (scan) return <KarekodOkut onAdres={connectScanned} onElle={(msg) => { setScan(false); setError(msg ?? null); }} />;
   return (
     <AuthShell title="Sunucu ekle" subtitle="Fabrikanızın TeksERP adresi">
       {error ? <Banner tone="error" text={error} testID="sunucu-hata" /> : null}
       <Field label="Sunucu adresi" value={adres} onChangeText={setAdres} autoCapitalize="none" autoComplete="url" keyboardType="url" placeholder="erp.fabrika.com" testID="sunucu-adres" />
       <View style={{ height: space.xs }} />
       <Button label="Bağlan" icon="link-outline" busy={busy} disabled={adres.trim() === ""} onPress={() => void connect()} testID="sunucu-baglan" />
+      {Platform.OS !== "web" ? (
+        <Button label="Karekod okut" tone="secondary" icon="qr-code-outline" onPress={() => { setError(null); setScan(true); }} testID="sunucu-karekod" />
+      ) : null}
       <Button label="Geri" tone="plain" onPress={onDone} testID="sunucu-geri" />
     </AuthShell>
   );

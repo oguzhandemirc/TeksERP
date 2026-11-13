@@ -1,0 +1,49 @@
+{
+  "_aciklama": "Patron karekodu sözleşme vektörleri — panel (vitest) ve patron uygulaması (jest) AYNI dosyayı koşar.",
+  "adres": [
+    { "girdi": "https://erp.fabrika.com", "adres": "https://erp.fabrika.com" },
+    { "girdi": "  HTTPS://ERP.Fabrika.COM/api/ ", "adres": "https://erp.fabrika.com" },
+    { "girdi": "erp.fabrika.com:8443", "adres": "https://erp.fabrika.com:8443" },
+    { "girdi": "https://deneme.etkiliyazilim.com/", "adres": "https://deneme.etkiliyazilim.com" },
+    { "girdi": "https://85.105.12.7", "adres": "https://85.105.12.7" },
+    { "girdi": "", "neden": "bos" },
+    { "girdi": "http://erp.fabrika.com", "neden": "sifresiz" },
+    { "girdi": "ftp://erp.fabrika.com", "neden": "sifresiz" },
+    { "girdi": "https://erp.fabrika.com/panel", "neden": "gecersiz" },
+    { "girdi": "https://kullanici@erp.fabrika.com", "neden": "gecersiz" },
+    { "girdi": "https://erp.fabrika.com?x=1", "neden": "gecersiz" },
+    { "girdi": "https://erp.fabrika.com:70000", "neden": "gecersiz" },
+    { "girdi": "https://fabrika", "neden": "gecersiz" },
+    { "girdi": "https://-erp.fabrika.com", "neden": "gecersiz" },
+    { "girdi": "https://localhost:4443", "neden": "yerel" },
+    { "girdi": "https://127.0.0.1:4443", "neden": "yerel" },
+    { "girdi": "https://192.168.1.20:4443", "neden": "yerel" },
+    { "girdi": "https://10.0.0.5", "neden": "yerel" },
+    { "girdi": "https://172.20.1.1", "neden": "yerel" },
+    { "girdi": "https://169.254.3.4", "neden": "yerel" },
+    { "girdi": "https://100.100.1.1", "neden": "yerel" },
+    { "girdi": "https://sunucu.local", "neden": "yerel" },
+    { "girdi": "https://nas.home.arpa", "neden": "yerel" }
+  ],
+  "karekod": [
+    { "adres": "https://erp.fabrika.com", "metin": "tekserp-patron:1:https://erp.fabrika.com" },
+    { "adres": "erp.fabrika.com:8443/api", "metin": "tekserp-patron:1:https://erp.fabrika.com:8443" },
+    { "adres": "http://erp.fabrika.com", "metin": null },
+    { "adres": "https://192.168.1.20:4443", "metin": null }
+  ],
+  "okuma": [
+    { "metin": "tekserp-patron:1:https://erp.fabrika.com", "adres": "https://erp.fabrika.com" },
+    { "metin": " tekserp-patron:1:https://erp.fabrika.com:8443/ ", "adres": "https://erp.fabrika.com:8443" },
+    { "metin": "tekserp-patron:2:https://erp.fabrika.com", "neden": "yeni-surum" },
+    { "metin": "tekserp-patron:0:https://erp.fabrika.com", "neden": "yabanci" },
+    { "metin": "tekserp-patron:x:https://erp.fabrika.com", "neden": "yabanci" },
+    { "metin": "tekserp-patron:1:http://erp.fabrika.com", "neden": "sifresiz" },
+    { "metin": "tekserp-patron:1:erp.fabrika.com", "neden": "gecersiz" },
+    { "metin": "tekserp-patron:1:https://192.168.1.20:4443", "neden": "yerel" },
+    { "metin": "tekserp-patron:1:https://erp.fabrika.com/../x", "neden": "gecersiz" },
+    { "metin": "https://erp.fabrika.com", "neden": "yabanci" },
+    { "metin": "teks-erp-tls:2:-:ab12:4443:erp.fabrika.com", "neden": "yabanci" },
+    { "metin": "otpauth://totp/TeksERP:a?secret=JBSWY3DPEHPK3PXP", "neden": "yabanci" },
+    { "metin": "", "neden": "yabanci" }
+  ]
+}
