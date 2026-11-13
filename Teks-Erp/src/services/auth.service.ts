@@ -583,8 +583,8 @@ export class AuthService {
    *   • PIN/kart, süperadmin (`isSystemAccount`): HER ZAMAN sorulur; 2FA kurulmamışsa giriş
    *     403 TOTP_ENROLLMENT_REQUIRED — PIN tek başına kimlik olduğu için ikinci faktörsüz kısa yol yok.
    *   • PIN/kart, diğerleri: TOTP açık ∧ `auth.shortCredentialTotpRequired` (varsayılan kapalı).
-   *   • Web (çerez kipi): TOTP zorunlu (kurulmamışsa 403). `auth.webTotpPolicy=USER_CHOICE` ∧ kullanıcı
-   *     kendi hesabında `webTotpOptOut` → ne kurulum ne kod istenir. Süperadmin web'de her zaman kod verir.
+   *   • Web (çerez kipi): `auth.webTotpPolicy` USER_CHOICE (varsayılan, V1b) → kod yalnız TOTP kurulu ∧ opt-out
+   *     yoksa; REQUIRED → herkese zorunlu (kurulmamışsa 403). Süperadmin web'de her zaman kod verir.
    *   • Barındırılan kurulumda Bearer parola girişi (electron / mobile / boş): çerez yolunun aynı kuralı +
    *     onaylı ve kanıtlı tablet cihazı ikinci faktör sayılır (`hosted-second-factor.ts`, Y1). LAN'da yok.
    *   • Patron türü (V1, 2026-11-13): yalnız parola; kod yalnız kullanıcı TOTP'yi açtıysa (LAN ve barındırılan),
@@ -597,8 +597,8 @@ export class AuthService {
     const status = await TotpAccountService.getStatus(userId);
     const shortPath = via !== "password";
     let isSystemAccount = false;
-    // Bulut web paneli (çerez kipi, K4): giriş yolu ne olursa olsun TOTP zorunlu; kurulmamışsa giriş yok.
-    // USER_CHOICE'ta opt-out ya da KURULMAMIŞ TOTP kodu kaldırır (`webTotpWaived`) — süperadmin HARİÇ.
+    // Bulut web paneli (çerez kipi): REQUIRED'da giriş yolu ne olursa olsun TOTP zorunlu; USER_CHOICE'ta
+    // (varsayılan, V1b) opt-out ya da KURULMAMIŞ TOTP kodu kaldırır (`webTotpWaived`) — süperadmin HARİÇ.
     const webCookie = cookieLoginApplies(ctx?.clientType);
     // Kod adımında "Bu cihazı hatırla" kutusu çizilebilir mi (web çerez kipi ya da barındırılan masaüstü).
     let rememberable = webCookie && via === "password";

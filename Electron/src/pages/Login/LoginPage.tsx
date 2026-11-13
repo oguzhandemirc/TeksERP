@@ -25,6 +25,7 @@ import { LoginHero } from "./LoginHero";
 import { Callout } from "@/components/ui/callout";
 import { useLoginActivationLocked, useLoginLicenseSuspended } from "./useServerCompanyName";
 import { LicenseSuspendedLogin } from "./LicenseSuspendedLogin";
+import { TurnstileBox } from "./TurnstileBox";
 import { factoryLocaleString } from "@/lib/factory-time";
 
 /** 409 SESSION_EXISTS onay diyaloğu için, mevcut oturumu okunur cümleye çevir. */
@@ -198,6 +199,7 @@ export function LoginPage() {
         ) : (
           <LoginForm form={form} submitting={submitting} onSubmit={onSubmit} />
         )}
+        <TurnstileBox />
       </div>
       <SurumRozeti />
     </div>

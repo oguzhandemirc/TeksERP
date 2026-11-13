@@ -100,6 +100,13 @@ export const LICENSE_REVOCATION_SETTING_KEY = "license.revocation";
 export const ERROR_REPORT_CONSENT_SETTING_KEY = "errorReports.consent";
 
 /**
+ * Tarayıcı girişi bot koruması (Cloudflare Turnstile, V1c). Tek yazma yüzeyi `PUT /api/admin/turnstile`:
+ * anahtarsız açma 400 orada doğrulanır, ham uç onu atlardı. Gizli anahtar DB'de DEĞİL, ortamda.
+ */
+export const TURNSTILE_ENABLED_SETTING_KEY = "auth.turnstileEnabled";
+export const TURNSTILE_SITE_KEY_SETTING_KEY = "auth.turnstileSiteKey";
+
+/**
  * `PUT /api/admin/settings/:key` ucunun REDDETTİĞİ anahtarlar.
  *
  * Kümeye ek olarak ön ek kuralı da uygulanır (`isReservedSettingKey`) — küme
@@ -115,6 +122,8 @@ export const RESERVED_SETTING_KEYS: ReadonlySet<string> = new Set([
   LICENSE_TRACE_SETTING_KEY,
   LICENSE_REVOCATION_SETTING_KEY,
   ERROR_REPORT_CONSENT_SETTING_KEY,
+  TURNSTILE_ENABLED_SETTING_KEY,
+  TURNSTILE_SITE_KEY_SETTING_KEY,
   // Menü düzeni (K19): tek yazar doğrulamalı `PUT /api/menu-layout` (bilinmeyen/gizlenemez ekran 400).
   "ui.menuHiddenScreens",
   "ui.menuAdvancedGroup",
