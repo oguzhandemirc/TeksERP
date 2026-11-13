@@ -100,6 +100,8 @@ export interface ItemPriceUpsertInput {
   validFrom?: Date | null;
   /** İdempotency (hizmet fiyat tablosu ucu); replay kararı çağıranın `tokenReplay`indedir. */
   clientToken?: string | null;
+  /** Bayat veri koruması (V5c): görülen yürürlükteki satırın `updatedAt`i; null/atlanmış = denetim yok. */
+  expectedUpdatedAt?: Date | null;
 }
 
 // Fiyat normalizasyonu (`Decimal(14,4)` sınırı) ve yazım tx'i: `helpers/item-price-write.helper`.
@@ -413,7 +415,7 @@ export class ItemPriceService {
     const key: ItemPriceKey = { ...subject, customerId, propertyValueId, kind: input.kind, currency: input.currency };
     let outcome: Awaited<ReturnType<typeof writeItemPriceVersionTx>>;
     try {
-      outcome = await prisma.$transaction((tx) => writeItemPriceVersionTx(tx, { key, price, requestedUnit, validFrom, at, userId, clientToken: input.clientToken }));
+      outcome = await prisma.$transaction((tx) => writeItemPriceVersionTx(tx, { key, price, requestedUnit, validFrom, at, userId, clientToken: input.clientToken, expectedUpdatedAt: input.expectedUpdatedAt }));
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
         throw AppError.conflict("Bu kalem/müşteri/yön/para birimi için fiyat aynı anda başka bir işlemle yazıldı — listeyi yenileyip tekrar deneyin.");

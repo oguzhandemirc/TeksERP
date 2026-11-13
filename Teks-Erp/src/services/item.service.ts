@@ -46,6 +46,7 @@ import {
   type CodeUniquenessTexts,
 } from "./helpers/code-unique.helper";
 import { assertItemUsable } from "./helpers/item-usage.helper";
+import { takeExpectedUpdatedAt, updatedAtVersionWhere } from "./helpers/stale-record.helper";
 import { parseDecimalField, parseTextField } from "./helpers/cost-input.helper";
 import { YARN_WASTE_PCT_MAX } from "./helpers/yarn-waste.helper";
 import { findWeftOverrideOrphans, throwWeftOverrideOrphan } from "./helpers/effective-construction.helper";
@@ -571,6 +572,11 @@ export class ItemService extends BaseService {
     // Uyumluluk yolu: eski panel hizmet kartını `/api/items/:id` ile düzenler → hizmet kartı servisi.
     if (await isServiceItemId(id)) return legacyResponse(await serviceItemService.update(id, rawData ?? {}, userId));
     const { isActive, ...data } = (rawData ?? {}) as Record<string, unknown>;
+    // Bayat veri koruması (V5c): yalnız skaler yol; yaşam döngüsü ve liste değişimi ayrı yazar → sürümle birlikte 400.
+    const expected = takeExpectedUpdatedAt(data);
+    if (expected && (isActive !== undefined || "allowedColorIds" in data || "allowedPropertyIds" in data)) {
+      throw AppError.badRequest("Aktif/pasif ve izinli liste değişimi expectedUpdatedAt ile birlikte gönderilemez.", { code: "VALIDATION_ERROR" });
+    }
     if (isActive !== undefined) {
       if (typeof isActive !== "boolean") throw AppError.badRequest("'isActive' true/false olmalı");
       const res = await this.runTransition({
@@ -631,7 +637,7 @@ export class ItemService extends BaseService {
     const hasListReplace =
       allowedColorIds !== undefined || allowedPropertyIds !== undefined;
     if (!hasListReplace) {
-      return super.update(id, restData, userId);
+      return this.updateCore(id, restData, userId, updatedAtVersionWhere(expected));
     }
     // İzinli renk/özellik listesi karta TANIM ekler (B) — "Tükenene kadar"/Pasif kartta kapalı (1e (k)).
     await assertItemUsable(prisma, id, "DEFINITION");
