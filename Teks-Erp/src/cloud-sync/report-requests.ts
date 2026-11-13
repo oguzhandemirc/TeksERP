@@ -293,13 +293,16 @@ export function isReportCloudSurfaced(entry: ReportCatalogEntry): boolean {
   return isReportSurfaced(entry) && !CLOUD_HELD_REPORT_KEYS.has(entry.key);
 }
 
+/** Yüzey yüklemi: bulut `isReportCloudSurfaced`; patron ERP ucu (V5a) `isReportSurfaced` — saatlik plan yok, bekletme gerekmez. */
+export type ReportSurfacePredicate = (entry: ReportCatalogEntry) => boolean;
+
 /** Rapor şu an sunulabilir mi — kapalı rapor ve kapalı modül buluta da kapalıdır (fail-closed). */
-async function availability(r: RemoteReport): Promise<"ACIK" | "RAPOR_KAPALI" | "MODUL_KAPALI"> {
+export async function remoteReportAvailability(r: RemoteReport, surfaced: ReportSurfacePredicate = isReportCloudSurfaced): Promise<"ACIK" | "RAPOR_KAPALI" | "MODUL_KAPALI"> {
   if (!(await moduleOpen(r.module))) return "MODUL_KAPALI";
   if (r.gate && !(await r.gate())) return "MODUL_KAPALI";
   // Yüzeye çıkmamış v2 satırı (`hazir:false`) ve bulutta bekletilen rapor buluta kapalı (fail-closed).
   const entry = REPORT_BY_KEY.get(r.key);
-  if (!entry || !isReportCloudSurfaced(entry)) return "RAPOR_KAPALI";
+  if (!entry || !surfaced(entry)) return "RAPOR_KAPALI";
   const vis = await readReportsClosedKeys();
   if (vis.durum === "olculemedi" || vis.kapali.includes(r.key)) return "RAPOR_KAPALI";
   return "ACIK";
@@ -313,7 +316,7 @@ export async function remoteReportCatalog(): Promise<
   for (const r of REMOTE_REPORTS) {
     const entry = REPORT_BY_KEY.get(r.key);
     if (!entry || r.key.startsWith("audit/")) continue;
-    if ((await availability(r)) !== "ACIK") continue;
+    if ((await remoteReportAvailability(r)) !== "ACIK") continue;
     out.push({
       anahtar: r.key,
       baslik: entry.baslik,
@@ -357,6 +360,7 @@ export async function computeReportResult(g: {
   readonly donem: ReportPeriod | null;
   readonly nowMs: number;
   readonly timeoutMs?: number;
+  readonly surfaced?: ReportSurfacePredicate;
 }): Promise<ReportResult> {
   const base = {
     v: 1 as const,
@@ -370,7 +374,7 @@ export async function computeReportResult(g: {
   const fail = (hataKodu: ReportResult["hataKodu"]): ReportResult => ReportResultRequestSchema.parse({ ...base, durum: "HATA", veri: null, hataKodu });
   const r = findRemoteReport(g.key);
   if (!r || g.key.startsWith("audit/")) return fail("RAPOR_BILINMIYOR");
-  const avail = await availability(r);
+  const avail = await remoteReportAvailability(r, g.surfaced);
   if (avail === "MODUL_KAPALI") return fail("MODUL_KAPALI");
   if (avail === "RAPOR_KAPALI") return fail("RAPOR_KAPALI");
   const parsed = r.params.safeParse(g.params);

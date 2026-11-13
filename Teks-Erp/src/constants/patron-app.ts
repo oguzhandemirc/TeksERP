@@ -12,6 +12,12 @@
 export const PATRON_API_VERSION = 1;
 
 /**
+ * V5a: `/api/patron/v1/raporlar` (istek üzerine oluştur + geçmiş) sözleşme sürümü — `/auth/me` `patronReportApi`.
+ * Alan yoksa (eski backend) uygulama ERP kipinde rapor sekmesini gizler. Ekleme olduğu için `PATRON_API_VERSION` artmaz.
+ */
+export const PATRON_REPORT_API_VERSION = 1;
+
+/**
  * Patron oturumunun mutlak ömrü (gün) — kullanıcı kararı "30 günde bir parola" (2026-11-13). Yenileme
  * belirteci YOK; süre bitince parola (+ kullanıcı açtıysa kod) yeniden istenir. Fabrikanın mutlak tavanı
  * (`auth.absoluteSessionCapDays`) daha kısaysa o kazanır.

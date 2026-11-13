@@ -117,6 +117,10 @@ const DINAMIK_IZIN_KAYNAKLARI: Record<string, readonly string[]> = {
   // olduğunu test_patron_okuma_ucu §1c ölçer — devir.
   "src/routes/patron-read.routes.ts": [`${DELEGE}scripts/test_patron_okuma_ucu.ts`],
   "src/services/patron-read/izin-esleme.ts": [`${DELEGE}scripts/test_patron_okuma_ucu.ts`],
+  // Patron raporu (V5a): route toplu kapısı aynı sabit; `katalog.ts` `matchesPermission(perms, p)` — p ∈ katalog `izin` +
+  // `EXTRA_ROUTE_PERMISSIONS`; her kodun katalogda olduğunu ve kapının ısırdığını test_patron_rapor §1f/§5a ölçer — devir.
+  "src/routes/patron-rapor.routes.ts": [`${DELEGE}scripts/test_patron_rapor.ts`],
+  "src/services/patron-rapor/katalog.ts": [`${DELEGE}scripts/test_patron_rapor.ts`],
   // Açılış panosu kutu/hareket kapıları: `gate(ctx, GATE_PERMISSIONS.x, ...modüller)` → matchesPermission(perms, permission).
   "src/services/dashboard/pano-kaynak.ts": ["GATE_PERMISSIONS"],
   "src/services/dashboard/pano-hareketler.service.ts": ["GATE_PERMISSIONS"],

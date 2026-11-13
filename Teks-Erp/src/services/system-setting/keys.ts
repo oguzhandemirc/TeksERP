@@ -995,6 +995,11 @@ export const SETTING_KEYS = {
   /** Semantik rapor bloğunun sorgu tavanı, SANİYE (5..45; DB seviyesi 50 sn'nin altında). Default 15.
    *  Davranış bayrağı değil, işletme ayarı: tek okuyucusu `reports/semantik/calistirici.ts`. */
   REPORTS_STATEMENT_TIMEOUT_SEC: "reports.statementTimeoutSec",
+  /** Patron uygulaması rapor koşumu (V5a) — işletme ayarları, tek okuyucu `system-setting/patron-rapor.ts`:
+   *  kullanıcı başına saatlik koşum tavanı (1..1000, 60) · rapor başına saklanan koşum (1..200, 20) · saklama günü (1..3650, 90). */
+  PATRON_REPORT_HOURLY_MAX: "patronRapor.saatlikTavan",
+  PATRON_REPORT_KEEP_COUNT: "patronRapor.saklaAdet",
+  PATRON_REPORT_KEEP_DAYS: "patronRapor.saklaGun",
   /** İstek başlığının (`request_traces`) saklama süresi, GÜN (0..3650; 0 = budama yok). Default 90.
    *  Gece bakım işi okur; bu yaştan eski satırlar budanır (telemetri, K-B1). */
   REQUEST_TRACE_RETENTION_DAYS: "requestTrace.retentionDays",
