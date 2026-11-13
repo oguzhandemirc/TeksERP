@@ -184,6 +184,7 @@ router.post(
  *       Operatöre detaylı onay göstermek için çağrılır. Her etkilenecek WO için
  *       statü, üretilen rulo sayısı, diğer bağlı sipariş sayısı ve izinli
  *       aksiyonları (UNLINK_ONLY / CONVERT_TO_STOCK / CANCEL_WO) döner.
+ *       `previewToken`: belirlenimli özet (sır değil) — iptal gövdesine `expectedPreviewToken` olarak geri yollanır.
  *     security: [{ bearerAuth: [] }]
  */
 router.get(
@@ -266,6 +267,9 @@ router.get(
  *               reasonText:
  *                 type: string
  *                 description: Görünen/serbest sebep metni (opsiyonel). Kodu sunucu türetir.
+ *               expectedPreviewToken:
+ *                 type: string
+ *                 description: "Opsiyonel — cancel-preview yanıtındaki previewToken. Sipariş içeriği, etkilenen iş emirleri/durumları ya da aktif sevkiyatlar arada değiştiyse 409 CANCEL_PREVIEW_STALE ve hiçbir şey uygulanmaz. Gönderilmezse davranış değişmez."
  */
 const cancelBodySchema = z.object({
   workOrderActions: z
@@ -290,6 +294,8 @@ const cancelBodySchema = z.object({
    */
   reasonCode: z.string().max(64).nullish(),
   reasonText: z.string().max(1000).nullish(),
+  /** V4c: önizlemedeki `previewToken` — tutmazsa 409 CANCEL_PREVIEW_STALE, hiçbir şey uygulanmaz; yoksa bugünkü davranış. */
+  expectedPreviewToken: z.string().max(64).nullish(),
 });
 router.post(
   "/:id/cancel",
@@ -297,12 +303,12 @@ router.post(
   requirePermission("order:write"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { workOrderActions, reasonCode, reasonText } = cancelBodySchema.parse(req.body ?? {});
+      const { workOrderActions, reasonCode, reasonText, expectedPreviewToken } = cancelBodySchema.parse(req.body ?? {});
       const result = await orderService.cancelWithActions(
         assertValidUuid(req.params.id),
         workOrderActions,
         req.user?.userId,
-        { reasonCode, reasonText }
+        { reasonCode, reasonText, expectedPreviewToken }
       );
       res.status(200).json(result);
     } catch (error) {

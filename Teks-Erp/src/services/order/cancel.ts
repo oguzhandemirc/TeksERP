@@ -15,6 +15,7 @@ import {
 } from "@prisma/client";
 import { ACTIVE_ORDER_LINK } from "../helpers/order-link.helper";
 import { computeAllowedActions, pickDefaultAction, type OrderServiceThis } from "./shared";
+import { previewTokenFor } from "./cancel-preview-token";
 
 export async function getCancelPreview(this: OrderServiceThis, orderId: string): Promise<ApiResponse<unknown>> {
     const order = await prisma.order.findUnique({
@@ -182,6 +183,8 @@ export async function getCancelPreview(this: OrderServiceThis, orderId: string):
         affectedWorkOrders,
         activeShipments,
         canCancel: activeShipments.length === 0,
+        // V4c: uygulamaya `expectedPreviewToken` olarak geri yollanır; tutmazsa 409 CANCEL_PREVIEW_STALE.
+        previewToken: await previewTokenFor(orderId),
       },
     };
   }
