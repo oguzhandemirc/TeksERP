@@ -75,6 +75,7 @@ import {
   readWebTotpPolicy,
   WEB_TOTP_POLICIES,
   DEFAULT_WEB_TOTP_POLICY,
+  WEB_TOTP_POLICY_ON_JUNK,
   readShippingDocItemNameMode,
   SAME_TYPE_SESSION_POLICIES,
   SHIPMENT_ORDER_REQUIREMENTS,
@@ -1725,7 +1726,8 @@ async function main() {
     ["sameTypeSessionPolicy", await readSameTypeSessionPolicy(junkClient), DEFAULT_SAME_TYPE_SESSION_POLICY],
     ["shippingOrderRequirement", await readShippingOrderRequirement(junkClient), DEFAULT_SHIPMENT_ORDER_REQUIREMENT],
     ["shippingInvoiceMode", await readShippingInvoiceMode(junkClient), DEFAULT_SHIPPING_INVOICE_MODE],
-    ["webTotpPolicy", await readWebTotpPolicy(junkClient), DEFAULT_WEB_TOTP_POLICY],
+    // Güvenlik ayarı: satır yokken USER_CHOICE (V1b) ama çöp değer FAIL-CLOSED → REQUIRED.
+    ["webTotpPolicy", await readWebTotpPolicy(junkClient), WEB_TOTP_POLICY_ON_JUNK],
     ["tamburPlanGateWidthCheck", await readTamburPlanGateWidthCheck(junkClient), DEFAULT_TAMBUR_PLAN_WIDTH_CHECK],
     ["tamburChildWidthSource", await readTamburChildWidthSource(junkClient), DEFAULT_TAMBUR_CHILD_WIDTH_SOURCE],
     ["tamburLabelPrintTiming", await readTamburLabelPrintTiming(junkClient), DEFAULT_TAMBUR_LABEL_PRINT_TIMING],

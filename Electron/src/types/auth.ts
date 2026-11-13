@@ -61,6 +61,8 @@ export interface LoginRequest {
   /** 'notify' politikasında aynı hesap başka yerde açıkken kullanıcı onayı verince
    *  true ile tekrar çağrılır; backend iki oturumu da açık tutar. */
   confirmKick?: boolean;
+  /** Cloudflare Turnstile belirteci — yalnız tarayıcı girişinde ve sunucu koruması açıkken (V1c). */
+  turnstileToken?: string;
   /**
    * İkinci faktör — TOTP kodu (6 hane) ya da kurtarma kodu (XXXX-XXXX).
    *

@@ -9,7 +9,7 @@
 import prisma from "../../lib/prisma";
 import { isHostedInstallation } from "../helpers/install-class.helper";
 import { asBoolean, asNumber } from "./core";
-import { DEFAULT_TRUSTED_DEVICE_DAYS, DEFAULT_WEB_TOTP_POLICY, MAX_TRUSTED_DEVICE_DAYS, WEB_TOTP_POLICIES, type WebTotpPolicy } from "./defaults";
+import { DEFAULT_TRUSTED_DEVICE_DAYS, DEFAULT_WEB_TOTP_POLICY, MAX_TRUSTED_DEVICE_DAYS, WEB_TOTP_POLICIES, WEB_TOTP_POLICY_ON_JUNK, type WebTotpPolicy } from "./defaults";
 import { SETTING_KEYS } from "./keys";
 
 
@@ -131,8 +131,8 @@ export async function readShortCredentialTotpRequired(
 }
 
 /**
- * Web paneli (tarayıcı, çerez kipi) TOTP politikası. Default REQUIRED (K4, bugünkü davranış).
- * FAIL-CLOSED: satır yok / çöp değer → REQUIRED. Süperadmin bu ayara BAKMAZ.
+ * Web paneli (tarayıcı, çerez kipi) + barındırılan Bearer (Y1) TOTP politikası. Satır yok → USER_CHOICE
+ * (V1b, 2026-11-13); FAIL-CLOSED: çöp değer → REQUIRED. Süperadmin bu ayara BAKMAZ.
  * ENFORCE: `AuthService.assertSecondFactor` (tek boğaz).
  */
 export async function readWebTotpPolicy(
@@ -144,8 +144,9 @@ export async function readWebTotpPolicy(
     select: { value: true },
   });
   const v = setting?.value;
+  if (v === undefined || v === null) return DEFAULT_WEB_TOTP_POLICY;
   if (typeof v === "string" && WEB_TOTP_POLICIES.includes(v as WebTotpPolicy)) return v as WebTotpPolicy;
-  return DEFAULT_WEB_TOTP_POLICY;
+  return WEB_TOTP_POLICY_ON_JUNK;
 }
 
 /**

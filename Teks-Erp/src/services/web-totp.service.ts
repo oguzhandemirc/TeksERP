@@ -1,8 +1,8 @@
 // =============================================================================
 // Web (tarayıcı, çerez kipi) girişinde iki adımlı doğrulama — İKİ KATMAN (2026-11-01)
 // =============================================================================
-// ① Fabrika politikası `auth.webTotpPolicy` (yalnız süperadmin yazar): REQUIRED (varsayılan,
-//    K4) | USER_CHOICE. ② Kullanıcı tercihi `User.webTotpOptOut`: yalnız USER_CHOICE iken
+// ① Fabrika politikası `auth.webTotpPolicy` (yalnız süperadmin yazar): USER_CHOICE (varsayılan,
+//    V1b 2026-11-13) | REQUIRED. ② Kullanıcı tercihi `User.webTotpOptOut`: yalnız USER_CHOICE iken
 //    etkili, yalnız KENDİ hesabından (`PUT /api/auth/web-totp`) yazılır; kapatmak parola +
 //    (kuruluysa) kod ister, açmak serbest. USER_CHOICE'ta TOTP kurmamış hesap kodsuz girer (kurmak =
 //    seçmek). Sistem hesabında tercih yok sayılır (CHECK de var).

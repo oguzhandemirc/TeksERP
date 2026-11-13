@@ -22,6 +22,7 @@ import { useAuthStore } from "@/store/auth";
 import { canEnterApp, type ExistingSessionInfo, type JwtPayload, type LoginResponse } from "@/types/auth";
 import { usePasswordChangeStep } from "./usePasswordChangeStep";
 import { syncRememberedLoginAfterLogin } from "./syncRememberedLogin";
+import { currentTurnstileToken, resetTurnstile } from "@/lib/turnstile";
 
 /**
  * GİRİŞ AKIŞI — `LoginPage`ten AYRILDI (sayfa 200 satır kuralını aşıyordu).
@@ -112,7 +113,8 @@ export function useLoginFlow() {
     setSubmitting(true);
     const device = await loadRememberedDevice(values.username);
     try {
-      const body = { ...values, confirmKick: confirmKick || undefined, totpCode, rememberDevice: rememberDevice || undefined };
+      const turnstileToken = currentTurnstileToken();
+      const body = { ...values, confirmKick: confirmKick || undefined, totpCode, rememberDevice: rememberDevice || undefined, turnstileToken };
       const res = await authService.login({ ...body, trustedDeviceToken: device.token ?? undefined }, { suppressErrorToast: true });
       if (res.data.trustedDeviceToken) await trustedDeviceStore.set(device.slot, res.data.trustedDeviceToken).catch(() => undefined);
       if (res.data.mustChangePassword === true) {
@@ -175,6 +177,7 @@ export function useLoginFlow() {
       }
       toastUnhandledLoginError(err);
     } finally {
+      resetTurnstile(); // belirteç tek kullanımlık; sıradaki deneme (TOTP adımı dahil) yenisini alır
       setSubmitting(false);
     }
   };
