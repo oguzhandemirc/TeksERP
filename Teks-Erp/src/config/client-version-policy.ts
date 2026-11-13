@@ -108,6 +108,16 @@ export const WEB_VERSION_POLICY: ClientVersionPolicy = {
 };
 
 /**
+ * PATRON TELEFON UYGULAMASI (V1, 2026-11-13) — ERP'ye doğrudan bağlanan yeni istemci.
+ * `minVersion` 0.0.0 = kilit YOK: bugün kırılan bir sözleşme yok; mağazadaki 1.2.0 ERP'ye hiç
+ * dokunmaz (bulutla konuşur). Uyum yetenek müzakeresiyle (`/api/auth/me` `patronApiVersion`) yürür.
+ */
+export const PATRON_VERSION_POLICY: ClientVersionPolicy = {
+  minVersion: "0.0.0",
+  currentVersion: "1.2.0",
+};
+
+/**
  * İstemci → politika kayıt defteri. Uç bunun üzerinden servis eder
  * (`GET /api/client-policy/:istemci`), böylece yeni bir istemci eklemek
  * BURAYA bir satır yazmaktır — route'a dokunmak gerekmez.
@@ -334,4 +344,5 @@ export const CLIENT_VERSION_POLICIES: Record<string, ClientVersionPolicy> = {
   electron: ELECTRON_VERSION_POLICY,
   mobil: MOBIL_VERSION_POLICY,
   web: WEB_VERSION_POLICY,
+  patron: PATRON_VERSION_POLICY,
 };

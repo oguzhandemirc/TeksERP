@@ -58,7 +58,8 @@ import { webTotpWaived } from "./web-totp.service";
 import { consumeTrustedDevice, noteWebLogin, revokeAllTrustedDevicesTx, auditBulkRevoke, trustedDeviceDaysFor } from "./trusted-device.service";
 import { CURRENT_PASSWORD_INVALID_CODE } from "../constants/password-policy";
 import { matchesPermission } from "../middlewares/rbac.middleware";
-import { grantsDesktopPanel } from "../constants/permission-catalog";
+import { grantsDesktopPanel, PATRON_LOGIN_PERMISSION } from "../constants/permission-catalog";
+import { PATRON_SESSION_DAYS } from "../constants/patron-app";
 import { appliesHostedBearerRule, decideHostedBearer, HOSTED_ENROLLMENT_MESSAGE } from "./hosted-second-factor";
 
 /** Login çağrılarının istemci bağlamı — Session registry + aynı-tip politika için.
@@ -107,8 +108,8 @@ export interface LoginContext {
 /** Token'ı hangi kimlik bilgisi açtı — zorunlu değişim dalı yönteme göre ayrışır. */
 type LoginVia = "password" | "quick-pin" | "card";
 
-/** Gövdeden gelen istemci türü. `undefined` = mobil (tarihsel varsayılan). */
-export type LoginClientType = "electron" | "mobile" | "web";
+/** Gövdeden gelen istemci türü. `undefined` = mobil (tarihsel varsayılan). `patron` = patron telefon uygulaması (V1). */
+export type LoginClientType = "electron" | "mobile" | "web" | "patron";
 
 /** Giriş çıktısı. `mustChangePassword` panelde ve değişim adımını taşıyan tabletin parolalı girişinde true olabilir. */
 export type LoginResult = {
@@ -122,11 +123,16 @@ export type LoginResult = {
 };
 
 export const PASSWORD_CHANGE_REQUIRED_CODE = "PASSWORD_CHANGE_REQUIRED";
+/** Patron türü girişte `patron-app:login` izni yok (kanal reddi; izin panelden atanır). */
+export const PATRON_ACCESS_DENIED_CODE = "PATRON_ACCESS_DENIED";
 /** Satıcı hesabının yeni parolası ortak varsayılan parolayla aynı. */
 export const PASSWORD_IS_DEFAULT_CODE = "PASSWORD_IS_DEFAULT";
 export const PASSWORD_CHANGE_REQUIRED_MESSAGE =
   "Parolanızı değiştirmeniz gerekiyor. Yeni parola belirlemeden devam edilemez.";
 export { CURRENT_PASSWORD_INVALID_CODE } from "../constants/password-policy";
+/** Patron uygulaması parola değişimi adımı taşımıyorsa: değişim panelden yapılır. */
+const PASSWORD_CHANGE_REQUIRED_MESSAGE_PATRON =
+  "Bu hesabın parolası değiştirilmeli. Önce yönetim panelinden giriş yapıp yeni parola belirleyin, sonra patron uygulamasından tekrar girin.";
 /** Değişim adımı taşımayan (eski) tabletin parolalı girişi. */
 const PASSWORD_CHANGE_REQUIRED_MESSAGE_LEGACY_TABLET =
   "Bu hesabın parolası değiştirilmeli. Bu tablet sürümü parola değiştiremiyor — tableti güncelleyin ya da yönetim panelinden giriş yapıp yeni parola belirleyin.";
@@ -158,6 +164,8 @@ export function hostedDesktopSessionMinutes(minutes: number, clientType: LoginCl
 function resolveDeviceType(clientType: LoginClientType | undefined): ClientType {
   if (clientType === "electron") return ClientType.ELECTRON;
   if (clientType === "web") return ClientType.WEB;
+  // Patron kendi yuvasını alır: MOBILE'a katlansa aynı kişinin tablet oturumunu düşürürdü (aynı-tip `kick`).
+  if (clientType === "patron") return ClientType.PATRON;
   return ClientType.MOBILE;
 }
 
@@ -579,6 +587,8 @@ export class AuthService {
    *     kendi hesabında `webTotpOptOut` → ne kurulum ne kod istenir. Süperadmin web'de her zaman kod verir.
    *   • Barındırılan kurulumda Bearer parola girişi (electron / mobile / boş): çerez yolunun aynı kuralı +
    *     onaylı ve kanıtlı tablet cihazı ikinci faktör sayılır (`hosted-second-factor.ts`, Y1). LAN'da yok.
+   *   • Patron türü (V1, 2026-11-13): yalnız parola; kod yalnız kullanıcı TOTP'yi açtıysa (LAN ve barındırılan),
+   *     sistem hesabı hep kod. Patron oturumu ayrıca `patron-app:login` izni ister (`issueToken`).
    * Kodlar giriş kilidine göre seçildi (yalnız 401 kaba kuvvet sayılır):
    *   • 409 TOTP_REQUIRED → kod istendi; kimlik denemesi DEĞİL (istemci kodu ekleyip tekrar POST eder).
    *   • 401 TOTP_INVALID  → yanlış kod; SAYILIR (TOTP uzayı 10^6, kilitsiz tahmin edilirdi).
@@ -606,6 +616,15 @@ export class AuthService {
         ctx.secondFactorOutcome = "TRUSTED_DEVICE";
         return;
       }
+    } else if (ctx?.clientType === "patron") {
+      // Patron telefonu (V1, kullanıcı kararı 2026-11-13): kod yalnız kullanıcı TOTP'yi açtıysa sorulur —
+      // barındırılan Y1 kuralı uygulanmaz; sistem hesabı her kanalda kod verir (kurulmamışsa giriş yok).
+      const row = await prisma.user.findUnique({ where: { id: userId }, select: { isSystemAccount: true } });
+      isSystemAccount = row ? row.isSystemAccount === true : true;
+      if (isSystemAccount && !status.enabled) {
+        throw AppError.forbidden(HOSTED_ENROLLMENT_MESSAGE, { code: "TOTP_ENROLLMENT_REQUIRED" });
+      }
+      if (!status.enabled) return;
     } else if (appliesHostedBearerRule(ctx?.clientType, via)) {
       // Barındırılan (Y1): clientType beyanı kuralı gevşetemez — çerez yolunun katmanları + onaylı tablet cihazı.
       const verdict = await decideHostedBearer(userId, ctx?.clientType, ctx?.approvedDeviceProven === true);
@@ -652,7 +671,7 @@ export class AuthService {
     ctx: LoginContext | undefined,
     shortPath: boolean,
   ): Promise<string> {
-    if (isDesktopClient(ctx?.clientType) || ctx?.totpCapable) return "Doğrulama kodu gerekli.";
+    if (isDesktopClient(ctx?.clientType) || ctx?.clientType === "patron" || ctx?.totpCapable) return "Doğrulama kodu gerekli.";
     // Eski tablet kod soramıyor. PIN/kart yolu kodsuz açıksa (parolalı giriş) oraya yönlendir.
     const shortOpen =
       !shortPath &&
@@ -679,6 +698,17 @@ export class AuthService {
     }
     await assertSealAllowsLogin(user.id); // G1: parola/PIN/kart ortak boğaz
     const permissions = await this.getEffectivePermissions(user.id);
+    const patron = ctx?.clientType === "patron";
+    // Patron türü yalnız parolayla: PIN/kart saha kısa yoludur, internetten 30 günlük oturum açmaz.
+    if (patron && via !== "password") {
+      throw AppError.badRequest("Patron uygulamasıyla yalnız kullanıcı adı ve parolayla giriş yapılır.", { code: "PATRON_PASSWORD_ONLY" });
+    }
+    // Patron kanalı izni (V1): atama panelden; `admin:*` vermez, süperadmin `*` verir.
+    if (patron && !matchesPermission(permissions, PATRON_LOGIN_PERMISSION)) {
+      throw AppError.forbidden("Bu hesabın patron uygulamasına giriş izni yok. Yöneticiniz panelden 'Patron telefon uygulamasıyla giriş' iznini vermeli.", {
+        code: PATRON_ACCESS_DENIED_CODE,
+      });
+    }
 
     // Zorunlu parola değişimi: panel ve değişim adımını taşıyan tabletin PAROLALI girişi token
     // alır, verifyToken onu parola değiştirme ucuna daraltır. Eski tablet ve PIN/kart token
@@ -694,7 +724,7 @@ export class AuthService {
       !(via === "password" && ctx?.passwordChangeCapable === true)
     ) {
       if (via === "password") {
-        throw AppError.forbidden(PASSWORD_CHANGE_REQUIRED_MESSAGE_LEGACY_TABLET, {
+        throw AppError.forbidden(patron ? PASSWORD_CHANGE_REQUIRED_MESSAGE_PATRON : PASSWORD_CHANGE_REQUIRED_MESSAGE_LEGACY_TABLET, {
           code: PASSWORD_CHANGE_REQUIRED_CODE,
         });
       }
@@ -744,9 +774,12 @@ export class AuthService {
     const jti = randomUUID();
     const nowMs = Date.now();
     const effectiveCapDays = effectiveAbsoluteSessionCapDays(capDays);
-    let effectiveExpiresAt: Date = timeoutEnabled
-      ? new Date(nowMs + sessionMinutes * 60 * 1000)
-      : new Date(nowMs + effectiveCapDays * 24 * 60 * 60 * 1000);
+    // Patron (V1): otomatik çıkış ve barındırılan 24 sa tavanı UYGULANMAZ — mutlak 30 gün (fabrika tavanı kısaysa o).
+    let effectiveExpiresAt: Date = patron
+      ? new Date(nowMs + Math.min(PATRON_SESSION_DAYS, effectiveCapDays) * 24 * 60 * 60 * 1000)
+      : timeoutEnabled
+        ? new Date(nowMs + sessionMinutes * 60 * 1000)
+        : new Date(nowMs + effectiveCapDays * 24 * 60 * 60 * 1000);
 
     // Part C — süreli izinler: kullanıcının EN YAKIN gelecekteki validUntil'i tabanla
     // min'lenir. Süreli izin verilmişse (grant tokenVersion++ ile re-login zorlar)

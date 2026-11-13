@@ -2,6 +2,8 @@
 // TeksERP - Auth Controller
 // =============================================================================
 
+import { APP_VERSION } from "../lib/app-version";
+import { PATRON_API_VERSION } from "../constants/patron-app";
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { AuthService } from "../services/auth.service";
@@ -78,14 +80,16 @@ const changePasswordSchema = z.object({
 // request'ten türetilir (req.device.deviceId ya da x-device-id header) — body'de değil.
 // "web" = tarayıcıdaki panel (Electron kabuğu olmadan aynı React kodu).
 // Kendi oturum yuvasını alır; masaüstü izin kapısına electron ile BİRLİKTE tabidir.
-const clientTypeSchema = z.enum(["electron", "mobile", "web"]).optional();
+const clientTypeSchema = z.enum(["electron", "mobile", "web"], { message: "Geçersiz istemci türü" }).optional();
+// "patron" = patron telefon uygulaması (V1): yalnız PAROLALI giriş — PIN/kart şeması bu değeri bilerek tanımaz.
+const passwordClientTypeSchema = z.enum(["electron", "mobile", "web", "patron"], { message: "Geçersiz istemci türü" }).optional();
 
 // Zod schemas for validation
 const loginSchema = z.object({
   // Tavan kimliksiz uçta gövde işini sınırlar (bcrypt zaten 72 baytta keser; 256 bol).
   username: z.string().min(1, "Kullanıcı adı gerekli").max(256, "Kullanıcı adı çok uzun"),
   password: z.string().min(1, "Şifre gerekli").max(256, "Şifre çok uzun"),
-  clientType: clientTypeSchema,
+  clientType: passwordClientTypeSchema,
   confirmKick: z.boolean().optional(),
   // İkinci faktör — yalnız hesabında TOTP açık kullanıcıdan istenir. Üst sınır:
   // kurtarma kodu yolunda bcrypt.compare çağrılır, sınırsız metin CPU yakar.
@@ -770,6 +774,10 @@ export class AuthController {
           factoryAdminExists,
           defaultSuperadminPasswordPending,
           systemAccountSealStatus,
+          // Yetenek müzakeresi (V1): patron uygulaması "bu fabrika neyi destekliyor"u buradan + `GET /api/feature-flags`
+          // (modül bayrakları) okur; ayrı uç açılmadı. İkisi de bilgi, kapı değil.
+          backendVersion: APP_VERSION,
+          patronApiVersion: PATRON_API_VERSION,
         },
       });
     } catch (error) {

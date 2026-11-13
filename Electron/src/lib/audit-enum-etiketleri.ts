@@ -99,6 +99,8 @@ const ENUM_LABELS_ANA: Record<string, string> = {
   // Tarayıcıdaki panel (patron/uzaktan erişim) — Electron'dan AYRI bir oturum
   // yuvası taşır, o yüzden denetim kaydında da ayrı görünmeli.
   WEB: "Web",
+  // Patron telefon uygulaması — kendi oturum yuvası (V1, 2026-11-13).
+  PATRON: "Patron uygulaması",
   TABLET: "Tablet",
   PHONE: "Telefon",
   DESKTOP: "Masaüstü",

@@ -333,6 +333,8 @@ export const PERMISSION_CATALOG = [
   // Bulut web paneli (BULUT-WEB-PANELI.md K4, 2026-10-15): tarayıcıdan çerezli giriş kanalı izni;
   // TOTP ile birlikte aranır. `mobile:` önekli değil (masaüstü kapısında sayılır); `admin:*` VERMEZ.
   { code: "web:access", module: "ADMIN", category: "web", description: "Bulut web paneline tarayıcıdan giriş (iki adımlı doğrulamayla birlikte)" },
+  // V1 (2026-11-13): patron telefon uygulamasının giriş KANALI — ekran açmaz, masaüstü panelini de açmaz (`grantsDesktopPanel`).
+  { code: "patron-app:login", module: "ADMIN", category: "web", description: "Patron telefon uygulamasıyla giriş (30 günlük oturum)" },
   { code: "admin:*", module: "ADMIN", category: "admin", description: "Tüm admin yetkileri (wildcard)" },
   { code: "report:production", module: "REPORTS", category: "web", description: "Üretim raporları" },
   { code: "report:sales", module: "REPORTS", category: "web", description: "Sipariş raporları" },
@@ -422,10 +424,13 @@ export const REPORT_PUBLISH_PERMISSION = "report:publish";
 /** Tüm `report:*` kodları — semantik rapor uçlarının giriş kapısı ("herhangi bir rapor izni"; veri yetkisi derleyicide). */
 export const REPORT_PERMISSION_CODES: readonly string[] = PERMISSION_CATALOG.filter((p) => p.code.startsWith("report:")).map((p) => p.code);
 
+/** Patron telefon uygulaması giriş kanalı izni — TEK kaynak (auth kapısı + masaüstü kapısı + bekçi). */
+export const PATRON_LOGIN_PERMISSION = "patron-app:login";
+
 /**
- * Masaüstü paneli (Electron + web) girişini AÇAN izin kümesi mi? En az bir mobil-olmayan kod yeter.
+ * Masaüstü paneli (Electron + web) girişini AÇAN izin kümesi mi? En az bir mobil-olmayan kod yeter; patron kanal izni sayılmaz.
  * TEK yüklem: auth kanal kapısı ve rol şablonu bekçisi (operatör şablonu → panel girişi YOK) bunu okur.
  */
 export function grantsDesktopPanel(codes: readonly string[]): boolean {
-  return codes.some((c) => !c.startsWith("mobile:"));
+  return codes.some((c) => !c.startsWith("mobile:") && c !== PATRON_LOGIN_PERMISSION);
 }

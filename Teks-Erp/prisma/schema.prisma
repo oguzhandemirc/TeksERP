@@ -459,6 +459,8 @@ enum ClientType {
   ELECTRON
   MOBILE
   WEB
+  /// Patron telefon uygulaması (V1, 2026-11-13) — kendi oturum yuvası, 30 gün mutlak ömür.
+  PATRON
 }
 
 // =============================================================================

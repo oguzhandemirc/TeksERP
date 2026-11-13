@@ -48,6 +48,7 @@ Sınıf: [ÇEKİRDEK] her kurulumda aynı · [PROFİL] bu fabrikanın seçimi. K
 - [ÇEKİRDEK] Play yükleme parolası `keystore.properties`te DURMAZ: Anahtar Zinciri `tekserp/play-yukleme` → Gradle ortamla (`TEKSERP_IMZA_PAROLASI`, `--no-daemon`), keytool `-storepass:env`; argv'ye asla. Sil+kur yalnız eski kanal tabletinde.
 - [ÇEKİRDEK] Windows yapıtını yalnız `deploy/kurulum/kod-imzala.ps1` imzalar: sertifika yoksa uyar + devam, varken imza/doğrulama düşerse DUR; sertifika/parmak izi/parola repoya girmez.
 - [ÇEKİRDEK] `minVersion` KODDA (`client-version-policy.ts`; `currentVersion` kiranın `kanal.guncelSurumler`inden); `GET /api/client-policy/:istemci` PUBLIC, istemci FAIL-OPEN, tanımsız 404; yalnız gerçek kırılmada, sahadakinden büyük olamaz; önce istemci.
+- [ÇEKİRDEK] Patron uygulaması (`client-policy/patron`, `minVersion` 0.0.0) yeteneği `/api/auth/me` `patronApiVersion` + `backendVersion` ve `GET /api/feature-flags` modül bayraklarından okur; backend yalnız EKLER, alan/uç kaldırmak `PATRON_API_VERSION`ı artırır.
 - [ÇEKİRDEK] Ortak tablet Play'in en düşük hedef SDK'sı (bugün 36); API 36 yön kilidi `android.window.PROPERTY_COMPAT_ALLOW_RESTRICTED_RESIZABILITY` (`plugins/withBuyukEkranYonu`), 37'den önce kilitsiz düzen; `build:aab` AAB'den ölçer.
 
 ### Yasaklar

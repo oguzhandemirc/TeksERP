@@ -23,7 +23,8 @@ function versionOrUnknown(v: string | null): string {
   return v !== null && VersionTextSchema.safeParse(v).success ? v : UNKNOWN_VERSION;
 }
 
-const CLIENT_KIND_TO_SUMMARY = { electron: "panel", mobil: "tablet", web: "web" } as const;
+// patron: satıcı tel şeması türü tanımaz (ayna değişmez) → "diger" kovası.
+const CLIENT_KIND_TO_SUMMARY = { electron: "panel", mobil: "tablet", web: "web", patron: "diger" } as const;
 
 /** Bağlı istemci defteri → tür × sürüm sayısı (en kalabalık önce, tavanlı). */
 export function clientDistribution(): HealthSummary["istemciler"] {
