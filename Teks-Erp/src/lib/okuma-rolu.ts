@@ -18,6 +18,7 @@ export const READ_ONLY_HIDDEN_TABLES: readonly string[] = [
   "totp_enrollments", // aday TOTP sırrı + tek kullanımlık bağlantı anahtarı
   "user_recovery_codes", // kurtarma kodu bcrypt özetleri
   "login_lockout_buckets", // giriş kilidi kovası (saldırgana deneme bütçesi söyler)
+  "patron_push_tokens", // patron telefonunun push belirteci (sarılı ham + bulut bağının özeti)
 ];
 
 /** Tablo başına kapalı kolonlar; tablonun kalanı okunur. */

@@ -678,6 +678,7 @@ model User {
   reportRuns                   ReportRun[]                 @relation("ReportRunUser")
   reportSnapshotsCreated       ReportSnapshot[]            @relation("ReportSnapshotCreatedBy")
   patronReportRuns             PatronReportRun[]           @relation("PatronReportRunUser")
+  patronPushTokens             PatronPushToken[]           @relation("PatronPushTokenUser")
   machineShiftStatsSealed      MachineShiftStat[]          @relation("MachineShiftStatSealedBy")
   machineShiftSealsActed       MachineShiftStatSeal[]      @relation("MachineShiftSealBy")
   createdPeripheralDevices     PeripheralDevice[]          @relation("PeripheralDeviceCreatedBy")
@@ -862,7 +863,8 @@ model Session {
   newDevice     Boolean?
 
   // Ayak izi korunur — kullanıcı silinirken (soft-delete kalıbı) oturum geçmişi kaybolmaz.
-  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  user             User              @relation(fields: [userId], references: [id], onDelete: Restrict)
+  patronPushTokens PatronPushToken[] @relation("PatronPushTokenSession")
 
   @@index([userId])
   @@map("sessions")
@@ -14308,6 +14310,41 @@ model PatronReportRun {
   @@index([userId, reportKey, createdAt(sort: Desc)])
   @@index([createdAt])
   @@map("patron_report_runs")
+}
+
+/// Patron telefonunun Expo push belirteci (push köprüsü P2, `docs/design/PATRON-PUSH-KOPRUSU.md`).
+/// Belirteç onu yazan OTURUMLA yaşar: oturum iptali/çıkış/parola/pasif → BIRAKILACAK (ham silinir), iş buluta
+/// `birak` der → BIRAKILDI. Satır silinmez (bırakma durum geçişidir); aynı belirteç yeniden gelirse satır dirilir.
+/// Durum kümesi VarChar + CHECK (ŞEMA-DIŞI, envanter `test_db_invariants`); tek yazar `services/patron-push/`.
+model PatronPushToken {
+  id            String    @id @default(uuid()) @db.Uuid
+  userId        String    @db.Uuid
+  /// Kaydı yazan oturum; oturum satırı budanınca NULL olur ve süpürme belirteci bırakır.
+  sessionId     String?   @db.Uuid
+  /// sha256(utf8(ham belirteç)) küçük harf hex — buluttaki bağın anahtarı (bir cihaz = bir satır).
+  tokenDigest   String    @unique @db.VarChar(64)
+  /// Ham belirteç, kısa kimlik halkasıyla SARILI (`ptk1:<kid>:…`, AES-256-GCM); bırakılınca NULL.
+  tokenSealed   String?
+  /// android | ios (CHECK).
+  platform      String    @db.VarChar(16)
+  deviceName    String?   @db.VarChar(80)
+  /// BEKLIYOR | KAYITLI | BIRAKILACAK | BIRAKILDI (CHECK).
+  cloudState    String    @default("BEKLIYOR") @db.VarChar(16)
+  attempts      Int       @default(0)
+  nextAttemptAt DateTime? @db.Timestamptz
+  lastErrorCode String?   @db.VarChar(64)
+  lastSeenAt    DateTime  @default(now()) @db.Timestamptz
+  releasedAt    DateTime? @db.Timestamptz
+  createdAt     DateTime  @default(now()) @db.Timestamptz
+  updatedAt     DateTime  @updatedAt @db.Timestamptz
+
+  user    User     @relation("PatronPushTokenUser", fields: [userId], references: [id], onDelete: Restrict)
+  session Session? @relation("PatronPushTokenSession", fields: [sessionId], references: [id], onDelete: SetNull)
+
+  @@index([userId, cloudState])
+  @@index([sessionId])
+  @@index([cloudState, nextAttemptAt])
+  @@map("patron_push_tokens")
 }
 
 // =============================================================================
