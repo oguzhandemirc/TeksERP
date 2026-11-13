@@ -1,5 +1,5 @@
 // Saklı koşumun sonucu: üstte "Oluşturuldu: … · parametre özeti", altında fabrikanın sunumu (`SunumGorunumu`) ya da
-// jenerik döküm; HATA'lı koşumda kısa Türkçe neden. Sonuç görüntüleyici bulut kipiyle ORTAK (yeniden kurulmaz).
+// jenerik döküm; HATA'lı koşumda kısa Türkçe neden; altta PDF/Excel paylaşımı (`DisaAktar`, yalnız ERP kipi). Sonuç görüntüleyici bulut kipiyle ORTAK (yeniden kurulmaz).
 import { Text, View } from "react-native";
 import type { RaporKosumuDetay } from "../../../api/rapor";
 import { reportDomain } from "../../../lib/labels/finans";
@@ -10,6 +10,7 @@ import { Banner, Card } from "../../kit";
 import { makeStyles } from "../../theme-context";
 import { space, typography } from "../../tokens";
 import { SunumGorunumu } from "../SunumGorunumu";
+import { DisaAktar } from "./DisaAktar";
 
 export function KosumSonucu({ kosum, testID = "kosum-sonucu" }: { readonly kosum: RaporKosumuDetay; readonly testID?: string }) {
   const s = useStyles();
@@ -25,6 +26,7 @@ export function KosumSonucu({ kosum, testID = "kosum-sonucu" }: { readonly kosum
           <SnapshotView value={veri} />
         </Card>
       ) : null}
+      <DisaAktar kosum={kosum} />
     </View>
   );
 }

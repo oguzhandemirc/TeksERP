@@ -1,14 +1,14 @@
 // Rapor koşumunu dosya olarak paylaşma (ERP `GET /patron/v1/raporlar/:id/dosya`): Excel sunucudan .xlsx gelir; PDF için
-// sunucu aynı spec'ten HTML verir, telefon PDF'e çevirir. Geçici dosyalar önbellekteki `rapor-dosya/` dizininde doğar ve
-// paylaşım bitince (hata dahil) silinir; önceki turdan kalan artık her başlangıçta süpürülür. Platform modülleri port olarak
-// gelir (`rapor-dosya-yerel.ts`) — akış saf kalır, testte sahtesi verilir.
+// sunucu aynı spec'ten HTML verir, telefon PDF'e çevirir. Dosyalar önbellekteki `rapor-dosya/` dizininde doğar; paylaşımdan
+// hemen sonra SİLİNMEZ (alıcı uygulama dosyayı geç okuyabilir) — her yeni dışa aktarmanın başında ve uygulama açılışında
+// süpürülür. Platform modülleri port olarak gelir (`rapor-dosya-yerel.ts`) — akış saf kalır, testte sahtesi verilir.
 import { ApiError, errorMessage } from "../api/client";
 import type { Raporcu, RaporDosyaBicimi } from "../api/rapor";
 
 export type RaporDosyaTuru = "pdf" | "excel";
 
 export interface DosyaPortlari {
-  /** Önbellek dizinindeki eski artıkları siler (başarısızlık akışı durdurmaz). */
+  /** Önbellek dizinindeki önceki dışa aktarma dosyalarını siler (başarısızlık akışı durdurmaz). */
   supur(): void;
   /** Baytı önbellek dizinine `ad` ile yazar; dosya adresi döner. */
   yaz(ad: string, veri: Uint8Array): string;
@@ -44,36 +44,36 @@ export function dosyaHataIletisi(err: unknown): string {
 
 class PaylasimYok extends Error {}
 
-/** İndir → (PDF ise çevir) → paylaşım sayfası → geçici dosyaları sil. */
-export async function raporDosyasiPaylas(raporcu: Raporcu, kosumId: string, tur: RaporDosyaTuru, p: DosyaPortlari, baslik: string): Promise<void> {
-  if (!(await p.paylasimVar())) throw new PaylasimYok("Bu cihazda paylaşım kullanılamıyor.");
+/** Önceki dışa aktarma dosyalarını siler; en iyi çaba (hata yutulur, bir sonraki turda yeniden denenir). */
+export function oncekileriSupur(p: Pick<DosyaPortlari, "supur">): void {
   try {
     p.supur();
   } catch {
-    // Artık süpürme en iyi çabadır.
+    // Süpürme en iyi çabadır.
   }
+}
+
+/** Önceki artıkları süpür → indir → (PDF ise çevir) → paylaşım sayfası. Paylaşılan dosya bir sonraki tura kadar durur. */
+export async function raporDosyasiPaylas(raporcu: Raporcu, kosumId: string, tur: RaporDosyaTuru, p: DosyaPortlari, baslik: string): Promise<void> {
+  if (!(await p.paylasimVar())) throw new PaylasimYok("Bu cihazda paylaşım kullanılamıyor.");
+  oncekileriSupur(p);
   const file = await raporcu.dosya(kosumId, BICIM[tur]);
   const ad = dosyaAdi(file.fileName, tur);
-  const gecici: string[] = [];
-  try {
-    let uri: string;
-    if (tur === "excel") {
-      uri = p.yaz(ad, new Uint8Array(file.data));
-      gecici.push(uri);
-    } else {
-      const htmlUri = p.yaz(ad.replace(/\.pdf$/, ".html"), new Uint8Array(file.data));
-      gecici.push(htmlUri);
+  let uri: string;
+  if (tur === "excel") {
+    uri = p.yaz(ad, new Uint8Array(file.data));
+  } else {
+    const htmlUri = p.yaz(ad.replace(/\.pdf$/, ".html"), new Uint8Array(file.data));
+    try {
       uri = await p.pdfYap(await p.metinOku(htmlUri), ad);
-      gecici.push(uri);
-    }
-    await p.paylas(uri, tur === "excel" ? { mimeType: XLSX_MIME, uti: "org.openxmlformats.spreadsheetml.sheet", baslik } : { mimeType: "application/pdf", uti: "com.adobe.pdf", baslik });
-  } finally {
-    for (const u of gecici) {
+    } finally {
+      // Ara HTML paylaşılmaz; hemen silinebilir (silinemezse bir sonraki turda süpürülür).
       try {
-        p.sil(u);
+        p.sil(htmlUri);
       } catch {
-        // Silinemeyen dosya bir sonraki turda süpürülür.
+        // en iyi çaba
       }
     }
   }
+  await p.paylas(uri, tur === "excel" ? { mimeType: XLSX_MIME, uti: "org.openxmlformats.spreadsheetml.sheet", baslik } : { mimeType: "application/pdf", uti: "com.adobe.pdf", baslik });
 }

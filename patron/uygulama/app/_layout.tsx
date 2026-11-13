@@ -1,5 +1,6 @@
 import { Slot } from "expo-router";
 import { StatusBar } from "expo-status-bar";
+import { useEffect } from "react";
 import { Platform, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { SessionProvider } from "../src/state/session";
@@ -17,7 +18,17 @@ function Themed() {
   );
 }
 
+// Önceki rapor dışa aktarma dosyaları açılışta süpürülür (paylaşımdan hemen sonra silinmezler). Yerel modül yalnız
+// telefonda yüklenir; web'de dosya sistemi yok.
+function oncekiDisaAktarmalariSupur() {
+  if (Platform.OS === "web") return;
+  const { oncekileriSupur } = require("../src/lib/rapor-dosya") as typeof import("../src/lib/rapor-dosya");
+  const { yerelDosyaPortlari } = require("../src/lib/rapor-dosya-yerel") as typeof import("../src/lib/rapor-dosya-yerel");
+  oncekileriSupur(yerelDosyaPortlari);
+}
+
 export default function RootLayout() {
+  useEffect(oncekiDisaAktarmalariSupur, []);
   return (
     <SafeAreaProvider>
       <ThemeProvider store={plainStore}>
