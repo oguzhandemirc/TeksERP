@@ -14329,6 +14329,10 @@ model PatronPushToken {
   /// android | ios (CHECK).
   platform      String    @db.VarChar(16)
   deviceName    String?   @db.VarChar(80)
+  /// Telefonun seçtiği BİLDİRİM sesi (S0; tel `PUSH_SOUNDS`, CHECK); değişince satır yeniden `kaydet`e girer.
+  soundNotification String @default("tekserp_zil") @db.VarChar(24)
+  /// Telefonun seçtiği ALARM sesi (S0; tel `PUSH_SOUNDS`, CHECK).
+  soundAlarm    String    @default("tekserp_alarm") @db.VarChar(24)
   /// BEKLIYOR | KAYITLI | BIRAKILACAK | BIRAKILDI (CHECK).
   cloudState    String    @default("BEKLIYOR") @db.VarChar(16)
   attempts      Int       @default(0)

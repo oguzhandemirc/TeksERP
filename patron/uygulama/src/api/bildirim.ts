@@ -38,11 +38,16 @@ export interface Tercihler {
 export interface KatalogTuru {
   readonly kod: string;
   readonly ad: string;
+  /** Departman (fabrika `NotificationGrup`); grup başına aç/kapat bundan. */
+  readonly grup?: string;
+  readonly sinif?: string;
+  readonly varsayilanKanallar?: readonly string[];
 }
 
 /** Telefon push cihazı + tercih (ERP). Yalnız `yetenek().patronPush` açıkken çağrılır. */
 export interface PushCihazci {
-  kaydet(b: { belirtec: string; platform: "android" | "ios"; cihazAdi?: string }): Promise<unknown>;
+  /** `sesBildirim`/`sesAlarm` (S0): eski fabrika alanı tanımaz (katı şema) → yalnız varsayılandan sapınca yollanır (`erp-push.ts`). */
+  kaydet(b: { belirtec: string; platform: "android" | "ios"; cihazAdi?: string; sesBildirim?: string; sesAlarm?: string }): Promise<unknown>;
   birak(belirtec: string): Promise<unknown>;
   katalog(): Promise<{ turler: readonly KatalogTuru[] }>;
   tercihler(): Promise<Tercihler>;
@@ -66,12 +71,44 @@ export function createErpPushCihazci(c: ApiClient): PushCihazci {
  * geri yollanır, yalnız o hücrenin satırı eklenir/değişir. Görünmeyen türün satırı yollanmaz (sunucu onu silmez).
  */
 export function pushTercihGovdesi(t: Tercihler, tur: string, acik: boolean): TercihSatiri[] {
+  return pushTercihGovdesiToplu(t, new Map([[tur, acik]]));
+}
+
+/** Toplu (hazır düğme · grup): `degisen`deki her türün PATRON_PUSH hücresi yazılır, öteki satırlar AYNEN geri yollanır. */
+export function pushTercihGovdesiToplu(t: Tercihler, degisen: ReadonlyMap<string, boolean>): TercihSatiri[] {
   const kanallar = new Map(t.hucreler.map((h) => [h.kind, new Set(h.kanallar.map((k) => k.kanal))]));
   const out: TercihSatiri[] = t.satirlar
-    .filter((r) => kanallar.get(r.tur)?.has(r.kanal) && !(r.tur === tur && r.kanal === PATRON_PUSH_KANAL))
+    .filter((r) => kanallar.get(r.tur)?.has(r.kanal) && !(degisen.has(r.tur) && r.kanal === PATRON_PUSH_KANAL))
     .map((r) => (r.kapsam === undefined || r.kapsam === null ? { tur: r.tur, kanal: r.kanal, acik: r.acik } : { tur: r.tur, kanal: r.kanal, acik: r.acik, kapsam: r.kapsam }));
-  out.push({ tur, kanal: PATRON_PUSH_KANAL, acik });
+  for (const [tur, acik] of degisen) out.push({ tur, kanal: PATRON_PUSH_KANAL, acik });
   return out;
+}
+
+export type HazirSecim = "HEPSI" | "ONEMLI" | "HICBIRI";
+
+/** "Önemli" = alarm sınıfı ya da fabrikanın telefon varsayılanı AÇIK türü (alarm · güvenlik · cari kilidi …). */
+export const onemliMi = (t: KatalogTuru | undefined): boolean => t?.sinif === "ALARM" || (t?.varsayilanKanallar ?? []).includes(PATRON_PUSH_KANAL);
+
+/** Hazır düğmenin hedefi: görünen her telefon hücresi için aç/kapat (yalnız değişenler döner). */
+export function hazirSecimDegisimi(t: Tercihler, turler: readonly KatalogTuru[], secim: HazirSecim): Map<string, boolean> {
+  const kat = new Map(turler.map((x) => [x.kod, x]));
+  const out = new Map<string, boolean>();
+  for (const h of pushHucreleri(t)) {
+    const hedef = secim === "HEPSI" ? true : secim === "HICBIRI" ? false : onemliMi(kat.get(h.tur));
+    if (hedef !== h.acik) out.set(h.tur, hedef);
+  }
+  return out;
+}
+
+/** Telefon hücreleri departmana göre (katalog sırası korunur; grupsuz tür "Diğer"). */
+export function pushGruplari(t: Tercihler, turler: readonly KatalogTuru[]): { grup: string; hucreler: { tur: string; acik: boolean }[] }[] {
+  const kat = new Map(turler.map((x) => [x.kod, x]));
+  const gruplar = new Map<string, { tur: string; acik: boolean }[]>();
+  for (const h of pushHucreleri(t)) {
+    const g = kat.get(h.tur)?.grup ?? "Diğer";
+    gruplar.set(g, [...(gruplar.get(g) ?? []), h]);
+  }
+  return [...gruplar].map(([grup, hucreler]) => ({ grup, hucreler }));
 }
 
 /** Tür → telefon bildirimi hücresi (yalnız kanalı taşıyan ve gizli olmayan türler). */

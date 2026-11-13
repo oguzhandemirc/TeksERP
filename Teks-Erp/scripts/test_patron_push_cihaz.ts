@@ -13,6 +13,8 @@
 //   §9 bulut turu (sahte taşıyıcı): imza amaç `bildir` + `yol` · gövdede ham yok · 503 → istek etkilenmez, geri
 //      çekilme, sonra KAYITLI · bırakılan → `birak` → BIRAKILDI · lisans uygun değil → dışarı istek YOK
 //   §10 sır hijyeni: ham belirteç günlükte (stdout/stderr, testte açıkça yakalanır) ve system_logs'ta YOK
+//   §11 ses (S0): alan yoksa varsayılan zil/alarm · değişim KAYITLI→BEKLIYOR · `kaydet` `sesler` yalnız sapanda ·
+//       küme dışı 400 · dürt gövdesinde yalnız ALARM'da `sinif`
 // NEGATİF SONDA: harita satırında (`docs/bekci-harita/bildirim.md`). Gerçek bulut çağrısı YOK.
 // Koşum: npx tsx scripts/run-all-tests.ts patron_push_cihaz   (kendi _test DB'si; ayar yazar → hedef DB kapısı)
 // =============================================================================
@@ -27,10 +29,13 @@ import { PermissionManagementService } from "../src/services/permission-manageme
 import { PATRON_LOGIN_PERMISSION } from "../src/constants/permission-catalog";
 import { SHORT_CREDENTIAL_KEY_FILE, setShortCredentialKeyDirForTests } from "../src/lib/short-credential/keyring";
 import { digestPushToken, openPushToken, PUSH_TOKEN_SEAL_PREFIX } from "../src/services/patron-push/token-seal";
-import { runPatronPushRound } from "../src/services/patron-push/cloud-round.service";
+import { registerSounds, runPatronPushRound } from "../src/services/patron-push/cloud-round.service";
 import { MAX_PUSH_TOKENS_PER_USER } from "../src/services/patron-push/device.service";
+import { buildNudgeBody } from "../src/services/patron-push/nudge-payload";
+import { NOTIFICATION_KINDS } from "../src/constants/notification-catalog";
 import type { CloudTransport } from "../src/cloud-sync/cloud-client";
-import { PUSH_BRIDGE_PATHS } from "../src/cloud-sync/wire";
+import { PUSH_BRIDGE_PATHS, PushNudgeRequestSchema } from "../src/cloud-sync/wire";
+import { randomUUID } from "node:crypto";
 import { setCloudUrlForTests } from "../src/cloud-sync/cloud-url";
 import { REQUEST_HEADER, verifyRequest } from "../src/lib/license/protocol";
 import { uyari } from "../src/lib/logger";
@@ -277,6 +282,34 @@ async function main(): Promise<void> {
     await runPatronPushRound({ transport: cloud.transport, now: new Date((rd?.nextAttemptAt ?? now).getTime() + 1000) });
     const rd2 = await row(raw("D"));
     check("§9g süre dolunca yeniden dener → KAYITLI, sayaç sıfır", rd2?.cloudState === "KAYITLI" && rd2.attempts === 0 && rd2.lastErrorCode === null, String(rd2?.cloudState));
+
+    console.log("\n=== §11 ses seçimi (S0) ===");
+    check("§11a eski uygulama (ses alanı yok) → varsayılan zil/alarm", rd2?.soundNotification === "tekserp_zil" && rd2.soundAlarm === "tekserp_alarm", `${rd2?.soundNotification}/${rd2?.soundAlarm}`);
+    r = await reg(b2.token, raw("D"), { sesBildirim: "tekserp_mekik", sesAlarm: "sessiz" });
+    const rs = await row(raw("D"));
+    check("§11b ⭐ ses değişince KAYITLI satır BEKLIYOR'a döner (buluttaki bağın sesi de değişmeli)", r.status === 200 && r.body.data?.durum === "BEKLIYOR" && rs?.cloudState === "BEKLIYOR" && rs.soundNotification === "tekserp_mekik" && rs.soundAlarm === "sessiz", `${r.status} ${String(rs?.cloudState)}`);
+    let callsS = cloud.calls.length;
+    await runPatronPushRound({ transport: cloud.transport });
+    const sesKaydet = cloud.calls.slice(callsS).filter((x) => x.yol === PUSH_BRIDGE_PATHS.REGISTER).map((x) => JSON.parse(x.body) as { sesler?: unknown });
+    check("§11c ⭐ `kaydet` gövdesinde `sesler` = [{ozet, bildirim, alarm}] → KAYITLI", JSON.stringify(sesKaydet.at(-1)?.sesler) === JSON.stringify([{ ozet: digestPushToken(raw("D")), bildirim: "tekserp_mekik", alarm: "sessiz" }]) && (await row(raw("D")))?.cloudState === "KAYITLI", JSON.stringify(sesKaydet));
+    r = await reg(b2.token, raw("D"), { sesBildirim: "tekserp_mekik", sesAlarm: "sessiz" });
+    check("§11d aynı ses yeniden kayıt → KAYITLI kalır (gereksiz kaydet yok)", r.body.data?.durum === "KAYITLI" && (await row(raw("D")))?.cloudState === "KAYITLI");
+    r = await reg(b2.token, raw("D"));
+    callsS = cloud.calls.length;
+    await runPatronPushRound({ transport: cloud.transport });
+    const varsayilanKaydet = cloud.calls.slice(callsS).filter((x) => x.yol === PUSH_BRIDGE_PATHS.REGISTER);
+    check("§11e ⭐ alan göndermeyen eski uygulama → varsayılana döner; `kaydet`te `sesler` alanı YOK (eski bulut katı şeması)",
+      r.body.data?.durum === "BEKLIYOR" && varsayilanKaydet.length === 1 && !("sesler" in (JSON.parse(varsayilanKaydet[0]!.body) as object)) && (await row(raw("D")))?.soundNotification === "tekserp_zil", `${varsayilanKaydet.length}`);
+    r = await reg(b2.token, raw("D"), { sesBildirim: "../zil" });
+    check("§11f küme dışı ses → 400 PATRON_PUSH_GOVDE", r.status === 400 && r.body.details?.code === "PATRON_PUSH_GOVDE", String(r.status));
+    check("§11g registerSounds: varsayılan satır gönderilmez, hepsi varsayılansa undefined",
+      registerSounds([{ tokenDigest: "a".repeat(64), soundNotification: "tekserp_zil", soundAlarm: "tekserp_alarm" }]) === undefined
+      && JSON.stringify(registerSounds([{ tokenDigest: "a".repeat(64), soundNotification: "tekserp_zil", soundAlarm: "tekserp_alarm" }, { tokenDigest: "b".repeat(64), soundNotification: "varsayilan", soundAlarm: "tekserp_alarm" }])) === JSON.stringify([{ ozet: "b".repeat(64), bildirim: "varsayilan", alarm: "tekserp_alarm" }]));
+    const anyKind = NOTIFICATION_KINDS[0]!;
+    const alarmBody = buildNudgeBody({ id: randomUUID(), kind: anyKind, payload: null, klass: "ALARM" }, [raw("D")]);
+    const bildirimBody = buildNudgeBody({ id: randomUUID(), kind: anyKind, payload: null, klass: "BILDIRIM" }, [raw("D")]);
+    check("§11h dürt gövdesi: ALARM → `sinif: ALARM`; BİLDİRİM → alan YOK; ikisi de tel şemasından geçer",
+      alarmBody.sinif === "ALARM" && !("sinif" in bildirimBody) && PushNudgeRequestSchema.safeParse(alarmBody).success && PushNudgeRequestSchema.safeParse(bildirimBody).success);
     kur = lisansKipKur({ zorlama: false, kiraEk: { devredildi: true } });
     cloud = fakeCloud(kur.f.kurulum.x, kur.f.kurulumId);
     r = await reg(b2.token, raw("E"));
