@@ -55,10 +55,17 @@ check(
   a2 === a1 && b2 === b1 && c2 === c1 + (etiketteMi ? 0 : 1),
   `taban ${taban}${sonEtiket ? " (etiket)" : " (package.json)"} → ${sonraki}`,
 );
+// Küçük/büyük hane ELLE karardır (`--surum`): sürüm commit'inde package.json tabanın TAM bir sonraki küçük ya da
+// büyük hanesinde (yama 0) durabilir; atlama (2.15 → 2.17) ya da yamalı elle sürüm (2.16.1) yine kırmızı.
+const elleHane = (t: string, p: string): boolean => {
+  const [ta, tb] = sayi(t);
+  const [pa, pb, pc] = sayi(p);
+  return pc === 0 && ((pa === ta && pb === tb + 1) || (pa === ta + 1 && pb === 0));
+};
 check(
-  "package.json tabanda ya da bu turun numarasında",
-  pkgSurum === taban || pkgSurum === sonraki,
-  `package.json ${pkgSurum}`,
+  "package.json tabanda, bu turun numarasında ya da elle verilen bir sonraki küçük/büyük hanede",
+  pkgSurum === taban || pkgSurum === sonraki || elleHane(taban, pkgSurum),
+  `package.json ${pkgSurum} · taban ${taban}`,
 );
 
 console.log("\n=== §3 Elle sürüm KAZANIR ===");
