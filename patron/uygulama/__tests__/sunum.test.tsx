@@ -67,8 +67,10 @@ beforeEach(() => {
 
 describe("§1 ana sayı ve ölçülemedi", () => {
   it("birimli biçim: metre 1 ondalık, para 0 ondalık, yüzde öne", () => {
-    expect(figureText(12500.5, "m")).toBe("12.500,5 m");
+    expect(figureText(12500.5, "m")).toBe("12500,5 m");
     expect(figureText(845000.4, "TRY")).toBe("845.000 TL");
+    // Sayı kuralı: yalnız para binlikli; ölçü/sayım ayırıcısız.
+    expect(figureText(14700, "kg")).toBe("14700 kg");
     expect(figureText(12.5, "yuzde")).toBe("%12,5");
   });
   it("null değer 'Ölçülemedi' — asla 0", () => {
@@ -82,7 +84,7 @@ describe("§1 ana sayı ve ölçülemedi", () => {
   });
   it("ölçülen ana sayı, en çok 3 yan sayı ve ilk 3 anlatı cümlesi çizilir", () => {
     render(<SunumGorunumu sunum={sample()} domain="sevkiyat" />);
-    expect(screen.getByTestId("sunum-ana-deger").props.children).toBe("12.500,5 m");
+    expect(screen.getByTestId("sunum-ana-deger").props.children).toBe("12500,5 m");
     expect(screen.getByTestId("sunum-yan-sevk.tutar")).toBeTruthy();
     expect(screen.queryByTestId("sunum-yan-sevk.fazla")).toBeNull();
     expect(screen.getByText("Ne görüyoruz?")).toBeTruthy();
@@ -124,7 +126,7 @@ describe("§3 tablo", () => {
   it("dolu tablo satırı birimli hücreyle çizilir", () => {
     render(<SunumGorunumu sunum={sample()} domain="sevkiyat" />);
     // Hem grafik çubuğunda hem tablo hücresinde aynı fabrika sayısı.
-    expect(screen.getAllByText("8.000 m").length).toBe(2);
+    expect(screen.getAllByText("8000 m").length).toBe(2);
   });
 });
 
