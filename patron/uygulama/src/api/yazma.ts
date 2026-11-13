@@ -400,5 +400,5 @@ export function createErpYazici(c: ApiClient): Yazici {
 
 export const IPTAL_ILETISI: Readonly<Record<Exclude<IptalKarari, "SERBEST">, string>> = {
   SEVKIYAT_VAR: "Siparişin aktif sevkiyatı var; iptal edilemez",
-  URETIMDE: "Bu sipariş üretimde; her iş emri için ne olacağını seçin",
+  URETIMDE: "Bu sipariş üretimde; üretimdeki her iş için ne olacağını seçin",
 };

@@ -141,7 +141,7 @@ describe("§3 iptal önizleme kapısı", () => {
     const f = fakeClient((m) => (m === "GET" ? ((n += 1), ham(n === 1 ? {} : { affectedWorkOrders: [{ id: "w1", workOrderNumber: "IE-7", status: "PLANNED" }] })) : {}));
     const y = createErpYazici(f.c);
     expect(iptalKarari(await y.siparisIptalOnizleme("o1"))).toBe("SERBEST");
-    await expect(y.siparisIptal("o1")).rejects.toMatchObject({ status: 409, code: "SIPARIS_URETIMDE", message: "Bu sipariş üretimde; her iş emri için ne olacağını seçin" });
+    await expect(y.siparisIptal("o1")).rejects.toMatchObject({ status: 409, code: "SIPARIS_URETIMDE", message: "Bu sipariş üretimde; üretimdeki her iş için ne olacağını seçin" });
     expect(f.calls.filter((c) => c.m === "POST")).toEqual([]);
   });
   it("temiz siparişte cancel boş eylem listesiyle gider", async () => {

@@ -126,7 +126,7 @@ export default function CancelOrder() {
             </>
           ) : null}
           {!onaylanabilir ? (
-            <Banner tone="warn" text={karar === "URETIMDE" ? "Bu sunucu iş emri eylemlerini bildirmiyor; panelden iptal edin" : IPTAL_ILETISI[karar]} testID={`iptal-${karar}`} />
+            <Banner tone="warn" text={karar === "URETIMDE" ? "Bu sunucu üretimdeki siparişin iptalini desteklemiyor; panelden iptal edin" : IPTAL_ILETISI[karar]} testID={`iptal-${karar}`} />
           ) : (
             <>
               <Text style={s.note}>{karar === "SERBEST" ? `Yalnız bu sipariş iptal edilir; bağlı ${TERIM.terbiyeIsEmri.tekilKucuk} yok.` : `Sipariş iptal edilir; her ${TERIM.terbiyeIsEmri.tekilKucuk} için seçtiğiniz uygulanır.`}</Text>
