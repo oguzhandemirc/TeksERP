@@ -94,8 +94,8 @@ services:
       # anahtar biriminde ÖNCEDEN üretilmiş olmalı (birim salt okunur — runbook §2.1).
       BILDIRIM_KIPI: ${BILDIRIM_KIPI:-kapali}
       BILDIRIM_VAPID_KONU: ${BILDIRIM_VAPID_KONU:-}
-      # Telefon push (F5 + push köprüsü): varsayılan kapali = bugünkü davranış. Açılış üç koşul ister (native-gate.ts):
-      # acik ∧ BILDIRIM_KIPI=gercek ∧ expo_erisim_belirteci sırrı dolu — eksikse KAPALI kalır, sunucu yine açılır.
+      # Telefon push (F5 + push köprüsü): varsayılan kapali = bugünkü davranış. Köprü (native-gate.ts) acik ∧
+      # expo_erisim_belirteci dolu ister, BILDIRIM_KIPI'den bağımsız; bulut kipi push ayrıca gercek ister. Eksikse KAPALI, sunucu açılır.
       BILDIRIM_NATIVE_PUSH: ${BILDIRIM_NATIVE_PUSH:-kapali}
       # Köprü ayarları DEĞERSİZ geçer: .env'de yoksa konteynerde de yok → koddaki varsayılan (config.ts). Boş dize
       # geçirilmez (sayı alanını 0'a çevirip açılışı durdururdu); compose-denetle ⑪ ölçer.
