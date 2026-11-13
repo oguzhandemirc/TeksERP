@@ -86,4 +86,17 @@ describe("PatronCloudPage — fabrika seddi", () => {
     expect(screen.getByText("Reddedildi")).toBeInTheDocument();
     expect(screen.getByText("Aynı adda cari var")).toBeInTheDocument();
   });
+
+  it("⭐ makbuz araması Türkçe katlamalı süzer; eşleşme yoksa boş durum", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(await screen.findByRole("tab", { name: "Buluttan gelenler" }));
+    const kutu = await screen.findByRole("searchbox");
+    await user.type(kutu, "AYNI ADDA");
+    await waitFor(() => expect(screen.queryByText("SIP-0042")).not.toBeInTheDocument());
+    expect(screen.getByText("Aynı adda cari var")).toBeInTheDocument();
+    await user.clear(kutu);
+    await user.type(kutu, "yok-boyle-kayit");
+    expect(await screen.findByText("Eşleşen kayıt yok")).toBeInTheDocument();
+  });
 });
