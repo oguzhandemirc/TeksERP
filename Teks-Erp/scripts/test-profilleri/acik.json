@@ -164,6 +164,7 @@
     "pinLockoutEnabled": true,
     "devicePairingRequired": true,
     "deviceProofRequired": true,
+    "deviceAutoReattach": true,
     "shortCredentialApprovedDeviceOnly": true,
     "labelCopiesSource": "STATION",
     "nativeSendEnabled": true,

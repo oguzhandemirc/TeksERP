@@ -501,6 +501,10 @@ export const SETTING_KEYS = {
    *  Default false (bugünkü davranış). Eşleştirme etkin zorunluyken anlamlıdır; PIN/kart, personel
    *  listesi ve indirme belirteci onaysız cihaza kapalı kalır. Barındırılanda ZORLANMAZ. ENFORCE edilir. */
   DEVICE_UNPAIRED_PASSWORD_LOGIN: "device.unpairedPasswordLogin",
+  /** Onaylı cihazın bilinen donanımı (ANDROID_ID özeti) yeni kurulumla gelirse yönetici onayı
+   *  beklemeden aynı satıra yeniden bağlansın mı. Default TRUE (kullanıcı kararı 2026-11-13);
+   *  barındırılanda ZORLANMAZ (yönetici kapatabilir). Revoke/pasif cihaz asla. ENFORCE edilir. */
+  DEVICE_AUTO_REATTACH: "device.autoReattachKnownHardware",
   /** Hızlı PIN / QR kartla giriş YALNIZ onaylı cihazdan mı. Default false (bugünkü davranış).
    *  Açıkken eşleştirme de etkin zorunlu olur (otomatik onay kapanır); barındırılan
    *  kurulumda (BARINDIRILAN) her iki kural ZORUNLUDUR ve kapatılamaz. ENFORCE edilir. */

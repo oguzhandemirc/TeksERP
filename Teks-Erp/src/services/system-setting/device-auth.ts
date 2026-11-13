@@ -68,6 +68,23 @@ export async function readDeviceUnpairedPasswordLogin(
   return asBoolean(setting?.value);
 }
 
+/**
+ * Onaylı + aktif cihazın bilinen donanım özeti yeni bir kurulum anahtarıyla (kaldır-kur, veri silme)
+ * gelirse YÖNETİCİ ONAYI BEKLEMEDEN aynı satıra yeniden bağlansın mı. Default TRUE — "bugünkü
+ * davranış" kuralına bilinçli istisna (kullanıcı kararı 2026-11-13). Barındırılan sınıf ZORLAMAZ.
+ * ENFORCE: `DeviceRebindService.routeKnownHardware` (yalnız eşleştirme etkin zorunluyken anlamlı).
+ */
+export async function readDeviceAutoReattach(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.DEVICE_AUTO_REATTACH },
+    select: { value: true },
+  });
+  return setting ? asBoolean(setting.value) : true;
+}
+
 /** Kısa kimlik "yalnız onaylı cihaz" kuralının KAYITLI değeri (barındırılan sınıf hariç). */
 export async function readStoredShortCredentialApprovedDeviceOnly(
   tx?: Pick<typeof prisma, "systemSetting">,

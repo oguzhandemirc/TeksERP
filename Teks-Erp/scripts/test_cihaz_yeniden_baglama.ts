@@ -2,7 +2,8 @@
  * Bekçi: cihaz eşleme v2 (D1) — donanım özetiyle tanıma, yeni satır yerine YENİDEN BAĞLAMA.
  * Kök neden: kimlik uygulama deposundaki rastgele localId'ydi; kaldır-kur depoyu silince sunucu yeni
  * `devices` satırı açıyordu. Artık bilinen `hw` yeni localId ile gelirse aynı satıra bağlanır
- * (eşleştirme kapalıysa otomatik, zorunluysa/barındırılanda talep + yönetici onayı).
+ * (eşleştirme kapalıysa otomatik, zorunluysa/barındırılanda talep + yönetici onayı — bu bekçi
+ * `device.autoReattachKnownHardware`ı KAPATIR; açık hâl test_cihaz_kalici_tanima'da).
  * Gerçek HTTP: app aynı süreçte 127.0.0.1:<boş port> (ikinci süreç yok). Yalnız `_test` DB.
  * Koşum: `cd Teks-Erp && npx tsx scripts/test_cihaz_yeniden_baglama.ts`
  *
@@ -174,7 +175,7 @@ async function main(): Promise<void> {
   const stamp = Date.now();
   const AYARLAR = [
     SETTING_KEYS.DEVICE_PAIRING_REQUIRED, SETTING_KEYS.AUTH_SHORT_CREDENTIAL_APPROVED_DEVICE_ONLY,
-    SETTING_KEYS.DEVICE_PROOF_REQUIRED, SETTING_KEYS.AUTH_WEB_TOTP_POLICY,
+    SETTING_KEYS.DEVICE_PROOF_REQUIRED, SETTING_KEYS.AUTH_WEB_TOTP_POLICY, SETTING_KEYS.DEVICE_AUTO_REATTACH,
   ];
   const once = new Map<string, unknown>();
   for (const k of AYARLAR) {
@@ -224,6 +225,8 @@ async function main(): Promise<void> {
     await set(SETTING_KEYS.DEVICE_PAIRING_REQUIRED, false);
     await set(SETTING_KEYS.AUTH_SHORT_CREDENTIAL_APPROVED_DEVICE_ONLY, false);
     await set(SETTING_KEYS.DEVICE_PROOF_REQUIRED, false);
+    // Bu bekçi TALEP + yönetici onayı yolunu ölçer; onaysız tanıma (varsayılan açık) test_cihaz_kalici_tanima'da.
+    await set(SETTING_KEYS.DEVICE_AUTO_REATTACH, false);
     // Ölçülen bağlama akışı; barındırılan yerinde onayın 2FA'sı test_barindirma_ikinci_faktor §7'de.
     await set(SETTING_KEYS.AUTH_WEB_TOTP_POLICY, "USER_CHOICE");
     await kilitTemizle();

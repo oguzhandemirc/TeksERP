@@ -280,6 +280,8 @@ export interface FeatureFlags {
   deviceProofRequired: boolean;
   /** Onaysız tablet yalnız parolayla girebilsin mi (default false; eşleştirme zorunluyken etkili). */
   deviceUnpairedPasswordLogin: boolean;
+  /** Bilinen donanım yeni kurulumla gelince onaysız yeniden bağlansın mı (default TRUE, 2026-11-13). */
+  deviceAutoReattach: boolean;
   /** Hızlı PIN / kart girişi yalnız onaylı cihazdan mı (ETKİN değer: barındırılan kurulumda hep true). */
   shortCredentialApprovedDeviceOnly: boolean;
   /** 2FA'sı açık hesabın PIN/kart girişinde kod sorulur mu (default false; süperadminde hep sorulur). */
