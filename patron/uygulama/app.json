@@ -25,9 +25,10 @@
         "resizeMode": "contain",
         "backgroundColor": "#161C2B"
       },
-      "permissions": [],
+      "permissions": ["android.permission.CAMERA"],
       "blockedPermissions": [
         "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.RECORD_AUDIO",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.VIBRATE",
@@ -50,6 +51,14 @@
       "expo-router",
       "expo-secure-store",
       "expo-font",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Fabrika sunucusunun bağlantı karekodunu okutmak için kamera kullanılır.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ],
       "./plugins/withPatronImza.js"
     ],
     "experiments": {
