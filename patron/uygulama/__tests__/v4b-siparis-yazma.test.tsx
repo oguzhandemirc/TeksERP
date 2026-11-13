@@ -8,6 +8,7 @@ import { ApiError, type ApiClient } from "../src/api/client";
 import { BULUT_YETENEK, erpYetenek, setYetenek } from "../src/api/yetenek";
 import { createBulutYazici, createErpYazici, iptalKarari, siparisGovdesi, siparisKaydi, type IptalOnizleme } from "../src/api/yazma";
 import { siparisFormu, siparisPatch } from "../src/lib/duzenleme";
+import { TERIM } from "../src/lib/terim";
 
 const mockYazici = { kanal: "dogrudan", siparisNotu: false, siparisOku: jest.fn(), siparisGuncelle: jest.fn(), siparisIptalOnizleme: jest.fn(), siparisIptal: jest.fn() };
 const mockSession = { yazici: mockYazici, permissions: ["bulut:oturum", "bulut:siparis:oku"] as string[], offline: false, api: { record: jest.fn(), list: jest.fn() }, cache: null, markOnline: jest.fn() };
@@ -154,7 +155,7 @@ describe("§3 iptal önizleme kapısı", () => {
     mockYazici.siparisIptalOnizleme.mockReset().mockResolvedValue(URETIMDE);
     render(<CancelOrder />);
     await settle();
-    expect(screen.getByText("İş emri IE-7")).toBeTruthy();
+    expect(screen.getByText(`${TERIM.terbiyeIsEmri.tekil} IE-7`)).toBeTruthy();
     expect(screen.getByTestId("iptal-URETIMDE")).toBeTruthy();
     expect(screen.queryByTestId("siparis-iptal")).toBeNull();
   });
