@@ -74,7 +74,7 @@ router.get("/", (_req: Request, res: Response) => {
  *       - in: path
  *         name: istemci
  *         required: true
- *         schema: { type: string, enum: [electron, mobil] }
+ *         schema: { type: string, enum: [electron, mobil, web, patron] }
  *     responses:
  *       200:
  *         description: Politika (yanit apiVersion de tasir)

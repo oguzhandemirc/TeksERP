@@ -108,6 +108,9 @@ const TANIM_DOSYALARI = ["src/middlewares/rbac.middleware.ts"] as const;
 const DELEGE = "delege:";
 
 const DINAMIK_IZIN_KAYNAKLARI: Record<string, readonly string[]> = {
+  // matchesPermission(permissions, PATRON_LOGIN_PERMISSION) — patron türü giriş kanalı kapısı (V1); sabit permission-catalog.ts'te,
+  // katalog satırını ve kapının ısırdığını test_patron_giris §4a/§7b ölçer — burada devir.
+  "src/services/auth.service.ts": [`${DELEGE}scripts/test_patron_giris.ts`],
   // Açılış panosu kutu/hareket kapıları: `gate(ctx, GATE_PERMISSIONS.x, ...modüller)` → matchesPermission(perms, permission).
   "src/services/dashboard/pano-kaynak.ts": ["GATE_PERMISSIONS"],
   "src/services/dashboard/pano-hareketler.service.ts": ["GATE_PERMISSIONS"],

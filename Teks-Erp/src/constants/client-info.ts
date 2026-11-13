@@ -31,7 +31,7 @@
 
 /** Başlık adları — TEK KAYNAK. Express başlıkları küçük harfe indirger. */
 export const CLIENT_INFO_HEADERS = {
-  /** İstemci türü: electron | mobil | web */
+  /** İstemci türü: electron | mobil | web | patron */
   kind: "x-client-kind",
   /** İstemcinin kendi sürümü ("1.2.6"). Web'de yok (backend ile birlikte gider). */
   version: "x-client-version",
@@ -51,7 +51,7 @@ export const CLIENT_INFO_HEADERS = {
 } as const;
 
 /** Tanınan istemci türleri — `CLIENT_VERSION_POLICIES` anahtarlarıyla aynı küme. */
-export const CLIENT_KINDS = ["electron", "mobil", "web"] as const;
+export const CLIENT_KINDS = ["electron", "mobil", "web", "patron"] as const;
 export type ClientKind = (typeof CLIENT_KINDS)[number];
 
 export function isClientKind(v: string): v is ClientKind {
