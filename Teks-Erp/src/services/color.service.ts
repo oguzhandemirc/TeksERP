@@ -118,6 +118,7 @@ export class ColorService extends BaseService {
   async create(
     data: Record<string, unknown>,
     userId?: string,
+    opts?: { clientToken?: string },
   ): Promise<ApiResponse<unknown>> {
     const { customerIds, customerAliases, rest } = splitCustomerIds(data);
 
@@ -145,7 +146,8 @@ export class ColorService extends BaseService {
       await this.assertCustomersAssignable(customerIds);
     }
 
-    const res = await super.create(rest, userId);
+    // Doğuş deneme kimliği yalnız token boğazından (`color-item-create.service.ts`); gövde yazamaz.
+    const res = await super.create(rest, userId, opts?.clientToken ? { clientToken: opts.clientToken } : undefined);
     const color = res.data as { id: string } | null;
 
     if (color && customerIds !== undefined) {

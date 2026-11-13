@@ -3625,6 +3625,8 @@ model Item {
   /// geçirmesi/tamamlaması bekleniyor. Aktif ve kullanılabilir; yalnız işaret.
   /// Admin normal düzenleme/onay ile temizler. Normal admin create'te false kalır.
   pendingReview Boolean  @default(false)
+  /// İdempotency — doğuş deneme kimliği (patron telefonu `POST /api/items`); genel PATCH yazamaz.
+  clientToken   String?  @unique @db.Uuid
   /// K4P: ürün kartı eni (cm) — 4 puan muayene alanının BİRİNCİ kaynağı
   /// (`resolveInspectionWidth`); BaseController skaleri, bilerek yazılabilir alan.
   /// CHECK `items_width_cm_ck` (> 0).
@@ -9539,14 +9541,16 @@ model RollReturn {
 /// Roll, OrderLine, WorkOrder.targetColor, Swatch ve Item.allowedColors buradan
 /// referans alır.
 model Color {
-  id        String   @id @default(uuid()) @db.Uuid
-  code      String   @unique @db.VarChar(32) // "MAVI", "KIRMIZI"
-  name      String   @db.VarChar(100)
-  hex       String?  @db.VarChar(7) // UI rozeti için #RRGGBB
-  sortOrder Int      @default(0)
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now()) @db.Timestamptz
-  updatedAt DateTime @updatedAt @db.Timestamptz
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique @db.VarChar(32) // "MAVI", "KIRMIZI"
+  name        String   @db.VarChar(100)
+  hex         String?  @db.VarChar(7) // UI rozeti için #RRGGBB
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  /// İdempotency — doğuş deneme kimliği (patron telefonu `POST /api/colors`); genel PATCH yazamaz.
+  clientToken String?  @unique @db.Uuid
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
 
   // Relations
   itemAllowed         ItemAllowedColor[]

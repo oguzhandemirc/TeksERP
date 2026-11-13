@@ -294,7 +294,7 @@ export class ItemService extends BaseService {
   async create(
     data: Record<string, unknown>,
     userId: string | undefined,
-    opts?: { pendingReview?: boolean },
+    opts?: { pendingReview?: boolean; clientToken?: string },
   ): Promise<ApiResponse<unknown>> {
     // Oluşturan doğuşta yazılır (künye); BaseController `req.user?.userId` verir, eksikse 401.
     const actorId = requireActorId(userId, "Ürün kartı");
@@ -488,7 +488,8 @@ export class ItemService extends BaseService {
               ...widthCmData(input.widthCm),
               ...fabricStructure,
               // Yalnız iç quick-create (saha KK1) opt'u işaretler; public gövde etkisiz.
-              ...(opts?.pendingReview ? { pendingReview: true } : {}),
+              // Doğuş deneme kimliği (`clientToken`) yalnız token boğazından (`color-item-create.service.ts`).
+              ...(opts?.pendingReview ? { pendingReview: true } : {}), ...(opts?.clientToken ? { clientToken: opts.clientToken } : {}),
               allowedColors:
                 allowedColorIds.length > 0
                   ? { create: allowedColorIds.map((colorId) => ({ colorId })) }
