@@ -19,6 +19,8 @@ import { getCloudUrl, type CloudUrlSource } from "../cloud-sync/cloud-url";
 import { cloudPost, egressCloudTransport, type CloudTransport } from "../cloud-sync/cloud-client";
 import { AccountLockResponseSchema, ENVELOPE_VERSION, SYNC_PATHS, type CloudAccount } from "../cloud-sync/wire";
 import { readPatronCloudUserId } from "./helpers/patron-cloud-user.helper";
+import { listRecentInboxReceipts, measureInboxQuota, readPatronCloudGuardSettings, type InboxQuota, type InboxReceiptRow, type PatronCloudGuardSettings } from "./patron-cloud-guard.service";
+import { REPORT_MIN_GAP_MS, reportGate } from "../cloud-sync/report-gate";
 
 /** Teknik kullanıcının kullanıcı adı (panel kuralı: yalnız İngilizce harf + rakam). */
 export const PATRON_CLOUD_USERNAME = "patronbulutu";
@@ -194,6 +196,13 @@ export interface PatronCloudStatus {
   readonly hesaplar: readonly CloudAccount[];
   readonly hesaplarAlinma: string | null;
   readonly sonTur: (Omit<InboxRunSummary, "atMs"> & { at: string }) | null;
+  /** Fabrika seddi (G1): anahtar + tavanlar, şu anki pencere sayaçları, buluttan gelen son makbuzlar. */
+  readonly sed: {
+    readonly ayarlar: PatronCloudGuardSettings;
+    readonly gelenKutusu: InboxQuota;
+    readonly rapor: { readonly sonSaat: number; readonly tavan: number; readonly enAzAralikSn: number; readonly sonYoklama: string | null };
+  };
+  readonly makbuzlar: readonly InboxReceiptRow[];
 }
 
 export async function getPatronCloudStatus(): Promise<PatronCloudStatus> {
@@ -203,6 +212,11 @@ export async function getPatronCloudStatus(): Promise<PatronCloudStatus> {
     : null;
   const user = u && !u.deletedAt ? { id: u.id, username: u.username, fullName: u.fullName, isActive: u.isActive } : null;
   const e = cloudEligibility();
+  const now = Date.now();
+  const guard = await readPatronCloudGuardSettings();
+  const inboxQuota = await measureInboxQuota(guard, now);
+  const rg = reportGate.status(now);
+  const makbuzlar = await listRecentInboxReceipts();
   return {
     etkin: Boolean(user?.isActive),
     teknikKullanici: user,
@@ -211,6 +225,12 @@ export async function getPatronCloudStatus(): Promise<PatronCloudStatus> {
     hesaplar: accounts?.list ?? [],
     hesaplarAlinma: accounts ? new Date(accounts.fetchedAtMs).toISOString() : null,
     sonTur: lastRun ? { ...lastRun, at: new Date(lastRun.atMs).toISOString() } : null,
+    sed: {
+      ayarlar: guard,
+      gelenKutusu: inboxQuota,
+      rapor: { sonSaat: rg.sonSaat, tavan: guard.raporSaatlikTavan, enAzAralikSn: REPORT_MIN_GAP_MS / 1000, sonYoklama: rg.sonYoklama === null ? null : new Date(rg.sonYoklama).toISOString() },
+    },
+    makbuzlar,
   };
 }
 

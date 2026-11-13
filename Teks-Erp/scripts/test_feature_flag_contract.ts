@@ -606,6 +606,26 @@ async function main() {
       file: "Electron/src/pages/System/MenuLayout/MenuLayoutPage.tsx",
       needle: "menu-advanced-group",
     },
+    PATRON_BULUT_INBOX_ENABLED: {
+      why: "Patron bulutu fabrika seddi (G1) — buluttan yazma anahtarı; flag yüküne konmaz, tek yazar ayar şifreli `PUT /api/patron-bulut/ayarlar` (ham ayar ucu reddeder); panel Erişim → Yönetim Bulutu",
+      file: "Electron/src/pages/Access/PatronCloud/service.ts",
+      needle: "gelenKutusuAcik",
+    },
+    PATRON_BULUT_INBOX_HOURLY_MAX: {
+      why: "Patron bulutu fabrika seddi (G1) — gelen kutusu saatlik tavanı (1..10000); aynı uç ve aynı panel ekranı",
+      file: "Electron/src/pages/Access/PatronCloud/service.ts",
+      needle: "saatlikTavan",
+    },
+    PATRON_BULUT_INBOX_DAILY_MAX: {
+      why: "Patron bulutu fabrika seddi (G1) — gelen kutusu günlük tavanı (1..10000); aynı uç ve aynı panel ekranı",
+      file: "Electron/src/pages/Access/PatronCloud/service.ts",
+      needle: "gunlukTavan",
+    },
+    PATRON_BULUT_REPORT_HOURLY_MAX: {
+      why: "Patron bulutu fabrika seddi (G1) — buluttan istenen rapor saatlik tavanı (1..1000); aynı uç ve aynı panel ekranı",
+      file: "Electron/src/pages/Access/PatronCloud/service.ts",
+      needle: "raporSaatlikTavan",
+    },
     WORKORDER_DEFAULT_TARGET_ITEM_ID: {
       why: "Ürün kimliği (UUID) — flag yüküne konmaz; tek yazar doğrulamalı `PUT /api/feature-flags/work-order-default-item` (ham ayar ucu reddeder); panel Özellik Anahtarları → İş Emirleri",
       file: "Electron/src/pages/GeneralSettings/WorkOrderDefaultItemSection.tsx",

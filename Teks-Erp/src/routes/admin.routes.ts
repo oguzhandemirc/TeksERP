@@ -2,6 +2,7 @@
 // TeksERP - Admin Routes (Permission Management + Maintenance)
 // =============================================================================
 
+import { GUARD_SETTING_KEYS } from "../services/patron-cloud-guard.service";
 import { INCOMING_DOC_DEDICATED_SETTING_KEYS } from "../services/gelen-belge-ayar.service";
 import { Router, Request, Response, NextFunction } from "express";
 import { SCREEN_CATALOG, permissionsWithoutScreen } from "../constants/screen-catalog";
@@ -1814,6 +1815,13 @@ router.put(
       if (key === SETTING_KEYS.EMANET_DEFAULT_WAREHOUSE_ID) {
         throw AppError.badRequest(
           `Emanet varsayılan deposu yalnız kendi ucundan (PUT /api/feature-flags/emanet-default-warehouse) değiştirilir`,
+          { code: "SETTING_KEY_RESERVED", key },
+        );
+      }
+      // Patron bulutu fabrika seddi (G1): aralık doğrulaması ve ayar şifresi yalnız kendi ucunda; düz metin onu atlardı.
+      if ((GUARD_SETTING_KEYS as readonly string[]).includes(key)) {
+        throw AppError.badRequest(
+          "Yönetim bulutu ayarları yalnız kendi ekranından (PUT /api/patron-bulut/ayarlar) değiştirilir",
           { code: "SETTING_KEY_RESERVED", key },
         );
       }

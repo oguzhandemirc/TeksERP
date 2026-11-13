@@ -5,6 +5,8 @@
 // tek tur — işleme sırası buluttaki atomik claim + burada seri döngü), zil yağmur korumalı, test enjeksiyonu.
 // SIFIR FARK: ön koşul (§1.4, fail-closed), teknik kullanıcı ya da bulut adresi yoksa HİÇBİR dış istek atılmaz.
 // Lisans yazmaya kapalıysa (`zorla` + KISITLI/DURDURULMUŞ) `al` çağrılmaz: kayıtlar bulutta BEKLIYOR kalır.
+// Fabrika seddi (G1, `patron-cloud-guard.service.ts`): panel anahtarı kapalıysa ya da kayan pencere tavanı doluysa
+// `al` çağrılmaz; açıkken `enFazla` tavanın bu tura bıraktığı kalanla kırpılır.
 // Beklenen ağ hatası `reportJobFailure`e yazılmaz; yalnız programcı hatası iz bırakır.
 // =============================================================================
 import { reportJobFailure } from "./job-failure";
@@ -17,6 +19,7 @@ import { INBOX_PULL_MAX } from "../cloud-sync/inbox-wire";
 import { AccountsResponseSchema, ENVELOPE_VERSION, InboxClaimResponseSchema, SYNC_PATHS, type InboxOutcome, type SyncPath } from "../cloud-sync/wire";
 import { processInboxMessage } from "../services/cloud-inbox.service";
 import { recordCloudAccounts, recordInboxRun, resolveActivePatronCloudUserId } from "../services/patron-cloud.service";
+import { measureInboxQuota, readPatronCloudGuardSettings } from "../services/patron-cloud-guard.service";
 import { requestEventRound } from "./cloud-sync.job";
 
 const STARTUP_DELAY_MS = 90 * 1000;
@@ -33,6 +36,8 @@ export type InboxRunOutcome =
   | "ADRES_YOK"
   | "TEKNIK_KULLANICI_YOK"
   | "LISANS_KISITLI"
+  | "DURDURULDU"
+  | "TAVAN_DOLU"
   | "BASARILI"
   | "BASARISIZ";
 
@@ -50,6 +55,8 @@ let running = false;
 let again = false;
 let timer: NodeJS.Timeout | null = null;
 let lastRunAt = 0;
+/** Tavan uyarısı tavan dolduğu sürece bir kez yazılır (her tur log yağmuru olmasın). */
+let quotaWarnedFor: string | null = null;
 
 type CloudCall = { ok: true; json: unknown } | { ok: false; code: string };
 
@@ -117,11 +124,22 @@ export async function runCloudInboxOnce(transport: VendorTransport = egressTrans
 
     if (!inboxWritesAllowed(e.snap)) return done({ outcome: "LISANS_KISITLI", ...empty }, now);
 
-    const pull = await cloudPost(base, SYNC_PATHS.INBOX_CLAIM, { v: ENVELOPE_VERSION, enFazla: INBOX_PULL_MAX }, transport);
+    const guard = await readPatronCloudGuardSettings();
+    if (!guard.gelenKutusuAcik) return done({ outcome: "DURDURULDU", ...empty }, now);
+    const quota = await measureInboxQuota(guard, now);
+    if (quota.kalan <= 0) {
+      if (quotaWarnedFor !== quota.dolu) uyari("patron-bulut", `gelen kutusu tavanı doldu (${quota.dolu === "GUNLUK" ? "son 24 saat" : "son 60 dakika"}) — kayıtlar bulutta bekliyor`);
+      quotaWarnedFor = quota.dolu;
+      return done({ outcome: "TAVAN_DOLU", reason: quota.dolu ?? "SAATLIK", ...empty }, now);
+    }
+    quotaWarnedFor = null;
+
+    const pull = await cloudPost(base, SYNC_PATHS.INBOX_CLAIM, { v: ENVELOPE_VERSION, enFazla: Math.min(INBOX_PULL_MAX, quota.kalan) }, transport);
     if (!pull.ok) return done({ outcome: "BASARISIZ", ...empty }, now, pull.code);
     const parsed = InboxClaimResponseSchema.safeParse(pull.json);
     if (!parsed.success) return done({ outcome: "BASARISIZ", ...empty }, now, "YANIT_GECERSIZ");
-    const messages = [...parsed.data.kayitlar].sort((a, b) => Date.parse(a.olusturulma) - Date.parse(b.olusturulma) || a.mesajId.localeCompare(b.mesajId));
+    // Bulut isteneni aşarsa fazlası işlenmez (claim süresi dolunca bulut yeniden verir).
+    const messages = [...parsed.data.kayitlar.slice(0, Math.min(INBOX_PULL_MAX, quota.kalan))].sort((a, b) => Date.parse(a.olusturulma) - Date.parse(b.olusturulma) || a.mesajId.localeCompare(b.mesajId));
 
     const outcomes: InboxOutcome[] = [];
     let uncertain = 0;
@@ -206,4 +224,5 @@ export function __resetCloudInboxJobForTests(): void {
   stopped = false;
   running = false;
   again = false;
+  quotaWarnedFor = null;
 }

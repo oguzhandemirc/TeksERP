@@ -44,6 +44,22 @@ export const CARI_NOTIFICATION_ENTRIES = {
     payloadAlanlari: ["kilitId", "cariId", "cariAd", "cariKodu", "kapsam", "sebep", "kisi"],
     tahminiHaftalik: 0.5, saklama: SAKLAMA,
   },
+  "cari.patron-carisi": {
+    kod: "cari.patron-carisi", ad: "Yönetim bulutundan cari kart açıldı",
+    sinif: "BILDIRIM", altTur: "OLAY", grup: "Sipariş",
+    izinler: [["customer:read"]],
+    modul: "cekirdek:ana-veri",
+    // G1 seddi: buluttan doğan cari sessiz geçmesin; sabit kalıp — 10 dk penceresi "N cari açıldı" birleşir.
+    tekilKalibi: "patron-carisi",
+    pencereSn: 600, varsayilan: ["customer:write"], kilit: "YOK",
+    kanallar: KANAL_MASAUSTU,
+    varsayilanKanallar: ["UYGULAMA"],
+    baslik: "Yönetim bulutundan cari kart açıldı",
+    govde: "{cariAd} ({cariKodu}) · {hesapAdi}",
+    panelEkran: "definitions/cariler", panelYol: "/definitions/cariler?kayit=C:{cariId}",
+    payloadAlanlari: ["cariId", "cariAd", "cariKodu", "hesapAdi"],
+    tahminiHaftalik: 1, saklama: SAKLAMA,
+  },
   "cari.risk-limiti-asildi": {
     kod: "cari.risk-limiti-asildi", ad: "Cari risk limitini aştı",
     sinif: "BILDIRIM", altTur: "KOSUL", grup: "Finans",
