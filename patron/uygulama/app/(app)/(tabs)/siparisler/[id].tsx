@@ -48,6 +48,7 @@ export default function OrderDetail() {
   const acik = k.durum !== "COMPLETED" && k.durum !== "CANCELLED";
   const duzenle = acik && islemVar("siparis.duzenle", permissions);
   const iptal = acik && islemVar("siparis.iptal", permissions);
+  const kalem = acik && (islemVar("siparis.kalem", permissions) || islemVar("siparis.kalem-iptal", permissions));
   return (
     <Screen title={no ?? "Sipariş"} module="siparisler" back onRefresh={() => {
         r.reload();
@@ -98,10 +99,11 @@ export default function OrderDetail() {
             ) : null}
           </View>
 
-          {duzenle || iptal ? (
+          {duzenle || iptal || kalem ? (
             <View style={s.actions} testID="siparis-eylemler">
               {offline ? <Banner tone="off" text="Sunucuya ulaşılamıyor; değişiklik yapılamaz" testID="yazma-kapali" /> : null}
               {duzenle ? <Button label="Düzenle" tone="secondary" icon="create-outline" disabled={offline} testID="siparis-duzenle" onPress={() => router.push({ pathname: "/siparisler/duzenle", params: { id: String(id) } } as never)} /> : null}
+              {kalem ? <Button label="Kalemler" tone="secondary" icon="layers-outline" disabled={offline} testID="siparis-kalemler" onPress={() => router.push({ pathname: "/siparisler/kalemler", params: { id: String(id) } } as never)} /> : null}
               {iptal ? <Button label="İptal et" tone="danger" icon="close-circle-outline" disabled={offline} testID="siparis-iptal-ac" onPress={() => router.push({ pathname: "/siparisler/iptal", params: { id: String(id) } } as never)} /> : null}
             </View>
           ) : null}

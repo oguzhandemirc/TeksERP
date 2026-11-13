@@ -1,5 +1,5 @@
-// Sipariş düzenleme (ERP) — YALNIZ BAŞLIK: cari · para birimi · termin (kısmi sevkte yalnız termin). Kalemler panelde:
-// fabrika kalem dizisini tam değiştirir (gönderilmeyen kalem ve zorunlu özellik silinir). Açılışta gerçek ERP detayı
+// Sipariş düzenleme (ERP) — YALNIZ BAŞLIK: cari · para birimi · termin (kısmi sevkte yalnız termin). Kalemler ayrı
+// ekranda (`kalemler.tsx`): fabrika kalem dizisini tam değiştirir, orada her kalem kayıtlı alanlarıyla geri gider. Açılışta gerçek ERP detayı
 // okunur, sürüm `contentUpdatedAt` PATCH'te geri gider; sürümsüz (eski) sunucuda kaydet kapalı. STALE akışı caride olduğu gibi.
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -119,7 +119,7 @@ export default function EditOrder() {
             <View style={[s.stripe, { backgroundColor: t.domain.sevkiyat.fg }]} />
             <Field label="Termin" value={form.termin} onChangeText={(v) => set({ termin: v })} keyboardType="numbers-and-punctuation" placeholder="GG.AA.YYYY" testID="termin-metin" />
           </View>
-          <Muted>{`Kalemler (${kayit.kalemSayisi}) panelden düzenlenir.`}</Muted>
+          <Muted>{`Kalemler (${kayit.kalemSayisi}) sipariş ekranındaki "Kalemler" düğmesinden değişir.`}</Muted>
           {offline ? <Banner tone="off" text="Sunucuya ulaşılamıyor; değişiklik yapılamaz" testID="yazma-kapali" /> : null}
           {error ? <Banner tone="error" text={error} testID="kaydet-hata" /> : null}
           {info ? <Muted testID="kaydet-bilgi">{info}</Muted> : null}

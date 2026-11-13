@@ -74,3 +74,8 @@ export function eylemlerTam(
 ): boolean {
   return isEmirleri.every((w) => secim.some((x) => x.isEmriId === w.id && w.izinli.includes(x.eylem)));
 }
+
+/** Panelle aynı eylem dili (`OrderCancelDialog`); İE adı terim kaynağından okuma anında çözülür. */
+export function eylemEtiketi(e: IsEmriEylemi, belirtme: string): string {
+  return e === "UNLINK_ONLY" ? "Sadece bağı kopar" : e === "CONVERT_TO_STOCK" ? `${belirtme} stoğa çevir` : `${belirtme} de iptal et`;
+}

@@ -133,3 +133,14 @@ export function kalemFarkVar(taze: KalemDurumu, form: readonly KalemSatiri[]): b
   const b = form.map((f) => imza(f.urunId, f.renkId, toDecimal(f.miktar) ?? f.miktar, f.birimFiyat.trim() === "" ? "" : (toDecimal(f.birimFiyat) ?? f.birimFiyat))).sort();
   return a.length !== b.length || a.some((x, i) => x !== b[i]);
 }
+
+/**
+ * Bayat kayıttan sonra "Yenile": kullanıcının yazdığı satırlar KORUNUR; arada iptal edilen kalemin satırı düşer, arada
+ * eklenen kalem tazeden gelir (aksi hâlde dizi onu eksik gönderir ve fabrika silerdi).
+ */
+export function formuTazele(form: readonly KalemSatiri[], taze: KalemDurumu): KalemSatiri[] {
+  const aktif = new Set(taze.kalemler.filter((k) => !k.iptal).map((k) => k.id));
+  const kalan = form.filter((f) => !f.id || aktif.has(f.id));
+  const eksik = kalemSatirlari(taze).filter((t) => !form.some((f) => f.id === t.id));
+  return [...kalan.filter((f) => f.id), ...eksik, ...kalan.filter((f) => !f.id)];
+}

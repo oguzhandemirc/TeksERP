@@ -150,9 +150,9 @@ describe("§3 iptal önizleme kapısı", () => {
     expect(f.calls.map((c) => `${c.m} ${c.path}`)).toEqual(["GET /orders/o1/cancel-preview", "POST /orders/o1/cancel"]);
     expect(f.calls[1]!.body).toEqual({ workOrderActions: [] });
   });
-  it("ekran: İE taşıyan siparişte kayıtlar listelenir, iptal düğmesi YOK", async () => {
+  it("ekran: İE eylemlerini bildirmeyen (eski) fabrikada kayıtlar listelenir, iptal düğmesi YOK", async () => {
     setYetenek(erpYetenek(SETS, ["order:write"]));
-    mockYazici.siparisIptalOnizleme.mockReset().mockResolvedValue(URETIMDE);
+    mockYazici.siparisIptalOnizleme.mockReset().mockResolvedValue({ ...URETIMDE, isEmirleri: URETIMDE.isEmirleri.map((w) => ({ ...w, izinli: [], varsayilan: null })) });
     render(<CancelOrder />);
     await settle();
     expect(screen.getByText(`${TERIM.terbiyeIsEmri.tekil} IE-7`)).toBeTruthy();
