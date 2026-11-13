@@ -76,6 +76,7 @@ import type { OrderStats } from "./order/list";
 import type { OrderShipmentsResult } from "./order/detail";
 import type { OrderActor, PreparedOrderCreate } from "./order/create";
 import { voidOrderConfirmationTx } from "./order-documents.service";
+import { claimOrderVersionTx, orderContentVersionWhere, takeExpectedUpdatedAt, withOrderContentVersion } from "./helpers/stale-record.helper";
 import { ORDER_HEADER_WRITABLE, ORDER_LINE_WRITABLE, computeAllowedActions, computeTotalAmount, pickDefaultAction, withExtraWarnings, type CancelAction, type OrderServiceThis, type OrderWithLines } from "./order/shared";
 
 export type { OrderStats } from "./order/list";
@@ -544,7 +545,7 @@ export class OrderService extends BaseService {
     if (res.success && res.data) {
       await this.withResolvedColorNames(res.data as OrderWithLines, opts?.canReadCustomerAliases === true);
     }
-    return this.withUnitWarnings(res);
+    return this.withUnitWarnings(withOrderContentVersion(res));
   }
 
   /** Satır adı → kumaşa özel → genel; `DEFAULT`a düşerse null (bizim ad dönmez). */
@@ -753,6 +754,7 @@ export class OrderService extends BaseService {
 
     const cleanData: Record<string, unknown> = { ...data };
     delete cleanData.lines;
+    const expected = takeExpectedUpdatedAt(cleanData); // bayat veri koruması; yoksa davranış aynı
 
     // HEADER WHITELIST (mass-assignment guard'ı — M-3): status / shippedQty /
     // completedAt / manualClosedById / orderNumber gibi muhasebe+kimlik alanları
@@ -796,7 +798,8 @@ export class OrderService extends BaseService {
         const full = await this.findById(id);
         return { ...full, message: "Değişiklik yok" };
       }
-      return super.update(id, cleanData, userId);
+      const versionWhere = expected ? { status: OrderStatus.PARTIAL_SHIPPED, ...orderContentVersionWhere(expected) } : undefined;
+      return withOrderContentVersion(await this.updateCore(id, cleanData, userId, versionWhere));
     }
 
     const branchChanging = Object.prototype.hasOwnProperty.call(cleanData, "branchId");
@@ -901,6 +904,7 @@ export class OrderService extends BaseService {
     const updated = await prisma.$transaction(async (tx) => {
       // İLK ifade: satır kartlarının kilidi (8030 SHARED → FOR SHARE, itemId sırasıyla).
       if (lineCheck) await runItemUsageChecksTx(tx, lineCheck.checks);
+      if (expected && (incomingLines || Object.keys(cleanData).length > 0)) await claimOrderVersionTx(tx, id, current.status, expected);
       if (incomingLines) {
         // F144: WO-bağı guard'ını tx İÇİNDE TAZE re-check et — pre-tx (1362) okuma
         // ile deleteMany arasında eşzamanlı WO create (orderLinks INSERT) araya
@@ -1131,7 +1135,7 @@ export class OrderService extends BaseService {
     }
 
     return withExtraWarnings(
-      this.withUnitWarnings({ success: true, data: updated, message: "Sipariş güncellendi" }),
+      this.withUnitWarnings(withOrderContentVersion({ success: true, data: updated, message: "Sipariş güncellendi" })),
       [...(lineCheck?.warnings ?? []), ...riskWarnings],
     );
   }

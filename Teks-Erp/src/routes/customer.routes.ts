@@ -319,9 +319,12 @@ router.post("/", verifyToken, requirePermission("customer:write"), async (req, r
  *               contactPhone: { type: string }
  *               email: { type: string }
  *               notes: { type: string }
+ *               expectedUpdatedAt: { type: string, format: date-time, description: "İsteğe bağlı bayat veri koruması — detay yanıtındaki `updatedAt` aynen geri yollanır; kart arada değiştiyse 409 STALE_RECORD. `isActive:false` ile birlikte 400. Gönderilmezse davranış değişmez; DB'ye yazılmaz." }
  *     responses:
  *       200:
  *         description: Güncellendi
+ *       409:
+ *         description: STALE_RECORD (expectedUpdatedAt tutmadı)
  */
 router.patch("/:id", verifyToken, requirePermission("customer:write"), async (req, res, next) => {
   try {

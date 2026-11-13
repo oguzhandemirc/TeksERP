@@ -24,6 +24,7 @@ import { bornCariAccountTx, readCustomerFinance, writeCustomerFinanceTerms, type
 import type { Request } from "express";
 import { gatedSoftDelete, gatedUpdate } from "./helpers/master-data-archive.helper";
 import { CUSTOMER_ARCHIVE } from "./helpers/archive-gate/customer-archive.helper";
+import { takeExpectedUpdatedAt, updatedAtIs } from "./helpers/stale-record.helper";
 
 /**
  * VKN (10 hane), TCKN (11 hane) ve yabancı VAT/EIN (12-15 hane) için ortak
@@ -342,15 +343,12 @@ export class CustomerService extends BaseService {
     return { ...base, data: { ...(base.data as Record<string, unknown>), cariAccountId: finance?.cariAccountId ?? null, finance } };
   }
 
-  async update(
-    id: string,
-    data: Record<string, unknown>,
-    userId?: string
-  ): Promise<ApiResponse<unknown>> {
+  async update(id: string, data: Record<string, unknown>, userId?: string): Promise<ApiResponse<unknown>> {
     // `branches` yalnız create'e özel iç-içe alandır (nestedCreateFields). Update
     // gövdesinde gelirse (beklenmez — UI şubeleri ayrı uçlardan yönetir) sessizce
     // düş: BaseService.update nested-wrap YAPMAZ, ham dizi Prisma update'i bozardı.
     if ("branches" in data) delete data.branches;
+    const expected = takeExpectedUpdatedAt(data, { forbidDeactivate: true }); // bayat veri koruması; yoksa davranış aynı
     this.normalizeDefaultDestination(data); normalizeTamburLabelSettings(data); // tambur/etiket ayarı (S5)
     // Rol modeli: gövdede rol ya da eski `type` varsa mevcut bayraklarla birleşir, `type` yeniden türetilir.
     if ("isCustomerRole" in data || "isSupplierRole" in data || "isSubcontractorRole" in data || "type" in data) {
@@ -374,7 +372,7 @@ export class CustomerService extends BaseService {
     return gatedUpdate(CUSTOMER_ARCHIVE, id, data, {
       userId,
       write: (tx) => tx.customer.update({ where: { id }, data: { isActive: false } }),
-      next: (rest) => super.update(id, rest, userId),
+      next: (rest) => this.updateCore(id, rest, userId, expected ? { updatedAt: updatedAtIs(expected) } : undefined),
     });
   }
 

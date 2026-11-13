@@ -48,6 +48,7 @@
 - **[ÇEKİRDEK]** `CLIENT_IP_HEADER` yalnız beyanlı ters vekil arkasında verilir (demo) ve her isteğe uygulanır; LAN kurulumunda VERİLMEZ. `REMOTE_PORT` .env'de duruyorsa başlık yok sayılır ve uyarılır; `TRUST_PROXY` app-wide AYARLANMAZ. · bekçi: `scripts/test_web_hardening.ts §CI-11..13`
 
 ## Backend
+- **[ÇEKİRDEK]** Sipariş/cari PATCH'inde bayat veri koruması isteğe bağlıdır: gövdedeki `expectedUpdatedAt` (sipariş için detaydaki `contentUpdatedAt` = başlık + kalemlerin en büyük `updatedAt`i, cari için `updatedAt`) yazımın atomik claim'ine girer, tutmazsa 409 `STALE_RECORD`; alan yoksa davranış aynı, DB'ye yazılmaz; kalem-yalnız yazım da sürümü ilerletir (`helpers/stale-record.helper.ts`). · bekçi: `test_bayat_veri_korumasi`
 - **[ÇEKİRDEK]** P2002 kolonu YALNIZ `src/utils/p2002.ts` ile okunur (`p2002OnField` · `p2002TargetParts` · `p2002UniqueColumn` · `p2002Mentions`); `meta.target` doğrudan okunmaz (pg adaptörü vermez). · bekçi: `test_p2002_hedef_tek_kaynak` + `test_numara_yarisi_levent_dokuma` ①
 
 
