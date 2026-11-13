@@ -1222,6 +1222,12 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "report_snapshots", name: "report_snapshots_kind_ck" },
   // Patron raporu (V5a, migration 20261113140000): koşum durumu kapalı küme (HESAPLANIYOR · HAZIR · HATA).
   { table: "patron_report_runs", name: "patron_report_runs_status_ck" },
+  // Push köprüsü P2 (2026-11-13): kapalı kümeler + ham belirteç yalnız canlı satırda + bırakma damgası çifti.
+  { table: "patron_push_tokens", name: "patron_push_tokens_cloud_state_ck" },
+  { table: "patron_push_tokens", name: "patron_push_tokens_platform_ck" },
+  { table: "patron_push_tokens", name: "patron_push_tokens_digest_ck" },
+  { table: "patron_push_tokens", name: "patron_push_tokens_sealed_live_ck" },
+  { table: "patron_push_tokens", name: "patron_push_tokens_released_ck" },
   // bildirim: tercih katmanı (N4-SEMA, migration 20261025160000) — kapalı kümeler (TS aynası
   // `constants/notification-preference.ts`), sessiz saat biçimi + çift yüklem, takipte TEK hedef FK.
   { table: "notification_preferences", name: "notification_preferences_channel_ck" },

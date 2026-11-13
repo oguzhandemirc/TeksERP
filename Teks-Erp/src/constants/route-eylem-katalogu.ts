@@ -21,6 +21,8 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   // ── Patron raporu istek üzerine (V5a, 2026-11-13)
   "POST /api/patron/v1/raporlar": e("patron uygulamasından rapor oluşturdu", "patron uygulamasından rapor oluşturmaya çalıştı"),
   "DELETE /api/patron/v1/raporlar/:id": e("oluşturduğu bir raporu sildi", "oluşturduğu bir raporu silmeye çalıştı"),
+  "POST /api/bildirim/cihaz": e("patron telefonunu anlık bildirim için kaydetti", "patron telefonunu anlık bildirim için kaydetmeye çalıştı"),
+  "DELETE /api/bildirim/cihaz": e("patron telefonunun anlık bildirim kaydını kaldırdı", "patron telefonunun anlık bildirim kaydını kaldırmaya çalıştı"),
   // ── Tarayıcı girişi bot koruması (V1c, 2026-11-13)
   "PUT /api/admin/turnstile": e("tarayıcı girişi bot korumasını değiştirdi", "tarayıcı girişi bot korumasını değiştirmeye çalıştı"),
   // ── Patron bulutu fabrika seddi (G1, 2026-11-13)

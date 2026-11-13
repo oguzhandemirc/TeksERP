@@ -909,6 +909,8 @@ export const updateSchema = z.strictObject({
   documentsConfig: z.record(z.string(), z.any()).optional(),
   // bildirim: bildirim.gelenKutusuEnabled — kişisel gelen kutusu + yeni zil (default false → bugünkü zil). Kapsamsız: yalnız admin:settings yazar.
   bildirimGelenKutusuEnabled: z.boolean().optional(),
+  // bildirim: bildirim.patronPushEnabled — patron telefonuna push (köprü P2; default false). Kapsamsız: yalnız admin:settings yazar.
+  bildirimPatronPushEnabled: z.boolean().optional(),
   // belge-sablon T1C: documents.designerEnabled / documents.publishSodEnabled (default false). Kapsamsız: yalnız admin:settings yazar.
   documentDesignerEnabled: z.boolean().optional(),
   documentPublishSodEnabled: z.boolean().optional(),

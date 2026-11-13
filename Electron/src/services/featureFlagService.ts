@@ -807,6 +807,8 @@ export interface FeatureFlags {
   backupHour: number;
   // bildirim: kişisel gelen kutusu + yeni zil — default false (bugünkü zil); okuyan N1-ZIL.
   bildirimGelenKutusuEnabled: boolean;
+  // bildirim: patron telefonuna push (köprü P2) — default false (cihaz kaydı 409, buluta istek yok).
+  bildirimPatronPushEnabled: boolean;
   // belge-sablon: tasarımcı + yayın SoD bayrakları — default false (bugünkü Sistem tasarımı).
   documentDesignerEnabled: boolean;
   documentPublishSodEnabled: boolean;

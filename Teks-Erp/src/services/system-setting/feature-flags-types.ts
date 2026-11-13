@@ -549,6 +549,8 @@ export interface FeatureFlags {
   /** bildirim: kişisel gelen kutusu + yeni zil (default false = bugünkü zil davranışı).
    *  Okuyucular N1-MOTOR/N1-ZIL'de; bu alan yalnız taşır. */
   bildirimGelenKutusuEnabled: boolean;
+  /** Push köprüsü P2: patron telefonuna anlık bildirim (default false = cihaz kaydı 409, buluta istek yok). */
+  bildirimPatronPushEnabled: boolean;
   /** Belge tasarımcısı (default false = bugünkü Sistem tasarımı; tasarım uçları 403, basım şablon çözmez). */
   documentDesignerEnabled: boolean;
   /** Şablon yayınında tasarlayan ≠ yayınlayan (default false = bugünkü davranış). */

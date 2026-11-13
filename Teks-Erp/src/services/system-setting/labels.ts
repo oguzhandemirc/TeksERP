@@ -182,6 +182,21 @@ export async function readNotificationInboxEnabled(
   return asBoolean(setting?.value);
 }
 
+/**
+ * Patron telefonuna push (köprü P2) açık mı? Default FALSE (kayıt yok/çöp → bugünkü davranış: cihaz kaydı 409,
+ * buluta istek yok). Davranış bayrağı, modül anahtarı değil.
+ */
+export async function readPatronPushEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.BILDIRIM_PATRON_PUSH_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
 /** Belge tasarımcısı açık mı? Default FALSE (kayıt yok/çöp → bugünkü Sistem tasarımı; fail-closed). */
 export async function readDocumentDesignerEnabled(
   tx?: Pick<typeof prisma, "systemSetting">,

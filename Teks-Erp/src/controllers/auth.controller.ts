@@ -3,7 +3,8 @@
 // =============================================================================
 
 import { APP_VERSION } from "../lib/app-version";
-import { PATRON_API_VERSION, PATRON_REPORT_API_VERSION, PATRON_REPORT_EXPORT_VERSION } from "../constants/patron-app";
+import { PATRON_API_VERSION, PATRON_REPORT_API_VERSION, PATRON_REPORT_EXPORT_VERSION, PATRON_PUSH_VERSION } from "../constants/patron-app";
+import { patronPushAvailable } from "../services/patron-push/device.service";
 import { PATRON_READ_SETS } from "../services/patron-read/izin-esleme";
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
@@ -751,6 +752,7 @@ export class AuthController {
       const defaultSuperadminPasswordPending = bantGorur ? await varsayilanParolaBekliyor() : false;
       // Sistem hesabı mührü bandı (G1): aynı kitleye; öteki herkese "ok".
       const systemAccountSealStatus = bantGorur ? sealBandStatus(await sealSummary()) : "ok";
+      const patronPush = await patronPushAvailable();
       res.status(200).json({
         success: true,
         data: {
@@ -785,6 +787,7 @@ export class AuthController {
           patronReadSets: PATRON_READ_SETS,
           patronReportApi: PATRON_REPORT_API_VERSION,
           patronReportExport: PATRON_REPORT_EXPORT_VERSION,
+          ...(patronPush ? { patronPush: PATRON_PUSH_VERSION } : {}),
         },
       });
     } catch (error) {

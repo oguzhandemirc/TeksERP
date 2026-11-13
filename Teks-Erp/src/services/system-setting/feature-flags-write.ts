@@ -2746,6 +2746,18 @@ export async function setFeatureFlags(
       if (!(wasEnabled && input.bildirimGelenKutusuEnabled)) await resetNotificationBaselines(prisma);
     }
 
+    if (Object.prototype.hasOwnProperty.call(input, "bildirimPatronPushEnabled")) {
+      if (typeof input.bildirimPatronPushEnabled !== "boolean") {
+        throw AppError.badRequest("bildirimPatronPushEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.BILDIRIM_PATRON_PUSH_ENABLED,
+        input.bildirimPatronPushEnabled,
+        "Patron telefonuna anlık bildirim (push köprüsü): açıkken patron uygulaması cihazını kaydeder; kapalıyken bugünkü davranış",
+        userId
+      );
+    }
+
     if (Object.prototype.hasOwnProperty.call(input, "documentDesignerEnabled")) {
       if (typeof input.documentDesignerEnabled !== "boolean") {
         throw AppError.badRequest("documentDesignerEnabled boolean olmalı");

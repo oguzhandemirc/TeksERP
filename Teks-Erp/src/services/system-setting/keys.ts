@@ -1028,6 +1028,8 @@ export const SETTING_KEYS = {
   PATRON_BULUT_REPORT_HOURLY_MAX: "patronBulut.raporSaatlikTavan",
   // bildirim: gelen kutusu davranış bayrağı (modül anahtarı DEĞİL — plan Karar Y1); default false.
   BILDIRIM_GELEN_KUTUSU_ENABLED: "bildirim.gelenKutusuEnabled",
+  // Push köprüsü P2: patron telefonuna anlık bildirim (davranış bayrağı, profile girmez); default false.
+  BILDIRIM_PATRON_PUSH_ENABLED: "bildirim.patronPushEnabled",
   // belge-sablon T1C: davranış bayrakları (modül DEĞİL, profile girmez); ikisi de default false.
   DOCUMENTS_DESIGNER_ENABLED: "documents.designerEnabled",
   DOCUMENTS_PUBLISH_SOD_ENABLED: "documents.publishSodEnabled",

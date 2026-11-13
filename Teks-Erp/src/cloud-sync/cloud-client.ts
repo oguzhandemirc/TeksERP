@@ -1,4 +1,4 @@
-// Patron bulutuna TEL katmanı: kurulum anahtarıyla imzalı İSTEK (`amac: esitle`), gzip'li
+// Patron bulutuna TEL katmanı: kurulum anahtarıyla imzalı İSTEK (`amac: esitle`; push köprüsü yollarında `bildir`), gzip'li
 // gövde, taşıma soyutlaması (test enjeksiyonu), hata sınıflaması. Lisans tel katmanının
 // (`services/helpers/license-wire.helper`) kalıbı; imza protokolün `signRequest`inden geçer.
 import { gzipSync } from "node:zlib";
@@ -6,9 +6,19 @@ import { EgressError, egressRequest } from "../lib/http-egress";
 import { getLicenseStore } from "../lib/license/store";
 import { REQUEST_HEADER, isoToMs, signRequest } from "../lib/license/protocol";
 import { requestClockSkewMs } from "../lib/license/request-clock";
-import { CloudErrorResponseSchema, type SyncPath } from "./wire";
+import { CloudErrorResponseSchema, PUSH_BRIDGE_PATHS, type PushBridgePath, type SyncPath } from "./wire";
 
 const CLOUD_TIMEOUT_MS = 60_000;
+
+/** Fabrikanın buluta imzalı çağırdığı her uç: eşitleme kanalı + push köprüsü. */
+export type CloudPath = SyncPath | PushBridgePath;
+
+const PUSH_PATH_SET: ReadonlySet<string> = new Set(Object.values(PUSH_BRIDGE_PATHS));
+
+/** Amaç YOLDAN türer (tek kaynak): köprü yolu `bildir`, gerisi `esitle` — çağıran amacı yanlış eşleyemez. */
+export function purposeForPath(path: CloudPath): "esitle" | "bildir" {
+  return PUSH_PATH_SET.has(path) ? "bildir" : "esitle";
+}
 const RESPONSE_MAX_BYTES = 8 * 1024 * 1024;
 
 export interface CloudHttpRequest {
@@ -51,12 +61,12 @@ const NETWORK_RETRIES = 2;
 type Attempt = CloudResult | { readonly ok: false; readonly status: number; readonly code: string; readonly serverTimeMs?: number };
 
 /** Ağ tekrarlı gönderim; imza damgası `nowMs()`ten (D4 düzeltmesinde duvar − pay). */
-async function sendWithRetries(ctx: CloudCallContext, req: { url: string; path: SyncPath; raw: Buffer; gzip: boolean }, nowMs: () => number): Promise<Attempt> {
+async function sendWithRetries(ctx: CloudCallContext, req: { url: string; path: CloudPath; raw: Buffer; gzip: boolean }, nowMs: () => number): Promise<Attempt> {
   const store = getLicenseStore();
   if (!store?.key || store.problem) return { ok: false, status: 0, code: "LISANS_DEPOSU_YOK" };
   let last: Attempt = { ok: false, status: 0, code: "EGRESS_NETWORK" };
   for (let attempt = 0; attempt <= NETWORK_RETRIES; attempt++) {
-    const token = signRequest({ installationId: ctx.installationId, purpose: "esitle", body: req.raw, key: { privateKey: store.key.privateKey, nowMs: nowMs() }, path: req.path });
+    const token = signRequest({ installationId: ctx.installationId, purpose: purposeForPath(req.path), body: req.raw, key: { privateKey: store.key.privateKey, nowMs: nowMs() }, path: req.path });
     const headers: Record<string, string> = {
       "content-type": "application/json",
       accept: "application/json",
@@ -90,9 +100,10 @@ async function sendWithRetries(ctx: CloudCallContext, req: { url: string; path: 
  * İmzalı POST. `gzip` açıkken `govdeOzeti` SIKIŞTIRILMIŞ ham baytların özetidir (§6.1 — sunucu açmadan önce
  * özetler). Bulut saati kayıkken (`ISTEK_ZAMAN` + `sunucuSaati`) istek BİR KEZ düzeltilmiş damgayla, yeni nonce'la
  * yeniden imzalanır (D4, lisans kanalıyla aynı yardımcı); ikinci `ISTEK_ZAMAN`da durulur. `path` imzaya girer: bulut
- * doğrulayıcısı (`authenticateFactory`) AYNI `SYNC_PATHS` sabitini verir — adresin önekinden bağımsız.
+ * doğrulayıcısı (`authenticateFactory` · köprü kapısı) AYNI `SYNC_PATHS`/`PUSH_BRIDGE_PATHS` sabitini verir — adresin
+ * önekinden bağımsız; köprüde yolsuz imza 401 olduğu için `path` her çağrıda zorunludur.
  */
-export async function cloudPost(ctx: CloudCallContext, path: SyncPath, body: unknown, opts: { gzip: boolean }): Promise<CloudResult> {
+export async function cloudPost(ctx: CloudCallContext, path: CloudPath, body: unknown, opts: { gzip: boolean }): Promise<CloudResult> {
   const text = JSON.stringify(body);
   const raw = opts.gzip ? gzipSync(Buffer.from(text, "utf8")) : Buffer.from(text, "utf8");
   const req = { url: `${ctx.baseUrl}${path}`, path, raw, gzip: opts.gzip };

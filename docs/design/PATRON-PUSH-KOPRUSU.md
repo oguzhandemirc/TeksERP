@@ -100,3 +100,14 @@ ya da kayıt düşerse yineleme yeniden gönderir (çift bildirim olasılığı 
   (eşzamanlı istek × 20) aşabilir — dakikalık 60 tavanıyla sınırlı, bir kez (sonraki her kaydet 409).
 - Nonce 10 dk; dakikalık bakım tikinde budanır. Bilet (makbuz yoklaması) sonuçlanınca ya da 2 gün sonra budanır.
 - Kilit ekranında tam metin kullanıcı kararıdır; metin Expo/Google'dan geçer, bulut saklamaz.
+
+## 6. Fabrika tarafı (P2, 2026-11-13)
+
+- Uçlar `POST/DELETE /api/bildirim/cihaz` (`Teks-Erp/src/routes/patron-push.routes.ts`): yalnız patron oturumu
+  (`clientType: "patron"`) + `patron-app:login`, yalnız kendi adına. Tablo `patron_push_tokens`; ham belirteç kısa
+  kimlik halkasıyla sarılı (`ptk1:`), halka yoksa 503 `PUSH_ANAHTAR_YOK`; yanıt/günlük/audit ham ya da özet taşımaz.
+- Kapı: `bildirim.patronPushEnabled` ∧ `bildirim.gelenKutusuEnabled` (`patronPushGateOpen`); kapalıyken POST 409
+  `PATRON_PUSH_KAPALI`, `/auth/me` `patronPush` 0, iş dışarı istek atmaz. DELETE kapıdan bağımsız başarılıdır.
+- Kayıt `clientToken` taşımaz: belirteç özeti UNIQUE doğal anahtardır, aynı belirteç tekrar gelirse aynı satır güncellenir.
+- Kullanıcı başına 10 canlı cihaz; aşan EN ESKİ (son görülme) bırakılır. Belirteç oturumuyla yaşar (çıkış, parola,
+  pasif, süre dolumu → bırakılır). `kaydet`/`birak` yalnız 30 sn'lik işte (`jobs/patron-push.job.ts`), hata geri çekilir.
