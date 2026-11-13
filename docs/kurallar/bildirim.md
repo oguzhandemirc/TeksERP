@@ -60,6 +60,7 @@
 - **[ÇEKİRDEK]** Tablet zil istemcisi (`mobil/src/services/bildirim/bellTransport.ts`) yalnız ön planda, başlık `services/clientHeaders.ts`'ten, öne dönüşte `rev`/`epoch` farkıyla tamamlar; bayrak kapalı/`/ozet` 404 iken zil/şerit/akış çizme, alarm yoklaması 15 sn (sağlıklı zilde 60 sn).
 - **[ÇEKİRDEK]** İstasyon bildirim şeridini `ScreenChrome` `topStrip` yuvasının ALTINDA çiz, `sekme=okunmamis` + `filter[kanal]/[tablet]/[ozet]` cevabını süzmeden göster; sesi `sesli` alanından, `soundGate` ile satır (id+sayaç) başına bir kez çal.
 - **[ÇEKİRDEK]** Patron push belirtecini yalnız `services/patron-push/` yazsın: patron oturumundan, kendi adına, ham değer halkayla sarılı (halka yoksa 503); kayıt `patronPushGateOpen` (push ∧ gelen kutusu bayrağı) ister, bırakma kapıdan bağımsızdır; belirteç oturumuyla yaşar; buluta `kaydet`/`birak` yalnız iş turunda, kapı ∧ `pushBridgeEligibility` iken <sub>(arşiv:2026-11-13 push-erp)</sub>.
+- **[ÇEKİRDEK]** Patron telefonu dürtünü yalnız dağıtıcı tx'inde `enqueuePatronPushTx` yazsın (teslim `pp` ∧ push bayrağı ∧ canlı belirteç; kuyrukta metin ve belirteç yok); gönderim yalnız `patron-push` iş turunda kapı ∧ `pushBridgeEligibility` iken, satır başına atomik claim ve hız bütçesiyle; kapı kapalıyken canlı dürt ATLANDI olur, okunan bildirimin dürtü İPTAL <sub>(arşiv:2026-11-13 push-durt)</sub>.
 
 ## Bekçiler — bu alana dokununca koş
 

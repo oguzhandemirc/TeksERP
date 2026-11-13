@@ -1,10 +1,10 @@
-# Patron push köprüsü — fabrika ↔ bulut sözleşmesi (P1, 2026-11-13)
+# Patron push köprüsü — fabrika ↔ bulut sözleşmesi (P1–P3, 2026-11-13)
 
 > Bulut tarafı `patron/sunucu` (uçlar `src/http/factory-routes.ts`, kapı `src/services/push-bridge-auth.ts`, servis
 > `src/services/push-bridge.ts`); tel şemaları `patron/sunucu/src/wire/esitleme.ts` ↔ fabrika aynası
 > `Teks-Erp/src/cloud-sync/wire/esitleme.ts` (bayt-eşit, `test_bulut_tel_aynasi`). Bekçiler `test_bildirim_koprusu`,
 > `test_bildirim_koprusu_sertlik` (inceleme düzeltmeleri 2026-11-13).
-> Plan ve kararlar: arşiv `docs/history/arsiv/2026-11.md` § "Patron push köprüsü P1". Fabrika tarafı P2/P3'te yazılır.
+> Plan ve kararlar: arşiv `docs/history/arsiv/2026-11.md` § "Patron push köprüsü P1". Fabrika tarafı §6 (P2) ve §7 (P3).
 
 ## 1. Model
 
@@ -111,3 +111,20 @@ ya da kayıt düşerse yineleme yeniden gönderir (çift bildirim olasılığı 
 - Kayıt `clientToken` taşımaz: belirteç özeti UNIQUE doğal anahtardır, aynı belirteç tekrar gelirse aynı satır güncellenir.
 - Kullanıcı başına 10 canlı cihaz; aşan EN ESKİ (son görülme) bırakılır. Belirteç oturumuyla yaşar (çıkış, parola,
   pasif, süre dolumu → bırakılır). `kaydet`/`birak` yalnız 30 sn'lik işte (`jobs/patron-push.job.ts`), hata geri çekilir.
+
+## 7. Fabrika dürtü (P3, 2026-11-13)
+
+- Kanal `PATRON_PUSH` her türde seçilebilir; varsayılan açık yalnız `dokuma.tezgah-alarmi`, `kimlik.yeni-cihaz-girisi`,
+  `kimlik.supheli-giris-denemesi`, `cari.kilitlendi`. Karar `decideDeliveries` (`pp`): kanal açık ∧ yalnız-özet değil ∧
+  (nöbetteki ALARM ∨ sessiz saat susturmuyor). Panelde anahtar yok (P4'te uygulamada); panel/tablet değeri aynen geri yollar.
+- Kuyruk `patron_push_nudges` (kutu satırı başına, FK CASCADE): dağıtıcı tx'inde `enqueuePatronPushTx` yazar (push bayrağı ∧
+  canlı belirteç); tx geri alınırsa dürt yok; bekleyen dürt varken birleşen olay ikinci dürt doğurmaz. Metin ve belirteç
+  kuyrukta YOK.
+- Gönderim `jobs/patron-push.job.ts` turunun son adımı (`services/patron-push/nudge-round.ts`): kapı ya da uygunluk yoksa
+  canlı satırlar ATLANDI, dışarı istek yok. Açıkken bayat claim (5 dk) geri · 24 sa → VAZGECILDI · okunmuş/çözülmüş kutu →
+  IPTAL · hız bütçesi (120/dk, tur ≤ 60) kadar satır, her biri atomik claim. Gövde kutudan TAM METİN, `data {bildirimId,
+  rota: "/bildirimler"}`, en çok 20 KAYITLI belirteç.
+- Sonuç eşlemesi (§3 tablosunun fabrika karşılığı): GONDERILDI/KAPALI → satır GONDERILDI · GECERSIZ ve `gecersiz[]` →
+  belirteç yerelde BIRAKILDI (`birak` yok) · BAGSIZ → belirteç BEKLIYOR + dürt yeniden · GECICI → yeniden · KALICI → vazgeç.
+  HTTP 401/403 → tur durur, deneme sayılmaz, 5 dk · 429 → 60 sn duraklama · 5xx/ağ/409 → geri çekilme (30 sn × 2^n ≤ 1 sa) ·
+  diğer 4xx → vazgeç. Terminal satır 7 gün sonra budanır. Bekçi `test_patron_push_durt`.
