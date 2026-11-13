@@ -60,6 +60,7 @@ import { isHostedInstallation } from "../services/helpers/install-class.helper";
 import { redactLoginMethods } from "../services/helpers/hosted-public-surface.helper";
 import "../types/express-augment";
 import { appliesHostedBearerRule } from "../services/hosted-second-factor";
+import { readTurnstilePublicSiteKey } from "../services/turnstile/turnstile-config";
 
 const webTotpSchema = z.strictObject({
   optOut: z.boolean(),
@@ -620,7 +621,7 @@ export class AuthController {
    *     tags: [Auth]
    *     summary: Mobil giriş yöntemleri (public — login ekranı auth'suz okur)
    *     responses:
-   *       200: { description: "{ enabled: (list|pin|card)[], primary, companyName, lisansDurduruldu, lisansEtkinlesmedi, unpairedPasswordOnly }" }
+   *       200: { description: "{ enabled: (list|pin|card)[], primary, companyName, lisansDurduruldu, lisansEtkinlesmedi, unpairedPasswordOnly, turnstileSiteKey }" }
    */
   static async loginMethods(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
@@ -632,10 +633,11 @@ export class AuthController {
       const lisansEtkinlesmedi = isActivationLockedBeforeLogin();
       // Onaysız-parola kipi: tablet personel listesi yerine kullanıcı adı + parola formu gösterir.
       const unpairedPasswordOnly = Boolean(req.unapprovedDevice);
+      const turnstileSiteKey = await readTurnstilePublicSiteKey(); // V1c: alan yalnız koruma açıkken (aksi bayt-aynı)
       res.status(200).json({
         success: true,
         data: redactLoginMethods(
-          { ...methods, companyName, lisansDurduruldu, lisansEtkinlesmedi, unpairedPasswordOnly },
+          { ...methods, companyName, lisansDurduruldu, lisansEtkinlesmedi, unpairedPasswordOnly, ...(turnstileSiteKey ? { turnstileSiteKey } : {}) },
           { hosted: isHostedInstallation(), approvedDevice: Boolean(req.device) },
         ),
       });

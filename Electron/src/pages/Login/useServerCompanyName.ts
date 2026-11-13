@@ -59,3 +59,9 @@ export function useLoginActivationLocked(): boolean {
   }, [known, locked]);
   return locked;
 }
+
+/** Turnstile site anahtarı (V1c): yalnız sunucu tarayıcı girişinde korumayı açtıysa gelir; eski backend göndermez. */
+export function useLoginTurnstileSiteKey(): string | null {
+  const q = useLoginMethods();
+  return q.data?.data?.turnstileSiteKey ?? null;
+}

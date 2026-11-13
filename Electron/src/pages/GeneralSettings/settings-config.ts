@@ -2917,7 +2917,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     label: "İnternetten Giriş",
     icon: ShieldCheck,
     description: "İnternetten girişte iki adımlı doğrulama: kullanıcı seçer ya da herkese zorunlu.",
-    keywords: "iki adımlı doğrulama 2fa totp kod web tarayıcı internet bulut giriş güvenlik parola kapat zorunlu tercih",
+    keywords: "iki adımlı doğrulama 2fa totp kod web tarayıcı internet bulut giriş güvenlik parola kapat zorunlu tercih robot bot captcha turnstile cloudflare spam",
     kind: "flags",
     section: "system",
     permissionAny: [SETTINGS_ADMIN_PERMISSION],
