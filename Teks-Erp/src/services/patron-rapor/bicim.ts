@@ -1,12 +1,13 @@
 // =============================================================================
 // Patron raporu koşum satırı → tel biçimi (bulut `ReportRequest` / `ReportRequestDetail`, `patron/sunucu/src/wire/api.ts`)
 // =============================================================================
-// Ekler (eski ekran yok sayar): `baslik`, `sureMs`, `parametreOzeti`, `olusturan`. İstek eşzamanlı olduğu için
+// Ekler (eski ekran yok sayar): `baslik`, `sureMs`, `parametreOzeti`, `olusturan`, `dosyaBicimleri`. İstek eşzamanlı olduğu için
 // `BEKLIYOR`/`IPTAL` durumu hiç doğmaz. Tarih özeti fabrika diliminde (`constants/time`).
 // =============================================================================
 import type { Prisma } from "@prisma/client";
 import { REPORT_BY_KEY } from "../../constants/report-catalog";
 import { factoryDateTr, resolveRangeStart } from "../../constants/time";
+import { fileFormatsOf } from "./disa-aktar/spec";
 
 export const RUN_SELECT = {
   id: true, userId: true, reportKey: true, params: true, status: true, errorCode: true, durationMs: true,
@@ -63,6 +64,8 @@ export function toDetail(r: RunRowWithResult) {
   const ready = r.status === "HAZIR" && r.result !== null;
   return {
     ...toRequest(r),
+    /** İndirilebilir dosya biçimleri (`GET /:id/dosya`); zarfsız/HATA'lı koşumda boş — eski uygulama yok sayar. */
+    dosyaBicimleri: fileFormatsOf(r.status, r.result),
     sonuc: ready ? { veri: r.result, hesaplandi: (r.finishedAt ?? r.createdAt).toISOString(), kaynakUfuk: r.createdAt.toISOString() } : null,
   };
 }

@@ -12,7 +12,7 @@ Yeni paket eklerken: önce `KUTUPHANELER.md` §1 (tek kütüphane ilkesi) ve §3
 
 Bu tablo **kayıtlı kararın kendisidir**: `package.json > dependencies` ile bu tablo arasındaki fark bekçi kırmızısıdır ([KU-08]). Backend'in izinli paket listesi bugüne kadar `Teks-Erp/CLAUDE.md` § Paketler'de yaşıyordu; **liste buraya taşındı**, CLAUDE.md yalnız buraya işaret eder (aynı cümle iki yerde yaşarsa biri bayatlar — `README.md` § Üç belge katmanı).
 
-### 2.1 Backend (`Teks-Erp/`) — CommonJS, 22 dependency
+### 2.1 Backend (`Teks-Erp/`) — CommonJS, 23 dependency
 
 | İhtiyaç | Paket | Not / reddedilen |
 |---|---|---|
@@ -23,6 +23,7 @@ Bu tablo **kayıtlı kararın kendisidir**: `package.json > dependencies` ile bu
 | Barkod sembolü | `bwip-js` (7 dosya) | — |
 | Belge şablon dili | `liquidjs` **10.30.0 SABİT** (belge tasarımcısı, `services/document-template/motor/`) | KATI ayar + etiket/filtre izin listesi; echo/cycle/capture sarmalayıcıları bu sürümde ölçüldü (§9 2026-10-24) · Handlebars/Nunjucks/Eta/EJS reddedildi; refakat kartı RAW_HTML `{{alan}}` motoru AYRI kalır |
 | Rapor analizi (korelasyon) | `simple-statistics` **7.12.1 SABİT** (yalnız `services/reports/anlati/istatistik/`) | katsayı paketten; olasılık (t, ki-kare kuyruğu) kendi `dagilim.ts` ~80 satır (KARARLAR: p-değeri paketi yok) · `jstat`/`mathjs` reddedildi (§9 2026-10-25) |
+| Excel (.xlsx) | `exceljs` ^4.4.0 — **dinamik import**, yalnız `services/patron-rapor/disa-aktar/xlsx.ts` (patron rapor dosyası) | panelle AYNI paket/sürüm (PDF = Excel tek spec, altın dosya eşitliği) · SheetJS/xlsx ve elle zip yazıcı reddedildi (§9 2026-11-13) |
 | Font rasteri | `opentype.js` (2 dosya, DejaVu glif) | bwip ile ÇİFT DEĞİL: native yolun `asciiFold` kısıtını kaldıran Türkçe glif rasteri |
 | mDNS ilanı | `bonjour-service` **1.4.4 SABİT** | [KU-11]; tembel `require` + try/catch, tek dosya `jobs/mdns-advertiser.job.ts` |
 | Ortam | `dotenv` | — |

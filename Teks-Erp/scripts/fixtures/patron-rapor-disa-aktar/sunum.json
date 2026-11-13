@@ -1,0 +1,64 @@
+{
+  "anahtar": "sales/order-intake",
+  "baslik": "Sipariş Girişi <script>alert(1)</script>",
+  "soru": "Ne kadar sipariş aldık & kimden?",
+  "donem": { "from": "2026-11-01", "to": "2026-11-13", "etiket": "01.11.2026 – 13.11.2026" },
+  "kiyasDonemi": { "from": "2026-10-01", "to": "2026-10-13", "etiket": "Ekim 2026" },
+  "anaSayi": { "olcu": "siparis_metre", "ad": "Sipariş metresi", "deger": 42300.25, "birim": "m", "kiyas": { "deger": 39000, "fark": 3300.25, "yuzde": 8.46, "yon": "artti", "durum": "iyi" } },
+  "yanSayilar": [
+    { "olcu": "tutar", "ad": "Tutar", "deger": 1234567.891, "birim": "TRY", "kiyas": { "deger": null, "fark": null, "yuzde": null, "yon": null, "durum": "notr" } },
+    { "olcu": "oran", "ad": "Zamanında", "deger": 84.44, "birim": "yuzde", "kiyas": { "deger": 90, "fark": -5.56, "yuzde": -6.2, "yon": "azaldi", "durum": "kotu" } },
+    { "olcu": "adet", "ad": "Sipariş sayısı", "deger": null, "birim": "siparis", "olculemedi": "Veri yok" },
+    { "olcu": "fazla", "ad": "Dördüncü (basılmaz)", "deger": 1, "birim": "adet" }
+  ],
+  "anlati": [
+    { "kural": "a", "onem": 0.9, "metin": "Sipariş metresi %8,5 arttı \"önemli\".", "kanit": {} },
+    { "kural": "b", "onem": 0.8, "metin": "En büyük müşteri <b>Kaya</b> & Ortakları.", "kanit": {} },
+    { "kural": "c", "onem": 0.7, "metin": "Üçüncü cümle.", "kanit": {} },
+    { "kural": "d", "onem": 0.6, "metin": "Dördüncü cümle.", "kanit": {} },
+    { "kural": "e", "onem": 0.5, "metin": "Beşinci cümle.", "kanit": {} },
+    { "kural": "f", "onem": 0.4, "metin": "Altıncı cümle (basılmaz).", "kanit": {} }
+  ],
+  "grafik": {
+    "tur": "cizgi",
+    "eksen": { "x": { "ad": "Gün", "tur": "zaman" }, "y": { "ad": "Metre", "birim": "m" } },
+    "seriler": [ { "ad": "Bu dönem", "veri": [100, null, 250.5] }, { "ad": "Önceki", "veri": [90, 80, 70], "soluk": true } ],
+    "kategoriler": ["2026-11-01", "2026-11-02T21:30:00.000Z", "2026-11"]
+  },
+  "tablo": {
+    "kolonlar": [
+      { "anahtar": "musteri", "baslik": "Müşteri" },
+      { "anahtar": "metre", "baslik": "Metre", "birim": "m" },
+      { "anahtar": "tutar", "baslik": "Tutar", "birim": "TRY" },
+      { "anahtar": "adet", "baslik": "Sipariş", "birim": "siparis" },
+      { "anahtar": "oran", "baslik": "Pay", "birim": "yuzde", "hiza": "sol" }
+    ],
+    "satirlar": [
+      { "musteri": "Kaya & Ortakları <img src=x onerror=alert(1)>", "metre": 1200.55, "tutar": 325684.9, "adet": 3, "oran": 12.5 },
+      { "musteri": "\"Tırnaklı\" Tekstil", "metre": 800, "tutar": null, "adet": 1, "oran": -0.04 },
+      { "musteri": "İğne Şirketi", "metre": 0, "tutar": 1000, "adet": 0, "oran": null }
+    ],
+    "toplam": { "musteri": "Toplam", "metre": 2000.55, "tutar": 326684.9, "adet": 4, "oran": 100 },
+    "kesildi": { "gosterilen": 3, "toplam": 1250 }
+  },
+  "tanimlar": [ { "ad": "Sipariş metresi", "aciklama": "Onaylı siparişlerin <metre> toplamı." } ],
+  "parametreler": [
+    { "ad": "dateFrom", "etiket": "Başlangıç", "tur": "tarih", "deger": "2026-11-01" },
+    { "ad": "musteri", "etiket": "Müşteri", "tur": "cokluSecim", "deger": ["c1", "c9"], "secenekler": [ { "deger": "c1", "etiket": "Kaya & Ortakları" } ] },
+    { "ad": "renk", "etiket": "Renk", "tur": "secim", "deger": null },
+    { "ad": "varyant", "etiket": "Kırılım", "tur": "secim", "deger": null }
+  ],
+  "varyant": {
+    "boyut": "musteri", "boyutEtiketi": "Müşteri", "secili": null, "digerleri": [],
+    "hucreler": [
+      { "deger": "c1", "ad": "Kaya", "anaSayi": { "olcu": "siparis_metre", "ad": "Sipariş metresi", "deger": 1200, "birim": "m", "kiyas": { "deger": 1200, "fark": 0, "yuzde": 0, "yon": "degismedi", "durum": "notr" } } },
+      { "deger": "c2", "ad": "Ak <Tekstil>", "anaSayi": { "olcu": "siparis_metre", "ad": "Sipariş metresi", "deger": 500, "birim": "m", "kiyas": { "deger": 0, "fark": 500, "yuzde": null, "yon": "artti", "durum": "iyi" } } }
+    ]
+  },
+  "donemler": [
+    { "from": "2026-09-01", "to": "2026-09-30", "etiket": "Eylül 2026", "anaSayi": { "olcu": "siparis_metre", "ad": "Sipariş metresi", "deger": null, "birim": "m", "olculemedi": "Kayıt yok" } },
+    { "from": "2026-10-01", "to": "2026-10-31", "etiket": "Ekim 2026", "anaSayi": { "olcu": "siparis_metre", "ad": "Sipariş metresi", "deger": 39000, "birim": "m" } },
+    { "from": "2026-11-01", "to": "2026-11-13", "etiket": "Kasım 2026", "anaSayi": { "olcu": "siparis_metre", "ad": "Sipariş metresi", "deger": 42300.25, "birim": "m", "kiyas": { "deger": 39000, "fark": 3300.25, "yuzde": 8.46, "yon": "artti", "durum": "iyi" } } }
+  ],
+  "uyarilar": ["Fiyatsız 2 sipariş tutara girmedi & ayrıca sayıldı."]
+}

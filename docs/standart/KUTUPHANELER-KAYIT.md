@@ -2,6 +2,14 @@
 
 > `KUTUPHANELER.md` §9'dan bölündü (2026-11-02; o dosya boyut tavanına 202 bayt kalmıştı — kural kalır, ENVANTER ayrılır, §2 → `KUTUPHANELER-TABLO.md` emsali). Kayıt biçimi `KUTUPHANELER.md` §3; en yeni kayıt üstte.
 
+### exceljs@^4.4.0 · backend · 2026-11-13
+1. Problem      : patron telefon uygulaması (ERP kipi) rapor koşumunu Excel olarak paylaşmalı; dosya fabrikada SAKLI sonuçtan, panelle aynı spec'ten üretilir (`GET /api/patron/v1/raporlar/:id/dosya`). Kullanıcı onayı 2026-11-13 (koordinatör iletti); §2.1'e "Excel (.xlsx)" satırı
+2. Alternatifler: SheetJS `xlsx` (panelde reddedilmiş, iki ayrı motor PDF = Excel eşitliğini bozar) · elle zip + SpreadsheetML yazıcı ([KU-07]; yeni motor + bakım yükü — reddedildi) · Excel'i telefonda üretmek (RN/Hermes'te Node stream bağımlılığı riskli, spec üçüncü kopya olur — reddedildi) — SEÇİLDİ: panelle aynı paket
+3. Boyut/biçim  : saf JS, native yok, CommonJS; ~1 MB + geçişliler (`jszip` MIT seçeneği, `archiver`…); açılışı şişirmesin diye ilk dosyada `await import` ([KU-17])
+4. Bakım        : 4.4.0 (panelle aynı caret); sürüm atlaması iki projede birlikte yapılır, altın dosya (`scripts/fixtures/patron-rapor-disa-aktar/`) ölçer
+5. Lisans       : MIT (geçişli `jszip` "(MIT OR GPL-3.0-or-later)" → MIT, [KU-10])
+6. Dağıtım      : backend paketinde, native yok; korumalı paket yükleyicisini etkilemez (tembel `import`)
+
 ### @fontsource-variable/inter@^5.3.0 + @fontsource/dm-sans@^5.3.0 + @fontsource/nunito-sans@^5.3.0 + @fontsource/source-serif-4@^5.3.1 · Electron · 2026-11-12
 1. Problem      : kullanıcı kararı 2026-11-12 — panel yazısı "yumuşak ve okunaklı" olsun, yazı tipleri arasında geçiş yapılsın, Inter varsayılan; Görünüm › Yazı tipi (`appearance.typeface`, `data-typeface`); §2 "Font" satırı genişler, yeni ihtiyaç satırı açılmaz
 2. Alternatifler: Google Fonts CDN (fabrika çevrimdışı olabilir, dışarı istek — reddedildi) · sistem yazısı yığını (makineye göre değişir, Türkçe glif/rakam hizası denetimsiz — reddedildi) · woff2'yi elle depoya koymak (sürüm/lisans takibi elle — reddedildi)

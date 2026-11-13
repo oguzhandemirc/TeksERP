@@ -1,0 +1,380 @@
+[
+  {
+    "name": "Özet",
+    "preamble": [
+      [
+        "Sipariş Girişi <script>alert(1)</script>"
+      ],
+      [
+        "Ne kadar sipariş aldık & kimden?"
+      ],
+      [
+        "Dönem: 01.11.2026 – 13.11.2026"
+      ],
+      [
+        "Kıyas: Ekim 2026"
+      ],
+      [
+        "Müşteri: Kaya & Ortakları, c9 · Renk: Tümü · Kırılım: Tek"
+      ],
+      [
+        "Oluşturuldu: 13.11.2026 10:15"
+      ],
+      [
+        "Basım: 13.11.2026 10:30"
+      ]
+    ],
+    "columns": [
+      {
+        "header": "Bölüm",
+        "key": "b",
+        "width": 18
+      },
+      {
+        "header": "Ad",
+        "key": "a",
+        "width": 60
+      },
+      {
+        "header": "Değer",
+        "key": "d",
+        "width": 40
+      },
+      {
+        "header": "Kıyas",
+        "key": "k",
+        "width": 28
+      }
+    ],
+    "rows": [
+      {
+        "b": "Ana sayı",
+        "a": "Sipariş metresi",
+        "d": "42300,3 m",
+        "k": "▲ %8,5 (Ekim 2026: 39000 m)"
+      },
+      {
+        "b": "Yan sayı",
+        "a": "Tutar",
+        "d": "1.234.567,89 TL",
+        "k": ""
+      },
+      {
+        "b": "Yan sayı",
+        "a": "Zamanında",
+        "d": "%84,4",
+        "k": ""
+      },
+      {
+        "b": "Yan sayı",
+        "a": "Sipariş sayısı",
+        "d": "Ölçülemedi",
+        "k": ""
+      },
+      {
+        "b": "Ne görüyoruz?",
+        "a": "Sipariş metresi %8,5 arttı \"önemli\".",
+        "d": "",
+        "k": ""
+      },
+      {
+        "b": "Ne görüyoruz?",
+        "a": "En büyük müşteri <b>Kaya</b> & Ortakları.",
+        "d": "",
+        "k": ""
+      },
+      {
+        "b": "Ne görüyoruz?",
+        "a": "Üçüncü cümle.",
+        "d": "",
+        "k": ""
+      },
+      {
+        "b": "Ne görüyoruz?",
+        "a": "Dördüncü cümle.",
+        "d": "",
+        "k": ""
+      },
+      {
+        "b": "Ne görüyoruz?",
+        "a": "Beşinci cümle.",
+        "d": "",
+        "k": ""
+      },
+      {
+        "b": "Bu rapor ne sayar?",
+        "a": "Sipariş metresi",
+        "d": "Onaylı siparişlerin <metre> toplamı.",
+        "k": ""
+      },
+      {
+        "b": "Uyarı",
+        "a": "Fiyatsız 2 sipariş tutara girmedi & ayrıca sayıldı.",
+        "d": "",
+        "k": ""
+      }
+    ]
+  },
+  {
+    "name": "Grafik verisi",
+    "preamble": [
+      [
+        "Sipariş Girişi <script>alert(1)</script>"
+      ],
+      [
+        "Ne kadar sipariş aldık & kimden?"
+      ],
+      [
+        "Dönem: 01.11.2026 – 13.11.2026"
+      ],
+      [
+        "Kıyas: Ekim 2026"
+      ],
+      [
+        "Müşteri: Kaya & Ortakları, c9 · Renk: Tümü · Kırılım: Tek"
+      ],
+      [
+        "Oluşturuldu: 13.11.2026 10:15"
+      ],
+      [
+        "Basım: 13.11.2026 10:30"
+      ]
+    ],
+    "columns": [
+      {
+        "header": "Gün",
+        "key": "k"
+      },
+      {
+        "header": "Bu dönem (m)",
+        "key": "s0",
+        "numFmt": "0.0",
+        "align": "right"
+      },
+      {
+        "header": "Önceki (m)",
+        "key": "s1",
+        "numFmt": "0",
+        "align": "right"
+      }
+    ],
+    "rows": [
+      {
+        "k": "01.11.2026",
+        "s0": 100,
+        "s1": 90
+      },
+      {
+        "k": "03.11.2026",
+        "s0": "—",
+        "s1": 80
+      },
+      {
+        "k": "11.2026",
+        "s0": 250.5,
+        "s1": 70
+      }
+    ]
+  },
+  {
+    "name": "Müşteri kırılımı",
+    "preamble": [
+      [
+        "Sipariş Girişi <script>alert(1)</script>"
+      ],
+      [
+        "Ne kadar sipariş aldık & kimden?"
+      ],
+      [
+        "Dönem: 01.11.2026 – 13.11.2026"
+      ],
+      [
+        "Kıyas: Ekim 2026"
+      ],
+      [
+        "Müşteri: Kaya & Ortakları, c9 · Renk: Tümü · Kırılım: Tek"
+      ],
+      [
+        "Oluşturuldu: 13.11.2026 10:15"
+      ],
+      [
+        "Basım: 13.11.2026 10:30"
+      ]
+    ],
+    "columns": [
+      {
+        "header": "Müşteri",
+        "key": "ad"
+      },
+      {
+        "header": "Sipariş metresi",
+        "key": "deger",
+        "align": "right"
+      },
+      {
+        "header": "Kıyas",
+        "key": "kiyas"
+      }
+    ],
+    "rows": [
+      {
+        "ad": "Kaya",
+        "deger": "1200 m",
+        "kiyas": "＝ Değişmedi (Ekim 2026: 1200 m)"
+      },
+      {
+        "ad": "Ak <Tekstil>",
+        "deger": "500 m",
+        "kiyas": "▲ 500 m (Ekim 2026: 0 m)"
+      }
+    ]
+  },
+  {
+    "name": "Dönem kıyası",
+    "preamble": [
+      [
+        "Sipariş Girişi <script>alert(1)</script>"
+      ],
+      [
+        "Ne kadar sipariş aldık & kimden?"
+      ],
+      [
+        "Dönem: 01.11.2026 – 13.11.2026"
+      ],
+      [
+        "Kıyas: Ekim 2026"
+      ],
+      [
+        "Müşteri: Kaya & Ortakları, c9 · Renk: Tümü · Kırılım: Tek"
+      ],
+      [
+        "Oluşturuldu: 13.11.2026 10:15"
+      ],
+      [
+        "Basım: 13.11.2026 10:30"
+      ]
+    ],
+    "columns": [
+      {
+        "header": "Dönem",
+        "key": "donem"
+      },
+      {
+        "header": "Sipariş metresi",
+        "key": "deger",
+        "align": "right"
+      },
+      {
+        "header": "Kıyas",
+        "key": "kiyas"
+      }
+    ],
+    "rows": [
+      {
+        "donem": "Eylül 2026",
+        "deger": "Ölçülemedi (Kayıt yok)",
+        "kiyas": ""
+      },
+      {
+        "donem": "Ekim 2026",
+        "deger": "39000 m",
+        "kiyas": ""
+      },
+      {
+        "donem": "Kasım 2026",
+        "deger": "42300,3 m",
+        "kiyas": "▲ %8,5 (Ekim 2026: 39000 m)"
+      }
+    ]
+  },
+  {
+    "name": "Tablo",
+    "preamble": [
+      [
+        "Sipariş Girişi <script>alert(1)</script>"
+      ],
+      [
+        "Ne kadar sipariş aldık & kimden?"
+      ],
+      [
+        "Dönem: 01.11.2026 – 13.11.2026"
+      ],
+      [
+        "Kıyas: Ekim 2026"
+      ],
+      [
+        "Müşteri: Kaya & Ortakları, c9 · Renk: Tümü · Kırılım: Tek"
+      ],
+      [
+        "Oluşturuldu: 13.11.2026 10:15"
+      ],
+      [
+        "Basım: 13.11.2026 10:30"
+      ]
+    ],
+    "columns": [
+      {
+        "header": "Müşteri",
+        "key": "musteri",
+        "align": "left"
+      },
+      {
+        "header": "Metre (m)",
+        "key": "metre",
+        "numFmt": "0.0",
+        "align": "right"
+      },
+      {
+        "header": "Tutar (TL)",
+        "key": "tutar",
+        "numFmt": "#,##0.00",
+        "align": "right"
+      },
+      {
+        "header": "Sipariş (sipariş)",
+        "key": "adet",
+        "numFmt": "0",
+        "align": "right"
+      },
+      {
+        "header": "Pay (%)",
+        "key": "oran",
+        "numFmt": "0.0",
+        "align": "left"
+      }
+    ],
+    "rows": [
+      {
+        "musteri": "Kaya & Ortakları <img src=x onerror=alert(1)>",
+        "metre": 1200.55,
+        "tutar": 325684.9,
+        "adet": 3,
+        "oran": 12.5
+      },
+      {
+        "musteri": "\"Tırnaklı\" Tekstil",
+        "metre": 800,
+        "tutar": null,
+        "adet": 1,
+        "oran": -0.04
+      },
+      {
+        "musteri": "İğne Şirketi",
+        "metre": 0,
+        "tutar": 1000,
+        "adet": 0,
+        "oran": null
+      }
+    ],
+    "totalRow": {
+      "musteri": "Toplam",
+      "metre": 2000.55,
+      "tutar": 326684.9,
+      "adet": 4,
+      "oran": 100
+    },
+    "notes": [
+      "İlk 3 satır gösteriliyor (toplam 1250)."
+    ]
+  }
+]

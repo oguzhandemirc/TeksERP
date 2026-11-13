@@ -30,6 +30,8 @@ export interface ErpMe {
   readonly patronReadSets?: readonly string[];
   /** V5a rapor ucu sözleşme sürümü (`/api/patron/v1/raporlar`); yoksa rapor gizli. */
   readonly patronReportApi?: number;
+  /** Rapor koşumu dosyası ucu sürümü (`GET /patron/v1/raporlar/:id/dosya`); yoksa PDF/Excel düğmeleri gizli. */
+  readonly patronReportExport?: number;
 }
 
 export interface ErpLoginResult {
