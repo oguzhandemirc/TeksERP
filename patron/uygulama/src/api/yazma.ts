@@ -71,6 +71,31 @@ export interface RenkGovdesi {
   readonly hex?: string;
 }
 
+/** Fiyat yönü (ERP `PriceKind`). */
+export type FiyatYonu = "SALE" | "PURCHASE";
+
+/** ERP yürürlükteki fiyat satırı (V5c); `surum` = satırın `updatedAt`i (anahtarın bayat koruma sürümü). */
+export interface FiyatKaydi {
+  readonly id: string;
+  readonly surum: string;
+  /** null = kart varsayılanı; dolu = o carinin istisnası. */
+  readonly cariId: string | null;
+  readonly cariAdi: string;
+  readonly yon: FiyatYonu;
+  readonly doviz: string;
+  /** Ondalık dizi ("12.5"). */
+  readonly fiyat: string;
+}
+
+/** Fiyat anahtarı + değer; `fiyat` ondalık dizi. */
+export interface FiyatGovdesi {
+  readonly urunId: string;
+  readonly cariId: string | null;
+  readonly yon: FiyatYonu;
+  readonly doviz: string;
+  readonly fiyat: string;
+}
+
 export interface Yazici {
   /** Yaratma nereye gider: gelen kutusu MESAJI (fabrika sonra işler) ya da doğrudan fabrika kaydı. */
   readonly kanal: "gelen-kutusu" | "dogrudan";
@@ -90,6 +115,10 @@ export interface Yazici {
   renkOku(id: string): Promise<RenkKaydi>;
   renkGuncelle(id: string, surum: string, patch: Readonly<Record<string, unknown>>): Promise<RenkKaydi>;
   renkPasif(id: string): Promise<void>;
+  /** Ürünün yürürlükteki fiyatları (kart varsayılanı + cari istisnaları). */
+  fiyatlar(urunId: string): Promise<FiyatKaydi[]>;
+  /** Var olanı günceller, yoksa açar. `surum`: anahtarın görülen satırı (yoksa null → gönderilmez). */
+  fiyatYaz(g: FiyatGovdesi, surum: string | null): Promise<void>;
 }
 
 const seg = (v: string) => encodeURIComponent(v);
@@ -113,6 +142,8 @@ export function createBulutYazici(api: Api): Yazici {
     renkOku: yok,
     renkGuncelle: yok,
     renkPasif: yok,
+    fiyatlar: yok,
+    fiyatYaz: yok,
   };
 }
 
@@ -179,6 +210,16 @@ export function renkKaydi(h: Ham | null | undefined): RenkKaydi {
   const surum = tarih(h?.updatedAt);
   if (!h || typeof h.id !== "string" || !surum) throw beklenmeyen();
   return { id: h.id, surum, kod: s(h.code), ad: s(h.name), hex: s(h.hex), aktif: h.isActive !== false };
+}
+
+const ondalik = (v: unknown): string => (typeof v === "number" && Number.isFinite(v) ? String(v) : s(v));
+
+export function fiyatKaydi(h: Ham | null | undefined): FiyatKaydi {
+  const surum = tarih(h?.updatedAt);
+  if (!h || typeof h.id !== "string" || !surum || (h.kind !== "SALE" && h.kind !== "PURCHASE")) throw beklenmeyen();
+  const cari = (h.customer ?? {}) as Ham;
+  const cariId = typeof h.customerId === "string" && h.customerId !== "" ? h.customerId : null;
+  return { id: h.id, surum, cariId, cariAdi: cariId ? s(cari.name) : "", yon: h.kind, doviz: s(h.currency) || "TRY", fiyat: ondalik(h.price) };
 }
 
 export function siparisKaydi(h: Ham | null | undefined): SiparisKaydi {
@@ -254,6 +295,17 @@ export function createErpYazici(c: ApiClient): Yazici {
     renkGuncelle: async (id, surum, patch) => renkKaydi(await c.patch<Ham>(`/colors/${seg(id)}`, { ...patch, expectedUpdatedAt: surum })),
     renkPasif: async (id) => {
       await c.del<unknown>(`/colors/${seg(id)}`);
+    },
+    // Fiyat ucu ticaret modülü kapısının arkasında: kapalıysa 403 MODULE_DISABLED, ileti aynen gösterilir.
+    fiyatlar: async (urunId) => {
+      const r = await c.get<unknown>("/item-prices", { "filter[itemId]": urunId, pageSize: 500 });
+      if (!Array.isArray(r)) throw beklenmeyen();
+      return (r as Ham[]).map(fiyatKaydi);
+    },
+    fiyatYaz: async (g, surum) => {
+      await c.post<unknown>("/item-prices", tanimli({
+        itemId: g.urunId, customerId: g.cariId, kind: g.yon, currency: g.doviz, price: Number(g.fiyat), expectedUpdatedAt: surum ?? undefined,
+      }));
     },
   };
 }

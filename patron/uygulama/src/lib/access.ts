@@ -15,6 +15,7 @@ export type ModuleKey =
   | "standart-maliyetler"
   | "cariler"
   | "renkler"
+  | "urunler"
   | "sevkiyat"
   | "uretim"
   | "stok"
@@ -52,6 +53,7 @@ export const MODULES: readonly ModuleDef[] = [
   { key: "siparisler", title: "Siparişler", route: "/siparisler", anyOf: ["bulut:siparis:oku"], sets: ["siparis"] },
   { key: "cariler", title: "Cariler", hint: "Müşteri ve tedarikçiler", route: "/cariler", anyOf: ["bulut:cari:oku", "bulut:cari-bakiye:oku", "bulut:cari:yaz"], sets: ["cari-kart"] },
   { key: "renkler", title: "Renkler", hint: "Renk tanımları", route: "/renkler", anyOf: [], sets: ["renk"], islemler: ["renk.ekle", "renk.duzenle"] },
+  { key: "urunler", title: "Ürünler", hint: "Ürün ve fiyatlar", route: "/urunler", anyOf: [], sets: ["urun"], islemler: ["fiyat.yaz"] },
   { key: "sevkiyat", title: "Sevkiyat", hint: "Sevk edilen ve bekleyen", route: "/sevkiyat", anyOf: ["bulut:sevkiyat:oku"], sets: ["sevkiyat"] },
   { key: "uretim", title: "Üretim", route: "/uretim", anyOf: ["bulut:uretim:oku"], sets: ["is-emri"] },
   { key: "stok", title: "Stok", hint: "Ham ve bitmiş stok", route: "/stok", anyOf: ["bulut:stok:oku"], sets: ["stok-karnesi"] },

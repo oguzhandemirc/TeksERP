@@ -28,6 +28,7 @@ export const MODULE_ICON: Readonly<Record<ModuleKey, { readonly domain: Domain; 
   "standart-maliyetler": { domain: "finans", icon: "calculator-outline" },
   cariler: { domain: "cariler", icon: DOMAIN_ICON.cariler },
   renkler: { domain: "uretim", icon: "color-palette-outline" },
+  urunler: { domain: "stok", icon: "cube-outline" },
   sevkiyat: { domain: "sevkiyat", icon: DOMAIN_ICON.sevkiyat },
   uretim: { domain: "uretim", icon: DOMAIN_ICON.uretim },
   stok: { domain: "stok", icon: DOMAIN_ICON.stok },
