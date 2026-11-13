@@ -111,6 +111,12 @@ const DINAMIK_IZIN_KAYNAKLARI: Record<string, readonly string[]> = {
   // matchesPermission(permissions, PATRON_LOGIN_PERMISSION) — patron türü giriş kanalı kapısı (V1); sabit permission-catalog.ts'te,
   // katalog satırını ve kapının ısırdığını test_patron_giris §4a/§7b ölçer — burada devir.
   "src/services/auth.service.ts": [`${DELEGE}scripts/test_patron_giris.ts`],
+  // Patron okuma ucu (V3a): route toplu kapısı `requirePermission(PATRON_LOGIN_PERMISSION)` (sabit permission-catalog.ts'te,
+  // kapının ısırdığını test_patron_okuma_ucu §1a/§3a ölçer); `izin-esleme` `matchesPermission(perms, row.erp)` — row ∈
+  // ERP_TO_CLOUD (sabit bulut kodlarını da taşır, burada toplanamaz) ve REPORT_PERMISSION_CODES; ERP kodlarının katalogda
+  // olduğunu test_patron_okuma_ucu §1c ölçer — devir.
+  "src/routes/patron-read.routes.ts": [`${DELEGE}scripts/test_patron_okuma_ucu.ts`],
+  "src/services/patron-read/izin-esleme.ts": [`${DELEGE}scripts/test_patron_okuma_ucu.ts`],
   // Açılış panosu kutu/hareket kapıları: `gate(ctx, GATE_PERMISSIONS.x, ...modüller)` → matchesPermission(perms, permission).
   "src/services/dashboard/pano-kaynak.ts": ["GATE_PERMISSIONS"],
   "src/services/dashboard/pano-hareketler.service.ts": ["GATE_PERMISSIONS"],

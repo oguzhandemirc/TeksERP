@@ -194,6 +194,16 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
       "(pano-kutular.service.ts:50). Router kapısı KONULAMAZ: pano her kurulumun açılış ekranıdır, modülden bağımsızdır.",
   },
   {
+    dosya: "routes/patron-read.routes.ts",
+    neden:
+      "PATRON OKUMA UCU (V3a, 2026-11-13). Router SALT-OKUMADIR (yazma ucu yok, test_patron_okuma_ucu §1b). Ticaret dokunuşu " +
+      "GEÇİŞLİ ve YANILTICIDIR: anlık kurucu (`cloud-sync/snapshots`) `DashboardService`i istasyon canlı durumu için import eder, " +
+      "aile cephesi `services/dashboard/pano-kutu-ajanda.ts`in alış siparişi okumasına uzanır; sunulan HİÇBİR küme o kutuyu çağırmaz. " +
+      "Kapı KÜME BAŞINADIR (`MODULE_GATES`, patron-read.routes.ts); sunulan kümelerin hiçbiri ticaret tablosu okumaz ve her kümenin " +
+      "modülü haritada adlı kapıya bağlıdır — test_patron_okuma_ucu §1h/§1i ölçer, ticaret kapalıyken kümelerin açık kaldığını §6d. " +
+      "Router kapısı KONULAMAZ: ticaret kapalı kurulumda patronun bütün ekranı kapanırdı.",
+  },
+  {
     dosya: "routes/customer-period-summary.routes.ts",
     neden:
       "MÜŞTERİ DÖNEM ÖZETİ (cari-be madde 3, 2026-11-12). Router SALT-OKUMADIR (CUD yok); ticaret dokunuşu yalnız GEÇİŞLİ importtur: kapı tek kaynağı " +

@@ -51,6 +51,10 @@
 //                             ayrım sonraki pakette.
 //   • /api/orders             Sipariş çekirdek; yalnız `/orders/:id/where` (İE
 //                             ilerleme kartları) UÇ BAZLI kapılı.
+// KÜME BAZLI (router kapısı yok, kapı kümenin modülünden):
+//   • /api/patron/v1          Patron okuma ucu; `MODULE_GATES` haritası kümeyi adlı
+//                             kapıya bağlar (`ozet.uretim` → üretim), modülsüz
+//                             kümeler açık kalır (`test_patron_okuma_ucu` §6).
 // Bu liste bekçinin (`test_production_regime_gate`) beklenti listesiyle
 // BİREBİR olmalı — ayrışırsa ya kapı sessizce düşer ya bekçi ölü satır sayar.
 //
