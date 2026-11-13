@@ -53,6 +53,8 @@ export interface ApiClient {
   get<T>(path: string, query?: Query): Promise<T>;
   post<T>(path: string, body: unknown): Promise<T>;
   patch<T>(path: string, body: unknown): Promise<T>;
+  /** Yalnız ERP kipi (cari pasife alma `DELETE /api/customers/:id`); bulut uç tablosu DELETE kullanmaz. */
+  del<T>(path: string): Promise<T>;
   download(path: string, query?: Query): Promise<DownloadedFile>;
 }
 
@@ -140,6 +142,7 @@ export function createClient(opts: ClientOptions): ApiClient {
     get: (path, query) => request("GET", path, undefined, query),
     post: (path, body) => request("POST", path, body ?? {}),
     patch: (path, body) => request("PATCH", path, body ?? {}),
+    del: (path) => request("DELETE", path),
     download,
   };
 }

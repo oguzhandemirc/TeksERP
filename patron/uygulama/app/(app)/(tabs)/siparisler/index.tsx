@@ -5,6 +5,7 @@ import { useRouter } from "expo-router";
 import { useState } from "react";
 import { ScrollView, View } from "react-native";
 import type { ListSearchSpec } from "../../../../src/api/wire";
+import { islemVar } from "../../../../src/api/yetenek";
 import { can } from "../../../../src/lib/access";
 import { formatNumber } from "../../../../src/lib/format";
 import { ORDER_STATUS, ORDER_STATUS_ORDER, type OrderStatus } from "../../../../src/lib/labels/siparis";
@@ -71,7 +72,7 @@ export default function Orders() {
   const chipLabel = search?.suzgec?.secenekler.find((o) => o.deger === chip)?.etiket ?? null;
   const title = search ? (chipLabel ?? "Tüm siparişler") : durum === "tumu" ? "Tüm siparişler" : ORDER_STATUS[durum].label;
   const filtered = search ? !!ara || chip !== null : durum !== "tumu";
-  const canWrite = can(permissions, "bulut:siparis:yaz");
+  const canWrite = islemVar("siparis.ekle", permissions);
   const summary = useRemote(can(permissions, "bulut:ozet:oku") ? "anlik:ozet.siparis" : null, () => api.snapshot("ozet.siparis"), { tags: ["ozet", "ozet.siparis"] });
   const refresh = () => {
     list.reload();

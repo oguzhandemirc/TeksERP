@@ -1,11 +1,12 @@
-// Yeni sipariş fabrikaya GELEN KUTUSU üzerinden gider: sipariş no, yön, durum fabrikada doğar.
-// Gövde `buildOrder` (forms.ts), gönderim `useWrite` (işlem kimliği kuralı) — yalnız görünüm yenilendi.
+// Yeni sipariş: bulutta GELEN KUTUSU mesajı, ERP'de doğrudan `POST /api/orders` (`Yazici`); no, yön, durum fabrikada doğar.
+// Gövde `buildOrder` (forms.ts), gönderim `useWrite`: işlem kimliği (`clientToken`) belirsiz hatada yapışır → çift kayıt yok.
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { addDaysToKey, factoryDayKey, fmtDayKey } from "../../../../src/lib/factory-time";
 import { buildOrder, type OrderLineInput } from "../../../../src/lib/forms";
+import { invalidate } from "../../../../src/state/changes";
 import { useSession } from "../../../../src/state/session";
 import { Screen } from "../../../../src/ui/Frame";
 import { IconChip } from "../../../../src/ui/IconChip";
@@ -26,7 +27,7 @@ const QUICK = [{ key: "0", label: "Bugün", days: 0 }, { key: "7", label: "+7 g�
 type QuickKey = (typeof QUICK)[number]["key"] | "elle";
 
 export default function NewOrder() {
-  const { api } = useSession();
+  const { yazici, offline } = useSession();
   const router = useRouter();
   const t = useTokens();
   const s = useStyles();
@@ -38,10 +39,10 @@ export default function NewOrder() {
   const [lines, setLines] = useState<Line[]>([EMPTY]);
   const [formError, setFormError] = useState<string | null>(null);
   const built = buildOrder({
-    cariKartId: cari?.id ?? null, doviz, termin, aciklama,
+    cariKartId: cari?.id ?? null, doviz, termin, aciklama: yazici.siparisNotu ? aciklama : "",
     kalemler: lines.map((l): OrderLineInput => ({ urunId: l.urun?.id ?? null, renkId: l.renk?.id ?? null, miktar: l.miktar, birimFiyat: l.birimFiyat })),
   });
-  const send = useCallback((id: string) => (built.ok ? api.inboxCreate(id, "SIPARIS", built.body) : Promise.reject(new Error(built.error))), [api, built]);
+  const send = useCallback((id: string) => (built.ok ? yazici.siparisEkle(id, built.body) : Promise.reject(new Error(built.error))), [yazici, built]);
   const w = useWrite(send);
   const setLine = (i: number, patch: Partial<Line>) => setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...patch } : l)));
 
@@ -55,14 +56,19 @@ export default function NewOrder() {
     if (!built.ok) return setFormError(built.error);
     setFormError(null);
     const r = await w.run(JSON.stringify(built.body));
-    if (r) router.replace({ pathname: "/gelen-kutusu/[mesajId]", params: { mesajId: r.mesajId } } as never);
+    if (r?.tur === "gelen-kutusu") router.replace({ pathname: "/gelen-kutusu/[mesajId]", params: { mesajId: r.mesajId } } as never);
+    else if (r) {
+      invalidate(["siparis", "ozet.siparis"]);
+      router.replace({ pathname: "/siparisler/[id]", params: { id: r.id } } as never);
+    }
   }
+  const dogrudan = yazici.kanal === "dogrudan";
 
   return (
     <Screen title="Yeni sipariş" module="siparisler" back>
       <View style={s.intro}>
-        <IconChip domain="gelenKutusu" icon="paper-plane-outline" size={32} />
-        <Text style={s.introText}>Sipariş fabrikaya gelen kutusundan iletilir; fabrika işleyince durumunu oradan izlersiniz.</Text>
+        <IconChip domain={dogrudan ? "siparisler" : "gelenKutusu"} icon={dogrudan ? undefined : "paper-plane-outline"} size={32} />
+        <Text style={s.introText}>{dogrudan ? "Sipariş fabrikaya hemen kaydedilir; numarayı fabrika verir." : "Sipariş fabrikaya gelen kutusundan iletilir; fabrika işleyince durumunu oradan izlersiniz."}</Text>
       </View>
 
       <View style={s.card}>
@@ -112,12 +118,17 @@ export default function NewOrder() {
       ))}
       <Button label="Kalem ekle" tone="secondary" icon="add-circle-outline" onPress={() => setLines((ls) => [...ls, EMPTY])} testID="kalem-ekle" />
 
-      <SectionHeader title="Not" />
-      <Field label="Açıklama (isteğe bağlı)" value={aciklama} onChangeText={setAciklama} multiline />
+      {yazici.siparisNotu ? (
+        <>
+          <SectionHeader title="Not" />
+          <Field label="Açıklama (isteğe bağlı)" value={aciklama} onChangeText={setAciklama} multiline />
+        </>
+      ) : null}
 
+      {offline ? <Banner tone="off" text="Sunucuya ulaşılamıyor; değişiklik yapılamaz" testID="yazma-kapali" /> : null}
       {formError || w.error ? <Banner tone="error" text={formError ?? w.error ?? ""} /> : null}
       <View style={s.submit}>
-        <Button label="Fabrikaya gönder" icon="paper-plane-outline" busy={w.busy} disabled={w.disabled} onPress={() => void submit()} testID="siparis-gonder" />
+        <Button label={dogrudan ? "Kaydet" : "Fabrikaya gönder"} icon={dogrudan ? "checkmark-circle-outline" : "paper-plane-outline"} busy={w.busy} disabled={w.disabled} onPress={() => void submit()} testID="siparis-gonder" />
       </View>
     </Screen>
   );

@@ -167,6 +167,9 @@
 - **[ÇEKİRDEK]** Sunucu bağlantısını yalnız `src/api/` katmanında kur (`Baglanti = {kip, tabanAdres, tasima}`); ekran kip sormaz, `Api` + yetenekle çalışır; yeni taşıma (boru) yalnız yeni `Tasima` olarak eklenir; ERP uçlarını bulut uç tablosuna (`ENDPOINTS`) koyma <sub>(arşiv:2026-11-13 V3b)</sub>.
 - **[ÇEKİRDEK]** ERP kipinde modülü ancak ana kümesi `/auth/me` `patronReadSets`te ve özelliği yetenekte varsa göster; beyan yoksa hiçbir küme açık sayılmaz; sunulmayan küme ve kipte olmayan uç ağa gitmeden 404 <sub>(arşiv:2026-11-13 V3b)</sub>.
 - **[ÇEKİRDEK]** ERP sunucusunu yalnız https ve `GET /api/client-policy/patron` yoklamasıyla kabul et; depoya yalnız kip + adres yaz, parola/kod hiçbir yere; ERP'de saklı veri 7 günde silinir, çıkışta veri + belirteç silinir, bağlantı kalır <sub>(arşiv:2026-11-13 V3b)</sub>.
+- **[ÇEKİRDEK]** Yazmayı yalnız `src/api/yazma.ts` `Yazici` üzerinden yap, açıklığı `islemVar`dan sor; bulut yaratması `inboxCreate` olarak bayt aynı kalır, ERP panelin uçlarına gider <sub>(arşiv:2026-11-13 V4b)</sub>.
+- **[ÇEKİRDEK]** ERP düzenlemesinde önce gerçek ERP kaydını oku, yalnız farkı `expectedUpdatedAt` ile yolla; 409 `STALE_RECORD`'da formu koru, sürümü "Yenile" ile al <sub>(arşiv:2026-11-13 V4b)</sub>.
+- **[ÇEKİRDEK]** Telefonda sipariş kalemi düzenleme ve İE/aktif sevkiyat taşıyan siparişi iptal etme; iptalden hemen önce önizlemeyi yeniden oku <sub>(arşiv:2026-11-13 V4b)</sub>.
 
 ### Kararlar
 

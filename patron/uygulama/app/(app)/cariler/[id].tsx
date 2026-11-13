@@ -5,7 +5,10 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
 import { Text, View } from "react-native";
+import { errorMessage } from "../../../src/api/client";
 import type { ProjectionRecord } from "../../../src/api/wire";
+import { islemVar } from "../../../src/api/yetenek";
+import { invalidate } from "../../../src/state/changes";
 import { can } from "../../../src/lib/access";
 import { cariLockView } from "../../../src/lib/cari-lock";
 import { fmtFactoryDateTime } from "../../../src/lib/factory-time";
@@ -15,7 +18,7 @@ import { useSession } from "../../../src/state/session";
 import { useRemote } from "../../../src/state/useRemote";
 import { Screen } from "../../../src/ui/Frame";
 import { IconChip } from "../../../src/ui/IconChip";
-import { Button, Muted } from "../../../src/ui/kit";
+import { Banner, Button, ConfirmButton, Muted } from "../../../src/ui/kit";
 import { ListGroup } from "../../../src/ui/ListRow";
 import { openRecord } from "../../../src/ui/nav";
 import { SectionHeader } from "../../../src/ui/SectionHeader";
@@ -77,7 +80,7 @@ function BalanceCard({ r }: { r: ProjectionRecord }) {
 
 export default function CustomerDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { api, permissions } = useSession();
+  const { api, permissions, yazici, offline } = useSession();
   const router = useRouter();
   const t = useTokens();
   const s = useStyles();
@@ -88,12 +91,31 @@ export default function CustomerDetail() {
   const orders = can(permissions, "bulut:siparis:oku");
   const movements = useListCapability().idFilter("cari-hareket", "cariHesapId") && balance;
   const [tick, setTick] = useState(0);
+  const duzenle = islemVar("cari.duzenle", permissions);
+  const pasifIzni = islemVar("cari.pasif", permissions);
+  const [pasifBusy, setPasifBusy] = useState(false);
+  const [pasifHata, setPasifHata] = useState<string | null>(null);
   const accounts = useRemoteList("cari-hesap", { cariKartId: cariId ?? undefined }, { enabled: balance && !!cariId && !!r.data });
   const recent = useRemoteList("siparis", { cariKartId: cariId ?? undefined }, { enabled: orders && !!cariId && !!r.data, limit: 10 });
   const k = asObj(r.data?.kayit);
   const kisisel = r.data?.kisisel === undefined || r.data.kisisel === null ? null : asObj(r.data.kisisel);
   const roles = cariRoles(k);
   const place = [str(k.ilce), str(k.il), str(k.ulke)].filter(Boolean).join(", ");
+  async function pasifeAl() {
+    if (!cariId || offline) return;
+    setPasifBusy(true);
+    setPasifHata(null);
+    try {
+      await yazici.cariPasif(cariId);
+      invalidate(["cari-kart"]);
+      r.reload();
+    } catch (err) {
+      // Canlı referanslı cari reddedilir: sunucunun Türkçe iletisi aynen.
+      setPasifHata(errorMessage(err));
+    } finally {
+      setPasifBusy(false);
+    }
+  }
   const refresh = () => {
     r.reload();
     accounts.reload();
@@ -121,6 +143,19 @@ export default function CustomerDetail() {
             </View>
             {str(k.varsayilanYon) ? <Text style={s.meta}>{`Varsayılan sevk yönü: ${destinationLabel(k.varsayilanYon)}`}</Text> : null}
           </View>
+          {duzenle || (pasifIzni && k.aktif !== false) ? (
+            <View style={s.actions} testID="cari-eylemler">
+              {offline ? <Banner tone="off" text="Sunucuya ulaşılamıyor; değişiklik yapılamaz" testID="yazma-kapali" /> : null}
+              {duzenle ? (
+                <Button label="Düzenle" tone="secondary" icon="create-outline" disabled={offline} testID="cari-duzenle"
+                  onPress={() => router.push({ pathname: "/cariler/duzenle", params: { id: String(cariId) } } as never)} />
+              ) : null}
+              {pasifIzni && k.aktif !== false ? (
+                <ConfirmButton label="Pasife al" question="Cari pasife alınsın mı? Açık kaydı olan cari pasife alınamaz." busy={pasifBusy} disabled={offline} onConfirm={() => void pasifeAl()} testID="cari-pasif" />
+              ) : null}
+              {pasifHata ? <Banner tone="error" text={pasifHata} testID="cari-pasif-hata" /> : null}
+            </View>
+          ) : null}
 
           {balance ? (
             <>
@@ -172,6 +207,7 @@ const useStyles = makeStyles((t) => ({
   flex: { flex: 1 },
   name: { ...typography.headline, ...tabularNums, color: t.text },
   code: { ...typography.subhead, ...tabularNums, color: t.textSecondary, marginTop: 2 },
+  actions: { gap: space.s, marginBottom: space.m },
   pills: { flexDirection: "row" as const, flexWrap: "wrap" as const, gap: space.xs },
   meta: { ...typography.footnote, color: t.textSecondary },
   zero: { ...typography.body, color: t.textSecondary },

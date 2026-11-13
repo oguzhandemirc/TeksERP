@@ -4,7 +4,7 @@ import { useRouter } from "expo-router";
 import { useState } from "react";
 import { View } from "react-native";
 import { LIST_SEARCH } from "../../../src/api/wire";
-import { can } from "../../../src/lib/access";
+import { islemVar } from "../../../src/api/yetenek";
 import { useSession } from "../../../src/state/session";
 import { FilterChip } from "../../../src/ui/FilterChip";
 import { Screen } from "../../../src/ui/Frame";
@@ -28,7 +28,7 @@ export default function Customers() {
   const [sheet, setSheet] = useState(false);
   const ara = useDebounced(term.trim(), 300);
   const list = useRemoteList("cari-kart", { ara: ara || undefined, suzgec: rol === "tumu" ? undefined : rol });
-  const canWrite = can(permissions, "bulut:cari:yaz");
+  const canWrite = islemVar("cari.ekle", permissions);
   return (
     <Screen
       title="Cariler" module="cariler"
