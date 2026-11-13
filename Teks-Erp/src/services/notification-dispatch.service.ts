@@ -31,8 +31,7 @@ import {
 } from "./helpers/notification-aggregate.helper";
 import { decideDeliveries, loadDeliveryContext, type DeliveryContext, type DeliveryReason } from "./helpers/notification-delivery.helper";
 import { hata, uyari } from "../lib/logger";
-import { enqueuePatronPushTx } from "./patron-push/nudge-enqueue";
-import { requestPatronPushRound } from "./patron-push/wake";
+import { enqueuePatronPushTx, onPatronPushQueued } from "./patron-push/nudge-enqueue";
 
 /** Advisory kilit uzayı — envanter `helpers/period-guard.helper.ts` başlığında. */
 export const NOTIFICATION_DISPATCH_LOCK_NS: number = 8040;
@@ -316,7 +315,7 @@ export function setNotificationDeliveredHook(hook: NotificationDeliveredHook | n
 }
 
 function onDelivered(r: Pick<DispatchResult, "userIds" | "alarmUserIds" | "nudges">): void {
-  if (r.nudges > 0) requestPatronPushRound();
+  onPatronPushQueued(r.nudges);
   if (!deliveredHook || (r.userIds.length === 0 && r.alarmUserIds.length === 0)) return;
   try {
     deliveredHook(r.userIds, r.alarmUserIds);
@@ -353,8 +352,7 @@ export async function runNotificationDispatchOnce(
         const r = await prisma.$transaction((tx) => dispatchBatchTx(tx, { limit: 1, onlyId: id, beforeCommit: opts.beforeCommit }));
         total.processed += r.processed;
         total.upserts += r.upserts;
-        total.resolved += r.resolved;
-        total.nudges += r.nudges;
+        total.resolved += r.resolved; total.nudges += r.nudges;
         for (const u of r.userIds) users.add(u);
         for (const u of r.alarmUserIds) alarmUsers.add(u);
       } catch (rowErr) {

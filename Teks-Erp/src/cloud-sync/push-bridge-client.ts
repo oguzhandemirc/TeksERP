@@ -6,9 +6,12 @@ import {
   ENVELOPE_VERSION,
   PUSH_BRIDGE_MAX_TOKENS,
   PUSH_BRIDGE_PATHS,
+  PushNudgeRequestSchema,
+  PushNudgeResponseSchema,
   PushRegisterResponseSchema,
   PushReleaseResponseSchema,
 } from "./wire";
+import type { z } from "zod";
 
 export type BridgeResult<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly status: number; readonly code: string };
 
@@ -33,4 +36,19 @@ export async function releaseDigests(ctx: CloudCallContext, digests: readonly st
   if (!r.ok) return r;
   const parsed = PushReleaseResponseSchema.safeParse(r.json);
   return parsed.success ? { ok: true, value: { birakilan: parsed.data.birakilan } } : { ok: false, status: 200, code: "YANIT_GECERSIZ" };
+}
+
+export type PushNudgeRequest = z.infer<typeof PushNudgeRequestSchema>;
+export type PushNudgeResponse = z.infer<typeof PushNudgeResponseSchema>;
+
+/**
+ * `POST /v1/bildirim/durt` — gövde katı şemayla gönderimden ÖNCE doğrulanır (şema dışı gövde programcı hatası; bulut
+ * 400'lerdi). Ham belirteç ve metin yalnız bu isteğin gövdesindedir: dönüş/hata hiçbirini taşımaz.
+ */
+export async function nudgeTokens(ctx: CloudCallContext, body: PushNudgeRequest): Promise<BridgeResult<PushNudgeResponse>> {
+  if (!PushNudgeRequestSchema.safeParse(body).success) throw new Error("dürt gövdesi şema dışı");
+  const r = await cloudPost(ctx, PUSH_BRIDGE_PATHS.NUDGE, body, { gzip: false });
+  if (!r.ok) return r;
+  const parsed = PushNudgeResponseSchema.safeParse(r.json);
+  return parsed.success ? { ok: true, value: parsed.data } : { ok: false, status: 200, code: "YANIT_GECERSIZ" };
 }

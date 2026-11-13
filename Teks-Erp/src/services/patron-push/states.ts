@@ -16,3 +16,11 @@ export const RELEASE_DATA = {
   lastErrorCode: null,
 } as const satisfies Prisma.PatronPushTokenUpdateManyMutationInput;
 
+
+const BACKOFF_BASE_MS = 30_000;
+const BACKOFF_MAX_MS = 60 * 60 * 1000;
+
+/** Satır başına geri çekilme (belirteç turu + dürt kuyruğu ortak): 30 sn × 2^(n-1), ≤ 1 sa. */
+export function pushBackoffMs(attempts: number): number {
+  return Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * 2 ** Math.min(Math.max(attempts - 1, 0), 10));
+}
