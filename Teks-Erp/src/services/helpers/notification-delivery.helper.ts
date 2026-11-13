@@ -6,7 +6,8 @@
 // (IZIN ya da donmuş liste) · TAKIPCI/OLUSTURAN (`record_follows`) · LISTE (fabrika `extraRecipientIds`).
 // Açık kaynak (takip/liste/nöbet) katalog düzeyindeki "sana varsayılan değil"i aşar; bilinçli KAPALI'yı
 // (fabrika/profil/kullanıcı) aşmaz. Sessiz saat fabrika dilimindedir ve yalnız ses/OS/tablet kanalını
-// susturur; gelen kutusu satırı her durumda yazılır; nöbetteki ALARM sessiz saati DELER (Karar Y2).
+// susturur; gelen kutusu satırı her durumda yazılır; nöbetteki ALARM sessiz saati DELER (Karar Y2). Patron
+// telefonu (PATRON_PUSH) aynı kural + yalnız-özet teslimde dürt yok; kuyruğa dağıtıcı yazar (`patron-push/nudge-enqueue.ts`).
 // =============================================================================
 import type { Prisma } from "@prisma/client";
 import type { NotificationCatalogEntry, NotificationKind } from "../../constants/notification-catalog";
@@ -49,6 +50,8 @@ export interface Delivery {
   ozet: boolean;
   km: boolean;
   kt: boolean;
+  /** Patron telefonuna dürt (köprü P3): kanal açık ∧ yalnız-özet değil ∧ sessiz saat susturmuyor (nöbetteki ALARM deler). */
+  pp: boolean;
 }
 
 export async function loadDeliveryContext(tx: Tx, userIds: readonly string[], now: Date): Promise<DeliveryContext> {
@@ -76,7 +79,7 @@ export function inQuietHours(at: Date, start: string | null, end: string | null)
   return s < e ? t >= s && t < e : t >= s || t < e;
 }
 
-function quietMutes(ctx: DeliveryContext, userId: string, channel: "MASAUSTU" | "TABLET_SES"): boolean {
+function quietMutes(ctx: DeliveryContext, userId: string, channel: "MASAUSTU" | "TABLET_SES" | "PATRON_PUSH"): boolean {
   const q = ctx.settings.get(userId);
   if (!q || !q.quietChannels.includes(channel)) return false;
   return (NOTIFICATION_QUIET_CHANNELS as readonly string[]).includes(channel) && inQuietHours(ctx.now, q.quietStart, q.quietEnd);
@@ -223,7 +226,8 @@ export async function decideDeliveries(d: DecideInput, candidates: ReadonlyArray
     const piercesQuiet = isAlarm && nobette;
     const km = channelEnabled(subject, kind, "MASAUSTU", layerOpt).acik && (piercesQuiet || !quietMutes(ctx, userId, "MASAUSTU"));
     const kt = channelEnabled(subject, kind, "TABLET_SES", layerOpt).acik && (piercesQuiet || !quietMutes(ctx, userId, "TABLET_SES"));
-    out.push({ userId, reason, ozet: digest, km, kt });
+    const pp = !digest && channelEnabled(subject, kind, "PATRON_PUSH", layerOpt).acik && (piercesQuiet || !quietMutes(ctx, userId, "PATRON_PUSH"));
+    out.push({ userId, reason, ozet: digest, km, kt, pp });
   }
   return out;
 }
