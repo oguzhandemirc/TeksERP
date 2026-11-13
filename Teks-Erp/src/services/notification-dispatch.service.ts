@@ -31,6 +31,8 @@ import {
 } from "./helpers/notification-aggregate.helper";
 import { decideDeliveries, loadDeliveryContext, type DeliveryContext, type DeliveryReason } from "./helpers/notification-delivery.helper";
 import { hata, uyari } from "../lib/logger";
+import { enqueuePatronPushTx } from "./patron-push/nudge-enqueue";
+import { requestPatronPushRound } from "./patron-push/wake";
 
 /** Advisory kilit uzayı — envanter `helpers/period-guard.helper.ts` başlığında. */
 export const NOTIFICATION_DISPATCH_LOCK_NS: number = 8040;
@@ -109,6 +111,8 @@ export interface DispatchResult {
   userIds: string[];
   /** Alarm satırı değişen kullanıcılar (tekil, sıralı) — zil `alarm` (`alarmRev`). */
   alarmUserIds: string[];
+  /** Bu turda kuyruğa giren patron telefonu dürtü (köprü P3; commit sonrası iş turu uyandırılır). */
+  nudges: number;
 }
 
 interface BatchOptions {
@@ -267,11 +271,13 @@ async function claimBatch(tx: Tx, rows: OutboxRow[], state: BatchState): Promise
 async function dispatchBatchTx(tx: Tx, o: BatchOptions): Promise<DispatchResult> {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(${NOTIFICATION_DISPATCH_LOCK_NS}::int, hashtext(${NOTIFICATION_DISPATCHER_LOCK_KEY}))`;
   const rows = await selectBatch(tx, o);
-  if (rows.length === 0) return { processed: 0, upserts: 0, resolved: 0, failed: 0, userIds: [], alarmUserIds: [] };
+  if (rows.length === 0) return { processed: 0, upserts: 0, resolved: 0, failed: 0, userIds: [], alarmUserIds: [], nudges: 0 };
   const known = rows.filter((r) => entryOf(r.kind) !== undefined);
   const state = await aggregateRows(tx, rows, known);
   const a = [...state.agg.values()];
   await upsertInbox(tx, a);
+  // Patron telefonu dürtü AYNI tx'te: tur geri alınırsa dürt de yok.
+  const nudges = await enqueuePatronPushTx(tx, a);
   // Zil iki kanaldan çalar: BİLDİRİM kutusu (`rev`) · ALARM satırı (`alarmRev`, panel alarm sorgusunu da tazeler).
   const users: TouchedUsers = { box: new Set(), alarm: new Set() };
   for (const x of a) touchUser(users, state, x.userId, x.groupKey);
@@ -284,7 +290,7 @@ async function dispatchBatchTx(tx: Tx, o: BatchOptions): Promise<DispatchResult>
   if (o.beforeCommit) await o.beforeCommit(tx);
   const box = [...users.box].sort();
   const alarm = [...users.alarm].sort();
-  return { processed: rows.length, upserts: a.length, resolved, failed: 0, userIds: box, alarmUserIds: alarm };
+  return { processed: rows.length, upserts: a.length, resolved, failed: 0, userIds: box, alarmUserIds: alarm, nudges };
 }
 
 function errorCode(err: unknown): string {
@@ -309,7 +315,8 @@ export function setNotificationDeliveredHook(hook: NotificationDeliveredHook | n
   deliveredHook = hook;
 }
 
-function onDelivered(r: Pick<DispatchResult, "userIds" | "alarmUserIds">): void {
+function onDelivered(r: Pick<DispatchResult, "userIds" | "alarmUserIds" | "nudges">): void {
+  if (r.nudges > 0) requestPatronPushRound();
   if (!deliveredHook || (r.userIds.length === 0 && r.alarmUserIds.length === 0)) return;
   try {
     deliveredHook(r.userIds, r.alarmUserIds);
@@ -338,7 +345,7 @@ export async function runNotificationDispatchOnce(
       take: limit,
       select: { id: true },
     });
-    const total: DispatchResult = { processed: 0, upserts: 0, resolved: 0, failed: 0, userIds: [], alarmUserIds: [] };
+    const total: DispatchResult = { processed: 0, upserts: 0, resolved: 0, failed: 0, userIds: [], alarmUserIds: [], nudges: 0 };
     const users = new Set<string>();
     const alarmUsers = new Set<string>();
     for (const { id } of pending) {
@@ -347,6 +354,7 @@ export async function runNotificationDispatchOnce(
         total.processed += r.processed;
         total.upserts += r.upserts;
         total.resolved += r.resolved;
+        total.nudges += r.nudges;
         for (const u of r.userIds) users.add(u);
         for (const u of r.alarmUserIds) alarmUsers.add(u);
       } catch (rowErr) {

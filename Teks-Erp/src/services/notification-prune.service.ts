@@ -3,7 +3,8 @@
 // =============================================================================
 // Gelen kutusu/outbox/günlük sayaç TELEMETRİ, koşullar DURUM'dur (defter değil): satır silinince
 // hiçbir rapor sayısı değişmez. Süreler: kutu okunmuş 90 / okunmamış 180 gün (katalog `saklama`) ·
-// outbox işlendikten 7 gün (düşüp vazgeçilen satır da 7 gün) · çözülmüş koşul 180 gün · sayaç 35 gün.
+// outbox işlendikten 7 gün (düşüp vazgeçilen satır da 7 gün) · çözülmüş koşul 180 gün · sayaç 35 gün · patron
+// telefonu dürt kuyruğu bittikten 7 gün.
 // Açık koşul ve çözülmemiş satır yaşından bağımsız KALIR. Beyan: `scripts/test_telemetri_defter_degil.ts`.
 // Çağıran: `jobs/maintenance.job.ts` gece penceresi.
 // =============================================================================
@@ -20,6 +21,8 @@ export const NOTIFICATION_RETENTION = {
   outboxDays: 7,
   conditionResolvedDays: 180,
   dailyStatsDays: 35,
+  /** Patron telefonu dürt kuyruğu (köprü P3): terminal satır bittikten sonra. */
+  pushNudgeDays: 7,
 } as const;
 
 export interface NotificationPruneResult {
@@ -27,6 +30,7 @@ export interface NotificationPruneResult {
   outbox: number;
   conditions: number;
   dailyStats: number;
+  pushNudges: number;
 }
 
 const ago = (now: Date, days: number): Date => new Date(now.getTime() - days * DAY_MS);
@@ -74,5 +78,7 @@ export async function pruneNotifications(now: Date = new Date()): Promise<Notifi
   const dailyStats = await prisma.notificationDailyStats.deleteMany({
     where: { factoryDay: { lt: new Date(factoryDayKeyUtcMidnight(now).getTime() - R.dailyStatsDays * DAY_MS) } },
   });
-  return { inbox, outbox: outbox.count, conditions: conditions.count, dailyStats: dailyStats.count };
+  // Yalnız terminal satır (`finishedAt` dolu ⇔ terminal, DB CHECK); canlı dürt yaşından bağımsız kalır.
+  const pushNudges = await prisma.patronPushNudge.deleteMany({ where: { finishedAt: { lt: ago(now, R.pushNudgeDays) } } });
+  return { inbox, outbox: outbox.count, conditions: conditions.count, dailyStats: dailyStats.count, pushNudges: pushNudges.count };
 }

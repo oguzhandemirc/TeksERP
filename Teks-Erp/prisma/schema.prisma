@@ -13776,7 +13776,8 @@ model NotificationInbox {
   snoozedUntil  DateTime? @db.Timestamptz
   resolvedAt    DateTime? @db.Timestamptz
 
-  user User @relation("NotificationInboxUser", fields: [userId], references: [id], onDelete: Restrict)
+  user       User              @relation("NotificationInboxUser", fields: [userId], references: [id], onDelete: Restrict)
+  pushNudges PatronPushNudge[] @relation("PatronPushNudgeInbox")
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -14345,6 +14346,31 @@ model PatronPushToken {
   @@index([sessionId])
   @@index([cloudState, nextAttemptAt])
   @@map("patron_push_tokens")
+}
+
+/// Patron telefonu DÜRT kuyruğu (push köprüsü P3) — TELEMETRİ/iş kuyruğu, defter DEĞİL: satır silinince hiçbir sayı
+/// değişmez; terminal satır 7 günde `notification-prune.service` ile budanır, kutu satırı budanınca CASCADE gider.
+/// Metin ve belirteç TAŞIMAZ (gönderimde gelen kutusundan / `patron_push_tokens`tan okunur). Tek yazar `services/patron-push/`.
+/// ŞEMA-DIŞI: state CHECK · terminal ⇔ finishedAt · GONDERILIYOR ⇔ claimedAt · partial unique (inboxId) WHERE state canlı.
+model PatronPushNudge {
+  id            String    @id @default(uuid()) @db.Uuid
+  inboxId       String    @db.Uuid
+  /// BEKLIYOR | GONDERILIYOR | GONDERILDI | IPTAL | ATLANDI | VAZGECILDI (CHECK).
+  state         String    @default("BEKLIYOR") @db.VarChar(16)
+  attempts      Int       @default(0)
+  nextAttemptAt DateTime? @db.Timestamptz
+  claimedAt     DateTime? @db.Timestamptz
+  lastErrorCode String?   @db.VarChar(64)
+  finishedAt    DateTime? @db.Timestamptz
+  createdAt     DateTime  @default(now()) @db.Timestamptz
+  updatedAt     DateTime  @updatedAt @db.Timestamptz
+
+  inbox NotificationInbox @relation("PatronPushNudgeInbox", fields: [inboxId], references: [id], onDelete: Cascade)
+
+  @@index([inboxId])
+  @@index([state, nextAttemptAt])
+  @@index([finishedAt])
+  @@map("patron_push_nudges")
 }
 
 // =============================================================================
