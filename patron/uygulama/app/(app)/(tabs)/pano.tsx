@@ -220,10 +220,10 @@ function yerelKutu(key: string, d: YerelVeri, go: Go): KpiCardProps | null {
       if (d.production === undefined) return null;
       const month = period(d.shipping, "buAy");
       const lines = [
-        d.shipping !== undefined ? { label: `${PERIOD_LABEL.buAy} sevk`, value: `${qty(month.sevkMiktari)} ${UNIT.metre}` } : null,
+        d.shipping !== undefined ? { label: "Ay sevk", value: `${qty(month.sevkMiktari)} ${UNIT.metre}` } : null,
         d.orders !== undefined ? { label: "Karşılanma", value: pct(obj(d.orders).karsilanmaYuzde) } : null,
       ].filter((l): l is { label: string; value: string } => l !== null);
-      return { label: "Bugün tamamlanan", value: qty(obj(d.production).bugunTamamlananToplam), unit: UNIT.top, caption: "istasyonlarda biten", domain: "uretim", icon: "today-outline", lines, onPress: go("/uretim"), testID: "pano-kahraman" };
+      return { label: "Bugün üretim", value: qty(obj(d.production).bugunTamamlananToplam), unit: UNIT.top, caption: "istasyonlarda biten", domain: "uretim", icon: "today-outline", lines, onPress: go("/uretim"), testID: "pano-kahraman" };
     }
     case "bugunSevk": {
       if (d.shipping === undefined) return null;
