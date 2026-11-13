@@ -177,11 +177,30 @@ describe("§2 iptal önizleme belirteci", () => {
     expect(mockYazici.siparisIptal).toHaveBeenLastCalledWith("o1", "b2");
     expect(mockRouter.back).toHaveBeenCalled();
   });
-  it("ekran: STALE sonrası sipariş üretime girdiyse iptal düğmesi YOK, 'yeniden onaylayın' denmez", async () => {
+  it("ekran: STALE sonrası sipariş üretime girdi → İE eylemi seçilir, onay BAŞTAN, seçimle + yeni belirteçle gider", async () => {
     setYetenek(erpYetenek(["siparis"], ["order:write"]));
     mockSession.offline = false;
     mockYazici.siparisIptalOnizleme.mockReset().mockResolvedValueOnce(TEMIZ)
-      .mockResolvedValueOnce({ ...TEMIZ, belirtec: "b2", isEmirleri: [{ id: "w1", no: "IE-7", durum: "PLANNED", uretilenTop: 0 }] });
+      .mockResolvedValueOnce({ ...TEMIZ, belirtec: "b2", isEmirleri: [{ id: "w1", no: "IE-7", durum: "PLANNED", uretilenTop: 0, izinli: ["UNLINK_ONLY"], varsayilan: "UNLINK_ONLY", digerSiparisler: [] }] });
+    mockYazici.siparisIptal.mockReset().mockRejectedValueOnce(new ApiError(409, "CANCEL_PREVIEW_STALE", "x")).mockResolvedValueOnce(undefined);
+    render(<CancelOrder />);
+    await settle();
+    fireEvent.press(screen.getByTestId("siparis-iptal"));
+    fireEvent.press(screen.getByTestId("siparis-iptal-evet"));
+    await settle();
+    expect(screen.getByText("Sipariş siz bakarken değişti; güncel durum aşağıda. Yeniden onaylayın.")).toBeTruthy();
+    expect(screen.getByTestId("eylem-w1")).toBeTruthy();
+    expect(screen.queryByTestId("siparis-iptal-evet")).toBeNull();
+    fireEvent.press(screen.getByTestId("siparis-iptal"));
+    fireEvent.press(screen.getByTestId("siparis-iptal-evet"));
+    await settle();
+    expect(mockYazici.siparisIptal).toHaveBeenLastCalledWith("o1", "b2", [{ isEmriId: "w1", eylem: "UNLINK_ONLY" }]);
+  });
+  it("ekran: STALE sonrası üretime girdi ama fabrika eylem bildirmiyor → iptal düğmesi YOK, 'yeniden onaylayın' denmez", async () => {
+    setYetenek(erpYetenek(["siparis"], ["order:write"]));
+    mockSession.offline = false;
+    mockYazici.siparisIptalOnizleme.mockReset().mockResolvedValueOnce(TEMIZ)
+      .mockResolvedValueOnce({ ...TEMIZ, belirtec: "b2", isEmirleri: [{ id: "w1", no: "IE-7", durum: "PLANNED", uretilenTop: 0, izinli: [], varsayilan: null, digerSiparisler: [] }] });
     mockYazici.siparisIptal.mockReset().mockRejectedValueOnce(new ApiError(409, "CANCEL_PREVIEW_STALE", "x"));
     render(<CancelOrder />);
     await settle();
