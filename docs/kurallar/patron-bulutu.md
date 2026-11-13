@@ -163,6 +163,9 @@
 - **[ÇEKİRDEK]** TOTP kurulumunda `otpauth` karekodu ve elle anahtar birlikte; sır yalnız o ekranda bellekte.
 - **[ÇEKİRDEK]** Web girişinde ardışık/ters eğik çizgi yönlendiriciden ÖNCE tek '/'ye katlanır (`history.replaceState`); sıra `entry.ts`te sabit (metro-runtime → katlama → `expo-router/entry`).
 - **[ÇEKİRDEK]** Ekran/gezinme adı yalnız `src/lib/access.ts`; "Diğer" ve ray aynı `NAV_GROUPS`; boş durum `EMPTY_ICON`; Bildirim Ayarları cihaz iznini formdan ÖNCE gösterir.
+- **[ÇEKİRDEK]** Sunucu bağlantısını yalnız `src/api/` katmanında kur (`Baglanti = {kip, tabanAdres, tasima}`); ekran kip sormaz, `Api` + yetenekle çalışır; yeni taşıma (boru) yalnız yeni `Tasima` olarak eklenir; ERP uçlarını bulut uç tablosuna (`ENDPOINTS`) koyma <sub>(arşiv:2026-11-13 V3b)</sub>.
+- **[ÇEKİRDEK]** ERP kipinde modülü ancak ana kümesi `/auth/me` `patronReadSets`te ve özelliği yetenekte varsa göster; beyan yoksa hiçbir küme açık sayılmaz; sunulmayan küme ve kipte olmayan uç ağa gitmeden 404 <sub>(arşiv:2026-11-13 V3b)</sub>.
+- **[ÇEKİRDEK]** ERP sunucusunu yalnız https ve `GET /api/client-policy/patron` yoklamasıyla kabul et; depoya yalnız kip + adres yaz, parola/kod hiçbir yere; ERP'de saklı veri 7 günde silinir, çıkışta veri + belirteç silinir, bağlantı kalır <sub>(arşiv:2026-11-13 V3b)</sub>.
 
 ### Kararlar
 
@@ -206,7 +209,7 @@ Bulut sunucusu: `test_rls_sizinti`, `test_izin_suzmesi`, `test_gelen_kutusu_clai
 
 Dağıtım (CI dışı): `deploy/patron/compose-denetle.mjs`, `deploy/patron/duman.sh`, `deploy/patron/tarayici-duman.cjs`, `scripts/build-aab.mjs`. Uçtan uca: `scripts/senaryo-patron.ts` (Senaryo P).
 
-Uygulama (jest): `notifications.test.tsx`, `refresh.test.ts`, `mirror.test.ts`, `access.test.ts`, `cache.test.ts`, `client.test.ts`, `forms.test.ts`, `format.test.ts`, `ui.test.tsx`, `useRemote.test.tsx`, `changes.test.ts`, `session.test.tsx`, `web-path.test.ts`, `export.test.ts`, `native-push.test.tsx`, `native-push-izin.test.ts`, `account-deletion.test.tsx`, `taps.test.ts`, `picker.test.tsx`, `totp-qr.test.tsx`, `notification-test.test.tsx`, `factory-time.test.ts`, `factory-time-periods.test.ts`, `tokens.test.ts`, `kit.test.tsx`, `tabs.test.tsx`, `labels.test.ts`, `e1-pano.test.tsx`, `e2-siparis.test.tsx`, `e3-finans.test.tsx`, `diger.test.tsx`, `tutarlilik.test.ts`, `bildirim-izni.test.tsx`, `masraf-ozeti`, `karlilik-ozeti`, `fason-ozeti.test.tsx`, `kasa-kategori.test.tsx`; duman `scripts/duman.ts`.
+Uygulama (jest): `notifications.test.tsx`, `refresh.test.ts`, `mirror.test.ts`, `access.test.ts`, `cache.test.ts`, `client.test.ts`, `forms.test.ts`, `format.test.ts`, `ui.test.tsx`, `useRemote.test.tsx`, `changes.test.ts`, `session.test.tsx`, `web-path.test.ts`, `export.test.ts`, `native-push.test.tsx`, `native-push-izin.test.ts`, `account-deletion.test.tsx`, `taps.test.ts`, `picker.test.tsx`, `totp-qr.test.tsx`, `notification-test.test.tsx`, `factory-time.test.ts`, `factory-time-periods.test.ts`, `tokens.test.ts`, `kit.test.tsx`, `tabs.test.tsx`, `labels.test.ts`, `e1-pano.test.tsx`, `e2-siparis.test.tsx`, `e3-finans.test.tsx`, `diger.test.tsx`, `tutarlilik.test.ts`, `bildirim-izni.test.tsx`, `masraf-ozeti`, `karlilik-ozeti`, `fason-ozeti.test.tsx`, `kasa-kategori.test.tsx`, `erp-baglanti.test.ts`, `erp-oturum.test.tsx`; duman `scripts/duman.ts`.
 
 Yeni bekçi doğduğu commit'te bu listeye VE haritanın `## patron-bulutu` bölümüne eklenir; katalog/tetikleyici değişince `test_db_invariants` da koşulur.
 

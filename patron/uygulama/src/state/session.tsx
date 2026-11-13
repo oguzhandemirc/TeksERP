@@ -4,12 +4,18 @@
 // önbelleği (ayrık kapsam) durur; çıkış ve yeni giriş bütün önbelleği siler.
 // Tazelik (K1): öne gelince ve değişim akışında fabrika damgası değişince `refresh()`; "Son eşitleme" = fabrika
 // veri anı (`esitleme.ufuk`, paketin ufku), bulutun alım anı değil. Belirteç yenileme ucu sunucuda yok — dokunulmaz.
+// İki kip (V3b): bağlantı (`api/baglanti.ts`) bulut ya da fabrika ERP'si; ekranlar yalnız `api` + `yetenek` görür.
+// ERP: giriş `/auth/login` (kod istek üzerine), yetenek `/auth/me` `patronReadSets`, veri canlı (eşitleme/akış yok),
+// saklı veri 7 gün. Bağlantı (kip + adres) çıkışta KALIR; veri ve belirteç silinir.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ApiError, createClient, errorMessage } from "../api/client";
 import { createApi, type Api } from "../api/endpoints";
+import { adresiDuzelt, baglantiOku, baglantiSil, baglantiYaz, bulutBaglantisi, erpBaglantisi, erpYokla, type Baglanti } from "../api/baglanti";
+import { createErpApi, erpBen, erpGiris } from "../api/erp";
+import { BULUT_YETENEK, erpYetenek, izinleriSuz, setYetenek, type Yetenek } from "../api/yetenek";
 import type { FacilityChoice, FacilityStatus, LoginResponse } from "../api/wire";
 import { apiBaseUrl } from "../lib/config";
-import { clearCache, createCache, openingCacheHygiene, type Cache } from "./cache";
+import { clearCache, createCache, ERP_CACHE_MAX_AGE_MS, openingCacheHygiene, purgeExpired, type Cache } from "./cache";
 import { createFeedFetcher, useChangeFeed, type FeedMode } from "./changes";
 import { useForeground } from "./useForeground";
 import { legacyPlainStore, plainStore, secretStore } from "./store";
@@ -42,6 +48,14 @@ export interface SessionValue {
   /** Değişim akışı kipi: uzun yoklama · eski sunucu 60 sn yoklama · kapalı (arka plan / oturumsuz). */
   readonly feedMode: FeedMode;
   readonly configured: boolean;
+  /** Bağlanılan sunucunun sunduğu (küme + özellik); ekran kip yerine buna bakar. */
+  readonly yetenek: Yetenek;
+  /** Elle eklenen fabrika sunucusu adresi; bulut bağlantısında null. */
+  readonly server: string | null;
+  /** Adresi yoklar; TeksERP ise bağlantı kaydedilir. Tanınmazsa Türkçe ileti döner. */
+  connectServer(adres: string): Promise<string | null>;
+  /** Kayıtlı sunucuyu unutur (yalnız oturumsuzken); bulut bağlantısına dönülür. */
+  forgetServer(): Promise<void>;
   markOnline(online: boolean, savedAt?: string): void;
   login(b: { eposta: string; parola: string; totp: string }): Promise<void>;
   logout(): Promise<void>;
@@ -50,6 +64,9 @@ export interface SessionValue {
   /** Başka tesise geç; reddedilirse `false` ve `switchError` dolar, etkin tesis değişmez. */
   switchFacility(tesisId: string): Promise<boolean>;
 }
+
+/** ERP bağlantısı var ama sunucu henüz kümelerini söylemedi: hiçbir küme açık değil (fail-closed). */
+const ERP_KAPALI = erpYetenek([]);
 
 const Ctx = createContext<SessionValue | null>(null);
 
@@ -85,6 +102,17 @@ export function SessionProvider({ children, platform = "mobil" }: { children: Re
   const [offline, setOffline] = useState(false);
   const [offlineSince, setOfflineSince] = useState<string | null>(null);
   const base = apiBaseUrl();
+  /** Kayıtlı ERP bağlantısı; undefined = depo henüz okunmadı. */
+  const [erp, setErp] = useState<Baglanti | null | undefined>(undefined);
+  const [erpCaps, setErpCaps] = useState<Yetenek | null>(null);
+  const [facilitySavedAt, setFacilitySavedAt] = useState<string | null>(null);
+  const bag: Baglanti | null = erp ?? (base ? bulutBaglantisi(base) : null);
+  const isErp = bag?.kip === "erp";
+  const caps: Yetenek = isErp ? (erpCaps ?? ERP_KAPALI) : BULUT_YETENEK;
+  // Görünürlük yardımcıları (`lib/access.ts`) etkin yeteneği okur; render içinde, çocuklardan önce kurulur.
+  setYetenek(caps);
+  const capsRef = useRef(caps);
+  capsRef.current = caps;
 
   const reset = useCallback(async () => {
     token.current = null;
@@ -95,14 +123,23 @@ export function SessionProvider({ children, platform = "mobil" }: { children: Re
     setScope(null);
     setChoices([]);
     setSwitchError(null);
+    setErpCaps(null);
+    setFacilitySavedAt(null);
     setPhase("giris");
   }, []);
 
-  const api = useMemo(
-    () => createApi(createClient({ baseUrl: base ?? "http://yapilandirilmamis.invalid", getToken: () => token.current, onUnauthorized: () => { if (token.current) void reset(); } })),
-    [base, reset],
+  const bagKey = bag ? `${bag.kip}|${bag.tabanAdres}` : "";
+  const client = useMemo(
+    () =>
+      bag?.kip === "erp"
+        ? createClient({ baseUrl: bag.tabanAdres, fetchImpl: bag.tasima, getToken: () => token.current, onUnauthorized: () => { if (token.current) void reset(); } })
+        : createClient({ baseUrl: base ?? "http://yapilandirilmamis.invalid", getToken: () => token.current, onUnauthorized: () => { if (token.current) void reset(); } }),
+    // Bağlantı kimliği `bagKey` (nesne her render yeniden kurulur).
+    [bagKey, base, reset],
   );
-  const cache = useMemo(() => (scope ? createCache(plainStore, scope) : null), [scope]);
+  const api = useMemo(() => (isErp ? createErpApi(client, () => capsRef.current) : createApi(client)), [client, isErp]);
+  const makeCache = useCallback((s: string) => createCache(plainStore, s, undefined, isErp ? ERP_CACHE_MAX_AGE_MS : undefined), [isErp]);
+  const cache = useMemo(() => (scope ? makeCache(scope) : null), [scope, makeCache]);
 
   const markOnline = useCallback((online: boolean, savedAt?: string) => {
     setOffline(!online);
@@ -114,6 +151,7 @@ export function SessionProvider({ children, platform = "mobil" }: { children: Re
       const r = await c.load("oturum", () => api.session());
       await loadFacilityTimezone(c, api);
       setFacility(r.data);
+      setFacilitySavedAt(r.savedAt);
       markOnline(!r.offline, r.savedAt);
       return r.data;
     },
@@ -149,18 +187,51 @@ export function SessionProvider({ children, platform = "mobil" }: { children: Re
     [loadFacility, loadChoices],
   );
 
+  // Kayıtlı bağlantı bir kez okunur; okunana kadar açılış bekler.
   useEffect(() => {
+    let alive = true;
+    void baglantiOku(secretStore).then((v) => {
+      if (alive) setErp(v ? erpBaglantisi(v.tabanAdres) : null);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const applyCaps = useCallback((sets: unknown) => {
+    const y = erpYetenek(sets);
+    capsRef.current = y;
+    setYetenek(y);
+    setErpCaps(y);
+  }, []);
+
+  /** ERP: kullanıcı + sunulan kümeler (`/auth/me`, saklı kopyalı — çevrimdışı açılışta da yetenek bilinir). */
+  const loadErpCaps = useCallback(
+    async (c: Cache) => {
+      const me = (await c.load("ben", () => erpBen(client))).data;
+      applyCaps(me.patronReadSets);
+      return me;
+    },
+    [client, applyCaps],
+  );
+
+  const booted = useRef(false);
+  useEffect(() => {
+    if (erp === undefined || booted.current) return;
+    booted.current = true;
     let alive = true;
     void (async () => {
       const [t, s] = await Promise.all([secretStore.get(TOKEN_KEY).catch(() => null), secretStore.get(SCOPE_KEY).catch(() => null)]);
       if (!alive) return;
       await openingCacheHygiene({ plain: plainStore, legacy: legacyPlainStore, hasSession: Boolean(t && s) });
+      if (isErp) await purgeExpired(plainStore, ERP_CACHE_MAX_AGE_MS);
       if (!alive) return;
       if (!t || !s) return setPhase("giris");
       token.current = t;
       setScope(s);
       try {
-        const c = createCache(plainStore, s);
+        const c = makeCache(s);
+        if (isErp) await loadErpCaps(c);
         await loadFacility(c);
         await loadChoices(c);
         if (alive) setPhase("hazir");
@@ -173,10 +244,39 @@ export function SessionProvider({ children, platform = "mobil" }: { children: Re
     return () => {
       alive = false;
     };
-  }, [loadFacility, loadChoices]);
+  }, [erp, isErp, makeCache, loadErpCaps, loadFacility, loadChoices]);
+
+  /** ERP girişi: belirteç → `/auth/me` (yetenek) → `/patron/v1/oturum`. Parola ve kod yalnız istekte kalır. */
+  const loginErp = useCallback(
+    async (b: { eposta: string; parola: string; totp: string }, adres: string) => {
+      const r = await erpGiris(client, { kullanici: b.eposta, parola: b.parola, kod: b.totp });
+      await clearCache(plainStore);
+      setSwitchError(null);
+      token.current = r.token;
+      try {
+        const me = await erpBen(client);
+        const s = `erp|${adres}|${me.userId}`;
+        const c = makeCache(s);
+        await c.load("ben", () => Promise.resolve(me));
+        applyCaps(me.patronReadSets);
+        await secretStore.set(TOKEN_KEY, r.token).catch(() => undefined);
+        await secretStore.set(SCOPE_KEY, s).catch(() => undefined);
+        setScope(s);
+        await loadFacility(c);
+      } catch (err) {
+        // Yarım giriş kalmaz: belirteç düşer, sonraki deneme baştan.
+        await reset();
+        throw err;
+      }
+      setChoices([]);
+      setPhase("hazir");
+    },
+    [client, makeCache, applyCaps, loadFacility, reset],
+  );
 
   const login = useCallback(
     async (b: { eposta: string; parola: string; totp: string }) => {
+      if (bag?.kip === "erp") return loginErp(b, bag.tabanAdres);
       const hint = await plainStore.get(LAST_FACILITY_KEY).catch(() => null);
       const plain = { ...b, istemci: platform };
       // Eski sunucu gövdeyi sıkı doğrular (bilinmeyen `tesisId` → 400, TOTP'ye gelmeden): ipucusuz bir kez daha.
@@ -192,8 +292,27 @@ export function SessionProvider({ children, platform = "mobil" }: { children: Re
       await adopt(r);
       setPhase("hazir");
     },
-    [api, adopt, platform],
+    [api, adopt, platform, bag, loginErp],
   );
+
+  const connectServer = useCallback(async (girdi: string): Promise<string | null> => {
+    const adres = adresiDuzelt(girdi);
+    if (!adres) return "Geçerli bir https adresi yazın";
+    const r = await erpYokla(adres);
+    if (!r.tamam) return r.ileti;
+    await baglantiYaz(secretStore, r.baglanti);
+    setErpCaps(null);
+    setErp(r.baglanti);
+    return null;
+  }, []);
+
+  const forgetServer = useCallback(async () => {
+    if (token.current) return;
+    await baglantiSil(secretStore);
+    await clearCache(plainStore);
+    setErpCaps(null);
+    setErp(null);
+  }, []);
 
   const logout = useCallback(async () => {
     // Tek kimlik, tek oturum hissi: bütün tesislerdeki oturumlar kapanır.
@@ -249,17 +368,20 @@ export function SessionProvider({ children, platform = "mobil" }: { children: Re
   });
 
   const feedFetch = useMemo(
-    () => (base ? createFeedFetcher({ baseUrl: base, getToken: () => token.current, onUnauthorized: () => { if (token.current) void reset(); } }) : null),
-    [base, reset],
+    () => (base && !isErp ? createFeedFetcher({ baseUrl: base, getToken: () => token.current, onUnauthorized: () => { if (token.current) void reset(); } }) : null),
+    [base, reset, isErp],
   );
   const feedMode = useChangeFeed({
-    enabled: phase === "hazir",
+    enabled: phase === "hazir" && caps.tazele,
     fetchChanges: feedFetch,
     resetKey: scope,
     onStamp: (stamp) => {
       if (stamp !== live.current.stamp) void live.current.refresh().catch(() => undefined);
     },
   });
+
+  const rawPerms = facility?.hesap.izinler;
+  const permissions = useMemo(() => (rawPerms ? (caps === BULUT_YETENEK ? rawPerms : izinleriSuz(rawPerms, caps)) : []), [rawPerms, caps]);
 
   const value: SessionValue = {
     phase,
@@ -269,12 +391,16 @@ export function SessionProvider({ children, platform = "mobil" }: { children: Re
     facilityId,
     facilities: choices.length > 0 ? choices : facility ? [{ id: facility.tesis.id, ad: facility.tesis.ad ?? "TeksERP Yönetim", hizmet: facility.hizmet?.asama ?? "ACIK" }] : [],
     switchError,
-    permissions: facility?.hesap.izinler ?? [],
+    permissions,
     offline,
     offlineSince,
-    factoryStamp: facility?.esitleme?.ufuk ?? null,
+    factoryStamp: caps.canli ? (facility ? facilitySavedAt : null) : (facility?.esitleme?.ufuk ?? null),
     feedMode,
-    configured: base !== null,
+    configured: bag !== null,
+    yetenek: caps,
+    server: isErp && bag ? bag.tabanAdres : null,
+    connectServer,
+    forgetServer,
     markOnline,
     login,
     logout,

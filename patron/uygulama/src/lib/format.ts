@@ -77,3 +77,8 @@ export const STATUS_LABEL: Readonly<Record<string, string>> = {
 export function statusLabel(s: unknown): string {
   return typeof s === "string" ? (STATUS_LABEL[s] ?? s) : "—";
 }
+
+/** Canlı veri (ERP) kopukken: "Sunucuya ulaşılamıyor — son güncelleme 14:05" (fabrika saati). */
+export function liveOfflineText(savedAt: string | null): string {
+  return `Sunucuya ulaşılamıyor — son güncelleme ${savedAt ? formatFactory(savedAt, "HH:mm") : "bilinmiyor"}`;
+}
