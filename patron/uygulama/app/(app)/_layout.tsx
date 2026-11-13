@@ -21,7 +21,8 @@ export default function AppLayout() {
     <View style={{ flex: 1, flexDirection: "row", backgroundColor: t.bg }}>
       {wide ? <SideNav /> : null}
       <View style={{ flex: 1 }}>
-        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: t.bg } }} />
+        {/* Geniş ekranda yığın kaydırması yok: raydan geçiş yanaldır, ekran içeriği kendi kısa solmasıyla girer. */}
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: t.bg }, animation: wide ? "none" : "default" }} />
       </View>
     </View>
   );

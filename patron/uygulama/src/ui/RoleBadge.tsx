@@ -1,6 +1,7 @@
-// Rol rozeti (tasarım dili §1.4): ölçüt `bulut:hesap:yonet` → Yönetici, diğerleri Çalışan. Yalnız gösterir; karar
+// Rol rozeti (tasarım dili §1.4): ölçüt `bulut:hesap:yonet` (ERP kipinde `admin:users`) → Yönetici, diğerleri Çalışan. Yalnız gösterir; karar
 // sunucudadır. Rol adı TEK kaynak `ROLE_LABEL` (profil kartı, hesap satırı da buradan okur).
 import { Text, View } from "react-native";
+import { erpIzinVar, yetenek } from "../api/yetenek";
 import { can } from "../lib/access";
 import { makeStyles, useTokens } from "./theme-context";
 import { FONT_SCALE, radius, space, typography } from "./tokens";
@@ -8,6 +9,9 @@ import { FONT_SCALE, radius, space, typography } from "./tokens";
 export type Role = "yonetici" | "ekip";
 
 export function roleOf(perms: readonly string[]): Role {
+  // ERP kipinde bulut hesap kodu süzülür (hesap yönetimi yok); rol fabrikanın kullanıcı yönetimi izninden okunur.
+  const erp = yetenek().erpIzinleri;
+  if (erp !== null) return erpIzinVar(erp, "admin:users") ? "yonetici" : "ekip";
   return can(perms, "bulut:hesap:yonet") ? "yonetici" : "ekip";
 }
 
