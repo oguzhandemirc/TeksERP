@@ -126,6 +126,7 @@
 - **[ÇEKİRDEK]** Deneme bildirimi yalnız kendi etkin cihazlarına, kuyruğa/geçmişe yazılmaz, hesap başına dakikada bir; kip kapalıyken 409.
 - **[PROFİL]** `BILDIRIM_KIPI` varsayılanı `kapali`; `gercek` yalnız mağaza hesapları + patron VDS kurulumundan sonra.
 - **[ÇEKİRDEK]** Native push yükü içeriksiz (`nativePushPayload`); gönderim `BILDIRIM_NATIVE_PUSH=acik` + `gercek` + Expo belirteci ister; `google-services.json` repoya girmez.
+- **[ÇEKİRDEK]** Push köprüsü (`/v1/bildirim/*`, amaç `bildir`, sözleşme `docs/design/PATRON-PUSH-KOPRUSU.md`) başlık + gövdeyi yalnız İLETİR — DB'ye, bilete, günlüğe yazma; kişi değil (kurulum, belirteç özeti) bağı tut; tesis DB'si/yönlendirme açma; lisans geçerliliğini yalnız satıcı `durum`undan oku.
 - **[PROFİL]** Telefon push DERLEME kapısı: `app.config.js` yalnız `PATRON_NATIVE_PUSH=1` ∧ `google-services.json` varken izinleri açar; `NATIVE_PUSH` literal ana anahtar, etkin kapı `NATIVE_PUSH_ETKIN`; Android'de kanal izin isteminden ÖNCE kurulur.
 
 ## Patron sunucusu — alt-alan kuralları (patron/sunucu/CLAUDE.md'den, 2026-10-03)
