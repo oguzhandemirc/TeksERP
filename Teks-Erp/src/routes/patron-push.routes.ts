@@ -2,8 +2,8 @@
 // TeksERP - Patron push cihazı (`/api/bildirim/cihaz`, push köprüsü P2)
 // =============================================================================
 // Patron telefonu Expo belirtecini kaydeder/bırakır. Toplu kapı kimlik + `patron-app:login`; patron oturumu ve
-// bayrak (`bildirim.patronPushEnabled`) serviste. Belirteç biçimi tel aynasının deseninden (tek kaynak). Yanıt ham
-// belirteci ya da özetini TAŞIMAZ. Bulut eşlemesi istek yolunda değil, iş turunda.
+// kapı (`bildirim.patronPushEnabled` ∧ `bildirim.gelenKutusuEnabled`, yalnız kayıtta) serviste. Belirteç biçimi
+// tel aynasının deseninden (tek kaynak). Yanıt ham belirteci ya da özetini TAŞIMAZ. Bulut eşlemesi iş turunda.
 // =============================================================================
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
@@ -63,12 +63,12 @@ const callerOf = (req: Request): PushCaller => ({ userId: req.user!.userId, jti:
  *       200: { description: "{ kayitli: true, durum: BEKLIYOR | KAYITLI, birakilanEski }" }
  *       400: { description: Gövde geçersiz (PATRON_PUSH_GOVDE) }
  *       403: { description: patron-app:login yok ya da patron oturumu değil (PATRON_ISTEMCI_DEGIL) }
- *       409: { description: Bayrak kapalı (PATRON_PUSH_KAPALI) ya da eşzamanlı değişiklik (PATRON_PUSH_CAKISMA) }
+ *       409: { description: Push ya da gelen kutusu bayrağı kapalı (PATRON_PUSH_KAPALI) ya da eşzamanlı değişiklik (PATRON_PUSH_CAKISMA) }
  *       503: { description: Anahtar halkası yok (PUSH_ANAHTAR_YOK) }
  *   delete:
  *     tags: [Bildirim]
  *     summary: Patron telefonunun push belirtecini bırak
- *     description: Yalnız kendi canlı belirtecini bırakır; başkasının ya da olmayan belirteç `birakildi:false`.
+ *     description: Yalnız kendi canlı belirtecini bırakır; başkasının ya da olmayan belirteç `birakildi:false`. Bayrak kapalıyken de çalışır.
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true
@@ -82,7 +82,6 @@ const callerOf = (req: Request): PushCaller => ({ userId: req.user!.userId, jti:
  *     responses:
  *       200: { description: "{ birakildi: boolean }" }
  *       403: { description: patron oturumu değil (PATRON_ISTEMCI_DEGIL) }
- *       409: { description: Bayrak kapalı (PATRON_PUSH_KAPALI) }
  */
 router.post("/", async (req: Request, res: Response, next: NextFunction) => {
   try {

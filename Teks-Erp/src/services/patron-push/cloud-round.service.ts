@@ -1,7 +1,7 @@
 // =============================================================================
 // Patron push bulut turu — yerel durumu buluttaki bağa eşler (giden iş kuyruğu; harici yoklama DEĞİL)
 // =============================================================================
-// Sıra: süpürme (yerel, her tur) → bayrak kapalı ya da kurulum uygun değilse DUR (dışarı istek YOK) → BEKLIYOR
+// Sıra: süpürme (yerel, her tur) → kapı (iki bayrak) kapalı ya da kurulum uygun değilse DUR (dışarı istek YOK) → BEKLIYOR
 // partisi `kaydet` → BIRAKILACAK partisi `birak`. Sonuç yalnız satır hâlâ beklenen durumdaysa yazılır (koşullu
 // updateMany): arada çıkış yapılırsa `kaydet`in başarısı satırı KAYITLI yapmaz, sonraki tur bırakır. Hata kullanıcı
 // isteğine dokunmaz: satır başına geri çekilme (30 sn × 2^n, ≤ 1 sa) + kısa hata kodu; ham belirteç gövdeye girmez.
@@ -11,8 +11,8 @@ import { egressCloudTransport, type CloudCallContext, type CloudTransport } from
 import { pushBridgeEligibility, type PushBridgeEligibility } from "../../cloud-sync/eligibility";
 import { registerDigests, releaseDigests, type BridgeResult } from "../../cloud-sync/push-bridge-client";
 import { PUSH_BRIDGE_MAX_TOKENS } from "../../cloud-sync/wire";
-import { readPatronPushEnabled } from "../system-setting.service";
 import { releaseOrphanPushTokens } from "./lifecycle";
+import { patronPushGateOpen } from "./device.service";
 
 const BACKOFF_BASE_MS = 30_000;
 const BACKOFF_MAX_MS = 60 * 60 * 1000;
@@ -86,7 +86,7 @@ async function runPhase(ctx: CloudCallContext, phase: Phase, now: Date): Promise
 export async function runPatronPushRound(deps: PushRoundDeps = {}): Promise<PushRoundSummary> {
   const now = deps.now ?? new Date();
   const suprulen = await releaseOrphanPushTokens(now);
-  if (!(await readPatronPushEnabled())) return { durum: "KAPALI", suprulen };
+  if (!(await patronPushGateOpen())) return { durum: "KAPALI", suprulen };
   const elig = (deps.eligibility ?? pushBridgeEligibility)();
   if (!elig.ok) return { durum: "UYGUN_DEGIL", sebep: elig.reason, suprulen };
   const ctx: CloudCallContext = { baseUrl: elig.baseUrl, installationId: elig.installationId, transport: deps.transport ?? egressCloudTransport };

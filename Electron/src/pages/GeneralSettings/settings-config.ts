@@ -3083,7 +3083,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         summary: "Patron uygulaması kapalıyken de bildirim telefonun kilit ekranına düşer.",
         defaultOn: false,
         audience: ["Yönetim"],
-        desc: "Açıkken patron uygulaması cihazını fabrikaya kaydeder ve bildirim patron bulutu üzerinden telefona iletilir (lisanslı kurulumda). Kapalıyken bugünkü davranış: telefon yalnız uygulama açıkken bildirim görür.",
+        desc: "Açıkken patron uygulaması cihazını fabrikaya kaydeder ve bildirim patron bulutu üzerinden telefona iletilir (lisanslı kurulumda). Kişisel gelen kutusu da açık olmalıdır. Kapalıyken bugünkü davranış: telefon yalnız uygulama açıkken bildirim görür.",
       },
     ],
   },

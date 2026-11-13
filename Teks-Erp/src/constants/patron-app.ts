@@ -24,8 +24,8 @@ export const PATRON_REPORT_API_VERSION = 1;
 export const PATRON_REPORT_EXPORT_VERSION = 1;
 
 /**
- * Push köprüsü P2: `POST/DELETE /api/bildirim/cihaz` sözleşme sürümü — `/auth/me` `patronPush`. Alan YALNIZ bayrak
- * (`bildirim.patronPushEnabled`) açık ∧ kurulum köprüye uygunken yayımlanır; yoksa uygulama cihaz kaydı denemez.
+ * Push köprüsü P2: `POST/DELETE /api/bildirim/cihaz` sözleşme sürümü — `/auth/me` `patronPush`. Alan YALNIZ iki
+ * bayrak (`bildirim.patronPushEnabled` ∧ `bildirim.gelenKutusuEnabled`) açık ∧ kurulum köprüye uygunken yayımlanır.
  */
 export const PATRON_PUSH_VERSION = 1;
 

@@ -10,7 +10,7 @@ import { ClientType, Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { pushBridgeEligibility } from "../../cloud-sync/eligibility";
-import { readPatronPushEnabled } from "../system-setting.service";
+import { readNotificationInboxEnabled, readPatronPushEnabled } from "../system-setting.service";
 import { digestPushToken, sealPushToken } from "./token-seal";
 import { LIVE_STATES, RELEASE_DATA } from "./states";
 import { requestPatronPushRound } from "./wake";
@@ -42,8 +42,16 @@ export interface RegisterResult {
   readonly birakilanEski: number;
 }
 
+/**
+ * Push KAPISI — tek kaynak (kayıt ucu, `/auth/me` yeteneği, bulut turu): push bayrağı ∧ gelen kutusu bayrağı.
+ * Dürtü gelen kutusu dağıtıcısından doğar; gelen kutusu kapalıyken kayıt almak çıkışsız kapı olurdu.
+ */
+export async function patronPushGateOpen(): Promise<boolean> {
+  return (await readPatronPushEnabled()) && (await readNotificationInboxEnabled());
+}
+
 async function assertEnabled(): Promise<void> {
-  if (!(await readPatronPushEnabled())) {
+  if (!(await patronPushGateOpen())) {
     throw AppError.conflict("Patron telefonuna anlık bildirim bu fabrikada kapalı.", { code: "PATRON_PUSH_KAPALI" });
   }
 }
@@ -60,7 +68,8 @@ async function patronSessionId(caller: PushCaller): Promise<string> {
 }
 
 /** Tek deneme: kilit → var olanı devral/dirilt ya da yarat → tavanı uygula. Yarış kaybı (claim 0 / P2002) fırlatır. */
-async function registerOnce(caller: PushCaller, sessionId: string, input: RegisterInput, digest: string, sealed: string): Promise<RegisterResult> {
+async function registerOnce(caller: PushCaller, sessionId: string, input: RegisterInput, stored: { digest: string; sealed: string }): Promise<RegisterResult> {
+  const { digest, sealed } = stored;
   return prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(${PATRON_PUSH_LOCK_NS}::int, hashtext(${caller.userId}))`;
     const now = new Date();
@@ -111,7 +120,7 @@ export async function registerPatronPushDevice(input: RegisterInput, caller: Pus
   const sealed = sealPushToken(input.token, digest);
   for (let attempt = 1; ; attempt++) {
     try {
-      const result = await registerOnce(caller, sessionId, input, digest, sealed);
+      const result = await registerOnce(caller, sessionId, input, { digest, sealed });
       requestPatronPushRound();
       return result;
     } catch (err) {
@@ -123,9 +132,11 @@ export async function registerPatronPushDevice(input: RegisterInput, caller: Pus
   }
 }
 
-/** `DELETE /api/bildirim/cihaz` — yalnız KENDİ canlı belirtecini bırakır; başkasınınki/olmayan `false` (sızıntı yok). */
+/**
+ * `DELETE /api/bildirim/cihaz` — yalnız KENDİ canlı belirtecini bırakır; başkasınınki/olmayan `false` (sızıntı yok).
+ * Kapı kapalıyken de çalışır: kullanıcı belirtecini her durumda bırakabilir; buluta `birak` kapı açılınca işle gider.
+ */
 export async function releasePatronPushDevice(token: string, caller: PushCaller): Promise<{ birakildi: boolean }> {
-  await assertEnabled();
   await patronSessionId(caller);
   const res = await prisma.patronPushToken.updateMany({
     where: { tokenDigest: digestPushToken(token), userId: caller.userId, cloudState: { in: [...LIVE_STATES] } },
@@ -135,7 +146,7 @@ export async function releasePatronPushDevice(token: string, caller: PushCaller)
   return { birakildi: res.count > 0 };
 }
 
-/** `/auth/me` `patronPush` yeteneği: bayrak açık ∧ kurulum köprüye uygun (lisans geçerli gönderici). Bilgi, kapı değil. */
+/** `/auth/me` `patronPush` yeteneği: kapı açık ∧ kurulum köprüye uygun (lisans geçerli gönderici). Bilgi, kapı değil. */
 export async function patronPushAvailable(): Promise<boolean> {
-  return (await readPatronPushEnabled()) && pushBridgeEligibility().ok;
+  return (await patronPushGateOpen()) && pushBridgeEligibility().ok;
 }
