@@ -84,6 +84,7 @@ RUN --mount=type=secret,id=varsayilan_sa,required=false \
     /opt/tekserp/bin/node docker/korumali/sahne.mjs /sahne/app
 # Prod bağımlılıkları + Prisma istemcisi YORUMSUZ şemadan; şema motoru Linux ikilisi (ELF kapısı).
 # `node_modules/.bin` sembolik bağdır: imzalı kapsamda bağ imzalanmaz (Windows paketi de taşımaz); prisma doğrudan çağrılır.
+# İç içe `.bin` de silinir: bir bağımlılığın kendi node_modules'u (ör. exceljs → uuid) bağ getirir, K9 durdurur.
 WORKDIR /sahne/app
 RUN npm ci --omit=dev --no-audit --no-fund \
   && PRISMA_CLI_BINARY_TARGETS=debian-openssl-3.0.x npx prisma generate \
@@ -92,6 +93,7 @@ RUN npm ci --omit=dev --no-audit --no-fund \
   && find node_modules/@prisma/engines -maxdepth 1 -name 'schema-engine-*' ! -name 'schema-engine-debian-openssl-3.0.x' -delete \
   && find node_modules -name '*.map' -type f -delete \
   && rm -rf node_modules/.bin \
+  && find node_modules -type d -name .bin -prune -exec rm -rf {} + \
   && rm -f package-lock.json && npm cache clean --force
 
 # ---------------------------------------------------------------------------

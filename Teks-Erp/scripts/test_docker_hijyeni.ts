@@ -736,6 +736,7 @@ function imajImzaStatik(betik: string, dockerfile: string): string[] {
   if (!/if \(hedefYazildi\) \{\s*docker\(\['image', 'rm', hedef\]\)/.test(kod)) ih.push("düşen imzada etiket silinmiyor");
   if (!/'--network', 'none'/.test(kod)) ih.push("öz-denetim ağlı koşuyor");
   if (!/rm -rf node_modules\/\.bin/.test(dockerfile)) ih.push("Dockerfile node_modules/.bin bağlarını bırakıyor (imzalanamaz)");
+  if (!/find node_modules -type d -name \.bin -prune -exec rm -rf \{\} \+/.test(dockerfile)) ih.push("Dockerfile iç içe node_modules/*/.bin bağlarını bırakıyor (imzalanamaz)");
   if (!/COPY --from=runtime-node --chown=root:root \/w\/sahne\/runtime\/bin\/node \/app\/runtime\/bin\/node/.test(dockerfile)) ih.push("runtime Node imzalı kapsamda (app/runtime) değil");
   return ih;
 }
@@ -753,6 +754,7 @@ function imajImzaStatik(betik: string, dockerfile: string): string[] {
     ["öz-denetim ağlı", b.replace("'--network', 'none',", ""), d],
     ["etiket öz-denetimden önce bırakıldı", b.replace("    hedefYazildi = true;\n", "    hedefYazildi = false;\n"), d],
     [".bin geri", b, d.replace("  && rm -rf node_modules/.bin \\\n", "")],
+    ["iç içe .bin geri", b, d.replace("  && find node_modules -type d -name .bin -prune -exec rm -rf {} + \\\n", "")],
     ["runtime kapsam dışı", b, d.replace("/app/runtime/bin/node\nRUN", "/usr/local/bin/node2\nRUN")],
   ];
   for (const [ad, mb, md] of sondalar) {
