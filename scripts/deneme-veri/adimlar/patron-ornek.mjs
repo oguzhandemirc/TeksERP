@@ -133,8 +133,9 @@ async function siparisler(c, k) {
       lines: satirlar.map(([kod, q, renk]) => ({ itemId: k.kalem[kod].id, quantity: q, width: k.kalem[kod].en, unitPrice: k.fiyat[kod], colorId: k.renk[renk] })),
     });
     const tam = (await c.api("GET", `/api/orders/${o.id}`)).data ?? o;
-    const satir = (tam.lines ?? []).slice().sort((a, b) => (a.lineNo ?? 0) - (b.lineNo ?? 0));
-    k.siparis[key] = { id: o.id, no: tam.orderNumber, musteri, satirlar, satirId: satir.map((l) => l.id) };
+    // Satır kimliği KUMAŞTAN eşlenir (yanıtın satır sırası belirlenimli değil; sıra kayarsa iş emri replay'i çakışır)
+    const satirId = satirlar.map(([kod]) => (tam.lines ?? []).find((l) => l.itemId === k.kalem[kod].id)?.id);
+    k.siparis[key] = { id: o.id, no: tam.orderNumber, musteri, satirlar, satirId };
   }
 }
 
