@@ -1,38 +1,34 @@
-// Pano — "patron 10 saniyede ne görmeli": tesis + rol + eşitleme · Dikkat şeridi · bugünün kahramanı · 4 KPI ·
-// alan kartları (DASHBOARD_CARDS izinleriyle; izinsiz kart çizilmez). Özet izni olmayan çalışan boş ekran yerine
-// "Görebildiğin alanlar" listesini görür. Sayılar fabrikanın; uygulama karşılaştırma hesaplamaz.
+// Pano — sıkı, kişiselleştirilebilir: başlık satırında eşitleme · Dikkat (yalnız madde varsa) · seçili kutular.
+// Fabrika `patronPano` yayımlıyorsa kutular panelin açılış panosu kataloğundan (hesap fabrikada); değilse yerel
+// anlık kutuları. Kutu seçimi + sıra cihazda (`usePanoDuzeni`). Özet izni olmayan çalışan "Görebildiğin alanlar"ı görür.
 import { useRouter } from "expo-router";
+import { useMemo, useState } from "react";
 import { Text, View } from "react-native";
+import { yetenek } from "../../../src/api/yetenek";
+import { PANO_DONEMLERI, type PanoDonem, type PanoKutuTanimi } from "../../../src/api/pano";
 import { can, MODULES, moduleVisible, visibleCards, visibleModules, type ModuleKey } from "../../../src/lib/access";
 import { PERIOD_LABEL, UNIT } from "../../../src/lib/labels/uretim";
 import { TERIM } from "../../../src/lib/terim";
 import { useSession } from "../../../src/state/session";
 import { useOpenRefresh } from "../../../src/state/useOpenRefresh";
+import { useRemote } from "../../../src/state/useRemote";
 import { FacilityName, Screen, useWide } from "../../../src/ui/Frame";
-import { HeroSummary } from "../../../src/ui/HeroSummary";
-import { DOMAIN_ICON, MODULE_ICON } from "../../../src/ui/icons";
-import { KpiCard, KpiGrid, type KpiLine } from "../../../src/ui/KpiCard";
+import { MODULE_ICON } from "../../../src/ui/icons";
+import { KpiCard, KpiGrid, type KpiCardProps } from "../../../src/ui/KpiCard";
 import { ListGroup, ListRow } from "../../../src/ui/ListRow";
 import { AttentionStrip } from "../../../src/ui/pano/AttentionStrip";
-import { areaSummary, attentionItems, column, dueAmount, dueRows, dueShort, obj, period, pct, qty, type AttentionItem } from "../../../src/ui/pano/read";
-import { FactoryStamp } from "../../../src/ui/pano/SnapshotGate";
+import { cihazDeposu, usePanoDuzeni, type KatalogKutusu } from "../../../src/ui/pano/duzen";
+import { KUTU_META, kutuGorunum, MOBILDE_YOK } from "../../../src/ui/pano/kutu-gorunum";
+import { PanoDuzenleyici } from "../../../src/ui/pano/PanoDuzenleyici";
+import { areaSummary, attentionItems, column, dueAmount, dueRows, dueShort, obj, pct, period, qty, type AttentionItem } from "../../../src/ui/pano/read";
 import { combine, useSnapshot } from "../../../src/ui/pano/useSnapshot";
-import { RoleBadge } from "../../../src/ui/RoleBadge";
 import { SectionHeader } from "../../../src/ui/SectionHeader";
-import { LoadingSkeleton } from "../../../src/ui/StateViews";
+import { SegmentedControl } from "../../../src/ui/SegmentedControl";
+import { CapsuleButton } from "../../../src/ui/siparis/parts";
+import { Empty, ErrorState, LoadingSkeleton } from "../../../src/ui/StateViews";
 import { SyncIndicator } from "../../../src/ui/SyncIndicator";
 import { makeStyles } from "../../../src/ui/theme-context";
-import { space, typography, type Domain } from "../../../src/ui/tokens";
-
-/** Alan kartı → gidilecek bölüm + renk kimliği (Fason üretimin içinde, finans özeti Finans'ta). */
-const CARD_TARGET: Readonly<Record<string, { route: string; domain: Domain; module: ModuleKey }>> = {
-  "ozet.siparis": { route: "/siparisler", domain: "siparisler", module: "siparisler" },
-  "ozet.sevkiyat": { route: "/sevkiyat", domain: "sevkiyat", module: "sevkiyat" },
-  "ozet.uretim": { route: "/uretim", domain: "uretim", module: "uretim" },
-  "ozet.stok": { route: "/stok", domain: "stok", module: "stok" },
-  "ozet.fason": { route: "/uretim", domain: "fason", module: "uretim" },
-  "ozet-finans": { route: "/finans", domain: "finans", module: "finans" },
-};
+import { space, typography } from "../../../src/ui/tokens";
 
 /** Çalışan hesabındaki alan satırlarının kısa açıklaması. */
 const MODULE_HINT: Readonly<Partial<Record<ModuleKey, string>>> = {
@@ -49,90 +45,86 @@ const MODULE_HINT: Readonly<Partial<Record<ModuleKey, string>>> = {
   profil: "Hesabın, parola ve oturum",
 };
 
+const DEPO = cihazDeposu();
+
+const DONEM_LABEL: Readonly<Record<PanoDonem, string>> = { bugun: "Bugün", hafta: "Hafta", ay: "Ay", yil: "Yıl" };
+
+/** Yerel kutular (fabrika pano ucu yoksa): anahtar → gereken anlık + varsayılan mı. Sıra = varsayılan yerleşim. */
+const YEREL_KATALOG: readonly (KatalogKutusu & { readonly projeksiyon: string })[] = [
+  { anahtar: "kahraman", baslik: "Bugün tamamlanan üretim", aciklama: "İstasyonlarda bugün biten toplar", varsayilan: true, projeksiyon: "ozet.uretim" },
+  { anahtar: "bugunSevk", baslik: "Bugün sevk", aciklama: "Bugün, bu ay ve geçen ay brüt sevk", varsayilan: true, projeksiyon: "ozet.sevkiyat" },
+  { anahtar: "acikSiparis", baslik: "Açık sipariş", aciklama: "Açık kalem, karşılanma ve geciken", varsayilan: true, projeksiyon: "ozet.siparis" },
+  { anahtar: "vade", baslik: "Vadesi yaklaşan", aciklama: "7 gün içinde vadesi gelen çek/senet", varsayilan: true, projeksiyon: "ozet-finans" },
+  { anahtar: "kuyruk", baslik: "Üretim kuyruğu", aciklama: "Yarı mamul, fason ve depo", varsayilan: true, projeksiyon: "ozet.uretim" },
+  { anahtar: "stok", baslik: "Stok", aciklama: "Stok özeti", varsayilan: false, projeksiyon: "ozet.stok" },
+  { anahtar: "fason", baslik: "Fason", aciklama: "Fason özeti", varsayilan: false, projeksiyon: "ozet.fason" },
+];
+
 export default function Dashboard() {
   const { facility, permissions, factoryStamp, offline, refresh } = useSession();
   const router = useRouter();
   const wide = useWide();
   const s = useStyles();
   useOpenRefresh();
+  const uzak = yetenek().pano;
   const cards = visibleCards(permissions);
-  // Kutucuk/satır yalnız açılabilen bölüme götürür (bölüm bu sunucuda yoksa dokunma bir şey yapmaz).
-  const reach = (route: string) => {
+  const [duzenle, setDuzenle] = useState(false);
+  // Kutucuk yalnız açılabilen bölüme götürür (bölüm bu sunucuda yoksa dokunma bir şey yapmaz).
+  const go = (route: string | undefined) => {
+    if (!route) return undefined;
     const m = MODULES.find((x) => x.route === route);
-    return m === undefined || moduleVisible(permissions, m.key);
+    return m === undefined || moduleVisible(permissions, m.key) ? () => router.push(route as never) : undefined;
   };
-  const go = (route: string) => () => {
-    if (reach(route)) router.push(route as never);
-  };
-  const on = (p: string) => cards.some((c) => c.projection === p);
-  const orders = useSnapshot("ozet.siparis", on("ozet.siparis"));
+  const has = (p: string) => cards.some((c) => c.projection === p);
+  // Sipariş + finans anlığı Dikkat şeridini de besler (her kipte); diğerleri yalnız yerel kutular için.
+  const on = (p: string) => !uzak && has(p);
+  const orders = useSnapshot("ozet.siparis", has("ozet.siparis"));
+  const finance = useSnapshot("ozet-finans", has("ozet-finans"));
   const shipping = useSnapshot("ozet.sevkiyat", on("ozet.sevkiyat"));
   const production = useSnapshot("ozet.uretim", on("ozet.uretim"));
   const stock = useSnapshot("ozet.stok", on("ozet.stok"));
   const subcontract = useSnapshot("ozet.fason", on("ozet.fason"));
-  const finance = useSnapshot("ozet-finans", on("ozet-finans"));
   const health = useSnapshot("saglik", can(permissions, "bulut:ozet:oku"));
-  const byProjection = { "ozet.siparis": orders, "ozet.sevkiyat": shipping, "ozet.uretim": production, "ozet.stok": stock, "ozet.fason": subcontract, "ozet-finans": finance } as const;
   const all = combine([orders, shipping, production, stock, subcontract, finance, health]);
+  const veri = (r: { data: { veri: unknown } | null }) => r.data?.veri;
+
+  const items = attentionItems({ health: veri(health), orders: veri(orders), finance: veri(finance), lastSync: facility ? factoryStamp : undefined });
   const reloadAll = () => {
     void refresh();
     all.reload();
   };
-
-  const veri = (r: { data: { veri: unknown } | null }) => r.data?.veri;
-  const items = attentionItems({ health: veri(health), orders: veri(orders), finance: veri(finance), lastSync: facility ? factoryStamp : undefined });
   const open = (i: AttentionItem) => (i.action === "esitle" ? reloadAll() : i.route ? router.push(i.route as never) : undefined);
-  const firstLoad = cards.length > 0 && cards.every((c) => !byProjection[c.projection as keyof typeof byProjection]?.data) && [orders, shipping, production, stock, subcontract, finance].some((r) => r.loading);
 
-  const header = (
-    <View style={s.header}>
-      {!wide ? <FacilityName /> : null}
-      <View style={s.headerRow}>
-        {!wide ? (
-          <View>
-            <RoleBadge permissions={permissions} />
-          </View>
-        ) : null}
-        <SyncIndicator last={factoryStamp} offline={offline} onPress={reloadAll} />
-      </View>
-    </View>
-  );
+  const yerelKatalog = useMemo(() => YEREL_KATALOG.filter((k) => cards.some((c) => c.projection === k.projeksiyon)), [cards]);
+  const showPano = uzak || cards.length > 0;
 
   return (
-    <Screen title="Pano" back={false} subtitle={header} onRefresh={reloadAll} refreshing={all.refreshing}>
-      {cards.length === 0 ? (
+    <Screen
+      title="Pano"
+      back={false}
+      titleRight={<SyncIndicator last={factoryStamp} offline={offline} onPress={reloadAll} />}
+      subtitle={!wide ? <FacilityName /> : undefined}
+      headerRight={showPano ? <CapsuleButton label="Düzenle" icon="create-outline" onPress={() => setDuzenle(true)} testID="pano-duzenle" /> : undefined}
+      onRefresh={reloadAll}
+      refreshing={all.refreshing}
+    >
+      {!showPano ? (
         <Reachable permissions={permissions} onOpen={(route) => router.push(route as never)} />
       ) : (
         <>
-          <SectionHeader title="Dikkat" count={items.length > 0 ? items.length : undefined} testID="bolum-dikkat" />
-          <AttentionStrip items={items} checked={checkedText(permissions, on)} onOpen={open} />
-          {firstLoad ? <LoadingSkeleton variant="kpi" rows={4} testID="pano-yukleniyor" /> : null}
-          {production.data ? <TodayHero production={production.data} shipping={veri(shipping)} orders={veri(orders)} offline={production.offline} /> : null}
-          <KpiGrid testID="pano-kpi">
-            {shipping.data ? <ShipTodayTile data={shipping.data.veri} onPress={go("/sevkiyat")} /> : null}
-            {orders.data ? <OpenOrdersTile data={orders.data.veri} onPress={go("/siparisler")} /> : null}
-            {finance.data ? <DueTile data={finance.data.veri} onPress={go("/finans")} /> : null}
-            {production.data ? <QueueTile data={production.data.veri} onPress={go("/uretim")} /> : null}
-          </KpiGrid>
-          <SectionHeader title="Alanlar" testID="bolum-alanlar" />
-          <ListGroup testID="alan-kartlari">
-            {cards.map((c) => {
-              const target = CARD_TARGET[c.projection];
-              const r = byProjection[c.projection as keyof typeof byProjection];
-              const subtitle = r?.data ? areaSummary(c.projection, r.data.veri) : r?.error ? r.error : r?.loading ? "Yükleniyor…" : "Fabrikadan henüz gelmedi";
-              return (
-                <ListRow
-                  key={c.projection}
-                  title={c.title}
-                  subtitle={subtitle}
-                  domain={target?.domain ?? "genel"}
-                  icon={target ? DOMAIN_ICON[target.domain] : undefined}
-                  onPress={target && reach(target.route) ? go(target.route) : undefined}
-                  testID={`anlik-${c.projection}`}
-                />
-              );
-            })}
-          </ListGroup>
+          {items.length > 0 ? <AttentionStrip items={items} checked="" onOpen={open} /> : null}
+          {uzak ? (
+            <UzakPano go={go} duzenle={duzenle} kapat={() => setDuzenle(false)} />
+          ) : (
+            <YerelPano
+              katalog={yerelKatalog}
+              duzenle={duzenle}
+              kapat={() => setDuzenle(false)}
+              go={go}
+              data={{ orders: veri(orders), shipping: veri(shipping), production: veri(production), stock: veri(stock), subcontract: veri(subcontract), finance: veri(finance) }}
+              loading={[orders, shipping, production, stock, subcontract, finance].some((r) => r.loading)}
+            />
+          )}
         </>
       )}
       {facility?.esitleme?.sozlesmeUyarisi ? <Text style={s.note}>{facility.esitleme.sozlesmeUyarisi}</Text> : null}
@@ -140,120 +132,142 @@ export default function Dashboard() {
   );
 }
 
-function checkedText(perms: readonly string[], on: (p: string) => boolean): string {
-  const parts = [can(perms, "bulut:ozet:oku") ? "yedek" : null, on("ozet.siparis") ? "siparişler" : null, on("ozet-finans") ? "çek vadeleri" : null, "eşitleme"];
-  return `${parts.filter(Boolean).join(", ")} kontrol edildi`;
-}
+type Go = (route: string | undefined) => (() => void) | undefined;
 
-/** Bugünün kahramanı: istasyonlarda bugün biten top + bu ayın sevk/karşılanma oranları (fabrika sayıları). */
-function TodayHero({ production, shipping, orders, offline }: { readonly production: { veri: unknown; surum: string; projeksiyon: string }; readonly shipping: unknown; readonly orders: unknown; readonly offline: boolean }) {
-  const p = obj(production.veri);
-  const month = period(shipping, "buAy");
-  const minis = [
-    shipping !== undefined ? { label: `${PERIOD_LABEL.buAy} sevk`, value: `${qty(month.sevkMiktari)} ${UNIT.metre}` } : null,
-    shipping !== undefined ? { label: "Zamanında", value: pct(month.zamanindaYuzde) } : null,
-    orders !== undefined ? { label: "Karşılanma", value: pct(obj(orders).karsilanmaYuzde) } : null,
-  ].filter((m): m is { label: string; value: string } => m !== null);
+/** Fabrikanın pano kutuları: katalog → kullanıcı düzeni → seçili kutuların verisi (tek istek). */
+function UzakPano({ go, duzenle, kapat }: { readonly go: Go; readonly duzenle: boolean; readonly kapat: () => void }) {
+  const { panocu, scope } = useSession();
+  const kat = useRemote("pano:katalog", () => panocu.katalog());
+  const katalog = useMemo<PanoKutuTanimi[] | null>(() => (kat.data ? kat.data.kutular.filter((k) => !MOBILDE_YOK.has(k.anahtar)) : null), [kat.data]);
+  const duzen = usePanoDuzeni(scope, katalog, DEPO);
+  const donem: PanoDonem = (PANO_DONEMLERI as readonly string[]).includes(duzen.donem ?? "") ? (duzen.donem as PanoDonem) : "bugun";
+  const keys = duzen.kutular;
+  const data = useRemote(duzen.hazir && keys.length > 0 ? `pano:${donem}:${keys.join(",")}` : null, () => panocu.veri(keys, donem));
+  const byKey = new Map((katalog ?? []).map((k) => [k.anahtar, k]));
+  const donemli = keys.some((k) => byKey.get(k)?.donemli);
+
+  if (!katalog) return kat.error ? <ErrorState text={`Pano yüklenemedi: ${kat.error}`} onRetry={kat.reload} testID="pano-hata" /> : <LoadingSkeleton variant="kpi" rows={4} testID="pano-yukleniyor" />;
   return (
-    <View>
-      <HeroSummary
-        title="Bugün tamamlanan üretim"
-        value={qty(p.bugunTamamlananToplam)}
-        unit={UNIT.top}
-        caption="İstasyonlarda bugün biten toplar"
-        domain="uretim"
-        icon="today-outline"
-        minis={minis}
-        testID="pano-kahraman"
-      />
-      <FactoryStamp snap={production} offline={offline} />
-    </View>
+    <>
+      {donemli ? (
+        <View style={{ marginBottom: space.m }}>
+          <SegmentedControl items={PANO_DONEMLERI.map((k) => ({ key: k, label: DONEM_LABEL[k] }))} value={donem} onChange={duzen.setDonem} testIDPrefix="pano-donem-" accessibilityLabel="Dönem" />
+        </View>
+      ) : null}
+      {keys.length === 0 ? <Empty text="Panoda kutu yok — Düzenle ile ekleyin" testID="pano-bos" /> : null}
+      {data.loading && !data.data ? <LoadingSkeleton variant="kpi" rows={Math.min(keys.length, 4)} testID="pano-yukleniyor" /> : null}
+      {data.data ? (
+        <KpiGrid testID="pano-kpi">
+          {keys.map((k) => {
+            const t = byKey.get(k);
+            const g = kutuGorunum(k, data.data!.kutular[k]);
+            const meta = KUTU_META[k];
+            return (
+              <KpiCard
+                key={k}
+                label={t?.baslik ?? k}
+                value={g ? g.value ?? "" : "—"}
+                unit={g?.unit}
+                caption={g ? g.caption : "Veri yok"}
+                trend={g?.trend}
+                lines={g?.lines}
+                domain={meta?.domain ?? "genel"}
+                icon={meta?.icon}
+                onPress={go(meta?.route)}
+                testID={`kutu-${k}`}
+              />
+            );
+          })}
+        </KpiGrid>
+      ) : null}
+      <PanoDuzenleyici visible={duzenle} onClose={kapat} katalog={katalog} duzen={duzen} />
+    </>
   );
 }
 
-function ShipTodayTile({ data, onPress }: { readonly data: unknown; readonly onPress: () => void }) {
-  const today = period(data, "bugun");
-  const month = period(data, "buAy");
-  const last = period(data, "gecenAy");
+interface YerelVeri {
+  readonly orders: unknown;
+  readonly shipping: unknown;
+  readonly production: unknown;
+  readonly stock: unknown;
+  readonly subcontract: unknown;
+  readonly finance: unknown;
+}
+
+/** Eski fabrika / bulut: anlık özetlerden yerel kutular, aynı düzenleyiciyle. */
+function YerelPano({ katalog, duzenle, kapat, go, data, loading }: { readonly katalog: readonly KatalogKutusu[]; readonly duzenle: boolean; readonly kapat: () => void; readonly go: Go; readonly data: YerelVeri; readonly loading: boolean }) {
+  const { scope } = useSession();
+  const duzen = usePanoDuzeni(scope ?? null, katalog, DEPO);
+  const tiles = duzen.kutular.map((k) => yerelKutu(k, data, go)).filter((p): p is KpiCardProps => p !== null);
   return (
-    <KpiCard
-      label="Bugün sevk"
-      value={qty(today.sevkMiktari)}
-      unit={UNIT.metre}
-      caption={`${qty(today.sevkTopSayisi)} ${UNIT.top} · brüt`}
-      domain="sevkiyat"
-      lines={[
-        { label: PERIOD_LABEL.buAy, value: `${qty(month.sevkMiktari)} ${UNIT.metre}` },
-        { label: PERIOD_LABEL.gecenAy, value: `${qty(last.sevkMiktari)} ${UNIT.metre}` },
-      ]}
-      onPress={onPress}
-      testID="kpi-bugun-sevk"
-    />
+    <>
+      {tiles.length === 0 && loading ? <LoadingSkeleton variant="kpi" rows={4} testID="pano-yukleniyor" /> : null}
+      {tiles.length === 0 && !loading && duzen.kutular.length === 0 ? <Empty text="Panoda kutu yok — Düzenle ile ekleyin" testID="pano-bos" /> : null}
+      {tiles.length > 0 ? (
+        <KpiGrid testID="pano-kpi">
+          {tiles.map((p) => <KpiCard key={p.testID} {...p} />)}
+        </KpiGrid>
+      ) : null}
+      <PanoDuzenleyici visible={duzenle} onClose={kapat} katalog={katalog} duzen={duzen} />
+    </>
   );
 }
 
-function OpenOrdersTile({ data, onPress }: { readonly data: unknown; readonly onPress: () => void }) {
-  const d = obj(data);
-  const late = typeof d.gecikenKalem === "number" && d.gecikenKalem > 0;
-  const lines: KpiLine[] = [
-    { label: "Açık miktar", value: `${qty(d.acikMiktar)} ${UNIT.metre}` },
-    { label: "Geciken", value: `${qty(d.gecikenKalem)} ${UNIT.kalem}`, tone: late ? "kritik" : undefined },
-  ];
-  return (
-    <KpiCard
-      label="Açık sipariş"
-      value={qty(d.acikKalem)}
-      unit={UNIT.kalem}
-      caption={`${pct(d.karsilanmaYuzde)} karşılandı`}
-      domain="siparisler"
-      status={late ? { kind: "kritik", label: "Geciken var" } : { kind: "iyi", label: "Gecikme yok" }}
-      lines={lines}
-      onPress={onPress}
-      testID="kpi-acik-siparis"
-    />
-  );
-}
-
-/** Vadesi yaklaşan (7 gün) çek/senet: döviz ve yön ayrı satır; toplanmaz. */
-function DueTile({ data, onPress }: { readonly data: unknown; readonly onPress: () => void }) {
-  const soon = dueRows(data, ["SOON"]);
-  const overdue = dueRows(data, ["OVERDUE"]);
-  const first = soon[0];
-  return (
-    <KpiCard
-      label="Vadesi yaklaşan"
-      value={first ? dueAmount(first) : "Yok"}
-      caption={first ? `${dueShort(first)} · 7 gün içinde` : "7 gün içinde vadesi gelen çek/senet yok"}
-      domain="finans"
-      icon="calendar-outline"
-      status={overdue.length > 0 ? { kind: "kritik", label: "Geçmiş var" } : undefined}
-      lines={soon.slice(1, 3).map((r) => ({ label: dueShort(r), value: dueAmount(r) }))}
-      lineLayout="stack"
-      onPress={onPress}
-      testID="kpi-vade"
-    />
-  );
-}
-
-/** Üretim kuyruğu: yarı mamul kolonu (Kanban ile aynı kaynak, top sayısı); yanında fason ve depo. */
-function QueueTile({ data, onPress }: { readonly data: unknown; readonly onPress: () => void }) {
-  const semi = column(data, "yariMamul");
-  const fason = column(data, "fason");
-  const depot = column(data, "depo");
-  const lines = [fason, depot].flatMap((c) => (c ? [{ label: c.label, value: `${qty(c.count)} ${UNIT.top}` }] : []));
-  return (
-    <KpiCard
-      label="Üretim kuyruğu"
-      value={qty(semi?.count)}
-      unit={UNIT.top}
-      caption={semi ? `${semi.label} · şu an` : "Akış verisi yok"}
-      domain="uretim"
-      icon="layers-outline"
-      lines={lines}
-      onPress={onPress}
-      testID="kpi-uretim-kuyrugu"
-    />
-  );
+/** Yerel kutu → kart; verisi henüz gelmemiş kutu çizilmez. */
+function yerelKutu(key: string, d: YerelVeri, go: Go): KpiCardProps | null {
+  switch (key) {
+    case "kahraman": {
+      if (d.production === undefined) return null;
+      const month = period(d.shipping, "buAy");
+      const lines = [
+        d.shipping !== undefined ? { label: `${PERIOD_LABEL.buAy} sevk`, value: `${qty(month.sevkMiktari)} ${UNIT.metre}` } : null,
+        d.orders !== undefined ? { label: "Karşılanma", value: pct(obj(d.orders).karsilanmaYuzde) } : null,
+      ].filter((l): l is { label: string; value: string } => l !== null);
+      return { label: "Bugün tamamlanan", value: qty(obj(d.production).bugunTamamlananToplam), unit: UNIT.top, caption: "istasyonlarda biten", domain: "uretim", icon: "today-outline", lines, onPress: go("/uretim"), testID: "pano-kahraman" };
+    }
+    case "bugunSevk": {
+      if (d.shipping === undefined) return null;
+      const today = period(d.shipping, "bugun");
+      return {
+        label: "Bugün sevk", value: qty(today.sevkMiktari), unit: UNIT.metre, caption: `${qty(today.sevkTopSayisi)} ${UNIT.top} · brüt`, domain: "sevkiyat",
+        lines: [{ label: PERIOD_LABEL.buAy, value: `${qty(period(d.shipping, "buAy").sevkMiktari)} ${UNIT.metre}` }],
+        onPress: go("/sevkiyat"), testID: "kpi-bugun-sevk",
+      };
+    }
+    case "acikSiparis": {
+      if (d.orders === undefined) return null;
+      const o = obj(d.orders);
+      const late = typeof o.gecikenKalem === "number" && o.gecikenKalem > 0;
+      return {
+        label: "Açık sipariş", value: qty(o.acikKalem), unit: UNIT.kalem, caption: `${pct(o.karsilanmaYuzde)} karşılandı`, domain: "siparisler",
+        lines: [{ label: "Geciken", value: `${qty(o.gecikenKalem)} ${UNIT.kalem}`, tone: late ? "kritik" : undefined }],
+        onPress: go("/siparisler"), testID: "kpi-acik-siparis",
+      };
+    }
+    case "vade": {
+      if (d.finance === undefined) return null;
+      const soon = dueRows(d.finance, ["SOON"]);
+      const overdue = dueRows(d.finance, ["OVERDUE"]);
+      const first = soon[0];
+      return {
+        label: "Vadesi yaklaşan", value: first ? dueAmount(first) : "Yok", caption: first ? `${dueShort(first)} · 7 gün` : "7 gün içinde yok", domain: "finans", icon: "calendar-outline",
+        status: overdue.length > 0 ? { kind: "kritik", label: "Geçmiş var" } : undefined,
+        lines: soon.slice(1, 3).map((r) => ({ label: dueShort(r), value: dueAmount(r) })), lineLayout: "stack", onPress: go("/finans"), testID: "kpi-vade",
+      };
+    }
+    case "kuyruk": {
+      if (d.production === undefined) return null;
+      const semi = column(d.production, "yariMamul");
+      const lines = [column(d.production, "fason"), column(d.production, "depo")].flatMap((c) => (c ? [{ label: c.label, value: `${qty(c.count)} ${UNIT.top}` }] : []));
+      return { label: "Üretim kuyruğu", value: qty(semi?.count), unit: UNIT.top, caption: semi ? semi.label : "Akış verisi yok", domain: "uretim", icon: "layers-outline", lines, onPress: go("/uretim"), testID: "kpi-uretim-kuyrugu" };
+    }
+    case "stok":
+      return d.stock === undefined ? null : { label: "Stok", value: "", caption: areaSummary("ozet.stok", d.stock), domain: "stok", onPress: go("/stok"), testID: "kpi-stok" };
+    case "fason":
+      return d.subcontract === undefined ? null : { label: "Fason", value: "", caption: areaSummary("ozet.fason", d.subcontract), domain: "fason", onPress: go("/uretim"), testID: "kpi-fason" };
+    default:
+      return null;
+  }
 }
 
 /** Özet izni olmayan hesap: görebildiği bölümler (izinliler) gruplu liste olarak. */
@@ -282,8 +296,6 @@ function Reachable({ permissions, onOpen }: { readonly permissions: readonly str
 }
 
 const useStyles = makeStyles((t) => ({
-  header: { gap: space.xs, marginTop: space.xs },
-  headerRow: { flexDirection: "row" as const, alignItems: "center" as const, gap: space.m, flexWrap: "wrap" as const },
   intro: { ...typography.callout, color: t.textSecondary, marginTop: space.s },
   note: { ...typography.footnote, color: t.textSecondary, marginTop: space.m },
 }));

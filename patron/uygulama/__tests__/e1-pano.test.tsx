@@ -43,6 +43,15 @@ const mockSession = {
   feedMode: "kapali",
   offline: false,
   offlineSince: null as string | null,
+  scope: "t1:h1" as string | null,
+  panocu: {
+    katalog: jest.fn(async () => ({ kutular: [
+      { anahtar: "uretim", baslik: "Üretim", aciklama: "", grup: "uretim", donemli: true, varsayilan: true, boyut: "kpi" },
+      { anahtar: "egilim", baslik: "Eğilim", aciklama: "", grup: "uretim", donemli: true, varsayilan: true, boyut: "genis" },
+      { anahtar: "stokOzeti", baslik: "Stok özeti", aciklama: "", grup: "stok", donemli: false, varsayilan: false, boyut: "orta" },
+    ] })),
+    veri: jest.fn(async (_k: readonly string[], donem: string) => ({ donem, olusturuldu: "2026-11-14T09:00:00Z", kutular: { uretim: { metre: { deger: 4200, degisimYuzde: 12 }, top: { deger: 38 } } } })),
+  },
 };
 const mockRouter = { navigate: jest.fn(), push: jest.fn(), back: jest.fn(), canGoBack: () => false, replace: jest.fn() };
 jest.mock("../src/state/session", () => ({ useSession: () => mockSession }));
@@ -70,9 +79,9 @@ describe("Pano", () => {
   it("§1 izinsiz alan kartı çizilmez", async () => {
     mockSession.permissions = ["bulut:oturum", "bulut:ozet:oku", "bulut:siparis:oku"];
     render(<Dashboard />);
-    expect(await screen.findByTestId("anlik-ozet.siparis")).toBeTruthy();
-    expect(screen.queryByTestId("anlik-ozet-finans")).toBeNull();
-    expect(screen.queryByTestId("anlik-ozet.uretim")).toBeNull();
+    expect(await screen.findByTestId("kpi-acik-siparis")).toBeTruthy();
+    expect(screen.queryByTestId("kpi-vade")).toBeNull();
+    expect(screen.queryByTestId("pano-kahraman")).toBeNull();
     await waitFor(() => expect(mockApi.snapshot).toHaveBeenCalledWith("ozet.siparis"));
     expect(mockApi.snapshot).not.toHaveBeenCalledWith("ozet-finans");
   });
@@ -86,6 +95,23 @@ describe("Pano", () => {
     const [first] = attentionItems({ health: { yedek: { hukum: "kritik" } }, orders: { gecikenKalem: 0 } });
     expect(first).toMatchObject({ key: "yedek", tone: "kritik" });
     expect(attentionItems({ health: { yedek: { hukum: "ok" } } })).toEqual([]);
+  });
+
+  it("§1b fabrika pano ucu: katalog kutuları, grafik kutusu yok, dönem değişince yeniden çeker", async () => {
+    const Y = require("../src/api/yetenek") as typeof import("../src/api/yetenek");
+    Y.setYetenek({ ...Y.BULUT_YETENEK, pano: true });
+    try {
+      mockSession.permissions = ["bulut:oturum", "bulut:ozet:oku", "bulut:siparis:oku"];
+      render(<Dashboard />);
+      const tile = await screen.findByTestId("kutu-uretim");
+      expect(within(tile).getByText("4.200")).toBeTruthy();
+      expect(screen.queryByTestId("kutu-egilim")).toBeNull();
+      expect(mockSession.panocu.veri).toHaveBeenLastCalledWith(["uretim"], "bugun");
+      fireEvent.press(screen.getByTestId("pano-donem-ay"));
+      await waitFor(() => expect(mockSession.panocu.veri).toHaveBeenLastCalledWith(["uretim"], "ay"));
+    } finally {
+      Y.setYetenek(Y.BULUT_YETENEK);
+    }
   });
 
   it("§3 çalışan (özet izni yok): 'Görebildiğin alanlar', Dikkat şeridi yok", async () => {
