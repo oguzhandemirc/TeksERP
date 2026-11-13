@@ -171,6 +171,9 @@
 - **[ÇEKİRDEK]** ERP düzenlemesinde önce gerçek ERP kaydını oku, yalnız farkı `expectedUpdatedAt` ile yolla; 409 `STALE_RECORD`'da formu koru, sürümü "Yenile" ile al <sub>(arşiv:2026-11-13 V4b)</sub>.
 - **[ÇEKİRDEK]** Telefonda sipariş kalemi düzenleme ve İE/aktif sevkiyat taşıyan siparişi iptal etme; iptalden hemen önce önizlemeyi yeniden oku <sub>(arşiv:2026-11-13 V4b)</sub>.
 - **[ÇEKİRDEK]** ERP cari doğuşuna deneme kimliğini `clientToken` olarak, iptale görülen önizlemenin `previewToken`ını `expectedPreviewToken` olarak koy (yoksa gönderme); 409 `CANCEL_PREVIEW_STALE`de önizlemeyi yeniden çek, onayı baştan al <sub>(arşiv:2026-11-13 V4d)</sub>.
+- **[ÇEKİRDEK]** ERP raporunu yalnız `src/api/rapor.ts` `Raporcu` ile iste; ekran `yetenek().raporAnlik`e bakar (`rapor` = `/auth/me` `patronReportApi`), bulut istek → yoklama akışı `Api` üzerinde aynen kalır <sub>(arşiv:2026-11-13 V5b)</sub>.
+- **[ÇEKİRDEK]** ERP rapor listesinde istemci bulut kodu süzgecini (`requestable`) uygulama, sunucu kataloğunu göster; izin/modül/rapor kapısı hatasında kataloğu yeniden çek <sub>(arşiv:2026-11-13 V5b)</sub>.
+- **[ÇEKİRDEK]** Rapor ekranı açılınca son koşumun saklı sonucunu göster, yenisini yalnız "Yeni oluştur" ile iste; deneme kimliği mantıksal deneme başına, belirsizde yapışık <sub>(arşiv:2026-11-13 V5b)</sub>.
 
 ### Kararlar
 

@@ -28,6 +28,8 @@ export interface ErpMe {
   readonly backendVersion?: string;
   readonly patronApiVersion?: number | string;
   readonly patronReadSets?: readonly string[];
+  /** V5a rapor ucu sözleşme sürümü (`/api/patron/v1/raporlar`); yoksa rapor gizli. */
+  readonly patronReportApi?: number;
 }
 
 export interface ErpLoginResult {

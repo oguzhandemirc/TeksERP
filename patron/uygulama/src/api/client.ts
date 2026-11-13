@@ -51,7 +51,8 @@ export interface DownloadedFile {
 
 export interface ApiClient {
   get<T>(path: string, query?: Query): Promise<T>;
-  post<T>(path: string, body: unknown): Promise<T>;
+  /** `timeoutMs`: uzun süren eşzamanlı işlem (ERP rapor oluşturma); verilmezse istemcinin varsayılanı. */
+  post<T>(path: string, body: unknown, o?: { readonly timeoutMs?: number }): Promise<T>;
   patch<T>(path: string, body: unknown): Promise<T>;
   /** Yalnız ERP kipi (cari pasife alma `DELETE /api/customers/:id`); bulut uç tablosu DELETE kullanmaz. */
   del<T>(path: string): Promise<T>;
@@ -111,8 +112,8 @@ export function createClient(opts: ClientOptions): ApiClient {
     throw err;
   }
 
-  async function request<T>(method: string, path: string, body?: unknown, query?: Query): Promise<T> {
-    const res = await send(method, path, { body, query, accept: "application/json" });
+  async function request<T>(method: string, path: string, body?: unknown, query?: Query, timeoutMs?: number): Promise<T> {
+    const res = await send(method, path, { body, query, accept: "application/json", timeoutMs });
     let parsed: unknown = null;
     try {
       parsed = await res.json();
@@ -140,7 +141,7 @@ export function createClient(opts: ClientOptions): ApiClient {
 
   return {
     get: (path, query) => request("GET", path, undefined, query),
-    post: (path, body) => request("POST", path, body ?? {}),
+    post: (path, body, o) => request("POST", path, body ?? {}, undefined, o?.timeoutMs),
     patch: (path, body) => request("PATCH", path, body ?? {}),
     del: (path) => request("DELETE", path),
     download,

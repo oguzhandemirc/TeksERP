@@ -16,7 +16,7 @@ import {
   type TabloBlok,
   type TabloHucresi,
 } from "../../api/wire";
-import { formatNumber } from "../../lib/format";
+import { formatNumber, formatQty } from "../../lib/format";
 import { BarRow } from "../charts/BarRow";
 import { Sparkline } from "../charts/Sparkline";
 import type { IconName } from "../icons";
@@ -31,11 +31,11 @@ export const TABLE_ROW_LIMIT = 8;
 export const CHART_BAR_LIMIT = 8;
 export const UNMEASURED = "Ölçülemedi";
 
-/** Sayı + birim metni: para 0 ondalık, diğerleri en çok 1; yüzde işareti öne ("%12"). `null` → "Ölçülemedi". */
+/** Sayı + birim metni: para 0 ondalık binlikli, diğerleri en çok 1 ayırıcısız ("12500,5 m"); yüzde işareti öne ("%12"). `null` → "Ölçülemedi". */
 export function figureText(value: number | null | undefined, unit: Birim): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return UNMEASURED;
   const digits = PARA_BIRIMLERI.includes(unit) ? 0 : Number.isInteger(value) ? 0 : 1;
-  const n = formatNumber(value, digits);
+  const n = PARA_BIRIMLERI.includes(unit) ? formatNumber(value, digits) : formatQty(value, digits);
   return unit === "yuzde" ? `%${n}` : `${n} ${BIRIM_METNI[unit] ?? ""}`.trim();
 }
 
@@ -56,13 +56,13 @@ export function comparisonView(k: AnaSayiKiyas | undefined, unit: Birim): Compar
   const icon: IconName = k.yon === "artti" ? "arrow-up" : k.yon === "azaldi" ? "arrow-down" : "remove-outline";
   if (k.yon === "degismedi") return { icon, tone, text: "Değişmedi" };
   const amount =
-    k.yuzde !== null ? `%${formatNumber(Math.abs(k.yuzde), 1)}` : k.fark !== null ? figureText(Math.abs(k.fark), unit) : null;
+    k.yuzde !== null ? `%${formatQty(Math.abs(k.yuzde), 1)}` : k.fark !== null ? figureText(Math.abs(k.fark), unit) : null;
   return { icon, tone, text: amount ? `${amount} ${DIRECTION_WORD[k.yon]}` : DIRECTION_WORD[k.yon] };
 }
 
 function cellText(v: TabloHucresi | undefined, unit: Birim | undefined): string {
   if (v === null || v === undefined) return "—";
-  if (typeof v === "number") return unit ? figureText(v, unit) : formatNumber(v, Number.isInteger(v) ? 0 : 1);
+  if (typeof v === "number") return unit ? figureText(v, unit) : formatQty(v, Number.isInteger(v) ? 0 : 1);
   return v;
 }
 
@@ -211,7 +211,7 @@ function TableCard({ table, domain, testID }: { table: TabloBlok | null; domain:
             ))}
           </View>
         ))}
-        {total > rows.length ? <Text style={s.note}>{`${formatNumber(total, 0)} satırdan ilk ${rows.length}; tamamı panelde.`}</Text> : null}
+        {total > rows.length ? <Text style={s.note}>{`${formatQty(total, 0)} satırdan ilk ${rows.length}; tamamı panelde.`}</Text> : null}
       </Card>
     </>
   );

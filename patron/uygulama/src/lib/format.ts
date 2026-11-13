@@ -17,6 +17,11 @@ export function formatNumber(value: unknown, digits = 2): string {
   return neg && body !== "0" ? `-${body}` : body;
 }
 
+/** Ölçü/sayım/yüzde: binlik AYIRICISIZ ("14700,5"); yalnız para binlikli (`genel.md` sayı biçimi). */
+export function formatQty(value: unknown, digits = 2): string {
+  return formatNumber(value, digits).replace(/\./g, "");
+}
+
 export function formatMoney(value: unknown, currency = "TRY"): string {
   const n = formatNumber(value, 2);
   if (n === "—") return n;

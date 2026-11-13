@@ -17,6 +17,8 @@ import { SectionHeader } from "../../../src/ui/SectionHeader";
 import { Empty, ErrorState, LoadingSkeleton } from "../../../src/ui/StateViews";
 import { space } from "../../../src/ui/tokens";
 import { EMPTY_ICON } from "../../../src/ui/icons";
+import { yetenek } from "../../../src/api/yetenek";
+import { AnlikRaporListesi } from "../../../src/ui/raporlar/anlik/Liste";
 
 type Obj = Readonly<Record<string, unknown>>;
 const obj = (v: unknown): Obj => (typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Obj) : {});
@@ -44,7 +46,12 @@ function stockStats(veri: unknown): ReadyStat[] {
   ];
 }
 
+/** İstek üzerine rapor (ERP `patronReportApi`) yeteneğe göre; bulutun istek → yoklama ekranı aşağıda AYNEN. */
 export default function Reports() {
+  return yetenek().raporAnlik ? <AnlikRaporListesi /> : <BulutRaporlar />;
+}
+
+function BulutRaporlar() {
   const { api, permissions } = useSession();
   const router = useRouter();
   const catalog = useRemote("anlik:rapor-katalogu", () => api.snapshot("rapor-katalogu"));

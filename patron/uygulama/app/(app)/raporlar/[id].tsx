@@ -21,8 +21,15 @@ import { SectionHeader } from "../../../src/ui/SectionHeader";
 import { LoadingSkeleton } from "../../../src/ui/StateViews";
 import { makeStyles, useTokens } from "../../../src/ui/theme-context";
 import { FONT_SCALE, radius, space, typography } from "../../../src/ui/tokens";
+import { yetenek } from "../../../src/api/yetenek";
+import { AnlikKosum } from "../../../src/ui/raporlar/anlik/Kosum";
 
+/** İstek üzerine rapor (ERP `patronReportApi`) yeteneğe göre; bulutun istek → yoklama ekranı aşağıda AYNEN. */
 export default function ReportDetail() {
+  return yetenek().raporAnlik ? <AnlikKosum /> : <BulutRaporAyrintisi />;
+}
+
+function BulutRaporAyrintisi() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { api, offline } = useSession();
   const t = useTokens();

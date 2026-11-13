@@ -14,6 +14,7 @@ import { adresiDuzelt, baglantiOku, baglantiSil, baglantiYaz, bulutBaglantisi, e
 import { createErpApi, erpBen, erpGiris } from "../api/erp";
 import { BULUT_YETENEK, erpYetenek, izinleriSuz, setYetenek, type Yetenek } from "../api/yetenek";
 import { createBulutYazici, createErpYazici, type Yazici } from "../api/yazma";
+import { createBulutRaporcu, createErpRaporcu, type Raporcu } from "../api/rapor";
 import type { FacilityChoice, FacilityStatus, LoginResponse } from "../api/wire";
 import { apiBaseUrl } from "../lib/config";
 import { clearCache, createCache, ERP_CACHE_MAX_AGE_MS, openingCacheHygiene, purgeExpired, type Cache } from "./cache";
@@ -35,6 +36,8 @@ export interface SessionValue {
   readonly api: Api;
   /** Yazma (V4b): bulutta gelen kutusu, ERP'de fabrika uçları; işlem açıklığı `islemVar`. */
   readonly yazici: Yazici;
+  /** İstek üzerine rapor (yalnız `yetenek().raporAnlik` açıkken çağrılır; bulutta ağa gitmez). */
+  readonly raporcu: Raporcu;
   readonly cache: Cache | null;
   readonly facility: FacilityStatus | null;
   /** Etkin tesis (kapsamdan); oturumsuzken null. */
@@ -142,6 +145,7 @@ export function SessionProvider({ children, platform = "mobil" }: { children: Re
   );
   const api = useMemo(() => (isErp ? createErpApi(client, () => capsRef.current) : createApi(client)), [client, isErp]);
   const yazici = useMemo(() => (isErp ? createErpYazici(client) : createBulutYazici(api)), [client, isErp, api]);
+  const raporcu = useMemo(() => (isErp ? createErpRaporcu(client) : createBulutRaporcu()), [client, isErp]);
   const makeCache = useCallback((s: string) => createCache(plainStore, s, undefined, isErp ? ERP_CACHE_MAX_AGE_MS : undefined), [isErp]);
   const cache = useMemo(() => (scope ? makeCache(scope) : null), [scope, makeCache]);
 
@@ -202,8 +206,8 @@ export function SessionProvider({ children, platform = "mobil" }: { children: Re
     };
   }, []);
 
-  const applyCaps = useCallback((sets: unknown, perms: unknown) => {
-    const y = erpYetenek(sets, perms);
+  const applyCaps = useCallback((sets: unknown, perms: unknown, reportApi: unknown) => {
+    const y = erpYetenek(sets, perms, reportApi);
     capsRef.current = y;
     setYetenek(y);
     setErpCaps(y);
@@ -213,7 +217,7 @@ export function SessionProvider({ children, platform = "mobil" }: { children: Re
   const loadErpCaps = useCallback(
     async (c: Cache) => {
       const me = (await c.load("ben", () => erpBen(client))).data;
-      applyCaps(me.patronReadSets, me.permissions);
+      applyCaps(me.patronReadSets, me.permissions, me.patronReportApi);
       return me;
     },
     [client, applyCaps],
@@ -262,7 +266,7 @@ export function SessionProvider({ children, platform = "mobil" }: { children: Re
         const s = `erp|${adres}|${me.userId}`;
         const c = makeCache(s);
         await c.load("ben", () => Promise.resolve(me));
-        applyCaps(me.patronReadSets, me.permissions);
+        applyCaps(me.patronReadSets, me.permissions, me.patronReportApi);
         await secretStore.set(TOKEN_KEY, r.token).catch(() => undefined);
         await secretStore.set(SCOPE_KEY, s).catch(() => undefined);
         setScope(s);
@@ -391,6 +395,7 @@ export function SessionProvider({ children, platform = "mobil" }: { children: Re
     phase,
     api,
     yazici,
+    raporcu,
     cache,
     facility,
     facilityId,
