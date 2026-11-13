@@ -24,7 +24,7 @@ describe("izin kümesi kapıya göre", () => {
   });
   it("açık → bugünkü + POST_NOTIFICATIONS/c2dm/WAKE_LOCK", () => {
     const acik = pk.izinliIzinler(PAKET, true, appConfig.NATIVE_PUSH_IZINLERI);
-    expect(acik).toEqual([...BUGUNKU, ...appConfig.NATIVE_PUSH_IZINLERI]);
+    expect(acik).toEqual([...BUGUNKU, ...appConfig.NATIVE_PUSH_IZINLERI, "android.permission.ACCESS_NETWORK_STATE"]);
     expect(acik).toContain("android.permission.POST_NOTIFICATIONS");
   });
 });
