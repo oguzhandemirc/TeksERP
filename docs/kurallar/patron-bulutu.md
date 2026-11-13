@@ -204,6 +204,7 @@
 - **[ÇEKİRDEK]** `patron.etkiliyazilim.com` kalıcı takma ad: `yonetim.etkiliyazilim.com` ile aynı yönlendiricide (`PATRON_HOST` + `PATRON_TAKMA_HOST` zorunlu), DNS kaydı silinmez.
 - **[ÇEKİRDEK]** Sunucu göç parolasını ALMAZ: üç DB rolü üç docker secret'ı, göç parolası yalnız DB · `patron-goc` · yedek; sunucu port yayımlamaz, satıcıyla birim/sır paylaşmaz.
 - **[ÇEKİRDEK]** Konteynere yalnız rolünün sırları: `patron-baslat.sh` `rol_sirlari()` (`PATRON_ROL`) ↔ compose `secrets:` birebir; hazırlayıcı uygulama parolasını almaz.
+- **[ÇEKİRDEK]** İsteğe bağlı kanal sırrını (`guvenlik_telegram_*`, `expo_erisim_belirteci`) compose'a `${…_DOSYASI_HOST:-/dev/null}` ile bağla ve betikte yok/boş/biçimsizse kanalı KAPALI tutup açılışı sürdür; kod ayarını (`KOPRU_*`) compose'a değersiz geçir, boş dize ya da kopya varsayılan yazma · bekçi: `test_compose_sirlari` §5 <sub>(arşiv:2026-11-13)</sub>
 - **[ÇEKİRDEK]** Dış çıkış yalnız bildirim için: internal olmayan tek ağ `cikis`, yalnız `patron` katılır, orada dinlemez; DB · göç · yedek internal ağda.
 - **[ÇEKİRDEK]** VAPID sır dosyası konteyner dışında önceden üretilir; sunucu chmod çağırmaz; boş `BILDIRIM_VAPID_KONU` verilmemiş sayılır.
 - **[ÇEKİRDEK]** Yeni projeksiyon/tel şeması taşıyan fabrika sürümünden ÖNCE bulutu yükselt (`surum-yayin.md` § Backend).

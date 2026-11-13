@@ -25,6 +25,9 @@
 //      bildirim çıkışı — satıcı .env'inde tanımlıysa) çakışmaz
 //   ⑩ her servisin `secrets:` listesi = giriş betiğinin o rolde okuduğu sırlar (patron-baslat.sh rol tablosu ·
 //      yedek-dongusu.sh · DB'nin *_FILE ortamı): eksik sır servisi döngüde çökertir, fazla sır en az yetkiyi bozar — ikisi de ❌
+//   ⑪ telefon push: Expo erişim belirteci yalnız sunucuda ve İSTEĞE BAĞLI (.env'de yoksa /dev/null); BILDIRIM_NATIVE_PUSH
+//      geçirilir (kapali|acik, .env'de yoksa kapali); köprü ayarları (KOPRU_*) DEĞERSİZ geçer (.env'de yoksa konteynerde
+//      yok → koddaki varsayılan) ya da pozitif tamsayıdır — boş dize sayı alanını 0'a çevirip açılışı durdururdu
 //
 // Kullanım: node deploy/patron/compose-denetle.mjs --env-file <.env> --satici-env <satıcının .env'i> [-f <compose> ...]
 //           [--baslat-betigi <yol>] [--yedek-betigi <yol>]   (bekçinin sondaları için; varsayılan bu dizindekiler)
@@ -282,6 +285,27 @@ if (!saticiEnv) {
       const ayr = [eksik.length ? `EKSİK (servis çöker): ${eksik.join(", ")}` : "", fazla.length ? `FAZLA (okunmayan sır, en az yetki): ${fazla.join(", ")}` : ""].filter(Boolean).join(" · ");
       kontrol(`⑩ ${ad}: secrets = giriş betiğinin okuduğu sırlar (${kaynak})`, eksik.length === 0 && fazla.length === 0, ayr || verilen.join(", ") || "sırsız");
     }
+  }
+}
+
+// ⑪ telefon push ayarları + Expo sırrı (sınıf: dağıtım dosyası kod ayarını konteynere geçirmez → kapı hiç açılamaz)
+{
+  kontrol("⑪ Expo erişim belirteci yalnız sunucuda", sahipler("expo_erisim_belirteci") === "patron", sahipler("expo_erisim_belirteci") || "hiçbiri");
+  const expoDosya = String(cfg.secrets?.expo_erisim_belirteci?.file ?? "");
+  const expoBeyan = ortamDosyasi.EXPO_ERISIM_BELIRTECI_DOSYASI_HOST;
+  kontrol(
+    "⑪ Expo sırrı İSTEĞE BAĞLI: .env'de yoksa /dev/null, varsa o yol",
+    expoDosya !== "" && (expoBeyan ? path.resolve(expoDosya) === path.resolve(expoBeyan) : expoDosya === "/dev/null"),
+    expoDosya || "YOK",
+  );
+  const np = ortam.BILDIRIM_NATIVE_PUSH;
+  const npBeklenen = ortamDosyasi.BILDIRIM_NATIVE_PUSH ?? "kapali";
+  kontrol("⑪ BILDIRIM_NATIVE_PUSH geçirilir (kapali|acik; .env'de yoksa kapali)", ["kapali", "acik"].includes(String(np)) && np === npBeklenen, `${np ?? "YOK"} (beklenen ${npBeklenen})`);
+  for (const k of ["KOPRU_DURT_DK", "KOPRU_SORGU_BUTCE_DK", "KOPRU_BAYAT_AZAMI_SAAT", "KOPRU_DURT_SURE_SN"]) {
+    const v = ortam[k];
+    const beyan = ortamDosyasi[k];
+    const ok = k in ortam && (beyan === undefined ? v === null : String(v) === beyan && /^[1-9]\d*$/.test(beyan));
+    kontrol(`⑪ ${k} geçirilir (değersiz → koddaki varsayılan; verilirse pozitif tamsayı)`, ok, !(k in ortam) ? "compose geçirmiyor" : v === null ? "değersiz" : String(v));
   }
 }
 

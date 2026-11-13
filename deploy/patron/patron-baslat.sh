@@ -2,8 +2,8 @@
 # Patron konteyner girişi: DB URL'lerini ve satıcı iç API belirtecini docker SECRET dosyalarından kurar,
 # komutu çalıştırır — sırlar imaj yapılandırmasına ve `docker inspect`e girmez. Rol (PATRON_ROL) hangi sırların
 # okunacağını belirler; her rol YALNIZ kendi sırlarını okur ve hepsini ZORUNLU sayar (en az yetki) — tek istisna
-# güvenlik bildirimi sırları (guvenlik_telegram_*): İSTEĞE BAĞLI, okunamazsa kanal KAPALI:
-#   sunucu  → uygulama + eşitleme parolası · tesis rol anahtarı · iç API belirteci (boş = kapalı)
+# güvenlik bildirimi sırları (guvenlik_telegram_*) ve Expo erişim belirteci: İSTEĞE BAĞLI, okunamazsa kanal KAPALI:
+#   sunucu  → uygulama + eşitleme parolası · tesis rol anahtarı · iç API belirteci (boş = kapalı) · Expo belirteci (boş = telefon push kapalı)
 #   goc     → göç + uygulama + eşitleme parolası · tesis rol anahtarı (migrate deploy · db-rolleri · tesis CLI'leri)
 #   hazirla → göç parolası · tesis rol anahtarı (tesis-db izle; uygulama parolasını ALMAZ)
 # ROL TABLOSU compose-denetle ⑩'un tek kaynağıdır: compose'un `secrets:` listesi bununla birebir eşleşmeli.
@@ -15,7 +15,7 @@ DB="${DB_HOST:-patron-db}:5432/${DB_ADI:-patron}?schema=public"
 
 rol_sirlari() {
   case "$1" in
-    sunucu) echo "uygulama_parolasi esitleme_parolasi tesis_rol_anahtari ic_api_belirteci guvenlik_telegram_bot_token guvenlik_telegram_chat_id" ;;
+    sunucu) echo "uygulama_parolasi esitleme_parolasi tesis_rol_anahtari ic_api_belirteci guvenlik_telegram_bot_token guvenlik_telegram_chat_id expo_erisim_belirteci" ;;
     goc) echo "goc_parolasi uygulama_parolasi esitleme_parolasi tesis_rol_anahtari" ;;
     hazirla) echo "goc_parolasi tesis_rol_anahtari" ;;
     *) return 1 ;;
@@ -94,6 +94,22 @@ for sir in $SIRLAR; do
         if istege_bagli_sir guvenlik_telegram_chat_id; then
           GUVENLIK_TELEGRAM_CHAT_ID_DOSYASI="$S/guvenlik_telegram_chat_id"
           export GUVENLIK_TELEGRAM_CHAT_ID_DOSYASI
+        fi
+      fi ;;
+    expo_erisim_belirteci)
+      # Telefon push İSTEĞE BAĞLI: boş (/dev/null) ya da biçimsiz sır → değişken kurulmaz, gönderim KAPALI, sunucu açılır.
+      # Değer ortama girer (sunucu onu okur) ama hiçbir çıktıya yazılmaz; uyarı yalnız sırrın ADINI söyler.
+      if [ -z "${EXPO_ERISIM_BELIRTECI:-}" ] && istege_bagli_sir expo_erisim_belirteci; then
+        if [ -s "$S/expo_erisim_belirteci" ]; then
+          e="$(tr -d '\r\n' < "$S/expo_erisim_belirteci")"
+          case "$e" in
+            *[!0-9A-Za-z_-]*|"") echo "[patron] uyarı: expo_erisim_belirteci biçimsiz (yalnız harf/rakam/_/-) — telefon push KAPALI" >&2 ;;
+            *) if [ "${#e}" -ge 16 ]; then EXPO_ERISIM_BELIRTECI="$e"; export EXPO_ERISIM_BELIRTECI
+               else echo "[patron] uyarı: expo_erisim_belirteci 16 karakterden kısa — telefon push KAPALI" >&2; fi ;;
+          esac
+          unset e
+        else
+          echo "[patron] bilgi: expo_erisim_belirteci boş — telefon push KAPALI" >&2
         fi
       fi ;;
     *) echo "[patron] rol tablosunda tanınmayan sır: $sir" >&2; exit 1 ;;

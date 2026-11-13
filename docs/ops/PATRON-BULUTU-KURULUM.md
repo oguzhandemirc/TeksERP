@@ -177,6 +177,37 @@ Kullanıcının adımları (değerleri Claude'a VERMEYİN):
 4. **Dosyaları yaz (VDS, `sirlar/`, root:SIR_GID 0440):** `sirlar/guvenlik-telegram-belirteci` (bot belirteci) ve `sirlar/guvenlik-telegram-grup` (sohbet kimliği); `.env`e `GUVENLIK_TELEGRAM_BOT_TOKEN_DOSYASI_HOST` · `GUVENLIK_TELEGRAM_CHAT_ID_DOSYASI_HOST` (örnekte yorumlu satırları açın). Kanal İSTEĞE BAĞLIDIR: değişkenler/dosyalar yoksa ya da boşsa compose yine açılır (boş `/dev/null` bağlanır), kanal KAPALI ve açılış günlüğü uyarır — mevcut kurulumda güncelleme için hiçbir dosya gerekmez.
 5. **Yeniden başlat ve sına:** `docker compose up -d patron` → günlükte `[patron] güvenlik bildirimi: AÇIK` · ilk turda günlük özet gruba düşer.
 
+### 4c. Telefon push'unu açma (F5 + push köprüsü) — varsayılan KAPALI
+
+Telefona (Expo/FCM) gönderimin kapısı `patron/sunucu/src/push/native-gate.ts`: `BILDIRIM_NATIVE_PUSH=acik` ∧ `BILDIRIM_KIPI=gercek` ∧ Expo erişim belirteci. Üçü birden yoksa telefon push KAPALI kalır, sunucu yine açılır. Aynı kapı iki yolu birden açar: fabrikanın push köprüsü (`/v1/bildirim/durt`, ERP kipi) ve bulut kipi telefon bildirimleri (patron uygulamasında "Bu cihazda bildirimleri aç" demiş, native kaydı olan hesaplar). Uygulama tarafı ön koşulları (Firebase, push kapılı derleme, gizlilik metni): `PATRON-BILDIRIM-CANLI-DENEME.md` § Telefon push.
+
+**Sır nasıl isteğe bağlı:** compose sırrı `expo_erisim_belirteci`, dosyası `${EXPO_ERISIM_BELIRTECI_DOSYASI_HOST:-/dev/null}` (`guvenlik_telegram_*` ile aynı kalıp). `.env`de satır yoksa `/dev/null` bağlanır → giriş betiği (`patron-baslat.sh`) dosyayı boş bulur, `EXPO_ERISIM_BELIRTECI`i KURMAZ, günlüğe `[patron] bilgi: expo_erisim_belirteci boş — telefon push KAPALI` yazar. Biçimsiz (harf/rakam/`_`/`-` dışı) ya da 16 karakterden kısa değer de aynı şekilde KAPALI kalır (uyarı yalnız sırrın ADINI söyler; değer hiçbir çıktıya yazılmaz). **Tuzak:** satır VERİLİP dosya YOKSA `docker compose up` bağlama hatasıyla düşer (`bind source path does not exist`, yerelde ölçüldü) — satırı açmadan önce dosyayı yaz; kapatmak için dosyayı boşalt ya da satırı yorumla. Mevcut kurulum bu compose'a **yeni satır ya da dosya eklemeden** yükseltilir (köprü ayarları `KOPRU_*` de satır yoksa koddaki varsayılanla gelir: 120 · 60 · 24 · 20).
+
+1. **Expo erişim belirtecini al (kullanıcı, değeri Claude'a VERMEYİN):** expo.dev → hesap/organizasyon → Access tokens → yeni belirteç (EAS projesinin sahibi olan hesapta). Projenin "Enhanced push security" ayarı açıksa Expo da belirteç ister; ayar kapalı olsa bile sunucunun kapısı belirteçsiz AÇILMAZ.
+2. **Sır dosyasını yaz (VDS):** dosyayı `sirlar/` altında root:SIR_GID 0440 yarat ve değeri EDİTÖRLE yapıştır (komut satırına, kabuk geçmişine yazma):
+   ```bash
+   cd /opt/stack/apps/tekserp-patron-uretim
+   sudo install -o root -g 61062 -m 0440 /dev/null sirlar/expo-erisim-belirteci   # SIR_GID = .env'deki değer
+   sudo -e sirlar/expo-erisim-belirteci                                             # tek satır, yalnız belirteç
+   sudo stat -c '%U:%g %a %s' sirlar/expo-erisim-belirteci                           # root:61062 440 <bayt > 16>
+   ```
+3. **Ön koşul — bildirim kipi:** `.env`de `BILDIRIM_KIPI=gercek` + `BILDIRIM_VAPID_KONU=mailto:<adres>` ve anahtar biriminde `patron-vapid.json` (§2.1; üretimde 2026-09-30'dan beri var). `gercek` kipin bütün tesislerde ne açtığı aşağıda (**Yan etki**); karar kullanıcınındır.
+4. **`.env` satırları** (önce `cp -p .env ~/env-yedek-<tarih>-push`):
+   ```
+   BILDIRIM_NATIVE_PUSH=acik
+   EXPO_ERISIM_BELIRTECI_DOSYASI_HOST=/opt/stack/apps/tekserp-patron-uretim/sirlar/expo-erisim-belirteci
+   ```
+   İsteğe bağlı köprü ayarları (`KOPRU_DURT_DK` · `KOPRU_SORGU_BUTCE_DK` · `KOPRU_BAYAT_AZAMI_SAAT` · `KOPRU_DURT_SURE_SN`) yalnız pozitif tamsayıyla; boş değer (`KOPRU_X=`) açılışı DURDURUR.
+5. **Denetle (Mac, `.env`in kopyasıyla):** `node deploy/patron/compose-denetle.mjs --env-file <kopya> --satici-env <satıcı kopyası>` → ⑪ yedi satır ✅ (Expo yolu · `BILDIRIM_NATIVE_PUSH=acik` · KOPRU satırları); kopyaları `rm -P`.
+6. **Yeniden yarat:** `sudo docker compose config -q && sudo docker compose up -d --no-deps --force-recreate patron` (yalnız sunucu; DB · hazırlayıcı · yedek dokunulmaz, kesinti ~20 sn).
+7. **Doğrula:**
+   - `sudo docker compose logs --since 2m patron | grep -E 'PATRON_BILDIRIM|expo_erisim_belirteci'` → `PATRON_BILDIRIM kip=gercek`; `native=kapali (…)` satırı ve `expo_erisim_belirteci …` uyarısı YOK (varsa neden yazar: `BILDIRIM_KIPI gercek degil` · `EXPO_ERISIM_BELIRTECI yok`).
+   - Sırrın varlığı (değer basılmaz): `sudo docker exec tekserp-patron-uretim patron-baslat node -e 'console.log(process.env.EXPO_ERISIM_BELIRTECI ? "belirtec var" : "YOK")'` → `belirtec var` (düz `docker exec`/`inspect` görmez — §6 notu).
+   - Köprü uçtan uca: push kapılı derlenmiş uygulamada ERP kipinde "Telefon bildirimlerini aç" → fabrikada bir bildirim doğur → telefonda görünür; fabrika `/v1/bildirim/durt` yanıtı `gonderim:"acik"`, sonuç `GONDERILDI`. Kapalıyken aynı istek `gonderim:"kapali"`, sonuç `KAPALI` (belirteç silinmez).
+8. **Kapama / geri alma:** `.env`de `BILDIRIM_NATIVE_PUSH=kapali` (ya da satırı yorumla) → 6. adım. Telefon hedefi `KALICI:NATIVE_PUSH_KAPALI`, köprü `KAPALI` döner; web push ve uygulama içi geçmiş sürer. Belirteç sızdıysa: expo.dev'de belirteci İPTAL et, dosyayı yenisiyle değiştir (ya da `sudo truncate -s 0` ile boşalt) → 6. adım. Kipi de geri almak: `BILDIRIM_KIPI=kapali` → 6. adım (bildirim işi kurulmaz). Hepsi göçsüz; `.env` yedeğinden `cat ~/env-yedek-… > .env` aynı sonucu verir.
+
+**Yan etki — `BILDIRIM_KIPI=gercek` bütün tesislerde ne açar (2026-11-13 kod ölçümü):** (a) süreç içi bildirim işi kurulur, her `BILDIRIM_ARALIGI_SN` (30 sn) turunda hizmeti AÇIK her tesiste AKTİF hesaplar için olay üretir — ilk turda o anki koşullar (geciken sipariş, veri gelmiyor, eşikler…) bildirim olarak doğar ve uygulama içi geçmişte görünür; (b) web push aboneliği olan cihazlara VAPID ile gerçek gönderim; (c) `/api/bildirim/ayarlar` web push açık anahtarını döner → web sürümünde tarayıcı bildirimi açma seçeneği görünür; deneme bildirimi düğmesi çalışır; (d) native kapı kapalıyken telefon hedefleri `KALICI:NATIVE_PUSH_KAPALI` sonuçlanır (yalnız telefonu olan hesabın bildirimi `BASARISIZ` görünür). E-posta ya da başka kanal YOK; güvenlik bildirimi (Telegram, §4b) kipten bağımsızdır. `gercek` kip `BILDIRIM_VAPID_KONU` olmadan açılışı DURDURUR (config).
+
 ## 5. DNS (kullanıcı — Cloudflare)
 
 `yonetim` A → `80.253.255.188` ve `patron` A → `80.253.255.188`, ikisi de **proxy AÇIK (turuncu bulut)** — sertifika Origin CA `*.etkiliyazilim.com` (iki adı da kapsar; certresolver yok), ona yalnız CF Edge güvenir; CF kenar sertifikası (Universal SSL `*.etkiliyazilim.com`) da ikisini kapsar. `patron` kaydı KALICIDIR — silinmez, DNS-only'ye çevrilmez (kurulu fabrikaların eşitleme adresi). Kayıt kurulumdan ÖNCE açılırsa `/saglik` 404 döner (Traefik'te yönlendirici yok, zararsız); sonra 200. Önbellek kuralı gerekmez: giriş HTML'i `no-store`, özetli varlıklar `immutable` (CF köken başlığına uyar), API `no-store`. Fabrikanın varsayılan bulut adresi backend 2.15.10'dan itibaren `https://yonetim.etkiliyazilim.com`'dur (`Teks-Erp/src/cloud-sync/cloud-url.ts`, `PATRON_CLOUD_URL`); 2.15.9 ve öncesi kurulumlar `patron.`'a eşitler — takma ad bu yüzden kalıcıdır.

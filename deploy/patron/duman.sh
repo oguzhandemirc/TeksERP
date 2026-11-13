@@ -101,6 +101,8 @@ olc "/cariler/x (istemci yönlendirmesi)" "$(kod /cariler/x)"
 olc "/api/yok · /v1/yok · /ic/v1/zil · /yonetim" "$(kod /api/yok) · $(kod /v1/yok) · $(kod /ic/v1/zil) · $(kod /yonetim)"
 olc "/api/oturum (oturumsuz)" "$(kod /api/oturum)"
 olc "Traefik etiketi (konteyner)" "$(docker inspect tekserp-patron-duman --format '{{index .Config.Labels "traefik.http.routers.tekserp-patron-duman.rule"}}')"
+# Telefon push sırsız yükseltme yolu: .env'de Expo satırı yok → /dev/null bağlanır, sunucu açılır, gönderim KAPALI.
+olc "telefon push (Expo sırrı yok → /dev/null)" "$(docker logs tekserp-patron-duman 2>&1 | grep -E 'expo_erisim_belirteci|PATRON_BILDIRIM' | tr '\n' ' ')"
 olc "ic-api'de 4620 dinlenmez (BIND)" "$(docker exec tekserp-patron-duman node -e "require('http').get('http://172.31.241.3:4620/saglik',r=>console.log(r.statusCode)).on('error',e=>console.log(e.code))")"
 
 if [ -x "$KOK/patron/sunucu/node_modules/.bin/tsx" ]; then
