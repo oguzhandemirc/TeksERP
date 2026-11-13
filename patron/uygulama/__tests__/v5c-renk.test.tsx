@@ -65,13 +65,13 @@ describe("§1 yetenek ve görünürlük", () => {
 });
 
 describe("§2 uçlar ve gövde", () => {
-  it("ERP yazıcısı: POST /colors (kod yok, deneme kimliği yok), PATCH sürümle, DELETE pasif", async () => {
+  it("ERP yazıcısı: POST /colors (kod yok, deneme kimliği clientToken), PATCH sürümle, DELETE pasif", async () => {
     const f = fakeClient();
     const y = createErpYazici(f.c);
     expect(await y.renkEkle("t1", { ad: "MAVI", hex: "#1D4ED8" })).toEqual({ tur: "kayit", id: "r1" });
-    expect(f.calls[0]).toEqual({ m: "POST", path: "/colors", body: { name: "MAVI", hex: "#1D4ED8" } });
+    expect(f.calls[0]).toEqual({ m: "POST", path: "/colors", body: { name: "MAVI", hex: "#1D4ED8", clientToken: "t1" } });
     await y.renkEkle("t2", { ad: "MOR" });
-    expect(f.calls[1]!.body).toEqual({ name: "MOR" });
+    expect(f.calls[1]!.body).toEqual({ name: "MOR", clientToken: "t2" });
     expect(await y.renkOku("r1")).toEqual(KAYIT);
     await y.renkGuncelle("r1", KAYIT.surum, { name: "KREM" });
     expect(f.calls[3]).toEqual({ m: "PATCH", path: "/colors/r1", body: { name: "KREM", expectedUpdatedAt: "2026-11-13T09:00:00.000Z" } });
@@ -98,6 +98,11 @@ describe("§2 uçlar ve gövde", () => {
     const dup = new ApiError(409, "CONFLICT", "'MAVI' adında bir renk zaten var");
     expect((tanimEkleHatasi(dup, true, "Renk") as ApiError).message).toMatch(/önceki deneme kaydedilmiş olabilir/);
     expect(tanimEkleHatasi(dup, false, "Renk")).toBe(dup);
+  });
+  it("yeni fabrika: token çakışması ve sonradan pasif kayıt kesin iletilere çevrilir", () => {
+    expect((tanimEkleHatasi(new ApiError(409, "CLIENT_TOKEN_COLLISION", "x"), true, "Renk") as ApiError).message).toMatch(/farklı bilgilerle kaydedilmiş/);
+    expect((tanimEkleHatasi(new ApiError(409, "COLOR_CREATE_GONE", "x"), false, "Renk") as ApiError).message).toMatch(/sonradan pasife alınmış/);
+    expect((tanimEkleHatasi(new ApiError(409, "ITEM_CREATE_GONE", "x"), false, "Ürün") as ApiError).code).toBe("ITEM_CREATE_GONE");
   });
 });
 

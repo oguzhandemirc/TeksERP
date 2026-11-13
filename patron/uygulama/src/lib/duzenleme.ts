@@ -149,9 +149,23 @@ export function renkPatch(k: RenkKaydi, f: RenkFormu): Built<Patch> {
   return { ok: true, body: out };
 }
 
-/** Tanım doğuşunda fabrika deneme kimliği almaz: belirsiz denemeden sonraki ad mükerreri büyük olasılıkla ilk denemedir. */
+/** Renk/ürün doğuşu token'lı replay kodları (V5c fabrikası): kayıt sonradan pasif/birleşik. */
+export const TANIM_CREATE_GONE = ["COLOR_CREATE_GONE", "ITEM_CREATE_GONE"] as const;
+
+/**
+ * Tanım (renk/ürün) yaratma hatası → kullanıcı iletisi. Yeni fabrika aynı deneme kimliğine ilk kaydı döner; çakışma ve
+ * "sonradan pasif" kesin 409'dur. Eski fabrika kimliği düşürür: orada belirsiz denemeden sonraki ad mükerreri büyük
+ * olasılıkla ilk denemedir.
+ */
 export function tanimEkleHatasi(err: unknown, belirsizOnce: boolean, liste: string): unknown {
-  if (belirsizOnce && err instanceof ApiError && err.status === 409) {
+  if (!(err instanceof ApiError)) return err;
+  if ((TANIM_CREATE_GONE as readonly string[]).includes(err.code)) {
+    return new ApiError(409, err.code, "Bu kayıt oluşturulmuş ama sonradan pasife alınmış; listeden bakın.", err.details);
+  }
+  if (err.code === CLIENT_TOKEN_COLLISION) {
+    return new ApiError(409, err.code, "Önceki deneme farklı bilgilerle kaydedilmiş; yeniden göndermek için tekrar dokunun.", err.details);
+  }
+  if (belirsizOnce && err.status === 409) {
     return new ApiError(409, err.code, `Bu adda kayıt zaten var; önceki deneme kaydedilmiş olabilir. ${liste} listesini yenileyip kontrol edin.`, err.details);
   }
   return err;

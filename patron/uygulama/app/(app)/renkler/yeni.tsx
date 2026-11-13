@@ -1,5 +1,6 @@
-// Yeni renk (V5c, yalnız ERP): kod fabrikada doğar; ad mükerreri fabrikada 409. Gönderim `useWrite` (deneme kimliği
-// kuralı); fabrika renk doğuşunda kimlik almaz, belirsiz tekrardaki ad mükerreri "önceki deneme" iletisine çevrilir.
+// Yeni renk (V5c, yalnız ERP): kod fabrikada doğar; ad mükerreri fabrikada 409. Gönderim `useWrite` (deneme kimliği =
+// `clientToken`; yeni fabrika tekrara ilk rengi döner). Eski fabrika kimliği düşürür: belirsiz tekrardaki ad mükerreri
+// "önceki deneme" iletisine çevrilir.
 import { useRouter } from "expo-router";
 import { useCallback, useRef, useState } from "react";
 import { ApiError } from "../../../src/api/client";

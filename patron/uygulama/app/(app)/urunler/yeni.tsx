@@ -1,5 +1,6 @@
 // Yeni ürün (V5c, yalnız ERP): ad + tür; kod fabrikada doğar (STK-…), birim türden. Yapı alanları (en, gramaj…) panelde.
-// Ad mükerreri fabrikada 409; belirsiz tekrardaki mükerrer "önceki deneme" iletisine çevrilir.
+// Deneme kimliği `clientToken` olarak gider (yeni fabrika tekrara ilk kartı döner); eski fabrikada belirsiz tekrardaki ad
+// mükerreri "önceki deneme" iletisine çevrilir.
 import { useRouter } from "expo-router";
 import { useCallback, useRef, useState } from "react";
 import { View } from "react-native";

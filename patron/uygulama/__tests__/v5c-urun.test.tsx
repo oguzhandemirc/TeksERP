@@ -1,6 +1,7 @@
 // V5c bekçisi (ürün): yetenek (bulutta kapalı · ERP `item:write`[+read] + küme), Ürünler modülü ürün işlemiyle de
 // görünür, ERP uçları (POST ad+tür+birim, kod yok · PATCH yalnız ad + sürüm), bulut yazıcısı ağsız, form, düzenleme
-// ekranında kod/tür salt okunur, STALE akışı, belirsiz tekrar, çevrimdışı.
+// ekranında kod/tür salt okunur, STALE akışı, belirsiz tekrar, çevrimdışı; yeni ürün ekranında belirsiz tekrar aynı
+// deneme kimliğiyle (fabrika `clientToken`ı), düzeltilmiş gövde yeni kimlikle.
 // NEGATİF SONDA (2026-11-13): `urunGuncelle`den sürüm düşürüldü + birim türden türetilmedi → 2 ✕ (§2a §2c).
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import type { ReactElement } from "react";
@@ -10,13 +11,14 @@ import { createBulutYazici, createErpYazici, urunKaydi, type UrunKaydi } from ".
 import { moduleVisible } from "../src/lib/access";
 import { urunGovdesi, urunPatch } from "../src/lib/urun";
 
-const mockYazici = { kanal: "dogrudan", urunOku: jest.fn(), urunGuncelle: jest.fn() };
+const mockYazici = { kanal: "dogrudan", urunOku: jest.fn(), urunGuncelle: jest.fn(), urunEkle: jest.fn() };
 const mockSession = { yazici: mockYazici, permissions: [] as string[], offline: false };
 const mockRouter = { push: jest.fn(), replace: jest.fn(), back: jest.fn(), navigate: jest.fn(), canGoBack: () => true };
 jest.mock("../src/state/session", () => ({ useSession: () => mockSession }));
 jest.mock("expo-router", () => ({ useRouter: () => mockRouter, usePathname: () => "/urunler", useLocalSearchParams: () => ({ id: "u1" }) }));
 jest.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
 const EditItem = (require("../app/(app)/urunler/duzenle") as { default: () => ReactElement }).default;
+const NewItem = (require("../app/(app)/urunler/yeni") as { default: () => ReactElement }).default;
 
 const SETS = ["cari-kart", "urun", "renk"];
 const YAZ = ["item:write", "item:read"];
@@ -63,7 +65,7 @@ describe("§2 uçlar ve gövde", () => {
     const f = fakeClient();
     const y = createErpYazici(f.c);
     expect(await y.urunEkle("t1", { ad: "SARDIN", tur: "YARN", birim: "KG" })).toEqual({ tur: "kayit", id: "u1" });
-    expect(f.calls[0]).toEqual({ m: "POST", path: "/items", body: { name: "SARDIN", itemType: "YARN", unit: "KG" } });
+    expect(f.calls[0]).toEqual({ m: "POST", path: "/items", body: { name: "SARDIN", itemType: "YARN", unit: "KG", clientToken: "t1" } });
     expect(await y.urunOku("u1")).toEqual(KAYIT);
     await y.urunGuncelle("u1", KAYIT.surum, { name: "POPLIN 140" });
     expect(f.calls[2]).toEqual({ m: "PATCH", path: "/items/u1", body: { name: "POPLIN 140", expectedUpdatedAt: KAYIT.surum } });
@@ -155,5 +157,45 @@ describe("§3 düzenleme ekranı", () => {
     await settle();
     expect(mockYazici.urunOku).not.toHaveBeenCalled();
     expect(screen.queryByTestId("urun-kaydet")).toBeNull();
+  });
+});
+
+describe("§4 yeni ürün ekranı", () => {
+  beforeEach(() => {
+    setYetenek(erpYetenek(SETS, YAZ));
+    mockSession.permissions = ["bulut:oturum"];
+    mockSession.offline = false;
+    mockYazici.urunEkle.mockReset();
+    mockRouter.back.mockReset();
+  });
+
+  it("belirsiz hata → 'Tekrar dene' AYNI deneme kimliğiyle; gövde ad+tür+birim", async () => {
+    mockYazici.urunEkle.mockRejectedValueOnce(new ApiError(0, "AG_HATASI", "Sunucuya ulaşılamadı")).mockResolvedValueOnce({ tur: "kayit", id: "u9" });
+    render(<NewItem />);
+    fireEvent.changeText(screen.getByTestId("urun-ad"), "SARDIN");
+    fireEvent.press(screen.getByTestId("urun-tur-YARN"));
+    fireEvent.press(screen.getByTestId("urun-gonder"));
+    await settle();
+    expect(screen.getByText("Tekrar dene")).toBeTruthy();
+    fireEvent.press(screen.getByTestId("urun-gonder"));
+    await settle();
+    const [a, b] = mockYazici.urunEkle.mock.calls;
+    expect(a![0]).toBe(b![0]);
+    expect(a![1]).toEqual({ ad: "SARDIN", tur: "YARN", birim: "KG" });
+    expect(mockRouter.back).toHaveBeenCalled();
+  });
+
+  it("kesin hata (ad mükerreri) aynen; düzeltilen gövde yeni deneme kimliği alır", async () => {
+    mockYazici.urunEkle.mockRejectedValueOnce(new ApiError(409, "CONFLICT", "'SARDIN' adında ürün zaten var")).mockResolvedValueOnce({ tur: "kayit", id: "u9" });
+    render(<NewItem />);
+    fireEvent.changeText(screen.getByTestId("urun-ad"), "SARDIN");
+    fireEvent.press(screen.getByTestId("urun-gonder"));
+    await settle();
+    expect(screen.getByText("'SARDIN' adında ürün zaten var")).toBeTruthy();
+    fireEvent.changeText(screen.getByTestId("urun-ad"), "SARDIN 2");
+    fireEvent.press(screen.getByTestId("urun-gonder"));
+    await settle();
+    const [a, b] = mockYazici.urunEkle.mock.calls;
+    expect(a![0]).not.toBe(b![0]);
   });
 });

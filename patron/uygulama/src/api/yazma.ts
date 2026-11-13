@@ -316,9 +316,9 @@ export function createErpYazici(c: ApiClient): Yazici {
       // Belirteç kullanıcının GÖRDÜĞÜ önizlemeden: arada değiştiyse fabrika 409 CANCEL_PREVIEW_STALE verir, uygulamaz.
       await c.post<unknown>(`/orders/${seg(id)}/cancel`, belirtec ? { workOrderActions: [], expectedPreviewToken: belirtec } : { workOrderActions: [] });
     },
-    // Renk doğuşunda fabrika `clientToken` almaz (kolon yok): belirsiz tekrarın koruması ad tekilliğidir (409).
-    renkEkle: async (_id, g) => {
-      const r = await c.post<Ham>("/colors", tanimli({ name: g.ad, hex: g.hex }));
+    // `clientToken` = deneme kimliği: yeni fabrika aynı token'a ilk rengi döner, eski fabrika gövde süzgecinde düşürür.
+    renkEkle: async (id, g) => {
+      const r = await c.post<Ham>("/colors", tanimli({ name: g.ad, hex: g.hex, clientToken: id }));
       if (typeof r?.id !== "string") throw beklenmeyen();
       return { tur: "kayit", id: r.id };
     },
@@ -328,8 +328,8 @@ export function createErpYazici(c: ApiClient): Yazici {
       await c.del<unknown>(`/colors/${seg(id)}`);
     },
     // Kod fabrikada doğar (STK-…); kart yapı alanları (en, gramaj…) panelde.
-    urunEkle: async (_id, g) => {
-      const r = await c.post<Ham>("/items", { name: g.ad, itemType: g.tur, unit: g.birim });
+    urunEkle: async (id, g) => {
+      const r = await c.post<Ham>("/items", { name: g.ad, itemType: g.tur, unit: g.birim, clientToken: id });
       if (typeof r?.id !== "string") throw beklenmeyen();
       return { tur: "kayit", id: r.id };
     },
