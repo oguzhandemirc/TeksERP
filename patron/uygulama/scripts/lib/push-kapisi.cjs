@@ -7,12 +7,15 @@ const PUSH_PAKETLERI = ["expo-notifications", "expo-application"];
 /** Firebase / bildirim bileşeni deseni (servis, alıcı, sağlayıcı adı). */
 const BILDIRIM_BILESENI = /firebase|expo\.modules\.notifications|c2dm/i;
 
+/** Firebase'in kendi manifestinden gelen, engelde olmayan istemsiz (normal) izin: yalnız kapı açıkken pakette. */
+const PUSH_KITAPLIK_IZINLERI = ["android.permission.ACCESS_NETWORK_STATE"];
+
 /** Birleşik manifestte bulunmasına izin verilen izinler: bugünkü küme; kapı açıkken + bildirim izinleri. */
 function izinliIzinler(paket, acik, pushIzinleri) {
   // AndroidX'in uygulamaya özel imza izni paket adını taşır: literal yazılmaz, paketten türer.
   // CAMERA: yalnız sunucu bağlantı karekodunu okutmak için (expo-camera, mikrofon kapalı).
   const taban = ["android.permission.INTERNET", "android.permission.CAMERA", `${paket}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`];
-  return acik ? [...taban, ...pushIzinleri] : taban;
+  return acik ? [...taban, ...pushIzinleri, ...PUSH_KITAPLIK_IZINLERI] : taban;
 }
 
 /** Kapalı: hiçbir bildirim/Firebase bileşeni olmaz. Açık: expo-notifications servisi OLMALI (modül gerçekten bağlandı). */
@@ -38,4 +41,4 @@ function autolinkingKapiya(pkg, acik) {
   };
 }
 
-module.exports = { PUSH_PAKETLERI, BILDIRIM_BILESENI, izinliIzinler, bilesenSorunlari, autolinkingKapiya };
+module.exports = { PUSH_PAKETLERI, PUSH_KITAPLIK_IZINLERI, BILDIRIM_BILESENI, izinliIzinler, bilesenSorunlari, autolinkingKapiya };
