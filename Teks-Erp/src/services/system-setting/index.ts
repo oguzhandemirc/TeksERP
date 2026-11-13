@@ -76,7 +76,7 @@ export type {
   SackDumpNameMode, ShippingOrderCoverage, ShipReadyRule, ShipReadyNotifyUnit, LoginMethod, LoginMethodsConfig,
 } from "./defaults";
 export {
-  readDevicePairingRequired, readDeviceProofRequired, readDeviceUnpairedPasswordLogin, readStoredShortCredentialApprovedDeviceOnly,
+  readDeviceAutoReattach, readDevicePairingRequired, readDeviceProofRequired, readDeviceUnpairedPasswordLogin, readStoredShortCredentialApprovedDeviceOnly,
   readShortCredentialApprovedDeviceOnly, readShortCredentialTotpRequired, readWebTotpPolicy, readTrustedDeviceDays,
 } from "./device-auth";
 export {

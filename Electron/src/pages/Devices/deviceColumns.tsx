@@ -13,8 +13,19 @@ const statusCellText = (d: DeviceListItem): string => (d.mergedIntoId ? "Birleş
 const deviceStatusLabel = (d: DeviceListItem): string =>
   !d.isActive ? "Pasif" : d.status === "APPROVED" ? "Onaylı" : "Onay bekliyor";
 
+const REBOUND_PATH_LABEL: Record<NonNullable<DeviceListItem["lastReboundPath"]>, string> = {
+  OTOMATIK: "kendiliğinden",
+  PANEL: "panelden onayla",
+  YERINDE: "yerinde onayla",
+};
+/** "Yeniden bağlandı" izi: tarih + yol ("12.11.2026 09:40 · kendiliğinden"); hiç olmadıysa boş. */
+export const reboundText = (d: DeviceListItem): string =>
+  d.lastReboundAt
+    ? [safeFormat(d.lastReboundAt, "dd.MM.yyyy HH:mm"), d.lastReboundPath ? REBOUND_PATH_LABEL[d.lastReboundPath] : ""].filter(Boolean).join(" · ")
+    : "";
+
 // Dışa aktarım sütunları — ekrandaki kolonların (Cihaz · Tür · Durum · Son
-// aktivite · Kimlik) karşılığı; kimlik tabloda kısaltılır, dosyada TAM yazılır
+// aktivite · Yeniden bağlandı · Kimlik) karşılığı; kimlik tabloda kısaltılır, dosyada TAM yazılır
 // (cihaz eşleştirmesi ancak tam kimlikle yapılabilir).
 export const DEVICE_EXPORT_COLUMNS: ExportColumn<DeviceListItem>[] = [
   { label: "Cihaz Adı", value: (d) => d.name },
@@ -23,6 +34,7 @@ export const DEVICE_EXPORT_COLUMNS: ExportColumn<DeviceListItem>[] = [
   { label: "Makine", value: (d) => (d.machine ? `${d.machine.name} (${d.machine.code})` : "") },
   { label: "İstasyon", value: (d) => d.machine?.station.name ?? "" },
   { label: "Son Aktivite", value: (d) => (d.lastSeenAt ? safeFormat(d.lastSeenAt, "dd.MM.yyyy HH:mm") : "") },
+  { label: "Yeniden Bağlandı", value: reboundText },
   { label: "Cihaz Kimliği", value: (d) => d.deviceId },
 ];
 
@@ -40,6 +52,13 @@ function deviceColumns(proofLostIds: ReadonlySet<string>, handlers: { current: D
       cell: ({ row }) => <DeviceStatusCell device={row.original} proofLost={proofLostIds.has(row.original.id)} />,
     },
     { id: "lastSeenAt", header: "Son aktivite", size: 160, meta: { label: "Son aktivite", exportValue: lastSeenText }, cell: ({ row }) => <span className="text-xs text-muted-foreground">{lastSeenText(row.original)}</span> },
+    {
+      id: "lastReboundAt",
+      header: "Yeniden bağlandı",
+      size: 200,
+      meta: { label: "Yeniden bağlandı", exportValue: reboundText },
+      cell: ({ row }) => <span className="text-xs text-muted-foreground">{reboundText(row.original) || "—"}</span>,
+    },
     {
       id: "deviceId",
       header: "Kimlik",

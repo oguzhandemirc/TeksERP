@@ -1219,6 +1219,18 @@ export async function setFeatureFlags(
       );
     }
 
+    if (Object.prototype.hasOwnProperty.call(input, "deviceAutoReattach")) {
+      if (typeof input.deviceAutoReattach !== "boolean") {
+        throw AppError.badRequest("deviceAutoReattach boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.DEVICE_AUTO_REATTACH,
+        input.deviceAutoReattach,
+        "Onaylı cihaz yeniden kurulunca (aynı donanım) yönetici onayı beklemeden tanınsın",
+        userId
+      );
+    }
+
     if (Object.prototype.hasOwnProperty.call(input, "shipmentManualSackCountEnabled")) {
       if (typeof input.shipmentManualSackCountEnabled !== "boolean") {
         throw AppError.badRequest("shipmentManualSackCountEnabled boolean olmalı");

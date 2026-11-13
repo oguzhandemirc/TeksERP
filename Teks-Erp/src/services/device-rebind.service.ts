@@ -11,7 +11,8 @@ import { Prisma, DeviceKind } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
-import { readDevicePairingRequired } from "./system-setting.service";
+import { readDeviceAutoReattach, readDevicePairingRequired } from "./system-setting.service";
+import { isHostedInstallation } from "./helpers/install-class.helper";
 import {
   assertDeviceRowCapacity, findLiveDeviceByHw, hasHwConflictEvent, liveDeviceWhere,
   writeBindingEventTx, type HwClaim,
@@ -24,6 +25,39 @@ export const MAX_OPEN_REBIND_REQUESTS = 200;
 const REQUEST_LIST_LIMIT = 200;
 
 export type RebindPath = "OTOMATIK" | "PANEL" | "YERINDE";
+
+/** Otomatik bağlamanın gerekçesi (defter `meta.kural` + audit `reason`). */
+export type AutoRebindRule = "ESLESTIRME_KAPALI" | "BILINEN_DONANIM";
+
+/** Barındırılanda aynı hedefe bu süre içinde ikinci OTOMATİK bağlama talebe düşer (klon/çekişme sigortası). */
+export const AUTO_REBIND_COOLDOWN_MS = 10 * 60 * 1000;
+
+/**
+ * Otomatik yeniden bağlama kararı — TEK yüklem. Hedef aktif + onaylı olmalı (revoke edilmiş PENDING
+ * ya da pasif cihaz public uçla dirilmez); eşleştirme kapalıysa ya da `device.autoReattachKnownHardware`
+ * açıksa otomatik. `recentAuto`: barındırılanda son 10 dk'da otomatik bağlama olduysa talep.
+ */
+export function autoRebindRule(p: {
+  target: { isActive: boolean; status: string };
+  pairingRequired: boolean;
+  autoReattach: boolean;
+  hostedRecentAuto: boolean;
+}): AutoRebindRule | null {
+  if (!p.target.isActive || p.target.status !== "APPROVED") return null;
+  if (!p.pairingRequired) return "ESLESTIRME_KAPALI";
+  if (!p.autoReattach || p.hostedRecentAuto) return null;
+  return "BILINEN_DONANIM";
+}
+
+/** Barındırılan sınıfta hedefe son soğuma penceresinde OTOMATİK bağlama olmuş mu (defterden). */
+async function hostedRecentAutoRebind(targetId: string): Promise<boolean> {
+  if (!isHostedInstallation()) return false;
+  const since = new Date(Date.now() - AUTO_REBIND_COOLDOWN_MS);
+  const n = await prisma.deviceBindingEvent.count({
+    where: { deviceRefId: targetId, event: "REBOUND", createdAt: { gte: since }, meta: { path: ["yol"], equals: "OTOMATIK" } },
+  });
+  return n > 0;
+}
 
 /**
  * Yeniden bağlama (atomik claim): etkin anahtar `oldLocalId` iken `newLocalId`ye geçer ve kanıt
@@ -94,16 +128,21 @@ export class DeviceRebindService {
   }): Promise<RouteResult> {
     const target = await findLiveDeviceByHw(prisma, p.hw.ozet);
     if (!target) return null;
-    const auto = !p.pairingRequired && target.isActive && target.status === "APPROVED";
-    if (auto) {
-      await DeviceRebindService.autoRebind(target, p.localId, p.hw);
+    const eligible = target.isActive && target.status === "APPROVED";
+    const autoReattach = p.pairingRequired && eligible ? await readDeviceAutoReattach() : false;
+    const rule = autoRebindRule({
+      target, pairingRequired: p.pairingRequired, autoReattach,
+      hostedRecentAuto: autoReattach ? await hostedRecentAutoRebind(target.id) : false,
+    });
+    if (rule) {
+      await DeviceRebindService.autoRebind(target, p.localId, p.hw, rule);
       return { reboundDeviceId: target.id };
     }
     return { response: await DeviceRebindService.openRequest(target, p) };
   }
 
   private static async autoRebind(
-    target: { id: string; deviceId: string; name: string }, localId: string, hw: HwClaim,
+    target: { id: string; deviceId: string; name: string }, localId: string, hw: HwClaim, rule: AutoRebindRule,
   ): Promise<void> {
     await prisma.$transaction(async (tx) => {
       const n = await rebindDeviceTx(tx, {
@@ -117,13 +156,16 @@ export class DeviceRebindService {
       }
       await writeBindingEventTx(tx, {
         deviceRefId: target.id, localId, deviceName: target.name, event: "REBOUND", hwDigest: hw.ozet,
-        meta: { yol: "OTOMATIK", eskiLocalId: target.deviceId },
+        meta: { yol: "OTOMATIK", kural: rule, eskiLocalId: target.deviceId },
       });
     });
     await AuditService.log({
       userId: undefined, action: "UPDATE", tableName: "devices", recordId: target.id,
       oldData: { deviceId: target.deviceId },
-      newData: { event: "DEVICE_REBOUND_AUTO", deviceId: localId, reason: "devicePairingRequired=false" },
+      newData: {
+        event: "DEVICE_REBOUND_AUTO", deviceId: localId,
+        reason: rule === "ESLESTIRME_KAPALI" ? "devicePairingRequired=false" : "device.autoReattachKnownHardware=true",
+      },
     }).catch(() => undefined);
   }
 
