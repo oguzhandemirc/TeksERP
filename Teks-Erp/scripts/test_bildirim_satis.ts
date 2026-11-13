@@ -4,7 +4,7 @@
 // =============================================================================
 // NEDEN: S1 türleri (geniş katalog 2026-11-14) gerçek yazma yollarına bağlı olmalı; bağ kopunca bildirim sessizce
 // kesilir ve hiçbir başka bekçi bunu görmez. Ölçülenler:
-//   §0 AST — her OLAY türünün `src/`de TEK `emitNotification` literali `notification-sources/satis.ts`te ve her
+//   §0 AST — her OLAY türünün `src/`de TEK `emitNotification` literali `notification-sources/satis.ts`te (teklif → `teklif.ts`) ve her
 //      yayma fonksiyonu beklenen yazma yolu dosyasından çağrılıyor (çağrı yeri listesi aşağıda).
 //   §1 DB (geri sarılan tx; global durum yazmaz) — tür başına olay → outbox satırı: gerçek yollar
 //      `createWorkOrderTx` (açıldı) · `claimWorkOrderStatusTx` (başladı/tamamlandı/iptal) · `recomputeOrderStatusTx`
@@ -33,8 +33,9 @@ import { claimWorkOrderStatusTx, createWorkOrderTx } from "../src/services/helpe
 import { recomputeOrderStatusTx } from "../src/services/helpers/order-status.helper";
 import {
   describeOrderChanges, emitOrderCreatedTx, emitOrderLineCancelledTx, emitOrderTerminalTx, emitOrderUpdatedTx,
-  emitQuoteEventTx, emitWorkOrderRouteChangedTx,
+  emitWorkOrderRouteChangedTx,
 } from "../src/services/notification-sources/satis";
+import { emitQuoteEventTx } from "../src/services/notification-sources/teklif";
 import { digestStampKey, lastClosedWindow, registeredDigestKinds, runDigestOnce } from "../src/jobs/notification-digest.job";
 import { registerSalesDigestSources } from "../src/services/notification-sources/satis-ozet";
 import { factoryDayStart } from "../src/constants/time";
@@ -87,9 +88,11 @@ function bolum0(): void {
     };
     gez(sf);
   }
-  const ihlal = S1_OLAY.filter((k) => JSON.stringify(literaller.get(k)) !== JSON.stringify(["services/notification-sources/satis.ts"]))
+  // Teklif türleri ayrı dosyada (maliyet modeli `salesQuote` sipariş/iş emri zincirine girmesin — rejim kapısı).
+  const kaynak = (k: string) => `services/notification-sources/${k.startsWith("teklif.") ? "teklif" : "satis"}.ts`;
+  const ihlal = S1_OLAY.filter((k) => JSON.stringify(literaller.get(k)) !== JSON.stringify([kaynak(k)]))
     .map((k) => `${k}: ${JSON.stringify(literaller.get(k) ?? [])}`);
-  check("§0a ⭐ her S1 OLAY türünün TEK emit literali notification-sources/satis.ts", ihlal.length === 0, ihlal.join(" · ") || `${S1_OLAY.length} tür`);
+  check("§0a ⭐ her S1 OLAY türünün TEK emit literali notification-sources/satis.ts (teklif.* → teklif.ts)", ihlal.length === 0, ihlal.join(" · ") || `${S1_OLAY.length} tür`);
   const eksik = Object.entries(CAGRI_YERLERI).flatMap(([fn, dosyalar]) => dosyalar.filter((d) => !cagrilar.get(fn)?.has(d)).map((d) => `${fn} ← ${d}`));
   check("§0b ⭐ her yayma fonksiyonu yazma yolundan çağrılıyor", eksik.length === 0, eksik.join(" · ") || `${Object.keys(CAGRI_YERLERI).length} fonksiyon`);
   check("§0c özet türleri katalogda `ozet` beyanlı ve emit literali yok (zamanlayıcı yazar)",
@@ -164,7 +167,7 @@ async function bolum12(): Promise<void> {
       const wo2 = await createWorkOrderTx(tx, ctx, { data: { workOrderNumber: `TEST-BS2-${ek}`, type: "STOCK_PRODUCTION", targetItemId: item.id } });
       await claimWorkOrderStatusTx(tx, wo2.id, { from: [WorkOrderStatus.PLANNED], to: WorkOrderStatus.CANCELLED, ctx });
       await olc("isemri.iptal", wo2.id);
-      await emitWorkOrderRouteChangedTx(tx, wo2.id, "Boya → Kurşun", "Boya → Tambur", u.id);
+      await emitWorkOrderRouteChangedTx(tx, wo2.id, { from: "Boya → Kurşun", to: "Boya → Tambur" }, u.id);
       await olc("isemri.rota-degisti", wo2.id, (p) => p.yeniRota === "Boya → Tambur");
 
       // §2 birleştirme: aynı tür + aynı kayıt → aynı anahtar (dağıtıcı 10 dk penceresinde tek satıra katlar).

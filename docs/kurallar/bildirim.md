@@ -64,7 +64,7 @@
 
 - **[ÇEKİRDEK]** `PATRON_PUSH` her türün varsayılan kanalıdır (`KANAL_VARSAYILAN` = UYGULAMA + PATRON_PUSH); `onemli` yalnız telefondaki "Yalnız önemliler" hazır seçiminin kümesidir, varsayılan teslimi değiştirmez · bekçi: `test_patron_push_durt` §1a/§1e, `test_bildirim_katalogu` §10 <sub>(arşiv:2026-11-14 K1)</sub>
 - **[ÇEKİRDEK]** Özet türünü (`ozet` beyanlı) yalnız `jobs/notification-digest.job.ts` yazsın: tur tx'inin ilk ifadesi 8040 `hashtext('bildirim-ozet:'||kind)`, damga `bildirim.ozetDamga.<tür>` pencere başına tek, ilk tur taban · bekçi: `test_bildirim_satis` <sub>(arşiv:2026-11-14 K1)</sub>
-- **[ÇEKİRDEK]** Satış/teklif/iş emri OLAY türlerini yalnız `services/notification-sources/satis.ts` yaysın, iş tx'inin içinden, durum geçişinin tek boğazından (`claimWorkOrderStatusTx`, `recomputeOrderStatusTx`); takipçi yazımından ÖNCE çağır (dönüş satırı aynen) · bekçi: `test_bildirim_satis`, `test_bildirim_takip` <sub>(arşiv:2026-11-14 K1)</sub>
+- **[ÇEKİRDEK]** Satış/teklif/iş emri OLAY türlerini yalnız `services/notification-sources/satis.ts` yaysın (teklif → `teklif.ts`; maliyet modeli sipariş zincirine girmez), iş tx'inin içinden, durum geçişinin tek boğazından (`claimWorkOrderStatusTx`, `recomputeOrderStatusTx`); takipçi yazımından ÖNCE çağır (dönüş satırı aynen) · bekçi: `test_bildirim_satis`, `test_bildirim_takip` <sub>(arşiv:2026-11-14 K1)</sub>
 
 ### Geçersiz kılınan kurallar
 

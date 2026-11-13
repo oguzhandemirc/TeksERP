@@ -263,7 +263,7 @@ export async function claimWorkOrderStatusTx(
     }],
     opts.ctx,
   );
-  await emitWorkOrderStatusTx(tx, workOrderId, current, opts.to, opts.ctx.userId); // S1 başladı · tamamlandı · iptal
+  await emitWorkOrderStatusTx(tx, workOrderId, { from: current, to: opts.to }, opts.ctx.userId); // S1 başladı · tamamlandı · iptal
   return current;
 }
 

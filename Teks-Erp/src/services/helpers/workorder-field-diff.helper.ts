@@ -183,7 +183,7 @@ export async function recordStepDiffTx(
   const [from, to] = [routeLabel(rows.before), routeLabel(rows.after)];
   if (from !== to) {
     await recordStepPlanChangesTx(tx, workOrderId, { step: null, changes: [{ field: "route", from, to, fromLabel: from, toLabel: to }] }, ctx);
-    await emitWorkOrderRouteChangedTx(tx, workOrderId, from ?? "", to ?? "", ctx.userId); // S1 `isemri.rota-degisti`
+    await emitWorkOrderRouteChangedTx(tx, workOrderId, { from: from ?? "", to: to ?? "" }, ctx.userId); // S1 `isemri.rota-degisti`
     written++;
   }
   const beforeById = new Map(rows.before.map((s) => [s.id, s]));

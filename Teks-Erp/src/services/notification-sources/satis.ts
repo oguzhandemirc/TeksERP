@@ -12,11 +12,11 @@ import { emitNotification, type EmitDb } from "../helpers/notification-emit.help
 import { readNotificationInboxEnabled } from "../system-setting/labels";
 
 type Db = EmitDb & Pick<Prisma.TransactionClient, "order" | "orderLine">;
-type Actor = string | null | undefined;
+export type Actor = string | null | undefined;
 /** Aktör verilmeyen iç yollar (ör. sevk sonrası yeniden hesap) istek bağlamının kullanıcısına düşer; job'da null. */
-const who = (actor: Actor): string | null => actor ?? currentOrigin().userId ?? null;
+export const who = (actor: Actor): string | null => actor ?? currentOrigin().userId ?? null;
 /** Bayrak kapalı kurulumda yük okumalarını hiç yapma (emit helper da okur; bu ön kapı gereksiz sorguyu keser). */
-const off = async (tx: EmitDb): Promise<boolean> => !(await readNotificationInboxEnabled(tx));
+export const off = async (tx: EmitDb): Promise<boolean> => !(await readNotificationInboxEnabled(tx));
 
 async function orderFacts(tx: Db, orderId: string): Promise<{ siparisNo: string; musteriAd: string } | null> {
   const o = await tx.order.findUnique({ where: { id: orderId }, select: { orderNumber: true, customer: { select: { name: true } } } });
@@ -108,35 +108,6 @@ export async function emitOrderTerminalTx(tx: Db, orderId: string, status: "CANC
   else await emitNotification(tx, "siparis.tamamlandi", ORDER(orderId), payload, { actorUserId: who(actor) });
 }
 
-// ── Teklif ──────────────────────────────────────────────────────────────────
-export type QuoteEvent = "olusturuldu" | "send" | "accept" | "reject";
-
-/** `teklif.*` — teklif doğuşu (`createQuote`) ve geçişleri (`runTransition` claim'i sonrası, aynı tx). */
-export async function emitQuoteEventTx(
-  tx: EmitDb & Pick<Prisma.TransactionClient, "salesQuote">,
-  quoteId: string,
-  event: QuoteEvent,
-  actor: Actor,
-): Promise<void> {
-  if (await off(tx)) return;
-  const q = await tx.salesQuote.findUnique({
-    where: { id: quoteId },
-    select: { quoteNo: true, revisionNo: true, rejectReason: true, customer: { select: { name: true } } },
-  });
-  if (!q) return;
-  const base = {
-    teklifId: quoteId,
-    teklifNo: q.revisionNo > 1 ? `${q.quoteNo}/${q.revisionNo}` : q.quoteNo,
-    musteriAd: q.customer?.name ?? "—",
-  };
-  const subject = { type: "sales_quote", id: quoteId, key: quoteId };
-  const opts = { actorUserId: who(actor) };
-  if (event === "olusturuldu") await emitNotification(tx, "teklif.olusturuldu", subject, base, opts);
-  else if (event === "send") await emitNotification(tx, "teklif.gonderildi", subject, base, opts);
-  else if (event === "accept") await emitNotification(tx, "teklif.kabul", subject, base, opts);
-  else await emitNotification(tx, "teklif.red", subject, { ...base, sebep: q.rejectReason ?? "—" }, opts);
-}
-
 // ── İş emri ─────────────────────────────────────────────────────────────────
 type WoDb = EmitDb & Pick<Prisma.TransactionClient, "workOrder">;
 const WO = (id: string) => ({ type: "work_order", id, key: id });
@@ -158,7 +129,7 @@ export async function emitWorkOrderCreatedTx(tx: WoDb, workOrderId: string, acto
  * `isemri.baslatildi` (PLANNED→IN_PROGRESS) · `isemri.tamamlandi` (→COMPLETED) · `isemri.iptal` (→CANCELLED) —
  * statü değişiminin TEK yolu `claimWorkOrderStatusTx`. Yeniden açılma (COMPLETED→IN_PROGRESS) başlama sayılmaz.
  */
-export async function emitWorkOrderStatusTx(tx: WoDb, workOrderId: string, from: string, to: string, actor: Actor): Promise<void> {
+export async function emitWorkOrderStatusTx(tx: WoDb, workOrderId: string, { from, to }: { from: string; to: string }, actor: Actor): Promise<void> {
   const starts = to === "IN_PROGRESS" && from === "PLANNED";
   if (!starts && to !== "COMPLETED" && to !== "CANCELLED") return;
   if (await off(tx)) return;
@@ -173,7 +144,7 @@ export async function emitWorkOrderStatusTx(tx: WoDb, workOrderId: string, from:
 }
 
 /** `isemri.rota-degisti` — rota etiketi farkı (`workorder-field-diff.helper` rota satırı). */
-export async function emitWorkOrderRouteChangedTx(tx: WoDb, workOrderId: string, from: string, to: string, actor: Actor): Promise<void> {
+export async function emitWorkOrderRouteChangedTx(tx: WoDb, workOrderId: string, { from, to }: { from: string; to: string }, actor: Actor): Promise<void> {
   if (await off(tx)) return;
   const w = await tx.workOrder.findUnique({ where: { id: workOrderId }, select: { workOrderNumber: true } });
   if (!w) return;

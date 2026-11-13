@@ -20,7 +20,7 @@ import { suggestFxRate } from "./helpers/maliyet-bridge.helper";
 import { parseDecimalField, parseTextField, PCT_RULE } from "./helpers/cost-input.helper";
 import { tokenReplay } from "./helpers/token-replay.helper";
 import { QUOTE_INCLUDE, QUOTE_TABLE, readQuoteToken, type QuoteRecord } from "./sales-quote-transitions.service";
-import { emitQuoteEventTx } from "./notification-sources/satis";
+import { emitQuoteEventTx } from "./notification-sources/teklif";
 
 const CURRENCIES: readonly Currency[] = ["TRY", "USD", "EUR", "GBP", "RUB"];
 const DAY_MS = 86_400_000;

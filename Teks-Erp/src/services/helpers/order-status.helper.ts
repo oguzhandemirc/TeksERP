@@ -222,18 +222,11 @@ export async function recomputeOrderStatusTx(
     // Kalem iptalleri yüzünden CANCELLED'a düşen siparişe de zaman damgası —
     // damgasız iptal İptal Karnesi'nden sessizce düşerdi.
     if (newStatus === OrderStatus.CANCELLED) data.cancelledAt = new Date();
-    if (newStatus === OrderStatus.COMPLETED && !order.completedAt) {
-      data.completedAt = new Date();
-    }
-    if (newStatus !== OrderStatus.COMPLETED && order.completedAt) {
-      data.completedAt = null;
-    }
+    if (newStatus === OrderStatus.COMPLETED && !order.completedAt) data.completedAt = new Date();
+    if (newStatus !== OrderStatus.COMPLETED && order.completedAt) data.completedAt = null;
   }
   await tx.order.update({ where: { id: orderId }, data });
-  // S1: tam sevk → `siparis.tamamlandi`, son kalem iptali → `siparis.iptal` (aynı tx; aktör istek bağlamından).
-  if (changed && (newStatus === OrderStatus.COMPLETED || newStatus === OrderStatus.CANCELLED)) {
-    await emitOrderTerminalTx(tx, orderId, newStatus, null);
-  }
+  if (changed && (newStatus === OrderStatus.COMPLETED || newStatus === OrderStatus.CANCELLED)) await emitOrderTerminalTx(tx, orderId, newStatus, null); // S1 tamamlandı/iptal, aynı tx
 
   return { changed, oldStatus: order.status, newStatus };
 }

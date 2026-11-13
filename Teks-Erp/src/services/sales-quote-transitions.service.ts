@@ -15,7 +15,7 @@ import { tokenReplay } from "./helpers/token-replay.helper";
 import { freezeQuoteDocumentTx, voidQuoteDocumentTx } from "./quote-documents.service";
 import { validate as isUuidString } from "uuid";
 import { LINE_RECIPE_SELECT } from "./helpers/line-recipe.helper";
-import { emitQuoteEventTx } from "./notification-sources/satis";
+import { emitQuoteEventTx } from "./notification-sources/teklif";
 
 export const QUOTE_TABLE = "SALES_QUOTE";
 export const QUOTE_INCLUDE = {
