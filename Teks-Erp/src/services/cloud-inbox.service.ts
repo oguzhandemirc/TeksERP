@@ -168,6 +168,16 @@ function patronOrderPayload(order: Record<string, unknown>): Record<string, unkn
   };
 }
 
+/** Katalog `payloadAlanlari` kadar (cariId · cariAd · cariKodu · hesapAdi) — vergi no/adres/tutar girmez. */
+function patronCardPayload(card: Record<string, unknown>, hesapAdi: string): Record<string, unknown> {
+  return {
+    cariId: card.id,
+    cariAd: typeof card.name === "string" ? card.name : null,
+    cariKodu: typeof card.code === "string" ? card.code : null,
+    hesapAdi,
+  };
+}
+
 /** SİPARİŞ (K): kapılar `prepareOrderCreate`ten; sipariş + makbuz aynı tx; 8036 mesajId üzerinde tx'in ilk ifadesi. */
 async function createOrderFromMessage(f: ReceiptFields, w: OrderMessage, replay: ReceiptReplay, actorUserId: string): Promise<InboxOutcome> {
   const svc = await orderService();
@@ -218,6 +228,9 @@ async function createCardFromMessage(f: ReceiptFields, data: Record<string, unkn
           mesaj: "Cari kart oluşturuldu",
         }),
       });
+      // G1 seddi: buluttan doğan cari sessiz geçmesin — siparişle aynı kalıp (yalnız gerçek doğumda, aynı tx'te).
+      const cardId = born.card.id as string;
+      await emitNotification(tx, "cari.patron-carisi", { type: "customer", id: cardId, key: cardId }, patronCardPayload(born.card, f.msg.hesapAdi), { actorUserId });
       return { replay: false as const, born, receipt };
     }),
   );

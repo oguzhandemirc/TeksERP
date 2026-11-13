@@ -44,6 +44,40 @@ export interface PatronCloudStatus {
     uncertain: number;
     errorCode: string | null;
   } | null;
+  sed: PatronCloudGuardState;
+  makbuzlar: InboxReceiptRow[];
+}
+
+/** Fabrika seddi (G1) ayarları — backend `patron-cloud-guard.service.ts` PatronCloudGuardSettings. */
+export interface PatronCloudGuardSettings {
+  gelenKutusuAcik: boolean;
+  saatlikTavan: number;
+  gunlukTavan: number;
+  raporSaatlikTavan: number;
+}
+
+export interface PatronCloudGuardState {
+  ayarlar: PatronCloudGuardSettings;
+  gelenKutusu: {
+    saatlik: { sayi: number; tavan: number };
+    gunluk: { sayi: number; tavan: number };
+    kalan: number;
+    dolu: "SAATLIK" | "GUNLUK" | null;
+  };
+  rapor: { sonSaat: number; tavan: number; enAzAralikSn: number; sonYoklama: string | null };
+}
+
+/** Buluttan gelen kaydın makbuzu (salt okunur; `cloud_inbox_receipts`). */
+export interface InboxReceiptRow {
+  id: string;
+  at: string;
+  tur: "SIPARIS" | "CARI";
+  sonuc: "ISLENDI" | "REDDEDILDI";
+  hesapAdi: string;
+  belgeNo: string | null;
+  varlikId: string | null;
+  kod: string | null;
+  mesaj: string | null;
 }
 
 export interface PatronCloudActivation {
@@ -64,6 +98,14 @@ export const patronCloudService = {
     withSettingsPassword((headers) =>
       apiClient
         .post<ApiResponse<PatronCloudActivation>>("/api/patron-bulut/etkinlestir", {}, { headers, ...QUIET })
+        .then((r) => ({ data: r.data.data, message: r.data.message })),
+    ),
+
+  /** Fabrika seddi ayarları — ⚠️ ayar şifresi kapısından geçer; yanıt güncel durumdur. */
+  updateGuard: (input: Partial<PatronCloudGuardSettings>): Promise<{ data: PatronCloudStatus; message?: string }> =>
+    withSettingsPassword((headers) =>
+      apiClient
+        .put<ApiResponse<PatronCloudStatus>>("/api/patron-bulut/ayarlar", input, { headers, ...QUIET })
         .then((r) => ({ data: r.data.data, message: r.data.message })),
     ),
 

@@ -82,6 +82,7 @@ import {
   type WireValue,
 } from "./wire";
 import { snapshotDigest } from "./digest";
+import { loadWatermarks, saveWatermarks, wmKey } from "./watermarks";
 
 /** Rapor başına hesap tavanı (§7 "60 sn"); aşan istek `ZAMAN_ASIMI` ile kapanır. */
 export const REPORT_TIMEOUT_MS = 60_000;
@@ -400,20 +401,23 @@ export interface ReportRunOutcome {
 }
 
 /** Bulutta bekleyen istekleri üstlenir, hesaplar, sonucu gönderir (her sonuç ayrı imzalı istek). */
-export async function claimAndRunReportRequests(ctx: CloudCallContext, nowMs: () => number = Date.now): Promise<ReportRunOutcome> {
-  const res = await cloudPost(ctx, SYNC_PATHS.REPORT_CLAIM, { v: 1, enFazla: REPORT_CLAIM_BATCH }, { gzip: false });
+/** `enFazla`: fabrika seddinin bu tura bıraktığı kalan (`report-gate.ts`); bulut daha fazlasını verirse fazlası hesaplanmaz. */
+export async function claimAndRunReportRequests(ctx: CloudCallContext, nowMs: () => number = Date.now, enFazla: number = REPORT_CLAIM_BATCH): Promise<ReportRunOutcome> {
+  const limit = Math.max(1, Math.min(REPORT_CLAIM_BATCH, Math.floor(enFazla)));
+  const res = await cloudPost(ctx, SYNC_PATHS.REPORT_CLAIM, { v: 1, enFazla: limit }, { gzip: false });
   if (!res.ok) return { claimed: 0, sent: 0, failedSend: 0 };
   const parsed = ReportClaimResponseSchema.safeParse(res.json);
   if (!parsed.success) return { claimed: 0, sent: 0, failedSend: 0 };
   let sent = 0;
   let failedSend = 0;
-  for (const req of parsed.data.istekler) {
+  // Bulut isteneni aşarsa fazlası hesaplanmaz (claim süresi dolunca bulut yeniden verir).
+  for (const req of parsed.data.istekler.slice(0, limit)) {
     const result = await computeReportResult({ istekId: req.istekId, key: req.raporAnahtari, params: req.parametreler, donem: null, nowMs: nowMs() });
     const ok = await sendReportResult(ctx, result);
     if (ok) sent++;
     else failedSend++;
   }
-  return { claimed: parsed.data.istekler.length, sent, failedSend };
+  return { claimed: Math.min(parsed.data.istekler.length, limit), sent, failedSend };
 }
 
 /** Sonuç 4 MB (sıkıştırılmış) tavanını aşarsa veri yerine `SONUC_BUYUK` hatası gider. */
@@ -454,4 +458,16 @@ export function standardReportPlan(now: Date): StandardReportPlan[] {
 /** İçerik özeti (sonucun `veri`si) — aynı sonuç ikinci kez gönderilmez. */
 export function reportDigest(result: ReportResult): string {
   return snapshotDigest((result.veri ?? null) as WireValue);
+}
+
+/** Saatlik standart görüntüler: içerik özeti değişmeyen gönderilmez (filigran `wmKey.standardReport`). */
+export async function pushStandardReportSnapshots(ctx: CloudCallContext, nowMs: number): Promise<void> {
+  const stored = await loadWatermarks();
+  for (const plan of standardReportPlan(new Date(nowMs))) {
+    const result = await computeReportResult({ istekId: null, key: plan.key, params: plan.params, donem: plan.donem, nowMs });
+    const key = wmKey.standardReport(plan.key, plan.donem ?? "kesit");
+    const digest = reportDigest(result);
+    if (stored.get(key)?.digest === digest) continue;
+    if (await sendReportResult(ctx, result)) await saveWatermarks([{ source: key, digest, at: new Date(nowMs) }]);
+  }
 }

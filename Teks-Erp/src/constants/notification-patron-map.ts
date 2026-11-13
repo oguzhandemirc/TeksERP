@@ -28,6 +28,7 @@ export const NOTIFICATION_PATRON_MAP: Readonly<Record<NotificationKind, PatronEs
   "sevkiyat.sevke-hazir": { patronKind: null, neden: "patron bildirimi sonraki adım (DALGA4 §12.2); şimdilik yalnız fabrika içi" },
   "cari.kilitlendi": { patronKind: "cari-kilit", neden: "bulut cari-hesap.kilit projeksiyonundan üretir (D4-I6, kilit başına tek)" },
   "cari.kilit-acildi": { patronKind: "cari-kilit", neden: "bulutta aynı türün açılış olayı (`cari-kilit:<kilitId>:acildi`)" },
+  "cari.patron-carisi": { patronKind: null, neden: "patronun kendi gönderisi; sonucu bulutta `gelen-kutusu-sonucu` ayrı olayıdır" },
   "cari.risk-limiti-asildi": { patronKind: null, neden: "bulutta tür yok (tutar dışarı çıkmaz; risk görünümü fabrika içi)" },
   "dokuma.levent-bitiyor": { patronKind: null, neden: "yalnız fabrika içi (salon işi)" },
   "dokuma.tezgah-alarmi": { patronKind: null, neden: "yalnız fabrika içi (nöbet/kademe alarmı)" },
