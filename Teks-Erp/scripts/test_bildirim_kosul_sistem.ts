@@ -10,12 +10,17 @@
 // Ek: §f eşitleme uygun değilken (bulut kapalı) koşul açılmaz, açıksa kapanır · §g ölçülemeyen kaynak
 // (açılışta ilk ölçüm yok / offsite henüz koşmadı / lisans durumu hazır değil) açık koşulu KORUR ·
 // §h ardışık iki hatalı eşitleme turu açar, tek hata açmaz · §i lisans bitişi ≤ gün → `bitis-yakin` ·
+// §j açılış ısınması: bütünlük denetimi bitmeden (güncelleme sonrası ilk tur) `BUTUNLUK_OLCULEMEDI` /
+// `DERLEME_TARIHI_YOK` koşul AÇMAZ, diğer nedenler açar; ısınmadan önce açık olan korunur; ısınma
+// bitince (ya da denetim sonuç verince) aynı nedenler açar.
 // §M gerçek okuyucularla her `evaluate` süresi (60 sn periyodun maliyeti).
 //
 // NEGATİF SONDALAR (2026-10-25, md5 ile birebir geri alındı):
 //  ① tarayıcıda `evaluate` hatası "boş küme"ye çevrildi (`truths = []`) → §e ×4 ❌ (+ zincirleme §c/§d)
 //  ② bastırma kaldırıldı: yedek konu anahtarına tur damgası eklendi (`gece-<now>`) → §b ❌ (çift bildirim)
 //  ③ `acikKalsin` boş döndü (ölçülemeyen = düzeldi) → §g ×3 ❌
+//  ⑤ (2026-11-14) ısınma süzgeci kaldırıldı (`pending = []`) → §j1 + §j2 ❌ (güncellemede iki "Lisans uyarısı" bildirimi)
+//  ⑥ (2026-11-14) ısınma süzgeci süre şartsız (`warming = !integrityMeasured()`) → §j3 + §j4 ❌ (denetimi hiç bitmeyen kurulumda uyarı susar)
 //  ④ 8040 satırı `period-guard.helper.ts` envanterinden silindi → `test_advisory_lock_namespaces` ❌
 // Global ayar yazar (`bildirim.gelenKutusuEnabled`); bulduğu değere `finally`de döner.
 // =============================================================================
@@ -73,6 +78,8 @@ const d = {
   lisans: { durumHazir: true, state: { uygulananKademe: "NORMAL", nedenler: [] as { kod: string }[], odenmisTarih: null as { tarihMs: number | null } | null } },
   guncelleme: { guncelleyici: { durum: "CALISIYOR" }, bekleyen: null as { surum: string; karar: string } | null, onay: null as { surum: string } | null },
   firlat: new Set<string>(),
+  butunlukOlculdu: true,
+  uptimeMs: 60 * 60_000,
 };
 function sahte(kaynak: string, fn: () => unknown): never | unknown {
   if (d.firlat.has(kaynak)) throw new Error(`sahte okuyucu hatası: ${kaynak}`);
@@ -85,6 +92,8 @@ const SAHTE: Partial<SystemSourceDeps> = {
   cloudSyncStatus: () => sahte("bulut", () => d.bulut) as ReturnType<SystemSourceDeps["cloudSyncStatus"]>,
   licenseSnapshot: () => sahte("lisans", () => d.lisans) as ReturnType<SystemSourceDeps["licenseSnapshot"]>,
   updateStatus: async () => sahte("guncelleme", () => d.guncelleme) as Awaited<ReturnType<SystemSourceDeps["updateStatus"]>>,
+  integrityMeasured: () => d.butunlukOlculdu,
+  uptimeMs: () => d.uptimeMs,
 };
 
 async function kisi(ad: string, codes: string[]): Promise<string> {
@@ -265,6 +274,38 @@ async function govde(): Promise<void> {
     check("§g3 lisans durumu hazır değil → açık koşul KAPANMAZ", typeof rg3 === "object" && rg3.closed === 0 && !!(await acikKosul("sistem.lisans-uyarisi", "VADE_DOLDU")));
     d.lisans = { durumHazir: true, state: { uygulananKademe: "NORMAL", nedenler: [], odenmisTarih: null } };
     await tur("sistem.lisans-uyarisi");
+
+    // §j açılış ısınması (sunucuda gözlenen: güncelleme sonrası ilk turda iki konu açılıp 60 sn sonra kapanıyordu)
+    const LK = "sistem.lisans-uyarisi";
+    const acilis = { durumHazir: true, state: { uygulananKademe: "UYARI", nedenler: [{ kod: "BUTUNLUK_OLCULEMEDI" }, { kod: "DERLEME_TARIHI_YOK" }], odenmisTarih: null } };
+    d.butunlukOlculdu = false;
+    d.uptimeMs = 5_000;
+    d.lisans = acilis;
+    const rj1 = await tur(LK);
+    check("§j1 ısınmada bütünlük nedenleri koşul AÇMAZ", typeof rj1 === "object" && rj1.opened === 0
+      && !(await acikKosul(LK, "BUTUNLUK_OLCULEMEDI")) && !(await acikKosul(LK, "DERLEME_TARIHI_YOK")), JSON.stringify(rj1));
+    d.lisans = { durumHazir: true, state: { uygulananKademe: "UYARI", nedenler: [{ kod: "BUTUNLUK_OLCULEMEDI" }, { kod: "VADE_DOLDU" }], odenmisTarih: null } };
+    const rj2 = await tur(LK);
+    check("§j2 ısınmada başka neden yine açar", typeof rj2 === "object" && rj2.opened === 1 && !!(await acikKosul(LK, "VADE_DOLDU"))
+      && !(await acikKosul(LK, "BUTUNLUK_OLCULEMEDI")), JSON.stringify(rj2));
+    d.butunlukOlculdu = true;
+    d.uptimeMs = 60 * 60_000;
+    d.lisans = { durumHazir: true, state: { uygulananKademe: "NORMAL", nedenler: [], odenmisTarih: null } };
+    await tur(LK);
+    d.butunlukOlculdu = false;
+    d.uptimeMs = 11 * 60_000;
+    d.lisans = acilis;
+    const rj3 = await tur(LK);
+    check("§j3 ısınma bitti, denetim hâlâ sonuçsuz → bütünlük nedenleri AÇAR", typeof rj3 === "object" && rj3.opened === 2
+      && !!(await acikKosul(LK, "BUTUNLUK_OLCULEMEDI")), JSON.stringify(rj3));
+    d.uptimeMs = 5_000;
+    const rj4 = await tur(LK);
+    check("§j4 açık bütünlük konusu ısınmada (yeniden başlatma) KAPANMAZ", typeof rj4 === "object" && rj4.closed === 0
+      && !!(await acikKosul(LK, "BUTUNLUK_OLCULEMEDI")) && !!(await acikKosul(LK, "DERLEME_TARIHI_YOK")), JSON.stringify(rj4));
+    d.butunlukOlculdu = true;
+    d.uptimeMs = 60 * 60_000;
+    d.lisans = { durumHazir: true, state: { uygulananKademe: "NORMAL", nedenler: [], odenmisTarih: null } };
+    await tur(LK);
 
     // ── 4 · Güncelleme ───────────────────────────────────────────────────────
     await yasamDongusu({
