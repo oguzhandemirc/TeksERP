@@ -43,6 +43,7 @@ import { TERIM } from "../../constants/terim";
 import { resolveRollLabels, rollLabel, nextSubcontractorDocNoTx } from "./shared";
 import type { SubcontractorServiceThis } from "./shared";
 import type { SubcontractorService } from "../subcontractor.service";
+import { emitSubcontractReceivedTx } from "../notification-sources/depo";
 
 // Refakat kartı okutma izi (TravelerCardScan) — tx İÇİNDE; audit'i çağıran eylem basar.
 // Bu dosyada durur: aile içinde audit taşıyan bir modülde (test_audit_muafiyeti §7 dosya düzeyi).
@@ -689,6 +690,7 @@ export async function receiveInner(
           appliedWidth: measuredWidth,
         },
       });
+      await emitSubcontractReceivedTx(tx, receipt.id, plans.length, userId);
 
       // Receipt'in property listesi — yeni doğacak açık kumaş Roll'ları bunu
       // inherit edecek (Kurşun/KK2'de operatör "yeni kumaş aç" çağrısında).

@@ -40,6 +40,7 @@ import { hasDocumentDeclared, isOpenForApproval, isSummaryLine, lineProblems, pe
 import { declaredPageCount } from "../lib/gelen-belge/parti-ozet";
 import { learnBatchNoKey } from "./gelen-belge-sablon.service";
 import { auditPerDocument, perDocumentEntryWarning, summaryTargets, type PartyEntry, type SummaryDeclared } from "./gelen-belge-onay-parti.service";
+import { emitIncomingDocApprovedTx } from "./notification-sources/depo";
 
 // Kapı yüklemleri tek kaynakta (detay yanıtı da aynılarını okur); eski içe aktaranlar için yeniden dışa aktarılır.
 export { totalMismatches, totalWarnings };
@@ -320,7 +321,7 @@ export async function approveDeliveryNote(id: string, input: ApproveInput, userI
   const processChoices = await resolveProcessChoices(note, input.processChoices);
   const varianceReason = input.varianceReason?.trim() || undefined;
 
-  const claimed = await claimForApproval(note, { userId, varianceReason, entryMode: mode, batchMode: await readDuplicateBatchNoMode(), confirmDuplicateBatchNo: input.confirmDuplicateBatchNo, parties: opts.parties, summary: opts.summary, auditExtra: { ...(dup.confirmedPeers.length ? { duplicateDocNoConfirmed: dup.confirmedPeers } : {}), ...(opts.via ? { via: opts.via } : {}) } });
+  const claimed = await claimForApproval(note, { userId, varianceReason, docNoPeers: dup.confirmedPeers, entryMode: mode, batchMode: await readDuplicateBatchNoMode(), confirmDuplicateBatchNo: input.confirmDuplicateBatchNo, parties: opts.parties, summary: opts.summary, auditExtra: { ...(dup.confirmedPeers.length ? { duplicateDocNoConfirmed: dup.confirmedPeers } : {}), ...(opts.via ? { via: opts.via } : {}) } });
   warnings.push(...dup.warnings, ...claimed.batch.warnings);
   if (claimed.perDocument) await auditPerDocument(note, userId, claimed.perDocument, opts.parties);
 
@@ -391,10 +392,7 @@ export async function approveDeliveryNote(id: string, input: ApproveInput, userI
   const remaining = await prisma.customerDeliveryNoteLine.count({ where: { noteId: id, rollId: null, status: { notIn: [DeliveryNoteLineStatus.SKIPPED, DeliveryNoteLineStatus.INFO] } } });
   summary.skipped = await prisma.customerDeliveryNoteLine.count({ where: { noteId: id, status: DeliveryNoteLineStatus.SKIPPED } });
   const finalStatus = remaining === 0 ? DeliveryNoteStatus.APPROVED : DeliveryNoteStatus.PARTIAL;
-  await prisma.customerDeliveryNote.updateMany({
-    where: { id, status: DeliveryNoteStatus.APPROVING },
-    data: { status: finalStatus, updatedById: userId, ...(finalStatus === "APPROVED" ? { approvedAt: new Date(), approvedById: userId } : {}) },
-  });
+  await closeApproval(id, finalStatus, userId);
   await AuditService.log({ userId, action: "UPDATE", tableName: NOTE_TABLE, recordId: id, oldData: { status: "APPROVING" }, newData: { status: finalStatus, noteNo: note.noteNo, entered: summary.entered, failed: summary.failed, replayed: summary.replayed, ...(defaultItem ? { defaultItemId: defaultItem.id, defaultItemSource: defaultItem.source } : {}) } });
   // Alias öğrenme tx DIŞINDA ve best-effort: sözlük istatistiktir, top doğumunu geciktirmez/geri sarmaz.
   if (entered.length) await learnAliases(note, entered, userId, processChoices).catch(() => undefined);
@@ -404,6 +402,17 @@ export async function approveDeliveryNote(id: string, input: ApproveInput, userI
   }
 
   return { note: await getDeliveryNote(id), summary, warnings };
+}
+
+/** Kapanış claim'i (yalnız APPROVING'den) + `gelenbelge.onaylandi` tek tx: yalnız gerçekten kapatan (count 1) bildirir. */
+async function closeApproval(id: string, finalStatus: DeliveryNoteStatus, userId: string): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    const closed = await tx.customerDeliveryNote.updateMany({
+      where: { id, status: DeliveryNoteStatus.APPROVING },
+      data: { status: finalStatus, updatedById: userId, ...(finalStatus === "APPROVED" ? { approvedAt: new Date(), approvedById: userId } : {}) },
+    });
+    if (closed.count === 1 && finalStatus === DeliveryNoteStatus.APPROVED) await emitIncomingDocApprovedTx(tx, id, userId);
+  });
 }
 
 /** Bekçi/okuyucu için: satırın top token'ı (belirlenimli). */

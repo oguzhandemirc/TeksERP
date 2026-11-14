@@ -102,6 +102,7 @@ import { uyari } from "../lib/logger";
 import { runItemUsageChecks, runItemUsageChecksTx, type ItemUsageCheck } from "./helpers/item-usage.helper";
 import { listSearchWhere } from "../utils/list-search";
 import { PURCHASE_OPEN_LINE_SEARCH } from "./helpers/list-search-paths.helper";
+import { emitPurchaseOrderCreatedTx } from "./notification-sources/ticaret";
 
 /**
  * Alış siparişi senkronunun `pg_advisory_xact_lock` NAMESPACE'i (2 argümanlı form).
@@ -627,7 +628,7 @@ export class PurchaseOrderService {
             // İLK ifade: kart kilitleri (8030 SHARED → FOR SHARE) — alış satırı D1 referansıdır.
             await runItemUsageChecksTx(tx, purchaseLineUsageChecks(input.lines, new Set()));
             const orderNo = await nextPurchaseOrderNo(tx, orderDate);
-            return tx.purchaseOrder.create({
+            const po = await tx.purchaseOrder.create({
               data: {
                 orderNo,
                 supplierId: party.supplierId,
@@ -651,6 +652,8 @@ export class PurchaseOrderService {
               },
               select: { id: true, orderNo: true },
             });
+            await emitPurchaseOrderCreatedTx(tx, po.id, userId);
+            return po;
           }),
         undefined,
         (err) => !isClientTokenP2002(err),

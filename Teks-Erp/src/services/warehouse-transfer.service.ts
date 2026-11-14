@@ -30,6 +30,7 @@ import { WAREHOUSE_STOCK_STATUSES } from "./helpers/warehouse-stock.helper";
 import { STOCK_MOVE_REASON } from "../constants/stock-move-reasons";
 import type { ApiResponse } from "../types/api.types";
 import { escapeLikeTerm } from "../utils/like-escape";
+import { emitWarehouseTransferTx } from "./notification-sources/depo";
 
 const TRANSFER_PREFIX = "DT";
 
@@ -328,6 +329,7 @@ export class WarehouseTransferService {
         // Resmi belge — transfer irsaliyesi v1 BURADA, aynı tx içinde donar
         // (sevk irsaliyesi emsali): içerik "taşıma anı"dır.
         await printedDocumentService.freezeForSource(tx, PrintedDocType.TRANSFER_DISPATCH, transfer.id, userId);
+        await emitWarehouseTransferTx(tx, transfer.id, { transferNo: transfer.transferNo, from: from.name, to: to.name, count: rolls.length + sackRollIds.length }, userId);
 
         return { id: transfer.id, transferNo: transfer.transferNo, count: rolls.length + sackRollIds.length, sackCount: sacks.length };
       }),

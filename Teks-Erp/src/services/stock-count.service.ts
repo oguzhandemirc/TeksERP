@@ -74,6 +74,7 @@ import { uyari } from "../lib/logger";
 import { upperTr } from "../utils/tr-case";
 import { escapeLikeTerm } from "../utils/like-escape";
 import { TERIM } from "../constants/terim";
+import { emitStockCountDifferenceTx } from "./notification-sources/depo";
 
 type Tx = Prisma.TransactionClient;
 
@@ -771,6 +772,7 @@ export class StockCountService {
         (acc, a) => acc.plus(a.qty),
         new Prisma.Decimal(0),
       );
+      await emitStockCountDifferenceTx(tx, count.id, { countNo: count.countNo, rolls: applied.length, meters: Number(cancelledMeters), yarn: yarnAdjustments }, userId);
       return {
         id: count.id,
         countNo: count.countNo,

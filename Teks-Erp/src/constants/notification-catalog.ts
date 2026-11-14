@@ -20,6 +20,7 @@ import { CARI_NOTIFICATION_ENTRIES } from "./notification-catalog-cari";
 import { READY_WORK_NOTIFICATION_ENTRIES } from "./notification-catalog-sevkiyat";
 import { KIMLIK_NOTIFICATION_ENTRIES } from "./notification-catalog-kimlik";
 import { SATIS_NOTIFICATION_ENTRIES } from "./notification-catalog-satis";
+import { DEPO_NOTIFICATION_ENTRIES } from "./notification-catalog-depo";
 
 export { NOTIFICATION_PHASES, NOTIFICATION_GRUPLARI } from "./notification-catalog.types";
 export type {
@@ -276,6 +277,7 @@ export const NOTIFICATION_CATALOG = {
     tahminiHaftalik: 15, saklama: SAKLAMA,
   },
   ...READY_WORK_NOTIFICATION_ENTRIES, // D4-J2 — ayrı dosyada (dosya boyu)
+  ...DEPO_NOTIFICATION_ENTRIES, // S3 — depo · sevkiyat · fason · gelen belge · satınalma olayları + özetleri (ayrı dosya, dosya boyu)
 
   // ── Finans (D4-I5) — ayrı dosyada (dosya boyu); yük TUTAR taşımaz ──
   ...CARI_NOTIFICATION_ENTRIES,

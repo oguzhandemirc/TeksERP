@@ -86,6 +86,7 @@ import { tokenReplay } from "./helpers/token-replay.helper";
 import { isClientTokenP2002 } from "../utils/p2002";
 import type { ApiResponse } from "../types/api.types";
 import { assertItemUsable, assertItemUsableTx, type ItemUsage } from "./helpers/item-usage.helper";
+import { emitGoodsReceiptCreatedTx } from "./notification-sources/ticaret";
 
 
 const inventory = new InventoryService();
@@ -815,7 +816,7 @@ export class GoodsReceiptService {
         }
 
         const receiptNo = await nextReceiptNo(tx);
-        return tx.goodsReceipt.create({
+        const created = await tx.goodsReceipt.create({
           data: {
             receiptNo,
             warehouseId: input.warehouseId,
@@ -832,6 +833,8 @@ export class GoodsReceiptService {
           },
           select: { id: true, receiptNo: true },
         });
+        await emitGoodsReceiptCreatedTx(tx, created.id, userId);
+        return created;
       }),
       undefined,
       (err) => !isClientTokenP2002(err),

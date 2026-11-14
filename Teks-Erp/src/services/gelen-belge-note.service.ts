@@ -38,6 +38,7 @@ import { noteTanima } from "./gelen-belge-tanima-ozeti.service";
 import { withDocLineCount } from "./gelen-belge-satir-sayim.service";
 import { withNoteWorkOrders } from "./gelen-belge-liste-is-emri.service";
 import type { DeliveryNoteCreateInput, DeliveryNoteHeaderInput, DeliveryNoteListQuery } from "./gelen-belge-note-types";
+import { emitIncomingDocCreatedTx } from "./notification-sources/depo";
 
 const NOTE_TABLE = "CUSTOMER_DELIVERY_NOTE";
 const SERIES_KEY = "customerDeliveryNote";
@@ -296,6 +297,7 @@ export async function createDeliveryNote(input: DeliveryNoteCreateInput, userId:
           restored = await applyStoredReadsTx(tx, row.id, plans);
         }
         await assertDocNoUniqueTx(tx, row.id, dupMode, docNoKeys);
+        await emitIncomingDocCreatedTx(tx, row.id, userId);
         return row;
       });
     }, undefined, (err) => p2002TargetsCode(err, "noteNo"), "Gelen belge numarası").catch(translateUnique);
