@@ -24,7 +24,7 @@ import { areaSummary, attentionItems, column, dueAmount, dueRows, dueShort, obj,
 import { combine, useSnapshot } from "../../../src/ui/pano/useSnapshot";
 import { SectionHeader } from "../../../src/ui/SectionHeader";
 import { SegmentedControl } from "../../../src/ui/SegmentedControl";
-import { CapsuleButton } from "../../../src/ui/siparis/parts";
+import { HeaderIconButton } from "../../../src/ui/siparis/parts";
 import { Empty, ErrorState, LoadingSkeleton } from "../../../src/ui/StateViews";
 import { SyncIndicator } from "../../../src/ui/SyncIndicator";
 import { makeStyles } from "../../../src/ui/theme-context";
@@ -104,7 +104,7 @@ export default function Dashboard() {
       back={false}
       titleRight={<SyncIndicator last={factoryStamp} offline={offline} onPress={reloadAll} />}
       subtitle={!wide ? <FacilityName /> : undefined}
-      headerRight={showPano ? <CapsuleButton label="Düzenle" icon="create-outline" onPress={() => setDuzenle(true)} testID="pano-duzenle" /> : undefined}
+      headerRight={showPano ? <HeaderIconButton label="Panoyu düzenle" icon="options-outline" onPress={() => setDuzenle(true)} testID="pano-duzenle" /> : undefined}
       onRefresh={reloadAll}
       refreshing={all.refreshing}
     >
@@ -154,7 +154,7 @@ function UzakPano({ go, duzenle, kapat }: { readonly go: Go; readonly duzenle: b
           <SegmentedControl items={PANO_DONEMLERI.map((k) => ({ key: k, label: DONEM_LABEL[k] }))} value={donem} onChange={duzen.setDonem} testIDPrefix="pano-donem-" accessibilityLabel="Dönem" />
         </View>
       ) : null}
-      {keys.length === 0 ? <Empty text="Panoda kutu yok — Düzenle ile ekleyin" testID="pano-bos" /> : null}
+      {keys.length === 0 ? <Empty text="Panoda kutu yok — sağ üstteki düzenle düğmesiyle ekleyin" testID="pano-bos" /> : null}
       {data.loading && !data.data ? <LoadingSkeleton variant="kpi" rows={Math.min(keys.length, 4)} testID="pano-yukleniyor" /> : null}
       {data.data ? (
         <KpiGrid testID="pano-kpi">
@@ -202,7 +202,7 @@ function YerelPano({ katalog, duzenle, kapat, go, data, loading }: { readonly ka
   return (
     <>
       {tiles.length === 0 && loading ? <LoadingSkeleton variant="kpi" rows={4} testID="pano-yukleniyor" /> : null}
-      {tiles.length === 0 && !loading && duzen.kutular.length === 0 ? <Empty text="Panoda kutu yok — Düzenle ile ekleyin" testID="pano-bos" /> : null}
+      {tiles.length === 0 && !loading && duzen.kutular.length === 0 ? <Empty text="Panoda kutu yok — sağ üstteki düzenle düğmesiyle ekleyin" testID="pano-bos" /> : null}
       {tiles.length > 0 ? (
         <KpiGrid testID="pano-kpi">
           {tiles.map((p) => <KpiCard key={p.testID} {...p} />)}

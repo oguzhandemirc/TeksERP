@@ -48,7 +48,7 @@ export default function CancelOrderLine() {
     if (izin && id && kalem) void oku();
   }, [izin, id, kalem, oku]);
 
-  if (!izin) return <Screen title="Kalem iptali" module="siparisler" back><Muted>Bu işlem için yetkiniz yok.</Muted></Screen>;
+  if (!izin) return <Screen sheet title="Kalem iptali" module="siparisler" back><Muted>Bu işlem için yetkiniz yok.</Muted></Screen>;
 
   const bitti = () => {
     haptic("success");
@@ -86,7 +86,7 @@ export default function CancelOrderLine() {
 
   const o = onizleme;
   return (
-    <Screen title="Kalem iptali" module="siparisler" back>
+    <Screen sheet title="Kalem iptali" module="siparisler" back>
       {!o && !loadError ? <LoadingSkeleton rows={3} /> : null}
       {loadError && !o ? <ErrorState text={loadError} onRetry={() => void oku()} /> : null}
       {o ? (

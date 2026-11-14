@@ -1,8 +1,9 @@
-// Cari satırı: ad (tam genişlik) · kod + il · rol rozetleri (+ Pasif). Roller kimlik değil bayraktır (master veri kuralı).
+// Cari satırı: ad (tam genişlik) · kod + il · rol rozetleri (+ Pasif); geniş ekranda rozetler sağda (iki satırlık sıkı satır). Roller kimlik değil bayraktır (master veri kuralı).
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Pressable, Text, View } from "react-native";
 import type { ProjectionRecord } from "../../api/wire";
 import { cariRoles } from "../../lib/labels/siparis";
+import { useWide } from "../Frame";
 import { IconChip } from "../IconChip";
 import { StatusBadge } from "../StatusBadge";
 import { makeStyles, useTokens } from "../theme-context";
@@ -18,6 +19,13 @@ export function CustomerRow({ r, onPress }: { r: ProjectionRecord; onPress: () =
   const passive = k.aktif === false;
   const sub = [str(k.kod), str(k.il)].filter(Boolean).join(" · ");
   const name = str(k.ad) ?? "—";
+  const wide = useWide();
+  const pills = roles.length > 0 || passive ? (
+    <View style={[s.pills, wide && s.pillsSide]}>
+      {roles.map((x) => <RolePill key={x.key} roleKey={x.key} label={x.label} />)}
+      {passive ? <StatusBadge kind="bilgi" label="Pasif" size="sm" /> : null}
+    </View>
+  ) : null;
   return (
     <Pressable
       onPress={onPress} testID={`cari-${r.id}`} accessibilityRole="button"
@@ -28,13 +36,9 @@ export function CustomerRow({ r, onPress }: { r: ProjectionRecord; onPress: () =
       <View style={s.text}>
         <Text style={[s.title, passive && { color: t.textSecondary }]} numberOfLines={1} maxFontSizeMultiplier={FONT_SCALE.body}>{name}</Text>
         {sub ? <Text style={s.subtitle} numberOfLines={1}>{sub}</Text> : null}
-        {roles.length > 0 || passive ? (
-          <View style={s.pills}>
-            {roles.map((x) => <RolePill key={x.key} roleKey={x.key} label={x.label} />)}
-            {passive ? <StatusBadge kind="bilgi" label="Pasif" size="sm" /> : null}
-          </View>
-        ) : null}
+        {wide ? null : pills}
       </View>
+      {wide ? pills : null}
       <Ionicons name="chevron-forward" size={18} color={t.textMuted} />
     </Pressable>
   );
@@ -45,5 +49,6 @@ const useStyles = makeStyles((t) => ({
   text: { flex: 1, minWidth: 0, gap: 3 },
   title: { ...typography.headline, color: t.text },
   subtitle: { ...typography.subhead, ...tabularNums, color: t.textSecondary },
+  pillsSide: { marginTop: 0, flexWrap: "nowrap" as const, flexShrink: 0 },
   pills: { flexDirection: "row" as const, flexWrap: "wrap" as const, alignItems: "center" as const, gap: space.xs, marginTop: 2 },
 }));

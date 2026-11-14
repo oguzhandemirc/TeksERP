@@ -23,6 +23,8 @@ export interface RemoteList {
   readonly loading: boolean;
   readonly refreshing: boolean;
   readonly error: string | null;
+  /** Modül fabrikada kapalı (hata değil): ekran sakin boş durum çizer, arama/süzgeç gizlenir. */
+  readonly closed: boolean;
   readonly stale: boolean;
   readonly offline: boolean;
   readonly savedAt: string | null;
@@ -114,7 +116,8 @@ export function useRemoteList(projection: string, query: ListQuery = {}, options
     items,
     loading: enabled && loading,
     refreshing: ara ? !!search?.loading && !!search.page : first.refreshing,
-    error: error ?? moreError,
+    error: first.closed ? null : (error ?? moreError),
+    closed: !!first.closed,
     stale: ara ? false : first.stale,
     offline,
     savedAt: ara ? null : first.savedAt,

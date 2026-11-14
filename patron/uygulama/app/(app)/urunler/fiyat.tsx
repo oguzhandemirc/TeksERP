@@ -56,7 +56,7 @@ export default function ItemPrices() {
     if (izin && id) void oku();
   }, [izin, id, oku]);
 
-  if (!izin) return <Screen title="Fiyatlar" module="urunler" back><Muted>Bu işlem için yetkiniz yok.</Muted></Screen>;
+  if (!izin) return <Screen sheet title="Fiyatlar" module="urunler" back><Muted>Bu işlem için yetkiniz yok.</Muted></Screen>;
 
   const ac = (k: Kip) => {
     setKip(k);
@@ -98,7 +98,7 @@ export default function ItemPrices() {
 
   const acik = kip.tur !== "yok";
   return (
-    <Screen title={ad ? `${ad} fiyatları` : "Fiyatlar"} module="urunler" back onRefresh={() => void oku()}>
+    <Screen sheet title={ad ? `${ad} fiyatları` : "Fiyatlar"} module="urunler" back onRefresh={() => void oku()}>
       {list === null && !loadError ? <LoadingSkeleton rows={2} /> : null}
       {loadError && list === null ? <ErrorState text={loadError} onRetry={() => void oku()} /> : null}
       {list !== null ? (

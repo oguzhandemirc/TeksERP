@@ -127,12 +127,44 @@ export interface ScreenProps {
   readonly headerRight?: ReactNode;
   /** Büyük başlığın altındaki satır (ör. tesis adı). */
   readonly subtitle?: ReactNode;
+  /** Form ekranı: geniş ekranda tam sayfa yerine karartılmış listenin üstünde ortalı kart (yığında saydam kip,
+   *  `FORM_SHEET_OPTIONS`); başlıkta "Kapat". Telefonda bugünkü tam sayfa. */
+  readonly sheet?: boolean;
   /** Büyük başlıkla AYNI satırda sağda (ör. eşitleme göstergesi) — ayrı satır işgal etmez. */
   readonly titleRight?: ReactNode;
 }
 
+/** Geniş ekranda form rotalarının yığın seçeneği: alttaki ekran görünür kalır, kart solarak gelir. */
+export const FORM_SHEET_OPTIONS = { presentation: "transparentModal", animation: "fade", contentStyle: { backgroundColor: "transparent" } } as const;
+
+function SheetScreen({ title, children, allowed, onClose }: { title: string; children: ReactNode; allowed: boolean; onClose: () => void }) {
+  const t = useTokens();
+  const s = useStyles();
+  const insets = useSafeAreaInsets();
+  const { switchError } = useSession();
+  return (
+    <View style={[s.sheetBackdrop, { paddingTop: insets.top + space.l, paddingBottom: insets.bottom + space.l }]}>
+      {/* Karartma dokunuşla KAPATMAZ: yarım form yanlışlıkla kaybolmasın; çıkış başlıktaki "Kapat"tan. */}
+      <View style={[s.scrim, { backgroundColor: t.navy, opacity: t.scheme === "dark" ? 0.7 : 0.4 }]} />
+      <View style={[s.sheetCard, t.floatShadow]} accessibilityViewIsModal testID="form-karti">
+        <View style={s.sheetHead}>
+          <Text style={s.sheetTitle} accessibilityRole="header" numberOfLines={1}>{title}</Text>
+          <Pressable onPress={onClose} hitSlop={8} accessibilityRole="button" accessibilityLabel="Kapat" testID="form-kapat" style={s.sheetClose}>
+            <Ionicons name="close" size={22} color={t.textSecondary} />
+          </Pressable>
+        </View>
+        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={s.sheetBody}>
+          <StatusBands />
+          {switchError ? <Banner tone="error" text={switchError} testID="bant-tesis-gecisi" /> : null}
+          {allowed ? children : <Banner tone="error" icon="lock-closed-outline" text="Bu bölümü görme yetkiniz yok" />}
+        </ScrollView>
+      </View>
+    </View>
+  );
+}
+
 /** Her ekranın kabı: büyük başlık, bantlar, kaydırma ve aşağı çek-yenile; izin kapısı. */
-export function Screen({ title: titleProp, module, children, back, onRefresh, refreshing, headerRight, subtitle, titleRight }: ScreenProps) {
+export function Screen({ title: titleProp, module, children, back, onRefresh, refreshing, headerRight, subtitle, titleRight, sheet }: ScreenProps) {
   const title = titleProp ?? (module ? moduleTitle(module) : "");
   const t = useTokens();
   const s = useStyles();
@@ -145,6 +177,7 @@ export function Screen({ title: titleProp, module, children, back, onRefresh, re
   const reduced = useReducedMotion();
   const showBack = !wide && (back ?? title !== "Pano");
   const goBack = () => (router.canGoBack() ? router.back() : router.replace("/pano"));
+  if (sheet && wide) return <SheetScreen title={title} allowed={allowed} onClose={goBack}>{children}</SheetScreen>;
   return (
     // Geniş ekranda yığın animasyonu yok (yanal gezinme); içerik bir kez kısa solmayla girer.
     <Animated.View style={s.screen} entering={wide && !reduced ? FadeIn.duration(durations.instant) : undefined}>
@@ -167,6 +200,13 @@ export function Screen({ title: titleProp, module, children, back, onRefresh, re
 
 const useStyles = makeStyles((t) => ({
   screen: { flex: 1, backgroundColor: t.bg },
+  sheetBackdrop: { flex: 1, alignItems: "center" as const, justifyContent: "center" as const, paddingHorizontal: space.xl },
+  scrim: { position: "absolute" as const, top: 0, left: 0, right: 0, bottom: 0 },
+  sheetCard: { width: "100%" as const, maxWidth: 640, maxHeight: "100%" as const, backgroundColor: t.bg, borderRadius: radius.card, overflow: "hidden" as const },
+  sheetHead: { flexDirection: "row" as const, alignItems: "center" as const, gap: space.s, paddingLeft: space.xl, paddingRight: space.m, paddingVertical: space.m, borderBottomWidth: 1, borderColor: t.separator, backgroundColor: t.surface },
+  sheetTitle: { ...typography.title3, color: t.text, flex: 1 },
+  sheetClose: { width: TOUCH, height: TOUCH, alignItems: "center" as const, justifyContent: "center" as const },
+  sheetBody: { padding: space.xl, paddingTop: space.l },
   content: { paddingTop: space.xs, maxWidth: CONTENT_MAX, width: "100%" as const, alignSelf: "center" as const },
   facility: { ...typography.headline, color: t.text, flexShrink: 1 },
   facilityPress: { minHeight: TOUCH, flexDirection: "row" as const, alignItems: "center" as const, gap: space.xs },

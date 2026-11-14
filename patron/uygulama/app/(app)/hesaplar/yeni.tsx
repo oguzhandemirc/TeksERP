@@ -26,14 +26,14 @@ export default function NewAccount() {
   const w = useWrite(send);
   if (done) {
     return (
-      <Screen title="Davet hazır" module="hesaplar" back>
+      <Screen sheet title="Davet hazır" module="hesaplar" back>
         <Banner tone="off" icon="checkmark-circle" text={`${done.hesap.ad} için davet oluşturuldu.`} />
         <InviteShown r={done} />
       </Screen>
     );
   }
   return (
-    <Screen title="Hesap davet et" module="hesaplar" back>
+    <Screen sheet title="Hesap davet et" module="hesaplar" back>
       <GroupCaption>Kişi</GroupCaption>
       <ListGroup>
         <View style={{ paddingHorizontal: space.l, paddingTop: space.l }}>

@@ -65,7 +65,7 @@ export default function NewOrder() {
   const dogrudan = yazici.kanal === "dogrudan";
 
   return (
-    <Screen title="Yeni sipariş" module="siparisler" back>
+    <Screen sheet title="Yeni sipariş" module="siparisler" back>
       <View style={s.intro}>
         <IconChip domain={dogrudan ? "siparisler" : "gelenKutusu"} icon={dogrudan ? undefined : "paper-plane-outline"} size={32} />
         <Text style={s.introText}>{dogrudan ? "Sipariş fabrikaya hemen kaydedilir; numarayı fabrika verir." : "Sipariş fabrikaya gelen kutusundan iletilir; fabrika işleyince durumunu oradan izlersiniz."}</Text>
