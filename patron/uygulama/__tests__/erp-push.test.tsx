@@ -35,6 +35,9 @@ function portlar(o: Partial<{ izin: string; iste: string; belirtec: string | nul
     belirtecAl: jest.fn(async () => st.belirtec),
     belirtecDegisince: jest.fn((cb: () => void) => { st.degis = cb; return () => { st.degis = null; }; }),
     cihazAdi: jest.fn(() => (o.ad === undefined ? "  Samsung Galaxy  " : o.ad)),
+    kanallariKur: jest.fn(async () => undefined),
+    sesiOnizle: jest.fn(async () => undefined),
+    kanalAyariniAc: jest.fn(async () => undefined),
   };
   return { p: p as unknown as Portlar & typeof p, st };
 }
@@ -163,6 +166,21 @@ describe("oturum kancası (sessiz kayıt + belirteç değişimi)", () => {
       expect(factory).not.toHaveBeenCalled();
       expect(c.kaydet).not.toHaveBeenCalled();
     }
+  });
+});
+
+describe("belirteç olayı süzgeci (döngü sondası, 2026-11-14)", () => {
+  it("⭐ ilk olay ve aynı belirteçle tekrar eden olay kaydı TETİKLEMEZ; yalnız gerçek değişim tetikler", () => {
+    const cb = jest.fn();
+    const suz = ep.degisinceSuzgeci(cb);
+    suz("fcm-1"); // kayıt belirteci alınca yayılan ilk olay
+    suz("fcm-1"); // her yeniden alışta aynı değer
+    suz("fcm-1");
+    expect(cb).not.toHaveBeenCalled();
+    suz("fcm-2");
+    expect(cb).toHaveBeenCalledTimes(1);
+    suz("fcm-2");
+    expect(cb).toHaveBeenCalledTimes(1);
   });
 });
 

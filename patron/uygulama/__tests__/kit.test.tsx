@@ -108,3 +108,15 @@ describe("tema", () => {
     expect(screen.getAllByTestId("sema").at(-1)!.props.children).toBe(dark.scheme);
   });
 });
+
+describe("KPI ızgarası dengeli sütun", () => {
+  const { balancedColumns } = require("../src/ui/KpiCard") as typeof import("../src/ui/KpiCard");
+  it("4 kart 3 sütuna sığıyorsa 2×2; geniş ekranda 4 sütun; dar ekranda 2", () => {
+    expect(balancedColumns(4, 504)).toBe(2);
+    expect(balancedColumns(4, 760)).toBe(4);
+    expect(balancedColumns(4, 340)).toBe(2);
+    expect(balancedColumns(3, 504)).toBe(3);
+    expect(balancedColumns(5, 504)).toBe(3);
+    expect(balancedColumns(1, 0)).toBe(1);
+  });
+});

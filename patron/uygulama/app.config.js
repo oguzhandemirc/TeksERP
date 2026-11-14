@@ -21,6 +21,8 @@ const ROZET_IZINLERI = [
   "com.oppo.launcher.permission.READ_SETTINGS", "com.oppo.launcher.permission.WRITE_SETTINGS",
   "me.everything.badger.permission.BADGE_COUNT_READ", "me.everything.badger.permission.BADGE_COUNT_WRITE",
 ];
+/** TeksERP bildirim sesleri (S0): yalnız açık kapıda pakete girer (kapalı derleme BİREBİR app.json); küme `src/push/sesler.ts`. */
+const BILDIRIM_SESLERI = ["tekserp_zil", "tekserp_alarm", "tekserp_mekik", "tekserp_dokuma", "tekserp_kisa"].map((s) => `./assets/sounds/${s}.wav`);
 const FIREBASE_DOSYASI = "google-services.json";
 const EAS_KIMLIGI = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EXPO_SAHIBI = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
@@ -52,7 +54,7 @@ function withNativePush(config, { env = process.env, root = __dirname, warn = co
       googleServicesFile: `./${FIREBASE_DOSYASI}`,
       blockedPermissions: [...(android.blockedPermissions ?? []).filter((p) => !NATIVE_PUSH_IZINLERI.includes(p)), ...ROZET_IZINLERI],
     },
-    plugins: [...(config.plugins ?? []), "expo-notifications"],
+    plugins: [...(config.plugins ?? []), ["expo-notifications", { sounds: BILDIRIM_SESLERI }]],
     extra: { ...extra, nativePush: true, eas: { ...(extra.eas ?? {}), projectId: k.projectId } },
   };
 }
@@ -62,3 +64,4 @@ module.exports.withNativePush = withNativePush;
 module.exports.pushKapisi = pushKapisi;
 module.exports.NATIVE_PUSH_IZINLERI = NATIVE_PUSH_IZINLERI;
 module.exports.ROZET_IZINLERI = ROZET_IZINLERI;
+module.exports.BILDIRIM_SESLERI = BILDIRIM_SESLERI;

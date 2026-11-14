@@ -10,6 +10,7 @@ import {
   PushNudgeResponseSchema,
   PushRegisterResponseSchema,
   PushReleaseResponseSchema,
+  type PushTokenSoundsSchema,
 } from "./wire";
 import type { z } from "zod";
 
@@ -21,9 +22,15 @@ function assertBatch(digests: readonly string[]): void {
 }
 
 /** `POST /v1/bildirim/kaydet` — bağı kurar/tazeler; dönen `bagli` bağlanan özetlerdir. */
-export async function registerDigests(ctx: CloudCallContext, digests: readonly string[]): Promise<BridgeResult<{ bagli: string[] }>> {
+export async function registerDigests(
+  ctx: CloudCallContext,
+  digests: readonly string[],
+  sounds?: z.infer<typeof PushTokenSoundsSchema>[],
+): Promise<BridgeResult<{ bagli: string[] }>> {
   assertBatch(digests);
-  const r = await cloudPost(ctx, PUSH_BRIDGE_PATHS.REGISTER, { v: ENVELOPE_VERSION, ozetler: digests }, { gzip: false });
+  // `sesler` yalnız varsayılandan sapan seçim varken gider (yoksa alan YOK — eski bulut katı şemayla uyumlu).
+  const body = sounds && sounds.length > 0 ? { v: ENVELOPE_VERSION, ozetler: digests, sesler: sounds } : { v: ENVELOPE_VERSION, ozetler: digests };
+  const r = await cloudPost(ctx, PUSH_BRIDGE_PATHS.REGISTER, body, { gzip: false });
   if (!r.ok) return r;
   const parsed = PushRegisterResponseSchema.safeParse(r.json);
   return parsed.success ? { ok: true, value: { bagli: parsed.data.bagli } } : { ok: false, status: 200, code: "YANIT_GECERSIZ" };

@@ -83,7 +83,7 @@ async function settle(row: { id: string; attempts: number }, d: NudgeDecision, n
 async function sendOne(ctx: CloudCallContext, row: { id: string; inboxId: string }, now: Date): Promise<NudgeDecision | "IPTAL"> {
   const inbox = await prisma.notificationInbox.findUnique({
     where: { id: row.inboxId },
-    select: { id: true, userId: true, kind: true, payload: true, readAt: true, resolvedAt: true },
+    select: { id: true, userId: true, kind: true, klass: true, payload: true, readAt: true, resolvedAt: true },
   });
   if (!inbox || !inboxWantsNudge(inbox)) return "IPTAL";
   if (!isNotificationKind(inbox.kind)) return { kind: "FINISH", state: "ATLANDI", code: "BILINMEYEN_TUR" };
@@ -108,7 +108,7 @@ async function sendOne(ctx: CloudCallContext, row: { id: string; inboxId: string
     if (raw && PushTokenSchema.safeParse(raw).success) opened.push({ raw, digest: t.tokenDigest });
   }
   if (opened.length === 0) return { kind: "FINISH", state: "ATLANDI", code: "BELIRTEC_ACILAMADI" };
-  const body = buildNudgeBody({ id: inbox.id, kind: inbox.kind, payload: inbox.payload }, opened.map((o) => o.raw));
+  const body = buildNudgeBody({ id: inbox.id, kind: inbox.kind, payload: inbox.payload, klass: inbox.klass }, opened.map((o) => o.raw));
   noteNudgeSent(now.getTime());
   const res = await nudgeTokens(ctx, body);
   return applyNudgeResult(res, opened.map((o) => o.digest), now);

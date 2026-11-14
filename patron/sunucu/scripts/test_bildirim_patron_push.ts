@@ -63,7 +63,7 @@ async function main(): Promise<void> {
 
   // ── §1 anahtar kümesi ─────────────────────────────────────────────────────
   const y = nativePushPayload(ANDROID, DOLU) as Record<string, unknown>;
-  kontrol("§1 ⭐ yük anahtarları yalnız to/title/sound/priority/data (body YOK)",
+  kontrol("§1 ⭐ yük anahtarları yalnız to/title/sound/channelId/priority/data (body YOK)",
     JSON.stringify(Object.keys(y).sort()) === JSON.stringify([...NATIVE_PAYLOAD_KEYS].sort()) && !("body" in y), Object.keys(y).join(","));
   const data = y.data as Record<string, unknown>;
   kontrol("§1b data anahtarları yalnız bildirimId/rota/tesisId",

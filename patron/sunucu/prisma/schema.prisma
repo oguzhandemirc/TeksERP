@@ -168,6 +168,10 @@ model PushBridgeLink {
   installationId String    @map("kurulum_id") @db.Uuid
   tokenDigest    String    @map("token_digest") @db.VarChar(64)
   invalidatedAt  DateTime? @map("invalidated_at") @db.Timestamptz
+  /// Telefonun seçtiği BİLDİRİM sesi (S0; tel `PUSH_SOUNDS`, CHECK) — Expo `channelId` + `sound` bundan kurulur.
+  soundNotification String @default("tekserp_zil") @map("ses_bildirim") @db.VarChar(24)
+  /// Telefonun seçtiği ALARM sesi (S0; tel `PUSH_SOUNDS`, CHECK).
+  soundAlarm     String    @default("tekserp_alarm") @map("ses_alarm") @db.VarChar(24)
   createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz
   updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 

@@ -10,7 +10,7 @@ import { z } from "zod";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { PATRON_LOGIN_PERMISSION } from "../constants/permission-catalog";
-import { PushTokenSchema } from "../cloud-sync/wire";
+import { PushSoundSchema, PushTokenSchema } from "../cloud-sync/wire";
 import { AppError } from "../utils/app-error";
 import { registerPatronPushDevice, releasePatronPushDevice, type PushCaller } from "../services/patron-push/device.service";
 
@@ -23,6 +23,9 @@ const registerSchema = z.strictObject({
   belirtec: z.string({ error: "belirtec zorunlu" }).pipe(tokenField),
   platform: z.enum(["android", "ios"], { error: "platform android ya da ios olmalı" }),
   cihazAdi: z.string().trim().max(80, "cihazAdi en çok 80 karakter").optional(),
+  // S0: telefonun seçtiği ses; eski uygulama göndermez → varsayılan zil/alarm (serviste).
+  sesBildirim: PushSoundSchema.optional(),
+  sesAlarm: PushSoundSchema.optional(),
 });
 const releaseSchema = z.strictObject({ belirtec: z.string({ error: "belirtec zorunlu" }).pipe(tokenField) });
 
@@ -59,6 +62,8 @@ const callerOf = (req: Request): PushCaller => ({ userId: req.user!.userId, jti:
  *               belirtec: { type: string, example: "ExponentPushToken[xxxxxxxx]" }
  *               platform: { type: string, enum: [android, ios] }
  *               cihazAdi: { type: string, maxLength: 80 }
+ *               sesBildirim: { type: string, enum: [tekserp_zil, tekserp_alarm, tekserp_mekik, tekserp_dokuma, tekserp_kisa, varsayilan, sessiz], description: "Yoksa tekserp_zil" }
+ *               sesAlarm: { type: string, enum: [tekserp_zil, tekserp_alarm, tekserp_mekik, tekserp_dokuma, tekserp_kisa, varsayilan, sessiz], description: "Yoksa tekserp_alarm" }
  *     responses:
  *       200: { description: "{ kayitli: true, durum: BEKLIYOR | KAYITLI, birakilanEski }" }
  *       400: { description: Gövde geçersiz (PATRON_PUSH_GOVDE) }
@@ -87,7 +92,7 @@ router.post("/", async (req: Request, res: Response, next: NextFunction) => {
   try {
     const body = parse(registerSchema, req.body);
     const data = await registerPatronPushDevice(
-      { token: body.belirtec, platform: body.platform, deviceName: body.cihazAdi ? body.cihazAdi : null },
+      { token: body.belirtec, platform: body.platform, deviceName: body.cihazAdi ? body.cihazAdi : null, soundNotification: body.sesBildirim, soundAlarm: body.sesAlarm },
       callerOf(req),
     );
     res.set("Cache-Control", "no-store").status(200).json({ success: true, data });

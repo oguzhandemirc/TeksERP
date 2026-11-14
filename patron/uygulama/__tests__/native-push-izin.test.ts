@@ -25,6 +25,7 @@ const appConfig = require("../app.config.js") as ((a: { config: Record<string, u
   withNativePush: (c: Record<string, unknown>, o: { env: Record<string, string | undefined>; root: string; warn: (m: string) => void }) => Record<string, unknown>;
   NATIVE_PUSH_IZINLERI: string[];
   ROZET_IZINLERI: string[];
+  BILDIRIM_SESLERI: string[];
 };
 const appJson = (JSON.parse(readFileSync(path.join(kok, "app.json"), "utf8")) as { expo: Record<string, unknown> }).expo;
 type Android = { blockedPermissions: string[]; googleServicesFile?: string };
@@ -40,6 +41,8 @@ describe("derleme kapısı (app.config.js)", () => {
     expect(appConfig.withNativePush(appJson, { env: { EXPO_OWNER: "sahte-sahip", PATRON_EAS_PROJECT_ID: EAS }, root: kok, warn })).toBe(appJson);
     expect(appJson.owner).toBeUndefined();
     expect(JSON.stringify(appConfig({ config: appJson }))).toBe(JSON.stringify(appJson));
+    // S0: kapalı pakette ses dosyası/eklentisi yok (sesler yalnız açık kapıda eklenir).
+    expect(JSON.stringify(appJson)).not.toMatch(/tekserp_|expo-notifications/);
     expect((appJson.android as Android).blockedPermissions).toEqual(expect.arrayContaining(appConfig.NATIVE_PUSH_IZINLERI));
   });
 
@@ -82,7 +85,13 @@ describe("derleme kapısı (app.config.js)", () => {
       expect(appConfig.ROZET_IZINLERI.some((p) => appConfig.NATIVE_PUSH_IZINLERI.includes(p))).toBe(false);
       expect(sonra).toEqual(expect.arrayContaining(["android.permission.SYSTEM_ALERT_WINDOW", "com.google.android.gms.permission.AD_ID"]));
       expect((out.android as Android).googleServicesFile).toBe("./google-services.json");
-      expect(out.plugins).toEqual([...(appJson.plugins as unknown[]), "expo-notifications"]);
+      expect(out.plugins).toEqual([...(appJson.plugins as unknown[]), ["expo-notifications", { sounds: appConfig.BILDIRIM_SESLERI }]]);
+      // S0: beş TeksERP sesi eklentiye verilir, dosyaları repoda (44.1 kHz mono 16-bit WAV, RIFF başlığı).
+      expect(appConfig.BILDIRIM_SESLERI).toEqual(["zil", "alarm", "mekik", "dokuma", "kisa"].map((s) => `./assets/sounds/tekserp_${s}.wav`));
+      for (const s of appConfig.BILDIRIM_SESLERI) {
+        const b = readFileSync(path.join(kok, s));
+        expect([b.toString("ascii", 0, 4), b.toString("ascii", 8, 12), b.readUInt16LE(22), b.readUInt32LE(24), b.readUInt16LE(34)]).toEqual(["RIFF", "WAVE", 1, 44100, 16]);
+      }
       expect(out.extra).toEqual({ nativePush: true, eas: { projectId: EAS } });
       expect(out.owner).toBeUndefined();
       const sahipli = appConfig.withNativePush(appJson, { env: { PATRON_NATIVE_PUSH: "1", PATRON_EAS_PROJECT_ID: EAS, EXPO_OWNER: "sahte-sahip" }, root: d, warn: jest.fn() });
@@ -124,7 +133,7 @@ describe("izin istemi (register-native, Android 13+)", () => {
   it("⭐ kanal izinden ÖNCE kurulur; izin verilince belirteç bulut cihaz kaydına gider", async () => {
     mockIzin = "granted";
     await expect(registerNative(api)).resolves.toEqual({ kind: "KAYITLI", deviceId: "d1" });
-    expect(mockSira).toEqual(["kanal", "izin-oku", "izin-iste"]);
+    expect(mockSira).toEqual(["kanal", "kanal", "izin-oku", "izin-iste"]);
     expect(api.deviceRegister).toHaveBeenCalledWith({ platform: "android", belirtec: "ExponentPushToken[sonda]", ad: "Sonda" });
   });
 
