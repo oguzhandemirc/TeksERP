@@ -913,6 +913,8 @@ export const updateSchema = z.strictObject({
   bildirimPatronPushEnabled: z.boolean().optional(),
   // bildirim: bildirim.stokYaslanan.kaynak — `stok.yaslanan` yaş çıpası (default depo-giris). Kapsamsız: yalnız admin:settings yazar.
   notificationStockAgingSource: z.enum(["depo-giris", "durum-degisimi"]).optional(),
+  // bildirim: bildirim.stokYaslanan.kapsam — `stok.yaslanan` top kapsamı (default raf = Stok & Ölü Stok raf kümesi). Kapsamsız: yalnız admin:settings yazar.
+  notificationStockAgingScope: z.enum(["raf", "depodaki-her-top"]).optional(),
   // belge-sablon T1C: documents.designerEnabled / documents.publishSodEnabled (default false). Kapsamsız: yalnız admin:settings yazar.
   documentDesignerEnabled: z.boolean().optional(),
   documentPublishSodEnabled: z.boolean().optional(),

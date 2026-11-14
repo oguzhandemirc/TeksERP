@@ -811,6 +811,8 @@ export interface FeatureFlags {
   bildirimPatronPushEnabled: boolean;
   /** `stok.yaslanan` yaş çıpası — backend `StockAgingSource` aynası (default `depo-giris`). */
   notificationStockAgingSource: "depo-giris" | "durum-degisimi";
+  /** `stok.yaslanan` top kapsamı — backend `StockAgingScope` aynası (default `raf`). */
+  notificationStockAgingScope: "raf" | "depodaki-her-top";
   // belge-sablon: tasarımcı + yayın SoD bayrakları — default false (bugünkü Sistem tasarımı).
   documentDesignerEnabled: boolean;
   documentPublishSodEnabled: boolean;

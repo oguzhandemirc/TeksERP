@@ -44,6 +44,7 @@ import { OrderStatus, Prisma } from "@prisma/client";
 import { pctOf, round1 } from "./_breakdown";
 import { readEmanetEnabled } from "../system-setting.service";
 import { consignedRollSql, splitByOwnership } from "../helpers/stock-ownership.helper";
+import { SHELF_FINISHED_STATUSES, SHELF_RAW_STATUSES, shelfRollSql } from "../helpers/stock-shelf.helper";
 
 /** Yaş kovaları (gün) — üst sınır dahil değil; sonuncusu açık uçlu. */
 const AGE_BUCKETS = [
@@ -149,8 +150,9 @@ export interface StockCell {
   ownerCustomerId: string | null;
 }
 
-const FINISHED = ["WAREHOUSE", "A1_STOCK"];
-const RAW = ["STOCK"];
+// Raf statüleri TEK yerde (`helpers/stock-shelf.helper.ts`) — `stok.yaslanan` `raf` kapsamı da oradan okur.
+const FINISHED: readonly string[] = SHELF_FINISHED_STATUSES;
+const RAW: readonly string[] = SHELF_RAW_STATUSES;
 /** Ham ↔ yarı mamul ayrımı: statü aynı (STOCK), ayıran şey giriş kaynağı. */
 const SEMI = "SEMI_FINISHED";
 
@@ -195,9 +197,7 @@ export async function loadShelfCells(): Promise<StockCell[]> {
     FROM rolls r
     JOIN items i       ON i.id = r."itemId"
     LEFT JOIN colors c ON c.id = r."colorId"
-    WHERE r.status = ANY(${[...FINISHED, ...RAW]}::"RollStatus"[])
-      AND r."shipmentId" IS NULL
-      AND r."sackId" IS NULL
+    WHERE ${shelfRollSql("r")}
   `);
   return rows.map((r) => ({
     rollId: r.rollId,
