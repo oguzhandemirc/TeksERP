@@ -36,6 +36,10 @@ let sessionStatus = 200;
 let mePush: number | undefined;
 let inboxOn = false;
 let pushDeleteDown = false;
+/** Kapalı modül tazelemesi: `/auth/me` `patronClosedSets` (undefined = alan yok). */
+let meClosed: string[] | undefined;
+const appListeners = new Set<(st: string) => void>();
+const appState = (st: string) => [...appListeners].forEach((l) => l(st));
 
 function reply(status: number, data: unknown, code?: string) {
   const body = status < 400 ? { success: true, data } : { success: false, message: "ret", details: code ? { code } : {} };
@@ -57,7 +61,7 @@ function server(url: string, init: RequestInit): Promise<Response> {
     return reply(200, { token: "jwt1", user: { id: "u1" }, mustChangePassword: false });
   }
   if (key === `GET ${ERP}/api/auth/me`) {
-    return reply(200, { userId: "u1", username: "ali", permissions: ["patron-app:login", "order:read"], backendVersion: "1.2.6", patronApiVersion: 1, patronReadSets: SETS, ...(mePush === undefined ? {} : { patronPush: mePush }) });
+    return reply(200, { userId: "u1", username: "ali", permissions: ["patron-app:login", "order:read"], backendVersion: "1.2.6", patronApiVersion: 1, patronReadSets: SETS, ...(mePush === undefined ? {} : { patronPush: mePush }), ...(meClosed === undefined ? {} : { patronClosedSets: meClosed }) });
   }
   if (key === `GET ${ERP}/api/bildirim/ozet`) return inboxOn ? reply(200, { enabled: true, okunmamis: 0, epoch: 1, rev: 1 }) : reply(404, null, "BULUNAMADI");
   if (key === `DELETE ${ERP}/api/bildirim/cihaz`) return pushDeleteDown ? Promise.reject(new TypeError("Network request failed")) : reply(200, { birakildi: true });
@@ -97,8 +101,13 @@ beforeEach(() => {
   mePush = undefined;
   inboxOn = false;
   pushDeleteDown = false;
+  meClosed = undefined;
+  appListeners.clear();
   (AppState as { currentState: unknown }).currentState = "active";
-  (AppState.addEventListener as jest.Mock).mockImplementation(() => ({ remove: () => undefined }));
+  (AppState.addEventListener as jest.Mock).mockImplementation((_t: string, l: (st: string) => void) => {
+    appListeners.add(l);
+    return { remove: () => appListeners.delete(l) };
+  });
   globalThis.fetch = jest.fn(server) as unknown as typeof fetch;
 });
 
@@ -262,6 +271,59 @@ describe("ERP kipi oturumu", () => {
     expect(cur.offline).toBe(true);
     expect(yetenek().kumeler).toEqual(new Set(SETS));
     expect(cur.server).toBe(ERP);
+  });
+});
+
+describe("ERP yetenek tazelemesi (kapalı modül yeniden girişe kalmaz)", () => {
+  const meReads = () => calls.filter((c) => c.method === "GET" && c.url === `${ERP}/api/auth/me`).length;
+  let now = Date.parse("2026-11-14T10:00:00Z");
+  beforeEach(() => {
+    now = Date.parse("2026-11-14T10:00:00Z");
+    jest.spyOn(Date, "now").mockImplementation(() => now);
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  it("öne gelince /auth/me tazelenir: modül kapanınca kapalı küme yeniden girişsiz yansır, açılınca kalkar", async () => {
+    await connectAndLogin();
+    expect(yetenek().kapali.size).toBe(0);
+    const before = meReads();
+    meClosed = ["kasa"];
+    now += 61_000;
+    await act(async () => appState("background"));
+    await act(async () => appState("active"));
+    await waitFor(() => expect(yetenek().kapali.has("kasa")).toBe(true));
+    expect(meReads()).toBe(before + 1);
+    expect(cur.yetenek.kapali.has("kasa")).toBe(true);
+    meClosed = [];
+    now += 61_000;
+    await act(async () => cur.refresh());
+    await waitFor(() => expect(yetenek().kapali.size).toBe(0));
+  });
+
+  it("asgari aralık: 60 sn dolmadan öne gelme/elle yenileme /auth/me sormaz (oturum yine tazelenir)", async () => {
+    await connectAndLogin();
+    const before = meReads();
+    const sessions = () => calls.filter((c) => c.url.endsWith("/patron/v1/oturum")).length;
+    const s0 = sessions();
+    now += 30_000;
+    await act(async () => appState("background"));
+    await act(async () => appState("active"));
+    await waitFor(() => expect(sessions()).toBe(s0 + 1));
+    await act(async () => cur.refresh());
+    expect(meReads()).toBe(before);
+    now += 31_000;
+    await act(async () => cur.refresh());
+    expect(meReads()).toBe(before + 1);
+  });
+
+  it("tazeleme sırasında /auth/me ağ hatası: saklı yetenek kalır, oturum düşmez", async () => {
+    await connectAndLogin();
+    meClosed = ["kasa"];
+    now += 61_000;
+    down = true;
+    await act(async () => cur.refresh());
+    expect(cur.phase).toBe("hazir");
+    expect(yetenek().kumeler).toEqual(new Set(SETS));
   });
 });
 
