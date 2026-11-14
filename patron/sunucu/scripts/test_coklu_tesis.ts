@@ -11,7 +11,7 @@
 //   §5–§9 (`lib/coklu-tesis-ek.ts`): davet "bağla" yolu (incele bayt-eşit · her ret girişle aynı 401 · başarıda E de
 //      listelenir) · paylaşımlı kimlikte tesis yöneticisi sıfırlaması 409, tek üyelikte çalışır · satıcı kimlik
 //      sıfırlaması yalnız zorlamayla ve denetimli, yabancı davet yeniden sırlayamaz · cihaz kaydı bütün AKTİF
-//      üyeliklerde, push yükü tesisi taşır · merkez kimliği bağsız kalınca PASİF, 30 gün sonra sırsız tombstone
+//      üyeliklerde, çıkışta bırak hepsinde pasif, push yükü tesisi taşır · merkez kimliği bağsız kalınca PASİF, 30 gün sonra sırsız tombstone
 // Koşum: npx tsx scripts/test_coklu_tesis.ts
 // =============================================================================
 import { randomUUID } from "node:crypto";

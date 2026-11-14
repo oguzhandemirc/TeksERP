@@ -4,7 +4,7 @@
 // Gelen kutusu/outbox/günlük sayaç TELEMETRİ, koşullar DURUM'dur (defter değil): satır silinince
 // hiçbir rapor sayısı değişmez. Süreler: kutu okunmuş 90 / okunmamış 180 gün (katalog `saklama`) ·
 // outbox işlendikten 7 gün (düşüp vazgeçilen satır da 7 gün) · çözülmüş koşul 180 gün · sayaç 35 gün · patron
-// telefonu dürt kuyruğu bittikten 7 gün.
+// telefonu dürt kuyruğu bittikten 7 gün · patron push cihaz satırı bırakılmış (BIRAKILDI) ve son görülmeden 180 gün.
 // Açık koşul ve çözülmemiş satır yaşından bağımsız KALIR. Beyan: `scripts/test_telemetri_defter_degil.ts`.
 // Çağıran: `jobs/maintenance.job.ts` gece penceresi.
 // =============================================================================
@@ -23,6 +23,8 @@ export const NOTIFICATION_RETENTION = {
   dailyStatsDays: 35,
   /** Patron telefonu dürt kuyruğu (köprü P3): terminal satır bittikten sonra. */
   pushNudgeDays: 7,
+  /** Patron push cihaz satırı: yalnız bulut bağı bırakılmış (BIRAKILDI) satır, son kayıt/yenilemeden sonra. */
+  pushTokenDays: 180,
 } as const;
 
 export interface NotificationPruneResult {
@@ -31,6 +33,7 @@ export interface NotificationPruneResult {
   conditions: number;
   dailyStats: number;
   pushNudges: number;
+  pushTokens: number;
 }
 
 const ago = (now: Date, days: number): Date => new Date(now.getTime() - days * DAY_MS);
@@ -80,5 +83,8 @@ export async function pruneNotifications(now: Date = new Date()): Promise<Notifi
   });
   // Yalnız terminal satır (`finishedAt` dolu ⇔ terminal, DB CHECK); canlı dürt yaşından bağımsız kalır.
   const pushNudges = await prisma.patronPushNudge.deleteMany({ where: { finishedAt: { lt: ago(now, R.pushNudgeDays) } } });
-  return { inbox, outbox: outbox.count, conditions: conditions.count, dailyStats: dailyStats.count, pushNudges: pushNudges.count };
+  // Yalnız BIRAKILDI: ham belirteç yok, bulut bağı yok; canlı ve BIRAKILACAK (bulutta `birak` bekleyen) satır kalır.
+  // Kayıt aynı satırı diriltirse tek ifadeli koşullu silme yarışı kaybeder; kayıt claim'i 0 → taze okumayla yeniden yaratır.
+  const pushTokens = await prisma.patronPushToken.deleteMany({ where: { cloudState: "BIRAKILDI", lastSeenAt: { lt: ago(now, R.pushTokenDays) } } });
+  return { inbox, outbox: outbox.count, conditions: conditions.count, dailyStats: dailyStats.count, pushNudges: pushNudges.count, pushTokens: pushTokens.count };
 }

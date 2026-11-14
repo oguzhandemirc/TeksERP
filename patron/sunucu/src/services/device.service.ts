@@ -12,7 +12,7 @@ import { accountActor, recordAudit } from "../lib/audit";
 import { badRequest, notFound } from "../lib/errors";
 import { withTesis } from "../lib/tenant";
 import { validPushToken } from "../push/targets";
-import type { Device } from "../wire/api";
+import type { Device, DeviceRelease } from "../wire/api";
 import type { CloudContext } from "./context";
 
 export const PLATFORM_WIRE: Readonly<Record<"ios" | "android" | "web", DevicePlatform>> = { ios: "IOS", android: "ANDROID", web: "WEB" };
@@ -101,4 +101,32 @@ export async function deactivateDevice(ctx: CloudContext, s: SessionContext, id:
     }
   }
   return deviceView(out.fresh);
+}
+
+/** Tek tesiste kendi hesabın bu belirteçli etkin satırlarını pasife çeker; pasife düşen satırlar döner. */
+function releaseIn(ctx: CloudContext, m: MembershipRoute, tokenHash: string) {
+  return withTesis(ctx.app, { tesisId: m.tesisId }, async (tx) => {
+    const rows = await tx.pushDevice.findMany({ where: { tesisId: m.tesisId, accountId: m.accountId, tokenHash, active: true }, select: { id: true } });
+    if (rows.length === 0) return [];
+    const r = await tx.pushDevice.updateMany({ where: { id: { in: rows.map((x) => x.id) }, tesisId: m.tesisId, accountId: m.accountId, active: true }, data: { active: false } });
+    return r.count > 0 ? rows : [];
+  });
+}
+
+/**
+ * Çıkışta bu telefonun bildirim bağını bırakır (soft): belirteç özetiyle oturum tesisinde ve kimliğin BÜTÜN
+ * üyeliklerinde yalnız KENDİ hesabının etkin satırı pasife düşer. Bilinmeyen belirteç 0 (varlık sızdırmaz); tekrarı 0.
+ * Bu uç çağrılmazsa (eski uygulama) satır etkin kalır — bugünkü davranış.
+ */
+export async function releaseDeviceByToken(ctx: CloudContext, s: SessionContext, token: string): Promise<DeviceRelease> {
+  const tokenHash = tokenDigestOf(token);
+  const routes: MembershipRoute[] = [{ tesisId: s.tesisId, accountId: s.accountId }];
+  if (s.identityId) for (const m of await membershipRoutes(ctx, s.identityId)) if (m.tesisId !== s.tesisId) routes.push(m);
+  let released = 0;
+  for (const m of routes) {
+    const gone = m.tesisId === s.tesisId ? await releaseIn(ctx, m, tokenHash) : await otherFacility(m.tesisId, () => releaseIn(ctx, m, tokenHash));
+    for (const d of gone ?? []) await recordAudit(ctx.app, { tesisId: m.tesisId, actor: accountActor(m.accountId), event: "CIHAZ_KALDIRILDI", entity: "PushDevice", entityId: d.id, summary: { sebep: "CIKIS" } });
+    released += gone?.length ?? 0;
+  }
+  return { birakilan: released };
 }

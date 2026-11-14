@@ -13,7 +13,8 @@
 //   §5 adres tutarlılığı: ADRES kurulum/ölçüm betiğinde, kaynak notta, Play form belgesinde, sunucu envanterinde aynı;
 //      PATRON_ADRES kurulum/ölçüm betiğinde, kendi kaynağında, mağaza runbook'unda; #hesap-silme çapası sayfada ve runbook'ta
 //   §6 kablolama: commit kancası + CI bu bekçiyi koşar
-//   §7 Patron metni ↔ kod: saklama süreleri (patron/sunucu maintenance.ts + config.ts varsayılanları) ve anlık bildirim
+//   §7 Patron metni ↔ kod: saklama süreleri (patron/sunucu maintenance.ts — push köprüsü bileti PUSH_BRIDGE_TICKET_DAYS
+//      dahil — + config.ts varsayılanları + fabrika `notification-prune.service.ts` pushTokenDays) ve anlık bildirim
 //      metni (patron/uygulama push/support.ts NATIVE_PUSH): literal false → "yok" cümlesi · derleme kapısına bağlı
 //      (app.config.js pushKapisi + EAS kimliği) → politika + Play açıklaması push cümlelerini taşır, "yok" demez ·
 //      literal true YASAK (kapısız paket metni yalanlar)
@@ -55,6 +56,8 @@ const BEN_REL = 'scripts/test_gizlilik_sayfasi.mjs';
 const MAGAZA_REL = 'docs/ops/PATRON-MAGAZA-ANDROID.md';
 const BAKIM_REL = 'patron/sunucu/src/services/maintenance.ts';
 const AYAR_REL = 'patron/sunucu/src/config.ts';
+/** Fabrika tarafı: bırakılmış patron push cihaz satırının saklama süresi (`NOTIFICATION_RETENTION.pushTokenDays`). */
+const FABRIKA_BUDAMA_REL = 'Teks-Erp/src/services/notification-prune.service.ts';
 const PUSH_REL = 'patron/uygulama/src/push/support.ts';
 const UYG_AYAR_REL = 'patron/uygulama/app.config.js';
 const METINLER_REL = 'patron/uygulama/magaza/metinler.json';
@@ -75,8 +78,8 @@ const MAGAZA_PUSH_VAR_EN = 'Push notifications: if you allow them';
 const MAGAZA_PUSH_YOK_EN = 'Push notifications on the phone are not available';
 
 /** Commit tetiği: bekçinin okuduğu her dosya (§6 listenin kancada aynen geçtiğini ölçer). */
-export const TETIK = Object.freeze([KAYNAK_REL, HTML_REL, PATRON_KAYNAK_REL, PATRON_HTML_REL, COMPOSE_REL, NGINX_REL, URET_REL, KUR_REL, OLC_REL, FORM_REL, ENVANTER_REL, MAGAZA_REL, BAKIM_REL, AYAR_REL, PUSH_REL, UYG_AYAR_REL, METINLER_REL, CF_REL, ZINCIR_REL, BEN_REL]);
-const OKUNAN = [KAYNAK_REL, HTML_REL, PATRON_KAYNAK_REL, PATRON_HTML_REL, COMPOSE_REL, NGINX_REL, KUR_REL, OLC_REL, FORM_REL, ENVANTER_REL, MAGAZA_REL, BAKIM_REL, AYAR_REL, PUSH_REL, UYG_AYAR_REL, METINLER_REL, CF_REL, KANCA_REL, CI_REL];
+export const TETIK = Object.freeze([KAYNAK_REL, HTML_REL, PATRON_KAYNAK_REL, PATRON_HTML_REL, COMPOSE_REL, NGINX_REL, URET_REL, KUR_REL, OLC_REL, FORM_REL, ENVANTER_REL, MAGAZA_REL, BAKIM_REL, AYAR_REL, FABRIKA_BUDAMA_REL, PUSH_REL, UYG_AYAR_REL, METINLER_REL, CF_REL, ZINCIR_REL, BEN_REL]);
+const OKUNAN = [KAYNAK_REL, HTML_REL, PATRON_KAYNAK_REL, PATRON_HTML_REL, COMPOSE_REL, NGINX_REL, KUR_REL, OLC_REL, FORM_REL, ENVANTER_REL, MAGAZA_REL, BAKIM_REL, AYAR_REL, FABRIKA_BUDAMA_REL, PUSH_REL, UYG_AYAR_REL, METINLER_REL, CF_REL, KANCA_REL, CI_REL];
 
 function dosyalariOku() {
   const d = {};
@@ -239,6 +242,8 @@ export function olc(d) {
   const varsayilan = (ad) => { const m = new RegExp(`${ad}:\\s*positiveInt\\([^)]*\\)\\.default\\((\\d+)\\)`).exec(d[AYAR_REL]); return m ? Number(m[1]) : null; };
   const silme = sabit(d[BAKIM_REL], 'IDENTITY_PURGE_DAYS');
   const ip = sabit(d[BAKIM_REL], 'IP_RETENTION_DAYS');
+  const bilet = sabit(d[BAKIM_REL], 'PUSH_BRIDGE_TICKET_DAYS');
+  const cihazGun = (() => { const m = /pushTokenDays: (\d+),/.exec(d[FABRIKA_BUDAMA_REL]); return m ? Number(m[1]) : null; })();
   const giris = varsayilan('DENETIM_GIRIS_SAKLAMA_GUN');
   const denetim = varsayilan('DENETIM_SAKLAMA_GUN');
   const pushM = /export const NATIVE_PUSH(?:: boolean)? = (true|false|nativePushEnabled\()/.exec(d[PUSH_REL]);
@@ -255,7 +260,8 @@ export function olc(d) {
     magazaIng = null;
   }
   if (typeof magazaAciklama !== 'string' || typeof magazaIng !== 'string') s.olculemedi.push(`§7 ${METINLER_REL} tr-TR/en-US fullDescription okunamadı`);
-  if (silme === null || ip === null) s.olculemedi.push(`§7 ${BAKIM_REL} IDENTITY_PURGE_DAYS / IP_RETENTION_DAYS okunamadı`);
+  if (silme === null || ip === null || bilet === null) s.olculemedi.push(`§7 ${BAKIM_REL} IDENTITY_PURGE_DAYS / IP_RETENTION_DAYS / PUSH_BRIDGE_TICKET_DAYS okunamadı`);
+  if (cihazGun === null) s.olculemedi.push(`§7 ${FABRIKA_BUDAMA_REL} pushTokenDays okunamadı`);
   if (giris === null || denetim === null) s.olculemedi.push(`§7 ${AYAR_REL} DENETIM_GIRIS_SAKLAMA_GUN / DENETIM_SAKLAMA_GUN varsayılanı okunamadı`);
   if (!pushM) s.olculemedi.push(`§7 ${PUSH_REL} NATIVE_PUSH okunamadı`);
   if (s.olculemedi.length) return s;
@@ -269,6 +275,8 @@ export function olc(d) {
     `Kapanıştan sonraki ${silme}. günde`,
     `(başarısız giriş ${giris} gün, diğerleri ${yil} yıl)`,
     `IP adresi ${ip} gün sonra çıkarılır`,
+    `en geç ${bilet} gün içinde silinir`,
+    `cihaz son görüldükten ${cihazGun} gün sonra fabrika sunucusundan silinir`,
   ];
   for (const c of gerekli) if (!md.includes(c)) s.kirmizi.push(`§7 ${PATRON_KAYNAK_REL} koddaki süreyi yazmıyor: "${c}"`);
   if (pushM[1] === 'true') {
@@ -341,6 +349,9 @@ function sondalar(taban) {
     ['N31 Patron sayfasına betik', 'kirmizi', deg(PATRON_HTML_REL, (t) => t.replace('</body>', '<script>1</script></body>')), '§1'],
     ['N32 kimlik silme süresi kodda 45', 'kirmizi', deg(BAKIM_REL, (t) => t.replace('export const IDENTITY_PURGE_DAYS = 30;', 'export const IDENTITY_PURGE_DAYS = 45;')), '§7'],
     ['N33 IP saklama kodda 60', 'kirmizi', deg(BAKIM_REL, (t) => t.replace('export const IP_RETENTION_DAYS = 30;', 'export const IP_RETENTION_DAYS = 60;')), '§7'],
+    ['N33b push köprüsü bilet saklaması kodda 3', 'kirmizi', deg(BAKIM_REL, (t) => t.replace('export const PUSH_BRIDGE_TICKET_DAYS = 2;', 'export const PUSH_BRIDGE_TICKET_DAYS = 3;')), '§7'],
+    ['N33c metindeki bilet süresi 5 gün', 'kirmizi', (d) => { d[PATRON_KAYNAK_REL] = d[PATRON_KAYNAK_REL].replace(/en\s+geç\s+2\s+gün\s+içinde\s+silinir/, 'en geç 5 gün içinde silinir'); d[PATRON_HTML_REL] = uret(d[PATRON_KAYNAK_REL]); }, '§7'],
+    ['N33d fabrika cihaz satırı saklaması kodda 90', 'kirmizi', deg(FABRIKA_BUDAMA_REL, (t) => t.replace('pushTokenDays: 180,', 'pushTokenDays: 90,')), '§7'],
     ['N34 denetim saklama varsayılanı 1095', 'kirmizi', deg(AYAR_REL, (t) => t.replace(/(DENETIM_SAKLAMA_GUN:\s*positiveInt\([^)]*\)\.default\()\d+/, '$11095')), '§7'],
     ['N35 NATIVE_PUSH literal true (kapısız)', 'kirmizi', deg(PUSH_REL, (t) => t.replace(/export const NATIVE_PUSH: boolean = nativePushEnabled\([^;]*;/, 'export const NATIVE_PUSH = true;')), '§7'],
     ['N36 metinden şifreli saklama cümlesi silindi', 'kirmizi', (d) => { d[PATRON_KAYNAK_REL] = d[PATRON_KAYNAK_REL].replace(/sunucusunda\s+şifreli\s+olarak/, 'sunucusunda'); d[PATRON_HTML_REL] = uret(d[PATRON_KAYNAK_REL]); }, '§7'],
@@ -361,6 +372,8 @@ function sondalar(taban) {
     ['O1 CF kaynağı okunamadı', 'olculemedi', deg(CF_REL, () => undefined)],
     ['O2 CLOUDFLARE_NETWORKS adı değişti', 'olculemedi', deg(CF_REL, (t) => t.replaceAll('CLOUDFLARE_NETWORKS', 'CF_AGLARI'))],
     ['O3 IDENTITY_PURGE_DAYS adı değişti', 'olculemedi', deg(BAKIM_REL, (t) => t.replaceAll('IDENTITY_PURGE_DAYS', 'KIMLIK_SILME_GUN'))],
+    ['O3b PUSH_BRIDGE_TICKET_DAYS adı değişti', 'olculemedi', deg(BAKIM_REL, (t) => t.replaceAll('PUSH_BRIDGE_TICKET_DAYS', 'BILET_GUN'))],
+    ['O3c fabrika budama kaynağı okunamadı', 'olculemedi', deg(FABRIKA_BUDAMA_REL, () => undefined)],
     ['O4 push kapısı okunamadı', 'olculemedi', deg(PUSH_REL, () => undefined)],
     ['O5 mağaza metinleri bozuk JSON', 'olculemedi', deg(METINLER_REL, (t) => t.slice(1))],
   ];
