@@ -4,7 +4,8 @@
 // tesise aitse (`data.tesisId`) önce o tesise geçilir; geçiş reddedilirse yol AÇILMAZ (ileti oturumdan gösterilir).
 // Telefonda dinleyici yalnız `NATIVE_PUSH` açıkken kurulur (`taps-native.ts`); kapalıyken native modüle dokunulmaz.
 // ERP kipi (P4, fabrika gelen kutusu): yük `tesisId` taşımaz (tek fabrika bağlantısı); yol güvensiz/eksikse Bildirimler
-// ekranı açılır ve `bildirimId` satırı vurgulanıp okundu sayılır (`?vurgu=`). Bulut kipinde yedek yol YOK (bugünkü davranış).
+// ekranı açılır ve `bildirimId` satırı vurgulanıp okundu sayılır (`?vurgu=`); kayıt yolunda (`/bolum/<UUID>`) satır yine
+// okundu sayılır. Bulut kipinde yedek yol YOK (bugünkü davranış).
 import { useRouter } from "expo-router";
 import { useEffect, useRef } from "react";
 import { Platform } from "react-native";
@@ -22,6 +23,8 @@ export interface TapDeps {
   readonly yedekRota?: string | null;
   switchFacility(tesisId: string): Promise<boolean>;
   push(route: string): void;
+  /** ERP: kayda gidilince bildirim satırı okundu sayılır (listede vurgu da okundu sayar); hata yutulur. */
+  okundu?(bildirimId: string): Promise<unknown>;
 }
 
 /** Saf dokunuş akışı: güvenli yol → (gerekirse) tesis geçişi → yol. Açıldıysa true. */
@@ -33,7 +36,9 @@ export async function openNotification(data: unknown, d: TapDeps): Promise<boole
     if (!(await d.switchFacility(v.tesisId))) return false;
   }
   const id = typeof v.bildirimId === "string" && UUID.test(v.bildirimId) ? v.bildirimId : null;
-  d.push(d.yedekRota && route === d.yedekRota && id ? `${route}?vurgu=${id}` : route);
+  const liste = d.yedekRota && route === d.yedekRota;
+  d.push(liste && id ? `${route}?vurgu=${id}` : route);
+  if (d.yedekRota && !liste && id && d.okundu) void d.okundu(id).catch(() => undefined);
   return true;
 }
 
@@ -55,11 +60,12 @@ export function webTapFromUrl(href: string): { rota: string; tesisId: string } |
 
 export function useNotificationTaps(enabled: boolean): void {
   const router = useRouter();
-  const { facilityId, switchFacility, yetenek } = useSession();
+  const { facilityId, switchFacility, yetenek, bildirimci } = useSession();
   const yedekRota = yetenek.bildirimKutusu && !yetenek.bildirim ? ERP_BILDIRIM_ROTASI : null;
+  const okundu = (id: string) => bildirimci.okundu(id).then(() => invalidate([BILDIRIM_TAG]));
   // Tesis değişince dinleyici yeniden kurulmasın (son bildirim yeniden açılırdı): güncel değerler ref'te.
-  const deps = useRef<TapDeps>({ facilityId, switchFacility, yedekRota, push: (r) => router.push(r as never) });
-  deps.current = { facilityId, switchFacility, yedekRota, push: (r) => router.push(r as never) };
+  const deps = useRef<TapDeps>({ facilityId, switchFacility, yedekRota, okundu, push: (r) => router.push(r as never) });
+  deps.current = { facilityId, switchFacility, yedekRota, okundu, push: (r) => router.push(r as never) };
   useEffect(() => {
     if (!enabled || Platform.OS !== "web" || typeof window === "undefined") return;
     const tap = webTapFromUrl(window.location.href);

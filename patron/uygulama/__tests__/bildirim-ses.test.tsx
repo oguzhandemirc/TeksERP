@@ -2,6 +2,7 @@
 // (eski fabrika 400'ünde alansız yeniden deneme), hazır düğme/grup gövdeleri, Android kanal kurulumu/temizliği.
 // Portlar ve expo-notifications taklit; ağ/cihaz yok.
 // NEGATİF SONDA (2026-11-14, geri alındı): 400 kodu eşleşmeyince ve `varsayilan` silinmeyince 2 ❌.
+// NEGATİF SONDA (2026-11-15, geri alındı): önceki tekserp-* kanalı silinince 2 ❌ (kurulum + önizleme).
 import { Platform } from "react-native";
 
 const mockN = {
@@ -176,21 +177,24 @@ describe("Android kanalları (kanallar-native)", () => {
   });
   afterEach(() => restore.restore());
 
-  it("⭐ iki kanal kurulur (alarm MAX, bildirim HIGH); eski 'varsayilan' ve seçilmeyen tekserp-* silinir, yabancı kanal kalır", async () => {
+  it("⭐ iki kanal kurulur (alarm MAX, bildirim HIGH); yalnız eski 'varsayilan' silinir, önceki tekserp-* ve yabancı kanal kalır", async () => {
     mockN.kanallar = [{ id: "varsayilan" }, { id: "tekserp-bildirim-zil" }, { id: "tekserp-alarm-mekik" }, { id: "tekserp-bildirim-kisa" }, { id: "baska-kanal" }];
     await kn.kanallariKur({ bildirim: "tekserp_kisa", alarm: "sessiz" });
     expect(mockN.kur.mock.calls.map((c) => c[0])).toEqual(["tekserp-bildirim-kisa", "tekserp-alarm-sessiz"]);
     expect(mockN.kur.mock.calls[0]![1]).toEqual(expect.objectContaining({ importance: 4, sound: "tekserp_kisa.wav" }));
     expect(mockN.kur.mock.calls[1]![1]).toEqual(expect.objectContaining({ importance: 5, sound: null, enableVibrate: true }));
-    expect(mockN.sil.mock.calls.map((c) => c[0]).sort()).toEqual(["tekserp-alarm-mekik", "tekserp-bildirim-zil", "varsayilan"]);
+    expect(mockN.sil.mock.calls.map((c) => c[0])).toEqual(["varsayilan"]);
   });
   it("telefon varsayılanı → kanal 'sound' alanı verilmez (sistem sesi)", async () => {
     await kn.kanallariKur({ bildirim: "varsayilan", alarm: "tekserp_alarm" });
     expect(mockN.kur.mock.calls[0]![1]).not.toHaveProperty("sound");
   });
-  it("önizleme seçilen sesin kanalında yerel bildirim planlar", async () => {
+  it("⭐ önizleme hiçbir kanalı silmez: kanal kümesi = seçili ∪ önizlenen, yerel bildirim önizlenen kanalda", async () => {
+    mockN.kanallar = [{ id: "tekserp-bildirim-zil" }, { id: "tekserp-alarm-alarm" }, { id: "tekserp-alarm-mekik" }];
     await kn.sesiOnizle("ALARM", "tekserp_dokuma", ses.VARSAYILAN_SES);
-    expect(mockN.kur.mock.calls.map((c) => c[0])).toEqual(["tekserp-bildirim-zil", "tekserp-alarm-dokuma"]);
+    const kurulan = mockN.kur.mock.calls.map((c) => c[0]);
+    expect(kurulan).toEqual(expect.arrayContaining([ses.kanalKimligi("BILDIRIM", ses.VARSAYILAN_SES.bildirim), ses.kanalKimligi("ALARM", ses.VARSAYILAN_SES.alarm), "tekserp-alarm-dokuma"]));
+    expect(mockN.sil).not.toHaveBeenCalled();
     expect(mockN.planla).toHaveBeenCalledWith(expect.objectContaining({ trigger: { channelId: "tekserp-alarm-dokuma" } }));
   });
   it("Android dışı → kanal kurulmaz", async () => {

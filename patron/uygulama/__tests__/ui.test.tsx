@@ -74,6 +74,16 @@ describe("ray: daralt/genişlet, yanal gezinme, ERP rolü", () => {
     fireEvent.press(screen.getByTestId("ray-dugme"));
     expect(screen.getByText("Siparişler")).toBeTruthy();
   });
+  it("ray genişliği açık/dar hedefe geçer (Reanimated; taşan içerik kırpılır)", () => {
+    const { RAIL_WIDTH, RAIL_COLLAPSED } = require("../src/ui/tokens") as typeof import("../src/ui/tokens");
+    mockSession.permissions = ["bulut:siparis:oku"];
+    render(<SideNav />);
+    const genislik = () => (require("react-native") as typeof import("react-native")).StyleSheet.flatten(screen.getByTestId("ray").props.style) as { width?: number; overflow?: string };
+    expect(genislik()).toEqual(expect.objectContaining({ width: RAIL_WIDTH, overflow: "hidden" }));
+    fireEvent.press(screen.getByTestId("ray-dugme"));
+    expect(genislik().width).toBe(RAIL_COLLAPSED);
+    fireEvent.press(screen.getByTestId("ray-dugme"));
+  });
   it("raydan geçiş yığını köke indirir ve tek ekran açar; açık bölüme dokunmak bir şey yapmaz", () => {
     mockSession.permissions = ["bulut:siparis:oku"];
     mockRouter.navigate.mockClear();
