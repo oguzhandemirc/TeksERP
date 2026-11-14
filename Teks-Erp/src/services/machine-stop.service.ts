@@ -210,7 +210,7 @@ export async function closeStopCore(stopId: string, ended: StampResolution, clos
     if (rows.length === 0) {
       const fresh = await tx.machineStopEvent.findUniqueOrThrow({ where: { id: stopId }, select: { machineId: true, startedAt: true, endedAt: true, revokedAt: true, endSource: true, endCorrectedAt: true } });
       if (fresh.revokedAt) throw AppError.conflict("Bu duruş geri alınmış — kapatılamaz.", { code: "STOP_REVOKED", stopId, revokedAt: fresh.revokedAt });
-      if (await correctWatchdogCloseTx({ tx, stopId, fresh, closer, endedAt: ended.value, simdi })) return { stop: await loadStop(tx, stopId), replay: false, corrected: fresh.endedAt };
+      if (await correctWatchdogCloseTx({ tx, stopId, fresh, closer, endedAt: ended.value, simdi })) return { stop: await emitBreakdownClosedTx(tx, stopId, closer.actorId).then(() => loadStop(tx, stopId)), replay: false, corrected: fresh.endedAt }; // bakim.tamamlandi düzeltmesi: duruş anahtarıyla aynı satıra birleşir
       if (fresh.endedAt && closer.endSource === MachineStopEndSource.SIGNAL) {
         return { stop: await loadStop(tx, stopId), replay: signalCloseConflict(stopId, { endedAt: fresh.endedAt, endSource: fresh.endSource }, ended.value) === "replay" };
       }

@@ -1,0 +1,351 @@
+// =============================================================================
+// BEKÇİ — BİLDİRİM S5b: kalan boşluklar (vade koşulları · cari.degisti · kurşun kâğıt yolu · watchdog düzeltmesi)
+// Çalıştır: npx tsx scripts/run-all-tests.ts test_bildirim_bosluk
+// =============================================================================
+// NEDEN: vade sorusunu bugüne dek yalnız yaşlandırma raporu cevaplıyordu; bildirim ayrı formül yazarsa aynı faturaya
+// iki yüzey iki cevap verir. Ölçülenler:
+//   §V0 AST — vade fonksiyonları (`resolveEffectiveDue` · `daysOverdueAt` · `bucketOfDaysOverdue` · `isOverdueBucket` ·
+//       `dueWindowState`) yalnız `helpers/invoice-due.helper.ts`te TANIMLI; rapor onları helper'dan import eder; vade
+//       kaynağı `collectAgingRows` + `dueWindowState` çağırır, `dueDate`/`paymentTermDays` okumaz; emit literali yok.
+//   §V1 saf: `dueWindowState` sınırları (−pencere … −1 yaklaşan, 0 gecikmiş, vadesiz) + gruplama (yön, sayı, gün).
+//   §V2 DB: gerçek faturalarla kaynak konuları = raporun kalem kovalarından BAĞIMSIZ türetilen küme (boğaz-ikiz);
+//       ödenmiş/uzak vadeli fatura konu doğurmaz; tolerans eşiği; modül kapalı → boş; yükte tutar yok.
+//   §C cari.degisti: gerçek `CustomerService.update` → tek outbox satırı, değişen alan ADLARI metinde (değer yok); değişiklik
+//       yoksa / yalnız iç kolon değiştiyse satır yok; kanca fırlatınca kart da outbox da geri sarılır (aynı tx).
+//   §K kursun.gramaj-sapmasi kâğıt yolu: `KursunBypassService` setGramaj · assign · completeFromDistribution aynı tek yayma
+//       noktasını (`emitKursunDeviationTx`, `rollId: null`) çağırır; kâğıt yükü "Kâğıt dağıtım", hedefe eşit gramaj yazmaz.
+//   §W bakim.tamamlandi watchdog düzeltmesi: gerçek `closeStopCore` — WATCHDOG geçici kapanışı + sinyal düzeltmesi iki outbox
+//       satırı yazar, ikisinin birleştirme anahtarı (`notificationGroupKey`) saatler sonra bile AYNI → tek gelen kutusu satırı.
+// NEGATİF SONDA: bölüm başlıklarında (aşağıda, bölüm bölüm).
+// =============================================================================
+import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join, relative, sep } from "node:path";
+import ts from "typescript";
+import { InvoiceStatus, InvoiceType, Prisma } from "@prisma/client";
+import prisma, { pool } from "../src/lib/prisma";
+import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { walkTs } from "./lib/ts-tarama";
+import { NOTIFICATION_CATALOG } from "../src/constants/notification-catalog";
+import { canSeeNotificationType } from "../src/services/helpers/notification-visibility.helper";
+import { dueWindowState } from "../src/services/helpers/invoice-due.helper";
+import { collectAgingRows, getAgingReport, isOverdueBucket } from "../src/services/reports/finance-aging.report";
+import { dueSoonSubjects, groupDueItems, overdueSubjects, overrideDueSourceDeps } from "../src/services/notification-sources/finans-vade";
+import { cleanupTestCustomers } from "./fixture-customer-cleanup";
+import { factoryDayStart } from "../src/constants/time";
+import { SETTING_KEYS } from "../src/services/system-setting.service";
+import { CustomerService } from "../src/services/customer.service";
+import type { UpdateTxContext } from "../src/services/base.service";
+import { emitCustomerChangedTx } from "../src/services/notification-sources/anaveri";
+import { emitKursunDeviationTx } from "../src/services/notification-sources/uretim";
+import { KURSUN_PROPERTY_CODE } from "../src/services/helpers/quality-station.helper";
+import { closeStopCore } from "../src/services/machine-stop.service";
+import { notificationGroupKey } from "../src/services/helpers/notification-aggregate.helper";
+
+let pass = 0;
+let fail = 0;
+function check(label: string, ok: boolean, detay = ""): void {
+  if (ok) { pass++; console.log(`✅ ${label}${detay ? ` — ${detay}` : ""}`); }
+  else { fail++; console.error(`❌ ${label}${detay ? ` — ${detay}` : ""}`); }
+}
+
+const SRC = join(__dirname, "..", "src");
+const ek = Date.now().toString(36);
+const DAY = 86_400_000;
+const oku = (rel: string): string => readFileSync(join(SRC, rel), "utf8");
+const DUE_FNS = ["resolveEffectiveDue", "daysOverdueAt", "bucketOfDaysOverdue", "isOverdueBucket", "dueWindowState"];
+const HELPER = "services/helpers/invoice-due.helper.ts";
+const REPORT = "services/reports/finance-aging.report.ts";
+const VADE = "services/notification-sources/finans-vade.ts";
+
+// ── §V0 AST ────────────────────────────────────────────────────────────────
+// NEGATİF SONDA (2026-11-14): rapora `bucketOfDaysOverdue` yerel kopyası eklendi → §V0a ❌; finans-vade'de
+//   `dueWindowState` yerine `it.daysOverdue >= 0` yazıldı → §V0c/§V1e/§V2c ❌. İkisi de geri alındı.
+function bolumV0(): void {
+  console.log("\n§V0 AST — vade tek kaynağı");
+  const tanimlar = new Map<string, string[]>();
+  const literaller: string[] = [];
+  for (const f of walkTs(SRC)) {
+    const rel = relative(SRC, f).split(sep).join("/");
+    const sf = ts.createSourceFile(rel, readFileSync(f, "utf8"), ts.ScriptTarget.Latest, true);
+    const gez = (n: ts.Node): void => {
+      const ad = ts.isFunctionDeclaration(n) && n.name ? n.name.text
+        : ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.initializer && (ts.isArrowFunction(n.initializer) || ts.isFunctionExpression(n.initializer)) ? n.name.text : null;
+      if (ad && DUE_FNS.includes(ad)) tanimlar.set(ad, [...(tanimlar.get(ad) ?? []), rel]);
+      if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === "emitNotification") {
+        const a = n.arguments[1];
+        if (a && ts.isStringLiteral(a) && /^finans\.vade-/.test(a.text)) literaller.push(`${a.text}@${rel}`);
+      }
+      ts.forEachChild(n, gez);
+    };
+    gez(sf);
+  }
+  const ihlal = DUE_FNS.filter((fn) => JSON.stringify(tanimlar.get(fn)) !== JSON.stringify([HELPER])).map((fn) => `${fn}: ${JSON.stringify(tanimlar.get(fn) ?? [])}`);
+  check("§V0a ⭐ vade fonksiyonları yalnız invoice-due.helper'da tanımlı", ihlal.length === 0, ihlal.join(" · ") || `${DUE_FNS.length} fonksiyon`);
+  const rapor = ts.createSourceFile(REPORT, oku(REPORT), ts.ScriptTarget.Latest, true);
+  const raporImport = rapor.statements.some((s) => ts.isImportDeclaration(s) && ts.isStringLiteral(s.moduleSpecifier)
+    && s.moduleSpecifier.text === "../helpers/invoice-due.helper" && /resolveEffectiveDue/.test(s.getText()) && /daysOverdueAt/.test(s.getText()) && /bucketOfDaysOverdue/.test(s.getText()));
+  check("§V0b rapor vade kararını helper'dan import ediyor (DAY_MS hesabı raporda yok)", raporImport && !/paymentTermDays \* /.test(oku(REPORT)));
+  const kaynak = oku(VADE);
+  check("§V0c ⭐ vade kaynağı yaşlandırma çekirdeği + dueWindowState'ten okur, kendi vadesini hesaplamaz",
+    /collectAgingRows\(/.test(kaynak) && /dueWindowState\(/.test(kaynak) && !/\bdueDate\b|\bpaymentTermDays\b|daysOverdue\s*>=\s*0/.test(kaynak));
+  check("§V0d vade türlerinin emit literali yok (koşul tarayıcısı yazar)", literaller.length === 0, literaller.join(" · ") || "temiz");
+  const yasak = /tutar|bakiye|fiyat|amount|total/i;
+  const yasakli = (["finans.vade-yaklasti", "finans.vade-gecti"] as const).flatMap((k) => NOTIFICATION_CATALOG[k].payloadAlanlari.filter((a) => yasak.test(a)));
+  check("§V0e vade yüklerinde tutar alanı yok (S4 kararı)", yasakli.length === 0, yasakli.join(", ") || "temiz");
+}
+
+// ── §V1 saf ────────────────────────────────────────────────────────────────
+function bolumV1(): void {
+  console.log("\n§V1 saf — pencere sınırları + gruplama");
+  check("§V1a pencere: −4 uzak · −3 yaklaşan · −1 yaklaşan · 0 gecikmiş · null vadesiz",
+    dueWindowState(-4, 3) === "NOT_DUE" && dueWindowState(-3, 3) === "DUE_SOON" && dueWindowState(-1, 3) === "DUE_SOON"
+      && dueWindowState(0, 3) === "OVERDUE" && dueWindowState(null, 3) === "NO_DUE");
+  check("§V1b pencere 0 → yaklaşan kümesi boş", dueWindowState(-1, 0) === "NOT_DUE");
+  const it = (netOpen: string, daysOverdue: number | null) => ({ netOpen, daysOverdue }) as never;
+  const rows = [{ cariId: "c1", name: "A", code: "A1", currency: "TRY", items: [it("10", 5), it("20", 12), it("-5", 3), it("0", 40), it("7", -2), it("7", null)] }] as never;
+  const gec = groupDueItems(rows, "OVERDUE", { windowDays: 0, minOverdue: 0 });
+  const al = gec.find((s) => s.key === "c1:TRY:alacak")?.payload;
+  const bor = gec.find((s) => s.key === "c1:TRY:borç")?.payload;
+  check("§V1c ⭐ gecikmiş: yön başına konu, sayı + en eski gün; kapanmış (net 0) kalem sayılmaz",
+    gec.length === 2 && al?.belgeSayisi === 2 && al?.gun === 12 && bor?.belgeSayisi === 1, JSON.stringify(gec.map((s) => s.payload)));
+  check("§V1d tolerans 10 gün → yalnız 12 günlük kalem", groupDueItems(rows, "OVERDUE", { windowDays: 0, minOverdue: 10 }).map((s) => s.payload.belgeSayisi).join() === "1");
+  const yak = groupDueItems(rows, "DUE_SOON", { windowDays: 3, minOverdue: 0 });
+  check("§V1e yaklaşan: vadeye kalan gün (−2 → 2)", yak.length === 1 && yak[0]!.payload.gun === 2 && yak[0]!.payload.belgeSayisi === 1);
+}
+
+// ── §V2 DB: boğaz-ikiz ─────────────────────────────────────────────────────
+// NEGATİF SONDA (2026-11-14): finans-vade'de `net === 0` süzgeci kaldırıldı → §V1c/§V1d ❌ (kapanmış kalem sayıldı). Geri alındı.
+async function bolumV2(): Promise<void> {
+  console.log("\n§V2 DB — kaynak = yaşlandırma raporu (boğaz-ikiz)");
+  const engel = hedefDbEngeli();
+  if (engel) throw new Error(`DURDURULDU — ${engel}`);
+  const cust = await prisma.customer.create({ data: { code: `TEST-BB-${ek}`, name: `TEST-BB Müşteri ${ek}` }, select: { id: true } });
+  const invIds: string[] = [];
+  let geri: (() => void) | null = null;
+  try {
+    const cari = await prisma.cariAccount.create({ data: { kind: "CUSTOMER", customerId: cust.id }, select: { id: true } });
+    const now = new Date();
+    const fatura = async (n: string, gun: number, o: { paid?: number; type?: InvoiceType } = {}) => {
+      const r = await prisma.invoice.create({
+        data: {
+          docNo: `TEST-BB-${n}-${ek}`, type: o.type ?? InvoiceType.SALES, cariId: cari.id, status: InvoiceStatus.CONFIRMED,
+          issueDate: new Date(now.getTime() - 60 * DAY), confirmedAt: new Date(now.getTime() - 60 * DAY),
+          dueDate: new Date(now.getTime() + gun * DAY + (gun < 0 ? -3_600_000 : 3_600_000)),
+          grandTotal: new Prisma.Decimal(100), grandTotalTry: new Prisma.Decimal(100), paidTotal: new Prisma.Decimal(o.paid ?? 0),
+        },
+        select: { id: true },
+      });
+      invIds.push(r.id);
+    };
+    await fatura("G5", -5);
+    await fatura("G12", -12);
+    await fatura("ODENDI", -20, { paid: 100 });
+    await fatura("Y2", 2);
+    await fatura("U10", 10);
+    await fatura("ALIS", -3, { type: InvoiceType.PURCHASE });
+    geri = overrideDueSourceDeps({ moduleOpen: async () => true, agingRows: (asOf) => collectAgingRows({ asOf, cariId: cari.id, includeDetail: true }) });
+
+    const gec = await overdueSubjects(now);
+    const yak = await dueSoonSubjects(now);
+    // Bağımsız türetim: rapor zarfının kalem kovaları (kaynağın yolu değil).
+    const rapor = await getAgingReport({ asOf: now, cariId: cari.id, includeDetail: true });
+    const kalemler = rapor.blocks.flatMap((b) => b.rows.flatMap((r) => r.items ?? []));
+    const raporAlacakGec = kalemler.filter((i) => isOverdueBucket(i.bucket) && Number(i.netOpen) > 0).length;
+    const raporBorcGec = kalemler.filter((i) => isOverdueBucket(i.bucket) && Number(i.netOpen) < 0).length;
+    const al = gec.find((s) => s.key === `${cari.id}:TRY:alacak`)?.payload;
+    const bor = gec.find((s) => s.key === `${cari.id}:TRY:borç`)?.payload;
+    check("§V2a ⭐ gecikmiş belge sayısı = raporun gecikmiş kovalarındaki açık kalem sayısı (alacak + borç)",
+      al?.belgeSayisi === raporAlacakGec && bor?.belgeSayisi === raporBorcGec && raporAlacakGec === 2 && raporBorcGec === 1,
+      `kaynak ${String(al?.belgeSayisi)}/${String(bor?.belgeSayisi)} · rapor ${raporAlacakGec}/${raporBorcGec}`);
+    check("§V2b ödenmiş fatura sayılmaz, en eski gün 12", al?.gun === 12, JSON.stringify(al));
+    const yakPayload = yak.find((s) => s.key === `${cari.id}:TRY:alacak`)?.payload;
+    // 2 gün 1 saat sonra → gecikme günü −3 (taban) → "en geç 3 gün içinde" (üst sınır; pencereyle aynı ölçü).
+    check("§V2c yaklaşan (3 gün): yalnız 2 gün sonraki fatura (gün = 3, üst sınır); 10 gün sonraki girmez", yak.length === 1 && yakPayload?.belgeSayisi === 1 && yakPayload?.gun === 3, JSON.stringify(yak.map((s) => s.payload)));
+    const yasak = /tutar|amount|total|100/i;
+    check("§V2d yükte tutar yok", [...gec, ...yak].every((s) => !Object.entries(s.payload).some(([k, v]) => yasak.test(k) || String(v).includes("100"))));
+    geri();
+    geri = overrideDueSourceDeps({ moduleOpen: async () => false });
+    check("§V2e modül kapalıyken iki koşul da boş", (await overdueSubjects(now)).length === 0 && (await dueSoonSubjects(now)).length === 0);
+  } finally {
+    geri?.();
+    await prisma.invoice.deleteMany({ where: { id: { in: invIds } } });
+    await cleanupTestCustomers([cust.id]);
+  }
+}
+
+// ── §C cari.degisti ────────────────────────────────────────────────────────
+// NEGATİF SONDA (2026-11-14): CustomerService'ten `afterUpdateTx` kaldırıldı → §Ca/§Cc/§Cd/§Ce ❌; BaseService'te kanca tx
+//   DIŞINDA çağrıldı (yazım tx'siz) → §Cd ❌ (kart adı geri sarılmadı). İkisi de geri alındı.
+class Patlat extends Error {}
+/** Kanca sonrası fırlatan alt sınıf: yazım + outbox'ın AYNI tx'te geri sarıldığını ölçer (tip zorlaması yok). */
+class PatlayanCariServisi extends CustomerService {
+  patlat = false;
+  protected override async afterUpdateTx(tx: Prisma.TransactionClient, c: UpdateTxContext): Promise<void> {
+    await super.afterUpdateTx(tx, c);
+    if (this.patlat) throw new Patlat();
+  }
+}
+async function bolumC(): Promise<void> {
+  console.log("\n§C cari.degisti — gerçek CustomerService.update");
+  const engel = hedefDbEngeli();
+  if (engel) throw new Error(`DURDURULDU — ${engel}`);
+  const key = SETTING_KEYS.BILDIRIM_GELEN_KUTUSU_ENABLED;
+  const ilk = await prisma.systemSetting.findUnique({ where: { key } });
+  // Route config'iyle birebir (customer.routes.ts).
+  const svc = new PatlayanCariServisi({
+    modelName: "customer", tableName: "CUSTOMER", searchFields: ["name"], codeSearchFields: ["code", "taxNumber", "exportCode"],
+    defaultInclude: undefined, uniqueField: "code", nestedCreateFields: ["branches"],
+  });
+  const cust = await prisma.customer.create({ data: { code: `TEST-BBC-${ek}`, name: `TEST-BBC Müşteri ${ek}` }, select: { id: true } });
+  const satirlar = () => prisma.notificationOutbox.findMany({ where: { kind: "cari.degisti", subjectId: cust.id }, select: { id: true, payload: true } });
+  try {
+    await prisma.systemSetting.upsert({ where: { key }, create: { key, value: true }, update: { value: true } });
+    await svc.update(cust.id, { name: `TEST-BBC Müşteri ${ek} Yeni`, contactPhone: "05550000000" });
+    const r1 = await satirlar();
+    const p = (r1[0]?.payload ?? {}) as Record<string, unknown>;
+    check("§Ca ⭐ kart güncellemesi tek cari.degisti satırı yazar, alan adları metinde", r1.length === 1 && typeof p.alanlar === "string" && p.alanlar.includes("Ad"), JSON.stringify(p));
+    check("§Cb yükte alan DEĞERİ yok (telefon metne girmez)", !JSON.stringify(p).includes("05550000000"));
+    await svc.update(cust.id, { contactPhone: "05550000000" });
+    check("§Cc değişiklik yoksa satır yok", (await satirlar()).length === 1);
+    svc.patlat = true;
+    const patladi = await svc.update(cust.id, { city: "TEST-Şehir" }).then(() => false, (e: unknown) => e instanceof Patlat);
+    const kart = await prisma.customer.findUnique({ where: { id: cust.id }, select: { city: true } });
+    check("§Cd ⭐ kanca fırlatınca kart ve outbox birlikte geri sarılır (aynı tx)", patladi && kart?.city !== "TEST-Şehir" && (await satirlar()).length === 1, `${patladi}/${kart?.city}`);
+    let ic = -1;
+    await prisma.$transaction(async (tx) => {
+      await emitCustomerChangedTx(tx, cust.id, [{ field: "nameFold" }, { field: "updatedAt" }, { field: "type" }, { field: "clientToken" }], null);
+      ic = await tx.notificationOutbox.count({ where: { kind: "cari.degisti", subjectId: cust.id } });
+      throw new Patlat();
+    }).catch((e: unknown) => { if (!(e instanceof Patlat)) throw e; });
+    check("§Ce yalnız iç kolon değişimi bildirim doğurmaz (opt-in liste)", ic === 1, `${ic}`);
+  } finally {
+    await prisma.notificationOutbox.deleteMany({ where: { kind: "cari.degisti", subjectId: cust.id } });
+    await cleanupTestCustomers([cust.id]);
+    if (ilk) await prisma.systemSetting.update({ where: { key }, data: { value: (ilk.value ?? Prisma.JsonNull) as Prisma.InputJsonValue } });
+    else await prisma.systemSetting.deleteMany({ where: { key } });
+  }
+}
+
+// ── §K kurşun kâğıt yolu ───────────────────────────────────────────────────
+// NEGATİF SONDA (2026-11-14): setGramaj'daki çağrı silindi → §Ka ❌; emitter'da `a.rollId ?` dalı kaldırıldı
+//   (kâğıtta topNo "—") → §Kb ❌. İkisi de geri alındı.
+function bolumKa(): void {
+  console.log("\n§K kurşun kâğıt (bypass) yolu — AST");
+  const rel = "services/kursun-bypass.service.ts";
+  const sf = ts.createSourceFile(rel, oku(rel), ts.ScriptTarget.Latest, true);
+  const bulunan = new Set<string>();
+  const gez = (n: ts.Node, metot: string | null): void => {
+    const ad = ts.isMethodDeclaration(n) && ts.isIdentifier(n.name) ? n.name.text : metot;
+    if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === "emitKursunDeviationTx" && ad) {
+      const a = n.arguments[1];
+      if (a && ts.isObjectLiteralExpression(a) && a.properties.some((p) => ts.isPropertyAssignment(p) && p.name.getText() === "rollId" && p.initializer.kind === ts.SyntaxKind.NullKeyword)) bulunan.add(ad);
+    }
+    ts.forEachChild(n, (c) => gez(c, ad));
+  };
+  gez(sf, null);
+  const eksik = ["setGramaj", "assign", "completeFromDistribution"].filter((m) => !bulunan.has(m));
+  check("§Ka ⭐ kâğıt gramajını yazan üç metot tek yayma noktasını `rollId: null` ile çağırır", eksik.length === 0, eksik.join(", ") || [...bulunan].join(", "));
+}
+
+async function bolumKb(): Promise<void> {
+  console.log("\n§K kurşun kâğıt yükü (geri sarılan tx)");
+  const engel = hedefDbEngeli();
+  if (engel) throw new Error(`DURDURULDU — ${engel}`);
+  let sonuc: [boolean, boolean, string] = [false, false, ""];
+  await prisma.$transaction(async (tx) => {
+    await tx.systemSetting.upsert({ where: { key: SETTING_KEYS.BILDIRIM_GELEN_KUTUSU_ENABLED }, create: { key: SETTING_KEYS.BILDIRIM_GELEN_KUTUSU_ENABLED, value: true }, update: { value: true } });
+    const st = await tx.station.create({ data: { code: `TBBK-${ek}`.slice(0, 32), name: `TEST-BBK İstasyon ${ek}`, type: "INTERNAL" }, select: { id: true } });
+    const item = await tx.item.create({ data: { code: `TBBK-${ek}`, name: `TEST-BBK Kumaş ${ek}`, itemType: "FABRIC" }, select: { id: true } });
+    const base = await tx.fabricProperty.upsert({ where: { code: KURSUN_PROPERTY_CODE }, create: { code: KURSUN_PROPERTY_CODE, name: "Kurşun" }, update: {}, select: { id: true } });
+    const variant = (await tx.fabricProperty.findFirst({ where: { variantOfPropertyId: base.id }, select: { id: true } }))
+      ?? (await tx.fabricProperty.create({ data: { code: `TBBK-V-${ek}`.slice(0, 32), name: `TEST-BBK Gramaj ${ek}`, variantOfPropertyId: base.id }, select: { id: true } }));
+    const v1 = await tx.fabricPropertyValue.create({ data: { propertyId: variant.id, code: `TBBK1-${ek}`.slice(0, 32), name: "120 gr" }, select: { id: true } });
+    const v2 = await tx.fabricPropertyValue.create({ data: { propertyId: variant.id, code: `TBBK2-${ek}`.slice(0, 32), name: "140 gr" }, select: { id: true } });
+    const wo = await tx.workOrder.create({ data: { workOrderNumber: `TEST-BBK-${ek}`, type: "STOCK_PRODUCTION", targetItemId: item.id }, select: { id: true } });
+    const step = await tx.workOrderStep.create({ data: { workOrderId: wo.id, stationId: st.id, stepSequence: 1 }, select: { id: true } });
+    await tx.workOrderTargetValue.create({ data: { workOrderId: wo.id, propertyId: variant.id, valueId: v1.id } });
+    const say = () => tx.notificationOutbox.findMany({ where: { kind: "kursun.gramaj-sapmasi", subjectId: wo.id }, select: { payload: true } });
+    await emitKursunDeviationTx(tx, { rollId: null, stepId: step.id, valueId: v1.id }, null);
+    const esit = (await say()).length === 0;
+    await emitKursunDeviationTx(tx, { rollId: null, stepId: step.id, valueId: v2.id }, null);
+    const r = await say();
+    const p = (r[0]?.payload ?? {}) as Record<string, unknown>;
+    sonuc = [esit, r.length === 1 && p.topNo === "Kâğıt dağıtım" && p.gramaj === "140 gr" && p.hedef === "120 gr", JSON.stringify(p)];
+    throw new Patlat();
+  }).catch((e: unknown) => { if (!(e instanceof Patlat)) throw e; });
+  check("§Kb ⭐ kâğıt gramajı hedeften farklı → satır, top yerine \"Kâğıt dağıtım\"", sonuc[1], sonuc[2]);
+  check("§Kc kâğıt gramajı hedefe eşit → satır yok", sonuc[0]);
+}
+
+// ── §W watchdog düzeltmesi ─────────────────────────────────────────────────
+// NEGATİF SONDA (2026-11-14): closeStopCore düzeltme dalından emit kaldırıldı → §Wa/§Wb ❌; katalogda pencereSn 600'e
+//   döndürüldü → §Wb ❌ (geç düzeltme ayrı satır olurdu). İkisi de geri alındı.
+async function bolumW(): Promise<void> {
+  console.log("\n§W bakim.tamamlandi — watchdog geçici kapanışı + sinyal düzeltmesi (gerçek closeStopCore)");
+  const engel = hedefDbEngeli();
+  if (engel) throw new Error(`DURDURULDU — ${engel}`);
+  const key = SETTING_KEYS.BILDIRIM_GELEN_KUTUSU_ENABLED;
+  const ilk = await prisma.systemSetting.findUnique({ where: { key } });
+  const st = await prisma.station.create({ data: { code: `TBBW-${ek}`.toUpperCase().slice(0, 32), name: `TEST-BBW Hol ${ek}`, type: "INTERNAL", kind: "WEAVING" }, select: { id: true } });
+  const m = await prisma.machine.create({ data: { stationId: st.id, code: `TBBW-${ek}`.toUpperCase().slice(0, 32), name: `TEST-BBW Tezgah ${ek}` }, select: { id: true } });
+  let stopId = "";
+  try {
+    await prisma.systemSetting.upsert({ where: { key }, create: { key, value: true }, update: { value: true } });
+    const now = Date.now();
+    const s0 = await prisma.machineStopEvent.create({
+      data: { machineId: m.id, stopKey: randomUUID(), startedAt: new Date(now - 30 * 60_000), reasonCode: "MEKANIK_ARIZA", lossClass: "UNPLANNED", factoryDay: new Date(factoryDayStart(new Date(now)).toISOString().slice(0, 10) + "T00:00:00Z"), source: "OPERATOR" },
+      select: { id: true },
+    });
+    stopId = s0.id;
+    await closeStopCore(stopId, { value: new Date(now - 20 * 60_000), warning: null }, { endSource: "WATCHDOG", actorId: null });
+    await closeStopCore(stopId, { value: new Date(now - 10 * 60_000), warning: null }, { endSource: "SIGNAL", actorId: null });
+    const rows = await prisma.notificationOutbox.findMany({
+      where: { kind: "bakim.tamamlandi", subjectId: stopId }, orderBy: { createdAt: "asc" },
+      select: { kind: true, subjectId: true, subjectKey: true, conditionId: true, dedupeKey: true, occurredAt: true, payload: true },
+    });
+    const p = rows.map((r) => r.payload as Record<string, unknown>);
+    check("§Wa ⭐ geçici kapanış + düzeltme iki outbox satırı; ikincisi gerçek süre ve \"düzeltildi\"",
+      rows.length === 2 && p[0]?.kapanis === "otomatik geçici kapanış" && p[0]?.sureDk === 10 && p[1]?.kapanis === "sinyalle düzeltildi" && p[1]?.sureDk === 20,
+      JSON.stringify(p.map((x) => [x.kapanis, x.sureDk])));
+    const g = rows.map((r) => notificationGroupKey(r));
+    const gec = rows[1] ? notificationGroupKey({ ...rows[1], occurredAt: new Date(rows[1].occurredAt.getTime() + 3 * 3_600_000) }) : "";
+    check("§Wb ⭐ iki satırın birleştirme anahtarı aynı, 3 saat geç düzeltmede de (tek gelen kutusu satırı)", g.length === 2 && g[0] === g[1] && g[0] === gec, `${g.join(" | ")} | ${gec}`);
+  } finally {
+    await prisma.notificationOutbox.deleteMany({ where: { kind: "bakim.tamamlandi", subjectId: stopId || undefined } });
+    await prisma.machineStopEvent.deleteMany({ where: { machineId: m.id } });
+    await prisma.machine.delete({ where: { id: m.id } });
+    await prisma.station.delete({ where: { id: st.id } });
+    if (ilk) await prisma.systemSetting.update({ where: { key }, data: { value: (ilk.value ?? Prisma.JsonNull) as Prisma.InputJsonValue } });
+    else await prisma.systemSetting.deleteMany({ where: { key } });
+  }
+}
+
+function bolumK7(): void {
+  console.log("\n§K7 modül kapısı");
+  const viewer = { permissions: ["*"] };
+  const kapali = (kind: "finans.vade-yaklasti" | "finans.vade-gecti") => !canSeeNotificationType(viewer, kind, { modules: { financeEnabled: false }, gates: {} })
+    && canSeeNotificationType(viewer, kind, { modules: { financeEnabled: true }, gates: {} });
+  check("§K7a finans kapalıyken vade türleri görünmez", kapali("finans.vade-yaklasti") && kapali("finans.vade-gecti"));
+}
+
+async function main(): Promise<void> {
+  console.log("=== Bildirim S5b — vade · cari değişti · kurşun kâğıt · watchdog düzeltmesi ===");
+  bolumV0();
+  bolumV1();
+  bolumK7();
+  await bolumV2();
+  await bolumC();
+  bolumKa();
+  await bolumKb();
+  await bolumW();
+}
+
+main()
+  .catch((e) => { fail++; console.error("❌ beklenmeyen hata:", e); })
+  .finally(async () => {
+    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+    process.exitCode = fail > 0 ? 1 : 0;
+    await prisma.$disconnect();
+    await pool.end();
+  });

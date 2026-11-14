@@ -30,7 +30,7 @@ import { foldCodeForCompare } from "../utils/code-format";
 import { nextSeriesNo } from "./number-series.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 
-import { diffFields } from "./helpers/audit-diff.helper";
+import { diffFields, type FieldChange } from "./helpers/audit-diff.helper";
 import { staleRecordError } from "./helpers/stale-record.helper";
 import { baseWriteClosedFields } from "../constants/write-guard";
 // =============================================================================
@@ -390,9 +390,17 @@ export interface BaseServiceConfig {
   >;
 }
 
+/** `afterUpdateTx` kancasının bağlamı: değişen alanlar audit diff'iyle aynı (`diffFields`). */
+export interface UpdateTxContext { id: string; changes: FieldChange[]; userId?: string }
+
 export class BaseService {
   protected delegate: PrismaDelegate;
   protected config: BaseServiceConfig;
+  /**
+   * İsteğe bağlı: tanımlayan alt sınıfta `updateCore` yazımı + bu kanca TEK tx'te koşar (ör. bildirim outbox'ı iş
+   * tx'ine bağlansın). Tanımlamayan serviste yol değişmez (tx açılmaz); audit her iki yolda tx DIŞINDA kalır.
+   */
+  protected afterUpdateTx?(tx: Prisma.TransactionClient, ctx: UpdateTxContext): Promise<void>;
 
   constructor(config: BaseServiceConfig) {
     this.config = config;
@@ -1258,20 +1266,27 @@ export class BaseService {
       }
     }
 
-    const updated = versionWhere
-      ? await this.versionedWrite(id, oldRecord, withActor(data, userId, "UPDATE", this.config.modelName), versionWhere)
-      : await this.delegate.update({
+    // ── ALAN-BAZLI DEĞİŞİKLİK (Faz B2) ────────────────────────────────────
+    // Diff BURADA hesaplanır çünkü `oldRecord` zaten okunmuş durumda — 14
+    // master-data modeli tek noktadan kapsanır (künye kaldıracının aynısı).
+    const changes = diffFields(oldRecord as Record<string, unknown> | null, data);
+    const write = (d: PrismaDelegate): Promise<unknown> => versionWhere
+      ? this.versionedWrite(d, { id, oldRecord, data: withActor(data, userId, "UPDATE", this.config.modelName), versionWhere })
+      : d.update({
           where: { id },
           data: withActor(data, userId, "UPDATE", this.config.modelName),
           ...(this.config.defaultInclude
             ? { include: this.config.defaultInclude }
             : {}),
         });
-
-    // ── ALAN-BAZLI DEĞİŞİKLİK (Faz B2) ────────────────────────────────────
-    // Diff BURADA hesaplanır çünkü `oldRecord` zaten okunmuş durumda — 14
-    // master-data modeli tek noktadan kapsanır (künye kaldıracının aynısı).
-    const changes = diffFields(oldRecord as Record<string, unknown> | null, data);
+    const hook = this.afterUpdateTx?.bind(this);
+    const updated = hook
+      ? await prisma.$transaction(async (tx) => {
+          const row = await write((tx as unknown as Record<string, PrismaDelegate>)[this.config.modelName]!);
+          await hook(tx, { id, changes, userId });
+          return row;
+        })
+      : await write(this.delegate);
 
     // ⚠️ DEĞİŞİKLİK YOKSA AUDIT SATIRI YAZILMAZ. Ölçüldü (2026-08-19):
     // `LABEL_TEMPLATE` 4.813 kayıtla en çok loglanan 4. tabloydu ve çoğu boş
@@ -1294,15 +1309,14 @@ export class BaseService {
 
   /** Sürüm koşullu yazım: tek atomik UPDATE; kayıt yoksa eski yolun not-found'u, varsa bayat → 409. */
   private async versionedWrite(
-    id: string,
-    oldRecord: unknown,
-    data: Record<string, unknown>,
-    versionWhere: Record<string, unknown>,
+    d: PrismaDelegate,
+    w: { id: string; oldRecord: unknown; data: Record<string, unknown>; versionWhere: Record<string, unknown> },
   ): Promise<unknown> {
+    const { id, oldRecord, data, versionWhere } = w;
     if (!oldRecord) throw AppError.notFound("Kayıt bulunamadı");
-    const claimed = await this.delegate.updateMany({ where: { ...versionWhere, id }, data });
+    const claimed = await d.updateMany({ where: { ...versionWhere, id }, data });
     if (claimed.count === 0) throw staleRecordError();
-    return this.delegate.findUnique({
+    return d.findUnique({
       where: { id },
       ...(this.config.defaultInclude ? { include: this.config.defaultInclude } : {}),
     });
