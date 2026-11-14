@@ -75,7 +75,7 @@ export default function NewReport() {
   }
 
   return (
-    <Screen title="Rapor iste" module="raporlar" back>
+    <Screen sheet title="Rapor iste" module="raporlar" back>
       <Card domain={dom.domain}>
         <View style={s.head}>
           <IconChip domain={dom.domain} icon={dom.icon} size={36} />

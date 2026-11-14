@@ -32,7 +32,7 @@ export default function NewColor() {
     }
   }, [yazici, built]);
   const w = useWrite(send);
-  if (!islemVar("renk.ekle", permissions)) return <Screen title="Yeni renk" module="renkler" back><Muted>Bu işlem için yetkiniz yok.</Muted></Screen>;
+  if (!islemVar("renk.ekle", permissions)) return <Screen sheet title="Yeni renk" module="renkler" back><Muted>Bu işlem için yetkiniz yok.</Muted></Screen>;
 
   async function submit() {
     if (!built.ok) return setFormError(built.error);
@@ -45,7 +45,7 @@ export default function NewColor() {
   }
   const shown = formError ?? w.error;
   return (
-    <Screen title="Yeni renk" module="renkler" back>
+    <Screen sheet title="Yeni renk" module="renkler" back>
       <Card domain="uretim">
         <Field label="Ad" value={f.ad} onChangeText={(v) => setF((o) => ({ ...o, ad: v }))} testID="renk-ad" placeholder="Örn. 055 BEYAZ" />
         <Field label="Renk kodu (isteğe bağlı)" value={f.hex} onChangeText={(v) => setF((o) => ({ ...o, hex: v }))} testID="renk-hex" placeholder="#RRGGBB" autoCapitalize="characters" />

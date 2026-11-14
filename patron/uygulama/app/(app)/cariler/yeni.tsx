@@ -71,7 +71,7 @@ export default function NewCustomer() {
   const dogrudan = yazici.kanal === "dogrudan";
 
   return (
-    <Screen title="Yeni cari" module="cariler" back>
+    <Screen sheet title="Yeni cari" module="cariler" back>
       <View style={s.intro}>
         <IconChip domain={dogrudan ? "cariler" : "gelenKutusu"} icon={dogrudan ? "business-outline" : "paper-plane-outline"} size={32} />
         <Text style={s.introText}>{dogrudan ? "Cari fabrikaya hemen kaydedilir; kodu fabrika verir." : "Cari fabrikaya gelen kutusundan iletilir; kod ve mükerrer denetimi fabrikada yapılır."}</Text>
