@@ -657,7 +657,7 @@ node deploy/backend-yayinla.mjs --grup=test --urun=backend-oci --paket=$D/teslim
 grep -c '/tekserp-indir/html/test/backend-oci' $D/yayin-kuru.log                       # > 0
 grep -nE 'adnansahin|guncelleme\.etkiliyazilim|sahinsrv|192\.168\.1\.250|100\.107\.103\.79|/oncu/|/genel/' $D/yayin-kuru.log && echo "⛔ DUR" || echo "✓ kanal=test temiz"
 grep -q 'göç 395' $D/yayin-kuru.log && echo "göç sayısı tamam"
-node deploy/backend-yayinla.mjs --grup=test --urun=backend-oci --paket=$D/teslim/tekserp-backend-oci-2.15.13.tar 2>&1 | tee $D/yayin.log   # gerçek
+node deploy/backend-yayinla.mjs --grup=test --urun=backend-oci --paket=$D/teslim/tekserp-backend-oci-2.15.13.tar --anahtar=$TEKSERP_PAKET_ANAHTARI 2>&1 | tee $D/yayin.log   # gerçek; --anahtar ZORUNLU (yoksa "PAKET ANAHTARI YOK"), parola Anahtar Zinciri'nden
 node scripts/backend-surum.mjs --etiketle 2.15.13 && git ls-remote --tags origin backend-v2.15.13
 node deploy/backend-yayinla.mjs --grup=test --urun=backend-oci --dogrula
 
