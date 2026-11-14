@@ -1,6 +1,6 @@
 // Android bildirim kanalları (S0; expo-notifications). Yalnız derleme kapısı açıkken `*-native.ts`ten yüklenir.
-// Seçili iki kanal (BİLDİRİM + ALARM) kurulur; eski `varsayilan` kanalı ve seçilmeyen `tekserp-*` kanalları silinir
-// (Android ayarlarında yalnız kullanılan kanallar görünsün). Kanal izin isteminden ÖNCE kurulur (13+ istemi kanal varken çıkar).
+// Seçili iki kanal (BİLDİRİM + ALARM) garanti edilir; yalnız eski `varsayilan` kanalı silinir. Önceki/önizlenen `tekserp-*`
+// kanalları BIRAKILIR: silmek kullanıcının telefon ayarından verdiği kanal ayarını yok eder. Kanal izin isteminden ÖNCE kurulur.
 import * as Notifications from "expo-notifications";
 import { Linking, Platform } from "react-native";
 import { ESKI_KANAL, SES_ADI, kanalKimligi, sesDosyasi, type Ses, type SesSecimi, type SesSinifi } from "./sesler";
@@ -22,21 +22,25 @@ async function kanalKur(sinif: SesSinifi, ses: Ses): Promise<string> {
 
 export async function kanallariKur(s: SesSecimi): Promise<void> {
   if (Platform.OS !== "android") return;
-  const istenen = new Set([await kanalKur("BILDIRIM", s.bildirim), await kanalKur("ALARM", s.alarm)]);
+  await kanalKur("BILDIRIM", s.bildirim);
+  await kanalKur("ALARM", s.alarm);
   // Temizlik best-effort: silinemeyen kanal yalnız ayarlarda fazladan görünür, bildirimi engellemez.
   try {
     for (const k of await Notifications.getNotificationChannelsAsync()) {
-      if ((k.id === ESKI_KANAL || k.id.startsWith("tekserp-")) && !istenen.has(k.id)) await Notifications.deleteNotificationChannelAsync(k.id);
+      if (k.id === ESKI_KANAL) await Notifications.deleteNotificationChannelAsync(k.id);
     }
   } catch {
     // yut
   }
 }
 
-/** Seçili sesi yerel bildirimle çalar (Android'de kanal sesi; iOS'ta dosya adı). Kanal önce kurulur. */
+/** Sesi yerel bildirimle çalar (Android'de kanal sesi; iOS'ta dosya adı). Kanal kümesi = seçili ∪ önizlenen; hiçbiri silinmez. */
 export async function sesiOnizle(sinif: SesSinifi, ses: Ses, secim: SesSecimi): Promise<void> {
   require("./taps-native"); // ön plan gösterim kuralı (ses çalsın) bu modülde kurulur
-  await kanallariKur(sinif === "ALARM" ? { ...secim, alarm: ses } : { ...secim, bildirim: ses });
+  if (Platform.OS === "android") {
+    await kanallariKur(secim);
+    await kanalKur(sinif, ses);
+  }
   const dosya = sesDosyasi(ses);
   await Notifications.scheduleNotificationAsync({
     content: { title: "Ses önizleme", body: SES_ADI[ses], ...(dosya === null ? {} : { sound: dosya }) },

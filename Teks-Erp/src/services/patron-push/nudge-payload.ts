@@ -1,6 +1,6 @@
 // Dürt gövdesi — metin gönderim ANINDA gelen kutusu satırından render edilir (kuyrukta metin yok). Kullanıcı kararı
-// 2026-11-13: TAM METİN (başlık + gövde). Rota uygulamanın KENDİ ekranıdır: panel yolu (`panelYol`) uygulamada
-// karşılıksızdır, fabrika kimlikleri uygulama kayıt yollarıyla eşleşmez → ERP bildirim listesi `/bildirimler`.
+// 2026-11-13: TAM METİN (başlık + gövde). Rota uygulamanın KENDİ ekranıdır; 2026-11-15 kararı: sipariş/cari/sevkiyat/
+// teklif/iş emri türü kaydına (`/bolum/<UUID>`, mevcut `rota` alanı — tel ve bulut değişmez), diğerleri `/bildirimler`.
 import {
   getNotificationEntry,
   NOTIFICATION_KINDS,
@@ -19,9 +19,29 @@ export function isNotificationKind(kind: string): kind is NotificationKind {
   return (NOTIFICATION_KINDS as readonly string[]).includes(kind);
 }
 
-/** Türün uygulama-güvenli yolu (bugün her tür liste ekranına; P4'te tür başına derin bağlantı açılabilir). */
-export function patronPushRoute(_kind: NotificationKind): string {
-  return PushRouteSchema.parse(PATRON_APP_NOTIFICATIONS_ROUTE);
+/**
+ * Kayda giden türler: panel yolu kimliğin HANGİ tablonun olduğunu söyler (`focus={cariId}` cari HESABI, `C:{cariId}`
+ * cari KARTI) → uygulama bölümü. Uygulama `/teklifler|/sevkiyat|/uretim/<id>`i kendi kayıt ekranına çevirir; bunu
+ * bilmeyen eski uygulama listeye düşer. Yalnız tür ön eki + kayıt UUID'si gider; metin/kişisel veri yok.
+ */
+const RECORD_ROUTE_BY_PANEL_PATH: Readonly<Record<string, { readonly field: string; readonly section: string }>> = {
+  "/operations/orders?focus={siparisId}": { field: "siparisId", section: "/siparisler" },
+  "/definitions/cariler?kayit=C:{cariId}": { field: "cariId", section: "/cariler" },
+  "/operations/shipments/{sevkiyatId}": { field: "sevkiyatId", section: "/sevkiyat" },
+  "/cost/quotes/{teklifId}": { field: "teklifId", section: "/teklifler" },
+  "/operations/work-orders/{isEmriId}": { field: "isEmriId", section: "/uretim" },
+};
+/** Kullanıcı kararı (2026-11-15): yalnız bu ön eklerin türleri kayda gider (kurşun/tambur iş emri yolunu paylaşsa da listeye). */
+const RECORD_KIND_PREFIXES: ReadonlySet<string> = new Set(["siparis", "cari", "sevkiyat", "teklif", "isemri"]);
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Türün uygulama-güvenli yolu: kayda giden türde kimlik UUID ise `/bolum/<id>`, değilse ERP bildirim listesi. */
+export function patronPushRoute(kind: NotificationKind, payload?: unknown): string {
+  const panelPath = getNotificationEntry(kind).panelYol;
+  const target = RECORD_KIND_PREFIXES.has(kind.split(".")[0] ?? "") && Object.hasOwn(RECORD_ROUTE_BY_PANEL_PATH, panelPath) ? RECORD_ROUTE_BY_PANEL_PATH[panelPath] : undefined;
+  const id = target && payload !== null && typeof payload === "object" ? (payload as Record<string, unknown>)[target.field] : undefined;
+  const route = target && typeof id === "string" && UUID_RE.test(id) ? `${target.section}/${id.toLowerCase()}` : PATRON_APP_NOTIFICATIONS_ROUTE;
+  return PushRouteSchema.parse(route);
 }
 
 const clip = (s: string, max: number): string => [...s].slice(0, max).join("");
@@ -37,7 +57,7 @@ export function buildNudgeBody(
     belirtecler: [...tokens],
     baslik: title,
     govde: clip(text.govde, BODY_RAW_MAX),
-    data: { bildirimId: inbox.id, rota: patronPushRoute(inbox.kind) },
+    data: { bildirimId: inbox.id, rota: patronPushRoute(inbox.kind, inbox.payload) },
     // S0: bulut alarm kanalını/sesini seçsin. BİLDİRİM'de alan YOK (bulut varsayılanı; sesi bilmeyen eski bulutla uyum).
     ...(inbox.klass === "ALARM" ? { sinif: "ALARM" as const } : {}),
   };
