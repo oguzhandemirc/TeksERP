@@ -3101,6 +3101,20 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
           { value: "durum-degisimi", label: "Son durum değişiminden", hint: "Stok & Ölü Stok raporunun raf yaşı; satışa hazırlama da sayacı sıfırlar." },
         ],
       },
+      {
+        // `defaultValue` backend `DEFAULT_STOCK_AGING_SCOPE` ile birebir (bekçi §16).
+        enumKey: "notificationStockAgingScope",
+        title: "Yaşlanan stok: hangi toplar sayılsın",
+        summary: "\"N gündür depoda\" bildirimi yalnız raftaki topları mı, depoda duran her topu mu saysın.",
+        desc: "Raftaki toplar (varsayılan): Stok & Ölü Stok raporuyla aynı küme — çuvala girmiş ya da sevkiyata okutulmuş top sayılmaz; emanet modülü açıksa müşteri malı da raporda olduğu gibi dışarıda kalır. Böylece bildirim ile rapor aynı adedi söyler. Depodaki her top: fiziksel olarak depoda duran her top sayılır (çuvaldaki, planlı sevkiyattaki ve emanet toplar dahil); adet rapordakinden büyük çıkabilir. Bildirim metninde kapsam yazılır (raf / tümü).",
+        defaultValue: "raf",
+        display: "radio",
+        audience: ["Yönetim"],
+        options: [
+          { value: "raf", label: "Raftaki toplar (varsayılan)", hint: "Stok & Ölü Stok raporuyla aynı adet; çuvaldaki, sevkiyattaki ve (emanet açıksa) müşteri malı top sayılmaz." },
+          { value: "depodaki-her-top", label: "Depodaki her top", hint: "Çuvaldaki, planlı sevkiyattaki ve emanet top da sayılır." },
+        ],
+      },
     ],
   },
   {

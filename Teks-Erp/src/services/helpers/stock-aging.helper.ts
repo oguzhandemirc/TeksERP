@@ -1,7 +1,11 @@
 // =============================================================================
 // DEPODA YAŞLANAN STOK — "bu top kaç gündür depoda" sorusunun TEK yüklemi (`stok.yaslanan`)
 // =============================================================================
-// Küme: şu an depoda olan top (`WAREHOUSE_STOCK_STATUSES` + depolu; ölü küme `K18_DEAD_STATUSES` ayrıca dışarıda).
+// Küme iki kipli (karar 2026-11-15, `bildirim.stokYaslanan.kapsam`; her iki kipte depolu top, konu depo başına):
+//   • `raf` (varsayılan): Stok & Ölü Stok raporunun raf kümesi — `stock-shelf.helper.ts#shelfRollSql` (kopya yok);
+//     emanet açıkken müşteri malı raporun `splitByOwnership` bölmesiyle aynı yüklemle (`consignedRollSql`) dışarıda.
+//   • `depodaki-her-top`: fiziksel olarak depoda duran her top (`WAREHOUSE_STOCK_STATUSES`; çuvaldaki, planlı
+//     sevkiyattaki, emanet dahil); ölü küme `K18_DEAD_STATUSES` ayrıca dışarıda.
 // Yaş çıpası iki kipli (kullanıcı kararı 2026-11-14, `bildirim.stokYaslanan.kaynak`):
 //   • `depo-giris` (varsayılan): depo defterinde topun SON GERÇEK GİRİŞİ — dışarıdan depoya satır
 //     (`from` boş, `to` dolu). Ters kayıt satırı giriş sayılmaz; terslenmiş satır hiç olmamış sayılır
@@ -16,7 +20,9 @@
 import { Prisma, WarehouseEventType } from "@prisma/client";
 import { K18_DEAD_STATUSES } from "../batch.service";
 import { WAREHOUSE_STOCK_STATUSES } from "./warehouse-stock.helper";
-import type { StockAgingSource } from "../system-setting/defaults";
+import { consignedRollSql } from "./stock-ownership.helper";
+import { shelfRollSql } from "./stock-shelf.helper";
+import type { StockAgingScope, StockAgingSource } from "../system-setting/defaults";
 
 type Db = { $queryRaw: <T>(query: Prisma.Sql) => Promise<T> };
 
@@ -64,13 +70,22 @@ function laterExitSql(): Prisma.Sql {
       AND ${effectiveSql("x")})`;
 }
 
+/** Kapsamın `rolls r` yüklemi. `raf` + emanet açık → müşteri malı dışarıda (rapor bölmesinin SQL ikizi). */
+export function agedStockScopeSql(scope: StockAgingScope, emanetOn: boolean): Prisma.Sql {
+  if (scope === "raf") {
+    return emanetOn ? Prisma.sql`${shelfRollSql("r")} AND NOT ${consignedRollSql("r")}` : shelfRollSql("r");
+  }
+  return Prisma.sql`r.status = ANY(${[...WAREHOUSE_STOCK_STATUSES]}::"RollStatus"[])
+        AND NOT (r.status = ANY(${K18_DEAD_STATUSES}::"RollStatus"[]))`;
+}
+
 /**
  * Çıpası `cutoff`a eşit ya da daha eski olan depo toplarını depo başına toplar.
  * `warehouseIds` verilirse yalnız o depolar (bekçi körlük zemini; koşul kaynağı tüm depoları okur).
  */
 export async function loadAgedStockGroups(
   db: Db,
-  opts: { source: StockAgingSource; cutoff: Date; warehouseIds?: readonly string[] },
+  opts: { source: StockAgingSource; scope: StockAgingScope; emanetOn: boolean; cutoff: Date; warehouseIds?: readonly string[] },
 ): Promise<AgedStockGroup[]> {
   const byEntry = opts.source === "depo-giris";
   const whFilter = opts.warehouseIds ? Prisma.sql`AND r."warehouseId" = ANY(${[...opts.warehouseIds]}::uuid[])` : Prisma.empty;
@@ -84,8 +99,7 @@ export async function loadAgedStockGroups(
     WITH stock AS (
       SELECT r.id, r."warehouseId", r."currentQty", r."statusChangedAt"
       FROM rolls r
-      WHERE r.status = ANY(${[...WAREHOUSE_STOCK_STATUSES]}::"RollStatus"[])
-        AND NOT (r.status = ANY(${K18_DEAD_STATUSES}::"RollStatus"[]))
+      WHERE ${agedStockScopeSql(opts.scope, opts.emanetOn)}
         AND r."warehouseId" IS NOT NULL ${whFilter}
     ), anchored AS (${anchored})
     SELECT a."warehouseId"::text AS "warehouseId", w.name AS "warehouseName",

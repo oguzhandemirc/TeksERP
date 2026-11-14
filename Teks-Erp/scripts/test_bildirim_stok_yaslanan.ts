@@ -1,5 +1,5 @@
 // =============================================================================
-// BEKÇİ — `stok.yaslanan` (KOSUL): depoda N gündür (varsayılan 30) duran toplar, iki yaş kipi
+// BEKÇİ — `stok.yaslanan` (KOSUL): depoda N gündür (varsayılan 30) duran toplar, iki yaş kipi × iki top kapsamı
 // Çalıştır: npx tsx scripts/run-all-tests.ts test_bildirim_stok_yaslanan
 // =============================================================================
 // NEDEN: kullanıcı kararı 2026-11-14 "depoya giriş tarihinden say, eşik 30 gün, ayardan değişir" + iki aday kuvvetli
@@ -9,9 +9,16 @@
 //      ölü top hariç; sevk stornosu ilk girişe döner; girişten sonra terslenmemiş çıkış → düşüş.
 //   §2 durum-degisimi — çıpa `statusChangedAt`, kenar ±1 ms, düşüş yok.
 //   §3 tarayıcı — taban → açıldı (ACILDI) → top sevk edilince KAPANDI ("çözüldü").
+//   §4 kapsam (karar 2026-11-15, `bildirim.stokYaslanan.kapsam`) — `raf` (varsayılan) Stok & Ölü Stok raf kümesiyle
+//      AYNI adet (çuvaldaki/planlı sevkiyattaki/fasondan dönmüş top yok; emanet açıkken müşteri malı yok);
+//      `depodaki-her-top` hepsini sayar; ayar kayıtsız/çöp → `raf`; metinde "kapsam: raf|tümü".
+//   §0e tek kaynak — rapor ve helper raf yüklemini `stock-shelf.helper.ts#shelfRollSql`ten okur (kopya yok).
 // NEGATİF SONDA (2026-11-14, helper md5 ile geri alındı): ① giriş adayında `reversesMovementId IS NULL` kalktı ⇒ §1d ❌
 //   (11/1) · ② düşüş dalı `statusChangedAt` yerine `e."createdAt"` ⇒ §1a/§1b/§1e ❌ (9/3) · ③ ölü küme süzgeci kalkıp
 //   CANCELLED kümeye girdi ⇒ §1a/§1b/§2a/§2b ❌ (8/4).
+// NEGATİF SONDA (2026-11-15, kopya + md5 ile geri alındı): ④ `shelfRollSql`ten `"sackId" IS NULL` kalktı ⇒ §4a/§4b/§4c/§4d ❌
+//   (15/4) · ⑤ raf dalında emanet süzgeci kalktı ⇒ §0e/§4b/§4c ❌ (16/3) · ⑥ kapsam varsayılanı `depodaki-her-top` ⇒
+//   §0f/§3a/§4d ❌ (16/3).
 // =============================================================================
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -19,12 +26,15 @@ import { Prisma, RollForm, RollStatus, WarehouseEventType } from "@prisma/client
 import prisma, { pool } from "../src/lib/prisma";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { NOTIFICATION_CATALOG } from "../src/constants/notification-catalog";
-import { SETTING_KEYS, readStockAgingSource } from "../src/services/system-setting.service";
+import { SETTING_KEYS, readStockAgingScope, readStockAgingSource } from "../src/services/system-setting.service";
+import { loadShelfCells } from "../src/services/reports/stock-scorecard.report.service";
+import { splitByOwnership } from "../src/services/helpers/stock-ownership.helper";
 import { postStockMove } from "../src/services/helpers/warehouse-ledger.helper";
 import { loadAgedStockGroups } from "../src/services/helpers/stock-aging.helper";
 import { notificationBaselineKey } from "../src/services/helpers/notification-baseline.helper";
 import { runConditionSourceOnce } from "../src/jobs/notification-condition.job";
-import { STOCK_AGING_KIND, overrideStockAgingDeps, registerStockAgingConditionSource } from "../src/services/notification-sources/stok-yaslanan";
+import { STOCK_AGING_KIND, agedStockSubjects, overrideStockAgingDeps, registerStockAgingConditionSource } from "../src/services/notification-sources/stok-yaslanan";
+import type { StockAgingScope } from "../src/services/system-setting/defaults";
 
 let pass = 0;
 let fail = 0;
@@ -36,8 +46,8 @@ function check(label: string, ok: boolean, detay = ""): void {
 const ek = Date.now().toString(36);
 const DAY = 86_400_000;
 const T0 = Date.now();
-const ids = { wh: [] as string[], rolls: [] as string[], item: "" };
-const SETTING_KEYS_TOUCHED = [SETTING_KEYS.NOTIFICATION_STOCK_AGING_SOURCE, SETTING_KEYS.BILDIRIM_GELEN_KUTUSU_ENABLED, notificationBaselineKey(STOCK_AGING_KIND)];
+const ids = { wh: [] as string[], rolls: [] as string[], item: "", customer: "", sack: "", shipment: "" };
+const SETTING_KEYS_TOUCHED = [SETTING_KEYS.NOTIFICATION_STOCK_AGING_SOURCE, SETTING_KEYS.NOTIFICATION_STOCK_AGING_SCOPE, SETTING_KEYS.BILDIRIM_GELEN_KUTUSU_ENABLED, notificationBaselineKey(STOCK_AGING_KIND)];
 
 async function bolum0(): Promise<void> {
   console.log("\n§0 katalog + ayar");
@@ -51,6 +61,19 @@ async function bolum0(): Promise<void> {
   check("§0c ⭐ ayar kayıtsız/çöp → depo-giris (kullanıcı kararı)", yok === "depo-giris" && cop === "depo-giris", `${yok}/${cop}`);
   const src = readFileSync(join(__dirname, "..", "src", "services", "notification-sources", "stok-yaslanan.ts"), "utf8");
   check("§0d kaynak yüklemi kopyalamaz (helper'dan, ham SQL yok)", src.includes("loadAgedStockGroups") && !/warehouse_movements|queryRaw/.test(src));
+  const oku = (...p: string[]) => readFileSync(join(__dirname, "..", "src", "services", ...p), "utf8");
+  const rapor = oku("reports", "stock-scorecard.report.service.ts");
+  const yardimci = oku("helpers", "stock-aging.helper.ts");
+  check("§0e ⭐ raf yüklemi TEK kaynak: rapor ve yaşlanma helper'ı `shelfRollSql`ten okur, ikisinde de elle `sackId`/`shipmentId` süzgeci yok",
+    rapor.includes('shelfRollSql("r")') && yardimci.includes('shelfRollSql("r")') && yardimci.includes('consignedRollSql("r")')
+      && ![rapor, yardimci].some((t) => /"sackId"\s+IS\s+NULL|"shipmentId"\s+IS\s+NULL/i.test(t))
+      && src.includes("readEmanetEnabled") && rapor.includes("readEmanetEnabled"));
+  await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.NOTIFICATION_STOCK_AGING_SCOPE } });
+  const kYok = await readStockAgingScope();
+  await prisma.systemSetting.create({ data: { key: SETTING_KEYS.NOTIFICATION_STOCK_AGING_SCOPE, value: "copp" } });
+  const kCop = await readStockAgingScope();
+  await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.NOTIFICATION_STOCK_AGING_SCOPE } });
+  check("§0f ⭐ kapsam kayıtsız/çöp → raf (karar 2026-11-15)", kYok === "raf" && kCop === "raf", `${kYok}/${kCop}`);
 }
 
 async function mkWarehouse(tag: string): Promise<string> {
@@ -59,9 +82,10 @@ async function mkWarehouse(tag: string): Promise<string> {
   return w.id;
 }
 
-async function mkRoll(tag: string, warehouseId: string | null, statusChangedAt: number, status: RollStatus = RollStatus.WAREHOUSE): Promise<string> {
+type RollExtra = { sackId?: string; shipmentId?: string; ownerCustomerId?: string };
+async function mkRoll(tag: string, warehouseId: string | null, statusChangedAt: number, status: RollStatus = RollStatus.WAREHOUSE, extra: RollExtra = {}): Promise<string> {
   const r = await prisma.roll.create({
-    data: { barcode: `TEST-SY-${tag}-${ek}`, itemId: ids.item, initialQty: 100, currentQty: 100, status, form: RollForm.TOP, warehouseId, statusChangedAt: new Date(statusChangedAt) },
+    data: { barcode: `TEST-SY-${tag}-${ek}`, itemId: ids.item, initialQty: 100, currentQty: 100, status, form: RollForm.TOP, warehouseId, statusChangedAt: new Date(statusChangedAt), ...extra },
     select: { id: true },
   });
   ids.rolls.push(r.id);
@@ -80,8 +104,9 @@ async function move(m: Move): Promise<{ id: string; at: number }> {
   return { id, at: row.createdAt.getTime() };
 }
 
-const groups = (source: "depo-giris" | "durum-degisimi", cutoff: number, wh: string) =>
-  loadAgedStockGroups(prisma, { source, cutoff: new Date(cutoff), warehouseIds: [wh] }).then((g) => g[0] ?? { rollCount: 0, fallbackCount: 0, meters: 0 });
+// §1–§2 yaş çıpasını ölçer; kapsamı PR #723'ün kümesinde (`depodaki-her-top`) sabit tutar. Kapsam §4'te.
+const groups = (source: "depo-giris" | "durum-degisimi", cutoff: number, wh: string, scope: StockAgingScope = "depodaki-her-top", emanetOn = false) =>
+  loadAgedStockGroups(prisma, { source, scope, emanetOn, cutoff: new Date(cutoff), warehouseIds: [wh] }).then((g) => g[0] ?? { rollCount: 0, fallbackCount: 0, meters: 0 });
 
 async function bolum12(): Promise<void> {
   console.log("\n§1 depo-giris · §2 durum-degisimi");
@@ -130,15 +155,15 @@ async function bolum3(): Promise<void> {
   const e8 = await move({ roll: r8, type: WarehouseEventType.ENTRY, to: C });
   await prisma.systemSetting.upsert({ where: { key: SETTING_KEYS.BILDIRIM_GELEN_KUTUSU_ENABLED }, create: { key: SETTING_KEYS.BILDIRIM_GELEN_KUTUSU_ENABLED, value: true }, update: { value: true } });
   await prisma.systemSetting.deleteMany({ where: { key: { in: [notificationBaselineKey(STOCK_AGING_KIND), SETTING_KEYS.NOTIFICATION_STOCK_AGING_SOURCE] } } });
-  const geri = overrideStockAgingDeps({ warehouseIds: [C], now: () => new Date(e8.at + 29 * DAY) });
+  const geri = overrideStockAgingDeps({ warehouseIds: [C], now: () => new Date(e8.at + 29 * DAY), emanetOn: async () => false });
   try {
     const t1 = await runConditionSourceOnce(STOCK_AGING_KIND);
     overrideStockAgingDeps({ now: () => new Date(e8.at + 30 * DAY) });
     const t2 = await runConditionSourceOnce(STOCK_AGING_KIND);
     const ac = await prisma.notificationOutbox.findFirst({ where: { kind: STOCK_AGING_KIND, subjectKey: C, phase: "ACILDI" }, select: { payload: true } });
     const p = (ac?.payload ?? {}) as Record<string, unknown>;
-    check("§3a ⭐ taban (29 gün, sessiz) → 30 gün ACILDI, yük adet/gün/metre/yaş kaynağı", typeof t1 === "object" && t1.baseline === 0 && typeof t2 === "object" && t2.opened === 1
-      && p.adet === 1 && p.gun === 30 && p.metre === 100 && p.yasKaynagi === "depoya girişten", `${JSON.stringify(t1)} ${JSON.stringify(t2)} ${JSON.stringify(p)}`);
+    check("§3a ⭐ taban (29 gün, sessiz) → 30 gün ACILDI, yük adet/gün/metre/kapsam(raf varsayılan)/yaş kaynağı", typeof t1 === "object" && t1.baseline === 0 && typeof t2 === "object" && t2.opened === 1
+      && p.adet === 1 && p.gun === 30 && p.metre === 100 && p.kapsam === "raf" && p.yasKaynagi === "depoya girişten", `${JSON.stringify(t1)} ${JSON.stringify(t2)} ${JSON.stringify(p)}`);
     await prisma.roll.update({ where: { id: r8 }, data: { status: RollStatus.SHIPPED, warehouseId: null } });
     await move({ roll: r8, type: WarehouseEventType.SHIPMENT, from: C, toStatus: RollStatus.SHIPPED });
     const t3 = await runConditionSourceOnce(STOCK_AGING_KIND);
@@ -148,6 +173,49 @@ async function bolum3(): Promise<void> {
     geri();
     await prisma.notificationOutbox.deleteMany({ where: { kind: STOCK_AGING_KIND, subjectKey: { in: ids.wh } } });
     await prisma.notificationCondition.deleteMany({ where: { kind: STOCK_AGING_KIND, subjectKey: { in: ids.wh } } });
+  }
+}
+
+async function bolum4(): Promise<void> {
+  console.log("\n§4 kapsam: raf (rapor kümesi) ↔ depodaki-her-top");
+  const D = await mkWarehouse("D");
+  ids.customer = (await prisma.customer.create({ data: { code: `TSY-${ek}`, name: `TEST-SY musteri ${ek}` }, select: { id: true } })).id;
+  ids.sack = (await prisma.sack.create({ data: { sackNo: `TEST-SY-CV-${ek}` }, select: { id: true } })).id;
+  ids.shipment = (await prisma.shipment.create({ data: { shipmentNo: `TEST-SY-SV-${ek}`, customerId: ids.customer }, select: { id: true } })).id;
+  const eski = T0 - 40 * DAY;
+  const ilkSira = ids.rolls.length; // körlük zemini: yalnız bu bölümün D topları karşılaştırılır
+  const raf = [await mkRoll("kA", D, eski), await mkRoll("kF", D, eski, RollStatus.STOCK)];
+  const emanet = await mkRoll("kD", D, eski, RollStatus.WAREHOUSE, { ownerCustomerId: ids.customer });
+  const cuval = await mkRoll("kB", D, eski, RollStatus.WAREHOUSE, { sackId: ids.sack });
+  const sevk = await mkRoll("kC", D, eski, RollStatus.WAREHOUSE, { shipmentId: ids.shipment });
+  await mkRoll("kE", D, eski, RollStatus.RETURNED_FROM_SUBCONTRACTOR);
+  const cutoff = T0 - 30 * DAY;
+  const g = (scope: StockAgingScope, emanetOn: boolean) => groups("durum-degisimi", cutoff, D, scope, emanetOn);
+  const [rK, rA, hK, hA] = [await g("raf", false), await g("raf", true), await g("depodaki-her-top", false), await g("depodaki-her-top", true)];
+  check("§4a ⭐ emanet kapalı: raf 3 (düz + ham + emanet), her-top 6 (çuval + planlı sevkiyat + fasondan dönen dahil)", rK.rollCount === 3 && hK.rollCount === 6 && rK.meters === 300, `${rK.rollCount}/${hK.rollCount}`);
+  check("§4b ⭐ emanet açık: raf 2 (müşteri malı raporda olduğu gibi dışarıda), her-top yine 6", rA.rollCount === 2 && hA.rollCount === 6, `${rA.rollCount}/${hA.rollCount}`);
+  const mine = new Set(ids.rolls.slice(ilkSira));
+  const cells = (await loadShelfCells()).filter((c) => mine.has(c.rollId) && c.days !== null && c.days >= 30);
+  const raporOff = splitByOwnership(cells, false, (c) => c.consigned).own;
+  const raporOn = splitByOwnership(cells, true, (c) => c.consigned).own;
+  const hepsi = new Set(cells.map((c) => c.rollId));
+  check("§4c ⭐ raf kipinde rapor ile bildirim adedi EŞİT (emanet kapalı/açık), çuvaldaki/sevkiyattaki rapor kümesinde de yok",
+    raporOff.length === rK.rollCount && raporOn.length === rA.rollCount && !hepsi.has(cuval) && !hepsi.has(sevk)
+      && raf.every((id) => hepsi.has(id)) && hepsi.has(emanet) && !raporOn.some((c) => c.rollId === emanet),
+    `rapor ${raporOff.length}/${raporOn.length} · bildirim ${rK.rollCount}/${rA.rollCount}`);
+  const geri = overrideStockAgingDeps({ warehouseIds: [D], now: () => new Date(T0), source: async () => "durum-degisimi", emanetOn: async () => false });
+  try {
+    const yuk = async () => ((await agedStockSubjects())[0]?.payload ?? {}) as Record<string, unknown>;
+    await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.NOTIFICATION_STOCK_AGING_SCOPE } });
+    const pYok = await yuk();
+    await prisma.systemSetting.create({ data: { key: SETTING_KEYS.NOTIFICATION_STOCK_AGING_SCOPE, value: "depodaki-her-top" } });
+    const pHer = await yuk();
+    check("§4d ⭐ tarayıcı: ayar yok → raf (3 top, \"kapsam: raf\"); depodaki-her-top → 6 top, \"kapsam: tümü\"",
+      pYok.adet === 3 && pYok.kapsam === "raf" && pHer.adet === 6 && pHer.kapsam === "tümü", `${JSON.stringify(pYok)} ${JSON.stringify(pHer)}`);
+    const govde = NOTIFICATION_CATALOG[STOCK_AGING_KIND].govde;
+    check("§4e metin kapsamı yazar (`kapsam: {kapsam}`), yük alanı beyanlı", govde.includes("kapsam: {kapsam}") && NOTIFICATION_CATALOG[STOCK_AGING_KIND].payloadAlanlari.includes("kapsam"));
+  } finally {
+    geri();
   }
 }
 
@@ -161,10 +229,14 @@ async function main(): Promise<void> {
     await bolum0();
     await bolum12();
     await bolum3();
+    await bolum4();
   } finally {
     await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: ids.rolls }, reversesMovementId: { not: null } } });
     await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: ids.rolls } } });
     await prisma.roll.deleteMany({ where: { id: { in: ids.rolls } } });
+    if (ids.shipment) await prisma.shipment.delete({ where: { id: ids.shipment } });
+    if (ids.sack) await prisma.sack.delete({ where: { id: ids.sack } });
+    if (ids.customer) await prisma.customer.delete({ where: { id: ids.customer } });
     await prisma.warehouse.deleteMany({ where: { id: { in: ids.wh } } });
     await prisma.item.delete({ where: { id: ids.item } });
     await prisma.systemSetting.deleteMany({ where: { key: { in: SETTING_KEYS_TOUCHED } } });

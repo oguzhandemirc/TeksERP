@@ -1032,6 +1032,8 @@ export const SETTING_KEYS = {
   BILDIRIM_PATRON_PUSH_ENABLED: "bildirim.patronPushEnabled",
   /** `stok.yaslanan` koşulunun yaş çıpası: `depo-giris` (depo defterinden giriş anı) | `durum-degisimi` (`Roll.statusChangedAt`). */
   NOTIFICATION_STOCK_AGING_SOURCE: "bildirim.stokYaslanan.kaynak",
+  /** `stok.yaslanan` top kapsamı: `raf` (Stok & Ölü Stok raf kümesi, `helpers/stock-shelf.helper.ts`) | `depodaki-her-top` (depolu her canlı top). */
+  NOTIFICATION_STOCK_AGING_SCOPE: "bildirim.stokYaslanan.kapsam",
   // belge-sablon T1C: davranış bayrakları (modül DEĞİL, profile girmez); ikisi de default false.
   DOCUMENTS_DESIGNER_ENABLED: "documents.designerEnabled",
   DOCUMENTS_PUBLISH_SOD_ENABLED: "documents.publishSodEnabled",

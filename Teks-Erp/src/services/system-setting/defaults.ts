@@ -223,6 +223,11 @@ export type StockAgingSource = "depo-giris" | "durum-degisimi";
 export const STOCK_AGING_SOURCES: StockAgingSource[] = ["depo-giris", "durum-degisimi"];
 /** Varsayılan `depo-giris` — kullanıcı kararı 2026-11-14 ("depoya giriş tarihinden say"); tür yeni, eski davranış yok. */
 export const DEFAULT_STOCK_AGING_SOURCE: StockAgingSource = "depo-giris";
+/** `stok.yaslanan` top kapsamı (bkz. `SETTING_KEYS.NOTIFICATION_STOCK_AGING_SCOPE`). */
+export type StockAgingScope = "raf" | "depodaki-her-top";
+export const STOCK_AGING_SCOPES: StockAgingScope[] = ["raf", "depodaki-her-top"];
+/** Varsayılan `raf` — karar 2026-11-15: bildirim Stok & Ölü Stok raporunun raf kümesiyle aynı adedi söylesin. */
+export const DEFAULT_STOCK_AGING_SCOPE: StockAgingScope = "raf";
 
 /** D4-F3: müşteri barkodu basan şablonda kod yoksa. */
 export type LabelCustomerCodeMissing = "BLOCK" | "ROLL_BARCODE";

@@ -9,7 +9,7 @@
 import prisma from "../../lib/prisma";
 import { isHostedInstallation } from "../helpers/install-class.helper";
 import { asBoolean, asNumber } from "./core";
-import { DEFAULT_LABEL_COPIES_SOURCE, DEFAULT_LABEL_CUSTOMER_CODE_AT, DEFAULT_LABEL_CUSTOMER_CODE_MISSING, DEFAULT_STOCK_AGING_SOURCE, LABEL_COPIES_SOURCES, LABEL_CUSTOMER_CODE_AT_MODES, LABEL_CUSTOMER_CODE_MISSING_MODES, STOCK_AGING_SOURCES, type LabelCopiesSource, type LabelCustomerCodeAt, type LabelCustomerCodeMissing, type StockAgingSource } from "./defaults";
+import { DEFAULT_LABEL_COPIES_SOURCE, DEFAULT_LABEL_CUSTOMER_CODE_AT, DEFAULT_LABEL_CUSTOMER_CODE_MISSING, DEFAULT_STOCK_AGING_SCOPE, DEFAULT_STOCK_AGING_SOURCE, LABEL_COPIES_SOURCES, LABEL_CUSTOMER_CODE_AT_MODES, LABEL_CUSTOMER_CODE_MISSING_MODES, STOCK_AGING_SCOPES, STOCK_AGING_SOURCES, type LabelCopiesSource, type LabelCustomerCodeAt, type LabelCustomerCodeMissing, type StockAgingScope, type StockAgingSource } from "./defaults";
 import { readServiceEnum } from "./finance";
 import { SETTING_KEYS } from "./keys";
 
@@ -193,6 +193,19 @@ export async function readStockAgingSource(
   });
   const v = setting?.value;
   return typeof v === "string" && STOCK_AGING_SOURCES.includes(v as StockAgingSource) ? (v as StockAgingSource) : DEFAULT_STOCK_AGING_SOURCE;
+}
+
+/** `stok.yaslanan` top kapsamı; kayıt yok/çöp değer → `raf` (karar 2026-11-15: raporla aynı küme). */
+export async function readStockAgingScope(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<StockAgingScope> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.NOTIFICATION_STOCK_AGING_SCOPE },
+    select: { value: true },
+  });
+  const v = setting?.value;
+  return typeof v === "string" && STOCK_AGING_SCOPES.includes(v as StockAgingScope) ? (v as StockAgingScope) : DEFAULT_STOCK_AGING_SCOPE;
 }
 
 /**

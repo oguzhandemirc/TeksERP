@@ -344,6 +344,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   bildirimGelenKutusuEnabled: "cekirdek",
   bildirimPatronPushEnabled: "cekirdek",
   notificationStockAgingSource: "cekirdek",
+  notificationStockAgingScope: "cekirdek",
   documentDesignerEnabled: "cekirdek",
   documentPublishSodEnabled: "cekirdek",
 };
