@@ -130,6 +130,7 @@
 - **[ÇEKİRDEK]** Push köprüsü (`/v1/bildirim/*`, amaç `bildir`, sözleşme `docs/design/PATRON-PUSH-KOPRUSU.md`) başlık + gövdeyi yalnız İLETİR — DB'ye, bilete, günlüğe yazma; kişi değil (kurulum, belirteç özeti) bağı tut; tesis DB'si/yönlendirme açma; lisans geçerliliğini yalnız satıcı `durum`undan oku.
 - **[PROFİL]** Telefon push DERLEME kapısı: `app.config.js` `pushKapisi` yalnız `PATRON_NATIVE_PUSH=1` ∧ `google-services.json` ∧ `PATRON_EAS_PROJECT_ID` varken açılır; `NATIVE_PUSH` bu kapıya bağlıdır (literal yazma); `build-aab` izin kümesi, bildirim bileşeni ve Android bağlama dışlamasını aynı kapıdan alır; Android'de kanal izin isteminden ÖNCE kurulur.
 - **[ÇEKİRDEK]** ERP kipinde telefon push'u yalnız `patronPush` yeteneği ∧ derleme kapısıyla göster; izni yalnız açık "Telefon bildirimlerini aç" eylemiyle iste; belirteci çıkışta `/auth/logout`tan ÖNCE yalnız kaydedildiği fabrikadan bırak; tercih PUT'unda yalnız (tür, PATRON_PUSH) hücresini değiştir, öteki satırları aynen geri yolla.
+- **[ÇEKİRDEK]** Telefon bildirim sesi tek kümeden (`PUSH_SOUNDS` ↔ `src/push/sesler.ts`) ve kanal kimliği `tekserp-<sınıf>-<ses>` (`pushChannelId` ↔ `kanalKimligi`, ALARM MAX); bulut `kaydet` sesi `sesler`den ya da varsayılandan kurar; uygulama ses alanını yalnız sapınca yollar, 400 `PATRON_PUSH_GOVDE`de alansız bir kez yeniden dener; hazır düğme/grup yeni uç açmaz (`PUT /bildirim/tercihler`) · bekçi: `test_bildirim_koprusu` §13, `bildirim-ses.test.tsx` <sub>(arşiv:2026-11-14)</sub>
 
 ## Patron sunucusu — alt-alan kuralları (patron/sunucu/CLAUDE.md'den, 2026-10-03)
 

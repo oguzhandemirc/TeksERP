@@ -8,7 +8,8 @@
 // Belirsiz hatada (ağ/5xx/429) aynı gövde + aynı token ile yeniden denenir (lib/istemci.mjs).
 // "Salon bugünü" adımı fabrikanın BUGÜNÜnü boyar (açık koşum/duruş); gün dönünce yeniden koşulur (sunum-hazırla eşi).
 //
-//   node scripts/deneme-veri/doldur.mjs --url <adres> --sir <Anahtar Zinciri servisi> [--cap 2026-10-16] [--adim a,b] [--kuru]
+//   node scripts/deneme-veri/doldur.mjs --url <adres> --sir <Anahtar Zinciri servisi> [--kullanici demoveri] [--cap 2026-10-16] [--adim a,b] [--kuru] [--aralik ms]
+// --aralik: her yazım isteğinden önce bekleme (ms; varsayılan 0) — bildirim/olay akışını ve hız sınırını yormamak için.
 // --kuru: yalnız GET (lib/kuru.mjs) — yazımlar ağa çıkmaz, adım başına "METHOD yol → adet" basılır (uygulama öncesi önizleme).
 // Hesap: `demoveri` (hizmet-hesabi.mjs kurar). Çıktı sır basmaz.
 // =============================================================================
@@ -25,9 +26,12 @@ import { depo } from "./adimlar/depo.mjs";
 import { kalite } from "./adimlar/kalite.mjs";
 import { kartela } from "./adimlar/kartela.mjs";
 import { finansGecmis } from "./adimlar/finans-gecmis.mjs";
+import { patronOrnek } from "./adimlar/patron-ornek.mjs";
 
 /** Sonraki adımların kimlik okuduğu adımlar — seçimde de koşar (yazacakları yoksa no-op). */
 const ZORUNLU = new Set(["ana-veri"]);
+/** Kurulumun kendi ana verisiyle çalışan adımlar — yalnız bunlar seçilince ZORUNLU (ana-veri) KOŞMAZ (yabancı tezgah/kalem doğmaz). */
+const BAGIMSIZ = new Set(["patron-ornek"]);
 
 export const ADIMLAR = [
   ["ana-veri", anaVeri],
@@ -41,6 +45,8 @@ export const ADIMLAR = [
   ["kalite", kalite],
   ["kartela", kartela],
   ["finans-gecmis", finansGecmis],
+  // patron örnek verisi (dv3: ad alanı) — kurulumun kendi ana verisi üstüne; `--adim patron-ornek` ile tek başına koşar
+  ["patron-ornek", patronOrnek],
 ];
 
 const arg = (ad, v) => { const i = process.argv.indexOf(ad); return i > 0 ? process.argv[i + 1] : v; };
@@ -50,9 +56,10 @@ async function main() {
   const secim = arg("--adim")?.split(",");
   if (!url || !sir) throw new Error("kullanım: doldur.mjs --url <adres> --sir <zincir servisi> [--cap YYYY-AA-GG] [--adim a,b]");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(cap)) throw new Error("--cap YYYY-AA-GG");
-  const parola = zincirOku(sir);
+  const kullanici = arg("--kullanici", "demoveri");
+  const parola = zincirOku(sir, kullanici);
   if (!parola) throw new Error(`Anahtar Zinciri'nde '${sir}' yok — önce hizmet-hesabi.mjs`);
-  const ist = istemciKur({ url, kullanici: arg("--kullanici", "demoveri"), parola });
+  const ist = istemciKur({ url, kullanici, parola, yazimAraligiMs: Number(arg("--aralik", "0")) });
   await ist.giris();
   const kuru = process.argv.includes("--kuru") ? kuruSarmala(ist.api) : null;
   if (kuru) console.log("KURU KOŞU — yalnız GET; yazımlar sayılır, gönderilmez");
@@ -61,7 +68,8 @@ async function main() {
   try {
     for (const [ad, fn] of ADIMLAR) {
       // Ana veri her koşumda okunur (sonraki adımlar kimliklerini kullanır); yazacak bir şey yoksa no-op.
-      if (secim && !secim.includes(ad) && !ZORUNLU.has(ad)) continue;
+      if (secim && !secim.includes(ad) && (!ZORUNLU.has(ad) || secim.every((x) => BAGIMSIZ.has(x)))) continue;
+      if (!secim && BAGIMSIZ.has(ad)) continue; // seçimsiz tam koşum yalnız dolgu-1/2 adımlarını koşar
       const s = Date.now();
       const y0 = kuru?.yazim.length ?? 0;
       console.log(`▶ ${ad}`);

@@ -27,7 +27,7 @@ export function patronPushRoute(_kind: NotificationKind): string {
 const clip = (s: string, max: number): string => [...s].slice(0, max).join("");
 
 export function buildNudgeBody(
-  inbox: { id: string; kind: NotificationKind; payload: unknown },
+  inbox: { id: string; kind: NotificationKind; payload: unknown; klass?: string },
   tokens: readonly string[],
 ): PushNudgeRequest {
   const text = renderNotification(inbox.kind, inbox.payload as Record<string, unknown> | null, "OLAY");
@@ -38,5 +38,7 @@ export function buildNudgeBody(
     baslik: title,
     govde: clip(text.govde, BODY_RAW_MAX),
     data: { bildirimId: inbox.id, rota: patronPushRoute(inbox.kind) },
+    // S0: bulut alarm kanalını/sesini seçsin. BİLDİRİM'de alan YOK (bulut varsayılanı; sesi bilmeyen eski bulutla uyum).
+    ...(inbox.klass === "ALARM" ? { sinif: "ALARM" as const } : {}),
   };
 }

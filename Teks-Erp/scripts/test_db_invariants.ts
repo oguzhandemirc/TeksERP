@@ -1236,6 +1236,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "patron_push_tokens", name: "patron_push_tokens_digest_ck" },
   { table: "patron_push_tokens", name: "patron_push_tokens_sealed_live_ck" },
   { table: "patron_push_tokens", name: "patron_push_tokens_released_ck" },
+  { table: "patron_push_tokens", name: "patron_push_tokens_sound_notification_ck" },
+  { table: "patron_push_tokens", name: "patron_push_tokens_sound_alarm_ck" },
   { table: "patron_push_nudges", name: "patron_push_nudges_state_ck" },
   { table: "patron_push_nudges", name: "patron_push_nudges_finished_ck" },
   { table: "patron_push_nudges", name: "patron_push_nudges_claimed_ck" },

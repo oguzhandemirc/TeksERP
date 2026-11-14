@@ -10,11 +10,24 @@ import type { Prisma } from "@prisma/client";
 import { CloudError, badRequest } from "../lib/errors";
 import { withCentral } from "../lib/tenant";
 import { bridgeGateState } from "../push/native-gate";
-import { ExpoTransport, RECEIPT_BATCH, RecordingTransport, type BridgeTransport, type PushOutcome, type ReceiptBatch } from "../push/transports";
+import { bridgeSoundOf, ExpoTransport, RECEIPT_BATCH, RecordingTransport, type BridgeTransport, type PushOutcome, type ReceiptBatch } from "../push/transports";
 import type { z } from "zod";
-import { ENVELOPE_VERSION, PUSH_BODY_MAX, PUSH_TITLE_MAX, type PushNudgeOutcome, type PushNudgeRequestSchema, type PushNudgeResponseSchema, type PushRegisterRequestSchema } from "../wire/esitleme";
+import {
+  ENVELOPE_VERSION,
+  PUSH_BODY_MAX,
+  PUSH_DEFAULT_SOUND,
+  PUSH_SOUNDS,
+  PUSH_TITLE_MAX,
+  type PushNudgeOutcome,
+  type PushNudgeRequestSchema,
+  type PushNudgeResponseSchema,
+  type PushRegisterRequestSchema,
+  type PushReleaseRequestSchema,
+  type PushSound,
+} from "../wire/esitleme";
 
 type PushRegisterRequest = z.infer<typeof PushRegisterRequestSchema>;
+type PushReleaseRequest = z.infer<typeof PushReleaseRequestSchema>;
 type PushNudgeRequest = z.infer<typeof PushNudgeRequestSchema>;
 type PushNudgeResponse = z.input<typeof PushNudgeResponseSchema>;
 import type { CloudContext } from "./context";
@@ -83,11 +96,30 @@ export async function registerTokens(ctx: CloudContext, caller: BridgeCaller, re
     await tx.pushBridgeLink.createMany({ data: digests.map((tokenDigest) => ({ installationId, tokenDigest })), skipDuplicates: true });
     // Yeniden kayıt geçersizlik işaretini kaldırır (telefon aynı belirteci yeniden doğruladı).
     await tx.pushBridgeLink.updateMany({ where: { installationId, tokenDigest: { in: digests }, invalidatedAt: { not: null } }, data: { invalidatedAt: null } });
+    // Ses seçimi (S0): kayıt bağın sesini KURAR — `sesler`de olmayan özet varsayılana döner. Aynı sesli özetler tek yazım.
+    for (const [key, group] of soundGroups(digests, req.sesler ?? [])) {
+      const [soundNotification, soundAlarm] = key.split("|") as [PushSound, PushSound];
+      await tx.pushBridgeLink.updateMany({ where: { installationId, tokenDigest: { in: group } }, data: { soundNotification, soundAlarm } });
+    }
   });
   return { v: ENVELOPE_VERSION, bagli: digests };
 }
 
-export async function releaseTokens(ctx: CloudContext, caller: BridgeCaller, req: PushRegisterRequest): Promise<{ v: 1; birakilan: number }> {
+/** Özetleri (bildirim|alarm) sesine göre gruplar; aynı özet iki kez gelirse SON seçim geçerli. */
+function soundGroups(digests: readonly string[], sounds: NonNullable<PushRegisterRequest["sesler"]>): Map<string, string[]> {
+  const chosen = new Map(sounds.map((s) => [s.ozet, `${s.bildirim}|${s.alarm}`]));
+  const out = new Map<string, string[]>();
+  for (const d of digests) {
+    const key = chosen.get(d) ?? `${PUSH_DEFAULT_SOUND.BILDIRIM}|${PUSH_DEFAULT_SOUND.ALARM}`;
+    out.set(key, [...(out.get(key) ?? []), d]);
+  }
+  return out;
+}
+
+/** DB değeri kümede değilse (CHECK bunu önler; savunma) sınıfın varsayılanı. */
+const soundOrDefault = (v: string, fallback: PushSound): PushSound => ((PUSH_SOUNDS as readonly string[]).includes(v) ? (v as PushSound) : fallback);
+
+export async function releaseTokens(ctx: CloudContext, caller: BridgeCaller, req: PushReleaseRequest): Promise<{ v: 1; birakilan: number }> {
   const digests = unique(req.ozetler);
   const n = await withCentral(ctx.sync, {}, async (tx) => (await tx.pushBridgeLink.deleteMany({ where: { installationId: caller.installationId, tokenDigest: { in: digests } } })).count);
   return { v: ENVELOPE_VERSION, birakilan: n };
@@ -103,14 +135,20 @@ export async function nudge(ctx: CloudContext, caller: BridgeCaller, req: PushNu
   const installationId = caller.installationId;
   const tokens = unique(req.belirtecler).map((token) => ({ token, digest: tokenDigestOf(token) }));
   const links = await withCentral(ctx.sync, {}, (tx) =>
-    tx.pushBridgeLink.findMany({ where: { installationId, tokenDigest: { in: tokens.map((t) => t.digest) } }, select: { tokenDigest: true, invalidatedAt: true } }),
+    tx.pushBridgeLink.findMany({ where: { installationId, tokenDigest: { in: tokens.map((t) => t.digest) } }, select: { tokenDigest: true, invalidatedAt: true, soundNotification: true, soundAlarm: true } }),
   );
+  const cls = req.sinif ?? "BILDIRIM";
   const linkOf = new Map(links.map((l) => [l.tokenDigest, l]));
   const transport = bridgeTransport(ctx);
   const results: { ozet: string; sonuc: PushNudgeOutcome; kod?: string }[] = [];
   const tickets: { tokenDigest: string; ticket: string }[] = [];
   const msg = { title, body, bildirimId: req.data.bildirimId, rota: req.data.rota };
-  const live = tokens.filter((t) => linkOf.get(t.digest)?.invalidatedAt === null);
+  const live = tokens.flatMap((t) => {
+    const l = linkOf.get(t.digest);
+    if (!l || l.invalidatedAt !== null) return [];
+    const chosen = cls === "ALARM" ? soundOrDefault(l.soundAlarm, PUSH_DEFAULT_SOUND.ALARM) : soundOrDefault(l.soundNotification, PUSH_DEFAULT_SOUND.BILDIRIM);
+    return [{ ...t, sound: bridgeSoundOf(cls, chosen) }];
+  });
   // Ağ çağrısı tx DIŞINDA; süre tavanlı + yineleme belleğiyle (`push-bridge-send.ts`). Sonuç sırası istek sırasıdır.
   const sent = transport && live.length > 0 ? await sendWithBudget(ctx, transport, { installationId, items: live, msg, nowMs }) : [];
   const outcomeByDigest = new Map(live.map((t, k) => [t.digest, sent[k]]));

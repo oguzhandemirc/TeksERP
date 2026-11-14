@@ -371,6 +371,10 @@ export default [
     rules: { "@typescript-eslint/no-floating-promises": "error" },
   },
 
+  // ── 4b) Patron bulutu eşitleme teli: `patron/sunucu/src/wire/esitleme.ts`in BAYT-EŞİT aynası (`test_bulut_tel_aynasi`);
+  //        tek dosyadır, bölünemez — boyut tavanı yok (bulutta aynı istisna, 2026-11-14).
+  { files: ["src/cloud-sync/wire/esitleme.ts"], rules: { "max-lines": "off" } },
+
   // ── 5) KAPSAM: bekçiler ve seed (2026-09-05'te açıldı) ─────────────────────
   // `scripts/` 555 dosya ve 455 bekçi taşıyor, `prisma/` seed'leri var; ikisi de
   // bugüne dek HİÇ lint edilmiyordu. Aynı boşluk tsc'de yaşanmış ve 87 tip hatası
