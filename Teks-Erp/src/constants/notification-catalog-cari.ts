@@ -6,7 +6,7 @@
 // ne limit — gelen kutusu finans ekranı değil (`test_bildirim_katalogu` §8). Kilit türleri OLAY (kilit başına tek,
 // yayma `cari-hold.service`), risk türü KOSUL (`notification-sources/cari.ts`, yüklem `riskExposureTx`).
 // =============================================================================
-import { NOTIFICATION_DEFAULT_RETENTION as SAKLAMA, NOTIFICATION_DESKTOP_CHANNELS as KANAL_MASAUSTU, NOTIFICATION_IMPORTANT_DEFAULT_CHANNELS as KANAL_ONEMLI, type NotificationCatalogEntry } from "./notification-catalog.types";
+import { NOTIFICATION_DEFAULT_RETENTION as SAKLAMA, NOTIFICATION_DESKTOP_CHANNELS as KANAL_MASAUSTU, NOTIFICATION_DEFAULT_CHANNELS as KANAL_VARSAYILAN, type NotificationCatalogEntry } from "./notification-catalog.types";
 
 export const CARI_NOTIFICATION_ENTRIES = {
   "cari.kilitlendi": {
@@ -20,7 +20,7 @@ export const CARI_NOTIFICATION_ENTRIES = {
     tekilKalibi: "{kilitId}",
     pencereSn: 0, varsayilan: ["finance:invoice", "shipping:write"], kilit: "YOK",
     kanallar: KANAL_MASAUSTU,
-    varsayilanKanallar: KANAL_ONEMLI,
+    varsayilanKanallar: KANAL_VARSAYILAN, onemli: true,
     baslik: "Cari kilitlendi: {cariAd}",
     govde: "{cariKodu} · {kapsam} durduruldu · sebep: {sebep} · {kisi}",
     panelEkran: "finance/cari", panelYol: "/finance/cari?focus={cariId}",
@@ -37,7 +37,7 @@ export const CARI_NOTIFICATION_ENTRIES = {
     tekilKalibi: "{kilitId}",
     pencereSn: 0, varsayilan: ["finance:invoice", "shipping:write"], kilit: "YOK",
     kanallar: KANAL_MASAUSTU,
-    varsayilanKanallar: ["UYGULAMA"],
+    varsayilanKanallar: KANAL_VARSAYILAN,
     baslik: "Cari kilidi açıldı: {cariAd}",
     govde: "{cariKodu} · {kapsam} yeniden açık · kilit sebebi: {sebep} · {kisi}",
     panelEkran: "finance/cari", panelYol: "/finance/cari?focus={cariId}",
@@ -53,7 +53,7 @@ export const CARI_NOTIFICATION_ENTRIES = {
     tekilKalibi: "patron-carisi",
     pencereSn: 600, varsayilan: ["customer:write"], kilit: "YOK",
     kanallar: KANAL_MASAUSTU,
-    varsayilanKanallar: ["UYGULAMA"],
+    varsayilanKanallar: KANAL_VARSAYILAN,
     baslik: "Yönetim bulutundan cari kart açıldı",
     govde: "{cariAd} ({cariKodu}) · {hesapAdi}",
     panelEkran: "definitions/cariler", panelYol: "/definitions/cariler?kayit=C:{cariId}",
@@ -69,7 +69,7 @@ export const CARI_NOTIFICATION_ENTRIES = {
     tekilKalibi: "{cariId}:{paraBirimi}",
     pencereSn: 0, varsayilan: ["finance:read"], kilit: "YOK",
     kanallar: KANAL_MASAUSTU,
-    varsayilanKanallar: ["UYGULAMA"],
+    varsayilanKanallar: KANAL_VARSAYILAN, onemli: true,
     baslik: "Cari risk limitini aştı: {cariAd}",
     govde: "{cariKodu}: {paraBirimi} bakiyesi risk limitinin üstünde",
     cozuldu: "{cariAd}: {paraBirimi} bakiyesi yeniden risk limitinin içinde",

@@ -14,6 +14,8 @@ import { readNotificationInboxEnabled } from "../services/system-setting.service
 import { DISPATCH_BATCH_LIMIT, runNotificationDispatchOnce } from "../services/notification-dispatch.service";
 import { NOTIFICATION_NOTIFY_CHANNEL } from "../services/helpers/notification-emit.helper";
 import { startNotificationConditionScanner, stopNotificationConditionScanner } from "./notification-condition.job";
+import { startNotificationDigestScheduler, stopNotificationDigestScheduler } from "./notification-digest.job";
+import { registerSalesDigestSources } from "../services/notification-sources/satis-ozet";
 import { registerSystemConditionSources } from "../services/notification-sources/sistem";
 import { registerReadyWorkConditionSource, registerWorkConditionSources } from "../services/notification-sources/is";
 import { registerQualityConditionSources } from "../services/notification-sources/kalite";
@@ -126,6 +128,7 @@ function startDispatching(sweepMs: number): void {
   }, sweepMs);
   sweepTimer.unref();
   startNotificationConditionScanner();
+  startNotificationDigestScheduler();
   tick(); // yeniden başlatmada kalan işlenmemiş satırlar hemen
   bilgi("bildirim", "dağıtıcı ve koşul tarayıcısı başladı (gelen kutusu açık)");
 }
@@ -137,6 +140,7 @@ function stopDispatching(reason: string): void {
   if (sweepTimer) clearInterval(sweepTimer);
   sweepTimer = null;
   stopNotificationConditionScanner();
+  stopNotificationDigestScheduler();
   dropListener();
   bilgi("bildirim", `dağıtıcı ve koşul tarayıcısı durdu (${reason})`);
 }
@@ -184,6 +188,7 @@ export function startNotificationJobs(): void {
   registerCariConditionSources(); // cari risk limiti (D4-I5)
   registerDeviceConditionSources(); // anahtar halkası kaybı (izlenebilirlik D5)
   registerLoomAlarmRecipientResolver(); // tezgah alarmı donmuş alıcı (N2-ALARM)
+  registerSalesDigestSources(); // S1 özetleri: gün sonu sipariş · vardiya sonu planlama
   registerIdentityRecipientResolvers(); // yeni cihazla web girişi: kişinin kendisi + kullanıcı yöneticileri
   firstTimer = setTimeout(() => void reconcileNotificationJobs(), STARTUP_DELAY_MS);
   firstTimer.unref();

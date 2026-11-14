@@ -8,6 +8,8 @@ export type PatronEslemesi =
   | { readonly patronKind: string; readonly neden?: string }
   | { readonly patronKind: null; readonly neden: string };
 
+const BULUT_TURU_YOK = "bulutta tür yok; telefona fabrika dürtüsüyle (PATRON_PUSH) gider, bulut kataloğu ayrı karar";
+
 export const NOTIFICATION_PATRON_MAP: Readonly<Record<NotificationKind, PatronEslemesi>> = {
   "sistem.yedek-basarisiz": { patronKind: "yedek-basarisiz" },
   "sistem.esitleme-gecikti": { patronKind: "esitleme-gecikti", neden: "bulut kendi tarafından ölçer (son paket yaşı)" },
@@ -30,6 +32,24 @@ export const NOTIFICATION_PATRON_MAP: Readonly<Record<NotificationKind, PatronEs
   "cari.kilit-acildi": { patronKind: "cari-kilit", neden: "bulutta aynı türün açılış olayı (`cari-kilit:<kilitId>:acildi`)" },
   "cari.patron-carisi": { patronKind: null, neden: "patronun kendi gönderisi; sonucu bulutta `gelen-kutusu-sonucu` ayrı olayıdır" },
   "cari.risk-limiti-asildi": { patronKind: null, neden: "bulutta tür yok (tutar dışarı çıkmaz; risk görünümü fabrika içi)" },
+  // S1 (2026-11-14): patron telefonu bu türleri fabrika dürtüsüyle alır (PATRON_PUSH); bulut KIND_RULES türü ayrı karar.
+  "siparis.olusturuldu": { patronKind: null, neden: BULUT_TURU_YOK },
+  "siparis.degisti": { patronKind: null, neden: BULUT_TURU_YOK },
+  "siparis.termin-degisti": { patronKind: null, neden: BULUT_TURU_YOK },
+  "siparis.kalem-iptal": { patronKind: null, neden: BULUT_TURU_YOK },
+  "siparis.iptal": { patronKind: null, neden: BULUT_TURU_YOK },
+  "siparis.tamamlandi": { patronKind: null, neden: BULUT_TURU_YOK },
+  "siparis.gunluk-ozet": { patronKind: null, neden: BULUT_TURU_YOK },
+  "teklif.olusturuldu": { patronKind: null, neden: BULUT_TURU_YOK },
+  "teklif.gonderildi": { patronKind: null, neden: BULUT_TURU_YOK },
+  "teklif.kabul": { patronKind: null, neden: BULUT_TURU_YOK },
+  "teklif.red": { patronKind: null, neden: BULUT_TURU_YOK },
+  "isemri.acildi": { patronKind: null, neden: BULUT_TURU_YOK },
+  "isemri.baslatildi": { patronKind: null, neden: BULUT_TURU_YOK },
+  "isemri.tamamlandi": { patronKind: null, neden: BULUT_TURU_YOK },
+  "isemri.iptal": { patronKind: null, neden: BULUT_TURU_YOK },
+  "isemri.rota-degisti": { patronKind: null, neden: BULUT_TURU_YOK },
+  "planlama.vardiya-ozet": { patronKind: null, neden: BULUT_TURU_YOK },
   "dokuma.levent-bitiyor": { patronKind: null, neden: "yalnız fabrika içi (salon işi)" },
   "dokuma.tezgah-alarmi": { patronKind: null, neden: "yalnız fabrika içi (nöbet/kademe alarmı)" },
 };

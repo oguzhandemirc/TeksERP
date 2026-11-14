@@ -17,6 +17,7 @@ import { currentOrigin } from "../../lib/request-context";
 import { workOrderEventStampTx } from "./ledger-stamp.helper";
 import { followAsCreatorTx } from "./record-follow.helper";
 import { TERIM_AD } from "../../constants/terim";
+import { emitWorkOrderCreatedTx, emitWorkOrderStatusTx } from "../notification-sources/satis";
 
 type Tx = Prisma.TransactionClient;
 
@@ -185,6 +186,7 @@ export async function createWorkOrderTx<T extends Prisma.WorkOrderCreateArgs>(
     }],
     ctx,
   );
+  await emitWorkOrderCreatedTx(tx, row.id, ctx.userId); // S1 `isemri.acildi`
   // Oluşturan otomatik takipçi (bildirim §5.3); dönüş aynen.
   await followAsCreatorTx(tx, ctx.userId, { workOrderId: row.id });
   return wo;
@@ -261,6 +263,7 @@ export async function claimWorkOrderStatusTx(
     }],
     opts.ctx,
   );
+  await emitWorkOrderStatusTx(tx, workOrderId, { from: current, to: opts.to }, opts.ctx.userId); // S1 başladı · tamamlandı · iptal
   return current;
 }
 

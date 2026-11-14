@@ -315,6 +315,8 @@ function makeStepTx(opts: {
       },
     },
     workOrderEvent: { createMany: async (args: { data: unknown[] }) => ({ count: args.data.length }) },
+    // Statü geçişi bildirim yayar (S1); bayrak kaydı yok → kapalı, bildirim no-op.
+    systemSetting: { findUnique: async () => null },
     // Defter damgası (`ledger-stamp.helper`) tek satırlık DB saati okur.
     $queryRaw: async () => [{ at: new Date() }],
   } as unknown as Parameters<typeof recomputeStepStatus>[0];
@@ -425,6 +427,7 @@ async function testEnsureInProgress() {
         },
       },
       workOrderEvent: { createMany: async (args: { data: unknown[] }) => { events.push(...args.data); return { count: args.data.length }; } },
+      systemSetting: { findUnique: async () => null },
       $queryRaw: async () => [{ at: new Date() }],
     } as unknown as Parameters<typeof ensureWorkOrderInProgress>[0];
     return { tx, calls, events };

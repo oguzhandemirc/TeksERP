@@ -12,7 +12,9 @@ export type NotificationSinif = "ALARM" | "BILDIRIM";
 /** OLAY bir kez olur; KOSUL durum sürdükçe TEK kayıttır ve düzelince "çözüldü" olur. ALARM'da `null`. */
 export type NotificationAltTur = "OLAY" | "KOSUL";
 export type NotificationGrup =
-  | "Sipariş" | "Üretim" | "Kalite" | "Sevkiyat" | "Fason" | "Stok" | "Finans" | "Dokuma" | "Sistem";
+  | "Sipariş" | "Üretim" | "Kalite" | "Sevkiyat" | "Fason" | "Stok" | "Finans" | "Dokuma" | "Sistem"
+  // K8 (2026-11-14 geniş katalog): departman başına aç/kapat için ek gruplar.
+  | "Satış" | "Planlama" | "Depo" | "Satınalma" | "Mal Kabul" | "Bakım" | "Personel" | "Ana Veri" | "Yetki";
 /** HER_ZAMAN: uygulama kanalı kapatılamaz (ertelenir) · NOBETTE: yalnız nöbetteki alıcıya lockedCell. */
 export type NotificationKilit = "YOK" | "HER_ZAMAN" | "NOBETTE";
 export type NotificationKanal = "UYGULAMA" | "OZET" | "MASAUSTU" | "TABLET_SES" | "PATRON_PUSH";
@@ -21,7 +23,8 @@ export const NOTIFICATION_PHASES = ["OLAY", "ACILDI", "KAPANDI", "GUNCELLENDI"] 
 export type NotificationPhase = (typeof NOTIFICATION_PHASES)[number];
 
 export const NOTIFICATION_GRUPLARI: readonly NotificationGrup[] = [
-  "Sipariş", "Üretim", "Kalite", "Sevkiyat", "Fason", "Stok", "Finans", "Dokuma", "Sistem",
+  "Sipariş", "Satış", "Planlama", "Üretim", "Kalite", "Sevkiyat", "Fason", "Stok", "Depo", "Mal Kabul", "Satınalma",
+  "Finans", "Dokuma", "Bakım", "Personel", "Ana Veri", "Yetki", "Sistem",
 ];
 
 /** Gelen kutusu TELEMETRİDİR (defter değil): budama süreleri (B2). */
@@ -34,11 +37,15 @@ export const NOTIFICATION_DEFAULT_RETENTION: NotificationSaklama = { okunmusGun:
 
 // MASAUSTU seçilebilir ama varsayılanı KAPALI (N3 "varsayılan hiçbiri" = bugünkü davranış, patron kararı 2026-10-25);
 // kullanıcı Kullanıcı Tercihleri → Masaüstü bildirimleri'nden açar. Tezgah alarmı kendi kanalıyla ayrıdır.
-// PATRON_PUSH (köprü P3) her türde seçilebilir; varsayılanı yalnız önemli türlerde açık (`..._IMPORTANT_DEFAULT_CHANNELS`).
+// PATRON_PUSH (köprü P3) her türde seçilebilir ve varsayılanı HER türde açık (kullanıcı kararı 2026-11-14 "her şey
+// bildirim gelsin, gerekirse patron kapatır"; 2026-11-13 "yalnız önemliler" kuralının yerine). "Önemli" artık
+// yalnız telefondaki "Yalnız önemliler" hazır seçiminin kümesidir (`onemli: true`).
 export const NOTIFICATION_DESKTOP_CHANNELS: readonly NotificationKanal[] = ["UYGULAMA", "OZET", "MASAUSTU", "PATRON_PUSH"];
 
-/** Patron telefonu varsayılanı AÇIK türlerin kanalları (kullanıcı kararı 2026-11-13: alarm · güvenlik · cari kilidi). */
-export const NOTIFICATION_IMPORTANT_DEFAULT_CHANNELS: readonly NotificationKanal[] = ["UYGULAMA", "PATRON_PUSH"];
+/** Varsayılan teslim kanalları — her BİLDİRİM türünde uygulama içi + patron telefonu (K1, 2026-11-14). */
+export const NOTIFICATION_DEFAULT_CHANNELS: readonly NotificationKanal[] = ["UYGULAMA", "PATRON_PUSH"];
+/** Geriye uyum adı: eski "önemli tür" kanalı artık varsayılanın kendisidir. */
+export const NOTIFICATION_IMPORTANT_DEFAULT_CHANNELS: readonly NotificationKanal[] = NOTIFICATION_DEFAULT_CHANNELS;
 
 /**
  * Kişisel kapsam süzgeci beyanı (plan §5.2) — yalnız DARALTIR. Beyan edilmeyen anahtar o türde 400.
@@ -79,6 +86,10 @@ export interface NotificationCatalogEntry {
   kilitGerekcesi?: string;
   kanallar: readonly NotificationKanal[];
   varsayilanKanallar: readonly NotificationKanal[];
+  /** Telefondaki "Yalnız önemliler" hazır seçiminin kümesi (plan ⭐); varsayılan teslimi DEĞİŞTİRMEZ. */
+  onemli?: true;
+  /** Özet türü (plan Ö): olay değil, zamanlayıcı (`jobs/notification-digest.job.ts`) pencere başına bir kez yazar. */
+  ozet?: "SAATLIK" | "VARDIYA" | "GUN_SONU";
   baslik: string;
   govde: string;
   /** KOSUL ve ALARM'da kapanış metni. */

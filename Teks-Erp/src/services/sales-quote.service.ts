@@ -20,6 +20,7 @@ import { suggestFxRate } from "./helpers/maliyet-bridge.helper";
 import { parseDecimalField, parseTextField, PCT_RULE } from "./helpers/cost-input.helper";
 import { tokenReplay } from "./helpers/token-replay.helper";
 import { QUOTE_INCLUDE, QUOTE_TABLE, readQuoteToken, type QuoteRecord } from "./sales-quote-transitions.service";
+import { emitQuoteEventTx } from "./notification-sources/teklif";
 
 const CURRENCIES: readonly Currency[] = ["TRY", "USD", "EUR", "GBP", "RUB"];
 const DAY_MS = 86_400_000;
@@ -130,7 +131,7 @@ export async function createQuote(body: Record<string, unknown>, userId?: string
       () =>
         prisma.$transaction(async (tx) => {
           const quoteNo = await nextQuoteNo(tx);
-          return tx.salesQuote.create({
+          const q = await tx.salesQuote.create({
             data: {
               quoteNo, clientToken, customerId, branchId, quoteDate, validUntilDate, currency, ...fx,
               paymentTermDays: intOrNull(h.paymentTermDays) ?? null, financeChargePct: h.financeChargePct ?? null,
@@ -139,6 +140,8 @@ export async function createQuote(body: Record<string, unknown>, userId?: string
             },
             include: QUOTE_INCLUDE,
           });
+          await emitQuoteEventTx(tx, q.id, "olusturuldu", userId);
+          return q;
         }),
       undefined,
       (e) => !isClientTokenP2002(e),

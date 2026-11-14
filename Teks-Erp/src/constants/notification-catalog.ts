@@ -15,10 +15,11 @@
 
 import { z } from "zod";
 import { TERIM } from "./terim";
-import { NOTIFICATION_DEFAULT_RETENTION, NOTIFICATION_DESKTOP_CHANNELS, type NotificationCatalogEntry } from "./notification-catalog.types";
+import { NOTIFICATION_DEFAULT_CHANNELS, NOTIFICATION_DEFAULT_RETENTION, NOTIFICATION_DESKTOP_CHANNELS, type NotificationCatalogEntry } from "./notification-catalog.types";
 import { CARI_NOTIFICATION_ENTRIES } from "./notification-catalog-cari";
 import { READY_WORK_NOTIFICATION_ENTRIES } from "./notification-catalog-sevkiyat";
 import { KIMLIK_NOTIFICATION_ENTRIES } from "./notification-catalog-kimlik";
+import { SATIS_NOTIFICATION_ENTRIES } from "./notification-catalog-satis";
 
 export { NOTIFICATION_PHASES, NOTIFICATION_GRUPLARI } from "./notification-catalog.types";
 export type {
@@ -28,6 +29,7 @@ export type {
 
 const SAKLAMA = NOTIFICATION_DEFAULT_RETENTION;
 const KANAL_MASAUSTU = NOTIFICATION_DESKTOP_CHANNELS;
+const KANAL_VARSAYILAN = NOTIFICATION_DEFAULT_CHANNELS;
 
 export const NOTIFICATION_CATALOG = {
   // ── Sistem ────────────────────────────────────────────────────────────────
@@ -40,7 +42,7 @@ export const NOTIFICATION_CATALOG = {
     pencereSn: 0, varsayilan: "HERKES", kilit: "HER_ZAMAN",
     kilitGerekcesi: "Yedeksiz fabrika veri kaybına açıktır; bu uyarı kapatılamaz, yalnız ertelenebilir.",
     kanallar: KANAL_MASAUSTU,
-    varsayilanKanallar: ["UYGULAMA"],
+    varsayilanKanallar: KANAL_VARSAYILAN, onemli: true,
     baslik: "Yedek alınamadı",
     govde: "{kaynakAd} yedeği alınamadı: {neden}",
     cozuldu: "{kaynakAd} yedeği yeniden alınıyor",
@@ -56,7 +58,7 @@ export const NOTIFICATION_CATALOG = {
     tekilKalibi: "bulut",
     pencereSn: 0, varsayilan: "HERKES", kilit: "YOK",
     kanallar: KANAL_MASAUSTU,
-    varsayilanKanallar: ["UYGULAMA"],
+    varsayilanKanallar: KANAL_VARSAYILAN,
     baslik: "Yönetim bulutu eşitlemesi gecikti",
     govde: "Son başarılı eşitleme {sonBasarili}; durum: {durum}",
     cozuldu: "Yönetim bulutu eşitlemesi yeniden başarılı",
@@ -74,7 +76,7 @@ export const NOTIFICATION_CATALOG = {
     pencereSn: 0, varsayilan: "HERKES", kilit: "HER_ZAMAN",
     kilitGerekcesi: "Lisans sorunu zamanında çözülmezse kurulum kısıtlı kipe geçebilir; bu uyarı kapatılamaz, yalnız ertelenebilir.",
     kanallar: KANAL_MASAUSTU,
-    varsayilanKanallar: ["UYGULAMA"],
+    varsayilanKanallar: KANAL_VARSAYILAN,
     baslik: "Lisans uyarısı",
     govde: "{neden}",
     cozuldu: "Lisans uyarısı giderildi",
@@ -91,7 +93,7 @@ export const NOTIFICATION_CATALOG = {
     tekilKalibi: "{surum}",
     pencereSn: 0, varsayilan: "HERKES", kilit: "YOK",
     kanallar: KANAL_MASAUSTU,
-    varsayilanKanallar: ["UYGULAMA"],
+    varsayilanKanallar: KANAL_VARSAYILAN,
     baslik: "Güncelleme onay bekliyor",
     govde: "{surum} sürümü kuruluma hazır, onayınızı bekliyor",
     cozuldu: "{surum} sürümü için onay beklenmiyor",
@@ -110,7 +112,7 @@ export const NOTIFICATION_CATALOG = {
     tekilKalibi: "{yazici}",
     pencereSn: 600, varsayilan: "HERKES", kilit: "YOK",
     kanallar: KANAL_MASAUSTU,
-    varsayilanKanallar: ["UYGULAMA"],
+    varsayilanKanallar: KANAL_VARSAYILAN,
     baslik: "{yaziciAd} yazıcısında baskı hatası",
     govde: "{kisi} · {tur} · {neden}",
     panelEkran: "system/print-history", panelYol: "/system/print-history?printer={yazici}&status=HATA",
@@ -130,7 +132,7 @@ export const NOTIFICATION_CATALOG = {
     tekilKalibi: "patron-siparisi",
     pencereSn: 600, varsayilan: ["order:write"], kilit: "YOK",
     kanallar: KANAL_MASAUSTU,
-    varsayilanKanallar: ["UYGULAMA"],
+    varsayilanKanallar: KANAL_VARSAYILAN,
     baslik: "Yönetim bulutundan sipariş geldi",
     govde: "{musteriAd} için {siparisNo} numaralı sipariş açıldı",
     panelEkran: "operations/orders", panelYol: "/operations/orders?focus={siparisId}",
@@ -145,7 +147,7 @@ export const NOTIFICATION_CATALOG = {
     tekilKalibi: "{siparisId}",
     pencereSn: 0, varsayilan: ["order:write"], kilit: "YOK",
     kanallar: KANAL_MASAUSTU,
-    varsayilanKanallar: ["UYGULAMA"],
+    varsayilanKanallar: KANAL_VARSAYILAN,
     baslik: "Sipariş termini yaklaştı",
     govde: "{siparisNo} ({musteriAd}) termini {termin}",
     cozuldu: "{siparisNo} için termin yaklaşma uyarısı kapandı",
@@ -163,7 +165,7 @@ export const NOTIFICATION_CATALOG = {
     tekilKalibi: "{siparisId}",
     pencereSn: 0, varsayilan: ["order:write"], kilit: "YOK",
     kanallar: KANAL_MASAUSTU,
-    varsayilanKanallar: ["UYGULAMA"],
+    varsayilanKanallar: KANAL_VARSAYILAN, onemli: true,
     baslik: "Sipariş termini geçti",
     govde: "{siparisNo} ({musteriAd}) termini {termin} tarihinde geçti",
     cozuldu: "{siparisNo} kapandı ya da termini güncellendi",
@@ -172,6 +174,8 @@ export const NOTIFICATION_CATALOG = {
     payloadAlanlari: ["siparisId", "siparisNo", "musteriAd", "termin"],
     tahminiHaftalik: 5, saklama: SAKLAMA,
   },
+
+  ...SATIS_NOTIFICATION_ENTRIES, // S1 — sipariş · teklif · planlama olayları + özetleri (ayrı dosya, dosya boyu)
 
   // ── Üretim ────────────────────────────────────────────────────────────────
   "isemri.gecikti": {
@@ -182,7 +186,7 @@ export const NOTIFICATION_CATALOG = {
     tekilKalibi: "{isEmriId}",
     pencereSn: 0, varsayilan: ["workorder:write"], kilit: "YOK",
     kanallar: KANAL_MASAUSTU,
-    varsayilanKanallar: ["UYGULAMA"],
+    varsayilanKanallar: KANAL_VARSAYILAN, onemli: true,
     get baslik() { return `${TERIM.terbiyeIsEmri.tekil} gecikti`; },
     govde: "{isEmriNo} planlanan bitişi {planlananBitis} geçti",
     cozuldu: "{isEmriNo} tamamlandı ya da planı güncellendi",
@@ -202,7 +206,7 @@ export const NOTIFICATION_CATALOG = {
     tekilKalibi: "{kumasId}:{gun}",
     pencereSn: 0, varsayilan: ["quality:write"], kilit: "YOK",
     kanallar: KANAL_MASAUSTU,
-    varsayilanKanallar: ["UYGULAMA"],
+    varsayilanKanallar: KANAL_VARSAYILAN,
     baslik: "1. kalite oranı düşük",
     govde: "{kumasAd}: bugün 1. kalite oranı {oran} (eşik {esik})",
     cozuldu: "{kumasAd}: 1. kalite oranı eşiğin üstüne çıktı",
@@ -223,7 +227,7 @@ export const NOTIFICATION_CATALOG = {
     tekilKalibi: "{sertifikaId}",
     pencereSn: 0, varsayilan: ["certificate:write"], kilit: "YOK",
     kanallar: KANAL_MASAUSTU,
-    varsayilanKanallar: ["UYGULAMA"],
+    varsayilanKanallar: KANAL_VARSAYILAN,
     baslik: "Sertifika süresi doluyor",
     govde: "{standart} · {sertifikaNo} ({sahip}): {durum}",
     cozuldu: "{standart} · {sertifikaNo} yenilendi ya da iptal edildi",
@@ -243,7 +247,7 @@ export const NOTIFICATION_CATALOG = {
     tekilKalibi: "{firmaId}",
     pencereSn: 0, varsayilan: "HERKES", kilit: "YOK",
     kanallar: KANAL_MASAUSTU,
-    varsayilanKanallar: ["UYGULAMA"],
+    varsayilanKanallar: KANAL_VARSAYILAN, onemli: true,
     baslik: "Fason dönüşü gecikti",
     govde: "{firmaAd}: {acikKalem} kalem {enEskiGun} gündür dönmedi",
     cozuldu: "{firmaAd}: geciken fason dönüşü kalmadı",
@@ -263,7 +267,7 @@ export const NOTIFICATION_CATALOG = {
     tekilKalibi: "{sevkiyatId}",
     pencereSn: 0, varsayilan: ["shipping:write"], kilit: "YOK",
     kanallar: KANAL_MASAUSTU,
-    varsayilanKanallar: ["UYGULAMA"],
+    varsayilanKanallar: KANAL_VARSAYILAN,
     baslik: "Sevkiyat onay bekliyor",
     govde: "{sevkiyatNo} ({musteriAd}) planlandı, onay bekliyor",
     cozuldu: "{sevkiyatNo} onaylandı ya da iptal edildi",
@@ -286,7 +290,7 @@ export const NOTIFICATION_CATALOG = {
     tekilKalibi: "{leventId}",
     pencereSn: 0, varsayilan: ["warpbeam:write"], kilit: "YOK",
     kanallar: ["UYGULAMA", "OZET", "MASAUSTU", "TABLET_SES", "PATRON_PUSH"],
-    varsayilanKanallar: ["UYGULAMA"],
+    varsayilanKanallar: KANAL_VARSAYILAN,
     baslik: "Levent bitiyor",
     govde: "{tezgahNo} tezgahındaki {leventNo} leventi ~{kalanGun} gün içinde bitiyor",
     cozuldu: "{leventNo} leventi indirildi ya da tahmin düzeldi",
@@ -311,7 +315,7 @@ export const NOTIFICATION_CATALOG = {
     kilitGerekcesi: "Nöbetteki sorumlu tezgah alarmını kapatamaz; alarm onaylanana dek çalar, yalnız süreli susturulur.",
     // PATRON_PUSH (köprü P3): ALARM önemli sınıftır, varsayılan açık; nöbetteki alıcıda sessiz saati deler.
     kanallar: ["UYGULAMA", "MASAUSTU", "TABLET_SES", "PATRON_PUSH"],
-    varsayilanKanallar: ["UYGULAMA", "MASAUSTU", "TABLET_SES", "PATRON_PUSH"],
+    varsayilanKanallar: ["UYGULAMA", "MASAUSTU", "TABLET_SES", "PATRON_PUSH"], onemli: true,
     baslik: "Tezgah alarmı: {tezgahNo}",
     govde: "{alarmAd} · {salonAd}",
     cozuldu: "{tezgahNo} tezgah alarmı kapandı",

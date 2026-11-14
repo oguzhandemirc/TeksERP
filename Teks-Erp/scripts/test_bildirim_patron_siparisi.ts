@@ -50,7 +50,9 @@ function check(label: string, ok: boolean, detay = ""): void {
 const SRC = join(__dirname, "..", "src");
 const EMIT_HELPER = "services/helpers/notification-emit.helper.ts";
 /** Türü değişkenle yayan tek izinli dosya: koşul tarayıcısı (yalnız KOSUL türleri). */
-const DEGISKEN_TURLU_IZINLI = new Set(["jobs/notification-condition.job.ts"]);
+// Koşul tarayıcısı KOSUL türlerini, özet zamanlayıcısı (S1) yalnız `ozet` beyanlı türleri değişkenle yayar;
+// ikisi de OLAY türüne (`siparis.patron-siparisi`) dokunmaz.
+const DEGISKEN_TURLU_IZINLI = new Set(["jobs/notification-condition.job.ts", "jobs/notification-digest.job.ts"]);
 const OLAY: NotificationKind = "siparis.patron-siparisi";
 
 interface EmitCagri { dosya: string; satir: number; tur: string | null; txIcinde: boolean }
@@ -102,7 +104,7 @@ function bolum0(): void {
   const tanimsiz = cagrilar.filter((c) => c.tur !== null && !(c.tur in NOTIFICATION_CATALOG));
   check("§0c literal tür katalogda (tanınmayan tür yok)", tanimsiz.length === 0, JSON.stringify(tanimsiz));
   const degisken = cagrilar.filter((c) => c.tur === null && !DEGISKEN_TURLU_IZINLI.has(c.dosya));
-  check("§0d türü değişkenle yayan yalnız koşul tarayıcısı", degisken.length === 0, JSON.stringify(degisken));
+  check("§0d türü değişkenle yayan yalnız koşul tarayıcısı + özet zamanlayıcısı", degisken.length === 0, JSON.stringify(degisken));
   // Sonda: tarayıcı tx dışı çağrıyı ve ikinci noktayı gerçekten görüyor mu (körlük zemini).
   const sonda = emitCagrilari("x.ts", `async function f(){ await emitNotification(db, "${OLAY}", s, p); await prisma.$transaction(async (tx) => { await emitNotification(tx, "${OLAY}", s, p); }); }`);
   check("§0e sonda: tx dışı çağrı txIcinde=false, tx içi true, iki nokta sayılır",

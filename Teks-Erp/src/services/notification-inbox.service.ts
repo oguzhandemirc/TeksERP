@@ -272,7 +272,7 @@ export async function visibleCatalog(viewer: InboxViewer) {
       return {
         kod: e.kod, ad: e.ad, sinif: e.sinif, altTur: e.altTur, grup: e.grup, kilit: e.kilit,
         kilitGerekcesi: e.kilitGerekcesi ?? null, kanallar: e.kanallar, varsayilanKanallar: e.varsayilanKanallar,
-        kapsam: e.kapsam ?? null,
+        kapsam: e.kapsam ?? null, onemli: e.onemli === true, ozet: e.ozet ?? null,
       };
     }),
     yetkiDisi,

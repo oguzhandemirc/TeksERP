@@ -188,7 +188,7 @@ async function createOrderFromMessage(f: ReceiptFields, w: OrderMessage, replay:
       prisma.$transaction(async (tx) => {
         const replayed = await replay.inTx(tx, f.msg.mesajId);
         if (replayed) return { replay: true as const, replayed };
-        const order = await svc.insertPreparedOrderTx(tx, prepared);
+        const order = await svc.insertPreparedOrderTx(tx, prepared, { notify: false });
         const receipt = await tx.cloudInboxReceipt.create({
           data: receiptData(f, CloudInboxOutcome.ISLENDI, order.id as string, {
             varlikId: order.id,
