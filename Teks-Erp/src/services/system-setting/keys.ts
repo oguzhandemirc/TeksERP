@@ -1030,6 +1030,8 @@ export const SETTING_KEYS = {
   BILDIRIM_GELEN_KUTUSU_ENABLED: "bildirim.gelenKutusuEnabled",
   // Push köprüsü P2: patron telefonuna anlık bildirim (davranış bayrağı, profile girmez); default false.
   BILDIRIM_PATRON_PUSH_ENABLED: "bildirim.patronPushEnabled",
+  /** `stok.yaslanan` koşulunun yaş çıpası: `depo-giris` (depo defterinden giriş anı) | `durum-degisimi` (`Roll.statusChangedAt`). */
+  NOTIFICATION_STOCK_AGING_SOURCE: "bildirim.stokYaslanan.kaynak",
   // belge-sablon T1C: davranış bayrakları (modül DEĞİL, profile girmez); ikisi de default false.
   DOCUMENTS_DESIGNER_ENABLED: "documents.designerEnabled",
   DOCUMENTS_PUBLISH_SOD_ENABLED: "documents.publishSodEnabled",

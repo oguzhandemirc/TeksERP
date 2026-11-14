@@ -218,6 +218,12 @@ export const LABEL_COPIES_SOURCES: LabelCopiesSource[] = ["GLOBAL", "STATION"];
 /** Varsayılan `GLOBAL` — BUGÜNKÜ davranış (hiçbir istemci akış etiketine `copies` göndermiyor; ölçüldü 2026-10-24). */
 export const DEFAULT_LABEL_COPIES_SOURCE: LabelCopiesSource = "GLOBAL";
 
+/** `stok.yaslanan` yaş çıpası (bkz. `SETTING_KEYS.NOTIFICATION_STOCK_AGING_SOURCE`). */
+export type StockAgingSource = "depo-giris" | "durum-degisimi";
+export const STOCK_AGING_SOURCES: StockAgingSource[] = ["depo-giris", "durum-degisimi"];
+/** Varsayılan `depo-giris` — kullanıcı kararı 2026-11-14 ("depoya giriş tarihinden say"); tür yeni, eski davranış yok. */
+export const DEFAULT_STOCK_AGING_SOURCE: StockAgingSource = "depo-giris";
+
 /** D4-F3: müşteri barkodu basan şablonda kod yoksa. */
 export type LabelCustomerCodeMissing = "BLOCK" | "ROLL_BARCODE";
 export const LABEL_CUSTOMER_CODE_MISSING_MODES: LabelCustomerCodeMissing[] = ["BLOCK", "ROLL_BARCODE"];

@@ -23,6 +23,7 @@ import { registerDepotDigestSources } from "../services/notification-sources/dep
 import { registerFinanceDigestSources } from "../services/notification-sources/finans-ozet";
 import { registerFinanceConditionSources } from "../services/notification-sources/finans-kosul";
 import { registerDueConditionSources } from "../services/notification-sources/finans-vade";
+import { registerStockAgingConditionSource } from "../services/notification-sources/stok-yaslanan";
 import { registerSystemConditionSources } from "../services/notification-sources/sistem";
 import { registerReadyWorkConditionSource, registerWorkConditionSources } from "../services/notification-sources/is";
 import { registerQualityConditionSources } from "../services/notification-sources/kalite";
@@ -203,6 +204,7 @@ export function startNotificationJobs(): void {
   registerFinanceDigestSources(); // S4/S5a özetleri: gün sonu + haftalık finans (sayılar, tutar yok)
   registerFinanceConditionSources(); // S4 koşulu: çek/senet vadesi
   registerDueConditionSources(); // S5b koşulları: fatura vadesi yaklaştı / geçti (yaşlandırma çekirdeği)
+  registerStockAgingConditionSource(); // depoda yaşlanan stok (çıpa bildirim.stokYaslanan.kaynak)
   registerIdentityRecipientResolvers(); // yeni cihazla web girişi: kişinin kendisi + kullanıcı yöneticileri
   firstTimer = setTimeout(() => void reconcileNotificationJobs(), STARTUP_DELAY_MS);
   firstTimer.unref();

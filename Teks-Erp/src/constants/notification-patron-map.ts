@@ -77,6 +77,7 @@ export const NOTIFICATION_PATRON_MAP: Readonly<Record<NotificationKind, PatronEs
   "stok.sayim-farki": { patronKind: null, neden: BULUT_TURU_YOK },
   "stok.transfer": { patronKind: null, neden: BULUT_TURU_YOK },
   "stok.gunluk-ozet": { patronKind: null, neden: BULUT_TURU_YOK },
+  "stok.yaslanan": { patronKind: null, neden: BULUT_TURU_YOK },
   "fason.cikis": { patronKind: null, neden: BULUT_TURU_YOK },
   "fason.donus": { patronKind: null, neden: BULUT_TURU_YOK },
   "fason.gunluk-ozet": { patronKind: null, neden: BULUT_TURU_YOK },
