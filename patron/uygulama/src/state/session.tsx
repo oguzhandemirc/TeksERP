@@ -20,6 +20,7 @@ import { createBulutBildirimci, createErpBildirimci, createErpPushCihazci, erpBi
 import { ERP_PUSH_KEY, erpPushBirak } from "../push/erp-push";
 import type { FacilityChoice, FacilityStatus, LoginResponse } from "../api/wire";
 import { apiBaseUrl } from "../lib/config";
+import { dueForRefetch, ME_REFRESH_MIN_GAP_MS } from "../lib/refresh";
 import { clearCache, createCache, ERP_CACHE_MAX_AGE_MS, openingCacheHygiene, purgeExpired, type Cache } from "./cache";
 import { createFeedFetcher, useChangeFeed, type FeedMode } from "./changes";
 import { useForeground } from "./useForeground";
@@ -222,9 +223,12 @@ export function SessionProvider({ children, platform = "mobil" }: { children: Re
     };
   }, []);
 
+  /** Son `/auth/me` benimseme anı: tazeleme (öne gelme · elle yenileme) en az `ME_REFRESH_MIN_GAP_MS` arayla. */
+  const capsAt = useRef(0);
   const applyCaps = useCallback((sets: unknown, perms: unknown, reportApi: unknown, inbox: boolean, reportExport: unknown, push: unknown, pano: unknown, closed: unknown) => {
     const y = erpYetenek(sets, perms, reportApi, inbox, reportExport, push, pano, closed);
     capsRef.current = y;
+    capsAt.current = Date.now();
     setYetenek(y);
     setErpCaps(y);
   }, []);
@@ -386,12 +390,17 @@ export function SessionProvider({ children, platform = "mobil" }: { children: Re
   const refresh = useCallback((): Promise<FacilityStatus | null> => {
     if (!cache) return Promise.resolve(null);
     if (inflight.current) return inflight.current;
-    const p = loadFacility(cache).finally(() => {
+    // ERP: modül kapısı (`patronClosedSets`) ve izinler yeniden girişe kalmasın diye `/auth/me` de tazelenir; hata
+    // sessiz (saklı yetenek kalır), sık çağrı aralıkla kesilir.
+    const now = Date.now();
+    const meDue = isErp && dueForRefetch(capsAt.current, now, ME_REFRESH_MIN_GAP_MS);
+    if (meDue) capsAt.current = now; // başarısız deneme de aralığı doldurur (401/ağ hatasında sıkıştırma yok)
+    const p = Promise.all([loadFacility(cache), meDue ? loadErpCaps(cache).catch(() => undefined) : undefined]).then(([f]) => f).finally(() => {
       inflight.current = null;
     });
     inflight.current = p;
     return p;
-  }, [cache, loadFacility]);
+  }, [cache, loadFacility, isErp, loadErpCaps]);
 
   const live = useRef({ phase, refresh, stamp: facility?.esitleme?.ufuk ?? null });
   live.current = { phase, refresh, stamp: facility?.esitleme?.ufuk ?? null };

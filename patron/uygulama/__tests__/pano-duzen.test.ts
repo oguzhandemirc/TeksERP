@@ -1,6 +1,6 @@
 // Pano kişiselleştirme (saf): düzen temizliği · taşıma · varsayılan · kutu görünümü · yetenek fail-closed.
 import { erpYetenek } from "../src/api/yetenek";
-import { duzenAnahtari, tasi, temizDuzen, varsayilanDuzen } from "../src/ui/pano/duzen";
+import { duzenAnahtari, gizliyiKoru, tasi, temizDuzen, varsayilanDuzen } from "../src/ui/pano/duzen";
 import { kutuGorunum, MOBILDE_YOK } from "../src/ui/pano/kutu-gorunum";
 
 describe("pano düzeni", () => {
@@ -20,6 +20,21 @@ describe("pano düzeni", () => {
   it("varsayılan = katalogdaki varsayılan kutular, katalog sırasıyla; anahtar kapsam başına", () => {
     expect(varsayilanDuzen([{ anahtar: "a", baslik: "A", varsayilan: true }, { anahtar: "b", baslik: "B", varsayilan: false }, { anahtar: "c", baslik: "C", varsayilan: true }])).toEqual(["a", "c"]);
     expect(duzenAnahtari("erp|x|u1")).toBe("patron.pano.erp|x|u1");
+  });
+});
+
+describe("gizli kutu korunur (kapalı modül)", () => {
+  const g = new Set(["v"]);
+  it("gizli kutu önceki komşusunun arkasına geri konur; komşusu yoksa başa; gizli olmayan düşen düşer", () => {
+    expect(gizliyiKoru(["a", "v", "b"], ["a"], g)).toEqual(["a", "v"]);
+    expect(gizliyiKoru(["a", "v", "b"], ["b", "a"], g)).toEqual(["b", "a", "v"]);
+    expect(gizliyiKoru(["v", "a"], ["a", "c"], g)).toEqual(["v", "a", "c"]);
+    expect(gizliyiKoru(["a", "b"], ["b"], g)).toEqual(["b"]);
+  });
+  it("art arda gizliler sırasını korur; tekrar eklenmez", () => {
+    const g2 = new Set(["v", "w"]);
+    expect(gizliyiKoru(["a", "v", "w", "b"], ["b", "a"], g2)).toEqual(["b", "a", "v", "w"]);
+    expect(gizliyiKoru(["a", "v"], ["a", "v"], g)).toEqual(["a", "v"]);
   });
 });
 

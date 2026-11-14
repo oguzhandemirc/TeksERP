@@ -39,6 +39,25 @@ export function varsayilanDuzen(katalog: readonly KatalogKutusu[]): string[] {
   return katalog.filter((k) => k.varsayilan).map((k) => k.anahtar);
 }
 
+/** Yazımda gizli (ör. modülü kapalı) ama önceki düzende olan kutular yerinde korunur: her biri önceki düzende kendinden
+ *  önce gelen ilk kutunun arkasına (yoksa başa) geri konur — modül açılınca kullanıcının seçimi geri gelir. */
+export function gizliyiKoru(onceki: readonly string[], yeni: readonly string[], gizli: ReadonlySet<string>): string[] {
+  const out = [...yeni];
+  onceki.forEach((k, i) => {
+    if (!gizli.has(k) || out.includes(k)) return;
+    let pos = 0;
+    for (let j = i - 1; j >= 0; j--) {
+      const at = out.indexOf(onceki[j]!);
+      if (at >= 0) {
+        pos = at + 1;
+        break;
+      }
+    }
+    out.splice(pos, 0, k);
+  });
+  return out;
+}
+
 /** Bir kutuyu bir adım yukarı (-1) / aşağı (+1) taşır; sınırda değişmez. */
 export function tasi(list: readonly string[], key: string, delta: -1 | 1): string[] {
   const i = list.indexOf(key);
@@ -72,8 +91,11 @@ export interface PanoDuzeni {
   sifirla(): void;
 }
 
-/** Düzen kancası: `katalog` null iken (yükleniyor) boş düzen döner. */
-export function usePanoDuzeni(kapsam: string | null, katalog: readonly KatalogKutusu[] | null, store: Pick<KeyValue, "get" | "set" | "remove"> | null): PanoDuzeni {
+const HIC: ReadonlySet<string> = new Set();
+
+/** Düzen kancası: `katalog` null iken (yükleniyor) boş düzen döner. `gizli`: katalogda tanınan ama şimdi çizilmeyen
+ *  kutular (modülü kurulumda kapalı) — düzenden düşmez, yalnız `kutular`da görünmez; yazımda yerinde korunur. */
+export function usePanoDuzeni(kapsam: string | null, katalog: readonly KatalogKutusu[] | null, store: Pick<KeyValue, "get" | "set" | "remove"> | null, gizli: ReadonlySet<string> = HIC): PanoDuzeni {
   const [kayit, setKayit] = useState<DuzenKaydi | null>(null);
   const [okundu, setOkundu] = useState(false);
   useEffect(() => {
@@ -96,7 +118,10 @@ export function usePanoDuzeni(kapsam: string | null, katalog: readonly KatalogKu
 
   const known = useMemo(() => new Set((katalog ?? []).map((k) => k.anahtar)), [katalog]);
   const saved = useMemo(() => temizDuzen(kayit?.kutular, known), [kayit, known]);
-  const kutular = useMemo(() => (katalog ? saved ?? varsayilanDuzen(katalog) : []), [katalog, saved]);
+  // Tam düzen (gizliler dahil) yazımın tabanı; çizilen = gizlisiz.
+  const tam = useMemo(() => (katalog ? saved ?? varsayilanDuzen(katalog) : []), [katalog, saved]);
+  const kutular = useMemo(() => (gizli.size === 0 ? tam : tam.filter((k) => !gizli.has(k))), [tam, gizli]);
+  const koru = (next: readonly string[]) => (gizli.size === 0 ? [...next] : gizliyiKoru(tam, next, gizli));
 
   const yaz = useCallback(
     (next: DuzenKaydi | null) => {
@@ -113,9 +138,9 @@ export function usePanoDuzeni(kapsam: string | null, katalog: readonly KatalogKu
     donem: kayit?.donem,
     varsayilanMi: saved === null,
     hazir: okundu && katalog !== null,
-    ekle: (key) => (kutular.includes(key) ? undefined : yaz({ ...kayit, kutular: [...kutular, key] })),
-    cikar: (key) => yaz({ ...kayit, kutular: kutular.filter((k) => k !== key) }),
-    tasi: (key, delta) => yaz({ ...kayit, kutular: tasi(kutular, key, delta) }),
+    ekle: (key) => (kutular.includes(key) ? undefined : yaz({ ...kayit, kutular: koru([...kutular, key]) })),
+    cikar: (key) => yaz({ ...kayit, kutular: koru(kutular.filter((k) => k !== key)) }),
+    tasi: (key, delta) => yaz({ ...kayit, kutular: koru(tasi(kutular, key, delta)) }),
     setDonem: (d) => yaz({ ...kayit, kutular: saved ?? undefined, donem: d }),
     sifirla: () => yaz(kayit?.donem ? { donem: kayit.donem } : null),
   };

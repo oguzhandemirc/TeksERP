@@ -1,12 +1,12 @@
 // =============================================================================
-// DEPO · SEVKİYAT · FASON ÖZETLERİ — gün sonu (S3, geniş katalog 2026-11-14)
+// DEPO · SEVKİYAT · FASON ÖZETLERİ — gün sonu (S3) + haftalık fason (S5a), geniş katalog 2026-11-14
 // =============================================================================
 // Sayılar deftere/belgeye dayanır (SystemLog'dan türetilmez): sevk metresi brüt TEK tanımdan (`reports/_shipped.ts`
 // `collectShipped`, iade geri-eklemeli), geri alma `shipment_events` defterinden, depo hareketleri `warehouse_movements`
 // defterinden, fason sevk/kabul iptalsiz belgelerden. Hepsi sıfırsa pencere bildirimsiz geçer. Yük tutar taşımaz.
 // =============================================================================
-import { ShipmentEventType, ShipmentStatus, WarehouseEventType } from "@prisma/client";
-import { registerDigestSource } from "../../jobs/notification-digest.job";
+import { ShipmentEventType, ShipmentStatus, WarehouseEventType, type Prisma } from "@prisma/client";
+import { registerDigestSource, type DigestWindow } from "../../jobs/notification-digest.job";
 import { collectShipped } from "../reports/_shipped";
 
 const m2 = (v: unknown): number => Math.round(Number(String(v ?? 0)) * 100) / 100;
@@ -37,13 +37,14 @@ export function registerDepotDigestSources(): void {
       return { gun: w.label, giris: entry._count._all, girisMetre: m2(entry._sum.qty), iade, transfer, duzeltme };
     },
   });
-  registerDigestSource({
-    kind: "fason.gunluk-ozet",
-    compute: async (tx, w) => {
-      const cikislar = await tx.subcontractorDispatch.aggregate({ where: { cancelledAt: null, dispatchedAt: { gte: w.from, lt: w.to } }, _count: { _all: true }, _sum: { totalQty: true } });
-      const donus = await tx.subcontractorReceipt.count({ where: { cancelledAt: null, receivedAt: { gte: w.from, lt: w.to } } });
-      if (cikislar._count._all + donus === 0) return null;
-      return { gun: w.label, cikis: cikislar._count._all, cikisMetre: m2(cikislar._sum.totalQty), donus };
-    },
-  });
+  // Günlük ve haftalık fason özeti AYNI sayımı yapar; yalnız pencere ve etiket alanı (`gun` / `hafta`) farklıdır.
+  registerDigestSource({ kind: "fason.gunluk-ozet", compute: async (tx, w) => fasonCounts(tx, w, "gun") });
+  registerDigestSource({ kind: "fason.haftalik-ozet", compute: async (tx, w) => fasonCounts(tx, w, "hafta") });
+}
+
+async function fasonCounts(tx: Prisma.TransactionClient, w: DigestWindow, labelKey: "gun" | "hafta"): Promise<Record<string, unknown> | null> {
+  const cikislar = await tx.subcontractorDispatch.aggregate({ where: { cancelledAt: null, dispatchedAt: { gte: w.from, lt: w.to } }, _count: { _all: true }, _sum: { totalQty: true } });
+  const donus = await tx.subcontractorReceipt.count({ where: { cancelledAt: null, receivedAt: { gte: w.from, lt: w.to } } });
+  if (cikislar._count._all + donus === 0) return null;
+  return { [labelKey]: w.label, cikis: cikislar._count._all, cikisMetre: m2(cikislar._sum.totalQty), donus };
 }

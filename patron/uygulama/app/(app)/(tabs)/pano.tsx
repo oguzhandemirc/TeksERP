@@ -6,7 +6,7 @@ import { useMemo, useState } from "react";
 import { Text, View } from "react-native";
 import { yetenek } from "../../../src/api/yetenek";
 import { PANO_DONEMLERI, type PanoDonem, type PanoKutuTanimi } from "../../../src/api/pano";
-import { can, menuModules, MODULES, moduleVisible, visibleCards, type ModuleKey } from "../../../src/lib/access";
+import { can, menuModules, moduleClosed, MODULES, moduleVisible, visibleCards, type ModuleKey } from "../../../src/lib/access";
 import { PERIOD_LABEL, UNIT } from "../../../src/lib/labels/uretim";
 import { TERIM } from "../../../src/lib/terim";
 import { useSession } from "../../../src/state/session";
@@ -49,16 +49,23 @@ const DEPO = cihazDeposu();
 
 const DONEM_LABEL: Readonly<Record<PanoDonem, string>> = { bugun: "Bugün", hafta: "Hafta", ay: "Ay", yil: "Yıl" };
 
-/** Yerel kutular (fabrika pano ucu yoksa): anahtar → gereken anlık + varsayılan mı. Sıra = varsayılan yerleşim. */
-const YEREL_KATALOG: readonly (KatalogKutusu & { readonly projeksiyon: string })[] = [
-  { anahtar: "kahraman", baslik: "Bugün tamamlanan üretim", aciklama: "İstasyonlarda bugün biten toplar", varsayilan: true, projeksiyon: "ozet.uretim" },
-  { anahtar: "bugunSevk", baslik: "Bugün sevk", aciklama: "Bugün, bu ay ve geçen ay brüt sevk", varsayilan: true, projeksiyon: "ozet.sevkiyat" },
-  { anahtar: "acikSiparis", baslik: "Açık sipariş", aciklama: "Açık kalem, karşılanma ve geciken", varsayilan: true, projeksiyon: "ozet.siparis" },
-  { anahtar: "vade", baslik: "Vadesi yaklaşan", aciklama: "7 gün içinde vadesi gelen çek/senet", varsayilan: true, projeksiyon: "ozet-finans" },
-  { anahtar: "kuyruk", baslik: "Üretim kuyruğu", aciklama: "Yarı mamul, fason ve depo", varsayilan: true, projeksiyon: "ozet.uretim" },
-  { anahtar: "stok", baslik: "Stok", aciklama: "Stok özeti", varsayilan: false, projeksiyon: "ozet.stok" },
-  { anahtar: "fason", baslik: "Fason", aciklama: "Fason özeti", varsayilan: false, projeksiyon: "ozet.fason" },
+/** Yerel kutular (fabrika pano ucu yoksa): anahtar → gereken anlık + ait olduğu modül + varsayılan mı. Sıra =
+ *  varsayılan yerleşim. Modülü kurulumda kapalıysa (`patronClosedSets`) kutu çizilmez, düzenden de düşmez. */
+const YEREL_KATALOG: readonly (KatalogKutusu & { readonly projeksiyon: string; readonly modul: ModuleKey })[] = [
+  { anahtar: "kahraman", baslik: "Bugün tamamlanan üretim", aciklama: "İstasyonlarda bugün biten toplar", varsayilan: true, projeksiyon: "ozet.uretim", modul: "uretim" },
+  { anahtar: "bugunSevk", baslik: "Bugün sevk", aciklama: "Bugün, bu ay ve geçen ay brüt sevk", varsayilan: true, projeksiyon: "ozet.sevkiyat", modul: "sevkiyat" },
+  { anahtar: "acikSiparis", baslik: "Açık sipariş", aciklama: "Açık kalem, karşılanma ve geciken", varsayilan: true, projeksiyon: "ozet.siparis", modul: "siparisler" },
+  { anahtar: "vade", baslik: "Vadesi yaklaşan", aciklama: "7 gün içinde vadesi gelen çek/senet", varsayilan: true, projeksiyon: "ozet-finans", modul: "finans" },
+  { anahtar: "kuyruk", baslik: "Üretim kuyruğu", aciklama: "Yarı mamul, fason ve depo", varsayilan: true, projeksiyon: "ozet.uretim", modul: "uretim" },
+  { anahtar: "stok", baslik: "Stok", aciklama: "Stok özeti", varsayilan: false, projeksiyon: "ozet.stok", modul: "stok" },
+  { anahtar: "fason", baslik: "Fason", aciklama: "Fason özeti", varsayilan: false, projeksiyon: "ozet.fason", modul: "uretim" },
 ];
+
+/** Yerel kutunun modülü kurulumda kapalı mı (menüyle aynı kaynak: `moduleClosed`). */
+function yerelKutuKapali(k: { readonly modul: ModuleKey }): boolean {
+  const m = MODULES.find((x) => x.key === k.modul);
+  return m !== undefined && moduleClosed(m);
+}
 
 export default function Dashboard() {
   const { facility, permissions, factoryStamp, offline, refresh } = useSession();
@@ -96,6 +103,8 @@ export default function Dashboard() {
   const open = (i: AttentionItem) => (i.action === "esitle" ? reloadAll() : i.route ? router.push(i.route as never) : undefined);
 
   const yerelKatalog = useMemo(() => YEREL_KATALOG.filter((k) => cards.some((c) => c.projection === k.projeksiyon)), [cards]);
+  const kapali = yetenek().kapali;
+  const yerelGizli = useMemo(() => new Set(yerelKatalog.filter(yerelKutuKapali).map((k) => k.anahtar)), [yerelKatalog, kapali]);
   const showPano = uzak || cards.length > 0;
 
   return (
@@ -118,6 +127,7 @@ export default function Dashboard() {
           ) : (
             <YerelPano
               katalog={yerelKatalog}
+              gizli={yerelGizli}
               duzenle={duzenle}
               kapat={() => setDuzenle(false)}
               go={go}
@@ -195,9 +205,11 @@ interface YerelVeri {
 }
 
 /** Eski fabrika / bulut: anlık özetlerden yerel kutular, aynı düzenleyiciyle. */
-function YerelPano({ katalog, duzenle, kapat, go, data, loading }: { readonly katalog: readonly KatalogKutusu[]; readonly duzenle: boolean; readonly kapat: () => void; readonly go: Go; readonly data: YerelVeri; readonly loading: boolean }) {
+function YerelPano({ katalog, gizli, duzenle, kapat, go, data, loading }: { readonly katalog: readonly KatalogKutusu[]; readonly gizli: ReadonlySet<string>; readonly duzenle: boolean; readonly kapat: () => void; readonly go: Go; readonly data: YerelVeri; readonly loading: boolean }) {
   const { scope } = useSession();
-  const duzen = usePanoDuzeni(scope ?? null, katalog, DEPO);
+  const duzen = usePanoDuzeni(scope ?? null, katalog, DEPO, gizli);
+  // Düzenleyicinin "ekle" listesi kapalı modülün kutusunu önermez.
+  const acikKatalog = useMemo(() => (gizli.size === 0 ? katalog : katalog.filter((k) => !gizli.has(k.anahtar))), [katalog, gizli]);
   const tiles = duzen.kutular.map((k) => yerelKutu(k, data, go)).filter((p): p is KpiCardProps => p !== null);
   return (
     <>
@@ -208,7 +220,7 @@ function YerelPano({ katalog, duzenle, kapat, go, data, loading }: { readonly ka
           {tiles.map((p) => <KpiCard key={p.testID} {...p} />)}
         </KpiGrid>
       ) : null}
-      <PanoDuzenleyici visible={duzenle} onClose={kapat} katalog={katalog} duzen={duzen} />
+      <PanoDuzenleyici visible={duzenle} onClose={kapat} katalog={acikKatalog} duzen={duzen} />
     </>
   );
 }

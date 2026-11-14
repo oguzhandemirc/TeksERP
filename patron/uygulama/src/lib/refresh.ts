@@ -7,6 +7,8 @@ import type { SnapshotRefresh } from "../api/wire";
 export const REFRESH_FAIL_BACKOFF_MS = 30_000;
 /** Sunucunun `sonrakiMs`i bundan kısa olsa da istemci en az bu kadar bekler (ardışık ekran geçişleri). */
 export const REFRESH_MIN_GAP_MS = 5_000;
+/** ERP `/auth/me` (yetenek + kapalı modüller) tazelemesi: öne gelme ve elle yenileme bundan sık sormaz. */
+export const ME_REFRESH_MIN_GAP_MS = 60_000;
 
 export interface RefreshGate {
   /** `nowMs` aralık dolduysa `call`ı bir kez çalıştırır; çalıştırdıysa true. Uçuştayken ikinci çağrı düşer. */

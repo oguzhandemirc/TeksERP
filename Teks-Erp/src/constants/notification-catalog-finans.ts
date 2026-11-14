@@ -105,6 +105,14 @@ export const FINANS_NOTIFICATION_ENTRIES = {
     payloadAlanlari: ["gun", "tahsilat", "odeme", "fatura", "iptal"],
     tahminiHaftalik: 7,
   },
+  "finans.haftalik-ozet": {
+    ...FINANS, tekilKalibi: "{hafta}", pencereSn: 0, ozet: "HAFTALIK",
+    kod: "finans.haftalik-ozet", ad: "Haftalık finans özeti", panelEkran: "finance/payments", panelYol: "/finance/payments",
+    baslik: "Haftalık finans özeti · {hafta}",
+    govde: "{tahsilat} tahsilat · {odeme} ödeme · {fatura} fatura onaylandı · {iptal} iptal",
+    payloadAlanlari: ["hafta", "tahsilat", "odeme", "fatura", "iptal"],
+    tahminiHaftalik: 1,
+  },
 
   // ── Cari kart ─────────────────────────────────────────────────────────────
   "cari.olusturuldu": {

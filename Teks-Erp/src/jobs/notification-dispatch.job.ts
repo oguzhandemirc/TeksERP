@@ -199,8 +199,8 @@ export function startNotificationJobs(): void {
   registerProductionDigestSources(); // S2 özetleri: saatlik/gün sonu üretim · kalite · kurşun · vardiya sonu dokuma
   registerProductionConditionSources(); // S2 koşulları: makine/tezgah duruyor · uzun arıza
   registerQuoteConditionSources(); // teklif süresi doldu
-  registerDepotDigestSources(); // S3 özetleri: gün sonu sevkiyat · depo · fason
-  registerFinanceDigestSources(); // S4 özeti: gün sonu finans (sayılar, tutar yok)
+  registerDepotDigestSources(); // S3 özetleri: gün sonu sevkiyat · depo · fason; S5a haftalık fason
+  registerFinanceDigestSources(); // S4/S5a özetleri: gün sonu + haftalık finans (sayılar, tutar yok)
   registerFinanceConditionSources(); // S4 koşulu: çek/senet vadesi
   registerDueConditionSources(); // S5b koşulları: fatura vadesi yaklaştı / geçti (yaşlandırma çekirdeği)
   registerIdentityRecipientResolvers(); // yeni cihazla web girişi: kişinin kendisi + kullanıcı yöneticileri
