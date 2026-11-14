@@ -3,6 +3,7 @@
 // savunmalı okunur, eksik alan "—". Uygulama ARİTMETİK YAPMAZ: değer, değişim yüzdesi ve oranlar fabrikadan.
 import { formatMoney } from "../../lib/format";
 import { UNIT } from "../../lib/labels/uretim";
+import { TERIM } from "../../lib/terim";
 import type { KpiLine, KpiTrend } from "../KpiCard";
 import type { IconName } from "../icons";
 import type { Domain } from "../tokens";
@@ -131,7 +132,7 @@ export function kutuGorunum(anahtar: string, veri: unknown): KutuGorunum | null 
     }
     case "isEmriDurum":
       return {
-        value: qty(d.toplam), caption: "açık iş emri",
+        value: qty(d.toplam), caption: `açık ${TERIM.terbiyeIsEmri.tekilKucuk}`,
         lines: arr(d.durumlar).map((r) => ({ label: r.durum === "IN_PROGRESS" ? "Üretimde" : "Planlı", value: qty(r.adet) })),
       };
     case "dagilim":
