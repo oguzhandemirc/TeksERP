@@ -125,12 +125,14 @@ export interface ScreenProps {
   readonly refreshing?: boolean;
   /** Üst barın sağ yuvası (ör. eşitleme göstergesi, ikon düğmesi). */
   readonly headerRight?: ReactNode;
-  /** Büyük başlığın altındaki satır (ör. tesis adı + SyncIndicator). */
+  /** Büyük başlığın altındaki satır (ör. tesis adı). */
   readonly subtitle?: ReactNode;
+  /** Büyük başlıkla AYNI satırda sağda (ör. eşitleme göstergesi) — ayrı satır işgal etmez. */
+  readonly titleRight?: ReactNode;
 }
 
 /** Her ekranın kabı: büyük başlık, bantlar, kaydırma ve aşağı çek-yenile; izin kapısı. */
-export function Screen({ title: titleProp, module, children, back, onRefresh, refreshing, headerRight, subtitle }: ScreenProps) {
+export function Screen({ title: titleProp, module, children, back, onRefresh, refreshing, headerRight, subtitle, titleRight }: ScreenProps) {
   const title = titleProp ?? (module ? moduleTitle(module) : "");
   const t = useTokens();
   const s = useStyles();
@@ -154,7 +156,7 @@ export function Screen({ title: titleProp, module, children, back, onRefresh, re
         refreshControl={onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={t.tint} colors={[t.tint]} progressBackgroundColor={t.surface} /> : undefined}
         contentContainerStyle={[s.content, { paddingBottom: insets.bottom + space.xl, paddingHorizontal: wide ? space.xl : space.l }]}
       >
-        <LargeTitle title={title} scrollY={scrollY} subtitle={subtitle} />
+        <LargeTitle title={title} scrollY={scrollY} subtitle={subtitle} right={titleRight} />
         <StatusBands />
         {switchError ? <Banner tone="error" text={switchError} testID="bant-tesis-gecisi" /> : null}
         {allowed ? children : <Banner tone="error" icon="lock-closed-outline" text="Bu bölümü görme yetkiniz yok" />}
