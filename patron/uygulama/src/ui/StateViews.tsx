@@ -32,6 +32,11 @@ export function Empty({ text, domain = "genel", icon, actionLabel, onAction, tes
   );
 }
 
+/** Modül fabrikada kapalı (bayrak/lisans): kırmızı hata ve "Tekrar dene" YOK — sakin, gri, tek satır bilgi. */
+export function ModuleClosed({ text = "Bu bölüm fabrikanızda kapalı", testID }: { readonly text?: string; readonly testID?: string }) {
+  return <Empty text={`${text}. Açılması için fabrika yöneticinize başvurun.`} icon="lock-closed-outline" testID={testID} />;
+}
+
 /** İskelet: KPI ızgarası ya da liste satırı biçiminde; hareket azaltma açıksa sabit. */
 export function LoadingSkeleton({ variant = "list", rows = 3, testID }: { readonly variant?: "kpi" | "list"; readonly rows?: number; readonly testID?: string }) {
   const s = useStyles();

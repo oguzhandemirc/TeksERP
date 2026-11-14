@@ -7,7 +7,7 @@ import { fmtFactoryTime } from "../../lib/factory-time";
 import { formatAgo } from "../../lib/format";
 import type { IconName } from "../icons";
 import { Button } from "../kit";
-import { Empty, ErrorState, LoadingSkeleton } from "../StateViews";
+import { Empty, ErrorState, LoadingSkeleton, ModuleClosed } from "../StateViews";
 import { makeStyles, useTokens } from "../theme-context";
 import { FONT_SCALE, TOUCH, radius, space, tabularNums, typography, type Domain, type StatusKind } from "../tokens";
 import type { RemoteList } from "./useRemoteList";
@@ -84,6 +84,7 @@ export function QuickChip(p: { label: string; selected: boolean; onPress: () => 
 export function ListStates(p: { list: RemoteList; empty: string; domain: Domain; icon?: IconName; testID?: string }) {
   const { list } = p;
   if (list.loading) return <LoadingSkeleton rows={4} testID={p.testID ? `${p.testID}-yukleniyor` : undefined} />;
+  if (list.closed) return <ModuleClosed testID={p.testID ? `${p.testID}-kapali` : undefined} />;
   return (
     <View>
       {list.error ? <ErrorState text={list.error} onRetry={list.reload} /> : null}

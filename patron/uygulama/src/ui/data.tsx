@@ -13,7 +13,7 @@ import { useSession } from "../state/session";
 import { useRemote } from "../state/useRemote";
 import { Banner, Button, Card, Muted } from "./kit";
 import { ListGroup, ListRow, type ListRowProps } from "./ListRow";
-import { Empty, LoadingSkeleton, OfflineBand, ReadOnlyBand, SyncLateBand } from "./StateViews";
+import { Empty, LoadingSkeleton, ModuleClosed, OfflineBand, ReadOnlyBand, SyncLateBand } from "./StateViews";
 import { makeStyles, useTokens } from "./theme-context";
 import { radius, space, tabularNums, typography, type Domain } from "./tokens";
 
@@ -298,6 +298,7 @@ export function ProjectionList(p: ProjectionListProps) {
     );
   });
 
+  if (!search && first.closed && !first.data) return <ModuleClosed testID={`kapali-${p.projection}`} />;
   return (
     <View>
       {error ? <ErrorBox text={error} onRetry={retry} /> : null}

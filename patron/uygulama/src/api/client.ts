@@ -151,6 +151,13 @@ export function createClient(opts: ClientOptions): ApiClient {
   };
 }
 
+/** Fabrikada kapalı modül (bayrak ya da lisans): hata değil, ekranın SAKİN boş durumudur (yeniden deneme anlamsız). */
+export const MODULE_CLOSED_CODES: ReadonlySet<string> = new Set(["MODULE_DISABLED", "LICENSE_MODULE"]);
+
+export function isModuleClosed(err: unknown): boolean {
+  return err instanceof ApiError && err.status === 403 && MODULE_CLOSED_CODES.has(err.code);
+}
+
 /** Kullanıcıya gösterilecek TR ileti. */
 export function errorMessage(err: unknown): string {
   if (err instanceof ApiError) {

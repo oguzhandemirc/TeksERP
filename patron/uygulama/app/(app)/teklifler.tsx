@@ -29,7 +29,7 @@ export default function Quotes() {
   const options = search?.suzgec ? [{ deger: null as string | null, etiket: "Tümü" }, ...search.suzgec.secenekler] : [];
   return (
     <Screen title="Teklifler" module="teklifler" onRefresh={list.reload} refreshing={list.refreshing} subtitle={<StaleNote stale={list.stale} savedAt={list.savedAt} />}>
-      {search ? (
+      {search && !list.closed ? (
         <View style={{ gap: space.s, marginBottom: space.m }}>
           <SearchField value={term} onChangeText={setTerm} placeholder="Teklif no ya da müşteri ara" testID="teklif-ara" />
           {options.length > 0 ? (
@@ -41,7 +41,7 @@ export default function Quotes() {
           ) : null}
         </View>
       ) : null}
-      <SectionHeader title="Gönderilen teklifler" domain="siparisler" count={!list.loading && !list.hasMore ? list.items.length : undefined} />
+      {list.closed ? null : <SectionHeader title="Gönderilen teklifler" domain="siparisler" count={!list.loading && !list.hasMore ? list.items.length : undefined} />}
       {list.items.length > 0 ? (
         <ListGroup testID="teklif-listesi">
           {list.items.map((r) => {
