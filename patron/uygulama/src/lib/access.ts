@@ -3,7 +3,7 @@
 // İzne ek olarak bağlanılan sunucunun YETENEĞİ (`api/yetenek.ts`): modülün ana kümesi ya da özelliği sunulmuyorsa
 // modül görünmez (bulutta her şey sunulur — bugünkü davranış).
 
-import { islemVar, kumeSunuluyor, yetenek, type Islem, type Yetenek } from "../api/yetenek";
+import { islemVar, kumeKapali, kumeSunuluyor, yetenek, type Islem, type Yetenek } from "../api/yetenek";
 import { TERIM_AD } from "./terim";
 
 type Ozellik = { [K in keyof Yetenek]: Yetenek[K] extends boolean ? K : never }[keyof Yetenek];
@@ -118,6 +118,22 @@ export function visibleModules(perms: readonly string[]): ModuleDef[] {
 export function moduleVisible(perms: readonly string[], key: ModuleKey): boolean {
   const m = MODULES.find((x) => x.key === key);
   return m !== undefined && moduleAllowed(perms, m);
+}
+
+/** Kurulumda modülü (bayrak/lisans) kapalı: ekranın kümelerinden biri `/auth/me` `patronClosedSets`te. */
+export function moduleClosed(m: ModuleDef, y: Yetenek = yetenek()): boolean {
+  return (m.sets ?? []).some((k) => kumeKapali(k, y));
+}
+
+/** Gezinme yüzeyleri (sekme · ray · Diğer · kısayol): görünür VE modülü kapalı değil. Ekran kapısı `moduleVisible`
+ *  kalır — derin bağlantı ekranı açar, uç 403 verir, kapalı satırı çizilir. */
+export function moduleInMenu(perms: readonly string[], key: ModuleKey): boolean {
+  const m = MODULES.find((x) => x.key === key);
+  return m !== undefined && moduleAllowed(perms, m) && !moduleClosed(m);
+}
+
+export function menuModules(perms: readonly string[]): ModuleDef[] {
+  return visibleModules(perms).filter((m) => !moduleClosed(m));
 }
 
 /** Pano kartları: anlık özet → gereken izinlerin HEPSİ (sunucu kataloğuyla aynı küme). */

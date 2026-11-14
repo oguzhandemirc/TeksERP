@@ -28,6 +28,8 @@ export interface ErpMe {
   readonly backendVersion?: string;
   readonly patronApiVersion?: number | string;
   readonly patronReadSets?: readonly string[];
+  /** Kurulumda modül kapısı (bayrak/lisans) kapalı kümeler; yoksa (eski fabrika) hepsi açık sayılır — yalnız menü. */
+  readonly patronClosedSets?: readonly string[];
   /** V5a rapor ucu sözleşme sürümü (`/api/patron/v1/raporlar`); yoksa rapor gizli. */
   readonly patronReportApi?: number;
   /** Rapor koşumu dosyası ucu sürümü (`GET /patron/v1/raporlar/:id/dosya`); yoksa PDF/Excel düğmeleri gizli. */
