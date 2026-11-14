@@ -20,6 +20,7 @@ import { CARI_NOTIFICATION_ENTRIES } from "./notification-catalog-cari";
 import { READY_WORK_NOTIFICATION_ENTRIES } from "./notification-catalog-sevkiyat";
 import { KIMLIK_NOTIFICATION_ENTRIES } from "./notification-catalog-kimlik";
 import { SATIS_NOTIFICATION_ENTRIES } from "./notification-catalog-satis";
+import { URETIM_NOTIFICATION_ENTRIES } from "./notification-catalog-uretim";
 import { DEPO_NOTIFICATION_ENTRIES } from "./notification-catalog-depo";
 
 export { NOTIFICATION_PHASES, NOTIFICATION_GRUPLARI } from "./notification-catalog.types";
@@ -196,6 +197,8 @@ export const NOTIFICATION_CATALOG = {
     payloadAlanlari: ["isEmriId", "isEmriNo", "planlananBitis"],
     tahminiHaftalik: 8, saklama: SAKLAMA,
   },
+
+  ...URETIM_NOTIFICATION_ENTRIES, // S2 — üretim · dokuma · kalite · kurşun · tambur · bakım (ayrı dosya, dosya boyu)
 
   // ── Kalite ────────────────────────────────────────────────────────────────
   "kalite.kk1-oran-dusuk": {

@@ -34,6 +34,7 @@ import { markWeavingOrderInProgressTx } from "./helpers/weaving-order.helper";
 import { assertRunWeavingOrderGate } from "./helpers/production-chain-gates.helper";
 import type { ApiResponse } from "../types/api.types";
 import { assertItemUsableTx } from "./helpers/item-usage.helper";
+import { emitRunPatternChangedTx } from "./notification-sources/uretim";
 
 
 const TABLE = "MACHINE_RUN";
@@ -180,7 +181,7 @@ async function openMachineRunFresh(
         const r = await markWeavingOrderInProgressTx(tx, input.weavingOrderId, userId);
         orderTransitioned = r.transitioned;
       }
-      return tx.machineRun.create({
+      const run = await tx.machineRun.create({
         data: {
           machineId: machine.id,
           productionLineNo: input.productionLineNo,
@@ -194,6 +195,9 @@ async function openMachineRunFresh(
         },
         select: MACHINE_RUN_SELECT,
       });
+      // Bildirim (S2): Değiştir yolunda kumaş/renk farklıysa `dokuma.desen-degisti` — aynı tx.
+      if (replacedBox.run) await emitRunPatternChangedTx(tx, { machineId: machine.id, from: replacedBox.run, to: run }, userId ?? null);
+      return run;
     });
   } catch (e) {
     // Token P2002'si boğazda (`runReplay.run`) replay'e döner; hat seddi yarışı Türkçe 409.

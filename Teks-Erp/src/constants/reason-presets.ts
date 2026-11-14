@@ -250,6 +250,9 @@ const WEAVING_ONLY: readonly StationKind[] = [StationKind.WEAVING];
  *    bakmaz — izin kataloğu denklemi). Görünürlük kapısı PANELDEDİR: `KIND_TABS`
  *    sekmesi yalnız `tezgahEnabled` açıkken çizilir.
  */
+/** "Arıza" duruş kodları — bakım bildirimleri (`bakim.*`) bu kümeyi okur; kopuş/malzeme/operatör arıza DEĞİLDİR. */
+export const BREAKDOWN_STOP_REASON_CODES: readonly string[] = ["MEKANIK_ARIZA", "ELEKTRIK_ARIZA", "JAKAR_ARIZA"];
+
 export const MACHINE_STOP_REASONS: readonly ReasonPresetSeed[] = [
   // ── Kopuşlar ve malzeme (UNPLANNED) — makine kendi kendine durdu
   { code: "COZGU_KOPUSU", label: "Çözgü kopuşu", stopLossClass: "UNPLANNED", stationKinds: WEAVING_ONLY },

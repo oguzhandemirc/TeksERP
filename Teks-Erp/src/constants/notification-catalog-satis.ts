@@ -123,6 +123,15 @@ export const SATIS_NOTIFICATION_ENTRIES = {
     tahminiHaftalik: 3,
   },
 
+  "teklif.suresi-doldu": {
+    ...TEKLIF, kod: "teklif.suresi-doldu", ad: "Teklifin geçerlilik süresi doldu", altTur: "KOSUL", pencereSn: 0,
+    baslik: "Teklif süresi doldu: {teklifNo}",
+    govde: "{teklifNo} ({musteriAd}) {gecerlilik} tarihinde geçerliliğini yitirdi, müşteri cevap vermedi",
+    cozuldu: "{teklifNo} cevaplandı, revize edildi ya da kapandı",
+    payloadAlanlari: ["teklifId", "teklifNo", "musteriAd", "gecerlilik"],
+    tahminiHaftalik: 2,
+  },
+
   // ── Planlama / İş emri ────────────────────────────────────────────────────
   "isemri.acildi": {
     ...IS_EMRI, kod: "isemri.acildi", get ad() { return `${ie()} açıldı`; },
