@@ -207,7 +207,10 @@ function main(): void {
   // 40 → 41 (2026-11-13, V4a bayat veri): `helpers/stale-record.helper.ts` — sipariş sürüm claim'i
   // (`claimOrderVersionTx`, kalem FOR UPDATE + atomik `updateMany` yalnız `updatedAt`, tx İÇİNDE); audit'i
   // çağıran eylem basar (`OrderService.update` başlık/kalem farkıyla) — EBEVEYN_EYLEMDE.
-  const AUDITSIZ_YAZICI_TABAN = 41;
+  // 41 → 42 (2026-11-14, bildirim S1): `jobs/notification-digest.job.ts` — özet zamanlayıcısının pencere damgası
+  // (`bildirim.ozetDamga.<tür>` SystemSetting, 8040 kilidi altında, pencere başına tek); kullanıcı eylemi yok, yazdığı
+  // tek şey tekillik filigranı — `backup-scheduler` · `machine-shift-close` damgalarıyla aynı SISTEM_ISI kalıbı.
+  const AUDITSIZ_YAZICI_TABAN = 42;
   const auditsizYazici: string[] = [];
   for (const [rel, s] of metin) {
     if (auditDosya.has(rel) || /tableName:\s*"/.test(s)) continue;

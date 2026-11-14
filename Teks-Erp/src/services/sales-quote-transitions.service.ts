@@ -15,6 +15,7 @@ import { tokenReplay } from "./helpers/token-replay.helper";
 import { freezeQuoteDocumentTx, voidQuoteDocumentTx } from "./quote-documents.service";
 import { validate as isUuidString } from "uuid";
 import { LINE_RECIPE_SELECT } from "./helpers/line-recipe.helper";
+import { emitQuoteEventTx } from "./notification-sources/teklif";
 
 export const QUOTE_TABLE = "SALES_QUOTE";
 export const QUOTE_INCLUDE = {
@@ -63,6 +64,8 @@ async function runTransition(
   const q = await prisma.$transaction(async (tx) => {
     await claimQuoteTx(tx, id, transition, { data: { ...data, updatedById: opts.userId ?? null }, extra: opts.extra });
     if (opts.after) await opts.after(tx);
+    // S1 bildirimleri: gönderildi · kabul · ret (iptal/kabulü geri al bildirim doğurmaz).
+    if (transition === "send" || transition === "accept" || transition === "reject") await emitQuoteEventTx(tx, id, transition, opts.userId);
     return tx.salesQuote.findUniqueOrThrow({ where: { id }, include: QUOTE_INCLUDE });
   });
   auditQuoteStatus(id, { from: before?.status ?? "?", to: q.status, userId: opts.userId, extra: opts.audit });

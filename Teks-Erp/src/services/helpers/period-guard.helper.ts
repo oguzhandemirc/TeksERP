@@ -62,7 +62,7 @@
 //   8037  FACTORY_TIMEZONE_LOCK_NS  services/factory-timezone.service.ts  fabrika saat dilimi dönem defteri (tek anahtar; değişiklik ↔ iptal)
 //   8038  SYSTEM_ACCOUNT_LOCK_NS  services/helpers/varsayilan-superadmin.helper.ts  satıcı hesabı doğuşu/devri (tek anahtar; boot varsayılanı ↔ kurulum aracı)
 //   8039  AUDIT_CHAIN_LOCK_NS  services/audit-chain.service.ts  audit hash zinciri sırası (tek anahtar; kilidi DB trigger'ı `audit_zincir_bagla` alır)
-//   8040  NOTIFICATION_DISPATCH_LOCK_NS  services/notification-dispatch.service.ts  bildirim dağıtıcı + koşul tarayıcısı (anahtar `hashtext('bildirim-dagitici')` · `hashtext('bildirim-kosul:'||kind)`)
+//   8040  NOTIFICATION_DISPATCH_LOCK_NS  services/notification-dispatch.service.ts  bildirim dağıtıcı + koşul tarayıcısı + özet zamanlayıcısı (anahtar `hashtext('bildirim-dagitici')` · `hashtext('bildirim-kosul:'||kind)` · `hashtext('bildirim-ozet:'||kind)`)
 //   8041  E_IRSALIYE_SERIES_LOCK_NS  services/e-irsaliye/e-irsaliye-number.ts  e-İrsaliye numara üretimi ↔ başlangıç değeri yazımı (tek anahtar; sevkiyat kilidi 8023'ün ARKASINDAN)
 //   8042  DEVICE_MERGE_LOCK_NS  services/device-merge.service.ts  cihaz kopyası birleştirme ↔ geri alma (tek anahtar; kaynak/hedef claim'leri serileşir)
 //   8043  DELIVERY_NOTE_CANCEL_LOCK_NS  services/gelen-belge-iptal.service.ts  onaylı gelen belge iptali (belge başına `hashtext(noteId)`; claim + top/iş emri iptali arkasında)

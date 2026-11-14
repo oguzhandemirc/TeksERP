@@ -28,6 +28,8 @@ import { ACTIVE_ORDER_LINK, activeOrderLinkCount, unlinkOrderLinesTx } from "../
 import { TERIM } from "../../constants/terim";
 import type { OrderServiceThis } from "./shared";
 import { guardLineCancelPreview, lineCancelTokenFor } from "./line-cancel-token";
+import { emitOrderLineCancelledTx } from "../notification-sources/satis";
+import { sequentialTx } from "../helpers/tx-sequential-relations.helper";
 
 export async function loadLineForCancel(orderId: string, lineId: string) {
     const line = await prisma.orderLine.findUnique({
@@ -210,6 +212,8 @@ export async function cancelOrderLine(this: OrderServiceThis,
       ).map((l) => l.id);
       await touchOrderLinesTx(tx, lineIds);
       await recomputeOrderStatusTx(tx, orderId);
+      const cancelled = await sequentialTx(tx).orderLine.findUnique({ where: { id: lineId }, select: { item: { select: { name: true } }, color: { select: { name: true } } } });
+      await emitOrderLineCancelledTx(tx, orderId, [cancelled?.item?.name, cancelled?.color?.name].filter(Boolean).join(" · ") || "—", userId);
     });
 
     await AuditService.log({

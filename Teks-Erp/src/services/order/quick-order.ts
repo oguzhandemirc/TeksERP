@@ -21,6 +21,7 @@ import { isClientTokenP2002 } from "../../utils/p2002";
 import { warehouseStampManyTx } from "../helpers/warehouse.helper";
 import { runItemUsageChecksTx } from "../helpers/item-usage.helper";
 import { TERIM } from "../../constants/terim";
+import { emitOrderCreatedTx } from "../notification-sources/satis";
 import { siparisSatirIzi, type OrderServiceThis, type SiparisSatiri } from "./shared";
 
 export async function quickOrderFromRolls(this: OrderServiceThis, 
@@ -163,7 +164,9 @@ export async function quickOrderTx(this: OrderServiceThis, { data, rolls, lines,
             }
           }
           const orderNumber = await this.nextOrderNumber(tx, prepared);
-          return { order: await this.insertOrderTx(tx, prepared, orderNumber), stockRollIds };
+          const order = await this.insertOrderTx(tx, prepared, orderNumber);
+          await emitOrderCreatedTx(tx, order.id as string, prepared.actorUserId);
+          return { order, stockRollIds };
         }),
       undefined,
       (err) => !isClientTokenP2002(err),

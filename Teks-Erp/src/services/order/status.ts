@@ -17,6 +17,7 @@ import {
   recomputeOrderStatusTx,
 } from "../helpers/order-status.helper";
 import type { OrderServiceThis } from "./shared";
+import { emitOrderTerminalTx } from "../notification-sources/satis";
 
 export async function manualComplete(this: OrderServiceThis, 
     id: string,
@@ -70,6 +71,7 @@ export async function manualComplete(this: OrderServiceThis,
           `Sipariş bu sırada ${fresh?.status} durumuna geçti — manuel tamamlanamadı. Sayfayı yenileyin.`
         );
       }
+      await emitOrderTerminalTx(tx, id, OrderStatus.COMPLETED, userId);
     });
     const updated = await prisma.order.findUnique({ where: { id } });
 

@@ -23,6 +23,7 @@ import { ACTIVE_ORDER_LINK, activeOrderLinkCount, unlinkOrderLinesTx } from "../
 import { TERIM } from "../../constants/terim";
 import { voidOrderConfirmationTx } from "../order-documents.service";
 import type { OrderServiceThis } from "./shared";
+import { emitOrderTerminalTx } from "../notification-sources/satis";
 
 export async function getActiveShipmentLinks(
     orderId: string
@@ -115,6 +116,7 @@ export async function softDelete(this: OrderServiceThis,
       }
       // Donmuş sipariş teyidi iptalle birlikte VOIDED (birlikte ya da hiç).
       await voidOrderConfirmationTx(tx, id, "Sipariş iptal edildi");
+      await emitOrderTerminalTx(tx, id, OrderStatus.CANCELLED, userId);
 
 
       // BU siparişin satır bağlarını TAZE oku (orderLineId scope — shared WO'nun

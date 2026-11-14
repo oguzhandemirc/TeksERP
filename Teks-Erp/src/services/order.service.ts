@@ -77,6 +77,7 @@ import type { OrderStats } from "./order/list";
 import type { OrderShipmentsResult } from "./order/detail";
 import type { OrderActor, PreparedOrderCreate } from "./order/create";
 import { voidOrderConfirmationTx } from "./order-documents.service";
+import { describeOrderChanges, emitOrderTerminalTx, emitOrderUpdatedTx } from "./notification-sources/satis";
 import { claimOrderVersionTx, orderContentVersionWhere, takeExpectedUpdatedAt, withOrderContentVersion } from "./helpers/stale-record.helper";
 import { ORDER_HEADER_WRITABLE, ORDER_LINE_WRITABLE, computeAllowedActions, computeTotalAmount, pickDefaultAction, withExtraWarnings, type CancelAction, type OrderServiceThis, type OrderWithLines } from "./order/shared";
 
@@ -605,8 +606,8 @@ export class OrderService extends BaseService {
    * SHARE) bu dikişin ilk ifadeleridir; 8036 token kilidi alınıyorsa ÇAĞIRANIN tx'inde ondan ÖNCE gelir (hızlı
    * sipariş ile aynı sıra). Sıra no kilitlerin ARKASINDA okunur; çakışmayı çağıranın `withBarcodeRetry`si çözer.
    */
-  async insertPreparedOrderTx(tx: Prisma.TransactionClient, p: PreparedOrderCreate): Promise<Record<string, unknown>> {
-    return insertPreparedOrderTxImpl.call(this as unknown as OrderServiceThis, tx, p);
+  async insertPreparedOrderTx(tx: Prisma.TransactionClient, p: PreparedOrderCreate, opts?: { notify?: boolean }): Promise<Record<string, unknown>> {
+    return insertPreparedOrderTxImpl.call(this as unknown as OrderServiceThis, tx, p, opts);
   }
 
   /**
@@ -721,6 +722,8 @@ export class OrderService extends BaseService {
             itemId: true,
             // A2 (açık satırda miktar) kararı eski ↔ yeni miktarı karşılaştırır.
             quantity: true,
+            // Bildirim "ne değişti" özeti (S1 `siparis.degisti`): fiyat farkı yalnız sözcük olarak geçer.
+            unitPrice: true,
             // ⚠️ LOAD-BEARING: aşağıdaki `cancelledAt !== null` süzgeci bu alan
             // seçilmezse `undefined !== null` ile TÜM kalemleri iptal sayar ve
             // hiçbir kalem güncellenemez olurdu (sessiz felç).
@@ -1096,6 +1099,17 @@ export class OrderService extends BaseService {
       if (incomingLines) {
         await recomputeOrderStatusTx(tx, id);
       }
+      // S1 bildirimleri (aynı tx; değişiklik yoksa yazılmaz).
+      await emitOrderUpdatedTx(tx, id, {
+        ...(Object.prototype.hasOwnProperty.call(cleanData, "deadline")
+          ? { deadline: { from: current.deadline, to: (await tx.order.findUnique({ where: { id }, select: { deadline: true } }))?.deadline ?? null } }
+          : {}),
+        parts: describeOrderChanges(current.lines, incomingLines, Object.keys(cleanData).filter((k) => {
+          const before = (current as Record<string, unknown>)[k];
+          const norm = (v: unknown) => (v instanceof Date ? v.toISOString().slice(0, 10) : typeof v === "string" && /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : v == null ? null : String(v));
+          return !(k in current) || norm(before) !== norm(cleanData[k]);
+        })),
+      }, userId);
 
       return tx.order.findUnique({
         where: { id },
@@ -1359,6 +1373,7 @@ export class OrderService extends BaseService {
           }, tekrar iptal edilemez. Sayfayı yenileyin.`
         );
       }
+      await emitOrderTerminalTx(tx, orderId, OrderStatus.CANCELLED, userId);
       // Donmuş sipariş teyidi iptalle birlikte VOIDED (birlikte ya da hiç).
       await voidOrderConfirmationTx(tx, orderId, cancelReasonText ?? "Sipariş iptal edildi");
       // F145: preview↔apply arası WO status yarışını kapat. Etkilenen WO'ları
