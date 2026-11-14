@@ -93,6 +93,8 @@ export const NOTIFICATION_PATRON_MAP: Readonly<Record<NotificationKind, PatronEs
   "finans.fatura-kesildi": { patronKind: null, neden: BULUT_TURU_YOK },
   "finans.fatura-iptal": { patronKind: null, neden: BULUT_TURU_YOK },
   "finans.cek-senet-vade": { patronKind: null, neden: BULUT_TURU_YOK },
+  "finans.vade-yaklasti": { patronKind: null, neden: BULUT_TURU_YOK },
+  "finans.vade-gecti": { patronKind: null, neden: BULUT_TURU_YOK },
   "finans.gunluk-ozet": { patronKind: null, neden: BULUT_TURU_YOK },
   "cari.olusturuldu": { patronKind: null, neden: BULUT_TURU_YOK },
   "cari.pasife-alindi": { patronKind: null, neden: BULUT_TURU_YOK },

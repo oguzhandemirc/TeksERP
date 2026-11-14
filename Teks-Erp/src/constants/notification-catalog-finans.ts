@@ -24,6 +24,11 @@ const ODEME = {
   ...FINANS, tekilKalibi: "{odemeId}", panelEkran: "finance/payments", panelYol: "/finance/payments",
   payloadAlanlari: ["odemeId", "belgeNo", "cariAd", "yontem", "kullanici"],
 } as const;
+const VADE = {
+  ...FINANS, altTur: "KOSUL", pencereSn: 0, izinler: [["report:finance"]], tekilKalibi: "{cariId}:{paraBirimi}:{yon}",
+  panelEkran: "reports/finance", panelYol: "/reports/finance/alacaklar",
+  payloadAlanlari: ["cariId", "cariAd", "yon", "paraBirimi", "belgeSayisi", "gun"],
+} as const;
 const FATURA = { ...FINANS, tekilKalibi: "{faturaId}", panelEkran: "finance/invoices", panelYol: "/finance/invoices" } as const;
 const CARI_KART = {
   ...ORTAK, grup: "Ana Veri", izinler: [["customer:read"]], modul: "cekirdek:ana-veri",
@@ -72,6 +77,25 @@ export const FINANS_NOTIFICATION_ENTRIES = {
     paramSemasi: z.object({ gun: z.number().int().min(0).max(30).default(3) }).strict(),
     payloadAlanlari: ["cekId", "belgeNo", "belgeTuru", "yon", "cariAd", "vade"],
     tahminiHaftalik: 5,
+  },
+  // Vade (S5b): karar `helpers/invoice-due.helper.ts` + yaşlandırma çekirdeği (`collectAgingRows`, sanal FIFO sonrası).
+  // Konu cari × para birimi × yön; yük belge sayısı + gün, TUTAR YOK. Yük açılışta donar (gün o anın ölçüsü).
+  "finans.vade-yaklasti": {
+    ...VADE, kod: "finans.vade-yaklasti", ad: "Vadesi yaklaşan belge",
+    baslik: "Vade yaklaşıyor: {cariAd}",
+    govde: "{cariAd} · {belgeSayisi} {yon} belgesinin vadesi en geç {gun} gün içinde ({paraBirimi})",
+    cozuldu: "{cariAd}: vadesi yaklaşan {yon} belgesi kalmadı",
+    paramSemasi: z.object({ gun: z.number().int().min(0).max(30).default(3) }).strict(),
+    tahminiHaftalik: 10,
+  },
+  "finans.vade-gecti": {
+    ...VADE, kod: "finans.vade-gecti", ad: "Vadesi geçen belge", onemli: true,
+    baslik: "Vadesi geçti: {cariAd}",
+    govde: "{cariAd} · {belgeSayisi} {yon} belgesinin vadesi geçti, en eskisi {gun} gün ({paraBirimi})",
+    cozuldu: "{cariAd}: vadesi geçmiş {yon} belgesi kalmadı",
+    // tolerans: vade geçtikten kaç gün sonra bildirilsin (0 = hemen) — "hemen" ve "birkaç gün bekle" ikisi de ayarla seçilir.
+    paramSemasi: z.object({ tolerans: z.number().int().min(0).max(90).default(0) }).strict(),
+    tahminiHaftalik: 10,
   },
   "finans.gunluk-ozet": {
     ...FINANS, tekilKalibi: "{gun}", pencereSn: 0, ozet: "GUN_SONU",
