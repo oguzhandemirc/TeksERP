@@ -42,3 +42,23 @@ export async function refreshNotificationParams(db: Pick<Prisma.TransactionClien
   }
   snapshot = next;
 }
+
+/**
+ * OLAY türünün eşiği (S6a): olay iş tx'inde doğar, süreç görüntüsü yalnız koşul turunda tazelenir → fabrika satırı
+ * aynı tx'ten TEK sorguyla okunur. Bozuk/şemaya uymayan satır katalog varsayılanına düşer (koşul okuyucusuyla aynı).
+ */
+export async function readNotificationParamsTx(
+  db: Pick<Prisma.TransactionClient, "notificationFactoryDefault">,
+  kind: NotificationKind,
+): Promise<Record<string, unknown>> {
+  const row = await db.notificationFactoryDefault.findUnique({ where: { kind }, select: { params: true } });
+  const env = row?.params == null ? null : notificationFactoryParamsSchema.safeParse(row.params);
+  if (env?.success) {
+    try {
+      return parseKindParams(kind, env.data.degerler);
+    } catch {
+      // Şema daralmış: varsayılan geçerli.
+    }
+  }
+  return parseKindParams(kind, {});
+}

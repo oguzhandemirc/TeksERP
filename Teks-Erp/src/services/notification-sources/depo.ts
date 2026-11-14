@@ -10,6 +10,8 @@ import type { Prisma } from "@prisma/client";
 import { emitNotification, type EmitDb } from "../helpers/notification-emit.helper";
 import { off, who, type Actor } from "./satis";
 import { sequentialTx } from "../helpers/tx-sequential-relations.helper";
+import { readNotificationParamsTx } from "../helpers/notification-params.helper";
+import { formatNotificationNumber } from "../helpers/notification-render.helper";
 
 type Tx = EmitDb & Prisma.TransactionClient;
 const m2 = (v: unknown): number => Math.round(Number(String(v ?? 0)) * 100) / 100;
@@ -33,12 +35,19 @@ export async function emitShipmentDispatchedTx(tx: Tx, shipmentId: string, actor
   }, { actorUserId: who(actor) });
 }
 
+/** Sevkiyatın BRÜT top/metresi: canlı toplar + iptal edilmemiş iade satırları (`reports/_shipped.ts` brüt kuralı). */
+async function shipmentGross(tx: Tx, shipmentId: string): Promise<{ topSayisi: number; metre: number }> {
+  const live = await tx.roll.aggregate({ where: { shipmentId }, _count: { _all: true }, _sum: { currentQty: true } });
+  const back = await tx.rollReturn.aggregate({ where: { fromShipmentId: shipmentId, cancelledAt: null }, _count: { _all: true }, _sum: { qty: true } });
+  return { topSayisi: live._count._all + back._count._all, metre: m2(m2(live._sum.currentQty) + m2(back._sum.qty)) };
+}
+
 /** `sevkiyat.geri-alindi` — DISPATCHED→PLANNED claim'i (`undo-dispatch.ts`, SoD `shipping:undo-dispatch`). */
 export async function emitShipmentUndoneTx(tx: Tx, shipmentId: string, reason: string, actor: Actor): Promise<void> {
   if (await off(tx)) return;
   const f = await shipmentFacts(tx, shipmentId);
   if (!f) return;
-  await emitNotification(tx, "sevkiyat.geri-alindi", subject("shipment", shipmentId), { sevkiyatId: shipmentId, ...f, sebep: txt(reason) }, { actorUserId: who(actor) });
+  await emitNotification(tx, "sevkiyat.geri-alindi", subject("shipment", shipmentId), { sevkiyatId: shipmentId, ...f, ...(await shipmentGross(tx, shipmentId)), sebep: txt(reason) }, { actorUserId: who(actor) });
 }
 
 /** `sevkiyat.faturalandi` — fatura işareti claim'i (`fields.ts`, `shipping:invoice`); işaret kaldırma bildirim değil. */
@@ -46,7 +55,7 @@ export async function emitShipmentInvoicedTx(tx: Tx, shipmentId: string, invoice
   if (await off(tx)) return;
   const f = await shipmentFacts(tx, shipmentId);
   if (!f) return;
-  await emitNotification(tx, "sevkiyat.faturalandi", subject("shipment", shipmentId), { sevkiyatId: shipmentId, ...f, faturaNo: txt(invoiceNo, 64) }, { actorUserId: who(actor) });
+  await emitNotification(tx, "sevkiyat.faturalandi", subject("shipment", shipmentId), { sevkiyatId: shipmentId, ...f, ...(await shipmentGross(tx, shipmentId)), faturaNo: txt(invoiceNo, 64) }, { actorUserId: who(actor) });
 }
 
 /** `sevkiyat.iade` — iade belgesi tx'i (`return.service.ts#createReturn`); konu belge lideri, kalemler `returnGroupId`. */
@@ -102,21 +111,55 @@ export async function emitSubcontractDispatchedTx(tx: Tx, dispatchId: string, ac
   if (await off(tx)) return;
   const d = await tx.subcontractorDispatch.findUnique({
     where: { id: dispatchId },
-    select: { dispatchNo: true, totalQty: true, subcontractor: { select: { name: true } }, _count: { select: { items: true } } },
+    select: { dispatchNo: true, totalQty: true, subcontractor: { select: { name: true } } },
   });
   if (!d) return;
+  const rolls = await tx.subcontractorDispatchItem.count({ where: { dispatchId, rollId: { not: null } } });
+  const beams = await tx.subcontractorDispatchItem.count({ where: { dispatchId, warpBeamId: { not: null } } });
+  const yarn = await tx.subcontractorDispatchItem.aggregate({ where: { dispatchId, yarnItemId: { not: null } }, _sum: { dispatchedQty: true } });
+  const parts = [
+    rolls > 0 ? `${rolls} top` : null,
+    beams > 0 ? `${beams} levent` : null,
+    rolls + beams > 0 || m2(d.totalQty) > 0 ? `${formatNotificationNumber(m2(d.totalQty))} m` : null,
+    m2(yarn._sum.dispatchedQty) > 0 ? `${formatNotificationNumber(m2(yarn._sum.dispatchedQty))} kg iplik` : null,
+  ].filter((p): p is string => p !== null);
   await emitNotification(tx, "fason.cikis", subject("subcontractor_dispatch", dispatchId), {
-    sevkId: dispatchId, sevkNo: d.dispatchNo, firmaAd: d.subcontractor?.name ?? "—", topSayisi: d._count.items, metre: m2(d.totalQty),
+    sevkId: dispatchId, sevkNo: d.dispatchNo, firmaAd: d.subcontractor?.name ?? "—", icerik: parts.join(", "),
   }, { actorUserId: who(actor) });
 }
 
-/** `fason.donus` — fason kabul fişi doğuşu (`subcontractor/receive.ts`; `receiptReplay` boğazı replay'i buraya getirmez). */
-export async function emitSubcontractReceivedTx(tx: Tx, receiptId: string, rollCount: number, actor: Actor): Promise<void> {
+/**
+ * `fason.donus` — fason kabul fişi doğuşu (`subcontractor/receive.ts`; `receiptReplay` boğazı replay'i buraya getirmez) ve
+ * fason dokuma kabulü (`subcontractor-weaving.service.ts`, top döngüsünden sonra gerçek doğan top/metre ile). `metre` = dönen.
+ */
+export async function emitSubcontractReceivedTx(tx: Tx, receiptId: string, c: { rollCount: number; meters: Prisma.Decimal | number }, actor: Actor): Promise<void> {
   if (await off(tx)) return;
   const r = await tx.subcontractorReceipt.findUnique({ where: { id: receiptId }, select: { receiptNo: true, subcontractor: { select: { name: true } } } });
   if (!r) return;
   await emitNotification(tx, "fason.donus", subject("subcontractor_receipt", receiptId), {
-    kabulId: receiptId, kabulNo: r.receiptNo, firmaAd: r.subcontractor?.name ?? "—", topSayisi: rollCount,
+    kabulId: receiptId, kabulNo: r.receiptNo, firmaAd: r.subcontractor?.name ?? "—", topSayisi: c.rollCount, metre: m2(c.meters),
+  }, { actorUserId: who(actor) });
+}
+
+/**
+ * `fason.fire-farki` — kabulde fasonun hesabından düşülen (giden) ↔ doğan (dönen) metre farkı eşiği (`oran` %, iki yön)
+ * aşınca; çağıran çekme/fazla defter satırlarını yazan blok (`subcontractor/receive.ts`), aynı tx. Giden 0 ise oran yok.
+ */
+export async function emitSubcontractShrinkTx(
+  tx: Tx, receiptId: string, c: { consumed: Prisma.Decimal; born: Prisma.Decimal }, actor: Actor,
+): Promise<void> {
+  if (await off(tx)) return;
+  if (!c.consumed.greaterThan(0)) return;
+  const diff = c.born.minus(c.consumed);
+  const pct = diff.abs().dividedBy(c.consumed).times(100);
+  const threshold = Number((await readNotificationParamsTx(tx, "fason.fire-farki")).oran ?? 3);
+  if (pct.lessThan(threshold)) return;
+  const r = await tx.subcontractorReceipt.findUnique({ where: { id: receiptId }, select: { receiptNo: true, subcontractor: { select: { name: true } } } });
+  if (!r) return;
+  await emitNotification(tx, "fason.fire-farki", subject("subcontractor_receipt", receiptId), {
+    kabulId: receiptId, kabulNo: r.receiptNo, firmaAd: r.subcontractor?.name ?? "—",
+    gidenMetre: m2(c.consumed), donenMetre: m2(c.born), farkMetre: m2(diff.abs()),
+    yon: diff.isNegative() ? "eksik (çekme)" : "fazla", oranYuzde: Math.round(pct.toNumber() * 10) / 10,
   }, { actorUserId: who(actor) });
 }
 
@@ -143,8 +186,8 @@ export async function emitIncomingDocApprovedTx(tx: Tx, noteId: string, actor: A
   if (await off(tx)) return;
   const f = await noteFacts(tx, noteId);
   if (!f) return;
-  const topSayisi = await tx.customerDeliveryNoteLine.count({ where: { noteId, rollId: { not: null } } });
-  await emitNotification(tx, "gelenbelge.onaylandi", NOTE(noteId), { belgeId: noteId, ...f, topSayisi }, { actorUserId: who(actor) });
+  const agg = await tx.customerDeliveryNoteLine.aggregate({ where: { noteId, rollId: { not: null } }, _count: { _all: true }, _sum: { meters: true } });
+  await emitNotification(tx, "gelenbelge.onaylandi", NOTE(noteId), { belgeId: noteId, ...f, topSayisi: agg._count._all, metre: m2(agg._sum.meters) }, { actorUserId: who(actor) });
 }
 
 /** `gelenbelge.iptal` — iptal claim'i (`gelen-belge-iptal.service.ts#claimNoteTx`). */
