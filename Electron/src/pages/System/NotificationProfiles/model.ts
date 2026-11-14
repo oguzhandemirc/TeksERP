@@ -181,3 +181,17 @@ const ESIK_LABEL_TUR: Readonly<Record<string, Readonly<Record<string, string>>>>
 export function esikEtiketi(tur: string, alan: string): string {
   return ESIK_LABEL_TUR[tur]?.[alan] ?? ESIK_LABEL[alan] ?? alan;
 }
+
+/**
+ * Hazır profille doldurma (rol profili): küme içi tür ACIK, dışı KAPALI; KILITLI hücre korunur, katalogda her zaman
+ * kilitli tür KAPALI'ya düşmez (ACIK olur). Yalnız verilen türler; kayıt mevcut hücre PUT'uyla.
+ */
+export function fillFromPreset(draft: CellDraft, kinds: readonly Pick<FactoryDefaultKind, "tur" | "kilit">[], presetKinds: readonly string[]): CellDraft {
+  const inSet = new Set(presetKinds);
+  const next: Record<string, ProfileCellState> = { ...draft };
+  for (const k of kinds) {
+    if (next[k.tur] === "KILITLI") continue;
+    next[k.tur] = inSet.has(k.tur) || !allowsOff(k.kilit) ? "ACIK" : "KAPALI";
+  }
+  return next;
+}
