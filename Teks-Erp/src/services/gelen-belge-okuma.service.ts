@@ -19,6 +19,7 @@ import { PDF_MIME } from "./gelen-belge-scan.service";
 import { photoPurgedError } from "./gelen-belge-foto-saklama.service";
 import { readDuplicateDocNoMode } from "./system-setting.service";
 import { lockDocNosTx } from "./helpers/gelen-belge-mukerrer.helper";
+import { emitIncomingDocCreatedTx } from "./notification-sources/depo";
 
 export const READ_MAX_ATTEMPTS = 3;
 /** READING'de bu kadar kalan tarama (süreç düşmüş) yeniden PENDING sayılır. */
@@ -131,6 +132,7 @@ export async function processClaimedScan(id: string, readerUrl: string, ocr: typ
       });
       const s = await tx.documentScan.updateMany({ where: { id, status: "READING", noteId: null }, data: { ...scanData, noteId: row.id } });
       if (s.count === 0) throw new Error("SCAN_LOST");
+      await emitIncomingDocCreatedTx(tx, row.id, scan.capturedById);
       return row;
     });
   }, undefined, (err) => p2002TargetsCode(err, "noteNo"), "Gelen belge numarası")

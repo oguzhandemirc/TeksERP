@@ -40,6 +40,7 @@ import { assertShipmentNotHeldTx } from "../helpers/cari-hold.helper";
 import { assertCustomerRiskLimitTx } from "../helpers/risk-exposure.helper";
 import { transitionSwatchesTx } from "../helpers/swatch-event.helper";
 import type { AllocationAuditTrail, ShippingServiceThis } from "./shared";
+import { emitShipmentDispatchedTx } from "../notification-sources/depo";
 
 // eslint-disable-next-line max-params -- `this` bağlam bildirimi parametre değil; özgün metot 4 parametreli
 export async function performDispatchTx(this: ShippingServiceThis, 
@@ -231,6 +232,7 @@ export async function performDispatchTx(this: ShippingServiceThis,
     await recomputeOrderStatusForOrdersTx(tx, orderIds);
     // Resmi belge — sevk irsaliyesi v1 burada donar.
     await printedDocumentService.freezeForSource(tx, PrintedDocType.SHIPMENT_DISPATCH, shipmentId, userId);
+    await emitShipmentDispatchedTx(tx, shipmentId, userId);
     return { flipped, iz: tazeTahsisIzi };
   }
 
