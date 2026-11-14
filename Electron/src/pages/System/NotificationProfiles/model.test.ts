@@ -1,3 +1,5 @@
+import { readFileSync, readdirSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { FactoryDefaultKind } from "@/services/bildirimProfilService";
 import {
@@ -5,6 +7,7 @@ import {
   cellsFromDraft,
   draftEquals,
   draftFromCells,
+  esikEtiketi,
   factoryChanges,
   factoryDraftFrom,
   membersAfterLockChoice,
@@ -58,5 +61,27 @@ describe("bildirim profilleri modeli", () => {
     expect(factoryChanges(kinds, base, d2).errors).toHaveLength(1);
     const d3 = { ...base, a: { ...base.a!, durum: "KILITLI" as const } };
     expect(factoryChanges(kinds, base, d3).turler.map((t) => t.tur)).toEqual(["a"]);
+  });
+});
+
+describe("fabrika varsayılanı eşik etiketleri", () => {
+  it("katalogdaki her paramSemasi alanının Türkçe etiketi var (ham anahtar görünmez)", () => {
+    const dir = resolve(__dirname, "../../../../../Teks-Erp/src/constants");
+    const alanlar = new Set<string>();
+    for (const f of readdirSync(dir).filter((n) => /^notification-catalog.*\.ts$/.test(n))) {
+      const src = readFileSync(resolve(dir, f), "utf8");
+      for (const m of src.matchAll(/paramSemasi:\s*z\.object\(\{([\s\S]*?)\}\)\.strict\(\)/g)) {
+        for (const a of m[1]!.matchAll(/(\w+):\s*z\./g)) alanlar.add(a[1]!);
+      }
+    }
+    expect(alanlar.size).toBeGreaterThan(3);
+    for (const a of alanlar) expect(esikEtiketi("x.y", a), a).not.toBe(a);
+  });
+
+  it("yaklaşıyor türlerinde gün öne-bakış penceresidir", () => {
+    expect(esikEtiketi("finans.vade-yaklasti", "gun")).toBe("Kaç gün kala");
+    expect(esikEtiketi("stok.yaslanan", "gun")).toBe("Eşik (gün)");
+    expect(esikEtiketi("finans.vade-gecti", "tolerans")).toBe("Gecikme payı (gün)");
+    expect(esikEtiketi("x.y", "bilinmeyen")).toBe("bilinmeyen");
   });
 });

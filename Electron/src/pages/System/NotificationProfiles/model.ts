@@ -113,3 +113,26 @@ export function factoryChanges(
 
 export const CELL_LABEL: Record<ProfileCellState, string> = { ACIK: "Açık", KAPALI: "Kapalı", KILITLI: "Kilitli" };
 export const FACTORY_LABEL: Record<FactoryDefaultKind["durum"], string> = { MIRAS: "Miras", ...CELL_LABEL };
+
+// Katalog `paramSemasi` alan adı → görünen ad. Bilinmeyen alan adıyla görünür (sessizce kaybolmaz); yeni
+// alan eklenince buraya da yazılır (bekçi: model.test.ts — katalogda bilinen her alanın etiketi var).
+const ESIK_LABEL: Readonly<Record<string, string>> = {
+  gun: "Eşik (gün)",
+  kalanGun: "Kalan gün eşiği",
+  dakika: "Eşik (dakika)",
+  saat: "Eşik (saat)",
+  oranYuzde: "Oran eşiği (%)",
+  minMetre: "En az metre",
+  tolerans: "Gecikme payı (gün)",
+};
+// "Yaklaşıyor" türlerinde `gun` bir öne-bakış penceresidir; "Eşik (gün)" yaş eşiği gibi okunuyordu.
+const ESIK_LABEL_TUR: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  "siparis.termin-yaklasti": { gun: "Kaç gün kala" },
+  "kalite.sertifika-suresi-doluyor": { gun: "Kaç gün kala" },
+  "finans.vade-yaklasti": { gun: "Kaç gün kala" },
+  "finans.cek-senet-vade": { gun: "Kaç gün kala" },
+};
+
+export function esikEtiketi(tur: string, alan: string): string {
+  return ESIK_LABEL_TUR[tur]?.[alan] ?? ESIK_LABEL[alan] ?? alan;
+}
