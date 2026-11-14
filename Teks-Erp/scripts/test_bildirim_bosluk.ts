@@ -12,6 +12,8 @@
 //       ödenmiş/uzak vadeli fatura konu doğurmaz; tolerans eşiği; modül kapalı → boş; yükte tutar yok.
 //   §C cari.degisti: gerçek `CustomerService.update` → tek outbox satırı, değişen alan ADLARI metinde (değer yok); değişiklik
 //       yoksa / yalnız iç kolon değiştiyse satır yok; kanca fırlatınca kart da outbox da geri sarılır (aynı tx).
+//   §K kursun.gramaj-sapmasi kâğıt yolu: `KursunBypassService` setGramaj · assign · completeFromDistribution aynı tek yayma
+//       noktasını (`emitKursunDeviationTx`, `rollId: null`) çağırır; kâğıt yükü "Kâğıt dağıtım", hedefe eşit gramaj yazmaz.
 // NEGATİF SONDA: bölüm başlıklarında (aşağıda, bölüm bölüm).
 // =============================================================================
 import { readFileSync } from "node:fs";
@@ -30,6 +32,8 @@ import { cleanupTestCustomers } from "./fixture-customer-cleanup";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { CustomerService } from "../src/services/customer.service";
 import { emitCustomerChangedTx } from "../src/services/notification-sources/anaveri";
+import { emitKursunDeviationTx } from "../src/services/notification-sources/uretim";
+import { KURSUN_PROPERTY_CODE } from "../src/services/helpers/quality-station.helper";
 
 let pass = 0;
 let fail = 0;
@@ -209,6 +213,57 @@ async function bolumC(): Promise<void> {
   }
 }
 
+// ── §K kurşun kâğıt yolu ───────────────────────────────────────────────────
+// NEGATİF SONDA (2026-11-14): setGramaj'daki çağrı silindi → §Ka ❌; emitter'da `a.rollId ?` dalı kaldırıldı
+//   (kâğıtta topNo "—") → §Kb ❌. İkisi de geri alındı.
+function bolumKa(): void {
+  console.log("\n§K kurşun kâğıt (bypass) yolu — AST");
+  const rel = "services/kursun-bypass.service.ts";
+  const sf = ts.createSourceFile(rel, oku(rel), ts.ScriptTarget.Latest, true);
+  const bulunan = new Set<string>();
+  const gez = (n: ts.Node, metot: string | null): void => {
+    const ad = ts.isMethodDeclaration(n) && ts.isIdentifier(n.name) ? n.name.text : metot;
+    if (ts.isCallExpression(n) && ts.isIdentifier(n.expression) && n.expression.text === "emitKursunDeviationTx" && ad) {
+      const a = n.arguments[1];
+      if (a && ts.isObjectLiteralExpression(a) && a.properties.some((p) => ts.isPropertyAssignment(p) && p.name.getText() === "rollId" && p.initializer.kind === ts.SyntaxKind.NullKeyword)) bulunan.add(ad);
+    }
+    ts.forEachChild(n, (c) => gez(c, ad));
+  };
+  gez(sf, null);
+  const eksik = ["setGramaj", "assign", "completeFromDistribution"].filter((m) => !bulunan.has(m));
+  check("§Ka ⭐ kâğıt gramajını yazan üç metot tek yayma noktasını `rollId: null` ile çağırır", eksik.length === 0, eksik.join(", ") || [...bulunan].join(", "));
+}
+
+async function bolumKb(): Promise<void> {
+  console.log("\n§K kurşun kâğıt yükü (geri sarılan tx)");
+  const engel = hedefDbEngeli();
+  if (engel) throw new Error(`DURDURULDU — ${engel}`);
+  let sonuc: [boolean, boolean, string] = [false, false, ""];
+  await prisma.$transaction(async (tx) => {
+    await tx.systemSetting.upsert({ where: { key: SETTING_KEYS.BILDIRIM_GELEN_KUTUSU_ENABLED }, create: { key: SETTING_KEYS.BILDIRIM_GELEN_KUTUSU_ENABLED, value: true }, update: { value: true } });
+    const st = await tx.station.create({ data: { code: `TBBK-${ek}`.slice(0, 32), name: `TEST-BBK İstasyon ${ek}`, type: "INTERNAL" }, select: { id: true } });
+    const item = await tx.item.create({ data: { code: `TBBK-${ek}`, name: `TEST-BBK Kumaş ${ek}`, itemType: "FABRIC" }, select: { id: true } });
+    const base = await tx.fabricProperty.upsert({ where: { code: KURSUN_PROPERTY_CODE }, create: { code: KURSUN_PROPERTY_CODE, name: "Kurşun" }, update: {}, select: { id: true } });
+    const variant = (await tx.fabricProperty.findFirst({ where: { variantOfPropertyId: base.id }, select: { id: true } }))
+      ?? (await tx.fabricProperty.create({ data: { code: `TBBK-V-${ek}`.slice(0, 32), name: `TEST-BBK Gramaj ${ek}`, variantOfPropertyId: base.id }, select: { id: true } }));
+    const v1 = await tx.fabricPropertyValue.create({ data: { propertyId: variant.id, code: `TBBK1-${ek}`.slice(0, 32), name: "120 gr" }, select: { id: true } });
+    const v2 = await tx.fabricPropertyValue.create({ data: { propertyId: variant.id, code: `TBBK2-${ek}`.slice(0, 32), name: "140 gr" }, select: { id: true } });
+    const wo = await tx.workOrder.create({ data: { workOrderNumber: `TEST-BBK-${ek}`, type: "STOCK_PRODUCTION", targetItemId: item.id }, select: { id: true } });
+    const step = await tx.workOrderStep.create({ data: { workOrderId: wo.id, stationId: st.id, stepSequence: 1 }, select: { id: true } });
+    await tx.workOrderTargetValue.create({ data: { workOrderId: wo.id, propertyId: variant.id, valueId: v1.id } });
+    const say = () => tx.notificationOutbox.findMany({ where: { kind: "kursun.gramaj-sapmasi", subjectId: wo.id }, select: { payload: true } });
+    await emitKursunDeviationTx(tx, { rollId: null, stepId: step.id, valueId: v1.id }, null);
+    const esit = (await say()).length === 0;
+    await emitKursunDeviationTx(tx, { rollId: null, stepId: step.id, valueId: v2.id }, null);
+    const r = await say();
+    const p = (r[0]?.payload ?? {}) as Record<string, unknown>;
+    sonuc = [esit, r.length === 1 && p.topNo === "Kâğıt dağıtım" && p.gramaj === "140 gr" && p.hedef === "120 gr", JSON.stringify(p)];
+    throw new Patlat();
+  }).catch((e: unknown) => { if (!(e instanceof Patlat)) throw e; });
+  check("§Kb ⭐ kâğıt gramajı hedeften farklı → satır, top yerine \"Kâğıt dağıtım\"", sonuc[1], sonuc[2]);
+  check("§Kc kâğıt gramajı hedefe eşit → satır yok", sonuc[0]);
+}
+
 function bolumK7(): void {
   console.log("\n§K7 modül kapısı");
   const viewer = { permissions: ["*"] };
@@ -224,6 +279,8 @@ async function main(): Promise<void> {
   bolumK7();
   await bolumV2();
   await bolumC();
+  bolumKa();
+  await bolumKb();
 }
 
 main()

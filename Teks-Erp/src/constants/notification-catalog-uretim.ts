@@ -94,7 +94,7 @@ export const URETIM_NOTIFICATION_ENTRIES = {
     ...ORTAK, ...URETIM_RAPOR, kod: "kursun.gramaj-sapmasi", ad: "Kurşun gramajı hedeften saptı", grup: "Üretim", onemli: true,
     tekilKalibi: "{isEmriId}", pencereSn: 600, panelYol: "/reports/production/kursun-gramaj",
     baslik: "Gramaj sapması: {isEmriNo}",
-    govde: "{topNo} topuna {gramaj} basıldı, hedef {hedef} · {kullanici}",
+    govde: "{topNo} · {gramaj} basıldı, hedef {hedef} · {kullanici}",
     payloadAlanlari: ["isEmriId", "isEmriNo", "topNo", "gramaj", "hedef", "kullanici"],
     tahminiHaftalik: 2,
   },

@@ -89,6 +89,7 @@ import {
 } from "./helpers/quality-station.helper";
 import { ACTIONABLE_ROLL_ERROR_WHERE } from "./helpers/roll-error-scope.helper";
 import { TERIM } from "../constants/terim";
+import { emitKursunDeviationTx } from "./notification-sources/uretim";
 
 /**
  * Bypass kapanışının movement notes marker ÖN EKİ. Tur kimliği (uuid) suffix
@@ -512,7 +513,7 @@ export class KursunBypassService {
     const { previousValueId } = await prisma.$transaction(async (tx) => {
       const before = await tx.kursunBypassAssignment.findUnique({
         where: { id: assignmentId },
-        select: { propertyValueId: true },
+        select: { propertyValueId: true, workOrderStepId: true },
       });
       if (!before) throw AppError.notFound("Dağıtım kaydı bulunamadı");
       const claim = await tx.kursunBypassAssignment.updateMany({
@@ -522,6 +523,7 @@ export class KursunBypassService {
       if (claim.count === 0) {
         throw AppError.conflict("Tamamlanmış/iptal dağıtımın gramajı değişmez", { code: "KURSUN_GRAMAJ_FROZEN" });
       }
+      if (before.propertyValueId !== propertyValueId) await emitKursunDeviationTx(tx, { rollId: null, stepId: before.workOrderStepId, valueId: propertyValueId }, userId);
       return { previousValueId: before.propertyValueId };
     });
     const changed = previousValueId !== propertyValueId;
@@ -1043,6 +1045,7 @@ export class KursunBypassService {
           });
           assignmentId = created.id;
         }
+        if (input.propertyValueId) await emitKursunDeviationTx(tx, { rollId: null, stepId: step.id, valueId: input.propertyValueId }, userId); // kâğıt gramajı
 
         return {
           assignmentId,
@@ -1442,10 +1445,11 @@ export class KursunBypassService {
       // KQ-D6: tamamlamada verilen gramaj, claim'den ÖNCE açık satıra yazılır (aynı
       // tx); atama zaten kapanmışsa 0 satır döner ve claim'in idempotent dalı karar verir.
       if (input.propertyValueId !== undefined) {
-        await tx.kursunBypassAssignment.updateMany({
+        const set = await tx.kursunBypassAssignment.updateMany({
           where: { id: assignmentId, completedAt: null, cancelledAt: null },
           data: { propertyValueId: input.propertyValueId },
         });
+        if (set.count > 0) await emitKursunDeviationTx(tx, { rollId: null, stepId: a.workOrderStepId, valueId: input.propertyValueId }, userId);
       }
       const claimed = await this.claimAssignmentTx(
         tx,

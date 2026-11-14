@@ -96,7 +96,7 @@ export async function emitRunPatternChangedTx(
 /** `kursun.gramaj-sapmasi` — basılan gramaj İE'nin aktif hedefinden farklı (`applyKursunOperationTx` yeni satırı). */
 export async function emitKursunDeviationTx(
   tx: Tx,
-  a: { rollId: string; stepId: string; valueId: string | null },
+  a: { rollId: string | null; stepId: string; valueId: string | null },
   actor: Actor,
 ): Promise<void> {
   if (!a.valueId) return;
@@ -106,10 +106,11 @@ export async function emitKursunDeviationTx(
   // Hedef = İE kartı/raporla AYNI okuyucu (`readKursunTarget`); hedef yoksa sapma yok.
   const target = await readKursunTarget(step.workOrderId, tx);
   if (!target || target.valueId === a.valueId) return;
-  const roll = await tx.roll.findUnique({ where: { id: a.rollId }, select: { barcode: true } });
+  // Kâğıt (bypass) dağıtımda gramaj topa değil atamaya yazılır (`rollId: null`) → konu iş emri, top yerine "Kâğıt dağıtım".
+  const roll = a.rollId ? await tx.roll.findUnique({ where: { id: a.rollId }, select: { barcode: true } }) : null;
   const value = await tx.fabricPropertyValue.findUnique({ where: { id: a.valueId }, select: { name: true } });
   await emitNotification(tx, "kursun.gramaj-sapmasi", { type: "work_order", id: step.workOrderId, key: step.workOrderId }, {
-    isEmriId: step.workOrderId, isEmriNo: step.workOrder.workOrderNumber, topNo: roll?.barcode ?? "—",
+    isEmriId: step.workOrderId, isEmriNo: step.workOrder.workOrderNumber, topNo: a.rollId ? roll?.barcode ?? "—" : "Kâğıt dağıtım",
     gramaj: value?.name ?? "—", hedef: target.valueName,
   }, { actorUserId: who(actor) });
 }
