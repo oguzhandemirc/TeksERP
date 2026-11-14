@@ -6,13 +6,14 @@ import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import type { Api } from "../api/endpoints";
 import type { RegisterOutcome } from "./register";
+import { kanallariKur } from "./kanallar-native";
+import { VARSAYILAN_SES } from "./sesler";
 
 export async function registerNative(api: Api): Promise<RegisterOutcome> {
   if (!Device.isDevice) return { kind: "DESTEKLENMIYOR", message: "Bildirim yalnız gerçek cihazda alınabilir (öykünücü değil)" };
   // Android 13+: POST_NOTIFICATIONS çalışma zamanı istemi ancak bir kanal VARKEN çıkar → kanal izinden ÖNCE kurulur.
-  if (Platform.OS === "android") {
-    await Notifications.setNotificationChannelAsync("varsayilan", { name: "Bildirimler", importance: Notifications.AndroidImportance.HIGH });
-  }
+  // Bulut kipinde ses seçimi yok: varsayılan TeksERP kanalları (bulut iletisi aynı kimliği yollar), eski `varsayilan` silinir.
+  await kanallariKur(VARSAYILAN_SES);
   const current = await Notifications.getPermissionsAsync();
   const status = current.granted ? current.status : (await Notifications.requestPermissionsAsync()).status;
   if (status !== "granted") return { kind: "IZIN_YOK", message: "Bildirim izni verilmedi; telefon ayarlarından açabilirsiniz" };

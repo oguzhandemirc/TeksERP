@@ -4,18 +4,18 @@ import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import { degisinceSuzgeci, type IzinDurumu, type PushPortlari } from "./erp-push";
+import { kanalAyariniAc, kanallariKur, sesiOnizle } from "./kanallar-native";
+import type { SesSecimi } from "./sesler";
 
 const durum = (p: Notifications.NotificationPermissionsStatus): IzinDurumu =>
   p.granted ? "VERILDI" : p.status === "denied" && !p.canAskAgain ? "REDDEDILDI" : "SORULMADI";
 
-/** Kanal izinden ÖNCE (Android 13+ istemi kanal varken çıkar); izni önceden verilmiş cihazda da kayıtta kurulur (idempotent). */
-async function kanal(): Promise<void> {
-  if (Platform.OS === "android") {
-    await Notifications.setNotificationChannelAsync("varsayilan", { name: "Bildirimler", importance: Notifications.AndroidImportance.HIGH });
-  }
-}
-
-export function erpPushPortlari(): PushPortlari {
+/**
+ * Kanallar izinden ÖNCE (Android 13+ istemi kanal varken çıkar); izni önceden verilmiş cihazda da kayıtta kurulur
+ * (idempotent). Ses başına kanal: seçim değişince yeni kanal kurulur, eski `varsayilan` ve seçilmeyenler silinir.
+ */
+export function erpPushPortlari(secim: () => Promise<SesSecimi>): PushPortlari {
+  const kanal = async () => kanallariKur(await secim());
   return {
     platform: Platform.OS === "ios" ? "ios" : "android",
     izinOku: async () => (Device.isDevice ? durum(await Notifications.getPermissionsAsync()) : "DESTEKLENMIYOR"),
@@ -35,5 +35,8 @@ export function erpPushPortlari(): PushPortlari {
       return () => sub.remove();
     },
     cihazAdi: () => Device.deviceName ?? null,
+    kanallariKur: (s) => kanallariKur(s),
+    sesiOnizle: async (sinif, ses) => sesiOnizle(sinif, ses, await secim()),
+    kanalAyariniAc: (sinif, ses) => kanalAyariniAc(sinif, ses, Constants.expoConfig?.android?.package ?? null),
   };
 }

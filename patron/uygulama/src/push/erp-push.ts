@@ -5,6 +5,8 @@
 import { Platform } from "react-native";
 import type { PushCihazci } from "../api/bildirim";
 import type { KeyValue } from "../state/browser-store";
+import { ApiError } from "../api/client";
+import { VARSAYILAN_SES, sesSecimiKaydet, sesSecimiYukle, type Ses, type SesSecimi, type SesSinifi } from "./sesler";
 import { NATIVE_PUSH_ETKIN } from "./support";
 
 export type IzinDurumu = "VERILDI" | "REDDEDILDI" | "SORULMADI" | "DESTEKLENMIYOR";
@@ -19,6 +21,12 @@ export interface PushPortlari {
   /** Cihaz belirteci değişince çağrılır; dönüş aboneliği kaldırır. */
   belirtecDegisince(cb: () => void): () => void;
   cihazAdi(): string | null;
+  /** S0: seçili BİLDİRİM + ALARM kanallarını kurar (Android; seçilmeyen `tekserp-*` ve eski `varsayilan` silinir). */
+  kanallariKur(s: SesSecimi): Promise<void>;
+  /** Sesi yerel bildirimle çalar (önizleme). */
+  sesiOnizle(sinif: SesSinifi, ses: Ses): Promise<void>;
+  /** Seçili kanalın telefon ayarını açar (her sistem sesi orada seçilebilir). */
+  kanalAyariniAc(sinif: SesSinifi, ses: Ses): Promise<void>;
 }
 
 /** Gizli depoda: son kaydedilen belirteç + kaydedildiği fabrika adresi. */
@@ -56,7 +64,11 @@ export function degisinceSuzgeci(cb: () => void): (veri: unknown) => void {
   };
 }
 
-export const yerelPortlar = (): PushPortlari => (require("./erp-push-native") as typeof import("./erp-push-native")).erpPushPortlari();
+/** Gizli depo çağrı anında alınır: ekran modülü yüklenirken yerel depo modülü istenmesin. */
+const gizliDepo = (): KeyValue => (require("../state/store") as typeof import("../state/store")).secretStore;
+
+export const yerelPortlar = (): PushPortlari =>
+  (require("./erp-push-native") as typeof import("./erp-push-native")).erpPushPortlari(() => sesSecimiYukle(gizliDepo()));
 
 const ret = (d: IzinDurumu): ErpPushSonucu => ({ kind: d === "DESTEKLENMIYOR" ? "DESTEKLENMIYOR" : d === "REDDEDILDI" ? "REDDEDILDI" : "IZIN_YOK" });
 
@@ -77,9 +89,33 @@ export async function erpPushEtkinlestir(b: ErpPushBaglam, o: { iste: boolean })
   const belirtec = await p.belirtecAl();
   if (!belirtec) return { kind: "YAPILANDIRMA_EKSIK" };
   const ad = p.cihazAdi()?.trim().slice(0, 80);
-  await b.cihazci.kaydet({ belirtec, platform: p.platform, ...(ad ? { cihazAdi: ad } : {}) });
+  // Ses seçimi cihaz kaydıyla gider: fabrika buluta iletir, bulut Expo iletisinde kanal + sesi bundan kurar.
+  // Eski fabrika (alanı bilmeyen katı şema) için: varsayılan seçimde alan HİÇ gitmez; sapan seçim 400 PATRON_PUSH_GOVDE
+  // alırsa sessiz yeniden deneme alansız (bildirim gelir, ses fabrika güncellenince seçilene döner).
+  const ses = await sesSecimiYukle(b.store);
+  const temel = { belirtec, platform: p.platform, ...(ad ? { cihazAdi: ad } : {}) };
+  if (ses.bildirim === VARSAYILAN_SES.bildirim && ses.alarm === VARSAYILAN_SES.alarm) await b.cihazci.kaydet(temel);
+  else {
+    try {
+      await b.cihazci.kaydet({ ...temel, sesBildirim: ses.bildirim, sesAlarm: ses.alarm });
+    } catch (err) {
+      if (!(err instanceof ApiError && err.status === 400 && err.code === "PATRON_PUSH_GOVDE")) throw err;
+      await b.cihazci.kaydet(temel);
+    }
+  }
   await b.store.set(ERP_PUSH_KEY, JSON.stringify({ adres: b.adres, belirtec }));
   return { kind: "KAYITLI" };
+}
+
+/**
+ * Ses değişimi: seçim cihaza yazılır → kanallar kurulur → izin verilmişse kayıt yenilenir (fabrika buluta iletir).
+ * İzin yoksa yalnız yerelde kalır; "Telefon bildirimlerini aç" kaydı seçimi zaten taşır.
+ */
+export async function erpPushSesDegistir(b: ErpPushBaglam, secim: SesSecimi): Promise<ErpPushSonucu> {
+  await sesSecimiKaydet(b.store, secim);
+  if (!b.acik) return { kind: "KAPALI" };
+  await b.portlar().kanallariKur(secim);
+  return erpPushEtkinlestir(b, { iste: false });
 }
 
 function sakliOku(raw: string | null): { adres: string; belirtec: string } | null {

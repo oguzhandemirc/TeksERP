@@ -10,6 +10,7 @@ import { ClientType, Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { pushBridgeEligibility } from "../../cloud-sync/eligibility";
+import { PUSH_DEFAULT_SOUND, type PushSound } from "../../cloud-sync/wire";
 import { readNotificationInboxEnabled, readPatronPushEnabled } from "../system-setting.service";
 import { digestPushToken, sealPushToken } from "./token-seal";
 import { LIVE_STATES, RELEASE_DATA } from "./states";
@@ -33,6 +34,9 @@ export interface RegisterInput {
   readonly token: string;
   readonly platform: "android" | "ios";
   readonly deviceName: string | null;
+  /** S0 ses seçimi; yoksa (eski uygulama) sınıfın varsayılanı. */
+  readonly soundNotification?: PushSound;
+  readonly soundAlarm?: PushSound;
 }
 
 export interface RegisterResult {
@@ -73,12 +77,16 @@ async function registerOnce(caller: PushCaller, sessionId: string, input: Regist
   return prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(${PATRON_PUSH_LOCK_NS}::int, hashtext(${caller.userId}))`;
     const now = new Date();
-    const common = { userId: caller.userId, sessionId, tokenSealed: sealed, platform: input.platform, deviceName: input.deviceName, lastSeenAt: now };
-    const existing = await tx.patronPushToken.findUnique({ where: { tokenDigest: digest }, select: { id: true, cloudState: true } });
+    const soundNotification = input.soundNotification ?? PUSH_DEFAULT_SOUND.BILDIRIM;
+    const soundAlarm = input.soundAlarm ?? PUSH_DEFAULT_SOUND.ALARM;
+    const common = { userId: caller.userId, sessionId, tokenSealed: sealed, platform: input.platform, deviceName: input.deviceName, lastSeenAt: now, soundNotification, soundAlarm };
+    const existing = await tx.patronPushToken.findUnique({ where: { tokenDigest: digest }, select: { id: true, cloudState: true, soundNotification: true, soundAlarm: true } });
     let state: RegisterResult["durum"];
     if (existing) {
-      // KAYITLI bağ bulutta kurulu kalır (bağ kurulum ↔ özettir, kişiyi tanımaz); diğer her hâl yeniden bağlanır.
-      state = existing.cloudState === "KAYITLI" ? "KAYITLI" : "BEKLIYOR";
+      // KAYITLI bağ bulutta kurulu kalır (bağ kurulum ↔ özettir, kişiyi tanımaz); ses değiştiyse buluttaki bağın sesi
+      // de değişmeli → yeniden `kaydet` (BEKLIYOR). Diğer her hâl yeniden bağlanır.
+      const soundChanged = existing.soundNotification !== soundNotification || existing.soundAlarm !== soundAlarm;
+      state = existing.cloudState === "KAYITLI" && !soundChanged ? "KAYITLI" : "BEKLIYOR";
       const revive = state === "BEKLIYOR" && existing.cloudState !== "BEKLIYOR";
       const claimed = await tx.patronPushToken.updateMany({
         where: { id: existing.id, cloudState: existing.cloudState },

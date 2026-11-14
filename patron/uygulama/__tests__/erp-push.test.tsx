@@ -35,6 +35,9 @@ function portlar(o: Partial<{ izin: string; iste: string; belirtec: string | nul
     belirtecAl: jest.fn(async () => st.belirtec),
     belirtecDegisince: jest.fn((cb: () => void) => { st.degis = cb; return () => { st.degis = null; }; }),
     cihazAdi: jest.fn(() => (o.ad === undefined ? "  Samsung Galaxy  " : o.ad)),
+    kanallariKur: jest.fn(async () => undefined),
+    sesiOnizle: jest.fn(async () => undefined),
+    kanalAyariniAc: jest.fn(async () => undefined),
   };
   return { p: p as unknown as Portlar & typeof p, st };
 }
