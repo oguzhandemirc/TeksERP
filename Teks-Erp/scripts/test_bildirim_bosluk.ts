@@ -35,6 +35,7 @@ import { cleanupTestCustomers } from "./fixture-customer-cleanup";
 import { factoryDayStart } from "../src/constants/time";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { CustomerService } from "../src/services/customer.service";
+import type { UpdateTxContext } from "../src/services/base.service";
 import { emitCustomerChangedTx } from "../src/services/notification-sources/anaveri";
 import { emitKursunDeviationTx } from "../src/services/notification-sources/uretim";
 import { KURSUN_PROPERTY_CODE } from "../src/services/helpers/quality-station.helper";
@@ -177,6 +178,14 @@ async function bolumV2(): Promise<void> {
 // NEGATİF SONDA (2026-11-14): CustomerService'ten `afterUpdateTx` kaldırıldı → §Ca/§Cc/§Cd/§Ce ❌; BaseService'te kanca tx
 //   DIŞINDA çağrıldı (yazım tx'siz) → §Cd ❌ (kart adı geri sarılmadı). İkisi de geri alındı.
 class Patlat extends Error {}
+/** Kanca sonrası fırlatan alt sınıf: yazım + outbox'ın AYNI tx'te geri sarıldığını ölçer (tip zorlaması yok). */
+class PatlayanCariServisi extends CustomerService {
+  patlat = false;
+  protected override async afterUpdateTx(tx: Prisma.TransactionClient, c: UpdateTxContext): Promise<void> {
+    await super.afterUpdateTx(tx, c);
+    if (this.patlat) throw new Patlat();
+  }
+}
 async function bolumC(): Promise<void> {
   console.log("\n§C cari.degisti — gerçek CustomerService.update");
   const engel = hedefDbEngeli();
@@ -184,7 +193,7 @@ async function bolumC(): Promise<void> {
   const key = SETTING_KEYS.BILDIRIM_GELEN_KUTUSU_ENABLED;
   const ilk = await prisma.systemSetting.findUnique({ where: { key } });
   // Route config'iyle birebir (customer.routes.ts).
-  const svc = new CustomerService({
+  const svc = new PatlayanCariServisi({
     modelName: "customer", tableName: "CUSTOMER", searchFields: ["name"], codeSearchFields: ["code", "taxNumber", "exportCode"],
     defaultInclude: undefined, uniqueField: "code", nestedCreateFields: ["branches"],
   });
@@ -199,8 +208,7 @@ async function bolumC(): Promise<void> {
     check("§Cb yükte alan DEĞERİ yok (telefon metne girmez)", !JSON.stringify(p).includes("05550000000"));
     await svc.update(cust.id, { contactPhone: "05550000000" });
     check("§Cc değişiklik yoksa satır yok", (await satirlar()).length === 1);
-    const asil = svc["afterUpdateTx"]!.bind(svc);
-    (svc as unknown as { afterUpdateTx: typeof asil }).afterUpdateTx = async (tx, ctx) => { await asil(tx, ctx); throw new Patlat(); };
+    svc.patlat = true;
     const patladi = await svc.update(cust.id, { city: "TEST-Şehir" }).then(() => false, (e: unknown) => e instanceof Patlat);
     const kart = await prisma.customer.findUnique({ where: { id: cust.id }, select: { city: true } });
     check("§Cd ⭐ kanca fırlatınca kart ve outbox birlikte geri sarılır (aynı tx)", patladi && kart?.city !== "TEST-Şehir" && (await satirlar()).length === 1, `${patladi}/${kart?.city}`);
