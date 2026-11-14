@@ -240,7 +240,13 @@ const EXEMPT: Record<string, string> = {
  * tablet menüyü süzmek için HER kullanıcı okur (sır değil, güvenlik sınırı değil). Yazma `admin:settings` + ayar
  * şifresi guard'lı. `test_menu_layout` §4 ölçer.
  */
-const BARE_CHAIN_BASELINE = 44;
+/**
+ * ⚠️ 44 → 49 (2026-11-15, bildirim tercih profilleri, BİLİNÇLİ): `tercihler/profiller` GET/POST · `tercihler/profiller/:id`
+ * PATCH/DELETE · `tercihler/profil-uygula` POST yalnız `verifyToken` taşır — kişinin KENDİ tercih profilleri (satır kapsamı
+ * token'daki `userId`; başkasının profili 404, tür kümesi görme süzgeciyle kesişir). Yönetici `profiller/hazir` guard'lı.
+ * `test_bildirim_profil` §5h · §7 ölçer.
+ */
+const BARE_CHAIN_BASELINE = 49;
 
 /** Körlük zemini: tarayıcı boşa düşerse "ihlal yok" ile "hiçbir şeye bakılmadı" aynı yeşile çıkmasın. */
 const MIN_ROUTE_LAYERS = 400;

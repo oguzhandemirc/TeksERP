@@ -48,7 +48,14 @@ const SCOPE_PREVIEW_FACTOR = 0.5;
 
 const isKind = (k: string): k is NotificationKind => (NOTIFICATION_KINDS as readonly string[]).includes(k);
 
-async function context(v: PreferenceViewer): Promise<{ subject: PreferenceSubject; env: NotificationVisibilityEnv; layers: PreferenceLayers }> {
+export interface PreferenceContext {
+  subject: PreferenceSubject;
+  env: NotificationVisibilityEnv;
+  layers: PreferenceLayers;
+}
+
+/** Tek istek için katman fotoğrafı (profil servisi de buradan okur; çözüm tek yerde kalır). */
+export async function context(v: PreferenceViewer): Promise<PreferenceContext> {
   const env = await loadNotificationVisibilityEnv(prisma);
   const layers = await loadPreferenceLayers(prisma, [v.userId]);
   return { subject: { userId: v.userId, permissions: v.permissions }, env, layers };
@@ -65,6 +72,7 @@ const PreferenceItem = z
   })
   .strict();
 export const PreferencesBody = z.object({ tercihler: z.array(PreferenceItem).max(1000) }).strict();
+export type PreferenceItemInput = z.infer<typeof PreferenceItem>;
 
 export async function getPreferences(v: PreferenceViewer) {
   const { subject, env, layers } = await context(v);
@@ -141,7 +149,13 @@ function planPreferenceRows(
 /** Tam gövde: kişinin GÖREBİLDİĞİ türlerdeki satırları değiştirir (görünmeyen türün satırı izin dönerse geçerli kalır). */
 export async function putPreferences(v: PreferenceViewer, body: unknown) {
   const { tercihler } = PreferencesBody.parse(body);
-  const { subject, env, layers } = await context(v);
+  await writePreferenceItems(v, await context(v), tercihler);
+  return getPreferences(v);
+}
+
+/** Tam gövdeyi doğrular ve TEK tx'te yazar (PUT ve profil uygulaması aynı yol: seyrek yazım, kilit 409). */
+export async function writePreferenceItems(v: PreferenceViewer, ctx: PreferenceContext, tercihler: PreferenceItemInput[]): Promise<void> {
+  const { subject, env, layers } = ctx;
   const plan = planPreferenceRows(subject, env, layers, tercihler);
   const visible = NOTIFICATION_KINDS.filter((k) => canSeeNotificationType(subject, k, env));
   await prisma.$transaction(async (tx) => {
@@ -158,7 +172,6 @@ export async function putPreferences(v: PreferenceViewer, body: unknown) {
       });
     }
   });
-  return getPreferences(v);
 }
 
 // ---- önizleme (Karar Y3; YAZMAZ) ------------------------------------------

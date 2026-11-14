@@ -190,6 +190,104 @@ router.post("/tercihler/varsayilana-don", t.postReset);
 
 /**
  * @openapi
+ * /api/bildirim/tercihler/profiller:
+ *   get:
+ *     tags: [Bildirim]
+ *     summary: 'Tercih profilleri — hazır (katalogdan türeyen) + kişisel kayıtlı; `etkin` kayıtlı seçimle birebir eşleşenler (boş = Özel)'
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: kanal, required: false, schema: { type: string, enum: [UYGULAMA, MASAUSTU, PATRON_PUSH], default: UYGULAMA } }
+ *     responses:
+ *       200: { description: "{kanal, turSayisi, hazir[{kod,ad,aciklama,acik}], kisisel[{id,ad,acik,kapali,olusturuldu,guncellendi}], etkin['hazir:KOD'|'kisisel:<id>']}" }
+ *       409: { description: Gelen kutusu kapalı (BILDIRIM_KAPALI) }
+ *   post:
+ *     tags: [Bildirim]
+ *     summary: 'Şimdiki KAYITLI seçimi (kanaldaki açık/kapalı türler) adla kişisel profil olarak kaydeder; replay tek kayıt'
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [ad, kanal]
+ *             properties:
+ *               ad: { type: string, maxLength: 60 }
+ *               kanal: { type: string, enum: [UYGULAMA, MASAUSTU, PATRON_PUSH] }
+ *               clientToken: { type: string, format: uuid }
+ *     responses:
+ *       201: { description: "{profil, profiller}" }
+ *       409: { description: "Aynı ad (NOTIFICATION_PREF_PROFILE_NAME_TAKEN) · tavan (NOTIFICATION_PREF_PROFILE_LIMIT) · token çakışması (CLIENT_TOKEN_COLLISION)" }
+ */
+router.get("/tercihler/profiller", t.getPrefProfiles);
+router.post("/tercihler/profiller", t.postPrefProfile);
+
+/**
+ * @openapi
+ * /api/bildirim/tercihler/profil-uygula:
+ *   post:
+ *     tags: [Bildirim]
+ *     summary: 'Profili bir kanala uygular (tek tx, hedef duruma yazar → idempotent); kilitli türe dokunmaz, kapsam satırları korunur'
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [kanal]
+ *             properties:
+ *               kanal: { type: string, enum: [UYGULAMA, MASAUSTU, PATRON_PUSH] }
+ *               hazir: { type: string, description: "Hazır profil kodu (HEPSI · ONEMLI · OZETLER · URETIM · SATIS_SEVKIYAT · FINANS · GUVENLIK · SESSIZ)" }
+ *               kisisel: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: "{hucreler, satirlar, profiller}" }
+ *       400: { description: "Tanınmayan hazır profil (NOTIFICATION_PRESET_UNKNOWN)" }
+ *       404: { description: "Kişisel profil yok (NOTIFICATION_PREF_PROFILE_NOT_FOUND)" }
+ *       409: { description: "Silinmiş profil (NOTIFICATION_PREF_PROFILE_ARCHIVED)" }
+ */
+router.post("/tercihler/profil-uygula", t.postApplyPrefProfile);
+
+/**
+ * @openapi
+ * /api/bildirim/tercihler/profiller/{id}:
+ *   patch:
+ *     tags: [Bildirim]
+ *     summary: 'Kişisel profili yeniden adlandırır ve/veya şimdiki seçimle günceller (`seciminiGuncelle` + `kanal`)'
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               ad: { type: string, maxLength: 60 }
+ *               kanal: { type: string, enum: [UYGULAMA, MASAUSTU, PATRON_PUSH] }
+ *               seciminiGuncelle: { type: boolean }
+ *     responses:
+ *       200: { description: "{profil, profiller}" }
+ *       404: { description: "Profil yok ya da başkasının (NOTIFICATION_PREF_PROFILE_NOT_FOUND)" }
+ *       409: { description: "Silinmiş (NOTIFICATION_PREF_PROFILE_ARCHIVED) · aynı ad (NOTIFICATION_PREF_PROFILE_NAME_TAKEN)" }
+ *   delete:
+ *     tags: [Bildirim]
+ *     summary: 'Kişisel profili siler (arşiv — durum geçişi); uygulanmış tercihler yerinde kalır'
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *       - { in: query, name: kanal, required: false, schema: { type: string, enum: [UYGULAMA, MASAUSTU, PATRON_PUSH] } }
+ *     responses:
+ *       200: { description: "Güncel profil listesi (GET ile aynı biçim)" }
+ *       404: { description: "Profil yok ya da başkasının (NOTIFICATION_PREF_PROFILE_NOT_FOUND)" }
+ *       409: { description: "Zaten silinmiş (NOTIFICATION_PREF_PROFILE_ARCHIVED)" }
+ */
+router.patch("/tercihler/profiller/:id", t.patchPrefProfile);
+router.delete("/tercihler/profiller/:id", t.deletePrefProfile);
+
+/**
+ * @openapi
  * /api/bildirim/ayarlar:
  *   get:
  *     tags: [Bildirim]
@@ -308,6 +406,19 @@ router.post("/profiller", ADMIN, t.postProfile);
  *       409: { description: Gelen kutusu kapalı }
  */
 router.get("/profiller/aday-kullanicilar", ADMIN, t.getProfileCandidates);
+
+/**
+ * @openapi
+ * /api/bildirim/profiller/hazir:
+ *   get:
+ *     tags: [Bildirim]
+ *     summary: 'Hazır profillerin TAM (görme süzgeçsiz) tür kümeleri — rol profili matrisini tek tıkla doldurmak için'
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{items[{kod, ad, aciklama, turler}]}" }
+ *       403: { description: İzin yok }
+ */
+router.get("/profiller/hazir", ADMIN, t.getPresetProfiles);
 
 /**
  * @openapi

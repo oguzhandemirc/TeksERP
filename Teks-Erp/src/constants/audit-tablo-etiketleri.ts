@@ -244,6 +244,7 @@ export const TABLE_LABELS: Record<string, string> = {
   // Bildirim tercih katmanı (N4-MOTOR): yönetici profilleri ve fabrika varsayılanı.
   NOTIFICATION_PROFILE: "Bildirim Profili",
   NOTIFICATION_FACTORY_DEFAULT: "Bildirim Fabrika Varsayılanı",
+  NOTIFICATION_PREFERENCE_PROFILE: "Kişisel Bildirim Profili",
 };
 
 /** Ham tableName'i Türkçe etiketle. Boş → "—", bilinmeyen → ham değer. */

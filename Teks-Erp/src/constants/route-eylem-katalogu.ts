@@ -18,6 +18,11 @@ export interface UcEylemi {
 const e = (fiil: string, deneme: string): UcEylemi => ({ fiil, deneme });
 
 export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
+  // ── Bildirim tercih profilleri (2026-11-15)
+  "POST /api/bildirim/tercihler/profiller": e("bildirim seçimini profil olarak kaydetti", "bildirim seçimini profil olarak kaydetmeye çalıştı"),
+  "PATCH /api/bildirim/tercihler/profiller/:id": e("kişisel bildirim profilini güncelledi", "kişisel bildirim profilini güncellemeye çalıştı"),
+  "DELETE /api/bildirim/tercihler/profiller/:id": e("kişisel bildirim profilini sildi", "kişisel bildirim profilini silmeye çalıştı"),
+  "POST /api/bildirim/tercihler/profil-uygula": e("bildirim profilini uyguladı", "bildirim profilini uygulamaya çalıştı"),
   // ── Patron raporu istek üzerine (V5a, 2026-11-13)
   "POST /api/patron/v1/raporlar": e("patron uygulamasından rapor oluşturdu", "patron uygulamasından rapor oluşturmaya çalıştı"),
   "DELETE /api/patron/v1/raporlar/:id": e("oluşturduğu bir raporu sildi", "oluşturduğu bir raporu silmeye çalıştı"),
