@@ -16,6 +16,9 @@ import { NOTIFICATION_NOTIFY_CHANNEL } from "../services/helpers/notification-em
 import { startNotificationConditionScanner, stopNotificationConditionScanner } from "./notification-condition.job";
 import { startNotificationDigestScheduler, stopNotificationDigestScheduler } from "./notification-digest.job";
 import { registerSalesDigestSources } from "../services/notification-sources/satis-ozet";
+import { registerProductionDigestSources } from "../services/notification-sources/uretim-ozet";
+import { registerProductionConditionSources } from "../services/notification-sources/uretim-kosul";
+import { registerQuoteConditionSources } from "../services/notification-sources/teklif-kosul";
 import { registerDepotDigestSources } from "../services/notification-sources/depo-ozet";
 import { registerFinanceDigestSources } from "../services/notification-sources/finans-ozet";
 import { registerFinanceConditionSources } from "../services/notification-sources/finans-kosul";
@@ -192,6 +195,9 @@ export function startNotificationJobs(): void {
   registerDeviceConditionSources(); // anahtar halkası kaybı (izlenebilirlik D5)
   registerLoomAlarmRecipientResolver(); // tezgah alarmı donmuş alıcı (N2-ALARM)
   registerSalesDigestSources(); // S1 özetleri: gün sonu sipariş · vardiya sonu planlama
+  registerProductionDigestSources(); // S2 özetleri: saatlik/gün sonu üretim · kalite · kurşun · vardiya sonu dokuma
+  registerProductionConditionSources(); // S2 koşulları: makine/tezgah duruyor · uzun arıza
+  registerQuoteConditionSources(); // teklif süresi doldu
   registerDepotDigestSources(); // S3 özetleri: gün sonu sevkiyat · depo · fason
   registerFinanceDigestSources(); // S4 özeti: gün sonu finans (sayılar, tutar yok)
   registerFinanceConditionSources(); // S4 koşulu: çek/senet vadesi
