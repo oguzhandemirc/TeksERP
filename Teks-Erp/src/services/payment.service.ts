@@ -39,6 +39,7 @@ import type { ApiResponse } from "../types/api.types";
 import { applyCashTxTx, cancelCashTxTx, moveAccountBalanceTx } from "./helpers/cash-ledger.helper";
 import { settingRowPath } from "../constants/panel-ayar-yolu";
 import { logLegacyLegAdoption, type AdoptedLegacyLeg } from "./helpers/cari-account-adopt.helper";
+import { emitPaymentCreatedTx } from "./notification-sources/finans";
 
 export interface CreatePaymentInput {
   direction: PaymentDirection;
@@ -326,6 +327,7 @@ export class PaymentService {
           payment.id,
           userId,
         );
+        await emitPaymentCreatedTx(tx, payment.id, userId);
 
         return payment;
           }),

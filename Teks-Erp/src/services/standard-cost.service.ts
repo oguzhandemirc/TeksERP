@@ -26,6 +26,7 @@ import { buildTurkishSearch } from "../utils/query-parser";
 import { decodeOffsetCursor, encodeOffsetCursor } from "../utils/cursor";
 import { readCostPresentationCurrency, type CostPresentationCurrency } from "./system-setting.service";
 import { costPresentation, frozenRate, presentationHeader, withPresentation } from "./helpers/cost-presentation.helper";
+import { emitStandardCostVersionTx } from "./notification-sources/maliyet";
 
 const TABLE = "STANDARD_COST_VERSION";
 const versionSelect = {
@@ -123,6 +124,7 @@ async function writeVersion(p: {
           amountPerMTry: roundCost4(l.amountPerMTry),
         })),
       });
+      await emitStandardCostVersionTx(tx, created.id, p.userId);
       return { created, supersededId: prev?.id ?? null };
     });
   } catch (e) {

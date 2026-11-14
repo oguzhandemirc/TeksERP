@@ -34,6 +34,7 @@ import {
 } from "./live-ref-where.helper";
 import { AuditService } from "../audit.service";
 import { TERIM } from "../../constants/terim";
+import { emitItemArchivedTx } from "../notification-sources/anaveri";
 
 export { ITEM_LIFECYCLE_LABEL, itemLifecycleWriteData } from "./item-lifecycle-data.helper";
 
@@ -253,6 +254,7 @@ export async function transitionItemLifecycleTx(
     if (fresh?.lifecycleStatus === input.to) return { ...base, idempotent: true };
     throw AppError.conflict("Kartın durumu bu sırada değişti — tekrar deneyin.", { code: "ITEM_LIFECYCLE_CHANGED" });
   }
+  if (input.to === ItemLifecycleStatus.ARCHIVED) await emitItemArchivedTx(tx, input.itemId, input.reason, input.userId);
   return { ...base, idempotent: false };
 }
 

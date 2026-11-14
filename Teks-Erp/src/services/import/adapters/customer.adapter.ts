@@ -120,7 +120,7 @@ export const customerImportAdapter: ImportAdapter = {
   async createOne(row: PreparedRow, ctx: ImportContext) {
     const { code: _ignored, ...data } = row.values;
     void _ignored; // kod sunucuda üretilir
-    const res = await customerService.create(data, ctx.userId);
+    const res = await customerService.create(data, ctx.userId, { notify: false }); // toplu aktarım tek tek bildirim üretmez
     return { id: (res.data as { id: string }).id };
   },
 

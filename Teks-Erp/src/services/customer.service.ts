@@ -25,6 +25,7 @@ import type { Request } from "express";
 import { gatedSoftDelete, gatedUpdate } from "./helpers/master-data-archive.helper";
 import { CUSTOMER_ARCHIVE } from "./helpers/archive-gate/customer-archive.helper";
 import { takeExpectedUpdatedAt, updatedAtIs } from "./helpers/stale-record.helper";
+import { emitCustomerArchivedTx, emitCustomerCardCreatedTx } from "./notification-sources/anaveri";
 
 /**
  * VKN (10 hane), TCKN (11 hane) ve yabancı VAT/EIN (12-15 hane) için ortak
@@ -231,11 +232,11 @@ export class CustomerService extends BaseService {
     data: Record<string, unknown>,
     userId?: string,
     /** Z-A: kart formunun "Finans" bölümü — route `finance:write` + modül kapısını geçirmiş, Zod doğrulamış. */
-    opts?: { finance?: CustomerFinanceInput | null }
+    opts?: { finance?: CustomerFinanceInput | null; notify?: boolean }
   ): Promise<ApiResponse<unknown>> {
     const plan = this.prepareCardCreate(data);
     return this.withCardCreateRetry(data, async () => {
-      const born = await prisma.$transaction((tx) => this.createCardInTx(tx, plan, userId));
+      const born = await prisma.$transaction((tx) => this.createCardInTx(tx, plan, userId, { notify: opts?.notify }));
       return this.finishCardCreate(born, userId, { finance: opts?.finance ?? null });
     });
   }
@@ -275,7 +276,7 @@ export class CustomerService extends BaseService {
    * Uç kendi tx'ini açar; patron bulutu gelen kutusu aynı tx'e makbuzunu yazar (atomik değilse idempotency yok).
    * Audit ve finans terimleri tx DIŞINDA, commit SONRASI `finishCardCreate`te.
    */
-  async createCardInTx(tx: Prisma.TransactionClient, plan: CardCreatePlan, userId: string | undefined, opts?: { clientToken?: string }): Promise<BornCard> {
+  async createCardInTx(tx: Prisma.TransactionClient, plan: CardCreatePlan, userId: string | undefined, opts?: { clientToken?: string; notify?: boolean }): Promise<BornCard> {
     const data = plan.data;
     data.code = await nextCustomerCode();
     this.applyStringFields(data, true);
@@ -301,6 +302,8 @@ export class CustomerService extends BaseService {
     };
     const profile = plan.wantsProfile ? await createProfileForCustomerTx(tx, c, userId) : null;
     const cariAccountId = await bornCariAccountTx(tx, c.id);
+    // Toplu içe aktarma ve yönetim bulutu (kendi türü `cari.patron-carisi`) `notify:false` geçer.
+    if (opts?.notify !== false) await emitCustomerCardCreatedTx(tx, c.id, userId);
     const fresh = await tx.customer.findUnique({ where: { id: c.id }, include: { subcontractor: { select: { id: true, isActive: true } } } });
     return { card: fresh as unknown as Record<string, unknown>, profile, cariAccountId, auditData: clean };
   }
@@ -371,7 +374,7 @@ export class CustomerService extends BaseService {
     }
     return gatedUpdate(CUSTOMER_ARCHIVE, id, data, {
       userId,
-      write: (tx) => tx.customer.update({ where: { id }, data: { isActive: false } }),
+      write: async (tx) => { const row = await tx.customer.update({ where: { id }, data: { isActive: false } }); await emitCustomerArchivedTx(tx, id, userId); return row; },
       next: (rest) => this.updateCore(id, rest, userId, expected ? { updatedAt: updatedAtIs(expected) } : undefined),
     });
   }
@@ -382,9 +385,7 @@ export class CustomerService extends BaseService {
    * `isActive:false` da aynı kapıdan geçer (eskiden atlıyordu).
    */
   async softDelete(id: string, userId?: string): Promise<ApiResponse<unknown>> {
-    return gatedSoftDelete(CUSTOMER_ARCHIVE, id, userId, (tx) =>
-      tx.customer.update({ where: { id }, data: { isActive: false } }),
-    );
+    return gatedSoftDelete(CUSTOMER_ARCHIVE, id, userId, async (tx) => { const row = await tx.customer.update({ where: { id }, data: { isActive: false } }); await emitCustomerArchivedTx(tx, id, userId); return row; });
   }
 
   /**

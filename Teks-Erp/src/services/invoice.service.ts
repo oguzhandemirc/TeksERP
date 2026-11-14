@@ -112,6 +112,7 @@ import type { ApiResponse } from "../types/api.types";
 import { unitLabel } from "../constants/item-unit";
 import { settingRowPath } from "../constants/panel-ayar-yolu";
 import { ekranYolu } from "../constants/panel-ekran-yolu";
+import { emitInvoiceCancelledTx, emitInvoiceConfirmedTx } from "./notification-sources/finans";
 
 /** Konu alanları (`lineType`/`itemId`/`serviceItemId`) `normalizeInvoiceLines`'ta kanonik hâle gelir (D1c). */
 export interface InvoiceLineInput extends InvoiceLineSubjectInput {
@@ -1107,6 +1108,7 @@ export class InvoiceService {
 
       // F4: emanet çıkış iptaliyle bağı düşen sarım satırı taslakta kaldıysa onay 409 (claim sonrası, aynı tx).
       await assertNoConsignmentRevokedLinesTx(tx, id);
+      await emitInvoiceConfirmedTx(tx, id, userId);
       // Claim SONRASI içerik tx İÇİNDE taze yüklenir (check-then-act değil).
       const inv = await tx.invoice.findUniqueOrThrow({
         where: { id },
@@ -1706,6 +1708,7 @@ export class InvoiceService {
         reason ?? "Fatura iptal edildi",
       );
 
+      await emitInvoiceCancelledTx(tx, inv.id, { posted: Boolean(posted), reason }, userId);
       return { id: inv.id, docNo: inv.docNo, wasPosted: Boolean(posted), yarnBack, serviceLinksRevoked };
     });
 

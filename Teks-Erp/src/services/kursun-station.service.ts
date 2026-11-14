@@ -16,6 +16,7 @@ import { KURSUN_PROPERTY_CODE } from "./helpers/quality-station.helper";
 import { readKursunGramPrice } from "./helpers/kursun-gram-price-input.helper";
 import { listKursunGramPriceHistory, recordKursunGramPriceVersionTx } from "./helpers/kursun-gram-price-version.helper";
 import { fabricPropertyService } from "../routes/fabric-property.routes";
+import { emitKursunGramPriceChangedTx } from "./notification-sources/maliyet-kursun";
 
 export interface KursunStationValue {
   id: string;
@@ -179,7 +180,9 @@ export async function setKursunStation(stationId: string, input: KursunStationIn
     // K14: kolon + sürüm aynı tx'te (değer değişmediyse sürüm yazılmaz).
     await prisma.$transaction(async (tx) => {
       await tx.station.update({ where: { id: stationId }, data: { kursunGramPrice: price.price, kursunGramCurrency: price.currency } });
-      await recordKursunGramPriceVersionTx(tx, { stationId }, price, userId);
+      if (await recordKursunGramPriceVersionTx(tx, { stationId }, price, userId)) {
+        await emitKursunGramPriceChangedTx(tx, { kind: "station", id: stationId }, price.price === null, userId);
+      }
     });
   }
   const after = await getKursunStation(stationId);

@@ -27,6 +27,7 @@ import { geciciParolaUret } from "../lib/ilk-yonetici-parolasi";
 import { closeUser as closeUserBells } from "./notification-bell-hub";
 import { currentPermissionDescription, currentSeedText } from "./helpers/terim-tohum-metni.helper";
 import { ROLE_TEMPLATE_CATALOG } from "../constants/role-template-catalog";
+import { emitPasswordResetTx, emitUserCreatedTx, emitUserDeactivatedTx, emitUserPermissionsChangedTx } from "./notification-sources/yetki";
 
 /**
  * Silinen kullanıcının sır kolonları (B5). `passwordHash` NOT NULL olduğu için geçersiz özet
@@ -313,6 +314,7 @@ export class PermissionManagementService {
         !sameTime(before.validUntil, input.validUntil ?? null);
       if (changed) {
         await tx.user.update({ where: { id: userId }, data: { tokenVersion: { increment: 1 } } });
+        await emitUserPermissionsChangedTx(tx, userId, { addedPermissionIds: before ? [] : [input.permissionId], removedCount: 0, changedCount: before ? 1 : 0 }, actorUserId);
       }
       return row;
     });
@@ -444,6 +446,7 @@ export class PermissionManagementService {
       if (toAdd.length || toRemove.length || toUpdate.length) {
         await tx.user.update({ where: { id: userId }, data: { tokenVersion: { increment: 1 } } });
       }
+      await emitUserPermissionsChangedTx(tx, userId, { addedPermissionIds: toAdd.map((i) => i.permissionId), removedCount: toRemove.length, changedCount: toUpdate.length }, actorUserId);
     });
 
     await AuditService.log({
@@ -502,8 +505,9 @@ export class PermissionManagementService {
       }
       // deleteMany (delete DEĞİL): satır eşzamanlı başka bir akışta silindiyse
       // P2025 yerine no-op — bump yine koşar, davranış idempotent kalır.
-      await tx.userPermission.deleteMany({ where: { id: existing.id } });
+      const removed = await tx.userPermission.deleteMany({ where: { id: existing.id } });
       await tx.user.update({ where: { id: userId }, data: { tokenVersion: { increment: 1 } } });
+      await emitUserPermissionsChangedTx(tx, userId, { addedPermissionIds: [], removedCount: removed.count }, actorUserId);
     });
 
     await AuditService.log({
@@ -573,6 +577,7 @@ export class PermissionManagementService {
           code: "PASSWORD_RESET_CONFLICT",
         });
       }
+      await emitPasswordResetTx(tx, userId, actorUserId);
       return revokeAllTrustedDevicesTx(tx, userId, "PASSWORD_RESET", actorUserId ?? null);
     });
     await auditBulkRevoke(userId, revokedDevices, "PASSWORD_RESET", actorUserId ?? null);
@@ -633,7 +638,9 @@ export class PermissionManagementService {
       : [];
 
     const passwordHash = await hashPassword(input.password, PASSWORD_BCRYPT_COST);
-    const user = await prisma.user.create({
+    // Doğuş + bildirim aynı tx'te (rollback → bildirim yok).
+    const user = await prisma.$transaction(async (tx) => {
+    const born = await tx.user.create({
       data: {
         // ⚠️ SELF-RELATION: "bu hesabı KİM açtı" — ISO 27001 açısından anlamlı.
         // Künye (Faz A2) — kaydın kimliği kolonda, audit'te DEĞİL (audit 6 ayda arşivlenir).
@@ -655,6 +662,9 @@ export class PermissionManagementService {
           : {}),
       },
       select: USER_SELECT,
+    });
+    await emitUserCreatedTx(tx, born.id, actorUserId);
+    return born;
     });
 
     await AuditService.log({
@@ -744,6 +754,7 @@ export class PermissionManagementService {
           code: "FACTORY_ADMIN_TEMPLATE_MISSING",
         });
       }
+      await emitUserCreatedTx(tx, created.id, actorUserId);
       return { user: created, permissionCount: template.permissions.length };
     });
 
@@ -990,6 +1001,7 @@ export class PermissionManagementService {
         data: { isActive: false, tokenVersion: { increment: 1 } },
         select: USER_SELECT,
       });
+      await emitUserDeactivatedTx(tx, id, actorUserId);
       return { user: updated, revokedDevices: await revokeAllTrustedDevicesTx(tx, id, "DEACTIVATED", actorUserId ?? null) };
     });
     await auditBulkRevoke(id, revokedDevices, "DEACTIVATED", actorUserId ?? null);
@@ -1341,19 +1353,20 @@ export class PermissionManagementService {
       // İzin EKLENDİ → uçuştaki token'ı geçersiz kıl (grant/revoke/set ile AYNI
       // invariant: "izin değişince tokenVersion++"). Merge dalı bunu atlıyordu →
       // eklenen izinler token dolana/re-login'e kadar etkisiz kalıyordu. Atomik.
-      await prisma.$transaction([
-        prisma.userPermission.createMany({
+      await prisma.$transaction(async (tx) => {
+        await tx.userPermission.createMany({
           data: toAdd.map((permissionId) => ({
             userId,
             permissionId,
             grantedById: actorUserId ?? null,
           })),
-        }),
-        prisma.user.update({
+        });
+        await tx.user.update({
           where: { id: userId },
           data: { tokenVersion: { increment: 1 } },
-        }),
-      ]);
+        });
+        await emitUserPermissionsChangedTx(tx, userId, { addedPermissionIds: toAdd, removedCount: 0 }, actorUserId);
+      });
     }
 
     await AuditService.log({

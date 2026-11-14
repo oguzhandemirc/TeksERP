@@ -31,6 +31,8 @@ import { readKursunGramPrice } from "./helpers/kursun-gram-price-input.helper";
 import { assertKursunGramajValue } from "./helpers/kursun-bypass-gramaj.helper";
 import { listKursunGramPriceHistory, recordKursunGramPriceVersionTx } from "./helpers/kursun-gram-price-version.helper";
 import { cariTaxOverrideData, taxOverrideOf, type CariTaxOverrideInput } from "./helpers/cari-tax-override.helper";
+import { emitKursunGramPriceChangedTx } from "./notification-sources/maliyet-kursun";
+import { cariDisplayName } from "./notification-sources/finans";
 
 /**
  * H8b: müşteri tetiği yalnız fabrika ayarının değerleri ya da null (fabrika ayarı); yalnız MÜŞTERİ carisinde
@@ -442,7 +444,9 @@ export class CariService {
       },
       select: { id: true },
       });
-      if (gram !== undefined) await recordKursunGramPriceVersionTx(tx, { cariAccountId: id }, gram, userId);
+      if (gram !== undefined && (await recordKursunGramPriceVersionTx(tx, { cariAccountId: id }, gram, userId))) {
+        await emitKursunGramPriceChangedTx(tx, { kind: "cari", id, name: await cariDisplayName(tx, id) }, gram.price === null, userId);
+      }
       return row;
     });
 
