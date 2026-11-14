@@ -15,6 +15,7 @@ import { Prisma, RollOperationType } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { ACTIVE_OPERATION } from "./roll-operation.helper";
 import { consumeForOperationTx, reverseConsumptionTx } from "./consumable-stock.helper";
+import { emitKursunDeviationTx } from "../notification-sources/uretim";
 
 type Tx = Prisma.TransactionClient;
 
@@ -95,6 +96,7 @@ export async function applyKursunOperationTx(tx: Tx, a: ApplyKursunArgs): Promis
   if (!active) {
     if ((await insertActive(tx, a)) === 1) {
       await consumeNewActiveTx(tx, a);
+      await emitKursunDeviationTx(tx, a, a.userId); // kursun.gramaj-sapmasi (hedeften farklıysa)
       return "created";
     }
     const winner = await readActive(tx, a);
@@ -114,5 +116,6 @@ export async function applyKursunOperationTx(tx: Tx, a: ApplyKursunArgs): Promis
   // Sarf stoğu: eski gramajın tüketimi geri yazılır, yeni gramajınki düşülür.
   await reverseConsumptionTx(tx, { id: active.id }, a.userId, KURSUN_CORRECTION_REASON);
   await consumeNewActiveTx(tx, a);
+  await emitKursunDeviationTx(tx, a, a.userId);
   return "corrected";
 }

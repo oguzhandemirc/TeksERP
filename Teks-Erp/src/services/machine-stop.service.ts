@@ -29,6 +29,7 @@
 import { MachineDataSource, MachineStopEndSource } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import prisma from "../lib/prisma";
+import { emitBreakdownClosedTx, emitBreakdownStopTx, isBreakdownReason } from "./notification-sources/uretim";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { p2002Mentions } from "../utils/p2002";
@@ -134,6 +135,7 @@ export async function openStopCore(input: OpenStopCoreInput, opts: OpenManualSto
         },
         select: MACHINE_STOP_SELECT,
       });
+      if (isBreakdownReason(row.reasonCode)) await emitBreakdownStopTx(tx, row.id, input.actorId); // bakim.ariza (sebepli açılış)
       return { replay: false as const, row };
     });
     if (out.replay) return { success: true, data: out.row, message: STOP_REPLAY_MESSAGE };
@@ -230,6 +232,7 @@ export async function closeStopCore(stopId: string, ended: StampResolution, clos
       }
       throw AppError.conflict("Duruş az önce değişti — tekrar deneyin.", { code: "MACHINE_STOP_RACE", stopId });
     }
+    await emitBreakdownClosedTx(tx, stopId, closer.actorId); // bakim.tamamlandi (yalnız arıza sebepli duruş)
     return { stop: await loadStop(tx, stopId), replay: false };
     // Mühürlü vardiyada kartın gerçek bitişi kaybolmaz: geciken kapanış kuyruğuna yazılır, 409 korunur.
   }).catch((e: unknown) => rethrowSealedSignalEnd(e, stopId, ended.value, closer.endSource));
@@ -281,6 +284,7 @@ export async function classifyStop(stopId: string, input: ClassifyStopInput, use
         code: "STOP_ALREADY_CLASSIFIED", stopId, reasonCode: fresh.reasonCode,
       });
     }
+    if (isBreakdownReason(preset.code)) await emitBreakdownStopTx(tx, stopId, userId); // bakim.ariza (ilk sınıflama)
     return loadStop(tx, stopId);
   });
 
@@ -346,6 +350,7 @@ export async function reclassifyStop(stopId: string, input: ReclassifyStopInput,
         actedById: userId ?? null,
       },
     });
+    if (isBreakdownReason(to.code) && !isBreakdownReason(input.fromReasonCode.trim())) await emitBreakdownStopTx(tx, stopId, userId); // bakim.ariza
     return { stop: await loadStop(tx, stopId), oldTargetMinutes: cur.targetMinutes };
   });
 

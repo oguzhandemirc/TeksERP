@@ -63,7 +63,7 @@ function main(): void {
   console.log("=== BİLDİRİM KATALOĞU ===\n");
 
   // ── §0 körlük zemini + kimlik ─────────────────────────────────────────────
-  check("§0 katalog: 40 tür (23 + S1 satış/teklif/planlama 17)", girdiler.length === 40, `${girdiler.length} tür`);
+  check("§0 katalog: 56 tür (23 + S1 satış/teklif/planlama 17 + S2 üretim/dokuma/kurşun/tambur/bakım 15 + teklif süresi doldu)", girdiler.length === 56, `${girdiler.length} tür`);
   kural("§0b `kod` = anahtar ve `<alan>.<tür>` kalıbında",
     girdiler.filter(([k, e]) => e.kod !== k || !/^[a-z0-9]+\.[a-z0-9-]+$/.test(k)).map(([k]) => k), "hepsi");
   kural("§0c `grup` beyanlı gruplardan (K8: 18 grup)", girdiler.filter(([, e]) => !NOTIFICATION_GRUPLARI.includes(e.grup))

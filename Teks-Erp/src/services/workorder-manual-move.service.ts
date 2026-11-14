@@ -541,6 +541,8 @@ export class WorkOrderManualMoveService {
       reason: string;
     },
     userId?: string,
+    /** Çağıranın aynı tx'te yazacağı ek kayıt (ör. Tambur geri gönderiminin bildirimi); taşıma geri sarılırsa o da sarılır. */
+    opts: { inTx?: (tx: Prisma.TransactionClient) => Promise<void> } = {},
   ): Promise<ApiResponse<unknown>> {
     if (!input.reason || input.reason.trim().length < 3) {
       throw AppError.badRequest("Taşıma gerekçesi zorunlu (en az 3 karakter)");
@@ -911,6 +913,7 @@ export class WorkOrderManualMoveService {
           workOrderId,
           "MANUAL_MOVE",
         );
+        if (opts.inTx) await opts.inTx(tx);
 
         return {
           newBatchNumber,

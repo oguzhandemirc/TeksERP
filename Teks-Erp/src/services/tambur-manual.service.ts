@@ -105,6 +105,7 @@ import { buildIntentSnapshot } from "./label.service";
 import { applyTamburCapabilitiesTx } from "./tambur.service";
 import { loadStationPropertyCaps } from "./helpers/station-capability-transfer.helper";
 import { TERIM } from "../constants/terim";
+import { emitSendToDyeTx } from "./notification-sources/uretim";
 
 /** T1 kalanı (K3c): elle doğan topa yalnız Tambur TÜRÜNDEKİ oturum istasyonunun AUTO yeteneği yazılır. */
 async function loadSessionTamburCaps(stationId: string | null | undefined) {
@@ -818,6 +819,8 @@ export class TamburManualService {
         workOrderId,
         { rollIds: [roll.id], targetStepId: dyeStep.id, reason },
         ctx.userId,
+        // Bildirim (S2): `tambur.yeniden-islem` taşımayla aynı tx'te.
+        { inTx: (tx) => emitSendToDyeTx(tx, { workOrderId, workOrderNumber, rollBarcode: roll.barcode, targetStationName: dyeStep.stationName, reason }, ctx.userId ?? null) },
       );
     } catch (err) {
       if (err instanceof AppError) {
