@@ -12,6 +12,9 @@
  *   P4 FK politikasından `RollInspection.device` silinir  → 1 ❌ (§9a)
  *   P5 servise `tx.device.delete` girer                   → 1 ❌ (§10b)
  *   P6 betik bir satırın `updatedAt`ını yazar             → 2 ❌ (§10c, §11b)
+ * (2026-11-14, temiz koşum 45/0, ~8 sn)
+ *   P7 ayrı oturum istasyon satırını FOR NO KEY UPDATE tutar → 1 ❌ (§13: "istasyon pasif" + engelleyen pid, ~38 sn; eskiden 180 sn SIGTERM)
+ *   P3 tekrar (advisory kilit kaldırılır)                 → 1 ❌ (§7a 6/6 ham)
  */
 import prisma from "../src/lib/prisma"; // İLK import: dotenv → DATABASE_URL
 import http from "node:http";
@@ -64,6 +67,31 @@ const KOK = join(__dirname, "..");
 const SERVIS = "src/services/device-merge.service.ts";
 const BETIK = "scripts/cihaz-birlestir.ts";
 const DAKIKA = 60_000;
+// Normal temizlik <20 ms (ölçüldü 2026-11-14, yerel 25 sıralı + 18 paralel koşum); koşucunun 180 sn sınırının çok altında, CI yavaşlığına geniş pay.
+const TEMIZLIK_SINIR_MS = 30_000;
+const bekle = <T>(ms: number, deger: T): Promise<T> => new Promise((r) => setTimeout(() => r(deger), ms).unref());
+
+/** Takılma anı: DB'de boşta olmayan oturumlar (kimi bekliyor) + sunucunun açık bağlantıları + süreç kaynakları. */
+async function takilmaTeshisi(server: http.Server): Promise<string> {
+  const baglanti = await Promise.race([
+    new Promise<string>((r) => server.getConnections((e, n) => r(e ? `ölçülemedi (${e.message})` : String(n)))),
+    bekle(2_000, "ölçülemedi (zaman aşımı)"),
+  ]);
+  let db: string;
+  try {
+    const satirlar = await Promise.race([
+      prisma.$queryRaw<Array<Record<string, unknown>>>`
+        SELECT pid, state, wait_event_type AS bekleme, wait_event AS olay, pg_blocking_pids(pid) AS engelleyen, left(query, 160) AS sorgu
+        FROM pg_stat_activity
+        WHERE datname = current_database() AND pid <> pg_backend_pid() AND state IS DISTINCT FROM 'idle'`,
+      bekle(5_000, null),
+    ]);
+    db = satirlar === null ? "ölçülemedi (sorgu 5 sn'de dönmedi — havuz da tıkalı olabilir)" : JSON.stringify(satirlar);
+  } catch (e) {
+    db = `ölçülemedi (${e instanceof Error ? e.message : String(e)})`;
+  }
+  return `açık HTTP bağlantısı: ${baglanti} · DB oturumları: ${db} · süreç kaynakları: ${process.getActiveResourcesInfo().join(",")}`;
+}
 
 // ─── §9 FK kapsaması: şema metnindeki `Device` FK'ları ↔ DEVICE_MERGE_FK_POLICY (iki yönlü) ───
 export function deviceFkAnahtarlari(sema: string): string[] {
@@ -366,19 +394,34 @@ async function main(): Promise<void> {
     const izinsiz = await istek(port, "GET", "/api/admin/devices/merge/candidates", undefined, {});
     check("§12a kimliksiz istek 401", izinsiz.status === 401, `HTTP ${izinsiz.status}`);
   } finally {
-    if (periferikIdler.length) {
-      await prisma.devicePeripheral.deleteMany({ where: { peripheralId: { in: periferikIdler } } });
-      await prisma.peripheralDevice.deleteMany({ where: { id: { in: periferikIdler } } });
-    }
-    // Birleşmiş satırlar silinmez (FK RESTRICT + defter); pasif bırakılır.
-    await prisma.device.updateMany({ where: { id: { in: yaratilan.length ? yaratilan : [randomUUID()] } }, data: { isActive: false } });
-    await prisma.user.updateMany({ where: { id: { in: [yonetici.id, operator.id] } }, data: { isActive: false } });
-    await prisma.station.update({ where: { id: istasyon.id }, data: { isActive: false } });
-    await new Promise<void>((r) => server.close(() => r()));
+    // Temizlik süre sınırlı (§13): CI'da (koşu 43615867100) §12a'dan sonra burada 180 sn sessiz takıldı;
+    // takılma artık hangi adımda olduğunu + DB kilit/bağlantı teşhisini basan KIRMIZIdır, SIGTERM değil.
+    let adim = "periferik sil";
+    const temizlik = (async () => {
+      if (periferikIdler.length) {
+        await prisma.devicePeripheral.deleteMany({ where: { peripheralId: { in: periferikIdler } } });
+        await prisma.peripheralDevice.deleteMany({ where: { id: { in: periferikIdler } } });
+      }
+      // Birleşmiş satırlar silinmez (FK RESTRICT + defter); pasif bırakılır.
+      adim = "cihaz pasif";
+      await prisma.device.updateMany({ where: { id: { in: yaratilan.length ? yaratilan : [randomUUID()] } }, data: { isActive: false } });
+      adim = "kullanıcı pasif";
+      await prisma.user.updateMany({ where: { id: { in: [yonetici.id, operator.id] } }, data: { isActive: false } });
+      adim = "istasyon pasif";
+      await prisma.station.update({ where: { id: istasyon.id }, data: { isActive: false } });
+      adim = "sunucu kapat";
+      await new Promise<void>((r) => server.close(() => r()));
+      return "tamam" as const;
+    })();
+    temizlik.catch(() => undefined); // sınırdan SONRA gelen ret işlenmemiş ret olmasın; sınırdan önceki ret yarıştan yayılır
+    const sonuc = await Promise.race([temizlik, bekle(TEMIZLIK_SINIR_MS, "asim" as const)]);
+    check(`§13 temizlik ${TEMIZLIK_SINIR_MS / 1000} sn içinde biter (takılma teşhisli kırmızı, sessiz zaman aşımı değil)`,
+      sonuc === "tamam", sonuc === "tamam" ? "" : `takılan adım: ${adim} · ${await takilmaTeshisi(server)}`);
   }
 
   console.log(`\n=== Sonuç: ${gecti} geçti, ${kaldi} başarısız ===`);
-  await prisma.$disconnect();
+  // Takılmış sorgu havuz bağlantısını tutuyorsa `$disconnect` da bekler; çıkışı ona bağlama.
+  await Promise.race([prisma.$disconnect(), bekle(5_000, undefined)]);
   process.exit(kaldi === 0 ? 0 : 1);
 }
 
