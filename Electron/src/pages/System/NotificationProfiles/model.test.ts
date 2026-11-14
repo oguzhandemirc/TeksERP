@@ -8,11 +8,16 @@ import {
   draftEquals,
   draftFromCells,
   esikEtiketi,
+  factoryBulk,
   factoryChanges,
   factoryDraftFrom,
+  filterKinds,
+  matrixBulk,
   membersAfterLockChoice,
   needsLockPreview,
   parseTrNumber,
+  stateSummary,
+  SUMMARY_LABEL,
 } from "./model";
 
 const kind = (tur: string, extra: Partial<FactoryDefaultKind> = {}): FactoryDefaultKind => ({
@@ -61,6 +66,38 @@ describe("bildirim profilleri modeli", () => {
     expect(factoryChanges(kinds, base, d2).errors).toHaveLength(1);
     const d3 = { ...base, a: { ...base.a!, durum: "KILITLI" as const } };
     expect(factoryChanges(kinds, base, d3).turler.map((t) => t.tur)).toEqual(["a"]);
+  });
+});
+
+describe("grup araçları (arama · özet · toplu aç/kapa)", () => {
+  const kinds = [
+    kind("siparis.iptal", { ad: "Sipariş iptal edildi", grup: "Sipariş" }),
+    kind("finans.vade-yaklasti", { ad: "Vade yaklaştı", grup: "Finans" }),
+    kind("sistem.yedek", { ad: "Yedek alınamadı", grup: "Sistem", kilit: "HER_ZAMAN" }),
+  ];
+
+  it("⭐ arama ad · tür kodu · grup adında, Türkçe katlamalı ve kelime kelime (AND)", () => {
+    expect(filterKinds(kinds, "").map((k) => k.tur)).toHaveLength(3);
+    expect(filterKinds(kinds, "SİPARİŞ").map((k) => k.tur)).toEqual(["siparis.iptal"]);
+    expect(filterKinds(kinds, "vade-yak").map((k) => k.tur)).toEqual(["finans.vade-yaklasti"]);
+    expect(filterKinds(kinds, "sistem yedek").map((k) => k.tur)).toEqual(["sistem.yedek"]);
+    expect(filterKinds(kinds, "sistem vade")).toEqual([]);
+  });
+
+  it("özet yalnız sıfır olmayan durumları sabit sırada yazar", () => {
+    expect(stateSummary(["MIRAS", "ACIK", "ACIK", "KILITLI"], ["ACIK", "KAPALI", "KILITLI", "MIRAS"], SUMMARY_LABEL)).toBe("2 açık · 1 kilitli · 1 miras");
+    expect(stateSummary([], ["ACIK"], SUMMARY_LABEL)).toBe("");
+  });
+
+  it("⭐ toplu kapat her zaman kilitli türe dokunmaz; yalnız verilen türler değişir", () => {
+    const base = factoryDraftFrom(kinds);
+    const off = factoryBulk(base, kinds.slice(1), "KAPALI");
+    expect(off["siparis.iptal"]!.durum).toBe("MIRAS");
+    expect(off["finans.vade-yaklasti"]!.durum).toBe("KAPALI");
+    expect(off["sistem.yedek"]!.durum).toBe("MIRAS");
+    expect(factoryBulk(base, kinds, "ACIK")["sistem.yedek"]!.durum).toBe("ACIK");
+    expect(matrixBulk({}, kinds, "KAPALI")).toEqual({ "siparis.iptal": "KAPALI", "finans.vade-yaklasti": "KAPALI" });
+    expect(matrixBulk({ x: "KILITLI" }, kinds.slice(2), "ACIK")).toEqual({ x: "KILITLI", "sistem.yedek": "ACIK" });
   });
 });
 

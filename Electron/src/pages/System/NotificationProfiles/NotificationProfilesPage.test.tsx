@@ -7,10 +7,11 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
 import { NOTIFICATION_PROFILES_ACCESS, SYSTEM_HUB_ACCESS } from "@/lib/permissions";
 import type { FactoryDefaultKind, NotificationProfile } from "@/services/bildirimProfilService";
+import { useAuthStore } from "@/store/auth";
 import { systemTiles } from "../tile-config";
 
 const svc = vi.hoisted(() => ({
@@ -169,6 +170,87 @@ describe("matris", () => {
     svc.liste.mockResolvedValue({ items: [{ ...A, izinsizUyeler: { "fason.donus-gecikti": 2 } }] });
     renderWithProviders(<NotificationProfilesPage />);
     expect(await screen.findByText(/Bu türü 2 üye alamaz: izinleri yok/)).toBeInTheDocument();
+  });
+});
+
+describe("grup katlama · toplu aç/kapa · arama", () => {
+  const openFactory = async () => {
+    renderWithProviders(<NotificationProfilesPage />);
+    const tab = await screen.findByRole("tab", { name: "Fabrika varsayılanı" });
+    fireEvent.mouseDown(tab);
+    fireEvent.click(tab);
+    return screen.findByRole("region", { name: "Fason" });
+  };
+  const groupHead = (region: HTMLElement) => region.querySelector<HTMLElement>("button[aria-expanded]")!;
+  beforeEach(() => {
+    localStorage.clear();
+    useAuthStore.setState({ user: { userId: "u-yonetici" } as never });
+  });
+
+  it("⭐ grup katlanır; durum kullanıcı başına localStorage'da hatırlanır", async () => {
+    const fason = await openFactory();
+    const head = groupHead(fason);
+    expect(head).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByTestId("fabrika-fason.donus-gecikti")).toBeInTheDocument();
+    fireEvent.click(head);
+    expect(head).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByTestId("fabrika-fason.donus-gecikti")).toBeNull();
+    expect(JSON.parse(localStorage.getItem("bildirimProfil.daraltilan.fabrika.u-yonetici")!)).toEqual(["Fason"]);
+    cleanup();
+    const again = await openFactory();
+    expect(groupHead(again)).toHaveAttribute("aria-expanded", "false");
+    // Başka kullanıcının tercihi ayrı anahtarda: o kullanıcı hepsini açık görür.
+    cleanup();
+    useAuthStore.setState({ user: { userId: "u-baska" } as never });
+    const other = await openFactory();
+    expect(groupHead(other)).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("Tümünü daralt / genişlet bütün grupları birlikte çevirir", async () => {
+    await openFactory();
+    fireEvent.click(screen.getByRole("button", { name: "Tümünü daralt" }));
+    expect(screen.queryByTestId("fabrika-fason.donus-gecikti")).toBeNull();
+    expect(screen.queryByTestId("fabrika-sistem.yedek-basarisiz")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Tümünü genişlet" }));
+    expect(screen.getByTestId("fabrika-sistem.yedek-basarisiz")).toBeInTheDocument();
+  });
+
+  it("⭐ grup toplu kapat: özet güncellenir, her zaman kilitli tür kapanmaz; Kaydet yalnız değişeni yollar", async () => {
+    svc.fabrikaVarsayilaniYaz.mockResolvedValue({ turler: KINDS });
+    await openFactory();
+    const sistem = screen.getByRole("region", { name: "Sistem" });
+    expect(within(sistem).getByText("1 miras")).toBeInTheDocument();
+    fireEvent.click(within(sistem).getByRole("button", { name: "Sistem: hepsini kapat" }));
+    expect(within(sistem).getByText("1 miras")).toBeInTheDocument();
+    const fason = screen.getByRole("region", { name: "Fason" });
+    fireEvent.click(within(fason).getByRole("button", { name: "Fason: hepsini kapat" }));
+    expect(within(fason).getByText("1 kapalı")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Kaydet" }));
+    await waitFor(() => expect(svc.fabrikaVarsayilaniYaz).toHaveBeenCalledTimes(1));
+    expect(svc.fabrikaVarsayilaniYaz.mock.calls[0]![0].map((t: { tur: string; durum: string }) => [t.tur, t.durum])).toEqual([["fason.donus-gecikti", "KAPALI"]]);
+  });
+
+  it("⭐ matris grup toplu aç yalnız o grubun hücrelerini yazar", async () => {
+    renderWithProviders(<NotificationProfilesPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Fason: hepsini aç" }));
+    fireEvent.click(screen.getByRole("button", { name: "Kaydet" }));
+    await waitFor(() => expect(svc.hucreleriYaz).toHaveBeenCalledTimes(1));
+    expect(svc.hucreleriYaz).toHaveBeenCalledWith("p-a", [{ tur: "fason.donus-gecikti", durum: "ACIK" }]);
+  });
+
+  it("⭐ arama süzer, daraltılmış grubu açar, eşleşme yoksa söyler; toplu düğme görünenlere uygulanır", async () => {
+    await openFactory();
+    fireEvent.click(screen.getByRole("button", { name: "Tümünü daralt" }));
+    fireEvent.change(screen.getByRole("searchbox", { name: "Bildirim türü ara" }), { target: { value: "dönüşü" } });
+    expect(screen.getByTestId("fabrika-fason.donus-gecikti")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Sistem" })).toBeNull();
+    expect(screen.getByText("1 / 2 tür")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Fason: görünenleri aç" })).toBeInTheDocument();
+    fireEvent.change(screen.getByRole("searchbox", { name: "Bildirim türü ara" }), { target: { value: "yok-böyle" } });
+    expect(screen.getByText(/ile eşleşen bildirim türü yok/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Aramayı temizle" }));
+    // Arama bitince kullanıcının katlama tercihi geri gelir.
+    expect(screen.queryByTestId("fabrika-fason.donus-gecikti")).toBeNull();
   });
 });
 
