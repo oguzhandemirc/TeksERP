@@ -52,6 +52,7 @@ import { lockShipmentScopeTx } from "./helpers/shipment-locks.helper";
 import { assertRollsRevivable } from "./helpers/item-usage.helper";
 import { DEAD_ROLL_STATUSES } from "./helpers/live-ref-where.helper";
 import { ambiguousCustomerCodeError, matchExtras, resolveRollByScanCode } from "./helpers/roll-scan-resolve.helper";
+import { emitReturnReceivedTx } from "./notification-sources/depo";
 
 const D0 = () => new Prisma.Decimal(0);
 
@@ -646,12 +647,8 @@ export class ReturnService {
       // satırı yoktu) ve künye/şablon "ilk açan kişinin gününe" göre donuyordu.
       // Tx İÇİNDE: iade başarısızsa belge de geri sarılır.
       // ÇOK KALEMLİDE TEK BELGE: sourceId = lider (sektörde bir iade = bir irsaliye).
-      await printedDocumentService.freezeForSource(
-        tx,
-        PrintedDocType.RETURN_DISPATCH,
-        leaderId,
-        userId,
-      );
+      await printedDocumentService.freezeForSource(tx, PrintedDocType.RETURN_DISPATCH, leaderId, userId);
+      await emitReturnReceivedTx(tx, leaderId, userId);
       return { ids: createdIds, leaderId, totalQty };
     });
 

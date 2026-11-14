@@ -8,6 +8,7 @@ import { AuditService } from "./audit.service";
 import { duplicateBatchNoGateTx } from "./helpers/gelen-belge-mukerrer.helper";
 import { approvalBatchNos, writePerDocumentTx, type PartyEntry, type PerDocumentWritten, type SummaryDeclared } from "./gelen-belge-onay-parti.service";
 import type { DuplicateBatchNoMode } from "./system-setting.service";
+import { emitIncomingDocClaimedTx } from "./notification-sources/depo";
 
 /** Yarıda kalmış APPROVING (süreç ölümü) bu süreden sonra yeniden claim edilebilir. */
 export const STALE_APPROVING_MS = 10 * 60 * 1000;
@@ -40,10 +41,11 @@ async function claimHeaderTx(tx: Prisma.TransactionClient, snap: { id: string; s
 }
 
 /** Kapı + claim + (PER_DOCUMENT) özet satırları; `batchMode` tx DIŞINDA okunur (kilit tx'in İLK ifadesi kalsın). */
-export async function claimForApproval(note: ClaimNote & { noteNo: string }, a: { userId: string; varianceReason?: string; entryMode: string; batchMode: DuplicateBatchNoMode; confirmDuplicateBatchNo?: boolean; parties?: ReadonlyArray<PartyEntry>; summary?: SummaryDeclared; auditExtra?: Record<string, unknown> }): Promise<{ batch: { warnings: string[]; confirmedPeers: string[] }; perDocument: PerDocumentWritten | null }> {
+export async function claimForApproval(note: ClaimNote & { noteNo: string }, a: { userId: string; varianceReason?: string; docNoPeers?: readonly string[]; entryMode: string; batchMode: DuplicateBatchNoMode; confirmDuplicateBatchNo?: boolean; parties?: ReadonlyArray<PartyEntry>; summary?: SummaryDeclared; auditExtra?: Record<string, unknown> }): Promise<{ batch: { warnings: string[]; confirmedPeers: string[] }; perDocument: PerDocumentWritten | null }> {
   const res = await prisma.$transaction(async (tx) => {
     const batch = await duplicateBatchNoGateTx(tx, note, approvalBatchNos(note, a.entryMode, a), { mode: a.batchMode, confirmed: a.confirmDuplicateBatchNo });
     await claimHeaderTx(tx, note, a.userId, a.varianceReason);
+    await emitIncomingDocClaimedTx(tx, note.id, { varianceReason: a.varianceReason, peers: [...(a.docNoPeers ?? []), ...batch.confirmedPeers] }, a.userId);
     const perDocument = a.entryMode === "PER_DOCUMENT" ? await writePerDocumentTx(tx, note, a.parties, a.summary) : null;
     return { batch, perDocument };
   });

@@ -17,6 +17,7 @@ import { WorkOrderService } from "./workorder.service";
 import { isWorkOrderUnprocessed, touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { CANCELLABLE_NOTE_STATUSES, evaluateNoteCancel, loadNoteCancelContext, type CancelBlocker } from "./gelen-belge-iptal-onizleme.service";
 import { TERIM } from "../constants/terim";
+import { emitIncomingDocCancelledTx } from "./notification-sources/depo";
 
 /** Belge iptali serileştirmesi (belge başına anahtar `hashtext(noteId)`). Envanter: `period-guard.helper.ts` — **8043**. */
 export const DELIVERY_NOTE_CANCEL_LOCK_NS: number = 8043;
@@ -91,6 +92,7 @@ async function claimNoteTx(tx: Prisma.TransactionClient, noteId: string, input: 
     const why = n.status === DeliveryNoteStatus.CANCELLED ? "zaten iptal edilmiş" : "onaylı değil (taslak silme ayrı yoldur)";
     throw AppError.conflict(`${n.noteNo} ${why}.`, { code: "DELIVERY_NOTE_NOT_CANCELLABLE", status: n.status });
   }
+  await emitIncomingDocCancelledTx(tx, noteId, input.reason, userId);
   return before?.status ?? DeliveryNoteStatus.APPROVED;
 }
 

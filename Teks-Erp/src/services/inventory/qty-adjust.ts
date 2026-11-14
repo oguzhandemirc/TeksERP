@@ -28,6 +28,7 @@ import {
   WarehouseEventType,
 } from "@prisma/client";
 import { TERIM } from "../../constants/terim";
+import { emitRollQtyAdjustedTx } from "../notification-sources/depo";
 
 // G4 — sayım metraj düzeltmesinin sapma kaynağı: katalogdan (2026-08-14 dikişi
 // — ilk yazımdaki geçici tip köprüsü kaldırıldı, kaynak tek yerde).
@@ -205,6 +206,7 @@ export async function adjustRollQty(
           notes: reason.slice(0, 300),
         });
       }
+      await emitRollQtyAdjustedTx(tx, rollId, { from: oldQty, to: newQty, reason }, userId);
     });
 
     // Audit tx-DIŞI (best-effort konvansiyonu — bu dosyadaki diğer CUD'ler gibi).

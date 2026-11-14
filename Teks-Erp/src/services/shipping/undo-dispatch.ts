@@ -57,6 +57,7 @@ import { assertRollsRevivable, assertSwatchesRevivable } from "../helpers/item-u
 import { transitionSwatchesTx } from "../helpers/swatch-event.helper";
 import { settingRowPath } from "../../constants/panel-ayar-yolu";
 import type { ShippingServiceThis } from "./shared";
+import { emitShipmentUndoneTx } from "../notification-sources/depo";
 
 export function resolveUndoBlockReason(input: {
     status: ShipmentStatus;
@@ -312,6 +313,7 @@ export async function undoDispatch(this: ShippingServiceThis,
         reason: trimmed,
         userId,
       });
+      await emitShipmentUndoneTx(tx, shipmentId, trimmed, userId);
       // SHIPPED → IN_SHIPMENT kartelayı canlı kümeye döndürür: dirilmedir, kart Pasif olamaz (MV-06, top ikizi aşağıda).
       const shippedSwatches = await tx.swatch.findMany({ where: { shipmentId, status: SwatchStatus.SHIPPED }, select: { id: true } });
       await assertSwatchesRevivable(tx, shippedSwatches.map((s) => s.id));

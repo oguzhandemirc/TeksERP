@@ -42,6 +42,7 @@ import { TERIM } from "../../constants/terim";
 import { nextSubcontractorDocNoTx } from "./shared";
 import { assembleFasonCekiDoc } from "./printed-docs";
 import type { SubcontractorServiceThis } from "./shared";
+import { emitSubcontractDispatchedTx } from "../notification-sources/depo";
 
 export async function dispatch(
     data: {
@@ -739,6 +740,7 @@ export async function dispatch(
         dispatch.id,
         userId
       );
+      await emitSubcontractDispatchedTx(tx, dispatch.id, userId);
 
       // Refakat kartının parti bloğundaki "Sevk" sütunu (fason firma + sevk no)
       // ancak SEVKTEN SONRA dolar — eldeki kâğıt o sütunda boş kaldı → bayat.

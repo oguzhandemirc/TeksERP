@@ -35,6 +35,7 @@ import {
 import { resolveDeliveryToTx, type DeliveryToInput, type DeliveryToValue } from "../helpers/shipment-delivery.helper";
 import { settingRowPath } from "../../constants/panel-ayar-yolu";
 import { destinationLockMessage, type ShippingServiceThis } from "./shared";
+import { emitShipmentInvoicedTx } from "../notification-sources/depo";
 
 // eslint-disable-next-line max-params -- `this` bağlam bildirimi parametre değil; özgün metot 4 parametreli
 export async function setDestination(this: ShippingServiceThis, shipmentId: string, destination: ShipmentDestination, userId?: string, destinationChosen = false): Promise<ApiResponse<unknown>> {
@@ -163,6 +164,7 @@ export async function setShipmentInvoice(
           reason: value ? `Fatura no: ${value}` : "Fatura işareti kaldırıldı",
           userId,
         });
+        if (value) await emitShipmentInvoicedTx(tx, shipmentId, value, userId);
       }
       return u;
     });
