@@ -4,7 +4,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { useEffect } from "react";
 import { Text, View } from "react-native";
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from "react-native-reanimated";
-import { DOMAIN_ICON, type IconName } from "./icons";
+import { DOMAIN_ICON, EMPTY_ICON, type IconName } from "./icons";
 import { Banner, Button } from "./kit";
 import { durations } from "./motion";
 import { makeStyles, useReducedMotion, useTokens } from "./theme-context";
@@ -34,7 +34,7 @@ export function Empty({ text, domain = "genel", icon, actionLabel, onAction, tes
 
 /** Modül fabrikada kapalı (bayrak/lisans): kırmızı hata ve "Tekrar dene" YOK — sakin, gri, tek satır bilgi. */
 export function ModuleClosed({ text = "Bu bölüm fabrikanızda kapalı", testID }: { readonly text?: string; readonly testID?: string }) {
-  return <Empty text={`${text}. Açılması için fabrika yöneticinize başvurun.`} icon="lock-closed-outline" testID={testID} />;
+  return <Empty text={`${text} — açılması için fabrika yöneticinize başvurun`} icon={EMPTY_ICON.kapali} testID={testID} />;
 }
 
 /** İskelet: KPI ızgarası ya da liste satırı biçiminde; hareket azaltma açıksa sabit. */
