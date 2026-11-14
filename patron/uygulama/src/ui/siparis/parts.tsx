@@ -61,6 +61,19 @@ export function CapsuleButton(p: { label: string; icon?: IconName; onPress: () =
   );
 }
 
+/** Üst barın İKİNCİL eylemi (ör. panoyu düzenle): yalnız ikon, ince çerçeveli yuvarlak; birincil "Yeni …" kapsülüyle
+ *  karışmaz ve küçük başlığa yer bırakır. Ad ekran okuyucuya `label`dan. */
+export function HeaderIconButton(p: { label: string; icon: IconName; onPress: () => void; testID?: string }) {
+  const t = useTokens();
+  const s = useStyles();
+  return (
+    <Pressable onPress={p.onPress} testID={p.testID} accessibilityRole="button" accessibilityLabel={p.label} hitSlop={6}
+      style={({ pressed }) => [s.iconBtn, pressed && { backgroundColor: t.surfaceAlt }]}>
+      <Ionicons name={p.icon} size={20} color={t.tint} />
+    </Pressable>
+  );
+}
+
 /** Tek seçimli hızlı süzgeç çipi (yatay şerit): seçili tint zemin; durum `accessibilityState.selected`. */
 export function QuickChip(p: { label: string; selected: boolean; onPress: () => void; testID?: string }) {
   const t = useTokens();
@@ -174,6 +187,7 @@ export const useStyles = makeStyles((t) => ({
     backgroundColor: t.tint,
   },
   capsuleOff: { opacity: 0.4 },
+  iconBtn: { width: TOUCH, height: TOUCH, borderRadius: radius.chip, alignItems: "center" as const, justifyContent: "center" as const, borderWidth: 1, borderColor: t.separator, backgroundColor: t.surface },
   quick: { minHeight: 36, justifyContent: "center" as const, paddingHorizontal: space.m, borderRadius: radius.chip, borderWidth: 1, borderColor: t.separator, backgroundColor: t.surface },
   quickText: { ...typography.subhead, fontWeight: "600" as const },
   capsuleText: { ...typography.subhead, fontWeight: "600" as const, color: t.onTint },

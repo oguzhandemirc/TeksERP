@@ -23,6 +23,8 @@ export interface Yetenek {
   /** ERP telefon push köprüsü (`/auth/me` `patronPush` ≥ 1): belirteç kaydı + tür başına telefon bildirimi tercihi.
    *  Bulutta false — bulutun telefon push yolu `bildirim` ayarlarındadır. */
   readonly patronPush: boolean;
+  /** Panelin pano kutuları (ERP `/auth/me` `patronPano` ≥ 1): katalog + seçili kutu verisi; değilse yerel anlık panosu. */
+  readonly pano: boolean;
   /** Açılış zili (`POST /tazele`) ve değişim akışı (`GET /degisim`). */
   readonly tazele: boolean;
   readonly hesapYonetimi: boolean;
@@ -45,6 +47,7 @@ export const BULUT_YETENEK: Yetenek = {
   bildirim: true,
   bildirimKutusu: false,
   patronPush: false,
+  pano: false,
   tazele: true,
   hesapYonetimi: true,
   parolaDegistir: true,
@@ -59,7 +62,7 @@ const dizeler = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is
  * ERP sunucusu: sunulan kümeler sunucunun beyanından (eski sunucu beyan etmezse BOŞ — fail-closed). Bulut yazma
  * kanalı (gelen kutusu, `:yaz` kodları) yok; ERP yazma işlemleri ham ERP izinlerinden (`islemVar`).
  */
-export function erpYetenek(patronReadSets: unknown, erpPermissions?: unknown, patronReportApi?: unknown, bildirimKutusu?: unknown, patronReportExport?: unknown, patronPush?: unknown): Yetenek {
+export function erpYetenek(patronReadSets: unknown, erpPermissions?: unknown, patronReportApi?: unknown, bildirimKutusu?: unknown, patronReportExport?: unknown, patronPush?: unknown, patronPano?: unknown): Yetenek {
   const kumeler = new Set(dizeler(patronReadSets));
   // Rapor ucu (V5a) yalnız sürümünü beyan eden sunucuda; eski sunucu beyan etmez → rapor gizli (fail-closed).
   const rapor = typeof patronReportApi === "number" && patronReportApi >= 1;
@@ -78,6 +81,8 @@ export function erpYetenek(patronReadSets: unknown, erpPermissions?: unknown, pa
     bildirimKutusu: bildirimKutusu === true,
     // Fabrika yalnız kapısı açıkken sürüm yayımlar; eski fabrika alanı vermez → push gizli (fail-closed). Kutu kapalıysa da gizli.
     patronPush: bildirimKutusu === true && typeof patronPush === "number" && patronPush >= 1,
+    // Eski fabrika alanı vermez → yerel anlık panosu (fail-closed).
+    pano: typeof patronPano === "number" && patronPano >= 1,
     tazele: false,
     hesapYonetimi: false,
     parolaDegistir: false,
