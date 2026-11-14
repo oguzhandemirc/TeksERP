@@ -71,7 +71,7 @@ export interface NotificationCatalogKind {
   /** "Yalnız önemliler" kümesi (S1, 2026-11-14); eski sunucu göndermez → false. */
   onemli?: boolean;
   /** Özet türü sıklığı; olay türünde null. */
-  ozet?: "SAATLIK" | "VARDIYA" | "GUN_SONU" | null;
+  ozet?: "SAATLIK" | "VARDIYA" | "GUN_SONU" | "HAFTALIK" | null;
 }
 
 /** Katalog kapsam beyanı (`notification-catalog.ts` `kapsam`). */

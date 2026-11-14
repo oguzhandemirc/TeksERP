@@ -1,9 +1,10 @@
 // =============================================================================
-// BİLDİRİM ÖZET ZAMANLAYICISI — özet türleri (katalog `ozet`: SAATLIK · VARDIYA · GUN_SONU), S1 2026-11-14
+// BİLDİRİM ÖZET ZAMANLAYICISI — özet türleri (katalog `ozet`: SAATLIK · VARDIYA · GUN_SONU · HAFTALIK), S1 2026-11-14
 // =============================================================================
 // Yüksek frekanslı olaylar tekil bildirim değil, PENCERE başına tek özet satırıdır (plan K3). Kaynak `compute(pencere)`
 // yük döner (null = o pencerede yazılacak bir şey yok). Pencere fabrika diliminden (`constants/time.ts`): saatlik =
-// biten fabrika saati, gün sonu = biten fabrika günü, vardiya = biten son vardiya örneği (`shiftInstance`).
+// biten fabrika saati, gün sonu = biten fabrika günü, vardiya = biten son vardiya örneği (`shiftInstance`),
+// haftalık = biten fabrika haftası (Pazartesi 00:00 → Pazartesi 00:00; S5a 2026-11-14).
 // Tekillik: tur tx'inin İLK ifadesi 8040 kilidi `hashtext('bildirim-ozet:'||kind)`; damga `bildirim.ozetDamga.<tür>`
 // = son yazılan pencere anahtarı → aynı pencere iki kez yazılmaz (yeniden başlatma ve çift süreç dahil).
 // İlk tur (damga yok) yalnız damgayı kurar, bildirim üretmez (açılışta geçmiş pencere seli yok — koşul su damgası emsali).
@@ -12,14 +13,14 @@
 import type { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { NOTIFICATION_CATALOG, type NotificationKind } from "../constants/notification-catalog";
-import { factoryDayStart, factoryYmd } from "../constants/time";
+import { factoryDayStart, factoryWeekday, factoryYmd } from "../constants/time";
 import { NOTIFICATION_DISPATCH_LOCK_NS } from "../services/notification-dispatch.service";
 import { emitNotification } from "../services/helpers/notification-emit.helper";
 import { readNotificationInboxEnabled } from "../services/system-setting.service";
 import { reportJobFailure } from "./job-failure";
 import { uyari } from "../lib/logger";
 
-export type DigestCadence = "SAATLIK" | "VARDIYA" | "GUN_SONU";
+export type DigestCadence = "SAATLIK" | "VARDIYA" | "GUN_SONU" | "HAFTALIK";
 
 export interface DigestWindow {
   /** Pencere kimliği (damga + konu anahtarı): saat ISO'su · fabrika günü · vardiya örneği id'si. */
@@ -58,11 +59,25 @@ function cadenceOf(kind: NotificationKind): DigestCadence {
   return (NOTIFICATION_CATALOG[kind] as { ozet?: DigestCadence }).ozet!;
 }
 
+/** Bir önceki fabrika gününün başı; gün adımı DST'de 23/25 saat olabildiği için `-24h` değil `dayStart(t-1h)`. */
+const previousFactoryDay = (dayStart: Date): Date => factoryDayStart(new Date(dayStart.getTime() - HOUR_MS));
+
+/** `now` anında biten son fabrika haftası: [önceki Pazartesi 00:00, bu Pazartesi 00:00). Anahtar = haftanın ilk günü. */
+function lastClosedWeek(now: Date): DigestWindow {
+  let to = factoryDayStart(now);
+  while (factoryWeekday(to) !== 1) to = previousFactoryDay(to);
+  let from = to;
+  for (let i = 0; i < 7; i += 1) from = previousFactoryDay(from);
+  const ilk = factoryYmd(from);
+  return { key: ilk, from, to, label: `${ilk} – ${factoryYmd(previousFactoryDay(to))}` };
+}
+
 /** `now` anında BİTMİŞ en son pencere (fabrika dilimi). Vardiya tanımı yoksa null. */
 export async function lastClosedWindow(db: Pick<Prisma.TransactionClient, "shiftInstance">, cadence: DigestCadence, now: Date): Promise<DigestWindow | null> {
+  if (cadence === "HAFTALIK") return lastClosedWeek(now);
   if (cadence === "GUN_SONU") {
     const to = factoryDayStart(now);
-    const from = factoryDayStart(new Date(to.getTime() - HOUR_MS));
+    const from = previousFactoryDay(to);
     const gun = factoryYmd(from);
     return { key: gun, from, to, label: gun };
   }
