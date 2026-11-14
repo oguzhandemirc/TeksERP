@@ -15,21 +15,26 @@ import {
 } from "@/services/bildirimProfilService";
 import { cn } from "@/lib/utils";
 import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
+import { useKindBrowse } from "./group-collapse";
+import { KindGroupHeader, KindSearchBar } from "./KindGroupParts";
 import { LockPreviewDialog } from "./LockPreviewDialog";
 import {
   CELL_LABEL,
+  SUMMARY_LABEL,
   allowsOff,
   cellsFromDraft,
   draftEquals,
   draftFromCells,
-  groupKinds,
+  matrixBulk,
   membersAfterLockChoice,
   needsLockPreview,
+  stateSummary,
   type CellDraft,
 } from "./model";
 import { PROFILES_QUERY_ROOT } from "./queries";
 
 const STATES: ProfileCellState[] = ["ACIK", "KAPALI", "KILITLI"];
+const SUMMARY_ORDER = ["ACIK", "KAPALI", "KILITLI", "BOS"] as const;
 
 interface Props {
   profile: NotificationProfile;
@@ -52,7 +57,7 @@ export function ProfileMatrixTab({ profile, kinds }: Props) {
       return n;
     });
 
-  const groups = groupKinds(kinds);
+  const { query, setQuery, searching, groups, shown, isOpen, toggle, foldAll } = useKindBrowse(kinds, "matris");
   return (
     <>
       {readOnly && (
@@ -60,6 +65,7 @@ export function ProfileMatrixTab({ profile, kinds }: Props) {
           <p className="text-sm text-muted-foreground">Arşivlenmiş profil — matris salt okunur, çözüme katılmaz.</p>
         </ListMessage>
       )}
+      <KindSearchBar className="shrink-0 border-b px-3 py-1.5" query={query} onQuery={setQuery} shown={shown} total={kinds.length} onFoldAll={foldAll} />
       <ListBody>
         <table className="w-full min-w-[520px] text-sm">
           <thead className="text-xs text-muted-foreground">
@@ -72,16 +78,22 @@ export function ProfileMatrixTab({ profile, kinds }: Props) {
             </tr>
           </thead>
           {groups.map((g) => (
-            <tbody key={g.grup}>
-              <tr className="bg-muted/20">
-                <th colSpan={5} className="px-3 py-1.5 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">{g.grup}</th>
-              </tr>
-              {g.items.map((k) => (
-                <MatrixRow key={k.tur} kind={k} value={draft[k.tur]} blind={profile.izinsizUyeler?.[k.tur] ?? 0} readOnly={readOnly} onSet={(v) => set(k.tur, v)} />
-              ))}
-            </tbody>
+            <MatrixGroup
+              key={g.grup}
+              grup={g.grup}
+              items={g.items}
+              draft={draft}
+              blind={profile.izinsizUyeler ?? {}}
+              readOnly={readOnly}
+              open={isOpen(g.grup)}
+              filtered={searching}
+              onToggle={() => toggle(g.grup)}
+              onBulk={(to) => setDraft((d) => matrixBulk(d, g.items, to))}
+              onSet={set}
+            />
           ))}
         </table>
+        {searching && groups.length === 0 && <p className="py-6 text-center text-sm text-muted-foreground">“{query.trim()}” ile eşleşen bildirim türü yok.</p>}
       </ListBody>
       <ListFooter loaded={kinds.length} label={dirty ? "Kaydedilmemiş değişiklik var." : `${kinds.length} bildirim türü`}>
         {!readOnly && (
@@ -100,6 +112,45 @@ export function ProfileMatrixTab({ profile, kinds }: Props) {
         onConfirm={(kept) => save.mutate(kept)}
       />
     </>
+  );
+}
+
+interface GroupProps {
+  grup: string;
+  items: readonly FactoryDefaultKind[];
+  draft: CellDraft;
+  blind: Readonly<Record<string, number>>;
+  readOnly: boolean;
+  open: boolean;
+  filtered: boolean;
+  onToggle: () => void;
+  onBulk: (to: "ACIK" | "KAPALI") => void;
+  onSet: (tur: string, v: ProfileCellState | null) => void;
+}
+
+/** Katlanır grup gövdesi: başlık satırı her zaman, tür satırları yalnız açıkken. */
+function MatrixGroup({ grup, items, draft, blind, readOnly, open, filtered, onToggle, onBulk, onSet }: GroupProps) {
+  const bodyId = `matris-grup-${grup}`;
+  return (
+    <tbody id={bodyId}>
+      <tr className="border-t bg-muted/20">
+        <th colSpan={5} className="p-0 text-left font-normal">
+          <KindGroupHeader
+            grup={grup}
+            count={items.length}
+            summary={stateSummary(items.map((k) => draft[k.tur] ?? "BOS"), SUMMARY_ORDER, SUMMARY_LABEL)}
+            open={open}
+            onToggle={onToggle}
+            onBulk={readOnly ? undefined : onBulk}
+            filtered={filtered}
+            controls={bodyId}
+          />
+        </th>
+      </tr>
+      {open && items.map((k) => (
+        <MatrixRow key={k.tur} kind={k} value={draft[k.tur]} blind={blind[k.tur] ?? 0} readOnly={readOnly} onSet={(v) => onSet(k.tur, v)} />
+      ))}
+    </tbody>
   );
 }
 
