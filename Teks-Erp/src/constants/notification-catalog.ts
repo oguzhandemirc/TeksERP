@@ -24,6 +24,7 @@ import { URETIM_NOTIFICATION_ENTRIES } from "./notification-catalog-uretim";
 import { DEPO_NOTIFICATION_ENTRIES } from "./notification-catalog-depo";
 import { FINANS_NOTIFICATION_ENTRIES } from "./notification-catalog-finans";
 import { YETKI_NOTIFICATION_ENTRIES } from "./notification-catalog-yetki";
+import { SISTEM_DISK_NOTIFICATION_ENTRIES } from "./notification-catalog-sistem";
 
 export { NOTIFICATION_PHASES, NOTIFICATION_GRUPLARI } from "./notification-catalog.types";
 export type {
@@ -106,24 +107,7 @@ export const NOTIFICATION_CATALOG = {
     payloadAlanlari: ["surum"],
     tahminiHaftalik: 0.5, saklama: SAKLAMA,
   },
-  // S6a: uygulama diskinin doluluğu (`/health` ile aynı okuyucu `readAppDiskMetrics`); ölçülemezse açık koşul korunur.
-  "sistem.disk-dolu": {
-    kod: "sistem.disk-dolu", ad: "Sunucu diski doluyor",
-    sinif: "BILDIRIM", altTur: "KOSUL", grup: "Sistem",
-    izinler: [["system:backups"]],
-    modul: "cekirdek:sistem-kimlik-belge",
-    tekilKalibi: "{disk}",
-    pencereSn: 0, varsayilan: "HERKES", kilit: "YOK",
-    kanallar: KANAL_MASAUSTU,
-    varsayilanKanallar: KANAL_VARSAYILAN, onemli: true,
-    baslik: "Sunucu diski doluyor",
-    govde: "Sunucu diski %{doluluk} dolu (eşik %{esik}), {bosGb} GB boş kaldı",
-    cozuldu: "Sunucu diski eşiğin altına indi",
-    panelEkran: "system/backups", panelYol: "/system/backups",
-    payloadAlanlari: ["disk", "doluluk", "esik", "bosGb"],
-    paramSemasi: z.object({ oran: z.number().min(50).max(99).default(90) }).strict(),
-    tahminiHaftalik: 0.1, saklama: SAKLAMA,
-  },
+  ...SISTEM_DISK_NOTIFICATION_ENTRIES, // S6a — sunucu diski (ayrı dosya, dosya boyu)
   "yazici.hata": {
     kod: "yazici.hata", ad: "Yazıcıda baskı hatası",
     sinif: "BILDIRIM", altTur: "OLAY", grup: "Sistem",
