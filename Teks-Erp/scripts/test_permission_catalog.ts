@@ -121,6 +121,9 @@ const DINAMIK_IZIN_KAYNAKLARI: Record<string, readonly string[]> = {
   // `EXTRA_ROUTE_PERMISSIONS`; her kodun katalogda olduğunu ve kapının ısırdığını test_patron_rapor §1f/§5a ölçer — devir.
   "src/routes/patron-rapor.routes.ts": [`${DELEGE}scripts/test_patron_rapor.ts`],
   "src/services/patron-rapor/katalog.ts": [`${DELEGE}scripts/test_patron_rapor.ts`],
+  // Patron panosu (2026-11-14): route toplu kapısı `PATRON_LOGIN_PERMISSION` + `PANO_ROUTE_PERMISSIONS` (dashboard emsali);
+  // kutu izinleri `pano-kaynak.ts` GATE_PERMISSIONS'ta — toplu kapının sırasını test_patron_pano_ucu §1a ölçer — devir.
+  "src/routes/patron-pano.routes.ts": [`${DELEGE}scripts/test_patron_pano_ucu.ts`],
   // Patron push cihazı (köprü P2): route toplu kapısı aynı sabit (`PATRON_LOGIN_PERMISSION`); kapının ısırdığını
   // test_patron_push_cihaz §2 ölçer — devir.
   "src/routes/patron-push.routes.ts": [`${DELEGE}scripts/test_patron_push_cihaz.ts`],

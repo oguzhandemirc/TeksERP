@@ -324,6 +324,13 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
       "(pano-kutular.service.ts:50). Router kapısı KONULAMAZ: pano her kurulumun açılış ekranıdır, modülden bağımsızdır.",
   },
   {
+    dosya: "routes/patron-pano.routes.ts",
+    neden:
+      "PATRON PANOSU (2026-11-14). Router SALT-OKUMADIR ve açılış panosu kutu servisini (`pano-kutular.service`) AYNEN sarar; finans dokunuşu " +
+      "`routes/dashboard.routes.ts` muafıyla aynı kutu zinciridir (nakit/tahsilat kutuları yalnız `nakit` kapısı açıkken). Kapı KUTU düzeyinde sunucudadır; " +
+      "router kapısı patronun bütün panosunu kapatırdı (`test_patron_pano_ucu` §1b veri kaynağını ölçer).",
+  },
+  {
     dosya: "routes/customer-period-summary.routes.ts",
     neden:
       "MÜŞTERİ DÖNEM ÖZETİ (cari-be madde 3, 2026-11-12). Router SALT-OKUMADIR (CUD yok); finans dokunuşu yalnız GEÇİŞLİ importtur: kapı tek kaynağı " +
