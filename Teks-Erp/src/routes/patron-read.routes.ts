@@ -11,12 +11,14 @@ import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { requireMaliyetEnabled, requireProductionEnabled, requireTicaretEnabled } from "../middlewares/module.middleware";
 import { requireFinanceEnabled } from "../middlewares/finance.middleware";
+import { LICENSE_MODULE_CODE } from "../lib/license/module-ceiling";
 import { PATRON_LOGIN_PERMISSION } from "../constants/permission-catalog";
 import { AppError } from "../utils/app-error";
 import {
   facilityStatus, getSetRecord, getSnapshot, listSet, setGates, type PatronUser,
 } from "../services/patron-read/patron-read.service";
 import { ID_FILTER_KEYS } from "../services/patron-read/kayit-sayfasi";
+import { PATRON_READ_SETS } from "../services/patron-read/izin-esleme";
 
 const router = Router();
 // ⚠️ Toplu kapı: bu satırdan ÖNCE tanımlanan uç kapısız kalır (Express kayıt sırası).
@@ -39,6 +41,32 @@ const moduleGate = (kind: "KAYIT" | "ANLIK"): RequestHandler => (req, res, next)
   };
   step(0);
 };
+
+/** Kapının "kapalı" hükmü: yalnız modül kapısının kendi 403 kodları (bayrak ya da lisans tavanı). */
+const CLOSED_CODES: ReadonlySet<string> = new Set(["MODULE_DISABLED", LICENSE_MODULE_CODE]);
+
+function gateVerdict(key: string, req: Request, res: Response): Promise<"open" | "closed" | "unknown"> {
+  return new Promise((resolve) => {
+    void MODULE_GATES[key]!(req, res, (err?: unknown) => {
+      if (!err) return resolve("open");
+      const closed = err instanceof AppError && err.statusCode === 403 && CLOSED_CODES.has(String(err.details?.code));
+      resolve(closed ? "closed" : "unknown");
+    });
+  });
+}
+
+/**
+ * `/auth/me` `patronClosedSets`: uçların koştuğu AYNI `MODULE_GATES` işleyicileri (kapı başına bir kez) — kapılarından
+ * biri kapalı diyen küme. Kapı başka hata verirse (DB vb.) hüküm yok → `null` (alan yayımlanmaz, uygulama bugünkü gibi
+ * hepsini gösterir; güvenlik sınırı her istekte uç kapısıdır, menü değil).
+ */
+export async function closedPatronReadSets(req: Request, res: Response): Promise<string[] | null> {
+  const gatesOf = (n: string) => [...setGates(n, "KAYIT"), ...setGates(n, "ANLIK")];
+  const keys = [...new Set(PATRON_READ_SETS.flatMap(gatesOf))];
+  const verdicts = new Map(await Promise.all(keys.map(async (k) => [k, await gateVerdict(k, req, res)] as const)));
+  if ([...verdicts.values()].includes("unknown")) return null;
+  return PATRON_READ_SETS.filter((n) => gatesOf(n).some((g) => verdicts.get(g) === "closed"));
+}
 
 const userOf = (req: Request): PatronUser => ({ userId: req.user!.userId, username: req.user!.username, permissions: req.user!.permissions });
 

@@ -116,6 +116,9 @@ const DINAMIK_IZIN_KAYNAKLARI: Record<string, readonly string[]> = {
   // ERP_TO_CLOUD (sabit bulut kodlarını da taşır, burada toplanamaz) ve REPORT_PERMISSION_CODES; ERP kodlarının katalogda
   // olduğunu test_patron_okuma_ucu §1c ölçer — devir.
   "src/routes/patron-read.routes.ts": [`${DELEGE}scripts/test_patron_okuma_ucu.ts`],
+  // `/auth/me` `patronClosedSets` yalnız `matchesPermission(izinler, PATRON_LOGIN_PERMISSION)` oturumuna (sabit
+  // permission-catalog.ts'te); patron izinsiz oturumda alanın yokluğunu test_patron_okuma_ucu §6f ölçer — devir.
+  "src/controllers/auth.controller.ts": [`${DELEGE}scripts/test_patron_okuma_ucu.ts`],
   "src/services/patron-read/izin-esleme.ts": [`${DELEGE}scripts/test_patron_okuma_ucu.ts`],
   // Patron raporu (V5a): route toplu kapısı aynı sabit; `katalog.ts` `matchesPermission(perms, p)` — p ∈ katalog `izin` +
   // `EXTRA_ROUTE_PERMISSIONS`; her kodun katalogda olduğunu ve kapının ısırdığını test_patron_rapor §1f/§5a ölçer — devir.

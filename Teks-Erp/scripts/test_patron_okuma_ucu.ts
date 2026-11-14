@@ -13,6 +13,8 @@
 //   §5 önbellek yetkiyi delmez: aynı kullanıcı önbellekteki kümeye izni kalkınca 403 alır
 //   §6 modül kapısı (KÜME BAŞINA, router kapısı yok): ön muhasebe kapalı → `ozet-finans` 403 MODULE_DISABLED (lisans
 //      tavanıysa LICENSE_MODULE) · üretim kapalı → `ozet.uretim` 403 · ticaret kapalı → kümeler açık (ticaret kümesi yok)
+//      · §6e–§6i `/auth/me` `patronClosedSets` her bayrak hâlinde HER kümede uç kapı hükmüyle birebir (menü gizleme);
+//      patron izinsiz oturumda alan yok
 //   §1h/§1i küme kapısının kapsamı: ticaret tablosu okuyan küme TAM OLARAK `TICARET_SETS` (fiyat kartı) ve ticaret
 //      kapısını taşır · her kümenin bütün kapıları `MODULE_GATES`te (`test_ticaret_regime_gate` muafı ve
 //      `test_production_regime_gate` §6 bu ölçüme yaslanır)
@@ -260,7 +262,27 @@ async function main(): Promise<void> {
     check("§5b aynı kullanıcı izni kalkınca önbellek varken 403", denied === "PATRON_SET_FORBIDDEN", denied);
 
     console.log("\n=== §6 modül kapısı ===");
+    // §6e–§6h: `/auth/me` `patronClosedSets` ⇔ uçların gerçek kapı hükmü (her küme, o anki bayrak hâlinde).
+    const MOD_CODES = ["MODULE_DISABLED", "LICENSE_MODULE"];
+    const closedParity = async (label: string, mustClose: readonly string[], mustOpen: readonly string[]) => {
+      const me = await call("/auth/me", boss.token);
+      const closed = (me.body.data as Record<string, unknown> | undefined)?.patronClosedSets;
+      const list = Array.isArray(closed) ? (closed as string[]) : null;
+      const off: string[] = [];
+      for (const n of PATRON_READ_SETS) {
+        const path = patronSet(n, "KAYIT") ? `/patron/v1/veri/${n}?limit=1` : `/patron/v1/anlik/${n}`;
+        const r = await call(path, boss.token);
+        const gated = r.status === 403 && MOD_CODES.includes(String(r.body.details?.code));
+        if (list && gated !== list.includes(n)) off.push(`${n}:${gated ? "uç-kapalı" : "uç-açık"}`);
+      }
+      const want = list !== null && mustClose.every((n) => list.includes(n)) && mustOpen.every((n) => !list.includes(n));
+      check(label, list !== null && off.length === 0 && want, list === null ? "alan yok" : off.join(",") || `[${list}]`);
+    };
+    await closedParity("§6e başlangıç bayrak hâlinde /auth/me patronClosedSets ⇔ uç kapı hükmü", [], ["ozet.siparis", "siparis", "tesis"]);
+    const noPatronMe = await call("/auth/me", noPatron.token);
+    check("§6f patron izinsiz oturumda patronClosedSets alanı YOK", noPatronMe.status === 200 && !("patronClosedSets" in ((noPatronMe.body.data ?? {}) as object)));
     await setFlag(finKey, false);
+    await closedParity("§6g ön muhasebe kapalı: patronClosedSets ⇔ uç kapı hükmü (ozet-finans, kasa kapalı; ozet.siparis açık)", ["ozet-finans", "kasa"], ["ozet.siparis", "siparis"]);
     const off = await call("/patron/v1/anlik/ozet-finans", boss.token);
     check("§6a ön muhasebe kapalı → 403 MODULE_DISABLED|LICENSE_MODULE", off.status === 403 && ["MODULE_DISABLED", "LICENSE_MODULE"].includes(String(off.body.details?.code)), `${off.status} ${off.body.details?.code}`);
     check("§6b modülsüz küme etkilenmez (ozet.siparis 200)", (await call("/patron/v1/anlik/ozet.siparis", boss.token)).status === 200);
@@ -271,11 +293,13 @@ async function main(): Promise<void> {
     check("§6c üretim kapalı → ozet.uretim 403 MODULE_DISABLED|LICENSE_MODULE, ozet.siparis 200",
       prodOff.status === 403 && ["MODULE_DISABLED", "LICENSE_MODULE"].includes(String(prodOff.body.details?.code)) && (await call("/patron/v1/anlik/ozet.siparis", boss.token)).status === 200,
       `${prodOff.status} ${prodOff.body.details?.code}`);
+    await closedParity("§6h üretim kapalı: patronClosedSets ⇔ uç kapı hükmü (ozet.uretim, is-emri kapalı)", ["ozet.uretim", "is-emri"], ["ozet.siparis", "siparis"]);
     await setFlag(SETTING_KEYS.PRODUCTION_ENABLED, true);
     await setFlag(SETTING_KEYS.TICARET_ENABLED, false);
     clearPatronSnapshotCache();
     const tic = await Promise.all(["/patron/v1/oturum", "/patron/v1/anlik/ozet.siparis", "/patron/v1/anlik/acik-siparis-karsilama", "/patron/v1/veri/siparis?limit=1"].map((u) => call(u, boss.token)));
     check("§6d ticaret kapalı → kümeler AÇIK (router düzeyi ticaret kapısı yok)", tic.every((r) => r.status === 200), tic.map((r) => r.status).join(","));
+    await closedParity("§6i ticaret kapalı: patronClosedSets ⇔ uç kapı hükmü (yalnız ticaret kümesi fiyat kapalı)", ["fiyat"], ["ozet.siparis", "siparis"]);
     await v3c({ call, makeUser, setFlag, T, made });
   } finally {
     for (const key of flagKeys) {

@@ -222,8 +222,8 @@ export function SessionProvider({ children, platform = "mobil" }: { children: Re
     };
   }, []);
 
-  const applyCaps = useCallback((sets: unknown, perms: unknown, reportApi: unknown, inbox: boolean, reportExport: unknown, push: unknown, pano: unknown) => {
-    const y = erpYetenek(sets, perms, reportApi, inbox, reportExport, push, pano);
+  const applyCaps = useCallback((sets: unknown, perms: unknown, reportApi: unknown, inbox: boolean, reportExport: unknown, push: unknown, pano: unknown, closed: unknown) => {
+    const y = erpYetenek(sets, perms, reportApi, inbox, reportExport, push, pano, closed);
     capsRef.current = y;
     setYetenek(y);
     setErpCaps(y);
@@ -239,7 +239,7 @@ export function SessionProvider({ children, platform = "mobil" }: { children: Re
   const loadErpCaps = useCallback(
     async (c: Cache) => {
       const me = (await c.load("ben", () => erpBen(client))).data;
-      applyCaps(me.patronReadSets, me.permissions, me.patronReportApi, await bildirimAcik(c), me.patronReportExport, me.patronPush, me.patronPano);
+      applyCaps(me.patronReadSets, me.permissions, me.patronReportApi, await bildirimAcik(c), me.patronReportExport, me.patronPush, me.patronPano, me.patronClosedSets);
       return me;
     },
     [client, applyCaps, bildirimAcik],
@@ -288,13 +288,13 @@ export function SessionProvider({ children, platform = "mobil" }: { children: Re
         const s = `erp|${adres}|${me.userId}`;
         const c = makeCache(s);
         await c.load("ben", () => Promise.resolve(me));
-        applyCaps(me.patronReadSets, me.permissions, me.patronReportApi, false, me.patronReportExport, me.patronPush, me.patronPano);
+        applyCaps(me.patronReadSets, me.permissions, me.patronReportApi, false, me.patronReportExport, me.patronPush, me.patronPano, me.patronClosedSets);
         await secretStore.set(TOKEN_KEY, r.token).catch(() => undefined);
         await secretStore.set(SCOPE_KEY, s).catch(() => undefined);
         setScope(s);
         await loadFacility(c);
         // Gelen kutusu açıklığı oturum kurulduktan sonra (hata girişi bozmaz; kapalı kalır).
-        applyCaps(me.patronReadSets, me.permissions, me.patronReportApi, await bildirimAcik(c), me.patronReportExport, me.patronPush, me.patronPano);
+        applyCaps(me.patronReadSets, me.permissions, me.patronReportApi, await bildirimAcik(c), me.patronReportExport, me.patronPush, me.patronPano, me.patronClosedSets);
       } catch (err) {
         // Yarım giriş kalmaz: belirteç düşer, sonraki deneme baştan.
         await reset();
