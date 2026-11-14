@@ -14,10 +14,15 @@ import { backupHealth } from "../../lib/health-snapshot";
 import { lastOffsiteSweep } from "../helpers/offsite-backup.helper";
 import { getCloudSyncStatus } from "../../jobs/cloud-sync.job";
 import { getLicenseSnapshot } from "../../lib/license/runtime";
+import { getIntegrityOutcome } from "../../lib/license/integrity-state";
 import { getUpdateStatus } from "../update-status.service";
 import { registerConditionSource, type ConditionSubject } from "../../jobs/notification-condition.job";
 
 export const SYSTEM_CONDITION_PERIOD_MS = 60_000;
+/** Açılış bütünlük denetimi bu süreçte henüz bitmemişken onun ürettiği nedenler ısınma boyunca "ölçülmedi"dir. */
+export const LICENSE_INTEGRITY_WARMUP_MS = 10 * 60_000;
+/** Ölçümü bütünlük denetimine bağlı nedenler: denetim bitene dek `integrity === null` bunları kendiliğinden doğurur. */
+export const INTEGRITY_PENDING_REASON_CODES: readonly string[] = ["BUTUNLUK_OLCULEMEDI", "DERLEME_TARIHI_YOK"];
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const SYSTEM_CONDITION_KINDS = [
@@ -49,6 +54,10 @@ export interface SystemSourceDeps {
   /** Türün katalog parametreleri (fabrika varsayılanı tablosu N4'te gelir; o zamana dek katalog varsayılanı). */
   params: (kind: NotificationKind) => Record<string, unknown>;
   now: () => number;
+  /** Bu süreçte bütünlük denetimi en az bir kez sonuç verdi mi (`integrity-state` bellek durumu). */
+  integrityMeasured: () => boolean;
+  /** Süreç ne zamandır ayakta (ms) — ısınma penceresi. */
+  uptimeMs: () => number;
 }
 
 const REAL_DEPS: SystemSourceDeps = {
@@ -59,6 +68,8 @@ const REAL_DEPS: SystemSourceDeps = {
   updateStatus: () => getUpdateStatus(),
   params: effectiveNotificationParams,
   now: Date.now,
+  integrityMeasured: () => getIntegrityOutcome() !== null,
+  uptimeMs: () => process.uptime() * 1000,
 };
 
 let deps: SystemSourceDeps = REAL_DEPS;
@@ -215,7 +226,13 @@ export async function licenseSubjects(): Promise<ConditionSubject[]> {
   if (tier !== "NORMAL") {
     const codes = [...new Set(snap.state.nedenler.map((n) => n.kod))];
     if (codes.length === 0) codes.push(`KADEME_${tier}`);
-    for (const k of codes) out.push(subject(k, { nedenKodu: k, neden: LICENSE_REASON_TEXT[k] ?? `Lisans kademesi: ${tier}` }));
+    // Yeniden başlatmada (güncelleme) ilk tur açılış denetiminden önce koşar: bu nedenler ısınmada yalnız açıksa korunur.
+    const warming = !deps.integrityMeasured() && deps.uptimeMs() < LICENSE_INTEGRITY_WARMUP_MS;
+    const pending = warming ? codes.filter((k) => INTEGRITY_PENDING_REASON_CODES.includes(k)) : [];
+    for (const k of codes) {
+      if (!pending.includes(k)) out.push(subject(k, { nedenKodu: k, neden: LICENSE_REASON_TEXT[k] ?? `Lisans kademesi: ${tier}` }));
+    }
+    if (pending.length > 0) out.push(...(await keepIfOpen(kind, pending)));
   }
   const endMs = snap.state.odenmisTarih?.tarihMs ?? null;
   const days = Number(deps.params(kind).gun ?? 14);

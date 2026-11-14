@@ -661,6 +661,9 @@ node deploy/backend-yayinla.mjs --grup=test --urun=backend-oci --paket=$D/teslim
 node scripts/backend-surum.mjs --etiketle 2.15.13 && git ls-remote --tags origin backend-v2.15.13
 node deploy/backend-yayinla.mjs --grup=test --urun=backend-oci --dogrula
 
+# (4b) yeni sürümü HEMEN çektir: güncelleyici adayı yalnız lisans yoklamasında öğrenir (saatlik tur) —
+#      beklemeden deneme web paneli → Sistem → Lisans → "Şimdi yokla" (ya da `POST /api/license/yokla`,
+#      izin `license:manage`, oturum belirteciyle; belirteç komuta/günlüğe yazılmaz). Yoklamasız (5) bir saate dek ONAY_BEKLIYOR göstermez.
 # (5) deneme: ONAY_BEKLIYOR ölçümü (salt okuma) → kullanıcı panelden "Şimdi kur"
 #     beklenen durum.json: <kurulu: 2.15.12 ya da 2.15.11 — 2.15.12 "Şimdi kur" kullanıcı adımıydı, yayın anında ölç> HAZIR 2.15.13 ONAY_BEKLIYOR ONAYLI None
 # (6) kurulum sonrası: /health 2.15.13 · göç 395 / yarım 0 · durum.json son.sonuc BASARILI
