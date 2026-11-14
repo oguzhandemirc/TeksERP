@@ -3086,6 +3086,22 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         desc: "Açıkken patron uygulaması cihazını fabrikaya kaydeder ve bildirim patron bulutu üzerinden telefona iletilir (lisanslı kurulumda). Kişisel gelen kutusu da açık olmalıdır. Kapalıyken bugünkü davranış: telefon yalnız uygulama açıkken bildirim görür.",
       },
     ],
+    enumFlags: [
+      {
+        // `defaultValue` backend `DEFAULT_STOCK_AGING_SOURCE` ile birebir (bekçi §16). Gün eşiği bildirim fabrika varsayılanında.
+        enumKey: "notificationStockAgingSource",
+        title: "Yaşlanan stok: gün neyden sayılsın",
+        summary: "\"N gündür depoda\" bildirimi topun depoya girişinden mi, son durum değişiminden mi saysın.",
+        desc: "Depoya girişten (varsayılan): topun depoya son girdiği an (giriş, iade, üretimden ya da fasondan dönüş); sevk geri alınırsa ilk giriş geçerli kalır. Giriş kaydı olmayan eski toplar durum tarihinden sayılır ve bildirimde kaç top olduğu yazılır. Son durum değişiminden: Stok & Ölü Stok raporundaki raf yaşıyla aynı; ham topun satışa hazırlanması da sayacı sıfırlar. Gün eşiği (varsayılan 30) Bildirim profilleri → Fabrika varsayılanı ekranından değişir.",
+        defaultValue: "depo-giris",
+        display: "radio",
+        audience: ["Yönetim"],
+        options: [
+          { value: "depo-giris", label: "Depoya girişten (varsayılan)", hint: "Topun depoya son girdiği an; giriş kaydı yoksa durum tarihi (bildirimde yazılır)." },
+          { value: "durum-degisimi", label: "Son durum değişiminden", hint: "Stok & Ölü Stok raporunun raf yaşı; satışa hazırlama da sayacı sıfırlar." },
+        ],
+      },
+    ],
   },
   {
     // ═══════════════════════════════════════════════════════════════════════

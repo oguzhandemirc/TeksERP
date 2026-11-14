@@ -258,6 +258,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   // ── bildirim ───────────────────────────────────────────────────────────────
   bildirimGelenKutusuEnabled: A(true),
   bildirimPatronPushEnabled: A(true),
+  notificationStockAgingSource: V("varsayılan depo-giris en çok dalı işletir (defter çıpası + durum tarihine düşüş); durum-degisimi onun alt kümesi"),
   // ── belge-sablon ───────────────────────────────────────────────────────────
   documentDesignerEnabled: A(true),
   documentPublishSodEnabled: A(true),

@@ -911,6 +911,8 @@ export const updateSchema = z.strictObject({
   bildirimGelenKutusuEnabled: z.boolean().optional(),
   // bildirim: bildirim.patronPushEnabled — patron telefonuna push (köprü P2; default false). Kapsamsız: yalnız admin:settings yazar.
   bildirimPatronPushEnabled: z.boolean().optional(),
+  // bildirim: bildirim.stokYaslanan.kaynak — `stok.yaslanan` yaş çıpası (default depo-giris). Kapsamsız: yalnız admin:settings yazar.
+  notificationStockAgingSource: z.enum(["depo-giris", "durum-degisimi"]).optional(),
   // belge-sablon T1C: documents.designerEnabled / documents.publishSodEnabled (default false). Kapsamsız: yalnız admin:settings yazar.
   documentDesignerEnabled: z.boolean().optional(),
   documentPublishSodEnabled: z.boolean().optional(),

@@ -5,6 +5,7 @@
 // `services/notification-sources/depo.ts`; özet türleri `depo-ozet.ts` → `jobs/notification-digest.job.ts`. OLAY
 // birleştirme anahtarı = tür + kayıt, pencere 10 dk (K3). Sevk metresi BRÜT (sevk anı); yük tutar taşımaz.
 // =============================================================================
+import { z } from "zod";
 import {
   NOTIFICATION_DEFAULT_CHANNELS as KANAL_VARSAYILAN,
   NOTIFICATION_DEFAULT_RETENTION as SAKLAMA,
@@ -100,6 +101,18 @@ export const DEPO_NOTIFICATION_ENTRIES = {
     govde: "{kullanici} {topSayisi} topu {kaynakDepo} → {hedefDepo} taşıdı",
     payloadAlanlari: ["transferId", "transferNo", "kaynakDepo", "hedefDepo", "topSayisi", "kullanici"],
     tahminiHaftalik: 5,
+  },
+  // KOSUL: yaş çıpası ayarlı (`bildirim.stokYaslanan.kaynak`); yüklem `helpers/stock-aging.helper.ts` (kaynak `stok-yaslanan.ts`).
+  "stok.yaslanan": {
+    ...DEPO, altTur: "KOSUL", pencereSn: 0, izinler: [["report:inventory"]], modul: "cekirdek:stok-giris",
+    tekilKalibi: "{depoId}", panelEkran: "reports/inventory", panelYol: "/reports/inventory/scorecard",
+    kod: "stok.yaslanan", ad: "Depoda yaşlanan stok",
+    baslik: "Yaşlanan stok: {depoAd}",
+    govde: "{depoAd}: {adet} top {gun}+ gündür depoda ({metre} m) · yaş: {yasKaynagi}",
+    cozuldu: "{depoAd}: {gun}+ gündür depoda duran top kalmadı",
+    paramSemasi: z.object({ gun: z.number().int().min(1).max(365).default(30) }).strict(),
+    payloadAlanlari: ["depoId", "depoAd", "adet", "gun", "metre", "yasKaynagi"],
+    tahminiHaftalik: 1,
   },
   "stok.gunluk-ozet": {
     ...DEPO, ...DAILY_DIGEST, izinler: [["roll:read"]], modul: "cekirdek:stok-giris",

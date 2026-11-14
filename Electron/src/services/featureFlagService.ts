@@ -809,6 +809,8 @@ export interface FeatureFlags {
   bildirimGelenKutusuEnabled: boolean;
   // bildirim: patron telefonuna push (köprü P2) — default false (cihaz kaydı 409, buluta istek yok).
   bildirimPatronPushEnabled: boolean;
+  /** `stok.yaslanan` yaş çıpası — backend `StockAgingSource` aynası (default `depo-giris`). */
+  notificationStockAgingSource: "depo-giris" | "durum-degisimi";
   // belge-sablon: tasarımcı + yayın SoD bayrakları — default false (bugünkü Sistem tasarımı).
   documentDesignerEnabled: boolean;
   documentPublishSodEnabled: boolean;

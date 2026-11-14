@@ -343,6 +343,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   // bildirim: gelen kutusu davranış bayrağı (modül anahtarı değil — plan Karar Y1).
   bildirimGelenKutusuEnabled: "cekirdek",
   bildirimPatronPushEnabled: "cekirdek",
+  notificationStockAgingSource: "cekirdek",
   documentDesignerEnabled: "cekirdek",
   documentPublishSodEnabled: "cekirdek",
 };
