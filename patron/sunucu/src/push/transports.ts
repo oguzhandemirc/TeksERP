@@ -8,6 +8,7 @@ import type { DevicePlatform } from "@prisma/client";
 import type { CloudConfig } from "../config";
 import { KIND_RULES } from "../catalog/notifications";
 import { NOTIFICATION_KINDS, type NotificationKind } from "../wire/api";
+import { PUSH_DEFAULT_SOUND, pushChannelId, type PushClass, type PushSound } from "../wire/esitleme";
 import { parseWebSubscription } from "./targets";
 import type { VapidKeys } from "./vapid";
 
@@ -51,11 +52,26 @@ export interface BridgeMessage {
   readonly rota: string | null;
 }
 
+/** Telefonun ses seçiminden kurulan Expo alanları (S0): Android `channelId` sesi belirler, iOS `sound` dosya adıdır. */
+export interface BridgeSound {
+  readonly channelId: string;
+  /** `tekserp_*.wav` · `default` (telefonun sesi) · null (sessiz, yalnız titreşim). */
+  readonly sound: string | null;
+}
+
+/** Sınıf + seçili ses → Expo alanları. Kanal kimliği tel `pushChannelId`'den (uygulama ikiziyle aynı vektörler). */
+export function bridgeSoundOf(cls: PushClass, sound: PushSound): BridgeSound {
+  return { channelId: pushChannelId(cls, sound), sound: sound === "sessiz" ? null : sound === "varsayilan" ? "default" : `${sound}.wav` };
+}
+
+/** Seçim bilinmiyorsa (eski çağıran, bulut kipi) BİLDİRİM sınıfının varsayılan sesi. */
+export const DEFAULT_BRIDGE_SOUND: BridgeSound = bridgeSoundOf("BILDIRIM", PUSH_DEFAULT_SOUND.BILDIRIM);
+
 /** Köprü gönderimi: ham Expo belirtecine TAM METİNLİ yük (kullanıcı kararı 2026-11-13: kilit ekranında başlık + gövde). */
 export interface BridgeTransport {
-  sendBridge(token: string, msg: BridgeMessage): Promise<PushOutcome>;
-  /** Toplu gönderim (tek istek, sonuç sırası = belirteç sırası); yoksa köprü sıralı gönderir. */
-  sendBridgeBatch?(tokens: readonly string[], msg: BridgeMessage): Promise<PushOutcome[]>;
+  sendBridge(token: string, msg: BridgeMessage, sound?: BridgeSound): Promise<PushOutcome>;
+  /** Toplu gönderim (tek istek; sonuç ve `sounds` sırası = belirteç sırası); yoksa köprü sıralı gönderir. */
+  sendBridgeBatch?(tokens: readonly string[], msg: BridgeMessage, sounds?: readonly BridgeSound[]): Promise<PushOutcome[]>;
   receipts?(tickets: readonly string[]): Promise<ReceiptBatch>;
 }
 
@@ -75,19 +91,19 @@ export class RecordingTransport implements PushTransport {
   /** `tickets` açıkken Expo platformlarına bilet verir; makbuz `forcedReceipts`ten (yoksa hazır değil). */
   readonly forcedReceipts = new Map<string, PushOutcome>();
   readonly receiptCalls: string[][] = [];
-  readonly bridgeSent: { token: string; msg: BridgeMessage }[] = [];
+  readonly bridgeSent: { token: string; msg: BridgeMessage; sound: BridgeSound }[] = [];
   readonly bridgeBatches: number[] = [];
   private seq = 0;
   constructor(private readonly opts: { tickets?: boolean } = {}) {}
-  async sendBridgeBatch(tokens: readonly string[], msg: BridgeMessage): Promise<PushOutcome[]> {
+  async sendBridgeBatch(tokens: readonly string[], msg: BridgeMessage, sounds?: readonly BridgeSound[]): Promise<PushOutcome[]> {
     this.bridgeBatches.push(tokens.length);
     const out: PushOutcome[] = [];
-    for (const t of tokens) out.push(await this.sendBridge(t, msg));
+    for (const [k, t] of tokens.entries()) out.push(await this.sendBridge(t, msg, sounds?.[k]));
     return out;
   }
-  sendBridge(token: string, msg: BridgeMessage): Promise<PushOutcome> {
+  sendBridge(token: string, msg: BridgeMessage, sound: BridgeSound = DEFAULT_BRIDGE_SOUND): Promise<PushOutcome> {
     const forced = this.forced.get(token);
-    if (!forced || forced.kind === "OK") this.bridgeSent.push({ token, msg });
+    if (!forced || forced.kind === "OK") this.bridgeSent.push({ token, msg, sound });
     if (forced) return Promise.resolve(forced);
     const ticket = this.opts.tickets ? `sahte-bilet-${++this.seq}` : undefined;
     return Promise.resolve(ticket ? { kind: "OK", ticket } : { kind: "OK" });
@@ -106,7 +122,7 @@ export class RecordingTransport implements PushTransport {
 }
 
 /** Native yükün izinli anahtarları — bekçi (`test_bildirim_patron_push`) bu kümeyi ölçer; yeni anahtar bilinçli eklenir. */
-export const NATIVE_PAYLOAD_KEYS = ["to", "title", "sound", "priority", "data"] as const;
+export const NATIVE_PAYLOAD_KEYS = ["to", "title", "sound", "channelId", "priority", "data"] as const;
 export const NATIVE_DATA_KEYS = ["bildirimId", "rota", "tesisId"] as const;
 
 /** İÇERİKSİZ native yük (F5): başlık + kimlikler; gövde/tutar/ad Expo'ya, FCM'e ve kilit ekranına GİTMEZ — içerik
@@ -114,15 +130,17 @@ export const NATIVE_DATA_KEYS = ["bildirimId", "rota", "tesisId"] as const;
 export function nativePushPayload(target: PushTarget, msg: PushMessage) {
   const kind = msg.kind && (NOTIFICATION_KINDS as readonly string[]).includes(msg.kind) ? (msg.kind as NotificationKind) : null;
   const title = kind ? KIND_RULES[kind].label : msg.title.slice(0, 60);
-  return { to: target.token, title, sound: "default", priority: "high", data: { bildirimId: msg.id, rota: msg.route, tesisId: msg.tesisId } };
+  // Bulut kipinde ses seçimi yok: BİLDİRİM sınıfının varsayılan TeksERP sesi (uygulama aynı kanalı kurar).
+  const s = DEFAULT_BRIDGE_SOUND;
+  return { to: target.token, title, sound: s.sound, channelId: s.channelId, priority: "high", data: { bildirimId: msg.id, rota: msg.route, tesisId: msg.tesisId } };
 }
 
 /** Köprü yükünün izinli anahtarları — bekçi (`test_bildirim_koprusu`) ölçer. İçerikli: `body` VAR, `tesisId` YOK (ERP kipi). */
-export const BRIDGE_PAYLOAD_KEYS = ["to", "title", "body", "sound", "priority", "data"] as const;
+export const BRIDGE_PAYLOAD_KEYS = ["to", "title", "body", "sound", "channelId", "priority", "data"] as const;
 export const BRIDGE_DATA_KEYS = ["bildirimId", "rota"] as const;
 
-export function bridgePushPayload(token: string, msg: BridgeMessage) {
-  return { to: token, title: msg.title, body: msg.body, sound: "default", priority: "high", data: { bildirimId: msg.bildirimId, rota: msg.rota } };
+export function bridgePushPayload(token: string, msg: BridgeMessage, sound: BridgeSound = DEFAULT_BRIDGE_SOUND) {
+  return { to: token, title: msg.title, body: msg.body, sound: sound.sound, channelId: sound.channelId, priority: "high", data: { bildirimId: msg.bildirimId, rota: msg.rota } };
 }
 
 /** Expo push: gönderim bilet döner; asıl teslim sonucu makbuzda (`receipts`, ikinci aşama — `DeviceNotRegistered` çoğu kez orada). */
@@ -136,13 +154,13 @@ export class ExpoTransport implements PushTransport {
     return this.post(nativePushPayload(target, msg));
   }
 
-  sendBridge(token: string, msg: BridgeMessage): Promise<PushOutcome> {
-    return this.post(bridgePushPayload(token, msg));
+  sendBridge(token: string, msg: BridgeMessage, sound?: BridgeSound): Promise<PushOutcome> {
+    return this.post(bridgePushPayload(token, msg, sound));
   }
 
   /** Expo dizi kabul eder (≤ 100 ileti): tek istek, bilet sırası ileti sırasıdır. */
-  sendBridgeBatch(tokens: readonly string[], msg: BridgeMessage): Promise<PushOutcome[]> {
-    return this.postMany(tokens.map((t) => bridgePushPayload(t, msg)));
+  sendBridgeBatch(tokens: readonly string[], msg: BridgeMessage, sounds?: readonly BridgeSound[]): Promise<PushOutcome[]> {
+    return this.postMany(tokens.map((t, k) => bridgePushPayload(t, msg, sounds?.[k])));
   }
 
   private async post(payload: object): Promise<PushOutcome> {

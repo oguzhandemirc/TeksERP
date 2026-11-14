@@ -53,6 +53,9 @@ function portlar(izin: string, iste = "VERILDI"): import("../src/push/erp-push")
     belirtecAl: jest.fn(async () => "ExponentPushToken[ekran123]"),
     belirtecDegisince: jest.fn(() => () => undefined),
     cihazAdi: jest.fn(() => "Telefon"),
+    kanallariKur: jest.fn(async () => undefined),
+    sesiOnizle: jest.fn(async () => undefined),
+    kanalAyariniAc: jest.fn(async () => undefined),
   };
   return p;
 }
@@ -158,6 +161,64 @@ describe("tür başına telefon bildirimi anahtarı", () => {
     await flush();
     expect(mockCihazci.tercihYaz).not.toHaveBeenCalled();
     expect(mockCihazci.kaydet).not.toHaveBeenCalled();
+  });
+});
+
+describe("S0 — hazır düğmeler, grup anahtarı, ses", () => {
+  const { pushTercihGovdesiToplu } = require("../src/api/bildirim") as typeof import("../src/api/bildirim");
+  beforeEach(() => {
+    mockCihazci.katalog.mockResolvedValue({ turler: [
+      { kod: "dokuma.tezgah-alarmi", ad: "Tezgâh alarmı", grup: "Dokuma", sinif: "ALARM" },
+      { kod: "siparis.termin-gecti", ad: "Termini geçen sipariş", grup: "Satış" },
+    ] });
+  });
+  it("⭐ 'Hepsini kapat' tek PUT, yalnız açık hücre değişir; 'Yalnız önemliler' alarmı açık bırakır", async () => {
+    render(<TelefonBildirimleri nativePush os="android" portlar={() => portlar("VERILDI")} />);
+    await flush();
+    fireEvent.press(screen.getByTestId("telefon-hazir-HICBIRI"));
+    await flush();
+    expect(mockCihazci.tercihYaz).toHaveBeenCalledTimes(1);
+    expect(mockCihazci.tercihYaz).toHaveBeenCalledWith(pushTercihGovdesiToplu(TERCIH, new Map([["dokuma.tezgah-alarmi", false]])));
+    mockCihazci.tercihYaz.mockClear();
+    fireEvent.press(screen.getByTestId("telefon-hazir-ONEMLI"));
+    await flush();
+    // Alarm zaten açık, sipariş kapalı → değişiklik yok, PUT yok.
+    expect(mockCihazci.tercihYaz).not.toHaveBeenCalled();
+    expect(screen.getByTestId("telefon-bildirim-mesaj")).toHaveTextContent("Zaten bu şekilde.");
+  });
+  it("⭐ grup anahtarı yalnız o grubun hücrelerini tek PUT'ta yazar", async () => {
+    render(<TelefonBildirimleri nativePush os="android" portlar={() => portlar("VERILDI")} />);
+    await flush();
+    expect(screen.getByTestId("telefon-grup-ac-Satış").props.value).toBe(false);
+    fireEvent(screen.getByTestId("telefon-grup-ac-Satış"), "valueChange", true);
+    await flush();
+    expect(mockCihazci.tercihYaz).toHaveBeenCalledTimes(1);
+    expect(mockCihazci.tercihYaz).toHaveBeenCalledWith(pushTercihGovdesiToplu(TERCIH, new Map([["siparis.termin-gecti", true]])));
+  });
+  it("⭐ Ses bölümü yalnız izin VERILDI'de; önizle/ayar portları seçili sesle çağrılır", async () => {
+    const yok = render(<TelefonBildirimleri nativePush os="android" portlar={() => portlar("SORULMADI")} />);
+    await flush();
+    expect(screen.queryByTestId("telefon-ses")).toBeNull();
+    yok.unmount();
+    const p = portlar("VERILDI");
+    render(<TelefonBildirimleri nativePush os="android" portlar={() => p} />);
+    await flush();
+    expect(screen.getByTestId("telefon-ses")).toBeTruthy();
+    fireEvent.press(screen.getByTestId("telefon-ses-onizle-BILDIRIM-tekserp_mekik"));
+    fireEvent.press(screen.getByTestId("telefon-ses-ayar"));
+    await flush();
+    expect(p.sesiOnizle).toHaveBeenCalledWith("BILDIRIM", "tekserp_mekik");
+    expect(p.kanalAyariniAc).toHaveBeenCalledWith("BILDIRIM", "tekserp_zil");
+  });
+  it("⭐ ses seçimi: kanallar kurulur + kayıt yeni sesle yenilenir", async () => {
+    const p = portlar("VERILDI");
+    render(<TelefonBildirimleri nativePush os="android" portlar={() => p} />);
+    await flush();
+    fireEvent.press(screen.getByTestId("telefon-ses-BILDIRIM-tekserp_kisa"));
+    await flush();
+    expect(p.kanallariKur).toHaveBeenCalledWith({ bildirim: "tekserp_kisa", alarm: "tekserp_alarm" });
+    expect(mockCihazci.kaydet).toHaveBeenCalledWith(expect.objectContaining({ sesBildirim: "tekserp_kisa", sesAlarm: "tekserp_alarm" }));
+    expect(screen.getByTestId("telefon-bildirim-mesaj")).toHaveTextContent(/Ses seçildi/);
   });
 });
 

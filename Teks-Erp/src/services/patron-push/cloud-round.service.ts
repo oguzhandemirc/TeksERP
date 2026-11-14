@@ -10,7 +10,10 @@ import prisma from "../../lib/prisma";
 import { egressCloudTransport, type CloudCallContext, type CloudTransport } from "../../cloud-sync/cloud-client";
 import { pushBridgeEligibility, type PushBridgeEligibility } from "../../cloud-sync/eligibility";
 import { registerDigests, releaseDigests, type BridgeResult } from "../../cloud-sync/push-bridge-client";
-import { PUSH_BRIDGE_MAX_TOKENS } from "../../cloud-sync/wire";
+import { PUSH_BRIDGE_MAX_TOKENS, PUSH_DEFAULT_SOUND, PushSoundSchema, type PushTokenSoundsSchema } from "../../cloud-sync/wire";
+import type { z } from "zod";
+
+type PushTokenSounds = z.infer<typeof PushTokenSoundsSchema>;
 import { releaseOrphanPushTokens } from "./lifecycle";
 import { patronPushGateOpen } from "./device.service";
 import { pushBackoffMs } from "./states";
@@ -31,13 +34,36 @@ export type PushRoundSummary =
 
 type Phase = { from: "BEKLIYOR"; to: "KAYITLI" } | { from: "BIRAKILACAK"; to: "BIRAKILDI" };
 
-async function dueBatch(state: Phase["from"], now: Date): Promise<{ id: string; tokenDigest: string; attempts: number }[]> {
+interface DueRow {
+  id: string;
+  tokenDigest: string;
+  attempts: number;
+  soundNotification: string;
+  soundAlarm: string;
+}
+
+async function dueBatch(state: Phase["from"], now: Date): Promise<DueRow[]> {
   return prisma.patronPushToken.findMany({
     where: { cloudState: state, OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }] },
     orderBy: [{ updatedAt: "asc" }, { id: "asc" }],
     take: PUSH_BRIDGE_MAX_TOKENS,
-    select: { id: true, tokenDigest: true, attempts: true },
+    select: { id: true, tokenDigest: true, attempts: true, soundNotification: true, soundAlarm: true },
   });
+}
+
+/**
+ * `kaydet`in `sesler`i (S0): yalnız varsayılandan SAPAN satırlar — bulut olmayan özeti varsayılana kurar. Hepsi
+ * varsayılansa alan hiç gitmez (sesi bilmeyen eski bulut katı şemayla 400'lemesin). Küme dışı değer (CHECK önler) atlanır.
+ */
+export function registerSounds(rows: readonly Pick<DueRow, "tokenDigest" | "soundNotification" | "soundAlarm">[]): PushTokenSounds[] | undefined {
+  const out = rows.flatMap((r) => {
+    const bildirim = PushSoundSchema.safeParse(r.soundNotification);
+    const alarm = PushSoundSchema.safeParse(r.soundAlarm);
+    if (!bildirim.success || !alarm.success) return [];
+    if (bildirim.data === PUSH_DEFAULT_SOUND.BILDIRIM && alarm.data === PUSH_DEFAULT_SOUND.ALARM) return [];
+    return [{ ozet: r.tokenDigest, bildirim: bildirim.data, alarm: alarm.data }];
+  });
+  return out.length > 0 ? out : undefined;
 }
 
 /** Satır başına geri çekilme; durum değiştiyse (claim tutmazsa) dokunulmaz. Parti ≤ 20 satır, sıralı yazım. */
@@ -61,7 +87,7 @@ async function runPhase(ctx: CloudCallContext, phase: Phase, now: Date): Promise
   const digests = rows.map((r) => r.tokenDigest);
   // `kaydet` yalnız bağladığı özetleri döner; dönmeyen satır başarısız sayılır (bir sonraki turda yeniden).
   const res: BridgeResult<readonly string[]> = phase.to === "KAYITLI"
-    ? mapOk(await registerDigests(ctx, digests), (v) => v.bagli)
+    ? mapOk(await registerDigests(ctx, digests, registerSounds(rows)), (v) => v.bagli)
     : mapOk(await releaseDigests(ctx, digests), () => digests);
   if (!res.ok) {
     await backoff(rows, phase.from, res.status === 0 ? res.code : `${res.status}:${res.code}`, now);

@@ -14,20 +14,21 @@
 //   §10 hız sınırı 429 HIZ_SINIRI · belirteç tavanı 400 · sıkıştırılmış gövde 400
 //   §11 ⭐ gönderim kapalı (`BILDIRIM_KIPI=kapali`) → 200, `gonderim:"kapali"`, sonuç KAPALI (hata değil)
 //   §12 bırak → bağ silinir, sonraki dürt BAGSIZ
+//   §13 ⭐ ses (S0): kaydet `sesler`i bağa yazar (yoksa varsayılan zil/alarm); dürt sınıfa göre channelId + sound kurar
 // Koşum: npx tsx scripts/test_bildirim_koprusu.ts   (kendi *_test DB'si)
 // NEGATİF SONDA (2026-11-13, dosya kopyasıyla birebir geri alındı):
 //   N1 bağsız belirteç de gönderildi ⇒ §5a · §11a · N2 başlık günlüğe yazıldı ⇒ §9b · N3 `durum` denetimi kalktı ⇒ §1e ×2
 //   N4 merkez nonce yazılmadı ⇒ §2a · §2b · N5 yüke `tesisId` eklendi ⇒ §6d · §6e · N6 geçersiz bağ silinmedi ⇒ §7a · §8c
-//   N7 başlık bilet satırına yazıldı ⇒ §9a
+//   N7 başlık bilet satırına yazıldı ⇒ §9a · N8 (2026-11-14) dürt `sinif` yok sayıldı ⇒ §13c
 // =============================================================================
 import { generateKeyPairSync, randomUUID } from "node:crypto";
 import { Client } from "pg";
 import { CLOUD_TABLES, MERKEZ_TABLES } from "../src/lib/db-grants";
 import { databaseOf, facilityDbName } from "../src/lib/tesis-db-ad";
-import { BRIDGE_DATA_KEYS, BRIDGE_PAYLOAD_KEYS, ExpoTransport, RecordingTransport, bridgePushPayload } from "../src/push/transports";
+import { BRIDGE_DATA_KEYS, BRIDGE_PAYLOAD_KEYS, ExpoTransport, RecordingTransport, bridgePushPayload, bridgeSoundOf } from "../src/push/transports";
 import { checkBridgeReceipts, tokenDigestOf } from "../src/services/push-bridge";
-import { PUSH_BRIDGE_PATHS, PUSH_TITLE_MAX } from "../src/wire/esitleme";
-import { SATICI_ORTAMI, SENTINEL, belirtec, birak, durt, gunlukYakala, istek, kaydet, kod, kurulum, saticiDurumu, sahteFetch, uretilenBelirtecler, veri, yabanciKurulum, type SahteKurulum } from "./lib/kopru-ortam";
+import { PUSH_BRIDGE_PATHS, PUSH_TITLE_MAX, pushChannelId } from "../src/wire/esitleme";
+import { SATICI_ORTAMI, SENTINEL, belirtec, birak, durt, durtGovdesi, gunlukYakala, istek, kaydet, kod, kurulum, saticiDurumu, sahteFetch, uretilenBelirtecler, veri, yabanciKurulum, type SahteKurulum } from "./lib/kopru-ortam";
 import { kontrol, ortamKur, sonuc, type Yanit } from "./lib/test-ortam";
 
 const gunluk = gunlukYakala();
@@ -185,6 +186,43 @@ async function main(): Promise<void> {
     const brTekrar = await birak(o, a, [tokenDigestOf(tokA)]);
     const brDurt = await durt(o, a, [tokA]);
     kontrol("§12a bırak siler (1), tekrarı 0; sonraki dürt BAGSIZ", (br.json as { birakilan?: number }).birakilan === 1 && (brTekrar.json as { birakilan?: number }).birakilan === 0 && veri(brDurt).sonuclar[0]?.sonuc === "BAGSIZ");
+
+    console.log("\n§13 ses seçimi (S0): kayıtta saklanır, Expo yükünde sınıfa göre channelId + sound");
+    const s = yeni();
+    const tokEski = belirtec();
+    const tokSecen = belirtec();
+    const tokSessiz = belirtec();
+    await kaydet(o, s, [tokenDigestOf(tokEski)]);
+    const sesli = await istek(o, s, PUSH_BRIDGE_PATHS.REGISTER, {
+      v: 1,
+      ozetler: [tokenDigestOf(tokSecen), tokenDigestOf(tokSessiz)],
+      sesler: [{ ozet: tokenDigestOf(tokSecen), bildirim: "tekserp_mekik", alarm: "varsayilan" }, { ozet: tokenDigestOf(tokSessiz), bildirim: "sessiz", alarm: "sessiz" }],
+    });
+    const sesSatir = async (tok: string) => (await goc.query<{ ses_bildirim: string; ses_alarm: string }>("SELECT ses_bildirim, ses_alarm FROM push_bridge_links WHERE kurulum_id = $1 AND token_digest = $2", [s.kurulumId, tokenDigestOf(tok)])).rows[0];
+    kontrol("§13a ⭐ eski fabrika (sesler yok) → varsayılan zil/alarm; seçim kayda yazılır", sesli.status === 200
+      && JSON.stringify(await sesSatir(tokEski)) === JSON.stringify({ ses_bildirim: "tekserp_zil", ses_alarm: "tekserp_alarm" })
+      && JSON.stringify(await sesSatir(tokSecen)) === JSON.stringify({ ses_bildirim: "tekserp_mekik", ses_alarm: "varsayilan" }), `${sesli.status}`);
+    // Tanık metni günlüğe düşer (§9d ham belirteç taraması) → belirteç yerine adı yazılır.
+    const ad = (t: string) => (t === tokEski ? "eski" : t === tokSecen ? "secen" : t === tokSessiz ? "sessiz" : "?");
+    const gonderilen = (n: number) => tasiyici.bridgeSent.slice(-n).map((g) => ({ t: ad(g.token), ...g.sound }));
+    const sDurt = await durt(o, s, [tokEski, tokSecen, tokSessiz]);
+    kontrol("§13b ⭐ BİLDİRİM dürtü (sinif yok = eski fabrika): belirteç başına kendi kanalı + sesi", veri(sDurt).sonuclar.every((r) => r.sonuc === "GONDERILDI") && JSON.stringify(gonderilen(3)) === JSON.stringify([
+      { t: "eski", channelId: "tekserp-bildirim-zil", sound: "tekserp_zil.wav" },
+      { t: "secen", channelId: "tekserp-bildirim-mekik", sound: "tekserp_mekik.wav" },
+      { t: "sessiz", channelId: "tekserp-bildirim-sessiz", sound: null },
+    ]), JSON.stringify(gonderilen(3)));
+    await istek(o, s, PUSH_BRIDGE_PATHS.NUDGE, { ...durtGovdesi([tokEski, tokSecen]), sinif: "ALARM" });
+    kontrol("§13c ⭐ ALARM dürtü → alarm sesi/kanalı (varsayılan = telefonun sesi `default`)", JSON.stringify(gonderilen(2)) === JSON.stringify([
+      { t: "eski", channelId: "tekserp-alarm-alarm", sound: "tekserp_alarm.wav" },
+      { t: "secen", channelId: "tekserp-alarm-varsayilan", sound: "default" },
+    ]), JSON.stringify(gonderilen(2)));
+    await kaydet(o, s, [tokenDigestOf(tokSecen)]);
+    kontrol("§13d sessiz yeniden kayıt (sesler yok) seçimi varsayılana döndürür", JSON.stringify(await sesSatir(tokSecen)) === JSON.stringify({ ses_bildirim: "tekserp_zil", ses_alarm: "tekserp_alarm" }));
+    const kotuSes = await istek(o, s, PUSH_BRIDGE_PATHS.REGISTER, { v: 1, ozetler: [tokenDigestOf(tokSecen)], sesler: [{ ozet: tokenDigestOf(tokSecen), bildirim: "../x", alarm: "sessiz" }] });
+    const kotuSinif = await istek(o, s, PUSH_BRIDGE_PATHS.NUDGE, { ...durtGovdesi([tokSecen]), sinif: "ETKINLIK" });
+    kontrol("§13e küme dışı ses · sınıf → 400 GOVDE_GECERSIZ", kotuSes.status === 400 && kotuSinif.status === 400 && kod(kotuSes) === "GOVDE_GECERSIZ", `${kotuSes.status}/${kotuSinif.status}`);
+    const yukSes = bridgePushPayload(tokA, { title: "t", body: "b", bildirimId: randomUUID(), rota: null }, bridgeSoundOf("ALARM", "tekserp_dokuma"));
+    kontrol("§13f yük: channelId = pushChannelId(sınıf, ses), sound dosya adı", yukSes.channelId === pushChannelId("ALARM", "tekserp_dokuma") && yukSes.channelId === "tekserp-alarm-dokuma" && yukSes.sound === "tekserp_dokuma.wav");
 
     console.log("\n§9 metin saklanmaz, günlüğe girmez");
     const merkez = CLOUD_TABLES.filter((t) => MERKEZ_TABLES.includes(t));

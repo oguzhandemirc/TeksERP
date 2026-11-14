@@ -3,7 +3,7 @@
 //     belirteçler `GECICI SURE_DOLDU` (geç biten gönderim yine yineleme belleğine işlenir).
 //   · yineleme belleği (süreç içi, `PUSH_BRIDGE_DEDUP_MS`): aynı (kurulum, bildirimId, özet) gönderildiyse ikinci kez
 //     GÖNDERİLMEZ → `GONDERILDI`; gönderim sürüyorsa `GECICI GONDERIM_SURUYOR`. Yeniden başlatmada bellek silinir.
-import type { BridgeMessage, BridgeTransport, PushOutcome } from "../push/transports";
+import { DEFAULT_BRIDGE_SOUND, type BridgeMessage, type BridgeSound, type BridgeTransport, type PushOutcome } from "../push/transports";
 import type { CloudContext } from "./context";
 
 /** Aynı bildirimin aynı belirtece ikinci kez gitmediği pencere. */
@@ -27,6 +27,8 @@ function dedupOf(ctx: CloudContext): Map<string, DedupState> {
 export interface SendItem {
   readonly token: string;
   readonly digest: string;
+  /** Bağdaki ses seçiminden (sınıfa göre) kurulan Expo kanal + ses alanları; yoksa varsayılan. */
+  readonly sound?: BridgeSound;
 }
 
 const SURE_DOLDU: PushOutcome = { kind: "GECICI", code: "SURE_DOLDU" };
@@ -37,6 +39,7 @@ function sendAll(transport: BridgeTransport, items: readonly SendItem[], msg: Br
     const batch = transport.sendBridgeBatch(
       items.map((i) => i.token),
       msg,
+      items.map((i) => i.sound ?? DEFAULT_BRIDGE_SOUND),
     );
     return items.map((_, k) => batch.then((r) => r[k] ?? { kind: "KALICI", code: "EXPO_YANIT_BICIMSIZ" }));
   }
@@ -44,7 +47,7 @@ function sendAll(transport: BridgeTransport, items: readonly SendItem[], msg: Br
   const out: Promise<PushOutcome>[] = [];
   let prev: Promise<unknown> = Promise.resolve();
   for (const i of items) {
-    const p = prev.then(() => (performance.now() >= deadline ? SURE_DOLDU : transport.sendBridge(i.token, msg)));
+    const p = prev.then(() => (performance.now() >= deadline ? SURE_DOLDU : transport.sendBridge(i.token, msg, i.sound ?? DEFAULT_BRIDGE_SOUND)));
     out.push(p);
     prev = p;
   }

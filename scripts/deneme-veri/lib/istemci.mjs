@@ -15,13 +15,17 @@ export class ApiHatasi extends Error {
   }
 }
 
-/** Anahtar Zinciri'nden parola (yoksa null). Değer yalnız bellekte. */
-export function zincirOku(servis) {
-  try {
-    return execFileSync("security", ["find-generic-password", "-s", servis, "-w"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).replace(/\n$/, "");
-  } catch {
-    return null;
-  }
+/** Anahtar Zinciri'nden parola (yoksa null). Değer yalnız bellekte. Bir serviste birden çok hesap varsa `hesap` o hesabın
+ *  kaydını seçer (yalnız `-s` ilk eşleşeni döner — başka kullanıcının parolası olabilir); hesap kaydı yoksa servis kaydına düşer. */
+export function zincirOku(servis, hesap) {
+  const oku = (args) => {
+    try {
+      return execFileSync("security", ["find-generic-password", ...args, "-w"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).replace(/\n$/, "");
+    } catch {
+      return null;
+    }
+  };
+  return (hesap ? oku(["-s", servis, "-a", hesap]) : null) ?? oku(["-s", servis]);
 }
 /** Anahtar Zinciri'ne yaz (-U: varsa güncelle). Parola argv'ye girmez — `security -i` komutu stdin'den okunur. */
 export function zincirYaz(servis, hesap, parola) {
@@ -33,7 +37,7 @@ export function zincirYaz(servis, hesap, parola) {
 
 const bekle = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export function istemciKur({ url, kullanici, parola, deneme = 12, sessiz = false }) {
+export function istemciKur({ url, kullanici, parola, deneme = 12, sessiz = false, yazimAraligiMs = 0 }) {
   let token = null;
   const sayac = { istek: 0, yeniden: 0 };
 
@@ -80,6 +84,7 @@ export function istemciKur({ url, kullanici, parola, deneme = 12, sessiz = false
   /** `tekDeneme`: tokensız yaratma — belirsiz hatada körlemesine yeniden denenmez (çağıran ara-yoksa-yarat ile yeniden okur). */
   async function api(method, path, body, { tekDeneme = false } = {}) {
     if (!token) await giris();
+    if (method !== "GET" && yazimAraligiMs > 0) await bekle(yazimAraligiMs);
     const o = tekDeneme ? { enCok: 1 } : {};
     try {
       return await hamIstek(method, path, body, o);

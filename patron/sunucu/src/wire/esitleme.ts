@@ -389,10 +389,31 @@ export const PushTokenSchema = z.string().regex(/^Expo(nent)?PushToken\[[A-Za-z0
 /** Uygulama içi rota = uygulamanın `safeRoute` deseni: `/bolum` ya da `/bolum/kimlik`; `//`, `..`, `%`, `\`, şema, sorgu YOK. */
 export const PushRouteSchema = z.string().max(200).regex(/^\/[a-z-]+(\/[A-Za-z0-9-]{1,64})?$/);
 
-export const PushRegisterRequestSchema = z.strictObject({ v: z.literal(ENVELOPE_VERSION), ozetler: z.array(PushTokenDigestSchema).min(1).max(PUSH_BRIDGE_MAX_TOKENS) });
+/**
+ * Telefon bildirim sesi (S0): uygulamaya gömülü TeksERP sesleri + telefonun varsayılanı + sessiz (yalnız titreşim).
+ * Android kanal sesi kurulduktan sonra değişmez → ses × sınıf başına ayrı kanal (`pushChannelId`). Uygulama ikizi
+ * `patron/uygulama/src/push/sesler.ts` (aynı küme, aynı kanal vektörleri).
+ */
+export const PUSH_SOUNDS = ["tekserp_zil", "tekserp_alarm", "tekserp_mekik", "tekserp_dokuma", "tekserp_kisa", "varsayilan", "sessiz"] as const;
+export type PushSound = (typeof PUSH_SOUNDS)[number];
+export const PushSoundSchema = z.enum(PUSH_SOUNDS);
+export const PUSH_CLASSES = ["BILDIRIM", "ALARM"] as const;
+export type PushClass = (typeof PUSH_CLASSES)[number];
+/** Seçim yokken (eski uygulama/fabrika alan göndermez) sınıfın sesi. */
+export const PUSH_DEFAULT_SOUND: Readonly<Record<PushClass, PushSound>> = { BILDIRIM: "tekserp_zil", ALARM: "tekserp_alarm" };
+/** Android kanal kimliği: `tekserp-<sınıf>-<ses>` (ör. `tekserp-bildirim-zil`, `tekserp-alarm-sessiz`). */
+export const pushChannelId = (cls: PushClass, sound: PushSound): string => `tekserp-${cls.toLowerCase()}-${sound.replace(/^tekserp_/, "")}`;
+
+/** Belirteç başına ses seçimi; kaydette olmayan özet varsayılan seslere döner (yalnız varsayılandan sapan gönderilir). */
+export const PushTokenSoundsSchema = z.strictObject({ ozet: PushTokenDigestSchema, bildirim: PushSoundSchema, alarm: PushSoundSchema });
+export const PushRegisterRequestSchema = z.strictObject({
+  v: z.literal(ENVELOPE_VERSION),
+  ozetler: z.array(PushTokenDigestSchema).min(1).max(PUSH_BRIDGE_MAX_TOKENS),
+  sesler: z.array(PushTokenSoundsSchema).max(PUSH_BRIDGE_MAX_TOKENS).optional(),
+});
 export const PushRegisterResponseSchema = z.object({ v: z.literal(ENVELOPE_VERSION), bagli: z.array(PushTokenDigestSchema) });
 
-export const PushReleaseRequestSchema = PushRegisterRequestSchema;
+export const PushReleaseRequestSchema = z.strictObject({ v: z.literal(ENVELOPE_VERSION), ozetler: z.array(PushTokenDigestSchema).min(1).max(PUSH_BRIDGE_MAX_TOKENS) });
 export const PushReleaseResponseSchema = z.object({ v: z.literal(ENVELOPE_VERSION), birakilan: z.number().int().min(0) });
 
 // Ham sınır (başlık 400 · gövde 4000) aşılırsa 400; altında kalan metni bulut temizler ve PUSH_*_MAX'a kırpar.
@@ -402,6 +423,8 @@ export const PushNudgeRequestSchema = z.strictObject({
   baslik: z.string().min(1).max(400),
   govde: z.string().max(4000),
   data: z.strictObject({ bildirimId: Uuid, rota: PushRouteSchema.nullable() }),
+  /** Bildirimin sınıfı (kanal + ses seçimi); yoksa BILDIRIM. Fabrika yalnız ALARM'da yollar (eski bulutla uyum). */
+  sinif: z.enum(PUSH_CLASSES).optional(),
 });
 
 /**

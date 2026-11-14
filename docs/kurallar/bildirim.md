@@ -61,6 +61,7 @@
 - **[ÇEKİRDEK]** İstasyon bildirim şeridini `ScreenChrome` `topStrip` yuvasının ALTINDA çiz, `sekme=okunmamis` + `filter[kanal]/[tablet]/[ozet]` cevabını süzmeden göster; sesi `sesli` alanından, `soundGate` ile satır (id+sayaç) başına bir kez çal.
 - **[ÇEKİRDEK]** Patron push belirtecini yalnız `services/patron-push/` yazsın: patron oturumundan, kendi adına, ham değer halkayla sarılı (halka yoksa 503); kayıt `patronPushGateOpen` (push ∧ gelen kutusu bayrağı) ister, bırakma kapıdan bağımsızdır; belirteç oturumuyla yaşar; buluta `kaydet`/`birak` yalnız iş turunda, kapı ∧ `pushBridgeEligibility` iken <sub>(arşiv:2026-11-13 push-erp)</sub>.
 - **[ÇEKİRDEK]** Patron telefonu dürtünü yalnız dağıtıcı tx'inde `enqueuePatronPushTx` yazsın (teslim `pp` ∧ push bayrağı ∧ canlı belirteç; kuyrukta metin ve belirteç yok); gönderim yalnız `patron-push` iş turunda kapı ∧ `pushBridgeEligibility` iken, satır başına atomik claim ve hız bütçesiyle; kapı kapalıyken canlı dürt ATLANDI olur, okunan bildirimin dürtü İPTAL <sub>(arşiv:2026-11-13 push-durt)</sub>.
+- **[ÇEKİRDEK]** Patron telefon sesi cihaz kaydıyla taşınsın (`sesBildirim/sesAlarm` → bulut `sesler`, dürtte `sinif` yalnız ALARM'da); yeni alanı karşı uca yalnız varsayılandan sapınca yolla, ses değişince KAYITLI satırı BEKLIYOR'a döndür; dağıtım sırası bulut → fabrika → uygulama · bekçi: `test_patron_push_cihaz` §11 <sub>(arşiv:2026-11-14)</sub>
 
 ## Bekçiler — bu alana dokununca koş
 
