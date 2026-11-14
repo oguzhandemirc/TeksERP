@@ -44,10 +44,12 @@ export const URETIM_NOTIFICATION_ENTRIES = {
   },
   "bakim.tamamlandi": {
     ...ORTAK, ...MAKINE_DURUS, kod: "bakim.tamamlandi", ad: "Arıza giderildi", grup: "Bakım",
-    tekilKalibi: "{makineId}", pencereSn: 600,
+    // Anahtar DURUŞ başına, pencere yok (S5b): watchdog'un geçici kapanışı sonradan gerçek bitişle düzeltilince ikinci
+    // outbox satırı AYNI gelen kutusu satırına birleşir (yük gerçek süreyle yenilenir) — çift bildirim olmaz.
+    tekilKalibi: "{durusId}", pencereSn: 0,
     baslik: "Arıza giderildi: {makineAd}",
-    govde: "{makineAd} yeniden çalışıyor ({sebep}, {sureDk} dk durdu) · {kullanici}",
-    payloadAlanlari: ["makineId", "makineAd", "sebep", "sureDk", "kullanici"],
+    govde: "{makineAd} yeniden çalışıyor ({sebep}, {sureDk} dk durdu · {kapanis}) · {kullanici}",
+    payloadAlanlari: ["durusId", "makineAd", "sebep", "sureDk", "kapanis", "kullanici"],
     tahminiHaftalik: 3,
   },
   "bakim.uzun-durus": {

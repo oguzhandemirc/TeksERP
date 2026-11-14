@@ -14,8 +14,11 @@
 //       yoksa / yalnız iç kolon değiştiyse satır yok; kanca fırlatınca kart da outbox da geri sarılır (aynı tx).
 //   §K kursun.gramaj-sapmasi kâğıt yolu: `KursunBypassService` setGramaj · assign · completeFromDistribution aynı tek yayma
 //       noktasını (`emitKursunDeviationTx`, `rollId: null`) çağırır; kâğıt yükü "Kâğıt dağıtım", hedefe eşit gramaj yazmaz.
+//   §W bakim.tamamlandi watchdog düzeltmesi: gerçek `closeStopCore` — WATCHDOG geçici kapanışı + sinyal düzeltmesi iki outbox
+//       satırı yazar, ikisinin birleştirme anahtarı (`notificationGroupKey`) saatler sonra bile AYNI → tek gelen kutusu satırı.
 // NEGATİF SONDA: bölüm başlıklarında (aşağıda, bölüm bölüm).
 // =============================================================================
+import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import ts from "typescript";
@@ -29,11 +32,14 @@ import { dueWindowState } from "../src/services/helpers/invoice-due.helper";
 import { collectAgingRows, getAgingReport, isOverdueBucket } from "../src/services/reports/finance-aging.report";
 import { dueSoonSubjects, groupDueItems, overdueSubjects, overrideDueSourceDeps } from "../src/services/notification-sources/finans-vade";
 import { cleanupTestCustomers } from "./fixture-customer-cleanup";
+import { factoryDayStart } from "../src/constants/time";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { CustomerService } from "../src/services/customer.service";
 import { emitCustomerChangedTx } from "../src/services/notification-sources/anaveri";
 import { emitKursunDeviationTx } from "../src/services/notification-sources/uretim";
 import { KURSUN_PROPERTY_CODE } from "../src/services/helpers/quality-station.helper";
+import { closeStopCore } from "../src/services/machine-stop.service";
+import { notificationGroupKey } from "../src/services/helpers/notification-aggregate.helper";
 
 let pass = 0;
 let fail = 0;
@@ -264,6 +270,49 @@ async function bolumKb(): Promise<void> {
   check("§Kc kâğıt gramajı hedefe eşit → satır yok", sonuc[0]);
 }
 
+// ── §W watchdog düzeltmesi ─────────────────────────────────────────────────
+// NEGATİF SONDA (2026-11-14): closeStopCore düzeltme dalından emit kaldırıldı → §Wa/§Wb ❌; katalogda pencereSn 600'e
+//   döndürüldü → §Wb ❌ (geç düzeltme ayrı satır olurdu). İkisi de geri alındı.
+async function bolumW(): Promise<void> {
+  console.log("\n§W bakim.tamamlandi — watchdog geçici kapanışı + sinyal düzeltmesi (gerçek closeStopCore)");
+  const engel = hedefDbEngeli();
+  if (engel) throw new Error(`DURDURULDU — ${engel}`);
+  const key = SETTING_KEYS.BILDIRIM_GELEN_KUTUSU_ENABLED;
+  const ilk = await prisma.systemSetting.findUnique({ where: { key } });
+  const st = await prisma.station.create({ data: { code: `TBBW-${ek}`.toUpperCase().slice(0, 32), name: `TEST-BBW Hol ${ek}`, type: "INTERNAL", kind: "WEAVING" }, select: { id: true } });
+  const m = await prisma.machine.create({ data: { stationId: st.id, code: `TBBW-${ek}`.toUpperCase().slice(0, 32), name: `TEST-BBW Tezgah ${ek}` }, select: { id: true } });
+  let stopId = "";
+  try {
+    await prisma.systemSetting.upsert({ where: { key }, create: { key, value: true }, update: { value: true } });
+    const now = Date.now();
+    const s0 = await prisma.machineStopEvent.create({
+      data: { machineId: m.id, stopKey: randomUUID(), startedAt: new Date(now - 30 * 60_000), reasonCode: "MEKANIK_ARIZA", lossClass: "UNPLANNED", factoryDay: new Date(factoryDayStart(new Date(now)).toISOString().slice(0, 10) + "T00:00:00Z"), source: "OPERATOR" },
+      select: { id: true },
+    });
+    stopId = s0.id;
+    await closeStopCore(stopId, { value: new Date(now - 20 * 60_000), warning: null }, { endSource: "WATCHDOG", actorId: null });
+    await closeStopCore(stopId, { value: new Date(now - 10 * 60_000), warning: null }, { endSource: "SIGNAL", actorId: null });
+    const rows = await prisma.notificationOutbox.findMany({
+      where: { kind: "bakim.tamamlandi", subjectId: stopId }, orderBy: { createdAt: "asc" },
+      select: { kind: true, subjectId: true, subjectKey: true, conditionId: true, dedupeKey: true, occurredAt: true, payload: true },
+    });
+    const p = rows.map((r) => r.payload as Record<string, unknown>);
+    check("§Wa ⭐ geçici kapanış + düzeltme iki outbox satırı; ikincisi gerçek süre ve \"düzeltildi\"",
+      rows.length === 2 && p[0]?.kapanis === "otomatik geçici kapanış" && p[0]?.sureDk === 10 && p[1]?.kapanis === "sinyalle düzeltildi" && p[1]?.sureDk === 20,
+      JSON.stringify(p.map((x) => [x.kapanis, x.sureDk])));
+    const g = rows.map((r) => notificationGroupKey(r));
+    const gec = rows[1] ? notificationGroupKey({ ...rows[1], occurredAt: new Date(rows[1].occurredAt.getTime() + 3 * 3_600_000) }) : "";
+    check("§Wb ⭐ iki satırın birleştirme anahtarı aynı, 3 saat geç düzeltmede de (tek gelen kutusu satırı)", g.length === 2 && g[0] === g[1] && g[0] === gec, `${g.join(" | ")} | ${gec}`);
+  } finally {
+    await prisma.notificationOutbox.deleteMany({ where: { kind: "bakim.tamamlandi", subjectId: stopId || undefined } });
+    await prisma.machineStopEvent.deleteMany({ where: { machineId: m.id } });
+    await prisma.machine.delete({ where: { id: m.id } });
+    await prisma.station.delete({ where: { id: st.id } });
+    if (ilk) await prisma.systemSetting.update({ where: { key }, data: { value: (ilk.value ?? Prisma.JsonNull) as Prisma.InputJsonValue } });
+    else await prisma.systemSetting.deleteMany({ where: { key } });
+  }
+}
+
 function bolumK7(): void {
   console.log("\n§K7 modül kapısı");
   const viewer = { permissions: ["*"] };
@@ -281,6 +330,7 @@ async function main(): Promise<void> {
   await bolumC();
   bolumKa();
   await bolumKb();
+  await bolumW();
 }
 
 main()

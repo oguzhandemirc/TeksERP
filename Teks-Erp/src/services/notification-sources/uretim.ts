@@ -5,7 +5,7 @@
 // durum geçişinin tek boğazından çağırır (duruş → `machine-stop.service`, levent → `applyWarpBeamEventTx`,
 // kurşun → `applyKursunOperationTx`). Replay/no-op yolunda çağrılmaz. Bayrak kapalıyken no-op; yük tutar taşımaz.
 // =============================================================================
-import type { Prisma } from "@prisma/client";
+import { MachineStopEndSource, type Prisma } from "@prisma/client";
 import { BREAKDOWN_STOP_REASON_CODES } from "../../constants/reason-presets";
 import { emitNotification, type EmitDb } from "../helpers/notification-emit.helper";
 import { readKursunTarget } from "../helpers/process-summary.helper";
@@ -22,7 +22,7 @@ const clip = (s: string, n = 120): string => (s.length > n ? `${s.slice(0, n - 1
 async function stopFacts(tx: Tx, stopId: string) {
   const s = await tx.machineStopEvent.findUnique({
     where: { id: stopId },
-    select: { id: true, reasonCode: true, durationSec: true, revokedAt: true, machine: { select: { id: true, name: true } } },
+    select: { id: true, reasonCode: true, durationSec: true, revokedAt: true, endSource: true, endCorrectedAt: true, machine: { select: { id: true, name: true } } },
   });
   if (!s || s.revokedAt || !isBreakdownReason(s.reasonCode)) return null;
   const preset = await tx.reasonPreset.findFirst({ where: { kind: "MACHINE_STOP", code: s.reasonCode! }, select: { label: true } });
@@ -40,12 +40,19 @@ export async function emitBreakdownStopTx(tx: Tx, stopId: string, actor: Actor):
 }
 
 /** `bakim.tamamlandi` — arıza sebepli duruş kapandı (`closeStopCore` ana claim'i). */
+/** Kapanışın kaynağı metinde: watchdog kapanışı geçicidir, gerçek bitiş gelince aynı bildirim "düzeltildi" olur. */
+function closeLabel(src: MachineStopEndSource | null, correctedAt: Date | null): string {
+  if (correctedAt) return "sinyalle düzeltildi";
+  if (src === MachineStopEndSource.WATCHDOG) return "otomatik geçici kapanış";
+  return src === MachineStopEndSource.SIGNAL ? "makine sinyali" : "elle kapatıldı";
+}
 export async function emitBreakdownClosedTx(tx: Tx, stopId: string, actor: Actor): Promise<void> {
   if (await off(tx)) return;
   const f = await stopFacts(tx, stopId);
   if (!f) return;
   await emitNotification(tx, "bakim.tamamlandi", { type: "machine_stop", id: stopId, key: f.machine.id }, {
-    makineId: f.machine.id, makineAd: f.machine.name, sebep: f.sebep, sureDk: Math.round((f.durationSec ?? 0) / 60),
+    durusId: stopId, makineAd: f.machine.name, sebep: f.sebep, sureDk: Math.round((f.durationSec ?? 0) / 60),
+    kapanis: closeLabel(f.endSource, f.endCorrectedAt),
   }, { actorUserId: who(actor) });
 }
 
