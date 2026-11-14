@@ -6,6 +6,8 @@ import { APP_VERSION } from "../lib/app-version";
 import { PATRON_API_VERSION, PATRON_REPORT_API_VERSION, PATRON_PANO_VERSION, PATRON_REPORT_EXPORT_VERSION, PATRON_PUSH_VERSION } from "../constants/patron-app";
 import { patronPushAvailable } from "../services/patron-push/device.service";
 import { PATRON_READ_SETS } from "../services/patron-read/izin-esleme";
+import { closedPatronReadSets } from "../routes/patron-read.routes";
+import { PATRON_LOGIN_PERMISSION } from "../constants/permission-catalog";
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { AuthService } from "../services/auth.service";
@@ -753,6 +755,8 @@ export class AuthController {
       // Sistem hesabı mührü bandı (G1): aynı kitleye; öteki herkese "ok".
       const systemAccountSealStatus = bantGorur ? sealBandStatus(await sealSummary()) : "ok";
       const patronPush = await patronPushAvailable();
+      // Kapalı kümeler yalnız patron oturumuna (panel çağrısına kapı okuması eklenmez); `null` = hüküm yok → alan yok.
+      const patronClosedSets = matchesPermission(izinler, PATRON_LOGIN_PERMISSION) ? await closedPatronReadSets(req, res) : null;
       res.status(200).json({
         success: true,
         data: {
@@ -785,6 +789,9 @@ export class AuthController {
           patronApiVersion: PATRON_API_VERSION,
           // V3a: `/api/patron/v1` altında bu sunucunun verdiği küme adları (yoksa uygulama ekranı gizler).
           patronReadSets: PATRON_READ_SETS,
+          // Kurulumda modül kapısı (bayrak ya da lisans tavanı) kapalı olan kümeler — uçların AYNI kapısından; uygulama
+          // menüden gizler. Alan yoksa (eski sunucu / hüküm yok) uygulama hepsini gösterir, uç 403 ile gri satır.
+          ...(patronClosedSets ? { patronClosedSets } : {}),
           patronReportApi: PATRON_REPORT_API_VERSION,
           patronReportExport: PATRON_REPORT_EXPORT_VERSION,
           patronPano: PATRON_PANO_VERSION,

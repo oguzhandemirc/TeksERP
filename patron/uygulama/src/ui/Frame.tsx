@@ -6,7 +6,7 @@ import { useState, type ReactNode } from "react";
 import { Pressable, RefreshControl, ScrollView, Text, useWindowDimensions, View } from "react-native";
 import Animated, { FadeIn } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { MODULES, moduleNavTitle, moduleTitle, moduleVisible, type ModuleKey } from "../lib/access";
+import { MODULES, moduleInMenu, moduleNavTitle, moduleTitle, moduleVisible, type ModuleKey } from "../lib/access";
 import { useSession } from "../state/session";
 import { StatusBands } from "./data";
 import { FacilitySwitchModal } from "./FacilitySwitcher";
@@ -80,7 +80,7 @@ export function SideNav() {
         {RAIL_GROUPS.map((g, gi) => {
           const items = g.modules.flatMap((k) => {
             const m = MODULES.find((x) => x.key === k);
-            return m && moduleVisible(permissions, k) ? [m] : [];
+            return m && moduleInMenu(permissions, k) ? [m] : [];
           });
           if (items.length === 0) return null;
           return (

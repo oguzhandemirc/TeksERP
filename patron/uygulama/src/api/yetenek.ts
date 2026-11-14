@@ -5,6 +5,9 @@
 export interface Yetenek {
   /** Sunulan veri kümeleri; null = hepsi (bulut — sunucu kendi beyanıyla 404 verir). */
   readonly kumeler: ReadonlySet<string> | null;
+  /** Sunulan ama kurulumda modülü (bayrak/lisans) KAPALI kümeler (ERP `patronClosedSets`): yalnız menüden gizler;
+   *  veri katmanı istemeye devam eder, derin bağlantı uçtan 403 alıp kapalı satırını çizer. Boş = bilinmiyor/hepsi açık. */
+  readonly kapali: ReadonlySet<string>;
   /** Veri canlı (eşitleme yok): "son eşitleme" yerine "son güncelleme"; eşitleme gecikmesi bandı yok. */
   readonly canli: boolean;
   /** Girişte doğrulama kodu HER ZAMAN istenir (bulut); değilse sunucu isterse (409 TOTP_REQUIRED). */
@@ -37,6 +40,7 @@ export interface Yetenek {
 
 export const BULUT_YETENEK: Yetenek = {
   kumeler: null,
+  kapali: new Set(),
   canli: false,
   kodHerZaman: true,
   yazma: true,
@@ -62,12 +66,14 @@ const dizeler = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is
  * ERP sunucusu: sunulan kümeler sunucunun beyanından (eski sunucu beyan etmezse BOŞ — fail-closed). Bulut yazma
  * kanalı (gelen kutusu, `:yaz` kodları) yok; ERP yazma işlemleri ham ERP izinlerinden (`islemVar`).
  */
-export function erpYetenek(patronReadSets: unknown, erpPermissions?: unknown, patronReportApi?: unknown, bildirimKutusu?: unknown, patronReportExport?: unknown, patronPush?: unknown, patronPano?: unknown): Yetenek {
+export function erpYetenek(patronReadSets: unknown, erpPermissions?: unknown, patronReportApi?: unknown, bildirimKutusu?: unknown, patronReportExport?: unknown, patronPush?: unknown, patronPano?: unknown, patronClosedSets?: unknown): Yetenek {
   const kumeler = new Set(dizeler(patronReadSets));
   // Rapor ucu (V5a) yalnız sürümünü beyan eden sunucuda; eski sunucu beyan etmez → rapor gizli (fail-closed).
   const rapor = typeof patronReportApi === "number" && patronReportApi >= 1;
   return {
     kumeler,
+    // Eski fabrika alanı vermez → boş: menü bugünkü gibi hepsini gösterir (gizleme bilgi, kapı değil — kapı uçta).
+    kapali: new Set(dizeler(patronClosedSets)),
     canli: true,
     kodHerZaman: false,
     yazma: false,
@@ -106,6 +112,11 @@ export function yetenek(): Yetenek {
 /** Küme adı (`ozet.siparis`, `siparis`) bu sunucuda var mı. */
 export function kumeSunuluyor(ad: string, y: Yetenek = etkin): boolean {
   return y.kumeler === null || y.kumeler.has(ad);
+}
+
+/** Küme sunuluyor ama kurulumda modülü kapalı mı (yalnız menü gizlemesi; veri katmanı buna bakmaz). */
+export function kumeKapali(ad: string, y: Yetenek = etkin): boolean {
+  return y.kapali.has(ad);
 }
 
 /**
