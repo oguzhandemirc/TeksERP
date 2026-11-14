@@ -65,7 +65,7 @@ export async function applyWarpBeamEventTx(
   const createdAt = await warpBeamEventStampTx(tx, input.beamId);
   const ev = await sequentialTx(tx).warpBeamEvent.create({ data: { beamId: input.beamId, kind: input.kind, fromStatus: input.from, toStatus: input.to, ...input.data, createdAt }, select: WARP_BEAM_EVENT_SELECT });
   // Bildirim (S2): levent bağlandı / bitti — durum geçişinin tek boğazı, aynı tx.
-  await emitWarpBeamEventTx(tx, input.beamId, input.kind, input.data.machineId ?? null, input.data.createdById ?? null);
+  await emitWarpBeamEventTx(tx, { beamId: input.beamId, kind: input.kind, machineId: input.data.machineId ?? null }, input.data.createdById ?? null);
   return ev;
 }
 

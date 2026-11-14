@@ -51,7 +51,11 @@ export async function emitBreakdownClosedTx(tx: Tx, stopId: string, actor: Actor
 
 // ── Levent ──────────────────────────────────────────────────────────────────
 /** `dokuma.levent-takildi` (MOUNTED) · `dokuma.levent-bitti` (EXHAUSTED) — levent olayının tek yazarı `applyWarpBeamEventTx`. */
-export async function emitWarpBeamEventTx(tx: Tx, beamId: string, kind: string, machineId: string | null, actor: Actor): Promise<void> {
+export async function emitWarpBeamEventTx(
+  tx: Tx,
+  { beamId, kind, machineId }: { beamId: string; kind: string; machineId: string | null },
+  actor: Actor,
+): Promise<void> {
   if (kind !== "MOUNTED" && kind !== "EXHAUSTED") return;
   if (await off(tx)) return;
   const beam = await tx.warpBeam.findUnique({ where: { id: beamId }, select: { beamNo: true } });
@@ -74,7 +78,11 @@ async function fabricLabel(tx: Tx, f: RunFabric): Promise<string> {
 }
 
 /** `dokuma.desen-degisti` — koşum "Değiştir" ile yenilendi ve kumaş/renk farklı (`openMachineRunFresh`). */
-export async function emitRunPatternChangedTx(tx: Tx, machineId: string, from: RunFabric, to: RunFabric, actor: Actor): Promise<void> {
+export async function emitRunPatternChangedTx(
+  tx: Tx,
+  { machineId, from, to }: { machineId: string; from: RunFabric; to: RunFabric },
+  actor: Actor,
+): Promise<void> {
   if (from.itemId === to.itemId && from.colorId === to.colorId) return;
   if (await off(tx)) return;
   const m = await tx.machine.findUnique({ where: { id: machineId }, select: { name: true } });

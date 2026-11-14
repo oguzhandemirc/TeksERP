@@ -196,7 +196,7 @@ async function openMachineRunFresh(
         select: MACHINE_RUN_SELECT,
       });
       // Bildirim (S2): Değiştir yolunda kumaş/renk farklıysa `dokuma.desen-degisti` — aynı tx.
-      if (replacedBox.run) await emitRunPatternChangedTx(tx, machine.id, replacedBox.run, run, userId ?? null);
+      if (replacedBox.run) await emitRunPatternChangedTx(tx, { machineId: machine.id, from: replacedBox.run, to: run }, userId ?? null);
       return run;
     });
   } catch (e) {

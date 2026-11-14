@@ -165,9 +165,9 @@ async function bolum1(): Promise<void> {
       // Desen: aynı kumaş yazmaz, farklı kumaş yazar.
       const k1 = await tx.item.create({ data: { code: `TBU-K1-${ek}`, name: `TEST-BU Kumaş1 ${ek}`, itemType: "FABRIC" }, select: { id: true } });
       const k2 = await tx.item.create({ data: { code: `TBU-K2-${ek}`, name: `TEST-BU Kumaş2 ${ek}`, itemType: "FABRIC" }, select: { id: true } });
-      await emitRunPatternChangedTx(tx, m.id, { itemId: k1.id, colorId: null }, { itemId: k1.id, colorId: null }, u.id);
+      await emitRunPatternChangedTx(tx, { machineId: m.id, from: { itemId: k1.id, colorId: null }, to: { itemId: k1.id, colorId: null } }, u.id);
       await olc("desen aynı kumaşta yazılmaz", "dokuma.desen-degisti", m.id, 0);
-      await emitRunPatternChangedTx(tx, m.id, { itemId: k1.id, colorId: null }, { itemId: k2.id, colorId: null }, u.id);
+      await emitRunPatternChangedTx(tx, { machineId: m.id, from: { itemId: k1.id, colorId: null }, to: { itemId: k2.id, colorId: null } }, u.id);
       await olc("desen farklı kumaşta yazılır", "dokuma.desen-degisti", m.id, 1, (p) => p.eskiKumas === `TEST-BU Kumaş1 ${ek}` && p.yeniKumas === `TEST-BU Kumaş2 ${ek}`);
 
       // Kurşun: İE hedefi (KURSUN varyantı) = basılan → yok; farklı → var.
