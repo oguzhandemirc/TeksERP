@@ -57,7 +57,7 @@ export default function OrderLinesEdit() {
     if ((izin || iptalIzni) && id) void oku();
   }, [izin, iptalIzni, id, oku]);
 
-  if (!izin && !iptalIzni) return <Screen title="Kalemler" module="siparisler" back><Muted>Bu işlem için yetkiniz yok.</Muted></Screen>;
+  if (!izin && !iptalIzni) return <Screen sheet title="Kalemler" module="siparisler" back><Muted>Bu işlem için yetkiniz yok.</Muted></Screen>;
   const setSatir = (i: number, p: Partial<KalemSatiri>) => setForm((f) => (f ? f.map((x, j) => (j === i ? { ...x, ...p } : x)) : f));
   const surum = kayit?.siparis.surum ?? null;
   const yazilabilir = izin && kayit !== null && kayit.kilit === null && surum !== null;
@@ -94,7 +94,7 @@ export default function OrderLinesEdit() {
   const iptalAcik = iptalIzni && kayit !== null && kayit.kilit !== "KAPALI";
   const kayitli = (kid?: string) => (kid ? kayit?.kalemler.find((k) => k.id === kid) : undefined);
   return (
-    <Screen title={kayit?.siparis.no ? `${kayit.siparis.no} kalemleri` : "Kalemler"} module="siparisler" back>
+    <Screen sheet title={kayit?.siparis.no ? `${kayit.siparis.no} kalemleri` : "Kalemler"} module="siparisler" back>
       {!kayit && !loadError ? <LoadingSkeleton rows={3} /> : null}
       {loadError && !kayit ? <ErrorState text={loadError} onRetry={() => void oku()} /> : null}
       {kayit && form ? (

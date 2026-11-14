@@ -1,4 +1,5 @@
 // Anlık kapısı: yükleniyor → iskelet · hata → "Tekrar dene" · veri yok → ikonlu boş · veri → içerik.
+// Kapalı modül (403 MODULE_DISABLED/LICENSE_MODULE) de hata değildir → sakin "kapalı" satırı.
 // 404 hata DEĞİLDİR: fabrika anlığı henüz yayınlamadı (ya da eski fabrika üretmiyor) → aynı boş durum (D4-KUC3c).
 // Bayat (önbellek) veri çizilir; üstüne "Fabrika verisi HH:MM" damgası `FactoryStamp` ile ayrıca basılır.
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -7,7 +8,7 @@ import { Text, View } from "react-native";
 import type { Snapshot } from "../../api/wire";
 import { formatFactory } from "../../lib/factory-time";
 import type { Remote } from "../../state/useRemote";
-import { Empty, ErrorState, LoadingSkeleton } from "../StateViews";
+import { Empty, ErrorState, LoadingSkeleton, ModuleClosed } from "../StateViews";
 import { makeStyles, useTokens } from "../theme-context";
 import { space, typography, type Domain } from "../tokens";
 import { EMPTY_ICON } from "../icons";
@@ -23,6 +24,7 @@ export function SnapshotGate({ remote, domain, variant = "kpi", rows, empty, chi
 }) {
   if (remote.data) return <View testID={testID}>{children(remote.data.veri, remote.data)}</View>;
   if (remote.loading) return <LoadingSkeleton variant={variant} rows={rows ?? (variant === "kpi" ? 2 : 3)} testID={testID ? `${testID}-yukleniyor` : undefined} />;
+  if (remote.closed) return <ModuleClosed testID={testID ? `${testID}-kapali` : undefined} />;
   if (remote.error && !remote.notFound) return <ErrorState text={remote.error} onRetry={remote.reload} testID={testID ? `${testID}-hata` : undefined} />;
   return <Empty text={empty ?? "Fabrikadan bu özet henüz gelmedi"} domain={domain} icon={EMPTY_ICON.bekliyor} testID={testID ? `${testID}-bos` : undefined} />;
 }

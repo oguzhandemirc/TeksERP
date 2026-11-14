@@ -55,7 +55,7 @@ export default function CancelOrder() {
     if (izin && id) void oku();
   }, [izin, id, oku]);
 
-  if (!izin) return <Screen title="Sipariş iptali" module="siparisler" back><Muted>Bu işlem için yetkiniz yok.</Muted></Screen>;
+  if (!izin) return <Screen sheet title="Sipariş iptali" module="siparisler" back><Muted>Bu işlem için yetkiniz yok.</Muted></Screen>;
 
   async function iptalEt() {
     if (offline || !onizleme) return;
@@ -100,7 +100,7 @@ export default function CancelOrder() {
   const secilebilir = karar === "URETIMDE" && onizleme!.isEmirleri.every((w) => w.izinli.length > 0);
   const onaylanabilir = karar === "SERBEST" || secilebilir;
   return (
-    <Screen title={onizleme?.siparisNo ? `${onizleme.siparisNo} iptal` : "Sipariş iptali"} module="siparisler" back>
+    <Screen sheet title={onizleme?.siparisNo ? `${onizleme.siparisNo} iptal` : "Sipariş iptali"} module="siparisler" back>
       {!onizleme && !loadError ? <LoadingSkeleton rows={3} /> : null}
       {loadError && !onizleme ? <ErrorState text={loadError} onRetry={() => void oku()} /> : null}
       {onizleme && karar ? (

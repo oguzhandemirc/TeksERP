@@ -147,7 +147,9 @@ function statik(): void {
   const nameRe = new RegExp(`"(${Object.values(NAMES).join("|")})"`);
   const nameExtra = walk(CLOUD_SRC).filter((f) => nameRe.test(readFileSync(f, "utf8"))).map((f) => path.relative(ROOT, f)).filter((f) => !nameAllowed.has(f));
   check("§2c2 ⭐ patron/sunucu'da anlık adları yalnız katalog + tel dosyalarında geçer", nameExtra.length === 0, nameExtra.join(", ") || "temiz");
-  const allowedApp = new Set([APP_VIEW, "patron/uygulama/src/api/wire.ts"]);
+  // `ui/pano/kutu-gorunum.ts` fason anlığını değil panelin pano kutusu telini okur (`stok`/`stokOzeti.iplikKg` aynı adlı
+  // stok alanı, değer fabrikada hesaplı) — ayrı sözleşme, burada beyanlı (2026-11-14 patron panosu).
+  const allowedApp = new Set([APP_VIEW, "patron/uygulama/src/api/wire.ts", "patron/uygulama/src/ui/pano/kutu-gorunum.ts"]);
   const appExtra = APP_DIRS.flatMap(walk).filter((f) => FIELD_RE.test(readFileSync(f, "utf8"))).map((f) => path.relative(ROOT, f)).filter((f) => !allowedApp.has(f));
   const arith = arithmeticIn(readFileSync(path.join(ROOT, APP_VIEW), "utf8"));
   check("§2d ⭐ uygulamada alanları yalnız görünüm okur; görünümde aritmetik/karşılaştırma/toplama yok",

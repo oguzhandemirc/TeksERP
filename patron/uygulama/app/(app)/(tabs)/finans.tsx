@@ -22,7 +22,7 @@ import { useListCapability } from "../../../src/ui/siparis/capabilities";
 import { openRecord } from "../../../src/ui/nav";
 import { SectionHeader } from "../../../src/ui/SectionHeader";
 import { SegmentedControl } from "../../../src/ui/SegmentedControl";
-import { ErrorState, LoadingSkeleton } from "../../../src/ui/StateViews";
+import { ErrorState, LoadingSkeleton, ModuleClosed } from "../../../src/ui/StateViews";
 import { space } from "../../../src/ui/tokens";
 
 function List({ projection, row, empty }: { projection: string; row: (r: ProjectionRecord) => ProjectionRowView; empty: string }) {
@@ -54,7 +54,8 @@ export default function Finance() {
       {summaryAllowed ? (
         <View>
           {summary.loading && !summary.data ? <LoadingSkeleton variant="kpi" rows={2} /> : null}
-          {summary.error && !summary.data ? <ErrorState text={summary.error} onRetry={summary.reload} /> : null}
+          {summary.closed && !summary.data ? <ModuleClosed testID="finans-kapali" /> : null}
+          {summary.error && !summary.closed && !summary.data ? <ErrorState text={summary.error} onRetry={summary.reload} /> : null}
           {summary.data ? <ReceivableHero veri={summary.data.veri} caption={caption} /> : null}
           {summary.data && can(permissions, "bulut:cek:oku") ? <ChequeDue veri={summary.data.veri} /> : null}
         </View>

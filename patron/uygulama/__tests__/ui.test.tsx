@@ -177,3 +177,27 @@ describe("fabrika değiştir (çok tesis)", () => {
     expect(screen.getByTestId("tesis-gecis-hatasi")).toBeTruthy();
   });
 });
+
+describe("form kartı (D5): geniş ekranda form tam sayfa değil, karartılmış listenin üstünde kart", () => {
+  const RN = require("react-native") as typeof import("react-native");
+  const size = (width: number) => jest.spyOn(RN, "useWindowDimensions").mockReturnValue({ width, height: 1280, scale: 2, fontScale: 1 });
+  afterEach(() => jest.restoreAllMocks());
+  it("geniş: kart + başlık + Kapat geri gider; büyük başlık yok", () => {
+    size(800);
+    mockRouter.back.mockClear();
+    const goBack = jest.spyOn(mockRouter, "canGoBack").mockReturnValue(true);
+    render(<Screen sheet title="Yeni cari"><Text>FORM</Text></Screen>);
+    expect(screen.getByTestId("form-karti")).toBeTruthy();
+    expect(screen.getByText("FORM")).toBeTruthy();
+    expect(screen.getAllByText("Yeni cari")).toHaveLength(1);
+    fireEvent.press(screen.getByTestId("form-kapat"));
+    expect(mockRouter.back).toHaveBeenCalledTimes(1);
+    goBack.mockRestore();
+  });
+  it("dar: bugünkü tam sayfa (kart yok)", () => {
+    size(400);
+    render(<Screen sheet title="Yeni cari"><Text>FORM</Text></Screen>);
+    expect(screen.queryByTestId("form-karti")).toBeNull();
+    expect(screen.getByText("FORM")).toBeTruthy();
+  });
+});

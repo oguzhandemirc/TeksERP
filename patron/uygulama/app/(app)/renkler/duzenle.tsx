@@ -51,7 +51,7 @@ export default function EditColor() {
     if (izin && id) void oku();
   }, [izin, id, oku]);
 
-  if (!izin) return <Screen title="Renk düzenle" module="renkler" back><Muted>Bu işlem için yetkiniz yok.</Muted></Screen>;
+  if (!izin) return <Screen sheet title="Renk düzenle" module="renkler" back><Muted>Bu işlem için yetkiniz yok.</Muted></Screen>;
   const set = (p: Partial<RenkFormu>) => setForm((f) => (f ? { ...f, ...p } : f));
 
   async function kaydet() {
@@ -99,7 +99,7 @@ export default function EditColor() {
 
   const fark = taze && form ? farkSatirlari(form, renkFormu(taze), ETIKET) : [];
   return (
-    <Screen title={kayit ? `${kayit.kod} düzenle` : "Renk düzenle"} module="renkler" back>
+    <Screen sheet title={kayit ? `${kayit.kod} düzenle` : "Renk düzenle"} module="renkler" back>
       {!kayit && !loadError ? <LoadingSkeleton rows={2} /> : null}
       {loadError && !kayit ? <ErrorState text={loadError} onRetry={() => void oku()} /> : null}
       {kayit && form ? (

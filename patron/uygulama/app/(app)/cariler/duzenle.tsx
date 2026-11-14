@@ -51,7 +51,7 @@ export default function EditCustomer() {
     if (izin && id) void oku();
   }, [izin, id, oku]);
 
-  if (!izin) return <Screen title="Cari düzenle" module="cariler" back><Muted>Bu işlem için yetkiniz yok.</Muted></Screen>;
+  if (!izin) return <Screen sheet title="Cari düzenle" module="cariler" back><Muted>Bu işlem için yetkiniz yok.</Muted></Screen>;
   const set = (p: Partial<CariFormu>) => setForm((f) => (f ? { ...f, ...p } : f));
 
   async function kaydet() {
@@ -93,7 +93,7 @@ export default function EditCustomer() {
 
   const fark = taze && form ? farkSatirlari(form, cariFormu(taze), ETIKET) : [];
   return (
-    <Screen title={kayit ? `${kayit.kod} düzenle` : "Cari düzenle"} module="cariler" back>
+    <Screen sheet title={kayit ? `${kayit.kod} düzenle` : "Cari düzenle"} module="cariler" back>
       {!kayit && !loadError ? <LoadingSkeleton rows={3} /> : null}
       {loadError && !kayit ? <ErrorState text={loadError} onRetry={() => void oku()} /> : null}
       {kayit && form ? (

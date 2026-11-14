@@ -164,3 +164,29 @@ describe("§6 görsel kayıt (emülatör yok: PNG yerine ekran metinleri anlık 
     expect(texts).toMatchSnapshot();
   });
 });
+
+describe("§7 lisansta/bayrakta kapalı modül hata DEĞİL: sakin satır, kırmızı hata ve 'Tekrar dene' yok", () => {
+  const { ApiError } = require("../src/api/client") as typeof import("../src/api/client");
+  it.each(["MODULE_DISABLED", "LICENSE_MODULE"])("403 %s → kapalı satırı, arama gizli", async (code) => {
+    mockSession.permissions = ["bulut:teklif:oku", "bulut:maliyet:oku"];
+    mockApi.list.mockImplementation(async () => { throw new ApiError(403, code, "Maliyet & Teklif modülü bu kurulumda kapalı."); });
+    render(<Quotes />);
+    await flush();
+    expect(screen.getByTestId("teklifler-kapali")).toBeTruthy();
+    expect(screen.getByText(/fabrikanızda kapalı/)).toBeTruthy();
+    expect(screen.queryByText("Tekrar dene")).toBeNull();
+    expect(screen.queryByText(/modülü bu kurulumda kapalı/)).toBeNull();
+    expect(screen.queryByTestId("teklif-ara")).toBeNull();
+    render(<StandardCosts />);
+    await flush();
+    expect(screen.getByTestId("standart-maliyetler-kapali")).toBeTruthy();
+  });
+  it("başka 403 (izin) hâlâ hata olarak görünür", async () => {
+    mockSession.permissions = ["bulut:teklif:oku"];
+    mockApi.list.mockImplementation(async () => { throw new ApiError(403, "FORBIDDEN", "Yetkiniz yok"); });
+    render(<Quotes />);
+    await flush();
+    expect(screen.queryByTestId("teklifler-kapali")).toBeNull();
+    expect(screen.getByText("Yetkiniz yok")).toBeTruthy();
+  });
+});

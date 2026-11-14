@@ -54,7 +54,7 @@ export function LargeHeader({ title, scrollY, topInset, onBack, right }: {
 }
 
 /** İçerikteki büyük başlık (ekran okuyucu bunu başlık olarak duyar). */
-export function LargeTitle({ title, scrollY, subtitle }: { readonly title: string; readonly scrollY: SharedValue<number>; readonly subtitle?: ReactNode }) {
+export function LargeTitle({ title, scrollY, subtitle, right }: { readonly title: string; readonly scrollY: SharedValue<number>; readonly subtitle?: ReactNode; readonly right?: ReactNode }) {
   const s = useStyles();
   const fade = useAnimatedStyle(() => ({
     opacity: interpolate(scrollY.value, [0, COLLAPSE_AT * 0.8], [1, 0], Extrapolation.CLAMP),
@@ -62,7 +62,10 @@ export function LargeTitle({ title, scrollY, subtitle }: { readonly title: strin
   }));
   return (
     <Animated.View style={[s.large, fade]}>
-      <Text style={s.largeText} accessibilityRole="header" numberOfLines={2} maxFontSizeMultiplier={FONT_SCALE.title}>{title}</Text>
+      <View style={s.largeRow}>
+        <Text style={s.largeText} accessibilityRole="header" numberOfLines={2} maxFontSizeMultiplier={FONT_SCALE.title}>{title}</Text>
+        {right ? <View style={s.largeRight}>{right}</View> : null}
+      </View>
       {subtitle}
     </Animated.View>
   );
@@ -78,5 +81,7 @@ const useStyles = makeStyles((t) => ({
   small: { ...typography.headline, color: t.text, flex: 1, textAlign: "center" as const },
   line: { height: 1, backgroundColor: t.separator },
   large: { marginBottom: space.m, transformOrigin: "left" as const },
-  largeText: { ...typography.largeTitle, color: t.text },
+  largeRow: { flexDirection: "row" as const, alignItems: "center" as const, gap: space.m },
+  largeText: { ...typography.largeTitle, color: t.text, flexShrink: 1 },
+  largeRight: { marginLeft: "auto" as const, flexShrink: 1 },
 }));
