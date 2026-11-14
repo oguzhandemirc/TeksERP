@@ -89,7 +89,7 @@ export interface NotificationCatalogEntry {
   /** Telefondaki "Yalnız önemliler" hazır seçiminin kümesi (plan ⭐); varsayılan teslimi DEĞİŞTİRMEZ. */
   onemli?: true;
   /** Özet türü (plan Ö): olay değil, zamanlayıcı (`jobs/notification-digest.job.ts`) pencere başına bir kez yazar. */
-  ozet?: "SAATLIK" | "VARDIYA" | "GUN_SONU";
+  ozet?: "SAATLIK" | "VARDIYA" | "GUN_SONU" | "HAFTALIK";
   baslik: string;
   govde: string;
   /** KOSUL ve ALARM'da kapanış metni. */

@@ -31,6 +31,7 @@ const INCOMING_DOC = {
   tekilKalibi: "{belgeId}", panelEkran: "operations/gelen-belgeler", panelYol: "/operations/gelen-belgeler/{belgeId}",
 } as const;
 const DAILY_DIGEST = { tekilKalibi: "{gun}", pencereSn: 0, ozet: "GUN_SONU" } as const;
+const WEEKLY_DIGEST = { tekilKalibi: "{hafta}", pencereSn: 0, ozet: "HAFTALIK" } as const;
 
 export const DEPO_NOTIFICATION_ENTRIES = {
   // ── Sevkiyat ──────────────────────────────────────────────────────────────
@@ -131,6 +132,13 @@ export const DEPO_NOTIFICATION_ENTRIES = {
     govde: "{cikis} fason çıkışı ({cikisMetre} m) · {donus} fason dönüşü",
     payloadAlanlari: ["gun", "cikis", "cikisMetre", "donus"],
     tahminiHaftalik: 7,
+  },
+  "fason.haftalik-ozet": {
+    ...FASON, ...WEEKLY_DIGEST, kod: "fason.haftalik-ozet", ad: "Haftalık fason özeti",
+    baslik: "Haftalık fason özeti · {hafta}",
+    govde: "{cikis} fason çıkışı ({cikisMetre} m) · {donus} fason dönüşü",
+    payloadAlanlari: ["hafta", "cikis", "cikisMetre", "donus"],
+    tahminiHaftalik: 1,
   },
 
   // ── Mal kabul / Gelen belge ───────────────────────────────────────────────
