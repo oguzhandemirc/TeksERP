@@ -205,6 +205,38 @@ describe("dokunuş (ERP yedek yolu)", () => {
     expect(d.push).toHaveBeenCalledWith("/bildirimler");
   });
 
+  // Denetim 2026-11-15 (kullanıcı kararı): dokununca kayda git. NEGATİF SONDA (geri alındı): `RECORD_ALIASES` boşalınca ❌.
+  it("⭐ ERP: kayıt yolu → kaydın ekranı (sipariş/cari kendi ekranı; teklif/sevkiyat/iş emri jenerik kayıt) + satır okundu", async () => {
+    const K = "0b6c5c3e-9f1a-4d2b-8c3d-1e2f3a4b5c6d";
+    const beklenen: [string, string][] = [
+      [`/siparisler/${K}`, `/siparisler/${K}`], [`/cariler/${K}`, `/cariler/${K}`],
+      [`/teklifler/${K}`, `/kayit/teklif/${K}`], [`/sevkiyat/${K}`, `/kayit/sevkiyat/${K}`], [`/uretim/${K}`, `/kayit/is-emri/${K}`],
+    ];
+    for (const [rota, hedef] of beklenen) {
+      const okundu = jest.fn(async () => ({ degisti: true }));
+      const d = { ...deps("/bildirimler"), okundu };
+      await expect(openNotification({ bildirimId: ID, rota }, d)).resolves.toBe(true);
+      expect(d.push).toHaveBeenCalledWith(hedef);
+      expect(okundu).toHaveBeenCalledWith(ID);
+    }
+  });
+
+  it("⭐ ERP: kimliği UUID olmayan takma ad ya da sunulmayan küme → liste (vurgulu); listede ayrıca okundu çağrısı yok", async () => {
+    const okundu = jest.fn(async () => ({ degisti: true }));
+    const d = { ...deps("/bildirimler"), okundu };
+    await openNotification({ bildirimId: ID, rota: "/teklifler/T-12" }, d);
+    expect(d.push).toHaveBeenLastCalledWith(`/bildirimler?vurgu=${ID}`);
+    const Y = require("../src/api/yetenek") as typeof import("../src/api/yetenek");
+    Y.setYetenek({ ...BULUT_YETENEK, kumeler: new Set(["siparis"]) });
+    try {
+      await openNotification({ bildirimId: ID, rota: "/uretim/0b6c5c3e-9f1a-4d2b-8c3d-1e2f3a4b5c6d" }, d);
+      expect(d.push).toHaveBeenLastCalledWith(`/bildirimler?vurgu=${ID}`);
+    } finally {
+      Y.setYetenek(BULUT_YETENEK);
+    }
+    expect(okundu).not.toHaveBeenCalled();
+  });
+
   it("⭐ bulut: yedek yol yok — güvensiz rota hiçbir yere gitmez (bugünkü davranış)", async () => {
     const d = deps(null);
     await expect(openNotification({ bildirimId: ID, rota: "https://kotu.example" }, d)).resolves.toBe(false);

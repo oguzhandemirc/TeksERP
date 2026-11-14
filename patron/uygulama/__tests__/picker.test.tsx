@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
+const RN = require("react-native") as typeof import("react-native");
 
 const mockList = jest.fn();
 const mockCache = { load: jest.fn(async (_k: string, f: () => Promise<unknown>) => ({ data: await f(), offline: false, savedAt: "" })), peek: jest.fn(async () => null) };
@@ -6,7 +7,10 @@ const mockSession = { api: { list: mockList }, cache: mockCache, markOnline: jes
 jest.mock("../src/state/session", () => ({ useSession: () => mockSession }));
 // Liste ilk sayfası `useRemote` ile gelir (`peek` gerekli). Gezinme bağlamı yok: `useFocusEffect`siz taklit → odak kancası etkisiz (her an odakta).
 jest.mock("expo-router", () => ({}));
-jest.mock("react-native-safe-area-context", () => ({ useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }) }));
+jest.mock("react-native-safe-area-context", () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+  SafeAreaInsetsContext: (jest.requireActual("react") as typeof import("react")).createContext(null),
+}));
 
 // mock'lar kurulduktan SONRA yüklenir.
 const { Picker } = require("../src/ui/Picker") as typeof import("../src/ui/Picker");
@@ -77,5 +81,38 @@ describe("seçici — sunucu araması", () => {
     await bekle(0);
     expect(screen.queryByTestId("secici-ara")).toBeNull();
     expect(mockList).toHaveBeenLastCalledWith("depo", expect.objectContaining({ ara: undefined, suzgec: undefined }));
+  });
+});
+
+// Denetim 2026-11-15: Android `pageSheet`i tanımaz → tablette seçici tam ekran açılıyordu.
+// NEGATİF SONDA (2026-11-15, geri alındı): ModalSheet geniş dalı kaldırılınca 1 ❌ (tablet).
+describe("seçici — geniş ekranda ortalı kart", () => {
+  const size = (width: number) => jest.spyOn(RN, "useWindowDimensions").mockReturnValue({ width, height: 1280, scale: 2, fontScale: 1 });
+  beforeEach(() => {
+    jest.useFakeTimers();
+    mockList.mockReset();
+    mockList.mockImplementation(async () => sayfa("X"));
+  });
+  afterEach(() => {
+    jest.restoreAllMocks();
+    jest.useRealTimers();
+  });
+
+  it("⭐ tablet (≥ 768): saydam Modal + kart; karartmaya dokunmak kapatır", async () => {
+    size(1024);
+    render(<Picker label="Cari" projection="cari-kart" value={null} onChange={jest.fn()} testID="cari-sec" />);
+    fireEvent.press(screen.getByTestId("cari-sec"));
+    await bekle(0);
+    expect(screen.getByTestId("secici-kart")).toBeTruthy();
+    expect(screen.UNSAFE_getByType(RN.Modal).props).toEqual(expect.objectContaining({ transparent: true, animationType: "fade" }));
+  });
+  it("⭐ telefon: bugünkü tam sayfa (kart yok, saydam değil)", async () => {
+    size(400);
+    render(<Picker label="Cari" projection="cari-kart" value={null} onChange={jest.fn()} testID="cari-sec" />);
+    fireEvent.press(screen.getByTestId("cari-sec"));
+    await bekle(0);
+    expect(screen.queryByTestId("secici-kart")).toBeNull();
+    expect(screen.UNSAFE_getByType(RN.Modal).props.transparent).toBeFalsy();
+    expect(screen.getByTestId("secici-ara")).toBeTruthy();
   });
 });

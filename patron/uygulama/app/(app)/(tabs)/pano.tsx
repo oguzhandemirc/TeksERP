@@ -67,6 +67,12 @@ function yerelKutuKapali(k: { readonly modul: ModuleKey }): boolean {
   return m !== undefined && moduleClosed(m);
 }
 
+/** Anlığın her yerel kutusunun modülü kapalı: istek 403 alacağından hiç gitmez (denetim 2026-11-15). */
+function anlikKapali(projeksiyon: string): boolean {
+  const kutular = YEREL_KATALOG.filter((k) => k.projeksiyon === projeksiyon);
+  return kutular.length > 0 && kutular.every(yerelKutuKapali);
+}
+
 export default function Dashboard() {
   const { facility, permissions, factoryStamp, offline, refresh } = useSession();
   const router = useRouter();
@@ -82,7 +88,7 @@ export default function Dashboard() {
     const m = MODULES.find((x) => x.route === route);
     return m === undefined || moduleVisible(permissions, m.key) ? () => router.push(route as never) : undefined;
   };
-  const has = (p: string) => cards.some((c) => c.projection === p);
+  const has = (p: string) => cards.some((c) => c.projection === p) && !anlikKapali(p);
   // Sipariş + finans anlığı Dikkat şeridini de besler (her kipte); diğerleri yalnız yerel kutular için.
   const on = (p: string) => !uzak && has(p);
   const orders = useSnapshot("ozet.siparis", has("ozet.siparis"));
