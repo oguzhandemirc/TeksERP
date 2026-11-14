@@ -47,6 +47,9 @@ export function applyModuleCeiling(settingKey: string, rawEnabled: boolean): boo
   return allowed;
 }
 
+/** Lisans tavanı reddinin `details.code`u; okuyucular (ör. patron kapalı küme hükmü) literal yerine bunu kullanır. */
+export const LICENSE_MODULE_CODE = "LICENSE_MODULE";
+
 /** Lisans bu modülü kapatıyorsa 403 `LICENSE_MODULE` (adlı modül kapıları), değilse null. */
 export function licenseModuleError(settingKey: string, label: string): AppError | null {
   const snap = readySnapshot();

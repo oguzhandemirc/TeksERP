@@ -6,7 +6,7 @@ import { useMemo, useState } from "react";
 import { Text, View } from "react-native";
 import { yetenek } from "../../../src/api/yetenek";
 import { PANO_DONEMLERI, type PanoDonem, type PanoKutuTanimi } from "../../../src/api/pano";
-import { can, MODULES, moduleVisible, visibleCards, visibleModules, type ModuleKey } from "../../../src/lib/access";
+import { can, menuModules, MODULES, moduleVisible, visibleCards, type ModuleKey } from "../../../src/lib/access";
 import { PERIOD_LABEL, UNIT } from "../../../src/lib/labels/uretim";
 import { TERIM } from "../../../src/lib/terim";
 import { useSession } from "../../../src/state/session";
@@ -273,7 +273,7 @@ function yerelKutu(key: string, d: YerelVeri, go: Go): KpiCardProps | null {
 /** Özet izni olmayan hesap: görebildiği bölümler (izinliler) gruplu liste olarak. */
 function Reachable({ permissions, onOpen }: { readonly permissions: readonly string[]; readonly onOpen: (route: string) => void }) {
   const s = useStyles();
-  const mods = visibleModules(permissions).filter((m) => m.key !== "pano");
+  const mods = menuModules(permissions).filter((m) => m.key !== "pano");
   return (
     <View testID="gorebildigin-alanlar">
       <Text style={s.intro}>Fabrika özetini görme yetkin yok; aşağıdaki bölümlerle çalışabilirsin. Özet için tesis yöneticine başvur.</Text>

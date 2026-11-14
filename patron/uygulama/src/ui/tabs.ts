@@ -1,6 +1,6 @@
 // Telefon alt sekmeleri (K3): Pano · Üretim · Siparişler · Finans · Diğer. Yollar SABİT — bildirim rotaları,
 // `safeRoute` ve `public/bildirim-sw.js` bunlara bağlı. İzinsiz sekme çizilmez (`href: null`); Pano ve Diğer hep var.
-import { moduleNavTitle, moduleVisible, type ModuleKey } from "../lib/access";
+import { moduleInMenu, moduleNavTitle, type ModuleKey } from "../lib/access";
 import { MODULE_ICON, MORE_ICON, type IconName } from "./icons";
 import type { Domain } from "./tokens";
 
@@ -25,7 +25,7 @@ export const TABS: readonly TabDef[] = [
 ];
 
 export function tabVisible(perms: readonly string[], tab: TabDef): boolean {
-  return tab.module === undefined || moduleVisible(perms, tab.module);
+  return tab.module === undefined || moduleInMenu(perms, tab.module);
 }
 
 export function visibleTabs(perms: readonly string[]): TabDef[] {

@@ -38,7 +38,6 @@ const EXEMPT: Record<string, string> = {
   "Finance/Cheques/DeliveryNoteCancelPanel.tsx": GOMULU,
   "Finance/PeriodClose/CashPeriodSection.tsx": GOMULU,
   "Operations/GelenBelgeler/LinesTable.tsx": GOMULU,
-  "Operations/Orders/production-proposal/ProposalInsights.tsx": GOMULU,
   "Operations/ProductBalance/ProductBalanceRow.tsx": GOMULU,
   "Operations/PurchaseOrders/GoodsReceiptOrderSection.tsx": GOMULU,
   "Operations/Rolls/card/RollInfoTable.tsx": GOMULU,

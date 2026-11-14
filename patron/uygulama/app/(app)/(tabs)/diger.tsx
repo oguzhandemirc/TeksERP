@@ -3,7 +3,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
 import { Pressable, Text, View } from "react-native";
-import { MODULES, moduleDef, moduleNavTitle, moduleVisible } from "../../../src/lib/access";
+import { MODULES, moduleDef, moduleInMenu, moduleNavTitle, moduleVisible } from "../../../src/lib/access";
 import { yetenek } from "../../../src/api/yetenek";
 import { okunmamisRozeti } from "../../../src/lib/erp-bildirim";
 import { useSession } from "../../../src/state/session";
@@ -57,7 +57,7 @@ export default function More() {
         <Ionicons name="chevron-forward" size={18} color={t.textMuted} />
       </Pressable>
       {MORE_GROUPS.map((g) => {
-        const mods = g.modules.filter((k) => moduleVisible(permissions, k)).map((k) => MODULES.find((m) => m.key === k)!);
+        const mods = g.modules.filter((k) => moduleInMenu(permissions, k)).map((k) => MODULES.find((m) => m.key === k)!);
         if (mods.length === 0) return null;
         return [
           <SectionHeader key={`${g.title}-h`} title={g.title} />,
