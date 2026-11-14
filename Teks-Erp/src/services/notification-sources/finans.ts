@@ -8,6 +8,7 @@
 // =============================================================================
 import { InvoiceType, PaymentDirection, PaymentMethod, type Prisma } from "@prisma/client";
 import { emitNotification, type EmitDb } from "../helpers/notification-emit.helper";
+import { sequentialTx } from "../helpers/tx-sequential-relations.helper";
 import { off, who, type Actor } from "./satis";
 
 type Tx = EmitDb & Prisma.TransactionClient;
@@ -23,7 +24,7 @@ const INVOICE_TYPE_LABEL: Record<InvoiceType, string> = {
 
 /** Cari hesabın görünen adı (kart ya da geçiş artığı fason profili). */
 export async function cariDisplayName(tx: Tx, cariId: string): Promise<string> {
-  const c = await tx.cariAccount.findUnique({
+  const c = await sequentialTx(tx).cariAccount.findUnique({
     where: { id: cariId },
     select: { customer: { select: { name: true } }, subcontractor: { select: { name: true } } },
   });
