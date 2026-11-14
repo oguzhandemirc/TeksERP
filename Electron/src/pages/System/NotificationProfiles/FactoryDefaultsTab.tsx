@@ -9,19 +9,11 @@ import { Input } from "@/components/ui/input";
 import { actionErrorMessage } from "@/pages/Operations/LoomAlarms/useLoomAlarmActions";
 import { bildirimProfilService, type FactoryDefaultKind, type FactoryDefaultState } from "@/services/bildirimProfilService";
 import { cn } from "@/lib/utils";
-import { FACTORY_LABEL, allowsOff, factoryChanges, factoryDraftFrom, groupKinds, type FactoryDraftRow } from "./model";
+import { FACTORY_LABEL, allowsOff, esikEtiketi, factoryChanges, factoryDraftFrom, groupKinds, type FactoryDraftRow } from "./model";
 import { candidatesKey, PROFILES_QUERY_ROOT } from "./queries";
 import { UserPickerDialog } from "./UserPickerDialog";
 
 const STATES: FactoryDefaultState[] = ["MIRAS", "ACIK", "KAPALI", "KILITLI"];
-// Katalog `paramSemasi` alan adları → görünen ad (bilinmeyen alan adıyla görünür, sessizce kaybolmaz).
-const ESIK_LABEL: Record<string, string> = {
-  gun: "Eşik (gün)",
-  kalanGun: "Kalan gün eşiği",
-  dakika: "Eşik (dakika)",
-  oranYuzde: "Oran eşiği (%)",
-  minMetre: "En az metre",
-};
 
 export function FactoryDefaultsTab({ kinds }: { kinds: readonly FactoryDefaultKind[] }) {
   const qc = useQueryClient();
@@ -115,12 +107,12 @@ function FactoryRow({ kind: k, row, names, onPatch, onPick }: RowProps) {
         {k.esikVar &&
           Object.keys(row.esikMetin).map((f) => (
             <label key={f} className="flex items-center gap-1.5">
-              <span className="text-muted-foreground">{ESIK_LABEL[f] ?? f}</span>
+              <span className="text-muted-foreground">{esikEtiketi(k.tur, f)}</span>
               <Input
                 inputMode="decimal"
                 className="h-7 w-20 text-right"
                 value={row.esikMetin[f]}
-                aria-label={`${k.ad}: ${ESIK_LABEL[f] ?? f}`}
+                aria-label={`${k.ad}: ${esikEtiketi(k.tur, f)}`}
                 onChange={(e) => onPatch({ esikMetin: { ...row.esikMetin, [f]: e.target.value } })}
               />
             </label>
