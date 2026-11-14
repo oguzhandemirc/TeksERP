@@ -3,7 +3,7 @@
 // 403/404 gelince ekrandaki (saklı) veri de düşer. Odak, öne gelme (≥5 sn aralık) ve etiket geçersizleştirmesi
 // (`changes.ts`) yeniden çeker; odakta olmayan ekran geçersizleşirse bir sonraki odakta çeker.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, errorMessage } from "../api/client";
+import { ApiError, errorMessage, isModuleClosed } from "../api/client";
 import { dueForRefetch } from "../lib/refresh";
 import { changeBus } from "./changes";
 import { useSession } from "./session";
@@ -15,6 +15,8 @@ export interface Remote<T> {
   readonly error: string | null;
   /** Son çekim 404 (kayıt/anlık yok; ör. fabrika anlığı henüz yayınlamadı) — ekran hata yerine boş durum çizebilir. */
   readonly notFound?: boolean;
+  /** Son çekim "modül fabrikada kapalı" (MODULE_DISABLED/LICENSE_MODULE) — ekran hata yerine sakin boş durum çizer. */
+  readonly closed?: boolean;
   /** Bir çekim sürüyor (ilk yükleme ya da arkadan tazeleme); ekranlar `loading && !data` ile iskelet basar. */
   readonly loading: boolean;
   /** Ekranda veri varken arkadan tazeleniyor (aşağı çek göstergesi). */
@@ -43,6 +45,7 @@ interface State<T> {
   data: T | null;
   error: string | null;
   notFound: boolean;
+  closed: boolean;
   loading: boolean;
   refreshing: boolean;
   stale: boolean;
@@ -50,7 +53,7 @@ interface State<T> {
   savedAt: string | null;
 }
 
-const blank = <T,>(loading: boolean): State<T> => ({ data: null, error: null, notFound: false, loading, refreshing: false, stale: false, offline: false, savedAt: null });
+const blank = <T,>(loading: boolean): State<T> => ({ data: null, error: null, notFound: false, closed: false, loading, refreshing: false, stale: false, offline: false, savedAt: null });
 
 export function useRemote<T>(key: string | null, fetcher: () => Promise<T>, options: RemoteOptions = {}): Remote<T> {
   const { cache, markOnline } = useSession();
@@ -75,7 +78,7 @@ export function useRemote<T>(key: string | null, fetcher: () => Promise<T>, opti
     lastFetchAt.current = Date.now();
     dirty.current = false;
     // Anahtar/kapsam değişti: önceki ekranın verisi yeni anahtarın üstünde gösterilmez.
-    setState((s) => (same ? { ...s, loading: true, refreshing: s.data !== null, error: null, notFound: false } : blank<T>(true)));
+    setState((s) => (same ? { ...s, loading: true, refreshing: s.data !== null, error: null, notFound: false, closed: false } : blank<T>(true)));
     if (!same) {
       cache
         .peek<T>(key)
@@ -91,18 +94,20 @@ export function useRemote<T>(key: string | null, fetcher: () => Promise<T>, opti
         settled = true;
         if (!alive) return;
         markOnline(!r.offline, r.savedAt);
-        setState({ data: r.data, error: null, notFound: false, loading: false, refreshing: false, stale: r.offline, offline: r.offline, savedAt: r.savedAt });
+        setState({ data: r.data, error: null, notFound: false, closed: false, loading: false, refreshing: false, stale: r.offline, offline: r.offline, savedAt: r.savedAt });
       })
       .catch((err: unknown) => {
         settled = true;
         if (!alive) return;
         // İzni kalkan / silinen kayıt: önbellek sildi, ekrandaki saklı kopya da düşer.
         const drop = err instanceof ApiError && (err.kind === "YETKI" || err.kind === "BULUNAMADI");
+        const closed = isModuleClosed(err);
         setState((s) => ({
           ...s,
           ...(drop ? { data: null, savedAt: null, stale: false } : null),
           error: errorMessage(err),
           notFound: err instanceof ApiError && err.kind === "BULUNAMADI",
+          closed,
           loading: false,
           refreshing: false,
         }));

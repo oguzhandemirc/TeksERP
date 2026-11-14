@@ -95,7 +95,8 @@ function statik(): void {
   check("§2b ⭐ patron/sunucu hazırlık alanına yalnız tel sözleşmesinde dokunur (hesap/süzme yok)", cloudExtra.length === 0, cloudExtra.join(", ") || "temiz");
   const app = APP_DIRS.flatMap(walk).filter((f) => /\bsevkeHazir\b|\bhazir(Top|Metre)\b/.test(readFileSync(f, "utf8")));
   // Tel aynası (bayt-eşit kopya) tip/etiket taşır; görünüm dışında alanı okuyan dosya yok.
-  const allowed = new Set([path.relative(ROOT, APP_VIEW), "patron/uygulama/src/api/wire.ts"]);
+  // Pano kutusu görünümü ayrı teldir: `bekleyen.sevkeHazir` fabrika panosunun hazır sayısıdır (bulut türetmesi değil), aynen basılır.
+  const allowed = new Set([path.relative(ROOT, APP_VIEW), "patron/uygulama/src/api/wire.ts", "patron/uygulama/src/ui/pano/kutu-gorunum.ts"]);
   const appExtra = app.map((f) => path.relative(ROOT, f)).filter((f) => !allowed.has(f));
   const arith = arithmeticIn(readFileSync(APP_VIEW, "utf8"));
   check("§2c ⭐ uygulamada alanı yalnız görünüm okur; görünümde sayı karşılaştırması/aritmetik yok", appExtra.length === 0 && arith.length === 0, [...appExtra, ...arith].join(", ") || "temiz");

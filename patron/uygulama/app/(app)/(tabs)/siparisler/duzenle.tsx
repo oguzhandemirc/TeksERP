@@ -54,7 +54,7 @@ export default function EditOrder() {
     if (izin && id) void oku();
   }, [izin, id, oku]);
 
-  if (!izin) return <Screen title="Sipariş düzenle" module="siparisler" back><Muted>Bu işlem için yetkiniz yok.</Muted></Screen>;
+  if (!izin) return <Screen sheet title="Sipariş düzenle" module="siparisler" back><Muted>Bu işlem için yetkiniz yok.</Muted></Screen>;
   const set = (p: Partial<SiparisFormu>) => setForm((f) => (f ? { ...f, ...p } : f));
   const kapali = kayit !== null && (kayit.durum === "COMPLETED" || kayit.durum === "CANCELLED");
   const surumsuz = kayit !== null && kayit.surum === null;
@@ -91,7 +91,7 @@ export default function EditOrder() {
   const fark = taze && form ? farkSatirlari(form, siparisFormu(taze), ETIKET) : [];
   const cari: Picked | null = form?.cariKartId ? { id: form.cariKartId, title: form.cariAdi || "Seçili cari" } : null;
   return (
-    <Screen title={kayit?.no ? `${kayit.no} düzenle` : "Sipariş düzenle"} module="siparisler" back>
+    <Screen sheet title={kayit?.no ? `${kayit.no} düzenle` : "Sipariş düzenle"} module="siparisler" back>
       {!kayit && !loadError ? <LoadingSkeleton rows={3} /> : null}
       {loadError && !kayit ? <ErrorState text={loadError} onRetry={() => void oku()} /> : null}
       {kayit && form ? (

@@ -51,7 +51,7 @@ export default function EditItem() {
     if (izin && id) void oku();
   }, [izin, id, oku]);
 
-  if (!izin) return <Screen title="Ürün düzenle" module="urunler" back><Muted>Bu işlem için yetkiniz yok.</Muted></Screen>;
+  if (!izin) return <Screen sheet title="Ürün düzenle" module="urunler" back><Muted>Bu işlem için yetkiniz yok.</Muted></Screen>;
 
   async function kaydet() {
     if (!kayit || ad === null || offline) return;
@@ -82,7 +82,7 @@ export default function EditItem() {
   }
 
   return (
-    <Screen title={kayit ? `${kayit.kod} düzenle` : "Ürün düzenle"} module="urunler" back>
+    <Screen sheet title={kayit ? `${kayit.kod} düzenle` : "Ürün düzenle"} module="urunler" back>
       {!kayit && !loadError ? <LoadingSkeleton rows={2} /> : null}
       {loadError && !kayit ? <ErrorState text={loadError} onRetry={() => void oku()} /> : null}
       {kayit && ad !== null ? (

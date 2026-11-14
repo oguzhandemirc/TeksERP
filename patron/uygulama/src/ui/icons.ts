@@ -52,6 +52,8 @@ export const EMPTY_ICON = {
   bekliyor: "hourglass-outline",
   /** İzin yok: listelenecek bir şey kalmadı. */
   yetki: "lock-closed-outline",
+  /** Modül fabrikada kapalı (bayrak/lisans) — hata değil. */
+  kapali: "pause-circle-outline",
   /** Kayıt bulunamadı (silinmiş ya da erişim dışı). */
   bulunamadi: "help-circle-outline",
   /** Bildirim yok / ayar okunamadı. */

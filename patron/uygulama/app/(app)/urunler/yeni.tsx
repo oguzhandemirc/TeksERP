@@ -36,7 +36,7 @@ export default function NewItem() {
     }
   }, [yazici, built]);
   const w = useWrite(send);
-  if (!islemVar("urun.ekle", permissions)) return <Screen title="Yeni ürün" module="urunler" back><Muted>Bu işlem için yetkiniz yok.</Muted></Screen>;
+  if (!islemVar("urun.ekle", permissions)) return <Screen sheet title="Yeni ürün" module="urunler" back><Muted>Bu işlem için yetkiniz yok.</Muted></Screen>;
 
   async function submit() {
     if (!built.ok) return setFormError(built.error);
@@ -49,7 +49,7 @@ export default function NewItem() {
   }
   const shown = formError ?? w.error;
   return (
-    <Screen title="Yeni ürün" module="urunler" back>
+    <Screen sheet title="Yeni ürün" module="urunler" back>
       <Card domain="stok">
         <Field label="Ad" value={f.ad} onChangeText={(v) => setF((o) => ({ ...o, ad: v }))} testID="urun-ad" placeholder="Örn. POPLIN 120" />
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.xs }}>

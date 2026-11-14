@@ -34,6 +34,8 @@ export interface ErpMe {
   readonly patronReportExport?: number;
   /** Push köprüsü sürümü (`POST/DELETE /api/bildirim/cihaz`); yalnız fabrikanın push kapısı açıkken gelir. */
   readonly patronPush?: number;
+  /** Pano kutuları ucu sürümü (`/patron/v1/pano[/kutular]`); yoksa yerel anlık panosu. */
+  readonly patronPano?: number;
 }
 
 export interface ErpLoginResult {

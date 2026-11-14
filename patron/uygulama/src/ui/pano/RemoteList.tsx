@@ -9,7 +9,7 @@ import { useSession } from "../../state/session";
 import { useRemote, type Remote } from "../../state/useRemote";
 import { Button } from "../kit";
 import { ListGroup } from "../ListRow";
-import { Empty, ErrorState, LoadingSkeleton } from "../StateViews";
+import { Empty, ErrorState, LoadingSkeleton, ModuleClosed } from "../StateViews";
 import type { IconName } from "../icons";
 import type { Domain } from "../tokens";
 
@@ -60,6 +60,7 @@ export function RemoteList({ projection, remote, renderRow, empty, domain, empty
 
   if (!first) {
     if (remote.loading) return <LoadingSkeleton variant="list" rows={4} testID={testID ? `${testID}-yukleniyor` : undefined} />;
+    if (remote.closed) return <ModuleClosed testID={testID ? `${testID}-kapali` : undefined} />;
     if (remote.error) return <ErrorState text={remote.error} onRetry={remote.reload} testID={testID ? `${testID}-hata` : undefined} />;
     return null;
   }
