@@ -10,6 +10,8 @@
 //   §V1 saf: `dueWindowState` sınırları (−pencere … −1 yaklaşan, 0 gecikmiş, vadesiz) + gruplama (yön, sayı, gün).
 //   §V2 DB: gerçek faturalarla kaynak konuları = raporun kalem kovalarından BAĞIMSIZ türetilen küme (boğaz-ikiz);
 //       ödenmiş/uzak vadeli fatura konu doğurmaz; tolerans eşiği; modül kapalı → boş; yükte tutar yok.
+//   §C cari.degisti: gerçek `CustomerService.update` → tek outbox satırı, değişen alan ADLARI metinde (değer yok); değişiklik
+//       yoksa / yalnız iç kolon değiştiyse satır yok; kanca fırlatınca kart da outbox da geri sarılır (aynı tx).
 // NEGATİF SONDA: bölüm başlıklarında (aşağıda, bölüm bölüm).
 // =============================================================================
 import { readFileSync } from "node:fs";
@@ -25,6 +27,9 @@ import { dueWindowState } from "../src/services/helpers/invoice-due.helper";
 import { collectAgingRows, getAgingReport, isOverdueBucket } from "../src/services/reports/finance-aging.report";
 import { dueSoonSubjects, groupDueItems, overdueSubjects, overrideDueSourceDeps } from "../src/services/notification-sources/finans-vade";
 import { cleanupTestCustomers } from "./fixture-customer-cleanup";
+import { SETTING_KEYS } from "../src/services/system-setting.service";
+import { CustomerService } from "../src/services/customer.service";
+import { emitCustomerChangedTx } from "../src/services/notification-sources/anaveri";
 
 let pass = 0;
 let fail = 0;
@@ -158,6 +163,52 @@ async function bolumV2(): Promise<void> {
   }
 }
 
+// ── §C cari.degisti ────────────────────────────────────────────────────────
+// NEGATİF SONDA (2026-11-14): CustomerService'ten `afterUpdateTx` kaldırıldı → §Ca/§Cc/§Cd/§Ce ❌; BaseService'te kanca tx
+//   DIŞINDA çağrıldı (yazım tx'siz) → §Cd ❌ (kart adı geri sarılmadı). İkisi de geri alındı.
+class Patlat extends Error {}
+async function bolumC(): Promise<void> {
+  console.log("\n§C cari.degisti — gerçek CustomerService.update");
+  const engel = hedefDbEngeli();
+  if (engel) throw new Error(`DURDURULDU — ${engel}`);
+  const key = SETTING_KEYS.BILDIRIM_GELEN_KUTUSU_ENABLED;
+  const ilk = await prisma.systemSetting.findUnique({ where: { key } });
+  // Route config'iyle birebir (customer.routes.ts).
+  const svc = new CustomerService({
+    modelName: "customer", tableName: "CUSTOMER", searchFields: ["name"], codeSearchFields: ["code", "taxNumber", "exportCode"],
+    defaultInclude: undefined, uniqueField: "code", nestedCreateFields: ["branches"],
+  });
+  const cust = await prisma.customer.create({ data: { code: `TEST-BBC-${ek}`, name: `TEST-BBC Müşteri ${ek}` }, select: { id: true } });
+  const satirlar = () => prisma.notificationOutbox.findMany({ where: { kind: "cari.degisti", subjectId: cust.id }, select: { id: true, payload: true } });
+  try {
+    await prisma.systemSetting.upsert({ where: { key }, create: { key, value: true }, update: { value: true } });
+    await svc.update(cust.id, { name: `TEST-BBC Müşteri ${ek} Yeni`, contactPhone: "05550000000" });
+    const r1 = await satirlar();
+    const p = (r1[0]?.payload ?? {}) as Record<string, unknown>;
+    check("§Ca ⭐ kart güncellemesi tek cari.degisti satırı yazar, alan adları metinde", r1.length === 1 && typeof p.alanlar === "string" && p.alanlar.includes("Ad"), JSON.stringify(p));
+    check("§Cb yükte alan DEĞERİ yok (telefon metne girmez)", !JSON.stringify(p).includes("05550000000"));
+    await svc.update(cust.id, { contactPhone: "05550000000" });
+    check("§Cc değişiklik yoksa satır yok", (await satirlar()).length === 1);
+    const asil = svc["afterUpdateTx"]!.bind(svc);
+    (svc as unknown as { afterUpdateTx: typeof asil }).afterUpdateTx = async (tx, ctx) => { await asil(tx, ctx); throw new Patlat(); };
+    const patladi = await svc.update(cust.id, { city: "TEST-Şehir" }).then(() => false, (e: unknown) => e instanceof Patlat);
+    const kart = await prisma.customer.findUnique({ where: { id: cust.id }, select: { city: true } });
+    check("§Cd ⭐ kanca fırlatınca kart ve outbox birlikte geri sarılır (aynı tx)", patladi && kart?.city !== "TEST-Şehir" && (await satirlar()).length === 1, `${patladi}/${kart?.city}`);
+    let ic = -1;
+    await prisma.$transaction(async (tx) => {
+      await emitCustomerChangedTx(tx, cust.id, [{ field: "nameFold" }, { field: "updatedAt" }, { field: "type" }, { field: "clientToken" }], null);
+      ic = await tx.notificationOutbox.count({ where: { kind: "cari.degisti", subjectId: cust.id } });
+      throw new Patlat();
+    }).catch((e: unknown) => { if (!(e instanceof Patlat)) throw e; });
+    check("§Ce yalnız iç kolon değişimi bildirim doğurmaz (opt-in liste)", ic === 1, `${ic}`);
+  } finally {
+    await prisma.notificationOutbox.deleteMany({ where: { kind: "cari.degisti", subjectId: cust.id } });
+    await cleanupTestCustomers([cust.id]);
+    if (ilk) await prisma.systemSetting.update({ where: { key }, data: { value: (ilk.value ?? Prisma.JsonNull) as Prisma.InputJsonValue } });
+    else await prisma.systemSetting.deleteMany({ where: { key } });
+  }
+}
+
 function bolumK7(): void {
   console.log("\n§K7 modül kapısı");
   const viewer = { permissions: ["*"] };
@@ -172,6 +223,7 @@ async function main(): Promise<void> {
   bolumV1();
   bolumK7();
   await bolumV2();
+  await bolumC();
 }
 
 main()

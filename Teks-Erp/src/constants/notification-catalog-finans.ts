@@ -114,6 +114,14 @@ export const FINANS_NOTIFICATION_ENTRIES = {
     payloadAlanlari: ["cariId", "cariAd", "cariKodu", "kullanici"],
     tahminiHaftalik: 3,
   },
+  // S5b: değişen alanların yalnız ADLARI (değer yok — iletişim/vergi bilgisi ve iç kolon metne girmez; liste opt-in).
+  "cari.degisti": {
+    ...CARI_KART, kod: "cari.degisti", ad: "Cari kart değişti",
+    baslik: "Cari kart değişti: {cariAd}",
+    govde: "{kullanici} {cariAd} ({cariKodu}) kartını düzenledi: {alanlar}",
+    payloadAlanlari: ["cariId", "cariAd", "cariKodu", "alanlar", "kullanici"],
+    tahminiHaftalik: 5,
+  },
   "cari.pasife-alindi": {
     ...CARI_KART, kod: "cari.pasife-alindi", ad: "Cari kart pasife alındı",
     baslik: "Cari pasife alındı: {cariAd}",

@@ -7,6 +7,7 @@
 // =============================================================================
 import type { Prisma } from "@prisma/client";
 import { emitNotification, type EmitDb } from "../helpers/notification-emit.helper";
+import { auditFieldLabel } from "../../constants/audit-field-labels";
 import { off, who, type Actor } from "./satis";
 
 type Tx = EmitDb & Prisma.TransactionClient;
@@ -24,6 +25,27 @@ export async function emitCustomerCardCreatedTx(tx: Tx, customerId: string, acto
   const f = await cardFacts(tx, customerId);
   if (!f) return;
   await emitNotification(tx, "cari.olusturuldu", subject("customer", customerId), f, { actorUserId: who(actor) });
+}
+
+/**
+ * Metne girebilen müşteri kartı alanları — OPT-IN (iç kolon: id/künye/`nameFold`/`type` türevi/birleştirme/token yok).
+ * Listede olmayan alanın değişimi bildirim doğurmaz.
+ */
+export const CUSTOMER_CHANGE_FIELDS: ReadonlySet<string> = new Set([
+  "name", "code", "taxNumber", "exportCode", "address", "city", "district", "country", "defaultDestination",
+  "contactName", "contactPhone", "email", "notes", "isCustomerRole", "isSupplierRole", "isSubcontractorRole", "isActive",
+  "documentProfileId", "labelWidthSource", "tamburWeighRequired", "tamburSplitLengthM", "tamburLabelBatchEnabled",
+  "labelShowGlobalTemplates",
+]);
+
+/** `cari.degisti` — kart güncellemesinin tx'i (`CustomerService.afterUpdateTx` ← `BaseService.updateCore`); yük alan ADLARI. */
+export async function emitCustomerChangedTx(tx: Tx, customerId: string, changes: ReadonlyArray<{ field: string }>, actor: Actor): Promise<void> {
+  const alanlar = [...new Set(changes.map((c) => c.field).filter((f) => CUSTOMER_CHANGE_FIELDS.has(f)))].map(auditFieldLabel);
+  if (alanlar.length === 0) return;
+  if (await off(tx)) return;
+  const f = await cardFacts(tx, customerId);
+  if (!f) return;
+  await emitNotification(tx, "cari.degisti", subject("customer", customerId), { ...f, alanlar: txt(alanlar.join(", "), 200) }, { actorUserId: who(actor) });
 }
 
 /** `cari.pasife-alindi` — arşiv kapısının yazımı (`CustomerService` update/softDelete → `archiveMasterData`). */

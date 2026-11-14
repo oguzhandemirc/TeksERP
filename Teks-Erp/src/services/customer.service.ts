@@ -5,7 +5,7 @@
 //   - create / update: taxNumber format kontrolü (VKN/TCKN + esnek yabancı VAT)
 // =============================================================================
 
-import { BaseService, BaseServiceConfig, withActor } from "./base.service";
+import { BaseService, BaseServiceConfig, withActor, type UpdateTxContext } from "./base.service";
 import { withCustomerHolds } from "./helpers/cari-hold-badge.helper";
 import { ApiResponse } from "../types/api.types";
 import { AppError } from "../utils/app-error";
@@ -25,7 +25,7 @@ import type { Request } from "express";
 import { gatedSoftDelete, gatedUpdate } from "./helpers/master-data-archive.helper";
 import { CUSTOMER_ARCHIVE } from "./helpers/archive-gate/customer-archive.helper";
 import { takeExpectedUpdatedAt, updatedAtIs } from "./helpers/stale-record.helper";
-import { emitCustomerArchivedTx, emitCustomerCardCreatedTx } from "./notification-sources/anaveri";
+import { emitCustomerArchivedTx, emitCustomerCardCreatedTx, emitCustomerChangedTx } from "./notification-sources/anaveri";
 
 /**
  * VKN (10 hane), TCKN (11 hane) ve yabancı VAT/EIN (12-15 hane) için ortak
@@ -378,6 +378,9 @@ export class CustomerService extends BaseService {
       next: (rest) => this.updateCore(id, rest, userId, expected ? { updatedAt: updatedAtIs(expected) } : undefined),
     });
   }
+
+  /** `cari.degisti`: BaseService kart yazımını bu kancayla tek tx'e alır (geri alınan güncelleme bildirim doğurmaz). */
+  protected override async afterUpdateTx(tx: Prisma.TransactionClient, c: UpdateTxContext): Promise<void> { await emitCustomerChangedTx(tx, c.id, c.changes, c.userId); }
 
   /**
    * `DELETE` = pasife al — arşiv kapısından (URUN-YASAM-DONGUSU.md §6). Eski M-26 "açık
