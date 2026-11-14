@@ -145,6 +145,7 @@ import notificationRoutes from "./routes/bildirim.routes";
 import patronPushRoutes from "./routes/patron-push.routes";
 import patronReadRoutes from "./routes/patron-read.routes";
 import patronReportRoutes from "./routes/patron-rapor.routes";
+import patronPanoRoutes from "./routes/patron-pano.routes";
 import { isNotificationBellPath } from "./constants/notification-stream";
 import { latencyMiddleware } from "./middlewares/latency.middleware";
 import { requestTraceMiddleware } from "./middlewares/request-trace.middleware";
@@ -768,6 +769,7 @@ app.use("/api/hata-raporlari", errorReportRoutes);
 app.use("/api/patron-bulut", patronCloudRoutes);
 // Patron telefon uygulaması okuma ucu (V3a): bulut okuma biçiminde canlı ERP verisi.
 app.use("/api/patron/v1/raporlar", patronReportRoutes);
+app.use("/api/patron/v1/pano", patronPanoRoutes);
 app.use("/api/patron/v1", patronReadRoutes);
 // Bildirim zili + gelen kutusu (kişisel uçlar, verifyToken; bayrak `bildirim.gelenKutusuEnabled`).
 // Patron push cihazı (köprü P2) — genel bildirim router'ından ÖNCE: kendi kapısı (`patron-app:login`) ve bayrağı var.
