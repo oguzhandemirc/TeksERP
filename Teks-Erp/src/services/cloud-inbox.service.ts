@@ -219,7 +219,7 @@ async function createCardFromMessage(f: ReceiptFields, data: Record<string, unkn
     prisma.$transaction(async (tx) => {
       const replayed = await replay.inTx(tx, f.msg.mesajId);
       if (replayed) return { replay: true as const, replayed };
-      const born = await svc.createCardInTx(tx, plan, actorUserId);
+      const born = await svc.createCardInTx(tx, plan, actorUserId, { notify: false });
       const receipt = await tx.cloudInboxReceipt.create({
         data: receiptData(f, CloudInboxOutcome.ISLENDI, born.card.id as string, {
           varlikId: born.card.id,

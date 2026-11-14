@@ -26,6 +26,7 @@ import {
   verifyTotp,
   RECOVERY_CODE_BCRYPT_COST,
 } from "./totp.service";
+import { emitTotpResetTx } from "./notification-sources/yetki";
 
 /** Kurulum penceresinin ömrü. Kısa: bağlantı bir sohbet/telefon görüşmesi
  *  boyunca kullanılır, gün boyu açık kalan bir kapı olması amaçlanmadı. */
@@ -369,6 +370,7 @@ export class TotpAccountService {
         where: { userId: params.userId, consumedAt: null },
         data: { expiresAt: new Date() },
       });
+      await emitTotpResetTx(tx, params.userId, params.byId);
       // Doğrulama sıfırlandı → "hatırlanan" tarayıcılar da kodsuz giremez (aynı tx).
       return revokeAllTrustedDevicesTx(tx, params.userId, "TOTP_RESET", params.byId);
     });

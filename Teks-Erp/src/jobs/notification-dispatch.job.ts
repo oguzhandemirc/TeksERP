@@ -17,6 +17,8 @@ import { startNotificationConditionScanner, stopNotificationConditionScanner } f
 import { startNotificationDigestScheduler, stopNotificationDigestScheduler } from "./notification-digest.job";
 import { registerSalesDigestSources } from "../services/notification-sources/satis-ozet";
 import { registerDepotDigestSources } from "../services/notification-sources/depo-ozet";
+import { registerFinanceDigestSources } from "../services/notification-sources/finans-ozet";
+import { registerFinanceConditionSources } from "../services/notification-sources/finans-kosul";
 import { registerSystemConditionSources } from "../services/notification-sources/sistem";
 import { registerReadyWorkConditionSource, registerWorkConditionSources } from "../services/notification-sources/is";
 import { registerQualityConditionSources } from "../services/notification-sources/kalite";
@@ -191,6 +193,8 @@ export function startNotificationJobs(): void {
   registerLoomAlarmRecipientResolver(); // tezgah alarmı donmuş alıcı (N2-ALARM)
   registerSalesDigestSources(); // S1 özetleri: gün sonu sipariş · vardiya sonu planlama
   registerDepotDigestSources(); // S3 özetleri: gün sonu sevkiyat · depo · fason
+  registerFinanceDigestSources(); // S4 özeti: gün sonu finans (sayılar, tutar yok)
+  registerFinanceConditionSources(); // S4 koşulu: çek/senet vadesi
   registerIdentityRecipientResolvers(); // yeni cihazla web girişi: kişinin kendisi + kullanıcı yöneticileri
   firstTimer = setTimeout(() => void reconcileNotificationJobs(), STARTUP_DELAY_MS);
   firstTimer.unref();

@@ -174,7 +174,7 @@ export const itemImportAdapter: ImportAdapter = {
 
   async createOne(row: PreparedRow, ctx: ImportContext) {
     const payload = toServicePayload(row);
-    const res = await itemService.create(payload, ctx.userId);
+    const res = await itemService.create(payload, ctx.userId, { notify: false }); // toplu aktarım tek tek bildirim üretmez
     return { id: (res.data as { id: string }).id };
   },
 

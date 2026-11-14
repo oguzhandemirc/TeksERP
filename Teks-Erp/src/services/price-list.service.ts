@@ -25,6 +25,7 @@ import { tokenReplay } from "./helpers/token-replay.helper";
 import { readQuoteToken } from "./sales-quote-transitions.service";
 import { freezePriceListDocumentTx } from "./quote-documents.service";
 import { assertRecipesMatchItems, LINE_RECIPE_SELECT, readRecipeId } from "./helpers/line-recipe.helper";
+import { emitPriceListPublishedTx } from "./notification-sources/maliyet";
 
 export const PRICE_LIST_TABLE = "PRICE_LIST";
 export const PRICE_LIST_INCLUDE = {
@@ -263,6 +264,7 @@ export async function publishPriceList(id: string, userId?: string): Promise<Pri
       });
       const r = await tx.priceList.updateMany({ where: { id, status: "DRAFT" }, data: { status: "PUBLISHED", publishedAt: now, publishedById: userId ?? null, updatedById: userId ?? null } });
       if (r.count === 0) throw await claimError(tx, id);
+      await emitPriceListPublishedTx(tx, id, userId);
       // Belge yayın ANINDA donar (lazy "geriye dönük" değil); hata yayını geri sarar.
       await freezePriceListDocumentTx(tx, id, userId);
       return tx.priceList.findUniqueOrThrow({ where: { id }, include: PRICE_LIST_INCLUDE });

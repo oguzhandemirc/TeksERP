@@ -25,6 +25,7 @@ import {
   MAX_DEVICE_ROWS, assertDeviceRowCapacity, countSeatDevices, writeBindingEventTx, type HwClaim,
   listMergedCopies, readMergeLink,
 } from "./helpers/device-identity.helper";
+import { emitDevicePendingTx } from "./notification-sources/yetki";
 
 /** Kanıt tuzu hiçbir yanıta/audit yüküne girmez. */
 const DEVICE_SECRET_OMIT = { proofSalt: true } as const;
@@ -375,6 +376,7 @@ export class DeviceService {
           // `ip`: kaynak tavanının sayım anahtarı + onay ekranındaki "nereden geldi" bilgisi.
           meta: { status: row.status, kaynak: "ANNOUNCE", ...(input.source ? { ip: input.source } : {}) },
         });
+        await emitDevicePendingTx(tx, row);
         return row;
       });
     } catch (e) {

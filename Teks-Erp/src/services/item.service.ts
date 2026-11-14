@@ -63,6 +63,7 @@ import {
 import { serviceItemService } from "./service-item.service";
 import type { PaginatedResponse } from "../types/api.types";
 import type { CursorPaginatedResponse } from "./base.service";
+import { emitItemCreatedTx } from "./notification-sources/anaveri";
 
 export interface ItemCreateInput {
   /** Boş/verilmezse backend `STK-NNNNNN` üretir; doluysa manuel kod kabul edilir. */
@@ -294,7 +295,7 @@ export class ItemService extends BaseService {
   async create(
     data: Record<string, unknown>,
     userId: string | undefined,
-    opts?: { pendingReview?: boolean; clientToken?: string },
+    opts?: { pendingReview?: boolean; clientToken?: string; notify?: boolean },
   ): Promise<ApiResponse<unknown>> {
     // Oluşturan doğuşta yazılır (künye); BaseController `req.user?.userId` verir, eksikse 401.
     const actorId = requireActorId(userId, "Ürün kartı");
@@ -417,10 +418,7 @@ export class ItemService extends BaseService {
           let target: CodeCandidate | null = null;
           if (manualCode) {
             await lockCodeScopeTx(tx, ITEM_CODE_LOCK_SCOPE, manualCode);
-            target = resolveReactivateTarget(
-              manualCode,
-              await tx.item.findMany({ select: ITEM_CODE_CANDIDATE_SELECT }),
-            );
+            target = resolveReactivateTarget(manualCode, await tx.item.findMany({ select: ITEM_CODE_CANDIDATE_SELECT }));
             await assertCodeFreeInOtherKind(tx, "item", manualCode);
           }
           if (target) {
@@ -432,9 +430,7 @@ export class ItemService extends BaseService {
               reason: "Aynı kodla yeniden oluşturuldu",
               userId: actorId,
             });
-            if (tr.idempotent) {
-              throw AppError.conflict("Bu kod ile aktif ürün zaten var");
-            }
+            if (tr.idempotent) throw AppError.conflict("Bu kod ile aktif ürün zaten var");
             // Reactivate: M:N'leri replace + güncel veri.
             // ⚠️ `code` YAZILMAZ ve YAZILMASINA GEREK YOK — `decideCodeUniqueness`
             // yalnız TAM EŞLEŞMELİ pasif kaydı diriltir (harf farkı 409'dur), yani
@@ -504,6 +500,7 @@ export class ItemService extends BaseService {
               allowedProperties: { include: { property: true } },
             },
           });
+          if (opts?.notify !== false) await emitItemCreatedTx(tx, fresh.id, actorId);
           return { record: fresh, revivedFrom: null as CodeCandidate | null };
         });
       },
