@@ -10,6 +10,7 @@ import { InvoiceType, PaymentDirection, PaymentMethod, type Prisma } from "@pris
 import { emitNotification, type EmitDb } from "../helpers/notification-emit.helper";
 import { sequentialTx } from "../helpers/tx-sequential-relations.helper";
 import { off, who, type Actor } from "./satis";
+import { emitCustomerTermsChangedTx } from "./anaveri";
 
 type Tx = EmitDb & Prisma.TransactionClient;
 const subject = (type: string, id: string) => ({ type, id, key: id });
@@ -64,4 +65,39 @@ export async function emitInvoiceCancelledTx(tx: Tx, invoiceId: string, c: { pos
   const f = await invoiceFacts(tx, invoiceId);
   if (!f) return;
   await emitNotification(tx, "finans.fatura-iptal", subject("invoice", invoiceId), { faturaId: invoiceId, ...f, sebep: txt(c.reason) }, { actorUserId: who(actor) });
+}
+
+// ── cari.degisti — finans/fason terimleri (S6b) ─────────────────────────────
+/** Cari hesap terim kolonu → metindeki alan ADI (değer metne girmez: vade/limit/fiyat tutar sınıfıdır). */
+export const CARI_TERM_LABELS = {
+  taxOffice: "Vergi dairesi", defaultCurrency: "Para birimi", paymentTermDays: "Vade günü", riskLimit: "Risk limiti",
+  notes: "Cari notu", isActive: "Cari hesap durumu", serviceBillingTrigger: "Hizmet faturalama anı",
+  kursunGramPrice: "Kurşun gram fiyatı", kursunGramCurrency: "Kurşun gram para birimi", kursunDefaultValueId: "Varsayılan kurşun gramajı",
+  vatRate: "KDV oranı", withholdingEnabled: "Tevkifat", withholdingNumerator: "Tevkifat oranı", withholdingDenominator: "Tevkifat oranı",
+  purchaseWithholdingEnabled: "Alış tevkifatı", purchaseWithholdingNumerator: "Alış tevkifat oranı", purchaseWithholdingDenominator: "Alış tevkifat oranı",
+} as const satisfies Partial<Record<keyof Prisma.CariAccountSelect, string>>;
+type TermKey = keyof typeof CARI_TERM_LABELS;
+const TERM_KEYS = Object.keys(CARI_TERM_LABELS) as TermKey[];
+const TERM_SELECT = {
+  ...Object.fromEntries(TERM_KEYS.map((k) => [k, true])) as Record<TermKey, true>,
+  customerId: true, subcontractor: { select: { customerId: true } },
+} satisfies Prisma.CariAccountSelect;
+type TermSnapshot = Record<TermKey, unknown> & { customerId: string | null; subcontractor: { customerId: string | null } | null };
+
+/** Yazımdan ÖNCE terim fotoğrafı (aynı tx). Bayrak kapalıysa `null` — sonraki adım hiçbir şey okumaz. */
+export async function captureCariTermsTx(tx: Tx, cariId: string): Promise<TermSnapshot | null> {
+  if (await off(tx)) return null;
+  return (await tx.cariAccount.findUnique({ where: { id: cariId }, select: TERM_SELECT })) as TermSnapshot | null;
+}
+
+/** Yazımdan SONRA: değişen terimlerin adları kartın `cari.degisti` satırına (kart = hesabın kartı ya da fason profilinin kartı). */
+export async function emitCariTermsChangedTx(tx: Tx, cariId: string, before: TermSnapshot | null, actor: Actor): Promise<void> {
+  if (!before) return;
+  const after = (await tx.cariAccount.findUnique({ where: { id: cariId }, select: TERM_SELECT })) as TermSnapshot | null;
+  if (!after) return;
+  const norm = (v: unknown): string => (v == null ? "" : String(v));
+  const labels = TERM_KEYS.filter((k) => norm(before[k]) !== norm(after[k])).map((k) => CARI_TERM_LABELS[k]);
+  const customerId = after.customerId ?? after.subcontractor?.customerId ?? null;
+  if (labels.length === 0 || !customerId) return;
+  await emitCustomerTermsChangedTx(tx, customerId, labels, actor);
 }

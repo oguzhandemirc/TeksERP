@@ -4,7 +4,7 @@
 // Yüklem KOPYALANMAZ: küme + yaş çıpası `helpers/stock-aging.helper.ts#loadAgedStockGroups`. Eşik katalog
 // `paramSemasi.gun` (varsayılan 30) ⊕ fabrika (`effectiveNotificationParams`); çıpa kipi `bildirim.stokYaslanan.kaynak`,
 // top kapsamı `bildirim.stokYaslanan.kapsam` (`raf` = Stok & Ölü Stok raf kümesi; metinde "kapsam: raf|tümü").
-// Konu depo başına; yük adet + metre + gün, TUTAR yok. Defter girişi olmayan top durum tarihinden sayılır ve
+// Konu depo başına (depo kolonu boş toplar "Depo atanmamış" grubunda, anahtar `depo-atanmamis`); yük adet + metre + gün, TUTAR yok. Defter girişi olmayan top durum tarihinden sayılır ve
 // `yasKaynagi` metninde adediyle yazılır. `evaluate` fırlatırsa motor hiçbir koşulu kapatmaz (fail-closed).
 // =============================================================================
 import prisma from "../../lib/prisma";
@@ -26,6 +26,8 @@ export interface StockAgingDeps {
   emanetOn: () => Promise<boolean>;
   /** Bekçi körlük zemini: yalnız bu depolar (üretimde tanımsız = tüm depolar). */
   warehouseIds?: readonly string[];
+  /** Bekçi: `warehouseIds` kipinde depo atanmamış grubu da oku. */
+  includeUnassigned?: boolean;
 }
 
 const REAL_DEPS: Readonly<StockAgingDeps> = {
@@ -57,11 +59,15 @@ export function scopeLabel(scope: StockAgingScope): string {
   return scope === "raf" ? "raf" : "tümü";
 }
 
+/** Depo atanmamış toplar grubunun konu anahtarı (UUID olmayan sabit; `subjectId` boş kalır). */
+export const UNASSIGNED_WAREHOUSE_KEY = "depo-atanmamis";
+
 export function toSubject(g: AgedStockGroup, source: StockAgingSource, days: number, scope: StockAgingScope): ConditionSubject {
+  const key = g.warehouseId ?? UNASSIGNED_WAREHOUSE_KEY;
   return {
-    key: g.warehouseId, type: "depo", id: g.warehouseId,
+    key, type: "depo", id: g.warehouseId,
     payload: {
-      depoId: g.warehouseId, depoAd: g.warehouseName, adet: g.rollCount, gun: days,
+      depoId: key, depoAd: g.warehouseName, adet: g.rollCount, gun: days,
       metre: Math.round(g.meters * 10) / 10, kapsam: scopeLabel(scope), yasKaynagi: ageSourceLabel(source, g.fallbackCount),
     },
   };
@@ -73,7 +79,7 @@ export async function agedStockSubjects(): Promise<ConditionSubject[]> {
   const scope = await deps.scope();
   const emanetOn = await deps.emanetOn();
   const cutoff = new Date(deps.now().getTime() - days * DAY_MS);
-  const groups = await loadAgedStockGroups(prisma, { source, scope, emanetOn, cutoff, warehouseIds: deps.warehouseIds });
+  const groups = await loadAgedStockGroups(prisma, { source, scope, emanetOn, cutoff, warehouseIds: deps.warehouseIds, includeUnassigned: deps.includeUnassigned });
   return groups.map((g) => toSubject(g, source, days, scope));
 }
 

@@ -169,6 +169,9 @@ const ESIK_LABEL: Readonly<Record<string, string>> = {
   oranYuzde: "Oran eşiği (%)",
   minMetre: "En az metre",
   tolerans: "Gecikme payı (gün)",
+  // Mesai dışı giriş: vardiya tanımı yoksa kullanılan fabrika saati aralığı (7,5 = 07:30).
+  baslangicSaat: "Mesai başlangıcı (saat)",
+  bitisSaat: "Mesai bitişi (saat)",
 };
 // "Yaklaşıyor" türlerinde `gun` bir öne-bakış penceresidir; "Eşik (gün)" yaş eşiği gibi okunuyordu.
 const ESIK_LABEL_TUR: Readonly<Record<string, Readonly<Record<string, string>>>> = {

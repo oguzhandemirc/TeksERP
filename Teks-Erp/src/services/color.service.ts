@@ -12,8 +12,10 @@
 // =============================================================================
 
 import { Request } from "express";
+import type { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
-import { BaseService } from "./base.service";
+import { BaseService, type CreateTxContext } from "./base.service";
+import { emitColorCreatedTx } from "./notification-sources/anaveri";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
@@ -118,7 +120,7 @@ export class ColorService extends BaseService {
   async create(
     data: Record<string, unknown>,
     userId?: string,
-    opts?: { clientToken?: string },
+    opts?: { clientToken?: string; notify?: boolean },
   ): Promise<ApiResponse<unknown>> {
     const { customerIds, customerAliases, rest } = splitCustomerIds(data);
 
@@ -147,7 +149,7 @@ export class ColorService extends BaseService {
     }
 
     // Doğuş deneme kimliği yalnız token boğazından (`color-item-create.service.ts`); gövde yazamaz.
-    const res = await super.create(rest, userId, opts?.clientToken ? { clientToken: opts.clientToken } : undefined);
+    const res = await super.create(rest, userId, opts?.clientToken ? { clientToken: opts.clientToken } : undefined, { notify: opts?.notify });
     const color = res.data as { id: string } | null;
 
     if (color && customerIds !== undefined) {
@@ -163,6 +165,9 @@ export class ColorService extends BaseService {
    * atamalara DOKUNULMAZ (restore'un `{ isActive: true }` PATCH'i atamaları
    * silmesin diye kritik).
    */
+  /** `anaveri.renk-olusturuldu`: BaseService doğuş yazımını bu kancayla tek tx'e alır (diriltme yaymaz). */
+  protected override async afterCreateTx(tx: Prisma.TransactionClient, c: CreateTxContext): Promise<void> { await emitColorCreatedTx(tx, c.id, c.userId); }
+
   /** `DELETE` = pasife al — arşiv kapısından (URUN-YASAM-DONGUSU.md §6). */
   async softDelete(id: string, userId?: string): Promise<ApiResponse<unknown>> {
     return gatedSoftDelete(COLOR_ARCHIVE, id, userId, (tx) => tx.color.update({ where: { id }, data: { isActive: false } }));
@@ -217,7 +222,7 @@ export class ColorService extends BaseService {
     // rest boşsa gereksiz audit/no-op update üretme — mevcut kaydı çek.
     const res =
       Object.keys(rest).length > 0
-        ? await this.updateCore(id, rest, userId, updatedAtVersionWhere(expected))
+        ? await this.updateCore(id, rest, userId, { versionWhere: updatedAtVersionWhere(expected) })
         : await super.findById(id);
 
     const color = res.data as { id: string } | null;

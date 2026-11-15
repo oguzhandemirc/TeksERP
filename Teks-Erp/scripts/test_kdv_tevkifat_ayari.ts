@@ -89,7 +89,8 @@ const CARI_FIELDS = new Set([
 ]);
 // Cari geçersiz kılmasını YAZAN (doğrulama) ve sözleşmeyi taşıyan (Zod) yüzeyler; okuyup karar veren yalnız RESOLVER.
 // cari-merge.helper (D4-K3d): birleştirmede kaynak terimini boş hedefe KOPYALAR (çatışmada durur) — çözümlemez.
-const CARI_FIELD_FILES = new Set([RESOLVER, "services/helpers/cari-tax-override.helper.ts", "routes/finance.routes.ts", "services/helpers/cari-merge.helper.ts"]);
+// notification-sources/finans.ts (S6b): `cari.degisti` terim fotoğrafı — alanın yalnız ADI metne girer, oran çözülmez.
+const CARI_FIELD_FILES = new Set([RESOLVER, "services/helpers/cari-tax-override.helper.ts", "routes/finance.routes.ts", "services/helpers/cari-merge.helper.ts", "services/notification-sources/finans.ts"]);
 const DRAFT_PATHS = ["services/helpers/shipment-auto-draft.helper.ts", "services/service-period-invoice.service.ts", "services/invoice.service.ts"];
 
 function walk(dir: string, out: string[] = []): string[] {

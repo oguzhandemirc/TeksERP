@@ -77,6 +77,23 @@ export const LEGACY_TEMPLATE_NAME_TO_CODE: Readonly<Record<string, string>> = {
   "Mobil — Tüm Ekranlar": "MOBILE_ALL",
 };
 
+/**
+ * "Okuma" sayılan, `:read`/`:view` sonekli olmayan web izinleri — görüntüleme ekranları ve raporlar. Liste elle
+ * tutulur çünkü sonek bunları ayırt edemez; yazma/onay/basım/tasarım izni BURAYA GİRMEZ (bekçi §2f ölçer).
+ */
+export const PATRON_READ_EXTRA_CODES = [
+  "roll:history", "loom:live-view", "loom:alarm-view",
+  "report:production", "report:sales", "report:quality", "report:inventory", "report:subcontract", "report:customer",
+  "report:audit", "report:yarn-need", "report:finance",
+  "system:activity", "system:work-sessions", "system:server-status", "system:clients", "system:print-history",
+] as const;
+
+/** "Patron — tam okuma" kümesi: katalogdaki her web `:read`/`:view` izni + ek okuma izinleri + patron uygulaması girişi. */
+export function patronReadAllCodes(): string[] {
+  const suffixed = PERMISSION_CATALOG.filter((p) => p.category === "web" && /:(read|view)$/.test(p.code)).map((p) => p.code);
+  return [...new Set<string>([...suffixed, ...PATRON_READ_EXTRA_CODES, "patron-app:login"])];
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // MASAÜSTÜ (BÜRO) ROLLERİ
 //
@@ -614,6 +631,15 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "settings:notifications",
     ],
   },
+  {
+    // C4 (kullanıcı kararı 2026-11-15): patron telefonu + panel için hazır salt-okuma paketi. Kod kuralı değişmez —
+    // şablon kimseye atanmaz, yönetici panelden uygular. Küme katalogdan TÜRETİLİR (yeni okuma izni kendiliğinden girer).
+    code: "WEB_PATRON_READ_ALL",
+    name: "Patron — tam okuma",
+    description: "Bütün ekranları görür, hiçbir kaydı değiştiremez; patron telefon uygulamasına giriş dahil",
+    mode: "list",
+    codes: patronReadAllCodes(),
+  },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -778,8 +804,6 @@ export const ROLE_COVERAGE_EXEMPT: Readonly<Record<string, string>> = {
     "Tezgah alarmının üst kademesi (K2 bildirimi + başkasının üstlenmesini bırakma) müdür/patron yetkisidir; hazır şablonlarda müdür rolü yok — fabrika panelden SEÇİLİ kişiye atar (dokuma alarm A1b, tasarım §A.9).",
   "web:access":
     "Ekran değil, giriş KANALI izni (bulut web paneli, BULUT-WEB-PANELI.md K4): fabrika dışından tarayıcıyla girişi açar → dar rollere varsayılan atanmaz, panelden SEÇİLİ kişiye verilir ('Admin (Tam Yetki)' katalogla eşitlendiği için taşır; TOTP yine zorunlu).",
-  "patron-app:login":
-    "Ekran değil, giriş KANALI izni (patron telefon uygulaması, V1 2026-11-13): internetten 30 günlük oturum açar → dar rollere varsayılan atanmaz, panelden SEÇİLİ kişiye verilir ('Admin (Tam Yetki)' katalogla eşitlendiği için paket olarak taşır).",
   "admin:*":
     "Global admin wildcard'ı — dar bir role konulsaydı o rolü sessizce süper kullanıcı yapardı. Yalnız 'Admin (Tam Yetki)' taşır.",
   "mobile:tambur-duzelt":

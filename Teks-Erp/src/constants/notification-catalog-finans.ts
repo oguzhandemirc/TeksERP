@@ -153,6 +153,26 @@ export const FINANS_NOTIFICATION_ENTRIES = {
     payloadAlanlari: ["urunId", "urunAd", "urunKodu", "sebep", "kullanici"],
     tahminiHaftalik: 1,
   },
+  // S6b: BaseService doğuş kancası (`ColorService.afterCreateTx`); diriltme ve toplu içe aktarma yaymaz.
+  "anaveri.renk-olusturuldu": {
+    ...ORTAK, grup: "Ana Veri", izinler: [["property:read"]], modul: "cekirdek:ana-veri",
+    tekilKalibi: "{renkId}", panelEkran: "definitions/colors", panelYol: "/definitions/colors",
+    kod: "anaveri.renk-olusturuldu", ad: "Yeni renk tanımlandı",
+    baslik: "Yeni renk: {renkAd}",
+    govde: "{kullanici} {renkAd} ({renkKodu}) rengini tanımladı",
+    payloadAlanlari: ["renkId", "renkAd", "renkKodu", "kullanici"],
+    tahminiHaftalik: 5,
+  },
+  // S6b: güncelleme kancası (`ProductRecipeService.afterUpdateTx`); yük değişen alanların yalnız ADLARI (opt-in liste).
+  "anaveri.recete-degisti": {
+    ...ORTAK, grup: "Ana Veri", izinler: [["station:read"]], modul: "productionEnabled",
+    tekilKalibi: "{receteId}", panelEkran: "definitions/product-recipes", panelYol: "/definitions/product-recipes",
+    kod: "anaveri.recete-degisti", ad: "Üretim reçetesi değişti",
+    baslik: "Reçete değişti: {receteAd}",
+    govde: "{kullanici} {receteAd} ({receteKodu}) reçetesini düzenledi: {alanlar}",
+    payloadAlanlari: ["receteId", "receteAd", "receteKodu", "alanlar", "kullanici"],
+    tahminiHaftalik: 3,
+  },
 
   // ── Maliyet / Fiyat ───────────────────────────────────────────────────────
   "maliyet.standart-degisti": {

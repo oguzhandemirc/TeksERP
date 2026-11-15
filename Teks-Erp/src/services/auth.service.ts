@@ -55,6 +55,7 @@ import { settingScreenPath } from "../constants/panel-ayar-yolu";
 import { ekranYolu } from "../constants/panel-ekran-yolu";
 import { cookieLoginApplies } from "../lib/web-session-cookie";
 import { webTotpWaived } from "./web-totp.service";
+import { noteOffHoursLogin } from "./notification-sources/kimlik";
 import { consumeTrustedDevice, noteWebLogin, revokeAllTrustedDevicesTx, auditBulkRevoke, trustedDeviceDaysFor } from "./trusted-device.service";
 import { CURRENT_PASSWORD_INVALID_CODE } from "../constants/password-policy";
 import { matchesPermission } from "../middlewares/rbac.middleware";
@@ -715,7 +716,7 @@ export class AuthService {
     // almaz (alsaydı her istek 403 alırdı); PIN/kart cevabı adımın kullanıcı adını taşır.
     const flags = await prisma.user.findUnique({
       where: { id: user.id },
-      select: { mustChangePassword: true },
+      select: { mustChangePassword: true, fullName: true },
     });
     const mustChangePassword = flags?.mustChangePassword === true;
     if (
@@ -857,6 +858,9 @@ export class AuthService {
     const token = jwt.sign(claim, JWT_SECRET, signOptions);
 
     const payload: JwtPayload = { ...signPayload, jti };
+    // S6b `kimlik.mesai-disi-giris`: oturum açıldıktan sonra ayrı kısa tx; bildirim hatası girişi bozmaz.
+    await noteOffHoursLogin({ userId: user.id, displayName: flags?.fullName?.trim() || user.username, clientType: ctx?.clientType, at: new Date(nowMs) })
+      .catch((e: unknown) => uyari("auth", `mesai dışı giriş bildirimi yazılamadı (giriş etkilenmedi): ${e instanceof Error ? e.message : String(e)}`));
     if (ctx && (cookieLoginApplies(ctx.clientType) || ctx.hostedBearerFollowUp === true)) {
       const web = await noteWebLogin({
         userId: user.id,

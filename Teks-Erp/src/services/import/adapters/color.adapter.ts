@@ -86,7 +86,7 @@ export const colorImportAdapter: ImportAdapter = {
   async createOne(row: PreparedRow, ctx: ImportContext) {
     const { code: _ignored, ...data } = row.values;
     void _ignored; // kod sunucu tarafında üretilir
-    const res = await colorService.create(data, ctx.userId);
+    const res = await colorService.create(data, ctx.userId, { notify: false });
     return { id: (res.data as { id: string }).id };
   },
 

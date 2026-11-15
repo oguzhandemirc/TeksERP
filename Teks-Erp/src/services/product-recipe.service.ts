@@ -6,8 +6,10 @@
 // PATCH'te değişebildiği için gelen `properties` dizisini Prisma nested-write
 // { deleteMany, create } biçimine çeviririz (workorder.service deseni).
 
+import type { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
-import { BaseService } from "./base.service";
+import { BaseService, type UpdateTxContext, type WriteHookOptions } from "./base.service";
+import { emitRecipeChangedTx } from "./notification-sources/anaveri";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { applyFoldTypeForWriteInPlace } from "./helpers/fold-type";
@@ -178,6 +180,7 @@ export class ProductRecipeService extends BaseService {
     id: string,
     data: Record<string, unknown>,
     userId?: string,
+    opts?: WriteHookOptions,
   ): Promise<ApiResponse<unknown>> {
     await this.validateRefs(data, id);
     await assertNoMoveOrphans(id, data.itemId);
@@ -188,13 +191,17 @@ export class ProductRecipeService extends BaseService {
     if (Array.isArray(next.properties)) {
       // dedup → @@unique([recipeId,propertyId]) ihlali (P2002/409) önlenir.
       const ids = recipePropertyIds(next.properties);
-      next.properties = {
-        deleteMany: {},
-        create: ids.map((propertyId) => ({ propertyId })),
-      };
+      // Form her kayıtta kümeyi yollar: AYNI küme yeniden yazılmaz — audit ve `anaveri.recete-degisti` sahte değişim görmesin.
+      const current = await prisma.productRecipeProperty.findMany({ where: { recipeId: id }, select: { propertyId: true } });
+      const same = current.length === ids.length && current.every((c) => ids.includes(c.propertyId));
+      if (same) delete next.properties;
+      else next.properties = { deleteMany: {}, create: ids.map((propertyId) => ({ propertyId })) };
     }
-    return super.update(id, next, userId);
+    return this.updateCore(id, next, userId, opts);
   }
+
+  /** `anaveri.recete-degisti`: BaseService güncelleme yazımını bu kancayla tek tx'e alır (geri alınan yazım yaymaz). */
+  protected override async afterUpdateTx(tx: Prisma.TransactionClient, c: UpdateTxContext): Promise<void> { await emitRecipeChangedTx(tx, c.id, c.changes, c.userId); }
 
   /**
    * F215: pasif reçete kodu yeniden create edilince gelen `properties` UYGULANIR.
