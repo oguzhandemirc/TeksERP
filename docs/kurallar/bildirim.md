@@ -54,7 +54,7 @@
 - **[ÇEKİRDEK]** Kişisel tercihi seyrek yaz (yalnız sapan/kapsamlı satır); kilitli türde uygulama içini kapatma 409 `NOTIFICATION_KIND_LOCKED`; görülemeyen tür, kanal dışı ve beyansız kapsam anahtarı 400.
 - **[ÇEKİRDEK]** Önizleme uçları (`tercihler/onizleme`, `kilit-onizleme`, `varsayilana-don/onizleme`) yazmasız; haftalık tahmin son 30 fabrika günü sayacından, yoksa katalog `tahminiHaftalik`.
 - **[ÇEKİRDEK]** Profili silme, arşivle (atomik claim); hücre/üye kümesini pivot replace et, audit'i profil satırına tx DIŞINDA yaz.
-- **[ÇEKİRDEK]** Hazır tercih profilini tür listesiyle değil katalog yüklemiyle tanımla (`notification-preset-profiles.ts`, her grup tek departmanda, ALARM her profilde); profili kanala `writePreferenceItems` yolundan uygula (kilitli türe dokunma, kararsız tür/öteki kanal/kapsam aynen kalır), etkin profili kayıtlı çözümden hesapla; kişisel profil kayıtlı seçimin fotoğrafıdır, silmesi arşiv · bekçi: `test_bildirim_profil` <sub>(arşiv:2026-11-15 tercih profilleri)</sub>
+- **[ÇEKİRDEK]** Hazır tercih profilini katalog yüklemiyle tanımla; kanala `writePreferenceItems` ile uygula <sub>(arşiv:2026-11-15)</sub>
 - **[ÇEKİRDEK]** Masaüstü seçimini sunucu hücresinden (`/katalog.hucreler`, MASAUSTU) oku, `PUT /tercihler`e yaz; N3 `masaustuTurler` anahtarını yalnız bir sürüm birleşimle oku, yazımda seçili kalanlarla buda.
 - **[ÇEKİRDEK]** Her fabrika türü `src/constants/notification-patron-map.ts`te patron türüne eşlenir ya da `null` + gerekçe; bulut kataloğuna tür eklemek ayrı karar.
 - **[ÇEKİRDEK]** Satır süzgeçlerini (`filter[ozet]`, `filter[tablet]`, `filter[kanal]=TABLET_SES`) yalnız `notification-list-filter.helper.ts`ten `buildInboxWhere`e geçir; tablet sesini satırın `sesli` alanından oku; istemci süzmez.
