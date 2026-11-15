@@ -13,12 +13,12 @@ import { deleteOwnAccount } from "../services/account-self-delete";
 import type { CloudContext } from "../services/context";
 import { ANAHTAR_SUZGEC_AZAMI, LIST_ID_FILTER_KEYS, LIST_KEY_FILTER_KEYS, type LoginResponse, type PermissionCatalog } from "../wire/api";
 import { facilityStatus, getProjectionRecord, getSnapshot, listProjection } from "../services/data.service";
-import { deactivateDevice, listDevices, registerDevice } from "../services/device.service";
 import { requestSnapshotRefresh } from "../services/doorbell";
 import { cancelInbox, createInboxMessage, getInbox, listInbox } from "../services/inbox.service";
 import { cancelReportRequest, createReportRequest, getReportRequest, listReportRequests } from "../services/report.service";
 import { PermissionList, Template, Token, Uuid, body, page, param, s, sendFile, text, uuidCursor, written, type ApiCall, type ApiRouteDef } from "./api-route-kit";
 import { CHANGE_ROUTES } from "./change-routes";
+import { DEVICE_ROUTES } from "./device-routes";
 import { EXPORT_ROUTES } from "./export-routes";
 import { NOTIFICATION_ROUTES } from "./notification-routes";
 import { clientAddress, rateLimit } from "./rate-limit";
@@ -208,25 +208,7 @@ export const API_ROUTES: readonly ApiRouteDef[] = [
     kimlik: { muaf: "atomik claim BEKLIYOR → IPTAL; zaten iptalse aynı sonuç" },
     handler: async (c) => ({ data: await cancelReportRequest(c.ctx, s(c), param(c, "id")) }),
   },
-  // ---- bildirim cihazı ----
-  {
-    method: "post",
-    path: "/cihazlar",
-    auth: "OTURUM",
-    kimlik: { muaf: "push belirteci doğal kimliktir (tesis + belirteç özeti TEKİL); tekrar aynı satırı günceller" },
-    handler: async (c) => {
-      const b = body(c, z.strictObject({ platform: z.enum(["ios", "android", "web"]), belirtec: z.string().min(8).max(4096), ad: z.string().trim().min(1).max(120).optional() }));
-      return { status: 201, data: await registerDevice(c.ctx, s(c), { platform: b.platform, token: b.belirtec, ...(b.ad ? { ad: b.ad } : {}) }) };
-    },
-  },
-  { method: "get", path: "/cihazlar", auth: "OTURUM", kimlik: "OKUMA", handler: async (c) => ({ data: await listDevices(c.ctx, s(c)) }) },
-  {
-    method: "post",
-    path: "/cihazlar/:id/kaldir",
-    auth: "OTURUM",
-    kimlik: { muaf: "atomik claim active → pasif; tekrarı aynı sonuç" },
-    handler: async (c) => ({ data: await deactivateDevice(c.ctx, s(c), param(c, "id")) }),
-  },
+  ...DEVICE_ROUTES,
   ...NOTIFICATION_ROUTES,
   ...EXPORT_ROUTES,
   // ---- hesap yönetimi (bulut:hesap:yonet) ----
