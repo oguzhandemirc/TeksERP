@@ -635,7 +635,7 @@ export class ItemService extends BaseService {
     const hasListReplace =
       allowedColorIds !== undefined || allowedPropertyIds !== undefined;
     if (!hasListReplace) {
-      return this.updateCore(id, restData, userId, updatedAtVersionWhere(expected));
+      return this.updateCore(id, restData, userId, { versionWhere: updatedAtVersionWhere(expected) });
     }
     // İzinli renk/özellik listesi karta TANIM ekler (B) — "Tükenene kadar"/Pasif kartta kapalı (1e (k)).
     await assertItemUsable(prisma, id, "DEFINITION");

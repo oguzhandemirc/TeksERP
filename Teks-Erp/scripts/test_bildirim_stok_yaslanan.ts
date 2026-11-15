@@ -19,6 +19,7 @@
 // NEGATİF SONDA (2026-11-15, kopya + md5 ile geri alındı): ④ `shelfRollSql`ten `"sackId" IS NULL` kalktı ⇒ §4a/§4b/§4c/§4d ❌
 //   (15/4) · ⑤ raf dalında emanet süzgeci kalktı ⇒ §0e/§4b/§4c ❌ (16/3) · ⑥ kapsam varsayılanı `depodaki-her-top` ⇒
 //   §0f/§3a/§4d ❌ (16/3).
+//   §5 depo atanmamış raf topları "Depo atanmamış" grubunda (S6b 2026-11-15).
 // =============================================================================
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -219,6 +220,31 @@ async function bolum4(): Promise<void> {
   }
 }
 
+// §5 S6b (2026-11-15): depo kolonu boş raf topu "Depo atanmamış" grubunda sayılır, sessizce düşmez.
+// NEGATİF SONDA (2026-11-15, kopya + md5 ile geri alındı): helper'a `r."warehouseId" IS NOT NULL` geri kondu ⇒ §5a/§5c ❌.
+async function bolum5(): Promise<void> {
+  console.log("\n§5 depo atanmamış raf topları");
+  const E = await mkWarehouse("E");
+  const atanmamis = async () => (await loadAgedStockGroups(prisma, { source: "durum-degisimi", scope: "raf", emanetOn: false, cutoff: new Date(T0 - 30 * DAY), warehouseIds: [E], includeUnassigned: true }))
+    .find((g) => g.warehouseId === null);
+  const once = (await atanmamis())?.rollCount ?? 0;
+  await mkRoll("u1", null, T0 - 45 * DAY);
+  await mkRoll("u2", null, T0 - 45 * DAY, RollStatus.STOCK);
+  await mkRoll("u3", null, T0 - 5 * DAY); // genç top sayılmaz
+  const g = await atanmamis();
+  check("§5a ⭐ depo atanmamış eski raf topları kendi grubunda sayılır (+2), genç top girmez", (g?.rollCount ?? 0) - once === 2 && g?.warehouseName === "Depo atanmamış", `${once} → ${g?.rollCount}`);
+  const sade = await loadAgedStockGroups(prisma, { source: "durum-degisimi", scope: "raf", emanetOn: false, cutoff: new Date(T0 - 30 * DAY), warehouseIds: [E] });
+  check("§5b depo süzgeçli okumada (bekçi kipi) atanmamış grup yalnız istenince gelir", sade.every((x) => x.warehouseId !== null));
+  const geri = overrideStockAgingDeps({ warehouseIds: [E], includeUnassigned: true, now: () => new Date(T0), source: async () => "durum-degisimi", scope: async () => "raf", emanetOn: async () => false });
+  try {
+    const konu = (await agedStockSubjects()).find((x) => x.key === "depo-atanmamis");
+    check("§5c ⭐ tarayıcı konusu: anahtar `depo-atanmamis`, subjectId boş, metinde \"Depo atanmamış\"",
+      !!konu && konu.id === null && konu.payload.depoAd === "Depo atanmamış" && konu.payload.depoId === "depo-atanmamis", JSON.stringify(konu));
+  } finally {
+    geri();
+  }
+}
+
 async function main(): Promise<void> {
   console.log("=== Bildirim — stok.yaslanan ===");
   const engel = hedefDbEngeli();
@@ -230,6 +256,7 @@ async function main(): Promise<void> {
     await bolum12();
     await bolum3();
     await bolum4();
+    await bolum5();
   } finally {
     await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: ids.rolls }, reversesMovementId: { not: null } } });
     await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: ids.rolls } } });

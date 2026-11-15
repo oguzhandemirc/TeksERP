@@ -803,7 +803,7 @@ export class OrderService extends BaseService {
         return { ...full, message: "Değişiklik yok" };
       }
       const versionWhere = expected ? { status: OrderStatus.PARTIAL_SHIPPED, ...orderContentVersionWhere(expected) } : undefined;
-      return withOrderContentVersion(await this.updateCore(id, cleanData, userId, versionWhere));
+      return withOrderContentVersion(await this.updateCore(id, cleanData, userId, { versionWhere }));
     }
 
     const branchChanging = Object.prototype.hasOwnProperty.call(cleanData, "branchId");

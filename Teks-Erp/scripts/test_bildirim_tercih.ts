@@ -16,6 +16,8 @@
 // NEGATİF SONDALAR (2026-10-25, md5 ile birebir geri alındı): ① teslim kararında ALARM ek-kaynak kapısı kaldırıldı
 // (donmuş listeye LISTE eklendi) → §3a ❌ (23/1) · ② sessiz saat UTC duvar saatinden okundu → §2a §2b §3b ❌ (21/3) ·
 // ③ katalog `varsayilan` kapsaması hep doğru → §1a §4a §4d ❌ (21/3; tercih yokken davranış değişti).
+// S6b (2026-11-15): termin-gecti varsayılanı HERKES oldu → §4d `yalnizTakip` kapsamına taşındı; sonda: takipçi okuması
+//   `state: "TAKIP"` süzgecini kaybetti → §4d ❌ (24/1); geri alındı.
 // Global ayar yazar (`bildirim.gelenKutusuEnabled`); bulduğu değere `finally`de döner. Kendi kullanıcı/sipariş/
 // tercih satırlarını siler.
 // =============================================================================
@@ -51,7 +53,7 @@ const orders: string[] = [];
 const customers: string[] = [];
 const ALARM: NotificationKind = "dokuma.tezgah-alarmi"; // ALARM · kilit NOBETTE
 const PATRON: NotificationKind = "siparis.patron-siparisi"; // OLAY · varsayılan order:write · kanallar UYGULAMA/OZET/MASAUSTU
-const TERMIN: NotificationKind = "siparis.termin-gecti"; // KOSUL · varsayılan order:write · kapsam yalnizTakip
+const TERMIN: NotificationKind = "siparis.termin-gecti"; // KOSUL · varsayılan HERKES (S6b C5) · kapsam yalnizTakip
 const YEDEK: NotificationKind = "sistem.yedek-basarisiz"; // kilit HER_ZAMAN · varsayılan HERKES
 
 const ENV_ACIK: NotificationVisibilityEnv = { modules: { tezgahEnabled: true }, gates: { tezgahAlarm: true } };
@@ -216,11 +218,15 @@ async function bolum4(): Promise<void> {
   await prisma.notificationPreference.create({
     data: { userId: daraltan, kind: TERMIN, channel: "UYGULAMA", enabled: true, scope: { schemaVersion: 1, yalnizTakip: true } },
   });
+  // C5: KOSUL varsayılanı HERKES → bırakan izinle zaten alırdı; "BIRAKTI takip sayılmaz" sorusu `yalnizTakip` kapsamında sorulur.
+  await prisma.notificationPreference.create({
+    data: { userId: birakan, kind: TERMIN, channel: "UYGULAMA", enabled: true, scope: { schemaVersion: 1, yalnizTakip: true } },
+  });
   await emit(TERMIN, { type: "siparis", id: o.id, key: o.id }, { siparisId: o.id, siparisNo: `TBT-${ek}`, musteriAd: "T", termin: "01.01.2026" });
   await dagit();
   const t = await satir(takipci, TERMIN);
-  check("§4c takipçi (izni var, varsayılan dışı) TAKIPCI sebebiyle alır", t?.reason === "TAKIPCI", t?.reason ?? "satır yok");
-  check("§4d ⭐ BIRAKTI almaz (oluşturan otomatiği bırakınca)", !(await satir(birakan, TERMIN)));
+  check("§4c takipçi TAKIPCI sebebiyle alır (izin sebebinden önce gelir)", t?.reason === "TAKIPCI", t?.reason ?? "satır yok");
+  check("§4d ⭐ BIRAKTI takip sayılmaz: `yalnizTakip` kapsamlı bırakan almaz (oluşturan otomatiği bırakınca)", !(await satir(birakan, TERMIN)));
   check("§4e `yalnizTakip` kapsamı daraltır: takip etmeyen varsayılan alıcı almaz, aynı olayı yazar alır",
     !(await satir(daraltan, TERMIN)) && !!(await satir(yazar, TERMIN)));
 

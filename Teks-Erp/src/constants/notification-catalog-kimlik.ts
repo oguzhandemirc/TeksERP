@@ -1,4 +1,5 @@
 // Kimlik/cihaz bildirimleri — ana katalogdan dosya boyu için ayrıldı (2026-11-01); sıra katalogdakiyle aynı.
+import { z } from "zod";
 import { NOTIFICATION_DEFAULT_RETENTION as SAKLAMA, NOTIFICATION_DESKTOP_CHANNELS as KANAL_MASAUSTU, NOTIFICATION_DEFAULT_CHANNELS as KANAL_VARSAYILAN, type NotificationCatalogEntry } from "./notification-catalog.types";
 
 export const KIMLIK_NOTIFICATION_ENTRIES = {
@@ -61,5 +62,27 @@ export const KIMLIK_NOTIFICATION_ENTRIES = {
     panelEkran: "access/users", panelYol: "/access/users",
     payloadAlanlari: ["kullaniciId", "kullanici", "hataSayisi", "kaynakSayisi", "saat"],
     tahminiHaftalik: 0.1, saklama: SAKLAMA,
+  },
+  // S6b (2026-11-15): web · yönetim paneli · patron uygulaması girişi mesai dışında. Vardiya TANIMLIYSA süren vardiya
+  // (`loadCurrentShift`) esastır; tanımlı değilse bu eşikler (fabrika saati, Fabrika varsayılanları'ndan düzenlenir).
+  "kimlik.mesai-disi-giris": {
+    kod: "kimlik.mesai-disi-giris", ad: "Mesai dışında giriş",
+    sinif: "BILDIRIM", altTur: "OLAY", grup: "Sistem",
+    izinler: [["admin:users"]],
+    modul: "cekirdek:sistem-kimlik-belge",
+    // Aynı kişinin bir saat içindeki mesai dışı girişleri tek satırda birleşir.
+    tekilKalibi: "{kullaniciId}",
+    pencereSn: 3600, varsayilan: "HERKES", kilit: "YOK",
+    kanallar: KANAL_MASAUSTU,
+    varsayilanKanallar: KANAL_VARSAYILAN,
+    baslik: "{kullanici} mesai dışında giriş yaptı",
+    govde: "{kanal} · {saat} · {mesai}",
+    paramSemasi: z.object({
+      baslangicSaat: z.number().min(0).max(24).default(7),
+      bitisSaat: z.number().min(0).max(24).default(19),
+    }).strict(),
+    panelEkran: "access/users", panelYol: "/access/users",
+    payloadAlanlari: ["kullaniciId", "kullanici", "kanal", "saat", "mesai"],
+    tahminiHaftalik: 2, saklama: SAKLAMA,
   },
 } as const satisfies Record<string, NotificationCatalogEntry>;

@@ -5,6 +5,7 @@
 // Master Data controllers (Item, Customer, Station, etc.) use this directly.
 // =============================================================================
 
+import { sequentialTx } from "./helpers/tx-sequential-relations.helper";
 import prisma from "../lib/prisma";
 import { Prisma } from "@prisma/client";
 import { AuditService } from "./audit.service";
@@ -392,6 +393,12 @@ export interface BaseServiceConfig {
 
 /** `afterUpdateTx` kancasının bağlamı: değişen alanlar audit diff'iyle aynı (`diffFields`). */
 export interface UpdateTxContext { id: string; changes: FieldChange[]; userId?: string }
+/** `afterCreateTx` kancasının bağlamı: yeni kaydın kimliği (diriltme bir geçiştir, kancayı çağırmaz). */
+export interface CreateTxContext { id: string; userId?: string }
+/** Yazım seçenekleri: `notify:false` (toplu içe aktarma) bildirim kancalarını atlar — yazım yolu kancasız serviste olduğu gibi. */
+export interface WriteHookOptions { notify?: boolean }
+/** `updateCore` seçenekleri: sürüm koşulu (bayat veri) + kanca tercihi (`max-params` sınırı: tek nesne). */
+export interface UpdateCoreOptions extends WriteHookOptions { versionWhere?: Record<string, unknown> }
 
 export class BaseService {
   protected delegate: PrismaDelegate;
@@ -401,6 +408,8 @@ export class BaseService {
    * tx'ine bağlansın). Tanımlamayan serviste yol değişmez (tx açılmaz); audit her iki yolda tx DIŞINDA kalır.
    */
   protected afterUpdateTx?(tx: Prisma.TransactionClient, ctx: UpdateTxContext): Promise<void>;
+  /** `afterUpdateTx`in doğuş eşi: tanımlayan alt sınıfta INSERT + kanca TEK tx; tanımlamayanda yol bayt aynı. */
+  protected afterCreateTx?(tx: Prisma.TransactionClient, ctx: CreateTxContext): Promise<void>;
 
   constructor(config: BaseServiceConfig) {
     this.config = config;
@@ -1043,6 +1052,7 @@ export class BaseService {
   protected async performInsert(
     data: Record<string, unknown>,
     userId?: string,
+    hookOpts?: WriteHookOptions,
   ): Promise<ApiResponse<unknown>> {
     // Transform nested array fields to Prisma's { create: [...] } format
     const prismaData = withActor({ ...data }, userId, "CREATE", this.config.modelName);
@@ -1054,10 +1064,21 @@ export class BaseService {
       }
     }
 
-    const record = (await this.delegate.create({
+    const createArgs = {
       data: prismaData,
       ...(this.config.defaultInclude ? { include: this.config.defaultInclude } : {}),
-    })) as Record<string, unknown>;
+    };
+    const hook = hookOpts?.notify === false ? undefined : this.afterCreateTx?.bind(this);
+    // Kancasız yol `this.delegate.create` olarak kalır (künye taraması genel yolu bu imzadan tanır).
+    const record = hook
+      ? await prisma.$transaction(async (tx) => {
+          // `defaultInclude` ilişkileri tek tx bağlantısında SIRALI yüklensin (pg eşzamanlı sorgu uyarısı, S15a).
+          const txDelegate = (sequentialTx(tx) as unknown as Record<string, PrismaDelegate>)[this.config.modelName]!;
+          const row = (await txDelegate.create(createArgs)) as Record<string, unknown>;
+          await hook(tx, { id: row.id as string, userId });
+          return row;
+        })
+      : ((await this.delegate.create(createArgs)) as Record<string, unknown>);
 
     await AuditService.log({
       userId,
@@ -1075,6 +1096,7 @@ export class BaseService {
     userId?: string,
     // Sunucunun koyduğu kapalı alanlar (ör. doğuş `clientToken`ı) — gövde süzgecinden SONRA eklenir, gövde yazamaz.
     system?: Readonly<Record<string, unknown>>,
+    hookOpts?: WriteHookOptions,
   ): Promise<ApiResponse<unknown>> {
     const data = this.normalizeNameFields({ ...this.sanitizeWriteData(rawData), ...system });
 
@@ -1088,7 +1110,7 @@ export class BaseService {
       await this.assertNameNotDuplicate(data);
       return withBarcodeRetry(async () => {
         data[codeField] = await this.nextAutoCode();
-        return this.performInsert(data, userId);
+        return this.performInsert(data, userId, hookOpts);
       });
     }
 
@@ -1121,7 +1143,7 @@ export class BaseService {
     }
     await this.assertNameNotDuplicate(data);
 
-    return this.performInsert(data, userId);
+    return this.performInsert(data, userId, hookOpts);
   }
 
   /**
@@ -1188,19 +1210,21 @@ export class BaseService {
     rawData: Record<string, unknown>,
     userId?: string
   ): Promise<ApiResponse<unknown>> {
+    // `notify:false` isteyen alt sınıf `updateCore`u doğrudan çağırır (genel imza alt sınıfların 4. parametresine ait).
     return this.updateCore(id, rawData, userId);
   }
 
   /**
-   * `update` gövdesi. `versionWhere` verilirse yazım tek atomik `updateMany WHERE {id, …sürüm}`
+   * `update` gövdesi. `opts.versionWhere` verilirse yazım tek atomik `updateMany WHERE {id, …sürüm}`
    * olur ve 0 satır → 409 `STALE_RECORD` (bayat veri koruması); verilmezse bayt aynı yol.
    */
   protected async updateCore(
     id: string,
     rawData: Record<string, unknown>,
     userId?: string,
-    versionWhere?: Record<string, unknown>,
+    opts: UpdateCoreOptions = {},
   ): Promise<ApiResponse<unknown>> {
+    const { versionWhere } = opts;
     const data = this.normalizeNameFields(this.sanitizeWriteData(rawData));
     // Fetch old data for audit
     const oldRecord = await this.delegate.findUnique({ where: { id } });
@@ -1279,10 +1303,10 @@ export class BaseService {
             ? { include: this.config.defaultInclude }
             : {}),
         });
-    const hook = this.afterUpdateTx?.bind(this);
+    const hook = opts.notify === false ? undefined : this.afterUpdateTx?.bind(this);
     const updated = hook
       ? await prisma.$transaction(async (tx) => {
-          const row = await write((tx as unknown as Record<string, PrismaDelegate>)[this.config.modelName]!);
+          const row = await write((sequentialTx(tx) as unknown as Record<string, PrismaDelegate>)[this.config.modelName]!);
           await hook(tx, { id, changes, userId });
           return row;
         })

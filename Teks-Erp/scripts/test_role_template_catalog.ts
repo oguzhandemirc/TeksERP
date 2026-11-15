@@ -38,6 +38,8 @@ import {
   ROLE_COVERAGE_EXEMPT,
   SOD_ALLOWED_TEMPLATES,
   SOD_PERMISSION_CODES,
+  PATRON_READ_EXTRA_CODES,
+  PATRON_READ_EXCLUDED_CODES,
   resolveRoleTemplateCodes,
 } from "../src/constants/role-template-catalog";
 import { reconcileRoleTemplates } from "../src/jobs/role-template-catalog.job";
@@ -163,6 +165,25 @@ async function main(): Promise<void> {
   check("⭐ K4P panel izinleri (muayene/lab/sertifika) yalnız WEB_* sorumlu-şef şablonlarında", k4pSizinti.length === 0, k4pSizinti.join(", ") || "temiz");
   const authKaynak = readFileSync(path.join(__dirname, "..", "src", "services", "auth.service.ts"), "utf8");
   check("Kanal kapısı tek yüklemi okur (`grantsDesktopPanel`; elle `startsWith(\"mobile:\")` yok)", authKaynak.includes("!grantsDesktopPanel(permissions)") && !authKaynak.includes('startsWith("mobile:")'));
+
+  console.log("\n=== §2f PATRON — TAM OKUMA (C4, kullanıcı kararı 2026-11-15) ===");
+  // NEGATİF SONDA (2026-11-15): PATRON_READ_EXTRA_CODES'a "order:write" eklendi → §2f-b ❌; türetimden `:view` soneki
+  //   düşürüldü → §2f-c ❌ (license:view eksik). İkisi de geri alındı.
+  const patron = ROLE_TEMPLATE_CATALOG.find((r) => r.code === "WEB_PATRON_READ_ALL");
+  const dislanan = new Set<string>(PATRON_READ_EXCLUDED_CODES);
+  const okumaSoneki = [...izinKodlari].filter((c) => /:(read|view)$/.test(c) && !dislanan.has(c) && PERMISSION_CATALOG.find((p) => p.code === c)?.category === "web");
+  check("§2f-a şablon var, mode list, patron uygulaması girişini taşır", !!patron && patron.mode === "list" && patron.codes.includes("patron-app:login"));
+  const yazmaSinifi = (patron?.codes ?? []).filter((c) => c !== "patron-app:login" && !/:(read|view)$/.test(c) && !(PATRON_READ_EXTRA_CODES as readonly string[]).includes(c));
+  const yazmaSoneki = (patron?.codes ?? []).filter((c) => /:(write|approve|cancel|manage|print|edit|design|publish|merge|close|invoice|payment|import)$/.test(c) || c.endsWith(":*") || c === "*");
+  check("§2f-b ⭐ yazma/onay/yönetim izni yok (her kod okuma soneki, beyanlı ek okuma ya da giriş kanalı)", yazmaSinifi.length === 0 && yazmaSoneki.length === 0, [...yazmaSinifi, ...yazmaSoneki].join(", ") || "temiz");
+  const eksikOkuma = okumaSoneki.filter((c) => !patron?.codes.includes(c));
+  check("§2f-c ⭐ katalogdaki her web okuma izni şablonda (türetim — yeni :read kendiliğinden girer)", okumaSoneki.length >= 25 && eksikOkuma.length === 0, eksikOkuma.join(", ") || `${okumaSoneki.length} okuma izni`);
+  const patronSod = SOD_PERMISSION_CODES.filter((c) => matchesPermission(patron?.codes ?? [], c));
+  check("§2f-d SoD kümesi girmez", patronSod.length === 0, patronSod.join(", ") || "temiz");
+  const oluEk = PATRON_READ_EXTRA_CODES.filter((c) => !izinKodlari.has(c));
+  const sizan = PATRON_READ_EXCLUDED_CODES.filter((c) => patron?.codes.includes(c) || !izinKodlari.has(c));
+  check("§2f-f dışlanan okuma izni (mal kabul) şablonda yok ve katalogda yaşıyor", sizan.length === 0, sizan.join(", ") || "temiz");
+  check("§2f-e ek okuma listesinde ölü kod yok", oluEk.length === 0, oluEk.join(", ") || `${PATRON_READ_EXTRA_CODES.length} kod`);
 
   console.log("\n=== §2b EKRAN BAĞIMLILIKLARI: yazan, okuduğu ucu da görebiliyor mu? ===");
   // ⚠️ §2 "her izin BİR rolde var mı" diye sorar ve bu soru YETMEZ: bir izin
