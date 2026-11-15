@@ -22,6 +22,9 @@ import type {
   NotificationPreferencePreview,
   NotificationResetRow,
   FollowRecordType,
+  NotificationProfileChannel,
+  NotificationProfilesView,
+  NotificationPersonalProfile,
 } from "@/lib/bildirim/types";
 
 const BASE = "/api/bildirim";
@@ -98,6 +101,18 @@ export const bildirimService = {
     post(`${BASE}/tercihler/onizleme`, tercihler ? { tercihler } : {}),
   varsayilanaDonOnizleme: (): Promise<{ satirlar: NotificationResetRow[] }> => post(`${BASE}/tercihler/varsayilana-don/onizleme`),
   varsayilanaDon: (ids: string[]): Promise<{ silinen: number }> => post(`${BASE}/tercihler/varsayilana-don`, { ids }),
+  /** Tercih profilleri (hazır + kişisel + etkin). Eski sunucu 404 → şerit gizlenir. */
+  profiller: (kanal: NotificationProfileChannel): Promise<NotificationProfilesView> => get(`${BASE}/tercihler/profiller?kanal=${kanal}`),
+  /** Profili kanala uygular (tek istek, tek tx, hedef duruma yazar → idempotent). */
+  profilUygula: (b: { kanal: NotificationProfileChannel; hazir?: string; kisisel?: string }): Promise<NotificationPreferencesResult & { profiller: NotificationProfilesView }> =>
+    post(`${BASE}/tercihler/profil-uygula`, b),
+  /** Şimdiki KAYITLI seçimi adla kaydeder; `clientToken` mantıksal deneme başına. */
+  profilKaydet: (b: { ad: string; kanal: NotificationProfileChannel; clientToken: string }): Promise<{ profil: NotificationPersonalProfile | null; profiller: NotificationProfilesView }> =>
+    post(`${BASE}/tercihler/profiller`, b),
+  profilGuncelle: (id: string, b: { ad?: string; kanal: NotificationProfileChannel; seciminiGuncelle?: boolean }): Promise<{ profil: NotificationPersonalProfile | null; profiller: NotificationProfilesView }> =>
+    apiClient.patch<ApiResponse<{ profil: NotificationPersonalProfile | null; profiller: NotificationProfilesView }>>(`${BASE}/tercihler/profiller/${encodeURIComponent(id)}`, b, Q).then((r) => r.data.data),
+  profilSil: (id: string, kanal: NotificationProfileChannel): Promise<NotificationProfilesView> =>
+    apiClient.delete<ApiResponse<NotificationProfilesView>>(`${BASE}/tercihler/profiller/${encodeURIComponent(id)}?kanal=${kanal}`, Q).then((r) => r.data.data),
   ayarlar: (): Promise<NotificationUserSettings> => get(`${BASE}/ayarlar`),
   ayarlariYaz: (a: NotificationUserSettings): Promise<NotificationUserSettings> => put(`${BASE}/ayarlar`, a),
   takip: (tur: FollowRecordType, id: string): Promise<FollowState> => get(followPath(tur, id)),

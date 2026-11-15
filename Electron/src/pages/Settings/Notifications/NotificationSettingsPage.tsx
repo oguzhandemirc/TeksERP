@@ -18,6 +18,7 @@ import { ScopeDialog } from "./ScopeDialog";
 import { QuietHoursCard } from "./QuietHoursCard";
 import { PreviewStrip } from "./PreviewStrip";
 import { ResetDialog } from "./ResetDialog";
+import { ProfileStrip } from "./ProfileStrip";
 import { useNotificationSettingsForm } from "./useNotificationSettingsForm";
 
 export function NotificationSettingsPage() {
@@ -39,6 +40,7 @@ export function NotificationSettingsPage() {
   } else {
     body = (
       <>
+        <ProfileStrip enabled kirli={f.tercihKirli} />
         <KindGroupList
           turler={f.katalog?.turler ?? []}
           taslak={f.taslak}

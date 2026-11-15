@@ -136,3 +136,33 @@ export interface NotificationPreferenceInput {
   acik: boolean;
   kapsam?: unknown;
 }
+
+/** Tercih profilinin uygulandığı kanal (sunucu `PROFILE_CHANNELS`). */
+export type NotificationProfileChannel = "UYGULAMA" | "MASAUSTU" | "PATRON_PUSH";
+
+/** Hazır profil — tür kümesi sunucuda katalogdan türer (kişinin görebildikleriyle kesişik). */
+export interface NotificationPresetProfile {
+  kod: string;
+  ad: string;
+  aciklama: string;
+  acik: string[];
+}
+
+/** Kişisel kayıtlı profil (kanaldan bağımsız tür seçimi). */
+export interface NotificationPersonalProfile {
+  id: string;
+  ad: string;
+  acik: string[];
+  kapali: string[];
+  olusturuldu: string;
+  guncellendi: string;
+}
+
+/** `GET /tercihler/profiller` — `etkin` kayıtlı seçimle birebir eşleşenler ("hazir:KOD" | "kisisel:<id>"); boş = Özel. */
+export interface NotificationProfilesView {
+  kanal: NotificationProfileChannel;
+  turSayisi: number;
+  hazir: NotificationPresetProfile[];
+  kisisel: NotificationPersonalProfile[];
+  etkin: string[];
+}

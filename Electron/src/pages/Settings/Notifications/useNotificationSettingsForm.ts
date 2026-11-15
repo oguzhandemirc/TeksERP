@@ -72,5 +72,5 @@ export function useNotificationSettingsForm() {
   const status = yuklendi && !acik ? "kapali" : (unavailable(tercih.error) ?? unavailable(katalog.error));
   const hata = tercih.isError || katalog.isError;
   const yukleniyor = !yuklendi || tercih.isLoading || katalog.isLoading;
-  return { katalog: katalog.data, taslak, setTaslak, ayarTaslak, setAyarTaslak, kirli: (tercihKirli || settingsDirty) && (!ayarTaslak || (isQuietTime(ayarTaslak.sessizBaslangic) && isQuietTime(ayarTaslak.sessizBitis))), kaydediliyor, kaydet, grupToplu, status, hata, yukleniyor };
+  return { katalog: katalog.data, tercihKirli, taslak, setTaslak, ayarTaslak, setAyarTaslak, kirli: (tercihKirli || settingsDirty) && (!ayarTaslak || (isQuietTime(ayarTaslak.sessizBaslangic) && isQuietTime(ayarTaslak.sessizBitis))), kaydediliyor, kaydet, grupToplu, status, hata, yukleniyor };
 }

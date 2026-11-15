@@ -950,6 +950,21 @@
   display: none; /* Chromium / Electron */
 }
 
+/* Görünüm değişim anında (theme/appearance.ts beginThemeTransition; azaltılmış hareketi kendisi atlar) ~400 ms
+   açılan renk geçişi penceresi. Önem bayrağı ve medya sarmalayıcısı YOK: Tailwind derleyicisi bu kuralda kapanışı
+   yutup özellik kayıtlarını içine gömüyordu (bütün Switch topuzları solda kalıyordu). Katmansız kural yardımcıları yener. */
+html[data-theme-transition] *,
+html[data-theme-transition] *::before,
+html[data-theme-transition] *::after {
+  transition:
+    background-color 0.3s ease,
+    border-color 0.3s ease,
+    color 0.3s ease,
+    fill 0.3s ease,
+    stroke 0.3s ease,
+    box-shadow 0.3s ease;
+}
+
 /* Yazdırma — yalnız .print-area içeriği basılır. window.print() çağrıldığında
    sayfanın geri kalanı (Sheet/Dialog overlay'leri dahil) gizlenir; print-area
    kağıdın başına oturur. Refakat kartı vb. belge dialoglarında kullanılır. */
@@ -973,18 +988,3 @@
   }
 }
 
-
-/* Görünüm değişim anında (appearance.ts `beginThemeTransition`) ~400 ms açılan renk geçişi penceresi. */
-@media (prefers-reduced-motion: no-preference) {
-  html[data-theme-transition] *,
-  html[data-theme-transition] *::before,
-  html[data-theme-transition] *::after {
-    transition:
-      background-color 0.3s ease,
-      border-color 0.3s ease,
-      color 0.3s ease,
-      fill 0.3s ease,
-      stroke 0.3s ease,
-      box-shadow 0.3s ease !important;
-  }
-}

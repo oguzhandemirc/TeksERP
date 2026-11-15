@@ -18,6 +18,7 @@ import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage"
 import { useKindBrowse } from "./group-collapse";
 import { KindGroupHeader, KindSearchBar } from "./KindGroupParts";
 import { LockPreviewDialog } from "./LockPreviewDialog";
+import { PresetFillMenu } from "./PresetFillMenu";
 import {
   CELL_LABEL,
   SUMMARY_LABEL,
@@ -25,6 +26,7 @@ import {
   cellsFromDraft,
   draftEquals,
   draftFromCells,
+  fillFromPreset,
   matrixBulk,
   membersAfterLockChoice,
   needsLockPreview,
@@ -98,6 +100,13 @@ export function ProfileMatrixTab({ profile, kinds }: Props) {
       <ListFooter loaded={kinds.length} label={dirty ? "Kaydedilmemiş değişiklik var." : `${kinds.length} bildirim türü`}>
         {!readOnly && (
           <>
+            <PresetFillMenu
+              disabled={save.isPending}
+              onFill={(p) => {
+                setDraft((d) => fillFromPreset(d, kinds, p.turler));
+                toast(`“${p.ad}” kümesiyle dolduruldu; kaydetmeyi unutmayın.`);
+              }}
+            />
             <Button size="sm" variant="outline" disabled={lookup.isPending} onClick={() => void onPreview()}>Kilit önizlemesi</Button>
             <Button size="sm" disabled={!dirty || save.isPending || lookup.isPending} onClick={() => void onSave()}>Kaydet</Button>
           </>

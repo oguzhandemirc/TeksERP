@@ -10,6 +10,7 @@ import {
   esikEtiketi,
   factoryBulk,
   factoryChanges,
+  fillFromPreset,
   factoryDraftFrom,
   filterKinds,
   matrixBulk,
@@ -120,5 +121,18 @@ describe("fabrika varsayılanı eşik etiketleri", () => {
     expect(esikEtiketi("stok.yaslanan", "gun")).toBe("Eşik (gün)");
     expect(esikEtiketi("finans.vade-gecti", "tolerans")).toBe("Gecikme payı (gün)");
     expect(esikEtiketi("x.y", "bilinmeyen")).toBe("bilinmeyen");
+  });
+});
+
+describe("fillFromPreset — rol profilini hazır profille doldurma", () => {
+  const kinds = [
+    { tur: "a", kilit: "YOK" as const },
+    { tur: "b", kilit: "YOK" as const },
+    { tur: "c", kilit: "HER_ZAMAN" as const },
+    { tur: "d", kilit: "YOK" as const },
+  ];
+  it("küme içi ACIK, dışı KAPALI; KILITLI korunur; her zaman kilitli tür KAPALI olmaz; listede olmayan hücre aynen", () => {
+    const out = fillFromPreset({ d: "KILITLI", z: "KAPALI" }, kinds, ["a"]);
+    expect(out).toEqual({ a: "ACIK", b: "KAPALI", c: "ACIK", d: "KILITLI", z: "KAPALI" });
   });
 });

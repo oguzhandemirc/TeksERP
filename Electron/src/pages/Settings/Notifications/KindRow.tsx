@@ -1,4 +1,4 @@
-// Tek tür satırı (plan §6.4): ad + "Neden alırsınız" · uygulama içi üç durum · masaüstü · tablet sesi · kapsam.
+// Tek tür satırı (plan §6.4): ad + "Neden alırsınız" · uygulama içi üç durum · masaüstü · tablet sesi · patron telefonu · kapsam.
 // Kilitli satırda yalnız "Anlık" vardır; kilit bilgisi METİNLE verilir (renk tek başına anlam taşımaz).
 import { Lock, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -59,7 +59,7 @@ export function KindRow(p: {
   k: KindDraft;
   katalog: NotificationCatalogKind;
   onMode: (m: InAppMode) => void;
-  onChannel: (ch: "MASAUSTU" | "TABLET_SES", v: boolean) => void;
+  onChannel: (ch: "MASAUSTU" | "TABLET_SES" | "PATRON_PUSH", v: boolean) => void;
   onScope: () => void;
 }) {
   const { k, katalog, onMode, onChannel, onScope } = p;
@@ -95,6 +95,7 @@ export function KindRow(p: {
         </span>
         <ChannelSwitch etiket="Masaüstü" ad={katalog.ad} deger={k.kanal.MASAUSTU} pasif={sideOff} onChange={(v) => onChannel("MASAUSTU", v)} />
         <ChannelSwitch etiket="Tablet sesi" ad={katalog.ad} deger={k.kanal.TABLET_SES} pasif={sideOff} onChange={(v) => onChannel("TABLET_SES", v)} />
+        <ChannelSwitch etiket="Patron telefonu" ad={katalog.ad} deger={k.kanal.PATRON_PUSH} pasif={sideOff} onChange={(v) => onChannel("PATRON_PUSH", v)} />
         {hasScope && !k.kilit && (
           <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
             Kapsam
@@ -104,8 +105,8 @@ export function KindRow(p: {
           </span>
         )}
       </div>
-      {sideOff && (k.kanal.MASAUSTU !== undefined || k.kanal.TABLET_SES !== undefined) && (
-        <p className="text-[11px] text-muted-foreground">Uygulama içi kapalıyken masaüstü ve tablet sesi de gönderilmez.</p>
+      {sideOff && (k.kanal.MASAUSTU !== undefined || k.kanal.TABLET_SES !== undefined || k.kanal.PATRON_PUSH !== undefined) && (
+        <p className="text-[11px] text-muted-foreground">Uygulama içi kapalıyken masaüstü, tablet sesi ve patron telefonu da gönderilmez.</p>
       )}
     </li>
   );

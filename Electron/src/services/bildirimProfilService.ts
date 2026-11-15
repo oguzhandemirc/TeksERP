@@ -54,6 +54,13 @@ export interface LockPreviewAffected {
   turler: { tur: string; ad: string }[];
 }
 
+export interface PresetProfileSet {
+  kod: string;
+  ad: string;
+  aciklama: string;
+  turler: string[];
+}
+
 export interface MemberCandidate {
   id: string;
   ad: string;
@@ -77,6 +84,8 @@ export const bildirimProfilService = {
     data(apiClient.post(`${pid(id)}/kilit-onizleme`, { hucreler }, Q)),
   uyeleriYaz: (id: string, userIds: string[]): Promise<NotificationProfile> =>
     data(apiClient.put(`${pid(id)}/uyeler`, { userIds }, Q)),
+  /** Hazır profillerin tam (süzgeçsiz) tür kümeleri — matrisi doldurmak için. Eski sunucu 404. */
+  hazirProfiller: (): Promise<{ items: PresetProfileSet[] }> => data(apiClient.get(`${BASE}/profiller/hazir`, Q)),
   adaylar: (): Promise<{ items: MemberCandidate[] }> => data(apiClient.get(`${BASE}/profiller/aday-kullanicilar`, Q)),
   fabrikaVarsayilani: (): Promise<{ turler: FactoryDefaultKind[] }> => data(apiClient.get(`${BASE}/fabrika-varsayilani`, Q)),
   fabrikaVarsayilaniYaz: (turler: FactoryDefaultInput[]): Promise<{ turler: FactoryDefaultKind[] }> =>

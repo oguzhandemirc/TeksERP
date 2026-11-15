@@ -15,6 +15,12 @@ export const ERP_BILDIRIM_ENDPOINTS = {
   katalog: ["get", "/bildirim/katalog"],
   tercihler: ["get", "/bildirim/tercihler"],
   tercihYaz: ["put", "/bildirim/tercihler"],
+  // Tercih profilleri (fabrika 2026-11-15): eski fabrika 404 → ekran üç hazır düğmeye geri düşer.
+  profiller: ["get", "/bildirim/tercihler/profiller"],
+  profilKaydet: ["post", "/bildirim/tercihler/profiller"],
+  profilUygula: ["post", "/bildirim/tercihler/profil-uygula"],
+  profilGuncelle: ["patch", "/bildirim/tercihler/profiller/:id"],
+  profilSil: ["delete", "/bildirim/tercihler/profiller/:id"],
 } as const;
 
 /** Telefon bildirimi kanalı (fabrika `NotificationKanal`). */
@@ -42,6 +48,41 @@ export interface KatalogTuru {
   readonly grup?: string;
   readonly sinif?: string;
   readonly varsayilanKanallar?: readonly string[];
+  /** Katalog "önemli" işareti (fabrika 2.16.1+); eski fabrikada yok → yalnız ALARM önemli sayılır. */
+  readonly onemli?: boolean;
+}
+
+/** Hazır profil: tür kümesi fabrikada katalogdan türer (kişinin görebildikleriyle kesişik). */
+export interface HazirProfil {
+  readonly kod: string;
+  readonly ad: string;
+  readonly aciklama: string;
+  readonly acik: readonly string[];
+}
+/** Kişisel kayıtlı profil (kayıtlı seçimin fotoğrafı). */
+export interface KisiselProfil {
+  readonly id: string;
+  readonly ad: string;
+  readonly acik: readonly string[];
+  readonly kapali: readonly string[];
+}
+/** `GET /tercihler/profiller?kanal=PATRON_PUSH`; `etkin` kayıtlı seçimle eşleşenler ("hazir:KOD" · "kisisel:<id>"), boş = Özel. */
+export interface ProfilGorunumu {
+  readonly hazir: readonly HazirProfil[];
+  readonly kisisel: readonly KisiselProfil[];
+  readonly etkin: readonly string[];
+}
+export const hazirAnahtar = (kod: string) => `hazir:${kod}`;
+export const kisiselAnahtar = (id: string) => `kisisel:${id}`;
+
+/** Etkin profil adı (birden çoksa ilki; hazır önce gelir) ya da "Özel". */
+export function etkinProfilAdi(g: ProfilGorunumu): string {
+  const ad = new Map<string, string>([...g.hazir.map((p) => [hazirAnahtar(p.kod), p.ad] as const), ...g.kisisel.map((p) => [kisiselAnahtar(p.id), p.ad] as const)]);
+  for (const e of g.etkin) {
+    const a = ad.get(e);
+    if (a) return a;
+  }
+  return "Özel";
 }
 
 /** Telefon push cihazı + tercih (ERP). Yalnız `yetenek().patronPush` açıkken çağrılır. */
@@ -52,16 +93,31 @@ export interface PushCihazci {
   katalog(): Promise<{ turler: readonly KatalogTuru[] }>;
   tercihler(): Promise<Tercihler>;
   tercihYaz(tercihler: readonly TercihSatiri[]): Promise<Tercihler>;
+  /** Profil uçlarının hepsi telefon kanalında (PATRON_PUSH) çalışır. */
+  profiller(): Promise<ProfilGorunumu>;
+  /** Uygula hedef duruma yazar (idempotent, token yok); dönen tercihler + profiller. */
+  profilUygula(p: { hazir: string } | { kisisel: string }): Promise<Tercihler & { profiller: ProfilGorunumu }>;
+  /** Şimdiki KAYITLI seçimi adla kaydeder; `clientToken` mantıksal deneme başına (`attempt.ts`). */
+  profilKaydet(ad: string, clientToken: string): Promise<{ profiller: ProfilGorunumu }>;
+  profilGuncelle(id: string, b: { ad?: string; seciminiGuncelle?: boolean }): Promise<{ profiller: ProfilGorunumu }>;
+  profilSil(id: string): Promise<ProfilGorunumu>;
 }
 
 export function createErpPushCihazci(c: ApiClient): PushCihazci {
   const E = ERP_BILDIRIM_ENDPOINTS;
+  const K = PATRON_PUSH_KANAL;
+  const yol = (id: string) => E.profilGuncelle[1].replace(":id", encodeURIComponent(id));
   return {
     kaydet: (b) => c.post(E.cihazKaydet[1], b),
     birak: (belirtec) => c.del(E.cihazBirak[1], { belirtec }),
     katalog: () => c.get(E.katalog[1]),
     tercihler: () => c.get(E.tercihler[1]),
     tercihYaz: (tercihler) => c.put(E.tercihYaz[1], { tercihler }),
+    profiller: () => c.get(E.profiller[1], { kanal: K }),
+    profilUygula: (p) => c.post(E.profilUygula[1], { kanal: K, ...p }),
+    profilKaydet: (ad, clientToken) => c.post(E.profilKaydet[1], { ad, kanal: K, clientToken }),
+    profilGuncelle: (id, b) => c.patch(yol(id), { ...b, kanal: K }),
+    profilSil: (id) => c.del(`${yol(id)}?kanal=${K}`),
   };
 }
 
@@ -86,8 +142,11 @@ export function pushTercihGovdesiToplu(t: Tercihler, degisen: ReadonlyMap<string
 
 export type HazirSecim = "HEPSI" | "ONEMLI" | "HICBIRI";
 
-/** "Önemli" = alarm sınıfı ya da fabrikanın telefon varsayılanı AÇIK türü (alarm · güvenlik · cari kilidi …). */
-export const onemliMi = (t: KatalogTuru | undefined): boolean => t?.sinif === "ALARM" || (t?.varsayilanKanallar ?? []).includes(PATRON_PUSH_KANAL);
+/**
+ * "Önemli" = alarm sınıfı ya da katalogda `onemli` işaretli tür (fabrikanın ONEMLI hazır profiliyle aynı yüklem).
+ * Telefon varsayılan kanalı ÖLÇÜT DEĞİL: 2026-11-14'ten beri her tür PATRON_PUSH varsayılanlı, düğme "hepsini aç" oluyordu.
+ */
+export const onemliMi = (t: KatalogTuru | undefined): boolean => t?.sinif === "ALARM" || t?.onemli === true;
 
 /** Hazır düğmenin hedefi: görünen her telefon hücresi için aç/kapat (yalnız değişenler döner). */
 export function hazirSecimDegisimi(t: Tercihler, turler: readonly KatalogTuru[], secim: HazirSecim): Map<string, boolean> {

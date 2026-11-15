@@ -142,15 +142,21 @@ describe("hazır düğmeler ve gruplar (gövde)", () => {
   };
   const K = [
     { kod: "dokuma.tezgah-alarmi", ad: "Tezgâh alarmı", grup: "Dokuma", sinif: "ALARM" },
-    { kod: "guvenlik.giris", ad: "Giriş", grup: "Sistem", varsayilanKanallar: ["UYGULAMA", "PATRON_PUSH"] },
-    { kod: "siparis.termin-gecti", ad: "Termin", grup: "Satış", varsayilanKanallar: ["UYGULAMA"] },
+    { kod: "guvenlik.giris", ad: "Giriş", grup: "Sistem", varsayilanKanallar: ["UYGULAMA", "PATRON_PUSH"], onemli: true },
+    { kod: "siparis.termin-gecti", ad: "Termin", grup: "Satış", varsayilanKanallar: ["UYGULAMA", "PATRON_PUSH"] },
     { kod: "sistem.disk", ad: "Disk" },
   ];
   it("⭐ HEPSI / ONEMLI / HICBIRI yalnız DEĞİŞEN hücreleri döner", () => {
     expect([...bil.hazirSecimDegisimi(T, K, "HEPSI")]).toEqual([["dokuma.tezgah-alarmi", true], ["guvenlik.giris", true], ["sistem.disk", true]]);
     expect([...bil.hazirSecimDegisimi(T, K, "HICBIRI")]).toEqual([["siparis.termin-gecti", false]]);
-    // Önemli = ALARM sınıfı ∨ telefon varsayılanı açık tür.
+    // Önemli = ALARM sınıfı ∨ katalog `onemli` işareti (fabrikanın ONEMLI hazır profiliyle aynı yüklem).
     expect([...bil.hazirSecimDegisimi(T, K, "ONEMLI")]).toEqual([["dokuma.tezgah-alarmi", true], ["guvenlik.giris", true], ["siparis.termin-gecti", false]]);
+  });
+  it("⭐ K8: telefon varsayılan kanalı önem ölçütü DEĞİL (her tür PATRON_PUSH varsayılanlıyken düğme 'hepsini aç' oluyordu)", () => {
+    expect(bil.onemliMi({ kod: "x", ad: "X", varsayilanKanallar: ["UYGULAMA", "PATRON_PUSH"] })).toBe(false);
+    expect(bil.onemliMi({ kod: "x", ad: "X", onemli: true })).toBe(true);
+    expect(bil.onemliMi({ kod: "x", ad: "X", sinif: "ALARM" })).toBe(true);
+    expect(bil.onemliMi(undefined)).toBe(false);
   });
   it("gruplar katalog grubundan; grupsuz tür 'Diğer'", () => {
     expect(bil.pushGruplari(T, K).map((g) => [g.grup, g.hucreler.map((h) => h.tur)])).toEqual([
