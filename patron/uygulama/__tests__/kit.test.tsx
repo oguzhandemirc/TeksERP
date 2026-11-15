@@ -130,4 +130,23 @@ describe("KPI ızgarası dengeli sütun", () => {
     expect(balancedColumns(5, 504)).toBe(3);
     expect(balancedColumns(1, 0)).toBe(1);
   });
+  it("kesirli ölçüde (yoğunluk 1,5: 503,67dp) hücreler toplamı ızgarayı aşmaz → 3 kart tek satırda kalır", () => {
+    const { kpiCellWidth } = require("../src/ui/KpiCard") as typeof import("../src/ui/KpiCard");
+    for (const w of [503.67, 504, 504.33, 761.5]) {
+      const cols = balancedColumns(3, Math.floor(w));
+      expect(cols * kpiCellWidth(w, cols) + 12 * (cols - 1)).toBeLessThanOrEqual(w);
+    }
+    expect(balancedColumns(3, Math.floor(503.67))).toBe(3);
+    expect(kpiCellWidth(503.67, 3)).toBe(159);
+  });
+});
+
+describe("Button erişilebilirlik etiketi", () => {
+  it("ikonlu düğmede etiket açık metindir (virgülle başlamaz)", () => {
+    const { Button } = require("../src/ui/kit") as typeof import("../src/ui/kit");
+    render(<Button label="Profili kaydet" icon="save-outline" onPress={() => undefined} testID="kaydet" />);
+    expect(screen.getByTestId("kaydet").props.accessibilityLabel).toBe("Profili kaydet");
+    render(<Button label="Kaydet" accessibilityLabel="Cariyi kaydet" onPress={() => undefined} testID="ozel" />);
+    expect(screen.getByTestId("ozel").props.accessibilityLabel).toBe("Cariyi kaydet");
+  });
 });

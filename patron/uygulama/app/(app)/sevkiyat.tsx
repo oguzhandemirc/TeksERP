@@ -11,7 +11,7 @@ import { Screen } from "../../src/ui/Frame";
 import { openRecord } from "../../src/ui/nav";
 import { KpiCard, KpiGrid } from "../../src/ui/KpiCard";
 import { ListRow } from "../../src/ui/ListRow";
-import { num, obj, period, pct, qty, str } from "../../src/ui/pano/read";
+import { num, obj, period, pctOfCount, qty, str } from "../../src/ui/pano/read";
 import { RecordStatusBadge } from "../../src/ui/pano/RecordStatusBadge";
 import { RemoteList, useRecordPage } from "../../src/ui/pano/RemoteList";
 import { FactoryStamp, SnapshotGate } from "../../src/ui/pano/SnapshotGate";
@@ -44,7 +44,7 @@ export default function Shipments() {
                 <>
                   <KpiGrid testID="sevk-kpi">
                     <KpiCard label="Sevk edilen" value={qty(d.sevkMiktari)} unit={UNIT.metre} caption={`${PERIOD_LABEL[p]} · ${qty(d.sevkTopSayisi)} ${UNIT.top} · brüt`} domain="sevkiyat" testID="kpi-sevk-metre" />
-                    <KpiCard label="Zamanında teslim" value={pct(d.zamanindaYuzde)} caption={`${qty(d.tamamlananSiparis)} sipariş tamamlandı`} domain="sevkiyat" icon="checkmark-done-outline" testID="kpi-zamaninda" />
+                    <KpiCard label="Zamanında teslim" value={pctOfCount(d.zamanindaYuzde, d.tamamlananSiparis)} caption={`${qty(d.tamamlananSiparis)} sipariş tamamlandı`} domain="sevkiyat" icon="checkmark-done-outline" testID="kpi-zamaninda" />
                     <KpiCard
                       label="Ortalama gecikme"
                       value={late === null ? "Yok" : qty(late)}

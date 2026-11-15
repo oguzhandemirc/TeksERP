@@ -71,7 +71,7 @@ export function Button(p: { label: string; onPress: () => void; tone?: Tone; dis
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={p.accessibilityLabel}
+      accessibilityLabel={p.accessibilityLabel ?? p.label}
       accessibilityState={{ disabled: !!off, busy: !!p.busy }}
       disabled={off}
       onPress={p.onPress}

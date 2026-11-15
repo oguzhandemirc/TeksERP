@@ -2,6 +2,7 @@
 import { erpYetenek } from "../src/api/yetenek";
 import { duzenAnahtari, gizliyiKoru, tasi, temizDuzen, varsayilanDuzen } from "../src/ui/pano/duzen";
 import { kutuGorunum, MOBILDE_YOK } from "../src/ui/pano/kutu-gorunum";
+import { pct, pctOfCount } from "../src/ui/pano/read";
 
 describe("pano düzeni", () => {
   const known = new Set(["a", "b", "c"]);
@@ -43,6 +44,21 @@ describe("kutu görünümü", () => {
     const g = kutuGorunum("uretim", { metre: { deger: 4200, degisimYuzde: -5 }, top: { deger: 38 } });
     expect(g?.value).toBe("4.200");
     expect(g?.trend?.direction).toBe("down");
+  });
+  it("eğilim Türkçe yüzde biçimi: işaret en başta (-%100, +%12,5); önceki dönem 0 iken yüzde yok", () => {
+    expect(kutuGorunum("uretim", { metre: { deger: 0, onceki: 30, degisimYuzde: -100 } })?.trend?.text).toBe("-%100 önceki döneme göre");
+    expect(kutuGorunum("uretim", { metre: { deger: 45, onceki: 40, degisimYuzde: 12.5 } })?.trend?.text).toBe("+%12,5 önceki döneme göre");
+    expect(kutuGorunum("uretim", { metre: { deger: 5, onceki: 0, degisimYuzde: 100 } })?.trend).toBeUndefined();
+    expect(kutuGorunum("uretim", { metre: { deger: 5, onceki: 0, degisimYuzde: null } })?.trend).toBeUndefined();
+  });
+  it("pct işareti yüzde işaretinden önce; pctOfCount paydasız oranda —", () => {
+    expect(pct(-12.5)).toBe("-%12,5");
+    expect(pct(0)).toBe("%0");
+    expect(pct(7, true)).toBe("+%7");
+    expect(pct(null)).toBe("—");
+    expect(pctOfCount(0, 0)).toBe("—");
+    expect(pctOfCount(0, undefined)).toBe("—");
+    expect(pctOfCount(80, 5)).toBe("%80");
   });
   it("veri yok / tanınmayan kutu null; grafik kutuları mobilde yok", () => {
     expect(kutuGorunum("uretim", null)).toBeNull();

@@ -34,9 +34,18 @@ export function qty(v: unknown): string {
   return formatNumber(n, Number.isInteger(n) || Math.abs(n) >= 1000 ? 0 : 1);
 }
 
-export function pct(v: unknown): string {
+/** Türkçe yüzde: işaret en başta, sonra "%" (-%12,5; "%-12,5" değil). */
+export function pct(v: unknown, signed = false): string {
   const n = num(v);
-  return n === null ? "—" : `%${formatNumber(n, 1)}`;
+  if (n === null) return "—";
+  const sign = n < 0 ? "-" : signed && n > 0 ? "+" : "";
+  return `${sign}%${formatNumber(Math.abs(n), 1)}`;
+}
+
+/** Oran yalnız paydası varsa anlamlı: tamamlanan iş 0 iken "%0" yerine "—". */
+export function pctOfCount(v: unknown, count: unknown): string {
+  const c = num(count);
+  return c === null || c <= 0 ? "—" : pct(v);
 }
 
 /** Dönemli bölümden tek dönem (`ozet.sevkiyat` / `ozet.fason`). */
