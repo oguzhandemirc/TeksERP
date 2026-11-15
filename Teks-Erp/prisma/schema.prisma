@@ -665,6 +665,7 @@ model User {
   notificationPrefs            NotificationPreference[]    @relation("NotificationPreferenceUser")
   notificationSetting          NotificationUserSetting?    @relation("NotificationUserSettingUser")
   notificationProfiles         NotificationProfileMember[] @relation("NotificationProfileMemberUser")
+  notificationPrefProfiles     NotificationPreferenceProfile[] @relation("NotificationPreferenceProfileUser")
   recordFollows                RecordFollow[]              @relation("RecordFollowUser")
   rowMarks                     RowMark[]                   @relation("RowMarkOwner")
   reportCategoriesCreated      ReportCategory[]            @relation("ReportCategoryCreatedBy")
@@ -13924,6 +13925,31 @@ model NotificationProfileMember {
   @@unique([profileId, userId])
   @@index([userId])
   @@map("notification_profile_members")
+}
+
+/// KİŞİSEL BİLDİRİM PROFİLİ — kişinin adla kaydettiği tür seçimi ("Gece", "Fuar haftası"); kanaldan bağımsızdır,
+/// uygulanırken bir kanala yazılır (`notification-preference-profile.service`). Silinmez, arşivlenir (`archivedAt`).
+/// Kayıtta kararı olmayan tür (sonradan eklenen/görünür olan) uygulamada AYNEN kalır.
+/// ŞEMA-DIŞI: CHECK NOT (onKinds && offKinds) · partial unique (userId, lower(name)) WHERE archivedAt IS NULL.
+model NotificationPreferenceProfile {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @db.Uuid
+  name        String    @db.VarChar(60)
+  /// Açık türler (katalog kodu; CHECK yok, tek kaynak katalog).
+  onKinds     String[]  @default([]) @db.VarChar(64)
+  /// Kapalı türler.
+  offKinds    String[]  @default([]) @db.VarChar(64)
+  archivedAt  DateTime? @db.Timestamptz
+  /// İdempotency — kayıt yaratan uç (`clientToken @unique` sözleşmesi).
+  clientToken String?   @unique @db.Uuid
+
+  user User @relation("NotificationPreferenceProfileUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([userId])
+  @@map("notification_preference_profiles")
 }
 
 /// FABRİKA VARSAYILANI — tür başına tek satır (audit'li); satır yok = MIRAS (katalog varsayılanı).

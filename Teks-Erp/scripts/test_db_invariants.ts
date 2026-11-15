@@ -712,6 +712,14 @@ const PARTIAL_INDEXES: Array<{
     predicate: `("weavingOrderId" IS NOT NULL)`,
     why: "kişi × dokuma işi tek takip — aynı ON CONFLICT hedefi",
   },
+  // bildirim: kişisel tercih profilleri (migration 20261115120000) — kişi başına canlı ad tekil, harf duyarsız.
+  {
+    table: "notification_preference_profiles",
+    index: "notification_preference_profiles_user_name_live_uq",
+    uniq: true,
+    predicate: `("archivedAt" IS NULL)`,
+    why: "kişi başına aynı adla tek canlı profil (\"Gece\" iki kez kaydedilip hangisi uygulanacağı belirsiz kalmasın); silinen ad yeniden kullanılabilir",
+  },
   // ⚠️ `machine_runs_clientToken_key` BURAYA GİRMEZ — o düz (partial olmayan) bir
   //    unique ve şemadaki `@unique`ten doğuyor; `weaving_orders_clientToken_key`
   //    emsali. PG düz unique'te de çok sayıda NULL'a izin verir.
@@ -1253,6 +1261,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "record_follows", name: "record_follows_one_target_ck" },
   { table: "record_follows", name: "record_follows_state_ck" },
   { table: "record_follows", name: "record_follows_reason_ck" },
+  // Kişisel tercih profili (20261115120000): bir tür aynı profilde hem açık hem kapalı olamaz.
+  { table: "notification_preference_profiles", name: "notification_preference_profiles_kinds_disjoint_ck" },
   // Satır işareti: renk ve not ikisi de boş satır tutulmaz (servis siler; 20261113120000_row_marks).
   { table: "row_marks", name: "row_marks_not_empty_chk" },
 ];

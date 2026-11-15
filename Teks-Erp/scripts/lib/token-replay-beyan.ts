@@ -54,6 +54,8 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   // Toplu satır ekleme: parti kimliği satır başına aynı; başlık satırı `claimDraft` kilidinin ARDINDAN okunur (K′), DB unique yok.
   [`${S}gelen-belge-line.service.ts::addDeliveryNoteLines`]: { giris: { [`${S}gelen-belge-line.service.ts::addDeliveryNoteLines`]: "K′" } },
   [`${S}notification-profile.service.ts::createProfile`]: { giris: { [`${S}notification-profile.service.ts::createProfile`]: "R" } },
+  // Kişisel bildirim tercih profili (2026-11-15): panel/telefondan clientToken ile doğar.
+  [`${S}notification-preference-profile.service.ts::createProfile`]: { giris: { [`${S}notification-preference-profile.service.ts::createProfile`]: "R" } },
   // Belge tasarımcısı (T1B): şablon + v1 ve yeni sürüm panelden clientToken ile doğar.
   [`${S}document-template/template.service.ts::createTemplate`]: { giris: { [`${S}document-template/template.service.ts::createTemplate`]: "R" } },
   [`${S}document-template/version.service.ts::saveVersion`]: { giris: { [`${S}document-template/version.service.ts::saveVersion`]: "R" } },
@@ -321,6 +323,7 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}gelen-belge-line.service.ts::lineBatchReplay`]: ["noteId"],
   [`${S}gelen-belge-iptal.service.ts::replayFor`]: ["noteId", "reason"],
   [`${S}notification-profile.service.ts::createReplay`]: ["kod"],
+  [`${S}notification-preference-profile.service.ts::createReplay`]: ["userId", "ad"],
   [`${S}document-template/template.service.ts::createReplay`]: ["docType", "name", "copiedFrom"],
   [`${S}document-template/version.service.ts::saveReplay`]: ["templateId", "sourceHtml", "css"],
   [`${S}rapor-tanimi.service.ts::createReplay`]: ["ownerId", "govde"],

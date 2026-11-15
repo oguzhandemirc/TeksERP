@@ -11,6 +11,7 @@ import * as pref from "../services/notification-preference.service";
 import * as follow from "../services/notification-follow.service";
 import * as profile from "../services/notification-profile.service";
 import * as audience from "../services/notification-profile-audience.service";
+import * as prefProfile from "../services/notification-preference-profile.service";
 
 type Handler = (req: Request) => Promise<unknown>;
 
@@ -37,6 +38,11 @@ export const putPreferences = json((req) => pref.putPreferences(viewer(req), req
 export const postPreferencePreview = json((req) => pref.previewPreferences(viewer(req), req.body));
 export const postResetPreview = json((req) => pref.resetPreview(viewer(req)));
 export const postReset = json((req) => pref.resetPreferences(viewer(req), req.body));
+export const getPrefProfiles = json((req) => prefProfile.listProfiles(viewer(req), req.query));
+export const postPrefProfile = json((req) => prefProfile.createProfile(viewer(req), req.body), 201);
+export const patchPrefProfile = json((req) => prefProfile.updateProfile(viewer(req), profileId(req), req.body));
+export const deletePrefProfile = json((req) => prefProfile.archiveProfile(viewer(req), profileId(req), req.query));
+export const postApplyPrefProfile = json((req) => prefProfile.applyProfile(viewer(req), req.body));
 export const getSettings = json((req) => pref.getSettings(viewer(req)));
 export const putSettings = json((req) => pref.putSettings(viewer(req), req.body));
 export const getFollow = json((req) => follow.getFollow(viewer(req), param(req, "tur"), param(req, "id")));
@@ -45,6 +51,7 @@ export const deleteFollow = json((req) => follow.deleteFollow(viewer(req), param
 
 export const getProfiles = json((req) => profile.listProfiles(req.query as Record<string, unknown>));
 export const getProfileCandidates = json(() => audience.listMemberCandidates());
+export const getPresetProfiles = json(async () => prefProfile.listPresetsForAdmin());
 export const postProfile = json((req) => profile.createProfile(req.body, req.user!.userId), 201);
 export const patchProfile = json((req) => profile.updateProfile(profileId(req), req.body, req.user!.userId));
 export const deleteProfile = json((req) => profile.archiveProfile(profileId(req), req.user!.userId));
