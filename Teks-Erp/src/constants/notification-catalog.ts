@@ -24,6 +24,7 @@ import { URETIM_NOTIFICATION_ENTRIES } from "./notification-catalog-uretim";
 import { DEPO_NOTIFICATION_ENTRIES } from "./notification-catalog-depo";
 import { FINANS_NOTIFICATION_ENTRIES } from "./notification-catalog-finans";
 import { YETKI_NOTIFICATION_ENTRIES } from "./notification-catalog-yetki";
+import { SISTEM_DISK_NOTIFICATION_ENTRIES } from "./notification-catalog-sistem";
 
 export { NOTIFICATION_PHASES, NOTIFICATION_GRUPLARI } from "./notification-catalog.types";
 export type {
@@ -106,6 +107,7 @@ export const NOTIFICATION_CATALOG = {
     payloadAlanlari: ["surum"],
     tahminiHaftalik: 0.5, saklama: SAKLAMA,
   },
+  ...SISTEM_DISK_NOTIFICATION_ENTRIES, // S6a — sunucu diski (ayrı dosya, dosya boyu)
   "yazici.hata": {
     kod: "yazici.hata", ad: "Yazıcıda baskı hatası",
     sinif: "BILDIRIM", altTur: "OLAY", grup: "Sistem",

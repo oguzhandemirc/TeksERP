@@ -169,6 +169,8 @@ const ESIK_LABEL: Readonly<Record<string, string>> = {
   oranYuzde: "Oran eşiği (%)",
   minMetre: "En az metre",
   tolerans: "Gecikme payı (gün)",
+  oran: "Oran eşiği (%)",
+  metre: "Metre eşiği",
 };
 // "Yaklaşıyor" türlerinde `gun` bir öne-bakış penceresidir; "Eşik (gün)" yaş eşiği gibi okunuyordu.
 const ESIK_LABEL_TUR: Readonly<Record<string, Readonly<Record<string, string>>>> = {

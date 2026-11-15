@@ -11,6 +11,7 @@ import { effectiveNotificationParams } from "../helpers/notification-params.help
 import type { NotificationKind } from "../../constants/notification-catalog";
 import { factoryDateTimeTr, factoryDateTr } from "../../constants/time";
 import { backupHealth } from "../../lib/health-snapshot";
+import { readAppDiskMetrics } from "../../lib/disk-metrics";
 import { lastOffsiteSweep } from "../helpers/offsite-backup.helper";
 import { getCloudSyncStatus } from "../../jobs/cloud-sync.job";
 import { getLicenseSnapshot } from "../../lib/license/runtime";
@@ -30,6 +31,7 @@ export const SYSTEM_CONDITION_KINDS = [
   "sistem.esitleme-gecikti",
   "sistem.lisans-uyarisi",
   "sistem.guncelleme-onay-bekliyor",
+  "sistem.disk-dolu",
 ] as const satisfies readonly NotificationKind[];
 
 /** Okuyucuların kaynak için gereken dar yüzü — bekçi sahteyle değiştirir. */
@@ -51,6 +53,8 @@ export interface SystemSourceDeps {
     bekleyen: { surum: string; karar: string } | null;
     onay: { surum: string } | null;
   }>;
+  /** `/health`in disk alanları (aynı okuyucu); ölçülemezse alanlar null. */
+  appDisk: () => { diskTotalBytes: number | null; diskFreeBytes: number | null; diskUsedPct: number | null };
   /** Türün katalog parametreleri (fabrika varsayılanı tablosu N4'te gelir; o zamana dek katalog varsayılanı). */
   params: (kind: NotificationKind) => Record<string, unknown>;
   now: () => number;
@@ -66,6 +70,7 @@ const REAL_DEPS: SystemSourceDeps = {
   cloudSyncStatus: getCloudSyncStatus,
   licenseSnapshot: () => getLicenseSnapshot(),
   updateStatus: () => getUpdateStatus(),
+  appDisk: readAppDiskMetrics,
   params: effectiveNotificationParams,
   now: Date.now,
   integrityMeasured: () => getIntegrityOutcome() !== null,
@@ -261,14 +266,26 @@ export async function updateSubjects(): Promise<ConditionSubject[]> {
   return [subject(b.surum, { surum: b.surum })];
 }
 
+// ── 5 · Disk doluyor (S6a) ──────────────────────────────────────────────────────────────────────
+export async function diskSubjects(): Promise<ConditionSubject[]> {
+  const kind = "sistem.disk-dolu";
+  const d = deps.appDisk();
+  if (d.diskUsedPct === null) return keepIfOpen(kind, ["uygulama"]);
+  const threshold = Number(deps.params(kind).oran ?? 90);
+  if (d.diskUsedPct < threshold) return [];
+  const freeGb = d.diskFreeBytes === null ? "—" : String(Math.round((d.diskFreeBytes / 1024 ** 3) * 10) / 10).replace(".", ",");
+  return [subject("uygulama", { disk: "uygulama", doluluk: String(d.diskUsedPct).replace(".", ","), esik: String(threshold).replace(".", ","), bosGb: freeGb })];
+}
+
 export const SYSTEM_SOURCE_EVALUATORS: Record<(typeof SYSTEM_CONDITION_KINDS)[number], () => Promise<ConditionSubject[]>> = {
   "sistem.yedek-basarisiz": backupSubjects,
   "sistem.esitleme-gecikti": syncSubjects,
   "sistem.lisans-uyarisi": licenseSubjects,
   "sistem.guncelleme-onay-bekliyor": updateSubjects,
+  "sistem.disk-dolu": diskSubjects,
 };
 
-/** Dört kaynağı tarayıcıya kaydeder (tekrar çağrı aynı kaydı yeniler). */
+/** Sistem kaynaklarını tarayıcıya kaydeder (tekrar çağrı aynı kaydı yeniler). */
 export function registerSystemConditionSources(): void {
   for (const kind of SYSTEM_CONDITION_KINDS) {
     registerConditionSource({ kind, periodMs: SYSTEM_CONDITION_PERIOD_MS, evaluate: () => SYSTEM_SOURCE_EVALUATORS[kind]() });

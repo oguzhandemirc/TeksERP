@@ -6,6 +6,7 @@
 // birleştirme anahtarı = tür + kayıt (`tekilKalibi`), pencere 10 dk (K3). `{kullanici}` emit helper'ı aktörden doldurur (K4).
 // Yük tutar taşımaz (fiyat değişimi metinde yalnız "fiyat" sözcüğüyle geçer).
 // =============================================================================
+import { z } from "zod";
 import { TERIM } from "./terim";
 import {
   NOTIFICATION_DEFAULT_CHANNELS as KANAL_VARSAYILAN,
@@ -45,9 +46,18 @@ export const SATIS_NOTIFICATION_ENTRIES = {
   "siparis.olusturuldu": {
     ...SIPARIS, kod: "siparis.olusturuldu", ad: "Yeni sipariş girildi",
     baslik: "Yeni sipariş: {siparisNo}",
-    govde: "{kullanici} yeni sipariş girdi: {musteriAd} · {kalemSayisi} kalem",
-    payloadAlanlari: ["siparisId", "siparisNo", "musteriAd", "kalemSayisi", "kullanici"],
+    govde: "{kullanici} yeni sipariş girdi: {musteriAd} · {kalemSayisi} kalem · {miktar}",
+    payloadAlanlari: ["siparisId", "siparisNo", "musteriAd", "kalemSayisi", "miktar", "kullanici"],
     tahminiHaftalik: 25,
+  },
+  // S6a: doğuşta canlı MT kalemlerin toplamı eşiği (`metre`) aşınca; ölçü METRE (kullanıcı kararı: tutar yok).
+  "siparis.buyuk-siparis": {
+    ...SIPARIS, kod: "siparis.buyuk-siparis", ad: "Büyük sipariş girildi", onemli: true,
+    baslik: "Büyük sipariş: {siparisNo}",
+    govde: "{musteriAd} için {metre} m sipariş girildi (eşik {esik} m) · {kalemSayisi} kalem · {kullanici}",
+    payloadAlanlari: ["siparisId", "siparisNo", "musteriAd", "metre", "esik", "kalemSayisi", "kullanici"],
+    paramSemasi: z.object({ metre: z.number().min(1).max(10_000_000).default(5000) }).strict(),
+    tahminiHaftalik: 2,
   },
   "siparis.degisti": {
     ...SIPARIS, kod: "siparis.degisti", ad: "Sipariş değiştirildi",
@@ -73,15 +83,15 @@ export const SATIS_NOTIFICATION_ENTRIES = {
   "siparis.iptal": {
     ...SIPARIS, kod: "siparis.iptal", ad: "Sipariş iptal edildi", onemli: true,
     baslik: "Sipariş iptal edildi: {siparisNo}",
-    govde: "{kullanici} siparişi iptal etti: {siparisNo} ({musteriAd})",
-    payloadAlanlari: ["siparisId", "siparisNo", "musteriAd", "kullanici"],
+    govde: "{kullanici} siparişi iptal etti: {siparisNo} ({musteriAd}) · {miktar}",
+    payloadAlanlari: ["siparisId", "siparisNo", "musteriAd", "miktar", "kullanici"],
     tahminiHaftalik: 2,
   },
   "siparis.tamamlandi": {
     ...SIPARIS, kod: "siparis.tamamlandi", ad: "Sipariş tamamlandı",
     baslik: "Sipariş tamamlandı: {siparisNo}",
-    govde: "{siparisNo} ({musteriAd}) tamamlandı · {kullanici}",
-    payloadAlanlari: ["siparisId", "siparisNo", "musteriAd", "kullanici"],
+    govde: "{siparisNo} ({musteriAd}) tamamlandı · {miktar} · {kullanici}",
+    payloadAlanlari: ["siparisId", "siparisNo", "musteriAd", "miktar", "kullanici"],
     tahminiHaftalik: 20,
   },
   "siparis.gunluk-ozet": {
@@ -167,6 +177,22 @@ export const SATIS_NOTIFICATION_ENTRIES = {
     govde: "{kullanici}: {isEmriNo} rotası {eskiRota} → {yeniRota}",
     payloadAlanlari: ["isEmriId", "isEmriNo", "eskiRota", "yeniRota", "kullanici"],
     tahminiHaftalik: 4,
+  },
+  // S6a: kurşun kuyruğunda adımın acil rozeti KAPALI→AÇIK geçişi (`setQueueUrgent`); yeniden işaretleme bildirmez.
+  "isemri.acil-isaretlendi": {
+    ...IS_EMRI, kod: "isemri.acil-isaretlendi", get ad() { return `${ie()} acil işaretlendi`; }, onemli: true,
+    baslik: "Acil: {isEmriNo}",
+    govde: "{kullanici} {isEmriNo} kaydını {istasyonAd} kuyruğunda acil işaretledi",
+    payloadAlanlari: ["isEmriId", "isEmriNo", "istasyonAd", "kullanici"],
+    tahminiHaftalik: 5,
+  },
+  // S6a (genel fason F9): yeniden işlem sebepli iş emri doğunca; sınıf İE'de DONMUŞ `reworkBillable`dan.
+  "fason.yeniden-islem": {
+    ...IS_EMRI, grup: "Fason", kod: "fason.yeniden-islem", ad: "Yeniden işlem açıldı", onemli: true,
+    baslik: "Yeniden işlem: {isEmriNo}",
+    govde: "{kullanici} yeniden işlem açtı: {isEmriNo} · sebep: {sebep} ({sinif})",
+    payloadAlanlari: ["isEmriId", "isEmriNo", "sebep", "sinif", "kullanici"],
+    tahminiHaftalik: 2,
   },
   "planlama.vardiya-ozet": {
     ...IS_EMRI, kod: "planlama.vardiya-ozet", ad: "Vardiya sonu planlama özeti", ozet: "VARDIYA",

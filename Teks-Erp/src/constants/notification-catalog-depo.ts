@@ -46,15 +46,15 @@ export const DEPO_NOTIFICATION_ENTRIES = {
   "sevkiyat.geri-alindi": {
     ...SEVK, kod: "sevkiyat.geri-alindi", ad: "Sevk geri alındı", onemli: true,
     baslik: "Sevk geri alındı: {sevkiyatNo}",
-    govde: "{kullanici} {sevkiyatNo} ({musteriAd}) sevkini geri aldı: {sebep}",
-    payloadAlanlari: ["sevkiyatId", "sevkiyatNo", "musteriAd", "sebep", "kullanici"],
+    govde: "{kullanici} {sevkiyatNo} ({musteriAd}) sevkini geri aldı ({topSayisi} top, {metre} m): {sebep}",
+    payloadAlanlari: ["sevkiyatId", "sevkiyatNo", "musteriAd", "topSayisi", "metre", "sebep", "kullanici"],
     tahminiHaftalik: 1,
   },
   "sevkiyat.faturalandi": {
     ...SEVK, kod: "sevkiyat.faturalandi", ad: "Sevkiyat faturalandı",
     baslik: "Faturalandı: {sevkiyatNo}",
-    govde: "{sevkiyatNo} ({musteriAd}) fatura {faturaNo} ile işaretlendi · {kullanici}",
-    payloadAlanlari: ["sevkiyatId", "sevkiyatNo", "musteriAd", "faturaNo", "kullanici"],
+    govde: "{sevkiyatNo} ({musteriAd}, {topSayisi} top, {metre} m) fatura {faturaNo} ile işaretlendi · {kullanici}",
+    payloadAlanlari: ["sevkiyatId", "sevkiyatNo", "musteriAd", "topSayisi", "metre", "faturaNo", "kullanici"],
     tahminiHaftalik: 15,
   },
   "sevkiyat.iade": {
@@ -128,16 +128,26 @@ export const DEPO_NOTIFICATION_ENTRIES = {
   "fason.cikis": {
     ...FASON, tekilKalibi: "{sevkId}", kod: "fason.cikis", ad: "Fasona mal çıktı",
     baslik: "Fason çıkışı: {sevkNo}",
-    govde: "{firmaAd} firmasına {topSayisi} top, {metre} m gönderildi · {kullanici}",
-    payloadAlanlari: ["sevkId", "sevkNo", "firmaAd", "topSayisi", "metre", "kullanici"],
+    // S6a: içerik bileşik metin — top sevki "5 top, 1250 m", fason dokuma sevki "3 levent, 800 m, 40 kg iplik".
+    govde: "{firmaAd} firmasına {icerik} gönderildi · {kullanici}",
+    payloadAlanlari: ["sevkId", "sevkNo", "firmaAd", "icerik", "kullanici"],
     tahminiHaftalik: 15,
   },
   "fason.donus": {
     ...FASON, tekilKalibi: "{kabulId}", kod: "fason.donus", ad: "Fasondan mal döndü",
     baslik: "Fason dönüşü: {kabulNo}",
-    govde: "{firmaAd} firmasından {topSayisi} top geldi · {kullanici}",
-    payloadAlanlari: ["kabulId", "kabulNo", "firmaAd", "topSayisi", "kullanici"],
+    govde: "{firmaAd} firmasından {topSayisi} top, {metre} m geldi · {kullanici}",
+    payloadAlanlari: ["kabulId", "kabulNo", "firmaAd", "topSayisi", "metre", "kullanici"],
     tahminiHaftalik: 15,
+  },
+  // S6a: kabulde giden (fasonun hesabından düşülen) ↔ dönen (doğan parçalar) farkı; eşik `oran` (%) her iki yönde.
+  "fason.fire-farki": {
+    ...FASON, tekilKalibi: "{kabulId}", kod: "fason.fire-farki", ad: "Fason dönüşünde metre farkı", onemli: true,
+    baslik: "Fason metre farkı: {kabulNo}",
+    govde: "{firmaAd}: {gidenMetre} m gitti, {donenMetre} m döndü, fark {farkMetre} m {yon} (%{oranYuzde}) · {kullanici}",
+    payloadAlanlari: ["kabulId", "kabulNo", "firmaAd", "gidenMetre", "donenMetre", "farkMetre", "yon", "oranYuzde", "kullanici"],
+    paramSemasi: z.object({ oran: z.number().min(0.1).max(100).default(3) }).strict(),
+    tahminiHaftalik: 3,
   },
   "fason.gunluk-ozet": {
     ...FASON, ...DAILY_DIGEST, kod: "fason.gunluk-ozet", ad: "Günlük fason özeti",
@@ -165,8 +175,8 @@ export const DEPO_NOTIFICATION_ENTRIES = {
   "gelenbelge.onaylandi": {
     ...INCOMING_DOC, kod: "gelenbelge.onaylandi", ad: "Gelen belge onaylandı",
     baslik: "Gelen belge onaylandı: {belgeNo}",
-    govde: "{belgeNo} ({gonderen}) onaylandı, {topSayisi} top girdi · {kullanici}",
-    payloadAlanlari: ["belgeId", "belgeNo", "gonderen", "topSayisi", "kullanici"],
+    govde: "{belgeNo} ({gonderen}) onaylandı, {topSayisi} top, {metre} m girdi · {kullanici}",
+    payloadAlanlari: ["belgeId", "belgeNo", "gonderen", "topSayisi", "metre", "kullanici"],
     tahminiHaftalik: 30,
   },
   "gelenbelge.iptal": {
