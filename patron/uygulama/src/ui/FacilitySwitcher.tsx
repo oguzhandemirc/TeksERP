@@ -3,10 +3,11 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { useSession } from "../state/session";
 import { IconChip } from "./IconChip";
 import { Banner, Button } from "./kit";
+import { ModalSheet, useInSheetCard } from "./ModalSheet";
 import { StatusBadge } from "./StatusBadge";
 import { makeStyles, useTokens } from "./theme-context";
 import { READABLE_MAX, TOUCH, radius, space, typography, type StatusKind } from "./tokens";
@@ -17,6 +18,15 @@ const PHASE_BADGE: Readonly<Record<string, { readonly label: string; readonly ki
 };
 
 export function FacilitySwitchModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  return (
+    <ModalSheet visible={visible} onClose={onClose} scrimCloses iosPresentation="formSheet" testID="tesis-modal">
+      <FacilityList onClose={onClose} />
+    </ModalSheet>
+  );
+}
+
+function FacilityList({ onClose }: { onClose: () => void }) {
+  const kart = useInSheetCard();
   const { facilities, facilityId, switchFacility, switchError } = useSession();
   const router = useRouter();
   const t = useTokens();
@@ -32,41 +42,39 @@ export function FacilitySwitchModal({ visible, onClose }: { visible: boolean; on
     }
   }
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose} transparent={false} presentationStyle={Platform.OS === "ios" ? "formSheet" : undefined}>
-      <View style={s.sheet} testID="tesis-modal">
-        <View style={s.bar}>
-          <Text style={s.title} accessibilityRole="header">Fabrika değiştir</Text>
-        </View>
-        <Text style={s.note}>Üyesi olduğunuz fabrikalar. Geçince pano yeni fabrikanın verisiyle açılır.</Text>
-        {switchError ? <Banner tone="error" text={switchError} testID="tesis-gecis-hatasi" /> : null}
-        <ScrollView style={s.flex}>
-          <View style={s.group}>
-            {facilities.map((f, i) => {
-              const active = f.id === facilityId;
-              const badge = PHASE_BADGE[f.hizmet];
-              return (
-                <Pressable key={f.id} accessibilityRole="button" accessibilityState={{ selected: active, disabled: busy !== null }} disabled={busy !== null}
-                  testID={`tesis-${f.id}`} onPress={() => (active ? onClose() : void choose(f.id))}
-                  style={({ pressed }) => [s.row, i > 0 && s.sep, pressed && { backgroundColor: t.surfaceAlt }]}>
-                  <IconChip domain={active ? "gelenKutusu" : "genel"} icon="business-outline" size={36} />
-                  <Text style={[s.name, active && { color: t.tint, fontWeight: "700" }]} numberOfLines={1}>{f.ad}</Text>
-                  {badge ? <View testID={`tesis-rozet-${f.id}`}><StatusBadge kind={badge.kind} label={badge.label} size="sm" /></View> : null}
-                  {busy === f.id ? (
-                    <ActivityIndicator color={t.tint} accessibilityLabel="Geçiliyor" />
-                  ) : active ? (
-                    <View style={s.active}>
-                      <Ionicons name="checkmark-circle" size={20} color={t.tint} />
-                      <Text style={[s.activeText, { color: t.tint }]}>Etkin</Text>
-                    </View>
-                  ) : null}
-                </Pressable>
-              );
-            })}
-          </View>
-        </ScrollView>
-        <Button label="Kapat" tone="plain" onPress={onClose} testID="tesis-modal-kapat" />
+    <View style={[s.sheet, kart && s.sheetCard]} testID="tesis-modal">
+      <View style={s.bar}>
+        <Text style={s.title} accessibilityRole="header">Fabrika değiştir</Text>
       </View>
-    </Modal>
+      <Text style={s.note}>Üyesi olduğunuz fabrikalar. Geçince pano yeni fabrikanın verisiyle açılır.</Text>
+      {switchError ? <Banner tone="error" text={switchError} testID="tesis-gecis-hatasi" /> : null}
+      <ScrollView style={kart ? s.listCard : s.flex}>
+        <View style={s.group}>
+          {facilities.map((f, i) => {
+            const active = f.id === facilityId;
+            const badge = PHASE_BADGE[f.hizmet];
+            return (
+              <Pressable key={f.id} accessibilityRole="button" accessibilityState={{ selected: active, disabled: busy !== null }} disabled={busy !== null}
+                testID={`tesis-${f.id}`} onPress={() => (active ? onClose() : void choose(f.id))}
+                style={({ pressed }) => [s.row, i > 0 && s.sep, pressed && { backgroundColor: t.surfaceAlt }]}>
+                <IconChip domain={active ? "gelenKutusu" : "genel"} icon="business-outline" size={36} />
+                <Text style={[s.name, active && { color: t.tint, fontWeight: "700" }]} numberOfLines={1}>{f.ad}</Text>
+                {badge ? <View testID={`tesis-rozet-${f.id}`}><StatusBadge kind={badge.kind} label={badge.label} size="sm" /></View> : null}
+                {busy === f.id ? (
+                  <ActivityIndicator color={t.tint} accessibilityLabel="Geçiliyor" />
+                ) : active ? (
+                  <View style={s.active}>
+                    <Ionicons name="checkmark-circle" size={20} color={t.tint} />
+                    <Text style={[s.activeText, { color: t.tint }]}>Etkin</Text>
+                  </View>
+                ) : null}
+              </Pressable>
+            );
+          })}
+        </View>
+      </ScrollView>
+      <Button label="Kapat" tone="plain" onPress={onClose} testID="tesis-modal-kapat" />
+    </View>
   );
 }
 
@@ -86,6 +94,9 @@ export function FacilitySwitchButton() {
 const useStyles = makeStyles((t) => ({
   flex: { flex: 1 },
   sheet: { flex: 1, backgroundColor: t.bg, padding: space.l, width: "100%" as const, maxWidth: READABLE_MAX, alignSelf: "center" as const },
+  // Kartta içerik boyu: `flex: 1` ebeveyni yüksekliksiz kartı sıfıra çökertir.
+  sheetCard: { flex: 0, flexShrink: 1, maxWidth: undefined },
+  listCard: { flexGrow: 0, flexShrink: 1 },
   bar: { paddingTop: space.s, paddingBottom: space.xs },
   title: { ...typography.title2, color: t.text },
   note: { ...typography.subhead, color: t.textSecondary, marginBottom: space.m },

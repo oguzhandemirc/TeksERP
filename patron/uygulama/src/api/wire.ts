@@ -575,6 +575,11 @@ export interface Device {
   readonly olusturulma: string;
 }
 
+/** `POST /cihazlar/birak` — çıkışta bu telefonun bildirim bağı bırakılır (kimliğin bütün tesislerinde kendi satırları). */
+export interface DeviceRelease {
+  readonly birakilan: number;
+}
+
 // ---------------------------------------------------------------- bildirimler (B5)
 
 /** Bildirim türleri — kurallar sunucu kataloğunda (`src/catalog/notifications.ts`: izin, finans sınıfı, kaynak). */

@@ -14,7 +14,10 @@ export type RegisterOutcome =
 
 const SW_PATH = "/bildirim-sw.js";
 
-async function registerWeb(api: Api, vapidKey: string | null): Promise<RegisterOutcome> {
+/** Kayıt başarılıysa belirteç çıkışta bırakılmak üzere hatırlanır (`bulut-push.ts`). */
+export type BelirtecHatirla = (belirtec: string) => Promise<void>;
+
+async function registerWeb(api: Api, vapidKey: string | null, hatirla?: BelirtecHatirla): Promise<RegisterOutcome> {
   const nav = globalThis.navigator as Navigator | undefined;
   if (!nav?.serviceWorker || !("PushManager" in globalThis) || !("Notification" in globalThis)) {
     return { kind: "DESTEKLENMIYOR", message: "Bu tarayıcı bildirim desteklemiyor (iPhone'da 16.4+ ve ana ekrana eklenmiş olmalı)" };
@@ -25,12 +28,14 @@ async function registerWeb(api: Api, vapidKey: string | null): Promise<RegisterO
   const reg = await nav.serviceWorker.register(SW_PATH);
   const existing = await reg.pushManager.getSubscription();
   const sub = existing ?? (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: base64UrlToBytes(vapidKey) as BufferSource }));
-  const device = await api.deviceRegister({ platform: "web", belirtec: JSON.stringify(sub.toJSON()), ad: "Tarayıcı" });
+  const belirtec = JSON.stringify(sub.toJSON());
+  const device = await api.deviceRegister({ platform: "web", belirtec, ad: "Tarayıcı" });
+  await hatirla?.(belirtec);
   return { kind: "KAYITLI", deviceId: device.id };
 }
 
-export function registerThisDevice(api: Api, vapidKey: string | null, nativePush: boolean = NATIVE_PUSH_ETKIN): Promise<RegisterOutcome> {
-  if (Platform.OS === "web") return registerWeb(api, vapidKey);
+export function registerThisDevice(api: Api, vapidKey: string | null, nativePush: boolean = NATIVE_PUSH_ETKIN, hatirla?: BelirtecHatirla): Promise<RegisterOutcome> {
+  if (Platform.OS === "web") return registerWeb(api, vapidKey, hatirla);
   if (!nativePush) return Promise.resolve({ kind: "DESTEKLENMIYOR", message: NATIVE_PUSH_SOON });
-  return (require("./register-native") as typeof import("./register-native")).registerNative(api);
+  return (require("./register-native") as typeof import("./register-native")).registerNative(api, hatirla);
 }

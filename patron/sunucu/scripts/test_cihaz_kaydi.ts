@@ -4,6 +4,8 @@
 //      geri SIZDIRMAZ · başka hesap aynı cihazdan kaydolursa satır ona geçer (bir telefon, tek oturum)
 //   §2 liste yalnız kendi aktif cihazları · kaldır = soft (aktif=false), tekrar aynı sonuç; başkasının
 //      cihazı 404 · biçimsiz platform 400 · oturumsuz 401
+//   §3 çıkışta bırak (`/cihazlar/birak`): belirteç özetiyle yalnız KENDİ etkin satırı pasif (1), tekrarı 0 ·
+//      başkasının belirteci bırakılmaz (0, satır etkin) · gövdesiz 400 · oturumsuz 401
 // Koşum: npx tsx scripts/test_cihaz_kaydi.ts
 // =============================================================================
 import { randomUUID } from "node:crypto";
@@ -44,6 +46,23 @@ async function main(): Promise<void> {
     kontrol("§2d biçimsiz platform 400", kotu.status === 400);
     const anon = await api(o, "POST", "/api/cihazlar", { govde: { platform: "ios", belirtec } });
     kontrol("§2e oturumsuz 401", anon.status === 401);
+
+    console.log("\n§3 çıkışta bırak");
+    const tokA = `ExponentPushToken[${randomUUID()}]`;
+    const tokB = `ExponentPushToken[${randomUUID()}]`;
+    const ca = (await api(o, "POST", "/api/cihazlar", { belirtec: a.belirtec, govde: { platform: "android", belirtec: tokA } })).json.data as Cihaz;
+    const cb = (await api(o, "POST", "/api/cihazlar", { belirtec: b.belirtec, govde: { platform: "android", belirtec: tokB } })).json.data as Cihaz;
+    const aktifMi = async (id: string) => (await withTesis(o.goc, { tesisId: k.tesisId }, (tx) => tx.pushDevice.findUnique({ where: { id } })))?.active;
+    const yabanci = await api(o, "POST", "/api/cihazlar/birak", { belirtec: a.belirtec, govde: { belirtec: tokB } });
+    kontrol("§3a başkasının belirteci bırakılmaz (0, satır etkin)", yabanci.status === 200 && (yabanci.json.data as { birakilan: number }).birakilan === 0 && (await aktifMi(cb.id)) === true);
+    const b1 = await api(o, "POST", "/api/cihazlar/birak", { belirtec: a.belirtec, govde: { belirtec: tokA } });
+    const b2 = await api(o, "POST", "/api/cihazlar/birak", { belirtec: a.belirtec, govde: { belirtec: tokA } });
+    kontrol("§3b kendi belirteci → 1, satır pasif (soft); tekrarı 0",
+      b1.status === 200 && (b1.json.data as { birakilan: number }).birakilan === 1 && (b2.json.data as { birakilan: number }).birakilan === 0 && (await aktifMi(ca.id)) === false);
+    kontrol("§3c yanıt belirteci geri SIZDIRMAZ", !JSON.stringify(b1.json).includes(tokA));
+    const govdesiz = await api(o, "POST", "/api/cihazlar/birak", { belirtec: a.belirtec, govde: {} });
+    const anon3 = await api(o, "POST", "/api/cihazlar/birak", { govde: { belirtec: tokA } });
+    kontrol("§3d gövdesiz 400 · oturumsuz 401", govdesiz.status === 400 && anon3.status === 401);
   } finally {
     await temizleTesis(o, k.tesisId);
     await o.kapat();

@@ -30,6 +30,8 @@ const hesap = (id: string) => ({ id, eposta: `${id}@x.test`, ad: id, izinler: ["
 interface Call { method: string; path: string; body: unknown; token: string | null }
 let calls: Call[] = [];
 let oldServer = false;
+/** `POST /cihazlar/birak` yanıtı; 404 → eski sunucu (uç yok). */
+let releaseStatus = 200;
 /** Değişim akışı yanıtı; null → uç yok (eski sunucu, 404). */
 let feed: { sayac: number; degisenler: string[]; fabrikaDamgasi: string | null } | null = null;
 /** `GET /oturum` eşitleme ufku (fabrika veri anı); null → henüz eşitleme yok. */
@@ -67,6 +69,7 @@ function server(url: string, init: RequestInit): Promise<Response> {
     return reply(403, null, "TESIS_GECISI_YOK");
   }
   if (key === "POST /oturum/kapat") return reply(200, null);
+  if (key === "POST /cihazlar/birak") return releaseStatus === 200 ? reply(200, { birakilan: 1 }) : reply(releaseStatus, null, "BULUNAMADI");
   if (key === "GET /degisim" && feed) {
     if (feed.fabrikaDamgasi) ufuk = feed.fabrikaDamgasi; // paket bulutta kabul edildi
     return reply(200, feed);
@@ -154,6 +157,39 @@ describe("çok tesisli oturum", () => {
     expect(cacheKeys()).toEqual([]);
     expect(mockSecret.m.size).toBe(0);
     expect(cur.facilities).toEqual([]);
+  });
+
+  it("⭐ bulut çıkışı: saklı bildirim belirteci /oturum/kapat'tan ÖNCE /cihazlar/birak ile bırakılır, kayıt silinir", async () => {
+    await boot();
+    await login();
+    mockSecret.m.set("patron.bulutPushBelirteci", "ExponentPushToken[sonda]");
+    calls = [];
+    await act(async () => cur.logout());
+    const rel = calls.findIndex((c) => c.method === "POST" && c.path === "/cihazlar/birak");
+    const out = calls.findIndex((c) => c.method === "POST" && c.path === "/oturum/kapat");
+    expect(rel).toBeGreaterThanOrEqual(0);
+    expect(rel).toBeLessThan(out);
+    expect(calls[rel]!.body).toEqual({ belirtec: "ExponentPushToken[sonda]" });
+    expect(calls[rel]!.token).toBe("b1");
+    expect(mockSecret.m.has("patron.bulutPushBelirteci")).toBe(false);
+  });
+
+  it("bulut çıkışı: saklı belirteç yoksa /cihazlar/birak çağrılmaz; eski sunucu 404 çıkışı durdurmaz", async () => {
+    await boot();
+    await login();
+    calls = [];
+    await act(async () => cur.logout());
+    expect(calls.some((c) => c.path === "/cihazlar/birak")).toBe(false);
+    await login();
+    mockSecret.m.set("patron.bulutPushBelirteci", "ExponentPushToken[eski]");
+    releaseStatus = 404;
+    calls = [];
+    await act(async () => cur.logout());
+    releaseStatus = 200;
+    expect(calls.some((c) => c.path === "/cihazlar/birak")).toBe(true);
+    expect(calls.some((c) => c.path === "/oturum/kapat")).toBe(true);
+    expect(cur.phase).toBe("giris");
+    expect(mockSecret.m.size).toBe(0);
   });
 
   it("403 TESIS_GECISI_YOK: liste tazelenir, etkin tesis değişmez, Türkçe ileti", async () => {

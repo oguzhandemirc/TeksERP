@@ -108,5 +108,16 @@ describe("yerel pano: kapalı modülün kutusu", () => {
   it("kapalı küme yok (eski fabrika): Finans kutusu bugünkü gibi görünür", async () => {
     render(<Dashboard />);
     expect(await screen.findByTestId("kpi-vade")).toBeTruthy();
+    expect(mockApi.snapshot).toHaveBeenCalledWith("ozet-finans");
+  });
+
+  // Denetim 2026-11-15. NEGATİF SONDA (geri alındı): `has`tan `anlikKapali` çıkınca ❌.
+  it("⭐ kapalı modülün özet anlığı istenmez (403 isteği gitmez); açık modülünki gider", async () => {
+    Y.setYetenek(FINANS_KAPALI);
+    render(<Dashboard />);
+    expect(await screen.findByTestId("kpi-acik-siparis")).toBeTruthy();
+    const istenen = mockApi.snapshot.mock.calls.map((c) => c[0]);
+    expect(istenen).toContain("ozet.siparis");
+    expect(istenen).not.toContain("ozet-finans");
   });
 });

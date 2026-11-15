@@ -7,7 +7,7 @@
 > Kararlar (kullanıcı 2026-10-15): önce yalnız Android · ilk sürümde telefonda ANLIK BİLDİRİM YOK (Firebase yok;
 > uygulama native push kaydı denemez, uyarı göstermez; bildirim ekranında "yakında" notu) · web push aynen.
 > Push köprüsü P4 (2026-11-13): telefon push DERLEME KAPISINA bağlandı (aşağıda "Native push kapısı"); kapı kapalı
-> derleme bugünkü paketle aynıdır. Metinler (politika YONETIM-GP-2026.4, Play açıklaması, §4.2) push'u anlatır — taslak, yayın kullanıcı onayıyla.
+> derleme bugünkü paketle aynıdır. Metinler (politika YONETIM-GP-2026.5, Play açıklaması, §4.2) push'u anlatır — taslak, yayın kullanıcı onayıyla.
 > Tablet (ortak paket) Play yolu ayrıdır: `PLAY-STORE-YAYIN.md` · `PLAY-KONSOL-FORMLARI.md`.
 > Play geliştirici hesabı **KİŞİSEL** (Console ana sayfası "Etkili Yazılım LTD · Kişisel hesap", ölçüm 2026-10-20):
 > "12 test kullanıcısı × 14 gün kapalı test" şartı bu uygulamaya **uygulanır** (§3 madde 7). Düzeltme notu:
@@ -107,7 +107,7 @@ izin bilerek eklenir, formu da güncellenir.
 - `https://tekserp.etkiliyazilim.com/gizlilik` TABLET uygulamasının politikasıdır ("Etkili Yazılım bu verileri
   toplamaz") — TeksERP Yönetim için YANLIŞTIR, kullanılmaz. `https://yonetim.etkiliyazilim.com/gizlilik` SPA giriş HTML'idir, metin değil.
 
-### 4.2 Veri güvenliği formu — toplanan veri (koddan ölçüldü, 2026-10-15)
+### 4.2 Veri güvenliği formu — toplanan veri (koddan ölçüldü, 2026-10-15; push + ses güncellemesi 2026-11-15, çıkışta bırakma + 180 gün 2026-11-15, politika YONETIM-GP-2026.5)
 
 Uygulamada analitik, reklam, çökme raporu SDK'sı YOK; Firebase yalnız push kapısı açık derlemede (yalnız FCM bildirim
 alımı); reklam kimliği (`AD_ID`) engelli. Bütün
@@ -119,10 +119,12 @@ trafik HTTPS (`usesCleartextTraffic` varsayılan kapalı, adres `https://`). Ver
 | Kişisel bilgiler → E-posta adresi | giriş kimliği | Toplanır, paylaşılmaz | Hesap yönetimi, güvenlik | Zorunlu |
 | Kişisel bilgiler → Kullanıcı kimlikleri | hesap/tesis kimliği (UUID) | Toplanır | Uygulama işlevi | Zorunlu |
 | Uygulama etkinliği → Diğer kullanıcı içerikleri | girilen sipariş/cari talepleri (gelen kutusu), rapor istekleri | Toplanır; fabrikaya iletilir (veri sorumlusu fabrikadır — Play "paylaşım" sayılmaz: hizmet sağlayıcı/kullanıcının isteği) | Uygulama işlevi | Kullanıcı isterse |
-| Uygulama etkinliği → Diğer işlemler | bildirim tercihleri (telefon bildirimi türleri dahil), tesis seçimi | Toplanır | Uygulama işlevi | İsteğe bağlı |
-| Cihaz veya diğer kimlikler | Expo push belirteci + cihaz adı (yalnız push kapısı açık derlemede, kullanıcı telefon bildirimlerini açarsa; ERP kipinde fabrika sunucusunda şifreli, bulut kipinde bulut cihaz kaydı) | Toplanır; FCM/Expo iletim için hizmet sağlayıcıdır (Play "paylaşım" sayılmaz — ⚠ formda doğrula) | Uygulama işlevi (bildirim) | İsteğe bağlı |
+| Uygulama etkinliği → Diğer işlemler | bildirim tercihleri (telefon bildirimi türleri dahil), bildirim/alarm sesi seçimi (ERP kipinde fabrikaya + bulut köprü bağına), tesis seçimi | Toplanır | Uygulama işlevi | İsteğe bağlı |
+| Cihaz veya diğer kimlikler | Expo push belirteci + cihaz adı + platform (yalnız push kapısı açık derlemede, kullanıcı telefon bildirimlerini açarsa; ERP kipinde fabrika sunucusunda şifreli, bulutta yalnız SHA-256 özeti + ses; bulut kipinde bulut cihaz kaydı; her iki kipte çıkışta bırakılır, fabrikadaki bırakılmış satır son görülmeden 180 gün sonra silinir) | Toplanır; FCM/Expo iletim için hizmet sağlayıcıdır (Play "paylaşım" sayılmaz — ⚠ formda doğrula) | Uygulama işlevi (bildirim) | İsteğe bağlı |
 | Konum | — (IP yalnız sunucuda giriş güvenlik kaydında, 30 gün; konum türetilmez) | Toplanmaz* | Güvenlik | — |
 | Finansal bilgiler | fabrikanın cari/çek/stok verisi GÖSTERİLİR; kullanıcıdan toplanmaz | ⚠ değerlendir | — | — |
+| Dosyalar ve belgeler | PDF/Excel rapor dosyası cihazda (önbellek) üretilir, yalnız kullanıcının "Paylaş" eylemiyle seçtiği uygulamaya gider; bize gönderilmez | Toplanmaz | — | — |
+| Fotoğraflar | kamera yalnız bağlantı karekodu için; görüntü saklanmaz/gönderilmez | Toplanmaz | — | — |
 
 \* IP adresinin Play formundaki karşılığı (⚠ Play yardımından doğrulanmalı): IP'den konum türetilmiyorsa "konum"
 işaretlenmez; güvenlik kaydı "Güvenlik, sahtekârlık önleme" amacıyla beyan edilebilir.

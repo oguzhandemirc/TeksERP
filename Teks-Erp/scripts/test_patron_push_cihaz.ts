@@ -15,6 +15,8 @@
 //   §10 sır hijyeni: ham belirteç günlükte (stdout/stderr, testte açıkça yakalanır) ve system_logs'ta YOK
 //   §11 ses (S0): alan yoksa varsayılan zil/alarm · değişim KAYITLI→BEKLIYOR · `kaydet` `sesler` yalnız sapanda ·
 //       küme dışı 400 · dürt gövdesinde yalnız ALARM'da `sinif`
+//   §12 saklama: budama yalnız BIRAKILDI ∧ son görülme > 180 gün satırı siler; 180 günden yeni BIRAKILDI, eski canlı
+//       (KAYITLI) ve eski BIRAKILACAK (bulutta `birak` bekleyen) satır kalır
 // NEGATİF SONDA: harita satırında (`docs/bekci-harita/bildirim.md`). Gerçek bulut çağrısı YOK.
 // Koşum: npx tsx scripts/run-all-tests.ts patron_push_cihaz   (kendi _test DB'si; ayar yazar → hedef DB kapısı)
 // =============================================================================
@@ -28,7 +30,8 @@ import { SETTING_KEYS, invalidateFeatureFlagsCache } from "../src/services/syste
 import { PermissionManagementService } from "../src/services/permission-management.service";
 import { PATRON_LOGIN_PERMISSION } from "../src/constants/permission-catalog";
 import { SHORT_CREDENTIAL_KEY_FILE, setShortCredentialKeyDirForTests } from "../src/lib/short-credential/keyring";
-import { digestPushToken, openPushToken, PUSH_TOKEN_SEAL_PREFIX } from "../src/services/patron-push/token-seal";
+import { digestPushToken, openPushToken, PUSH_TOKEN_SEAL_PREFIX, sealPushToken } from "../src/services/patron-push/token-seal";
+import { NOTIFICATION_RETENTION, pruneNotifications } from "../src/services/notification-prune.service";
 import { registerSounds, runPatronPushRound } from "../src/services/patron-push/cloud-round.service";
 import { MAX_PUSH_TOKENS_PER_USER } from "../src/services/patron-push/device.service";
 import { buildNudgeBody } from "../src/services/patron-push/nudge-payload";
@@ -317,6 +320,24 @@ async function main(): Promise<void> {
     const meNo = await call("/auth/me", b2.token);
     check("§9h lisans uygun değil (devredildi): kayıt 200 BEKLIYOR kalır, tur UYGUN_DEGIL, dışarı istek YOK, patronPush yok",
       r.status === 200 && sum.durum === "UYGUN_DEGIL" && cloud.calls.length === 0 && (await row(raw("E")))?.cloudState === "BEKLIYOR" && meNo.body.data?.patronPush === undefined, `${sum.durum}:${"sebep" in sum ? String(sum.sebep) : ""} çağrı=${cloud.calls.length}`);
+
+    console.log("\n=== §12 saklama (180 gün) ===");
+    const DAY = 86_400_000;
+    const mk = async (tag: string, cloudState: "KAYITLI" | "BIRAKILACAK" | "BIRAKILDI", daysAgo: number) => {
+      const t = raw(`PR${tag}`);
+      const d = digestPushToken(t);
+      const r12 = await prisma.patronPushToken.create({
+        data: { userId: a.id, tokenDigest: d, tokenSealed: cloudState === "KAYITLI" ? sealPushToken(t, d) : null, platform: "android", cloudState, lastSeenAt: new Date(Date.now() - daysAgo * DAY), releasedAt: cloudState === "BIRAKILDI" ? new Date() : null },
+        select: { id: true },
+      });
+      return r12.id;
+    };
+    const days = NOTIFICATION_RETENTION.pushTokenDays;
+    const [oldGone, freshGone, oldLive, oldPending] = [await mk("1", "BIRAKILDI", days + 1), await mk("2", "BIRAKILDI", days - 1), await mk("3", "KAYITLI", days + 20), await mk("4", "BIRAKILACAK", days + 20)];
+    const pr = await pruneNotifications();
+    const exists = async (id: string) => (await prisma.patronPushToken.findUnique({ where: { id }, select: { id: true } })) !== null;
+    check("§12a ⭐ son görülmeden 180 günden eski BIRAKILDI satır budanır", days === 180 && pr.pushTokens >= 1 && !(await exists(oldGone)), `gün=${days} budanan=${pr.pushTokens}`);
+    check("§12b 180 günden yeni BIRAKILDI, eski KAYITLI ve eski BIRAKILACAK satır KALIR", (await exists(freshGone)) && (await exists(oldLive)) && (await exists(oldPending)));
 
     console.log("\n=== §10 sır hijyeni ===");
     uyari("test-patron-push", "yakalama-sondasi");
