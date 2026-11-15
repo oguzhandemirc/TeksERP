@@ -9,6 +9,7 @@
 
 import { resolveWorkOrderDefaultItemForCreate } from "../workorder-default-item.service";
 import { freezeReworkBillableTx } from "../helpers/rework-billing.helper";
+import { emitWorkOrderReworkTx } from "../notification-sources/satis";
 import { assertPlannedMachines, filterTemplatePlannedMachines } from "../helpers/planned-machine.helper";
 import { ACTIVE_ORDER_LINK } from "../helpers/order-link.helper";
 import prisma from "../../lib/prisma";
@@ -659,6 +660,8 @@ export async function insertPreparedTx(this: WorkOrderServiceThis, tx: Prisma.Tr
       },
       include: WO_CREATE_INCLUDE,
     }, defaultTargetItem ? { defaultTargetItemApplied: true } : undefined);
+    // S6a `fason.yeniden-islem`: yalnız kullanıcı doğuşu (bölme/kopya `createWorkOrderTx`ten geçer ama yeniden işlem açmaz).
+    await emitWorkOrderReworkTx(tx, wo.id, userId);
 
     // Phase 1: WO açılışı order status'a dokunmuyor. "Üretim sürüyor mu?"
     // sorusu line.workOrderLinks üzerinden runtime hesabı.

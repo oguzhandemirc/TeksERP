@@ -169,6 +169,8 @@ const ESIK_LABEL: Readonly<Record<string, string>> = {
   oranYuzde: "Oran eşiği (%)",
   minMetre: "En az metre",
   tolerans: "Gecikme payı (gün)",
+  oran: "Oran eşiği (%)",
+  metre: "Metre eşiği",
   // Mesai dışı giriş: vardiya tanımı yoksa kullanılan fabrika saati aralığı (7,5 = 07:30).
   baslangicSaat: "Mesai başlangıcı (saat)",
   bitisSaat: "Mesai bitişi (saat)",

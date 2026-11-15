@@ -108,6 +108,15 @@ export const URETIM_NOTIFICATION_ENTRIES = {
     payloadAlanlari: ["gun", "top", "metre", "sapan"],
     tahminiHaftalik: 7,
   },
+  // S6a: brode (BRODE yetenekli istasyon) sayaç okumalarının günlük özeti; iş = makine × top × adım (`machineWorkMeters`).
+  "brode.gunluk-ozet": {
+    ...ORTAK, ...URETIM_RAPOR, kod: "brode.gunluk-ozet", ad: "Günlük brode özeti", grup: "Üretim", ozet: "GUN_SONU",
+    tekilKalibi: "{gun}", pencereSn: 0, panelYol: "/reports/production",
+    baslik: "Günlük brode özeti · {gun}",
+    govde: "{makine} brode makinesinde {is} iş, {metre} m işlendi",
+    payloadAlanlari: ["gun", "makine", "is", "metre"],
+    tahminiHaftalik: 7,
+  },
 
   // ── Tambur ────────────────────────────────────────────────────────────────
   "tambur.yeniden-islem": {
