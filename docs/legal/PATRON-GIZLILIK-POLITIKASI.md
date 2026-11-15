@@ -10,13 +10,13 @@
 > `https://tekserp.etkiliyazilim.com/yonetim-gizlilik#hesap-silme` (eski `/patron-gizlilik` kalıcı 301 ile buraya; çapa "Hesap silme" başlığından üretilir; Play
 > formuna yazılır, başlık değişmez). Bu dosya sayfanın TEK KAYNAĞIDIR: `deploy/gizlilik-sayfasi/uret.mjs` ile
 > `deploy/gizlilik-sayfasi/html/yonetim-gizlilik.html`e çevrilir. Bekçi `scripts/test_gizlilik_sayfasi.mjs`
-> bayt-eşitliği, süreleri (`patron/sunucu` `IDENTITY_PURGE_DAYS` · `IP_RETENTION_DAYS` · denetim saklama
-> varsayılanları) ve anlık bildirim metnini (`patron/uygulama/src/push/support.ts` `NATIVE_PUSH`, derleme kapısına bağlı;
+> bayt-eşitliği, süreleri (`patron/sunucu` `IDENTITY_PURGE_DAYS` · `IP_RETENTION_DAYS` · `PUSH_BRIDGE_TICKET_DAYS` ·
+> denetim saklama varsayılanları · fabrika `notification-prune.service.ts` `pushTokenDays`) ve anlık bildirim metnini (`patron/uygulama/src/push/support.ts` `NATIVE_PUSH`, derleme kapısına bağlı;
 > push köprüsü P4, 2026-11-13) koda karşı ölçer. Metin değişince sürüm kimliği ve yürürlük tarihi birlikte artar;
 > yürürlük satırındaki köşeli parantezli yer tutucu, kullanıcı yayını onaylayıp tarihi yazana kadar yayını durdurur.
 
-**Metin sürümü:** `YONETIM-GP-2026.4`
-**Yürürlük:** [YAYIN ONAYINDA YAZILIR]
+**Metin sürümü:** `YONETIM-GP-2026.5`
+**Yürürlük:** [YÜRÜRLÜK TARİHİ]
 **Uygulama:** TeksERP Yönetim (Google Play paket adı: `com.etkiliyazilim.tekserp.yonetim`)
 **Geliştirici:** Etkili Yazılım Ltd. Şti.
 **İletişim:** info@etkiliyazilim.com
@@ -42,10 +42,12 @@ uygulamasıdır. Hesaplar yalnız fabrikanın tesis yöneticisinin davetiyle aç
   giriş ve başarısız giriş kayıtları ile bu kayıtlardaki IP adresi, hesap durumu ve izinleriniz.
 - **Girdiğiniz içerik:** hesabınızla oluşturduğunuz sipariş ve cari talepleri, rapor istekleri ve sonuçları.
   Talepler fabrikanın TeksERP sistemine iletilir; orada adınız ve hesap kimliğiniz kaydın kaynağı olarak saklanır.
-- **Uygulama tercihleri:** bildirim tercihleri (telefon bildirimi alacağınız türler dahil), sessiz saatler ve tesis seçimi.
+- **Uygulama tercihleri:** bildirim tercihleri (telefon bildirimi alacağınız türler dahil), telefon bildirimi için
+  seçtiğiniz bildirim ve alarm sesi, sessiz saatler ve tesis seçimi.
 - **Cihaz bildirim anahtarı (isteğe bağlı):** Android uygulamasının anlık bildirim destekli sürümünde, Bildirimler
   ekranındaki "Telefon bildirimlerini aç" adımıyla izin verirseniz telefonunuzun bildirim anahtarı (Expo push
-  belirteci) ve cihaz adı alınır. Uygulamayı fabrikanın sunucusuna doğrudan bağladıysanız anahtar fabrika
+  belirteci), cihaz adı ve platformu (Android) alınır; ses seçiminizi varsayılandan değiştirdiyseniz o da anahtarla
+  birlikte gider. Uygulamayı fabrikanın sunucusuna doğrudan bağladıysanız anahtar fabrika
   sunucusunda şifreli olarak saklanır; TeksERP Yönetim bulutuyla kullanıyorsanız bulutta cihaz kaydınız olarak
   tutulur. İzin vermezseniz anahtar alınmaz.
 
@@ -58,6 +60,11 @@ Toplanmayanlar:
 - **Rehber, fotoğraf, dosya, mikrofon:** uygulama bu izinleri istemez. Kamera izni yalnız fabrika sunucusunun
   bağlantı karekodunu okutmak için, okutma adımında istenir; görüntü saklanmaz ve gönderilmez. Bildirim izni yalnız
   anlık bildirim destekli sürümde ve siz telefon bildirimlerini açtığınızda istenir.
+- **Rapor dosyaları:** PDF ve Excel rapor dosyaları telefonunuzda oluşturulur ve uygulamanın geçici alanında
+  tutulur; yalnız siz "Paylaş" dediğinizde seçtiğiniz uygulamaya verilir, bize gönderilmez. Uygulama depolama izni
+  istemez.
+- **Ağ durumu:** anlık bildirim destekli sürümde bildirim kitaplığı bağlantının açık olup olmadığını denetler (ağ
+  durumu izni); bu bilgi saklanmaz ve gönderilmez.
 - **Analitik, reklam, çökme raporu:** uygulamada bu amaçlarla çalışan bir hizmet yoktur.
 
 Cihazınızda: oturum belirteci cihazın güvenli deposunda tutulur. Son görüntülenen veri, bağlantı koptuğunda
@@ -85,19 +92,40 @@ görebilmeniz için uygulamanın korumalı alanında saklanır, cihaz yedeğine 
   Messaging (FCM) ve Expo push hizmeti üzerinden iletilir (Google LLC ve 650 Industries, Inc.; yurt dışı).
   Uygulamayı fabrikanın sunucusuna doğrudan bağladıysanız bildirimin başlığı ve içeriği (tam metin; cari adı ya da
   tutar içerebilir) kilit ekranında görünebilir ve fabrikadan bu hizmetlere giderken Etkili Yazılım bulutundan
-  geçer; bulutta saklanmaz ve günlüğe yazılmaz. Bulut yalnız cihaz anahtarının geri döndürülemez özetini fabrikayla
-  eşleştirmek için tutar. TeksERP Yönetim bulutuyla kullanıyorsanız telefon bildirimi yalnız bildirim türünün adını
-  taşır. Hangi türlerin telefonunuza geleceğini Bildirimler ekranından seçersiniz.
+  geçer; bulutta saklanmaz ve günlüğe yazılmaz. Bulut yalnız cihaz anahtarının geri döndürülemez özetini ve
+  seçtiğiniz bildirim ve alarm sesini fabrikayla eşleştirmek için tutar; teslimin denetimi için tuttuğu gönderim
+  kaydı ham anahtar ve bildirim metni taşımaz ve en geç 2 gün içinde silinir. TeksERP Yönetim bulutuyla
+  kullanıyorsanız telefon bildirimi yalnız bildirim türünün adını taşır. Her iki durumda bildirimle birlikte yalnız
+  bildirimin kimliği ve uygulamada açılacak ekranın bilgisi gider. Bu hizmetler bildirimi iletim için işler; kendi
+  saklama koşulları Google ve Expo'nun gizlilik politikalarında yazılıdır.
 - **Kamu kurumları:** yalnız hukuken yetkili kurumun talebi hâlinde.
 
 Veriler satılmaz, reklam ağlarıyla ya da başka bir üçüncü kişiyle paylaşılmaz.
+
+Telefon bildirimlerini istediğiniz an kapatabilirsiniz:
+
+- **Uygulama içinden:** Bildirimler → Telefon bildirimleri bölümünde her bildirim türünü ayrı ayrı kapatabilir ya da
+  "Hepsini kapat" düğmesini kullanabilirsiniz. TeksERP Yönetim bulutuyla kullanıyorsanız Bildirimler ekranındaki
+  cihaz listesinden bu telefonu çıkarabilirsiniz.
+- **Telefon ayarlarından:** Android Ayarlar → Uygulamalar → TeksERP Yönetim → Bildirimler adımından bildirim
+  iznini kaldırabilirsiniz (izin reddedilmişse uygulamadaki "Telefon ayarlarını aç" düğmesi uygulamanın telefon
+  ayarlarını açar).
+- **Oturumu kapatarak:** oturumu kapattığınızda bu cihazın bildirim anahtarı bırakılır ve cihaza bildirim
+  gönderilmez; uygulamayı fabrikanın sunucusuna doğrudan bağladıysanız da TeksERP Yönetim bulutuyla
+  kullanıyorsanız da.
 
 ## 5. Saklama
 
 - Hesap verileriniz hesabınız açık kaldığı sürece saklanır.
 - Giriş kayıtlarındaki IP adresi 30 gün sonra silinir.
-- Cihaz bildirim anahtarı oturumunuzla yaşar: oturumu kapattığınızda, parolanız değiştiğinde ya da hesabınız
-  kapandığında bırakılır ve o cihaza bildirim gönderilmez.
+- Uygulamayı fabrikanın sunucusuna doğrudan bağladıysanız cihaz bildirim anahtarı oturumunuzla yaşar: oturumu
+  kapattığınızda, parolanız değiştiğinde ya da hesabınız kapandığında bırakılır ve o cihaza bildirim gönderilmez.
+  Bırakılınca fabrika sunucusundaki şifreli anahtar ve buluttaki eşleşme kaydı silinir; Google ya da Expo cihazın
+  artık bildirim alamadığını bildirirse eşleşme kaydı kendiliğinden silinir. Bırakılan cihaz kaydında kalan cihaz
+  adı ve ses seçimi, cihaz son görüldükten 180 gün sonra fabrika sunucusundan silinir.
+- TeksERP Yönetim bulutuyla kullanıyorsanız cihaz kaydı, oturumu kapattığınızda, cihazı Bildirimler ekranından
+  çıkardığınızda, Google ya da Expo cihazın artık bildirim alamadığını bildirdiğinde ya da hesabınız kapandığında
+  pasife alınır ve o cihaza bildirim gönderilmez; kayıt hesabınızın kişisel verileriyle birlikte silinir.
 - Başarısız giriş kayıtları 90 gün, diğer güvenlik kayıtları 2 yıl saklanır ve sonra silinir.
 - Hesap kapanınca girişiniz hemen kapanır; adınız, e-posta adresiniz, parolanızın özeti, doğrulama sırrınız,
   oturumlarınız ve cihaz bildirim kayıtlarınız kapanıştan 30 gün sonra silinir.

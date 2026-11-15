@@ -17,6 +17,7 @@ import { createBulutYazici, createErpYazici, type Yazici } from "../api/yazma";
 import { createBulutPanocu, createErpPanocu, type Panocu } from "../api/pano";
 import { createBulutRaporcu, createErpRaporcu, type Raporcu } from "../api/rapor";
 import { createBulutBildirimci, createErpBildirimci, createErpPushCihazci, erpBildirimAcik, type Bildirimci, type PushCihazci } from "../api/bildirim";
+import { BULUT_PUSH_KEY, bulutPushBirak } from "../push/bulut-push";
 import { ERP_PUSH_KEY, erpPushBirak } from "../push/erp-push";
 import type { FacilityChoice, FacilityStatus, LoginResponse } from "../api/wire";
 import { apiBaseUrl } from "../lib/config";
@@ -136,6 +137,7 @@ export function SessionProvider({ children, platform = "mobil" }: { children: Re
     token.current = null;
     await secretStore.remove(TOKEN_KEY).catch(() => undefined);
     await secretStore.remove(ERP_PUSH_KEY).catch(() => undefined);
+    await secretStore.remove(BULUT_PUSH_KEY).catch(() => undefined);
     await secretStore.remove(SCOPE_KEY).catch(() => undefined);
     await clearCache(plainStore);
     setFacility(null);
@@ -353,10 +355,12 @@ export function SessionProvider({ children, platform = "mobil" }: { children: Re
   const logout = useCallback(async () => {
     // ERP telefon push belirteci oturum varken bırakılır (oturum kapanınca uç 401 verir); çevrimdışıysa sessiz geçilir.
     if (pushCihazci && bagAdres) await erpPushBirak({ adres: bagAdres, cihazci: pushCihazci, store: secretStore });
+    // Bulut kipinde bu telefonun bildirim bağı da oturum varken bırakılır (eski sunucu 404 / çevrimdışı → sessiz).
+    if (!isErp) await bulutPushBirak(api, secretStore);
     // Tek kimlik, tek oturum hissi: bütün tesislerdeki oturumlar kapanır.
     await api.logout({ hepsi: true }).catch(() => undefined);
     await reset();
-  }, [api, reset, pushCihazci, bagAdres]);
+  }, [api, reset, pushCihazci, bagAdres, isErp]);
 
   const facilityId = scope ? (scope.split(":")[0] ?? null) : null;
 

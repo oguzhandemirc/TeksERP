@@ -13,6 +13,9 @@
 //   §8 çift tur aynı satırı iki kez göndermez (atomik claim) · §9 hız bütçesi dolunca sırada bekler
 //   §10 24 saatte vazgeçer · §11 budama yalnız terminal satır · §12 sır hijyeni (günlük, system_logs, kuyruk satırı)
 //   §13 kuyruk ile gönderim arasında türü görme izni kalkan kullanıcıya dürt gitmez (ATLANDI GORMEZ)
+//   §14 dokununca kayda git (2026-11-15): sipariş/cari kartı/sevkiyat/teklif/iş emri → `/bolum/<UUID>` (tel şemasında);
+//       cari HESABI kimlikli tür, kimliksiz/UUID olmayan yük, başka ön ek (kurşun) ve yazıcı → `/bildirimler`
+//       NEGATİF SONDA §14 (2026-11-15, geri alındı): ön ek kısıtı kalkınca §14b ❌ (tambur iş emri yoluna gider).
 // NEGATİF SONDA: harita satırında (`docs/bekci-harita/bildirim.md`). Gerçek bulut/Expo çağrısı YOK (sahte taşıyıcı).
 // Koşum: npx tsx scripts/run-all-tests.ts patron_push_durt   (kendi _test DB'si; ayar yazar → hedef DB kapısı)
 // =============================================================================
@@ -37,6 +40,7 @@ import type { NotificationVisibilityEnv } from "../src/services/helpers/notifica
 import { getNotificationEntry, NOTIFICATION_KINDS, type NotificationKind } from "../src/constants/notification-catalog";
 import type { CloudTransport } from "../src/cloud-sync/cloud-client";
 import { pushBridgeEligibility } from "../src/cloud-sync/eligibility";
+import { buildNudgeBody, patronPushRoute } from "../src/services/patron-push/nudge-payload";
 import { PUSH_BRIDGE_PATHS, PushNudgeRequestSchema } from "../src/cloud-sync/wire";
 import { setCloudUrlForTests } from "../src/cloud-sync/cloud-url";
 import { REQUEST_HEADER, verifyRequest } from "../src/lib/license/protocol";
@@ -149,8 +153,30 @@ async function bolum1(): Promise<void> {
     `varsayılan=${defaults.length}/${NOTIFICATION_KINDS.length} önemli=${onemli.join(",")}`);
 }
 
+function bolum14(): void {
+  console.log("\n=== §14 dokununca kayda git ===");
+  const id = randomUUID();
+  const r = (k: string, payload: unknown) => patronPushRoute(k as NotificationKind, payload);
+  const kayit: [string, string, string][] = [
+    ["siparis.termin-gecti", "siparisId", "/siparisler"], ["cari.olusturuldu", "cariId", "/cariler"], ["cari.patron-carisi", "cariId", "/cariler"],
+    ["sevkiyat.yola-cikti", "sevkiyatId", "/sevkiyat"], ["teklif.kabul", "teklifId", "/teklifler"], ["isemri.gecikti", "isEmriId", "/uretim"],
+  ];
+  const bad = kayit.filter(([k, alan, bolum]) => r(k, { [alan]: id, siparisNo: "S-1" }) !== `${bolum}/${id}`);
+  check("§14a sipariş/cari kartı/sevkiyat/teklif/iş emri → `/bolum/<UUID>`", bad.length === 0, JSON.stringify(bad));
+  const liste = [
+    r("cari.kilitlendi", { cariId: id }), // panel yolu cari HESABI (`focus=`) → uygulama kart ekranıyla eşleşmez
+    r("siparis.termin-gecti", {}), r("siparis.termin-gecti", { siparisId: "S-1" }), r("siparis.termin-gecti", { siparisId: `${id}/x` }),
+    r("siparis.gunluk-ozet", { siparisId: id }), r("kursun.gramaj-sapmasi", { isEmriId: id }), r("tambur.yeniden-islem", { isEmriId: id }), r(YAZICI, { siparisId: id }), r("teklif.kabul", null),
+  ];
+  check("§14b cari hesabı · kimliksiz/UUID olmayan yük · özet · başka ön ek → `/bildirimler`", liste.every((x) => x === "/bildirimler"), JSON.stringify(liste));
+  const body = buildNudgeBody({ id: randomUUID(), kind: "teklif.kabul" as NotificationKind, payload: { teklifId: id.toUpperCase(), teklifNo: "T-1", musteriAd: "M", kullanici: "K" } }, ["ExponentPushToken[abcdefgh12]"]);
+  check("§14c gövde tel şemasında; rota küçük harf UUID, yükte yeni alan yok", PushNudgeRequestSchema.safeParse(body).success
+    && body.data.rota === `/teklifler/${id}` && Object.keys(body.data).sort().join(",") === "bildirimId,rota", JSON.stringify(body.data));
+}
+
 async function main(): Promise<void> {
   await bolum1();
+  bolum14();
   const block = hedefDbEngeli();
   if (block) { check("§0 hedef DB yazılabilir", false, block); return; }
   const stopCapture = startLogCapture();

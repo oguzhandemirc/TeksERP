@@ -2,13 +2,14 @@
 // Arama ve süzgeç SUNUCUDA (`LIST_SEARCH`); istemci listeyi süzmez. "Daha fazla" aynı terimle devam eder.
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useEffect, useState } from "react";
-import { Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LIST_SEARCH, type ListSearchSpec } from "../api/wire";
 import { recordSubtitle, recordTitle } from "../lib/present";
 import { FilterChip } from "./FilterChip";
 import { haptic } from "./haptics";
 import { ListGroup, ListRow } from "./ListRow";
+import { ModalSheet } from "./ModalSheet";
 import { ListStates, SearchField } from "./siparis/parts";
 import { useRemoteList } from "./siparis/useRemoteList";
 import { makeStyles, useTokens } from "./theme-context";
@@ -134,9 +135,9 @@ export function Picker(p: { label: string; projection: string; value: Picked | n
         </Text>
         <Ionicons name="chevron-forward" size={18} color={t.textMuted} />
       </Pressable>
-      <Modal visible={open} animationType="slide" presentationStyle="pageSheet" onRequestClose={close}>
+      <ModalSheet visible={open} onClose={close} fill scrimCloses testID="secici">
         {open ? <Sheet label={p.label} projection={p.projection} spec={spec} optional={p.optional} value={p.value} onClose={close} onPick={(v) => { p.onChange(v); close(); }} /> : null}
-      </Modal>
+      </ModalSheet>
     </View>
   );
 }

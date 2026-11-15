@@ -140,7 +140,9 @@ ya da kayıt düşerse yineleme yeniden gönderir (çift bildirim olasılığı 
   canlı satırlar ATLANDI, dışarı istek yok. Açıkken bayat claim (5 dk) geri · 24 sa → VAZGECILDI · okunmuş/çözülmüş kutu →
   IPTAL · hız bütçesi (120/dk, tur ≤ 60) kadar satır, her biri atomik claim; gönderim anında alıcı türü hâlâ görmüyorsa
   (izin/modül/kapı kapandı) ATLANDI `GORMEZ`. Gövde kutudan TAM METİN, `data {bildirimId,
-  rota: "/bildirimler"}`, en çok 20 KAYITLI belirteç.
+  rota}`, en çok 20 KAYITLI belirteç. `rota` (2026-11-15): sipariş/cari kartı/sevkiyat/teklif/iş emri türünde yükün kayıt
+  UUID'si ile `/siparisler|/cariler|/sevkiyat|/teklifler|/uretim/<id>` (`patronPushRoute`; kimliğin tablosu türün
+  `panelYol`undan), diğerleri `/bildirimler`; tel ve bulut değişmez.
 - Sonuç eşlemesi (§3 tablosunun fabrika karşılığı): GONDERILDI/KAPALI → satır GONDERILDI · GECERSIZ ve `gecersiz[]` →
   belirteç yerelde BIRAKILDI (`birak` yok) · BAGSIZ → belirteç BEKLIYOR + dürt yeniden · GECICI → yeniden · KALICI → vazgeç.
   HTTP 401/403 → tur durur, deneme sayılmaz, 5 dk · 429 → 60 sn duraklama · 5xx/ağ/409 → geri çekilme (30 sn × 2^n ≤ 1 sa) ·
@@ -153,6 +155,7 @@ ya da kayıt düşerse yineleme yeniden gönderir (çift bildirim olasılığı 
 - ERP kipi: yetenek `/auth/me` `patronPush` (yoksa her şey gizli). Bildirimler ekranında "Telefon bildirimlerini aç"
   (izin yalnız burada), tür başına "Telefon bildirimi" anahtarı (yalnız PATRON_PUSH hücresi). Belirteç oturum başına
   `POST /api/bildirim/cihaz`; çıkışta yalnız kaydedildiği fabrikadan `DELETE` (çevrimdışı sessiz).
-- Dokunuş: güvensiz/eksik rota → `/bildirimler`; `bildirimId` satırı vurgulanır ve okundu sayılır. **Sınır:** yükte tesis
+- Dokunuş: `/teklifler|/sevkiyat|/uretim/<id>` uygulamada `/kayit/<küme>/<id>`e çevrilir (küme sunulmuyorsa liste);
+  bunu bilmeyen eski uygulama ve güvensiz/eksik rota → `/bildirimler`; `bildirimId` satırı vurgulanır ve okundu sayılır. **Sınır:** yükte tesis
   yok ve uygulama tek fabrika bağlantısı tutar → bildirim etkin fabrikanın Bildirimler ekranında açılır; satır o fabrikada
   yoksa liste normal açılır.

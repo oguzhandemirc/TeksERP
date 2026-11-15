@@ -10,6 +10,7 @@ import { formatAgo } from "../lib/format";
 import { devicePlatform, NOTIFICATION_SKIP, notificationKind } from "../lib/labels/diger";
 import { safeRoute } from "../lib/notification-form";
 import { permissionView, readPermission, type PermissionState } from "../push/permission";
+import { bulutPushHatirlaGizli } from "../push/bulut-push";
 import { registerThisDevice } from "../push/register";
 import { NATIVE_PUSH_SOON, pushAvailable } from "../push/support";
 import { useSession } from "../state/session";
@@ -90,7 +91,7 @@ export function NotificationDevices({ vapidKey, pushHere = pushAvailable(Platfor
     if (initial === null) readState();
   }, [initial, readState]);
   const view = permission ? permissionView(permission, os) : null;
-  const register = useWrite(useCallback(() => registerThisDevice(api, vapidKey), [api, vapidKey]));
+  const register = useWrite(useCallback(() => registerThisDevice(api, vapidKey, undefined, bulutPushHatirlaGizli), [api, vapidKey]));
   // Hedef cihaz ref'te: aynı dokunuşta yazılıp okunur (state bir sonraki render'a kalır).
   const removeId = useRef<string | null>(null);
   const remove = useWrite(useCallback(() => api.deviceRemove(String(removeId.current)), [api]));

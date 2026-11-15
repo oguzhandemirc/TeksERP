@@ -51,7 +51,7 @@ export const AUDIT_EXEMPT_MODELS: AuditMuafiyeti[] = [
   { model: "Session", sinif: "KIMLIK_AKISI",
     gerekce: "oturum kaydı; giriş/çıkış/iptal audit'in AUTH kategorisinde zaten yazılır, satırın kendi CUD'u ikinci bir iz üretmez" },
   { model: "PatronPushToken", sinif: "KIMLIK_AKISI",
-    gerekce: "patron telefonunun push belirteci oturumun ekidir (onu yazan oturumla yaşar, oturum iptali/çıkış/parola/pasif bırakır; giriş/çıkış/iptal AUTH kategorisinde zaten yazılır); yükte belirteç olamayacağı için satırın CUD'u iz ekleyecek bilgi taşımaz — tek yazar `services/patron-push/`" },
+    gerekce: "patron telefonunun push belirteci oturumun ekidir (onu yazan oturumla yaşar, oturum iptali/çıkış/parola/pasif bırakır; giriş/çıkış/iptal AUTH kategorisinde zaten yazılır); yükte belirteç olamayacağı için satırın CUD'u iz ekleyecek bilgi taşımaz — tek yazar `services/patron-push/`; bırakılmış (BIRAKILDI) satırı 180 günde yalnız `notification-prune` budar" },
   { model: "DeviceBindingEvent", sinif: "EBEVEYN_EYLEMDE",
     gerekce: "cihaz bağlama DEFTERİ — tek yazar `helpers/device-identity.helper.ts#writeBindingEventTx`; audit'i çağıran eylem basar (announce doğuşu · yeniden bağlama · talep · red · revoke · kalıcı silme, `device.service`/`device-rebind.service`)" },
   { model: "KursunGramPriceVersion", sinif: "EBEVEYN_EYLEMDE",
