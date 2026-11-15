@@ -1,6 +1,6 @@
 // Push köprüsü P4 — ERP Bildirimler ekranı: "Telefon bildirimleri" bölümü (görünürlük, izin akışı, tür anahtarı) ve
 // telefon bildirimine dokunarak gelinen satırın vurgusu + okundu. Portlar ve uçlar taklit; ağ/Expo yok.
-import { act, fireEvent, render, screen } from "@testing-library/react-native";
+import { act, fireEvent, render, screen, within } from "@testing-library/react-native";
 import { Linking } from "react-native";
 
 const ID = "0f3c2d1e-4b5a-4c6d-8e7f-9a0b1c2d3e4f";
@@ -150,6 +150,16 @@ describe("tür başına telefon bildirimi anahtarı", () => {
     const kapat = pushTercihGovdesi(TERCIH, "dokuma.tezgah-alarmi", false);
     expect(kapat.filter((r) => r.tur === "dokuma.tezgah-alarmi")).toEqual([{ tur: "dokuma.tezgah-alarmi", kanal: "PATRON_PUSH", acik: false }]);
     expect(kapat).toHaveLength(3);
+  });
+  it("giriş tek kartta: başlık · izin rozeti · açık tür özeti · yeniden kaydet düğmesi aynı kapsayıcıda", async () => {
+    render(<TelefonBildirimleri nativePush os="android" portlar={() => portlar("VERILDI")} />);
+    await flush();
+    const kart = within(screen.getByTestId("telefon-ozet"));
+    expect(kart.getByText("Telefon bildirimleri")).toBeTruthy();
+    expect(kart.getByText("İzin verildi")).toBeTruthy();
+    expect(kart.getByTestId("telefon-ozet-metin")).toHaveTextContent(/^1\/2 tür telefona gelir/);
+    expect(kart.getByTestId("telefon-bildirim-ac").props.accessibilityLabel).toBe("Bu telefonu yeniden kaydet");
+    expect(screen.queryByText(/^Hangi bildirimler telefonunuza gelsin/)).toBeNull(); // açıklama karta katıldı
   });
   it("⭐ liste sunucu varsayılanıyla çizilir (tür adı katalogdan); anahtar PUT'u yollar", async () => {
     render(<TelefonBildirimleri nativePush os="android" portlar={() => portlar("VERILDI")} />);

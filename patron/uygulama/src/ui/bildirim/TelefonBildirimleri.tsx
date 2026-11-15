@@ -17,11 +17,11 @@ import { useRemote } from "../../state/useRemote";
 import { GroupNote } from "../diger/parts";
 import { ProfilSeridi } from "./ProfilSeridi";
 import { TelefonSesi } from "./TelefonSesi";
+import { TelefonOzeti } from "./TelefonOzeti";
 import { TurGruplari } from "./TurGruplari";
 import { Banner, Button } from "../kit";
 import { SectionHeader } from "../SectionHeader";
 import { LoadingSkeleton } from "../StateViews";
-import { StatusBadge } from "../StatusBadge";
 import { space } from "../tokens";
 
 const SONUC: Readonly<Record<Exclude<ErpPushSonucu["kind"], "KAYITLI">, string>> = {
@@ -163,37 +163,31 @@ function Bolum({ portlar }: { portlar: () => PushPortlari }) {
   const turler: readonly KatalogTuru[] = remote.data?.turler ?? [];
   const ad: ReadonlyMap<string, string> = new Map(turler.map((t) => [t.kod, t.ad]));
   const gruplar = tercihler ? pushGruplari(tercihler, turler) : [];
+  const hucreler = gruplar.flatMap((g) => g.hucreler);
+  const acikSayi = hucreler.filter((h) => h.acik).length;
+  const toplamSayi = hucreler.length;
   const kilit = offline || busy !== null;
   const hazir = (s: HazirSecim) => tercihler && void yaz(`hazir-${s}`, hazirSecimDegisimi(tercihler, turler, s));
   return (
     <View style={{ marginBottom: space.l }} testID="telefon-bildirimleri">
-      <SectionHeader title="Telefon bildirimleri" />
-      {izin === "VERILDI" ? (
-        <View style={{ flexDirection: "row", alignItems: "center", gap: space.s, marginBottom: space.s }}>
-          <StatusBadge kind="iyi" label="İzin verildi" size="sm" />
-        </View>
-      ) : null}
+      {/* Giriş tek kartta: başlık · izin · açık tür özeti · eylem (izin verildi / sorulmadı). */}
+      {izin === "VERILDI" || izin === "SORULMADI" ? (
+        <TelefonOzeti izinVar={izin === "VERILDI"} acik={acikSayi} toplam={toplamSayi} busy={busy === "ac"} disabled={offline || busy !== null} onAc={() => void ac()} />
+      ) : (
+        <SectionHeader title="Telefon bildirimleri" />
+      )}
       {izin === "REDDEDILDI" ? (
         <>
           <Banner tone="error" text={SONUC.REDDEDILDI} testID="telefon-izin-reddedildi" />
           <Button label="Telefon ayarlarını aç" icon="settings-outline" tone="plain" onPress={() => void Linking.openSettings().catch(() => undefined)} testID="telefon-izin-ayarlar" />
         </>
       ) : null}
-      {izin === "SORULMADI" ? (
-        <>
-          <GroupNote>Seçtiğiniz bildirimler uygulama kapalıyken de telefonunuza gelir. Bildirim metni kilit ekranında görünebilir.</GroupNote>
-          <Button label="Telefon bildirimlerini aç" icon="notifications-outline" busy={busy === "ac"} disabled={offline || busy !== null} onPress={() => void ac()} testID="telefon-bildirim-ac" />
-        </>
-      ) : null}
-      {izin === "VERILDI" ? (
-        <Button label="Bu telefonu yeniden kaydet" tone="plain" icon="refresh-outline" busy={busy === "ac"} disabled={offline || busy !== null} onPress={() => void ac()} testID="telefon-bildirim-ac" />
-      ) : null}
       {mesaj ? <Banner tone={mesaj.tone} text={mesaj.text} testID="telefon-bildirim-mesaj" /> : null}
       {remote.loading && !tercihler ? <LoadingSkeleton rows={3} /> : null}
       {remote.error && !tercihler ? <Banner tone="warn" text={remote.error} testID="telefon-tercih-hata" /> : null}
       {gruplar.length > 0 ? (
         <>
-          <GroupNote>Hangi bildirimler telefonunuza gelsin? Kapalı olanlar yalnız uygulamadaki listede görünür.</GroupNote>
+          {izin !== "VERILDI" ? <GroupNote>Hangi bildirimler telefonunuza gelsin? Kapalı olanlar yalnız uygulamadaki listede görünür.</GroupNote> : null}
           {profiller ? (
             <ProfilSeridi gorunum={profiller} busy={busy} disabled={offline} onUygula={uygula} onKaydet={profilKaydet} onGuncelle={profilGuncelle} onSil={profilSil} />
           ) : (
