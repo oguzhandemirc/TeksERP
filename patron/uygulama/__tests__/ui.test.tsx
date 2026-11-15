@@ -95,6 +95,39 @@ describe("ray: daralt/genişlet, yanal gezinme, ERP rolü", () => {
     expect(genislik().width).toBe(RAIL_COLLAPSED);
     fireEvent.press(screen.getByTestId("ray-dugme"));
   });
+  it("içerik kayması hiçbir karede pozitif değil: genişlerken ray kenarına yapışık, daralırken yerinde", () => {
+    const { railContentShift } = require("../src/ui/Frame") as typeof import("../src/ui/Frame");
+    const { RAIL_WIDTH, RAIL_COLLAPSED } = require("../src/ui/tokens") as typeof import("../src/ui/tokens");
+    // Genişletme: yuva hemen geniş; panel dar → geniş giderken içerik panel kenarıyla birlikte kayar.
+    expect(railContentShift(RAIL_COLLAPSED, RAIL_WIDTH)).toBe(RAIL_COLLAPSED - RAIL_WIDTH);
+    expect(railContentShift(150, RAIL_WIDTH)).toBe(150 - RAIL_WIDTH);
+    expect(railContentShift(RAIL_WIDTH, RAIL_WIDTH)).toBe(0);
+    // Daraltma: yuva hemen dar; panel içeriğin üstünden çekilir, içerik sağa itilmez (taşma yok).
+    for (const panel of [RAIL_WIDTH, 150, RAIL_COLLAPSED]) expect(railContentShift(panel, RAIL_COLLAPSED)).toBe(0);
+  });
+  it("çerçevede ray yuvası hedef genişliğe tek seferde geçer; panel ve içerik aynı değerden okur", () => {
+    const { RailFrame } = require("../src/ui/Frame") as typeof import("../src/ui/Frame");
+    const { RAIL_WIDTH, RAIL_COLLAPSED } = require("../src/ui/tokens") as typeof import("../src/ui/tokens");
+    const { StyleSheet } = require("react-native") as typeof import("react-native");
+    mockSession.permissions = ["bulut:siparis:oku"];
+    render(<RailFrame><Text>ICERIK</Text></RailFrame>);
+    const stil = (id: string) => StyleSheet.flatten(screen.getByTestId(id).props.style) as { width?: number; position?: string; transform?: { translateX: number }[] };
+    expect(stil("ray-yuvasi").width).toBe(RAIL_WIDTH);
+    expect(stil("ray").position).toBe("absolute");
+    expect(stil("ray-icerik").transform?.[0]?.translateX ?? 0).toBe(0);
+    fireEvent.press(screen.getByTestId("ray-dugme"));
+    expect(stil("ray-yuvasi").width).toBe(RAIL_COLLAPSED);
+    expect(stil("ray-icerik").transform?.[0]?.translateX ?? 0).toBeLessThanOrEqual(0);
+    fireEvent.press(screen.getByTestId("ray-dugme"));
+    expect(stil("ray-yuvasi").width).toBe(RAIL_WIDTH);
+    expect(screen.getByText("ICERIK")).toBeTruthy();
+  });
+  it("dar ekranda çerçeve ray çizmez, içerik yine aynı kapta", () => {
+    const { RailFrame } = require("../src/ui/Frame") as typeof import("../src/ui/Frame");
+    render(<RailFrame rail={false}><Text>ICERIK</Text></RailFrame>);
+    expect(screen.queryByTestId("ray")).toBeNull();
+    expect(screen.getByTestId("ray-icerik")).toBeTruthy();
+  });
   it("raydan geçiş yığını köke indirir ve tek ekran açar; açık bölüme dokunmak bir şey yapmaz", () => {
     mockSession.permissions = ["bulut:siparis:oku"];
     mockRouter.navigate.mockClear();
