@@ -19,6 +19,11 @@ export function placeholdersOf(template: string): string[] {
 // tezgah/levent numarası sayı gelirse "1.234" olmasın.
 const TR_NUMBER = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 2, useGrouping: false });
 
+/** Kaynağın kendi kurduğu bileşik metin parçası (ör. "5 top, 12,5 m") aynı sayı biçimiyle yazılsın diye. */
+export function formatNotificationNumber(v: number): string {
+  return Number.isFinite(v) ? TR_NUMBER.format(v) : "—";
+}
+
 function readValue(payload: Record<string, unknown>, name: string, forText = false): string | null {
   const v = payload[name];
   if (typeof v === "string") return v.trim() === "" ? null : v;

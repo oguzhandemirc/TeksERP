@@ -36,16 +36,19 @@ export async function workFirstReadingAt(works: WorkRef[]): Promise<Map<string, 
  * Pencerede İLK okuması olan işler + makine × gün metresi (anahtar `${machineId}|${YYYY-MM-DD}`). Penceredeki okuması
  * olup ilk okuması pencereden önce olan iş, önceki bir günündür — bu pencerenin günlerine girmez.
  */
-export async function machineWorkMeters(machineIds: string[], start: Date, end: Date): Promise<{ dayMeters: Map<string, Prisma.Decimal>; works: Map<string, MachineWork> }> {
+export async function machineWorkMeters(
+  machineIds: string[], start: Date, end: Date,
+  db: Pick<Prisma.TransactionClient, "rollMeterReading"> = prisma,
+): Promise<{ dayMeters: Map<string, Prisma.Decimal>; works: Map<string, MachineWork> }> {
   const dayMeters = new Map<string, Prisma.Decimal>();
   const works = new Map<string, MachineWork>();
   if (machineIds.length === 0) return { dayMeters, works };
-  const rows = await prisma.rollMeterReading.findMany({
+  const rows = await db.rollMeterReading.findMany({
     where: { machineId: { in: machineIds }, createdAt: { gte: start, lt: end } },
     select: { machineId: true, rollId: true, workOrderStepId: true, phase: true, meters: true, createdAt: true, revokedAt: true },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
-  const earlier = await prisma.rollMeterReading.findMany({
+  const earlier = await db.rollMeterReading.findMany({
     where: { machineId: { in: machineIds }, rollId: { in: [...new Set(rows.map((r) => r.rollId))] }, createdAt: { lt: start } },
     select: { machineId: true, rollId: true, workOrderStepId: true },
   });

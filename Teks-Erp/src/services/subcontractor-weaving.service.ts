@@ -28,6 +28,7 @@ import { formatSeriesCode } from "./number-series.service";
 import { AuditService } from "./audit.service";
 import { InventoryService } from "./inventory.service";
 import { nextSubcontractorDocNoTx } from "./subcontractor.service";
+import { emitSubcontractDispatchedTx, emitSubcontractReceivedTx } from "./notification-sources/depo";
 import { cancelWarpBeamItemsTx, countReturnedBeamItems, dispatchWarpBeamItemsTx } from "./subcontractor-beam.service";
 import { cancelYarnItemsTx, countReturnedYarnItems, dispatchYarnItemsTx, type YarnDispatchLineInput } from "./subcontractor-yarn.service";
 import { WEAVING_ORDER_OPEN_STATUSES } from "./weaving-order.service";
@@ -148,6 +149,8 @@ export async function dispatchForWeaving(input: WeavingDispatchInput, userId?: s
     // totalQty = Σ kalem (`test_consistency §19`); levent kalemi metre taşır (F1 ile aynı); iplik kg GİRMEZ (H1).
     if (beams.lines.length > 0) await tx.subcontractorDispatch.update({ where: { id: dispatch.id }, data: { totalQty: beams.totalM } });
     const yarn = yarnLines.length > 0 ? await dispatchYarnItemsTx(tx, { dispatchId: dispatch.id, lines: yarnLines, userId }) : null;
+    // S6a: dokuma sevki de `fason.cikis`in tek yayma noktasından (kalemler + totalQty yazıldıktan sonra).
+    await emitSubcontractDispatchedTx(tx, dispatch.id, userId);
     return { dispatch: { ...dispatch, expectedReturnSource: termin.source }, beams, yarn, weavingOrderNumber: wo.weavingOrderNumber };
   });
   await AuditService.log({
@@ -302,6 +305,10 @@ async function receiveForWeavingFresh(input: WeavingReceiptInput, userId?: strin
       failed.push({ index, message: e instanceof Error ? e.message : String(e) });
     }
   }
+  // S6a `fason.donus`: başlık ve toplar ayrı tx'lerde doğar (satır hatası makbuzu düşürmez) → bildirim ilk geçişin
+  // GERÇEK sonucuyla, döngüden sonra kısa tx'te; replay yolu buraya gelmez (yukarıda döndü).
+  const bornMeters = rolls.reduce((s, r) => s.plus(new Prisma.Decimal(r.initialQty)), new Prisma.Decimal(0));
+  await prisma.$transaction((tx) => emitSubcontractReceivedTx(tx, header.receipt.id, { rollCount: rolls.length, meters: bornMeters }, userId));
   await AuditService.log({
     userId,
     action: "CREATE",

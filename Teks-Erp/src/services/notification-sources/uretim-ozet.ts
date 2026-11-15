@@ -13,6 +13,8 @@ import { factoryTimeHms } from "../../constants/time";
 import { producedRollsSql } from "../reports/_produced";
 import { K18_DEAD_STATUSES } from "../batch.service";
 import { aggregateKursunApplications, listKursunApplications } from "../helpers/process-summary.helper";
+import { machineWorkMeters } from "../helpers/meter-reading-work.helper";
+import { BRODE_PROPERTY_CODE } from "../helpers/service-quantity.helper";
 
 type Tx = Prisma.TransactionClient;
 const r1 = (n: number): number => Math.round(n * 10) / 10;
@@ -29,6 +31,18 @@ export async function producedTotals(tx: Tx, w: DigestWindow) {
     LEFT JOIN quality_grades g ON g.id = p."qualityGradeId"`);
   const r = rows[0] ?? { top: 0, metre: 0, birinci: 0, ikinci: 0, fire: 0 };
   return { top: Number(r.top), metre: Number(r.metre), birinci: Number(r.birinci), ikinci: Number(r.ikinci), fire: Number(r.fire) };
+}
+
+/** Pencerede ilk okuması olan brode işleri (BRODE yetenekli istasyonun makineleri): makine, iş adedi, metre. */
+export async function brodeTotals(tx: Tx, w: Pick<DigestWindow, "from" | "to">): Promise<{ makine: number; is: number; metre: number }> {
+  const machines = await tx.machine.findMany({
+    where: { station: { propertyCapabilities: { some: { property: { code: BRODE_PROPERTY_CODE } } } } },
+    select: { id: true },
+  });
+  const { works } = await machineWorkMeters(machines.map((m) => m.id), w.from, w.to, tx);
+  const used = new Set([...works.keys()].map((k) => k.split("|")[0]));
+  const metre = [...works.values()].reduce((s, x) => s + Number(x.meters), 0);
+  return { makine: used.size, is: works.size, metre: r1(metre) };
 }
 
 export function registerProductionDigestSources(): void {
@@ -64,6 +78,14 @@ export function registerProductionDigestSources(): void {
       if (apps.length === 0) return null;
       const s = aggregateKursunApplications(apps);
       return { gun: w.label, top: s.totals.rollCount, metre: r1(Number(s.totals.meters)), sapan: apps.filter((a) => a.deviatesFromTarget).length };
+    },
+  });
+  // S6a: brode = BRODE yetenekli istasyonun makineleri; iş/metre kârlılıkla aynı tanımdan (`machineWorkMeters`, CUT>OUT>IN).
+  registerDigestSource({
+    kind: "brode.gunluk-ozet",
+    compute: async (tx, w) => {
+      const t = await brodeTotals(tx, w);
+      return t.is === 0 ? null : { gun: w.label, ...t };
     },
   });
   registerDigestSource({
