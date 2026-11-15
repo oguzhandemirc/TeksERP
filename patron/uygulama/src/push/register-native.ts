@@ -5,11 +5,11 @@ import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 import type { Api } from "../api/endpoints";
-import type { RegisterOutcome } from "./register";
+import type { BelirtecHatirla, RegisterOutcome } from "./register";
 import { kanallariKur } from "./kanallar-native";
 import { VARSAYILAN_SES } from "./sesler";
 
-export async function registerNative(api: Api): Promise<RegisterOutcome> {
+export async function registerNative(api: Api, hatirla?: BelirtecHatirla): Promise<RegisterOutcome> {
   if (!Device.isDevice) return { kind: "DESTEKLENMIYOR", message: "Bildirim yalnız gerçek cihazda alınabilir (öykünücü değil)" };
   // Android 13+: POST_NOTIFICATIONS çalışma zamanı istemi ancak bir kanal VARKEN çıkar → kanal izinden ÖNCE kurulur.
   // Bulut kipinde ses seçimi yok: varsayılan TeksERP kanalları (bulut iletisi aynı kimliği yollar), eski `varsayilan` silinir.
@@ -23,6 +23,7 @@ export async function registerNative(api: Api): Promise<RegisterOutcome> {
   const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
   const platform = Platform.OS === "ios" ? "ios" : "android";
   const device = await api.deviceRegister({ platform, belirtec: token, ...(Device.deviceName ? { ad: Device.deviceName.slice(0, 120) } : {}) });
+  await hatirla?.(token);
   return { kind: "KAYITLI", deviceId: device.id };
 }
 

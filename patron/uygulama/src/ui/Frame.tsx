@@ -2,9 +2,9 @@
 // Menü yalnız izinli bölümleri gösterir (karar yine sunucuda; izinsiz uç 403 döner).
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { usePathname, useRouter } from "expo-router";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Pressable, RefreshControl, ScrollView, Text, useWindowDimensions, View } from "react-native";
-import Animated, { FadeIn } from "react-native-reanimated";
+import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MODULES, moduleInMenu, moduleNavTitle, moduleTitle, moduleVisible, type ModuleKey } from "../lib/access";
 import { useSession } from "../state/session";
@@ -14,7 +14,7 @@ import { IconChip } from "./IconChip";
 import { MODULE_ICON } from "./icons";
 import { Banner } from "./kit";
 import { LargeHeader, LargeTitle, useHeaderScroll } from "./LargeHeader";
-import { durations } from "./motion";
+import { durations, easing } from "./motion";
 import { railNavigate } from "./nav";
 import { useRailOpen } from "./rail-pref";
 import { RoleBadge } from "./RoleBadge";
@@ -56,8 +56,16 @@ export function SideNav() {
   const path = usePathname();
   const insets = useSafeAreaInsets();
   const { open, toggle } = useRailOpen();
+  const reduced = useReducedMotion();
+  const target = (open ? RAIL_WIDTH : RAIL_COLLAPSED) + insets.left;
+  // Genişlik yumuşak geçer (içerik sabit kalır, taşan etiket kırpılır); "hareketi azalt" açıksa anında.
+  const width = useSharedValue(target);
+  useEffect(() => {
+    width.value = reduced ? target : withTiming(target, { duration: durations.base, easing: easing.standard });
+  }, [target, reduced, width]);
+  const widthStyle = useAnimatedStyle(() => ({ width: width.value }));
   return (
-    <View style={[s.rail, { width: (open ? RAIL_WIDTH : RAIL_COLLAPSED) + insets.left, paddingTop: insets.top + space.s, paddingLeft: insets.left + space.s }]} testID="ray">
+    <Animated.View style={[s.rail, widthStyle, { paddingTop: insets.top + space.s, paddingLeft: insets.left + space.s }]} testID="ray">
       <View style={[s.railHead, !open && s.railHeadClosed]}>
         <Pressable
           accessibilityRole="button"
@@ -108,7 +116,7 @@ export function SideNav() {
           );
         })}
       </ScrollView>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -211,7 +219,7 @@ const useStyles = makeStyles((t) => ({
   facility: { ...typography.headline, color: t.text, flexShrink: 1 },
   facilityPress: { minHeight: TOUCH, flexDirection: "row" as const, alignItems: "center" as const, gap: space.xs },
   facilitySwitch: { ...typography.footnote, color: t.tint },
-  rail: { borderRightWidth: 1, borderColor: t.separator, backgroundColor: t.surface, paddingRight: space.s },
+  rail: { borderRightWidth: 1, borderColor: t.separator, backgroundColor: t.surface, paddingRight: space.s, overflow: "hidden" as const },
   railHead: { flexDirection: "row" as const, alignItems: "flex-start" as const, gap: space.xs, marginBottom: space.s },
   railHeadClosed: { justifyContent: "center" as const },
   railToggle: { width: TOUCH, height: TOUCH, borderRadius: radius.control, alignItems: "center" as const, justifyContent: "center" as const },

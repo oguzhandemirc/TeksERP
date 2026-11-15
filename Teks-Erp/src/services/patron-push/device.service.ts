@@ -2,8 +2,8 @@
 // Patron push cihazı — telefonun Expo belirtecini fabrikaya kaydeder/bırakır (push köprüsü P2)
 // =============================================================================
 // Belirteç onu yazan OTURUMLA yaşar: kayıt yalnız patron oturumundan, yalnız kendi adına; oturum iptali (çıkış,
-// parola, pasif, aynı tip yeni giriş, süre dolumu) belirteci BIRAKILACAK yapar ve ham değeri siler. Satır silinmez:
-// bırakma durum geçişidir, aynı belirteç yeniden gelirse satır dirilir. Bulutla eşleme istek yolunda DEĞİL, iş
+// parola, pasif, aynı tip yeni giriş, süre dolumu) belirteci BIRAKILACAK yapar ve ham değeri siler. Bırakma durum
+// geçişidir, aynı belirteç yeniden gelirse satır dirilir; BIRAKILDI satır 180 günde budanır (`notification-prune`). Bulutla eşleme istek yolunda DEĞİL, iş
 // turunda (`cloud-round.service.ts`); burası yalnız yerel durumu yazar. Ham belirteç ne yanıta ne log'a girer.
 // =============================================================================
 import { ClientType, Prisma } from "@prisma/client";

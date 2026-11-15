@@ -132,9 +132,12 @@ describe("izin istemi (register-native, Android 13+)", () => {
 
   it("⭐ kanal izinden ÖNCE kurulur; izin verilince belirteç bulut cihaz kaydına gider", async () => {
     mockIzin = "granted";
-    await expect(registerNative(api)).resolves.toEqual({ kind: "KAYITLI", deviceId: "d1" });
+    const hatirla = jest.fn(async () => undefined);
+    await expect(registerNative(api, hatirla)).resolves.toEqual({ kind: "KAYITLI", deviceId: "d1" });
     expect(mockSira).toEqual(["kanal", "kanal", "izin-oku", "izin-iste"]);
     expect(api.deviceRegister).toHaveBeenCalledWith({ platform: "android", belirtec: "ExponentPushToken[sonda]", ad: "Sonda" });
+    // Çıkışta bırakılmak üzere belirteç hatırlanır (bulut-push.ts).
+    expect(hatirla).toHaveBeenCalledWith("ExponentPushToken[sonda]");
   });
 
   it("izin reddedilirse kayıt denenmez, Türkçe yönlendirme döner", async () => {

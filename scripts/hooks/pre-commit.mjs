@@ -287,6 +287,7 @@ const GIZLILIK_SAYFASI_TETIK = new Set([
   "deploy/gizlilik-sayfasi/nginx/default.conf", "deploy/gizlilik-sayfasi/uret.mjs", "deploy/gizlilik-sayfasi/vds-kur.sh",
   "deploy/gizlilik-sayfasi/olc.mjs", "docs/ops/PLAY-KONSOL-FORMLARI.md", "docs/ops/SUNUCU-ENVANTERI.md",
   "docs/ops/PATRON-MAGAZA-ANDROID.md", "patron/sunucu/src/services/maintenance.ts", "patron/sunucu/src/config.ts",
+  "Teks-Erp/src/services/notification-prune.service.ts",
   "patron/uygulama/src/push/support.ts", "patron/uygulama/app.config.js", "patron/uygulama/magaza/metinler.json",
   "satici/sunucu/src/http/client-address.ts", "deploy/traefik/kenar-zinciri.mjs", "scripts/test_gizlilik_sayfasi.mjs",
 ]);

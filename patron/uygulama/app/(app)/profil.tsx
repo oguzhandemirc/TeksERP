@@ -3,8 +3,8 @@
 // hesabımı sil (ayrı ekran: açıklama + parola + TOTP), çıkış (iki adım).
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useRouter } from "expo-router";
-import { useCallback, useState } from "react";
-import { Modal, Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { useCallback, useState, type ReactNode } from "react";
+import { Pressable, ScrollView, Text, View, type ViewStyle } from "react-native";
 import { moduleDef, moduleTitle } from "../../src/lib/access";
 import { MODULE_ICON } from "../../src/ui/icons";
 import { ROLE_LABEL, roleOf } from "../../src/ui/RoleBadge";
@@ -15,6 +15,7 @@ import { FacilitySwitchModal } from "../../src/ui/FacilitySwitcher";
 import { Screen } from "../../src/ui/Frame";
 import { Banner, Button, ConfirmButton, Field } from "../../src/ui/kit";
 import { ListGroup, ListRow } from "../../src/ui/ListRow";
+import { ModalSheet, useInSheetCard } from "../../src/ui/ModalSheet";
 import { SegmentedControl } from "../../src/ui/SegmentedControl";
 import { makeStyles, THEME_PREF_LABEL, THEME_PREFS, useThemePref, useTokens } from "../../src/ui/theme-context";
 import { radius, READABLE_MAX, space, typography } from "../../src/ui/tokens";
@@ -38,8 +39,8 @@ function PasswordSheet({ visible, onClose, onDone }: { readonly visible: boolean
     onClose();
   };
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle={Platform.OS === "ios" ? "formSheet" : undefined} onRequestClose={close}>
-      <View style={[s.sheet, { backgroundColor: t.bg }]} testID="parola-sayfasi">
+    <ModalSheet visible={visible} onClose={close} iosPresentation="formSheet" testID="parola-sayfasi">
+      <SheetBox style={{ backgroundColor: t.bg }} testID="parola-sayfasi">
         <View style={s.sheetBar}>
           <Text style={s.sheetTitle} accessibilityRole="header">Parola değiştir</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="Kapat" onPress={close} hitSlop={12} testID="parola-kapat">
@@ -56,9 +57,15 @@ function PasswordSheet({ visible, onClose, onDone }: { readonly visible: boolean
           <Button label="Parolayı değiştir" icon="key-outline" busy={change.busy} disabled={change.disabled || cur === "" || next.length < 12 || totp.length !== 6} testID="parola-kaydet"
             onPress={() => void change.run(totp).then((r) => { if (r) { setCur(""); setNext(""); setTotp(""); onDone(); } })} />
         </ScrollView>
-      </View>
-    </Modal>
+      </SheetBox>
+    </ModalSheet>
   );
+}
+
+/** Sayfa gövdesi: telefonda tam yükseklik, geniş ekran kartında içerik boyu (yüksekliksiz kartta `flex: 1` çöker). */
+function SheetBox({ style, testID, children }: { readonly style: ViewStyle; readonly testID: string; readonly children: ReactNode }) {
+  const kart = useInSheetCard();
+  return <View style={[kart ? { flexShrink: 1 } : { flex: 1 }, style]} testID={testID}>{children}</View>;
 }
 
 export default function Profile() {
@@ -171,7 +178,6 @@ const useStyles = makeStyles((t) => ({
   switchText: { ...typography.subhead, fontWeight: "600" as const },
   pad: { padding: space.m },
   logout: { marginTop: space.l },
-  sheet: { flex: 1 },
   sheetBar: { flexDirection: "row" as const, alignItems: "center" as const, justifyContent: "space-between" as const, paddingHorizontal: space.l, paddingTop: space.l, paddingBottom: space.s },
   sheetTitle: { ...typography.title2, color: t.text },
   sheetBody: { padding: space.l, maxWidth: READABLE_MAX, width: "100%" as const, alignSelf: "center" as const },

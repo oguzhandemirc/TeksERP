@@ -158,6 +158,12 @@ export async function cihazlar(o: Ortam, s: Kurgu): Promise<void> {
   const kaldir = await api(o, "POST", `/api/cihazlar/${id}/kaldir`, { belirtec, govde: {} });
   const [acik, pasif] = [await satirlar(true), await satirlar(false)];
   kontrol("§8b cihazı kaldırmak bütün üyeliklerde pasife çeker", kaldir.status === 200 && acik === "" && pasif === [s.a, s.b, s.e].join(","), `${kaldir.status} açık=${acik} pasif=${pasif}`);
+  // Çıkışta bırak (uygulama `/oturum/kapat`tan ÖNCE çağırır): yeniden kayıt → tek çağrı bütün üyeliklerde pasife çeker.
+  await api(o, "POST", "/api/cihazlar", { belirtec, govde: { platform: "android", belirtec: tok } });
+  const yeniden = await satirlar(true);
+  const birak = await api(o, "POST", "/api/cihazlar/birak", { belirtec, govde: { belirtec: tok } });
+  const [acik2, pasif2] = [await satirlar(true), await satirlar(false)];
+  kontrol("§8d ⭐ çıkışta bırak (`/cihazlar/birak`) belirteci bütün üyeliklerde pasife çeker", yeniden === [s.a, s.b, s.e].join(",") && birak.status === 200 && (birak.json.data as { birakilan: number }).birakilan === 3 && acik2 === "" && pasif2 === [s.a, s.b, s.e].join(","), `${birak.status} ${JSON.stringify(birak.json.data)} açık=${acik2}`);
   const web = JSON.parse(webPushPayload({ id: "n", title: "t", body: "b", route: "/pano", tesisId: s.b })) as Record<string, unknown>;
   kontrol("§8c ⭐ web push gövdesi tesisi taşır (`tesisId`)", web.tesisId === s.b && web.rota === "/pano" && web.bildirimId === "n");
 }

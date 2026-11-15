@@ -1,6 +1,7 @@
 // Bildirim ayarları formu (saf): ayar ↔ form metni, doğrulama TR. Kural sunucudadır (katı şema); burada yalnız
 // kullanıcıya erken ve anlaşılır hata göstermek için aynı sınırlar. Bildirime dokununca açılacak yol da burada süzülür.
 import { MODULES } from "./access";
+import { kumeSunuluyor } from "../api/yetenek";
 import { NOTIFICATION_KINDS, type NotificationKind, type NotificationSettings } from "../api/wire";
 
 export interface NotificationForm {
@@ -78,6 +79,10 @@ export function fromForm(f: NotificationForm): { ok: true; settings: Notificatio
 }
 
 const RECORD_ROUTES = new Set(["/gelen-kutusu", "/raporlar", "/siparisler", "/cariler"]);
+/** Kendi kayıt ekranı olmayan bölümün kaydı: tel `/bolum/<UUID>` (iki parça) → jenerik kayıt ekranı (fabrika dürtüsü,
+ *  2026-11-15). Küme bu sunucuda sunulmuyorsa null (ERP'de liste yedeği açılır). */
+const RECORD_ALIASES: Readonly<Record<string, string>> = { "/teklifler": "teklif", "/sevkiyat": "sevkiyat", "/uretim": "is-emri" };
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Bildirimin taşıdığı yol yalnız uygulamanın KENDİ ekranıysa açılır (dış adres, `//`, bilinmeyen bölüm → null). */
 export function safeRoute(rota: unknown): string | null {
@@ -85,6 +90,10 @@ export function safeRoute(rota: unknown): string | null {
   const [, first, second] = rota.split("/");
   const base = `/${first}`;
   if (!MODULES.some((m) => m.route === base)) return null;
+  if (second !== undefined && Object.prototype.hasOwnProperty.call(RECORD_ALIASES, base)) {
+    const kume = RECORD_ALIASES[base]!;
+    return UUID_RE.test(second) && kumeSunuluyor(kume) ? `/kayit/${kume}/${second}` : null;
+  }
   if (second !== undefined && !RECORD_ROUTES.has(base)) return null;
   return rota;
 }
