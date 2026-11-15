@@ -32,7 +32,7 @@ import { assertKursunGramajValue } from "./helpers/kursun-bypass-gramaj.helper";
 import { listKursunGramPriceHistory, recordKursunGramPriceVersionTx } from "./helpers/kursun-gram-price-version.helper";
 import { cariTaxOverrideData, taxOverrideOf, type CariTaxOverrideInput } from "./helpers/cari-tax-override.helper";
 import { emitKursunGramPriceChangedTx } from "./notification-sources/maliyet-kursun";
-import { cariDisplayName } from "./notification-sources/finans";
+import { captureCariTermsTx, cariDisplayName, emitCariTermsChangedTx } from "./notification-sources/finans";
 
 /**
  * H8b: müşteri tetiği yalnız fabrika ayarının değerleri ya da null (fabrika ayarı); yalnız MÜŞTERİ carisinde
@@ -426,6 +426,7 @@ export class CariService {
 
     // K14: gram fiyatı değişince kolon + sürüm aynı tx'te (değer değişmediyse sürüm yazılmaz).
     const updated = await prisma.$transaction(async (tx) => {
+      const termsBefore = await captureCariTermsTx(tx, id); // S6b `cari.degisti`: kart Finans bölümü + Finans → Cari tek yol
       const row = await tx.cariAccount.update({
       where: { id },
       data: {
@@ -447,6 +448,7 @@ export class CariService {
       if (gram !== undefined && (await recordKursunGramPriceVersionTx(tx, { cariAccountId: id }, gram, userId))) {
         await emitKursunGramPriceChangedTx(tx, { kind: "cari", id, name: await cariDisplayName(tx, id) }, gram.price === null, userId);
       }
+      await emitCariTermsChangedTx(tx, id, termsBefore, userId);
       return row;
     });
 

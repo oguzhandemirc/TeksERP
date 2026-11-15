@@ -191,7 +191,7 @@ export const productRecipeImportAdapter: ImportAdapter = {
       await writeWeftChanges(row, id, ctx.userId);
       return { id };
     }
-    await productRecipeService.update(id, payload, ctx.userId);
+    await productRecipeService.update(id, payload, ctx.userId, { notify: false });
     await writeWeftChangesAfter(row, id, ctx.userId);
     return { id };
   },

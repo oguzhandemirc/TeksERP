@@ -6,6 +6,11 @@
 // sahipleri; ikisi de görme süzgeciyle kesişir (kural yetki genişletmez). Payload'da sır yok.
 // =============================================================================
 import type { Prisma } from "@prisma/client";
+import prisma from "../../lib/prisma";
+import { loadAlarmShiftFacts } from "../helpers/loom-alarm-shift.helper";
+import { inQuietHours } from "../helpers/notification-delivery.helper";
+import { effectiveNotificationParams } from "../helpers/notification-params.helper";
+import { readNotificationInboxEnabled } from "../system-setting/labels";
 import { factoryDateTimeTr } from "../../constants/time";
 import { matchesPermission } from "../../middlewares/rbac.middleware";
 import { emitNotification } from "../helpers/notification-emit.helper";
@@ -85,6 +90,63 @@ export async function emitSuspiciousLogin(
     },
     {},
   );
+}
+
+export const OFF_HOURS_LOGIN_KIND = "kimlik.mesai-disi-giris" as const;
+
+/** Mesai dışı girişin izlendiği kanallar — tablet (saha) girişi vardiya işidir, izlenmez. */
+const OFF_HOURS_CHANNEL_LABEL: Readonly<Record<string, string>> = { web: "Web tarayıcısı", electron: "Yönetim paneli", patron: "Patron uygulaması" };
+
+const hhmm = (hour: number): string => {
+  const m = Math.round(hour * 60) % 1440;
+  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+};
+
+/**
+ * "Bu an mesai dışı mı" — vardiya TANIMLIYSA (fabrika-geneli takvim kuralı) süren vardiya yokken; tanımlı değilse
+ * fabrika saatinde [başlangıç, bitiş) dışında (gece yarısını aşan aralık desteklenir; eşit uçlar = mesai tanımsız → hiç).
+ */
+export function isOutsideWorkHours(input: { at: Date; shiftDefined: boolean; inShift: boolean; startHour: number; endHour: number }): { outside: boolean; label: string } {
+  if (input.shiftDefined) return { outside: !input.inShift, label: "süren vardiya yok" };
+  const s = hhmm(input.startHour);
+  const e = hhmm(input.endHour);
+  if (s === e) return { outside: false, label: "mesai tanımsız" };
+  return { outside: !inQuietHours(input.at, s, e), label: `mesai ${s}–${e}` };
+}
+
+/**
+ * `kimlik.mesai-disi-giris` TEK yayma noktası (çağıran `AuthService.issueToken`, oturum açıldıktan sonra): ayrı kısa tx,
+ * hata girişi bozmaz (çağıran yutar). Yükte ad + kanal + saat; IP, tarayıcı ve sır yok.
+ */
+type ShiftFactsReader = (tx: Prisma.TransactionClient, at: Date) => Promise<{ shiftDefined: boolean; currentShift: unknown }>;
+let readShiftFacts: ShiftFactsReader = loadAlarmShiftFacts;
+/** Bekçi enjeksiyonu: vardiya okuyucusunu değiştirir (global vardiya tanımı yazmadan), geri alma fonksiyonu döner. */
+export function overrideOffHoursShiftFacts(fn: ShiftFactsReader): () => void {
+  const previous = readShiftFacts;
+  readShiftFacts = fn;
+  return () => {
+    readShiftFacts = previous;
+  };
+}
+
+export async function noteOffHoursLogin(input: { userId: string; displayName: string; clientType: string | undefined; at: Date }): Promise<boolean> {
+  const kanal = input.clientType ? OFF_HOURS_CHANNEL_LABEL[input.clientType] : undefined;
+  if (!kanal) return false;
+  return prisma.$transaction(async (tx) => {
+    if (!(await readNotificationInboxEnabled(tx))) return false;
+    const facts = await readShiftFacts(tx, input.at);
+    const p = effectiveNotificationParams(OFF_HOURS_LOGIN_KIND);
+    const v = isOutsideWorkHours({ at: input.at, shiftDefined: facts.shiftDefined, inShift: facts.currentShift !== null, startHour: Number(p.baslangicSaat), endHour: Number(p.bitisSaat) });
+    if (!v.outside) return false;
+    await emitNotification(
+      tx,
+      "kimlik.mesai-disi-giris",
+      { type: "user", id: input.userId, key: input.userId },
+      { kullaniciId: input.userId, kullanici: input.displayName, kanal, saat: factoryDateTimeTr(input.at), mesai: v.label },
+      { actorUserId: input.userId },
+    );
+    return true;
+  });
 }
 
 export function registerIdentityRecipientResolvers(): void {

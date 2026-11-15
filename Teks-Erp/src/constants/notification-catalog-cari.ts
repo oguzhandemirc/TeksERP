@@ -67,7 +67,7 @@ export const CARI_NOTIFICATION_ENTRIES = {
     modul: "financeEnabled",
     // Konu hesap × para birimi (limit her para biriminde AYRI ölçülür — `riskExposureTx`).
     tekilKalibi: "{cariId}:{paraBirimi}",
-    pencereSn: 0, varsayilan: ["finance:read"], kilit: "YOK",
+    pencereSn: 0, varsayilan: "HERKES", kilit: "YOK",
     kanallar: KANAL_MASAUSTU,
     varsayilanKanallar: KANAL_VARSAYILAN, onemli: true,
     baslik: "Cari risk limitini aştı: {cariAd}",

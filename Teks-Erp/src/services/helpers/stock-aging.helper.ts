@@ -15,6 +15,7 @@
 //     — metinde açıkça yazılır, sessiz tahmin yok (defter geçmişi eski toplarda yok: backfill yok kararı).
 //   • `durum-degisimi`: `Roll.statusChangedAt` (trigger damgası; Stok & Ölü Stok raporunun raf yaşı çıpası).
 // "En son giriş" okuyucusu `MOVEMENT_DESC` ikizidir: `createdAt DESC, id DESC` (eşitlik bozucu, defter.md).
+// Depo kolonu boş top "Depo atanmamış" grubunda (`warehouseId: null`) sayılır.
 // Çıpası bilinmeyen (NULL) top sayılmaz. Yaş mutlak farktır: çıpa ≤ `cutoff` (= an − N gün).
 // =============================================================================
 import { Prisma, WarehouseEventType } from "@prisma/client";
@@ -29,8 +30,12 @@ type Db = { $queryRaw: <T>(query: Prisma.Sql) => Promise<T> };
 /** Konum değiştirmeyen satırlar: giriş/çıkış sayılmaz. */
 const NON_PLACEMENT_EVENTS: WarehouseEventType[] = [WarehouseEventType.ADJUST, WarehouseEventType.TRANSFORM, WarehouseEventType.OPENING_BALANCE];
 
+/** Depo kolonu boş raf/stok topları tek konu grubunda sayılır (S6b, 2026-11-15) — sessizce düşmesin. */
+export const UNASSIGNED_WAREHOUSE_LABEL = "Depo atanmamış";
+
 export interface AgedStockGroup {
-  warehouseId: string;
+  /** `null` = depo atanmamış toplar grubu. */
+  warehouseId: string | null;
   warehouseName: string;
   rollCount: number;
   meters: number;
@@ -81,33 +86,36 @@ export function agedStockScopeSql(scope: StockAgingScope, emanetOn: boolean): Pr
 
 /**
  * Çıpası `cutoff`a eşit ya da daha eski olan depo toplarını depo başına toplar.
- * `warehouseIds` verilirse yalnız o depolar (bekçi körlük zemini; koşul kaynağı tüm depoları okur).
+ * `warehouseIds` verilirse yalnız o depolar (bekçi körlük zemini; koşul kaynağı tüm depoları okur); o kipte
+ * depo atanmamış grup yalnız `includeUnassigned` ile gelir.
  */
 export async function loadAgedStockGroups(
   db: Db,
-  opts: { source: StockAgingSource; scope: StockAgingScope; emanetOn: boolean; cutoff: Date; warehouseIds?: readonly string[] },
+  opts: { source: StockAgingSource; scope: StockAgingScope; emanetOn: boolean; cutoff: Date; warehouseIds?: readonly string[]; includeUnassigned?: boolean },
 ): Promise<AgedStockGroup[]> {
   const byEntry = opts.source === "depo-giris";
-  const whFilter = opts.warehouseIds ? Prisma.sql`AND r."warehouseId" = ANY(${[...opts.warehouseIds]}::uuid[])` : Prisma.empty;
+  const unassigned = opts.warehouseIds ? opts.includeUnassigned === true : true;
+  const whFilter = opts.warehouseIds
+    ? Prisma.sql`AND (r."warehouseId" = ANY(${[...opts.warehouseIds]}::uuid[]) OR (${unassigned} AND r."warehouseId" IS NULL))`
+    : Prisma.empty;
   const anchored = byEntry
     ? Prisma.sql`
       SELECT s.*, CASE WHEN f.fb THEN s."statusChangedAt" ELSE e."createdAt" END AS "anchorAt", f.fb AS fallback
       FROM stock s ${entryAnchorSql()}
       CROSS JOIN LATERAL (SELECT (e.id IS NULL OR ${laterExitSql()}) AS fb) f`
     : Prisma.sql`SELECT s.*, s."statusChangedAt" AS "anchorAt", false AS fallback FROM stock s`;
-  const rows = await db.$queryRaw<Array<{ warehouseId: string; warehouseName: string; rollCount: number; meters: number; fallbackCount: number }>>(Prisma.sql`
+  const rows = await db.$queryRaw<Array<{ warehouseId: string | null; warehouseName: string | null; rollCount: number; meters: number; fallbackCount: number }>>(Prisma.sql`
     WITH stock AS (
       SELECT r.id, r."warehouseId", r."currentQty", r."statusChangedAt"
       FROM rolls r
-      WHERE ${agedStockScopeSql(opts.scope, opts.emanetOn)}
-        AND r."warehouseId" IS NOT NULL ${whFilter}
+      WHERE ${agedStockScopeSql(opts.scope, opts.emanetOn)} ${whFilter}
     ), anchored AS (${anchored})
     SELECT a."warehouseId"::text AS "warehouseId", w.name AS "warehouseName",
            COUNT(*)::int AS "rollCount", COALESCE(SUM(a."currentQty"), 0)::float AS meters,
            (COUNT(*) FILTER (WHERE a.fallback))::int AS "fallbackCount"
-    FROM anchored a JOIN warehouses w ON w.id = a."warehouseId"
+    FROM anchored a LEFT JOIN warehouses w ON w.id = a."warehouseId"
     WHERE a."anchorAt" IS NOT NULL AND a."anchorAt" <= ${opts.cutoff}
     GROUP BY a."warehouseId", w.name
-    ORDER BY a."warehouseId"`);
-  return rows.map((r) => ({ ...r, rollCount: Number(r.rollCount), meters: Number(r.meters), fallbackCount: Number(r.fallbackCount) }));
+    ORDER BY a."warehouseId" NULLS LAST`);
+  return rows.map((r) => ({ ...r, warehouseName: r.warehouseId === null ? UNASSIGNED_WAREHOUSE_LABEL : r.warehouseName ?? "—", rollCount: Number(r.rollCount), meters: Number(r.meters), fallbackCount: Number(r.fallbackCount) }));
 }

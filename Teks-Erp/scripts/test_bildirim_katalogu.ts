@@ -63,7 +63,7 @@ function main(): void {
   console.log("=== BİLDİRİM KATALOĞU ===\n");
 
   // ── §0 körlük zemini + kimlik ─────────────────────────────────────────────
-  check("§0 katalog: 107 tür (23 + S1 satış/teklif/planlama 17 + S2 üretim/dokuma/kurşun/tambur/bakım 15 + teklif süresi doldu + S3 depo/sevkiyat/fason/gelen belge/satınalma 19 + S4 finans/cari/ana veri/maliyet/yetki/cihaz 20 + S5a haftalık fason/finans özeti 2 + S5b vade 2 + cari değişti + yaşlanan stok + S6a fason fire/yeniden işlem · disk · acil · brode özeti · büyük sipariş 6)", girdiler.length === 107, `${girdiler.length} tür`);
+  check("§0 katalog: 110 tür (23 + S1 satış/teklif/planlama 17 + S2 üretim/dokuma/kurşun/tambur/bakım 15 + teklif süresi doldu + S3 depo/sevkiyat/fason/gelen belge/satınalma 19 + S4 finans/cari/ana veri/maliyet/yetki/cihaz 20 + S5a haftalık fason/finans özeti 2 + S5b vade 2 + cari değişti + yaşlanan stok + S6a fason fire/yeniden işlem · disk · acil · brode özeti · büyük sipariş 6 + S6b renk/reçete/mesai dışı giriş 3)", girdiler.length === 110, `${girdiler.length} tür`);
   kural("§0b `kod` = anahtar ve `<alan>.<tür>` kalıbında",
     girdiler.filter(([k, e]) => e.kod !== k || !/^[a-z0-9]+\.[a-z0-9-]+$/.test(k)).map(([k]) => k), "hepsi");
   kural("§0c `grup` beyanlı gruplardan (K8: 18 grup)", girdiler.filter(([, e]) => !NOTIFICATION_GRUPLARI.includes(e.grup))
@@ -129,6 +129,12 @@ function main(): void {
   kural("§4 ⭐ kilitli tür (kilit ≠ YOK) varsayılan KAPALI olamaz",
     girdiler.filter(([, e]) => e.kilit !== "YOK" && e.varsayilan === "KAPALI").map(([k]) => k),
     `${girdiler.filter(([, e]) => e.kilit !== "YOK").length} kilitli tür`);
+  // C5 (kullanıcı kararı 2026-11-15): koşul "durum sürdükçe" sorusudur, okuma izinli herkes görür (K1 ruhu).
+  // NEGATİF SONDA (2026-11-15): siparis.termin-gecti varsayılanı ["order:write"]e döndürüldü → §4c ❌; geri alındı.
+  const kosullar = girdiler.filter(([, e]) => e.altTur === "KOSUL");
+  check("§4c körlük zemini: katalogda ≥ 20 KOSUL türü", kosullar.length >= 20, `${kosullar.length}`);
+  kural("§4c ⭐ KOSUL türünün varsayılanı izin listesi değil (HERKES = görebilen herkes; yazma izni süzgeci yok)",
+    kosullar.filter(([, e]) => Array.isArray(e.varsayilan)).map(([k, e]) => `${k}: ${JSON.stringify(e.varsayilan)}`), "hepsi");
   kural("§4b kilitli türde `kilitGerekcesi` dolu, kilitsizde yok",
     girdiler.filter(([, e]) => (e.kilit !== "YOK") !== Boolean(e.kilitGerekcesi?.trim())).map(([k]) => k), "hepsi");
 

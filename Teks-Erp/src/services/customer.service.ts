@@ -375,7 +375,7 @@ export class CustomerService extends BaseService {
     return gatedUpdate(CUSTOMER_ARCHIVE, id, data, {
       userId,
       write: async (tx) => { const row = await tx.customer.update({ where: { id }, data: { isActive: false } }); await emitCustomerArchivedTx(tx, id, userId); return row; },
-      next: (rest) => this.updateCore(id, rest, userId, expected ? { updatedAt: updatedAtIs(expected) } : undefined),
+      next: (rest) => this.updateCore(id, rest, userId, { versionWhere: expected ? { updatedAt: updatedAtIs(expected) } : undefined }),
     });
   }
 

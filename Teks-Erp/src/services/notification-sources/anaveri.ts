@@ -41,6 +41,19 @@ export const CUSTOMER_CHANGE_FIELDS: ReadonlySet<string> = new Set([
 /** `cari.degisti` — kart güncellemesinin tx'i (`CustomerService.afterUpdateTx` ← `BaseService.updateCore`); yük alan ADLARI. */
 export async function emitCustomerChangedTx(tx: Tx, customerId: string, changes: ReadonlyArray<{ field: string }>, actor: Actor): Promise<void> {
   const alanlar = [...new Set(changes.map((c) => c.field).filter((f) => CUSTOMER_CHANGE_FIELDS.has(f)))].map(auditFieldLabel);
+  await emitCardChangedTx(tx, customerId, alanlar, actor);
+}
+
+/**
+ * `cari.degisti` — finans/fason terimleri (S6b): `cariService.update` tx'i, kartın görünen alan ADLARIYLA (değer yok).
+ * Terim etiketleri çağıranın (finans kapılı zincir) sözlüğünden gelir; bu dosya finans modelini okumaz.
+ */
+export async function emitCustomerTermsChangedTx(tx: Tx, customerId: string, termLabels: readonly string[], actor: Actor): Promise<void> {
+  await emitCardChangedTx(tx, customerId, [...new Set(termLabels)], actor);
+}
+
+/** `cari.degisti`in TEK yayma noktası — kart alanı ve finans terimi yolu aynı satıra düşer. */
+async function emitCardChangedTx(tx: Tx, customerId: string, alanlar: readonly string[], actor: Actor): Promise<void> {
   if (alanlar.length === 0) return;
   if (await off(tx)) return;
   const f = await cardFacts(tx, customerId);
@@ -75,4 +88,28 @@ export async function emitItemArchivedTx(tx: Tx, itemId: string, reason: string 
   const f = await itemFacts(tx, itemId);
   if (!f) return;
   await emitNotification(tx, "anaveri.urun-pasif", subject("item", itemId), { ...f, sebep: txt(reason) }, { actorUserId: who(actor) });
+}
+
+/** `anaveri.renk-olusturuldu` — renk doğuş tx'i (`ColorService.afterCreateTx` ← `BaseService.performInsert`). */
+export async function emitColorCreatedTx(tx: Tx, colorId: string, actor: Actor): Promise<void> {
+  if (await off(tx)) return;
+  const c = await tx.color.findUnique({ where: { id: colorId }, select: { name: true, code: true } });
+  if (!c) return;
+  await emitNotification(tx, "anaveri.renk-olusturuldu", subject("color", colorId), { renkId: colorId, renkAd: c.name, renkKodu: c.code }, { actorUserId: who(actor) });
+}
+
+/** Metne girebilen reçete alanları — OPT-IN (künye/`nameFold` yok). `properties` yalnız küme gerçekten değişince gelir. */
+export const RECIPE_CHANGE_FIELDS: ReadonlySet<string> = new Set([
+  "name", "code", "itemId", "colorId", "width", "foldType", "routeId", "variantCode", "finishingRateCode", "properties", "isActive",
+]);
+const RECIPE_LABELS: Readonly<Record<string, string>> = { properties: "Özellikler", variantCode: "Varyant kodu", finishingRateCode: "Terbiye fiyat kodu" };
+
+/** `anaveri.recete-degisti` — reçete güncellemesinin tx'i (`ProductRecipeService.afterUpdateTx`); yük alan ADLARI. */
+export async function emitRecipeChangedTx(tx: Tx, recipeId: string, changes: ReadonlyArray<{ field: string }>, actor: Actor): Promise<void> {
+  const alanlar = [...new Set(changes.map((c) => c.field).filter((f) => RECIPE_CHANGE_FIELDS.has(f)))].map((f) => RECIPE_LABELS[f] ?? auditFieldLabel(f));
+  if (alanlar.length === 0) return;
+  if (await off(tx)) return;
+  const r = await tx.productRecipe.findUnique({ where: { id: recipeId }, select: { name: true, code: true } });
+  if (!r) return;
+  await emitNotification(tx, "anaveri.recete-degisti", subject("product_recipe", recipeId), { receteId: recipeId, receteAd: r.name, receteKodu: r.code, alanlar: txt(alanlar.join(", "), 200) }, { actorUserId: who(actor) });
 }
