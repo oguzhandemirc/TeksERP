@@ -30,6 +30,17 @@ export function RoleBadge({ permissions, testID = "rol-rozeti" }: { readonly per
   );
 }
 
+/** Rayın sade rol satırı: rozet yerine fabrika adının altında küçük gri metin. */
+export function RoleText({ permissions, testID = "rol-rozeti" }: { readonly permissions: readonly string[]; readonly testID?: string }) {
+  const t = useTokens();
+  const role = roleOf(permissions);
+  return (
+    <Text style={[typography.caption, { color: t.textMuted }]} numberOfLines={1} maxFontSizeMultiplier={FONT_SCALE.title} testID={testID} accessibilityLabel={`Rol: ${ROLE_LABEL[role]}`}>
+      {ROLE_LABEL[role]}
+    </Text>
+  );
+}
+
 const useStyles = makeStyles(() => ({
   badge: { alignSelf: "flex-start" as const, borderRadius: radius.chip, paddingHorizontal: space.s, paddingVertical: 2 },
   text: { ...typography.footnote, fontWeight: "600" as const },

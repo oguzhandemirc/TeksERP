@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react-native";
 import { ConfirmButton } from "../src/ui/kit";
 
 const mockSession = {
@@ -73,6 +73,17 @@ describe("ray: daralt/genişlet, yanal gezinme, ERP rolü", () => {
     expect(screen.queryByTestId("rol-rozeti")).toBeNull();
     fireEvent.press(screen.getByTestId("ray-dugme"));
     expect(screen.getByText("Siparişler")).toBeTruthy();
+  });
+  it("rol rozet değil sade metin; daralt düğmesi açıkken başlık satırının sağında, dar rayda 'genişlet'", () => {
+    mockSession.permissions = ["bulut:hesap:yonet"];
+    render(<SideNav />);
+    const rol = screen.getByTestId("rol-rozeti");
+    expect(rol.type).toBe("Text");
+    expect(rol.props.children).toBe("Yönetici");
+    expect(screen.getByTestId("ray-dugme").props.accessibilityLabel).toBe("Menüyü daralt");
+    fireEvent.press(screen.getByTestId("ray-dugme"));
+    expect(screen.getByTestId("ray-dugme").props.accessibilityLabel).toBe("Menüyü genişlet");
+    fireEvent.press(screen.getByTestId("ray-dugme"));
   });
   it("ray genişliği açık/dar hedefe geçer (Reanimated; taşan içerik kırpılır)", () => {
     const { RAIL_WIDTH, RAIL_COLLAPSED } = require("../src/ui/tokens") as typeof import("../src/ui/tokens");
@@ -203,6 +214,23 @@ describe("form kartı (D5): geniş ekranda form tam sayfa değil, karartılmış
     fireEvent.press(screen.getByTestId("form-kapat"));
     expect(mockRouter.back).toHaveBeenCalledTimes(1);
     goBack.mockRestore();
+  });
+  it("geniş: eylem düğmesi büyük başlıkla AYNI satır kapsayıcısında; boş üst bar satırı yok", () => {
+    size(1280);
+    render(<Screen title="Cariler" titleRight={<Text testID="esitleme">E</Text>} headerRight={<Text testID="yeni-cari">Yeni cari</Text>}><Text>LISTE</Text></Screen>);
+    const satir = screen.getByTestId("baslik-satiri");
+    expect(within(satir).getByText("Cariler")).toBeTruthy();
+    expect(within(satir).getByTestId("yeni-cari")).toBeTruthy();
+    expect(within(satir).getByTestId("esitleme")).toBeTruthy();
+    expect(screen.getAllByTestId("yeni-cari")).toHaveLength(1);
+    expect(screen.getByTestId("ust-bar-satirsiz")).toBeTruthy();
+  });
+  it("dar: eylem üst barda kalır (kaydırınca görünür), başlık satırında değil", () => {
+    size(400);
+    render(<Screen title="Cariler" headerRight={<Text testID="yeni-cari">Yeni cari</Text>}><Text>LISTE</Text></Screen>);
+    expect(within(screen.getByTestId("baslik-satiri")).queryByTestId("yeni-cari")).toBeNull();
+    expect(screen.getAllByTestId("yeni-cari")).toHaveLength(1);
+    expect(screen.queryByTestId("ust-bar-satirsiz")).toBeNull();
   });
   it("dar: bugünkü tam sayfa (kart yok)", () => {
     size(400);

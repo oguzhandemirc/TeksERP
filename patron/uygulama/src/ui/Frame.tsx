@@ -17,7 +17,7 @@ import { LargeHeader, LargeTitle, useHeaderScroll } from "./LargeHeader";
 import { durations, easing } from "./motion";
 import { railNavigate } from "./nav";
 import { useRailOpen } from "./rail-pref";
-import { RoleBadge } from "./RoleBadge";
+import { RoleText } from "./RoleBadge";
 import { RAIL_GROUPS } from "./tabs";
 import { makeStyles, useReducedMotion, useTokens } from "./theme-context";
 import { CONTENT_MAX, RAIL_COLLAPSED, RAIL_WIDTH, TOUCH, WIDE_MIN, radius, space, typography } from "./tokens";
@@ -66,23 +66,25 @@ export function SideNav() {
   const widthStyle = useAnimatedStyle(() => ({ width: width.value }));
   return (
     <Animated.View style={[s.rail, widthStyle, { paddingTop: insets.top + space.s, paddingLeft: insets.left + space.s }]} testID="ray">
+      {/* Başlık satırı sayfa büyük başlığıyla aynı yükseklikte (üst dolgu + TOUCH) ortalanır. */}
       <View style={[s.railHead, !open && s.railHeadClosed]}>
+        {open ? (
+          <View style={s.railTitle}>
+            <FacilityName />
+            <RoleText permissions={permissions} />
+          </View>
+        ) : null}
+        {/* Belirgin, çerçeveli düğme: açıkken "‹" daraltır, dar rayda "≡" genişletir. */}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={open ? "Menüyü daralt" : "Menüyü genişlet"}
           testID="ray-dugme"
           onPress={toggle}
           hitSlop={4}
-          style={({ pressed }) => [s.railToggle, pressed && { backgroundColor: t.surfaceAlt }]}
+          style={({ pressed }) => [s.railToggle, { borderColor: t.separator, backgroundColor: pressed ? t.tintContainer : t.bg }]}
         >
-          <Ionicons name={open ? "chevron-back" : "menu"} size={22} color={t.textSecondary} />
+          <Ionicons name={open ? "chevron-back" : "menu"} size={20} color={t.tint} />
         </Pressable>
-        {open ? (
-          <View style={s.railTitle}>
-            <FacilityName />
-            <RoleBadge permissions={permissions} />
-          </View>
-        ) : null}
       </View>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: insets.bottom + space.l }}>
         {RAIL_GROUPS.map((g, gi) => {
@@ -189,15 +191,16 @@ export function Screen({ title: titleProp, module, children, back, onRefresh, re
   return (
     // Geniş ekranda yığın animasyonu yok (yanal gezinme); içerik bir kez kısa solmayla girer.
     <Animated.View style={s.screen} entering={wide && !reduced ? FadeIn.duration(durations.instant) : undefined}>
-      <LargeHeader title={title} scrollY={scrollY} topInset={insets.top} onBack={showBack ? goBack : undefined} right={headerRight} />
+      {/* Geniş ekranda boş bar satırı yok: eylem büyük başlıkla aynı satırda dikey ortalı, üstte yalnız güvenli alan. */}
+      <LargeHeader title={title} scrollY={scrollY} topInset={insets.top} onBack={showBack ? goBack : undefined} right={wide ? undefined : headerRight} inline={wide} />
       <Animated.ScrollView
         onScroll={onScroll}
         scrollEventThrottle={16}
         keyboardShouldPersistTaps="handled"
         refreshControl={onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor={t.tint} colors={[t.tint]} progressBackgroundColor={t.surface} /> : undefined}
-        contentContainerStyle={[s.content, { paddingBottom: insets.bottom + space.xl, paddingHorizontal: wide ? space.xl : space.l }]}
+        contentContainerStyle={[s.content, { paddingBottom: insets.bottom + space.xl, paddingHorizontal: wide ? space.xl : space.l }, wide && { paddingTop: space.s }]}
       >
-        <LargeTitle title={title} scrollY={scrollY} subtitle={subtitle} right={titleRight} />
+        <LargeTitle title={title} scrollY={scrollY} subtitle={subtitle} right={wide && headerRight ? <>{titleRight}{headerRight}</> : titleRight} />
         <StatusBands />
         {switchError ? <Banner tone="error" text={switchError} testID="bant-tesis-gecisi" /> : null}
         {allowed ? children : <Banner tone="error" icon="lock-closed-outline" text="Bu bölümü görme yetkiniz yok" />}
@@ -220,10 +223,10 @@ const useStyles = makeStyles((t) => ({
   facilityPress: { minHeight: TOUCH, flexDirection: "row" as const, alignItems: "center" as const, gap: space.xs },
   facilitySwitch: { ...typography.footnote, color: t.tint },
   rail: { borderRightWidth: 1, borderColor: t.separator, backgroundColor: t.surface, paddingRight: space.s, overflow: "hidden" as const },
-  railHead: { flexDirection: "row" as const, alignItems: "flex-start" as const, gap: space.xs, marginBottom: space.s },
+  railHead: { flexDirection: "row" as const, alignItems: "center" as const, gap: space.xs, minHeight: TOUCH, marginBottom: space.m },
   railHeadClosed: { justifyContent: "center" as const },
-  railToggle: { width: TOUCH, height: TOUCH, borderRadius: radius.control, alignItems: "center" as const, justifyContent: "center" as const },
-  railTitle: { flex: 1, gap: 2, paddingTop: space.xs, paddingRight: space.xs },
+  railToggle: { width: 40, height: 40, borderRadius: radius.control, borderWidth: 1, alignItems: "center" as const, justifyContent: "center" as const },
+  railTitle: { flex: 1, minWidth: 0, gap: 0, paddingLeft: space.s },
   railRule: { height: 1, backgroundColor: t.separator, marginVertical: space.s, marginHorizontal: space.s },
   railItemClosed: { justifyContent: "center" as const, paddingHorizontal: 0 },
   railSection: { ...typography.caption, color: t.textMuted, paddingHorizontal: space.s, marginTop: space.m, marginBottom: space.xs },
