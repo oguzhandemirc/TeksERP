@@ -74,6 +74,17 @@ describe("KpiCard", () => {
     fireEvent.press(screen.getByTestId("kpi-sevk"));
     expect(fn).toHaveBeenCalled();
   });
+  it("kompakt panel dili: ikon sağ altta silik filigran, kart sıkı (min yükseklik yok)", () => {
+    const { StyleSheet } = require("react-native") as typeof import("react-native");
+    render(<KpiCard label="Sevk edilen" value="0" unit="m" domain="sevkiyat" icon="car-outline" testID="kpi-f" />);
+    const f = StyleSheet.flatten(screen.getByTestId("kpi-f-filigran").props.style) as { position?: string; right?: number; bottom?: number; opacity?: number };
+    expect(f.position).toBe("absolute");
+    expect(f.right).toBeLessThanOrEqual(0);
+    expect(f.bottom).toBeLessThanOrEqual(0);
+    expect(f.opacity).toBeLessThanOrEqual(0.15);
+    const card = StyleSheet.flatten(screen.getByTestId("kpi-f").props.style) as { minHeight?: number };
+    expect(card.minHeight).toBeUndefined();
+  });
 });
 
 describe("KpiCard yan değerler + ListRow Posta düzeni", () => {

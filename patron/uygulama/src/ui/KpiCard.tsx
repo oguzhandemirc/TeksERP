@@ -1,15 +1,14 @@
-// KPI kartı: sol alan şeridi · ikon çipi + etiket · büyük sayı (birim küçük) · alt açıklama · durum rozeti ·
+// KPI kartı (panel kompakt dili): sol alan şeridi · küçük etiket · kalın sayı (birim küçük) · sağ altta silik ikon filigranı ·
 // fabrikanın verdiği yan değerler (iki dönem yan yana, döviz satırları; karşılaştırma HESAPLANMAZ) · eğilim + sparkline.
 // Ekran okuyucu tek etiket duyar: "Etiket: değer birim, eğilim, durum, açıklama, yan değerler".
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Children, isValidElement, useState, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import { Sparkline } from "./charts/Sparkline";
-import type { IconName } from "./icons";
-import { IconChip } from "./IconChip";
+import { DOMAIN_ICON, type IconName } from "./icons";
 import { StatusBadge } from "./StatusBadge";
 import { makeStyles, useTokens } from "./theme-context";
-import { FONT_SCALE, STRIPE, TOUCH, radius, space, tabularNums, typography, type Domain, type StatusKind } from "./tokens";
+import { FONT_SCALE, STRIPE, radius, space, tabularNums, typography, type Domain, type StatusKind } from "./tokens";
 
 export interface KpiTrend {
   /** Görünen metin, işaretli: "+%12 düne göre". */
@@ -60,10 +59,9 @@ export function kpiAccessibilityLabel(p: Pick<KpiCardProps, "label" | "value" | 
 /** Uzun değer ("23.120 m", "385.000 ₺") dar kutuda kırpılmasın: web'de `adjustsFontSizeToFit` yok, boyu uzunluk seçer. */
 export function valueSize(value: string, unit?: string): { fontSize: number; lineHeight: number } | null {
   const n = value.length + (unit ? Math.ceil(unit.length / 2) : 0);
-  if (n <= 6) return null;
-  if (n <= 8) return { fontSize: 28, lineHeight: 34 };
-  if (n <= 11) return { fontSize: 24, lineHeight: 30 };
-  return { fontSize: 20, lineHeight: 26 };
+  if (n <= 8) return null;
+  if (n <= 11) return { fontSize: 20, lineHeight: 26 };
+  return { fontSize: 18, lineHeight: 24 };
 }
 
 export function KpiCard(p: KpiCardProps) {
@@ -72,9 +70,12 @@ export function KpiCard(p: KpiCardProps) {
   const body = (
     <>
       <View style={[s.stripe, { backgroundColor: t.domain[p.domain].fg }]} />
+      {/* Panel KPI dili: ikon solda çip değil, sağ altta büyük ve silik filigran (içeriğin arkasında, dokunuş almaz). */}
+      <View style={s.watermark} pointerEvents="none" testID={p.testID ? `${p.testID}-filigran` : undefined}>
+        <Ionicons name={p.icon ?? DOMAIN_ICON[p.domain]} size={WATERMARK} color={t.domain[p.domain].fg} />
+      </View>
       <View style={s.head}>
-        <IconChip domain={p.domain} icon={p.icon} size={30} />
-        <Text style={s.label} numberOfLines={2} maxFontSizeMultiplier={FONT_SCALE.title}>{p.label}</Text>
+        <Text style={s.label} numberOfLines={1} maxFontSizeMultiplier={FONT_SCALE.title}>{p.label}</Text>
         {p.onPress ? <Ionicons name="chevron-forward" size={16} color={t.textMuted} /> : null}
       </View>
       {p.value !== "" ? (
@@ -141,37 +142,40 @@ export function KpiGrid({ children, testID }: { readonly children: ReactNode; re
 }
 
 const KPI_MIN = 150;
+const WATERMARK = 56;
 
 const useStyles = makeStyles((t) => ({
   grid: { flexDirection: "row" as const, flexWrap: "wrap" as const, gap: space.m, marginBottom: space.m },
   cell: { flexDirection: "row" as const },
+  // Kompakt (panel `stat-card-compact` dili): dar iç boşluk, küçük gri etiket, kalın orta boy değer.
   card: {
     flexGrow: 1,
     flexBasis: KPI_MIN,
-    minHeight: TOUCH * 2,
     backgroundColor: t.surface,
-    borderRadius: radius.card,
-    padding: space.m,
+    borderRadius: radius.cardInner,
+    paddingVertical: space.s + 2,
+    paddingRight: space.m,
     paddingLeft: space.m + STRIPE,
     overflow: "hidden" as const,
     ...t.cardShadow,
   },
   pressed: { opacity: 0.85, transform: [{ scale: 0.98 }] },
   stripe: { position: "absolute" as const, left: 0, top: 0, bottom: 0, width: STRIPE },
-  head: { flexDirection: "row" as const, alignItems: "center" as const, gap: space.s },
-  label: { ...typography.footnote, fontWeight: "600" as const, color: t.textSecondary, flex: 1 },
-  valueRow: { flexDirection: "row" as const, alignItems: "baseline" as const, gap: space.xs, marginTop: space.s },
-  value: { ...typography.kpi, fontSize: 30, lineHeight: 34, color: t.text, flexShrink: 1 },
-  unit: { ...typography.callout, fontWeight: "600" as const, color: t.textSecondary },
-  caption: { ...typography.footnote, color: t.textSecondary, marginTop: 2 },
-  badge: { marginTop: space.s },
-  lines: { marginTop: space.m, paddingTop: space.s, borderTopWidth: 1, borderTopColor: t.separator, gap: space.xs },
+  watermark: { position: "absolute" as const, right: -8, bottom: -12, opacity: 0.08 },
+  head: { flexDirection: "row" as const, alignItems: "center" as const, gap: space.xs },
+  label: { ...typography.caption, color: t.textSecondary, flex: 1 },
+  valueRow: { flexDirection: "row" as const, alignItems: "baseline" as const, gap: space.xs, marginTop: 2 },
+  value: { ...typography.kpi, fontSize: 22, lineHeight: 28, color: t.text, flexShrink: 1 },
+  unit: { ...typography.footnote, fontWeight: "600" as const, color: t.textSecondary },
+  caption: { ...typography.caption, fontWeight: "400" as const, color: t.textSecondary },
+  badge: { marginTop: space.xs },
+  lines: { marginTop: space.s, paddingTop: space.xs, borderTopWidth: 1, borderTopColor: t.separator, gap: 2 },
   lineStack: { gap: 0 },
   line: { flexDirection: "row" as const, justifyContent: "space-between" as const, gap: space.s },
   lineLabel: { ...typography.footnote, color: t.textSecondary, flexShrink: 1 },
   // değer kırpılmaz; dar kutuda etiket kısalır
   lineValue: { ...typography.footnote, ...tabularNums, fontWeight: "600" as const, color: t.text, flexShrink: 0 },
-  foot: { flexDirection: "row" as const, alignItems: "center" as const, justifyContent: "space-between" as const, marginTop: space.s, minHeight: 24 },
+  foot: { flexDirection: "row" as const, alignItems: "center" as const, justifyContent: "space-between" as const, marginTop: space.xs, minHeight: 20 },
   trend: { flexDirection: "row" as const, alignItems: "center" as const, gap: 2 },
-  trendText: { ...typography.footnote, ...tabularNums, fontWeight: "600" as const },
+  trendText: { ...typography.caption, ...tabularNums, fontWeight: "600" as const },
 }));

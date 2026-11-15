@@ -20,18 +20,27 @@ export function useHeaderScroll(): { scrollY: SharedValue<number>; onScroll: Ret
   return { scrollY, onScroll };
 }
 
-/** Üst bar: geri düğmesi · küçük başlık (kaydırınca belirir) · sağ yuva. */
-export function LargeHeader({ title, scrollY, topInset, onBack, right }: {
+/** Üst bar: geri düğmesi · küçük başlık (kaydırınca belirir) · sağ yuva.
+ *  `inline`: geniş ekranda bar satırı çizilmez (geri yok, eylem büyük başlık satırında) — yalnız güvenli alan + çizgi. */
+export function LargeHeader({ title, scrollY, topInset, onBack, right, inline }: {
   readonly title: string;
   readonly scrollY: SharedValue<number>;
   readonly topInset: number;
   readonly onBack?: () => void;
   readonly right?: ReactNode;
+  readonly inline?: boolean;
 }) {
   const t = useTokens();
   const s = useStyles();
   const small = useAnimatedStyle(() => ({ opacity: interpolate(scrollY.value, [COLLAPSE_AT * 0.6, COLLAPSE_AT], [0, 1], Extrapolation.CLAMP) }));
   const line = useAnimatedStyle(() => ({ opacity: interpolate(scrollY.value, [0, COLLAPSE_AT], [0, 1], Extrapolation.CLAMP) }));
+  if (inline) {
+    return (
+      <View style={[s.bar, { paddingTop: topInset }]} testID="ust-bar-satirsiz">
+        <Animated.View style={[s.line, line]} />
+      </View>
+    );
+  }
   return (
     <View style={[s.bar, { paddingTop: topInset }]}>
       <View style={s.inner}>
@@ -62,9 +71,9 @@ export function LargeTitle({ title, scrollY, subtitle, right }: { readonly title
   }));
   return (
     <Animated.View style={[s.large, fade]}>
-      <View style={s.largeRow}>
+      <View style={s.largeRow} testID="baslik-satiri">
         <Text style={s.largeText} accessibilityRole="header" numberOfLines={2} maxFontSizeMultiplier={FONT_SCALE.title}>{title}</Text>
-        {right ? <View style={s.largeRight}>{right}</View> : null}
+        {right ? <View style={s.largeRight} testID="baslik-sag">{right}</View> : null}
       </View>
       {subtitle}
     </Animated.View>
@@ -81,7 +90,8 @@ const useStyles = makeStyles((t) => ({
   small: { ...typography.headline, color: t.text, flex: 1, textAlign: "center" as const },
   line: { height: 1, backgroundColor: t.separator },
   large: { marginBottom: space.m, transformOrigin: "left" as const },
-  largeRow: { flexDirection: "row" as const, alignItems: "center" as const, gap: space.m },
+  // minHeight = ray başlık satırı (TOUCH): ray ile sayfa başlığı aynı dikey eksende ortalanır.
+  largeRow: { flexDirection: "row" as const, alignItems: "center" as const, gap: space.m, minHeight: TOUCH },
   largeText: { ...typography.largeTitle, color: t.text, flexShrink: 1 },
-  largeRight: { marginLeft: "auto" as const, flexShrink: 1 },
+  largeRight: { marginLeft: "auto" as const, flexShrink: 1, flexDirection: "row" as const, alignItems: "center" as const, gap: space.s },
 }));
