@@ -49,10 +49,12 @@ const m = (v: unknown) => `${qty(v)} ${UNIT.metre}`;
 
 /** Fabrikanın verdiği değişim yüzdesi → eğilim (yön ok şekliyle; artış iyi, düşüş uyarı). */
 function trendOf(kpi: unknown): KpiTrend | undefined {
-  const d = num(obj(kpi).degisimYuzde);
-  if (d === null) return undefined;
+  const k = obj(kpi);
+  const d = num(k.degisimYuzde);
+  // Önceki dönem 0 iken yüzde anlamsız (fabrika da null verir); eski fabrikaya karşı burada da süzülür.
+  if (d === null || num(k.onceki) === 0) return undefined;
   const direction = d > 0 ? "up" : d < 0 ? "down" : "flat";
-  return { text: `${d > 0 ? "+" : ""}${pct(d)} önceki döneme göre`, direction, tone: d > 0 ? "iyi" : d < 0 ? "uyari" : "bilgi" };
+  return { text: `${pct(d, true)} önceki döneme göre`, direction, tone: d > 0 ? "iyi" : d < 0 ? "uyari" : "bilgi" };
 }
 
 const top3 = <T,>(rows: readonly T[], f: (r: T) => KpiLine): KpiLine[] => rows.slice(0, 3).map(f);

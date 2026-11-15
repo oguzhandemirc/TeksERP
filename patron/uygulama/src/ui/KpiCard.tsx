@@ -128,14 +128,19 @@ export function balancedColumns(count: number, width: number, minWidth = KPI_MIN
   return Math.ceil(count / rows);
 }
 
+/** Hücre genişliği aşağı yuvarlanır: kesirli ölçüde (yoğunluk 1,5) hücreler toplamı ızgarayı aşıp son kartı alt satıra itmesin. */
+export function kpiCellWidth(width: number, cols: number, gap = space.m): number {
+  return Math.max(0, Math.floor((Math.floor(width) - gap * (cols - 1)) / cols));
+}
+
 export function KpiGrid({ children, testID }: { readonly children: ReactNode; readonly testID?: string }) {
   const s = useStyles();
   const [width, setWidth] = useState(0);
   const items = Children.toArray(children).filter(isValidElement);
   const cols = balancedColumns(items.length, width);
-  const cell = width > 0 ? (width - space.m * (cols - 1)) / cols : undefined;
+  const cell = width > 0 ? kpiCellWidth(width, cols) : undefined;
   return (
-    <View style={s.grid} testID={testID} onLayout={(e) => setWidth(Math.round(e.nativeEvent.layout.width))}>
+    <View style={s.grid} testID={testID} onLayout={(e) => setWidth(Math.floor(e.nativeEvent.layout.width))}>
       {cell === undefined ? items : items.map((c, i) => <View key={c.key ?? i} style={[s.cell, { width: cell }]}>{c}</View>)}
     </View>
   );

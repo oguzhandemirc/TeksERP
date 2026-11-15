@@ -210,7 +210,7 @@ export function Screen({ title: titleProp, module, children, back, onRefresh, re
 }
 
 const useStyles = makeStyles((t) => ({
-  screen: { flex: 1, backgroundColor: t.bg },
+  screen: { flex: 1, backgroundColor: t.bg, overflow: "hidden" as const },
   sheetBackdrop: { flex: 1, alignItems: "center" as const, justifyContent: "center" as const, paddingHorizontal: space.xl },
   scrim: { position: "absolute" as const, top: 0, left: 0, right: 0, bottom: 0 },
   sheetCard: { width: "100%" as const, maxWidth: 640, maxHeight: "100%" as const, backgroundColor: t.bg, borderRadius: radius.card, overflow: "hidden" as const },
