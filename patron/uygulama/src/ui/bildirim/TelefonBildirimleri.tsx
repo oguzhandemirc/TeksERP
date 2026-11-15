@@ -1,22 +1,24 @@
 // ERP Bildirimler ekranının "Telefon bildirimleri" bölümü (push köprüsü P4): bu telefonun izni + açık "Telefon
 // bildirimlerini aç" eylemi (izin YALNIZ burada istenir) + tür başına "Telefon bildirimi" anahtarı. Yalnız yetenek
 // `patronPush` ∧ derleme kapısı ∧ telefonda çizilir. Anahtar yalnız (tür, PATRON_PUSH) hücresini yazar; varsayılanı sunucu verir.
-// S0: üç hazır düğme (Hepsini aç · Yalnız önemliler · Hepsini kapat) + departman başına aç/kapat aynı tercih ucuyla toplu
-// yazar (yeni uç yok); "Ses" bölümü (`TelefonSesi`) izin verilmişken görünür.
-import { useCallback, useEffect, useState } from "react";
+// Profiller (fabrika `tercihler/profiller`, PATRON_PUSH): üstte çip şeridi; eski fabrika (uç yok/hata) → S0'ın üç hazır
+// düğmesi (Hepsini aç · Yalnız önemliler · Hepsini kapat) aynı tercih ucuyla toplu yazar. Türler katlanır gruplarda +
+// arama (`TurGruplari`); "Ses" bölümü (`TelefonSesi`) izin verilmişken görünür.
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Linking, Platform, View } from "react-native";
-import { hazirSecimDegisimi, pushGruplari, pushTercihGovdesiToplu, type HazirSecim, type KatalogTuru, type Tercihler } from "../../api/bildirim";
+import { createAttempt, runAttempt } from "../../api/attempt";
+import { hazirSecimDegisimi, pushGruplari, pushTercihGovdesiToplu, type HazirSecim, type KatalogTuru, type ProfilGorunumu, type Tercihler } from "../../api/bildirim";
 import { errorMessage } from "../../api/client";
 import { yetenek } from "../../api/yetenek";
-import { erpBildirimGorunusu } from "../../lib/erp-bildirim";
 import { erpPushAcik, erpPushEtkinlestir, erpPushSesDegistir, yerelPortlar, type ErpPushSonucu, type IzinDurumu, type PushPortlari } from "../../push/erp-push";
 import type { SesSecimi } from "../../push/sesler";
 import { useSession } from "../../state/session";
 import { useRemote } from "../../state/useRemote";
-import { GroupCaption, GroupNote, ToggleRow } from "../diger/parts";
+import { GroupNote } from "../diger/parts";
+import { ProfilSeridi } from "./ProfilSeridi";
 import { TelefonSesi } from "./TelefonSesi";
+import { TurGruplari } from "./TurGruplari";
 import { Banner, Button } from "../kit";
-import { ListGroup } from "../ListRow";
 import { SectionHeader } from "../SectionHeader";
 import { LoadingSkeleton } from "../StateViews";
 import { StatusBadge } from "../StatusBadge";
@@ -29,6 +31,15 @@ const SONUC: Readonly<Record<Exclude<ErpPushSonucu["kind"], "KAYITLI">, string>>
   DESTEKLENMIYOR: "Bildirim yalnız gerçek cihazda alınabilir (öykünücü değil).",
   YAPILANDIRMA_EKSIK: "Bu uygulama sürümünde telefon bildirimi yapılandırılmamış.",
 };
+
+/** Profil görünümü ya da `null` (eski fabrika 404 · ağ/sunucu hatası): şerit gizlenir, üç düğme çizilir. */
+async function profilOku(oku: (() => Promise<ProfilGorunumu>) | undefined): Promise<ProfilGorunumu | null> {
+  try {
+    return oku ? await oku() : null;
+  } catch {
+    return null;
+  }
+}
 
 /** Gizli depo eylem anında alınır: ekran modülü yüklenirken yerel depo modülü istenmesin. */
 const gizliDepo = () => (require("../../state/store") as typeof import("../../state/store")).secretStore;
@@ -52,12 +63,18 @@ function Bolum({ portlar }: { portlar: () => PushPortlari }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [mesaj, setMesaj] = useState<{ tone: "off" | "warn" | "error"; text: string } | null>(null);
   const remote = useRemote("push-tercih", async () => {
-    const [k, t] = await Promise.all([cihazci.katalog(), cihazci.tercihler()]);
-    return { turler: k.turler, tercihler: t };
+    // Profil ucu yoksa (eski fabrika 404) ya da düşerse şerit yerine üç düğme çizilir; liste yine yüklenir.
+    const [k, t, pr] = await Promise.all([cihazci.katalog(), cihazci.tercihler(), profilOku(cihazci.profiller)]);
+    return { turler: k.turler, tercihler: t, profiller: pr };
   });
   const [tercihler, setTercihler] = useState<Tercihler | null>(null);
+  const [profiller, setProfiller] = useState<ProfilGorunumu | null>(null);
+  const kayitDenemesi = useRef(createAttempt());
   useEffect(() => {
-    if (remote.data) setTercihler(remote.data.tercihler);
+    if (remote.data) {
+      setTercihler(remote.data.tercihler);
+      setProfiller(remote.data.profiller);
+    }
   }, [remote.data]);
   useEffect(() => {
     let alive = true;
@@ -91,13 +108,46 @@ function Bolum({ portlar }: { portlar: () => PushPortlari }) {
     setMesaj(null);
     try {
       setTercihler(await cihazci.tercihYaz(pushTercihGovdesiToplu(tercihler, degisen)));
+      // Tek tür/grup değişimi etkin profili değiştirebilir (ör. "Özel"e düşer); şerit varsa tazele.
+      if (profiller) void profilOku(cihazci.profiller).then((g) => g && setProfiller(g));
     } catch (err) {
       setMesaj({ tone: "error", text: errorMessage(err) });
     } finally {
       setBusy(null);
     }
-  }, [tercihler, offline, cihazci]);
+  }, [tercihler, offline, cihazci, profiller]);
   const degistir = (tur: string, acikMi: boolean) => void yaz(tur, new Map([[tur, acikMi]]));
+
+  /** Profil eylemleri ortak kabı: çevrimdışı/meşgul denetimi, hata iletisi, başarıda `true`. */
+  const profilEylemi = useCallback(async (anahtar: string, fn: () => Promise<void>): Promise<boolean> => {
+    if (offline) {
+      setMesaj({ tone: "error", text: "Çevrimdışısınız; değişiklik yapılamaz" });
+      return false;
+    }
+    setBusy(anahtar);
+    setMesaj(null);
+    try {
+      await fn();
+      return true;
+    } catch (err) {
+      setMesaj({ tone: "error", text: errorMessage(err) });
+      return false;
+    } finally {
+      setBusy(null);
+    }
+  }, [offline]);
+  const uygula = (secim: { hazir: string } | { kisisel: string }, anahtar: string) => void profilEylemi(anahtar, async () => {
+    const r = await cihazci.profilUygula(secim);
+    setTercihler({ hucreler: r.hucreler, satirlar: r.satirlar });
+    setProfiller(r.profiller);
+  });
+  const profilKaydet = (ad: string) => profilEylemi("profil-ad", async () => {
+    setProfiller((await runAttempt(kayitDenemesi.current, (token) => cihazci.profilKaydet(ad, token))).profiller);
+    setMesaj({ tone: "off", text: `“${ad}” profili kaydedildi.` });
+  });
+  const profilGuncelle = (id: string, b: { ad?: string; seciminiGuncelle?: boolean }) =>
+    profilEylemi(b.seciminiGuncelle ? "profil-guncelle" : "profil-ad", async () => setProfiller((await cihazci.profilGuncelle(id, b)).profiller));
+  const profilSil = (id: string) => profilEylemi("profil-sil", async () => setProfiller(await cihazci.profilSil(id)));
 
   const baglam = useCallback(() => ({ acik: true, adres: server!, cihazci, store: gizliDepo(), portlar }), [server, cihazci, portlar]);
   const sesDegistir = useCallback(async (s: SesSecimi) => {
@@ -111,8 +161,9 @@ function Bolum({ portlar }: { portlar: () => PushPortlari }) {
   const sesUyari = (err: unknown) => setMesaj({ tone: "warn", text: errorMessage(err) });
 
   const turler: readonly KatalogTuru[] = remote.data?.turler ?? [];
-  const ad = new Map(turler.map((t) => [t.kod, t.ad]));
+  const ad: ReadonlyMap<string, string> = new Map(turler.map((t) => [t.kod, t.ad]));
   const gruplar = tercihler ? pushGruplari(tercihler, turler) : [];
+  const kilit = offline || busy !== null;
   const hazir = (s: HazirSecim) => tercihler && void yaz(`hazir-${s}`, hazirSecimDegisimi(tercihler, turler, s));
   return (
     <View style={{ marginBottom: space.l }} testID="telefon-bildirimleri">
@@ -143,29 +194,17 @@ function Bolum({ portlar }: { portlar: () => PushPortlari }) {
       {gruplar.length > 0 ? (
         <>
           <GroupNote>Hangi bildirimler telefonunuza gelsin? Kapalı olanlar yalnız uygulamadaki listede görünür.</GroupNote>
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.s, marginBottom: space.s }} testID="telefon-hazir">
-            <Button label="Hepsini aç" tone="secondary" icon="notifications-outline" busy={busy === "hazir-HEPSI"} disabled={offline || busy !== null} onPress={() => hazir("HEPSI")} testID="telefon-hazir-HEPSI" />
-            <Button label="Yalnız önemliler" tone="secondary" icon="star-outline" busy={busy === "hazir-ONEMLI"} disabled={offline || busy !== null} onPress={() => hazir("ONEMLI")} testID="telefon-hazir-ONEMLI" />
-            <Button label="Hepsini kapat" tone="secondary" icon="notifications-off-outline" busy={busy === "hazir-HICBIRI"} disabled={offline || busy !== null} onPress={() => hazir("HICBIRI")} testID="telefon-hazir-HICBIRI" />
-          </View>
-          {gruplar.map((g) => {
-            const acikSayi = g.hucreler.filter((h) => h.acik).length;
-            return (
-              <View key={g.grup} style={{ marginBottom: space.s }}>
-                <GroupCaption>{g.grup}</GroupCaption>
-                <ListGroup testID={`telefon-grup-${g.grup}`}>
-                  <ToggleRow label={`${g.grup} bildirimlerinin hepsi`} hint={`${acikSayi}/${g.hucreler.length} açık`} value={acikSayi === g.hucreler.length}
-                    disabled={offline || busy !== null} onChange={(v) => void yaz(`grup-${g.grup}`, new Map(g.hucreler.filter((h) => h.acik !== v).map((h) => [h.tur, v])))}
-                    testID={`telefon-grup-ac-${g.grup}`} />
-                  {g.hucreler.map((h) => (
-                    <ToggleRow key={h.tur} label={ad.get(h.tur) ?? h.tur} value={h.acik} disabled={offline || busy !== null}
-                      icon={erpBildirimGorunusu(h.tur).icon} domain={erpBildirimGorunusu(h.tur).domain}
-                      onChange={(v) => degistir(h.tur, v)} testID={`telefon-tercih-${h.tur}`} />
-                  ))}
-                </ListGroup>
-              </View>
-            );
-          })}
+          {profiller ? (
+            <ProfilSeridi gorunum={profiller} busy={busy} disabled={offline} onUygula={uygula} onKaydet={profilKaydet} onGuncelle={profilGuncelle} onSil={profilSil} />
+          ) : (
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.s, marginBottom: space.s }} testID="telefon-hazir">
+              <Button label="Hepsini aç" tone="secondary" icon="notifications-outline" busy={busy === "hazir-HEPSI"} disabled={kilit} onPress={() => hazir("HEPSI")} testID="telefon-hazir-HEPSI" />
+              <Button label="Yalnız önemliler" tone="secondary" icon="star-outline" busy={busy === "hazir-ONEMLI"} disabled={kilit} onPress={() => hazir("ONEMLI")} testID="telefon-hazir-ONEMLI" />
+              <Button label="Hepsini kapat" tone="secondary" icon="notifications-off-outline" busy={busy === "hazir-HICBIRI"} disabled={kilit} onPress={() => hazir("HICBIRI")} testID="telefon-hazir-HICBIRI" />
+            </View>
+          )}
+          <TurGruplari gruplar={gruplar} ad={ad} disabled={kilit} onTur={degistir}
+            onGrup={(g, v) => void yaz(`grup-${g.grup}`, new Map(g.hucreler.filter((h) => h.acik !== v).map((h) => [h.tur, v])))} />
         </>
       ) : null}
       {izin === "VERILDI" ? (

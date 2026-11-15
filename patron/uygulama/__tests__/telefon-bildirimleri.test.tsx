@@ -4,7 +4,10 @@ import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import { Linking } from "react-native";
 
 const ID = "0f3c2d1e-4b5a-4c6d-8e7f-9a0b1c2d3e4f";
-const mockCihazci = { kaydet: jest.fn(), birak: jest.fn(), katalog: jest.fn(), tercihler: jest.fn(), tercihYaz: jest.fn() };
+const mockCihazci = {
+  kaydet: jest.fn(), birak: jest.fn(), katalog: jest.fn(), tercihler: jest.fn(), tercihYaz: jest.fn(),
+  profiller: jest.fn(), profilUygula: jest.fn(), profilKaydet: jest.fn(), profilGuncelle: jest.fn(), profilSil: jest.fn(),
+};
 const mockBildirimci = { ozet: jest.fn(), liste: jest.fn(), okundu: jest.fn(), tumunuOkundu: jest.fn() };
 const mockSession = {
   server: "https://a.fabrika.com" as string | null, pushCihazci: mockCihazci as unknown, bildirimci: mockBildirimci, offline: false,
@@ -62,6 +65,12 @@ function portlar(izin: string, iste = "VERILDI"): import("../src/push/erp-push")
 async function flush() {
   for (let i = 0; i < 6; i++) await act(async () => undefined);
 }
+/** Katlanır grupların hepsini açar (varsayılan kapalı). */
+async function gruplariAc() {
+  for (const b of screen.queryAllByTestId(/^telefon-grup-baslik-/)) fireEvent.press(b);
+  await flush();
+}
+const { ApiError } = require("../src/api/client") as typeof import("../src/api/client");
 
 beforeEach(() => {
   for (const f of [...Object.values(mockCihazci), ...Object.values(mockBildirimci)]) f.mockReset();
@@ -74,6 +83,8 @@ beforeEach(() => {
   mockCihazci.tercihler.mockResolvedValue(TERCIH);
   mockCihazci.tercihYaz.mockImplementation(async () => TERCIH);
   mockCihazci.kaydet.mockResolvedValue({ kayitli: true });
+  // Varsayılan: eski fabrika (profil ucu yok) → üç hazır düğme.
+  mockCihazci.profiller.mockRejectedValue(new ApiError(404, "NOT_FOUND", "Bulunamadı"));
 });
 
 describe("görünürlük", () => {
@@ -143,6 +154,8 @@ describe("tür başına telefon bildirimi anahtarı", () => {
   it("⭐ liste sunucu varsayılanıyla çizilir (tür adı katalogdan); anahtar PUT'u yollar", async () => {
     render(<TelefonBildirimleri nativePush os="android" portlar={() => portlar("VERILDI")} />);
     await flush();
+    expect(screen.queryByText("Tezgâh alarmı")).toBeNull(); // gruplar kapalı açılır
+    await gruplariAc();
     expect(screen.getByText("Tezgâh alarmı")).toBeTruthy();
     expect(screen.queryByTestId("telefon-tercih-sistem.disk")).toBeNull();
     expect(screen.getByTestId("telefon-tercih-dokuma.tezgah-alarmi").props.value).toBe(true);
@@ -155,6 +168,7 @@ describe("tür başına telefon bildirimi anahtarı", () => {
     mockSession.offline = true;
     render(<TelefonBildirimleri nativePush os="android" portlar={() => portlar("SORULMADI")} />);
     await flush();
+    await gruplariAc();
     expect(screen.getByTestId("telefon-tercih-siparis.termin-gecti").props.disabled).toBe(true);
     fireEvent(screen.getByTestId("telefon-tercih-siparis.termin-gecti"), "valueChange", true);
     fireEvent.press(screen.getByTestId("telefon-bildirim-ac"));
@@ -189,6 +203,8 @@ describe("S0 — hazır düğmeler, grup anahtarı, ses", () => {
   it("⭐ grup anahtarı yalnız o grubun hücrelerini tek PUT'ta yazar", async () => {
     render(<TelefonBildirimleri nativePush os="android" portlar={() => portlar("VERILDI")} />);
     await flush();
+    expect(screen.getByTestId("telefon-grup-ozet-Satış")).toHaveTextContent("0/1 açık");
+    await gruplariAc();
     expect(screen.getByTestId("telefon-grup-ac-Satış").props.value).toBe(false);
     fireEvent(screen.getByTestId("telefon-grup-ac-Satış"), "valueChange", true);
     await flush();
@@ -253,5 +269,160 @@ describe("dokunuşla gelinen satır", () => {
     await flush();
     expect(mockBildirimci.okundu).not.toHaveBeenCalled();
     expect(screen.getByTestId("bildirim-vurgu")).toBeTruthy();
+  });
+});
+
+describe("tercih profilleri (PATRON_PUSH)", () => {
+  const PID = "6b1f0c4e-2d3a-4b5c-9d8e-7f6a5b4c3d2e";
+  type Gorunum = import("../src/api/bildirim").ProfilGorunumu;
+  const gorunum = (etkin: string[], kisisel = [{ id: PID, ad: "Hafta sonu", acik: ["dokuma.tezgah-alarmi"], kapali: ["siparis.termin-gecti"] }]): Gorunum => ({
+    hazir: [
+      { kod: "HEPSI", ad: "Her şey", aciklama: "Bütün bildirimler", acik: ["dokuma.tezgah-alarmi", "siparis.termin-gecti"] },
+      { kod: "SESSIZ", ad: "Sessiz", aciklama: "Yalnız alarmlar", acik: ["dokuma.tezgah-alarmi"] },
+    ],
+    kisisel,
+    etkin,
+  });
+  const SESSIZ: Tercihler = {
+    hucreler: TERCIH.hucreler.map((h) => (h.kind === "siparis.termin-gecti" ? { ...h, kanallar: h.kanallar.map((k) => (k.kanal === "PATRON_PUSH" ? { ...k, durum: "KAPALI" as const } : k)) } : h)),
+    satirlar: [...TERCIH.satirlar, { tur: "siparis.termin-gecti", kanal: "PATRON_PUSH", acik: false, kapsam: null }],
+  };
+  const ac = async () => {
+    render(<TelefonBildirimleri nativePush os="android" portlar={() => portlar("VERILDI")} />);
+    await flush();
+  };
+  beforeEach(() => {
+    mockCihazci.profiller.mockReset();
+    mockCihazci.profiller.mockResolvedValue(gorunum([]));
+    mockCihazci.katalog.mockResolvedValue({ turler: [
+      { kod: "dokuma.tezgah-alarmi", ad: "Tezgâh alarmı", grup: "Dokuma", sinif: "ALARM" },
+      { kod: "siparis.termin-gecti", ad: "Termini geçen sipariş", grup: "Satış" },
+    ] });
+  });
+
+  it("⭐ uç varsa şerit çizilir, üç düğme YOK; etkin yoksa 'Özel', kanal PATRON_PUSH'tan okunur", async () => {
+    await ac();
+    expect(screen.getByTestId("telefon-profil-seridi")).toBeTruthy();
+    expect(screen.queryByTestId("telefon-hazir")).toBeNull();
+    expect(screen.getByTestId("telefon-profil-etkin")).toHaveTextContent("Özel");
+    expect(screen.getByTestId("telefon-profil-kisisel-" + PID)).toBeTruthy();
+  });
+  it("⭐ eski fabrika (404) ya da ağ hatası → şerit yok, üç düğme var; liste yine yüklenir", async () => {
+    mockCihazci.profiller.mockRejectedValue(new ApiError(404, "NOT_FOUND", "Bulunamadı"));
+    await ac();
+    expect(screen.queryByTestId("telefon-profil-seridi")).toBeNull();
+    expect(screen.getByTestId("telefon-hazir-ONEMLI")).toBeTruthy();
+    expect(screen.getByTestId("telefon-grup-baslik-Dokuma")).toBeTruthy();
+  });
+  it("⭐ çipe dokunmak profilUygula'yı tek kez çağırır; dönen tercih + etkin profil ekrana yansır", async () => {
+    mockCihazci.profilUygula.mockResolvedValue({ ...SESSIZ, profiller: gorunum(["hazir:SESSIZ"]) });
+    await ac();
+    fireEvent.press(screen.getByTestId("telefon-profil-hazir-SESSIZ"));
+    await flush();
+    expect(mockCihazci.profilUygula).toHaveBeenCalledTimes(1);
+    expect(mockCihazci.profilUygula).toHaveBeenCalledWith({ hazir: "SESSIZ" });
+    expect(mockCihazci.tercihYaz).not.toHaveBeenCalled();
+    expect(screen.getByTestId("telefon-profil-etkin")).toHaveTextContent("Sessiz");
+    expect(screen.getByTestId("telefon-profil-hazir-SESSIZ").props.accessibilityState.selected).toBe(true);
+    expect(screen.getByTestId("telefon-grup-ozet-Satış")).toHaveTextContent("0/1 açık");
+  });
+  it("⭐ tek tür değişince profil görünümü tazelenir (etkin 'Özel'e düşebilir)", async () => {
+    mockCihazci.profiller.mockResolvedValueOnce(gorunum(["hazir:HEPSI"])).mockResolvedValue(gorunum([]));
+    await ac();
+    expect(screen.getByTestId("telefon-profil-etkin")).toHaveTextContent("Her şey");
+    await gruplariAc();
+    fireEvent(screen.getByTestId("telefon-tercih-siparis.termin-gecti"), "valueChange", true);
+    await flush();
+    expect(mockCihazci.profiller).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId("telefon-profil-etkin")).toHaveTextContent("Özel");
+  });
+  it("⭐ 'Profili kaydet': belirsiz hatada AYNI clientToken yeniden gider, başarıdan sonraki kayıt YENİ token alır", async () => {
+    mockCihazci.profilKaydet.mockRejectedValueOnce(new ApiError(0, "AG", "Bağlantı yok")).mockResolvedValue({ profiller: gorunum([]) });
+    await ac();
+    fireEvent.press(screen.getByTestId("telefon-profil-kaydet"));
+    expect(screen.getByTestId("telefon-profil-ad-kaydet").props.accessibilityState?.disabled).toBe(true); // boş ad
+    fireEvent.changeText(screen.getByTestId("telefon-profil-ad"), "  Gece  ");
+    fireEvent.press(screen.getByTestId("telefon-profil-ad-kaydet"));
+    await flush();
+    expect(screen.getByTestId("telefon-bildirim-mesaj")).toHaveTextContent("Bağlantı yok");
+    fireEvent.press(screen.getByTestId("telefon-profil-ad-kaydet"));
+    await flush();
+    const [[ad1, t1], [ad2, t2]] = mockCihazci.profilKaydet.mock.calls as [[string, string], [string, string]];
+    expect([ad1, ad2]).toEqual(["Gece", "Gece"]);
+    expect(t2).toBe(t1);
+    expect(screen.queryByTestId("telefon-profil-ad-paneli")).toBeNull();
+    expect(screen.getByTestId("telefon-bildirim-mesaj")).toHaveTextContent("“Gece” profili kaydedildi.");
+    fireEvent.press(screen.getByTestId("telefon-profil-kaydet"));
+    fireEvent.changeText(screen.getByTestId("telefon-profil-ad"), "Sabah");
+    fireEvent.press(screen.getByTestId("telefon-profil-ad-kaydet"));
+    await flush();
+    expect(mockCihazci.profilKaydet.mock.calls[2]![1]).not.toBe(t1);
+  });
+  it("⭐ kişisel çipe uzun bas → güncelle / yeniden adlandır / onaylı sil", async () => {
+    mockCihazci.profilGuncelle.mockResolvedValue({ profiller: gorunum([]) });
+    mockCihazci.profilSil.mockResolvedValue(gorunum([], []));
+    await ac();
+    fireEvent(screen.getByTestId("telefon-profil-kisisel-" + PID), "longPress");
+    fireEvent.press(screen.getByTestId("telefon-profil-guncelle"));
+    await flush();
+    expect(mockCihazci.profilGuncelle).toHaveBeenCalledWith(PID, { seciminiGuncelle: true });
+    fireEvent(screen.getByTestId("telefon-profil-kisisel-" + PID), "longPress");
+    fireEvent.press(screen.getByTestId("telefon-profil-adlandir"));
+    fireEvent.changeText(screen.getByTestId("telefon-profil-ad"), "Hafta içi");
+    fireEvent.press(screen.getByTestId("telefon-profil-ad-kaydet"));
+    await flush();
+    expect(mockCihazci.profilGuncelle).toHaveBeenLastCalledWith(PID, { ad: "Hafta içi" });
+    fireEvent(screen.getByTestId("telefon-profil-kisisel-" + PID), "longPress");
+    fireEvent.press(screen.getByTestId("telefon-profil-sil"));
+    expect(mockCihazci.profilSil).not.toHaveBeenCalled(); // önce onay
+    fireEvent.press(screen.getByTestId("telefon-profil-sil-evet"));
+    await flush();
+    expect(mockCihazci.profilSil).toHaveBeenCalledWith(PID);
+    expect(screen.queryByTestId("telefon-profil-kisisel-" + PID)).toBeNull();
+  });
+  it("⭐ çevrimdışı → çipler kapalı, uygulama çağrısı yok", async () => {
+    mockSession.offline = true;
+    await ac();
+    fireEvent.press(screen.getByTestId("telefon-profil-hazir-SESSIZ"));
+    await flush();
+    expect(mockCihazci.profilUygula).not.toHaveBeenCalled();
+  });
+});
+
+describe("tür listesi: katlanır gruplar + arama", () => {
+  beforeEach(() => {
+    mockCihazci.katalog.mockResolvedValue({ turler: [
+      { kod: "dokuma.tezgah-alarmi", ad: "Tezgâh alarmı", grup: "Dokuma", sinif: "ALARM" },
+      { kod: "siparis.termin-gecti", ad: "Termini geçen sipariş", grup: "Satış" },
+    ] });
+  });
+  it("⭐ başlık 'x/y açık'; arama eşleşen türü açık grupta gösterir (Türkçe büyük/küçük harf), eşleşme yoksa ileti", async () => {
+    render(<TelefonBildirimleri nativePush os="android" portlar={() => portlar("VERILDI")} />);
+    await flush();
+    expect(screen.getByTestId("telefon-grup-ozet-Dokuma")).toHaveTextContent("1/1 açık");
+    expect(screen.queryByTestId("telefon-tercih-siparis.termin-gecti")).toBeNull();
+    fireEvent.changeText(screen.getByTestId("telefon-tur-ara"), "TERMİNİ");
+    await flush();
+    expect(screen.getByTestId("telefon-tercih-siparis.termin-gecti")).toBeTruthy();
+    expect(screen.queryByTestId("telefon-grup-baslik-Dokuma")).toBeNull();
+    expect(screen.queryByTestId("telefon-grup-ac-Satış")).toBeNull(); // aramada grup toplu anahtarı yok
+    fireEvent.changeText(screen.getByTestId("telefon-tur-ara"), "yokboyle");
+    await flush();
+    expect(screen.getByTestId("telefon-tur-ara-bos")).toBeTruthy();
+    fireEvent.press(screen.getByTestId("telefon-tur-ara-temizle"));
+    await flush();
+    expect(screen.getByTestId("telefon-grup-baslik-Dokuma")).toBeTruthy();
+  });
+  it("⭐ eski fabrika geri düşüşü: 'Yalnız önemliler' katalog `onemli` işaretini okur, telefon varsayılanını değil", async () => {
+    mockCihazci.katalog.mockResolvedValue({ turler: [
+      { kod: "dokuma.tezgah-alarmi", ad: "Tezgâh alarmı", grup: "Dokuma", varsayilanKanallar: ["UYGULAMA", "PATRON_PUSH"] },
+      { kod: "siparis.termin-gecti", ad: "Termini geçen sipariş", grup: "Satış", varsayilanKanallar: ["UYGULAMA", "PATRON_PUSH"], onemli: true },
+    ] });
+    render(<TelefonBildirimleri nativePush os="android" portlar={() => portlar("VERILDI")} />);
+    await flush();
+    fireEvent.press(screen.getByTestId("telefon-hazir-ONEMLI"));
+    await flush();
+    const { pushTercihGovdesiToplu } = require("../src/api/bildirim") as typeof import("../src/api/bildirim");
+    expect(mockCihazci.tercihYaz).toHaveBeenCalledWith(pushTercihGovdesiToplu(TERCIH, new Map([["dokuma.tezgah-alarmi", false], ["siparis.termin-gecti", true]])));
   });
 });
