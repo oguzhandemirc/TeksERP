@@ -4,7 +4,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { usePathname, useRouter } from "expo-router";
 import { useEffect, useState, type ReactNode } from "react";
 import { Pressable, RefreshControl, ScrollView, Text, useWindowDimensions, View } from "react-native";
-import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MODULES, moduleInMenu, moduleNavTitle, moduleTitle, moduleVisible, type ModuleKey } from "../lib/access";
 import { useSession } from "../state/session";
@@ -46,26 +46,63 @@ export function FacilityName() {
   );
 }
 
+/** Rayın hedef genişliği (güvenli alan dahil) ve ona yumuşak geçen paylaşılan değer; "hareketi azalt"ta anında. */
+function useRailWidth(): { open: boolean; toggle: () => void; target: number; width: SharedValue<number> } {
+  const insets = useSafeAreaInsets();
+  const { open, toggle } = useRailOpen();
+  const reduced = useReducedMotion();
+  const target = (open ? RAIL_WIDTH : RAIL_COLLAPSED) + insets.left;
+  const width = useSharedValue(target);
+  useEffect(() => {
+    width.value = reduced ? target : withTiming(target, { duration: durations.base, easing: easing.standard });
+  }, [target, reduced, width]);
+  return { open, toggle, target, width };
+}
+
+/** İçeriğin yatay kayması: genişlerken içerik ray kenarına yapışık kayar (sağda kısa boşluk), daralırken yerinde
+ *  durur ve çekilen ray onu açar. Hiçbir karede içerik sağ kenardan taşmaz (kayma ≤ 0). */
+export function railContentShift(panelWidth: number, slotWidth: number): number {
+  "worklet";
+  return Math.min(0, panelWidth - slotWidth);
+}
+
+/** Geniş ekran çerçevesi: ray + içerik. Yerleşimde ray yuvası hedef genişliğe TEK seferde geçer (içerik bir kez,
+ *  son genişliğinde yerleşir; KPI sütunu ara genişlikte yeniden hesaplanmaz); canlanan yalnız yuvanın üstünde
+ *  süzülen ray paneli ve içeriğin transform kayması — kare kare yerleşim (ve yığının gecikmeli ölçüsü) yok. */
+export function RailFrame({ children, rail = true }: { readonly children: ReactNode; readonly rail?: boolean }) {
+  const t = useTokens();
+  const s = useStyles();
+  const { target, width } = useRailWidth();
+  const shift = useAnimatedStyle(() => ({ transform: [{ translateX: rail ? railContentShift(width.value, target) : 0 }] }));
+  return (
+    <View style={[s.frame, { backgroundColor: t.bg }]}>
+      {rail ? (
+        <View style={[s.railSlot, { width: target }]} testID="ray-yuvasi">
+          <SideNav width={width} floating />
+        </View>
+      ) : null}
+      <Animated.View style={[s.frameContent, shift]} testID="ray-icerik">{children}</Animated.View>
+    </View>
+  );
+}
+
 /** Geniş ekran rayı: tesis adı + rol rozeti; sekmelerle aynı sırada ana bölümler, sonra "İş" ve "Hesap" grupları.
- *  Açılır/kapanır (dar = yalnız ikon); durum çubuğu ve gezinme çubuğu güvenli alanı dolguyla korunur. */
-export function SideNav() {
+ *  Açılır/kapanır (dar = yalnız ikon); durum çubuğu ve gezinme çubuğu güvenli alanı dolguyla korunur.
+ *  `RailFrame` içinde genişliği çerçeveden alır ve yuvanın üstünde süzülür (`floating`). */
+export function SideNav({ width: frameWidth, floating }: { readonly width?: SharedValue<number>; readonly floating?: boolean } = {}) {
   const { permissions } = useSession();
   const t = useTokens();
   const s = useStyles();
   const router = useRouter();
   const path = usePathname();
   const insets = useSafeAreaInsets();
-  const { open, toggle } = useRailOpen();
-  const reduced = useReducedMotion();
-  const target = (open ? RAIL_WIDTH : RAIL_COLLAPSED) + insets.left;
-  // Genişlik yumuşak geçer (içerik sabit kalır, taşan etiket kırpılır); "hareketi azalt" açıksa anında.
-  const width = useSharedValue(target);
-  useEffect(() => {
-    width.value = reduced ? target : withTiming(target, { duration: durations.base, easing: easing.standard });
-  }, [target, reduced, width]);
+  const own = useRailWidth();
+  const { open, toggle } = own;
+  // Genişlik yumuşak geçer (taşan etiket kırpılır); çerçevedeyse içerikle AYNI değerden okunur.
+  const width = frameWidth ?? own.width;
   const widthStyle = useAnimatedStyle(() => ({ width: width.value }));
   return (
-    <Animated.View style={[s.rail, widthStyle, { paddingTop: insets.top + space.s, paddingLeft: insets.left + space.s }]} testID="ray">
+    <Animated.View style={[s.rail, floating && s.railFloating, widthStyle, { paddingTop: insets.top + space.s, paddingLeft: insets.left + space.s }]} testID="ray">
       {/* Başlık satırı sayfa büyük başlığıyla aynı yükseklikte (üst dolgu + TOUCH) ortalanır. */}
       <View style={[s.railHead, !open && s.railHeadClosed]}>
         {open ? (
@@ -222,6 +259,11 @@ const useStyles = makeStyles((t) => ({
   facility: { ...typography.headline, color: t.text, flexShrink: 1 },
   facilityPress: { minHeight: TOUCH, flexDirection: "row" as const, alignItems: "center" as const, gap: space.xs },
   facilitySwitch: { ...typography.footnote, color: t.tint },
+  frame: { flex: 1, flexDirection: "row" as const },
+  // Yuva içerikten ÖNCE çizilir; zIndex genişleyen panelin içeriğin üstünde kalmasını sağlar.
+  railSlot: { zIndex: 1 },
+  frameContent: { flex: 1 },
+  railFloating: { position: "absolute" as const, top: 0, bottom: 0, left: 0 },
   rail: { borderRightWidth: 1, borderColor: t.separator, backgroundColor: t.surface, paddingRight: space.s, overflow: "hidden" as const },
   railHead: { flexDirection: "row" as const, alignItems: "center" as const, gap: space.xs, minHeight: TOUCH, marginBottom: space.m },
   railHeadClosed: { justifyContent: "center" as const },
