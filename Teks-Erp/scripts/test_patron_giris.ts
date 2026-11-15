@@ -266,9 +266,10 @@ async function main(): Promise<void> {
     const auth = src("src/services/auth.service.ts") + src("src/routes/auth.routes.ts") + src("src/controllers/auth.controller.ts");
     check("§7a yenileme belirteci/ucu yazılmadı (30 günde bir parola)", !/refresh[-_]?token|\/refresh\b|refreshToken/i.test(auth));
     check("§7b katalog satırı var (kategori web)", PERMISSION_CATALOG.some((p) => p.code === PATRON_LOGIN_PERMISSION && p.category === "web"));
-    check("§7c dar rollere atanmaz (muaf beyanlı, ADMIN_FULL dışında hiçbir şablonda yok)",
-      PATRON_LOGIN_PERMISSION in ROLE_COVERAGE_EXEMPT &&
-        ROLE_TEMPLATE_CATALOG.filter((t) => t.mode !== "all").every((t) => !t.codes.includes(PATRON_LOGIN_PERMISSION)));
+    // S6b C4: tek dar taşıyıcı "Patron — tam okuma" şablonu; başka dar rol patron uygulamasına giremez.
+    const tasiyan = ROLE_TEMPLATE_CATALOG.filter((t) => t.mode !== "all" && t.codes.includes(PATRON_LOGIN_PERMISSION)).map((t) => t.code);
+    check("§7c dar rollerden yalnız WEB_PATRON_READ_ALL taşır (muaf listesinde değil)",
+      !(PATRON_LOGIN_PERMISSION in ROLE_COVERAGE_EXEMPT) && tasiyan.length === 1 && tasiyan[0] === "WEB_PATRON_READ_ALL", tasiyan.join(", ") || "yok");
     check("§7d ekransız izin beyanı", SCREENLESS_PERMISSIONS.some((p) => p.code === PATRON_LOGIN_PERMISSION));
     const migDir = join(__dirname, "..", "prisma", "migrations");
     const mig = readdirSync(migDir).find((d) => d.endsWith("_client_type_patron"));

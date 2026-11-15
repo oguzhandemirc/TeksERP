@@ -17,7 +17,7 @@ export const READY_WORK_NOTIFICATION_ENTRIES = {
     izinler: [["shipping:read"]],
     modul: "cekirdek:sevkiyat-depo",
     tekilKalibi: "{sekme}:{id}",
-    pencereSn: 0, varsayilan: ["shipping:write"], kilit: "YOK",
+    pencereSn: 0, varsayilan: "HERKES", kilit: "YOK",
     kanallar: KANAL_MASAUSTU,
     varsayilanKanallar: KANAL_VARSAYILAN,
     baslik: "Sevke hazır: {birim} {no}",

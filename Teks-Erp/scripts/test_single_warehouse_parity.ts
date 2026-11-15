@@ -240,6 +240,9 @@ async function main(): Promise<void> {
     WEB_WAREHOUSE_SHIPPING: ["warehouse:read", "warehouse:transfer"],
     // Depoyu tanımlayan kişi sistem yöneticisidir.
     WEB_SYSTEM_ADMIN: ["warehouse:write"],
+    // S6b C4 "Patron — tam okuma": depo yüzeyi multiWarehouse kapılı (WEB_WAREHOUSE_SHIPPING emsali);
+    // `goods-receipt:read` türetimden açıkça dışlanır (`PATRON_READ_EXCLUDED_CODES`).
+    WEB_PATRON_READ_ALL: ["warehouse:read"],
     // ⚠️ TİCARET KURULUM ŞABLONU (2026-08-14) — bu kuralın BİLİNÇLİ istisnası.
     // Kural "goods-receipt hiçbir şablonda olmasın" idi ve gerekçesi
     // GÖRÜNÜRLÜKTÜ: mal kabul karosu yalnız izinle kapılı, şablona akarsa

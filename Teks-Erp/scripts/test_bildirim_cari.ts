@@ -19,6 +19,7 @@
 //   ① `cari.ts` yüküne `bakiye: e.balance.toString()` eklendi → §4h ❌ (23/1); katalogda `payloadAlanlari`na
 //      `riskLimiti` eklendi → `test_bildirim_katalogu` §8 + §5b ❌ (27/2) · ② is.ts'e `riskLimit` okuyup `.gt(`
 //      kıyaslayan kopya fonksiyon → §0c ❌ (23/1)
+//   ③ (S6b 2026-11-15) etiket istisnası (`!ts.isStringLiteral(initializer)`) kaldırıldı → `CARI_TERM_LABELS` §0c ❌ (25/1)
 // Global ayar yazar (`bildirim.gelenKutusuEnabled`, `finance.enabled`, koşul damgası); `finally`de geri koyar.
 // =============================================================================
 import { randomUUID } from "node:crypto";
@@ -100,7 +101,8 @@ function predicateCopies(file: string, text: string): string[] {
   const out: string[] = [];
   const visit = (n: ts.Node): void => {
     if (ts.isPropertyAccessExpression(n) && n.name.text === "riskLimit") out.push(`${file}: riskLimit`);
-    if (ts.isIdentifier(n) && n.text === "riskLimit" && ts.isPropertyAssignment(n.parent)) out.push(`${file}: riskLimit seçimi`);
+    // Değeri string olan anahtar etiket sözlüğüdür (S6b `CARI_TERM_LABELS`: değişen alanın ADI), okuma/seçim değil.
+    if (ts.isIdentifier(n) && n.text === "riskLimit" && ts.isPropertyAssignment(n.parent) && n.parent.name === n && !ts.isStringLiteral(n.parent.initializer)) out.push(`${file}: riskLimit seçimi`);
     if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && ["gt", "gte", "lt", "lte", "cmp", "comparedTo"].includes(n.expression.name.text)) {
       out.push(`${file}: .${n.expression.name.text}(`);
     }
@@ -128,6 +130,8 @@ function statik(): void {
   check("§0c ⭐ notification-sources/ altında risk yüklemi kopyası yok (riskLimit okuması / Decimal kıyası)", copies.length === 0, copies.join(" · ") || "temiz");
   const kopyaSonda = predicateCopies("y.ts", "const a = cari.riskLimit; if (bal.gt(a)) x();");
   check("§0d sonda: kopya tarayıcısı riskLimit + .gt( görür", kopyaSonda.length === 2, kopyaSonda.join(", "));
+  const etiketSonda = predicateCopies("z.ts", "const L = { riskLimit: \"Risk limiti\" }; const S = { riskLimit: true };");
+  check("§0d2 sonda: etiket sözlüğü anahtarı sayılmaz, `riskLimit: true` seçimi sayılır", etiketSonda.length === 1 && etiketSonda[0] === "z.ts: riskLimit seçimi", etiketSonda.join(", "));
   const cariKod = readFileSync(join(srcDir, "cari.ts"), "utf8");
   check("§0e cari.ts çekirdeği çağırır: riskExposureTx(…) + `.exceeded`",
     /from "\.\.\/helpers\/risk-exposure\.helper"/.test(cariKod) && /riskExposureTx\(/.test(cariKod) && /\.exceeded\b/.test(cariKod));
