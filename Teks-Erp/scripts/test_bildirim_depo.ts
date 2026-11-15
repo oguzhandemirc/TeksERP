@@ -62,8 +62,8 @@ const CAGRI_YERLERI: Record<string, string[]> = {
   emitRollQtyAdjustedTx: ["services/inventory/qty-adjust.ts"],
   emitStockCountDifferenceTx: ["services/stock-count.service.ts"],
   emitWarehouseTransferTx: ["services/warehouse-transfer.service.ts"],
-  emitSubcontractDispatchedTx: ["services/subcontractor/dispatch.ts"],
-  emitSubcontractReceivedTx: ["services/subcontractor/receive.ts"],
+  emitSubcontractDispatchedTx: ["services/subcontractor/dispatch.ts", "services/subcontractor-weaving.service.ts"],
+  emitSubcontractReceivedTx: ["services/subcontractor/receive.ts", "services/subcontractor-weaving.service.ts"],
   emitIncomingDocCreatedTx: ["services/gelen-belge-note.service.ts", "services/gelen-belge-okuma.service.ts"],
   emitIncomingDocApprovedTx: ["services/gelen-belge-onay.service.ts"],
   emitIncomingDocCancelledTx: ["services/gelen-belge-iptal.service.ts"],
@@ -137,9 +137,9 @@ async function bolum1(): Promise<void> {
       await emitShipmentDispatchedTx(tx, sh.id, u.id);
       await olc("sevkiyat.yola-cikti", sh.id, (p) => p.kullanici === AD && p.topSayisi === 2 && p.metre === 100.5 && p.musteriAd === `TEST-BD Müşteri ${ek}`);
       await emitShipmentUndoneTx(tx, sh.id, "yanlış araç", u.id);
-      await olc("sevkiyat.geri-alindi", sh.id, (p) => p.sebep === "yanlış araç" && p.kullanici === AD);
+      await olc("sevkiyat.geri-alindi", sh.id, (p) => p.sebep === "yanlış araç" && p.kullanici === AD && p.topSayisi === 2 && p.metre === 100.5);
       await emitShipmentInvoicedTx(tx, sh.id, "FTR-42", u.id);
-      await olc("sevkiyat.faturalandi", sh.id, (p) => p.faturaNo === "FTR-42");
+      await olc("sevkiyat.faturalandi", sh.id, (p) => p.faturaNo === "FTR-42" && p.topSayisi === 2 && p.metre === 100.5);
 
       const rr = await tx.rollReturn.create({ data: { rollId: r1.id, customerId: cust.id, itemId: item.id, qty: new Prisma.Decimal(50.25), receivedById: u.id, fromShipmentId: sh.id, returnNo: `TEST-IA-${ek}` }, select: { id: true } });
       await emitReturnReceivedTx(tx, rr.id, u.id);
@@ -164,10 +164,10 @@ async function bolum1(): Promise<void> {
       const wv = await tx.weavingOrder.create({ data: { weavingOrderNumber: `TEST-BD-${ek}`, itemId: item.id, executionKind: "SUBCONTRACTED", subcontractorId: firma.id }, select: { id: true } });
       const sd = await tx.subcontractorDispatch.create({ data: { dispatchNo: `TEST-BD-${ek}`, subcontractorId: firma.id, weavingOrderId: wv.id, totalQty: new Prisma.Decimal(300) }, select: { id: true } });
       await emitSubcontractDispatchedTx(tx, sd.id, u.id);
-      await olc("fason.cikis", sd.id, (p) => p.metre === 300 && p.firmaAd === firma.name);
+      await olc("fason.cikis", sd.id, (p) => p.icerik === "300 m" && p.firmaAd === firma.name);
       const srec = await tx.subcontractorReceipt.create({ data: { receiptNo: `TEST-BD-${ek}`, subcontractorId: firma.id, weavingOrderId: wv.id }, select: { id: true } });
-      await emitSubcontractReceivedTx(tx, srec.id, 5, u.id);
-      await olc("fason.donus", srec.id, (p) => p.topSayisi === 5);
+      await emitSubcontractReceivedTx(tx, srec.id, { rollCount: 5, meters: new Prisma.Decimal("250.5") }, u.id);
+      await olc("fason.donus", srec.id, (p) => p.topSayisi === 5 && p.metre === 250.5);
 
       const note = await tx.customerDeliveryNote.create({ data: { noteNo: `TEST-BD-${ek}`, sourceKind: "MANUAL", ownerCustomerId: cust.id }, select: { id: true } });
       await emitIncomingDocCreatedTx(tx, note.id, u.id);
@@ -178,7 +178,7 @@ async function bolum1(): Promise<void> {
       await olc("gelenbelge.mukerrer", note.id, (p) => p.esler === "GB-1");
       await olc("gelenbelge.metre-farki", note.id, (p) => p.sebep === "kâğıt yanlış toplanmış");
       await emitIncomingDocApprovedTx(tx, note.id, u.id);
-      await olc("gelenbelge.onaylandi", note.id, (p) => p.topSayisi === 0);
+      await olc("gelenbelge.onaylandi", note.id, (p) => p.topSayisi === 0 && p.metre === 0);
       await emitIncomingDocCancelledTx(tx, note.id, "mükerrer okutma", u.id);
       await olc("gelenbelge.iptal", note.id, (p) => p.sebep === "mükerrer okutma");
 

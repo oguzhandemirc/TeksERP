@@ -43,7 +43,7 @@ import { TERIM } from "../../constants/terim";
 import { resolveRollLabels, rollLabel, nextSubcontractorDocNoTx } from "./shared";
 import type { SubcontractorServiceThis } from "./shared";
 import type { SubcontractorService } from "../subcontractor.service";
-import { emitSubcontractReceivedTx } from "../notification-sources/depo";
+import { emitSubcontractReceivedTx, emitSubcontractShrinkTx } from "../notification-sources/depo";
 
 // Refakat kartı okutma izi (TravelerCardScan) — tx İÇİNDE; audit'i çağıran eylem basar.
 // Bu dosyada durur: aile içinde audit taşıyan bir modülde (test_audit_muafiyeti §7 dosya düzeyi).
@@ -690,7 +690,10 @@ export async function receiveInner(
           appliedWidth: measuredWidth,
         },
       });
-      await emitSubcontractReceivedTx(tx, receipt.id, plans.length, userId);
+      await emitSubcontractReceivedTx(tx, receipt.id, {
+        rollCount: plans.length,
+        meters: (data.newRolls ?? []).reduce((s, nr) => s.plus(new Prisma.Decimal(nr.qty)), new Prisma.Decimal(0)),
+      }, userId);
 
       // Receipt'in property listesi — yeni doğacak açık kumaş Roll'ları bunu
       // inherit edecek (Kurşun/KK2'de operatör "yeni kumaş aç" çağrısında).
@@ -1151,6 +1154,8 @@ export async function receiveInner(
               userId,
             });
           }
+          // S6a `fason.fire-farki`: aynı iki sayı, eşik kararı tek yayma noktasında.
+          await emitSubcontractShrinkTx(tx, receipt.id, { consumed: consumedTotal, born: bornTotal }, userId);
         }
       }
       // newRolls boş senaryosu artık geçersiz (controller min(1) ile reddediyor).

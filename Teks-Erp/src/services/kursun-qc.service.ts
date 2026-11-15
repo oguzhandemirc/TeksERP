@@ -24,6 +24,7 @@ import prisma from "../lib/prisma";
 import { normalizeScanCode } from "../utils/code-format";
 import { randomUUID } from "crypto";
 import { AuditService } from "./audit.service";
+import { emitWorkOrderUrgentTx } from "./notification-sources/satis";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
 import {
@@ -2278,13 +2279,17 @@ export class KursunQcService {
     // F167: atomik claim — eşzamanlı finishStep step'i COMPLETED'e çekerken
     // check-then-act tamamlanmış adıma acil rozeti yazabilirdi. updateMany
     // status/station koşulunu tek sorguda pinler; 0 satır → nedeni ayır.
-    const claimed = await prisma.workOrderStep.updateMany({
-      where: {
-        id: stepId,
-        status: { not: StepStatus.COMPLETED },
-        station: { ...STEP_FLOW_WHERE },
-      },
-      data: { isUrgent, urgentMarkedAt: isUrgent ? new Date() : null },
+    // S6a: önce GEÇİŞ claim'i (karşı değerden), tutmazsa bugünkü aynı-değer yazımı — davranış aynı, yalnız gerçek
+    // KAPALI→AÇIK geçişi `isemri.acil-isaretlendi` doğurur (aynı tx).
+    const claimed = await prisma.$transaction(async (tx) => {
+      const where = { id: stepId, status: { not: StepStatus.COMPLETED }, station: { ...STEP_FLOW_WHERE } };
+      const data = { isUrgent, urgentMarkedAt: isUrgent ? new Date() : null };
+      const flipped = await tx.workOrderStep.updateMany({ where: { ...where, isUrgent: !isUrgent }, data });
+      if (flipped.count > 0) {
+        if (isUrgent) await emitWorkOrderUrgentTx(tx, stepId, userId);
+        return flipped;
+      }
+      return tx.workOrderStep.updateMany({ where, data });
     });
     if (claimed.count === 0) {
       const existing = await prisma.workOrderStep.findUnique({
