@@ -88,7 +88,7 @@ async function bolumBR(): Promise<string[]> {
   const base = readFileSync(join(__dirname, "..", "src", "services", "base.service.ts"), "utf8");
   check("§Ba kancasız/`notify:false` yolda tx açılmaz (iki kanca da `hook ? $transaction : delegate`)",
     (base.match(/(hookOpts\?|opts)\.notify === false \? undefined : this\.after(Create|Update)Tx\?\.bind\(this\)/g) ?? []).length === 2
-      && /: await insert\(this\.delegate\)/.test(base) && /: await write\(this\.delegate\)/.test(base));
+      && /: \(\(await this\.delegate\.create\(createArgs\)\)/.test(base) && /: await write\(this\.delegate\)/.test(base));
   const ids: string[] = [];
   const r1 = await colorService.create({ name: `TEST S6B ${ek} A` });
   const c1 = (r1.data as { id: string }).id;

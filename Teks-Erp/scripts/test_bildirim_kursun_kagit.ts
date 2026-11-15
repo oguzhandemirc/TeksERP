@@ -132,7 +132,7 @@ async function bolumC(o: Ortam): Promise<void> {
 }
 
 /** Söküm (FK sırası: outbox → atama → top izleri → İE → makine → istasyon → değer → çeşit → kumaş). */
-async function sok(): Promise<void> {
+async function teardown(): Promise<void> {
   const cocuk = await prisma.roll.findMany({ where: { parentRollId: { in: iz.roll } }, select: { id: true } });
   const roll = [...iz.roll, ...cocuk.map((c) => c.id)];
   const atama = (await prisma.kursunBypassAssignment.findMany({ where: { workOrderId: { in: iz.wo } }, select: { id: true } })).map((a) => a.id);
@@ -180,7 +180,7 @@ async function main(): Promise<void> {
     await bolumA(o);
     await bolumC(o);
   } finally {
-    await sok().catch((e: unknown) => { fail++; console.error("❌ TEMİZLİK HATASI:", e instanceof Error ? e.message : e); });
+    await teardown().catch((e: unknown) => { fail++; console.error("❌ TEMİZLİK HATASI:", e instanceof Error ? e.message : e); });
     await ayarGeri(SETTING_KEYS.BILDIRIM_GELEN_KUTUSU_ENABLED, kutu);
     await ayarGeri(SETTING_KEYS.KURSUN_BYPASS_ENABLED, bypass);
   }

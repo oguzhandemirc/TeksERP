@@ -88,9 +88,16 @@ export const PATRON_READ_EXTRA_CODES = [
   "system:activity", "system:work-sessions", "system:server-status", "system:clients", "system:print-history",
 ] as const;
 
-/** "Patron — tam okuma" kümesi: katalogdaki her web `:read`/`:view` izni + ek okuma izinleri + patron uygulaması girişi. */
+/**
+ * Okuma soneki taşıdığı halde "Patron — tam okuma"ya GİRMEYEN izinler: mal kabul karosu yalnız izinle kapılı;
+ * fabrika rolüne akarsa üretici fabrikada belirir (test_single_warehouse_parity §5a/§5c — yalnız ticaret şablonu taşır).
+ */
+export const PATRON_READ_EXCLUDED_CODES = ["goods-receipt:read"] as const;
+
+/** "Patron — tam okuma" kümesi: katalogdaki her web `:read`/`:view` izni (dışlananlar hariç) + ek okuma izinleri + patron uygulaması girişi. */
 export function patronReadAllCodes(): string[] {
-  const suffixed = PERMISSION_CATALOG.filter((p) => p.category === "web" && /:(read|view)$/.test(p.code)).map((p) => p.code);
+  const excluded = new Set<string>(PATRON_READ_EXCLUDED_CODES);
+  const suffixed = PERMISSION_CATALOG.filter((p) => p.category === "web" && /:(read|view)$/.test(p.code) && !excluded.has(p.code)).map((p) => p.code);
   return [...new Set<string>([...suffixed, ...PATRON_READ_EXTRA_CODES, "patron-app:login"])];
 }
 

@@ -1064,19 +1064,21 @@ export class BaseService {
       }
     }
 
-    const insert = async (d: PrismaDelegate): Promise<Record<string, unknown>> => (await d.create({
+    const createArgs = {
       data: prismaData,
       ...(this.config.defaultInclude ? { include: this.config.defaultInclude } : {}),
-    })) as Record<string, unknown>;
+    };
     const hook = hookOpts?.notify === false ? undefined : this.afterCreateTx?.bind(this);
+    // Kancasız yol `this.delegate.create` olarak kalır (künye taraması genel yolu bu imzadan tanır).
     const record = hook
       ? await prisma.$transaction(async (tx) => {
           // `defaultInclude` ilişkileri tek tx bağlantısında SIRALI yüklensin (pg eşzamanlı sorgu uyarısı, S15a).
-          const row = await insert((sequentialTx(tx) as unknown as Record<string, PrismaDelegate>)[this.config.modelName]!);
+          const txDelegate = (sequentialTx(tx) as unknown as Record<string, PrismaDelegate>)[this.config.modelName]!;
+          const row = (await txDelegate.create(createArgs)) as Record<string, unknown>;
           await hook(tx, { id: row.id as string, userId });
           return row;
         })
-      : await insert(this.delegate);
+      : ((await this.delegate.create(createArgs)) as Record<string, unknown>);
 
     await AuditService.log({
       userId,
