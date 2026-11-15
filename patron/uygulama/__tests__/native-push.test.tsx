@@ -57,8 +57,9 @@ describe("telefonda native push kapalı", () => {
 
   it("kapı açılınca native kayıt yolu kullanılır (sonraki sürüm)", async () => {
     mockRegisterNative.mockResolvedValue({ kind: "KAYITLI", deviceId: "d1" });
-    await expect(registerThisDevice(api, null, true)).resolves.toEqual({ kind: "KAYITLI", deviceId: "d1" });
-    expect(mockRegisterNative).toHaveBeenCalledWith(api);
+    const hatirla = jest.fn(async () => undefined);
+    await expect(registerThisDevice(api, null, true, hatirla)).resolves.toEqual({ kind: "KAYITLI", deviceId: "d1" });
+    expect(mockRegisterNative).toHaveBeenCalledWith(api, hatirla);
   });
 
   it("web'de kayıt web yolundan gider (kapıdan etkilenmez)", async () => {

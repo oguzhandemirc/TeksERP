@@ -10,8 +10,8 @@
 > `https://tekserp.etkiliyazilim.com/yonetim-gizlilik#hesap-silme` (eski `/patron-gizlilik` kalıcı 301 ile buraya; çapa "Hesap silme" başlığından üretilir; Play
 > formuna yazılır, başlık değişmez). Bu dosya sayfanın TEK KAYNAĞIDIR: `deploy/gizlilik-sayfasi/uret.mjs` ile
 > `deploy/gizlilik-sayfasi/html/yonetim-gizlilik.html`e çevrilir. Bekçi `scripts/test_gizlilik_sayfasi.mjs`
-> bayt-eşitliği, süreleri (`patron/sunucu` `IDENTITY_PURGE_DAYS` · `IP_RETENTION_DAYS` · denetim saklama
-> varsayılanları) ve anlık bildirim metnini (`patron/uygulama/src/push/support.ts` `NATIVE_PUSH`, derleme kapısına bağlı;
+> bayt-eşitliği, süreleri (`patron/sunucu` `IDENTITY_PURGE_DAYS` · `IP_RETENTION_DAYS` · `PUSH_BRIDGE_TICKET_DAYS` ·
+> denetim saklama varsayılanları · fabrika `notification-prune.service.ts` `pushTokenDays`) ve anlık bildirim metnini (`patron/uygulama/src/push/support.ts` `NATIVE_PUSH`, derleme kapısına bağlı;
 > push köprüsü P4, 2026-11-13) koda karşı ölçer. Metin değişince sürüm kimliği ve yürürlük tarihi birlikte artar;
 > yürürlük satırındaki köşeli parantezli yer tutucu, kullanıcı yayını onaylayıp tarihi yazana kadar yayını durdurur.
 
@@ -110,8 +110,9 @@ Telefon bildirimlerini istediğiniz an kapatabilirsiniz:
 - **Telefon ayarlarından:** Android Ayarlar → Uygulamalar → TeksERP Yönetim → Bildirimler adımından bildirim
   iznini kaldırabilirsiniz (izin reddedilmişse uygulamadaki "Telefon ayarlarını aç" düğmesi uygulamanın telefon
   ayarlarını açar).
-- **Oturumu kapatarak:** uygulamayı fabrikanın sunucusuna doğrudan bağladıysanız oturumu kapattığınızda bu
-  cihazın bildirim anahtarı bırakılır ve cihaza bildirim gönderilmez.
+- **Oturumu kapatarak:** oturumu kapattığınızda bu cihazın bildirim anahtarı bırakılır ve cihaza bildirim
+  gönderilmez; uygulamayı fabrikanın sunucusuna doğrudan bağladıysanız da TeksERP Yönetim bulutuyla
+  kullanıyorsanız da.
 
 ## 5. Saklama
 
@@ -120,11 +121,11 @@ Telefon bildirimlerini istediğiniz an kapatabilirsiniz:
 - Uygulamayı fabrikanın sunucusuna doğrudan bağladıysanız cihaz bildirim anahtarı oturumunuzla yaşar: oturumu
   kapattığınızda, parolanız değiştiğinde ya da hesabınız kapandığında bırakılır ve o cihaza bildirim gönderilmez.
   Bırakılınca fabrika sunucusundaki şifreli anahtar ve buluttaki eşleşme kaydı silinir; Google ya da Expo cihazın
-  artık bildirim alamadığını bildirirse eşleşme kaydı kendiliğinden silinir. Fabrika sunucusundaki cihaz kaydında
-  kalan cihaz adı ve ses seçimi fabrikanın saklama kurallarına tabidir.
-- TeksERP Yönetim bulutuyla kullanıyorsanız cihaz kaydı, cihazı Bildirimler ekranından çıkardığınızda, Google ya
-  da Expo cihazın artık bildirim alamadığını bildirdiğinde ya da hesabınız kapandığında pasife alınır ve o cihaza
-  bildirim gönderilmez; kayıt hesabınızın kişisel verileriyle birlikte silinir.
+  artık bildirim alamadığını bildirirse eşleşme kaydı kendiliğinden silinir. Bırakılan cihaz kaydında kalan cihaz
+  adı ve ses seçimi, cihaz son görüldükten 180 gün sonra fabrika sunucusundan silinir.
+- TeksERP Yönetim bulutuyla kullanıyorsanız cihaz kaydı, oturumu kapattığınızda, cihazı Bildirimler ekranından
+  çıkardığınızda, Google ya da Expo cihazın artık bildirim alamadığını bildirdiğinde ya da hesabınız kapandığında
+  pasife alınır ve o cihaza bildirim gönderilmez; kayıt hesabınızın kişisel verileriyle birlikte silinir.
 - Başarısız giriş kayıtları 90 gün, diğer güvenlik kayıtları 2 yıl saklanır ve sonra silinir.
 - Hesap kapanınca girişiniz hemen kapanır; adınız, e-posta adresiniz, parolanızın özeti, doğrulama sırrınız,
   oturumlarınız ve cihaz bildirim kayıtlarınız kapanıştan 30 gün sonra silinir.

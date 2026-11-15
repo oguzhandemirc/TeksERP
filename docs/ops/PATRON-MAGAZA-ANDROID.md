@@ -107,7 +107,7 @@ izin bilerek eklenir, formu da güncellenir.
 - `https://tekserp.etkiliyazilim.com/gizlilik` TABLET uygulamasının politikasıdır ("Etkili Yazılım bu verileri
   toplamaz") — TeksERP Yönetim için YANLIŞTIR, kullanılmaz. `https://yonetim.etkiliyazilim.com/gizlilik` SPA giriş HTML'idir, metin değil.
 
-### 4.2 Veri güvenliği formu — toplanan veri (koddan ölçüldü, 2026-10-15; push + ses güncellemesi 2026-11-15, politika YONETIM-GP-2026.5)
+### 4.2 Veri güvenliği formu — toplanan veri (koddan ölçüldü, 2026-10-15; push + ses güncellemesi 2026-11-15, çıkışta bırakma + 180 gün 2026-11-15, politika YONETIM-GP-2026.5)
 
 Uygulamada analitik, reklam, çökme raporu SDK'sı YOK; Firebase yalnız push kapısı açık derlemede (yalnız FCM bildirim
 alımı); reklam kimliği (`AD_ID`) engelli. Bütün
@@ -120,7 +120,7 @@ trafik HTTPS (`usesCleartextTraffic` varsayılan kapalı, adres `https://`). Ver
 | Kişisel bilgiler → Kullanıcı kimlikleri | hesap/tesis kimliği (UUID) | Toplanır | Uygulama işlevi | Zorunlu |
 | Uygulama etkinliği → Diğer kullanıcı içerikleri | girilen sipariş/cari talepleri (gelen kutusu), rapor istekleri | Toplanır; fabrikaya iletilir (veri sorumlusu fabrikadır — Play "paylaşım" sayılmaz: hizmet sağlayıcı/kullanıcının isteği) | Uygulama işlevi | Kullanıcı isterse |
 | Uygulama etkinliği → Diğer işlemler | bildirim tercihleri (telefon bildirimi türleri dahil), bildirim/alarm sesi seçimi (ERP kipinde fabrikaya + bulut köprü bağına), tesis seçimi | Toplanır | Uygulama işlevi | İsteğe bağlı |
-| Cihaz veya diğer kimlikler | Expo push belirteci + cihaz adı + platform (yalnız push kapısı açık derlemede, kullanıcı telefon bildirimlerini açarsa; ERP kipinde fabrika sunucusunda şifreli, bulutta yalnız SHA-256 özeti + ses; bulut kipinde bulut cihaz kaydı) | Toplanır; FCM/Expo iletim için hizmet sağlayıcıdır (Play "paylaşım" sayılmaz — ⚠ formda doğrula) | Uygulama işlevi (bildirim) | İsteğe bağlı |
+| Cihaz veya diğer kimlikler | Expo push belirteci + cihaz adı + platform (yalnız push kapısı açık derlemede, kullanıcı telefon bildirimlerini açarsa; ERP kipinde fabrika sunucusunda şifreli, bulutta yalnız SHA-256 özeti + ses; bulut kipinde bulut cihaz kaydı; her iki kipte çıkışta bırakılır, fabrikadaki bırakılmış satır son görülmeden 180 gün sonra silinir) | Toplanır; FCM/Expo iletim için hizmet sağlayıcıdır (Play "paylaşım" sayılmaz — ⚠ formda doğrula) | Uygulama işlevi (bildirim) | İsteğe bağlı |
 | Konum | — (IP yalnız sunucuda giriş güvenlik kaydında, 30 gün; konum türetilmez) | Toplanmaz* | Güvenlik | — |
 | Finansal bilgiler | fabrikanın cari/çek/stok verisi GÖSTERİLİR; kullanıcıdan toplanmaz | ⚠ değerlendir | — | — |
 | Dosyalar ve belgeler | PDF/Excel rapor dosyası cihazda (önbellek) üretilir, yalnız kullanıcının "Paylaş" eylemiyle seçtiği uygulamaya gider; bize gönderilmez | Toplanmaz | — | — |
