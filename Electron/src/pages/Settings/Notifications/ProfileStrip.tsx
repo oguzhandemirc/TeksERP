@@ -46,40 +46,11 @@ export function ProfileStrip({ enabled, kirli }: { enabled: boolean; kirli: bool
         </Button>
       </div>
       <div role="group" aria-label="Profil seç" className="flex flex-wrap gap-1.5">
-        {chips.map((c) => {
-          const on = view.etkin.includes(c.key);
-          return (
-            <span key={c.key} className={cn("inline-flex items-center rounded-full border text-xs", on ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted-foreground")}>
-              <button
-                type="button"
-                aria-pressed={on}
-                title={c.ipucu}
-                disabled={busy}
-                onClick={() => pick(c)}
-                className={cn("inline-flex items-center gap-1 rounded-full px-3 py-1 font-medium hover:text-foreground disabled:cursor-not-allowed", c.kisisel && "pr-1.5")}
-                data-testid={`profil-${c.key}`}
-              >
-                {on && <Check className="h-3.5 w-3.5" aria-hidden />}
-                {c.ad}
-              </button>
-              {c.kisisel && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button type="button" disabled={busy} aria-label={`${c.ad} — profil işlemleri`} className="mr-1 rounded-full p-0.5 hover:bg-muted">
-                      <MoreHorizontal className="h-3.5 w-3.5" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start">
-                    <DropdownMenuItem disabled={kirli} onSelect={() => s.update.mutate({ id: c.id!, seciminiGuncelle: true })}>Şu anki seçimle güncelle</DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => setNameFor({ chip: c })}>Yeniden adlandır</DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem className="text-destructive" onSelect={() => setConfirm({ kind: "sil", chip: c })}>Sil…</DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-            </span>
-          );
-        })}
+        {chips.map((c) => (
+          <ProfileChipButton key={c.key} chip={c} on={view.etkin.includes(c.key)} busy={busy} kirli={kirli} onPick={() => pick(c)}
+            onRefresh={() => s.update.mutate({ id: c.id!, seciminiGuncelle: true })} onRename={() => setNameFor({ chip: c })}
+            onDelete={() => setConfirm({ kind: "sil", chip: c })} />
+        ))}
       </div>
       <ProfileNameDialog
         open={nameFor !== null}
@@ -93,31 +64,81 @@ export function ProfileStrip({ enabled, kirli }: { enabled: boolean; kirli: bool
           else s.create.mutate(ad, done);
         }}
       />
-      <Dialog open={confirm !== null} onOpenChange={(o) => !o && setConfirm(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{confirm?.kind === "sil" ? "Profil silinsin mi?" : "Profil uygulansın mı?"}</DialogTitle>
-            <DialogDescription>
-              {confirm?.kind === "sil"
-                ? `“${confirm.chip.ad}” profili silinir. Bildirim seçiminiz değişmez.`
-                : `Kaydedilmemiş değişiklikleriniz kaybolur ve “${confirm?.chip.ad ?? ""}” profili uygulanır.`}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirm(null)}>Vazgeç</Button>
-            <Button
-              variant={confirm?.kind === "sil" ? "destructive" : "default"}
-              onClick={() => {
-                if (confirm?.kind === "sil") s.remove.mutate(confirm.chip.id!);
-                else if (confirm) s.apply.mutate(confirm.chip);
-                setConfirm(null);
-              }}
-            >
-              {confirm?.kind === "sil" ? "Sil" : "Uygula"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        confirm={confirm}
+        onClose={() => setConfirm(null)}
+        onConfirm={(c) => {
+          if (c.kind === "sil") s.remove.mutate(c.chip.id!);
+          else s.apply.mutate(c.chip);
+          setConfirm(null);
+        }}
+      />
     </section>
+  );
+}
+
+function ProfileChipButton(p: {
+  chip: ProfileChip;
+  on: boolean;
+  busy: boolean;
+  kirli: boolean;
+  onPick: () => void;
+  onRefresh: () => void;
+  onRename: () => void;
+  onDelete: () => void;
+}) {
+  const c = p.chip;
+  return (
+    <span className={cn("inline-flex items-center rounded-full border text-xs", p.on ? "border-primary bg-primary/10 text-foreground" : "border-border text-muted-foreground")}>
+      <button
+        type="button"
+        aria-pressed={p.on}
+        title={c.ipucu}
+        disabled={p.busy}
+        onClick={p.onPick}
+        className={cn("inline-flex items-center gap-1 rounded-full px-3 py-1 font-medium hover:text-foreground disabled:cursor-not-allowed", c.kisisel && "pr-1.5")}
+        data-testid={`profil-${c.key}`}
+      >
+        {p.on && <Check className="h-3.5 w-3.5" aria-hidden />}
+        {c.ad}
+      </button>
+      {c.kisisel && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" disabled={p.busy} aria-label={`${c.ad} — profil işlemleri`} className="mr-1 rounded-full p-0.5 hover:bg-muted">
+              <MoreHorizontal className="h-3.5 w-3.5" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem disabled={p.kirli} onSelect={p.onRefresh}>Şu anki seçimle güncelle</DropdownMenuItem>
+            <DropdownMenuItem onSelect={p.onRename}>Yeniden adlandır</DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="text-destructive" onSelect={p.onDelete}>Sil…</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+    </span>
+  );
+}
+
+function ConfirmDialog({ confirm, onClose, onConfirm }: { confirm: Confirm | null; onClose: () => void; onConfirm: (c: Confirm) => void }) {
+  const sil = confirm?.kind === "sil";
+  return (
+    <Dialog open={confirm !== null} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{sil ? "Profil silinsin mi?" : "Profil uygulansın mı?"}</DialogTitle>
+          <DialogDescription>
+            {sil
+              ? `“${confirm?.chip.ad ?? ""}” profili silinir. Bildirim seçiminiz değişmez.`
+              : `Kaydedilmemiş değişiklikleriniz kaybolur ve “${confirm?.chip.ad ?? ""}” profili uygulanır.`}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Vazgeç</Button>
+          <Button variant={sil ? "destructive" : "default"} onClick={() => confirm && onConfirm(confirm)}>{sil ? "Sil" : "Uygula"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
