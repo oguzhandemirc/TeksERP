@@ -73,10 +73,10 @@ beforeEach(() => {
 describe("profil modeli", () => {
   it("etkin yoksa Özel; kişisel eşleşme hazırın önüne geçer; uygula gövdesi", () => {
     expect(activeLabel({ ...VIEW, etkin: [] } as never)).toBe("Özel");
-    expect(activeLabel({ ...VIEW, etkin: ["hazir:HEPSI", `kisisel:${VIEW.kisisel[0].id}`] } as never)).toBe("Gece");
+    expect(activeLabel({ ...VIEW, etkin: ["hazir:HEPSI", `kisisel:${VIEW.kisisel[0]!.id}`] } as never)).toBe("Gece");
     const chips = profileChips(VIEW as never);
     expect(applyBody(chips[0]!, "UYGULAMA")).toEqual({ kanal: "UYGULAMA", hazir: "HEPSI" });
-    expect(applyBody(chips[2]!, "PATRON_PUSH")).toEqual({ kanal: "PATRON_PUSH", kisisel: VIEW.kisisel[0].id });
+    expect(applyBody(chips[2]!, "PATRON_PUSH")).toEqual({ kanal: "PATRON_PUSH", kisisel: VIEW.kisisel[0]!.id });
   });
 });
 
