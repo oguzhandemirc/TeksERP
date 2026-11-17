@@ -1,5 +1,5 @@
 // Üretim karoları (menü kökü Üretim, `/production`; sıra = hub sırası). Fason karolarının ikisi `warehouse.ts`te.
-import { Factory, FilePlus2, Gauge, History, Ruler, Share2, SwatchBook, Spool, AlertOctagon, MonitorPlay, Siren, Layers, CalendarClock } from "lucide-react";
+import { Factory, FilePlus2, Gauge, History, Ruler, Share2, SwatchBook, Spool, AlertOctagon, MonitorPlay, Siren, Layers, CalendarClock, Calculator } from "lucide-react";
 import { isKursunPlanningVisible, isMeterDeviationsVisible, isWorkOrdersVisible } from "../production-regime";
 import { isWeavingOrdersVisible } from "../WeavingOrders/weaving-regime";
 import { isMachineStopsVisible, machineStopsTitle } from "../MachineStops/stop-regime";
@@ -129,6 +129,19 @@ export const productionTiles: OperationsTile[] = [
     to: "/operations/warp-beams",
     group: "production",
     permission: "warpbeam:read",
+    visibleWhen: isWarpBeamsVisible,
+    offHint: flagOffHint("devereEnabled"),
+  },
+  {
+    // ÇÖZGÜ HESABI (fason devere D3): `/api/warp-plan` `requireDevereEnabled` + `warpspec:read`; karo aynı
+    // bayrak ve izinle (route `ProtectedRoute` ile birebir). Yüklem Leventler karosuyla AYNI nesne (devere).
+    key: "cozgu-hesabi",
+    title: "Çözgü Hesabı",
+    description: "Kaç levent için kaç kg iplik gider; eldeki iplik kaç metre çözgüye yeter (devere, çözgü, iplik ihtiyacı)",
+    icon: Calculator,
+    to: "/operations/cozgu-hesabi",
+    group: "production",
+    permission: "warpspec:read",
     visibleWhen: isWarpBeamsVisible,
     offHint: flagOffHint("devereEnabled"),
   },

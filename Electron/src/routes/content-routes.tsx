@@ -99,6 +99,7 @@ import { WeavingFloorPage } from "@/pages/Operations/WeavingFloor/WeavingFloorPa
 import { LoomAlarmsPage } from "@/pages/Operations/LoomAlarms/LoomAlarmsPage";
 import { LoomAlarmDetailPage } from "@/pages/Operations/LoomAlarms/LoomAlarmDetailPage";
 import { WarpBeamsPage } from "@/pages/Operations/WarpBeams/WarpBeamsPage";
+import { WarpPlanPage } from "@/pages/Operations/WarpPlan/WarpPlanPage";
 import { PurchaseOrdersPage } from "@/pages/Operations/PurchaseOrders/PurchaseOrdersPage";
 import { ItemPricesPage } from "@/pages/Definitions/ItemPrices/ItemPricesPage";
 import { ServicePricesPage } from "@/pages/Definitions/ServicePrices/ServicePricesPage";
@@ -693,6 +694,15 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="warpbeam:read">
         <WarpBeamsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Çözgü Hesabı (fason devere D3) — karo izniyle BİREBİR (`warpspec:read`); yazmaz.
+    path: "operations/cozgu-hesabi",
+    element: (
+      <ProtectedRoute requirePermission="warpspec:read">
+        <WarpPlanPage />
       </ProtectedRoute>
     ),
   },
