@@ -88,6 +88,7 @@ import { VatSummaryPage } from "@/pages/Reports/Finance/VatSummaryPage";
 import { FxDiffPage } from "@/pages/Reports/Finance/FxDiffPage";
 // Paket D (2026-08-14) — hepsi NAMED export.
 import { YarnStockPage } from "@/pages/Operations/Yarn/YarnStockPage";
+import { YarnAtSubcontractorPage } from "@/pages/Operations/YarnAtSubcontractor/YarnAtSubcontractorPage";
 import { WeavingOrdersPage } from "@/pages/Operations/WeavingOrders/WeavingOrdersPage";
 import { LoomLoadPage } from "@/pages/Operations/LoomLoad/LoomLoadPage";
 import { ShiftDefinitionsPage } from "@/pages/ShiftDefinitions/ShiftDefinitionsPage";
@@ -627,6 +628,15 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="warehouse:read">
         <YarnStockPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Fasondaki İplik (devere D6c) — karo izniyle BİREBİR (`warping-order:read`); salt okuma.
+    path: "operations/fasondaki-iplik",
+    element: (
+      <ProtectedRoute requirePermission="warping-order:read">
+        <YarnAtSubcontractorPage />
       </ProtectedRoute>
     ),
   },
