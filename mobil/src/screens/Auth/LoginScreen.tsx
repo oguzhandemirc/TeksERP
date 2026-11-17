@@ -36,6 +36,7 @@ import type { RootStackParamList } from '../../navigation/types';
 import { isLoginSuspended } from '../../lib/license';
 import { LicenseSuspendedCard } from '../../components/lock/LicenseSuspendedGate';
 import UnpairedPasswordForm from './UnpairedPasswordForm';
+import CompactPasswordField from './CompactPasswordField';
 
 const COLORS = {
   bg: '#0f172a',
@@ -450,6 +451,13 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
     setError('');
   }, []);
 
+  // Dar düzen (telefon/dikey) liste+şifre: değer `CompactPasswordField`te klavye türüne göre süzülmüş gelir.
+  const handleCompactPasswordChange = useCallback((value: string) => {
+    if (!selectedUserRef.current || submittingRef.current) return;
+    setPin(value);
+    setError('');
+  }, []);
+
   // Klavye türü değişince yarım girilen değer TAŞINMAZ — harfli↔sayısal arası karışık parola oluşmasın
   // (ABC'de "abc" yazıp 123'e geçince numpad üstüne eklerdi). Tercih yine cihazda hatırlanır (hook).
   const handleToggleKeyboard = useCallback(() => {
@@ -570,64 +578,23 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
     </>
   );
 
-  // Telefon/dikey: donanım numpad'i yok — noktalar dokunulunca Android sayı
-  // klavyesini açan görünmez bir TextInput'a odaklanır. Klavye nav çubuğunun
-  // üstünden açıldığı için dock sorunu yaşanmaz.
+  // Telefon/dikey: donanım numpad'i yok — noktalar dokunulunca sistem klavyesi açılır. ABC/123 geçişi
+  // burada da görünür; ABC girdiyi süzmez (harfli parola dikeyde de girilebilsin).
   const pinSectionCompact = (
     <>
-      <Text style={[styles.sectionLabel, styles.sectionLabelSpaced]}>2 · ŞİFRE</Text>
-      <TouchableRipple
-        onPress={focusPin}
-        disabled={!selectedUser || submitting}
-        rippleColor="rgba(99,102,241,0.25)"
-        borderless
-        style={styles.pinInputTap}
-      >
-        <View style={styles.pinInputWrap}>
-          <View style={[styles.pinRow, styles.pinRowCompact]}>
-            {Array.from({ length: Math.min(pin.length + 1, 12) }).map((_, i) => (
-              <View
-                key={i}
-                style={[
-                  styles.pinDot,
-                  i < pin.length && styles.pinDotFilled,
-                  i === pin.length && !!selectedUser && !submitting && styles.pinDotActive,
-                  !!error && styles.pinDotError,
-                ]}
-              />
-            ))}
-          </View>
-          {!!selectedUser && (
-            <TextInput
-              ref={pinInputRef}
-              value={pin}
-              onChangeText={handlePinChange}
-              // Liste+şifre alfanümerik olabilir → varsayılan klavye + gizli metin; salt-PIN sayısal kalır.
-              keyboardType={activeMethod === 'list' ? 'default' : 'number-pad'}
-              secureTextEntry={activeMethod === 'list'}
-              maxLength={PASSWORD_MAX}
-              autoFocus
-              caretHidden
-              // Görünmez overlay olduğu için sistemin çizdiği görsel öğeleri bastır:
-              // Android autofill vurgu kutusu, seçim tutamağı ve bağlam menüsü
-              // aksi halde noktaların üstünde görünür artefakt bırakıyordu.
-              importantForAutofill="no"
-              autoComplete="off"
-              autoCorrect={false}
-              contextMenuHidden
-              selectTextOnFocus={false}
-              editable={!submitting}
-              returnKeyType="done"
-              underlineColorAndroid="transparent"
-              // Dokunmalar üstteki TouchableRipple'a gitsin (overlayInput'taki
-              // pointerEvents:'none'); odak yalnızca focusPin() ile programatik.
-              style={styles.overlayInput}
-            />
-          )}
-        </View>
-      </TouchableRipple>
-
-      <Text style={styles.pinHelper}>Şifre girmek için dokunun</Text>
+      <CompactPasswordField
+        value={pin}
+        maxLength={PASSWORD_MAX}
+        alphaKeyboard={alphaKeyboard}
+        hasUser={!!selectedUser}
+        submitting={submitting}
+        hasError={!!error}
+        inputRef={pinInputRef}
+        onChange={handleCompactPasswordChange}
+        onToggleKeyboard={handleToggleKeyboard}
+        onFocusRequest={focusPin}
+        onSubmit={() => selectedUser && pin.length > 0 && void submit(pin, selectedUser)}
+      />
 
       <View style={[styles.statusRow, styles.statusRowCompact]}>
         {submitting ? (
