@@ -229,7 +229,7 @@ const MODULLER: ModulTanimi[] = [
     middleware: "requireDevereEnabled",
     okuyucu: "readDevereEnabled",
     modulKodu: "devere",
-    routeDosyalari: ["routes/warp-spec.routes.ts"],
+    routeDosyalari: ["routes/warp-spec.routes.ts", "routes/warping-order.routes.ts"],
     sondalar: modulUclari("devereEnabled"),
     onKosul: { alan: "iplikEnabled", beklenenModulKodu: "iplik" },
   },
@@ -396,6 +396,8 @@ const SONDA_IZINLERI = [
   // çarpar; bu izin olmadan "modül AÇIKKEN 2xx" körlük zemini modül yüzünden
   // değil YETKİ yüzünden kırmızı verir ve yanlış hikâye anlatır (ölçüldü).
   "warpspec:read",
+  // Fason devere siparişi sondası (`/api/warping-orders`, D4a) — aynı gerekçe.
+  "warping-order:read",
   // Kalite Güvence sondaları (`/api/lab-tests`, `/api/lab-test-types`) — aynı gerekçe.
   "labtest:read",
   // Tezgah Salonu sondası (`/api/loom-floor`) — aynı gerekçe.

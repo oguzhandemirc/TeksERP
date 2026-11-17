@@ -46,7 +46,7 @@ export const READ_ONLY_NOT_SECRET_COLUMNS: readonly string[] = [
   "permissionCode", "planReasonCode", "procedureCode", "quickPinSetAt", "rateCode", "rawCode", "rawKey", "rawStopCode",
   "reasonCode", "reportKey", "routeKey", "rowKeys", "sampleCode", "scopeKey", "sealGeneration", "sealState", "sealedAt", "sealedById",
   "secretIssuedAt", "sequenceCode", "seriesKey", "setKey", "signalStopKey", "stopKey", "subjectKey", "suggestedGradeCode", "textDigest", "toReasonCode",
-  "tokenVersion", "totpEnabledAt", "totpLastStep", "variantCode", "webTotpOptOut",
+  "tokenVersion", "totpEnabledAt", "totpLastStep", "variantCode", "warpingOrderId", "webTotpOptOut",
 ];
 
 /** Sır çağrıştıran kolon adı — bekçinin taradığı küme (fail-closed: eşleşen her ad sınıflandırılmalı). */

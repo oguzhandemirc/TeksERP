@@ -480,6 +480,10 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   { code: "loom:doff", reason: "Panel doff yüzeyi yok; tablet `mobile:dokuma` ile kaydeder — web kodu API/entegrasyon için." },
   { code: "loom:doff-revoke", reason: "Panel geri alma yüzeyi yok; tablet `mobile:dokuma-geri-al` ile — web kodu API/entegrasyon için." },
   // Tezgah künyesi + gölge mod (B3, 2026-09-14): "Devreye Alma" ekranı AYRI dilim (Faz 2 ingest ile, `tezgah.enabled`).
+  // Fason devere D4 (2026-11-17): backend yüzeyi önce; panel ekranları (Fason Devere Siparişleri) D6 dilimi — ekranla ölü muaf olur.
+  { code: "warping-order:read", reason: "Fason devere sipariş ekranı D6 dilimiyle doğar; bugün yalnız API." },
+  { code: "warping-order:write", reason: "Fason devere sipariş/sevk diyaloğu D6 dilimiyle doğar; bugün yalnız API." },
+  { code: "warping-order:cancel", reason: "Fason devere iptal düğmesi D6 dilimiyle doğar; bugün yalnız API." },
 ];
 
 /** Katalogda adı geçmeyen izin var mı? (bekçi ve panel bandı kullanır) */

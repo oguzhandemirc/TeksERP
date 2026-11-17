@@ -44,6 +44,8 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   // K4P-LAB: lab testi panelden clientToken ile DRAFT doğar; iptal edilmiş testin token'ı 409 (4. durum).
   // Emanet çıkış belgesi (F5): panel/tabletten clientToken ile doğar; iptal edilmiş belgenin token'ı 409 (4. durum).
   [`${S}consignment-dispatch/create.ts::createConsignmentDispatch`]: { giris: { [`${S}consignment-dispatch/create.ts::createConsignmentDispatch`]: "R" } },
+  // Fason devere siparişi (D4a): panelden clientToken ile doğar; iptal edilmiş siparişin token'ı 409 (4. durum).
+  [`${S}warping-order/create.ts::createWarpingOrder`]: { giris: { [`${S}warping-order/create.ts::createWarpingOrder`]: "R" } },
   [`${S}lab-test.service.ts::createLabTest`]: { giris: { [`${S}lab-test.service.ts::createLabTest`]: "R" } },
   // K29: okutmayla rota — sahada eklenen adım clientToken ile doğar (aynı okutmanın tekrarı ikinci adım eklemez).
   [`${S}workorder-scan-route.service.ts::applyPlanTx`]: { giris: { [`${S}workorder-scan-route.service.ts::applyScanRoute`]: "R" } },
@@ -317,6 +319,7 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}support.service.ts::replayFor`]: ["konu", "aciklama"],
   [`${S}lab-test.service.ts::replayFor`]: ["rollId", "batchId"],
   [`${S}consignment-dispatch/create.ts::replayFor`]: ["ownerCustomerId", "items"],
+  [`${S}warping-order/create.ts::replayFor`]: ["warpSpecId", "subcontractorId", "beamLines", "extraWarpSpecIds", "salesOrderIds"],
   [`${S}certificate.service.ts::replayFor`]: ["certificateNo", "renewsId"],
   [`${S}workorder-scan-route.service.ts::replayFor`]: ["workOrderId", "stationId"],
   [`${S}gelen-belge-note.service.ts::replayFor`]: ["senderDocNo", "ownerCustomerId"],

@@ -174,7 +174,7 @@ async function main(): Promise<void> {
     const metin = yorumlariSok(fs.readFileSync(path.join(routerDizin, f), "utf8"));
     const dokunuyor =
       DEVERE_MODELLERI.some((m) => new RegExp(`\\b(prisma|tx)\\.${m}\\b`).test(metin)) ||
-      /WarpSpecService|warpSpecService|warp-beam(-wind|-mount|-consume)?\.service|warp-plan\.service/.test(metin);
+      /WarpSpecService|warpSpecService|warp-beam(-wind|-mount|-consume)?\.service|warp-plan\.service|warping-order\//.test(metin);
     if (!dokunuyor) continue;
     dokunanlar.push(f);
     const kapili = metin.includes(KAPI) || (ALT_YONLENDIRICI[f] !== undefined && anaKapiliVeTakili(f, ALT_YONLENDIRICI[f]));

@@ -62,6 +62,10 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "PUT /api/customer-consignees/:id/label-template": e("bir etiket alıcısının şablonunu değiştirdi", "bir etiket alıcısının şablonunu değiştirmeye çalıştı"),
   "POST /api/customer-consignees/:id/merge": e("iki etiket alıcısını birleştirdi", "iki etiket alıcısını birleştirmeye çalıştı"),
   // ── Emanet çıkış belgesi (genel fason F5, 2026-11-08)
+  "POST /api/warping-orders/preview": e("fason devere siparişi önizlemesi aldı", "fason devere siparişi önizlemesi almaya çalıştı"),
+  "POST /api/warping-orders": e("fason devere siparişi oluşturdu", "fason devere siparişi oluşturmaya çalıştı"),
+  "PATCH /api/warping-orders/:id": e("bir fason devere siparişini düzenledi", "bir fason devere siparişini düzenlemeye çalıştı"),
+  "POST /api/warping-orders/:id/cancel": e("bir fason devere siparişini iptal etti", "bir fason devere siparişini iptal etmeye çalıştı"),
   "POST /api/consignment-dispatches/preview": e("emanet çıkış önizlemesi aldı", "emanet çıkış önizlemesi almaya çalıştı"),
   "POST /api/consignment-dispatches": e("emanet levent/ipliği sahibine çıkardı", "emanet levent/ipliği sahibine çıkarmaya çalıştı"),
   "POST /api/consignment-dispatches/:id/cancel": e("bir emanet çıkış belgesini iptal etti", "bir emanet çıkış belgesini iptal etmeye çalıştı"),

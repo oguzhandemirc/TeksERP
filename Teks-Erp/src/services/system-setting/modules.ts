@@ -267,6 +267,17 @@ export async function readDevereWarpFixedWasteM(tx?: Pick<typeof prisma, "system
   return n === null || !Number.isFinite(n) || n < 0 || n > DEVERE_WARP_FIXED_WASTE_M_MAX ? DEFAULT_DEVERE_WARP_FIXED_WASTE_M : n;
 }
 
+/** Fason devere D4: kapama fire toleransı (%) — 0 = denetim yok (varsayılan); üst sınır dahil. */
+export const DEFAULT_DEVERE_FASON_WASTE_TOLERANCE_PCT = 0;
+export const DEVERE_FASON_WASTE_TOLERANCE_PCT_MAX = 99;
+/** Fire toleransı HAM değer — satır yok / çöp / aralık dışı → 0 (denetim yok). */
+export async function readDevereFasonWasteTolerancePct(tx?: Pick<typeof prisma, "systemSetting">): Promise<number> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.DEVERE_FASON_WASTE_TOLERANCE_PCT }, select: { value: true } });
+  if (!setting) return DEFAULT_DEVERE_FASON_WASTE_TOLERANCE_PCT;
+  const n = asNumber(setting.value);
+  return n === null || !Number.isFinite(n) || n < 0 || n > DEVERE_FASON_WASTE_TOLERANCE_PCT_MAX ? DEFAULT_DEVERE_FASON_WASTE_TOLERANCE_PCT : n;
+}
+
 /** Z1: levent sarımında dokuma işi bağı zorunlu mu? Default FALSE (serbest levent meşru — bugünkü davranış). HAM değer. */
 export async function readDevereBeamWeavingLinkRequired(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
   const client = tx ?? prisma;
