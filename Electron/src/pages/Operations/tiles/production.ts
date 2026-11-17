@@ -159,6 +159,19 @@ export const productionTiles: OperationsTile[] = [
     offHint: flagOffHint("devereEnabled"),
   },
   {
+    // FASONDAKİ İPLİK (devere D6c): `yarn-at-subcontractor` `requireDevereEnabled` + `requireIplikEnabled` +
+    // `warping-order:read`; karo aynı izin, yüklem Leventler ile AYNI nesne (devere ETKİN değeri iplik zincirini taşır).
+    key: "fasondaki-iplik",
+    title: "Fasondaki İplik",
+    description: "Hangi fasoncuda hangi iplikten kaç kg var (devere, fasonda iplik, devreden, iplik bakiyesi)",
+    icon: Spool,
+    to: "/operations/fasondaki-iplik",
+    group: "production",
+    permission: "warping-order:read",
+    visibleWhen: isWarpBeamsVisible,
+    offHint: flagOffHint("devereEnabled"),
+  },
+  {
     key: "kartela",
     title: "Kartela Takibi",
     description: "Kartela fason sevkleri ve dönen kartelalar",

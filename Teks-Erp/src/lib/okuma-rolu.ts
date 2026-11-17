@@ -41,7 +41,7 @@ export const READ_ONLY_HIDDEN_COLUMNS: Readonly<Record<string, readonly string[]
 export const READ_ONLY_NOT_SECRET_COLUMNS: readonly string[] = [
   "barcode", "barcodeText", "batchNoKey", "cancelClientToken", "cancelReasonCode", "cardTokenLegacy", "chainHash", "clientToken", "code", "codeBefore",
   "collectorKey", "contentHash", "contentKey", "dedupeKey", "defaultPasswordChangedAt", "defaultPasswordIssuedAt", "digest", "digestHour",
-  "entryReasonCode", "errorCode", "exportCode", "factoryDayKey", "finishingRateCode", "fromReasonCode", "fromWarpingOrderId", "groupKey", "holderWarpingOrderId", "inputHash", "installationKeyId",
+  "entryReasonCode", "errorCode", "exportCode", "factoryDayKey", "finishingRateCode", "fromReasonCode", "fromWarpingOrderId", "groupKey", "holderWarpingOrderId", "inputHash", "requestHash", "installationKeyId",
   "key", "keyValue", "lastErrorCode", "mustChangePassword", "ourBatchNoKey", "pairKey", "paramsDigest", "payloadDigest", "pendingKey",
   "permissionCode", "planReasonCode", "procedureCode", "quickPinSetAt", "rateCode", "rawCode", "rawKey", "rawStopCode",
   "reasonCode", "reportKey", "routeKey", "rowKeys", "sampleCode", "scopeKey", "sealGeneration", "sealState", "sealedAt", "sealedById",

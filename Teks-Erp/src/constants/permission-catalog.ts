@@ -115,6 +115,7 @@ export const PERMISSION_CATALOG = [
   { code: "warping-order:read", module: "PRODUCTION", category: "web", description: "Fason devere siparişi listesi/detayı (plan · sevk · deverecideki iplik)" },
   { code: "warping-order:write", module: "PRODUCTION", category: "web", description: "Fason devere siparişi açma/düzenleme ve devereciye iplik sevki" },
   { code: "warping-order:cancel", module: "PRODUCTION", category: "web", description: "Fason devere siparişi ve iplik sevki iptali (ters kayıt; ayrı yetenek)" },
+  { code: "warping-order:settle", module: "PRODUCTION", category: "web", description: "Fason devere siparişi kapanışı (kalan iplik iade / fire / deverecide kalır) ve yeniden açma (ters kayıt; ayrı yetenek)" },
   // ── Dokuma / tezgah koşumu (2026-09-13, P2b) ───────────────────────────────
   // Geri alma AYRI kod: koşum randımanın PAYDASINI taşır, geri almak günlük
   // aç/kapa işinden ayrı bir yetkidir (`shipping:undo-dispatch` emsali).
