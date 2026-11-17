@@ -15,6 +15,8 @@ import { assertNoBareFilterParams, parseQueryParams, readFilterList } from "../u
 import { previewWarpingTransfer, transferWarpingYarn, WARPING_TRANSFER_MAX_LINES } from "../services/warping-order/yarn-transfer";
 import { cancelWarpingTransfer, previewCancelWarpingTransfer } from "../services/warping-order/yarn-transfer-cancel";
 import { cancelWarpingYarnReturn, listWarpingTransfers, listWarpingYarnHoldings, returnWarpingYarn, warpingYarnAtSubcontractors } from "../services/warping-order/yarn-return";
+import { listWarpingDispatches } from "../services/warping-order/dispatches-read";
+import { listWarpingYarnReturns } from "../services/warping-order/returns-read";
 import "../types/express-augment";
 
 const router = Router();
@@ -68,7 +70,7 @@ const AT_FILTERS = ["subcontractorId", "yarnItemId", "status"];
  *       - { in: query, name: "filter[yarnItemId]", schema: { type: string } }
  *       - { in: query, name: "filter[status]", schema: { type: string } }
  *     responses:
- *       200: { description: "{ success, data: [{ subcontractorId, yarnItemId, lotId, lotNo, ownerCustomerId, kg, oldestDispatchedAt, orders[] }] }" }
+ *       200: { description: "{ success, data: [{ subcontractorId, subcontractorCode, subcontractorName, yarnItemId, yarnItemCode, yarnItemName, lotId, lotNo, ownerCustomerId, ownerCustomerName, kg, oldestDispatchedAt, orders[{ warpingOrderId, orderNo, status, kg }] }] }" }
  */
 router.get("/yarn-at-subcontractor", requirePermission("warping-order:read"), requireIplikEnabled, wrap(async (req) => {
   assertNoBareFilterParams(req, AT_FILTERS);
@@ -98,7 +100,24 @@ router.get("/yarn-at-subcontractor", requirePermission("warping-order:read"), re
  *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
  *     responses:
  *       200: { description: "{ success, data: [{ dispatchItemId, own, yarnItemId, lotNo, outKg, returnedKg, transferInKg, transferOutKg, holdingKg }] }" }
+ * /api/warping-orders/{id}/dispatches:
+ *   get:
+ *     tags: [WarpingOrder]
+ *     summary: Siparişin iplik sevkleri — iptal edilmişler DAHİL (status), kalem kalem BRÜT çıkış · net iade · aktarma · dağıtım; iptal edilebilirlik + neden
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: "{ success, data: WarpingDispatchListRow[] }" }
+ *       404: { description: WARPING_ORDER_NOT_FOUND }
  * /api/warping-orders/{id}/yarn-returns:
+ *   get:
+ *     tags: [WarpingOrder]
+ *     summary: Siparişin iplik iadeleri (en yeni önce) — movementId, iplik, lot, kg, sebep, durum, storno edilebilirlik
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: "{ success, data: WarpingYarnReturnRow[] }" }
+ *       404: { description: WARPING_ORDER_NOT_FOUND }
  *   post:
  *     tags: [WarpingOrder]
  *     summary: Kapanış dışında iplik İADESİ (SUBCONTRACT_RETURN) — tavan siparişin tutması; aktarımla gelen kalemde aynı tx'te geri aktarım
@@ -124,6 +143,16 @@ router.get("/yarn-at-subcontractor", requirePermission("warping-order:read"), re
 router.get("/:id/yarn-holdings", requirePermission("warping-order:read"), requireIplikEnabled, wrap(async (req) => {
   const id = parse(Id, req.params.id);
   return { status: 200, body: { success: true, data: await listWarpingYarnHoldings(id) } };
+}));
+
+router.get("/:id/dispatches", requirePermission("warping-order:read"), requireIplikEnabled, wrap(async (req) => {
+  const id = parse(Id, req.params.id);
+  return { status: 200, body: { success: true, data: await listWarpingDispatches(id) } };
+}));
+
+router.get("/:id/yarn-returns", requirePermission("warping-order:read"), requireIplikEnabled, wrap(async (req) => {
+  const id = parse(Id, req.params.id);
+  return { status: 200, body: { success: true, data: await listWarpingYarnReturns(id) } };
 }));
 
 router.post("/:id/yarn-returns", requirePermission("warping-order:write"), requireIplikEnabled, wrap(async (req) => {

@@ -60,11 +60,44 @@ const YARN_ITEM_SELECT = {
   id: true, kind: true, yarnItemId: true, warehouseId: true, lotId: true, dispatchedQty: true,
   dispatch: { select: { id: true, dispatchNo: true, cancelledAt: true, warpingOrderId: true } },
   yarnItem: { select: { code: true, name: true } },
-  yarnMovements: { select: { id: true, kind: true, qtyKg: true, warehouseId: true, lotId: true, reasonCode: true }, orderBy: { createdAt: "asc" as const } },
+  yarnMovements: { select: { id: true, kind: true, qtyKg: true, warehouseId: true, lotId: true, reasonCode: true }, orderBy: [{ createdAt: "asc" as const }, { id: "asc" as const }] },
   warpingYarnTransfers: { select: { kind: true, qtyKg: true, fromWarpingOrderId: true, toWarpingOrderId: true } },
   warpBeamYarnAllocations: { where: LIVE_ALLOCATION, select: { kg: true, holderWarpingOrderId: true } },
 } satisfies Prisma.SubcontractorDispatchItemSelect;
 type YarnItemRow = Prisma.SubcontractorDispatchItemGetPayload<{ select: typeof YARN_ITEM_SELECT }>;
+
+type ReturnLedgerRow = { id: string; kind: YarnMovementKind; qtyKg: Prisma.Decimal; warehouseId: string; lotId: string | null; reasonCode: string | null };
+
+/**
+ * Storno edilmiş dönüş satırları. Storno satırı dönüşe bağ taşımaz; kronolojik sırada (çağıran `createdAt` artan verir)
+ * her storno, aynı grubun (depo · lot · sebep) AYNI kg'lı açık dönüşlerinin EN YENİSİNE eşlenir — eşit kg'lı aynı grup
+ * dönüşleri birbirinin yerine geçer. D6-be: eski grup-net kapısı aynı satırın ikinci stornosunu kabul edip başka bir
+ * dönüşün kg'sını düşürüyordu.
+ */
+export function cancelledYarnReturnIds(movements: ReturnLedgerRow[]): Set<string> {
+  const open = new Map<string, ReturnLedgerRow[]>();
+  const done = new Set<string>();
+  const key = (m: ReturnLedgerRow) => `${m.warehouseId}|${m.lotId ?? ""}|${m.reasonCode ?? ""}`;
+  for (const m of movements) {
+    if (m.kind === YarnMovementKind.SUBCONTRACT_RETURN) open.set(key(m), [...(open.get(key(m)) ?? []), m]);
+    else if (m.kind === YarnMovementKind.SUBCONTRACT_RETURN_CANCEL) {
+      const list = open.get(key(m)) ?? [];
+      for (let i = list.length - 1; i >= 0; i--) {
+        if (D(list[i]!.qtyKg).eq(m.qtyKg)) {
+          done.add(list[i]!.id);
+          list.splice(i, 1);
+          break;
+        }
+      }
+    }
+  }
+  return done;
+}
+
+/** Dönüş satırı storno edilebilir mi — TEK tanım: `cancelYarnReturn` kapısı ve devere iade listesi (`warping-order/returns-read`). */
+export function yarnReturnOpen(movements: ReturnLedgerRow[], ret: ReturnLedgerRow): boolean {
+  return ret.kind === YarnMovementKind.SUBCONTRACT_RETURN && !cancelledYarnReturnIds(movements).has(ret.id);
+}
 
 /** Σ dönüş − Σ dönüş stornosu (kalem geneli). */
 function returnedNet(item: { yarnMovements: Array<{ kind: YarnMovementKind; qtyKg: Prisma.Decimal }> }): Prisma.Decimal {
@@ -229,11 +262,7 @@ export async function cancelYarnReturn(dispatchId: string, input: { dispatchItem
     const item = await loadYarnItem(tx, dispatchId, input.dispatchItemId);
     const ret =item.yarnMovements.find((m) => m.id === input.movementId && m.kind === YarnMovementKind.SUBCONTRACT_RETURN);
     if (!ret) throw AppError.notFound("Bu kalemde böyle bir dönüş satırı yok", { code: "YARN_RETURN_NOT_FOUND" });
-    // Grup net'i (aynı depo · lot · sebep): storno edilmiş dönüş ikinci kez storno edilemez.
-    const groupNet = item.yarnMovements
-      .filter((m) => m.warehouseId === ret.warehouseId && m.lotId === ret.lotId && m.reasonCode === ret.reasonCode)
-      .reduce((acc, m) => (m.kind === YarnMovementKind.SUBCONTRACT_RETURN ? acc.plus(m.qtyKg) : m.kind === YarnMovementKind.SUBCONTRACT_RETURN_CANCEL ? acc.minus(m.qtyKg) : acc), D(0));
-    if (groupNet.lt(ret.qtyKg)) throw AppError.conflict("Bu dönüş zaten iptal edilmiş — iptal edilecek dönüş yok", { code: "YARN_RETURN_NOT_OPEN" });
+    if (!yarnReturnOpen(item.yarnMovements, ret)) throw AppError.conflict("Bu dönüş zaten iptal edilmiş — iptal edilecek dönüş yok", { code: "YARN_RETURN_NOT_OPEN" });
     const { movementId } = await applyYarnMovementTx(tx, {
       itemId: item.yarnItemId!, warehouseId: ret.warehouseId, kind: YarnMovementKind.SUBCONTRACT_RETURN_CANCEL, qtyKg: ret.qtyKg,
       lotId: ret.lotId, reasonCode: ret.reasonCode, dispatchItemId: item.id, userId: userId ?? null, reason,
