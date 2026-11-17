@@ -13,7 +13,7 @@ import { lotQualityOf, YARN_LOT_QUALITY } from "@/pages/Operations/Yarn/yarnLotQ
 import { fmtKg } from "./order-model";
 import type { PickedRef } from "./dispatch-model";
 
-interface Option extends PickedRef {
+export interface Option extends PickedRef {
   hint?: string;
   disabledReason?: string;
   badge?: { label: string; cls: string };
@@ -64,7 +64,7 @@ function OptionRow({ o, selected, onPick }: { o: Option; selected: boolean; onPi
   );
 }
 
-function SourcePicker(p: PickerProps) {
+export function SourcePicker(p: PickerProps) {
   const [open, setOpen] = useState(false);
   const q = useQuery({ queryKey: p.queryKey, queryFn: p.load, enabled: open, staleTime: 15_000 });
   const rows = q.data ?? [];

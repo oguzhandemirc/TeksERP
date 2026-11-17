@@ -50,6 +50,10 @@ vi.mock("./yarn-service", () => ({
   useWarpingDispatches: () => ({ data: [], isSuccess: true, isError: false, refetch: vi.fn() }),
   useWarpingInstruction: () => ({ data: undefined, isLoading: true, isError: false }),
 }));
+vi.mock("./holding-service", () => {
+  const emptyList = () => ({ data: [], isSuccess: true, isError: false });
+  return { warpingHoldingService: {}, useWarpingHoldings: emptyList, useWarpingReturns: emptyList, useWarpingTransfers: emptyList };
+});
 
 import { WarpingOrderPage } from "./WarpingOrderPage";
 import { WarpingOrderFormDialog } from "./WarpingOrderFormDialog";
