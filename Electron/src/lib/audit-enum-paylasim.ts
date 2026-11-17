@@ -105,7 +105,7 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
     "RollErrorOrigin(süreç hatası) ve DeliveryNoteAliasScope(belgedeki işlem metninin eşlemesi) — ortak Türkçe 'Süreç hatası' " +
     "alias kapsamında YANLIŞ; `DELIVERY_NOTE_ALIAS.scope` override'ı ('İşlem') ayırır (alias yazan tek yol D4 onayı). " +
     "CostComponent(proses tarifesi maliyet satırı, SEYİTOĞLU MİG-2a) da paylaşır — standart maliyet satırı audit'e ALAN olarak yazılmaz (sürüm donmuş fotoğraf), override gerekmez",
-  KG: "ItemUnit(kilogram birimi) ve FinishingBasis(kg bazlı terbiye tarifesi, SEYİTOĞLU MİG-2a) — ikisi de 'Kilogram'; ortak Türkçe doğru",
+  KG: "ItemUnit(kilogram birimi), FinishingBasis(kg bazlı terbiye tarifesi, SEYİTOĞLU MİG-2a) ve WarpingFeeUnit(kg başına devere ücreti, D4a) — hepsi 'Kilogram'; ortak Türkçe doğru",
   LENO: "WeaveDesignKind(döner/leno desen) ve WarpLayerRole(döner çözgü katmanı, SEYİTOĞLU MİG-1) — ikisi de 'Döner (leno)'; ortak Türkçe doğru",
   CANCELLED: "on beş durum enum'u — hepsinde 'İptal' (en geniş ortaklık)",
   // ── Alarm sorumluları (A4): alıcının KAYNAĞI ile kuralın ALICI TÜRÜ aynı üç olgudur — ortak Türkçe doğru.

@@ -1945,6 +1945,18 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         step: 1,
         audience: ["Planlamacı", "Yönetim"],
       },
+      {
+        // Fason devere D4: backend `readDevereFasonWasteTolerancePct` (kayıt yok = 0) ve üst sınır 99 ile birebir.
+        key: "devereFasonWasteTolerancePct",
+        title: "Fason devere fire toleransı (%)",
+        desc: "Fason devere siparişi kapanırken fire yüzdesi bu değeri aşarsa uyarı gösterilir; işlem engellenmez. Sipariş açılırken bu değer siparişe yazılır. 0 (varsayılan) = denetim yok.",
+        min: 0,
+        max: 99,
+        fallback: 0,
+        unit: "%",
+        step: 0.5,
+        audience: ["Planlamacı", "Yönetim"],
+      },
     ],
   },
   {

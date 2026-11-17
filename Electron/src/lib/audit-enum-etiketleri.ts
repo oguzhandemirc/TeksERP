@@ -90,6 +90,9 @@ const ENUM_LABELS_ANA: Record<string, string> = {
   TEXT: "Açıklama",
   MT: "Metre",
   KG: "Kilogram",
+  // WarpingFeeUnit (fason devere ücret birimi, D4a) — KG yukarıda ortak
+  METRE: "Metre",
+  ENDS_METRE: "Tel × metre",
   ADET: "Adet",
   // CompanyType / ClientType / DeviceKind
   CUSTOMER: "Müşteri",

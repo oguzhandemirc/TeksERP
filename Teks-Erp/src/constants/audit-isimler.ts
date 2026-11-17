@@ -48,6 +48,7 @@ const SEVK = iyelik("sevk", "i", "e", "i");
 export const AUDIT_ISIMLERI: Readonly<Record<string, TermCases>> = {
   ORDER: SIPARIS,
   PURCHASE_ORDER: onEkli("alış", SIPARIS),
+  WARPING_ORDER: onEkli("fason devere", SIPARIS),
   ROLL: iyelik("top", "u", "a", "u"),
   get WORK_ORDER() { return TERIM.terbiyeIsEmri.cekimKucuk; },
   WEAVING_ORDER: TERIM.dokumaIsEmri.cekimKucuk,

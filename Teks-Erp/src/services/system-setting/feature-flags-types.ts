@@ -214,6 +214,8 @@ export interface FeatureFlags {
   devereBeamWeavingLinkRequired: boolean;
   /** Fason devere D1: çözgü hesabında sabit fire metresi (0 = firesiz formül, bugünkü davranış). */
   devereWarpFixedWasteM: number;
+  /** Fason devere D4: kapama fire toleransı (%); 0 = denetim yok (bugünkü davranış). */
+  devereFasonWasteTolerancePct: number;
   /** Z1: tezgah koşumu dokuma işine bağlı açılmalı (varsayılan KAPALI = stoka dokuma meşru). HAM; etkin `dokuma && bayrak`. */
   dokumaRunWeavingOrderRequired: boolean;
   /** Z1: dokuma işi en az bir sipariş satırına bağlı olmalı (varsayılan KAPALI). HAM; etkin `dokuma && bayrak`. */

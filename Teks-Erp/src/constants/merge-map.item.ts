@@ -54,6 +54,17 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
       why: "İki iplik aynı çözgü kartında ayrı satırsa birleşme tek ipliğe iki tel satırı doğurur — önce kartı düzeltin.",
     },
     {
+      // Fason devere D4a: sipariş plan satırında iplik TEKİL (`[warpingOrderId, yarnItemId]`); kg anlık görüntüsü toplanamaz.
+      kind: "CONFLICT",
+      model: "WarpingOrderYarn",
+      table: "warping_order_yarns",
+      column: "yarnItemId",
+      label: "Fason devere siparişi iplik satırı",
+      uniqueOn: ["warpingOrderId", "yarnItemId"],
+      policy: "BLOCK",
+      why: "İki iplik aynı devere siparişinde ayrı satırsa birleşme tek ipliğe iki plan satırı doğurur — önce siparişi düzeltin.",
+    },
+    {
       // Fason devere D2: levent doğuş kırılımı (defter); olayda iplik TEKİL — iki iplik aynı leventteyse birleşme kırılımı ezerdi.
       kind: "CONFLICT",
       model: "WarpBeamEventYarn",

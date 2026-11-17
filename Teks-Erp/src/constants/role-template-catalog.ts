@@ -151,6 +151,9 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "warpspec:read",
       // Levent planlamanın OKUDUĞU şeydir (hazır levent stoğu); sarım/iptal süpervizörde.
       "warpbeam:read",
+      // Fason devere siparişi: planlama açar ve ipliği sevk eder; iptal (ters kayıt) süpervizörde.
+      "warping-order:read",
+      "warping-order:write",
       // Dokuma işi planlamanın OKUDUĞU şeydir; kapat/iptal kararı süpervizörde.
       // Ekranı henüz yok (yüzey önce, ekran sonra) — sahada bir şey AÇMAZ.
       "weavingorder:read",
@@ -200,6 +203,8 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       // Genel fason F5: emanet levent/ipliği sahibine depo çıkarır (görünürlük kapısı `emanet.enabled`).
       "consignment:read",
       "consignment:write",
+      // Devereciye giden ipliği depo çıkarır; sipariş/sevk yazma planlamada.
+      "warping-order:read",
       // ⚠️ `goods-receipt:*` BİLEREK YOK: Mal Kabul ekranı yalnız izinle kapılı
       // (tek depolu ticaret kurulumu da kullanacağı için multiWarehouse şartı
       // konamaz) → şablona akarsa fabrikada karo BELİRİR. Alım-satım kurulumunda
@@ -441,6 +446,10 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "warpbeam:read",
       "warpbeam:write",
       "warpbeam:cancel",
+      // Fason devere: aç/sevk et + iptal (ters kayıt; ayrı kod, aynı kişide).
+      "warping-order:read",
+      "warping-order:write",
+      "warping-order:cancel",
       // Dokuma işi yazma DAR: kapanış AÇIK BİR KARARDIR (operatör/süpervizör
       // kapatır, türetilmez) ve iptal bir durum geçişidir — planlama okur.
       "weavingorder:read",

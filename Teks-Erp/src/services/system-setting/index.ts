@@ -162,6 +162,7 @@ export {
   readKaliteGuvenceEnabled, readDevereLotRequired, readDevereMountTracking, readDevereMountTrackingRequired, readDevereAutoConsume,
   readDevereBeamWeavingLinkRequired, readDokumaRunWeavingOrderRequired, readDokumaOrderLineLinkRequired, readDokumaRollBirth, readDokumaWeavingWastePct, readDokumaYarnReservationEnabled, DEFAULT_DOKUMA_WEAVING_WASTE_PCT, DOKUMA_WEAVING_WASTE_PCT_MAX,
   readDevereWarpFixedWasteM, DEFAULT_DEVERE_WARP_FIXED_WASTE_M, DEVERE_WARP_FIXED_WASTE_M_MAX,
+  readDevereFasonWasteTolerancePct, DEFAULT_DEVERE_FASON_WASTE_TOLERANCE_PCT, DEVERE_FASON_WASTE_TOLERANCE_PCT_MAX,
   readReportsClosedKeys, readDokumaEnabledRaw, readDokumaEnabled, readMaliyetEnabledRaw, readMaliyetEnabled,
   readGelenBelgeEnabledRaw,
 } from "./modules";
