@@ -337,6 +337,8 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "operations/gelen-belgeler", app: "desktop", modul: "gelenBelgeEnabled", title: "Gelen Belgeler", requires: ["gelen-belge:read"], capabilities: ["gelen-belge:write", "gelen-belge:approve", "gelen-belge:cancel", "gelen-belge:template"] },
   { key: "operations/purchase-orders", app: "desktop", modul: "ticaretEnabled", title: "Alış Siparişleri", requires: ["purchase-order:read", "purchase-order:write"], capabilities: [] },
   { key: "operations/yarn-stock", app: "desktop", modul: "iplikEnabled", title: "İplik Stoğu", requires: ["warehouse:read"], capabilities: ["yarn:write", "quality:write"] },
+  // Fasondaki İplik (devere D6c, 2026-11-18): fasoncu × iplik × lot bakiyesi; salt okuma.
+  { key: "operations/fasondaki-iplik", app: "desktop", modul: "devereEnabled", title: "Fasondaki İplik", requires: ["warping-order:read"], capabilities: [] },
   { key: "operations/stock-counts", app: "desktop", modul: "ticaretEnabled", title: "Stok Sayımı", requires: ["warehouse:read"], capabilities: ["warehouse:write"] },
   { key: "operations/warehouse-transfers", app: "desktop", modul: "depoMultiEnabled", title: "Depo Transferi", requires: ["warehouse:transfer"], capabilities: [] },
   { key: "definitions/warehouses", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "Depolar", requires: ["warehouse:read"], capabilities: ["warehouse:write"] },
@@ -484,6 +486,8 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   { code: "loom:doff", reason: "Panel doff yüzeyi yok; tablet `mobile:dokuma` ile kaydeder — web kodu API/entegrasyon için." },
   { code: "loom:doff-revoke", reason: "Panel geri alma yüzeyi yok; tablet `mobile:dokuma-geri-al` ile — web kodu API/entegrasyon için." },
   // Tezgah künyesi + gölge mod (B3, 2026-09-14): "Devreye Alma" ekranı AYRI dilim (Faz 2 ingest ile, `tezgah.enabled`).
+  // Fason devere D5b (2026-11-18): kapanış / yeniden açma diyaloğu D7 dilimiyle doğar — ekranla ölü muaf olur.
+  { code: "warping-order:settle", reason: "Fason devere kapanış / yeniden açma diyaloğu D7 dilimiyle doğar; bugün yalnız API." },
 ];
 
 /** Katalogda adı geçmeyen izin var mı? (bekçi ve panel bandı kullanır) */

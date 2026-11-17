@@ -20,6 +20,7 @@ import { getWarpingOrder, listWarpingOrders } from "../services/warping-order/re
 import { WARPING_ORDER_MAX_BEAM_LINES, WARPING_ORDER_MAX_EXTRA_SPECS } from "../services/warping-order/plan";
 import warpingOrderYarnRoutes from "./warping-order-yarn.routes";
 import warpingOrderReceiveRoutes from "./warping-order-receive.routes";
+import warpingOrderSettleRoutes from "./warping-order-settle.routes";
 import "../types/express-augment";
 
 const router = Router();
@@ -28,6 +29,8 @@ router.use(verifyToken, requireDevereEnabled);
 router.use("/", warpingOrderYarnRoutes);
 // D5a dönüş kabulü alt router'ı — aynı miras ve `/:id`den önce.
 router.use("/", warpingOrderReceiveRoutes);
+// D5b kapanış / yeniden açma alt router'ı — aynı miras ve `/:id`den önce.
+router.use("/", warpingOrderSettleRoutes);
 
 const wrap = (fn: (req: Request) => Promise<{ status: number; body: unknown }>) => async (req: Request, res: Response, next: NextFunction) => {
   try {
