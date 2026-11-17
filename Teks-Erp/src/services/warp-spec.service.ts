@@ -6,28 +6,42 @@
 // sarılır ve doğuş anında tel/denye değerini KOPYALAR — kart sonradan
 // düzeltilse bile geçmiş leventin kg'ı değişmez.
 //
-// ⚠️ İKİ GİRDİ SUNUCUDA DOĞRULANIR, çünkü ikisi de devere formülünün çarpanıdır
-// (`kg = tel × denye × metre / 9.000.000`):
-//   • `yarnItemId` gerçekten İPLİK mi ve DENYESİ var mı,
-//   • `endsCount` sıfırdan büyük bir tam sayı mı (DB CHECK ikinci hat).
-// Denyesiz bir iplikle kart açılabilseydi levent sarımı ekranında hesap sessizce
-// 0 kg gösterirdi; hata operatöre kart açılırken söylenmeli.
+// Fason devere D3: kart çok iplikli olabilir. Gövde `yarns: [{ yarnItemId, endsCount }]` taşırsa satır kümesi
+// REPLACE edilir ve kolonlar (`yarnItemId` = ilk satırın ipliği, `endsCount` = Σ tel) satırlardan TÜRETİLİR —
+// gövdedeki kolon değerleri yok sayılır. Eski gövde (`yarnItemId` + `endsCount`, satırsız) tek satıra çevrilir;
+// çok iplikli kartta özeti bozan eski gövde 400 (eski panel satırları sessizce silemesin).
 // =============================================================================
-import { ItemType, type Prisma } from "@prisma/client";
+import { AsyncLocalStorage } from "node:async_hooks";
+import type { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { BaseService, type CreateTxContext, type UpdateTxContext } from "./base.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
-import { assertItemUsable } from "./helpers/item-usage.helper";
-import { warpSpecSummaryFromLines } from "./helpers/warp-spec-yarn.helper";
+import { AuditService } from "./audit.service";
+import { warpSpecSummaryFromLines, WARP_SPEC_YARN_DENIER_INCLUDE, type WarpSpecYarnLine } from "./helpers/warp-spec-yarn.helper";
+import {
+  assertWarpYarnItem,
+  normalizeSequenceNote,
+  parseWarpYarnRows,
+  readWarpYarnRows,
+  replaceWarpYarnRowsTx,
+  sameWarpYarnRows,
+} from "./helpers/warp-spec-yarn-write.helper";
 
-/** Fason devere D1: satır yazma yüzeyi henüz KAPALI — çok iplikli kartın özet kolonları bu yoldan değişemez. */
 const MULTI_YARN_LOCKED =
-  "Çok iplikli çözgü kartının ipliği ve teli bu ekrandan değiştirilemez — iplik satırları düzenleme ekranı henüz açık değil.";
+  "Çok iplikli çözgü kartının ipliği ve teli iplik satırlarından düzenlenir — kart formundaki İplikler bölümünü kullanın.";
+
+/** Bu istekte yazılacak satır kümesi; BaseService kancası (aynı tx) buradan okur. Yoksa eski gövde yolu. */
+interface PendingRows {
+  rows: ReadonlyArray<WarpSpecYarnLine>;
+  /** Pasif kart diriltildiyse onun eski kümesi (audit'in "eski" tarafı); yeni doğuşta boş. */
+  before: WarpSpecYarnLine[];
+}
+const pendingRows = new AsyncLocalStorage<PendingRows>();
 
 /**
- * Tek iplikli kartın `WarpSpecYarn` satırını kolonlarla aynı tutar (aynı tx). Çok iplikli kartta kolonlar
- * satırların özetidir; özeti bozan yazım 400 (tx geri alınır). Satır kümesi saf yapılandırma pivotudur (replace).
+ * Eski gövde yolu: tek iplikli kartın satırını kolonlarla aynı tutar (aynı tx). Çok iplikli kartta kolonlar
+ * satırların özetidir; özeti bozan yazım 400 (tx geri alınır).
  */
 async function syncSingleYarnRowTx(tx: Prisma.TransactionClient, warpSpecId: string): Promise<void> {
   const spec = await tx.warpSpec.findUniqueOrThrow({ where: { id: warpSpecId }, select: { yarnItemId: true, endsCount: true } });
@@ -39,10 +53,14 @@ async function syncSingleYarnRowTx(tx: Prisma.TransactionClient, warpSpecId: str
   }
   const r = rows[0];
   if (r && r.yarnItemId === spec.yarnItemId && r.endsCount === spec.endsCount && r.sortOrder === 0) return;
-  await tx.warpSpecYarn.deleteMany({ where: { warpSpecId } });
-  await tx.warpSpecYarn.create({ data: { warpSpecId, yarnItemId: spec.yarnItemId, endsCount: spec.endsCount, sortOrder: 0 } });
+  await replaceWarpYarnRowsTx(tx, warpSpecId, [{ yarnItemId: spec.yarnItemId, endsCount: spec.endsCount, sortOrder: 0 }]);
 }
 
+async function writeRowsOrSyncTx(tx: Prisma.TransactionClient, id: string): Promise<void> {
+  const pending = pendingRows.getStore();
+  if (pending) await replaceWarpYarnRowsTx(tx, id, pending.rows);
+  else await syncSingleYarnRowTx(tx, id);
+}
 
 /** 0 ≤ x < 100; "" / null / gönderilmemiş = bilinmiyor (boş bırakılabilir). */
 function assertPct(v: unknown, message: string): void {
@@ -55,83 +73,102 @@ function assertPct(v: unknown, message: string): void {
   if (!Number.isFinite(n) || n < 0 || n >= 100) throw AppError.badRequest(message);
 }
 
+interface PreparedBody {
+  body: Record<string, unknown>;
+  rows: WarpSpecYarnLine[] | null;
+}
+
 export class WarpSpecService extends BaseService {
   /**
-   * @param partial `update` yolunda alan GÖNDERİLMEMİŞ olabilir (kısmi güncelleme);
-   *   `create`te ikisi de zorunludur.
+   * Gövdeyi hazırlar: `yarns` varsa doğrulanır ve kolonlar satırlardan türetilir; yoksa eski kolon girdisi denetlenir.
+   * @param partial `update` yolunda alan GÖNDERİLMEMİŞ olabilir (kısmi güncelleme); `create`te iplik ve tel zorunlu.
    */
-  private async assertInputs(data: Record<string, unknown>, partial: boolean): Promise<void> {
+  private async prepare(rawData: Record<string, unknown>, partial: boolean): Promise<PreparedBody> {
+    if (!rawData || typeof rawData !== "object" || Array.isArray(rawData)) throw AppError.badRequest("Geçersiz istek gövdesi");
+    const body: Record<string, unknown> = { ...rawData };
+    let rows: WarpSpecYarnLine[] | null = null;
+    if (body.yarns !== undefined) {
+      rows = await parseWarpYarnRows(body.yarns);
+      Object.assign(body, warpSpecSummaryFromLines(rows));
+    }
+    delete body.yarns;
+    const note = normalizeSequenceNote(body.sequenceNote);
+    if (note !== undefined) body.sequenceNote = note;
+
+    // Faz 4 take-up (%): 0 ≤ x < 100 (DB CHECK `warp_specs_take_up_pct_range` ikinci hat); "" / null = bilinmiyor.
+    assertPct(body.takeUpPct, "Take-up yüzdesi 0 ile 100 arasında olmalı (100 hariç).");
+    // SY-C1 kart firesi: maliyet zincirinde YAPI'dan sonra, PARAMETRE'den önce (DB CHECK `warp_specs_waste_pct_range` ikinci hat).
+    assertPct(body.wastePct, "Fire yüzdesi 0 ile 100 arasında olmalı (100 hariç).");
+    if (!rows) await this.assertLegacyColumns(body, partial);
+    return { body, rows };
+  }
+
+  /** Eski gövde: tek iplik + toplam tel. Satırlı gövdede bu alanlar türetildiği için denetim gerekmez. */
+  private async assertLegacyColumns(data: Record<string, unknown>, partial: boolean): Promise<void> {
     const ends = data.endsCount;
     if (ends !== undefined && ends !== null && ends !== "") {
       const n = Number(ends);
-      if (!Number.isInteger(n) || n <= 0) {
-        throw AppError.badRequest("Tel adedi sıfırdan büyük bir tam sayı olmalı.");
-      }
+      if (!Number.isInteger(n) || n <= 0) throw AppError.badRequest("Tel adedi sıfırdan büyük bir tam sayı olmalı.");
     } else if (!partial) {
       throw AppError.badRequest("Tel adedi zorunludur (devere hesabının ilk çarpanı).");
     }
-
-    // Faz 4 take-up (%): 0 ≤ x < 100 (DB CHECK `warp_specs_take_up_pct_range` ikinci hat); "" / null = bilinmiyor.
-    assertPct(data.takeUpPct, "Take-up yüzdesi 0 ile 100 arasında olmalı (100 hariç).");
-    // SY-C1 kart firesi: maliyet zincirinde YAPI'dan sonra, PARAMETRE'den önce (DB CHECK `warp_specs_waste_pct_range` ikinci hat).
-    assertPct(data.wastePct, "Fire yüzdesi 0 ile 100 arasında olmalı (100 hariç).");
-
     const yarnItemId = data.yarnItemId;
-    if (typeof yarnItemId === "string" && yarnItemId.length > 0) {
-      const item = await prisma.item.findUnique({
-        where: { id: yarnItemId },
-        select: { id: true, name: true, itemType: true, linearDensityDen: true },
-      });
-      if (!item) throw AppError.badRequest("Çözgü ipliği bulunamadı.");
-      if (item.itemType !== ItemType.YARN) {
-        throw AppError.badRequest("Çözgü ipliği bir İPLİK kalemi olmalı — kumaş ya da sarf kalemi seçilemez.");
-      }
-      // Çözgü kartı karta yeni TANIM ekler (B) — "Tükenene kadar"/Pasif iplik seçilemez.
-      await assertItemUsable(prisma, item.id, "DEFINITION");
-      if (item.linearDensityDen === null) {
-        throw AppError.badRequest(
-          `"${item.name}" kaleminin denye değeri boş. Devere hesabı (tel × denye × metre ÷ 9.000.000) ` +
-            "denye olmadan yapılamaz — kalem kartından denyeyi girin.",
-        );
-      }
-    } else if (!partial) {
-      throw AppError.badRequest("Çözgü ipliği zorunludur.");
+    if (typeof yarnItemId === "string" && yarnItemId.length > 0) await assertWarpYarnItem(yarnItemId);
+    else if (!partial) throw AppError.badRequest("Çözgü ipliği zorunludur.");
+  }
+
+  /** Yazımdan sonra: dönen kayıt satırlarla TAZE okunur (kanca include'dan sonra koştu); küme değiştiyse audit. */
+  private async finish(res: ApiResponse<unknown>, before: WarpSpecYarnLine[], rows: WarpSpecYarnLine[] | null, userId?: string): Promise<ApiResponse<unknown>> {
+    const id = (res.data as { id?: string } | null)?.id;
+    if (!id) return res;
+    const after = await readWarpYarnRows(id);
+    if (rows && !sameWarpYarnRows(before, after)) {
+      const view = (l: WarpSpecYarnLine[]) => l.map((r) => ({ yarnItemId: r.yarnItemId, endsCount: r.endsCount }));
+      await AuditService.log({ userId, action: "UPDATE", tableName: "WARP_SPEC", recordId: id, oldData: { yarns: view(before) }, newData: { yarns: view(after) } });
     }
+    const fresh = await prisma.warpSpec.findUnique({ where: { id }, include: WARP_SPEC_YARN_DENIER_INCLUDE });
+    return { ...res, data: fresh ?? res.data };
   }
 
   async create(rawData: Record<string, unknown>, userId?: string): Promise<ApiResponse<unknown>> {
-    await this.assertInputs(rawData, false);
-    return super.create(rawData, userId);
+    const { body, rows } = await this.prepare(rawData, false);
+    if (!rows) return this.finish(await super.create(body, userId), [], null, userId);
+    const store: PendingRows = { rows, before: [] };
+    const res = await pendingRows.run(store, () => super.create(body, userId));
+    return this.finish(res, store.before, rows, userId);
   }
 
-  async update(
-    id: string,
-    rawData: Record<string, unknown>,
-    userId?: string,
-  ): Promise<ApiResponse<unknown>> {
-    await this.assertInputs(rawData, true);
-    return super.update(id, rawData, userId);
+  async update(id: string, rawData: Record<string, unknown>, userId?: string): Promise<ApiResponse<unknown>> {
+    const { body, rows } = await this.prepare(rawData, true);
+    if (!rows) return this.finish(await super.update(id, body, userId), [], null, userId);
+    const store: PendingRows = { rows, before: await readWarpYarnRows(id) };
+    const res = await pendingRows.run(store, () => super.update(id, body, userId));
+    return this.finish(res, store.before, rows, userId);
   }
 
   protected override async afterCreateTx(tx: Prisma.TransactionClient, c: CreateTxContext): Promise<void> {
-    await syncSingleYarnRowTx(tx, c.id);
+    await writeRowsOrSyncTx(tx, c.id);
   }
 
   protected override async afterUpdateTx(tx: Prisma.TransactionClient, c: UpdateTxContext): Promise<void> {
-    await syncSingleYarnRowTx(tx, c.id);
+    await writeRowsOrSyncTx(tx, c.id);
   }
 
-  /** Pasif kartın diriltilmesi kanca yolundan geçmez: çok iplikli kartta özet ÖNCE denetlenir, satır SONRA eşitlenir. */
+  /** Pasif kartın diriltilmesi kanca yolundan geçmez: çok iplikli kartta eski gövde özeti ÖNCE denetlenir, satır SONRA yazılır. */
   protected override async reactivate(id: string, data: Record<string, unknown>, userId?: string): Promise<ApiResponse<unknown>> {
-    const rows = await prisma.warpSpecYarn.findMany({ where: { warpSpecId: id }, select: { yarnItemId: true, endsCount: true, sortOrder: true } });
-    if (rows.length > 1) {
-      const s = warpSpecSummaryFromLines(rows);
-      const touchesYarn = data.yarnItemId !== undefined && data.yarnItemId !== s.yarnItemId;
-      const touchesEnds = data.endsCount !== undefined && Number(data.endsCount) !== s.endsCount;
-      if (touchesYarn || touchesEnds) throw AppError.badRequest(MULTI_YARN_LOCKED);
+    const pending = pendingRows.getStore();
+    if (!pending) {
+      const rows = await readWarpYarnRows(id);
+      if (rows.length > 1) {
+        const s = warpSpecSummaryFromLines(rows);
+        const touchesYarn = data.yarnItemId !== undefined && data.yarnItemId !== s.yarnItemId;
+        const touchesEnds = data.endsCount !== undefined && Number(data.endsCount) !== s.endsCount;
+        if (touchesYarn || touchesEnds) throw AppError.badRequest(MULTI_YARN_LOCKED);
+      }
     }
+    else pending.before = await readWarpYarnRows(id);
     const res = await super.reactivate(id, data, userId);
-    await prisma.$transaction((tx) => syncSingleYarnRowTx(tx, id));
+    await prisma.$transaction((tx) => writeRowsOrSyncTx(tx, id));
     return res;
   }
 }

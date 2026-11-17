@@ -8,6 +8,13 @@ export interface WarpSpecYarnItem {
   linearDensityDen: string | number | null;
 }
 
+export interface WarpSpecYarnRow {
+  yarnItemId: string;
+  endsCount: number;
+  sortOrder: number;
+  yarnItem?: WarpSpecYarnItem | null;
+}
+
 export interface WarpSpec {
   id: string;
   code: string;
@@ -25,6 +32,10 @@ export interface WarpSpec {
   takeUpPct: string | number | null;
   /** SY-C1 kart firesi (%) — Decimal (JSON'da sayı); null = maliyet parametre varsayılanını kullanır. */
   wastePct?: string | number | null;
+  /** Fason devere D3: iplik satırları (sortOrder sıralı); kolonlar (yarnItemId/endsCount) bunların özetidir. */
+  yarns?: WarpSpecYarnRow[];
+  /** Dizilim talimatı (≤160) — hesaba girmez. */
+  sequenceNote?: string | null;
   notes: string | null;
   isActive: boolean;
   createdAt: string;

@@ -5,7 +5,7 @@ import { z } from "zod";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { requireDevereEnabled } from "../middlewares/module.middleware";
-import { calculateWarpPlan, WARP_PLAN_MAX_LINES } from "../services/warp-plan.service";
+import { calculateWarpPlan, suggestWarpEnds, WARP_PLAN_MAX_LINES } from "../services/warp-plan.service";
 import "../types/express-augment";
 
 const router = Router();
@@ -47,6 +47,41 @@ const calcSchema = z.strictObject({
 router.post("/calculate", requirePermission("warpspec:read"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     res.json(await calculateWarpPlan(calcSchema.parse(req.body)));
+  } catch (error) {
+    next(error);
+  }
+});
+
+const positive = (label: string, max: number) =>
+  z.number({ message: `${label} sayı olmalı` }).positive(`${label} sıfırdan büyük olmalı`).max(max, `${label} çok büyük`);
+const suggestSchema = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("KG_PER_1000M"), yarnItemId: z.uuid({ message: "İplik kimliği geçersiz" }), kgPer1000m: positive("1000 m kg", 100_000) }),
+  z.strictObject({
+    kind: z.literal("REED"),
+    reedPerCm: positive("Tarak", 1000),
+    widthCm: positive("Tarak eni", 10_000),
+    endsPerDent: z.number({ message: "Dişe tel sayı olmalı" }).int("Dişe tel tam sayı olmalı").positive("Dişe tel sıfırdan büyük olmalı").max(100, "Dişe tel çok büyük").optional(),
+  }),
+], { message: "Öneri türü KG_PER_1000M ya da REED olmalı" });
+
+/**
+ * @openapi
+ * /api/warp-plan/ends-suggest:
+ *   post:
+ *     tags: [WarpSpecs]
+ *     summary: Çözgü kartı tel önerisi (yazmaz)
+ *     description: |
+ *       KG_PER_1000M: "1000 m'ye şu kadar kg" → tel = round(kg × 9000 ÷ denye), yuvarlama farkıyla.
+ *       REED: tarak (cm'deki diş) × tarak eni × dişe tel → toplam tel. Sonuç yalnız öneridir; kartı değiştirmez.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Önerilen tel }
+ *       400: { description: Geçersiz girdi · iplik yok/denyesiz }
+ *       403: { description: Devere modülü kapalı (MODULE_DISABLED) ya da yetki yok }
+ */
+router.post("/ends-suggest", requirePermission("warpspec:read"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json(await suggestWarpEnds(suggestSchema.parse(req.body)));
   } catch (error) {
     next(error);
   }

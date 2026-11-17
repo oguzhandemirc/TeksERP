@@ -8,7 +8,8 @@
 // Modül kapısı: dokuma kapalıyken desen/atkı adaptörleri `/entities` listesinde yok.
 // NEGATİF SONDA (ölçüldü, geri alındı): `weave-design`/`warp-spec` adaptöründe iplik çözümü modül
 // düzeyi önbelleğe alınınca (uygula önizlemeye güvenir) §7a/§7b kırmızı — BEKCI-HARITASI satırı.
-// SY-F3K §1a'': `resolveYarnCode` itemType vermeyince mesaj "kumaş bulunamadı" → ❌ (42/1); geri alındı.
+// Devere D3 §2g–§2k (2026-11-17): `yarnsBody` yalnız ilk çocuğu yazınca §2g/§2h/§2i kırmızı (45/3); geri alındı.
+// SY-F3K §1a'':`resolveYarnCode` itemType vermeyince mesaj "kumaş bulunamadı" → ❌ (42/1); geri alındı.
 // Fikstür `TEST-SYH2-<ts>`; temizlik `finally`de FK sırasıyla; modül bayrakları birebir geri yüklenir.
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
@@ -130,6 +131,24 @@ async function main(): Promise<void> {
   check("§2e güncelleme geri sarıldı (5250)", (await prisma.warpSpec.findUnique({ where: { code: c("WP1") } }))?.endsCount === 5250);
   await revertAll(wApp.runId, [2]);
   check("§2f yaratma geri sarıldı → PASİF (silinmedi)", (await prisma.warpSpec.findUnique({ where: { code: c("WP1") } }))?.isActive === false);
+
+  // Fason devere D3: gruplu şablon — aynı kodlu satırlar tek kart, her satır bir çözgü ipliği (MONO).
+  const mRows = [
+    row(2, { code: c("WM"), name: `${TAG} mono`, sequenceNote: "1 A 1 B", yarnCode: c("Y1"), endsCount: "5250" }),
+    row(3, { code: c("WM"), yarnCode: c("Y2"), endsCount: "5250" }),
+  ];
+  const mApp = await apply("warpSpec", mRows);
+  const wm = await prisma.warpSpec.findUnique({ where: { code: c("WM") }, select: { id: true, yarnItemId: true, endsCount: true, sequenceNote: true, yarns: { select: { yarnItemId: true, endsCount: true }, orderBy: { sortOrder: "asc" } } } });
+  check("§2g gruplu: iki satır tek kart, özet türedi, dizilim yazıldı", mApp.created === 1 && wm?.yarnItemId === y1 && wm.endsCount === 10500 && wm.sequenceNote === "1 A 1 B" && JSON.stringify(wm.yarns) === JSON.stringify([{ yarnItemId: y1, endsCount: 5250 }, { yarnItemId: y2, endsCount: 5250 }]), JSON.stringify(wm));
+  check("§2h aynı gruplu dosya → SKIP", (await ImportService.preview("warpSpec", mRows, {}, { userId: adminId, permissions: ALL })).rows[0]?.action === "SKIP");
+  const mHead = await apply("warpSpec", [row(2, { code: c("WM"), takeUpPct: "5" })]);
+  const wm2 = await prisma.warpSpec.findUnique({ where: { code: c("WM") }, select: { takeUpPct: true, _count: { select: { yarns: true } } } });
+  check("§2i iplik sütunları boş güncelleme iplik listesine dokunmaz", mHead.updated === 1 && Number(wm2?.takeUpPct) === 5 && wm2?._count.yarns === 2, JSON.stringify(wm2));
+  const mDup = await ImportService.preview("warpSpec", [row(2, { code: c("WD"), name: `${TAG} dup`, yarnCode: c("Y1"), endsCount: "10" }), row(3, { code: c("WD"), yarnCode: c("Y1"), endsCount: "20" })], {}, { userId: adminId, permissions: ALL });
+  check("§2j aynı iplik iki satır → ERROR", mDup.rows[0]?.action === "ERROR" && mDup.rows[0].errors.some((e) => e.column === "yarnCode"), JSON.stringify(mDup.rows[0]?.errors));
+  await revertAll(mHead.runId, [2]);
+  await revertAll(mApp.runId, [2]);
+  check("§2k gruplu yaratma geri sarıldı → PASİF", (await prisma.warpSpec.findUnique({ where: { code: c("WM") } }))?.isActive === false);
 
   console.log("§3 atkı kartı (gruplu): sıra kodundan adet + geri al");
   const fRows = [

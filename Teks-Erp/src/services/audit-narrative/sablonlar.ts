@@ -185,6 +185,8 @@ const OLAY_SABLONLARI: Record<string, Sablon> = {
   "CONSUMABLE_MOVEMENT:CREATE": olusturdu,
   // Kurşun istasyonu gramaj düğmeleri + gram fiyatı (OIE 2026-11): kayıt istasyondur
   "STATION_KURSUN:UPDATE": duzenledi,
+  // Fason devere D3: çözgü kartının iplik satır kümesi değişti (yük {yarns eski/yeni})
+  "WARP_SPEC:UPDATE": duzenledi,
   // K16 "Yine de al": iş atandığı makineden başka kurşun makinesinde alındı (iz; atama değişmez)
   "WORK_ORDER_STEP:KURSUN_FOREIGN_MACHINE_TAKE": olay("belirtme", "atandığı kurşun makinesi dışında aldı"),
 };
