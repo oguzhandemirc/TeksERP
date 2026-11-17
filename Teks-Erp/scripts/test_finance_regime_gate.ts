@@ -310,6 +310,13 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
       "Router fatura tablosuna ne yazar ne okur; kapı konulamaz (devere fasonu ön muhasebe olmadan meşrudur).",
   },
   {
+    dosya: "routes/warping-order-yarn.routes.ts",
+    neden:
+      "FASON DEVERE İADE/AKTARMA alt router'ı (D4b-2, 2026-11-18; `warping-order.routes.ts` içine mount). Finans dokunuşu " +
+      "GEÇİŞLİDİR: aktarma kapıları `warping-order/dispatch` (lot kuralı/tek sahip yüklemleri) üzerinden `subcontractor/shared`a " +
+      "uzanır, o da `receipt-cancel`i yalnız TİP için import eder. Router fatura tablosuna ne yazar ne okur.",
+  },
+  {
     dosya: "routes/workorder.routes.ts",
     neden:
       "FASON KABUL İPTALİ (çekirdek, F6 inceleme 2026-11-08). Finans dokunuşu SALT-OKUMADIR: kabul iptali ve önizlemesi " +

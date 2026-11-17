@@ -24,7 +24,9 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import type { ApiResponse } from "../types/api.types";
 import { AuditService } from "./audit.service";
-import { applyYarnMovementTx } from "./yarn.service";import { assertItemUsableTx } from "./helpers/item-usage.helper";
+import { applyYarnMovementTx } from "./yarn.service";
+import { assertItemUsableTx } from "./helpers/item-usage.helper";
+import { lockDispatchItemsTx, netTransfersByOrder } from "./helpers/warping-yarn-open.helper";
 
 
 type Tx = Prisma.TransactionClient;
@@ -56,9 +58,10 @@ export interface YarnDispatchLine {
 /** Kalem + defteri — iptal/dönüş "bu kalemin çıkışı / açık dönüşü" sorusunu buradan cevaplar. */
 const YARN_ITEM_SELECT = {
   id: true, kind: true, yarnItemId: true, warehouseId: true, lotId: true, dispatchedQty: true,
-  dispatch: { select: { id: true, dispatchNo: true, cancelledAt: true } },
+  dispatch: { select: { id: true, dispatchNo: true, cancelledAt: true, warpingOrderId: true } },
   yarnItem: { select: { code: true, name: true } },
   yarnMovements: { select: { id: true, kind: true, qtyKg: true, warehouseId: true, lotId: true, reasonCode: true }, orderBy: { createdAt: "asc" as const } },
+  warpingYarnTransfers: { select: { kind: true, qtyKg: true, fromWarpingOrderId: true, toWarpingOrderId: true } },
 } satisfies Prisma.SubcontractorDispatchItemSelect;
 type YarnItemRow = Prisma.SubcontractorDispatchItemGetPayload<{ select: typeof YARN_ITEM_SELECT }>;
 
@@ -170,22 +173,35 @@ export interface YarnReturnDto {
 }
 
 /** Fasondan DÖNÜŞ — SUBCONTRACT_RETURN (+kg). Kısmi; Σ net dönüş çıkışı aşamaz (400 `YARN_RETURN_EXCEEDS`). */
-export async function returnYarn(dispatchId: string, input: ReturnYarnInput, userId?: string): Promise<ApiResponse<YarnReturnDto>> {
+/**
+ * Dönüşün tx gövdesi (devere iade sarmalayıcısı da çağırır). Kalem satırı `FOR UPDATE` — iki eşzamanlı dönüş tavanı
+ * birlikte aşamaz. Tavan = çıkış − net dönüş ± kalemin KENDİ siparişinin net devere aktarımı (D4b-2; başka siparişe
+ * aktarılmış iplik buradan dönemez, o siparişin iade ucundan döner).
+ */
+export async function returnYarnTx(tx: Tx, dispatchId: string, input: ReturnYarnInput, userId?: string | null) {
   const qty = kg(input.qtyKg, "Dönen kg");
-  const result = await prisma.$transaction(async (tx) => {
-    const item = await loadYarnItem(tx, dispatchId, input.dispatchItemId);
-    const out = shipOutOf(item);
-    const already = returnedNet(item);
-    if (already.plus(qty).gt(out.qtyKg)) {
-      throw AppError.badRequest(`Dönen kg gideni aşamaz (giden ${Number(out.qtyKg)} kg, dönmüş ${Number(already)} kg)`, { code: "YARN_RETURN_EXCEEDS", shippedKg: Number(out.qtyKg), returnedKg: Number(already) });
-    }
-    const reasonCode = await assertReturnReasonTx(tx, input.reasonCode);
-    const { movementId } = await applyYarnMovementTx(tx, {
-      itemId: item.yarnItemId!, warehouseId: input.warehouseId ?? out.warehouseId, kind: YarnMovementKind.SUBCONTRACT_RETURN, qtyKg: qty,
-      lotId: input.lotId === undefined ? out.lotId : input.lotId, reasonCode, dispatchItemId: item.id, userId: userId ?? null,
+  await lockDispatchItemsTx(tx, [input.dispatchItemId]);
+  const item = await loadYarnItem(tx, dispatchId, input.dispatchItemId);
+  const out = shipOutOf(item);
+  const already = returnedNet(item);
+  const own = item.dispatch.warpingOrderId;
+  const ownTransferNet = own ? (netTransfersByOrder(item.warpingYarnTransfers).get(own) ?? D(0)) : D(0);
+  if (already.plus(qty).gt(out.qtyKg.plus(ownTransferNet))) {
+    throw AppError.badRequest(`Dönen kg gideni aşamaz (giden ${Number(out.qtyKg)} kg, dönmüş ${Number(already)} kg${ownTransferNet.isZero() ? "" : `, başka siparişe net aktarılan ${Number(ownTransferNet.neg())} kg`})`, {
+      code: "YARN_RETURN_EXCEEDS", shippedKg: Number(out.qtyKg), returnedKg: Number(already), transferredKg: Number(ownTransferNet.neg()),
     });
-    return { movementId, item, remainingKg: out.qtyKg.minus(already).minus(qty) };
+  }
+  const reasonCode = await assertReturnReasonTx(tx, input.reasonCode);
+  const { movementId } = await applyYarnMovementTx(tx, {
+    itemId: item.yarnItemId!, warehouseId: input.warehouseId ?? out.warehouseId, kind: YarnMovementKind.SUBCONTRACT_RETURN, qtyKg: qty,
+    lotId: input.lotId === undefined ? out.lotId : input.lotId, reasonCode, dispatchItemId: item.id, userId: userId ?? null,
   });
+  return { movementId, item, qty, remainingKg: out.qtyKg.minus(already).minus(qty) };
+}
+
+export async function returnYarn(dispatchId: string, input: ReturnYarnInput, userId?: string): Promise<ApiResponse<YarnReturnDto>> {
+  const result = await prisma.$transaction((tx) => returnYarnTx(tx, dispatchId, input, userId));
+  const qty = result.qty;
   const itemCode = result.item.yarnItem?.code ?? "";
   await AuditService.log({ userId, action: "UPDATE", tableName: "SUBCONTRACTOR_DISPATCH", recordId: dispatchId, newData: { yarnReturned: itemCode, dispatchItemId: input.dispatchItemId, qtyKg: Number(qty), reasonCode: input.reasonCode, movementId: result.movementId } });
   return {
@@ -200,8 +216,9 @@ export async function cancelYarnReturn(dispatchId: string, input: { dispatchItem
   const reason = input.reason.trim();
   if (reason.length < 3) throw AppError.badRequest("İptal sebebi en az 3 karakter olmalı");
   const result = await prisma.$transaction(async (tx) => {
+    await lockDispatchItemsTx(tx, [input.dispatchItemId]); // çift storno yarışı kalem satırında sıraya girer
     const item = await loadYarnItem(tx, dispatchId, input.dispatchItemId);
-    const ret = item.yarnMovements.find((m) => m.id === input.movementId && m.kind === YarnMovementKind.SUBCONTRACT_RETURN);
+    const ret =item.yarnMovements.find((m) => m.id === input.movementId && m.kind === YarnMovementKind.SUBCONTRACT_RETURN);
     if (!ret) throw AppError.notFound("Bu kalemde böyle bir dönüş satırı yok", { code: "YARN_RETURN_NOT_FOUND" });
     // Grup net'i (aynı depo · lot · sebep): storno edilmiş dönüş ikinci kez storno edilemez.
     const groupNet = item.yarnMovements

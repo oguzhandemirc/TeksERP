@@ -6,7 +6,8 @@
 // `null` ("bilinmiyor", 0 değil). Deverecide duran iplik yalnız fason devere başlıklarından sayılır (§4.6); o başlık
 // D4'te doğar, bu yüzden devereci seçiliyken bugün 0 döner (hesap doğru, kol hazır).
 // =============================================================================
-import { ItemType, Prisma } from "@prisma/client";
+import { ItemType, Prisma, WarpingOrderStatus } from "@prisma/client";
+import { carryOverByYarn, loadWarpingYarnHoldings } from "./helpers/warping-yarn-open.helper";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import type { ApiResponse } from "../types/api.types";
@@ -110,11 +111,15 @@ export async function calculateWarpPlan(input: WarpPlanCalcInput): Promise<ApiRe
   }
   const fixedWasteM = input.fixedWasteM ?? (await readDevereWarpFixedWasteM());
   const stockRead = await readYarnStock(ids, { excludeHeld: true });
+  // D4b-2: "deverecide" = seçili deverecideki KAPANMIŞ siparişlerden kalan fabrika malı iplik (devreden bakiye; emanet hariç).
+  const carry = input.subcontractorId
+    ? carryOverByYarn(await loadWarpingYarnHoldings(prisma, { subcontractorIds: [input.subcontractorId], yarnItemIds: ids, statuses: [WarpingOrderStatus.COMPLETED] }), null)
+    : new Map<string, Prisma.Decimal>();
   const stock = new Map<string, WarpPlanStock>();
   for (const id of ids) {
     stock.set(id, {
       depoKg: stockRead ? (stockRead.byItem.get(id)?.serbestKg ?? new Prisma.Decimal(0)) : null,
-      fasondaKg: input.subcontractorId ? new Prisma.Decimal(0) : null,
+      fasondaKg: input.subcontractorId ? (carry.get(id) ?? new Prisma.Decimal(0)) : null,
     });
   }
   const common = {

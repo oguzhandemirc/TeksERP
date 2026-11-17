@@ -2094,6 +2094,9 @@ model WarpingOrder {
   salesOrders   WarpingOrderToOrder[]
   /// D4b: iplik sevk belgeleri (başlık üçüncü kolu `SubcontractorDispatch.warpingOrderId`).
   dispatches    SubcontractorDispatch[] @relation("DispatchWarpingOrder")
+  /// D4b-2: siparişler arası iplik aktarma defteri (kaynak / hedef).
+  yarnTransfersOut WarpingYarnTransfer[] @relation("WarpingYarnTransferFrom")
+  yarnTransfersIn  WarpingYarnTransfer[] @relation("WarpingYarnTransferTo")
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -2103,6 +2106,42 @@ model WarpingOrder {
   @@index([status, createdAt])
   @@index([createdAt])
   @@map("warping_orders")
+}
+
+/// FASON DEVERE D4b-2 — deverecideki ipliğin siparişler arası AKTARMA defteri (append-only, `updatedAt` YOK).
+/// Stok hareketi değildir (iplik deverecide kalır); kalemin hangi siparişe "tutulduğunu" değiştirir.
+/// Tutma: holding(kalem, sipariş) = [kendi siparişi ise çıkış − iade − sarılan] + Σ net gelen − Σ net giden.
+/// Ters yol: TRANSFER_CANCEL satırı orijinaline `reversesId` (tek ters, çift storno DB'de imkânsız).
+model WarpingYarnTransfer {
+  id                 String   @id @default(uuid()) @db.Uuid
+  dispatchItemId     String   @db.Uuid
+  fromWarpingOrderId String   @db.Uuid
+  toWarpingOrderId   String   @db.Uuid
+  /// 'TRANSFER' | 'TRANSFER_CANCEL' (VarChar + CHECK).
+  kind               String   @db.VarChar(20)
+  /// CHECK > 0.
+  qtyKg              Decimal  @db.Decimal(14, 3)
+  /// TRANSFER_CANCEL → orijinal TRANSFER satırı (CHECK kind='TRANSFER' ⇔ NULL).
+  reversesId         String?  @unique @db.Uuid
+  /// Bir istekte yazılan satırlar (aktarma/storno birimi).
+  batchId            String   @db.Uuid
+  /// İdempotency — yalnız istemin ilk satırında.
+  clientToken        String?  @unique @db.Uuid
+  note               String?  @db.VarChar(300)
+  createdById        String?  @db.Uuid
+  createdAt          DateTime @default(now()) @db.Timestamptz
+
+  dispatchItem     SubcontractorDispatchItem @relation("WarpingYarnTransferItem", fields: [dispatchItemId], references: [id], onDelete: Restrict)
+  fromWarpingOrder WarpingOrder              @relation("WarpingYarnTransferFrom", fields: [fromWarpingOrderId], references: [id], onDelete: Restrict)
+  toWarpingOrder   WarpingOrder              @relation("WarpingYarnTransferTo", fields: [toWarpingOrderId], references: [id], onDelete: Restrict)
+  reverses         WarpingYarnTransfer?      @relation("WarpingYarnTransferReversal", fields: [reversesId], references: [id], onDelete: Restrict)
+  reversal         WarpingYarnTransfer?      @relation("WarpingYarnTransferReversal")
+
+  @@index([dispatchItemId, createdAt])
+  @@index([fromWarpingOrderId, createdAt])
+  @@index([toWarpingOrderId, createdAt])
+  @@index([batchId])
+  @@map("warping_yarn_transfers")
 }
 
 /// Sipariş hedef satırı (K6): `beamCount` adet × `beamLengthM` boy. ③b pivot — sipariş OPEN iken replace.
@@ -7979,6 +8018,8 @@ model SubcontractorDispatchItem {
   lot            YarnLot?                   @relation("DispatchItemYarnLot", fields: [lotId], references: [id], onDelete: Restrict)
   /// İplik kaleminin defteri — `SUBCONTRACT_*` satırları (CHECK `yarn_movements_fason_link_ck` iki yönlü).
   yarnMovements  YarnMovement[]             @relation("YarnMovementDispatchItem")
+  /// Fason devere D4b-2: kalemin siparişler arası aktarma defteri.
+  warpingYarnTransfers WarpingYarnTransfer[] @relation("WarpingYarnTransferItem")
 
   /// Sevk kalemi defteri → `updatedAt` YOK (konvansiyon). Güncellemeler DURUM
   /// bayrağı (`remainderClosedAt`; defteri `RollVariance`) ya da parti

@@ -273,6 +273,11 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     [{ dosya: "src/services/yarn.service.ts", sembol: "applyYarnMovementTx" }],
     ["src/services/yarn.service.ts"]),
 
+  D("WarpingYarnTransfer", "fason devere D4b-2: deverecideki ipliğin siparişler arası AKTARMA defteri — stok hareketi değil, kalemin hangi siparişçe tutulduğunu değiştirir (satır silinirse siparişin tuttuğu kg, öneri ve devreden bakiye değişir); ileri TRANSFER (elle aktarma + iade için geri aktarım) ↔ TRANSFER_CANCEL (`reversesId`, tek ters, çift storno DB'de imkânsız)",
+    { tur: "TERS_BAG", kolon: "reversesId" },
+    [{ dosya: "src/services/warping-order/yarn-transfer-cancel.ts", sembol: "cancelWarpingTransfer" }],
+    ["src/services/warping-order/yarn-transfer.ts", "src/services/warping-order/yarn-return.ts", "src/services/warping-order/yarn-transfer-cancel.ts"]),
+
   D("WarpBeamEvent", "levent olay defteri (devere 1b + fason F1 + Faz 3 tezgah bağı) — WOUND doğuş gerçekleri değişmez; ters yol tipli çiftler, orijinaline `reversesEventId` (tek ters, çift iptal DB'de imkânsız): WOUND↔WOUND_CANCEL (CANCELLED terminal, PLANNED'a dönmez) · SHIP_OUT↔SHIP_OUT_CANCEL (sevk iptali) · RETURNED_IN↔RETURNED_IN_CANCEL (fason dönüşü stornosu) · Faz 3: MOUNTED/DISMOUNTED/EXHAUSTED/SCRAPPED ↔ *_CANCEL (LIFO — yalnız en yeni aktif durum olayı) · CONSUMED↔CONSUMED_CANCEL (LIFO dışı; Faz 4 `rollId`li satır top iptalinde `cancelConsumedForRollTx`, SCRAP'ta dokunulmaz) · ADJUST_IN/ADJUST_OUT karşı düzeltmeyle kapanır (ters bağ yok, sebep zorunlu); fason satırları sevk kalemine bağlı (`dispatchItemId`, CHECK iki yönlü) · genel fason F5: SHIP_TO_OWNER↔SHIP_TO_OWNER_CANCEL (emanet çıkış belgesi iptali; `consignmentItemId`, CHECK iki yönlü)",
     { tur: "TERS_BAG", kolon: "reversesEventId" },
     [
