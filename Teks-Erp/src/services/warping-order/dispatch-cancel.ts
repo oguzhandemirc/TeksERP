@@ -10,11 +10,13 @@ import { AppError } from "../../utils/app-error";
 import { AuditService } from "../audit.service";
 import { cancelYarnItemsTx, countReturnedYarnItems } from "../subcontractor-yarn.service";
 import { assertWarpingBound } from "../helpers/dispatch-header.helper";
-import { loadWarpingYarnItems } from "../helpers/warping-yarn-open.helper";
+import { loadWarpingYarnItems, type WarpingYarnItem } from "../helpers/warping-yarn-open.helper";
 import { WARPING_ORDER_TABLE } from "./create";
 
 type Tx = Prisma.TransactionClient;
 const kg = (v: Prisma.Decimal) => v.toFixed(3);
+const isTransferred = (i: WarpingYarnItem) => i.transferOutKg.gt(0) || i.transferInKg.gt(0);
+const TRANSFERRED_MSG = "Bu sevkin ipliği başka siparişe aktarılmış — önce aktarmayı iptal edin (LIFO).";
 
 export interface WarpingDispatchCancelPreview {
   dispatch: { id: string; dispatchNo: string; cancelledAt: string | null };
@@ -39,7 +41,9 @@ export async function previewCancelWarpingDispatch(id: string, dispatchId: strin
   const items = await loadWarpingYarnItems(prisma, { dispatchId });
   const returned = items.filter((i) => i.returnedKg.gt(0));
   const others = await prisma.subcontractorDispatch.count({ where: { warpingOrderId: id, cancelledAt: null, id: { not: dispatchId } } });
-  const blockedReason = d.cancelledAt ? "Sevk zaten iptal edilmiş." : returned.length > 0 ? "Bu sevkten iade alınmış — önce iadeleri iptal edin (LIFO)." : null;
+  const blockedReason = d.cancelledAt ? "Sevk zaten iptal edilmiş."
+    : returned.length > 0 ? "Bu sevkten iade alınmış — önce iadeleri iptal edin (LIFO)."
+    : items.some(isTransferred) ? TRANSFERRED_MSG : null;
   return {
     dispatch: { id: d.id, dispatchNo: d.dispatchNo, cancelledAt: d.cancelledAt?.toISOString() ?? null },
     canCancel: blockedReason === null,
@@ -61,6 +65,10 @@ export async function cancelWarpingDispatch(id: string, dispatchId: string, reas
       throw AppError.conflict(`${fresh.orderNo} durumu ${fresh.status} — sevk iptal edilemez.`, { code: "WARPING_ORDER_NOT_CANCELLABLE", status: fresh.status });
     }
     const d = await loadOwnDispatch(tx, id, dispatchId);
+    // D4b-2 LIFO: kalemi başka siparişe aktarılmış (net) sevk düşerse hedefin tuttuğu iplik havada kalır.
+    if ((await loadWarpingYarnItems(tx, { dispatchId: d.id })).some(isTransferred)) {
+      throw AppError.conflict(TRANSFERRED_MSG, { code: "YARN_ITEM_TRANSFERRED" });
+    }
     if ((await countReturnedYarnItems(tx, d.id)) > 0) {
       throw AppError.conflict("Bu sevkten iade alınmış — sevk iptal edilemez, önce iadeleri iptal edin (LIFO).", { code: "YARN_ITEM_RETURNED" });
     }
