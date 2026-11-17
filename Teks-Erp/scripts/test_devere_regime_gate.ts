@@ -36,6 +36,8 @@
 //   ④ `readDevereEnabled`in `asBoolean` varsayılanı `true`ya çevrildi → §5 kırmızı.
 //   ⑤ (2026-09-15, Faz 3 E2) `warp-beam.routes.ts`ten `router.use("/", warpBeamMountRoutes)` düşürüldü
 //      → §6c kırmızı (alt yönlendirici beyanı ÖLÇÜLÜR: ana kapılı VE alt takılı değilse KAPISIZ).
+//   ⑥ (2026-11-17, devere D1) `warp-plan.routes.ts`ten `requireDevereEnabled` adı silindi
+//      → §6c kırmızı (KAPISIZ: warp-plan.routes.ts); hesap ucu `warp-plan.service` ile yüzeyde ölçülür.
 // =============================================================================
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -153,7 +155,7 @@ async function main(): Promise<void> {
   check("§6a Körlük zemini: router dizini tarandı", routerlar.length >= 40, `n=${routerlar.length}`);
 
   /** Devere-ÖZEL Prisma model erişimcileri (Faz 1b'de `warpBeam`/`warpBeamEvent` eklenir). */
-  const DEVERE_MODELLERI = ["warpSpec", "warpBeam", "warpBeamEvent"];
+  const DEVERE_MODELLERI = ["warpSpec", "warpSpecYarn", "warpBeam", "warpBeamEvent"];
   const dokunanlar: string[] = [];
   const kapisizlar: string[] = [];
   /**
@@ -172,7 +174,7 @@ async function main(): Promise<void> {
     const metin = yorumlariSok(fs.readFileSync(path.join(routerDizin, f), "utf8"));
     const dokunuyor =
       DEVERE_MODELLERI.some((m) => new RegExp(`\\b(prisma|tx)\\.${m}\\b`).test(metin)) ||
-      /WarpSpecService|warpSpecService|warp-beam(-wind|-mount|-consume)?\.service/.test(metin);
+      /WarpSpecService|warpSpecService|warp-beam(-wind|-mount|-consume)?\.service|warp-plan\.service/.test(metin);
     if (!dokunuyor) continue;
     dokunanlar.push(f);
     const kapili = metin.includes(KAPI) || (ALT_YONLENDIRICI[f] !== undefined && anaKapiliVeTakili(f, ALT_YONLENDIRICI[f]));

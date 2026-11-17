@@ -146,6 +146,7 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "devereMountTracking",
       "devereMountTrackingRequired",
       "devereAutoConsume",
+      "devereWarpFixedWasteM",
       "devereBeamWeavingLinkRequired",
     ],
   },

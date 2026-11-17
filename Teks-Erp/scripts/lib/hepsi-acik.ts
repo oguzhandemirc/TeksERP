@@ -151,6 +151,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   devereMountTracking: A(true),
   devereMountTrackingRequired: A(true),
   devereAutoConsume: A(true),
+  devereWarpFixedWasteM: A(20), // sabit fireyi devreye sokan değer: çözgü hesabının fireli önerisi büyür
   devereBeamWeavingLinkRequired: A(true),
   dokumaRunWeavingOrderRequired: A(true),
   dokumaOrderLineLinkRequired: A(true),

@@ -39,7 +39,7 @@ import { effectiveIncomingDocsEnabled } from "./incoming-docs";
 import { SETTING_KEYS } from "./keys";
 import { readKursunMeterCapture } from "./kursun-batch";
 import { LABEL_COPIES_MAX, readNotificationInboxEnabled, type DefaultLabelMedia } from "./labels";
-import { DEFAULT_DOKUMA_WEAVING_WASTE_PCT, DOKUMA_WEAVING_WASTE_PCT_MAX, readDepoMultiEnabledRaw, readDevereEnabledRaw, readDokumaEnabledRaw, readEmanetEnabledRaw, readGelenBelgeEnabledRaw, readIplikEnabledRaw, readKaliteGuvenceEnabledRaw, readKumasTeknikEnabledRaw, readMaliyetEnabledRaw, readProductionEnabledRaw, readTezgahEnabledRaw, readTicaretEnabledRaw } from "./modules";
+import { DEFAULT_DEVERE_WARP_FIXED_WASTE_M, DEVERE_WARP_FIXED_WASTE_M_MAX, DEFAULT_DOKUMA_WEAVING_WASTE_PCT, DOKUMA_WEAVING_WASTE_PCT_MAX, readDepoMultiEnabledRaw, readDevereEnabledRaw, readDokumaEnabledRaw, readEmanetEnabledRaw, readGelenBelgeEnabledRaw, readIplikEnabledRaw, readKaliteGuvenceEnabledRaw, readKumasTeknikEnabledRaw, readMaliyetEnabledRaw, readProductionEnabledRaw, readTezgahEnabledRaw, readTicaretEnabledRaw } from "./modules";
 import { readTezgahAlarmEnabled, readTezgahAlarmNoShiftMode, readTezgahAlarmUnclassifiedTargetMinutes } from "./packing-loom";
 import { readPartyCodeAuto } from "./production";
 import { readItemPhaseOutNewOrder, readShippingOrderRequirement, readShippingReadyNotifyUnits, resetReadyBaselineOnIncomingDocOpen } from "./shipping";
@@ -219,7 +219,7 @@ export async function setFeatureFlags(
     // 400'e düşürür ya da API sözleşmesine olmayan bir null sokar.
     input: Omit<
       Partial<FeatureFlags>,
-      "fasonShrinkTolerancePct" | "dokumaWeavingWastePct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "shippingReadyTolerancePct" | "tamburPlanGateWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "financeWithholdingNumerator" | "financeWithholdingDenominator" | "financePurchaseWithholdingNumerator" | "financePurchaseWithholdingDenominator" | "shippingSackSeqStart" | "tezgahEscalationGraceMinutes" | "tezgahAlarmRenotifyMinutes" | "tezgahMaxOpenStopHours" | "tezgahCollectorSilenceMinutes" | "license"
+      "fasonShrinkTolerancePct" | "dokumaWeavingWastePct" | "devereWarpFixedWasteM" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "shippingReadyTolerancePct" | "tamburPlanGateWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "financeWithholdingNumerator" | "financeWithholdingDenominator" | "financePurchaseWithholdingNumerator" | "financePurchaseWithholdingDenominator" | "shippingSackSeqStart" | "tezgahEscalationGraceMinutes" | "tezgahAlarmRenotifyMinutes" | "tezgahMaxOpenStopHours" | "tezgahCollectorSilenceMinutes" | "license"
     > & {
       /** null = fabrika varsayılanına dön (1). */
       shippingSackSeqStart?: number | null;
@@ -227,6 +227,8 @@ export async function setFeatureFlags(
       tezgahEscalationGraceMinutes?: number | null;
       /** null = fabrika varsayılanına dön (%0). */
       dokumaWeavingWastePct?: number | null;
+      /** null = fabrika varsayılanına dön (0 m). */
+      devereWarpFixedWasteM?: number | null;
       /** null = varsayılana dön (10 dk). */
       tezgahAlarmRenotifyMinutes?: number | null;
       /** null = varsayılana dön (12 sa). */
@@ -1663,6 +1665,14 @@ export async function setFeatureFlags(
         throw AppError.badRequest(`Dokuma firesi 0 ile ${DOKUMA_WEAVING_WASTE_PCT_MAX} arasında olmalı (yüzde)`);
       }
       await this.set(SETTING_KEYS.DOKUMA_WEAVING_WASTE_PCT, v === null ? DEFAULT_DOKUMA_WEAVING_WASTE_PCT : v, "Dokuma firesi (%) — üretim önerisi ve iplik ihtiyacında ham metre = … ÷ (1 − fire)", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "devereWarpFixedWasteM")) {
+      const v = input.devereWarpFixedWasteM;
+      // `null` = alan temizlendi → varsayılan 0 (firesiz formül = bugünkü davranış).
+      if (v !== null && (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > DEVERE_WARP_FIXED_WASTE_M_MAX)) {
+        throw AppError.badRequest(`Sabit çözgü firesi 0 ile ${DEVERE_WARP_FIXED_WASTE_M_MAX} metre arasında olmalı`);
+      }
+      await this.set(SETTING_KEYS.DEVERE_WARP_FIXED_WASTE_M, v === null ? DEFAULT_DEVERE_WARP_FIXED_WASTE_M : v, "Devere: çözgü hesabında sipariş başına sabit fire metresi", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "tezgahEscalationGraceMinutes")) {
       const v = input.tezgahEscalationGraceMinutes;

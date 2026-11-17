@@ -101,6 +101,14 @@ export function warpYarnKgExact(endsCount: number, denier: Prisma.Decimal.Value,
   return new Prisma.Decimal(endsCount).mul(denier).mul(lengthM).div(9_000_000);
 }
 
+/**
+ * Ters yön ikizi: verilen kg bu tel × denyeyle kaç metre çözgü sarar = kg × 9.000.000 / (tel × denye), yuvarlamasız.
+ * Formül sabiti bu dosyada kalsın diye ayrı fonksiyon (fason devere D1 `warp-plan.helper`).
+ */
+export function warpLengthFromKgExact(endsCount: number, denier: Prisma.Decimal.Value, kg: Prisma.Decimal.Value): Prisma.Decimal {
+  return new Prisma.Decimal(kg).mul(9_000_000).div(new Prisma.Decimal(endsCount).mul(denier));
+}
+
 /** Nominal (teorik) kg — Decimal 3 hane, panel ön hesabı aynı formülün aynasıdır. Formül `warpYarnKgExact`te. */
 export function warpTheoreticalKg(endsCount: number, denier: Prisma.Decimal.Value, lengthM: Prisma.Decimal.Value): Prisma.Decimal {
   return warpYarnKgExact(endsCount, denier, lengthM).toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP);

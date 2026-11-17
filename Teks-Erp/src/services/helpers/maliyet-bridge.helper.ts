@@ -107,13 +107,20 @@ export interface YarnStockRead { serbestKg: Prisma.Decimal; emanetKg: Prisma.Dec
  * İplik stoku (iplik modülü). Emanet açıksa müşteri sahipli lotlar AYRI döner ve serbest stoktan
  * çıkarılır (müşterinin malı ihtiyacı karşılamaz); emanet kapalıysa `emanetKg: null`.
  */
-export async function readYarnStock(yarnItemIds: string[]): Promise<{ emanetAcik: boolean; byItem: Map<string, YarnStockRead> } | null> {
+export async function readYarnStock(
+  yarnItemIds: string[],
+  opts: { excludeHeld?: boolean } = {},
+): Promise<{ emanetAcik: boolean; byItem: Map<string, YarnStockRead> } | null> {
   if (!(await readIplikEnabled())) return null;
   const consigned = await readEmanetEnabled();
   const { readYarnStockKg } = await import("../yarn-lot.service");
-  const raw = await readYarnStockKg(yarnItemIds, { consigned });
+  // `excludeHeld` (fason devere çözgü hesabı): kalite bekletmedeki lotlar serbest stoktan düşülür; varsayılan bugünkü sayı.
+  const raw = await readYarnStockKg(yarnItemIds, { consigned, excludeHeld: opts.excludeHeld === true });
   const out = new Map<string, YarnStockRead>();
-  for (const [id, r] of raw) out.set(id, { serbestKg: r.consignedKg ? r.totalKg.minus(r.consignedKg) : r.totalKg, emanetKg: r.consignedKg });
+  for (const [id, r] of raw) {
+    const serbest = (r.consignedKg ? r.totalKg.minus(r.consignedKg) : r.totalKg).minus(r.heldKg ?? 0);
+    out.set(id, { serbestKg: serbest, emanetKg: r.consignedKg });
+  }
   return { emanetAcik: consigned, byItem: out };
 }
 

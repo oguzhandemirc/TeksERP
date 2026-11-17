@@ -156,12 +156,24 @@ export default yarnLotService;
  */
 export async function readYarnStockKg(
   itemIds: string[],
-  opts: { consigned: boolean },
-): Promise<Map<string, { totalKg: Prisma.Decimal; consignedKg: Prisma.Decimal | null }>> {
-  const out = new Map<string, { totalKg: Prisma.Decimal; consignedKg: Prisma.Decimal | null }>();
+  opts: { consigned: boolean; excludeHeld?: boolean },
+): Promise<Map<string, { totalKg: Prisma.Decimal; consignedKg: Prisma.Decimal | null; heldKg: Prisma.Decimal | null }>> {
+  const out = new Map<string, { totalKg: Prisma.Decimal; consignedKg: Prisma.Decimal | null; heldKg: Prisma.Decimal | null }>();
   if (itemIds.length === 0) return out;
   const zero = () => new Prisma.Decimal(0);
-  for (const id of itemIds) out.set(id, { totalKg: zero(), consignedKg: opts.consigned ? zero() : null });
+  for (const id of itemIds) out.set(id, { totalKg: zero(), consignedKg: opts.consigned ? zero() : null, heldKg: opts.excludeHeld ? zero() : null });
+  if (opts.excludeHeld) {
+    // Kalite bekletmedeki/bloke lotlar çıkış yazamaz (fason devere D1 §5.4); emanet ayrı sayılıyorsa sahipli lot burada sayılmaz.
+    const held = await prisma.yarnLot.findMany({
+      where: { itemId: { in: itemIds }, qualityStatus: { not: YarnLotQualityStatus.RELEASED }, ...(opts.consigned ? { ownerCustomerId: null } : {}) },
+      select: { id: true, itemId: true },
+    });
+    const hb = await yarnLotBalancesTx(prisma, held.map((l) => l.id));
+    for (const l of held) {
+      const row = out.get(l.itemId)!;
+      row.heldKg = row.heldKg!.plus(hb.get(l.id) ?? zero());
+    }
+  }
   const sums = await prisma.yarnStock.groupBy({ by: ["itemId"], where: { itemId: { in: itemIds } }, _sum: { balanceKg: true } });
   for (const s of sums) out.get(s.itemId)!.totalKg = s._sum.balanceKg ?? zero();
   if (opts.consigned) {

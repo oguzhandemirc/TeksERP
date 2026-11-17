@@ -13,11 +13,35 @@
 // Denyesiz bir iplikle kart açılabilseydi levent sarımı ekranında hesap sessizce
 // 0 kg gösterirdi; hata operatöre kart açılırken söylenmeli.
 // =============================================================================
-import { ItemType } from "@prisma/client";
+import { ItemType, type Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
-import { BaseService } from "./base.service";
+import { BaseService, type CreateTxContext, type UpdateTxContext } from "./base.service";
 import { AppError } from "../utils/app-error";
-import { ApiResponse } from "../types/api.types";import { assertItemUsable } from "./helpers/item-usage.helper";
+import { ApiResponse } from "../types/api.types";
+import { assertItemUsable } from "./helpers/item-usage.helper";
+import { warpSpecSummaryFromLines } from "./helpers/warp-spec-yarn.helper";
+
+/** Fason devere D1: satır yazma yüzeyi henüz KAPALI — çok iplikli kartın özet kolonları bu yoldan değişemez. */
+const MULTI_YARN_LOCKED =
+  "Çok iplikli çözgü kartının ipliği ve teli bu ekrandan değiştirilemez — iplik satırları düzenleme ekranı henüz açık değil.";
+
+/**
+ * Tek iplikli kartın `WarpSpecYarn` satırını kolonlarla aynı tutar (aynı tx). Çok iplikli kartta kolonlar
+ * satırların özetidir; özeti bozan yazım 400 (tx geri alınır). Satır kümesi saf yapılandırma pivotudur (replace).
+ */
+async function syncSingleYarnRowTx(tx: Prisma.TransactionClient, warpSpecId: string): Promise<void> {
+  const spec = await tx.warpSpec.findUniqueOrThrow({ where: { id: warpSpecId }, select: { yarnItemId: true, endsCount: true } });
+  const rows = await tx.warpSpecYarn.findMany({ where: { warpSpecId }, select: { yarnItemId: true, endsCount: true, sortOrder: true } });
+  if (rows.length > 1) {
+    const s = warpSpecSummaryFromLines(rows);
+    if (s.yarnItemId !== spec.yarnItemId || s.endsCount !== spec.endsCount) throw AppError.badRequest(MULTI_YARN_LOCKED);
+    return;
+  }
+  const r = rows[0];
+  if (r && r.yarnItemId === spec.yarnItemId && r.endsCount === spec.endsCount && r.sortOrder === 0) return;
+  await tx.warpSpecYarn.deleteMany({ where: { warpSpecId } });
+  await tx.warpSpecYarn.create({ data: { warpSpecId, yarnItemId: spec.yarnItemId, endsCount: spec.endsCount, sortOrder: 0 } });
+}
 
 
 /** 0 ≤ x < 100; "" / null / gönderilmemiş = bilinmiyor (boş bırakılabilir). */
@@ -87,5 +111,27 @@ export class WarpSpecService extends BaseService {
   ): Promise<ApiResponse<unknown>> {
     await this.assertInputs(rawData, true);
     return super.update(id, rawData, userId);
+  }
+
+  protected override async afterCreateTx(tx: Prisma.TransactionClient, c: CreateTxContext): Promise<void> {
+    await syncSingleYarnRowTx(tx, c.id);
+  }
+
+  protected override async afterUpdateTx(tx: Prisma.TransactionClient, c: UpdateTxContext): Promise<void> {
+    await syncSingleYarnRowTx(tx, c.id);
+  }
+
+  /** Pasif kartın diriltilmesi kanca yolundan geçmez: çok iplikli kartta özet ÖNCE denetlenir, satır SONRA eşitlenir. */
+  protected override async reactivate(id: string, data: Record<string, unknown>, userId?: string): Promise<ApiResponse<unknown>> {
+    const rows = await prisma.warpSpecYarn.findMany({ where: { warpSpecId: id }, select: { yarnItemId: true, endsCount: true, sortOrder: true } });
+    if (rows.length > 1) {
+      const s = warpSpecSummaryFromLines(rows);
+      const touchesYarn = data.yarnItemId !== undefined && data.yarnItemId !== s.yarnItemId;
+      const touchesEnds = data.endsCount !== undefined && Number(data.endsCount) !== s.endsCount;
+      if (touchesYarn || touchesEnds) throw AppError.badRequest(MULTI_YARN_LOCKED);
+    }
+    const res = await super.reactivate(id, data, userId);
+    await prisma.$transaction((tx) => syncSingleYarnRowTx(tx, id));
+    return res;
   }
 }
