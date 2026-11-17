@@ -287,6 +287,9 @@ export const SETTING_KEYS = {
    *  tüketim düşer mi (`CONSUMED.rollId`). DEFAULT false = bugünkü davranış: tüketim elle yazılır, KK1
    *  yanıtı bayt bayt aynı. Davranış bayrağı — profile/modül tablosuna GİRMEZ. */
   DEVERE_AUTO_CONSUME: "devere.autoConsume",
+  /** [PROFİL] Fason devere D1: çözgü hesabında sipariş başına SABİT fire metresi (baş/son/düğüm). DEFAULT 0 =
+   *  müşterinin kâğıttaki formülü (firesiz); yalnız öneriyi büyütür, hiçbir defteri değiştirmez. */
+  DEVERE_WARP_FIXED_WASTE_M: "devere.warpFixedWasteM",
   /** Dokuma işi modülü: dokuma işi planlama · tezgah koşumu · top indirme.
    *  ÜRETİME BAĞIMLI (`MODULE_DEPENDENCIES`), tezgah izlemenin KARDEŞİ — fasona
    *  dokutan firmada dokuma işi var tezgah yok (DOKUMA-IS-EMRI §2.5). */

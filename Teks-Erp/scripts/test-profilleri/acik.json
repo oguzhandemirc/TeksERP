@@ -90,6 +90,7 @@
     "devereMountTracking": true,
     "devereMountTrackingRequired": true,
     "devereAutoConsume": true,
+    "devereWarpFixedWasteM": 20,
     "devereBeamWeavingLinkRequired": true,
     "dokumaRunWeavingOrderRequired": true,
     "dokumaOrderLineLinkRequired": true,

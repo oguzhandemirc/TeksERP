@@ -1932,6 +1932,20 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         desc: "Açıkken levent bir dokuma iş emrine bağlanmadan planlanamaz/sarılamaz. Kapalıyken (varsayılan) stoğa serbest levent sarılır ve raporda “işsiz levent” olarak ayrı görünür.",
       },
     ],
+    numberFlags: [
+      {
+        // Fason devere D1: backend `readDevereWarpFixedWasteM` (kayıt yok = 0) ve üst sınır 1000 ile birebir.
+        key: "devereWarpFixedWasteM",
+        title: "Sabit çözgü firesi (m)",
+        desc: "Çözgü hesabında her siparişin metresine baş, son ve düğüm için bu kadar metre eklenir; fireli öneri buna göre büyür. 0 (varsayılan) = müşterinin kâğıttaki formülü (firesiz).",
+        min: 0,
+        max: 1000,
+        fallback: 0,
+        unit: "m",
+        step: 1,
+        audience: ["Planlamacı", "Yönetim"],
+      },
+    ],
   },
   {
     id: "dokuma",

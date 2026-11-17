@@ -1973,10 +1973,15 @@ model WarpSpec {
   /// SEYİTOĞLU MİG-1 (§4.4) — çözgü çekme fire payı (%). CHECK `warp_specs_waste_pct_range`
   /// 0 ≤ x < 100; NULL = bugünkü davranış (fire payı yok).
   wastePct     Decimal? @db.Decimal(5, 2)
+  /// FASON DEVERE D1 — dizilim talimatı ("1 A 1 B"), serbest metin; hesaba GİRMEZ, yalnız ekranda/talimatta.
+  sequenceNote String?  @db.VarChar(160)
   notes        String?  @db.VarChar(500)
   isActive     Boolean  @default(true)
 
   yarnItem      Item            @relation("WarpSpecYarn", fields: [yarnItemId], references: [id], onDelete: Restrict)
+  /// FASON DEVERE D1 — çok iplikli kart satırları. Kolonlar (`yarnItemId`, `endsCount`) türetilmiş özettir:
+  /// ana iplik = en küçük `sortOrder` satırı, toplam tel = Σ satır. Okuyucu `warpSpecYarnLines`ten okur.
+  yarns         WarpSpecYarn[]
   fabricItems   Item[]          @relation("ItemWarpSpec")
   /// Bu kartın ek çözgü katmanı olarak geçtiği kumaşlar (MİG-1).
   warpLayers    ItemWarpLayer[] @relation("ItemWarpLayerSpec")
@@ -2000,6 +2005,31 @@ model WarpSpec {
   @@unique([nameFold])
   @@index([yarnItemId])
   @@map("warp_specs")
+}
+
+/// ÇÖZGÜ KARTI İPLİK SATIRI (fason devere D1, 2026-11-17) — ③b SAF YAPILANDIRMA PİVOTU (`WeftSpecYarn`
+/// ikizi): küme REPLACE edilir, audit'e eski/yeni küme yazılır. İplik kartta TEKİL; YARN ∧ denye dolu (servis 400).
+/// Levent doğarken satırlar WOUND kırılımına KOPYALANIR (D2) — kart sonradan değişse de geçmiş kg değişmez.
+model WarpSpecYarn {
+  id         String @id @default(uuid()) @db.Uuid
+  warpSpecId String @db.Uuid
+  yarnItemId String @db.Uuid
+  /// Bu ipliğin TOPLAM teli (kenar dahil) — CHECK > 0.
+  endsCount  Int
+  /// Talimattaki harf sırası (A, B, C…) — CHECK ≥ 0.
+  sortOrder  Int    @db.SmallInt
+
+  /// Cascade: satır kartın parçasıdır (③b pivot); üretimde kart sert silinmez (pasife alınır), yalnız bekçi temizliği tetikler.
+  warpSpec WarpSpec @relation(fields: [warpSpecId], references: [id], onDelete: Cascade)
+  yarnItem Item     @relation("WarpSpecYarnItem", fields: [yarnItemId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([warpSpecId, yarnItemId])
+  @@unique([warpSpecId, sortOrder])
+  @@index([yarnItemId])
+  @@map("warp_spec_yarns")
 }
 
 /// ATKI KARTI (S2 şema çekirdeği — MAL-1, 2026-10-25, patron kararı seçenek B).
@@ -3700,6 +3730,7 @@ model Item {
   warpSpec                       WarpSpec?                   @relation("ItemWarpSpec", fields: [warpSpecId], references: [id], onDelete: Restrict)
   /// Bu İPLİĞİ kullanan çözgü kartları (1:N) — silme kapısının bağımlılık kaynağı.
   warpSpecsAsYarn                WarpSpec[]                  @relation("WarpSpecYarn")
+  warpSpecYarnsAsYarn            WarpSpecYarn[]              @relation("WarpSpecYarnItem")
   /// Bu KUMAŞIN atkı kartı (N:1) — dokuma ürün yapısı (MAL-1 / S2).
   weftSpec                       WeftSpec?                   @relation("ItemWeftSpec", fields: [weftSpecId], references: [id], onDelete: Restrict)
   /// Bu İPLİĞİ atkı olarak kullanan kart satırları (1:N).

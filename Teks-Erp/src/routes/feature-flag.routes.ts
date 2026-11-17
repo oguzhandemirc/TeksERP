@@ -393,6 +393,8 @@ export const updateSchema = z.strictObject({
   devereMountTrackingRequired: z.boolean().optional(),
   // devere.autoConsume — tezgahtan doğan top leventten otomatik tüketim (default false = elle). Backend ENFORCE.
   devereAutoConsume: z.boolean().optional(),
+  /** Fason devere D1: sabit çözgü firesi (m; `DEVERE_WARP_FIXED_WASTE_M_MAX` ile birebir); null = varsayılana (0) dön. */
+  devereWarpFixedWasteM: z.number({ message: "Sabit çözgü firesi sayı olmalı" }).min(0, "Sabit çözgü firesi negatif olamaz").max(1000, "Sabit çözgü firesi en çok 1000 m olabilir").nullable().optional(),
   dokumaEnabled: z.boolean().optional(),
   // maliyet.enabled — Maliyet & Teklif modülü (MAL-0); üretime bağımlı, bağımlılık serviste.
   maliyetEnabled: z.boolean().optional(),

@@ -42,6 +42,17 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
     // Taşınmazsa çözgü kartı mezar taşına bakmaya devam eder ve levent doğarken
     // denye ölü karttan okunurdu. `YarnMovement.itemId` emsali.
     { kind: "MOVE", model: "WarpSpec", table: "warp_specs", column: "yarnItemId", label: "Çözgü kartı (iplik)" },
+    {
+      // Fason devere D1: kart satırında iplik TEKİL (`[warpSpecId, yarnItemId]`); iki iplik aynı kartta ise toplamak telleri sessizce birleştirir.
+      kind: "CONFLICT",
+      model: "WarpSpecYarn",
+      table: "warp_spec_yarns",
+      column: "yarnItemId",
+      label: "Çözgü kartı iplik satırı",
+      uniqueOn: ["warpSpecId", "yarnItemId"],
+      policy: "BLOCK",
+      why: "İki iplik aynı çözgü kartında ayrı satırsa birleşme tek ipliğe iki tel satırı doğurur — önce kartı düzeltin.",
+    },
     // 2026-09-13 (dokuma P1) — üç `weaving_orders` bağı da MOVE: referans bağ,
     // tekillik kısıtı yok; taşınmazsa dokuma işi ölü kayda bağlı kalır.
     { kind: "MOVE", model: "WeavingOrder", table: "weaving_orders", column: "itemId", label: "Dokuma iş emri" },

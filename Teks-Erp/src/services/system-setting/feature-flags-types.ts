@@ -212,6 +212,8 @@ export interface FeatureFlags {
   devereAutoConsume: boolean;
   /** Z1: levent sarımında dokuma işi bağı zorunlu (varsayılan KAPALI = serbest levent meşru). HAM; etkin `devere && bayrak`. */
   devereBeamWeavingLinkRequired: boolean;
+  /** Fason devere D1: çözgü hesabında sabit fire metresi (0 = firesiz formül, bugünkü davranış). */
+  devereWarpFixedWasteM: number;
   /** Z1: tezgah koşumu dokuma işine bağlı açılmalı (varsayılan KAPALI = stoka dokuma meşru). HAM; etkin `dokuma && bayrak`. */
   dokumaRunWeavingOrderRequired: boolean;
   /** Z1: dokuma işi en az bir sipariş satırına bağlı olmalı (varsayılan KAPALI). HAM; etkin `dokuma && bayrak`. */

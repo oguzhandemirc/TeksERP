@@ -430,6 +430,8 @@ export interface FeatureFlags {
   devereMountTrackingRequired: boolean;
   /** Devere Faz 4: tezgahtan doğan top (KK1 WEAVING + indirme bağı) bağlı leventlerden otomatik tüketim düşer — varsayılan kapalı (elle). */
   devereAutoConsume: boolean;
+  /** Fason devere D1: çözgü hesabında sabit fire metresi (backend `DEFAULT_DEVERE_WARP_FIXED_WASTE_M` = 0). */
+  devereWarpFixedWasteM: number;
   /** Z1 üretim belge zinciri (2026-09-18) — üç davranış bayrağı, varsayılan KAPALI = bağ opsiyonel (bugünkü davranış). */
   devereBeamWeavingLinkRequired: boolean;
   dokumaRunWeavingOrderRequired: boolean;
