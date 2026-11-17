@@ -1,8 +1,8 @@
 // =============================================================================
 // TeksERP — FASON DEVERE SİPARİŞİ (`/api/warping-orders`, devere D4)
 // =============================================================================
-// Kapı sırası: `verifyToken` → `requireIplikEnabled` (iplik kapalıyken devereciye iplik gönderilemez, sipariş
-// anlamsız) → `requireDevereEnabled` (rejim kapısı SON — `routerKapiOlcumu` deseni) → izin. Plan sunucuda hesaplanır; istemci sayı türetmez.
+// Kapı sırası: `verifyToken` → `requireDevereEnabled` → izin. İplik kapısı sipariş CRUD'una konmaz (stok sütunu iplik
+// kapalıyken `null` = bilinmiyor); iplik HAREKETİ yazan sevk uçları (D4b) `requireIplikEnabled`'ı uç başına alır. Plan sunucuda hesaplanır; istemci sayı türetmez.
 // =============================================================================
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
@@ -10,7 +10,7 @@ import { Currency, WarpingFeeUnit, WarpingOrderStatus } from "@prisma/client";
 import { AppError } from "../utils/app-error";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
-import { requireDevereEnabled, requireIplikEnabled } from "../middlewares/module.middleware";
+import { requireDevereEnabled } from "../middlewares/module.middleware";
 import { assertNoBareFilterParams, parseQueryParams, readFilterList, readIdCondition } from "../utils/query-parser";
 import { createWarpingOrder, patchWarpingOrder, previewWarpingOrder, WARPING_ORDER_MAX_SALES_ORDERS } from "../services/warping-order/create";
 import { cancelPreviewWarpingOrder, cancelWarpingOrder } from "../services/warping-order/cancel";
@@ -19,7 +19,7 @@ import { WARPING_ORDER_MAX_BEAM_LINES, WARPING_ORDER_MAX_EXTRA_SPECS } from "../
 import "../types/express-augment";
 
 const router = Router();
-router.use(verifyToken, requireIplikEnabled, requireDevereEnabled);
+router.use(verifyToken, requireDevereEnabled);
 
 const wrap = (fn: (req: Request) => Promise<{ status: number; body: unknown }>) => async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -90,7 +90,7 @@ const YMD = /^\d{4}-\d{2}-\d{2}$/;
  *     responses:
  *       200: { description: "{ success, data, nextCursor, summary }" }
  *       400: { description: Tanınmayan/geçersiz süzgeç (FILTER_UNKNOWN · FILTER_INVALID) }
- *       403: { description: Devere/iplik modülü kapalı (MODULE_DISABLED) ya da warping-order:read yok }
+ *       403: { description: Devere modülü kapalı (MODULE_DISABLED) ya da warping-order:read yok }
  *   post:
  *     tags: [WarpingOrder]
  *     summary: Fason devere siparişi aç (plan sunucuda hesaplanır ve donar; clientToken idempotent)

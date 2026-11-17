@@ -38,8 +38,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
     label: "Top barkodu",
     seedPrefix: "T",
     seedDateSegment: D,
-    seedDigits: 4,
-    seedSeparator: "",
+    seedDigits: 4, seedSeparator: "",
     kind: "ROLL",
     infix: { re: "[HF]", aciklama: "faz harfi (H=ham · F=final) — `RollBarcodeCounter` anahtarının parçası, biçim ayarı değil" },
     scopedCounter: {

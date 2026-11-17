@@ -271,3 +271,23 @@ export async function readSharedBeamGroupsForRoll(db: Db, rollId: string): Promi
   const ground = rows[0]?.item.warpSpecId;
   return ground ? { groundWarpSpecId: ground, layers: rows.map((r) => ({ beamMode: r.beamMode, takeUpPct: r.warpSpec.takeUpPct })) } : null;
 }
+
+/** Devere D4a: ana kartı zemin kullanan kumaşlarda AYNI LEVENT (SHARED_BEAM) katmanı olan aktif kartlar (ek tel grubu önerisi). */
+export async function readSharedBeamSpecsForGround(db: Pick<Db, "itemWarpLayer">, warpSpecId: string): Promise<Array<{ id: string; code: string; name: string }>> {
+  const rows = await db.itemWarpLayer.findMany({
+    where: { item: { warpSpecId }, beamMode: "SHARED_BEAM", warpSpecId: { not: warpSpecId }, warpSpec: { isActive: true } },
+    select: { warpSpec: { select: { id: true, code: true, name: true } } },
+    orderBy: [{ warpSpec: { code: "asc" } }],
+  });
+  return rows.map((r) => r.warpSpec);
+}
+
+/** Devere D4a: verilen kartların, ana kartı zemin kullanan kumaşlardaki katman kipleri (ek tel grubu kapısı). */
+export async function readLayerModesOnGround(db: Pick<Db, "itemWarpLayer">, warpSpecId: string, specIds: string[]): Promise<Array<{ beamMode: string; specCode: string; itemCode: string }>> {
+  const rows = await db.itemWarpLayer.findMany({
+    where: { item: { warpSpecId }, warpSpecId: { in: specIds } },
+    select: { beamMode: true, warpSpec: { select: { code: true } }, item: { select: { code: true } } },
+    orderBy: [{ warpSpecId: "asc" }, { itemId: "asc" }],
+  });
+  return rows.map((r) => ({ beamMode: r.beamMode, specCode: r.warpSpec.code, itemCode: r.item.code }));
+}

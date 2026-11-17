@@ -53,6 +53,17 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
       policy: "BLOCK",
       why: "İki iplik aynı çözgü kartında ayrı satırsa birleşme tek ipliğe iki tel satırı doğurur — önce kartı düzeltin.",
     },
+    {
+      // Fason devere D4a: sipariş plan satırında iplik TEKİL (`[warpingOrderId, yarnItemId]`); kg anlık görüntüsü toplanamaz.
+      kind: "CONFLICT",
+      model: "WarpingOrderYarn",
+      table: "warping_order_yarns",
+      column: "yarnItemId",
+      label: "Fason devere siparişi iplik satırı",
+      uniqueOn: ["warpingOrderId", "yarnItemId"],
+      policy: "BLOCK",
+      why: "İki iplik aynı devere siparişinde ayrı satırsa birleşme tek ipliğe iki plan satırı doğurur — önce siparişi düzeltin.",
+    },
     // 2026-09-13 (dokuma P1) — üç `weaving_orders` bağı da MOVE: referans bağ,
     // tekillik kısıtı yok; taşınmazsa dokuma işi ölü kayda bağlı kalır.
     { kind: "MOVE", model: "WeavingOrder", table: "weaving_orders", column: "itemId", label: "Dokuma iş emri" },

@@ -183,7 +183,7 @@ async function main(): Promise<void> {
     const p2 = await patchWarpingOrder(r6.data.id, { notes: "meta serbest" }, U);
     check("PATCH IN_PROGRESS meta (not) serbest", p2.notes === "meta serbest" && p2.targetLengthM === "2000.000");
     const cpv = await cancelPreviewWarpingOrder(r6.data.id);
-    check("İptal önizlemesi IN_PROGRESS'te iptal edilemez der", (cpv as unknown as { canCancel?: boolean }).canCancel === false, JSON.stringify(cpv).slice(0, 160));
+    check("İptal önizlemesi IN_PROGRESS'te iptal edilemez der", cpv.canCancel === false, JSON.stringify(cpv).slice(0, 160));
     const eCanIP = await errOf(() => cancelWarpingOrder(r6.data.id, "bekçi iptal", U));
     check("İptal IN_PROGRESS → 409 WARPING_ORDER_NOT_CANCELLABLE", eCanIP?.status === 409 && eCanIP.code === "WARPING_ORDER_NOT_CANCELLABLE", JSON.stringify(eCanIP));
 

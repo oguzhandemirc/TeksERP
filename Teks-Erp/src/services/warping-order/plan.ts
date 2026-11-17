@@ -11,6 +11,7 @@ import { resolveDenier } from "../../constants/warp-beam";
 import { computeWarpPlanForward, type WarpWasteSource } from "../helpers/warp-plan.helper";
 import { WARP_SPEC_YARN_LINES_SELECT, warpSpecYarnLines } from "../helpers/warp-spec-yarn.helper";
 import { isSharedBeamLayer, WARP_BEAM_MODE_LABEL, type WarpBeamModeCode } from "../helpers/warp-layer-beam.helper";
+import { readLayerModesOnGround, readSharedBeamSpecsForGround } from "../helpers/effective-construction.helper";
 
 type Db = Pick<Prisma.TransactionClient, "warpSpec" | "item" | "itemWarpLayer">;
 
@@ -71,13 +72,9 @@ export function normalizeBeamLines(lines: BeamLineInput[]): WarpingPlan["beamLin
 
 /** Ana kartı zemin olarak kullanan kumaşlarda AYNI LEVENT (SHARED_BEAM) katmanı olan kartlar — ek tel grubu önerisi. */
 export async function suggestExtraSpecs(db: Db, warpSpecId: string): Promise<Array<{ id: string; code: string; name: string }>> {
-  const layers = await db.itemWarpLayer.findMany({
-    where: { item: { warpSpecId }, beamMode: "SHARED_BEAM", warpSpecId: { not: warpSpecId }, warpSpec: { isActive: true } },
-    select: { warpSpec: { select: { id: true, code: true, name: true } } },
-    orderBy: [{ warpSpec: { code: "asc" } }],
-  });
+  const specs = await readSharedBeamSpecsForGround(db, warpSpecId);
   const seen = new Map<string, { id: string; code: string; name: string }>();
-  for (const l of layers) seen.set(l.warpSpec.id, l.warpSpec);
+  for (const s of specs) seen.set(s.id, s);
   return [...seen.values()];
 }
 
@@ -87,16 +84,12 @@ export async function suggestExtraSpecs(db: Db, warpSpecId: string): Promise<Arr
  */
 async function assertExtrasShareBeam(db: Db, warpSpecId: string, extraIds: string[]): Promise<void> {
   if (extraIds.length === 0) return;
-  const layers = await db.itemWarpLayer.findMany({
-    where: { item: { warpSpecId }, warpSpecId: { in: extraIds } },
-    select: { beamMode: true, warpSpec: { select: { code: true } }, item: { select: { code: true } } },
-    orderBy: [{ warpSpecId: "asc" }, { itemId: "asc" }],
-  });
+  const layers = await readLayerModesOnGround(db, warpSpecId, extraIds);
   const bad = layers.find((l) => !isSharedBeamLayer(l.beamMode));
   if (bad) {
     const label = WARP_BEAM_MODE_LABEL[bad.beamMode as WarpBeamModeCode] ?? bad.beamMode;
     const hint = bad.beamMode === "CREEL" ? "cağlıktan beslenir, devereye gitmez" : "ayrı levente sarılır — ayrı devere siparişi açın";
-    throw AppError.badRequest(`${bad.warpSpec.code} kartı ${bad.item.code} kumaşında "${label}" katmanı: ${hint}.`, { code: "WARPING_EXTRA_NOT_SHARED", beamMode: bad.beamMode });
+    throw AppError.badRequest(`${bad.specCode} kartı ${bad.itemCode} kumaşında "${label}" katmanı: ${hint}.`, { code: "WARPING_EXTRA_NOT_SHARED", beamMode: bad.beamMode });
   }
 }
 

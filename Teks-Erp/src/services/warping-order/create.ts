@@ -10,6 +10,7 @@ import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { AuditService } from "../audit.service";
 import { tokenReplay } from "../helpers/token-replay.helper";
+import { sequentialTx } from "../helpers/tx-sequential-relations.helper";
 import { lockCodeScopeTx } from "../helpers/code-unique.helper";
 import { nextSeriesNo, resolveSeriesFormat, seriesPrefix } from "../number-series.service";
 import { readDevereFasonWasteTolerancePct, readDevereWarpFixedWasteM } from "../system-setting.service";
@@ -265,7 +266,7 @@ export async function patchWarpingOrder(id: string, input: WarpingOrderPatchInpu
   const before = await loadWarpingOrderDto(prisma, id);
   const result = await prisma.$transaction(async (tx) => {
     const claim = await tx.warpingOrder.updateMany({ where: { id, status: { in: allowed } }, data: { updatedById: userId } });
-    const fresh = await tx.warpingOrder.findUnique({
+    const fresh = await sequentialTx(tx).warpingOrder.findUnique({
       where: { id },
       select: { id: true, orderNo: true, status: true, warpSpecId: true, subcontractorId: true, fixedWasteM: true, feeUnit: true, feeUnitPrice: true, feeCurrency: true, beamLines: { select: { beamCount: true, beamLengthM: true }, orderBy: { sortOrder: "asc" } }, extraSpecs: { select: { warpSpecId: true }, orderBy: { sortOrder: "asc" } } },
     });
