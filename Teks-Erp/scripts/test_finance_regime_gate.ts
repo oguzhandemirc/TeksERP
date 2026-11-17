@@ -303,6 +303,13 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
       "`SUBCONTRACTOR_RECEIPT_INVOICED`). Ön muhasebe kapalıyken `invoices` boştur, engel doğmaz; router fatura tablosuna yazmaz.",
   },
   {
+    dosya: "routes/warping-order.routes.ts",
+    neden:
+      "FASON DEVERE SİPARİŞİ (D4b-1, 2026-11-17). Finans dokunuşu GEÇİŞLİ ve YANILTICIDIR: sevk belge numarası " +
+      "`subcontractor/shared` (`nextSubcontractorDocNoTx`) üzerinden alınır, o dosya `receipt-cancel`i yalnız TİP için import eder. " +
+      "Router fatura tablosuna ne yazar ne okur; kapı konulamaz (devere fasonu ön muhasebe olmadan meşrudur).",
+  },
+  {
     dosya: "routes/workorder.routes.ts",
     neden:
       "FASON KABUL İPTALİ (çekirdek, F6 inceleme 2026-11-08). Finans dokunuşu SALT-OKUMADIR: kabul iptali ve önizlemesi " +

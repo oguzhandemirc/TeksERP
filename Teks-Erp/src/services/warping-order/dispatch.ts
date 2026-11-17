@@ -13,7 +13,7 @@ import { AppError } from "../../utils/app-error";
 import { AuditService } from "../audit.service";
 import { tokenReplay } from "../helpers/token-replay.helper";
 import { sequentialTx } from "../helpers/tx-sequential-relations.helper";
-import { nextSubcontractorDocNoTx } from "../subcontractor.service";
+import { nextSubcontractorDocNoTx } from "../subcontractor/shared";
 import { emitSubcontractDispatchedTx } from "../notification-sources/depo";
 import { dispatchYarnItemsTx } from "../subcontractor-yarn.service";
 import { assertWarpingBound } from "../helpers/dispatch-header.helper";
