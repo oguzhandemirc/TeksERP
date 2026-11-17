@@ -87,6 +87,7 @@ export const MENU_PRESETS: readonly MenuPreset[] = [
       { key: "operations/fasondaki-iplik", reason: DOKUMA_YOK },
       { key: "operations/warp-beams", reason: DOKUMA_YOK },
       { key: "operations/cozgu-hesabi", reason: DOKUMA_YOK },
+      { key: "operations/fason-devere", reason: DOKUMA_YOK },
       { key: "reports/dokuma", reason: DOKUMA_YOK },
       { key: "KK1", reason: "Ham giriş yok — toplar gelen belgeden doğar." },
       { key: "Dokuma", reason: DOKUMA_YOK },
