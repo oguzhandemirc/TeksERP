@@ -31,6 +31,32 @@ export interface WarpingYarnReturnResult {
   backTransferBatchId: string | null;
 }
 
+/**
+ * İadenin tx gövdesi — sipariş satırını ÇAĞIRAN claim eder (elle iade: aşağıda; D5b kapanış: `settle.ts`). Aktarımla
+ * gelen kalemde geri aktarım + iade aynı tx'te.
+ */
+export async function returnWarpingYarnTx(tx: Prisma.TransactionClient, id: string, input: ReturnYarnInput, userId: string) {
+  await lockDispatchItemsTx(tx, [input.dispatchItemId]);
+  const it = (await loadWarpingYarnItems(tx, { warpingOrderId: id })).find((i) => i.dispatchItemId === input.dispatchItemId);
+  if (!it || it.openKg.lte(0)) throw AppError.notFound("Bu sipariş bu sevk kaleminden iplik tutmuyor.", { code: "WARPING_YARN_NOT_HELD" });
+  const qty = D(input.qtyKg).toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP);
+  if (qty.gt(it.openKg)) {
+    throw AppError.badRequest(`İade, siparişin deverecide tuttuğu ipliği aşamaz (tutulan ${kg(it.openKg)} kg, iade ${kg(qty)} kg).`, { code: "YARN_RETURN_EXCEEDS", holdingKg: kg(it.openKg) });
+  }
+  let backTransferBatchId: string | null = null;
+  let backTransferId: string | null = null;
+  if (!it.own && qty.gt(0)) {
+    backTransferBatchId = randomUUID();
+    const bt = await tx.warpingYarnTransfer.create({
+      data: { dispatchItemId: it.dispatchItemId, fromWarpingOrderId: id, toWarpingOrderId: it.warpingOrderId, kind: WARPING_TRANSFER, qtyKg: qty, batchId: backTransferBatchId, note: "İade için geri aktarım", createdById: userId },
+      select: { id: true },
+    });
+    backTransferId = bt.id;
+  }
+  const r = await returnYarnTx(tx, it.dispatchId, input, userId);
+  return { r, it, backTransferBatchId, backTransferId, holding: it.openKg.minus(r.qty) };
+}
+
 export async function returnWarpingYarn(id: string, input: ReturnYarnInput, userId: string): Promise<WarpingYarnReturnResult> {
   const out = await prisma.$transaction(async (tx) => {
     const claim = await tx.warpingOrder.updateMany({ where: { id, status: { in: HOLDERS } }, data: { updatedById: userId } });
@@ -39,22 +65,7 @@ export async function returnWarpingYarn(id: string, input: ReturnYarnInput, user
       if (!fresh) throw AppError.notFound("Fason devere siparişi bulunamadı.", { code: "WARPING_ORDER_NOT_FOUND" });
       throw AppError.conflict(`${fresh.orderNo} durumu ${fresh.status} — deverecide tuttuğu iplik yok, iade alınamaz.`, { code: "WARPING_RETURN_STATUS", status: fresh.status });
     }
-    await lockDispatchItemsTx(tx, [input.dispatchItemId]);
-    const it = (await loadWarpingYarnItems(tx, { warpingOrderId: id })).find((i) => i.dispatchItemId === input.dispatchItemId);
-    if (!it || it.openKg.lte(0)) throw AppError.notFound("Bu sipariş bu sevk kaleminden iplik tutmuyor.", { code: "WARPING_YARN_NOT_HELD" });
-    const qty = D(input.qtyKg).toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP);
-    if (qty.gt(it.openKg)) {
-      throw AppError.badRequest(`İade, siparişin deverecide tuttuğu ipliği aşamaz (tutulan ${kg(it.openKg)} kg, iade ${kg(qty)} kg).`, { code: "YARN_RETURN_EXCEEDS", holdingKg: kg(it.openKg) });
-    }
-    let backTransferBatchId: string | null = null;
-    if (!it.own && qty.gt(0)) {
-      backTransferBatchId = randomUUID();
-      await tx.warpingYarnTransfer.create({
-        data: { dispatchItemId: it.dispatchItemId, fromWarpingOrderId: id, toWarpingOrderId: it.warpingOrderId, kind: WARPING_TRANSFER, qtyKg: qty, batchId: backTransferBatchId, note: "İade için geri aktarım", createdById: userId },
-      });
-    }
-    const r = await returnYarnTx(tx, it.dispatchId, input, userId);
-    return { r, it, backTransferBatchId, holding: it.openKg.minus(r.qty) };
+    return returnWarpingYarnTx(tx, id, input, userId);
   });
   const itemCode = out.r.item.yarnItem?.code ?? "";
   await AuditService.log({ userId, action: "UPDATE", tableName: "SUBCONTRACTOR_DISPATCH", recordId: out.it.dispatchId, newData: { yarnReturned: itemCode, dispatchItemId: input.dispatchItemId, qtyKg: kg(out.r.qty), reasonCode: input.reasonCode, movementId: out.r.movementId, warpingOrderId: id } });

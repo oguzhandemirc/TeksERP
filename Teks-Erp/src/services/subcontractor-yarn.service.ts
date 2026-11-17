@@ -26,7 +26,7 @@ import type { ApiResponse } from "../types/api.types";
 import { AuditService } from "./audit.service";
 import { applyYarnMovementTx } from "./yarn.service";
 import { assertItemUsableTx } from "./helpers/item-usage.helper";
-import { allocationsByHolder, LIVE_ALLOCATION, lockDispatchItemsTx, netTransfersByOrder } from "./helpers/warping-yarn-open.helper";
+import { allocationsByHolder, LIVE_ALLOCATION, lockDispatchItemsTx, netTransfersByOrder, wastesByHolder } from "./helpers/warping-yarn-open.helper";
 
 
 type Tx = Prisma.TransactionClient;
@@ -63,8 +63,13 @@ const YARN_ITEM_SELECT = {
   yarnMovements: { select: { id: true, kind: true, qtyKg: true, warehouseId: true, lotId: true, reasonCode: true }, orderBy: { createdAt: "asc" as const } },
   warpingYarnTransfers: { select: { kind: true, qtyKg: true, fromWarpingOrderId: true, toWarpingOrderId: true } },
   warpBeamYarnAllocations: { where: LIVE_ALLOCATION, select: { kg: true, holderWarpingOrderId: true } },
+  warpingYarnWastes: { select: { kind: true, qtyKg: true, warpingOrderId: true } },
 } satisfies Prisma.SubcontractorDispatchItemSelect;
 type YarnItemRow = Prisma.SubcontractorDispatchItemGetPayload<{ select: typeof YARN_ITEM_SELECT }>;
+
+/** D5b: kalemin bütün siparişlerdeki net kapanış firesi (deverecide değildir). */
+const wasteNet = (item: { warpingYarnWastes: Array<{ kind: string; qtyKg: Prisma.Decimal; warpingOrderId: string }> }): Prisma.Decimal =>
+  [...wastesByHolder(item.warpingYarnWastes).values()].reduce((a, v) => a.plus(v), D(0));
 
 /** Σ dönüş − Σ dönüş stornosu (kalem geneli). */
 function returnedNet(item: { yarnMovements: Array<{ kind: YarnMovementKind; qtyKg: Prisma.Decimal }> }): Prisma.Decimal {
@@ -135,6 +140,9 @@ export async function cancelYarnItemsTx(tx: Tx, input: { dispatchId: string; rea
     if (returnedNet(it).gt(0)) {
       throw AppError.conflict(`${it.yarnItem?.code} ipliği bu sevkten dönmüş — sevk iptal edilemez, önce dönüşü iptal edin`, { code: "YARN_ITEM_RETURNED", itemCode: it.yarnItem?.code });
     }
+    if (wasteNet(it).gt(0)) {
+      throw AppError.conflict(`${it.yarnItem?.code} ipliğine kapanışta fire yazılmış — sevk iptal edilemez, önce siparişi yeniden açın (LIFO)`, { code: "YARN_ITEM_WASTED", itemCode: it.yarnItem?.code });
+    }
     if (it.warpBeamYarnAllocations.length > 0) {
       throw AppError.conflict(`${it.yarnItem?.code} ipliği bu sevkten dönen levente dağıtılmış — sevk iptal edilemez, önce levent dönüşünü iptal edin (LIFO)`, { code: "YARN_ITEM_ALLOCATED", itemCode: it.yarnItem?.code });
     }
@@ -195,8 +203,10 @@ export async function returnYarnTx(tx: Tx, dispatchId: string, input: ReturnYarn
   const ownTransferNet = own ? (netTransfersByOrder(item.warpingYarnTransfers).get(own) ?? D(0)) : D(0);
   // D5: kendi siparişinin tutmasından dönen leventlere dağıtılan iplik deverecide değildir — iade edilemez.
   const ownAllocated = own ? (allocationsByHolder(item.warpBeamYarnAllocations).get(own) ?? D(0)) : D(0);
-  if (already.plus(qty).gt(out.qtyKg.plus(ownTransferNet).minus(ownAllocated))) {
-    throw AppError.badRequest(`Dönen kg gideni aşamaz (giden ${Number(out.qtyKg)} kg, dönmüş ${Number(already)} kg${ownTransferNet.isZero() ? "" : `, başka siparişe net aktarılan ${Number(ownTransferNet.neg())} kg`}${ownAllocated.isZero() ? "" : `, levente sarılan ${Number(ownAllocated)} kg`})`, {
+  // D5b: kendi siparişinin kapanışta fire yazdığı iplik de deverecide değildir.
+  const ownWaste = own ? (wastesByHolder(item.warpingYarnWastes).get(own) ?? D(0)) : D(0);
+  if (already.plus(qty).gt(out.qtyKg.plus(ownTransferNet).minus(ownAllocated).minus(ownWaste))) {
+    throw AppError.badRequest(`Dönen kg gideni aşamaz (giden ${Number(out.qtyKg)} kg, dönmüş ${Number(already)} kg${ownTransferNet.isZero() ? "" : `, başka siparişe net aktarılan ${Number(ownTransferNet.neg())} kg`}${ownAllocated.isZero() ? "" : `, levente sarılan ${Number(ownAllocated)} kg`}${ownWaste.isZero() ? "" : `, fire yazılan ${Number(ownWaste)} kg`})`, {
       code: "YARN_RETURN_EXCEEDS", shippedKg: Number(out.qtyKg), returnedKg: Number(already), transferredKg: Number(ownTransferNet.neg()), allocatedKg: Number(ownAllocated),
     });
   }
@@ -220,27 +230,31 @@ export async function returnYarn(dispatchId: string, input: ReturnYarnInput, use
   };
 }
 
+/** Dönüş stornosunun tx gövdesi (D5b: kapanış stornosu aynı tx'te çağırır). */
+export async function cancelYarnReturnTx(tx: Tx, dispatchId: string, input: { dispatchItemId: string; movementId: string; reason: string }, userId?: string | null) {
+  const reason = input.reason;
+  await lockDispatchItemsTx(tx, [input.dispatchItemId]); // çift storno yarışı kalem satırında sıraya girer
+  const item = await loadYarnItem(tx, dispatchId, input.dispatchItemId);
+  const ret =item.yarnMovements.find((m) => m.id === input.movementId && m.kind === YarnMovementKind.SUBCONTRACT_RETURN);
+  if (!ret) throw AppError.notFound("Bu kalemde böyle bir dönüş satırı yok", { code: "YARN_RETURN_NOT_FOUND" });
+  // Grup net'i (aynı depo · lot · sebep): storno edilmiş dönüş ikinci kez storno edilemez.
+  const groupNet = item.yarnMovements
+    .filter((m) => m.warehouseId === ret.warehouseId && m.lotId === ret.lotId && m.reasonCode === ret.reasonCode)
+    .reduce((acc, m) => (m.kind === YarnMovementKind.SUBCONTRACT_RETURN ? acc.plus(m.qtyKg) : m.kind === YarnMovementKind.SUBCONTRACT_RETURN_CANCEL ? acc.minus(m.qtyKg) : acc), D(0));
+  if (groupNet.lt(ret.qtyKg)) throw AppError.conflict("Bu dönüş zaten iptal edilmiş — iptal edilecek dönüş yok", { code: "YARN_RETURN_NOT_OPEN" });
+  const { movementId } = await applyYarnMovementTx(tx, {
+    itemId: item.yarnItemId!, warehouseId: ret.warehouseId, kind: YarnMovementKind.SUBCONTRACT_RETURN_CANCEL, qtyKg: ret.qtyKg,
+    lotId: ret.lotId, reasonCode: ret.reasonCode, dispatchItemId: item.id, userId: userId ?? null, reason,
+  });
+  const out = shipOutOf(item);
+  return { movementId, item, qty: ret.qtyKg, remainingKg: out.qtyKg.minus(returnedNet(item)).plus(ret.qtyKg) };
+}
+
 /** Dönüş STORNOSU — SUBCONTRACT_RETURN_CANCEL (−kg), dönüş satırının depo/lot/sebep grubunda; grup net'i kg'yi karşılamıyorsa 409. */
 export async function cancelYarnReturn(dispatchId: string, input: { dispatchItemId: string; movementId: string; reason: string }, userId?: string): Promise<ApiResponse<YarnReturnDto>> {
   const reason = input.reason.trim();
   if (reason.length < 3) throw AppError.badRequest("İptal sebebi en az 3 karakter olmalı");
-  const result = await prisma.$transaction(async (tx) => {
-    await lockDispatchItemsTx(tx, [input.dispatchItemId]); // çift storno yarışı kalem satırında sıraya girer
-    const item = await loadYarnItem(tx, dispatchId, input.dispatchItemId);
-    const ret =item.yarnMovements.find((m) => m.id === input.movementId && m.kind === YarnMovementKind.SUBCONTRACT_RETURN);
-    if (!ret) throw AppError.notFound("Bu kalemde böyle bir dönüş satırı yok", { code: "YARN_RETURN_NOT_FOUND" });
-    // Grup net'i (aynı depo · lot · sebep): storno edilmiş dönüş ikinci kez storno edilemez.
-    const groupNet = item.yarnMovements
-      .filter((m) => m.warehouseId === ret.warehouseId && m.lotId === ret.lotId && m.reasonCode === ret.reasonCode)
-      .reduce((acc, m) => (m.kind === YarnMovementKind.SUBCONTRACT_RETURN ? acc.plus(m.qtyKg) : m.kind === YarnMovementKind.SUBCONTRACT_RETURN_CANCEL ? acc.minus(m.qtyKg) : acc), D(0));
-    if (groupNet.lt(ret.qtyKg)) throw AppError.conflict("Bu dönüş zaten iptal edilmiş — iptal edilecek dönüş yok", { code: "YARN_RETURN_NOT_OPEN" });
-    const { movementId } = await applyYarnMovementTx(tx, {
-      itemId: item.yarnItemId!, warehouseId: ret.warehouseId, kind: YarnMovementKind.SUBCONTRACT_RETURN_CANCEL, qtyKg: ret.qtyKg,
-      lotId: ret.lotId, reasonCode: ret.reasonCode, dispatchItemId: item.id, userId: userId ?? null, reason,
-    });
-    const out = shipOutOf(item);
-    return { movementId, item, qty: ret.qtyKg, remainingKg: out.qtyKg.minus(returnedNet(item)).plus(ret.qtyKg) };
-  });
+  const result = await prisma.$transaction(async (tx) => cancelYarnReturnTx(tx, dispatchId, { ...input, reason }, userId));
   const itemCode = result.item.yarnItem?.code ?? "";
   await AuditService.log({ userId, action: "UPDATE", tableName: "SUBCONTRACTOR_DISPATCH", recordId: dispatchId, newData: { yarnReturnCancelled: itemCode, dispatchItemId: input.dispatchItemId, reversesMovementId: input.movementId, qtyKg: Number(result.qty), reason, movementId: result.movementId } });
   return {
@@ -285,7 +299,7 @@ export async function listYarnItems(client: Pick<typeof prisma, "subcontractorDi
     const sar = r.warpBeamEvents.reduce((a, e) => a.plus(e.theoreticalKg ?? 0), D(0)).plus(r.warpBeamYarnAllocations.reduce((a, x) => a.plus(x.kg), D(0)));
     return {
       dispatchItemId: r.id, unit: "KG" as const, item: r.yarnItem!, warehouseId: r.warehouseId!, lotId: r.lotId,
-      dispatchedKg: Number(r.dispatchedQty), returnedKg: Number(ret), sarilanKg: Number(sar), sarilan, remainingKg: Number(D(r.dispatchedQty).minus(ret).minus(sar)),
+      dispatchedKg: Number(r.dispatchedQty), returnedKg: Number(ret), sarilanKg: Number(sar), sarilan, remainingKg: Number(D(r.dispatchedQty).minus(ret).minus(sar).minus(wasteNet(r))),
       returns: r.yarnMovements.filter((m) => m.kind !== YarnMovementKind.SUBCONTRACT_OUT).map((m) => ({ movementId: m.id, kind: m.kind, qtyKg: Number(m.qtyKg), warehouseId: m.warehouseId, lotId: m.lotId, reasonCode: m.reasonCode })),
     };
   });
@@ -306,11 +320,12 @@ export async function yarnOutstandingKgByDispatch(dispatchIds: string[]): Promis
       yarnMovements: { select: { kind: true, qtyKg: true } },
       warpBeamEvents: { where: { kind: "WOUND", reversal: null }, select: { theoreticalKg: true } },
       warpBeamYarnAllocations: { where: LIVE_ALLOCATION, select: { kg: true } },
+      warpingYarnWastes: { select: { kind: true, qtyKg: true, warpingOrderId: true } },
     },
   });
   for (const r of rows) {
     const sar = r.warpBeamEvents.reduce((a, e) => a.plus(e.theoreticalKg ?? 0), D(0)).plus(r.warpBeamYarnAllocations.reduce((a, x) => a.plus(x.kg), D(0)));
-    const rem = D(r.dispatchedQty).minus(returnedNet(r)).minus(sar);
+    const rem = D(r.dispatchedQty).minus(returnedNet(r)).minus(sar).minus(wasteNet(r));
     out.set(r.dispatchId, (out.get(r.dispatchId) ?? D(0)).plus(rem));
   }
   return out;

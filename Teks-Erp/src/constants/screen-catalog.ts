@@ -486,6 +486,7 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   { code: "warping-order:read", reason: "Fason devere sipariş ekranı D6 dilimiyle doğar; bugün yalnız API." },
   { code: "warping-order:write", reason: "Fason devere sipariş/sevk diyaloğu D6 dilimiyle doğar; bugün yalnız API." },
   { code: "warping-order:cancel", reason: "Fason devere iptal düğmesi D6 dilimiyle doğar; bugün yalnız API." },
+  { code: "warping-order:settle", reason: "Fason devere kapanış / yeniden açma diyaloğu D7 dilimiyle doğar; bugün yalnız API." },
 ];
 
 /** Katalogda adı geçmeyen izin var mı? (bekçi ve panel bandı kullanır) */

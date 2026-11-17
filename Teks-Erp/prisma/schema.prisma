@@ -2104,6 +2104,9 @@ model WarpingOrder {
   /// D5: bu siparişin leventlerinin iplik dağıtımı (tüketen) / bu siparişin tutmasından düşen dağıtım (tutan).
   yarnAllocations     WarpBeamYarnAllocation[] @relation("WarpBeamYarnAllocationOrder")
   yarnAllocationsHeld WarpBeamYarnAllocation[] @relation("WarpBeamYarnAllocationHolder")
+  /// D5b: kapanış / yeniden açma defteri ve kapanış fire satırları (tutan sipariş).
+  settlements         WarpingOrderSettlement[]
+  yarnWastes          WarpingYarnWaste[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -2113,6 +2116,75 @@ model WarpingOrder {
   @@index([status, createdAt])
   @@index([createdAt])
   @@map("warping_orders")
+}
+
+/// FASON DEVERE D5b — sipariş KAPANIŞ / YENİDEN AÇMA defteri (append-only, `updatedAt` YOK).
+/// SETTLE: kapanış isteği (token, gerekçe, fire %, tolerans hükmü, kapanışta yazılan iade hareketleri ve geri aktarımlar);
+/// REOPEN: kapanış stornosu — orijinal SETTLE'a `reversesId` (tek ters, çift storno DB'de imkânsız). Durum
+/// (`WarpingOrder.status`) "şu an ne"; bu defter "ne oldu". "Deverecide kalır" için satır yazılmaz (tutma açık kalır).
+model WarpingOrderSettlement {
+  id                String   @id @default(uuid()) @db.Uuid
+  warpingOrderId    String   @db.Uuid
+  /// 'SETTLE' | 'REOPEN' (VarChar + CHECK; REOPEN ⇔ reversesId dolu).
+  kind              String   @db.VarChar(20)
+  reversesId        String?  @unique @db.Uuid
+  /// İdempotency — yalnız SETTLE.
+  clientToken       String?  @unique @db.Uuid
+  /// Kapanış gövdesinin özeti (replay kimliği: aynı token farklı gövde 409).
+  requestHash       String?  @db.VarChar(64)
+  /// İsteğe bağlı gerekçe (tolerans aşımında da zorunlu değil — kullanıcı kararı 2026-11-17).
+  reason            String?  @db.VarChar(300)
+  /// Sipariş geneli fire % = Σ fire / (Σ sarılan nominal + Σ fire); paydası 0 ise NULL.
+  wastePct          Decimal? @db.Decimal(7, 2)
+  /// Kapanışın değerlendirildiği tolerans (siparişin donuk değeri; sipariş satırı değişmez); NULL = denetim yok.
+  tolerancePct      Decimal? @db.Decimal(5, 2)
+  overTolerance     Boolean  @default(false)
+  /// Kapanışta yazılan iade hareketleri (`YarnMovement` SUBCONTRACT_RETURN) — yeniden açma bunları storno eder.
+  returnMovementIds String[] @db.Uuid
+  /// Aktarımla gelen kalemden iadede yazılan geri aktarım satırları (`WarpingYarnTransfer`).
+  backTransferIds   String[] @db.Uuid
+  createdById       String?  @db.Uuid
+  createdAt         DateTime @default(now()) @db.Timestamptz
+
+  warpingOrder WarpingOrder            @relation(fields: [warpingOrderId], references: [id], onDelete: Restrict)
+  reverses     WarpingOrderSettlement? @relation("WarpingOrderSettlementReversal", fields: [reversesId], references: [id], onDelete: Restrict)
+  reversal     WarpingOrderSettlement? @relation("WarpingOrderSettlementReversal")
+  wastes       WarpingYarnWaste[]
+
+  @@index([warpingOrderId, createdAt])
+  @@map("warping_order_settlements")
+}
+
+/// FASON DEVERE D5b — kapanış FİRE defteri (append-only, `updatedAt` YOK). Satır silinirse deverecide kalan, devreden
+/// bakiye ve fire % değişir → DEFTER. Ters yol: WASTE_CANCEL orijinaline `reversesId` (yeniden açmada).
+/// Tutma: holding(kalem, sipariş) −= Σ net fire(tutan = sipariş).
+model WarpingYarnWaste {
+  id             String   @id @default(uuid()) @db.Uuid
+  settlementId   String   @db.Uuid
+  /// Tutan (fireyi beyan eden) sipariş.
+  warpingOrderId String   @db.Uuid
+  dispatchItemId String   @db.Uuid
+  /// 'WASTE' | 'WASTE_CANCEL' (VarChar + CHECK).
+  kind           String   @db.VarChar(20)
+  /// CHECK > 0.
+  qtyKg          Decimal  @db.Decimal(14, 3)
+  /// Kapanış kararı: iplik ya da sipariş geneli fire % toleransı aştı mı (rapor süzgeci).
+  overTolerance  Boolean  @default(false)
+  reason         String?  @db.VarChar(300)
+  reversesId     String?  @unique @db.Uuid
+  createdById    String?  @db.Uuid
+  createdAt      DateTime @default(now()) @db.Timestamptz
+
+  settlement   WarpingOrderSettlement    @relation(fields: [settlementId], references: [id], onDelete: Restrict)
+  warpingOrder WarpingOrder              @relation(fields: [warpingOrderId], references: [id], onDelete: Restrict)
+  dispatchItem SubcontractorDispatchItem @relation("WarpingYarnWasteItem", fields: [dispatchItemId], references: [id], onDelete: Restrict)
+  reverses     WarpingYarnWaste?         @relation("WarpingYarnWasteReversal", fields: [reversesId], references: [id], onDelete: Restrict)
+  reversal     WarpingYarnWaste?         @relation("WarpingYarnWasteReversal")
+
+  @@index([settlementId])
+  @@index([warpingOrderId, createdAt])
+  @@index([dispatchItemId, createdAt])
+  @@map("warping_yarn_wastes")
 }
 
 /// FASON DEVERE D4b-2 — deverecideki ipliğin siparişler arası AKTARMA defteri (append-only, `updatedAt` YOK).
@@ -8073,6 +8145,8 @@ model SubcontractorDispatchItem {
   warpingYarnTransfers    WarpingYarnTransfer[]      @relation("WarpingYarnTransferItem")
   /// Fason devere D5: dönen leventlere dağıtılan iplik (nominal).
   warpBeamYarnAllocations WarpBeamYarnAllocation[]   @relation("WarpBeamYarnAllocationItem")
+  /// Fason devere D5b: kapanışta fire beyanı (net = WASTE − WASTE_CANCEL).
+  warpingYarnWastes       WarpingYarnWaste[]         @relation("WarpingYarnWasteItem")
 
   /// Sevk kalemi defteri → `updatedAt` YOK (konvansiyon). Güncellemeler DURUM
   /// bayrağı (`remainderClosedAt`; defteri `RollVariance`) ya da parti
