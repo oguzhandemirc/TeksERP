@@ -17,6 +17,8 @@ import { WARP_SPEC_YARN_LINES_SELECT, warpSpecYarnLines, type WarpSpecYarnLine }
 import {
   computeWarpPlanForward,
   computeWarpPlanReverse,
+  endsFromKgPer1000m,
+  endsFromReed,
   type WarpPlanForwardResult,
   type WarpPlanReverseResult,
   type WarpPlanStock,
@@ -148,4 +150,32 @@ export async function calculateWarpPlan(input: WarpPlanCalcInput): Promise<ApiRe
     },
     ...(warnings.length > 0 ? { warnings } : {}),
   };
+}
+
+// ── KART FORMU YARDIMCILARI (plan §5.5, D3) — yalnız ÖNERİR; hiçbir şey yazmaz ──
+export type WarpEndsSuggestInput =
+  | { kind: "KG_PER_1000M"; yarnItemId: string; kgPer1000m: number }
+  | { kind: "REED"; reedPerCm: number; widthCm: number; endsPerDent?: number };
+
+export interface WarpEndsSuggestResult {
+  endsCount: number;
+  /** Yalnız KG_PER_1000M: istenen kg − önerilen telin verdiği kg (yuvarlama farkı). */
+  diffKg: number | null;
+  /** Yalnız KG_PER_1000M: hesapta kullanılan iplik kartı denyesi. */
+  denier: number | null;
+}
+
+export async function suggestWarpEnds(input: WarpEndsSuggestInput): Promise<ApiResponse<WarpEndsSuggestResult>> {
+  if (input.kind === "REED") {
+    const endsCount = endsFromReed(input.reedPerCm, input.widthCm, input.endsPerDent ?? 1);
+    if (endsCount <= 0) throw AppError.badRequest("Tarak × en × dişe tel sıfır tel veriyor — değerleri kontrol edin.");
+    return { success: true, data: { endsCount, diffKg: null, denier: null } };
+  }
+  const it = await prisma.item.findUnique({ where: { id: input.yarnItemId }, select: { name: true, itemType: true, linearDensityDen: true, yarnWastePct: true } });
+  if (!it) throw AppError.badRequest("Çözgü ipliği bulunamadı.");
+  if (it.itemType !== ItemType.YARN) throw AppError.badRequest(`"${it.name}" bir İPLİK kalemi değil.`);
+  const denier = resolveDenier(it);
+  if (denier === null) throw AppError.badRequest(`"${it.name}" kaleminin denye değeri boş — tel önerisi denyesiz hesaplanamaz.`);
+  const r = endsFromKgPer1000m(input.kgPer1000m, denier);
+  return { success: true, data: { endsCount: r.endsCount, diffKg: r.diffKg, denier: Number(denier) } };
 }

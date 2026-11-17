@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
-import { Plus, Pencil, Trash2, RotateCcw, PowerOff, Upload, Merge } from "lucide-react";
+import { Plus, Pencil, Trash2, RotateCcw, PowerOff, Upload, Merge, Copy } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
 import { ToolbarToggle } from "@/components/data-table/ToolbarToggle";
@@ -92,6 +92,8 @@ interface Props<T extends { id: string }> {
   rowSelectable?: (row: T) => boolean;
   /** true → sayfa yeni kayıt diyaloğu AÇIK doğar (başka ekrandan "yeni …" kısayoluyla gelindi). Varsayılan kapalı. */
   openCreateOnMount?: boolean;
+  /** Verilirse satırda "Kopyala" düğmesi: form `copyFrom` ile YENİ kayıt olarak açılır (taslağı form kurar). */
+  copyLabel?: string;
   renderForm: (params: {
     open: boolean;
     onOpenChange: (open: boolean) => void;
@@ -100,6 +102,8 @@ interface Props<T extends { id: string }> {
     isSubmitting: boolean;
     /** Formdan başka bir kaydın formuna geç (ebeveyn → çeşit). */
     openEdit: (row: T) => void;
+    /** "Kopyala" ile açıldıysa kaynak kayıt (initial null, kayıt oluşturma). */
+    copyFrom: T | null;
   }) => ReactNode;
 }
 
@@ -134,9 +138,11 @@ export function CrudPage<T extends { id: string }>({
   rowClassName,
   rowSelectable,
   openCreateOnMount = false,
+  copyLabel,
 }: Props<T>) {
   const [formOpen, setFormOpen] = useState(openCreateOnMount);
   const [editing, setEditing] = useState<T | null>(null);
+  const [copyFrom, setCopyFrom] = useState<T | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [hardRemoving, setHardRemoving] = useState<T | null>(null);
   const [showInactive, setShowInactive] = useShowInactive(persistFilters);
@@ -178,12 +184,30 @@ export function CrudPage<T extends { id: string }>({
                   className="h-7 w-7"
                   onClick={(e) => {
                     e.stopPropagation();
+                    setCopyFrom(null);
                     setEditing(row.original);
                     setFormOpen(true);
                   }}
                 >
                   <Pencil className="h-3.5 w-3.5" />
                 </Button>
+                {copyLabel ? (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-7 w-7"
+                    title={copyLabel}
+                    aria-label={copyLabel}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditing(null);
+                      setCopyFrom(row.original);
+                      setFormOpen(true);
+                    }}
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                  </Button>
+                ) : null}
                 {isActive ? (
                   <Button
                     size="icon"
@@ -238,7 +262,7 @@ export function CrudPage<T extends { id: string }>({
     ],
     // restoreMutation.isPending → aktifleştir butonunun `disabled`'ı; state
     // setter'ları ve restoreMutation.mutate referans olarak kararlı.
-    [columns, writePermission, permanentDelete, onRemove, removeLabel, onRestore, restoreLabel, restoreMutation.isPending],
+    [columns, writePermission, permanentDelete, onRemove, removeLabel, onRestore, restoreLabel, restoreMutation.isPending, copyLabel],
   );
 
   const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<T>({
@@ -274,6 +298,7 @@ export function CrudPage<T extends { id: string }>({
     }
     setFormOpen(false);
     setEditing(null);
+    setCopyFrom(null);
   };
 
   const navigate = useNavigate();
@@ -326,6 +351,7 @@ export function CrudPage<T extends { id: string }>({
           className={isEmpty ? "animate-pulse" : undefined}
           onClick={() => {
             setEditing(null);
+            setCopyFrom(null);
             setFormOpen(true);
           }}
         >
@@ -385,15 +411,20 @@ export function CrudPage<T extends { id: string }>({
         open: formOpen,
         onOpenChange: (open) => {
           setFormOpen(open);
-          if (!open) setEditing(null);
+          if (!open) {
+            setEditing(null);
+            setCopyFrom(null);
+          }
         },
         initial: editing,
         onSubmit,
         isSubmitting: createMutation.isPending || updateMutation.isPending,
         openEdit: (row) => {
+          setCopyFrom(null);
           setEditing(row);
           setFormOpen(true);
         },
+        copyFrom,
       })}
 
       <ConfirmDialog

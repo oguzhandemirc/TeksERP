@@ -88,7 +88,7 @@ router.get("/:id", requirePermission("warpspec:read"), controller.findById);
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       201: { description: Oluşturuldu }
- *       400: { description: Tel adedi ≤ 0 · iplik İPLİK değil · denye boş }
+ *       400: { description: "Tel adedi ≤ 0 · iplik İPLİK değil · denye boş · aynı iplik iki satır (gövde `yarns: [{ yarnItemId, endsCount }]` satır kümesini REPLACE eder; iplik/tel kolonları satırlardan türer)" }
  */
 router.post("/", requirePermission("warpspec:write"), controller.create);
 

@@ -3,6 +3,21 @@ import { acceptNumberAsText } from "@/lib/decimal-form-text";
 
 /** Sayı alanları formda METİN taşır (boş bırakılabilsin diye); gönderimde
  *  `buildPayload` sayıya çevirir. API Decimal'i sayı döndürür → `acceptNumberAsText` ikisini de kabul eder. Sınırlar DB kolonlarıyla birebir. */
+/** Sunucudaki `WARP_SPEC_MAX_YARNS` aynası. */
+export const WARP_SPEC_MAX_YARNS = 20;
+
+/** Tek iplik satırı; tel adedi devere formülünün ilk çarpanı — sıfır sessizce 0 kg üretirdi. */
+export const warpYarnRowSchema = z.object({
+  yarnItemId: z.string().min(1, "Çözgü ipliği seçilmeli"),
+  endsCount: acceptNumberAsText(
+    z
+      .string()
+      .trim()
+      .min(1, "Tel adedi zorunlu")
+      .refine((v) => Number.isInteger(Number(v)) && Number(v) > 0, "Tel adedi sıfırdan büyük tam sayı olmalı"),
+  ),
+});
+
 export const warpSpecFormSchema = z.object({
   code: z
     .string()
@@ -14,15 +29,16 @@ export const warpSpecFormSchema = z.object({
     .trim()
     .min(1, "Çözgü kartı adı boş bırakılamaz")
     .max(100, "Ad en fazla 100 karakter olabilir"),
-  yarnItemId: z.string().min(1, "Çözgü ipliği seçilmeli"),
-  // Tel adedi devere formülünün ilk çarpanı — sıfır sessizce 0 kg üretirdi.
-  endsCount: acceptNumberAsText(
-    z
-      .string()
-      .trim()
-      .min(1, "Tel adedi zorunlu")
-      .refine((v) => Number.isInteger(Number(v)) && Number(v) > 0, "Tel adedi sıfırdan büyük tam sayı olmalı"),
-  ),
+  // Fason devere D3: iplik satırları (sunucu sınırlarıyla aynı: 1..20, aynı iplik iki kez yok).
+  yarns: z
+    .array(warpYarnRowSchema)
+    .min(1, "En az bir çözgü ipliği girilmeli")
+    .max(WARP_SPEC_MAX_YARNS, `En fazla ${WARP_SPEC_MAX_YARNS} iplik satırı olabilir`)
+    .refine(
+      (rows) => new Set(rows.map((r) => r.yarnItemId).filter(Boolean)).size === rows.filter((r) => r.yarnItemId).length,
+      "Aynı iplik iki satırda olamaz — telini tek satırda topla",
+    ),
+  sequenceNote: z.string().max(160, "Dizilim en fazla 160 karakter olabilir").optional().or(z.literal("")),
   selvedgeEnds: acceptNumberAsText(
     z
       .string()
@@ -82,8 +98,8 @@ export type WarpSpecFormValues = z.infer<typeof warpSpecFormSchema>;
 export const warpSpecFormDefaults: WarpSpecFormValues = {
   code: "",
   name: "",
-  yarnItemId: "",
-  endsCount: "",
+  yarns: [{ yarnItemId: "", endsCount: "" }],
+  sequenceNote: "",
   selvedgeEnds: "",
   reedNo: "",
   endsPerDent: "",
