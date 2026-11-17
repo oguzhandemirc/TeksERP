@@ -253,6 +253,8 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "operations/loom-load", app: "desktop", modul: "dokumaEnabled", title: "Tezgâh Yükü", requires: ["weavingorder:read"], capabilities: [] },
   // Leventler (devere Faz 1b, 2026-09-14): plan → sar → hazır levent; sarım iptali ayrı yetenek.
   { key: "operations/warp-beams", app: "desktop", modul: "devereEnabled", title: "Leventler", requires: ["warpbeam:read"], capabilities: ["warpbeam:write", "warpbeam:cancel"] },
+  // Çözgü Hesabı (fason devere D3, 2026-11-17): levent adedi × boy → iplik kg; eldeki iplik → en çok metre. Yazmaz.
+  { key: "operations/cozgu-hesabi", app: "desktop", modul: "devereEnabled", title: "Çözgü Hesabı", requires: ["warpspec:read"], capabilities: [] },
   // Tezgah duruşları (Faz 1b web yüzeyi, 2026-09-14): elle giriş/kapatma/geri alma `loom:manual-entry`,
   // sebep atama/yeniden sınıflandırma `loom:classify` — İKİSİNDEN BİRİ ekranı açar, eylemler ekran içinde izinle.
   { key: "operations/machine-stops", app: "desktop", modul: "dokumaEnabled", title: "Tezgah Duruşları", requires: ["loom:manual-entry", "loom:classify"], capabilities: [] },

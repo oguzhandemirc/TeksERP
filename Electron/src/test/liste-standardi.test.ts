@@ -46,6 +46,9 @@ const EXEMPT: Record<string, string> = {
   "Operations/Shipments/DirectShipmentDetailContent.tsx": GOMULU,
   "Operations/Shipments/detail/SackRow.tsx": GOMULU,
   "Operations/StockCounts/StockCountLines.tsx": GOMULU,
+  // Çözgü Hesabı sonucu: hesap çıktısı (iplik başına birkaç satır), kayıt listesi değil.
+  "Operations/WarpPlan/ForwardTable.tsx": GOMULU,
+  "Operations/WarpPlan/ReverseResult.tsx": GOMULU,
   "Operations/WeavingFloor/jobs/BulkParts.tsx": GOMULU,
   "Operations/WeavingFloor/stops/StopBulkParts.tsx": GOMULU,
   "Operations/WorkOrders/BranchLanes.tsx": GOMULU,
