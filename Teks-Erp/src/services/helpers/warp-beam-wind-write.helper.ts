@@ -13,6 +13,7 @@ import { WARP_BEAM_SELECT } from "./warp-beam.helper";
 import { applyWarpBeamEventTx } from "./warp-beam-event.helper";
 import { toWarpBeamDto, type WarpBeamDto } from "./warp-beam-dto.helper";
 import type { WindWarpBeamInput, YarnIssueLine, YarnReturnLine } from "../warp-beam-wind.service";
+import { firstDenierMissing, warpSpecDenierLines, warpSpecEffectiveDenier, warpSpecLineKgs } from "./warp-spec-yarn.helper";
 
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 
@@ -42,8 +43,31 @@ export async function windResult(firstId: string, setKey: string | null, message
   return { success: true, data: { ...toWarpBeamDto(fresh), siblings: await siblingsOf(setKey, firstId) }, message, ...(warnings.length ? { warnings } : {}) };
 }
 
-/** Bir leventin WOUND satırı + iplik payı (tek tx içinde; takımda N kez). */
-export async function writeWoundTx(tx: Prisma.TransactionClient, target: { id: string; endsCount: number }, ctx: { input: WindWarpBeamInput; lengthM: Prisma.Decimal; denier: Prisma.Decimal.Value; theoreticalKg: Prisma.Decimal; yarnItemId: string; userId?: string; clientToken: string | null }, lines: { issues: YarnIssueLine[]; returns: YarnReturnLine[] }) {
+export type WoundYarnLine = ReturnType<typeof warpSpecLineKgs>[number];
+
+/**
+ * Fason devere D2 — sarımın iplik gerçekleri kartın SATIRLARINDAN: kırılım (satır başına kg), WOUND `theoreticalKg` = Σ,
+ * `denier` = eşdeğer denye (tek iplikte ipliğin kendisi → bayt-aynı). İçeride sarım ve G1c kalem bağı tek ipliğe göre
+ * kurulu (iplik çıkışı tek kalem) → çok iplikli kartta ikisi de 400 (S30; kalem bağı fason devere dönüşünde, D5).
+ */
+export function resolveWoundYarns(spec: Parameters<typeof warpSpecDenierLines>[0], lengthM: Prisma.Decimal, o: { inHouse: boolean; dispatchItem: boolean }) {
+  const lines = warpSpecDenierLines(spec);
+  const noDen = firstDenierMissing(lines);
+  if (noDen) throw AppError.badRequest(`"${noDen.yarnItem.name}" kaleminin denye değeri boş — nominal kg hesaplanamaz; kalem kartından denyeyi girin.`, { code: "WARP_DENIER_MISSING" });
+  if (lines.length > 1 && o.inHouse) {
+    throw AppError.badRequest("Çok iplikli çözgü kartı içeride sarımda henüz desteklenmiyor — bu kartla levent fason devereye sardırılır ya da hazır alınır.", { code: "WARP_SPEC_MULTI_YARN_IN_HOUSE" });
+  }
+  if (lines.length > 1 && o.dispatchItem) {
+    throw AppError.badRequest("Çok iplikli çözgü kartında levent tek bir iplik kalemine bağlanamaz — iplik dağıtımı fason devere siparişinin dönüş kabulünde yapılır.", { code: "WARP_SPEC_MULTI_YARN_DISPATCH_ITEM" });
+  }
+  const yarnLines = warpSpecLineKgs(lines, lengthM);
+  const theoreticalKg = yarnLines.reduce((s, l) => s.plus(l.theoreticalKg), D(0));
+  const denier = warpSpecEffectiveDenier(lines)!.toDecimalPlaces(4, Prisma.Decimal.ROUND_HALF_UP);
+  return { denier, theoreticalKg, yarnItemId: lines[0]!.yarnItemId, yarnLines };
+}
+
+/** Bir leventin WOUND satırı + doğuş kırılımı + iplik payı (tek tx içinde; takımda N kez). */
+export async function writeWoundTx(tx: Prisma.TransactionClient, target: { id: string; endsCount: number }, ctx: { input: WindWarpBeamInput; lengthM: Prisma.Decimal; denier: Prisma.Decimal.Value; theoreticalKg: Prisma.Decimal; yarnItemId: string; yarnLines: WoundYarnLine[]; userId?: string; clientToken: string | null }, lines: { issues: YarnIssueLine[]; returns: YarnReturnLine[] }) {
   const { issues, returns } = lines;
   const ev = await applyWarpBeamEventTx(tx, {
     beamId: target.id,
@@ -66,6 +90,8 @@ export async function writeWoundTx(tx: Prisma.TransactionClient, target: { id: s
       createdById: ctx.userId ?? null,
     },
   });
+  // Doğuş kırılımı (defter): kart sonradan değişse de leventin ipliği bu satırlardan okunur (S23).
+  await tx.warpBeamEventYarn.createMany({ data: ctx.yarnLines.map((l) => ({ eventId: ev.id, yarnItemId: l.yarnItemId, endsCount: l.endsCount, denier: l.denier, theoreticalKg: l.theoreticalKg })) });
   for (const line of issues) {
     await applyYarnMovementTx(tx, { itemId: ctx.yarnItemId, warehouseId: line.warehouseId, kind: YarnMovementKind.WARP_ISSUE, qtyKg: kg(line.qtyKg, "İplik çıkış kg"), warpBeamId: target.id, lotId: line.lotId ?? null, userId: ctx.userId ?? null });
   }

@@ -120,7 +120,7 @@ Budama izni bekçi yeşil olmadan verilmez; retention işi sondaları ölçen be
 - `RollPlanDeviation` → ❌ BORÇ (damga yok) · `TravelerCardScan` → TELEMETRİ (budama ufku guard'a bağlı)
 - `ImportRunLine` → `revertedAt` + `revertSkipReason` · `MergeOperation` → `revertedAt` (LIFO) · `ShipmentOrder` → `isActive` denorm, `setShipmentOrdersTx` replace
 - `MachineRun` → `revokedAt` (tek dosya `machine-run.service.ts`) · `MachineStopEvent` → `revokedAt`, yazma yüzeyi yok · `MachineStopReclass` → KARSI_KAYIT (`reclassifyStop`)
-- `WarpBeamEvent` → `WOUND_CANCEL` + `reversesEventId @unique` (tek dosya `warp-beam-wind.service.ts`) · `DoffEvent` → `revokedAt`, yazma yüzeyi yok
+- `WarpBeamEvent` → `WOUND_CANCEL` + `reversesEventId @unique` (tek dosya `warp-beam-wind.service.ts`); `WarpBeamEventYarn` → SATIR, ebeveyn `WarpBeamEvent` (iptal ebeveynin `WOUND_CANCEL`ı) · `DoffEvent` → `revokedAt`, yazma yüzeyi yok
 - `WorkOrderEvent` → KARŞI KAYIT (`helpers/workorder-event.helper.ts`, `claimWorkOrderStatusTx`) · `WorkOrderCloseSnapshot` → SATIR_EBEVEYN, yeni sürüm (`helpers/workorder-close-snapshot.helper.ts`)
 - `SwatchEvent` → KARSI_OLAY `reversesEventId` (`helpers/swatch-event.helper.ts`) · `RollStatusEvent` → KARSI_KAYIT, trigger `rolls_write_status_event`, kodda yazan 0
 - `FactoryTimezonePeriod` → TERS_BAG `reversesPeriodId @unique` (`factory-timezone.service.ts`, kilit 8037) · `StandardCostVersion` (+`StandardCostLine`) → YENİ SÜRÜM `restoredFromId` (`standard-cost.service.ts`)

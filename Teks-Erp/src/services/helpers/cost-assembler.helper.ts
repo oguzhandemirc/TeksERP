@@ -10,7 +10,9 @@
 import { Prisma, type Currency } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { ACTIVE_FINISHING_RATE, ACTIVE_YARN_COST_PRICE } from "./cost-price-validity.helper";
-import type { CostInput, CostPrice, CostRate, CostSource, CostWarpLayer, CostWeftYarn, CostYarn, Sourced } from "./fabric-cost.helper";
+import type { CostInput, CostPrice, CostRate, CostSource, CostWarpLayer, CostWarpYarn, CostWeftYarn, CostYarn, Sourced } from "./fabric-cost.helper";
+import { costWarpYarns } from "./fabric-cost-types.helper";
+import { WARP_SPEC_YARN_DENIER_SELECT, warpSpecDenierLines } from "./warp-spec-yarn.helper";
 import type { FinishingKgBasis } from "./fabric-cost-kg.helper";
 import { resolveDenier } from "../../constants/warp-beam";
 import { DEFAULT_COST_FINISHING_KG_BASIS, readCostFinishingKgBasis, readCostWeavingStandardMethod, type WeavingStandardMethod } from "../system-setting.service";
@@ -55,7 +57,8 @@ const yarnSelect = { id: true, name: true, linearDensityDen: true } as const;
 type CostYarnRow = { id: string; name: string; linearDensityDen: Dec | null };
 const itemSelect = {
   id: true, code: true, name: true, itemType: true, isActive: true, rawWidthCm: true,
-  warpSpec: { select: { id: true, endsCount: true, takeUpPct: true, wastePct: true, reedWidthCm: true, yarnItem: { select: yarnSelect } } },
+  // Fason devere D2: çözgü ipliği kart SATIRLARINDAN (tek okuyucu `warpSpecDenierLines`).
+  warpSpec: { select: { id: true, takeUpPct: true, wastePct: true, reedWidthCm: true, ...WARP_SPEC_YARN_DENIER_SELECT } },
   weftSpec: { select: { id: true, picksPerCm: true, yarns: { orderBy: { sortOrder: "asc" }, select: { sortOrder: true, picksInRepeat: true, yarnItem: { select: yarnSelect } } } } },
   costStructure: { include: { processes: { orderBy: { sortOrder: "asc" }, select: { rateCode: true } } } },
 } satisfies Prisma.ItemSelect;
@@ -100,11 +103,11 @@ async function loadSourcesTx(tx: Db, a: { itemIds: string[]; extraRateCodes: str
   const weftOverrides = await readWeftOverridesForRecipes(tx, recipes.map((r) => r.id));
   const yarnIds = new Set<string>();
   for (const m of weftOverrides.values()) for (const y of m.values()) yarnIds.add(y.id);
-  for (const ls of warpLayers.values()) for (const l of ls) yarnIds.add(l.warpSpec.yarnItem.id);
+  for (const ls of warpLayers.values()) for (const l of ls) for (const y of warpSpecDenierLines(l.warpSpec)) yarnIds.add(y.yarnItemId);
   const codes = new Set(extraRateCodes);
   for (const r of recipes) if (r.finishingRateCode) codes.add(r.finishingRateCode);
   for (const r of rows) {
-    if (r.warpSpec) yarnIds.add(r.warpSpec.yarnItem.id);
+    if (r.warpSpec) for (const y of warpSpecDenierLines(r.warpSpec)) yarnIds.add(y.yarnItemId);
     for (const y of r.weftSpec?.yarns ?? []) yarnIds.add(y.yarnItem.id);
     if (r.costStructure?.finishingRateCode) codes.add(r.costStructure.finishingRateCode);
     for (const p of r.costStructure?.processes ?? []) codes.add(p.rateCode);
@@ -152,6 +155,12 @@ const cardYarn = (src: CostSources, y: CostYarnRow): CostYarn => {
     ...(waste != null ? { wastePct: waste } : {}),
   };
 };
+/** Fason devere D2: kartın ana ipliği + (yalnız ≥ 2 satırda) satırları — tek iplikte girdi + `inputHash` bayt-aynı. */
+function cardWarpYarns(src: CostSources, spec: Parameters<typeof warpSpecDenierLines>[0]): { yarn: CostYarn; yarns?: CostWarpYarn[] } {
+  const lines = warpSpecDenierLines(spec);
+  const yarn = cardYarn(src, lines[0]!.yarnItem);
+  return lines.length > 1 ? { yarn, yarns: lines.map((l) => ({ ...cardYarn(src, l.yarnItem), endsCount: l.endsCount })) } : { yarn };
+}
 const adHocYarn = (y: AdHocYarn): CostYarn => ({
   yarnItemId: null, name: y.name, denier: { value: y.denier, source: "ELLE" },
   price: y.pricePerKg ? { amount: y.pricePerKg, currency: y.currency, source: "ELLE" } : null,
@@ -197,9 +206,9 @@ export function buildCostInput(src: CostSources, ref: CostSourceRef, o: CostOver
   const rawWidth = item ? item.rawWidthCm : dec(ah?.weft?.rawWidthCm);
   const fromWidth = rawWidth && p ? rawWidth.plus(p.weftSelvedgeAllowanceCm) : null;
   const warpBase = ws
-    ? { warpSpecId: ws.id, endsCount: ws.endsCount, takeUp: ws.takeUpPct, takeUpSrc: "KART" as const, yarn: cardYarn(src, ws.yarnItem) }
+    ? { warpSpecId: ws.id, endsCount: ws.endsCount, takeUp: ws.takeUpPct, takeUpSrc: "KART" as const, ...cardWarpYarns(src, ws) }
     : ah?.warp
-      ? { warpSpecId: null, endsCount: ah.warp.endsCount, takeUp: dec(ah.warp.takeUpPct), takeUpSrc: "ELLE" as const, yarn: adHocYarn(ah.warp.yarn) }
+      ? { warpSpecId: null, endsCount: ah.warp.endsCount, takeUp: dec(ah.warp.takeUpPct), takeUpSrc: "ELLE" as const, yarn: adHocYarn(ah.warp.yarn), yarns: undefined }
       : null;
   // Öncelik (tasarım §6.5): ELLE > varyant kodu > ürün yapısı kodu > yok.
   const recipe = "itemId" in ref && ref.recipeId ? src.recipes?.get(ref.recipeId) : undefined;
@@ -224,7 +233,7 @@ export function buildCostInput(src: CostSources, ref: CostSourceRef, o: CostOver
     endsCount: l.warpSpec.endsCount,
     takeUpPct: firstOf([l.warpSpec.takeUpPct, "KART"], [p?.defaultTakeUpPct, "PARAMETRE"]),
     wastePct: layerWaste(l.beamMode, l.warpSpec.wastePct),
-    yarn: cardYarn(src, l.warpSpec.yarnItem),
+    ...cardWarpYarns(src, l.warpSpec),
     role: l.role,
     beamMode: l.beamMode,
   }));
@@ -241,6 +250,7 @@ export function buildCostInput(src: CostSources, ref: CostSourceRef, o: CostOver
       // Kart firesi (SY-C1): aynı çözgüyü paylaşan desenler tek yerden; boş kartta zincir bugünkü gibi PARAMETRE'ye düşer.
       wastePct: warpWaste(ws?.wastePct ?? null),
       yarn: warpBase.yarn,
+      ...(warpBase.yarns ? { yarns: warpBase.yarns } : {}),
     },
     ...(warpLayers.length ? { warpLayers } : {}),
     weft: hasWeft
@@ -295,8 +305,7 @@ export async function assembleCostInputTx(tx: Db, ref: CostSourceRef, overrides:
 export function costCurrencies(input: CostInput): Currency[] {
   const set = new Set<Currency>();
   const add = (p: CostPrice | null | undefined) => p && p.currency !== "TRY" && set.add(p.currency);
-  add(input.warp?.yarn.price);
-  input.warpLayers?.forEach((l) => add(l.yarn.price));
+  for (const w of [...(input.warp ? [input.warp] : []), ...(input.warpLayers ?? [])]) costWarpYarns(w).forEach((y) => add(y.price));
   input.weft?.yarns.forEach((y) => add(y.price));
   add(input.finishing?.price);
   add(input.loomPick?.rate);

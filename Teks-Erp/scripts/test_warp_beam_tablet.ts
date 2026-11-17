@@ -72,7 +72,7 @@ function statik(): void {
 }
 
 const ALLOW = {
-  warpSpecs: ["id", "code", "name", "endsCount", "denier"],
+  warpSpecs: ["id", "code", "name", "endsCount", "denier", "kgPerM", "yarnCount"],
   machines: ["id", "code", "name", "stationName"],
   warehouses: ["id", "name", "isDefault"],
   subcontractors: ["id", "name"],

@@ -14,13 +14,13 @@ import { ApiResponse } from "../types/api.types";
 import { readDevereLotRequired } from "./system-setting.service";
 import { applyYarnMovementTx } from "./yarn.service";
 import { assertWarpBeamReplayAlive, tokenReplay } from "./helpers/token-replay.helper";
-import { resolveDenier, warpTheoreticalKg } from "../constants/warp-beam";
+
 import { WARP_BEAM_SELECT } from "./helpers/warp-beam.helper";
 import { applyWarpBeamEventTx, logWarpBeamEventAudit } from "./helpers/warp-beam-event.helper";
 import { assertPhysicalBeamFreeTx, lineShares, siblingPhysicalNo } from "./helpers/warp-beam-set.helper";
 import { nextBeamNoTx } from "./helpers/warp-beam.helper";
 import { AuditService } from "./audit.service";
-import { assertReturnReasonTx, kg, lotWarnings, siblingsOf, windResult, writeWoundTx, type WindResultDto } from "./helpers/warp-beam-wind-write.helper";
+import { assertReturnReasonTx, kg, lotWarnings, resolveWoundYarns, siblingsOf, windResult, writeWoundTx, type WindResultDto } from "./helpers/warp-beam-wind-write.helper";
 export type { WindResultDto };
 import { toWarpBeamDto, toWarpBeamEventDto, type WarpBeamDto, type WarpBeamEventDto } from "./warp-beam.service";
 import { resolveOwnerFromLotsTx } from "./helpers/emanet-owner.helper";
@@ -133,14 +133,12 @@ async function windWarpBeamFresh(id: string, input: WindWarpBeamInput, userId?: 
   if (!Number.isInteger(count) || count < 1 || count > 24) throw AppError.badRequest("Adet 1..24 olmalı");
   if (count > 1 && beam.setKey) throw AppError.conflict(`${beam.beamNo} zaten bir takımın parçası — takım yeniden açılamaz`, { code: "WARP_BEAM_SET_EXISTS" });
   const lengthM = kg(input.lengthM, "Sarılan metre");
-  const denier = resolveDenier(beam.warpSpec.yarnItem);
-  if (denier === null) throw AppError.badRequest(`"${beam.warpSpec.yarnItem.name}" kaleminin denye değeri boş — nominal kg hesaplanamaz; kalem kartından denyeyi girin.`, { code: "WARP_DENIER_MISSING" });
   const inHouse = beam.originKind === WarpBeamOrigin.IN_HOUSE;
+  // Fason devere D2: kartın satırları → doğuş kırılımı; içeride çok iplikli kart 400 (S30, fail-closed).
+  const { denier, theoreticalKg, yarnItemId, yarnLines } = resolveWoundYarns(beam.warpSpec, lengthM, { inHouse, dispatchItem: !!input.dispatchItemId });
   const issues = input.yarnIssues ?? [];
   const returns = input.yarnReturns ?? [];
   assertOriginInputs(beam, input, inHouse);
-  const theoreticalKg = warpTheoreticalKg(beam.warpSpec.endsCount, denier, lengthM);
-  const yarnItemId = beam.warpSpec.yarnItem.id;
   // K4 — KİLİT SIRASI: iplik satırları (kalem sabit) depo → sebep sırasına dizilir; iki paralel sarım depoları
   // ters sırayla kilitlerse FOR UPDATE 40P01'e düşer (`yarn-balance-guard` başlığı: kanonik sıra her yolun işi).
   const issuesSorted = [...issues].sort((a, b) => a.warehouseId.localeCompare(b.warehouseId) || (a.lotId ?? "").localeCompare(b.lotId ?? ""));
@@ -172,7 +170,7 @@ async function windWarpBeamFresh(id: string, input: WindWarpBeamInput, userId?: 
   const setKey = count > 1 ? crypto.randomUUID() : null;
   const issueShares = lineShares(issuesSorted, count);
   const returnShares = lineShares(returnsSorted, count);
-  const ctx = { input, lengthM, denier, theoreticalKg, yarnItemId, userId, clientToken: null };
+  const ctx = { input, lengthM, denier, theoreticalKg, yarnItemId, yarnLines, userId, clientToken: null };
 
   // G3 EMANET KALITIMI: çıkış lotlarının sahibi tek ise levent (ve takım kardeşleri) onu alır — doğum yolu, PATCH değil;
   // leventin kendi sahibiyle çelişirse 409. Ownersız lotlar sahibi düşürmez; bayrak kapalıyken owner'lı lot zaten doğamaz.
@@ -201,7 +199,7 @@ async function windWarpBeamFresh(id: string, input: WindWarpBeamInput, userId?: 
     }
     return first;
   });
-  await logWarpBeamEventAudit({ userId, eventId: wound.id, kind: "WOUND", data: { beamId: id, lengthM: Number(lengthM), theoreticalKg: Number(theoreticalKg), kgSource: input.kgSource, issues: issues.length, returns: returns.length, count, setKey, ...(lotOwner ? { ownerCustomerId: lotOwner, ownerInherited: true } : {}) } });
+  await logWarpBeamEventAudit({ userId, eventId: wound.id, kind: "WOUND", data: { beamId: id, lengthM: Number(lengthM), theoreticalKg: Number(theoreticalKg), kgSource: input.kgSource, ...(yarnLines.length > 1 ? { yarnLines: yarnLines.map((l) => ({ yarnItemId: l.yarnItemId, endsCount: l.endsCount, theoreticalKg: Number(l.theoreticalKg) })) } : {}), issues: issues.length, returns: returns.length, count, setKey, ...(lotOwner ? { ownerCustomerId: lotOwner, ownerInherited: true } : {}) } });
   const sibs = await siblingsOf(setKey, id);
   // Kardeş doğuşları audit'e (best-effort, tx dışında): her biri ayrı WARP_BEAM kaydıdır.
   for (const s of sibs) await AuditService.log({ userId, action: "CREATE", tableName: "WARP_BEAM", recordId: s.id, newData: { beamNo: s.beamNo, setKey, siblingOf: beam.beamNo, lengthM: Number(lengthM) } }).catch(() => undefined);
@@ -221,19 +219,20 @@ export interface CancelWoundPreviewDto {
   reasonRequired: true;
 }
 
-type YarnGroup = Map<string, { warehouseId: string; warehouseName: string; lot: { id: string; lotNo: string } | null; reasonCode: string | null; qty: Prisma.Decimal }>;
+type YarnGroup = Map<string, { itemId: string; warehouseId: string; warehouseName: string; lot: { id: string; lotNo: string } | null; reasonCode: string | null; qty: Prisma.Decimal }>;
 
 // Gruplama anahtarı depo × LOT (× sebep): ters kayıt lot bazında düşer, yoksa lot bakiyesi şişerdi (§4.9-4 "kalem × depo × lot").
 async function groupYarnLinesTx(client: Prisma.TransactionClient | typeof prisma, beamId: string): Promise<{ issues: YarnGroup; returns: YarnGroup }> {
-  const rows = await sequentialTx(client).yarnMovement.findMany({ where: { warpBeamId: beamId }, select: { kind: true, qtyKg: true, reasonCode: true, warehouse: { select: { id: true, name: true } }, lot: { select: { id: true, lotNo: true } } } });
+  const rows = await sequentialTx(client).yarnMovement.findMany({ where: { warpBeamId: beamId }, select: { kind: true, itemId: true, qtyKg: true, reasonCode: true, warehouse: { select: { id: true, name: true } }, lot: { select: { id: true, lotNo: true } } } });
   const issues: YarnGroup = new Map();
   const returns: YarnGroup = new Map();
   const add = (g: YarnGroup, key: string, r: (typeof rows)[number], sign: 1 | -1) => {
-    const cur = g.get(key) ?? { warehouseId: r.warehouse.id, warehouseName: r.warehouse.name, lot: r.lot, reasonCode: r.reasonCode, qty: D(0) };
+    const cur = g.get(key) ?? { itemId: r.itemId, warehouseId: r.warehouse.id, warehouseName: r.warehouse.name, lot: r.lot, reasonCode: r.reasonCode, qty: D(0) };
     cur.qty = cur.qty.plus(D(r.qtyKg).mul(sign));
     g.set(key, cur);
   };
-  const lotKey = (r: (typeof rows)[number]) => r.lot?.id ?? "";
+  // Anahtar iplik kalemiyle başlar: ters satır ileri satırın KENDİ kalemine yazılır (kart sonradan değişse de).
+  const lotKey = (r: (typeof rows)[number]) => `${r.lot?.id ?? ""}|${r.itemId}`;
   for (const r of rows) {
     // NET: ileri satır + tersi ayrı ayrı toplanır (iki toplam birbirini götürmez — §4.9-4).
     if (r.kind === YarnMovementKind.WARP_ISSUE) add(issues, `${r.warehouse.id}|${lotKey(r)}`, r, 1);
@@ -270,7 +269,6 @@ export async function cancelWound(id: string, reason: string, userId?: string): 
   if (!beam) throw AppError.notFound("Levent bulunamadı");
   const wound = beam.events[0];
   if (!wound) throw AppError.conflict(`${beam.beamNo} hiç sarılmamış — plandaki levent iptal edilmez, silinir`, { code: "WARP_BEAM_NOT_WOUND" });
-  const yarnItemId = beam.warpSpec.yarnItem.id;
   const cancel = await prisma.$transaction(async (tx) => {
     const ev = await applyWarpBeamEventTx(tx, {
       beamId: id,
@@ -281,10 +279,10 @@ export async function cancelWound(id: string, reason: string, userId?: string): 
     });
     const { issues, returns } = await groupYarnLinesTx(tx, id);
     for (const g of issues.values()) {
-      if (g.qty.gt(0)) await applyYarnMovementTx(tx, { itemId: yarnItemId, warehouseId: g.warehouseId, kind: YarnMovementKind.WARP_ISSUE_REVERSAL, qtyKg: g.qty, warpBeamId: id, lotId: g.lot?.id ?? null, reason: reason.trim(), userId: userId ?? null });
+      if (g.qty.gt(0)) await applyYarnMovementTx(tx, { itemId: g.itemId, warehouseId: g.warehouseId, kind: YarnMovementKind.WARP_ISSUE_REVERSAL, qtyKg: g.qty, warpBeamId: id, lotId: g.lot?.id ?? null, reason: reason.trim(), userId: userId ?? null });
     }
     for (const g of returns.values()) {
-      if (g.qty.gt(0)) await applyYarnMovementTx(tx, { itemId: yarnItemId, warehouseId: g.warehouseId, kind: YarnMovementKind.WARP_RETURN_REVERSAL, qtyKg: g.qty, warpBeamId: id, reasonCode: g.reasonCode, lotId: g.lot?.id ?? null, reason: reason.trim(), userId: userId ?? null });
+      if (g.qty.gt(0)) await applyYarnMovementTx(tx, { itemId: g.itemId, warehouseId: g.warehouseId, kind: YarnMovementKind.WARP_RETURN_REVERSAL, qtyKg: g.qty, warpBeamId: id, reasonCode: g.reasonCode, lotId: g.lot?.id ?? null, reason: reason.trim(), userId: userId ?? null });
     }
     return ev;
   });
