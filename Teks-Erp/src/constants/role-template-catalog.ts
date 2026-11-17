@@ -450,6 +450,8 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "warping-order:read",
       "warping-order:write",
       "warping-order:cancel",
+      // Kapanış (fire beyanı + iade) ve yeniden açma: aynı kişide, ayrı kod — fire defteri sayıyı değiştirir.
+      "warping-order:settle",
       // Dokuma işi yazma DAR: kapanış AÇIK BİR KARARDIR (operatör/süpervizör
       // kapatır, türetilmez) ve iptal bir durum geçişidir — planlama okur.
       "weavingorder:read",

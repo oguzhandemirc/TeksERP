@@ -305,7 +305,7 @@ export async function previewWarpingDispatch(id: string): Promise<WarpingDispatc
     ownerCustomerId: owner,
     stock: { known: stock !== null },
     yarns: o.yarns.map((y) => {
-      const s = sums.get(y.yarnItemId) ?? { outKg: D(0), returnedKg: D(0), transferInKg: D(0), transferOutKg: D(0), openKg: D(0) };
+      const s = sums.get(y.yarnItemId) ?? { outKg: D(0), returnedKg: D(0), transferInKg: D(0), transferOutKg: D(0), wasteKg: D(0), openKg: D(0) };
       const co = carry.get(y.yarnItemId) ?? D(0);
       const suggested = Prisma.Decimal.max(D(0), D(y.grossKg).minus(receivedKg(s)).minus(co));
       const depo = stock ? (stock.byItem.get(y.yarnItemId)?.serbestKg ?? D(0)) : null;

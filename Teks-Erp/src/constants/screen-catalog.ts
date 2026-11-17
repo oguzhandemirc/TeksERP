@@ -484,6 +484,8 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   { code: "loom:doff", reason: "Panel doff yüzeyi yok; tablet `mobile:dokuma` ile kaydeder — web kodu API/entegrasyon için." },
   { code: "loom:doff-revoke", reason: "Panel geri alma yüzeyi yok; tablet `mobile:dokuma-geri-al` ile — web kodu API/entegrasyon için." },
   // Tezgah künyesi + gölge mod (B3, 2026-09-14): "Devreye Alma" ekranı AYRI dilim (Faz 2 ingest ile, `tezgah.enabled`).
+  // Fason devere D5b (2026-11-18): kapanış / yeniden açma diyaloğu D7 dilimiyle doğar — ekranla ölü muaf olur.
+  { code: "warping-order:settle", reason: "Fason devere kapanış / yeniden açma diyaloğu D7 dilimiyle doğar; bugün yalnız API." },
 ];
 
 /** Katalogda adı geçmeyen izin var mı? (bekçi ve panel bandı kullanır) */

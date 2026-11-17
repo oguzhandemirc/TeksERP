@@ -5,6 +5,7 @@
 // iplik kalemleri. Sanal depo yok — iplik defterinden (`YarnMovement` SUBCONTRACT_*) türetilir. D4b-2 TUTMA modeli:
 //   holding(kalem, sipariş) = [kendi siparişi ise açık bakiye] + Σ net aktarım(hedef = sipariş) − Σ net aktarım(kaynak = sipariş)
 //                             − Σ canlı levent dağıtımı(tutan = sipariş)   (D5; devirde tutan = kapanmış kaynak sipariş)
+//                             − Σ net kapanış firesi(tutan = sipariş)      (D5b; WASTE − WASTE_CANCEL)
 // Σ_sipariş holding = kalemin açık bakiyesi (aktarma stok hareketi değildir). Sahip = lotun `ownerCustomerId`si (lotsuz null).
 // =============================================================================
 import { Prisma, SubcontractorDispatchItemKind, WarpingOrderStatus, YarnMovementKind } from "@prisma/client";
@@ -14,6 +15,8 @@ type Db = Pick<Prisma.TransactionClient, "subcontractorDispatchItem" | "warpingO
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 export const WARPING_TRANSFER = "TRANSFER" as const;
 export const WARPING_TRANSFER_CANCEL = "TRANSFER_CANCEL" as const;
+export const WARPING_WASTE = "WASTE" as const;
+export const WARPING_WASTE_CANCEL = "WASTE_CANCEL" as const;
 /** Canlı dağıtım yüklemi — ebeveyn WOUND ters kayıtla geri alınmamış (tek tanım; okuyucular bunu kullanır). */
 export const LIVE_ALLOCATION = { eventYarn: { event: { reversal: null } } } satisfies Prisma.WarpBeamYarnAllocationWhereInput;
 
@@ -44,6 +47,8 @@ export interface WarpingYarnItem {
   transferOutKg: Prisma.Decimal;
   /** D5: bakılan siparişin tutmasından dönen leventlere dağıtılan (canlı) kg. */
   allocatedKg: Prisma.Decimal;
+  /** D5b: bakılan siparişin bu kalemden beyan ettiği net kapanış firesi. */
+  wasteKg: Prisma.Decimal;
   /** Bakılan siparişin bu kalemden TUTTUĞU (holding). */
   openKg: Prisma.Decimal;
 }
@@ -57,6 +62,8 @@ export const WARPING_YARN_ITEM_SELECT = {
   warpingYarnTransfers: { select: { kind: true, qtyKg: true, fromWarpingOrderId: true, toWarpingOrderId: true } },
   // D5: dönen leventlere dağıtım — iptal edilen leventinki (WOUND_CANCEL) sayılmaz.
   warpBeamYarnAllocations: { where: LIVE_ALLOCATION, select: { kg: true, holderWarpingOrderId: true } },
+  // D5b: kapanış firesi (net = WASTE − WASTE_CANCEL), tutan sipariş gözünden.
+  warpingYarnWastes: { select: { kind: true, qtyKg: true, warpingOrderId: true } },
 } satisfies Prisma.SubcontractorDispatchItemSelect;
 type Row = Prisma.SubcontractorDispatchItemGetPayload<{ select: typeof WARPING_YARN_ITEM_SELECT }>;
 
@@ -64,6 +71,13 @@ type Row = Prisma.SubcontractorDispatchItemGetPayload<{ select: typeof WARPING_Y
 export function allocationsByHolder(allocs: Row["warpBeamYarnAllocations"]): Map<string, Prisma.Decimal> {
   const m = new Map<string, Prisma.Decimal>();
   for (const a of allocs) m.set(a.holderWarpingOrderId, (m.get(a.holderWarpingOrderId) ?? D(0)).plus(a.kg));
+  return m;
+}
+
+/** Sipariş başına net kapanış firesi (WASTE − WASTE_CANCEL; tutan sipariş gözünden). */
+export function wastesByHolder(wastes: Array<{ kind: string; qtyKg: Prisma.Decimal.Value; warpingOrderId: string }>): Map<string, Prisma.Decimal> {
+  const m = new Map<string, Prisma.Decimal>();
+  for (const w of wastes) m.set(w.warpingOrderId, (m.get(w.warpingOrderId) ?? D(0)).plus(w.kind === WARPING_WASTE ? D(w.qtyKg) : D(w.qtyKg).neg()));
   return m;
 }
 
@@ -76,8 +90,9 @@ function ownOpen(r: Row) {
   const wound = r.warpBeamEvents.reduce((acc, e) => acc.plus(e.theoreticalKg ?? 0), D(0));
   const out = D(r.dispatchedQty);
   const allocated = r.warpBeamYarnAllocations.reduce((acc, a) => acc.plus(a.kg), D(0));
-  // `open` = kendi siparişinin aktarım/dağıtım ÖNCESİ tabanı; `itemOpen` = kalemin deverecide kalan toplamı.
-  return { out, returned, wound, allocated, open: out.minus(returned).minus(wound), itemOpen: out.minus(returned).minus(wound).minus(allocated) };
+  const waste = [...wastesByHolder(r.warpingYarnWastes).values()].reduce((acc, v) => acc.plus(v), D(0));
+  // `open` = kendi siparişinin aktarım/dağıtım/fire ÖNCESİ tabanı; `itemOpen` = kalemin deverecide kalan toplamı.
+  return { out, returned, wound, allocated, open: out.minus(returned).minus(wound), itemOpen: out.minus(returned).minus(wound).minus(allocated).minus(waste) };
 }
 
 /** Kalemin sipariş başına net aktarımı (+ gelen, − giden); storno satırı aynı kaynak/hedefle eksi sayılır. */
@@ -97,6 +112,7 @@ export function holdingsOf(r: Row): Map<string, Prisma.Decimal> {
   const m = netTransfersByOrder(r.warpingYarnTransfers);
   m.set(own, (m.get(own) ?? D(0)).plus(ownOpen(r).open));
   for (const [k, v] of allocationsByHolder(r.warpBeamYarnAllocations)) m.set(k, (m.get(k) ?? D(0)).minus(v));
+  for (const [k, v] of wastesByHolder(r.warpingYarnWastes)) m.set(k, (m.get(k) ?? D(0)).minus(v));
   for (const [k, v] of m) if (v.isZero()) m.delete(k);
   return m;
 }
@@ -120,13 +136,14 @@ export function toWarpingYarnItem(r: Row, viewOrderId?: string): WarpingYarnItem
   }
   const own = view === ownId;
   const consumed = allocationsByHolder(r.warpBeamYarnAllocations).get(view) ?? D(0);
+  const wasted = wastesByHolder(r.warpingYarnWastes).get(view) ?? D(0);
   return {
     dispatchItemId: r.id, dispatchId: r.dispatch.id, dispatchNo: r.dispatch.dispatchNo, dispatchedAt: r.dispatch.dispatchedAt,
     warpingOrderId: ownId, own, yarnItemId: r.yarnItemId!, warehouseId: r.warehouseId!, lotId: r.lotId,
     lotNo: r.lot?.lotNo ?? null, ownerCustomerId: r.lot?.ownerCustomerId ?? null,
     outKg: base.out, returnedKg: base.returned, woundKg: base.wound, itemOpenKg: base.itemOpen,
-    transferInKg: tin, transferOutKg: tout, allocatedKg: consumed,
-    openKg: (own ? base.open : D(0)).plus(tin).minus(tout).minus(consumed),
+    transferInKg: tin, transferOutKg: tout, allocatedKg: consumed, wasteKg: wasted,
+    openKg: (own ? base.open : D(0)).plus(tin).minus(tout).minus(consumed).minus(wasted),
   };
 }
 
@@ -146,6 +163,7 @@ export async function loadWarpingYarnItems(db: Pick<Db, "subcontractorDispatchIt
           OR: [
             { dispatch: { warpingOrderId: where.warpingOrderId } },
             { warpingYarnTransfers: { some: { OR: [{ fromWarpingOrderId: where.warpingOrderId }, { toWarpingOrderId: where.warpingOrderId }] } } },
+            { warpingYarnWastes: { some: { warpingOrderId: where.warpingOrderId } } },
           ],
         }
       : { kind: SubcontractorDispatchItemKind.YARN, dispatch: { id: where.dispatchId, warpingOrderId: { not: null } } },
@@ -155,18 +173,19 @@ export async function loadWarpingYarnItems(db: Pick<Db, "subcontractorDispatchIt
   return rows.map((r) => toWarpingYarnItem(r, "warpingOrderId" in where ? where.warpingOrderId : undefined));
 }
 
-export interface YarnSums { outKg: Prisma.Decimal; returnedKg: Prisma.Decimal; transferInKg: Prisma.Decimal; transferOutKg: Prisma.Decimal; openKg: Prisma.Decimal }
+export interface YarnSums { outKg: Prisma.Decimal; returnedKg: Prisma.Decimal; transferInKg: Prisma.Decimal; transferOutKg: Prisma.Decimal; wasteKg: Prisma.Decimal; openKg: Prisma.Decimal }
 
-/** İplik başına toplam — kendi brüt çıkışı · kendi iadesi · net gelen/giden aktarım · deverecide tutulan. */
+/** İplik başına toplam — kendi brüt çıkışı · kendi iadesi · net gelen/giden aktarım · net kapanış firesi · deverecide tutulan. */
 export function sumByYarn(items: WarpingYarnItem[]): Map<string, YarnSums> {
   const m = new Map<string, YarnSums>();
   for (const it of items) {
-    const cur = m.get(it.yarnItemId) ?? { outKg: D(0), returnedKg: D(0), transferInKg: D(0), transferOutKg: D(0), openKg: D(0) };
+    const cur = m.get(it.yarnItemId) ?? { outKg: D(0), returnedKg: D(0), transferInKg: D(0), transferOutKg: D(0), wasteKg: D(0), openKg: D(0) };
     m.set(it.yarnItemId, {
       outKg: it.own ? cur.outKg.plus(it.outKg) : cur.outKg,
       returnedKg: it.own ? cur.returnedKg.plus(it.returnedKg) : cur.returnedKg,
       transferInKg: cur.transferInKg.plus(it.transferInKg),
       transferOutKg: cur.transferOutKg.plus(it.transferOutKg),
+      wasteKg: cur.wasteKg.plus(it.wasteKg),
       openKg: cur.openKg.plus(it.openKg),
     });
   }
