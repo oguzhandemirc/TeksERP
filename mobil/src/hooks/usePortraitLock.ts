@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import * as ScreenOrientation from 'expo-screen-orientation';
+import { acquireOrientationLock } from './orientationLock';
 
 /**
  * Telefon-dikey ekranlar için portrait kilidi (Tartı/Paket, Sevkiyat — saha,
@@ -8,9 +8,6 @@ import * as ScreenOrientation from 'expo-screen-orientation';
 export function usePortraitLock(enabled: boolean = true) {
   useEffect(() => {
     if (!enabled) return;
-    void ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
-    return () => {
-      void ScreenOrientation.unlockAsync();
-    };
+    return acquireOrientationLock('PORTRAIT_UP');
   }, [enabled]);
 }

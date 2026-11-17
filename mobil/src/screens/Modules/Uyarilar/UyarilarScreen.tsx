@@ -24,8 +24,7 @@ import { colors, spacing, typography } from '../../../theme';
 
 export default function LoomAlarmsScreen() {
   const compact = useDeviceType() === 'phone';
-  // Telefon dikey kilitli; tablet uygulamanın varsayılan yatayında kalır (Sipariş emsali —
-  // `useLandscapeLock(false)` telefonda kilidi açıp dikey kilidi bozardı).
+  // Telefon dikey kilitli; tablette kilit yok (cihaz döndürmesi serbest, Sipariş emsali).
   usePortraitLock(compact);
   const navigation = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
   const access = useLoomAlarmAccess();
