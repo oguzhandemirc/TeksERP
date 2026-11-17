@@ -6,6 +6,7 @@ import { useOperationsVisibilityContext } from "./useOperationsVisibility";
 import { operationGroups, type OperationGroupKey } from "./groups-config";
 import { sectionTiles } from "./sections";
 import type { OperationsTile } from "./tile-config";
+import { isPathLicenseClosed } from "@/lib/license/module-enabled";
 
 export interface VisibleSectionTile extends OperationsTile {
   /** Bağlama göre çözülmüş ad (`titleWhen`). */
@@ -43,7 +44,7 @@ export function useSectionTiles(): SectionTilesState {
     const allowed = sectionTiles(g.key).filter((t) => !isHubTileHidden(menu, t.to) && permittedTile(t));
     permitted[g.key] = allowed.length > 0;
     tiles[g.key] = allowed
-      .filter((t) => !isOff(t) || offEntryMode(true, Boolean(t.offHint), canSeeOff) !== "hide")
+      .filter((t) => !isOff(t) || offEntryMode(true, Boolean(t.offHint), canSeeOff && !isPathLicenseClosed(t.to, ctx.licenseClosedModules)) !== "hide")
       .map((t) => ({ ...t, label: t.titleWhen?.(ctx) ?? t.title, off: isOff(t) }));
   }
   return { ready: ctx.flagsReady, tiles, permitted };

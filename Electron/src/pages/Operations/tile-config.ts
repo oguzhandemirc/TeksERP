@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import type { OperationGroupKey } from "./groups-config";
+import type { ModuleFlagKey } from "@/lib/module-flags";
 import { planningTiles } from "./tiles/planning";
 import { productionTiles } from "./tiles/production";
 import { warehouseTiles } from "./tiles/warehouse";
@@ -155,6 +156,8 @@ export interface OperationsVisibilityContext {
   flagsReady: boolean;
   /** Sorgu HATA ile bitti: bayraklar bilinmiyor; kapılar yönlendirmez, gerçek kapı backend 403. */
   flagsFailed: boolean;
+  /** Lisansın kapattığı modüller (`licenseClosedModules`); bu modüllerin girişi süperadmine de SOLUK çizilmez, hiç çizilmez. */
+  licenseClosedModules?: ReadonlySet<ModuleFlagKey>;
 }
 
 export interface OperationsTile {

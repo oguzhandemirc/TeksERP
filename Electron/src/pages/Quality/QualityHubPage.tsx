@@ -9,6 +9,7 @@ import { useOperationsVisibilityContext } from "@/pages/Operations/useOperations
 import { qualityTiles, type QualityTile } from "./tile-config";
 import { useMenuLayout } from "@/hooks/useMenuLayout";
 import { isHubTileHidden } from "@/lib/menu-layout";
+import { isPathLicenseClosed } from "@/lib/license/module-enabled";
 
 /** Kalite Güvence kökü (UX-2 K1) — Operasyon hub'ıyla aynı kural: izin şart, kapalı modül karosu yalnız modülü açabilene soluk + ipucu. */
 export function QualityHubPage() {
@@ -19,7 +20,7 @@ export function QualityHubPage() {
     t.permissionAny ? hasAnyPermission(t.permissionAny) : !t.permission || hasPermission(t.permission);
   const isOff = (t: QualityTile) => Boolean(t.visibleWhen && !t.visibleWhen(ctx));
   const menu = useMenuLayout();
-  const visible = qualityTiles.filter((t) => !isHubTileHidden(menu, t.to) && permitted(t) && offEntryMode(isOff(t), Boolean(t.offHint), canSeeOff) !== "hide");
+  const visible = qualityTiles.filter((t) => !isHubTileHidden(menu, t.to) && permitted(t) && offEntryMode(isOff(t), Boolean(t.offHint), canSeeOff && !isPathLicenseClosed(t.to, ctx.licenseClosedModules)) !== "hide");
   return (
     <PageShell>
       <PageHeader

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { featureFlagService, DEFAULT_COMPANY_NAME, type FactoryTimezonePending } from "@/services/featureFlagService";
 import type { SameTypeSessionPolicy } from "@/types/auth";
 import { isSameTypeSessionPolicy } from "@/lib/session-auth";
+import { applyLicenseCeiling, isModuleEnabled } from "@/lib/license/module-enabled";
 import {
   DEFAULT_SHIPMENT_ORDER_REQUIREMENT,
   DEFAULT_SHIPPING_INVOICE_MODE,
@@ -16,11 +17,25 @@ import {
 
 const QUERY_KEY = ["feature-flags"];
 
-export function useFeatureFlags() {
+type FlagsResponse = Awaited<ReturnType<typeof featureFlagService.get>>;
+
+// Kararlı referans: select sonucu veri kimliği değişmedikçe yeniden hesaplanmaz.
+function selectWithLicenseCeiling(res: FlagsResponse): FlagsResponse {
+  const data = applyLicenseCeiling(res?.data);
+  return data === res?.data ? res : { ...res, data };
+}
+
+/**
+ * Bayraklar — modül şalterleri LİSANS TAVANINDAN GEÇMİŞ hâliyle: lisansın kapattığı modül her
+ * okuyucuya kapalı görünür (menü · rota · karo · sayfa içi alan). `raw: true` HAM şalteri verir;
+ * yalnız şalterin kendi yazdığını gösteren Sistem → Modüller toggle'ı (`FeatureFlagSection`) kullanır.
+ */
+export function useFeatureFlags(opts?: { raw?: boolean }) {
   return useQuery({
     queryKey: QUERY_KEY,
     queryFn: () => featureFlagService.get(),
     staleTime: 5 * 60 * 1000,
+    select: opts?.raw ? undefined : selectWithLicenseCeiling,
   });
 }
 
@@ -56,8 +71,7 @@ export function usePricingEnabled(): boolean {
  */
 export function useTezgahEnabled(): boolean {
   const q = useFeatureFlags();
-  const d = q.data?.data;
-  return (d?.productionEnabled ?? false) && (d?.tezgahEnabled ?? false);
+  return isModuleEnabled(q.data?.data, "tezgahEnabled");
 }
 
 /**
@@ -66,8 +80,7 @@ export function useTezgahEnabled(): boolean {
  */
 export function useTezgahAlarmEnabled(): boolean {
   const q = useFeatureFlags();
-  const d = q.data?.data;
-  return (d?.productionEnabled ?? false) && (d?.tezgahEnabled ?? false) && (d?.tezgahAlarmEnabled ?? false);
+  return isModuleEnabled(q.data?.data, "tezgahEnabled") && (q.data?.data?.tezgahAlarmEnabled ?? false);
 }
 
 /**
@@ -77,43 +90,40 @@ export function useTezgahAlarmEnabled(): boolean {
  */
 export function useDokumaEnabled(): boolean {
   const q = useFeatureFlags();
-  const d = q.data?.data;
-  return (d?.productionEnabled ?? false) && (d?.dokumaEnabled ?? false);
+  return isModuleEnabled(q.data?.data, "dokumaEnabled");
 }
 
 /** Devere modülü açık mı (`devere.enabled`). Yüklenene dek KAPALI — fail-closed. */
 /** K4P Kalite Güvence modülü açık mı (`kaliteGuvence.enabled`). Yüklenene dek KAPALI — yeni alanlar görünmez. */
 export function useKaliteGuvenceEnabled(): boolean {
   const q = useFeatureFlags();
-  return q.data?.data?.kaliteGuvenceEnabled ?? false;
+  return isModuleEnabled(q.data?.data, "kaliteGuvenceEnabled");
 }
 
 export function useDevereEnabled(): boolean {
   const q = useFeatureFlags();
-  return q.data?.data?.devereEnabled ?? false;
+  return isModuleEnabled(q.data?.data, "devereEnabled");
 }
 
 /** G3 Emanet / konsinye mülkiyet modülü açık mı (`emanet.enabled`). Yüklenene dek KAPALI — fail-closed:
  *  sahip müşteri alanı yalnız bununla çizilir; bağımsız modül. */
 export function useEmanetEnabled(): boolean {
   const q = useFeatureFlags();
-  return q.data?.data?.emanetEnabled ?? false;
+  return isModuleEnabled(q.data?.data, "emanetEnabled");
 }
 
 /** Maliyet & Teklif modülü etkin mi (`production && maliyet`). Yüklenene dek ve alanı tanımayan eski
  *  sunucuda KAPALI — fail-closed: maliyet menüsü/ekranı bayrak gelmeden çizilmez. */
 export function useMaliyetEnabled(): boolean {
   const q = useFeatureFlags();
-  const d = q.data?.data;
-  return (d?.productionEnabled ?? false) && (d?.maliyetEnabled ?? false);
+  return isModuleEnabled(q.data?.data, "maliyetEnabled");
 }
 
 /** Gelen belge taslağı (OCR) modülü etkin mi (`emanet && gelenBelge`). Yüklenene dek ve alanı tanımayan eski
  *  sunucuda KAPALI — fail-closed: gelen belge karosu/ekranı bayrak gelmeden çizilmez. */
 export function useGelenBelgeEnabled(): boolean {
   const q = useFeatureFlags();
-  const d = q.data?.data;
-  return (d?.emanetEnabled ?? false) && (d?.gelenBelgeEnabled ?? false);
+  return isModuleEnabled(q.data?.data, "gelenBelgeEnabled");
 }
 
 /** Devere Faz 2: iplik lotu zorunlu mu (`devere.lotRequired`). Yüklenene dek KAPALI = bugünkü davranış (lot isteğe bağlı). */

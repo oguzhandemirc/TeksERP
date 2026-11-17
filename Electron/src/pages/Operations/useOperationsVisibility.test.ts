@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { renderHook } from "@testing-library/react";
-import type { FeatureFlags } from "@/services/featureFlagService";
+import type { FeatureFlagsView } from "@/services/featureFlagService";
+import { isRouteModuleOpen } from "@/lib/route-modules";
 import { useOperationsVisibilityContext } from "./useOperationsVisibility";
 
 // =============================================================================
@@ -11,7 +12,7 @@ import { useOperationsVisibilityContext } from "./useOperationsVisibility";
 // ticaret && iplik · devere · dokuma = production && dokuma) da burada çözülür.
 // =============================================================================
 
-let flagsData: Partial<FeatureFlags> | undefined;
+let flagsData: Partial<FeatureFlagsView> | undefined;
 vi.mock("@/hooks/usePricingEnabled", () => ({
   useFeatureFlags: () => ({ data: flagsData === undefined ? undefined : { data: flagsData } }),
   useShipmentConfirmationEnabled: () => false,
@@ -56,6 +57,25 @@ describe("useOperationsVisibilityContext — bayrak okunamadığında yön", () 
     expect(ctx().gelenBelgeEnabled).toBe(false);
     flagsData = { emanetEnabled: true, gelenBelgeEnabled: true };
     expect(ctx().gelenBelgeEnabled).toBe(true);
+  });
+
+  it("⭐ lisans tavanı: şalter AÇIK ama `kapaliModuller`de → bağlamda kapalı, rota kapısı /cost/quotes'u kapatır", () => {
+    flagsData = {
+      productionEnabled: true,
+      maliyetEnabled: true,
+      kaliteGuvenceEnabled: true,
+      financeEnabled: true,
+      license: { kip: "zorla", kapaliModuller: [{ anahtar: "maliyet.enabled", neden: "LISANSTA_YOK" }, { anahtar: "kaliteGuvence.enabled", neden: "LISANSTA_YOK" }] },
+    };
+    const c = { ...ctx(), flagsReady: true };
+    expect(c.maliyetEnabled).toBe(false);
+    expect(c.kaliteGuvenceEnabled).toBe(false);
+    expect(c.financeEnabled).toBe(true);
+    expect(isRouteModuleOpen("/cost/quotes/new", c)).toBe(false);
+    expect(isRouteModuleOpen("/quality/inspections", c)).toBe(false);
+    expect(isRouteModuleOpen("/finance/cari", c)).toBe(true);
+    flagsData = { ...flagsData, license: { kip: "gozlem", kapaliModuller: [] } };
+    expect(isRouteModuleOpen("/cost/quotes/new", ctx())).toBe(true);
   });
 
   it("zincir: iplik AÇIK ama ticaret KAPALI → etkin iplik KAPALI; devere BAĞIMSIZ kalır (K3 2026-09-14)", () => {

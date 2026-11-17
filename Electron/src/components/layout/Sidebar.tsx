@@ -18,6 +18,7 @@ import { isMenuHidden } from "@/lib/menu-layout";
 import { useAuthStore } from "@/store/auth";
 import { isSuperadminGateOpen } from "@/lib/superadmin-gate";
 import { useLicenseScreenVisible } from "@/hooks/useLicenseStatus";
+import { isPathLicenseClosed } from "@/lib/license/module-enabled";
 
 interface Props {
   collapsed: boolean;
@@ -52,7 +53,9 @@ export function Sidebar({ collapsed }: Props) {
     // üretim belirsizken çizilir (fabrikada bir an kaybolup gelmesin).
     // Sonuçlanmış kapalı satır yalnız modülü açabilene soluk çizilir (`withOffHint`), diğerine hiç (2026-11-01).
     if (item.featureFlag && !visibilityCtx[item.featureFlag]) {
-      if (!visibilityCtx.flagsReady || offEntryMode(true, true, canSeeOff) === "hide") return false;
+      // Lisansın kapattığı modül soluk bile çizilmez: açacak şalter yok (kullanıcı kararı 2026-11-17).
+      const licenseClosed = isPathLicenseClosed(item.to, visibilityCtx.licenseClosedModules);
+      if (!visibilityCtx.flagsReady || offEntryMode(true, true, canSeeOff && !licenseClosed) === "hide") return false;
     }
     return true;
   };

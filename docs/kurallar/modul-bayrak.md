@@ -48,6 +48,7 @@
 - **[ÇEKİRDEK]** `ScreenEntry.modul` ZORUNLU aidiyet beyanı (`ModulKey` · `cekirdek:*` · `planlanan:fason|kartela`), görünürlük kuralı değil (o `visibleWhen`); `MODULESIZ_EKRANLAR` muafı yok.
 - **[ÇEKİRDEK]** Modül okuyucusunun varyantını çağıran seçer: `readXRaw` saf DB (yalnız `getFeatureFlags` ve `effectiveModuleValue`), `readX = readXRaw ∧ lisans tavanı` (tüm enforcement). Tavan kuralı `docs/kurallar/lisans.md` § Değişmezler'de.
 - **[ÇEKİRDEK]** Lisansın kapattığı modülde adlı kapı 403 `LICENSE_MODULE`; lisans açık modülü AÇTIRMAZ (`setFeatureFlags` yazma tavanı; `flagWriteGuard`a dokunma); dondurulan modül kapalı; panel ham şalter + salt-okunur `license` bloğunu okur.
+- **[ÇEKİRDEK]** Panelde "modül etkin mi" yalnız `Electron/src/lib/license/module-enabled.ts` (ham şalter ∧ `license.kapaliModuller` ∧ ön koşul); `useFeatureFlags` tavanlı görünüm verir, ham şalteri yalnız Sistem → Modüller toggle'ı `useFeatureFlags({ raw: true })` ile okur; lisansın kapattığı modül menü/karo/paletten TAMAMEN gizlenir (süperadmine de soluk çizilmez), rotası `/forbidden` modül kapalı.
 - **[ÇEKİRDEK]** Kullanıcıya "şuradan açılır" diyen backend cümlesi yolu `constants/panel-ayar-yolu.ts`ten alır (`settingScreenPath` · `settingRowPath`); elle "Genel Ayarlar"/"Ayarlar →" yasak; tablo panel `settings-config.ts` ile bayt eşit.
 - **[ÇEKİRDEK]** Ayar dışı ekrana yönlendiren backend cümlesi `constants/panel-ekran-yolu.ts` `ekranYolu`ndan (ayraç ` → `); elle "Tanımlar → …"/"X > Y" yazma; yeni ekran için tabloya satır ekle.
 
