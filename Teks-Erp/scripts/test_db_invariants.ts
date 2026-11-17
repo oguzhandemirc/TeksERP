@@ -808,7 +808,7 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "fabric_property_values", name: "fabric_property_values_amount_ck" },
   { table: "fabric_property_values", name: "fabric_property_values_default_active_ck" },
   { table: "subcontractor_dispatch_items", name: "subcontractor_dispatch_items_kind_ref_ck" },
-  // G2 fason dokuma (2026-09-14): başlık iş emri adımı XOR dokuma işi — birincil kapı serviste
+  // G2 fason dokuma (2026-09-14): başlık iş emri adımı XOR dokuma işi; D4b (2026-11-17) üçüncü kol devere siparişi — tam biri, birincil kapı serviste
   { table: "subcontractor_dispatches", name: "subcontractor_dispatches_header_ck" },
   { table: "subcontractor_receipts", name: "subcontractor_receipts_header_ck" },
   { table: "yarn_movements", name: "yarn_movements_warp_link_ck" },

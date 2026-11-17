@@ -9,7 +9,7 @@
 import prisma from "../../lib/prisma";
 import { applyModuleCeiling } from "../../lib/license/module-ceiling";
 import { asBoolean, asNumber } from "./core";
-import { DEFAULT_DOKUMA_ROLL_BIRTH, DOKUMA_ROLL_BIRTH_MODES, type DokumaRollBirth } from "./defaults";
+import { DEFAULT_DEVERE_FASON_LOT_POLICY, DEFAULT_DOKUMA_ROLL_BIRTH, DEVERE_FASON_LOT_POLICIES, DOKUMA_ROLL_BIRTH_MODES, type DevereFasonLotPolicy, type DokumaRollBirth } from "./defaults";
 import { SETTING_KEYS } from "./keys";
 
 
@@ -265,6 +265,13 @@ export async function readDevereWarpFixedWasteM(tx?: Pick<typeof prisma, "system
   if (!setting) return DEFAULT_DEVERE_WARP_FIXED_WASTE_M;
   const n = asNumber(setting.value);
   return n === null || !Number.isFinite(n) || n < 0 || n > DEVERE_WARP_FIXED_WASTE_M_MAX ? DEFAULT_DEVERE_WARP_FIXED_WASTE_M : n;
+}
+
+/** Fason devere D4b (K4): lot karışımı kuralı — satır yok / tanınmayan değer → `WARN`. Aksiyon anında, cache'siz. */
+export async function readDevereFasonLotPolicy(tx?: Pick<typeof prisma, "systemSetting">): Promise<DevereFasonLotPolicy> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.DEVERE_FASON_LOT_POLICY }, select: { value: true } });
+  const v = setting?.value;
+  return typeof v === "string" && DEVERE_FASON_LOT_POLICIES.includes(v as DevereFasonLotPolicy) ? (v as DevereFasonLotPolicy) : DEFAULT_DEVERE_FASON_LOT_POLICY;
 }
 
 /** Fason devere D4: kapama fire toleransı (%) — 0 = denetim yok (varsayılan); üst sınır dahil. */

@@ -10,7 +10,9 @@ import { Currency, WarpingFeeUnit, WarpingOrderStatus } from "@prisma/client";
 import { AppError } from "../utils/app-error";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
-import { requireDevereEnabled } from "../middlewares/module.middleware";
+import { requireDevereEnabled, requireIplikEnabled } from "../middlewares/module.middleware";
+import { dispatchWarpingOrder, getWarpingInstruction, previewWarpingDispatch, WARPING_DISPATCH_MAX_LINES } from "../services/warping-order/dispatch";
+import { cancelWarpingDispatch, previewCancelWarpingDispatch } from "../services/warping-order/dispatch-cancel";
 import { assertNoBareFilterParams, parseQueryParams, readFilterList, readIdCondition } from "../utils/query-parser";
 import { createWarpingOrder, patchWarpingOrder, previewWarpingOrder, WARPING_ORDER_MAX_SALES_ORDERS } from "../services/warping-order/create";
 import { cancelPreviewWarpingOrder, cancelWarpingOrder } from "../services/warping-order/cancel";
@@ -235,6 +237,129 @@ router.post("/:id/cancel", requirePermission("warping-order:cancel"), wrap(async
   const body = parse(CancelBody, req.body);
   const data = await cancelWarpingOrder(id, body.reason, req.user!.userId);
   return { status: 200, body: { success: true, data, message: `${data.orderNo} iptal edildi` } };
+}));
+
+// ── D4b: iplik sevki · sevk iptali · çözgü talimatı ─────────────────────────
+const DispatchLine = z.strictObject({
+  yarnItemId: Id,
+  warehouseId: Id,
+  lotId: Id.nullable().optional(),
+  qtyKg: z.number({ message: "İplik kg sayı olmalı" }).positive("İplik kg sıfırdan büyük olmalı").max(1_000_000, "İplik kg çok büyük"),
+});
+const DispatchBody = z.strictObject({
+  clientToken: z.uuid("clientToken geçersiz (UUID)"),
+  lines: z.array(DispatchLine).min(1, "En az bir iplik satırı gerekli").max(WARPING_DISPATCH_MAX_LINES, `En çok ${WARPING_DISPATCH_MAX_LINES} iplik satırı`),
+  plateNumber: z.string().max(32, "Plaka en çok 32 karakter").nullable().optional(),
+  driverName: z.string().max(100, "Şoför adı en çok 100 karakter").nullable().optional(),
+  notes: z.string().max(500, "Not en çok 500 karakter").nullable().optional(),
+  expectedReturnAt: z.iso.datetime({ offset: true, message: "Termin ISO tarih-saat olmalı" }).nullable().optional(),
+});
+
+/**
+ * @openapi
+ * /api/warping-orders/{id}/dispatch-preview:
+ *   get:
+ *     tags: [WarpingOrder]
+ *     summary: İplik sevk önizlemesi — iplik başına plan · gönderilen · iade · deverecide · önerilen · depo · eksik; lot kuralı ve sahip
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: "{ success, data: WarpingDispatchPreview }" }
+ *       403: { description: Devere ya da iplik modülü kapalı (MODULE_DISABLED) }
+ * /api/warping-orders/{id}/dispatch:
+ *   post:
+ *     tags: [WarpingOrder]
+ *     summary: Devereciye iplik sevki (kısmi/çok seferli/plandan fazla meşru; clientToken idempotent) — sipariş IN_PROGRESS olur
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [clientToken, lines]
+ *             properties:
+ *               clientToken: { type: string, format: uuid }
+ *               lines: { type: array, items: { type: object, properties: { yarnItemId: { type: string }, warehouseId: { type: string }, lotId: { type: string, nullable: true }, qtyKg: { type: number } } } }
+ *               plateNumber: { type: string, nullable: true }
+ *               driverName: { type: string, nullable: true }
+ *               notes: { type: string, nullable: true }
+ *               expectedReturnAt: { type: string, format: date-time, nullable: true }
+ *     responses:
+ *       201: { description: "Sevk açıldı — { data: { dispatch, yarnItems, instruction, warnings } }" }
+ *       200: { description: Aynı denemenin tekrarı (replay) }
+ *       400: { description: "WARPING_YARN_NOT_IN_PLAN · YARN_LOT_REQUIRED · WARPING_DISPATCH_DUPLICATE_LINE · eksi bakiye" }
+ *       409: { description: "WARPING_ORDER_NOT_DISPATCHABLE · OWNER_MISMATCH · WARPING_LOT_MIXED · DISPATCH_CANCELLED · CLIENT_TOKEN_COLLISION" }
+ */
+router.get("/:id/dispatch-preview", requirePermission("warping-order:write"), requireIplikEnabled, wrap(async (req) => {
+  const id = parse(Id, req.params.id);
+  return { status: 200, body: { success: true, data: await previewWarpingDispatch(id) } };
+}));
+
+router.post("/:id/dispatch", requirePermission("warping-order:write"), requireIplikEnabled, wrap(async (req) => {
+  const id = parse(Id, req.params.id);
+  const body = parse(DispatchBody, req.body);
+  const out = await dispatchWarpingOrder(id, body, req.user!.userId);
+  const { warnings, replayed, ...data } = out;
+  return {
+    status: replayed ? 200 : 201,
+    body: { success: true, data, message: replayed ? `${data.dispatch.dispatchNo} zaten kayıtlı` : `İplik sevki ${data.dispatch.dispatchNo} açıldı (${data.yarnTotalKg} kg)`, ...(warnings.length > 0 ? { warnings } : {}) },
+  };
+}));
+
+/**
+ * @openapi
+ * /api/warping-orders/{id}/dispatches/{dispatchId}/cancel-preview:
+ *   get:
+ *     tags: [WarpingOrder]
+ *     summary: Sevk iptali önizlemesi — etkilenen her iplik kalemi, LIFO engeli, sipariş OPEN'a döner mi
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *       - { in: path, name: dispatchId, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: "{ success, data: WarpingDispatchCancelPreview }" }
+ * /api/warping-orders/{id}/dispatches/{dispatchId}/cancel:
+ *   post:
+ *     tags: [WarpingOrder]
+ *     summary: Sevk iptali — iplik depoya geri (SUBCONTRACT_OUT_CANCEL); iade alınmış sevk 409 (LIFO); son canlı sevkte sipariş OPEN
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *       - { in: path, name: dispatchId, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: İptal edildi }
+ *       409: { description: "YARN_ITEM_RETURNED · DISPATCH_CANCELLED · WARPING_ORDER_NOT_CANCELLABLE" }
+ */
+router.get("/:id/dispatches/:dispatchId/cancel-preview", requirePermission("warping-order:cancel"), requireIplikEnabled, wrap(async (req) => {
+  const id = parse(Id, req.params.id);
+  const dispatchId = parse(Id, req.params.dispatchId);
+  return { status: 200, body: { success: true, data: await previewCancelWarpingDispatch(id, dispatchId) } };
+}));
+
+router.post("/:id/dispatches/:dispatchId/cancel", requirePermission("warping-order:cancel"), requireIplikEnabled, wrap(async (req) => {
+  const id = parse(Id, req.params.id);
+  const dispatchId = parse(Id, req.params.dispatchId);
+  const body = parse(CancelBody, req.body);
+  const data = await cancelWarpingDispatch(id, dispatchId, body.reason, req.user!.userId);
+  return { status: 200, body: { success: true, data, message: `Sevk ${data.dispatchNo} iptal edildi` } };
+}));
+
+/**
+ * @openapi
+ * /api/warping-orders/{id}/instruction:
+ *   get:
+ *     tags: [WarpingOrder]
+ *     summary: Çözgü talimatı bloğu — kart(lar), iplik başına harf/tel/denye, dizilim, tarak, levent adedi × boy, termin, not (iç kolon yok)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: "{ success, data: WarpingInstruction }" }
+ */
+router.get("/:id/instruction", requirePermission("warping-order:read"), wrap(async (req) => {
+  const id = parse(Id, req.params.id);
+  return { status: 200, body: { success: true, data: await getWarpingInstruction(id) } };
 }));
 
 export default router;

@@ -2092,6 +2092,8 @@ model WarpingOrder {
   yarns         WarpingOrderYarn[]
   extraSpecs    WarpingOrderExtraSpec[]
   salesOrders   WarpingOrderToOrder[]
+  /// D4b: iplik sevk belgeleri (başlık üçüncü kolu `SubcontractorDispatch.warpingOrderId`).
+  dispatches    SubcontractorDispatch[] @relation("DispatchWarpingOrder")
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -7852,6 +7854,11 @@ model SubcontractorDispatch {
   stepId                 String?  @db.Uuid
   /// Fason dokuma sevki — `WeavingOrder.executionKind = SUBCONTRACTED` işin fasoncusuna.
   weavingOrderId         String?  @db.Uuid
+  /// Fason devere D4b (2026-11-17): BAŞLIK ÜÇÜNCÜ KOLU — devere siparişine iplik sevki (iş emri · dokuma · devere,
+  /// tam biri; CHECK `subcontractor_dispatches_header_ck`). Yalnız `warping-order/dispatch.ts` yazar.
+  warpingOrderId         String?  @db.Uuid
+  /// D4b: devere sevkinin idempotency anahtarı (mantıksal deneme başına; replay `tokenReplay`). Diğer yollar NULL.
+  clientToken            String?  @unique @db.Uuid
   subcontractorId        String   @db.Uuid // Gerçekleşen fason firma
   // Sevk anında "plan ne diyordu" snapshot'ı — rapor için.
   // step.plannedSubcontractorId değişebilir; bu alan o anki değeri dondurur.
@@ -7890,6 +7897,7 @@ model SubcontractorDispatch {
   batch                 Batch?                              @relation(fields: [batchId], references: [id], onDelete: Restrict)
   step                  WorkOrderStep?                      @relation(fields: [stepId], references: [id], onDelete: Restrict)
   weavingOrder          WeavingOrder?                       @relation("DispatchWeavingOrder", fields: [weavingOrderId], references: [id], onDelete: Restrict)
+  warpingOrder          WarpingOrder?                       @relation("DispatchWarpingOrder", fields: [warpingOrderId], references: [id], onDelete: Restrict)
   subcontractor         Subcontractor                       @relation("DispatchSubcontractor", fields: [subcontractorId], references: [id])
   plannedSubcontractor  Subcontractor?                      @relation("DispatchPlannedSubcontractor", fields: [plannedSubcontractorId], references: [id])
   dispatchedBy          User?                               @relation("DispatchCreatedBy", fields: [dispatchedById], references: [id])
@@ -7909,6 +7917,7 @@ model SubcontractorDispatch {
   // Composite: WO-filtreli + tarih sıralı liste (workorder detay panelinde kullanılır)
   @@index([workOrderId, dispatchedAt])
   @@index([weavingOrderId, dispatchedAt])
+  @@index([warpingOrderId, dispatchedAt])
   // Parti-filtreli sevkler (getBatches lane hesabı + born kalıtım kaynağı)
   @@index([batchId])
   // Composite: Fason firma-filtreli + tarih sıralı liste (firma raporları için)

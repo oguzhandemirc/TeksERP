@@ -434,6 +434,8 @@ export interface FeatureFlags {
   devereWarpFixedWasteM: number;
   /** Fason devere D4: kapama fire toleransı % (backend `DEFAULT_DEVERE_FASON_WASTE_TOLERANCE_PCT` = 0 = denetim yok). */
   devereFasonWasteTolerancePct: number;
+  /** Fason devere D4b (K4): lot karışımı kuralı (backend `DEFAULT_DEVERE_FASON_LOT_POLICY` = WARN). */
+  devereFasonLotPolicy: DevereFasonLotPolicy;
   /** Z1 üretim belge zinciri (2026-09-18) — üç davranış bayrağı, varsayılan KAPALI = bağ opsiyonel (bugünkü davranış). */
   devereBeamWeavingLinkRequired: boolean;
   dokumaRunWeavingOrderRequired: boolean;
@@ -934,6 +936,8 @@ export type TezgahAlarmNoShiftMode = "WARN" | "ALWAYS" | "REQUIRE_SHIFT";
 /** H1: kurşun metre ölçümü — backend `KursunMeterCapture` aynası. */
 export type KursunMeterCapture = "OFF" | "OUT" | "IN_OUT";
 
+/** Fason devere D4b (K4) — backend `DevereFasonLotPolicy` aynası. */
+export type DevereFasonLotPolicy = "FREE" | "WARN" | "SINGLE_LOT";
 /** S1: top doğuş yolu — backend `DokumaRollBirth` aynası. */
 export type DokumaRollBirth = "TABLET_DOFF" | "KK1_LABEL_OR_ORDER" | "KK1_LABEL_ONLY";
 export type AlarmShiftNotice = "NO_SHIFT_DEFINED" | "NO_SHIFT_NOW";

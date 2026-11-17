@@ -70,6 +70,12 @@ export const DOKUMA_ROLL_BIRTH_MODES: DokumaRollBirth[] = ["TABLET_DOFF", "KK1_L
 /** Varsayılan `TABLET_DOFF` — BUGÜNKÜ davranış (KK1 gövdesinde yeni alan reddedilir, tablet İNDİR yolu aynen). */
 export const DEFAULT_DOKUMA_ROLL_BIRTH: DokumaRollBirth = "TABLET_DOFF";
 
+/** Fason devere D4b (K4): sipariş kapsamında iplik başına lot karışımı kuralı. */
+export type DevereFasonLotPolicy = "FREE" | "WARN" | "SINGLE_LOT";
+export const DEVERE_FASON_LOT_POLICIES: DevereFasonLotPolicy[] = ["FREE", "WARN", "SINGLE_LOT"];
+/** Varsayılan `WARN` — kullanıcı kararı 2026-11-17 (K4); devere sevki yeni yol, "bugünkü davranış" yok. */
+export const DEFAULT_DEVERE_FASON_LOT_POLICY: DevereFasonLotPolicy = "WARN";
+
 /** H1: kurşun metre ölçümü — `OFF` bugünkü davranış (okuma yazılmaz, `meterOut` yok sayılır); `OUT` çıkış; `IN_OUT` giriş + çıkış. */
 export type KursunMeterCapture = "OFF" | "OUT" | "IN_OUT";
 export const KURSUN_METER_CAPTURE_MODES: KursunMeterCapture[] = ["OFF", "OUT", "IN_OUT"];

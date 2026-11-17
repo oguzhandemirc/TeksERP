@@ -19,7 +19,7 @@ import { readFinanceAutoDraftFromShipmentEnabled, readFinanceBlockNegativeCashEn
 import { publicTimezoneWarning, readCompanyName, readFactoryTimezonePeriods } from "./general";
 import { readBatchAutoCreateEnabled, readBatchLastNumberHintEnabled, readBatchShortNumberEnabled, readKursunBypassEnabled, readKursunMachineAssignMode, readKursunMeterCapture, readKursunMeterStockMode, readKursunMeterVarianceApproval, readKursunMeterVarianceBasis, readKursunMeterVarianceThresholdM, readKursunMeterVarianceThresholdPct, readKursunSimulatedMeterEnabled, readProductionRouteMode, readProductionScanRouteStations, readQualityGradeRequiredEnabled, readScanCustomerCodeLookupEnabled } from "./kursun-batch";
 import { readDefaultLabelMedia, readDocumentDesignerEnabled, readDocumentPublishSodEnabled, readLabelCopies, readLabelCopiesSource, readLabelCustomerCodeAt, readLabelCustomerCodeMissing, readLabelNativeSendEnabled, readMobileRasterEnabled, readNotificationInboxEnabled, readPatronBulutOlayGudumluEnabled, readPatronPushEnabled, readScrapGradeLabelEnabled, readStockAgingScope, readStockAgingSource } from "./labels";
-import { readDevereFasonWasteTolerancePct, readDevereWarpFixedWasteM, readDepoMultiEnabledRaw, readDevereAutoConsume, readDevereBeamWeavingLinkRequired, readDevereEnabledRaw, readDevereLotRequired, readDevereMountTracking, readDevereMountTrackingRequired, readDokumaEnabledRaw, readDokumaOrderLineLinkRequired, readDokumaRollBirth, readDokumaRunWeavingOrderRequired, readDokumaWeavingWastePct, readDokumaYarnReservationEnabled, readEmanetEnabledRaw, readGelenBelgeEnabledRaw, readIplikEnabledRaw, readKaliteGuvenceEnabledRaw, readKumasTeknikEnabledRaw, readMaliyetEnabledRaw, readProductionEnabledRaw, readReportsClosedKeys, readTezgahEnabledRaw, readTicaretEnabledRaw } from "./modules";
+import { readDevereFasonLotPolicy, readDevereFasonWasteTolerancePct, readDevereWarpFixedWasteM, readDepoMultiEnabledRaw, readDevereAutoConsume, readDevereBeamWeavingLinkRequired, readDevereEnabledRaw, readDevereLotRequired, readDevereMountTracking, readDevereMountTrackingRequired, readDokumaEnabledRaw, readDokumaOrderLineLinkRequired, readDokumaRollBirth, readDokumaRunWeavingOrderRequired, readDokumaWeavingWastePct, readDokumaYarnReservationEnabled, readEmanetEnabledRaw, readGelenBelgeEnabledRaw, readIplikEnabledRaw, readKaliteGuvenceEnabledRaw, readKumasTeknikEnabledRaw, readMaliyetEnabledRaw, readProductionEnabledRaw, readReportsClosedKeys, readTezgahEnabledRaw, readTicaretEnabledRaw } from "./modules";
 import { readPackageNoMode, readPackageNoStartsAtZero, readPackageNumbering, readPackingGroupMode, readPackingGroupNumbering, readPackingGroupsEnabled, readPackingLotPartialDispatch, readPackingLotRequired, readPackingPoolPackageNo, readSackDumpNameMode, readShippingDocPackingLot, readShippingReturnFootnote, readShippingSackSeqOnDoc, readShippingSackSeqPrefix, readShippingSackSeqPrefixLive, readShippingSackSeqShowTotal, readShippingSackSeqStart, readTezgahAlarmEnabled, readTezgahAlarmEscalateWhenAcked, readTezgahAlarmNoShiftMode, readTezgahAlarmRenotifyMinutes, readTezgahAlarmUnclassifiedEnabled, readTezgahAlarmUnclassifiedTargetMinutes, readTezgahCollectorSilenceMinutes, readTezgahEscalationGraceMinutes, readTezgahMaxOpenStopHours } from "./packing-loom";
 import { readBackupHour, readLoginMethods, readPinLockoutAttempts, readPinLockoutEnabled, readPinLockoutEscalateAfter, readPinLockoutLongPenaltyMin, readPinLockoutPenaltySec } from "./pin-backup";
 import { readFasonNoteMobileEntry, readKartelaMeasurementEnabled, readKk1DuplicateGuardEnabled, readKk1HistoryAllEntriesEnabled, readKk1LabelScanVerifyEnabled, readKk1OnlineOnlyEnabled, readKk1WeightEntryEnabled, readPartyCodeAuto, readRawWidthEnabled, readReturnGradingEnabled, readSimulatedWeightEnabled, readSupportOwnTicketsOnlyEnabled, readTargetQuantityEnabled, readTargetWidthEnabled, readWorkOrderQuickOwnOnlyEnabled } from "./production";
@@ -62,9 +62,7 @@ const DEVICE_PROOF_TTL_MS = 10_000;
 export async function readDeviceProofRequiredCached(): Promise<boolean> {
   if (isHostedInstallation()) return true;
   const now = Date.now();
-  if (deviceProofCache && deviceProofCache.gen === cacheGeneration && now - deviceProofCache.at < DEVICE_PROOF_TTL_MS) {
-    return deviceProofCache.value;
-  }
+  if (deviceProofCache && deviceProofCache.gen === cacheGeneration && now - deviceProofCache.at < DEVICE_PROOF_TTL_MS) return deviceProofCache.value;
   try {
     const value = await readDeviceProofRequired();
     deviceProofCache = { value, at: now, gen: cacheGeneration };
@@ -174,6 +172,7 @@ export async function getFeatureFlags(): Promise<ApiResponse<FeatureFlags>> {
       devereBeamWeavingLinkRequired: await readDevereBeamWeavingLinkRequired(cacheClient),
       devereWarpFixedWasteM: await readDevereWarpFixedWasteM(cacheClient),
       devereFasonWasteTolerancePct: await readDevereFasonWasteTolerancePct(cacheClient),
+      devereFasonLotPolicy: await readDevereFasonLotPolicy(cacheClient),
       dokumaRunWeavingOrderRequired: await readDokumaRunWeavingOrderRequired(cacheClient),
       dokumaOrderLineLinkRequired: await readDokumaOrderLineLinkRequired(cacheClient),
       dokumaRollBirth: await readDokumaRollBirth(cacheClient),

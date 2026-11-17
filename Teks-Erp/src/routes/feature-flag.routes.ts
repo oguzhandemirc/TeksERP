@@ -396,6 +396,8 @@ export const updateSchema = z.strictObject({
   /** Fason devere D1: sabit çözgü firesi (m; `DEVERE_WARP_FIXED_WASTE_M_MAX` ile birebir); null = varsayılana (0) dön. */
   devereWarpFixedWasteM: z.number({ message: "Sabit çözgü firesi sayı olmalı" }).min(0, "Sabit çözgü firesi negatif olamaz").max(1000, "Sabit çözgü firesi en çok 1000 m olabilir").nullable().optional(),
   /** Fason devere D4: kapama fire toleransı (%; `DEVERE_FASON_WASTE_TOLERANCE_PCT_MAX` ile birebir); 0 = denetim yok; null = varsayılana dön. */
+  /** Fason devere D4b (K4): lot karışımı kuralı (enum; `DEVERE_FASON_LOT_POLICIES` ile birebir). */
+  devereFasonLotPolicy: z.enum(["FREE", "WARN", "SINGLE_LOT"]).optional(),
   devereFasonWasteTolerancePct: z.number({ message: "Fire toleransı sayı olmalı" }).min(0, "Fire toleransı negatif olamaz").max(99, "Fire toleransı en çok %99 olabilir").nullable().optional(),
   dokumaEnabled: z.boolean().optional(),
   // maliyet.enabled — Maliyet & Teklif modülü (MAL-0); üretime bağımlı, bağımlılık serviste.

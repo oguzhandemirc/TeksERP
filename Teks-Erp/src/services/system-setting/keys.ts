@@ -293,6 +293,9 @@ export const SETTING_KEYS = {
   /** [PROFİL] Fason devere D4: kapamada fire % toleransı — sipariş açılırken DONAR. DEFAULT 0 = denetim yok
    *  (bugünkü davranış); aşım yalnız UYARIR, hiçbir işlemi engellemez. */
   DEVERE_FASON_WASTE_TOLERANCE_PCT: "devere.fasonWasteTolerancePct",
+  /** [PROFİL] Fason devere D4b (K4): siparişte iplik başına lot karışımı — `FREE` serbest · `WARN` uyarı (VARSAYILAN,
+   *  kullanıcı kararı 2026-11-17) · `SINGLE_LOT` ikinci lot 409. Enum; kalıp `DEVERE_FASON_LOT_POLICIES`. */
+  DEVERE_FASON_LOT_POLICY: "devere.fasonLotPolicy",
   /** Dokuma işi modülü: dokuma işi planlama · tezgah koşumu · top indirme.
    *  ÜRETİME BAĞIMLI (`MODULE_DEPENDENCIES`), tezgah izlemenin KARDEŞİ — fasona
    *  dokutan firmada dokuma işi var tezgah yok (DOKUMA-IS-EMRI §2.5). */
