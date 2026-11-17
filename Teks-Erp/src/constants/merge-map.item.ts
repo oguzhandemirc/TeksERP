@@ -64,6 +64,17 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
       policy: "BLOCK",
       why: "İki iplik aynı devere siparişinde ayrı satırsa birleşme tek ipliğe iki plan satırı doğurur — önce siparişi düzeltin.",
     },
+    {
+      // Fason devere D2: levent doğuş kırılımı (defter); olayda iplik TEKİL — iki iplik aynı leventteyse birleşme kırılımı ezerdi.
+      kind: "CONFLICT",
+      model: "WarpBeamEventYarn",
+      table: "warp_beam_event_yarns",
+      column: "yarnItemId",
+      label: "Levent iplik kırılımı",
+      uniqueOn: ["eventId", "yarnItemId"],
+      policy: "BLOCK",
+      why: "İki iplik aynı leventin doğuş kırılımında ayrı satırsa birleşme tek ipliğe iki satır doğurur.",
+    },
     // 2026-09-13 (dokuma P1) — üç `weaving_orders` bağı da MOVE: referans bağ,
     // tekillik kısıtı yok; taşınmazsa dokuma işi ölü kayda bağlı kalır.
     { kind: "MOVE", model: "WeavingOrder", table: "weaving_orders", column: "itemId", label: "Dokuma iş emri" },

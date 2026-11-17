@@ -13,12 +13,14 @@ import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { CONSTRUCTION_WARNING, REPEAT_PICKS_TOLERANCE_PCT } from "../../constants/weave-design";
 import { weftLetter } from "./weft-sequence.helper";
+import { WARP_SPEC_YARN_DENIER_SELECT } from "./warp-spec-yarn.helper";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
 const YARN_SELECT = { id: true, code: true, name: true, linearDensityDen: true } satisfies Prisma.ItemSelect;
 const WARP_SELECT = {
-  id: true, code: true, name: true, endsCount: true, takeUpPct: true, wastePct: true, yarnItem: { select: YARN_SELECT },
+  // Fason devere D2: iplik + denye kart satırlarından (`yarns`); `yarnItem` = ana iplik.
+  id: true, code: true, name: true, takeUpPct: true, wastePct: true, ...WARP_SPEC_YARN_DENIER_SELECT,
 } satisfies Prisma.WarpSpecSelect;
 const DESIGN_SELECT = {
   id: true, code: true, name: true, kind: true, familyLabel: true, frameCount: true, repeatCm: true,
@@ -245,7 +247,7 @@ export async function readItemWarpLayers(db: Db, itemId: string): Promise<Array<
 
 const COST_LAYER_SELECT = {
   itemId: true, role: true, beamMode: true,
-  warpSpec: { select: { id: true, endsCount: true, takeUpPct: true, wastePct: true, yarnItem: { select: { id: true, name: true, linearDensityDen: true } } } },
+  warpSpec: { select: { id: true, takeUpPct: true, wastePct: true, ...WARP_SPEC_YARN_DENIER_SELECT } },
 } satisfies Prisma.ItemWarpLayerSelect;
 export type CostWarpLayerRow = Prisma.ItemWarpLayerGetPayload<{ select: typeof COST_LAYER_SELECT }>;
 

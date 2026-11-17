@@ -17,7 +17,7 @@ import {
   type CostOverrides,
   type CostSourceRef,
 } from "./helpers/cost-assembler.helper";
-import { computeFabricCost, presentCostResult, suggestUnitPrice, type CostInput, type CostOutcome, type FxRates } from "./helpers/fabric-cost.helper";
+import { computeFabricCost, costWarpYarns, presentCostResult, suggestUnitPrice, type CostInput, type CostOutcome, type FxRates } from "./helpers/fabric-cost.helper";
 import { serializeCostInput, type FxRatesSnapshot } from "./helpers/cost-snapshot.helper";
 import { measuredWarpWaste, suggestFxRate, suggestYarnPrices } from "./helpers/maliyet-bridge.helper";
 import { factoryYmd } from "../constants/time";
@@ -150,8 +150,7 @@ export async function previewCost(body: CostCalcBody) {
   const out = computeFabricCost(input, fx.rates);
   const pres = setting === "TRY" ? null : costPresentation(setting, fx.rates[setting], "ONIZLEME");
   const yarnIds = [
-    input.warp?.yarn.yarnItemId,
-    ...(input.warpLayers ?? []).map((l) => l.yarn.yarnItemId),
+    ...[...(input.warp ? [input.warp] : []), ...(input.warpLayers ?? [])].flatMap((w) => costWarpYarns(w).map((y) => y.yarnItemId)),
     ...(input.weft?.yarns ?? []).map((y) => y.yarnItemId),
   ].filter((x): x is string => !!x);
   const yarnPrices = [];

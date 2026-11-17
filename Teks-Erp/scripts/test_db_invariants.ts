@@ -1092,6 +1092,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "warping_order_beam_lines", name: "warping_order_beam_lines_qty_ck" },
   { table: "warping_order_yarns", name: "warping_order_yarns_qty_ck" },
   { table: "warping_order_extra_specs", name: "warping_order_extra_specs_sort_ck" },
+  // Fason devere D2 (20261117190000_warp_beam_event_yarns)
+  { table: "warp_beam_event_yarns", name: "warp_beam_event_yarns_facts_ck" },
   { table: "cost_parameter_sets", name: "cost_parameter_sets_pct_ck" },
   { table: "cost_parameter_sets", name: "cost_parameter_sets_amount_ck" },
   { table: "cost_parameter_sets", name: "cost_parameter_sets_stamp_ck" },

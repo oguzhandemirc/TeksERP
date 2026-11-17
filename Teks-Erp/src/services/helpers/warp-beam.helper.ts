@@ -6,6 +6,7 @@ import { AppError } from "../../utils/app-error";
 import { nextSeriesNo, resolveSeriesFormat, seriesPrefix } from "../number-series.service";
 import { lockCodeScopeTx } from "./code-unique.helper";
 import { warpBeamLengthSign, type WarpBeamEventKind } from "../../constants/warp-beam";
+import { WARP_SPEC_YARN_DENIER_SELECT } from "./warp-spec-yarn.helper";
 
 export const WARP_BEAM_PREFIX = "LV";
 const WARP_BEAM_CODE_SCOPE = "warpBeam";
@@ -45,6 +46,8 @@ export const WARP_BEAM_EVENT_SELECT = {
   rollId: true,
   roll: { select: { id: true, barcode: true } },
   machine: { select: { id: true, code: true, name: true } },
+  // Fason devere D2: WOUND doğuş kırılımı (diğer türlerde boş dizi).
+  yarns: { select: { yarnItemId: true, endsCount: true, denier: true, theoreticalKg: true, yarnItem: { select: { code: true, name: true } } }, orderBy: { yarnItem: { code: "asc" } } },
 } satisfies Prisma.WarpBeamEventSelect;
 
 export const WARP_BEAM_SELECT = {
@@ -62,7 +65,8 @@ export const WARP_BEAM_SELECT = {
   ownerCustomer: { select: { id: true, name: true } },
   createdAt: true,
   updatedAt: true,
-  warpSpec: { select: { id: true, code: true, name: true, endsCount: true, yarnItem: { select: { id: true, code: true, name: true, linearDensityDen: true } } } },
+  // Fason devere D2: iplik/denye kartın satırlarından (tek okuyucu `warpSpecDenierLines`).
+  warpSpec: { select: { id: true, code: true, name: true, ...WARP_SPEC_YARN_DENIER_SELECT } },
   subcontractor: { select: { id: true, name: true } },
   supplier: { select: { id: true, name: true } },
   // Z1 (Y2): bu levent hangi dokuma işi için — opsiyonel.

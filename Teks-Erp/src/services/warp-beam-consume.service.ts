@@ -12,6 +12,7 @@ import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
 import { applyWarpBeamEventTx, logWarpBeamEventAudit } from "./helpers/warp-beam-event.helper";
 import { assertDismountAllowedTx, assertMountTrackingOnTx, warpLengthFromWeight } from "./helpers/warp-beam-mount.helper";
+import { warpSpecDenierLines, warpSpecKgPerMExact } from "./helpers/warp-spec-yarn.helper";
 import { assertCoversRemaining, BEAM_TERMINAL, closeToMeasuredTx, loadBeamTx, positiveM, readRemainingM, remainingMTx } from "./helpers/warp-beam-ledger.helper";
 import { assertWarpBeamConsumeReplayAlive, tokenReplay } from "./helpers/token-replay.helper";
 import { freshBeamDto } from "./warp-beam-mount.service";
@@ -161,7 +162,7 @@ export async function exhaustBeam(id: string, input: ExhaustInput, userId?: stri
       residual = D(input.residualM).toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP);
       if (residual.lt(0)) throw AppError.badRequest("Artık negatif olamaz");
     } else if (input.grossKg != null) {
-      const w = warpLengthFromWeight(input.grossKg, input.tareKg ?? null, beam.warpSpec.endsCount, beam.warpSpec.yarnItem.linearDensityDen);
+      const w = warpLengthFromWeight(input.grossKg, input.tareKg ?? null, warpSpecKgPerMExact(warpSpecDenierLines(beam.warpSpec)));
       if (w) {
         residual = w;
         source = "WEIGHED";

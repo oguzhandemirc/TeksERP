@@ -14,6 +14,7 @@
 import { Router } from "express";
 import { BaseController } from "../controllers/base.controller";
 import { WarpSpecService } from "../services/warp-spec.service";
+import { WARP_SPEC_YARN_DENIER_INCLUDE } from "../services/helpers/warp-spec-yarn.helper";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { requireDevereEnabled } from "../middlewares/module.middleware";
@@ -24,7 +25,8 @@ export const warpSpecService = new WarpSpecService({
   searchFields: ["name"],
   codeSearchFields: ["code"],
   // Liste ekranı "hangi iplikten" sorusunu kod/ad olmadan cevaplayamaz.
-  defaultInclude: { yarnItem: { select: { id: true, code: true, name: true, linearDensityDen: true } } },
+  // Fason devere D2: çok iplikli kartın satırları da (`yarns`, denyeli) — tek okuyucu ailesinin include'u.
+  defaultInclude: WARP_SPEC_YARN_DENIER_INCLUDE,
   uniqueField: "code",
   // Kod ELLE girilir (desen kodu saha dilidir: "UA6007-Ç"); autoCode YOK.
   duplicateNameField: "name",

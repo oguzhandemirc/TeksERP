@@ -9,6 +9,7 @@ import { Prisma, WarpBeamStatus, type WarpLengthSource } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { applyWarpBeamEventTx } from "./warp-beam-event.helper";
 import { warpBeamRemainingM } from "./warp-beam.helper";
+import { WARP_SPEC_YARN_DENIER_SELECT } from "./warp-spec-yarn.helper";
 
 type Tx = Prisma.TransactionClient;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
@@ -24,7 +25,8 @@ export const BEAM_LEDGER_SELECT = {
   currentPosition: true,
   physicalBeamNo: true,
   warpSpecId: true,
-  warpSpec: { select: { id: true, code: true, endsCount: true, yarnItem: { select: { linearDensityDen: true } } } },
+  // Fason devere D2: tartıdan metre Σ satır kg/m ile (çok iplikli kart) — tek okuyucu `warpSpecDenierLines`.
+  warpSpec: { select: { id: true, code: true, ...WARP_SPEC_YARN_DENIER_SELECT } },
 } satisfies Prisma.WarpBeamSelect;
 export type BeamLedgerRow = Prisma.WarpBeamGetPayload<{ select: typeof BEAM_LEDGER_SELECT }>;
 

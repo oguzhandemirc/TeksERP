@@ -606,6 +606,7 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
   SATIR("SwatchStockReductionItem", "SwatchStockReduction", "düşümün iptal kümesi; storno kalemden okur"),
   SATIR("MergeOperationSource", "MergeOperation", "birleştirmenin kaynak kaydı"),
   SATIR("MergeOperationRef", "MergeOperation", "taşınan satırın kimlik fotoğrafı"),
+  SATIR("WarpBeamEventYarn", "WarpBeamEvent", "fason devere D2: WOUND doğuş kırılımı (iplik başına tel/denye/kg kopyası) — ebeveyn WOUND ile aynı tx'te doğar, değişmez; ters yolu ebeveynin tipli tersi (WOUND_CANCEL), kırılım `reversal: null` süzgeciyle sayılmaz"),
   SATIR("InvoiceLine", "Invoice", "fatura satırı; düzenleme sil-yaz ama ATOMİK CLAIM `status: DRAFT` arkasında ⇒ hard-delete sınıf ④ (deftere hiç yazmamış taslak), \"bağımsız sil-yaz\" ile KARIŞTIRILMAZ — fark claim'dir"),
   SATIR("ConsignmentDispatchItem", "ConsignmentDispatch", "emanet çıkış kalemi (genel fason F5) — polimorfik (WARP_BEAM | YARN); defteri WarpBeamEvent SHIP_TO_OWNER / YarnMovement CONSIGNMENT_OUT (kaleme bağlı); iptal başlıkta damgalanır, kalem değişmez"),
   SATIR("SubcontractorDispatchItem", "SubcontractorDispatch", "fason sevk kalemi ⚠️ SINIRDA: 5 bağımsız yazım, 0 silme — bağımsız düzenlenebilir tarafa yakın (ölçüldü 2026-09-13); F1: polimorfik (ROLL | WARP_BEAM), levent kaleminin defteri WarpBeamEvent (SHIP_OUT kaleme bağlı), kabul makbuzuna girmez"),

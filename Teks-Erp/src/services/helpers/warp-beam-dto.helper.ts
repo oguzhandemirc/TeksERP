@@ -3,6 +3,7 @@
 // =============================================================================
 import { Prisma, WarpBeamStatus, type WarpBeamMountMethod, type WarpBeamOrigin, type WarpKgSource, type WarpLengthSource } from "@prisma/client";
 import { warpBeamRemainingM, type WarpBeamEventRow, type WarpBeamRow } from "./warp-beam.helper";
+import { warpSpecDenierLines, warpSpecEffectiveDenier, warpSpecKgPerMExact, type WarpSpecDenierYarn } from "./warp-spec-yarn.helper";
 
 const num = (v: Prisma.Decimal | null | undefined): number | null => (v == null ? null : Number(v));
 
@@ -38,6 +39,8 @@ export interface WarpBeamEventDto {
   fabricLengthM: number | null;
   /** Faz 4: otomatik tüketim hangi toptan (CONSUMED.rollId) — elle tüketimde null. */
   roll: { id: string; barcode: string | null } | null;
+  /** Fason devere D2: WOUND doğuş kırılımı (iplik başına kopya); diğer türlerde boş dizi. */
+  yarns: Array<{ yarnItemId: string; code: string; name: string; endsCount: number; denier: number; theoreticalKg: number }>;
 }
 
 export interface WarpBeamDto {
@@ -56,7 +59,16 @@ export interface WarpBeamDto {
   ownerCustomer: { id: string; name: string } | null;
   createdAt: Date;
   updatedAt: Date;
-  warpSpec: { id: string; code: string; name: string; endsCount: number; yarnItem: { id: string; code: string; name: string; linearDensityDen: number | null } };
+  /**
+   * `yarnItem` = ana iplik; `linearDensityDen` EŞDEĞER denyedir (tek iplikte ipliğin kendisi) — eski istemcinin
+   * `endsCount × denye` ön hesabı çok iplikli kartta da doğru kalsın (fason devere D2). Satırlar `yarns`, Σ kg/m `kgPerM`.
+   */
+  warpSpec: {
+    id: string; code: string; name: string; endsCount: number;
+    yarnItem: { id: string; code: string; name: string; linearDensityDen: number | null };
+    yarns: Array<{ yarnItemId: string; endsCount: number; sortOrder: number; yarnItem: { id: string; code: string; name: string; linearDensityDen: number | null } }>;
+    kgPerM: number | null;
+  };
   subcontractor: { id: string; name: string } | null;
   supplier: { id: string; name: string } | null;
   /** Z1 (Y2): bağlı dokuma işi — null = serbest/stoğa levent (meşru; raporda "işsiz levent"). */
@@ -107,6 +119,19 @@ export function toWarpBeamEventDto(e: WarpBeamEventRow): WarpBeamEventDto {
     tareKg: num(e.tareKg),
     fabricLengthM: num(e.fabricLengthM),
     roll: e.roll,
+    yarns: e.yarns.map((y) => ({ yarnItemId: y.yarnItemId, code: y.yarnItem.code, name: y.yarnItem.name, endsCount: y.endsCount, denier: Number(y.denier), theoreticalKg: Number(y.theoreticalKg) })),
+  };
+}
+
+function warpSpecDto(s: WarpBeamRow["warpSpec"]): WarpBeamDto["warpSpec"] {
+  const lines = warpSpecDenierLines(s);
+  const main = lines[0]!.yarnItem;
+  const yarn = (y: WarpSpecDenierYarn) => ({ id: y.id, code: y.code, name: y.name, linearDensityDen: num(y.linearDensityDen) });
+  return {
+    id: s.id, code: s.code, name: s.name, endsCount: s.endsCount,
+    yarnItem: { ...yarn(main), linearDensityDen: num(warpSpecEffectiveDenier(lines)) },
+    yarns: lines.map((l) => ({ yarnItemId: l.yarnItemId, endsCount: l.endsCount, sortOrder: l.sortOrder, yarnItem: yarn(l.yarnItem) })),
+    kgPerM: num(warpSpecKgPerMExact(lines)),
   };
 }
 
@@ -127,7 +152,7 @@ export function toWarpBeamDto(r: WarpBeamRow, remainingM?: number): WarpBeamDto 
     ownerCustomer: r.ownerCustomer,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
-    warpSpec: { ...r.warpSpec, yarnItem: { ...r.warpSpec.yarnItem, linearDensityDen: num(r.warpSpec.yarnItem.linearDensityDen) } },
+    warpSpec: warpSpecDto(r.warpSpec),
     subcontractor: r.subcontractor,
     supplier: r.supplier,
     weavingOrderId: r.weavingOrderId,
