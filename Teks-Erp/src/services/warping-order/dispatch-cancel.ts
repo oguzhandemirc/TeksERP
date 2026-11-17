@@ -43,7 +43,9 @@ export async function previewCancelWarpingDispatch(id: string, dispatchId: strin
   const others = await prisma.subcontractorDispatch.count({ where: { warpingOrderId: id, cancelledAt: null, id: { not: dispatchId } } });
   const blockedReason = d.cancelledAt ? "Sevk zaten iptal edilmiş."
     : returned.length > 0 ? "Bu sevkten iade alınmış — önce iadeleri iptal edin (LIFO)."
-    : items.some(isTransferred) ? TRANSFERRED_MSG : null;
+    : items.some(isTransferred) ? TRANSFERRED_MSG
+    // D5a: tx yolunda `cancelYarnItemsTx` 409 YARN_ITEM_ALLOCATED verir; önizleme aynı engeli önceden gösterir.
+    : items.some((i) => i.allocatedKg.gt(0)) ? "Bu sevkin ipliği devereden dönen levente dağıtılmış — önce levent kabulünü geri alın (LIFO)." : null;
   return {
     dispatch: { id: d.id, dispatchNo: d.dispatchNo, cancelledAt: d.cancelledAt?.toISOString() ?? null },
     canCancel: blockedReason === null,

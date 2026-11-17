@@ -19,12 +19,15 @@ import { cancelPreviewWarpingOrder, cancelWarpingOrder } from "../services/warpi
 import { getWarpingOrder, listWarpingOrders } from "../services/warping-order/read";
 import { WARPING_ORDER_MAX_BEAM_LINES, WARPING_ORDER_MAX_EXTRA_SPECS } from "../services/warping-order/plan";
 import warpingOrderYarnRoutes from "./warping-order-yarn.routes";
+import warpingOrderReceiveRoutes from "./warping-order-receive.routes";
 import "../types/express-augment";
 
 const router = Router();
 router.use(verifyToken, requireDevereEnabled);
 // D4b-2 iplik iade/aktarma alt router'ı kapıyı BURADAN miras alır; `/:id`den ÖNCE (statik `/yarn-at-subcontractor` yolu).
 router.use("/", warpingOrderYarnRoutes);
+// D5a dönüş kabulü alt router'ı — aynı miras ve `/:id`den önce.
+router.use("/", warpingOrderReceiveRoutes);
 
 const wrap = (fn: (req: Request) => Promise<{ status: number; body: unknown }>) => async (req: Request, res: Response, next: NextFunction) => {
   try {

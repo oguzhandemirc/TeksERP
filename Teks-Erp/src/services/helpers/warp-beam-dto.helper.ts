@@ -86,6 +86,8 @@ export interface WarpBeamDto {
   currentMachine: { id: string; code: string; name: string } | null;
   /** Raşel takımı (#23): birlikte doğan leventlerin ortak anahtarı; tek levent null. */
   setKey: string | null;
+  /** Fason devere D5: dönüş kabulünde doğduğu devere siparişi (yoksa null). */
+  warpingOrderId: string | null;
 }
 
 export function toWarpBeamEventDto(e: WarpBeamEventRow): WarpBeamEventDto {
@@ -165,5 +167,6 @@ export function toWarpBeamDto(r: WarpBeamRow, remainingM?: number): WarpBeamDto 
     currentPosition: r.currentPosition,
     currentMachine: r.currentMachine,
     setKey: r.setKey,
+    warpingOrderId: r.warpingOrderId,
   };
 }
