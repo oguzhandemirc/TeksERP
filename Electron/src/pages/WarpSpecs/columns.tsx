@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
 import type { WarpSpec } from "./types";
 import { formatQty } from "@/lib/format";
+import { yarnLetter } from "@/pages/Operations/WarpPlan/warp-plan-model";
 
 /** Sayıyı Türkçe biçimde bas; boş/parse edilemez değer için tire. */
 function num(v: string | number | null | undefined, digits = 0): string {
@@ -25,6 +26,21 @@ export const warpSpecColumns: ColumnDef<WarpSpec>[] = [
     id: "yarn",
     header: "Çözgü ipliği",
     cell: ({ row }) => {
+      const rows = row.original.yarns ?? [];
+      // Çok iplikli kart: kolon özeti tek ipliği gösterir, asıl bilgi satırlardadır (harf · iplik · tel).
+      if (rows.length > 1) {
+        return (
+          <span className="flex flex-col text-xs">
+            {[...rows].sort((a, b) => a.sortOrder - b.sortOrder).map((r, i) => (
+              <span key={r.yarnItemId}>
+                <span className="font-mono font-semibold">{yarnLetter(i)}</span> {r.yarnItem?.name ?? "—"}
+                <span className="text-muted-foreground"> · {num(r.endsCount)} tel</span>
+              </span>
+            ))}
+            {row.original.sequenceNote ? <span className="text-muted-foreground">Dizilim: {row.original.sequenceNote}</span> : null}
+          </span>
+        );
+      }
       const y = row.original.yarnItem;
       if (!y) return <span className="text-muted-foreground">—</span>;
       return (

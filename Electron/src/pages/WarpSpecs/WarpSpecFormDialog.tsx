@@ -1,42 +1,29 @@
-import { Controller, type UseFormReturn } from "react-hook-form";
-import { Package } from "lucide-react";
+import { useState } from "react";
+import { type UseFormReturn } from "react-hook-form";
+import { Ruler } from "lucide-react";
 import { EntityFormDialog } from "@/components/forms/EntityFormDialog";
 import { FormField } from "@/components/forms/FormField";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
-import { itemService } from "@/pages/Items/service";
-import type { Item } from "@/pages/Items/types";
 import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
-import { warpSpecFormDefaults, warpSpecFormSchema, type WarpSpecFormValues } from "./schema";
+import { formatQty } from "@/lib/format";
+import { suggestWarpEnds } from "@/pages/Operations/WarpPlan/service";
+import { parseInput } from "@/pages/Operations/WarpPlan/warp-plan-model";
+import { warpSpecFormSchema, type WarpSpecFormValues } from "./schema";
+import { buildDefaults } from "./payload";
+import { YarnRowsEditor } from "./YarnRowsEditor";
+import { WarpPreviewStrip } from "./WarpPreviewStrip";
 import type { WarpSpec } from "./types";
-import { decimalToFormText } from "@/lib/decimal-form-text";
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initial?: WarpSpec | null;
+  /** "Kopyala": aynı reçeteden yeni kart taslağı (kayıt OLUŞTURMA olarak gider). */
+  draft?: WarpSpecFormValues | null;
   onSubmit: (values: WarpSpecFormValues) => void | Promise<void>;
   isSubmitting?: boolean;
-}
-
-function buildDefaults(initial?: WarpSpec | null): WarpSpecFormValues {
-  if (!initial) return warpSpecFormDefaults;
-  return {
-    code: initial.code,
-    name: initial.name,
-    yarnItemId: initial.yarnItemId,
-    // API Decimal/Int alanlarını SAYI döndürür; form metin taşır (sunum provası: düzenle→Kaydet sessiz kalıyordu).
-    endsCount: decimalToFormText(initial.endsCount),
-    selvedgeEnds: decimalToFormText(initial.selvedgeEnds),
-    reedNo: decimalToFormText(initial.reedNo),
-    endsPerDent: decimalToFormText(initial.endsPerDent),
-    reedWidthCm: decimalToFormText(initial.reedWidthCm),
-    takeUpPct: decimalToFormText(initial.takeUpPct),
-    wastePct: decimalToFormText(initial.wastePct),
-    notes: initial.notes ?? "",
-    isActive: initial.isActive,
-  };
 }
 
 /** Faz 4 take-up (%): çözgü ÷ kumaş; boş = bilinmiyor (otomatik tüketim çözgü = kumaş sayar, uyarır). */
@@ -57,14 +44,44 @@ function WasteField({ form }: { form: UseFormReturn<WarpSpecFormValues> }) {
   );
 }
 
-export function WarpSpecFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting }: Props) {
+/** "Taraktan": tarak × tarak eni × dişe tel → toplam tel ÖNERİSİ (birim profildir). Tek satırda uygular, çok satırda yalnız gösterir. */
+function ReedHelper({ form }: { form: UseFormReturn<WarpSpecFormValues> }) {
+  const [note, setNote] = useState<string | null>(null);
+  const run = async () => {
+    const v = form.getValues();
+    const reed = parseInput(String(v.reedNo ?? ""));
+    const width = parseInput(String(v.reedWidthCm ?? ""));
+    const perDent = (v.endsPerDent ?? "").toString().trim() === "" ? 1 : parseInput(String(v.endsPerDent));
+    if (!reed || !width || !perDent) return setNote("Önce tarak no ve tarak enini girin.");
+    try {
+      const r = await suggestWarpEnds({ kind: "REED", reedPerCm: reed, widthCm: width, endsPerDent: perDent });
+      const ends = formatQty(r.endsCount, 0);
+      if (v.yarns.length === 1) {
+        form.setValue("yarns.0.endsCount", String(r.endsCount), { shouldDirty: true, shouldValidate: true });
+        setNote(`${ends} tel yazıldı.`);
+      } else setNote(`Taraktan toplam ${ends} tel çıkıyor — satırlara kendiniz paylaştırın.`);
+    } catch {
+      setNote(null); // apiClient hatayı zaten bildirdi
+    }
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-xs">
+      <Button type="button" size="sm" variant="outline" onClick={() => void run()} title="tarak × tarak eni × dişe tel">
+        <Ruler className="h-3.5 w-3.5" /> Taraktan
+      </Button>
+      {note ? <span className="text-muted-foreground" data-testid="reed-helper-note">{note}</span> : null}
+    </div>
+  );
+}
+
+export function WarpSpecFormDialog({ open, onOpenChange, initial, draft, onSubmit, isSubmitting }: Props) {
   return (
     <EntityFormDialog<WarpSpecFormValues>
       open={open}
       onOpenChange={onOpenChange}
-      title={initial ? "Çözgü Kartını Düzenle" : "Yeni Çözgü Kartı"}
+      title={initial ? "Çözgü Kartını Düzenle" : draft ? "Çözgü Kartını Kopyala" : "Yeni Çözgü Kartı"}
       schema={warpSpecFormSchema}
-      defaultValues={buildDefaults(initial)}
+      defaultValues={initial ? buildDefaults(initial) : (draft ?? buildDefaults(null))}
       onSubmit={onSubmit}
       isSubmitting={isSubmitting}
     >
@@ -76,56 +93,22 @@ export function WarpSpecFormDialog({ open, onOpenChange, initial, onSubmit, isSu
 
           <FormField label="Çözgü kartı adı" htmlFor="name" error={form.formState.errors.name} required>
             <Input id="name" autoFocus {...form.register("name")} placeholder="UA6007 çözgüsü" />
-            {/* Mükerreri REDDETMEK yerine ÖNLEMEK — yazarken benzerleri gösterir.
-                `excludeId` düzenlemede kendi ikizine çarpmayı engeller. */}
+            {/* Mükerreri REDDETMEK yerine ÖNLEMEK — yazarken benzerleri gösterir; `excludeId` kendi ikizini dışlar. */}
             <SimilarNamesWarning entity="warp-specs" name={form.watch("name") ?? ""} excludeId={initial?.id} />
           </FormField>
 
-          {/* ⚠️ Yalnız İPLİK kalemleri: süzgeç sunucuda uygulanır. Backend ayrıca
-              kalemin YARN olduğunu ve DENYESİNİN dolu olduğunu doğrular —
-              denyesiz iplikle kart açılsaydı levent sarımında hesap sessizce
-              0 kg gösterirdi. */}
-          <FormField label="Çözgü ipliği" error={form.formState.errors.yarnItemId} required>
-            <Controller
-              control={form.control}
-              name="yarnItemId"
-              render={({ field }) => (
-                <EntityPickerModal<Item>
-                  value={field.value || null}
-                  onChange={(id) => field.onChange(id ?? "")}
-                  service={itemService}
-                  queryKey="items-warp-yarn"
-                  filters={{ itemType: "YARN", lifecycleStatus: "ACTIVE" }}
-                  getLabel={(i) => i.name}
-                  getSubLabel={(i) => i.code}
-                  icon={Package}
-                  title="Çözgü ipliği seç"
-                  placeholder="İplik seç"
-                />
-              )}
-            />
-          </FormField>
+          <YarnRowsEditor />
+          <WarpPreviewStrip />
 
-          <FormField
-            label="Tel adedi (kenar dahil)"
-            htmlFor="endsCount"
-            error={form.formState.errors.endsCount}
-            required
-            hint="Devere hesabının ilk çarpanı: tel × denye × metre ÷ 9.000.000 = kg"
-          >
-            <Input id="endsCount" {...form.register("endsCount")} inputMode="numeric" placeholder="3500" />
+          <FormField label="Dizilim (talimat)" htmlFor="sequenceNote" error={form.formState.errors.sequenceNote} hint="Devereciye giden talimat: ör. 2A 1B. Hesaba girmez.">
+            <Input id="sequenceNote" {...form.register("sequenceNote")} placeholder="2A 1B" />
           </FormField>
 
           <FormField label="Kenar teli" htmlFor="selvedgeEnds" error={form.formState.errors.selvedgeEnds}>
             <Input id="selvedgeEnds" {...form.register("selvedgeEnds")} inputMode="numeric" placeholder="24" />
           </FormField>
 
-          <FormField
-            label="Tarak no"
-            htmlFor="reedNo"
-            error={form.formState.errors.reedNo}
-            hint="Birimi fabrikanın kendi kullanımıdır (diş/cm ya da diş/10 cm); hesaba girmez."
-          >
+          <FormField label="Tarak no" htmlFor="reedNo" error={form.formState.errors.reedNo} hint="Birimi fabrikanın kendi kullanımıdır (diş/cm ya da diş/10 cm); hesaba girmez.">
             <Input id="reedNo" {...form.register("reedNo")} inputMode="decimal" placeholder="14" />
           </FormField>
 
@@ -136,6 +119,7 @@ export function WarpSpecFormDialog({ open, onOpenChange, initial, onSubmit, isSu
           <FormField label="Tarak eni (cm)" htmlFor="reedWidthCm" error={form.formState.errors.reedWidthCm}>
             <Input id="reedWidthCm" {...form.register("reedWidthCm")} inputMode="decimal" placeholder="280" />
           </FormField>
+          <ReedHelper form={form} />
           <TakeUpField form={form} />
           <WasteField form={form} />
 

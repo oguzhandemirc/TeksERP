@@ -20,6 +20,7 @@ const e = (fiil: string, deneme: string): UcEylemi => ({ fiil, deneme });
 export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   // ── Fason devere D1 (2026-11-17) — hesap ucu, yazmaz
   "POST /api/warp-plan/calculate": e("çözgü hesabı yaptı", "çözgü hesabı yapmaya çalıştı"),
+  "POST /api/warp-plan/ends-suggest": e("çözgü tel önerisi aldı", "çözgü tel önerisi almaya çalıştı"),
   // ── Bildirim tercih profilleri (2026-11-15)
   "POST /api/bildirim/tercihler/profiller": e("bildirim seçimini profil olarak kaydetti", "bildirim seçimini profil olarak kaydetmeye çalıştı"),
   "PATCH /api/bildirim/tercihler/profiller/:id": e("kişisel bildirim profilini güncelledi", "kişisel bildirim profilini güncellemeye çalıştı"),

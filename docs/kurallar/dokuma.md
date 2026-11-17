@@ -93,6 +93,7 @@
 
 - [ÇEKİRDEK] Çözgü kartının ipliğini/denyesini yalnız `warpSpecDenierLines` ailesinden (`WARP_SPEC_YARN_DENIER_SELECT`) oku; levent doğuşunun iplik kırılımı `WarpBeamEventYarn`dir, WOUND `denier` çok iplikte eşdeğer denyedir; çok iplikli kart içeride sarılmaz (400) — `test_cozgu_iplik_tek_kaynak`, `test_cozgu_dogus_kirilimi`.
 - [ÇEKİRDEK] Çözgü kartı ipliklerini yeni kodda yalnız `warpSpecYarnLines`ten oku (satırsız kart = kolonlardan tek satır); kolonlar satırların özetidir (sıra 0 ipliği, Σ tel); kg↔metre formülü yalnız `constants/warp-beam.ts`, çözgü planı (ileri/ters, fire, kısıt iplik) yalnız `warp-plan.helper`.
+- [ÇEKİRDEK] Çözgü kartı iplik satırlarını yalnız `yarns: [{yarnItemId, endsCount}]` gövdesiyle REPLACE et (`warp-spec-yarn-write.helper`, aynı tx); `yarnItemId`/`endsCount` kolonları satırlardan türer, gövdedeki değerleri yok sayılır; satırsız eski gövde yalnız tek iplikli kartı düzenler (çok iplikte özeti bozan yazım 400) — `test_cozgu_karti_iplik_satiri` §7.
 - [ÇEKİRDEK] İş kapanışı açık karardır, türetilmez; açık koşumda 409 `{code, machines[], runIds[]}`.
 - [ÇEKİRDEK] İş iptali yalnız kendi durum geçişi; koşum/duruş/doff/top dokunulmaz.
 - [ÇEKİRDEK] `/api/weaving-orders` (`weavingorder:read/write`): `DK` no, 8032 ilk ifade; replay `WEAVING_ORDER_CANCELLED`; claim `WEAVING_ORDER_NOT_OPEN`/`WEAVING_ORDER_NOT_EDITABLE`.

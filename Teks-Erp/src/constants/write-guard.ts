@@ -18,8 +18,6 @@ export const BASE_WRITE_CLOSED_FIELDS: Readonly<Record<string, readonly string[]
   // Doğuş deneme kimliği yalnız token'lı doğuş boğazından (`color-item-create.service.ts`, tokenReplay); genel gövde yazamaz.
   color: ["clientToken"],
   item: ["clientToken"],
-  // Devere D1: çözgü sırası notu kart yazma yüzeyiyle (satır editörü, D3) birlikte açılır; o güne dek gövde yazamaz.
-  warpSpec: ["sequenceNote"],
   // Hizmet kartı: genel gövde yalnız ad + birim yazar (servis allowlist'iyle aynı); kod doğuşta, durum yaşam döngüsü ucundan, birleştirme kendi boğazından.
   serviceItem: [
     "code", "isActive", "lifecycleStatus", "lifecycleChangedAt", "lifecycleChangedById", "lifecycleReason",
