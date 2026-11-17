@@ -280,9 +280,10 @@ async function main(): Promise<void> {
     check("DB: ters bağlı TRANSFER · kg 0 · kaynak = hedef · ikinci ters · tanınmayan tür reddedilir", [e1, e2, e3, e4, e5].every((e) => e !== null), [e1, e2, e3, e4, e5].map((e) => (e ? "✗" : "geçti")).join(","));
     const routes = fs.readFileSync(path.join(__dirname, "../src/routes/warping-order-yarn.routes.ts"), "utf8");
     const ends = ["get\\(\"/yarn-at-subcontractor\"", "get\\(\"/:id/yarn-holdings\"", "post\\(\"/:id/yarn-returns\"", "post\\(\"/:id/yarn-returns/:movementId/cancel\"", "get\\(\"/:id/yarn-transfers\"",
-      "post\\(\"/:id/yarn-transfers/preview\"", "post\\(\"/:id/yarn-transfers\"", "get\\(\"/:id/yarn-transfers/:batchId/cancel-preview\"", "post\\(\"/:id/yarn-transfers/:batchId/cancel\""];
+      "post\\(\"/:id/yarn-transfers/preview\"", "post\\(\"/:id/yarn-transfers\"", "get\\(\"/:id/yarn-transfers/:batchId/cancel-preview\"", "post\\(\"/:id/yarn-transfers/:batchId/cancel\"",
+      "get\\(\"/:id/dispatches\"", "get\\(\"/:id/yarn-returns\""]; // D6-be okuma uçları
     const gated = ends.map((p) => new RegExp(`router\\.${p}[^\\n]*requireIplikEnabled`).test(routes));
-    check("Modül: dokuz iplik ucunun her biri `requireIplikEnabled`'ı uç başına alır (403 MODULE_DISABLED)", gated.every(Boolean) && (routes.match(/^router\.(get|post)\(/gm) ?? []).length === ends.length, JSON.stringify(gated));
+    check("Modül: on bir iplik ucunun her biri `requireIplikEnabled`'ı uç başına alır (403 MODULE_DISABLED)", gated.every(Boolean) && (routes.match(/^router\.(get|post)\(/gm) ?? []).length === ends.length, JSON.stringify(gated));
     const main = fs.readFileSync(path.join(__dirname, "../src/routes/warping-order.routes.ts"), "utf8");
     check("Modül: alt router `/:id`den önce ve devere kapısının arkasında bağlı", main.indexOf("router.use(verifyToken, requireDevereEnabled)") < main.indexOf('router.use("/", warpingOrderYarnRoutes)') && main.indexOf('router.use("/", warpingOrderYarnRoutes)') < main.indexOf('router.get("/:id"'));
     void dE;
