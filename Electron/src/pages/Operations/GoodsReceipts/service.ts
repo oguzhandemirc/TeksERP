@@ -184,7 +184,7 @@ export async function createGoodsReceipt(body: {
   /** D4c — iplik tedarikçiden DOĞRUDAN bu devere siparişine (depoya girmeden; aynı işlemde sevk). Yalnız seçiliyken gider. */
   directWarpingOrderId?: string | null;
   lines?: GoodsReceiptLineInput[];
-}): Promise<{ data: GoodsReceiptCreateData; message?: string; warnings?: string[] }> {
+}): Promise<{ data: GoodsReceiptCreateData; message?: string }> {
   // ⚠️ DEĞERİ OLMAYAN ALAN HİÇ GÖNDERİLMEZ — `purchaseOrderId: null` yazmak
   // teknik olarak da geçerli (Zod `.nullable()`) ama gövdeyi fabrikadaki
   // bugünkü isteğinden AYIRIR: "sıfır görünür fark" kuralı istek gövdesini de

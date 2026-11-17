@@ -155,8 +155,7 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
       }
       // Fiş üç sipariş sorgusunu da bayatlatır (kapanan sipariş seçicide kalmasın) — tek liste, `receiptInvalidation`.
       invalidateReceiptSideEffects(qc);
-      // D4c: doğrudan devere sevkinin bilgi uyarıları (lot karışımı, plandan fazla) — engel değil, söylenir.
-      if (res.warnings?.length) toast.warning(res.warnings.slice(0, 3).join(" · "));
+      // D4c: doğrudan devere sevkinin uyarılarını (lot karışımı, plandan fazla) apiClient interceptor'ı basar.
       setDirectOrder(null);
       setLines([emptyLine()]);
       setDeliveryNoteNo("");
