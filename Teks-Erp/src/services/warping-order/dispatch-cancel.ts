@@ -49,35 +49,53 @@ export async function previewCancelWarpingDispatch(id: string, dispatchId: strin
   };
 }
 
-export async function cancelWarpingDispatch(id: string, dispatchId: string, reason: string, userId: string): Promise<{ dispatchId: string; dispatchNo: string; yarnItemsReverted: number; orderStatus: WarpingOrderStatus }> {
-  const why = reason.trim();
-  if (why.length < 3) throw AppError.badRequest("İptal sebebi en az 3 karakter olmalı.");
-  const out = await prisma.$transaction(async (tx) => {
-    // Sipariş satırı İLK ifadede kilitlenir: eşzamanlı sevk ile "son canlı sevk → OPEN" geçişi sıraya girer.
-    const lock = await tx.warpingOrder.updateMany({ where: { id, status: WarpingOrderStatus.IN_PROGRESS }, data: { updatedById: userId } });
-    if (lock.count === 0) {
-      const fresh = await tx.warpingOrder.findUnique({ where: { id }, select: { orderNo: true, status: true } });
-      if (!fresh) throw AppError.notFound("Fason devere siparişi bulunamadı.", { code: "WARPING_ORDER_NOT_FOUND" });
-      throw AppError.conflict(`${fresh.orderNo} durumu ${fresh.status} — sevk iptal edilemez.`, { code: "WARPING_ORDER_NOT_CANCELLABLE", status: fresh.status });
-    }
-    const d = await loadOwnDispatch(tx, id, dispatchId);
-    if ((await countReturnedYarnItems(tx, d.id)) > 0) {
-      throw AppError.conflict("Bu sevkten iade alınmış — sevk iptal edilemez, önce iadeleri iptal edin (LIFO).", { code: "YARN_ITEM_RETURNED" });
-    }
-    const claim = await tx.subcontractorDispatch.updateMany({ where: { id: d.id, cancelledAt: null }, data: { cancelledAt: new Date(), cancelledById: userId, cancelReason: why } });
-    if (claim.count === 0) throw AppError.conflict(`Sevk ${d.dispatchNo} zaten iptal edilmiş.`, { code: "DISPATCH_CANCELLED" });
-    const reverted = await cancelYarnItemsTx(tx, { dispatchId: d.id, reason: why, userId });
-    const live = await tx.subcontractorDispatch.count({ where: { warpingOrderId: id, cancelledAt: null } });
-    let status: WarpingOrderStatus = WarpingOrderStatus.IN_PROGRESS;
-    if (live === 0) {
-      const back = await tx.warpingOrder.updateMany({ where: { id, status: WarpingOrderStatus.IN_PROGRESS }, data: { status: WarpingOrderStatus.OPEN, updatedById: userId } });
-      if (back.count === 1) status = WarpingOrderStatus.OPEN;
-    }
-    return { dispatchNo: d.dispatchNo, reverted, status };
-  });
-  await AuditService.log({ userId, action: "UPDATE", tableName: "SUBCONTRACTOR_DISPATCH", recordId: dispatchId, newData: { cancelled: true, kind: "WARPING", warpingOrderId: id, reason: why, yarnItemsReverted: out.reverted } });
+export interface WarpingDispatchCancelTxOut { dispatchNo: string; reverted: number; status: WarpingOrderStatus }
+
+/**
+ * Sevk iptalinin tx gövdesi — sipariş satırını kilitleyen claim burada (çağıranın tx'inde ilk ya da fiş claim'inin
+ * hemen ardı). Elle iptal ve mal kabul fişi iptali (D4c, doğrudan devere sevki) aynı LIFO kapılarından geçer.
+ */
+export interface WarpingDispatchCancelArgs { id: string; dispatchId: string; why: string; userId: string }
+
+export async function cancelWarpingDispatchTx(tx: Tx, { id, dispatchId, why, userId }: WarpingDispatchCancelArgs): Promise<WarpingDispatchCancelTxOut> {
+  // Sipariş satırı kilitlenir: eşzamanlı sevk ile "son canlı sevk → OPEN" geçişi sıraya girer.
+  const lock = await tx.warpingOrder.updateMany({ where: { id, status: WarpingOrderStatus.IN_PROGRESS }, data: { updatedById: userId } });
+  if (lock.count === 0) {
+    const fresh = await tx.warpingOrder.findUnique({ where: { id }, select: { orderNo: true, status: true } });
+    if (!fresh) throw AppError.notFound("Fason devere siparişi bulunamadı.", { code: "WARPING_ORDER_NOT_FOUND" });
+    throw AppError.conflict(`${fresh.orderNo} durumu ${fresh.status} — sevk iptal edilemez.`, { code: "WARPING_ORDER_NOT_CANCELLABLE", status: fresh.status });
+  }
+  const d = await loadOwnDispatch(tx, id, dispatchId);
+  if ((await countReturnedYarnItems(tx, d.id)) > 0) {
+    throw AppError.conflict("Bu sevkten iade alınmış — sevk iptal edilemez, önce iadeleri iptal edin (LIFO).", { code: "YARN_ITEM_RETURNED" });
+  }
+  const claim = await tx.subcontractorDispatch.updateMany({ where: { id: d.id, cancelledAt: null }, data: { cancelledAt: new Date(), cancelledById: userId, cancelReason: why } });
+  if (claim.count === 0) throw AppError.conflict(`Sevk ${d.dispatchNo} zaten iptal edilmiş.`, { code: "DISPATCH_CANCELLED" });
+  const reverted = await cancelYarnItemsTx(tx, { dispatchId: d.id, reason: why, userId });
+  const live = await tx.subcontractorDispatch.count({ where: { warpingOrderId: id, cancelledAt: null } });
+  let status: WarpingOrderStatus = WarpingOrderStatus.IN_PROGRESS;
+  if (live === 0) {
+    const back = await tx.warpingOrder.updateMany({ where: { id, status: WarpingOrderStatus.IN_PROGRESS }, data: { status: WarpingOrderStatus.OPEN, updatedById: userId } });
+    if (back.count === 1) status = WarpingOrderStatus.OPEN;
+  }
+  return { dispatchNo: d.dispatchNo, reverted, status };
+}
+
+/** Sevk iptali audit'i (tx DIŞINDA). */
+export async function auditWarpingDispatchCancel(
+  { id, dispatchId, why, userId }: WarpingDispatchCancelArgs, out: WarpingDispatchCancelTxOut, goodsReceiptId?: string,
+): Promise<void> {
+  await AuditService.log({ userId, action: "UPDATE", tableName: "SUBCONTRACTOR_DISPATCH", recordId: dispatchId, newData: { cancelled: true, kind: "WARPING", warpingOrderId: id, reason: why, yarnItemsReverted: out.reverted, goodsReceiptId: goodsReceiptId ?? null } });
   if (out.status === WarpingOrderStatus.OPEN) {
     await AuditService.log({ userId, action: "UPDATE", tableName: WARPING_ORDER_TABLE, recordId: id, oldData: { status: WarpingOrderStatus.IN_PROGRESS }, newData: { status: WarpingOrderStatus.OPEN, reason: "son canlı sevk iptal edildi" } });
   }
+}
+
+export async function cancelWarpingDispatch(id: string, dispatchId: string, reason: string, userId: string): Promise<{ dispatchId: string; dispatchNo: string; yarnItemsReverted: number; orderStatus: WarpingOrderStatus }> {
+  const why = reason.trim();
+  if (why.length < 3) throw AppError.badRequest("İptal sebebi en az 3 karakter olmalı.");
+  // Sipariş satırı claim'i tx'in İLK ifadesi (`cancelWarpingDispatchTx` başı).
+  const out = await prisma.$transaction(async (tx) => cancelWarpingDispatchTx(tx, { id, dispatchId, why, userId }));
+  await auditWarpingDispatchCancel({ id, dispatchId, why, userId }, out);
   return { dispatchId, dispatchNo: out.dispatchNo, yarnItemsReverted: out.reverted, orderStatus: out.status };
 }
