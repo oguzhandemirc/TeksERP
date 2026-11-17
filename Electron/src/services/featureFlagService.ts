@@ -818,6 +818,14 @@ export interface FeatureFlags {
   documentPublishSodEnabled: boolean;
 }
 
+/** Lisansın kapattığı modül nedeni — backend `ModuleClosedReason` aynası. */
+export type ModuleClosedReason = "LISANSTA_YOK" | "DONDURULDU" | "ANAHTAR_YOK";
+export interface LicenseModuleBlock {
+  kip: "gozlem" | "zorla";
+  /** DB anahtarı (`maliyet.enabled`); gözlemde daima boş. */
+  kapaliModuller: ReadonlyArray<{ anahtar: string; neden: ModuleClosedReason }>;
+}
+
 export { DEFAULT_COMPANY_LETTERHEAD };
 export { DEFAULT_COMPANY_LEGAL_IDENTITY, DEFAULT_EIRSALIYE_CONFIG };
 export type { CompanyLegalIdentity, EIrsaliyeConfig };
@@ -913,6 +921,9 @@ export type FeatureFlagsView = FeatureFlags & {
   factoryTimezonePending?: FactoryTimezonePending | null;
   /** Kayıtlı dilim geçersiz (sunucu `factoryTimezone` ile açıldı) — metin sunucunun; eski backend göndermez. */
   factoryTimezoneWarning?: { code: string; message: string } | null;
+  /** Lisans modül tavanı — SALT OKUNUR (PATCH alanı değil), backend `LicenseModuleBlock` aynası. Modül
+   *  şalterleri HAM gelir; etkin değer `lib/license/module-enabled.ts`ten. Eski sunucu göndermez → tavan yok. */
+  license?: LicenseModuleBlock;
 };
 
 export type TezgahAlarmNoShiftMode = "WARN" | "ALWAYS" | "REQUIRE_SHIFT";

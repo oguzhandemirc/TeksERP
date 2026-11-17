@@ -9,6 +9,7 @@ import { HubCard, HubGrid } from "@/components/hub/HubCard";
 import { HubSkeleton } from "@/components/hub/HubSkeleton";
 import { useMenuLayout } from "@/hooks/useMenuLayout";
 import { isHubTileHidden } from "@/lib/menu-layout";
+import { isPathLicenseClosed } from "@/lib/license/module-enabled";
 
 export function DefinitionsHubPage() {
   const { isAdmin, hasPermission, hasAnyPermission } = useRoleAccess();
@@ -26,7 +27,7 @@ export function DefinitionsHubPage() {
     if (isHubTileHidden(menu, t.to)) return false; // K19 menü düzeni
     // Rejim kuralı İZİNDEN ve admin kısa devresinden ÖNCE: kurulum türü
     // sorusudur, yetki değil — admin de fabrika rejiminde Cariler'i görmez.
-    if (offEntryMode(isOff(t), Boolean(t.offHint), canSeeOff) === "hide") return false;
+    if (offEntryMode(isOff(t), Boolean(t.offHint), canSeeOff && !isPathLicenseClosed(t.to, visibilityCtx.licenseClosedModules)) === "hide") return false;
     if (isAdmin) return true;
     if (t.permissionAny) return hasAnyPermission(t.permissionAny);
     return !t.permission || hasPermission(t.permission);

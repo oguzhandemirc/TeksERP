@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { isReportOpenWith } from "@/lib/report-gate";
 import { useShipmentConfirmationEnabled } from "@/hooks/usePricingEnabled";
@@ -6,6 +6,7 @@ import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { sackStoreService } from "./SackStore/service";
 import { resolveMachineStopEnabled } from "./MachineStops/stop-regime";
+import { isModuleEnabled, licenseClosedModules } from "@/lib/license/module-enabled";
 import type { OperationsVisibilityContext } from "./tile-config";
 
 /**
@@ -27,34 +28,36 @@ export function useOperationsVisibilityContext(): OperationsVisibilityContext {
   const shipmentConfirmationEnabled = useShipmentConfirmationEnabled();
   const { hasPermission } = useRoleAccess();
   const flagsQuery = useFeatureFlags();
-  const financeEnabled = flagsQuery.data?.data?.financeEnabled ?? false;
+  // ⚠️ ETKİN DEĞER = ham şalter ∧ lisans tavanı ∧ ön koşul zinciri, TEK yardımcıdan (`isModuleEnabled`).
+  // Lisansın kapattığı modül (`license.kapaliModuller`) menüde, rotada ve karoda kapalıdır (2026-11-17).
+  const flags = flagsQuery.data?.data;
+  const financeEnabled = isModuleEnabled(flags, "financeEnabled");
   // Backend varsayılanı AÇIK — belirsizken de açık kabul edilir (panelin her
   // yerindeki yazım: `productionEnabled ?? true`).
-  const productionEnabled = flagsQuery.data?.data?.productionEnabled ?? true;
-  const ticaretEnabled = flagsQuery.data?.data?.ticaretEnabled ?? false;
+  const productionEnabled = isModuleEnabled(flags, "productionEnabled");
+  const ticaretEnabled = isModuleEnabled(flags, "ticaretEnabled");
   // ⚠️ ETKİN DEĞER, HAM DEĞİL — bağımlılık (iplik → ticaret) panelde TEK yerde
   // çözülür: burada. Backend de aynı kuralı kapının içinde uygular; ham değer
   // yalnız Genel Ayarlar toggle'ının kendi yazdığını geri okuması için döner.
   // Zinciri karo yüklemlerine dağıtmak, bir gün birinin unutması demekti.
-  const iplikEnabled =
-    ticaretEnabled && (flagsQuery.data?.data?.iplikEnabled ?? false);
+  const iplikEnabled = isModuleEnabled(flags, "iplikEnabled");
   // 2026-09-02: ÇOK DEPO artık veri türevi DEĞİL, modül anahtarı. Eskiden
   // `useMultiWarehouse()` (aktif depo > 1) okunuyordu — o hook da artık aynı
   // bayrağı okuyor, yani tek kaynak korunuyor. Buradan çağrılmamasının sebebi
   // depo listesi sorgusunun bu ekranda hiç gerekmemesi (hub her açılışta
   // kimsenin okumadığı bir istek atıyordu — 2026-09-01 sondasının aynısı).
-  const depoMultiEnabled = flagsQuery.data?.data?.depoMultiEnabled ?? false;
+  const depoMultiEnabled = isModuleEnabled(flags, "depoMultiEnabled");
   // ⚠️ DEVERE BAĞIMSIZ (2026-09-14, 1e K3 / DEVERE-LEVENT §9.7d): hazır/fason levent iplik
   // tüketmez; backend kapısı yalnız devere okur, iplik kapısı aksiyon anında (içeride sarım).
   // Belirsizken FALSE ("sıfır görünür fark").
-  const devereEnabled = flagsQuery.data?.data?.devereEnabled ?? false;
+  const devereEnabled = isModuleEnabled(flags, "devereEnabled");
   // ⚠️ ETKİN DEĞER (iki halka): dokuma → production. Belirsizken FALSE — fabrikada
   // karo bir an belirip kaybolmamalı ("sıfır görünür fark"); backend kapısı
   // `requireDokumaEnabled` aynı sırayı ölçer.
-  const dokumaEnabled = productionEnabled && (flagsQuery.data?.data?.dokumaEnabled ?? false);
+  const dokumaEnabled = isModuleEnabled(flags, "dokumaEnabled");
   // Tezgah izleme de ETKİN değer (production && tezgah) — dokumanın kardeşi, çocuğu değil;
   // backend kapısı `requireTezgahEnabled` aynı sırayı ölçer. Belirsizken FALSE.
-  const tezgahEnabled = productionEnabled && (flagsQuery.data?.data?.tezgahEnabled ?? false);
+  const tezgahEnabled = isModuleEnabled(flags, "tezgahEnabled");
   // Makine duruşu rejimi (D4-A3): dokuma ∨ (production ∧ `uretim.makineDurusTakibi`) — backend `machineStopRegime`
   // ile aynı anlam, TEK çözüm `resolveMachineStopEnabled`. Belirsizken FALSE (ayar ve dokuma belirsizken kapalı).
   const machineStopEnabled = resolveMachineStopEnabled({
@@ -63,11 +66,13 @@ export function useOperationsVisibilityContext(): OperationsVisibilityContext {
     machineStopTrackingEnabled: flagsQuery.data?.data?.machineStopTrackingEnabled ?? false,
   });
   // Kalite Güvence (K4P) zincirsiz: KK1 muayenesi üretim kapalıyken de vardır. Belirsizken FALSE.
-  const kaliteGuvenceEnabled = flagsQuery.data?.data?.kaliteGuvenceEnabled ?? false;
+  const kaliteGuvenceEnabled = isModuleEnabled(flags, "kaliteGuvenceEnabled");
   // Maliyet ETKİN değer (production && maliyet) — `useMaliyetEnabled` ile aynı yüklem; belirsizken FALSE.
-  const maliyetEnabled = productionEnabled && (flagsQuery.data?.data?.maliyetEnabled ?? false);
+  const maliyetEnabled = isModuleEnabled(flags, "maliyetEnabled");
   // Gelen belge ETKİN değer (emanet && gelenBelge) — `useGelenBelgeEnabled` ile aynı yüklem; belirsizken FALSE.
-  const incomingDocumentEnabled = (flagsQuery.data?.data?.emanetEnabled ?? false) && (flagsQuery.data?.data?.gelenBelgeEnabled ?? false);
+  const incomingDocumentEnabled = isModuleEnabled(flags, "gelenBelgeEnabled");
+  const license = flags?.license;
+  const closedByLicense = useMemo(() => licenseClosedModules({ license }), [license]);
   // Rapor listesi: alan yoksa/yüklenmediyse de `null` — "boş liste = hepsi açık" yalnız
   // backend'in gerçekten boş dizi söylediği durumdur (fail-closed, K5).
   const reportsClosedKeys: readonly string[] | null = flagsQuery.data?.data?.reportsClosedKeys ?? null;
@@ -96,10 +101,11 @@ export function useOperationsVisibilityContext(): OperationsVisibilityContext {
     kaliteGuvenceEnabled,
     maliyetEnabled,
     gelenBelgeEnabled: incomingDocumentEnabled,
-    emanetEnabled: flagsQuery.data?.data?.emanetEnabled ?? false,
+    emanetEnabled: isModuleEnabled(flags, "emanetEnabled"),
     reportsClosedKeys,
     isReportOpen,
     flagsReady,
     flagsFailed,
+    licenseClosedModules: closedByLicense,
   };
 }

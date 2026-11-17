@@ -152,7 +152,8 @@ export function FeatureFlagSection({
     );
   }
 
-  const flagsQ = useFeatureFlags();
+  // HAM şalter: toggle kendi yazdığını gösterir; lisans kapatması yanındaki rozetten okunur.
+  const flagsQ = useFeatureFlags({ raw: true });
   const server = flagsQ.data?.data;
 
   // Ham system-setting alanları — yalnız bu kategoride varsa çekilir.
