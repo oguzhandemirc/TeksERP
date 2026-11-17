@@ -36,16 +36,20 @@ async function loadOwnDispatch(db: Pick<Tx, "subcontractorDispatch">, id: string
   return d;
 }
 
-export async function previewCancelWarpingDispatch(id: string, dispatchId: string): Promise<WarpingDispatchCancelPreview> {
-  const d = await loadOwnDispatch(prisma, id, dispatchId);
-  const items = await loadWarpingYarnItems(prisma, { dispatchId });
-  const returned = items.filter((i) => i.returnedKg.gt(0));
-  const others = await prisma.subcontractorDispatch.count({ where: { warpingOrderId: id, cancelledAt: null, id: { not: dispatchId } } });
-  const blockedReason = d.cancelledAt ? "Sevk zaten iptal edilmiş."
-    : returned.length > 0 ? "Bu sevkten iade alınmış — önce iadeleri iptal edin (LIFO)."
+/** Sevk iptalinin LIFO engeli — TEK tanım (iptal önizlemesi ve sipariş sevk listesi `dispatches-read` okur). */
+export function warpingDispatchCancelBlock(cancelledAt: Date | null, items: WarpingYarnItem[]): string | null {
+  return cancelledAt ? "Sevk zaten iptal edilmiş."
+    : items.some((i) => i.returnedKg.gt(0)) ? "Bu sevkten iade alınmış — önce iadeleri iptal edin (LIFO)."
     : items.some(isTransferred) ? TRANSFERRED_MSG
     // D5a: tx yolunda `cancelYarnItemsTx` 409 YARN_ITEM_ALLOCATED verir; önizleme aynı engeli önceden gösterir.
     : items.some((i) => i.allocatedKg.gt(0)) ? "Bu sevkin ipliği devereden dönen levente dağıtılmış — önce levent kabulünü geri alın (LIFO)." : null;
+}
+
+export async function previewCancelWarpingDispatch(id: string, dispatchId: string): Promise<WarpingDispatchCancelPreview> {
+  const d = await loadOwnDispatch(prisma, id, dispatchId);
+  const items = await loadWarpingYarnItems(prisma, { dispatchId });
+  const others = await prisma.subcontractorDispatch.count({ where: { warpingOrderId: id, cancelledAt: null, id: { not: dispatchId } } });
+  const blockedReason = warpingDispatchCancelBlock(d.cancelledAt, items);
   return {
     dispatch: { id: d.id, dispatchNo: d.dispatchNo, cancelledAt: d.cancelledAt?.toISOString() ?? null },
     canCancel: blockedReason === null,

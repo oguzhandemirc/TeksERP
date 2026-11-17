@@ -124,7 +124,24 @@ export async function warpingYarnAtSubcontractors(filter: { subcontractorIds?: s
     else g.orders.push({ warpingOrderId: h.warpingOrderId, orderNo: h.orderNo, status: h.orderStatus, kg: kg(h.kg) });
     groups.set(k, g);
   }
-  return [...groups.values()]
+  // D6-be: ad alanları kimliklere EK (geriye uyumlu); sıralama kimlikle kalır.
+  const list = [...groups.values()];
+  const uniq = <T,>(xs: T[]) => [...new Set(xs)];
+  const subIds = uniq(list.map((g) => g.subcontractorId));
+  const yarnIds = uniq(list.map((g) => g.yarnItemId));
+  const ownerIds = uniq(list.map((g) => g.ownerCustomerId).filter((x): x is string => x !== null));
+  const subs = subIds.length > 0 ? await prisma.subcontractor.findMany({ where: { id: { in: subIds } }, select: { id: true, code: true, name: true } }) : [];
+  const yarns = yarnIds.length > 0 ? await prisma.item.findMany({ where: { id: { in: yarnIds } }, select: { id: true, code: true, name: true } }) : [];
+  const owners = ownerIds.length > 0 ? await prisma.customer.findMany({ where: { id: { in: ownerIds } }, select: { id: true, name: true } }) : [];
+  const subBy = new Map(subs.map((s) => [s.id, s]));
+  const yarnBy = new Map(yarns.map((y) => [y.id, y]));
+  const ownerBy = new Map(owners.map((o) => [o.id, o.name]));
+  return list
     .sort((a, b) => a.subcontractorId.localeCompare(b.subcontractorId) || a.yarnItemId.localeCompare(b.yarnItemId) || (a.lotNo ?? "").localeCompare(b.lotNo ?? ""))
-    .map((g) => ({ ...g, kg: kg(g.kg), oldestDispatchedAt: g.oldestDispatchedAt.toISOString() }));
+    .map((g) => ({
+      ...g, kg: kg(g.kg), oldestDispatchedAt: g.oldestDispatchedAt.toISOString(),
+      subcontractorCode: subBy.get(g.subcontractorId)?.code ?? null, subcontractorName: subBy.get(g.subcontractorId)?.name ?? null,
+      yarnItemCode: yarnBy.get(g.yarnItemId)?.code ?? null, yarnItemName: yarnBy.get(g.yarnItemId)?.name ?? null,
+      ownerCustomerName: g.ownerCustomerId ? ownerBy.get(g.ownerCustomerId) ?? null : null,
+    }));
 }

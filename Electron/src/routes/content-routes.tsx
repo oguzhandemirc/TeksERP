@@ -100,6 +100,8 @@ import { LoomAlarmsPage } from "@/pages/Operations/LoomAlarms/LoomAlarmsPage";
 import { LoomAlarmDetailPage } from "@/pages/Operations/LoomAlarms/LoomAlarmDetailPage";
 import { WarpBeamsPage } from "@/pages/Operations/WarpBeams/WarpBeamsPage";
 import { WarpPlanPage } from "@/pages/Operations/WarpPlan/WarpPlanPage";
+import { WarpingOrdersPage } from "@/pages/Operations/WarpingOrders/WarpingOrdersPage";
+import { WarpingOrderPage } from "@/pages/Operations/WarpingOrders/WarpingOrderPage";
 import { PurchaseOrdersPage } from "@/pages/Operations/PurchaseOrders/PurchaseOrdersPage";
 import { ItemPricesPage } from "@/pages/Definitions/ItemPrices/ItemPricesPage";
 import { ServicePricesPage } from "@/pages/Definitions/ServicePrices/ServicePricesPage";
@@ -703,6 +705,23 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="warpspec:read">
         <WarpPlanPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Fason Devere Siparişleri (devere D6a) — karo izniyle BİREBİR (`warping-order:read`); yazma ekran içinde `PermissionGate`.
+    path: "operations/fason-devere",
+    element: (
+      <ProtectedRoute requirePermission="warping-order:read">
+        <WarpingOrdersPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "operations/fason-devere/:id",
+    element: (
+      <ProtectedRoute requirePermission="warping-order:read">
+        <WarpingOrderPage />
       </ProtectedRoute>
     ),
   },
