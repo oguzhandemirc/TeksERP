@@ -623,90 +623,90 @@ model User {
   updatedAt DateTime @updatedAt @db.Timestamptz
 
   // Kayıt künyesi ters ilişkileri (2026-08-19) — createdBy/updatedBy
-  createdColors                Color[]                     @relation("ColorCreatedBy")
-  updatedColors                Color[]                     @relation("ColorUpdatedBy")
-  createdCustomers             Customer[]                  @relation("CustomerCreatedBy")
-  updatedCustomers             Customer[]                  @relation("CustomerUpdatedBy")
-  createdCustomerBranchs       CustomerBranch[]            @relation("CustomerBranchCreatedBy")
-  updatedCustomerBranchs       CustomerBranch[]            @relation("CustomerBranchUpdatedBy")
-  createdDefectTypes           DefectType[]                @relation("DefectTypeCreatedBy")
-  updatedDefectTypes           DefectType[]                @relation("DefectTypeUpdatedBy")
-  createdFabricPropertys       FabricProperty[]            @relation("FabricPropertyCreatedBy")
-  updatedFabricPropertys       FabricProperty[]            @relation("FabricPropertyUpdatedBy")
-  createdItems                 Item[]                      @relation("ItemCreatedBy")
-  updatedItems                 Item[]                      @relation("ItemUpdatedBy")
-  lifecycleChangedItems        Item[]                      @relation("ItemLifecycleChangedBy")
-  createdServiceItems          ServiceItem[]               @relation("ServiceItemCreatedBy")
-  updatedServiceItems          ServiceItem[]               @relation("ServiceItemUpdatedBy")
-  lifecycleChangedServiceItems ServiceItem[]               @relation("ServiceItemLifecycleChangedBy")
-  mergedServiceItems           ServiceItem[]               @relation("ServiceItemMergedBy")
-  createdMachines              Machine[]                   @relation("MachineCreatedBy")
-  updatedMachines              Machine[]                   @relation("MachineUpdatedBy")
-  createdMachineSpecs          MachineSpec[]               @relation("MachineSpecCreatedBy")
-  updatedMachineSpecs          MachineSpec[]               @relation("MachineSpecUpdatedBy")
-  createdShiftDefinitions      ShiftDefinition[]           @relation("ShiftDefinitionCreatedBy")
-  updatedShiftDefinitions      ShiftDefinition[]           @relation("ShiftDefinitionUpdatedBy")
-  createdMachineCollectors     MachineCollector[]          @relation("MachineCollectorCreatedBy")
-  updatedMachineCollectors     MachineCollector[]          @relation("MachineCollectorUpdatedBy")
-  createdStopCodeMaps          MachineStopCodeMap[]        @relation("MachineStopCodeMapCreatedBy")
-  updatedStopCodeMaps          MachineStopCodeMap[]        @relation("MachineStopCodeMapUpdatedBy")
-  machineStopsClassified       MachineStopEvent[]          @relation("MachineStopClassifiedBy")
-  machineStopsOpened           MachineStopEvent[]          @relation("MachineStopOpenedBy")
-  machineStopsClosed           MachineStopEvent[]          @relation("MachineStopClosedBy")
-  machineStopReclasses         MachineStopReclass[]        @relation("MachineStopReclassBy")
-  loomAlarmsAcked              LoomAlarm[]                 @relation("LoomAlarmAckedBy")
-  loomAlarmsSnoozed            LoomAlarm[]                 @relation("LoomAlarmSnoozedBy")
-  loomAlarmEvents              LoomAlarmEvent[]            @relation("LoomAlarmEventBy")
+  createdColors                Color[]                         @relation("ColorCreatedBy")
+  updatedColors                Color[]                         @relation("ColorUpdatedBy")
+  createdCustomers             Customer[]                      @relation("CustomerCreatedBy")
+  updatedCustomers             Customer[]                      @relation("CustomerUpdatedBy")
+  createdCustomerBranchs       CustomerBranch[]                @relation("CustomerBranchCreatedBy")
+  updatedCustomerBranchs       CustomerBranch[]                @relation("CustomerBranchUpdatedBy")
+  createdDefectTypes           DefectType[]                    @relation("DefectTypeCreatedBy")
+  updatedDefectTypes           DefectType[]                    @relation("DefectTypeUpdatedBy")
+  createdFabricPropertys       FabricProperty[]                @relation("FabricPropertyCreatedBy")
+  updatedFabricPropertys       FabricProperty[]                @relation("FabricPropertyUpdatedBy")
+  createdItems                 Item[]                          @relation("ItemCreatedBy")
+  updatedItems                 Item[]                          @relation("ItemUpdatedBy")
+  lifecycleChangedItems        Item[]                          @relation("ItemLifecycleChangedBy")
+  createdServiceItems          ServiceItem[]                   @relation("ServiceItemCreatedBy")
+  updatedServiceItems          ServiceItem[]                   @relation("ServiceItemUpdatedBy")
+  lifecycleChangedServiceItems ServiceItem[]                   @relation("ServiceItemLifecycleChangedBy")
+  mergedServiceItems           ServiceItem[]                   @relation("ServiceItemMergedBy")
+  createdMachines              Machine[]                       @relation("MachineCreatedBy")
+  updatedMachines              Machine[]                       @relation("MachineUpdatedBy")
+  createdMachineSpecs          MachineSpec[]                   @relation("MachineSpecCreatedBy")
+  updatedMachineSpecs          MachineSpec[]                   @relation("MachineSpecUpdatedBy")
+  createdShiftDefinitions      ShiftDefinition[]               @relation("ShiftDefinitionCreatedBy")
+  updatedShiftDefinitions      ShiftDefinition[]               @relation("ShiftDefinitionUpdatedBy")
+  createdMachineCollectors     MachineCollector[]              @relation("MachineCollectorCreatedBy")
+  updatedMachineCollectors     MachineCollector[]              @relation("MachineCollectorUpdatedBy")
+  createdStopCodeMaps          MachineStopCodeMap[]            @relation("MachineStopCodeMapCreatedBy")
+  updatedStopCodeMaps          MachineStopCodeMap[]            @relation("MachineStopCodeMapUpdatedBy")
+  machineStopsClassified       MachineStopEvent[]              @relation("MachineStopClassifiedBy")
+  machineStopsOpened           MachineStopEvent[]              @relation("MachineStopOpenedBy")
+  machineStopsClosed           MachineStopEvent[]              @relation("MachineStopClosedBy")
+  machineStopReclasses         MachineStopReclass[]            @relation("MachineStopReclassBy")
+  loomAlarmsAcked              LoomAlarm[]                     @relation("LoomAlarmAckedBy")
+  loomAlarmsSnoozed            LoomAlarm[]                     @relation("LoomAlarmSnoozedBy")
+  loomAlarmEvents              LoomAlarmEvent[]                @relation("LoomAlarmEventBy")
   loomAlarmRecipients          LoomAlarmRecipient[]
-  hallShiftResponsibles        HallShiftResponsible[]      @relation("HallShiftResponsibleUser")
-  hallShiftDutyOverrides       HallShiftDutyOverride[]     @relation("HallShiftDutyOverrideUser")
-  loomAlarmTierRules           LoomAlarmTierRule[]         @relation("LoomAlarmTierRuleUser")
-  notificationInbox            NotificationInbox[]         @relation("NotificationInboxUser")
-  notificationPrefs            NotificationPreference[]    @relation("NotificationPreferenceUser")
-  notificationSetting          NotificationUserSetting?    @relation("NotificationUserSettingUser")
-  notificationProfiles         NotificationProfileMember[] @relation("NotificationProfileMemberUser")
+  hallShiftResponsibles        HallShiftResponsible[]          @relation("HallShiftResponsibleUser")
+  hallShiftDutyOverrides       HallShiftDutyOverride[]         @relation("HallShiftDutyOverrideUser")
+  loomAlarmTierRules           LoomAlarmTierRule[]             @relation("LoomAlarmTierRuleUser")
+  notificationInbox            NotificationInbox[]             @relation("NotificationInboxUser")
+  notificationPrefs            NotificationPreference[]        @relation("NotificationPreferenceUser")
+  notificationSetting          NotificationUserSetting?        @relation("NotificationUserSettingUser")
+  notificationProfiles         NotificationProfileMember[]     @relation("NotificationProfileMemberUser")
   notificationPrefProfiles     NotificationPreferenceProfile[] @relation("NotificationPreferenceProfileUser")
-  recordFollows                RecordFollow[]              @relation("RecordFollowUser")
-  rowMarks                     RowMark[]                   @relation("RowMarkOwner")
-  reportCategoriesCreated      ReportCategory[]            @relation("ReportCategoryCreatedBy")
-  reportCategoriesUpdated      ReportCategory[]            @relation("ReportCategoryUpdatedBy")
-  reportDefinitionsOwned       ReportDefinition[]          @relation("ReportDefinitionOwner")
-  reportDefinitionsCreated     ReportDefinition[]          @relation("ReportDefinitionCreatedBy")
-  reportDefinitionsUpdated     ReportDefinition[]          @relation("ReportDefinitionUpdatedBy")
-  reportVersionsCreated        ReportDefinitionVersion[]   @relation("ReportVersionCreatedBy")
-  reportPresetsOwned           ReportPreset[]              @relation("ReportPresetOwner")
-  reportShares                 ReportShare[]               @relation("ReportShareUser")
-  reportRuns                   ReportRun[]                 @relation("ReportRunUser")
-  reportSnapshotsCreated       ReportSnapshot[]            @relation("ReportSnapshotCreatedBy")
-  patronReportRuns             PatronReportRun[]           @relation("PatronReportRunUser")
-  patronPushTokens             PatronPushToken[]           @relation("PatronPushTokenUser")
-  machineShiftStatsSealed      MachineShiftStat[]          @relation("MachineShiftStatSealedBy")
-  machineShiftSealsActed       MachineShiftStatSeal[]      @relation("MachineShiftSealBy")
-  createdPeripheralDevices     PeripheralDevice[]          @relation("PeripheralDeviceCreatedBy")
-  updatedPeripheralDevices     PeripheralDevice[]          @relation("PeripheralDeviceUpdatedBy")
-  deviceBindingEventsActed     DeviceBindingEvent[]        @relation("DeviceBindingEventActor")
-  deviceRebindsDecided         DeviceRebindRequest[]       @relation("DeviceRebindDecidedBy")
-  createdProductRecipes        ProductRecipe[]             @relation("ProductRecipeCreatedBy")
-  updatedProductRecipes        ProductRecipe[]             @relation("ProductRecipeUpdatedBy")
-  createdWarpSpecs             WarpSpec[]                  @relation("WarpSpecCreatedBy")
-  updatedWarpSpecs             WarpSpec[]                  @relation("WarpSpecUpdatedBy")
-  createdQualityGrades         QualityGrade[]              @relation("QualityGradeCreatedBy")
-  updatedQualityGrades         QualityGrade[]              @relation("QualityGradeUpdatedBy")
-  createdReturnReasons         ReturnReason[]              @relation("ReturnReasonCreatedBy")
-  updatedReturnReasons         ReturnReason[]              @relation("ReturnReasonUpdatedBy")
-  createdRoutes                Route[]                     @relation("RouteCreatedBy")
-  updatedRoutes                Route[]                     @relation("RouteUpdatedBy")
-  createdStations              Station[]                   @relation("StationCreatedBy")
-  updatedStations              Station[]                   @relation("StationUpdatedBy")
-  createdSubcontractors        Subcontractor[]             @relation("SubcontractorCreatedBy")
-  updatedSubcontractors        Subcontractor[]             @relation("SubcontractorUpdatedBy")
-  createdLabelTemplates        LabelTemplate[]             @relation("LabelTemplateCreatedBy")
-  updatedLabelTemplates        LabelTemplate[]             @relation("LabelTemplateUpdatedBy")
-  createdOrders                Order[]                     @relation("OrderCreatedBy")
-  updatedOrders                Order[]                     @relation("OrderUpdatedBy")
-  cancelledOrderLines          OrderLine[]                 @relation("OrderLineCancelledBy")
-  createdBatchs                Batch[]                     @relation("BatchCreatedBy")
-  updatedBatchs                Batch[]                     @relation("BatchUpdatedBy")
+  recordFollows                RecordFollow[]                  @relation("RecordFollowUser")
+  rowMarks                     RowMark[]                       @relation("RowMarkOwner")
+  reportCategoriesCreated      ReportCategory[]                @relation("ReportCategoryCreatedBy")
+  reportCategoriesUpdated      ReportCategory[]                @relation("ReportCategoryUpdatedBy")
+  reportDefinitionsOwned       ReportDefinition[]              @relation("ReportDefinitionOwner")
+  reportDefinitionsCreated     ReportDefinition[]              @relation("ReportDefinitionCreatedBy")
+  reportDefinitionsUpdated     ReportDefinition[]              @relation("ReportDefinitionUpdatedBy")
+  reportVersionsCreated        ReportDefinitionVersion[]       @relation("ReportVersionCreatedBy")
+  reportPresetsOwned           ReportPreset[]                  @relation("ReportPresetOwner")
+  reportShares                 ReportShare[]                   @relation("ReportShareUser")
+  reportRuns                   ReportRun[]                     @relation("ReportRunUser")
+  reportSnapshotsCreated       ReportSnapshot[]                @relation("ReportSnapshotCreatedBy")
+  patronReportRuns             PatronReportRun[]               @relation("PatronReportRunUser")
+  patronPushTokens             PatronPushToken[]               @relation("PatronPushTokenUser")
+  machineShiftStatsSealed      MachineShiftStat[]              @relation("MachineShiftStatSealedBy")
+  machineShiftSealsActed       MachineShiftStatSeal[]          @relation("MachineShiftSealBy")
+  createdPeripheralDevices     PeripheralDevice[]              @relation("PeripheralDeviceCreatedBy")
+  updatedPeripheralDevices     PeripheralDevice[]              @relation("PeripheralDeviceUpdatedBy")
+  deviceBindingEventsActed     DeviceBindingEvent[]            @relation("DeviceBindingEventActor")
+  deviceRebindsDecided         DeviceRebindRequest[]           @relation("DeviceRebindDecidedBy")
+  createdProductRecipes        ProductRecipe[]                 @relation("ProductRecipeCreatedBy")
+  updatedProductRecipes        ProductRecipe[]                 @relation("ProductRecipeUpdatedBy")
+  createdWarpSpecs             WarpSpec[]                      @relation("WarpSpecCreatedBy")
+  updatedWarpSpecs             WarpSpec[]                      @relation("WarpSpecUpdatedBy")
+  createdQualityGrades         QualityGrade[]                  @relation("QualityGradeCreatedBy")
+  updatedQualityGrades         QualityGrade[]                  @relation("QualityGradeUpdatedBy")
+  createdReturnReasons         ReturnReason[]                  @relation("ReturnReasonCreatedBy")
+  updatedReturnReasons         ReturnReason[]                  @relation("ReturnReasonUpdatedBy")
+  createdRoutes                Route[]                         @relation("RouteCreatedBy")
+  updatedRoutes                Route[]                         @relation("RouteUpdatedBy")
+  createdStations              Station[]                       @relation("StationCreatedBy")
+  updatedStations              Station[]                       @relation("StationUpdatedBy")
+  createdSubcontractors        Subcontractor[]                 @relation("SubcontractorCreatedBy")
+  updatedSubcontractors        Subcontractor[]                 @relation("SubcontractorUpdatedBy")
+  createdLabelTemplates        LabelTemplate[]                 @relation("LabelTemplateCreatedBy")
+  updatedLabelTemplates        LabelTemplate[]                 @relation("LabelTemplateUpdatedBy")
+  createdOrders                Order[]                         @relation("OrderCreatedBy")
+  updatedOrders                Order[]                         @relation("OrderUpdatedBy")
+  cancelledOrderLines          OrderLine[]                     @relation("OrderLineCancelledBy")
+  createdBatchs                Batch[]                         @relation("BatchCreatedBy")
+  updatedBatchs                Batch[]                         @relation("BatchUpdatedBy")
 
   // ── KAYIT KÜNYESİ (Faz A2, 2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md
   createdById String? @db.Uuid
@@ -2413,6 +2413,8 @@ model WarpBeamEvent {
   dispatchItem    SubcontractorDispatchItem? @relation("WarpBeamEventDispatchItem", fields: [dispatchItemId], references: [id], onDelete: Restrict)
   consignmentItem ConsignmentDispatchItem?   @relation("WarpBeamEventConsignmentItem", fields: [consignmentItemId], references: [id], onDelete: Restrict)
   roll            Roll?                      @relation("WarpBeamEventRoll", fields: [rollId], references: [id], onDelete: Restrict)
+  /// Fason devere D2: WOUND doğuş kırılımı (iplik başına tel/denye/kg kopyası).
+  yarns           WarpBeamEventYarn[]
 
   @@index([beamId, createdAt])
   @@index([machineId, createdAt])
@@ -2422,6 +2424,31 @@ model WarpBeamEvent {
   @@index([rollId])
   @@index([beamId, kind, createdAt])
   @@map("warp_beam_events")
+}
+
+/// FASON DEVERE D2 — WOUND doğuş kırılımı (DEFTER, append-only, `updatedAt` yok): kart satırlarının ve iplik
+/// denyesinin doğuş anındaki KOPYASI; kart sonradan değişse de leventin ipliği değişmez. Ebeveyn WOUND satırında
+/// `endsCount` = Σ tel, `theoreticalKg` = Σ kg, `denier` = eşdeğer denye. Ters yol ebeveynin `WOUND_CANCEL`ı
+/// (kırılım `reversal: null` süzgeciyle sayılmaz); ayrı ters satır yok.
+model WarpBeamEventYarn {
+  id            String   @id @default(uuid()) @db.Uuid
+  eventId       String   @db.Uuid
+  yarnItemId    String   @db.Uuid
+  /// Bu ipliğin teli — CHECK > 0.
+  endsCount     Int
+  /// `resolveDenier` kopyası — CHECK > 0.
+  denier        Decimal  @db.Decimal(10, 4)
+  /// endsCount × denier × lengthM / 9_000_000 (3 hane) — CHECK ≥ 0.
+  theoreticalKg Decimal  @db.Decimal(14, 3)
+  createdAt     DateTime @default(now()) @db.Timestamptz
+
+  /// Cascade: kırılım olayın parçası; olay satırı üretimde silinmez (append-only, `test_warp_beam_lifecycle` §0b), yalnız bekçi temizliği tetikler.
+  event    WarpBeamEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  yarnItem Item          @relation("WarpBeamEventYarnItem", fields: [yarnItemId], references: [id], onDelete: Restrict)
+
+  @@unique([eventId, yarnItemId])
+  @@index([yarnItemId])
+  @@map("warp_beam_event_yarns")
 }
 
 /// KİM DOKUYOR — `WarpBeamOrigin` kalıbının kardeşi, ikinci bir desen icat edilmez.
@@ -3731,6 +3758,7 @@ model Item {
   /// Bu İPLİĞİ kullanan çözgü kartları (1:N) — silme kapısının bağımlılık kaynağı.
   warpSpecsAsYarn                WarpSpec[]                  @relation("WarpSpecYarn")
   warpSpecYarnsAsYarn            WarpSpecYarn[]              @relation("WarpSpecYarnItem")
+  warpBeamEventYarnsAsYarn       WarpBeamEventYarn[]         @relation("WarpBeamEventYarnItem")
   /// Bu KUMAŞIN atkı kartı (N:1) — dokuma ürün yapısı (MAL-1 / S2).
   weftSpec                       WeftSpec?                   @relation("ItemWeftSpec", fields: [weftSpecId], references: [id], onDelete: Restrict)
   /// Bu İPLİĞİ atkı olarak kullanan kart satırları (1:N).
@@ -9293,9 +9321,9 @@ model Shipment {
   /// TESLİM YERİ (K18, 2026-11-03) — mal carinin değil BAŞKA bir carinin adresine gider
   /// (ör. boyahane). Sahiplik/cari DEĞİŞMEZ (`customerId` malın sahibi kalır, OWNER_MISMATCH
   /// kapısı aynen). Yalnız PLANNED'de yazılır; belge snapshot'ına DOĞARKEN donar. NULL = bugünkü.
-  deliveryCustomerId String? @db.Uuid
+  deliveryCustomerId String?   @db.Uuid
   /// Serbest teslim adresi; NULL ise belge doğarken teslim carisinin kart adresi basılır.
-  deliveryAddress    String? @db.VarChar(500)
+  deliveryAddress    String?   @db.VarChar(500)
   /// PLANLANAN SEVK GÜNÜ (2026-11-13) — fabrika takvim günü (an değil); pano ajandası planlı sevkiyatı
   /// bu güne koyar. Yalnız PLANNED'de yazılır (409 `SHIPMENT_NOT_PLANNED`); sevkten sonra okunur kalır.
   /// NULL = tarih verilmedi (bugünkü davranış: ajandada tarihsiz liste). Gecikme/termin üretilmez.
@@ -14375,30 +14403,30 @@ model PatronReportRun {
 /// `birak` der → BIRAKILDI. Satır silinmez (bırakma durum geçişidir); aynı belirteç yeniden gelirse satır dirilir.
 /// Durum kümesi VarChar + CHECK (ŞEMA-DIŞI, envanter `test_db_invariants`); tek yazar `services/patron-push/`.
 model PatronPushToken {
-  id            String    @id @default(uuid()) @db.Uuid
-  userId        String    @db.Uuid
+  id                String    @id @default(uuid()) @db.Uuid
+  userId            String    @db.Uuid
   /// Kaydı yazan oturum; oturum satırı budanınca NULL olur ve süpürme belirteci bırakır.
-  sessionId     String?   @db.Uuid
+  sessionId         String?   @db.Uuid
   /// sha256(utf8(ham belirteç)) küçük harf hex — buluttaki bağın anahtarı (bir cihaz = bir satır).
-  tokenDigest   String    @unique @db.VarChar(64)
+  tokenDigest       String    @unique @db.VarChar(64)
   /// Ham belirteç, kısa kimlik halkasıyla SARILI (`ptk1:<kid>:…`, AES-256-GCM); bırakılınca NULL.
-  tokenSealed   String?
+  tokenSealed       String?
   /// android | ios (CHECK).
-  platform      String    @db.VarChar(16)
-  deviceName    String?   @db.VarChar(80)
+  platform          String    @db.VarChar(16)
+  deviceName        String?   @db.VarChar(80)
   /// Telefonun seçtiği BİLDİRİM sesi (S0; tel `PUSH_SOUNDS`, CHECK); değişince satır yeniden `kaydet`e girer.
-  soundNotification String @default("tekserp_zil") @db.VarChar(24)
+  soundNotification String    @default("tekserp_zil") @db.VarChar(24)
   /// Telefonun seçtiği ALARM sesi (S0; tel `PUSH_SOUNDS`, CHECK).
-  soundAlarm    String    @default("tekserp_alarm") @db.VarChar(24)
+  soundAlarm        String    @default("tekserp_alarm") @db.VarChar(24)
   /// BEKLIYOR | KAYITLI | BIRAKILACAK | BIRAKILDI (CHECK).
-  cloudState    String    @default("BEKLIYOR") @db.VarChar(16)
-  attempts      Int       @default(0)
-  nextAttemptAt DateTime? @db.Timestamptz
-  lastErrorCode String?   @db.VarChar(64)
-  lastSeenAt    DateTime  @default(now()) @db.Timestamptz
-  releasedAt    DateTime? @db.Timestamptz
-  createdAt     DateTime  @default(now()) @db.Timestamptz
-  updatedAt     DateTime  @updatedAt @db.Timestamptz
+  cloudState        String    @default("BEKLIYOR") @db.VarChar(16)
+  attempts          Int       @default(0)
+  nextAttemptAt     DateTime? @db.Timestamptz
+  lastErrorCode     String?   @db.VarChar(64)
+  lastSeenAt        DateTime  @default(now()) @db.Timestamptz
+  releasedAt        DateTime? @db.Timestamptz
+  createdAt         DateTime  @default(now()) @db.Timestamptz
+  updatedAt         DateTime  @updatedAt @db.Timestamptz
 
   user    User     @relation("PatronPushTokenUser", fields: [userId], references: [id], onDelete: Restrict)
   session Session? @relation("PatronPushTokenSession", fields: [sessionId], references: [id], onDelete: SetNull)

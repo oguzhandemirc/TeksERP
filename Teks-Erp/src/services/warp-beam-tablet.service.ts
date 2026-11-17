@@ -6,7 +6,7 @@
 import { CompanyType, YarnLotQualityStatus } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { ApiResponse } from "../types/api.types";
-import { resolveDenier } from "../constants/warp-beam";
+import { WARP_SPEC_YARN_DENIER_SELECT, warpSpecDenierLines, warpSpecKgPerMExact } from "./helpers/warp-spec-yarn.helper";
 import { listDevereMachines, listLoomMachines } from "./warp-beam.service";
 import { yarnLotBalancesTx } from "./helpers/yarn-lot.helper";
 import { readDevereAutoConsume, readDevereLotRequired, readDevereMountTracking, readDevereMountTrackingRequired, resolveBeamWeavingLinkRequired, resolveYarnQualityHoldEnabled } from "./system-setting.service";
@@ -30,7 +30,8 @@ import { lastWindDefaults, type LastWindDefault } from "./helpers/warp-beam-wind
  * bütün aktif cariler döner, tip yalnız sıralama için (SUPPLIER/BOTH önce).
  */
 export interface WarpBeamTabletContextDto {
-  warpSpecs: Array<{ id: string; code: string; name: string; endsCount: number; denier: number | null }>;
+  /** Fason devere D2: `denier` yalnız tek iplikli kartta dolu (çok iplikli kart içeride sarılamaz, 400); Σ kg/m `kgPerM`, satır sayısı `yarnCount`. */
+  warpSpecs: Array<{ id: string; code: string; name: string; endsCount: number; denier: number | null; kgPerM: number | null; yarnCount: number }>;
   machines: Array<{ id: string; code: string; name: string; stationName: string }>;
   warehouses: Array<{ id: string; name: string; isDefault: boolean }>;
   subcontractors: Array<{ id: string; name: string }>;
@@ -58,9 +59,18 @@ export interface WarpBeamTabletContextDto {
   lastWindDefaults: LastWindDefault[];
 }
 
+type TabletSpecRow = Parameters<typeof warpSpecDenierLines>[0] & { id: string; code: string; name: string };
+/** Tek iplikte `denier` bugünkü değer (bayt-aynı); çok iplikte null — tablet `endsCount × denye` ön hesabı yanlış kg vermesin. */
+function tabletWarpSpec(w: TabletSpecRow): WarpBeamTabletContextDto["warpSpecs"][number] {
+  const lines = warpSpecDenierLines(w);
+  const kgPerM = warpSpecKgPerMExact(lines);
+  const d = lines.length === 1 ? lines[0]!.denier : null;
+  return { id: w.id, code: w.code, name: w.name, endsCount: w.endsCount, denier: d == null ? null : Number(d), kgPerM: kgPerM == null ? null : Number(kgPerM), yarnCount: lines.length };
+}
+
 export async function getWarpBeamTabletContext(): Promise<ApiResponse<WarpBeamTabletContextDto>> {
   const [specs, machines, warehouses, subcontractors, suppliers] = await Promise.all([
-    prisma.warpSpec.findMany({ where: { isActive: true }, orderBy: { code: "asc" }, select: { id: true, code: true, name: true, endsCount: true, yarnItemId: true, yarnItem: { select: { linearDensityDen: true } } } }),
+    prisma.warpSpec.findMany({ where: { isActive: true }, orderBy: { code: "asc" }, select: { id: true, code: true, name: true, ...WARP_SPEC_YARN_DENIER_SELECT } }),
     listDevereMachines().then((r) => r.data),
     prisma.warehouse.findMany({ where: { isActive: true }, orderBy: [{ isDefault: "desc" }, { name: "asc" }], select: { id: true, name: true, isDefault: true } }),
     prisma.subcontractor.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
@@ -81,7 +91,7 @@ export async function getWarpBeamTabletContext(): Promise<ApiResponse<WarpBeamTa
   return {
     success: true,
     data: {
-      warpSpecs: specs.map((w) => ({ id: w.id, code: w.code, name: w.name, endsCount: w.endsCount, denier: (() => { const d = resolveDenier(w.yarnItem); return d == null ? null : Number(d); })() })),
+      warpSpecs: specs.map((w) => tabletWarpSpec(w)),
       machines,
       warehouses,
       subcontractors,

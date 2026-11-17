@@ -203,11 +203,12 @@ export async function beamsMountedDuringMany(client: { $queryRawUnsafe: Client["
   return out;
 }
 
-/** Tartıdan metre (#13/#14): (brüt − dara) ÷ (tel × denye ÷ 9.000.000). Dara yoksa null — metre ESTIMATED'a düşer. */
-export function warpLengthFromWeight(grossKg: Prisma.Decimal.Value, tareKg: Prisma.Decimal.Value | null | undefined, endsCount: number, denier: Prisma.Decimal.Value | null | undefined): Prisma.Decimal | null {
-  if (tareKg == null || denier == null || endsCount <= 0) return null;
-  const kgPerM = new Prisma.Decimal(endsCount).mul(denier).div(9_000_000);
-  if (kgPerM.lte(0)) return null;
+/**
+ * Tartıdan metre (#13/#14): (brüt − dara) ÷ çözgü kg/m. kg/m = Σ satır (tel × denye ÷ 9.000.000) — çağıran
+ * `warpSpecKgPerMExact`ten verir (fason devere D2: çok iplikli kart). Dara ya da kg/m yoksa null — metre ESTIMATED'a düşer.
+ */
+export function warpLengthFromWeight(grossKg: Prisma.Decimal.Value, tareKg: Prisma.Decimal.Value | null | undefined, kgPerM: Prisma.Decimal | null): Prisma.Decimal | null {
+  if (tareKg == null || kgPerM == null || kgPerM.lte(0)) return null;
   const net = new Prisma.Decimal(grossKg).minus(tareKg);
   if (net.lt(0)) return null;
   return net.div(kgPerM).toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP);

@@ -129,11 +129,12 @@ export function yarnKgByYarn(ready: readonly ReadyItem[], beams: Map<string, { r
     perYarn.set(id, a);
   };
   for (const r of ready) {
-    add(r.usage.warp!.yarnItemId, "warp", r.usage.warp!.kgPerM.mul(warpMeters.get(r)!), r.usage.warp!.wasteSource);
+    // Fason devere D2: çözgünün her ipliği kendi kg/m payıyla (tek iplikte tek satır = bugünkü).
+    for (const y of r.usage.warp!.yarns) add(y.yarnItemId, "warp", y.kgPerM.mul(warpMeters.get(r)!), y.wasteSource);
     // SY-B1/N2: SHARED_BEAM zemin leventinde (aynı düşüm); SEPARATE kendi leventinin düşümüyle; CREEL tam talep (stoktan).
     for (const l of r.usage.warpLayers) {
       const own = layerMeters.get(`${r.d.itemId}|${l.warpSpecId}`);
-      add(l.yarnItemId, "warp", l.kgPerM.mul(isSharedBeamLayer(l.beamMode) ? warpMeters.get(r)! : (own ?? r.rawM)), l.wasteSource);
+      for (const y of l.yarns) add(y.yarnItemId, "warp", y.kgPerM.mul(isSharedBeamLayer(l.beamMode) ? warpMeters.get(r)! : (own ?? r.rawM)), y.wasteSource);
     }
     for (const w of r.usage.weft) add(w.yarnItemId, "weft", w.kgPerM.mul(r.rawM), w.wasteSource);
   }

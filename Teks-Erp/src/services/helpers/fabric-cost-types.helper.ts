@@ -37,7 +37,15 @@ export interface CostYarn { yarnItemId: string | null; name: string; denier: Sou
 export interface CostWeftYarn extends CostYarn { picksInRepeat: number }
 /** `kgBase` yalnız KG tabanında yazılır — metre tabanlı tarifenin girdisi + hash'i bayt-aynı kalır. */
 export interface CostRate { code: string; name: string; basis: "RAW_M" | "FINISHED_M" | "KG"; kgBase?: FinishingKgBasis; price: CostPrice | null }
-export interface CostWarp { warpSpecId: string | null; endsCount: number; takeUpPct: Sourced<Dec>; wastePct: Sourced<Dec>; yarn: CostYarn }
+/** Fason devere D2: çok iplikli çözgü kartının bir satırı (iplik + kendi teli). */
+export interface CostWarpYarn extends CostYarn { endsCount: number }
+/**
+ * `yarns` yalnız ≥ 2 satırlı kartta yazılır (tek iplikte girdi + `inputHash` bayt-aynı); o zaman `yarn` = ana iplik,
+ * `endsCount` = Σ tel ve motor kg'ı SATIR SATIR toplar.
+ */
+export interface CostWarp { warpSpecId: string | null; endsCount: number; takeUpPct: Sourced<Dec>; wastePct: Sourced<Dec>; yarn: CostYarn; yarns?: CostWarpYarn[] }
+/** Çözgünün iplik satırları — tek iplikte `[yarn]` (toplam telle). Fiyat/kur/iplik listesi okuyucuları buradan geçer. */
+export const costWarpYarns = (w: CostWarp): CostWarpYarn[] => w.yarns ?? [{ ...w.yarn, endsCount: w.endsCount }];
 /** SY-B1 ek çözgü katmanı (döner/ikinci çözgü): zeminle AYNI formül, kendi tel/iplik/take-up'ı. */
 export interface CostWarpLayer extends CostWarp { role: "LENO" | "SECONDARY"; beamMode: "SEPARATE_BEAM" | "SHARED_BEAM" | "CREEL" }
 export const WARP_LAYER_ROLE_LABEL: Record<CostWarpLayer["role"], string> = { LENO: "döner", SECONDARY: "ikinci" };

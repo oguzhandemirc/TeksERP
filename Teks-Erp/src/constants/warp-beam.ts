@@ -102,6 +102,14 @@ export function warpYarnKgExact(endsCount: number, denier: Prisma.Decimal.Value,
 }
 
 /**
+ * İplik metresinden kg = metre × denye / 9.000.000 (denyenin tanımı: 9000 m'nin gramı). Atkı motoru çağırır;
+ * işlem sırası (metre önce) maliyetin bugünkü Decimal sonucunu bayt-aynı tutar (fason devere D2).
+ */
+export function yarnKgFromLengthExact(yarnLengthM: Prisma.Decimal.Value, denier: Prisma.Decimal.Value): Prisma.Decimal {
+  return new Prisma.Decimal(yarnLengthM).mul(denier).div(9_000_000);
+}
+
+/**
  * Ters yön ikizi: verilen kg bu tel × denyeyle kaç metre çözgü sarar = kg × 9.000.000 / (tel × denye), yuvarlamasız.
  * Formül sabiti bu dosyada kalsın diye ayrı fonksiyon (fason devere D1 `warp-plan.helper`).
  */
