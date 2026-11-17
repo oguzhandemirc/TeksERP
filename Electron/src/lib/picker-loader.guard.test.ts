@@ -68,6 +68,9 @@ const ALLOWED: Record<string, string> = {
     "transfer listesi — 100 sayfa boyutu",
   "pages/Operations/WarehouseTransfers/service.ts":
     "BARKOD çözümü: okutulan barkodun aday kümesi (statü süzgeçli), picker değil",
+  "pages/Operations/WarpingOrders/YarnSourcePickers.tsx":
+    "TEK iplik kaleminin bakiyeli depoları (`/api/yarn/stocks?itemId&onlyNonZero`, uç tavanı 200) — " +
+    "kalem kapsamlı kısa liste, ana veri picker'ı değil; `loadAllForPicker` 500 ister ve bu uç 400 döner",
   "pages/Operations/WorkOrders/OrderPickerDialog.tsx":
     "ARAMA tabanlı picker (debounce'lu sunucu araması + filtre + özel uç). " +
     "Orada 100 bir 'tümünü çek' tavanı değil, sonuç sayfası boyutudur — " +

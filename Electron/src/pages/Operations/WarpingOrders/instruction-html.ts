@@ -48,7 +48,7 @@ function dispatchSection(d: WarpingDispatchRow, i: WarpingInstruction): string {
     <h1>İPLİK SEVK İRSALİYESİ</h1>
     <div class="sub">${esc(d.dispatchNo)} · ${esc(fmtFactoryDateTime(d.dispatchedAt))}</div>
     <table class="kv">
-      ${row("Alıcı (devereci)", `${i.subcontractor.name} (${i.subcontractor.code})`)}
+      ${row("Devereci", `${i.subcontractor.name} (${i.subcontractor.code})`)}
       ${row("Sipariş", `${i.orderNo} — ${i.warpSpec.code}`)}
     </table>
     <table class="grid"><thead><tr><th>İplik</th><th>Lot</th><th>Çıkış deposu</th><th class="n">Kg</th></tr></thead>
