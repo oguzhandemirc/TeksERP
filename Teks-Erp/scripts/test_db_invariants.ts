@@ -810,6 +810,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "subcontractor_dispatch_items", name: "subcontractor_dispatch_items_kind_ref_ck" },
   // G2 fason dokuma (2026-09-14): başlık iş emri adımı XOR dokuma işi; D4b (2026-11-17) üçüncü kol devere siparişi — tam biri, birincil kapı serviste
   { table: "subcontractor_dispatches", name: "subcontractor_dispatches_header_ck" },
+  // D4c (2026-11-18): kaynak mal kabul fişi bağı yalnız devere başlığında (doğrudan devere kabulü)
+  { table: "subcontractor_dispatches", name: "subcontractor_dispatches_receipt_warping_ck" },
   { table: "subcontractor_receipts", name: "subcontractor_receipts_header_ck" },
   { table: "yarn_movements", name: "yarn_movements_warp_link_ck" },
   { table: "yarn_movements", name: "yarn_movements_warp_return_reason_ck" },

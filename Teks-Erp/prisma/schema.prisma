@@ -2094,6 +2094,8 @@ model WarpingOrder {
   salesOrders   WarpingOrderToOrder[]
   /// D4b: iplik sevk belgeleri (başlık üçüncü kolu `SubcontractorDispatch.warpingOrderId`).
   dispatches    SubcontractorDispatch[] @relation("DispatchWarpingOrder")
+  /// D4c: bu siparişe doğrudan (depoya girmeden) iplik getiren mal kabul fişleri.
+  directReceipts GoodsReceipt[] @relation("GoodsReceiptDirectWarpingOrder")
   /// D4b-2: siparişler arası iplik aktarma defteri (kaynak / hedef).
   yarnTransfersOut WarpingYarnTransfer[] @relation("WarpingYarnTransferFrom")
   yarnTransfersIn  WarpingYarnTransfer[] @relation("WarpingYarnTransferTo")
@@ -7896,6 +7898,8 @@ model SubcontractorDispatch {
   /// Fason devere D4b (2026-11-17): BAŞLIK ÜÇÜNCÜ KOLU — devere siparişine iplik sevki (iş emri · dokuma · devere,
   /// tam biri; CHECK `subcontractor_dispatches_header_ck`). Yalnız `warping-order/dispatch.ts` yazar.
   warpingOrderId         String?  @db.Uuid
+  /// D4c (K1): doğrudan devere mal kabulünün sevki — kaynak fiş (iz + fiş iptalinde sevk iptali). Yalnız devere başlığında dolu.
+  goodsReceiptId         String?  @db.Uuid
   /// D4b: devere sevkinin idempotency anahtarı (mantıksal deneme başına; replay `tokenReplay`). Diğer yollar NULL.
   clientToken            String?  @unique @db.Uuid
   subcontractorId        String   @db.Uuid // Gerçekleşen fason firma
@@ -7937,6 +7941,7 @@ model SubcontractorDispatch {
   step                  WorkOrderStep?                      @relation(fields: [stepId], references: [id], onDelete: Restrict)
   weavingOrder          WeavingOrder?                       @relation("DispatchWeavingOrder", fields: [weavingOrderId], references: [id], onDelete: Restrict)
   warpingOrder          WarpingOrder?                       @relation("DispatchWarpingOrder", fields: [warpingOrderId], references: [id], onDelete: Restrict)
+  goodsReceipt          GoodsReceipt?                       @relation("DispatchGoodsReceipt", fields: [goodsReceiptId], references: [id], onDelete: Restrict)
   subcontractor         Subcontractor                       @relation("DispatchSubcontractor", fields: [subcontractorId], references: [id])
   plannedSubcontractor  Subcontractor?                      @relation("DispatchPlannedSubcontractor", fields: [plannedSubcontractorId], references: [id])
   dispatchedBy          User?                               @relation("DispatchCreatedBy", fields: [dispatchedById], references: [id])
@@ -7957,6 +7962,7 @@ model SubcontractorDispatch {
   @@index([workOrderId, dispatchedAt])
   @@index([weavingOrderId, dispatchedAt])
   @@index([warpingOrderId, dispatchedAt])
+  @@index([goodsReceiptId])
   // Parti-filtreli sevkler (getBatches lane hesabı + born kalıtım kaynağı)
   @@index([batchId])
   // Composite: Fason firma-filtreli + tarih sıralı liste (firma raporları için)
@@ -11593,7 +11599,12 @@ model GoodsReceipt {
   /// mal kabulü meşru kalır; sipariş bir PLANDIR, kabulün ön koşulu değil).
   purchaseOrderId String? @db.Uuid
 
+  /// D4c (K1) — iplik tedarikçiden DOĞRUDAN devereciye: her iplik satırı aynı tx'te bu siparişe sevk edilir (depo net 0).
+  directWarpingOrderId String? @db.Uuid
+
   warehouse             Warehouse               @relation(fields: [warehouseId], references: [id])
+  directWarpingOrder    WarpingOrder?           @relation("GoodsReceiptDirectWarpingOrder", fields: [directWarpingOrderId], references: [id], onDelete: Restrict)
+  directDispatches      SubcontractorDispatch[] @relation("DispatchGoodsReceipt")
   supplier              Customer?               @relation("GoodsReceiptSupplier", fields: [supplierId], references: [id])
   /// C4 — fason tedarikçi bacağı (Restrict: tedarikçisi silinen fiş kalamaz;
   /// subcontractor zaten soft-delete dünyasında).
@@ -11621,6 +11632,7 @@ model GoodsReceipt {
   @@index([status, createdAt])
   // Paket D — "bu siparişin fişleri" sorgusu (sipariş detayı + karşılanma).
   @@index([purchaseOrderId])
+  @@index([directWarpingOrderId])
   @@index([notesFold])
   @@map("goods_receipts")
 }
