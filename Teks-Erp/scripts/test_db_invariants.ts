@@ -1096,6 +1096,10 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "warping_order_extra_specs", name: "warping_order_extra_specs_sort_ck" },
   // Fason devere D2 (20261117190000_warp_beam_event_yarns)
   { table: "warp_beam_event_yarns", name: "warp_beam_event_yarns_facts_ck" },
+  // Fason devere D4b-2 (20261118010000_warping_yarn_transfers)
+  { table: "warping_yarn_transfers", name: "warping_yarn_transfers_kind_ck" },
+  { table: "warping_yarn_transfers", name: "warping_yarn_transfers_qty_ck" },
+  { table: "warping_yarn_transfers", name: "warping_yarn_transfers_orders_ck" },
   { table: "cost_parameter_sets", name: "cost_parameter_sets_pct_ck" },
   { table: "cost_parameter_sets", name: "cost_parameter_sets_amount_ck" },
   { table: "cost_parameter_sets", name: "cost_parameter_sets_stamp_ck" },

@@ -20,7 +20,7 @@ import { assertWarpingBound } from "../helpers/dispatch-header.helper";
 import { singleOwner } from "../helpers/emanet-owner.helper";
 import { readYarnStock } from "../helpers/maliyet-bridge.helper";
 import { readDevereFasonLotPolicy, readDevereLotRequired, type DevereFasonLotPolicy } from "../system-setting.service";
-import { loadWarpingYarnItems, lotKey, sumByYarn, type WarpingYarnItem } from "../helpers/warping-yarn-open.helper";
+import { carryOverByYarn, loadWarpingYarnHoldings, loadWarpingYarnItems, lotKey, receivedKg, sumByYarn, type WarpingYarnItem } from "../helpers/warping-yarn-open.helper";
 import { WARPING_ORDER_TABLE } from "./create";
 import { loadWarpingOrderDto } from "./read";
 import { buildWarpingInstruction, type WarpingInstruction } from "./instruction";
@@ -73,7 +73,7 @@ export function mixedLots(items: Array<{ yarnItemId: string; lotId: string | nul
   return out;
 }
 
-function lotPolicyVerdict(policy: DevereFasonLotPolicy, mixed: Map<string, string[]>, codeOf: (yarnItemId: string) => string): string[] {
+export function lotPolicyVerdict(policy: DevereFasonLotPolicy, mixed: Map<string, string[]>, codeOf: (yarnItemId: string) => string): string[] {
   if (mixed.size === 0 || policy === "FREE") return [];
   const names = [...mixed.keys()].map(codeOf);
   if (policy === "SINGLE_LOT") {
@@ -84,7 +84,7 @@ function lotPolicyVerdict(policy: DevereFasonLotPolicy, mixed: Map<string, strin
   return names.map((n) => `${n}: siparişte birden çok lot (ya da lotlu + lotsuz) karışıyor — aynı levende renk/boy farkı çıkabilir.`);
 }
 
-function openItems(items: WarpingYarnItem[]): WarpingYarnItem[] {
+export function openItems(items: WarpingYarnItem[]): WarpingYarnItem[] {
   return items.filter((i) => i.openKg.gt(0));
 }
 
@@ -219,7 +219,7 @@ export async function dispatchClaimedWarpingOrderTx(
   const sums = sumByYarn(await loadWarpingYarnItems(tx, { warpingOrderId: id }));
   for (const y of order.yarns) {
     const s = sums.get(y.yarnItemId);
-    const net = s ? s.outKg.minus(s.returnedKg) : D(0);
+    const net = s ? receivedKg(s) : D(0);
     if (net.gt(y.grossKg)) warnings.push(`${y.yarnItem.code}: plan ${kg(D(y.grossKg))} kg, gönderilen ${kg(net)} kg — fazla ${kg(net.minus(y.grossKg))} kg deverecide kalır ya da iade edilir.`);
   }
   await emitSubcontractDispatchedTx(tx, dispatch.id, userId);
@@ -260,9 +260,14 @@ export interface WarpingDispatchPreview {
     /** Bu siparişe gönderilen (BRÜT, iptaller hariç). */
     dispatchedKg: string;
     returnedKg: string;
-    /** Bu siparişin deverecide duran ipliği. */
+    /** D4b-2: başka siparişten net gelen / başka siparişe net giden aktarım. */
+    transferInKg: string;
+    transferOutKg: string;
+    /** Bu siparişin deverecide duran (tuttuğu) ipliği. */
     atSubcontractorKg: string;
-    /** Önerilen = plan brüt − (gönderilen − iade); eksiye inmez, yuvarlamasız. */
+    /** D4b-2: aynı deverecide KAPANMIŞ siparişlerden kalan, aynı sahipli iplik (devreden bakiye). */
+    carryOverKg: string;
+    /** Önerilen = plan brüt − (gönderilen − iade + gelen − giden aktarım) − devreden; eksiye inmez, yuvarlamasız. */
     suggestedKg: string;
     /** Depo serbest stoğu (iplik kapalıysa null = bilinmiyor). */
     depoKg: string | null;
@@ -288,6 +293,11 @@ export async function previewWarpingDispatch(id: string): Promise<WarpingDispatc
   const policy = await readDevereFasonLotPolicy();
   const mixed = mixedLots(open);
   if (mixed.size > 0 && policy !== "FREE") warnings.push(...[...mixed.keys()].map((y) => `${o.yarns.find((x) => x.yarnItemId === y)?.code ?? y}: siparişte birden çok lot var.`));
+  // Devreden bakiye: aynı devereci + iplik + sahip (siparişin sahibi; iplik yoksa fabrika malı).
+  const carry = stock === null ? new Map<string, Prisma.Decimal>() : carryOverByYarn(
+    (await loadWarpingYarnHoldings(prisma, { subcontractorIds: [o.subcontractor.id], yarnItemIds: o.yarns.map((y) => y.yarnItemId), statuses: [WarpingOrderStatus.COMPLETED] })).filter((h) => h.warpingOrderId !== id),
+    owner,
+  );
   return {
     order: { id: o.id, orderNo: o.orderNo, status: o.status, subcontractorId: o.subcontractor.id },
     lotPolicy: policy,
@@ -295,8 +305,9 @@ export async function previewWarpingDispatch(id: string): Promise<WarpingDispatc
     ownerCustomerId: owner,
     stock: { known: stock !== null },
     yarns: o.yarns.map((y) => {
-      const s = sums.get(y.yarnItemId) ?? { outKg: D(0), returnedKg: D(0), openKg: D(0) };
-      const suggested = Prisma.Decimal.max(D(0), D(y.grossKg).minus(s.outKg.minus(s.returnedKg)));
+      const s = sums.get(y.yarnItemId) ?? { outKg: D(0), returnedKg: D(0), transferInKg: D(0), transferOutKg: D(0), openKg: D(0) };
+      const co = carry.get(y.yarnItemId) ?? D(0);
+      const suggested = Prisma.Decimal.max(D(0), D(y.grossKg).minus(receivedKg(s)).minus(co));
       const depo = stock ? (stock.byItem.get(y.yarnItemId)?.serbestKg ?? D(0)) : null;
       const lotMap = new Map<string, { lotId: string | null; lotNo: string | null; openKg: Prisma.Decimal }>();
       for (const it of open.filter((i) => i.yarnItemId === y.yarnItemId)) {
@@ -307,7 +318,8 @@ export async function previewWarpingDispatch(id: string): Promise<WarpingDispatc
       return {
         yarnItemId: y.yarnItemId, code: y.code, name: y.name, letter: y.letter, endsCount: y.endsCount,
         planNetKg: y.netKg, planGrossKg: y.grossKg,
-        dispatchedKg: kg(s.outKg), returnedKg: kg(s.returnedKg), atSubcontractorKg: kg(s.openKg), suggestedKg: kg(suggested),
+        dispatchedKg: kg(s.outKg), returnedKg: kg(s.returnedKg), transferInKg: kg(s.transferInKg), transferOutKg: kg(s.transferOutKg),
+        atSubcontractorKg: kg(s.openKg), carryOverKg: kg(co), suggestedKg: kg(suggested),
         depoKg: depo ? kg(depo) : null,
         shortageKg: depo ? kg(Prisma.Decimal.max(D(0), suggested.minus(depo))) : null,
         lots: [...lotMap.values()].map((l) => ({ lotId: l.lotId, lotNo: l.lotNo, openKg: kg(l.openKg) })),

@@ -48,6 +48,7 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}warping-order/create.ts::createWarpingOrder`]: { giris: { [`${S}warping-order/create.ts::createWarpingOrder`]: "R" } },
   // Fason devere iplik sevki (D4b): `SubcontractorDispatch.clientToken`; iptal edilmiş sevkin token'ı 409 (4. durum). Yazar tx helper'ıdır; doğrudan kabul (D4c) token'sız çağırır.
   [`${S}warping-order/dispatch.ts::dispatchClaimedWarpingOrderTx`]: { giris: { [`${S}warping-order/dispatch.ts::dispatchWarpingOrder`]: "R" } },
+  [`${S}warping-order/yarn-transfer.ts::transferWarpingYarn`]: { giris: { [`${S}warping-order/yarn-transfer.ts::transferWarpingYarn`]: "R" } },
   [`${S}lab-test.service.ts::createLabTest`]: { giris: { [`${S}lab-test.service.ts::createLabTest`]: "R" } },
   // K29: okutmayla rota — sahada eklenen adım clientToken ile doğar (aynı okutmanın tekrarı ikinci adım eklemez).
   [`${S}workorder-scan-route.service.ts::applyPlanTx`]: { giris: { [`${S}workorder-scan-route.service.ts::applyScanRoute`]: "R" } },
@@ -323,6 +324,7 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}consignment-dispatch/create.ts::replayFor`]: ["ownerCustomerId", "items"],
   [`${S}warping-order/create.ts::replayFor`]: ["warpSpecId", "subcontractorId", "beamLines", "extraWarpSpecIds", "salesOrderIds"],
   [`${S}warping-order/dispatch.ts::dispatchReplay`]: ["warpingOrderId", "lines"],
+  [`${S}warping-order/yarn-transfer.ts::transferReplay`]: ["fromWarpingOrderId", "toWarpingOrderId", "lines"],
   [`${S}certificate.service.ts::replayFor`]: ["certificateNo", "renewsId"],
   [`${S}workorder-scan-route.service.ts::replayFor`]: ["workOrderId", "stationId"],
   [`${S}gelen-belge-note.service.ts::replayFor`]: ["senderDocNo", "ownerCustomerId"],

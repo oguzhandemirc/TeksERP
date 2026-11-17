@@ -18,10 +18,13 @@ import { createWarpingOrder, patchWarpingOrder, previewWarpingOrder, WARPING_ORD
 import { cancelPreviewWarpingOrder, cancelWarpingOrder } from "../services/warping-order/cancel";
 import { getWarpingOrder, listWarpingOrders } from "../services/warping-order/read";
 import { WARPING_ORDER_MAX_BEAM_LINES, WARPING_ORDER_MAX_EXTRA_SPECS } from "../services/warping-order/plan";
+import warpingOrderYarnRoutes from "./warping-order-yarn.routes";
 import "../types/express-augment";
 
 const router = Router();
 router.use(verifyToken, requireDevereEnabled);
+// D4b-2 iplik iade/aktarma alt router'ı kapıyı BURADAN miras alır; `/:id`den ÖNCE (statik `/yarn-at-subcontractor` yolu).
+router.use("/", warpingOrderYarnRoutes);
 
 const wrap = (fn: (req: Request) => Promise<{ status: number; body: unknown }>) => async (req: Request, res: Response, next: NextFunction) => {
   try {
