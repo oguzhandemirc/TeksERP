@@ -66,6 +66,8 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/warping-orders": e("fason devere siparişi oluşturdu", "fason devere siparişi oluşturmaya çalıştı"),
   "PATCH /api/warping-orders/:id": e("bir fason devere siparişini düzenledi", "bir fason devere siparişini düzenlemeye çalıştı"),
   "POST /api/warping-orders/:id/cancel": e("bir fason devere siparişini iptal etti", "bir fason devere siparişini iptal etmeye çalıştı"),
+  "POST /api/warping-orders/:id/dispatch": e("devereciye iplik sevk etti", "devereciye iplik sevk etmeye çalıştı"),
+  "POST /api/warping-orders/:id/dispatches/:dispatchId/cancel": e("bir devere iplik sevkini iptal etti", "bir devere iplik sevkini iptal etmeye çalıştı"),
   "POST /api/consignment-dispatches/preview": e("emanet çıkış önizlemesi aldı", "emanet çıkış önizlemesi almaya çalıştı"),
   "POST /api/consignment-dispatches": e("emanet levent/ipliği sahibine çıkardı", "emanet levent/ipliği sahibine çıkarmaya çalıştı"),
   "POST /api/consignment-dispatches/:id/cancel": e("bir emanet çıkış belgesini iptal etti", "bir emanet çıkış belgesini iptal etmeye çalıştı"),

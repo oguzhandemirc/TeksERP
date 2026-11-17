@@ -1932,6 +1932,23 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         desc: "Açıkken levent bir dokuma iş emrine bağlanmadan planlanamaz/sarılamaz. Kapalıyken (varsayılan) stoğa serbest levent sarılır ve raporda “işsiz levent” olarak ayrı görünür.",
       },
     ],
+    enumFlags: [
+      {
+        // Fason devere D4b (K4): `defaultValue` backend `DEFAULT_DEVERE_FASON_LOT_POLICY` ile birebir (bekçi §16).
+        enumKey: "devereFasonLotPolicy",
+        title: "Fason devere siparişinde lot karışımı",
+        summary: "Bir devere siparişine aynı ipliğin birden çok lotu gönderildiğinde ne olsun.",
+        desc: "Devereciye giden iplikte farklı lotlar aynı levente sarılırsa renk ve boy farkı çıkabilir. Uyar seçiliyken (varsayılan) sevk yapılır ve ekranda uyarı görünür; tek lot zorunluysa ikinci lot sevkte reddedilir; serbestte uyarı da gösterilmez.",
+        defaultValue: "WARN",
+        display: "radio",
+        audience: ["Depocu", "Planlamacı", "Yönetim"],
+        options: [
+          { value: "FREE", label: "Serbest", hint: "Farklı lotlar uyarısız gönderilir." },
+          { value: "WARN", label: "Uyar (varsayılan)", hint: "Sevk yapılır; ikinci lot için uyarı gösterilir." },
+          { value: "SINGLE_LOT", label: "Tek lot zorunlu", hint: "Bir siparişte her iplik tek lottan gider; ikinci lot reddedilir." },
+        ],
+      },
+    ],
     numberFlags: [
       {
         // Fason devere D1: backend `readDevereWarpFixedWasteM` (kayıt yok = 0) ve üst sınır 1000 ile birebir.

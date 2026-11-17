@@ -152,6 +152,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   devereMountTrackingRequired: A(true),
   devereAutoConsume: A(true),
   devereWarpFixedWasteM: A(20), // sabit fireyi devreye sokan değer: çözgü hesabının fireli önerisi büyür
+  devereFasonLotPolicy: A("WARN"), // üç kip de iş görür; WARN sevki engellemeden karışımı görünür kılar (varsayılan)
   devereFasonWasteTolerancePct: A(3), // tolerans denetimini devreye sokan değer: kapamada %3 üstü fire uyarır (D5)
   devereBeamWeavingLinkRequired: A(true),
   dokumaRunWeavingOrderRequired: A(true),

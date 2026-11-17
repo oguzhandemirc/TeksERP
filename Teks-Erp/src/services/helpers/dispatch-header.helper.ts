@@ -1,9 +1,9 @@
 // =============================================================================
-// FASON BAŞLIK DARALTMASI — iş emri yolu ↔ dokuma işi yolu (G2, 2026-09-14)
+// FASON BAŞLIK DARALTMASI — iş emri yolu ↔ dokuma işi yolu (G2, 2026-09-14) ↔ devere siparişi yolu (D4b, 2026-11-17)
 // =============================================================================
 // `SubcontractorDispatch` / `SubcontractorReceipt` başlığı POLİMORFİK: ya iş emri
-// adımına (`workOrderId`+`stepId`[+`batchId`]) ya dokuma işine (`weavingOrderId`)
-// bağlı — tam biri (CHECK `*_header_ck`). İş emri yolundaki her okuyucu yüklediği
+// adımına (`workOrderId`+`stepId`[+`batchId`]) ya dokuma işine (`weavingOrderId`) ya da (yalnız sevk)
+// fason devere siparişine (`warpingOrderId`) bağlı — tam biri (CHECK `*_header_ck`). İş emri yolundaki her okuyucu yüklediği
 // kaydı BURADAN geçirir: tip `string | null`dan `string`a iner VE dokuma işine
 // bağlı kayıt o yola girerse 409 verir — aksi hâlde `where: { workOrderId: null }`
 // sessizce derlenir ve yanlış satırı okurdu (fail-closed).
@@ -35,7 +35,7 @@ export function assertWorkOrderBound<T extends HeaderRow>(
   what = "Fason sevki",
 ): asserts row is WorkOrderBound<T> {
   if (row.workOrderId === null) {
-    throw AppError.conflict(`${what} bir ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} değil dokuma iş emrine bağlı — bu işlem ${TERIM.terbiyeIsEmri.tekilKucuk} yolundadır`, {
+    throw AppError.conflict(`${what} bir ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} değil dokuma iş emrine ya da devere siparişine bağlı — bu işlem ${TERIM.terbiyeIsEmri.tekilKucuk} yolundadır`, {
       code: "DISPATCH_NOT_WORK_ORDER_BOUND",
     });
   }
@@ -62,8 +62,24 @@ export function assertWeavingBound<T extends { weavingOrderId: string | null }>(
   what = "Fason belgesi",
 ): asserts row is T & { weavingOrderId: string } {
   if (row.weavingOrderId === null) {
-    throw AppError.conflict(`${what} dokuma iş emrine değil ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} bağlı — bu işlem ${TERIM.terbiyeIsEmri.tekilKucuk} yolundan yapılır`, {
+    throw AppError.conflict(`${what} dokuma iş emrine bağlı değil (${TERIM.terbiyeIsEmri.tekilKucuk} ya da devere siparişi belgesi) — bu işlem kendi yolundan yapılır`, {
       code: "DISPATCH_NOT_WEAVING_BOUND",
+    });
+  }
+}
+
+export function isWarpingBound<T extends { warpingOrderId: string | null }>(row: T): row is T & { warpingOrderId: string } {
+  return row.warpingOrderId !== null;
+}
+
+/** Fason devere siparişine bağlı sevk kapısı (D4b) — iş emri ve dokuma sevki devere yoluna giremez (ayna). */
+export function assertWarpingBound<T extends { warpingOrderId: string | null }>(
+  row: T,
+  what = "Fason sevki",
+): asserts row is T & { warpingOrderId: string } {
+  if (row.warpingOrderId === null) {
+    throw AppError.conflict(`${what} fason devere siparişine bağlı değil — bu işlem kendi yolundan yapılır`, {
+      code: "DISPATCH_NOT_WARPING_BOUND",
     });
   }
 }
