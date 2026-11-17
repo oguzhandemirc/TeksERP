@@ -96,6 +96,12 @@ export interface WarpingOrderSummary {
   openTargetLengthM: string;
 }
 
+/** Backend `warp-plan.helper` `WarpWasteSource` aynası. */
+export type WarpWasteSource =
+  | { kind: "SABIT_M"; value: number }
+  | { kind: "KART_PCT"; value: number }
+  | { kind: "IPLIK_PCT"; yarnItemId: string; value: number };
+
 export interface WarpingOrderPreview {
   warpSpec: SpecRef;
   extras: SpecRef[];
@@ -105,6 +111,8 @@ export interface WarpingOrderPreview {
   targetLengthM: string;
   fixedWasteM: string;
   hasWaste: boolean;
+  /** Fire kaynakları (sabit m · çözgü kartı % · iplik kartı %); eski backend göndermez. */
+  wasteSources?: WarpWasteSource[];
   stock: { known: boolean; emanetAcik: boolean };
   yarns: Array<WarpingPlanYarn & { depoKg: string | null; emanetKg: string | null }>;
   totals: { netKg: string; grossKg: string };

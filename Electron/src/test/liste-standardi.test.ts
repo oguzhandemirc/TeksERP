@@ -51,6 +51,9 @@ const EXEMPT: Record<string, string> = {
   "Operations/WarpPlan/ReverseResult.tsx": GOMULU,
   // Fason devere sipariş planı: iplik başına birkaç satır (form önizlemesi + sipariş sayfası bölümü), kayıt listesi değil.
   "Operations/WarpingOrders/PlanTable.tsx": GOMULU,
+  // D6b: sipariş sayfası sevk bölümü (sevk başına birkaç kalem) ve sevk diyaloğunun iplik satırları — kayıt listesi değil.
+  "Operations/WarpingOrders/DispatchesSection.tsx": GOMULU,
+  "Operations/WarpingOrders/DispatchLinesTable.tsx": GOMULU,
   "Operations/WeavingFloor/jobs/BulkParts.tsx": GOMULU,
   "Operations/WeavingFloor/stops/StopBulkParts.tsx": GOMULU,
   "Operations/WorkOrders/BranchLanes.tsx": GOMULU,

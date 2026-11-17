@@ -1,13 +1,13 @@
 // =============================================================================
 // FASON DEVERE SİPARİŞİ — kayıt sayfası (plan E4) · `operations/fason-devere/:id`
 // =============================================================================
-// Bölümler: özet · iplik planı (sunucuda donmuş). Yazma düğmeleri izinle (`PermissionGate`) ve durumla çizilir:
+// Bölümler: özet · iplik planı (sunucuda donmuş) · sevkler (D6b; yeni sevk, iptal, irsaliye + çözgü talimatı). Yazma düğmeleri izinle (`PermissionGate`) ve durumla çizilir:
 // düzenle OPEN/IN_PROGRESS (sevkliyken yalnız meta), iptal yalnız OPEN'da anlamlı — sevkli siparişte önizleme
 // "önce sevkleri iptal edin" der. Kapalı/iptal siparişte yazma yüzeyi HİÇ çizilmez.
 // =============================================================================
 import { useState } from "react";
 import { useParams } from "react-router-dom";
-import { Ban, Pencil } from "lucide-react";
+import { Ban, FileText, Pencil } from "lucide-react";
 import { PageBody, PageShell } from "@/components/layout/PageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
@@ -17,6 +17,8 @@ import { Button } from "@/components/ui/button";
 import { apiErrorMessage } from "@/services/apiClient";
 import { cn } from "@/lib/utils";
 import { CancelOrderDialog } from "./CancelOrderDialog";
+import { DispatchesSection } from "./DispatchesSection";
+import { InstructionPrintDialog } from "./InstructionPrintDialog";
 import { OrderSummary } from "./OrderSummary";
 import { PlanTable } from "./PlanTable";
 import { WarpingOrderFormDialog } from "./WarpingOrderFormDialog";
@@ -24,7 +26,7 @@ import { editModeOf } from "./order-model";
 import { useWarpingOrder, WARPING_ORDERS_PATH } from "./service";
 import { warpingStatusMeta, type WarpingOrder } from "./types";
 
-type DialogKind = "edit" | "cancel" | null;
+type DialogKind = "edit" | "cancel" | "instruction" | null;
 
 export function WarpingOrderPage() {
   const { id } = useParams<{ id: string }>();
@@ -58,20 +60,34 @@ export function WarpingOrderPage() {
               <p className="text-xs text-muted-foreground">Sipariş açılırken hesaplandı ve saklandı; kart sonradan değişse de bu plan değişmez.</p>
               <PlanTable yarns={o.yarns} hasWaste={o.hasWaste} totals={o.totals} />
             </section>
+            <DispatchesSection order={o} />
           </>
         )}
       </PageBody>
       {o && dialog === "edit" && <WarpingOrderFormDialog order={o} onClose={() => setDialog(null)} onSaved={() => setDialog(null)} />}
       {o && dialog === "cancel" && <CancelOrderDialog order={o} onClose={() => setDialog(null)} />}
+      {o && dialog === "instruction" && <InstructionPrintDialog orderId={o.id} onClose={() => setDialog(null)} />}
     </PageShell>
   );
 }
 
 function OrderActions({ o, onOpen }: { o: WarpingOrder; onOpen: (d: DialogKind) => void }) {
   const editable = editModeOf(o.status) !== null;
-  if (!editable) return null;
   return (
     <div className="flex items-center gap-2">
+      {o.status !== "CANCELLED" && (
+        <Button size="sm" variant="outline" onClick={() => onOpen("instruction")} title="Devereciye giden çözgü talimatını önizle ve yazdır">
+          <FileText className="mr-1 h-4 w-4" /> Çözgü talimatı
+        </Button>
+      )}
+      {editable && <EditCancelButtons o={o} onOpen={onOpen} />}
+    </div>
+  );
+}
+
+function EditCancelButtons({ o, onOpen }: { o: WarpingOrder; onOpen: (d: DialogKind) => void }) {
+  return (
+    <>
       <PermissionGate permission="warping-order:write">
         <Button size="sm" variant="outline" onClick={() => onOpen("edit")} title={o.status === "IN_PROGRESS" ? "Sevkli siparişte yalnız termin, ücret, tolerans, müşteri siparişi ve not değişir" : undefined}>
           <Pencil className="mr-1 h-4 w-4" /> Düzenle
@@ -82,6 +98,6 @@ function OrderActions({ o, onOpen }: { o: WarpingOrder; onOpen: (d: DialogKind) 
           <Ban className="mr-1 h-4 w-4" /> İptal et
         </Button>
       </PermissionGate>
-    </div>
+    </>
   );
 }
