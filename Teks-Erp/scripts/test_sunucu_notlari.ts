@@ -111,6 +111,9 @@ const OTOMATIK_YAZIMLAR: readonly { yer: string; sinif: Sinif; zarfUyarisi: bool
   { yer: "Electron/src/pages/Reports/_v2/custom/code/useCodeCheck.ts::customReportApi.validate", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
   // MAL-3 maliyet önizlemesi: yapı/ezme değişince ~400 ms durulup sorar; yazmaz, uyarılar `data` içinde (zarf uyarısız).
   { yer: "Electron/src/pages/Cost/shared/useCostPreview.ts::previewCost", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
+  // Fason devere D3 çözgü hesabı: kart formu şeridi + Çözgü Hesabı ekranı girdi değişince ~400 ms durulup sorar; yazmaz,
+  // stok uyarısını zarfa basar (ekran satır içi gösterir → `serverWarnings: "handled"`).
+  { yer: "Electron/src/pages/Operations/WarpPlan/service.ts::calculateWarpPlan", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: true },
   // T5 belge şablonu: Sistem önizlemesi / sürüm karşılaştırması / yayın onayı açılınca çizer (yazmaz; zarf `ok(res, data)`, uyarısız).
   // Satır işareti: liste açılınca/sayfa değişince görünür satırların işaretlerini sorar (salt okuma POST, id listesi URL'ye sığmaz; zarf uyarısız).
   { yer: "Electron/src/components/data-table/row-marks/useRowMarks.ts::lookupRowMarks", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },

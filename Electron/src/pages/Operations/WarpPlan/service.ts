@@ -6,7 +6,8 @@ import type { WarpEndsSuggest, WarpEndsSuggestBody, WarpPlanBody, WarpPlanResult
 
 /** Çözgü hesabı — YAZMAZ (`POST /api/warp-plan/calculate`, `warpspec:read`; devere kapalıysa 403 `MODULE_DISABLED`). */
 export async function calculateWarpPlan(body: WarpPlanBody): Promise<ApiResponse<WarpPlanResult>> {
-  return (await apiClient.post<ApiResponse<WarpPlanResult>>("/api/warp-plan/calculate", body)).data;
+  // Canlı hesap (yazarken): uyarılar ve hata ekranda satır içi gösterilir — tost yağmaz.
+  return (await apiClient.post<ApiResponse<WarpPlanResult>>("/api/warp-plan/calculate", body, { suppressErrorToast: true, serverWarnings: "handled" })).data;
 }
 
 /** Kart formu tel önerisi — YAZMAZ ("1000 m'ye kg'dan" · "Taraktan"). */
