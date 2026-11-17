@@ -87,7 +87,10 @@ import { isClientTokenP2002 } from "../utils/p2002";
 import type { ApiResponse } from "../types/api.types";
 import { assertItemUsable, assertItemUsableTx, type ItemUsage } from "./helpers/item-usage.helper";
 import { emitGoodsReceiptCreatedTx } from "./notification-sources/ticaret";
-
+import {
+  assertDirectWarpingReceipt, auditDirectDispatchReversals, auditDirectReceiptDispatch, claimDirectWarpingOrderTx,
+  dispatchDirectReceiptLineTx, reverseDirectDispatchesTx, DIRECT_WARPING_PERMISSION,
+} from "./warping-order/direct-receipt";
 
 const inventory = new InventoryService();
 
@@ -167,6 +170,8 @@ export interface GoodsReceiptCreateInput {
    * AÇILMADI ("fiş bir kaptır"; karışık alım için ikinci fiş açılır).
    */
   rawStockEntry?: boolean;
+  /** D4c (K1): iplik tedarikçiden DOĞRUDAN bu devere siparişine — her iplik satırı aynı tx'te sevk edilir (depo net 0). */
+  directWarpingOrderId?: string | null;
   lines?: GoodsReceiptLineInput[];
 }
 
@@ -207,6 +212,8 @@ export interface AddLinesResult {
    * fişi kapatması demekti.
    */
   contractPricing?: { pricedItems: number; conflictItems: number };
+  /** D4c: doğrudan devere sevklerinin bilgi uyarıları (lot karışımı, plandan fazla). */
+  directWarpingWarnings?: string[];
 }
 
 // =============================================================================
@@ -672,6 +679,40 @@ function assertReceiptOrderCurrency(
  */
 const GOODS_RECEIPT_DATE_FIELDS = ["createdAt"] as const;
 
+/**
+ * İplik satırının miktarı (kg). Çelişen girdi sessizce seçilmez: `weightKg` miktardan farklıysa ve kumaşa özgü alanlar
+ * (renk/en/kalite/kat/özellik) iplikte 400 — `YarnStock` (kalem × depo) onları taşıyamaz (aşağıdaki `addYarnLine` notu).
+ */
+function yarnLineQtyKg(line: GoodsReceiptLineInput): Prisma.Decimal {
+  const qtyKg = new Prisma.Decimal(line.initialQty);
+  if (line.weightKg != null && !new Prisma.Decimal(line.weightKg).equals(qtyKg)) {
+    throw AppError.badRequest(
+      `İplik satırında miktar (${qtyKg.toString()} kg) ile ağırlık (${line.weightKg} kg) çelişiyor. ` +
+        `İplikte miktar zaten kg'dır — ağırlık alanını boş bırakın.`,
+    );
+  }
+  const strays: string[] = [];
+  if (line.colorId) strays.push("renk");
+  if (line.width != null) strays.push("en");
+  if (line.qualityGrade) strays.push("kalite");
+  if (line.foldType) strays.push("kat");
+  if (line.propertyIds?.length) strays.push("özellik");
+  if (strays.length > 0) {
+    throw AppError.badRequest(
+      `İplik satırı ${strays.join(" / ")} taşıyamaz — iplik stoğu kalem × depo bazında kg olarak tutulur. ` +
+        `Bu alanlar kumaş (top) satırlarına aittir.`,
+    );
+  }
+  return qtyKg;
+}
+
+/** D4c: doğrudan devere fişinde sevki yazan kullanıcı şart (sevk belgesi `dispatchedById` taşır). */
+function directWarpingActor(orderId: string | null | undefined, userId: string | undefined): { orderId: string; userId: string } | null {
+  if (!orderId) return null;
+  if (!userId) throw AppError.unauthorized("Kimlik doğrulama gerekli.");
+  return { orderId, userId };
+}
+
 export class GoodsReceiptService {
   /**
    * Fiş açar; `lines` verilmişse satırları da işler.
@@ -695,7 +736,7 @@ export class GoodsReceiptService {
   private receiptReplay(input: GoodsReceiptCreateInput) {
     type P = {
       id: string; receiptNo: string; status: GoodsReceiptStatus; warehouseId: string; purchaseOrderId: string | null;
-      deliveryNoteNo: string | null; rawStockEntry: boolean; currency: string; storedParty: string; incomingParty: string | null;
+      deliveryNoteNo: string | null; rawStockEntry: boolean; directWarpingOrderId: string | null; currency: string; storedParty: string; incomingParty: string | null;
     };
     return tokenReplay<P, ApiResponse<unknown>>({
       find: async (db, clientToken) => {
@@ -703,7 +744,7 @@ export class GoodsReceiptService {
           where: { clientToken },
           select: {
             id: true, receiptNo: true, status: true, warehouseId: true, purchaseOrderId: true, deliveryNoteNo: true,
-            rawStockEntry: true, currency: true, supplierId: true, subcontractorId: true,
+            rawStockEntry: true, directWarpingOrderId: true, currency: true, supplierId: true, subcontractorId: true,
           },
         });
         if (!r) return null;
@@ -724,6 +765,7 @@ export class GoodsReceiptService {
         { ad: "purchaseOrderId", mevcut: p.purchaseOrderId, gelen: input.purchaseOrderId ?? null },
         { ad: "deliveryNoteNo", mevcut: p.deliveryNoteNo, gelen: input.deliveryNoteNo?.trim() || null },
         { ad: "rawStockEntry", mevcut: p.rawStockEntry, gelen: input.rawStockEntry === true },
+        { ad: "directWarpingOrderId", mevcut: p.directWarpingOrderId, gelen: input.directWarpingOrderId ?? null },
         { ad: "currency", mevcut: p.currency, gelen: input.currency ?? "TRY" },
         ...(p.incomingParty !== null ? [{ ad: "taraf", mevcut: p.storedParty, gelen: p.incomingParty }] : []),
       ],
@@ -745,6 +787,8 @@ export class GoodsReceiptService {
       const pre = await buildPreflightContext(input.lines, { purchaseOrderId: input.purchaseOrderId ?? null, supplierId: input.supplierId ?? null, currency: input.currency ?? "TRY" });
       await assertReceiptLinesValid(input.lines, pre.ctx);
     }
+    // D4c — doğrudan devere fişi: modül · sipariş durumu · yalnız plandaki iplik; başlık açılmadan (içi boş fiş doğmaz).
+    if (input.directWarpingOrderId) await assertDirectWarpingReceipt(input.directWarpingOrderId, input.lines ?? []);
     const warehouse = await prisma.warehouse.findUnique({
       where: { id: input.warehouseId },
       select: { id: true, name: true, isActive: true },
@@ -829,6 +873,7 @@ export class GoodsReceiptService {
             purchaseOrderId: input.purchaseOrderId ?? null,
             // C2 — fiş seviyesinde raf kararı (varsayılan false = WAREHOUSE).
             rawStockEntry: input.rawStockEntry === true,
+            directWarpingOrderId: input.directWarpingOrderId ?? null,
             createdById: userId ?? null,
           },
           select: { id: true, receiptNo: true },
@@ -851,11 +896,12 @@ export class GoodsReceiptService {
         supplierId: input.supplierId ?? null,
         subcontractorId: input.subcontractorId ?? null,
         rawStockEntry: input.rawStockEntry === true,
+        directWarpingOrderId: input.directWarpingOrderId ?? null,
       },
     });
 
     const lineResult: AddLinesResult = input.lines?.length
-      ? await this.addLines(receipt.id, input.lines, userId, { preflightDone: true })
+      ? await this.addLines(receipt.id, input.lines, userId, { preflightDone: true, directWarpingAllowed: true })
       : { created: [], createdYarn: [], failed: [], purchaseOrder: null };
 
     return {
@@ -876,6 +922,7 @@ export class GoodsReceiptService {
         // C1 — sözleşme fiyatı uygulandıysa SÖYLENİR (sessiz doğru cevap,
         // görünmez cevaptır); sipariş bağı yoksa boş string, mesaj bayt-bayt aynı.
         describeContractPricing(lineResult.contractPricing),
+      ...(lineResult.directWarpingWarnings?.length ? { warnings: lineResult.directWarpingWarnings } : {}),
     };
   }
 
@@ -918,7 +965,11 @@ export class GoodsReceiptService {
    * ⚠️ Baştaki statü kontrolü HIZLI YOLDUR (UX) — asıl sed her satır tx'inin
    * içindeki `claimActiveReceiptTx`tir (Sınıf 4, I1).
    */
-  async addLines(receiptId: string, lines: GoodsReceiptLineInput[], userId?: string, opts: { preflightDone?: boolean } = {}): Promise<AddLinesResult> {
+  async addLines(
+    receiptId: string, lines: GoodsReceiptLineInput[], userId?: string,
+    /** `directWarpingAllowed`: çağıran `warping-order:write` yetkisini doğruladı (fail-closed: yoksa doğrudan devere fişine satır 403). */
+    opts: { preflightDone?: boolean; directWarpingAllowed?: boolean } = {},
+  ): Promise<AddLinesResult> {
     const receipt = await prisma.goodsReceipt.findUnique({
       where: { id: receiptId },
       // ⚠️ `supplierId` + `currency` fiyat ÖN-DOLUMU (D2) için okunur: fiyat
@@ -939,12 +990,20 @@ export class GoodsReceiptService {
         purchaseOrder: { select: { orderNo: true, currency: true } },
         // C2 — topun doğacağı raf (aşağıdaki `targetStatus`).
         rawStockEntry: true,
+        directWarpingOrderId: true,
       },
     });
     if (!receipt) throw AppError.notFound("Mal kabul fişi bulunamadı.");
     if (receipt.status === GoodsReceiptStatus.CANCELLED) {
       throw AppError.conflict(`${receipt.receiptNo} iptal edilmiş — satır eklenemez.`);
     }
+    if (receipt.directWarpingOrderId) {
+      if (!opts.directWarpingAllowed) {
+        throw AppError.forbidden(`${receipt.receiptNo} doğrudan devere fişi — satır eklemek için '${DIRECT_WARPING_PERMISSION}' yetkisi gerekli.`, { code: "PERMISSION_DENIED", required: DIRECT_WARPING_PERMISSION });
+      }
+      await assertDirectWarpingReceipt(receipt.directWarpingOrderId, lines);
+    }
+    const directWarpingWarnings: string[] = [];
     // ⚠️ Para birimi çelişkisi: fiş SATIR ALMADAN ÖNCE reddedilir. `create`
     // guard'ıyla aynı fonksiyon — mesajın ve kuralın iki yerde ayrışması,
     // "fiş açılırken engellendim ama satır eklerken geçti" demekti.
@@ -1120,7 +1179,7 @@ export class GoodsReceiptService {
           // yani bugün no-op'tur — ama defteri yarım tutmak, ileride aynı
           // kalemden hem top hem kg doğuran bir yol eklenirse sessizce yanlış
           // damga üretirdi.
-          createdYarn.push(await this.addYarnLine(receipt, line, priceFor(line), { userId, itemUsage: yarnUsage }));
+          createdYarn.push(await this.addYarnLine(receipt, line, priceFor(line), { userId, itemUsage: yarnUsage, warnings: directWarpingWarnings }));
           noteAccepted(line, claim);
           continue;
         }
@@ -1220,6 +1279,7 @@ export class GoodsReceiptService {
         pricedItems: contract.pricedItems.size,
         conflictItems: contract.conflictItems.size,
       },
+      ...(directWarpingWarnings.length > 0 ? { directWarpingWarnings } : {}),
     };
   }
 
@@ -1239,32 +1299,14 @@ export class GoodsReceiptService {
    * gerektiğinde çözüm `YarnLot`tur, sessiz kabul değil.)
    */
   private async addYarnLine(
-    receipt: { id: string; receiptNo: string; warehouseId: string; supplierId: string | null },
+    receipt: { id: string; receiptNo: string; warehouseId: string; supplierId: string | null; directWarpingOrderId?: string | null },
     line: GoodsReceiptLineInput,
     /** D2 zinciriyle ÇÖZÜLMÜŞ birim fiyat (satır > kart > null) — fişin para biriminde. */
     unitPrice: Prisma.Decimal.Value | null,
-    { userId, itemUsage = "NEW_STOCK" }: { userId?: string; itemUsage?: ItemUsage } = {},
+    { userId, itemUsage = "NEW_STOCK", warnings }: { userId?: string; itemUsage?: ItemUsage; warnings?: string[] } = {},
   ): Promise<string> {
-    const qtyKg = new Prisma.Decimal(line.initialQty);
-    if (line.weightKg != null && !new Prisma.Decimal(line.weightKg).equals(qtyKg)) {
-      throw AppError.badRequest(
-        `İplik satırında miktar (${qtyKg.toString()} kg) ile ağırlık (${line.weightKg} kg) çelişiyor. ` +
-          `İplikte miktar zaten kg'dır — ağırlık alanını boş bırakın.`,
-      );
-    }
-
-    const strays: string[] = [];
-    if (line.colorId) strays.push("renk");
-    if (line.width != null) strays.push("en");
-    if (line.qualityGrade) strays.push("kalite");
-    if (line.foldType) strays.push("kat");
-    if (line.propertyIds?.length) strays.push("özellik");
-    if (strays.length > 0) {
-      throw AppError.badRequest(
-        `İplik satırı ${strays.join(" / ")} taşıyamaz — iplik stoğu kalem × depo bazında kg olarak tutulur. ` +
-          `Bu alanlar kumaş (top) satırlarına aittir.`,
-      );
-    }
+    const direct = directWarpingActor(receipt.directWarpingOrderId, userId);
+    const qtyKg = yarnLineQtyKg(line);
 
     // FİYAT (`YarnMovement.unitPrice`, migration 20260814 — Sınıf 5): fişin
     // para biriminde, kabul ANINDA donar (`Roll.purchasePrice` simetriği) —
@@ -1294,6 +1336,8 @@ export class GoodsReceiptService {
       // satır kilidinde bekler; iptal önce commit'lendiyse count=0 → 409 ve
       // CANCELLED fişe iplik satırı DOĞMAZ.
       await this.claimActiveReceiptTx(tx, receipt.id, receipt.receiptNo);
+      // D4c: doğrudan devere — sipariş satırı fiş satırının HEMEN ardından, kart/lot/stok kilitlerinden ÖNCE (elle sevkle aynı yön).
+      const directOrder = direct ? await claimDirectWarpingOrderTx(tx, direct.orderId, direct.userId) : null;
       // Kart kilidi (8030 SHARED → FOR SHARE) — iplik bakiyesi D1 referansıdır; lot kilidinden (8029) önce.
       await assertItemUsableTx(tx, line.itemId, itemUsage);
       // Lot doğuşu tek kapı: `[kalem, lotNo]` upsert, 8029 kilidi (tedarikçi yalnız ilk doğuşta yazılır).
@@ -1315,8 +1359,16 @@ export class GoodsReceiptService {
           data: { unitPrice: new Prisma.Decimal(unitPrice) },
         });
       }
-      return applied;
+      // D4c: aynı depo + aynı lot + aynı kg sevki → depo net 0; sevk düşerse (lot kuralı, tek sahip, bekletme) IN de yok.
+      const sent = directOrder && direct
+        ? await dispatchDirectReceiptLineTx(tx, directOrder, { goodsReceiptId: receipt.id, receiptNo: receipt.receiptNo, warehouseId: receipt.warehouseId, itemId: line.itemId, lotId: lot?.id ?? null, qtyKg }, direct.userId)
+        : null;
+      return { ...applied, sent };
     });
+    if (res.sent && direct) {
+      await auditDirectReceiptDispatch(direct.orderId, res.sent, direct.userId, receipt.id);
+      warnings?.push(...res.sent.warnings);
+    }
 
     void AuditService.log({
       userId,
@@ -1372,7 +1424,11 @@ export class GoodsReceiptService {
    * gerçekten kullanılmış, "hiç girmedi" demek defteri yalanlar. Operatör önce
    * o topları ayıklamalı.
    */
-  async cancel(id: string, reason: string | undefined, userId?: string): Promise<ApiResponse<unknown>> {
+  async cancel(
+    id: string, reason: string | undefined, userId?: string,
+    /** D4c: çağıran `warping-order:cancel` yetkisini doğruladı — doğrudan devere sevki bağlı fişte şart (fail-closed). */
+    opts: { warpingCancelAllowed?: boolean } = {},
+  ): Promise<ApiResponse<unknown>> {
     const receipt = await prisma.goodsReceipt.findUnique({
       where: { id },
       select: { id: true, receiptNo: true, status: true, purchaseOrderId: true },
@@ -1487,7 +1543,8 @@ export class GoodsReceiptService {
     //
     // ⚠️ KUMAŞ-ONLY FİŞTE DAVRANIŞ AYNI: ters kayıt fonksiyonu indeksli
     // `goodsReceiptId` üzerinden 0 satır okur ve HİÇBİR ŞEY yazmaz.
-    const { yarnReversal, freshRolls } = await prisma.$transaction(async (tx) => {
+    const cancelWhy = reason?.trim() || `Mal kabul fişi iptali (${receipt.receiptNo})`;
+    const { yarnReversal, freshRolls, directReversals } = await prisma.$transaction(async (tx) => {
       const claim = await tx.goodsReceipt.updateMany({
         where: { id, status: GoodsReceiptStatus.ACTIVE },
         data: {
@@ -1530,6 +1587,9 @@ export class GoodsReceiptService {
         select: rollCancelSelect,
       });
       assertRollsUnused(freshRolls);
+      // D4c: doğrudan devere sevkleri ÖNCE ters (SUBCONTRACT_OUT_CANCEL → depo), sonra fişin ADJUST_OUT'u → depo net 0.
+      // Kilit sırası fiş satırı → sipariş satırı (satır ekleme ile aynı); iade alınmış sevk 409 (LIFO).
+      const directReversals = await reverseDirectDispatchesTx(tx, { goodsReceiptId: id, why: cancelWhy, userId, cancelAllowed: opts.warpingCancelAllowed === true });
       const yarnReversal = await reverseGoodsReceiptYarnTx(
         tx,
         id,
@@ -1538,7 +1598,7 @@ export class GoodsReceiptService {
       );
       // Sarf satırları: ters kaydı aynı tx'te (ayardan bağımsız; eksi bakiye engel değil).
       await reverseConsumableReceiptTx(tx, id, userId ?? null);
-      return { yarnReversal, freshRolls };
+      return { yarnReversal, freshRolls, directReversals };
     });
 
     // Eksi bakiye ENGEL DEĞİL: iplik fişten sonra sarf edilmiş olabilir ve
@@ -1572,6 +1632,7 @@ export class GoodsReceiptService {
     // ⚠️ `syncPurchaseOrderSafely` hatayı YUTAR — mal kabul iptali fiziksel bir
     // gerçeği kaydeder ve bir rapor rakamı yüzünden geri alınmamalıdır; rollup
     // bir sonraki senkronda kendini onarır.
+    if (directReversals.length > 0 && userId) await auditDirectDispatchReversals(directReversals, cancelWhy, userId, id);
     const poSync = await syncPurchaseOrderSafely(receipt.purchaseOrderId);
 
     void AuditService.log({
@@ -1611,11 +1672,13 @@ export class GoodsReceiptService {
           qtyKg: y.qtyKg.toString(),
           balanceKg: y.balanceKg.toString(),
         })),
+        directDispatchesCancelled: directReversals.map((r) => ({ dispatchId: r.dispatchId, dispatchNo: r.out.dispatchNo, warpingOrderId: r.warpingOrderId })),
       },
       message:
         (skipped.length > 0
           ? `${receipt.receiptNo} iptal edildi; ${cancelled.length} top düşürüldü, ${skipped.length} top atlandı.`
-          : `${receipt.receiptNo} iptal edildi (${cancelled.length} top).`) + yarnNote,
+          : `${receipt.receiptNo} iptal edildi (${cancelled.length} top).`) + yarnNote +
+        (directReversals.length > 0 ? ` Devereciye doğrudan sevk iptal edildi: ${directReversals.map((r) => r.out.dispatchNo).join(", ")}.` : ""),
     };
   }
 
@@ -1814,6 +1877,9 @@ export class GoodsReceiptService {
         createdBy: { select: { id: true, fullName: true, username: true } },
         // D3 — bağlı alış siparişinin başlığı (fişten siparişe tıkla-git).
         purchaseOrder: { select: { id: true, orderNo: true, status: true, currency: true, expectedDate: true } },
+        // D4c — doğrudan devere: hedef sipariş + bu fişten doğan sevk belgeleri (iptaller dahil, kronolojik).
+        directWarpingOrder: { select: { id: true, orderNo: true, status: true, subcontractor: { select: { id: true, name: true } } } },
+        directDispatches: { select: { id: true, dispatchNo: true, dispatchedAt: true, cancelledAt: true }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
       },
     });
     if (!receipt) throw AppError.notFound("Mal kabul fişi bulunamadı.");

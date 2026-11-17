@@ -19,6 +19,7 @@ import {
   ReceiptLineRows, emptyLine, expandLines, lineKind, receiptTotals, type DraftLine,
 } from "./ReceiptLineRows";
 import { ReceiptImportButton } from "./ReceiptImportButton";
+import { DirectWarpingOrderField, useDirectWarpingAvailable, type DirectWarpingOrderRef } from "./DirectWarpingOrderField";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { consumableIdsFrom, useItemTypes, yarnIdsFrom } from "./useItemTypes";
 // TİCARET (D3) — alış siparişi bağı. Bölüm görünürlük kararını KENDİ verir
@@ -68,6 +69,9 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
   // Bağlanacak alış siparişi — ticaret rejimi kapalıyken DAİMA null kalır
   // (bölüm hiç çizilmez), yani istek gövdesi fabrikadaki bugünküyle aynıdır.
   const [purchaseOrderId, setPurchaseOrderId] = useState<string | null>(null);
+  // D4c — iplik tedarikçiden devereciye doğrudan; alan yalnız devere açık + `warping-order:write` iken çizilir.
+  const directAvailable = useDirectWarpingAvailable();
+  const [directOrder, setDirectOrder] = useState<DirectWarpingOrderRef | null>(null);
 
   // ⚠️ TEK DEPOLU KURULUMDA SEÇİCİ ÇİZİLMEZ — depo otomatik varsayılandır.
   // Tek seçenekli bir liste, cevabı belli bir soruyu sormaktır.
@@ -119,6 +123,7 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
         clientToken: attempt.token(),
         // Servis, değer yoksa anahtarı gövdeye HİÇ koymaz (bkz. service.ts).
         purchaseOrderId,
+        directWarpingOrderId: directAvailable ? (directOrder?.id ?? null) : null,
         lines: expandLines(lines, yarnIds, attempt.keyed, consumableIds),
       }),
     onError: (error) => {
@@ -150,6 +155,8 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
       }
       // Fiş üç sipariş sorgusunu da bayatlatır (kapanan sipariş seçicide kalmasın) — tek liste, `receiptInvalidation`.
       invalidateReceiptSideEffects(qc);
+      // D4c: doğrudan devere sevkinin uyarılarını (lot karışımı, plandan fazla) apiClient interceptor'ı basar.
+      setDirectOrder(null);
       setLines([emptyLine()]);
       setDeliveryNoteNo("");
       setSupplier(null);
@@ -187,6 +194,13 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
             onFillLines={(filled) => setLines((ls) => mergeFilledLines(ls, filled))}
             disabled={createM.isPending}
           />
+
+          {directAvailable && (
+            <div className="max-w-xl">
+              <Label>Doğrudan devere siparişi (opsiyonel)</Label>
+              <DirectWarpingOrderField value={directOrder} onChange={setDirectOrder} disabled={createM.isPending} />
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {multiWarehouse && (

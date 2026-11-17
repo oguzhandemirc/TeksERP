@@ -19,6 +19,7 @@ let lotRequired = false;
 vi.mock("@/hooks/usePricingEnabled", () => ({
   useFeatureFlags: () => ({ data: { data: { financeEnabled: false } } }),
   useDevereLotRequired: () => lotRequired,
+  useDevereEnabled: () => false,
 }));
 vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ hasPermission: () => false, hasAnyPermission: () => false, hasAllPermissions: () => false }) }));
 const toastSuccess = vi.fn();

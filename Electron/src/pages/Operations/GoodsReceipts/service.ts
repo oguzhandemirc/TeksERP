@@ -181,6 +181,8 @@ export async function createGoodsReceipt(body: {
   purchaseOrderId?: string | null;
   /** C2 — "işlenecek mal": toplar `WAREHOUSE` yerine `STOCK` doğar. */
   rawStockEntry?: boolean;
+  /** D4c — iplik tedarikçiden DOĞRUDAN bu devere siparişine (depoya girmeden; aynı işlemde sevk). Yalnız seçiliyken gider. */
+  directWarpingOrderId?: string | null;
   lines?: GoodsReceiptLineInput[];
 }): Promise<{ data: GoodsReceiptCreateData; message?: string }> {
   // ⚠️ DEĞERİ OLMAYAN ALAN HİÇ GÖNDERİLMEZ — `purchaseOrderId: null` yazmak
@@ -193,12 +195,13 @@ export async function createGoodsReceipt(body: {
   // ⚠️ `subcontractorId` ve `rawStockEntry` C4/C2 ile geldi ve AYNI kurala
   // uyar: fason bacağı boşken anahtar hiç yazılmaz, `rawStockEntry` yalnız
   // TRUE iken gider (varsayılan davranış = bugünkü davranış).
-  const { purchaseOrderId, subcontractorId, rawStockEntry, ...rest } = body;
+  const { purchaseOrderId, subcontractorId, rawStockEntry, directWarpingOrderId, ...rest } = body;
   const payload = {
     ...rest,
     ...(purchaseOrderId ? { purchaseOrderId } : {}),
     ...(subcontractorId ? { subcontractorId } : {}),
     ...(rawStockEntry ? { rawStockEntry: true } : {}),
+    ...(directWarpingOrderId ? { directWarpingOrderId } : {}),
   };
   const res = await apiClient.post("/api/goods-receipts", payload);
   return res.data;

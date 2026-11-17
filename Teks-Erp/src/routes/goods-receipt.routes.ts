@@ -9,8 +9,9 @@ import { Router, type Request, type Response, type NextFunction } from "express"
 import { z } from "zod";
 import { RECEIPT_LINE_CLASSES, describeOverReceipt, goodsReceiptService } from "../services/goods-receipt.service";
 import { describeContractPricing } from "../services/helpers/contract-price.helper";
+import { AppError } from "../utils/app-error";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
+import { requirePermission, requireAnyPermission, matchesPermission, RBAC_DENIED_CODE } from "../middlewares/rbac.middleware";
 import { requireTicaretEnabled } from "../middlewares/module.middleware";
 import { parseQueryParams } from "../utils/query-parser";
 
@@ -69,6 +70,8 @@ const createSchema = z.object({
   // ATAR: bu satır olmadan panel siparişi seçer, backend bağı düşürür ve
   // "ne ısmarladım ne geldi" raporu hiç dolmaz.
   purchaseOrderId: z.string().uuid().nullable().optional(),
+  // D4c (K1) — iplik tedarikçiden DOĞRUDAN bu devere siparişine (depoya girmeden); yetki `warping-order:write`.
+  directWarpingOrderId: z.string().uuid().nullable().optional(),
   lines: z.array(lineSchema).max(500).optional(),
 });
 
@@ -201,6 +204,10 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const input = createSchema.parse(req.body);
+      // D4c — doğrudan devere fişi aynı işlemde devere sevki yazar: sevk yetkisi de şart.
+      if (input.directWarpingOrderId && !matchesPermission(req.user?.permissions ?? [], "warping-order:write")) {
+        throw AppError.forbidden("Doğrudan devere fişi için 'warping-order:write' yetkisi gerekli.", { code: RBAC_DENIED_CODE, required: "warping-order:write" });
+      }
       res.status(201).json(await goodsReceiptService.create(input, req.user?.userId));
     } catch (e) {
       next(e);
@@ -228,7 +235,9 @@ router.post(
     try {
       const { lines } = z.object({ lines: z.array(lineSchema).min(1).max(500) }).parse(req.body);
       // Ön-uçuş (C8) artık `addLines` İÇİNDE — fiyat zinciri ve sipariş bağlamı fişten okunur (beş sınıf daha, 2026-09-18).
-      const result = await goodsReceiptService.addLines(req.params.id as string, lines, req.user?.userId);
+      const result = await goodsReceiptService.addLines(req.params.id as string, lines, req.user?.userId, {
+        directWarpingAllowed: matchesPermission(req.user?.permissions ?? [], "warping-order:write"),
+      });
       // ⚠️ İplik satırı `Roll` doğurmaz → `created.length` onu SAYMAZ. Yalnız
       // ona bakan mesaj, 5 kalem iplik girildiğinde "0 top eklendi" derdi ve
       // depocu kaydın düştüğünü sanıp tekrar girerdi. İplik yokken metin
@@ -259,6 +268,7 @@ router.post(
           // Fiyat kararı satırın DOĞDUĞU yerde veriliyor; depocunun kart fiyatı
           // sandığı bir rakamla fişi kapatmasının önündeki tek işaret budur.
           describeContractPricing(result.contractPricing),
+        ...(result.directWarpingWarnings?.length ? { warnings: result.directWarpingWarnings } : {}),
       });
     } catch (e) {
       next(e);
@@ -287,7 +297,9 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { reason } = z.object({ reason: z.string().max(300).optional() }).parse(req.body ?? {});
-      res.status(200).json(await goodsReceiptService.cancel(req.params.id as string, reason, req.user?.userId));
+      res.status(200).json(await goodsReceiptService.cancel(req.params.id as string, reason, req.user?.userId, {
+        warpingCancelAllowed: matchesPermission(req.user?.permissions ?? [], "warping-order:cancel"),
+      }));
     } catch (e) {
       next(e);
     }

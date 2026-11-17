@@ -146,8 +146,10 @@ function validateLines(lines: WarpingDispatchLineInput[]): void {
   }
 }
 
-/** Sipariş claim'i (tx'in İLK ifadesi) + taze okuma; claim düşerse tanılı 409. */
-async function claimForDispatchTx(tx: Tx, id: string, userId: string) {
+export type ClaimedWarpingOrder = Awaited<ReturnType<typeof claimForDispatchTx>>;
+
+/** Sipariş claim'i (tx'in İLK ifadesi; doğrudan mal kabulde fiş claim'inin hemen ardı) + taze okuma; düşerse tanılı 409. */
+export async function claimForDispatchTx(tx: Tx, id: string, userId: string) {
   // İki yüklemli claim: önce OPEN → IN_PROGRESS (geçişi audit'e taşımak için ayrı), olmazsa IN_PROGRESS satırı kilitlenir.
   const opened = await tx.warpingOrder.updateMany({ where: { id, status: WarpingOrderStatus.OPEN }, data: { status: WarpingOrderStatus.IN_PROGRESS, updatedById: userId } });
   const claim = opened.count === 1 ? opened : await tx.warpingOrder.updateMany({ where: { id, status: { in: DISPATCHABLE } }, data: { status: WarpingOrderStatus.IN_PROGRESS, updatedById: userId } });
@@ -162,60 +164,84 @@ async function claimForDispatchTx(tx: Tx, id: string, userId: string) {
   return { ...order, wasOpen: opened.count === 1 };
 }
 
+export interface WarpingDispatchTxOut {
+  dispatch: { id: string; dispatchNo: string };
+  yarn: Awaited<ReturnType<typeof dispatchYarnItemsTx>>;
+  ownerCustomerId: string | null;
+  warnings: string[];
+  wasOpen: boolean;
+  orderNo: string;
+}
+
+/**
+ * Sevkin tx gövdesi — sipariş claim'i ÇAĞIRANDA alınmış olmalı (`claimForDispatchTx`). Tek sevk yazıcısı: elle sevk ve
+ * doğrudan devere mal kabulü (D4c, `goodsReceiptId`) aynı kapılardan geçer (plan dışı · lot zorunlu · tek sahip · K4).
+ */
+export async function dispatchClaimedWarpingOrderTx(
+  tx: Tx, order: ClaimedWarpingOrder, input: WarpingDispatchInput, opts: { userId: string; goodsReceiptId?: string },
+): Promise<WarpingDispatchTxOut> {
+  const { userId } = opts;
+  const id = order.id;
+  const codeOf = (yarnItemId: string) => order.yarns.find((y) => y.yarnItemId === yarnItemId)?.yarnItem.code ?? yarnItemId;
+  const offPlan = input.lines.find((l) => !order.yarns.some((y) => y.yarnItemId === l.yarnItemId));
+  if (offPlan) throw AppError.badRequest("Plan dışı iplik sevk edilemez — yalnız siparişin iplik planındaki iplikler gider.", { code: "WARPING_YARN_NOT_IN_PLAN", yarnItemId: offPlan.yarnItemId });
+  if (await readDevereLotRequired(tx)) {
+    const lotless = input.lines.find((l) => !l.lotId);
+    if (lotless) throw AppError.badRequest(`İplik lotu zorunlu — ${codeOf(lotless.yarnItemId)} satırında lot seçin.`, { code: "YARN_LOT_REQUIRED" });
+  }
+  const existing = openItems(await loadWarpingYarnItems(tx, { warpingOrderId: id }));
+  const lotIds = [...new Set(input.lines.map((l) => l.lotId).filter((x): x is string => !!x))];
+  const lots = lotIds.length > 0 ? await tx.yarnLot.findMany({ where: { id: { in: lotIds } }, select: { id: true, ownerCustomerId: true } }) : [];
+  const ownerOfLot = new Map(lots.map((l) => [l.id, l.ownerCustomerId]));
+  // Tek sahip (S28): doğacak leventin sahibi bu siparişin ipliğinden kalıtılır — iki sahip ya da fabrika + emanet 409.
+  const ownerCustomerId = singleOwner(
+    [...existing.map((i) => i.ownerCustomerId), ...input.lines.map((l) => (l.lotId ? ownerOfLot.get(l.lotId) ?? null : null))],
+    "Fason devere siparişi", { strict: true },
+  );
+  const warnings = lotPolicyVerdict(await readDevereFasonLotPolicy(tx), mixedLots([...existing, ...input.lines.map((l) => ({ yarnItemId: l.yarnItemId, lotId: l.lotId ?? null }))]), codeOf);
+  const now = new Date();
+  const dispatchNo = await nextSubcontractorDocNoTx(tx, "subcontractorDispatch", now);
+  const expectedReturnAt = input.expectedReturnAt === undefined ? order.expectedReturnAt : input.expectedReturnAt === null ? null : new Date(input.expectedReturnAt);
+  const dispatch = await tx.subcontractorDispatch.create({
+    data: {
+      dispatchNo, warpingOrderId: order.id, subcontractorId: order.subcontractorId, clientToken: input.clientToken ?? null,
+      goodsReceiptId: opts.goodsReceiptId ?? null,
+      plateNumber: input.plateNumber ?? null, driverName: input.driverName ?? null, notes: input.notes ?? null,
+      dispatchedById: userId, dispatchedAt: now, totalQty: 0, expectedReturnAt,
+    },
+    select: { id: true, dispatchNo: true },
+  });
+  const yarn = await dispatchYarnItemsTx(tx, {
+    dispatchId: dispatch.id, userId,
+    lines: input.lines.map((l) => ({ itemId: l.yarnItemId, warehouseId: l.warehouseId, lotId: l.lotId ?? null, qtyKg: l.qtyKg })),
+  });
+  // S10: plandan fazla gönderim meşru — bilgi uyarısı (fazlası deverecide kalır / iade edilir).
+  const sums = sumByYarn(await loadWarpingYarnItems(tx, { warpingOrderId: id }));
+  for (const y of order.yarns) {
+    const s = sums.get(y.yarnItemId);
+    const net = s ? receivedKg(s) : D(0);
+    if (net.gt(y.grossKg)) warnings.push(`${y.yarnItem.code}: plan ${kg(D(y.grossKg))} kg, gönderilen ${kg(net)} kg — fazla ${kg(net.minus(y.grossKg))} kg deverecide kalır ya da iade edilir.`);
+  }
+  await emitSubcontractDispatchedTx(tx, dispatch.id, userId);
+  return { dispatch, yarn, ownerCustomerId, warnings, wasOpen: order.wasOpen, orderNo: order.orderNo };
+}
+
+/** Sevk audit'i (tx DIŞINDA) — elle sevk ve doğrudan devere kabulü aynı ayak izini bırakır. */
+export async function auditWarpingDispatch(id: string, out: WarpingDispatchTxOut, userId: string, goodsReceiptId?: string): Promise<void> {
+  await AuditService.log({
+    userId, action: "CREATE", tableName: "SUBCONTRACTOR_DISPATCH", recordId: out.dispatch.id,
+    newData: { dispatchNo: out.dispatch.dispatchNo, kind: "WARPING", warpingOrderId: id, yarnItemCount: out.yarn.lines.length, yarnTotalKg: out.yarn.totalKg.toString(), ownerCustomerId: out.ownerCustomerId, goodsReceiptId: goodsReceiptId ?? null },
+  });
+  if (out.wasOpen) {
+    await AuditService.log({ userId, action: "UPDATE", tableName: WARPING_ORDER_TABLE, recordId: id, oldData: { status: WarpingOrderStatus.OPEN }, newData: { status: WarpingOrderStatus.IN_PROGRESS, dispatchNo: out.dispatch.dispatchNo } });
+  }
+}
+
 export async function dispatchWarpingOrder(id: string, input: WarpingDispatchInput, userId: string): Promise<WarpingDispatchResult> {
   validateLines(input.lines);
   return dispatchReplay(id, input).run(input.clientToken, async () => {
-    const out = await prisma.$transaction(async (tx) => {
-      const order = await claimForDispatchTx(tx, id, userId);
-      const codeOf = (yarnItemId: string) => order.yarns.find((y) => y.yarnItemId === yarnItemId)?.yarnItem.code ?? yarnItemId;
-      const offPlan = input.lines.find((l) => !order.yarns.some((y) => y.yarnItemId === l.yarnItemId));
-      if (offPlan) throw AppError.badRequest("Plan dışı iplik sevk edilemez — yalnız siparişin iplik planındaki iplikler gider.", { code: "WARPING_YARN_NOT_IN_PLAN", yarnItemId: offPlan.yarnItemId });
-      if (await readDevereLotRequired(tx)) {
-        const lotless = input.lines.find((l) => !l.lotId);
-        if (lotless) throw AppError.badRequest(`İplik lotu zorunlu — ${codeOf(lotless.yarnItemId)} satırında lot seçin.`, { code: "YARN_LOT_REQUIRED" });
-      }
-      const existing = openItems(await loadWarpingYarnItems(tx, { warpingOrderId: id }));
-      const lotIds = [...new Set(input.lines.map((l) => l.lotId).filter((x): x is string => !!x))];
-      const lots = lotIds.length > 0 ? await tx.yarnLot.findMany({ where: { id: { in: lotIds } }, select: { id: true, ownerCustomerId: true } }) : [];
-      const ownerOfLot = new Map(lots.map((l) => [l.id, l.ownerCustomerId]));
-      // Tek sahip (S28): doğacak leventin sahibi bu siparişin ipliğinden kalıtılır — iki sahip ya da fabrika + emanet 409.
-      const ownerCustomerId = singleOwner(
-        [...existing.map((i) => i.ownerCustomerId), ...input.lines.map((l) => (l.lotId ? ownerOfLot.get(l.lotId) ?? null : null))],
-        "Fason devere siparişi", { strict: true },
-      );
-      const warnings = lotPolicyVerdict(await readDevereFasonLotPolicy(tx), mixedLots([...existing, ...input.lines.map((l) => ({ yarnItemId: l.yarnItemId, lotId: l.lotId ?? null }))]), codeOf);
-      const now = new Date();
-      const dispatchNo = await nextSubcontractorDocNoTx(tx, "subcontractorDispatch", now);
-      const expectedReturnAt = input.expectedReturnAt === undefined ? order.expectedReturnAt : input.expectedReturnAt === null ? null : new Date(input.expectedReturnAt);
-      const dispatch = await tx.subcontractorDispatch.create({
-        data: {
-          dispatchNo, warpingOrderId: order.id, subcontractorId: order.subcontractorId, clientToken: input.clientToken ?? null,
-          plateNumber: input.plateNumber ?? null, driverName: input.driverName ?? null, notes: input.notes ?? null,
-          dispatchedById: userId, dispatchedAt: now, totalQty: 0, expectedReturnAt,
-        },
-        select: { id: true, dispatchNo: true },
-      });
-      const yarn = await dispatchYarnItemsTx(tx, {
-        dispatchId: dispatch.id, userId,
-        lines: input.lines.map((l) => ({ itemId: l.yarnItemId, warehouseId: l.warehouseId, lotId: l.lotId ?? null, qtyKg: l.qtyKg })),
-      });
-      // S10: plandan fazla gönderim meşru — bilgi uyarısı (fazlası deverecide kalır / iade edilir).
-      const sums = sumByYarn(await loadWarpingYarnItems(tx, { warpingOrderId: id }));
-      for (const y of order.yarns) {
-        const s = sums.get(y.yarnItemId);
-        const net = s ? receivedKg(s) : D(0);
-        if (net.gt(y.grossKg)) warnings.push(`${y.yarnItem.code}: plan ${kg(D(y.grossKg))} kg, gönderilen ${kg(net)} kg — fazla ${kg(net.minus(y.grossKg))} kg deverecide kalır ya da iade edilir.`);
-      }
-      await emitSubcontractDispatchedTx(tx, dispatch.id, userId);
-      return { dispatch, yarn, ownerCustomerId, warnings, wasOpen: order.wasOpen, orderNo: order.orderNo };
-    });
-    await AuditService.log({
-      userId, action: "CREATE", tableName: "SUBCONTRACTOR_DISPATCH", recordId: out.dispatch.id,
-      newData: { dispatchNo: out.dispatch.dispatchNo, kind: "WARPING", warpingOrderId: id, yarnItemCount: out.yarn.lines.length, yarnTotalKg: out.yarn.totalKg.toString(), ownerCustomerId: out.ownerCustomerId },
-    });
-    if (out.wasOpen) {
-      await AuditService.log({ userId, action: "UPDATE", tableName: WARPING_ORDER_TABLE, recordId: id, oldData: { status: WarpingOrderStatus.OPEN }, newData: { status: WarpingOrderStatus.IN_PROGRESS, dispatchNo: out.dispatch.dispatchNo } });
-    }
+    const out = await prisma.$transaction(async (tx) => dispatchClaimedWarpingOrderTx(tx, await claimForDispatchTx(tx, id, userId), input, { userId }));
+    await auditWarpingDispatch(id, out, userId);
     return loadDispatchResult(out.dispatch.id, out.warnings, false);
   });
 }

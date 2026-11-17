@@ -30,7 +30,7 @@ import { listYarnItems, returnYarn, returnYarnTx } from "../src/services/subcont
 import { cancelWound } from "../src/services/warp-beam-wind.service";
 import { createWarpingOrder } from "../src/services/warping-order/create";
 import { dispatchWarpingOrder, type WarpingDispatchLineInput } from "../src/services/warping-order/dispatch";
-import { cancelWarpingDispatch } from "../src/services/warping-order/dispatch-cancel";
+import { cancelWarpingDispatch, previewCancelWarpingDispatch } from "../src/services/warping-order/dispatch-cancel";
 import { listWarpingYarnHoldings } from "../src/services/warping-order/yarn-return";
 import { previewWarpingReceive, receiveWarpingOrder, type WarpingReceiveBeamInput } from "../src/services/warping-order/receive";
 import { cancelWarpingReceipt, previewCancelWarpingReceipt } from "../src/services/warping-order/receive-cancel";
@@ -167,7 +167,8 @@ async function main(): Promise<void> {
     const eRet = await errOf(() => returnYarn(d1.dispatch.id, { dispatchItemId: it(d1, X), qtyKg: 1, reasonCode: R }, U));
     check("Eski iade ucu tavanı levente sarılanı düşer → 400 YARN_RETURN_EXCEEDS", eRet?.status === 400 && eRet.code === "YARN_RETURN_EXCEEDS", show(eRet));
     const eDc = await errOf(() => cancelWarpingDispatch(A, d2.dispatch.id, `${TAG} iptal`, U));
-    check("Dağıtılmış kalemli sevk iptali → 409 YARN_ITEM_ALLOCATED (LIFO)", eDc?.status === 409 && eDc.code === "YARN_ITEM_ALLOCATED", show(eDc));
+    const dcPv = await previewCancelWarpingDispatch(A, d2.dispatch.id);
+    check("Dağıtılmış kalemli sevk iptali → 409 YARN_ITEM_ALLOCATED (LIFO), önizleme engelli", eDc?.status === 409 && eDc.code === "YARN_ITEM_ALLOCATED" && !dcPv.canCancel && /dağıtılmış/.test(dcPv.blockedReason ?? ""), `${show(eDc)} | ${dcPv.blockedReason}`);
     const tokB = randomUUID();
     const r2 = await receive(A, [{ lengthM: 400 }], tokB, "IRS-2");
     check("S24 ikinci kabul: X 20 dağıtılamadı (uyarı), Y 16 devirden, Z 14 devir + 10 dağıtılamadı; bakiye eksiye inmedi", r2.warnings.length === 2 && (await holds(C, Y)) === 0 && (await holds(C, Z)) === 0 && r2.settlement.yarns.find((v) => v.yarnItemId === X)!.unallocatedKg === "20.000", JSON.stringify(r2.warnings));

@@ -46,8 +46,8 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}consignment-dispatch/create.ts::createConsignmentDispatch`]: { giris: { [`${S}consignment-dispatch/create.ts::createConsignmentDispatch`]: "R" } },
   // Fason devere siparişi (D4a): panelden clientToken ile doğar; iptal edilmiş siparişin token'ı 409 (4. durum).
   [`${S}warping-order/create.ts::createWarpingOrder`]: { giris: { [`${S}warping-order/create.ts::createWarpingOrder`]: "R" } },
-  // Fason devere iplik sevki (D4b): `SubcontractorDispatch.clientToken`; iptal edilmiş sevkin token'ı 409 (4. durum).
-  [`${S}warping-order/dispatch.ts::dispatchWarpingOrder`]: { giris: { [`${S}warping-order/dispatch.ts::dispatchWarpingOrder`]: "R" } },
+  // Fason devere iplik sevki (D4b): `SubcontractorDispatch.clientToken`; iptal edilmiş sevkin token'ı 409 (4. durum). Yazar tx helper'ıdır; doğrudan kabul (D4c) token'sız çağırır.
+  [`${S}warping-order/dispatch.ts::dispatchClaimedWarpingOrderTx`]: { giris: { [`${S}warping-order/dispatch.ts::dispatchWarpingOrder`]: "R" } },
   [`${S}warping-order/yarn-transfer.ts::transferWarpingYarn`]: { giris: { [`${S}warping-order/yarn-transfer.ts::transferWarpingYarn`]: "R" } },
   [`${S}warping-order/receive.ts::receiveWarpingOrder`]: { giris: { [`${S}warping-order/receive.ts::receiveWarpingOrder`]: "R" } },
   [`${S}lab-test.service.ts::createLabTest`]: { giris: { [`${S}lab-test.service.ts::createLabTest`]: "R" } },
@@ -270,7 +270,7 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}cheque-delivery-note.service.ts::noteReplay`]: ["chequeIds", "bankAccountId", "cariId", "targetLabel", "notes", "deliveryDate"],
   [`${S}cheque.service.ts::chequeReplay`]: ["kind", "amount", "dueDate", "taraf", "docType", "currency", "serialNo", "exchangeRate", "issueDate", "postingDate"],
   [`${S}gelen-belge-ozel-sablon.service.ts::createUserTemplate`]: ["code"],
-  [`${S}goods-receipt.service.ts::receiptReplay`]: ["warehouseId", "purchaseOrderId", "deliveryNoteNo", "rawStockEntry", "currency", "taraf"],
+  [`${S}goods-receipt.service.ts::receiptReplay`]: ["warehouseId", "purchaseOrderId", "deliveryNoteNo", "rawStockEntry", "directWarpingOrderId", "currency", "taraf"],
   [`${S}inventory/initial-entry.ts::initialEntryReplay`]: ["itemId", "colorId", "initialQty"],
   [`${S}inventory/open-fabric.ts::openFabricReplay`]: ["parentReceiptId", "producedInStepId"],
   [`${S}invoice.service.ts::invoiceReplay`]: ["type", "taraf", "currency", "satırlar"],

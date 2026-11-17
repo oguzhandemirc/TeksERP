@@ -102,4 +102,15 @@ describe("createGoodsReceipt — tedarikçi bacağı ve ham stok bayrağı", () 
     const on = mockPost.mock.calls[0]![1] as Record<string, unknown>;
     expect(on.rawStockEntry).toBe(true);
   });
+
+  it("⭐ D4c — `directWarpingOrderId` YALNIZ seçiliyken gönderilir", async () => {
+    await createGoodsReceipt({ ...BASE, directWarpingOrderId: null });
+    const off = mockPost.mock.calls[0]![1] as Record<string, unknown>;
+    expect("directWarpingOrderId" in off).toBe(false);
+
+    vi.clearAllMocks();
+    await createGoodsReceipt({ ...BASE, directWarpingOrderId: "wo-1" });
+    const on = mockPost.mock.calls[0]![1] as Record<string, unknown>;
+    expect(on.directWarpingOrderId).toBe("wo-1");
+  });
 });
