@@ -24,6 +24,7 @@ import { assertReturnReasonTx, kg, lotWarnings, resolveWoundYarns, siblingsOf, w
 export type { WindResultDto };
 import { toWarpBeamDto, toWarpBeamEventDto, type WarpBeamDto, type WarpBeamEventDto } from "./warp-beam.service";
 import { resolveOwnerFromLotsTx } from "./helpers/emanet-owner.helper";
+import { assertWarpingWoundCancellableTx } from "./helpers/warping-receipt-guard.helper";
 import { assertBeamWeavingLinkGate, assertWeavingOrderLinkableTx, warpSpecMismatchWarning } from "./helpers/production-chain-gates.helper";
 
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
@@ -270,6 +271,8 @@ export async function cancelWound(id: string, reason: string, userId?: string): 
   const wound = beam.events[0];
   if (!wound) throw AppError.conflict(`${beam.beamNo} hiç sarılmamış — plandaki levent iptal edilmez, silinir`, { code: "WARP_BEAM_NOT_WOUND" });
   const cancel = await prisma.$transaction(async (tx) => {
+    // Fason devere D5a: devere doğumlu levent — sipariş claim'i (kapanmışsa 409) + LIFO; diğer leventlerde no-op.
+    await assertWarpingWoundCancellableTx(tx, { id, beamNo: beam.beamNo, warpingOrderId: beam.warpingOrderId }, userId ?? null);
     const ev = await applyWarpBeamEventTx(tx, {
       beamId: id,
       kind: "WOUND_CANCEL",
