@@ -200,9 +200,11 @@ describe("karo bağlantıları", () => {
     // 2026-11-11: `loom-load` (Tezgâh Yükü, SY-3) — Dokuma İşleri ile AYNI kapı (isWeavingOrdersVisible).
     // 2026-11-11 (T5 menü): üç gelen belge KURULUM karosu Tanımlar › Gelen Belge Kurulumu'na taşındı (kapı aynı).
     // 2026-11-17: `cozgu-hesabi` (Çözgü Hesabı, fason devere D3) — Leventler ile AYNI devere kapısı.
+    // 2026-11-18: `fasondaki-iplik` (Fasondaki İplik, D6c) — Leventler ile AYNI devere kapısı.
     expect(conditional.sort()).toEqual([
       "cozgu-hesabi",
       "emanet-cikis",
+      "fasondaki-iplik",
       "gelen-belgeler",
       "goods-receipts",
       "icerideki-isler",

@@ -15,6 +15,7 @@ import {
 import type { Subcontractor } from "./types";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { SubcontractorCustomerLink } from "./SubcontractorCustomerLink";
+import { SubcontractorYarnSection } from "@/pages/Operations/YarnAtSubcontractor/SubcontractorYarnSection";
 import { TERIM } from "@/lib/terim";
 
 interface Props {
@@ -186,6 +187,8 @@ export function SubcontractorFormDialog({
               <input type="checkbox" {...form.register("isFavorite")} /> Favori — {TERIM.terbiyeIsEmri.tekilKucuk} fason adımında default firma
             </label>
           </div>
+          {/* Devere D6c: fasoncudaki iplik bakiyesi — modül/izin yoksa hiç çizilmez. */}
+          {initial && <SubcontractorYarnSection subcontractorId={initial.id} />}
         </>
       )}
     </EntityFormDialog>

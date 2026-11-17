@@ -7,6 +7,7 @@ import { itemLifecycleOf } from "@/lib/item-lifecycle";
 import type { Item } from "./types";
 import { ItemCustomerColorAliasesPanel } from "./ItemCustomerColorAliasesPanel";
 import { ItemCostLink } from "./ItemCostLink";
+import { YarnWhereSection } from "@/pages/Operations/YarnAtSubcontractor/YarnWhereSection";
 
 interface Props {
   /** Düzenlenen kart; yeni kartta null. */
@@ -16,7 +17,13 @@ interface Props {
 
 export function ItemCardTabs({ item, children }: Props) {
   const { hasPermission } = useRoleAccess();
-  const costLink = item ? <ItemCostLink itemId={item.id} itemType={item.itemType} /> : null;
+  // İplik kartında "Nerede?" (depo / fasonda, devere D6c) — kumaş kartında hiçbir şey çizmez.
+  const costLink = item ? (
+    <>
+      <ItemCostLink itemId={item.id} itemType={item.itemType} />
+      {item.itemType === "YARN" && <YarnWhereSection itemId={item.id} itemType={item.itemType} />}
+    </>
+  ) : null;
   if (!item || item.itemType !== "FABRIC" || !hasPermission("customer-alias:read")) return <>{costLink}{children}</>;
   return (
     <Tabs defaultValue="info">

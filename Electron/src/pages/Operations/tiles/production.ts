@@ -119,6 +119,19 @@ export const productionTiles: OperationsTile[] = [
     permission: "loom:alarm-view", visibleWhen: isLoomAlarmsVisible, offHint: flagOffHint("tezgahEnabled"),
   },
   {
+    // FASONDAKİ İPLİK (devere D6c): `yarn-at-subcontractor` `requireDevereEnabled` + `requireIplikEnabled` +
+    // `warping-order:read`; karo aynı izin, yüklem Leventler ile AYNI nesne (devere ETKİN değeri iplik zincirini taşır).
+    key: "fasondaki-iplik",
+    title: "Fasondaki İplik",
+    description: "Hangi fasoncuda hangi iplikten kaç kg var (devere, fasonda iplik, devreden, iplik bakiyesi)",
+    icon: Spool,
+    to: "/operations/fasondaki-iplik",
+    group: "production",
+    permission: "warping-order:read",
+    visibleWhen: isWarpBeamsVisible,
+    offHint: flagOffHint("devereEnabled"),
+  },
+  {
     // LEVENTLER (2026-09-14, devere Faz 1b): backend `warp-beam.routes` `requireDevereEnabled`
     // taşır; karo aynı bayrağa bağlı (ETKİN değer: devere → iplik → ticaret). Referans
     // profilde KAPALI, karo çizilmez. Yüklem SAF (palet kimlik testi `toBe`).
