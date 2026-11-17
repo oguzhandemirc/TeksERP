@@ -10,6 +10,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ListFilter, Truck, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import apiClient from "@/services/apiClient";
@@ -93,7 +94,7 @@ export function DirectWarpingOrderField({ value, onChange, disabled }: Props) {
               girer ve aynı işlemde bu siparişe sevk edilir (depo etkisi sıfır). Yalnız siparişin planındaki iplikler girilebilir.
             </DialogDescription>
           </DialogHeader>
-          <Input autoFocus placeholder="Sipariş no, fasoncu ya da kart ara…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Devere siparişi ara" />
+          <Input autoFocus placeholder="Sipariş ara…" title="Sipariş no, fasoncu ya da kart adıyla ara" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Devere siparişi ara" />
           <div className="max-h-[50vh] overflow-y-auto rounded-md border" role="listbox" aria-label="Açık devere siparişleri">
             {q.isLoading && <p className="p-3 text-sm text-muted-foreground">Yükleniyor…</p>}
             {!q.isLoading && rows.length === 0 && <p className="p-3 text-sm text-muted-foreground">Açık ya da sevkte devere siparişi yok.</p>}
@@ -114,7 +115,7 @@ export function DirectWarpingOrderField({ value, onChange, disabled }: Props) {
                   <span className="ml-2 text-muted-foreground">{r.subcontractor.name}</span>
                   <span className="block truncate text-xs text-muted-foreground">{r.warpSpec.code} · {r.warpSpec.name} · {r.targetLengthM} m</span>
                 </span>
-                <span className="shrink-0 rounded bg-secondary px-2 py-0.5 text-xs">{STATUS_TR[r.status] ?? r.status}</span>
+                <Badge variant="secondary" className="shrink-0">{STATUS_TR[r.status] ?? r.status}</Badge>
               </button>
             ))}
           </div>
