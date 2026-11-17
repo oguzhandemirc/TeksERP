@@ -432,6 +432,8 @@ export interface FeatureFlags {
   devereAutoConsume: boolean;
   /** Fason devere D1: çözgü hesabında sabit fire metresi (backend `DEFAULT_DEVERE_WARP_FIXED_WASTE_M` = 0). */
   devereWarpFixedWasteM: number;
+  /** Fason devere D4: kapama fire toleransı % (backend `DEFAULT_DEVERE_FASON_WASTE_TOLERANCE_PCT` = 0 = denetim yok). */
+  devereFasonWasteTolerancePct: number;
   /** Z1 üretim belge zinciri (2026-09-18) — üç davranış bayrağı, varsayılan KAPALI = bağ opsiyonel (bugünkü davranış). */
   devereBeamWeavingLinkRequired: boolean;
   dokumaRunWeavingOrderRequired: boolean;

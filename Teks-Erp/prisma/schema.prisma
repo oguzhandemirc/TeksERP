@@ -1978,15 +1978,19 @@ model WarpSpec {
   notes        String?  @db.VarChar(500)
   isActive     Boolean  @default(true)
 
-  yarnItem      Item            @relation("WarpSpecYarn", fields: [yarnItemId], references: [id], onDelete: Restrict)
+  yarnItem              Item                    @relation("WarpSpecYarn", fields: [yarnItemId], references: [id], onDelete: Restrict)
   /// FASON DEVERE D1 — çok iplikli kart satırları. Kolonlar (`yarnItemId`, `endsCount`) türetilmiş özettir:
   /// ana iplik = en küçük `sortOrder` satırı, toplam tel = Σ satır. Okuyucu `warpSpecYarnLines`ten okur.
-  yarns         WarpSpecYarn[]
-  fabricItems   Item[]          @relation("ItemWarpSpec")
+  yarns                 WarpSpecYarn[]
+  fabricItems           Item[]                  @relation("ItemWarpSpec")
   /// Bu kartın ek çözgü katmanı olarak geçtiği kumaşlar (MİG-1).
-  warpLayers    ItemWarpLayer[] @relation("ItemWarpLayerSpec")
-  weavingOrders WeavingOrder[]  @relation("WeavingOrderWarpSpec")
-  warpBeams     WarpBeam[]      @relation("WarpBeamSpec")
+  warpLayers            ItemWarpLayer[]         @relation("ItemWarpLayerSpec")
+  weavingOrders         WeavingOrder[]          @relation("WeavingOrderWarpSpec")
+  warpBeams             WarpBeam[]              @relation("WarpBeamSpec")
+  /// Fason devere D4: bu kartla açılan siparişler · ek tel grubu · plan satırı kaynağı.
+  warpingOrders         WarpingOrder[]          @relation("WarpingOrderSpec")
+  warpingOrderExtras    WarpingOrderExtraSpec[] @relation("WarpingOrderExtraSpec")
+  warpingOrderYarnLines WarpingOrderYarn[]      @relation("WarpingOrderYarnSource")
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -2030,6 +2034,155 @@ model WarpSpecYarn {
   @@unique([warpSpecId, sortOrder])
   @@index([yarnItemId])
   @@map("warp_spec_yarns")
+}
+
+/// FASON DEVERE SİPARİŞİ durumu (D4): OPEN = sevksiz · IN_PROGRESS = iplik/levent hareketi var ·
+/// COMPLETED = kapandı (D5) · CANCELLED = sevksizken iptal. Geçişler atomik claim.
+enum WarpingOrderStatus {
+  OPEN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+/// Devere ücreti birimi (fatura sonraki dilim; alan şimdi). Varsayılan METRE — müşteri Excel'i $/m.
+enum WarpingFeeUnit {
+  METRE
+  KG
+  ENDS_METRE
+}
+
+/// FASON DEVERE SİPARİŞİ (D4, 2026-11-17) — DURUM tablosu: iplik KG gider, çözgü METRE ile levent olarak döner.
+/// Hedef = Σ(levent adedi × boy) satırları (K6: satır satır farklı boy). `beamCount`/`targetLengthM` satırların
+/// ÖZETİDİR, yalnız servis yazar. Fire girdileri ve tolerans oluşturma anında ayardan DONAR.
+model WarpingOrder {
+  id                String             @id @default(uuid()) @db.Uuid
+  orderNo           String             @unique @db.VarChar(64)
+  clientToken       String?            @unique @db.Uuid
+  /// Ana (zemin) çözgü kartı — doğan leventin kartı.
+  warpSpecId        String             @db.Uuid
+  /// Devereci (fason firma).
+  subcontractorId   String             @db.Uuid
+  /// Σ satır levent adedi (özet; CHECK > 0).
+  beamCount         Int
+  /// Σ(adet × boy) metre (özet; CHECK > 0).
+  targetLengthM     Decimal            @db.Decimal(14, 3)
+  fixedWasteM       Decimal            @default(0) @db.Decimal(8, 2)
+  /// Kapamada fire % toleransı; NULL = denetim yok (D5 yalnız uyarır).
+  wasteTolerancePct Decimal?           @db.Decimal(5, 2)
+  feeUnit           WarpingFeeUnit     @default(METRE)
+  feeUnitPrice      Decimal?           @db.Decimal(12, 4)
+  /// Fiyat girildiyse zorunlu (CHECK); varsayılan USD (müşteri belgesi).
+  feeCurrency       Currency?
+  expectedReturnAt  DateTime?          @db.Timestamptz
+  /// Devereciye not — çözgü talimatında basılır.
+  notes             String?            @db.VarChar(500)
+  status            WarpingOrderStatus @default(OPEN)
+  completedAt       DateTime?          @db.Timestamptz
+  completedById     String?            @db.Uuid
+  cancelledAt       DateTime?          @db.Timestamptz
+  cancelledById     String?            @db.Uuid
+  cancelReason      String?            @db.VarChar(300)
+  createdById       String?            @db.Uuid
+  updatedById       String?            @db.Uuid
+
+  warpSpec      WarpSpec                @relation("WarpingOrderSpec", fields: [warpSpecId], references: [id], onDelete: Restrict)
+  subcontractor Subcontractor           @relation("WarpingOrderSubcontractor", fields: [subcontractorId], references: [id], onDelete: Restrict)
+  beamLines     WarpingOrderBeamLine[]
+  yarns         WarpingOrderYarn[]
+  extraSpecs    WarpingOrderExtraSpec[]
+  salesOrders   WarpingOrderToOrder[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([warpSpecId])
+  @@index([subcontractorId, createdAt])
+  @@index([status, createdAt])
+  @@index([createdAt])
+  @@map("warping_orders")
+}
+
+/// Sipariş hedef satırı (K6): `beamCount` adet × `beamLengthM` boy. ③b pivot — sipariş OPEN iken replace.
+model WarpingOrderBeamLine {
+  id             String  @id @default(uuid()) @db.Uuid
+  warpingOrderId String  @db.Uuid
+  beamCount      Int
+  beamLengthM    Decimal @db.Decimal(12, 3)
+  sortOrder      Int     @db.SmallInt
+
+  warpingOrder WarpingOrder @relation(fields: [warpingOrderId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([warpingOrderId, sortOrder])
+  @@map("warping_order_beam_lines")
+}
+
+/// Plan anlık görüntüsü — iplik başına tel/denye/fire ve net (firesiz) / brüt (fireli) kg. OPEN iken replace,
+/// ilk sevkten sonra DONUK; kart sonradan değişse de sipariş planı değişmez. Aynı iplik iki karttan gelirse teller toplanır.
+model WarpingOrderYarn {
+  id               String  @id @default(uuid()) @db.Uuid
+  warpingOrderId   String  @db.Uuid
+  yarnItemId       String  @db.Uuid
+  /// Satırın geldiği kart (ana kart ya da ek tel grubu).
+  sourceWarpSpecId String  @db.Uuid
+  endsCount        Int
+  denier           Decimal @db.Decimal(10, 4)
+  wastePct         Decimal @default(0) @db.Decimal(5, 2)
+  netKg            Decimal @db.Decimal(14, 3)
+  grossKg          Decimal @db.Decimal(14, 3)
+  sortOrder        Int     @db.SmallInt
+
+  warpingOrder WarpingOrder @relation(fields: [warpingOrderId], references: [id], onDelete: Cascade)
+  yarnItem     Item         @relation("WarpingOrderYarnItem", fields: [yarnItemId], references: [id], onDelete: Restrict)
+  sourceSpec   WarpSpec     @relation("WarpingOrderYarnSource", fields: [sourceWarpSpecId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([warpingOrderId, yarnItemId])
+  @@unique([warpingOrderId, sortOrder])
+  @@index([yarnItemId])
+  @@index([sourceWarpSpecId])
+  @@map("warping_order_yarns")
+}
+
+/// Ek tel grubu (aynı levente sarılan ikinci/üçüncü çözgü kartı — döner varsayılanı aynı levent). ③b pivot.
+model WarpingOrderExtraSpec {
+  id             String @id @default(uuid()) @db.Uuid
+  warpingOrderId String @db.Uuid
+  warpSpecId     String @db.Uuid
+  sortOrder      Int    @db.SmallInt
+
+  warpingOrder WarpingOrder @relation(fields: [warpingOrderId], references: [id], onDelete: Cascade)
+  warpSpec     WarpSpec     @relation("WarpingOrderExtraSpec", fields: [warpSpecId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([warpingOrderId, warpSpecId])
+  @@unique([warpingOrderId, sortOrder])
+  @@index([warpSpecId])
+  @@map("warping_order_extra_specs")
+}
+
+/// K3: devere siparişinin isteğe bağlı müşteri siparişi bağı (bağsız = stoğa çözgü). ③b pivot.
+model WarpingOrderToOrder {
+  id             String @id @default(uuid()) @db.Uuid
+  warpingOrderId String @db.Uuid
+  orderId        String @db.Uuid
+
+  warpingOrder WarpingOrder @relation(fields: [warpingOrderId], references: [id], onDelete: Cascade)
+  order        Order        @relation("WarpingOrderSalesOrder", fields: [orderId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([warpingOrderId, orderId])
+  @@index([orderId])
+  @@map("warping_order_to_orders")
 }
 
 /// ATKI KARTI (S2 şema çekirdeği — MAL-1, 2026-10-25, patron kararı seçenek B).
@@ -3731,6 +3884,7 @@ model Item {
   /// Bu İPLİĞİ kullanan çözgü kartları (1:N) — silme kapısının bağımlılık kaynağı.
   warpSpecsAsYarn                WarpSpec[]                  @relation("WarpSpecYarn")
   warpSpecYarnsAsYarn            WarpSpecYarn[]              @relation("WarpSpecYarnItem")
+  warpingOrderYarns              WarpingOrderYarn[]          @relation("WarpingOrderYarnItem")
   /// Bu KUMAŞIN atkı kartı (N:1) — dokuma ürün yapısı (MAL-1 / S2).
   weftSpec                       WeftSpec?                   @relation("ItemWeftSpec", fields: [weftSpecId], references: [id], onDelete: Restrict)
   /// Bu İPLİĞİ atkı olarak kullanan kart satırları (1:N).
@@ -4905,7 +5059,9 @@ model Order {
   rollReturns    RollReturn[] // Bu siparişe atfedilen iadeler (sevk muhasebesini değiştirmez)
 
   /// Bildirim takipçileri (F4, `record_follows`).
-  followers RecordFollow[]
+  followers         RecordFollow[]
+  /// Fason devere D4 (K3): bu siparişe bağlanan devere siparişleri.
+  warpingOrderLinks WarpingOrderToOrder[] @relation("WarpingOrderSalesOrder")
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -8216,6 +8372,7 @@ model Subcontractor {
   plannedSteps             WorkOrderStep[]           @relation("StepPlannedSubcontractor")
   weavingOrders            WeavingOrder[]            @relation("WeavingOrderSubcontractor")
   warpBeams                WarpBeam[]                @relation("WarpBeamSubcontractor")
+  warpingOrders            WarpingOrder[]            @relation("WarpingOrderSubcontractor")
   plannedRouteSteps        RouteStep[]               @relation("RouteStepPlannedSubcontractor")
   kartelaDispatches        KartelaDispatch[]         @relation("KartelaDispatchSub")
   kartelaReceipts          KartelaReceipt[]          @relation("KartelaReceiptSub")

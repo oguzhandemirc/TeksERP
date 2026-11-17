@@ -228,6 +228,7 @@ export const TABLE_LABELS: Record<string, string> = {
   CONSUMABLE_MOVEMENT: "Sarf Stok Hareketi",
   YARN_LOT: "İplik Lotu",
   WARP_SPEC: "Çözgü Kartı",
+  WARPING_ORDER: "Fason Devere Siparişi",
   WEAVING_ORDER: "Dokuma İş Emri",
   WARP_BEAM: "Levent",
   WARP_BEAM_EVENT: "Levent Olayı",

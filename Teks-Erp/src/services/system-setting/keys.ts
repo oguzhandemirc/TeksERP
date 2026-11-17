@@ -290,6 +290,9 @@ export const SETTING_KEYS = {
   /** [PROFİL] Fason devere D1: çözgü hesabında sipariş başına SABİT fire metresi (baş/son/düğüm). DEFAULT 0 =
    *  müşterinin kâğıttaki formülü (firesiz); yalnız öneriyi büyütür, hiçbir defteri değiştirmez. */
   DEVERE_WARP_FIXED_WASTE_M: "devere.warpFixedWasteM",
+  /** [PROFİL] Fason devere D4: kapamada fire % toleransı — sipariş açılırken DONAR. DEFAULT 0 = denetim yok
+   *  (bugünkü davranış); aşım yalnız UYARIR, hiçbir işlemi engellemez. */
+  DEVERE_FASON_WASTE_TOLERANCE_PCT: "devere.fasonWasteTolerancePct",
   /** Dokuma işi modülü: dokuma işi planlama · tezgah koşumu · top indirme.
    *  ÜRETİME BAĞIMLI (`MODULE_DEPENDENCIES`), tezgah izlemenin KARDEŞİ — fasona
    *  dokutan firmada dokuma işi var tezgah yok (DOKUMA-IS-EMRI §2.5). */
