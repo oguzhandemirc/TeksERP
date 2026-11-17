@@ -210,7 +210,11 @@ function main(): void {
   // 41 → 42 (2026-11-14, bildirim S1): `jobs/notification-digest.job.ts` — özet zamanlayıcısının pencere damgası
   // (`bildirim.ozetDamga.<tür>` SystemSetting, 8040 kilidi altında, pencere başına tek); kullanıcı eylemi yok, yazdığı
   // tek şey tekillik filigranı — `backup-scheduler` · `machine-shift-close` damgalarıyla aynı SISTEM_ISI kalıbı.
-  const AUDITSIZ_YAZICI_TABAN = 42;
+  // 42 → 43 (2026-11-18, fason devere D5a): `helpers/warping-receipt-guard.helper.ts` — devere siparişinin kabul
+  // stornosu claim'i (`claimWarpingOrderForWoundCancelTx`, atomik `updateMany` IN_PROGRESS) + kabulün kırılım/dağıtım
+  // yazıcısı (`writeWarpingWoundYarnsTx`), ikisi de tx İÇİNDE; audit'i çağıran eylem basar (`receive` · `receive-cancel`
+  // · `cancelWound`) — EBEVEYN_EYLEMDE.
+  const AUDITSIZ_YAZICI_TABAN = 43;
   const auditsizYazici: string[] = [];
   for (const [rel, s] of metin) {
     if (auditDosya.has(rel) || /tableName:\s*"/.test(s)) continue;

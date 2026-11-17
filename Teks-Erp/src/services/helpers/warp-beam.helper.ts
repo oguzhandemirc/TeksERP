@@ -76,6 +76,7 @@ export const WARP_BEAM_SELECT = {
   currentMachineId: true,
   currentPosition: true,
   setKey: true,
+  warpingOrderId: true,
   currentMachine: { select: { id: true, code: true, name: true } },
   // Listede "gerçek metre / kg" WOUND satırından okunur (bir levent bir kez doğar — partial unique).
   events: { where: { kind: "WOUND" }, select: WARP_BEAM_EVENT_SELECT, take: 1 },

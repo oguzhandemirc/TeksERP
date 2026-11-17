@@ -163,7 +163,7 @@ async function main(): Promise<void> {
    * ardındadır. Beyan ÖLÇÜLÜR: ana dosya kapıyı taşımalı VE alt dosyayı import edip `router.use` ile takmalı —
    * ikisi de yoksa alt dosya KAPISIZ sayılır (beyan bayatlarsa kırmızı).
    */
-  const ALT_YONLENDIRICI: Record<string, string> = { "warp-beam-mount.routes.ts": "warp-beam.routes.ts", "warping-order-yarn.routes.ts": "warping-order.routes.ts" };
+  const ALT_YONLENDIRICI: Record<string, string> = { "warp-beam-mount.routes.ts": "warp-beam.routes.ts", "warping-order-yarn.routes.ts": "warping-order.routes.ts", "warping-order-receive.routes.ts": "warping-order.routes.ts" };
   const anaKapiliVeTakili = (alt: string, ana: string): boolean => {
     const anaMetin = yorumlariSok(fs.readFileSync(path.join(routerDizin, ana), "utf8"));
     const modul = alt.replace(/\.ts$/, "");

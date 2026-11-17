@@ -2086,19 +2086,24 @@ model WarpingOrder {
   createdById       String?            @db.Uuid
   updatedById       String?            @db.Uuid
 
-  warpSpec      WarpSpec                @relation("WarpingOrderSpec", fields: [warpSpecId], references: [id], onDelete: Restrict)
-  subcontractor Subcontractor           @relation("WarpingOrderSubcontractor", fields: [subcontractorId], references: [id], onDelete: Restrict)
-  beamLines     WarpingOrderBeamLine[]
-  yarns         WarpingOrderYarn[]
-  extraSpecs    WarpingOrderExtraSpec[]
-  salesOrders   WarpingOrderToOrder[]
+  warpSpec            WarpSpec                 @relation("WarpingOrderSpec", fields: [warpSpecId], references: [id], onDelete: Restrict)
+  subcontractor       Subcontractor            @relation("WarpingOrderSubcontractor", fields: [subcontractorId], references: [id], onDelete: Restrict)
+  beamLines           WarpingOrderBeamLine[]
+  yarns               WarpingOrderYarn[]
+  extraSpecs          WarpingOrderExtraSpec[]
+  salesOrders         WarpingOrderToOrder[]
   /// D4b: iplik sevk belgeleri (başlık üçüncü kolu `SubcontractorDispatch.warpingOrderId`).
-  dispatches    SubcontractorDispatch[] @relation("DispatchWarpingOrder")
+  dispatches          SubcontractorDispatch[]  @relation("DispatchWarpingOrder")
   /// D4c: bu siparişe doğrudan (depoya girmeden) iplik getiren mal kabul fişleri.
-  directReceipts GoodsReceipt[] @relation("GoodsReceiptDirectWarpingOrder")
+  directReceipts      GoodsReceipt[]           @relation("GoodsReceiptDirectWarpingOrder")
   /// D4b-2: siparişler arası iplik aktarma defteri (kaynak / hedef).
-  yarnTransfersOut WarpingYarnTransfer[] @relation("WarpingYarnTransferFrom")
-  yarnTransfersIn  WarpingYarnTransfer[] @relation("WarpingYarnTransferTo")
+  yarnTransfersOut    WarpingYarnTransfer[]    @relation("WarpingYarnTransferFrom")
+  yarnTransfersIn     WarpingYarnTransfer[]    @relation("WarpingYarnTransferTo")
+  /// D5: dönüş kabulünde doğan leventler.
+  warpBeams           WarpBeam[]               @relation("WarpBeamWarpingOrder")
+  /// D5: bu siparişin leventlerinin iplik dağıtımı (tüketen) / bu siparişin tutmasından düşen dağıtım (tutan).
+  yarnAllocations     WarpBeamYarnAllocation[] @relation("WarpBeamYarnAllocationOrder")
+  yarnAllocationsHeld WarpBeamYarnAllocation[] @relation("WarpBeamYarnAllocationHolder")
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -2491,16 +2496,22 @@ model WarpBeam {
   ///   IN_HOUSE    → ikisi de NULL (WOUND.machineId dolu)
   ///   SUBCONTRACT → subcontractorId
   ///   PURCHASED   → supplierId XOR subcontractorId, TAM BİRİ (fason devereci kendi ipliğiyle faturalayabilir)
-  originKind      WarpBeamOrigin @default(IN_HOUSE)
-  subcontractorId String?        @db.Uuid
-  supplierId      String?        @db.Uuid
+  originKind        WarpBeamOrigin @default(IN_HOUSE)
+  subcontractorId   String?        @db.Uuid
+  supplierId        String?        @db.Uuid
   /// G3 EMANET — MÜLKİYET ekseni (köken ekseninden BAĞIMSIZ, ikinci kolon): dolu ise levent o müşterinin
   /// malıdır; CONSIGNED'da ZORUNLU (CHECK `warp_beams_origin_party_ck`), öteki kökenlerde serbest (fasona
   /// sardırılan levent müşteri ipliğiyle sarılabilir — `resolveOwnerFromLotsTx` kalıtımı). DOĞUM niteliği:
   /// yalnız create/kalıtım yazar, PATCH gövdesinden yazılamaz (E2b); sahiplik değişimi = yeni doğum. Ayrı defter YOK.
-  ownerCustomerId String?        @db.Uuid
+  ownerCustomerId   String?        @db.Uuid
+  /// Fason devere D5: hangi devere siparişinin dönüş kabulünde doğdu — DOĞUM niteliği (PATCH şemasında yok).
+  /// Dolu ise köken SUBCONTRACT ve `warpingReceiptKey` dolu (CHECK `warp_beams_warping_order_ck`).
+  warpingOrderId    String?        @db.Uuid
+  /// Aynı kabul işleminde (tek irsaliye) birlikte doğan leventlerin ortak anahtarı — kabul stornosu LIFO birimi.
+  warpingReceiptKey String?        @db.Uuid
 
   warpSpec            WarpSpec                    @relation("WarpBeamSpec", fields: [warpSpecId], references: [id], onDelete: Restrict)
+  warpingOrder        WarpingOrder?               @relation("WarpBeamWarpingOrder", fields: [warpingOrderId], references: [id], onDelete: Restrict)
   subcontractor       Subcontractor?              @relation("WarpBeamSubcontractor", fields: [subcontractorId], references: [id], onDelete: Restrict)
   supplier            Customer?                   @relation("WarpBeamSupplier", fields: [supplierId], references: [id], onDelete: Restrict)
   ownerCustomer       Customer?                   @relation("WarpBeamOwner", fields: [ownerCustomerId], references: [id], onDelete: Restrict)
@@ -2529,6 +2540,8 @@ model WarpBeam {
   @@index([currentMachineId])
   @@index([weavingOrderId])
   @@index([setKey])
+  @@index([warpingOrderId])
+  @@index([warpingReceiptKey])
   @@map("warp_beams")
 }
 
@@ -2554,6 +2567,8 @@ model WarpBeamEvent {
   /// F5: emanet çıkış kalemi bağı — `SHIP_TO_OWNER`/`SHIP_TO_OWNER_CANCEL` ⇔ dolu (CHECK
   /// `warp_beam_events_consignment_item_ck` iki yönlü); kalem başına TEK `SHIP_TO_OWNER` (partial unique).
   consignmentItemId String?        @db.Uuid
+  /// Fason devere D5: devereci irsaliye no (WOUND; dönüş kabulünde ortak).
+  deliveryNoteNo    String?        @db.VarChar(64)
 
   /// Çözgü metresi; > 0 (CHECK).
   lengthM   Decimal? @db.Decimal(12, 3)
@@ -2639,12 +2654,42 @@ model WarpBeamEventYarn {
   createdAt     DateTime @default(now()) @db.Timestamptz
 
   /// Cascade: kırılım olayın parçası; olay satırı üretimde silinmez (append-only, `test_warp_beam_lifecycle` §0b), yalnız bekçi temizliği tetikler.
-  event    WarpBeamEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  yarnItem Item          @relation("WarpBeamEventYarnItem", fields: [yarnItemId], references: [id], onDelete: Restrict)
+  event       WarpBeamEvent            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  yarnItem    Item                     @relation("WarpBeamEventYarnItem", fields: [yarnItemId], references: [id], onDelete: Restrict)
+  /// D5: bu kırılım satırının ipliği hangi sevk kaleminden düştü (nominal, sevk sırasıyla).
+  allocations WarpBeamYarnAllocation[]
 
   @@unique([eventId, yarnItemId])
   @@index([yarnItemId])
   @@map("warp_beam_event_yarns")
+}
+
+/// FASON DEVERE D5 — dönen leventin ipliğinin sevk kalemlerine DAĞITIMI (DEFTER, append-only, `updatedAt` yok).
+/// Kalem tutması = … − Σ dağıtım(tutan = sipariş); ters yol ebeveyn WOUND'un tipli tersi (WOUND_CANCEL) — iptal
+/// edilen leventin dağıtımı `event.reversal: null` süzgeciyle sayılmaz. Tek yazar `warping-order/receive.ts`.
+model WarpBeamYarnAllocation {
+  id                   String   @id @default(uuid()) @db.Uuid
+  eventYarnId          String   @db.Uuid
+  dispatchItemId       String   @db.Uuid
+  /// Tüketen: leventi doğuran devere siparişi.
+  warpingOrderId       String   @db.Uuid
+  /// Tutan: kalemden tutması düşen sipariş (kendisi, aktarımla gelen ya da devreden = başka kapanmış sipariş).
+  holderWarpingOrderId String   @db.Uuid
+  /// CHECK > 0.
+  kg                   Decimal  @db.Decimal(14, 3)
+  createdAt            DateTime @default(now()) @db.Timestamptz
+
+  /// Cascade: dağıtım kırılımın parçası (kırılım da olayın); üretimde olay satırı silinmez.
+  eventYarn          WarpBeamEventYarn         @relation(fields: [eventYarnId], references: [id], onDelete: Cascade)
+  dispatchItem       SubcontractorDispatchItem @relation("WarpBeamYarnAllocationItem", fields: [dispatchItemId], references: [id], onDelete: Restrict)
+  warpingOrder       WarpingOrder              @relation("WarpBeamYarnAllocationOrder", fields: [warpingOrderId], references: [id], onDelete: Restrict)
+  holderWarpingOrder WarpingOrder              @relation("WarpBeamYarnAllocationHolder", fields: [holderWarpingOrderId], references: [id], onDelete: Restrict)
+
+  @@unique([eventYarnId, dispatchItemId, holderWarpingOrderId])
+  @@index([dispatchItemId])
+  @@index([warpingOrderId])
+  @@index([holderWarpingOrderId])
+  @@map("warp_beam_yarn_allocations")
 }
 
 /// KİM DOKUYOR — `WarpBeamOrigin` kalıbının kardeşi, ikinci bir desen icat edilmez.
@@ -8013,19 +8058,21 @@ model SubcontractorDispatchItem {
   remainderClosedAt DateTime? @db.Timestamptz
 
   // Relations
-  dispatch       SubcontractorDispatch      @relation(fields: [dispatchId], references: [id], onDelete: Cascade)
+  dispatch                SubcontractorDispatch      @relation(fields: [dispatchId], references: [id], onDelete: Cascade)
   /// `onDelete: Restrict` AÇIK: bağ opsiyonel olunca Prisma varsayılanı SetNull'a kayardı (FK drift).
-  roll           Roll?                      @relation(fields: [rollId], references: [id], onDelete: Restrict)
-  warpBeam       WarpBeam?                  @relation("DispatchItemWarpBeam", fields: [warpBeamId], references: [id], onDelete: Restrict)
-  warpBeamEvents WarpBeamEvent[]            @relation("WarpBeamEventDispatchItem")
-  receiptItems   SubcontractorReceiptItem[] @relation("ReceiptItemSource")
-  yarnItem       Item?                      @relation("DispatchItemYarnItem", fields: [yarnItemId], references: [id], onDelete: Restrict)
-  warehouse      Warehouse?                 @relation("DispatchItemWarehouse", fields: [warehouseId], references: [id], onDelete: Restrict)
-  lot            YarnLot?                   @relation("DispatchItemYarnLot", fields: [lotId], references: [id], onDelete: Restrict)
+  roll                    Roll?                      @relation(fields: [rollId], references: [id], onDelete: Restrict)
+  warpBeam                WarpBeam?                  @relation("DispatchItemWarpBeam", fields: [warpBeamId], references: [id], onDelete: Restrict)
+  warpBeamEvents          WarpBeamEvent[]            @relation("WarpBeamEventDispatchItem")
+  receiptItems            SubcontractorReceiptItem[] @relation("ReceiptItemSource")
+  yarnItem                Item?                      @relation("DispatchItemYarnItem", fields: [yarnItemId], references: [id], onDelete: Restrict)
+  warehouse               Warehouse?                 @relation("DispatchItemWarehouse", fields: [warehouseId], references: [id], onDelete: Restrict)
+  lot                     YarnLot?                   @relation("DispatchItemYarnLot", fields: [lotId], references: [id], onDelete: Restrict)
   /// İplik kaleminin defteri — `SUBCONTRACT_*` satırları (CHECK `yarn_movements_fason_link_ck` iki yönlü).
-  yarnMovements  YarnMovement[]             @relation("YarnMovementDispatchItem")
+  yarnMovements           YarnMovement[]             @relation("YarnMovementDispatchItem")
   /// Fason devere D4b-2: kalemin siparişler arası aktarma defteri.
-  warpingYarnTransfers WarpingYarnTransfer[] @relation("WarpingYarnTransferItem")
+  warpingYarnTransfers    WarpingYarnTransfer[]      @relation("WarpingYarnTransferItem")
+  /// Fason devere D5: dönen leventlere dağıtılan iplik (nominal).
+  warpBeamYarnAllocations WarpBeamYarnAllocation[]   @relation("WarpBeamYarnAllocationItem")
 
   /// Sevk kalemi defteri → `updatedAt` YOK (konvansiyon). Güncellemeler DURUM
   /// bayrağı (`remainderClosedAt`; defteri `RollVariance`) ya da parti
