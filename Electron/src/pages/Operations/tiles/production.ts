@@ -1,5 +1,5 @@
 // Üretim karoları (menü kökü Üretim, `/production`; sıra = hub sırası). Fason karolarının ikisi `warehouse.ts`te.
-import { Factory, FilePlus2, Gauge, History, Ruler, Share2, SwatchBook, Spool, AlertOctagon, MonitorPlay, Siren, Layers, CalendarClock, Calculator } from "lucide-react";
+import { Factory, FilePlus2, Gauge, History, Ruler, Share2, SwatchBook, Spool, AlertOctagon, MonitorPlay, Siren, Layers, CalendarClock, Calculator, Truck } from "lucide-react";
 import { isKursunPlanningVisible, isMeterDeviationsVisible, isWorkOrdersVisible } from "../production-regime";
 import { isWeavingOrdersVisible } from "../WeavingOrders/weaving-regime";
 import { isMachineStopsVisible, machineStopsTitle } from "../MachineStops/stop-regime";
@@ -142,6 +142,19 @@ export const productionTiles: OperationsTile[] = [
     to: "/operations/cozgu-hesabi",
     group: "production",
     permission: "warpspec:read",
+    visibleWhen: isWarpBeamsVisible,
+    offHint: flagOffHint("devereEnabled"),
+  },
+  {
+    // FASON DEVERE SİPARİŞLERİ (D6a): `/api/warping-orders` `requireDevereEnabled` + `warping-order:read`; karo aynı
+    // bayrak ve izinle (route `ProtectedRoute` ile birebir). Devere ETKİN değeri iplik zincirini zaten taşır.
+    key: "fason-devere",
+    title: "Fason Devere Siparişleri",
+    description: "Devereciye çözgü işi ver, iplik planı ve sevki (devere, fason çözgü, devereci, iplik sevki)",
+    icon: Truck,
+    to: "/operations/fason-devere",
+    group: "production",
+    permission: "warping-order:read",
     visibleWhen: isWarpBeamsVisible,
     offHint: flagOffHint("devereEnabled"),
   },

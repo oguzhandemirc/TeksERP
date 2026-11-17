@@ -15,6 +15,7 @@ import { WarpPlanInputs } from "./WarpPlanInputs";
 import { ForwardTable } from "./ForwardTable";
 import { ReverseResult } from "./ReverseResult";
 import type { WarpPlanMode } from "./types";
+import { OpenOrderLink } from "./OpenOrderLink";
 
 export function WarpPlanPage() {
   const [s, setS] = useState<WarpPlanState>(emptyWarpPlanState);
@@ -64,6 +65,7 @@ function ResultArea({ s, hasBody, q, fresh }: { s: WarpPlanState; hasBody: boole
         <Callout key={w} tone="warning" className="text-sm">{w}</Callout>
       ))}
       {res.forward && <ForwardTable res={res} forward={res.forward} />}
+      {res.forward && s.mode === "FROM_BEAMS" && <OpenOrderLink s={s} />}
       {res.reverse && <ReverseResult res={res} reverse={res.reverse} />}
     </div>
   );
