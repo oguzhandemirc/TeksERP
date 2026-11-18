@@ -17,6 +17,7 @@ import { assertNoBareFilterParams, parseQueryParams, readFilterList, readIdCondi
 import { createWarpingOrder, patchWarpingOrder, previewWarpingOrder, WARPING_ORDER_MAX_SALES_ORDERS } from "../services/warping-order/create";
 import { cancelPreviewWarpingOrder, cancelWarpingOrder } from "../services/warping-order/cancel";
 import { getWarpingOrder, listWarpingOrders } from "../services/warping-order/read";
+import { listWarpingDelays, WARPING_DELAY_STATES, type WarpingDelayState } from "../services/warping-order/delays";
 import { WARPING_ORDER_MAX_BEAM_LINES, WARPING_ORDER_MAX_EXTRA_SPECS } from "../services/warping-order/plan";
 import warpingOrderYarnRoutes from "./warping-order-yarn.routes";
 import warpingOrderReceiveRoutes from "./warping-order-receive.routes";
@@ -79,6 +80,7 @@ const ListQuery = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
 }).passthrough();
 const FILTERS = ["status", "subcontractorId", "warpSpecId", "salesOrderId", "from", "to"];
+const DELAY_FILTERS = ["state", "subcontractorId"];
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
@@ -182,6 +184,38 @@ router.post("/", requirePermission("warping-order:write"), wrap(async (req) => {
 router.post("/preview", requirePermission("warping-order:write"), wrap(async (req) => {
   const body = parse(PreviewBody, req.body);
   return { status: 200, body: { success: true, data: await previewWarpingOrder(body) } };
+}));
+
+/**
+ * @openapi
+ * /api/warping-orders/delays:
+ *   get:
+ *     tags: [WarpingOrder]
+ *     summary: Devere gecikmeleri (D8b) — açık siparişlerden termini geçmiş / 2 gün içinde / terminsiz olanlar (fason kokpiti bandı)
+ *     description: |
+ *       Etkin termin = sipariş termini, yoksa iptal edilmemiş sevklerin en erken termini; gecikme fabrika günüyle.
+ *       Sayaçlar durum süzgecinden bağımsız, devereci süzgecine bağlı. Devere kapalı → 403 MODULE_DISABLED.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: "filter[state]", schema: { type: string, enum: [ALL, OVERDUE, DUE_SOON, NO_DUE_DATE], default: ALL } }
+ *       - { in: query, name: "filter[subcontractorId]", schema: { type: string }, description: "uuid; virgülle çoklu" }
+ *     responses:
+ *       200: { description: "{ success, data: { data: WarpingDelayRow[], summary: { openCount, overdueCount, dueSoonCount, noDueDateCount } }, warnings? }" }
+ *       400: { description: FILTER_INVALID · FILTER_UNKNOWN }
+ */
+router.get("/delays", requirePermission("warping-order:read"), wrap(async (req) => {
+  assertNoBareFilterParams(req, DELAY_FILTERS);
+  const f = parseQueryParams(req).filters;
+  const unknown = Object.keys(f).filter((k) => !DELAY_FILTERS.includes(k));
+  if (unknown.length > 0) throw AppError.badRequest(`Tanınmayan süzgeç: ${unknown.join(", ")}`, { code: "FILTER_UNKNOWN", params: unknown });
+  const states = readFilterList(f.state);
+  if (states.length > 1 || (states[0] !== undefined && !(WARPING_DELAY_STATES as readonly string[]).includes(states[0]))) {
+    throw AppError.badRequest("filter[state] tek değer olmalı (ALL · OVERDUE · DUE_SOON · NO_DUE_DATE)", { code: "FILTER_INVALID" });
+  }
+  const subs = readFilterList(f.subcontractorId);
+  if (subs.some((s) => !Id.safeParse(s).success)) throw AppError.badRequest("filter[subcontractorId] geçersiz kimlik.", { code: "FILTER_INVALID" });
+  const out = await listWarpingDelays({ state: (states[0] ?? "ALL") as WarpingDelayState, subcontractorIds: subs });
+  return { status: 200, body: { success: true, ...out } };
 }));
 
 /**

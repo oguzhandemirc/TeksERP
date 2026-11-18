@@ -11,6 +11,8 @@ export interface YarnNeedOptions {
   netle?: boolean;
   /** true (varsayılan): devere açıksa hazır leventlerin kalanı çözgü ihtiyacından düşülür. */
   leventDus?: boolean;
+  /** D8b: false (varsayılan, bugünkü eksik): deverecideki iplik yalnız gösterilir; true: fabrika malı payı eksikten düşülür. */
+  deverecideDus?: boolean;
   musteriId?: string;
   urunId?: string;
 }
@@ -33,6 +35,10 @@ export interface YarnNeedRow {
   ayrilanKg?: string;
   /** SY-3 I1: serbest stok − ayrılan (eksiye inebilir = ayrılan stoğu aşıyor); stok bilinmiyorsa null. Eksik buna göre. */
   serbestKg?: string | null;
+  /** D8b (YALNIZ devere + iplik açıkken anahtar var): devere siparişleriyle fasoncularda duran iplik (tüm sahipler). */
+  deverecideKg?: string;
+  /** D8b (devere + iplik + emanet açıkken): deverecideki ipliğin müşteri malı (emanet) payı; eksikten hiç düşülmez. */
+  deverecideEmanetKg?: string;
 }
 
 export interface YarnNeedSummary {
@@ -47,6 +53,8 @@ export interface YarnNeedSummary {
   siparisMetre: string;
   /** SY-3 I1 (yalnız ayar açıkken): Σ ayrılan kg. */
   ayrilanKg?: string;
+  /** D8b (yalnız devere + iplik açıkken): Σ deverecide duran kg. */
+  deverecideKg?: string;
 }
 
 export interface YarnNeedReport {
@@ -55,6 +63,8 @@ export interface YarnNeedReport {
   meta: {
     netle: boolean;
     leventDus: boolean;
+    /** D8b (YALNIZ devere + iplik açıkken anahtar var; kapalıyken yanıt bugünküyle bayt-eşit): deverecideki iplik eksikten düşüldü mü. */
+    deverecideDus?: boolean;
     /** kg'ın çarpıldığı metre: HAM (sipariş metresi ÷ (1 − çekme) ÷ (1 − dokuma firesi)). */
     metreEsasi: "HAM";
     /** Uygulanan dokuma firesi % (etkin ayar; dokuma kapalıyken 0). */
@@ -62,7 +72,8 @@ export interface YarnNeedReport {
     yapisiEksik: Array<{ urunId: string; urunKodu: string; urun: string; kalemSayisi: number; metre: string; eksikler: string[] }>;
     olculemeyen: Array<{ urunId: string; urunKodu: string; urun: string; birim: string; kalemSayisi: number; miktar: string }>;
     leventler: Array<{ cozguKartiId: string; leventSayisi: number; kalanCozguM: string; dusulenKumasM: string }>;
-    kaynaklar: { stok: boolean; emanet: boolean; acikAlis: boolean; leventDusumu: boolean };
+    /** `deverecide` yalnız devere + iplik açıkken (true) — "Deverecide" kolonunun ve rozetinin tek işareti. */
+    kaynaklar: { stok: boolean; emanet: boolean; acikAlis: boolean; leventDusumu: boolean; deverecide?: true };
     hesapZamani: string;
     /** Süzgeç seçenekleri: talebi olan müşteriler ve ürünler (süzme sunucuda). */
     secenekler: { musteriler: Array<{ id: string; ad: string }>; urunler: Array<{ id: string; ad: string }> };

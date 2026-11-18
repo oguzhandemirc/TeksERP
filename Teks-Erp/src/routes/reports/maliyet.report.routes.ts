@@ -30,6 +30,7 @@ const evetHayir = z.enum(["1", "0"], { message: "Değer yalnız 1 ya da 0 olabil
 export const yarnNeedQuerySchema = z.object({
   netle: evetHayir,
   leventDus: evetHayir,
+  deverecideDus: evetHayir,
   musteriId: z.string().uuid("Geçersiz müşteri").optional(),
   urunId: z.string().uuid("Geçersiz ürün").optional(),
 }).strict();
@@ -44,17 +45,18 @@ export const yarnNeedQuerySchema = z.object({
  *     parameters:
  *       - { in: query, name: netle, schema: { type: string, enum: ["1", "0"] }, description: "1 (varsayılan) = depo ve üretimdeki kumaş düşülür" }
  *       - { in: query, name: leventDus, schema: { type: string, enum: ["1", "0"] }, description: "1 (varsayılan) = devere açıksa hazır leventlerin kalanı çözgüden düşülür" }
+ *       - { in: query, name: deverecideDus, schema: { type: string, enum: ["1", "0"] }, description: "0 (varsayılan) = deverecideki iplik yalnız gösterilir; 1 = fabrika malı payı eksikten düşülür (devere + iplik açıkken)" }
  *       - { in: query, name: musteriId, schema: { type: string, format: uuid } }
  *       - { in: query, name: urunId, schema: { type: string, format: uuid } }
  *     responses:
- *       200: { description: "v2 sunum zarfı (data.tablo · anaSayi · uyarilar) + data.detay (satirlar[iplik, cozguKg, atkiKg, ihtiyacKg, serbestStokKg, emanetKg, acikAlisKg, eksikKg, eksikBelirsiz] · ozet · meta[yapisiEksik, olculemeyen, leventler, kaynaklar, hesapZamani]); ayar dokuma.yarnReservationEnabled açıkken satır ayrilanKg/serbestKg, ozet.ayrilanKg, meta.ayirma ve gövdede warnings" }
+ *       200: { description: "v2 sunum zarfı (data.tablo · anaSayi · uyarilar) + data.detay (satirlar[iplik, cozguKg, atkiKg, ihtiyacKg, serbestStokKg, emanetKg, acikAlisKg, eksikKg, eksikBelirsiz] · ozet · meta[yapisiEksik, olculemeyen, leventler, kaynaklar, hesapZamani]); ayar dokuma.yarnReservationEnabled açıkken satır ayrilanKg/serbestKg, ozet.ayrilanKg, meta.ayirma ve gövdede warnings; devere + iplik açıkken satır/özet deverecideKg (emanet açıkken satır deverecideEmanetKg), meta.kaynaklar.deverecide, meta.deverecideDus" }
  *       400: { description: Tanınmayan ya da geçersiz parametre }
  *       403: { description: Maliyet modülü kapalı (MODULE_DISABLED), rapor kapalı ya da yetki yok }
  */
 router.get("/iplik-ihtiyaci", requireReportOpen("maliyet/iplik-ihtiyaci"), requirePermission("report:yarn-need"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     const q = yarnNeedQuerySchema.parse(req.query);
-    const opts = { netle: q.netle !== "0", leventDus: q.leventDus !== "0", musteriId: q.musteriId, urunId: q.urunId };
+    const opts = { netle: q.netle !== "0", leventDus: q.leventDus !== "0", deverecideDus: q.deverecideDus === "1", musteriId: q.musteriId, urunId: q.urunId };
     const detay = await yarnNeedReport(opts);
     const warnings = yarnReservationWarnings(detay);
     res.status(200).json({ success: true, data: { ...buildYarnNeedSunumu(detay, opts), detay }, ...(warnings.length ? { warnings } : {}) });
