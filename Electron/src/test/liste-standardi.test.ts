@@ -57,6 +57,10 @@ const EXEMPT: Record<string, string> = {
   "Operations/WarpingOrders/HoldingsSection.tsx": GOMULU,
   "Operations/WarpingOrders/TransferParts.tsx": GOMULU,
   "Operations/WarpingOrders/YarnReturnsList.tsx": GOMULU,
+  // D7a: dönen leventler bölümü (kabul başına birkaç levent), mutabakat iplik satırları, kabul diyaloğu satırları.
+  "Operations/WarpingOrders/ReceiptsSection.tsx": GOMULU,
+  "Operations/WarpingOrders/ReceiveParts.tsx": GOMULU,
+  "Operations/WarpingOrders/SettlementSummary.tsx": GOMULU,
   "Operations/WeavingFloor/jobs/BulkParts.tsx": GOMULU,
   "Operations/WeavingFloor/stops/StopBulkParts.tsx": GOMULU,
   "Operations/WorkOrders/BranchLanes.tsx": GOMULU,

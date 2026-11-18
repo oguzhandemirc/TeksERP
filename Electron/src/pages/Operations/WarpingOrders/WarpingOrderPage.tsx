@@ -1,7 +1,7 @@
 // =============================================================================
 // FASON DEVERE SİPARİŞİ — kayıt sayfası (plan E4) · `operations/fason-devere/:id`
 // =============================================================================
-// Bölümler: özet · iplik planı (sunucuda donmuş) · sevkler (D6b; yeni sevk, iptal, irsaliye + çözgü talimatı) · deverecide tutulan iplik (iade, aktarma, geçmiş). Yazma düğmeleri izinle (`PermissionGate`) ve durumla çizilir:
+// Bölümler: özet · iplik planı (sunucuda donmuş) · sevkler (D6b; yeni sevk, iptal, irsaliye + çözgü talimatı) · deverecide tutulan iplik (iade, aktarma, geçmiş) · dönen leventler (D7a; kabul, mutabakat, geri alma). Yazma düğmeleri izinle (`PermissionGate`) ve durumla çizilir:
 // düzenle OPEN/IN_PROGRESS (sevkliyken yalnız meta), iptal yalnız OPEN'da anlamlı — sevkli siparişte önizleme
 // "önce sevkleri iptal edin" der. Kapalı/iptal siparişte yazma yüzeyi HİÇ çizilmez.
 // =============================================================================
@@ -22,6 +22,7 @@ import { HoldingsSection } from "./HoldingsSection";
 import { InstructionPrintDialog } from "./InstructionPrintDialog";
 import { OrderSummary } from "./OrderSummary";
 import { PlanTable } from "./PlanTable";
+import { ReceiptsSection } from "./ReceiptsSection";
 import { WarpingOrderFormDialog } from "./WarpingOrderFormDialog";
 import { editModeOf } from "./order-model";
 import { useWarpingOrder, WARPING_ORDERS_PATH } from "./service";
@@ -63,6 +64,7 @@ export function WarpingOrderPage() {
             </section>
             <DispatchesSection order={o} />
             <HoldingsSection order={o} />
+            <ReceiptsSection order={o} />
           </>
         )}
       </PageBody>
