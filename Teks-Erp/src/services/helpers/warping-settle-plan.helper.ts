@@ -10,6 +10,7 @@ import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import type { WarpingYarnItem } from "./warping-yarn-open.helper";
+import { qtyText, pctText } from "./warping-message.helper";
 
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 const kg = (v: Prisma.Decimal) => v.toFixed(3);
@@ -84,7 +85,7 @@ function explicitLines(held: WarpingYarnItem[], body: WarpingSettleBody): Map<st
     const ret = dec3(l.returnKg ?? 0, "İade kg");
     const waste = dec3(l.wasteKg ?? 0, "Fire kg");
     if (ret.plus(waste).gt(it.openKg)) {
-      throw AppError.badRequest(`${it.dispatchNo} kaleminde iade + fire, deverecide tutulanı aşamaz (tutulan ${kg(it.openKg)} kg, iade ${kg(ret)} + fire ${kg(waste)}).`, {
+      throw AppError.badRequest(`${it.dispatchNo} kaleminde iade + fire, deverecide tutulanı aşamaz (tutulan ${qtyText(it.openKg)} kg, iade ${qtyText(ret)} kg + fire ${qtyText(waste)} kg).`, {
         code: "WARPING_SETTLE_EXCEEDS", dispatchItemId: it.dispatchItemId, holdingKg: kg(it.openKg),
       });
     }
@@ -124,8 +125,8 @@ export function buildSettlePlan(held0: WarpingYarnItem[], yarns: SettlePlanYarnI
     totWound = totWound.plus(woundKg);
     const p = pct(wasteKg, woundKg.plus(wasteKg));
     const over = tol !== null && p !== null && p.gt(tol);
-    if (over) warnings.push(`${y.code}: fire %${p!.toFixed(2)} toleransı (%${tol!.toFixed(2)}) aşıyor — kapanış engellenmez, gerekçe yazmanız önerilir.`);
-    if (D(y.unallocatedKg).gt(0)) warnings.push(`${y.code}: nominal tüketim deverecideki iplikten ${kg(D(y.unallocatedKg))} kg fazla (bilgi).`);
+    if (over) warnings.push(`${y.code}: fire %${pctText(p!)} toleransı (%${pctText(tol!)}) aşıyor — kapanış engellenmez, gerekçe yazmanız önerilir.`);
+    if (D(y.unallocatedKg).gt(0)) warnings.push(`${y.code}: nominal tüketim deverecideki iplikten ${qtyText(D(y.unallocatedKg))} kg fazla (bilgi).`);
     return {
       yarnItemId: y.yarnItemId, code: y.code, plannedWasteKg: Prisma.Decimal.max(ZERO, D(y.grossKg).minus(y.netKg)), woundKg,
       holdingKg: sum((l) => l.holdingKg), returnKg: sum((l) => l.returnKg), wasteKg, keepKg: sum((l) => l.keepKg), wastePct: p, overTolerance: over,
@@ -133,7 +134,7 @@ export function buildSettlePlan(held0: WarpingYarnItem[], yarns: SettlePlanYarnI
   });
   const wastePct = pct(totWaste, totWound.plus(totWaste));
   const overAll = tol !== null && wastePct !== null && wastePct.gt(tol);
-  if (overAll) warnings.unshift(`Sipariş geneli fire %${wastePct!.toFixed(2)} toleransı (%${tol!.toFixed(2)}) aşıyor — kapanış engellenmez.`);
+  if (overAll) warnings.unshift(`Sipariş geneli fire %${pctText(wastePct!)} toleransı (%${pctText(tol!)}) aşıyor — kapanış engellenmez.`);
   return { isDefault, lines, yarns: yarnRows, wastePct, tolerancePct: tol, overTolerance: overAll || yarnRows.some((y) => y.overTolerance), warnings };
 }
 

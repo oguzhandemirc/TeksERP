@@ -15,6 +15,7 @@ import { cancelYarnReturnTx } from "../subcontractor-yarn.service";
 import { loadWarpingYarnItems, lockDispatchItemsTx, WARPING_TRANSFER_CANCEL, WARPING_WASTE, WARPING_WASTE_CANCEL } from "../helpers/warping-yarn-open.helper";
 import { WARPING_ORDER_TABLE } from "./create";
 import { loadSettlementRecord, newestLiveSettlement, WARPING_REOPEN, type WarpingSettlementRecord } from "./settle-record";
+import { qtyText } from "../helpers/warping-message.helper";
 
 type Tx = Prisma.TransactionClient;
 const kg = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v).toFixed(3);
@@ -81,7 +82,7 @@ async function claimForReopenTx(tx: Tx, id: string, userId: string): Promise<voi
 async function cancelBackTransferTx(tx: Tx, t: { id: string; dispatchItemId: string; fromWarpingOrderId: string; toWarpingOrderId: string; qtyKg: Prisma.Decimal }, userId: string) {
   const held = (await loadWarpingYarnItems(tx, { warpingOrderId: t.toWarpingOrderId })).find((i) => i.dispatchItemId === t.dispatchItemId)?.openKg ?? new Prisma.Decimal(0);
   if (held.lt(t.qtyKg)) {
-    throw AppError.conflict(`Geri aktarım geri alınamaz — iplik kalemin kendi siparişinde artık yok (tutulan ${kg(held)} kg, gereken ${kg(t.qtyKg)} kg).`, { code: "WARPING_REOPEN_TRANSFER_HELD" });
+    throw AppError.conflict(`Geri aktarım geri alınamaz — iplik kalemin kendi siparişinde artık yok (tutulan ${qtyText(held)} kg, gereken ${qtyText(t.qtyKg)} kg).`, { code: "WARPING_REOPEN_TRANSFER_HELD" });
   }
   await tx.warpingYarnTransfer.create({
     data: {

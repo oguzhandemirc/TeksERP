@@ -24,6 +24,7 @@ import { carryOverByYarn, loadWarpingYarnHoldings, loadWarpingYarnItems, lotKey,
 import { WARPING_ORDER_TABLE } from "./create";
 import { loadWarpingOrderDto } from "./read";
 import { buildWarpingInstruction, type WarpingInstruction } from "./instruction";
+import { qtyText } from "../helpers/warping-message.helper";
 
 type Tx = Prisma.TransactionClient;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
@@ -220,7 +221,7 @@ export async function dispatchClaimedWarpingOrderTx(
   for (const y of order.yarns) {
     const s = sums.get(y.yarnItemId);
     const net = s ? receivedKg(s) : D(0);
-    if (net.gt(y.grossKg)) warnings.push(`${y.yarnItem.code}: plan ${kg(D(y.grossKg))} kg, gönderilen ${kg(net)} kg — fazla ${kg(net.minus(y.grossKg))} kg deverecide kalır ya da iade edilir.`);
+    if (net.gt(y.grossKg)) warnings.push(`${y.yarnItem.code}: plan ${qtyText(D(y.grossKg))} kg, gönderilen ${qtyText(net)} kg — fazla ${qtyText(net.minus(y.grossKg))} kg deverecide kalır ya da iade edilir.`);
   }
   await emitSubcontractDispatchedTx(tx, dispatch.id, userId);
   return { dispatch, yarn, ownerCustomerId, warnings, wasOpen: order.wasOpen, orderNo: order.orderNo };

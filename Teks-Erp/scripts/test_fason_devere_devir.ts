@@ -13,6 +13,7 @@
 //   OKU  deverecide okuyucusu fasoncu × iplik × lot, sipariş kırılımı; Σ tutma = kalemin açık bakiyesi
 //   Yarış iki eşzamanlı aktarma tutmayı birlikte aşamaz · iki eşzamanlı iade aynı kalemi birlikte aşamaz
 //   DB   CHECK (tür ⇔ ters bağ, kg > 0, kaynak ≠ hedef) · çift ters unique · uçların `requireIplikEnabled`'ı
+//   MSG  devere insan metninde sayı ölçü sınıfı (ayırıcısız, ondalık virgül; `details` makine biçimi) + ham biçim taraması
 // NEGATİF SONDA (koşuldu 2026-11-18): bkz. arşiv notu "Fason devere D4b-2".
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım; ayarlar FOTOĞRAFINA döndürülür, kendi kayıtlarını siler.
 // =============================================================================
@@ -36,6 +37,7 @@ import { cancelWarpingDispatch, previewCancelWarpingDispatch } from "../src/serv
 import { previewWarpingTransfer, transferWarpingYarn, type WarpingTransferLineInput } from "../src/services/warping-order/yarn-transfer";
 import { cancelWarpingTransfer, previewCancelWarpingTransfer } from "../src/services/warping-order/yarn-transfer-cancel";
 import { cancelWarpingYarnReturn, listWarpingYarnHoldings, returnWarpingYarn, warpingYarnAtSubcontractors } from "../src/services/warping-order/yarn-return";
+import { pctText, qtyText } from "../src/services/helpers/warping-message.helper";
 
 let pass = 0;
 let fail = 0;
@@ -45,14 +47,14 @@ function check(label: string, ok: boolean, detail = ""): void {
   console.log(`${ok ? "✅" : "❌"} ${label}${detail ? " — " + detail : ""}`);
 }
 const TAG = `TEST-FDD-${process.pid}`;
-type Err = { status?: number; code?: string; msg: string };
+type Err = { status?: number; code?: string; msg: string; details?: Record<string, unknown> };
 const errOf = async (fn: () => Promise<unknown>): Promise<Err | null> => {
   try {
     await fn();
     return null;
   } catch (e) {
-    const x = e as { statusCode?: number; details?: { code?: string }; message?: string; code?: string };
-    return { status: x.statusCode, code: x.details?.code ?? x.code, msg: String(x.message ?? e) };
+    const x = e as { statusCode?: number; details?: { code?: string } & Record<string, unknown>; message?: string; code?: string };
+    return { status: x.statusCode, code: x.details?.code ?? x.code, msg: String(x.message ?? e), details: x.details };
   }
 };
 const show = (e: Err | null) => (e ? `${e.status} ${e.code ?? ""} ${e.msg.slice(0, 120)}` : "hata yok");
@@ -145,6 +147,7 @@ async function main(): Promise<void> {
     check("S11a iade: depo +5, A'nın X tutması 25", (await depo(X, xL1)) === depoX0 + 5 && (await holds(A, X)) === 25 && r1.holdingKg === "25.000", `${await depo(X, xL1)} ${await holds(A, X)}`);
     const eOver = await errOf(() => returnWarpingYarn(A, { dispatchItemId: itX, qtyKg: 25.001, reasonCode: R }, U));
     check("S11b tutmayı aşan iade → 400 YARN_RETURN_EXCEEDS", eOver?.status === 400 && eOver.code === "YARN_RETURN_EXCEEDS", show(eOver));
+    check("MSGa iade aşım metni Türkçe sayı biçiminde (tutulan 25 kg, iade 25,001 kg); details makine biçiminde", !!eOver?.msg.includes("(tutulan 25 kg, iade 25,001 kg)") && eOver?.details?.holdingKg === "25.000", show(eOver));
     await setSetting(SETTING_KEYS.IPLIK_ENABLED, "false");
     const eMod = await errOf(() => returnWarpingYarn(A, { dispatchItemId: itX, qtyKg: 1, reasonCode: R }, U));
     await setSetting(SETTING_KEYS.IPLIK_ENABLED, "true");
@@ -173,6 +176,7 @@ async function main(): Promise<void> {
     check("AKTd replay: aynı token farklı gövde → 409 CLIENT_TOKEN_COLLISION", eCol?.status === 409 && eCol.code === "CLIENT_TOKEN_COLLISION", show(eCol));
     const eEx = await errOf(() => move(A, B, [{ yarnItemId: X, qtyKg: 20.001 }]));
     check("AKTe tutmayı aşan aktarma → 400 WARPING_TRANSFER_EXCEEDS (eksi bakiye kapısı)", eEx?.status === 400 && eEx.code === "WARPING_TRANSFER_EXCEEDS", show(eEx));
+    check("MSGb aktarma aşım metni Türkçe sayı biçiminde (20 kg / 20,001 kg); details makine biçiminde", !!eEx?.msg.includes("tuttuğu 20 kg, aktarılmak istenen 20,001 kg") && eEx?.details?.availableKg === "20.000" && eEx?.details?.requestedKg === "20.001", show(eEx));
     const eOff = await errOf(() => move(A, B, [{ yarnItemId: W, qtyKg: 1 }]));
     check("AKTf plan dışı iplik → 400 WARPING_YARN_NOT_IN_PLAN", eOff?.status === 400 && eOff.code === "WARPING_YARN_NOT_IN_PLAN", show(eOff));
     const eSub = await errOf(() => move(A, C, [{ yarnItemId: X, qtyKg: 1 }]));
@@ -286,6 +290,15 @@ async function main(): Promise<void> {
     check("Modül: on bir iplik ucunun her biri `requireIplikEnabled`'ı uç başına alır (403 MODULE_DISABLED)", gated.every(Boolean) && (routes.match(/^router\.(get|post)\(/gm) ?? []).length === ends.length, JSON.stringify(gated));
     const main = fs.readFileSync(path.join(__dirname, "../src/routes/warping-order.routes.ts"), "utf8");
     check("Modül: alt router `/:id`den önce ve devere kapısının arkasında bağlı", main.indexOf("router.use(verifyToken, requireDevereEnabled)") < main.indexOf('router.use("/", warpingOrderYarnRoutes)') && main.indexOf('router.use("/", warpingOrderYarnRoutes)') < main.indexOf('router.get("/:id"'));
+    // MSG — devere metin sayı biçimi: ölçü sınıfı (ayırıcısız, ondalık virgül, sondaki sıfır yok; genel.md)
+    check("MSGc qtyText/pctText: 25000.5 → \"25000,5\" · \"12.000\" → \"12\" · 0.0004 → \"0\" · \"3.250\" → \"3,25\"", qtyText(25000.5) === "25000,5" && qtyText("12.000") === "12" && qtyText(new Prisma.Decimal("1.230")) === "1,23" && qtyText(0.0004) === "0" && pctText("3.250") === "3,25", `${qtyText(25000.5)} ${qtyText("12.000")} ${pctText("3.250")}`);
+    const MSG_DIRS = ["../src/services/warping-order", "../src/services/helpers"].map((d) => path.join(__dirname, d));
+    const msgFiles = MSG_DIRS.flatMap((d) => fs.readdirSync(d).filter((n) => n.endsWith(".ts") && (d.endsWith("warping-order") || /^warping-/.test(n))).map((n) => path.join(d, n)))
+      .concat(["warp-beam-wind.service.ts", "warp-plan.service.ts"].map((n) => path.join(__dirname, "../src/services", n)));
+    // İnsan metni: AppError/uyarı/mesaj şablonu içinde ham kg biçimleyici (`kg(` · `kg3(` · `.toFixed(`) ya da `Number(` olmaz.
+    const RAW_IN_MSG = /(AppError\.\w+\(|warnings\.(push|unshift)\(|out\.push\(|blockers\.push\(|message: )`[^`]*\$\{[^}`]*(\bkg3?\(|\.toFixed\(|\bNumber\()/;
+    const rawHits = msgFiles.flatMap((p) => fs.readFileSync(p, "utf8").split("\n").map((l, i) => (RAW_IN_MSG.test(l) ? `${path.basename(p)}:${i + 1}` : null)).filter((x): x is string => x !== null));
+    check(`MSGd devere mesajlarında ham sayı biçimi yok (${msgFiles.length} dosya; körlük zemini ≥ 20)`, msgFiles.length >= 20 && rawHits.length === 0, rawHits.join(", "));
     void dE;
   } finally {
     const ds = await prisma.subcontractorDispatch.findMany({ where: { warpingOrderId: { in: orderIds } }, select: { id: true } });
