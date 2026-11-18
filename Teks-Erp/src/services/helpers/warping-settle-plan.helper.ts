@@ -10,7 +10,7 @@ import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import type { WarpingYarnItem } from "./warping-yarn-open.helper";
-import { qtyText, pctText } from "./warping-message.helper";
+import { qtyText, pctText } from "./qty-text.helper";
 
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 const kg = (v: Prisma.Decimal) => v.toFixed(3);

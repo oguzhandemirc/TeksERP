@@ -67,6 +67,7 @@
 - [ÇEKİRDEK] Ölçülen fark `closeToMeasuredTx`; açık koşumda son levent 409 `WARP_DISMOUNT_OPEN_RUN`; pencere tek SQL `beamsMountedDuring`.
 - [PROFİL] `devere.mountTracking` false → 409 `WARP_MOUNT_TRACKING_OFF`; `devere.mountTrackingRequired` → 400 `WARP_MOUNT_METHOD_REQUIRED`; yüzeyler yalnız açıkken.
 - [ÇEKİRDEK] Levent yeni izin kodu açmaz; alan doğrulaması `devere-station-fields.middleware`; bilinmeyen durum çökmez.
+- [ÇEKİRDEK] Levent ve devere insan metnindeki kg/metre/yüzdeyi yalnız `helpers/qty-text.helper` (`qtyText`/`pctText`) ile bas; `details`/DTO makine biçiminde kalır.
 - [ÇEKİRDEK] Beyansız doff damgası DB saatinden (`readDbNow`).
 - [ÇEKİRDEK] Otomatik tüketim tek yazar `autoConsumeForRollTx` (doff anı `beamsMountedDuring`); kalan yetmezse KK1 engellenmez, uyarır.
 - [ÇEKİRDEK] Top iptali `cancelConsumedForRollTx`, SCRAP'ta yazmaz; `Roll`a levent kolonu açma; [PROFİL] `devere.autoConsume` false; uyarı metni aynen basılır.

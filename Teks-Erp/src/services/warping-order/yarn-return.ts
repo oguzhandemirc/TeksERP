@@ -14,7 +14,7 @@ import { cancelYarnReturn, returnYarnTx, type ReturnYarnInput } from "../subcont
 import { loadWarpingYarnHoldings, loadWarpingYarnItems, lockDispatchItemsTx, WARPING_TRANSFER } from "../helpers/warping-yarn-open.helper";
 import { WARPING_ORDER_TABLE } from "./create";
 import { listWarpingTransfers as listWarpingTransferBatches } from "./yarn-transfer-shared";
-import { qtyText } from "../helpers/warping-message.helper";
+import { qtyText } from "../helpers/qty-text.helper";
 
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 const kg = (v: Prisma.Decimal) => v.toFixed(3);

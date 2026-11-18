@@ -17,6 +17,7 @@ import { assertCoversRemaining, BEAM_TERMINAL, closeToMeasuredTx, loadBeamTx, po
 import { assertWarpBeamConsumeReplayAlive, tokenReplay } from "./helpers/token-replay.helper";
 import { freshBeamDto } from "./warp-beam-mount.service";
 import type { WarpBeamDto } from "./warp-beam.service";
+import { qtyText } from "./helpers/qty-text.helper";
 
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 
@@ -96,7 +97,7 @@ export async function consumeBeam(id: string, input: ConsumeInput, userId?: stri
       return { ev, beamNo: beam.beamNo, left: remaining.minus(lengthM) };
     });
     await logWarpBeamEventAudit({ userId, eventId: result.ev.id, kind: "CONSUMED", data: { beamId: id, lengthM: Number(lengthM), lengthSource: input.lengthSource } });
-    return { success: true, data: await freshBeamDto(id), message: `${result.beamNo}: ${lengthM} m tüketildi — kalan ${result.left} m` };
+    return { success: true, data: await freshBeamDto(id), message: `${result.beamNo}: ${qtyText(lengthM)} m tüketildi — kalan ${qtyText(result.left)} m` };
   });
 }
 
@@ -128,7 +129,7 @@ export async function adjustBeam(id: string, input: AdjustInput, userId?: string
     return { ev, beamNo: beam.beamNo };
   });
   await logWarpBeamEventAudit({ userId, eventId: result.ev.id, kind, data: { beamId: id, lengthM: Number(lengthM), reasonCode: input.reasonCode } });
-  return { success: true, data: await freshBeamDto(id), message: `${result.beamNo}: kalan ${input.direction === "IN" ? "+" : "−"}${lengthM} m düzeltildi` };
+  return { success: true, data: await freshBeamDto(id), message: `${result.beamNo}: kalan ${input.direction === "IN" ? "+" : "−"}${qtyText(lengthM)} m düzeltildi` };
 }
 
 export interface ExhaustInput {
@@ -188,7 +189,7 @@ export async function exhaustBeam(id: string, input: ExhaustInput, userId?: stri
     return { ev, beamNo: beam.beamNo, residual, closed, warnings };
   });
   await logWarpBeamEventAudit({ userId, eventId: result.ev.id, kind: "EXHAUSTED", data: { beamId: id, residualM: Number(result.residual), closed: result.closed.kind, reasonCode: input.reasonCode ?? null } });
-  return { success: true, data: await freshBeamDto(id), message: `${result.beamNo} bitti — artık ${result.residual} m${result.closed.kind ? ` (${result.closed.kind} ${result.closed.deltaM.abs()} m ile kapatıldı)` : ""}`, ...(result.warnings.length ? { warnings: result.warnings } : {}) };
+  return { success: true, data: await freshBeamDto(id), message: `${result.beamNo} bitti — artık ${qtyText(result.residual)} m${result.closed.kind ? ` (${result.closed.kind} ${qtyText(result.closed.deltaM.abs())} m ile kapatıldı)` : ""}`, ...(result.warnings.length ? { warnings: result.warnings } : {}) };
 }
 
 export interface ScrapPreviewDto {
@@ -232,7 +233,7 @@ export async function scrapBeam(id: string, input: { reasonCode: string; reason?
     return { ev, beamNo: beam.beamNo, remaining, warnings };
   });
   await logWarpBeamEventAudit({ userId, eventId: result.ev.id, kind: "SCRAPPED", data: { beamId: id, lengthM: Number(result.remaining), reasonCode: input.reasonCode } });
-  return { success: true, data: await freshBeamDto(id), message: `${result.beamNo} hurdaya ayrıldı — ${result.remaining} m fire`, ...(result.warnings.length ? { warnings: result.warnings } : {}) };
+  return { success: true, data: await freshBeamDto(id), message: `${result.beamNo} hurdaya ayrıldı — ${qtyText(result.remaining)} m fire`, ...(result.warnings.length ? { warnings: result.warnings } : {}) };
 }
 
 /** Tüketim geri alma — LIFO'ya girmez (durum değiştirmez); satır silinmez, `CONSUMED_CANCEL` ters bağla. */
@@ -250,5 +251,5 @@ export async function cancelConsumed(id: string, eventId: string, reason: string
     return { ev, beamNo: beam.beamNo, lengthM: ev0.lengthM };
   });
   await logWarpBeamEventAudit({ userId, eventId: result.ev.id, kind: "CONSUMED_CANCEL", data: { beamId: id, reversesEventId: eventId, reason: why } });
-  return { success: true, data: await freshBeamDto(id), message: `${result.beamNo}: ${result.lengthM} m tüketim geri alındı` };
+  return { success: true, data: await freshBeamDto(id), message: `${result.beamNo}: ${result.lengthM == null ? "" : `${qtyText(result.lengthM)} m `}tüketim geri alındı` };
 }
