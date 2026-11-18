@@ -26,6 +26,7 @@ import { toWarpBeamDto, toWarpBeamEventDto, type WarpBeamDto, type WarpBeamEvent
 import { resolveOwnerFromLotsTx } from "./helpers/emanet-owner.helper";
 import { assertWarpingWoundCancellableTx } from "./helpers/warping-receipt-guard.helper";
 import { assertBeamWeavingLinkGate, assertWeavingOrderLinkableTx, warpSpecMismatchWarning } from "./helpers/production-chain-gates.helper";
+import { qtyText } from "./helpers/warping-message.helper";
 
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 
@@ -157,12 +158,12 @@ async function windWarpBeamFresh(id: string, input: WindWarpBeamInput, userId?: 
   const issueKg = issuesSorted.reduce((acc, l) => acc.plus(kg(l.qtyKg, "İplik çıkış kg")), D(0));
   const returnKg = returnsSorted.reduce((acc, l) => acc.plus(kg(l.qtyKg, "Dip iade kg")), D(0));
   if (returnKg.gt(issueKg)) {
-    throw AppError.badRequest(`Dönen bobin dibi (${returnKg} kg) cağlığa yüklenen brüt çıkışı (${issueKg} kg) aşamaz.`, { code: "WARP_RETURN_EXCEEDS_ISSUE", issueKg: Number(issueKg), returnKg: Number(returnKg) });
+    throw AppError.badRequest(`Dönen bobin dibi (${qtyText(returnKg)} kg) cağlığa yüklenen brüt çıkışı (${qtyText(issueKg)} kg) aşamaz.`, { code: "WARP_RETURN_EXCEEDS_ISSUE", issueKg: Number(issueKg), returnKg: Number(returnKg) });
   }
   if (count > 1 && inHouse && issueKg.gt(0)) {
     // Beyanlı yaklaşıklık uyarısı: takım toplam çıkışı N × nominalden %25'ten fazla sapıyorsa söyle (red değil).
     const nominalSet = theoreticalKg.mul(count);
-    if (issueKg.minus(nominalSet).abs().gt(nominalSet.mul(0.25))) warnings.push(`Takım çıkışı ${issueKg} kg, ${count} × nominal ${nominalSet} kg'dan %25'ten fazla sapıyor — adet ya da kg'yi kontrol edin.`);
+    if (issueKg.minus(nominalSet).abs().gt(nominalSet.mul(0.25))) warnings.push(`Takım çıkışı ${qtyText(issueKg)} kg, ${count} × nominal ${qtyText(nominalSet)} kg'dan %25'ten fazla sapıyor — adet ya da kg'yi kontrol edin.`);
   }
   const prefix = input.physicalBeamNoPrefix?.trim() || null;
   const firstPhysical = siblingPhysicalNo(prefix, 1, beam.physicalBeamNo);
@@ -205,7 +206,7 @@ async function windWarpBeamFresh(id: string, input: WindWarpBeamInput, userId?: 
   // Kardeş doğuşları audit'e (best-effort, tx dışında): her biri ayrı WARP_BEAM kaydıdır.
   for (const s of sibs) await AuditService.log({ userId, action: "CREATE", tableName: "WARP_BEAM", recordId: s.id, newData: { beamNo: s.beamNo, setKey, siblingOf: beam.beamNo, lengthM: Number(lengthM) } }).catch(() => undefined);
   const adlar = [beam.beamNo, ...sibs.map((s) => s.beamNo)].join(", ");
-  return windResult(id, setKey, count > 1 ? `${adlar} sarıldı (${count} adet) — ${Number(lengthM)} m/levent, nominal ${Number(theoreticalKg)} kg/levent` : `${beam.beamNo} sarıldı — ${Number(lengthM)} m, nominal ${Number(theoreticalKg)} kg`, warnings);
+  return windResult(id, setKey, count > 1 ? `${adlar} sarıldı (${count} adet) — ${qtyText(lengthM)} m/levent, nominal ${qtyText(theoreticalKg)} kg/levent` : `${beam.beamNo} sarıldı — ${qtyText(lengthM)} m, nominal ${qtyText(theoreticalKg)} kg`, warnings);
 }
 
 // ── SARIMI İPTAL ET (READY → CANCELLED, WOUND_CANCEL) ───────────────────────────

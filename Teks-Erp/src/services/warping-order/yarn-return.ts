@@ -14,6 +14,7 @@ import { cancelYarnReturn, returnYarnTx, type ReturnYarnInput } from "../subcont
 import { loadWarpingYarnHoldings, loadWarpingYarnItems, lockDispatchItemsTx, WARPING_TRANSFER } from "../helpers/warping-yarn-open.helper";
 import { WARPING_ORDER_TABLE } from "./create";
 import { listWarpingTransfers as listWarpingTransferBatches } from "./yarn-transfer-shared";
+import { qtyText } from "../helpers/warping-message.helper";
 
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 const kg = (v: Prisma.Decimal) => v.toFixed(3);
@@ -41,7 +42,7 @@ export async function returnWarpingYarnTx(tx: Prisma.TransactionClient, id: stri
   if (!it || it.openKg.lte(0)) throw AppError.notFound("Bu sipariş bu sevk kaleminden iplik tutmuyor.", { code: "WARPING_YARN_NOT_HELD" });
   const qty = D(input.qtyKg).toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP);
   if (qty.gt(it.openKg)) {
-    throw AppError.badRequest(`İade, siparişin deverecide tuttuğu ipliği aşamaz (tutulan ${kg(it.openKg)} kg, iade ${kg(qty)} kg).`, { code: "YARN_RETURN_EXCEEDS", holdingKg: kg(it.openKg) });
+    throw AppError.badRequest(`İade, siparişin deverecide tuttuğu ipliği aşamaz (tutulan ${qtyText(it.openKg)} kg, iade ${qtyText(qty)} kg).`, { code: "YARN_RETURN_EXCEEDS", holdingKg: kg(it.openKg) });
   }
   let backTransferBatchId: string | null = null;
   let backTransferId: string | null = null;

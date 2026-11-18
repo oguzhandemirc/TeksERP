@@ -171,7 +171,7 @@ async function main(): Promise<void> {
     // ── S15 K4 lot kuralı + S10 plan fazlası ─────────────────────────────
     const d2 = await send(O1, [{ yarnItemId: X, warehouseId: whId, lotId: xL2, qtyKg: 35 }]);
     check("S15b WARN: ikinci lot sevk edilir + lot karışımı uyarısı", d2.warnings.some((w) => /birden çok lot/.test(w)), JSON.stringify(d2.warnings));
-    check("S10b plandan fazla (X 55 > 50) meşru + fazla uyarısı", d2.warnings.some((w) => /fazla 5\.000 kg/.test(w)), JSON.stringify(d2.warnings));
+    check("S10b plandan fazla (X 55 > 50) meşru + fazla uyarısı", d2.warnings.some((w) => /plan 50 kg, gönderilen 55 kg — fazla 5 kg/.test(w)), JSON.stringify(d2.warnings));
     await setSetting(SETTING_KEYS.DEVERE_FASON_LOT_POLICY, "SINGLE_LOT");
     const eSingle = await errOf(() => send(O1, [{ yarnItemId: Y, warehouseId: whId, lotId: yL1, qtyKg: 1 }, { yarnItemId: X, warehouseId: whId, lotId: xL2, qtyKg: 1 }]));
     check("S15c SINGLE_LOT: siparişte karışık lotlu iplik → 409 WARPING_LOT_MIXED", eSingle?.status === 409 && eSingle.code === "WARPING_LOT_MIXED", show(eSingle));
