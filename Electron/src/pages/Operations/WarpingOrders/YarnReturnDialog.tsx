@@ -24,7 +24,7 @@ import { SourcePicker } from "./YarnSourcePickers";
 import type { PickedRef } from "./dispatch-model";
 import type { WarpingYarnHolding } from "./holding-types";
 
-function ReasonChips({ value, onChange }: { value: string; onChange: (c: string) => void }) {
+export function ReasonChips({ value, onChange }: { value: string; onChange: (c: string) => void }) {
   const q = useQuery({ queryKey: ["reason-presets", "YARN_SUBCONTRACT_RETURN", "devere"], queryFn: () => reasonPresetService.list(false) });
   const reasons = useMemo(() => (q.data ?? []).filter((p) => p.kind === "YARN_SUBCONTRACT_RETURN" && p.isActive), [q.data]);
   if (q.isLoading) return <p className="text-sm text-muted-foreground">Sebepler yükleniyor…</p>;
