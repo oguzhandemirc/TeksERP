@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { loadAllForPicker, PICKER_MAX_PAGE_SIZE } from "./picker-loader";
+import { loadAllForPicker, loadAllPagesForPicker, PAGED_PICKER_MAX_PAGES, PAGED_PICKER_PAGE_SIZE, PICKER_MAX_PAGE_SIZE } from "./picker-loader";
 import type { CrudService } from "@/services/crudService";
 
 // Minimal sahte CrudService — yalnız getAll'ı kullanır.
@@ -44,5 +44,47 @@ describe("loadAllForPicker", () => {
     expect(svc.getAll).toHaveBeenCalledWith(
       expect.objectContaining({ sortBy: "code", filters: { isActive: "true", itemType: "FABRIC" } }),
     );
+  });
+});
+
+// Sayfalı uç (CrudService değil, ör. `/api/yarn/stocks` — tavan 200): sayfa sayfa sonuna kadar.
+function pagedSource(total: number) {
+  const rows = Array.from({ length: total }, (_, i) => ({ id: `r${i}` }));
+  return vi.fn(async (page: number, pageSize: number) => ({
+    data: rows.slice((page - 1) * pageSize, page * pageSize),
+    pagination: { total },
+  }));
+}
+
+describe("loadAllPagesForPicker", () => {
+  it("sayfa boyu helper'ın sabitidir ve uç tavanının (200) altında kalır", () => {
+    expect(PAGED_PICKER_PAGE_SIZE).toBeLessThanOrEqual(200);
+  });
+
+  it("tavanı aşan kümeyi KESMEDEN getirir (250 satır → 3 sayfa)", async () => {
+    const fetch = pagedSource(250);
+    const rows = await loadAllPagesForPicker(fetch);
+    expect(rows).toHaveLength(250);
+    expect(rows[249]).toEqual({ id: "r249" });
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(fetch).toHaveBeenNthCalledWith(1, 1, PAGED_PICKER_PAGE_SIZE);
+    expect(fetch).toHaveBeenNthCalledWith(3, 3, PAGED_PICKER_PAGE_SIZE);
+  });
+
+  it("tam sayfa katında fazladan istek atmaz (toplam = sayfa boyu)", async () => {
+    const fetch = pagedSource(PAGED_PICKER_PAGE_SIZE);
+    expect(await loadAllPagesForPicker(fetch)).toHaveLength(PAGED_PICKER_PAGE_SIZE);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("boş küme tek istekle boş döner", async () => {
+    const fetch = pagedSource(0);
+    expect(await loadAllPagesForPicker(fetch)).toEqual([]);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("kaçak döngüde sessiz kesmek yerine HATA fırlatır", async () => {
+    const fetch = pagedSource(PAGED_PICKER_PAGE_SIZE * PAGED_PICKER_MAX_PAGES + 1);
+    await expect(loadAllPagesForPicker(fetch)).rejects.toThrow(/çok büyük/);
   });
 });
