@@ -16,7 +16,10 @@ export interface YarnNeedMeta {
   dokumaFiresiPct?: number;
   yapisiEksik: Array<{ urunId: string; urunKodu: string; urun: string; kalemSayisi: number; metre: string; eksikler: string[] }>;
   olculemeyen: Array<{ urunId: string; urunKodu: string; urun: string; birim: string; kalemSayisi: number; miktar: string }>;
-  kaynaklar: { stok: boolean; emanet: boolean; acikAlis: boolean; leventDusumu: boolean };
+  /** `deverecide` yalnız devere + iplik açıkken (D8b); eski backend göndermez. */
+  kaynaklar: { stok: boolean; emanet: boolean; acikAlis: boolean; leventDusumu: boolean; deverecide?: true };
+  /** D8b: deverecideki iplik eksikten düşüldü mü — yalnız devere + iplik açıkken var. */
+  deverecideDus?: boolean;
   hesapZamani: string;
   /** SY-3 I1: yalnız iplik ayırma ayarı açıkken var (Ayrılan/Serbest sütunları sunucu tablosunda gelir). */
   ayirma?: { isSayisi: number; yapisiEksikIsler: Array<{ isId: string; isNo: string; eksikler: string[] }>; talepNetlendi: boolean; netlenenKumasM: string };
@@ -66,12 +69,17 @@ export function rawBasisText(meta: Pick<YarnNeedMeta, "metreEsasi" | "dokumaFire
 }
 
 /** Hesaba giren / girmeyen kaynak rozetleri — modül kapalıysa "bilinmiyor" diye AÇIKÇA söylenir. */
-export function sourceBadges(k: YarnNeedMeta["kaynaklar"]): Array<{ key: string; label: string; on: boolean }> {
+export function sourceBadges(k: YarnNeedMeta["kaynaklar"], deverecideDus?: boolean): Array<{ key: string; label: string; on: boolean }> {
+  // D8b: devere kapalıyken (anahtar yok) rozet hiç yok — bugünkü ekranla aynı.
+  const devere = k.deverecide
+    ? [{ key: "deverecide", label: deverecideDus ? "Deverecideki iplik düşüldü" : "Deverecideki iplik gösterildi — eksikten düşülmedi", on: Boolean(deverecideDus) }]
+    : [];
   return [
     { key: "stok", label: k.stok ? "Serbest stok düşüldü" : "Stok bilinmiyor (iplik modülü kapalı)", on: k.stok },
     { key: "emanet", label: k.emanet ? "Emanet ayrı gösterildi" : "Emanet takibi kapalı", on: k.emanet },
     { key: "acikAlis", label: k.acikAlis ? "Açık alış düşüldü" : "Açık alış bilinmiyor (ticaret modülü kapalı)", on: k.acikAlis },
     { key: "levent", label: k.leventDusumu ? "Hazır levent düşüldü" : "Hazır levent düşülmedi", on: k.leventDusumu },
+    ...devere,
   ];
 }
 

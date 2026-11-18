@@ -7,7 +7,13 @@ import { REPORT_BY_KEY } from "@/lib/report-catalog";
 import { cn } from "@/lib/utils";
 import { useReportV2 } from "@/pages/Reports/_v2/useReportV2";
 import { ReportV2Frame } from "@/pages/Reports/_v2/view/ReportV2Frame";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
+import { YARN_AT_SUB_PATH } from "@/pages/Operations/YarnAtSubcontractor/service";
 import { fmtQtyDec } from "../shared/format";
+
+/** Fasondaki İplik route'unun izni (`content-routes.tsx` ile aynı). */
+const YARN_AT_SUB_PERMISSION = "warping-order:read";
 import { excludedText, missingText, rawBasisText, reservationText, sourceBadges, wasteSourceText, YARN_NEED_KEY, type YarnNeedMeta, type YarnNeedPresentation } from "./yarn-need-model";
 
 const ENTRY = REPORT_BY_KEY.get(YARN_NEED_KEY)!;
@@ -33,13 +39,33 @@ export function YarnNeedPage() {
   );
 }
 
+/** D8b: "Deverecide" sütununun ayrıntısı — hangi deverecide hangi lot; route izni yoksa bağ çizilmez. */
+function YarnAtSubLink() {
+  const open = useOpenTarget();
+  const { hasPermission } = useRoleAccess();
+  if (!hasPermission(YARN_AT_SUB_PERMISSION)) return null;
+  return (
+    <p className="text-xs text-muted-foreground">
+      Deverecide duran ipliğin firma ve lot ayrıntısı:{" "}
+      <a
+        href={YARN_AT_SUB_PATH}
+        className="font-medium text-primary underline-offset-2 hover:underline"
+        onClick={(e) => { e.preventDefault(); open(YARN_AT_SUB_PATH, e); }}
+        onAuxClick={(e) => { if (e.button === 1) { e.preventDefault(); open(YARN_AT_SUB_PATH, e); } }}
+      >
+        Fasondaki İplik
+      </a>
+    </p>
+  );
+}
+
 function MetaStrip({ meta, basis, notes }: { meta: YarnNeedMeta; basis: string | null; notes: Array<string | null> }) {
   const [open, setOpen] = useState(false);
   const excluded = excludedText(meta);
   return (
     <div className="mt-2 flex flex-col gap-2">
       <ul className="flex flex-wrap gap-1.5" aria-label="Hesaba giren kaynaklar">
-        {sourceBadges(meta.kaynaklar).map((b) => (
+        {sourceBadges(meta.kaynaklar, meta.deverecideDus).map((b) => (
           <li
             key={b.key}
             className={cn(
@@ -51,6 +77,7 @@ function MetaStrip({ meta, basis, notes }: { meta: YarnNeedMeta; basis: string |
           </li>
         ))}
       </ul>
+      {meta.kaynaklar.deverecide ? <YarnAtSubLink /> : null}
       {basis ? <p className="text-xs text-muted-foreground" data-testid="yarn-need-basis">{basis}</p> : null}
       {notes.map((n) => (n ? <p key={n} className="text-xs text-muted-foreground" data-testid="yarn-need-note">{n}</p> : null))}
       {excluded ? (

@@ -79,6 +79,20 @@ describe("İplik İhtiyaç Planı — iplik firesi kaynağı (SY-3 I2)", () => {
   });
 });
 
+describe("İplik İhtiyaç Planı — deverecideki iplik (D8b)", () => {
+  const base = { stok: true, emanet: false, acikAlis: false, leventDusumu: false };
+  it("devere kapalı (anahtar yok) → rozet yok, bugünkü dört rozet", () => {
+    expect(sourceBadges(base).map((b) => b.key)).toEqual(["stok", "emanet", "acikAlis", "levent"]);
+  });
+  it("açık, düşülmedi (varsayılan) → 'gösterildi — eksikten düşülmedi', sönük", () => {
+    const b = sourceBadges({ ...base, deverecide: true }, false).at(-1)!;
+    expect(b).toEqual({ key: "deverecide", label: "Deverecideki iplik gösterildi — eksikten düşülmedi", on: false });
+  });
+  it("açık, düşüldü → 'Deverecideki iplik düşüldü', yeşil", () => {
+    expect(sourceBadges({ ...base, deverecide: true }, true).at(-1)).toEqual({ key: "deverecide", label: "Deverecideki iplik düşüldü", on: true });
+  });
+});
+
 describe("İplik İhtiyaç Planı — iplik ayırma (SY-3 I1)", () => {
   const ay = (over = {}) => ({ isSayisi: 3, yapisiEksikIsler: [], talepNetlendi: true, netlenenKumasM: "1250.5", ...over });
   it("ayar kapalı (ayirma yok) → satır yok", () => {

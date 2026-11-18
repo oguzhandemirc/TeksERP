@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { RefreshButton } from "@/components/RefreshButton";
 import { FASON_COCKPIT_QUERY_KEY, listCockpit } from "./service";
 import { CockpitFilters } from "./CockpitFilters";
+import { DevereDelayBand } from "./DevereDelayBand";
+import { DEVERE_DELAY_QUERY_KEY } from "./devere-delays";
 import { CockpitFirmStrip, CockpitSummaryStrip } from "./CockpitSummary";
 import { COCKPIT_COLUMNS, cockpitRowClass } from "./CockpitTable";
 import type { CockpitFilter } from "./types";
@@ -39,10 +41,11 @@ export function FasonCockpitPage() {
       <PageHeader
         title="Fason Kokpiti"
         description="Fasondaki bütün açık sevkler: ne zaman dönmeli, kaç gün gecikti, fasonda ne kaldı."
-        actions={<RefreshButton queryKey={FASON_COCKPIT_QUERY_KEY} />}
+        actions={<RefreshButton queryKey={FASON_COCKPIT_QUERY_KEY} extraKeys={[DEVERE_DELAY_QUERY_KEY]} />}
       />
       <ListBand>
         <CockpitSummaryStrip summary={summary} />
+        <DevereDelayBand subcontractorId={filter.subcontractorId} />
       </ListBand>
       <ListToolbar>
         <CockpitFirmStrip summary={summary} selectedId={filter.subcontractorId} onSelect={(id) => setFilter({ ...filter, subcontractorId: id })} />
