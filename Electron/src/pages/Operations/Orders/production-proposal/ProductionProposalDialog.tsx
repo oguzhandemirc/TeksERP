@@ -12,6 +12,7 @@ import type { OrderLine } from "../types";
 import { productionProposalService } from "./service";
 import { buildApplyBody, conflictLineIds, initialSelection, isConflict, toggled, type ProposalSelection } from "./selection";
 import { BeamSection, ExcludedSection, WeavingSection, WorkOrderSection, type LineLabel } from "./ProposalSections";
+import { DevereNeedLink } from "./DevereNeedLink";
 import type { ProposalApplyResult } from "./types";
 import { TERIM } from "@/lib/terim";
 
@@ -104,7 +105,7 @@ export function ProductionProposalDialog({ open, onOpenChange, orderId, orderNum
               onPlannedM={(k, t) => f.setSel((s) => ({ ...s, plannedM: new Map(s.plannedM).set(k, t) }))} />
             <WorkOrderSection rows={p.workOrders} sel={f.sel} canCreate={p.canCreate.workOrder} lineLabel={lineLabel}
               onToggle={(k) => f.setSel((s) => ({ ...s, workOrders: toggled(s.workOrders, k) }))} />
-            <BeamSection rows={p.weavingOrders} />
+            <BeamSection rows={p.weavingOrders} action={<DevereNeedLink orderId={orderId} onNavigate={() => onOpenChange(false)} />} />
             <ExcludedSection rows={p.excluded} lineLabel={lineLabel} />
           </div>
         ) : null}
