@@ -48,6 +48,7 @@
 
 - **[ÇEKİRDEK]** Şablon kimliği `permission_templates.code`, AD DEĞİL; `code=null` fabrikanın şablonu, dokunulmaz; sahiplenme YALNIZ `LEGACY_TEMPLATE_NAME_TO_CODE` (`entry.name`e açılmaz); ad çakışmasında oluşturma ATLANIR.
 - **[ÇEKİRDEK]** `mode:"all"` YALNIZ "Admin (Tam Yetki)" şablonunda (her boot katalogla eşitlenir; tam bir tane); diğer rollerde eksik izin EKLENİR, fazlalar korunur, izin çıkarılmaz.
+- **[ÇEKİRDEK]** Tam Yetki'ye açılışta EKLENEN izni (SoD hariç) aynı tx'te, ekleme öncesi şablonun SoD dışı bütün izinlerini süresiz taşıyan kullanıcılara yay (`spreadAdminFullTx`, kilit 8049, audit `ADMIN_FULL_AUTO_SPREAD`); diğer şablonlar kullanıcıya yaymaz, bilerek alınmış izin geri verilmez.
 - **[ÇEKİRDEK]** "Patron — tam okuma" (`WEB_PATRON_READ_ALL`) şablonu katalogdan türer (`patronReadAllCodes()` = web `:read`/`:view` − `PATRON_READ_EXCLUDED_CODES` (mal kabul) + `PATRON_READ_EXTRA_CODES` + `patron-app:login`), elle sayılmaz; yazma izni girmez · bekçi: `test_role_template_catalog` §2f, `test_patron_giris` §7c <sub>(arşiv:2026-11-15 S6b C4)</sub>
 - **[ÇEKİRDEK]** Ayar şifresi kapsamı elle sayılmaz: `src/routes/**` içinde `systemSettingService.set(`/`setFeatureFlags(`/`systemSetting.upsert(` çağıran her zincir `requireSettingsPassword` taşır (AST tripwire, iki yönlü muaf).
 - **[ÇEKİRDEK]** Hash `security.settingsPasswordHash` `systemSettingService.set()` ile YAZILMAZ: doğrudan upsert + ayrı olay (`SETTINGS_PASSWORD_SET/ROTATED/REVOKED`); `security.*` listeden/config-bundle'dan dışlanır, `PUT /admin/settings/:key` reddeder.

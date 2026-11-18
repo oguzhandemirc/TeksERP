@@ -21,6 +21,9 @@
 //   §4 Uzlaştırma İDEMPOTENT mi (ikinci koşum hiçbir şey değiştirmemeli) —
 //      yoksa her restart audit'e sahte "değişti" satırı yazar ve gerçek bir
 //      değişikliği görünmez kılar.
+//   §5 TAM YETKİ YAYILIMI: Tam Yetki'ye bu koşumda eklenen izin bağlı kullanıcıya
+//      gider; bağlı olmayan, süreli, silinmiş, diğer şablon almaz; SoD yayılmaz;
+//      audit izi; idempotent; eşzamanlı iki açılışta tek yayılım.
 //
 // Koşum: npx tsx scripts/test_role_template_catalog.ts
 //
@@ -42,11 +45,12 @@ import {
   PATRON_READ_EXCLUDED_CODES,
   resolveRoleTemplateCodes,
 } from "../src/constants/role-template-catalog";
-import { reconcileRoleTemplates } from "../src/jobs/role-template-catalog.job";
+import { reconcileRoleTemplates, ROLE_TEMPLATE_RECONCILE_LOCK_NS, withoutSodPermissionIds } from "../src/jobs/role-template-catalog.job";
 import { matchesPermission } from "../src/middlewares/rbac.middleware";
 import { readFileSync } from "fs";
 import * as path from "path";
 import { foldNameForCompare } from "../src/services/helpers/name-normalize.helper";
+import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
 let pass = 0;
 let fail = 0;
@@ -325,8 +329,124 @@ async function main(): Promise<void> {
   );
   if (ikinci.custom.length > 0)
     console.log(`   ℹ️  fabrikanın kendi ${ikinci.custom.length} şablonu korunuyor: ${ikinci.custom.join(", ")}`);
+  check("İkinci koşum kimseye izin yaymıyor", ikinci.spread.length === 0, `${ikinci.spread.length} satır`);
+
+  await tamYetkiYayilimi();
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+}
+
+/**
+ * §5 TAM YETKİ YAYILIMI (kullanıcı kararı 2026-11-18): `ADMIN_FULL`a bu koşumda eklenen izin,
+ * şablonun bütün (SoD hariç) izinlerini süresiz taşıyan kullanıcıya da verilir; diğer şablonlar yaymaz.
+ * "Yeni doğan izin" = bekçinin yarattığı geçici izin + `extraCodesByTemplate` dikişi (şablon satırı SİLİNMEZ).
+ */
+async function tamYetkiYayilimi(): Promise<void> {
+  console.log("\n=== §5 TAM YETKİ YAYILIMI ===");
+  const engel = hedefDbEngeli();
+  if (engel) {
+    check("§5 hedef DB yazılabilir", false, engel);
+    return;
+  }
+  const STAMP = Date.now().toString(36);
+  const sod = new Set<string>(SOD_PERMISSION_CODES);
+  const admin = await prisma.permissionTemplate.findUnique({ where: { code: "ADMIN_FULL" }, select: { permissions: { select: { permission: { select: { code: true } } } } } });
+  const muhasebe = await prisma.permissionTemplate.findUnique({ where: { code: "WEB_ACCOUNTING" }, select: { permissions: { select: { permission: { select: { code: true } } } } } });
+  if (!admin || !muhasebe) {
+    check("§5 ADMIN_FULL ve WEB_ACCOUNTING DB'de", false);
+    return;
+  }
+  const adminKodlari = admin.permissions.map((p) => p.permission.code);
+  const adminTemelKodlar = adminKodlari.filter((c) => !sod.has(c));
+  const Y = [...adminTemelKodlar].sort()[0]; // bilerek kaldırılan
+  const muhasebeKodlari = muhasebe.permissions.map((p) => p.permission.code).filter((c) => !sod.has(c));
+
+  // SoD süzgeci saf fonksiyonda — yayılım ve bağlılık ölçümü ikisi de bunu kullanır.
+  const sodKodu = [...SOD_PERMISSION_CODES].sort()[0];
+  const sodSatir = await prisma.permission.findMany({ where: { code: { in: [sodKodu, Y] } }, select: { id: true, code: true } });
+  const sodHarita = new Map(sodSatir.map((p) => [p.id, p.code]));
+  const suzulen = withoutSodPermissionIds(sodSatir.map((p) => p.id), sodHarita).map((id) => sodHarita.get(id));
+  check("§5c ⭐ SoD izni yayılım kümesinden düşer (sıradan izin kalır)", sodSatir.length === 2 && !suzulen.includes(sodKodu) && suzulen.includes(Y), suzulen.join(", "));
+
+  const madeUserIds: string[] = [];
+  const madePermIds: string[] = [];
+  const yeniIzin = async (ek: string): Promise<string> => {
+    const code = `test-izyay-${ek}-${STAMP}:x`.slice(0, 64);
+    const p = await prisma.permission.create({ data: { code, module: "ADMIN", description: "TEST izin yayılım bekçisi" }, select: { id: true } });
+    madePermIds.push(p.id);
+    return code;
+  };
+  const yeniKullanici = async (ek: string, kodlar: readonly string[], opts: { validUntil?: Date; deleted?: boolean } = {}): Promise<string> => {
+    const u = await prisma.user.create({
+      data: {
+        username: `test-izyay-${ek}-${STAMP}`.slice(0, 50),
+        fullName: `TEST İzin Yayılım ${ek}`,
+        passwordHash: "$2a$10$testtesttesttesttesttestteAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        ...(opts.deleted ? { deletedAt: new Date(), isActive: false } : {}),
+      },
+      select: { id: true },
+    });
+    madeUserIds.push(u.id);
+    const perms = await prisma.permission.findMany({ where: { code: { in: [...kodlar] } }, select: { id: true } });
+    await prisma.userPermission.createMany({ data: perms.map((p) => ({ userId: u.id, permissionId: p.id, validUntil: opts.validUntil ?? null })) });
+    return u.id;
+  };
+  const sahip = async (userId: string, code: string): Promise<number> =>
+    prisma.userPermission.count({ where: { userId, permission: { code } } });
+
+  try {
+    const bagli = await yeniKullanici("bagli", adminTemelKodlar);
+    const kaldirilan = await yeniKullanici("kaldirilan", adminTemelKodlar.filter((c) => c !== Y));
+    const sureli = await yeniKullanici("sureli", adminTemelKodlar, { validUntil: new Date(Date.now() + 365 * 86_400_000) });
+    const silinmis = await yeniKullanici("silinmis", adminTemelKodlar, { deleted: true });
+    const muhasebeci = await yeniKullanici("muhasebe", muhasebeKodlari);
+
+    // Yeni doğan izin X: hem Tam Yetki'ye hem Muhasebe şablonuna bu koşumda girer.
+    const X = await yeniIzin("x");
+    const dikis = { extraCodesByTemplate: { ADMIN_FULL: [X], WEB_ACCOUNTING: [X] } };
+    const r1 = await reconcileRoleTemplates(dikis);
+    check("§5a iki şablon da yeni izni aldı (Tam Yetki + Muhasebe)", (r1.itemsAdded.ADMIN_FULL ?? []).includes(X) && (r1.itemsAdded.WEB_ACCOUNTING ?? []).includes(X), JSON.stringify({ a: r1.itemsAdded.ADMIN_FULL, m: r1.itemsAdded.WEB_ACCOUNTING }));
+    check("§5b ⭐ bağlı kullanıcı yeni izni aldı", (await sahip(bagli, X)) === 1 && r1.spread.some((s) => s.userId === bagli && s.permissionCode === X));
+    check("§5d ⭐ bilerek izni alınmış kullanıcı bağlı sayılmadı — ne yeni izin ne kaldırılan geri", (await sahip(kaldirilan, X)) === 0 && (await sahip(kaldirilan, Y)) === 0);
+    check("§5e süreli izinli kullanıcı bağlı sayılmadı", (await sahip(sureli, X)) === 0);
+    check("§5f silinmiş kullanıcıya yayılmadı", (await sahip(silinmis, X)) === 0);
+    check("§5g ⭐ diğer şablon (Muhasebe) kullanıcısına yayılmadı", (await sahip(muhasebeci, X)) === 0);
+    check("§5h yalnız eklenen izin yayıldı", r1.spread.every((s) => s.permissionCode === X), [...new Set(r1.spread.map((s) => s.permissionCode))].join(", "));
+
+    const satir = r1.spread.find((s) => s.userId === bagli);
+    const iz = satir ? await prisma.systemLog.count({ where: { tableName: "USER_PERMISSION", recordId: satir.userPermissionId, action: "CREATE" } }) : 0;
+    check("§5i audit: kullanıcı × izin ayak izi yazıldı", iz === 1, `${iz} satır`);
+
+    const r2 = await reconcileRoleTemplates(dikis);
+    check("§5j ⭐ idempotent: ikinci açılış yaymıyor, tek satır kalıyor", r2.spread.length === 0 && (await sahip(bagli, X)) === 1);
+
+    // Çok örnekli açılış: iki uzlaştırma aynı anda — biri yayar, öteki kilitte bekleyip boş döner.
+    const yaris = await yeniKullanici("yaris", [...adminTemelKodlar, X]);
+    const Z = await yeniIzin("z");
+    const dikisZ = { extraCodesByTemplate: { ADMIN_FULL: [X, Z], WEB_ACCOUNTING: [X] } };
+    const [y1, y2] = await Promise.all([reconcileRoleTemplates(dikisZ), reconcileRoleTemplates(dikisZ)]);
+    const yarisYayilim = [...y1.spread, ...y2.spread].filter((s) => s.userId === yaris);
+    check("§5k yarış: iki eşzamanlı açılışta izin TEK kez yayıldı", yarisYayilim.length === 1 && (await sahip(yaris, Z)) === 1, `${yarisYayilim.length} yayılım`);
+
+    // Kilit gerçekten alınıyor mu: elle açık tutulan tx uzayı tutarken uzlaştırma BEKLEMELİ.
+    let birakildi = 0;
+    let bitti = 0;
+    const tutucu = prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${ROLE_TEMPLATE_RECONCILE_LOCK_NS}::int, 1::int)`;
+      await new Promise((r) => setTimeout(r, 1500));
+      birakildi = Date.now();
+    }, { timeout: 10_000 });
+    await new Promise((r) => setTimeout(r, 300));
+    const bekleyen = reconcileRoleTemplates().then(() => { bitti = Date.now(); });
+    await Promise.all([tutucu, bekleyen]);
+    check("§5l ⭐ uzlaştırma 8049 kilidinde bekliyor (çok örnekli açılış serileşir)", bitti >= birakildi && birakildi > 0, `bitti-bırakıldı=${bitti - birakildi} ms`);
+  } finally {
+    await prisma.userPermission.deleteMany({ where: { userId: { in: madeUserIds } } }).catch(() => {});
+    // Bekçi kullanıcısı sert silinmez — silindi damgası (yayılım da bunları dışlar).
+    await prisma.user.updateMany({ where: { id: { in: madeUserIds } }, data: { deletedAt: new Date(), isActive: false } }).catch(() => {});
+    // Geçici izin: şablon satırları ve kalan kullanıcı izinleri FK cascade ile gider.
+    await prisma.permission.deleteMany({ where: { id: { in: madePermIds } } }).catch(() => {});
+  }
 }
 
 main()

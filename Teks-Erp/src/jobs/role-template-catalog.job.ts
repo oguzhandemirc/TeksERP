@@ -25,6 +25,10 @@
 // satırlar BİR KEZ adlarıyla eşlenip kodlanır (`LEGACY_TEMPLATE_NAME_TO_CODE`);
 // ad çakışması olan kodsuz satır da "sahiplenilir" — ikinci bir kopya doğmaz.
 //
+// TAM YETKİ YAYILIMI (kullanıcı kararı 2026-11-18): `ADMIN_FULL`a bu koşumda eklenen
+// izinler, şablona bağlı kullanıcılara da verilir (`spreadAdminFullTx`); diğer şablonlar
+// yalnız şablonda büyür, kullanıcıya yayılmaz.
+//
 // BEST-EFFORT: hata sunucuyu DÜŞÜRMEZ ama sessizce de yutulmaz.
 // =============================================================================
 
@@ -33,11 +37,26 @@ import prisma from "../lib/prisma";
 import {
   ROLE_TEMPLATE_CATALOG,
   LEGACY_TEMPLATE_NAME_TO_CODE,
+  SOD_PERMISSION_CODES,
   resolveRoleTemplateCodes,
 } from "../constants/role-template-catalog";
 import { AuditService } from "../services/audit.service";
 import { foldNameForCompare } from "../services/helpers/name-normalize.helper";
+import { emitUserPermissionsChangedTx } from "../services/notification-sources/yetki";
 import { bilgi, uyari } from "../lib/logger";
+
+/** Uzlaştırma tx'inin ilk ifadesi — çok örnekli açılışta şablon ekleme + Tam Yetki yayılımı serileşir. */
+export const ROLE_TEMPLATE_RECONCILE_LOCK_NS: number = 8049;
+const ROLE_TEMPLATE_RECONCILE_LOCK_KEY = 1;
+
+/** Yeni izinleri şablonu almış kullanıcılara da yayan TEK şablon (diğerleri yalnız şablona eklenir). */
+export const AUTO_SPREAD_TEMPLATE_CODE = "ADMIN_FULL";
+
+export type AdminFullSpreadRow = {
+  userPermissionId: string;
+  userId: string;
+  permissionCode: string;
+};
 
 export type RoleTemplateReconcileResult = {
   /** Katalogdaki rol sayısı. */
@@ -50,7 +69,92 @@ export type RoleTemplateReconcileResult = {
   itemsAdded: Record<string, string[]>;
   /** Katalogda olmayan (fabrikanın kendi) şablon adları — DOKUNULMAZ. */
   custom: string[];
+  /** Tam Yetki'ye bu koşumda eklenen izinlerden bağlı kullanıcılara yayılan satırlar. */
+  spread: AdminFullSpreadRow[];
 };
+
+/** SoD izinleri yayılmaz ve bağlılık ölçümüne girmez (elle atanır) — saf süzgeç, bekçi doğrudan sınar. */
+export function withoutSodPermissionIds(ids: readonly string[], codeById: ReadonlyMap<string, string>): string[] {
+  const sod = new Set<string>(SOD_PERMISSION_CODES);
+  return ids.filter((id) => !sod.has(codeById.get(id) ?? ""));
+}
+
+/** YALNIZ BEKÇİ: şablon kodu → katalogda yeni doğmuş gibi eklenecek izin kodları (satır silmeden taklit). */
+export type RoleTemplateReconcileOptions = { extraCodesByTemplate?: Readonly<Record<string, readonly string[]>> };
+
+/**
+ * Tam Yetki yayılımı — `ADMIN_FULL`a BU koşumda eklenen izinleri şablona "bağlı" kullanıcılara verir.
+ * Bağlılığın kalıcı izi yok (`applyTemplate` kopyalar, link kalmaz; audit karar kaynağı olamaz):
+ * bağlı = ekleme ÖNCESİ şablon izinlerinin (SoD hariç) HEPSİNİ süresiz taşıyan, silinmemiş, sistem
+ * hesabı olmayan kullanıcı. Bilerek tek izni alınmış kullanıcı bağlı sayılmaz → hiçbir şey almaz;
+ * SoD izni hiç yayılmaz (elle atanır). tokenVersion artmaz: izin her istekte DB'den çözülür
+ * (önbellek TTL 30 sn) ve her sürümde bütün yöneticileri oturumdan atmak istenmez.
+ */
+async function spreadAdminFullTx(
+  tx: Prisma.TransactionClient,
+  preexistingPermIds: ReadonlySet<string>,
+  addedPermIds: readonly string[],
+  codeById: ReadonlyMap<string, string>,
+): Promise<AdminFullSpreadRow[]> {
+  const required = withoutSodPermissionIds([...preexistingPermIds], codeById);
+  const toSpread = withoutSodPermissionIds(addedPermIds, codeById);
+  // Boş ön küme "herkes bağlı" demek olurdu — fail-closed: yayma.
+  if (required.length === 0 || toSpread.length === 0) return [];
+
+  const now = new Date();
+  const held = await tx.userPermission.groupBy({
+    by: ["userId"],
+    where: {
+      permissionId: { in: required },
+      validUntil: null,
+      OR: [{ validFrom: null }, { validFrom: { lte: now } }],
+      user: { deletedAt: null, isSystemAccount: false },
+    },
+    _count: { _all: true },
+  });
+  const boundUserIds = held.filter((h) => h._count._all === required.length).map((h) => h.userId).sort();
+  if (boundUserIds.length === 0) return [];
+
+  const created = await tx.userPermission.createManyAndReturn({
+    data: boundUserIds.flatMap((userId) => toSpread.map((permissionId) => ({ userId, permissionId, grantedById: null }))),
+    skipDuplicates: true, // kullanıcı izni tek tek almış olabilir
+    select: { id: true, userId: true, permissionId: true },
+  });
+  const byUser = new Map<string, string[]>();
+  for (const r of created) byUser.set(r.userId, [...(byUser.get(r.userId) ?? []), r.permissionId]);
+  // Sıralı ve ardışık (tx + Promise.all yasak).
+  for (const userId of [...byUser.keys()].sort()) {
+    await emitUserPermissionsChangedTx(tx, userId, { addedPermissionIds: byUser.get(userId) ?? [], removedCount: 0 }, null);
+  }
+  return created
+    .map((r) => ({ userPermissionId: r.id, userId: r.userId, permissionCode: codeById.get(r.permissionId) ?? r.permissionId }))
+    .sort((a, b) => a.userId.localeCompare(b.userId) || a.permissionCode.localeCompare(b.permissionCode));
+}
+
+/** Var olan şablona eksik izinleri ekler; Tam Yetki ise GERÇEKTEN eklenenleri bağlı kullanıcılara yayar. */
+async function addMissingTemplateItemsTx(
+  tx: Prisma.TransactionClient,
+  hedef: { code: string; id: string; isActive: boolean; permissions: { permissionId: string }[] },
+  wantedIds: readonly string[],
+  idToCode: ReadonlyMap<string, string>,
+): Promise<{ added: string[]; spread: AdminFullSpreadRow[] }> {
+  const mevcut = new Set(hedef.permissions.map((p) => p.permissionId));
+  const eksik = wantedIds.filter((id) => !mevcut.has(id));
+  if (eksik.length === 0) return { added: [], spread: [] };
+  // Dönen satırlar = GERÇEKTEN eklenenler; yayılım yalnız bunlara bakar (iki koşum aynı sonucu verir).
+  const res = await tx.permissionTemplateItem.createManyAndReturn({
+    data: eksik.map((permissionId) => ({ templateId: hedef.id, permissionId })),
+    skipDuplicates: true, // eşzamanlı boot yarışında güvenli (@@id bileşik)
+    select: { permissionId: true },
+  });
+  const eklenen = res.map((r) => r.permissionId);
+  const added = eklenen.map((id) => idToCode.get(id) ?? id).sort();
+  const spread =
+    eklenen.length > 0 && hedef.code === AUTO_SPREAD_TEMPLATE_CODE && hedef.isActive
+      ? await spreadAdminFullTx(tx, mevcut, eklenen, idToCode)
+      : [];
+  return { added, spread };
+}
 
 /**
  * Uzlaştırmanın YAZAN kısmı — üç modele dokunur (`permissionTemplate` update +
@@ -63,9 +167,12 @@ export type RoleTemplateReconcileResult = {
  */
 async function reconcileRoleTemplatesTx(
   tx: Prisma.TransactionClient,
+  opts: RoleTemplateReconcileOptions,
 ): Promise<RoleTemplateReconcileResult> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(${ROLE_TEMPLATE_RECONCILE_LOCK_NS}::int, ${ROLE_TEMPLATE_RECONCILE_LOCK_KEY}::int)`;
   const permissions = await tx.permission.findMany({ select: { id: true, code: true } });
   const permIdByCode = new Map(permissions.map((p) => [p.code, p.id]));
+  const idToCode = new Map(permissions.map((p) => [p.id, p.code]));
 
   const existing = await tx.permissionTemplate.findMany({
     select: {
@@ -89,6 +196,7 @@ async function reconcileRoleTemplatesTx(
   const adopted: string[] = [];
   const adoptedIds = new Set<string>();
   const itemsAdded: Record<string, string[]> = {};
+  const spread: AdminFullSpreadRow[] = [];
 
   // Kod → eski ad (sahiplenme YALNIZ bu tabloyla yapılır, bkz. aşağıdaki not).
   const legacyNameByCode = new Map(
@@ -96,7 +204,7 @@ async function reconcileRoleTemplatesTx(
   );
 
   for (const entry of ROLE_TEMPLATE_CATALOG) {
-    const wantedCodes = resolveRoleTemplateCodes(entry);
+    const wantedCodes = [...resolveRoleTemplateCodes(entry), ...(opts.extraCodesByTemplate?.[entry.code] ?? [])];
     const wantedIds: string[] = [];
     const unknown: string[] = [];
     for (const c of wantedCodes) {
@@ -172,19 +280,9 @@ async function reconcileRoleTemplatesTx(
     }
 
     // Var olan şablon: yalnız EKSİK izinleri ekle. Ad/açıklama/isActive EZİLMEZ.
-    const hedef = row;
-    const mevcut = new Set(hedef.permissions.map((p) => p.permissionId));
-    const eksik = wantedIds.filter((id) => !mevcut.has(id));
-    if (eksik.length > 0) {
-      const res = await tx.permissionTemplateItem.createMany({
-        data: eksik.map((permissionId) => ({ templateId: hedef.id, permissionId })),
-        skipDuplicates: true, // eşzamanlı boot yarışında güvenli (@@id bileşik)
-      });
-      if (res.count > 0) {
-        const idToCode = new Map(permissions.map((p) => [p.id, p.code]));
-        itemsAdded[entry.code] = eksik.map((id) => idToCode.get(id) ?? id).sort();
-      }
-    }
+    const r = await addMissingTemplateItemsTx(tx, { ...row, code: entry.code }, wantedIds, idToCode);
+    if (r.added.length > 0) itemsAdded[entry.code] = r.added;
+    spread.push(...r.spread);
   }
 
   const katalogKodlari = new Set(ROLE_TEMPLATE_CATALOG.map((e) => e.code));
@@ -195,18 +293,32 @@ async function reconcileRoleTemplatesTx(
     .map((t) => t.name)
     .sort();
 
-  return { total: ROLE_TEMPLATE_CATALOG.length, created, adopted, itemsAdded, custom };
+  return { total: ROLE_TEMPLATE_CATALOG.length, created, adopted, itemsAdded, custom, spread };
 }
 
 /**
  * Katalogdaki rolleri DB ile uzlaştırır. Var olanı EZMEZ, hiçbir şeyi SİLMEZ.
  * Doğrudan çağrılabilir (test/script) — sunucuya bağımlılığı yoktur.
  */
-export async function reconcileRoleTemplates(): Promise<RoleTemplateReconcileResult> {
+export async function reconcileRoleTemplates(opts: RoleTemplateReconcileOptions = {}): Promise<RoleTemplateReconcileResult> {
   // Çok-modelli yazım TEK tx'te; rapor/audit tx DIŞINDA (audit best-effort'tur,
   // tx'e girerse kendi hatasıyla uzlaştırmayı geri sarardı).
-  const result = await prisma.$transaction((tx) => reconcileRoleTemplatesTx(tx));
-  const { created, adopted, itemsAdded, custom } = result;
+  const result = await prisma.$transaction((tx) => reconcileRoleTemplatesTx(tx, opts));
+  const { created, adopted, itemsAdded, custom, spread } = result;
+
+  if (spread.length > 0) {
+    bilgi("role-templates", `Tam Yetki yayılımı: ${new Set(spread.map((s) => s.userId)).size} kullanıcıya ${spread.length} izin verildi.`);
+    // Kullanıcı × izin başına bir ayak izi (panelin tekil grant iziyle aynı biçim); aktör = sistem.
+    await AuditService.logMany(
+      spread.map((s) => ({
+        userId: undefined,
+        action: "CREATE" as const,
+        tableName: "USER_PERMISSION",
+        recordId: s.userPermissionId,
+        newData: { userId: s.userId, permissionCode: s.permissionCode, source: "ADMIN_FULL_AUTO_SPREAD" },
+      })),
+    );
+  }
 
   const eklenenIzinSayisi = Object.values(itemsAdded).reduce((a, l) => a + l.length, 0);
   if (created.length === 0 && adopted.length === 0 && eklenenIzinSayisi === 0) {
@@ -228,11 +340,12 @@ export async function reconcileRoleTemplates(): Promise<RoleTemplateReconcileRes
         created,
         adopted,
         itemsAdded,
+        spreadCount: spread.length,
       },
     });
   }
   if (custom.length > 0)
     bilgi("role-templates", `Fabrikanın kendi ${custom.length} şablonu korunuyor: ${custom.join(", ")}`);
 
-  return { total: ROLE_TEMPLATE_CATALOG.length, created, adopted, itemsAdded, custom };
+  return result;
 }
