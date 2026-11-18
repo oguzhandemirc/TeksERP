@@ -78,8 +78,6 @@ const ALLOWED: Record<string, string> = {
     "dışa aktarım imleç DÖNGÜSÜ (sonuna kadar çeker, sınırda hata fırlatır) — 200 sayfa boyu",
   "pages/Operations/SackContentEdit/service.ts":
     "parti çuvalları imleç DÖNGÜSÜ (nextCursor bitene kadar) — 500 sayfa boyu",
-  "pages/Operations/ReadyWorks/service.ts":
-    "İçerideki İşler imleç DÖNGÜSÜ (maxPages tavanlı) — 200 sayfa boyu, seçici değil",
   "components/RecordHistoryDialog.tsx":
     "kayıt geçmişi (audit) görüntüsü — son 100 satır, seçici değil",
   "pages/System/DataImport/DataImportPage.tsx":
