@@ -10,6 +10,7 @@ import { Callout } from "@/components/ui/callout";
 import { apiErrorMessage } from "@/services/apiClient";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { TERIM } from "@/lib/terim";
 import { itemLifecycleOf, pickableLifecycle } from "@/lib/item-lifecycle";
 import { itemService } from "@/pages/Items/service";
 import type { Item } from "@/pages/Items/types";
@@ -86,7 +87,7 @@ function NeedResult({ hasQuery, q }: { hasQuery: boolean; q: ReturnType<typeof u
       {res.rows.length === 0 && res.warnings.length === 0 && <Empty text="Bu kaynak için leventli çözgü ihtiyacı yok." />}
       <NeedTable res={res} />
       <p className="text-xs text-muted-foreground">
-        Eldeki + yoldaki = hazır/takılı levent kalanı + planlanmış levent + açık devere siparişlerinin henüz dönmemiş metresi. Önce açık dokuma işleri (plan başlangıcı sırasıyla) bu çözgüyü kullanır; öneri yalnız kalan eksiği kapatır.
+        Eldeki + yoldaki = hazır/takılı levent kalanı + planlanmış levent + açık devere siparişlerinin henüz dönmemiş metresi. Önce açık {TERIM.dokumaIsEmri.cogulKucuk} (plan başlangıcı sırasıyla) bu çözgüyü kullanır; öneri yalnız kalan eksiği kapatır.
       </p>
     </div>
   );
