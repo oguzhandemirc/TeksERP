@@ -23,7 +23,8 @@ import { PICKER_MAX_PAGE_SIZE } from "./picker-loader";
  */
 
 const SRC = resolve(__dirname, "..");
-const INLINE_PAGE_SIZE = /pageSize:\s*(\d{3,})/g;
+// `limit:` cursor uçlarının (listCursor, /api/yarn/lots, /api/warp-beams) aynı kesilme kalıbıdır (2026-11-18).
+const INLINE_PAGE_SIZE = /\b(?:pageSize|limit):\s*(\d{3,})/g;
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
@@ -72,6 +73,19 @@ const ALLOWED: Record<string, string> = {
     "ARAMA tabanlı picker (debounce'lu sunucu araması + filtre + özel uç). " +
     "Orada 100 bir 'tümünü çek' tavanı değil, sonuç sayfası boyutudur — " +
     "`loadAllForPicker`a çevirmek aramayı KALDIRIRDI",
+  // ── `limit:` genişlemesi (2026-11-18): seçici OLMAYAN cursor okumaları ──────
+  "components/timeline/EventTimeline.tsx":
+    "dışa aktarım imleç DÖNGÜSÜ (sonuna kadar çeker, sınırda hata fırlatır) — 200 sayfa boyu",
+  "pages/Operations/SackContentEdit/service.ts":
+    "parti çuvalları imleç DÖNGÜSÜ (nextCursor bitene kadar) — 500 sayfa boyu",
+  "pages/Operations/ReadyWorks/service.ts":
+    "İçerideki İşler imleç DÖNGÜSÜ (maxPages tavanlı) — 200 sayfa boyu, seçici değil",
+  "components/RecordHistoryDialog.tsx":
+    "kayıt geçmişi (audit) görüntüsü — son 100 satır, seçici değil",
+  "pages/System/DataImport/DataImportPage.tsx":
+    "içe aktarım koşuları listesi — son 100 koşu, seçici değil",
+  "pages/Reports/_v2/custom/custom-api.ts":
+    "ARAMA tabanlı özel rapor listesi (`ara` sunucuda) — 100 sonuç sayfası",
 };
 
 describe("picker veri çekme kuralı", () => {
@@ -82,7 +96,7 @@ describe("picker veri çekme kuralı", () => {
     expect(PICKER_MAX_PAGE_SIZE).toBeGreaterThanOrEqual(500);
   });
 
-  it("inline üç haneli pageSize YOK — hepsi loadAllForPicker'dan geçiyor", () => {
+  it("inline üç haneli pageSize/limit YOK — hepsi tüm-sayfa yükleyiciden geçiyor", () => {
     const violations: string[] = [];
     for (const file of FILES) {
       const rel = relative(SRC, file);
@@ -92,10 +106,18 @@ describe("picker veri çekme kuralı", () => {
         const size = Number(m[1]);
         if (size < 100) continue;
         const line = src.slice(0, m.index).split("\n").length;
-        violations.push(`${rel}:${line} → pageSize: ${size}`);
+        violations.push(`${rel}:${line} → ${m[0]}`);
       }
     }
     expect(violations, violations.join("\n")).toEqual([]);
+  });
+
+  it("tarayıcı cursor `limit:` kalıbını da yakalıyor (öz sonda)", () => {
+    const hits = (s: string) => [...s.matchAll(INLINE_PAGE_SIZE)].map((m) => Number(m[1]));
+    expect(hits("listYarnLots({ itemId, isActive: true, limit: 200 })")).toEqual([200]);
+    expect(hits("svc.listCursor({ limit: 100, filters })")).toEqual([100]);
+    expect(hits("getAll({ page: 1, pageSize: 500 })")).toEqual([500]);
+    expect(hits("timeLimit: 500, ratelimit: 300")).toEqual([]);
   });
 
   it("muaf listesi bayat değil (her muaf gerçekten ihlal içeriyor)", () => {

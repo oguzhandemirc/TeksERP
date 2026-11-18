@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { loadAllForPicker, loadAllPagesForPicker, PAGED_PICKER_MAX_PAGES, PAGED_PICKER_PAGE_SIZE, PICKER_MAX_PAGE_SIZE } from "./picker-loader";
+import { loadAllCursorPagesForPicker, loadAllForPicker, loadAllPagesForPicker, PAGED_PICKER_MAX_PAGES, PAGED_PICKER_PAGE_SIZE, PICKER_MAX_PAGE_SIZE } from "./picker-loader";
 import type { CrudService } from "@/services/crudService";
 
 // Minimal sahte CrudService — yalnız getAll'ı kullanır.
@@ -86,5 +86,37 @@ describe("loadAllPagesForPicker", () => {
   it("kaçak döngüde sessiz kesmek yerine HATA fırlatır", async () => {
     const fetch = pagedSource(PAGED_PICKER_PAGE_SIZE * PAGED_PICKER_MAX_PAGES + 1);
     await expect(loadAllPagesForPicker(fetch)).rejects.toThrow(/çok büyük/);
+  });
+});
+
+function cursorSource(total: number) {
+  return vi.fn(async (cursor: string | undefined, limit: number) => {
+    const start = cursor ? Number(cursor) : 0;
+    const end = Math.min(start + limit, total);
+    const data = Array.from({ length: end - start }, (_, i) => ({ id: `c${start + i}` }));
+    return { data, pagination: { nextCursor: end < total ? String(end) : null, hasMore: end < total } };
+  });
+}
+
+describe("loadAllCursorPagesForPicker", () => {
+  it("imleç bitene kadar KESMEDEN getirir (250 satır → 3 istek)", async () => {
+    const fetch = cursorSource(250);
+    const rows = await loadAllCursorPagesForPicker(fetch);
+    expect(rows).toHaveLength(250);
+    expect(rows[249]).toEqual({ id: "c249" });
+    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(fetch).toHaveBeenNthCalledWith(1, undefined, PAGED_PICKER_PAGE_SIZE);
+    expect(fetch).toHaveBeenNthCalledWith(2, String(PAGED_PICKER_PAGE_SIZE), PAGED_PICKER_PAGE_SIZE);
+  });
+
+  it("pagination'sız yanıt tek sayfa sayılır", async () => {
+    const fetch = vi.fn(async () => ({ data: [{ id: "x" }] }));
+    expect(await loadAllCursorPagesForPicker(fetch)).toEqual([{ id: "x" }]);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("kaçak döngüde sessiz kesmek yerine HATA fırlatır", async () => {
+    const fetch = cursorSource(PAGED_PICKER_PAGE_SIZE * PAGED_PICKER_MAX_PAGES + 1);
+    await expect(loadAllCursorPagesForPicker(fetch)).rejects.toThrow(/çok büyük/);
   });
 });
