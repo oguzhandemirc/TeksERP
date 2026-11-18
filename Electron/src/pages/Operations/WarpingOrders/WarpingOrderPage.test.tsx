@@ -54,6 +54,7 @@ vi.mock("./holding-service", () => {
   const emptyList = () => ({ data: [], isSuccess: true, isError: false });
   return { warpingHoldingService: {}, useWarpingHoldings: emptyList, useWarpingReturns: emptyList, useWarpingTransfers: emptyList };
 });
+vi.mock("./receive-service", () => ({ warpingReceiveService: {}, useWarpingReceipts: () => ({ data: undefined, isSuccess: false, isError: false }) }));
 
 import { WarpingOrderPage } from "./WarpingOrderPage";
 import { WarpingOrderFormDialog } from "./WarpingOrderFormDialog";
