@@ -73,6 +73,15 @@ export type RoleTemplateReconcileResult = {
   spread: AdminFullSpreadRow[];
 };
 
+/** SoD izinleri yayılmaz ve bağlılık ölçümüne girmez (elle atanır) — saf süzgeç, bekçi doğrudan sınar. */
+export function withoutSodPermissionIds(ids: readonly string[], codeById: ReadonlyMap<string, string>): string[] {
+  const sod = new Set<string>(SOD_PERMISSION_CODES);
+  return ids.filter((id) => !sod.has(codeById.get(id) ?? ""));
+}
+
+/** YALNIZ BEKÇİ: şablon kodu → katalogda yeni doğmuş gibi eklenecek izin kodları (satır silmeden taklit). */
+export type RoleTemplateReconcileOptions = { extraCodesByTemplate?: Readonly<Record<string, readonly string[]>> };
+
 /**
  * Tam Yetki yayılımı — `ADMIN_FULL`a BU koşumda eklenen izinleri şablona "bağlı" kullanıcılara verir.
  * Bağlılığın kalıcı izi yok (`applyTemplate` kopyalar, link kalmaz; audit karar kaynağı olamaz):
@@ -87,10 +96,8 @@ async function spreadAdminFullTx(
   addedPermIds: readonly string[],
   codeById: ReadonlyMap<string, string>,
 ): Promise<AdminFullSpreadRow[]> {
-  const sod = new Set<string>(SOD_PERMISSION_CODES);
-  const isSod = (id: string): boolean => sod.has(codeById.get(id) ?? "");
-  const required = [...preexistingPermIds].filter((id) => !isSod(id));
-  const toSpread = addedPermIds.filter((id) => !isSod(id));
+  const required = withoutSodPermissionIds([...preexistingPermIds], codeById);
+  const toSpread = withoutSodPermissionIds(addedPermIds, codeById);
   // Boş ön küme "herkes bağlı" demek olurdu — fail-closed: yayma.
   if (required.length === 0 || toSpread.length === 0) return [];
 
@@ -160,6 +167,7 @@ async function addMissingTemplateItemsTx(
  */
 async function reconcileRoleTemplatesTx(
   tx: Prisma.TransactionClient,
+  opts: RoleTemplateReconcileOptions,
 ): Promise<RoleTemplateReconcileResult> {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(${ROLE_TEMPLATE_RECONCILE_LOCK_NS}::int, ${ROLE_TEMPLATE_RECONCILE_LOCK_KEY}::int)`;
   const permissions = await tx.permission.findMany({ select: { id: true, code: true } });
@@ -196,7 +204,7 @@ async function reconcileRoleTemplatesTx(
   );
 
   for (const entry of ROLE_TEMPLATE_CATALOG) {
-    const wantedCodes = resolveRoleTemplateCodes(entry);
+    const wantedCodes = [...resolveRoleTemplateCodes(entry), ...(opts.extraCodesByTemplate?.[entry.code] ?? [])];
     const wantedIds: string[] = [];
     const unknown: string[] = [];
     for (const c of wantedCodes) {
@@ -292,10 +300,10 @@ async function reconcileRoleTemplatesTx(
  * Katalogdaki rolleri DB ile uzlaştırır. Var olanı EZMEZ, hiçbir şeyi SİLMEZ.
  * Doğrudan çağrılabilir (test/script) — sunucuya bağımlılığı yoktur.
  */
-export async function reconcileRoleTemplates(): Promise<RoleTemplateReconcileResult> {
+export async function reconcileRoleTemplates(opts: RoleTemplateReconcileOptions = {}): Promise<RoleTemplateReconcileResult> {
   // Çok-modelli yazım TEK tx'te; rapor/audit tx DIŞINDA (audit best-effort'tur,
   // tx'e girerse kendi hatasıyla uzlaştırmayı geri sarardı).
-  const result = await prisma.$transaction((tx) => reconcileRoleTemplatesTx(tx));
+  const result = await prisma.$transaction((tx) => reconcileRoleTemplatesTx(tx, opts));
   const { created, adopted, itemsAdded, custom, spread } = result;
 
   if (spread.length > 0) {
