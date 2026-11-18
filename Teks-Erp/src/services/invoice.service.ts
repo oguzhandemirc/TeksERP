@@ -27,10 +27,9 @@ import {
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
+import { assertShipmentsDispatchedTx, lockBillableShipmentsTx } from "./helpers/service-billing-shipment-lock.helper";
 import {
-  assertShipmentsDispatchedTx,
   insertServiceLinksTx,
-  lockBillableShipmentsTx,
   lockServiceReadingsTx,
   reconcileServiceLinksWithLines,
   revokeServiceLinksTx,

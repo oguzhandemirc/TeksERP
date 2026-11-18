@@ -10,7 +10,6 @@
 // İade bağı ÇÖZMEZ (storno ≠ iade).
 // =============================================================================
 import { Currency, InvoiceLineType, Prisma, ServiceBillingSubject, ServiceMeterBasis, ShipmentStatus, type ServiceQtyUnit } from "@prisma/client";
-import { lockShipmentScopeTx } from "./shipment-locks.helper";
 import { findCariAccountForCardTx } from "./finance.helper";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
@@ -268,34 +267,6 @@ export async function syncServiceLinksToLinesTx(
   const active = await tx.serviceBillingLink.findMany({ where: { invoiceId, revokedAt: null }, select: { serviceItemId: true, billedMeters: true, billedQty: true } });
   const { droppedItemIds } = reconcileServiceLinksWithLines(lines, active);
   return revokeServiceLinksTx(tx, invoiceId, { userId, reason: "Hizmet satırı taslaktan çıkarıldı" }, droppedItemIds);
-}
-
-/**
- * Bağlı taslak sevk geri almayla serileşir: 8023 sevkiyat kilidi (tx'in İLK ifadesi olarak çağrılır) + taze durum.
- * `undoDispatch` aynı kilit altında bağları sayar — kilitsiz taslak phantom bağ doğururdu.
- */
-export async function lockBillableShipmentTx(tx: Tx, shipmentId: string): Promise<void> {
-  await lockBillableShipmentsTx(tx, [shipmentId]);
-}
-
-/**
- * H8 dönem taslağı: n sevkiyat → 8023 kilitleri id sırasıyla (deterministik; çok kilit deadlock'suz), ÖNCE hepsi
- * kilitlenir, sonra taze durum okunur. Sıralanmış tek kilit = `lockBillableShipmentTx`.
- */
-export async function lockBillableShipmentsTx(tx: Tx, shipmentIds: string[], opts: { assertDispatched?: boolean } = {}): Promise<void> {
-  const ids = [...new Set(shipmentIds)].sort();
-  for (const id of ids) await lockShipmentScopeTx(tx, id);
-  if (opts.assertDispatched !== false) await assertShipmentsDispatchedTx(tx, ids);
-}
-
-/** Kilit ALTINDA taze durum: bağ yazılacak her sevkiyat hâlâ DISPATCHED (değilse 409). */
-export async function assertShipmentsDispatchedTx(tx: Tx, shipmentIds: string[]): Promise<void> {
-  const ids = [...new Set(shipmentIds)];
-  if (ids.length === 0) return;
-  const live = await tx.shipment.count({ where: { id: { in: ids }, status: ShipmentStatus.DISPATCHED } });
-  if (live !== ids.length) {
-    throw AppError.conflict("Sevkiyat artık sevk edilmiş durumda değil — hizmet işleri faturalanamaz. Ekranı yenileyin.", { code: "SHIPMENT_NOT_DISPATCHED" });
-  }
 }
 
 /**
