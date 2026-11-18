@@ -15,6 +15,7 @@ import { pickServiceItemId } from "./service-item-pick.helper";
 import { ACTIVE_ORDER_LINK } from "./order-link.helper";
 import { expectedRolls } from "./expected-rolls.helper";
 import { TERIM } from "../../constants/terim";
+import { qtyText } from "./qty-text.helper";
 
 type Tx = Prisma.TransactionClient;
 type Reader = Pick<Prisma.TransactionClient, "consumableMovement">;
@@ -60,7 +61,7 @@ async function negativeWarnings(tx: Tx, itemIds: string[]): Promise<ConsumableWa
   return items.map((it) => ({
     code: "CONSUMABLE_NEGATIVE_BALANCE" as const,
     itemId: it.id,
-    message: `"${it.name}" sarf stoğu eksiye düştü (${bal.get(it.id)!.toFixed(3)} ${it.unit}) — iş durmadı, mal kabul girişini kontrol edin.`,
+    message: `"${it.name}" sarf stoğu eksiye düştü (${qtyText(bal.get(it.id)!)} ${it.unit}) — iş durmadı, mal kabul girişini kontrol edin.`,
   }));
 }
 

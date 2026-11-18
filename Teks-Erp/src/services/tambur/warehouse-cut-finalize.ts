@@ -52,6 +52,7 @@ import { resolveRollLabelTexts } from "../helpers/label-batch-no.helper";
 import { applyTamburCapabilitiesTx, closeOrphanRollErrors, liveCutChildIdsTx } from "./shared";
 import { resolveTamburLabelTemplate } from "../helpers/tambur-label-template.helper";
 import { rollLabelKindOf } from "../helpers/roll-stage.helper";
+import { qtyText } from "../helpers/qty-text.helper";
 
 // eslint-disable-next-line max-params -- özgün metot 5 parametreli ve uyarısı cephedeki imzada sayılır; ailenin max-params katkısı bölme öncesi gibi İKİ
 export async function finalizeWarehouseCut(
@@ -491,7 +492,7 @@ export async function finalizeWarehouseCut(
         remainingQty: result.remainingQty,
       },
       message: result.remainingChild
-        ? `Top Kesme bitti: ${parent.barcode} arşivlendi · kalan ${result.remainingQty}m ${childQualityGrade} olarak kayıtlı`
-        : `Top Kesme bitti: ${parent.barcode} arşivlendi${result.remainingQty > 0 ? ` · ${result.remainingQty}m fire` : ""}`,
+        ? `Top Kesme bitti: ${parent.barcode} arşivlendi · kalan ${qtyText(result.remainingQty)} m ${childQualityGrade} olarak kayıtlı`
+        : `Top Kesme bitti: ${parent.barcode} arşivlendi${result.remainingQty > 0 ? ` · ${qtyText(result.remainingQty)} m fire` : ""}`,
     };
   }

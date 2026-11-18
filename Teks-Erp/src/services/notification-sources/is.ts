@@ -26,6 +26,7 @@ import { computeReadyWorks, NOTIFY_UNIT_READY_UNIT, notifyUnitNeedsIncomingDoc, 
 import { READY_WORK_KIND as READY_WORK_KIND_CODE } from "../../constants/notification-catalog-sevkiyat";
 import { effectiveShipReadyPolicy } from "../helpers/ship-readiness.helper";
 import { effectiveIncomingDocsEnabled, readShippingReadyNotifyUnits, readShippingReadyScanMinutes, type ShipReadyNotifyUnit } from "../system-setting.service";
+import { pctText } from "../helpers/qty-text.helper";
 
 export const WORK_CONDITION_PERIOD_MS = 300_000;
 const DAY_MS = 86_400_000;
@@ -120,7 +121,7 @@ export function overrideWorkSourceDeps(p: Partial<WorkSourceDeps>): () => void {
 }
 
 const num = (kind: NotificationKind, key: string): number => Number(deps.params(kind)[key]);
-const tr1 = (n: number): string => n.toLocaleString("tr-TR", { maximumFractionDigits: 1 });
+const tr1 = (n: number): string => pctText(n, 1);
 
 // ── 6–7 · Sipariş termini yaklaştı / geçti (aynı okuma, ayrık yüklemler) ─────────────────────────
 export async function deadlineApproachingSubjects(): Promise<ConditionSubject[]> {

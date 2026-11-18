@@ -44,6 +44,7 @@ import {
   stepRunsStepFlow,
 } from "../helpers/quality-station.helper";
 import { finalizeRollsAtLastStep } from "../helpers/roll-finalize.helper";
+import { qtyText } from "../helpers/qty-text.helper";
 
 export async function kursunFinish(
     rollId: string,
@@ -406,7 +407,7 @@ export async function kursunFinish(
         nextStepId: nextStep?.id ?? null,
       },
       message: nextStep
-        ? `Kurşun/KK2 tamamlandı (${totalMeters} mt). Roll Tambur step'ine ilerletildi.`
-        : `Kurşun/KK2 tamamlandı (${totalMeters} mt). Sonraki step yok — Roll final (depoya alındı).`,
+        ? `Kurşun/KK2 tamamlandı (${qtyText(totalMeters)} mt). Roll Tambur step'ine ilerletildi.`
+        : `Kurşun/KK2 tamamlandı (${qtyText(totalMeters)} mt). Sonraki step yok — Roll final (depoya alındı).`,
     };
   }

@@ -23,6 +23,7 @@ import { lockStepMovementsTx } from "./service-step-movement-lock.helper";
 import type { ServiceDraftWorkRow } from "../service-billing/types";
 import { linkBilledQty, SERVICE_QTY_UNIT_LABEL } from "./service-quantity.helper";
 import { SERVICE_BILLING_TRIGGERS, type ServiceBillingTrigger, type loadServiceBillingSettings } from "../system-setting.service";
+import { qtyText } from "./qty-text.helper";
 
 type Tx = Prisma.TransactionClient;
 type Db = Tx | typeof prisma;
@@ -177,7 +178,7 @@ export function reconcileServiceLinksWithLines<T extends { serviceItemId: string
     // Bağ metresi iş başına 3 haneye yuvarlı, satır toplamı yuvarlanmadan toplanır → iş başına 0,001 pay.
     if (qty.minus(g.sum).abs().gt(new Prisma.Decimal(0.001).mul(g.n))) {
       throw AppError.conflict(
-        `"${itemLines[0].description ?? "Hizmet"}" satırının miktarı (${qty.toFixed(3)} m) faturalanmamış işlerle (${g.sum.toFixed(3)} m) tutmuyor — satırı önizlemedeki miktarla bırakın ya da tamamen çıkarın.`,
+        `"${itemLines[0].description ?? "Hizmet"}" satırının miktarı (${qtyText(qty)} m) faturalanmamış işlerle (${qtyText(g.sum)} m) tutmuyor — satırı önizlemedeki miktarla bırakın ya da tamamen çıkarın.`,
         { code: "SERVICE_LINES_MISMATCH", serviceItemId: itemId },
       );
     }

@@ -26,6 +26,7 @@ import {
 } from "../helpers/targetable-property.helper";
 import { matchesPermission } from "../../middlewares/rbac.middleware";
 import { upperTr } from "../../utils/tr-case";
+import { qtyText } from "../helpers/qty-text.helper";
 
 export async function applyManualProperties(
     rollId: string,
@@ -380,7 +381,7 @@ export async function applyManualProperties(
                 : taze.status !== roll.status
                   ? `topun durumu bu sırada değişti (${roll.status} → ${taze.status})`
                   : !taze.currentQty.equals(roll.currentQty)
-                    ? `topun metrajı bu sırada değişti (${roll.currentQty.toString()} → ${taze.currentQty.toString()} m) — büyük olasılıkla Tambur'da kesildi`
+                    ? `topun metrajı bu sırada değişti (${qtyText(roll.currentQty)} → ${qtyText(taze.currentQty)} m) — büyük olasılıkla Tambur'da kesildi`
                     : "top bu sırada başka bir işlemle güncellendi";
           throw AppError.conflict(
             `${upperTr(neden.charAt(0))}${neden.slice(1)} — düzeltme uygulanmadı. Ekranı yenileyip güncel değerlerle tekrar deneyin.`,

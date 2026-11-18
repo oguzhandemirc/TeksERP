@@ -19,6 +19,7 @@ import { readMaliyetEnabled } from "../system-setting.service";
 import type { YarnWasteSource } from "./yarn-waste.helper";
 import { hoursUntilDeadline } from "./order-deadline.helper";
 import { TERIM } from "../../constants/terim";
+import { qtyText } from "./qty-text.helper";
 
 type Dec = Prisma.Decimal;
 const round3 = (d: Dec): number => d.toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP).toNumber();
@@ -177,7 +178,7 @@ export function yarnReservationWarnings(groups: Array<{ itemName?: string; yarnS
   for (const g of groups) {
     for (const y of g.yarnSummary?.yarns ?? []) {
       if (y.reservedKg !== undefined && y.reservedKg > 0 && (y.shortKg ?? 0) > 0) {
-        out.push(`${g.itemName ? g.itemName + ": " : ""}${y.code || y.name} ipliğinin ${y.reservedKg} kg'ı açık ${TERIM.dokumaIsEmri.cogulCekimKucuk.yonelme} ayrılmış; serbest miktar yetmiyor (eksik ${y.shortKg} kg).`);
+        out.push(`${g.itemName ? g.itemName + ": " : ""}${y.code || y.name} ipliğinin ${qtyText(y.reservedKg)} kg'ı açık ${TERIM.dokumaIsEmri.cogulCekimKucuk.yonelme} ayrılmış; serbest miktar yetmiyor (eksik ${qtyText(y.shortKg ?? 0)} kg).`);
       }
     }
   }

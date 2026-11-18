@@ -15,6 +15,7 @@ import { factoryDateTr, factoryDayStartOfKey } from "../../../constants/time";
 import { capTable, catalogHeader, definitionsOf, metricFigure, periodOf, plainFigure, viewParameter, type CoreReportResult } from "./_common";
 import { dayRangeParameters, type ResolvedDayRange } from "./_day-range";
 import { secondsToMinutes } from "./duruslar.temel";
+import { pctText } from "../../helpers/qty-text.helper";
 
 /** Tablo görünümleri — eski Randıman / Vardiya Karnesi satırları (tezgah × vardiya × gün, aynı `efficiencyReport`). */
 export const LOOM_EFFICIENCY_VIEWS = ["ozet", "kapasite", "vardiyalar"] as const;
@@ -65,7 +66,7 @@ async function efficiencyTotals(from: string, to: string) {
   return (await efficiencyReport({ from, to, limit: 1 })).toplam;
 }
 
-const fmtPct = (v: number): string => `%${v.toLocaleString("tr-TR", { maximumFractionDigits: 1 })}`;
+const fmtPct = (v: number): string => `%${pctText(v, 1)}`;
 
 /** "Neden" açıklaması — iki pay günlük dille; ölçülemeyen pay söylenmez (uydurulmaz). */
 export function efficiencyReasonText(availabilityPct: number | null, performancePct: number | null): string | null {

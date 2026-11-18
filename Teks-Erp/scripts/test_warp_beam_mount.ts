@@ -12,10 +12,10 @@
 // NEGATİF SONDALAR (2026-09-14): `assertCoversRemaining` gövdesi boşaltıldı → §4b kırmızı ·
 //   `assertSlotFreeTx` çağrısı düşürüldü → §2e kırmızı (sed 409'a çevrilir ama meşgul levent ADI kaybolur) · `assertMountTrackingOnTx`
 //   boşaltıldı → §1b kırmızı · `activeForwardStatusEventTx` orderBy asc → §6b HATA (en yeni yerine en eski olay).
-// MSG (2026-11-18): `assertCoversRemaining` metni ham `${lengthM}` → §0f kırmızı · tüketim mesajına `${Number(x)} m` / `.toFixed(` → §0g kırmızı · bitiş mesajı ham `deltaM.abs()` → §8d-MSG kırmızı.
+// MSG (2026-11-18): `assertCoversRemaining` metni ham `${lengthM}` → §0f kırmızı · tüketim mesajı ham sayı → `test_mesaj_sayi_bicimi` §1 kırmızı (§0g oraya taşındı) · bitiş mesajı ham `deltaM.abs()` → §8d-MSG kırmızı.
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. Bayraklar FOTOĞRAFINA döndürülür.
 // =============================================================================
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { Prisma, StationType, WarpBeamOrigin, WarpBeamStatus, WarpKgSource } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
@@ -74,16 +74,7 @@ function statik(): void {
   try { assertCoversRemaining("TST-LV", new Prisma.Decimal("10.5"), new Prisma.Decimal("12.25"), "Tüketim"); } catch (e) { if (e instanceof AppError) eMsg = e; }
   const det = eMsg?.details as { remainingM?: unknown; requestedM?: unknown } | undefined;
   check("§0f eksiye düşme metni Türkçe sayı biçiminde (12,25 m / 10,5 m); details makine biçiminde (12.25 / 10.5)", !!eMsg?.message.includes("Tüketim 12,25 m, leventte kalan 10,5 m") && det?.requestedM === 12.25 && det?.remainingM === 10.5, eMsg?.message ?? "hata yok");
-  const SVC = path.join(ROOT, "src/services");
-  const msgFiles = readdirSync(SVC).filter((n) => /^(warp-beam|subcontractor-beam).*\.ts$/.test(n)).map((n) => path.join(SVC, n))
-    .concat(readdirSync(path.join(SVC, "helpers")).filter((n) => /^(warp-beam|warp-layer-beam|beam-need|consignment-beam).*\.ts$/.test(n)).map((n) => path.join(SVC, "helpers", n)))
-    .concat(["consignment-dispatch/lines.ts", "warp-need.service.ts"].map((n) => path.join(SVC, n)));
-  // İnsan metni bağlamı (AppError · uyarı · mesaj · defter sebebi) içinde: ham `.toFixed(`/`Number(` ya da biçimleyicisiz `${x} m|kg` / `%${x}` olmaz.
-  const CTX = /(AppError\.\w+\(|warnings\.(push|unshift)\(|message: |reason: |Label = )`/;
-  // Birim sonrası Unicode harf bakışı: `${ad} müşterisinin` birim değildir (düz `\b` "ü"de yanılır).
-  const RAW = /\$\{[^}`]*(\.toFixed\(|\bNumber\()|\$\{(?![^}]*\b(?:qtyText|pctText)\()[^}`]*\}\s?(?:m|kg)(?![\p{L}\d])|%\$\{(?![^}]*\bpctText\()/u;
-  const rawHits = msgFiles.flatMap((p) => readFileSync(p, "utf8").split("\n").map((l, i) => (CTX.test(l) && RAW.test(l) ? `${path.basename(p)}:${i + 1}` : null)).filter((x): x is string => x !== null));
-  check(`§0g levent mesajlarında ham sayı biçimi yok (${msgFiles.length} dosya; körlük zemini ≥ 20)`, msgFiles.length >= 20 && rawHits.length === 0, rawHits.join(", "));
+  // §0g (ham sayı taraması) 2026-11-18 tüm servislere genişleyip `test_mesaj_sayi_bicimi`ne taşındı.
 }
 
 async function main(): Promise<void> {

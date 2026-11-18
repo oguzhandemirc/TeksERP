@@ -58,6 +58,7 @@ import { inheritedChildWidth, ownerTailIntent, resolveTamburChildWidth } from ".
 import { resolveRollLabelTexts } from "../helpers/label-batch-no.helper";
 import { applyTamburCapabilitiesTx, closeOrphanRollErrors, liveCutChildIdsTx } from "./shared";
 import { resolveTamburLabelTemplate } from "../helpers/tambur-label-template.helper";
+import { qtyText } from "../helpers/qty-text.helper";
 
 export async function finalizeOpenFabric(
     openFabricRollId: string,
@@ -525,9 +526,9 @@ export async function finalizeOpenFabric(
     });
 
     const message = result.wantChild
-      ? `Açık kumaş finalize: kalan ${result.remainingQty} mt ${childQualityGrade} kalitede top olarak kaydedildi.`
+      ? `Açık kumaş finalize: kalan ${qtyText(result.remainingQty)} mt ${childQualityGrade} kalitede top olarak kaydedildi.`
       : action === "discard" && result.remainingQty > 0
-        ? `Açık kumaş finalize: kalan ${result.remainingQty} mt kayıt dışı (operatör attı).`
+        ? `Açık kumaş finalize: kalan ${qtyText(result.remainingQty)} mt kayıt dışı (operatör attı).`
         : "Açık kumaş finalize edildi.";
 
     return {

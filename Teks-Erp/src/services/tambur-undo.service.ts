@@ -116,6 +116,7 @@ import { InventoryService } from "./inventory.service";
 import { assertRollsRevivable } from "./helpers/item-usage.helper";
 import { ACTIONABLE_ROLL_ERROR_WHERE } from "./helpers/roll-error-scope.helper";
 import { TERIM } from "../constants/terim";
+import { qtyText } from "./helpers/qty-text.helper";
 
 const TAMBUR_UNDO_CONSUMABLE_REASON = "Tambur geri alındı — top başına sarf iadesi";
 
@@ -850,8 +851,8 @@ export class TamburUndoService {
         // "Geri Al" adı operatörü metrajın döneceğine inandırıyordu.
         label: parentArchived ? "Topu iptal et (kayıt yanlıştı)" : "Kesimi geri al",
         description: parentArchived
-          ? `${child.barcode ?? "bu parça"} iptal edilir. ${qty} m kaynağa geri dönmez (kaynak arşivde) — kayıt düzeltmesi olarak yazılır. ${TERIM.terbiyeIsEmri.cumleBasi.yalin} KAPALI kalır.`
-          : `${child.barcode ?? "bu parça"} iptal edilir, ${qty} m kaynak topa geri döner.`,
+          ? `${child.barcode ?? "bu parça"} iptal edilir. ${qtyText(qty)} m kaynağa geri dönmez (kaynak arşivde) — kayıt düzeltmesi olarak yazılır. ${TERIM.terbiyeIsEmri.cumleBasi.yalin} KAPALI kalır.`
+          : `${child.barcode ?? "bu parça"} iptal edilir, ${qtyText(qty)} m kaynak topa geri döner.`,
         canApply: finalBlock == null,
         blockReason: finalBlock,
         affectedCount: 1,
@@ -944,8 +945,8 @@ export class TamburUndoService {
         mode: "SINGLE_RESTORE",
         label: `${TERIM.terbiyeIsEmri.cumleBasi.yonelme} geri al (kumaş elimde)`,
         description: op
-          ? `${child.barcode ?? "bu parça"} iptal edilir, ${qty} m kaynak topa geri konur ve top Tambur adımına döner — yeniden kesilebilir. Diğer toplara dokunulmaz.`
-          : `${child.barcode ?? "bu parça"} iptal edilir, ${qty} m kaynak topa geri konur ve top depoya döner. Diğer toplara dokunulmaz.`,
+          ? `${child.barcode ?? "bu parça"} iptal edilir, ${qtyText(qty)} m kaynak topa geri konur ve top Tambur adımına döner — yeniden kesilebilir. Diğer toplara dokunulmaz.`
+          : `${child.barcode ?? "bu parça"} iptal edilir, ${qtyText(qty)} m kaynak topa geri konur ve top depoya döner. Diğer toplara dokunulmaz.`,
         canApply: finalBlock == null,
         blockReason: finalBlock,
         affectedCount: 1,
@@ -1124,8 +1125,8 @@ export class TamburUndoService {
             : "Tüm işlemi geri al",
         description:
           (children.length > 0
-            ? `${children.length} top iptal edilir, ${Number(restored)} m kaynak topa geri döner`
-            : `İptal edilecek parça kalmamış (hepsi tek tek iptal edilmiş); ${Number(restored)} m kaynak topa geri konur`) +
+            ? `${children.length} top iptal edilir, ${qtyText(restored)} m kaynak topa geri döner`
+            : `İptal edilecek parça kalmamış (hepsi tek tek iptal edilmiş); ${qtyText(restored)} m kaynak topa geri konur`) +
           (wo?.willRevive ? `, tamamlanmış ${TERIM.terbiyeIsEmri.tekilKucuk} yeniden açılır` : "") +
           ". Sebep yazmanız gerekir.",
         canApply: blockReason == null,
@@ -1587,8 +1588,8 @@ export class TamburUndoService {
       },
       message:
         result.restoredTo === "VARIANCE"
-          ? `Parça iptal edildi — ${result.restoredLen} m "kayıt düzeltmesi" olarak kayda geçti (kaynak top arşivde, metraj geri dönmez)`
-          : `Parça iptal edildi — ${result.restoredLen} m kaynak topa geri döndü`,
+          ? `Parça iptal edildi — ${qtyText(result.restoredLen)} m "kayıt düzeltmesi" olarak kayda geçti (kaynak top arşivde, metraj geri dönmez)`
+          : `Parça iptal edildi — ${qtyText(result.restoredLen)} m kaynak topa geri döndü`,
     };
   }
 
@@ -1862,8 +1863,8 @@ export class TamburUndoService {
         woRevived: result.woRevived,
       },
       message: result.warehouseClosure
-        ? `Parça iptal edildi — ${result.restoredQty} m kaynak topa geri kondu (top depoya döndü)`
-        : `Parça iptal edildi — ${result.restoredQty} m ${result.workOrderNumber ?? `${TERIM.terbiyeIsEmri.cekimKucuk.ilgi}`} Tambur adımına geri kondu${
+        ? `Parça iptal edildi — ${qtyText(result.restoredQty)} m kaynak topa geri kondu (top depoya döndü)`
+        : `Parça iptal edildi — ${qtyText(result.restoredQty)} m ${result.workOrderNumber ?? `${TERIM.terbiyeIsEmri.cekimKucuk.ilgi}`} Tambur adımına geri kondu${
             result.woRevived ? ` (${TERIM.terbiyeIsEmri.tekilKucuk} yeniden açıldı)` : ""
           }`,
     };
@@ -2273,8 +2274,8 @@ export class TamburUndoService {
           ? `${result.cancelledChildIds.length} parça iptal, `
           : "") +
         (result.warehouseClosure
-          ? `${result.restoredQty} m kaynak topa geri döndü (depo kesimi)`
-          : `${result.restoredQty} m ${result.workOrderNumber} Tambur adımına döndü`) +
+          ? `${qtyText(result.restoredQty)} m kaynak topa geri döndü (depo kesimi)`
+          : `${qtyText(result.restoredQty)} m ${result.workOrderNumber} Tambur adımına döndü`) +
         (result.woRevived ? ` (${TERIM.terbiyeIsEmri.tekilKucuk} yeniden açıldı)` : ""),
     };
   }

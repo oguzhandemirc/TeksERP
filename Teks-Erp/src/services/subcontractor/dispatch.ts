@@ -43,6 +43,7 @@ import { nextSubcontractorDocNoTx } from "./shared";
 import { assembleFasonCekiDoc } from "./printed-docs";
 import type { SubcontractorServiceThis } from "./shared";
 import { emitSubcontractDispatchedTx } from "../notification-sources/depo";
+import { qtyText } from "../helpers/qty-text.helper";
 
 export async function dispatch(
     data: {
@@ -969,7 +970,7 @@ export async function dispatch(
             }
           : result.dispatch,
       message:
-        `Fason sevki oluşturuldu: ${result.dispatch.dispatchNo} (${rolls.length} top, ${totalQty.toFixed(1)}m)` +
+        `Fason sevki oluşturuldu: ${result.dispatch.dispatchNo} (${rolls.length} top, ${qtyText(totalQty)} m)` +
         (remainderNumbers.length > 0
           ? ` — kalan toplar yeni parti(ler)e ayrıldı: ${remainderNumbers.join(", ")}`
           : ""),

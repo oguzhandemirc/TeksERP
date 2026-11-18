@@ -30,6 +30,7 @@ import {
 import { ApiResponse } from "../../types/api.types";
 import { SWATCH_IN_STOCK_WHERE, transitionSwatchesTx } from "../helpers/swatch-event.helper";
 import { nextSackNo, type ShippingServiceThis } from "./shared";
+import { qtyText } from "../helpers/qty-text.helper";
 
 export async function scanIntoSack(this: ShippingServiceThis, 
     data: { sackId: string; barcode: string },
@@ -553,7 +554,7 @@ export async function markSackContentChangedTx(
           weightKg: null,
           weightSource: sk.weightSource,
           weighedAt: stamp,
-          notes: `İçerik değişti — önceki tartı ${sk.weightKg?.toString() ?? "?"} kg düştü`,
+          notes: `İçerik değişti — önceki tartı ${sk.weightKg != null ? qtyText(sk.weightKg) : "?"} kg düştü`,
         })),
       });
     }

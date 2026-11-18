@@ -81,6 +81,7 @@ import { AppError } from "../../utils/app-error";
 import { readYarnBlockNegativeBalanceEnabled } from "../system-setting.service";
 import { yarnLotBalanceTx } from "./yarn-lot.helper";
 import { settingRowPath } from "../../constants/panel-ayar-yolu";
+import { qtyText } from "./qty-text.helper";
 
 export interface YarnOutflowRef {
   itemId: string;
@@ -149,7 +150,7 @@ export async function assertYarnBalanceCoversTx(
     if (lotBalance.minus(ref.qtyKg).isNegative()) {
       const lot = await tx.yarnLot.findUnique({ where: { id: ref.lotId }, select: { lotNo: true } });
       throw AppError.conflict(
-        `"${lot?.lotNo ?? ref.lotId}" lotunun bu depodaki bakiyesi eksiye düşecek: mevcut ${lotBalance.toFixed(3)} kg, istenen çıkış ${ref.qtyKg.toFixed(3)} kg. ` +
+        `"${lot?.lotNo ?? ref.lotId}" lotunun bu depodaki bakiyesi eksiye düşecek: mevcut ${qtyText(lotBalance)} kg, istenen çıkış ${qtyText(ref.qtyKg)} kg. ` +
           `Lot bakiyesi hareketlerden türetilir — bu lota giriş yazılmadıysa mal kabul satırındaki lot numarasını düzeltin ya da lotsuz çıkış yazın.`,
         { code: "YARN_LOT_BALANCE_EXCEEDED", lotId: ref.lotId, warehouseId: ref.warehouseId, balanceKg: lotBalance.toFixed(3), requestedKg: ref.qtyKg.toFixed(3) },
       );
@@ -173,7 +174,7 @@ export async function assertYarnBalanceCoversTx(
   // olduğu hâlde operatöre hiçbir çıkış yolu göstermez.
   throw AppError.conflict(
     `"${itemLabel}" kaleminin "${whLabel}" deposundaki bakiyesi eksiye düşecek: ` +
-      `mevcut ${balance.toFixed(3)} kg, istenen çıkış ${ref.qtyKg.toFixed(3)} kg. ` +
+      `mevcut ${qtyText(balance)} kg, istenen çıkış ${qtyText(ref.qtyKg)} kg. ` +
       `Eksi iplik bakiyesi engeli açık — depoda gerçekte mal varsa açılış/sayım kaydı eksik olabilir: ` +
       `İplik Stok Hareketleri'nden giriş (ya da sayım düzeltmesi) yazın, tutarı düzeltin ` +
       `ya da bu kuralı ${settingRowPath("yarnBlockNegativeBalanceEnabled")} ile kapatın.`,

@@ -28,6 +28,7 @@ import {
 import { MOVEMENT_ASC } from "./helpers/warehouse-ledger.helper";
 import { ambiguousCustomerCodeError, matchExtras, resolveRollByScanCode } from "./helpers/roll-scan-resolve.helper";
 import { TERIM } from "../constants/terim";
+import { pctText, qtyText } from "./helpers/qty-text.helper";
 
 export interface TimelineItem {
   /** Kaynak önekli tekil kimlik (`woe:<id>`, `link-in:<id>` …) — cursor bunun üstünde kurulur. */
@@ -55,7 +56,7 @@ export interface TimelinePage {
 }
 
 const m = (d: Prisma.Decimal | number | null | undefined) =>
-  d == null ? "—" : `${Number(d).toLocaleString("tr-TR", { maximumFractionDigits: 1 })} m`;
+  d == null ? "—" : `${qtyText(d, 1)} m`;
 
 type Pending = Omit<TimelineItem, "actor"> & { actorId: string | null };
 
@@ -221,7 +222,7 @@ async function sourcedItems(workOrderId: string, stepIds: string[]): Promise<Pen
     select: { id: true, version: true, closeKind: true, rollCount: true, warehouseM: true, a1M: true, yieldPct: true, closedById: true, createdAt: true },
   });
   for (const s of snaps) {
-    const yieldText = s.yieldPct != null ? ` · verim %${Number(s.yieldPct).toLocaleString("tr-TR", { maximumFractionDigits: 1 })}` : "";
+    const yieldText = s.yieldPct != null ? ` · verim %${pctText(s.yieldPct, 1)}` : "";
     const backfill = s.closeKind === "BACKFILL";
     out.push({
       ...NO_META, id: `snap:${s.id}`, at: s.createdAt.toISOString(), group: "KAPANIS",

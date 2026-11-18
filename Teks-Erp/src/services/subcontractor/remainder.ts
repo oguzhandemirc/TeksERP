@@ -30,6 +30,7 @@ import { assertWorkOrderBound } from "../helpers/dispatch-header.helper";
 import { assertRollsRevivable } from "../helpers/item-usage.helper";
 import { TERIM } from "../../constants/terim";
 import { logTravelerScan } from "./receive";
+import { qtyText } from "../helpers/qty-text.helper";
 
 export async function reopenRemainder(
     data: { stepId: string; rollId: string },
@@ -181,7 +182,7 @@ export async function reopenRemainder(
         data.stepId,
         ScanType.INFO,
         userId,
-        `Fason kalan kapaması geri alındı: ${roll.barcode ?? "barkodsuz top"} · ${Number(roll.currentQty)} m yeniden fasonda`,
+        `Fason kalan kapaması geri alındı: ${roll.barcode ?? "barkodsuz top"} · ${qtyText(roll.currentQty)} m yeniden fasonda`,
       );
     });
 
@@ -367,7 +368,7 @@ export async function closeRemainder(
         data.stepId,
         ScanType.INFO,
         userId,
-        `Fason kalan kapatıldı (gelmeyecek): ${roll.barcode ?? "barkodsuz top"} · ${closedQty} m · sebep: ${data.reasonCode}`,
+        `Fason kalan kapatıldı (gelmeyecek): ${roll.barcode ?? "barkodsuz top"} · ${qtyText(closedQty)} m · sebep: ${data.reasonCode}`,
       );
     });
 
@@ -388,6 +389,6 @@ export async function closeRemainder(
     return {
       success: true,
       data: { rollId: data.rollId, closedQty },
-      message: `Fasondaki kalan kapatıldı: ${roll.barcode ?? "barkodsuz top"} · ${closedQty} m fire olarak deftere yazıldı.`,
+      message: `Fasondaki kalan kapatıldı: ${roll.barcode ?? "barkodsuz top"} · ${qtyText(closedQty)} m fire olarak deftere yazıldı.`,
     };
   }

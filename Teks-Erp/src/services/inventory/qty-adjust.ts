@@ -29,6 +29,7 @@ import {
 } from "@prisma/client";
 import { TERIM } from "../../constants/terim";
 import { emitRollQtyAdjustedTx } from "../notification-sources/depo";
+import { qtyText } from "../helpers/qty-text.helper";
 
 // G4 — sayım metraj düzeltmesinin sapma kaynağı: katalogdan (2026-08-14 dikişi
 // — ilk yazımdaki geçici tip köprüsü kaldırıldı, kaynak tek yerde).
@@ -240,8 +241,8 @@ export async function adjustRollQty(
         varianceId,
       },
       message: isShort
-        ? `Metraj düzeltildi: ${Number(oldQty)} m → ${Number(newQty)} m (−${Number(diff)} m kayıt düzeltmesi)`
-        : `Metraj düzeltildi: ${Number(oldQty)} m → ${Number(newQty)} m (+${Number(diff)} m fazlalık)`,
+        ? `Metraj düzeltildi: ${qtyText(oldQty)} m → ${qtyText(newQty)} m (−${qtyText(diff)} m kayıt düzeltmesi)`
+        : `Metraj düzeltildi: ${qtyText(oldQty)} m → ${qtyText(newQty)} m (+${qtyText(diff)} m fazlalık)`,
     };
   }
 

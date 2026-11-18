@@ -19,6 +19,7 @@ import type { StationLookupWorkOrder } from "./station-lookup-rows.helper";
 import {
   isScanVerified, scoreScan, type ScanEvidence, type TargetRecord, type VerifyComponentKey, type WorkOrderVerification,
 } from "./station-scan-score.helper";
+import { pctText } from "./qty-text.helper";
 
 /** Fotoğraf yolunun doldurduğu kanıt; `key` adayı bulduran alan (parti no ile bulunan aday parti no'yla doğrulanmaz). */
 export interface ScanVerifySink {
@@ -117,7 +118,7 @@ function decisionOf(threshold: number, candidates: number, verified: number): Sc
 /** Eşik altı sonuç cümlesi — sade Türkçe; puan yoksa nedenini söyler. */
 export function unverifiedMessage(best: number | null, strong: boolean): string {
   if (best === null || !strong) return "Belge doğrulanamadı (top listesi okunamadı) — listeden seçin ya da fiş no ile elle arayın.";
-  return `Belge tam eşleşmedi (%${best}) — listeden seçin ya da fiş no ile elle arayın.`;
+  return `Belge tam eşleşmedi (%${pctText(best)}) — listeden seçin ya da fiş no ile elle arayın.`;
 }
 
 /** Eşiği geçen adaylarla sonuç cümlesi; iki farklı belge geçtiyse seçtirir. */

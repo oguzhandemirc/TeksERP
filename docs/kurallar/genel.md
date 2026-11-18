@@ -42,6 +42,7 @@
 - **[ÇEKİRDEK]** `TERIM`le DB'ye kalıcı metin yazan açılış tohumu (izin/rol şablonu/sebep) yazmadan ÖNCE rejimi DB'den çözer (`reconcileCatalogsOnce` → `refreshTermRegime`); rejim job'uyla sırasız koşturma. · bekçi: `test_terim_katalog_tohum.ts`
 
 - **[ÇEKİRDEK]** Sayı biçimi birim sınıfına göre, her yüzeyde (kart, liste, özet bandı, rapor tablosu, grafik, kayıt sayfası, PDF/Excel, sunucu rapor cümlesi): para binlik ayırıcılı 2 hane ("325.684,90 TRY"), metre/kg/top/adet/yüzde ayırıcısız ("14700 m"); panelde yalnız `lib/format` (`formatAmount`/`formatMoney` · `formatQty`/`formatDisplay`), rapor biçiminde virgül = para (`lib/number-format`), sunucuda `anlati/sayi-bicim`; basılı müşteri belgeleri ayrı karar (`test_yerel_ayar_bagimliligi` §5).
+- **[ÇEKİRDEK]** Sunucunun kullanıcıya döndürdüğü cümlede (hata · uyarı · mesaj · defter sebebi · liste alt yazısı) kg/metre/yüzde sayısını yalnız `helpers/qty-text.helper` (`qtyText`/`pctText`) ile yaz; ham `${x} m`, `%${x}`, `.toFixed(` yazma, adı gölgeleme; `details`/DTO/imza makine biçiminde kalır, para `paraMetni`. · bekçi: `test_mesaj_sayi_bicimi` <sub>(arşiv:2026-11-18)</sub>
 
 ### Yasaklar
 

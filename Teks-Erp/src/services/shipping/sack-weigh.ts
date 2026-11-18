@@ -29,6 +29,7 @@ import { ApiResponse } from "../../types/api.types";
 import { transitionSwatchesTx } from "../helpers/swatch-event.helper";
 import { resolveWeightSource } from "../helpers/weight-source-gate.helper";
 import type { ShippingServiceThis } from "./shared";
+import { qtyText } from "../helpers/qty-text.helper";
 
 // eslint-disable-next-line max-params -- `this` bağlam bildirimi parametre değil; özgün metot 4 parametreli
 export async function weighSack(this: ShippingServiceThis, 
@@ -131,7 +132,7 @@ export async function writeSackWeightTx(
     if (onceki?.weightKg == null) return "NOOP";
     await tx.sack.update({ where: { id: p.sackId }, data: { weightKg: null, weightSource: null, weighedById: null, weighedAt: null } });
     await tx.sackWeighing.create({
-      data: { sackId: p.sackId, kind: SackWeighingKind.CLEARED, weightKg: null, weightSource: onceki.weightSource, weighedById: p.userId ?? null, weighedAt: stamp, notes: `Elle kaldırıldı — önceki ${onceki.weightKg.toString()} kg` },
+      data: { sackId: p.sackId, kind: SackWeighingKind.CLEARED, weightKg: null, weightSource: onceki.weightSource, weighedById: p.userId ?? null, weighedAt: stamp, notes: `Elle kaldırıldı — önceki ${qtyText(onceki.weightKg)} kg` },
     });
     return "CLEARED";
   }

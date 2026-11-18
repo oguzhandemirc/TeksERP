@@ -35,6 +35,7 @@ import {
 import { AuditService } from "../audit.service";
 import { TERIM } from "../../constants/terim";
 import { emitItemArchivedTx } from "../notification-sources/anaveri";
+import { qtyText } from "./qty-text.helper";
 
 export { ITEM_LIFECYCLE_LABEL, itemLifecycleWriteData } from "./item-lifecycle-data.helper";
 
@@ -147,7 +148,7 @@ export async function listItemLiveRefs(
       select: { id: true, barcode: true, status: true, currentQty: true, warehouse: { select: { name: true } } },
     })).map((r) => ({
       id: r.id, title: r.barcode ?? r.id,
-      detail: `${r.status} · ${r.currentQty.toString()} m${r.warehouse ? ` · ${r.warehouse.name}` : ""}`,
+      detail: `${r.status} · ${qtyText(r.currentQty)} m${r.warehouse ? ` · ${r.warehouse.name}` : ""}`,
     })),
     WORK_ORDER: (await db.workOrder.findMany({
       where: w.WORK_ORDER, take, orderBy: { createdAt: "asc" }, select: { id: true, workOrderNumber: true, status: true },
@@ -175,11 +176,11 @@ export async function listItemLiveRefs(
       select: { id: true, dispatchedQty: true, dispatch: { select: { dispatchNo: true, dispatchedAt: true } } },
     })).map((x) => ({
       id: x.id, title: x.dispatch.dispatchNo,
-      detail: `${x.dispatch.dispatchedAt.toISOString()} · ${x.dispatchedQty.toString()} kg`,
+      detail: `${x.dispatch.dispatchedAt.toISOString()} · ${qtyText(x.dispatchedQty)} kg`,
     })),
     YARN_STOCK: (await db.yarnStock.findMany({
       where: w.YARN_STOCK, take, select: { id: true, balanceKg: true, warehouse: { select: { name: true } } },
-    })).map((x) => ({ id: x.id, title: x.warehouse.name, detail: `${x.balanceKg.toString()} kg` })),
+    })).map((x) => ({ id: x.id, title: x.warehouse.name, detail: `${qtyText(x.balanceKg)} kg` })),
     SWATCH: (await db.swatch.findMany({
       where: w.SWATCH, take, orderBy: { cardNumber: "asc" }, select: { id: true, cardNumber: true, status: true },
     })).map((x) => ({ id: x.id, title: x.cardNumber, detail: x.status })),

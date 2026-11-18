@@ -12,6 +12,7 @@ import { AuditService } from "./audit.service";
 import { validateBands, type RuleBand } from "./helpers/four-point.helper";
 import { RULE_SET_SELECT } from "./helpers/four-point-resolve.helper";
 import { readKaliteGuvenceEnabled } from "./system-setting.service";
+import { pctText } from "./helpers/qty-text.helper";
 
 export const RULE_SET_AUDIT_TABLE = "FOUR_POINT_RULE_SET";
 
@@ -81,7 +82,7 @@ function auditView(input: RuleSetInput, bands: RuleBand[]): Record<string, unkno
   return {
     name: input.name, scope: input.scope, customerId: input.customerId ?? null, itemId: input.itemId ?? null,
     unit: input.unit ?? "M2", runningCap: input.runningCap ?? "YARD",
-    bands: bands.map((b) => `${b.label}≤${b.maxScore?.toFixed(2) ?? "∞"}`).join(" · "),
+    bands: bands.map((b) => `${b.label}≤${b.maxScore == null ? "∞" : pctText(b.maxScore)}`).join(" · "),
   };
 }
 

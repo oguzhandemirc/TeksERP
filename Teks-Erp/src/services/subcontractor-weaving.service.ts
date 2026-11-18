@@ -35,6 +35,7 @@ import { WEAVING_ORDER_OPEN_STATUSES } from "./weaving-order.service";
 import { markWeavingOrderInProgressTx } from "./helpers/weaving-order.helper";
 import { assertWeavingBound } from "./helpers/dispatch-header.helper";
 import { resolveOwnerFromBeamsTx } from "./helpers/emanet-owner.helper";
+import { qtyText } from "./helpers/qty-text.helper";
 
 const inventory = new InventoryService();
 type Tx = Prisma.TransactionClient;
@@ -163,7 +164,7 @@ export async function dispatchForWeaving(input: WeavingDispatchInput, userId?: s
   return {
     success: true,
     data: { ...created.dispatch, beams: created.beams.lines, totalM: created.beams.totalM.toString(), ...(created.yarn ? { yarnItems: created.yarn.lines, yarnTotalKg: created.yarn.totalKg.toString() } : {}) },
-    message: `Fason dokuma sevki ${created.dispatch.dispatchNo} açıldı (${created.weavingOrderNumber}, ${warpBeamIds.length} levent${created.yarn ? `, ${created.yarn.totalKg} kg iplik` : ""})`,
+    message: `Fason dokuma sevki ${created.dispatch.dispatchNo} açıldı (${created.weavingOrderNumber}, ${warpBeamIds.length} levent${created.yarn ? `, ${qtyText(created.yarn.totalKg)} kg iplik` : ""})`,
   };
 }
 

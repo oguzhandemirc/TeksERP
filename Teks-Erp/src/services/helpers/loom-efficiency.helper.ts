@@ -12,6 +12,7 @@
 //    `avg(…Pct)` hiçbir yerde. Bu dosya DB'siz ve saf — girdi terimler, çıktı oranlar.
 // =============================================================================
 import { LOOM_KPI_FORMULA_VERSION } from "../../constants/loom-shift";
+import { pctText } from "./qty-text.helper";
 
 /** Oranların girdisi — karne satırının SANİYE/ATKI terimleri (oran değil). */
 export interface LoomKpiTerms {
@@ -49,7 +50,7 @@ export function computeMachineKpis(t: LoomKpiTerms): LoomKpis {
 
   const performancePct = t.targetUnitCapacityApt > 0 ? toPct(netPicks / t.targetUnitCapacityApt) : null;
   if (performancePct === null) olculemedi.P = "hedef devir yok (koşum ve künye NULL) ya da çalışma süresi sıfır";
-  else if (performancePct > 100) warnings.push(`Performans %${performancePct} > 100 — hedef devir ya da atkı sayacı hatalı olabilir; düzeltilmedi, olduğu gibi basıldı.`);
+  else if (performancePct > 100) warnings.push(`Performans %${pctText(performancePct)} > 100 — hedef devir ya da atkı sayacı hatalı olabilir; düzeltilmedi, olduğu gibi basıldı.`);
 
   const effectivenessPct = t.targetUnitCapacityPot > 0 ? toPct(netPicks / t.targetUnitCapacityPot) : null;
   if (effectivenessPct === null) olculemedi.E = "hedef devir yok ya da planlı süre sıfır";

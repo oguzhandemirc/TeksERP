@@ -10,6 +10,7 @@
 // =============================================================================
 import { codeMatchTier, tolerantCodeKey } from "./doc-code-match.helper";
 import { foldNameForCompare } from "./name-normalize.helper";
+import { qtyText } from "./qty-text.helper";
 
 export type VerifyComponentKey = "ROLL_NOS" | "ROLL_METERS" | "ROLL_COUNT" | "TOTAL_METERS" | "BATCH_NO" | "ORDER_NO" | "OWNER" | "SENDER" | "DOC_DATE";
 
@@ -116,7 +117,7 @@ function totalMetersComponent(ev: ScanEvidence, t: TargetRecord): VerifyComponen
   const stored = t.pieceMeters ?? 0;
   if (!ev.singlePiece || !t.singlePiece || !(read > 0) || !(stored > 0)) return null;
   const ok = meterNear(read, stored);
-  return comp("TOTAL_METERS", ok ? 1 : 0, ok ? `${stored} m` : `okunan ${read} · kayıt ${stored}`);
+  return comp("TOTAL_METERS", ok ? 1 : 0, ok ? `${qtyText(stored)} m` : `okunan ${qtyText(read)} · kayıt ${qtyText(stored)}`);
 }
 
 /** Kod alanı (parti / sipariş no): tam 1 · OCR-toleranslı 0,75 · yok 0. */
