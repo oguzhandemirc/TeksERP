@@ -10,6 +10,7 @@ import { AppError } from "../../utils/app-error";
 import { applyWarpBeamEventTx } from "./warp-beam-event.helper";
 import { warpBeamRemainingM } from "./warp-beam.helper";
 import { WARP_SPEC_YARN_DENIER_SELECT } from "./warp-spec-yarn.helper";
+import { qtyText } from "./qty-text.helper";
 
 type Tx = Prisma.TransactionClient;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
@@ -61,7 +62,7 @@ export function positiveM(v: Prisma.Decimal.Value, label: string): Prisma.Decima
 /** Kalanı eksiye düşürme yasağı — CONSUMED · ADJUST_OUT · EXHAUSTED tek kapı (1e ③). */
 export function assertCoversRemaining(beamNo: string, remaining: Prisma.Decimal, lengthM: Prisma.Decimal, label: string): void {
   if (remaining.minus(lengthM).lt(0)) {
-    throw AppError.conflict(`${beamNo}: ${label} ${lengthM} m, leventte kalan ${remaining} m — kalan eksiye düşemez. Önce kalanı düzeltin (ölçüm farkı) ya da metreyi düşürün.`, { code: "WARP_BEAM_REMAINING_EXCEEDED", remainingM: Number(remaining), requestedM: Number(lengthM) });
+    throw AppError.conflict(`${beamNo}: ${label} ${qtyText(lengthM)} m, leventte kalan ${qtyText(remaining)} m — kalan eksiye düşemez. Önce kalanı düzeltin (ölçüm farkı) ya da metreyi düşürün.`, { code: "WARP_BEAM_REMAINING_EXCEEDED", remainingM: Number(remaining), requestedM: Number(lengthM) });
   }
 }
 

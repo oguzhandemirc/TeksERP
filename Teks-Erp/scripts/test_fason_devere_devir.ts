@@ -37,7 +37,7 @@ import { cancelWarpingDispatch, previewCancelWarpingDispatch } from "../src/serv
 import { previewWarpingTransfer, transferWarpingYarn, type WarpingTransferLineInput } from "../src/services/warping-order/yarn-transfer";
 import { cancelWarpingTransfer, previewCancelWarpingTransfer } from "../src/services/warping-order/yarn-transfer-cancel";
 import { cancelWarpingYarnReturn, listWarpingYarnHoldings, returnWarpingYarn, warpingYarnAtSubcontractors } from "../src/services/warping-order/yarn-return";
-import { pctText, qtyText } from "../src/services/helpers/warping-message.helper";
+import { pctText, qtyText } from "../src/services/helpers/qty-text.helper";
 
 let pass = 0;
 let fail = 0;

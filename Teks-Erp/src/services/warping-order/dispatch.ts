@@ -24,7 +24,7 @@ import { carryOverByYarn, loadWarpingYarnHoldings, loadWarpingYarnItems, lotKey,
 import { WARPING_ORDER_TABLE } from "./create";
 import { loadWarpingOrderDto } from "./read";
 import { buildWarpingInstruction, type WarpingInstruction } from "./instruction";
-import { qtyText } from "../helpers/warping-message.helper";
+import { qtyText } from "../helpers/qty-text.helper";
 
 type Tx = Prisma.TransactionClient;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);

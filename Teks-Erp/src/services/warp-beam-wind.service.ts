@@ -26,7 +26,7 @@ import { toWarpBeamDto, toWarpBeamEventDto, type WarpBeamDto, type WarpBeamEvent
 import { resolveOwnerFromLotsTx } from "./helpers/emanet-owner.helper";
 import { assertWarpingWoundCancellableTx } from "./helpers/warping-receipt-guard.helper";
 import { assertBeamWeavingLinkGate, assertWeavingOrderLinkableTx, warpSpecMismatchWarning } from "./helpers/production-chain-gates.helper";
-import { qtyText } from "./helpers/warping-message.helper";
+import { qtyText } from "./helpers/qty-text.helper";
 
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 

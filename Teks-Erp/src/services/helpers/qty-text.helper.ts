@@ -1,5 +1,6 @@
-// Devere uyarı/hata METNİNDEKİ sayıların tek biçimi: ölçü sınıfı, ondalık virgül, ayırıcısız,
-// sondaki sıfır atılır ("25000,5 kg") — `genel.md` sayı kuralı, sunucuda `anlati/sayi-bicim`.
+// Kullanıcıya dönen uyarı/hata/mesaj METNİNDEKİ ölçü sayılarının (kg, metre, yüzde) tek biçimi:
+// ondalık virgül, ayırıcısız, sondaki sıfır atılır ("25000,5 kg") — `genel.md` sayı kuralı,
+// sunucuda `anlati/sayi-bicim`. Devere ve dokuma (levent) aynı kaynağı kullanır.
 // Yalnız insan metni içindir; DTO ve `details` alanları kendi makine biçiminde kalır.
 import type { Prisma } from "@prisma/client";
 import { sayiMetni } from "../reports/anlati/sayi-bicim";

@@ -19,6 +19,7 @@ import { buildProductionProposalWithContext, PROPOSAL_CODES } from "./helpers/pr
 import { receivedMetersByWeavingOrder, rollMetersByWeavingOrder } from "./helpers/weaving-order-of-roll.helper";
 import { weavingProducedM, weavingRemainingM } from "./helpers/weaving-order-list-progress.helper";
 import { lastWarpingSubcontractorBySpec, readWarpSupplyBySpec, type OpenWarpingRef } from "./helpers/warp-supply.helper";
+import { qtyText } from "./helpers/qty-text.helper";
 
 export type WarpNeedInput =
   | { source: "FABRIC"; itemId: string; recipeId?: string | null; fabricM: number }
@@ -150,7 +151,7 @@ export async function computeWarpNeed(input: WarpNeedInput): Promise<ApiResponse
   if (input.source === "FABRIC") {
     const c = await construct(memo, input.itemId, input.recipeId ?? null);
     const item = await prisma.item.findUnique({ where: { id: input.itemId }, select: { name: true } });
-    sourceLabel = `${item?.name ?? "Kumaş"} · ${input.fabricM} m`;
+    sourceLabel = `${item?.name ?? "Kumaş"} · ${qtyText(input.fabricM)} m`;
     targets = [{ key: "FABRIC", itemId: input.itemId, itemName: item?.name ?? "", recipeId: input.recipeId ?? null, fabricM: input.fabricM, construction: c, ground: null }];
   } else if (input.source === "WEAVING_ORDER") {
     await assertDokuma();

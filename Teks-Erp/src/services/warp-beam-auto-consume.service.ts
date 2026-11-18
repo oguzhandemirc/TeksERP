@@ -19,6 +19,7 @@ import { remainingMTx } from "./helpers/warp-beam-ledger.helper";
 import { readSharedBeamGroupsForRoll } from "./helpers/effective-construction.helper";
 import { fastestGroupTakeUpPct } from "./helpers/warp-layer-beam.helper";
 import { KK1_BEAM_CHANGE_WINDOW_HOURS, KK1_BEAM_CHANGE_WINDOW_MS } from "../constants/dokuma-kk1";
+import { qtyText, pctText } from "./helpers/qty-text.helper";
 
 type Tx = Prisma.TransactionClient;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
@@ -90,7 +91,7 @@ export async function autoConsumeForRollTx(tx: Tx, input: AutoConsumeInput): Pro
   }
   const lines = Math.max(1, doff.machine.productionLineCount);
   const fabric = D(input.fabricLengthM).div(lines).toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP);
-  if (lines > 1) warnings.push(`${doff.machine.code} ${lines} hatlı — top metresi hat payı olarak düşüldü (${fabric} m/levent; kardeş hat topları kendi payını düşer).`);
+  if (lines > 1) warnings.push(`${doff.machine.code} ${lines} hatlı — top metresi hat payı olarak düşüldü (${qtyText(fabric)} m/levent; kardeş hat topları kendi payını düşer).`);
   // SY-B1 SHARED_BEAM: zemin leventinde ek tel grubu varsa kalan EN HIZLI tükenen gruptan düşer.
   const shared = await readSharedBeamGroupsForRoll(tx, input.rollId);
   for (const m of mounted) {
@@ -98,21 +99,21 @@ export async function autoConsumeForRollTx(tx: Tx, input: AutoConsumeInput): Pro
     const isSharedGround = shared !== null && beam.warpSpecId === shared.groundWarpSpecId;
     const takeUp = isSharedGround ? fastestGroupTakeUpPct(beam.warpSpec.takeUpPct, shared.layers) : beam.warpSpec.takeUpPct;
     const wanted = warpLengthFromFabric(fabric, takeUp);
-    if (takeUp == null) warnings.push(`${beam.beamNo}: çözgü kartında take-up yok — çözgü = kumaş sayıldı (${wanted} m, tahmin).`);
+    if (takeUp == null) warnings.push(`${beam.beamNo}: çözgü kartında take-up yok — çözgü = kumaş sayıldı (${qtyText(wanted)} m, tahmin).`);
     const remaining = await remainingMTx(tx, beam.id);
     const lengthM = Prisma.Decimal.min(wanted, remaining);
     if (lengthM.lte(0)) {
-      warnings.push(`${beam.beamNo}: kalan 0 m — ${wanted} m tüketim yazılamadı (levent bitmiş olabilir; elle düzeltin).`);
+      warnings.push(`${beam.beamNo}: kalan 0 m — ${qtyText(wanted)} m tüketim yazılamadı (levent bitmiş olabilir; elle düzeltin).`);
       continue;
     }
-    if (lengthM.lt(wanted)) warnings.push(`${beam.beamNo}: kalan ${remaining} m yetmedi — ${lengthM} m yazıldı, ${wanted.minus(lengthM)} m açık (kalanı düzeltin).`);
+    if (lengthM.lt(wanted)) warnings.push(`${beam.beamNo}: kalan ${qtyText(remaining)} m yetmedi — ${qtyText(lengthM)} m yazıldı, ${qtyText(wanted.minus(lengthM))} m açık (kalanı düzeltin).`);
     // Terminal/sevkte levent (doff sonrası bitmiş olabilir): durum değişmez, claim aynı durumdan aynı duruma.
     await applyWarpBeamEventTx(tx, {
       beamId: beam.id,
       kind: "CONSUMED",
       from: beam.status,
       to: beam.status,
-      data: { rollId: input.rollId, lengthM, lengthSource: "ESTIMATED", fabricLengthM: fabric, machineId: doff.machineId, mountPosition: m.mountPosition, reason: takeUp == null ? "Top doğuşu — take-up bilinmiyor, çözgü = kumaş" : `Top doğuşu — ${isSharedGround ? "ortak levent, en hızlı grup " : ""}take-up %${takeUp}`, createdById: input.userId ?? null },
+      data: { rollId: input.rollId, lengthM, lengthSource: "ESTIMATED", fabricLengthM: fabric, machineId: doff.machineId, mountPosition: m.mountPosition, reason: takeUp == null ? "Top doğuşu — take-up bilinmiyor, çözgü = kumaş" : `Top doğuşu — ${isSharedGround ? "ortak levent, en hızlı grup " : ""}take-up %${pctText(takeUp)}`, createdById: input.userId ?? null },
     });
   }
   return warnings;

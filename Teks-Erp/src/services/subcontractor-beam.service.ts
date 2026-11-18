@@ -25,6 +25,7 @@ import { AuditService } from "./audit.service";
 import { applyWarpBeamEventTx, logWarpBeamEventAudit } from "./helpers/warp-beam-event.helper";
 import { remainingMTx } from "./helpers/warp-beam-ledger.helper";
 import { assertWarpBeamEventReplayAlive, tokenReplay } from "./helpers/token-replay.helper";
+import { qtyText } from "./helpers/qty-text.helper";
 
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 
@@ -200,7 +201,7 @@ async function returnWarpBeamFresh(dispatchId: string, input: ReturnWarpBeamInpu
     const shipOut = shipOutOf(item);
     if (openReturnOf(item)) throw AppError.conflict(`${item.warpBeam?.beamNo} bu sevkten zaten dönmüş`, { code: "WARP_BEAM_ALREADY_RETURNED" });
     if (shipOut.lengthM && lengthM.gt(shipOut.lengthM)) {
-      throw AppError.badRequest(`Dönen metre gideni aşamaz (giden ${Number(shipOut.lengthM)} m)`, { code: "WARP_BEAM_RETURN_EXCEEDS", shippedM: Number(shipOut.lengthM) });
+      throw AppError.badRequest(`Dönen metre gideni aşamaz (giden ${qtyText(shipOut.lengthM)} m)`, { code: "WARP_BEAM_RETURN_EXCEEDS", shippedM: Number(shipOut.lengthM) });
     }
     const ev = await applyWarpBeamEventTx(tx, {
       beamId: input.warpBeamId,
@@ -218,7 +219,7 @@ async function returnWarpBeamFresh(dispatchId: string, input: ReturnWarpBeamInpu
   return {
     success: true,
     data: { eventId: result.ev.id, beamNo, dispatchNo: result.item.dispatch.dispatchNo, lengthM: Number(result.ev.lengthM ?? lengthM), status: WarpBeamStatus.READY },
-    message: `${beamNo} fasondan döndü — ${Number(lengthM)} m`,
+    message: `${beamNo} fasondan döndü — ${qtyText(lengthM)} m`,
   };
 }
 
