@@ -13,6 +13,7 @@ import { apiErrorMessage } from "@/services/apiClient";
 import { DispatchCancelDialog } from "./DispatchCancelDialog";
 import { InstructionPrintDialog } from "./InstructionPrintDialog";
 import { fmtKg } from "./order-model";
+import { transferText } from "./holding-model";
 import { YarnDispatchDialog } from "./YarnDispatchDialog";
 import { useWarpingDispatches } from "./yarn-service";
 import type { WarpingOrder } from "./types";
@@ -22,11 +23,6 @@ const num = "text-right tabular-nums";
 const kgOrDash = (v: string) => (Number(v) === 0 ? "—" : fmtKg(v));
 /** Başlık özeti yalnız biçimdir: sunucunun sevk başı toplamlarının toplamı (iptaller hariç). */
 const sumKg = (rows: WarpingDispatchRow[], k: "totalOutKg" | "totalHoldingKg") => rows.reduce((s, d) => s + Number(d[k]), 0);
-
-function transferText(out: string, inn: string): string {
-  const parts = [Number(inn) > 0 && `+${fmtKg(inn)}`, Number(out) > 0 && `−${fmtKg(out)}`].filter(Boolean);
-  return parts.length ? parts.join(" / ") : "—";
-}
 
 function ItemRow({ it, muted }: { it: WarpingDispatchItem; muted: boolean }) {
   return (

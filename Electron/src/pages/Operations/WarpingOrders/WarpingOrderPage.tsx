@@ -1,7 +1,7 @@
 // =============================================================================
 // FASON DEVERE SİPARİŞİ — kayıt sayfası (plan E4) · `operations/fason-devere/:id`
 // =============================================================================
-// Bölümler: özet · iplik planı (sunucuda donmuş) · sevkler (D6b; yeni sevk, iptal, irsaliye + çözgü talimatı). Yazma düğmeleri izinle (`PermissionGate`) ve durumla çizilir:
+// Bölümler: özet · iplik planı (sunucuda donmuş) · sevkler (D6b; yeni sevk, iptal, irsaliye + çözgü talimatı) · deverecide tutulan iplik (iade, aktarma, geçmiş). Yazma düğmeleri izinle (`PermissionGate`) ve durumla çizilir:
 // düzenle OPEN/IN_PROGRESS (sevkliyken yalnız meta), iptal yalnız OPEN'da anlamlı — sevkli siparişte önizleme
 // "önce sevkleri iptal edin" der. Kapalı/iptal siparişte yazma yüzeyi HİÇ çizilmez.
 // =============================================================================
@@ -18,6 +18,7 @@ import { apiErrorMessage } from "@/services/apiClient";
 import { cn } from "@/lib/utils";
 import { CancelOrderDialog } from "./CancelOrderDialog";
 import { DispatchesSection } from "./DispatchesSection";
+import { HoldingsSection } from "./HoldingsSection";
 import { InstructionPrintDialog } from "./InstructionPrintDialog";
 import { OrderSummary } from "./OrderSummary";
 import { PlanTable } from "./PlanTable";
@@ -61,6 +62,7 @@ export function WarpingOrderPage() {
               <PlanTable yarns={o.yarns} hasWaste={o.hasWaste} totals={o.totals} />
             </section>
             <DispatchesSection order={o} />
+            <HoldingsSection order={o} />
           </>
         )}
       </PageBody>

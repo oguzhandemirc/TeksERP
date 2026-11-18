@@ -54,6 +54,9 @@ const EXEMPT: Record<string, string> = {
   // D6b: sipariş sayfası sevk bölümü (sevk başına birkaç kalem) ve sevk diyaloğunun iplik satırları — kayıt listesi değil.
   "Operations/WarpingOrders/DispatchesSection.tsx": GOMULU,
   "Operations/WarpingOrders/DispatchLinesTable.tsx": GOMULU,
+  "Operations/WarpingOrders/HoldingsSection.tsx": GOMULU,
+  "Operations/WarpingOrders/TransferParts.tsx": GOMULU,
+  "Operations/WarpingOrders/YarnReturnsList.tsx": GOMULU,
   "Operations/WeavingFloor/jobs/BulkParts.tsx": GOMULU,
   "Operations/WeavingFloor/stops/StopBulkParts.tsx": GOMULU,
   "Operations/WorkOrders/BranchLanes.tsx": GOMULU,
