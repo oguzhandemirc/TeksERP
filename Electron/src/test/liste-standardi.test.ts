@@ -61,6 +61,9 @@ const EXEMPT: Record<string, string> = {
   "Operations/WarpingOrders/ReceiptsSection.tsx": GOMULU,
   "Operations/WarpingOrders/ReceiveParts.tsx": GOMULU,
   "Operations/WarpingOrders/SettlementSummary.tsx": GOMULU,
+  // D7b: kapanış diyaloğunun kalem satırları ve iplik başına önizleme, kapanış geçmişi (birkaç kayıt) — kayıt listesi değil.
+  "Operations/WarpingOrders/SettleParts.tsx": GOMULU,
+  "Operations/WarpingOrders/SettlementsSection.tsx": GOMULU,
   "Operations/WeavingFloor/jobs/BulkParts.tsx": GOMULU,
   "Operations/WeavingFloor/stops/StopBulkParts.tsx": GOMULU,
   "Operations/WorkOrders/BranchLanes.tsx": GOMULU,

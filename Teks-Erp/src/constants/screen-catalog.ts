@@ -256,7 +256,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // Çözgü Hesabı (fason devere D3, 2026-11-17): levent adedi × boy → iplik kg; eldeki iplik → en çok metre. Yazmaz.
   { key: "operations/cozgu-hesabi", app: "desktop", modul: "devereEnabled", title: "Çözgü Hesabı", requires: ["warpspec:read"], capabilities: [] },
   // Fason Devere Siparişleri (devere D6a, 2026-11-18): liste + sipariş sayfası; yeni/düzenle (write), iptal (cancel).
-  { key: "operations/fason-devere", app: "desktop", modul: "devereEnabled", title: "Fason Devere Siparişleri", requires: ["warping-order:read"], capabilities: ["warping-order:write", "warping-order:cancel"] },
+  { key: "operations/fason-devere", app: "desktop", modul: "devereEnabled", title: "Fason Devere Siparişleri", requires: ["warping-order:read"], capabilities: ["warping-order:write", "warping-order:cancel", "warping-order:settle"] },
   // Tezgah duruşları (Faz 1b web yüzeyi, 2026-09-14): elle giriş/kapatma/geri alma `loom:manual-entry`,
   // sebep atama/yeniden sınıflandırma `loom:classify` — İKİSİNDEN BİRİ ekranı açar, eylemler ekran içinde izinle.
   { key: "operations/machine-stops", app: "desktop", modul: "dokumaEnabled", title: "Tezgah Duruşları", requires: ["loom:manual-entry", "loom:classify"], capabilities: [] },
@@ -486,8 +486,6 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   { code: "loom:doff", reason: "Panel doff yüzeyi yok; tablet `mobile:dokuma` ile kaydeder — web kodu API/entegrasyon için." },
   { code: "loom:doff-revoke", reason: "Panel geri alma yüzeyi yok; tablet `mobile:dokuma-geri-al` ile — web kodu API/entegrasyon için." },
   // Tezgah künyesi + gölge mod (B3, 2026-09-14): "Devreye Alma" ekranı AYRI dilim (Faz 2 ingest ile, `tezgah.enabled`).
-  // Fason devere D5b (2026-11-18): kapanış / yeniden açma diyaloğu D7 dilimiyle doğar — ekranla ölü muaf olur.
-  { code: "warping-order:settle", reason: "Fason devere kapanış / yeniden açma diyaloğu D7 dilimiyle doğar; bugün yalnız API." },
 ];
 
 /** Katalogda adı geçmeyen izin var mı? (bekçi ve panel bandı kullanır) */
