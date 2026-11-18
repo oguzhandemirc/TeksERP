@@ -21,6 +21,7 @@ import { lotPolicyVerdict, mixedLots, openItems } from "./dispatch";
 import { WARPING_ORDER_TABLE } from "./create";
 import { loadTransferBatch, type WarpingTransferBatch } from "./yarn-transfer-shared";
 import { claimTransferOrdersTx } from "./yarn-transfer-cancel";
+import { qtyText } from "../helpers/warping-message.helper";
 
 type Tx = Prisma.TransactionClient;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
@@ -68,7 +69,7 @@ export function allocateTransfer(source: WarpingYarnItem[], lines: WarpingTransf
       && (l.dispatchItemId === undefined || i.dispatchItemId === l.dispatchItemId));
     const avail = pool.reduce((a, i) => a.plus(Prisma.Decimal.max(0, left.get(i.dispatchItemId)!)), D(0));
     if (avail.lt(need)) {
-      throw AppError.badRequest(`${codeOf(l.yarnItemId)}: kaynak siparişin deverecide tuttuğu ${kg(avail)} kg, aktarılmak istenen ${kg(need)} kg — aktarma tutmayı aşamaz.`, {
+      throw AppError.badRequest(`${codeOf(l.yarnItemId)}: kaynak siparişin deverecide tuttuğu ${qtyText(avail)} kg, aktarılmak istenen ${qtyText(need)} kg — aktarma tutmayı aşamaz.`, {
         code: "WARPING_TRANSFER_EXCEEDS", yarnItemId: l.yarnItemId, availableKg: kg(avail), requestedKg: kg(need),
       });
     }

@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { loadAllPagesForPicker } from "@/lib/picker-loader";
 import { listYarnLots, listYarnStocks } from "@/pages/Operations/Yarn/service";
 import { lotQualityOf, YARN_LOT_QUALITY } from "@/pages/Operations/Yarn/yarnLotQuality";
 import { fmtKg } from "./order-model";
@@ -96,8 +97,9 @@ export function SourcePicker(p: PickerProps) {
 }
 
 export async function loadWarehouseOptions(itemId: string): Promise<Option[]> {
-  const r = await listYarnStocks({ page: 1, pageSize: 100, itemId, onlyNonZero: true });
-  return r.data.map((s) => ({ id: s.warehouse.id, label: s.warehouse.name, hint: s.warehouse.code, balanceKg: Number(s.balanceKg) }));
+  // Uç tavanı 200; depo sayısı bunu aşabilir → sayfa sayfa sonuna kadar (sessiz kesme yok).
+  const rows = await loadAllPagesForPicker((page, pageSize) => listYarnStocks({ page, pageSize, itemId, onlyNonZero: true }));
+  return rows.map((s) => ({ id: s.warehouse.id, label: s.warehouse.name, hint: s.warehouse.code, balanceKg: Number(s.balanceKg) }));
 }
 
 async function loadLotOptions(itemId: string): Promise<Option[]> {

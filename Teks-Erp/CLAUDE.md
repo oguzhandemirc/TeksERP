@@ -33,7 +33,7 @@ npx tsx scripts/run-all-tests.ts <ad-parçası>   # tek bekçi
 
 ## İzin ve rol — katalog koda, atama panele
 
-- Yeni izin = `src/constants/permission-catalog.ts`'e TEK satır; boot uzlaştırması DB'ye getirir, KİMSEYE ATAMAZ; bekçi `test_permission_catalog.ts`. Migration YAZMA; uzlaştırma yalnız ekler.
+- Yeni izin = `src/constants/permission-catalog.ts`'e TEK satır; boot uzlaştırması DB'ye getirir, KİMSEYE ATAMAZ; bekçi `test_permission_catalog.ts`. Migration YAZMA; uzlaştırma yalnız ekler. İstisna: Tam Yetki (ADMIN_FULL) şablonuna EKLENEN yeni izni, şablonun önceki bütün izinlerine süresiz sahip kullanıcıya açılışta yay — SoD izinlerini yayma, geriye dönük uygulama (`yetki-izin.md`).
 - Rol şablonları aynı üçlü (`role-template-catalog.ts` + job + `test_role_template_catalog.ts`); `mode:"all"` yalnız "Admin (Tam Yetki)"; kimlik `code`; sistem rolü pasifleştirilir, sert silinmez; muaflar `ROLE_COVERAGE_EXEMPT`'te gerekçeli.
 - Mobil uç kapısı `requireAnyPermission('<web-izni>', ...MOBILE_X)`; kategori `web` izinler `admin:*` ile GELMEZ. Ayrıntı `docs/kurallar/yetki-izin.md`.
 

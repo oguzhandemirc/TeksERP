@@ -25,6 +25,7 @@ import { allocateWoundYarn, loadAllocationCandidates, type AllocationCandidate }
 import { loadWarpingSettlement, type WarpingSettlement } from "../helpers/warping-settlement.helper";
 import { WARPING_ORDER_TABLE } from "./create";
 import { loadWarpingReceipt, type WarpingReceiptDto } from "./receipts";
+import { qtyText } from "../helpers/warping-message.helper";
 
 type Tx = Prisma.TransactionClient;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
@@ -68,7 +69,7 @@ export function normalizeReceiveBeams(beams: WarpingReceiveBeamInput[]): Array<O
     const grossKg = b.grossKg == null ? null : dec3(b.grossKg, "Brüt kg", "pos");
     const tareKg = b.tareKg == null ? null : dec3(b.tareKg, "Dara kg", "nonneg");
     if (tareKg && !grossKg) throw AppError.badRequest(`${idx + 1}. satır: dara yazıldıysa brüt kg da yazılmalı.`, { code: "WARPING_RECEIVE_TARE_WITHOUT_GROSS" });
-    if (tareKg && grossKg && tareKg.gte(grossKg)) throw AppError.badRequest(`${idx + 1}. satır: dara (${kg3(tareKg)} kg) brütten (${kg3(grossKg)} kg) küçük olmalı.`, { code: "WARPING_RECEIVE_TARE_EXCEEDS" });
+    if (tareKg && grossKg && tareKg.gte(grossKg)) throw AppError.badRequest(`${idx + 1}. satır: dara (${qtyText(tareKg)} kg) brütten (${qtyText(grossKg)} kg) küçük olmalı.`, { code: "WARPING_RECEIVE_TARE_EXCEEDS" });
     return { idx, lengthM: dec3(b.lengthM, `${idx + 1}. satır metre`, "pos"), physicalBeamNo, grossKg, tareKg };
   });
 }
@@ -97,7 +98,7 @@ async function evaluate(db: Tx | typeof prisma, order: Awaited<ReturnType<typeof
   const codeOf = (y: string) => order.planYarns.find((p) => p.yarnItemId === y)?.code ?? y;
   const warnings: string[] = [];
   for (const [y, rest] of alloc.unallocated) {
-    warnings.push(`${codeOf(y)}: nominal tüketim deverecideki iplikten ${kg3(rest)} kg fazla — tel/denye/metre ya da eksik sevk kaydını kontrol edin (fazlası dağıtılmadı, bakiye eksiye inmez).`);
+    warnings.push(`${codeOf(y)}: nominal tüketim deverecideki iplikten ${qtyText(rest)} kg fazla — tel/denye/metre ya da eksik sevk kaydını kontrol edin (fazlası dağıtılmadı, bakiye eksiye inmez).`);
   }
   return { candidates, ownerCustomerId, alloc, warnings };
 }
@@ -109,7 +110,7 @@ function weighWarnings(beams: BeamPlan[]): string[] {
     const net = b.grossKg.minus(b.tareKg);
     const nominal = b.yarns.reduce((s, y) => s.plus(y.kg), D(0));
     const diff = net.minus(nominal);
-    if (!diff.isZero()) out.push(`${b.idx + 1}. levent: tartı net ${kg3(net)} kg, hesap ${kg3(nominal)} kg — fark ${diff.gt(0) ? "+" : ""}${kg3(diff)} kg (bilgi; tüketim hesaptan).`);
+    if (!diff.isZero()) out.push(`${b.idx + 1}. levent: tartı net ${qtyText(net)} kg, hesap ${qtyText(nominal)} kg — fark ${diff.gt(0) ? "+" : ""}${qtyText(diff)} kg (bilgi; tüketim hesaptan).`);
   }
   return out;
 }

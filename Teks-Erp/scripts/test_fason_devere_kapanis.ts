@@ -133,7 +133,7 @@ async function main(): Promise<void> {
     check("Gövde: iade + fire > tutulan 400 · sebepsiz iade 400 · tutulmayan kalem 400", eEx?.code === "WARPING_SETTLE_EXCEEDS" && eRs?.code === "WARPING_SETTLE_RETURN_REASON" && eUk?.code === "WARPING_SETTLE_LINE_UNKNOWN", `${show(eEx)} | ${show(eRs)} | ${show(eUk)}`);
     const pvY = await previewSettleWarpingOrder(A, { lines: [{ dispatchItemId: itY, wasteKg: 3 }] });
     const pvYy = (y: { id: string }) => pvY.plan.yarns.find((v) => v.yarnItemId === y.id)!;
-    check("İplik başı tolerans: yalnız Y fire %6,98 > 5 (genel %1,96 içinde) → overTolerance + Y uyarısı, X uyarısız", pvY.plan.overTolerance && pvY.plan.wastePct === "1.96" && pvYy(Y).wastePct === "6.98" && pvYy(Y).overTolerance && !pvYy(X).overTolerance && pvY.warnings.length === 1 && pvY.warnings[0]!.includes("6.98"), `${pvY.plan.wastePct} ${pvYy(Y).wastePct} ${JSON.stringify(pvY.warnings)}`);
+    check("İplik başı tolerans: yalnız Y fire %6,98 > 5 (genel %1,96 içinde) → overTolerance + Y uyarısı, X uyarısız", pvY.plan.overTolerance && pvY.plan.wastePct === "1.96" && pvYy(Y).wastePct === "6.98" && pvYy(Y).overTolerance && !pvYy(X).overTolerance && pvY.warnings.length === 1 && pvY.warnings[0]!.includes("fire %6,98 toleransı (%5)"), `${pvY.plan.wastePct} ${pvYy(Y).wastePct} ${JSON.stringify(pvY.warnings)}`);
     const xStock0 = await stockOf(X);
     const tokA = randomUUID();
     const sA = await settle(A, body, tokA);
