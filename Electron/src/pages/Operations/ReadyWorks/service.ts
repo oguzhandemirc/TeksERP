@@ -1,6 +1,7 @@
 // SEVKE HAZIR İŞLER (D4-J3, ister 2.4 / 2.10) — `GET /api/shipping/ready-works` + `/:unit/:id/rolls` aynası.
 // Hazırlık SUNUCUDA türetilir (`ship-readiness.helper`); durum ve müşteri süzgeci query'ye gider, istemci süzmez.
 import apiClient from "@/services/apiClient";
+import { loadAllCursorPagesForPicker } from "@/lib/picker-loader";
 
 export type ReadyWorkUnit = "workOrder" | "deliveryNote" | "customerBatch" | "customer";
 export type ReadyWorkState = "READY" | "PARTIAL" | "NONE";
@@ -99,20 +100,16 @@ export async function getReadyWorkRolls(unit: ReadyWorkUnit, id: string, rollCla
     );
     out.push(...r.data.data.items);
     cursor = r.data.data.nextCursor;
-    if (!cursor) break;
+    if (!cursor) return out;
   }
-  return out;
+  // Tavanda imleç bitmediyse eksik listeyi "tümü" diye vermek yerine açık hata (sessiz kesme yok).
+  throw new Error(`Birimin topları çok fazla (${maxPages} sayfayı aştı); liste eksik gösterilmez.`);
 }
 
-/** Birim türünün TÜM satırları (imleç sonuna kadar, sayfa tavanlı) — İçerideki İşler müşteri hazırlık kolonu. */
-export async function getAllReadyWorks(groupBy: ReadyWorkUnit, maxPages = 10): Promise<ReadyWorkRow[]> {
-  const out: ReadyWorkRow[] = [];
-  let cursor: string | null = null;
-  for (let i = 0; i < maxPages; i++) {
-    const page: ReadyWorkPage = await getReadyWorks({ groupBy, states: [], cursor, limit: 200 });
-    out.push(...page.items);
-    cursor = page.nextCursor;
-    if (!cursor) break;
-  }
-  return out;
+/** Birim türünün TÜM satırları — İçerideki İşler müşteri hazırlık kolonu. Tek yükleyici: sonuna kadar, tavanda açık hata. */
+export async function getAllReadyWorks(groupBy: ReadyWorkUnit): Promise<ReadyWorkRow[]> {
+  return loadAllCursorPagesForPicker(async (cursor, limit) => {
+    const page = await getReadyWorks({ groupBy, states: [], cursor, limit });
+    return { data: page.items, pagination: { nextCursor: page.nextCursor } };
+  });
 }
