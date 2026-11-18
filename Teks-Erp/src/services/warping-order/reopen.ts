@@ -15,7 +15,7 @@ import { cancelYarnReturnTx } from "../subcontractor-yarn.service";
 import { loadWarpingYarnItems, lockDispatchItemsTx, WARPING_TRANSFER_CANCEL, WARPING_WASTE, WARPING_WASTE_CANCEL } from "../helpers/warping-yarn-open.helper";
 import { WARPING_ORDER_TABLE } from "./create";
 import { loadSettlementRecord, newestLiveSettlement, WARPING_REOPEN, type WarpingSettlementRecord } from "./settle-record";
-import { qtyText } from "../helpers/warping-message.helper";
+import { qtyText } from "../helpers/qty-text.helper";
 
 type Tx = Prisma.TransactionClient;
 const kg = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v).toFixed(3);

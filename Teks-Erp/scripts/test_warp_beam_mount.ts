@@ -12,9 +12,10 @@
 // NEGATİF SONDALAR (2026-09-14): `assertCoversRemaining` gövdesi boşaltıldı → §4b kırmızı ·
 //   `assertSlotFreeTx` çağrısı düşürüldü → §2e kırmızı (sed 409'a çevrilir ama meşgul levent ADI kaybolur) · `assertMountTrackingOnTx`
 //   boşaltıldı → §1b kırmızı · `activeForwardStatusEventTx` orderBy asc → §6b HATA (en yeni yerine en eski olay).
+// MSG (2026-11-18): `assertCoversRemaining` metni ham `${lengthM}` → §0f kırmızı · tüketim mesajına `${Number(x)} m` / `.toFixed(` → §0g kırmızı · bitiş mesajı ham `deltaM.abs()` → §8d-MSG kırmızı.
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım. Bayraklar FOTOĞRAFINA döndürülür.
 // =============================================================================
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { Prisma, StationType, WarpBeamOrigin, WarpBeamStatus, WarpKgSource } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
@@ -28,6 +29,7 @@ import { adjustBeam, cancelConsumed, consumeBeam, exhaustBeam, scrapBeam, scrapP
 import { closeMachineRun, openMachineRun } from "../src/services/machine-run.service";
 import { reconcileReasonPresets } from "../src/jobs/reason-preset-catalog.job";
 import { ACTIVE_FORWARD_EVENT_SQL, BEAMS_MOUNTED_DURING_SQL } from "../src/services/helpers/warp-beam-mount.helper";
+import { assertCoversRemaining } from "../src/services/helpers/warp-beam-ledger.helper";
 import { AppError } from "../src/utils/app-error";
 
 let pass = 0;
@@ -67,6 +69,21 @@ function statik(): void {
   check("§0c yıkıcı uçlar (hurda · geri almalar) `warpbeam:cancel` taşır", yikici.length === 0, yikici.join(","));
   check("§0d ACTIVE_FORWARD_EVENT_SQL ↔ WARP_BEAM_STATUS_EVENT_KINDS (boğaz-ikiz)", WARP_BEAM_STATUS_EVENT_KINDS.every((k) => ACTIVE_FORWARD_EVENT_SQL.includes(`'${k}'`)));
   check("§0e koşum penceresi SQL'i dört kapatıcıyı tanır (DISMOUNTED · EXHAUSTED · SCRAPPED · SHIP_OUT)", ["DISMOUNTED", "EXHAUSTED", "SCRAPPED", "SHIP_OUT"].every((k) => BEAMS_MOUNTED_DURING_SQL.includes(`'${k}'`)));
+  // MSG — levent insan metninde ölçü sayısı `qty-text.helper`dan (ayırıcısız, ondalık virgül; genel.md); details makine biçimi.
+  let eMsg: AppError | null = null;
+  try { assertCoversRemaining("TST-LV", new Prisma.Decimal("10.5"), new Prisma.Decimal("12.25"), "Tüketim"); } catch (e) { if (e instanceof AppError) eMsg = e; }
+  const det = eMsg?.details as { remainingM?: unknown; requestedM?: unknown } | undefined;
+  check("§0f eksiye düşme metni Türkçe sayı biçiminde (12,25 m / 10,5 m); details makine biçiminde (12.25 / 10.5)", !!eMsg?.message.includes("Tüketim 12,25 m, leventte kalan 10,5 m") && det?.requestedM === 12.25 && det?.remainingM === 10.5, eMsg?.message ?? "hata yok");
+  const SVC = path.join(ROOT, "src/services");
+  const msgFiles = readdirSync(SVC).filter((n) => /^(warp-beam|subcontractor-beam).*\.ts$/.test(n)).map((n) => path.join(SVC, n))
+    .concat(readdirSync(path.join(SVC, "helpers")).filter((n) => /^(warp-beam|warp-layer-beam|beam-need|consignment-beam).*\.ts$/.test(n)).map((n) => path.join(SVC, "helpers", n)))
+    .concat(["consignment-dispatch/lines.ts", "warp-need.service.ts"].map((n) => path.join(SVC, n)));
+  // İnsan metni bağlamı (AppError · uyarı · mesaj · defter sebebi) içinde: ham `.toFixed(`/`Number(` ya da biçimleyicisiz `${x} m|kg` / `%${x}` olmaz.
+  const CTX = /(AppError\.\w+\(|warnings\.(push|unshift)\(|message: |reason: |Label = )`/;
+  // Birim sonrası Unicode harf bakışı: `${ad} müşterisinin` birim değildir (düz `\b` "ü"de yanılır).
+  const RAW = /\$\{[^}`]*(\.toFixed\(|\bNumber\()|\$\{(?![^}]*\b(?:qtyText|pctText)\()[^}`]*\}\s?(?:m|kg)(?![\p{L}\d])|%\$\{(?![^}]*\bpctText\()/u;
+  const rawHits = msgFiles.flatMap((p) => readFileSync(p, "utf8").split("\n").map((l, i) => (CTX.test(l) && RAW.test(l) ? `${path.basename(p)}:${i + 1}` : null)).filter((x): x is string => x !== null));
+  check(`§0g levent mesajlarında ham sayı biçimi yok (${msgFiles.length} dosya; körlük zemini ≥ 20)`, msgFiles.length >= 20 && rawHits.length === 0, rawHits.join(", "));
 }
 
 async function main(): Promise<void> {
@@ -198,6 +215,7 @@ async function main(): Promise<void> {
     const x4 = await exhaustBeam(b4, { grossKg: 20, tareKg: 8 });
     const adj = await olay(b4, "ADJUST_IN");
     check("§8d ⭐ tartı: (20−8) ÷ (3500×300÷9e6) = 102,857 m > kalan 100 → ADJUST_IN 2,857 (OLCUM_FARKI) + EXHAUSTED WEIGHED; kalan 0", x4.data.status === WarpBeamStatus.EXHAUSTED && adj?.reasonCode === "OLCUM_FARKI" && adj?.lengthM?.toNumber() === 2.857 && (await olay(b4, "EXHAUSTED"))?.lengthSource === "WEIGHED" && (await kalan(b4)) === 0, String(adj?.lengthM));
+    check("§8d-MSG bitiş mesajı kapatma farkını Türkçe sayı biçiminde basar (ADJUST_IN 2,857 m)", (x4.message ?? "").includes("ADJUST_IN 2,857 m ile kapatıldı"), x4.message ?? "");
     const b5 = await sar(30);
     const x5 = await exhaustBeam(b5, { grossKg: 5 });
     check("§8e dara yok → metre türetilemez: ESTIMATED, artık 0 (lengthM null), UYARI", x5.data.status === WarpBeamStatus.EXHAUSTED && (x5.warnings ?? []).some((w) => /Dara/.test(w)) && (await olay(b5, "EXHAUSTED"))?.lengthM === null && (await olay(b5, "EXHAUSTED"))?.lengthSource === "ESTIMATED");

@@ -25,7 +25,7 @@ import { allocateWoundYarn, loadAllocationCandidates, type AllocationCandidate }
 import { loadWarpingSettlement, type WarpingSettlement } from "../helpers/warping-settlement.helper";
 import { WARPING_ORDER_TABLE } from "./create";
 import { loadWarpingReceipt, type WarpingReceiptDto } from "./receipts";
-import { qtyText } from "../helpers/warping-message.helper";
+import { qtyText } from "../helpers/qty-text.helper";
 
 type Tx = Prisma.TransactionClient;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);

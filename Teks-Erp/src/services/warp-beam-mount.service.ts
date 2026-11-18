@@ -29,6 +29,7 @@ import {
   type MountedBeamView,
 } from "./helpers/warp-beam-mount.helper";
 import { closeToMeasuredTx, loadBeamTx, readRemainingM, remainingMTx } from "./helpers/warp-beam-ledger.helper";
+import { qtyText } from "./helpers/qty-text.helper";
 
 export interface MountBeamInput {
   machineId: string;
@@ -98,7 +99,7 @@ async function mountBeamFresh(id: string, input: MountBeamInput, userId?: string
     // Yarım levent (daha önce tüketim görmüş) başka makineye — UYARI, red değil (§4.7).
     const remaining = await remainingMTx(tx, beam.id);
     const wound = await tx.warpBeamEvent.findFirst({ where: { beamId: beam.id, kind: "WOUND", reversal: null }, select: { lengthM: true } });
-    if (wound?.lengthM && remaining.lt(wound.lengthM)) warnings.push(`${beam.beamNo} yarım levent (kalan ${remaining} / ${wound.lengthM} m) — başka bir sarımın devamı; uyum (model/en/takım) operatörün sorumluluğunda.`);
+    if (wound?.lengthM && remaining.lt(wound.lengthM)) warnings.push(`${beam.beamNo} yarım levent (kalan ${qtyText(remaining)} / ${qtyText(wound.lengthM)} m) — başka bir sarımın devamı; uyum (model/en/takım) operatörün sorumluluğunda.`);
     // Yöntem ÖNERİSİ (veri, zorlama değil): bu yuvadan son sökülen levent aynı çözgü kartıysa düğüm.
     const last = await tx.warpBeamEvent.findFirst({ where: { kind: "DISMOUNTED", machineId: machine.id, mountPosition: input.position, reversal: null }, orderBy: { createdAt: "desc" }, select: { beam: { select: { warpSpecId: true } } } });
     if (last && last.beam.warpSpecId === beam.warpSpecId && !input.mountMethod) warnings.push("Bu yuvadan son sökülen levent aynı çözgü kartından — düğüm (tying-in) yöntemi uygun olabilir; beyan sizin.");
@@ -157,7 +158,7 @@ export async function dismountBeam(id: string, input: DismountBeamInput, userId?
     return { ev, beamNo: beam.beamNo, warnings, closed, machineCode: machine.code };
   });
   await logWarpBeamEventAudit({ userId, eventId: result.ev.id, kind: "DISMOUNTED", data: { beamId: id, closed: result.closed.kind, deltaM: Number(result.closed.deltaM) } });
-  const kapatma = result.closed.kind ? ` (ölçülen kalana kapatıldı: ${result.closed.kind} ${result.closed.deltaM.abs()} m)` : "";
+  const kapatma = result.closed.kind ? ` (ölçülen kalana kapatıldı: ${result.closed.kind} ${qtyText(result.closed.deltaM.abs())} m)` : "";
   return { success: true, data: await freshDto(id), message: `${result.beamNo} ${result.machineCode} makinesinden söküldü — hazır stoğa döndü${kapatma}`, ...(result.warnings.length ? { warnings: result.warnings } : {}) };
 }
 

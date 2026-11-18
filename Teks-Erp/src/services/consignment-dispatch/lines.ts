@@ -14,6 +14,7 @@ import { settingScreenPath } from "../../constants/panel-ayar-yolu";
 import { beamBlockedReason, yarnBlockedReason } from "./eligibility";
 import { yarnLotWarehouseBalancesTx } from "../helpers/yarn-lot.helper";
 import type { ConsignmentDispatchCreateInput, ConsignmentDispatchErrorCode } from "./types";
+import { qtyText } from "../helpers/qty-text.helper";
 
 type Db = Prisma.TransactionClient;
 export const D = (v: Prisma.Decimal.Value): Prisma.Decimal => new Prisma.Decimal(v);
@@ -186,7 +187,7 @@ export function assertNoBlockedLines(r: ResolvedDispatch): void {
       throw AppError.conflict(`${b.beamNo} ${r.owner.name} müşterisinin emanet leventi değil — sahibinden başkasına çıkış belgesi açılamaz.`, { code: b.blockedReason, warpBeamId: b.warpBeamId, ownerCustomerId: b.ownerCustomerId });
     }
     if (b.blockedReason === "CONSIGNMENT_BEAM_NOT_READY") {
-      throw AppError.conflict(`${b.beamNo} durumu ${b.status}, kalan ${b.remainingM.toFixed(3)} m — yalnız HAZIR ve kalanı olan levent sahibine çıkar.`, { code: b.blockedReason, warpBeamId: b.warpBeamId, status: b.status });
+      throw AppError.conflict(`${b.beamNo} durumu ${b.status}, kalan ${qtyText(b.remainingM)} m — yalnız HAZIR ve kalanı olan levent sahibine çıkar.`, { code: b.blockedReason, warpBeamId: b.warpBeamId, status: b.status });
     }
   }
   for (const y of r.yarns) {
@@ -197,7 +198,7 @@ export function assertNoBlockedLines(r: ResolvedDispatch): void {
       throw AppError.conflict(`"${y.lotNo}" lotu pasif — pasif lottan emanet çıkışı yapılamaz.`, { code: y.blockedReason, lotId: y.lotId });
     }
     if (y.blockedReason === "CONSIGNMENT_YARN_INSUFFICIENT") {
-      throw AppError.conflict(`"${y.lotNo}" lotunun ${y.warehouseName} deposundaki bakiyesi ${y.balanceKg.toFixed(3)} kg — istenen ${y.qtyKg.toFixed(3)} kg karşılanmıyor.`, { code: y.blockedReason, lotId: y.lotId, warehouseId: y.warehouseId, balanceKg: y.balanceKg.toFixed(3), requestedKg: y.qtyKg.toFixed(3) });
+      throw AppError.conflict(`"${y.lotNo}" lotunun ${y.warehouseName} deposundaki bakiyesi ${qtyText(y.balanceKg)} kg — istenen ${qtyText(y.qtyKg)} kg karşılanmıyor.`, { code: y.blockedReason, lotId: y.lotId, warehouseId: y.warehouseId, balanceKg: y.balanceKg.toFixed(3), requestedKg: y.qtyKg.toFixed(3) });
     }
   }
 }
