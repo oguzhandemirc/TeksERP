@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useMultiWarehouse } from "@/hooks/useWarehouses";
 import { useDevereBeamWeavingLinkRequired, useDevereLotRequired } from "@/hooks/usePricingEnabled";
 import { useAttemptToken } from "@/lib/attemptToken";
-import { listYarnLots } from "@/pages/Operations/Yarn/service";
+import { listAllActiveYarnLots } from "@/pages/Operations/Yarn/service";
 import { reasonPresetService } from "@/pages/ReasonPresets/service";
 import { warpBeamService, type WindPayload } from "./service";
 import { YarnLinesEditor, type YarnLineDraft } from "./YarnLinesEditor";
@@ -68,10 +68,10 @@ export function WindDialog({ target, isPending, onClose, onConfirm }: Props) {
   const presets = useQuery({ queryKey: ["reason-presets", "WARP_RETURN", "wind"], queryFn: () => reasonPresetService.list(false) });
   const returnReasons = useMemo(() => (presets.data ?? []).filter((p) => p.kind === "WARP_RETURN" && p.isActive), [presets.data]);
   // Devere Faz 2: çözgü ipliğinin aktif lotları (türetilen bakiyeyle) + lot zorunluluğu ayarı.
-  const lotsQ = useQuery({ queryKey: ["yarn", "lots", target.warpSpec.yarnItem.id, "wind"], queryFn: () => listYarnLots({ itemId: target.warpSpec.yarnItem.id, isActive: true, limit: 200 }), enabled: inHouse });
+  const lotsQ = useQuery({ queryKey: ["yarn", "lots", target.warpSpec.yarnItem.id, "wind"], queryFn: () => listAllActiveYarnLots(target.warpSpec.yarnItem.id), enabled: inHouse });
   const lotRequired = useDevereLotRequired();
   const weavingLinkRequired = useDevereBeamWeavingLinkRequired();
-  const lots = lotsQ.data?.data ?? [];
+  const lots = lotsQ.data ?? [];
   const lotsOk = (ls: YarnLineDraft[]) => !lotRequired || ls.every((l) => l.lotId !== "");
   const nominal = theoreticalKg(target.warpSpec.endsCount, target.warpSpec.yarnItem.linearDensityDen, Number(lengthM));
   const linesOk = (ls: YarnLineDraft[], needReason: boolean) => ls.every((l) => l.warehouseId && Number(l.qtyKg) > 0 && (!needReason || l.reasonCode));

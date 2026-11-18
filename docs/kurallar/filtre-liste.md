@@ -80,7 +80,7 @@ Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın se
 
 ### Reçeteler
 
-- **[ÇEKİRDEK]** "Tümünü göster" picker'ı `loadAllForPicker(service)` kullanır (PICKER_MAX_PAGE_SIZE=500 ↔ MAX_PAGE_SIZE); inline `pageSize: N` YAZMA; 500 aşılınca helper açık hata fırlatır → arama + listCursor, UI hatayı yakalar; CrudService dışı sayfalı uç (tavanı 500 altı, ör. `/api/yarn/stocks`) `loadAllPagesForPicker` ile sayfa sayfa çekilir.
+- **[ÇEKİRDEK]** "Tümünü göster" picker'ı `loadAllForPicker(service)` kullanır (PICKER_MAX_PAGE_SIZE=500 ↔ MAX_PAGE_SIZE); inline `pageSize: N` YAZMA; 500 aşılınca helper açık hata fırlatır → arama + listCursor, UI hatayı yakalar; CrudService dışı sayfalı uç (tavanı 500 altı, ör. `/api/yarn/stocks`) `loadAllPagesForPicker` ile sayfa sayfa, cursor uç (`/api/yarn/lots`, `/api/warp-beams`) `loadAllCursorPagesForPicker` ile imleç sonuna kadar çekilir; inline `limit: N` de YAZMA (bekçi `picker-loader.guard.test.ts`).
 - **[PROFİL]** Dört ayrı filtre: "İstasyon" (currentStationId, yalnız üretim sekmeleri) · "Giriş İstasyonu" (entryStationId) · "Giriş Kaynağı" (entrySource) · "Ekleyen" (createdById).
 - **[ÇEKİRDEK]** Sayfa kökü `PageShell` (flex h-full min-h-0 flex-col); TEK kaydırıcı `PageBody`; başlık/toolbar/footer shrink-0, eylemler `PageFooter`da; DataTable sayfaları ayrı PageBody istemez.
 - **[PROFİL yüzey]** Liste filtre çubuğunu `components/data-table/filter-row/FilterRow` ile TEK SATIR kur: kutular `FilterControl chip`, hızlı sekmeler `ViewSelect` (faceted sayı, liste açıkken), tarih `DatePresetFilter` penceresi, az kullanılanlar "+ Filtre"; ✕ yalnız kendi anahtarlarını, Temizle hepsini siler (arama kalır); kök `flex-wrap` taşımaz.

@@ -112,3 +112,31 @@ export async function loadAllPagesForPicker<T>(
       `Bu liste için arama tabanlı seçici kullanın.`,
   );
 }
+
+/**
+ * CURSOR sayfalı uçlar için (`limit`/`cursor` + `pagination.nextCursor`, ör. `/api/yarn/lots`
+ * tavanı 200, `/api/warp-beams` tavanı 100): imleç bitene kadar çeker, sessiz kesmez.
+ * Çağıran inline `limit: N` yazmaz; sayfa boyu ve kaçak kesici buradadır.
+ */
+export interface CursorPickerPage<T> {
+  data: T[];
+  pagination?: { nextCursor: string | null; hasMore?: boolean };
+}
+
+export async function loadAllCursorPagesForPicker<T>(
+  fetchPage: (cursor: string | undefined, limit: number) => Promise<CursorPickerPage<T>>,
+): Promise<T[]> {
+  const rows: T[] = [];
+  let cursor: string | undefined;
+  for (let page = 1; page <= PAGED_PICKER_MAX_PAGES; page++) {
+    const res = await fetchPage(cursor, PAGED_PICKER_PAGE_SIZE);
+    rows.push(...res.data);
+    const next = res.pagination?.nextCursor;
+    if (!next || res.pagination?.hasMore === false) return rows;
+    cursor = next;
+  }
+  throw new Error(
+    `Picker veri seti çok büyük (${PAGED_PICKER_PAGE_SIZE * PAGED_PICKER_MAX_PAGES} kaydı aştı). ` +
+      `Bu liste için arama tabanlı seçici kullanın.`,
+  );
+}
