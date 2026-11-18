@@ -45,6 +45,12 @@ vi.mock("./service", async (orig) => {
   };
 });
 
+vi.mock("./yarn-service", () => ({
+  warpingYarnService: {},
+  useWarpingDispatches: () => ({ data: [], isSuccess: true, isError: false, refetch: vi.fn() }),
+  useWarpingInstruction: () => ({ data: undefined, isLoading: true, isError: false }),
+}));
+
 import { WarpingOrderPage } from "./WarpingOrderPage";
 import { WarpingOrderFormDialog } from "./WarpingOrderFormDialog";
 

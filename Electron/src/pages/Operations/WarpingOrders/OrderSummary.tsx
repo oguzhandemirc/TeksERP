@@ -3,7 +3,11 @@ import type { ReactNode } from "react";
 import { fmtFactoryDateTime } from "@/lib/factory-time";
 import { cn } from "@/lib/utils";
 import { beamLinesText, dueText, feeText, fmtM, trimNum } from "./order-model";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { formatQty } from "@/lib/format";
+import { useWarpingPreview } from "./service";
 import type { WarpingOrder } from "./types";
+import { orderPreviewBody, percentWasteText } from "./waste-model";
 
 function Item({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
   return (
@@ -11,6 +15,22 @@ function Item({ label, children, className }: { label: string; children: ReactNo
       <dt className="text-xs text-muted-foreground">{label}</dt>
       <dd className="text-sm">{children}</dd>
     </div>
+  );
+}
+
+/** Fireli öneri yüzde fireyle hesaplanır → önce yüzde (kaynağıyla), sonra sabit metre ve tolerans. Kaynak önizlemeden
+ *  (yalnız yazma izinli kullanıcıda; önizleme ucu `warping-order:write` ister) — yoksa yüzde kaynaksız basılır. */
+function WasteItem({ o }: { o: WarpingOrder }) {
+  const { hasPermission } = useRoleAccess();
+  const ask = hasPermission("warping-order:write") && o.yarns.some((y) => Number(y.wastePct) > 0);
+  const pv = useWarpingPreview(ask ? orderPreviewBody(o) : null);
+  return (
+    <Item label="Fire">
+      Yüzde {percentWasteText(o, pv.data?.data)}
+      <span className="block text-xs text-muted-foreground">
+        sabit {fmtM(o.fixedWasteM)} m · tolerans {o.wasteTolerancePct === null ? "denetim yok" : `%${formatQty(o.wasteTolerancePct, 2, 0)}`}
+      </span>
+    </Item>
   );
 }
 
@@ -41,10 +61,7 @@ export function OrderSummary({ o }: { o: WarpingOrder }) {
         <span className={cn(due.late && "font-medium text-destructive")}>{due.text}</span>
       </Item>
       <Item label="Devere ücreti">{feeText(o.fee)}</Item>
-      <Item label="Fire">
-        Sabit {fmtM(o.fixedWasteM)} m · tolerans{" "}
-        {o.wasteTolerancePct === null ? "denetim yok" : `%${trimNum(o.wasteTolerancePct)}`}
-      </Item>
+      <WasteItem o={o} />
       <Item label="Müşteri siparişi">
         {o.salesOrders.length === 0
           ? "Bağsız — stoğa çözgü"
