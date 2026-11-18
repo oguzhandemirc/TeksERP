@@ -137,7 +137,7 @@ export const productionTiles: OperationsTile[] = [
     // bayrak ve izinle (route `ProtectedRoute` ile birebir). Yüklem Leventler karosuyla AYNI nesne (devere).
     key: "cozgu-hesabi",
     title: "Çözgü Hesabı",
-    description: "Kaç levent için kaç kg iplik gider; eldeki iplik kaç metre çözgüye yeter (devere, çözgü, iplik ihtiyacı)",
+    description: "Kaç levent için kaç kg iplik gider; eldeki iplik kaç metre çözgüye yeter; dokunacak kumaşa devere önerisi (devere, çözgü, iplik ihtiyacı, çözgü ihtiyacı)",
     icon: Calculator,
     to: "/operations/cozgu-hesabi",
     group: "production",

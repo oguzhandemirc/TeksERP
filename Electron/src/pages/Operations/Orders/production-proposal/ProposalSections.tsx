@@ -17,9 +17,9 @@ const fmt = (n: number | null | undefined, unit = "m") => formatMeasure(n, unit)
 export type LineLabel = (orderLineId: string) => string;
 
 // Diyalog bölümü: ortak bölüm kartı, liste kenardan kenara (satır ayırıcıları kartın içinde).
-function Section({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
+function Section({ title, hint, action, children }: { title: string; hint?: string; action?: ReactNode; children: ReactNode }) {
   return (
-    <SectionCard title={title} description={hint} flush>
+    <SectionCard title={title} description={hint} action={action} flush>
       {children}
     </SectionCard>
   );
@@ -109,11 +109,12 @@ function beamText(b: BeamNeed): string {
   return `hazır/takılı ${fmt(b.availableM)} yeter`;
 }
 
-export function BeamSection({ rows }: { rows: WeavingProposal[] }) {
+/** `action`: devere açıkken "Fason devere önerisi" bağı (`DevereNeedLink`); bölüm yine bilgi amaçlıdır. */
+export function BeamSection({ rows, action }: { rows: WeavingProposal[]; action?: ReactNode }) {
   const needs = rows.flatMap((w) => (w.beamNeeds ?? []).map((b) => ({ w, b })));
   if (needs.length === 0) return null;
   return (
-    <Section title="Levent ihtiyacı" hint="Bilgi amaçlı — levent planı buradan oluşturulmaz.">
+    <Section title="Levent ihtiyacı" hint="Bilgi amaçlı — levent planı buradan oluşturulmaz." action={action}>
       <ul>
         {needs.map(({ w, b }) => (
           <li key={`${w.key}:${b.role}:${b.warpSpecId}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-card-border px-5 py-2 text-xs">

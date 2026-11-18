@@ -25,6 +25,7 @@ import { warpingOrderColumns } from "./columns";
 import { fmtM } from "./order-model";
 import { WARPING_ORDERS_QUERY_KEY, warpingOrderPath, warpingOrderService, type WarpingOrderPage } from "./service";
 import { WarpingOrderFormDialog } from "./WarpingOrderFormDialog";
+import { SEED_PARAM_KEYS, seedFromParams } from "./seed-params";
 import { WARPING_ORDER_STATUSES, WARPING_STATUS_META, type WarpingOrderRow } from "./types";
 
 export const FILTERS: FilterDef[] = [
@@ -39,11 +40,11 @@ const PRIMARY = ["status", "subcontractorId", "warpSpecId"];
 export function WarpingOrdersPage() {
   const openTarget = useOpenTarget();
   const [sp, setSp] = useSearchParams();
-  // Çözgü Hesabı "Sipariş aç" düğmesi `?new=1&warpSpecId=…` ile gelir — form alanları dolu açılır.
+  // Çözgü Hesabı / ihtiyaç önerisi "Sipariş aç" `?new=1&warpSpecId=…` ile gelir — form alanları dolu açılır.
   const seed = sp.get("new") === "1" ? seedFromParams(sp) : null;
   const closeNew = () => {
     const next = new URLSearchParams(sp);
-    for (const k of ["new", "warpSpecId", "subcontractorId", "beamCount", "beamLengthM"]) next.delete(k);
+    for (const k of SEED_PARAM_KEYS) next.delete(k);
     setSp(next, { replace: true });
   };
   const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<WarpingOrderRow>({
@@ -101,14 +102,4 @@ export function WarpingOrdersPage() {
       {seed && <WarpingOrderFormDialog seed={seed} onClose={closeNew} onSaved={(id) => { closeNew(); openTarget(warpingOrderPath(id)); }} />}
     </PageShell>
   );
-}
-
-function seedFromParams(sp: URLSearchParams) {
-  const beamCount = sp.get("beamCount");
-  const beamLengthM = sp.get("beamLengthM");
-  return {
-    warpSpecId: sp.get("warpSpecId"),
-    subcontractorId: sp.get("subcontractorId"),
-    ...(beamCount || beamLengthM ? { beamLines: [{ beamCount: beamCount ?? "1", beamLengthM: beamLengthM ?? "" }] } : {}),
-  };
 }

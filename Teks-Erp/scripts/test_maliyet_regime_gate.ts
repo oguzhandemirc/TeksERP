@@ -198,6 +198,21 @@ const MODEL_MUAF: ReadonlyArray<{ dosya: string; model: string; neden: string }>
     model: "finishingRate",
     neden: "Dokuma işi öneri özeti/iplik ayırma zinciri (→ iplik ihtiyacı → üretim dengesi) (I3): terbiye tarifesinden yalnız tipik çekme %'sini OKUR (yapıda çekme yoksa); tarife yoksa çekme boş, açık bugünkü ifade — maliyet kapalıyken denge yine çalışır (üretim önerisi emsali).",
   },
+  {
+    dosya: "routes/warp-plan.routes.ts",
+    model: "finishingRate",
+    neden: "Çözgü ihtiyacı (devere D8, `GET /need?source=ORDER`) üretim önerisi zincirini çağırır: terbiye tarifesinden yalnız çekme %'sini OKUR; fiyat okumaz (production-proposal emsali).",
+  },
+  {
+    dosya: "routes/warp-plan.routes.ts",
+    model: "costStructure",
+    neden: "Çözgü ihtiyacı (devere D8) ürün yapısından yalnız etkin yapı alanlarını ve levent boyunu OKUR (resolveEffectiveConstruction / beam-need.helper); fiyat okumaz (loom-suggestion emsali).",
+  },
+  {
+    dosya: "routes/warp-plan.routes.ts",
+    model: "costParameterSet",
+    neden: "Çözgü ihtiyacı (devere D8) levent boyunu yapıda yoksa parametre setinin defaultBeamLengthM'inden OKUR (beam-need.helper); set yoksa öneri tek levent = eksik — fiyat okumaz (loom-suggestion emsali).",
+  },
 ];
 
 const ADLA_BEKLENEN_KAPILI: ReadonlyArray<{ dosya: string; neden: string }> = [

@@ -23,6 +23,7 @@ import { WEAVING_KIND_LABEL, WEAVING_STATUS_META, formatDay, type WeavingExecuti
 import { isFasonSectionVisible } from "./fason/fason-summary";
 import { isList, liveEmptyText } from "./overview/overview-model";
 import { WeavingCostSection } from "./overview/WeavingCostSection";
+import { WarpNeedSection } from "./overview/WarpNeedSection";
 import { FollowButton } from "@/components/bildirim/FollowButton";
 import { BeamsSection, LiveRunsSection, OrderLinesSection, OverviewKpis, RecentDoffsSection, RecentRunsSection } from "./overview/OverviewSections";
 
@@ -108,6 +109,7 @@ export function WeavingOrderDetailSheet({ order, onClose, onEdit, onCloseOrder, 
                   </>
                 )
               )}
+              <WarpNeedSection weavingOrderId={wo.id} isOpen={WEAVING_STATUS_META[wo.status]?.open ?? false} onNavigate={onClose} />
               {wo.orderLines && <OrderLinesSection lines={wo.orderLines} />}
               <WeavingCostSection itemId={wo.item.id} />
               {wo.status === "CANCELLED" && wo.cancelReason && (

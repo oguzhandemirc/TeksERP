@@ -6,6 +6,7 @@ import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { requireDevereEnabled } from "../middlewares/module.middleware";
 import { calculateWarpPlan, suggestWarpEnds, WARP_PLAN_MAX_LINES } from "../services/warp-plan.service";
+import { computeWarpNeed } from "../services/warp-need.service";
 import "../types/express-augment";
 
 const router = Router();
@@ -82,6 +83,51 @@ const suggestSchema = z.discriminatedUnion("kind", [
 router.post("/ends-suggest", requirePermission("warpspec:read"), async (req: Request, res: Response, next: NextFunction) => {
   try {
     res.json(await suggestWarpEnds(suggestSchema.parse(req.body)));
+  } catch (error) {
+    next(error);
+  }
+});
+
+const uuid = (label: string) => z.uuid({ message: `${label} kimliği geçersiz` });
+const needSchema = z.discriminatedUnion("source", [
+  z.strictObject({
+    source: z.literal("FABRIC"),
+    itemId: uuid("Kumaş"),
+    recipeId: uuid("Varyant").optional(),
+    fabricM: z.coerce.number({ message: "Kumaş metresi sayı olmalı" }).positive("Kumaş metresi sıfırdan büyük olmalı").max(10_000_000, "Kumaş metresi çok büyük"),
+  }),
+  z.strictObject({ source: z.literal("WEAVING_ORDER"), weavingOrderId: uuid("Dokuma iş emri") }),
+  z.strictObject({ source: z.literal("ORDER"), orderId: uuid("Sipariş") }),
+], { message: "Kaynak FABRIC, WEAVING_ORDER ya da ORDER olmalı" });
+
+/**
+ * @openapi
+ * /api/warp-plan/need:
+ *   get:
+ *     tags: [WarpSpecs]
+ *     summary: Çözgü ihtiyacı → fason devere siparişi önerisi (yazmaz)
+ *     description: |
+ *       Talep (FABRIC: kumaş + ham metre · WEAVING_ORDER: dokuma işinin kalanı · ORDER: siparişin dokunacak açık satırları)
+ *       → çözgü kartı başına gerekli metre (take-up) − arz (stok levent + planlanan levent + açık devere siparişi kalanı;
+ *       öncelikli açık dokuma işlerine ayrılan düşülür) = eksik ve levent adedi × boy önerisi.
+ *     parameters:
+ *       - { in: query, name: source, required: true, schema: { type: string, enum: [FABRIC, WEAVING_ORDER, ORDER] } }
+ *       - { in: query, name: itemId, schema: { type: string, format: uuid } }
+ *       - { in: query, name: recipeId, schema: { type: string, format: uuid } }
+ *       - { in: query, name: fabricM, schema: { type: number } }
+ *       - { in: query, name: weavingOrderId, schema: { type: string, format: uuid } }
+ *       - { in: query, name: orderId, schema: { type: string, format: uuid } }
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Öneri satırları + uyarılar }
+ *       400: { description: Tanınmayan kaynak / eksik ya da fazla parametre }
+ *       403: { description: Devere (ya da dokuma kaynağında dokuma) modülü kapalı (MODULE_DISABLED) ya da yetki yok }
+ *       404: { description: Kaynak kayıt yok }
+ *       409: { description: Sipariş üretime uygun değil (ORDER_NOT_PRODUCIBLE) }
+ */
+router.get("/need", requirePermission("warpspec:read"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json(await computeWarpNeed(needSchema.parse(req.query)));
   } catch (error) {
     next(error);
   }
