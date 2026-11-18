@@ -71,7 +71,7 @@ export async function readWarpSupplyBySpec(db: Db, warpSpecIds: readonly string[
 }
 
 /** Siparişin gelen metresi = iptal edilmemiş leventlerinin canlı (stornosuz) WOUND metresi (mutabakatla aynı tanım). */
-async function receivedMByWarpingOrder(db: Db, warpingOrderIds: string[]): Promise<Map<string, number>> {
+export async function receivedMByWarpingOrder(db: Db, warpingOrderIds: string[]): Promise<Map<string, number>> {
   const out = new Map<string, number>();
   if (warpingOrderIds.length === 0) return out;
   const beams = await db.warpBeam.findMany({

@@ -138,6 +138,27 @@ export async function readReadyBeams(warpSpecIds: string[]): Promise<Map<string,
   return readReadyBeamRemainingM(warpSpecIds);
 }
 
+export interface YarnAtWarperRead { totalKg: Prisma.Decimal; emanetKg: Prisma.Decimal | null }
+
+/**
+ * D8b: deverecide duran iplik (devere + iplik modülü; "Fasondaki İplik" ekranının TEK okuyucusu `loadWarpingYarnHoldings`,
+ * tüm sipariş durumları = devreden dahil). Emanet açıksa müşteri sahipli lotların payı AYRI döner. Kapalı → sorgusuz null.
+ */
+export async function readYarnAtWarpers(yarnItemIds: string[]): Promise<{ emanetAcik: boolean; byItem: Map<string, YarnAtWarperRead> } | null> {
+  if (!(await readDevereEnabled()) || !(await readIplikEnabled())) return null;
+  const consigned = await readEmanetEnabled();
+  const out = new Map<string, YarnAtWarperRead>();
+  if (yarnItemIds.length === 0) return { emanetAcik: consigned, byItem: out };
+  const { loadWarpingYarnHoldings } = await import("./warping-yarn-open.helper");
+  for (const h of await loadWarpingYarnHoldings(prisma, { yarnItemIds })) {
+    const a = out.get(h.yarnItemId) ?? { totalKg: new Prisma.Decimal(0), emanetKg: consigned ? new Prisma.Decimal(0) : null };
+    a.totalKg = a.totalKg.plus(h.kg);
+    if (a.emanetKg && h.ownerCustomerId) a.emanetKg = a.emanetKg.plus(h.kg);
+    out.set(h.yarnItemId, a);
+  }
+  return { emanetAcik: consigned, byItem: out };
+}
+
 /**
  * SY-3 I1 iplik ayırma (ayar `dokuma.yarnReservationEnabled`, üretim+dokuma ebeveynli). Kapalı → SORGU ATMADAN null
  * (yanıt bugünküyle bayt-eşit). `leventDus` false ise hazır levent okunmaz (rapor seçeneğiyle aynı).

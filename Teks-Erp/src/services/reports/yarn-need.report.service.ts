@@ -15,7 +15,7 @@ import { ProductionBalanceService, type BalanceGroup } from "../production-balan
 import { ACTIVE_LINE, MEASURED_LINE } from "../helpers/order-line-scope.helper";
 import { buildCostInput, loadCostSourcesTx } from "../helpers/cost-assembler.helper";
 import { fabricMetersFromWarpM, yarnUsagePerM, type CostInput, type CostWarpLayer } from "../helpers/fabric-cost.helper";
-import { readOpenPurchase, readReadyBeams, readYarnReservation, readYarnStock } from "../helpers/maliyet-bridge.helper";
+import { readOpenPurchase, readReadyBeams, readYarnAtWarpers, readYarnReservation, readYarnStock } from "../helpers/maliyet-bridge.helper";
 import { isSharedBeamLayer, layerHasOwnBeam } from "../helpers/warp-layer-beam.helper";
 import { rawMetersFromFinished } from "../helpers/raw-need.helper";
 import { resolveDokumaWeavingWastePct } from "../system-setting.service";
@@ -150,6 +150,7 @@ export function yarnShortKg(need: Dec, freeStockKg: Dec | null, openPurchaseKg: 
 export async function yarnNeedReport(opts: YarnNeedOptions = {}): Promise<YarnNeedReport> {
   const netle = opts.netle ?? true;
   const leventDus = opts.leventDus ?? true;
+  const deverecideDus = opts.deverecideDus ?? false;
   // SY-3 I1: kapalıyken null ve sorgu yok → aşağıdaki her dal bugünküyle aynı.
   const reservation = await readYarnReservation({ leventDus });
   const talepNetlendi = reservation !== null && !opts.musteriId;
@@ -223,9 +224,10 @@ export async function yarnNeedReport(opts: YarnNeedOptions = {}): Promise<YarnNe
   // SY-3 I1: süzgeçsiz görünümde yalnız ayrılan iplikler de satırdır (stoğu işlere bağlı iplik görünmeli).
   const filtered = !!(opts.musteriId || opts.urunId);
   const yarnIds = [...new Set([...perYarn.keys(), ...(reservation && !filtered ? reservation.reservedKg.keys() : [])])].sort();
-  const [stock, purchase, names] = await Promise.all([
+  const [stock, purchase, warpers, names] = await Promise.all([
     readYarnStock(yarnIds),
     readOpenPurchase(yarnIds),
+    readYarnAtWarpers(yarnIds),
     yarnIds.length ? prisma.item.findMany({ where: { id: { in: yarnIds } }, select: { id: true, code: true, name: true } }) : Promise.resolve([]),
   ]);
   const nameOf = new Map(names.map((n) => [n.id, n]));
@@ -235,6 +237,7 @@ export async function yarnNeedReport(opts: YarnNeedOptions = {}): Promise<YarnNe
   let tWeft = D0();
   let tShort = D0();
   let tReserved = D0();
+  let tWarper = D0();
   const rows = yarnIds.map((id) => {
     const r = reservation?.reservedKg.get(id);
     const a = perYarn.get(id) ?? { warp: D0(), weft: D0(), wasteSource: r?.wasteSource ?? "KART" };
@@ -243,8 +246,13 @@ export async function yarnNeedReport(opts: YarnNeedOptions = {}): Promise<YarnNe
     const p = purchase ? (purchase.get(id) ?? D0()) : null;
     const reservedKg = r?.kg ?? D0();
     const free = s ? s.serbestKg.minus(reservedKg) : null;
-    const short = yarnShortKg(need, reservation ? free : (s?.serbestKg ?? null), p);
+    // D8b: deverecideki iplik yalnız seçenekle (varsayılan kapalı = bugünkü eksik) ve yalnız fabrika malı payıyla düşer.
+    const w = warpers?.byItem.get(id);
+    const wOwn = w && deverecideDus ? w.totalKg.minus(w.emanetKg ?? D0()) : D0();
+    const base = reservation ? free : (s?.serbestKg ?? null);
+    const short = yarnShortKg(need, base !== null && !wOwn.isZero() ? base.plus(wOwn) : base, p);
     tReserved = tReserved.plus(reservedKg);
+    tWarper = tWarper.plus(w?.totalKg ?? D0());
     tWarp = tWarp.plus(a.warp);
     tWeft = tWeft.plus(a.weft);
     tShort = tShort.plus(short);
@@ -265,6 +273,7 @@ export async function yarnNeedReport(opts: YarnNeedOptions = {}): Promise<YarnNe
         eksikBelirsiz: stock === null,
         fireKaynagi: r?.wasteSource === "IPLIK" ? "IPLIK" : a.wasteSource,
         ...(reservation ? { ayrilanKg: kg(reservedKg), serbestKg: free ? kg(free) : null } : {}),
+        ...(warpers ? { deverecideKg: kg(w?.totalKg ?? D0()), ...(warpers.emanetAcik ? { deverecideEmanetKg: kg(w?.emanetKg ?? D0()) } : {}) } : {}),
       } satisfies YarnNeedRow,
     };
   });
@@ -281,6 +290,7 @@ export async function yarnNeedReport(opts: YarnNeedOptions = {}): Promise<YarnNe
       kumasMetre: m1(kumasMetre),
       siparisMetre: m1(siparisMetre),
       ...(reservation ? { ayrilanKg: kg(tReserved) } : {}),
+      ...(warpers ? { deverecideKg: kg(tWarper) } : {}),
     },
     meta: {
       netle,
@@ -290,7 +300,8 @@ export async function yarnNeedReport(opts: YarnNeedOptions = {}): Promise<YarnNe
       yapisiEksik: yapisiEksik.sort((a, b) => a.urunKodu.localeCompare(b.urunKodu, "tr")),
       olculemeyen,
       leventler,
-      kaynaklar: { stok: stock !== null, emanet: consignmentOn, acikAlis: purchase !== null, leventDusumu: beams !== null },
+      kaynaklar: { stok: stock !== null, emanet: consignmentOn, acikAlis: purchase !== null, leventDusumu: beams !== null, ...(warpers ? { deverecide: true as const } : {}) },
+      ...(warpers ? { deverecideDus } : {}),
       hesapZamani: factoryDateTimeTr(new Date()),
       secenekler: {
         musteriler: [...musteriler].map(([id, ad]) => ({ id, ad })).sort((a, b) => a.ad.localeCompare(b.ad, "tr")),

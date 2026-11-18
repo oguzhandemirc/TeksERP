@@ -33,6 +33,8 @@ export function yarnNeedColumns(r: YarnNeedReport): TabloKolonu[] {
       { anahtar: "serbestKg", baslik: "Serbest (ayrılan düşülmüş)", birim: "kg" as const, hiza: "sag" as const },
     ] : []),
     ...(r.meta.kaynaklar.emanet ? [{ anahtar: "emanetKg", baslik: "Emanet (müşterinin)", birim: "kg" as const, hiza: "sag" as const }] : []),
+    // D8b: yalnız devere + iplik açıkken (kapalıyken kolon listesi bugünküyle aynı).
+    ...(r.meta.kaynaklar.deverecide ? [{ anahtar: "deverecideKg", baslik: "Deverecide (fasonda)", birim: "kg" as const, hiza: "sag" as const }] : []),
     { anahtar: "acikAlisKg", baslik: "Açık alış", birim: "kg", hiza: "sag" },
     { anahtar: "eksikKg", baslik: "Eksik", birim: "kg", hiza: "sag" },
   ];
@@ -49,12 +51,14 @@ export function yarnNeedTable(r: YarnNeedReport): TabloBlok {
       serbestStokKg: ya(s.serbestStokKg),
       ...(r.meta.ayirma ? { ayrilanKg: sayi(s.ayrilanKg ?? "0"), serbestKg: ya(s.serbestKg ?? null) } : {}),
       ...(r.meta.kaynaklar.emanet ? { emanetKg: ya(s.emanetKg) } : {}),
+      ...(r.meta.kaynaklar.deverecide ? { deverecideKg: sayi(s.deverecideKg ?? "0") } : {}),
       acikAlisKg: ya(s.acikAlisKg),
       eksikKg: sayi(s.eksikKg),
     })),
     toplam: {
       iplik: "Toplam", cozguKg: sayi(r.ozet.cozguKg), atkiKg: sayi(r.ozet.atkiKg), ihtiyacKg: sayi(r.ozet.ihtiyacKg),
       ...(r.ozet.ayrilanKg !== undefined ? { ayrilanKg: sayi(r.ozet.ayrilanKg) } : {}),
+      ...(r.ozet.deverecideKg !== undefined ? { deverecideKg: sayi(r.ozet.deverecideKg) } : {}),
       eksikKg: sayi(r.ozet.eksikKg),
     },
   };
@@ -64,6 +68,7 @@ function parametreler(r: YarnNeedReport, o: YarnNeedOptions): ParametreBeyani[] 
   return [
     { ad: "netle", etiket: "Depo ve üretimi düş", tur: "secim", deger: r.meta.netle ? "1" : "0", secenekler: EVET_HAYIR },
     { ad: "leventDus", etiket: "Hazır leventleri düş", tur: "secim", deger: r.meta.leventDus ? "1" : "0", secenekler: EVET_HAYIR },
+    ...(r.meta.kaynaklar.deverecide ? [{ ad: "deverecideDus", etiket: "Deverecideki ipliği düş", tur: "secim" as const, deger: r.meta.deverecideDus ? "1" : "0", secenekler: EVET_HAYIR }] : []),
     { ad: "musteriId", etiket: "Müşteri", tur: "secim", deger: o.musteriId ?? null, secenekler: r.meta.secenekler.musteriler.map((m) => ({ deger: m.id, etiket: m.ad })) },
     { ad: "urunId", etiket: "Ürün", tur: "secim", deger: o.urunId ?? null, secenekler: r.meta.secenekler.urunler.map((m) => ({ deger: m.id, etiket: m.ad })) },
   ];
@@ -122,6 +127,9 @@ export function buildYarnNeedSunumu(r: YarnNeedReport, o: YarnNeedOptions): Rapo
         { ad: "Ayrılan", aciklama: `Açık (planlı ya da süren) kendi tezgâh ${TERIM.dokumaIsEmri.cogulCekimKucuk.ilgi} kalan ham metresi için gereken iplik; hazır leventler önce bu işlere düşülür. Stok ayırmaz, yalnız gösterir.` },
         { ad: "Serbest (ayrılan düşülmüş)", aciklama: "Serbest stoktan ayrılan çıkınca kalan; eksiye inmişse işler stoktan fazlasını bekliyor demektir. Eksik bu sayıya göre hesaplanır." },
         { ad: "İhtiyaç (ayırma açıkken)", aciklama: "Açık işlerin kalan metresi ürünün talebinden düşülür; ihtiyaç yalnız henüz işe bağlanmamış talebi gösterir." },
+      ] : []),
+      ...(r.meta.kaynaklar.deverecide ? [
+        { ad: "Deverecide (fasonda)", aciklama: `Fason devere için fasonculara gönderilmiş, henüz çözgü olarak dönmemiş, iade edilmemiş ve fire yazılmamış iplik ("Fasondaki İplik" ekranıyla aynı sayı). ${r.meta.deverecideDus ? "Fabrikanın malı olan kısmı eksikten düşüldü; müşterinin emanet ipliği düşülmez." : "Eksikten düşülmez; dönen çözgü hazır levent olarak zaten düşülür. \"Deverecideki ipliği düş\" seçeneğiyle düşülebilir."}` },
       ] : []),
       { ad: BILINMIYOR, aciklama: "İlgili modül kapalı olduğu için değer okunamadı; sıfır demek değildir." },
     ],

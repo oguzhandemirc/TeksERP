@@ -15,6 +15,9 @@ vi.mock("@/components/forms/entity-picker/EntityPickerModal", () => ({
   EntityPickerModal: ({ placeholder }: { placeholder?: string }) => <button type="button">{placeholder}</button>,
 }));
 
+// Devere bandı kendi testinde (DevereDelayBand.test.tsx); burada kapalı → bayrak isteği de atılmaz, çağrı sayısı ölçülebilir.
+vi.mock("@/hooks/usePricingEnabled", async (orig) => ({ ...(await orig<Record<string, unknown>>()), useDevereEnabled: () => false }));
+
 const get = vi.fn();
 vi.mock("@/services/apiClient", () => ({ default: { get: (...a: unknown[]) => get(...a) } }));
 
