@@ -31,6 +31,7 @@
 import apiClient from "@/services/apiClient";
 import type { YarnLotQualityStatus } from "./yarnLotQuality";
 import { factoryLocaleString } from "@/lib/factory-time";
+import { loadAllCursorPagesForPicker } from "@/lib/picker-loader";
 
 /** Backend `YarnMovementKind` enum'unun aynası (Electron backend'i import edemez). */
 export type YarnMovementKind = "IN" | "OUT" | "ADJUST_IN" | "ADJUST_OUT" | "WARP_ISSUE" | "WARP_ISSUE_REVERSAL" | "WARP_RETURN" | "WARP_RETURN_REVERSAL" | "SUBCONTRACT_OUT" | "SUBCONTRACT_OUT_CANCEL" | "SUBCONTRACT_RETURN" | "SUBCONTRACT_RETURN_CANCEL" | "CONSIGNMENT_OUT" | "CONSIGNMENT_OUT_CANCEL";
@@ -109,6 +110,11 @@ export async function listYarnLots(params: { limit?: number; cursor?: string; it
     },
   });
   return res.data as YarnLotListResponse;
+}
+
+/** Seçiciler için kalemin TÜM aktif lotları — uç tavanı 200; imleçle sonuna kadar (sessiz kesme yok). */
+export function listAllActiveYarnLots(itemId: string): Promise<YarnLotRow[]> {
+  return loadAllCursorPagesForPicker((cursor, limit) => listYarnLots({ itemId, isActive: true, cursor, limit }));
 }
 
 export async function createYarnLot(body: { itemId: string; lotNo: string; supplierId?: string | null; notes?: string | null; ownerCustomerId?: string | null }): Promise<{ success: boolean; data: YarnLotRow; message?: string }> {

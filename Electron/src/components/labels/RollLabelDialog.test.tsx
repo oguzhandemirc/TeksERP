@@ -17,7 +17,7 @@ vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn(), info: vi.f
 vi.mock("@/components/PermissionGate", () => ({ PermissionGate: ({ children }: { children: ReactNode }) => <>{children}</> }));
 vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ hasPermission: () => true }) }));
 vi.mock("@/hooks/usePricingEnabled", () => ({ useFeatureFlags: () => ({ data: { data: { scrapGradeLabelEnabled: false } } }) }));
-vi.mock("@/pages/QualityGrades/service", () => ({ qualityGradeService: { listCursor: () => Promise.resolve({ data: [] }) } }));
+vi.mock("@/pages/QualityGrades/service", () => ({ qualityGradeService: { getAll: () => Promise.resolve({ data: [], pagination: { page: 1, pageSize: 500, total: 0, totalPages: 1 } }) } }));
 vi.mock("@/hooks/useDebouncedValue", () => ({ useDebouncedValue: <T,>(v: T) => v }));
 // Seçici modalı: tek düğme, tıklanınca kayıtlı bir cari/kumaş "seçer".
 vi.mock("@/components/forms/entity-picker/EntityPickerModal", () => ({
