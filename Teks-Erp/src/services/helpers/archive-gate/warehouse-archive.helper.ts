@@ -3,6 +3,7 @@ import type { ArchiveSpec, RefKind } from "../master-data-archive.helper";
 import { LIVE_ROLL } from "../live-ref-where.helper";
 import { SETTING_KEYS } from "../../system-setting/keys";
 import { readEmanetDefaultWarehouseId } from "../../system-setting/tambur-fason";
+import { qtyText } from "../qty-text.helper";
 
 /** F1b: ayarda emanet deposu olarak kayıtlı depo pasife alınamaz ve kalıcı silinemez (sahipli doğum 400 verirdi).
  *  Okuma doğum boğazıyla AYNI okuyucudan (kanonik küçük harf) — biçim farkı kapıyı atlatmasın. Tek kaynak: pasife alma
@@ -37,7 +38,7 @@ export const WAREHOUSE_ARCHIVE: ArchiveSpec = {
       count: (db, id) => db.yarnStock.count({ where: { warehouseId: id, balanceKg: { not: 0 } } }),
       list: async (db, id, take) =>
         (await db.yarnStock.findMany({ where: { warehouseId: id, balanceKg: { not: 0 } }, take, select: { id: true, balanceKg: true, item: { select: { name: true } } } }))
-          .map((y) => ({ id: y.id, title: y.item.name, detail: `${y.balanceKg.toString()} kg` })),
+          .map((y) => ({ id: y.id, title: y.item.name, detail: `${qtyText(y.balanceKg)} kg` })),
     },
     EMANET_DEFAULT_WAREHOUSE_REF,
   ],

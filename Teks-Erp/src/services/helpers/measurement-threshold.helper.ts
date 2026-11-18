@@ -1,3 +1,4 @@
+import { qtyText } from "./qty-text.helper";
 // =============================================================================
 // GERÇEKÇİLİK EŞİĞİ — UYARI, BLOK DEĞİL
 // =============================================================================
@@ -22,11 +23,11 @@ export const LENGTH_WARN_M = 10_000;
 /** Eşik aşıldıysa operatöre gösterilecek metin, aşılmadıysa `null`. */
 export function weightWarning(kg: number): string | null {
   if (!(kg > WEIGHT_WARN_KG)) return null;
-  return `${kg} kg gerçekçi görünmüyor (eşik ${WEIGHT_WARN_KG} kg). Kantar gram ölçüyorsa Cihaz Kaydı'ndaki Ölçek 0,001 olmalı.`;
+  return `${qtyText(kg)} kg gerçekçi görünmüyor (eşik ${qtyText(WEIGHT_WARN_KG)} kg). Kantar gram ölçüyorsa Cihaz Kaydı'ndaki Ölçek 0,001 olmalı.`;
 }
 
 /** Eşik aşıldıysa operatöre gösterilecek metin, aşılmadıysa `null`. */
 export function lengthWarning(m: number): string | null {
   if (!(m > LENGTH_WARN_M)) return null;
-  return `${m} m gerçekçi görünmüyor (eşik ${LENGTH_WARN_M} m). Cihazın ham birimi cm ise Ölçek 0,01 olmalı.`;
+  return `${qtyText(m)} m gerçekçi görünmüyor (eşik ${qtyText(LENGTH_WARN_M)} m). Cihazın ham birimi cm ise Ölçek 0,01 olmalı.`;
 }

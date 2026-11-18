@@ -14,6 +14,7 @@ import type { ResolvedDayRange } from "./temel/_day-range";
 import { dayRangeParameters } from "./temel/_day-range";
 import { anaSayiKur } from "./sunum/sunum-kur";
 import type { RaporSunumu, TabloBlok, TabloHucresi } from "./sunum/sunum.types";
+import { qtyText } from "../helpers/qty-text.helper";
 
 type Dec = Prisma.Decimal;
 export const WEAVING_EFFICIENCY_KEY = "maliyet/dokuma-verimlilik";
@@ -114,7 +115,7 @@ export function buildWeavingEfficiencySunumu(r: WeavingEfficiencyReport, window:
   const timeSource = r.rows[0]?.timeSource ?? null;
   const warnings: string[] = [];
   if (r.currency !== "TRY" && r.fxRate === null) warnings.push(`${r.currency} kuru bulunamadı: tutarlar "eksik" yazıldı (sıfır değil).`);
-  if (Number(r.runlessMeters) > 0) warnings.push(`Koşum açılmadan dokunan ${r.runlessMeters} m kumaşın gerçek maliyeti ölçülemedi (koşumsuz metre).`);
+  if (Number(r.runlessMeters) > 0) warnings.push(`Koşum açılmadan dokunan ${qtyText(r.runlessMeters)} m kumaşın gerçek maliyeti ölçülemedi (koşumsuz metre).`);
   if (ongoingCount > 0) warnings.push(`Devam eden ${ongoingCount} iş tabloda gösterildi, sapma ana sayısına girmedi (tezgâhtaki kumaş henüz top değil).`);
   if (timeSource === "NORM") warnings.push("Tezgâh süresi metre normundan hesaplandı (Kârlılık makine süresi ayarı: NORM).");
   return {

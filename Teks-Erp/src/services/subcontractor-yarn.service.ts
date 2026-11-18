@@ -27,6 +27,7 @@ import { AuditService } from "./audit.service";
 import { applyYarnMovementTx } from "./yarn.service";
 import { assertItemUsableTx } from "./helpers/item-usage.helper";
 import { allocationsByHolder, LIVE_ALLOCATION, lockDispatchItemsTx, netTransfersByOrder, wastesByHolder } from "./helpers/warping-yarn-open.helper";
+import { qtyText } from "./helpers/qty-text.helper";
 
 
 type Tx = Prisma.TransactionClient;
@@ -239,7 +240,7 @@ export async function returnYarnTx(tx: Tx, dispatchId: string, input: ReturnYarn
   // D5b: kendi siparişinin kapanışta fire yazdığı iplik de deverecide değildir.
   const ownWaste = own ? (wastesByHolder(item.warpingYarnWastes).get(own) ?? D(0)) : D(0);
   if (already.plus(qty).gt(out.qtyKg.plus(ownTransferNet).minus(ownAllocated).minus(ownWaste))) {
-    throw AppError.badRequest(`Dönen kg gideni aşamaz (giden ${Number(out.qtyKg)} kg, dönmüş ${Number(already)} kg${ownTransferNet.isZero() ? "" : `, başka siparişe net aktarılan ${Number(ownTransferNet.neg())} kg`}${ownAllocated.isZero() ? "" : `, levente sarılan ${Number(ownAllocated)} kg`}${ownWaste.isZero() ? "" : `, fire yazılan ${Number(ownWaste)} kg`})`, {
+    throw AppError.badRequest(`Dönen kg gideni aşamaz (giden ${qtyText(out.qtyKg)} kg, dönmüş ${qtyText(already)} kg${ownTransferNet.isZero() ? "" : `, başka siparişe net aktarılan ${qtyText(ownTransferNet.neg())} kg`}${ownAllocated.isZero() ? "" : `, levente sarılan ${qtyText(ownAllocated)} kg`}${ownWaste.isZero() ? "" : `, fire yazılan ${qtyText(ownWaste)} kg`})`, {
       code: "YARN_RETURN_EXCEEDS", shippedKg: Number(out.qtyKg), returnedKg: Number(already), transferredKg: Number(ownTransferNet.neg()), allocatedKg: Number(ownAllocated),
     });
   }
@@ -259,7 +260,7 @@ export async function returnYarn(dispatchId: string, input: ReturnYarnInput, use
   return {
     success: true,
     data: { movementId: result.movementId, dispatchItemId: input.dispatchItemId, dispatchNo: result.item.dispatch.dispatchNo, itemCode, qtyKg: Number(qty), remainingKg: Number(result.remainingKg) },
-    message: `${itemCode} fasondan döndü — ${Number(qty)} kg`,
+    message: `${itemCode} fasondan döndü — ${qtyText(qty)} kg`,
   };
 }
 

@@ -75,6 +75,7 @@ import { upperTr } from "../utils/tr-case";
 import { escapeLikeTerm } from "../utils/like-escape";
 import { TERIM } from "../constants/terim";
 import { emitStockCountDifferenceTx } from "./notification-sources/depo";
+import { qtyText } from "./helpers/qty-text.helper";
 
 type Tx = Prisma.TransactionClient;
 
@@ -707,7 +708,7 @@ export class StockCountService {
         if (!live.equals(D(line.expectedQty))) {
           outOfScope.push({
             lineId: line.id,
-            reason: `Bakiye sayımdan sonra değişti (defter ${live.toString()} kg)`,
+            reason: `Bakiye sayımdan sonra değişti (defter ${qtyText(live)} kg)`,
           });
           continue;
         }
@@ -840,7 +841,7 @@ export class StockCountService {
       data,
       message:
         `${outcome.countNo} tamamlandı — ${outcome.cancelledRolls} top kayıttan düşüldü ` +
-        `(${outcome.cancelledMeters} m), ${outcome.yarnAdjustments} iplik düzeltmesi` +
+        `(${qtyText(outcome.cancelledMeters)} m), ${outcome.yarnAdjustments} iplik düzeltmesi` +
         (outcome.outOfScope > 0 ? `, ${outcome.outOfScope} satır kapsam dışı kaldı.` : "."),
     };
   }

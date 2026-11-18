@@ -51,6 +51,7 @@ import { buildNextCursor, cursorWhere, decodeCursor } from "../utils/cursor";
 import { buildTurkishSearch } from "../utils/query-parser";
 import type { ApiResponse } from "../types/api.types";import { assertItemUsable, assertItemUsableTx, type ItemUsage } from "./helpers/item-usage.helper";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
+import { qtyText } from "./helpers/qty-text.helper";
 
 
 
@@ -477,8 +478,8 @@ export class YarnService {
       // ⚠️ Eksi bakiye ENGEL DEĞİL UYARIDIR — ve mutlaka SÖYLENİR. Sessiz eksi
       // bakiye, sayım yapılana kadar kimsenin fark etmediği bir hatadır.
       message: negative
-        ? `${sign}${qty.toString()} kg yazıldı. ⚠️ "${item.name}" / "${wh.name}" bakiyesi EKSİDE: ${res.balanceKg.toString()} kg — açılış/sayım girişi eksik olabilir.`
-        : `${sign}${qty.toString()} kg yazıldı. Yeni bakiye: ${res.balanceKg.toString()} kg.`,
+        ? `${sign}${qtyText(qty)} kg yazıldı. ⚠️ "${item.name}" / "${wh.name}" bakiyesi EKSİDE: ${qtyText(res.balanceKg)} kg — açılış/sayım girişi eksik olabilir.`
+        : `${sign}${qtyText(qty)} kg yazıldı. Yeni bakiye: ${qtyText(res.balanceKg)} kg.`,
     };
   }
 }

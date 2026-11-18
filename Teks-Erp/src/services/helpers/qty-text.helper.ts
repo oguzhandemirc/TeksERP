@@ -5,8 +5,8 @@
 import type { Prisma } from "@prisma/client";
 import { sayiMetni } from "../reports/anlati/sayi-bicim";
 
-/** kg / metre: en çok 3 hane ("12,345", "25000,5", "40"). */
-export const qtyText = (v: Prisma.Decimal.Value): string => sayiMetni(Number(v), 3);
+/** kg / metre: en çok 3 hane ("12,345", "25000,5", "40"); kaba gösterimde `max` daraltılır. */
+export const qtyText = (v: Prisma.Decimal.Value, max = 3): string => sayiMetni(Number(v), max);
 
-/** Yüzde değeri (işaretsiz gövde): en çok 2 hane ("3,25", "5"); `%` çağıranın metnindedir. */
-export const pctText = (v: Prisma.Decimal.Value): string => sayiMetni(Number(v), 2);
+/** Yüzde değeri (işaretsiz gövde): en çok 2 hane ("3,25", "5"); `%` çağıranın metnindedir; `max` daraltır. */
+export const pctText = (v: Prisma.Decimal.Value, max = 2): string => sayiMetni(Number(v), max);

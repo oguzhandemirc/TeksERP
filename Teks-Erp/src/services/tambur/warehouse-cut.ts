@@ -58,6 +58,7 @@ import type { TamburService } from "../tambur.service";
 import { applyTamburCapabilitiesTx, cutReplay, type TamburServiceThis } from "./shared";
 import { resolveTamburLabelTemplate } from "../helpers/tambur-label-template.helper";
 import { rollLabelKindOf } from "../helpers/roll-stage.helper";
+import { qtyText } from "../helpers/qty-text.helper";
 
 export async function cutWarehouseRoll(this: TamburServiceThis, 
     ...args: Parameters<TamburService["cutWarehouseRollInner"]>
@@ -612,6 +613,6 @@ export async function cutWarehouseRollInner(
         parentRoll: result.updatedParent as Roll,
         parentRemainingQty: result.newParentQty,
       },
-      message: `Kesim: ${data.cutLength} mt → ${result.child.barcode}. Top kalan: ${result.newParentQty} mt.`,
+      message: `Kesim: ${qtyText(data.cutLength)} mt → ${result.child.barcode}. Top kalan: ${qtyText(result.newParentQty)} mt.`,
     };
   }

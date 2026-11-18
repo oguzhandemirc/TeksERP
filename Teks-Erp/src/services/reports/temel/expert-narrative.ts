@@ -10,6 +10,7 @@ import type { AnlatiCumlesi, Birim } from "../sunum/sunum.types";
 import type { CashBookReport } from "../cash-book.report";
 import type { VatSummaryReport } from "../finance-vat.report";
 import type { FxDiffReport } from "../finance-fx-diff.report";
+import { pctText } from "../../helpers/qty-text.helper";
 
 const toUnit = (currency: string): Birim | null => (currency === "TRY" || currency === "USD" || currency === "EUR" ? currency : null);
 const num = (s: string): number => Number(s);
@@ -52,7 +53,7 @@ export function buildVatNarrative(r: Pick<VatSummaryReport, "sales" | "purchase"
     anaSayi,
     veri: { satirSayisi: docs },
     ...(salesRows.length > 1
-      ? { kirilim: { boyut: "oran", birim: "TRY" as const, adTuru: "ozel" as const, ozneIlgi: "Satış KDV'sinin", satirlar: salesRows.map((x) => ({ ad: `%${Number(x.vatRate)} oranlı satışlar`, deger: num(x.vatTry) })) } }
+      ? { kirilim: { boyut: "oran", birim: "TRY" as const, adTuru: "ozel" as const, ozneIlgi: "Satış KDV'sinin", satirlar: salesRows.map((x) => ({ ad: `%${pctText(x.vatRate)} oranlı satışlar`, deger: num(x.vatTry) })) } }
       : {}),
   });
 }

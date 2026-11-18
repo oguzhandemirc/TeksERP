@@ -50,6 +50,7 @@ import { lowerTr } from "../utils/tr-case";
 import { ACTIVE_ROLL_PROPERTY } from "./helpers/property-revoke.helper";
 import { assertRollsRevivable, assertSwatchesRevivable } from "./helpers/item-usage.helper";
 import { SWATCH_IN_STOCK_WHERE, createSwatchesTx, transitionSwatchesTx, type SwatchBirthInput } from "./helpers/swatch-event.helper";
+import { qtyText } from "./helpers/qty-text.helper";
 
 // Liste filtre/sayfalama parametreleri — hem offset (mobil) hem cursor (admin)
 // modunu besler. cursor||mode==="cursor" → cursor response; aksi halde offset.
@@ -430,7 +431,7 @@ export class KartelaService {
     return {
       success: true,
       data: result as unknown as Record<string, unknown>,
-      message: `Kartela sevki oluşturuldu: ${result.dispatchNo} (${rolls.length} top, ${totalQty.toFixed(1)}m)`,
+      message: `Kartela sevki oluşturuldu: ${result.dispatchNo} (${rolls.length} top, ${qtyText(totalQty)} m)`,
     };
   }
 

@@ -10,6 +10,7 @@ import { AppError } from "../../utils/app-error";
 import { assertServiceItemUsable } from "./item-usage.helper";
 import type { ExpenseAllocationClosedWorkOrder } from "../system-setting.service";
 import { TERIM } from "../../constants/terim";
+import { pctText } from "./qty-text.helper";
 
 export const EXPENSE_ALLOCATION_SHARE_MAX = new Prisma.Decimal(100);
 
@@ -120,7 +121,7 @@ export async function assertShareWithinLimitTx(tx: Prisma.TransactionClient, cas
   if (used.plus(sharePct).gt(EXPENSE_ALLOCATION_SHARE_MAX)) {
     const remaining = EXPENSE_ALLOCATION_SHARE_MAX.minus(used);
     throw AppError.conflict(
-      `Bu masrafın %${used.toString()}'i zaten bağlı; en çok %${remaining.toString()} daha bağlanabilir.`,
+      `Bu masrafın %${pctText(used)}'i zaten bağlı; en çok %${pctText(remaining)} daha bağlanabilir.`,
       { code: "EXPENSE_ALLOCATION_OVER", usedPct: used.toString(), requestedPct: sharePct.toString(), remainingPct: remaining.toString() },
     );
   }

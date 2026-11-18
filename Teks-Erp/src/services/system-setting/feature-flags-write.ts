@@ -46,6 +46,7 @@ import { readItemPhaseOutNewOrder, readShippingOrderRequirement, readShippingRea
 import { DEFAULT_FASON_SHRINK_TOLERANCE_PCT, FASON_EXPECTED_RETURN_DAYS_MAX } from "./tambur-fason";
 import { normalizeTravelerCardConfig } from "./traveler-card";
 import type { SystemSettingService } from "../system-setting.service";
+import { qtyText } from "../helpers/qty-text.helper";
 
 /** Cephe sınıfının `this`i — taşınan metotlar `this.set`/özel doğrulayıcıları sınıf üzerinden çağırır (alay/izleme aynen kalır). */
 export type SystemSettingServiceThis = Pick<SystemSettingService, "set" | "getFeatureFlags"> & {
@@ -1672,7 +1673,7 @@ export async function setFeatureFlags(
       const v = input.devereWarpFixedWasteM;
       // `null` = alan temizlendi → varsayılan 0 (firesiz formül = bugünkü davranış).
       if (v !== null && (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > DEVERE_WARP_FIXED_WASTE_M_MAX)) {
-        throw AppError.badRequest(`Sabit çözgü firesi 0 ile ${DEVERE_WARP_FIXED_WASTE_M_MAX} metre arasında olmalı`);
+        throw AppError.badRequest(`Sabit çözgü firesi 0 ile ${qtyText(DEVERE_WARP_FIXED_WASTE_M_MAX)} metre arasında olmalı`);
       }
       await this.set(SETTING_KEYS.DEVERE_WARP_FIXED_WASTE_M, v === null ? DEFAULT_DEVERE_WARP_FIXED_WASTE_M : v, "Devere: çözgü hesabında sipariş başına sabit fire metresi", userId);
     }

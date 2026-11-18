@@ -18,6 +18,7 @@ import { ItemType, Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { normalizeLotNo } from "./yarn-lot.helper";
+import { qtyText } from "./qty-text.helper";
 import { readDevereLotRequired } from "../system-setting.service";import { assertItemUsable } from "./item-usage.helper";
 import { PANEL_SETTING_ROW, settingRowPath } from "../../constants/panel-ayar-yolu";
 import { ekranYolu } from "../../constants/panel-ekran-yolu";
@@ -71,7 +72,8 @@ export type ReceiptLineIssueCode =
   | "PRICE_REQUIRED"
   | "OVER_RECEIPT";
 
-export const qtyText = (v: Prisma.Decimal, unit: string): string => `${v.toString()} ${unit}`;
+/** Ölçü + birim ("12,5 m") — sayı tek kaynaktan (`qty-text.helper`). */
+export const qtyUnitText = (v: Prisma.Decimal, unit: string): string => `${qtyText(v)} ${unit}`;
 
 /** Fiyat zorunlu bayrağı açıkken çözülemeyen fiyat — ön-uçuş ve döngü guard'ı AYNI metni basar. */
 export function priceRequiredMessage(itemName: string, currency: string): string {
@@ -89,11 +91,11 @@ export function overReceiptMessage(p: { orderNo: string; itemName: string; order
     `"${PANEL_SETTING_ROW.purchaseBlockOverReceiptEnabled.baslik}" ayarı açık — fazlayı kaydetmek için siparişe bağlı OLMAYAN ` +
     `ayrı bir mal kabul fişi açın, siparişi düzeltin ya da ${settingRowPath("purchaseBlockOverReceiptEnabled")} ayarını kapatın.`;
   if (p.ordered.isZero()) {
-    return `"${p.itemName}" ${p.orderNo} siparişinde YOK (ısmarlanan 0), bu satırla ${qtyText(p.qty, p.unit)} girilecek. Yanlış sipariş seçilmiş olabilir. ${tail}`;
+    return `"${p.itemName}" ${p.orderNo} siparişinde YOK (ısmarlanan 0), bu satırla ${qtyUnitText(p.qty, p.unit)} girilecek. Yanlış sipariş seçilmiş olabilir. ${tail}`;
   }
   return (
-    `"${p.itemName}": ${p.orderNo} siparişinde ${qtyText(p.ordered, p.unit)} ısmarlandı, ${qtyText(p.already, p.unit)} gelmiş; ` +
-    `bu satırla ${qtyText(after, p.unit)} olur (${qtyText(after.minus(p.ordered), p.unit)} fazla). ${tail}`
+    `"${p.itemName}": ${p.orderNo} siparişinde ${qtyUnitText(p.ordered, p.unit)} ısmarlandı, ${qtyUnitText(p.already, p.unit)} gelmiş; ` +
+    `bu satırla ${qtyUnitText(after, p.unit)} olur (${qtyUnitText(after.minus(p.ordered), p.unit)} fazla). ${tail}`
   );
 }
 

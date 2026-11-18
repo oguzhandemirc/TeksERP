@@ -63,6 +63,7 @@ import { resolveRollLabelTexts } from "../helpers/label-batch-no.helper";
 import type { TamburService } from "../tambur.service";
 import { applyTamburCapabilitiesTx, cutReplay, type TamburServiceThis } from "./shared";
 import { resolveTamburLabelTemplate } from "../helpers/tambur-label-template.helper";
+import { qtyText } from "../helpers/qty-text.helper";
 
 export async function cutOpenFabric(this: TamburServiceThis, 
     ...args: Parameters<TamburService["cutOpenFabricInner"]>
@@ -525,6 +526,6 @@ export async function cutOpenFabricInner(
         childRoll: result.child,
         parentRemainingQty: result.newParentQty,
       },
-      message: `Kesim tamam: ${data.lengthMeters} mt → ${childStatus} (${result.child.barcode}). Açık kumaş kalan: ${result.newParentQty} mt.`,
+      message: `Kesim tamam: ${qtyText(data.lengthMeters)} mt → ${childStatus} (${result.child.barcode}). Açık kumaş kalan: ${qtyText(result.newParentQty)} mt.`,
     };
   }

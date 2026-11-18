@@ -29,6 +29,7 @@ import { workOrderStepIdOf } from "../helpers/dispatch-header.helper";
 import { isRollItem } from "../helpers/dispatch-item-kind.helper";
 import { TERIM } from "../../constants/terim";
 import { CLOSE_BLOCKED_STATUSES, CLOSE_DISPOSITION_MAX_ROLLS, CLOSE_IN_FLIGHT_STATUSES, type CancelWorkOrderInput } from "./shared";
+import { qtyText } from "../helpers/qty-text.helper";
 
 export async function getCancelImpact(id: string): Promise<ApiResponse<unknown>> {
     const wo = await prisma.workOrder.findUnique({
@@ -563,9 +564,7 @@ export async function prepareFasonCancelDecision(
           // MAKİNE-OKUR kod + kararın dayanacağı SOMUT liste. Modal bu listeyi
           // çizer: hangi sevk, hangi top, kaç metre.
           throw AppError.conflict(
-            `${kalanlar.length} top hâlâ fasonda (${kalanlar
-              .reduce((t, k) => t + Number(k.roll?.currentQty ?? 0), 0)
-              .toFixed(1)} m). ${TERIM.terbiyeIsEmri.cumleBasi.belirtme} iptal etmek için bu malın ne olacağına karar verin.`,
+            `${kalanlar.length} top hâlâ fasonda (${qtyText(kalanlar.reduce((t, k) => t + Number(k.roll?.currentQty ?? 0), 0))} m). ${TERIM.terbiyeIsEmri.cumleBasi.belirtme} iptal etmek için bu malın ne olacağına karar verin.`,
             {
               code: "FASON_REMAINDER_DECISION_REQUIRED",
               remainders: kalanlar.map((k) => ({

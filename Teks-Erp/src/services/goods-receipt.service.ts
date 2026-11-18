@@ -49,7 +49,7 @@ import { applyYarnMovementTx } from "./yarn.service";
 import { reverseGoodsReceiptYarnTx } from "./helpers/yarn-receipt-reversal.helper";
 import { recordConsumableReceiptTx, reverseConsumableReceiptTx } from "./helpers/consumable-stock.helper";
 import { ensureYarnLotTx, normalizeLotNo } from "./helpers/yarn-lot.helper";
-import { assertReceiptLinesValid, overReceiptMessage, priceRequiredMessage, qtyText, YARN_LOT_REQUIRED_MESSAGE, type PreflightContext } from "./helpers/goods-receipt-preflight.helper";
+import { assertReceiptLinesValid, overReceiptMessage, priceRequiredMessage, YARN_LOT_REQUIRED_MESSAGE, type PreflightContext } from "./helpers/goods-receipt-preflight.helper";
 import { yarnMovementSign } from "./helpers/yarn-sign.helper";
 // J1 — iki OPT-IN katılık bayrağı (ikisi de varsayılan KAPALI; kapalıyken tek
 // maliyet ayar okumasıdır ve davranış bayt-bayt bugünküdür).
@@ -91,6 +91,7 @@ import {
   assertDirectWarpingReceipt, auditDirectDispatchReversals, auditDirectReceiptDispatch, claimDirectWarpingOrderTx,
   dispatchDirectReceiptLineTx, reverseDirectDispatchesTx, DIRECT_WARPING_PERMISSION,
 } from "./warping-order/direct-receipt";
+import { qtyText } from "./helpers/qty-text.helper";
 
 const inventory = new InventoryService();
 
@@ -687,7 +688,7 @@ function yarnLineQtyKg(line: GoodsReceiptLineInput): Prisma.Decimal {
   const qtyKg = new Prisma.Decimal(line.initialQty);
   if (line.weightKg != null && !new Prisma.Decimal(line.weightKg).equals(qtyKg)) {
     throw AppError.badRequest(
-      `İplik satırında miktar (${qtyKg.toString()} kg) ile ağırlık (${line.weightKg} kg) çelişiyor. ` +
+      `İplik satırında miktar (${qtyText(qtyKg)} kg) ile ağırlık (${qtyText(line.weightKg)} kg) çelişiyor. ` +
         `İplikte miktar zaten kg'dır — ağırlık alanını boş bırakın.`,
     );
   }

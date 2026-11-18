@@ -14,6 +14,7 @@ import { AppError } from "../../utils/app-error";
 import { CONSTRUCTION_WARNING, REPEAT_PICKS_TOLERANCE_PCT } from "../../constants/weave-design";
 import { weftLetter } from "./weft-sequence.helper";
 import { WARP_SPEC_YARN_DENIER_SELECT } from "./warp-spec-yarn.helper";
+import { pctText, qtyText } from "./qty-text.helper";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -83,7 +84,7 @@ function constructionWarnings(c: Omit<EffectiveConstruction, "warnings">): Effec
     if (declared > 0 && Math.abs(implied - declared) / declared * 100 > REPEAT_PICKS_TOLERANCE_PCT) {
       out.push({
         code: CONSTRUCTION_WARNING.repeatPicksMismatch,
-        message: `Rapordaki atkı (${total}) ÷ desen boyu (${d.repeatCm.toString()} cm) = ${implied.toFixed(2)} atkı/cm; kartın sıklığı ${declared} — fark %${REPEAT_PICKS_TOLERANCE_PCT}'ten büyük.`,
+        message: `Rapordaki atkı (${total}) ÷ desen boyu (${qtyText(d.repeatCm)} cm) = ${pctText(implied)} atkı/cm; kartın sıklığı ${declared} — fark %${pctText(REPEAT_PICKS_TOLERANCE_PCT)}'ten büyük.`,
       });
     }
   }

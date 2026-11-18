@@ -19,6 +19,7 @@ import { STATEMENT_MAX_LINES, tooLarge, type LedgerRead } from "./consigned-stat
 import { readRollLabels, readRollLedger } from "./consigned-statement/roll-ledger";
 import { readWarpBeamLabels, readWarpBeamLedger, readYarnLotLabels, readYarnLotLedger } from "./consigned-statement/yarn-beam-ledger";
 import type { ConsignedStatement, StatementSection, SubjectLabel } from "./consigned-statement/types";
+import { qtyText } from "./helpers/qty-text.helper";
 
 export type * from "./consigned-statement/types";
 export { STATEMENT_MAX_LINES };
@@ -129,7 +130,7 @@ export async function getConsignedStatement(q: ConsignedStatementQuery): Promise
     const diff = new Prisma.Decimal(rolls.totals.closing).minus(liveQty);
     reconciliation = { rolls: { liveQty: Number(liveQty.toFixed(3)), diffQty: Number(diff.toFixed(3)) } };
     if (diff.abs().gt(0.01)) {
-      warnings.push(`Ekstre kalanı canlı içerideki emanetten ${diff.toFixed(3)} m farklı — defterde görünmeyen bir metraj değişimi var.`);
+      warnings.push(`Ekstre kalanı canlı içerideki emanetten ${qtyText(diff)} m farklı — defterde görünmeyen bir metraj değişimi var.`);
     }
   }
   const preHorizon = await prisma.roll.count({ where: { ownerCustomerId: customer.id, createdAt: { lt: ledgerHorizonStart() } } });

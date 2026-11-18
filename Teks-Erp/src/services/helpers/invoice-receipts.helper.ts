@@ -14,6 +14,7 @@ import { resolvePartyToCardTx } from "./party-card.helper";
 import { receiptQtyByRollTx } from "./receipt-qty.helper";
 import { goodsReceiptService, type ReceiptFabricLine, type ReceiptYarnLine } from "../goods-receipt.service";
 import { readFinanceInvoicePriceTolerancePct, readFinanceInvoiceQtyTolerancePct, resolveInvoiceMatchToleranceEnabled } from "../system-setting.service";
+import { pctText } from "./qty-text.helper";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
@@ -177,6 +178,6 @@ export async function assertReceiptMatchTx(db: Db, docNo: string, args: Paramete
   if (!m || !m.checked) return;
   const bad = m.differences.filter((d) => d.exceeded);
   if (bad.length === 0) return;
-  const label = (d: ReceiptMatchDifference) => `${d.kind === "QTY" ? "miktar" : "tutar"} fatura ${d.invoice} ↔ fiş ${d.receipts} (fark %${d.diffPct}, tolerans %${d.tolerancePct})`;
+  const label = (d: ReceiptMatchDifference) => `${d.kind === "QTY" ? "miktar" : "tutar"} fatura ${d.invoice} ↔ fiş ${d.receipts} (fark %${pctText(d.diffPct)}, tolerans %${pctText(d.tolerancePct)})`;
   throw AppError.badRequest(`${docNo}: bağlı mal kabul fişleriyle uyuşmuyor — ${bad.map(label).join("; ")}. Faturayı ya da fişleri düzeltin.`, { code: INVOICE_RECEIPT_CODES.mismatch, differences: m.differences });
 }

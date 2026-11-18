@@ -27,10 +27,9 @@ import {
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
+import { assertShipmentsDispatchedTx, lockBillableShipmentsTx } from "./helpers/service-billing-shipment-lock.helper";
 import {
-  assertShipmentsDispatchedTx,
   insertServiceLinksTx,
-  lockBillableShipmentsTx,
   lockServiceReadingsTx,
   reconcileServiceLinksWithLines,
   revokeServiceLinksTx,
@@ -67,6 +66,7 @@ import {
   toInvoiceReceiptDto,
 } from "./helpers/invoice-receipts.helper";
 import { factoryDateTr } from "../constants/time";
+import { qtyText } from "./helpers/qty-text.helper";
 
 /** n irsaliye → 1 fatura — TEK YAZAR: pivot REPLACE + `goodsReceiptId` kolonu (n=1 → o fiş; n≠1 → null). Pivot audit'i
  *  ebeveyn fatura eyleminde (bu dosya audit'lidir); helper yalnız doğrular/okur. */
@@ -179,7 +179,7 @@ function describeYarnOut(effects: YarnLedgerEffect[], verb = "stoktan düşüld�
   if (effects.length === 0) return "";
   const negative = effects.filter((e) => e.balanceKg.lt(0));
   return (
-    ` ${effects.length} iplik kalemi ${verb} (${effects.map((e) => `${e.itemName}: ${e.qtyKg.toString()} kg`).join(", ")}).` +
+    ` ${effects.length} iplik kalemi ${verb} (${effects.map((e) => `${e.itemName}: ${qtyText(e.qtyKg)} kg`).join(", ")}).` +
     (negative.length > 0
       ? ` ⚠️ ${negative.length} kalemde bakiye EKSİDE — açılış/sayım girişi eksik olabilir.`
       : "")

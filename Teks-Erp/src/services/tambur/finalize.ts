@@ -71,6 +71,7 @@ import { resolveRollLabelTexts } from "../helpers/label-batch-no.helper";
 import { isConsignedRoll } from "../helpers/stock-ownership.helper";
 import { applyTamburCapabilitiesTx, closeOrphanRollErrors } from "./shared";
 import { resolveTamburLabelTemplate } from "../helpers/tambur-label-template.helper";
+import { qtyText } from "../helpers/qty-text.helper";
 
 // Kesim etiket NİYETİ (hedef sipariş kalemi / müşteri var-mı + müşteri isActive;
 // hiçbiri yoksa stok) `helpers/label-intent.helper.ts`'te yaşar — eskiden bu
@@ -365,7 +366,7 @@ export async function finalize(
       const overEnabled = await resolveTamburOverQuantityEnabled();
       if (!overEnabled) {
         throw AppError.badRequest(
-          `Kesim uzunlukları toplamı (${cumulativeLenD.toString()}m) topun metrajını (${totalQtyD.toString()}m) aşıyor`
+          `Kesim uzunlukları toplamı (${qtyText(cumulativeLenD)} m) topun metrajını (${qtyText(totalQtyD)} m) aşıyor`
         );
       }
     }
@@ -686,7 +687,7 @@ export async function finalize(
       });
       if (!freshQtyRow || !new Prisma.Decimal(freshQtyRow.currentQty).equals(totalQtyD)) {
         throw AppError.conflict(
-          `Topun metrajı bu sırada değişti (${totalQtyD.toString()}m → ${freshQtyRow?.currentQty ?? "?"}m). Listeyi yenileyip tekrar deneyin.`
+          `Topun metrajı bu sırada değişti (${qtyText(totalQtyD)} m → ${freshQtyRow ? qtyText(freshQtyRow.currentQty) : "?"} m). Listeyi yenileyip tekrar deneyin.`
         );
       }
 

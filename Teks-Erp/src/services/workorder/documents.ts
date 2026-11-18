@@ -21,6 +21,7 @@ import { withBarcodeRetry } from "../../utils/barcode-retry";
 import { nextManifestNo } from "../helpers/manifest-number.helper";
 import { TERIM } from "../../constants/terim";
 import type { WorkOrderServiceThis } from "./shared";
+import { qtyText } from "../helpers/qty-text.helper";
 
 export async function getDocuments(workOrderId: string): Promise<ApiResponse<unknown>> {
     const wo = await prisma.workOrder.findUnique({
@@ -118,7 +119,7 @@ export async function getDocuments(workOrderId: string): Promise<ApiResponse<unk
         subtitle: [
           d.subcontractor?.name,
           d.batch?.batchNumber ? `Parti ${d.batch.batchNumber}` : null,
-          `${d._count.items} top · ${Number(d.totalQty)} m`,
+          `${d._count.items} top · ${qtyText(d.totalQty)} m`,
         ]
           .filter(Boolean)
           .join(" · "),
@@ -154,7 +155,7 @@ export async function getDocuments(workOrderId: string): Promise<ApiResponse<unk
         date: ds.shippedAt.toISOString(),
         group: ds.dispatch?.step?.station?.name ?? "Fason",
         title: "Fasondan Sevk İrsaliyesi",
-        subtitle: [ds.customer?.name, `${Number(ds.totalQty)} m`].filter(Boolean).join(" · "),
+        subtitle: [ds.customer?.name, `${qtyText(ds.totalQty)} m`].filter(Boolean).join(" · "),
         // Doğrudan sevk terminaldir — iptal yolu yok (buildFasonDirectShipDoc da
         // `voidInfo: null` der); alan sözleşme bütünlüğü için sabit false.
         cancelled: false,

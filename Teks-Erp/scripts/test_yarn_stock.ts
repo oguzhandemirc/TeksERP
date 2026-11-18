@@ -656,9 +656,10 @@ async function main(): Promise<void> {
   const blockMsg = await expectConflict(
     "10b) ⭐ AÇIK: eksiye düşecek ÇIKIŞ 409 ile reddedildi",
     () => yarnService.createMovement({ itemId: gItem.id, warehouseId: wh.id, kind: YarnMovementKind.OUT, qtyKg: 101 }),
+    // Sayı Türkçe ölçü biçiminde (`qty-text.helper`, 2026-11-18): "mevcut 100 kg", eski "100.000" değil.
     // Mesaj operatöre ÇIKIŞ YOLU göstermeli: ne kadar var, ne istendi, en olası
     // kök neden ve ayarın nereden kapatılacağı. "Yetersiz stok." doğru ama ölü.
-    [gItem.name, "100.000", "101.000", "açılış", settingRowPath("yarnBlockNegativeBalanceEnabled")],
+    [gItem.name, "mevcut 100 kg", "çıkış 101 kg", "açılış", settingRowPath("yarnBlockNegativeBalanceEnabled")],
   );
   check(
     "10c) Mesaj deponun adını da söylüyor (hangi depoda eksik belli)",
@@ -770,7 +771,7 @@ async function main(): Promise<void> {
   await expectConflict(
     "10j) ⭐ Stok satırı HİÇ YOKKEN çıkış reddedilir (yokluk = 0, sessizce geçilmez)",
     () => yarnService.createMovement({ itemId: freshItem.id, warehouseId: wh.id, kind: YarnMovementKind.OUT, qtyKg: 1 }),
-    ["0.000", "açılış"],
+    ["mevcut 0 kg", "açılış"],
   );
   check("10j2) KÖRLÜK ZEMİNİ: 10j gerçekten satırsız bir çift üzerinde koştu", noRow === 0, `satır=${noRow}`);
   check(

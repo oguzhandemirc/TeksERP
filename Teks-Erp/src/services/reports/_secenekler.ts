@@ -1,3 +1,4 @@
+import { pctText } from "../helpers/qty-text.helper";
 // =============================================================================
 // TeksERP — Raporlarda SEÇİCİ KAYNAKLARI (raporlar fazı R5b-c3): `meta.secenekler`
 // =============================================================================
@@ -100,7 +101,7 @@ export function rateOptions(values: Iterable<number | string | null | undefined>
     if (n === null || n === undefined || !Number.isFinite(n)) continue;
     const code = n.toFixed(2);
     if (seen.has(code)) continue;
-    seen.set(code, { code, ad: `%${n.toLocaleString("tr-TR", { maximumFractionDigits: 2 })}`, n });
+    seen.set(code, { code, ad: `%${pctText(n)}`, n });
   }
   return [...seen.values()].sort((a, b) => a.n - b.n).slice(0, SECENEK_MAX).map(({ code, ad }) => ({ code, ad }));
 }

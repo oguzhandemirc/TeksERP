@@ -63,6 +63,7 @@ import { collectShipmentServiceBilling, resolveCustomerServiceBillingTrigger, ty
 import type { ServiceDraftWorkRow } from "../service-billing/types";
 import { loadServiceBillingSettings, resolveServiceBillingEnabled } from "./../system-setting.service";
 import { isConsignedRoll } from "./stock-ownership.helper";
+import { qtyText } from "./qty-text.helper";
 
 /**
  * Sevk edilmiş bir sevkiyattan SATIŞ faturası taslağı satırları.
@@ -467,7 +468,7 @@ export async function autoDraftInvoiceAfterDispatch(
     const { lines, orderConflicts, warnings, serviceLinks, shipmentGross } = await collectShipmentInvoiceDraftLines(sh.id, sh.customerId, currency);
     if (lines.length === 0) return null;
     // H7: taslak notu sevk BRÜTÜNÜ de söyler (hizmet satırları metreyi işin metresinden yazar).
-    const grossNote = shipmentGross ? ` Sevk brütü: ${shipmentGross.rollCount} top, ${shipmentGross.meters} m.` : "";
+    const grossNote = shipmentGross ? ` Sevk brütü: ${shipmentGross.rollCount} top, ${qtyText(shipmentGross.meters)} m.` : "";
 
     // Tahakkuk tarihi = malın çıktığı an. `new Date()` yazmak, gece yarısını
     // geçen bir sevkte faturayı ertesi güne atardı.

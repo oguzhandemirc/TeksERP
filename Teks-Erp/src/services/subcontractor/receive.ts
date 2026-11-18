@@ -44,6 +44,7 @@ import { resolveRollLabels, rollLabel, nextSubcontractorDocNoTx } from "./shared
 import type { SubcontractorServiceThis } from "./shared";
 import type { SubcontractorService } from "../subcontractor.service";
 import { emitSubcontractReceivedTx, emitSubcontractShrinkTx } from "../notification-sources/depo";
+import { qtyText } from "../helpers/qty-text.helper";
 
 // Refakat kartı okutma izi (TravelerCardScan) — tx İÇİNDE; audit'i çağıran eylem basar.
 // Bu dosyada durur: aile içinde audit taşıyan bir modülde (test_audit_muafiyeti §7 dosya düzeyi).
@@ -1135,8 +1136,8 @@ export async function receiveInner(
             bornDiff.abs(),
           );
           const explain =
-            `Fason kabul ${receiptNo}: ${consumedTotal.toFixed(1)} m düşüldü, ` +
-            `${bornTotal.toFixed(1)} m döndü`;
+            `Fason kabul ${receiptNo}: ${qtyText(consumedTotal)} m düşüldü, ` +
+            `${qtyText(bornTotal)} m döndü`;
           for (const s of shares) {
             await recordVarianceTx(tx, {
               rollId: s.rollId,
