@@ -71,6 +71,7 @@
 //   8046  DELIVERY_BATCH_NO_LOCK_NS  services/helpers/gelen-belge-mukerrer.helper.ts  gelen belge onayı (sahip, katlı müşteri parti no) kapısı (`hashtext(sahip:anahtar)`; onay claim tx'inin İLK ifadesi; çok anahtar sıralı)
 //   8047  LABEL_OPTIONS_LOCK_NS  services/label-template-option.service.ts  çoklu etiket seti replace'i (anahtar `hashtext('global:'||kind)` · `hashtext('customer:'||id)`; tx başına tek kilit)
 //   8048  PATRON_PUSH_LOCK_NS  services/patron-push/device.service.ts  patron push cihaz kaydı (kullanıcı başına `hashtext(userId)`; tavan sayımı ↔ yazım)
+//   8049  ROLE_TEMPLATE_RECONCILE_LOCK_NS  jobs/role-template-catalog.job.ts  rol şablonu açılış uzlaştırması + Tam Yetki yayılımı (tek anahtar; çok örnekli açılış serileşir)
 // İKİ KURAL: ① Aynı uzaydan birden çok kilit alan tx anahtarları SIRALI alır
 // (aşağıdaki `assertPeriodsOpenTx` bunun tek meşru kapısıdır — tekil guard'ı
 // bir tx'te İKİ KEZ elle çağırmak YASAK ve `cheque.bounce` vakasında canlı
