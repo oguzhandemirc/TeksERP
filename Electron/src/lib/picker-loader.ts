@@ -83,3 +83,32 @@ export async function loadAllForPicker<T>(
 
   return res;
 }
+
+/**
+ * CrudService OLMAYAN sayfalı uçlar için (`page`/`pageSize` + `pagination.total`, ör.
+ * `/api/yarn/stocks` — tavanı 200): sayfa sayfa sonuna kadar çeker, sessiz kesmez.
+ * Sayfa boyu buradadır (her uç ≥ 100 kabul eder); çağıran inline `pageSize` yazmaz.
+ */
+export const PAGED_PICKER_PAGE_SIZE = 100;
+/** Kaçak döngü kesici: 100 × 50 = 5.000 satır üstü seçici değil arama ister. */
+export const PAGED_PICKER_MAX_PAGES = 50;
+
+export interface PagedPickerPage<T> {
+  data: T[];
+  pagination: { total: number };
+}
+
+export async function loadAllPagesForPicker<T>(
+  fetchPage: (page: number, pageSize: number) => Promise<PagedPickerPage<T>>,
+): Promise<T[]> {
+  const rows: T[] = [];
+  for (let page = 1; page <= PAGED_PICKER_MAX_PAGES; page++) {
+    const res = await fetchPage(page, PAGED_PICKER_PAGE_SIZE);
+    rows.push(...res.data);
+    if (res.data.length < PAGED_PICKER_PAGE_SIZE || rows.length >= res.pagination.total) return rows;
+  }
+  throw new Error(
+    `Picker veri seti çok büyük (${PAGED_PICKER_PAGE_SIZE * PAGED_PICKER_MAX_PAGES} kaydı aştı). ` +
+      `Bu liste için arama tabanlı seçici kullanın.`,
+  );
+}
