@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { loadAllPagesForPicker } from "@/lib/picker-loader";
-import { listYarnLots, listYarnStocks } from "@/pages/Operations/Yarn/service";
+import { listAllActiveYarnLots, listYarnStocks } from "@/pages/Operations/Yarn/service";
 import { lotQualityOf, YARN_LOT_QUALITY } from "@/pages/Operations/Yarn/yarnLotQuality";
 import { fmtKg } from "./order-model";
 import type { PickedRef } from "./dispatch-model";
@@ -103,8 +103,8 @@ export async function loadWarehouseOptions(itemId: string): Promise<Option[]> {
 }
 
 async function loadLotOptions(itemId: string): Promise<Option[]> {
-  const r = await listYarnLots({ itemId, isActive: true, limit: 100 });
-  return r.data.map((l) => {
+  const rows = await listAllActiveYarnLots(itemId);
+  return rows.map((l) => {
     const q = lotQualityOf(l);
     return {
       id: l.id, label: l.lotNo, balanceKg: Number(l.balanceKg),

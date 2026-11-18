@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Callout } from "@/components/ui/callout";
 import { listWarpBeams } from "@/pages/Operations/WarpBeams/service";
+import { loadAllCursorPagesForPicker } from "@/lib/picker-loader";
 import { formatM, type WarpBeam } from "@/pages/Operations/WarpBeams/types";
 import { useOperationsVisibilityContext } from "@/pages/Operations/useOperationsVisibility";
 import type { WeavingOrder } from "../types";
@@ -33,10 +34,11 @@ interface Props {
 function BeamPicker({ order, selected, onToggle }: { order: WeavingOrder; selected: Set<string>; onToggle: (id: string) => void }) {
   const beams = useQuery({
     queryKey: ["warp-beams", "fason-picker"],
-    queryFn: () => listWarpBeams({ limit: 100, filters: { status: "READY" } }),
+    // Uç tavanı 100; HAZIR levent bunu aşabilir → imleçle sonuna kadar (sessiz kesme yok).
+    queryFn: () => loadAllCursorPagesForPicker((cursor, limit) => listWarpBeams({ cursor, limit, filters: { status: "READY" } })),
   });
   const rows = useMemo(() => {
-    const all: WarpBeam[] = beams.data?.data ?? [];
+    const all: WarpBeam[] = beams.data ?? [];
     const own = (b: WarpBeam) => Number(b.warpSpecId === order.warpSpecId);
     return order.warpSpecId ? [...all].sort((a, b) => own(b) - own(a)) : all;
   }, [beams.data, order.warpSpecId]);

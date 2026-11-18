@@ -57,7 +57,7 @@ import {
   YARN_KIND_META,
   backendMessage,
   createYarnMovement,
-  listYarnLots,
+  listAllActiveYarnLots,
   type YarnMovementKind,
 } from "./service";
 import { YARN_ITEM_FILTER } from "./YarnFilterBar";
@@ -91,8 +91,8 @@ export function YarnMovementDialog({
   const [reason, setReason] = useState("");
   // Devere Faz 2: lot etiketi opsiyonel — seçilen ipliğin AKTİF lotları; "" = lot yok (açıkça).
   const [lotId, setLotId] = useState("");
-  const lotsQ = useQuery({ queryKey: ["yarn", "lots", itemId, "movement-dialog"], queryFn: () => listYarnLots({ itemId: itemId!, isActive: true, limit: 200 }), enabled: !!itemId });
-  const lots = lotsQ.data?.data ?? [];
+  const lotsQ = useQuery({ queryKey: ["yarn", "lots", itemId, "movement-dialog"], queryFn: () => listAllActiveYarnLots(itemId!), enabled: !!itemId });
+  const lots = lotsQ.data ?? [];
 
   // Tek depolu kurulumda seçici çizilmez → depo burada otomatik seçilir. Çok
   // depoluda ASLA ön seçim yapılmaz (dosya başlığındaki gerekçe).

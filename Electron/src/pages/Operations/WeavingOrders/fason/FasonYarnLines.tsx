@@ -14,14 +14,14 @@ import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { useMultiWarehouse } from "@/hooks/useWarehouses";
 import { itemService } from "@/pages/Items/service";
 import type { Item } from "@/pages/Items/types";
-import { listYarnLots } from "@/pages/Operations/Yarn/service";
+import { listAllActiveYarnLots } from "@/pages/Operations/Yarn/service";
 import { YARN_ITEM_FILTER } from "@/pages/Operations/Yarn/YarnFilterBar";
 import { NO_LOT } from "@/pages/Operations/WarpBeams/YarnLinesEditor";
 import type { YarnLineDraft } from "./fason-summary";
 
 function LotSelect({ itemId, value, onChange }: { itemId: string | null; value: string; onChange: (v: string) => void }) {
-  const lots = useQuery({ queryKey: ["yarn", "lots", itemId, "fason-dispatch"], queryFn: () => listYarnLots({ itemId: itemId ?? "", isActive: true, limit: 200 }), enabled: Boolean(itemId) });
-  const rows = lots.data?.data ?? [];
+  const lots = useQuery({ queryKey: ["yarn", "lots", itemId, "fason-dispatch"], queryFn: () => listAllActiveYarnLots(itemId ?? ""), enabled: Boolean(itemId) });
+  const rows = lots.data ?? [];
   return (
     <Select value={value || NO_LOT} onValueChange={(v) => onChange(v === NO_LOT ? "" : v)} disabled={!itemId}>
       <SelectTrigger className="w-52" aria-label="İplik lotu">

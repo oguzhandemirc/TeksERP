@@ -21,6 +21,7 @@ import { printTracked } from "@/lib/print";
 import { useLabelPrinter } from "@/hooks/useLabelPrinter";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { qualityGradeService } from "@/pages/QualityGrades/service";
+import { loadAllForPicker } from "@/lib/picker-loader";
 import { LabelPreviewZoom } from "./LabelPreviewZoom";
 import { RollLabelEditPanel } from "./RollLabelEditPanel";
 import { DesktopOnlyAction } from "@/components/ui/DesktopOnlyAction";
@@ -56,7 +57,7 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
   const scrapLabelEnabled = flagsQ.data?.data?.scrapGradeLabelEnabled ?? false;
   const gradesQ = useQuery({
     queryKey: ["quality-grades", "skip-label"],
-    queryFn: () => qualityGradeService.listCursor({ limit: 100, filters: { isActive: "true" } }),
+    queryFn: () => loadAllForPicker(qualityGradeService, { sortBy: "sortOrder" }),
     enabled: open,
     staleTime: 10 * 60 * 1000,
   });
