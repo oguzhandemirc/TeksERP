@@ -11,7 +11,7 @@ import { Prisma, WarpingOrderStatus } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { returnYarnTx, type ReturnYarnInput } from "../subcontractor-yarn.service";
-import { loadWarpingYarnHoldings, loadWarpingYarnItems, lockDispatchItemsTx, WARPING_TRANSFER } from "../helpers/warping-yarn-open.helper";
+import { loadWarpingYarnItems, lockDispatchItemsTx, WARPING_TRANSFER } from "../helpers/warping-yarn-open.helper";
 import { listWarpingTransfers as listWarpingTransferBatches } from "./yarn-transfer-shared";
 import { qtyText } from "../helpers/qty-text.helper";
 
@@ -87,38 +87,5 @@ export async function listWarpingYarnHoldings(id: string) {
   }));
 }
 
-/** Deverecide duran iplik — fasoncu × iplik × lot (× sipariş); `statuses` verilirse yalnız o durumdakiler. */
-export async function warpingYarnAtSubcontractors(filter: { subcontractorIds?: string[]; yarnItemIds?: string[]; statuses?: WarpingOrderStatus[] }) {
-  const rows = await loadWarpingYarnHoldings(prisma, filter);
-  const groups = new Map<string, { subcontractorId: string; yarnItemId: string; lotId: string | null; lotNo: string | null; ownerCustomerId: string | null; kg: Prisma.Decimal; oldestDispatchedAt: Date; orders: Array<{ warpingOrderId: string; orderNo: string; status: WarpingOrderStatus; kg: string }> }>();
-  for (const h of rows) {
-    const k = `${h.subcontractorId}|${h.yarnItemId}|${h.lotId ?? ""}|${h.ownerCustomerId ?? ""}`;
-    const g = groups.get(k) ?? { subcontractorId: h.subcontractorId, yarnItemId: h.yarnItemId, lotId: h.lotId, lotNo: h.lotNo, ownerCustomerId: h.ownerCustomerId, kg: D(0), oldestDispatchedAt: h.dispatchedAt, orders: [] };
-    g.kg = g.kg.plus(h.kg);
-    if (h.dispatchedAt < g.oldestDispatchedAt) g.oldestDispatchedAt = h.dispatchedAt;
-    const o = g.orders.find((x) => x.warpingOrderId === h.warpingOrderId);
-    if (o) o.kg = D(o.kg).plus(h.kg).toFixed(3);
-    else g.orders.push({ warpingOrderId: h.warpingOrderId, orderNo: h.orderNo, status: h.orderStatus, kg: kg(h.kg) });
-    groups.set(k, g);
-  }
-  // D6-be: ad alanları kimliklere EK (geriye uyumlu); sıralama kimlikle kalır.
-  const list = [...groups.values()];
-  const uniq = <T,>(xs: T[]) => [...new Set(xs)];
-  const subIds = uniq(list.map((g) => g.subcontractorId));
-  const yarnIds = uniq(list.map((g) => g.yarnItemId));
-  const ownerIds = uniq(list.map((g) => g.ownerCustomerId).filter((x): x is string => x !== null));
-  const subs = subIds.length > 0 ? await prisma.subcontractor.findMany({ where: { id: { in: subIds } }, select: { id: true, code: true, name: true } }) : [];
-  const yarns = yarnIds.length > 0 ? await prisma.item.findMany({ where: { id: { in: yarnIds } }, select: { id: true, code: true, name: true } }) : [];
-  const owners = ownerIds.length > 0 ? await prisma.customer.findMany({ where: { id: { in: ownerIds } }, select: { id: true, name: true } }) : [];
-  const subBy = new Map(subs.map((s) => [s.id, s]));
-  const yarnBy = new Map(yarns.map((y) => [y.id, y]));
-  const ownerBy = new Map(owners.map((o) => [o.id, o.name]));
-  return list
-    .sort((a, b) => a.subcontractorId.localeCompare(b.subcontractorId) || a.yarnItemId.localeCompare(b.yarnItemId) || (a.lotNo ?? "").localeCompare(b.lotNo ?? ""))
-    .map((g) => ({
-      ...g, kg: kg(g.kg), oldestDispatchedAt: g.oldestDispatchedAt.toISOString(),
-      subcontractorCode: subBy.get(g.subcontractorId)?.code ?? null, subcontractorName: subBy.get(g.subcontractorId)?.name ?? null,
-      yarnItemCode: yarnBy.get(g.yarnItemId)?.code ?? null, yarnItemName: yarnBy.get(g.yarnItemId)?.name ?? null,
-      ownerCustomerName: g.ownerCustomerId ? ownerBy.get(g.ownerCustomerId) ?? null : null,
-    }));
-}
+/** Deverecide duran iplik okuyucusu kendi dosyasında (Fasondaki İplik: lot süzgeci · arama · değer). */
+export { warpingYarnAtSubcontractors } from "./yarn-at-subcontractor";

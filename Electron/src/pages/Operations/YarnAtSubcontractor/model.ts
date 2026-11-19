@@ -74,6 +74,24 @@ export interface YarnAtSubSummary {
   carriedKg: number;
   /** En uzun süredir fasonda duran satırın gün sayısı (boşsa null). */
   oldestDays: number | null;
+  /** Değer toplamı PARA BİRİMİ BAŞINA (kur çevrilmez; satır değerleri sunucunun) — fiyat alanı gelmediyse boş. */
+  valueTotals: Array<{ currency: string; value: number }>;
+  /** Fiyatı olmayan satır sayısı (lotsuz · fiyatsız · karışık para birimi) — toplamın eksik olduğunu söyler. */
+  unpricedLines: number;
+}
+
+/** Tek terim: kapanmış siparişten fasoncuda kalan iplik (rozet · özet · dışa aktarım aynı kelime). */
+export const CARRIED_LABEL = "devreden";
+export const CARRIED_HINT = "Siparişi kapanmış ama fasoncuda kalan iplik — sonraki siparişe aktarılabilir ya da geri alınmalı";
+
+/** Fiyatsız satırın sebebi — ekranda ipucu, dosyada metin. */
+export function priceMissingText(r: YarnAtSubRow): string | null {
+  switch (r.priceStatus) {
+    case "NO_LOT": return "Lotsuz iplik — mal kabul fiyatı lota bağlıdır";
+    case "NO_PRICE": return "Bu lotun mal kabulünde fiyat yok";
+    case "MIXED_CURRENCY": return "Lotun mal kabulleri farklı para birimlerinde — tek fiyat verilemez";
+    default: return null;
+  }
 }
 
 /** Özet şeridi — listeyle AYNI yanıttan (tek where). */
@@ -81,8 +99,14 @@ export function summarize(rows: readonly YarnAtSubRow[], now: Date = new Date())
   let totalKg = 0;
   let carried = 0;
   let oldest: number | null = null;
+  const values = new Map<string, number>();
+  let unpriced = 0;
   for (const r of rows) {
     totalKg += n(r.kg);
+    if (r.priceStatus !== undefined) {
+      if (r.value != null && r.currency) values.set(r.currency, (values.get(r.currency) ?? 0) + n(r.value));
+      else unpriced += 1;
+    }
     carried += carriedKg(r);
     const d = ageDays(r.oldestDispatchedAt, now);
     if (oldest === null || d > oldest) oldest = d;
@@ -93,6 +117,8 @@ export function summarize(rows: readonly YarnAtSubRow[], now: Date = new Date())
     yarnCount: new Set(rows.map((r) => r.yarnItemId)).size,
     carriedKg: carried,
     oldestDays: oldest,
+    valueTotals: [...values.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([currency, value]) => ({ currency, value })),
+    unpricedLines: unpriced,
   };
 }
 
