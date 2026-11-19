@@ -42,12 +42,14 @@ export function FormField({
   return (
     <div className={cn("space-y-1.5", className)}>
       {info ? (
-        <div className="flex min-w-0 items-center gap-1">
-          <Label htmlFor={htmlFor} className="min-w-0">
+        // ⓘ'siz dalla AYNI satır kutusu: `contents` sarmalayıcı kutu üretmez (blok sarmalayıcı space-y boşluğu alıp
+        // girdiyi ~2px aşağı itiyordu); etiket + düğme alanın satır içi akışında, 20px düğme satırı büyütmez.
+        <div className="contents">
+          <Label htmlFor={htmlFor}>
             {label}
             {required && <span className="ml-0.5 font-bold text-destructive">*</span>}
           </Label>
-          <InfoPopover desc={info} />
+          <InfoPopover desc={info} className="-my-1 ml-1 align-middle" />
         </div>
       ) : (
         <Label htmlFor={htmlFor}>
