@@ -24,6 +24,8 @@ import { CASH_DERIVERS, CASH_DERIVER_ROW_FIELDS } from "./derived-cash";
 import { cariLockByCari } from "./derived-cari-hold";
 import { workOrderReadyWorksWire } from "./derived-ship-ready";
 import { mergedInvoiceViews } from "./derived-merged-invoice";
+import { isOpenWorkOrderStatus } from "../services/helpers/live-ref-where.helper";
+import { loadWorkOrderOrders, loadWorkOrderWhereabouts } from "./work-order-facts";
 
 type RawRow = Record<string, unknown> & { id: string };
 export type DerivedValues = Map<string, Record<string, unknown>>;
@@ -135,6 +137,9 @@ async function workOrderDerived(rows: readonly RawRow[]): Promise<DerivedValues>
     where: { id: { in: ids(rows) } },
     select: {
       id: true,
+      status: true,
+      targetItemId: true,
+      targetColorId: true,
       steps: { select: { id: true, stepSequence: true, status: true, stationId: true, station: { select: { name: true } } }, orderBy: { stepSequence: "asc" } },
       // Seçim listeyle aynı; aktif bağ yüklemi tek kaynaktan çağrı yerinde (koparılmış bağ projeksiyona girmez).
       orderLinks: { ...WO_LIST_CUSTOMER_LINKS, where: ACTIVE_ORDER_LINK },
@@ -144,6 +149,11 @@ async function workOrderDerived(rows: readonly RawRow[]): Promise<DerivedValues>
   });
   const withMeters = await new WorkOrderService().withProductionMeters(wos);
   const readiness = await workOrderReadyWorksWire(ids(rows));
+  // v3 (patron İE ekranı): nerede · kimin · hangi sipariş — `work-order-facts` tek kaynak.
+  const where = await loadWorkOrderWhereabouts(ids(rows));
+  const orders = await loadWorkOrderOrders(ids(rows));
+  const items = await displayNames("item", wos.map((w) => w.targetItemId));
+  const colors = await displayNames("color", wos.map((w) => w.targetColorId));
   const out: DerivedValues = new Map();
   for (const w of withMeters) {
     out.set(w.id, {
@@ -153,6 +163,14 @@ async function workOrderDerived(rows: readonly RawRow[]): Promise<DerivedValues>
       cariKartIdleri: w.customers.map((c) => c.id),
       aktifIstasyonId: currentWorkOrderStep(w.steps)?.stationId ?? null,
       sevkeHazir: readiness.get(w.id) ?? null,
+      acik: isOpenWorkOrderStatus(w.status),
+      musteriAdi: w.customers[0]?.name ?? null,
+      musteriAdlari: w.customers.map((c) => c.name),
+      siparisIdleri: (orders.get(w.id) ?? []).map((o) => o.id),
+      siparisNolari: (orders.get(w.id) ?? []).map((o) => o.no),
+      urunAdi: w.targetItemId ? items.get(w.targetItemId) ?? null : null,
+      renkAdi: w.targetColorId ? colors.get(w.targetColorId) ?? null : null,
+      ...where.get(w.id)!,
     });
   }
   return out;
