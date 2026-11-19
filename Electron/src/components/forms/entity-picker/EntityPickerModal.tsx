@@ -56,6 +56,8 @@ export interface EntityPickerModalProps<T extends { id: string }> {
   /** İlk çizimde modal açık doğar (komut paletinden doğrudan seçiciye inen girişler). */
   defaultOpen?: boolean;
   countLabel?: string;
+  /** Modal başlığının altında, aramanın üstünde ek şerit (ör. kategori süzgeci anahtarı + uyarı). */
+  headerSlot?: ReactNode;
 }
 
 /**
@@ -90,6 +92,7 @@ export function EntityPickerModal<T extends { id: string }>({
   onQuickAdd,
   countLabel,
   defaultOpen,
+  headerSlot,
 }: EntityPickerModalProps<T>) {
   const [open, setOpen] = useState(defaultOpen ?? false);
   const [search, setSearch] = useState("");
@@ -166,6 +169,7 @@ export function EntityPickerModal<T extends { id: string }>({
             </DialogTitle>
             {description && <DialogDescription>{description}</DialogDescription>}
           </DialogHeader>
+          {headerSlot && <div className="shrink-0">{headerSlot}</div>}
 
           <div className="relative shrink-0">
             <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />

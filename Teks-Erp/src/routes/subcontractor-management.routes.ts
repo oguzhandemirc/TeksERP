@@ -22,12 +22,17 @@ const subCtrl = new SubcontractorManagementController();
  * /api/subcontractors:
  *   get:
  *     tags: [Subcontractor]
- *     summary: Fason firma listesi (categoryId filter desteklenir)
+ *     summary: Fason firma listesi (categoryId filter + cursor kipi desteklenir)
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: query
  *         name: filter[categoryId]
- *         schema: { type: string, format: uuid }
+ *         description: "Kategori id (uuid ya da CSV); uuid olmayan ya da tanınmayan kategori → 400 SUBCONTRACTOR_CATEGORY_FILTER_INVALID"
+ *         schema: { type: string }
+ *       - in: query
+ *         name: mode
+ *         description: "`cursor` → yanıt `pagination {nextCursor, hasMore, limit, totalEstimate?}` (limit ≤200, `withTotal=true` toplamı ekler)"
+ *         schema: { type: string, enum: [cursor] }
  *       - in: query
  *         name: filter[isActive]
  *         schema: { type: string }
@@ -37,6 +42,7 @@ const subCtrl = new SubcontractorManagementController();
  *         schema: { type: string }
  *     responses:
  *       200: { description: "Liste — her satırda bağlı cari nesnesi customer (id, code, name, type) ya da null" }
+ *       400: { description: "Geçersiz/tanınmayan kategori süzgeci (details.code SUBCONTRACTOR_CATEGORY_FILTER_INVALID)" }
  */
 subcontractorRouter.get("/", verifyToken, requireAnyPermission("subcontractor:read", ...MOBILE_FASON_READ, "mobile:hizli-is-emri"), subCtrl.findAll);
 
