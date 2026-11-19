@@ -13,10 +13,12 @@ export interface PreferenceKindRowProps {
   kind: CatalogKind;
   value: (channel: PreferenceChannel) => boolean | null;
   locked: boolean;
+  /** Profil tercih kilidi: "Uygulamada" yönetici kararıyla sabit (açık da kapalı da olabilir); tablet sesi serbest. */
+  prefsLocked?: boolean;
   onToggle: (channel: PreferenceChannel, value: boolean) => void;
 }
 
-export default function PreferenceKindRow({ kind, value, locked, onToggle }: PreferenceKindRowProps) {
+export default function PreferenceKindRow({ kind, value, locked, prefsLocked = false, onToggle }: PreferenceKindRowProps) {
   return (
     <View style={styles.row} testID={`tercih-${kind.kod}`}>
       <View style={styles.text}>
@@ -32,7 +34,7 @@ export default function PreferenceKindRow({ kind, value, locked, onToggle }: Pre
         const v = value(ch);
         if (v === null) return <View key={ch} style={styles.cell} />;
         const label = `${kind.ad} — ${CHANNEL_LABEL[ch]}`;
-        if (ch === 'UYGULAMA' && locked) {
+        if (ch === 'UYGULAMA' && (locked || prefsLocked)) {
           // Pasif Switch koyu temada griye boyanıp "kapalı" okunuyordu; kilitli kanal anahtar değil, rozet.
           return (
             <View key={ch} style={styles.cell}>
@@ -45,7 +47,7 @@ export default function PreferenceKindRow({ kind, value, locked, onToggle }: Pre
                 accessibilityState={{ checked: v, disabled: true }}
               >
                 <Icon source="lock" size={14} color={C.accentLight} />
-                <Text style={styles.lockedText}>{v ? 'Hep açık' : 'Kapalı'}</Text>
+                <Text style={styles.lockedText}>{v ? (locked ? 'Hep açık' : 'Açık') : 'Kapalı'}</Text>
               </View>
             </View>
           );

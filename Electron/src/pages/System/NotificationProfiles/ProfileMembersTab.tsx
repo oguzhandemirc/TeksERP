@@ -10,6 +10,7 @@ import { actionErrorMessage } from "@/pages/Operations/LoomAlarms/useLoomAlarmAc
 import { bildirimProfilService, type NotificationProfile } from "@/services/bildirimProfilService";
 import { candidatesKey, PROFILES_QUERY_ROOT } from "./queries";
 import { UserPickerDialog } from "./UserPickerDialog";
+import { PrefsLockSwitch } from "./PrefsLockSwitch";
 
 export function ProfileMembersTab({ profile }: { profile: NotificationProfile }) {
   const qc = useQueryClient();
@@ -39,6 +40,7 @@ export function ProfileMembersTab({ profile }: { profile: NotificationProfile })
   const rows = [...ids].sort((a, b) => (names.get(a) ?? "").localeCompare(names.get(b) ?? "", "tr"));
   return (
     <div className="space-y-3">
+      <PrefsLockSwitch profile={profile} />
       {!readOnly && (
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => setPickerOpen(true)} disabled={candidates.isLoading}>

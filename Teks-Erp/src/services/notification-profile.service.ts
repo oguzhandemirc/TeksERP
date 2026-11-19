@@ -21,7 +21,7 @@ import { blindMemberCounts } from "./notification-profile-audience.service";
 import { parseKindParams, refreshNotificationParams } from "./helpers/notification-params.helper";
 
 const PROFILE_SELECT = {
-  id: true, code: true, name: true, archivedAt: true, createdAt: true, updatedAt: true,
+  id: true, code: true, name: true, archivedAt: true, prefsLocked: true, createdAt: true, updatedAt: true,
   cells: { select: { kind: true, state: true }, orderBy: { kind: "asc" } },
   members: { select: { userId: true, user: { select: { fullName: true, username: true } } }, orderBy: { userId: "asc" } },
 } as const satisfies Prisma.NotificationProfileSelect;
@@ -30,7 +30,7 @@ type ProfileRow = Prisma.NotificationProfileGetPayload<{ select: typeof PROFILE_
 
 function profileView(p: ProfileRow) {
   return {
-    id: p.id, kod: p.code, ad: p.name, arsivlendi: p.archivedAt,
+    id: p.id, kod: p.code, ad: p.name, arsivlendi: p.archivedAt, tercihKilidi: p.prefsLocked,
     hucreler: p.cells.map((c) => ({ tur: c.kind, durum: c.state })),
     uyeler: p.members.map((m) => ({ userId: m.userId, ad: m.user.fullName || m.user.username })),
   };
@@ -103,14 +103,25 @@ export async function createProfile(body: unknown, userId: string) {
   });
 }
 
-export const UpdateProfileBody = z.object({ ad: z.string().trim().min(1, "Profil adı zorunlu.").max(120) }).strict();
+/** `tercihKilidi`: üyelerin kişisel uygulama-içi tercih yazımını kapatır (varsayılan kapalı = bugünkü davranış). */
+export const UpdateProfileBody = z
+  .object({ ad: z.string().trim().min(1, "Profil adı zorunlu.").max(120).optional(), tercihKilidi: z.boolean().optional() })
+  .strict()
+  .refine((b) => b.ad !== undefined || b.tercihKilidi !== undefined, "Değiştirilecek alan yok.");
 
 export async function updateProfile(id: string, body: unknown, userId: string) {
   const b = UpdateProfileBody.parse(body);
   const before = await loadProfile(id);
-  const claimed = await prisma.notificationProfile.updateMany({ where: { id, archivedAt: null }, data: { name: b.ad } });
+  const data = { ...(b.ad !== undefined ? { name: b.ad } : {}), ...(b.tercihKilidi !== undefined ? { prefsLocked: b.tercihKilidi } : {}) };
+  const claimed = await prisma.notificationProfile.updateMany({ where: { id, archivedAt: null }, data });
   if (claimed.count === 0) await throwClaimFailure(id);
-  await AuditService.log({ userId, action: "UPDATE", tableName: "NOTIFICATION_PROFILE", recordId: id, oldData: { ad: before.ad }, newData: { ad: b.ad } });
+  const pick = (p: { ad: string; tercihKilidi: boolean }) => ({
+    ...(b.ad !== undefined ? { ad: p.ad } : {}), ...(b.tercihKilidi !== undefined ? { tercihKilidi: p.tercihKilidi } : {}),
+  });
+  await AuditService.log({
+    userId, action: "UPDATE", tableName: "NOTIFICATION_PROFILE", recordId: id,
+    oldData: pick(before), newData: pick({ ad: b.ad ?? before.ad, tercihKilidi: b.tercihKilidi ?? before.tercihKilidi }),
+  });
   return loadProfile(id);
 }
 

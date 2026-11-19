@@ -246,6 +246,7 @@ export const TABLE_LABELS: Record<string, string> = {
   NOTIFICATION_PROFILE: "Bildirim Profili",
   NOTIFICATION_FACTORY_DEFAULT: "Bildirim Fabrika Varsayılanı",
   NOTIFICATION_PREFERENCE_PROFILE: "Kişisel Bildirim Profili",
+  NOTIFICATION_PREFERENCE: "Kişinin Bildirim Tercihi (yönetici)",
 };
 
 /** Ham tableName'i Türkçe etiketle. Boş → "—", bilinmeyen → ham değer. */

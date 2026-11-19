@@ -142,6 +142,7 @@ export const AUDIT_ISIMLERI: Readonly<Record<string, TermCases>> = {
   NOTIFICATION_PROFILE: onEkli("bildirim", iyelik("profil", "i", "e", "i")),
   NOTIFICATION_FACTORY_DEFAULT: onEkli("bildirim fabrika", iyelik("varsayılan", "ı", "a", "ı")),
   NOTIFICATION_PREFERENCE_PROFILE: onEkli("kişisel bildirim", iyelik("profil", "i", "e", "i")),
+  NOTIFICATION_PREFERENCE: onEkli("kişinin bildirim", iyelik("tercih", "i", "e", "i")),
   SALES_QUOTE: onEkli("satış", iyelik("teklif", "i", "e", "i")),
   PRICE_LIST: onEkli("fiyat", sIyelik("liste", "i", "e")),
 };

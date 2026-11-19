@@ -19,9 +19,12 @@ import { ResetPasswordTab } from "./ResetPasswordTab";
 import { CardTokenTab } from "./CardTokenTab";
 import { QuickPinTab } from "./QuickPinTab";
 import { TwoFactorTab } from "./TwoFactorTab";
+import { UserNotificationsTab } from "./UserNotificationsTab";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { NOTIFICATION_PROFILES_ACCESS } from "@/lib/permissions";
 import { adminUserService, type AdminUserListItem } from "@/services/adminUserService";
 
-type UserDetailTab = "permissions" | "password" | "card" | "quick-pin" | "two-factor";
+type UserDetailTab = "permissions" | "password" | "card" | "quick-pin" | "two-factor" | "notifications";
 
 interface Props {
   user: AdminUserListItem | null;
@@ -38,6 +41,7 @@ interface Props {
  */
 export function UserDetailDialog({ user, open, onOpenChange, initialTab = "permissions" }: Props) {
   const qc = useQueryClient();
+  const canNotifications = useRoleAccess().hasAnyPermission(NOTIFICATION_PROFILES_ACCESS);
   const [fullName, setFullName] = useState(user?.fullName ?? "");
   const [renameOpen, setRenameOpen] = useState(false);
   const [nameInput, setNameInput] = useState("");
@@ -142,6 +146,7 @@ export function UserDetailDialog({ user, open, onOpenChange, initialTab = "permi
               <TabsTrigger value="card" className="flex-1">Personel Kartı</TabsTrigger>
               <TabsTrigger value="quick-pin" className="flex-1">Hızlı PIN</TabsTrigger>
               <TabsTrigger value="two-factor" className="flex-1">İki Adımlı</TabsTrigger>
+              {canNotifications && <TabsTrigger value="notifications" className="flex-1">Bildirimler</TabsTrigger>}
             </TabsList>
             <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-4">
               <TabsContent value="permissions" className="mt-0 h-full">
@@ -159,6 +164,11 @@ export function UserDetailDialog({ user, open, onOpenChange, initialTab = "permi
               <TabsContent value="two-factor" className="mt-0">
                 <TwoFactorTab userId={user.id} username={user.username} />
               </TabsContent>
+              {canNotifications && (
+                <TabsContent value="notifications" className="mt-0">
+                  <UserNotificationsTab userId={user.id} />
+                </TabsContent>
+              )}
             </div>
           </Tabs>
         )}
