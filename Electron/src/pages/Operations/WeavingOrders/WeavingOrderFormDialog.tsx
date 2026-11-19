@@ -22,6 +22,7 @@ import { TERIM } from "@/lib/terim";
 import type { UseFormReturn } from "react-hook-form";
 import { useProposalGates } from "../Orders/production-proposal/gates";
 import { LoomSuggestionSection, draftOf } from "./loom-suggestion/LoomSuggestionSection";
+import { FieldGrid, FormCard } from "@/components/forms/WideFormDialog";
 
 /** SY-M3: formun canlı değerlerinden tezgâh önerisi (ürün/varyant/çözgü/plan m değiştikçe yeniden sorar). */
 function FormLoomSuggestion({ form }: { form: UseFormReturn<WeavingOrderFormValues> }) {
@@ -73,17 +74,32 @@ export function WeavingOrderFormDialog({ open, onOpenChange, initial, onSubmit, 
       defaultValues={buildDefaults(initial)}
       onSubmit={(v) => onSubmit(v, attempt.token()).then(() => attempt.onSuccess(), (e: unknown) => attempt.onFailure(e))}
       isSubmitting={isSubmitting}
+      size="wide"
+      sectionsKey="weaving-order.form"
     >
       {(form) => (
-        <>
-          {devereEnabled && <BeamPrefillField form={form} onSuggestion={setSuggestion} />}
-          <FabricFields form={form} devereEnabled={devereEnabled} />
-          <ConstructionFields form={form} initialItemId={initial?.itemId ?? null} />
-          <WeavingOrderLinesSection form={form} initialLines={initial?.orderLines ?? []} required={orderLineRequired} />
-          <PartyFields form={form} />
-          <PlanFields form={form} suggestion={suggestion} />
+        // Geniş form (2026-11-19): kısa alanlar ızgarada; kartlar bölüm menüsünden gizlenebilir (zorunlu alanlı olanlar kilitli).
+        <div className="space-y-5">
+          <FormCard title="Ne dokunacak" sectionId="fabric" sectionRequired>
+            <div className="space-y-4">
+              <FieldGrid cols={4}>
+                {devereEnabled && <BeamPrefillField form={form} onSuggestion={setSuggestion} />}
+                <FabricFields form={form} devereEnabled={devereEnabled} />
+              </FieldGrid>
+              <ConstructionFields form={form} initialItemId={initial?.itemId ?? null} />
+            </div>
+          </FormCard>
+          <FormCard title="Kim, ne kadar, ne zaman" sectionId="plan" sectionRequired>
+            <FieldGrid cols={4}>
+              <PartyFields form={form} />
+              <PlanFields form={form} suggestion={suggestion} />
+            </FieldGrid>
+          </FormCard>
+          <FormCard title="Sipariş bağı" sectionId="order-lines" sectionRequired={orderLineRequired}>
+            <WeavingOrderLinesSection form={form} initialLines={initial?.orderLines ?? []} required={orderLineRequired} />
+          </FormCard>
           {loomSuggestionVisible && <FormLoomSuggestion form={form} />}
-        </>
+        </div>
       )}
     </EntityFormDialog>
   );

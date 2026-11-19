@@ -80,7 +80,8 @@ export function WeavingOrderLinesSection({ form, initialLines, required = false 
       label="Sipariş satırları"
       required={required}
       error={rootError && "message" in rootError && typeof rootError.message === "string" ? (rootError as { message: string }) : undefined}
-      hint={required ? "Bu kurulumda dokuma iş emri bir sipariş satırına bağlanmalı (ayar açık)." : "İsteğe bağlı — stoka dokuma meşru. Tahsis metresi boş bırakılabilir."}
+      hint={required ? "Bu kurulumda dokuma iş emri bir sipariş satırına bağlanmalı (ayar açık)." : undefined}
+      info={required ? undefined : "İsteğe bağlı — stoka dokuma meşru. Tahsis metresi boş bırakılabilir."}
     >
       <div className="space-y-2">
         {fields.length > 0 && (

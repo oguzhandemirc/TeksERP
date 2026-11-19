@@ -11,7 +11,7 @@ export function ItemYarnWasteField({ form }: { form: UseFormReturn<ItemFormValue
       label="İplik firesi % (opsiyonel)"
       htmlFor="yarnWastePct"
       error={form.formState.errors.yarnWastePct}
-      hint="Doluysa bu iplik maliyet ve iplik ihtiyacında bu fireyle hesaplanır; boşsa çözgü/atkı kartındaki fire kullanılır (0–50)"
+      info="Doluysa bu iplik maliyet ve iplik ihtiyacında bu fireyle hesaplanır; boşsa çözgü/atkı kartındaki fire kullanılır (0–50)"
     >
       <Input id="yarnWastePct" inputMode="decimal" placeholder="Boş = kart firesi" {...form.register("yarnWastePct")} />
     </FormField>

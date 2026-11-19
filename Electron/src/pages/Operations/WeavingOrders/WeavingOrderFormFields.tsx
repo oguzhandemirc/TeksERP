@@ -70,7 +70,7 @@ export function FabricFields({ form, devereEnabled }: { form: Form; devereEnable
           )}
         />
       </FormField>
-      <FormField label="Renk" error={err.colorId} hint="Ham dokumada boş bırakılır; renk sonraki adımlarda gelir.">
+      <FormField label="Renk" error={err.colorId} info="Ham dokumada boş bırakılır; renk sonraki adımlarda gelir.">
         <Controller
           control={form.control}
           name="colorId"
@@ -167,7 +167,7 @@ export function PartyFields({ form }: { form: Form }) {
   );
 }
 
-/** Hedef metre · plan tarihleri · not. Levent önerisi yalnız İPUCU: alanı kullanıcı "Uygula" ile doldurur. */
+/** Hedef metre · plan tarihleri · not (çağıran ızgaraya dizer; not tam satır). Levent önerisi yalnız İPUCU: alanı kullanıcı "Uygula" ile doldurur. */
 export function PlanFields({ form, suggestion = null }: { form: Form; suggestion?: PlannedMSuggestion | null }) {
   const err = form.formState.errors;
   return (
@@ -176,20 +176,18 @@ export function PlanFields({ form, suggestion = null }: { form: Form; suggestion
         label="Hedef metre"
         htmlFor="plannedM"
         error={err.plannedM}
-        hint="Boş = açık uçlu iş (levent bitene kadar). Hedefe ulaşmak işi KAPATMAZ; kapanış açık bir karardır."
+        info="Boş = açık uçlu iş (levent bitene kadar). Hedefe ulaşmak işi KAPATMAZ; kapanış açık bir karardır."
       >
         <Input id="plannedM" {...form.register("plannedM")} inputMode="decimal" placeholder="1200" />
         <PlannedMHint suggestion={suggestion} onApply={(m) => form.setValue("plannedM", String(m), { shouldDirty: true, shouldValidate: true })} />
       </FormField>
-      <div className="grid grid-cols-2 gap-3">
-        <FormField label="Planlanan başlangıç" htmlFor="plannedStartDate" error={err.plannedStartDate}>
+      <FormField label="Planlanan başlangıç" htmlFor="plannedStartDate" error={err.plannedStartDate}>
           <Controller control={form.control} name="plannedStartDate" render={({ field }) => <DatePickerInput id="plannedStartDate" value={field.value ?? ""} onChange={field.onChange} />} />
         </FormField>
         <FormField label="Planlanan bitiş" htmlFor="plannedEndDate" error={err.plannedEndDate}>
           <Controller control={form.control} name="plannedEndDate" render={({ field }) => <DatePickerInput id="plannedEndDate" value={field.value ?? ""} onChange={field.onChange} />} />
         </FormField>
-      </div>
-      <FormField label="Not" htmlFor="notes" error={err.notes}>
+      <FormField label="Not" htmlFor="notes" error={err.notes} className="col-span-full">
         <Textarea id="notes" {...form.register("notes")} rows={2} placeholder="Tahar, sıklık, özel istek…" />
       </FormField>
     </>

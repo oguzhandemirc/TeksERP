@@ -61,7 +61,7 @@ export function BeamPrefillField({ form, onSuggestion }: { form: Form; onSuggest
   }
 
   return (
-    <FormField label="Levent" hint={filled ? `${filled} — değiştirebilirsiniz. Levent bu formda bağlanmaz; bağ levent formundan kurulur.` : "İsteğe bağlı — seçilirse çözgü kartı ve fasoncu ondan dolar. Kaydedilmez."}>
+    <FormField label="Levent" hint={filled ? `${filled} — değiştirebilirsiniz.` : undefined} info="İsteğe bağlı — seçilirse çözgü kartı ve fasoncu ondan dolar. Levent bu formda bağlanmaz (kaydedilmez); bağ levent formundan kurulur.">
       <EntityPickerModal<WarpBeam>
         value={beamId || null}
         onChange={(id) => void pick(id).catch(() => toast.error("Levent bilgisi okunamadı — alanları elle doldurun."))}
