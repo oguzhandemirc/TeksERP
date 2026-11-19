@@ -34,7 +34,7 @@ export function UserNotificationRow(p: {
           <p className="text-sm text-muted-foreground">{k.ad}</p>
           <p className="text-xs text-muted-foreground">{k.gizliNeden}</p>
         </div>
-        <Switch checked={false} disabled aria-label={`${k.ad} — açılamaz: ${k.gizliNeden ?? ""}`} />
+        <Switch checked={false} disabled onCheckedChange={() => {}} aria-label={`${k.ad} — açılamaz: ${k.gizliNeden ?? ""}`} />
       </li>
     );
   }

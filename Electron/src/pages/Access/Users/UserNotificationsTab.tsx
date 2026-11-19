@@ -30,8 +30,8 @@ export function UserNotificationsTab({ userId }: { userId: string }) {
       qc.setQueryData(userPrefKey(userId), d);
       toast.success("Kişinin bildirim tercihi kaydedildi.");
     },
-    // eslint-disable-next-line yerel/mutation-onerror-toast -- istekler `suppressErrorToast` taşır: sunucu cümlesi TEK toast
     onError: (e) => {
+      // eslint-disable-next-line yerel/mutation-onerror-toast -- istekler `suppressErrorToast` taşır: sunucu cümlesi TEK toast
       toast.error(actionErrorMessage(e));
       void q.refetch();
     },

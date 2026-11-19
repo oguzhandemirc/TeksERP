@@ -17,7 +17,7 @@ const MODES: Array<{ mod: InAppMode; etiket: string }> = [
 function ModeSegment({ k, ad, onMode, salt }: { k: KindDraft; ad: string; onMode: (m: InAppMode) => void; salt: boolean }) {
   const secenekler = k.kilit ? MODES.slice(0, 1) : MODES.filter((m) => m.mod !== "OZET" || k.ozetVar);
   return (
-    <div role="radiogroup" aria-label={`${ad} — uygulama içi`} className="inline-flex rounded-md border border-border bg-muted/40 p-0.5">
+    <div role="radiogroup" aria-label={`${ad} — uygulama içi`} aria-disabled={salt || undefined} className={cn("inline-flex rounded-md border border-border bg-muted/40 p-0.5", salt && "opacity-60")}>
       {secenekler.map((m) => {
         const secili = k.mod === m.mod || (k.kilit && m.mod === "ANLIK");
         return (
