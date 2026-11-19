@@ -169,6 +169,7 @@
 - **[ÇEKİRDEK]** Seçici (cari · ürün · renk) doğrudan modal açar; arama/süzgeç SUNUCUDA (`LIST_SEARCH`, Türkçe katlama JS ↔ SQL birebir, LIKE jokeri kaçırılır).
 - **[ÇEKİRDEK]** Kimlik süzgeci (`cariKartId` · `cariHesapId` · `siparisId`) yalnız `LIST_ID_FILTERS` projeksiyonunda (diğeri 400), uygulama `/oturum` `liste` beyanıyla.
 - **[ÇEKİRDEK]** Üyelik süzgeci (`asama` · `fasonFirmaId` · dizi alanlı `siparisId`/`cariKartId`) yalnız `LIST_MEMBER_FILTERS` projeksiyonunda (beyansız 400), bulut jsonb `@>` ile; dizi alanını fabrika ERP süzgecinin Prisma ikiziyle aynı top yükleminden üretir (`cloud-sync/work-order-facts`) <sub>(arşiv:2026-11-19 İE v3)</sub>.
+- `stok-kalem`/`cuval-deposu`'nu ANLIK, `sevkiyat-icerigi`'ni KAYIT kur; yalnız panelin servislerinden (`getStockKalem`/`getStockKalemRolls`, `resolveScopeOr`) üret, top dizilerini tavanla ve kırpmayı bayrakla bildir, toplamları tavandan önce al <sub>(arşiv:2026-11-20 D5/D6)</sub>.
 - **[ÇEKİRDEK]** `kategoriAnahtari` yalnız `LIST_KEY_FILTERS`te, fabrika alanıyla birebir (`cashCategoryKey`); uygulama `liste.anahtarSuzgecleri` beyanıyla.
 - **[ÇEKİRDEK]** TOTP kurulumunda `otpauth` karekodu ve elle anahtar birlikte; sır yalnız o ekranda bellekte.
 - **[ÇEKİRDEK]** Web girişinde ardışık/ters eğik çizgi yönlendiriciden ÖNCE tek '/'ye katlanır (`history.replaceState`); sıra `entry.ts`te sabit (metro-runtime → katlama → `expo-router/entry`).
