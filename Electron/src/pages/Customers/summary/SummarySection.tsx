@@ -70,7 +70,8 @@ export function SummarySection({ title, note, query, empty, seeAllPath, children
 
 export interface Column<T> {
   header: string;
-  cell: (row: T) => ReactNode;
+  /** Hücre içeriği — bu tablo dışa aktarılmaz (TanStack kolonu DEĞİL; `cell` adı bilerek kullanılmadı). */
+  render: (row: T) => ReactNode;
   align?: "right";
   className?: string;
 }
@@ -96,7 +97,7 @@ export function SummaryTable<T>({ rows, columns, rowKey }: { rows: T[]; columns:
                 key={c.header}
                 className={cn("whitespace-nowrap px-2 py-1", c.align === "right" && "text-right tabular-nums", c.className)}
               >
-                {c.cell(r)}
+                {c.render(r)}
               </TableCell>
             ))}
           </TableRow>

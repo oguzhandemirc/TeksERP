@@ -26,12 +26,12 @@ function ShipCell({ o }: { o: Order }) {
 }
 
 const ORDER_COLS: Column<Order>[] = [
-  { header: "Sipariş no", cell: (o) => <span className="font-mono">{o.orderNumber}</span> },
-  { header: "Tarih", cell: (o) => day(o.orderDate) },
-  { header: "Şube", cell: (o) => <Clip text={o.branch?.name ?? ""} w="max-w-[120px]" /> },
-  { header: "Kumaş", cell: (o) => <Clip text={lineLabelsText(o.lines, "item")} />, className: "w-full" },
-  { header: "Metre", cell: (o) => orderMetreText(o), align: "right" },
-  { header: "Sevk durumu", cell: (o) => <ShipCell o={o} /> },
+  { header: "Sipariş no", render: (o) => <span className="font-mono">{o.orderNumber}</span> },
+  { header: "Tarih", render: (o) => day(o.orderDate) },
+  { header: "Şube", render: (o) => <Clip text={o.branch?.name ?? ""} w="max-w-[120px]" /> },
+  { header: "Kumaş", render: (o) => <Clip text={lineLabelsText(o.lines, "item")} />, className: "w-full" },
+  { header: "Metre", render: (o) => orderMetreText(o), align: "right" },
+  { header: "Sevk durumu", render: (o) => <ShipCell o={o} /> },
 ];
 
 export function RecentOrdersTable({ rows }: { rows: Order[] }) {
@@ -41,14 +41,14 @@ export function RecentOrdersTable({ rows }: { rows: Order[] }) {
 type OpenLineRow = { order: OpenOrder["order"]; line: OpenOrderLine };
 
 const OPEN_COLS: Column<OpenLineRow>[] = [
-  { header: "Sipariş no", cell: (r) => <span className="font-mono">{r.order.orderNumber}</span> },
-  { header: "Şube", cell: (r) => <Clip text={r.order.branch?.name ?? ""} w="max-w-[120px]" /> },
-  { header: "Kumaş", cell: (r) => <Clip text={r.line.item.name} />, className: "w-full" },
-  { header: "Renk", cell: (r) => <Clip text={r.line.color?.name ?? ""} w="max-w-[120px]" /> },
-  { header: "En", cell: (r) => (r.line.width == null ? "—" : num(r.line.width, 0)), align: "right" },
-  { header: "İstenen", cell: (r) => num(r.line.requested), align: "right" },
-  { header: "Sevk", cell: (r) => num(r.line.shipped), align: "right" },
-  { header: "Açık", cell: (r) => <span className="font-medium">{num(r.line.openQty)}</span>, align: "right" },
+  { header: "Sipariş no", render: (r) => <span className="font-mono">{r.order.orderNumber}</span> },
+  { header: "Şube", render: (r) => <Clip text={r.order.branch?.name ?? ""} w="max-w-[120px]" /> },
+  { header: "Kumaş", render: (r) => <Clip text={r.line.item.name} />, className: "w-full" },
+  { header: "Renk", render: (r) => <Clip text={r.line.color?.name ?? ""} w="max-w-[120px]" /> },
+  { header: "En", render: (r) => (r.line.width == null ? "—" : num(r.line.width, 0)), align: "right" },
+  { header: "İstenen", render: (r) => num(r.line.requested), align: "right" },
+  { header: "Sevk", render: (r) => num(r.line.shipped), align: "right" },
+  { header: "Açık", render: (r) => <span className="font-medium">{num(r.line.openQty)}</span>, align: "right" },
 ];
 
 /** En çok bu kadar kalem satırı çizilir; fazlası "Tümünü gör"de. */
@@ -66,13 +66,13 @@ export function OpenOrdersTable({ orders }: { orders: OpenOrder[] }) {
 }
 
 const SHIP_COLS: Column<ShipmentListItem>[] = [
-  { header: "Sevk no", cell: (s) => <span className="font-mono">{s.shipmentNo}</span> },
-  { header: "Sevk tarihi", cell: (s) => day(s.dispatchedAt) },
-  { header: "Şube", cell: (s) => <Clip text={s.branch?.name ?? ""} />, className: "w-full" },
-  { header: "Top", cell: (s) => num(s._count.rolls, 0), align: "right" },
-  { header: "Metre (brüt)", cell: (s) => num(s.totalMeters), align: "right" },
-  { header: "Kg", cell: (s) => (s.kind === "DIRECT" ? "—" : num(s.totalKg)), align: "right" },
-  { header: "İade", cell: (s) => (s._count.returns > 0 ? `${s._count.returns} top` : "—"), align: "right" },
+  { header: "Sevk no", render: (s) => <span className="font-mono">{s.shipmentNo}</span> },
+  { header: "Sevk tarihi", render: (s) => day(s.dispatchedAt) },
+  { header: "Şube", render: (s) => <Clip text={s.branch?.name ?? ""} />, className: "w-full" },
+  { header: "Top", render: (s) => num(s._count.rolls, 0), align: "right" },
+  { header: "Metre (brüt)", render: (s) => num(s.totalMeters), align: "right" },
+  { header: "Kg", render: (s) => (s.kind === "DIRECT" ? "—" : num(s.totalKg)), align: "right" },
+  { header: "İade", render: (s) => (s._count.returns > 0 ? `${s._count.returns} top` : "—"), align: "right" },
 ];
 
 export function ShipmentsTable({ rows }: { rows: ShipmentListItem[] }) {
@@ -80,13 +80,13 @@ export function ShipmentsTable({ rows }: { rows: ShipmentListItem[] }) {
 }
 
 const RETURN_COLS: Column<ReturnRow>[] = [
-  { header: "İade no", cell: (r) => <span className="font-mono">{r.returnNo ?? "—"}</span> },
-  { header: "Tarih", cell: (r) => day(r.createdAt) },
-  { header: "Sevk no", cell: (r) => <span className="font-mono">{r.fromShipment?.shipmentNo ?? "—"}</span> },
-  { header: "Kumaş", cell: (r) => <Clip text={r.item?.name ?? ""} />, className: "w-full" },
-  { header: "Renk", cell: (r) => <Clip text={r.color?.name ?? ""} w="max-w-[120px]" /> },
-  { header: "Metre", cell: (r) => num(r.qty), align: "right" },
-  { header: "Neden", cell: (r) => <Clip text={r.reason?.name ?? r.reasonText ?? ""} w="max-w-[140px]" /> },
+  { header: "İade no", render: (r) => <span className="font-mono">{r.returnNo ?? "—"}</span> },
+  { header: "Tarih", render: (r) => day(r.createdAt) },
+  { header: "Sevk no", render: (r) => <span className="font-mono">{r.fromShipment?.shipmentNo ?? "—"}</span> },
+  { header: "Kumaş", render: (r) => <Clip text={r.item?.name ?? ""} />, className: "w-full" },
+  { header: "Renk", render: (r) => <Clip text={r.color?.name ?? ""} w="max-w-[120px]" /> },
+  { header: "Metre", render: (r) => num(r.qty), align: "right" },
+  { header: "Neden", render: (r) => <Clip text={r.reason?.name ?? r.reasonText ?? ""} w="max-w-[140px]" /> },
 ];
 
 export function ReturnsTable({ rows }: { rows: ReturnRow[] }) {
