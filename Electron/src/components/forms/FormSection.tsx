@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ModalSection } from "./modal-sections/ModalSections";
+import type { SectionDecl } from "./modal-sections/ModalSections";
 
 /** Bölüm rengi — form başlığı ile sağ önizleme aynı kavramda aynı tonu kullanır. */
 export type SectionTone =
@@ -53,7 +55,17 @@ interface Props {
   flush?: boolean;
 }
 
-export function FormSection({
+/** `sectionId` verilince bölüm modalın × yanındaki "göster/gizle" menüsüne katılır; `required` rozetli bölüm gizlenemez. */
+export function FormSection({ sectionId, sectionRequired, errorFields, sectionError, ...rest }: Props & SectionDecl) {
+  if (!sectionId) return <SectionBody {...rest} />;
+  return (
+    <ModalSection id={sectionId} title={rest.title} required={sectionRequired ?? rest.required} fields={errorFields} hasError={sectionError}>
+      <SectionBody {...rest} />
+    </ModalSection>
+  );
+}
+
+function SectionBody({
   step,
   title,
   description,

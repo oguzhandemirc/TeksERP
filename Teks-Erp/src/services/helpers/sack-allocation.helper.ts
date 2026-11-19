@@ -33,3 +33,21 @@ export async function clearShipmentAllocationsTx(
   });
   return r.count;
 }
+
+/**
+ * TEK çuvalın ETKİN tahsislerini damgalar — çuval PLANNED sevkiyattan çıkarılırken. Çuvalın `shipmentId`si
+ * NULL'landıktan sonra sevkiyat-kapsamlı `clearShipmentAllocationsTx` onu göremez; damgasız kalan satır havuzdaki
+ * çuvalda ETKİN hayalet tahsis olur (düz storno etkin tahsisi korur → sipariş `shippedQty` şişer).
+ */
+export async function clearSackAllocationsTx(
+  tx: Prisma.TransactionClient,
+  sackId: string,
+  shipmentId: string,
+  userId: string | null | undefined,
+): Promise<number> {
+  const r = await tx.sackAllocation.updateMany({
+    where: { sackId, ...ACTIVE_SACK_ALLOCATION },
+    data: { clearedAt: new Date(), clearedShipmentId: shipmentId, clearedById: userId ?? null },
+  });
+  return r.count;
+}

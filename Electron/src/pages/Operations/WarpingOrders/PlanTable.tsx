@@ -40,12 +40,12 @@ export function PlanTable({ yarns, hasWaste, totals, showStock }: Props) {
               <TableHead>İplik</TableHead>
               <TableHead className={num}>Tel</TableHead>
               <TableHead className={num}>Denye</TableHead>
-              <TableHead className={num} title="Tel × denye × metre ÷ 9.000.000 — fire katılmadan">
-                Formül (firesiz) kg
+              <TableHead className={num} title="Formül: tel × denye × metre ÷ 9.000.000 — fire katılmadan">
+                Firesiz kg
               </TableHead>
               {col.gross && (
-                <TableHead className={num} title="Kart/iplik fire yüzdesi ve sabit fire metresiyle">
-                  Fireli öneri kg
+                <TableHead className={num} title="Fireli öneri: kart/iplik fire yüzdesi ve sabit fire metresiyle">
+                  Fireli kg
                 </TableHead>
               )}
               {col.stock && <TableHead className={num}>Depoda kg</TableHead>}
@@ -58,8 +58,8 @@ export function PlanTable({ yarns, hasWaste, totals, showStock }: Props) {
                 <TableRow key={`${y.yarnItemId}-${y.sourceWarpSpecId}`}>
                   {col.letter && <TableCell className="font-mono font-semibold">{y.letter}</TableCell>}
                   <TableCell>
-                    <span className="font-mono text-xs">{y.code}</span>{" "}
-                    <span className="text-muted-foreground">{y.name}</span>
+                    <span className="font-medium">{y.name}</span>
+                    <span className="block text-xs text-muted-foreground">{y.code}</span>
                   </TableCell>
                   <TableCell className={num}>{y.endsCount}</TableCell>
                   <TableCell className={num}>{Number(y.denier)}</TableCell>

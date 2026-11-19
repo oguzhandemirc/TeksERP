@@ -4,7 +4,8 @@ import { asNumber, parseJsonObject, readSseEvents } from './sseReader';
 
 const WAIT_ERROR_BACKOFF_MS = 5_000;
 
-type RoundResult = 'fallback' | 'done' | { hello: boolean };
+/** 'crowded' = sunucu kullanıcı başı akış tavanında bu akışı kapattı (`kapat{neden:'fazla'}`). */
+type RoundResult = 'fallback' | 'crowded' | 'done' | { hello: boolean };
 
 export class BellClient extends BellEngine {
   protected startTransport(): void {
@@ -31,6 +32,7 @@ export class BellClient extends BellEngine {
 
   private async sseRound(g: number, ac: AbortController): Promise<RoundResult> {
     let hello = false;
+    let crowded = false;
     try {
       const res = await this.dep.openStream(ac.signal);
       if (g !== this.gen) return 'done';
@@ -46,6 +48,10 @@ export class BellClient extends BellEngine {
       for await (const e of readSseEvents(res.body)) {
         if (g !== this.gen) return 'done';
         if (e.event === 'merhaba') hello = true;
+        if (e.event === 'kapat' && parseJsonObject(e.data).neden === 'fazla') {
+          crowded = true; // aynı hesapla çok cihaz: hemen yeniden bağlanmak sıradakini kovar (ping-pong)
+          continue;
+        }
         await this.handleEvent(e.event, e.data);
       }
     } catch {
@@ -53,7 +59,7 @@ export class BellClient extends BellEngine {
     } finally {
       if (this.s.connected) this.publish({ connected: false });
     }
-    return { hello };
+    return crowded ? 'crowded' : { hello };
   }
 
   private async sseLoop(g: number) {
@@ -62,7 +68,8 @@ export class BellClient extends BellEngine {
       this.abort = ac;
       const r = await this.sseRound(g, ac);
       if (r === 'done' || g !== this.gen) return;
-      if (r === 'fallback') return this.enterWait(g);
+      // Tavan kapanışı zorunlu düşüş değildir: uzun yoklamaya geçer, öne dönüşte SSE yeniden denenir.
+      if (r === 'fallback' || r === 'crowded') return this.enterWait(g);
       // Sunucunun ömürle kapattığı sağlıklı akış hata değildir; merhabasız kopuş hatadır.
       if (!r.hello && this.recordError()) return this.enterWait(g);
       const idx = r.hello ? 0 : Math.min(this.errors.length, BELL_RECONNECT_MS.length) - 1;

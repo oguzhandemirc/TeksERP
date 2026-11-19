@@ -227,14 +227,16 @@ export async function replace(
     await assertRouteRefsActive(finalSteps);
 
     // ── Sipariş bağları + tahsis miktarları ─────────────────────────────────
-    let allocations: { orderLineId: string; allocatedQty: number }[] = [];
+    // `allocatedQty` undefined = miktar gönderilmedi: kalan bağın paylaştırması KORUNUR
+    // (panel Düzenle yalnız `orderLineIds` yollar; eskiden sonradan girilen paylaştırmayı 0'a eziyordu).
+    let allocations: { orderLineId: string; allocatedQty: number | undefined }[] = [];
     if (data.orderLineAllocations && data.orderLineAllocations.length > 0) {
       allocations = data.orderLineAllocations.map((a) => ({
         orderLineId: a.orderLineId,
-        allocatedQty: a.allocatedQty ?? 0,
+        allocatedQty: a.allocatedQty,
       }));
     } else if (data.orderLineIds && data.orderLineIds.length > 0) {
-      allocations = data.orderLineIds.map((lid) => ({ orderLineId: lid, allocatedQty: 0 }));
+      allocations = data.orderLineIds.map((lid) => ({ orderLineId: lid, allocatedQty: undefined }));
     }
 
     // TİP = BAĞIN AYNASI (2026-08-21) — create() ile aynı kural: satır geldiyse
@@ -739,14 +741,16 @@ export async function replace(
         });
       }
       for (const l of keptLinks) {
+        const wanted = wantedAlloc.get(l.orderLineId);
+        if (wanted === undefined) continue; // miktar gelmedi → mevcut paylaştırma korunur
         await tx.workOrderToOrderLine.updateMany({
           where: { id: l.id, ...ACTIVE_ORDER_LINK },
-          data: { allocatedQty: wantedAlloc.get(l.orderLineId) ?? 0 },
+          data: { allocatedQty: wanted },
         });
       }
       if (enteringAlloc.length > 0) {
         await tx.workOrderToOrderLine.createMany({
-          data: enteringAlloc.map((a) => ({ workOrderId: id, orderLineId: a.orderLineId, allocatedQty: a.allocatedQty })),
+          data: enteringAlloc.map((a) => ({ workOrderId: id, orderLineId: a.orderLineId, allocatedQty: a.allocatedQty ?? 0 })),
           skipDuplicates: true,
         });
       }

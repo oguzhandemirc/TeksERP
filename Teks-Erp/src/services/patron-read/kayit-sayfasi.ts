@@ -10,7 +10,7 @@ import { AppError } from "../../utils/app-error";
 import { buildRecords } from "../../cloud-sync/record-builder";
 import { foldSearchTerm, foldSearchTokens } from "../../utils/search-fold";
 import type { RecordProjection } from "../../cloud-sync/projections";
-import { KEY_FILTERS, KEY_FILTER_MAX, RESOLVED_ID_FILTERS, SEARCH, keyFilterWhere, sortSourceOf, type Where } from "./kume-arama";
+import { KEY_FILTERS, KEY_FILTER_MAX, MEMBER_FILTERS, MEMBER_FILTER_KEYS, RESOLVED_ID_FILTERS, SEARCH, keyFilterWhere, sortSourceOf, type MemberFilterKey, type Where } from "./kume-arama";
 
 export { SEARCH, KEY_FILTERS } from "./kume-arama";
 
@@ -24,6 +24,8 @@ export interface PatronListQuery {
   readonly suzgec?: string;
   /** Bulut `LIST_KEY_FILTERS` (`kategoriAnahtari`); beyansız kümede 400. */
   readonly anahtar: Partial<Readonly<Record<keyof typeof KEY_FILTERS, string>>>;
+  /** Bulut `LIST_MEMBER_FILTERS`; beyansız kümede 400 (kimlik anahtarıyla aynı adlıysa kimlik süzgecine kalır). */
+  readonly uyelik?: Partial<Readonly<Record<MemberFilterKey, string>>>;
 }
 
 /** Bulut `LIST_ID_FILTER_KEYS` ile aynı sıra; bir küme yalnız o adda KOLONU varsa kabul eder. */
@@ -57,9 +59,22 @@ const encodeCursor = (at: Date, id: string): string => Buffer.from(JSON.stringif
 async function filterWhere(p: RecordProjection, q: PatronListQuery, nowMs: number): Promise<Where[] | null> {
   const and: Where[] = [];
   if (p.scope) and.push(p.scope.prismaWhere as Where);
+  const members = Object.hasOwn(MEMBER_FILTERS, p.name) ? MEMBER_FILTERS[p.name] : {};
+  for (const key of MEMBER_FILTER_KEYS) {
+    const v = q.uyelik?.[key];
+    if (v === undefined) continue;
+    const m = members?.[key];
+    if (!m) {
+      if ((ID_FILTER_KEYS as readonly string[]).includes(key)) continue;
+      throw bad(`Bu listede ${key} süzgeci yok`);
+    }
+    const w = await m.where(v);
+    if (w === null) throw bad(`${key} biçimsiz`);
+    and.push(w);
+  }
   for (const key of ID_FILTER_KEYS) {
     const v = q.kimlik[key];
-    if (v === undefined) continue;
+    if (v === undefined || members?.[key as MemberFilterKey]) continue;
     const src = sourceOf(p, key);
     const resolved = Object.hasOwn(RESOLVED_ID_FILTERS, `${p.name}.${key}`) ? RESOLVED_ID_FILTERS[`${p.name}.${key}`] : undefined;
     if (!src && !resolved) throw bad(`Bu listede ${key} süzgeci yok`);

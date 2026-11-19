@@ -57,7 +57,7 @@ describe("Leventten sonucu — sütun görünürlüğü", () => {
     render(<ForwardTable res={r} forward={forward(true)} />);
     expect(screen.getAllByText(/Fireli/).length).toBeGreaterThan(0);
     expect(screen.getByText("Deverecide kg")).toBeTruthy();
-    expect(wasteSourceText(forward(true).wasteSources, yarns)).toBe("sabit 20 m · PES-150 %2");
+    expect(wasteSourceText(forward(true).wasteSources, yarns)).toBe("sabit 20 m · PES 150 %2"); // iplik ADI, stok kodu değil
   });
 });
 
@@ -69,7 +69,8 @@ describe("Eldeki iplikten sonucu", () => {
     };
     render(<ReverseResult res={result({ mode: "FROM_STOCK", forward: null, reverse })} reverse={reverse} />);
     expect(screen.getByText("Kısıtlayan iplik")).toBeTruthy();
-    expect(screen.getByText(/PES-150 — PES 150/)).toBeTruthy();
+    expect(screen.getByText("Kısıtlayan iplik").parentElement?.textContent).toContain("PES 150"); // kısıtlayan iplik ADIYLA
+    expect(screen.queryByText(/PES-150 —/)).toBeNull();
     expect(screen.getByText(/2 levent/)).toBeTruthy();
   });
 });

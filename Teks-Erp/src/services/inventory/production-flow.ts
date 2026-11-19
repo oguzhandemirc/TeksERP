@@ -14,13 +14,9 @@ import {
   Roll,
   RollStatus,
   RollEntrySource,
-  StationKind,
-  StepStatus,
   ShipmentStatus,
 } from "@prisma/client";
-import {
-  STEP_FLOW_WHERE,
-} from "../helpers/quality-station.helper";
+import { KURSUN_FLOW_STEP_WHERE, TAMBUR_FLOW_STEP_WHERE } from "../helpers/production-flow-where.helper";
 import { ROLL_LIST_INCLUDE } from "./shared";
 
 // KANBAN KARTI'nın ilişki kümesi — LİSTE'nin (ROLL_LIST_INCLUDE) DAR alt kümesi.
@@ -139,8 +135,7 @@ export async function getProductionFlow(opts: {
         // ⚠️ Kolon ADI "Kurşun" KALIR. Faz A'da küme birebir aynı (backfill
         // yalnız PROCESS_QC'yi işaretler); ikinci bir KK istasyonu doğarsa
         // kolonun ölçtüğü şey ile adı ayrışır — etiket kararı Faz B'de.
-        station: { ...STEP_FLOW_WHERE },
-        status: { not: StepStatus.COMPLETED },
+        ...KURSUN_FLOW_STEP_WHERE,
         currentRolls: { some: {} },
       };
       const [steps, total] = await Promise.all([
@@ -193,8 +188,7 @@ export async function getProductionFlow(opts: {
     const tamburColumn = async (): Promise<{ cards: ProductionFlowQueueCard[]; total: number }> => {
       if (!opts.includeQueues) return { cards: [], total: 0 };
       const where: Prisma.WorkOrderStepWhereInput = {
-        station: { kind: StationKind.TAMBUR },
-        status: { not: StepStatus.COMPLETED },
+        ...TAMBUR_FLOW_STEP_WHERE,
         currentRolls: { some: {} },
       };
       const [steps, total] = await Promise.all([

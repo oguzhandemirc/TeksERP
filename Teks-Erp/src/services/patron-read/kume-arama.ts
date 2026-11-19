@@ -9,6 +9,10 @@ import { overdueOrderWhere } from "../helpers/order-deadline.helper";
 import { quoteExpiredWhere, quoteToday } from "../helpers/sales-quote-state.helper";
 import { cashCategoryWhere, parseCashCategoryKey } from "../helpers/cash-category-filter.helper";
 import { cariIdsResolvingTo } from "../../cloud-sync/derived-merged-invoice";
+import { OPEN_WORK_ORDER } from "../helpers/live-ref-where.helper";
+import { ACTIVE_ORDER_LINK } from "../helpers/order-link.helper";
+import { workOrderCustomerWhere } from "../helpers/work-order-customers.helper";
+import { FILTERABLE_STAGES, workOrderFirmWhere, workOrderOrderWhere, workOrderStageWhere, type FilterableStage } from "../../cloud-sync/work-order-facts";
 
 export type Where = Record<string, unknown>;
 export interface SearchOption { readonly deger: string; readonly alan: string; readonly esit: string | boolean; readonly where: (nowMs: number) => Where }
@@ -43,6 +47,19 @@ export const SEARCH: Readonly<Record<string, SearchSpec>> = {
       eq("KISMI_SEVK", "durum", "PARTIAL_SHIPPED", "status"), eq("TAMAMLANDI", "durum", "COMPLETED", "status"), eq("IPTAL", "durum", "CANCELLED", "status"),
     ],
   },
+  // `acik` ↔ OPEN_WORK_ORDER; müşteri adı açık bağın sipariş müşterisinden (bulut `musteriAdi`nın ERP karşılığı).
+  "is-emri": {
+    alanlar: ["isEmriNo", "musteriAdi", "siparisNolari"],
+    terim: (t) => [
+      { workOrderNumber: { contains: t, mode: "insensitive" } },
+      { orderLinks: { some: { ...ACTIVE_ORDER_LINK, orderLine: { order: { customer: { nameFold: { contains: t } } } } } } },
+      { orderLinks: { some: { ...ACTIVE_ORDER_LINK, orderLine: { order: { orderNumber: { contains: t, mode: "insensitive" } } } } } },
+    ],
+    secenekler: [
+      { deger: "ACIK", alan: "acik", esit: true, where: () => OPEN_WORK_ORDER as Where },
+      { deger: "KAPALI", alan: "acik", esit: false, where: () => ({ NOT: OPEN_WORK_ORDER }) as Where },
+    ],
+  },
   teklif: {
     alanlar: ["no", "musteriAdi"],
     terim: (t) => [{ quoteNo: { contains: t, mode: "insensitive" } }, { customer: { nameFold: { contains: t } } }],
@@ -53,6 +70,24 @@ export const SEARCH: Readonly<Record<string, SearchSpec>> = {
       eq("KABUL", "durum", "ACCEPTED", "status"), eq("SIPARIS", "durum", "CONVERTED", "status"),
       eq("RED", "durum", "REJECTED", "status"), eq("IPTAL", "durum", "CANCELLED", "status"),
     ],
+  },
+};
+
+/** Bulut `LIST_MEMBER_FILTER_KEYS` aynası (aynı sıra). */
+export const MEMBER_FILTER_KEYS = ["cariKartId", "siparisId", "fasonFirmaId", "asama"] as const;
+export type MemberFilterKey = (typeof MEMBER_FILTER_KEYS)[number];
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Bulut `LIST_MEMBER_FILTERS` aynası: küme → anahtar → (dizi alanı, Prisma ikizi). Dizi alanını fabrika aynı parçadan
+ * türetir (`work-order-facts`); `cariKartId` panelin İE müşteri süzgeci (`workOrderCustomerWhere`). Biçimsiz değer → null.
+ */
+export const MEMBER_FILTERS: Readonly<Record<string, Readonly<Partial<Record<MemberFilterKey, { alan: string; where: (v: string) => Promise<Where | null> }>>>>> = {
+  "is-emri": {
+    cariKartId: { alan: "cariKartIdleri", where: async (v) => (UUID_RE.test(v) ? ((await workOrderCustomerWhere(v.toLowerCase())) as Where) : null) },
+    siparisId: { alan: "siparisIdleri", where: async (v) => (UUID_RE.test(v) ? (workOrderOrderWhere(v.toLowerCase()) as Where) : null) },
+    fasonFirmaId: { alan: "fasonFirmaIdleri", where: async (v) => (UUID_RE.test(v) ? (workOrderFirmWhere(v.toLowerCase()) as Where) : null) },
+    asama: { alan: "asamalar", where: async (v) => ((FILTERABLE_STAGES as readonly string[]).includes(v) ? (workOrderStageWhere(v as FilterableStage) as Where) : null) },
   },
 };
 

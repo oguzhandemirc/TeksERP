@@ -15,6 +15,7 @@ Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın se
 - **[ÇEKİRDEK]** Grup numarası park yeridir: belgeye/etikete BASILMAZ, yeniden kullanılır (kimlik `PackingGroup.id`).
 - **[ÇEKİRDEK]** `packing.groupMode = sevk-partisi`: durum sevkten türer, elle kapatma YOK (OPEN doğar, `liveGroupWhere("sevk-partisi")`; son çuvalın sevkinde CLOSED, storno OPEN); ad tekilliği yalnız açık partilerde; `Sack.packageNo` unique `[packingGroupId, packageNo]`, kilit 8033.
 - **[ÇEKİRDEK]** Sevk edilmiş çuval partide kalır, numarası donar; transfer yeni numara verir; `lotPartialDispatch=false` tamamını ister.
+- **[ÇEKİRDEK]** Deftere yazmış çuvalı (`sackLedgerCountTx` > 0) sert SİLME, `retireEmptySackTx` ile emekliye ayır; havuz okuyucusu ve bağlama claim'i `LIVE_SACK_WHERE` süzer; PLANNED'dan çıkan çuvalın etkin tahsisini `clearSackAllocationsTx` damgalar.
 - **[ÇEKİRDEK]** Çuvalsız parti silinir. Ayarlar (`packing.groupMode` · `packageNoStartsAtZero` · `packageNoMode` · `packageNumbering` · `lotRequired` · `lotPartialDispatch` · `shipping.docPackingLot`) varsayılanı bugün.
 - **[ÇEKİRDEK]** İade tek pencere, dört kapsam (top · çuval · sevkiyat · parti; `classifyBarcode`); iade daima TOP satırıyla, sevkiyat başına bir belge.
 - **[ÇEKİRDEK]** Çok sevkiyat `POST /api/returns/batch` (grup başına tx; ilk grup düşerse yazma yok, sonra düşerse `failed`/`skipped` açık döner); partinin sevk edilmemiş çuvalları listelenmez.
