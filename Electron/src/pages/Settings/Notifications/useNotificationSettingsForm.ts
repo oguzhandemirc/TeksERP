@@ -20,6 +20,7 @@ function unavailable(e: unknown): "eski" | "kapali" | null {
 
 function saveErrorMessage(kod: string | undefined): string {
   if (kod === "NOTIFICATION_KIND_LOCKED") return "Bu bildirim yöneticiniz tarafından kilitlendi; uygulama içinde kapatılamaz. Tekrar kaydedin.";
+  if (kod === "NOTIFICATION_PREFS_LOCKED") return "Tercihlerin yöneticin tarafından kilitlendi; uygulama içi seçim değiştirilemez.";
   if (kod === "NOTIFICATION_KIND_NOT_VISIBLE") return "Bir bildirim türünü artık göremiyorsunuz; liste yenilendi.";
   if (kod === "NOTIFICATION_SCOPE_INVALID") return "Kapsam süzgeci geçersiz; kapsamı yeniden seçin.";
   return "Tercihler kaydedilemedi.";
@@ -56,7 +57,7 @@ export function useNotificationSettingsForm() {
       if (kod === "NOTIFICATION_KIND_LOCKED" && tur) {
         setTaslak((d) => (d[tur] ? { ...d, [tur]: { ...d[tur], kilit: true, mod: "ANLIK", kapsam: null } } : d));
       }
-      if (kod === "NOTIFICATION_KIND_NOT_VISIBLE") void tercih.refetch();
+      if (kod === "NOTIFICATION_KIND_NOT_VISIBLE" || kod === "NOTIFICATION_PREFS_LOCKED") void tercih.refetch();
       toast.error(saveErrorMessage(kod));
     } finally {
       setKaydediliyor(false);
@@ -72,5 +73,6 @@ export function useNotificationSettingsForm() {
   const status = yuklendi && !acik ? "kapali" : (unavailable(tercih.error) ?? unavailable(katalog.error));
   const hata = tercih.isError || katalog.isError;
   const yukleniyor = !yuklendi || tercih.isLoading || katalog.isLoading;
-  return { katalog: katalog.data, tercihKirli, taslak, setTaslak, ayarTaslak, setAyarTaslak, kirli: (tercihKirli || settingsDirty) && (!ayarTaslak || (isQuietTime(ayarTaslak.sessizBaslangic) && isQuietTime(ayarTaslak.sessizBitis))), kaydediliyor, kaydet, grupToplu, status, hata, yukleniyor };
+  const tercihKilidi = tercih.data?.tercihKilidi?.kilitli ? tercih.data.tercihKilidi : null;
+  return { katalog: katalog.data, tercihKilidi, tercihKirli, taslak, setTaslak, ayarTaslak, setAyarTaslak, kirli: (tercihKirli || settingsDirty) && (!ayarTaslak || (isQuietTime(ayarTaslak.sessizBaslangic) && isQuietTime(ayarTaslak.sessizBitis))), kaydediliyor, kaydet, grupToplu, status, hata, yukleniyor };
 }

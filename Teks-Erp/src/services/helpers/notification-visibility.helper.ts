@@ -110,6 +110,24 @@ export function canSeeNotificationType(
   return entry.izinler.some((konj) => konj.every((code) => matchesPermission(codes, code)));
 }
 
+export type NotificationHiddenReason =
+  | { tip: "MODUL"; modul: string }
+  | { tip: "KAPI"; kapi: string }
+  | { tip: "IZIN"; requiredPermissions: string[][] };
+
+/** "Neden görmüyor" (yönetici özeti): `canSeeNotificationType` true ise null; yoksa yüklemin AYNI sırasıyla ilk düşen koşul. */
+export function notificationHiddenReason(
+  viewer: NotificationViewer,
+  kind: NotificationKind,
+  env: NotificationVisibilityEnv,
+): NotificationHiddenReason | null {
+  if (canSeeNotificationType(viewer, kind, env)) return null;
+  const entry = entryOf(kind);
+  if (entry && isModulKey(entry.modul) && env.modules[entry.modul] !== true) return { tip: "MODUL", modul: entry.modul };
+  if (entry?.kapi && env.gates[entry.kapi] !== true) return { tip: "KAPI", kapi: entry.kapi };
+  return { tip: "IZIN", requiredPermissions: (entry?.izinler ?? []).map((k) => [...k]) };
+}
+
 export function visibleKindsFor(viewer: NotificationViewer, env: NotificationVisibilityEnv): NotificationKind[] {
   return NOTIFICATION_KINDS.filter((kind) => canSeeNotificationType(viewer, kind, env));
 }

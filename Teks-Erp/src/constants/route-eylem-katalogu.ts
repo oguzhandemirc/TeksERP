@@ -26,6 +26,8 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "PATCH /api/bildirim/tercihler/profiller/:id": e("kişisel bildirim profilini güncelledi", "kişisel bildirim profilini güncellemeye çalıştı"),
   "DELETE /api/bildirim/tercihler/profiller/:id": e("kişisel bildirim profilini sildi", "kişisel bildirim profilini silmeye çalıştı"),
   "POST /api/bildirim/tercihler/profil-uygula": e("bildirim profilini uyguladı", "bildirim profilini uygulamaya çalıştı"),
+  // ── Kişi kartı → Bildirimler (2026-11-19) — yönetici kişi adına tercih yazar
+  "PUT /api/bildirim/kullanicilar/:id/tercihler": e("bir kişinin bildirim tercihini değiştirdi", "bir kişinin bildirim tercihini değiştirmeye çalıştı"),
   // ── Patron raporu istek üzerine (V5a, 2026-11-13)
   "POST /api/patron/v1/raporlar": e("patron uygulamasından rapor oluşturdu", "patron uygulamasından rapor oluşturmaya çalıştı"),
   "DELETE /api/patron/v1/raporlar/:id": e("oluşturduğu bir raporu sildi", "oluşturduğu bir raporu silmeye çalıştı"),
