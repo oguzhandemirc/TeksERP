@@ -12,6 +12,7 @@ import * as follow from "../services/notification-follow.service";
 import * as profile from "../services/notification-profile.service";
 import * as audience from "../services/notification-profile-audience.service";
 import * as prefProfile from "../services/notification-preference-profile.service";
+import * as prefAdmin from "../services/notification-preference-admin.service";
 
 type Handler = (req: Request) => Promise<unknown>;
 
@@ -60,3 +61,5 @@ export const postProfileLockPreview = json((req) => profile.lockPreview(profileI
 export const putProfileMembers = json((req) => profile.replaceProfileMembers(profileId(req), req.body, req.user!.userId));
 export const getFactoryDefaults = json(() => profile.getFactoryDefaults());
 export const putFactoryDefaults = json((req) => profile.putFactoryDefaults(req.body, req.user!.userId));
+export const getUserPreferences = json((req) => prefAdmin.getUserPreferenceSummary(assertValidUuid(req.params.id)));
+export const putUserPreferences = json((req) => prefAdmin.putUserPreferences(req.user!.userId, assertValidUuid(req.params.id), req.body));

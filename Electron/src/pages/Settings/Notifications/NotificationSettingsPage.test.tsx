@@ -103,6 +103,25 @@ describe("NotificationSettingsPage", () => {
     expect(within(screen.getByTestId("tur-siparis.patron-siparisi")).queryByRole("radio", { name: "Kapalı" })).toBeNull();
   });
 
+  it("profil tercih kilidi: şerit + uygulama içi seçim pasif + toplu düğme yok; masaüstü anahtarı serbest", async () => {
+    svc.tercihler.mockResolvedValue({ hucreler: HUCRELER, satirlar: [], tercihKilidi: { kilitli: true, profiller: ["Vardiya"], kanallar: ["UYGULAMA", "OZET"] } });
+    renderWithProviders(<NotificationSettingsPage />);
+    const serit = await screen.findByTestId("tercih-kilidi");
+    expect(serit.textContent).toContain("Tercihlerin yöneticin tarafından kilitlendi");
+    expect(serit.textContent).toContain("Vardiya");
+    const satir = screen.getByTestId("tur-siparis.patron-siparisi");
+    expect((within(satir).getByRole("radio", { name: "Kapalı" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(satir).getByRole("switch", { name: /Masaüstü/ }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.queryByRole("button", { name: "Hepsini kapa" })).toBeNull();
+  });
+
+  it("kilit alanı yoksa (eski sunucu) şerit yok, seçim serbest", async () => {
+    renderWithProviders(<NotificationSettingsPage />);
+    const satir = await screen.findByTestId("tur-siparis.patron-siparisi");
+    expect(screen.queryByTestId("tercih-kilidi")).toBeNull();
+    expect((within(satir).getByRole("radio", { name: "Kapalı" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it("eski sunucu (404) → açıklama, çökme yok", async () => {
     svc.tercihler.mockRejectedValue(new Error("404"));
     d.status = 404;

@@ -77,3 +77,30 @@ it('kilitli tür: nedeni yazılı, uygulama anahtarı pasif; değişiklik tam g�
   expect(vars.tercihler).toEqual(buildPreferenceBody(PREFS, new Map([['dokuma.levent-bitiyor|TABLET_SES', false]])));
   expect(vars.tercihler).toContainEqual({ tur: 'dokuma.levent-bitiyor', kanal: 'MASAUSTU', acik: false });
 });
+
+it('profil tercih kilidi: şerit görünür, "Uygulamada" salt-okunur (kapalı da gösterilir), tablet sesi serbest', async () => {
+  mockFlags = { bildirimGelenKutusuEnabled: true };
+  const locked: PreferencesResponse = {
+    ...PREFS,
+    hucreler: [
+      { kind: 'dokuma.levent-bitiyor', kanallar: [
+        { kanal: 'UYGULAMA', durum: 'KAPALI', kilit: false, kaynak: 'profil:Vardiya', kapsam: null },
+        { kanal: 'TABLET_SES', durum: 'ACIK', kilit: false, kaynak: 'katalog', kapsam: null },
+      ] },
+    ],
+    tercihKilidi: { kilitli: true, profiller: ['Vardiya'], kanallar: ['UYGULAMA', 'OZET'] },
+  };
+  api.preferences.mockResolvedValue(locked);
+  renderWithPaper(<NotificationPreferencesScreen />);
+  expect(await screen.findByTestId('bildirim-tercih-kilidi')).toBeTruthy();
+  expect(screen.getByText(/yöneticin tarafından kilitlendi \(Vardiya\)/)).toBeTruthy();
+  expect(screen.getByLabelText('Levent bitiyor — Uygulamada').props.accessibilityState).toEqual({ checked: false, disabled: true });
+  expect(screen.getByLabelText('Levent bitiyor — Tablet sesi').props.disabled).toBe(false);
+});
+
+it('kilit alanı yoksa (eski sunucu) şerit çizilmez', async () => {
+  mockFlags = { bildirimGelenKutusuEnabled: true };
+  renderWithPaper(<NotificationPreferencesScreen />);
+  await screen.findByText('Veri kaybı riski');
+  expect(screen.queryByTestId('bildirim-tercih-kilidi')).toBeNull();
+});

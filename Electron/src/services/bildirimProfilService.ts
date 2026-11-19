@@ -26,6 +26,8 @@ export interface NotificationProfile {
   arsivlendi: string | null;
   hucreler: ProfileCell[];
   uyeler: { userId: string; ad: string }[];
+  /** Üyeler kişisel uygulama-içi tercih yazamaz. Eski sunucu göndermez (= kapalı). */
+  tercihKilidi?: boolean;
   /** Tür → bu türü göremeyen üye sayısı (bilgi; profil izin VERMEZ). Eski sunucu göndermez. */
   izinsizUyeler?: Record<string, number>;
 }
@@ -67,6 +69,39 @@ export interface MemberCandidate {
   kullaniciAdi: string;
 }
 
+/** Kişi kartı → Bildirimler: kişinin bir türü kanal başına nasıl aldığı (sunucu `resolvePreference`). */
+export interface UserPrefChannel {
+  kanal: "UYGULAMA" | "OZET" | "MASAUSTU" | "TABLET_SES" | "PATRON_PUSH";
+  durum: "ACIK" | "KAPALI" | "GIZLI";
+  kilit: boolean;
+  kaynak: string;
+  kisisel: { acik: boolean; kapsamli: boolean } | null;
+}
+
+export interface UserPrefKind {
+  tur: string;
+  ad: string;
+  grup: NotificationGroup;
+  gorur: boolean;
+  /** Göremiyorsa Türkçe gerekçe (modül kapalı · yetki yok · pasif). */
+  gizliNeden: string | null;
+  kanallar: UserPrefChannel[];
+}
+
+export interface UserPrefSummary {
+  kullanici: { id: string; ad: string; kullaniciAdi: string; aktif: boolean; sistemHesabi: boolean };
+  tercihKilidi: { kilitli: boolean; profiller: string[] };
+  profiller: { id: string; ad: string; tercihKilidi: boolean }[];
+  turler: UserPrefKind[];
+}
+
+export interface UserPrefInput {
+  tur: string;
+  kanal: UserPrefChannel["kanal"];
+  /** `null` = kişisel satırı kaldır (profil/fabrika/görev varsayılanına dön). */
+  acik: boolean | null;
+}
+
 const data = <T>(p: Promise<{ data: ApiResponse<T> }>): Promise<T> => p.then((r) => r.data.data);
 const pid = (id: string) => `${BASE}/profiller/${encodeURIComponent(id)}`;
 
@@ -77,6 +112,7 @@ export const bildirimProfilService = {
   olustur: (body: { kod: string; ad: string; clientToken: string }): Promise<NotificationProfile> =>
     data(apiClient.post(`${BASE}/profiller`, body, Q)),
   yenidenAdlandir: (id: string, ad: string): Promise<NotificationProfile> => data(apiClient.patch(pid(id), { ad }, Q)),
+  tercihKilidiYaz: (id: string, tercihKilidi: boolean): Promise<NotificationProfile> => data(apiClient.patch(pid(id), { tercihKilidi }, Q)),
   arsivle: (id: string): Promise<NotificationProfile> => data(apiClient.delete(pid(id), Q)),
   hucreleriYaz: (id: string, hucreler: ProfileCell[]): Promise<NotificationProfile> =>
     data(apiClient.put(`${pid(id)}/hucreler`, { hucreler }, Q)),
@@ -87,7 +123,12 @@ export const bildirimProfilService = {
   /** Hazır profillerin tam (süzgeçsiz) tür kümeleri — matrisi doldurmak için. Eski sunucu 404. */
   hazirProfiller: (): Promise<{ items: PresetProfileSet[] }> => data(apiClient.get(`${BASE}/profiller/hazir`, Q)),
   adaylar: (): Promise<{ items: MemberCandidate[] }> => data(apiClient.get(`${BASE}/profiller/aday-kullanicilar`, Q)),
-  fabrikaVarsayilani: (): Promise<{ turler: FactoryDefaultKind[] }> => data(apiClient.get(`${BASE}/fabrika-varsayilani`, Q)),
+  kisiTercihleri: (userId: string): Promise<UserPrefSummary> =>
+    data(apiClient.get(`${BASE}/kullanicilar/${encodeURIComponent(userId)}/tercihler`, Q)),
+  /** DELTA: yalnız verilen hücre değişir; sunucu kişinin göremediği türü 400 ile reddeder. */
+  kisiTercihleriYaz: (userId: string, tercihler: UserPrefInput[]): Promise<UserPrefSummary> =>
+    data(apiClient.put(`${BASE}/kullanicilar/${encodeURIComponent(userId)}/tercihler`, { tercihler }, Q)),
+  fabrikaVarsayilani: ():Promise<{ turler: FactoryDefaultKind[] }> => data(apiClient.get(`${BASE}/fabrika-varsayilani`, Q)),
   fabrikaVarsayilaniYaz: (turler: FactoryDefaultInput[]): Promise<{ turler: FactoryDefaultKind[] }> =>
     data(apiClient.put(`${BASE}/fabrika-varsayilani`, { turler }, Q)),
 };
