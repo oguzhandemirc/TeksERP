@@ -18,6 +18,7 @@ import { DEVERE_CATEGORY_CODE } from "@/lib/subcontractor-category-codes";
 import { orderService } from "@/pages/Operations/Orders/service";
 import type { Order } from "@/pages/Operations/Orders/types";
 import type { WarpingOrderFormState } from "./order-model";
+import { FeeRateHint } from "./FeeRateHint";
 import { BeamCountOpenToggle, BeamLineRows, OpenTargetInput } from "./BeamCountFields";
 import { WARPING_CURRENCIES, WARPING_FEE_UNIT_LABEL, type SpecRef, type WarpingFeeUnit } from "./types";
 
@@ -71,7 +72,13 @@ export function OrderIdentityFields({ s, up, identityLocked }: Pick<Props, "s" |
 }
 
 /** Ücret birimi · birim ücret · para birimi · termin tek sırada; sabit fire · fire toleransı yan yana. Uzun açıklama (i) balonunda. */
-export function OrderTermsFields({ s, up, planLocked, defaultFixedWasteM }: Pick<Props, "s" | "up" | "planLocked" | "defaultFixedWasteM">) {
+export function OrderTermsFields({
+  s,
+  up,
+  planLocked,
+  defaultFixedWasteM,
+  feeAutoFill,
+}: Pick<Props, "s" | "up" | "planLocked" | "defaultFixedWasteM"> & { feeAutoFill: boolean }) {
   return (
     <div className="space-y-4">
       <FieldGrid cols={4}>
@@ -110,6 +117,7 @@ export function OrderTermsFields({ s, up, planLocked, defaultFixedWasteM }: Pick
           <DatePickerInput value={s.expectedReturnDay} onChange={(v) => up({ expectedReturnDay: v })} />
         </FormField>
       </FieldGrid>
+      <FeeRateHint s={s} up={up} autoFill={feeAutoFill} />
       <FieldGrid cols={4}>
         <FormField
           label="Sabit fire (m)"
