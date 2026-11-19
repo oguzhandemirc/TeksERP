@@ -18,6 +18,7 @@ import {
 } from "../constants/notification-catalog";
 import {
   NOTIFICATION_CHANNELS,
+  NOTIFICATION_PREFS_LOCKED_CHANNELS,
   NOTIFICATION_QUIET_CHANNELS,
   notificationScopeSchema,
   QUIET_TIME_PATTERN,
@@ -27,6 +28,7 @@ import { loadNotificationVisibilityEnv, canSeeNotificationType, type Notificatio
 import {
   channelEnabled,
   loadPreferenceLayers,
+  preferenceLockProfiles,
   prefKey,
   resolveAllPreferences,
   resolvePreference,
@@ -35,6 +37,7 @@ import {
   type PreferenceSubject,
 } from "./helpers/notification-preference.helper";
 import { parseKindParams } from "./helpers/notification-params.helper";
+import { assertInAppUnchanged, isFrozenChannel, lockView } from "./helpers/notification-preference-lock.helper";
 
 export interface PreferenceViewer {
   userId: string;
@@ -84,6 +87,7 @@ export async function getPreferences(v: PreferenceViewer) {
   return {
     hucreler: resolveAllPreferences(subject, { env, layers }),
     satirlar: rows.map((r) => ({ id: r.id, tur: r.kind, kanal: r.channel, acik: r.enabled, kapsam: r.scope })),
+    tercihKilidi: lockView(layers, v.userId),
   };
 }
 
@@ -156,13 +160,20 @@ export async function putPreferences(v: PreferenceViewer, body: unknown) {
 /** Tam gövdeyi doğrular ve TEK tx'te yazar (PUT ve profil uygulaması aynı yol: seyrek yazım, kilit 409). */
 export async function writePreferenceItems(v: PreferenceViewer, ctx: PreferenceContext, tercihler: PreferenceItemInput[]): Promise<void> {
   const { subject, env, layers } = ctx;
+  const profiller = preferenceLockProfiles(layers, v.userId);
+  const locked = profiller.length > 0;
+  if (locked) assertInAppUnchanged(ctx, tercihler, profiller);
   const plan = planPreferenceRows(subject, env, layers, tercihler);
   const visible = NOTIFICATION_KINDS.filter((k) => canSeeNotificationType(subject, k, env));
+  // Kilitliyken uygulama-içi satırlar dokunulmaz kalır (yöneticinin yazdığı da dahil); yalnız yan kanallar yenilenir.
+  const rows = [...plan.values()].filter((p) => !locked || !isFrozenChannel(p.channel));
   await prisma.$transaction(async (tx) => {
-    await tx.notificationPreference.deleteMany({ where: { userId: v.userId, kind: { in: visible } } });
-    if (plan.size > 0) {
+    await tx.notificationPreference.deleteMany({
+      where: { userId: v.userId, kind: { in: visible }, ...(locked ? { channel: { notIn: [...NOTIFICATION_PREFS_LOCKED_CHANNELS] } } : {}) },
+    });
+    if (rows.length > 0) {
       await tx.notificationPreference.createMany({
-        data: [...plan.values()].map((p) => ({
+        data: rows.map((p) => ({
           userId: v.userId,
           kind: p.kind,
           channel: p.channel,
@@ -221,6 +232,8 @@ export async function previewPreferences(v: PreferenceViewer, body: unknown) {
 // ---- varsayılana dön (yıkıcı: önce önizleme, kayıt başına seçim) --------------
 
 export async function resetPreview(v: PreferenceViewer) {
+  const { layers } = await context(v);
+  const locked = preferenceLockProfiles(layers, v.userId).length > 0;
   const rows = await prisma.notificationPreference.findMany({
     where: { userId: v.userId },
     select: { id: true, kind: true, channel: true, enabled: true, scope: true },
@@ -229,7 +242,9 @@ export async function resetPreview(v: PreferenceViewer) {
   return {
     satirlar: rows.map((r) => ({
       id: r.id, tur: r.kind, ad: isKind(r.kind) ? getNotificationEntry(r.kind).ad : r.kind, kanal: r.channel, acik: r.enabled, kapsam: r.scope,
+      kilitli: locked && isFrozenChannel(r.channel),
     })),
+    tercihKilidi: lockView(layers, v.userId),
   };
 }
 
@@ -238,6 +253,18 @@ export const ResetBody = z.object({ ids: z.array(z.string().uuid()).min(1).max(1
 /** Yalnız kişinin KENDİ satırları silinir (saf yapılandırma pivotu); başkasının id'si sessizce etkisiz. */
 export async function resetPreferences(v: PreferenceViewer, body: unknown) {
   const { ids } = ResetBody.parse(body);
+  const { layers } = await context(v);
+  const profiller = preferenceLockProfiles(layers, v.userId);
+  if (profiller.length > 0) {
+    const frozen = await prisma.notificationPreference.count({
+      where: { userId: v.userId, id: { in: [...new Set(ids)] }, channel: { in: [...NOTIFICATION_PREFS_LOCKED_CHANNELS] } },
+    });
+    if (frozen > 0) {
+      throw AppError.conflict("Bildirim tercihlerin yöneticin tarafından kilitlendi; uygulama içi satırlar varsayılana döndürülemez.", {
+        code: "NOTIFICATION_PREFS_LOCKED", profiller,
+      });
+    }
+  }
   const r = await prisma.notificationPreference.deleteMany({ where: { userId: v.userId, id: { in: [...new Set(ids)] } } });
   return { silinen: r.count };
 }

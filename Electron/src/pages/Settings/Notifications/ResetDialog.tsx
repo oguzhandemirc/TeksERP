@@ -29,7 +29,7 @@ export function ResetDialog({ open, onClose, onDone }: { open: boolean; onClose:
   const rows = q.data?.satirlar ?? [];
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
-  useEffect(() => setSelected(new Set((q.data?.satirlar ?? []).map((r) => r.id))), [q.data]);
+  useEffect(() => setSelected(new Set((q.data?.satirlar ?? []).filter((r) => !r.kilitli).map((r) => r.id))), [q.data]);
   const apply = async () => {
     setBusy(true);
     try {
@@ -60,11 +60,12 @@ export function ResetDialog({ open, onClose, onDone }: { open: boolean; onClose:
                 <label className="flex items-start gap-2 rounded px-1 py-1 text-sm hover:bg-muted/60">
                   <Checkbox
                     checked={selected.has(r.id)}
+                    disabled={r.kilitli === true}
                     onCheckedChange={(v) => setSelected((s) => { const n = new Set(s); if (v === true) n.add(r.id); else n.delete(r.id); return n; })}
                   />
                   <span>
                     {r.ad}
-                    <span className="block text-xs text-muted-foreground">{CHANNEL_LABEL[r.kanal] ?? r.kanal}: {r.acik ? "açık" : "kapalı"}{r.kapsam ? " · kapsamlı" : ""}</span>
+                    <span className="block text-xs text-muted-foreground">{CHANNEL_LABEL[r.kanal] ?? r.kanal}: {r.acik ? "açık" : "kapalı"}{r.kapsam ? " · kapsamlı" : ""}{r.kilitli ? " · yöneticin kilitledi" : ""}</span>
                   </span>
                 </label>
               </li>

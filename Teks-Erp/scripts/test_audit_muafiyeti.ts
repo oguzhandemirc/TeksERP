@@ -217,7 +217,10 @@ function main(): void {
   // 43 → 44 (2026-11-19, devere iade + fire): `warping-order/yarn-return.ts` — iadenin tx gövdesi (geri aktarım +
   // `returnYarnTx`) ve kaynak claim'i (`claimReturnSourceTx`, atomik `updateMany`); elle iade yazarı `yarn-return-waste.ts`e
   // taşındı, audit'i çağıran eylem basar (`yarn-return-waste` iade · `settle` kapanış iadesi · `yarn-transfer`) — EBEVEYN_EYLEMDE.
-  const AUDITSIZ_YAZICI_TABAN = 44;
+  // 44 → 45 (2026-11-19, bildirim yönetimi): `notification-preference.service.ts` — NotificationPreference artık
+  // yönetici yolunda (`notification-preference-admin.service.ts`, kişi kartı) audit'li, model muafiyeti öldü; bu dosya
+  // kişinin KENDİ tercih yazımıdır (KULLANICI_TERCIHI: yalnız kendi gelen kutusu, rapor sayısı türemez).
+  const AUDITSIZ_YAZICI_TABAN = 45;
   const auditsizYazici: string[] = [];
   for (const [rel, s] of metin) {
     if (auditDosya.has(rel) || /tableName:\s*"/.test(s)) continue;

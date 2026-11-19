@@ -73,6 +73,8 @@ export interface PreferenceRow {
 export interface PreferencesResponse {
   hucreler: PreferenceKindCells[];
   satirlar: PreferenceRow[];
+  /** Profil tercih kilidi (eski sunucu göndermez = serbest): kilitliyken "Uygulamada" değiştirilemez. */
+  tercihKilidi?: { kilitli: boolean; profiller: string[]; kanallar: PreferenceChannel[] };
 }
 
 export interface PreferenceItem {

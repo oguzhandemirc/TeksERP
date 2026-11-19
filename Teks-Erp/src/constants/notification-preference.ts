@@ -18,6 +18,9 @@ export const NOTIFICATION_CHANNELS = [
 /** Sessiz saatin susturabildiği kanallar (`notification_user_settings.quietChannels` CHECK aynası). */
 export const NOTIFICATION_QUIET_CHANNELS = ["MASAUSTU", "TABLET_SES", "PATRON_PUSH"] as const satisfies readonly NotificationKanal[];
 
+/** Profil tercih kilidinin dondurduğu "uygulama içi" kanallar (Anlık/Özet/Kapalı tek seçimdir); yan kanallar serbest. */
+export const NOTIFICATION_PREFS_LOCKED_CHANNELS = ["UYGULAMA", "OZET"] as const satisfies readonly NotificationKanal[];
+
 /** `notification_profile_cells.state` CHECK aynası. */
 export const NOTIFICATION_PROFILE_CELL_STATES = ["ACIK", "KAPALI", "KILITLI"] as const;
 export type NotificationProfileCellState = (typeof NOTIFICATION_PROFILE_CELL_STATES)[number];

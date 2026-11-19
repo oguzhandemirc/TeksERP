@@ -2,12 +2,13 @@
 // masaüstü/özet/kapsam panelde ayarlanır ve kayıtta aynen korunur. Yeni MobileScreenKey AÇILMAZ.
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Text } from 'react-native-paper';
+import { ActivityIndicator, Icon, Text } from 'react-native-paper';
 import { SettingsActionButton, SettingsPage, settingsStyles, SETTINGS_COLORS as C } from './settingsUi';
 import PreferenceKindRow from './notifications/PreferenceKindRow';
 import { useNotificationPreferences, type PreferenceScreenState } from './notifications/useNotificationPreferences';
 import { cellValue } from '../../../lib/bildirim/preferenceDraft';
 import type { CatalogKind } from '../../../services/bildirim/types';
+import { httpStatusOf } from '../../../services/bildirim/bildirimApi';
 
 const EMPTY_TEXT: Record<Exclude<PreferenceScreenState, 'yukleniyor'>, string> = {
   kapali: 'Bildirim gelen kutusu bu kurulumda kapalı. Yönetici Genel Ayarlar → Bildirimler\'den açar.',
@@ -35,9 +36,18 @@ export default function NotificationPreferencesScreen() {
     );
   }
   const prefs = p.prefs;
+  const prefsLock = prefs.tercihKilidi?.kilitli ? prefs.tercihKilidi : null;
   const lockedOf = (kod: string) => prefs.hucreler.find((h) => h.kind === kod)?.kanallar.find((c) => c.kanal === 'UYGULAMA')?.kilit ?? false;
   return (
     <SettingsPage title="Bildirim tercihleri">
+      {prefsLock && (
+        <View style={[settingsStyles.card, styles.lockCard]} testID="bildirim-tercih-kilidi">
+          <Icon source="lock" size={20} color={C.warning} />
+          <Text style={styles.lockText}>
+            Tercihlerin yöneticin tarafından kilitlendi ({prefsLock.profiller.join(', ')}). "Uygulamada" değiştirilemez; tablet sesi serbest.
+          </Text>
+        </View>
+      )}
       {groupKinds(p.catalog).map(([grup, kinds]) => (
         <View key={grup} style={settingsStyles.card}>
           <Text style={settingsStyles.title}>{grup}</Text>
@@ -46,6 +56,7 @@ export default function NotificationPreferencesScreen() {
               <PreferenceKindRow
                 kind={k}
                 locked={lockedOf(k.kod)}
+                prefsLocked={!!prefsLock}
                 value={(ch) => cellValue(prefs, p.edits, k.kod, ch)}
                 onToggle={(ch, v) => p.toggle(k.kod, ch, v)}
               />
@@ -53,6 +64,7 @@ export default function NotificationPreferencesScreen() {
           ))}
         </View>
       ))}
+      {!!p.saveError && <Text style={styles.queued} testID="bildirim-tercih-hata">{httpStatusOf(p.saveError) === 409 ? 'Kaydedilemedi: tercihlerin yöneticin tarafından kilitlenmiş olabilir; ekranı yenileyin.' : 'Tercih kaydedilemedi.'}</Text>}
       {p.queued && <Text style={styles.queued} testID="bildirim-tercih-kuyrukta">Ağ yok — tercih kuyrukta, bağlantı gelince kaydedilecek.</Text>}
       <SettingsActionButton label="Kaydet" icon="content-save" tone="primary" onPress={p.submit} disabled={!p.dirty && !p.saving} busy={p.saving} busyLabel="Kaydediliyor…" testID="bildirim-tercih-kaydet" />
       <Text style={settingsStyles.hint}>Sessiz saat ve masaüstü bildirimleri panelden (Kullanıcı Tercihleri) ayarlanır.</Text>
@@ -63,4 +75,6 @@ export default function NotificationPreferencesScreen() {
 const styles = StyleSheet.create({
   divided: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: C.border },
   queued: { color: C.warning, fontSize: 14, marginVertical: 8 },
+  lockCard: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  lockText: { color: C.text, fontSize: 14, flexShrink: 1 },
 });
