@@ -11,7 +11,7 @@ import { CloudError, badRequest } from "../lib/errors";
 import { createAccount, listAccountAudit, listAccounts, resetAccount, setAccountStatus, updateAccount } from "../services/account.service";
 import { deleteOwnAccount } from "../services/account-self-delete";
 import type { CloudContext } from "../services/context";
-import { ANAHTAR_SUZGEC_AZAMI, LIST_ID_FILTER_KEYS, LIST_KEY_FILTER_KEYS, type LoginResponse, type PermissionCatalog } from "../wire/api";
+import { ANAHTAR_SUZGEC_AZAMI, LIST_ID_FILTER_KEYS, LIST_KEY_FILTER_KEYS, LIST_MEMBER_FILTER_KEYS, type LoginResponse, type PermissionCatalog } from "../wire/api";
 import { facilityStatus, getProjectionRecord, getSnapshot, listProjection } from "../services/data.service";
 import { requestSnapshotRefresh } from "../services/doorbell";
 import { cancelInbox, createInboxMessage, getInbox, listInbox } from "../services/inbox.service";
@@ -139,7 +139,7 @@ export const API_ROUTES: readonly ApiRouteDef[] = [
     kimlik: "OKUMA",
     handler: async (c) => {
       const { cursor, limit } = page(c);
-      return { data: await listProjection(c.ctx, s(c), String(c.req.params[PROJECTION]), { cursor, limit, durum: text(c, "durum", 40), kimlik: Object.fromEntries(LIST_ID_FILTER_KEYS.map((k) => [k, text(c, k, 40)])), anahtar: Object.fromEntries(LIST_KEY_FILTER_KEYS.map((k) => [k, text(c, k, ANAHTAR_SUZGEC_AZAMI + 1)])), ara: text(c, "ara", 200), suzgec: text(c, "suzgec", 40) }) };
+      return { data: await listProjection(c.ctx, s(c), String(c.req.params[PROJECTION]), { cursor, limit, durum: text(c, "durum", 40), kimlik: Object.fromEntries(LIST_ID_FILTER_KEYS.map((k) => [k, text(c, k, 40)])), anahtar: Object.fromEntries(LIST_KEY_FILTER_KEYS.map((k) => [k, text(c, k, ANAHTAR_SUZGEC_AZAMI + 1)])), uyelik: Object.fromEntries(LIST_MEMBER_FILTER_KEYS.map((k) => [k, text(c, k, 40)])), ara: text(c, "ara", 200), suzgec: text(c, "suzgec", 40) }) };
     },
   },
   { method: "get", path: `/veri/:${PROJECTION}/:id`, auth: "OTURUM", kimlik: "OKUMA", handler: async (c) => ({ data: await getProjectionRecord(c.ctx, s(c), String(c.req.params[PROJECTION]), String(c.req.params.id)) }) },

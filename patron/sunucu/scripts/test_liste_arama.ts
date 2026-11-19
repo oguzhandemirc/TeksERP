@@ -8,6 +8,7 @@
 //   §6 sipariş araması + görünüm çipleri: no + `musteriAdi` (eski satır adsız) · `gecikmis` eşitliği · tanınmayan 400
 //   §7 ⭐ kimlik süzgeçleri (`LIST_ID_FILTERS` TEK beyan): beyanlı projeksiyonda 200, beyansızda 400; başka tesis sızmaz
 //   §8 beyan ↔ fabrika kataloğu iki yönlü (kolonu taşıyan her projeksiyon beyanlı, beyanlı her çift kolonu taşır) · `/oturum` yeteneği
+//   §9 ⭐ iş emri araması (no · müşteri · sipariş no; Açık/Kapalı) + üyelik süzgeçleri (`LIST_MEMBER_FILTERS`: asama · fasonFirmaId · siparisId · cariKartId; beyansız 400)
 // Koşum: npx tsx scripts/test_liste_arama.ts
 // =============================================================================
 import { randomUUID } from "node:crypto";
@@ -16,7 +17,7 @@ import { join } from "node:path";
 import { Client } from "pg";
 import { ROLE_TEMPLATES } from "../src/catalog/permissions";
 import { FOLD_FROM, FOLD_TO, foldTerm, likePattern } from "../src/lib/search";
-import { ARAMA_AZAMI, LIST_ID_FILTER_KEYS, LIST_ID_FILTERS, LIST_SEARCH, type FacilityStatus } from "../src/wire/api";
+import { ARAMA_AZAMI, LIST_ID_FILTER_KEYS, LIST_ID_FILTERS, LIST_MEMBER_FILTER_KEYS, LIST_SEARCH, type FacilityStatus } from "../src/wire/api";
 import { api, girdi, hesapKur, imzali, kontrol, ortamKur, paket, sonuc, temizleTesis, tesisKur, type Ortam, type TestHesabi, type TestKurulumu } from "./lib/test-ortam";
 
 type Liste = { kayitlar: { id: string; kayit: Record<string, unknown> }[]; sonraki: string | null };
@@ -266,6 +267,46 @@ async function beyanKatalog(o: Ortam, h: TestHesabi): Promise<void> {
   kontrol("§8c `/oturum` liste yeteneği beyanın kendisi", r.status === 200 && JSON.stringify(liste?.kimlikSuzgecleri) === JSON.stringify(LIST_ID_FILTERS) && JSON.stringify(liste?.aranabilir) === JSON.stringify(Object.keys(LIST_SEARCH)), `${r.status}`);
 }
 
+/** İE v3 satırları: biri açık (kurşun + fason, siparişli), biri kapalı (sevk edilmiş, siparişsiz). */
+async function isEmriUyelik(o: Ortam, k: TestKurulumu, h: TestHesabi): Promise<void> {
+  console.log("\n§9 iş emri araması + üyelik süzgeçleri");
+  const w = { t: new Date(o.saat.simdi() - 60_000).toISOString(), k: "000000000003" };
+  const t = new Date(o.saat.simdi() - 120_000).toISOString();
+  const id = { acik: randomUUID(), kapali: randomUUID(), siparis: randomUUID(), firma: randomUUID(), cari: randomUUID() };
+  const ie = (iid: string, no: string, acik: boolean, ek: Record<string, unknown>) =>
+    ({ id: iid, isEmriNo: no, durum: acik ? "IN_PROGRESS" : "COMPLETED", acik, olusturulma: t, cariKartIdleri: [], siparisIdleri: [], siparisNolari: [], fasonFirmaIdleri: [], asamalar: [], ...ek });
+  const kayitlar = [girdi("is-emri", {
+    yaz: [
+      ie(id.acik, "IE-2026-0501", true, { musteriAdi: "GÜNEŞ ÖRME", cariKartIdleri: [id.cari], siparisIdleri: [id.siparis], siparisNolari: ["SP-2026-0777"], fasonFirmaIdleri: [id.firma], asamalar: ["fason", "kursun"] }),
+      ie(id.kapali, "IE-2026-0502", false, { asamalar: ["sevkEdildi"] }),
+    ],
+    yeni: w,
+  })];
+  const r = await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk: new Date(o.saat.simdi() - 60_000), kayitlar }) });
+  if (r.status !== 200 || (r.json as unknown as { ret: unknown[] }).ret.length > 0) throw new Error(`İE fikstürü: ${r.status} ${JSON.stringify(r.json)}`);
+  const siparisNo = await ara(o, h, "is-emri", { ara: "0777" });
+  kontrol("§9a ⭐ sipariş no ile bulur (varsayılan çip Açık)", siparisNo.status === 200 && ayni(siparisNo.ids, [id.acik]), `${siparisNo.status} ${siparisNo.ids.size}`);
+  const musteri = await ara(o, h, "is-emri", { ara: "gunes orme" });
+  kontrol("§9b müşteri adıyla bulur (Türkçe katlama)", ayni(musteri.ids, [id.acik]), `${musteri.ids.size}`);
+  const kapali = await ara(o, h, "is-emri", { suzgec: "KAPALI", ara: "ie-2026-05" });
+  kontrol("§9c KAPALI çipi `acik=false` eşitliği", ayni(kapali.ids, [id.kapali]), `${kapali.ids.size}`);
+  const kursun = await ara(o, h, "is-emri", { asama: "kursun" });
+  const sevk = await ara(o, h, "is-emri", { asama: "sevkEdildi" });
+  kontrol("§9d ⭐ asama üyeliği: kurşun açık İE'yi, sevkEdildi kapalı İE'yi bulur", ayni(kursun.ids, [id.acik]) && ayni(sevk.ids, [id.kapali]), `${kursun.ids.size}/${sevk.ids.size}`);
+  const firma = await ara(o, h, "is-emri", { fasonFirmaId: id.firma.toUpperCase() });
+  const baska = await ara(o, h, "is-emri", { fasonFirmaId: randomUUID() });
+  kontrol("§9e ⭐ fasonFirmaId üyeliği (büyük harf dahil); başka firma boş", firma.status === 200 && ayni(firma.ids, [id.acik]) && baska.status === 200 && baska.ids.size === 0, `${firma.status} ${firma.ids.size}/${baska.ids.size}`);
+  const sip = await ara(o, h, "is-emri", { siparisId: id.siparis });
+  const cari = await ara(o, h, "is-emri", { cariKartId: id.cari });
+  kontrol("§9f siparisId · cariKartId is-emri'de dizi üyeliği olarak okunur", ayni(sip.ids, [id.acik]) && ayni(cari.ids, [id.acik]), `${sip.status} ${sip.ids.size}/${cari.status} ${cari.ids.size}`);
+  const bicim = await ara(o, h, "is-emri", { asama: "diger" });
+  const beyansiz = await ara(o, h, "siparis", { fasonFirmaId: id.firma });
+  kontrol("§9g ⭐ süzülemez aşama 400; üyelik beyanı olmayan listede fasonFirmaId 400 (fail-closed)", bicim.status === 400 && beyansiz.status === 400, `${bicim.status}/${beyansiz.status}`);
+  const oturum = await api(o, "GET", "/api/oturum", { belirtec: h.belirtec });
+  const yetenek = (oturum.json.data as FacilityStatus | undefined)?.liste?.uyelikSuzgecleri;
+  kontrol("§9h `/oturum` üyelik yeteneği beyandan", JSON.stringify(yetenek) === JSON.stringify({ "is-emri": [...LIST_MEMBER_FILTER_KEYS] }), JSON.stringify(yetenek));
+}
+
 async function main(): Promise<void> {
   const o = await ortamKur();
   const k = await tesisKur(o);
@@ -285,6 +326,7 @@ async function main(): Promise<void> {
     await kimlikSuzgecleri(o, h, sid);
     await kimlikRls(o, h, await hesapKur(o, k2.tesisId, ROLE_TEMPLATES.PATRON), sid, sid2);
     await beyanKatalog(o, h);
+    await isEmriUyelik(o, k, h);
   } finally {
     await temizleTesis(o, k.tesisId);
     await temizleTesis(o, k2.tesisId);

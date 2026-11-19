@@ -13,6 +13,7 @@ import prisma from "../../lib/prisma";
 import {
   PATRON_RECORD_SETS, canRead, effectiveCloudPermissions, patronSet, readableSetNames, type SetDef,
 } from "./izin-esleme";
+import { MEMBER_FILTERS, MEMBER_FILTER_KEYS } from "./kume-arama";
 import { ID_FILTER_KEYS, KEY_FILTERS, SEARCH, getRecord, idFiltersOf, listRecords, type PatronListQuery, type PatronRecord } from "./kayit-sayfasi";
 import { getLicenseInstallationId } from "../../lib/license/runtime";
 
@@ -90,7 +91,9 @@ function listCapabilities() {
   }
   const served = new Set<string>(PATRON_RECORD_SETS);
   const anahtarSuzgecleri = Object.fromEntries(Object.entries(KEY_FILTERS).map(([k, v]) => [k, v.filter((n) => served.has(n))]).filter(([, v]) => v.length > 0));
-  return { kimlikSuzgecleri, aranabilir: Object.keys(SEARCH), anahtarSuzgecleri };
+  const uyelikSuzgecleri = Object.fromEntries(Object.entries(MEMBER_FILTERS).filter(([n]) => served.has(n))
+    .map(([n, m]) => [n, MEMBER_FILTER_KEYS.filter((k) => m[k] !== undefined)]));
+  return { kimlikSuzgecleri, aranabilir: Object.keys(SEARCH), anahtarSuzgecleri, uyelikSuzgecleri };
 }
 
 /** `GET /oturum` — bulut `FacilityStatus` biçimi; eşitleme yok (veri canlı), hizmet aşaması hep ACIK. */

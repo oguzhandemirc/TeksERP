@@ -18,6 +18,7 @@
 //   §1h/§1i küme kapısının kapsamı: ticaret tablosu okuyan küme TAM OLARAK `TICARET_SETS` (fiyat kartı) ve ticaret
 //      kapısını taşır · her kümenin bütün kapıları `MODULE_GATES`te (`test_ticaret_regime_gate` muafı ve
 //      `test_production_regime_gate` §6 bu ölçüme yaslanır)
+//   §1j üyelik süzgeçleri (`MEMBER_FILTERS`: anahtar → dizi alanı) bulut `LIST_MEMBER_FILTERS` ile birebir (sonda 2026-11-19: alan adı bozulunca ❌)
 //   §7 (V3c) sunulan HER küme tam izinli patronla 200 + bulut biçimi (Page/ProjectionRecord · Snapshot)
 //   §8 (V3c) çözücülü süzgeç: birleşmiş carinin faturası hedef hesap süzgecinde, kaynak süzgecinde YOK · anahtar
 //      süzgeci (kategoriAnahtari) beyansız kümede 400, biçimsiz değerde boş · yeni aramalar (urun, teklif) ·
@@ -37,6 +38,7 @@ import { PERMISSION_CATALOG, PATRON_LOGIN_PERMISSION } from "../src/constants/pe
 import { CLOUD_READ_PERMISSIONS, SNAPSHOT_PROJECTIONS } from "../src/cloud-sync/projections";
 import { ERP_TO_CLOUD, PATRON_READ_SETS, PATRON_RECORD_SETS, PATRON_SNAPSHOT_SETS, TICARET_SETS, patronSet } from "../src/services/patron-read/izin-esleme";
 import { SEARCH, idFiltersOf } from "../src/services/patron-read/kayit-sayfasi";
+import { MEMBER_FILTERS } from "../src/services/patron-read/kume-arama";
 import { clearPatronSnapshotCache, getSnapshot } from "../src/services/patron-read/patron-read.service";
 import { daysPastDeadline, isDeadlineOpenStatus } from "../src/services/helpers/order-deadline.helper";
 import { reconcilePermissionCatalog } from "../src/jobs/permission-catalog.job";
@@ -131,6 +133,12 @@ function statik(): void {
     if (!sameSet(idFiltersOf(def.projection!), theirs)) iDiffs.push(`${name}: ${idFiltersOf(def.projection!)} ≠ ${theirs}`);
   }
   check("§1g kimlik süzgeçleri bulut LIST_ID_FILTERS ile birebir", iDiffs.length === 0 && cloudIds !== undefined, iDiffs.join(" · "));
+  // Üyelik süzgeci: ERP Prisma ikizi bulutun jsonb üyeliğiyle AYNI anahtar → dizi alanı eşlemesini taşımalı.
+  const cloudMembers = constValue("LIST_MEMBER_FILTERS") as Record<string, Record<string, string>> | undefined;
+  const mine = Object.entries(MEMBER_FILTERS).map(([n, m]) => `${n}:${Object.entries(m).map(([k, v]) => `${k}=${v!.alan}`).sort().join(",")}`).sort();
+  const theirs = Object.entries(cloudMembers ?? {}).filter(([n]) => (PATRON_READ_SETS as readonly string[]).includes(n))
+    .map(([n, m]) => `${n}:${Object.entries(m).map(([k, v]) => `${k}=${v}`).sort().join(",")}`).sort();
+  check("§1j üyelik süzgeçleri bulut LIST_MEMBER_FILTERS ile birebir", cloudMembers !== undefined && JSON.stringify(mine) === JSON.stringify(theirs), `${mine} ≠ ${theirs}`);
   // Ticaret kapısı küme başınadır: ticaret tablosu okuyan küme `TICARET_SETS`te OLMALI (ve ticaret kapısını taşımalı);
   // listede olup okumayan küme de düşer (gereksiz kapı patron ekranını boşuna kapatır). Ticaret bekçisi muafı buna yaslanır.
   const TICARET_TABLE = /purchase_order|stock_count|item_price|PurchaseOrder|StockCount|ItemPrice/;
