@@ -128,12 +128,12 @@ export interface WarpingTransferBatch {
   totalKg: string;
   cancelled: boolean;
   cancelBatchId: string | null;
-  rows: Array<{ transferId: string; kind: string; dispatchItemId: string; dispatchNo: string; yarnItemId: string; code: string; lotId: string | null; lotNo: string | null; qtyKg: string; reversesId: string | null }>;
+  rows: Array<{ transferId: string; kind: string; dispatchItemId: string; dispatchNo: string; yarnItemId: string; code: string; name?: string; lotId: string | null; lotNo: string | null; qtyKg: string; reversesId: string | null }>;
 }
 
 export interface WarpingTransferCancelPreview {
   batch: WarpingTransferBatch;
   canCancel: boolean;
   blockedReason: string | null;
-  items: Array<{ dispatchItemId: string; dispatchNo: string; code: string; lotNo: string | null; qtyKg: string; targetHoldsKg: string }>;
+  items: Array<{ dispatchItemId: string; dispatchNo: string; code: string; name?: string; lotNo: string | null; qtyKg: string; targetHoldsKg: string }>;
 }

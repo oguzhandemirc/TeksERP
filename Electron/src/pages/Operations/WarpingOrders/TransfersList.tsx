@@ -16,6 +16,7 @@ import { toastServerSuccess } from "@/lib/serverNotes";
 import { cn } from "@/lib/utils";
 import { warpingHoldingService, useWarpingTransfers } from "./holding-service";
 import { fmtKg } from "./order-model";
+import { yarnLabelParts, yarnText } from "./YarnLabel";
 import { WARPING_ORDERS_QUERY_KEY } from "./service";
 import type { WarpingTransferBatch } from "./holding-types";
 
@@ -46,7 +47,7 @@ function TransferCancelDialog({ orderId, batch, onClose }: { orderId: string; ba
               <li><b>{fmtKg(p.batch.totalKg)} kg</b> {batch.toOrderNo} → {batch.fromOrderNo}</li>
               {p.items.map((it) => (
                 <li key={it.dispatchItemId} className="text-muted-foreground">
-                  {it.code} · {it.dispatchNo} · {it.lotNo ? `lot ${it.lotNo}` : "lotsuz"} — {fmtKg(it.qtyKg)} kg geri döner (hedef bugün {fmtKg(it.targetHoldsKg)} kg tutuyor)
+                  {yarnText(it.name, it.code)} · {it.dispatchNo} · {it.lotNo ? `lot ${it.lotNo}` : "lotsuz"} — {fmtKg(it.qtyKg)} kg geri döner (hedef bugün {fmtKg(it.targetHoldsKg)} kg tutuyor)
                 </li>
               ))}
             </ul>
@@ -70,7 +71,7 @@ function TransferCancelDialog({ orderId, batch, onClose }: { orderId: string; ba
 function BatchItem({ b, orderId, onCancel }: { b: WarpingTransferBatch; orderId: string; onCancel: () => void }) {
   const outgoing = b.fromWarpingOrderId === orderId;
   const isCancel = b.kind === "TRANSFER_CANCEL";
-  const lines = b.rows.map((r) => `${r.code} ${r.lotNo ?? "lotsuz"} ${fmtKg(r.qtyKg)} kg`).join(" · ");
+  const lines = b.rows.map((r) => `${yarnLabelParts(r.name, r.code).primary} ${r.lotNo ?? "lotsuz"} ${fmtKg(r.qtyKg)} kg`).join(" · ");
   return (
     <li className={cn("flex items-start justify-between gap-3 px-3 py-2 text-sm", b.cancelled && "text-muted-foreground")}>
       <span className="min-w-0">

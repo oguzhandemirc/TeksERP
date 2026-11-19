@@ -9,8 +9,9 @@ import { Callout } from "@/components/ui/callout";
 import { FormField } from "@/components/forms/FormField";
 import { Input } from "@/components/ui/input";
 import { toastServerSuccess } from "@/lib/serverNotes";
-import { yarnCode, type YarnNames } from "./holding-model";
+import type { YarnNames } from "./holding-model";
 import { fmtKg, fmtM } from "./order-model";
+import { yarnText } from "./YarnLabel";
 import { warpingReceiveService } from "./receive-service";
 import { WARPING_ORDERS_QUERY_KEY } from "./service";
 import type { WarpingReceipt, WarpingReceiptCancelPreview } from "./receive-types";
@@ -25,7 +26,7 @@ function AffectedList({ p, names, orderId }: { p: WarpingReceiptCancelPreview; n
       ))}
       {p.released.map((r) => (
         <li key={`${r.dispatchItemId}|${r.holderWarpingOrderId}`} className="text-muted-foreground">
-          {yarnCode(names, r.yarnItemId)} — {fmtKg(r.kg)} kg {r.dispatchNo} sevkinde yeniden deverecide görünür{r.holderWarpingOrderId !== orderId && " (devir, asıl siparişe döner)"}
+          {yarnText(names.get(r.yarnItemId)?.name, names.get(r.yarnItemId)?.code)} — {fmtKg(r.kg)} kg {r.dispatchNo} sevkinde yeniden deverecide görünür{r.holderWarpingOrderId !== orderId && " (devir, asıl siparişe döner)"}
         </li>
       ))}
     </ul>

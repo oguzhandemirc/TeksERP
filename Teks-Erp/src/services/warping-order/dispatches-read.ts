@@ -9,7 +9,7 @@ import { Prisma, SubcontractorDispatchItemKind, WarpingOrderStatus } from "@pris
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { sequentialTx } from "../helpers/tx-sequential-relations.helper";
-import { toWarpingYarnItem, WARPING_YARN_ITEM_SELECT, type WarpingYarnItem } from "../helpers/warping-yarn-open.helper";
+import { toWarpingYarnItem, WARPING_YARN_ITEM_SELECT, woundOfItem, type WarpingYarnItem } from "../helpers/warping-yarn-open.helper";
 import { warpingDispatchCancelBlock } from "./dispatch-cancel";
 
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
@@ -33,8 +33,10 @@ export interface WarpingDispatchListItem {
   transferOutKg: string;
   /** Başka siparişten bu kaleme geri aktarılan (ör. hedefin iadesi için geri aktarım). */
   transferInKg: string;
-  /** Kalemin dönen leventlere dağıtılan canlı toplamı (bütün tutanlar). */
+  /** Bu siparişin tutmasından dönen leventlere sarılan (canlı; fire HARİÇ — `woundOfItem`). */
   allocatedKg: string;
+  /** Bu siparişin bu kalemden yazdığı net fire (kapanış + iade penceresi; mutabakat Fire'ı ile aynı alan). */
+  wasteKg: string;
   /** Bu siparişin bu kalemden bugün tuttuğu (iptal edilmiş sevkte 0). */
   holdingKg: string;
 }
@@ -52,6 +54,7 @@ export interface WarpingDispatchListRow {
   totalTransferOutKg: string;
   totalTransferInKg: string;
   totalAllocatedKg: string;
+  totalWasteKg: string;
   totalHoldingKg: string;
   canCancel: boolean;
   cancelBlockedReason: string | null;
@@ -84,24 +87,23 @@ export async function listWarpingDispatches(id: string): Promise<WarpingDispatch
     const cancelled = h.cancelledAt !== null;
     const blocked = warpingDispatchCancelBlock(h.cancelledAt, list.map((x) => x.it)) ?? statusBlock;
     const items = list.map(({ it, code, name, warehouseName }) => {
-      const allocated = it.outKg.minus(it.returnedKg).minus(it.woundKg).minus(it.itemOpenKg);
       return {
         dispatchItemId: it.dispatchItemId, yarnItemId: it.yarnItemId, yarnItemCode: code, yarnItemName: name,
         warehouseId: it.warehouseId, warehouseName, lotId: it.lotId, lotNo: it.lotNo, ownerCustomerId: it.ownerCustomerId,
-        outKg: it.outKg, returnedKg: it.returnedKg, transferOutKg: it.transferOutKg, transferInKg: it.transferInKg, allocatedKg: allocated,
+        outKg: it.outKg, returnedKg: it.returnedKg, transferOutKg: it.transferOutKg, transferInKg: it.transferInKg, allocatedKg: woundOfItem(it), wasteKg: it.wasteKg,
         holdingKg: cancelled ? D(0) : it.openKg,
       };
     });
-    const sum = (k: "outKg" | "returnedKg" | "transferOutKg" | "transferInKg" | "allocatedKg" | "holdingKg") => kg(items.reduce((a, x) => a.plus(x[k]), D(0)));
+    const sum = (k: "outKg" | "returnedKg" | "transferOutKg" | "transferInKg" | "allocatedKg" | "wasteKg" | "holdingKg") => kg(items.reduce((a, x) => a.plus(x[k]), D(0)));
     return {
       dispatchId: h.id, dispatchNo: h.dispatchNo, dispatchedAt: h.dispatchedAt.toISOString(),
       status: cancelled ? "CANCELLED" : "ACTIVE", cancelledAt: h.cancelledAt?.toISOString() ?? null, cancelReason: h.cancelReason,
       goodsReceiptId: h.goodsReceiptId,
       totalOutKg: sum("outKg"), totalReturnedKg: sum("returnedKg"), totalTransferOutKg: sum("transferOutKg"), totalTransferInKg: sum("transferInKg"),
-      totalAllocatedKg: sum("allocatedKg"), totalHoldingKg: sum("holdingKg"),
+      totalAllocatedKg: sum("allocatedKg"), totalWasteKg: sum("wasteKg"), totalHoldingKg: sum("holdingKg"),
       canCancel: blocked === null, cancelBlockedReason: blocked,
       items: items.map((x) => ({
-        ...x, outKg: kg(x.outKg), returnedKg: kg(x.returnedKg), transferOutKg: kg(x.transferOutKg), transferInKg: kg(x.transferInKg), allocatedKg: kg(x.allocatedKg), holdingKg: kg(x.holdingKg),
+        ...x, outKg: kg(x.outKg), returnedKg: kg(x.returnedKg), transferOutKg: kg(x.transferOutKg), transferInKg: kg(x.transferInKg), allocatedKg: kg(x.allocatedKg), wasteKg: kg(x.wasteKg), holdingKg: kg(x.holdingKg),
       })),
     };
   });

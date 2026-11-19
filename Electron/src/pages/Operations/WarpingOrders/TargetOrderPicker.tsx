@@ -32,7 +32,7 @@ function TargetRow({ o, selected, onPick }: { o: WarpingOrderRow; selected: bool
       className={cn("flex w-full items-center justify-between gap-3 border-b px-3 py-2 text-left text-sm last:border-b-0 hover:bg-muted", selected && "bg-muted")}>
       <span className="min-w-0">
         <span className="font-medium">{o.orderNo}</span>
-        <span className="block truncate text-xs text-muted-foreground">{o.warpSpec.code} — {o.warpSpec.name}{o.expectedReturnAt ? ` · termin ${fmtFactoryDate(o.expectedReturnAt)}` : ""}</span>
+        <span className="block truncate text-xs text-muted-foreground">{o.warpSpec.name} ({o.warpSpec.code}){o.expectedReturnAt ? ` · termin ${fmtFactoryDate(o.expectedReturnAt)}` : ""}</span>
       </span>
       <Badge className={cn("shrink-0 font-normal", meta.badgeClass)}>{meta.label}</Badge>
     </button>

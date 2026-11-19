@@ -55,7 +55,7 @@ export interface WarpingTransferCancelPreview {
   canCancel: boolean;
   blockedReason: string | null;
   /** Etkilenen her kalem: geri dönecek kg ↔ hedefin bugün tuttuğu kg. */
-  items: Array<{ dispatchItemId: string; dispatchNo: string; code: string; lotNo: string | null; qtyKg: string; targetHoldsKg: string }>;
+  items: Array<{ dispatchItemId: string; dispatchNo: string; code: string; name: string; lotNo: string | null; qtyKg: string; targetHoldsKg: string }>;
 }
 
 async function ownBatch(db: Pick<Tx, "warpingYarnTransfer">, id: string, batchId: string): Promise<WarpingTransferBatch> {
@@ -69,7 +69,7 @@ async function verdict(db: Pick<Tx, "subcontractorDispatchItem">, batch: Warping
   const holds = new Map((await loadWarpingYarnItems(db, { warpingOrderId: batch.toWarpingOrderId })).map((i) => [i.dispatchItemId, i.openKg]));
   const need = new Map<string, Prisma.Decimal>();
   for (const r of batch.rows) need.set(r.dispatchItemId, (need.get(r.dispatchItemId) ?? D(0)).plus(r.qtyKg));
-  const items = batch.rows.map((r) => ({ dispatchItemId: r.dispatchItemId, dispatchNo: r.dispatchNo, code: r.code, lotNo: r.lotNo, qtyKg: r.qtyKg, targetHoldsKg: (holds.get(r.dispatchItemId) ?? D(0)).toFixed(3) }));
+  const items = batch.rows.map((r) => ({ dispatchItemId: r.dispatchItemId, dispatchNo: r.dispatchNo, code: r.code, name: r.name, lotNo: r.lotNo, qtyKg: r.qtyKg, targetHoldsKg: (holds.get(r.dispatchItemId) ?? D(0)).toFixed(3) }));
   if (batch.kind !== WARPING_TRANSFER) return { items, blocked: { status: 400, code: "WARPING_TRANSFER_NOT_REVERSIBLE", msg: "Storno belgesi geri alınamaz — gerekirse yeni aktarma yapın." } };
   if (batch.cancelled) return { items, blocked: { status: 409, code: "WARPING_TRANSFER_ALREADY_CANCELLED", msg: "Bu aktarma zaten iptal edilmiş." } };
   const short = [...need].find(([itemId, q]) => (holds.get(itemId) ?? D(0)).lt(q));

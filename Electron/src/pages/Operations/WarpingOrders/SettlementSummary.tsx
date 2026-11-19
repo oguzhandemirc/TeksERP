@@ -8,6 +8,7 @@ import { transferText } from "./holding-model";
 import { fmtKg, fmtM, isBeamCountOpen } from "./order-model";
 import { signedKg } from "./receive-model";
 import type { WarpingSettlement } from "./receive-types";
+import { YarnLabel } from "./YarnLabel";
 
 const num = "text-right tabular-nums";
 const kgOrDash = (v: string) => (Number(v) === 0 ? "—" : fmtKg(v));
@@ -59,7 +60,7 @@ export function SettlementSummary({ s }: { s: WarpingSettlement }) {
           <TableBody>
             {s.yarns.map((y) => (
               <TableRow key={y.yarnItemId}>
-                <TableCell><span className="font-medium">{y.letter} · {y.name}</span> <span className="text-xs text-muted-foreground">{y.code}</span></TableCell>
+                <TableCell><YarnLabel prefix={`${y.letter} · `} name={y.name} code={y.code} /></TableCell>
                 <TableCell className={num}>{fmtKg(y.planGrossKg)}</TableCell>
                 <TableCell className={num}>{fmtKg(y.dispatchedKg)}</TableCell>
                 <TableCell className={num}>{kgOrDash(y.returnedKg)}</TableCell>

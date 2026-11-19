@@ -2,8 +2,9 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { checkKg, yarnCode, type TransferDraftRow, type YarnNames } from "./holding-model";
+import { checkKg, type TransferDraftRow, type YarnNames } from "./holding-model";
 import { fmtKg } from "./order-model";
+import { YarnLabel, yarnText } from "./YarnLabel";
 import type { WarpingTransferPreview } from "./holding-types";
 
 const num = "text-right tabular-nums";
@@ -26,11 +27,12 @@ export function TransferDraftTable({ drafts, names, onChange }: { drafts: Transf
         <TableBody>
           {drafts.map((d, i) => {
             const h = d.holding;
-            const code = yarnCode(names, h.yarnItemId);
+            const y = names.get(h.yarnItemId);
+            const code = yarnText(y?.name, y?.code);
             const c = d.qtyKg.trim() === "" ? null : checkKg(d.qtyKg, h.holdingKg);
             return (
               <TableRow key={h.dispatchItemId}>
-                <TableCell>{code} <span className="text-muted-foreground">{names.get(h.yarnItemId)?.name}</span></TableCell>
+                <TableCell><YarnLabel name={y?.name} code={y?.code} /></TableCell>
                 <TableCell>{h.dispatchNo}{h.own ? "" : " (aktarımla gelen)"} · {h.lotNo ?? "lotsuz"}</TableCell>
                 <TableCell className={num}>{fmtKg(h.holdingKg)}</TableCell>
                 <TableCell>
@@ -54,7 +56,7 @@ export function TransferPreviewList({ p, names, targetNo }: { p: WarpingTransfer
       <li><b>{fmtKg(p.totalKg)} kg</b> → {targetNo}</li>
       {p.allocations.map((a) => (
         <li key={a.dispatchItemId} className="text-muted-foreground">
-          {yarnCode(names, a.yarnItemId)} · {a.dispatchNo} · {a.lotNo ? `lot ${a.lotNo}` : "lotsuz"} — {fmtKg(a.qtyKg)} kg {targetNo} siparişine sayılır
+          {yarnText(names.get(a.yarnItemId)?.name, names.get(a.yarnItemId)?.code)} · {a.dispatchNo} · {a.lotNo ? `lot ${a.lotNo}` : "lotsuz"} — {fmtKg(a.qtyKg)} kg {targetNo} siparişine sayılır
         </li>
       ))}
     </ul>

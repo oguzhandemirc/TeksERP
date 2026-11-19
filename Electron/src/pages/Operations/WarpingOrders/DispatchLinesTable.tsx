@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { addLotLine, lineNotes, overPlanNote, type DispatchLineDraft } from "./dispatch-model";
 import { fmtKg } from "./order-model";
 import { LotPicker, WarehousePicker } from "./YarnSourcePickers";
+import { YarnLabel } from "./YarnLabel";
 import type { WarpingDispatchPreview, WarpingDispatchPreviewYarn } from "./yarn-types";
 
 const num = "text-right tabular-nums";
@@ -42,7 +43,7 @@ function LineRow({ line, first, yarn, preview, lines, onChange }: RowProps) {
         <TableCell className="align-top">
           {first ? (
             <>
-              <span className="font-medium">{yarn.letter} · {yarn.name}</span> <span className="text-xs text-muted-foreground">{yarn.code}</span>
+              <YarnLabel prefix={`${yarn.letter} · `} name={yarn.name} code={yarn.code} />
               <span className="block text-xs text-muted-foreground">{contextText(yarn)}</span>
             </>
           ) : (

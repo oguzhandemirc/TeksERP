@@ -44,7 +44,7 @@ const notSettleable = (o: { orderNo: string; status: WarpingOrderStatus }) =>
 export async function evaluateSettle(db: Tx, id: string, body: WarpingSettleBody, tolerance: Prisma.Decimal | null) {
   const items = await loadWarpingYarnItems(db, { warpingOrderId: id });
   const st = await loadWarpingSettlement(db, id);
-  const yarns = st.yarns.map((y) => ({ yarnItemId: y.yarnItemId, code: y.code, netKg: y.planNetKg, grossKg: y.planGrossKg, woundKg: y.woundKg, unallocatedKg: y.unallocatedKg, priorWasteKg: y.wasteKg }));
+  const yarns = st.yarns.map((y) => ({ yarnItemId: y.yarnItemId, code: y.code, name: y.name, netKg: y.planNetKg, grossKg: y.planGrossKg, woundKg: y.woundKg, unallocatedKg: y.unallocatedKg, priorWasteKg: y.wasteKg }));
   const plan = buildSettlePlan(items, yarns, body, tolerance);
   return { items, settlement: st, plan, liveBeams: st.metre.receivedBeamCount };
 }
