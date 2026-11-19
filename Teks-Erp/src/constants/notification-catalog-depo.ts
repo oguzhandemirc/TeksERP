@@ -43,6 +43,15 @@ export const DEPO_NOTIFICATION_ENTRIES = {
     payloadAlanlari: ["sevkiyatId", "sevkiyatNo", "musteriAd", "topSayisi", "metre", "kullanici"],
     tahminiHaftalik: 20,
   },
+  // Doğuş (PLANNED) olayı; onay kapalıyken aynı tx'te `yola-cikti` de doğar. Varsayılan KAPALI: `onay-bekliyor` KOSUL'u
+  // ve `yola-cikti` aynı sevkiyatı zaten duyurur — yeni tür kimseye kendiliğinden gelmez, tercihle açılır (2026-11-19).
+  "sevkiyat.olusturuldu": {
+    ...SEVK, kod: "sevkiyat.olusturuldu", ad: "Sevkiyat oluşturuldu", varsayilan: "KAPALI",
+    baslik: "Sevkiyat oluşturuldu: {sevkiyatNo}",
+    govde: "{kullanici} {musteriAd} için {topSayisi} top, {metre} m sevkiyat kurdu · {durum}",
+    payloadAlanlari: ["sevkiyatId", "sevkiyatNo", "musteriAd", "topSayisi", "metre", "durum", "kullanici"],
+    tahminiHaftalik: 20,
+  },
   "sevkiyat.geri-alindi": {
     ...SEVK, kod: "sevkiyat.geri-alindi", ad: "Sevk geri alındı", onemli: true,
     baslik: "Sevk geri alındı: {sevkiyatNo}",
@@ -83,6 +92,17 @@ export const DEPO_NOTIFICATION_ENTRIES = {
     govde: "{kullanici} {barkod} topunu {eskiMetre} m → {yeniMetre} m düzeltti: {sebep}",
     payloadAlanlari: ["topId", "barkod", "eskiMetre", "yeniMetre", "sebep", "kullanici"],
     tahminiHaftalik: 3,
+  },
+  // Tek iptal/fire motoru `inventory/cancel.ts#softDelete`. Birleştirme anahtarı KİP (fire|iptal): toplu iptal (mal kabul
+  // fişi, Tambur geri alma) 10 dk içinde tek satırda "N kayıt" olur. Varsayılan fire yetkilileri (`roll:manual-adjust`).
+  "stok.top-fire-iptal": {
+    ...DEPO, izinler: [["roll:read"]], modul: "cekirdek:stok-giris",
+    tekilKalibi: "{kip}", panelEkran: "operations/rolls", panelYol: "/operations/rolls?search={barkod}",
+    kod: "stok.top-fire-iptal", ad: "Top fire edildi ya da iptal edildi", varsayilan: ["roll:manual-adjust"],
+    baslik: "Top {islem}: {barkod}",
+    govde: "{kullanici} {barkod} topunu {islem} ({urunAd}, {metre} m): {sebep}",
+    payloadAlanlari: ["barkod", "kip", "islem", "urunAd", "metre", "sebep", "kullanici"],
+    tahminiHaftalik: 10,
   },
   "stok.sayim-farki": {
     ...DEPO, izinler: [["warehouse:read"]], modul: "ticaretEnabled",
