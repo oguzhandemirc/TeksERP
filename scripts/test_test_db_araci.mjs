@@ -20,12 +20,14 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { psqlKomutu } from "./lib/test-db.mjs";
 
 const KOK = join(dirname(fileURLToPath(import.meta.url)), "..");
 const LIB = join(KOK, "scripts", "lib", "test-db.mjs");
 const CLI = join(KOK, "scripts", "test-db.mjs");
 const KONTEYNER = process.env.TEKSERP_TEST_DB_KONTEYNER || "tekserp-local-db";
 const KULLANICI = process.env.TEKSERP_TEST_DB_KULLANICI || "tekserp";
+const HEDEF = { konteyner: KONTEYNER, kullanici: KULLANICI, host: process.env.TEKSERP_TEST_DB_HOST || undefined, port: process.env.TEKSERP_TEST_DB_PORT || undefined };
 const argv = new Set(process.argv.slice(2));
 
 let pass = 0;
@@ -77,6 +79,12 @@ function safKontroller(L) {
   t("§1i .env DATABASE_URL ayrıştırma", L.envDbAdi("PORT=4001\nDATABASE_URL='postgresql://u:p@localhost:55433/tekserp_ab12_test?schema=public'\n") === "tekserp_ab12_test"
     && L.envDbAdi('export DATABASE_URL="postgresql://u@h/x_test"') === "x_test" && L.envDbAdi("# yok") === null);
   t("§1j tanımlayıcı çift tırnağı kaçırır", L.tanimlayici('a"b') === '"a""b"' && L.literal("a'b") === "'a''b'");
+  const pd = L.psqlKomutu({ konteyner: "kd", kullanici: "u" }, "d1", ["-F", "\t"]);
+  t("§1k host yoksa BUGÜNKÜ davranış: docker exec <konteyner> psql", pd.komut === "docker" && pd.argumanlar.slice(0, 4).join(" ") === "exec -i kd psql"
+    && pd.argumanlar.includes("d1") && pd.argumanlar.at(-1) === "\t" && pd.ad === "kd");
+  const ph = L.psqlKomutu({ konteyner: "kd", kullanici: "u", host: "10.0.0.5", port: "5433" }, "d1");
+  t("§1k host verilirse uzak psql -h/-p (docker yok)", ph.komut === "psql" && ph.argumanlar.slice(0, 4).join(" ") === "-h 10.0.0.5 -p 5433"
+    && !ph.argumanlar.includes("kd") && ph.ad === "10.0.0.5:5433");
   return k;
 }
 
@@ -92,6 +100,7 @@ async function sonda() {
     ["silmede bağlı oturum yok sayılır", "if (bagliOturum > 0) sebepler.push(`'${ad}' üzerinde", "if (false) sebepler.push(`'${ad}' üzerinde"],
     ["silmede .env hedefi yok sayılır", "if (envReferanslari?.length) sebepler", "if (false) sebepler"],
     ["silmede kayıt şartı yok", "if (!kayit && !bayraklar?.kayitsiz)", "if (false)"],
+    ["host verilse de docker'a gider", "  if (host) return { komut: \"psql\"", "  if (false) return { komut: \"psql\""],
   ];
   let i = 0;
   for (const [ad, ...ciftler] of mutasyonlar) {
@@ -119,7 +128,8 @@ function cli(args, { cwd = KOK, env = {} } = {}) {
 }
 
 function psql(db, sql) {
-  const r = spawnSync("docker", ["exec", "-i", KONTEYNER, "psql", "-X", "-U", KULLANICI, "-d", db, "-v", "ON_ERROR_STOP=1", "-qAt"], { input: sql, encoding: "utf8" });
+  const { komut, argumanlar } = psqlKomutu(HEDEF, db);
+  const r = spawnSync(komut, argumanlar, { input: sql, encoding: "utf8" });
   return { ok: r.status === 0, out: (r.stdout || "").trim(), err: (r.stderr || "").trim() };
 }
 const varMi = (ad) => psql("postgres", `select count(*) from pg_database where datname = '${ad}'`).out === "1";
@@ -127,7 +137,7 @@ const bekle = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function dbBolumu() {
   if (!psql("postgres", "select 1").ok) {
-    console.error(`⏸  ÖLÇÜLEMEDİ: ${KONTEYNER} konteynerine ulaşılamadı (§3 için yerel Docker PG gerekir; CI'da --dbsiz)`);
+    console.error(`⏸  ÖLÇÜLEMEDİ: ${psqlKomutu(HEDEF, "postgres").ad} hedefine ulaşılamadı (§3 için yerel Docker PG gerekir; CI'da --dbsiz)`);
     process.exit(2);
   }
   const rnd = Math.random().toString(36).slice(2, 8).replace(/[^a-z0-9]/g, "x");
@@ -155,7 +165,8 @@ async function dbBolumu() {
     }
 
     // Bağlı oturum: arka planda uyuyan bir oturum açılır; silme reddedilir, DB durur.
-    uyuyan = spawn("docker", ["exec", KONTEYNER, "psql", "-X", "-U", KULLANICI, "-d", A, "-c", "select pg_sleep(60)"], { stdio: "ignore" });
+    const u = psqlKomutu(HEDEF, A, ["-c", "select pg_sleep(60)"]);
+    uyuyan = spawn(u.komut, u.argumanlar.filter((x) => x !== "-i"), { stdio: "ignore" });
     let n = 0;
     for (let i = 0; i < 50 && n === 0; i++) {
       await bekle(100);

@@ -100,3 +100,10 @@ export function envDbAdi(metin) {
     return null;
   }
 }
+
+/** psql çağrısı: varsayılan yerel Docker konteyneri; `host` verilirse uzak PG (parola PGPASSWORD/.pgpass). */
+export function psqlKomutu({ konteyner, kullanici, host, port }, db, ek = []) {
+  const ortak = ["-X", "-U", kullanici, "-d", db, "-v", "ON_ERROR_STOP=1", "-qAt", ...ek];
+  if (host) return { komut: "psql", argumanlar: ["-h", host, "-p", String(port || 5432), ...ortak], ad: `${host}:${port || 5432}` };
+  return { komut: "docker", argumanlar: ["exec", "-i", konteyner, "psql", ...ortak], ad: konteyner };
+}

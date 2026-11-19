@@ -14,6 +14,7 @@
 // Ortam: TEKSERP_TEST_DB_KONTEYNER (tekserp-local-db) · TEKSERP_TEST_DB_KULLANICI (tekserp)
 //        · TEKSERP_TEST_DB_KAYIT (~/.tekserp/test-db-kayit.jsonl)
 //        · TEKSERP_TEST_DB_EK_AGACLAR (bekçi içindir: .env'i taranacak ek ağaçlar)
+//        · TEKSERP_TEST_DB_HOST/_PORT: verilirse Docker yerine uzak PG'ye `psql -h` (parola PGPASSWORD/.pgpass)
 // =============================================================================
 import { spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, realpathSync } from "node:fs";
@@ -21,30 +22,31 @@ import { homedir, userInfo } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  adHatasi, envDbAdi, klonKaynagiKarari, literal, silmeKarari, tanimlayici, yorumOku, yorumYaz,
+  adHatasi, envDbAdi, klonKaynagiKarari, literal, psqlKomutu, silmeKarari, tanimlayici, yorumOku, yorumYaz,
 } from "./lib/test-db.mjs";
 
 const KOK = join(dirname(fileURLToPath(import.meta.url)), "..");
 const KONTEYNER = process.env.TEKSERP_TEST_DB_KONTEYNER || "tekserp-local-db";
 const KULLANICI = process.env.TEKSERP_TEST_DB_KULLANICI || "tekserp";
 const KAYIT = process.env.TEKSERP_TEST_DB_KAYIT || join(homedir(), ".tekserp", "test-db-kayit.jsonl");
+const HEDEF = {
+  konteyner: KONTEYNER, kullanici: KULLANICI,
+  host: process.env.TEKSERP_TEST_DB_HOST || undefined, port: process.env.TEKSERP_TEST_DB_PORT || undefined,
+};
 
 class Olculemedi extends Error {}
 
 function psql(db, sql) {
-  const r = spawnSync(
-    "docker",
-    ["exec", "-i", KONTEYNER, "psql", "-X", "-U", KULLANICI, "-d", db, "-v", "ON_ERROR_STOP=1", "-qAt", "-F", "\t"],
-    { input: sql, encoding: "utf8" },
-  );
-  if (r.error) throw new Olculemedi(`docker çalıştırılamadı: ${r.error.message}`);
+  const { komut, argumanlar, ad } = psqlKomutu(HEDEF, db, ["-F", "\t"]);
+  const r = spawnSync(komut, argumanlar, { input: sql, encoding: "utf8" });
+  if (r.error) throw new Olculemedi(`${komut} çalıştırılamadı (${ad}): ${r.error.message}`);
   return { ok: r.status === 0, out: (r.stdout || "").trim(), err: (r.stderr || "").trim() };
 }
 
 /** postgres DB'sinde salt okuma; başarısızsa ÖLÇÜLEMEDİ (karar verilmez). */
 function oku(sql) {
   const r = psql("postgres", sql);
-  if (!r.ok) throw new Olculemedi(`PG okunamadı (${KONTEYNER}): ${r.err.split("\n")[0]}`);
+  if (!r.ok) throw new Olculemedi(`PG okunamadı (${psqlKomutu(HEDEF, "postgres").ad}): ${r.err.split("\n")[0]}`);
   return r.out;
 }
 
