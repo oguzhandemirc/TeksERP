@@ -355,14 +355,14 @@ async function v3c({ call, makeUser, setFlag, T: tag, made }: Ctx): Promise<void
     const why = [shapeOk(r.body.data, "Page"), ...recs.map((x) => shapeOk(x, "ProjectionRecord"))].filter(([ok]) => !ok).map(([, w]) => w);
     if (r.status !== 200 || why.length > 0) bad.push(`${name}:${r.status}:${r.body.details?.code ?? ""}:${why.join(";")}`);
   }
-  check("§7a her KAYIT kümesi 200 + Page/ProjectionRecord", bad.length === 0 && PATRON_RECORD_SETS.length === 28, bad.join(" · ") || `${PATRON_RECORD_SETS.length} küme`);
+  check("§7a her KAYIT kümesi 200 + Page/ProjectionRecord", bad.length === 0 && PATRON_RECORD_SETS.length === 29, bad.join(" · ") || `${PATRON_RECORD_SETS.length} küme`);
   const badSnap: string[] = [];
   for (const name of PATRON_SNAPSHOT_SETS) {
     const r = await call(`/patron/v1/anlik/${name}`, all.token);
     const [ok, why] = shapeOk(r.body.data, "Snapshot");
     if (r.status !== 200 || !ok || r.body.data?.projeksiyon !== name) badSnap.push(`${name}:${r.status}:${r.body.details?.code ?? ""}:${ok ? "" : why}`);
   }
-  check("§7b her ANLIK küme 200 + Snapshot (emanet/maliyet/üretim açık)", badSnap.length === 0 && PATRON_SNAPSHOT_SETS.length === 17, badSnap.join(" · ") || `${PATRON_SNAPSHOT_SETS.length} küme`);
+  check("§7b her ANLIK küme 200 + Snapshot (emanet/maliyet/üretim açık)", badSnap.length === 0 && PATRON_SNAPSHOT_SETS.length === 19, badSnap.join(" · ") || `${PATRON_SNAPSHOT_SETS.length} küme`);
   const ot = (await call("/patron/v1/oturum", all.token)).body.data as { liste?: { anahtarSuzgecleri?: Record<string, string[]>; kimlikSuzgecleri?: Record<string, string[]>; aranabilir?: string[] }; projeksiyonlar?: string[] } | undefined;
   check("§7c oturum liste: kategoriAnahtari → kasa-hareketi, cariHesapId ∋ fatura, aranabilir ∋ urun/renk/teklif",
     JSON.stringify(ot?.liste?.anahtarSuzgecleri) === JSON.stringify({ kategoriAnahtari: ["kasa-hareketi"] }) && (ot?.liste?.kimlikSuzgecleri?.cariHesapId ?? []).includes("fatura") && ["urun", "renk", "teklif"].every((n) => ot?.liste?.aranabilir?.includes(n)),

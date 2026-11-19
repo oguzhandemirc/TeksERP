@@ -459,6 +459,144 @@ export interface ServiceRevenueSnapshot {
   readonly son30Gun: ServiceRevenuePeriod;
 }
 
+/** `stok-kalem` kalem satırı (ham: kumaş · bitmiş: kumaş + en + renk + kat); sıra fabrikada. */
+export interface StockKalemRow {
+  readonly anahtar: string;
+  readonly urunId: string;
+  readonly urun: string;
+  readonly en: number | null;
+  readonly renk: string | null;
+  readonly kat: string | null;
+  readonly top: number;
+  readonly metre: number;
+  /** Kalemin en eski topunun rafta fabrika takvim günü. */
+  readonly enEskiGun: number | null;
+}
+
+/** `stok-kalem` raf topu; `kalem` = kalem satırının `anahtar`ı; `gun` rafa girişten bu yana fabrika takvim günü. */
+export interface StockKalemRoll {
+  readonly id: string;
+  readonly topNo: string | null;
+  readonly kalem: string;
+  readonly metre: number;
+  readonly kg: number | null;
+  readonly parti: string | null;
+  readonly depo: string | null;
+  readonly gun: number | null;
+}
+
+/** `stok-kalem` bölümü: toplamlar ve kalemler TÜM kümeden; `toplar` en yaşlı önce, tavanlı (`toplarKirpildi`). */
+export interface StockKalemSection {
+  readonly toplamTop: number;
+  readonly toplamMetre: number;
+  readonly kalemler: readonly StockKalemRow[];
+  readonly toplar: readonly StockKalemRoll[];
+  readonly toplarKirpildi: boolean;
+}
+
+/**
+ * `GET /anlik/stok-kalem` (izin `bulut:stok:oku`): rafın kalem listesi + topları, ham ve bitmiş ayrı (saatlik).
+ * `emanet` yalnız fabrikanın emanet modülü açıkken (o zaman bölümler BİZİM stok). Eski fabrika 404.
+ */
+export interface StockKalemSnapshot {
+  readonly ham: StockKalemSection;
+  readonly bitmis: StockKalemSection;
+  readonly emanet?: { readonly hamTop: number; readonly hamMetre: number; readonly bitmisTop: number; readonly bitmisMetre: number };
+}
+
+/** `cuval-deposu` çuvaldaki top (hayalet hariç). */
+export interface SackDepotRoll {
+  readonly id: string;
+  readonly topNo: string | null;
+  readonly urun: string;
+  readonly renk: string | null;
+  readonly en: number | null;
+  readonly kat: string | null;
+  readonly kalite: string | null;
+  readonly metre: number;
+}
+
+/** `cuval-deposu` birimi (çuval · araba · dökme); `durum` SEVKE_ATANDI = onay bekleyen sevkiyata atanmış. */
+export interface SackDepotUnit {
+  readonly id: string;
+  readonly cuvalNo: string;
+  readonly tur: "SACK" | "CART" | "BULK";
+  readonly etiket: string | null;
+  readonly cariKartId: string | null;
+  readonly cari: string | null;
+  readonly sube: string | null;
+  readonly durum: "DEPODA" | "SEVKE_ATANDI";
+  readonly sevkiyatId: string | null;
+  readonly sevkiyatNo: string | null;
+  readonly kg: number | null;
+  readonly top: number;
+  readonly metre: number;
+  /** Fabrika günü `YYYY-MM-DD`. */
+  readonly olusturulma: string;
+  readonly toplar: readonly SackDepotRoll[];
+}
+
+/** Çuval sayıları; `kg` = tartılı birimlerin toplamı (`null` = hiç tartılı yok). */
+export interface SackDepotCounts {
+  readonly cuval: number;
+  readonly top: number;
+  readonly metre: number;
+  readonly kg: number | null;
+}
+
+/**
+ * `GET /anlik/cuval-deposu` (izin `bulut:sevkiyat:oku`): sevk edilmemiş birimler (havuz + onay bekleyen sevkiyat), saatlik.
+ * Özet ve cari kovası fabrikada; `cuvallar` yeni önce, tavanlı (`kirpildi`). Eski fabrika 404.
+ */
+export interface SackDepotSnapshot {
+  readonly ozet: SackDepotCounts & { readonly tartiliCuval: number; readonly sevkeAtanan: number };
+  readonly cariler: readonly (SackDepotCounts & { readonly cariKartId: string | null; readonly ad: string })[];
+  readonly cuvallar: readonly SackDepotUnit[];
+  readonly kirpildi: boolean;
+}
+
+/** `sevkiyat-icerigi` top satırı: `iade` = sevkten sonra iade alındı (BRÜT içerikte kalır); `yok` = çuvalda kayıtlı, binada değil. */
+export interface ShipmentContentRoll {
+  readonly id: string;
+  readonly topNo: string | null;
+  readonly urun: string | null;
+  readonly renk: string | null;
+  readonly en: string | null;
+  readonly metre: string;
+  readonly iade: boolean;
+  readonly iadeTarihi: string | null;
+  readonly yok: boolean;
+}
+
+/** `sevkiyat-icerigi` çuvalı (sıra fabrikada); sayılar BRÜT (iade dahil). */
+export interface ShipmentContentSack {
+  readonly id: string;
+  readonly cuvalNo: string;
+  readonly sira: string | null;
+  readonly tur: string;
+  readonly etiket: string | null;
+  readonly kg: string | null;
+  readonly top: number;
+  readonly metre: string;
+  readonly iadeTop: number;
+  readonly iadeMetre: string;
+  readonly toplar: readonly ShipmentContentRoll[];
+}
+
+/**
+ * `GET /veri/sevkiyat-icerigi/:sevkiyatId` kayıt alanı (izin `bulut:sevkiyat:oku`): sevkiyatın çuval → top dökümü,
+ * fabrikanın sevkiyat ayrıntısıyla aynı (BRÜT). Eski fabrika/bulut 404 → uygulama bölümü gizler.
+ */
+export interface ShipmentContent {
+  readonly sevkNo: string;
+  readonly durum: string;
+  readonly cikisTarihi: string | null;
+  readonly olusturulma: string;
+  readonly ozet: { readonly cuval: number; readonly top: number; readonly metre: string; readonly kg: string; readonly tartiliCuval: number; readonly iadeTop: number; readonly iadeMetre: string };
+  readonly cuvallar: readonly ShipmentContentSack[];
+  readonly cuvalsizToplar: readonly ShipmentContentRoll[];
+}
+
 /** `GET /anlik/:projeksiyon`. */
 export interface Snapshot {
   readonly projeksiyon: string;

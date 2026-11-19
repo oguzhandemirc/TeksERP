@@ -92,6 +92,8 @@ export const ROOT_PROJECTIONS: readonly RootProjection[] = [
   { name: "sevkiyat", kind: "OLGU", permissions: ["bulut:sevkiyat:oku"], retentionFields: ["cikisTarihi", "olusturulma"], sortFields: ["cikisTarihi", "olusturulma"] },
   { name: "dogrudan-sevk", kind: "OLGU", permissions: ["bulut:sevkiyat:oku"], retentionFields: ["cikisTarihi", "olusturulma"], sortFields: ["cikisTarihi", "olusturulma"] },
   { name: "cuval", kind: "OLGU", permissions: ["bulut:sevkiyat:oku"], retentionFields: ["olusturulma"], sortFields: ["olusturulma"] },
+  // Sevkiyat çuval/top dökümü (fabrika `cloud-sync/shipment-content`): uygulama tek kaydı `GET /veri/sevkiyat-icerigi/:id` okur.
+  { name: "sevkiyat-icerigi", kind: "OLGU", permissions: ["bulut:sevkiyat:oku"], retentionFields: ["cikisTarihi", "olusturulma"], sortFields: ["cikisTarihi", "olusturulma"] },
   { name: "is-emri", kind: "OLGU", permissions: ["bulut:uretim:oku"], retentionFields: ["olusturulma"], sortFields: ["olusturulma"] },
   {
     name: "cari-hesap",
@@ -204,6 +206,8 @@ export const ROOT_PROJECTIONS: readonly RootProjection[] = [
   { name: "fason-acik", kind: "ANLIK", permissions: ["bulut:uretim:oku"] },
   { name: "hizmet-geliri", kind: "ANLIK", permissions: ["bulut:fatura:oku"] },
   { name: "stok-karnesi", kind: "ANLIK", permissions: ["bulut:stok:oku"] },
+  { name: "stok-kalem", kind: "ANLIK", permissions: ["bulut:stok:oku"] },
+  { name: "cuval-deposu", kind: "ANLIK", permissions: ["bulut:sevkiyat:oku"] },
   { name: "acik-siparis-karsilama", kind: "ANLIK", permissions: ["bulut:siparis:oku"] },
   { name: "rapor-katalogu", kind: "ANLIK", permissions: OTURUM },
   { name: "uretim-akisi", kind: "ANLIK", permissions: ["bulut:uretim:oku"] },

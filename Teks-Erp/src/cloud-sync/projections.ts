@@ -8,6 +8,7 @@
 // =============================================================================
 import { col, self, type Projection, type RecordProjection, type SnapshotProjection, type DataClass } from "./projection-types";
 import { FACTS } from "./catalog-facts";
+import { SHIPMENT_CONTENT_FACT } from "./catalog-shipment-content";
 import { TERIM } from "../constants/terim";
 
 export * from "./projection-types";
@@ -122,6 +123,16 @@ const SNAPSHOTS: readonly SnapshotProjection[] = [
     cadence: "SAATLIK", permission: "bulut:stok:oku", reads: ["rolls", "order_lines", "orders", "items", "colors"],
   },
   {
+    // Patron stok ekranı (2026-11-20): kalem satırları + raf topları aynı raf okumasından; top dizisi bölüm başına tavanlı.
+    name: "stok-kalem", kind: "ANLIK", source: "cloud-sync/snapshot-stock-kalem: stock-kalem.report.service getStockKalem + getStockKalemRolls (tek raf okuması, aynı kalem anahtarı)",
+    cadence: "SAATLIK", permission: "bulut:stok:oku", reads: ["rolls", "items", "colors", "batches", "warehouses"],
+  },
+  {
+    // Patron çuval deposu (2026-11-20): panel Çuvallar varsayılan kapsamı (havuz + PLANNED), içerik hayaletsiz.
+    name: "cuval-deposu", kind: "ANLIK", source: "cloud-sync/snapshot-sack-depot: sack-search resolveScopeOr + sack-content-totals loadSackContentTotals/PRESENT_ROLL_WHERE",
+    cadence: "SAATLIK", permission: "bulut:sevkiyat:oku", reads: ["sacks", "rolls", "shipments", "customers", "customer_branches", "items", "colors", "quality_grades"],
+  },
+  {
     name: "acik-siparis-karsilama", kind: "ANLIK", source: "reports/open-order-coverage.report.service getOpenOrderCoverage",
     cadence: "SAATLIK", permission: "bulut:siparis:oku", reads: ["order_lines", "orders", "rolls"],
   },
@@ -143,7 +154,7 @@ const SNAPSHOTS: readonly SnapshotProjection[] = [
     cadence: "HER_TUR", permission: "bulut:ozet:oku", reads: [],
   },
 ];
-export const RECORD_PROJECTIONS: readonly RecordProjection[] = [...DIMENSIONS, ...FACTS];
+export const RECORD_PROJECTIONS: readonly RecordProjection[] = [...DIMENSIONS, ...FACTS, SHIPMENT_CONTENT_FACT];
 export const SNAPSHOT_PROJECTIONS: readonly SnapshotProjection[] = SNAPSHOTS;
 export const PROJECTIONS: readonly Projection[] = [...RECORD_PROJECTIONS, ...SNAPSHOT_PROJECTIONS];
 
@@ -216,7 +227,7 @@ export const DELIBERATELY_EXCLUDED: Readonly<Record<string, string>> = {
   system_settings: "yapılandırma (şifre özetleri, kurulum kimliği taşır)",
   endpoint_latency_daily: "telemetri",
   sync_marks: "eşitlemenin kendi telemetrisi", sync_watermarks: "eşitlemenin kendi durum tablosu",
-  rolls: "top düzeyi buluta gitmez (v1) — stok karnesi + sevkiyat/çuval toplamları yeter; top araması fabrikada",
+  rolls: "top düzeyi kök projeksiyon değil; top satırları yalnız gömülü gider (stok-kalem/cuval-deposu anlıkları, sevkiyat-icerigi çuvalları); top araması fabrikada",
   roll_status_events: "stok hareket defteri v1 dışı (hacim) — rapor isteğiyle", warehouse_movements: "aynı",
   roll_movements: "aynı", roll_operations: "üretim ayrıntısı", get work_order_events() { return `${TERIM.terbiyeIsEmri.tekilKucuk} hareket defteri v1 dışı`; },
   printed_documents: "belge içeriği", label_templates: "şablon", traveler_card_templates: "şablon",

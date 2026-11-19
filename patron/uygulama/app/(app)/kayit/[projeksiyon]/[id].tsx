@@ -19,6 +19,7 @@ import { LoadingSkeleton } from "../../../../src/ui/StateViews";
 import { makeStyles, useTokens } from "../../../../src/ui/theme-context";
 import { FONT_SCALE, space, typography, type Domain } from "../../../../src/ui/tokens";
 import { QuoteLines } from "../../../../src/ui/teklif/QuoteLines";
+import { ShipmentContentSection } from "../../../../src/ui/sevkiyat/ShipmentContentSection";
 
 /** Projeksiyon → okunur tür adı + alan rengi/ikon (başlık çipi). Bilinmeyen ad okunur hâle getirilir. */
 const KIND: Readonly<Record<string, { readonly label: string; readonly domain: Domain; readonly icon: IconName }>> = {
@@ -89,6 +90,7 @@ export default function RecordDetail() {
               </Card>
             </>
           ) : null}
+          {p === "sevkiyat" ? <ShipmentContentSection shipmentId={String(id)} /> : null}
           {p === "teklif" ? <QuoteLines teklifId={String(id)} currency={recordCurrency(d.kayit)} /> : null}
           {d.kisisel !== undefined && d.kisisel !== null ? (
             <>

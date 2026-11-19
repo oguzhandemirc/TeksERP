@@ -27,6 +27,8 @@ import {
   CONSIGNED_SNAPSHOT, CONSIGNED_SNAPSHOT_SCHEMA, SERVICE_REVENUE_SNAPSHOT, SERVICE_REVENUE_SNAPSHOT_SCHEMA, SUBCONTRACT_OPEN_SNAPSHOT,
   SUBCONTRACT_OPEN_SNAPSHOT_SCHEMA, buildConsignedSnapshotData, buildServiceRevenueSnapshotData, buildSubcontractOpenSnapshotData,
 } from "./snapshot-fason";
+import { STOCK_KALEM_SNAPSHOT, STOCK_KALEM_SNAPSHOT_SCHEMA, buildStockKalemSnapshotData } from "./snapshot-stock-kalem";
+import { SACK_DEPOT_SNAPSHOT, SACK_DEPOT_SNAPSHOT_SCHEMA, buildSackDepotSnapshotData } from "./snapshot-sack-depot";
 
 export interface BuiltSnapshot {
   /** Tel adı (`ozet.stok`, `stok-karnesi`…). */
@@ -72,6 +74,8 @@ export const SNAPSHOT_WIRE_SCHEMAS: Readonly<Record<string, z.ZodType>> = {
   [CONSIGNED_SNAPSHOT]: CONSIGNED_SNAPSHOT_SCHEMA,
   [SUBCONTRACT_OPEN_SNAPSHOT]: SUBCONTRACT_OPEN_SNAPSHOT_SCHEMA,
   [SERVICE_REVENUE_SNAPSHOT]: SERVICE_REVENUE_SNAPSHOT_SCHEMA,
+  [STOCK_KALEM_SNAPSHOT]: STOCK_KALEM_SNAPSHOT_SCHEMA,
+  [SACK_DEPOT_SNAPSHOT]: SACK_DEPOT_SNAPSHOT_SCHEMA,
   "stok-karnesi": z.strictObject({
     ozet: z.strictObject({
       bitmisMiktar: Num, bitmisAdet: Num, hamMiktar: Num, hamAdet: Num, yariMamulMiktar: Num, yariMamulAdet: Num,
@@ -291,6 +295,12 @@ export async function buildSnapshots(ctx: SnapshotContext): Promise<BuiltSnapsho
         break;
       case SERVICE_REVENUE_SNAPSHOT:
         out.push(seal(SERVICE_REVENUE_SNAPSHOT, await buildServiceRevenueSnapshotData(ctx.now)));
+        break;
+      case STOCK_KALEM_SNAPSHOT:
+        out.push(seal(STOCK_KALEM_SNAPSHOT, await buildStockKalemSnapshotData(ctx.now)));
+        break;
+      case SACK_DEPOT_SNAPSHOT:
+        out.push(seal(SACK_DEPOT_SNAPSHOT, await buildSackDepotSnapshotData()));
         break;
       case "stok-karnesi":
         out.push(await buildStock());

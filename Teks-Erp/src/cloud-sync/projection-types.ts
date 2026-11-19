@@ -102,6 +102,8 @@ export interface RecordProjection {
   readonly permission: string;
   readonly module?: ModuleKey;
   readonly retention?: RetentionSpec;
+  /** Birim başına en çok kök (ağır satırlı projeksiyon; paket bayt tavanının altında kalsın). Yoksa satır sayısıyla. */
+  readonly unitRoots?: number;
   /** Kolon kümesi sürümü (§6.6): alan çıkarmak/anlam değiştirmek artırır ve TAM gönderim doğurur. */
   readonly catalogVersion: number;
 }
