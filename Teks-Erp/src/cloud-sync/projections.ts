@@ -159,7 +159,8 @@ export const SNAPSHOT_PROJECTIONS: readonly SnapshotProjection[] = SNAPSHOTS;
 export const PROJECTIONS: readonly Projection[] = [...RECORD_PROJECTIONS, ...SNAPSHOT_PROJECTIONS];
 
 /** Silme işaretinin kurulduğu kök tablolar — migration tetikleyicileri ile İKİ YÖNLÜ ölçülür. */
-export const SYNC_ROOT_TABLES: readonly string[] = RECORD_PROJECTIONS.map((p) => p.root.table);
+// Tekil: `sevkiyat-icerigi` `shipments` kökünü `sevkiyat` ile paylaşır; işaretler zamanla budanır, iki projeksiyon da okur.
+export const SYNC_ROOT_TABLES: readonly string[] = [...new Set(RECORD_PROJECTIONS.map((p) => p.root.table))];
 
 /** Alt satır izinleri (§3.1, §10): finans DIŞI projeksiyonun `.finans`ı `bulut:fiyat:oku`, finans projeksiyonununki kendi izni. */
 export function subRowPermission(p: RecordProjection, dataClass: Exclude<DataClass, "ISLEM">): string {

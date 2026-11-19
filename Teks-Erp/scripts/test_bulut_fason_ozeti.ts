@@ -157,7 +157,8 @@ function statik(): void {
   // stok alanı, değer fabrikada hesaplı) — ayrı sözleşme, burada beyanlı (2026-11-14 patron panosu).
   // `lib/is-emri.ts` `is-emri` kaydının firma payını (`fasonFirmalari[].fasonFirmaId`) ve üyelik anahtarını okur — ayrı
   // sözleşme (İE v3, fabrika türetir), saf görünüm; ekranlar literal yazmaz (2026-11-19 patron İE ekranı).
-  const allowedApp = new Set([APP_VIEW, "patron/uygulama/src/api/wire.ts", "patron/uygulama/src/ui/pano/kutu-gorunum.ts", "patron/uygulama/src/lib/is-emri.ts"]);
+  // `lib/stok-cuval.ts` stok-kalem/cuval-deposu `kirpildi` bayrağını okur — ayrı sözleşme, saf görünüm (2026-11-20 D6).
+  const allowedApp = new Set([APP_VIEW, "patron/uygulama/src/api/wire.ts", "patron/uygulama/src/ui/pano/kutu-gorunum.ts", "patron/uygulama/src/lib/is-emri.ts", "patron/uygulama/src/lib/stok-cuval.ts"]);
   const appExtra = APP_DIRS.flatMap(walk).filter((f) => FIELD_RE.test(readFileSync(f, "utf8"))).map((f) => path.relative(ROOT, f)).filter((f) => !allowedApp.has(f));
   const arith = arithmeticIn(readFileSync(path.join(ROOT, APP_VIEW), "utf8"));
   check("§2d ⭐ uygulamada alanları yalnız görünüm okur; görünümde aritmetik/karşılaştırma/toplama yok",

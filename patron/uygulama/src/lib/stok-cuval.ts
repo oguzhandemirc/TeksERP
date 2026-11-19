@@ -33,7 +33,7 @@ function kalemTitle(k: Record<string, unknown>): string {
 export interface StockKalemView {
   readonly totalText: string;
   readonly rows: readonly Row[];
-  readonly kirpildi: boolean;
+  readonly sinirli: boolean;
   readonly emanetText: string | null;
 }
 
@@ -51,7 +51,7 @@ export function stockKalemView(veri: unknown, bolum: StokBolum): StockKalemView 
       value: m(k.metre),
       lines: [join([t(k.top), gun(k.enEskiGun) ? `en eski ${gun(k.enEskiGun)}` : null])],
     })),
-    kirpildi: s.toplarKirpildi === true,
+    sinirli: s.toplarKirpildi === true,
     emanetText: e ? `Müşteri malı (emanet) ayrı: ${m(bolum === "ham" ? e.hamMetre : e.bitmisMetre)} · ${t(bolum === "ham" ? e.hamTop : e.bitmisTop)}` : null,
   };
 }
@@ -91,7 +91,7 @@ export interface SackDepotView {
   readonly detail: string;
   readonly customers: readonly Row[];
   readonly sacks: readonly (Row & { readonly assigned: boolean })[];
-  readonly kirpildi: boolean;
+  readonly sinirli: boolean;
 }
 
 /** `cuval-deposu` → özet + cari kovaları + birimler. Veri yoksa `null`. */
@@ -117,7 +117,7 @@ export function sackDepotView(veri: unknown, cariKartId?: string | null): SackDe
       lines: [join([str(c.cari) ?? "Müşterisiz", t(c.top), num(c.kg) === null ? null : `${qty(c.kg)} kg`, c.durum === "SEVKE_ATANDI" ? `sevkiyat ${str(c.sevkiyatNo) ?? ""}`.trim() : formatDate(c.olusturulma)])],
       assigned: c.durum === "SEVKE_ATANDI",
     })),
-    kirpildi: d.kirpildi === true,
+    sinirli: d.kirpildi === true,
   };
 }
 

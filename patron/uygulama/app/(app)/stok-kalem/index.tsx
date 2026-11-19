@@ -55,7 +55,7 @@ export default function StockKalem() {
                   ))}
                 </ListGroup>
               )}
-              {v.kirpildi ? <Text style={s.note}>Top listesi en eski toplarla sınırlı; kalem toplamları eksiksizdir.</Text> : null}
+              {v.sinirli ? <Text style={s.note}>Top listesi en eski toplarla sınırlı; kalem toplamları eksiksizdir.</Text> : null}
             </>
           );
         }}

@@ -71,7 +71,7 @@ export default function SackDepot() {
                   ))}
                 </ListGroup>
               )}
-              {v.kirpildi ? <Text style={s.note}>Liste en yeni çuvallarla sınırlı; özet eksiksizdir.</Text> : null}
+              {v.sinirli ? <Text style={s.note}>Liste en yeni çuvallarla sınırlı; özet eksiksizdir.</Text> : null}
             </>
           );
         }}

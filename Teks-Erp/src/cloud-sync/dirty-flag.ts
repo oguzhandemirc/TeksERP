@@ -49,6 +49,8 @@ export const READS_MODEL_MAP: Readonly<Record<string, string>> = {
   yarn_movements: "YarnMovement",
   warp_beams: "WarpBeam",
   weaving_orders: "WeavingOrder",
+  // D5 cuval-deposu: top kalite adı lookup kaynağı.
+  quality_grades: "QualityGrade",
 };
 
 /** Katalogdan türeyen izlenen tablo kümesi (bekçi §7 bunu `READS_MODEL_MAP` ∪ köklerle kıyaslar). */
