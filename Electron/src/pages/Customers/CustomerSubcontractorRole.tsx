@@ -6,6 +6,7 @@
 // döner; kaldırılınca profil `isActive:false` (SİLİNMEZ — sevk/kabul tarihçesi ona bağlı).
 // Tedarikçi ROLÜ olmayan kartta kutu pasif: önce Tedarikçi rolü (backend 400 ile aynı kural, rol modeli).
 // Anında sunucuya yazar (alias panelleri emsali); hata apiClient tek toast.
+// Profil aktifken altında kategori çoklu seçimi (`CustomerSubcontractorCategories`, 2026-11-19) — seçiciler buna göre süzer.
 // =============================================================================
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
@@ -14,6 +15,7 @@ import { subcontractorService } from "@/pages/Subcontractors/service";
 import type { Subcontractor } from "@/pages/Subcontractors/types";
 import { partnerRoleLabels } from "@/lib/partnerRoles";
 import type { Customer } from "./types";
+import { CustomerSubcontractorCategories } from "./CustomerSubcontractorCategories";
 
 export const SUBCONTRACTOR_ROLE_LABEL = "Fason iş yapar";
 export const SUBCONTRACTOR_ROLE_TYPE_HINT = `Fason profili için kartın ${partnerRoleLabels.supplier} rolü olmalı (önce Tedarikçi kutusunu işaretleyip kaydedin).`;
@@ -75,8 +77,15 @@ export function CustomerSubcontractorRole({ customer }: { customer: Customer }) 
           ? SUBCONTRACTOR_ROLE_TYPE_HINT
           : profile.data
             ? <>Fason profili: <span className="font-mono">{profile.data.code}</span>{profile.data.isActive ? "" : " (pasif)"} — <Link className="underline underline-offset-2" to={SUBCONTRACTORS_PATH}>fason firmaları sayfasında aç</Link></>
-            : "İşaretlenince bu kart için fason profili açılır (kategori ve belge profili fason sayfasından düzenlenir)."}
+            : "İşaretlenince bu kart için fason profili açılır; altından fason kategorilerini seçebilirsiniz (belge profili fason sayfasından düzenlenir)."}
       </p>
+      {checked && profile.data && (
+        <CustomerSubcontractorCategories
+          key={profile.data.categories?.map((c) => c.categoryId).join(",") ?? ""}
+          profile={profile.data}
+          onSaved={refresh}
+        />
+      )}
     </div>
   );
 }

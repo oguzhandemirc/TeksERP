@@ -14,8 +14,7 @@ import { QuickAddProperty } from "@/components/forms/QuickAddProperty";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { stationService } from "@/pages/Stations/service";
 import type { Station } from "@/pages/Stations/types";
-import { subcontractorService } from "@/pages/Subcontractors/service";
-import type { Subcontractor } from "@/pages/Subcontractors/types";
+import { SubcontractorCategoryPicker } from "@/components/forms/SubcontractorCategoryPicker";
 import { stationKindLabels } from "@/types/enums";
 import { stationCapabilityService } from "@/pages/StationCapabilities/service";
 import { capCanApplyColor, isTargetableProperty } from "@/pages/StationCapabilities/types";
@@ -114,10 +113,6 @@ export function RouteStepDetail({
   // Tek bayrak (2026-08-10) — bileşik `hasDefaultCategory && …` kalktı; bkz.
   // StationCapabilities/types.capCanApplyColor.
   const appliesColor = capCanApplyColor(cap);
-
-  const subFilter = step.requiredCategoryId
-    ? { categoryId: step.requiredCategoryId }
-    : undefined;
 
   // "Uygulamaz" ile "listesi boş" AYRI şeyler. Eskiden ikisi de aynı cümleyi
   // basıyordu ("Bu istasyon renk/özellik uygulamaz — sadece işlem yapar") ve
@@ -223,14 +218,13 @@ export function RouteStepDetail({
         {isExternal && (
           <div className="space-y-1">
             <label className="text-[11px] text-muted-foreground">Fason Firma</label>
-            <EntityPickerModal<Subcontractor>
+            <SubcontractorCategoryPicker
               value={step.plannedSubcontractorId}
               onChange={(v) => onSetFirm({ plannedSubcontractorId: v })}
-              service={subcontractorService}
-              queryKey={`subcontractors-${step.requiredCategoryId ?? "all"}`}
+              categoryId={step.requiredCategoryId}
+              queryKey="subcontractors-route-step"
               getLabel={(s) => s.name}
               getSubLabel={(s) => (s.taxNumber ? `VKN ${s.taxNumber}` : s.code)}
-              filters={subFilter}
               nullable
               noneLabel="— Seçilmedi"
               icon={Truck}
