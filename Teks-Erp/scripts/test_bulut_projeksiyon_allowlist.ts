@@ -132,7 +132,7 @@ function bicimBolumu(): void {
   console.log("\n§1 — katalog biçimi");
   const boyut = RECORD_PROJECTIONS.filter((p) => p.role === "BOYUT").length;
   const olgu = RECORD_PROJECTIONS.filter((p) => p.role === "OLGU").length;
-  check("§1a 28 KAYIT (8 BOYUT + 20 OLGU) + 13 ANLIK (PB1 emanet-bakiye · fason-acik · hizmet-geliri)", RECORD_PROJECTIONS.length === 28 && boyut === 8 && olgu === 20 && SNAPSHOT_PROJECTIONS.length === 13,
+  check("§1a 29 KAYIT (8 BOYUT + 21 OLGU, sevkiyat-icerigi) + 15 ANLIK (PB1 emanet-bakiye · fason-acik · hizmet-geliri; stok-kalem · cuval-deposu)", RECORD_PROJECTIONS.length === 29 && boyut === 8 && olgu === 21 && SNAPSHOT_PROJECTIONS.length === 15,
     `${RECORD_PROJECTIONS.length} (${boyut}+${olgu}) + ${SNAPSHOT_PROJECTIONS.length}`);
   const adlar = [...RECORD_PROJECTIONS, ...SNAPSHOT_PROJECTIONS].map((p) => p.name);
   check("§1b projeksiyon adları tekil ve tel biçiminde", new Set(adlar).size === adlar.length && adlar.every((a) => /^[a-z][a-z0-9-]*$/.test(a)));

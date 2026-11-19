@@ -96,7 +96,7 @@ async function envanterBolumu(): Promise<void> {
   const sql = MIGRATIONS.map((f) => fs.readFileSync(f, "utf8")).join("\n");
   const migrasyon = new Set([...sql.matchAll(/CREATE TRIGGER "(\w+)_sync_deleted" AFTER DELETE ON "(\w+)" FOR EACH ROW EXECUTE FUNCTION sync_mark_deleted\(/g)].map((m) => (m[1] === m[2] ? m[1] : `UYUMSUZ:${m[1]}/${m[2]}`)));
   const kok = new Set(SYNC_ROOT_TABLES);
-  check("§1a körlük zemini: 28 kök tablo (`hizmet` kökü `service_items` dahil), tekrar yok", SYNC_ROOT_TABLES.length === 28 && kok.size === 28, `${SYNC_ROOT_TABLES.length}/${kok.size}`);
+  check("§1a körlük zemini: 28 tekil kök tablo (`hizmet` kökü `service_items` dahil; `sevkiyat-icerigi` `shipments` kökünü paylaşır), tekrar yok", SYNC_ROOT_TABLES.length === 28 && kok.size === 28, `${SYNC_ROOT_TABLES.length}/${kok.size}`);
   const eksik = [...kok].filter((t) => !migrasyon.has(t));
   const fazla = [...migrasyon].filter((t) => !kok.has(t));
   check("§1b ⭐ her kök tablonun migration'da silme tetikleyicisi var (ve fazlası yok)", eksik.length === 0 && fazla.length === 0,

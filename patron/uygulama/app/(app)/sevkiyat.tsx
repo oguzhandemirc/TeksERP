@@ -10,7 +10,8 @@ import { useSession } from "../../src/state/session";
 import { Screen } from "../../src/ui/Frame";
 import { openRecord } from "../../src/ui/nav";
 import { KpiCard, KpiGrid } from "../../src/ui/KpiCard";
-import { ListRow } from "../../src/ui/ListRow";
+import { ListGroup, ListRow } from "../../src/ui/ListRow";
+import { kumeSunuluyor } from "../../src/api/yetenek";
 import { num, obj, period, pctOfCount, qty, str } from "../../src/ui/pano/read";
 import { RecordStatusBadge } from "../../src/ui/pano/RecordStatusBadge";
 import { RemoteList, useRecordPage } from "../../src/ui/pano/RemoteList";
@@ -61,6 +62,12 @@ export default function Shipments() {
             }}
           </SnapshotGate>
         </>
+      ) : null}
+
+      {kumeSunuluyor("cuval-deposu") && can(permissions, "bulut:sevkiyat:oku") ? (
+        <ListGroup testID="sevk-giris">
+          <ListRow title="Çuval deposu" subtitle="Sevke hazır çuvallar ve içindeki toplar" icon="cube-outline" domain="sevkiyat" onPress={() => router.push("/cuvallar" as never)} testID="cuvallar-git" />
+        </ListGroup>
       ) : null}
 
       <SectionHeader title="Son sevkler" domain="sevkiyat" testID="bolum-son-sevkler" />

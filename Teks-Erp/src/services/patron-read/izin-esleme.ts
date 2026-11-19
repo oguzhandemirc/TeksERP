@@ -18,7 +18,7 @@ export const PATRON_RECORD_SETS = [
   "siparis", "siparis-kalemi", "cari-kart",
   // V3c: kalan bulut KAYIT kökleri (boyutlar, sevk, üretim, finans, teklif/maliyet).
   "urun", "hizmet", "renk", "depo", "istasyon", "sube", "fason-firma",
-  "sevkiyat", "dogrudan-sevk", "cuval", "is-emri",
+  "sevkiyat", "dogrudan-sevk", "cuval", "is-emri", "sevkiyat-icerigi",
   "cari-hesap", "cari-hareket", "kasa", "banka", "kasa-hareketi", "cek-senet", "cek-hareketi",
   "fatura", "fatura-kalemi", "tahsilat-odeme", "fiyat",
   "teklif", "teklif-kalemi", "standart-maliyet",
@@ -28,6 +28,7 @@ export const PATRON_SNAPSHOT_SETS = [
   "ozet.siparis", "ozet.sevkiyat", "ozet.uretim", "ozet.stok", "ozet.fason",
   "ozet-finans", "stok-karnesi", "acik-siparis-karsilama", "tesis",
   "ozet-masraf", "karlilik-ozet", "emanet-bakiye", "fason-acik", "hizmet-geliri", "uretim-akisi", "saglik", "rapor-katalogu",
+  "stok-kalem", "cuval-deposu",
 ] as const;
 
 /**

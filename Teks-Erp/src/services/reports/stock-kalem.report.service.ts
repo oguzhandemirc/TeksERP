@@ -20,6 +20,8 @@
 import { isFinishedCell, isRawCell, loadShelfCellsByOwnership, type StockCell } from "./stock-scorecard.report.service";
 import { loadFoldTypeCatalog } from "../helpers/fold-type";
 import { round1 } from "./_breakdown";
+import { loadShelfRollExtras } from "../helpers/shelf-roll-extras.helper";
+import { factoryYmd } from "../../constants/time";
 
 export interface StockKalemHamRow {
   key: string;
@@ -85,22 +87,29 @@ function group<R extends { count: number; qty: number }>(
   return [...map.values()].map((r) => ({ ...r, qty: round1(r.qty) }));
 }
 
-export async function getStockKalem(): Promise<StockKalem> {
-  const [{ own: cells, consigned, emanetOn }, foldCatalog] = await Promise.all([loadShelfCellsByOwnership(), loadFoldTypeCatalog()]);
+/** Kalem anahtarı TEK tanım: kalem satırı ve topun `kalemKey`i aynı fonksiyondan (patron `stok-kalem` ikisini eşler). */
+export const hamKalemKey = (c: StockCell): string => c.itemId;
+export const bitmisKalemKey = (c: StockCell): string => `${c.itemId}|${c.width ?? ""}|${c.colorId ?? ""}|${c.foldType ?? ""}`;
+
+/** Raf okumasının bölünmüş hâli — kalem satırları ile topları AYNI okumadan kurmak için dışarıdan verilebilir. */
+export type ShelfSplit = Awaited<ReturnType<typeof loadShelfCellsByOwnership>>;
+
+export async function getStockKalem(split?: ShelfSplit): Promise<StockKalem> {
+  const [{ own: cells, consigned, emanetOn }, foldCatalog] = await Promise.all([split ?? loadShelfCellsByOwnership(), loadFoldTypeCatalog()]);
   const raw = cells.filter(isRawCell);
   const finished = cells.filter(isFinishedCell);
 
   const foldName = new Map(foldCatalog.values.map((v) => [v.code, v.name]));
   const foldOrder = new Map(foldCatalog.values.map((v, i) => [v.code, i]));
 
-  const ham = group(raw, (c) => c.itemId, (c, key) => ({
+  const ham = group(raw, hamKalemKey, (c, key) => ({
     key, itemId: c.itemId, itemName: c.itemName, count: 0, qty: 0,
   }));
   ham.sort((a, b) => a.itemName.localeCompare(b.itemName, "tr"));
 
   const bitmis = group(
     finished,
-    (c) => `${c.itemId}|${c.width ?? ""}|${c.colorId ?? ""}|${c.foldType ?? ""}`,
+    bitmisKalemKey,
     (c, key) => ({
       key, itemId: c.itemId, itemName: c.itemName, width: c.width,
       colorId: c.colorId, colorName: c.colorName,
@@ -127,4 +136,45 @@ export async function getStockKalem(): Promise<StockKalem> {
     ham,
     bitmis,
   };
+}
+
+// ── Kalemin topları (patron `stok-kalem`, 2026-11-20) ────────────────────────
+
+export interface StockKalemRoll {
+  rollId: string;
+  barcode: string | null;
+  /** Kalem satırının `key`i (`hamKalemKey` / `bitmisKalemKey`). */
+  kalemKey: string;
+  qty: number;
+  weightKg: number | null;
+  batchNumber: string | null;
+  warehouseName: string | null;
+  /** Rafta bekleme yaşı (gün, mutlak fark); damgasız top `null`. */
+  days: number | null;
+  /** Rafa giriş FABRİKA günü (`YYYY-MM-DD`); damgasız top `null`. */
+  shelfDay: string | null;
+}
+
+export interface StockKalemRolls { ham: StockKalemRoll[]; bitmis: StockKalemRoll[] }
+
+const rollOrder = (a: StockKalemRoll, b: StockKalemRoll): number =>
+  (b.days ?? -1) - (a.days ?? -1) || (a.barcode ?? "").localeCompare(b.barcode ?? "", "tr") || a.rollId.localeCompare(b.rollId);
+
+/** Raftaki BİZİM toplar tek tek (kalem satırlarıyla aynı küme ve anahtar); sıra en yaşlı önce. */
+export async function getStockKalemRolls(split?: ShelfSplit): Promise<StockKalemRolls> {
+  const { own: cells } = split ?? (await loadShelfCellsByOwnership());
+  const raw = cells.filter(isRawCell);
+  const finished = cells.filter(isFinishedCell);
+  const extras = await loadShelfRollExtras([...raw, ...finished].map((c) => c.rollId));
+  const row = (keyOf: (c: StockCell) => string) => (c: StockCell): StockKalemRoll => {
+    const e = extras.get(c.rollId);
+    return {
+      rollId: c.rollId, barcode: c.barcode, kalemKey: keyOf(c), qty: round1(c.qty),
+      weightKg: e?.weightKg === null || e?.weightKg === undefined ? null : round1(e.weightKg),
+      batchNumber: e?.batchNumber ?? null, warehouseName: e?.warehouseName ?? null,
+      days: c.days === null ? null : round1(c.days),
+      shelfDay: e?.statusChangedAt ? factoryYmd(e.statusChangedAt) : null,
+    };
+  };
+  return { ham: raw.map(row(hamKalemKey)).sort(rollOrder), bitmis: finished.map(row(bitmisKalemKey)).sort(rollOrder) };
 }

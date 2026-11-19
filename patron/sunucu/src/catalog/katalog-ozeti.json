@@ -172,6 +172,21 @@
       ]
     },
     {
+      "name": "sevkiyat-icerigi",
+      "kind": "OLGU",
+      "permissions": [
+        "bulut:sevkiyat:oku"
+      ],
+      "retentionFields": [
+        "cikisTarihi",
+        "olusturulma"
+      ],
+      "sortFields": [
+        "cikisTarihi",
+        "olusturulma"
+      ]
+    },
+    {
       "name": "is-emri",
       "kind": "OLGU",
       "permissions": [
@@ -555,6 +570,20 @@
       ]
     },
     {
+      "name": "stok-kalem",
+      "kind": "ANLIK",
+      "permissions": [
+        "bulut:stok:oku"
+      ]
+    },
+    {
+      "name": "cuval-deposu",
+      "kind": "ANLIK",
+      "permissions": [
+        "bulut:sevkiyat:oku"
+      ]
+    },
+    {
       "name": "acik-siparis-karsilama",
       "kind": "ANLIK",
       "permissions": [
@@ -640,6 +669,9 @@
       "bulut:sevkiyat:oku"
     ],
     "cuval": [
+      "bulut:sevkiyat:oku"
+    ],
+    "sevkiyat-icerigi": [
       "bulut:sevkiyat:oku"
     ],
     "is-emri": [
@@ -773,6 +805,12 @@
     ],
     "stok-karnesi": [
       "bulut:stok:oku"
+    ],
+    "stok-kalem": [
+      "bulut:stok:oku"
+    ],
+    "cuval-deposu": [
+      "bulut:sevkiyat:oku"
     ],
     "acik-siparis-karsilama": [
       "bulut:siparis:oku"

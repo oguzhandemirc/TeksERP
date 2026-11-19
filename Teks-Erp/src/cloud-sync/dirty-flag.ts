@@ -8,6 +8,7 @@
 // 5 dk emniyet turunda gider — bu dosya bir iyileştirmedir, doğruluk kaynağı DEĞİL.
 // Hook maliyeti: yazan işlemde bir `Map.get` + `Set.add`; okuma işlemleri dokunulmaz.
 // =============================================================================
+import { Prisma } from "@prisma/client";
 import { uyari } from "../lib/logger";
 import { RECORD_PROJECTIONS, SNAPSHOT_PROJECTIONS, SYNC_AUX_READS } from "./projections";
 
@@ -49,6 +50,9 @@ export const READS_MODEL_MAP: Readonly<Record<string, string>> = {
   yarn_movements: "YarnMovement",
   warp_beams: "WarpBeam",
   weaving_orders: "WeavingOrder",
+  // D5 cuval-deposu: top kalite adı lookup kaynağı.
+  // Model adı Prisma sabitinden: `quality*` anahtarına çıplak literal kalite-kodu bekçisini yanıltır.
+  quality_grades: Prisma.ModelName.QualityGrade,
 };
 
 /** Katalogdan türeyen izlenen tablo kümesi (bekçi §7 bunu `READS_MODEL_MAP` ∪ köklerle kıyaslar). */

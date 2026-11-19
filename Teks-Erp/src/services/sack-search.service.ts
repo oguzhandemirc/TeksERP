@@ -336,7 +336,7 @@ function resolveScopeSql(scope?: SackSearchScope): Prisma.Sql {
  * (`listSackCustomers`) AYNI yüklemden beslenmek ZORUNDA: ayrışırsa kapı "3 çuval"
  * der, liste 5 satır basar ve operatör hangisinin doğru olduğunu bilemez.
  */
-function resolveScopeOr(scope?: SackSearchScope, includeDispatched?: boolean): Prisma.SackWhereInput[] {
+export function resolveScopeOr(scope?: SackSearchScope, includeDispatched?: boolean): Prisma.SackWhereInput[] {
   if (scope) return scopeWhere(scope);
   if (includeDispatched) return scopeWhere("ALL");
   return [{ shipmentId: null, ...LIVE_SACK_WHERE }, { shipment: { status: { in: PLANNED_STATUSES } } }];

@@ -1,6 +1,8 @@
 // Stok — "ne var, kaç gündür duruyor": ham · yarı mamul · bitmiş (metre + top) · ölü stok uyarısı · yaş dağılımı ·
 // müşteri malı (emanet, PB1: `emanet-bakiye`) · kumaş bazında ilk satırlar. Tek kaynak `stok-karnesi` (saatlik anlık; "Fabrika verisi HH:MM" ile söylenir).
+import { useRouter } from "expo-router";
 import type { ReactNode } from "react";
+import { kumeSunuluyor } from "../../src/api/yetenek";
 import { Text, View } from "react-native";
 import { DEAD_STOCK_STATUS, STOCK_AGE_TONE, UNIT } from "../../src/lib/labels/uretim";
 import { AgingBar } from "../../src/ui/charts";
@@ -20,8 +22,14 @@ const TOP_ITEMS = 8;
 
 export default function Stock() {
   const card = useSnapshot("stok-karnesi");
+  const router = useRouter();
   return (
     <Screen module="stok" onRefresh={card.reload} refreshing={card.refreshing}>
+      {kumeSunuluyor("stok-kalem") ? (
+        <ListGroup testID="stok-giris">
+          <ListRow title="Kalem ve toplar" subtitle="Rafta duran her kalem, topları ve yaşı" icon="list-outline" domain="stok" onPress={() => router.push("/stok-kalem" as never)} testID="stok-kalem-git" />
+        </ListGroup>
+      ) : null}
       <SnapshotGate remote={card} domain="stok" rows={3} empty="Fabrikadan stok karnesi henüz gelmedi" testID="stok-karnesi">
         {(veri, snap) => <StockBody data={veri} stamp={<FactoryStamp snap={snap} offline={card.offline} note="saatlik güncellenir" testID="fabrika-verisi" />} />}
       </SnapshotGate>

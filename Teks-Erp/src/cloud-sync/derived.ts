@@ -19,6 +19,7 @@ import {
   resolveEffectiveDue,
 } from "../services/reports/finance-aging.report";
 import { WorkOrderService, WO_LIST_CUSTOMER_LINKS } from "../services/workorder.service";
+import { shipmentContentDerived } from "./shipment-content";
 import { COST_DERIVERS, COST_DERIVER_ROW_FIELDS } from "./derived-cost";
 import { CASH_DERIVERS, CASH_DERIVER_ROW_FIELDS } from "./derived-cash";
 import { cariLockByCari } from "./derived-cari-hold";
@@ -243,6 +244,7 @@ export const DERIVERS: Readonly<Record<string, Deriver>> = {
   "siparis-kalemi": orderLineDerived,
   sevkiyat: shipmentDerived,
   cuval: sackDerived,
+  "sevkiyat-icerigi": shipmentContentDerived,
   "is-emri": workOrderDerived,
   "cari-hesap": cariAccountDerived,
   fatura: invoiceDerived,
