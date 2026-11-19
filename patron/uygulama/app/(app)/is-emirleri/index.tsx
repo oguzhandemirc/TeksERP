@@ -18,6 +18,7 @@ import { ListStates, QuickChip, SearchField, StaleNote } from "../../../src/ui/s
 import { useRemoteList } from "../../../src/ui/siparis/useRemoteList";
 import { makeStyles } from "../../../src/ui/theme-context";
 import { space, typography } from "../../../src/ui/tokens";
+import { TERIM } from "../../../src/lib/terim";
 
 type Param = { asama?: string; firma?: string; firmaAdi?: string; cariKartId?: string; musteri?: string; siparisId?: string; siparisNo?: string };
 
@@ -57,7 +58,7 @@ export default function WorkOrders() {
     <Screen title={title} module="is-emirleri" back={!!title || undefined} onRefresh={list.reload} refreshing={list.refreshing} subtitle={<StaleNote stale={list.stale} savedAt={list.savedAt} />}>
       {!list.closed ? (
         <View style={s.tools}>
-          {search ? <SearchField value={term} onChangeText={setTerm} placeholder="İş emri no, müşteri ya da sipariş no ara" testID="is-emri-ara" /> : null}
+          {search ? <SearchField value={term} onChangeText={setTerm} placeholder={`${TERIM.terbiyeIsEmri.tekil} no, müşteri ya da sipariş no ara`} testID="is-emri-ara" /> : null}
           {search?.suzgec ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips} testID="is-emri-durum">
               {search.suzgec.secenekler.map((o) => <QuickChip key={o.deger} label={o.etiket} selected={durum === o.deger} onPress={() => setDurum(durum === o.deger ? null : o.deger)} testID={`durum-${o.deger}`} />)}
@@ -74,10 +75,10 @@ export default function WorkOrders() {
               {chips.map((c) => <FilterChip key={c.key} label={c.label} value={`${c.value}  ✕`} selected onPress={c.clear} testID={`is-emri-cip-${c.key}`} />)}
             </View>
           ) : null}
-          {ignored ? <Text style={s.note} testID="is-emri-suzgec-yok">Sunucu bu konum süzgecini henüz tanımıyor; bütün iş emirleri gösteriliyor.</Text> : null}
+          {ignored ? <Text style={s.note} testID="is-emri-suzgec-yok">Sunucu bu konum süzgecini henüz tanımıyor; bütün {TERIM.terbiyeIsEmri.cogulKucuk} gösteriliyor.</Text> : null}
         </View>
       ) : null}
-      {list.closed ? null : <SectionHeader title={stage ? "Bu konumdaki iş emirleri" : "İş emirleri"} domain="uretim" count={!list.loading && !list.hasMore ? list.items.length : undefined} />}
+      {list.closed ? null : <SectionHeader title={stage ? `Bu konumdaki ${TERIM.terbiyeIsEmri.cogulKucuk}` : TERIM.terbiyeIsEmri.cogul} domain="uretim" count={!list.loading && !list.hasMore ? list.items.length : undefined} />}
       {list.items.length > 0 ? (
         <ListGroup testID="is-emri-listesi">
           {list.items.map((r) => {
@@ -86,7 +87,7 @@ export default function WorkOrders() {
           })}
         </ListGroup>
       ) : null}
-      <ListStates list={list} empty={filtered ? "Bu süzgeçte iş emri yok" : "İş emri yok"} domain="uretim" testID="is-emirleri" />
+      <ListStates list={list} empty={filtered ? `Bu süzgeçte ${TERIM.terbiyeIsEmri.tekilKucuk} yok` : `${TERIM.terbiyeIsEmri.tekil} yok`} domain="uretim" testID="is-emirleri" />
     </Screen>
   );
 }

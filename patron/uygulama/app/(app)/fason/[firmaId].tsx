@@ -16,6 +16,7 @@ import { FactGroup, FactRow } from "../../../src/ui/siparis/parts";
 import { Empty } from "../../../src/ui/StateViews";
 import { makeStyles } from "../../../src/ui/theme-context";
 import { typography } from "../../../src/ui/tokens";
+import { TERIM } from "../../../src/lib/terim";
 
 export default function SubcontractFirm() {
   const { firmaId } = useLocalSearchParams<{ firmaId: string }>();
@@ -38,7 +39,7 @@ export default function SubcontractFirm() {
               {firmFilter && v.hasRolls ? (
                 <ListGroup>
                   <ListRow
-                    title="Bu firmadaki iş emirleri" icon="clipboard-outline" domain="uretim"
+                    title={`Bu firmadaki ${TERIM.terbiyeIsEmri.cogulKucuk}`} icon="clipboard-outline" domain="uretim"
                     onPress={() => router.push({ pathname: "/is-emirleri", params: { firma: v.id, firmaAdi: v.title } } as never)}
                     testID="fason-firma-is-emirleri"
                   />

@@ -3,6 +3,7 @@
 // Müşteri İE satırının `musteriAdi`'yla aynı çözüm (`withProductionMeters.customers` ilki); İE'siz top sahibine düşer.
 import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
+import { ACTIVE_ORDER_LINK } from "../services/helpers/order-link.helper";
 import { outstandingItemOfOpenDispatch } from "../services/helpers/fason-open-dispatch.helper";
 import { WorkOrderService, WO_LIST_CUSTOMER_LINKS } from "../services/workorder.service";
 import { firmRollWhere, ROLL_WO_SELECT, workOrdersOfRoll } from "./work-order-facts";
@@ -41,7 +42,7 @@ async function firstCustomerOfWorkOrders(woIds: string[]): Promise<Map<string, {
   if (woIds.length === 0) return new Map();
   const wos = await prisma.workOrder.findMany({
     where: { id: { in: woIds } },
-    select: { id: true, steps: { select: { id: true, stepSequence: true } }, orderLinks: WO_LIST_CUSTOMER_LINKS, customer: { select: { id: true, name: true } } },
+    select: { id: true, steps: { select: { id: true, stepSequence: true } }, orderLinks: { ...WO_LIST_CUSTOMER_LINKS, where: ACTIVE_ORDER_LINK }, customer: { select: { id: true, name: true } } },
   });
   const withMeters = await new WorkOrderService().withProductionMeters(wos);
   return new Map(withMeters.flatMap((w) => (w.customers[0] ? [[w.id, w.customers[0]] as const] : [])));

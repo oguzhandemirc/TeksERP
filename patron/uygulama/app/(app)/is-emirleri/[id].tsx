@@ -13,6 +13,7 @@ import { ListGroup, ListRow } from "../../../src/ui/ListRow";
 import { SectionHeader } from "../../../src/ui/SectionHeader";
 import { FactGroup, FactRow, StaleNote } from "../../../src/ui/siparis/parts";
 import { LoadingSkeleton } from "../../../src/ui/StateViews";
+import { TERIM } from "../../../src/lib/terim";
 
 export default function WorkOrderDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -28,7 +29,7 @@ export default function WorkOrderDetail() {
   const ready = shipReadinessView(k);
 
   return (
-    <Screen title={r.data ? workOrderNo(k) : "İş emri"} module="is-emirleri" back onRefresh={r.reload} refreshing={r.refreshing} subtitle={<StaleNote stale={r.stale} savedAt={r.savedAt} />}>
+    <Screen title={r.data ? workOrderNo(k) : TERIM.terbiyeIsEmri.tekil} module="is-emirleri" back onRefresh={r.reload} refreshing={r.refreshing} subtitle={<StaleNote stale={r.stale} savedAt={r.savedAt} />}>
       {r.loading && !r.data ? <LoadingSkeleton rows={5} /> : null}
       {r.error && !r.data ? <ErrorBox text={r.error} onRetry={r.reload} /> : null}
       {r.data ? (

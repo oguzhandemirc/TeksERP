@@ -5,6 +5,7 @@
 import type { PeriodKey } from "./labels/uretim";
 import { formatMoney, formatNumber } from "./format";
 import { daysText } from "./is-emri";
+import { TERIM } from "./terim";
 
 type Obj = Readonly<Record<string, unknown>>;
 const obj = (v: unknown): Obj | null => (typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Obj) : null);
@@ -112,7 +113,7 @@ export function subcontractOpenView(veri: unknown): SubcontractOpenView | null {
 export function subcontractRollsText(veri: unknown): string | null {
   const d = obj(veri);
   if (!d || !isNum(d.acikTop)) return null;
-  return [`${formatNumber(d.acikTop, 0)} top`, isNum(d.isEmriSayisi) ? `${formatNumber(d.isEmriSayisi, 0)} iş emri` : null, isNum(d.musteriSayisi) ? `${formatNumber(d.musteriSayisi, 0)} müşteri` : null].filter(Boolean).join(" · ");
+  return [`${formatNumber(d.acikTop, 0)} top`, isNum(d.isEmriSayisi) ? `${formatNumber(d.isEmriSayisi, 0)} ${TERIM.terbiyeIsEmri.tekilKucuk}` : null, isNum(d.musteriSayisi) ? `${formatNumber(d.musteriSayisi, 0)} müşteri` : null].filter(Boolean).join(" · ");
 }
 
 export interface SubcontractFirmView {
@@ -137,7 +138,7 @@ export function subcontractFirmView(veri: unknown, firmId: string, now: Date = n
     { key: "sevk", label: "Açık sevk", value: formatNumber(f.acikSevk, 0) },
     positive(f.geciken) ? { key: "geciken", label: "Dönüşü geciken sevk", value: formatNumber(f.geciken, 0) } : null,
     days ? { key: "gun", label: "En eski gönderim", value: days } : null,
-    isNum(f.isEmriSayisi) ? { key: "ie", label: "İş emri", value: formatNumber(f.isEmriSayisi, 0) } : null,
+    isNum(f.isEmriSayisi) ? { key: "ie", label: TERIM.terbiyeIsEmri.tekil, value: formatNumber(f.isEmriSayisi, 0) } : null,
     positive(f.iplikKg) ? { key: "iplik", label: "İplik", value: `${amount(f.iplikKg)} kg` } : null,
     positive(f.leventAdet) ? { key: "levent", label: "Levent", value: formatNumber(f.leventAdet, 0) } : null,
   ].filter((x): x is { key: string; label: string; value: string } => x !== null);

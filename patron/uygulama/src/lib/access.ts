@@ -4,7 +4,7 @@
 // modül görünmez (bulutta her şey sunulur — bugünkü davranış).
 
 import { islemVar, kumeKapali, kumeSunuluyor, yetenek, type Islem, type Yetenek } from "../api/yetenek";
-import { TERIM_AD } from "./terim";
+import { TERIM, TERIM_AD } from "./terim";
 
 type Ozellik = { [K in keyof Yetenek]: Yetenek[K] extends boolean ? K : never }[keyof Yetenek];
 export type ModuleKey =
@@ -60,7 +60,7 @@ export const MODULES: readonly ModuleDef[] = [
   { key: "urunler", title: "Ürünler", hint: "Ürün ve fiyatlar", route: "/urunler", anyOf: [], sets: ["urun"], islemler: ["fiyat.yaz", "urun.ekle", "urun.duzenle"] },
   { key: "sevkiyat", title: "Sevkiyat", hint: "Sevk edilen ve bekleyen", route: "/sevkiyat", anyOf: ["bulut:sevkiyat:oku"], sets: ["sevkiyat"] },
   { key: "uretim", title: "Üretim", route: "/uretim", anyOf: ["bulut:uretim:oku"], sets: ["is-emri"] },
-  { key: "is-emirleri", title: "İş emirleri", hint: "Hangi iş nerede, kimin", route: "/is-emirleri", anyOf: ["bulut:uretim:oku"], sets: ["is-emri"] },
+  { key: "is-emirleri", get title() { return TERIM.terbiyeIsEmri.cogul; }, hint: "Hangi iş nerede, kimin", route: "/is-emirleri", anyOf: ["bulut:uretim:oku"], sets: ["is-emri"] },
   { key: "stok", title: "Stok", hint: "Ham ve bitmiş stok", route: "/stok", anyOf: ["bulut:stok:oku"], sets: ["stok-karnesi"] },
   { key: "finans", title: TERIM_AD.onMuhasebe, navTitle: "Finans", route: "/finans", anyOf: [...FINANCE_READ, "bulut:cari-bakiye:oku", "bulut:maliyet:oku"], sets: ["kasa"] },
   { key: "teklifler", title: "Teklifler", hint: "Müşteriye gönderilen teklifler", route: "/teklifler", anyOf: ["bulut:teklif:oku"], sets: ["teklif"] },

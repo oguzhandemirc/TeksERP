@@ -113,7 +113,7 @@ export default function Production() {
             <FlowStrip data={veri} />
             {stageFilter ? (
               <>
-                <SectionHeader title="Toplar nerede?" domain="uretim" testID="bolum-nerede" onAction={() => router.push("/is-emirleri" as never)} actionLabel="İş emirleri" />
+                <SectionHeader title="Toplar nerede?" domain="uretim" testID="bolum-nerede" onAction={() => router.push("/is-emirleri" as never)} actionLabel={TERIM.terbiyeIsEmri.cogul} />
                 <ListGroup testID="toplar-nerede">
                   {WHERE_ROWS.map((w) => {
                     const c = column(veri, w.column);
