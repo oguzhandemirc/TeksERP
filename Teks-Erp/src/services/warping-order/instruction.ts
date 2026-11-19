@@ -17,7 +17,8 @@ export interface WarpingInstruction {
   sequenceNote: string | null;
   reed: { reedNo: string | null; reedWidthCm: string | null; endsPerDent: number | null } | null;
   beamLines: Array<{ beamCount: number; beamLengthM: string }>;
-  beamCount: number;
+  beamCount: number | null;
+  beamCountOpen: boolean;
   targetLengthM: string;
   expectedReturnAt: string | null;
   notes: string | null;
@@ -38,6 +39,7 @@ export function buildWarpingInstruction(o: WarpingOrderDto): WarpingInstruction 
     reed: hasReed ? { reedNo: r.reedNo, reedWidthCm: r.reedWidthCm, endsPerDent: r.endsPerDent } : null,
     beamLines: o.beamLines,
     beamCount: o.beamCount,
+    beamCountOpen: o.beamCountOpen,
     targetLengthM: o.targetLengthM,
     expectedReturnAt: o.expectedReturnAt,
     notes: o.notes,

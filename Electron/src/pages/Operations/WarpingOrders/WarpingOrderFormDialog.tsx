@@ -23,6 +23,7 @@ import {
   emptyOrderForm,
   fmtM,
   formFromOrder,
+  isBeamCountOpen,
   previewBody,
   trimNum,
   type WarpingOrderFormState,
@@ -84,7 +85,7 @@ export function WarpingOrderFormDialog({ order, seed, onClose, onSaved }: Props)
       title={order ? `${order.orderNo} — düzenle` : "Yeni fason devere siparişi"}
       description={
         !order
-          ? "Çözgü kartı ve levent adedi × boy girin; iplik başına kg sunucuda hesaplanır ve siparişle birlikte saklanır."
+          ? "Çözgü kartı ve levent adedi × boy (adet belli değilse toplam metre) girin; iplik başına kg sunucuda hesaplanır ve siparişle birlikte saklanır."
           : planLocked
             ? "Sevk başladı: yalnız termin, ücret, tolerans, müşteri siparişi ve not değişir."
             : "Çözgü kartı ve devereci değişmez; levent değişirse iplik planı yeniden hesaplanır."
@@ -152,13 +153,13 @@ function PlanPreview({ order, planLocked, pq, hasBody, fresh }: { order?: Warpin
           {apiErrorMessage(pq.error)}
         </p>
       ) : !hasBody ? (
-        <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">Plan için çözgü kartı seçin ve her levent satırına adet ile boy yazın.</p>
+        <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">Plan için çözgü kartı seçin ve her levent satırına adet ile boy (ya da adet belli değilse toplam metre) yazın.</p>
       ) : !fresh || !preview ? (
         <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">Hesaplanıyor…</p>
       ) : (
         <>
           <p className="text-sm text-muted-foreground">
-            {preview.beamCount} levent · {fmtM(preview.targetLengthM)} m çözgü
+            {isBeamCountOpen(preview) ? `Hedef ${fmtM(preview.targetLengthM)} m · adet belli değil` : `${preview.beamCount} levent · ${fmtM(preview.targetLengthM)} m çözgü`}
             {preview.stock.known ? "" : " · iplik stoğu bilinmiyor (iplik modülü kapalı)"}
           </p>
           <PlanTable yarns={preview.yarns} hasWaste={preview.hasWaste} totals={preview.totals} showStock={preview.stock.known} />

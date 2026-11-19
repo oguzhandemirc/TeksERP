@@ -2054,7 +2054,7 @@ enum WarpingFeeUnit {
 }
 
 /// FASON DEVERE SİPARİŞİ (D4, 2026-11-17) — DURUM tablosu: iplik KG gider, çözgü METRE ile levent olarak döner.
-/// Hedef = Σ(levent adedi × boy) satırları (K6: satır satır farklı boy). `beamCount`/`targetLengthM` satırların
+/// Hedef = Σ(levent adedi × boy) satırları (K6: satır satır farklı boy) ya da adet belli değilse yalnız toplam metre. `beamCount`/`targetLengthM` satırların
 /// ÖZETİDİR, yalnız servis yazar. Fire girdileri ve tolerans oluşturma anında ayardan DONAR.
 model WarpingOrder {
   id                String             @id @default(uuid()) @db.Uuid
@@ -2064,8 +2064,8 @@ model WarpingOrder {
   warpSpecId        String             @db.Uuid
   /// Devereci (fason firma).
   subcontractorId   String             @db.Uuid
-  /// Σ satır levent adedi (özet; CHECK > 0).
-  beamCount         Int
+  /// Σ satır levent adedi (özet; CHECK > 0). NULL = adet belli değil (devereciye bırakıldı; satır yok, hedef yalnız toplam metre).
+  beamCount         Int?
   /// Σ(adet × boy) metre (özet; CHECK > 0).
   targetLengthM     Decimal            @db.Decimal(14, 3)
   fixedWasteM       Decimal            @default(0) @db.Decimal(8, 2)

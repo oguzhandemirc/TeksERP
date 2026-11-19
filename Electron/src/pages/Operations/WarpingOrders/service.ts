@@ -42,7 +42,7 @@ export async function listWarpingOrders(params: CursorParams): Promise<WarpingOr
 }
 
 /** Plan önizlemesi — YAZMAZ; form değiştikçe (~400 ms durulunca) sorulur, hata formda satır içi gösterilir. */
-export async function previewWarpingOrder(body: { warpSpecId: string; beamLines: Array<{ beamCount: number; beamLengthM: number }>; extraWarpSpecIds?: string[]; fixedWasteM?: number }): Promise<ApiResponse<WarpingOrderPreview>> {
+export async function previewWarpingOrder(body: { warpSpecId: string; beamLines?: Array<{ beamCount: number; beamLengthM: number }>; openTargetLengthM?: number; extraWarpSpecIds?: string[]; fixedWasteM?: number }): Promise<ApiResponse<WarpingOrderPreview>> {
   return (await apiClient.post<ApiResponse<WarpingOrderPreview>>(`${BASE}/preview`, body, { suppressErrorToast: true })).data;
 }
 

@@ -31,7 +31,7 @@ export interface WarpingSettlementYarn {
 }
 
 export interface WarpingSettlement {
-  metre: { targetM: string; receivedM: string; diffM: string; diffPct: string | null; planBeamCount: number; receivedBeamCount: number };
+  metre: { targetM: string; receivedM: string; diffM: string; diffPct: string | null; planBeamCount: number | null; planBeamCountOpen?: boolean; receivedBeamCount: number };
   yarns: WarpingSettlementYarn[];
   weighing: { weighedBeamCount: number; weighedNetKg: string; nominalKg: string; diffKg: string; diffPct: string | null } | null;
 }

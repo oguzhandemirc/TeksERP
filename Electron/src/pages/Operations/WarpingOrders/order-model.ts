@@ -13,6 +13,9 @@ export interface WarpingOrderFormState {
   warpSpecId: string | null;
   subcontractorId: string | null;
   beamLines: BeamLineDraft[];
+  /** "Levent adedi belli değil": yalnız toplam metre girilir, adet kabulde çıkar. */
+  beamCountOpen: boolean;
+  openTargetLengthM: string;
   extraWarpSpecIds: string[];
   salesOrders: Array<{ id: string; label: string }>;
   feeUnit: WarpingFeeUnit;
@@ -36,6 +39,8 @@ export function emptyOrderForm(seed?: Partial<WarpingOrderFormState>): WarpingOr
     warpSpecId: null,
     subcontractorId: null,
     beamLines: [{ beamCount: "1", beamLengthM: "" }],
+    beamCountOpen: false,
+    openTargetLengthM: "",
     extraWarpSpecIds: [],
     salesOrders: [],
     feeUnit: "METRE",
@@ -54,7 +59,9 @@ export function formFromOrder(o: WarpingOrder): WarpingOrderFormState {
   return {
     warpSpecId: o.warpSpec.id,
     subcontractorId: o.subcontractor.id,
-    beamLines: o.beamLines.map((l) => ({ beamCount: String(l.beamCount), beamLengthM: trimNum(l.beamLengthM) })),
+    beamLines: isBeamCountOpen(o) ? [{ beamCount: "1", beamLengthM: "" }] : o.beamLines.map((l) => ({ beamCount: String(l.beamCount), beamLengthM: trimNum(l.beamLengthM) })),
+    beamCountOpen: isBeamCountOpen(o),
+    openTargetLengthM: isBeamCountOpen(o) ? trimNum(o.targetLengthM) : "",
     extraWarpSpecIds: o.extraSpecs.map((x) => x.id),
     salesOrders: o.salesOrders.map((s) => ({ id: s.id, label: `${s.orderNumber} — ${s.customerName}` })),
     feeUnit: o.fee.unit,
@@ -93,15 +100,31 @@ export function beamLinesBody(lines: BeamLineDraft[]): Array<{ beamCount: number
   return out;
 }
 
-/** Önizleme gövdesi (kart + levent satırları + ek grup + sabit fire); eksikse null. */
-export function previewBody(s: WarpingOrderFormState) {
+/** Açık adet toplam metresi: geçerliyse sayı, değilse null. */
+export function openTargetBody(v: string): number | null {
+  const m = parseNum(v);
+  return m !== null && m > 0 && m <= 10_000_000 ? m : null;
+}
+
+/** Hedef gövdesi: açık adet → `{ openTargetLengthM }`, değilse `{ beamLines }`; geçersizse null. */
+export function targetBody(s: WarpingOrderFormState): { beamLines: Array<{ beamCount: number; beamLengthM: number }> } | { openTargetLengthM: number } | null {
+  if (s.beamCountOpen) {
+    const m = openTargetBody(s.openTargetLengthM);
+    return m === null ? null : { openTargetLengthM: m };
+  }
   const beamLines = beamLinesBody(s.beamLines);
-  if (!s.warpSpecId || !beamLines) return null;
+  return beamLines ? { beamLines } : null;
+}
+
+/** Önizleme gövdesi (kart + hedef + ek grup + sabit fire); eksikse null. */
+export function previewBody(s: WarpingOrderFormState) {
+  const target = targetBody(s);
+  if (!s.warpSpecId || !target) return null;
   const fixed = parseNum(s.fixedWasteM);
   if (s.fixedWasteM.trim() !== "" && (fixed === null || fixed < 0 || fixed > 1000)) return null;
   return {
     warpSpecId: s.warpSpecId,
-    beamLines,
+    ...target,
     ...(s.extraWarpSpecIds.length > 0 ? { extraWarpSpecIds: s.extraWarpSpecIds } : {}),
     ...(fixed !== null ? { fixedWasteM: fixed } : {}),
   };
@@ -122,9 +145,11 @@ export function buildOrderBody(s: WarpingOrderFormState, mode: "create" | "edit-
     body.subcontractorId = s.subcontractorId;
   }
   if (mode !== "edit-meta") {
-    const beamLines = beamLinesBody(s.beamLines);
-    if (!beamLines) return { ok: false, error: "Her levent satırında adet (tam sayı) ve boy (m) sıfırdan büyük olmalı." };
-    body.beamLines = beamLines;
+    const target = targetBody(s);
+    if (!target) {
+      return { ok: false, error: s.beamCountOpen ? "Toplam metre sıfırdan büyük olmalı." : "Her levent satırında adet (tam sayı) ve boy (m) sıfırdan büyük olmalı." };
+    }
+    Object.assign(body, target);
     body.extraWarpSpecIds = s.extraWarpSpecIds;
     const fixed = parseNum(s.fixedWasteM);
     if (s.fixedWasteM.trim() !== "") {
@@ -161,6 +186,21 @@ export function editModeOf(status: WarpingOrderStatus): "edit-plan" | "edit-meta
 
 export const fmtKg = (v: number | string | null | undefined): string => formatQty(v, 3, 3);
 export const fmtM = (v: number | string | null | undefined): string => formatQty(v, 1, 0);
+
+/** Levent adedi açık mı — yeni backend `beamCountOpen`, eski backend hep doluydu (`beamCount` null değil). */
+export function isBeamCountOpen(o: { beamCount: number | null; beamCountOpen?: boolean }): boolean {
+  return o.beamCountOpen === true || o.beamCount === null;
+}
+
+/** Plan metni: satırlı "2 × 1.000 m + 1 × 800 m"; açık adet "toplam 1.500 m". */
+export function planText(o: { beamCount: number | null; beamCountOpen?: boolean; beamLines: ReadonlyArray<{ beamCount: number; beamLengthM: string }>; targetLengthM: string }): string {
+  return isBeamCountOpen(o) ? `toplam ${fmtM(o.targetLengthM)} m` : beamLinesText(o.beamLines);
+}
+
+/** Liste/detay hedef metni: "3 levent · 1.500 m" ya da "1.500 m (adet devereciye bırakıldı)". */
+export function targetText(o: { beamCount: number | null; beamCountOpen?: boolean; targetLengthM: string }): string {
+  return isBeamCountOpen(o) ? `${fmtM(o.targetLengthM)} m (adet devereciye bırakıldı)` : `${o.beamCount} levent · ${fmtM(o.targetLengthM)} m`;
+}
 
 /** "3 × 1.200 m" ya da çok satırlıysa "2 × 1.000 m + 1 × 800 m". */
 export function beamLinesText(lines: ReadonlyArray<{ beamCount: number; beamLengthM: string }>): string {

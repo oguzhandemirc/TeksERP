@@ -8,7 +8,7 @@ import { Callout } from "@/components/ui/callout";
 import { FormField } from "@/components/forms/FormField";
 import { Input } from "@/components/ui/input";
 import { toastServerSuccess } from "@/lib/serverNotes";
-import { fmtM } from "./order-model";
+import { targetText } from "./order-model";
 import { warpingOrderService, WARPING_ORDERS_QUERY_KEY } from "./service";
 import type { WarpingOrder } from "./types";
 
@@ -38,7 +38,7 @@ export function CancelOrderDialog({ order, onClose }: { order: WarpingOrder; onC
           <div className="space-y-3 text-sm">
             <ul className="space-y-1 rounded-md border p-3" aria-label="Etkilenen kayıtlar">
               <li>
-                <b>{p.order.orderNo}</b> — {p.order.beamCount} levent · {fmtM(p.order.targetLengthM)} m → İptal
+                <b>{p.order.orderNo}</b> — {targetText(p.order)} → İptal
               </li>
               {p.salesOrders.map((s) => (
                 <li key={s.id} className="text-muted-foreground">

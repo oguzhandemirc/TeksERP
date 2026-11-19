@@ -2,6 +2,7 @@
 // Yüzde sipariş açılışında iplik başına donar (`yarns[].wastePct`); KAYNAĞI saklanmaz → bugünkü kart/iplik değerleriyle
 // aynı hesabı soran önizlemenin `wasteSources`ından okunur. Değer değişmişse "açılıştaki değer" denir (yanlış kaynak basılmaz).
 import { formatQty } from "@/lib/format";
+import { isBeamCountOpen } from "./order-model";
 import type { WarpingOrder, WarpingOrderPreview, WarpWasteSource } from "./types";
 
 export type WasteSourceLabel = "çözgü kartı" | "iplik kartı" | "açılıştaki değer" | null;
@@ -28,7 +29,9 @@ export function percentWasteText(o: Pick<WarpingOrder, "yarns">, pv: WarpingOrde
 export function orderPreviewBody(o: WarpingOrder) {
   return {
     warpSpecId: o.warpSpec.id,
-    beamLines: o.beamLines.map((b) => ({ beamCount: b.beamCount, beamLengthM: Number(b.beamLengthM) })),
+    ...(isBeamCountOpen(o)
+      ? { openTargetLengthM: Number(o.targetLengthM) }
+      : { beamLines: o.beamLines.map((b) => ({ beamCount: b.beamCount, beamLengthM: Number(b.beamLengthM) })) }),
     ...(o.extraSpecs.length > 0 ? { extraWarpSpecIds: o.extraSpecs.map((e) => e.id) } : {}),
     fixedWasteM: Number(o.fixedWasteM),
   };

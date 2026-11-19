@@ -1,6 +1,6 @@
 // Yeni/düzenle formunun bölümleri (geniş form kartlarına dizilir): kimlik (kart · devereci) · levent adedi × boy satırları ·
 // ek tel grubu · müşteri siparişi bağı · ücret/termin/fire · not. `planLocked` (sevkli sipariş) plan alanlarını kilitler.
-import { Handshake, Layers, Plus, ShoppingCart, Trash2, X } from "lucide-react";
+import { Handshake, Layers, ShoppingCart, X } from "lucide-react";
 import { FormField } from "@/components/forms/FormField";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
@@ -17,7 +17,8 @@ import { SubcontractorCategoryPicker } from "@/components/forms/SubcontractorCat
 import { DEVERE_CATEGORY_CODE } from "@/lib/subcontractor-category-codes";
 import { orderService } from "@/pages/Operations/Orders/service";
 import type { Order } from "@/pages/Operations/Orders/types";
-import { MAX_BEAM_LINES, type WarpingOrderFormState } from "./order-model";
+import type { WarpingOrderFormState } from "./order-model";
+import { BeamCountOpenToggle, BeamLineRows, OpenTargetInput } from "./BeamCountFields";
 import { WARPING_CURRENCIES, WARPING_FEE_UNIT_LABEL, type SpecRef, type WarpingFeeUnit } from "./types";
 
 interface Props {
@@ -180,62 +181,20 @@ export function SalesOrderLinks({ s, up }: Pick<Props, "s" | "up">) {
   );
 }
 
-/** Levent adedi × boy satırları + aynı-levent ek tel grubu; sevkli siparişte kilitli. */
+/** Levent adedi × boy satırları (ya da "adet belli değil" → yalnız toplam metre) + aynı-levent ek tel grubu; sevkli siparişte kilitli. */
 export function BeamLinesFieldset({
   s,
   up,
   planLocked,
   extraOptions,
 }: Pick<Props, "s" | "up" | "planLocked" | "extraOptions">) {
-  const setLine = (i: number, patch: Partial<WarpingOrderFormState["beamLines"][number]>) =>
-    up({ beamLines: s.beamLines.map((l, k) => (k === i ? { ...l, ...patch } : l)) });
   const toggleExtra = (id: string, on: boolean) =>
     up({ extraWarpSpecIds: on ? [...s.extraWarpSpecIds, id] : s.extraWarpSpecIds.filter((x) => x !== id) });
   return (
     <fieldset className="space-y-3" disabled={planLocked}>
       {planLocked && <legend className="text-sm text-muted-foreground">İplik sevk edildi, plan değişmez.</legend>}
-      {s.beamLines.map((l, i) => (
-        <div key={i} className="flex items-center gap-2">
-          <Input
-            className="w-24"
-            inputMode="numeric"
-            aria-label={`${i + 1}. satır levent adedi`}
-            value={l.beamCount}
-            onChange={(e) => setLine(i, { beamCount: e.target.value })}
-          />
-          <span className="text-sm text-muted-foreground">levent ×</span>
-          <Input
-            className="w-32"
-            inputMode="decimal"
-            aria-label={`${i + 1}. satır levent boyu (m)`}
-            placeholder="boy"
-            value={l.beamLengthM}
-            onChange={(e) => setLine(i, { beamLengthM: e.target.value })}
-          />
-          <span className="text-sm text-muted-foreground">m</span>
-          {s.beamLines.length > 1 && (
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              aria-label={`${i + 1}. levent satırını sil`}
-              onClick={() => up({ beamLines: s.beamLines.filter((_, k) => k !== i) })}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          )}
-        </div>
-      ))}
-      {s.beamLines.length < MAX_BEAM_LINES && (
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => up({ beamLines: [...s.beamLines, { beamCount: "1", beamLengthM: "" }] })}
-        >
-          <Plus className="mr-1 h-4 w-4" /> Farklı boyda levent ekle
-        </Button>
-      )}
+      <BeamCountOpenToggle s={s} up={up} />
+      {s.beamCountOpen ? <OpenTargetInput s={s} up={up} /> : <BeamLineRows s={s} up={up} />}
       {extraOptions.length > 0 && (
         <div className="space-y-1 rounded-md border border-dashed p-2">
           <p className="text-sm font-medium">Aynı levente sarılacak ek tel grubu</p>

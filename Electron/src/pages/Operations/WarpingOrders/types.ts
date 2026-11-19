@@ -59,7 +59,10 @@ export interface WarpingOrder {
   warpSpec: SpecRef & { sequenceNote: string | null; reedNo: string | null; reedWidthCm: string | null; endsPerDent: number | null };
   subcontractor: SpecRef;
   beamLines: BeamLine[];
-  beamCount: number;
+  /** NULL = levent adedi belli değil (`beamLines` boş; hedef yalnız toplam metre). */
+  beamCount: number | null;
+  /** Eski backend göndermez (adet hep doluydu). */
+  beamCountOpen?: boolean;
   targetLengthM: string;
   extraSpecs: SpecRef[];
   salesOrders: Array<{ id: string; orderNumber: string; status: string; customerName: string }>;
@@ -84,7 +87,8 @@ export interface WarpingOrderRow {
   status: WarpingOrderStatus;
   warpSpec: SpecRef;
   subcontractor: { id: string; name: string };
-  beamCount: number;
+  beamCount: number | null;
+  beamCountOpen?: boolean;
   targetLengthM: string;
   expectedReturnAt: string | null;
   createdAt: string;
@@ -107,7 +111,8 @@ export interface WarpingOrderPreview {
   extras: SpecRef[];
   suggestedExtraSpecs: SpecRef[];
   beamLines: BeamLine[];
-  beamCount: number;
+  beamCount: number | null;
+  beamCountOpen?: boolean;
   targetLengthM: string;
   fixedWasteM: string;
   hasWaste: boolean;
@@ -119,7 +124,7 @@ export interface WarpingOrderPreview {
 }
 
 export interface WarpingOrderCancelPreview {
-  order: Pick<WarpingOrder, "id" | "orderNo" | "status" | "targetLengthM" | "beamCount">;
+  order: Pick<WarpingOrder, "id" | "orderNo" | "status" | "targetLengthM" | "beamCount" | "beamCountOpen">;
   canCancel: boolean;
   blockedReason: string | null;
   salesOrders: WarpingOrder["salesOrders"];
@@ -131,6 +136,8 @@ export interface WarpingOrderBody {
   warpSpecId?: string;
   subcontractorId?: string;
   beamLines?: Array<{ beamCount: number; beamLengthM: number }>;
+  /** Levent adedi belli değil — yalnız toplam metre (`beamLines` ile birlikte gönderilmez). */
+  openTargetLengthM?: number;
   extraWarpSpecIds?: string[];
   fixedWasteM?: number;
   salesOrderIds?: string[];
