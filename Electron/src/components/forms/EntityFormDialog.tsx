@@ -12,7 +12,9 @@ import {
 import type { ZodType } from "zod";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { FormErrorSummary } from "./FormErrorSummary";
+import { WideFormDialog } from "./WideFormDialog";
 import { useDirtyTab } from "@/components/layout/tabs/dirty-tabs";
 
 interface Props<TValues extends FieldValues> {
@@ -25,6 +27,8 @@ interface Props<TValues extends FieldValues> {
   onSubmit: SubmitHandler<TValues>;
   isSubmitting?: boolean;
   submitLabel?: string;
+  /** "wide": geniş form iskeleti (`WideFormDialog`) — sabit başlık + kendi kaydırıcılı gövde + sabit alt çubuk. */
+  size?: "default" | "wide";
   children: (form: UseFormReturn<TValues>) => ReactNode;
 }
 
@@ -38,6 +42,7 @@ export function EntityFormDialog<TValues extends FieldValues>({
   onSubmit,
   isSubmitting,
   submitLabel = "Kaydet",
+  size = "default",
   children,
 }: Props<TValues>) {
   const form = useForm<TValues>({
@@ -54,6 +59,28 @@ export function EntityFormDialog<TValues extends FieldValues>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
+  const buttons = (wide: boolean) => (
+    <>
+      <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+        İptal
+      </Button>
+      <Button type="submit" disabled={isSubmitting} className={cn(wide && "min-w-32")}>
+        {isSubmitting ? "Kaydediliyor..." : submitLabel}
+      </Button>
+    </>
+  );
+  const summary = <FormErrorSummary errors={form.formState.errors} submitCount={form.formState.submitCount} />;
+
+  if (size === "wide") {
+    return (
+      <FormProvider {...form}>
+        <WideFormDialog open={open} onOpenChange={onOpenChange} title={title} description={description} footer={buttons(true)} onSubmit={form.handleSubmit(onSubmit)} dirtyManaged>
+          {children(form)}
+          {summary}
+        </WideFormDialog>
+      </FormProvider>
+    );
+  }
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl">
@@ -62,21 +89,10 @@ export function EntityFormDialog<TValues extends FieldValues>({
           {description && <DialogDescription>{description}</DialogDescription>}
         </DialogHeader>
         <FormProvider {...form}>
-          <form
-            data-dirty-managed=""
-            onSubmit={form.handleSubmit(onSubmit)}
-            className="space-y-3"
-          >
+          <form data-dirty-managed="" onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
             {children(form)}
-            <FormErrorSummary errors={form.formState.errors} submitCount={form.formState.submitCount} />
-            <DialogFooter className="pt-2">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                İptal
-              </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Kaydediliyor..." : submitLabel}
-              </Button>
-            </DialogFooter>
+            {summary}
+            <DialogFooter className="pt-2">{buttons(false)}</DialogFooter>
           </form>
         </FormProvider>
       </DialogContent>

@@ -18,7 +18,7 @@ export function ReverseResult({ res, reverse }: Props) {
       {reverse.maxLengthM !== null && (
         <div className="grid gap-3 sm:grid-cols-3">
           <Stat label="En çok çözgü" value={`${fmtM(reverse.maxLengthM)} m`} strong />
-          <Stat label="Kısıtlayan iplik" value={constraint ? `${constraint.code} — ${constraint.name}` : "—"} />
+          <Stat label="Kısıtlayan iplik" value={constraint ? constraint.name : "—"} />
           <Stat
             label="Tam levent"
             value={reverse.fullBeams === null ? "Levent boyu girilmedi" : `${reverse.fullBeams} levent${reverse.remainderM ? ` + ${fmtM(reverse.remainderM)} m artar` : ""}`}
