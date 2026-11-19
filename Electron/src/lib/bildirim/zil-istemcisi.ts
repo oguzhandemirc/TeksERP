@@ -207,9 +207,10 @@ class BellEngine implements BellClient {
     return this.hatalar.length >= BELL_ERROR_THRESHOLD;
   }
 
-  /** Tek SSE bağlantısı; dönüş: "dus" (yoklamaya düş) · "bitti" (nesil değişti) · merhaba gelip gelmediği. */
-  private async akisTuru(n: number, ac: AbortController): Promise<"dus" | "bitti" | { merhaba: boolean }> {
+  /** Tek SSE bağlantısı; dönüş: "dus" (yoklamaya düş) · "fazla" (kullanıcı tavanı) · "bitti" (nesil değişti) · merhaba. */
+  private async akisTuru(n: number, ac: AbortController): Promise<"dus" | "fazla" | "bitti" | { merhaba: boolean }> {
     let merhaba = false;
+    let fazla = false;
     try {
       const res = await this.dep.akisAc(ac.signal);
       if (n !== this.nesil) return "bitti";
@@ -230,6 +231,10 @@ class BellEngine implements BellClient {
           this.hatalar = [];
           this.yayinla({ bagli: true });
           await this.degisiklik(this.surumGor(asNumber(v.epoch), asNumber(v.rev), asNumber(v.alarmRev)));
+        } else if (e.event === "kapat" && v.neden === "fazla") {
+          // Kullanıcı başı akış tavanı (sunucu en eskiyi kapattı): hemen yeniden bağlanmak sıradaki sekmeyi
+          // düşürür ve sekmeler birbirini sonsuza dek kovar → uzun yoklamaya düş; öne gelince SSE yeniden denenir.
+          fazla = true;
         } else if (e.event === "kapat") {
           // Sunucu akışı kapatıyor (ör. izin değişti): görünür türler değişmiş olabilir → tam çekim.
           await this.degisiklik("tam");
@@ -242,7 +247,7 @@ class BellEngine implements BellClient {
     } finally {
       if (this.d.bagli) this.yayinla({ bagli: false });
     }
-    return { merhaba };
+    return fazla ? "fazla" : { merhaba };
   }
 
   private async sseDongu(n: number) {
@@ -251,7 +256,7 @@ class BellEngine implements BellClient {
       this.abort = ac;
       const r = await this.akisTuru(n, ac);
       if (r === "bitti" || n !== this.nesil) return;
-      if (r === "dus") return this.bekleKipi(n);
+      if (r === "dus" || r === "fazla") return this.bekleKipi(n);
       // Sunucunun 30 dk ömürle kapattığı sağlıklı akış hata değildir; merhaba gelmeden kopan akış hatadır.
       if (!r.merhaba && this.hataKaydet()) return this.bekleKipi(n);
       const sira = r.merhaba ? 0 : Math.min(this.hatalar.length, BELL_RECONNECT_MS.length) - 1;
