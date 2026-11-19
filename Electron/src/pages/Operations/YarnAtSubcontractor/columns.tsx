@@ -23,7 +23,8 @@ export function NameCode({ name, code, strong, badge }: { name: string; code: st
         <span className={cn("truncate", strong ? "font-semibold" : "font-medium")}>{name}</span>
         {badge}
       </span>
-      {code && code !== name && <span className="truncate font-mono text-xs text-muted-foreground">{code}</span>}
+      {/* Tablo hücresi tek satıra katlar (index.css data-cell-clip): kod yalnız artan yeri alır (basis-0), ad önce sığar. */}
+      {code && code !== name && <span className="min-w-0 flex-1 basis-0 truncate font-mono text-xs text-muted-foreground">{code}</span>}
     </span>
   );
 }
@@ -31,10 +32,10 @@ export function NameCode({ name, code, strong, badge }: { name: string; code: st
 // Grup başı: ad + grup toplamı; sonraki satırlarda yalnız ekran okuyucuya ad (görsel tekrar yok).
 function GroupCell({ r, code }: { r: YarnAtSubLine; code: string | null }) {
   if (!r.groupFirst) return <span className="sr-only">{r.groupLabel}</span>;
+  // Satır sayısı ipucunda: rozet dar ana sütunda fasoncu adını kırpıyordu (satırlar zaten görünür).
   const badge = (
-    <span className="shrink-0 rounded bg-muted px-1.5 text-xs tabular-nums text-foreground">
+    <span className="shrink-0 rounded bg-muted px-1.5 text-xs tabular-nums text-foreground" title={`Grup toplamı · ${r.groupLines} satır`}>
       {kg(r.groupKg)}
-      {r.groupLines > 1 && <span className="text-muted-foreground"> · {r.groupLines} satır</span>}
     </span>
   );
   return <NameCode name={r.groupLabel} code={code} strong badge={badge} />;
@@ -43,7 +44,7 @@ function GroupCell({ r, code }: { r: YarnAtSubLine; code: string | null }) {
 const subCol = (main: boolean): ColumnDef<YarnAtSubLine> => ({
   id: "subcontractor",
   header: "Fasoncu",
-  size: main ? 300 : 220,
+  size: main ? 230 : 190,
   meta: { label: "Fasoncu", exportValue: (r: YarnAtSubLine) => subLabel(r) },
   cell: ({ row: { original: r } }) => (main ? <GroupCell r={r} code={r.subcontractorCode} /> : <NameCode name={subLabel(r)} code={r.subcontractorCode} />),
 });
@@ -51,7 +52,7 @@ const subCol = (main: boolean): ColumnDef<YarnAtSubLine> => ({
 const yarnCol = (main: boolean): ColumnDef<YarnAtSubLine> => ({
   id: "yarn",
   header: "İplik",
-  size: main ? 320 : 260,
+  size: main ? 250 : 200,
   meta: { label: "İplik", exportValue: (r: YarnAtSubLine) => fullName(yarnLabel(r), r.yarnItemCode) },
   cell: ({ row: { original: r } }) => (main ? <GroupCell r={r} code={r.yarnItemCode} /> : <NameCode name={yarnLabel(r)} code={r.yarnItemCode} />),
 });
@@ -81,14 +82,14 @@ const KG: ColumnDef<YarnAtSubLine> = {
 const VALUE: ColumnDef<YarnAtSubLine> = {
   id: "value",
   header: "Değer",
-  size: 150,
+  size: 130,
   meta: { label: "Değer", align: "right", exportValue: (r: YarnAtSubLine) => (r.value != null ? `${formatAmount(r.value)} ${r.currency ?? ""}`.trim() : "") },
   cell: ({ row: { original: r } }) => {
     if (r.value == null) return <span className="text-muted-foreground" title={priceMissingText(r) ?? undefined}>—</span>;
     return (
-      <span className="flex flex-col items-end" title={`${kg(r.kg)} × ${formatAmount(r.unitPrice, 2, 4)} ${r.currency ?? ""}/kg (mal kabul lot fiyatı)`}>
-        <span className="font-medium tabular-nums">{formatMoney(r.value, r.currency)}</span>
-        <span className="text-xs tabular-nums text-muted-foreground">{formatAmount(r.unitPrice, 2, 4)}/kg</span>
+      // Birim fiyat ipucunda: tek satırlı hücrede ikinci parça değeri kırpıyordu.
+      <span className="font-medium tabular-nums" title={`${kg(r.kg)} × ${formatAmount(r.unitPrice, 2, 4)} ${r.currency ?? ""}/kg (mal kabul lot fiyatı)`}>
+        {formatMoney(r.value, r.currency)}
       </span>
     );
   },
@@ -97,7 +98,7 @@ const VALUE: ColumnDef<YarnAtSubLine> = {
 const ORDERS: ColumnDef<YarnAtSubLine> = {
   id: "orders",
   header: "Sipariş",
-  size: 240,
+  size: 190,
   meta: { label: "Sipariş", exportValue: (r: YarnAtSubLine) => r.orders.map((o) => `${o.orderNo} ${kg(o.kg)}${o.status === "COMPLETED" ? ` (${CARRIED_LABEL})` : ""}`).join("; ") },
   cell: ({ row }) => (
     <span className="flex flex-col gap-0.5">
@@ -106,8 +107,9 @@ const ORDERS: ColumnDef<YarnAtSubLine> = {
           <Link to={warpingOrderHref(o.warpingOrderId)} className="font-mono text-foreground underline decoration-dotted underline-offset-4 hover:decoration-solid" onClick={(e) => e.stopPropagation()} title="Sipariş detayını aç">
             {o.orderNo}
           </Link>
-          <span className="tabular-nums text-muted-foreground">{kg(o.kg)}</span>
           {o.status === "COMPLETED" && <span className="shrink-0 rounded bg-amber-100 px-1 text-[11px] text-amber-900 dark:bg-amber-950 dark:text-amber-200" title={CARRIED_HINT}>{CARRIED_LABEL}</span>}
+          {/* Tek siparişte pay = Miktar sütunu; yalnız dağılımda ve rozetten SONRA (kırpılan kg olur, rozet değil). */}
+          {row.original.orders.length > 1 && <span className="tabular-nums text-muted-foreground">{kg(o.kg)}</span>}
         </span>
       ))}
     </span>
@@ -116,14 +118,14 @@ const ORDERS: ColumnDef<YarnAtSubLine> = {
 
 const AGE: ColumnDef<YarnAtSubLine> = {
   id: "age",
-  header: "Ne zamandır",
+  header: "Süre",
+  size: 76,
   meta: { label: "Ne zamandır", exportValue: (r: YarnAtSubLine) => `${ageText(ageDays(r.oldestDispatchedAt))} (${fmtFactoryDate(r.oldestDispatchedAt)})` },
   cell: ({ row }) => {
     const d = ageDays(row.original.oldestDispatchedAt);
     return (
-      <span className="flex flex-col" title="En eski sevkten bugüne (fabrika günü)">
-        <span className={cn("tabular-nums", d >= LONG_WAIT_DAYS && "font-medium text-amber-700 dark:text-amber-500")}>{ageText(d)}</span>
-        <span className="text-xs tabular-nums text-muted-foreground">{fmtFactoryDate(row.original.oldestDispatchedAt)} sevki</span>
+      <span className={cn("tabular-nums", d >= LONG_WAIT_DAYS && "font-medium text-amber-700 dark:text-amber-500")} title={`En eski sevk ${fmtFactoryDate(row.original.oldestDispatchedAt)} (fabrika günü)`}>
+        {ageText(d)}
       </span>
     );
   },
@@ -135,16 +137,17 @@ export type YarnRowAction = "return" | "transfer";
 const actionsCol = (onAction: (r: YarnAtSubLine, a: YarnRowAction) => void): ColumnDef<YarnAtSubLine> => ({
   id: "actions",
   header: () => <span className="sr-only">İşlem</span>,
-  size: 230,
+  // Simge düğme + ipucu: metinli düğmeler sütunu 230 px yapıyor, 1440 ekranda tablo dışına itiyordu.
+  size: 72,
   enableSorting: false,
   meta: { label: "İşlem", exportValue: () => "" },
   cell: ({ row: { original: r } }) => (
     <span className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-      <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => onAction(r, "return")} aria-label={`${yarnLabel(r)} ${r.lotNo ?? "lotsuz"} iade al`}>
-        <Undo2 className="mr-1 h-4 w-4" /> İade al
+      <Button size="icon" variant="ghost" className="h-7 w-7" title="İade al" onClick={() => onAction(r, "return")} aria-label={`${yarnLabel(r)} ${r.lotNo ?? "lotsuz"} iade al`}>
+        <Undo2 className="h-4 w-4" />
       </Button>
-      <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => onAction(r, "transfer")} aria-label={`${yarnLabel(r)} ${r.lotNo ?? "lotsuz"} başka siparişe aktar`}>
-        <ArrowRightLeft className="mr-1 h-4 w-4" /> Aktar
+      <Button size="icon" variant="ghost" className="h-7 w-7" title="Başka siparişe aktar" onClick={() => onAction(r, "transfer")} aria-label={`${yarnLabel(r)} ${r.lotNo ?? "lotsuz"} başka siparişe aktar`}>
+        <ArrowRightLeft className="h-4 w-4" />
       </Button>
     </span>
   ),
