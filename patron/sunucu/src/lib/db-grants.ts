@@ -26,6 +26,10 @@ export const APP_GRANTS: Readonly<Record<string, readonly Privilege[]>> = {
   push_devices: ["SELECT", "INSERT", "UPDATE", "DELETE"],
   notification_defaults: ["SELECT", "INSERT", "UPDATE"],
   notification_preferences: ["SELECT", "INSERT", "UPDATE"],
+  // Görünüm tercihi (kullanıcı tercihi): silinmez, "varsayılana dön" varsayılan değeri yazar.
+  view_preferences: ["SELECT", "INSERT", "UPDATE"],
+  // "Şimdi eşitle" durum satırı: hesap işaret açar (upsert); silinmez.
+  sync_requests: ["SELECT", "INSERT", "UPDATE"],
   notifications: ["SELECT", "INSERT", "UPDATE", "DELETE"],
   projection_rows: ["SELECT"],
   sync_state: ["SELECT"],
@@ -51,6 +55,8 @@ export const SYNC_GRANTS: Readonly<Record<string, readonly Privilege[]>> = {
   installations: ["SELECT", "INSERT", "UPDATE"],
   inbox_messages: ["SELECT", "UPDATE"],
   report_requests: ["SELECT", "UPDATE"],
+  // `rapor/al` claim'i bekleyen "şimdi eşitle" işaretini aynı tx'te tüketir.
+  sync_requests: ["SELECT", "UPDATE"],
   report_results: ["SELECT", "INSERT", "DELETE"],
   projection_rows: ["SELECT", "INSERT", "UPDATE", "DELETE"],
   sync_watermarks: ["SELECT", "INSERT", "UPDATE"],
@@ -77,6 +83,8 @@ export const CLOUD_TABLES: readonly string[] = [
   "push_devices",
   "notification_defaults",
   "notification_preferences",
+  "view_preferences",
+  "sync_requests",
   "notifications",
   "projection_rows",
   "sync_watermarks",
@@ -173,6 +181,8 @@ export const SUPPORT_GRANTS: Readonly<Record<string, "*" | readonly string[]>> =
   push_devices: ["id", "tesis_id", "account_id", "platform", "name", "active", "last_seen_at", "created_at", "updated_at"],
   notification_defaults: "*",
   notification_preferences: "*",
+  view_preferences: "*",
+  sync_requests: "*",
   notifications: "*",
   projection_rows: "*",
   sync_watermarks: "*",

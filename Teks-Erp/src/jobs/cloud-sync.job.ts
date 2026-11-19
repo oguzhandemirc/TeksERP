@@ -18,7 +18,7 @@ import { cloudEligibility, type CloudBlockReason } from "../cloud-sync/eligibili
 import { getCloudUrl } from "../cloud-sync/cloud-url";
 import { egressCloudTransport, type CloudTransport } from "../cloud-sync/cloud-client";
 import { runSyncRound, type RoundOutcome } from "../cloud-sync/sync-round";
-import { pushStandardReportSnapshots } from "../cloud-sync/report-requests";
+import { pushStandardReportSnapshots, setSyncNowHandler, type SyncNowScope } from "../cloud-sync/report-requests";
 import { reportGate, runGatedReportClaims } from "../cloud-sync/report-gate";
 import { readPatronCloudGuardSettings } from "../services/patron-cloud-guard.service";
 import { pruneSyncMarks } from "../cloud-sync/marks-pruning";
@@ -60,7 +60,7 @@ export interface CloudSyncStatus {
   readonly lastEventRoundAt: number | null;
 }
 
-export type CloudSyncTrigger = "periyodik" | "olay" | "zil";
+export type CloudSyncTrigger = "periyodik" | "olay" | "zil" | "istek";
 
 let started = false;
 let stopped = false;
@@ -213,6 +213,43 @@ async function runSnapshotRound(): Promise<void> {
   requestEventRound();
 }
 
+/** D8 "şimdi eşitle": iki istek turu arası en az (bulut da 60 sn'de birden fazla işaret açmaz). */
+export const SYNC_NOW_GAP_MS = 60 * 1000;
+/** TAM istekte uzlaştırma turu en çok bu aralıkla (bulut seddi 15 dk; fabrika kendi seddini ayrıca tutar). */
+export const SYNC_NOW_FULL_GAP_MS = 15 * 60 * 1000;
+let pendingSyncNow: SyncNowScope | null = null;
+let lastSyncNowAt = 0;
+let lastFullSyncNowAt = 0;
+
+/**
+ * Bulutun `rapor/al` yanıtındaki işaret (report-requests aktarır): iş çalışmıyorsa (anahtar kapalı) no-op; bekleyen
+ * TAM, KISMI ile küçülmez. Tur hemen değil `drainSyncNow`da koşar (rapor yoklaması `exclusive` içindedir). Asla atmaz.
+ */
+export function triggerCloudSyncNow(scope: SyncNowScope): void {
+  if (!started || stopped) return;
+  pendingSyncNow = pendingSyncNow === "TAM" ? "TAM" : scope;
+}
+
+/** Bekleyen isteği koşar: 60 sn içinde ikinci istek DÜŞER; KISMI = artımlı + saatlik anlıklar, TAM = + uzlaştırma (15 dk). */
+async function drainSyncNow(): Promise<void> {
+  const scope = pendingSyncNow;
+  if (!scope) return;
+  pendingSyncNow = null;
+  const t = clock();
+  if (t - lastSyncNowAt < SYNC_NOW_GAP_MS || !cloudEligibility(t).ok) return;
+  lastSyncNowAt = t;
+  await exclusive(async () => {
+    takeDirty();
+    const o = await runSyncRound({ kind: "ARTIMLI", cadences: new Set(["HER_TUR", "SAATLIK"]) }, { transport, nowMs: () => t });
+    remember(o, t, "istek");
+    if (o.status !== "HATA" && o.more) lastRoundAt = 0;
+    if (scope === "TAM" && o.status !== "HATA" && t - lastFullSyncNowAt >= SYNC_NOW_FULL_GAP_MS) {
+      lastFullSyncNowAt = t;
+      remember(await runSyncRound({ kind: "UZLASTIRMA", cadences: new Set() }, { transport, nowMs: () => t }), t, "istek");
+    }
+  });
+}
+
 /**
  * Olay turu iste — kirli bayrak dinleyicisi ve gelen kutusu çağırır. Kirli küme boşsa,
  * ön koşul kapalıysa (fail-closed; dışarı istek yok) ya da zamanlayıcı kuruluysa no-op.
@@ -271,6 +308,7 @@ function schedule(delayMs: number): void {
         pendingReports = false;
         await exclusive(() => runReportClaims(Date.now()));
       }
+      await drainSyncNow().catch((err) => reportJobFailure("cloud-sync", err));
       requestEventRound();
     })().finally(() => schedule(TICK_MS));
   }, delayMs);
@@ -284,13 +322,14 @@ export function startCloudSync(): void {
   if (started) return;
   started = true;
   onDirty(requestEventRound);
+  setSyncNowHandler(triggerCloudSyncNow);
   offDoorbell = [
     onDoorbellTopic("ozet", () => {
       if (!running) void runSnapshotRound().catch((err) => reportJobFailure("cloud-sync", err));
       else pendingSnapshot = true;
     }),
     onDoorbellTopic("rapor", () => {
-      if (!running) void exclusive(() => runReportClaims(Date.now()));
+      if (!running) void exclusive(() => runReportClaims(Date.now())).then(drainSyncNow).catch((err) => reportJobFailure("cloud-sync", err));
       else pendingReports = true;
     }),
   ];
@@ -309,6 +348,7 @@ export function startCloudSync(): void {
 export function stopCloudSync(): void {
   stopped = true;
   onDirty(null);
+  setSyncNowHandler(null);
   eventTimer?.cancel();
   eventTimer = null;
   for (const off of offDoorbell) off();
@@ -361,6 +401,9 @@ export function __configureCloudSyncForTests(p: { transport?: CloudTransport; re
     eventTimer = null;
     lastEventAttemptAt = 0;
     ineligibleUntil = 0;
+    pendingSyncNow = null;
+    lastSyncNowAt = 0;
+    lastFullSyncNowAt = 0;
     status = INITIAL_STATUS;
     reportGate.reset();
   }

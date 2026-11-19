@@ -78,6 +78,8 @@ const listQuerySchema = z.object({
   durum: optText(40),
   ara: optText(200),
   suzgec: optText(40),
+  sirala: optText(40),
+  yon: optText(10),
   kategoriAnahtari: optText(200),
   fasonFirmaId: optText(40),
   asama: optText(40),
@@ -89,7 +91,7 @@ function parseList(req: Request) {
   if (!r.success) throw AppError.badRequest(r.error.issues[0]?.message ?? "Sorgu geçersiz", { code: "PATRON_LIST_QUERY" });
   const q = r.data as z.infer<typeof listQuerySchema> & Record<string, string | undefined>;
   return {
-    cursor: q.imlec, limit: q.limit, durum: q.durum, ara: q.ara, suzgec: q.suzgec,
+    cursor: q.imlec, limit: q.limit, durum: q.durum, ara: q.ara, suzgec: q.suzgec, sirala: q.sirala, yon: q.yon,
     anahtar: q.kategoriAnahtari === undefined ? {} : { kategoriAnahtari: q.kategoriAnahtari },
     kimlik: Object.fromEntries(ID_FILTER_KEYS.filter((k) => q[k] !== undefined).map((k) => [k, q[k]!])),
     uyelik: Object.fromEntries(MEMBER_FILTER_KEYS.filter((k) => q[k] !== undefined).map((k) => [k, q[k]!])),

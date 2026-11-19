@@ -24,6 +24,9 @@ import { useListCapability } from "../../../../src/ui/siparis/capabilities";
 import { CapsuleButton, ListStates, QuickChip, SearchField, StaleNote } from "../../../../src/ui/siparis/parts";
 import { useRemoteList } from "../../../../src/ui/siparis/useRemoteList";
 import { space } from "../../../../src/ui/tokens";
+import { SIPARIS_SUTUNLARI } from "../../../../src/ui/tablo/sutunlar";
+import { useTabloTercihi } from "../../../../src/ui/tablo/useTabloTercihi";
+import { TabloAraclari, VeriTablosu } from "../../../../src/ui/tablo/VeriTablosu";
 
 type DurumKey = OrderStatus | "tumu";
 const CHOICES = [{ key: "tumu" as DurumKey, label: "Tümü" }, ...ORDER_STATUS_ORDER.map((k) => ({ key: k as DurumKey, label: ORDER_STATUS[k].label }))];
@@ -65,9 +68,12 @@ export default function Orders() {
   const [term, setTerm] = useState("");
   const [chip, setChip] = useState<string | null>(null);
   const ara = useDebounced(term.trim(), 300);
+  // Sıralama ve görünen sütunlar (D7): sunucu beyan ettiyse; tercih bulutta hesap başına, ERP kipinde cihazda.
+  const tablo = useTabloTercihi("tablo.siparis", "siparis", SIPARIS_SUTUNLARI);
+  const sira = tablo.tercih.sirala ? { sirala: tablo.tercih.sirala, yon: tablo.tercih.yon } : {};
   const list = useRemoteList(
     "siparis",
-    search ? { ara: ara || undefined, suzgec: chip ?? undefined } : { durum: durum === "tumu" ? undefined : durum },
+    search ? { ara: ara || undefined, suzgec: chip ?? undefined, ...sira } : { durum: durum === "tumu" ? undefined : durum, ...sira },
   );
   const chipLabel = search?.suzgec?.secenekler.find((o) => o.deger === chip)?.etiket ?? null;
   const title = search ? (chipLabel ?? "Tüm siparişler") : durum === "tumu" ? "Tüm siparişler" : ORDER_STATUS[durum].label;
@@ -97,10 +103,20 @@ export default function Orders() {
           <FilterChip label="Durum" value={CHOICES.find((c) => c.key === durum)?.label ?? "Tümü"} selected={durum !== "tumu"} onPress={() => setSheet(true)} testID="suzgec-durum" />
         </View>
       )}
+      {!list.closed ? <View style={{ marginBottom: space.m }}><TabloAraclari sutunlar={SIPARIS_SUTUNLARI} durum={tablo} testID="siparis-tablo" /></View> : null}
       {list.items.length > 0 ? (
-        <ListGroup testID="siparis-listesi">
-          {list.items.map((r) => <OrderRow key={r.id} r={r} onPress={() => openRecord(router, "siparis", r.id)} />)}
-        </ListGroup>
+        <VeriTablosu
+          sutunlar={SIPARIS_SUTUNLARI}
+          kayitlar={list.items}
+          durum={tablo}
+          onPress={(r) => openRecord(router, "siparis", r.id)}
+          testID="siparis-tablo"
+          kart={(items) => (
+            <ListGroup testID="siparis-listesi">
+              {items.map((r) => <OrderRow key={r.id} r={r} onPress={() => openRecord(router, "siparis", r.id)} />)}
+            </ListGroup>
+          )}
+        />
       ) : null}
       <ListStates list={list} empty={filtered ? "Bu süzgeçte sipariş yok" : "Henüz sipariş yok"} domain="siparisler" testID="siparisler" />
       <ChoiceSheet visible={sheet} title="Durum" choices={CHOICES} value={durum} onSelect={setDurum} onClose={() => setSheet(false)} testIDPrefix="durum-" />

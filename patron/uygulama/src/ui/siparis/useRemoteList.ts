@@ -17,6 +17,9 @@ export interface ListQuery {
   readonly suzgec?: string;
   /** Üyelik süzgeçleri; yalnız sunucu beyan ettiyse doldurulur (`ListCapability.memberFilter`). */
   readonly uyelik?: Partial<Readonly<Record<ListMemberFilterKey, string>>>;
+  /** Sunucu sıralaması; yalnız sunucu beyan ettiyse doldurulur (`ListCapability.sortFields`). */
+  readonly sirala?: string;
+  readonly yon?: "artan" | "azalan";
 }
 
 export interface RemoteList {
@@ -41,16 +44,17 @@ const LIMIT = 50;
 export function useRemoteList(projection: string, query: ListQuery = {}, options: { limit?: number; enabled?: boolean; tags?: readonly string[] } = {}): RemoteList {
   const { api } = useSession();
   const limit = options.limit ?? LIMIT;
-  const { durum, cariKartId, cariHesapId, siparisId, teklifId, suzgec } = query;
+  const { durum, cariKartId, cariHesapId, siparisId, teklifId, suzgec, sirala } = query;
+  const yon = sirala ? (query.yon ?? "artan") : undefined;
   const uyelikKey = query.uyelik ? Object.entries(query.uyelik).filter(([, v]) => v).map(([k, v]) => `${k}=${v}`).sort().join("&") : "";
   const ara = query.ara?.trim() || undefined;
   const enabled = options.enabled ?? true;
   const params = useCallback(
-    (imlec: string | undefined) => ({ imlec, limit, durum, cariKartId, cariHesapId, siparisId, teklifId, ara, suzgec, uyelik: uyelikKey ? (Object.fromEntries(new URLSearchParams(uyelikKey)) as ListQuery["uyelik"]) : undefined }),
-    [limit, durum, cariKartId, cariHesapId, siparisId, teklifId, ara, suzgec, uyelikKey],
+    (imlec: string | undefined) => ({ imlec, limit, durum, cariKartId, cariHesapId, siparisId, teklifId, ara, suzgec, sirala, yon, uyelik: uyelikKey ? (Object.fromEntries(new URLSearchParams(uyelikKey)) as ListQuery["uyelik"]) : undefined }),
+    [limit, durum, cariKartId, cariHesapId, siparisId, teklifId, ara, suzgec, sirala, yon, uyelikKey],
   );
   const ids = [cariKartId, cariHesapId, siparisId, teklifId].map((x) => x ?? "").join(":");
-  const key = `veri:${projection}:${durum ?? ""}:${ids}:${suzgec ?? ""}:${uyelikKey}:${limit}`;
+  const key = `veri:${projection}:${durum ?? ""}:${ids}:${suzgec ?? ""}:${uyelikKey}:${limit}${sirala ? `:${sirala}.${yon}` : ""}`;
 
   // Terimsiz ilk sayfa: saklı kopya + arkadan ağ + etiketle tazeleme.
   const first = useRemote<Page<ProjectionRecord>>(enabled && !ara ? key : null, () => api.list(projection, params(undefined)), { tags: options.tags ?? [projection] });

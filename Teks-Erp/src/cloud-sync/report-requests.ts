@@ -404,6 +404,23 @@ export interface ReportRunOutcome {
   readonly failedSend: number;
 }
 
+/** D8 "şimdi eşitle": bulutun claim yanıtındaki işaret eşitleme işine aktarılır (işi bu modül import etmez — döngü yok). */
+export type SyncNowScope = "KISMI" | "TAM";
+let syncNowHandler: ((kapsam: SyncNowScope) => void) | null = null;
+
+export function setSyncNowHandler(fn: ((kapsam: SyncNowScope) => void) | null): void {
+  syncNowHandler = fn;
+}
+
+/** Aktarım rapor yoklamasını ASLA bozmaz: işleyici yoksa (iş kapalı) sessiz, hata yutulur. */
+function relaySyncNow(kapsam: SyncNowScope): void {
+  try {
+    syncNowHandler?.(kapsam);
+  } catch {
+    /* eşitleme işi kendi turunda yine koşar */
+  }
+}
+
 /** Bulutta bekleyen istekleri üstlenir, hesaplar, sonucu gönderir (her sonuç ayrı imzalı istek). */
 /** `enFazla`: fabrika seddinin bu tura bıraktığı kalan (`report-gate.ts`); bulut daha fazlasını verirse fazlası hesaplanmaz. */
 export async function claimAndRunReportRequests(ctx: CloudCallContext, nowMs: () => number = Date.now, enFazla: number = REPORT_CLAIM_BATCH): Promise<ReportRunOutcome> {
@@ -412,6 +429,7 @@ export async function claimAndRunReportRequests(ctx: CloudCallContext, nowMs: ()
   if (!res.ok) return { claimed: 0, sent: 0, failedSend: 0 };
   const parsed = ReportClaimResponseSchema.safeParse(res.json);
   if (!parsed.success) return { claimed: 0, sent: 0, failedSend: 0 };
+  if (parsed.data.esitlemeIstegi) relaySyncNow(parsed.data.esitlemeIstegi.kapsam);
   let sent = 0;
   let failedSend = 0;
   // Bulut isteneni aşarsa fazlası hesaplanmaz (claim süresi dolunca bulut yeniden verir).

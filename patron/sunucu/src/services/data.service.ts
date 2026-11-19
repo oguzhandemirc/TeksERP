@@ -6,9 +6,9 @@ import { Prisma } from "@prisma/client";
 import type { SessionContext } from "../auth/session.service";
 import { projectionDef, type ProjectionDef } from "../catalog/projections";
 import { badRequest, forbidden, notFound } from "../lib/errors";
-import { searchCondition } from "../lib/search";
+import { foldSql, searchCondition } from "../lib/search";
 import { NO_TENANT, withTesis } from "../lib/tenant";
-import { ANAHTAR_SUZGEC_AZAMI, ARAMA_AZAMI, ASAMA_DEGERLERI, LIST_ID_FILTER_KEYS, LIST_ID_FILTERS, LIST_KEY_FILTER_KEYS, LIST_KEY_FILTERS, LIST_MEMBER_FILTER_KEYS, LIST_MEMBER_FILTERS, LIST_SEARCH, type FacilityStatus, type ListCapabilities, type ListIdFilterKey, type ListKeyFilterKey, type ListMemberFilterKey, type Page, type ProjectionRecord, type Snapshot } from "../wire/api";
+import { ANAHTAR_SUZGEC_AZAMI, ARAMA_AZAMI, ASAMA_DEGERLERI, LIST_ID_FILTER_KEYS, LIST_ID_FILTERS, LIST_KEY_FILTER_KEYS, LIST_KEY_FILTERS, LIST_MEMBER_FILTER_KEYS, LIST_MEMBER_FILTERS, LIST_SEARCH, LIST_SORT, type ListSortDir, type ListSortKind, type FacilityStatus, type ListCapabilities, type ListIdFilterKey, type ListKeyFilterKey, type ListMemberFilterKey, type Page, type ProjectionRecord, type Snapshot } from "../wire/api";
 import type { CloudContext } from "./context";
 import { loadServiceFacts, serviceState } from "./service-lifecycle";
 
@@ -41,6 +41,9 @@ export interface ListQuery {
   /** Seçici araması (`LIST_SEARCH`teki projeksiyonlar); imleç aynı terimle devam eder. */
   readonly ara?: string;
   readonly suzgec?: string;
+  /** Sıralama (`LIST_SORT` beyanı); yoksa `sort_at` azalan. */
+  readonly sirala?: string;
+  readonly yon?: string;
 }
 
 /** `ara`/`suzgec` koşulları: arama beyanı olmayan listede ya da tanınmayan süzgeçte 400 (fail-closed). */
@@ -130,7 +133,66 @@ function keyFilters(name: string, q: ListQuery): Prisma.Sql[] {
 export const LIST_CAPABILITIES: ListCapabilities = {
   kimlikSuzgecleri: LIST_ID_FILTERS, aranabilir: Object.keys(LIST_SEARCH), anahtarSuzgecleri: LIST_KEY_FILTERS,
   uyelikSuzgecleri: Object.fromEntries(Object.entries(LIST_MEMBER_FILTERS).map(([p, m]) => [p, LIST_MEMBER_FILTER_KEYS.filter((k) => m[k] !== undefined)])),
+  siralama: Object.fromEntries(Object.entries(LIST_SORT).map(([p, f]) => [p, Object.keys(f)])),
 };
+
+const NUMERIC = "^-?[0-9]+(\\.[0-9]+)?$";
+
+/** Sıralama anahtarı: boş değer (yok · JSON null · boş metin · sayı olmayan) SQL NULL'dur ve HEP sonda kalır. */
+function sortKeySql(field: string, kind: ListSortKind): Prisma.Sql {
+  const text = Prisma.sql`NULLIF(r.data->>${field}, '')`;
+  if (kind === "sayi") return Prisma.sql`(CASE WHEN ${text} ~ ${NUMERIC} THEN ${text}::numeric END)`;
+  if (kind === "metin") return foldSql(text);
+  return Prisma.sql`(${text} COLLATE "C")`;
+}
+
+export interface SortSpec {
+  readonly field: string;
+  readonly kind: ListSortKind;
+  readonly dir: ListSortDir;
+}
+
+/** `sirala`/`yon`: beyansız alan, tanınmayan yön ya da tek başına `yon` 400 (fail-closed); ikisi de yoksa null (eski sıra). */
+export function sortSpec(name: string, q: Pick<ListQuery, "sirala" | "yon">): SortSpec | null {
+  if (q.yon !== undefined && q.yon !== "artan" && q.yon !== "azalan") throw badRequest("yon artan ya da azalan olmalı");
+  if (q.sirala === undefined) {
+    if (q.yon !== undefined) throw badRequest("yon yalnız sirala ile");
+    return null;
+  }
+  const fields = Object.hasOwn(LIST_SORT, name) ? LIST_SORT[name]! : {};
+  const kind = Object.hasOwn(fields, q.sirala) ? fields[q.sirala] : undefined;
+  if (!kind) throw badRequest(`Bu listede ${q.sirala} sıralaması yok`);
+  return { field: q.sirala, kind, dir: (q.yon as ListSortDir | undefined) ?? "artan" };
+}
+
+/** Sıralı imleç: `[anahtar metni | null, kayıt kimliği]` (anahtar SQL'de aynı türe geri çevrilir). */
+function decodeSortCursor(cursor: string): { key: string | null; id: string } {
+  try {
+    const [key, id] = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as [unknown, string];
+    if ((key !== null && typeof key !== "string") || !UUID.test(id)) throw new Error("biçim");
+    return { key, id };
+  } catch {
+    throw badRequest("İmleç biçimsiz");
+  }
+}
+
+const encodeSortCursor = (key: string | null, id: string): string => Buffer.from(JSON.stringify([key, id])).toString("base64url");
+
+/** Sıralı imleç koşulu: (boş mu, anahtar yönlü, kimlik yönlü) sırasında imlecin ardından gelenler. */
+function sortCursorFilter(sort: SortSpec, c: { key: string | null; id: string }): Prisma.Sql {
+  const k = sortKeySql(sort.field, sort.kind);
+  const cmp = sort.dir === "artan" ? Prisma.sql`>` : Prisma.sql`<`;
+  if (c.key === null) return Prisma.sql`AND ${k} IS NULL AND r.record_id ${cmp} ${c.id}::uuid`;
+  if (sort.kind === "sayi" && !new RegExp(NUMERIC).test(c.key)) throw badRequest("İmleç biçimsiz");
+  const p = sort.kind === "sayi" ? Prisma.sql`${c.key}::numeric` : Prisma.sql`(${c.key}::text COLLATE "C")`;
+  return Prisma.sql`AND (${k} IS NULL OR ${k} ${cmp} ${p} OR (${k} = ${p} AND r.record_id ${cmp} ${c.id}::uuid))`;
+}
+
+function sortOrderSql(sort: SortSpec | null): Prisma.Sql {
+  if (!sort) return Prisma.sql`r.sort_at DESC, r.record_id DESC`;
+  const d = sort.dir === "artan" ? Prisma.sql`ASC` : Prisma.sql`DESC`;
+  return Prisma.sql`${sortKeySql(sort.field, sort.kind)} ${d} NULLS LAST, r.record_id ${d}`;
+}
 
 function decodeCursor(cursor: string): { sortAt: Date; id: string } {
   try {
@@ -150,6 +212,8 @@ export interface Row {
   data: unknown;
   version_at: Date;
   sort_at: Date;
+  /** Yalnız sıralı listede: sıralama anahtarının metni (imleç için). */
+  sort_key?: string | null;
   finans: unknown;
   kisisel: unknown;
 }
@@ -165,14 +229,15 @@ export function rowView(r: Row, sub: { finans: boolean; kisisel: boolean }): Pro
 }
 
 /** Kök + (izinliyse) alt satırlar tek sorguda; imleç `(sort_at, record_id)` azalan (liste ve dışa aktarma aynı sıra). */
-export function selectRows(s: SessionContext, def: ProjectionDef, where: Prisma.Sql, limit: number): Prisma.Sql {
+export function selectRows(s: SessionContext, def: ProjectionDef, where: Prisma.Sql, limit: number, sort: SortSpec | null = null): Prisma.Sql {
+  const key = sort ? Prisma.sql`, (${sortKeySql(sort.field, sort.kind)})::text AS sort_key` : Prisma.empty;
   return Prisma.sql`
-    SELECT r.record_id, r.data, r.version_at, r.sort_at, f.data AS finans, k.data AS kisisel
+    SELECT r.record_id, r.data, r.version_at, r.sort_at, f.data AS finans, k.data AS kisisel${key}
       FROM projection_rows r
       LEFT JOIN projection_rows f ON f.tesis_id = r.tesis_id AND f.projection = ${`${def.name}.finans`} AND f.record_id = r.record_id AND f.deleted_at IS NULL
       LEFT JOIN projection_rows k ON k.tesis_id = r.tesis_id AND k.projection = ${`${def.name}.kisisel`} AND k.record_id = r.record_id AND k.deleted_at IS NULL
      WHERE r.tesis_id = ${s.tesisId}::uuid AND r.projection = ${def.name} AND r.deleted_at IS NULL ${where}
-     ORDER BY r.sort_at DESC, r.record_id DESC
+     ORDER BY ${sortOrderSql(sort)}
      LIMIT ${limit}`;
 }
 
@@ -181,17 +246,20 @@ export async function listProjection(ctx: CloudContext, s: SessionContext, name:
   if (q.durum !== undefined && !/^[A-Z][A-Z0-9_]{0,39}$/.test(q.durum)) throw badRequest("durum biçimsiz");
   const filters: Prisma.Sql[] = [...idFilters(def.name, q), ...memberFilters(def.name, q), ...keyFilters(def.name, q), ...searchFilters(def.name, q)];
   if (q.durum) filters.push(Prisma.sql`AND r.data->>'durum' = ${q.durum}`);
-  if (q.cursor) {
+  const sort = sortSpec(def.name, q);
+  if (q.cursor && sort) filters.push(sortCursorFilter(sort, decodeSortCursor(q.cursor)));
+  else if (q.cursor) {
     const c = decodeCursor(q.cursor);
     filters.push(Prisma.sql`AND (r.sort_at, r.record_id) < (${c.sortAt}::timestamptz, ${c.id}::uuid)`);
   }
   const sub = visibleSubRows(s, def);
   const rows = await withTesis(ctx.app, { tesisId: s.tesisId, projections: s.projections }, (tx) =>
-    tx.$queryRaw<Row[]>(selectRows(s, def, filters.length > 0 ? Prisma.join(filters, " ") : Prisma.empty, q.limit + 1)),
+    tx.$queryRaw<Row[]>(selectRows(s, def, filters.length > 0 ? Prisma.join(filters, " ") : Prisma.empty, q.limit + 1, sort)),
   );
   const page = rows.slice(0, q.limit);
   const last = page[page.length - 1];
-  return { kayitlar: page.map((r) => rowView(r, sub)), sonraki: rows.length > q.limit && last ? encodeCursor(last.sort_at, last.record_id) : null };
+  const next = rows.length > q.limit && last ? (sort ? encodeSortCursor(last.sort_key ?? null, last.record_id) : encodeCursor(last.sort_at, last.record_id)) : null;
+  return { kayitlar: page.map((r) => rowView(r, sub)), sonraki: next };
 }
 
 export async function getProjectionRecord(ctx: CloudContext, s: SessionContext, name: string, id: string) {
@@ -239,5 +307,6 @@ export async function facilityStatus(ctx: CloudContext, s: SessionContext): Prom
       : null,
     hizmet: { asama: service.phase, bitis: service.endedAt?.toISOString() ?? null, saltOkunurBitis: service.readOnlyUntil?.toISOString() ?? null },
     liste: LIST_CAPABILITIES,
+    simdiEsitle: true,
   };
 }
