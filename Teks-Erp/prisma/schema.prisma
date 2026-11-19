@@ -2161,7 +2161,10 @@ model WarpingOrderSettlement {
 /// Tutma: holding(kalem, sipariş) −= Σ net fire(tutan = sipariş).
 model WarpingYarnWaste {
   id             String   @id @default(uuid()) @db.Uuid
-  settlementId   String   @db.Uuid
+  /// Kapanış firesi: kapanış/yeniden açma kaydı. İade firesinde NULL (CHECK `warping_yarn_wastes_source_ck`: ikisinden biri dolu).
+  settlementId   String?  @db.Uuid
+  /// İade firesi: aynı istekte yazılan iade hareketi (WASTE) / iade stornosu (WASTE_CANCEL).
+  returnMovementId String? @db.Uuid
   /// Tutan (fireyi beyan eden) sipariş.
   warpingOrderId String   @db.Uuid
   dispatchItemId String   @db.Uuid
@@ -2176,13 +2179,15 @@ model WarpingYarnWaste {
   createdById    String?  @db.Uuid
   createdAt      DateTime @default(now()) @db.Timestamptz
 
-  settlement   WarpingOrderSettlement    @relation(fields: [settlementId], references: [id], onDelete: Restrict)
+  settlement     WarpingOrderSettlement?   @relation(fields: [settlementId], references: [id], onDelete: Restrict)
+  returnMovement YarnMovement?             @relation("WarpingYarnWasteReturn", fields: [returnMovementId], references: [id], onDelete: Restrict)
   warpingOrder WarpingOrder              @relation(fields: [warpingOrderId], references: [id], onDelete: Restrict)
   dispatchItem SubcontractorDispatchItem @relation("WarpingYarnWasteItem", fields: [dispatchItemId], references: [id], onDelete: Restrict)
   reverses     WarpingYarnWaste?         @relation("WarpingYarnWasteReversal", fields: [reversesId], references: [id], onDelete: Restrict)
   reversal     WarpingYarnWaste?         @relation("WarpingYarnWasteReversal")
 
   @@index([settlementId])
+  @@index([returnMovementId])
   @@index([warpingOrderId, createdAt])
   @@index([dispatchItemId, createdAt])
   @@map("warping_yarn_wastes")
@@ -13207,6 +13212,10 @@ model YarnMovement {
   dispatchItemId    String? @db.Uuid
   /// F5: emanet çıkış kalemi bağı — `CONSIGNMENT_*` satırı ⇔ bağ dolu (CHECK `yarn_movements_consignment_link_ck`).
   consignmentItemId String? @db.Uuid
+  /// Devere iade(+fire) ucu idempotency — MANTIKSAL DENEME başına (yalnız token'lı yazımda dolu).
+  clientToken       String? @unique @db.Uuid
+  /// Token'lı isteğin gövde özeti (replay kimliği: aynı token farklı gövde 409).
+  requestHash       String? @db.VarChar(64)
 
   item            Item                       @relation(fields: [itemId], references: [id], onDelete: Restrict)
   dispatchItem    SubcontractorDispatchItem? @relation("YarnMovementDispatchItem", fields: [dispatchItemId], references: [id], onDelete: Restrict)
@@ -13218,6 +13227,7 @@ model YarnMovement {
   invoice         Invoice?                   @relation(fields: [invoiceId], references: [id])
   stockCount      StockCount?                @relation(fields: [stockCountId], references: [id], onDelete: Restrict)
   user            User?                      @relation("YarnMovementUser", fields: [userId], references: [id])
+  warpingWastes   WarpingYarnWaste[]         @relation("WarpingYarnWasteReturn")
 
   createdAt DateTime @default(now()) @db.Timestamptz
 

@@ -1,6 +1,6 @@
-// BEKÇİ — deverecide tutulan iplik saf yardımcıları (D6b-2): kg sınırı, aktarma gövdesi, aktarma hücresi.
+// BEKÇİ — deverecide tutulan iplik saf yardımcıları (D6b-2): kg sınırı, aktarma gövdesi, aktarma hücresi, iade + fire girişi.
 import { describe, expect, it } from "vitest";
-import { buildTransferLines, checkKg, holdsYarn, initialTransferDrafts, transferText } from "./holding-model";
+import { buildTransferLines, checkKg, checkReturn, holdsYarn, initialTransferDrafts, remainingAsWaste, transferText, yarnTitle } from "./holding-model";
 import type { WarpingYarnHolding } from "./holding-types";
 
 const h = (id: string, holdingKg: string, over: Partial<WarpingYarnHolding> = {}): WarpingYarnHolding => ({
@@ -33,5 +33,29 @@ describe("holding-model", () => {
     expect(transferText("8.000", "0.000")).toBe("−8,000");
     expect(transferText("0.000", "2.500")).toBe("+2,500");
     expect(transferText("0.000", "0.000")).toBe("—");
+  });
+
+  it("iade + fire: boş fire = 0, iade + fire tutmayı aşamaz, kalan hesaplanır", () => {
+    expect(checkReturn("280", "", "288.750")).toEqual({ ok: true, qty: 280, waste: 0, keep: 8.75 });
+    expect(checkReturn("280", "8,75", "288.750")).toEqual({ ok: true, qty: 280, waste: 8.75, keep: 0 });
+    expect(checkReturn("280", "9", "288.750")).toEqual({ ok: false, field: "total", error: "İade + fire (289,000 kg) deverecide tutulanı (288,750 kg) aşıyor." });
+    expect(checkReturn("280", "-1", "288.750")).toEqual({ ok: false, field: "waste", error: "Fire negatif olamaz." });
+    expect(checkReturn("280", "x", "288.750")).toEqual({ ok: false, field: "waste", error: "Fire için geçerli bir sayı girin." });
+    expect(checkReturn("", "1", "288.750")).toEqual({ ok: false, field: null, error: null });
+    expect(checkReturn("0", "1", "288.750")).toEqual({ ok: false, field: "qty", error: "Miktar sıfırdan büyük olmalı." });
+  });
+
+  it("kalanın hepsini fire yaz: fire = tutma − iade; geçersiz iadede yok", () => {
+    expect(remainingAsWaste("280", "288.750")).toBe("8,75");
+    expect(remainingAsWaste("288,75", "288.750")).toBe("0");
+    expect(remainingAsWaste("", "288.750")).toBeNull();
+    expect(remainingAsWaste("300", "288.750")).toBeNull();
+  });
+
+  it("başlık: iplik adı birincil, kod ikincil", () => {
+    const names = new Map([["y1", { code: "IPL-70", name: "70/800 Polyester" }], ["y2", { code: "IPL-X", name: "" }]]);
+    expect(yarnTitle(names, "y1")).toEqual({ primary: "70/800 Polyester", secondary: "IPL-70" });
+    expect(yarnTitle(names, "y2")).toEqual({ primary: "IPL-X", secondary: null });
+    expect(yarnTitle(names, "y3")).toEqual({ primary: "iplik", secondary: null });
   });
 });

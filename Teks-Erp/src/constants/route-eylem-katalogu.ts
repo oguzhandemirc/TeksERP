@@ -71,7 +71,8 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/warping-orders/:id/cancel": e("bir fason devere siparişini iptal etti", "bir fason devere siparişini iptal etmeye çalıştı"),
   "POST /api/warping-orders/:id/dispatch": e("devereciye iplik sevk etti", "devereciye iplik sevk etmeye çalıştı"),
   "POST /api/warping-orders/:id/dispatches/:dispatchId/cancel": e("bir devere iplik sevkini iptal etti", "bir devere iplik sevkini iptal etmeye çalıştı"),
-  "POST /api/warping-orders/:id/yarn-returns": e("devereciden iplik iadesi aldı", "devereciden iplik iadesi almaya çalıştı"),
+  "POST /api/warping-orders/:id/yarn-returns/preview": e("devere iplik iadesi önizlemesi aldı", "devere iplik iadesi önizlemesi almaya çalıştı"),
+  "POST /api/warping-orders/:id/yarn-returns": e("devereciden iplik iadesi aldı (varsa fire ile)", "devereciden iplik iadesi almaya çalıştı"),
   "POST /api/warping-orders/:id/yarn-returns/:movementId/cancel": e("bir devere iplik iadesini iptal etti", "bir devere iplik iadesini iptal etmeye çalıştı"),
   "POST /api/warping-orders/:id/yarn-transfers/preview": e("devere iplik aktarma önizlemesi aldı", "devere iplik aktarma önizlemesi almaya çalıştı"),
   "POST /api/warping-orders/:id/yarn-transfers": e("deverecideki ipliği başka devere siparişine aktardı", "deverecideki ipliği başka devere siparişine aktarmaya çalıştı"),
@@ -102,6 +103,7 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/admin/devices/proof-reset": e("cihazları yeniden bağlamak için kanıtı sıfırladı", "cihaz kanıtını sıfırlamaya çalıştı"),
   // ── Kimlik: web girişi 2FA kullanıcı tercihi
   "POST /api/admin/login-lockouts/:id/release": e("bir giriş kilidini kaldırdı", "bir giriş kilidini kaldırmaya çalıştı"),
+  "POST /api/admin/open-sessions/:id/revoke": e("bir açık oturumu sonlandırdı", "bir açık oturumu sonlandırmaya çalıştı"),
   "PUT /api/auth/web-totp": e("internetten giriş 2FA tercihini değiştirdi", "internetten giriş 2FA tercihini değiştirmeye çalıştı"),
   "POST /api/auth/trusted-devices/:id/revoke": e("hatırlanan bir cihazını kaldırdı", "hatırlanan bir cihazını kaldırmaya çalıştı"),
   "POST /api/auth/trusted-devices/revoke-all": e("hatırlanan bütün cihazlarını kaldırdı", "hatırlanan bütün cihazlarını kaldırmaya çalıştı"),

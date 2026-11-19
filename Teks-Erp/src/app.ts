@@ -136,6 +136,7 @@ import dbCopyRoutes from "./routes/db-copy.routes";
 import shortCredentialRoutes from "./routes/short-credential.routes";
 import credentialResetRoutes from "./routes/credential-reset.routes";
 import loginLockoutRoutes from "./routes/login-lockout.routes";
+import openSessionRoutes from "./routes/open-session.routes";
 import turnstileRoutes from "./routes/turnstile.routes";
 import readOnlyDbRoutes from "./routes/read-only-db.routes";
 import dashboardRoutes from "./routes/dashboard.routes";
@@ -719,6 +720,7 @@ app.use("/api/admin/db-copies", dbCopyRoutes);
 app.use("/api/admin/short-credentials", shortCredentialRoutes);
 app.use("/api/admin/credential-reset-requests", credentialResetRoutes);
 app.use("/api/admin/login-lockouts", loginLockoutRoutes); // O4: kilitli giriş kovaları
+app.use("/api/admin/open-sessions", openSessionRoutes); // açık oturumlar + yönetici sonlandırması
 app.use("/api/admin/turnstile", turnstileRoutes); // V1c: tarayıcı girişi bot koruması
 app.use("/api/admin/read-only-db", readOnlyDbRoutes);
 // ZENGİN sağlık yükü — `/health`ten AYRILDI (F-CORE-GUV-002). adminRoutes'tan
