@@ -225,13 +225,14 @@ export interface WarpingYarnHolding {
 /** Devereci(ler)deki iplik tutmaları — `statuses` verilirse yalnız o durumdaki siparişler (devreden = COMPLETED). */
 export async function loadWarpingYarnHoldings(
   db: Db,
-  filter: { subcontractorIds?: string[]; yarnItemIds?: string[]; statuses?: WarpingOrderStatus[] },
+  filter: { subcontractorIds?: string[]; yarnItemIds?: string[]; lotIds?: string[]; statuses?: WarpingOrderStatus[] },
 ): Promise<WarpingYarnHolding[]> {
-  if (filter.subcontractorIds?.length === 0 || filter.yarnItemIds?.length === 0) return [];
+  if (filter.subcontractorIds?.length === 0 || filter.yarnItemIds?.length === 0 || filter.lotIds?.length === 0) return [];
   const rows = await sequentialTx(db).subcontractorDispatchItem.findMany({
     where: {
       kind: SubcontractorDispatchItemKind.YARN,
       ...(filter.yarnItemIds ? { yarnItemId: { in: filter.yarnItemIds } } : {}),
+      ...(filter.lotIds ? { lotId: { in: filter.lotIds } } : {}),
       dispatch: { warpingOrderId: { not: null }, cancelledAt: null, ...(filter.subcontractorIds ? { subcontractorId: { in: filter.subcontractorIds } } : {}) },
     },
     select: WARPING_YARN_ITEM_SELECT,

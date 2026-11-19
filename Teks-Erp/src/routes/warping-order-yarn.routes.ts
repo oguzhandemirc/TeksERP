@@ -9,9 +9,10 @@ import { Router, type NextFunction, type Request, type Response } from "express"
 import { z } from "zod";
 import { WarpingOrderStatus } from "@prisma/client";
 import { AppError } from "../utils/app-error";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { matchesPermission, requirePermission } from "../middlewares/rbac.middleware";
 import { requireIplikEnabled } from "../middlewares/module.middleware";
 import { assertNoBareFilterParams, parseQueryParams, readFilterList } from "../utils/query-parser";
+import { readListSearch } from "../utils/list-search";
 import { previewWarpingTransfer, transferWarpingYarn, WARPING_TRANSFER_MAX_LINES } from "../services/warping-order/yarn-transfer";
 import { cancelWarpingTransfer, previewCancelWarpingTransfer } from "../services/warping-order/yarn-transfer-cancel";
 import { cancelWarpingYarnReturn, listWarpingTransfers, listWarpingYarnHoldings, returnWarpingYarn, warpingYarnAtSubcontractors } from "../services/warping-order/yarn-return";
@@ -56,7 +57,7 @@ const ReturnBody = z.strictObject({
   lotId: Id.nullable().optional(),
 });
 const CancelBody = z.strictObject({ reason: z.string().trim().min(3, "İptal sebebi en az 3 karakter").max(300, "İptal sebebi en çok 300 karakter") });
-const AT_FILTERS = ["subcontractorId", "yarnItemId", "status"];
+const AT_FILTERS = ["subcontractorId", "yarnItemId", "lotId", "status"];
 
 /**
  * @openapi
@@ -68,9 +69,12 @@ const AT_FILTERS = ["subcontractorId", "yarnItemId", "status"];
  *     parameters:
  *       - { in: query, name: "filter[subcontractorId]", schema: { type: string } }
  *       - { in: query, name: "filter[yarnItemId]", schema: { type: string } }
+ *       - { in: query, name: "filter[lotId]", schema: { type: string }, description: "Lot kimliği (CSV)" }
  *       - { in: query, name: "filter[status]", schema: { type: string } }
+ *       - { in: query, name: search, schema: { type: string, maxLength: 100 }, description: "Lot no · iplik kodu/adı · fasoncu · sipariş no" }
  *     responses:
- *       200: { description: "{ success, data: [{ subcontractorId, subcontractorCode, subcontractorName, yarnItemId, yarnItemCode, yarnItemName, lotId, lotNo, ownerCustomerId, ownerCustomerName, kg, oldestDispatchedAt, orders[{ warpingOrderId, orderNo, status, kg }] }] }" }
+ *       200: { description: "{ success, data: [{ subcontractorId, subcontractorCode, subcontractorName, yarnItemId, yarnItemCode, yarnItemName, lotId, lotNo, ownerCustomerId, ownerCustomerName, kg, oldestDispatchedAt, orders[{ warpingOrderId, orderNo, status, kg }], priceStatus?, unitPrice?, currency?, value? }] } — fiyat alanları yalnız goods-receipt:read ile" }
+ *       400: { description: "FILTER_UNKNOWN · FILTER_INVALID · LIST_SEARCH_TOO_LONG" }
  */
 router.get("/yarn-at-subcontractor", requirePermission("warping-order:read"), requireIplikEnabled, wrap(async (req) => {
   assertNoBareFilterParams(req, AT_FILTERS);
@@ -86,7 +90,13 @@ router.get("/yarn-at-subcontractor", requirePermission("warping-order:read"), re
   const status = readFilterList(f.status);
   const bad = status.find((s) => !(Object.values(WarpingOrderStatus) as string[]).includes(s));
   if (bad) throw AppError.badRequest(`filter[status] geçersiz: ${bad}`, { code: "FILTER_INVALID" });
-  const data = await warpingYarnAtSubcontractors({ subcontractorIds: ids("subcontractorId"), yarnItemIds: ids("yarnItemId"), statuses: status.length > 0 ? (status as WarpingOrderStatus[]) : undefined });
+  const search = readListSearch(req.query.search);
+  // Değer (lot fiyatı) iç bilgidir: fiş fiyatını görme izni yoksa alanlar yanıtta hiç yok (ticaret zaten iplik kapısında).
+  const withValue = matchesPermission(req.user?.permissions ?? [], "goods-receipt:read");
+  const data = await warpingYarnAtSubcontractors({
+    subcontractorIds: ids("subcontractorId"), yarnItemIds: ids("yarnItemId"), lotIds: ids("lotId"),
+    statuses: status.length > 0 ? (status as WarpingOrderStatus[]) : undefined, search, withValue,
+  });
   return { status: 200, body: { success: true, data } };
 }));
 
