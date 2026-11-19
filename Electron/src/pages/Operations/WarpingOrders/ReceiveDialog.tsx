@@ -13,7 +13,7 @@ import { FormField } from "@/components/forms/FormField";
 import { Input } from "@/components/ui/input";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { toastServerSuccess } from "@/lib/serverNotes";
-import { beamLinesText, fmtM } from "./order-model";
+import { fmtM, planText } from "./order-model";
 import { buildReceiveBody, draftsFromPlan, type ReceiveBeamDraft } from "./receive-model";
 import { warpingReceiveService } from "./receive-service";
 import { ReceiveBeamsTable, ReceivePreviewView } from "./ReceiveParts";
@@ -55,7 +55,7 @@ export function ReceiveDialog({ order, onClose }: { order: WarpingOrder; onClose
         <DialogHeader>
           <DialogTitle>{order.orderNo} — levent kabulü</DialogTitle>
           <DialogDescription>
-            {order.subcontractor.name} devereciden dönen leventleri girin (plan {beamLinesText(order.beamLines)}). Adet ve boy plandan farklı olabilir; kullanılan iplik sevk sırasıyla düşülür.
+            {order.subcontractor.name} devereciden dönen leventleri girin (plan {planText(order)}). Adet ve boy plandan farklı olabilir; kullanılan iplik sevk sırasıyla düşülür.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3 text-sm">

@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatQty } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { transferText } from "./holding-model";
-import { fmtKg, fmtM } from "./order-model";
+import { fmtKg, fmtM, isBeamCountOpen } from "./order-model";
 import { signedKg } from "./receive-model";
 import type { WarpingSettlement } from "./receive-types";
 
@@ -17,7 +17,7 @@ function MetreStrip({ m }: { m: WarpingSettlement["metre"] }) {
   const short = Number(m.diffM) < 0;
   return (
     <dl className="grid grid-cols-2 gap-x-6 gap-y-1 rounded-md border p-3 text-sm sm:grid-cols-4" aria-label="Metre mutabakatı">
-      <div><dt className="text-xs text-muted-foreground">Hedef</dt><dd className="font-medium tabular-nums">{fmtM(m.targetM)} m · {m.planBeamCount} levent</dd></div>
+      <div><dt className="text-xs text-muted-foreground">Hedef</dt><dd className="font-medium tabular-nums">{fmtM(m.targetM)} m · {isBeamCountOpen({ beamCount: m.planBeamCount, beamCountOpen: m.planBeamCountOpen }) ? "adet belli değil" : `${m.planBeamCount} levent`}</dd></div>
       <div><dt className="text-xs text-muted-foreground">Gelen</dt><dd className="font-medium tabular-nums">{fmtM(m.receivedM)} m · {m.receivedBeamCount} levent</dd></div>
       <div>
         <dt className="text-xs text-muted-foreground">Fark</dt>

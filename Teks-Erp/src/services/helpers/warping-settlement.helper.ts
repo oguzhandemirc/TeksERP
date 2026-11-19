@@ -35,7 +35,7 @@ export interface WarpingSettlementYarn {
 }
 
 export interface WarpingSettlement {
-  metre: { targetM: string; receivedM: string; diffM: string; diffPct: string | null; planBeamCount: number; receivedBeamCount: number };
+  metre: { targetM: string; receivedM: string; diffM: string; diffPct: string | null; planBeamCount: number | null; planBeamCountOpen: boolean; receivedBeamCount: number };
   yarns: WarpingSettlementYarn[];
   weighing: { weighedBeamCount: number; weighedNetKg: string; nominalKg: string; diffKg: string; diffPct: string | null } | null;
 }
@@ -91,7 +91,7 @@ export async function loadWarpingSettlement(db: Db, warpingOrderId: string): Pro
   const target = D(order.targetLengthM);
   const diff = receivedM.minus(target);
   return {
-    metre: { targetM: kg(target), receivedM: kg(receivedM), diffM: kg(diff), diffPct: pct(diff, target), planBeamCount: order.beamCount, receivedBeamCount: beams.filter((b) => b.events.some((e) => !e.reversal)).length },
+    metre: { targetM: kg(target), receivedM: kg(receivedM), diffM: kg(diff), diffPct: pct(diff, target), planBeamCount: order.beamCount, planBeamCountOpen: order.beamCountOpen, receivedBeamCount: beams.filter((b) => b.events.some((e) => !e.reversal)).length },
     yarns: order.yarns.map((y) => {
       const s = sums.get(y.yarnItemId);
       const w = wound.get(y.yarnItemId) ?? { total: D(0), own: D(0), carry: D(0) };

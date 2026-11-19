@@ -18,7 +18,7 @@ import { createWarpingOrder, patchWarpingOrder, previewWarpingOrder, WARPING_ORD
 import { cancelPreviewWarpingOrder, cancelWarpingOrder } from "../services/warping-order/cancel";
 import { getWarpingOrder, listWarpingOrders } from "../services/warping-order/read";
 import { listWarpingDelays, WARPING_DELAY_STATES, type WarpingDelayState } from "../services/warping-order/delays";
-import { WARPING_ORDER_MAX_BEAM_LINES, WARPING_ORDER_MAX_EXTRA_SPECS } from "../services/warping-order/plan";
+import { WARPING_ORDER_MAX_BEAM_LINES, WARPING_ORDER_MAX_EXTRA_SPECS, WARPING_ORDER_MAX_TARGET_M } from "../services/warping-order/plan";
 import warpingOrderYarnRoutes from "./warping-order-yarn.routes";
 import warpingOrderReceiveRoutes from "./warping-order-receive.routes";
 import warpingOrderSettleRoutes from "./warping-order-settle.routes";
@@ -57,7 +57,9 @@ const BeamLine = z.strictObject({
   beamLengthM: z.number({ message: "Levent boyu sayı olmalı" }).positive("Levent boyu sıfırdan büyük olmalı").max(1_000_000, "Levent boyu çok büyük"),
 });
 const PlanFields = {
-  beamLines: z.array(BeamLine).min(1, "En az bir levent satırı gerekli").max(WARPING_ORDER_MAX_BEAM_LINES, `En çok ${WARPING_ORDER_MAX_BEAM_LINES} levent satırı`),
+  // Hedef: beamLines YA DA openTargetLengthM (adet belli değil) — tam birini servis `resolvePlanTarget` denetler.
+  beamLines: z.array(BeamLine).min(1, "En az bir levent satırı gerekli").max(WARPING_ORDER_MAX_BEAM_LINES, `En çok ${WARPING_ORDER_MAX_BEAM_LINES} levent satırı`).optional(),
+  openTargetLengthM: z.number({ message: "Toplam metre sayı olmalı" }).positive("Toplam metre sıfırdan büyük olmalı").max(WARPING_ORDER_MAX_TARGET_M, "Toplam metre çok büyük").optional(),
   extraWarpSpecIds: z.array(Id).max(WARPING_ORDER_MAX_EXTRA_SPECS, `En çok ${WARPING_ORDER_MAX_EXTRA_SPECS} ek tel grubu`).optional(),
   fixedWasteM: z.number({ message: "Sabit fire sayı olmalı" }).min(0, "Sabit fire negatif olamaz").max(1000, "Sabit fire en çok 1000 m").optional(),
 };
@@ -72,7 +74,7 @@ const MetaFields = {
 };
 const PreviewBody = z.strictObject({ warpSpecId: Id, ...PlanFields });
 const CreateBody = z.strictObject({ clientToken: z.uuid("clientToken geçersiz (UUID)"), warpSpecId: Id, subcontractorId: Id, ...PlanFields, ...MetaFields });
-const PatchBody = z.strictObject({ ...PlanFields, beamLines: PlanFields.beamLines.optional(), ...MetaFields });
+const PatchBody = z.strictObject({ ...PlanFields, ...MetaFields });
 const CancelBody = z.strictObject({ reason: z.string().trim().min(3, "İptal sebebi en az 3 karakter").max(300, "İptal sebebi en çok 300 karakter") });
 const ListQuery = z.object({
   search: z.string().max(64).optional(),
@@ -114,12 +116,13 @@ const YMD = /^\d{4}-\d{2}-\d{2}$/;
  *         application/json:
  *           schema:
  *             type: object
- *             required: [clientToken, warpSpecId, subcontractorId, beamLines]
+ *             required: [clientToken, warpSpecId, subcontractorId]
  *             properties:
  *               clientToken: { type: string, format: uuid }
  *               warpSpecId: { type: string, format: uuid }
  *               subcontractorId: { type: string, format: uuid }
- *               beamLines: { type: array, items: { type: object, properties: { beamCount: { type: integer }, beamLengthM: { type: number } } } }
+ *               beamLines: { type: array, description: "openTargetLengthM ile birlikte verilmez", items: { type: object, properties: { beamCount: { type: integer }, beamLengthM: { type: number } } } }
+ *               openTargetLengthM: { type: number, description: "Levent adedi belli değil — yalnız toplam metre (adet kabulde çıkar)" }
  *               extraWarpSpecIds: { type: array, items: { type: string, format: uuid }, description: "Aynı levente sarılan ek tel grubu kartları" }
  *               salesOrderIds: { type: array, items: { type: string, format: uuid }, description: "K3 — boş = stoğa çözgü" }
  *               fixedWasteM: { type: number, description: "Verilmezse devere.warpFixedWasteM" }

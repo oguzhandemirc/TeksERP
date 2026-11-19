@@ -102,7 +102,9 @@ export interface WarpingInstruction {
   sequenceNote: string | null;
   reed: { reedNo: string | null; reedWidthCm: string | null; endsPerDent: number | null } | null;
   beamLines: Array<{ beamCount: number; beamLengthM: string }>;
-  beamCount: number;
+  beamCount: number | null;
+  /** Levent adedi devereciye bırakıldı; eski backend göndermez. */
+  beamCountOpen?: boolean;
   targetLengthM: string;
   expectedReturnAt: string | null;
   notes: string | null;

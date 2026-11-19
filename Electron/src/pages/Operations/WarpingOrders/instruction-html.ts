@@ -6,7 +6,7 @@
 // Saatler fabrika diliminden (`factory-time`). Sevk irsaliyesi seçilirse talimattan önce, sayfa sonuyla ayrılır.
 // =============================================================================
 import { fmtFactoryDate, fmtFactoryDateTime } from "@/lib/factory-time";
-import { fmtKg, fmtM, trimNum } from "./order-model";
+import { fmtKg, fmtM, isBeamCountOpen, trimNum } from "./order-model";
 import type { WarpingDispatchRow, WarpingInstruction } from "./yarn-types";
 
 const esc = (s: string): string => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -21,6 +21,7 @@ export function reedText(r: WarpingInstruction["reed"]): string {
 function instructionSection(i: WarpingInstruction): string {
   const cards = [`${i.warpSpec.code} — ${i.warpSpec.name}`, ...i.extraSpecs.map((e) => `${e.code} — ${e.name} (ek tel grubu)`)].join("; ");
   const beams = i.beamLines.map((b) => `${b.beamCount} × ${fmtM(b.beamLengthM)} m`).join(" + ");
+  const beamRow = isBeamCountOpen(i) ? row("Levent adedi", `devereciye bırakıldı, toplam ${fmtM(i.targetLengthM)} m`) : row("Levent", `${beams} — toplam ${i.beamCount} levent, ${fmtM(i.targetLengthM)} m`);
   const yarns = i.yarns
     .map((y) => `<tr><td class="c">${esc(y.letter)}</td><td>${esc(y.code)} — ${esc(y.name)}</td><td class="n">${String(y.endsCount)}</td><td class="n">${esc(trimNum(y.denier))}</td></tr>`)
     .join("");
@@ -29,7 +30,7 @@ function instructionSection(i: WarpingInstruction): string {
     <div class="sub">Sipariş ${esc(i.orderNo)} · Devereci ${esc(i.subcontractor.name)} (${esc(i.subcontractor.code)})</div>
     <table class="kv">
       ${row("Çözgü kartı", cards)}
-      ${row("Levent", `${beams} — toplam ${i.beamCount} levent, ${fmtM(i.targetLengthM)} m`)}
+      ${beamRow}
       ${row("Toplam tel", String(i.totalEnds))}
       ${row("Tarak", reedText(i.reed))}
       ${row("Termin", i.expectedReturnAt ? fmtFactoryDate(i.expectedReturnAt) : "—")}

@@ -6,7 +6,7 @@ import { Callout } from "@/components/ui/callout";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { fmtKg, fmtM } from "./order-model";
+import { fmtKg, fmtM, isBeamCountOpen } from "./order-model";
 import { emptyBeamDraft, MAX_RECEIVE_BEAMS, receiveYarnRows, signedKg, type ReceiveBeamDraft } from "./receive-model";
 import type { WarpingReceivePreview } from "./receive-types";
 
@@ -61,7 +61,7 @@ function MetreLine({ p }: { p: WarpingReceivePreview }) {
   const m = p.before.metre;
   return (
     <p>
-      Hedef <b>{fmtM(m.targetM)} m</b> ({m.planBeamCount} levent) · şimdiye kadar {fmtM(m.receivedM)} m · bu kabul <b>{fmtM(p.incoming.lengthM)} m</b> ({p.incoming.beamCount} levent)
+      Hedef <b>{fmtM(m.targetM)} m</b> ({isBeamCountOpen({ beamCount: m.planBeamCount, beamCountOpen: m.planBeamCountOpen }) ? "adet belli değil" : `${m.planBeamCount} levent`}) · şimdiye kadar {fmtM(m.receivedM)} m · bu kabul <b>{fmtM(p.incoming.lengthM)} m</b> ({p.incoming.beamCount} levent)
       {" → "}gelen <b>{fmtM(p.after.receivedM)} m</b>, fark <span className={cn(Number(p.after.diffM) < 0 && "text-amber-700 dark:text-amber-400")}>{signedKg(p.after.diffM, fmtM)} m</span>
     </p>
   );

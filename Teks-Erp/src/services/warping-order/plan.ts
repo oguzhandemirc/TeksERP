@@ -1,7 +1,7 @@
 // =============================================================================
 // FASON DEVERE SİPARİŞİ — plan hesabı (D4a; tek yer: önizleme, oluşturma, düzenleme aynı fonksiyon)
 // =============================================================================
-// Hedef = Σ(levent adedi × boy) satırları (K6). Ana kart + ek tel grupları (aynı levent — döner varsayılanı)
+// Hedef = Σ(levent adedi × boy) satırları (K6) ya da adet belli değilse yalnız toplam metre (`resolvePlanTarget`). Ana kart + ek tel grupları (aynı levent — döner varsayılanı)
 // satırları birleşir; aynı iplik iki karttan gelirse teller toplanır, kaynak ilk kart kalır. Aritmetik
 // `warp-plan.helper`dan (formül kopyalanmaz); kart firesi her satırın KENDİ kaynak kartından gelir.
 // =============================================================================
@@ -23,10 +23,15 @@ export interface BeamLineInput {
   beamLengthM: number | string;
 }
 
-export interface WarpingPlanInput {
+/** Hedef girdisi: `beamLines` (adet × boy) YA DA `openTargetLengthM` (adet devereciye bırakıldı) — tam biri. */
+export interface PlanTargetInput {
+  beamLines?: BeamLineInput[];
+  openTargetLengthM?: number | string;
+}
+
+export interface WarpingPlanInput extends PlanTargetInput {
   warpSpecId: string;
   extraWarpSpecIds: string[];
-  beamLines: BeamLineInput[];
   fixedWasteM: Prisma.Decimal.Value;
 }
 
@@ -49,7 +54,8 @@ export interface WarpingPlan {
   spec: { id: string; code: string; name: string };
   extras: Array<{ id: string; code: string; name: string }>;
   beamLines: Array<{ beamCount: number; beamLengthM: Prisma.Decimal; sortOrder: number }>;
-  beamCount: number;
+  /** NULL = levent adedi belli değil (devereciye bırakıldı; satır yok, hedef yalnız toplam metre). */
+  beamCount: number | null;
   targetLengthM: Prisma.Decimal;
   hasWaste: boolean;
   wasteSources: WarpWasteSource[];
@@ -68,6 +74,41 @@ export function normalizeBeamLines(lines: BeamLineInput[]): WarpingPlan["beamLin
     if (!len.isFinite() || len.lte(0)) throw AppError.badRequest("Levent boyu sıfırdan büyük olmalı.", { code: "WARPING_BEAM_LINES_INVALID" });
     return { beamCount: l.beamCount, beamLengthM: len, sortOrder: i };
   });
+}
+
+export const WARPING_ORDER_MAX_TARGET_M = 10_000_000;
+
+/** Levent adedi açık mı (sipariş/önizleme `beamCount` NULL) — DTO `beamCountOpen` ve panel metinleri bundan. */
+export const isBeamCountOpen = (beamCount: number | null | undefined): boolean => beamCount == null;
+
+/**
+ * TEK KAYNAK hedef: satırlar → Σ(adet × boy), adet = Σ adet; açık adet → satırsız, adet NULL, hedef = toplam metre.
+ * Önizleme, oluşturma, düzenleme ve idempotency imzası buradan geçer; okuyucular saklı `targetLengthM`i okur.
+ */
+export function resolvePlanTarget(input: PlanTargetInput): Pick<WarpingPlan, "beamLines" | "beamCount" | "targetLengthM"> {
+  const hasLines = input.beamLines !== undefined;
+  const hasOpen = input.openTargetLengthM !== undefined && input.openTargetLengthM !== null;
+  if (hasLines === hasOpen) {
+    throw AppError.badRequest("Levent satırları ya da (adet belli değilse) toplam metre — ikisinden biri girilmeli.", { code: "WARPING_BEAM_LINES_INVALID" });
+  }
+  if (hasOpen) {
+    const total = D(input.openTargetLengthM!).toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP);
+    if (!total.isFinite() || total.lte(0)) throw AppError.badRequest("Toplam metre sıfırdan büyük olmalı.", { code: "WARPING_BEAM_LINES_INVALID" });
+    if (total.gt(WARPING_ORDER_MAX_TARGET_M)) throw AppError.badRequest("Toplam metre çok büyük.", { code: "WARPING_BEAM_LINES_INVALID" });
+    return { beamLines: [], beamCount: null, targetLengthM: total };
+  }
+  const beamLines = normalizeBeamLines(input.beamLines!);
+  return {
+    beamLines,
+    beamCount: beamLines.reduce((s, l) => s + l.beamCount, 0),
+    targetLengthM: beamLines.reduce((acc, l) => acc.plus(l.beamLengthM.mul(l.beamCount)), D(0)),
+  };
+}
+
+/** İdempotency kimlik imzası — açık adet `open:<m>`, satırlı `2x1000.000,…`. */
+export function planTargetSig(input: PlanTargetInput): string {
+  const t = resolvePlanTarget(input);
+  return t.beamCount === null ? `open:${t.targetLengthM.toFixed(3)}` : t.beamLines.map((l) => `${l.beamCount}x${l.beamLengthM.toFixed(3)}`).join(",");
 }
 
 /** Ana kartı zemin olarak kullanan kumaşlarda AYNI LEVENT (SHARED_BEAM) katmanı olan kartlar — ek tel grubu önerisi. */
@@ -94,7 +135,7 @@ async function assertExtrasShareBeam(db: Db, warpSpecId: string, extraIds: strin
 }
 
 export async function computeWarpingPlan(db: Db, input: WarpingPlanInput): Promise<WarpingPlan> {
-  const beamLines = normalizeBeamLines(input.beamLines);
+  const { beamLines, beamCount, targetLengthM } = resolvePlanTarget(input);
   const extraIds = [...new Set(input.extraWarpSpecIds)];
   if (extraIds.length !== input.extraWarpSpecIds.length) throw AppError.badRequest("Aynı ek tel grubu iki kez seçilemez.", { code: "WARPING_EXTRA_DUPLICATE" });
   if (extraIds.length > WARPING_ORDER_MAX_EXTRA_SPECS) throw AppError.badRequest(`En çok ${WARPING_ORDER_MAX_EXTRA_SPECS} ek tel grubu seçilebilir.`);
@@ -133,8 +174,6 @@ export async function computeWarpingPlan(db: Db, input: WarpingPlanInput): Promi
     if (resolveDenier(it) === null) throw AppError.badRequest(`"${it.name}" kaleminin denye değeri boş — devere hesabı denyesiz yapılamaz.`, { code: "YARN_DENIER_MISSING" });
   }
 
-  const targetLengthM = beamLines.reduce((acc, l) => acc.plus(l.beamLengthM.mul(l.beamCount)), D(0));
-  const beamCount = beamLines.reduce((s, l) => s + l.beamCount, 0);
   const yarns: WarpingPlanYarn[] = [];
   let hasWaste = false;
   const wasteSources: WarpWasteSource[] = [];

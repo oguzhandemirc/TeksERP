@@ -2,7 +2,7 @@
 import type { ReactNode } from "react";
 import { fmtFactoryDateTime } from "@/lib/factory-time";
 import { cn } from "@/lib/utils";
-import { beamLinesText, dueText, feeText, fmtM, trimNum } from "./order-model";
+import { dueText, feeText, fmtM, isBeamCountOpen, planText, trimNum } from "./order-model";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { formatQty } from "@/lib/format";
 import { useWarpingPreview } from "./service";
@@ -54,8 +54,9 @@ export function OrderSummary({ o }: { o: WarpingOrder }) {
         <span className="font-medium">{o.subcontractor.name}</span>
       </Item>
       <Item label="Hedef">
-        <span className="font-medium tabular-nums">{fmtM(o.targetLengthM)} m</span> · {o.beamCount} levent
-        <span className="block text-xs text-muted-foreground">{beamLinesText(o.beamLines)}</span>
+        <span className="font-medium tabular-nums">{fmtM(o.targetLengthM)} m</span>
+        {isBeamCountOpen(o) ? " (adet devereciye bırakıldı)" : ` · ${o.beamCount} levent`}
+        {!isBeamCountOpen(o) && <span className="block text-xs text-muted-foreground">{planText(o)}</span>}
       </Item>
       <Item label="Termin">
         <span className={cn(due.late && "font-medium text-destructive")}>{due.text}</span>

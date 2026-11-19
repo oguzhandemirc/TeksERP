@@ -6,6 +6,7 @@ import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { buildNextCursor, cursorWhere, decodeCursor } from "../../utils/cursor";
 import { resolveRangeEnd, resolveRangeStart } from "../../constants/time";
+import { isBeamCountOpen } from "./plan";
 
 type Db = Pick<Prisma.TransactionClient, "warpingOrder">;
 const kg = (v: Prisma.Decimal) => v.toFixed(3);
@@ -33,7 +34,9 @@ export interface WarpingOrderDto {
   warpSpec: { id: string; code: string; name: string; sequenceNote: string | null; reedNo: string | null; reedWidthCm: string | null; endsPerDent: number | null };
   subcontractor: { id: string; code: string; name: string };
   beamLines: Array<{ beamCount: number; beamLengthM: string }>;
-  beamCount: number;
+  /** NULL = levent adedi belli değil (`beamLines` boş); eski istemci yalnız metinde gösterir. */
+  beamCount: number | null;
+  beamCountOpen: boolean;
   targetLengthM: string;
   extraSpecs: Array<{ id: string; code: string; name: string }>;
   salesOrders: Array<{ id: string; orderNumber: string; status: string; customerName: string }>;
@@ -84,6 +87,7 @@ export function toWarpingOrderDto(r: Row): WarpingOrderDto {
     subcontractor: r.subcontractor,
     beamLines: r.beamLines.map((l) => ({ beamCount: l.beamCount, beamLengthM: l.beamLengthM.toFixed(3) })),
     beamCount: r.beamCount,
+    beamCountOpen: isBeamCountOpen(r.beamCount),
     targetLengthM: r.targetLengthM.toFixed(3),
     extraSpecs: r.extraSpecs.map((e) => e.warpSpec),
     salesOrders: r.salesOrders.map((s) => ({ id: s.order.id, orderNumber: s.order.orderNumber, status: s.order.status, customerName: s.order.customer.name })),
@@ -148,7 +152,8 @@ export interface WarpingOrderListRow {
   status: WarpingOrderStatus;
   warpSpec: { id: string; code: string; name: string };
   subcontractor: { id: string; name: string };
-  beamCount: number;
+  beamCount: number | null;
+  beamCountOpen: boolean;
   targetLengthM: string;
   expectedReturnAt: string | null;
   createdAt: string;
@@ -178,7 +183,7 @@ export async function listWarpingOrders(p: WarpingOrderListParams): Promise<{ da
   for (const g of groups) byStatus[g.status] = g._count._all;
   return {
     data: page.map((r) => ({
-      id: r.id, orderNo: r.orderNo, status: r.status, warpSpec: r.warpSpec, subcontractor: r.subcontractor, beamCount: r.beamCount,
+      id: r.id, orderNo: r.orderNo, status: r.status, warpSpec: r.warpSpec, subcontractor: r.subcontractor, beamCount: r.beamCount, beamCountOpen: isBeamCountOpen(r.beamCount),
       targetLengthM: r.targetLengthM.toFixed(3), expectedReturnAt: r.expectedReturnAt?.toISOString() ?? null, createdAt: r.createdAt.toISOString(),
     })),
     nextCursor: hasMore ? buildNextCursor(page[page.length - 1]) : null,

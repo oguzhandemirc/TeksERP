@@ -12,7 +12,7 @@ import { WARPING_ORDER_TABLE } from "./create";
 import { loadWarpingOrderDto, type WarpingOrderDto } from "./read";
 
 export interface WarpingOrderCancelPreview {
-  order: Pick<WarpingOrderDto, "id" | "orderNo" | "status" | "targetLengthM" | "beamCount">;
+  order: Pick<WarpingOrderDto, "id" | "orderNo" | "status" | "targetLengthM" | "beamCount" | "beamCountOpen">;
   canCancel: boolean;
   blockedReason: string | null;
   /** Bağı düşmeyecek ama sipariş kapanınca "bağlı devere" listesinden çıkacak müşteri siparişleri. */
@@ -32,7 +32,7 @@ export async function cancelPreviewWarpingOrder(id: string): Promise<WarpingOrde
   const o = await loadWarpingOrderDto(prisma, id);
   const blockedReason = blockedReasonOf(o.status);
   return {
-    order: { id: o.id, orderNo: o.orderNo, status: o.status, targetLengthM: o.targetLengthM, beamCount: o.beamCount },
+    order: { id: o.id, orderNo: o.orderNo, status: o.status, targetLengthM: o.targetLengthM, beamCount: o.beamCount, beamCountOpen: o.beamCountOpen },
     canCancel: blockedReason === null,
     blockedReason,
     salesOrders: o.salesOrders,

@@ -2,7 +2,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { fmtFactoryDate } from "@/lib/factory-time";
 import { cn } from "@/lib/utils";
-import { dueText, fmtM } from "./order-model";
+import { dueText, targetText } from "./order-model";
 import { warpingStatusMeta, type WarpingOrderRow } from "./types";
 
 /** Sıralama başlığı YOK: uç en yeni önce sıralar; süzme sunucuda. Dönen metre / deverecide kalan D7 (dönüş kabulü) ile gelir. */
@@ -23,12 +23,8 @@ export const warpingOrderColumns: ColumnDef<WarpingOrderRow>[] = [
   {
     id: "target",
     header: "Hedef",
-    meta: { exportValue: (r: WarpingOrderRow) => `${r.beamCount} levent · ${fmtM(r.targetLengthM)} m` },
-    cell: ({ row }) => (
-      <span className="tabular-nums">
-        {row.original.beamCount} levent · {fmtM(row.original.targetLengthM)} m
-      </span>
-    ),
+    meta: { exportValue: (r: WarpingOrderRow) => targetText(r) },
+    cell: ({ row }) => <span className="tabular-nums">{targetText(row.original)}</span>,
   },
   {
     id: "status",

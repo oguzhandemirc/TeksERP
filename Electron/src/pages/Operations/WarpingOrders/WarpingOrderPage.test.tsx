@@ -5,6 +5,8 @@
 //   ② Kapalı (COMPLETED) siparişte yazma yüzeyi HİÇ çizilmez; izinsiz kullanıcıda da yok.
 //   ③ İptal diyaloğu önizlemedeki etkilenen kayıtları listeler; engelli (sevkli) siparişte düğme kapalı.
 //   ④ Yeni sipariş: kesin 4xx'ten sonra ikinci deneme YENİ token, ağ hatasından sonra AYNI token (mantıksal deneme).
+//   ⑤ "Levent adedi belli değil": adet/boy gizlenir, yalnız toplam metre; gövde openTargetLengthM taşır. Açık adet
+//      sipariş özeti "(adet devereciye bırakıldı)" basar. SONDA 2026-11-19: anahtar koşulu ters çevrildi → ⑤ ❌.
 // NEGATİF SONDA (2026-11-18): `OrderActions`ta `editable` kapısı kaldırıldı → ② ❌; iptal sebebi kutusu engelli siparişte de
 // çizildi (`p.canCancel` → `p`) → ③ ❌; FormDialog `onError`dan `attempt.onFailure` çıkarıldı → ④ (4xx sonrası yeni token) ❌. Geri alındı.
 // =============================================================================
@@ -168,5 +170,35 @@ describe("WarpingOrderFormDialog — geniş form iskeleti", () => {
     unmount();
     renderWithProviders(<WarpingOrderFormDialog order={{ ...order("IN_PROGRESS"), notes: "Kenarlar sıkı" }} onClose={() => {}} onSaved={() => {}} />);
     expect((screen.getByTestId("wo-notes-section") as HTMLDetailsElement).open).toBe(true);
+  });
+});
+
+describe("WarpingOrderFormDialog — levent adedi belli değil", () => {
+  beforeEach(() => setPerms(allPerms));
+
+  it("⑤ anahtar açılınca adet/boy gizlenir, toplam metre ile gönderilir", async () => {
+    const bodies: unknown[] = [];
+    create.mockImplementation((b: unknown) => {
+      bodies.push(b);
+      return Promise.resolve({ success: true, data: order("OPEN") });
+    });
+    const user = userEvent.setup();
+    renderWithProviders(<WarpingOrderFormDialog seed={{ warpSpecId: "ws", subcontractorId: "s1" }} onClose={() => {}} onSaved={() => {}} />);
+    expect(screen.getByLabelText("1. satır levent adedi")).toBeTruthy();
+    expect(screen.queryByLabelText("Toplam metre")).toBeNull();
+    await user.click(screen.getByRole("checkbox", { name: "Levent adedi belli değil" }));
+    expect(screen.queryByLabelText("1. satır levent adedi")).toBeNull();
+    await user.type(screen.getByLabelText("Toplam metre"), "1500");
+    await user.click(screen.getByRole("button", { name: "Siparişi aç" }));
+    await waitFor(() => expect(bodies.length).toBe(1));
+    expect(bodies[0]).toMatchObject({ openTargetLengthM: 1500 });
+    expect(bodies[0]).not.toHaveProperty("beamLines");
+  });
+
+  it("⑤ açık adet sipariş özeti: toplam metre + adet devereciye bırakıldı", async () => {
+    get.mockResolvedValue({ ...order("OPEN"), beamLines: [], beamCount: null, beamCountOpen: true, targetLengthM: "1500.000" });
+    renderWithProviders(<WarpingOrderPage />);
+    expect(await screen.findByText(/adet devereciye bırakıldı/)).toBeTruthy();
+    expect(screen.queryByText(/null levent/)).toBeNull();
   });
 });
