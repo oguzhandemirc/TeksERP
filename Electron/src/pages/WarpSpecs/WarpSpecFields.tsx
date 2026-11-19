@@ -1,6 +1,7 @@
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { type UseFormReturn } from "react-hook-form";
-import { type LucideIcon, Ruler } from "lucide-react";
+import { Ruler } from "lucide-react";
+import { FieldGrid } from "@/components/forms/WideFormDialog";
 import { FormField } from "@/components/forms/FormField";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,25 +14,10 @@ import type { WarpSpecFormValues } from "./schema";
 
 type Form = UseFormReturn<WarpSpecFormValues>;
 
-/** Form bölümü kartı — başlık şeridi + gövde; geniş yüzeyde gruplar ayraçla ayrışır. */
-export function SpecSection({ title, icon: Icon, note, aside, children }: { title: string; icon: LucideIcon; note?: string; aside?: ReactNode; children: ReactNode }) {
-  return (
-    <section className="rounded-xl border border-card-border bg-card shadow-card">
-      <header className="flex items-center gap-2 border-b px-4 py-2">
-        <Icon className="h-4 w-4 text-primary" />
-        <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{title}</h3>
-        {note ? <span className="hidden text-xs text-muted-foreground sm:inline">· {note}</span> : null}
-        {aside ? <div className="ml-auto">{aside}</div> : null}
-      </header>
-      <div className="px-4 py-3">{children}</div>
-    </section>
-  );
-}
-
 export function IdentityFields({ form, excludeId }: { form: Form; excludeId?: string }) {
   const e = form.formState.errors;
   return (
-    <div className="grid gap-3 sm:grid-cols-[12rem_minmax(0,1fr)]">
+    <div className="grid gap-4 sm:grid-cols-[12rem_minmax(0,1fr)]">
       <FormField label="Kod" htmlFor="code" error={e.code} required>
         <Input id="code" {...form.register("code")} placeholder="UA6007-Ç" />
       </FormField>
@@ -78,7 +64,7 @@ export function ReedHelper({ form }: { form: Form }) {
 export function ReedFields({ form }: { form: Form }) {
   const e = form.formState.errors;
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
+    <FieldGrid cols={4}>
       <FormField label="Kenar teli" htmlFor="selvedgeEnds" error={e.selvedgeEnds} info="Satır tel adetleri kenar dahil yazılır; bu alan bilgi içindir, hesaba girmez.">
         <Input id="selvedgeEnds" {...form.register("selvedgeEnds")} inputMode="numeric" placeholder="24" />
       </FormField>
@@ -100,7 +86,7 @@ export function ReedFields({ form }: { form: Form }) {
       <FormField label="Fire (%)" htmlFor="wastePct" error={e.wastePct} info="Çözgü ipliği firesi; hesaptaki fireli kg'yı ve maliyeti etkiler: çözgü = kumaş ÷ (1 − çekme) ÷ (1 − fire). Ürünün maliyet yapısındaki fire bunu ezer; boşsa maliyet parametrelerindeki varsayılan kullanılır.">
         <Input id="wastePct" {...form.register("wastePct")} inputMode="decimal" placeholder="ör. 3" />
       </FormField>
-    </div>
+    </FieldGrid>
   );
 }
 

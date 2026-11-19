@@ -19,12 +19,12 @@ export function WarpCalcPanel() {
   const view = calc.per1000 ? buildCalcView(calc.per1000, beam && calc.beamResult ? { input: beam, result: calc.beamResult } : null) : null;
   return (
     <aside className="rounded-xl border border-card-border bg-card shadow-card" data-testid="warp-calc-panel" aria-label="Hesap">
-      <header className="flex items-center gap-2 border-b px-4 py-2.5">
+      <header className="flex items-center gap-2 border-b px-5 py-2.5">
         <Calculator className="h-4 w-4 text-primary" />
         <h3 className="text-sm font-semibold">Hesap</h3>
         <span className="ml-auto text-xs text-muted-foreground">1000 m çözgü için</span>
       </header>
-      <div className="space-y-3 px-4 py-3">
+      <div className="space-y-3 px-5 py-4">
         {!calc.hasBody ? (
           <p className="rounded-md bg-muted/50 px-3 py-4 text-center text-sm text-muted-foreground">Hesap için her satırda iplik ve tel adedi girin.</p>
         ) : view ? (
