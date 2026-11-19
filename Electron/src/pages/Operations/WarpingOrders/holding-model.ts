@@ -1,6 +1,7 @@
 // Deverecide tutulan iplik — saf yardımcılar (D6b-2). Panel hesap YAPMAZ: yalnız biçim, satır içi sınır uyarısı
 // ve gövde kurar; tutma/aşım kararını sunucu verir (önizleme + yazım aynı yüklem).
 import { fmtKg, parseNum } from "./order-model";
+import { yarnLabelParts } from "./YarnLabel";
 import type { WarpingOrder, WarpingOrderStatus } from "./types";
 import type { WarpingTransferLine, WarpingYarnHolding } from "./holding-types";
 
@@ -20,7 +21,7 @@ export const yarnCode = (names: YarnNames, id: string) => names.get(id)?.code ??
 /** Başlıkta iplik ADI birincil, kod ikincil (plan satırı yoksa yalnız kod/"iplik"). */
 export const yarnTitle = (names: YarnNames, id: string) => {
   const y = names.get(id);
-  return { primary: y?.name || y?.code || "iplik", secondary: y?.name && y.code !== y.name ? y.code : null };
+  return yarnLabelParts(y?.name, y?.code);
 };
 
 export type KgCheck = { ok: true; qty: number } | { ok: false; error: string | null };

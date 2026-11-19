@@ -147,6 +147,9 @@ export function toWarpingYarnItem(r: Row, viewOrderId?: string): WarpingYarnItem
   };
 }
 
+/** Kalemden bakılan siparişin leventlerine SARILAN (eski WOUND bağı + canlı dağıtım); fire HARİÇ (`wasteKg` ayrı). */
+export const woundOfItem = (it: Pick<WarpingYarnItem, "woundKg" | "allocatedKg">): Prisma.Decimal => it.woundKg.plus(it.allocatedKg);
+
 const ITEM_ORDER = [{ dispatch: { dispatchedAt: "asc" as const } }, { createdAt: "asc" as const }, { id: "asc" as const }];
 
 /**

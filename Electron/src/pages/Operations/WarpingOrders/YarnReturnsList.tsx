@@ -16,6 +16,7 @@ import { toastServerSuccess } from "@/lib/serverNotes";
 import { cn } from "@/lib/utils";
 import { warpingHoldingService, useWarpingReturns } from "./holding-service";
 import { fmtKg } from "./order-model";
+import { YarnLabel, yarnText } from "./YarnLabel";
 import { WARPING_ORDERS_QUERY_KEY } from "./service";
 import type { WarpingYarnReturnRow } from "./holding-types";
 
@@ -36,7 +37,7 @@ function ReturnCancelDialog({ orderId, row, onClose }: { orderId: string; row: W
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>{row.yarnItemCode} iadesi geri alınsın mı?</DialogTitle>
+          <DialogTitle>{yarnText(row.yarnItemName, row.yarnItemCode)} iadesi geri alınsın mı?</DialogTitle>
           <DialogDescription>İade satırı silinmez; karşı satır yazılır ve iplik yeniden deverecide sayılır.</DialogDescription>
         </DialogHeader>
         <ul className="space-y-1 rounded-md border p-3 text-sm" aria-label="Etkilenen kayıtlar">
@@ -61,7 +62,7 @@ function ReturnRow({ r, onCancel }: { r: WarpingYarnReturnRow; onCancel: () => v
   return (
     <TableRow className={cn("text-sm", cancelled && "text-muted-foreground line-through decoration-muted-foreground/40")}>
       <TableCell className="whitespace-nowrap">{fmtFactoryDateTime(r.createdAt)}</TableCell>
-      <TableCell>{r.yarnItemCode} <span className="text-muted-foreground">{r.yarnItemName}</span></TableCell>
+      <TableCell><YarnLabel name={r.yarnItemName} code={r.yarnItemCode} /></TableCell>
       <TableCell>{r.dispatchNo}{r.ownDispatch ? "" : " (aktarımla gelen)"} · {r.lotNo ?? "lotsuz"}</TableCell>
       <TableCell>{r.warehouseName ?? "—"}</TableCell>
       <TableCell>{r.reasonLabel ?? r.reasonCode ?? "—"}</TableCell>

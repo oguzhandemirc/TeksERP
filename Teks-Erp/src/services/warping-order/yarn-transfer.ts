@@ -98,8 +98,8 @@ function validate(id: string, input: WarpingTransferInput): void {
 interface Evaluated { allocations: WarpingTransferAllocation[]; warnings: string[]; ownerCustomerId: string | null }
 
 /** Sevk ile aynı kapılar (hedefin gözünden): plan dışı iplik 400 · tek sahip KATI · K4 lot kuralı. */
-async function evaluate(db: Tx | typeof prisma, sourceId: string, input: WarpingTransferInput, target: { yarns: Array<{ yarnItemId: string; code: string }> }): Promise<Evaluated> {
-  const codeOf = (y: string) => target.yarns.find((t) => t.yarnItemId === y)?.code ?? y;
+async function evaluate(db: Tx | typeof prisma, sourceId: string, input: WarpingTransferInput, target: { yarns: Array<{ yarnItemId: string; label: string }> }): Promise<Evaluated> {
+  const codeOf = (y: string) => target.yarns.find((t) => t.yarnItemId === y)?.label ?? y;
   const offPlan = input.lines.find((l) => !target.yarns.some((y) => y.yarnItemId === l.yarnItemId));
   if (offPlan) throw AppError.badRequest("Hedef siparişin iplik planında olmayan iplik aktarılamaz.", { code: "WARPING_YARN_NOT_IN_PLAN", yarnItemId: offPlan.yarnItemId });
   const source = openItems(await loadWarpingYarnItems(db, { warpingOrderId: sourceId }));
@@ -113,7 +113,7 @@ async function evaluate(db: Tx | typeof prisma, sourceId: string, input: Warping
 async function loadTarget(db: Tx | typeof prisma, sourceId: string, targetId: string) {
   const orders = await sequentialTx(db).warpingOrder.findMany({
     where: { id: { in: [sourceId, targetId] } },
-    select: { id: true, orderNo: true, status: true, subcontractorId: true, yarns: { select: { yarnItemId: true, yarnItem: { select: { code: true } } } } },
+    select: { id: true, orderNo: true, status: true, subcontractorId: true, yarns: { select: { yarnItemId: true, yarnItem: { select: { code: true, name: true } } } } },
   });
   const source = orders.find((o) => o.id === sourceId);
   const target = orders.find((o) => o.id === targetId);
@@ -122,7 +122,7 @@ async function loadTarget(db: Tx | typeof prisma, sourceId: string, targetId: st
   if (source.subcontractorId !== target.subcontractorId) {
     throw AppError.badRequest("Aktarma yalnız AYNI devereciye ait siparişler arasında olur — iplik başka fasoncuya iade + sevkle gider.", { code: "WARPING_TRANSFER_OTHER_SUBCONTRACTOR" });
   }
-  return { source, target: { ...target, yarns: target.yarns.map((y) => ({ yarnItemId: y.yarnItemId, code: y.yarnItem.code })) } };
+  return { source, target: { ...target, yarns: target.yarns.map((y) => ({ yarnItemId: y.yarnItemId, label: y.yarnItem.name || y.yarnItem.code })) } };
 }
 
 const sig = (rows: Array<{ yarnItemId: string; qty: Prisma.Decimal.Value }>) => {

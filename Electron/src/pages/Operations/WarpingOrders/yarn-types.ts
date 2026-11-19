@@ -62,6 +62,8 @@ export interface WarpingDispatchItem {
   transferOutKg: string;
   transferInKg: string;
   allocatedKg: string;
+  /** Fire (ayrı sütun; eski sunucu göndermez). */
+  wasteKg?: string;
   holdingKg: string;
 }
 
@@ -78,6 +80,7 @@ export interface WarpingDispatchRow {
   totalTransferOutKg: string;
   totalTransferInKg: string;
   totalAllocatedKg: string;
+  totalWasteKg?: string;
   totalHoldingKg: string;
   canCancel: boolean;
   cancelBlockedReason: string | null;

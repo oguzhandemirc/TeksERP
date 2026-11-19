@@ -55,6 +55,8 @@ export interface SettlePlan {
 }
 export interface SettlePlanYarnInput {
   yarnItemId: string; code: string; netKg: string; grossKg: string; woundKg: string; unallocatedKg: string;
+  /** Uyarı metninde iplik ADI birincil (yoksa kod). */
+  name?: string;
   /** Bu siparişin bu iplikte ÖNCEDEN yazdığı canlı fire (iade penceresi firesi) — fire %'ye girer, plana girmez. */
   priorWasteKg?: string;
 }
@@ -133,8 +135,8 @@ export function buildSettlePlan(held0: WarpingYarnItem[], yarns: SettlePlanYarnI
     totWound = totWound.plus(woundKg);
     const p = pct(allWaste, woundKg.plus(allWaste));
     const over = tol !== null && p !== null && p.gt(tol);
-    if (over) warnings.push(`${y.code}: fire %${pctText(p!)} toleransı (%${pctText(tol!)}) aşıyor — kapanış engellenmez, gerekçe yazmanız önerilir.`);
-    if (D(y.unallocatedKg).gt(0)) warnings.push(`${y.code}: nominal tüketim deverecideki iplikten ${qtyText(D(y.unallocatedKg))} kg fazla (bilgi).`);
+    if (over) warnings.push(`${y.name || y.code}: fire %${pctText(p!)} toleransı (%${pctText(tol!)}) aşıyor — kapanış engellenmez, gerekçe yazmanız önerilir.`);
+    if (D(y.unallocatedKg).gt(0)) warnings.push(`${y.name || y.code}: nominal tüketim deverecideki iplikten ${qtyText(D(y.unallocatedKg))} kg fazla (bilgi).`);
     return {
       yarnItemId: y.yarnItemId, code: y.code, plannedWasteKg: Prisma.Decimal.max(ZERO, D(y.grossKg).minus(y.netKg)), woundKg,
       holdingKg: sum((l) => l.holdingKg), returnKg: sum((l) => l.returnKg), wasteKg, priorWasteKg, keepKg: sum((l) => l.keepKg), wastePct: p, overTolerance: over,

@@ -1,5 +1,5 @@
 // Sipariş sayfası "Sevkler" bölümü — `GET /:id/dispatches` (iptal edilenler DAHİL, eskiden yeniye). Sevk başına
-// kalem satırları (iplik · lot · depo · giden BRÜT · iade · aktarma · levente sarılan · deverecide). Yazdır =
+// kalem satırları (iplik · lot · depo · giden BRÜT · iade · aktarma · levente sarılan · fire · deverecide). Yazdır =
 // irsaliye + çözgü talimatı; iptal önizlemeli (engel varsa önizleme sebebini gösterir). Yeni sevk OPEN/IN_PROGRESS'te.
 import { Fragment, useState } from "react";
 import { Ban, Printer, Truck } from "lucide-react";
@@ -15,6 +15,7 @@ import { InstructionPrintDialog } from "./InstructionPrintDialog";
 import { fmtKg } from "./order-model";
 import { transferText } from "./holding-model";
 import { YarnDispatchDialog } from "./YarnDispatchDialog";
+import { YarnLabel } from "./YarnLabel";
 import { useWarpingDispatches } from "./yarn-service";
 import type { WarpingOrder } from "./types";
 import type { WarpingDispatchItem, WarpingDispatchRow } from "./yarn-types";
@@ -27,12 +28,13 @@ const sumKg = (rows: WarpingDispatchRow[], k: "totalOutKg" | "totalHoldingKg") =
 function ItemRow({ it, muted }: { it: WarpingDispatchItem; muted: boolean }) {
   return (
     <TableRow className={cn("text-xs", muted && "text-muted-foreground line-through decoration-muted-foreground/40")}>
-      <TableCell className="pl-8">{it.yarnItemCode} <span className="text-muted-foreground">{it.yarnItemName}</span></TableCell>
+      <TableCell className="pl-8"><YarnLabel name={it.yarnItemName} code={it.yarnItemCode} /></TableCell>
       <TableCell>{it.lotNo ?? "lotsuz"} · {it.warehouseName ?? "—"}</TableCell>
       <TableCell className={num}>{fmtKg(it.outKg)}</TableCell>
       <TableCell className={num}>{kgOrDash(it.returnedKg)}</TableCell>
       <TableCell className={num}>{transferText(it.transferOutKg, it.transferInKg)}</TableCell>
       <TableCell className={num}>{kgOrDash(it.allocatedKg)}</TableCell>
+      <TableCell className={num}>{kgOrDash(it.wasteKg ?? "0")}</TableCell>
       <TableCell className={num}>{fmtKg(it.holdingKg)}</TableCell>
       <TableCell />
     </TableRow>
@@ -57,6 +59,7 @@ function DispatchHead({ d, onPrint, onCancel }: { d: WarpingDispatchRow; onPrint
       <TableCell className={num}>{kgOrDash(d.totalReturnedKg)}</TableCell>
       <TableCell className={num}>{transferText(d.totalTransferOutKg, d.totalTransferInKg)}</TableCell>
       <TableCell className={num}>{kgOrDash(d.totalAllocatedKg)}</TableCell>
+      <TableCell className={num}>{kgOrDash(d.totalWasteKg ?? "0")}</TableCell>
       <TableCell className={cn(num, "font-medium")}>{cancelled ? "—" : fmtKg(d.totalHoldingKg)}</TableCell>
       <TableCell className="whitespace-nowrap text-right">
         {!cancelled && (
@@ -84,7 +87,8 @@ function DispatchTable({ rows, onPrint, onCancel }: { rows: WarpingDispatchRow[]
             <TableHead className={num} title="Giden iplik (brüt)">Giden kg</TableHead>
             <TableHead className={num} title="Depoya iade alınan">İade kg</TableHead>
             <TableHead className={num} title="Başka siparişten gelen (+) / başka siparişe giden (−)">Aktarma kg</TableHead>
-            <TableHead className={num} title="Devereden dönen leventlere sarılan">Levente sarılan</TableHead>
+            <TableHead className={num} title="Devereden dönen leventlere sarılan (levent kabulündeki tüketim; fire hariç)">Levente sarılan</TableHead>
+            <TableHead className={num} title="Kullanılamaz yazılan iplik (kapanış + iade penceresi; geri alınanlar düşülmüş)">Fire kg</TableHead>
             <TableHead className={num} title="Bu siparişin deverecide duran ipliği">Deverecide kg</TableHead>
             <TableHead><span className="sr-only">İşlem</span></TableHead>
           </TableRow>

@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { fmtKg, fmtM, isBeamCountOpen } from "./order-model";
 import { emptyBeamDraft, MAX_RECEIVE_BEAMS, receiveYarnRows, signedKg, type ReceiveBeamDraft } from "./receive-model";
 import type { WarpingReceivePreview } from "./receive-types";
+import { YarnLabel } from "./YarnLabel";
 
 const num = "text-right tabular-nums";
 type Field = keyof ReceiveBeamDraft;
@@ -82,7 +83,7 @@ function YarnTable({ p }: { p: WarpingReceivePreview }) {
         <TableBody>
           {receiveYarnRows(p).map((y) => (
             <TableRow key={y.yarnItemId}>
-              <TableCell><span className="font-medium">{y.name}</span> <span className="text-xs text-muted-foreground">{y.code}</span></TableCell>
+              <TableCell><YarnLabel name={y.name} code={y.code} /></TableCell>
               <TableCell className={num}>{fmtKg(y.woundKg)}</TableCell>
               <TableCell className={num}>{y.carryOverKg > 0 ? fmtKg(y.carryOverKg) : "—"}</TableCell>
               <TableCell className={cn(num, Number(y.unallocatedAfterKg) > 0 && "font-medium text-destructive")}>{Number(y.unallocatedAfterKg) > 0 ? fmtKg(y.unallocatedAfterKg) : "—"}</TableCell>

@@ -130,7 +130,7 @@ describe("DispatchesSection", () => {
     renderWithProviders(<DispatchesSection order={order()} />);
     await user.click(await screen.findByRole("button", { name: "FS1 sevkini iptal et" }));
     const dlg = await screen.findByRole("dialog");
-    expect(await within(dlg).findByText(/IPL-5X 5X · lot L-501 — 30,000 kg Merkez Depo geri girer/)).toBeTruthy();
+    expect(await within(dlg).findByText(/5X \(IPL-5X\) · lot L-501 — 30,000 kg Merkez Depo geri girer/)).toBeTruthy();
     expect(within(dlg).getByText(/önce iadeleri iptal edin/)).toBeTruthy();
     expect(within(dlg).getByText(/“Açık” durumuna döner/)).toBeTruthy();
     expect(within(dlg).queryByLabelText(/İptal sebebi/)).toBeNull();

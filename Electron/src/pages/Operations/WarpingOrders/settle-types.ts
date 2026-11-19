@@ -80,7 +80,7 @@ export interface WarpingSettlementRecord {
   reversesId: string | null;
   totalWasteKg: string;
   totalReturnKg: string;
-  wastes: Array<{ id: string; kind: string; dispatchItemId: string; dispatchNo: string; yarnItemId: string; code: string; lotNo: string | null; qtyKg: string; overTolerance: boolean; reversesId: string | null }>;
+  wastes: Array<{ id: string; kind: string; dispatchItemId: string; dispatchNo: string; yarnItemId: string; code: string; name?: string; lotNo: string | null; qtyKg: string; overTolerance: boolean; reversesId: string | null }>;
   returns: Array<{ movementId: string; dispatchItemId: string | null; yarnItemId: string; qtyKg: string; warehouseId: string; lotId: string | null; reasonCode: string | null }>;
   backTransferIds: string[];
 }

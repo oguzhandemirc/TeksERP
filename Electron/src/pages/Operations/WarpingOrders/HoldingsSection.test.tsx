@@ -74,7 +74,7 @@ describe("HoldingsSection — tutma ve iade", () => {
     const { unmount } = renderWithProviders(<HoldingsSection order={order()} />);
     expect(await screen.findByText("IPL-5X")).toBeTruthy();
     expect(screen.getByText("−8,000")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "IPL-5X FS1 iade al" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "5X (IPL-5X) FS1 iade al" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Başka siparişe aktar/ })).toBeTruthy();
     unmount();
     const r2 = renderWithProviders(<HoldingsSection order={order("OPEN")} />);
@@ -93,7 +93,7 @@ describe("HoldingsSection — tutma ve iade", () => {
     svc.returnPreview.mockResolvedValue({ holdingKg: "22.000", returnKg: "5.500", wasteKg: "0.000", keepKg: "16.500", wastePct: null, tolerancePct: null, overTolerance: false, willClose: false, warnings: [] });
     const user = userEvent.setup();
     renderWithProviders(<HoldingsSection order={order()} />);
-    await user.click(await screen.findByRole("button", { name: "IPL-5X FS1 iade al" }));
+    await user.click(await screen.findByRole("button", { name: "5X (IPL-5X) FS1 iade al" }));
     const dlg = await screen.findByRole("dialog");
     const kg = within(dlg).getByLabelText(/İade kg/) as HTMLInputElement;
     expect(kg.value).toBe("22");
@@ -136,11 +136,11 @@ describe("HoldingsSection — aktarma", () => {
     const dlg = await screen.findByRole("dialog");
     await user.click(within(dlg).getByRole("button", { name: "Hedef sipariş seç" }));
     await user.click(await screen.findByRole("option", { name: /FDV2/ }));
-    await user.type(within(dlg).getByLabelText("IPL-5X FS1 aktarılacak kg"), "3,5");
+    await user.type(within(dlg).getByLabelText("5X (IPL-5X) FS1 aktarılacak kg"), "3,5");
     const send = () => within(dlg).getByRole("button", { name: /^Aktar/ }) as HTMLButtonElement;
     expect(send().disabled).toBe(true);
     await user.click(within(dlg).getByRole("button", { name: "Önizle" }));
-    expect(await within(dlg).findByText(/IPL-5X · FS1 · lot L-501 — 3,500 kg FDV2 siparişine sayılır/)).toBeTruthy();
+    expect(await within(dlg).findByText(/5X \(IPL-5X\) · FS1 · lot L-501 — 3,500 kg FDV2 siparişine sayılır/)).toBeTruthy();
     expect(svc.transferPreview).toHaveBeenCalledWith("wo-1", { toWarpingOrderId: "wo-2", lines: [{ yarnItemId: "y1", qtyKg: 3.5, lotId: "L1", dispatchItemId: "i1" }], note: null });
     for (let i = 1; i <= 3; i++) {
       await user.click(send());
