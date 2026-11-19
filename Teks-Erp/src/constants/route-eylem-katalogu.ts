@@ -140,6 +140,8 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   get "POST /api/work-orders/:id/split"() { return e(`${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} böldü`, `${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} bölmeye çalıştı`); },
   "POST /api/work-orders/:id/manual-move": e("topları elle taşıdı", "topları elle taşımaya çalıştı"),
   get "PATCH /api/work-orders/:id/fold-type"() { return e(`${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} kat tipini değiştirdi`, `${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} kat tipini değiştirmeye çalıştı`); },
+  get "PUT /api/work-orders/:id/order-links/allocations"() { return e(`${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} metresini siparişlere paylaştırdı`, `${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} metresini siparişlere paylaştırmaya çalıştı`); },
+  get "PUT /api/work-orders/:id/note"() { return e(`${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} planlama notunu güncelledi`, `${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} planlama notunu güncellemeye çalıştı`); },
   get "DELETE /api/work-orders/:id"() { return e(`${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} sildi`, `${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} silmeye çalıştı`); },
   // ── Top
   "POST /api/rolls/initial-entry": e("top girişi yaptı", "top girişi yapmaya çalıştı"),

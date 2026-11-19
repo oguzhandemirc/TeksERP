@@ -20,6 +20,7 @@ import {
 } from "@prisma/client";
 import { resolveProducedOutputWhere } from "../helpers/produced-output.helper";
 import { loadCloseSnapshotView } from "../helpers/workorder-close-snapshot.helper";
+import { summarizeAllocation } from "../helpers/order-link-allocation.helper";
 import { computeWorkOrderLocks } from "../helpers/workorder-locks.helper";
 import { targetValueEditLock } from "../helpers/workorder-target-value-step.helper";
 import { KURSUN_PROPERTY_CODE } from "../helpers/quality-station.helper";
@@ -445,6 +446,8 @@ export async function findById(id: string): Promise<ApiResponse<Record<string, u
     const locks = await computeWorkOrderLocks(prisma, id);
     // Kapanıştaki hâl (künye) — canlı `producedRolls` ile yan yana gösterilir.
     const closeSnapshot = await loadCloseSnapshotView(prisma, id);
+    // Sipariş paylaştırması — sunucu hesaplar (tavan · toplam · kalan), istemci toplamaz.
+    const allocation = await summarizeAllocation(prisma, id);
 
     return {
       success: true,
@@ -462,6 +465,7 @@ export async function findById(id: string): Promise<ApiResponse<Record<string, u
         incoming,
         locks,
         closeSnapshot,
+        allocation,
       },
     };
   }

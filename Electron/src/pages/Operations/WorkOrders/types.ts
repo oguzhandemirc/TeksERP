@@ -120,6 +120,19 @@ export interface WorkOrderTargetPropertyLink {
   property: { id: string; code: string; name: string };
 }
 
+/** Sipariş paylaştırma özeti (backend `order-link-allocation.helper`): INPUT giren · TARGET hedef · NONE tavan yok. */
+export interface OrderAllocationSummary {
+  basis: number | null;
+  basisKind: "INPUT" | "TARGET" | "NONE";
+  allocated: number;
+  remaining: number | null;
+}
+
+export interface OrderLinkAllocationInput {
+  orderLineId: string;
+  allocatedQty: number;
+}
+
 export interface WorkOrder {
   id: string;
   /** İş Emri No (İE + GGAAYY + NNNN). Parti (P…) AYRI nesnedir — bkz. Batch/BatchLane. */
@@ -231,6 +244,8 @@ export interface WorkOrder {
       createdAt: string;
     }>;
   };
+  /** Sadece findById — sipariş paylaştırma özeti (sunucu hesaplar). Eski backend göndermez. */
+  allocation?: OrderAllocationSummary;
   /**
    * Sadece findById response'unda — iş emrinin EN SON kapanış künyesi (kapanış anında
    * donan üretim çıktısı). Hiç kapanmadıysa null. Canlı `producedRolls` ile yan yana.

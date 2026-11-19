@@ -58,7 +58,7 @@ export function SettlementSummary({ s }: { s: WarpingSettlement }) {
           <TableBody>
             {s.yarns.map((y) => (
               <TableRow key={y.yarnItemId}>
-                <TableCell><span className="font-medium">{y.letter}</span> {y.code} <span className="text-muted-foreground">{y.name}</span></TableCell>
+                <TableCell><span className="font-medium">{y.letter} · {y.name}</span> <span className="text-xs text-muted-foreground">{y.code}</span></TableCell>
                 <TableCell className={num}>{fmtKg(y.planGrossKg)}</TableCell>
                 <TableCell className={num}>{fmtKg(y.dispatchedKg)}</TableCell>
                 <TableCell className={num}>{kgOrDash(y.returnedKg)}</TableCell>

@@ -19,6 +19,7 @@ import {
   ReceiptLineRows, emptyLine, expandLines, lineKind, receiptTotals, type DraftLine,
 } from "./ReceiptLineRows";
 import { ReceiptImportButton } from "./ReceiptImportButton";
+import { ReceiptIntro } from "./ReceiptIntro";
 import { DirectWarpingOrderField, useDirectWarpingAvailable, type DirectWarpingOrderRef } from "./DirectWarpingOrderField";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { consumableIdsFrom, useItemTypes, yarnIdsFrom } from "./useItemTypes";
@@ -29,6 +30,7 @@ import { GoodsReceiptOrderSection } from "../PurchaseOrders/GoodsReceiptOrderSec
 import { mergeFilledLines } from "../PurchaseOrders/receiptOrderFields";
 import type { ReceiptPurchaseOrderSync } from "../PurchaseOrders/receiptSync";
 import { formatAmount, formatQty } from "@/lib/format";
+import { ModalSection, ModalSectionsScope } from "@/components/forms/modal-sections/ModalSections";
 
 interface Props {
   open: boolean;
@@ -172,11 +174,12 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-6xl">
-        <DialogHeader>
+        {/* Bölüm görünürlüğü (× yanındaki menü): tercih kullanıcıya özgü, `ModalSection id` ile beyan. */}
+        <ModalSectionsScope modalId="goods-receipt.create">
+        <DialogHeader className="pr-16">
           <DialogTitle>Yeni Mal Kabul</DialogTitle>
           <DialogDescription>
-            Aynı üründen birden fazla top geldiyse <b>Adet</b> yazmanız yeter — her top kendi
-            barkoduyla ayrı ayrı doğar. Benzer bir satır için <b>kopyala</b> düğmesini kullanın.
+            <ReceiptIntro kinds={lines.map((l) => lineKind(l, yarnIds, consumableIds))} />
           </DialogDescription>
         </DialogHeader>
 
@@ -196,12 +199,16 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
           />
 
           {directAvailable && (
+            <ModalSection id="direct-warping" title="Doğrudan devere siparişi">
             <div className="max-w-xl">
               <Label>Doğrudan devere siparişi (opsiyonel)</Label>
               <DirectWarpingOrderField value={directOrder} onChange={setDirectOrder} disabled={createM.isPending} />
             </div>
+            </ModalSection>
           )}
 
+          {/* Çok depoda Depo zorunlu → bölüm gizlenemez. */}
+          <ModalSection id="receipt-info" title="Fiş bilgileri" required={multiWarehouse}>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {multiWarehouse && (
               <div>
@@ -257,12 +264,14 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
               />
             </div>
           </div>
+          </ModalSection>
 
           {/* EK 7 (kullanıcı kararı 2026-09-18): fiş düzeyi "ham stok" kutusu KALKTI — top sınıfı (Ham · Yarı mamul ·
               Bitmiş) yalnız kumaş satırındaki anahtarda; yeni satır bir öncekini devralır. İPLİK ETKİLENMEZ. */}
 
           {/* İçe aktarma satırları EKLER, üstüne yazmaz — elle girilmiş bir
               kalem yüklemeyle sessizce kaybolmasın. */}
+          <ModalSection id="import" title="Dosyadan içe aktar">
           <ReceiptImportButton
             onImported={(imported) =>
               setLines((ls) => {
@@ -271,14 +280,18 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
               })
             }
           />
+          </ModalSection>
 
           {/* ⚠️ `yarnItemIds` GEÇİLMEK ZORUNDA — verilmezse satır editörü tüm
               kalemleri kumaş sayar: iplik satırı renk/en/kat sorar, backend
               400 verir ve "kg" rozeti hiç çizilmez (sözleşme ReceiptLineRows
               Props yorumunda). */}
-          <ReceiptLineRows lines={lines} onChange={setLinesAndClear} yarnItemIds={yarnIds} lineIssues={lineIssues} consumableItemIds={consumableIds} consumableEnabled={consumableEnabled} />
+          <ModalSection id="lines" title="Satırlar" required>
+            <ReceiptLineRows lines={lines} onChange={setLinesAndClear} yarnItemIds={yarnIds} lineIssues={lineIssues} consumableItemIds={consumableIds} consumableEnabled={consumableEnabled} />
+          </ModalSection>
 
           {/* Satır ekleme düğmeleri grupların kendisinde (EK 5) — burada yalnız özet. */}
+          <ModalSection id="totals" title="Toplam özeti">
           <div className="flex items-center justify-end">
             {/* Canlı özet: operatör "20 tane" yazdığında kaç TOP doğacağını
                 kaydetmeden görsün — yanlış çarpan en pahalı hatadır. */}
@@ -305,6 +318,7 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
               )}
             </p>
           </div>
+          </ModalSection>
         </div>
 
         <DialogFooter>
@@ -319,6 +333,7 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
             {createM.isPending ? "Kaydediliyor…" : `Fişi Oluştur (${submitSummary})`}
           </Button>
         </DialogFooter>
+        </ModalSectionsScope>
       </DialogContent>
     </Dialog>
   );

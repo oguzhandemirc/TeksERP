@@ -10,12 +10,18 @@
 // `WorkOrder.type` aynası AÇIK bağ sayısından türer — `activeOrderLinkCount`.
 // =============================================================================
 
-import type { Prisma } from "@prisma/client";
+import { WorkOrderStatus, type Prisma } from "@prisma/client";
 
 type Tx = Prisma.TransactionClient;
 
 /** Açık (koparılmamış) bağ — okuyan her yol buradan geçer. */
 export const ACTIVE_ORDER_LINK = { unlinkedAt: null } as const;
+
+/** Bağ işlemlerine (bağla · kaldır · paylaştır) KAPALI statüler; COMPLETED bilerek yok (`is-emri.md`). */
+export const ORDER_LINK_FROZEN_STATUSES: readonly WorkOrderStatus[] = [
+  WorkOrderStatus.CANCELLED,
+  WorkOrderStatus.SUPERSEDED,
+];
 
 export type UnlinkReason = "MANUAL_UNLINK" | "WO_REPLACE" | "ORDER_LINE_CANCEL" | "ORDER_DELETE" | "ORDER_CANCEL";
 

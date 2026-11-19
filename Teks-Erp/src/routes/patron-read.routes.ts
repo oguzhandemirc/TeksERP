@@ -18,6 +18,7 @@ import {
   facilityStatus, getSetRecord, getSnapshot, listSet, setGates, type PatronUser,
 } from "../services/patron-read/patron-read.service";
 import { ID_FILTER_KEYS } from "../services/patron-read/kayit-sayfasi";
+import { MEMBER_FILTER_KEYS } from "../services/patron-read/kume-arama";
 import { PATRON_READ_SETS } from "../services/patron-read/izin-esleme";
 
 const router = Router();
@@ -78,6 +79,8 @@ const listQuerySchema = z.object({
   ara: optText(200),
   suzgec: optText(40),
   kategoriAnahtari: optText(200),
+  fasonFirmaId: optText(40),
+  asama: optText(40),
   ...Object.fromEntries(ID_FILTER_KEYS.map((k) => [k, optText(40)])),
 });
 
@@ -89,6 +92,7 @@ function parseList(req: Request) {
     cursor: q.imlec, limit: q.limit, durum: q.durum, ara: q.ara, suzgec: q.suzgec,
     anahtar: q.kategoriAnahtari === undefined ? {} : { kategoriAnahtari: q.kategoriAnahtari },
     kimlik: Object.fromEntries(ID_FILTER_KEYS.filter((k) => q[k] !== undefined).map((k) => [k, q[k]!])),
+    uyelik: Object.fromEntries(MEMBER_FILTER_KEYS.filter((k) => q[k] !== undefined).map((k) => [k, q[k]!])),
   };
 }
 

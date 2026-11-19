@@ -176,6 +176,9 @@ export function subRowClasses(p: RecordProjection): Array<Exclude<DataClass, "IS
  */
 export const READ_COVERAGE: Readonly<Record<string, string>> = {
   payment_allocations: "kapama ham UPDATE'leri invoices.paidTotal / payments.allocatedTotal / cheques.allocatedTotal ile birlikte updatedAt=NOW() yazar (ölçüldü, §4.2) — o üç tablo kaynaktır",
+  // is-emri v3 fason firma payı: kalem defterlerinde `updatedAt` yok (konvansiyon).
+  subcontractor_dispatch_items: "kalem yaratma/kalan kapatma/geri alma aynı tx'te topun durumunu (rolls), birleştirme sevk başlığını (subcontractor_dispatches) yazar — o tablolar kaynaktır",
+  subcontractor_receipt_items: "makbuz kalemi yalnız makbuzla birlikte doğar (receive createMany), iptal makbuz başlığına yazılır — subcontractor_receipts kaynaktır",
 };
 
 /**

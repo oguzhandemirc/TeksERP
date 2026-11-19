@@ -60,3 +60,51 @@ describe("OrderLinksV3 açık metraj (MEASURED_LINE ikizi)", () => {
     expect(screen.queryByText(/Açık 100/)).not.toBeInTheDocument();
   });
 });
+
+describe("OrderLinksV3 paylaştırma çipi ve toplamı", () => {
+  function woAlloc(links: unknown[], allocation?: WorkOrder["allocation"]): WorkOrder {
+    return { type: "ORDER_PRODUCTION", orderLinks: links, allocation } as unknown as WorkOrder;
+  }
+
+  it("allocatedQty > 0 → 'Paylaştırılan N m' çipi; 0 → çip yok", () => {
+    renderWithProviders(
+      <OrderLinksV3
+        wo={woAlloc([
+          { ...linkWithOrder, allocatedQty: "60" },
+          { ...linkWithOrder, orderLineId: "l3", allocatedQty: 0 },
+        ])}
+      />,
+    );
+    expect(screen.getAllByText(/Paylaştırılan 60 m/)).toHaveLength(1);
+    expect(screen.queryByText(/Paylaştırılan 0 m/)).not.toBeInTheDocument();
+  });
+
+  it("toplam satırı sunucu özetinden: tavan + paylaştırılan + kalan", () => {
+    renderWithProviders(
+      <OrderLinksV3
+        wo={woAlloc([{ ...linkWithOrder, allocatedQty: 60 }], {
+          basis: 100,
+          basisKind: "INPUT",
+          allocated: 60,
+          remaining: 40,
+        })}
+      />,
+    );
+    const row = screen.getByTestId("allocation-total");
+    expect(row).toHaveTextContent("Giren 100 m");
+    expect(row).toHaveTextContent("Paylaştırılan 60 m");
+    expect(row).toHaveTextContent("Kalan 40 m");
+  });
+
+  it("paylaştırma yoksa (allocated 0) toplam satırı basılmaz; aşımda 'fazla' gösterilir", () => {
+    const { unmount } = renderWithProviders(
+      <OrderLinksV3 wo={woAlloc([linkWithOrder], { basis: 100, basisKind: "TARGET", allocated: 0, remaining: 100 })} />,
+    );
+    expect(screen.queryByTestId("allocation-total")).not.toBeInTheDocument();
+    unmount();
+    renderWithProviders(
+      <OrderLinksV3 wo={woAlloc([linkWithOrder], { basis: 100, basisKind: "TARGET", allocated: 110, remaining: -10 })} />,
+    );
+    expect(screen.getByTestId("allocation-total")).toHaveTextContent("10 m fazla");
+  });
+});
