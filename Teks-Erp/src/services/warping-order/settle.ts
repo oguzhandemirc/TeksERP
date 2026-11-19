@@ -138,9 +138,9 @@ export async function settleWarpingOrder(id: string, input: WarpingSettleInput, 
         select: { id: true },
       });
       const overByYarn = new Map(ev.plan.yarns.map((y) => [y.yarnItemId, y.overTolerance]));
-      await writeWastesTx(tx, { settlementId: s.id }, id, ev.plan.lines.map((l) => ({
+      await writeWastesTx(tx, { src: { settlementId: s.id }, warpingOrderId: id, reason, userId, lines: ev.plan.lines.map((l) => ({
         dispatchItemId: l.dispatchItemId, qtyKg: l.wasteKg, overTolerance: (overByYarn.get(l.yarnItemId) ?? false) || ev.plan.overTolerance,
-      })), reason, userId);
+      })) });
       return { settlementId: s.id, plan: ev.plan, beams: ev.settlement.metre.receivedBeamCount };
     });
     const p = out.plan;

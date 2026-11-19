@@ -22,7 +22,7 @@ import { buildSettleBody, draftsFromPlan, type SettleLineDraft } from "./settle-
 import { warpingSettleService } from "./settle-service";
 import { SettleLinesTable, SettlePreviewView } from "./SettleParts";
 import { useWarpingDispatches } from "./yarn-service";
-import { ReasonChips } from "./YarnReturnDialog";
+import { ReasonSelect } from "./YarnReturnParts";
 import type { WarpingOrder } from "./types";
 import type { WarpingSettleFields, WarpingSettlePreview } from "./settle-types";
 
@@ -63,7 +63,7 @@ function SettleForm({ order, initial, onClose }: { order: WarpingOrder; initial:
     <>
       <div className="space-y-3 text-sm">
         <SettleLinesTable drafts={f.drafts} names={yarnNamesOf(order)} exitNames={f.exitNames} onChange={f.setDrafts} />
-        {f.anyReturn && <FormField label="İade sebebi" required><ReasonChips value={f.reasonCode} onChange={f.setReasonCode} /></FormField>}
+        {f.anyReturn && <FormField label="İade sebebi" htmlFor="ws-return-reason" required className="max-w-sm"><ReasonSelect id="ws-return-reason" value={f.reasonCode} onChange={f.setReasonCode} /></FormField>}
         {!f.built.ok && <p className="text-destructive">{f.built.error}</p>}
         {fresh && <SettlePreviewView p={preview.data} />}
         {fresh && <PreviewNotes p={preview.data} />}

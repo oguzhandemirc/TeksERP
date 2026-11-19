@@ -124,6 +124,10 @@ async function main(): Promise<void> {
     check("Önizleme: fire 5 → %9,09 > tolerans 5 → overTolerance + kapanışla AYNI uyarı cümlesi", p2.overTolerance && p2.wastePct === "9.09" && p2.warnings.length === 1 && p2.warnings[0]!.includes("fire %9,09 toleransı (%5)"), JSON.stringify(p2));
     const p0 = await previewWarpingYarnReturn(A.id, { dispatchItemId: A.x, qtyKg: 5, reasonCode: R });
     check("Önizleme: fire yoksa tolerans uyarısı yok (bugünkü davranış)", !p0.overTolerance && p0.warnings.length === 0 && p0.wasteKg === "0.000", JSON.stringify(p0));
+    // Panel canlı özeti sebep seçilmeden önizler: sebepsiz önizleme sebepliyle AYNI sonucu verir (sebep yalnız yazımda zorunlu).
+    const pNoReason = await errOf(() => previewWarpingYarnReturn(A.id, { dispatchItemId: A.x, qtyKg: 5, wasteKg: 5 }));
+    const p2b = await previewWarpingYarnReturn(A.id, { dispatchItemId: A.x, qtyKg: 5, wasteKg: 5 }).catch(() => null);
+    check("Önizleme: sebepsiz çağrı hata vermez, sebepliyle aynı plan", pNoReason === null && JSON.stringify(p2b) === JSON.stringify(p2), show(pNoReason));
     const xStock0 = await stockOf(X);
     const eEx = await errOf(() => ret(A.id, { dispatchItemId: A.x, qtyKg: 8, wasteKg: 3 }));
     const eExP = await errOf(() => previewWarpingYarnReturn(A.id, { dispatchItemId: A.x, qtyKg: 8, wasteKg: 3, reasonCode: R }));

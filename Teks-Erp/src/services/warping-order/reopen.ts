@@ -117,7 +117,7 @@ export async function reopenWarpingOrder(id: string, reason: string, userId: str
       data: { warpingOrderId: id, kind: WARPING_REOPEN, reversesId: live.id, reason: why, returnMovementIds: [], backTransferIds: [], createdById: userId },
       select: { id: true },
     });
-    await reverseWastesTx(tx, { settlementId: reopen.id }, scope.wastes, why, userId);
+    await reverseWastesTx(tx, { src: { settlementId: reopen.id }, wastes: scope.wastes, reason: why, userId });
     const cancelled: string[] = [];
     const skipped: string[] = [];
     for (const r of scope.returns) {

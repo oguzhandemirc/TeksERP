@@ -65,7 +65,8 @@ const ReturnBody = z.strictObject({
   // İsteğe bağlı: eski panel token'sız gönderir (bugünkü davranış); yeni panel MANTIKSAL DENEME başına.
   clientToken: z.uuid("clientToken geçersiz (UUID)").optional(),
 });
-const ReturnPreviewBody = z.strictObject(ReturnFields);
+// Önizleme sebep seçilmeden de çağrılır (canlı özet): sebep yazımda zorunlu, önizlemede isteğe bağlı.
+const ReturnPreviewBody = z.strictObject({ ...ReturnFields, reasonCode: z.string().trim().max(64, "Sebep kodu en çok 64 karakter").optional() });
 const CancelBody = z.strictObject({ reason: z.string().trim().min(3, "İptal sebebi en az 3 karakter").max(300, "İptal sebebi en çok 300 karakter") });
 const AT_FILTERS = ["subcontractorId", "yarnItemId", "status"];
 

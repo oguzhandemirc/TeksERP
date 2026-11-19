@@ -35,7 +35,7 @@ export interface WarpingYarnReturnResult {
  * İadenin tx gövdesi — sipariş satırını ÇAĞIRAN claim eder (elle iade: aşağıda; D5b kapanış: `settle.ts`). Aktarımla
  * gelen kalemde geri aktarım + iade aynı tx'te.
  */
-export async function returnWarpingYarnTx(tx: Prisma.TransactionClient, id: string, input: ReturnYarnInput, userId: string, token?: { clientToken: string; requestHash: string } | null) {
+export async function returnWarpingYarnTx(tx: Prisma.TransactionClient, id: string, input: ReturnYarnInput, userId: string) {
   await lockDispatchItemsTx(tx, [input.dispatchItemId]);
   const it = (await loadWarpingYarnItems(tx, { warpingOrderId: id })).find((i) => i.dispatchItemId === input.dispatchItemId);
   if (!it || it.openKg.lte(0)) throw AppError.notFound("Bu sipariş bu sevk kaleminden iplik tutmuyor.", { code: "WARPING_YARN_NOT_HELD" });
@@ -53,7 +53,7 @@ export async function returnWarpingYarnTx(tx: Prisma.TransactionClient, id: stri
     });
     backTransferId = bt.id;
   }
-  const r = await returnYarnTx(tx, it.dispatchId, input, userId, token);
+  const r = await returnYarnTx(tx, it.dispatchId, input, userId);
   return { r, it, backTransferBatchId, backTransferId, holding: it.openKg.minus(r.qty) };
 }
 

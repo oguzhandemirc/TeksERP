@@ -1,6 +1,6 @@
 // Mutabakat özeti — `warping-settlement.helper` çıktısının (kabuller ucu ve kapanış önizlemesi aynı fonksiyon)
 // biçimi: hedef ↔ gelen metre, iplik başına gönderilen BRÜT · iade · sarılan · devirden · dağıtılamayan · deverecide
-// kalan, tartı farkı. Sayı türetilmez; gönderilen ile iade/kalan ayrı sütundur (netleştirilmiş tek sayı yok).
+// kalan (+ net fire), tartı farkı. Sayı türetilmez; gönderilen ile iade/kalan ayrı sütundur (netleştirilmiş tek sayı yok).
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatQty } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -52,6 +52,7 @@ export function SettlementSummary({ s }: { s: WarpingSettlement }) {
               <TableHead className={num} title="Dönen leventlere sarılan (tel × denye × metre)">Sarılan</TableHead>
               <TableHead className={num} title="Sarılanın başka siparişin kalanından düşen kısmı">Devirden</TableHead>
               <TableHead className={num} title="Deverecideki iplikten fazla tüketim — hiçbir sevke düşülemedi">Dağıtılamayan</TableHead>
+              <TableHead className={num} title="Kullanılamaz yazılan iplik (kapanış + iade penceresi; geri alınanlar düşülmüş)">Fire</TableHead>
               <TableHead className={num} title="Bu siparişin deverecide duran ipliği">Deverecide kalan</TableHead>
             </TableRow>
           </TableHeader>
@@ -66,6 +67,7 @@ export function SettlementSummary({ s }: { s: WarpingSettlement }) {
                 <TableCell className={num}>{kgOrDash(y.woundKg)}</TableCell>
                 <TableCell className={num}>{kgOrDash(y.carryOverUsedKg)}</TableCell>
                 <TableCell className={cn(num, Number(y.unallocatedKg) > 0 && "font-medium text-destructive")}>{kgOrDash(y.unallocatedKg)}</TableCell>
+                <TableCell className={num}>{kgOrDash(y.wasteKg ?? "0")}</TableCell>
                 <TableCell className={cn(num, "font-medium")}>{fmtKg(y.atSubcontractorKg)}</TableCell>
               </TableRow>
             ))}

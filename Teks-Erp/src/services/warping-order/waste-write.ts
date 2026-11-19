@@ -15,7 +15,8 @@ export type WasteSource = { settlementId: string; returnMovementId?: never } | {
 export interface WasteLine { dispatchItemId: string; qtyKg: Prisma.Decimal; overTolerance: boolean }
 
 /** İleri fire satırları (WASTE). Boş liste = yazım yok. */
-export async function writeWastesTx(tx: Tx, src: WasteSource, warpingOrderId: string, lines: WasteLine[], reason: string | null, userId: string): Promise<void> {
+export async function writeWastesTx(tx: Tx, args: { src: WasteSource; warpingOrderId: string; lines: WasteLine[]; reason: string | null; userId: string }): Promise<void> {
+  const { src, warpingOrderId, lines, reason, userId } = args;
   const rows = lines.filter((l) => l.qtyKg.gt(0));
   if (rows.length === 0) return;
   await tx.warpingYarnWaste.createMany({
@@ -28,9 +29,10 @@ export async function writeWastesTx(tx: Tx, src: WasteSource, warpingOrderId: st
 
 /** Ters fire satırları (WASTE_CANCEL) — ileri satır değişmez; `reversesId` @unique çift stornoyu DB'de keser. */
 export async function reverseWastesTx(
-  tx: Tx, src: WasteSource,
-  wastes: Array<{ id: string; dispatchItemId: string; qtyKg: Prisma.Decimal; warpingOrderId: string }>, reason: string, userId: string,
+  tx: Tx,
+  args: { src: WasteSource; wastes: Array<{ id: string; dispatchItemId: string; qtyKg: Prisma.Decimal; warpingOrderId: string }>; reason: string; userId: string },
 ): Promise<void> {
+  const { src, wastes, reason, userId } = args;
   if (wastes.length === 0) return;
   await tx.warpingYarnWaste.createMany({
     data: wastes.map((w) => ({

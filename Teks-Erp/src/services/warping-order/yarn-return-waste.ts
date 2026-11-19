@@ -85,12 +85,15 @@ export interface WarpingYarnReturnPreview {
   warnings: string[];
 }
 
+// Önizleme yazmaz ve sebebi doğrulamaz; plan yalnız iade satırında sebebin VARLIĞINI ister (yazımda katalog denetlenir).
+const PREVIEW_REASON = "PREVIEW";
+
 /** İade(+fire) önizlemesi — yazmaz. */
-export async function previewWarpingYarnReturn(id: string, b: { dispatchItemId: string; qtyKg: number; wasteKg?: number | null; reasonCode: string }): Promise<WarpingYarnReturnPreview> {
+export async function previewWarpingYarnReturn(id: string, b: { dispatchItemId: string; qtyKg: number; wasteKg?: number | null; reasonCode?: string }): Promise<WarpingYarnReturnPreview> {
   const o = await prisma.warpingOrder.findUnique({ where: { id }, select: { orderNo: true, status: true, wasteTolerancePct: true } });
   if (!o) throw AppError.notFound("Fason devere siparişi bulunamadı.", { code: "WARPING_ORDER_NOT_FOUND" });
   const waste = kg3(b.wasteKg);
-  const p = await prisma.$transaction((tx) => returnPlanTx(tx, id, { dispatchItemId: b.dispatchItemId, qtyKg: kg3(b.qtyKg), wasteKg: waste, reasonCode: b.reasonCode }, o.wasteTolerancePct));
+  const p = await prisma.$transaction((tx) => returnPlanTx(tx, id, { dispatchItemId: b.dispatchItemId, qtyKg: kg3(b.qtyKg), wasteKg: waste, reasonCode: b.reasonCode?.trim() || PREVIEW_REASON }, o.wasteTolerancePct));
   const willClose = p.drains && settleBlockers(o, { liveBeams: p.ev.liveBeams, plan: { ...p.ev.plan, lines: [] } }).length === 0;
   return {
     holdingKg: kg(p.it.openKg), returnKg: kg(kg3(b.qtyKg)), wasteKg: kg(waste), keepKg: kg(p.keep),
@@ -119,11 +122,14 @@ function returnReplay(id: string, input: WarpingYarnReturnInput, hash: string) {
       { ad: "requestHash", mevcut: hit.requestHash, gelen: hash },
     ],
     collision: "Bu işlem kimliği başka içerikli bir iadeye ait — iade penceresini yeniden açıp gönderin.",
-    respond: async (hit) => loadReturnResult(id, hit.movementId, null, [], true),
+    respond: async (hit) => loadReturnResult(id, hit.movementId, { backTransferBatchId: null, warnings: [], replayed: true }),
   });
 }
 
-async function loadReturnResult(id: string, movementId: string, backTransferBatchId: string | null, warnings: string[], replayed: boolean, autoClosed?: boolean): Promise<WarpingYarnReturnResult> {
+type ReturnResultExtra = { backTransferBatchId: string | null; warnings: string[]; replayed: boolean; autoClosed?: boolean };
+
+async function loadReturnResult(id: string, movementId: string, extra: ReturnResultExtra): Promise<WarpingYarnReturnResult> {
+  const { backTransferBatchId, warnings, replayed, autoClosed } = extra;
   const m = await prisma.yarnMovement.findUniqueOrThrow({
     where: { id: movementId },
     select: { qtyKg: true, dispatchItemId: true, item: { select: { code: true, name: true } }, dispatchItem: { select: { dispatch: { select: { dispatchNo: true } } } }, warpingWastes: { where: { kind: WARPING_WASTE }, select: { qtyKg: true } } },
@@ -140,20 +146,23 @@ async function loadReturnResult(id: string, movementId: string, backTransferBatc
 /** Elle iade (+ fire). Kalan sıfırlanır ve kapanış yüklemi izin verirse sipariş aynı tx'te kapanır. */
 export async function returnWarpingYarn(id: string, input: WarpingYarnReturnInput, userId: string): Promise<WarpingYarnReturnResult> {
   const { clientToken } = input;
-  const ret: ReturnYarnInput = { dispatchItemId: input.dispatchItemId, qtyKg: input.qtyKg, reasonCode: input.reasonCode, warehouseId: input.warehouseId, lotId: input.lotId };
   const waste = kg3(input.wasteKg);
   if (waste.lt(0)) throw AppError.badRequest("Fire kg negatif olamaz.", { code: "VALIDATION_ERROR" });
   const reason = input.wasteReason?.trim() || null;
   const hash = returnRequestHash(id, input);
+  const ret: ReturnYarnInput = {
+    dispatchItemId: input.dispatchItemId, qtyKg: input.qtyKg, reasonCode: input.reasonCode, warehouseId: input.warehouseId, lotId: input.lotId,
+    token: clientToken ? { clientToken, requestHash: hash } : null,
+  };
   return returnReplay(id, input, hash).run(clientToken, async () => {
     const out = await prisma.$transaction(async (tx) => {
       await claimReturnSourceTx(tx, id, userId);
       const o = await tx.warpingOrder.findUniqueOrThrow({ where: { id }, select: { wasteTolerancePct: true } });
       await lockDispatchItemsTx(tx, [ret.dispatchItemId]);
       const p = await returnPlanTx(tx, id, { dispatchItemId: ret.dispatchItemId, qtyKg: kg3(ret.qtyKg), wasteKg: waste, reasonCode: ret.reasonCode }, o.wasteTolerancePct);
-      const r = await returnWarpingYarnTx(tx, id, ret, userId, clientToken ? { clientToken, requestHash: hash } : null);
+      const r = await returnWarpingYarnTx(tx, id, ret, userId);
       const over = (p.yarn?.overTolerance ?? false) || p.ev.plan.overTolerance;
-      await writeWastesTx(tx, { returnMovementId: r.r.movementId }, id, [{ dispatchItemId: ret.dispatchItemId, qtyKg: waste, overTolerance: over }], reason, userId);
+      await writeWastesTx(tx, { src: { returnMovementId: r.r.movementId }, warpingOrderId: id, lines: [{ dispatchItemId: ret.dispatchItemId, qtyKg: waste, overTolerance: over }], reason, userId });
       const auto = await autoSettleIfDrainedTx(tx, id, userId, "YARN_RETURN");
       return { r, auto, over, warnings: tolWarnings(waste, p.ev.plan.warnings) };
     });
@@ -162,7 +171,7 @@ export async function returnWarpingYarn(id: string, input: WarpingYarnReturnInpu
     await AuditService.log({ userId, action: "UPDATE", tableName: "SUBCONTRACTOR_DISPATCH", recordId: out.r.it.dispatchId, newData: { yarnReturned: itemCode, dispatchItemId: ret.dispatchItemId, qtyKg: qty, wasteKg: kg(waste), reasonCode: ret.reasonCode, movementId: out.r.r.movementId, warpingOrderId: id } });
     await AuditService.log({ userId, action: "UPDATE", tableName: WARPING_ORDER_TABLE, recordId: id, newData: { yarnReturned: itemCode, movementId: out.r.r.movementId, qtyKg: qty, wasteKg: kg(waste), wasteReason: reason, overTolerance: waste.gt(0) && out.over, backTransferBatchId: out.r.backTransferBatchId } });
     await logAutoSettle(out.auto, userId);
-    return loadReturnResult(id, out.r.r.movementId, out.r.backTransferBatchId, out.warnings, false, out.auto !== null);
+    return loadReturnResult(id, out.r.r.movementId, { backTransferBatchId: out.r.backTransferBatchId, warnings: out.warnings, replayed: false, autoClosed: out.auto !== null });
   });
 }
 
@@ -178,7 +187,7 @@ export async function cancelReturnWithWasteTx(tx: Tx, dispatchId: string, input:
     select: { id: true, dispatchItemId: true, qtyKg: true, warpingOrderId: true },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
-  await reverseWastesTx(tx, { returnMovementId: res.movementId }, wastes, input.reason, userId);
+  await reverseWastesTx(tx, { src: { returnMovementId: res.movementId }, wastes, reason: input.reason, userId });
   return { ...res, wasteCancelledKg: wastes.reduce((s, w) => s.plus(w.qtyKg), D(0)) };
 }
 

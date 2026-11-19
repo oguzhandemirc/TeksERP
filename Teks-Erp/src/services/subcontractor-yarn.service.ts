@@ -210,6 +210,8 @@ export interface ReturnYarnInput {
   /** Varsayılan çıkışın deposu/lotu; fason başka depoya teslim edebilir (H2). */
   warehouseId?: string | null;
   lotId?: string | null;
+  /** Sunucu içi: devere iade ucunun deneme kimliği + gövde özeti (HTTP gövdesinden gelmez; Zod şeması taşımaz). */
+  token?: { clientToken: string; requestHash: string } | null;
 }
 export interface YarnReturnDto {
   movementId: string;
@@ -227,7 +229,7 @@ export interface YarnReturnDto {
  * birlikte aşamaz. Tavan = çıkış − net dönüş ± kalemin KENDİ siparişinin net devere aktarımı (D4b-2; başka siparişe
  * aktarılmış iplik buradan dönemez, o siparişin iade ucundan döner).
  */
-export async function returnYarnTx(tx: Tx, dispatchId: string, input: ReturnYarnInput, userId?: string | null, token?: { clientToken: string; requestHash: string } | null) {
+export async function returnYarnTx(tx: Tx, dispatchId: string, input: ReturnYarnInput, userId?: string | null) {
   const qty = kg(input.qtyKg, "Dönen kg");
   await lockDispatchItemsTx(tx, [input.dispatchItemId]);
   const item = await loadYarnItem(tx, dispatchId, input.dispatchItemId);
@@ -248,7 +250,7 @@ export async function returnYarnTx(tx: Tx, dispatchId: string, input: ReturnYarn
   const { movementId } = await applyYarnMovementTx(tx, {
     itemId: item.yarnItemId!, warehouseId: input.warehouseId ?? out.warehouseId, kind: YarnMovementKind.SUBCONTRACT_RETURN, qtyKg: qty,
     lotId: input.lotId === undefined ? out.lotId : input.lotId, reasonCode, dispatchItemId: item.id, userId: userId ?? null,
-    clientToken: token?.clientToken ?? null, requestHash: token?.requestHash ?? null,
+    clientToken: input.token?.clientToken ?? null, requestHash: input.token?.requestHash ?? null,
   });
   return { movementId, item, qty, remainingKg: out.qtyKg.minus(already).minus(qty) };
 }
