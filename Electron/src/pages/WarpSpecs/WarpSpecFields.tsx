@@ -1,0 +1,113 @@
+import { useState, type ReactNode } from "react";
+import { type UseFormReturn } from "react-hook-form";
+import { type LucideIcon, Ruler } from "lucide-react";
+import { FormField } from "@/components/forms/FormField";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
+import { formatQty } from "@/lib/format";
+import { suggestWarpEnds } from "@/pages/Operations/WarpPlan/service";
+import { parseInput } from "@/pages/Operations/WarpPlan/warp-plan-model";
+import type { WarpSpecFormValues } from "./schema";
+
+type Form = UseFormReturn<WarpSpecFormValues>;
+
+/** Form bölümü kartı — başlık şeridi + gövde; geniş yüzeyde gruplar ayraçla ayrışır. */
+export function SpecSection({ title, icon: Icon, note, aside, children }: { title: string; icon: LucideIcon; note?: string; aside?: ReactNode; children: ReactNode }) {
+  return (
+    <section className="rounded-xl border border-card-border bg-card shadow-card">
+      <header className="flex items-center gap-2 border-b px-4 py-2">
+        <Icon className="h-4 w-4 text-primary" />
+        <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{title}</h3>
+        {note ? <span className="hidden text-xs text-muted-foreground sm:inline">· {note}</span> : null}
+        {aside ? <div className="ml-auto">{aside}</div> : null}
+      </header>
+      <div className="px-4 py-3">{children}</div>
+    </section>
+  );
+}
+
+export function IdentityFields({ form, excludeId }: { form: Form; excludeId?: string }) {
+  const e = form.formState.errors;
+  return (
+    <div className="grid gap-3 sm:grid-cols-[12rem_minmax(0,1fr)]">
+      <FormField label="Kod" htmlFor="code" error={e.code} required>
+        <Input id="code" {...form.register("code")} placeholder="UA6007-Ç" />
+      </FormField>
+      <FormField label="Çözgü kartı adı" htmlFor="name" error={e.name} required>
+        <Input id="name" autoFocus {...form.register("name")} placeholder="UA6007 çözgüsü" />
+        {/* Mükerreri REDDETMEK yerine ÖNLEMEK — yazarken benzerleri gösterir; `excludeId` kendi ikizini dışlar. */}
+        <SimilarNamesWarning entity="warp-specs" name={form.watch("name") ?? ""} excludeId={excludeId} />
+      </FormField>
+    </div>
+  );
+}
+
+/** "Taraktan": tarak × tarak eni × dişe tel → toplam tel ÖNERİSİ (birim profildir). Tek satırda uygular, çok satırda yalnız gösterir. */
+export function ReedHelper({ form }: { form: Form }) {
+  const [note, setNote] = useState<string | null>(null);
+  const run = async () => {
+    const v = form.getValues();
+    const reed = parseInput(String(v.reedNo ?? ""));
+    const width = parseInput(String(v.reedWidthCm ?? ""));
+    const perDent = (v.endsPerDent ?? "").toString().trim() === "" ? 1 : parseInput(String(v.endsPerDent));
+    if (!reed || !width || !perDent) return setNote("Önce tarak no ve tarak enini girin.");
+    try {
+      const r = await suggestWarpEnds({ kind: "REED", reedPerCm: reed, widthCm: width, endsPerDent: perDent });
+      const ends = formatQty(r.endsCount, 0);
+      if (v.yarns.length === 1) {
+        form.setValue("yarns.0.endsCount", String(r.endsCount), { shouldDirty: true, shouldValidate: true });
+        setNote(`${ends} tel yazıldı.`);
+      } else setNote(`Taraktan toplam ${ends} tel çıkıyor — satırlara kendiniz paylaştırın.`);
+    } catch {
+      setNote(null); // apiClient hatayı zaten bildirdi
+    }
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-xs">
+      <Button type="button" size="sm" variant="outline" onClick={() => void run()} title="tarak × tarak eni × dişe tel">
+        <Ruler className="h-3.5 w-3.5" /> Taraktan tel öner
+      </Button>
+      {note ? <span className="text-muted-foreground" data-testid="reed-helper-note">{note}</span> : null}
+    </div>
+  );
+}
+
+/** Tarak ve dizilim: kısa sayısal alanlar ızgarada yan yana (geniş ekranda 4, dar ekranda 2 → 1 sütun). */
+export function ReedFields({ form }: { form: Form }) {
+  const e = form.formState.errors;
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-4">
+      <FormField label="Kenar teli" htmlFor="selvedgeEnds" error={e.selvedgeEnds} info="Satır tel adetleri kenar dahil yazılır; bu alan bilgi içindir, hesaba girmez.">
+        <Input id="selvedgeEnds" {...form.register("selvedgeEnds")} inputMode="numeric" placeholder="24" />
+      </FormField>
+      <FormField label="Tarak no" htmlFor="reedNo" error={e.reedNo} info="Birimi fabrikanın kendi kullanımıdır (diş/cm ya da diş/10 cm); hesaba girmez.">
+        <Input id="reedNo" {...form.register("reedNo")} inputMode="decimal" placeholder="14" />
+      </FormField>
+      <FormField label="Dişe tel" htmlFor="endsPerDent" error={e.endsPerDent} info="Taraktan tel önerisinde boşsa 1 sayılır.">
+        <Input id="endsPerDent" {...form.register("endsPerDent")} inputMode="numeric" placeholder="4" />
+      </FormField>
+      <FormField label="Tarak eni (cm)" htmlFor="reedWidthCm" error={e.reedWidthCm} info="Bilgi alanı; taraktan tel önerisinde kullanılır, hesaba girmez.">
+        <Input id="reedWidthCm" {...form.register("reedWidthCm")} inputMode="decimal" placeholder="280" />
+      </FormField>
+      <FormField className="sm:col-span-2" label="Dizilim (talimat)" htmlFor="sequenceNote" error={e.sequenceNote} info="Devereciye giden talimat: ör. 2A 1B. Hesaba girmez.">
+        <Input id="sequenceNote" {...form.register("sequenceNote")} placeholder="2A 1B" />
+      </FormField>
+      <FormField label={<span className="whitespace-nowrap">Çekme <span className="text-xs font-normal text-muted-foreground">(take-up)</span> %</span>} htmlFor="takeUpPct" error={e.takeUpPct} info="Çözgü ÷ kumaş oranı: çözgü = kumaş ÷ (1 − çekme). Boşsa tezgahtan doğan topun otomatik tüketimi çözgü = kumaş sayar ve uyarır.">
+        <Input id="takeUpPct" {...form.register("takeUpPct")} inputMode="decimal" placeholder="ör. 8" />
+      </FormField>
+      <FormField label="Fire (%)" htmlFor="wastePct" error={e.wastePct} info="Çözgü ipliği firesi; hesaptaki fireli kg'yı ve maliyeti etkiler: çözgü = kumaş ÷ (1 − çekme) ÷ (1 − fire). Ürünün maliyet yapısındaki fire bunu ezer; boşsa maliyet parametrelerindeki varsayılan kullanılır.">
+        <Input id="wastePct" {...form.register("wastePct")} inputMode="decimal" placeholder="ör. 3" />
+      </FormField>
+    </div>
+  );
+}
+
+export function NotesField({ form }: { form: Form }) {
+  return (
+    <FormField label="Not" htmlFor="notes" error={form.formState.errors.notes}>
+      <Textarea id="notes" {...form.register("notes")} rows={2} placeholder="Tahar planı, jakar koşumu…" />
+    </FormField>
+  );
+}

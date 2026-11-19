@@ -58,8 +58,8 @@ export function PlanTable({ yarns, hasWaste, totals, showStock }: Props) {
                 <TableRow key={`${y.yarnItemId}-${y.sourceWarpSpecId}`}>
                   {col.letter && <TableCell className="font-mono font-semibold">{y.letter}</TableCell>}
                   <TableCell>
-                    <span className="font-mono text-xs">{y.code}</span>{" "}
-                    <span className="text-muted-foreground">{y.name}</span>
+                    <span className="font-medium">{y.name}</span>
+                    <span className="ml-1 text-xs text-muted-foreground">{y.code}</span>
                   </TableCell>
                   <TableCell className={num}>{y.endsCount}</TableCell>
                   <TableCell className={num}>{Number(y.denier)}</TableCell>

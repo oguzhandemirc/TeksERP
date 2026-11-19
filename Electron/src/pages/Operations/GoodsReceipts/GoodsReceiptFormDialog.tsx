@@ -19,6 +19,7 @@ import {
   ReceiptLineRows, emptyLine, expandLines, lineKind, receiptTotals, type DraftLine,
 } from "./ReceiptLineRows";
 import { ReceiptImportButton } from "./ReceiptImportButton";
+import { ReceiptIntro } from "./ReceiptIntro";
 import { DirectWarpingOrderField, useDirectWarpingAvailable, type DirectWarpingOrderRef } from "./DirectWarpingOrderField";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { consumableIdsFrom, useItemTypes, yarnIdsFrom } from "./useItemTypes";
@@ -175,8 +176,7 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
         <DialogHeader>
           <DialogTitle>Yeni Mal Kabul</DialogTitle>
           <DialogDescription>
-            Aynı üründen birden fazla top geldiyse <b>Adet</b> yazmanız yeter — her top kendi
-            barkoduyla ayrı ayrı doğar. Benzer bir satır için <b>kopyala</b> düğmesini kullanın.
+            <ReceiptIntro kinds={lines.map((l) => lineKind(l, yarnIds, consumableIds))} />
           </DialogDescription>
         </DialogHeader>
 

@@ -8,7 +8,7 @@ import { buildDefaults, copyDraft } from "./payload";
 import type { WarpSpec } from "./types";
 
 const suggest = vi.fn();
-const lastBody: { v: WarpPlanBody | null } = { v: null };
+const bodies: Array<WarpPlanBody | null> = [];
 const planResult: WarpPlanResult = {
   mode: "FROM_BEAMS", warpSpec: null, fixedWasteM: 0, stock: { known: false, emanetAcik: false, subcontractorId: null },
   yarns: [
@@ -28,7 +28,7 @@ const planResult: WarpPlanResult = {
 vi.mock("@/pages/Operations/WarpPlan/service", () => ({
   suggestWarpEnds: (b: unknown) => suggest(b),
   useWarpPlan: (body: WarpPlanBody | null) => {
-    lastBody.v = body;
+    bodies.push(body);
     return { data: body ? { success: true, data: planResult } : undefined, isError: false };
   },
 }));
@@ -58,7 +58,7 @@ function renderDialog(props: Partial<Parameters<typeof WarpSpecFormDialog>[0]> =
 
 beforeEach(() => {
   suggest.mockReset();
-  lastBody.v = null;
+  bodies.length = 0;
 });
 
 describe("WarpSpecFormDialog — D3 satır editörü", () => {
@@ -69,11 +69,41 @@ describe("WarpSpecFormDialog — D3 satır editörü", () => {
     expect(screen.getByLabelText("B tel adedi")).toHaveProperty("value", "4000");
     expect(screen.getByTestId("warp-total-ends").textContent).toMatch(/7\.?000/);
     expect(screen.getByLabelText("Dizilim (talimat)", { exact: false })).toHaveProperty("value", "3A 4B");
-    const strip = screen.getByTestId("warp-preview-strip");
-    expect(strip.textContent).toContain("A PES-150 50,000 kg · B PES-75 33,333 kg");
-    // Fire yok → fireli satır gösterilmez.
-    expect(strip.textContent).not.toContain("Fireli");
-    expect(lastBody.v).toMatchObject({ beamCount: 1, beamLengthM: 1000, fixedWasteM: 0, lines: [{ yarnItemId: "y1", endsCount: 3000 }, { yarnItemId: "y2", endsCount: 4000 }] });
+    // Hesap paneli: iplik başına tel · denye · 1000 m kg · pay; ad + küçük kod; formül ve denye uyarısı.
+    const rowA = screen.getByTestId("warp-calc-row-A").textContent ?? "";
+    expect(rowA).toContain("PES 150");
+    expect(rowA).toContain("PES-150");
+    expect(rowA).toContain("50,000");
+    expect(rowA).toContain("%60");
+    expect(screen.getByTestId("warp-calc-row-B").textContent).toContain("33,333");
+    expect(screen.getByTestId("warp-calc-total-kg").textContent).toBe("83,333");
+    expect(screen.getByTestId("warp-calc-total-ends").textContent).toBe("7000");
+    expect(screen.getByTestId("warp-calc-formula").textContent).toBe("kg = tel × denye × metre ÷ 9.000.000");
+    expect(screen.getByTestId("warp-calc-panel").textContent).toContain("paylı denye buraya yazılmaz");
+    // Fire yok → fireli kg gösterilmez; levent girilmedi → levent sütunu yok.
+    expect(screen.getByTestId("warp-calc-panel").textContent).not.toContain("Fireli");
+    expect(screen.queryByText("Levent kg")).toBeNull();
+    // Satır editöründe iplik kodu + denye küçük satırda.
+    expect(screen.getByTestId("warp-yarn-code-A").textContent).toBe("PES-150 · 150 den");
+    expect(bodies).toContainEqual(expect.objectContaining({ beamCount: 1, beamLengthM: 1000, fixedWasteM: 0, lines: [{ yarnItemId: "y1", endsCount: 3000 }, { yarnItemId: "y2", endsCount: 4000 }] }));
+  });
+
+  it("levent boyu × adet girilince ikinci hesap istenir, levent sütunu ve toplamı çıkar", async () => {
+    const user = userEvent.setup();
+    renderDialog({ initial: spec });
+    await user.type(screen.getByLabelText("Levent boyu (m)"), "3000");
+    await user.clear(screen.getByLabelText("Levent adedi"));
+    await user.type(screen.getByLabelText("Levent adedi"), "2");
+    expect(bodies).toContainEqual(expect.objectContaining({ beamCount: 2, beamLengthM: 3000 }));
+    expect(screen.getByText("Levent kg")).toBeTruthy();
+    expect(screen.getByTestId("warp-calc-beam-total").textContent).toBe("83,333 kg");
+  });
+
+  it("eksik satırda hesap istenmez, yönlendirme metni çıkar", () => {
+    renderDialog();
+    expect(bodies.every((b) => b === null)).toBe(true);
+    expect(screen.getByTestId("warp-calc-panel").textContent).toContain("her satırda iplik ve tel adedi girin");
+    expect(screen.getByTestId("warp-calc-total-kg").textContent).toBe("—");
   });
 
   it("İplik ekle yeni harfli satır açar; satır silinince toplam düşer", async () => {

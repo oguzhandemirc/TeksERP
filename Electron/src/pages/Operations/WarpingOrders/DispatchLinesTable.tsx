@@ -42,7 +42,7 @@ function LineRow({ line, first, yarn, preview, lines, onChange }: RowProps) {
         <TableCell className="align-top">
           {first ? (
             <>
-              <span className="font-medium">{yarn.letter} · {yarn.code}</span> <span className="text-muted-foreground">{yarn.name}</span>
+              <span className="font-medium">{yarn.letter} · {yarn.name}</span> <span className="text-xs text-muted-foreground">{yarn.code}</span>
               <span className="block text-xs text-muted-foreground">{contextText(yarn)}</span>
             </>
           ) : (
