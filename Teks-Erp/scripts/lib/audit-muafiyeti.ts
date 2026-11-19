@@ -72,6 +72,8 @@ export const AUDIT_EXEMPT_MODELS: AuditMuafiyeti[] = [
     gerekce: "kapanış künyesini `helpers/workorder-close-snapshot.helper` COMPLETED claim'iyle aynı tx'te yazar; audit kapanışı yapan eylemde (elle Kapat · tambur/fason/kurşun son adım)" },
   { model: "WorkOrderEvent", sinif: "EBEVEYN_EYLEMDE",
     gerekce: "iş emri hareket satırını `helpers/workorder-event.helper` yazar; audit değişikliği yapan eylemde (workorder · workorder-link · tambur · fason · kurşun); otomatik geçişlerin audit'i yoktu, defter onların TEK izidir" },
+  { model: "WarpingYarnWaste", sinif: "EBEVEYN_EYLEMDE",
+    gerekce: "fason devere fire defteri — tek yazar `warping-order/waste-write.ts` (ileri WASTE / ters WASTE_CANCEL, tx İÇİNDE); audit çağıran eylemde (`settle` WARPING_ORDER kapanış yükü · `reopen` · `yarn-return-waste` iade/iade stornosu yükünde wasteKg)" },
   { model: "SwatchEvent", sinif: "EBEVEYN_EYLEMDE",
     gerekce: "kartela olay satırını `helpers/swatch-event.helper` durum claim'iyle aynı tx'te yazar; audit geçişi başlatan eylemde (kartela kabul/iptal/düşüm · çuval · sevkiyat)" },
   { model: "WarehouseMovement", sinif: "EBEVEYN_EYLEMDE",

@@ -41,7 +41,8 @@ function ReturnCancelDialog({ orderId, row, onClose }: { orderId: string; row: W
         </DialogHeader>
         <ul className="space-y-1 rounded-md border p-3 text-sm" aria-label="Etkilenen kayıtlar">
           <li><b>{row.dispatchNo}</b> · {row.lotNo ? `lot ${row.lotNo}` : "lotsuz"} — iade {fmtKg(row.qtyKg)} kg → Geri alındı</li>
-          <li className="text-muted-foreground">{fmtKg(row.qtyKg)} kg depodan düşer ({row.warehouseName ?? "iade deposu"}), deverecide tutulan iplik {fmtKg(row.qtyKg)} kg artar.</li>
+          <li className="text-muted-foreground">{fmtKg(row.qtyKg)} kg depodan düşer ({row.warehouseName ?? "iade deposu"}), deverecide tutulan iplik {fmtKg(Number(row.qtyKg) + Number(row.wasteKg ?? 0))} kg artar.</li>
+          {Number(row.wasteKg ?? 0) > 0 && <li className="text-muted-foreground">Bu iadeyle yazılan {fmtKg(row.wasteKg!)} kg fire de geri alınır.</li>}
         </ul>
         <FormField label="Geri alma sebebi" htmlFor="wr-cancel-reason" required hint="En az 3 karakter.">
           <Input id="wr-cancel-reason" autoFocus maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} />
@@ -64,7 +65,10 @@ function ReturnRow({ r, onCancel }: { r: WarpingYarnReturnRow; onCancel: () => v
       <TableCell>{r.dispatchNo}{r.ownDispatch ? "" : " (aktarımla gelen)"} · {r.lotNo ?? "lotsuz"}</TableCell>
       <TableCell>{r.warehouseName ?? "—"}</TableCell>
       <TableCell>{r.reasonLabel ?? r.reasonCode ?? "—"}</TableCell>
-      <TableCell className={num}>{fmtKg(r.qtyKg)}</TableCell>
+      <TableCell className={num}>
+        {fmtKg(r.qtyKg)}
+        {Number(r.wasteKg ?? 0) > 0 && <span className="block text-xs text-amber-700 dark:text-amber-400">fire {fmtKg(r.wasteKg!)} kg</span>}
+      </TableCell>
       <TableCell className="whitespace-nowrap text-right">
         {cancelled ? <Badge variant="outline" className="font-normal no-underline">Geri alındı</Badge> : (
           <PermissionGate permission="warping-order:write">

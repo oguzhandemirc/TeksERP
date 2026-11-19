@@ -1,7 +1,7 @@
 // =============================================================================
 // FASON DEVERE — deverecide tutulan iplik · iade · siparişler arası aktarma API istemcisi (D6b-2)
 // =============================================================================
-// İade ucu token'sız (sunucu kalem bazlı tutma kapısıyla korur); aktarma `clientToken` ile MANTIKSAL DENEME başına.
+// İade (+fire) ve aktarma `clientToken` ile MANTIKSAL DENEME başına; iade önizlemesinin uyarıları yalnız `data` içinde gelir.
 // Önizleme/yazım yanıtlarının `warnings`i apiClient interceptor'ında BİR KEZ basılır — diyalogda ikinci gösterim yok.
 // =============================================================================
 import { useQuery } from "@tanstack/react-query";
@@ -9,7 +9,8 @@ import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
 import { WARPING_ORDERS_QUERY_KEY } from "./service";
 import type {
-  WarpingTransferBatch, WarpingTransferCancelPreview, WarpingTransferFields, WarpingTransferPreview, WarpingYarnHolding, WarpingYarnReturnBody, WarpingYarnReturnRow,
+  WarpingTransferBatch, WarpingTransferCancelPreview, WarpingTransferFields, WarpingTransferPreview, WarpingYarnHolding, WarpingYarnReturnBody, WarpingYarnReturnPreview,
+  WarpingYarnReturnPreviewBody, WarpingYarnReturnResult, WarpingYarnReturnRow,
 } from "./holding-types";
 
 const BASE = "/api/warping-orders";
@@ -18,7 +19,9 @@ export const warpingHoldingService = {
   holdings: (id: string) => apiClient.get<ApiResponse<WarpingYarnHolding[]>>(`${BASE}/${id}/yarn-holdings`).then((r) => r.data.data),
   returns: (id: string) => apiClient.get<ApiResponse<WarpingYarnReturnRow[]>>(`${BASE}/${id}/yarn-returns`).then((r) => r.data.data),
   returnYarn: (id: string, body: WarpingYarnReturnBody) =>
-    apiClient.post<ApiResponse<{ movementId: string; itemCode: string; qtyKg: string }>>(`${BASE}/${id}/yarn-returns`, body).then((r) => r.data),
+    apiClient.post<ApiResponse<WarpingYarnReturnResult>>(`${BASE}/${id}/yarn-returns`, body).then((r) => r.data),
+  returnPreview: (id: string, body: WarpingYarnReturnPreviewBody) =>
+    apiClient.post<ApiResponse<WarpingYarnReturnPreview>>(`${BASE}/${id}/yarn-returns/preview`, body).then((r) => r.data.data),
   cancelReturn: (id: string, movementId: string, reason: string) =>
     apiClient.post<ApiResponse<{ itemCode: string }>>(`${BASE}/${id}/yarn-returns/${movementId}/cancel`, { reason }).then((r) => r.data),
   transfers: (id: string) => apiClient.get<ApiResponse<WarpingTransferBatch[]>>(`${BASE}/${id}/yarn-transfers`).then((r) => r.data.data),
