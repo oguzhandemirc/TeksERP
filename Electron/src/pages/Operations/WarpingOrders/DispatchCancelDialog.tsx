@@ -9,6 +9,7 @@ import { FormField } from "@/components/forms/FormField";
 import { Input } from "@/components/ui/input";
 import { toastServerSuccess } from "@/lib/serverNotes";
 import { fmtKg } from "./order-model";
+import { yarnText } from "./YarnLabel";
 import { WARPING_ORDERS_QUERY_KEY } from "./service";
 import { warpingYarnService } from "./yarn-service";
 import type { WarpingDispatchCancelPreview, WarpingDispatchRow } from "./yarn-types";
@@ -22,7 +23,7 @@ function AffectedList({ p, row }: { p: WarpingDispatchCancelPreview; row: Warpin
         const r = byItem.get(it.dispatchItemId);
         return (
           <li key={it.dispatchItemId} className="text-muted-foreground">
-            {r ? `${r.yarnItemCode} ${r.yarnItemName}` : it.yarnItemId} · {it.lotNo ? `lot ${it.lotNo}` : "lotsuz"} — {fmtKg(it.outKg)} kg {r?.warehouseName ?? "depoya"} geri girer
+            {r ? yarnText(r.yarnItemName, r.yarnItemCode) : it.yarnItemId} · {it.lotNo ? `lot ${it.lotNo}` : "lotsuz"} — {fmtKg(it.outKg)} kg {r?.warehouseName ?? "depoya"} geri girer
           </li>
         );
       })}

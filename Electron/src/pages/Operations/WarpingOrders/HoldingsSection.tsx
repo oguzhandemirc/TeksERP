@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { fmtFactoryDate } from "@/lib/factory-time";
 import { apiErrorMessage } from "@/services/apiClient";
-import { holdsYarn, transferText, yarnCode, yarnNamesOf, type YarnNames } from "./holding-model";
+import { holdsYarn, transferText, yarnNamesOf, type YarnNames } from "./holding-model";
 import { useWarpingHoldings } from "./holding-service";
 import { fmtKg } from "./order-model";
 import { TransferDialog } from "./TransferDialog";
@@ -16,17 +16,19 @@ import { TransfersList } from "./TransfersList";
 import { useWarpingDispatches } from "./yarn-service";
 import { YarnReturnDialog } from "./YarnReturnDialog";
 import { YarnReturnsList } from "./YarnReturnsList";
+import { YarnLabel, yarnText } from "./YarnLabel";
 import type { WarpingOrder } from "./types";
 import type { WarpingYarnHolding } from "./holding-types";
 
 const num = "text-right tabular-nums";
 
 function HoldingRow({ h, names, canWrite, onReturn }: { h: WarpingYarnHolding; names: YarnNames; canWrite: boolean; onReturn: () => void }) {
-  const code = yarnCode(names, h.yarnItemId);
+  const y = names.get(h.yarnItemId);
+  const code = yarnText(y?.name, y?.code);
   const empty = Number(h.holdingKg) === 0;
   return (
     <TableRow className={empty ? "text-muted-foreground" : undefined}>
-      <TableCell>{code} <span className="text-muted-foreground">{names.get(h.yarnItemId)?.name}</span></TableCell>
+      <TableCell><YarnLabel name={y?.name} code={y?.code} /></TableCell>
       <TableCell>{h.dispatchNo} <span className="text-xs text-muted-foreground">{h.own ? fmtFactoryDate(h.dispatchedAt) : "aktarımla gelen"}</span></TableCell>
       <TableCell>{h.lotNo ?? "lotsuz"}</TableCell>
       <TableCell className={num}>{h.own ? fmtKg(h.outKg) : "—"}</TableCell>

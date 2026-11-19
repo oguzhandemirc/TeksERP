@@ -131,7 +131,7 @@ describe("ReceiptsSection", () => {
     const dlg = await screen.findByRole("dialog");
     const list = within(await within(dlg).findByLabelText("Etkilenen kayıtlar"));
     expect(list.getByText("LV1")).toBeTruthy();
-    expect(list.getByText(/IPL-5X — 15,000 kg FS1/)).toBeTruthy();
+    expect(list.getByText(/5X \(IPL-5X\) — 15,000 kg FS1/)).toBeTruthy();
     expect(list.queryByText(/İptal olur/)).toBeNull();
     expect(within(dlg).getByText(/LIFO/)).toBeTruthy();
     expect(within(dlg).queryByLabelText(/Geri alma sebebi/)).toBeNull();

@@ -11,6 +11,9 @@ import type { WarpingDispatchRow, WarpingInstruction } from "./yarn-types";
 
 const esc = (s: string): string => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
+/** İplik ADI birincil, stok kodu küçük gri (panelin `YarnLabel` biçimiyle aynı). */
+const yarnCell = (name: string, code: string) => `${esc(name || code)}${name && code && code !== name ? ` <span class="code">${esc(code)}</span>` : ""}`;
+
 const row = (label: string, value: string) => `<tr><th>${esc(label)}</th><td>${esc(value)}</td></tr>`;
 
 export function reedText(r: WarpingInstruction["reed"]): string {
@@ -19,11 +22,11 @@ export function reedText(r: WarpingInstruction["reed"]): string {
 }
 
 function instructionSection(i: WarpingInstruction): string {
-  const cards = [`${i.warpSpec.code} — ${i.warpSpec.name}`, ...i.extraSpecs.map((e) => `${e.code} — ${e.name} (ek tel grubu)`)].join("; ");
+  const cards = [`${i.warpSpec.name} (${i.warpSpec.code})`, ...i.extraSpecs.map((e) => `${e.name} (${e.code}, ek tel grubu)`)].join("; ");
   const beams = i.beamLines.map((b) => `${b.beamCount} × ${fmtM(b.beamLengthM)} m`).join(" + ");
   const beamRow = isBeamCountOpen(i) ? row("Levent adedi", `devereciye bırakıldı, toplam ${fmtM(i.targetLengthM)} m`) : row("Levent", `${beams} — toplam ${i.beamCount} levent, ${fmtM(i.targetLengthM)} m`);
   const yarns = i.yarns
-    .map((y) => `<tr><td class="c">${esc(y.letter)}</td><td>${esc(y.code)} — ${esc(y.name)}</td><td class="n">${String(y.endsCount)}</td><td class="n">${esc(trimNum(y.denier))}</td></tr>`)
+    .map((y) => `<tr><td class="c">${esc(y.letter)}</td><td>${yarnCell(y.name, y.code)}</td><td class="n">${String(y.endsCount)}</td><td class="n">${esc(trimNum(y.denier))}</td></tr>`)
     .join("");
   return `<section>
     <h1>ÇÖZGÜ TALİMATI</h1>
@@ -43,14 +46,14 @@ function instructionSection(i: WarpingInstruction): string {
 
 function dispatchSection(d: WarpingDispatchRow, i: WarpingInstruction): string {
   const items = d.items
-    .map((it) => `<tr><td>${esc(it.yarnItemCode)} — ${esc(it.yarnItemName)}</td><td>${esc(it.lotNo ?? "—")}</td><td>${esc(it.warehouseName ?? "—")}</td><td class="n">${esc(fmtKg(it.outKg))}</td></tr>`)
+    .map((it) => `<tr><td>${yarnCell(it.yarnItemName, it.yarnItemCode)}</td><td>${esc(it.lotNo ?? "—")}</td><td>${esc(it.warehouseName ?? "—")}</td><td class="n">${esc(fmtKg(it.outKg))}</td></tr>`)
     .join("");
   return `<section class="break">
     <h1>İPLİK SEVK İRSALİYESİ</h1>
     <div class="sub">${esc(d.dispatchNo)} · ${esc(fmtFactoryDateTime(d.dispatchedAt))}</div>
     <table class="kv">
       ${row("Devereci", `${i.subcontractor.name} (${i.subcontractor.code})`)}
-      ${row("Sipariş", `${i.orderNo} — ${i.warpSpec.code}`)}
+      ${row("Sipariş", `${i.orderNo} — ${i.warpSpec.name}`)}
     </table>
     <table class="grid"><thead><tr><th>İplik</th><th>Lot</th><th>Çıkış deposu</th><th class="n">Kg</th></tr></thead>
       <tbody>${items}</tbody>
@@ -60,7 +63,7 @@ function dispatchSection(d: WarpingDispatchRow, i: WarpingInstruction): string {
 }
 
 const CSS = `@page{size:A4;margin:14mm}body{font-family:system-ui,-apple-system,"Segoe UI",Arial,sans-serif;font-size:11pt;color:#111}
-h1{font-size:16pt;margin:0 0 2mm}.sub{color:#444;margin-bottom:4mm}table{border-collapse:collapse;width:100%;margin-bottom:4mm}
+h1{font-size:16pt;margin:0 0 2mm}.code{color:#666;font-size:8pt}.sub{color:#444;margin-bottom:4mm}table{border-collapse:collapse;width:100%;margin-bottom:4mm}
 .kv th{text-align:left;width:32%;font-weight:600;padding:1.5mm 2mm;border-bottom:1px solid #ddd}.kv td{padding:1.5mm 2mm;border-bottom:1px solid #ddd}
 .grid th,.grid td{border:1px solid #999;padding:1.5mm 2mm}.grid th{background:#f2f2f2;text-align:left}.grid th.n{text-align:right}.grid th.c{text-align:center}.n{text-align:right;font-variant-numeric:tabular-nums}.c{text-align:center;width:12mm}
 .box{border:1px solid #999;padding:2mm 3mm;margin-bottom:3mm;white-space:pre-wrap}.break{page-break-after:always}

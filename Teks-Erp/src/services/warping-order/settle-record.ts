@@ -18,7 +18,7 @@ const RECORD_SELECT = {
   wastes: {
     select: {
       id: true, kind: true, qtyKg: true, overTolerance: true, dispatchItemId: true, reversesId: true,
-      dispatchItem: { select: { yarnItemId: true, lotId: true, lot: { select: { lotNo: true } }, yarnItem: { select: { code: true } }, dispatch: { select: { dispatchNo: true } } } },
+      dispatchItem: { select: { yarnItemId: true, lotId: true, lot: { select: { lotNo: true } }, yarnItem: { select: { code: true, name: true } }, dispatch: { select: { dispatchNo: true } } } },
     },
     orderBy: [{ createdAt: "asc" as const }, { id: "asc" as const }],
   },
@@ -32,7 +32,7 @@ export interface WarpingSettlementRecord {
   reopened: { id: string; createdAt: string; reason: string | null } | null;
   reversesId: string | null;
   totalWasteKg: string; totalReturnKg: string;
-  wastes: Array<{ id: string; kind: string; dispatchItemId: string; dispatchNo: string; yarnItemId: string; code: string; lotNo: string | null; qtyKg: string; overTolerance: boolean; reversesId: string | null }>;
+  wastes: Array<{ id: string; kind: string; dispatchItemId: string; dispatchNo: string; yarnItemId: string; code: string; name: string; lotNo: string | null; qtyKg: string; overTolerance: boolean; reversesId: string | null }>;
   returns: Array<{ movementId: string; dispatchItemId: string | null; yarnItemId: string; qtyKg: string; warehouseId: string; lotId: string | null; reasonCode: string | null }>;
   backTransferIds: string[];
 }
@@ -56,7 +56,7 @@ async function toRecord(db: Db, r: Row): Promise<WarpingSettlementRecord> {
     totalWasteKg: kg(totalWaste), totalReturnKg: kg(totalReturn),
     wastes: r.wastes.map((w) => ({
       id: w.id, kind: w.kind, dispatchItemId: w.dispatchItemId, dispatchNo: w.dispatchItem.dispatch.dispatchNo, yarnItemId: w.dispatchItem.yarnItemId ?? "",
-      code: w.dispatchItem.yarnItem?.code ?? "", lotNo: w.dispatchItem.lot?.lotNo ?? null, qtyKg: kg(w.qtyKg), overTolerance: w.overTolerance, reversesId: w.reversesId,
+      code: w.dispatchItem.yarnItem?.code ?? "", name: w.dispatchItem.yarnItem?.name ?? "", lotNo: w.dispatchItem.lot?.lotNo ?? null, qtyKg: kg(w.qtyKg), overTolerance: w.overTolerance, reversesId: w.reversesId,
     })),
     returns: moves.map((m) => ({ movementId: m.id, dispatchItemId: m.dispatchItemId, yarnItemId: m.itemId, qtyKg: kg(m.qtyKg), warehouseId: m.warehouseId, lotId: m.lotId, reasonCode: m.reasonCode })),
     backTransferIds: r.backTransferIds,

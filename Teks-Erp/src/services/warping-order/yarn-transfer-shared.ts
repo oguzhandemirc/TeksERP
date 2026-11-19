@@ -16,7 +16,7 @@ const ROW_SELECT = {
   fromWarpingOrder: { select: { orderNo: true } },
   toWarpingOrder: { select: { orderNo: true } },
   reversal: { select: { id: true, batchId: true, createdAt: true } },
-  dispatchItem: { select: { id: true, yarnItemId: true, lotId: true, lot: { select: { lotNo: true } }, yarnItem: { select: { code: true } }, dispatch: { select: { dispatchNo: true } } } },
+  dispatchItem: { select: { id: true, yarnItemId: true, lotId: true, lot: { select: { lotNo: true } }, yarnItem: { select: { code: true, name: true } }, dispatch: { select: { dispatchNo: true } } } },
 } satisfies Prisma.WarpingYarnTransferSelect;
 type Row = Prisma.WarpingYarnTransferGetPayload<{ select: typeof ROW_SELECT }>;
 
@@ -33,7 +33,7 @@ export interface WarpingTransferBatch {
   /** Aktarma belgesinin satırlarından en az biri stornolu mu (storno belge başına yazılır: hepsi ya da hiçbiri). */
   cancelled: boolean;
   cancelBatchId: string | null;
-  rows: Array<{ transferId: string; kind: string; dispatchItemId: string; dispatchNo: string; yarnItemId: string; code: string; lotId: string | null; lotNo: string | null; qtyKg: string; reversesId: string | null }>;
+  rows: Array<{ transferId: string; kind: string; dispatchItemId: string; dispatchNo: string; yarnItemId: string; code: string; name: string; lotId: string | null; lotNo: string | null; qtyKg: string; reversesId: string | null }>;
   warnings: string[];
 }
 
@@ -49,7 +49,7 @@ function toBatch(rows: Row[]): WarpingTransferBatch {
     cancelled: rev !== null, cancelBatchId: rev?.batchId ?? null,
     rows: rows.map((r) => ({
       transferId: r.id, kind: r.kind, dispatchItemId: r.dispatchItem.id, dispatchNo: r.dispatchItem.dispatch.dispatchNo,
-      yarnItemId: r.dispatchItem.yarnItemId ?? "", code: r.dispatchItem.yarnItem?.code ?? "", lotId: r.dispatchItem.lotId, lotNo: r.dispatchItem.lot?.lotNo ?? null,
+      yarnItemId: r.dispatchItem.yarnItemId ?? "", code: r.dispatchItem.yarnItem?.code ?? "", name: r.dispatchItem.yarnItem?.name ?? "", lotId: r.dispatchItem.lotId, lotNo: r.dispatchItem.lot?.lotNo ?? null,
       qtyKg: D(r.qtyKg).toFixed(3), reversesId: r.reversesId,
     })),
     warnings: [],

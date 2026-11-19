@@ -46,7 +46,7 @@ export interface WarpingReceiveInput {
   beams: WarpingReceiveBeamInput[];
 }
 
-interface PlanYarn { yarnItemId: string; code: string; endsCount: number; denier: Prisma.Decimal }
+interface PlanYarn { yarnItemId: string; code: string; name: string; endsCount: number; denier: Prisma.Decimal }
 interface BeamPlan { idx: number; lengthM: Prisma.Decimal; physicalBeamNo: string | null; grossKg: Prisma.Decimal | null; tareKg: Prisma.Decimal | null; yarns: Array<{ yarnItemId: string; endsCount: number; denier: Prisma.Decimal; kg: Prisma.Decimal }> }
 
 const dec3 = (v: number, ad: string, min: "pos" | "nonneg") => {
@@ -82,10 +82,10 @@ function planBeams(lines: Array<Omit<BeamPlan, "yarns">>, yarns: PlanYarn[]): Be
 async function loadOrderForReceive(db: Tx | typeof prisma, id: string) {
   const o = await sequentialTx(db).warpingOrder.findUnique({
     where: { id },
-    select: { id: true, orderNo: true, status: true, subcontractorId: true, warpSpecId: true, yarns: { select: { yarnItemId: true, endsCount: true, denier: true, yarnItem: { select: { code: true } } }, orderBy: { sortOrder: "asc" } } },
+    select: { id: true, orderNo: true, status: true, subcontractorId: true, warpSpecId: true, yarns: { select: { yarnItemId: true, endsCount: true, denier: true, yarnItem: { select: { code: true, name: true } } }, orderBy: { sortOrder: "asc" } } },
   });
   if (!o) throw AppError.notFound("Fason devere siparişi bulunamadı.", { code: "WARPING_ORDER_NOT_FOUND" });
-  return { ...o, planYarns: o.yarns.map((y): PlanYarn => ({ yarnItemId: y.yarnItemId, code: y.yarnItem.code, endsCount: y.endsCount, denier: D(y.denier) })) };
+  return { ...o, planYarns: o.yarns.map((y): PlanYarn => ({ yarnItemId: y.yarnItemId, code: y.yarnItem.code, name: y.yarnItem.name, endsCount: y.endsCount, denier: D(y.denier) })) };
 }
 
 type NeedKey = { beam: number; yarnItemId: string };
@@ -95,7 +95,7 @@ async function evaluate(db: Tx | typeof prisma, order: Awaited<ReturnType<typeof
   const { candidates, ownerCustomerId } = await loadAllocationCandidates(db, { id: order.id, subcontractorId: order.subcontractorId, yarnItemIds: order.planYarns.map((y) => y.yarnItemId) });
   const needs = beams.flatMap((b) => b.yarns.map((y) => ({ key: { beam: b.idx, yarnItemId: y.yarnItemId } as NeedKey, yarnItemId: y.yarnItemId, kg: y.kg })));
   const alloc = allocateWoundYarn(needs, candidates);
-  const codeOf = (y: string) => order.planYarns.find((p) => p.yarnItemId === y)?.code ?? y;
+  const codeOf = (y: string) => { const p = order.planYarns.find((x) => x.yarnItemId === y); return p?.name || p?.code || y; };
   const warnings: string[] = [];
   for (const [y, rest] of alloc.unallocated) {
     warnings.push(`${codeOf(y)}: nominal tüketim deverecideki iplikten ${qtyText(rest)} kg fazla — tel/denye/metre ya da eksik sevk kaydını kontrol edin (fazlası dağıtılmadı, bakiye eksiye inmez).`);
@@ -119,7 +119,7 @@ function weighWarnings(beams: BeamPlan[]): string[] {
 
 export interface WarpingReceivePreview {
   order: { id: string; orderNo: string; status: WarpingOrderStatus };
-  beams: Array<{ index: number; lengthM: string; nominalKg: string; weighedNetKg: string | null; yarns: Array<{ yarnItemId: string; code: string; kg: string }> }>;
+  beams: Array<{ index: number; lengthM: string; nominalKg: string; weighedNetKg: string | null; yarns: Array<{ yarnItemId: string; code: string; name: string; kg: string }> }>;
   allocations: Array<{ beamIndex: number; yarnItemId: string; dispatchItemId: string; dispatchNo: string; lotNo: string | null; holderWarpingOrderId: string; holderOrderNo: string | null; carryOver: boolean; kg: string }>;
   incoming: { beamCount: number; lengthM: string };
   /** Kabulden ÖNCEKİ mutabakat — panel gelenle yan yana koyar (istemci sayı türetmez: `incoming` + `after` hazır). */
@@ -148,7 +148,10 @@ export async function previewWarpingReceive(id: string, input: Omit<WarpingRecei
     beams: beams.map((b) => ({
       index: b.idx, lengthM: kg3(b.lengthM), nominalKg: kg3(b.yarns.reduce((s, y) => s.plus(y.kg), D(0))),
       weighedNetKg: b.grossKg && b.tareKg ? kg3(b.grossKg.minus(b.tareKg)) : null,
-      yarns: b.yarns.map((y) => ({ yarnItemId: y.yarnItemId, code: order.planYarns.find((p) => p.yarnItemId === y.yarnItemId)!.code, kg: kg3(y.kg) })),
+      yarns: b.yarns.map((y) => {
+        const p = order.planYarns.find((x) => x.yarnItemId === y.yarnItemId)!;
+        return { yarnItemId: y.yarnItemId, code: p.code, name: p.name, kg: kg3(y.kg) };
+      }),
     })),
     allocations: allocDto(ev.alloc.rows),
     incoming: { beamCount: beams.length, lengthM: kg3(incomingM) },
