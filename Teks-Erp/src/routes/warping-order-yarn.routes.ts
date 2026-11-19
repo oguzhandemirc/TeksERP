@@ -14,7 +14,9 @@ import { requireIplikEnabled } from "../middlewares/module.middleware";
 import { assertNoBareFilterParams, parseQueryParams, readFilterList } from "../utils/query-parser";
 import { previewWarpingTransfer, transferWarpingYarn, WARPING_TRANSFER_MAX_LINES } from "../services/warping-order/yarn-transfer";
 import { cancelWarpingTransfer, previewCancelWarpingTransfer } from "../services/warping-order/yarn-transfer-cancel";
-import { cancelWarpingYarnReturn, listWarpingTransfers, listWarpingYarnHoldings, returnWarpingYarn, warpingYarnAtSubcontractors } from "../services/warping-order/yarn-return";
+import { listWarpingTransfers, listWarpingYarnHoldings, warpingYarnAtSubcontractors } from "../services/warping-order/yarn-return";
+import { cancelWarpingYarnReturn, previewWarpingYarnReturn, returnWarpingYarn } from "../services/warping-order/yarn-return-waste";
+import { qtyText } from "../services/helpers/qty-text.helper";
 import { listWarpingDispatches } from "../services/warping-order/dispatches-read";
 import { listWarpingYarnReturns } from "../services/warping-order/returns-read";
 import "../types/express-augment";
@@ -48,13 +50,22 @@ const TransferFields = {
 };
 const TransferBody = z.strictObject({ clientToken: z.uuid("clientToken geçersiz (UUID)"), ...TransferFields });
 const TransferPreviewBody = z.strictObject(TransferFields);
-const ReturnBody = z.strictObject({
+const ReturnFields = {
   dispatchItemId: Id,
   qtyKg: Kg,
   reasonCode: z.string().trim().min(1, "Dönüş sebebi zorunlu").max(64, "Sebep kodu en çok 64 karakter"),
+  /** Kullanılamaz (fire) kg — isteğe bağlı; boş/0 = yalnız iade. */
+  wasteKg: z.number({ message: "Fire (kg) sayı olmalı" }).min(0, "Fire negatif olamaz").max(1_000_000, "Miktar çok büyük").nullable().optional(),
+};
+const ReturnBody = z.strictObject({
+  ...ReturnFields,
   warehouseId: Id.nullable().optional(),
   lotId: Id.nullable().optional(),
+  wasteReason: z.string().max(300, "Fire gerekçesi en çok 300 karakter").nullable().optional(),
+  // İsteğe bağlı: eski panel token'sız gönderir (bugünkü davranış); yeni panel MANTIKSAL DENEME başına.
+  clientToken: z.uuid("clientToken geçersiz (UUID)").optional(),
 });
+const ReturnPreviewBody = z.strictObject(ReturnFields);
 const CancelBody = z.strictObject({ reason: z.string().trim().min(3, "İptal sebebi en az 3 karakter").max(300, "İptal sebebi en çok 300 karakter") });
 const AT_FILTERS = ["subcontractorId", "yarnItemId", "status"];
 
@@ -120,14 +131,25 @@ router.get("/yarn-at-subcontractor", requirePermission("warping-order:read"), re
  *       404: { description: WARPING_ORDER_NOT_FOUND }
  *   post:
  *     tags: [WarpingOrder]
- *     summary: Kapanış dışında iplik İADESİ (SUBCONTRACT_RETURN) — tavan siparişin tutması; aktarımla gelen kalemde aynı tx'te geri aktarım
+ *     summary: Kapanış dışında iplik İADESİ (SUBCONTRACT_RETURN) + isteğe bağlı FİRE (wasteKg, kapanış firesiyle aynı defter) — tavan siparişin tutması (iade + fire); aktarımla gelen kalemde aynı tx'te geri aktarım; kalan 0 ve kapanış yüklemi izin verirse sipariş aynı tx'te kapanır (data.autoClosed); clientToken isteğe bağlı (replay 200)
  *     security: [{ bearerAuth: [] }]
  *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
  *     responses:
- *       201: { description: İade yazıldı }
+ *       200: { description: Replay — aynı token, kayıtlı iade }
+ *       201: { description: "İade (+fire) yazıldı; warnings? = fire toleransı aşımı (yalnız uyarı)" }
  *       400: { description: "YARN_RETURN_EXCEEDS · REASON_CODE_INVALID · eksi bakiye" }
  *       404: { description: WARPING_YARN_NOT_HELD }
- *       409: { description: WARPING_RETURN_STATUS }
+ *       409: { description: "WARPING_RETURN_STATUS · CLIENT_TOKEN_COLLISION · YARN_RETURN_CANCELLED" }
+ * /api/warping-orders/{id}/yarn-returns/preview:
+ *   post:
+ *     tags: [WarpingOrder]
+ *     summary: İade(+fire) önizlemesi — yazmaz; fire % ve tolerans kapanış planının aynı hesabından, willClose = kaydedilince sipariş kapanır mı
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: "{ success, data: { holdingKg, returnKg, wasteKg, keepKg, wastePct, tolerancePct, overTolerance, willClose, warnings } }" }
+ *       400: { description: YARN_RETURN_EXCEEDS }
+ *       404: { description: WARPING_YARN_NOT_HELD }
  * /api/warping-orders/{id}/yarn-returns/{movementId}/cancel:
  *   post:
  *     tags: [WarpingOrder]
@@ -155,11 +177,18 @@ router.get("/:id/yarn-returns", requirePermission("warping-order:read"), require
   return { status: 200, body: { success: true, data: await listWarpingYarnReturns(id) } };
 }));
 
+router.post("/:id/yarn-returns/preview", requirePermission("warping-order:write"), requireIplikEnabled, wrap(async (req) => {
+  const id = parse(Id, req.params.id);
+  const body = parse(ReturnPreviewBody, req.body);
+  // Uyarılar yalnız `data` içinde: canlı önizleme her girişte çağrılır, interceptor tostu basmasın.
+  return { status: 200, body: { success: true, data: await previewWarpingYarnReturn(id, body) } };
+}));
+
 router.post("/:id/yarn-returns", requirePermission("warping-order:write"), requireIplikEnabled, wrap(async (req) => {
   const id = parse(Id, req.params.id);
   const body = parse(ReturnBody, req.body);
-  const data = await returnWarpingYarn(id, body, req.user!.userId);
-  return { status: 201, body: { success: true, data, message: `${data.itemCode} devereciden iade alındı — ${data.qtyKg} kg` } };
+  const { warnings, replayed, ...data } = await returnWarpingYarn(id, body, req.user!.userId);
+  return { status: replayed ? 200 : 201, body: { success: true, data: { ...data, replayed }, message: returnMessage(data), ...(warnings.length > 0 ? { warnings } : {}) } };
 }));
 
 router.post("/:id/yarn-returns/:movementId/cancel", requirePermission("warping-order:write"), requireIplikEnabled, wrap(async (req) => {
@@ -167,8 +196,16 @@ router.post("/:id/yarn-returns/:movementId/cancel", requirePermission("warping-o
   const movementId = parse(Id, req.params.movementId);
   const body = parse(CancelBody, req.body);
   const data = await cancelWarpingYarnReturn(id, movementId, body.reason, req.user!.userId);
-  return { status: 200, body: { success: true, data, message: `${data.itemCode} iadesi iptal edildi — iplik yeniden deverecide` } };
+  const fire = Number(data.wasteCancelledKg) > 0 ? ` (iadeyle yazılan ${qtyText(data.wasteCancelledKg)} kg fire de geri alındı)` : "";
+  return { status: 200, body: { success: true, data, message: `${data.itemCode} iadesi iptal edildi — iplik yeniden deverecide${fire}` } };
 }));
+
+/** Başarı cümlesi: iplik ADI birincil; fire ve otomatik kapanış açıkça söylenir. */
+function returnMessage(d: { itemCode: string; itemName: string; qtyKg: string; wasteKg: string; autoClosed: boolean }): string {
+  const name = d.itemName || d.itemCode;
+  const fire = Number(d.wasteKg) > 0 ? ` · ${qtyText(d.wasteKg)} kg fire` : "";
+  return `${name} devereciden iade alındı — ${qtyText(d.qtyKg)} kg${fire}${d.autoClosed ? "; deverecide iplik kalmadı, sipariş kapandı" : ""}`;
+}
 
 /**
  * @openapi
@@ -238,7 +275,7 @@ router.post("/:id/yarn-transfers", requirePermission("warping-order:write"), req
   const { warnings, replayed, ...data } = await transferWarpingYarn(id, body, req.user!.userId);
   return {
     status: replayed ? 200 : 201,
-    body: { success: true, data, message: replayed ? "Aktarma zaten kayıtlı" : `${data.totalKg} kg ${data.toOrderNo} siparişine aktarıldı`, ...(warnings.length > 0 ? { warnings } : {}) },
+    body: { success: true, data, message: replayed ? "Aktarma zaten kayıtlı" : `${qtyText(data.totalKg)} kg ${data.toOrderNo} siparişine aktarıldı${data.sourceAutoClosed ? `; ${data.fromOrderNo} siparişinde iplik kalmadı, sipariş kapandı` : ""}`, ...(warnings.length > 0 ? { warnings } : {}) },
   };
 }));
 

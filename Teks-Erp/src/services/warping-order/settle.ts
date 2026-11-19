@@ -12,7 +12,8 @@ import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { AuditService } from "../audit.service";
 import { tokenReplay } from "../helpers/token-replay.helper";
-import { loadWarpingYarnItems, lockDispatchItemsTx, WARPING_WASTE } from "../helpers/warping-yarn-open.helper";
+import { loadWarpingYarnItems, lockDispatchItemsTx } from "../helpers/warping-yarn-open.helper";
+import { writeWastesTx } from "./waste-write";
 import { loadWarpingSettlement } from "../helpers/warping-settlement.helper";
 import { buildSettlePlan, settlePlanDto, settleRequestHash, type SettlePlan, type WarpingSettleBody } from "../helpers/warping-settle-plan.helper";
 import { WARPING_ORDER_TABLE } from "./create";
@@ -36,17 +37,29 @@ const notSettleable = (o: { orderNo: string; status: WarpingOrderStatus }) =>
     { code: o.status === WarpingOrderStatus.COMPLETED ? "WARPING_ORDER_COMPLETED" : "WARPING_ORDER_NOT_SETTLEABLE", status: o.status },
   );
 
-/** Planın girdileri — TAZE tutma + plan satırları + sarılan nominal (aynı tx ya da kök istemci). */
-async function evaluate(db: Tx, id: string, body: WarpingSettleBody, tolerance: Prisma.Decimal | null) {
+/**
+ * Planın girdileri — TAZE tutma + plan satırları + sarılan nominal + önceden yazılmış fire (aynı tx ya da kök istemci).
+ * Kapanış, kapanış önizlemesi, iade(+fire) önizlemesi ve otomatik kapanış AYNI fonksiyondan (tolerans tek hesap).
+ */
+export async function evaluateSettle(db: Tx, id: string, body: WarpingSettleBody, tolerance: Prisma.Decimal | null) {
   const items = await loadWarpingYarnItems(db, { warpingOrderId: id });
   const st = await loadWarpingSettlement(db, id);
-  const yarns = st.yarns.map((y) => ({ yarnItemId: y.yarnItemId, code: y.code, netKg: y.planNetKg, grossKg: y.planGrossKg, woundKg: y.woundKg, unallocatedKg: y.unallocatedKg }));
+  const yarns = st.yarns.map((y) => ({ yarnItemId: y.yarnItemId, code: y.code, netKg: y.planNetKg, grossKg: y.planGrossKg, woundKg: y.woundKg, unallocatedKg: y.unallocatedKg, priorWasteKg: y.wasteKg }));
   const plan = buildSettlePlan(items, yarns, body, tolerance);
   return { items, settlement: st, plan, liveBeams: st.metre.receivedBeamCount };
 }
 
 const emptyBlocker = (liveBeams: number, plan: SettlePlan) =>
   liveBeams === 0 && plan.lines.length === 0 ? "Siparişte dönen levent de deverecide iplik de yok — kapatılamaz; sevk/dönüş yoksa siparişi iptal edin." : null;
+
+/** "Sipariş kapatılabilir mi" — TEK yüklem: önizleme, kapanış ve otomatik kapanış bunu okur. */
+export function settleBlockers(o: { orderNo: string; status: WarpingOrderStatus }, ev: { liveBeams: number; plan: SettlePlan }): string[] {
+  const out: string[] = [];
+  if (o.status !== WarpingOrderStatus.IN_PROGRESS) out.push(notSettleable(o).message);
+  const empty = emptyBlocker(ev.liveBeams, ev.plan);
+  if (empty) out.push(empty);
+  return out;
+}
 
 export interface WarpingSettlePreview {
   order: { id: string; orderNo: string; status: WarpingOrderStatus };
@@ -60,11 +73,8 @@ export interface WarpingSettlePreview {
 /** Kapanış önizlemesi — gövdesiz = varsayılan A1-a; gövdeli = kullanıcının bölüşümü. Yazmaz. */
 export async function previewSettleWarpingOrder(id: string, body: WarpingSettleBody = {}): Promise<WarpingSettlePreview> {
   const o = await orderHead(prisma, id);
-  const ev = await prisma.$transaction(async (tx) => evaluate(tx, id, body, o.wasteTolerancePct));
-  const blockers: string[] = [];
-  if (o.status !== WarpingOrderStatus.IN_PROGRESS) blockers.push(notSettleable(o).message);
-  const empty = emptyBlocker(ev.liveBeams, ev.plan);
-  if (empty) blockers.push(empty);
+  const ev = await prisma.$transaction(async (tx) => evaluateSettle(tx, id, body, o.wasteTolerancePct));
+  const blockers = settleBlockers(o, ev);
   return { order: { id: o.id, orderNo: o.orderNo, status: o.status }, canSettle: blockers.length === 0, blockers, plan: settlePlanDto(ev.plan), settlement: ev.settlement, warnings: ev.plan.warnings };
 }
 
@@ -88,7 +98,7 @@ function settleReplay(id: string, hash: string) {
   });
 }
 
-async function claimForSettleTx(tx: Tx, id: string, userId: string): Promise<void> {
+export async function claimForSettleTx(tx: Tx, id: string, userId: string): Promise<void> {
   const claim = await tx.warpingOrder.updateMany({
     where: { id, status: WarpingOrderStatus.IN_PROGRESS },
     data: { status: WarpingOrderStatus.COMPLETED, completedAt: new Date(), completedById: userId, updatedById: userId },
@@ -108,9 +118,10 @@ export async function settleWarpingOrder(id: string, input: WarpingSettleInput, 
       const pre = await loadWarpingYarnItems(tx, { warpingOrderId: id });
       await lockDispatchItemsTx(tx, pre.map((i) => i.dispatchItemId));
       // Kilitten sonra TAZE: eşzamanlı kabul/iade/devir dağıtımı tutmayı değiştirmiş olabilir.
-      const ev = await evaluate(tx, id, body, o.wasteTolerancePct);
-      const empty = emptyBlocker(ev.liveBeams, ev.plan);
-      if (empty) throw AppError.conflict(empty, { code: "WARPING_SETTLE_EMPTY" });
+      const ev = await evaluateSettle(tx, id, body, o.wasteTolerancePct);
+      // Claim'den sonra durum COMPLETED okunur; yüklemin durum dalı claim'in kendisidir, burada yalnız içerik.
+      const empty = settleBlockers({ ...o, status: WarpingOrderStatus.IN_PROGRESS }, ev);
+      if (empty.length > 0) throw AppError.conflict(empty[0]!, { code: "WARPING_SETTLE_EMPTY" });
       const returnMovementIds: string[] = [];
       const backTransferIds: string[] = [];
       for (const l of ev.plan.lines.filter((x) => x.returnKg.gt(0))) {
@@ -127,15 +138,9 @@ export async function settleWarpingOrder(id: string, input: WarpingSettleInput, 
         select: { id: true },
       });
       const overByYarn = new Map(ev.plan.yarns.map((y) => [y.yarnItemId, y.overTolerance]));
-      const wastes = ev.plan.lines.filter((x) => x.wasteKg.gt(0));
-      if (wastes.length > 0) {
-        await tx.warpingYarnWaste.createMany({
-          data: wastes.map((l) => ({
-            settlementId: s.id, warpingOrderId: id, dispatchItemId: l.dispatchItemId, kind: WARPING_WASTE, qtyKg: l.wasteKg,
-            overTolerance: (overByYarn.get(l.yarnItemId) ?? false) || ev.plan.overTolerance, reason, createdById: userId,
-          })),
-        });
-      }
+      await writeWastesTx(tx, { settlementId: s.id }, id, ev.plan.lines.map((l) => ({
+        dispatchItemId: l.dispatchItemId, qtyKg: l.wasteKg, overTolerance: (overByYarn.get(l.yarnItemId) ?? false) || ev.plan.overTolerance,
+      })), reason, userId);
       return { settlementId: s.id, plan: ev.plan, beams: ev.settlement.metre.receivedBeamCount };
     });
     const p = out.plan;

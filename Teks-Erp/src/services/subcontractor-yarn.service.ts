@@ -175,7 +175,7 @@ export async function cancelYarnItemsTx(tx: Tx, input: { dispatchId: string; rea
       throw AppError.conflict(`${it.yarnItem?.code} ipliği bu sevkten dönmüş — sevk iptal edilemez, önce dönüşü iptal edin`, { code: "YARN_ITEM_RETURNED", itemCode: it.yarnItem?.code });
     }
     if (wasteNet(it).gt(0)) {
-      throw AppError.conflict(`${it.yarnItem?.code} ipliğine kapanışta fire yazılmış — sevk iptal edilemez, önce siparişi yeniden açın (LIFO)`, { code: "YARN_ITEM_WASTED", itemCode: it.yarnItem?.code });
+      throw AppError.conflict(`${it.yarnItem?.code} ipliğine fire yazılmış — sevk iptal edilemez; önce fireyi geri alın (kapanış firesi: siparişi yeniden açın · iade firesi: iadeyi iptal edin) (LIFO)`, { code: "YARN_ITEM_WASTED", itemCode: it.yarnItem?.code });
     }
     if (it.warpBeamYarnAllocations.length > 0) {
       throw AppError.conflict(`${it.yarnItem?.code} ipliği bu sevkten dönen levente dağıtılmış — sevk iptal edilemez, önce levent dönüşünü iptal edin (LIFO)`, { code: "YARN_ITEM_ALLOCATED", itemCode: it.yarnItem?.code });
@@ -227,7 +227,7 @@ export interface YarnReturnDto {
  * birlikte aşamaz. Tavan = çıkış − net dönüş ± kalemin KENDİ siparişinin net devere aktarımı (D4b-2; başka siparişe
  * aktarılmış iplik buradan dönemez, o siparişin iade ucundan döner).
  */
-export async function returnYarnTx(tx: Tx, dispatchId: string, input: ReturnYarnInput, userId?: string | null) {
+export async function returnYarnTx(tx: Tx, dispatchId: string, input: ReturnYarnInput, userId?: string | null, token?: { clientToken: string; requestHash: string } | null) {
   const qty = kg(input.qtyKg, "Dönen kg");
   await lockDispatchItemsTx(tx, [input.dispatchItemId]);
   const item = await loadYarnItem(tx, dispatchId, input.dispatchItemId);
@@ -248,6 +248,7 @@ export async function returnYarnTx(tx: Tx, dispatchId: string, input: ReturnYarn
   const { movementId } = await applyYarnMovementTx(tx, {
     itemId: item.yarnItemId!, warehouseId: input.warehouseId ?? out.warehouseId, kind: YarnMovementKind.SUBCONTRACT_RETURN, qtyKg: qty,
     lotId: input.lotId === undefined ? out.lotId : input.lotId, reasonCode, dispatchItemId: item.id, userId: userId ?? null,
+    clientToken: token?.clientToken ?? null, requestHash: token?.requestHash ?? null,
   });
   return { movementId, item, qty, remainingKg: out.qtyKg.minus(already).minus(qty) };
 }
