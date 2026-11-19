@@ -560,7 +560,7 @@ function DataTableRowInner<T>({
         </TableCell>
       )}
       {row.getVisibleCells().map((cell) => (
-        <TableCell key={cell.id} className={alignClass(cell.column.columnDef.meta)}>
+        <TableCell key={cell.id} className={alignClass(cell.column.columnDef.meta)} data-sticky={cell.column.columnDef.meta?.sticky}>
           <div data-cell-clip={cell.column.id} className={cell.column.columnDef.meta?.wrap ? "whitespace-normal break-words" : "truncate"} style={clipStyle(cell.column.id, true)}>
             {flexRender(cell.column.columnDef.cell, cell.getContext())}
           </div>

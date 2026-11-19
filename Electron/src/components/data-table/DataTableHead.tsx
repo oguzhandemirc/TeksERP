@@ -22,6 +22,7 @@ export function SortableHead<T>({ header, table }: { header: Header<T, unknown>;
     <TableHead
       ref={setNodeRef}
       data-col={header.column.id}
+      data-sticky={header.column.columnDef.meta?.sticky}
       style={{
         transform: CSS.Translate.toString(transform),
         transition,
