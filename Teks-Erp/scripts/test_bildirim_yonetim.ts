@@ -33,7 +33,6 @@ const ESITLEME = "sistem.esitleme-gecikti"; // kilit YOK · admin:users · varsa
 const TERMIN = "siparis.termin-yaklasti"; // order:read
 const SERTIFIKA = "kalite.sertifika-suresi-doluyor"; // certificate:read — kişide YOK
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Json = any;
 const code = (r: { json: Json }) => r.json?.error?.details?.code ?? r.json?.details?.code;
 

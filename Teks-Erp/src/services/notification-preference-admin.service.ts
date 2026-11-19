@@ -24,7 +24,8 @@ import {
 } from "./helpers/notification-visibility.helper";
 import { loadEffectiveGrants } from "./helpers/loom-alarm-recipient.helper";
 import { channelEnabled, loadPreferenceLayers, prefKey, resolvePreference, type PreferenceSubject } from "./helpers/notification-preference.helper";
-import { lockView, type PreferenceContext } from "./notification-preference.service";
+import { lockView } from "./helpers/notification-preference-lock.helper";
+import type { PreferenceContext } from "./notification-preference.service";
 
 const PERMISSION_LABEL = new Map<string, string>(PERMISSION_CATALOG.map((p) => [p.code, p.description]));
 
@@ -33,7 +34,7 @@ function hiddenText(r: NotificationHiddenReason, user: { isActive: boolean; isSy
   if (user.isSystemAccount) return "Sistem hesabı bildirim almaz.";
   if (r.tip === "MODUL") return `${MODULE_LABELS[r.modul] ?? r.modul} modülü kapalı.`;
   if (r.tip === "KAPI") return "Bu türün kurulum ayarı kapalı.";
-  const alt = r.izinler.map((k) => k.map((c) => PERMISSION_LABEL.get(c) ?? c).join(" + "));
+  const alt = r.requiredPermissions.map((k) => k.map((c) => PERMISSION_LABEL.get(c) ?? c).join(" + "));
   return `Kişinin bu türü görme yetkisi yok (gerekli: ${alt.join(" ya da ")}).`;
 }
 

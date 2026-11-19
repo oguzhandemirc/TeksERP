@@ -37,6 +37,7 @@ import {
   type PreferenceSubject,
 } from "./helpers/notification-preference.helper";
 import { parseKindParams } from "./helpers/notification-params.helper";
+import { assertInAppUnchanged, isFrozenChannel, lockView } from "./helpers/notification-preference-lock.helper";
 
 export interface PreferenceViewer {
   userId: string;
@@ -88,57 +89,6 @@ export async function getPreferences(v: PreferenceViewer) {
     satirlar: rows.map((r) => ({ id: r.id, tur: r.kind, kanal: r.channel, acik: r.enabled, kapsam: r.scope })),
     tercihKilidi: lockView(layers, v.userId),
   };
-}
-
-/** İstemcinin salt-okunur kararı: `kilitli` + kilitleyen profiller + donan kanallar (eski istemci alanı yok sayar). */
-export function lockView(layers: PreferenceLayers, userId: string) {
-  const profiller = preferenceLockProfiles(layers, userId);
-  return { kilitli: profiller.length > 0, profiller, kanallar: profiller.length > 0 ? [...NOTIFICATION_PREFS_LOCKED_CHANNELS] : [] };
-}
-
-const isFrozenChannel = (ch: string): boolean => (NOTIFICATION_PREFS_LOCKED_CHANNELS as readonly string[]).includes(ch);
-
-/** Anahtar sırasından bağımsız karşılaştırma (kaydedilmiş kapsam ↔ gövdedeki kapsam). */
-function canonical(v: unknown): string {
-  if (Array.isArray(v)) return `[${v.map(canonical).join(",")}]`;
-  if (v && typeof v === "object") {
-    return `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${canonical((v as Record<string, unknown>)[k])}`).join(",")}}`;
-  }
-  return JSON.stringify(v ?? null);
-}
-
-function scopeKey(raw: unknown): string {
-  if (raw === undefined || raw === null) return "null";
-  const r = notificationScopeSchema.safeParse({ schemaVersion: 1, ...(raw as object) });
-  return r.success ? canonical(r.data) : `bozuk:${canonical(raw)}`;
-}
-
-/**
- * Profil tercih kilidi açıkken gövdedeki "uygulama içi" seçimi (UYGULAMA + kapsam; UYGULAMA kapalıyken OZET) şimdiki
- * ÇÖZÜMLE aynı olmalı; değişen her öğe 409. Tam gövdeli eski istemci yalnız yan kanalı değiştiriyorsa geçer.
- */
-function assertInAppUnchanged(ctx: PreferenceContext, items: PreferenceItemInput[], profiller: string[]): void {
-  const { subject, env, layers } = ctx;
-  const o = { env, layers };
-  const byKey = new Map(items.map((it) => [prefKey(it.tur, it.kanal as NotificationKanal), it]));
-  for (const it of items) {
-    if (!isFrozenChannel(it.kanal) || !isKind(it.tur) || !canSeeNotificationType(subject, it.tur, env)) continue;
-    const kind = it.tur;
-    const inApp = resolvePreference(subject, kind, "UYGULAMA", o);
-    let same: boolean;
-    if (it.kanal === "UYGULAMA") {
-      same = it.acik === (inApp.durum === "ACIK") && scopeKey(it.kapsam) === scopeKey(inApp.kapsam);
-    } else {
-      const appItem = byKey.get(prefKey(kind, "UYGULAMA"));
-      const appOn = appItem ? appItem.acik : inApp.durum === "ACIK";
-      same = appOn || !getNotificationEntry(kind).kanallar.includes("OZET") || it.acik === channelEnabled(subject, kind, "OZET", o).acik;
-    }
-    if (!same) {
-      throw AppError.conflict("Bildirim tercihlerin yöneticin tarafından kilitlendi; uygulama içi seçim değiştirilemez.", {
-        code: "NOTIFICATION_PREFS_LOCKED", tur: kind, kanal: it.kanal, profiller,
-      });
-    }
-  }
 }
 
 /** Kapsamı katalog beyanıyla doğrular — yalnız daraltır; tanınmayan/beyansız anahtar 400. */
