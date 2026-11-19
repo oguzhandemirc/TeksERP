@@ -37,7 +37,7 @@ describe("izinli menü", () => {
     mockSession.permissions = ["bulut:siparis:oku", "bulut:uretim:oku", "bulut:kasa:oku", "bulut:cari:oku", "bulut:stok:oku", "bulut:siparis:yaz", "bulut:hesap:yonet"];
     render(<SideNav />);
     const order = screen.getAllByTestId(/^menu-/).map((n) => String(n.props.testID).slice(5));
-    expect(order).toEqual(["pano", "uretim", "siparisler", "finans", "cariler", "stok", "gelen-kutusu", "bildirimler", "hesaplar", "profil"]);
+    expect(order).toEqual(["pano", "uretim", "siparisler", "finans", "is-emirleri", "cariler", "stok", "gelen-kutusu", "bildirimler", "hesaplar", "profil"]);
     expect(screen.getByText("İş")).toBeTruthy();
     expect(screen.getByText("Hesap")).toBeTruthy();
   });

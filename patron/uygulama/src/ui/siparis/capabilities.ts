@@ -1,6 +1,6 @@
 // Liste yetenekleri SUNUCUDAN (`GET /oturum` `liste`): eski sunucu alanı göndermez ve tanımadığı süzgeç parametresini
 // yok sayar (süzülmemiş liste döner) — bu yüzden kimlik süzgeci ve yeni arama yalnız sunucu beyan ettiyse kullanılır.
-import { LIST_SEARCH, type FacilityStatus, type ListIdFilterKey, type ListKeyFilterKey, type ListSearchSpec } from "../../api/wire";
+import { LIST_SEARCH, type FacilityStatus, type ListIdFilterKey, type ListKeyFilterKey, type ListMemberFilterKey, type ListSearchSpec } from "../../api/wire";
 import { useSession } from "../../state/session";
 
 export interface ListCapability {
@@ -10,6 +10,8 @@ export interface ListCapability {
   search(projection: string): ListSearchSpec | null;
   /** Sunucu `projection` listesinde fabrika anahtarı süzgecini (`kategoriAnahtari`) kabul ediyor mu; eski sunucu: hayır. */
   keyFilter(projection: string, key: ListKeyFilterKey): boolean;
+  /** Sunucu `projection` listesinde üyelik süzgecini (İE aşama/firma/müşteri/sipariş) kabul ediyor mu; eski sunucu: hayır. */
+  memberFilter(projection: string, key: ListMemberFilterKey): boolean;
 }
 
 export function listCapability(facility: FacilityStatus | null): ListCapability {
@@ -19,6 +21,7 @@ export function listCapability(facility: FacilityStatus | null): ListCapability 
     search: (projection) =>
       liste?.aranabilir.includes(projection) && Object.prototype.hasOwnProperty.call(LIST_SEARCH, projection) ? (LIST_SEARCH[projection] ?? null) : null,
     keyFilter: (projection, key) => !!liste?.anahtarSuzgecleri?.[key]?.includes(projection),
+    memberFilter: (projection, key) => !!liste?.uyelikSuzgecleri?.[projection]?.includes(key),
   };
 }
 

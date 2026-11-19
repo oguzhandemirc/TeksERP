@@ -420,6 +420,12 @@ export interface SubcontractOpenFirm {
   readonly kalanMiktar: string;
   readonly iplikKg: string;
   readonly leventAdet: number;
+  /** Firmada duran top kırılımı (fabrika 2026-11-19+; İE firma süzgeciyle aynı küme). Eski fabrika göndermez. */
+  readonly acikTop?: number;
+  readonly enEskiGonderim?: string | null;
+  readonly isEmriSayisi?: number;
+  readonly musteriler?: readonly { readonly cariKartId: string | null; readonly ad: string | null; readonly top: number; readonly metre: string }[];
+  readonly urunler?: readonly { readonly urunId: string; readonly urunAdi: string | null; readonly renkId: string | null; readonly renkAdi: string | null; readonly top: number; readonly metre: string }[];
 }
 
 /**
@@ -432,6 +438,10 @@ export interface SubcontractOpenSnapshot {
   readonly yaklasan: number;
   readonly kalanMiktar: string;
   readonly kirpildi: boolean;
+  /** Fasonda duran top · farklı İE · farklı müşteri (fabrika 2026-11-19+); eski fabrika göndermez. */
+  readonly acikTop?: number;
+  readonly isEmriSayisi?: number;
+  readonly musteriSayisi?: number;
   readonly firmalar: readonly SubcontractOpenFirm[];
 }
 

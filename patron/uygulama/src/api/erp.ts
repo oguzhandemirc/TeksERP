@@ -2,7 +2,7 @@
 // bulutun `/oturum`, `/veri`, `/anlik` uçlarıyla AYNI (V3a) → ekranlar aynı `Api` tipini kullanır. Bu tablo bulut uç
 // tablosundan (`endpoints.ts`, ayna bekçisi) AYRIDIR. Parola ve kod yalnız istek gövdesinde gider; hiçbir yere yazılmaz.
 import { ApiError, type ApiClient } from "./client";
-import { createApi, type Api, type ListParams } from "./endpoints";
+import { createApi, listQuery, type Api, type ListParams } from "./endpoints";
 import { kipteYok } from "./baglanti";
 import { kumeSunuluyor, type Yetenek } from "./yetenek";
 import type { FacilityStatus, Page, ProjectionRecord, Snapshot } from "./wire";
@@ -101,7 +101,7 @@ export function createErpApi(c: ApiClient, y: () => Yetenek): Api {
   const base = createApi(c);
   const unsupported = Object.fromEntries(Object.keys(base).map((k) => [k, yok])) as unknown as Api;
   const guard = <T,>(ad: string, run: () => Promise<T>): Promise<T> => (kumeSunuluyor(ad, y()) ? run() : Promise.reject(kipteYok("KUME_SUNULMUYOR")));
-  const q = (p: ListParams) => ({ imlec: p.imlec, limit: p.limit, durum: p.durum, cariKartId: p.cariKartId, cariHesapId: p.cariHesapId, siparisId: p.siparisId, teklifId: p.teklifId, ara: p.ara, suzgec: p.suzgec, kategoriAnahtari: p.kategoriAnahtari });
+  const q = listQuery;
   return {
     ...unsupported,
     session: () => c.get<FacilityStatus>(ERP_ENDPOINTS.session[1]),

@@ -2,6 +2,7 @@
 // `API_ROUTES`uyla karşılaştırır — sunucuda olmayan uca istek yazılamaz.
 import type { ApiClient, DownloadedFile, Query } from "./client";
 import type {
+  ListMemberFilterKey,
   Account,
   AccountDeletion,
   AccountInviteResult,
@@ -103,10 +104,15 @@ export interface ListParams {
   readonly suzgec?: string;
   /** Fabrika anahtarı süzgeci (`LIST_KEY_FILTERS`); yalnız sunucu `liste.anahtarSuzgecleri`nde beyanlıysa gönderilir. */
   readonly kategoriAnahtari?: string;
+  /** Üyelik süzgeçleri (`LIST_MEMBER_FILTERS`); yalnız sunucu `liste.uyelikSuzgecleri`nde beyanlıysa gönderilir. */
+  readonly uyelik?: Partial<Readonly<Record<ListMemberFilterKey, string>>>;
 }
 
+/** Liste sorgusu — bulut ve ERP aynı parametre adlarıyla (üyelik anahtarı düz sorgu parametresidir). */
+export const listQuery = (p: ListParams): Query => ({ ...p.uyelik, imlec: p.imlec, limit: p.limit, durum: p.durum, cariKartId: p.uyelik?.cariKartId ?? p.cariKartId, cariHesapId: p.cariHesapId, siparisId: p.uyelik?.siparisId ?? p.siparisId, teklifId: p.teklifId, ara: p.ara, suzgec: p.suzgec, kategoriAnahtari: p.kategoriAnahtari });
+
 export function createApi(c: ApiClient) {
-  const q = (p: ListParams): Query => ({ imlec: p.imlec, limit: p.limit, durum: p.durum, cariKartId: p.cariKartId, cariHesapId: p.cariHesapId, siparisId: p.siparisId, teklifId: p.teklifId, ara: p.ara, suzgec: p.suzgec, kategoriAnahtari: p.kategoriAnahtari });
+  const q = listQuery;
   return {
     login: (b: { eposta: string; parola: string; totp: string; istemci?: "mobil" | "web"; tesisId?: string }) => c.post<LoginResponse>(pathOf("login"), b),
     inviteInspect: (davet: string) => c.post<InviteInfo>(pathOf("inviteInspect"), { davet }),

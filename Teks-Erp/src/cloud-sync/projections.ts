@@ -108,9 +108,9 @@ const SNAPSHOTS: readonly SnapshotProjection[] = [
   },
   {
     // PB1: F10 kokpit özeti (açık sevk · termini geçen · yaklaşan · fasonda kalan); termin çözücüsü kokpitin.
-    name: "fason-acik", kind: "ANLIK", source: "cloud-sync/snapshot-fason: subcontractor-cockpit getSubcontractorCockpit.summary",
+    name: "fason-acik", kind: "ANLIK", source: "cloud-sync/snapshot-fason: subcontractor-cockpit getSubcontractorCockpit.summary + fason-firm-facts (firmRollWhere)",
     cadence: "SAATLIK", permission: "bulut:uretim:oku",
-    reads: ["subcontractor_dispatches", "subcontractor_dispatch_items", "subcontractors", "rolls", "warp_beams", "yarn_movements", "weaving_orders"],
+    reads: ["subcontractor_dispatches", "subcontractor_dispatch_items", "subcontractors", "rolls", "warp_beams", "yarn_movements", "weaving_orders", "work_orders", "work_order_steps", "batches", "work_order_to_order_lines", "order_lines", "orders", "customers", "items", "colors"],
   },
   {
     // PB1: onaylı satış faturasının hizmet satırları, hizmet kartı kırılımı × 4 dönem (TL fabrikada).

@@ -1,8 +1,9 @@
 // Fason · emanet kartları (genel fason PB1): fabrikanın `emanet-bakiye` · `fason-acik` · `hizmet-geliri` anlıklarını
 // çizer. Rakamlar fabrikanın; görünüm `lib/fason-summary`. Anlık yoksa (eski fabrika, kapalı modül) 404 → boş durum.
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Text, View } from "react-native";
-import { consignedView, scorecardConsignedLines, serviceRevenueView, subcontractOpenView } from "../../lib/fason-summary";
+import { consignedView, scorecardConsignedLines, serviceRevenueView, subcontractOpenView, subcontractRollsText } from "../../lib/fason-summary";
 import { PERIODS, type PeriodKey } from "../../lib/labels/uretim";
 import { SegmentedControl } from "../SegmentedControl";
 import { Card } from "../kit";
@@ -59,13 +60,14 @@ export function ConsignedSection({ scorecardOzet }: { readonly scorecardOzet: un
   );
 }
 
-/** Üretim › Fasondaki işler: açık sevk, geciken dönüş, firma başına kalan. */
+/** Üretim › Fasondaki işler: açık sevk, geciken dönüş, firma başına kalan; firma satırı firma ayrıntısına gider. */
 export function SubcontractOpenSection() {
   const s = useStyles();
+  const router = useRouter();
   const remote = useSnapshot("fason-acik");
   return (
     <View>
-      <SectionHeader title="Fasondaki işler" domain="fason" testID="bolum-fason-acik" />
+      <SectionHeader title="Fasondaki işler" domain="fason" testID="bolum-fason-acik" onAction={remote.data ? () => router.push("/fason" as never) : undefined} actionLabel="Firmalar" />
       <SnapshotGate remote={remote} domain="fason" variant="list" rows={2} empty="Fabrikadan fason bilgisi henüz gelmedi" testID="fason-acik">
         {(veri, snap) => {
           const v = subcontractOpenView(veri);
@@ -81,11 +83,12 @@ export function SubcontractOpenSection() {
                 <Text style={s.line} testID="fason-acik-geciken">{v.lateText}</Text>
                 {v.soonText ? <Text style={s.line} testID="fason-acik-yaklasan">{v.soonText}</Text> : null}
                 <Text style={s.line} testID="fason-acik-kalan">{v.remainingText}</Text>
+                {subcontractRollsText(veri) ? <Text style={s.line} testID="fason-acik-top">{subcontractRollsText(veri)}</Text> : null}
                 {v.clipped ? <Text style={s.note}>Çok sayıda açık sevk var; firma listesi ilk sevklerden hazırlandı.</Text> : null}
               </Card>
               {v.firms.length > 0 ? (
                 <ListGroup testID="fason-acik-firmalar">
-                  {v.firms.map((f) => <ListRow key={f.key} title={f.title} value={f.value} valueTone={f.late ? "kritik" : undefined} lines={f.lines} domain="fason" icon="business-outline" testID={`fason-firma-${f.key}`} />)}
+                  {v.firms.map((f) => <ListRow key={f.key} title={f.title} value={f.value} valueTone={f.late ? "kritik" : undefined} lines={f.lines} domain="fason" icon="business-outline" onPress={() => router.push({ pathname: "/fason/[firmaId]", params: { firmaId: f.key } } as never)} testID={`fason-firma-${f.key}`} />)}
                 </ListGroup>
               ) : null}
             </>

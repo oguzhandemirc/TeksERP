@@ -4,6 +4,7 @@
 // boş durum çizer; çökmez.
 import type { PeriodKey } from "./labels/uretim";
 import { formatMoney, formatNumber } from "./format";
+import { daysText } from "./is-emri";
 
 type Obj = Readonly<Record<string, unknown>>;
 const obj = (v: unknown): Obj | null => (typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Obj) : null);
@@ -96,12 +97,58 @@ export function subcontractOpenView(veri: unknown): SubcontractOpenView | null {
     remainingText: `Fasonda ${amount(d.kalanMiktar)} m kumaş`,
     clipped: d.kirpildi === true,
     firms: list(d.firmalar).map((f, i) => {
-      const parts = [`${formatNumber(f.acikSevk, 0)} açık sevk`];
+      const parts = [isNum(f.acikTop) && positive(f.acikTop) ? `${formatNumber(f.acikTop, 0)} top` : null, `${formatNumber(f.acikSevk, 0)} açık sevk`].filter((x): x is string => x !== null);
       if (positive(f.geciken)) parts.push(`${formatNumber(f.geciken, 0)} gecikmiş`);
       if (positive(f.iplikKg)) parts.push(`${amount(f.iplikKg)} kg iplik`);
       if (positive(f.leventAdet)) parts.push(`${formatNumber(f.leventAdet, 0)} levent`);
+      const days = daysText(f.enEskiGonderim);
+      if (days) parts.push(days);
       return { key: text(f.fasonFirmaId) ?? String(i), title: text(f.etiket) ?? "—", value: `${amount(f.kalanMiktar)} m`, lines: [parts.join(" · ")], late: positive(f.geciken) };
     }),
+  };
+}
+
+/** Fasondaki top özeti "84 top · 12 iş emri · 5 müşteri"; fabrika alanı göndermediyse (eski sürüm) `null`. */
+export function subcontractRollsText(veri: unknown): string | null {
+  const d = obj(veri);
+  if (!d || !isNum(d.acikTop)) return null;
+  return [`${formatNumber(d.acikTop, 0)} top`, isNum(d.isEmriSayisi) ? `${formatNumber(d.isEmriSayisi, 0)} iş emri` : null, isNum(d.musteriSayisi) ? `${formatNumber(d.musteriSayisi, 0)} müşteri` : null].filter(Boolean).join(" · ");
+}
+
+export interface SubcontractFirmView {
+  readonly id: string;
+  readonly title: string;
+  /** Firmada duran top kırılımı geldi mi (eski fabrika: hayır → yalnız kokpit sayıları). */
+  readonly hasRolls: boolean;
+  readonly facts: readonly { readonly key: string; readonly label: string; readonly value: string }[];
+  readonly customers: readonly ConsignedRowView[];
+  readonly products: readonly ConsignedRowView[];
+}
+
+/** `fason-acik` firma satırı → firma ayrıntısı (müşteri ve ürün sırası fabrikanın). Firma yoksa `null`. */
+export function subcontractFirmView(veri: unknown, firmId: string, now: Date = new Date()): SubcontractFirmView | null {
+  const f = list(obj(veri)?.firmalar).find((x) => x.fasonFirmaId === firmId);
+  if (!f) return null;
+  const hasRolls = isNum(f.acikTop);
+  const days = daysText(f.enEskiGonderim, now);
+  const facts = [
+    hasRolls ? { key: "top", label: "Firmadaki top", value: `${formatNumber(f.acikTop, 0)} top` } : null,
+    { key: "kalan", label: "Fasonda kalan", value: `${amount(f.kalanMiktar)} m` },
+    { key: "sevk", label: "Açık sevk", value: formatNumber(f.acikSevk, 0) },
+    positive(f.geciken) ? { key: "geciken", label: "Dönüşü geciken sevk", value: formatNumber(f.geciken, 0) } : null,
+    days ? { key: "gun", label: "En eski gönderim", value: days } : null,
+    isNum(f.isEmriSayisi) ? { key: "ie", label: "İş emri", value: formatNumber(f.isEmriSayisi, 0) } : null,
+    positive(f.iplikKg) ? { key: "iplik", label: "İplik", value: `${amount(f.iplikKg)} kg` } : null,
+    positive(f.leventAdet) ? { key: "levent", label: "Levent", value: formatNumber(f.leventAdet, 0) } : null,
+  ].filter((x): x is { key: string; label: string; value: string } => x !== null);
+  const row = (key: string, title: string, r: Obj): ConsignedRowView => ({ key, title, value: `${formatNumber(r.top, 0)} top`, lines: [`${amount(r.metre)} m`] });
+  return {
+    id: firmId,
+    title: text(f.etiket) ?? "—",
+    hasRolls,
+    facts,
+    customers: list(f.musteriler).map((c, i) => row(text(c.cariKartId) ?? `yok-${i}`, text(c.ad) ?? "Müşterisi belirsiz (stok)", c)),
+    products: list(f.urunler).map((u, i) => row(`${text(u.urunId) ?? i}-${text(u.renkId) ?? ""}`, [text(u.urunAdi) ?? "—", text(u.renkAdi)].filter(Boolean).join(" · "), u)),
   };
 }
 

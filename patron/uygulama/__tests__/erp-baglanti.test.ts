@@ -153,7 +153,7 @@ describe("yetenek → görünürlük", () => {
 
   it("bulut: bugünkü görünürlük aynen (izin süzgeci etkisiz)", () => {
     setYetenek(BULUT_YETENEK);
-    expect(visibleModules(ALL).map((m) => m.key)).toEqual(["pano", "siparisler", "cariler", "sevkiyat", "uretim", "stok", "finans", "teklifler", "standart-maliyetler", "raporlar", "gelen-kutusu", "hesaplar", "bildirimler", "profil"]);
+    expect(visibleModules(ALL).map((m) => m.key)).toEqual(["pano", "siparisler", "cariler", "sevkiyat", "uretim", "is-emirleri", "stok", "finans", "teklifler", "standart-maliyetler", "raporlar", "gelen-kutusu", "hesaplar", "bildirimler", "profil"]);
     expect(izinleriSuz(ALL, BULUT_YETENEK)).toEqual(ALL);
   });
 });
