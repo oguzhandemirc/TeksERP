@@ -13,6 +13,7 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/render";
 import { CustomerSubcontractorRole, SUBCONTRACTOR_ROLE_LABEL, SUBCONTRACTOR_ROLE_TYPE_HINT } from "./CustomerSubcontractorRole";
+import { SUBCONTRACTOR_CATEGORIES_LABEL } from "./CustomerSubcontractorCategories";
 import { customerColumns } from "./columns";
 import type { Customer } from "./types";
 
@@ -22,7 +23,15 @@ const update = vi.fn();
 vi.mock("@/pages/Subcontractors/service", () => ({
   subcontractorService: { getAll: (...a: unknown[]) => getAll(...a), create: (...a: unknown[]) => create(...a), update: (...a: unknown[]) => update(...a) },
 }));
+const catGetAll = vi.fn();
+vi.mock("@/pages/SubcontractorCategories/service", () => ({
+  subcontractorCategoryService: { getAll: (...a: unknown[]) => catGetAll(...a) },
+}));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+const CATS = [
+  { id: "cat-boya", code: "BOYA", name: "Boyahane", description: null },
+  { id: "cat-dev", code: "DEVERE", name: "Devere", description: null },
+];
 
 const cari = (over: Partial<Customer> = {}): Customer =>
   ({ id: "c1", code: "MUS-1", name: "Boya A.Ş.", taxNumber: "1234567890", type: "SUPPLIER", isCustomerRole: false, isSupplierRole: true, isSubcontractorRole: false, contactPhone: "0212", address: "Bursa", isActive: true, createdAt: "", updatedAt: "", ...over }) as Customer;
@@ -34,6 +43,31 @@ beforeEach(() => {
   update.mockReset();
   create.mockResolvedValue({ success: true, data: { id: "s-new" } });
   update.mockResolvedValue({ success: true, data: { id: "s1" } });
+  catGetAll.mockReset();
+  catGetAll.mockImplementation(() => Promise.resolve({ success: true, data: CATS, pagination: { page: 1, pageSize: 500, total: CATS.length, totalPages: 1 } }));
+});
+
+describe("CustomerSubcontractorRole — fason kategorileri (2026-11-19)", () => {
+  it("⭐ ⑥ aktif profil → kategori listesi görünür, mevcut kategori işaretli; tık → update(id,{categoryIds}) küme değişimi", async () => {
+    getAll.mockImplementation(() => page([{ id: "s1", code: "FSN-1", isActive: true, categories: [{ categoryId: "cat-boya" }] }]));
+    renderWithProviders(<CustomerSubcontractorRole customer={cari()} />);
+    const boya = await screen.findByRole("checkbox", { name: /Boyahane/ });
+    expect(boya).toBeChecked();
+    const devere = screen.getByRole("checkbox", { name: /Devere/ });
+    expect(devere).not.toBeChecked();
+    await userEvent.click(devere);
+    await waitFor(() => expect(update).toHaveBeenCalledWith("s1", { categoryIds: ["cat-boya", "cat-dev"] }));
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("⑦ profil yok / pasif → kategori listesi YOK (önce fason profili açılır)", async () => {
+    getAll.mockImplementation(() => page([{ id: "s1", code: "FSN-1", isActive: false, categories: [] }]));
+    renderWithProviders(<CustomerSubcontractorRole customer={cari()} />);
+    const box = await screen.findByRole("checkbox", { name: SUBCONTRACTOR_ROLE_LABEL });
+    await waitFor(() => expect(box).not.toBeDisabled());
+    expect(screen.queryByText(SUBCONTRACTOR_CATEGORIES_LABEL)).toBeNull();
+    expect(catGetAll).not.toHaveBeenCalled();
+  });
 });
 
 describe("CustomerSubcontractorRole", () => {

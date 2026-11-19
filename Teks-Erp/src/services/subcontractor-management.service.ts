@@ -29,7 +29,11 @@ import {
   buildPagination,
   resolveSortBy,
   readIdCondition,
+  readFilterList,
+  isCursorRequested,
 } from "../utils/query-parser";
+import { decodeOffsetCursor, encodeOffsetCursor } from "../utils/cursor";
+import type { CursorPaginatedResponse } from "./base.service";
 import { Request } from "express";
 import { p2002OnField } from "../utils/p2002";
 import { assertArchivableTx } from "./helpers/master-data-archive.helper";
@@ -544,8 +548,33 @@ async function assertActiveCategories(
   return unique;
 }
 
+const CATEGORY_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const CATEGORY_FILTER_INVALID = "SUBCONTRACTOR_CATEGORY_FILTER_INVALID";
+
+/**
+ * `filter[categoryId]` okuyucusu (seçici süzgeci, 2026-11-19): uuid olmayan ya da DB'de
+ * bulunmayan kategori 400 — sessiz 0 satır kullanıcıya "bu kategoride fason yok" der.
+ */
+export async function readCategoryFilter(
+  raw: string | string[] | undefined,
+): Promise<string | { in: string[] } | null> {
+  const ids = [...new Set(readFilterList(raw))];
+  if (ids.length === 0) return null;
+  const bad = ids.filter((id) => !CATEGORY_UUID_RE.test(id));
+  if (bad.length > 0) {
+    throw AppError.badRequest(`Geçersiz fason kategorisi süzgeci: ${bad.join(", ")}`, { code: CATEGORY_FILTER_INVALID, values: bad });
+  }
+  const found = await prisma.subcontractorCategory.findMany({ where: { id: { in: ids } }, select: { id: true } });
+  if (found.length !== ids.length) {
+    const ok = new Set(found.map((c) => c.id));
+    const unknown = ids.filter((id) => !ok.has(id));
+    throw AppError.badRequest(`Tanınmayan fason kategorisi: ${unknown.join(", ")}`, { code: CATEGORY_FILTER_INVALID, values: unknown });
+  }
+  return readIdCondition(ids);
+}
+
 export class SubcontractorManagementService {
-  async findAll(req: Request): Promise<PaginatedResponse<unknown>> {
+  async findAll(req: Request): Promise<PaginatedResponse<unknown> | CursorPaginatedResponse<unknown>> {
     const params = parseQueryParams(req);
 
     // Standart filtreler (isActive, code...) buildWhereClause halleder
@@ -553,16 +582,11 @@ export class SubcontractorManagementService {
     // aramasında boşuna koşmaz.
     const where = buildWhereClause(params.filters, ["name"], params.search, ["code", "taxNumber"]);
 
-    // categoryId filter — relation üzerinden M:N filter. F92: dizi | CSV | tek değeri
-    // normalize et (birden çok kategori seçimi de çalışsın; tek → eşitlik, çok → {in}).
-    const rawCategoryId = params.filters["categoryId"];
-    const catIds = (Array.isArray(rawCategoryId) ? rawCategoryId : String(rawCategoryId ?? "").split(","))
-      .map((s) => s.trim())
-      .filter(Boolean);
-    if (catIds.length > 0) {
-      (where as Record<string, unknown>).categories = {
-        some: { categoryId: catIds.length === 1 ? catIds[0] : { in: catIds } },
-      };
+    // categoryId filter — relation üzerinden M:N filter (dizi | CSV | tek değer). Seçici
+    // süzgeci (2026-11-19): tanınmayan değer sessiz 0 satır değil 400.
+    const catCond = await readCategoryFilter(params.filters["categoryId"]);
+    if (catCond !== null) {
+      (where as Record<string, unknown>).categories = { some: { categoryId: catCond } };
     }
     delete (where as Record<string, unknown>).categoryId;
 
@@ -578,6 +602,40 @@ export class SubcontractorManagementService {
     }
 
     const orderBy = buildOrderByClause(params.sortBy, params.sortOrder);
+
+    // Cursor kipi (panel seçicisi `listCursor`): sayfa kipi 20 satırda keserdi, "Daha fazla" çıkmazdı.
+    // Offset cursor — fason kataloğu küçük; aynı where, aynı include.
+    if (isCursorRequested(req)) {
+      const rawLimit = parseInt(req.query.limit as string, 10) || 50;
+      const limit = Math.min(Math.max(1, rawLimit), 200);
+      const offset = decodeOffsetCursor(req.query.cursor as string | undefined);
+      if (offset > 10000) {
+        throw AppError.badRequest(`Sayfa derinliği aşıldı (offset=${offset}). Lütfen aramayı daraltın.`);
+      }
+      const wantTotal = req.query.withTotal === "true";
+      const [rows, totalEstimate] = await Promise.all([
+        prisma.subcontractor.findMany({
+          where,
+          orderBy: [orderBy, { id: "asc" }],
+          skip: offset,
+          take: limit + 1,
+          include: SUB_INCLUDE,
+        }),
+        wantTotal ? prisma.subcontractor.count({ where }) : Promise.resolve(undefined),
+      ]);
+      const hasMore = rows.length > limit;
+      return {
+        success: true,
+        data: hasMore ? rows.slice(0, limit) : rows,
+        pagination: {
+          nextCursor: hasMore ? encodeOffsetCursor(offset + limit) : null,
+          hasMore,
+          limit,
+          ...(totalEstimate !== undefined ? { totalEstimate } : {}),
+        },
+      };
+    }
+
     const { skip, take } = buildPagination(params.page, params.pageSize);
 
     const [data, total] = await Promise.all([

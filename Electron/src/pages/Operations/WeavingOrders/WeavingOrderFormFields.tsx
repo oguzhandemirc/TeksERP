@@ -19,8 +19,8 @@ import { itemService } from "@/pages/Items/service";
 import type { Item } from "@/pages/Items/types";
 import { colorService } from "@/pages/Colors/service";
 import type { Color } from "@/pages/Colors/types";
-import { subcontractorService } from "@/pages/Subcontractors/service";
-import type { Subcontractor } from "@/pages/Subcontractors/types";
+import { SubcontractorCategoryPicker } from "@/components/forms/SubcontractorCategoryPicker";
+import { DOKUMA_CATEGORY_CODE } from "@/lib/subcontractor-category-codes";
 import { warpSpecService } from "@/pages/WarpSpecs/service";
 import type { WarpSpec } from "@/pages/WarpSpecs/types";
 import type { WeavingOrderFormValues } from "./schema";
@@ -148,10 +148,10 @@ export function PartyFields({ form }: { form: Form }) {
             control={form.control}
             name="subcontractorId"
             render={({ field }) => (
-              <EntityPickerModal<Subcontractor>
+              <SubcontractorCategoryPicker
                 value={field.value || null}
                 onChange={(id) => field.onChange(id ?? "")}
-                service={subcontractorService}
+                categoryCode={DOKUMA_CATEGORY_CODE}
                 queryKey="subcontractors-weaving"
                 getLabel={(s) => s.name}
                 getSubLabel={(s) => s.code}
