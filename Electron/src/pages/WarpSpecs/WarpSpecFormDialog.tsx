@@ -7,6 +7,11 @@ import { YarnRowsEditor } from "./YarnRowsEditor";
 import { WarpCalcPanel } from "./WarpCalcPanel";
 import { IdentityFields, NotesField, ReedFields, ReedHelper } from "./WarpSpecFields";
 import type { WarpSpec } from "./types";
+import { ModalSection } from "@/components/forms/modal-sections/ModalSections";
+
+// Gizli bölümün bu alanlarında doğrulama hatası olursa bölüm kendiliğinden görünür.
+const REED_FIELDS = ["selvedgeEnds", "reedNo", "endsPerDent", "reedWidthCm", "sequenceNote", "takeUpPct", "wastePct"] as const;
+const NOTE_FIELDS = ["notes"] as const;
 
 interface Props {
   open: boolean;
@@ -25,6 +30,7 @@ export function WarpSpecFormDialog({ open, onOpenChange, initial, draft, onSubmi
       open={open}
       onOpenChange={onOpenChange}
       size="wide"
+      sectionsKey="warp-spec.form"
       title={initial ? "Çözgü Kartını Düzenle" : draft ? "Çözgü Kartını Kopyala" : "Yeni Çözgü Kartı"}
       description="İplikler ve telleri, tarak ve dizilim. Sağdaki hesap iplik kartındaki denyeyle anında güncellenir."
       schema={warpSpecFormSchema}
@@ -36,23 +42,27 @@ export function WarpSpecFormDialog({ open, onOpenChange, initial, draft, onSubmi
         <WideFormColumns
           main={
             <>
-              <FormCard title="Kimlik" icon={Fingerprint}>
+              <FormCard sectionId="identity" sectionRequired title="Kimlik" icon={Fingerprint}>
                 <IdentityFields form={form} excludeId={initial?.id} />
               </FormCard>
-              <FormCard title="Çözgü iplikleri" icon={Layers}>
+              <FormCard sectionId="yarns" sectionRequired title="Çözgü iplikleri" icon={Layers}>
                 <YarnRowsEditor />
               </FormCard>
-              <FormCard title="Tarak ve dizilim" icon={Ruler} note="Kenar teli, tarak ve dizilim hesaba girmez" aside={<ReedHelper form={form} />}>
+              <FormCard sectionId="reed" errorFields={REED_FIELDS} title="Tarak ve dizilim" icon={Ruler} note="Kenar teli, tarak ve dizilim hesaba girmez" aside={<ReedHelper form={form} />}>
                 <ReedFields form={form} />
               </FormCard>
             </>
           }
           side={
             <>
-              <WarpCalcPanel />
-              <div className="rounded-xl border border-card-border bg-card px-5 py-4 shadow-card">
-                <NotesField form={form} />
-              </div>
+              <ModalSection id="calc" title="Hesap">
+                <WarpCalcPanel />
+              </ModalSection>
+              <ModalSection id="notes" title="Not" fields={NOTE_FIELDS}>
+                <div className="rounded-xl border border-card-border bg-card px-5 py-4 shadow-card">
+                  <NotesField form={form} />
+                </div>
+              </ModalSection>
             </>
           }
         />

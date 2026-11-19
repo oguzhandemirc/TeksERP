@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { FormErrorSummary } from "./FormErrorSummary";
 import { WideFormDialog } from "./WideFormDialog";
 import { useDirtyTab } from "@/components/layout/tabs/dirty-tabs";
+import { MaybeSections } from "./modal-sections/ModalSections";
 
 interface Props<TValues extends FieldValues> {
   open: boolean;
@@ -29,6 +30,8 @@ interface Props<TValues extends FieldValues> {
   submitLabel?: string;
   /** "wide": geniş form iskeleti (`WideFormDialog`) — sabit başlık + kendi kaydırıcılı gövde + sabit alt çubuk. */
   size?: "default" | "wide";
+  /** Bölüm görünürlüğü tercih anahtarı; `sectionId`li kartlar × yanındaki menüde aç/kapa listelenir. */
+  sectionsKey?: string;
   children: (form: UseFormReturn<TValues>) => ReactNode;
 }
 
@@ -43,6 +46,7 @@ export function EntityFormDialog<TValues extends FieldValues>({
   isSubmitting,
   submitLabel = "Kaydet",
   size = "default",
+  sectionsKey,
   children,
 }: Props<TValues>) {
   const form = useForm<TValues>({
@@ -74,7 +78,7 @@ export function EntityFormDialog<TValues extends FieldValues>({
   if (size === "wide") {
     return (
       <FormProvider {...form}>
-        <WideFormDialog open={open} onOpenChange={onOpenChange} title={title} description={description} footer={buttons(true)} onSubmit={form.handleSubmit(onSubmit)} dirtyManaged>
+        <WideFormDialog open={open} onOpenChange={onOpenChange} title={title} description={description} footer={buttons(true)} onSubmit={form.handleSubmit(onSubmit)} dirtyManaged sectionsKey={sectionsKey}>
           {children(form)}
           {summary}
         </WideFormDialog>
@@ -84,17 +88,19 @@ export function EntityFormDialog<TValues extends FieldValues>({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl">
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          {description && <DialogDescription>{description}</DialogDescription>}
-        </DialogHeader>
-        <FormProvider {...form}>
-          <form data-dirty-managed="" onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
-            {children(form)}
-            {summary}
-            <DialogFooter className="pt-2">{buttons(false)}</DialogFooter>
-          </form>
-        </FormProvider>
+        <MaybeSections sectionsKey={sectionsKey}>
+          <DialogHeader className={cn(sectionsKey && "pr-16")}>
+            <DialogTitle>{title}</DialogTitle>
+            {description && <DialogDescription>{description}</DialogDescription>}
+          </DialogHeader>
+          <FormProvider {...form}>
+            <form data-dirty-managed="" onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
+              {children(form)}
+              {summary}
+              <DialogFooter className="pt-2">{buttons(false)}</DialogFooter>
+            </form>
+          </FormProvider>
+        </MaybeSections>
       </DialogContent>
     </Dialog>
   );

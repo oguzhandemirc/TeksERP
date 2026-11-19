@@ -85,6 +85,7 @@
 - **[ÇEKİRDEK]** Tıklamayla hedef açan her yüzey sekme kararını yalnız `tabs/use-tab-target.ts decideTabOpen`dan alır, `prefs.tabs.openMode`a (varsayılan `newTab`) uyar; bilinçli yeni-sekme eylemleri muaf. · bekçi: `Electron/src/components/layout/tabs/use-tab-target.test.tsx`
 - **[ÇEKİRDEK]** Başlık altına açıklama satırı çizme: `PageHeader.description`/`ScreenChrome.subtitle` ⓘ ipucuna; görünür tek satır kayıt bağlamı (`statusLine`; tablette `hidePlaceChip`). · bekçi: `Electron/src/components/layout/PageHeader.test.tsx` K24, `mobil/src/components/ScreenChrome.aciklama.test.tsx`
 - **[ÇEKİRDEK]** Mobil istasyon 2. kat aksiyonlarını tek `StationAction[]` dizisiyle `StationActionBar`a ver: dar (<600 dp) genişlikte öncelikli en çok 3 aksiyon tam etiketle çubukta, gerisi "Diğer" alt sayfasında (birincil tekrarlanmaz, görünmez aksiyon hiçbir yerde); geniş genişlikte hepsi satırda; ekran başına ayrı chip satırı yazma. · bekçi: `mobil/src/components/stationActions/StationActionBar.test.tsx`, `stationActionLayout.test.ts`
+- **[PROFİL yüzey]** Modal bölümünü `FormCard`/`FormSection` `sectionId` (ya da `ModalSection id`) ile beyan et, kapsamı ortak iskeletin `sectionsKey`i açar; zorunlu alanlı bölüme `sectionRequired`, hata alanlarına `errorFields` ver — zorunlu ya da hatalı bölüm gizlenemez, gizli bölüm çizilmez ama değeri korunur; tercih `prefs.modalSections[modalId]` (yalnız sapma). · bekçi: `Electron/src/components/forms/modal-sections/ModalSections.test.tsx` <sub>(2026-11-19)</sub>
 
 ### Tuzaklar
 

@@ -79,6 +79,7 @@ export function WarpingOrderFormDialog({ order, seed, onClose, onSaved }: Props)
   return (
     <WideFormDialog
       open
+      sectionsKey="warping-order.form"
       onOpenChange={(o) => !o && onClose()}
       title={order ? `${order.orderNo} — düzenle` : "Yeni fason devere siparişi"}
       description={
@@ -103,25 +104,25 @@ export function WarpingOrderFormDialog({ order, seed, onClose, onSaved }: Props)
         sideWidth="wide"
         main={
           <>
-            <FormCard title="Sipariş" icon={ClipboardList}>
+            <FormCard sectionId="order" sectionRequired title="Sipariş" icon={ClipboardList}>
               <div className="space-y-4">
                 <OrderIdentityFields s={s} up={up} identityLocked={Boolean(order)} />
                 <SalesOrderLinks s={s} up={up} />
               </div>
             </FormCard>
-            <FormCard title="Leventler" icon={Layers}>
+            <FormCard sectionId="beams" sectionRequired title="Leventler" icon={Layers}>
               <BeamLinesFieldset s={s} up={up} planLocked={planLocked} extraOptions={extraOptions} />
             </FormCard>
           </>
         }
         side={
-          <FormCard title="İplik planı" icon={Calculator}>
+          <FormCard sectionId="plan" title="İplik planı" icon={Calculator}>
             <PlanPreview order={order} planLocked={planLocked} pq={pq} hasBody={previewBody(s) !== null} fresh={Boolean(fresh)} />
           </FormCard>
         }
         after={
           <>
-            <FormCard title="Ücret, termin ve fire" icon={Coins}>
+            <FormCard sectionId="terms" sectionError={error !== null} title="Ücret, termin ve fire" icon={Coins}>
               <OrderTermsFields s={s} up={up} planLocked={planLocked} defaultFixedWasteM={preview ? trimNum(preview.fixedWasteM) : null} />
               <div className="mt-4">
                 <OrderNotesField s={s} up={up} />

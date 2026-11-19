@@ -45,6 +45,7 @@ import { PurchaseOrderPicker } from "./PurchaseOrderPicker";
 import { fmtQty, getPurchaseOrder } from "./service";
 import { fulfillmentOf, remainingText } from "./fulfillment";
 import { describeFill, fillLinesFromOrder, showPurchaseOrderFields } from "./receiptOrderFields";
+import { ModalSection } from "@/components/forms/modal-sections/ModalSections";
 
 interface Props {
   /** Seçili alış siparişi — fiş gövdesinde `purchaseOrderId` olarak gider. */
@@ -92,6 +93,7 @@ export function GoodsReceiptOrderSection({
   // Siparişin tedarikçi TARAFI — dolu bacak (cari kart ya da fason firma).
   const poParty = supplierPartyOf(po);
   const poSupplierRef = supplierRefOf(po);
+  const mismatch = Boolean(supplier && poParty && !sameSupplierParty(supplier, poParty));
 
   // Tedarikçiyi siparişten devral. Etki, prop geri döndüğü an kendini kapatır
   // (koşul false olur) → döngü yok. `ref` yalnız "hangi sipariş için devrettik"
@@ -136,9 +138,9 @@ export function GoodsReceiptOrderSection({
   }, [po?.id, disabled, detailQ.isFetching]);
 
   if (!visible) return null;
-
-
   return (
+    // Modal bölümü: kullanıcı gizleyebilir; tedarikçi çelişkisi varken (kayıt reddedilecek) hep görünür.
+    <ModalSection id="purchase-order" title="Alış siparişi" hasError={mismatch}>
     <div className="rounded-md border bg-muted/20 p-3">
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-[280px] flex-1">
@@ -183,7 +185,7 @@ export function GoodsReceiptOrderSection({
               "tedarikçi siparişten alındı" demek, tam da çeliştikleri anda
               ekranda duran bir yalan olurdu — backend ise kaydı 400 ile
               reddedecek. İki hâl AYRI cümle kurar. */}
-          {supplier && poParty && !sameSupplierParty(supplier, poParty) ? (
+          {mismatch ? (
             <p className="mt-2 flex items-start gap-2 rounded-md bg-amber-100 px-3 py-2 text-[11px] text-amber-900 dark:bg-amber-950 dark:text-amber-200">
               <Info className="mt-0.5 h-3 w-3 shrink-0" />
               <span>
@@ -255,5 +257,6 @@ export function GoodsReceiptOrderSection({
         </p>
       )}
     </div>
+    </ModalSection>
   );
 }
