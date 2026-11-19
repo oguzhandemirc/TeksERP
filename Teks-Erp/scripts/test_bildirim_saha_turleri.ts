@@ -26,6 +26,7 @@ import { NOTIFICATION_CATALOG } from "../src/constants/notification-catalog";
 import { canSeeNotificationType } from "../src/services/helpers/notification-visibility.helper";
 import { softDelete } from "../src/services/inventory/cancel";
 import { shippingService } from "../src/services/shipping.service";
+import { createShipmentCoreTx } from "../src/services/shipping/create";
 import {
   dailySummaryWindow, registerDepotDigestSources, shipmentWindowCounts, stockWindowCounts, subcontractWindowCounts,
 } from "../src/services/notification-sources/depo-ozet";
@@ -135,7 +136,6 @@ async function bolum1(): Promise<void> {
 
 // ── §2 gerçek çekirdek: createShipmentCoreTx (geri sarılan tx) ──────────────
 class GeriSar extends Error {}
-type CoreFn = (tx: Prisma.TransactionClient, p: Record<string, unknown>) => Promise<{ id: string; shipmentNo: string }>;
 
 async function bolum2(): Promise<void> {
   console.log("\n§2 gerçek çekirdek — createShipmentCoreTx → sevkiyat.olusturuldu");
@@ -144,8 +144,7 @@ async function bolum2(): Promise<void> {
     await prisma.$transaction(async (tx) => {
       await tx.systemSetting.upsert({ where: { key: INBOX }, create: { key: INBOX, value: true }, update: { value: true } });
       const cust = await tx.customer.create({ data: { code: `TEST-BSS-${ek}`, name: `TEST-BSS Müşteri ${ek}` }, select: { id: true } });
-      const core = (shippingService as unknown as { createShipmentCoreTx: CoreFn }).createShipmentCoreTx.bind(shippingService);
-      const sh = await core(tx, {
+      const sh = await createShipmentCoreTx.call(shippingService, tx, {
         sackIds: [], customerId: cust.id, branchId: null, orderIds: [], assertDestination: () => undefined,
         confirmationEnabled: true, orderless: true, userId: undefined,
       });
