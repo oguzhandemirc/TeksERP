@@ -65,6 +65,8 @@ const ON_EK_OZEL: Readonly<Record<string, Gorunus>> = {
   yazici: { domain: "genel", icon: "print-outline" },
   cihaz: { domain: "genel", icon: "hardware-chip-outline" },
   kimlik: { domain: "genel", icon: "shield-checkmark-outline" },
+  // `genel.gun-sonu-ozeti` (#778): birden çok alanı özetler — tek gruba düşmez.
+  genel: { domain: "genel", icon: "today-outline" },
 };
 
 const VARSAYILAN: Gorunus = { domain: "genel", icon: "notifications-outline" };

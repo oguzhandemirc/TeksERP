@@ -40,11 +40,11 @@ export const WORK_ORDER_V3_DERIVED: readonly DerivedSpec[] = [
 ];
 
 export const WORK_ORDER_V3_SOURCES: readonly ChangeSource[] = [
-  lookup("customers", "id", WOS_OF_CUSTOMERS, "cari adı değişince açık bağlı iş emirleri yeniden gider"),
-  lookup("items", "id", WOS_OF_ITEMS, "ürün adı değişince iş emirleri yeniden gider"),
-  lookup("colors", "id", WOS_OF_COLORS, "renk adı değişince iş emirleri yeniden gider"),
+  lookup("customers", "id", WOS_OF_CUSTOMERS, "cari adı değişince açık bağlı kökler yeniden gider"),
+  lookup("items", "id", WOS_OF_ITEMS, "ürün adı değişince kökler yeniden gider"),
+  lookup("colors", "id", WOS_OF_COLORS, "renk adı değişince kökler yeniden gider"),
   lookup("stations", "id", WO_OF_STATIONS, "istasyon türü/kalite yeteneği değişince aşama yeniden sınıflanır"),
-  lookup("subcontractors", "id", WOS_OF_SUBCONTRACTORS, "fason firma adı değişince açık kalemli iş emirleri yeniden gider"),
+  lookup("subcontractors", "id", WOS_OF_SUBCONTRACTORS, "fason firma adı değişince açık kalemli kökler yeniden gider"),
   lookup("subcontractor_dispatches", "id", WO_OF_DISPATCHES, "sevk iptali / doğrudan sevk kalemi kapatır"),
   lookup("subcontractor_receipts", "id", WO_OF_RECEIPTS, "makbuz iptali kaynak kalemi yeniden açar"),
 ];
