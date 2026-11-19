@@ -13,6 +13,7 @@
 import { Prisma } from "@prisma/client";
 import { ShipmentStatus } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
+import { LIVE_SACK_WHERE } from "./sack-retire.helper";
 
 /**
  * Sevkiyat-kapsamlı advisory lock namespace'i (2026-08-09, denetim F-SEV-ESZ-001).
@@ -66,12 +67,13 @@ export async function touchWarehouseSackTx(
   sackId: string
 ): Promise<void> {
   const touched = await tx.sack.updateMany({
-    where: { id: sackId, shipmentId: null },
+    // Emekli (silinmiş) çuvala içerik yazılmaz — `LIVE_SACK_WHERE` (sack-retire.helper).
+    where: { id: sackId, shipmentId: null, ...LIVE_SACK_WHERE },
     data: { updatedAt: new Date() },
   });
   if (touched.count === 0) {
     throw AppError.conflict(
-      "Çuval bu sırada bir sevkiyata atandı — içerik artık değiştirilemez. Sayfayı yenileyin."
+      "Çuval bu sırada bir sevkiyata atandı ya da silindi — içerik artık değiştirilemez. Sayfayı yenileyin."
     );
   }
 }

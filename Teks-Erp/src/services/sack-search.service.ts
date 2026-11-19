@@ -36,6 +36,7 @@ import { recordSackPickList, type PickListPrint } from "./helpers/manifest-numbe
 import { tokenReplay } from "./helpers/token-replay.helper";
 import { resolveDeliveryNoteLinesForRolls, type RollDeliveryNoteLine } from "./helpers/roll-delivery-note-line.helper";
 import { ambiguousCustomerCodeError, matchExtras, resolveRollByScanCode } from "./helpers/roll-scan-resolve.helper";
+import { LIVE_SACK_WHERE, liveSackSql } from "./helpers/sack-retire.helper";
 import { fromAttachment, recordPrintJob, type PrintJobReportOpt } from "./print-job.service";
 
 const PLANNED_STATUSES: ShipmentStatus[] = [ShipmentStatus.PLANNED];
@@ -294,13 +295,13 @@ export interface SackSearchParams {
 function scopeWhere(scope: SackSearchScope): Prisma.SackWhereInput[] {
   switch (scope) {
     case "POOL":
-      return [{ shipmentId: null }];
+      return [{ shipmentId: null, ...LIVE_SACK_WHERE }];
     case "PLANNED":
       return [{ shipment: { status: { in: PLANNED_STATUSES } } }];
     case "DISPATCHED":
       return [{ shipment: { status: ShipmentStatus.DISPATCHED } }];
     case "ALL":
-      return [{ shipmentId: null }, { shipment: { is: {} } }];
+      return [{ shipmentId: null, ...LIVE_SACK_WHERE }, { shipment: { is: {} } }];
   }
 }
 
@@ -313,13 +314,13 @@ function scopeWhere(scope: SackSearchScope): Prisma.SackWhereInput[] {
 function scopeSql(scope: SackSearchScope): Prisma.Sql {
   switch (scope) {
     case "POOL":
-      return Prisma.sql`s."shipmentId" IS NULL`;
+      return Prisma.sql`s."shipmentId" IS NULL AND ${liveSackSql("s")}`;
     case "PLANNED":
       return Prisma.sql`sh.status = ANY(${PLANNED_STATUSES}::"ShipmentStatus"[])`;
     case "DISPATCHED":
       return Prisma.sql`sh.status = ${ShipmentStatus.DISPATCHED}::"ShipmentStatus"`;
     case "ALL":
-      return Prisma.sql`TRUE`;
+      return Prisma.sql`(s."shipmentId" IS NOT NULL OR ${liveSackSql("s")})`;
   }
 }
 
@@ -338,7 +339,7 @@ function resolveScopeSql(scope?: SackSearchScope): Prisma.Sql {
 function resolveScopeOr(scope?: SackSearchScope, includeDispatched?: boolean): Prisma.SackWhereInput[] {
   if (scope) return scopeWhere(scope);
   if (includeDispatched) return scopeWhere("ALL");
-  return [{ shipmentId: null }, { shipment: { status: { in: PLANNED_STATUSES } } }];
+  return [{ shipmentId: null, ...LIVE_SACK_WHERE }, { shipment: { status: { in: PLANNED_STATUSES } } }];
 }
 
 /** Cari kapısı satırı — `customerId: null` = müşterisiz (genel stok) kovası. */
