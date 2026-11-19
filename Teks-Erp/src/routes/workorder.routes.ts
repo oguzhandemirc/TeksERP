@@ -11,6 +11,7 @@ import { matchesPermission, requirePermission, requireAnyPermission } from "../m
 import { workOrderConsumableUsage } from "../services/consumable-usage.service";
 import { getWorkOrderMeterComparison } from "../services/meter-comparison.service";
 import { workOrderTravelerRouter } from "./traveler-card.routes";
+import { workOrderPlanningRouter } from "./workorder-planning.routes";
 import { getEffectiveDefaultTarget, getWorkOrderDefaultItem } from "../services/workorder-default-item.service";
 import { requireQuickWorkOrderOwnership } from "../services/helpers/scope-narrowing.helper";
 import { getKursunGramaj, getWorkOrderSummary, patchFoldType, patchStepPlannedMachine, putTargetValues } from "../controllers/workorder-process.controller";
@@ -29,6 +30,8 @@ router.use(verifyToken, requireProductionEnabled);
 
 // /api/work-orders/:id/traveler-cards altında refakat kartı endpoint'leri
 router.use("/:id/traveler-cards", workOrderTravelerRouter);
+// /api/work-orders/:id/order-links/allocations + /:id/note (planlama uçları)
+router.use("/:id", workOrderPlanningRouter);
 
 /**
  * @openapi

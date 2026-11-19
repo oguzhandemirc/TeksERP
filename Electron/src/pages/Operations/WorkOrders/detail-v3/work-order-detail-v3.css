@@ -47,6 +47,7 @@
 .wo-v3 .btn.primary:hover { filter: brightness(1.06); color: #fff; }
 .wo-v3 .btn.danger { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 40%, var(--border-strong)); }
 .wo-v3 .btn.sm { font-size: 12px; padding: 4px 10px; border-radius: 7px; }
+.wo-v3 .btn:disabled { opacity: 0.5; cursor: not-allowed; filter: none; }
 .wo-v3 .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; border: 1px solid transparent; }
 .wo-v3 .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .wo-v3 .pill.run { color: var(--accent-ink); background: var(--accent-soft); }

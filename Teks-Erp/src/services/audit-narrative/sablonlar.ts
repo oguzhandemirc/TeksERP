@@ -131,6 +131,9 @@ const OLAY_SABLONLARI: Record<string, Sablon> = {
   "WORK_ORDER:WORK_ORDER_LABEL_OVERRIDE": olay("ilgi", "etiket bilgisini değiştirdi"), // Gülkesim S5
   "WORK_ORDER:ORDER_LINK_ADDED": olay("yonelme", "sipariş bağladı"),
   "WORK_ORDER:ORDER_LINK_REMOVED": olay("ayrilma", "sipariş bağını kaldırdı"),
+  "WORK_ORDER:ORDER_ALLOCATION_SET": olay("ilgi", "metresini siparişlere paylaştırdı"),
+  "WORK_ORDER:PLANNING_NOTE_SET": olay("ilgi", "planlama notunu güncelledi"),
+  "WORK_ORDER:PLANNING_NOTE_CLEARED": olay("ilgi", "planlama notunu temizledi"),
   "WORK_ORDER:ARCHIVED": olay("belirtme", "arşivledi"),
   // Top
   "ROLL:ARCHIVED": olay("belirtme", "arşivledi"),

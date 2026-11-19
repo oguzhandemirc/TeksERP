@@ -612,6 +612,8 @@ export class TamburService {
           colorCode: string | null;
           colorName: string | null;
           orderedQty: number;
+          /// Bu iş emrinden bu satıra PAYLAŞTIRILAN metre; paylaştırma yoksa null (eski tablet alanı yok sayar).
+          plannedQty: number | null;
           /// Sipariş satırı kesim notu + eşit-parça önerisi (Tambur talimatı).
           cutNote: string | null;
           pieceLengthM: number | null;

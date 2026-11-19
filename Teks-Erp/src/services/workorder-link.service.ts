@@ -45,7 +45,12 @@ import { InventoryService } from "./inventory.service";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import { whereRollsOfWorkOrder } from "./helpers/workorder-rolls.helper";
 import { ACTIVE_ROLL_PROPERTY } from "./helpers/property-revoke.helper";
-import { ACTIVE_ORDER_LINK, activeOrderLinkCount, unlinkOrderLinesTx } from "./helpers/order-link.helper";
+import {
+  ACTIVE_ORDER_LINK,
+  ORDER_LINK_FROZEN_STATUSES,
+  activeOrderLinkCount,
+  unlinkOrderLinesTx,
+} from "./helpers/order-link.helper";
 import {
   PLAN_CHANGE_FROZEN_STATUSES,
   assertPlanChangeAllowed,
@@ -69,10 +74,7 @@ const MIN_REASON_LENGTH = 3;
  * kapalıdır — o küme `PLAN_CHANGE_FROZEN_STATUSES` (workorder-target-color
  * helper, 2026-08-21 kullanıcı kararı).
  */
-const FROZEN_STATUSES: WorkOrderStatus[] = [
-  WorkOrderStatus.CANCELLED,
-  WorkOrderStatus.SUPERSEDED,
-];
+const FROZEN_STATUSES: readonly WorkOrderStatus[] = ORDER_LINK_FROZEN_STATUSES;
 
 export interface LinkableOrderLine {
   id: string;

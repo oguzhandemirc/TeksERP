@@ -18,6 +18,7 @@ import { WorkOrderCompleteDialog } from "./WorkOrderCompleteDialog";
 import { FasonSevkPrintDialog } from "./FasonSevkPrintDialog";
 import { FasonReceiveDialog } from "./FasonReceiveDialog";
 import { LinkOrderDialog } from "./LinkOrderDialog";
+import { AllocateOrdersButton } from "./AllocateOrderLinksDialog";
 import { ChangeTargetDialog } from "./ChangeTargetDialog";
 import { AddBatchDialog } from "./AddBatchDialog";
 import { UnlinkOrderDialog } from "./UnlinkOrderDialog";
@@ -156,6 +157,7 @@ export function WorkOrderDetailHeader({
                   )}
                 </Button>
               )}
+              {wo && <AllocateOrdersButton wo={wo} look="header" />}
               {visible && <WorkOrderHeaderActions visible={visible} onAction={runAction} />}
             </>
           ) : undefined
