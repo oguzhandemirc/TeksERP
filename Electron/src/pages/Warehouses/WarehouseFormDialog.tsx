@@ -47,6 +47,7 @@ export function WarehouseFormDialog({ open, onOpenChange, initial, onSubmit, isS
       defaultValues={defaults}
       onSubmit={onSubmit}
       isSubmitting={isSubmitting}
+      size="medium"
     >
       {(form) => (
         <>
@@ -59,33 +60,40 @@ export function WarehouseFormDialog({ open, onOpenChange, initial, onSubmit, isS
             // ENGEL DEĞİL BİLGİ: ikinci depo tanımlamak modülden bağımsız
             // olarak meşrudur (depo kartı ve defteri anahtarsız da çalışır).
             <div className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-              <b>Çoklu depo modülü kapalı.</b> İkinci aktif depo tanımlayabilirsiniz ama depo
-              seçicileri, listelerdeki depo kolonu ve Depo Transferi ekranı görünmez; transfer
-              uçları da 403 verir. Açmak için: Sistem → Modüller.
+              <b>Çoklu depo modülü kapalı.</b> İkinci aktif depo tanımlayabilirsiniz ama depo seçicileri,
+              listelerdeki depo kolonu ve Depo Transferi ekranı görünmez; transfer uçları da 403 verir. Açmak
+              için: Sistem → Modüller.
             </div>
           )}
           {initial?.isDefault && (
             // Varsayılan depo pasife alınamaz (backend 409 verir) — kullanıcıya
             // bunu Kaydet'e bastıktan SONRA söylemek yerine burada söylüyoruz.
             <div className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-              Bu depo <b>varsayılan</b> depodur: deposu belirtilmeyen her giriş buraya yazılır.
-              Pasife alınamaz — önce başka bir depoyu varsayılan yapın.
+              Bu depo <b>varsayılan</b> depodur: deposu belirtilmeyen her giriş buraya yazılır. Pasife
+              alınamaz — önce başka bir depoyu varsayılan yapın.
             </div>
           )}
-          <FormField label="Depo Adı" htmlFor="name" error={form.formState.errors.name} required>
-            <Input id="name" autoFocus placeholder="Merkez Depo, Şube Deposu..." {...form.register("name")} />
-            {/* Mükerreri REDDETMEK yerine ÖNLEMEK — depo adı DB seddiyle
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <FormField label="Depo Adı" htmlFor="name" error={form.formState.errors.name} required>
+              <Input
+                id="name"
+                autoFocus
+                placeholder="Merkez Depo, Şube Deposu..."
+                {...form.register("name")}
+              />
+              {/* Mükerreri REDDETMEK yerine ÖNLEMEK — depo adı DB seddiyle
                 tekildir (`warehouses_nameFold_key`), uyarı olmasa kullanıcı
                 bunu ancak kaydederken ham hata olarak görürdü. */}
-            <SimilarNamesWarning
-              entity="warehouses"
-              name={form.watch("name") ?? ""}
-              excludeId={initial?.id}
-            />
-          </FormField>
-          <FormField label="Adres" htmlFor="address" error={form.formState.errors.address}>
-            <Input id="address" placeholder="(opsiyonel)" {...form.register("address")} />
-          </FormField>
+              <SimilarNamesWarning
+                entity="warehouses"
+                name={form.watch("name") ?? ""}
+                excludeId={initial?.id}
+              />
+            </FormField>
+            <FormField label="Adres" htmlFor="address" error={form.formState.errors.address}>
+              <Input id="address" placeholder="(opsiyonel)" {...form.register("address")} />
+            </FormField>
+          </div>
           <FormField label="Not" htmlFor="notes" error={form.formState.errors.notes}>
             <Textarea id="notes" rows={2} placeholder="(opsiyonel)" {...form.register("notes")} />
           </FormField>

@@ -52,7 +52,7 @@ export function SubcontractorCustomerLink({ value, onChange, source, disabled, e
   });
   const canCreate = !value && source.name.trim().length > 0 && !disabled;
   return (
-    <FormField label="Bağlı cari" required error={error} hint="Fason profili cari kartına bağlıdır: tedarikçi seçicide tek satır (cari) olur; bağsız kaydedilemez">
+    <FormField label="Bağlı cari" required error={error} info="Fason profili cari kartına bağlıdır: tedarikçi seçicide tek satır (cari) olur; bağsız kaydedilemez">
       <div className="flex flex-wrap items-center gap-2">
         <div className="min-w-[16rem] flex-1">
           <CustomerPickerField variant="supplier-cari" clearable value={value} onChange={onChange} disabled={disabled} />

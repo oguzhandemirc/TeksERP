@@ -28,8 +28,9 @@ interface Props<TValues extends FieldValues> {
   onSubmit: SubmitHandler<TValues>;
   isSubmitting?: boolean;
   submitLabel?: string;
-  /** "wide": geniş form iskeleti (`WideFormDialog`) — sabit başlık + kendi kaydırıcılı gövde + sabit alt çubuk. */
-  size?: "default" | "wide";
+  /** "wide": geniş form iskeleti (`WideFormDialog`) — sabit başlık + kendi kaydırıcılı gövde + sabit alt çubuk.
+   *  "medium": az alanlı form; kısa alanlar ızgarada yan yana sığsın diye orta genişlik. */
+  size?: "default" | "medium" | "wide";
   /** Bölüm görünürlüğü tercih anahtarı; `sectionId`li kartlar × yanındaki menüde aç/kapa listelenir. */
   sectionsKey?: string;
   children: (form: UseFormReturn<TValues>) => ReactNode;
@@ -87,7 +88,7 @@ export function EntityFormDialog<TValues extends FieldValues>({
   }
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl">
+      <DialogContent className={size === "medium" ? "w-[calc(100%-2rem)] max-w-3xl" : "max-w-xl"}>
         <MaybeSections sectionsKey={sectionsKey}>
           <DialogHeader className={cn(sectionsKey && "pr-16")}>
             <DialogTitle>{title}</DialogTitle>

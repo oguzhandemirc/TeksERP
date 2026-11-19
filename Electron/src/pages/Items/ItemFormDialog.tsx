@@ -172,7 +172,7 @@ export function ItemFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="w-[calc(100%-2rem)] max-w-6xl" data-form-size="wide">
         <DialogHeader>
           <div className="flex items-center gap-1.5">
             <DialogTitle>{isEdit ? "Ürünü Düzenle" : "Yeni Ürün"}</DialogTitle>
@@ -205,14 +205,15 @@ export function ItemFormDialog({
         )}
 
         <ItemCardTabs item={initial}>
-        <form onSubmit={handleSubmit} className="space-y-3">
+        <form onSubmit={handleSubmit} className="space-y-4">
           {/* Sıra bilinçli: ÖNCE ad. Stok kodu forma EN ALTA, kapalı bir satır
               olarak alındı (2026-08-17 saha geri bildirimi) — ilk alan olduğu
               sürece personel "boş bırakın" yazsa da oraya kumaşın ADINI
               yazmaya çalışıyordu. Kodu sistem veriyor; elle giriş çok nadir
               ve artık bilinçli bir tıklama istiyor. */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_11.25rem_7.5rem]">
-            <FormField label="Ad" htmlFor="name" error={form.formState.errors.name} required>
+          {/* Geniş form (2026-11-19): kısa alanlar tek ızgarada yan yana; uzun açıklamalar ⓘ balonunda. */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <FormField label="Ad" htmlFor="name" error={form.formState.errors.name} required className="sm:col-span-2">
               <Input id="name" placeholder="Patos" {...form.register("name")} />
               {/* Canlı veride "ACTIVO" ve "ACTİVO" iki ayrı kumaş olarak duruyordu
                   (i/İ tuzağı) — uyarı yazarken görünsün. */}
@@ -249,7 +250,6 @@ export function ItemFormDialog({
                 className="bg-muted font-mono text-center cursor-not-allowed"
               />
             </FormField>
-          </div>
 
           {/* Denye yalnız iplikte sorulur: kumaş/sarf kaleminde karşılığı yok.
               Zorunlu DEĞİL — mevcut iplik kayıtları bu alan olmadan doğdu ve
@@ -260,7 +260,7 @@ export function ItemFormDialog({
               label="Denye (iplik inceliği)"
               htmlFor="linearDensityDen"
               error={form.formState.errors.linearDensityDen}
-              hint="Çözgü kartı açmak için gerekli — kg = tel × denye × metre ÷ 9.000.000"
+              info="Çözgü kartı açmak için gerekli — kg = tel × denye × metre ÷ 9.000.000"
             >
               <Input
                 id="linearDensityDen"
@@ -275,15 +275,18 @@ export function ItemFormDialog({
 
           {/* K4P: ürün kartı eni — muayene puan/100 m² kaynağı #1; modül kapalıyken alan hiç yok (bugünkü form). */}
           {itemType === ItemType.FABRIC && kaliteGuvenceEnabled && (
-            <FormField label="En (cm)" htmlFor="widthCm" error={form.formState.errors.widthCm} hint="4 puan muayenesinde puan/100 m² bu enden hesaplanır; boşsa KK1'de ölçülen en kullanılır">
+            <FormField label="En (cm)" htmlFor="widthCm" error={form.formState.errors.widthCm} info="4 puan muayenesinde puan/100 m² bu enden hesaplanır; boşsa KK1'de ölçülen en kullanılır">
               <Input id="widthCm" inputMode="decimal" placeholder="280" {...form.register("widthCm")} />
             </FormField>
           )}
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
 
           {/* E4 (2026-09-18): kumaşın varsayılan çözgü kartı — dokuma işi formu ve sunucu ön-dolumu buradan okur;
               yalnız KUMAŞ + devere açıkken çizilir (kapalıyken alan hiç yok = bugünkü form). */}
           {itemType === ItemType.FABRIC && devereEnabled && (
-            <FormField label="Varsayılan çözgü kartı (opsiyonel)" error={form.formState.errors.warpSpecId} hint="Dokuma iş emri açarken çözgü kartı bundan ön-dolar; boş = her işte elle seçilir">
+            <FormField label="Varsayılan çözgü kartı (opsiyonel)" error={form.formState.errors.warpSpecId} info="Dokuma iş emri açarken çözgü kartı bundan ön-dolar; boş = her işte elle seçilir">
               <Controller
                 control={form.control}
                 name="warpSpecId"
@@ -307,7 +310,9 @@ export function ItemFormDialog({
 
           {/* SY-A4: atkı + desen kartı — kumaş + dokuma + `warpspec:read` yoksa hiç çizilmez (bugünkü form). */}
           {constructionVisible && <ItemConstructionPickers form={form} />}
+          </div>
 
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {carriesLists && (
           <FormField label="İzinli Renkler (opsiyonel)">
             <PickerTrigger
@@ -341,6 +346,7 @@ export function ItemFormDialog({
             />
           </FormField>
           )}
+          </div>
 
           {staleLists && (
             <p role="note" className="text-xs text-amber-700 dark:text-amber-300">

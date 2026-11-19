@@ -15,6 +15,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FormField } from "@/components/forms/FormField";
+import { FieldGrid, FormCard } from "@/components/forms/WideFormDialog";
+import { ModalSectionsScope } from "@/components/forms/modal-sections/ModalSections";
 import { partnerRoleLabels } from "@/lib/partnerRoles";
 import { useCustomerBranchesEnabled, useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
@@ -144,170 +146,116 @@ export function CustomerFormDialog({
     void qc.invalidateQueries({ queryKey: ["finance", "cari-by-customer"] });
   });
 
+  const err = form.formState.errors;
+  const textareaCls =
+    "flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
+  // Geniş form (2026-11-19): kimlik · adres/sevk · iletişim · belge kartları; kısa alanlar ızgarada, uzun açıklama ⓘ'de.
   const infoFields = (
-    <>
-      {isEdit && initial?.code && (
-        <div className="text-xs text-muted-foreground">
-          Kod: <span className="font-mono">{initial.code}</span>
-        </div>
-      )}
-      <div className="grid grid-cols-2 gap-3">
-        <FormField label="Ad" htmlFor="name" error={form.formState.errors.name} required>
-          <Input id="name" autoFocus {...form.register("name")} />
-          {/* Mükerreri REDDETMEK yerine ÖNLEMEK: canlı veride "Moda Tekstil" ve
-              "MODA TEKSTİL" iki ayrı AKTİF müşteri olarak duruyordu. */}
-          <SimilarNamesWarning
-            entity="customers"
-            name={form.watch("name") ?? ""}
-            excludeId={initial?.id}
-          />
-        </FormField>
-        {/* Rol modeli: tip seçimi yerine üç kutu. Yeni kartta üçüncüsü (Fason iş yapar) kart + profili TEK işlemde doğurur
-            (`subcontractorRole`); işaretliyse Tedarikçi otomatik + kilitli (sunucu kuralı). Düzenlemede üçüncü kutu aşağıdaki
-            panel (profil aç/pasif). */}
-        <FormField label="Roller" error={form.formState.errors.isCustomerRole ?? form.formState.errors.isSupplierRole} required hint={!isEdit && fasonYeni ? SUBCONTRACTOR_NEEDS_SUPPLIER_MESSAGE : undefined}>
-          <div className="flex flex-wrap items-center gap-4 pt-1.5 text-sm">
-            <label className="flex items-center gap-2">
-              <input type="checkbox" disabled={requiredRole === "isCustomerRole"} {...form.register("isCustomerRole")} /> {partnerRoleLabels.customer}
-            </label>
-            <label className="flex items-center gap-2">
-              <input type="checkbox" disabled={requiredRole === "isSupplierRole" || (!isEdit && fasonYeni)} {...form.register("isSupplierRole")} /> {partnerRoleLabels.supplier}
-            </label>
-            {!isEdit && (
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={fasonYeni}
-                  onChange={(e) => {
-                    form.setValue("isSubcontractorRole", e.target.checked, { shouldDirty: true });
-                    if (e.target.checked) form.setValue("isSupplierRole", true, { shouldDirty: true });
-                  }}
-                />{" "}
-                {SUBCONTRACTOR_ROLE_LABEL}
-              </label>
-            )}
-          </div>
-        </FormField>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <FormField
-          label="Vergi No"
-          htmlFor="taxNumber"
-          error={form.formState.errors.taxNumber}
-          hint="İsteğe bağlı — 10-15 haneli VKN/TCKN"
-        >
-          <Input
-            id="taxNumber"
-            inputMode="numeric"
-            maxLength={32}
-            placeholder="örn: 1234567890"
-            {...form.register("taxNumber")}
-          />
-        </FormField>
-        {/* Yalnız yurtdışı yönde görünür; gizlenen dolu değer silinmez (form durumunda kalır). */}
-        {exportCodeVisible(form.watch("defaultDestination")) && (
-          <FormField
-            label="İhracat Kodu"
-            htmlFor="exportCode"
-            error={form.formState.errors.exportCode}
-            hint="Şirket ihracat kodu — sevk belgesine yalnız şube ihracat kodu yoksa basılır"
-          >
-            <Input id="exportCode" placeholder="Opsiyonel" {...form.register("exportCode")} />
+    <div className="space-y-4">
+      <FormCard title="Kimlik" sectionId="identity" sectionRequired aside={isEdit && initial?.code ? <span className="text-xs text-muted-foreground">Kod: <span className="font-mono">{initial.code}</span></span> : undefined}>
+        <FieldGrid cols={4}>
+          <FormField label="Ad" htmlFor="name" error={err.name} required className="md:col-span-2">
+            <Input id="name" autoFocus {...form.register("name")} />
+            {/* Mükerreri REDDETMEK yerine ÖNLEMEK: canlı veride "Moda Tekstil" ve "MODA TEKSTİL" iki ayrı AKTİF müşteriydi. */}
+            <SimilarNamesWarning entity="customers" name={form.watch("name") ?? ""} excludeId={initial?.id} />
           </FormField>
-        )}
-      </div>
-
-      <FormField label="Adres" htmlFor="address" error={form.formState.errors.address}>
-        <textarea
-          id="address"
-          rows={2}
-          className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          {...form.register("address")}
-        />
-      </FormField>
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <FormField label="Ülke" htmlFor="country" error={form.formState.errors.country}>
-          <Input id="country" placeholder="Türkiye" {...form.register("country")} />
-        </FormField>
-        {/* Sevk yönü KİLİDİ — sevkiyatta seçilmez, buradan gelir; boşsa ilk sevkte sorulur ve buraya yazılır. */}
-        <FormField label="Sevk yönü" error={form.formState.errors.defaultDestination}>
-          <Controller
-            control={form.control}
-            name="defaultDestination"
-            render={({ field }) => (
-              <Select
-                value={field.value ?? "NONE"}
-                onValueChange={(v) => field.onChange(v === "NONE" ? null : (v as "DOMESTIC" | "EXPORT"))}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="NONE">Seçilmedi (ilk sevkte sorulur)</SelectItem>
-                  <SelectItem value="DOMESTIC">Yurtiçi</SelectItem>
-                  <SelectItem value="EXPORT">Yurtdışı</SelectItem>
-                </SelectContent>
-              </Select>
-            )}
-          />
-        </FormField>
-        <FormField label="Şehir" htmlFor="city" error={form.formState.errors.city}>
-          <Input id="city" {...form.register("city")} />
-        </FormField>
-        <FormField label="İlçe" htmlFor="district" error={form.formState.errors.district}>
-          <Input id="district" {...form.register("district")} />
-        </FormField>
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <FormField label="Yetkili" htmlFor="contactName" error={form.formState.errors.contactName}>
-          <Input id="contactName" {...form.register("contactName")} />
-        </FormField>
-        <FormField label="Telefon" htmlFor="contactPhone" error={form.formState.errors.contactPhone}>
-          <Input
-            id="contactPhone"
-            inputMode="tel"
-            maxLength={40}
-            placeholder="0212 555 0000"
-            {...form.register("contactPhone")}
-          />
-        </FormField>
-        <FormField label="E-posta" htmlFor="email" error={form.formState.errors.email}>
-          <Input id="email" inputMode="email" placeholder="ornek@firma.com" {...form.register("email")} />
-        </FormField>
-      </div>
-
-      <FormField label="Notlar" htmlFor="notes" error={form.formState.errors.notes}>
-        <textarea
-          id="notes"
-          rows={2}
-          className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          {...form.register("notes")}
-        />
-      </FormField>
-
-      <FormField
-        label="Belge Şablon Profili"
-        hint="Bu müşteriye basılan irsaliyeler seçili profilin görünümünü kullanır; boş = genel ayar"
-      >
-        <Controller
-          control={form.control}
-          name="documentProfileId"
-          render={({ field }) => (
-            <DocumentProfileSelect value={field.value} onChange={field.onChange} />
+          <FormField label="Vergi No" htmlFor="taxNumber" error={err.taxNumber} info="İsteğe bağlı — 10-15 haneli VKN/TCKN">
+            <Input id="taxNumber" inputMode="numeric" maxLength={32} placeholder="örn: 1234567890" {...form.register("taxNumber")} />
+          </FormField>
+          <FormField label="Durum">
+            <label className="flex h-9 items-center gap-2 text-sm">
+              <input type="checkbox" {...form.register("isActive")} /> Aktif
+            </label>
+          </FormField>
+          {/* Rol modeli: tip yerine üç kutu. Yeni kartta "Fason iş yapar" kart + profili TEK işlemde doğurur (`subcontractorRole`);
+              işaretliyse Tedarikçi otomatik + kilitli (sunucu kuralı). Düzenlemede üçüncü rol aşağıdaki panel. */}
+          <FormField label="Roller" error={err.isCustomerRole ?? err.isSupplierRole} required hint={!isEdit && fasonYeni ? SUBCONTRACTOR_NEEDS_SUPPLIER_MESSAGE : undefined} className="md:col-span-2">
+            <div className="flex flex-wrap items-center gap-4 pt-1.5 text-sm">
+              <label className="flex items-center gap-2">
+                <input type="checkbox" disabled={requiredRole === "isCustomerRole"} {...form.register("isCustomerRole")} /> {partnerRoleLabels.customer}
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" disabled={requiredRole === "isSupplierRole" || (!isEdit && fasonYeni)} {...form.register("isSupplierRole")} /> {partnerRoleLabels.supplier}
+              </label>
+              {!isEdit && (
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={fasonYeni}
+                    onChange={(e) => {
+                      form.setValue("isSubcontractorRole", e.target.checked, { shouldDirty: true });
+                      if (e.target.checked) form.setValue("isSupplierRole", true, { shouldDirty: true });
+                    }}
+                  />{" "}
+                  {SUBCONTRACTOR_ROLE_LABEL}
+                </label>
+              )}
+            </div>
+          </FormField>
+          <FormField label="Belge Şablon Profili" info="Bu müşteriye basılan irsaliyeler seçili profilin görünümünü kullanır; boş = genel ayar">
+            <Controller control={form.control} name="documentProfileId" render={({ field }) => <DocumentProfileSelect value={field.value} onChange={field.onChange} />} />
+          </FormField>
+          {/* Yalnız yurtdışı yönde görünür; gizlenen dolu değer silinmez (form durumunda kalır). */}
+          {exportCodeVisible(form.watch("defaultDestination")) && (
+            <FormField label="İhracat Kodu" htmlFor="exportCode" error={err.exportCode} info="Şirket ihracat kodu — sevk belgesine yalnız şube ihracat kodu yoksa basılır">
+              <Input id="exportCode" placeholder="Opsiyonel" {...form.register("exportCode")} />
+            </FormField>
           )}
-        />
-      </FormField>
+        </FieldGrid>
+      </FormCard>
 
-      <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" {...form.register("isActive")} /> Aktif
-      </label>
+      <FormCard title="Adres ve iletişim" sectionId="address">
+        <FieldGrid cols={4}>
+          <FormField label="Ülke" htmlFor="country" error={err.country}>
+            <Input id="country" placeholder="Türkiye" {...form.register("country")} />
+          </FormField>
+          {/* Sevk yönü KİLİDİ — sevkiyatta seçilmez, buradan gelir; boşsa ilk sevkte sorulur ve buraya yazılır. */}
+          <FormField label="Sevk yönü" error={err.defaultDestination}>
+            <Controller
+              control={form.control}
+              name="defaultDestination"
+              render={({ field }) => (
+                <Select value={field.value ?? "NONE"} onValueChange={(v) => field.onChange(v === "NONE" ? null : (v as "DOMESTIC" | "EXPORT"))}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NONE">Seçilmedi (ilk sevkte sorulur)</SelectItem>
+                    <SelectItem value="DOMESTIC">Yurtiçi</SelectItem>
+                    <SelectItem value="EXPORT">Yurtdışı</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            />
+          </FormField>
+          <FormField label="Şehir" htmlFor="city" error={err.city}>
+            <Input id="city" {...form.register("city")} />
+          </FormField>
+          <FormField label="İlçe" htmlFor="district" error={err.district}>
+            <Input id="district" {...form.register("district")} />
+          </FormField>
+          <FormField label="Yetkili" htmlFor="contactName" error={err.contactName}>
+            <Input id="contactName" {...form.register("contactName")} />
+          </FormField>
+          <FormField label="Telefon" htmlFor="contactPhone" error={err.contactPhone}>
+            <Input id="contactPhone" inputMode="tel" maxLength={40} placeholder="0212 555 0000" {...form.register("contactPhone")} />
+          </FormField>
+          <FormField label="E-posta" htmlFor="email" error={err.email} className="md:col-span-2">
+            <Input id="email" inputMode="email" placeholder="ornek@firma.com" {...form.register("email")} />
+          </FormField>
+          <FormField label="Adres" htmlFor="address" error={err.address} className="md:col-span-2">
+            <textarea id="address" rows={2} className={textareaCls} {...form.register("address")} />
+          </FormField>
+          <FormField label="Notlar" htmlFor="notes" error={err.notes} className="md:col-span-2">
+            <textarea id="notes" rows={2} className={textareaCls} {...form.register("notes")} />
+          </FormField>
+        </FieldGrid>
+      </FormCard>
       {/* Üçüncü rol — kart kaydedildikten sonra (id var) anında yazan kutu (profil bağı); Tedarikçi kutusunun O ANKİ
           değeriyle açılır/kapanır (kayıt öncesi de: kural sunucudakiyle aynı). */}
       {isEdit && initial && <CustomerSubcontractorRole customer={{ ...initial, isSupplierRole: form.watch("isSupplierRole") }} />}
       {financeAccess.canRead && <CustomerFinanceSection form={form as never} customerId={initial?.id ?? null} canWrite={financeAccess.canWrite} />}
-    </>
+    </div>
   );
 
   const footer = (
@@ -324,9 +272,10 @@ export function CustomerFormDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={requestClose}>
-        {/* Düzenlemede 7 sekme ~810 px: pencere geniş, şerit dar ekranda sarar (Gülkesim prova: Kaydet kesikti). */}
-        <DialogContent className={isEdit ? "max-w-5xl" : "max-w-3xl"}>
-          <DialogHeader>
+        {/* Geniş form: alanlar ızgarada yan yana; düzenlemede 7 sekmelik şerit dar ekranda sarar. */}
+        <DialogContent className="w-[calc(100%-2rem)] max-w-[88rem]" data-form-size="wide">
+          <ModalSectionsScope modalId="customer.form">
+          <DialogHeader className="pr-16">
             <div className="flex items-center gap-1.5">
             <DialogTitle>{isEdit ? "Cari Kartını Düzenle" : "Yeni Cari"}</DialogTitle>
             {/* ⓘ — kim oluşturdu / en son kim değiştirdi (2026-08-19).
@@ -364,8 +313,8 @@ export function CustomerFormDialog({
 
               <TabsContent value="info">
                 <form onSubmit={submit} className="space-y-3">
-                  {/* Kart alanlarıyla form uzadı — footer görünür kalsın diye alanlar kayar. */}
-                  <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">{infoFields}</div>
+                  {/* Footer görünür kalsın diye gövde kendi içinde kayar. */}
+                  <div className="max-h-[66vh] overflow-y-auto rounded-lg bg-muted/40 p-4">{infoFields}</div>
                   {footer}
                 </form>
               </TabsContent>
@@ -424,10 +373,10 @@ export function CustomerFormDialog({
             </Tabs>
           ) : (
             <form onSubmit={submit} className="space-y-4">
-              <div className="max-h-[65vh] space-y-4 overflow-y-auto pr-1">
+              <div className="max-h-[64vh] space-y-4 overflow-y-auto rounded-lg bg-muted/40 p-4">
                 {infoFields}
                 {showBranchDraft && branchesEnabled && (
-                  <div className="border-t pt-3">
+                  <div className="rounded-xl border border-card-border bg-card px-5 py-4 shadow-card">
                     <CustomerBranchesDraftField form={form} />
                   </div>
                 )}
@@ -435,6 +384,7 @@ export function CustomerFormDialog({
               {footer}
             </form>
           )}
+          </ModalSectionsScope>
         </DialogContent>
       </Dialog>
 

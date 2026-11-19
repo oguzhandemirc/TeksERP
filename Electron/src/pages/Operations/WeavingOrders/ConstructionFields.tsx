@@ -28,7 +28,7 @@ type Form = UseFormReturn<WeavingOrderFormValues>;
 
 function RecipePicker({ form, itemId }: { form: Form; itemId: string }) {
   return (
-    <FormField label="Varyant (opsiyonel)" error={form.formState.errors.recipeId} hint="Varyantın değiştirdiği atkı ipliği özete yansır">
+    <FormField label="Varyant (opsiyonel)" error={form.formState.errors.recipeId} info="Varyantın değiştirdiği atkı ipliği özete yansır">
       <Controller
         control={form.control}
         name="recipeId"

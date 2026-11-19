@@ -5,6 +5,15 @@ import { Info } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
+// Balon yalnız klavye odağında açılır: diyalog açılışındaki otomatik odak (ilk odaklanabilir = ⓘ) onu kendiliğinden açmasın.
+function focusVisible(el: Element): boolean {
+  try {
+    return el.matches(":focus-visible");
+  } catch {
+    return true; // seçiciyi tanımayan ortam: eski davranış (odakta aç)
+  }
+}
+
 /**
  * (i) ikonu → açıklama balonu. Davranış:
  *  - Fareyle ikonun (veya balonun) ÜSTÜNE gelince açılır; ayrılınca kısa
@@ -64,7 +73,7 @@ export function InfoPopover({
           aria-label={label}
           aria-pressed={pinned}
           aria-describedby={open ? descId : undefined}
-          onFocus={openNow}
+          onFocus={(e) => focusVisible(e.currentTarget) && openNow()}
           onBlur={closeSoon}
           onMouseEnter={openNow}
           onMouseLeave={closeSoon}
