@@ -113,9 +113,10 @@ async function main(): Promise<void> {
     await shippingService.scanIntoSack({ sackId: C.id, barcode: s1.barcode }, ADMIN);
     await shippingService.removeSack(C.id, ADMIN, true);
     const e7 = await sonOlay(s1.id);
-    check("§7 dolu çuval silinir → UNSACKED, çuval satırı yok ama numarası olayda donuk",
+    // 2026-11-19: kartela olayı deftere yazmaktır (`sackLedgerCountTx`) → "sil" çuvalı emekliye ayırır.
+    check("§7 dolu çuval silinir → UNSACKED, çuval emekli, numarası olayda donuk",
       e7?.type === "UNSACKED" && e7.trigger === "SACK_REMOVE" && e7.sackNo === C.sackNo
-        && (await prisma.sack.count({ where: { id: C.id } })) === 0 && (await durum(s1.id)) === SwatchStatus.IN_STOCK);
+        && (await prisma.sack.findUnique({ where: { id: C.id } }))?.retiredAt != null && (await durum(s1.id)) === SwatchStatus.IN_STOCK);
 
     // §8–§10 onaylı sevkiyat
     await onayAyarla(true);
