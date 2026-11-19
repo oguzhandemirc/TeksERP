@@ -179,6 +179,18 @@ export class SessionRegistryService {
     return { revoked: res.count > 0 };
   }
 
+  /**
+   * Tek oturumu kimliğiyle, yalnız hâlâ AÇIKSA iptal et — atomik claim (çağıran count===0 → 409).
+   * Oturum satırının tek yazar ailesi bu servis; audit'i çağıran eylem basar (`open-session.service`).
+   */
+  static async revokeOpenById(id: string, open: Prisma.SessionWhereInput, now: Date, reason: string): Promise<{ count: number }> {
+    const res = await prisma.session.updateMany({
+      where: { id, ...open },
+      data: { revokedAt: now, revokeReason: reason.slice(0, 32) },
+    });
+    return { count: res.count };
+  }
+
   /** Kullanıcının TÜM aktif oturumlarını iptal et (şifre sıfırlama / pasife alma / silme). */
   static async revokeAllForUser(
     userId: string,

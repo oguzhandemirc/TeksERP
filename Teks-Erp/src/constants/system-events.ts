@@ -33,6 +33,8 @@ const AUTH_EVENTS = {
   LOGIN_LOCKED: "LOGIN_LOCKED",
   /** Yönetici kilitli bir giriş kovasını kaldırdı (O4). */
   LOGIN_LOCK_RELEASED: "LOGIN_LOCK_RELEASED",
+  /** Yönetici başka bir açık oturumu sonlandırdı (Bağlı İstemciler → Açık oturumlar). */
+  SESSION_REVOKED_BY_ADMIN: "SESSION_REVOKED_BY_ADMIN",
   /** Açık oturum varken giriş engellendi. */
   LOGIN_CONFLICT: "LOGIN_CONFLICT",
   LOGOUT: "LOGOUT",
