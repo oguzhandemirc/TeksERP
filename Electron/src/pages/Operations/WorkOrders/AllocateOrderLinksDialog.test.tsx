@@ -1,3 +1,4 @@
+import { TERIM } from "@/lib/terim";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -101,7 +102,7 @@ describe("AllocateOrderLinksDialog", () => {
     expect(screen.getByTestId("allocation-summary")).toHaveTextContent("100 m fazla");
     await user.click(screen.getByRole("button", { name: "Kaydet" }));
     expect(
-      await screen.findByText("Paylaştırılan toplam, iş emrine giren metreyi aşıyor (kalan 1000 m)."),
+      await screen.findByText(`Paylaştırılan toplam, ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} giren metreyi aşıyor (kalan 1000 m).`),
     ).toBeInTheDocument();
   });
 

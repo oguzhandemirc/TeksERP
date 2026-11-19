@@ -1,3 +1,4 @@
+import { TERIM } from "@/lib/terim";
 import { AlertTriangle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -76,7 +77,7 @@ export function AllocationSummaryBar({ preview }: { preview: AllocationPreview }
       )}
       {remaining == null && (
         <span className="text-xs text-muted-foreground">
-          (tavan yok — iş emrine top girmedi, hedef metre de yok)
+          (tavan yok — {TERIM.terbiyeIsEmri.cekimKucuk.yonelme} top girmedi, hedef metre de yok)
         </span>
       )}
     </div>

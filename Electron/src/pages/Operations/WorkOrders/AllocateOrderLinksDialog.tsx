@@ -1,3 +1,4 @@
+import { TERIM } from "@/lib/terim";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Split } from "lucide-react";
@@ -90,7 +91,7 @@ export function AllocateOrderLinksDialog({
             <Split className="h-4 w-4" /> Metreyi Siparişlere Paylaştır — {wo.workOrderNumber}
           </DialogTitle>
           <DialogDescription>
-            İş emrinin kumaşından her siparişe ne kadar ayrılacağını yazın (boş = paylaştırma yok). Bu yalnız plandır;
+            {TERIM.terbiyeIsEmri.cekim.ilgi} kumaşından her siparişe ne kadar ayrılacağını yazın (boş = paylaştırma yok). Bu yalnız plandır;
             sevkiyatı ve sipariş karşılamasını değiştirmez.
           </DialogDescription>
         </DialogHeader>

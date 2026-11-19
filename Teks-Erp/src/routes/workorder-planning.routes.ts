@@ -1,7 +1,7 @@
 // =============================================================================
 // İş emri planlama uçları (2026-11-19): sipariş paylaştırması + planlama notu.
 // /api/work-orders/:id altında mount edilir; kimlik + üretim modülü kapısı ÜST router'ın
-// `router.use(verifyToken, requireProductionEnabled)` satırından MİRAS (sub-mount ondan sonra).
+// `router.use(verifyToken, <üretim kapısı>)` satırından MİRAS (sub-mount ondan sonra; kapı adı `workorder.routes.ts`te).
 // =============================================================================
 
 import { Router, type NextFunction, type Request, type Response } from "express";

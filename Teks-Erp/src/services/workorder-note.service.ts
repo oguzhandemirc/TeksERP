@@ -6,6 +6,7 @@
 // yanıtına, kart HTML'ine EKLEME. Temizleme satırı silmez, `body`yi boş yazar.
 // =============================================================================
 
+import { TERIM } from "../constants/terim";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
@@ -23,7 +24,7 @@ export interface WorkOrderNoteView {
 
 async function assertWorkOrder(workOrderId: string): Promise<void> {
   const wo = await prisma.workOrder.findUnique({ where: { id: workOrderId }, select: { id: true } });
-  if (!wo) throw AppError.notFound("İş emri bulunamadı");
+  if (!wo) throw AppError.notFound(`${TERIM.terbiyeIsEmri.tekil} bulunamadı`);
 }
 
 async function view(workOrderId: string): Promise<WorkOrderNoteView> {

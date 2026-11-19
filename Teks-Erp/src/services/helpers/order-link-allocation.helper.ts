@@ -15,6 +15,7 @@
 // `workorder-allocation.service`te (tx İLK ifadesi `touchWorkOrderTx`, WO satır kilidi).
 // =============================================================================
 
+import { TERIM } from "../../constants/terim";
 import { Prisma, type ItemUnit } from "@prisma/client";
 import type prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
@@ -109,9 +110,9 @@ export async function assertAllocationWithinBasisTx(tx: Tx, workOrderId: string)
   const { basis, basisKind } = await readAllocationBasis(tx, workOrderId);
   const allocated = await sumAllocated(tx, workOrderId);
   if (basis && allocated.gt(basis)) {
-    const label = basisKind === "INPUT" ? "iş emrine giren" : "iş emrinin hedef";
+    const label = basisKind === "INPUT" ? `${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} giren metre` : `${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} hedef metresi`;
     throw AppError.badRequest(
-      `Paylaştırılan toplam ${m(allocated)}, ${label} metre ${m(basis)} — ${m(allocated.minus(basis))} fazla. ` +
+      `Paylaştırılan toplam ${m(allocated)}, ${label}: ${m(basis)} — ${m(allocated.minus(basis))} fazla. ` +
         "Siparişlere en fazla bu metre kadar paylaştırabilirsiniz.",
       {
         code: ALLOCATION_OVER_BASIS_CODE,
@@ -143,7 +144,7 @@ async function assertWorkOrderAllocatableTx(tx: Tx, workOrderId: string): Promis
     where: { id: workOrderId },
     select: { workOrderNumber: true, status: true },
   });
-  if (!wo) throw AppError.notFound("İş emri bulunamadı");
+  if (!wo) throw AppError.notFound(`${TERIM.terbiyeIsEmri.tekil} bulunamadı`);
   if (ORDER_LINK_FROZEN_STATUSES.includes(wo.status)) {
     throw AppError.conflict(
       `${wo.workOrderNumber} iptal edilmiş/devredilmiş durumda — sipariş paylaştırması değiştirilemez.`,
@@ -180,7 +181,7 @@ export async function loadAllocatableLinksTx(
   const missing = entries.filter((e) => !byLine.has(e.orderLineId));
   if (missing.length > 0) {
     throw AppError.badRequest(
-      `${missing.length} sipariş satırı bu iş emrine bağlı değil — ekranı yenileyip tekrar deneyin.`,
+      `${missing.length} sipariş satırı bu ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} bağlı değil — ekranı yenileyip tekrar deneyin.`,
       { code: ORDER_LINK_NOT_ACTIVE_CODE, orderLineIds: missing.map((x) => x.orderLineId) },
     );
   }

@@ -1,3 +1,4 @@
+import { TERIM } from "@/lib/terim";
 import { useMemo } from "react";
 import { formatNumber, safeFormatCalendar } from "@/lib/format";
 import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
@@ -149,7 +150,7 @@ export function OrderLinksV3({ wo }: { wo: WorkOrder }) {
                   {ol && (allocated > 0 || order?.status !== "CANCELLED") && (
                     <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
                       {allocated > 0 && (
-                        <span className="chip dim num" title="Bu iş emrinden bu siparişe ayrılan metre (plan)">
+                        <span className="chip dim num" title={`Bu ${TERIM.terbiyeIsEmri.cekimKucuk.ayrilma} bu siparişe ayrılan metre (plan)`}>
                           Paylaştırılan {fmtM(allocated)} m
                         </span>
                       )}

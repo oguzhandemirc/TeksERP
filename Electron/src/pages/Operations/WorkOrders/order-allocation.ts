@@ -1,3 +1,4 @@
+import { TERIM } from "@/lib/terim";
 import { formatQty } from "@/lib/format";
 import { isMeasuredUnit } from "@/lib/item-unit";
 import { parseCountedQty } from "@/pages/Operations/StockCounts/stockCountRules";
@@ -120,7 +121,7 @@ export function allocationErrorText(err: unknown, requestSum: number): string {
   const d = body?.details;
   if (d?.code === ALLOCATION_OVER_BASIS && typeof d.basis === "number" && typeof d.allocated === "number") {
     const room = Math.max(0, round3(d.basis - d.allocated + requestSum));
-    const what = d.basisKind === "TARGET" ? "iş emrinin hedef metresini" : "iş emrine giren metreyi";
+    const what = d.basisKind === "TARGET" ? `${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} hedef metresini` : `${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} giren metreyi`;
     return `Paylaştırılan toplam, ${what} aşıyor (kalan ${fmtM(room)} m).`;
   }
   const msg = body?.message?.trim() || (status ? "" : "Sunucuya ulaşılamıyor.") || "Kaydedilemedi.";

@@ -1,3 +1,4 @@
+import { TERIM } from "@/lib/terim";
 import { describe, it, expect } from "vitest";
 import {
   allocationErrorText,
@@ -65,7 +66,7 @@ describe("allocationErrorText — details.code okunur (body.code değil)", () =>
     },
   };
   it("aşım → kalan = tavan − diğer bağlar (istek 300, diğerleri 800 → kalan 200)", () => {
-    expect(allocationErrorText(over, 300)).toBe("Paylaştırılan toplam, iş emrine giren metreyi aşıyor (kalan 200 m).");
+    expect(allocationErrorText(over, 300)).toBe(`Paylaştırılan toplam, ${TERIM.terbiyeIsEmri.cekimKucuk.yonelme} giren metreyi aşıyor (kalan 200 m).`);
   });
   it("NEGATİF SONDA: kod body.code'da gelirse aşım cümlesi KURULMAZ (sunucu mesajı basılır)", () => {
     const wrong = { response: { status: 400, data: { code: "ALLOCATION_OVER_BASIS", message: "sunucu cümlesi" } } };
