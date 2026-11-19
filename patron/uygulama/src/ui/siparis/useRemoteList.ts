@@ -3,7 +3,7 @@
 // Arama sonucu saklanmaz (her terim ayrı anahtar doğururdu) — terimli istek doğrudan gider.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { errorMessage } from "../../api/client";
-import type { Page, ProjectionRecord } from "../../api/wire";
+import type { ListMemberFilterKey, Page, ProjectionRecord } from "../../api/wire";
 import { useSession } from "../../state/session";
 import { useRemote } from "../../state/useRemote";
 
@@ -15,6 +15,8 @@ export interface ListQuery {
   readonly teklifId?: string;
   readonly ara?: string;
   readonly suzgec?: string;
+  /** Üyelik süzgeçleri; yalnız sunucu beyan ettiyse doldurulur (`ListCapability.memberFilter`). */
+  readonly uyelik?: Partial<Readonly<Record<ListMemberFilterKey, string>>>;
 }
 
 export interface RemoteList {
@@ -40,14 +42,15 @@ export function useRemoteList(projection: string, query: ListQuery = {}, options
   const { api } = useSession();
   const limit = options.limit ?? LIMIT;
   const { durum, cariKartId, cariHesapId, siparisId, teklifId, suzgec } = query;
+  const uyelikKey = query.uyelik ? Object.entries(query.uyelik).filter(([, v]) => v).map(([k, v]) => `${k}=${v}`).sort().join("&") : "";
   const ara = query.ara?.trim() || undefined;
   const enabled = options.enabled ?? true;
   const params = useCallback(
-    (imlec: string | undefined) => ({ imlec, limit, durum, cariKartId, cariHesapId, siparisId, teklifId, ara, suzgec }),
-    [limit, durum, cariKartId, cariHesapId, siparisId, teklifId, ara, suzgec],
+    (imlec: string | undefined) => ({ imlec, limit, durum, cariKartId, cariHesapId, siparisId, teklifId, ara, suzgec, uyelik: uyelikKey ? (Object.fromEntries(new URLSearchParams(uyelikKey)) as ListQuery["uyelik"]) : undefined }),
+    [limit, durum, cariKartId, cariHesapId, siparisId, teklifId, ara, suzgec, uyelikKey],
   );
   const ids = [cariKartId, cariHesapId, siparisId, teklifId].map((x) => x ?? "").join(":");
-  const key = `veri:${projection}:${durum ?? ""}:${ids}:${suzgec ?? ""}:${limit}`;
+  const key = `veri:${projection}:${durum ?? ""}:${ids}:${suzgec ?? ""}:${uyelikKey}:${limit}`;
 
   // Terimsiz ilk sayfa: saklı kopya + arkadan ağ + etiketle tazeleme.
   const first = useRemote<Page<ProjectionRecord>>(enabled && !ara ? key : null, () => api.list(projection, params(undefined)), { tags: options.tags ?? [projection] });

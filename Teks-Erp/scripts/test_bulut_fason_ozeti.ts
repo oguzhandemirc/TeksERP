@@ -12,10 +12,13 @@
 //      müşteri satırı = İçerideki İşler + lot defteri (iplik 50 kg), toplam top = getConsignedWorkSummary toplamı ·
 //      hizmet-geliri yalnız ONAYLI SATIŞ; iptal/taslak/alış girmez; döviz satırı damgalı kurla TL · ozet.stok.emanet =
 //      karnenin emanet toplamı · emanet KAPALIYKEN emanet-bakiye üretilmez ve ozet.stok'ta emanet alanı yok ·
-//      finans kapalıyken hizmet-geliri üretilmez
+//      finans kapalıyken hizmet-geliri üretilmez · §3l ⭐ fason-acik firma kırılımı (2026-11-19) = İE firma süzgecinin
+//      top/İE kümesi (`firmRollWhere` · `workOrderFirmWhere`), TAG fason topu ürün satırında, İE'siz top müşterisiz satırda
 // ⭐ NEGATİF SONDA (ölçüldü 2026-11-08, 27/0 taban): iptal fatura gelire dahil → §3e ❌ · emanet şemasına `barkod` →
 //    §2b + §3i ❌ · emanet bayrağı yok sayıldı → §3j ❌ · geciken ← yaklaşan → §3a + §3b ❌ · kurucuda `expectedReturnAt`
 //    → §2a2 ❌ · görünümde `Number(x) + 0` → §2d ❌ · iplik defter yerine sıfır → §3c ❌; geri alındı → yeşil.
+//    2026-11-19: fason-firm-facts top kümesi `firmRollWhere()` yerine yalnız `status: AT_SUBCONTRACTOR` → §3l ❌
+//    (açık kalemsiz TAG topu toplamda); geri alındı → yeşil.
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım; TAG'li veri `finally`de silinir, bayraklar birebir geri yüklenir.
 // =============================================================================
 import { readFileSync, readdirSync, statSync } from "node:fs";
@@ -30,6 +33,7 @@ import { SNAPSHOT_WIRE_SCHEMAS, buildSnapshots } from "../src/cloud-sync/snapsho
 import { consignedTotal } from "../src/cloud-sync/overview";
 import { getConsignedWorkSummary } from "../src/services/roll-owner.service";
 import { getSubcontractorCockpit } from "../src/services/subcontractor-cockpit.service";
+import { firmRollWhere, workOrderFirmWhere } from "../src/cloud-sync/work-order-facts";
 import { getStockScorecard } from "../src/services/reports/stock-scorecard.report.service";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { applyYarnMovementTx } from "../src/services/yarn.service";
@@ -58,8 +62,10 @@ const FIELD_RE = /\b(topAdet|topMiktar|iplikKg|leventAdet|acikSevk|kirpildi|faso
 const BALANCE = ["topAdet", "topMiktar", "iplikKg", "leventAdet"];
 const ALLOWED: Record<string, string[]> = {
   [NAMES.emanet]: [...BALANCE.map((k) => `toplam.${k}`), "toplam", "cariler", "cariler.cariKartId", "cariler.etiket", ...BALANCE.map((k) => `cariler.${k}`)].sort(),
-  [NAMES.fason]: ["acikSevk", "geciken", "yaklasan", "kalanMiktar", "kirpildi", "firmalar",
-    ...["fasonFirmaId", "etiket", "acikSevk", "geciken", "kalanMiktar", "iplikKg", "leventAdet"].map((k) => `firmalar.${k}`)].sort(),
+  [NAMES.fason]: ["acikSevk", "geciken", "yaklasan", "kalanMiktar", "kirpildi", "acikTop", "isEmriSayisi", "musteriSayisi", "firmalar",
+    ...["fasonFirmaId", "etiket", "acikSevk", "geciken", "kalanMiktar", "iplikKg", "leventAdet", "acikTop", "enEskiGonderim", "isEmriSayisi", "musteriler", "urunler"].map((k) => `firmalar.${k}`),
+    ...["cariKartId", "ad", "top", "metre"].map((k) => `firmalar.musteriler.${k}`),
+    ...["urunId", "urunAdi", "renkId", "renkAdi", "top", "metre"].map((k) => `firmalar.urunler.${k}`)].sort(),
   [NAMES.gelir]: ["bugun", "buAy", "gecenAy", "son30Gun"].flatMap((p) => [p, `${p}.toplamTl`, `${p}.kalemler`,
     ...["hizmetId", "etiket", "miktar", "birim", "tutarTl"].map((k) => `${p}.kalemler.${k}`)]).sort(),
 };
@@ -149,7 +155,9 @@ function statik(): void {
   check("§2c2 ⭐ patron/sunucu'da anlık adları yalnız katalog + tel dosyalarında geçer", nameExtra.length === 0, nameExtra.join(", ") || "temiz");
   // `ui/pano/kutu-gorunum.ts` fason anlığını değil panelin pano kutusu telini okur (`stok`/`stokOzeti.iplikKg` aynı adlı
   // stok alanı, değer fabrikada hesaplı) — ayrı sözleşme, burada beyanlı (2026-11-14 patron panosu).
-  const allowedApp = new Set([APP_VIEW, "patron/uygulama/src/api/wire.ts", "patron/uygulama/src/ui/pano/kutu-gorunum.ts"]);
+  // `lib/is-emri.ts` `is-emri` kaydının firma payını (`fasonFirmalari[].fasonFirmaId`) ve üyelik anahtarını okur — ayrı
+  // sözleşme (İE v3, fabrika türetir), saf görünüm; ekranlar literal yazmaz (2026-11-19 patron İE ekranı).
+  const allowedApp = new Set([APP_VIEW, "patron/uygulama/src/api/wire.ts", "patron/uygulama/src/ui/pano/kutu-gorunum.ts", "patron/uygulama/src/lib/is-emri.ts"]);
   const appExtra = APP_DIRS.flatMap(walk).filter((f) => FIELD_RE.test(readFileSync(f, "utf8"))).map((f) => path.relative(ROOT, f)).filter((f) => !allowedApp.has(f));
   const arith = arithmeticIn(readFileSync(path.join(ROOT, APP_VIEW), "utf8"));
   check("§2d ⭐ uygulamada alanları yalnız görünüm okur; görünümde aritmetik/karşılaştırma/toplama yok",
@@ -206,6 +214,11 @@ async function canli(ids: Ids): Promise<void> {
     data: { dispatchNo: `${TAG}-DW`, weavingOrderId: ids.weaving, subcontractorId: dye.id, expectedReturnAt: new Date(now.getTime() - 2 * 86_400_000) },
     select: { id: true },
   })).id;
+  const fasonRoll = (await prisma.roll.create({ data: { barcode: `${TAG}-RF`, itemId: patos.id, initialQty: 40, currentQty: 40, status: RollStatus.AT_SUBCONTRACTOR, warehouseId: wh }, select: { id: true } })).id;
+  ids.rolls.push(fasonRoll);
+  await prisma.subcontractorDispatchItem.create({ data: { dispatchId: ids.dispatch, kind: "ROLL", rollId: fasonRoll, dispatchedQty: 40 } });
+  // Açık kalemsiz fason topu: firma kümesine GİRMEZ (yalnız statüyle sayan kurucu §3l'de kırmızı).
+  ids.rolls.push((await prisma.roll.create({ data: { barcode: `${TAG}-RY`, itemId: patos.id, initialQty: 5, currentQty: 5, status: RollStatus.AT_SUBCONTRACTOR, warehouseId: wh }, select: { id: true } })).id);
 
   const all = await snaps(now);
   const get = (n: string) => all.find((s) => s.projection === n)?.data as unknown;
@@ -217,9 +230,25 @@ async function canli(ids: Ids): Promise<void> {
   const firms = s.firms.map((x) => ({ fasonFirmaId: x.subcontractor.id, etiket: x.subcontractor.name, acikSevk: x.openDispatchCount, geciken: x.overdueCount, kalanMiktar: x.outstandingQty, iplikKg: x.yarnOutstandingKg, leventAdet: x.beamOutstandingCount }));
   check("§3a ⭐ fason-acik = kokpit özeti birebir (açık · geciken · yaklaşan · kalan · firma şeridi)",
     !!f && f.acikSevk === s.openDispatchCount && f.geciken === s.overdueCount && f.yaklasan === s.dueSoonCount && f.kalanMiktar === s.outstandingQty &&
-    JSON.stringify(f.firmalar) === JSON.stringify(firms) && f.kirpildi === ((k.warnings?.length ?? 0) > 0), `${f?.acikSevk}/${s.openDispatchCount} · ${f?.geciken}/${s.overdueCount}`);
+    JSON.stringify(f.firmalar.map((x) => Object.fromEntries(Object.keys(firms[0] ?? {}).map((key) => [key, x[key]])))) === JSON.stringify(firms) && f.kirpildi === ((k.warnings?.length ?? 0) > 0), `${f?.acikSevk}/${s.openDispatchCount} · ${f?.geciken}/${s.overdueCount}`);
   const mine = f?.firmalar.find((x) => x.fasonFirmaId === dye.id);
   check("§3b körlük zemini: TAG dokuma sevki fason firma satırında, termini geçmiş → geciken ≥ 1", !!mine && Number(mine.acikSevk) >= 1 && Number(mine.geciken) >= 1 && f!.geciken >= 1, JSON.stringify(mine));
+
+  // fason-acik firma kırılımı = İE firma süzgecinin kümesi
+  type FirmFacts = { fasonFirmaId: string; acikTop: number; isEmriSayisi: number; urunler: Array<{ urunId: string; top: number }>; musteriler: Array<{ cariKartId: string | null; top: number }> };
+  const fx = (f?.firmalar ?? []) as unknown as FirmFacts[];
+  const twins: string[] = [];
+  for (const x of fx) {
+    const top = await prisma.roll.count({ where: firmRollWhere(x.fasonFirmaId) });
+    const wo = await prisma.workOrder.count({ where: workOrderFirmWhere(x.fasonFirmaId) });
+    if (x.acikTop !== top || x.isEmriSayisi !== wo) twins.push(`${x.fasonFirmaId}: ${x.acikTop}/${top} top · ${x.isEmriSayisi}/${wo} İE`);
+  }
+  const all3 = f as unknown as { acikTop: number } | undefined;
+  check("§3l ⭐ fason-acik firma acikTop/isEmriSayisi = İE firma süzgeci kümesi; toplam acikTop = firmRollWhere sayımı",
+    twins.length === 0 && fx.length > 0 && all3?.acikTop === (await prisma.roll.count({ where: firmRollWhere() })), twins.join(" · ") || `${fx.length} firma`);
+  const dyeRow = fx.find((x) => x.fasonFirmaId === dye.id);
+  check("§3m körlük zemini: TAG fason topu boyahane satırında (ürün PATOS ≥ 1 top, İE'siz top müşterisiz satırda)",
+    !!dyeRow && dyeRow.acikTop >= 1 && !!dyeRow.urunler.find((u) => u.urunId === patos.id && u.top >= 1) && !!dyeRow.musteriler.find((m) => m.cariKartId === null && m.top >= 1), JSON.stringify(dyeRow));
 
   // emanet-bakiye
   const e = get(NAMES.emanet) as { toplam: { topAdet: number; topMiktar: number; iplikKg: string | null; leventAdet: number | null }; cariler: Array<{ cariKartId: string; etiket: string; topAdet: number; topMiktar: number; iplikKg: string | null; leventAdet: number | null }> } | undefined;

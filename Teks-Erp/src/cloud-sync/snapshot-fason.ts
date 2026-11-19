@@ -10,6 +10,7 @@ import { consignedMaterialByOwner } from "../services/helpers/consigned-material
 import { getSubcontractorCockpit } from "../services/subcontractor-cockpit.service";
 import { readDevereEnabled, readEmanetEnabled, readIplikEnabled } from "../services/system-setting.service";
 import { STANDARD_PERIODS, periodRange, type StandardPeriod } from "./periods";
+import { loadSubcontractRollFacts, type FirmRollFacts } from "./fason-firm-facts";
 
 export const CONSIGNED_SNAPSHOT = "emanet-bakiye";
 export const SUBCONTRACT_OPEN_SNAPSHOT = "fason-acik";
@@ -43,6 +44,10 @@ export const SUBCONTRACT_OPEN_SNAPSHOT_SCHEMA = z.strictObject({
   kalanMiktar: NumStr,
   /** Açık sevk kokpit tavanını aştı: firma şeridi ilk N sevkten (sayılar `acikSevk` hariç eksik olabilir). */
   kirpildi: z.boolean(),
+  // Patron fason ekranı (2026-11-19, YALNIZ EKLENDİ): firmada duran top kırılımı `fason-firm-facts` (İE firma süzgeci ikizi).
+  acikTop: Num,
+  isEmriSayisi: Num,
+  musteriSayisi: Num,
   firmalar: z.array(z.strictObject({
     fasonFirmaId: Uuid,
     etiket: z.string(),
@@ -51,6 +56,11 @@ export const SUBCONTRACT_OPEN_SNAPSHOT_SCHEMA = z.strictObject({
     kalanMiktar: NumStr,
     iplikKg: NumStr,
     leventAdet: Num,
+    acikTop: Num,
+    enEskiGonderim: z.string().nullable(),
+    isEmriSayisi: Num,
+    musteriler: z.array(z.strictObject({ cariKartId: Uuid.nullable(), ad: z.string().nullable(), top: Num, metre: NumStr })),
+    urunler: z.array(z.strictObject({ urunId: Uuid, urunAdi: z.string().nullable(), renkId: Uuid.nullable(), renkAdi: z.string().nullable(), top: Num, metre: NumStr })),
   })),
 });
 
@@ -96,19 +106,27 @@ export async function buildConsignedSnapshotData(): Promise<ConsignedInput | nul
   };
 }
 
+/** Firmada top yok (yalnız levent/dokuma sevki): kırılım boş. */
+const NO_ROLLS: FirmRollFacts = { acikTop: 0, enEskiGonderim: null, isEmriSayisi: 0, musteriler: [], urunler: [] };
+
 export async function buildSubcontractOpenSnapshotData(now: Date): Promise<z.input<typeof SUBCONTRACT_OPEN_SNAPSHOT_SCHEMA>> {
   // Sayfa istenmez (limit 1); özet ve firma şeridi kokpitin kendi tavanlı kümesinden.
   const res = await getSubcontractorCockpit({ limit: "1" }, now);
   const s = res.data!.summary;
+  const rolls = await loadSubcontractRollFacts();
   return {
     acikSevk: s.openDispatchCount,
     geciken: s.overdueCount,
     yaklasan: s.dueSoonCount,
     kalanMiktar: s.outstandingQty,
     kirpildi: (res.warnings?.length ?? 0) > 0,
+    acikTop: rolls.acikTop,
+    isEmriSayisi: rolls.isEmriSayisi,
+    musteriSayisi: rolls.musteriSayisi,
     firmalar: s.firms.map((f) => ({
       fasonFirmaId: f.subcontractor.id, etiket: f.subcontractor.name, acikSevk: f.openDispatchCount, geciken: f.overdueCount,
       kalanMiktar: f.outstandingQty, iplikKg: f.yarnOutstandingKg, leventAdet: f.beamOutstandingCount,
+      ...(rolls.firmalar.get(f.subcontractor.id) ?? NO_ROLLS),
     })),
   };
 }

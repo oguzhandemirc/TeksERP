@@ -45,9 +45,12 @@ const rollAtFirm = (subcontractorId?: string): Prisma.RollWhereInput => ({
   AND: [ROLL_STAGE_WHERE.fason, { dispatchItems: { some: outstandingItemOfOpenDispatch(subcontractorId ? { subcontractorId } : undefined) } }],
 });
 
+/** Firmada duran canlı top — İE firma süzgeci ve `fason-acik` firma kırılımı (`fason-firm-facts`) AYNI parçadan. */
+export const firmRollWhere = (subcontractorId?: string): Prisma.RollWhereInput => ({ AND: [LIVE, rollAtFirm(subcontractorId)] });
+
 /** Liste süzgeci: fasonda bu firmada topu olan iş emirleri — `fasonFirmaIdleri` üyeliğinin ikizi. */
 export function workOrderFirmWhere(subcontractorId: string): Prisma.WorkOrderWhereInput {
-  return whereWorkOrdersOfRolls({ AND: [LIVE, rollAtFirm(subcontractorId)] });
+  return whereWorkOrdersOfRolls(firmRollWhere(subcontractorId));
 }
 
 /** Liste süzgeci: bu siparişe açık bağı olan iş emirleri — `siparisIdleri` üyeliğinin ikizi. */
@@ -55,14 +58,14 @@ export function workOrderOrderWhere(orderId: string): Prisma.WorkOrderWhereInput
   return { orderLinks: { some: { ...ACTIVE_ORDER_LINK, orderLine: { orderId } } } };
 }
 
-const ROLL_WO_SELECT = {
+export const ROLL_WO_SELECT = {
   producedInStep: { select: { workOrderId: true } },
   currentStep: { select: { workOrderId: true } },
   batch: { select: { workOrderId: true } },
 } as const;
-type RollWoLinks = { producedInStep: { workOrderId: string } | null; currentStep: { workOrderId: string } | null; batch: { workOrderId: string } | null };
-/** Topun iş emirleri — `whereRollsOfWorkOrder`un üç bağı (üretildiği adım · durduğu adım · parti). */
-const workOrdersOfRoll = (r: RollWoLinks): string[] =>
+export type RollWoLinks = { producedInStep: { workOrderId: string } | null; currentStep: { workOrderId: string } | null; batch: { workOrderId: string } | null };
+/** Topun iş emirleri — `whereRollsOfWorkOrder`un üç bağı; sıra: durduğu adım · parti · üretildiği adım (ilki birincil). */
+export const workOrdersOfRoll = (r: RollWoLinks): string[] =>
   [...new Set([r.currentStep?.workOrderId, r.batch?.workOrderId, r.producedInStep?.workOrderId].filter((x): x is string => !!x))];
 
 const metre = (d: Prisma.Decimal): string => d.toFixed(3);

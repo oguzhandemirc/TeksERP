@@ -16,7 +16,7 @@ import { openRecord } from "../../../src/ui/nav";
 import { KpiCard, KpiGrid } from "../../../src/ui/KpiCard";
 import { ListRow } from "../../../src/ui/ListRow";
 import { FlowStrip, StationBars } from "../../../src/ui/pano/production";
-import { obj, period, pct, qty, str } from "../../../src/ui/pano/read";
+import { column, obj, period, pct, qty, str } from "../../../src/ui/pano/read";
 import { RecordStatusBadge } from "../../../src/ui/pano/RecordStatusBadge";
 import { MachineStopsCard } from "../../../src/ui/pano/MachineStopsCard";
 import { SubcontractOpenSection } from "../../../src/ui/fason/FasonCards";
@@ -29,6 +29,17 @@ import { StatusBadge } from "../../../src/ui/StatusBadge";
 import { makeStyles } from "../../../src/ui/theme-context";
 import { space, typography } from "../../../src/ui/tokens";
 import { EMPTY_ICON } from "../../../src/ui/icons";
+import { ListGroup } from "../../../src/ui/ListRow";
+import { useListCapability } from "../../../src/ui/siparis/capabilities";
+import { STAGE_LABEL } from "../../../src/lib/is-emri";
+
+/** "Toplar nerede?" satırları: akış kolonu (fabrikanın top sayısı) → o aşamadaki iş emirleri. */
+const WHERE_ROWS = [
+  { key: "kursun", column: "kursun", icon: "scan-outline" },
+  { key: "tambur", column: "tambur", icon: "disc-outline" },
+  { key: "fason", column: "fason", icon: "color-fill-outline" },
+  { key: "depo", column: "depo", icon: "cube-outline" },
+] as const;
 
 export default function Production() {
   const { permissions } = useSession();
@@ -43,6 +54,7 @@ export default function Production() {
   const orders = useRecordPage("is-emri", read);
   const all = combine([today, fason, flow, orders]);
   const f = period(fason.data?.veri, p);
+  const stageFilter = useListCapability().memberFilter("is-emri", "asama");
 
   return (
     <Screen module="uretim" back={false} onRefresh={all.reload} refreshing={all.refreshing}>
@@ -99,6 +111,23 @@ export default function Production() {
           <>
             <FactoryStamp snap={snap} offline={flow.offline} />
             <FlowStrip data={veri} />
+            {stageFilter ? (
+              <>
+                <SectionHeader title="Toplar nerede?" domain="uretim" testID="bolum-nerede" onAction={() => router.push("/is-emirleri" as never)} actionLabel={TERIM.terbiyeIsEmri.cogul} />
+                <ListGroup testID="toplar-nerede">
+                  {WHERE_ROWS.map((w) => {
+                    const c = column(veri, w.column);
+                    return c ? (
+                      <ListRow
+                        key={w.key} title={STAGE_LABEL[w.key]!} value={`${qty(c.count)} ${UNIT.top}`} icon={w.icon} domain="uretim"
+                        onPress={() => router.push({ pathname: "/is-emirleri", params: { asama: w.key } } as never)}
+                        testID={`nerede-${w.key}`}
+                      />
+                    ) : null;
+                  })}
+                </ListGroup>
+              </>
+            ) : null}
             <SectionHeader title="İstasyonlar" domain="uretim" testID="bolum-istasyonlar" />
             <StationBars data={veri} />
           </>
@@ -107,7 +136,7 @@ export default function Production() {
 
       <MachineStopsCard />
 
-      <SectionHeader title={TERIM.terbiyeIsEmri.cogul} domain="uretim" testID="bolum-is-emirleri" />
+      <SectionHeader title={TERIM.terbiyeIsEmri.cogul} domain="uretim" testID="bolum-is-emirleri" onAction={() => router.push("/is-emirleri" as never)} />
       <RemoteList
         projection="is-emri"
         remote={orders}
