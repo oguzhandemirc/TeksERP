@@ -173,6 +173,18 @@ export const LIST_SEARCH: Readonly<Record<string, ListSearchSpec>> = {
       ],
     },
   },
+  // İE v3 (fabrika 2026-11-19): müşteri/sipariş no fabrikanın türettiği adlardan; açık = PLANNED · IN_PROGRESS.
+  "is-emri": {
+    alanlar: ["isEmriNo", "musteriAdi", "siparisNolari"],
+    suzgec: {
+      etiket: "Durum",
+      varsayilan: "ACIK",
+      secenekler: [
+        { deger: "ACIK", etiket: "Açık", alan: "acik", esit: true },
+        { deger: "KAPALI", etiket: "Kapalı", alan: "acik", esit: false },
+      ],
+    },
+  },
   // Taslak teklif buluta gelmez. `suresiDoldu`yu fabrika türetir; geçerlilik günü dönünce satırı yeniden gönderir.
   teklif: {
     alanlar: ["no", "musteriAdi"],
@@ -220,12 +232,29 @@ export const LIST_KEY_FILTERS: Readonly<Record<ListKeyFilterKey, readonly string
   kategoriAnahtari: ["kasa-hareketi"],
 };
 
+// ---------------------------------------------------------------- liste üyelik süzgeçleri (patron İE ekranı)
+export const LIST_MEMBER_FILTER_KEYS = ["cariKartId", "siparisId", "fasonFirmaId", "asama"] as const;
+export type ListMemberFilterKey = (typeof LIST_MEMBER_FILTER_KEYS)[number];
+/** `asama` üyelik değerleri (fabrika `work-order-facts` aşama anahtarları; `diger` süzülmez). */
+export const ASAMA_DEGERLERI = ["fason", "kursun", "tambur", "depo", "sevkEdildi"] as const;
+export type AsamaDegeri = (typeof ASAMA_DEGERLERI)[number];
+
+/**
+ * `GET /veri/:projeksiyon?<anahtar>=<değer>` ⇒ kayıttaki fabrikanın ürettiği DİZİ alanı değeri İÇERİR. Projeksiyon →
+ * anahtar → dizi alanı. Bir projeksiyonda üyelik beyanı olan anahtar kimlik eşitliği olarak OKUNMAZ; beyansız 400.
+ */
+export const LIST_MEMBER_FILTERS: Readonly<Record<string, Readonly<Partial<Record<ListMemberFilterKey, string>>>>> = {
+  "is-emri": { cariKartId: "cariKartIdleri", siparisId: "siparisIdleri", fasonFirmaId: "fasonFirmaIdleri", asama: "asamalar" },
+};
+
 /** `GET /oturum` `liste` — bu sunucunun liste yetenekleri; eski sunucu göndermez (istemci süzgeçli görünümü gizler). */
 export interface ListCapabilities {
   readonly kimlikSuzgecleri: Readonly<Partial<Record<ListIdFilterKey, readonly string[]>>>;
   readonly aranabilir: readonly string[];
   /** D4-KUC3c; eski sunucu göndermez ⇒ istemci anahtar süzgecini (kasa kategori çipleri) gizler. */
   readonly anahtarSuzgecleri?: Readonly<Partial<Record<ListKeyFilterKey, readonly string[]>>>;
+  /** Projeksiyon → üyelik süzgeci anahtarları; eski sunucu göndermez ⇒ istemci İE süzgeçlerini (konum, firma, sipariş) gizler. */
+  readonly uyelikSuzgecleri?: Readonly<Record<string, readonly ListMemberFilterKey[]>>;
 }
 
 // ---------------------------------------------------------------- cari kilidi (D4-I6)

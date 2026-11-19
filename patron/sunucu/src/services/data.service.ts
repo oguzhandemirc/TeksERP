@@ -8,7 +8,7 @@ import { projectionDef, type ProjectionDef } from "../catalog/projections";
 import { badRequest, forbidden, notFound } from "../lib/errors";
 import { searchCondition } from "../lib/search";
 import { NO_TENANT, withTesis } from "../lib/tenant";
-import { ANAHTAR_SUZGEC_AZAMI, ARAMA_AZAMI, LIST_ID_FILTER_KEYS, LIST_ID_FILTERS, LIST_KEY_FILTER_KEYS, LIST_KEY_FILTERS, LIST_SEARCH, type FacilityStatus, type ListCapabilities, type ListIdFilterKey, type ListKeyFilterKey, type Page, type ProjectionRecord, type Snapshot } from "../wire/api";
+import { ANAHTAR_SUZGEC_AZAMI, ARAMA_AZAMI, ASAMA_DEGERLERI, LIST_ID_FILTER_KEYS, LIST_ID_FILTERS, LIST_KEY_FILTER_KEYS, LIST_KEY_FILTERS, LIST_MEMBER_FILTER_KEYS, LIST_MEMBER_FILTERS, LIST_SEARCH, type FacilityStatus, type ListCapabilities, type ListIdFilterKey, type ListKeyFilterKey, type ListMemberFilterKey, type Page, type ProjectionRecord, type Snapshot } from "../wire/api";
 import type { CloudContext } from "./context";
 import { loadServiceFacts, serviceState } from "./service-lifecycle";
 
@@ -36,6 +36,8 @@ export interface ListQuery {
   readonly kimlik?: Partial<Readonly<Record<ListIdFilterKey, string>>>;
   /** Fabrika anahtarı süzgeçleri (`LIST_KEY_FILTERS` beyanı); beyansız projeksiyonda 400. */
   readonly anahtar?: Partial<Readonly<Record<ListKeyFilterKey, string>>>;
+  /** Üyelik süzgeçleri (`LIST_MEMBER_FILTERS` beyanı); beyansız projeksiyonda 400. */
+  readonly uyelik?: Partial<Readonly<Record<ListMemberFilterKey, string>>>;
   /** Seçici araması (`LIST_SEARCH`teki projeksiyonlar); imleç aynı terimle devam eder. */
   readonly ara?: string;
   readonly suzgec?: string;
@@ -73,10 +75,35 @@ function idFilters(name: string, q: ListQuery): Prisma.Sql[] {
   const out: Prisma.Sql[] = [];
   for (const key of LIST_ID_FILTER_KEYS) {
     const v = q.kimlik?.[key];
-    if (v === undefined) continue;
+    if (v === undefined || memberField(name, key)) continue;
     if (!LIST_ID_FILTERS[key].includes(name)) throw badRequest(`Bu listede ${key} süzgeci yok`);
     if (!UUID.test(v)) throw badRequest(`${key} biçimsiz`);
     out.push(Prisma.sql`AND ${ID_FIELD_SQL[key]} = ${v.toLowerCase()}`);
+  }
+  return out;
+}
+
+const memberField = (name: string, key: string): string | undefined =>
+  Object.hasOwn(LIST_MEMBER_FILTERS, name) ? (LIST_MEMBER_FILTERS[name] as Partial<Record<string, string>>)[key] : undefined;
+const ID_KEYS: ReadonlySet<string> = new Set(LIST_ID_FILTER_KEYS);
+
+/**
+ * Üyelik süzgeçleri: fabrikanın dizi alanı değeri içerir (jsonb `@>`). Kimlik anahtarıyla AYNI adlı parametre üyelik
+ * beyanı olmayan listede kimlik süzgecine kalır; diğer beyansız anahtar 400, biçimsiz değer 400 (fail-closed).
+ */
+function memberFilters(name: string, q: ListQuery): Prisma.Sql[] {
+  const out: Prisma.Sql[] = [];
+  for (const key of LIST_MEMBER_FILTER_KEYS) {
+    const v = q.uyelik?.[key];
+    if (v === undefined) continue;
+    const field = memberField(name, key);
+    if (!field) {
+      if (ID_KEYS.has(key)) continue;
+      throw badRequest(`Bu listede ${key} süzgeci yok`);
+    }
+    const ok = key === "asama" ? (ASAMA_DEGERLERI as readonly string[]).includes(v) : UUID.test(v);
+    if (!ok) throw badRequest(`${key} biçimsiz`);
+    out.push(Prisma.sql`AND (r.data->${field}) @> ${JSON.stringify([key === "asama" ? v : v.toLowerCase()])}::jsonb`);
   }
   return out;
 }
@@ -100,7 +127,10 @@ function keyFilters(name: string, q: ListQuery): Prisma.Sql[] {
 }
 
 /** İstemcinin özellik kapısı: eski sunucu bu alanı göndermez, tanımadığı parametreyi de yok sayar. */
-export const LIST_CAPABILITIES: ListCapabilities = { kimlikSuzgecleri: LIST_ID_FILTERS, aranabilir: Object.keys(LIST_SEARCH), anahtarSuzgecleri: LIST_KEY_FILTERS };
+export const LIST_CAPABILITIES: ListCapabilities = {
+  kimlikSuzgecleri: LIST_ID_FILTERS, aranabilir: Object.keys(LIST_SEARCH), anahtarSuzgecleri: LIST_KEY_FILTERS,
+  uyelikSuzgecleri: Object.fromEntries(Object.entries(LIST_MEMBER_FILTERS).map(([p, m]) => [p, LIST_MEMBER_FILTER_KEYS.filter((k) => m[k] !== undefined)])),
+};
 
 function decodeCursor(cursor: string): { sortAt: Date; id: string } {
   try {
@@ -149,7 +179,7 @@ export function selectRows(s: SessionContext, def: ProjectionDef, where: Prisma.
 export async function listProjection(ctx: CloudContext, s: SessionContext, name: string, q: ListQuery): Promise<Page<ProjectionRecord>> {
   const def = readableDef(s, name, "KAYIT");
   if (q.durum !== undefined && !/^[A-Z][A-Z0-9_]{0,39}$/.test(q.durum)) throw badRequest("durum biçimsiz");
-  const filters: Prisma.Sql[] = [...idFilters(def.name, q), ...keyFilters(def.name, q), ...searchFilters(def.name, q)];
+  const filters: Prisma.Sql[] = [...idFilters(def.name, q), ...memberFilters(def.name, q), ...keyFilters(def.name, q), ...searchFilters(def.name, q)];
   if (q.durum) filters.push(Prisma.sql`AND r.data->>'durum' = ${q.durum}`);
   if (q.cursor) {
     const c = decodeCursor(q.cursor);

@@ -3,16 +3,15 @@
 import { factoryDaySql } from "../constants/time";
 import { ITEM_PRICE_CLOUD_SCOPE, ITEM_PRICE_WINDOW_CROSSING } from "../services/helpers/item-price-validity.helper";
 import { col, derived, lookup, self, via, type RecordProjection } from "./projection-types";
+import { WORK_ORDER_V3_DERIVED, WORK_ORDER_V3_SOURCES } from "./catalog-work-order";
 import { MERGED_INVOICE_RESOLVER, MERGED_INVOICE_READS, MERGED_INVOICE_SOURCES, MERGED_NOTE, TRANSFER_DUE_CROSSING } from "./catalog-merged-cari";
 
 // ── OLGU projeksiyonları ──────────────────────────────────────────────────────
 // İkinci kol: sevke hazırlık (D4-J5) topu partisinin iş emrinden sayar — top durumu değişince o iş emri de gider.
 const WO_OF_ROLLS = 'SELECT s."workOrderId" AS root_id FROM "rolls" r JOIN "work_order_steps" s ON s."id" IN (r."producedInStepId", r."currentStepId") WHERE r."id" = ANY($1::uuid[]) UNION SELECT b."workOrderId" AS root_id FROM "rolls" r JOIN "batches" b ON b."id" = r."batchId" WHERE r."id" = ANY($1::uuid[]) AND b."workOrderId" IS NOT NULL';
 const WO_OF_STEPS = 'SELECT DISTINCT s."workOrderId" AS root_id FROM "work_order_steps" s WHERE s."id" = ANY($1::uuid[])';
-const WO_OF_ORDER_LINES =
-  'SELECT DISTINCT l."workOrderId" AS root_id FROM "work_order_to_order_lines" l WHERE l."orderLineId" = ANY($1::uuid[]) AND l."unlinkedAt" IS NULL';
-const WO_OF_ORDERS =
-  'SELECT DISTINCT l."workOrderId" AS root_id FROM "work_order_to_order_lines" l JOIN "order_lines" ol ON ol."id" = l."orderLineId" WHERE ol."orderId" = ANY($1::uuid[]) AND l."unlinkedAt" IS NULL';
+const WO_OF_ORDER_LINES = 'SELECT DISTINCT l."workOrderId" AS root_id FROM "work_order_to_order_lines" l WHERE l."orderLineId" = ANY($1::uuid[]) AND l."unlinkedAt" IS NULL';
+const WO_OF_ORDERS = 'SELECT DISTINCT l."workOrderId" AS root_id FROM "work_order_to_order_lines" l JOIN "order_lines" ol ON ol."id" = l."orderLineId" WHERE ol."orderId" = ANY($1::uuid[]) AND l."unlinkedAt" IS NULL';
 
 // Görünen ad (cari/ürün/renk) olgu satırında türetilir: ad değişince bağlı kökler yeniden gider.
 const ORDERS_OF_CUSTOMERS = 'SELECT o."id" AS root_id FROM "orders" o WHERE o."customerId" = ANY($1::uuid[])';
@@ -127,6 +126,7 @@ export const FACTS: readonly RecordProjection[] = [
       derived("cariKartIdleri", "helpers/work-order-customers.helper resolveWorkOrderCustomers (açık bağ: bağlanma sırası; bağsız İE: top sahibi `Roll.ownerCustomerId`; liste önizlemesi)", ["work_order_to_order_lines", "order_lines", "orders", "rolls"]),
       derived("aktifIstasyonId", "helpers/work-order-current-step.helper currentWorkOrderStep", ["work_order_steps"]),
       derived("sevkeHazir", "cloud-sync/derived-ship-ready workOrderReadyWorksWire (ready-works computeReadyWorks + ship-readiness.helper; durum HAZIR/KISMEN/YOK + hazır top·metre; canlı top yoksa null; parti taşıması `batches_sync_wo_moved` + `rolls_sync_parent_moved` batchId dalı, shipping.ready.* yazımı `cloud-sync/ship-ready-dirty` ile KIRLI)", ["rolls"]),
+      ...WORK_ORDER_V3_DERIVED,
     ],
     sources: [self("work_orders"),
       via("work_order_steps", "workOrderId"),
@@ -134,10 +134,11 @@ export const FACTS: readonly RecordProjection[] = [
       lookup("roll_movements", "workOrderStepId", WO_OF_STEPS),
       via("work_order_to_order_lines", "workOrderId"),
       lookup("order_lines", "id", WO_OF_ORDER_LINES),
-      lookup("orders", "id", WO_OF_ORDERS)], markedBy: [{ table: "batches", trigger: "batches_sync_wo_moved" }],
+      lookup("orders", "id", WO_OF_ORDERS), ...WORK_ORDER_V3_SOURCES], markedBy: [{ table: "batches", trigger: "batches_sync_wo_moved" }],
     deletion: "YOK", permission: "bulut:uretim:oku", module: "production.enabled",
     // 2 (2026-11-06): `cariKartIdleri` anlamı genişledi (bağsız İE'de top sahibi) — TAM gönderim eski satırları doldurur.
-    retention: { wireFields: ["olusturulma"], sql: 't."createdAt"' }, catalogVersion: 2,
+    // 3 (2026-11-19): patron İE ekranı alanları EKLENDİ (açık, müşteri/sipariş, aşama, fason firmaları) — TAM gönderim.
+    retention: { wireFields: ["olusturulma"], sql: 't."createdAt"' }, catalogVersion: 3,
   },
   {
     name: "cari-hesap", kind: "KAYIT", role: "OLGU", root: { table: "cari_accounts", model: "CariAccount" },
