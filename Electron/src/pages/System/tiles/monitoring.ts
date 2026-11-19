@@ -30,7 +30,8 @@ export const monitoringTiles: SystemTile[] = [
     // olurdu, 2026-08-01 kurşun bypass dersi).
     key: "clients",
     title: "Bağlı İstemciler",
-    description: "Panel/tablet sürümleri, son görülme zamanı ve son kullanıcı",
+    description: "Panel/tablet sürümleri, son görülme zamanı ve açık oturumlar",
+    keywords: "bağlı cihazlar açık oturumlar oturum sonlandır uygulama sürümü",
     icon: MonitorSmartphone,
     to: "/system/clients",
     group: "monitoring",

@@ -1109,6 +1109,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "warping_order_settlements", name: "warping_order_settlements_pct_ck" },
   { table: "warping_yarn_wastes", name: "warping_yarn_wastes_kind_ck" },
   { table: "warping_yarn_wastes", name: "warping_yarn_wastes_qty_ck" },
+  // Fason devere iade firesi (20261119160000_warping_return_waste)
+  { table: "warping_yarn_wastes", name: "warping_yarn_wastes_source_ck" },
   { table: "cost_parameter_sets", name: "cost_parameter_sets_pct_ck" },
   { table: "cost_parameter_sets", name: "cost_parameter_sets_amount_ck" },
   { table: "cost_parameter_sets", name: "cost_parameter_sets_stamp_ck" },
