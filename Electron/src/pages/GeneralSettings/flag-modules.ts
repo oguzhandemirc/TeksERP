@@ -350,6 +350,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   bildirimPatronPushEnabled: "cekirdek",
   notificationStockAgingSource: "cekirdek",
   notificationStockAgingScope: "cekirdek",
+  notificationDailySummaryTime: "cekirdek",
   documentDesignerEnabled: "cekirdek",
   documentPublishSodEnabled: "cekirdek",
 };

@@ -35,6 +35,8 @@ export interface DigestSource {
   kind: NotificationKind;
   /** Pencerenin yükü; null → bu pencere için bildirim yok (damga yine ilerler). */
   compute: (tx: Prisma.TransactionClient, w: DigestWindow) => Promise<Record<string, unknown> | null>;
+  /** Kadansın varsayılan penceresi yerine türün kendi penceresi (ayarlı saat; ör. `genel.gun-sonu-ozeti`). Damga/kilit aynı. */
+  window?: (tx: Prisma.TransactionClient, now: Date) => Promise<DigestWindow | null>;
 }
 
 export type DigestRunResult = "disabled" | "no-window" | "already" | "baseline" | "empty" | "emitted";
@@ -103,7 +105,7 @@ export async function runDigestOnce(kind: NotificationKind, now: Date = new Date
   return prisma.$transaction(async (tx): Promise<DigestRunResult> => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(${NOTIFICATION_DISPATCH_LOCK_NS}::int, hashtext(${"bildirim-ozet:" + kind}))`;
     if (!(await readNotificationInboxEnabled(tx))) return "disabled";
-    const w = await lastClosedWindow(tx, cadenceOf(kind), now);
+    const w = src.window ? await src.window(tx, now) : await lastClosedWindow(tx, cadenceOf(kind), now);
     if (!w) return "no-window";
     const key = digestStampKey(kind);
     const stamp = await tx.systemSetting.findUnique({ where: { key }, select: { value: true } });

@@ -61,6 +61,7 @@ import { assertCustomerRiskLimitTx } from "../helpers/risk-exposure.helper";
 import { transitionSwatchesTx } from "../helpers/swatch-event.helper";
 import { LIVE_SACK_WHERE } from "../helpers/sack-retire.helper";
 import type { ShippingService } from "../shipping.service";
+import { emitShipmentCreatedTx } from "../notification-sources/depo";
 import { destinationLockMessage, shipmentReplay, type AllocationAuditTrail, type ShipmentDestinationDecision, type ShippingServiceThis } from "./shared";
 
 async function nextShipmentNo(tx: Prisma.TransactionClient): Promise<string> {
@@ -301,6 +302,8 @@ export async function createShipmentCoreTx(this: ShippingServiceThis,
       p.orderIds,
       p.branchId,
     );
+    // Doğuş bildirimi: içerik ve tahsis yazıldıktan sonra, anında sevkten ÖNCE (metre = sevkiyata giren toplar).
+    await emitShipmentCreatedTx(tx, created.id, { willDispatch: !p.confirmationEnabled }, p.userId);
     // Onay kapalı → aynı tx'te sevk et (DISPATCHED).
     if (!p.confirmationEnabled) {
       const dp = await this.performDispatchTx(
