@@ -8,6 +8,7 @@
 import { Router } from "express";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requireAnyPermission } from "../middlewares/rbac.middleware";
+import { protectSystemAccountTarget } from "../middlewares/system-account.middleware";
 import * as c from "../controllers/bildirim.controller";
 import * as t from "../controllers/bildirim-tercih.controller";
 
@@ -132,7 +133,7 @@ const ADMIN = requireAnyPermission("settings:notifications", "admin:settings");
  *     responses:
  *       200: { description: "{hucreler, satirlar}" }
  *       400: { description: "Görülemeyen tür (NOTIFICATION_KIND_NOT_VISIBLE) · kanal (NOTIFICATION_CHANNEL_INVALID) · kapsam (NOTIFICATION_SCOPE_INVALID)" }
- *       409: { description: "Kilitli tür (NOTIFICATION_KIND_LOCKED) · gelen kutusu kapalı (BILDIRIM_KAPALI)" }
+ *       409: { description: "Kilitli tür (NOTIFICATION_KIND_LOCKED) · profil tercih kilidi, uygulama içi değişti (NOTIFICATION_PREFS_LOCKED) · gelen kutusu kapalı (BILDIRIM_KAPALI)" }
  */
 router.get("/tercihler", t.getPreferences);
 router.put("/tercihler", t.putPreferences);
@@ -433,7 +434,7 @@ router.get("/profiller/hazir", ADMIN, t.getPresetProfiles);
  *       required: true
  *       content:
  *         application/json:
- *           schema: { type: object, required: [ad], properties: { ad: { type: string, maxLength: 120 } } }
+ *           schema: { type: object, properties: { ad: { type: string, maxLength: 120 }, tercihKilidi: { type: boolean, description: "Açıkken üyeler kişisel uygulama-içi tercih yazamaz (409 NOTIFICATION_PREFS_LOCKED)" } } }
  *     responses:
  *       200: { description: Profil }
  *       403: { description: Yetki yok }
@@ -547,6 +548,39 @@ router.put("/profiller/:id/uyeler", ADMIN, t.putProfileMembers);
  */
 router.get("/fabrika-varsayilani", ADMIN, t.getFactoryDefaults);
 router.put("/fabrika-varsayilani", ADMIN, t.putFactoryDefaults);
+
+/**
+ * @openapi
+ * /api/bildirim/kullanicilar/{id}/tercihler:
+ *   get:
+ *     tags: [Bildirim]
+ *     summary: 'Kişi kartı → Bildirimler: kişinin bütün türleri (görür/gizli + gerekçe), kanal başına durum/kilit/kaynak, profiller, tercih kilidi'
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: "{kullanici, tercihKilidi, profiller, turler}" }
+ *       403: { description: Yetki yok }
+ *       404: { description: Kullanıcı yok (USER_NOT_FOUND) }
+ *       409: { description: Gelen kutusu kapalı (BILDIRIM_KAPALI) }
+ *   put:
+ *     tags: [Bildirim]
+ *     summary: 'Yönetici kişi adına tür açar/kapatır (DELTA; acik:null kişisel satırı kaldırır). Kişinin göremediği tür 400; profil tercih kilidi yöneticiyi bağlamaz; audit'
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema: { type: object, required: [tercihler], properties: { tercihler: { type: array, items: { type: object, required: [tur, kanal, acik], properties: { tur: { type: string }, kanal: { type: string, enum: [UYGULAMA, OZET, MASAUSTU, TABLET_SES, PATRON_PUSH] }, acik: { type: boolean, nullable: true } } } } } }
+ *     responses:
+ *       200: { description: "Güncel özet" }
+ *       400: { description: "Kişinin göremediği tür (NOTIFICATION_KIND_NOT_VISIBLE) · kanal (NOTIFICATION_CHANNEL_INVALID)" }
+ *       403: { description: "Yetki yok · sistem hesabı hedefi" }
+ *       409: { description: "Kilitli tür (NOTIFICATION_KIND_LOCKED) · gelen kutusu kapalı" }
+ */
+router.use("/kullanicilar/:id", ADMIN, protectSystemAccountTarget);
+router.get("/kullanicilar/:id/tercihler", t.getUserPreferences);
+router.put("/kullanicilar/:id/tercihler", t.putUserPreferences);
 
 /**
  * @openapi

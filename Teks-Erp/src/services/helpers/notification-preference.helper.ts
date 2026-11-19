@@ -50,7 +50,7 @@ export interface FactoryDefaultView {
 /** Bir tur/isteğin katman fotoğrafı. `prefs` anahtarı `kind|channel`. */
 export interface PreferenceLayers {
   factory: ReadonlyMap<string, FactoryDefaultView>;
-  profiles: ReadonlyMap<string, ReadonlyArray<{ name: string; cells: ReadonlyMap<string, NotificationProfileCellState> }>>;
+  profiles: ReadonlyMap<string, ReadonlyArray<{ name: string; cells: ReadonlyMap<string, NotificationProfileCellState>; prefsLocked?: boolean }>>;
   prefs: ReadonlyMap<string, ReadonlyMap<string, PreferenceRowView>>;
 }
 
@@ -82,13 +82,13 @@ export async function loadPreferenceLayers(db: Db, userIds: readonly string[]): 
   const ids = [...new Set(userIds)];
   const members = await db.notificationProfileMember.findMany({
     where: { userId: { in: ids }, profile: { archivedAt: null } },
-    select: { userId: true, profile: { select: { name: true, cells: { select: { kind: true, state: true } } } } },
+    select: { userId: true, profile: { select: { name: true, prefsLocked: true, cells: { select: { kind: true, state: true } } } } },
     orderBy: [{ profile: { name: "asc" } }, { id: "asc" }],
   });
-  const profiles = new Map<string, Array<{ name: string; cells: Map<string, NotificationProfileCellState> }>>();
+  const profiles = new Map<string, Array<{ name: string; cells: Map<string, NotificationProfileCellState>; prefsLocked: boolean }>>();
   for (const m of members) {
     const list = profiles.get(m.userId) ?? [];
-    list.push({ name: m.profile.name, cells: new Map(m.profile.cells.map((c) => [c.kind, c.state as NotificationProfileCellState])) });
+    list.push({ name: m.profile.name, prefsLocked: m.profile.prefsLocked, cells: new Map(m.profile.cells.map((c) => [c.kind, c.state as NotificationProfileCellState])) });
     profiles.set(m.userId, list);
   }
   const prefRows = await db.notificationPreference.findMany({
@@ -102,6 +102,15 @@ export async function loadPreferenceLayers(db: Db, userIds: readonly string[]): 
     prefs.set(p.userId, m);
   }
   return { factory, profiles, prefs };
+}
+
+/**
+ * Profil tercih kilidi — "bu kişi kendi uygulama-içi tercihini yazabilir mi"nin TEK cevabı. Birleşim fail-closed:
+ * arşivsiz profillerden BİRİ kilitliyse kilitli (`some`); dönüş kilitleyen profil adları (boş = serbest).
+ * Çözümü değiştirmez: kişisel satırlar geçerli kalır, yalnız kişinin kendi yazımı kapanır (yönetici yazabilir).
+ */
+export function preferenceLockProfiles(layers: PreferenceLayers, userId: string): string[] {
+  return (layers.profiles.get(userId) ?? []).filter((p) => p.prefsLocked === true).map((p) => p.name);
 }
 
 export interface PreferenceSubject extends NotificationViewer {

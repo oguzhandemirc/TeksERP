@@ -35,17 +35,17 @@ function GroupNav({ gruplar, toplam, secili, onSec }: { gruplar: Group[]; toplam
   );
 }
 
-function GroupSection(p: { g: Group; taslak: PreferenceDraft; setTaslak: Dispatch<SetStateAction<PreferenceDraft>>; onScope: (kod: string) => void; grupToplu: (kodlar: string[], acik: boolean) => void }) {
-  const { g, taslak, setTaslak, onScope, grupToplu } = p;
+function GroupSection(p: { g: Group; taslak: PreferenceDraft; setTaslak: Dispatch<SetStateAction<PreferenceDraft>>; onScope: (kod: string) => void; grupToplu: (kodlar: string[], acik: boolean) => void; salt: boolean }) {
+  const { g, taslak, setTaslak, onScope, grupToplu, salt } = p;
   const kodlar = g.turler.map((k) => k.kod);
   return (
     <section aria-label={g.grup}>
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-1">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{g.grup}</h2>
-        <div className="flex gap-1">
+        {!salt && <div className="flex gap-1">
           <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => grupToplu(kodlar, true)}>Hepsini aç</Button>
           <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => grupToplu(kodlar, false)}>Hepsini kapa</Button>
-        </div>
+        </div>}
       </div>
       <ul>
         {g.turler.map((k) => {
@@ -59,6 +59,7 @@ function GroupSection(p: { g: Group; taslak: PreferenceDraft; setTaslak: Dispatc
               onMode={(m) => setTaslak((x) => setMode(x, k.kod, m))}
               onChannel={(ch, v) => setTaslak((x) => setChannel(x, k.kod, ch, v))}
               onScope={() => onScope(k.kod)}
+              salt={salt}
             />
           );
         })}
@@ -74,6 +75,8 @@ export function KindGroupList(p: {
   yetkiDisi: number;
   onScope: (kod: string) => void;
   grupToplu: (kodlar: string[], acik: boolean) => void;
+  /** Profil tercih kilidi açık: uygulama içi seçim ve toplu düğmeler kapalı. */
+  salt?: boolean;
 }) {
   const { turler, taslak, yetkiDisi } = p;
   const [ara, setAra] = useState("");
@@ -98,7 +101,7 @@ export function KindGroupList(p: {
           </div>
           {gorunen.length === 0 && <p className="py-6 text-center text-sm text-muted-foreground">Aramanıza uyan bildirim türü yok.</p>}
           {gorunen.map((g) => (
-            <GroupSection key={g.grup} g={g} taslak={taslak} setTaslak={p.setTaslak} onScope={p.onScope} grupToplu={p.grupToplu} />
+            <GroupSection key={g.grup} g={g} taslak={taslak} setTaslak={p.setTaslak} onScope={p.onScope} grupToplu={p.grupToplu} salt={p.salt === true} />
           ))}
           {yetkiDisi > 0 && (
             <p className="text-xs text-muted-foreground" data-testid="yetki-disi">
