@@ -8,6 +8,7 @@
 // =============================================================================
 import { randomUUID } from "node:crypto";
 import * as bcrypt from "bcryptjs";
+import { PASSWORD_BCRYPT_COST } from "../src/constants/password-policy";
 import type { Response } from "express";
 import prisma, { pool } from "../src/lib/prisma";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
@@ -61,10 +62,12 @@ async function main(): Promise<void> {
   const ilk = await prisma.systemSetting.findUnique({ where: { key }, select: { value: true } });
   const perms = await prisma.permission.findMany({ where: { code: { in: ["order:read", "order:write"] } }, select: { id: true } });
   const u = await prisma.user.create({
-    data: { username: `olc_gecikme_${ek}`, fullName: `TEST-OLCUM ${ek}`, passwordHash: await bcrypt.hash(randomUUID(), 4) },
+    data: { username: `olc_gecikme_${ek}`, fullName: `TEST-OLCUM ${ek}`, passwordHash: await bcrypt.hash(randomUUID(), PASSWORD_BCRYPT_COST) },
     select: { id: true },
   });
   for (const p of perms) await prisma.userPermission.create({ data: { userId: u.id, permissionId: p.id } });
+  // Ham izin yazımı: dağıtılmış token bayatlasın (ops betiği kalıbı, test_permission_grant_source §3a).
+  await prisma.user.update({ where: { id: u.id }, data: { tokenVersion: { increment: 1 } } });
   const zil: number[] = [];
   try {
     await prisma.systemSetting.upsert({ where: { key }, create: { key, value: true }, update: { value: true } });
