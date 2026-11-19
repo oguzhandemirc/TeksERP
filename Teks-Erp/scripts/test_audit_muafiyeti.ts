@@ -214,7 +214,10 @@ function main(): void {
   // stornosu claim'i (`claimWarpingOrderForWoundCancelTx`, atomik `updateMany` IN_PROGRESS) + kabulün kırılım/dağıtım
   // yazıcısı (`writeWarpingWoundYarnsTx`), ikisi de tx İÇİNDE; audit'i çağıran eylem basar (`receive` · `receive-cancel`
   // · `cancelWound`) — EBEVEYN_EYLEMDE.
-  const AUDITSIZ_YAZICI_TABAN = 43;
+  // 43 → 44 (2026-11-19, bildirim yönetimi): `notification-preference.service.ts` — NotificationPreference artık
+  // yönetici yolunda (`notification-preference-admin.service.ts`, kişi kartı) audit'li, model muafiyeti öldü; bu dosya
+  // kişinin KENDİ tercih yazımıdır (KULLANICI_TERCIHI: yalnız kendi gelen kutusu, rapor sayısı türemez).
+  const AUDITSIZ_YAZICI_TABAN = 44;
   const auditsizYazici: string[] = [];
   for (const [rel, s] of metin) {
     if (auditDosya.has(rel) || /tableName:\s*"/.test(s)) continue;

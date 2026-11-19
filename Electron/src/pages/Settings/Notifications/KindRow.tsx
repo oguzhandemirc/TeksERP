@@ -14,7 +14,7 @@ const MODES: Array<{ mod: InAppMode; etiket: string }> = [
   { mod: "KAPALI", etiket: "Kapalı" },
 ];
 
-function ModeSegment({ k, ad, onMode }: { k: KindDraft; ad: string; onMode: (m: InAppMode) => void }) {
+function ModeSegment({ k, ad, onMode, salt }: { k: KindDraft; ad: string; onMode: (m: InAppMode) => void; salt: boolean }) {
   const secenekler = k.kilit ? MODES.slice(0, 1) : MODES.filter((m) => m.mod !== "OZET" || k.ozetVar);
   return (
     <div role="radiogroup" aria-label={`${ad} — uygulama içi`} className="inline-flex rounded-md border border-border bg-muted/40 p-0.5">
@@ -26,7 +26,7 @@ function ModeSegment({ k, ad, onMode }: { k: KindDraft; ad: string; onMode: (m: 
             type="button"
             role="radio"
             aria-checked={secili}
-            disabled={k.kilit}
+            disabled={k.kilit || salt}
             onClick={() => onMode(m.mod)}
             className={cn(
               "rounded px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed",
@@ -61,8 +61,11 @@ export function KindRow(p: {
   onMode: (m: InAppMode) => void;
   onChannel: (ch: "MASAUSTU" | "TABLET_SES" | "PATRON_PUSH", v: boolean) => void;
   onScope: () => void;
+  /** Profil tercih kilidi: uygulama içi seçim salt-okunur (yan kanallar serbest). */
+  salt?: boolean;
 }) {
   const { k, katalog, onMode, onChannel, onScope } = p;
+  const salt = p.salt === true;
   const hasScope = !!katalog.kapsam && Object.keys(katalog.kapsam).length > 0;
   const sideOff = k.mod === "KAPALI" && !k.kilit;
   return (
@@ -91,12 +94,12 @@ export function KindRow(p: {
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-          Uygulama içi <ModeSegment k={k} ad={katalog.ad} onMode={onMode} />
+          Uygulama içi <ModeSegment k={k} ad={katalog.ad} onMode={onMode} salt={salt} />
         </span>
         <ChannelSwitch etiket="Masaüstü" ad={katalog.ad} deger={k.kanal.MASAUSTU} pasif={sideOff} onChange={(v) => onChannel("MASAUSTU", v)} />
         <ChannelSwitch etiket="Tablet sesi" ad={katalog.ad} deger={k.kanal.TABLET_SES} pasif={sideOff} onChange={(v) => onChannel("TABLET_SES", v)} />
         <ChannelSwitch etiket="Patron telefonu" ad={katalog.ad} deger={k.kanal.PATRON_PUSH} pasif={sideOff} onChange={(v) => onChannel("PATRON_PUSH", v)} />
-        {hasScope && !k.kilit && (
+        {hasScope && !k.kilit && !salt && (
           <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
             Kapsam
             <Button variant="outline" size="sm" className="h-7 text-xs" onClick={onScope} aria-label={`${katalog.ad} — kapsam: ${scopeLabel(k.kapsam)}`}>

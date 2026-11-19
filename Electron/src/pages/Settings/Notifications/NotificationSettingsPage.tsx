@@ -6,7 +6,7 @@
 // =============================================================================
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { BellOff, RotateCcw, ServerCrash, Save } from "lucide-react";
+import { BellOff, Lock, RotateCcw, ServerCrash, Save } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
@@ -40,7 +40,16 @@ export function NotificationSettingsPage() {
   } else {
     body = (
       <>
-        <ProfileStrip enabled kirli={f.tercihKirli} />
+        {f.tercihKilidi ? (
+          <div role="status" className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100" data-testid="tercih-kilidi">
+            <Lock className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+            <span>
+              <strong>Tercihlerin yöneticin tarafından kilitlendi.</strong> Uygulama içi seçimler ({f.tercihKilidi.profiller.join(", ")} profili) değiştirilemez; masaüstü, tablet sesi, patron telefonu ve sessiz saat serbest.
+            </span>
+          </div>
+        ) : (
+          <ProfileStrip enabled kirli={f.tercihKirli} />
+        )}
         <KindGroupList
           turler={f.katalog?.turler ?? []}
           taslak={f.taslak}
@@ -48,6 +57,7 @@ export function NotificationSettingsPage() {
           yetkiDisi={f.katalog?.yetkiDisi ?? 0}
           onScope={setKapsamKod}
           grupToplu={f.grupToplu}
+          salt={!!f.tercihKilidi}
         />
         <PreviewStrip draft={f.taslak} kinds={f.katalog?.turler ?? []} />
         {f.ayarTaslak && <QuietHoursCard deger={f.ayarTaslak} onChange={f.setAyarTaslak} />}

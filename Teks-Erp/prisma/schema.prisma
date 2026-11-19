@@ -14280,6 +14280,8 @@ model NotificationProfile {
   code        String    @unique @db.VarChar(40)
   name        String    @db.VarChar(120)
   archivedAt  DateTime? @db.Timestamptz
+  /// Tercih kilidi: açıkken üyeler kişisel uygulama-içi tercih yazamaz (birleşim: biri kilitliyse kilitli).
+  prefsLocked Boolean   @default(false)
   /// İdempotency — kayıt yaratan uç (`clientToken @unique` sözleşmesi).
   clientToken String?   @unique @db.Uuid
 

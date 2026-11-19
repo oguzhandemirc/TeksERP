@@ -107,6 +107,8 @@ export interface NotificationPreferencePreview {
 /** `POST /tercihler/varsayilana-don/onizleme` satırı. */
 export interface NotificationResetRow extends NotificationPreferenceRow {
   ad: string;
+  /** Profil tercih kilidi açıkken uygulama-içi satır döndürülemez (eski sunucu göndermez). */
+  kilitli?: boolean;
 }
 
 /** Takip uçlarının kayıt türü (`/takip/:tur/:id`). */
@@ -118,6 +120,13 @@ export type NotificationChannel = "UYGULAMA" | "OZET" | "MASAUSTU" | "TABLET_SES
 export interface NotificationPreferenceCell {
   kind: string;
   kanallar: Array<{ kanal: NotificationChannel; durum: "ACIK" | "KAPALI" | "GIZLI"; kilit: boolean; kaynak: string; kapsam: unknown }>;
+}
+
+/** Profil tercih kilidi (`GET /tercihler`.tercihKilidi): birleşim — profillerden biri kilitliyse kilitli. */
+export interface NotificationPrefsLock {
+  kilitli: boolean;
+  profiller: string[];
+  kanallar: NotificationChannel[];
 }
 
 /** Kişinin kaydedilmiş sapma satırı (`GET /tercihler`.satirlar). */

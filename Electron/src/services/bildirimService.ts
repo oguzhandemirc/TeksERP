@@ -18,6 +18,7 @@ import type {
   NotificationPreferenceCell,
   NotificationPreferenceInput,
   NotificationPreferenceRow,
+  NotificationPrefsLock,
   NotificationUserSettings,
   NotificationPreferencePreview,
   NotificationResetRow,
@@ -77,6 +78,8 @@ const followPath = (tur: FollowRecordType, id: string) => `${BASE}/takip/${tur}/
 export interface NotificationPreferencesResult {
   hucreler: NotificationPreferenceCell[];
   satirlar: NotificationPreferenceRow[];
+  /** Profil tercih kilidi (eski sunucu göndermez = serbest); `kanallar` donan uygulama-içi kanallar. */
+  tercihKilidi?: NotificationPrefsLock;
 }
 export interface FollowState {
   takip: boolean;

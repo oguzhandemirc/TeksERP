@@ -18,6 +18,7 @@ import {
 } from "../constants/notification-catalog";
 import {
   NOTIFICATION_CHANNELS,
+  NOTIFICATION_PREFS_LOCKED_CHANNELS,
   NOTIFICATION_QUIET_CHANNELS,
   notificationScopeSchema,
   QUIET_TIME_PATTERN,
@@ -27,6 +28,7 @@ import { loadNotificationVisibilityEnv, canSeeNotificationType, type Notificatio
 import {
   channelEnabled,
   loadPreferenceLayers,
+  preferenceLockProfiles,
   prefKey,
   resolveAllPreferences,
   resolvePreference,
@@ -84,7 +86,59 @@ export async function getPreferences(v: PreferenceViewer) {
   return {
     hucreler: resolveAllPreferences(subject, { env, layers }),
     satirlar: rows.map((r) => ({ id: r.id, tur: r.kind, kanal: r.channel, acik: r.enabled, kapsam: r.scope })),
+    tercihKilidi: lockView(layers, v.userId),
   };
+}
+
+/** İstemcinin salt-okunur kararı: `kilitli` + kilitleyen profiller + donan kanallar (eski istemci alanı yok sayar). */
+export function lockView(layers: PreferenceLayers, userId: string) {
+  const profiller = preferenceLockProfiles(layers, userId);
+  return { kilitli: profiller.length > 0, profiller, kanallar: profiller.length > 0 ? [...NOTIFICATION_PREFS_LOCKED_CHANNELS] : [] };
+}
+
+const isFrozenChannel = (ch: string): boolean => (NOTIFICATION_PREFS_LOCKED_CHANNELS as readonly string[]).includes(ch);
+
+/** Anahtar sırasından bağımsız karşılaştırma (kaydedilmiş kapsam ↔ gövdedeki kapsam). */
+function canonical(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(canonical).join(",")}]`;
+  if (v && typeof v === "object") {
+    return `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${canonical((v as Record<string, unknown>)[k])}`).join(",")}}`;
+  }
+  return JSON.stringify(v ?? null);
+}
+
+function scopeKey(raw: unknown): string {
+  if (raw === undefined || raw === null) return "null";
+  const r = notificationScopeSchema.safeParse({ schemaVersion: 1, ...(raw as object) });
+  return r.success ? canonical(r.data) : `bozuk:${canonical(raw)}`;
+}
+
+/**
+ * Profil tercih kilidi açıkken gövdedeki "uygulama içi" seçimi (UYGULAMA + kapsam; UYGULAMA kapalıyken OZET) şimdiki
+ * ÇÖZÜMLE aynı olmalı; değişen her öğe 409. Tam gövdeli eski istemci yalnız yan kanalı değiştiriyorsa geçer.
+ */
+function assertInAppUnchanged(ctx: PreferenceContext, items: PreferenceItemInput[], profiller: string[]): void {
+  const { subject, env, layers } = ctx;
+  const o = { env, layers };
+  const byKey = new Map(items.map((it) => [prefKey(it.tur, it.kanal as NotificationKanal), it]));
+  for (const it of items) {
+    if (!isFrozenChannel(it.kanal) || !isKind(it.tur) || !canSeeNotificationType(subject, it.tur, env)) continue;
+    const kind = it.tur;
+    const inApp = resolvePreference(subject, kind, "UYGULAMA", o);
+    let same: boolean;
+    if (it.kanal === "UYGULAMA") {
+      same = it.acik === (inApp.durum === "ACIK") && scopeKey(it.kapsam) === scopeKey(inApp.kapsam);
+    } else {
+      const appItem = byKey.get(prefKey(kind, "UYGULAMA"));
+      const appOn = appItem ? appItem.acik : inApp.durum === "ACIK";
+      same = appOn || !getNotificationEntry(kind).kanallar.includes("OZET") || it.acik === channelEnabled(subject, kind, "OZET", o).acik;
+    }
+    if (!same) {
+      throw AppError.conflict("Bildirim tercihlerin yöneticin tarafından kilitlendi; uygulama içi seçim değiştirilemez.", {
+        code: "NOTIFICATION_PREFS_LOCKED", tur: kind, kanal: it.kanal, profiller,
+      });
+    }
+  }
 }
 
 /** Kapsamı katalog beyanıyla doğrular — yalnız daraltır; tanınmayan/beyansız anahtar 400. */
@@ -156,13 +210,20 @@ export async function putPreferences(v: PreferenceViewer, body: unknown) {
 /** Tam gövdeyi doğrular ve TEK tx'te yazar (PUT ve profil uygulaması aynı yol: seyrek yazım, kilit 409). */
 export async function writePreferenceItems(v: PreferenceViewer, ctx: PreferenceContext, tercihler: PreferenceItemInput[]): Promise<void> {
   const { subject, env, layers } = ctx;
+  const profiller = preferenceLockProfiles(layers, v.userId);
+  const locked = profiller.length > 0;
+  if (locked) assertInAppUnchanged(ctx, tercihler, profiller);
   const plan = planPreferenceRows(subject, env, layers, tercihler);
   const visible = NOTIFICATION_KINDS.filter((k) => canSeeNotificationType(subject, k, env));
+  // Kilitliyken uygulama-içi satırlar dokunulmaz kalır (yöneticinin yazdığı da dahil); yalnız yan kanallar yenilenir.
+  const rows = [...plan.values()].filter((p) => !locked || !isFrozenChannel(p.channel));
   await prisma.$transaction(async (tx) => {
-    await tx.notificationPreference.deleteMany({ where: { userId: v.userId, kind: { in: visible } } });
-    if (plan.size > 0) {
+    await tx.notificationPreference.deleteMany({
+      where: { userId: v.userId, kind: { in: visible }, ...(locked ? { channel: { notIn: [...NOTIFICATION_PREFS_LOCKED_CHANNELS] } } : {}) },
+    });
+    if (rows.length > 0) {
       await tx.notificationPreference.createMany({
-        data: [...plan.values()].map((p) => ({
+        data: rows.map((p) => ({
           userId: v.userId,
           kind: p.kind,
           channel: p.channel,
@@ -221,6 +282,8 @@ export async function previewPreferences(v: PreferenceViewer, body: unknown) {
 // ---- varsayılana dön (yıkıcı: önce önizleme, kayıt başına seçim) --------------
 
 export async function resetPreview(v: PreferenceViewer) {
+  const { layers } = await context(v);
+  const locked = preferenceLockProfiles(layers, v.userId).length > 0;
   const rows = await prisma.notificationPreference.findMany({
     where: { userId: v.userId },
     select: { id: true, kind: true, channel: true, enabled: true, scope: true },
@@ -229,7 +292,9 @@ export async function resetPreview(v: PreferenceViewer) {
   return {
     satirlar: rows.map((r) => ({
       id: r.id, tur: r.kind, ad: isKind(r.kind) ? getNotificationEntry(r.kind).ad : r.kind, kanal: r.channel, acik: r.enabled, kapsam: r.scope,
+      kilitli: locked && isFrozenChannel(r.channel),
     })),
+    tercihKilidi: lockView(layers, v.userId),
   };
 }
 
@@ -238,6 +303,18 @@ export const ResetBody = z.object({ ids: z.array(z.string().uuid()).min(1).max(1
 /** Yalnız kişinin KENDİ satırları silinir (saf yapılandırma pivotu); başkasının id'si sessizce etkisiz. */
 export async function resetPreferences(v: PreferenceViewer, body: unknown) {
   const { ids } = ResetBody.parse(body);
+  const { layers } = await context(v);
+  const profiller = preferenceLockProfiles(layers, v.userId);
+  if (profiller.length > 0) {
+    const frozen = await prisma.notificationPreference.count({
+      where: { userId: v.userId, id: { in: [...new Set(ids)] }, channel: { in: [...NOTIFICATION_PREFS_LOCKED_CHANNELS] } },
+    });
+    if (frozen > 0) {
+      throw AppError.conflict("Bildirim tercihlerin yöneticin tarafından kilitlendi; uygulama içi satırlar varsayılana döndürülemez.", {
+        code: "NOTIFICATION_PREFS_LOCKED", profiller,
+      });
+    }
+  }
   const r = await prisma.notificationPreference.deleteMany({ where: { userId: v.userId, id: { in: [...new Set(ids)] } } });
   return { silinen: r.count };
 }
