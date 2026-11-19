@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Info, AlertTriangle } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { InfoPopover } from "@/components/ui/info-popover";
 
 /**
  * RHF'in array/nested error tipleri farklı union'lar üretir; biz sadece `message`'a
@@ -20,6 +21,8 @@ interface Props {
   error?: FieldErrorLike;
   hint?: ReactNode;
   hintTone?: HintTone;
+  /** Uzun açıklama: etiket yanında (i) ikonu → balon; formu kısaltır. Kısa/kritik ipucu `hint`te görünür kalır. */
+  info?: ReactNode;
   required?: boolean;
   children: ReactNode;
   className?: string;
@@ -31,16 +34,27 @@ export function FormField({
   error,
   hint,
   hintTone = "muted",
+  info,
   required,
   children,
   className,
 }: Props) {
   return (
     <div className={cn("space-y-1.5", className)}>
-      <Label htmlFor={htmlFor}>
-        {label}
-        {required && <span className="ml-0.5 font-bold text-destructive">*</span>}
-      </Label>
+      {info ? (
+        <div className="flex min-w-0 items-center gap-1">
+          <Label htmlFor={htmlFor} className="min-w-0">
+            {label}
+            {required && <span className="ml-0.5 font-bold text-destructive">*</span>}
+          </Label>
+          <InfoPopover desc={info} />
+        </div>
+      ) : (
+        <Label htmlFor={htmlFor}>
+          {label}
+          {required && <span className="ml-0.5 font-bold text-destructive">*</span>}
+        </Label>
+      )}
       {children}
       {error?.message && (
         <p className="flex items-start gap-1 text-xs text-destructive">

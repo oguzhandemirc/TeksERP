@@ -42,6 +42,18 @@ async function shipmentGross(tx: Tx, shipmentId: string): Promise<{ topSayisi: n
   return { topSayisi: live._count._all + back._count._all, metre: m2(m2(live._sum.currentQty) + m2(back._sum.qty)) };
 }
 
+/** `sevkiyat.olusturuldu` — tek doğuş çekirdeği `createShipmentCoreTx` (çuval claim'i + tahsisten sonra, anında sevkten ÖNCE). */
+export async function emitShipmentCreatedTx(tx: Tx, shipmentId: string, c: { willDispatch: boolean }, actor: Actor): Promise<void> {
+  if (await off(tx)) return;
+  const f = await shipmentFacts(tx, shipmentId);
+  if (!f) return;
+  const agg = await tx.roll.aggregate({ where: { shipmentId }, _count: { _all: true }, _sum: { currentQty: true } });
+  await emitNotification(tx, "sevkiyat.olusturuldu", subject("shipment", shipmentId), {
+    sevkiyatId: shipmentId, ...f, topSayisi: agg._count._all, metre: m2(agg._sum.currentQty),
+    durum: c.willDispatch ? "sevk edildi" : "onay bekliyor",
+  }, { actorUserId: who(actor) });
+}
+
 /** `sevkiyat.geri-alindi` — DISPATCHED→PLANNED claim'i (`undo-dispatch.ts`, SoD `shipping:undo-dispatch`). */
 export async function emitShipmentUndoneTx(tx: Tx, shipmentId: string, reason: string, actor: Actor): Promise<void> {
   if (await off(tx)) return;
@@ -81,6 +93,22 @@ export async function emitRollQtyAdjustedTx(tx: Tx, rollId: string, c: { from: u
   if (!r) return;
   await emitNotification(tx, "stok.elle-duzeltme", subject("roll", rollId), {
     topId: rollId, barkod: r.barcode, eskiMetre: m2(c.from), yeniMetre: m2(c.to), sebep: txt(c.reason),
+  }, { actorUserId: who(actor) });
+}
+
+/**
+ * `stok.top-fire-iptal` — tek iptal/fire motoru `inventory/cancel.ts#softDelete`, `cancelRollRecordTx` claim'inden SONRA aynı tx.
+ * Metre çıkış anının metresi (iptal satırı `currentQty`yi korur); sebep görünen etiket, serbest metin 120 karakterle kırpılır.
+ */
+export async function emitRollRetiredTx(
+  tx: Tx, rollId: string, c: { scrap: boolean; qty: unknown; reason: string | null }, actor: Actor,
+): Promise<void> {
+  if (await off(tx)) return;
+  const r = await tx.roll.findUnique({ where: { id: rollId }, select: { barcode: true, item: { select: { name: true } } } });
+  if (!r) return;
+  await emitNotification(tx, "stok.top-fire-iptal", subject("roll", rollId), {
+    barkod: r.barcode ?? "—", kip: c.scrap ? "fire" : "iptal", islem: c.scrap ? "fire edildi" : "iptal edildi",
+    urunAd: txt(r.item?.name), metre: m2(c.qty), sebep: txt(c.reason ?? "Sebep seçilmedi"),
   }, { actorUserId: who(actor) });
 }
 

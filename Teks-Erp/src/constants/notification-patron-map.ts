@@ -126,4 +126,8 @@ export const NOTIFICATION_PATRON_MAP: Readonly<Record<NotificationKind, PatronEs
   "isemri.acil-isaretlendi": { patronKind: null, neden: BULUT_TURU_YOK },
   "brode.gunluk-ozet": { patronKind: null, neden: BULUT_TURU_YOK },
   "siparis.buyuk-siparis": { patronKind: null, neden: BULUT_TURU_YOK },
+  // 2026-11-19 — sahadan gelen üç tür
+  "stok.top-fire-iptal": { patronKind: null, neden: BULUT_TURU_YOK },
+  "sevkiyat.olusturuldu": { patronKind: null, neden: BULUT_TURU_YOK },
+  "genel.gun-sonu-ozeti": { patronKind: null, neden: BULUT_TURU_YOK },
 };

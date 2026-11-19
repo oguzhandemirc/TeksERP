@@ -33,6 +33,7 @@ import { CustomerConsigneesPanel } from "./consignees/CustomerConsigneesPanel";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { CariHoldPanel } from "@/pages/Finance/CariHold/CariHoldPanel";
 import { CustomerBarcodeSeriesPanel } from "./BarcodeSeries/CustomerBarcodeSeriesPanel";
+import { CustomerSummaryTab } from "./summary/CustomerSummaryTab";
 import { DocumentProfileSelect } from "@/components/forms/DocumentProfileSelect";
 import type { Customer } from "./types";
 
@@ -352,6 +353,7 @@ export function CustomerFormDialog({
             <Tabs value={activeTab} onValueChange={setActiveTab} className="min-w-0">
               <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1" data-testid="customer-form-tabs">
                 <TabsTrigger value="info">Bilgiler</TabsTrigger>
+                {initial && <TabsTrigger value="summary">Özet</TabsTrigger>}
                 {branchesEnabled && <TabsTrigger value="branches">Şubeler</TabsTrigger>}
                 <TabsTrigger value="item-aliases">Müşterideki Kumaş Adları</TabsTrigger>
                 <TabsTrigger value="color-aliases">Müşterideki Renk Adları</TabsTrigger>
@@ -367,6 +369,8 @@ export function CustomerFormDialog({
                   {footer}
                 </form>
               </TabsContent>
+
+              <TabsContent value="summary">{initial && <CustomerSummaryTab customerId={initial.id} />}</TabsContent>
 
               {branchesEnabled && (
                 <TabsContent value="branches">

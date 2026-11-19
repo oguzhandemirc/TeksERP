@@ -64,6 +64,8 @@ export async function getTamburContext(this: TamburServiceThis,
           colorCode: string | null;
           colorName: string | null;
           orderedQty: number;
+          /// Bu iş emrinden bu satıra PAYLAŞTIRILAN metre; paylaştırma yoksa null (eski tablet alanı yok sayar).
+          plannedQty: number | null;
           /// Sipariş satırı kesim notu + eşit-parça önerisi (Tambur talimatı).
           cutNote: string | null;
           pieceLengthM: number | null;
@@ -187,6 +189,7 @@ export async function getTamburContext(this: TamburServiceThis,
     const links = await prisma.workOrderToOrderLine.findMany({
       where: { workOrderId: card.workOrderId, ...ACTIVE_ORDER_LINK },
       select: {
+        allocatedQty: true,
         orderLine: {
           select: {
             id: true,
@@ -231,6 +234,7 @@ export async function getTamburContext(this: TamburServiceThis,
           colorName: string | null;
           width: number | null;
           orderedQty: number;
+          plannedQty: number | null;
           cutNote: string | null;
           pieceLengthM: number | null;
           requiredProperties: { id: string; name: string }[];
@@ -260,6 +264,8 @@ export async function getTamburContext(this: TamburServiceThis,
         colorName: ol.color?.name ?? null,
         width: ol.width !== null ? Number(ol.width) : null,
         orderedQty: Number(ol.quantity),
+        // Sunucu hesaplar: 0 = paylaştırma yok → null.
+        plannedQty: Number(link.allocatedQty) > 0 ? Number(link.allocatedQty) : null,
         cutNote: ol.cutNote ?? null,
         pieceLengthM: ol.pieceLengthM !== null ? Number(ol.pieceLengthM) : null,
         requiredProperties: ol.requiredProperties.map((rp) => ({

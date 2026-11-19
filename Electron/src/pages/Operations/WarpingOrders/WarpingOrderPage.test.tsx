@@ -147,3 +147,26 @@ describe("WarpingOrderFormDialog — clientToken mantıksal deneme başına", ()
     expect(tokens[2]).toBe(tokens[1]);
   });
 });
+
+describe("WarpingOrderFormDialog — geniş form iskeleti", () => {
+  it("geniş diyalog; bölüm kartları; ücret · birim ücret · para birimi · termin ayrı alanlar; plan tablosunda iplik ADI birincil", () => {
+    renderWithProviders(<WarpingOrderFormDialog order={order("IN_PROGRESS")} onClose={() => {}} onSaved={() => {}} />);
+    expect(document.querySelector("[data-form-size='wide']")).toBeTruthy();
+    for (const t of ["Sipariş", "Leventler", "Ücret, termin ve fire", "İplik planı"]) expect(screen.getByRole("region", { name: t })).toBeTruthy();
+    expect(screen.getByLabelText("Para birimi")).toBeTruthy();
+    expect(screen.getByLabelText("Birim ücret")).toBeTruthy();
+    const cell = screen.getByText("PES 50 denye");
+    expect(cell.className).toContain("font-medium");
+    expect(cell.nextElementSibling?.textContent).toBe("PES-50");
+    // Uzun açıklamalar satırda değil (i) balonunda.
+    expect(screen.queryByText(/Kapanışta aşılırsa uyarır/)).toBeNull();
+  });
+
+  it("Not daraltılabilir: boşsa kapalı, doluysa açık gelir", () => {
+    const { unmount } = renderWithProviders(<WarpingOrderFormDialog order={order("IN_PROGRESS")} onClose={() => {}} onSaved={() => {}} />);
+    expect((screen.getByTestId("wo-notes-section") as HTMLDetailsElement).open).toBe(false);
+    unmount();
+    renderWithProviders(<WarpingOrderFormDialog order={{ ...order("IN_PROGRESS"), notes: "Kenarlar sıkı" }} onClose={() => {}} onSaved={() => {}} />);
+    expect((screen.getByTestId("wo-notes-section") as HTMLDetailsElement).open).toBe(true);
+  });
+});

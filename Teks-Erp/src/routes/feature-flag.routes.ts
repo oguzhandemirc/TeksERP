@@ -10,7 +10,7 @@
 
 import { Router, Request, Response, NextFunction } from "express";
 import { z } from "zod";
-import { systemSettingService, SHIPPING_RETURN_FOOTNOTE_MAX, SHIPPING_SACK_SEQ_PREFIX_WRITE_RE } from "../services/system-setting.service";
+import { systemSettingService, SHIPPING_RETURN_FOOTNOTE_MAX, NOTIFICATION_DAILY_SUMMARY_TIMES, SHIPPING_SACK_SEQ_PREFIX_WRITE_RE } from "../services/system-setting.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import {
   requirePermission,
@@ -921,6 +921,8 @@ export const updateSchema = z.strictObject({
   notificationStockAgingSource: z.enum(["depo-giris", "durum-degisimi"]).optional(),
   // bildirim: bildirim.stokYaslanan.kapsam — `stok.yaslanan` top kapsamı (default raf = Stok & Ölü Stok raf kümesi). Kapsamsız: yalnız admin:settings yazar.
   notificationStockAgingScope: z.enum(["raf", "depodaki-her-top"]).optional(),
+  // bildirim: bildirim.gunSonuOzeti.saat — `genel.gun-sonu-ozeti` pencere saati (default 00:00 = biten fabrika günü). Kapsamsız: yalnız admin:settings.
+  notificationDailySummaryTime: z.enum(NOTIFICATION_DAILY_SUMMARY_TIMES).optional(),
   // belge-sablon T1C: documents.designerEnabled / documents.publishSodEnabled (default false). Kapsamsız: yalnız admin:settings yazar.
   documentDesignerEnabled: z.boolean().optional(),
   documentPublishSodEnabled: z.boolean().optional(),

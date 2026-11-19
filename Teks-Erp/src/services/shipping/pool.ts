@@ -37,9 +37,10 @@ import {
   buildNextDynamicCursor,
 } from "../../utils/cursor";
 import { boardTotalsWithHold } from "../helpers/sack-store-board.helper";
+import { LIVE_SACK_WHERE } from "../helpers/sack-retire.helper";
 
 export async function listPool(params: { customerId?: string; search?: string }): Promise<ApiResponse<unknown>> {
-    const where: Prisma.SackWhereInput = { shipmentId: null };
+    const where: Prisma.SackWhereInput = { shipmentId: null, ...LIVE_SACK_WHERE };
     if (params.customerId) where.customerId = params.customerId;
     const search = params.search?.trim();
     if (search) {
@@ -124,7 +125,7 @@ export async function listCustomerPoolSacks(customerId: string): Promise<ApiResp
     // çekip sayfayı `reverse()` ile asc'e döndürüyoruz: kesilen uç ESKİ olanlar.
     const POOL_SACK_CAP = 2000;
     const sacksDesc = await prisma.sack.findMany({
-      where: { customerId, shipmentId: null },
+      where: { customerId, shipmentId: null, ...LIVE_SACK_WHERE },
       orderBy: { createdAt: "desc" },
       take: POOL_SACK_CAP,
       select: {

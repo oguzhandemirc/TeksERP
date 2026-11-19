@@ -16,10 +16,15 @@
 //   §5 SQL ikizi (`consistency-check.sql` + `test_consistency.ts`) her `sack_allocations` başvurusunda
 //      süzgeç taşır (qty ≤ 0 satırı beyanlı istisna)
 //   §6 damgalı satırın ileri kaydı DEĞİŞMEZ: qty/sackId/orderLineId aynı, sadece damga
+//   §7 (2026-11-19) tahsis defterli boş havuz çuvalı "silinir" = `retiredAt` (sert silme P2003 verirdi):
+//      defter bayt-eşit; havuz/arama görmez; içerik yazma 409; ikinci silme 404; deftersiz çuval sert silinir
+//   §8 PLANNED'dan çıkarılan çuvalda ETKİN hayalet tahsis kalmaz (`clearSackAllocationsTx`)
 //
 // NEGATİF SONDALAR (2026-09-14, cp + sha256): `order-status.helper`ten `...ACTIVE_SACK_ALLOCATION`
 // düşürüldü → §4 ihlal ❌ VE §1 shippedQty şişti (300 → 600) ❌ · `clearShipmentAllocationsTx`
 // deleteMany'e çevrildi → §1/§3 "satır silinmedi" ❌ + §4 silme ❌.
+// 2026-11-19 (yedekten geri yazarak): emekli yerine sert sil → P2003 beklenmeyen hata ❌ · müşteri havuzu
+// ya da arama POOL süzgeci düşürüldü → §7c ❌ · touch kapısı süzgeçsiz → §7d ❌ · hayalet damga yok → §8b+§8c ❌.
 // =============================================================================
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -27,6 +32,8 @@ import { RollStatus, ShipmentStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { ShippingService } from "../src/services/shipping.service";
 import { ACTIVE_SACK_ALLOCATION } from "../src/services/helpers/sack-allocation.helper";
+import { touchWarehouseSackTx } from "../src/services/helpers/shipment-locks.helper";
+import { sackSearchService } from "../src/services/sack-search.service";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { fixtureWarehouseId } from "./fixture-warehouse";
 import { aktifYuklemTara, sqlEksikSuzgec } from "./revoke-ast-tarama";
@@ -168,6 +175,50 @@ async function main(): Promise<void> {
   const s4 = await satirlar(sackA);
   check("§3b ⭐ iptal tahsisleri SİLMEDİ — satır sayısı aynı, hepsi damgalı", s4.length === iptalOncesi && s4.every((r) => r.clearedAt !== null), `${s4.length}/${iptalOncesi}, etkin ${s4.filter((r) => r.clearedAt === null).length}`);
   check("§3c iptal sonrası Σ etkin 0 ve sipariş defteri 0", (await etkinToplam(lineA)) === 0 && (await shippedOf(lineA)) === 0);
+
+  // ── §7 tahsis defterli boş çuval "silinir" = emekliye ayrılır (sert silme defteri koparırdı) ──
+  // §3 sonunda sackA havuzda, tahsis satırları damgalı. İçini boşalt (fikstür), sonra üretim yolu removeSack.
+  await prisma.roll.updateMany({ where: { sackId: sackA }, data: { sackId: null } });
+  const defterOnce = await satirlar(sackA);
+  const sil = await svc.removeSack(sackA, undefined);
+  const silData = sil.data as { retired?: boolean };
+  const satirSonra = await prisma.sack.findUnique({ where: { id: sackA }, select: { id: true, retiredAt: true, shipmentId: true } });
+  check("§7a ⭐ tahsis defterli boş çuval silinebildi (P2003 yok) — satır DURUYOR, retiredAt dolu", sil.success === true && silData.retired === true && satirSonra?.retiredAt != null, JSON.stringify({ silData, satirSonra }));
+  const defterSonra = await satirlar(sackA);
+  check("§7b ⭐ tahsis defteri bayt-eşit (satır sayısı, sackId, qty, damga)", JSON.stringify(defterSonra) === JSON.stringify(defterOnce) && defterSonra.length > 0, `${defterOnce.length} → ${defterSonra.length}`);
+  const havuz = JSON.stringify((await svc.listCustomerPoolSacks(customerId)).data);
+  const havuzOzet = JSON.stringify((await svc.listPool({ customerId })).data);
+  const arama = JSON.stringify(await sackSearchService.searchSacks({ customerId, scope: "POOL" }));
+  const aramaVarsayilan = JSON.stringify(await sackSearchService.searchSacks({ customerId }));
+  const no = `${TAG}-A`;
+  check("§7c ⭐ emekli çuval havuz listelerinde yok (müşteri havuzu · havuz özeti · arama POOL · varsayılan kapsam)", !havuz.includes(no) && !havuzOzet.includes(no) && !arama.includes(no) && !aramaVarsayilan.includes(no));
+  let yazma = "";
+  await prisma.$transaction(async (tx) => { await touchWarehouseSackTx(tx, sackA); }).catch((e: unknown) => { yazma = String((e as Error).message); });
+  check("§7d emekli çuvala içerik yazılamaz (touchWarehouseSackTx 409)", yazma.includes("silindi"), yazma || "geçti!");
+  let bagla = "";
+  await svc.createShipment({ sackIds: [sackA], customerId }, undefined).then((r) => { shipmentIds.push((r.data as { id: string }).id); }).catch((e: unknown) => { bagla = String((e as Error).message); });
+  check("§7e emekli çuval sevkiyata bağlanamaz", bagla !== "", bagla || "bağlandı!");
+  let ikinci = "";
+  await svc.removeSack(sackA, undefined).catch((e: unknown) => { ikinci = String((e as Error).message); });
+  check("§7f emekli çuvalı ikinci kez silmek 404 (bulunamadı)", ikinci.includes("bulunamadı"), ikinci || "geçti!");
+  const bos = await prisma.sack.create({ data: { sackNo: `${TAG}-BOS`, customerId }, select: { id: true } });
+  sackIds.push(bos.id);
+  const bosSil = await svc.removeSack(bos.id, undefined);
+  const bosVar = await prisma.sack.count({ where: { id: bos.id } });
+  check("§7g defteri olmayan boş çuval bugünkü gibi SERT silinir (taslak sınıfı)", bosSil.success === true && (bosSil.data as { retired?: boolean }).retired === false && bosVar === 0, `kalan=${bosVar}`);
+
+  // ── §8 PLANNED sevkiyattan çıkarılan çuvalda ETKİN hayalet tahsis kalmaz ──
+  const sackG = await makeSack("G", 200);
+  const shG = await kur(sackG, [orderA.id]);
+  await svc.dispatchShipment(shG, {}, undefined);
+  await svc.undoDispatch(shG, "bekçi §8 storno", undefined);
+  const gOnce = (await satirlar(sackG)).filter((r) => r.clearedAt === null).length;
+  check("§8a fikstür: storno sonrası PLANNED sevkiyatta çuvalın etkin tahsisi var", gOnce === 1, `${gOnce}`);
+  await svc.removeSackFromShipment(shG, sackG, undefined);
+  const gSonra = await satirlar(sackG);
+  const gEtkin = gSonra.filter((r) => r.clearedAt === null);
+  check("§8b ⭐ çıkarılan çuvalda etkin tahsis YOK — damgalı, clearedShipmentId = sevkiyat", gEtkin.length === 0 && gSonra.some((r) => r.clearedShipmentId === shG), JSON.stringify(gSonra));
+  check("§8c sipariş defteri Σ etkin tahsis hayaletsiz (A satırı 0)", (await etkinToplam(lineA)) === 0, `${await etkinToplam(lineA)}`);
 
   // ── §4 AST + tip taraması ─────────────────────────────────────────────────
   const kok = join(__dirname, "..");

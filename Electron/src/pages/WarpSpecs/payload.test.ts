@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildDefaults, buildPayload, copyDraft } from "./payload";
-import { buildPreviewBody, previewText } from "./preview";
+import { buildCalcView, buildPreviewBody, parseBeam } from "./preview";
 import { totalEnds } from "./YarnRowsEditor";
 import type { WarpSpec } from "./types";
 import type { WarpPlanResult } from "@/pages/Operations/WarpPlan/types";
@@ -67,9 +67,26 @@ describe("1000 m önizleme", () => {
     },
     reverse: null,
   });
-  it("fire yoksa fireli satır yok; varsa var", () => {
-    expect(previewText(result(false))).toEqual({ net: "A PES-150 50,000 kg", gross: null });
-    expect(previewText(result(true))?.gross).toBe("A PES-150 51,500 kg");
+  it("hesap görünümü: fire yoksa fireli kg yok; varsa var; pay yüzdesi sunucu kg'larından", () => {
+    const v = buildCalcView(result(false), null)!;
+    expect(v.rows[0]).toMatchObject({ letter: "A", name: "PES", code: "PES-150", denier: 150, netKg: 50, grossKg: null, sharePct: 100, beamKg: null });
+    expect([v.totalNetKg, v.totalGrossKg, v.beam]).toEqual([50, null, null]);
+    expect(buildCalcView(result(true), null)!.totalGrossKg).toBe(51.5);
+  });
+  it("levent boyu × adet: ikinci sonucun kg'ı satıra ve toplama yazılır", () => {
+    const beamRes = result(false);
+    beamRes.forward!.lines[0]!.netKg = 300;
+    beamRes.forward!.totals.netKg = 300;
+    const v = buildCalcView(result(false), { input: { lengthM: 3000, count: 2 }, result: beamRes })!;
+    expect(v.rows[0]!.beamKg).toBe(300);
+    expect(v.beam).toEqual({ lengthM: 3000, count: 2, totalKg: 300 });
+  });
+  it("levent girişi: eksik/sıfır/kesirli adet null; tam giriş gövdeye boy × adet olarak gider", () => {
+    expect(parseBeam("", "1")).toBeNull();
+    expect(parseBeam("3000", "0")).toBeNull();
+    expect(parseBeam("3000", "1,5")).toBeNull();
+    const beam = parseBeam("3000", "2")!;
+    expect(buildPreviewBody([{ yarnItemId: "y1", endsCount: "3000" }], "", beam)).toMatchObject({ beamCount: 2, beamLengthM: 3000 });
   });
   it("toplam tel yalnız geçerli tam sayıları toplar", () => {
     expect(totalEnds([{ yarnItemId: "a", endsCount: "1000" }, { yarnItemId: "b", endsCount: "x" }, { yarnItemId: "c", endsCount: "500" }])).toBe(1500);

@@ -82,7 +82,7 @@ function YarnTable({ p }: { p: WarpingReceivePreview }) {
         <TableBody>
           {receiveYarnRows(p).map((y) => (
             <TableRow key={y.yarnItemId}>
-              <TableCell>{y.code} <span className="text-muted-foreground">{y.name}</span></TableCell>
+              <TableCell><span className="font-medium">{y.name}</span> <span className="text-xs text-muted-foreground">{y.code}</span></TableCell>
               <TableCell className={num}>{fmtKg(y.woundKg)}</TableCell>
               <TableCell className={num}>{y.carryOverKg > 0 ? fmtKg(y.carryOverKg) : "—"}</TableCell>
               <TableCell className={cn(num, Number(y.unallocatedAfterKg) > 0 && "font-medium text-destructive")}>{Number(y.unallocatedAfterKg) > 0 ? fmtKg(y.unallocatedAfterKg) : "—"}</TableCell>
@@ -96,12 +96,12 @@ function YarnTable({ p }: { p: WarpingReceivePreview }) {
 
 function AllocationList({ p }: { p: WarpingReceivePreview }) {
   if (p.allocations.length === 0) return null;
-  const code = new Map(p.before.yarns.map((y) => [y.yarnItemId, y.code]));
+  const name = new Map(p.before.yarns.map((y) => [y.yarnItemId, y.name]));
   return (
     <ul className="space-y-0.5 rounded-md border p-3 text-xs text-muted-foreground" aria-label="Etkilenen sevk kalemleri">
       {p.allocations.map((a, i) => (
         <li key={i}>
-          {a.beamIndex + 1}. levent · {code.get(a.yarnItemId) ?? "iplik"} — {fmtKg(a.kg)} kg {a.dispatchNo} ({a.lotNo ? `lot ${a.lotNo}` : "lotsuz"}) sevkinden düşer
+          {a.beamIndex + 1}. levent · {name.get(a.yarnItemId) ?? "iplik"} — {fmtKg(a.kg)} kg {a.dispatchNo} ({a.lotNo ? `lot ${a.lotNo}` : "lotsuz"}) sevkinden düşer
           {a.carryOver && <b className="text-foreground"> · devir: {a.holderOrderNo ?? "başka sipariş"}</b>}
         </li>
       ))}

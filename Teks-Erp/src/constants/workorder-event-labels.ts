@@ -38,7 +38,9 @@ export const WORK_ORDER_FIELD_LABEL: Record<WorkOrderTrackedField, string> = {
 export const KURSUN_GRAMAJ_EVENT_FIELD = "kursunGramaj";
 /** Kurşun dışı hedef çeşit değeri (tablet "Hedef değeri değiştir"); etiket satırı "Özellik: değer" taşır. */
 export const TARGET_VALUE_EVENT_FIELD = "targetValue";
-export const WORK_ORDER_EXTRA_FIELD_LABEL: Record<string, string> = { [KURSUN_GRAMAJ_EVENT_FIELD]: "Kurşun gramajı", [TARGET_VALUE_EVENT_FIELD]: "Hedef değer" };
+/** Sipariş paylaştırması — bağ satırında durur, iş emri kolonu değil (bağ başına bir satır). */
+export const ORDER_ALLOCATION_EVENT_FIELD = "orderAllocation";
+export const WORK_ORDER_EXTRA_FIELD_LABEL: Record<string, string> = { [KURSUN_GRAMAJ_EVENT_FIELD]: "Kurşun gramajı", [TARGET_VALUE_EVENT_FIELD]: "Hedef değer", [ORDER_ALLOCATION_EVENT_FIELD]: "Sipariş paylaştırması" };
 
 /** Fason adımı planının alanları (STEP_PLAN_CHANGED; "route" rotanın bütünü). */
 export const WORK_ORDER_STEP_FIELD_LABEL: Record<string, string> = {
@@ -94,6 +96,7 @@ export const WORK_ORDER_TRIGGER_LABEL: Record<string, string> = {
   FASON_RECEIPT_WIDTH: "Fason kabulünde ölçülen en",
   ORDER_LINK: "Sipariş bağla",
   ORDER_UNLINK: "Sipariş bağını kaldır",
+  ORDER_ALLOCATION: "Sipariş paylaştırma",
   ORDER_LINE_CANCEL: "Sipariş kalemi iptali",
   ORDER_DELETE: "Sipariş silme",
   STEP_PLAN: "Adım planlama",

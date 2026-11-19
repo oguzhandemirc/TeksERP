@@ -66,10 +66,10 @@ export function stockText(v: number | null | undefined, unknownLabel = "bilinmiy
   return v === null || v === undefined ? unknownLabel : fmtKg(v);
 }
 
-/** Fireli sütunun bilgi imi: "sabit 20 m · kart %3 · PES-150 %2". */
+/** Fireli sütunun bilgi imi: "sabit 20 m · kart %3 · PES 150 %2" — iplik ADIYLA (stok kodu değil). */
 export function wasteSourceText(sources: ReadonlyArray<WarpWasteSource>, yarns: ReadonlyArray<WarpPlanYarnInfo>): string {
-  const code = (id: string) => yarns.find((y) => y.yarnItemId === id)?.code ?? "iplik";
+  const name = (id: string) => yarns.find((y) => y.yarnItemId === id)?.name ?? "iplik";
   return sources
-    .map((s) => (s.kind === "SABIT_M" ? `sabit ${fmtM(s.value)} m` : s.kind === "KART_PCT" ? `kart %${formatQty(s.value, 2)}` : `${code(s.yarnItemId)} %${formatQty(s.value, 2)}`))
+    .map((s) => (s.kind === "SABIT_M" ? `sabit ${fmtM(s.value)} m` : s.kind === "KART_PCT" ? `kart %${formatQty(s.value, 2)}` : `${name(s.yarnItemId)} %${formatQty(s.value, 2)}`))
     .join(" · ");
 }

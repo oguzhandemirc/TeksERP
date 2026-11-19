@@ -51,10 +51,11 @@ import {
 } from "../packing-lot.service";
 import { readSackSeqStart } from "../helpers/sack-seq.helper";
 import { ApiResponse } from "../../types/api.types";
-import { clearShipmentAllocationsTx } from "../helpers/sack-allocation.helper";
+import { clearSackAllocationsTx, clearShipmentAllocationsTx } from "../helpers/sack-allocation.helper";
 import { buildShipmentLoadPreview, type LoadPreview, type LoadPreviewInput } from "../helpers/shipment-load-preview.helper";
 import { assertLoadKindCompatible, LIVE_LOAD_UNIT_WHERE, planLoadUnits, type LoadUnitInput, type LoadUnitPlan } from "../helpers/load-unit.helper";
 import { transitionSwatchesTx } from "../helpers/swatch-event.helper";
+import { LIVE_SACK_WHERE } from "../helpers/sack-retire.helper";
 import { settingRowPath } from "../../constants/panel-ayar-yolu";
 import { SHIPPABLE_ROLL_WHERE, nextSackNo, openLoadUnitTx, type AllocationAuditTrail, type ShippingServiceThis } from "./shared";
 
@@ -190,7 +191,7 @@ export async function addSacksToShipment(this: ShippingServiceThis, shipmentId: 
       const maxSeqRow = await tx.sack.findFirst({ where: { shipmentId }, orderBy: { seq: "desc" }, select: { seq: true } });
       let seq = maxSeqRow?.seq != null ? maxSeqRow.seq + 1 : await readSackSeqStart(tx);
       for (const sackId of sackIds) {
-        const claimed = await tx.sack.updateMany({ where: { id: sackId, shipmentId: null }, data: { shipmentId, seq, customerId: shipment.customerId, branchId } });
+        const claimed = await tx.sack.updateMany({ where: { id: sackId, shipmentId: null, ...LIVE_SACK_WHERE }, data: { shipmentId, seq, customerId: shipment.customerId, branchId } });
         if (claimed.count !== 1) throw AppError.conflict("Çuvallardan biri az önce başka bir sevkiyata girdi — yenileyin.");
         seq += 1;
       }
@@ -226,6 +227,8 @@ export async function removeSackFromShipment(this: ShippingServiceThis, shipment
       await transitionSwatchesTx(tx, SwatchEventType.SHIPMENT_REMOVED, { scope: { sackIds: [sackId] }, shipment: { id: shipmentId }, ctx: { trigger: "SHIPMENT_REMOVE_SACK", userId } });
       const claimed = await tx.sack.updateMany({ where: { id: sackId, shipmentId }, data: { shipmentId: null, seq: null } });
       if (claimed.count !== 1) throw AppError.conflict("Çuval bu sırada çıkarıldı — yenileyin");
+      // Çıkan çuvalın etkin tahsisi burada damgalanır: aşağıdaki sevkiyat-kapsamlı yeniden hesap onu artık görmez.
+      await clearSackAllocationsTx(tx, sackId, shipmentId, userId);
       const lot = await readPackingLotSettings(tx);
       await reopenLotsForSacksTx(tx, [sackId], lot.mode === "sevk-partisi");
       await tx.roll.updateMany({ where: { sackId }, data: { shipmentId: null } });

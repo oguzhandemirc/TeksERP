@@ -207,3 +207,52 @@ describe("readSseEvents · ayrıştırıcı", () => {
     ]);
   });
 });
+
+describe("zil istemcisi · kullanıcı başı akış tavanı", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("kapat{neden:'fazla'} (kullanıcı başı tavan) → SSE'yi yeniden açmaz, uzun yoklamaya düşer; öne gelince SSE yeniden denenir", async () => {
+    // 6+ sekmede hemen yeniden bağlanma sıradaki sekmeyi düşürür, sekmeler birbirini 1 sn'de bir kovar (ping-pong).
+    const ilk = akis();
+    const ikinci = akis();
+    const dep = bagimlilik({ akisAc: vi.fn().mockResolvedValueOnce(ilk.res).mockResolvedValueOnce(ikinci.res) });
+    const z = createBellClient(dep);
+    const olaylar: string[] = [];
+    z.olayDinle((o) => olaylar.push(o));
+    z.abone();
+    await vi.advanceTimersByTimeAsync(0);
+    ilk.yaz("merhaba", { epoch: 100, rev: 1, alarmRev: 0 });
+    await bosalt();
+    ilk.yaz("kapat", { neden: "fazla" });
+    ilk.kapat();
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(dep.akisAc).toHaveBeenCalledTimes(1);
+    expect(z.durum().kip).toBe("bekle");
+    expect(dep.bekle).toHaveBeenCalledTimes(1);
+    expect(olaylar).not.toContain("tam");
+    document.dispatchEvent(new Event("visibilitychange"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(dep.akisAc).toHaveBeenCalledTimes(2);
+    expect(z.durum().kip).toBe("sse");
+  });
+
+  it("kapat{neden:'yetki'} → tam çekim ve SSE'ye yeniden bağlanma (tavan dışı kapanış değişmedi)", async () => {
+    const ilk = akis();
+    const ikinci = akis();
+    const dep = bagimlilik({ akisAc: vi.fn().mockResolvedValueOnce(ilk.res).mockResolvedValueOnce(ikinci.res) });
+    const z = createBellClient(dep);
+    const olaylar: string[] = [];
+    z.olayDinle((o) => olaylar.push(o));
+    z.abone();
+    await vi.advanceTimersByTimeAsync(0);
+    ilk.yaz("merhaba", { epoch: 100, rev: 1, alarmRev: 0 });
+    await bosalt();
+    ilk.yaz("kapat", { neden: "yetki" });
+    ilk.kapat();
+    await vi.advanceTimersByTimeAsync(1_500);
+    expect(olaylar).toContain("tam");
+    expect(dep.akisAc).toHaveBeenCalledTimes(2);
+    expect(z.durum().kip).toBe("sse");
+  });
+});

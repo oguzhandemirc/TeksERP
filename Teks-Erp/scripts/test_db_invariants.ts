@@ -764,6 +764,7 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "sacks", name: "sacks_weightKg_nonneg" },
   // Çuvalsız sevk: SACK-dışı birim tartı/parti taşımaz, araba no yalnız CART'ta, SACK çözülmez.
   { table: "sacks", name: "sacks_load_unit_shape" },
+  { table: "sacks", name: "sacks_retired_shape" },
   { table: "work_order_steps", name: "work_order_steps_time_order" },
   // K29 (2026-11-03): adım kökeni yalnız NULL (plan) ya da 'SCAN' (okutmayla sahada eklendi).
   { table: "work_order_steps", name: "work_order_steps_addedVia_check" },

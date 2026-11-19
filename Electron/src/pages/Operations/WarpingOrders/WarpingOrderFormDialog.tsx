@@ -8,20 +8,14 @@
 // =============================================================================
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Calculator, ClipboardList, Coins, Layers } from "lucide-react";
+import { FormCard, WideFormColumns, WideFormDialog } from "@/components/forms/WideFormDialog";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { apiErrorMessage } from "@/services/apiClient";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { toastServerSuccess } from "@/lib/serverNotes";
-import { OrderFormFields } from "./OrderFormFields";
+import { BeamLinesFieldset, OrderIdentityFields, OrderNotesField, OrderTermsFields, SalesOrderLinks } from "./OrderFormFields";
 import { PlanTable } from "./PlanTable";
 import {
   buildOrderBody,
@@ -83,75 +77,93 @@ export function WarpingOrderFormDialog({ order, seed, onClose, onSaved }: Props)
   };
 
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{order ? `${order.orderNo} — düzenle` : "Yeni fason devere siparişi"}</DialogTitle>
-          <DialogDescription>
-            {!order
-              ? "Çözgü kartı ve levent adedi × boy girin; iplik başına kg sunucuda hesaplanır ve siparişle birlikte saklanır."
-              : planLocked
-                ? "Sevk başladı: yalnız termin, ücret, tolerans, müşteri siparişi ve not değişir."
-                : "Çözgü kartı ve devereci değişmez; levent değişirse iplik planı yeniden hesaplanır."}
-          </DialogDescription>
-        </DialogHeader>
-        <OrderFormFields
-          s={s}
-          up={up}
-          identityLocked={Boolean(order)}
-          planLocked={planLocked}
-          extraOptions={extraOptions}
-          defaultFixedWasteM={preview ? trimNum(preview.fixedWasteM) : null}
-        />
-        <section className="space-y-2" aria-label="Plan önizlemesi" aria-busy={pq.isFetching}>
-          <h3 className="text-sm font-medium">İplik planı</h3>
-          {planLocked && order ? (
-            <PlanTable yarns={order.yarns} hasWaste={order.hasWaste} totals={order.totals} />
-          ) : pq.isError ? (
-            <p
-              role="alert"
-              className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive"
-            >
-              {apiErrorMessage(pq.error)}
-            </p>
-          ) : !previewBody(s) ? (
-            <p className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">
-              Plan için çözgü kartı seçin ve her levent satırına adet ile boy yazın.
-            </p>
-          ) : !fresh ? (
-            <p className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">
-              Hesaplanıyor…
-            </p>
-          ) : (
-            <>
-              <p className="text-sm text-muted-foreground">
-                {preview.beamCount} levent · {fmtM(preview.targetLengthM)} m çözgü
-                {preview.stock.known ? "" : " · iplik stoğu bilinmiyor (iplik modülü kapalı)"}
-              </p>
-              <PlanTable
-                yarns={preview.yarns}
-                hasWaste={preview.hasWaste}
-                totals={preview.totals}
-                showStock={preview.stock.known}
-              />
-            </>
-          )}
-        </section>
-        {error && (
-          <Callout tone="danger" className="text-sm">
-            {error}
-          </Callout>
-        )}
-        <DialogFooter>
+    <WideFormDialog
+      open
+      onOpenChange={(o) => !o && onClose()}
+      title={order ? `${order.orderNo} — düzenle` : "Yeni fason devere siparişi"}
+      description={
+        !order
+          ? "Çözgü kartı ve levent adedi × boy girin; iplik başına kg sunucuda hesaplanır ve siparişle birlikte saklanır."
+          : planLocked
+            ? "Sevk başladı: yalnız termin, ücret, tolerans, müşteri siparişi ve not değişir."
+            : "Çözgü kartı ve devereci değişmez; levent değişirse iplik planı yeniden hesaplanır."
+      }
+      footer={
+        <>
           <Button variant="outline" onClick={onClose}>
             Vazgeç
           </Button>
-          <Button onClick={submit} disabled={save.isPending}>
+          <Button onClick={submit} disabled={save.isPending} className="min-w-32">
             {save.isPending ? "Kaydediliyor…" : order ? "Kaydet" : "Siparişi aç"}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </>
+      }
+    >
+      <WideFormColumns
+        sideWidth="wide"
+        main={
+          <>
+            <FormCard title="Sipariş" icon={ClipboardList}>
+              <div className="space-y-4">
+                <OrderIdentityFields s={s} up={up} identityLocked={Boolean(order)} />
+                <SalesOrderLinks s={s} up={up} />
+              </div>
+            </FormCard>
+            <FormCard title="Leventler" icon={Layers}>
+              <BeamLinesFieldset s={s} up={up} planLocked={planLocked} extraOptions={extraOptions} />
+            </FormCard>
+          </>
+        }
+        side={
+          <FormCard title="İplik planı" icon={Calculator}>
+            <PlanPreview order={order} planLocked={planLocked} pq={pq} hasBody={previewBody(s) !== null} fresh={Boolean(fresh)} />
+          </FormCard>
+        }
+        after={
+          <>
+            <FormCard title="Ücret, termin ve fire" icon={Coins}>
+              <OrderTermsFields s={s} up={up} planLocked={planLocked} defaultFixedWasteM={preview ? trimNum(preview.fixedWasteM) : null} />
+              <div className="mt-4">
+                <OrderNotesField s={s} up={up} />
+              </div>
+            </FormCard>
+            {error && (
+              <Callout tone="danger" className="text-sm">
+                {error}
+              </Callout>
+            )}
+          </>
+        }
+      />
+    </WideFormDialog>
+  );
+}
+
+/** Plan önizlemesi: kilitliyse kayıtlı plan, değilse sunucu önizlemesi (yazmaz); iplik ADI birincil (PlanTable). */
+function PlanPreview({ order, planLocked, pq, hasBody, fresh }: { order?: WarpingOrder; planLocked: boolean; pq: ReturnType<typeof useWarpingPreview>; hasBody: boolean; fresh: boolean }) {
+  const preview = pq.data?.data;
+  return (
+    <section className="space-y-2" aria-label="Plan önizlemesi" aria-busy={pq.isFetching}>
+      {planLocked && order ? (
+        <PlanTable yarns={order.yarns} hasWaste={order.hasWaste} totals={order.totals} />
+      ) : pq.isError ? (
+        <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          {apiErrorMessage(pq.error)}
+        </p>
+      ) : !hasBody ? (
+        <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">Plan için çözgü kartı seçin ve her levent satırına adet ile boy yazın.</p>
+      ) : !fresh || !preview ? (
+        <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">Hesaplanıyor…</p>
+      ) : (
+        <>
+          <p className="text-sm text-muted-foreground">
+            {preview.beamCount} levent · {fmtM(preview.targetLengthM)} m çözgü
+            {preview.stock.known ? "" : " · iplik stoğu bilinmiyor (iplik modülü kapalı)"}
+          </p>
+          <PlanTable yarns={preview.yarns} hasWaste={preview.hasWaste} totals={preview.totals} showStock={preview.stock.known} />
+        </>
+      )}
+    </section>
   );
 }
 
