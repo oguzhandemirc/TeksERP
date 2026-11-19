@@ -819,6 +819,8 @@ export interface FeatureFlags {
   notificationStockAgingSource: "depo-giris" | "durum-degisimi";
   /** `stok.yaslanan` top kapsamı — backend `StockAgingScope` aynası (default `raf`). */
   notificationStockAgingScope: "raf" | "depodaki-her-top";
+  /** `genel.gun-sonu-ozeti` pencere saati "SS:DD" — backend aynası (default `00:00` = biten fabrika günü). */
+  notificationDailySummaryTime: string;
   // belge-sablon: tasarımcı + yayın SoD bayrakları — default false (bugünkü Sistem tasarımı).
   documentDesignerEnabled: boolean;
   documentPublishSodEnabled: boolean;

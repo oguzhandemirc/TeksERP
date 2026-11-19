@@ -63,7 +63,7 @@ function main(): void {
   console.log("=== BİLDİRİM KATALOĞU ===\n");
 
   // ── §0 körlük zemini + kimlik ─────────────────────────────────────────────
-  check("§0 katalog: 110 tür (23 + S1 satış/teklif/planlama 17 + S2 üretim/dokuma/kurşun/tambur/bakım 15 + teklif süresi doldu + S3 depo/sevkiyat/fason/gelen belge/satınalma 19 + S4 finans/cari/ana veri/maliyet/yetki/cihaz 20 + S5a haftalık fason/finans özeti 2 + S5b vade 2 + cari değişti + yaşlanan stok + S6a fason fire/yeniden işlem · disk · acil · brode özeti · büyük sipariş 6 + S6b renk/reçete/mesai dışı giriş 3)", girdiler.length === 110, `${girdiler.length} tür`);
+  check("§0 katalog: 113 tür (23 + S1 satış/teklif/planlama 17 + S2 üretim/dokuma/kurşun/tambur/bakım 15 + teklif süresi doldu + S3 depo/sevkiyat/fason/gelen belge/satınalma 19 + S4 finans/cari/ana veri/maliyet/yetki/cihaz 20 + S5a haftalık fason/finans özeti 2 + S5b vade 2 + cari değişti + yaşlanan stok + S6a fason fire/yeniden işlem · disk · acil · brode özeti · büyük sipariş 6 + S6b renk/reçete/mesai dışı giriş 3 + sahadan top fire/iptal · sevkiyat oluşturuldu · birleşik gün sonu 3)", girdiler.length === 113, `${girdiler.length} tür`);
   kural("§0b `kod` = anahtar ve `<alan>.<tür>` kalıbında",
     girdiler.filter(([k, e]) => e.kod !== k || !/^[a-z0-9]+\.[a-z0-9-]+$/.test(k)).map(([k]) => k), "hepsi");
   kural("§0c `grup` beyanlı gruplardan (K8: 18 grup)", girdiler.filter(([, e]) => !NOTIFICATION_GRUPLARI.includes(e.grup))
