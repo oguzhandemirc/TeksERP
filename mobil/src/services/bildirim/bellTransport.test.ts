@@ -19,6 +19,7 @@ function stream() {
   return {
     res: { status: 200, ok: true, body } as StreamResponse,
     send: (event: string, data: unknown) => ctrl.enqueue(enc.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)),
+    close: () => ctrl.close(),
   };
 }
 
@@ -127,4 +128,29 @@ it('bayrak kapalı (ozet.enabled=false) → akış açılmaz; SSE kapalıysa do�
   expect(noSse.openStream).not.toHaveBeenCalled();
   expect(c2.state().mode).toBe('wait');
   await c2.setActive(false);
+});
+
+it('kapat{neden:"fazla"} (aynı hesapla 6+ akış) → SSE yeniden açılmaz, uzun yoklama; öne dönüşte SSE yeniden denenir', async () => {
+  const s = stream();
+  const openStream = jest.fn(async () => s.res).mockResolvedValueOnce(s.res).mockResolvedValue(stream().res);
+  const d = deps({ openStream });
+  const c = createBellClient(d);
+  const events: string[] = [];
+  c.onEvent((e) => events.push(e));
+  await c.setActive(true);
+  s.send('merhaba', { epoch: 1, rev: 0, alarmRev: 0 });
+  await flush(10);
+  s.send('kapat', { neden: 'fazla' });
+  s.close();
+  await new Promise((r) => setTimeout(r, 1_300));
+  expect(openStream).toHaveBeenCalledTimes(1);
+  expect(c.state().mode).toBe('wait');
+  expect(d.wait).toHaveBeenCalledTimes(1);
+  expect(events).not.toContain('full');
+  await c.setActive(false);
+  await c.setActive(true);
+  await flush(10);
+  expect(openStream).toHaveBeenCalledTimes(2);
+  expect(c.state().mode).toBe('sse');
+  await c.setActive(false);
 });
