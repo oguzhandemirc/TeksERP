@@ -53,3 +53,20 @@ Bayrak ilk açıldığında koşul tarayıcısı birikmiş geçmişi "yeni" sayd
 Kanıt (`test_bildirim_kosul_is` §W): 807 birikmiş → 0 ACILDI / 0 kutu satırı / 807 sessiz açık koşul; ardından 1 yeni → tek ACILDI, alıcı başına tek satır. Negatif sondalar: taban `continue`'su silinince 807 ACILDI; bayrak yazımındaki damga sıfırlaması silinince 83.928 kutu satırı (patlama yeniden üretildi).
 
 OLAY türleri (tek seferlik olaylar) etkilenmez — bayrak kapalıyken emit edilmezler, birikmeleri yoktur.
+
+## 4. Yeniden ölçüm (2026-11-19): dağıtıcı gecikmesi · çok sekme · telefon arka planı
+
+> Ortam: boş test DB `tekserp_bildirim1119_test` (seed + fixture), tek alıcı, gerçek zamanlayıcı (gözetmen + 5 sn süpürme + LISTEN dürtmesi). Betik `Teks-Erp/scripts/olc_bildirim_gecikme.ts` (yalnız `_test` DB); zil, hub'a abone edilen sahte SSE yanıtına `event: zil` yazıldığı an; o anda gelen kutusu satırı commit edilmiştir (kanca tur commit'inden SONRA çağrılır).
+
+| Kip (n = 50) | commit → zil | Not |
+|---|---|---|
+| Ardışık (300 ms aralıklı tek olay) | p50 186 · p95 198 · en çok 200 ms | kutu sayacı 50/50 (OLAY 600 sn penceresi tek satırda sayar) |
+| Patlama (50 eşzamanlı tx) | son commit → tek zil 194 ms | commit penceresi 122 ms; birleştirici 50 dürtmeyi tek tura indirdi |
+| Yalnız süpürme (LISTEN yok, karşılaştırma) | p50 4361 · p95 4968 · en çok 5042 ms | dürtme olmasaydı gecikme 0–5 sn süpürme aralığına yayılırdı |
+
+**Karar:** dağıtıcı zaten yazım anında tetikleniyor (emit `pg_notify` → COMMIT'te teslim → tek LISTEN bağlantısı → 150 ms birleştirici, 1 sn tavan); süpürme yalnız yedektir. Gecikmenin ~150 ms'si bilinçli birleştirme penceresidir. Değişiklik gerekmedi.
+
+**Çok sekme (web paneli):** her sekme kendi `/zil` akışını açar (gizli sekme de). Desteklenen web paneli kurulumları HTTP/2'dir — bulut kenarı nginx `http2 on` (`deploy/bulut/kenar/site.conf.ornek`) ve önünde Cloudflare (aynı kenardaki `guncelleme` alanı ölçüldü: `http_version=2`); tarayıcının sunucu başı 6 bağlantı sınırı HTTP/1.1'e özgüdür, bu yollarda ısırmaz. HTTP/1.1 kalan yollar yalnız düz HTTP yerel geliştirme/demo ve fabrika LAN'ındaki 4443 (`https.createServer`, ALPN h2 yok) — Windows paketi web paneli TAŞIMAZ, 4443'e Electron/tablet bağlanır (tek akış). Lider sekme/SharedWorker gerekmedi.
+**Bulgu ve düzeltme:** sunucu kullanıcı başı 5 akış tavanında en eskiyi `kapat{neden:"fazla"}` ile kapatır; panel ve tablet istemcisi bu nedeni ayırt etmeyip 1 sn sonra yeniden bağlanıyor, o da sıradaki en eski akışı kapatıyordu — aynı hesapla 6+ sekme/cihazda akışlar birbirini sürekli kovuyor, her kovuşta `tam` çekim yapılıyordu. Artık `fazla` kapanışı uzun yoklamaya (`/bekle`) düşer (zorunlu düşüş değil): panelde sekme öne gelince, tablette uygulama öne dönünce SSE yeniden denenir. Test: `zil-istemcisi.test.ts` · `bellTransport.test.ts` (negatif sonda: anında yeniden bağlanma geri konunca ikisi de kırmızı).
+
+**Telefon arka planı:** zil ve alarm yoklaması yalnız ön planda (Android `onHostPause` JS zamanlayıcılarını durdurur; `refetchIntervalInBackground:false`). Arka plana geçerken BİLİNEN açık alarmlar için tek yerel hatırlatma zamanlanır (`lib/loomAlarm/reminder.ts`, `expo-notifications` yerel); arka plandayken YENİ doğan ALARM öne dönene dek telefona ulaşmaz. Kapatmak push ister (tasarım `DOKUMA-ALARM-VE-YOL-HARITASI.md` §A.12, A6b "hesap/karar bekler"); kod yazılmadı.
