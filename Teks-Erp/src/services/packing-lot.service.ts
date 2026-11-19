@@ -26,6 +26,7 @@ import {
   readPackingLotSettings,
 } from "./helpers/packing-group.helper";
 import { assertPackageNoFreeTx } from "./helpers/packing-group.helper";
+import { LIVE_SACK_WHERE } from "./helpers/sack-retire.helper";
 
 const GROUP_TABLE = "packing_groups";
 
@@ -83,13 +84,13 @@ export const PackingLotService = {
     await requireLotMode();
     const customer = await prisma.customer.findUnique({ where: { id: customerId }, select: { id: true, name: true } });
     if (!customer) throw AppError.notFound("Cari bulunamadı");
-    const where = { customerId, packingGroupId: null, shipmentId: null } as const;
+    const where = { customerId, packingGroupId: null, shipmentId: null, ...LIVE_SACK_WHERE } as const;
     const sacks = await prisma.sack.aggregate({ where, _count: { _all: true }, _sum: { weightKg: true } });
     const rolls = await prisma.roll.aggregate({ where: { sack: where }, _count: { _all: true }, _sum: { currentQty: true } });
     const weighed = await prisma.sack.count({ where: { ...where, weightKg: { not: null } } });
     // Tartılmamış çuval — carinin SEVK EDİLMEMİŞ bütün çuvalları (havuz + açık parti):
     // sevk öncesi eksik iş; kart tıklanınca liste "Tartılmadı" süzgeciyle açılır.
-    const unweighedSackCount = await prisma.sack.count({ where: { customerId, shipmentId: null, weightKg: null } });
+    const unweighedSackCount = await prisma.sack.count({ where: { customerId, shipmentId: null, weightKg: null, ...LIVE_SACK_WHERE } });
     const [openLotCount, closedLotCount] = [
       await prisma.packingGroup.count({ where: { customerId, status: "OPEN" } }),
       await prisma.packingGroup.count({ where: { customerId, status: "CLOSED" } }),

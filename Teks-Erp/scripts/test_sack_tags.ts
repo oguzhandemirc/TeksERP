@@ -18,7 +18,7 @@
 //   §5  `columns.cuval.shown` sanitize + Zod turunda HAYATTA KALIR ("ayar
 //       sessizce kaybolur" sınıfı — belge opt-in kolonunun ön koşulu)
 //   §6  Pasif etiketin ESKİ ataması hâlâ görünür (yeni atama ise 400)
-//   §7  ⭐ ETİKETLİ BOŞ ÇUVAL SİLİNEBİLİR (Cascade sondası — Restrict bırakılsaydı
+//   §7  ⭐ ETİKETLİ BOŞ ÇUVAL SİLİNEBİLİR (2026-11-19: emekliye ayrılır, iz kalır; önce
 //       `removeSack`in gerçek `tx.sack.delete`i ham FK hatasıyla düşerdi)
 //   §8  Toplu uç: `removeAll` + `remove` → 400 · sevk edilmiş çuval `skipped`
 //       (409 DEĞİL) · `add`+`remove` aynı çağrıda serbest
@@ -464,11 +464,12 @@ async function main(): Promise<void> {
       (await prisma.sackTagAssignment.count({ where: { sackId: sSil.id } })) === 1,
     );
     const delStatus = await status(() => shippingService.removeSack(sSil.id, admin.id));
-    check("⭐ §7 ETİKETLİ BOŞ ÇUVAL SİLİNDİ (Cascade — Restrict olsaydı ham FK hatası)", delStatus === null, String(delStatus));
-    check("§7 çuval gerçekten gitti", (await prisma.sack.findUnique({ where: { id: sSil.id } })) === null);
+    check("⭐ §7 ETİKETLİ BOŞ ÇUVAL SİLİNDİ (ham FK hatası yok)", delStatus === null, String(delStatus));
+    // 2026-11-19: iz deftere yazmaktır (`sackLedgerCountTx`) → "sil" emekliye ayırır; satır + iz geçmiş olarak kalır.
+    check("§7 çuval emekliye ayrıldı (havuzdan düştü)", (await prisma.sack.findUnique({ where: { id: sSil.id } }))?.retiredAt != null);
     check(
-      "§7 bağ satırı da Cascade ile gitti (öksüz kalmadı)",
-      (await prisma.sackTagAssignment.count({ where: { sackId: sSil.id } })) === 0,
+      "§7 iz satırı geçmiş olarak duruyor (öksüz değil — çuval satırı yaşıyor)",
+      (await prisma.sackTagAssignment.count({ where: { sackId: sSil.id } })) === 1,
     );
 
     // =====================================================================

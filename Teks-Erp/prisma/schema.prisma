@@ -599,6 +599,7 @@ model User {
   invoicedDirectShipments       DirectShipment[]         @relation("DirectShipmentInvoicedBy")
   weighedSacks                  Sack[]                   @relation("SackWeighedBy")
   dissolvedSacks                Sack[]                   @relation("SackDissolvedBy")
+  retiredSacks                  Sack[]                   @relation("SackRetiredBy")
   sackTagAssignments            SackTagAssignment[]      @relation("SackTagAssignmentCreatedBy")
   sackTagAssignmentsCleared     SackTagAssignment[]      @relation("SackTagAssignmentClearedBy")
   sackAllocationsCleared        SackAllocation[]         @relation("SackAllocationClearedBy")
@@ -9333,6 +9334,11 @@ model Sack {
   /// Birim çözüldü (sevkiyat iptali): toplar rafa döndü, birim defter izi için sevkiyatında kalır.
   dissolvedAt    DateTime?         @db.Timestamptz
   dissolvedById  String?           @db.Uuid
+  /// "Sil" DURUM GEÇİŞİ (2026-11-19): tahsis defteri (`SackAllocation`) taşıyan boş havuz çuvalı sert
+  /// silinmez, damgalanır — defter satırı bağıyla aynen kalır. Havuz okuyucuları `LIVE_SACK_WHERE` süzer
+  /// (`helpers/sack-retire.helper.ts`); seddi `sacks_retired_shape` (emekli = havuzda, SACK, boş grup).
+  retiredAt      DateTime?         @db.Timestamptz
+  retiredById    String?           @db.Uuid
 
   // Relations
   customer           Customer?           @relation(fields: [customerId], references: [id])
@@ -9348,6 +9354,7 @@ model Sack {
   warehouse          Warehouse?          @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
   weighedBy          User?               @relation("SackWeighedBy", fields: [weighedById], references: [id])
   dissolvedBy        User?               @relation("SackDissolvedBy", fields: [dissolvedById], references: [id])
+  retiredBy          User?               @relation("SackRetiredBy", fields: [retiredById], references: [id])
   rolls              Roll[] // Bu çuvaldaki toplar (içerik)
   swatches           Swatch[] // Bu çuvaldaki kartelalar (içerik)
   allocations        SackAllocation[] // Sevkte yazılan sipariş-satırı tahsisi (hangi çuval → hangi satır)
@@ -9375,6 +9382,7 @@ model Sack {
   /// Grup bloklarının listesi ve "grubu boş mu" yüklemi bu ağaçtan okunur.
   @@index([packingGroupId])
   @@index([dissolvedById])
+  @@index([retiredById])
   /// Şube-kırılımlı çuval listesi. DB'de KISMİ (`"branchId" IS NOT NULL`) —
   /// `sacks_warehouseId_idx` emsali (migration 20260905140000).
   @@index([branchId])
