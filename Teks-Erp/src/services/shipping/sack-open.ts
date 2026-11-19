@@ -31,6 +31,7 @@ import { markSackLabelsStaleOnCustomerChangeTx } from "../helpers/sack-label-sta
 import { nextPoolPackageNoTx } from "../helpers/sack-seq.helper";
 import { ApiResponse } from "../../types/api.types";
 import { assertManualNumberAllowed } from "../helpers/manual-number.helper";
+import { LIVE_SACK_WHERE } from "../helpers/sack-retire.helper";
 import type { ShippingService } from "../shipping.service";
 import { nextSackNo, type ShippingServiceThis } from "./shared";
 
@@ -306,7 +307,7 @@ export async function reassignSackCustomer(
     const labelsStale = await prisma.$transaction(async (tx) => {
       // Atomik claim — hâlâ depoda (shipmentId=null) olmalı.
       const claimed = await tx.sack.updateMany({
-        where: { id: sackId, shipmentId: null },
+        where: { id: sackId, shipmentId: null, ...LIVE_SACK_WHERE },
         data: { customerId, branchId },
       });
       if (claimed.count !== 1) throw AppError.conflict("Çuval az önce bir sevkiyata girdi — yenileyin.");
