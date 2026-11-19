@@ -46,7 +46,7 @@ describe("özet + devreden + yaş", () => {
   });
   it("özet şeridi aynı kümeden", () => {
     const s = summarize(rows, new Date("2026-11-18T10:00:00Z"));
-    expect(s).toEqual({ totalKg: 15, subcontractorCount: 2, yarnCount: 2, carriedKg: 7.5, oldestDays: 17 });
+    expect(s).toEqual({ valueTotals: [], unpricedLines: 0, totalKg: 15, subcontractorCount: 2, yarnCount: 2, carriedKg: 7.5, oldestDays: 17 });
     expect(summarize([]).oldestDays).toBeNull();
   });
   it("yaş fabrika günüyle; bozuk tarih 0", () => {

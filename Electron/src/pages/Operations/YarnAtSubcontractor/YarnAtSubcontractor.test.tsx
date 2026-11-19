@@ -78,7 +78,13 @@ describe("Fasondaki İplik ekranı", () => {
   it("① satırlar + devreden + sipariş bağı + özet şeridi", async () => {
     renderWithProviders(<YarnAtSubcontractorPage />, { route: "/operations/fasondaki-iplik" });
     expect(await screen.findByText("LOT-77")).toBeInTheDocument();
-    expect(screen.getByText(/devreden · sipariş kapandı/)).toBeInTheDocument();
+    // Tek terim, kesilmeden; açıklama ipucunda (eski "devreden · sipariş kapandı" dar sütunda kırpılıyordu).
+    const badge = screen.getByText("devreden");
+    expect(badge).toHaveAttribute("title", expect.stringMatching(/Siparişi kapanmış/));
+    expect(screen.queryByText(/devreden ·/)).toBeNull();
+    // İplik ADI birincil, kod ikinci satır + tam metin ipucunda.
+    expect(screen.getAllByText("PES 50 denye").length).toBeGreaterThan(0);
+    expect(screen.getAllByTitle("PES 50 denye (PES50)").length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: "FDV0001" })).toHaveAttribute("href", "/operations/fason-devere/o1");
     expect(screen.getByText("Müşteri Tekstil")).toBeInTheDocument();
     expect(screen.getByText("Bizim")).toBeInTheDocument();
@@ -91,7 +97,7 @@ describe("Fasondaki İplik ekranı", () => {
   it("② süzgeç URL'den sunucuya; süzgeçli boş durum ayrı cümle", async () => {
     list.mockResolvedValue([]);
     renderWithProviders(<YarnAtSubcontractorPage />, { route: "/operations/fasondaki-iplik?filter[subcontractorId]=s9&filter[status]=COMPLETED" });
-    expect(await screen.findByText(/Bu süzgece uyan fasondaki iplik yok/)).toBeInTheDocument();
+    expect(await screen.findByText(/Bu süzgece ya da aramaya uyan fasondaki iplik yok/)).toBeInTheDocument();
     expect(list).toHaveBeenCalledWith({ subcontractorId: "s9", status: "COMPLETED" });
   });
 
@@ -99,6 +105,50 @@ describe("Fasondaki İplik ekranı", () => {
     list.mockResolvedValue([]);
     renderWithProviders(<YarnAtSubcontractorPage />, { route: "/operations/fasondaki-iplik" });
     expect(await screen.findByText(/Şu an hiçbir fasoncuda iplik yok/)).toBeInTheDocument();
+  });
+
+  it("lot süzgeci URL'den sunucuya (filter[lotId])", async () => {
+    renderWithProviders(<YarnAtSubcontractorPage />, { route: "/operations/fasondaki-iplik?filter[lotId]=l1" });
+    await screen.findByText("LOT-77");
+    expect(list).toHaveBeenCalledWith({ lotId: "l1" });
+  });
+
+  it("değer: izinsiz sütun ve özet yok; goods-receipt:read ile satır değeri + para birimi başına toplam + fiyatsız sayısı", async () => {
+    const priced: YarnAtSubRow[] = [
+      { ...ROWS[0]!, priceStatus: "PRICE", unitPrice: "2.9000", currency: "USD", value: "349.45" },
+      { ...ROWS[1]!, priceStatus: "NO_LOT", unitPrice: null, currency: null, value: null },
+    ];
+    list.mockResolvedValue(priced);
+    const r = renderWithProviders(<YarnAtSubcontractorPage />, { route: "/operations/fasondaki-iplik" });
+    await screen.findByText("LOT-77");
+    expect(screen.queryAllByText("Değer")).toHaveLength(0); // sütun başlığı (tam metin)
+    expect(screen.getByRole("group", { name: "Fasondaki iplik özeti" })).not.toHaveTextContent("Değer");
+    r.unmount();
+    perms = [...perms, "goods-receipt:read"];
+    renderWithProviders(<YarnAtSubcontractorPage />, { route: "/operations/fasondaki-iplik" });
+    await screen.findByText("LOT-77");
+    expect(screen.getAllByText("Değer").length).toBeGreaterThan(0);
+    const band = screen.getByRole("group", { name: "Fasondaki iplik özeti" });
+    expect(band).toHaveTextContent("Değer (USD)349,45");
+    expect(band).toHaveTextContent("Fiyatsız1");
+    expect(screen.getByTitle(/Lotsuz iplik/)).toHaveTextContent("—");
+  });
+
+  it("satır eylemleri yalnız warping-order:write ile", async () => {
+    renderWithProviders(<YarnAtSubcontractorPage />, { route: "/operations/fasondaki-iplik" });
+    await screen.findByText("LOT-77");
+    expect(screen.queryByRole("button", { name: /iade al/ })).toBeNull();
+    perms = [...perms, "warping-order:write"];
+    renderWithProviders(<YarnAtSubcontractorPage />, { route: "/operations/fasondaki-iplik" });
+    expect((await screen.findAllByRole("button", { name: /iade al/ })).length).toBe(2);
+    expect(screen.getAllByRole("button", { name: /başka siparişe aktar/ }).length).toBe(2);
+  });
+
+  it("Fasoncu ekstresi düğmesi pencereyi açar", async () => {
+    renderWithProviders(<YarnAtSubcontractorPage />, { route: "/operations/fasondaki-iplik" });
+    await screen.findByText("LOT-77");
+    screen.getByRole("button", { name: /Fasoncu ekstresi/ }).click();
+    expect(await screen.findByRole("radiogroup", { name: "Fasoncu" })).toBeInTheDocument();
   });
 
   it("emanet kapalı → Sahibi sütunu yok", async () => {
