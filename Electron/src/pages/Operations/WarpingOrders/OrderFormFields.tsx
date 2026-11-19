@@ -13,8 +13,8 @@ import { FieldGrid } from "@/components/forms/WideFormDialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { warpSpecService } from "@/pages/WarpSpecs/service";
 import type { WarpSpec } from "@/pages/WarpSpecs/types";
-import { subcontractorService } from "@/pages/Subcontractors/service";
-import type { Subcontractor } from "@/pages/Subcontractors/types";
+import { SubcontractorCategoryPicker } from "@/components/forms/SubcontractorCategoryPicker";
+import { DEVERE_CATEGORY_CODE } from "@/lib/subcontractor-category-codes";
 import { orderService } from "@/pages/Operations/Orders/service";
 import type { Order } from "@/pages/Operations/Orders/types";
 import type { WarpingOrderFormState } from "./order-model";
@@ -53,10 +53,10 @@ export function OrderIdentityFields({ s, up, identityLocked }: Pick<Props, "s" |
         />
       </FormField>
       <FormField label="Devereci" required>
-        <EntityPickerModal<Subcontractor>
+        <SubcontractorCategoryPicker
           value={s.subcontractorId}
           onChange={(id) => up({ subcontractorId: id })}
-          service={subcontractorService}
+          categoryCode={DEVERE_CATEGORY_CODE}
           queryKey="subcontractors-warping-order-picker"
           getLabel={(x) => x.name}
           icon={Handshake}
