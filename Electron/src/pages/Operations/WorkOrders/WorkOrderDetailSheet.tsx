@@ -30,6 +30,8 @@ import { RouteStepline } from "./detail-v3/RouteStepline";
 import { ProducedV3 } from "./detail-v3/ProducedV3";
 import { SheetKpis } from "./detail-v3/SheetKpis";
 import { OrderLinksV3 } from "./detail-v3/OrderLinksV3";
+import { PlanningNoteCard } from "./detail-v3/PlanningNoteCard";
+import { AllocateOrdersButton } from "./AllocateOrderLinksDialog";
 import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
 import "./detail-v3/work-order-detail-v3.css";
 import type { WorkOrder } from "./types";
@@ -236,9 +238,16 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
 
                 {showOrders && (
                   <V3Section title="Bağlı Sipariş(ler)">
+                    <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "8px" }}>
+                      <AllocateOrdersButton wo={wo} look="sheet" />
+                    </div>
                     <OrderLinksV3 wo={wo} />
                   </V3Section>
                 )}
+
+                <V3Section title="Planlama Notu">
+                  <PlanningNoteCard workOrderId={wo.id} />
+                </V3Section>
               </>
             )}
           </div>

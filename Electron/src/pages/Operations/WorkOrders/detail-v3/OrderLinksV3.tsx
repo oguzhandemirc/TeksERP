@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { formatNumber, safeFormatCalendar } from "@/lib/format";
 import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
 import { lineOpenMeasured } from "../order-fulfillment";
+import { basisLabel, fmtM, qtyFromServer } from "../order-allocation";
 import type { WorkOrder } from "../types";
 
 /**
@@ -105,6 +106,7 @@ export function OrderLinksV3({ wo }: { wo: WorkOrder }) {
               const ol = link.orderLine;
               // KG/ADET satırda açık metraj ölçülmez (null) — "ölçülmüyor" basılır.
               const open = ol ? lineOpenMeasured(ol) : 0;
+              const allocated = qtyFromServer(link.allocatedQty);
               return (
                 <div
                   key={link.orderLineId}
@@ -144,12 +146,21 @@ export function OrderLinksV3({ wo }: { wo: WorkOrder }) {
                       </div>
                     )}
                   </div>
-                  {ol && order?.status !== "CANCELLED" && (
+                  {ol && (allocated > 0 || order?.status !== "CANCELLED") && (
                     <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                      <span className="chip ok num">Sevk {formatNumber(ol.shippedQty ?? 0, 1)}</span>
-                      <span className="chip bad num">
-                        {open === null ? "Açık ölçülmüyor" : `Açık ${formatNumber(open, 1)}`}
-                      </span>
+                      {allocated > 0 && (
+                        <span className="chip dim num" title="Bu iş emrinden bu siparişe ayrılan metre (plan)">
+                          Paylaştırılan {fmtM(allocated)} m
+                        </span>
+                      )}
+                      {order?.status !== "CANCELLED" && (
+                        <>
+                          <span className="chip ok num">Sevk {formatNumber(ol.shippedQty ?? 0, 1)}</span>
+                          <span className="chip bad num">
+                            {open === null ? "Açık ölçülmüyor" : `Açık ${formatNumber(open, 1)}`}
+                          </span>
+                        </>
+                      )}
                     </div>
                   )}
                 </div>
@@ -158,6 +169,35 @@ export function OrderLinksV3({ wo }: { wo: WorkOrder }) {
           </div>
         </div>
       ))}
+      <AllocationTotalRow allocation={wo.allocation} />
+    </div>
+  );
+}
+
+/** Paylaştırma özeti — SUNUCUNUN `allocation` alanından (istemci toplamaz); paylaştırma yoksa basılmaz. */
+function AllocationTotalRow({ allocation }: { allocation: WorkOrder["allocation"] }) {
+  if (!allocation || allocation.allocated <= 0) return null;
+  const label = basisLabel(allocation.basisKind);
+  const { basis, remaining } = allocation;
+  return (
+    <div
+      data-testid="allocation-total"
+      className="card"
+      style={{ padding: "9px 14px", display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px" }}
+    >
+      <span style={{ fontWeight: 600 }}>Paylaştırma</span>
+      {label && basis != null && (
+        <span className="tag num">
+          {label} {fmtM(basis)} m
+        </span>
+      )}
+      <span className="tag num">Paylaştırılan {fmtM(allocation.allocated)} m</span>
+      {remaining != null &&
+        (remaining < 0 ? (
+          <span className="chip bad num">{fmtM(-remaining)} m fazla</span>
+        ) : (
+          <span className="chip ok num">Kalan {fmtM(remaining)} m</span>
+        ))}
     </div>
   );
 }

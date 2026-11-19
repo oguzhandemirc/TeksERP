@@ -5539,6 +5539,7 @@ model WorkOrder {
   kursunBypasses   KursunBypassAssignment[] // Kurşun bypass atamaları (append-only)
   events           WorkOrderEvent[] // Durum/plan değişim defteri (append-only)
   closeSnapshots   WorkOrderCloseSnapshot[] // Kapanış künyesi sürümleri (append-only)
+  planningNote     WorkOrderNote? // Planlama notu — yalnız panel `/:id/note`
 
   /// İPTAL İZİ (2026-08-17). Sebep şimdiye kadar YALNIZ audit'e yazılıyordu ve
   /// `SystemLog` 6 ayda bir ARŞİVLENİYOR → "bu iş emri neden iptal edildi, kim
@@ -6009,6 +6010,25 @@ model KursunBypassAssignment {
   @@index([machineId])
   @@index([propertyValueId])
   @@map("kursun_bypass_assignments")
+}
+
+/// İş emri PLANLAMA notu (2026-11-19) — KATALOG sınıfı durum kaydı, iş emri başına TEK satır
+/// (`workOrderId @unique`, ayrı index gerekmez). Yalnız panel uçları okur/yazar (`GET/PUT
+/// /api/work-orders/:id/note`); refakat kartı, etiket, tablet ve patron bulutu OKUMAZ — bu yüzden
+/// `WorkOrder` kolonu değil ayrı tablo. Temizleme satırı SİLMEZ, `body`yi boş yazar.
+/// `updatedById` künyedir (FK/index yok). `onDelete` Restrict: iş emri silinmez.
+model WorkOrderNote {
+  id          String  @id @default(uuid()) @db.Uuid
+  workOrderId String  @unique @db.Uuid
+  body        String  @db.VarChar(2000)
+  updatedById String? @db.Uuid
+
+  workOrder WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@map("work_order_notes")
 }
 
 /// Join table: WorkOrder ↔ OrderLine (N:N)
