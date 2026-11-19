@@ -46,54 +46,62 @@ export function UserFormDialog({ open, onOpenChange, onSubmit, isSubmitting }: P
       defaultValues={defaults}
       onSubmit={onSubmit}
       isSubmitting={isSubmitting}
+      size="medium"
     >
       {(form) => (
         <>
-          <FormField
-            label="Kullanıcı Adı"
-            htmlFor="username"
-            error={form.formState.errors.username}
-            hint="Yalnız İngilizce harf ve rakam — özel karakter, boşluk ve Türkçe karakter olamaz."
-            required
-          >
-            <Input
-              id="username"
-              autoFocus
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              {...form.register("username", {
-                // Yazarken anında filtrele: harf/rakam dışı her karakter (özel/boşluk/Türkçe) hiç girilmesin.
-                onChange: (e) => {
-                  const cleaned = e.target.value.replace(/[^a-zA-Z0-9]/g, "");
-                  if (cleaned !== e.target.value) {
-                    e.target.value = cleaned;
-                    form.setValue("username", cleaned, { shouldValidate: true });
-                  }
-                },
-              })}
-            />
-          </FormField>
-          <FormField label="Ad Soyad" htmlFor="fullName" error={form.formState.errors.fullName} required>
-            <Input id="fullName" {...form.register("fullName")} />
-          </FormField>
-          <FormField
-            label="Şifre"
-            htmlFor="password"
-            error={form.formState.errors.password}
-            hint={`En az ${PASSWORD_MIN_LENGTH} karakter.`}
-            required
-          >
-            <Input id="password" type="password" autoComplete="new-password" {...form.register("password")} />
-          </FormField>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <FormField
+              label="Kullanıcı Adı"
+              htmlFor="username"
+              error={form.formState.errors.username}
+              info="Yalnız İngilizce harf ve rakam — özel karakter, boşluk ve Türkçe karakter olamaz."
+              required
+            >
+              <Input
+                id="username"
+                autoFocus
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                {...form.register("username", {
+                  // Yazarken anında filtrele: harf/rakam dışı her karakter (özel/boşluk/Türkçe) hiç girilmesin.
+                  onChange: (e) => {
+                    const cleaned = e.target.value.replace(/[^a-zA-Z0-9]/g, "");
+                    if (cleaned !== e.target.value) {
+                      e.target.value = cleaned;
+                      form.setValue("username", cleaned, { shouldValidate: true });
+                    }
+                  },
+                })}
+              />
+            </FormField>
+            <FormField label="Ad Soyad" htmlFor="fullName" error={form.formState.errors.fullName} required>
+              <Input id="fullName" {...form.register("fullName")} />
+            </FormField>
+            <FormField
+              label="Şifre"
+              htmlFor="password"
+              error={form.formState.errors.password}
+              hint={`En az ${PASSWORD_MIN_LENGTH} karakter.`}
+              required
+            >
+              <Input
+                id="password"
+                type="password"
+                autoComplete="new-password"
+                {...form.register("password")}
+              />
+            </FormField>
+          </div>
           <label className="flex items-start gap-2 rounded-md border bg-muted/20 p-2.5 text-sm">
             <input type="checkbox" className="mt-0.5" {...form.register("grantOperatorDefaults")} />
             <span>
               Üretim operatörü yetkilerini ver{" "}
               <span className="text-muted-foreground">(KK1 · Kurşun/KK2 · Tambur)</span>
               <span className="mt-0.5 block text-xs text-muted-foreground">
-                Sahada tabletle bu üç istasyon arasında çalışabilir. Yalnız web/yönetim
-                kullanıcısı açıyorsanız işareti kaldırın (yetkileri sonra tek tek atarsınız).
+                Sahada tabletle bu üç istasyon arasında çalışabilir. Yalnız web/yönetim kullanıcısı
+                açıyorsanız işareti kaldırın (yetkileri sonra tek tek atarsınız).
               </span>
             </span>
           </label>

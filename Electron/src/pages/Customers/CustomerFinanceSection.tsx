@@ -58,12 +58,12 @@ export function CustomerFinanceSection({ form, customerId, canWrite }: Props) {
   const risk = form.watch("financeRiskLimit") as string;
   const ro = !canWrite;
   return (
-    <div className="border-t pt-3" data-testid="customer-finance">
+    <div className="rounded-xl border border-card-border bg-card px-5 py-4 shadow-card" data-testid="customer-finance">
       <div className="mb-2 flex items-baseline justify-between">
-        <h4 className="text-sm font-semibold">Finans</h4>
+        <h4 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Finans</h4>
         <span className="text-[11px] text-muted-foreground">{ro ? "Salt okunur — düzenleme için muhasebe yazma yetkisi gerekir" : "Terimler cari hesapta tutulur; fatura vadesi buradan önerilir"}</span>
       </div>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <FormField label="Vade (gün)" error={termDaysError(term ?? "") ? { message: termDaysError(term ?? "") as string } : undefined}>
           <Input type="number" min={0} max={3650} step={1} readOnly={ro} aria-label="Vade (gün)" {...form.register("financePaymentTermDays")} />
         </FormField>
