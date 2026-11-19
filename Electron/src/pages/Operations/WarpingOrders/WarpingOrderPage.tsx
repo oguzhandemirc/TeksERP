@@ -43,7 +43,7 @@ export function WarpingOrderPage() {
       <PageHeader
         title={o ? o.orderNo : "Fason devere siparişi"}
         titleExtra={meta && <Badge className={cn("font-normal", meta.badgeClass)}>{meta.label}</Badge>}
-        description={o ? `${o.warpSpec.code} — ${o.warpSpec.name} · devereci ${o.subcontractor.name}` : undefined}
+        description={o ? `${o.warpSpec.name} (${o.warpSpec.code}) · devereci ${o.subcontractor.name}` : undefined}
         onBack={() => openTarget(WARPING_ORDERS_PATH)}
         parent={{ label: "Fason Devere Siparişleri", to: WARPING_ORDERS_PATH }}
         actions={o && <OrderActions o={o} onOpen={setDialog} />}

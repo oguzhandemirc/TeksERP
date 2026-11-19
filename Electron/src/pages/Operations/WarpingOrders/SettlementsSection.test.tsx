@@ -40,7 +40,7 @@ const record = (over: Partial<WarpingSettlementRecord> = {}): WarpingSettlementR
   id: "s1", warpingOrderId: "wo-1", kind: "SETTLE", reason: "fazla kopuş", wastePct: "4.88", tolerancePct: "3.00", overTolerance: true,
   createdAt: "2026-11-18T10:00:00Z", createdById: null, reopened: { id: "r1", createdAt: "2026-11-18T11:00:00Z", reason: "yanlış" }, reversesId: null,
   totalWasteKg: "1.282", totalReturnKg: "0.000", backTransferIds: [], returns: [],
-  wastes: [{ id: "w1", kind: "WASTE", dispatchItemId: "i1", dispatchNo: "FS1", yarnItemId: "y1", code: "IPL-5X", lotNo: "L-501", qtyKg: "1.282", overTolerance: true, reversesId: null }],
+  wastes: [{ id: "w1", kind: "WASTE", dispatchItemId: "i1", dispatchNo: "FS1", yarnItemId: "y1", code: "IPL-5X", name: "5X", lotNo: "L-501", qtyKg: "1.282", overTolerance: true, reversesId: null }],
   ...over,
 });
 
@@ -67,9 +67,9 @@ describe("SettlementsSection", () => {
   it("① geçmiş + düğmeler durum ve izinle", async () => {
     const r1 = renderWithProviders(<SettlementsSection order={order()} />);
     expect(await screen.findByText(/Yeniden açıldı/)).toBeTruthy();
-    expect(screen.getByText("Toleransı aşan iplik: IPL-5X")).toBeTruthy();
+    expect(screen.getByText("Toleransı aşan iplik: 5X")).toBeTruthy();
     expect(screen.getByText(/Gerekçe: fazla kopuş/)).toBeTruthy();
-    expect(screen.getByText(/Fire · IPL-5X · FS1 · lot L-501/)).toBeTruthy();
+    expect(screen.getByText((_, el) => el?.tagName === "TD" && /^Fire · 5X IPL-5X · FS1 · lot L-501$/.test(el.textContent ?? ""))).toBeTruthy();
     expect(screen.getByRole("button", { name: /Siparişi kapat/ })).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Yeniden aç/ })).toBeNull();
     r1.unmount();

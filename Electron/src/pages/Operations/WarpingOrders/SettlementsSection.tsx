@@ -10,6 +10,7 @@ import { fmtFactoryDateTime } from "@/lib/factory-time";
 import { cn } from "@/lib/utils";
 import { apiErrorMessage } from "@/services/apiClient";
 import { fmtKg } from "./order-model";
+import { YarnLabel, yarnLabelParts } from "./YarnLabel";
 import { labelOf, ReopenDialog, type ItemLabels } from "./ReopenDialog";
 import { SettleDialog } from "./SettleDialog";
 import { pctText } from "./settle-model";
@@ -21,7 +22,7 @@ import type { WarpingSettlementRecord } from "./settle-types";
 const num = "text-right tabular-nums";
 
 function RecordRows({ r, labels }: { r: WarpingSettlementRecord; labels: ItemLabels }) {
-  const overCodes = [...new Set(r.wastes.filter((w) => w.kind === "WASTE" && w.overTolerance).map((w) => w.code))];
+  const overCodes = [...new Set(r.wastes.filter((w) => w.kind === "WASTE" && w.overTolerance).map((w) => yarnLabelParts(w.name, w.code).primary))];
   const settle = r.kind === "SETTLE";
   return (
     <Fragment>
@@ -38,7 +39,7 @@ function RecordRows({ r, labels }: { r: WarpingSettlementRecord; labels: ItemLab
       </TableRow>
       {r.wastes.filter((w) => w.kind === "WASTE").map((w) => (
         <TableRow key={w.id} className="text-xs">
-          <TableCell className="pl-8">Fire · {w.code} · {w.dispatchNo} · {w.lotNo ? `lot ${w.lotNo}` : "lotsuz"}</TableCell>
+          <TableCell className="pl-8">Fire · <YarnLabel name={w.name} code={w.code} /> · {w.dispatchNo} · {w.lotNo ? `lot ${w.lotNo}` : "lotsuz"}</TableCell>
           <TableCell />
           <TableCell className={num}>{fmtKg(w.qtyKg)}</TableCell>
           <TableCell />
@@ -57,7 +58,7 @@ function RecordRows({ r, labels }: { r: WarpingSettlementRecord; labels: ItemLab
 
 function useItemLabels(orderId: string): ItemLabels {
   const dq = useWarpingDispatches(orderId);
-  return useMemo(() => new Map((dq.data ?? []).flatMap((d) => d.items.map((it) => [it.dispatchItemId, `${it.yarnItemCode} · ${d.dispatchNo} · ${it.lotNo ? `lot ${it.lotNo}` : "lotsuz"}`] as const))), [dq.data]);
+  return useMemo(() => new Map((dq.data ?? []).flatMap((d) => d.items.map((it) => [it.dispatchItemId, `${yarnLabelParts(it.yarnItemName, it.yarnItemCode).primary} · ${d.dispatchNo} · ${it.lotNo ? `lot ${it.lotNo}` : "lotsuz"}`] as const))), [dq.data]);
 }
 
 export function SettlementsSection({ order }: { order: WarpingOrder }) {

@@ -9,6 +9,7 @@
 //   C  aktarma kaynağın bütün kalanını taşır → kaynak KAPANIR
 //   E  kapanış fire %'si önceden yazılmış iade firesini sayar (priorWasteKg)
 //   DB kaynak CHECK (kapanış XOR iade hareketi)
+//   Sevk listesi: "Levente sarılan" fireyi İÇERMEZ, fire ayrı; deverecide = giden − iade − aktarma − sarılan − fire (mutabakatla aynı kaynak)
 // NEGATİF SONDA (koşuldu 2026-11-19): bkz. arşiv notu "Fason devere iade penceresinde fire + otomatik kapanış".
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım; ayarlar FOTOĞRAFINA döndürülür, kendi kayıtlarını siler.
 // =============================================================================
@@ -30,6 +31,7 @@ import { transferWarpingYarn } from "../src/services/warping-order/yarn-transfer
 import { receiveWarpingOrder } from "../src/services/warping-order/receive";
 import { previewSettleWarpingOrder } from "../src/services/warping-order/settle";
 import { reopenWarpingOrder } from "../src/services/warping-order/reopen";
+import { listWarpingDispatches } from "../src/services/warping-order/dispatches-read";
 import { AUTO_SETTLE_REASON } from "../src/services/warping-order/auto-settle";
 
 let pass = 0;
@@ -146,6 +148,12 @@ async function main(): Promise<void> {
     check("Replay: aynı token farklı gövde (fire) → 409 CLIENT_TOKEN_COLLISION", eCol?.code === "CLIENT_TOKEN_COLLISION", show(eCol));
     const st1 = await previewSettleWarpingOrder(A.id);
     check("Mutabakat: X satırında Fire 2 kg (iade firesi görünür)", st1.settlement.yarns.find((y) => y.yarnItemId === X.id)?.wasteKg === "2.000", JSON.stringify(st1.settlement.yarns.map((y) => [y.code, y.wasteKg])));
+    // Eski formül (giden − iade − kalemin kalanı) fireyi de "sarılan"a katıyordu: 52 = 50 + 2.
+    const dX = (await listWarpingDispatches(A.id)).flatMap((d) => d.items).find((i) => i.dispatchItemId === A.x);
+    const stX = st1.settlement.yarns.find((y) => y.yarnItemId === X.id);
+    check("Sevk listesi: X sarılan 50 (fire HARİÇ) · fire 2 ayrı · deverecide = giden − iade − aktarma − sarılan − fire · sarılan/fire mutabakatla aynı",
+      !!dX && dX.allocatedKg === "50.000" && dX.wasteKg === "2.000" && dX.allocatedKg === stX?.fromOwnKg && dX.wasteKg === stX?.wasteKg
+      && n(dX.outKg) - n(dX.returnedKg) - n(dX.transferOutKg) + n(dX.transferInKg) - n(dX.allocatedKg) - n(dX.wasteKg) === n(dX.holdingKg), JSON.stringify({ dX, stX }));
 
     await ret(A.id, { dispatchItemId: A.y, qtyKg: 10 });
     const pZ = await previewWarpingYarnReturn(A.id, { dispatchItemId: A.z, qtyKg: 7, wasteKg: 3, reasonCode: R });
