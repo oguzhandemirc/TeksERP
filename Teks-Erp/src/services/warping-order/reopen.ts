@@ -11,9 +11,10 @@ import { Prisma, WarpingOrderStatus } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { AuditService } from "../audit.service";
-import { cancelYarnReturnTx } from "../subcontractor-yarn.service";
-import { loadWarpingYarnItems, lockDispatchItemsTx, WARPING_TRANSFER_CANCEL, WARPING_WASTE, WARPING_WASTE_CANCEL } from "../helpers/warping-yarn-open.helper";
+import { cancelReturnWithWasteTx } from "./yarn-return-waste";
+import { loadWarpingYarnItems, lockDispatchItemsTx, WARPING_TRANSFER_CANCEL, WARPING_WASTE } from "../helpers/warping-yarn-open.helper";
 import { WARPING_ORDER_TABLE } from "./create";
+import { reverseWastesTx } from "./waste-write";
 import { loadSettlementRecord, newestLiveSettlement, WARPING_REOPEN, type WarpingSettlementRecord } from "./settle-record";
 import { qtyText } from "../helpers/qty-text.helper";
 
@@ -116,17 +117,13 @@ export async function reopenWarpingOrder(id: string, reason: string, userId: str
       data: { warpingOrderId: id, kind: WARPING_REOPEN, reversesId: live.id, reason: why, returnMovementIds: [], backTransferIds: [], createdById: userId },
       select: { id: true },
     });
-    if (scope.wastes.length > 0) {
-      await tx.warpingYarnWaste.createMany({
-        data: scope.wastes.map((w) => ({ settlementId: reopen.id, warpingOrderId: w.warpingOrderId, dispatchItemId: w.dispatchItemId, kind: WARPING_WASTE_CANCEL, qtyKg: w.qtyKg, reversesId: w.id, reason: why, createdById: userId })),
-      });
-    }
+    await reverseWastesTx(tx, { src: { settlementId: reopen.id }, wastes: scope.wastes, reason: why, userId });
     const cancelled: string[] = [];
     const skipped: string[] = [];
     for (const r of scope.returns) {
       if (!r.dispatchItemId || !r.dispatchItem) continue;
       try {
-        await cancelYarnReturnTx(tx, r.dispatchItem.dispatchId, { dispatchItemId: r.dispatchItemId, movementId: r.id, reason: `Kapanış stornosu: ${why}` }, userId);
+        await cancelReturnWithWasteTx(tx, r.dispatchItem.dispatchId, { dispatchItemId: r.dispatchItemId, movementId: r.id, reason: `Kapanış stornosu: ${why}` }, userId);
         cancelled.push(r.id);
       } catch (e) {
         // Kullanıcı kapanış iadesini ayrıca storno etmişse (grup net'i yetmez) atlanır; başka her hata tx'i düşürür.

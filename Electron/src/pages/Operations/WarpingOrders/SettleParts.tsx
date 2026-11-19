@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useMultiWarehouse } from "@/hooks/useWarehouses";
 import { cn } from "@/lib/utils";
-import { yarnCode, type YarnNames } from "./holding-model";
+import { yarnCode, yarnTitle, type YarnNames } from "./holding-model";
 import { fmtKg, parseNum } from "./order-model";
 import { fillLine, keepOf, pctText, type Bucket, type SettleLineDraft } from "./settle-model";
 import { SourcePicker } from "./YarnSourcePickers";
@@ -27,6 +27,18 @@ function WarehouseCell({ d, exitName, onChange }: { d: SettleLineDraft; exitName
   );
 }
 
+/** İplik hücresi: ADI birincil; stok kodu (+ sevk/lot) küçük ikincil satırda. */
+function YarnNameCell({ names, yarnItemId, extra, fallbackCode }: { names?: YarnNames; yarnItemId: string; extra?: string; fallbackCode?: string }) {
+  const t = names ? yarnTitle(names, yarnItemId) : { primary: fallbackCode ?? "iplik", secondary: null };
+  const second = [t.secondary, extra].filter(Boolean).join(" · ");
+  return (
+    <div className="leading-tight">
+      <div className="font-medium">{t.primary === "iplik" && fallbackCode ? fallbackCode : t.primary}</div>
+      {second && <div className="text-xs text-muted-foreground">{second}</div>}
+    </div>
+  );
+}
+
 interface LinesProps { drafts: SettleLineDraft[]; names: YarnNames; exitNames: Map<string, string>; onChange: (d: SettleLineDraft[]) => void }
 
 export function SettleLinesTable({ drafts, names, exitNames, onChange }: LinesProps) {
@@ -43,7 +55,7 @@ export function SettleLinesTable({ drafts, names, exitNames, onChange }: LinesPr
             <TableHead className="min-w-24 text-right">İade kg</TableHead>
             <TableHead className="min-w-24 text-right">Fire kg</TableHead>
             <TableHead className={cn(num, "whitespace-nowrap")} title="Deverecide kalır, sonraki siparişe devreder">Kalır kg</TableHead>
-            <TableHead>İade deposu</TableHead>
+            <TableHead className="whitespace-nowrap">İade deposu</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -52,8 +64,8 @@ export function SettleLinesTable({ drafts, names, exitNames, onChange }: LinesPr
             const label = `${yarnCode(names, d.line.yarnItemId)} ${d.line.dispatchNo}`;
             return (
               <TableRow key={d.line.dispatchItemId}>
-                <TableCell>
-                  <span className="font-medium">{yarnCode(names, d.line.yarnItemId)}</span> <span className="text-xs text-muted-foreground">{d.line.dispatchNo} · {d.line.lotNo ? `lot ${d.line.lotNo}` : "lotsuz"}{!d.line.own && " · aktarımla gelen"}</span>
+                <TableCell className="min-w-0">
+                  <YarnNameCell names={names} yarnItemId={d.line.yarnItemId} extra={`${d.line.dispatchNo} · ${d.line.lotNo ? `lot ${d.line.lotNo}` : "lotsuz"}${d.line.own ? "" : " · aktarımla gelen"}`} />
                 </TableCell>
                 <TableCell className={num}>{fmtKg(d.line.holdingKg)}</TableCell>
                 <TableCell>
@@ -78,13 +90,13 @@ export function SettleLinesTable({ drafts, names, exitNames, onChange }: LinesPr
 
 const OverBadge = ({ text }: { text: string }) => <Badge className="bg-amber-100 font-normal text-amber-800 dark:bg-amber-950 dark:text-amber-300">{text}</Badge>;
 
-export function SettlePreviewView({ p }: { p: WarpingSettlePreview }) {
+export function SettlePreviewView({ p, names }: { p: WarpingSettlePreview; names?: YarnNames }) {
   const plan = p.plan;
   return (
     <div className="space-y-2" aria-label="Kapanış önizlemesi">
       <p>
         Fire genel <b>{pctText(plan.wastePct)}</b>{plan.tolerancePct !== null && Number(plan.tolerancePct) > 0 ? ` · tolerans ${pctText(plan.tolerancePct)}` : " · tolerans denetimi yok"}{" "}
-        {plan.overTolerance && <OverBadge text={plan.yarns.some((y) => y.overTolerance) ? `Toleransı aşan iplik: ${plan.yarns.filter((y) => y.overTolerance).map((y) => y.code).join(", ")}` : "Tolerans aşıldı"} />}
+        {plan.overTolerance && <OverBadge text={plan.yarns.some((y) => y.overTolerance) ? `Toleransı aşan iplik: ${plan.yarns.filter((y) => y.overTolerance).map((y) => (names && names.get(y.yarnItemId)?.name) || y.code).join(", ")}` : "Tolerans aşıldı"} />}
       </p>
       <div className="overflow-x-auto rounded-md border">
         <Table aria-label="İplik başına kapanış">
@@ -102,7 +114,7 @@ export function SettlePreviewView({ p }: { p: WarpingSettlePreview }) {
           <TableBody>
             {plan.yarns.map((y) => (
               <TableRow key={y.yarnItemId}>
-                <TableCell>{y.code}</TableCell>
+                <TableCell><YarnNameCell names={names} yarnItemId={y.yarnItemId} fallbackCode={y.code} /></TableCell>
                 <TableCell className={num}>{fmtKg(y.woundKg)}</TableCell>
                 <TableCell className={num}>{fmtKg(y.holdingKg)}</TableCell>
                 <TableCell className={num}>{fmtKg(y.returnKg)}</TableCell>

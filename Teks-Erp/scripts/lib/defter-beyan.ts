@@ -278,15 +278,15 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     [{ dosya: "src/services/warping-order/yarn-transfer-cancel.ts", sembol: "cancelWarpingTransfer" }],
     ["src/services/warping-order/yarn-transfer.ts", "src/services/warping-order/yarn-return.ts", "src/services/warping-order/yarn-transfer-cancel.ts", "src/services/warping-order/reopen.ts"]),
 
-  D("WarpingYarnWaste", "fason devere D5b: kapanış FİRE defteri — kalemin tutan siparişince beyan edilen fire (satır silinirse deverecide kalan, devreden bakiye ve fire % değişir); ileri WASTE (kapanış) ↔ WASTE_CANCEL (yeniden açma; `reversesId`, tek ters, çift storno DB'de imkânsız)",
+  D("WarpingYarnWaste", "fason devere D5b: FİRE defteri — kalemin tutan siparişince beyan edilen fire (satır silinirse deverecide kalan, devreden bakiye ve fire % değişir); ileri WASTE (kapanış ya da iade penceresi, tek yazar `waste-write.ts`) ↔ WASTE_CANCEL (kapanış firesi: yeniden açma · iade firesi: iade stornosu; `reversesId`, tek ters, çift storno DB'de imkânsız)",
     { tur: "TERS_BAG", kolon: "reversesId" },
-    [{ dosya: "src/services/warping-order/reopen.ts", sembol: "reopenWarpingOrder" }],
-    ["src/services/warping-order/settle.ts", "src/services/warping-order/reopen.ts"]),
+    [{ dosya: "src/services/warping-order/reopen.ts", sembol: "reopenWarpingOrder" }, { dosya: "src/services/warping-order/yarn-return-waste.ts", sembol: "cancelReturnWithWasteTx" }],
+    ["src/services/warping-order/waste-write.ts"]),
 
-  D("WarpingOrderSettlement", "fason devere D5b: sipariş KAPANIŞ / YENİDEN AÇMA defteri — kapanışın gerekçesi, fire %, tolerans hükmü ve yazdığı iade/geri aktarım kimlikleri (yeniden açma bunları storno eder; satır silinirse kapanışın ters yolu kaybolur); ileri SETTLE ↔ REOPEN (`reversesId`, tek ters)",
+  D("WarpingOrderSettlement", "fason devere D5b: sipariş KAPANIŞ / YENİDEN AÇMA defteri — kapanışın gerekçesi, fire %, tolerans hükmü ve yazdığı iade/geri aktarım kimlikleri (yeniden açma bunları storno eder; satır silinirse kapanışın ters yolu kaybolur); ileri SETTLE (elle ya da otomatik kapanış `auto-settle.ts`) ↔ REOPEN (`reversesId`, tek ters)",
     { tur: "TERS_BAG", kolon: "reversesId" },
     [{ dosya: "src/services/warping-order/reopen.ts", sembol: "reopenWarpingOrder" }],
-    ["src/services/warping-order/settle.ts", "src/services/warping-order/reopen.ts"]),
+    ["src/services/warping-order/settle.ts", "src/services/warping-order/auto-settle.ts", "src/services/warping-order/reopen.ts"]),
 
   D("WarpBeamEvent", "levent olay defteri (devere 1b + fason F1 + Faz 3 tezgah bağı) — WOUND doğuş gerçekleri değişmez; ters yol tipli çiftler, orijinaline `reversesEventId` (tek ters, çift iptal DB'de imkânsız): WOUND↔WOUND_CANCEL (CANCELLED terminal, PLANNED'a dönmez) · SHIP_OUT↔SHIP_OUT_CANCEL (sevk iptali) · RETURNED_IN↔RETURNED_IN_CANCEL (fason dönüşü stornosu) · Faz 3: MOUNTED/DISMOUNTED/EXHAUSTED/SCRAPPED ↔ *_CANCEL (LIFO — yalnız en yeni aktif durum olayı) · CONSUMED↔CONSUMED_CANCEL (LIFO dışı; Faz 4 `rollId`li satır top iptalinde `cancelConsumedForRollTx`, SCRAP'ta dokunulmaz) · ADJUST_IN/ADJUST_OUT karşı düzeltmeyle kapanır (ters bağ yok, sebep zorunlu); fason satırları sevk kalemine bağlı (`dispatchItemId`, CHECK iki yönlü) · genel fason F5: SHIP_TO_OWNER↔SHIP_TO_OWNER_CANCEL (emanet çıkış belgesi iptali; `consignmentItemId`, CHECK iki yönlü)",
     { tur: "TERS_BAG", kolon: "reversesEventId" },

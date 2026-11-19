@@ -175,7 +175,7 @@ export async function cancelYarnItemsTx(tx: Tx, input: { dispatchId: string; rea
       throw AppError.conflict(`${it.yarnItem?.code} ipliği bu sevkten dönmüş — sevk iptal edilemez, önce dönüşü iptal edin`, { code: "YARN_ITEM_RETURNED", itemCode: it.yarnItem?.code });
     }
     if (wasteNet(it).gt(0)) {
-      throw AppError.conflict(`${it.yarnItem?.code} ipliğine kapanışta fire yazılmış — sevk iptal edilemez, önce siparişi yeniden açın (LIFO)`, { code: "YARN_ITEM_WASTED", itemCode: it.yarnItem?.code });
+      throw AppError.conflict(`${it.yarnItem?.code} ipliğine fire yazılmış — sevk iptal edilemez; önce fireyi geri alın (kapanış firesi: siparişi yeniden açın · iade firesi: iadeyi iptal edin) (LIFO)`, { code: "YARN_ITEM_WASTED", itemCode: it.yarnItem?.code });
     }
     if (it.warpBeamYarnAllocations.length > 0) {
       throw AppError.conflict(`${it.yarnItem?.code} ipliği bu sevkten dönen levente dağıtılmış — sevk iptal edilemez, önce levent dönüşünü iptal edin (LIFO)`, { code: "YARN_ITEM_ALLOCATED", itemCode: it.yarnItem?.code });
@@ -210,6 +210,8 @@ export interface ReturnYarnInput {
   /** Varsayılan çıkışın deposu/lotu; fason başka depoya teslim edebilir (H2). */
   warehouseId?: string | null;
   lotId?: string | null;
+  /** Sunucu içi: devere iade ucunun deneme kimliği + gövde özeti (HTTP gövdesinden gelmez; Zod şeması taşımaz). */
+  token?: { clientToken: string; requestHash: string } | null;
 }
 export interface YarnReturnDto {
   movementId: string;
@@ -248,6 +250,7 @@ export async function returnYarnTx(tx: Tx, dispatchId: string, input: ReturnYarn
   const { movementId } = await applyYarnMovementTx(tx, {
     itemId: item.yarnItemId!, warehouseId: input.warehouseId ?? out.warehouseId, kind: YarnMovementKind.SUBCONTRACT_RETURN, qtyKg: qty,
     lotId: input.lotId === undefined ? out.lotId : input.lotId, reasonCode, dispatchItemId: item.id, userId: userId ?? null,
+    clientToken: input.token?.clientToken ?? null, requestHash: input.token?.requestHash ?? null,
   });
   return { movementId, item, qty, remainingKg: out.qtyKg.minus(already).minus(qty) };
 }

@@ -1,5 +1,6 @@
 // =============================================================================
-// FASON DEVERE — kapanış DIŞINDA iplik İADESİ (sarmalayıcı) + iade stornosu · deverecide duran iplik okuyucuları (D4b-2)
+// FASON DEVERE — iplik İADESİNİN tx gövdesi + kaynak claim'i · deverecide duran iplik okuyucuları (D4b-2)
+// (elle iade + fire + iade stornosu ucu: `yarn-return-waste.ts`)
 // =============================================================================
 // İade = mevcut `returnYarnTx` (SUBCONTRACT_RETURN; tek yazar `applyYarnMovementTx`, iplik kapısı orada). Tavan bu
 // siparişin TUTMASI (holding). Aktarımla gelen kalemden iade: aynı tx'te kalemin kendi siparişine geri aktarım
@@ -9,10 +10,8 @@ import { randomUUID } from "node:crypto";
 import { Prisma, WarpingOrderStatus } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
-import { AuditService } from "../audit.service";
-import { cancelYarnReturn, returnYarnTx, type ReturnYarnInput } from "../subcontractor-yarn.service";
+import { returnYarnTx, type ReturnYarnInput } from "../subcontractor-yarn.service";
 import { loadWarpingYarnHoldings, loadWarpingYarnItems, lockDispatchItemsTx, WARPING_TRANSFER } from "../helpers/warping-yarn-open.helper";
-import { WARPING_ORDER_TABLE } from "./create";
 import { listWarpingTransfers as listWarpingTransferBatches } from "./yarn-transfer-shared";
 import { qtyText } from "../helpers/qty-text.helper";
 
@@ -58,36 +57,13 @@ export async function returnWarpingYarnTx(tx: Prisma.TransactionClient, id: stri
   return { r, it, backTransferBatchId, backTransferId, holding: it.openKg.minus(r.qty) };
 }
 
-export async function returnWarpingYarn(id: string, input: ReturnYarnInput, userId: string): Promise<WarpingYarnReturnResult> {
-  const out = await prisma.$transaction(async (tx) => {
-    const claim = await tx.warpingOrder.updateMany({ where: { id, status: { in: HOLDERS } }, data: { updatedById: userId } });
-    if (claim.count === 0) {
-      const fresh = await tx.warpingOrder.findUnique({ where: { id }, select: { orderNo: true, status: true } });
-      if (!fresh) throw AppError.notFound("Fason devere siparişi bulunamadı.", { code: "WARPING_ORDER_NOT_FOUND" });
-      throw AppError.conflict(`${fresh.orderNo} durumu ${fresh.status} — deverecide tuttuğu iplik yok, iade alınamaz.`, { code: "WARPING_RETURN_STATUS", status: fresh.status });
-    }
-    return returnWarpingYarnTx(tx, id, input, userId);
-  });
-  const itemCode = out.r.item.yarnItem?.code ?? "";
-  await AuditService.log({ userId, action: "UPDATE", tableName: "SUBCONTRACTOR_DISPATCH", recordId: out.it.dispatchId, newData: { yarnReturned: itemCode, dispatchItemId: input.dispatchItemId, qtyKg: kg(out.r.qty), reasonCode: input.reasonCode, movementId: out.r.movementId, warpingOrderId: id } });
-  await AuditService.log({ userId, action: "UPDATE", tableName: WARPING_ORDER_TABLE, recordId: id, newData: { yarnReturned: itemCode, movementId: out.r.movementId, qtyKg: kg(out.r.qty), backTransferBatchId: out.backTransferBatchId } });
-  return {
-    movementId: out.r.movementId, dispatchItemId: input.dispatchItemId, dispatchNo: out.it.dispatchNo, itemCode,
-    qtyKg: kg(out.r.qty), holdingKg: kg(out.holding), backTransferBatchId: out.backTransferBatchId,
-  };
-}
-
-/** İade stornosu — mevcut `cancelYarnReturn`; dönen iplik kalemin KENDİ siparişinin tutmasına döner. */
-export async function cancelWarpingYarnReturn(id: string, movementId: string, reason: string, userId: string) {
-  const m = await prisma.yarnMovement.findUnique({
-    where: { id: movementId },
-    select: { id: true, dispatchItemId: true, dispatchItem: { select: { dispatchId: true, dispatch: { select: { warpingOrderId: true } }, warpingYarnTransfers: { where: { OR: [{ fromWarpingOrderId: id }, { toWarpingOrderId: id }] }, select: { id: true }, take: 1 } } } },
-  });
-  const item = m?.dispatchItem;
-  const related = item && item.dispatch.warpingOrderId !== null && (item.dispatch.warpingOrderId === id || item.warpingYarnTransfers.length > 0);
-  if (!m || !item || !related) throw AppError.notFound("Bu siparişte böyle bir iade satırı yok.", { code: "YARN_RETURN_NOT_FOUND" });
-  const res = await cancelYarnReturn(item.dispatchId, { dispatchItemId: m.dispatchItemId!, movementId, reason }, userId);
-  return res.data!;
+/** İade/aktarma kaynağı claim'i — tx'in İLK ifadesi (sipariş satırı; kabul/sevk/kapanış aynı satırda sıraya girer). */
+export async function claimReturnSourceTx(tx: Prisma.TransactionClient, id: string, userId: string): Promise<void> {
+  const claim = await tx.warpingOrder.updateMany({ where: { id, status: { in: HOLDERS } }, data: { updatedById: userId } });
+  if (claim.count === 1) return;
+  const fresh = await tx.warpingOrder.findUnique({ where: { id }, select: { orderNo: true, status: true } });
+  if (!fresh) throw AppError.notFound("Fason devere siparişi bulunamadı.", { code: "WARPING_ORDER_NOT_FOUND" });
+  throw AppError.conflict(`${fresh.orderNo} durumu ${fresh.status} — deverecide tuttuğu iplik yok, iade alınamaz.`, { code: "WARPING_RETURN_STATUS", status: fresh.status });
 }
 
 // ── Okuyucular ───────────────────────────────────────────────────────────────

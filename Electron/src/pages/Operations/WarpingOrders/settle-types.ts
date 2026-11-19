@@ -29,6 +29,8 @@ export interface WarpingSettlePlanYarn {
   holdingKg: string;
   returnKg: string;
   wasteKg: string;
+  /** Bu ipliğe daha önce (iade penceresinde) yazılmış canlı fire — fire %ye girer; eski sunucuda yok. */
+  priorWasteKg?: string;
   keepKg: string;
   wastePct: string | null;
   overTolerance: boolean;
