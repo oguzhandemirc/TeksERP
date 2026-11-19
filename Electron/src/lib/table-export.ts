@@ -30,6 +30,12 @@ declare module "@tanstack/react-table" {
     exportExtras?: { label: string; value: (row: TData) => unknown; summable?: boolean }[];
     /** true → hücre ÇOK SATIRA sarılır (başlık + gövde gibi); varsayılan tek satır + "…" (DataTable). */
     wrap?: boolean;
+    /** Yalnız dosyadaki sütun adı (ekranda/Sütunlar menüsünde `label`/başlık kalır). */
+    exportLabel?: string;
+    /** true → dışa aktarıma girmez (düğme sütunu: "Belgeler" gibi); Sütunlar menüsünde kalır. */
+    noExport?: boolean;
+    /** "right" → sütun yatay kaydırmada sağa yapışık kalır (eylem sütunu; yalnız SON sütunda doğru). */
+    sticky?: "right";
   }
 }
 
@@ -60,14 +66,16 @@ function rawCellValue<T>(col: Column<T, unknown>, original: T): unknown {
 
 /** Görünür kolonlar (select/actions hariç) — export'lar paylaşır. */
 function tableExportCols<T>(table: Table<T>): Column<T, unknown>[] {
-  return table.getVisibleLeafColumns().filter((c) => c.id !== "select" && c.id !== "actions");
+  return table
+    .getVisibleLeafColumns()
+    .filter((c) => c.id !== "select" && c.id !== "actions" && !c.columnDef.meta?.noExport);
 }
 
 /** Görünür TanStack kolonları → motorun anladığı sütun tarifleri. */
 function toExportColumns<T>(table: Table<T>): ExportColumn<T>[] {
   return tableExportCols(table).flatMap((c) => [
     {
-      label: columnLabel(c),
+      label: c.columnDef.meta?.exportLabel ?? columnLabel(c),
       value: (row: T) => rawCellValue(c, row),
       summable: Boolean(c.columnDef.meta?.summable),
     },

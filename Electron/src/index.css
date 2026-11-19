@@ -562,6 +562,24 @@
   box-shadow: inset -1px 0 0 var(--table-col-line);
 }
 .data-grid[data-resizing] { cursor: col-resize; user-select: none; }
+/* Sağa yapışık eylem sütunu (`meta.sticky: "right"`): opak zemin + sol ayraç; satır vurgusu zemin
+   rengine görüntü katmanı olarak biner (yarı saydam satır rengi yapışık hücrede alttaki metni gösterirdi). */
+.data-grid :is(th, td)[data-sticky="right"] {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  background-color: hsl(var(--card));
+  box-shadow: inset 1px 0 0 var(--table-col-line), -8px 0 8px -8px rgb(0 0 0 / 0.18);
+}
+.data-grid th[data-sticky="right"] { z-index: 2; }
+/* Yapışık (son) sütunun genişlik tutamacı dışarı taşmasın — yoksa tablo 4px yatay kayar. */
+.data-grid th[data-sticky="right"] [data-col-resizer] { right: 0; }
+.data-grid tr:hover > td[data-sticky="right"] {
+  background-image: linear-gradient(hsl(var(--accent) / 0.5), hsl(var(--accent) / 0.5));
+}
+.data-grid tr[data-state="selected"] > td[data-sticky="right"] {
+  background-image: linear-gradient(hsl(var(--primary-soft) / 0.7), hsl(var(--primary-soft) / 0.7));
+}
 /* Hücre TEK SATIR: sayfa sütunu `whitespace-normal`/`flex-wrap` verse de tablo içinde kaydırmaz;
    taşan kısım kutuda "…" olur, tam metin üzerine gelince (column-layout `handleClipHover`). */
 .data-grid [data-cell-clip],

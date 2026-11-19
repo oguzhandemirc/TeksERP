@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { toast } from "sonner";
 import { FileSpreadsheet } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -18,13 +18,9 @@ import { accountingDispatchService } from "./service";
 import { buildDispatchColumns } from "./columns";
 import { ACCOUNTING_PERSIST } from "./filters";
 import { AccountingFilterRow } from "./AccountingFilterRow";
-import { InvoiceDialog } from "./InvoiceDialog";
 import { useAccountingExport } from "./useAccountingExport";
-import { useFeatureFlags, useShippingInvoiceMode } from "@/hooks/usePricingEnabled";
-import { ShipmentInvoiceDraft } from "./ShipmentInvoiceDraft";
-import { InvoiceDetailDialog } from "@/pages/Finance/InvoiceDetailDialog";
+import { useDispatchRowActions } from "./useDispatchRowActions";
 import type { DispatchCursorResponse, DispatchListItem } from "./types";
-import { ShipmentDocDialog } from "@/pages/Operations/Shipments/ShipmentDocDialog";
 
 const QUERY_KEY = "accounting-dispatch";
 
@@ -34,7 +30,7 @@ const FORCE = { status: "DISPATCHED" } as const;
 /**
  * Saha #2 — Muhasebe / Sevk Edilenler. DISPATCHED listesi (sevk tarihi sıralı, tarih +
  * müşteri + şube + yön + fatura + iade filtreli) + sevk irsaliyesi (ShipmentDocDialog —
- * sevkiyat ekranıyla AYNI yüzey) + fatura işareti (InvoiceDialog). Rakamlar BRÜT — iade düşülmez, "N iade" rozeti farkı
+ * sevkiyat ekranıyla AYNI yüzey) + fatura bilgisi/belgesi (useDispatchRowActions). Rakamlar BRÜT — iade düşülmez, "N iade" rozeti farkı
  * söyler (bkz. kök CLAUDE.md 2026-08-02).
  *
  * Excel çıkışları:
@@ -43,31 +39,9 @@ const FORCE = { status: "DISPATCHED" } as const;
  *    ayrı PDF/Excel, sevk no adıyla).
  */
 export function AccountingDispatchPage() {
-  /** Sevk irsaliyesi — sevkiyat ekranıyla AYNI bileşen (tek yüzey, tek düğme). */
-  const [belgeFor, setBelgeFor] = useState<DispatchListItem | null>(null);
-  const [invoiceFor, setInvoiceFor] = useState<DispatchListItem | null>(null);
-  // İÇ fatura taslağı — yalnız TİCARET REJİMİNDE. Fabrikada ön muhasebe modülü
-  // kapalı olduğu için düğme hiç çizilmez (fabrika sıfır-fark).
-  const financeEnabled = useFeatureFlags().data?.data?.financeEnabled ?? false;
-  // Elle fatura izi rejimi — üç yüzeyin (satır düğmesi · sağ-tık · toplu) ORTAK
-  // kaynağı. Varsayılan `dis` = bugünkü davranış.
-  const invoiceMode = useShippingInvoiceMode();
-  const [draftFor, setDraftFor] = useState<DispatchListItem | null>(null);
-  // Mevcut İÇ fatura (taslak ya da onaylı) — satırdaki bağdan açılır.
-  const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
-  const columns = useMemo(
-    () =>
-      buildDispatchColumns(
-        setBelgeFor,
-        setInvoiceFor,
-        setDraftFor,
-        financeEnabled,
-        setOpenInvoiceId,
-        invoiceMode,
-      ),
-    [financeEnabled, invoiceMode],
-  );
-
+  // Satır eylemleri (irsaliye · fatura bilgisi · fatura belgesi · ⋯) ve diyalogları — useDispatchRowActions.
+  const { handlers, dialogs: rowDialogs } = useDispatchRowActions(QUERY_KEY);
+  const columns = useMemo(() => buildDispatchColumns(handlers), [handlers]);
   const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<DispatchListItem>({
     queryKey: QUERY_KEY,
     fetchFn: accountingDispatchService.listCursor,
@@ -187,34 +161,7 @@ export function AccountingDispatchPage() {
           )
         }
       />
-
-      {/* Belge yüzeyi — sevkiyat ekranıyla AYNI bileşen: sürüm çubuğu, geçmiş,
-          "güncel görünüm", baskı seçenekleri, Excel ve toplu etiket hepsi orada
-          yaşıyor. Buraya ikinci bir kopya yazmak iki yüzeyin ayrışması demekti. */}
-      <ShipmentDocDialog
-        shipmentId={belgeFor?.id ?? null}
-        open={!!belgeFor}
-        onOpenChange={(o) => !o && setBelgeFor(null)}
-        kind={belgeFor?.kind}
-        shipmentNo={belgeFor?.shipmentNo}
-        status={belgeFor?.status}
-      />
-      <InvoiceDialog row={invoiceFor} onClose={() => setInvoiceFor(null)} queryKey={QUERY_KEY} />
-      <ShipmentInvoiceDraft
-        row={draftFor}
-        onClose={() => setDraftFor(null)}
-        onCreated={() => void query.refetch()}
-      />
-
-      {/* Sevkiyatın İÇ faturası — koşullu mount. Liste AÇIK KALIR: muhasebeci
-          taslağı kapatınca baktığı sevk listesine döner. */}
-      {openInvoiceId && (
-        <InvoiceDetailDialog
-          invoiceId={openInvoiceId}
-          open
-          onOpenChange={(o) => !o && setOpenInvoiceId(null)}
-        />
-      )}
+      {rowDialogs}
     </PageShell>
   );
 }

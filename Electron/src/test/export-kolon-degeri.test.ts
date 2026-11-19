@@ -6,7 +6,7 @@
 // olduğundan `original.items` undefined → boş hücre. Ekran doğru, dosya boş: kimse fark etmez.
 //
 // Ölçüm (AST): `src` altında `cell` + (`header` | `id`) taşıyan nesne literali bir TanStack kolon tanımıdır.
-// `accessorKey` / `accessorFn` / `meta: { exportValue }` üçünden biri yoksa ve id select/actions değilse İHLAL.
+// `accessorKey` / `accessorFn` / `meta: { exportValue }` (ya da beyanlı `meta.noExport`) yoksa ve id select/actions değilse İHLAL.
 // `meta` literal değilse (değişken/spread) ya da nesnede spread varsa ölçülemez → ihlal sayılmaz.
 // Devralınan ihlaller BASELINE'da donar; liste yalnız DARALIR (düzelen kolon buradan silinmeli, yeni ihlal kırmızı).
 // =============================================================================
@@ -25,7 +25,6 @@ const BASELINE: Record<string, string[]> = {
   "Items/columns.tsx": ["allowedColors", "allowedProperties"],
   "MachineStopCodeMaps/columns.tsx": ["scope", "stopReason"],
   "Machines/columns.tsx": ["loomLabel", "qr", "station"],
-  "Operations/AccountingDispatch/columns.tsx": ["counts", "customer", "invoice", "receipt", "totals"],
   "Operations/Kartela/kartelaColumns.tsx": ["subcontractor", "subcontractor"],
   "Operations/MachineStops/columns.tsx": ["duration", "lossClass", "machine", "reason", "shift", "source", "start"],
   "Operations/Returns/returnsColumns.tsx": ["barcode", "customer", "item", "order", "quality", "reason", "receivedBy", "returnNo"],
@@ -75,7 +74,8 @@ function cellOnlyColumnIds(fileName: string, text: string): string[] {
         let hasExport = false;
         if (meta) {
           if (ts.isPropertyAssignment(meta) && ts.isObjectLiteralExpression(meta.initializer)) {
-            hasExport = meta.initializer.properties.some((q) => propName(q) === "exportValue");
+            // `noExport` = bilerek dosya dışı düğme sütunu (beyanlı, sessiz boşluk değil).
+            hasExport = meta.initializer.properties.some((q) => propName(q) === "exportValue" || propName(q) === "noExport");
             if (meta.initializer.properties.some(ts.isSpreadAssignment)) measurable = false;
           } else measurable = false;
         }
