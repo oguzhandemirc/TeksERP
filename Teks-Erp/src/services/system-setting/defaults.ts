@@ -235,6 +235,15 @@ export const STOCK_AGING_SCOPES: StockAgingScope[] = ["raf", "depodaki-her-top"]
 /** Varsayılan `raf` — karar 2026-11-15: bildirim Stok & Ölü Stok raporunun raf kümesiyle aynı adedi söylesin. */
 export const DEFAULT_STOCK_AGING_SCOPE: StockAgingScope = "raf";
 
+/** `genel.gun-sonu-ozeti` pencere saati (bkz. `SETTING_KEYS.NOTIFICATION_DAILY_SUMMARY_TIME`), fabrika dilimi "SS:DD".
+ *  `00:00` = gün bitimi (biten fabrika gününün tamamı); diğerleri bugünün 00:00 → saat penceresi. 12:00–23:30 yarım saat adımlı. */
+export const NOTIFICATION_DAILY_SUMMARY_TIMES = [
+  "00:00",
+  ...Array.from({ length: 24 }, (_, i) => `${String(12 + Math.floor(i / 2)).padStart(2, "0")}:${i % 2 === 0 ? "00" : "30"}`),
+] as [string, ...string[]];
+/** Varsayılan `00:00` — diğer gün sonu özetleriyle aynı pencere (biten fabrika günü); tür yeni, varsayılan teslimi KAPALI. */
+export const DEFAULT_NOTIFICATION_DAILY_SUMMARY_TIME = "00:00";
+
 /** D4-F3: müşteri barkodu basan şablonda kod yoksa. */
 export type LabelCustomerCodeMissing = "BLOCK" | "ROLL_BARCODE";
 export const LABEL_CUSTOMER_CODE_MISSING_MODES: LabelCustomerCodeMissing[] = ["BLOCK", "ROLL_BARCODE"];

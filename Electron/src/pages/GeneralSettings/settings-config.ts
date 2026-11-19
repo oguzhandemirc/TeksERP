@@ -3158,6 +3158,22 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
           { value: "depodaki-her-top", label: "Depodaki her top", hint: "Çuvaldaki, planlı sevkiyattaki ve emanet top da sayılır." },
         ],
       },
+      {
+        // `defaultValue` backend `DEFAULT_NOTIFICATION_DAILY_SUMMARY_TIME` ile birebir (bekçi §16); seçenekler `NOTIFICATION_DAILY_SUMMARY_TIMES` aynası.
+        enumKey: "notificationDailySummaryTime",
+        title: "Gün sonu özeti saati",
+        summary: "Sipariş, üretim, sevk, depo ve fason sayılarını tek bildirimde toplayan gün sonu özeti hangi saatte gelsin.",
+        desc: "Gün bitiminde (varsayılan): fabrika günü kapanınca, biten günün tamamı özetlenir — diğer günlük özetlerle aynı an. Bir saat seçilirse o gün 00:00'dan seçilen saate kadar olan iş, saat gelince bir kez özetlenir. Bildirim kimseye kendiliğinden gelmez; isteyen Bildirim tercihlerinden \"Gün sonu özeti\" türünü açar.",
+        defaultValue: "00:00",
+        audience: ["Yönetim"],
+        options: [
+          { value: "00:00", label: "Gün bitiminde (varsayılan)", hint: "Biten fabrika gününün tamamı; diğer günlük özetlerle aynı an." },
+          ...Array.from({ length: 24 }, (_, i) => {
+            const v = `${String(12 + Math.floor(i / 2)).padStart(2, "0")}:${i % 2 === 0 ? "00" : "30"}`;
+            return { value: v, label: v, hint: `Bugün 00:00 – ${v} arası, saat ${v}'da özetlenir.` };
+          }),
+        ],
+      },
     ],
   },
   {

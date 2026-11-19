@@ -37,6 +37,7 @@ import {
 } from "@prisma/client";
 import { resolveReasonCode } from "../reason-preset.service";
 import { assertCancelReasonTx } from "../helpers/cancel-reason.helper";
+import { emitRollRetiredTx } from "../notification-sources/depo";
 // Fire sebebi metin SAKLAMAYAN bir kind'tır → sapma kataloğunun senkron kapısı.
 import { validateVarianceReason } from "../../constants/variance-reasons";
 // G2 (2026-08-14): tekil top iptali alış siparişi rollup'ını tetikler.
@@ -724,9 +725,12 @@ export async function softDelete(
     // istemcileri sessizce kilitler.
     void opts?.confirmLabelPrinted;
 
-    const updated = await prisma.$transaction((tx) =>
-      cancelRollRecordTx(tx, { existing, isScrap, userId, cancelReasonText, cancelReasonCode }),
-    );
+    const updated = await prisma.$transaction(async (tx) => {
+      const res = await cancelRollRecordTx(tx, { existing, isScrap, userId, cancelReasonText, cancelReasonCode });
+      // Bildirim claim'den SONRA aynı tx'te (rollback → bildirim yok); gelen belge iptali bu yoldan geçmez (`gelenbelge.iptal`).
+      await emitRollRetiredTx(tx, id, { scrap: isScrap, qty: existing.currentQty, reason: cancelReasonText }, userId);
+      return res;
+    });
     await auditCutReadings(userId, [], { ids: updated.cutReadingsRevoked, reason: ROLL_CANCEL_CUT_REASON });
 
     await AuditService.log({

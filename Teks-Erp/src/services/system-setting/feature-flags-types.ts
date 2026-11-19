@@ -561,6 +561,8 @@ export interface FeatureFlags {
   notificationStockAgingSource: StockAgingSource;
   /** `stok.yaslanan` top kapsamı (default `raf` = Stok & Ölü Stok raf kümesi; `depodaki-her-top` çuvaldaki/planlı sevkiyattaki/emanet topu da sayar). */
   notificationStockAgingScope: StockAgingScope;
+  /** `genel.gun-sonu-ozeti` pencere saati "SS:DD" (default `00:00` = biten fabrika günü, diğer gün sonu özetleriyle aynı). */
+  notificationDailySummaryTime: string;
   /** Belge tasarımcısı (default false = bugünkü Sistem tasarımı; tasarım uçları 403, basım şablon çözmez). */
   documentDesignerEnabled: boolean;
   /** Şablon yayınında tasarlayan ≠ yayınlayan (default false = bugünkü davranış). */

@@ -102,6 +102,18 @@ export const SATIS_NOTIFICATION_ENTRIES = {
     payloadAlanlari: ["gun", "yeni", "kalem", "tamamlanan", "iptal"],
     tahminiHaftalik: 7,
   },
+  // Birleşik gün sonu (2026-11-19): sayılar alan özetlerinin AYNI sayım fonksiyonlarından (`notification-sources/gun-sonu-ozeti.ts`);
+  // pencere saati `bildirim.gunSonuOzeti.saat` (00:00 = biten fabrika günü). Varsayılan KAPALI: alan özetleri zaten gelir, tercihle açılır.
+  "genel.gun-sonu-ozeti": {
+    ...ORTAK, grup: "Sipariş", izinler: [["report:sales"]], modul: "cekirdek:siparis-musteri",
+    kod: "genel.gun-sonu-ozeti", ad: "Gün sonu özeti (sipariş · üretim · sevk · depo · fason)", ozet: "GUN_SONU",
+    varsayilan: "KAPALI", tekilKalibi: "{gun}", pencereSn: 0,
+    panelEkran: "reports/sales", panelYol: "/reports/sales",
+    baslik: "Gün sonu özeti · {gun} ({aralik})",
+    govde: "{siparis} yeni sipariş · üretim {uretimTop} top, {uretimMetre} m · sevk {sevkTop} top, {sevkMetre} m · depoya {girisTop} top girdi · fason {fasonCikis} çıkış, {fasonDonus} dönüş",
+    payloadAlanlari: ["gun", "aralik", "siparis", "uretimTop", "uretimMetre", "sevkTop", "sevkMetre", "girisTop", "fasonCikis", "fasonDonus"],
+    tahminiHaftalik: 7,
+  },
 
   // ── Teklif ────────────────────────────────────────────────────────────────
   "teklif.olusturuldu": {

@@ -45,6 +45,13 @@ export async function brodeTotals(tx: Tx, w: Pick<DigestWindow, "from" | "to">):
   return { makine: used.size, is: works.size, metre: r1(metre) };
 }
 
+/** Pencerede biten kumaş (top/metre) + tamamlanan iş emri — gün sonu üretim özeti ve birleşik gün sonu özetinin TEK kaynağı. */
+export async function productionWindowCounts(tx: Tx, w: DigestWindow): Promise<{ top: number; metre: number; biten: number }> {
+  const t = await producedTotals(tx, w);
+  const biten = await tx.workOrderEvent.count({ where: { type: WorkOrderEventType.STATUS_CHANGED, toValue: "COMPLETED", createdAt: { gte: w.from, lt: w.to } } });
+  return { top: t.top, metre: r1(t.metre), biten };
+}
+
 export function registerProductionDigestSources(): void {
   registerDigestSource({
     kind: "uretim.top-uretildi-ozet",
@@ -57,10 +64,9 @@ export function registerProductionDigestSources(): void {
   registerDigestSource({
     kind: "uretim.gun-sonu-ozet",
     compute: async (tx, w) => {
-      const t = await producedTotals(tx, w);
-      const biten = await tx.workOrderEvent.count({ where: { type: WorkOrderEventType.STATUS_CHANGED, toValue: "COMPLETED", createdAt: { gte: w.from, lt: w.to } } });
-      if (t.top + biten === 0) return null;
-      return { gun: w.label, top: t.top, metre: r1(t.metre), biten };
+      const c = await productionWindowCounts(tx, w);
+      if (c.top + c.biten === 0) return null;
+      return { gun: w.label, ...c };
     },
   });
   registerDigestSource({

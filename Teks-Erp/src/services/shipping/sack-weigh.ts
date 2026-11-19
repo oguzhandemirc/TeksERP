@@ -30,6 +30,7 @@ import { transitionSwatchesTx } from "../helpers/swatch-event.helper";
 import { resolveWeightSource } from "../helpers/weight-source-gate.helper";
 import type { ShippingServiceThis } from "./shared";
 import { qtyText } from "../helpers/qty-text.helper";
+import { LIVE_SACK_WHERE, sackLedgerCountTx } from "../helpers/sack-retire.helper";
 
 // eslint-disable-next-line max-params -- `this` bağlam bildirimi parametre değil; özgün metot 4 parametreli
 export async function weighSack(this: ShippingServiceThis, 
@@ -89,8 +90,8 @@ export async function weighSack(this: ShippingServiceThis,
       '⋮ → "Elle kg gir" ile girin',
     );
 
-    const sack = await prisma.sack.findUnique({ where: { id: data.sackId }, select: { id: true, shipmentId: true } });
-    if (!sack) throw AppError.notFound("Çuval bulunamadı");
+    const sack = await prisma.sack.findUnique({ where: { id: data.sackId }, select: { id: true, shipmentId: true, retiredAt: true } });
+    if (!sack || sack.retiredAt) throw AppError.notFound("Çuval bulunamadı");
     if (sack.shipmentId != null) throw AppError.conflict("Sevkiyata atanmış çuvalın tartısı değiştirilemez");
 
     // Atomik claim: yukarıdaki tx-dışı guard yalnız UX (404 + okunaklı mesaj) —
@@ -160,9 +161,9 @@ export async function finishWeigh(
 export async function removeSack(sackId: string, userId?: string, withContents = false): Promise<ApiResponse<unknown>> {
     const sack = await prisma.sack.findUnique({
       where: { id: sackId },
-      select: { id: true, sackNo: true, shipmentId: true, _count: { select: { rolls: true, swatches: true } } },
+      select: { id: true, sackNo: true, shipmentId: true, retiredAt: true, _count: { select: { rolls: true, swatches: true } } },
     });
-    if (!sack) throw AppError.notFound("Çuval bulunamadı");
+    if (!sack || sack.retiredAt) throw AppError.notFound("Çuval bulunamadı");
     if (sack.shipmentId != null) throw AppError.conflict("Sevkiyata atanmış çuval silinemez — önce sevkiyattan çıkarın");
 
     const hasContents = sack._count.rolls > 0 || sack._count.swatches > 0;
@@ -171,6 +172,7 @@ export async function removeSack(sackId: string, userId?: string, withContents =
     }
 
     const rolls = hasContents ? await prisma.roll.findMany({ where: { sackId }, select: { id: true, barcode: true } }) : [];
+    let retired = false;
     await prisma.$transaction(async (tx) => {
       // Atomik claim: tx-dışı shipmentId guard'ı yalnız UX — "atama-önce-silme-sonra"
       // yarışında PLANNED (onay kapalıysa DISPATCHED) sevkiyattan çuval sessizce
@@ -188,15 +190,30 @@ export async function removeSack(sackId: string, userId?: string, withContents =
       await tx.roll.updateMany({ where: { sackId }, data: { sackId: null } });
       // Çuval satırı silinir; olay satırı çuval numarasını donuk taşır.
       await transitionSwatchesTx(tx, SwatchEventType.UNSACKED, { scope: { sackIds: [sackId] }, sack: { id: sackId, sackNo: sack.sackNo }, ctx: { trigger: "SACK_REMOVE", userId } });
-      await tx.sack.delete({ where: { id: sackId } });
+      // Deftere yazmış çuval (tartı · tahsis · iz · hareket) sert silinmez — "ne oldu" değişmez; emekliye ayrılır.
+      retired = (await sackLedgerCountTx(tx, sackId)) > 0;
+      if (retired) await retireEmptySackTx(tx, sackId, userId);
+      else await tx.sack.delete({ where: { id: sackId } });
     });
     await AuditService.log({
       userId,
-      action: "DELETE",
+      action: retired ? "UPDATE" : "DELETE",
       tableName: "SACK",
       recordId: sackId,
-      oldData: { sackNo: sack.sackNo, ...(hasContents ? { kind: "SACK_REMOVE_WITH_CONTENTS", returnedRolls: rolls.map((r) => r.barcode ?? r.id), rollCount: sack._count.rolls, swatchCount: sack._count.swatches } : {}) },
+      oldData: { sackNo: sack.sackNo, ...(retired ? { retired: true } : {}), ...(hasContents ? { kind: "SACK_REMOVE_WITH_CONTENTS", returnedRolls: rolls.map((r) => r.barcode ?? r.id), rollCount: sack._count.rolls, swatchCount: sack._count.swatches } : {}) },
     });
     const n = sack._count.rolls + sack._count.swatches;
-    return { success: true, data: { returnedToWarehouse: n }, message: n > 0 ? `Çuval silindi — ${n} top/kartela depoya döndü` : "Çuval silindi" };
+    return { success: true, data: { returnedToWarehouse: n, retired }, message: n > 0 ? `Çuval silindi — ${n} top/kartela depoya döndü` : "Çuval silindi" };
   }
+
+/**
+ * Boş havuz çuvalını emekliye ayırır — atomik claim (havuzda + canlı). Grup üyeliği ve paket no düşer
+ * (sert silmedeki `SetNull` ile aynı sonuç); satır, numara ve tahsis defteri aynen kalır.
+ */
+async function retireEmptySackTx(tx: Prisma.TransactionClient, sackId: string, userId: string | null | undefined): Promise<void> {
+  const r = await tx.sack.updateMany({
+    where: { id: sackId, shipmentId: null, ...LIVE_SACK_WHERE },
+    data: { retiredAt: new Date(), retiredById: userId ?? null, packingGroupId: null, packageNo: null },
+  });
+  if (r.count !== 1) throw AppError.conflict("Çuval bu sırada değişti — sayfayı yenileyin");
+}
