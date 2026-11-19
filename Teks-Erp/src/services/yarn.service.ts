@@ -136,6 +136,9 @@ export interface YarnMovementTxInput {
   dispatchItemId?: string | null;
   /** F5: CONSIGNMENT_OUT(_CANCEL) türlerinde ZORUNLU (CHECK `yarn_movements_consignment_link_ck`), diğerlerinde YAZILMAZ. */
   consignmentItemId?: string | null;
+  /** Devere iade(+fire) ucu: mantıksal deneme token'ı + gövde özeti (replay kararı çağıranın `tokenReplay`ında). */
+  clientToken?: string | null;
+  requestHash?: string | null;
 }
 
 export interface YarnMovementTxResult {
@@ -227,6 +230,7 @@ export async function applyYarnMovementTx(tx: Tx, input: YarnMovementTxInput): P
       lotId: input.lotId ?? null, bobbinCount: input.bobbinCount ?? null,
       dispatchItemId: input.dispatchItemId ?? null,
       consignmentItemId: input.consignmentItemId ?? null,
+      clientToken: input.clientToken ?? null, requestHash: input.requestHash ?? null,
     },
     select: { id: true },
   });

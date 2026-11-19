@@ -36,7 +36,8 @@ import { dispatchWarpingOrder, previewWarpingDispatch, type WarpingDispatchLineI
 import { cancelWarpingDispatch, previewCancelWarpingDispatch } from "../src/services/warping-order/dispatch-cancel";
 import { previewWarpingTransfer, transferWarpingYarn, type WarpingTransferLineInput } from "../src/services/warping-order/yarn-transfer";
 import { cancelWarpingTransfer, previewCancelWarpingTransfer } from "../src/services/warping-order/yarn-transfer-cancel";
-import { cancelWarpingYarnReturn, listWarpingYarnHoldings, returnWarpingYarn, warpingYarnAtSubcontractors } from "../src/services/warping-order/yarn-return";
+import { listWarpingYarnHoldings, warpingYarnAtSubcontractors } from "../src/services/warping-order/yarn-return";
+import { cancelWarpingYarnReturn, returnWarpingYarn } from "../src/services/warping-order/yarn-return-waste";
 import { pctText, qtyText } from "../src/services/helpers/qty-text.helper";
 
 let pass = 0;
@@ -285,9 +286,10 @@ async function main(): Promise<void> {
     const routes = fs.readFileSync(path.join(__dirname, "../src/routes/warping-order-yarn.routes.ts"), "utf8");
     const ends = ["get\\(\"/yarn-at-subcontractor\"", "get\\(\"/:id/yarn-holdings\"", "post\\(\"/:id/yarn-returns\"", "post\\(\"/:id/yarn-returns/:movementId/cancel\"", "get\\(\"/:id/yarn-transfers\"",
       "post\\(\"/:id/yarn-transfers/preview\"", "post\\(\"/:id/yarn-transfers\"", "get\\(\"/:id/yarn-transfers/:batchId/cancel-preview\"", "post\\(\"/:id/yarn-transfers/:batchId/cancel\"",
-      "get\\(\"/:id/dispatches\"", "get\\(\"/:id/yarn-returns\""]; // D6-be okuma uçları
+      "get\\(\"/:id/dispatches\"", "get\\(\"/:id/yarn-returns\"", // D6-be okuma uçları
+      "post\\(\"/:id/yarn-returns/preview\""]; // iade + fire önizlemesi (2026-11-19)
     const gated = ends.map((p) => new RegExp(`router\\.${p}[^\\n]*requireIplikEnabled`).test(routes));
-    check("Modül: on bir iplik ucunun her biri `requireIplikEnabled`'ı uç başına alır (403 MODULE_DISABLED)", gated.every(Boolean) && (routes.match(/^router\.(get|post)\(/gm) ?? []).length === ends.length, JSON.stringify(gated));
+    check("Modül: on iki iplik ucunun her biri `requireIplikEnabled`'ı uç başına alır (403 MODULE_DISABLED)", gated.every(Boolean) && (routes.match(/^router\.(get|post)\(/gm) ?? []).length === ends.length, JSON.stringify(gated));
     const main = fs.readFileSync(path.join(__dirname, "../src/routes/warping-order.routes.ts"), "utf8");
     check("Modül: alt router `/:id`den önce ve devere kapısının arkasında bağlı", main.indexOf("router.use(verifyToken, requireDevereEnabled)") < main.indexOf('router.use("/", warpingOrderYarnRoutes)') && main.indexOf('router.use("/", warpingOrderYarnRoutes)') < main.indexOf('router.get("/:id"'));
     // MSG — devere metin sayı biçimi: ölçü sınıfı (ayırıcısız, ondalık virgül, sondaki sıfır yok; genel.md)

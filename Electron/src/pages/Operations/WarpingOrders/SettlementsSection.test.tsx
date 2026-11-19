@@ -103,7 +103,8 @@ describe("SettlementsSection", () => {
     expect(close().disabled).toBe(true);
     expect(within(dlg).getByText(/yeniden önizleyin/)).toBeTruthy();
     expect((within(dlg).getByRole("button", { name: "Önizle" }) as HTMLButtonElement).disabled).toBe(true);
-    await user.click(await within(dlg).findByRole("radio", { name: "Kalan iplik" }));
+    await user.click(within(dlg).getByRole("combobox", { name: "İade sebebi" }));
+    await user.click(await screen.findByRole("option", { name: "Kalan iplik" }));
     expect((within(dlg).getByRole("button", { name: "Önizle" }) as HTMLButtonElement).disabled).toBe(false);
     expect(close().disabled).toBe(true);
     await user.click(within(dlg).getByRole("button", { name: "Önizle" }));

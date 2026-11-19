@@ -1,98 +1,42 @@
-import { MonitorSmartphone, AlertTriangle } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { PageTabsList, PageTabsTrigger } from "@/components/layout/PageTabs";
 import { RefreshButton } from "@/components/RefreshButton";
-import { DataTable } from "@/components/data-table/DataTable";
-import { DataTableTools } from "@/components/data-table/DataTableTools";
-import { Callout } from "@/components/ui/callout";
-import { EmptyState } from "@/components/ui/empty-state";
-import { useConnectedClients } from "./hooks";
-import { activeWindowLabel } from "./clients-utils";
-import { clientStamp as stamp, useClientsTable } from "./clientsColumns";
-import type { ConnectedClient } from "./service";
-import { ListSearchBox } from "@/components/data-table/ListSearchBox";
-import { useListSearch } from "@/hooks/useListSearch";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import { InstallationsTab } from "./InstallationsTab";
+import { OPEN_SESSIONS_KEY, OpenSessionsTab } from "./OpenSessionsTab";
 
-const NO_CLIENTS: ConnectedClient[] = [];
+const TAB_PANE = "mt-0 flex min-h-0 flex-1 flex-col";
 
 /**
- * Bağlı İstemciler — hangi kurulum, hangi sürüm, en son ne zaman istek
- * gönderdi ve o sırada kim oturumdaydı.
- *
- * ⚠️ EKRANIN İDDİASI DAR VE YAZILI: "Aktif" rozeti CANLI BAĞLANTI demek
- * DEĞİLDİR — ölçülen tek şey, o kurulumdan son N dakika içinde bir istek
- * gelmiş olmasıdır. Eşik sunucudan gelir (`activeWindowMs`), ekran kendi
- * sayısını yazmaz.
- *
- * ⚠️ Sayfa açılışında BİR KEZ çeker, sonrası "Yenile". Otomatik yoklama YOK
- * (kullanıcı kararı) — liste bir envanterdir, canlı gösterge değil.
+ * Bağlı İstemciler — iki görünüm:
+ * · Kurulumlar: hangi kurulum, hangi sürüm, en son ne zaman istek gönderdi (süreç belleği).
+ * · Açık oturumlar: kim, hangi cihazda, hangi uygulama sürümüyle oturum açık (DB); `admin:users`
+ *   sahibi oturumu sonlandırabilir.
+ * Sayfa açılışında bir kez çeker, sonrası "Yenile" — otomatik yoklama YOK (kullanıcı kararı).
  */
 export function ClientsPage() {
-  const { search, setSearch, term } = useListSearch();
-  const q = useConnectedClients(term);
-  const snap = q.data;
-  const esik = snap ? activeWindowLabel(snap.activeWindowMs) : null;
-  const clients = snap?.clients ?? NO_CLIENTS;
-  const table = useClientsTable(clients, snap?.now ?? "");
-
   return (
     <PageShell>
       <PageHeader
         title="Bağlı İstemciler"
-        description={
-          esik
-            ? `Son ${esik} içinde sunucuya istek gönderen kurulumlar "Aktif" sayılır.`
-            : "Sunucuya bağlanan panel/tablet/tarayıcıların sürümü ve son görülme zamanı."
-        }
+        description="Sunucuya bağlanan panel/tablet/tarayıcıların sürümü, son görülme zamanı ve açık oturumları."
         actions={
           <RefreshButton
             queryKey={["connected-clients"]}
+            extraKeys={[[OPEN_SESSIONS_KEY]]}
             successMessage="İstemci listesi yenilendi"
           />
         }
       />
-
-      <ListToolbar className="flex-row items-center">
-        <div className="ml-auto flex items-center gap-1.5">
-          <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Tür, sürüm, cihaz adı ya da son kullanıcı ara" />
-          <DataTableTools table={table} compact exportName="Bağlı istemciler" />
-        </div>
-      </ListToolbar>
-      <ListMessage className="shrink-0 space-y-4 empty:hidden">
-        {q.isError && (
-          <Callout tone="danger" icon={AlertTriangle} title="Liste alınamadı">
-            Sunucuya ulaşılamıyor. "Yenile" ile tekrar deneyin.
-          </Callout>
-        )}
-
-        {snap && (
-          <Callout tone="muted" title="Bu liste ne ölçüyor?">
-            Her istemci isteklerine kendi künyesini ekler; sunucu bunu{" "}
-            <strong>belleğinde</strong> tutar. <strong>“Aktif”</strong> rozeti “şu an
-            bağlı” değil, <strong>“son {esik} içinde istek gönderdi”</strong> demektir —
-            açık ama boşta duran bir panel bir süre sonra listede pasif görünür.{" "}
-            <strong>“Son kullanıcı”</strong> o makinede en son görülen kişidir; vardiya
-            değişiminde önceki kullanıcı, yeni istek gelene kadar yazılı kalır. Sunucu{" "}
-            {stamp(snap.serverStartedAt)} tarihinde başladı — <strong>yeniden
-            başlatıldığında liste boşalır</strong> ve istemciler ilk istekleriyle geri
-            döner.
-          </Callout>
-        )}
-
-        {snap && snap.clients.length === 0 && term && (
-          <p className="py-6 text-center text-sm text-muted-foreground">Aramaya uyan istemci yok.</p>
-        )}
-        {snap && snap.clients.length === 0 && !term && (
-          <EmptyState
-            icon={MonitorSmartphone}
-            title="Henüz künye bildiren istemci yok"
-            description="Sunucu yeni başlamış olabilir ya da sahadaki paneller/tabletler künye gönderen sürüme henüz güncellenmemiş olabilir."
-          />
-        )}
-      </ListMessage>
-      {clients.length > 0 ? <DataTable table={table} exportName="Bağlı istemciler" /> : <ListBody />}
-      <ListFooter loaded={snap?.clients.length ?? 0} />
+      <Tabs defaultValue="installations" className="flex min-h-0 flex-1 flex-col">
+        <PageTabsList>
+          <PageTabsTrigger value="installations">Kurulumlar</PageTabsTrigger>
+          <PageTabsTrigger value="sessions">Açık oturumlar</PageTabsTrigger>
+        </PageTabsList>
+        <TabsContent value="installations" className={TAB_PANE}><InstallationsTab /></TabsContent>
+        <TabsContent value="sessions" className={TAB_PANE}><OpenSessionsTab /></TabsContent>
+      </Tabs>
     </PageShell>
   );
 }

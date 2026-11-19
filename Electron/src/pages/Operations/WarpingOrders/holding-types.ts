@@ -30,6 +30,44 @@ export interface WarpingYarnReturnBody {
   qtyKg: number;
   reasonCode: string;
   warehouseId?: string | null;
+  /** Kullanılamaz (fire) kg — boş/0 = yalnız iade. */
+  wasteKg?: number | null;
+  /** Fire gerekçesi — serbest metin, isteğe bağlı. */
+  wasteReason?: string | null;
+  clientToken?: string;
+}
+
+/** `POST /:id/yarn-returns/preview` gövdesi — sebep önizlemede isteğe bağlı. */
+export interface WarpingYarnReturnPreviewBody {
+  dispatchItemId: string;
+  qtyKg: number;
+  wasteKg?: number | null;
+  reasonCode?: string;
+}
+
+export interface WarpingYarnReturnPreview {
+  holdingKg: string;
+  returnKg: string;
+  wasteKg: string;
+  keepKg: string;
+  /** İpliğin fire yüzdesi (önceki canlı fire dahil); fire yoksa null. */
+  wastePct: string | null;
+  tolerancePct: string | null;
+  overTolerance: boolean;
+  /** Kaydedilince sipariş kapanır mı (kalan 0 + kapanış ön koşulu). */
+  willClose: boolean;
+  warnings: string[];
+}
+
+export interface WarpingYarnReturnResult {
+  movementId: string;
+  itemCode: string;
+  itemName: string;
+  qtyKg: string;
+  wasteKg: string;
+  holdingKg: string;
+  autoClosed: boolean;
+  replayed: boolean;
 }
 
 export interface WarpingYarnReturnRow {
@@ -47,6 +85,8 @@ export interface WarpingYarnReturnRow {
   lotId: string | null;
   lotNo: string | null;
   qtyKg: string;
+  /** Bu iadeyle yazılan fire (canlı); eski sunucuda yok. */
+  wasteKg?: string;
   reasonCode: string | null;
   reasonLabel: string | null;
   note: string | null;

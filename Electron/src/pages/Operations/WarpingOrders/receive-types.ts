@@ -25,6 +25,8 @@ export interface WarpingSettlementYarn {
   carryOverUsedKg: string;
   /** Deverecideki iplikten fazla nominal tüketim — dağıtılamadı. */
   unallocatedKg: string;
+  /** Net canlı fire (kapanış + iade penceresi; geri alınanlar düşülmüş). Eski sunucuda yok. */
+  wasteKg?: string;
   atSubcontractorKg: string;
 }
 

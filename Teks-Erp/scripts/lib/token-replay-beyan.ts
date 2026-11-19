@@ -51,6 +51,9 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}warping-order/yarn-transfer.ts::transferWarpingYarn`]: { giris: { [`${S}warping-order/yarn-transfer.ts::transferWarpingYarn`]: "R" } },
   [`${S}warping-order/receive.ts::receiveWarpingOrder`]: { giris: { [`${S}warping-order/receive.ts::receiveWarpingOrder`]: "R" } },
   [`${S}warping-order/settle.ts::settleWarpingOrder`]: { giris: { [`${S}warping-order/settle.ts::settleWarpingOrder`]: "R" } },
+  // Devere iade(+fire): token iade hareketine yazılır (returnYarnTx → applyYarnMovementTx); giriş elle iade ucu.
+  [`${S}subcontractor-yarn.service.ts::returnYarnTx`]: { giris: { [`${S}warping-order/yarn-return-waste.ts::returnWarpingYarn`]: "R" } },
+  [`${S}yarn.service.ts::applyYarnMovementTx`]: { helper: "iplik defteri tek yazarı (token yalnız devere iade ucundan gelir)" },
   [`${S}lab-test.service.ts::createLabTest`]: { giris: { [`${S}lab-test.service.ts::createLabTest`]: "R" } },
   // K29: okutmayla rota — sahada eklenen adım clientToken ile doğar (aynı okutmanın tekrarı ikinci adım eklemez).
   [`${S}workorder-scan-route.service.ts::applyPlanTx`]: { giris: { [`${S}workorder-scan-route.service.ts::applyScanRoute`]: "R" } },
@@ -329,6 +332,7 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}warping-order/yarn-transfer.ts::transferReplay`]: ["fromWarpingOrderId", "toWarpingOrderId", "lines"],
   [`${S}warping-order/receive.ts::receiveReplay`]: ["warpingOrderId", "deliveryNoteNo", "beams"],
   [`${S}warping-order/settle.ts::settleReplay`]: ["warpingOrderId", "requestHash"],
+  [`${S}warping-order/yarn-return-waste.ts::returnReplay`]: ["dispatchItemId", "requestHash"],
   [`${S}certificate.service.ts::replayFor`]: ["certificateNo", "renewsId"],
   [`${S}workorder-scan-route.service.ts::replayFor`]: ["workOrderId", "stationId"],
   [`${S}gelen-belge-note.service.ts::replayFor`]: ["senderDocNo", "ownerCustomerId"],

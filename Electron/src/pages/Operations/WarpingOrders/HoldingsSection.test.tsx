@@ -2,7 +2,7 @@
 // BEKÇİ — sipariş sayfası "Deverecide tutulan iplik" + iade + iadeler + aktarma + aktarma stornosu (D6b-2)
 // =============================================================================
 //   ① Tutma satırları plandaki iplik adıyla çizilir; İade/Aktar yalnız Sevkte/Tamamlandı + `warping-order:write`.
-//   ② İade: kg önce tutmayla dolu, sebepsiz düğme kapalı; gövde kalem + kg + sebep kodu.
+//   ② İade: kg önce tutmayla dolu, sebepsiz düğme kapalı; sebep açılır listeden; gövde kalem + kg + sebep kodu + token.
 //   ③ İadeler: geri alınan satır eylemsiz; engelli satırda "Geri al" kapalı.
 //   ④ Aktarma: önizlemesiz Aktar kapalı; önizleme etkilenen kalemi listeler; token mantıksal deneme başına.
 //   ⑤ Aktarma stornosu önizlemedeki her kalemi listeler; engelde sebep kutusu yok, düğme kapalı.
@@ -20,7 +20,7 @@ import type { WarpingTransferBatch, WarpingYarnHolding, WarpingYarnReturnRow } f
 vi.mock("sonner", () => ({ toast: { warning: vi.fn(), success: vi.fn(), info: vi.fn(), error: vi.fn() } }));
 
 const svc = vi.hoisted(() => ({
-  holdings: vi.fn(), returns: vi.fn(), returnYarn: vi.fn(), cancelReturn: vi.fn(), transfers: vi.fn(), transferPreview: vi.fn(), transfer: vi.fn(), transferCancelPreview: vi.fn(), transferCancel: vi.fn(),
+  holdings: vi.fn(), returns: vi.fn(), returnYarn: vi.fn(), returnPreview: vi.fn(), cancelReturn: vi.fn(), transfers: vi.fn(), transferPreview: vi.fn(), transfer: vi.fn(), transferCancelPreview: vi.fn(), transferCancel: vi.fn(),
 }));
 vi.mock("./holding-service", () => ({
   warpingHoldingService: svc,
@@ -90,6 +90,7 @@ describe("HoldingsSection — tutma ve iade", () => {
 
   it("② iade: kg dolu, sebepsiz kapalı, gövde kalem + kg + sebep", async () => {
     svc.returnYarn.mockResolvedValue({ success: true, data: {} });
+    svc.returnPreview.mockResolvedValue({ holdingKg: "22.000", returnKg: "5.500", wasteKg: "0.000", keepKg: "16.500", wastePct: null, tolerancePct: null, overTolerance: false, willClose: false, warnings: [] });
     const user = userEvent.setup();
     renderWithProviders(<HoldingsSection order={order()} />);
     await user.click(await screen.findByRole("button", { name: "IPL-5X FS1 iade al" }));
@@ -99,11 +100,12 @@ describe("HoldingsSection — tutma ve iade", () => {
     const save = within(dlg).getByRole("button", { name: "İadeyi kaydet" }) as HTMLButtonElement;
     expect(save.disabled).toBe(true);
     expect(within(dlg).queryByText("Başka tür")).toBeNull();
-    await user.click(await within(dlg).findByRole("radio", { name: "Kalan iplik" }));
+    await user.click(within(dlg).getByRole("combobox", { name: "İade sebebi" }));
+    await user.click(await screen.findByRole("option", { name: "Kalan iplik" }));
     await user.clear(kg);
     await user.type(kg, "5,5");
     await user.click(save);
-    await waitFor(() => expect(svc.returnYarn).toHaveBeenCalledWith("wo-1", { dispatchItemId: "i1", qtyKg: 5.5, reasonCode: "KALAN" }));
+    await waitFor(() => expect(svc.returnYarn).toHaveBeenCalledWith("wo-1", { dispatchItemId: "i1", qtyKg: 5.5, reasonCode: "KALAN", clientToken: expect.any(String) }));
   });
 
   it("③ iadeler: geri alınan eylemsiz, engelli satırda Geri al kapalı", async () => {

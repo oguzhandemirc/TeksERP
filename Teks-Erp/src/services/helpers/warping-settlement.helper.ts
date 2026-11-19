@@ -3,7 +3,7 @@
 // =============================================================================
 // metre : hedef (adet × boy) · gelen (Σ canlı WOUND) · fark · fark % · levent adedi plan ↔ gelen
 // iplik : plan net/brüt · gönderilen (BRÜT) · iade · aktarım · sarılan (nominal Σ kırılım) · kendi tutmasından /
-//         devirden dağıtılan · dağıtılamayan · deverecide kalan (tutma)
+//         devirden dağıtılan · dağıtılamayan · fire · deverecide kalan (tutma)
 // tartı : girildiyse Σ(brüt − dara) ↔ aynı leventlerin nominal Σ'ı — yalnız BİLGİ, hiçbir sayıyı değiştirmez.
 // =============================================================================
 import { Prisma, WarpBeamStatus } from "@prisma/client";
@@ -28,6 +28,8 @@ export interface WarpingSettlementYarn {
   carryOverUsedKg: string;
   /** Deverecideki iplikten fazla nominal tüketim (dağıtılamadı). */
   unallocatedKg: string;
+  /** Bu siparişin yazdığı net canlı fire (kapanış + iade penceresi; WASTE − WASTE_CANCEL). */
+  wasteKg: string;
   /** Bu siparişin deverecide tuttuğu iplik. */
   atSubcontractorKg: string;
 }
@@ -97,7 +99,7 @@ export async function loadWarpingSettlement(db: Db, warpingOrderId: string): Pro
         yarnItemId: y.yarnItemId, code: y.code, name: y.name, letter: y.letter, planNetKg: y.netKg, planGrossKg: y.grossKg,
         dispatchedKg: kg(s?.outKg ?? D(0)), returnedKg: kg(s?.returnedKg ?? D(0)), transferInKg: kg(s?.transferInKg ?? D(0)), transferOutKg: kg(s?.transferOutKg ?? D(0)),
         woundKg: kg(w.total), fromOwnKg: kg(w.own), carryOverUsedKg: kg(w.carry), unallocatedKg: kg(w.total.minus(w.own).minus(w.carry)),
-        atSubcontractorKg: kg(s?.openKg ?? D(0)),
+        wasteKg: kg(s?.wasteKg ?? D(0)), atSubcontractorKg: kg(s?.openKg ?? D(0)),
       };
     }),
     weighing: wN === 0 ? null : { weighedBeamCount: wN, weighedNetKg: kg(wNet), nominalKg: kg(wNom), diffKg: kg(wNet.minus(wNom)), diffPct: pct(wNet.minus(wNom), wNom) },

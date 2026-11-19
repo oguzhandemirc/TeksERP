@@ -21,6 +21,7 @@ import { lotPolicyVerdict, mixedLots, openItems } from "./dispatch";
 import { WARPING_ORDER_TABLE } from "./create";
 import { loadTransferBatch, type WarpingTransferBatch } from "./yarn-transfer-shared";
 import { claimTransferOrdersTx } from "./yarn-transfer-cancel";
+import { autoSettleIfDrainedTx, logAutoSettle } from "./auto-settle";
 import { qtyText } from "../helpers/qty-text.helper";
 
 type Tx = Prisma.TransactionClient;
@@ -162,7 +163,7 @@ export async function previewWarpingTransfer(id: string, input: Omit<WarpingTran
   };
 }
 
-export async function transferWarpingYarn(id: string, input: WarpingTransferInput, userId: string): Promise<WarpingTransferBatch & { replayed: boolean }> {
+export async function transferWarpingYarn(id: string, input: WarpingTransferInput, userId: string): Promise<WarpingTransferBatch & { replayed: boolean; sourceAutoClosed?: boolean }> {
   validate(id, input);
   const replay = transferReplay(id, input);
   return replay.run(input.clientToken, async () => {
@@ -183,11 +184,14 @@ export async function transferWarpingYarn(id: string, input: WarpingTransferInpu
           },
         });
       }
-      return { batchId, warnings: ev.warnings, targetWasOpen: claim.targetWasOpen, total: ev.allocations.reduce((s, a) => s.plus(a.qtyKg), D(0)) };
+      // Kaynakta iplik kalmadıysa ve kapanış yüklemi izin veriyorsa kaynak aynı tx'te kapanır (kullanıcı kararı 2026-11-19).
+      const auto = await autoSettleIfDrainedTx(tx, id, userId, "YARN_TRANSFER");
+      return { batchId, auto, warnings: ev.warnings, targetWasOpen: claim.targetWasOpen, total: ev.allocations.reduce((s, a) => s.plus(a.qtyKg), D(0)) };
     });
     await AuditService.log({ userId, action: "UPDATE", tableName: WARPING_ORDER_TABLE, recordId: id, newData: { yarnTransferOut: out.batchId, toWarpingOrderId: input.toWarpingOrderId, totalKg: kg(out.total) } });
     await AuditService.log({ userId, action: "UPDATE", tableName: WARPING_ORDER_TABLE, recordId: input.toWarpingOrderId, newData: { yarnTransferIn: out.batchId, fromWarpingOrderId: id, totalKg: kg(out.total), ...(out.targetWasOpen ? { status: WarpingOrderStatus.IN_PROGRESS } : {}) } });
+    await logAutoSettle(out.auto, userId);
     const batch = await loadTransferBatch(prisma, out.batchId);
-    return { ...batch, warnings: [...batch.warnings, ...out.warnings], replayed: false };
+    return { ...batch, warnings: [...batch.warnings, ...out.warnings], replayed: false, sourceAutoClosed: out.auto !== null };
   });
 }
