@@ -59,6 +59,7 @@ import { emanetShipmentReleaseTx } from "../helpers/emanet-shipment.helper";
 import { assertShipmentNotHeldTx } from "../helpers/cari-hold.helper";
 import { assertCustomerRiskLimitTx } from "../helpers/risk-exposure.helper";
 import { transitionSwatchesTx } from "../helpers/swatch-event.helper";
+import { LIVE_SACK_WHERE } from "../helpers/sack-retire.helper";
 import type { ShippingService } from "../shipping.service";
 import { destinationLockMessage, shipmentReplay, type AllocationAuditTrail, type ShipmentDestinationDecision, type ShippingServiceThis } from "./shared";
 
@@ -283,7 +284,7 @@ export async function createShipmentCoreTx(this: ShippingServiceThis,
     const seqStart = await readSackSeqStart(tx);
     for (let i = 0; i < p.sackIds.length; i++) {
       const claimed = await tx.sack.updateMany({
-        where: { id: p.sackIds[i], shipmentId: null },
+        where: { id: p.sackIds[i], shipmentId: null, ...LIVE_SACK_WHERE },
         data: { shipmentId: created.id, seq: seqStart + i, customerId: p.customerId, branchId: p.branchId },
       });
       if (claimed.count !== 1) throw AppError.conflict("Çuvallardan biri az önce başka bir sevkiyata girdi — yenileyin.");
