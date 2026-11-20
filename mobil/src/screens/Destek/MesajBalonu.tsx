@@ -9,6 +9,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import AppModal from '../../components/AppModal';
 import TruncatedText from '../../components/TruncatedText';
+import { factoryLocaleString } from '../../lib/factory-time';
 import { colors, radius, spacing } from '../../theme';
 import { destekService, type DestekEk, type DestekMesaj } from '../../services/destek.service';
 import { boyutMetni, errorCode, silinmisEkMetni } from './destekMetin';
@@ -87,7 +88,7 @@ export default function MesajBalonu({ m }: { m: DestekMesaj }) {
         {[
           benim ? m.authorName ?? 'Siz' : m.authorName ?? 'Destek ekibi',
           ' · ',
-          new Date(m.createdAt).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' }),
+          factoryLocaleString(m.createdAt, 'tr-TR', { dateStyle: 'short', timeStyle: 'short' }),
         ]}
       </TruncatedText>
       <Text style={styles.govde}>{m.body}</Text>
