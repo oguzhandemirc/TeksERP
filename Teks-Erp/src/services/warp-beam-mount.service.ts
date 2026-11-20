@@ -15,6 +15,7 @@ import { p2002Mentions } from "../utils/p2002";
 import { ApiResponse } from "../types/api.types";
 import { readDevereMountTrackingRequired } from "./system-setting.service";
 import { applyWarpBeamEventTx, logWarpBeamEventAudit } from "./helpers/warp-beam-event.helper";
+import { beamBodyMachineFitVerdictTx } from "./helpers/beam-body.helper";
 import { WARP_BEAM_SELECT } from "./helpers/warp-beam.helper";
 import { toWarpBeamDto, type WarpBeamDto } from "./warp-beam.service";
 import { WARP_BEAM_CANCEL_OF, type WarpBeamEventKind } from "../constants/warp-beam";
@@ -96,6 +97,9 @@ async function mountBeamFresh(id: string, input: MountBeamInput, userId?: string
       if (!input.mountMethod || !input.setupStartedAt) throw AppError.badRequest('Bağlama yöntemi ve başlangıç saati zorunlu (ayar: "Devere — bağlama bilgisi zorunlu").', { code: "WARP_MOUNT_METHOD_REQUIRED" });
     }
     await assertSlotFreeTx(tx, machine.id, input.position, machine.code);
+    // Devere ek B3: gövde–tezgâh uyumu (`devere.beamBodyMachineFit`: WARN uyarı, BLOCK 409); gövde durumu kancada yürür.
+    const link = await tx.warpBeam.findUnique({ where: { id: beam.id }, select: { beamBodyId: true } });
+    if (link?.beamBodyId) warnings.push(...(await beamBodyMachineFitVerdictTx(tx, link.beamBodyId, machine.id)));
     // Yarım levent (daha önce tüketim görmüş) başka makineye — UYARI, red değil (§4.7).
     const remaining = await remainingMTx(tx, beam.id);
     const wound = await tx.warpBeamEvent.findFirst({ where: { beamId: beam.id, kind: "WOUND", reversal: null }, select: { lengthM: true } });

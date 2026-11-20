@@ -21,6 +21,7 @@ import { licenseModuleError } from "../../lib/license/module-ceiling";
 import type { WarpBeamEventKind } from "../../constants/warp-beam";
 import { WARP_BEAM_EVENT_SELECT, type WarpBeamEventRow } from "./warp-beam.helper";
 import { warpBeamEventStampTx } from "./ledger-stamp.helper";
+import { advanceBeamBodyForWarpEventTx } from "./beam-body-warp.helper";
 import { settingScreenPath } from "../../constants/panel-ayar-yolu";
 
 export const WARP_BEAM_EVENT_TABLE = "WARP_BEAM_EVENT";
@@ -64,6 +65,8 @@ export async function applyWarpBeamEventTx(
   }
   const createdAt = await warpBeamEventStampTx(tx, input.beamId);
   const ev = await sequentialTx(tx).warpBeamEvent.create({ data: { beamId: input.beamId, kind: input.kind, fromStatus: input.from, toStatus: input.to, ...input.data, createdAt }, select: WARP_BEAM_EVENT_SELECT });
+  // Devere ek B3: gövdeli sarımda gövde durumu aynı tx'te yürür (kilit sırası sarım → gövde); gövdesizde yazım yok.
+  await advanceBeamBodyForWarpEventTx(tx, { beamId: input.beamId, kind: input.kind, data: input.data });
   // Bildirim (S2): levent bağlandı / bitti — durum geçişinin tek boğazı, aynı tx.
   await emitWarpBeamEventTx(tx, { beamId: input.beamId, kind: input.kind, machineId: input.data.machineId ?? null }, input.data.createdById ?? null);
   return ev;

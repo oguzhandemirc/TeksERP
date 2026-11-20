@@ -2614,8 +2614,10 @@ model WarpBeam {
   warpingOrderId    String?        @db.Uuid
   /// Aynı kabul işleminde (tek irsaliye) birlikte doğan leventlerin ortak anahtarı — kabul stornosu LIFO birimi.
   warpingReceiptKey String?        @db.Uuid
+  /// Devere ek B3: sarıldığı levent gövdesi (demirbaş) — DOĞUM niteliği, yalnız kabul yazar (PATCH şemasında yok).
+  beamBodyId        String?        @db.Uuid
 
-  warpSpec            WarpSpec                    @relation("WarpBeamSpec", fields: [warpSpecId], references: [id], onDelete: Restrict)
+  warpSpec          WarpSpec                    @relation("WarpBeamSpec", fields: [warpSpecId], references: [id], onDelete: Restrict)
   warpingOrder        WarpingOrder?               @relation("WarpBeamWarpingOrder", fields: [warpingOrderId], references: [id], onDelete: Restrict)
   subcontractor       Subcontractor?              @relation("WarpBeamSubcontractor", fields: [subcontractorId], references: [id], onDelete: Restrict)
   supplier            Customer?                   @relation("WarpBeamSupplier", fields: [supplierId], references: [id], onDelete: Restrict)
@@ -2633,6 +2635,9 @@ model WarpBeam {
   consignmentItems    ConsignmentDispatchItem[]   @relation("ConsignmentItemWarpBeam")
   /// Devere ek B1: bu sarımı anan gövde olayları (yazıcısı B3).
   beamBodyEvents      BeamBodyEvent[]             @relation("BeamBodyEventWarpBeam")
+  /// Devere ek B3: sarımın gövdesi + gövdenin "şu an üstündeki sarım" geri ilişkisi.
+  beamBody            BeamBody?                   @relation("WarpBeamBody", fields: [beamBodyId], references: [id], onDelete: Restrict)
+  currentOnBody       BeamBody?                   @relation("BeamBodyCurrentWarp")
 
   createdAt   DateTime @default(now()) @db.Timestamptz
   updatedAt   DateTime @updatedAt @db.Timestamptz
@@ -2649,6 +2654,7 @@ model WarpBeam {
   @@index([setKey])
   @@index([warpingOrderId])
   @@index([warpingReceiptKey])
+  @@index([beamBodyId])
   @@map("warp_beams")
 }
 
@@ -2831,8 +2837,13 @@ model BeamBody {
   notes            String?            @db.VarChar(500)
   /// Pasif gövde listede varsayılan gizli; yalnız boş/terminal durumda pasife alınır (servis kapısı).
   isActive         Boolean            @default(true)
+  /// B3: üstündeki sarım — dolu durumlarda (FULL_STOCK·MOUNTED·FULL_OUT) dolu, ötekilerde NULL (CHECK
+  /// `beam_bodies_current_warp_ck`); yazıcısı yalnız `helpers/beam-body.helper` (claim ile aynı ifade).
+  currentWarpBeamId String?           @unique @db.Uuid
 
   ownerCustomer Customer?          @relation("BeamBodyOwner", fields: [ownerCustomerId], references: [id], onDelete: Restrict)
+  currentWarpBeam WarpBeam?        @relation("BeamBodyCurrentWarp", fields: [currentWarpBeamId], references: [id], onDelete: Restrict)
+  warpBeams     WarpBeam[]         @relation("WarpBeamBody")
   warehouse     Warehouse?         @relation("BeamBodyWarehouse", fields: [warehouseId], references: [id], onDelete: Restrict)
   subcontractor Subcontractor?     @relation("BeamBodySubcontractor", fields: [subcontractorId], references: [id], onDelete: Restrict)
   machine       Machine?           @relation("BeamBodyMachineNow", fields: [machineId], references: [id], onDelete: Restrict)

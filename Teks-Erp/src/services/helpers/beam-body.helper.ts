@@ -12,8 +12,9 @@ import { AuditService } from "../audit.service";
 import { SETTING_KEYS, readDevereBeamBodyMachineFit, readDevereBeamBodyMode, readDevereEnabled } from "../system-setting.service";
 import { licenseModuleError } from "../../lib/license/module-ceiling";
 import { settingRowPath, settingScreenPath } from "../../constants/panel-ayar-yolu";
-import { BEAM_BODY_MANUAL_KINDS, BEAM_BODY_STATUS_LABELS, cancelKindOf, type BeamBodyEventKind, type BeamBodyForwardKind } from "../../constants/beam-body";
+import { BEAM_BODY_FULL_STATUSES, BEAM_BODY_MANUAL_KINDS, BEAM_BODY_STATUS_LABELS, cancelKindOf, type BeamBodyEventKind, type BeamBodyForwardKind } from "../../constants/beam-body";
 import { beamBodyEventStampTx } from "./ledger-stamp.helper";
+import { sequentialTx } from "./tx-sequential-relations.helper";
 
 type Tx = Prisma.TransactionClient;
 type SettingDb = Pick<Prisma.TransactionClient, "systemSetting">;
@@ -100,16 +101,16 @@ export async function transitionBeamBodyTx(
     subcontractorDispatchId?: string | null;
     reasonCode?: string | null;
     reason?: string | null;
-    userId: string;
+    userId: string | null;
   },
 ): Promise<BeamBodyEventRow> {
   const claim = await tx.beamBody.updateMany({
     where: { id: input.bodyId, status: input.from, isActive: true },
-    data: { status: input.to, ...input.place, updatedById: input.userId },
+    data: { status: input.to, ...input.place, currentWarpBeamId: currentWarpOf(input.to, input.warpBeamId ?? null), updatedById: input.userId },
   });
   if (claim.count === 0) await throwStateConflict(tx, input.bodyId, input.from);
   const createdAt = await beamBodyEventStampTx(tx, input.bodyId);
-  return tx.beamBodyEvent.create({
+  return sequentialTx(tx).beamBodyEvent.create({
     data: {
       bodyId: input.bodyId, kind: input.kind, fromStatus: input.from, toStatus: input.to, ...input.place,
       warpBeamId: input.warpBeamId ?? null, subcontractorDispatchId: input.subcontractorDispatchId ?? null,
@@ -120,29 +121,35 @@ export async function transitionBeamBodyTx(
   });
 }
 
+/** Durum ↔ üstündeki sarım çifti (CHECK `beam_bodies_current_warp_ck`): dolu durumda olayın sarımı, değilse NULL. */
+const currentWarpOf = (status: BeamBodyStatus, warpBeamId: string | null): string | null => (BEAM_BODY_FULL_STATUSES.includes(status) ? warpBeamId : null);
+
 /**
  * Ters kayıt: ileri olayın tipli `*_CANCEL`ı; kart ileri olayın ÖNCEKİ durum/yerine döner (claim `status = ileri.to`).
  * Çift iptal DB'de imkânsız (`reversesId @unique` → P2002 → 409). `deactivate`: REGISTER iptali kartı pasife alır.
  */
 export async function reverseBeamBodyEventTx(
   tx: Tx,
-  input: { eventId: string; restore: { status: BeamBodyStatus; place: BeamBodyPlace }; deactivate?: boolean; reason: string; userId: string },
+  input: { eventId: string; restore: { status: BeamBodyStatus; place: BeamBodyPlace }; deactivate?: boolean; reason: string; userId: string | null },
 ): Promise<BeamBodyEventRow> {
-  const fwd = await tx.beamBodyEvent.findUnique({ where: { id: input.eventId }, select: { id: true, bodyId: true, kind: true, toStatus: true, reversal: { select: { id: true } } } });
+  const fwd = await tx.beamBodyEvent.findUnique({ where: { id: input.eventId }, select: { id: true, bodyId: true, kind: true, toStatus: true, warpBeamId: true, reversal: { select: { id: true } } } });
   if (!fwd) throw AppError.notFound("Gövde hareketi bulunamadı");
   if (fwd.kind.endsWith("_CANCEL")) throw AppError.badRequest("İptal kaydı geri alınamaz", { code: "BEAM_BODY_EVENT_IS_REVERSAL" });
   if (fwd.reversal) throw AppError.conflict("Bu gövde hareketi zaten iptal edilmiş", { code: "BEAM_BODY_EVENT_REVERSED" });
   const claim = await tx.beamBody.updateMany({
     where: { id: fwd.bodyId, status: fwd.toStatus, isActive: true },
-    data: { status: input.restore.status, ...input.restore.place, ...(input.deactivate ? { isActive: false } : {}), updatedById: input.userId },
+    data: {
+      status: input.restore.status, ...input.restore.place, currentWarpBeamId: currentWarpOf(input.restore.status, fwd.warpBeamId),
+      ...(input.deactivate ? { isActive: false } : {}), updatedById: input.userId,
+    },
   });
   if (claim.count === 0) await throwStateConflict(tx, fwd.bodyId, fwd.toStatus);
   const createdAt = await beamBodyEventStampTx(tx, fwd.bodyId);
   try {
-    return await tx.beamBodyEvent.create({
+    return await sequentialTx(tx).beamBodyEvent.create({
       data: {
         bodyId: fwd.bodyId, kind: cancelKindOf(fwd.kind as BeamBodyForwardKind) satisfies BeamBodyEventKind, fromStatus: fwd.toStatus, toStatus: input.restore.status,
-        ...input.restore.place, reversesId: fwd.id, reason: input.reason, createdById: input.userId, createdAt,
+        ...input.restore.place, warpBeamId: fwd.warpBeamId, reversesId: fwd.id, reason: input.reason, createdById: input.userId, createdAt,
       },
       select: BEAM_BODY_EVENT_SELECT,
     });
@@ -187,7 +194,7 @@ export async function beamBodyEventNeighborsTx(db: Pick<Tx, "beamBodyEvent">, ev
  * sonuç yerini taşır). Sonrasında hareket varsa 409 `BEAM_BODY_EVENT_NOT_LATEST` — sayım claim'den SONRA (satır kilidi
  * altında) tekrarlanır, eşzamanlı geçiş araya giremez.
  */
-export async function reverseLatestBeamBodyEventTx(tx: Tx, input: { eventId: string; reason: string; userId: string }): Promise<BeamBodyEventRow> {
+export async function reverseLatestBeamBodyEventTx(tx: Tx, input: { eventId: string; reason: string; userId: string | null }): Promise<BeamBodyEventRow> {
   const fwd = await tx.beamBodyEvent.findUnique({ where: { id: input.eventId }, select: { id: true, bodyId: true, kind: true, fromStatus: true, createdAt: true } });
   if (!fwd) throw AppError.notFound("Gövde hareketi bulunamadı", { code: "BEAM_BODY_EVENT_NOT_FOUND" });
   if (fwd.kind === "REGISTER" || !fwd.fromStatus) throw AppError.badRequest("Kayıt hareketi kayıt iptaliyle geri alınır", { code: "BEAM_BODY_EVENT_KIND" });

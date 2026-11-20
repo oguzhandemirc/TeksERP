@@ -2,7 +2,7 @@
 // LEVENT GÖVDESİ — olay türü evreni ve durum/sahip etiketleri (devere ek B1)
 // =============================================================================
 // Tür kümesi DB CHECK `beam_body_events_kind_ck` ile iki yönlü eşittir (`test_levent_govde`). İleri türün tersi
-// `<TÜR>_CANCEL`; B1 yalnız REGISTER/REGISTER_CANCEL yazar, öteki türlerin yazıcısı B2/B3.
+// `<TÜR>_CANCEL`; B1 REGISTER, B2 elle geçişler/iade, B3 sarım türleri (`BEAM_BODY_WARP_KINDS`, kanca `beam-body-warp.helper`).
 // =============================================================================
 import { BeamBodyOwnerRole, BeamBodyStatus } from "@prisma/client";
 
@@ -12,8 +12,10 @@ export const BEAM_BODY_FORWARD_KINDS = [
   "RETURN_EMPTY",
   "FILLED",
   "MOUNTED",
+  "DISMOUNTED",
   "EMPTIED",
   "SHIPPED_FULL",
+  "RETURNED_FULL",
   "MAINTENANCE_IN",
   "MAINTENANCE_OUT",
   "SCRAP",
@@ -34,8 +36,10 @@ export const BEAM_BODY_EVENT_LABELS: Record<BeamBodyForwardKind, string> = {
   RETURN_EMPTY: "Boş döndü",
   FILLED: "Dolu döndü",
   MOUNTED: "Tezgâha takıldı",
+  DISMOUNTED: "Tezgâhtan söküldü",
   EMPTIED: "Boşaldı",
   SHIPPED_FULL: "Dolu gönderildi",
+  RETURNED_FULL: "Dolu geri döndü",
   MAINTENANCE_IN: "Bakıma alındı",
   MAINTENANCE_OUT: "Bakımdan çıktı",
   SCRAP: "Hurdaya ayrıldı",
@@ -94,3 +98,10 @@ export const BEAM_BODY_MANUAL_KINDS = Object.keys(BEAM_BODY_MANUAL_TRANSITIONS) 
 export const BEAM_BODY_RETURN_MAX_ITEMS = 200;
 /** İplik sevkinde en çok boş gövde. */
 export const BEAM_BODY_DISPATCH_MAX = 50;
+
+/** Sarım türlü olaylar (B3): olay satırı `warpBeamId` taşır — CHECK `beam_body_events_warp_ck` ile aynı küme (tersleri dahil). */
+export const BEAM_BODY_WARP_KINDS = ["FILLED", "MOUNTED", "DISMOUNTED", "EMPTIED", "SHIPPED_FULL", "RETURNED_FULL"] as const satisfies readonly BeamBodyForwardKind[];
+export type BeamBodyWarpKind = (typeof BEAM_BODY_WARP_KINDS)[number];
+
+/** Üstünde sarım olan gövde durumları — CHECK `beam_bodies_current_warp_ck` (currentWarpBeamId dolu ⇔ bu küme). */
+export const BEAM_BODY_FULL_STATUSES: readonly BeamBodyStatus[] = [BeamBodyStatus.FULL_STOCK, BeamBodyStatus.MOUNTED, BeamBodyStatus.FULL_OUT];
