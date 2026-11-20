@@ -2,7 +2,7 @@
 // Hesap YOK (plan kg'ı sunucuda `computeWarpingPlan`); burada yalnız girdi doğrulama ve biçim.
 import { formatQty } from "@/lib/format";
 import { factoryDayKey, factoryDayStartIso, factoryDayDiff } from "@/lib/factory-time";
-import type { WarpingFeeUnit, WarpingOrder, WarpingOrderBody, WarpingOrderStatus } from "./types";
+import type { SpecRef, WarpingFeeUnit, WarpingOrder, WarpingOrderBody, WarpingOrderStatus } from "./types";
 
 export interface BeamLineDraft {
   beamCount: string;
@@ -221,4 +221,24 @@ export function dueText(expectedReturnAt: string | null, status: WarpingOrderSta
 export function feeText(fee: WarpingOrder["fee"]): string {
   const unit = fee.unit === "METRE" ? "m" : fee.unit === "KG" ? "kg" : "tel×m";
   return fee.unitPrice === null ? `Ücret girilmedi (${unit} başına)` : `${formatQty(fee.unitPrice, 4)} ${fee.currency ?? ""} / ${unit}`;
+}
+
+/** Ek tel grubu seçenek belleği: önizleme seçili kartları önerilerden düşer, 400 dönen önizleme hiç veri getirmez —
+ * seçenekler bellekte birikir ki işaretli kutu listeden kaybolmasın, işaret kaldırılabilsin. Kart değişince sıfırlanır. */
+export interface ExtraOptionMemo {
+  warpSpecId: string;
+  options: SpecRef[];
+}
+
+export function rememberExtraOptions(
+  prev: ExtraOptionMemo | null,
+  warpSpecId: string | null,
+  preview: { warpSpec: { id: string }; suggestedExtraSpecs: SpecRef[]; extras: SpecRef[] } | undefined,
+): ExtraOptionMemo | null {
+  if (!warpSpecId) return null;
+  const base = prev && prev.warpSpecId === warpSpecId ? prev : { warpSpecId, options: [] };
+  const incoming = preview && preview.warpSpec.id === warpSpecId ? [...preview.suggestedExtraSpecs, ...preview.extras] : [];
+  const added = incoming.filter((x, i) => !base.options.some((y) => y.id === x.id) && incoming.findIndex((y) => y.id === x.id) === i);
+  if (added.length === 0) return base;
+  return { warpSpecId, options: [...base.options, ...added] };
 }

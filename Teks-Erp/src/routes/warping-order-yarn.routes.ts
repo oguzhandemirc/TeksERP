@@ -301,7 +301,7 @@ router.post("/:id/yarn-transfers/:batchId/cancel", requirePermission("warping-or
   const batchId = parse(Id, req.params.batchId);
   const body = parse(CancelBody, req.body);
   const data = await cancelWarpingTransfer(id, batchId, body.reason, req.user!.userId);
-  return { status: 200, body: { success: true, data, message: `Aktarma iptal edildi — ${data.totalKg} kg ${data.fromOrderNo} siparişine döndü` } };
+  return { status: 200, body: { success: true, data, message: `Aktarma iptal edildi — ${qtyText(data.totalKg)} kg ${data.fromOrderNo} siparişine döndü` } };
 }));
 
 export default router;

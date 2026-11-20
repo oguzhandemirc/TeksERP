@@ -13,6 +13,7 @@ import { requireIplikEnabled } from "../middlewares/module.middleware";
 import { previewSettleWarpingOrder, settleWarpingOrder } from "../services/warping-order/settle";
 import { listWarpingSettlements } from "../services/warping-order/settle-record";
 import { previewReopenWarpingOrder, reopenWarpingOrder } from "../services/warping-order/reopen";
+import { qtyText } from "../services/helpers/qty-text.helper";
 import "../types/express-augment";
 
 const router = Router();
@@ -114,7 +115,7 @@ router.post("/:id/settle", requirePermission("warping-order:settle"), requireIpl
   const { warnings, replayed, ...data } = await settleWarpingOrder(id, body, req.user!.userId);
   return {
     status: replayed ? 200 : 201,
-    body: { success: true, data, message: replayed ? "Bu kapanış zaten kayıtlı" : `Sipariş kapandı — iade ${data.totalReturnKg} kg, fire ${data.totalWasteKg} kg`, ...(warnings.length > 0 ? { warnings } : {}) },
+    body: { success: true, data, message: replayed ? "Bu kapanış zaten kayıtlı" : `Sipariş kapandı — iade ${qtyText(data.totalReturnKg)} kg, fire ${qtyText(data.totalWasteKg)} kg`, ...(warnings.length > 0 ? { warnings } : {}) },
   };
 }));
 

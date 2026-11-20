@@ -17,7 +17,7 @@ export interface OperationGroup {
   route: string;
 }
 
-/** Görüntülenme sırası = üretim akışı (talep → üretim → depo → sevk). */
+/** Görüntülenme sırası = saha akışı (talep → mal kabul/stok → üretim → sevk), yan menüyle aynı (2026-11-20). */
 export const operationGroups: OperationGroup[] = [
   {
     key: "planning",
@@ -27,18 +27,18 @@ export const operationGroups: OperationGroup[] = [
     route: "/sales",
   },
   {
-    key: "production",
-    title: "Üretim",
-    get description() { return `${TERIM.terbiyeIsEmri.cumleBasiCogul.yalin}, kurşun sırası, kartela ve fason takibi`; },
-    icon: Factory,
-    route: "/production",
-  },
-  {
     key: "warehouse",
     title: "Depo",
     description: "Kumaş, iplik ve sarf stoğu, paketleme, mal kabul ve gelen belgeler",
     icon: Warehouse,
     route: "/warehouse",
+  },
+  {
+    key: "production",
+    title: "Üretim",
+    get description() { return `${TERIM.terbiyeIsEmri.cumleBasiCogul.yalin}, kurşun sırası, kartela ve fason takibi`; },
+    icon: Factory,
+    route: "/production",
   },
   {
     key: "shipping",

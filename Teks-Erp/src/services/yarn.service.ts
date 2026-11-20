@@ -398,6 +398,8 @@ export class YarnService {
         goodsReceipt: { select: { id: true, receiptNo: true } },
         lot: { select: { id: true, lotNo: true } },
         bobbinCount: true,
+        // Kaynak belge (panel "Kaynak" sütunu): fason/devere sevk-iade · emanet sevki · levent sarımı · sayım.
+        dispatchItem: { select: { dispatch: { select: { dispatchNo: true, warpingOrder: { select: { orderNo: true } } } } } }, consignmentItem: { select: { dispatch: { select: { dispatchNo: true } } } }, warpBeam: { select: { beamNo: true } }, stockCount: { select: { countNo: true } },
       },
     });
 

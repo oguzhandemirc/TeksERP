@@ -37,7 +37,7 @@ function LoomSelect({ value, onChange, list, loading, slots }: { value: string; 
         <SelectContent>
           {list.map((m) => (
             <SelectItem key={m.id} value={m.id}>
-              {m.code} · {m.name} ({m.warpBeamSlots} yuva)
+              {m.name} · {m.warpBeamSlots} yuva <span className="font-mono text-xs text-muted-foreground">{m.code}</span>
             </SelectItem>
           ))}
         </SelectContent>
@@ -77,7 +77,7 @@ export function MountDialog({ target, isPending, onClose, onConfirm }: Props) {
   return (
     <BeamDialogShell
       title={`${target.beamNo} tezgaha takılsın mı?`}
-      description={`Kalan ${formatM(target.remainingM)} · ${target.warpSpec.code}. Levent seçilen makinenin yuvasına bağlanır; dolu yuva reddedilir.`}
+      description={`Kalan ${formatM(target.remainingM)} · ${target.warpSpec.name}. Levent seçilen makinenin yuvasına bağlanır; dolu yuva reddedilir.`}
       confirmLabel="Tak"
       ok={ok}
       isPending={isPending}

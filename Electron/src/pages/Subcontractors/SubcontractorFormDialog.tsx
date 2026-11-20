@@ -17,6 +17,7 @@ import type { Subcontractor } from "./types";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { SubcontractorCustomerLink } from "./SubcontractorCustomerLink";
 import { SubcontractorYarnSection } from "@/pages/Operations/YarnAtSubcontractor/SubcontractorYarnSection";
+import { SubcontractorRatesSection } from "./SubcontractorRatesSection";
 import { TERIM } from "@/lib/terim";
 
 interface Props {
@@ -153,6 +154,7 @@ export function SubcontractorFormDialog({
             }
           />
           {/* Devere D6c: fasoncudaki iplik bakiyesi — modül/izin yoksa hiç çizilmez. */}
+          {initial && <SubcontractorRatesSection subcontractorId={initial.id} />}
           {initial && <SubcontractorYarnSection subcontractorId={initial.id} />}
         </div>
       )}

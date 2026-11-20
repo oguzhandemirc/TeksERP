@@ -1,7 +1,9 @@
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
-import { HubCard, HubGrid } from "@/components/hub/HubCard";
+import { HubCard } from "@/components/hub/HubCard";
+import { HubSubgroups } from "@/components/hub/HubSubgroups";
+import { layoutSubgroups } from "@/components/layout/nav-subgroups";
 import { visibleCostTiles } from "./tile-config";
 import { isRouteModuleOpen } from "@/lib/route-modules";
 import { useOperationsVisibilityContext } from "@/pages/Operations/useOperationsVisibility";
@@ -24,11 +26,12 @@ export function CostHubPage() {
         description="Kumaşın metre maliyeti: parametreler, iplik fiyatları, fason tarifeleri ve ürün başına standart maliyet. Her sayı sunucuda hesaplanır."
       />
       <PageBody className="p-4 sm:p-6">
-        <HubGrid>
-          {visible.map((tile, i) => (
+        <HubSubgroups
+          groups={layoutSubgroups("/cost", visible, ctx)}
+          renderCard={(tile, i) => (
             <HubCard key={tile.key} to={tile.to} title={tile.title} description={tile.description} icon={tile.icon} tone={tile.tone} index={i} />
-          ))}
-        </HubGrid>
+          )}
+        />
       </PageBody>
     </PageShell>
   );

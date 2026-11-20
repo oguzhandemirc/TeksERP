@@ -89,9 +89,9 @@ describe("Fasondaki İplik ekranı", () => {
     expect(screen.getByText("Müşteri Tekstil")).toBeInTheDocument();
     expect(screen.getByText("Bizim")).toBeInTheDocument();
     const band = screen.getByRole("group", { name: "Fasondaki iplik özeti" });
-    expect(band).toHaveTextContent("150,50");
+    expect(band).toHaveTextContent("150,500");
     expect(band).toHaveTextContent("Fasoncu2");
-    expect(band).toHaveTextContent("Devreden20,50");
+    expect(band).toHaveTextContent("Devreden20,500");
   });
 
   it("② süzgeç URL'den sunucuya; süzgeçli boş durum ayrı cümle", async () => {
@@ -190,7 +190,7 @@ describe("fasoncu kartı — iplik bakiyesi", () => {
     list.mockResolvedValue(ROWS.slice(0, 1));
     const r = renderWithProviders(<SubcontractorYarnSection subcontractorId="s1" />);
     expect(await screen.findByText("PES 50 denye")).toBeInTheDocument();
-    expect(screen.getByText(/20,50 kg devreden/)).toBeInTheDocument();
+    expect(screen.getByText(/20,500 kg devreden/)).toBeInTheDocument();
     expect(list).toHaveBeenCalledWith({ subcontractorId: "s1" });
     r.unmount();
     flags.devereEnabled = false;

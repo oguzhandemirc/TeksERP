@@ -3,6 +3,12 @@ import { Badge } from "@/components/ui/badge";
 import { WARP_BEAM_ORIGIN_LABEL, WARP_BEAM_STATUS_META, WARP_KG_SOURCE_LABEL, formatKg, formatM, type WarpBeam } from "./types";
 import { TERIM } from "@/lib/terim";
 
+/** Kartın iplikleri: çok iplikli kartta hepsi ("A · B"); satırsız/eski backend yanıtında ana iplik. */
+export function specYarnsText(s: WarpBeam["warpSpec"]): string {
+  const ys = s.yarns ?? [];
+  return ys.length > 1 ? [...ys].sort((a, b) => a.sortOrder - b.sortOrder).map((y) => y.yarnItem.name).join(" · ") : s.yarnItem.name;
+}
+
 /** Sıralama başlığı YOK: uç en yeni önce sıralar; süzme sunucuda. */
 /** Liste hücresi: sarılmamış levent "—", lotsuz sarım "Lot yok", tek lot adı, N lot sayı. */
 export function lotSummary(b: Pick<WarpBeam, "lots" | "wound">): string {
@@ -29,10 +35,10 @@ export const warpBeamColumns: ColumnDef<WarpBeam>[] = [
     id: "spec",
     header: "Çözgü kartı",
     cell: ({ row }) => (
-      <span className="flex flex-col">
+      <span className="flex flex-col" title={`${row.original.warpSpec.name} (${row.original.warpSpec.code}) · ${row.original.warpSpec.endsCount} tel · ${specYarnsText(row.original.warpSpec)}`}>
         <span>{row.original.warpSpec.name}</span>
         <span className="text-muted-foreground text-xs">
-          <span className="font-mono">{row.original.warpSpec.code}</span> · {row.original.warpSpec.endsCount} tel · {row.original.warpSpec.yarnItem.name}
+          <span className="font-mono">{row.original.warpSpec.code}</span> · {row.original.warpSpec.endsCount} tel · {specYarnsText(row.original.warpSpec)}
         </span>
       </span>
     ),
