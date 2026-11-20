@@ -4,6 +4,7 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { Tabs } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { destekRozetMetni, useDestekOkunmamis } from "../../../src/destek/gorunurluk";
 import { useSession } from "../../../src/state/session";
 import { useWide } from "../../../src/ui/Frame";
 import { TABS, tabVisible } from "../../../src/ui/tabs";
@@ -15,6 +16,8 @@ export default function TabsLayout() {
   const t = useTokens();
   const wide = useWide();
   const insets = useSafeAreaInsets();
+  // Destek yanıtı rozeti "Diğer" sekmesinde (Destek satırı orada); destek kapalıyken depo sıfır → rozet yok.
+  const destekRozeti = destekRozetMetni(useDestekOkunmamis());
   return (
     <Tabs
       screenOptions={{
@@ -37,7 +40,9 @@ export default function TabsLayout() {
             href: tabVisible(permissions, tab) ? undefined : null,
             tabBarActiveTintColor: tab.domain === "genel" ? t.tint : t.domain[tab.domain].fg,
             tabBarButtonTestID: `tab-${tab.name}`,
-            tabBarAccessibilityLabel: tab.title,
+            tabBarAccessibilityLabel: tab.name === "diger" && destekRozeti ? `${tab.title}, ${destekRozeti} talepte yeni destek yanıtı` : tab.title,
+            tabBarBadge: tab.name === "diger" && destekRozeti ? destekRozeti : undefined,
+            tabBarBadgeStyle: { backgroundColor: t.tint },
             tabBarIcon: ({ color, size }) => <Ionicons name={tab.icon} size={size} color={color} />,
           }}
         />

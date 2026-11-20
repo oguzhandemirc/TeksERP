@@ -12,6 +12,7 @@ import Sortable, {
 } from 'react-native-sortables';
 import ScreenChrome from '../../components/ScreenChrome';
 import SyncStatusChip from '../../components/SyncStatusChip';
+import { DestekCipi } from '../Destek/DestekGirisleri';
 import { useDeviceType } from '../../hooks/useDeviceType';
 import { useModuleOrder } from '../../hooks/useModuleOrder';
 import { useCompanyName } from '../../hooks/useFeatureFlags';
@@ -105,7 +106,7 @@ export default function ModuleSelectScreen() {
       <ScreenChrome
         title={companyName}
         subtitle="Bölüm Seçimi"
-        headerExtras={<SyncStatusChip />}
+        headerExtras={<><DestekCipi yalnizSimge={isPhone} /><SyncStatusChip /></>}
       >
         <View style={styles.empty}>
           <MaterialCommunityIcons name="folder-off-outline" size={64} color={colors.textMuted} />
@@ -128,7 +129,7 @@ export default function ModuleSelectScreen() {
       // Ölü mektup kutusunun ANA MENÜDEKİ girişi: operatör istasyondan çıkıp
       // buraya dönse de gönderilemeyen kaydı görebilsin (istasyon ekranlarında
       // çip zaten header'da duruyor). Hiçbir yerde görünmeyen kayıt yok demektir.
-      headerExtras={<SyncStatusChip />}
+      headerExtras={<><DestekCipi yalnizSimge={isPhone} /><SyncStatusChip /></>}
     >
       <Animated.ScrollView
         ref={scrollableRef}

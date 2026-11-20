@@ -2,6 +2,14 @@
 
 > `KUTUPHANELER.md` §9'dan bölündü (2026-11-02; o dosya boyut tavanına 202 bayt kalmıştı — kural kalır, ENVANTER ayrılır, §2 → `KUTUPHANELER-TABLO.md` emsali). Kayıt biçimi `KUTUPHANELER.md` §3; en yeni kayıt üstte.
 
+### react-native-view-shot@4.0.3 + react-native-svg@15.12.1 · mobil · patron/uygulama (yalnız view-shot) · 2026-11-20 (kullanıcı onayı)
+1. Problem      : Etkili Destek "Sorun bildir" — saha tableti ve patron uygulamasında anlık ekran görüntüsü (view-shot `captureScreen`/`captureRef`); mobilde üzerine ok/kutu/karartma çizimi (svg) · §2.3 "Destek: ekran yakalama · çizim"
+2. Alternatifler: ekran yakalama için `expo-screen-capture` (yalnız engeller/dinler, yakalamaz → red), elle yerel modül (PixelCopy + JPEG; view-shot'un bakımlı kopyası olurdu → red); çizim için `@shopify/react-native-skia` (~6 MB native → red), elle View tabanlı çizgi (ok/serbest iz eğri çizemez → red); view-shot + svg (SEÇİLDİ, Expo SDK 54 pinli sürümler)
+3. Boyut/biçim  : ikisi de native (autolink, config plugin YOK); svg ~1 MB AAR + JS ayrıştırıcı bağımlılıkları (css-select, css-tree)
+4. Bakım        : Expo pinli tam sürüm (`--save-exact`) — elle değiştirilmez ([KU-12]); SDK ile yükselir
+5. Lisans       : ikisi de MIT
+6. Dağıtım      : yerel modül → OTA YETMEZ, yeni APK/AAB ister ([KU-11]); yeni Android izni YOK (yakalama uygulamanın kendi penceresidir, MediaProjection değil). Eski APK'da modül yoksa yakalama boş döner, metinli talep yine açılır
+
 ### exceljs@^4.4.0 · backend · 2026-11-13
 1. Problem      : patron telefon uygulaması (ERP kipi) rapor koşumunu Excel olarak paylaşmalı; dosya fabrikada SAKLI sonuçtan, panelle aynı spec'ten üretilir (`GET /api/patron/v1/raporlar/:id/dosya`). Kullanıcı onayı 2026-11-13 (koordinatör iletti); §2.1'e "Excel (.xlsx)" satırı
 2. Alternatifler: SheetJS `xlsx` (panelde reddedilmiş, iki ayrı motor PDF = Excel eşitliğini bozar) · elle zip + SpreadsheetML yazıcı ([KU-07]; yeni motor + bakım yükü — reddedildi) · Excel'i telefonda üretmek (RN/Hermes'te Node stream bağımlılığı riskli, spec üçüncü kopya olur — reddedildi) — SEÇİLDİ: panelle aynı paket
