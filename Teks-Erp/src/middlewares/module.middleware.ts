@@ -179,7 +179,7 @@ export async function requireDevereEnabled(
  * Levent gövdesi envanteri (devere ek B1): devere açık ∧ `devere.beamBodyMode ≠ OFF`; OFF → 403 `BEAM_BODY_MODE_OFF`.
  * Karar tek yerde (`assertBeamBodyEnabled`); servis yolları da aynı fonksiyonu çağırır.
  */
-export async function requireBeamBodyEnabled(
+export async function requireBeamBodyTracking(
   req: Request,
   res: Response,
   next: NextFunction,

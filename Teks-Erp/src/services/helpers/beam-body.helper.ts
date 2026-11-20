@@ -9,7 +9,8 @@
 import { BeamBodyStatus, Prisma, type BeamBodyOwnerRole } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { AuditService } from "../audit.service";
-import { readDevereBeamBodyMachineFit, readDevereBeamBodyMode, readDevereEnabled } from "../system-setting.service";
+import { SETTING_KEYS, readDevereBeamBodyMachineFit, readDevereBeamBodyMode, readDevereEnabled } from "../system-setting.service";
+import { licenseModuleError } from "../../lib/license/module-ceiling";
 import { settingRowPath, settingScreenPath } from "../../constants/panel-ayar-yolu";
 import { BEAM_BODY_STATUS_LABELS, cancelKindOf, type BeamBodyEventKind, type BeamBodyForwardKind } from "../../constants/beam-body";
 import { beamBodyEventStampTx } from "./ledger-stamp.helper";
@@ -42,7 +43,7 @@ export interface BeamBodyPlace {
  */
 export async function assertBeamBodyEnabled(db?: SettingDb): Promise<void> {
   if (!(await readDevereEnabled(db))) {
-    throw AppError.forbidden(`Devere modülü bu kurulumda kapalı. ${settingScreenPath("modules")} ekranından açılabilir.`, { code: "MODULE_DISABLED", modul: "devere" });
+    throw licenseModuleError(SETTING_KEYS.DEVERE_ENABLED, "Devere / levent") ?? AppError.forbidden(`Devere modülü bu kurulumda kapalı. ${settingScreenPath("modules")} ekranından açılabilir.`, { code: "MODULE_DISABLED", modul: "devere" });
   }
   if ((await readDevereBeamBodyMode(db)) === "OFF") {
     throw AppError.forbidden(`Levent gövdesi takibi bu kurulumda kapalı. ${settingRowPath("devereBeamBodyMode")} ile açılır.`, { code: "BEAM_BODY_MODE_OFF" });

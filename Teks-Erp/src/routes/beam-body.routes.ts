@@ -1,7 +1,7 @@
 // =============================================================================
 // TeksERP — LEVENT GÖVDESİ ENVANTERİ (`/api/beam-bodies`, devere ek B1)
 // =============================================================================
-// Kapı sırası: `verifyToken` → `requireDevereEnabled` → `requireBeamBodyEnabled` (OFF → 403 BEAM_BODY_MODE_OFF,
+// Kapı sırası: `verifyToken` → `requireDevereEnabled` → `requireBeamBodyTracking` (OFF → 403 BEAM_BODY_MODE_OFF,
 // okuma dahil: yüzey yok = bugünkü davranış) → izin. Durum değişimi bu uçlarda YOK (B2/B3); B1 kayıt/düzenleme/kayıt iptali.
 // =============================================================================
 import { Router, type NextFunction, type Request, type Response } from "express";
@@ -10,7 +10,7 @@ import { BeamBodyStatus } from "@prisma/client";
 import { AppError } from "../utils/app-error";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
-import { requireBeamBodyEnabled, requireDevereEnabled } from "../middlewares/module.middleware";
+import { requireBeamBodyTracking, requireDevereEnabled } from "../middlewares/module.middleware";
 import { assertNoBareFilterParams, parseQueryParams, readFilterList, readIdCondition } from "../utils/query-parser";
 import { getBeamBody, listBeamBodies, listBeamBodyEvents, resolveBeamBody } from "../services/beam-body/read";
 import {
@@ -20,7 +20,7 @@ import { BEAM_BODY_OWNER_KINDS, BEAM_BODY_REGISTER_STATUSES, type BeamBodyOwnerK
 import "../types/express-augment";
 
 const router = Router();
-router.use(verifyToken, requireDevereEnabled, requireBeamBodyEnabled);
+router.use(verifyToken, requireDevereEnabled, requireBeamBodyTracking);
 
 const wrap = (fn: (req: Request) => Promise<{ status: number; body: unknown }>) => async (req: Request, res: Response, next: NextFunction) => {
   try {

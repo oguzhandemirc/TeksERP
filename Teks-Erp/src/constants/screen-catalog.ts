@@ -486,8 +486,8 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   { code: "loom:doff", reason: "Panel doff yüzeyi yok; tablet `mobile:dokuma` ile kaydeder — web kodu API/entegrasyon için." },
   { code: "loom:doff-revoke", reason: "Panel geri alma yüzeyi yok; tablet `mobile:dokuma-geri-al` ile — web kodu API/entegrasyon için." },
   // Devere ek B1 (2026-11-20): gövde envanteri backend'de doğdu; "Levent Gövdeleri" ekranı B4 diliminde — ekranla ölü muaf olur.
-  { code: "beam-body:read", reason: "Levent Gövdeleri ekranı B4 diliminde; menü MN (Üretim → Devere ve Tanımlar)." },
-  { code: "beam-body:write", reason: "Levent Gövdeleri ekranı B4 diliminde; menü MN (Üretim → Devere ve Tanımlar)." },
+  { code: "beam-body:read", reason: "Levent Gövdeleri ekranı B4 diliminde doğacak; menü kaydı MN diliminde." },
+  { code: "beam-body:write", reason: "Levent Gövdeleri ekranı B4 diliminde doğacak; menü kaydı MN diliminde." },
   // Tezgah künyesi + gölge mod (B3, 2026-09-14): "Devreye Alma" ekranı AYRI dilim (Faz 2 ingest ile, `tezgah.enabled`).
 ];
 

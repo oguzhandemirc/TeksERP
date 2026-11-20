@@ -17,7 +17,7 @@ import { z } from "zod";
 import { LabelController } from "../controllers/label.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
-import { requireBeamBodyEnabled } from "../middlewares/module.middleware";
+import { requireBeamBodyTracking } from "../middlewares/module.middleware";
 import { LabelOverrideService } from "../services/label-override.service";
 import { RollLabelEditService } from "../services/roll-label-edit.service";
 
@@ -759,7 +759,7 @@ const BEAM_BODY_LABEL_READ = requireAnyPermission("label:read", "beam-body:read"
  *       404: { description: BEAM_BODY_NOT_FOUND }
  *       409: { description: BEAM_BODY_INACTIVE }
  */
-router.get("/beam-bodies/:id", verifyToken, requireBeamBodyEnabled, BEAM_BODY_LABEL_READ, controller.getBeamBodyLabel);
+router.get("/beam-bodies/:id", verifyToken, requireBeamBodyTracking, BEAM_BODY_LABEL_READ, controller.getBeamBodyLabel);
 
 /**
  * @openapi
@@ -778,7 +778,7 @@ router.get("/beam-bodies/:id", verifyToken, requireBeamBodyEnabled, BEAM_BODY_LA
  *       400: { description: Şablon yok/uyumsuz · LABEL_COPIES_RANGE }
  *       404: { description: BEAM_BODY_NOT_FOUND }
  */
-router.get("/beam-bodies/:id/html", verifyToken, requireBeamBodyEnabled, BEAM_BODY_LABEL_READ, controller.getBeamBodyLabelHtml);
+router.get("/beam-bodies/:id/html", verifyToken, requireBeamBodyTracking, BEAM_BODY_LABEL_READ, controller.getBeamBodyLabelHtml);
 
 /**
  * @openapi
@@ -796,7 +796,7 @@ router.get("/beam-bodies/:id/html", verifyToken, requireBeamBodyEnabled, BEAM_BO
  *       400: { description: Şablon yok/uyumsuz · LABEL_COPIES_RANGE }
  *       404: { description: BEAM_BODY_NOT_FOUND }
  */
-router.get("/beam-bodies/:id/native", verifyToken, requireBeamBodyEnabled, BEAM_BODY_LABEL_READ, controller.getBeamBodyLabelNative);
+router.get("/beam-bodies/:id/native", verifyToken, requireBeamBodyTracking, BEAM_BODY_LABEL_READ, controller.getBeamBodyLabelNative);
 
 /**
  * @openapi
@@ -817,7 +817,7 @@ router.get("/beam-bodies/:id/native", verifyToken, requireBeamBodyEnabled, BEAM_
  *       400: { description: LABEL_COPIES_RANGE }
  *       404: { description: BEAM_BODY_NOT_FOUND }
  */
-router.post("/beam-bodies/:id/print-event", verifyToken, requireBeamBodyEnabled, requirePermission("label:print"), controller.recordBeamBodyPrintEvent);
+router.post("/beam-bodies/:id/print-event", verifyToken, requireBeamBodyTracking, requirePermission("label:print"), controller.recordBeamBodyPrintEvent);
 
 /**
  * @openapi
