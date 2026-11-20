@@ -31,7 +31,7 @@ export interface WarpingSettlementYarn {
 }
 
 export interface WarpingSettlement {
-  metre: { targetM: string; receivedM: string; diffM: string; diffPct: string | null; planBeamCount: number | null; planBeamCountOpen?: boolean; receivedBeamCount: number };
+  metre: { targetM: string; receivedM: string; diffM: string; diffPct: string | null; planBeamCount: number | null; planBeamCountOpen?: boolean; receivedBeamCount: number; /** C1: reddedilen sarım (gelene sayılmaz; eski sunucuda yok). */ rejectedM?: string; rejectedBeamCount?: number };
   yarns: WarpingSettlementYarn[];
   weighing: { weighedBeamCount: number; weighedNetKg: string; nominalKg: string; diffKg: string; diffPct: string | null } | null;
 }
@@ -49,6 +49,8 @@ export interface WarpingReceiptBeam {
   weighedNetKg: string | null;
   weighDiffKg: string | null;
   cancelled: boolean;
+  /** Devere ek C1: bu sarım reddedilen bir sarımın yeniden sarımıysa reddedilenin kimliği (eski sunucuda yok). */
+  reworkOfBeamId?: string | null;
   yarns: Array<{ yarnItemId: string; kg: string; allocations: Array<{ dispatchItemId: string; holderWarpingOrderId: string; carryOver: boolean; kg: string }> }>;
 }
 
@@ -72,6 +74,8 @@ export interface WarpingReceiveBeamBody {
   physicalBeamNo?: string | null;
   grossKg?: number | null;
   tareKg?: number | null;
+  /** Devere ek C2: yeniden sarılan reddedilen sarım (aynı sipariş, "yeniden sarılsın" kipli etkin ret). */
+  reworkOfBeamId?: string | null;
 }
 
 export interface WarpingReceiveFields {
@@ -81,7 +85,7 @@ export interface WarpingReceiveFields {
 
 export interface WarpingReceivePreview {
   order: { id: string; orderNo: string; status: WarpingOrderStatus };
-  beams: Array<{ index: number; lengthM: string; nominalKg: string; weighedNetKg: string | null; yarns: Array<{ yarnItemId: string; code: string; kg: string }> }>;
+  beams: Array<{ index: number; lengthM: string; nominalKg: string; weighedNetKg: string | null; reworkOf?: { beamId: string; beamNo: string; rejectionDocNo: string } | null; yarns: Array<{ yarnItemId: string; code: string; kg: string }> }>;
   allocations: Array<{
     beamIndex: number; yarnItemId: string; dispatchItemId: string; dispatchNo: string; lotNo: string | null;
     holderWarpingOrderId: string; holderOrderNo: string | null; carryOver: boolean; kg: string;
