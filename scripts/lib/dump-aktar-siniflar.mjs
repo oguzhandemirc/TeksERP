@@ -70,7 +70,7 @@ export const IS_TABLOLARI = [
   "customer_standalone_labels", "customer_template_routes", "customers", "defect_types", "direct_shipments",
   "document_profiles", "doff_events", "duplicate_reviews", "exchange_rates", "fabric_properties",
   "fabric_property_values", "free_documents", "goods_receipts", "hall_shift_duty_overrides",
-  "hall_shift_responsibles", "import_run_lines", "import_runs", "invoice_lines", "invoice_to_goods_receipts",
+  "hall_shift_responsibles", "import_run_lines", "import_runs", "invoice_lines", "invoice_to_goods_receipts", "invoice_to_warping_receipts",
   "invoices", "item_allowed_colors", "item_allowed_properties", "item_prices", "items",
   "kartela_dispatch_items", "kartela_dispatches", "kartela_receipt_items", "kartela_receipts",
   "kursun_bypass_assignments", "label_context_defaults", "label_template_variants", "label_templates",

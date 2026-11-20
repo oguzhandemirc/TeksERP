@@ -218,6 +218,8 @@ export interface FeatureFlags {
   devereFasonWasteTolerancePct: number;
   /** Fason devere D4b (K4): lot karışımı kuralı (varsayılan `WARN`). */
   devereFasonLotPolicy: DevereFasonLotPolicy;
+  /** Devere A1: yeniden sarım beklenen ücrete girer mi (varsayılan AÇIK). */
+  devereReworkBillable: boolean;
   /** Z1: tezgah koşumu dokuma işine bağlı açılmalı (varsayılan KAPALI = stoka dokuma meşru). HAM; etkin `dokuma && bayrak`. */
   dokumaRunWeavingOrderRequired: boolean;
   /** Z1: dokuma işi en az bir sipariş satırına bağlı olmalı (varsayılan KAPALI). HAM; etkin `dokuma && bayrak`. */

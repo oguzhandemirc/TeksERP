@@ -9,7 +9,7 @@ import { z } from "zod";
 import { Currency, WarpingFeeUnit, WarpingOrderStatus } from "@prisma/client";
 import { AppError } from "../utils/app-error";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { matchesPermission, requirePermission } from "../middlewares/rbac.middleware";
 import { requireDevereEnabled, requireIplikEnabled } from "../middlewares/module.middleware";
 import { dispatchWarpingOrder, getWarpingInstruction, previewWarpingDispatch, WARPING_DISPATCH_MAX_LINES } from "../services/warping-order/dispatch";
 import { cancelWarpingDispatch, previewCancelWarpingDispatch } from "../services/warping-order/dispatch-cancel";
@@ -17,6 +17,7 @@ import { assertNoBareFilterParams, parseQueryParams, readFilterList, readIdCondi
 import { createWarpingOrder, patchWarpingOrder, previewWarpingOrder, WARPING_ORDER_MAX_SALES_ORDERS } from "../services/warping-order/create";
 import { cancelPreviewWarpingOrder, cancelWarpingOrder } from "../services/warping-order/cancel";
 import { getWarpingOrder, listWarpingOrders } from "../services/warping-order/read";
+import { getWarpingOrderFeeSummary } from "../services/warping-order/fee-invoice";
 import { listWarpingDelays, WARPING_DELAY_STATES, type WarpingDelayState } from "../services/warping-order/delays";
 import { WARPING_ORDER_MAX_BEAM_LINES, WARPING_ORDER_MAX_EXTRA_SPECS, WARPING_ORDER_MAX_TARGET_M } from "../services/warping-order/plan";
 import warpingOrderYarnRoutes from "./warping-order-yarn.routes";
@@ -81,7 +82,8 @@ const ListQuery = z.object({
   cursor: z.string().max(200).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
 }).passthrough();
-const FILTERS = ["status", "subcontractorId", "warpSpecId", "salesOrderId", "from", "to"];
+const FILTERS = ["status", "subcontractorId", "warpSpecId", "salesOrderId", "from", "to", "feeInvoiced"];
+const FEE_STATES = ["NONE", "PARTIAL", "FULL"] as const;
 const DELAY_FILTERS = ["state", "subcontractorId"];
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -146,7 +148,14 @@ router.get("/", requirePermission("warping-order:read"), wrap(async (req) => {
   const status = readFilterList(f.status);
   const bad = status.find((s) => !(Object.values(WarpingOrderStatus) as string[]).includes(s));
   if (bad) throw AppError.badRequest(`filter[status] geçersiz: ${bad}`, { code: "FILTER_INVALID" });
-  const one = (k: "from" | "to"): string | undefined => {
+  // Devere A1: fatura durumu süzgeci fatura bilgisidir → finance:read ister (yoksa 403 değil, 400 fail-closed).
+  const feeInvoiced = readFilterList(f.feeInvoiced);
+  const badFee = feeInvoiced.find((s) => !(FEE_STATES as readonly string[]).includes(s));
+  if (badFee) throw AppError.badRequest(`filter[feeInvoiced] geçersiz: ${badFee} (NONE · PARTIAL · FULL)`, { code: "FILTER_INVALID" });
+  if (feeInvoiced.length > 0 && !matchesPermission(req.user?.permissions ?? [], "finance:read")) {
+    throw AppError.badRequest("Fatura durumu süzgeci için ön muhasebe okuma izni gerekli.", { code: "FILTER_INVALID" });
+  }
+  const one =(k: "from" | "to"): string | undefined => {
     const v = readFilterList(f[k]);
     if (v.length === 0) return undefined;
     if (v.length > 1 || !YMD.test(v[0]!)) throw AppError.badRequest(`filter[${k}] YYYY-AA-GG olmalı.`, { code: "FILTER_INVALID" });
@@ -158,6 +167,7 @@ router.get("/", requirePermission("warping-order:read"), wrap(async (req) => {
     subcontractorId: readIdCondition(f.subcontractorId),
     warpSpecId: readIdCondition(f.warpSpecId),
     salesOrderId: readIdCondition(f.salesOrderId),
+    feeInvoiced: feeInvoiced as Array<(typeof FEE_STATES)[number]>,
     from: one("from"),
     to: one("to"),
     search: q.search,
@@ -241,6 +251,27 @@ router.get("/delays", requirePermission("warping-order:read"), wrap(async (req) 
  *       200: { description: Güncel sipariş }
  *       409: { description: WARPING_ORDER_NOT_EDITABLE }
  */
+/**
+ * @openapi
+ * /api/warping-orders/{id}/fee-summary:
+ *   get:
+ *     tags: [WarpingOrder]
+ *     summary: Devere ücreti özeti — kabul başına ölçü ve beklenen ücret (devere A1)
+ *     description: >
+ *       Beklenen = donuk birim ücret × (metre · nominal kg · tel × metre); fiyatsız sipariş null. Bağlı fatura ve
+ *       `invoiceState` yalnız `finance:read` ∧ ön muhasebe açıkken döner (aksi null).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: "{ data: WarpingFeeOrderDto }" }
+ *       404: { description: WARPING_ORDER_NOT_FOUND }
+ */
+router.get("/:id/fee-summary", requirePermission("warping-order:read"), wrap(async (req) => {
+  const id = parse(Id, req.params.id);
+  const canReadInvoices = matchesPermission(req.user?.permissions ?? [], "finance:read");
+  return { status: 200, body: { success: true, data: await getWarpingOrderFeeSummary(id, { canReadInvoices }) } };
+}));
+
 router.get("/:id", requirePermission("warping-order:read"), wrap(async (req) => {
   const id = parse(Id, req.params.id);
   return { status: 200, body: { success: true, data: await getWarpingOrder(id) } };
