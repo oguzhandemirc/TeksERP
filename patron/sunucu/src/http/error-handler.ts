@@ -14,6 +14,8 @@ export function errorHandler(err: unknown, req: Request, res: Response, next: Ne
     return;
   }
   if (err instanceof CloudError) {
+    const retry = err.extra?.retryAfterSec;
+    if (typeof retry === "number" && retry > 0) res.set("Retry-After", String(Math.ceil(retry)));
     res.status(err.status).json({ success: false, message: err.message, details: { ...(err.extra ?? {}), code: err.code } });
     return;
   }
