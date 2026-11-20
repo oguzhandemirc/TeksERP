@@ -56,7 +56,7 @@ export interface BeamBodyPatchInput {
 }
 
 /** Sahip girdisi → tek FK + gösterim rolü. Fail-closed: tanınmayan/bağsız sahip 400. */
-async function resolveOwner(db: Tx | typeof prisma, o: BeamBodyOwnerInput): Promise<{ ownerCustomerId: string | null; ownerRole: BeamBodyOwnerRole | null }> {
+export async function resolveBeamBodyOwner(db: Tx | typeof prisma, o: BeamBodyOwnerInput): Promise<{ ownerCustomerId: string | null; ownerRole: BeamBodyOwnerRole | null }> {
   if (o.kind === "OURS") {
     if (o.customerId || o.subcontractorId) throw AppError.badRequest("Bizim gövdemiz için sahip cari seçilmez", { code: "BEAM_BODY_OWNER_INVALID" });
     return { ownerCustomerId: null, ownerRole: null };
@@ -74,7 +74,7 @@ async function resolveOwner(db: Tx | typeof prisma, o: BeamBodyOwnerInput): Prom
   return { ownerCustomerId: customerId, ownerRole: o.kind };
 }
 
-async function assertMachines(db: Tx | typeof prisma, ids: string[]): Promise<string[]> {
+export async function assertBeamBodyMachines(db: Tx | typeof prisma, ids: string[]): Promise<string[]> {
   const uniq = [...new Set(ids)];
   if (uniq.length === 0) return [];
   const found = await db.machine.findMany({ where: { id: { in: uniq }, isActive: true }, select: { id: true } });
@@ -102,7 +102,7 @@ async function resolveRegisterPlace(db: Tx | typeof prisma, input: BeamBodyCreat
 }
 
 const MANUAL_NO = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,31}$/;
-function normalizeManualNo(raw: string): string {
+export function normalizeBeamBodyNo(raw: string): string {
   const v = raw.trim();
   if (!MANUAL_NO.test(v)) throw AppError.badRequest("Gövde no 1–32 karakter; harf, rakam ve . _ / - içerebilir (QR'a basılır)", { code: "BEAM_BODY_NO_INVALID" });
   return v;
@@ -111,6 +111,27 @@ function normalizeManualNo(raw: string): string {
 async function assertNoFreeTx(tx: Tx, bodyNo: string): Promise<void> {
   const taken = await tx.beamBody.findFirst({ where: { bodyNo: { equals: bodyNo, mode: "insensitive" } }, select: { bodyNo: true } });
   if (taken) throw AppError.conflict(`${taken.bodyNo} numaralı gövde zaten kayıtlı`, { code: "BEAM_BODY_NO_TAKEN", bodyNo: taken.bodyNo });
+}
+
+/**
+ * Tx içi doğuş: no kilidi (8029) → no (elle ya da seri) → tekillik → kart + REGISTER. Kayıt ucu bunu tx'in İLK ifadesi
+ * olarak çağırır; devere dönüş kabulü (B3 yerinde tanım) sipariş claim'inden sonra (levent no kilidi emsali).
+ */
+export async function registerNewBeamBodyTx(
+  tx: Tx,
+  input: Omit<Parameters<typeof registerBeamBodyTx>[1], "bodyNo"> & { manualNo: string | null },
+): Promise<{ bodyId: string; eventId: string; bodyNo: string }> {
+  const now = new Date();
+  const fmt = resolveSeriesFormat(CODE_SCOPE);
+  await lockCodeScopeTx(tx, CODE_SCOPE, input.manualNo ?? seriesPrefix(fmt, now));
+  const bodyNo = input.manualNo ?? (await nextSeriesNo(CODE_SCOPE, async (prefix) =>
+    tx.beamBody
+      .findMany({ where: { bodyNo: { gte: prefix, startsWith: prefix } }, select: { bodyNo: true, createdAt: true } })
+      .then((rows) => rows.map((x) => ({ code: x.bodyNo, createdAt: x.createdAt }))), now, fmt));
+  await assertNoFreeTx(tx, bodyNo);
+  const { manualNo: _m, ...rest } = input;
+  const r = await registerBeamBodyTx(tx, { ...rest, bodyNo });
+  return { ...r, bodyNo };
 }
 
 interface PriorBody { id: string; bodyNo: string; ownerCustomerId: string | null; ownerRole: BeamBodyOwnerRole | null }
@@ -131,24 +152,14 @@ function replayFor(input: BeamBodyCreateInput, manualNo: string | null) {
 
 export async function createBeamBody(input: BeamBodyCreateInput, userId: string): Promise<CreateBeamBodyResult> {
   await assertBeamBodyEnabled();
-  const manualNo = input.bodyNo ? normalizeManualNo(input.bodyNo) : null;
+  const manualNo = input.bodyNo ? normalizeBeamBodyNo(input.bodyNo) : null;
   return replayFor(input, manualNo).run(input.clientToken, async () => {
-    const owner = await resolveOwner(prisma, input.owner);
+    const owner = await resolveBeamBodyOwner(prisma, input.owner);
     const { status, place } = await resolveRegisterPlace(prisma, input);
-    const machineIds = await assertMachines(prisma, input.machineIds ?? []);
+    const machineIds = await assertBeamBodyMachines(prisma, input.machineIds ?? []);
     const dims = { widthCm: D(input.widthCm), flangeDiameterCm: D(input.flangeDiameterCm), tareKg: D(input.tareKg) };
-    const out = await prisma.$transaction(async (tx) => {
-      const now = new Date();
-      const fmt = resolveSeriesFormat(CODE_SCOPE);
-      await lockCodeScopeTx(tx, CODE_SCOPE, manualNo ?? seriesPrefix(fmt, now));
-      const bodyNo = manualNo ?? (await nextSeriesNo(CODE_SCOPE, async (prefix) =>
-        tx.beamBody
-          .findMany({ where: { bodyNo: { gte: prefix, startsWith: prefix } }, select: { bodyNo: true, createdAt: true } })
-          .then((rows) => rows.map((x) => ({ code: x.bodyNo, createdAt: x.createdAt }))), now, fmt));
-      await assertNoFreeTx(tx, bodyNo);
-      const r = await registerBeamBodyTx(tx, { bodyNo, clientToken: input.clientToken, owner, dims, status, place, notes: input.notes ?? null, machineIds, userId });
-      return { ...r, bodyNo };
-    });
+    const out = await prisma.$transaction((tx) =>
+      registerNewBeamBodyTx(tx, { manualNo, clientToken: input.clientToken, owner, dims, status, place, notes: input.notes ?? null, machineIds, userId }));
     await AuditService.log({
       userId, action: "CREATE", tableName: BEAM_BODY_TABLE, recordId: out.bodyId,
       newData: { bodyNo: out.bodyNo, ...owner, status, ...place, widthCm: dims.widthCm?.toString() ?? null, flangeDiameterCm: dims.flangeDiameterCm?.toString() ?? null, tareKg: dims.tareKg?.toString() ?? null, machineIds },
@@ -165,8 +176,8 @@ export async function createBeamBody(input: BeamBodyCreateInput, userId: string)
 export async function patchBeamBody(id: string, input: BeamBodyPatchInput, userId: string): Promise<BeamBodyDto> {
   await assertBeamBodyEnabled();
   const before = await loadBeamBodyDto(prisma, id);
-  const owner = input.owner ? await resolveOwner(prisma, input.owner) : undefined;
-  const machineIds = input.machineIds ? await assertMachines(prisma, input.machineIds) : undefined;
+  const owner = input.owner ? await resolveBeamBodyOwner(prisma, input.owner) : undefined;
+  const machineIds = input.machineIds ? await assertBeamBodyMachines(prisma, input.machineIds) : undefined;
   const ownerChanges = owner !== undefined && (owner.ownerCustomerId !== (before.owner.customer?.id ?? null) || (owner.ownerRole ?? "OURS") !== before.owner.kind);
   const where: Prisma.BeamBodyWhereInput = { id };
   if (ownerChanges) Object.assign(where, { status: BeamBodyStatus.EMPTY_STOCK, isActive: true });

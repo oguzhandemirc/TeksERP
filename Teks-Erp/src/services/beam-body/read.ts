@@ -13,6 +13,7 @@ import {
   type BeamBodyForwardKind, type BeamBodyOwnerKind,
 } from "../../constants/beam-body";
 import { BEAM_BODY_EVENT_SELECT, beamBodyEventUndoBlock } from "../helpers/beam-body.helper";
+import { sequentialTx } from "../helpers/tx-sequential-relations.helper";
 
 type Db = Pick<Prisma.TransactionClient, "beamBody">;
 type IdCond = string | { in: string[] } | null;
@@ -26,6 +27,7 @@ export const BEAM_BODY_SELECT = {
   subcontractor: { select: { id: true, name: true } },
   machine: { select: { id: true, code: true, name: true } },
   machineFits: { select: { machine: { select: { id: true, code: true, name: true } } }, orderBy: { machine: { code: "asc" } } },
+  currentWarpBeam: { select: { id: true, beamNo: true, status: true } },
 } satisfies Prisma.BeamBodySelect;
 type BeamBodyRow = Prisma.BeamBodyGetPayload<{ select: typeof BEAM_BODY_SELECT }>;
 
@@ -42,6 +44,8 @@ export interface BeamBodyDto {
   /** Bizim olmayan, boş ve bizde duran gövde — sahibine iade edilecek (B2). */
   ownerReturnDue: boolean;
   machineFits: Array<{ id: string; code: string; name: string }>;
+  /** B3: üstündeki sarım (dolu durumlarda) — takmada gövde QR'ı sarımı bulur. */
+  currentWarpBeam: { id: string; beamNo: string; status: string } | null;
   notes: string | null;
   isActive: boolean;
   createdAt: string;
@@ -58,12 +62,13 @@ export function toBeamBodyDto(r: BeamBodyRow): BeamBodyDto {
     place: { warehouse: r.warehouse, subcontractor: r.subcontractor, machine: r.machine },
     ownerReturnDue: r.ownerCustomer !== null && r.status === BeamBodyStatus.EMPTY_STOCK && r.isActive,
     machineFits: r.machineFits.map((f) => f.machine),
+    currentWarpBeam: r.currentWarpBeam,
     notes: r.notes, isActive: r.isActive, createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
   };
 }
 
 export async function loadBeamBodyDto(db: Db, id: string): Promise<BeamBodyDto> {
-  const row = await db.beamBody.findUnique({ where: { id }, select: BEAM_BODY_SELECT });
+  const row = await sequentialTx(db).beamBody.findUnique({ where: { id }, select: BEAM_BODY_SELECT });
   if (!row) throw AppError.notFound("Levent gövdesi bulunamadı", { code: "BEAM_BODY_NOT_FOUND" });
   return toBeamBodyDto(row);
 }
