@@ -302,6 +302,11 @@ export const SETTING_KEYS = {
   /** [PROFİL] Devere A1: deverecinin kendi kusuruyla yeniden sardığı levent beklenen ücrete girer mi. DEFAULT true
    *  (kullanıcı kararı 2026-11-20; bugün yeniden sarım işareti yok → beklenen bayt-aynı). Yalnız UYARI hesabını etkiler. */
   DEVERE_REWORK_BILLABLE: "devere.reworkBillable",
+  /** [PROFİL] Devere F1: denye sapma raporunda öneri için iplik başına en az tek iplikli tartılı levent (DEFAULT 3,
+   *  kullanıcı kararı 2026-11-20). Yalnız raporun öneri sütununu etkiler; kartı hiçbir şey otomatik değiştirmez. */
+  DEVERE_DENIER_SUGGEST_MIN_BEAMS: "devere.denierSuggestMinBeams",
+  /** [PROFİL] Devere F1: denye önerisi sapma eşiği % (DEFAULT 2; eşiği AŞAN sapma öneri doğurur). Yalnız rapor. */
+  DEVERE_DENIER_SUGGEST_THRESHOLD_PCT: "devere.denierSuggestThresholdPct",
   /** Dokuma işi modülü: dokuma işi planlama · tezgah koşumu · top indirme.
    *  ÜRETİME BAĞIMLI (`MODULE_DEPENDENCIES`), tezgah izlemenin KARDEŞİ — fasona
    *  dokutan firmada dokuma işi var tezgah yok (DOKUMA-IS-EMRI §2.5). */

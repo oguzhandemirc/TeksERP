@@ -223,6 +223,10 @@ export interface FeatureFlags {
   devereSettleDefault: DevereSettleDefault;
   /** Devere A1: yeniden sarım beklenen ücrete girer mi (varsayılan AÇIK). */
   devereReworkBillable: boolean;
+  /** Devere F1: denye önerisi için iplik başına en az tartılı levent (varsayılan 3). */
+  devereDenierSuggestMinBeams: number;
+  /** Devere F1: denye önerisi sapma eşiği % (varsayılan 2). */
+  devereDenierSuggestThresholdPct: number;
   /** Z1: tezgah koşumu dokuma işine bağlı açılmalı (varsayılan KAPALI = stoka dokuma meşru). HAM; etkin `dokuma && bayrak`. */
   dokumaRunWeavingOrderRequired: boolean;
   /** Z1: dokuma işi en az bir sipariş satırına bağlı olmalı (varsayılan KAPALI). HAM; etkin `dokuma && bayrak`. */

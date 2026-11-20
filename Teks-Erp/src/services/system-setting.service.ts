@@ -322,7 +322,7 @@ export class SystemSettingService {
     // 400'e düşürür ya da API sözleşmesine olmayan bir null sokar.
     input: Omit<
       Partial<FeatureFlags>,
-      "fasonShrinkTolerancePct" | "dokumaWeavingWastePct" | "devereWarpFixedWasteM" | "devereFasonWasteTolerancePct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "shippingReadyTolerancePct" | "tamburPlanGateWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "financeWithholdingNumerator" | "financeWithholdingDenominator" | "financePurchaseWithholdingNumerator" | "financePurchaseWithholdingDenominator" | "shippingSackSeqStart" | "tezgahEscalationGraceMinutes" | "tezgahAlarmRenotifyMinutes" | "tezgahMaxOpenStopHours" | "tezgahCollectorSilenceMinutes" | "license"
+      "fasonShrinkTolerancePct" | "dokumaWeavingWastePct" | "devereWarpFixedWasteM" | "devereFasonWasteTolerancePct" | "devereDenierSuggestMinBeams" | "devereDenierSuggestThresholdPct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "shippingReadyTolerancePct" | "tamburPlanGateWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "financeWithholdingNumerator" | "financeWithholdingDenominator" | "financePurchaseWithholdingNumerator" | "financePurchaseWithholdingDenominator" | "shippingSackSeqStart" | "tezgahEscalationGraceMinutes" | "tezgahAlarmRenotifyMinutes" | "tezgahMaxOpenStopHours" | "tezgahCollectorSilenceMinutes" | "license"
     > & {
       /** null = fabrika varsayılanına dön (1). */
       shippingSackSeqStart?: number | null;
@@ -334,6 +334,10 @@ export class SystemSettingService {
       devereWarpFixedWasteM?: number | null;
       /** null = fabrika varsayılanına dön (0 = denetim yok). */
       devereFasonWasteTolerancePct?: number | null;
+      /** null = varsayılana dön (3 levent). */
+      devereDenierSuggestMinBeams?: number | null;
+      /** null = varsayılana dön (%2). */
+      devereDenierSuggestThresholdPct?: number | null;
       /** null = varsayılana dön (10 dk). */
       tezgahAlarmRenotifyMinutes?: number | null;
       /** null = varsayılana dön (12 sa). */

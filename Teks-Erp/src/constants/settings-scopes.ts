@@ -151,6 +151,8 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "devereFasonLotPolicy",
       "devereSettleDefault",
       "devereReworkBillable",
+      "devereDenierSuggestMinBeams",
+      "devereDenierSuggestThresholdPct",
       "devereBeamWeavingLinkRequired",
     ],
   },

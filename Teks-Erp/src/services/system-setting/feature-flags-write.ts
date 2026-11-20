@@ -40,7 +40,7 @@ import { SETTING_KEYS } from "./keys";
 import { DEVERE_SETTLE_DEFAULTS, type DevereSettleDefault } from "./devere-settle";
 import { readKursunMeterCapture } from "./kursun-batch";
 import { LABEL_COPIES_MAX, readNotificationInboxEnabled, type DefaultLabelMedia } from "./labels";
-import { DEFAULT_DEVERE_FASON_WASTE_TOLERANCE_PCT, DEVERE_FASON_WASTE_TOLERANCE_PCT_MAX, DEFAULT_DEVERE_WARP_FIXED_WASTE_M, DEVERE_WARP_FIXED_WASTE_M_MAX, DEFAULT_DOKUMA_WEAVING_WASTE_PCT, DOKUMA_WEAVING_WASTE_PCT_MAX, readDepoMultiEnabledRaw, readDevereEnabledRaw, readDokumaEnabledRaw, readEmanetEnabledRaw, readGelenBelgeEnabledRaw, readIplikEnabledRaw, readKaliteGuvenceEnabledRaw, readKumasTeknikEnabledRaw, readMaliyetEnabledRaw, readProductionEnabledRaw, readTezgahEnabledRaw, readTicaretEnabledRaw } from "./modules";
+import { DEFAULT_DEVERE_DENIER_SUGGEST_MIN_BEAMS, DEVERE_DENIER_SUGGEST_MIN_BEAMS_MAX, DEFAULT_DEVERE_DENIER_SUGGEST_THRESHOLD_PCT, DEVERE_DENIER_SUGGEST_THRESHOLD_PCT_MAX, DEFAULT_DEVERE_FASON_WASTE_TOLERANCE_PCT, DEVERE_FASON_WASTE_TOLERANCE_PCT_MAX, DEFAULT_DEVERE_WARP_FIXED_WASTE_M, DEVERE_WARP_FIXED_WASTE_M_MAX, DEFAULT_DOKUMA_WEAVING_WASTE_PCT, DOKUMA_WEAVING_WASTE_PCT_MAX, readDepoMultiEnabledRaw, readDevereEnabledRaw, readDokumaEnabledRaw, readEmanetEnabledRaw, readGelenBelgeEnabledRaw, readIplikEnabledRaw, readKaliteGuvenceEnabledRaw, readKumasTeknikEnabledRaw, readMaliyetEnabledRaw, readProductionEnabledRaw, readTezgahEnabledRaw, readTicaretEnabledRaw } from "./modules";
 import { readTezgahAlarmEnabled, readTezgahAlarmNoShiftMode, readTezgahAlarmUnclassifiedTargetMinutes } from "./packing-loom";
 import { readPartyCodeAuto } from "./production";
 import { readItemPhaseOutNewOrder, readShippingOrderRequirement, readShippingReadyNotifyUnits, resetReadyBaselineOnIncomingDocOpen } from "./shipping";
@@ -221,7 +221,7 @@ export async function setFeatureFlags(
     // 400'e düşürür ya da API sözleşmesine olmayan bir null sokar.
     input: Omit<
       Partial<FeatureFlags>,
-      "fasonShrinkTolerancePct" | "dokumaWeavingWastePct" | "devereWarpFixedWasteM" | "devereFasonWasteTolerancePct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "shippingReadyTolerancePct" | "tamburPlanGateWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "financeWithholdingNumerator" | "financeWithholdingDenominator" | "financePurchaseWithholdingNumerator" | "financePurchaseWithholdingDenominator" | "shippingSackSeqStart" | "tezgahEscalationGraceMinutes" | "tezgahAlarmRenotifyMinutes" | "tezgahMaxOpenStopHours" | "tezgahCollectorSilenceMinutes" | "license"
+      "fasonShrinkTolerancePct" | "dokumaWeavingWastePct" | "devereWarpFixedWasteM" | "devereFasonWasteTolerancePct" | "devereDenierSuggestMinBeams" | "devereDenierSuggestThresholdPct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "shippingReadyTolerancePct" | "tamburPlanGateWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "financeWithholdingNumerator" | "financeWithholdingDenominator" | "financePurchaseWithholdingNumerator" | "financePurchaseWithholdingDenominator" | "shippingSackSeqStart" | "tezgahEscalationGraceMinutes" | "tezgahAlarmRenotifyMinutes" | "tezgahMaxOpenStopHours" | "tezgahCollectorSilenceMinutes" | "license"
     > & {
       /** null = fabrika varsayılanına dön (1). */
       shippingSackSeqStart?: number | null;
@@ -233,6 +233,10 @@ export async function setFeatureFlags(
       devereWarpFixedWasteM?: number | null;
       /** null = fabrika varsayılanına dön (0 = denetim yok). */
       devereFasonWasteTolerancePct?: number | null;
+      /** null = varsayılana dön (3 levent). */
+      devereDenierSuggestMinBeams?: number | null;
+      /** null = varsayılana dön (%2). */
+      devereDenierSuggestThresholdPct?: number | null;
       /** null = varsayılana dön (10 dk). */
       tezgahAlarmRenotifyMinutes?: number | null;
       /** null = varsayılana dön (12 sa). */
@@ -1693,6 +1697,22 @@ export async function setFeatureFlags(
         throw AppError.badRequest(`Fason devere fire toleransı 0 ile ${DEVERE_FASON_WASTE_TOLERANCE_PCT_MAX} arasında olmalı`);
       }
       await this.set(SETTING_KEYS.DEVERE_FASON_WASTE_TOLERANCE_PCT, v === null ? DEFAULT_DEVERE_FASON_WASTE_TOLERANCE_PCT : v, "Devere: fason devere kapamasında fire % toleransı (0 = denetim yok)", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "devereDenierSuggestMinBeams")) {
+      const v = input.devereDenierSuggestMinBeams;
+      // `null` = alan temizlendi → varsayılan 3 (kullanıcı kararı).
+      if (v !== null && (typeof v !== "number" || !Number.isInteger(v) || v < 1 || v > DEVERE_DENIER_SUGGEST_MIN_BEAMS_MAX)) {
+        throw AppError.badRequest(`Denye önerisi için en az levent sayısı 1 ile ${DEVERE_DENIER_SUGGEST_MIN_BEAMS_MAX} arasında tam sayı olmalı`);
+      }
+      await this.set(SETTING_KEYS.DEVERE_DENIER_SUGGEST_MIN_BEAMS, v === null ? DEFAULT_DEVERE_DENIER_SUGGEST_MIN_BEAMS : v, "Devere: denye sapma raporunda öneri için iplik başına en az tartılı levent", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "devereDenierSuggestThresholdPct")) {
+      const v = input.devereDenierSuggestThresholdPct;
+      // `null` = alan temizlendi → varsayılan %2 (kullanıcı kararı); 0 anlamsız (her sapma öneri doğururdu).
+      if (v !== null && (typeof v !== "number" || !Number.isFinite(v) || v <= 0 || v > DEVERE_DENIER_SUGGEST_THRESHOLD_PCT_MAX)) {
+        throw AppError.badRequest(`Denye önerisi sapma eşiği 0'dan büyük, en çok ${DEVERE_DENIER_SUGGEST_THRESHOLD_PCT_MAX} olmalı (yüzde)`);
+      }
+      await this.set(SETTING_KEYS.DEVERE_DENIER_SUGGEST_THRESHOLD_PCT, v === null ? DEFAULT_DEVERE_DENIER_SUGGEST_THRESHOLD_PCT : v, "Devere: denye sapma raporunda öneri eşiği (%)", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "tezgahEscalationGraceMinutes")) {
       const v = input.tezgahEscalationGraceMinutes;

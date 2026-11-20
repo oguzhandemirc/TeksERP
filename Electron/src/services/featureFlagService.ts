@@ -440,6 +440,10 @@ export interface FeatureFlags {
   devereSettleDefault: DevereSettleDefault;
   /** Devere A1: yeniden sarılan levent beklenen devere ücretine girer mi (backend `readDevereReworkBillable`, kayıt yok = true). */
   devereReworkBillable: boolean;
+  /** Devere F1: denye önerisi için iplik başına en az tartılı levent (backend `DEFAULT_DEVERE_DENIER_SUGGEST_MIN_BEAMS` = 3). */
+  devereDenierSuggestMinBeams: number;
+  /** Devere F1: denye önerisi sapma eşiği % (backend `DEFAULT_DEVERE_DENIER_SUGGEST_THRESHOLD_PCT` = 2). */
+  devereDenierSuggestThresholdPct: number;
   /** Z1 üretim belge zinciri (2026-09-18) — üç davranış bayrağı, varsayılan KAPALI = bağ opsiyonel (bugünkü davranış). */
   devereBeamWeavingLinkRequired: boolean;
   dokumaRunWeavingOrderRequired: boolean;
