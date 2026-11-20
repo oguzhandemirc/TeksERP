@@ -17,7 +17,8 @@
 
 /** Global (1 MB) JSON katmanının ATLAYACAĞI mount ön ekleri. */
 // `/api/gelen-belge`: belge fotoğrafı base64 gövdeyle gelir (≤ 5 MB dosya ≈ 6,7 MB gövde; D2, 2026-10-29).
-export const BUYUK_GOVDE_YOLLARI = ["/api/import", "/api/config-bundle", "/api/certificates", "/api/gelen-belge"] as const;
+// `/api/etkili-destek`: destek talebi ekleri base64 gelir (5 × 10 MB); yalnız ekli iki POST ucu `SUPPORT_BODY_LIMIT` taşır.
+export const BUYUK_GOVDE_YOLLARI = ["/api/import", "/api/config-bundle", "/api/certificates", "/api/gelen-belge", "/api/etkili-destek"] as const;
 
 /** Global JSON gövde limiti — 413 mesajı da buradan okunur (metin sabiti YOK). */
 export const VARSAYILAN_GOVDE_LIMITI = "1mb";
@@ -28,14 +29,29 @@ export const BUYUK_GOVDE_LIMITI = "10mb";
 /** Sertifika belge eki (base64, ≤ 5 MB dosya ≈ 6,7 MB gövde) router'ının kendi limiti (K4P-SERT). */
 export const CERTIFICATE_BODY_LIMIT = "8mb";
 
+/** Etkili Destek ekli uçlarının limiti: 5 dosya × 10 MB, base64 (×4/3) + metin payı. */
+export const SUPPORT_BODY_LIMIT = "70mb";
+
+/** Kendi limiti `BUYUK_GOVDE_LIMITI`ten farklı olan büyük-gövde ön ekleri. */
+const PREFIX_LIMITS: Readonly<Record<string, string>> = {
+  "/api/certificates": CERTIFICATE_BODY_LIMIT,
+  "/api/etkili-destek": SUPPORT_BODY_LIMIT,
+};
+
+function matchesPrefix(url: string, p: string): boolean {
+  return url === p || url.startsWith(`${p}/`) || url.startsWith(`${p}?`);
+}
+
 /** Yolun ETKİN gövde limiti — 413 mesajı bunu söyler. */
 export function effectiveBodyLimit(url: string | undefined): string {
-  if (url && (url === "/api/certificates" || url.startsWith("/api/certificates/") || url.startsWith("/api/certificates?"))) return CERTIFICATE_BODY_LIMIT;
-  return buyukGovdeYolu(url) ? BUYUK_GOVDE_LIMITI : VARSAYILAN_GOVDE_LIMITI;
+  if (!url) return VARSAYILAN_GOVDE_LIMITI;
+  const p = BUYUK_GOVDE_YOLLARI.find((x) => matchesPrefix(url, x));
+  if (!p) return VARSAYILAN_GOVDE_LIMITI;
+  return PREFIX_LIMITS[p] ?? BUYUK_GOVDE_LIMITI;
 }
 
 /** İstek yolu büyük-gövde router'larından birine mi ait. */
 export function buyukGovdeYolu(url: string | undefined): boolean {
   if (!url) return false;
-  return BUYUK_GOVDE_YOLLARI.some((p) => url === p || url.startsWith(`${p}/`) || url.startsWith(`${p}?`));
+  return BUYUK_GOVDE_YOLLARI.some((p) => matchesPrefix(url, p));
 }

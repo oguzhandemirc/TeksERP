@@ -18,6 +18,11 @@ export interface UcEylemi {
 const e = (fiil: string, deneme: string): UcEylemi => ({ fiil, deneme });
 
 export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
+  // ── Etkili Destek (2026-11-20) — talepler merkezde durur, burada yalnız ayak izi
+  "POST /api/etkili-destek/talepler": e("destek talebi açtı", "destek talebi açmaya çalıştı"),
+  "POST /api/etkili-destek/talepler/:id/mesajlar": e("destek talebine yanıt yazdı", "destek talebine yanıt yazmaya çalıştı"),
+  "POST /api/etkili-destek/talepler/:id/kapat": e("destek talebini kapattı", "destek talebini kapatmaya çalıştı"),
+  "POST /api/etkili-destek/talepler/:id/okundu": e("destek talebini okundu işaretledi", "destek talebini okundu işaretlemeye çalıştı"),
   // ── Fason devere D1 (2026-11-17) — hesap ucu, yazmaz
   "POST /api/warp-plan/calculate": e("çözgü hesabı yaptı", "çözgü hesabı yapmaya çalıştı"),
   "POST /api/warp-plan/ends-suggest": e("çözgü tel önerisi aldı", "çözgü tel önerisi almaya çalıştı"),

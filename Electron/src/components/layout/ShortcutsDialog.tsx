@@ -1,4 +1,8 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useDestekStore } from "@/pages/Destek/destek-store";
+
+/** Yalnız Etkili Destek AÇIKKEN listelenir (kapalı kurulum bugünkü listeyi görür). */
+const DESTEK_SHORTCUT = { keys: ["Ctrl/⌘", "Shift", "B"], desc: "Sorun bildir" };
 
 const SHORTCUTS: { keys: string[]; desc: string }[] = [
   { keys: ["⌘", "K"], desc: "Komut paleti" },
@@ -23,6 +27,8 @@ export function ShortcutsDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const destekEnabled = useDestekStore((s) => s.enabled);
+  const list = destekEnabled ? [...SHORTCUTS.slice(0, -1), DESTEK_SHORTCUT, ...SHORTCUTS.slice(-1)] : SHORTCUTS;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
@@ -30,7 +36,7 @@ export function ShortcutsDialog({
           <DialogTitle>Klavye Kısayolları</DialogTitle>
         </DialogHeader>
         <ul className="space-y-1">
-          {SHORTCUTS.map((s) => (
+          {list.map((s) => (
             <li
               key={s.desc}
               className="flex items-center justify-between gap-4 rounded-md px-2 py-1.5 text-sm odd:bg-muted/40"

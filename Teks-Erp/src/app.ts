@@ -171,6 +171,7 @@ import clientPolicyRoutes from "./routes/client-policy.routes";
 import licenseRoutes from "./routes/license.routes";
 import updateRoutes from "./routes/update.routes";
 import supportRoutes from "./routes/support.routes";
+import destekRoutes from "./routes/destek.routes";
 import labTestRoutes from "./routes/lab-test.routes";
 import labTestTypeRoutes from "./routes/lab-test-type.routes";
 import certificateRoutes from "./routes/certificate.routes";
@@ -763,6 +764,9 @@ app.use("/api/license", licenseRoutes);
 app.use("/api/guncelleme", updateRoutes);
 // Destek talepleri (3d-2): panel → satıcı `/v1/destek`; yanıtlar zil `destek` + yoklamayla döner.
 app.use("/api/destek", supportRoutes);
+// Etkili Destek talepleri — panel/tablet → bu backend → destek merkezi (giden HTTPS). `.env`
+// (DESTEK_API_URL + DESTEK_API_KEY) yoksa `/durum` dışındaki her uç 403 MODULE_DISABLED, dış istek yok.
+app.use("/api/etkili-destek", destekRoutes);
 // K4P lab testleri (kaliteGuvence modülü): test + sonuç + onay/iptal; tür kataloğu ayrı router.
 app.use("/api/lab-tests", labTestRoutes);
 app.use("/api/lab-test-types", labTestTypeRoutes);

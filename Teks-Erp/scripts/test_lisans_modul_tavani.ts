@@ -142,6 +142,15 @@ const DOLAYLI_ANAHTARLI_URETICILER: Record<string, string> = {
   "services/system-setting.service.ts#assertModuleWritesLicensed": "yazma tavanı: `MODULE_SETTING_KEY_BY_FLAG` değerleri (hepsi `SETTING_KEYS.*`) üstünde döner",
 };
 
+/**
+ * LİSANS MODÜLÜ OLMAYAN `MODULE_DISABLED` reddi — bayrağı DB modül ayarı değil, lisansta karşılığı yok;
+ * gerekçeli, ölü beyan kırmızı. Yeni satır yalnız `.env`/dış entegrasyon kapısı için açılır.
+ */
+const LISANS_DISI_KAPILAR: Record<string, string> = {
+  "middlewares/destek.middleware.ts#requireSupportDeskEnabled": "Etkili Destek: `.env` (DESTEK_API_URL/KEY) + lisans tesis kimliği; lisans modülü değil",
+  "services/destek.service.ts#moduleDisabled": "Etkili Destek servis içi ikinci hat (aynı koşul, `readSupportDeskConfig`)",
+};
+
 function tekBicimAyagi(): void {
   console.log("\n§7 — LICENSE_MODULE tek biçim (DB anahtarı) · satır içi kapılar");
   const t = lisansModulTaramasi();
@@ -152,12 +161,15 @@ function tekBicimAyagi(): void {
   for (const [yer, neden] of Object.entries(DOLAYLI_ANAHTARLI_URETICILER)) {
     check(`§7b2 ölü beyan yok: ${yer} (${neden})`, t.ureticiler.some((u) => u.yer === yer && u.sabit === null));
   }
-  const lisanssiz = t.kapaliSiteleri.filter((k) => !k.lisansOnde);
+  for (const [yer, neden] of Object.entries(LISANS_DISI_KAPILAR)) {
+    check(`§7c2 lisans dışı kapı beyanı ölü değil ve gerçekten lisans sorusuz: ${yer} (${neden})`, t.kapaliSiteleri.some((k) => k.yer === yer && !k.lisansOnde));
+  }
+  const lisanssiz = t.kapaliSiteleri.filter((k) => !k.lisansOnde && !(k.yer in LISANS_DISI_KAPILAR));
   check("§7c ⭐ her MODULE_DISABLED reddinin önünde lisans sorusu var (lisans kapattıysa LICENSE_MODULE)", t.kapaliSiteleri.length >= 12 && lisanssiz.length === 0, `${t.kapaliSiteleri.length} site; lisanssız: ${lisanssiz.map((k) => k.yer).join(" | ")}`);
   const sabitOf = new Map(okuyucuCiftleri().map((c) => [c.ad, c.sabit] as const));
   const adli = new Set(ADLI_KAPILAR.map(([d, f]) => `${d}#${f}`));
   const satirIci = t.kapaliSiteleri.filter((k) => k.kosulOkuyuculari.length > 0);
-  const olculemedi = t.kapaliSiteleri.filter((k) => k.kosulOkuyuculari.length === 0 && !adli.has(k.yer) && k.lisansSabitleri.length === 0);
+  const olculemedi = t.kapaliSiteleri.filter((k) => k.kosulOkuyuculari.length === 0 && !adli.has(k.yer) && k.lisansSabitleri.length === 0 && !(k.yer in LISANS_DISI_KAPILAR));
   check("§7d ÖLÇÜLEMEDİ yok: koşulunda okuyucu görülmeyen red yalnız adlı kapıda (§2f ölçer)", olculemedi.length === 0, olculemedi.map((k) => k.yer).join(" | "));
   const yanlisAnahtar = satirIci.filter((k) => !k.kosulOkuyuculari.some((o) => k.lisansSabitleri.includes(sabitOf.get(o) ?? `?${o}`)));
   check("§7e ⭐ satır içi kapıda lisans anahtarı = koşuldaki okuyucunun anahtarı", satirIci.length >= 6 && yanlisAnahtar.length === 0, `${satirIci.length} satır içi; yanlış: ${yanlisAnahtar.map((k) => `${k.yer} okur=${k.kosulOkuyuculari.join(",")} lisans=${k.lisansSabitleri.join(",")}`).join(" | ")}`);

@@ -13,6 +13,7 @@ import { registerDocPrintIpc } from "./print.ipc.js";
 import { registerFilesIpc } from "./files.ipc.js";
 import { registerXlsxIpc } from "./xlsx.ipc.js";
 import { registerUpdaterIpc } from "./updater.ipc.js";
+import { registerScreenIpc } from "./screen.ipc.js";
 import { registerLicenseIpc } from "./license.ipc.js";
 import { registerLoomAlarmNotifyIpc } from "./loom-alarm-notify.ipc.js";
 import { registerConnectGateIpc } from "./connect-gate.ipc.js";
@@ -33,6 +34,7 @@ export function registerIpcHandlers(): void {
   registerFilesIpc();
   registerXlsxIpc();
   registerUpdaterIpc();
+  registerScreenIpc();
   registerLicenseIpc();
   registerLoomAlarmNotifyIpc();
   registerConnectGateIpc();

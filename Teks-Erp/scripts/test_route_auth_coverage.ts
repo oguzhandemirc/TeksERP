@@ -246,7 +246,12 @@ const EXEMPT: Record<string, string> = {
  * token'daki `userId`; başkasının profili 404, tür kümesi görme süzgeciyle kesişir). Yönetici `profiller/hazir` guard'lı.
  * `test_bildirim_profil` §5h · §7 ölçer.
  */
-const BARE_CHAIN_BASELINE = 49;
+/**
+ * ⚠️ 49 → 50 (2026-11-20, Etkili Destek, BİLİNÇLİ): `GET /api/etkili-destek/durum` yalnız `verifyToken` taşır — tek
+ * boolean döner (`.env`te destek adresi + anahtarı var mı), DB okuması ve dış istek yok; destek kapısının ÖNÜNDE olmalı
+ * (kapalıyken de cevap verir). Destek uçlarına izin kodu açılmadı (giriş yapmış herkes). `test_destek_entegrasyonu` §2 ölçer.
+ */
+const BARE_CHAIN_BASELINE = 50;
 
 /** Körlük zemini: tarayıcı boşa düşerse "ihlal yok" ile "hiçbir şeye bakılmadı" aynı yeşile çıkmasın. */
 const MIN_ROUTE_LAYERS = 400;
