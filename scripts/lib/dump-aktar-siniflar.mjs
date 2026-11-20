@@ -92,7 +92,7 @@ export const IS_TABLOLARI = [
   "subcontractor_receipt_properties", "subcontractor_receipts", "subcontractors", "swatch_events",
   "swatch_stock_reduction_items", "swatch_stock_reductions", "swatches", "traveler_card_scans",
   "traveler_card_templates", "traveler_cards", "warehouse_movements", "warehouse_transfers", "warehouses",
-  "warp_beam_events", "warp_beams", "warp_specs", "warping_beam_rejection_items", "warping_beam_rejection_photos", "warping_beam_rejections",
+  "warp_beam_events", "warp_beams", "warp_specs", "warping_beam_rejection_items", "warping_beam_rejection_photos", "warping_beam_rejections", "warping_receive_docs",
   "weaving_order_to_order_lines", "weaving_orders",
   "work_order_close_snapshot_lines", "work_order_close_snapshots", "work_order_events", "work_order_steps",
   "work_order_target_properties", "work_order_to_order_lines", "work_orders", "work_sessions", "yarn_lots",

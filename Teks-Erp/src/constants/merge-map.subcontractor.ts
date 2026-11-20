@@ -49,6 +49,7 @@ export const SUBCONTRACTOR_MERGE_RULES: MoveRule[] = [
     { kind: "MOVE", model: "BeamBody", table: "beam_bodies", column: "subcontractorId", label: "Levent gövdesi (bulunduğu devereci)" },
     { kind: "MOVE", model: "BeamBodyEvent", table: "beam_body_events", column: "subcontractorId", label: "Levent gövdesi hareketi (devereci)" },
     { kind: "MOVE", model: "WarpingBeamRejection", table: "warping_beam_rejections", column: "subcontractorId", label: "Kusurlu levent ret belgesi (devereci)" },
+    { kind: "MOVE", model: "WarpingReceiveDoc", table: "warping_receive_docs", column: "subcontractorId", label: "Devere dönüş kabul belgesi (devereci)" },
     { kind: "MOVE", model: "GoodsReceipt", table: "goods_receipts", column: "subcontractorId", label: "Mal kabul fişi (fason tedarikçi)" },
     { kind: "MOVE", model: "PurchaseOrder", table: "purchase_orders", column: "subcontractorId", label: "Alış siparişi (fason tedarikçi)" },
     { kind: "MOVE", model: "FinishingRate", table: "finishing_rates", column: "subcontractorId", label: "Apre tarifesi (fason firma)" },

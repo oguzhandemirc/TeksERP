@@ -406,6 +406,9 @@ export const updateSchema = z.strictObject({
   devereReworkBillable: z.boolean().optional(),
   /** Devere ek C1: kusurlu levent reddinde fotoğraf zorunlu (varsayılan false). */
   devereRejectPhotoRequired: z.boolean().optional(),
+  /** Devere ek E1: irsaliye no tekrarı + dönüş tartısı (enum; `devere-receive.ts` kalıplarıyla birebir). */
+  devereDuplicateDeliveryNote: z.enum(["ALLOW", "WARN", "BLOCK"]).optional(),
+  devereReceiveWeighing: z.enum(["OFF", "OPTIONAL", "REQUIRED"]).optional(),
   /** Devere F1: denye önerisi en az levent (tam sayı; `DEVERE_DENIER_SUGGEST_MIN_BEAMS_MAX` ile birebir); null = varsayılana (3) dön. */
   devereDenierSuggestMinBeams: z.number({ message: "En az levent sayısı sayı olmalı" }).int("En az levent sayısı tam sayı olmalı").min(1, "En az levent sayısı 1'den küçük olamaz").max(1000, "En az levent sayısı en çok 1000 olabilir").nullable().optional(),
   /** Devere F1: denye önerisi sapma eşiği (%; `DEVERE_DENIER_SUGGEST_THRESHOLD_PCT_MAX` ile birebir); null = varsayılana (2) dön. */

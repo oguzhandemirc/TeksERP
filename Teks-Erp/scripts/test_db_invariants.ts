@@ -807,6 +807,7 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "beam_body_returns", name: "beam_body_returns_cancel_ck" },
   // Devere ek C1 (migration 20261121090100): yeniden sarım bağı · ret belgesi iptal üçlüsü/sebep · foto boyu.
   { table: "warp_beams", name: "warp_beams_rework_ck" },
+  { table: "warp_beams", name: "warp_beams_receive_doc_ck" }, // devere ek E1: belgeye bağlı sarım kabul anahtarı taşır
   { table: "warping_beam_rejections", name: "warping_beam_rejections_cancel_ck" },
   { table: "warping_beam_rejections", name: "warping_beam_rejections_reason_ck" },
   { table: "warping_beam_rejection_photos", name: "warping_beam_rejection_photos_size_ck" },

@@ -446,6 +446,10 @@ export interface FeatureFlags {
   devereReworkBillable: boolean;
   /** Devere ek C1: kusurlu levent reddinde fotoğraf zorunlu (backend `readDevereRejectPhotoRequired`, kayıt yok = false). */
   devereRejectPhotoRequired: boolean;
+  /** Devere ek E1: aynı irsaliye no tekrarı (backend `DEFAULT_DEVERE_DUPLICATE_DELIVERY_NOTE` = WARN). */
+  devereDuplicateDeliveryNote: DevereDuplicateDeliveryNote;
+  /** Devere ek E1: dönüşte tartı (backend `DEFAULT_DEVERE_RECEIVE_WEIGHING` = OPTIONAL). */
+  devereReceiveWeighing: DevereReceiveWeighing;
   /** Devere F1: denye önerisi için iplik başına en az tartılı levent (backend `DEFAULT_DEVERE_DENIER_SUGGEST_MIN_BEAMS` = 3). */
   devereDenierSuggestMinBeams: number;
   /** Devere F1: denye önerisi sapma eşiği % (backend `DEFAULT_DEVERE_DENIER_SUGGEST_THRESHOLD_PCT` = 2). */
@@ -957,6 +961,9 @@ export type DevereBeamBodyMode = "OFF" | "OPTIONAL" | "REQUIRED";
 export type DevereBeamBodyMachineFit = "WARN" | "BLOCK";
 /** Devere H1 — backend `DevereSettleDefault` aynası. */
 export type DevereSettleDefault = "WASTE_UP_TO_PLAN" | "KEEP" | "RETURN" | "WASTE_ALL";
+/** Devere ek E1 — backend `DevereDuplicateDeliveryNote` / `DevereReceiveWeighing` aynası. */
+export type DevereDuplicateDeliveryNote = "ALLOW" | "WARN" | "BLOCK";
+export type DevereReceiveWeighing = "OFF" | "OPTIONAL" | "REQUIRED";
 /** S1: top doğuş yolu — backend `DokumaRollBirth` aynası. */
 export type DokumaRollBirth = "TABLET_DOFF" | "KK1_LABEL_OR_ORDER" | "KK1_LABEL_ONLY";
 export type AlarmShiftNotice = "NO_SHIFT_DEFINED" | "NO_SHIFT_NOW";

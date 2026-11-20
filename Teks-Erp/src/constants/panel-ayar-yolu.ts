@@ -42,6 +42,8 @@ export const PANEL_SETTING_ROW = {
   shipmentHandheldCreateEnabled: { ekran: "shipping", baslik: "El terminalinden sevk kurma" },
   devereMountTracking: { ekran: "devere", baslik: "Levent tezgah bağı defteri" },
   devereBeamBodyMode: { ekran: "devere", baslik: "Levent gövdesi takibi" },
+  devereDuplicateDeliveryNote: { ekran: "devere", baslik: "Aynı irsaliye no ile ikinci dönüş kabulü" },
+  devereReceiveWeighing: { ekran: "devere", baslik: "Devere dönüşünde tartı" },
   yarnBlockNegativeBalanceEnabled: { ekran: "yarn", baslik: "İplik stoğu eksi bakiyeye düşemesin" },
   goodsReceiptRequirePriceEnabled: { ekran: "warehouse", baslik: "Mal kabul satırında birim fiyat zorunlu olsun" },
   purchaseBlockOverReceiptEnabled: { ekran: "warehouse", baslik: "Siparişten fazla mal kabulünü engelle" },

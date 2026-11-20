@@ -2626,6 +2626,9 @@ model WarpBeam {
   /// Devere ek C1: bu sarım hangi reddedilen sarımın YENİDEN SARIMI — DOĞUM niteliği, yalnız kabul yazar. İptal edilmemiş
   /// sarımlar arasında tekil (partial unique `warp_beams_rework_of_live_uq`); dolu ise `warpingOrderId` dolu (CHECK).
   reworkOfBeamId    String?        @db.Uuid
+  /// Devere ek E1: birlikte kabul edildiği DÖNÜŞ KABUL BELGESİ (tek irsaliye, N sipariş) — DOĞUM niteliği, yalnız belge
+  /// kabulü yazar; dolu ise `warpingReceiptKey` dolu (CHECK `warp_beams_receive_doc_ck`). Eski tek-sipariş kabulünde NULL.
+  warpingReceiveDocId String?      @db.Uuid
 
   warpSpec          WarpSpec                    @relation("WarpBeamSpec", fields: [warpSpecId], references: [id], onDelete: Restrict)
   warpingOrder        WarpingOrder?               @relation("WarpBeamWarpingOrder", fields: [warpingOrderId], references: [id], onDelete: Restrict)
@@ -2652,6 +2655,7 @@ model WarpBeam {
   reworkOf            WarpBeam?                   @relation("WarpBeamRework", fields: [reworkOfBeamId], references: [id], onDelete: Restrict)
   reworks             WarpBeam[]                  @relation("WarpBeamRework")
   rejectionItems      WarpingBeamRejectionItem[]
+  warpingReceiveDoc   WarpingReceiveDoc?          @relation("WarpBeamReceiveDoc", fields: [warpingReceiveDocId], references: [id], onDelete: Restrict)
 
   createdAt   DateTime @default(now()) @db.Timestamptz
   updatedAt   DateTime @updatedAt @db.Timestamptz
@@ -2670,6 +2674,7 @@ model WarpBeam {
   @@index([warpingReceiptKey])
   @@index([beamBodyId])
   @@index([reworkOfBeamId])
+  @@index([warpingReceiveDocId])
   @@map("warp_beams")
 }
 
@@ -2978,6 +2983,29 @@ model BeamBodyReturnItem {
 /// true = "yeniden sarılsın" (kabulde `WarpBeam.reworkOfBeamId`), false = "iptal, iplik deverecide kalsın". İplik için satır
 /// YAZILMAZ: reddedilen sarımın dağıtımı tutmadan düşmez (`LIVE_ALLOCATION`). İptal başlıkta damgalanır (üçlü CHECK) +
 /// her kalemin olayına tipli ters (`REJECT_OUT_CANCEL`).
+/// Devere ek E1: DÖNÜŞ KABUL BELGESİ (`DK-YYMM-NNNN`) — tek irsaliyeyle gelen, aynı deverecinin N siparişinin leventleri
+/// tek tx'te (hep-ya-hiç) kabul edilir; her sipariş kendi `warpingReceiptKey`ini (LIFO/fatura birimi) korur, belge yalnız
+/// grup başlığıdır (`WarpBeam.warpingReceiveDocId`). Defter değil: sayılar sarımların WOUND olaylarından okunur.
+model WarpingReceiveDoc {
+  id              String   @id @default(uuid()) @db.Uuid
+  docNo           String   @unique @db.VarChar(64)
+  clientToken     String   @unique @db.Uuid
+  subcontractorId String   @db.Uuid
+  /// Deverecinin irsaliye no'su (WOUND olaylarındaki `deliveryNoteNo` ile aynı; boş olabilir).
+  deliveryNoteNo  String?  @db.VarChar(64)
+  createdById     String?  @db.Uuid
+
+  subcontractor Subcontractor @relation("WarpingReceiveDocSubcontractor", fields: [subcontractorId], references: [id], onDelete: Restrict)
+  beams         WarpBeam[]    @relation("WarpBeamReceiveDoc")
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([subcontractorId, deliveryNoteNo])
+  @@index([createdAt])
+  @@map("warping_receive_docs")
+}
+
 model WarpingBeamRejection {
   id              String    @id @default(uuid()) @db.Uuid
   docNo           String    @unique @db.VarChar(64)
@@ -8938,6 +8966,7 @@ model Subcontractor {
   beamBodyEvents           BeamBodyEvent[]           @relation("BeamBodyEventSubcontractor")
   warpingOrders            WarpingOrder[]            @relation("WarpingOrderSubcontractor")
   warpingBeamRejections    WarpingBeamRejection[]    @relation("WarpingBeamRejectionSubcontractor")
+  warpingReceiveDocs       WarpingReceiveDoc[]       @relation("WarpingReceiveDocSubcontractor")
   plannedRouteSteps        RouteStep[]               @relation("RouteStepPlannedSubcontractor")
   kartelaDispatches        KartelaDispatch[]         @relation("KartelaDispatchSub")
   kartelaReceipts          KartelaReceipt[]          @relation("KartelaReceiptSub")

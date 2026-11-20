@@ -91,5 +91,6 @@ export const NUMBER_SERIES_CODE_CAPACITY: Readonly<Record<string, number>> = {
   beamBody: 32, // beamBody.bodyNo
   beamBodyReturn: 64, // beamBodyReturn.docNo
   warpingBeamRejection: 64, // warpingBeamRejection.docNo
+  warpingReceiveDoc: 64, // warpingReceiveDoc.docNo
   customerDeliveryNote: 32, // customerDeliveryNote.noteNo
 };

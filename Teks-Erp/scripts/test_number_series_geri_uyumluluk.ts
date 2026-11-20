@@ -442,6 +442,7 @@ const L2_YOLU: Record<string, L2Yolu> = {
   batchShort: { not: "İki rejimli üreteç; L2 yolu `batch.shortNumberEnabled` bayrağını oynatmayı gerektirir — sarma ve aralık `test_batch_number_format` §0/§0b/§0c'de ölçülüyor." },
   warpingOrder: { not: "Fason devere siparişi çözgü kartı + iplik kalemleri + fason firma zinciri ister; numara doğuşu ve FDV öneki `test_fason_devere_siparis` S1'de servis yolundan ölçülüyor." },
   warpingBeamRejection: { not: "Ret belgesi dönmüş devere sarımı (sipariş + iplik sevki + kabul zinciri) ister; numara doğuşu ve DR öneki `test_fason_devere_ret` §2te servis yolundan ölçülüyor." },
+  warpingReceiveDoc: { not: "Kabul belgesi açık devere siparişi + iplik sevki zinciri ister; numara doğuşu ve DK öneki `test_fason_devere_kabul_belgesi` §1de servis yolundan ölçülüyor." },
   beamBodyReturn: { not: "Gövde iade belgesi devere modülü + `devere.beamBodyMode` + bizim olmayan boş gövde ister; numara doğuşu ve LGI öneki `test_levent_govde_hareket` §6'da servis yolundan ölçülüyor." },
   beamBody: { not: "Levent gövdesi devere modülü + `devere.beamBodyMode` ayarını açmayı gerektirir; numara doğuşu ve LG öneki `test_levent_govde` §2b'de servis yolundan ölçülüyor." },
   consignmentDispatch: { not: "Emanet çıkış belgesi en az bir CONSIGNED levent (READY, sarılmış) ya da sahipli lot + bakiye zinciri ister; numara doğuşu ve EC öneki `test_emanet_cikis` §4a'da servis yolundan ölçülüyor." },

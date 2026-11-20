@@ -38,6 +38,7 @@ import { DEFAULT_INVOICE_TOLERANCE_PCT, assertBrodeUnitHasPieceInput, readFinanc
 import { effectiveIncomingDocsEnabled } from "./incoming-docs";
 import { SETTING_KEYS } from "./keys";
 import { DEVERE_SETTLE_DEFAULTS, type DevereSettleDefault } from "./devere-settle";
+import { DEVERE_DUPLICATE_DELIVERY_NOTE_MODES, DEVERE_RECEIVE_WEIGHING_MODES, type DevereDuplicateDeliveryNote, type DevereReceiveWeighing } from "./devere-receive";
 import { readKursunMeterCapture } from "./kursun-batch";
 import { LABEL_COPIES_MAX, readNotificationInboxEnabled, type DefaultLabelMedia } from "./labels";
 import { DEFAULT_DEVERE_DENIER_SUGGEST_MIN_BEAMS, DEVERE_DENIER_SUGGEST_MIN_BEAMS_MAX, DEFAULT_DEVERE_DENIER_SUGGEST_THRESHOLD_PCT, DEVERE_DENIER_SUGGEST_THRESHOLD_PCT_MAX, DEFAULT_DEVERE_FASON_WASTE_TOLERANCE_PCT, DEVERE_FASON_WASTE_TOLERANCE_PCT_MAX, DEFAULT_DEVERE_WARP_FIXED_WASTE_M, DEVERE_WARP_FIXED_WASTE_M_MAX, DEFAULT_DOKUMA_WEAVING_WASTE_PCT, DOKUMA_WEAVING_WASTE_PCT_MAX, readDepoMultiEnabledRaw, readDevereEnabledRaw, readDokumaEnabledRaw, readEmanetEnabledRaw, readGelenBelgeEnabledRaw, readIplikEnabledRaw, readKaliteGuvenceEnabledRaw, readKumasTeknikEnabledRaw, readMaliyetEnabledRaw, readProductionEnabledRaw, readTezgahEnabledRaw, readTicaretEnabledRaw } from "./modules";
@@ -1702,6 +1703,20 @@ export async function setFeatureFlags(
         throw AppError.badRequest(`Gövde–tezgâh uyumu ${DEVERE_BEAM_BODY_MACHINE_FITS.join(", ")} değerlerinden biri olmalı`);
       }
       await this.set(SETTING_KEYS.DEVERE_BEAM_BODY_MACHINE_FIT, v, "Devere: levent gövdesi uyumsuz tezgâha takılırken uyar · engelle", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "devereDuplicateDeliveryNote")) {
+      const v = input.devereDuplicateDeliveryNote;
+      if (typeof v !== "string" || !DEVERE_DUPLICATE_DELIVERY_NOTE_MODES.includes(v as DevereDuplicateDeliveryNote)) {
+        throw AppError.badRequest(`İrsaliye no tekrarı ${DEVERE_DUPLICATE_DELIVERY_NOTE_MODES.join(", ")} değerlerinden biri olmalı`);
+      }
+      await this.set(SETTING_KEYS.DEVERE_DUPLICATE_DELIVERY_NOTE, v, "Devere: dönüş kabulünde aynı irsaliye no tekrarı — izin · uyar · engelle", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "devereReceiveWeighing")) {
+      const v = input.devereReceiveWeighing;
+      if (typeof v !== "string" || !DEVERE_RECEIVE_WEIGHING_MODES.includes(v as DevereReceiveWeighing)) {
+        throw AppError.badRequest(`Dönüş tartısı ${DEVERE_RECEIVE_WEIGHING_MODES.join(", ")} değerlerinden biri olmalı`);
+      }
+      await this.set(SETTING_KEYS.DEVERE_RECEIVE_WEIGHING, v, "Devere: dönüş kabulünde tartı — kapalı · isteğe bağlı · zorunlu", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "devereSettleDefault")) {
       const v = input.devereSettleDefault;

@@ -231,3 +231,5 @@ export type {
 } from "./traveler-card";
 export { readDevereSettleDefault, DEVERE_SETTLE_DEFAULTS, DEFAULT_DEVERE_SETTLE_DEFAULT } from "./devere-settle";
 export type { DevereSettleDefault } from "./devere-settle";
+export { readDevereDuplicateDeliveryNote, readDevereReceiveWeighing, DEVERE_DUPLICATE_DELIVERY_NOTE_MODES, DEFAULT_DEVERE_DUPLICATE_DELIVERY_NOTE, DEVERE_RECEIVE_WEIGHING_MODES, DEFAULT_DEVERE_RECEIVE_WEIGHING } from "./devere-receive";
+export type { DevereDuplicateDeliveryNote, DevereReceiveWeighing } from "./devere-receive";

@@ -98,6 +98,8 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/beam-bodies/:id/events/:eventId/undo": e("bir levent gövdesi hareketini geri aldı", "bir levent gövdesi hareketini geri almaya çalıştı"),
   "POST /api/beam-body-returns": e("levent gövdelerini sahibine iade etti", "levent gövdelerini sahibine iade etmeye çalıştı"),
   "POST /api/beam-body-returns/:id/cancel": e("bir gövde iade belgesini iptal etti", "bir gövde iade belgesini iptal etmeye çalıştı"),
+  "POST /api/warping-receive-docs/preview": e("devere dönüş kabul belgesi önizlemesi aldı", "devere dönüş kabul belgesi önizlemesi almaya çalıştı"),
+  "POST /api/warping-receive-docs": e("devereden dönen leventleri kabul belgesiyle aldı", "devereden dönen leventleri kabul belgesiyle almaya çalıştı"),
   "POST /api/warping-beam-rejections/preview": e("kusurlu levent ret önizlemesi aldı", "kusurlu levent ret önizlemesi almaya çalıştı"),
   "POST /api/warping-beam-rejections": e("kusurlu leventleri devereciye geri gönderdi (ret belgesi)", "kusurlu leventleri devereciye geri göndermeye çalıştı"),
   "POST /api/warping-beam-rejections/:id/photos": e("bir ret belgesine fotoğraf ekledi", "bir ret belgesine fotoğraf eklemeye çalıştı"),
