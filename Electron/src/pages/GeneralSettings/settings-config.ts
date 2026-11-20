@@ -1984,6 +1984,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       },
       {
         // Devere ek B1: `defaultValue` backend `DEFAULT_DEVERE_BEAM_BODY_MODE` ile birebir (bekçi §16).
+        group: DEVERE_GROUP.beamBody,
         enumKey: "devereBeamBodyMode",
         title: "Levent gövdesi takibi",
         summary: "Boş levent gövdeleri numara ve QR etiketle demirbaş olarak izlensin mi.",
@@ -1999,6 +2000,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       },
       {
         // Devere ek B1: `defaultValue` backend `DEFAULT_DEVERE_BEAM_BODY_MACHINE_FIT` ile birebir (bekçi §16).
+        group: DEVERE_GROUP.beamBody,
         enumKey: "devereBeamBodyMachineFit",
         title: "Gövde uymayan tezgâha takılırsa",
         summary: "Levent gövdesi, kartında uyumlu yazmayan bir tezgâha takılmak istendiğinde ne olsun.",
