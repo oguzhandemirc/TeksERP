@@ -61,6 +61,7 @@ export const AUDIT_ISIMLERI: Readonly<Record<string, TermCases>> = {
   SUBCONTRACTOR_DISPATCH: onEkli("fason", SEVK),
   SUBCONTRACTOR_RECEIPT: onEkli("fason mal kabul", RECORD_TERM),
   CONSIGNMENT_DISPATCH: onEkli("emanet çıkış", sIyelik("belge", "i", "e")),
+  BEAM_BODY_RETURN: onEkli("levent gövdesi iade", sIyelik("belge", "i", "e")),
   DIRECT_SHIPMENT: onEkli("fasondan", SEVK),
   SWATCH: { yalin: "kartelası", belirtme: "kartelasını", yonelme: "kartelasına", bulunma: "kartelasında", ayrilma: "kartelasından", ilgi: "kartelasının", vasita: "kartelasıyla" },
   MANIFEST: { yalin: "çeki listesi", belirtme: "çeki listesini", yonelme: "çeki listesine", bulunma: "çeki listesinde", ayrilma: "çeki listesinden", ilgi: "çeki listesinin", vasita: "çeki listesiyle" },
