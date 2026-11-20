@@ -270,11 +270,16 @@ router.post("/yarn-prices/:id/revoke", requirePermission("cost:write"), wrap(asy
  *         name: search
  *         schema: { type: string, maxLength: 100 }
  *         description: "Metin araması — tarife kodu/adı ya da fason firma; boş = arama yok"
+ *       - in: query
+ *         name: subcontractorId
+ *         schema: { type: string, format: uuid }
+ *         description: "Yalnız bu fason firmanın tarifeleri (devere siparişi ücret önerisi)"
  *     responses:
  *       200: { description: Liste }
  */
 router.get("/finishing-rates", requirePermission("cost:read"), wrap(async (req, res) => {
-  const q = z.object({ code: z.string().max(32).optional(), includeRevoked: includeRevokedQ, search: listSearchParam }).parse(req.query);
+  const subcontractorId = z.string().uuid("Geçersiz fason firma ID").optional();
+  const q = z.object({ code: z.string().max(32).optional(), subcontractorId, includeRevoked: includeRevokedQ, search: listSearchParam }).parse(req.query);
   res.status(200).json({ success: true, data: await listFinishingRates(q) });
 }));
 

@@ -124,7 +124,7 @@ export function WarpingOrderFormDialog({ order, seed, onClose, onSaved }: Props)
         after={
           <>
             <FormCard sectionId="terms" sectionError={error !== null} title="Ücret, termin ve fire" icon={Coins}>
-              <OrderTermsFields s={s} up={up} planLocked={planLocked} defaultFixedWasteM={preview ? trimNum(preview.fixedWasteM) : null} />
+              <OrderTermsFields s={s} up={up} planLocked={planLocked} feeAutoFill={!order} defaultFixedWasteM={preview ? trimNum(preview.fixedWasteM) : null} />
               <div className="mt-4">
                 <OrderNotesField s={s} up={up} />
               </div>

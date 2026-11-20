@@ -49,6 +49,7 @@
 - **[PROFİL]** Çekme UYARISI sunumdadır: `fason.shrinkWarnEnabled` (varsayılan AÇIK) + `fason.shrinkTolerancePct` (%10); backend ENFORCE ETMEZ, fark deftere aynen yazılır; "ÇEKME" adı, NÖTR renk.
 - **[ÇEKİRDEK]** Rota kapsaması REDDETMEZ, UYARIR (create · replace · "Rengi Değiştir", `ApiResponse.warnings`); boyahanesiz rota meşru; `goods` muafiyeti nitelik topların HEPSİNDE varsa (`some` YASAK).
 - **[ÇEKİRDEK]** Sipariş hedef değerini EXTERNAL adım notuna yalnız `appendTargetNotesToExternalSteps` (`helpers/fason-step-target-note.helper.ts`) ve yalnız iş emri DOĞUŞUNDA yazar; notta varsa eklemez, gövde hedefi girmez; PUT/rota değişimi notu yeniden yazmaz (`TARGET_NOTE_STALE` uyarısı).
+- **[PROFİL]** Devere siparişi ücretini yeni siparişte deverecinin AKTİF `FinishingRate`inden öner (`GET /api/cost/finishing-rates?subcontractorId=`, `cost:read` + maliyet modülü; eşleme RAW_M→METRE, KG→KG, gerisi doldurmaz); düzenlemede doldurma yapma, kayıtlı fiyat donar (`WarpingOrders/fee-rate.ts`).
 
 ## Backend
 
