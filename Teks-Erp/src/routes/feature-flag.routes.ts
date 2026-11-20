@@ -404,6 +404,10 @@ export const updateSchema = z.strictObject({
   devereSettleDefault: z.enum(["WASTE_UP_TO_PLAN", "KEEP", "RETURN", "WASTE_ALL"]).optional(),
   /** Devere A1: yeniden sarım beklenen devere ücretine girer mi (varsayılan true). */
   devereReworkBillable: z.boolean().optional(),
+  /** Devere F1: denye önerisi en az levent (tam sayı; `DEVERE_DENIER_SUGGEST_MIN_BEAMS_MAX` ile birebir); null = varsayılana (3) dön. */
+  devereDenierSuggestMinBeams: z.number({ message: "En az levent sayısı sayı olmalı" }).int("En az levent sayısı tam sayı olmalı").min(1, "En az levent sayısı 1'den küçük olamaz").max(1000, "En az levent sayısı en çok 1000 olabilir").nullable().optional(),
+  /** Devere F1: denye önerisi sapma eşiği (%; `DEVERE_DENIER_SUGGEST_THRESHOLD_PCT_MAX` ile birebir); null = varsayılana (2) dön. */
+  devereDenierSuggestThresholdPct: z.number({ message: "Sapma eşiği sayı olmalı" }).gt(0, "Sapma eşiği 0'dan büyük olmalı").max(50, "Sapma eşiği en çok %50 olabilir").nullable().optional(),
   devereFasonWasteTolerancePct: z.number({ message: "Fire toleransı sayı olmalı" }).min(0, "Fire toleransı negatif olamaz").max(99, "Fire toleransı en çok %99 olabilir").nullable().optional(),
   dokumaEnabled: z.boolean().optional(),
   // maliyet.enabled — Maliyet & Teklif modülü (MAL-0); üretime bağımlı, bağımlılık serviste.

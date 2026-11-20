@@ -119,6 +119,9 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   devereBeamWeavingLinkRequired: "devereEnabled",
   // Devere A1 (2026-11-20): yeniden sarımın beklenen ücrete girmesi devere modülünün davranış bayrağı.
   devereReworkBillable: "devereEnabled",
+  // Devere F1 (2026-11-20): denye sapma raporunun öneri eşikleri devere modülünün sayısal ayarları.
+  devereDenierSuggestMinBeams: "devereEnabled",
+  devereDenierSuggestThresholdPct: "devereEnabled",
   dokumaRunWeavingOrderRequired: "dokumaEnabled",
   dokumaOrderLineLinkRequired: "dokumaEnabled",
   // S1 (2026-10-21): top doğuş yolu dokumanın enum bayrağı (panel satırı S4b).

@@ -23,6 +23,8 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/etkili-destek/talepler/:id/mesajlar": e("destek talebine yanıt yazdı", "destek talebine yanıt yazmaya çalıştı"),
   "POST /api/etkili-destek/talepler/:id/kapat": e("destek talebini kapattı", "destek talebini kapatmaya çalıştı"),
   "POST /api/etkili-destek/talepler/:id/okundu": e("destek talebini okundu işaretledi", "destek talebini okundu işaretlemeye çalıştı"),
+  // ── Devere F1 (2026-11-20) — denye önerisini iplik kartına uygular
+  "POST /api/warp-specs/denier-deviation/apply": e("denye önerisini iplik kartına uyguladı", "denye önerisini iplik kartına uygulamaya çalıştı"),
   // ── Fason devere D1 (2026-11-17) — hesap ucu, yazmaz
   "POST /api/warp-plan/calculate": e("çözgü hesabı yaptı", "çözgü hesabı yapmaya çalıştı"),
   "POST /api/warp-plan/ends-suggest": e("çözgü tel önerisi aldı", "çözgü tel önerisi almaya çalıştı"),
