@@ -21,6 +21,7 @@
 // =============================================================================
 import type { Currency, InvoiceDetail, InvoiceLineInput, InvoiceType, InvoiceGoodsReceiptRef } from "./service";
 import { sameIdSet } from "./invoiceReceipts";
+import type { InvoiceWarpingReceiptRef } from "./warpingFee";
 import { shouldApplySuggestion } from "@/hooks/useItemPriceSuggestion";
 import { lineSubjectFrom, lineSubjectPayload, type InvoiceLineSubject } from "./invoiceLineSubject";
 
@@ -56,6 +57,10 @@ export interface InvoiceFormInitial {
   goodsReceiptIds?: string[];
   /** Aynı fişlerin etiket bilgisi (fiş no · irsaliye) — alanın altındaki özet için. */
   goodsReceipts?: InvoiceGoodsReceiptRef[];
+  /** Devere A2: faturanın cari hesabı (devere aday listesi) + bağlı devere kabulleri. Eski DTO'da yok → boş. */
+  cariId?: string;
+  warpingReceiptKeys?: string[];
+  warpingReceipts?: InvoiceWarpingReceiptRef[];
   /**
    * Para birimini KAYNAK BELGE (ya da kayıtlı fatura) dayattı mı?
    *
@@ -100,6 +105,9 @@ export function initialFromDetail(inv: InvoiceDetail): InvoiceFormInitial {
     notes: inv.notes ?? "",
     goodsReceiptIds: inv.goodsReceipts?.map((r) => r.id) ?? (inv.goodsReceipt ? [inv.goodsReceipt.id] : []),
     goodsReceipts: inv.goodsReceipts ?? [],
+    cariId: inv.cari.id,
+    warpingReceiptKeys: inv.warpingReceipts?.map((r) => r.receiptKey) ?? [],
+    warpingReceipts: inv.warpingReceipts ?? [],
     // Satır KİMLİĞİ DB satırının id'si: `crypto.randomUUID()` her render'da yeni
     // anahtar üretip alanların odağını kaybettirirdi.
     // Konu `lineType`tan: hizmet satırının `item`ı eski-panel aynasıdır, ürün kartı sanılmaz.
@@ -149,6 +157,7 @@ export interface InvoiceUpdateBody {
   externalNo: string | null;
   notes: string | null;
   goodsReceiptIds?: string[];
+  warpingReceiptKeys?: string[];
 }
 
 /**
@@ -172,6 +181,9 @@ export function buildUpdateBody(state: {
   /** Formdaki fiş kümesi; `initialGoodsReceiptIds` ile AYNI ise anahtar hiç gönderilmez (REPLACE yalnız değişimde). */
   goodsReceiptIds?: string[];
   initialGoodsReceiptIds?: string[];
+  /** Devere kabul kümesi — aynı kural (değişmeyen küme gönderilmez). */
+  warpingReceiptKeys?: string[];
+  initialWarpingReceiptKeys?: string[];
 }): InvoiceUpdateBody {
   const receiptsChanged = state.goodsReceiptIds !== undefined && !sameIdSet(state.goodsReceiptIds, state.initialGoodsReceiptIds ?? []);
   return {
@@ -180,6 +192,7 @@ export function buildUpdateBody(state: {
     externalNo: state.externalNo.trim() ? state.externalNo.trim() : null,
     notes: state.notes.trim() ? state.notes.trim() : null,
     ...(receiptsChanged ? { goodsReceiptIds: state.goodsReceiptIds } : {}),
+    ...(state.warpingReceiptKeys !== undefined && !sameIdSet(state.warpingReceiptKeys, state.initialWarpingReceiptKeys ?? []) ? { warpingReceiptKeys: state.warpingReceiptKeys } : {}),
   };
 }
 
