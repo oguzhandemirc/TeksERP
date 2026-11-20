@@ -18,6 +18,7 @@ import { cancelInbox, createInboxMessage, getInbox, listInbox } from "../service
 import { cancelReportRequest, createReportRequest, getReportRequest, listReportRequests } from "../services/report.service";
 import { PermissionList, Template, Token, Uuid, body, page, param, s, sendFile, text, uuidCursor, written, type ApiCall, type ApiRouteDef } from "./api-route-kit";
 import { CHANGE_ROUTES } from "./change-routes";
+import { DESTEK_ROUTES, jsonBodies } from "./destek-routes";
 import { DEVICE_ROUTES } from "./device-routes";
 import { EXPORT_ROUTES } from "./export-routes";
 import { NOTIFICATION_ROUTES } from "./notification-routes";
@@ -211,6 +212,8 @@ export const API_ROUTES: readonly ApiRouteDef[] = [
   ...DEVICE_ROUTES,
   ...NOTIFICATION_ROUTES,
   ...EXPORT_ROUTES,
+  // ---- Etkili Destek (talepler merkezde; bulut yalnız aktarır) ----
+  ...DESTEK_ROUTES,
   // ---- hesap yönetimi (bulut:hesap:yonet) ----
   { method: "get", path: "/hesaplar", auth: "OTURUM", kimlik: "OKUMA", handler: async (c) => ({ data: await listAccounts(c.ctx, s(c)) }) },
   {
@@ -282,7 +285,8 @@ export function createApiRouter(ctx: CloudContext): Router {
   const router = express.Router();
   router.use(noStore);
   router.use(jsonOnlyWrites);
-  router.use(express.json({ limit: "256kb", strict: true }));
+  // Genel 256 KB; YALNIZ destek ekli iki uçta 70 MB (destek-routes.ts jsonBodies).
+  router.use(jsonBodies(ctx, express.json({ limit: "256kb", strict: true })));
   const loginLimit = rateLimit({ perMinute: ctx.config.GIRIS_HIZ_DK, config: ctx.config });
   for (const def of API_ROUTES) {
     const guards = def.auth === "ACIK" ? [loginLimit] : [];

@@ -68,7 +68,7 @@ export function securityTick(nowMs: number = Date.now()): void {
 }
 
 /** Sır: ortamdan ya da dosyadan (ikisi birden belirsiz; dosya herkese okunursa red). Gerekçe yalnız değişken adı. */
-function secret(env: NodeJS.ProcessEnv, name: string): { value: string } | { reason: string } {
+export function secret(env: NodeJS.ProcessEnv, name: string): { value: string } | { reason: string } {
   const direct = env[name]?.trim() || undefined;
   const file = env[`${name}_DOSYASI`]?.trim() || undefined;
   if (direct && file) return { reason: `${name} ve ${name}_DOSYASI birlikte verilmiş (belirsiz)` };

@@ -124,4 +124,12 @@ export default [
       "@typescript-eslint/naming-convention": NAMING_CONVENTION,
     },
   },
+
+  // ── 4) Dış kaynak kopyası: Etkili Destek istemcisi (src/integrations/destek/KAYNAK.md) ──
+  // Fabrika kopyasıyla bayt-eşit; imza fonksiyonu `requestStringToSign(ts, nonce, method, path, bodyHash)` merkezdeki
+  // ikiziyle aynı beş parametreyi taşır. Yalnız bu boyut kuralı kapatılır; diğer src/ kuralları kopyada da geçerlidir.
+  {
+    files: ["src/integrations/destek/**/*.ts"],
+    rules: { "max-params": "off" },
+  },
 ];
