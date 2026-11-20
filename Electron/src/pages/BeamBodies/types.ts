@@ -56,6 +56,8 @@ export interface BeamBody {
   /** Bizim olmayan, boş ve bizde duran gövde. */
   ownerReturnDue: boolean;
   machineFits: CodedRef[];
+  /** B3: gövdenin üstündeki sarım (dolu/tezgâhta); eski sunucu göndermez. */
+  currentWarpBeam?: { id: string; beamNo: string; status: string } | null;
   notes: string | null;
   isActive: boolean;
   createdAt: string;

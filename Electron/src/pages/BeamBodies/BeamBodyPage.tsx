@@ -57,7 +57,7 @@ function BeamBodyRecord() {
       <PageBody className="space-y-6 p-4 sm:p-6">
         {q.isLoading && <p className="text-sm text-muted-foreground">Yükleniyor…</p>}
         {q.isError && <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">{apiErrorMessage(q.error)}</p>}
-        {b && <Summary b={b} />}
+        {b && <Summary b={b} onOpenWarp={(no) => openTarget(`/operations/warp-beams?search=${encodeURIComponent(no)}`)} />}
         {b && (
           <section className="space-y-3" aria-label="Hareket geçmişi">
             <h2 className="text-base font-semibold">Hareket geçmişi</h2>
@@ -85,7 +85,7 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function Summary({ b }: { b: BeamBody }) {
+function Summary({ b, onOpenWarp }: { b: BeamBody; onOpenWarp: (beamNo: string) => void }) {
   return (
     <section className="rounded-xl border border-card-border bg-card px-5 py-4 shadow-card" aria-label="Gövde özeti">
       <dl className="grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -93,6 +93,13 @@ function Summary({ b }: { b: BeamBody }) {
         <Fact label="Nerede">{placeText(b.place)}</Fact>
         <Fact label="En · flanş · dara">{dimsText(b)}</Fact>
         <Fact label="Uyumlu tezgâhlar">{b.machineFits.length === 0 ? "Hepsi (liste boş)" : b.machineFits.map((m) => m.name).join(", ")}</Fact>
+        {b.currentWarpBeam && (
+          <Fact label="Üstündeki sarım">
+            <button type="button" className="font-mono text-primary underline-offset-2 hover:underline" onClick={() => onOpenWarp(b.currentWarpBeam!.beamNo)}>
+              {b.currentWarpBeam.beamNo}
+            </button>
+          </Fact>
+        )}
         {b.ownerReturnDue && <Fact label="Uyarı"><span className="text-amber-700 dark:text-amber-300">Boş ve bizde — sahibine iade edilecek</span></Fact>}
         {!b.isActive && <Fact label="Kart">Pasif</Fact>}
         {b.notes && <Fact label="Not"><span className="whitespace-pre-line">{b.notes}</span></Fact>}
