@@ -3,7 +3,7 @@
 // sipariş) rota parametresidir, çiple kaldırılır; konumdayken satır o aşamanın top · metresini yazar (fabrikanın sayısı).
 // Sunucu üyelik süzgecini beyan etmediyse (eski sunucu) aşama/firma süzgeci gizlenir, not düşülür.
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import type { ListMemberFilterKey } from "../../../src/api/wire";
 import { FIRM_FILTER, isStage, listRowText, memberQuery, STAGE_CHIPS, STAGE_LABEL, type Kayit } from "../../../src/lib/is-emri";
@@ -19,6 +19,9 @@ import { useRemoteList } from "../../../src/ui/siparis/useRemoteList";
 import { makeStyles } from "../../../src/ui/theme-context";
 import { space, typography } from "../../../src/ui/tokens";
 import { TERIM } from "../../../src/lib/terim";
+import { isEmriSutunlari } from "../../../src/ui/tablo/sutunlar";
+import { useTabloTercihi } from "../../../src/ui/tablo/useTabloTercihi";
+import { TabloAraclari, VeriTablosu } from "../../../src/ui/tablo/VeriTablosu";
 
 type Param = { asama?: string; firma?: string; firmaAdi?: string; cariKartId?: string; musteri?: string; siparisId?: string; siparisNo?: string };
 
@@ -40,7 +43,11 @@ export default function WorkOrders() {
   const siparis = p.siparisId && can("siparisId") ? p.siparisId : undefined;
   // Firma konumunda aşama "fason"dur (top o firmada); başka aşama süzgeci verilmez.
   const stage = firma ? "fason" : asama;
+  // Sıralama ve görünen sütunlar (D7): sunucu beyan ettiyse; tercih bulutta hesap başına, ERP kipinde cihazda.
+  const sutunlar = useMemo(isEmriSutunlari, []);
+  const tablo = useTabloTercihi("tablo.is-emri", "is-emri", sutunlar);
   const list = useRemoteList("is-emri", {
+    ...(tablo.tercih.sirala ? { sirala: tablo.tercih.sirala, yon: tablo.tercih.yon } : {}),
     ...(search ? { ara: ara || undefined, suzgec: durum ?? undefined } : {}),
     uyelik: memberQuery({ asama, firma, cari, siparis }),
   });
@@ -79,13 +86,23 @@ export default function WorkOrders() {
         </View>
       ) : null}
       {list.closed ? null : <SectionHeader title={stage ? `Bu konumdaki ${TERIM.terbiyeIsEmri.cogulKucuk}` : TERIM.terbiyeIsEmri.cogul} domain="uretim" count={!list.loading && !list.hasMore ? list.items.length : undefined} />}
+      {!list.closed ? <View style={s.tools}><TabloAraclari sutunlar={sutunlar} durum={tablo} testID="is-emri-tablo" /></View> : null}
       {list.items.length > 0 ? (
-        <ListGroup testID="is-emri-listesi">
-          {list.items.map((r) => {
-            const x = listRowText(kayit(r.kayit), stage);
-            return <ListRow key={r.id} title={x.title} value={x.value} lines={x.lines} domain="uretim" icon="clipboard-outline" onPress={() => openRecord(router, "is-emri", r.id)} testID={`is-emri-${r.id}`} />;
-          })}
-        </ListGroup>
+        <VeriTablosu
+          sutunlar={sutunlar}
+          kayitlar={list.items}
+          durum={tablo}
+          onPress={(r) => openRecord(router, "is-emri", r.id)}
+          testID="is-emri-tablo"
+          kart={(items) => (
+            <ListGroup testID="is-emri-listesi">
+              {items.map((r) => {
+                const x = listRowText(kayit(r.kayit), stage);
+                return <ListRow key={r.id} title={x.title} value={x.value} lines={x.lines} domain="uretim" icon="clipboard-outline" onPress={() => openRecord(router, "is-emri", r.id)} testID={`is-emri-${r.id}`} />;
+              })}
+            </ListGroup>
+          )}
+        />
       ) : null}
       <ListStates list={list} empty={filtered ? `Bu süzgeçte ${TERIM.terbiyeIsEmri.tekilKucuk} yok` : `${TERIM.terbiyeIsEmri.tekil} yok`} domain="uretim" testID="is-emirleri" />
     </Screen>

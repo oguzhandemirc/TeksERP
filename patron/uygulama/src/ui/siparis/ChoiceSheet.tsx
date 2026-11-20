@@ -20,6 +20,8 @@ export function ChoiceSheet<K extends string>(p: {
   readonly onClose: () => void;
   /** Satır testID'si `${testIDPrefix}${key}`. */
   readonly testIDPrefix: string;
+  /** Çoklu seçim (sütun seçici): satırın işaretini bu verir ve dokunuş sayfayı KAPATMAZ. */
+  readonly isOn?: (k: K) => boolean;
 }) {
   const t = useTokens();
   const s = useStyles();
@@ -38,7 +40,7 @@ export function ChoiceSheet<K extends string>(p: {
           </View>
           <ScrollView style={s.list} contentContainerStyle={s.listInner}>
             {p.choices.map((c, i) => {
-              const on = c.key === p.value;
+              const on = p.isOn ? p.isOn(c.key) : c.key === p.value;
               return (
                 <Pressable
                   key={c.key}
@@ -48,7 +50,7 @@ export function ChoiceSheet<K extends string>(p: {
                   onPress={() => {
                     haptic("selection");
                     p.onSelect(c.key);
-                    p.onClose();
+                    if (!p.isOn) p.onClose();
                   }}
                   style={({ pressed }) => [s.row, i > 0 && s.rowSep, pressed && { backgroundColor: t.surfaceAlt }]}
                 >

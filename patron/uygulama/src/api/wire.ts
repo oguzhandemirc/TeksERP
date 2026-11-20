@@ -72,6 +72,8 @@ export interface FacilityStatus {
   readonly hizmet: ServiceStatus;
   /** Eski sunucu göndermez: yoksa kimlik süzgeci ve yeni aramalar YOK sayılır (eski sunucu tanımadığı parametreyi yok sayar). */
   readonly liste?: ListCapabilities;
+  /** D8: `POST /esitleme/simdi` ucu var (yalnız bulut; ERP kipinde veri zaten canlı). Eski sunucu göndermez ⇒ düğme gizli. */
+  readonly simdiEsitle?: boolean;
 }
 
 // ---------------------------------------------------------------- dışa aktarma (Ek-6/A §4.2)
@@ -255,6 +257,62 @@ export interface ListCapabilities {
   readonly anahtarSuzgecleri?: Readonly<Partial<Record<ListKeyFilterKey, readonly string[]>>>;
   /** Projeksiyon → üyelik süzgeci anahtarları; eski sunucu göndermez ⇒ istemci İE süzgeçlerini (konum, firma, sipariş) gizler. */
   readonly uyelikSuzgecleri?: Readonly<Record<string, readonly ListMemberFilterKey[]>>;
+  /**
+   * Projeksiyon → bu sunucunun sıralayabildiği alanlar (`LIST_SORT` ⊇ bu). Eski sunucu göndermez ⇒ istemci sıralama
+   * seçimini gizler (eski sıra: en yeni önce). ERP kipi yalnız SAKLI kolonu olan alanları beyan eder.
+   */
+  readonly siralama?: Readonly<Record<string, readonly string[]>>;
+}
+
+// ---------------------------------------------------------------- liste sıralaması (veri tablosu, D7)
+/** Sıralama anahtarının türü: metin Türkçe katlamalı (arama ile aynı katlama), sayı sayısal, tarih ISO metni. */
+export type ListSortKind = "metin" | "sayi" | "tarih";
+export type ListSortDir = "artan" | "azalan";
+export const LIST_SORT_DIRS: readonly ListSortDir[] = ["artan", "azalan"];
+
+/**
+ * `GET /veri/:projeksiyon?sirala=<alan>&yon=artan|azalan` — yalnız burada beyanlı alan sıralanır (diğerinde 400);
+ * boş değer her iki yönde SONDA; eşitlik kayıt kimliğiyle bozulur, imleç sıralamayla devam eder. Bulut hesap yapmaz:
+ * alan fabrikanın gönderdiği hâliyle karşılaştırılır. `sirala` yoksa eski sıra (en yeni önce) korunur.
+ */
+export const LIST_SORT: Readonly<Record<string, Readonly<Record<string, ListSortKind>>>> = {
+  siparis: { siparisNo: "metin", musteriAdi: "metin", siparisTarihi: "tarih", termin: "tarih", acikMiktar: "sayi", sevkMiktari: "sayi" },
+  "is-emri": { isEmriNo: "metin", musteriAdi: "metin", topSayisi: "sayi", metre: "sayi", planBitis: "tarih", olusturulma: "tarih" },
+  sevkiyat: { sevkNo: "metin", musteriAdi: "metin", cikisTarihi: "tarih", toplamMetre: "sayi", topSayisi: "sayi" },
+  "cari-kart": { ad: "metin", kod: "metin", il: "metin" },
+};
+
+// ---------------------------------------------------------------- görünüm tercihleri (veri tablosu, D7)
+/** `GET|POST /oturum/tercihler/:anahtar` — hesabın KENDİ görünüm tercihi; beyaz listeli anahtar, değer boyut sınırlı JSON. */
+export const VIEW_PREF_KEYS = ["tablo.siparis", "tablo.is-emri", "tablo.sevkiyat", "tablo.cari-kart"] as const;
+export type ViewPrefKey = (typeof VIEW_PREF_KEYS)[number];
+/** Değerin JSON metni en çok bu kadar bayt (UTF-8); DB CHECK'i iki katıyla son seddir. */
+export const VIEW_PREF_MAX_BYTES = 4096;
+
+/** `GET` yanıtı (hiç yazılmadıysa `deger` null) ve `POST` (`{ deger: nesne }`, tam yerine koyma) yanıtı. */
+export interface ViewPreference {
+  readonly anahtar: ViewPrefKey;
+  readonly deger: unknown;
+  readonly guncelleme: string | null;
+}
+
+// ---------------------------------------------------------------- şimdi eşitle (D8)
+export const SYNC_NOW_SCOPES = ["KISMI", "TAM"] as const;
+/** KISMI: artımlı tur + bütün anlıklar · TAM: ek olarak uzlaştırma (sayısı tutmayan küme baştan gönderilir). */
+export type SyncNowScope = (typeof SYNC_NOW_SCOPES)[number];
+/** Tesis başına iki kabul edilen istek arası en az (her kapsam). */
+export const SYNC_NOW_MIN_GAP_MS = 60_000;
+/** Tesis başına iki TAM istek arası en az. */
+export const SYNC_NOW_FULL_GAP_MS = 15 * 60_000;
+
+/**
+ * `POST /api/esitleme/simdi` `{ kapsam? }` — BEKLIYOR: işaret açık, fabrika bir sonraki yoklamada alır ·
+ * YAKIN_ZAMANDA: aralık dolmadı, işaret açılmadı. `sonrakiMumkun` bir sonraki kabul edilebilir an (ISO).
+ */
+export interface SyncNowResponse {
+  readonly durum: "BEKLIYOR" | "YAKIN_ZAMANDA";
+  readonly kapsam: SyncNowScope;
+  readonly sonrakiMumkun: string;
 }
 
 // ---------------------------------------------------------------- cari kilidi (D4-I6)

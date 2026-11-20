@@ -14,7 +14,7 @@ import {
   PATRON_RECORD_SETS, canRead, effectiveCloudPermissions, patronSet, readableSetNames, type SetDef,
 } from "./izin-esleme";
 import { MEMBER_FILTERS, MEMBER_FILTER_KEYS } from "./kume-arama";
-import { ID_FILTER_KEYS, KEY_FILTERS, SEARCH, getRecord, idFiltersOf, listRecords, type PatronListQuery, type PatronRecord } from "./kayit-sayfasi";
+import { ID_FILTER_KEYS, KEY_FILTERS, SEARCH, SORT, getRecord, idFiltersOf, listRecords, type PatronListQuery, type PatronRecord } from "./kayit-sayfasi";
 import { getLicenseInstallationId } from "../../lib/license/runtime";
 
 /** Önbellek tazeliği (ms) — pahalı özetler (`ozet` = 9 rapor servisi) saniyede bir yeniden kurulmasın. */
@@ -93,7 +93,8 @@ function listCapabilities() {
   const anahtarSuzgecleri = Object.fromEntries(Object.entries(KEY_FILTERS).map(([k, v]) => [k, v.filter((n) => served.has(n))]).filter(([, v]) => v.length > 0));
   const uyelikSuzgecleri = Object.fromEntries(Object.entries(MEMBER_FILTERS).filter(([n]) => served.has(n))
     .map(([n, m]) => [n, MEMBER_FILTER_KEYS.filter((k) => m[k] !== undefined)]));
-  return { kimlikSuzgecleri, aranabilir: Object.keys(SEARCH), anahtarSuzgecleri, uyelikSuzgecleri };
+  const siralama = Object.fromEntries(Object.entries(SORT).filter(([n]) => served.has(n)).map(([n, f]) => [n, Object.keys(f)]));
+  return { kimlikSuzgecleri, aranabilir: Object.keys(SEARCH), anahtarSuzgecleri, uyelikSuzgecleri, siralama };
 }
 
 /** `GET /oturum` — bulut `FacilityStatus` biçimi; eşitleme yok (veri canlı), hizmet aşaması hep ACIK. */

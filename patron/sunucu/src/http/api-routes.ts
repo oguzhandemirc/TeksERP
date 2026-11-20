@@ -21,6 +21,7 @@ import { CHANGE_ROUTES } from "./change-routes";
 import { DEVICE_ROUTES } from "./device-routes";
 import { EXPORT_ROUTES } from "./export-routes";
 import { NOTIFICATION_ROUTES } from "./notification-routes";
+import { VIEW_PREF_ROUTES } from "./view-pref-routes";
 import { clientAddress, rateLimit } from "./rate-limit";
 
 export type { ApiCall, ApiRouteDef } from "./api-route-kit";
@@ -139,7 +140,7 @@ export const API_ROUTES: readonly ApiRouteDef[] = [
     kimlik: "OKUMA",
     handler: async (c) => {
       const { cursor, limit } = page(c);
-      return { data: await listProjection(c.ctx, s(c), String(c.req.params[PROJECTION]), { cursor, limit, durum: text(c, "durum", 40), kimlik: Object.fromEntries(LIST_ID_FILTER_KEYS.map((k) => [k, text(c, k, 40)])), anahtar: Object.fromEntries(LIST_KEY_FILTER_KEYS.map((k) => [k, text(c, k, ANAHTAR_SUZGEC_AZAMI + 1)])), uyelik: Object.fromEntries(LIST_MEMBER_FILTER_KEYS.map((k) => [k, text(c, k, 40)])), ara: text(c, "ara", 200), suzgec: text(c, "suzgec", 40) }) };
+      return { data: await listProjection(c.ctx, s(c), String(c.req.params[PROJECTION]), { cursor, limit, durum: text(c, "durum", 40), kimlik: Object.fromEntries(LIST_ID_FILTER_KEYS.map((k) => [k, text(c, k, 40)])), anahtar: Object.fromEntries(LIST_KEY_FILTER_KEYS.map((k) => [k, text(c, k, ANAHTAR_SUZGEC_AZAMI + 1)])), uyelik: Object.fromEntries(LIST_MEMBER_FILTER_KEYS.map((k) => [k, text(c, k, 40)])), ara: text(c, "ara", 200), suzgec: text(c, "suzgec", 40), sirala: text(c, "sirala", 40), yon: text(c, "yon", 10) }) };
     },
   },
   { method: "get", path: `/veri/:${PROJECTION}/:id`, auth: "OTURUM", kimlik: "OKUMA", handler: async (c) => ({ data: await getProjectionRecord(c.ctx, s(c), String(c.req.params[PROJECTION]), String(c.req.params.id)) }) },
@@ -147,6 +148,7 @@ export const API_ROUTES: readonly ApiRouteDef[] = [
   { method: "post", path: "/tazele", auth: "OTURUM", kimlik: { muaf: "zil içerik taşımaz; tekrar yalnız fazladan anlık tur yaptırır (§6.5)" }, handler: async (c) => ({ data: requestSnapshotRefresh(c.ctx.doorbell, s(c).tesisId, c.ctx.now()) }) },
   { method: "get", path: `/anlik/:${PROJECTION}`, auth: "OTURUM", kimlik: "OKUMA", handler: async (c) => ({ data: await getSnapshot(c.ctx, s(c), String(c.req.params[PROJECTION])) }) },
   ...CHANGE_ROUTES,
+  ...VIEW_PREF_ROUTES,
   // ---- gelen kutusu ----
   {
     method: "post",
