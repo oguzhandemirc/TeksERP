@@ -204,7 +204,7 @@ async function main(): Promise<void> {
     track(dE8);
     const lE8 = await prisma.invoiceLine.findMany({ where: { invoiceId: dE8.data.id }, select: { qty: true, unit: true, unitPrice: true, description: true } });
     check("A8b 8 ondalık tel×m fiyatı: 3 000 000 × 0,00002345 = 70,35; taslak götürü satır 1 × 70,35, ölçü açıklamada",
-      sE8.fee.unitPrice === "0.00002345" && sE8.totals.expectedAmount === "70.35" && lE8.length === 1 && lE8[0]!.qty.toFixed(3) === "1.000" && lE8[0]!.unit === "götürü" && lE8[0]!.unitPrice.toFixed(2) === "70.35" && /3000000\.000 tel×m × 0\.00002345/.test(lE8[0]!.description ?? ""),
+      sE8.fee.unitPrice === "0.00002345" && sE8.totals.expectedAmount === "70.35" && lE8.length === 1 && lE8[0]!.qty.toFixed(3) === "1.000" && lE8[0]!.unit === "götürü" && lE8[0]!.unitPrice.toFixed(2) === "70.35" && /3000000 tel×m × 0,00002345/.test(lE8[0]!.description ?? ""),
       JSON.stringify({ p: sE8.fee.unitPrice, t: sE8.totals.expectedAmount, l: lE8[0] }));
 
     // ── A13 taraf · ALIŞ dışı · PATCH REPLACE ─────────────────────────────

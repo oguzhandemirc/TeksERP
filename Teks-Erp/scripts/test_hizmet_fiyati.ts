@@ -356,6 +356,8 @@ const COST_SIDE_SERVICE_ITEM_ID_FILES = new Set([
   // Fason dalga-2 F6: tarife ↔ hizmet kartı köprüsünün yazıcısı ve kabulden ALIŞ faturası taslağı — maliyet tarafı.
   "services/finishing-rate.service.ts",
   "services/subcontractor-purchase-draft.service.ts",
+  // Devere A1: devereci taslağı satırın hizmet kartını deverecinin aktif tarifesinin `serviceItemId`sinden alır (F6 köprüsü, çözücü değil).
+  "services/warping-order/fee-invoice.ts",
 ]);
 function astChecks(): void {
   section("§8 AST: çözücü tek, eşleme okuyucuları beyanlı, FinishingRate okunmaz");

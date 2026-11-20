@@ -169,6 +169,16 @@ const MODEL_MUAF: ReadonlyArray<{ dosya: string; model: string; neden: string }>
     neden: "F6 fason alış taslağı (from-subcontractor-receipt; uç zaten requireFinanceEnabled arkasında): fason tarifesini ve kumaşın tarife kodunu yalnız OKUR (subcontractor-purchase-draft → resolveRateCodes/pickFinishingRateAtDispatch, sevk kg kontrolüyle aynı çözüm). Maliyet kapalıyken tarife yoksa satır fiyat 0 + uyarıyla döner; maliyet tablosuna yazmaz.",
   },
   {
+    dosya: "routes/finance-warping-fee.routes.ts",
+    model: "finishingRate",
+    neden: "Devere A1 devereci faturası alt router'ı (finance.routes'un alt router'ı; requireFinanceEnabled miras + requireDevereEnabled): taslak satırının hizmet kartını deverecinin aktif fason tarifesinden (`FinishingRate.serviceItemId`) yalnız OKUR; F6 ile aynı fatura servisi zinciri. Maliyet kapalıyken tarife yoksa satır açıklama satırı + uyarıyla döner; maliyet tablosuna yazmaz.",
+  },
+  {
+    dosya: "routes/finance-warping-fee.routes.ts",
+    model: "costStructure",
+    neden: "Devere A1 devereci faturası alt router'ı (finance.routes'un alt router'ı; requireFinanceEnabled miras + requireDevereEnabled): taslak satırının hizmet kartını deverecinin aktif fason tarifesinden (`FinishingRate.serviceItemId`) yalnız OKUR; F6 ile aynı fatura servisi zinciri. Maliyet kapalıyken tarife yoksa satır açıklama satırı + uyarıyla döner; maliyet tablosuna yazmaz.",
+  },
+  {
     dosya: "routes/production-balance.routes.ts",
     model: "costStructure",
     neden: "Üretim dengesi (I3): kumaş açığında ham stoğu mamul karşılığına çevirmek için ürün yapısından yalnız boy çekmesini ve tarife KODUNU OKUR (production-balance readItemShrinkPct → resolveLengthShrinkPct); fiyat okumaz, yapı yoksa çekme boş = bugünkü açık (üretim önerisi emsali).",

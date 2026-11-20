@@ -135,6 +135,7 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   // ── Finans: dönem sonu hizmet faturası (H8)
   "POST /api/finance/invoices/service-period-draft": e("dönem sonu hizmet faturası taslağı oluşturdu", "dönem sonu hizmet faturası taslağı oluşturmaya çalıştı"),
   "POST /api/finance/invoices/from-subcontractor-receipt/:receiptId": e("fason kabulünden alış faturası taslağı oluşturdu", "fason kabulünden alış faturası taslağı oluşturmaya çalıştı"),
+  "POST /api/finance/invoices/draft-from-warping": e("devere siparişlerinden devereci faturası taslağı oluşturdu", "devere siparişlerinden devereci faturası taslağı oluşturmaya çalıştı"),
   // ── Terbiye iş emri
   get "POST /api/work-orders"() { return e(`${TERIM.terbiyeIsEmri.tekilKucuk} açtı`, `${TERIM.terbiyeIsEmri.tekilKucuk} açmaya çalıştı`); },
   get "PATCH /api/work-orders/:id"() { return e(`${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} düzenledi`, `${TERIM.terbiyeIsEmri.cekimKucuk.belirtme} düzenlemeye çalıştı`); },
