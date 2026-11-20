@@ -5,6 +5,7 @@ import { useRouter } from "expo-router";
 import { Pressable, Text, View } from "react-native";
 import { MODULES, moduleDef, moduleInMenu, moduleNavTitle, moduleVisible } from "../../../src/lib/access";
 import { yetenek } from "../../../src/api/yetenek";
+import { destekRozetMetni, useDestekEtkin, useDestekOkunmamis } from "../../../src/destek/gorunurluk";
 import { okunmamisRozeti } from "../../../src/lib/erp-bildirim";
 import { useSession } from "../../../src/state/session";
 import { useRemote } from "../../../src/state/useRemote";
@@ -38,6 +39,10 @@ export default function More() {
   const unread = notifyOn ? okunmamisRozeti(ozet.data?.okunmamis) : null;
   const pill = (key: string) => (key === "gelen-kutusu" ? badge : key === "bildirimler" ? unread : null);
   const hesap = facility?.hesap;
+  // Destek bloğu yalnız destek AÇIKKEN (kapalı / eski bulut / ERP kipi → menü bugünküyle aynı).
+  const destekEtkin = useDestekEtkin();
+  const destekOkunmamis = useDestekOkunmamis();
+  const destekRozeti = destekRozetMetni(destekOkunmamis);
 
   return (
     <Screen title="Diğer" back={false} subtitle={<FacilityName />} onRefresh={inboxOn ? pending.reload : undefined} refreshing={pending.refreshing}>
@@ -78,6 +83,23 @@ export default function More() {
           </ListGroup>,
         ];
       })}
+      {destekEtkin ? (
+        <>
+          <SectionHeader title="Yardım" />
+          <ListGroup testID="grup-destek">
+            <ListRow
+              title="Destek"
+              subtitle="Sorun bildir, taleplerini izle"
+              domain="genel"
+              icon="help-buoy-outline"
+              accessory={destekRozeti ? <CountPill value={destekRozeti} testID="destek-okunmamis" /> : undefined}
+              accessibilityLabel={destekRozeti ? `Destek, ${destekOkunmamis.tickets} talepte yeni yanıt` : "Destek"}
+              onPress={() => router.push("/destek" as never)}
+              testID="menu-destek"
+            />
+          </ListGroup>
+        </>
+      ) : null}
     </Screen>
   );
 }

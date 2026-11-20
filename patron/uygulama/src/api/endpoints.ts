@@ -37,6 +37,10 @@ import type {
   ViewPrefKey,
   TestNotificationResult,
 } from "./wire";
+import type { DestekDosya, DestekEkBaglantisi, DestekKapsam, DestekOkunmamis, DestekSayfa, DestekTalep, TalepAcGovde } from "./destek-wire";
+
+/** Ekli destek isteği (talep aç · yanıt yaz) zaman aşımı. */
+export const SUPPORT_UPLOAD_TIMEOUT_MS = 60_000;
 
 export const ENDPOINTS = {
   login: ["post", "/oturum/ac"],
@@ -87,6 +91,16 @@ export const ENDPOINTS = {
   viewPrefSet: ["post", "/oturum/tercihler/:anahtar"],
   /** D8 "şimdi eşitle" (yalnız bulut; sunucu `simdiEsitle` beyan ettiyse). */
   syncNow: ["post", "/esitleme/simdi"],
+  /** Etkili Destek (yalnız bulut; sözleşme `docs/ops/DESTEK-ENTEGRASYONU-BULUT.md`); `/destek/durum` `etkin:false`, 404 ya da ERP kipi → hiçbiri çağrılmaz. */
+  supportStatus: ["get", "/destek/durum"],
+  supportCreate: ["post", "/destek/talepler"],
+  supportList: ["get", "/destek/talepler"],
+  supportGet: ["get", "/destek/talepler/:id"],
+  supportReply: ["post", "/destek/talepler/:id/mesajlar"],
+  supportClose: ["post", "/destek/talepler/:id/kapat"],
+  supportRead: ["post", "/destek/talepler/:id/okundu"],
+  supportUnread: ["get", "/destek/okunmamis"],
+  supportAttachmentLink: ["get", "/destek/ekler/:id/baglanti"],
 } as const satisfies Record<string, readonly ["get" | "post" | "patch", string]>;
 
 type Name = keyof typeof ENDPOINTS;
@@ -176,6 +190,17 @@ export function createApi(c: ApiClient) {
     notificationTest: () => c.post<TestNotificationResult>(pathOf("notificationTest"), {}),
     exportManifest: () => c.get<ExportManifest>(pathOf("exportManifest")),
     exportDownload: (kume: string, bicim: ExportFormat): Promise<DownloadedFile> => c.download(pathOf("exportDownload", { kume }), { bicim }),
+    supportStatus: () => c.get<{ etkin: boolean }>(pathOf("supportStatus")),
+    /** Ekli istek 60 sn (bulutun merkez zaman aşımıyla aynı), eksiz istemci varsayılanı. */
+    supportCreate: (b: TalepAcGovde) => c.post<DestekTalep>(pathOf("supportCreate"), b, { timeoutMs: b.files?.length ? SUPPORT_UPLOAD_TIMEOUT_MS : undefined }),
+    supportList: (p: { scope: DestekKapsam; page?: number; limit?: number; status?: string }) => c.get<DestekSayfa>(pathOf("supportList"), p),
+    supportGet: (id: string) => c.get<DestekTalep>(pathOf("supportGet", { id })),
+    supportReply: (id: string, b: { message: string; files?: readonly DestekDosya[] }) =>
+      c.post<DestekTalep>(pathOf("supportReply", { id }), b, { timeoutMs: b.files?.length ? SUPPORT_UPLOAD_TIMEOUT_MS : undefined }),
+    supportClose: (id: string) => c.post<DestekTalep>(pathOf("supportClose", { id }), {}),
+    supportRead: (id: string) => c.post<{ lastReadAt: string }>(pathOf("supportRead", { id }), {}),
+    supportUnread: (scope: DestekKapsam = "mine") => c.get<DestekOkunmamis>(pathOf("supportUnread"), { scope }),
+    supportAttachmentLink: (id: string, variant: "original" | "thumb" = "original") => c.get<DestekEkBaglantisi>(pathOf("supportAttachmentLink", { id }), { variant }),
   };
 }
 

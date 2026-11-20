@@ -21,6 +21,9 @@ import { RoleText } from "./RoleBadge";
 import { RAIL_GROUPS } from "./tabs";
 import { makeStyles, useReducedMotion, useTokens } from "./theme-context";
 import { CONTENT_MAX, RAIL_COLLAPSED, RAIL_WIDTH, TOUCH, WIDE_MIN, radius, space, typography } from "./tokens";
+import { destekRozetMetni, useDestekEtkin, useDestekOkunmamis } from "../destek/gorunurluk";
+import { Rozet } from "./destek/parcalar";
+import { SorunBildirDugmesi } from "./destek/SorunBildirDugmesi";
 
 export function useWide(): boolean {
   return useWindowDimensions().width >= WIDE_MIN;
@@ -101,6 +104,9 @@ export function SideNav({ width: frameWidth, floating }: { readonly width?: Shar
   // Genişlik yumuşak geçer (taşan etiket kırpılır); çerçevedeyse içerikle AYNI değerden okunur.
   const width = frameWidth ?? own.width;
   const widthStyle = useAnimatedStyle(() => ({ width: width.value }));
+  const destekEtkin = useDestekEtkin();
+  const destekRozeti = destekRozetMetni(useDestekOkunmamis());
+  const destekAktif = path === "/destek" || path.startsWith("/destek/");
   return (
     <Animated.View style={[s.rail, floating && s.railFloating, widthStyle, { paddingTop: insets.top + space.s, paddingLeft: insets.left + space.s }]} testID="ray">
       {/* Başlık satırı sayfa büyük başlığıyla aynı yükseklikte (üst dolgu + TOUCH) ortalanır. */}
@@ -154,6 +160,24 @@ export function SideNav({ width: frameWidth, floating }: { readonly width?: Shar
             </View>
           );
         })}
+        {/* Destek modül tablosunda değil: yalnız `/destek/durum` etkin iken (kapalıyken ray bugünküyle aynı). */}
+        {destekEtkin ? (
+          <View>
+            {open ? <Text style={s.railSection} accessibilityRole="header">Yardım</Text> : <View style={s.railRule} />}
+            <Pressable
+              accessibilityRole="link"
+              accessibilityLabel={destekRozeti ? `Destek, ${destekRozeti} talepte yeni yanıt` : "Destek"}
+              accessibilityState={{ selected: destekAktif }}
+              testID="menu-destek"
+              onPress={() => railNavigate(router, "/destek", path)}
+              style={({ pressed }) => [s.railItem, !open && s.railItemClosed, destekAktif && { backgroundColor: t.tintContainer }, pressed && !destekAktif && { backgroundColor: t.surfaceAlt }]}
+            >
+              <IconChip domain="genel" icon="help-buoy-outline" size={28} />
+              {open ? <Text style={[s.railText, destekAktif && { color: t.tint, fontWeight: "600" }]} numberOfLines={1}>Destek</Text> : null}
+              {open && destekRozeti ? <Rozet label={destekRozeti} tone="primary" testID="ray-destek-okunmamis" /> : null}
+            </Pressable>
+          </View>
+        ) : null}
       </ScrollView>
     </Animated.View>
   );
@@ -211,7 +235,7 @@ function SheetScreen({ title, children, allowed, onClose }: { title: string; chi
 }
 
 /** Her ekranın kabı: büyük başlık, bantlar, kaydırma ve aşağı çek-yenile; izin kapısı. */
-export function Screen({ title: titleProp, module, children, back, onRefresh, refreshing, headerRight, subtitle, titleRight, sheet }: ScreenProps) {
+export function Screen({ title: titleProp, module, children, back, onRefresh, refreshing, headerRight: headerRightProp, subtitle, titleRight, sheet }: ScreenProps) {
   const title = titleProp ?? (module ? moduleTitle(module) : "");
   const t = useTokens();
   const s = useStyles();
@@ -224,6 +248,10 @@ export function Screen({ title: titleProp, module, children, back, onRefresh, re
   const reduced = useReducedMotion();
   const showBack = !wide && (back ?? title !== "Pano");
   const goBack = () => (router.canGoBack() ? router.back() : router.replace("/pano"));
+  // "Sorun bildir" yalnız destek AÇIKKEN ve destek ekranlarının dışında (kapalıyken başlık bugünküyle aynı).
+  const path = usePathname();
+  const sorunBildir = useDestekEtkin() && !path.startsWith("/destek");
+  const headerRight = sorunBildir ? <>{headerRightProp}<SorunBildirDugmesi /></> : headerRightProp;
   if (sheet && wide) return <SheetScreen title={title} allowed={allowed} onClose={goBack}>{children}</SheetScreen>;
   return (
     // Geniş ekranda yığın animasyonu yok (yanal gezinme); içerik bir kez kısa solmayla girer.
