@@ -236,6 +236,7 @@ export const TABLE_LABELS: Record<string, string> = {
   WARP_BEAM_EVENT: "Levent Olayı",
   BEAM_BODY: "Levent Gövdesi",
   BEAM_BODY_EVENT: "Levent Gövdesi Olayı",
+  BEAM_BODY_RETURN: "Levent Gövdesi İade Belgesi",
 
   // Fabrika tarafında da etiketsiz kalmış olanlar (aynı tarama).
   ROLL_QTY_ADJUST: "Top Metraj Düzeltmesi",

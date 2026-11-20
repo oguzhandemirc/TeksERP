@@ -35,6 +35,7 @@ import warpSpecRoutes from "./routes/warp-spec.routes";
 import warpPlanRoutes from "./routes/warp-plan.routes";
 import warpingOrderRoutes from "./routes/warping-order.routes";
 import beamBodyRoutes from "./routes/beam-body.routes";
+import beamBodyReturnRoutes from "./routes/beam-body-return.routes";
 import weftSpecRoutes from "./routes/weft-spec.routes";
 import weaveDesignRoutes from "./routes/weave-design.routes";
 import itemConstructionRoutes from "./routes/item-construction.routes";
@@ -577,6 +578,7 @@ app.use("/api/warp-specs", warpSpecRoutes);
 app.use("/api/warp-plan", warpPlanRoutes);
 app.use("/api/warping-orders", warpingOrderRoutes);
 app.use("/api/beam-bodies", beamBodyRoutes);
+app.use("/api/beam-body-returns", beamBodyReturnRoutes);
 // MAL-1 (S2 çekirdeği): atkı kartı — router kendi kapısını taşır (`requireDokumaEnabled`).
 app.use("/api/weft-specs", weftSpecRoutes);
 app.use("/api/weave-designs", weaveDesignRoutes);

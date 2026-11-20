@@ -12,7 +12,7 @@ import { AuditService } from "../audit.service";
 import { SETTING_KEYS, readDevereBeamBodyMachineFit, readDevereBeamBodyMode, readDevereEnabled } from "../system-setting.service";
 import { licenseModuleError } from "../../lib/license/module-ceiling";
 import { settingRowPath, settingScreenPath } from "../../constants/panel-ayar-yolu";
-import { BEAM_BODY_STATUS_LABELS, cancelKindOf, type BeamBodyEventKind, type BeamBodyForwardKind } from "../../constants/beam-body";
+import { BEAM_BODY_MANUAL_KINDS, BEAM_BODY_STATUS_LABELS, cancelKindOf, type BeamBodyEventKind, type BeamBodyForwardKind } from "../../constants/beam-body";
 import { beamBodyEventStampTx } from "./ledger-stamp.helper";
 
 type Tx = Prisma.TransactionClient;
@@ -27,6 +27,8 @@ export const BEAM_BODY_EVENT_SELECT = {
   subcontractor: { select: { id: true, name: true } },
   machine: { select: { id: true, code: true, name: true } },
   warpBeam: { select: { id: true, beamNo: true } },
+  subcontractorDispatch: { select: { id: true, dispatchNo: true } },
+  returnItem: { select: { beamReturn: { select: { id: true, docNo: true } } } },
 } satisfies Prisma.BeamBodyEventSelect;
 export type BeamBodyEventRow = Prisma.BeamBodyEventGetPayload<{ select: typeof BEAM_BODY_EVENT_SELECT }>;
 
@@ -94,6 +96,8 @@ export async function transitionBeamBodyTx(
     to: BeamBodyStatus;
     place: BeamBodyPlace;
     warpBeamId?: string | null;
+    /** B2: yalnız SHIP_EMPTY — gövdeyi götüren iplik sevki (CHECK `beam_body_events_dispatch_ck`). */
+    subcontractorDispatchId?: string | null;
     reasonCode?: string | null;
     reason?: string | null;
     userId: string;
@@ -108,7 +112,8 @@ export async function transitionBeamBodyTx(
   return tx.beamBodyEvent.create({
     data: {
       bodyId: input.bodyId, kind: input.kind, fromStatus: input.from, toStatus: input.to, ...input.place,
-      warpBeamId: input.warpBeamId ?? null, reasonCode: input.reasonCode ?? null, reason: input.reason ?? null,
+      warpBeamId: input.warpBeamId ?? null, subcontractorDispatchId: input.subcontractorDispatchId ?? null,
+      reasonCode: input.reasonCode ?? null, reason: input.reason ?? null,
       createdById: input.userId, createdAt,
     },
     select: BEAM_BODY_EVENT_SELECT,
@@ -146,6 +151,60 @@ export async function reverseBeamBodyEventTx(
     throw e;
   }
 }
+
+/**
+ * Elle "geri al" engeli — TEK tanım (geçmiş listesindeki `undoable` ve geri alma ucu aynı yüklemi okur). Belgeye bağlı
+ * olay belgenin iptaliyle geri alınır; yalnız son hareket geri alınır (yer zinciri bozulmasın).
+ */
+export function beamBodyEventUndoBlock(ev: { kind: string; hasDocument: boolean; reversed: boolean; isLatest: boolean }): { code: string; message: string } | null {
+  if (ev.kind.endsWith("_CANCEL")) return { code: "BEAM_BODY_EVENT_IS_REVERSAL", message: "İptal kaydı geri alınamaz" };
+  if (ev.reversed) return { code: "BEAM_BODY_EVENT_REVERSED", message: "Bu gövde hareketi zaten iptal edilmiş" };
+  if (ev.hasDocument) return { code: "BEAM_BODY_EVENT_DOCUMENT", message: "Bu hareket bir belgeye bağlı — belgeyi (sevk ya da iade belgesi) iptal edin" };
+  if (!(BEAM_BODY_MANUAL_KINDS as readonly string[]).includes(ev.kind)) return { code: "BEAM_BODY_EVENT_KIND", message: "Bu hareket türü elle geri alınmaz" };
+  if (!ev.isLatest) return { code: "BEAM_BODY_EVENT_NOT_LATEST", message: "Gövdenin bu hareketten sonra başka hareketi var — önce sonraki hareketler geri alınmalı" };
+  return null;
+}
+
+/** "Etkin" sonraki hareket: geri alınmamış ileri olay (iptal satırı ve iptal edilmiş ileri satır çifti sayılmaz). */
+export const BEAM_BODY_EFFECTIVE_EVENT_WHERE = { NOT: { kind: { endsWith: "_CANCEL" } }, reversal: { is: null } } satisfies Prisma.BeamBodyEventWhereInput;
+
+/**
+ * Olayın gövdedeki konumu: hemen önceki satır (her satır SONUÇ yerini taşır → geri dönülecek yer) ve sonrasındaki
+ * etkin hareket sayısı. Arada geri alınmış çiftler zinciri bozmaz (iptal satırı da sonuç yerini yazar).
+ */
+export async function beamBodyEventNeighborsTx(db: Pick<Tx, "beamBodyEvent">, ev: { id: string; bodyId: string; createdAt: Date }) {
+  const prev = await db.beamBodyEvent.findFirst({
+    where: { bodyId: ev.bodyId, createdAt: { lt: ev.createdAt } },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    select: { toStatus: true, warehouseId: true, subcontractorId: true, machineId: true },
+  });
+  const later = await db.beamBodyEvent.count({ where: { bodyId: ev.bodyId, createdAt: { gt: ev.createdAt }, ...BEAM_BODY_EFFECTIVE_EVENT_WHERE } });
+  return { prev, later };
+}
+
+/**
+ * Gövdenin SON ileri olayını geri alır (B2): durum = ileri olayın `fromStatus`, yer = bir önceki olayın yeri (her olay
+ * sonuç yerini taşır). Sonrasında hareket varsa 409 `BEAM_BODY_EVENT_NOT_LATEST` — sayım claim'den SONRA (satır kilidi
+ * altında) tekrarlanır, eşzamanlı geçiş araya giremez.
+ */
+export async function reverseLatestBeamBodyEventTx(tx: Tx, input: { eventId: string; reason: string; userId: string }): Promise<BeamBodyEventRow> {
+  const fwd = await tx.beamBodyEvent.findUnique({ where: { id: input.eventId }, select: { id: true, bodyId: true, kind: true, fromStatus: true, createdAt: true } });
+  if (!fwd) throw AppError.notFound("Gövde hareketi bulunamadı", { code: "BEAM_BODY_EVENT_NOT_FOUND" });
+  if (fwd.kind === "REGISTER" || !fwd.fromStatus) throw AppError.badRequest("Kayıt hareketi kayıt iptaliyle geri alınır", { code: "BEAM_BODY_EVENT_KIND" });
+  const before = await beamBodyEventNeighborsTx(tx, fwd);
+  if (before.later > 0) throw notLatest();
+  if (!before.prev) throw AppError.conflict("Gövde hareketinin öncesi bulunamadı", { code: "BEAM_BODY_EVENT_NOT_LATEST" });
+  const out = await reverseBeamBodyEventTx(tx, {
+    eventId: fwd.id,
+    restore: { status: fwd.fromStatus, place: { warehouseId: before.prev.warehouseId, subcontractorId: before.prev.subcontractorId, machineId: before.prev.machineId } },
+    reason: input.reason, userId: input.userId,
+  });
+  const after = await tx.beamBodyEvent.count({ where: { bodyId: fwd.bodyId, createdAt: { gt: fwd.createdAt }, ...BEAM_BODY_EFFECTIVE_EVENT_WHERE } });
+  if (after > 0) throw notLatest();
+  return out;
+}
+
+const notLatest = () => AppError.conflict("Gövdenin bu hareketten sonra başka hareketi var — önce sonraki hareketler geri alınmalı", { code: "BEAM_BODY_EVENT_NOT_LATEST" });
 
 async function throwStateConflict(tx: Tx, bodyId: string, expected: BeamBodyStatus): Promise<never> {
   const fresh = await tx.beamBody.findUnique({ where: { id: bodyId }, select: { bodyNo: true, status: true, isActive: true } });
