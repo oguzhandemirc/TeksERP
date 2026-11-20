@@ -311,7 +311,6 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   // --- ÇEKİRDEK: kimlik · oturum · cihaz · baskı · sistem --------------------
   companyName: "cekirdek",
   demoModeEnabled: "cekirdek",
-  supportOwnTicketsOnlyEnabled: "cekirdek",
   patronBulutOlayGudumluEnabled: "cekirdek",
   devicePairingRequired: "cekirdek",
   deviceProofRequired: "cekirdek",

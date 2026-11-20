@@ -44,7 +44,6 @@ const CAP_LABEL: Record<string, string> = {
   "settings:workstation": "Bu bilgisayarın donanım ayarlarını değiştirebilir",
   "system:backups": "Yedek alabilir",
   "license:manage": "Lisansı etkinleştirip taşıyabilir, proxy ayarlayabilir",
-  "support:create": "Satıcıya destek talebi açabilir",
   // Depo mal kabul + ön muhasebe (2026-09-01) — kutunun yanında NE yapabildiği
   // yazmazsa yönetici atama ekranında ham kodu okur.
   "goods-receipt:write": "Mal kabul fişi açıp düzenleyebilir",

@@ -5,7 +5,7 @@
 //   §2 statik: göçün kolon listesi = koddaki `SENDER_UPDATE_COLUMNS` (gönderici yalnız bunları yazar)
 //   §3 yetki ızgarası (üyelikten gelenler dahil): HER tablo × HER tablo yetkisi (türler sunucu kataloğundan) · her
 //      kolon UPDATE'i · her dizi — beklenen TAM küme dışında hiçbir şey
-//   §4 canlı: rolün bağlantısı `bildirim`i okur, durum kolonunu günceller; kurulum/destek/göç tablosu okuma, satır
+//   §4 canlı: rolün bağlantısı `bildirim`i okur, durum kolonunu günceller; kurulum/taşıma/göç tablosu okuma, satır
 //      ekleme/silme, gövde yazma, TRUNCATE, dizi, tablo yaratma → 42501
 //   §5 girişi açan yol (`enableSenderLogin` / `role-cli`): parola stdin'den, SCRAM istemcide (sunucu düz parola
 //      görmez; kayıtlı doğrulayıcı SCRAM), biçimsiz parola ve üye olmayan rol RED, parola döndürme eskisini düşürür
@@ -18,7 +18,7 @@
 //    o yetkiyi adıyla bulur — ölçüm kör olsaydı giriş açılırdı · §7'nin on bir sondası adıyla · §7k geri alınınca TAM küme
 //    (kör RED değil) · §7l açılış kapısı temizde GEÇER.
 // NEGATİF SONDA (DB'de GRANT/REVOKE ya da dosya DIŞI cp + shasum ile geri alındı): R1 role `govde` UPDATE +
-//   `destek_talebi` SELECT verildi → §3a ❌ (gönderici rolü de açılmadı) · R2 ızgara `kurulum`u atlar → §5d ❌ ·
+//   `tasima_talebi` SELECT verildi → §3a ❌ (gönderici rolü de açılmadı) · R2 ızgara `kurulum`u atlar → §5d ❌ ·
 //   R4 SCRAM anahtarları yer değiştirir → giriş 28P01 ❌ · R5 göçün rol bölümü koşulsuz CREATE ROLE → §6a ❌ · R6 eski
 //   sender-role + sender-db (yalnız ızgara) → §7'nin on iki satırı ❌ (giriş AÇILDI, açılış kapısı GEÇTİ).
 // Koşum: npx tsx scripts/test_bildirim_rolu.ts   (yalnız *_test DB)
@@ -103,14 +103,14 @@ async function main(): Promise<void> {
       kontrol("§4a bildirim okunur, durum kolonları güncellenir", izinli.every((x) => x === "İZİNLİ"), izinli.join(","));
       const yasak = {
         kurulum: await yetkiHatasi(c, `SELECT count(*) FROM "kurulum"`),
-        destek: await yetkiHatasi(c, `SELECT "aciklama" FROM "destek_talebi" LIMIT 1`),
+        tasima: await yetkiHatasi(c, `SELECT count(*) FROM "tasima_talebi"`),
         goc: await yetkiHatasi(c, `SELECT count(*) FROM "_prisma_migrations"`),
         ekle: await yetkiHatasi(c, `INSERT INTO "bildirim" ("id","olay","kanal","tekillikAnahtari","govde","updatedAt") VALUES (gen_random_uuid(),'DENEME','EPOSTA','DENEME:x','{"portalYolu":"/"}',now())`),
         govde: await yetkiHatasi(c, `UPDATE "bildirim" SET "govde" = '{}' WHERE false`),
         olay: await yetkiHatasi(c, `UPDATE "bildirim" SET "olay" = 'DENEME' WHERE false`),
         sil: await yetkiHatasi(c, `DELETE FROM "bildirim" WHERE false`),
         bosalt: await yetkiHatasi(c, `TRUNCATE "bildirim"`),
-        dizi: await yetkiHatasi(c, `SELECT nextval('destek_talep_no_seq')`),
+        dizi: await yetkiHatasi(c, `SELECT nextval('gecici_acilis_kodu_no_seq')`),
         tablo: await yetkiHatasi(c, `CREATE TABLE "bekci_yasak" (x int)`),
       };
       kontrol("§4b başka tablo · ekleme · silme · gövde/olay yazımı · TRUNCATE · dizi · tablo yaratma → 42501", Object.values(yasak).every((x) => x === "42501"), JSON.stringify(yasak));

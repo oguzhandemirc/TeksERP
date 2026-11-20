@@ -11,7 +11,7 @@ import { cloudEntitlementUntil, cloudRetentionMonths, CLOUD_MODULE_KEY } from ".
 import { computeSanctionState } from "./lease.service";
 
 export { CLOUD_MODULE_KEY };
-/** İç API'den çalınabilen zil konuları — lisans/güncelleme/destek zili yalnız satıcının kendi eylemlerinden. */
+/** İç API'den çalınabilen zil konuları — lisans/güncelleme zili yalnız satıcının kendi eylemlerinden. */
 export const INTERNAL_DOORBELL_TOPICS = ["gelen-kutusu", "rapor", "ozet"] as const satisfies readonly DoorbellTopic[];
 
 export const InternalInstallationSchema = z.strictObject({

@@ -373,6 +373,7 @@ console.log("\n§9 — Tırnaklı ETİKET ADI koddan mı (§9a kısa ad · §9b 
     { etiket: "Yurtiçi (sipariş yönü)", sinif: "EMEKLI", gerekce: "Eski Sipariş/İptal Karnesi yön seçicisi (DestinationSelect); 0e3bf2ede eski sayfayı emekli etti." },
     { etiket: "İhracat (sipariş yönü)", sinif: "EMEKLI", gerekce: "Eski Sipariş/İptal Karnesi yön seçicisi (DestinationSelect); 0e3bf2ede eski sayfayı emekli etti." },
     { etiket: "Müşteriye (m)", sinif: "EMEKLI", gerekce: "Eski Fasoncu Karnesi Excel kolonu (Subcontract/scorecard.ts); 83de0c735 eski raporları panelden kaldırdı." },
+    { etiket: "Destek Talepleri", sinif: "EMEKLI", gerekce: "supportOwnTicketsOnlyEnabled ayar kategorisi; eski destek talebi sistemi (3d-2) 2026-11-20'de söküldü." },
   ];
 
   let dosyaSayisi = 0;
@@ -466,6 +467,7 @@ console.log("\n§9 — Tırnaklı ETİKET ADI koddan mı (§9a kısa ad · §9b 
       { alinti: "Tablet hızlı terbiye iş emri: yalnız kendi başlattıklarını düzenler", gerekce: "K20 (2026-11-03) — ayar başlığı artık `${TERIM.terbiyeIsEmri.tekilKucuk}` şablonu; dokuma açıkken birebir bu metin." },
       { alinti: "İş emri parti kodunu otomatik üret", gerekce: "K20 (2026-11-03) — eski sürüm notu; başlık `${TERIM.terbiyeIsEmri.cumleBasi.yalin} parti kodunu otomatik üret` şablonu." },
       { alinti: "Bu iş emrinde üretim başladı — iptal panelden yapılır", gerekce: "Ad değişikliği 2026-10-11 (Terbiye İş Emri) — eski sürüm notu; tablet metni artık \"Bu terbiye iş emrinde üretim başladı\"." },
+      { alinti: "Destek talepleri: herkes yalnız kendininkini görür (yönetici hepsini)", gerekce: "Eski destek talebi sistemi (3d-2) 2026-11-20'de söküldü; ayar (supportOwnTicketsOnlyEnabled) koddan kalktı, yayımlanmış not donuk." },
     ];
     const govdeSade = sadeles(govde);
     const uzunAdaylar = new Map();

@@ -94,18 +94,6 @@ export async function readWorkOrderQuickOwnOnlyEnabled(
   return asBoolean(setting?.value);
 }
 
-/** Destek talepleri yalnız sahibine mi görünür? Default false (bugün: herkese). */
-export async function readSupportOwnTicketsOnlyEnabled(
-  tx?: Pick<typeof prisma, "systemSetting">,
-): Promise<boolean> {
-  const client = tx ?? prisma;
-  const setting = await client.systemSetting.findUnique({
-    where: { key: SETTING_KEYS.SUPPORT_OWN_TICKETS_ONLY_ENABLED },
-    select: { value: true },
-  });
-  return asBoolean(setting?.value);
-}
-
 export async function readKk1DuplicateGuardEnabled(
   tx?: Pick<typeof prisma, "systemSetting">,
 ): Promise<boolean> {

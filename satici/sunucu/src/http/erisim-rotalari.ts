@@ -116,12 +116,6 @@ export const ERISIM_PORTAL_ROTALARI: ReadonlySet<string> = new Set([
   "GET /yayincilar",
   "POST /yayincilar", // kayıt güven kökü ekler — izni yalnız yönetici rolünde
   "POST /yayincilar/:id/pasif",
-  // destek kutusu
-  "GET /destek",
-  "GET /destek/:id",
-  "GET /destek/:id/ek",
-  "POST /destek/:id/yanitla",
-  "POST /destek/:id/kapat",
   // hata raporları — müşteri onaylı, kişisel verisiz grup özetleri (salt-okuma)
   "GET /hata-raporlari",
   "GET /hata-raporlari/:id",

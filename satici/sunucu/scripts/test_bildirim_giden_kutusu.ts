@@ -2,24 +2,24 @@
 // BİLDİRİM GİDEN KUTUSU — satıcı olayı kendi tx'inde bildirim satırı yazar (satıcı dışarı BAĞLANMAZ).
 //   §0 STATİK: `enqueueNotificationTx` her çağrı yerinde ilk argüman `tx` (tx dışı yazım yok) · gövde
 //      allowlist'i katalog = göç seddi (sıra dahil) · enum aynası · kurucu fazla anahtarı ATAR
-//   §1 AYNI TX: kurulum hedefli BEFORE INSERT tetikleyicisi bildirim yazımını düşürünce OLAY DA YOK (destek ·
-//      kopya şüphesi · kopya kira reddi · taşıma · DR · planlı eylem · taksit gecikmesi · deneme); tetikleyici
+//   §1 AYNI TX: kurulum hedefli BEFORE INSERT tetikleyicisi bildirim yazımını düşürünce OLAY DA YOK (kopya
+//      şüphesi · kopya kira reddi · taşıma · DR · planlı eylem · taksit gecikmesi · deneme); tetikleyici
 //      kalkınca olay + kanal başına bir satır (EPOSTA + TELEGRAM)
-//   §2 TEKİLLİK: aynı olayın tekrarı (aynı talepId · sürmekte olan uyarı · aynı anahtar · aynı işlem kimliği ·
+//   §2 TEKİLLİK: aynı olayın tekrarı (sürmekte olan uyarı · aynı anahtar · aynı işlem kimliği ·
 //      DR tekrarı · zamanlayıcının ikinci turu) yeni satır doğurmaz
 //   §3 ALLOWLIST: kanarya metinler (açıklama · açan · gerekçe · sebep · mesaj · taksit açıklaması) hiçbir gövdede
 //      yok; gövde anahtarları = allowlist; DB seddi fazla anahtar · dış bağlantı · uzun değer · ham hata metni REDDEDER
 //   §4 GÖVDE SINIRI (bildirim iş olayını ASLA düşürmez): kodun ölçüsü = PG'nin octet_length(govde::text)'i · JSON.stringify'a
-//      göre tam 2000 bayt (PG'de 2017) gövde kısaltılır · 3 baytlık 200 karakterli adlar + eşsiz vekilli konu → destek
-//      talebi yine açılır, gövde ≤ 2000 · eşsiz vekil U+FFFD olur
+//      göre tam 2000 bayt (PG'de 2017) gövde kısaltılır · 3 baytlık 200 karakterli adlar + eşsiz vekilli konu → kurucu
+//      (`enqueueNotificationTx`) satırı yazar, gövde ≤ 2000 · eşsiz vekil U+FFFD olur
 //   §5 DENEME HIZI: kullanıcı başına 5 dk'da bir — yeni işlem kimliği 429 HIZ_SINIRI (satır yok, işlem kimliği yok) ·
 //      aynı kimliğin tekrarı yanıtı alır · başka kullanıcı etkilenmez · pencere dolunca / yazım düşünce yer iade
 // ⭐ KALICI SONDA ✓K (her koşumda): §0a çözümleyici sentetik `enqueueNotificationTx(prisma, …)`i yakalar ·
 //    §1'in her maddesi önce DÜŞÜRÜLMÜŞ yazımla ölçülür (tetikleyici kör olsaydı olay satırı doğardı).
-// NEGATİF SONDA (dosya DIŞI, cp + shasum ile geri alındı): N1 destek bildirimi tx SONRASI ayrı tx'te (ilk argüman
-//   yine `tx` — §0a göremez) → §1a/§1a' ❌ · N2 `skipDuplicates` yok → §2f ❌ · N3 kurucu girdiyi yayar → §0d ❌ ·
-//   N4 açıklama konuya eklenir → §1a'/§3a ❌ · N5 kira reddi bildirimsiz → §1h/§1h' ❌ · N6 eski kurucu (JSON.stringify
-//   ölçüsü, vekil normalleştirmesi yok) → §0f/§4a/§4b/§4c/§4d ❌ (destek talebi 500) · N7 deneme rotası sınırsız → §5a ❌ ·
+// NEGATİF SONDA (dosya DIŞI, cp + shasum ile geri alındı): N1 taşıma bildirimi tx SONRASI ayrı tx'te (ilk argüman
+//   yine `tx` — §0a göremez) → §1c/§1c' ❌ · N2 `skipDuplicates` yok → §2f ❌ · N3 kurucu girdiyi yayar → §0d ❌ ·
+//   N4 gerekçe gövdeye eklenir → §3a ❌ · N5 kira reddi bildirimsiz → §1h/§1h' ❌ · N6 eski kurucu (JSON.stringify
+//   ölçüsü, vekil normalleştirmesi yok) → §0f/§4a/§4b/§4c/§4d ❌ (kurucu yazımı 500) · N7 deneme rotası sınırsız → §5a ❌ ·
 //   N8 iade kaldırıldı → §1f'/§2d/§5b ❌.
 // Koşum: npx tsx scripts/test_bildirim_giden_kutusu.ts   (yalnız *_test DB)
 // =============================================================================
@@ -31,7 +31,6 @@ import { ENDPOINTS, digestFingerprint } from "../src/lisans-protokol";
 import { HAM_PARMAK_IZI, kurulumAnahtariUret, type TestAnahtari } from "../../../Teks-Erp/scripts/lib/lisans-fikstur";
 import { BODY_TOTAL_MAX_BYTES, BODY_VALUE_MAX, NOTIFICATION_BODY_KEYS, NOTIFICATION_CHANNELS, NOTIFICATION_EVENTS, NOTIFICATION_STATES, notificationBody, pgJsonbTextBytes, type NotificationBody } from "../src/notifications/catalog";
 import {
-  ORTAM,
   ORTAM_TASIMA,
   SATICI_KOKU,
   anahtarOrtamiKur,
@@ -112,7 +111,7 @@ function statik(): NotificationBody[] {
     JSON.stringify(enumValues(schema, "BildirimKanali")) === JSON.stringify([...NOTIFICATION_CHANNELS]) &&
     JSON.stringify(enumValues(schema, "BildirimDurumu")) === JSON.stringify([...NOTIFICATION_STATES]);
   kontrol("§0c enum aynası: olay · kanal · durum = katalog", aynali);
-  const fazla = notificationBody({ portalYolu: "/destek/x", konu: "a\u0000b\nc", ...({ aciklama: "KANARYA", saglik: { disk: 1 } } as object) });
+  const fazla = notificationBody({ portalYolu: "/kurulumlar/x", konu: "a\u0000b\nc", ...({ aciklama: "KANARYA", saglik: { disk: 1 } } as object) });
   kontrol("§0d kurucu yalnız allowlist anahtarını yazar, kontrol karakterini boşluğa indirir", JSON.stringify(Object.keys(fazla)) === JSON.stringify([...NOTIFICATION_BODY_KEYS]) && fazla.konu === "a b c");
   let yolRed = false;
   try {
@@ -128,7 +127,7 @@ function statik(): NotificationBody[] {
   for (let i = 0; i < 400; i++) {
     const m = () => (Math.random() < 0.1 ? null : rastgeleMetin(Math.floor(Math.random() * 420)));
     try {
-      const b = notificationBody({ portalYolu: "/destek/x", musteri: m(), tesis: m(), kurulum: m(), lisansNo: m(), sinif: m(), konu: m(), referans: m(), tarih: i % 9 === 0 ? new Date(Number.NaN) : new Date() });
+      const b = notificationBody({ portalYolu: "/kurulumlar/x", musteri: m(), tesis: m(), kurulum: m(), lisansNo: m(), sinif: m(), konu: m(), referans: m(), tarih: i % 9 === 0 ? new Date(Number.NaN) : new Date() });
       ornekler.push(b);
       if (pgJsonbTextBytes(b) > BODY_TOTAL_MAX_BYTES) bulgu.asan++;
       for (const v of Object.values(b)) {
@@ -197,11 +196,6 @@ interface Ortam {
 
 const KANARYA = `KANARYA-${randomUUID().slice(0, 8)}`;
 
-function destekGovdesi(o: Ortam, talepId: string) {
-  const y = yoklamaGovdesi({ sonKiraId: null, parmakIzi: o.fpSahip });
-  return { v: 1, talepId, konu: "Tartı ekranı donuyor", aciklama: `Açıklama ${KANARYA}-ACIKLAMA`, acan: `Ayşe ${KANARYA}-ACAN`, panelSurum: "1.3.2", ek: null, saglik: y.saglik, ortam: ORTAM };
-}
-
 async function yokla(o: Ortam, parmakIzi: Ortam["fpSahip"]) {
   const y = await imzaliPost(o.genel, ENDPOINTS.POLL, { kurulumId: o.a.kurulumId, amac: "yokla", anahtar: o.aAnahtar, govde: yoklamaGovdesi({ sonKiraId: o.sonKira, parmakIzi }) });
   if (y.status === 200) o.sonKira = kiraIdOf(y.json);
@@ -242,16 +236,13 @@ async function dene<T>(f: () => Promise<T>): Promise<T | Error> {
 }
 
 /** §1a–§1g: yazım düşürülünce olay YOK; tetikleyici kalkınca olay + iki satır. */
-async function ayniTx(o: Ortam): Promise<{ talepId: string; tasiyan: TestAnahtari; token: string; planli: string; kalem: string }> {
+async function ayniTx(o: Ortam): Promise<{ tasiyan: TestAnahtari; token: string; planli: string; kalem: string }> {
   const { prisma } = o;
-  const talepId = randomUUID();
   const tasiyan = kurulumAnahtariUret();
   const token = randomUUID();
   const s = await import("../src/services/sanction.service");
   console.log("\n§1 aynı tx — önce bildirim yazımı DÜŞÜRÜLÜR");
   await patlat(prisma, { kurulumlar: [o.a.kurulumDbId], anahtarlar: [`DENEME:${token}`] });
-  const d0 = await imzaliPost(o.genel, ENDPOINTS.SUPPORT, { kurulumId: o.a.kurulumId, amac: "destek", anahtar: o.aAnahtar, govde: destekGovdesi(o, talepId) });
-  kontrol("§1a destek: bildirim düşünce talep de YOK", d0.status >= 500 && (await prisma.destekTalebi.count({ where: { kurulumId: o.a.kurulumDbId } })) === 0, `${d0.status}`);
   const k0 = await yokla(o, o.fpYabanci);
   kontrol("§1b kopya şüphesi: bildirim düşünce uyarı da YOK (yoklama geri alındı)", k0.status >= 500 && (await prisma.kopyaUyarisi.count({ where: { kurulumId: o.a.kurulumDbId } })) === 0, `${k0.status}`);
   const t0 = await tasi(o, tasiyan);
@@ -268,18 +259,13 @@ async function ayniTx(o: Ortam): Promise<{ talepId: string; tasiyan: TestAnahtar
   const r0 = await devral(o);
   kontrol("§1g DR: bildirim düşünce ana kurulum ETKİN kalır", r0.status >= 500 && (await prisma.kurulum.findUniqueOrThrow({ where: { id: o.a.kurulumDbId } })).durum === "ETKIN", `${r0.status}`);
   await sustur(prisma);
-  return { talepId, tasiyan, token, planli, kalem };
+  return { tasiyan, token, planli, kalem };
 }
 
 async function ayniTxSonra(o: Ortam, x: Awaited<ReturnType<typeof ayniTx>>): Promise<void> {
   const { prisma } = o;
   const s = await import("../src/services/sanction.service");
   console.log("\n§1' aynı tx — tetikleyici kalkınca olay + kanal başına satır");
-  const d1 = await imzaliPost(o.genel, ENDPOINTS.SUPPORT, { kurulumId: o.a.kurulumId, amac: "destek", anahtar: o.aAnahtar, govde: destekGovdesi(o, x.talepId) });
-  const talep = await prisma.destekTalebi.findFirst({ where: { kurulumId: o.a.kurulumDbId } });
-  const dRows = await satirlar(prisma, "DESTEK_TALEBI", { kurulumId: o.a.kurulumDbId });
-  const govde = dRows[0]?.govde as Record<string, unknown> | undefined;
-  kontrol("§1a' destek: talep + iki kanal satırı (konu + talep no + portal yolu)", d1.status === 200 && !!talep && ikiKanal(dRows) && dRows.every((r) => r.ilgiliKayit === talep.id) && govde?.konu === "Tartı ekranı donuyor" && govde?.referans === talep.talepNo && govde?.portalYolu === `/destek/${talep.id}`, `${d1.status} ${dRows.length}`);
   const k1 = await yokla(o, o.fpYabanci);
   const uyari = await prisma.kopyaUyarisi.findFirst({ where: { kurulumId: o.a.kurulumDbId, tur: "PARMAK_IZI_UYUSMAZ" } });
   const kRows = await satirlar(prisma, "KOPYA_SUPHESI", { kurulumId: o.a.kurulumDbId });
@@ -315,9 +301,7 @@ async function tekillik(o: Ortam, x: Awaited<ReturnType<typeof ayniTx>>): Promis
   const { lockInstallation } = await import("../src/lib/locks");
   console.log("\n§2 tekillik");
   const say = (olay: (typeof NOTIFICATION_EVENTS)[number]) => prisma.bildirim.count({ where: { olay, kurulumId: o.a.kurulumDbId } });
-  const once = { d: await say("DESTEK_TALEBI"), k: await say("KOPYA_SUPHESI"), r: await say("KOPYA_KIRA_REDDI"), t: await say("TASIMA_TALEBI") };
-  const d2 = await imzaliPost(o.genel, ENDPOINTS.SUPPORT, { kurulumId: o.a.kurulumId, amac: "destek", anahtar: o.aAnahtar, govde: destekGovdesi(o, x.talepId) });
-  kontrol("§2a aynı talepId tekrar: aynı talep, yeni satır YOK", d2.status === 200 && (await say("DESTEK_TALEBI")) === once.d);
+  const once = { k: await say("KOPYA_SUPHESI"), r: await say("KOPYA_KIRA_REDDI"), t: await say("TASIMA_TALEBI") };
   const k2 = await yokla(o, o.fpYabanci);
   kontrol("§2b sürmekte olan uyarının tekrarı (ret dahil) yeni satır DOĞURMAZ", k2.status === 403 && (await say("KOPYA_SUPHESI")) === once.k && (await say("KOPYA_KIRA_REDDI")) === once.r, `${k2.status}`);
   const t2 = await tasi(o, x.tasiyan);
@@ -346,7 +330,7 @@ async function allowlist(o: Ortam, token: string): Promise<void> {
   console.log("\n§3 allowlist");
   const rows = await prisma.bildirim.findMany({ where: { OR: [{ kurulumId: o.a.kurulumDbId }, { tekillikAnahtari: `DENEME:${token}` }] } });
   const metin = JSON.stringify(rows.map((r) => r.govde));
-  kontrol("§3a kanarya (açıklama · açan · gerekçe · DR gerekçesi · sebep · mesaj · taksit açıklaması) hiçbir gövdede YOK", rows.length >= 16 && !metin.includes(KANARYA), `${rows.length} satır`);
+  kontrol("§3a kanarya (gerekçe · DR gerekçesi · sebep · mesaj · taksit açıklaması) hiçbir gövdede YOK", rows.length >= 14 && !metin.includes(KANARYA), `${rows.length} satır`);
   // jsonb anahtar sırasını korumaz (uzunluk + bayt sırası): küme karşılaştırılır.
   const beklenen = JSON.stringify([...NOTIFICATION_BODY_KEYS].sort());
   const anahtarlar = rows.every((r) => JSON.stringify(Object.keys(r.govde as object).sort()) === beklenen);
@@ -385,9 +369,9 @@ async function allowlist(o: Ortam, token: string): Promise<void> {
 
 /**
  * §4 gövde sınırı: kodun ölçüsü PG'ninkiyle aynı; JSON.stringify'a göre sınırdaki gövde (PG'de +17 bayt) kısaltılarak
- * yazılır; uzun çok baytlı adlar ve eşsiz vekilli konu İŞ OLAYINI DÜŞÜRMEZ (destek talebi yine açılır).
+ * yazılır; uzun çok baytlı adlar ve eşsiz vekilli konu yazımı DÜŞÜRMEZ (kurucu kısaltır).
  */
-async function govdeSiniri(o: Ortam, ornekler: readonly NotificationBody[], b: KurulumFiksturu, bAnahtar: TestAnahtari): Promise<void> {
+async function govdeSiniri(o: Ortam, ornekler: readonly NotificationBody[], b: KurulumFiksturu): Promise<void> {
   const { prisma } = o;
   console.log("\n§4 gövde sınırı — içerik iş olayını ASLA düşürmez");
   const olcum = await prisma
@@ -439,26 +423,26 @@ async function govdeSiniri(o: Ortam, ornekler: readonly NotificationBody[], b: K
   await prisma.musteri.update({ where: { id: b.musteriId }, data: { ad: uc(200) } });
   await prisma.tesis.update({ where: { id: k.tesisId }, data: { ad: uc(200) } });
   await prisma.kurulum.update({ where: { id: b.kurulumDbId }, data: { ad: uc(200) } });
+  // Kurucu yolu (`enqueueNotificationTx`): kurulum adları DB'den okunur, konu serbest metindir.
+  const { enqueueNotificationTx } = await import("../src/notifications/outbox");
   const destek = async (konu: string) => {
-    const talepId = randomUUID();
-    const y = yoklamaGovdesi({ sonKiraId: null, parmakIzi: o.fpSahip });
-    const r = await imzaliPost(o.genel, ENDPOINTS.SUPPORT, { kurulumId: b.kurulumId, amac: "destek", anahtar: bAnahtar, govde: { v: 1, talepId, konu, aciklama: "sınır", acan: "bekçi", panelSurum: "1.3.2", ek: null, saglik: y.saglik, ortam: ORTAM } });
-    const talep = await prisma.destekTalebi.findFirst({ where: { kurulumId: b.kurulumDbId, konu: { not: "" } }, orderBy: { createdAt: "desc" } });
-    const rows = await prisma.bildirim.findMany({ where: { olay: "DESTEK_TALEBI", kurulumId: b.kurulumDbId, ilgiliKayit: talep?.id ?? "00000000-0000-0000-0000-000000000000" } });
-    const boy = rows.length ? (await prisma.$queryRawUnsafe<{ n: number }[]>(`SELECT max(octet_length("govde"::text))::int AS n FROM "bildirim" WHERE "ilgiliKayit" = $1::uuid`, talep!.id))[0]!.n : -1;
-    return { status: r.status, kod: r.kod, rows, boy };
+    const ilgili = randomUUID();
+    const r = await dene(() => prisma.$transaction((tx) => enqueueNotificationTx(tx, { event: "DENEME", keyParts: ["sinir", ilgili], installationDbId: b.kurulumDbId, relatedId: ilgili, portalPath: "/bildirimler", konu })));
+    const rows = await prisma.bildirim.findMany({ where: { olay: "DENEME", kurulumId: b.kurulumDbId, ilgiliKayit: ilgili } });
+    const boy = rows.length ? (await prisma.$queryRawUnsafe<{ n: number }[]>(`SELECT max(octet_length("govde"::text))::int AS n FROM "bildirim" WHERE "ilgiliKayit" = $1::uuid`, ilgili))[0]!.n : -1;
+    return { status: r instanceof Error ? 500 : 200, kod: r instanceof Error ? r.message.split("\n").filter(Boolean).pop()?.slice(0, 80) : undefined, rows, boy };
   };
   const uzun = await destek(`${"€".repeat(199)}\ud800`);
   const g0 = uzun.rows[0]?.govde as Record<string, string | null> | undefined;
   kontrol(
-    "§4c ✓K 3 baytlık 200 karakterli adlar + eşsiz vekille biten 200 karakterlik konu: destek talebi AÇILIR, iki kanal satırı, gövde PG'de ≤ 2000, uzun alanlar '…' ile kısaltıldı",
+    "§4c ✓K 3 baytlık 200 karakterli adlar + eşsiz vekille biten 200 karakterlik konu: bildirim YAZILIR, iki kanal satırı, gövde PG'de ≤ 2000, uzun alanlar '…' ile kısaltıldı",
     uzun.status === 200 && ikiKanal(uzun.rows) && uzun.boy > 0 && uzun.boy <= 2000 && !!g0 && [g0.musteri, g0.tesis, g0.kurulum, g0.konu].every((v) => typeof v === "string" && v.endsWith("…")),
     `${uzun.status} ${uzun.kod ?? ""} · ${uzun.rows.length} satır · ${uzun.boy} bayt`,
   );
   const vekil = await destek("Tartı\ud800 ekranı \udc00donuyor");
   const g1 = vekil.rows[0]?.govde as Record<string, string | null> | undefined;
   kontrol(
-    "§4d eşsiz vekilli konu (kısa): destek talebi AÇILIR, konu U+FFFD ile yazılır",
+    "§4d eşsiz vekilli konu (kısa): bildirim YAZILIR, konu U+FFFD ile yazılır",
     vekil.status === 200 && ikiKanal(vekil.rows) && g1?.konu === "Tartı\ufffd ekranı \ufffddonuyor",
     `${vekil.status} ${vekil.kod ?? ""} · konu ${JSON.stringify(g1?.konu ?? null)}`,
   );
@@ -535,7 +519,7 @@ async function main(): Promise<void> {
     const b = await kurulumFiksturu(ctx);
     kurulumlar.push(b.kurulumDbId);
     await etkin(b, bAnahtar);
-    await govdeSiniri(o, ornekler, b, bAnahtar);
+    await govdeSiniri(o, ornekler, b);
     const ikinciKullanici = await portalKullaniciAc(ctx, "SATICI_YONETICI");
     kullanicilar.push(ikinciKullanici.id);
     const ikinciCerez = (await portalGiris(sunucu.portal, "/portal/api", ikinciKullanici)).cerez ?? "";

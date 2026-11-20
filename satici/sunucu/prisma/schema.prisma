@@ -403,7 +403,6 @@ model Kurulum {
   kopyaUyarilari         KopyaUyarisi[]
   taksitPlanlari         TaksitPlani[]
   ilkKurulumBaglantilari IndirmeBaglantisi[]
-  destekTalepleri        DestekTalebi[]
   bildirimler            Bildirim[]
   hakKokTalepleri        HakKokTalebi[]
   geciciKodlar           GeciciAcilisKodu[]
@@ -894,66 +893,6 @@ model KurulumKaydi {
   @@map("kurulum_kaydi")
 }
 
-// -----------------------------------------------------------------------------
-// DESTEK — fabrikanın panelinden açılan talepler (`POST /v1/destek`, kurulum imzalı).
-// Talep DURUM tablosudur; ne olduğu (açılış · yanıt · kapanış) `destek_olayi` DEFTERİNDEDİR.
-// -----------------------------------------------------------------------------
-
-enum DestekDurumu {
-  ACIK
-  YANITLANDI
-  KAPANDI
-}
-
-enum DestekOlayTuru {
-  ACILDI
-  YANIT
-  KAPATILDI
-}
-
-model DestekTalebi {
-  id            String       @id @default(uuid()) @db.Uuid
-  kurulumId     String       @db.Uuid
-  /// Fabrikanın yerel talep kimliği — (kurulum, talepId) tekrar gönderimde aynı talebi döndürür.
-  talepId       String       @db.Uuid
-  /// Doğuşta materyalize (`DST-000001`); sıra `destek_talep_no_seq`.
-  talepNo       String       @unique @db.VarChar(40)
-  konu          String       @db.VarChar(200)
-  aciklama      String
-  acan          String?      @db.VarChar(120)
-  panelSurum    String?      @db.VarChar(60)
-  ekTuru        String?      @db.VarChar(20)
-  ek            Bytes?
-  saglik        Json
-  ortam         Json
-  durum         DestekDurumu @default(ACIK)
-  kapanisZamani DateTime?    @db.Timestamptz
-  createdAt     DateTime     @default(now()) @db.Timestamptz
-  updatedAt     DateTime     @updatedAt @db.Timestamptz
-
-  kurulum Kurulum       @relation(fields: [kurulumId], references: [id])
-  olaylar DestekOlayi[]
-
-  @@unique([kurulumId, talepId])
-  @@index([durum, updatedAt])
-  @@index([kurulumId, updatedAt])
-  @@map("destek_talebi")
-}
-
-/// Destek DEFTERİ — açılış, satıcı yanıtı, kapanış satır olarak; satır değişmez, silinmez.
-model DestekOlayi {
-  id        String         @id @default(uuid()) @db.Uuid
-  talepId   String         @db.Uuid
-  tur       DestekOlayTuru
-  metin     String?
-  yapan     String         @db.VarChar(120)
-  createdAt DateTime       @default(now()) @db.Timestamptz
-
-  talep DestekTalebi @relation(fields: [talepId], references: [id])
-
-  @@index([talepId, createdAt])
-  @@map("destek_olayi")
-}
 
 /// HATA RAPORU grubu — müşteri onaylı, kişisel verisiz hata özeti (`POST /v1/hata-raporu`). TELEMETRİ:
 /// son görülmesinden saklama günü sonra budanır; hiçbir iş kararı ve sayı bu satırdan türemez.

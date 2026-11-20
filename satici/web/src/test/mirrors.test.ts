@@ -568,8 +568,8 @@ describe("güncelleme dalgası (F1b) aynası — services/update-wave.service.ts
 });
 
 describe("arayüzün çağırdığı her uç sunucuda var", () => {
-  // Satıcı tablosu başka dosyadan yayılan parçaları da taşır (`...SUPPORT_PORTAL_ROUTES`): her yayılan tablo bu listede.
-  const VENDOR_ROUTE_FILES = ["http/portal-routes.ts", "http/key-routes.ts", "http/hardware-routes.ts", "http/distribution-routes.ts", "http/support-routes.ts", "http/error-report-routes.ts", "http/notification-routes.ts", "http/update-wave-routes.ts"];
+  // Satıcı tablosu başka dosyadan yayılan parçaları da taşır (`...ERROR_REPORT_PORTAL_ROUTES`): her yayılan tablo bu listede.
+  const VENDOR_ROUTE_FILES = ["http/portal-routes.ts", "http/key-routes.ts", "http/hardware-routes.ts", "http/distribution-routes.ts", "http/error-report-routes.ts", "http/notification-routes.ts", "http/update-wave-routes.ts"];
   const vendor = [...VENDOR_ROUTE_FILES.flatMap(serverRoutes), ...sessionRoutes()];
   const DEALER_ROUTE_FILES = ["http/dealer-routes.ts", "http/dealer-transfer-routes.ts"];
   const dealer = [...DEALER_ROUTE_FILES.flatMap(serverRoutes), ...sessionRoutes()];

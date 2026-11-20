@@ -237,16 +237,6 @@ async function main(): Promise<void> {
       String(dosya.veri.dosyaAdi),
     );
 
-    // Destek kutusu (3d-2): talep fabrikadan `/v1/destek` ile doğar — burada fikstür olarak DB'den.
-    const talep = await prisma.destekTalebi.create({
-      data: { kurulumId: kId, talepId: randomUUID(), talepNo: `DST-U${randomUUID().slice(0, 8)}`, konu: "uç kapsamı", aciklama: "uç kapsamı",
-        ekTuru: "image/png", ek: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), saglik: {}, ortam: {} },
-    });
-    await s("get", "/destek", "/destek?durum=ACIK", 200);
-    await s("get", "/destek/:id", `/destek/${talep.id}`, 200);
-    await s("get", "/destek/:id/ek", `/destek/${talep.id}/ek`, 200);
-    await s("post", "/destek/:id/yanitla", `/destek/${talep.id}/yanitla`, 200, { metin: "incelendi" });
-    await s("post", "/destek/:id/kapat", `/destek/${talep.id}/kapat`, 200, { not: null });
     // Hata raporları: gruplar fabrikadan `/v1/hata-raporu` ile doğar — uç kapsamı için okuma yeter.
     await s("get", "/hata-raporlari", "/hata-raporlari", 200);
     await s("get", "/hata-raporlari/:id", `/hata-raporlari/${kId}?kaynak=sunucu`, 200);

@@ -1,6 +1,6 @@
 // =============================================================================
 // Destek (Etkili Destek talepleri) — fabrika backend'inin `/api/etkili-destek/*` uçları
-// (`/api/destek` eski satıcı destek sisteminindir; karıştırılmaz).
+// (`/api/destek` eski satıcı destek sisteminindi, 2026-11-20 söküldü).
 // =============================================================================
 // Sözleşme: docs/ops/DESTEK-ENTEGRASYONU-BULUT.md (fabrika sözleşmesi backend dilimindedir). Uygulama destek merkezine HİÇ
 // gitmez ve anahtar görmez; yalnız kendi backend'ine mevcut oturumla konuşur.

@@ -507,11 +507,6 @@ export async function temizleKurulumlar(kurulumDbIdleri: readonly string[], kidl
     // Donanım / zayıf tanıma onay talepleri (K8): denetim ayak izi talep id'siyle.
     for (const d of await tx.donanimTalebi.findMany({ where: w, select: { id: true } })) denetimIdleri.add(d.id);
     await tx.donanimTalebi.deleteMany({ where: w });
-    // Destek talepleri (3d-2): defter satırları önce, talep sonra; denetim ayak izi talep id'siyle.
-    const talepler = await tx.destekTalebi.findMany({ where: w, select: { id: true } });
-    for (const t of talepler) denetimIdleri.add(t.id);
-    await tx.destekOlayi.deleteMany({ where: { talepId: { in: talepler.map((t) => t.id) } } });
-    await tx.destekTalebi.deleteMany({ where: w });
     // Bildirim giden kutusu (kuruluma FK'lı; iletim kaydı, defter değil). Kimliksiz doğup sonra bu kuruluma
     // bağlanan taşıma talebinin bildirimi kurulumsuzdur → talep kimliğiyle.
     await tx.bildirim.deleteMany({ where: { OR: [w, { ilgiliKayit: { in: tasimaIdleri } }] } });

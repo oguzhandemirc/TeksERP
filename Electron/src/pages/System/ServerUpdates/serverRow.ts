@@ -6,7 +6,7 @@ import { decisionText, progressPercent } from "./labels";
 // Güncellemeler sayfasının "Sunucu" satırı — durum TEK yerde türetilir. Girdi özet (`/ozet`) ya da tam durum
 // (`/durum`, özetin üst kümesi); panel karar üretmez, güncelleyicinin yazdığını tek cümleye indirir.
 
-/** Sorunun tek eylemi: durumu yeniden oku · destek iste (eylem yoksa null). */
+/** Sorunun tek eylemi: durumu yeniden oku · destek (bugün düğmesiz; eski talep ekranı söküldü) (eylem yoksa null). */
 export type ProblemAction = "retry" | "support" | null;
 
 export interface ServerProblem {

@@ -17,7 +17,6 @@ import {
 } from "./belgeler";
 import { UpdateReportSchema } from "./guncelleme";
 import { FINGERPRINT_FACTORS } from "./parmak-izi";
-import { isPlainObject } from "./ortak";
 
 export const ENDPOINTS = {
   ACTIVATE: "/v1/etkinlestir",
@@ -26,7 +25,6 @@ export const ENDPOINTS = {
   OFFLINE: "/v1/cevrimdisi",
   TRANSFER: "/v1/tasima",
   DR_TAKEOVER: "/v1/dr-devral",
-  SUPPORT: "/v1/destek",
   /** Donanım değişikliği bildirimi (K8) — gövde `donanim.ts`. */
   HARDWARE: "/v1/donanim",
   /** Müşteri onaylı hata raporu — gövde `hata-raporu.ts`. */
@@ -48,7 +46,7 @@ export const POLL_DEFAULT_MINUTES = 60;
 export const SIGNED_SKEW_WARN_SECONDS = 300;
 export const DOORBELL_HEARTBEAT_SECONDS = 25;
 export const DOORBELL_EVENT_NAME = "zil";
-export const DOORBELL_TOPICS = ["lisans", "gelen-kutusu", "ozet", "rapor", "guncelleme", "destek"] as const;
+export const DOORBELL_TOPICS = ["lisans", "gelen-kutusu", "ozet", "rapor", "guncelleme"] as const;
 export const DoorbellEventSchema = z.object({ konu: z.enum(DOORBELL_TOPICS) });
 
 /** Crockford base32: I/L/O/U yok — elle yazımda karışmaz. */
@@ -347,55 +345,3 @@ export type PollRequest = z.infer<typeof PollRequestSchema>;
 export type LicenseResponse = z.infer<typeof LicenseResponseSchema>;
 export type HealthSummary = z.infer<typeof HealthSummarySchema>;
 
-// ── Destek talebi (3d-2) ──────────────────────────────────────────────────────
-export const SUPPORT_SUBJECT_MAX = 200;
-export const SUPPORT_TEXT_MAX = 5000;
-/** Küçük ek (ekran görüntüsü) üst sınırı — ikili bayt; büyük ek `/y/<belirteç>` yükleme bağlantısıyla gider. */
-export const SUPPORT_ATTACHMENT_MAX_BYTES = 1024 * 1024;
-export const SUPPORT_ATTACHMENT_TYPES = ["image/png", "image/jpeg"] as const;
-/** Satıcıdaki talep durumu; fabrikanın yerel kopyası bunun aynasıdır (+ yerel `GONDERILMEDI`). */
-export const SUPPORT_TICKET_STATES = ["ACIK", "YANITLANDI", "KAPANDI"] as const;
-export type SupportTicketState = (typeof SUPPORT_TICKET_STATES)[number];
-const Base64Schema = z.string().regex(/^[A-Za-z0-9+/]*={0,2}$/).max(Math.ceil(SUPPORT_ATTACHMENT_MAX_BYTES / 3) * 4);
-
-/** `POST /v1/destek` (amaç `destek`) — `talepId` fabrikanın yerel talep kimliğidir: tekrar gönderim aynı talebi döner. */
-export const SupportRequestSchema = z.strictObject({
-  v: VersionField,
-  talepId: UuidSchema,
-  konu: z.string().trim().min(1).max(SUPPORT_SUBJECT_MAX),
-  aciklama: z.string().trim().min(1).max(SUPPORT_TEXT_MAX),
-  acan: z.string().trim().min(1).max(120).nullable(),
-  panelSurum: VersionTextSchema.nullable(),
-  ek: z.strictObject({ tur: z.enum(SUPPORT_ATTACHMENT_TYPES), veri: Base64Schema }).nullable(),
-  saglik: HealthSummarySchema,
-  ortam: EnvironmentSchema,
-});
-export type SupportRequest = z.infer<typeof SupportRequestSchema>;
-
-export const SupportResponseSchema = z.object({
-  v: VersionField,
-  talepId: UuidSchema,
-  talepNo: z.string().min(1).max(40),
-  durum: z.enum(SUPPORT_TICKET_STATES),
-});
-
-/** Yoklama YANITINDAKİ destek güncellemesi (gevşek): kurulumun son 30 günde hareketli talepleri + satıcı yanıtları. */
-export const SUPPORT_UPDATE_LIMIT = 20;
-export const SUPPORT_REPLY_LIMIT = 50;
-export const SupportTicketUpdateSchema = z.object({
-  talepId: UuidSchema,
-  talepNo: z.string().min(1).max(40),
-  durum: z.enum(SUPPORT_TICKET_STATES),
-  guncellendi: IsoTimeSchema,
-  yanitlar: z
-    .array(z.object({ yanitId: UuidSchema, metin: z.string().min(1).max(SUPPORT_TEXT_MAX), zaman: IsoTimeSchema }))
-    .max(SUPPORT_REPLY_LIMIT),
-});
-export type SupportTicketUpdate = z.infer<typeof SupportTicketUpdateSchema>;
-/** Yanıttan destek alanını okur; biçimsiz alan kirayı DÜŞÜRMEZ (yok sayılır). */
-export const SupportUpdateListSchema = z.array(SupportTicketUpdateSchema).max(SUPPORT_UPDATE_LIMIT);
-export function readSupportUpdates(raw: unknown): SupportTicketUpdate[] {
-  if (!isPlainObject(raw)) return [];
-  const parsed = SupportUpdateListSchema.safeParse(raw["destek"]);
-  return parsed.success ? parsed.data : [];
-}

@@ -722,8 +722,6 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
   { model: "RollCustomerCode", sinif: "DURUM", yari: true,
     gerekce: "müşteriye tanımlı top barkodu eşlemesi (D4-F1): kimlik/okutma anahtarı, defter değil — silinse raporlanan hiçbir sayı değişmez. Yine de hard delete yok: değiştirme = eski satıra `revokedAt` damgası + yeni satır (kısmi unique `revokedAt IS NULL`), yazar `services/roll-customer-code.service.ts`" },
   { model: "UserRecoveryCode", sinif: "DURUM", gerekce: "tek kullanımlık kurtarma kodu; tüketimi `usedAt` ile işaretlenir, defter değil" },
-  { model: "SupportTicketReply", sinif: "DURUM",
-    gerekce: "satıcı destek yanıtının YEREL ÖNBELLEK kopyası (3d-2): \"ne oldu\"nun sahibi satıcının `destek_olayi` defteridir (tetikleyiciyle değişmez), talep satıcıda kapanır; yerelde iş kararı ve raporlanan sayı yok, satır `vendorReplyId` ile tekil, yalnız yoklama eşitlemesi ekler (`services/support-sync.service.ts`)" },
   { model: "LicenseAcceptance", sinif: "DURUM",
     gerekce: "ilk kurulum sözleşme kabulünün YEREL kanıt kopyası (Ek-7): silinse raporlanan hiçbir sayı değişmez; etkinleştirme kapısının girdisidir (bu kurulum anahtarının EN SON satırı ∧ güncel metin) — \"ne oldu\"nun hukuki sahibi satıcının `kurulum_kaydi` defteridir (tetikleyiciyle değişmez, `SOZLESME_KABUL_EDILDI`); satır silinmez, güncellenmez, geri alınmaz — yeni kabul yeni satırdır (`services/license-acceptance.service.ts`)" },
   { model: "UpdateApproval", sinif: "DURUM",

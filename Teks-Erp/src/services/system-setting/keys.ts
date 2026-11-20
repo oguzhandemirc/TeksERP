@@ -414,9 +414,6 @@ export const SETTING_KEYS = {
   /** Tablet hızlı iş emri izni (`mobile:hizli-is-emri`) yalnız KENDİ başlattığı iş
    *  emrini düzenler/iptal eder mi. Default FALSE (bugünkü davranış: hepsini). */
   WORKORDER_QUICK_OWN_ONLY_ENABLED: "workorder.quickOwnOnlyEnabled",
-  /** Destek talepleri yalnız sahibine görünür mü (`admin:settings` hepsini görür).
-   *  Default FALSE (bugünkü davranış: `support:create` taşıyan herkes hepsini). */
-  SUPPORT_OWN_TICKETS_ONLY_ENABLED: "support.ownTicketsOnlyEnabled",
   /** KK1 ham giriş ÇEVRİMDIŞI KUYRUKSUZ (online-only) rejimde mi. Default FALSE.
    *  Açıkken mobil KK1 çevrimdışıyken kayıt ALMAZ (form kilitli, sebep yazılır)
    *  ve kayıt+etiket tek nefeste yürür — "Sırada/Başarısız/Gitmedi" liste

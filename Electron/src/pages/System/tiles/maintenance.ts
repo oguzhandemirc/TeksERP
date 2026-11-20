@@ -1,5 +1,5 @@
 // Sistem › Bakım karoları (sıra = hub sırası).
-import { ScrollText, DatabaseBackup, DatabaseZap, DatabaseSearch, Download, Info, KeyRound, LifeBuoy, Upload, Merge } from "lucide-react";
+import { ScrollText, DatabaseBackup, DatabaseZap, DatabaseSearch, Download, Info, KeyRound, Bug, Upload, Merge } from "lucide-react";
 import { LICENSE_ACCESS, SYSTEM_BACKUPS_ACCESS } from "@/lib/permissions";
 import type { SystemTile } from "../tile-config";
 
@@ -79,14 +79,14 @@ export const maintenanceTiles: SystemTile[] = [
     licenseObservationGate: true,
   },
   {
-    key: "support",
-    title: "Destek",
-    description: "Satıcıya destek talebi açın (ekran görüntüsü + sağlık özeti), yanıtları izleyin",
-    icon: LifeBuoy,
-    to: "/system/support",
+    key: "error-reports",
+    title: "Hata Raporları",
+    description: "Satıcıya kişisel verisiz hata raporu gönderme onayı ve gönderilenlerin listesi",
+    icon: Bug,
+    to: "/system/error-reports",
     group: "maintenance",
     // ⚠️ content-routes.tsx'teki ProtectedRoute ile AYNI kod.
-    permission: "support:create",
+    permission: "admin:settings",
   },
   {
     key: "about",

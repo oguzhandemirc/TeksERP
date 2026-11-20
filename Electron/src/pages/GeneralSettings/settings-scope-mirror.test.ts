@@ -98,7 +98,7 @@ describe("ayar kategorisi ↔ backend kapsam tablosu", () => {
       acc.settings.push(...settings);
       byPerm.set(perm, acc);
     }
-    // İzin bir özel bölümü de açıyorsa (ör. `settings:session` → Oturum bölümü + Destek
+    // İzin bir özel bölümü de açıyorsa (ör. `settings:session` → Oturum bölümü
     // satırları) satır listesinde olmayan anahtar o bölümündür — ters yön orada ölçülemez.
     const specialPerms = new Set(narrow.filter(({ cat, perm }) => cat.kind !== "flags" && perm).map(({ perm }) => perm));
     const extra: string[] = [];

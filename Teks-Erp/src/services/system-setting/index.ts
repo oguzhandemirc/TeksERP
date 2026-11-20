@@ -188,7 +188,7 @@ export {
 } from "./pin-backup";
 export {
   readTargetQuantityEnabled, readTargetWidthEnabled, readRawWidthEnabled, readKk1WeightEntryEnabled, readWorkOrderQuickOwnOnlyEnabled,
-  readSupportOwnTicketsOnlyEnabled, readKk1DuplicateGuardEnabled, readKk1OnlineOnlyEnabled, readKk1LabelScanVerifyEnabled,
+  readKk1DuplicateGuardEnabled, readKk1OnlineOnlyEnabled, readKk1LabelScanVerifyEnabled,
   readKk1HistoryAllEntriesEnabled, readSimulatedWeightEnabled, readPartyCodeAuto, readReturnGradingEnabled,
   readKartelaMeasurementEnabled, readFasonNoteMobileEntry,
 } from "./production";

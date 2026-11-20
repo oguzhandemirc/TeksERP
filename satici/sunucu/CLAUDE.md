@@ -51,7 +51,7 @@ Yaşa göre silinen tablolar YALNIZ `src/services/maintenance.ts` `PRUNED_MODELS
 
 ## Alt-alan kuralları — dokunmadan önce oku
 
-Kural `docs/kurallar/lisans.md` § Satıcı sunucusu; anlatım `MIMARI.md` § Alt-alan anlatımı (aynı adlı `###` başlık): Kurulum kaydı + destek · VDS kurulumu · İç API · Kira zinciri · Parmak izi v2 · Modül anahtarı kasası · Hız ve vekil · Bildirimler · Portal · Dağıtım · Güncelleme dalgası · ERİŞİM · Anahtar hiyerarşisi. Kural satırı bekçi adından bulunur.
+Kural `docs/kurallar/lisans.md` § Satıcı sunucusu; anlatım `MIMARI.md` § Alt-alan anlatımı (aynı adlı `###` başlık): Kurulum kaydı · VDS kurulumu · İç API · Kira zinciri · Parmak izi v2 · Modül anahtarı kasası · Hız ve vekil · Bildirimler · Portal · Dağıtım · Güncelleme dalgası · ERİŞİM · Anahtar hiyerarşisi. Kural satırı bekçi adından bulunur.
 
 ## Komutlar
 

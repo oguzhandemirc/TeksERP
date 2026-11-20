@@ -33,7 +33,6 @@ export const REQUEST_PURPOSES = [
   "yokla",
   "zil",
   "cevrimdisi",
-  "destek",
   "esitle",
   "tasima",
   "dr-devral",

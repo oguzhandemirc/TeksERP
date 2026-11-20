@@ -136,12 +136,7 @@
 
 ## 13. Destek talebi
 
-- **Nerede:** panel "Sistem" → "Destek" → "Yeni destek talebi".
-- **Yap:** "Konu" · "Açıklama" · "Ekran görüntüsü ekle" → "Talebi gönder".
-- **Beklenen:** "Talepler" listesinde "Gönderilmeyi bekliyor" → "Açık".
-- **Satıcıya bildirim:** ⚠️ **Telegram / e-posta bildirimi BUGÜN YOK** (satıcı kodunda bildirim kanalı ve ayarı yok) — satıcı talebi yalnız portaldaki "Destek kutusu"ndan görür. Adım ❌ yazılır.
-- **Portal:** "Destek kutusu" → talep → "Yanıt" → "Yanıtı gönder" (ya da "Talebi kapat" / "Notla kapat").
-- **Beklenen:** satıcı zili → fabrika hemen yoklar → panel talep detayında "Satıcı yanıtları" (liste 60 sn'de bir tazelenir), durum "Yanıtlandı".
+- Eski panel içi destek talebi (3d-2) 2026-11-20'de söküldü; adım ATLANIR (yerine Etkili Destek).
 
 ## 14. Yaptırım kademeleri K0…K5 ve geri alma (Zorla kip)
 

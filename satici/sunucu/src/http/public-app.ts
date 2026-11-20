@@ -12,7 +12,6 @@ import {
   OfflineRequestSchema,
   PollRequestSchema,
   REQUEST_HEADER,
-  SupportRequestSchema,
   TempConsumedRequestSchema,
   TransferRequestSchema,
   isPlainObject,
@@ -31,7 +30,6 @@ import { authenticateRequest, recordRequestNonce, requestScope, verifySignedRequ
 import { markTempCodesConsumed } from "../services/temp-code.service";
 import { processPoll } from "../services/poll.service";
 import { bindLiveHardwareResponse, bindLiveResponse } from "../services/response-binding";
-import { openSupportTicket } from "../services/support.service";
 import { createTransferFloodGuard } from "../services/transfer-flood";
 import { handleTransferRequest } from "../services/transfer.service";
 import { parseJsonBody, parseStrict, rawBodyOf } from "./body";
@@ -189,17 +187,6 @@ export function createPublicApp(ctx: VendorContext, hub: DoorbellHub | null): Ex
 
   app.post(ENDPOINTS.DR_TAKEOVER, raw, async (req: Request, res: Response) => {
     res.json(await drTakeover(ctx, req, limit));
-  });
-
-  // DESTEK: gövde küçük ek (≤1 MB görüntü, base64) taşıyabilir — yalnız bu uçta daha geniş ham sınır.
-  // Büyük ek bu gövdede değil `/y/<belirteç>` yükleme bağlantısıyla gider (3d-1).
-  const rawSupport = express.raw({ type: () => true, limit: "2mb" });
-  app.post(ENDPOINTS.SUPPORT, rawSupport, async (req: Request, res: Response) => {
-    const nowMs = Date.now();
-    const body = rawBodyOf(req.body);
-    const parsed = parseStrict(SupportRequestSchema, parseJsonBody(body));
-    const auth = await authenticateRequest({ header: req.get(REQUEST_HEADER), rawBody: body, purposes: ["destek"], nowMs, limit, path: ENDPOINTS.SUPPORT });
-    res.json(await openSupportTicket(auth, parsed));
   });
 
   // HATA RAPORU: müşteri onaylı, kişisel verisiz grup özetleri (amaç `hata-raporu`; yoklamaya karışmaz).

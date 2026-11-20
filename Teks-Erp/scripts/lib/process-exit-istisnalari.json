@@ -126,7 +126,6 @@
  "scripts/test_cihaz_kaniti.ts": 1,
  "scripts/test_cihaz_yeniden_baglama.ts": 1,
  "scripts/test_dependency_contract.ts": 1,
- "scripts/test_destek_talebi.ts": 1,
  "scripts/test_destination_mix.ts": 1,
  "scripts/test_devralinan_tavan.ts": 3,
  "scripts/test_e_irsaliye_xml.ts": 1,

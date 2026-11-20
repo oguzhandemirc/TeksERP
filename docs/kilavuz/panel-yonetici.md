@@ -76,11 +76,11 @@ Panelin üstünde renkli ince bir şerit çıkabilir. Mavi bilgi, sarı uyarı, 
 
 ## 8. Destek talebi
 
-Sistem → **Destek** → "Yeni destek talebi": **Konu** ve **Açıklama** yazın, isterseniz **Ekran görüntüsü ekle** (yanlış çıkarsa **Ekran görüntüsünü kaldır**), **Talebi gönder**. Sağlık özeti sunucuda otomatik eklenir. Yanıtlar aynı sayfada "Talepler" listesinde, "Satıcı yanıtları" bölümünde görünür.
+Panel içindeki eski "Destek" ekranı kaldırıldı (2026-11-20). Destek için programı sağlayan firmanın size verdiği destek kanalını kullanın.
 
 ## 9. Hata raporu onayı
 
-Sistem → **Destek** sayfasında **Hata raporları** kartı vardır (ayar yetkisi ister; kartın sağ üstündeki anahtar **Hata raporlarını gönder**). **Varsayılan KAPALIdır**: siz açmadıkça hiçbir şey toplanmaz ve gönderilmez. Anahtarı açarken ayar şifresi sorulabilir. Açıkken programdaki (sunucu, panel ve tablet) hataların yalnız **türü, yeri ve sürümü** satıcıya gider; hata mesajı, kullanıcı adı, müşteri ya da sipariş bilgisi **gönderilmez**. Kartta açanın adı ve saati, "Bekleyen" ve "Gönderilen" sayıları ile her grubun satırı (tür · yer · sürüm · kaç kez · son zaman; "Bekliyor" / "Gönderildi") görünür; yani neyin gittiğini her zaman buradan görürsünüz. Kapatmak için anahtarı kapatın. Sorunu anlatmak için yine **Destek** talebi açabilirsiniz (bölüm 8).
+Sistem → **Bakım** → **Hata Raporları** sayfasında **Hata raporları** kartı vardır (ayar yetkisi ister; kartın sağ üstündeki anahtar **Hata raporlarını gönder**). **Varsayılan KAPALIdır**: siz açmadıkça hiçbir şey toplanmaz ve gönderilmez. Anahtarı açarken ayar şifresi sorulabilir. Açıkken programdaki (sunucu, panel ve tablet) hataların yalnız **türü, yeri ve sürümü** satıcıya gider; hata mesajı, kullanıcı adı, müşteri ya da sipariş bilgisi **gönderilmez**. Kartta açanın adı ve saati, "Bekleyen" ve "Gönderilen" sayıları ile her grubun satırı (tür · yer · sürüm · kaç kez · son zaman; "Bekliyor" / "Gönderildi") görünür; yani neyin gittiğini her zaman buradan görürsünüz. Kapatmak için anahtarı kapatın.
 
 ## 10. Fabrika ağında şifreli bağlantı (yalnız panel)
 

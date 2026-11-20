@@ -101,7 +101,7 @@
 - **[ÇEKİRDEK]** Başarıda yalnız DAR kovanın ceza merdivenini sıfırla; `RATE_LIMIT_FACTORY_IPS` eşik × çarpan alır; LAN'da hiçbiri devreye girmez.
 - **[ÇEKİRDEK]** Hesap başına kova YUMUŞAK (kademeli bekleme `LOGIN_THROTTLED`; sert kilit yok, başarılı kaynak beklemez); yeni/değişen parola `newPasswordViolation`dan geçer (girişte uygulanmaz).
 - **[ÇEKİRDEK]** Genel CRUD (BaseService) gövdesinden yazılamayacak kolon `src/constants/write-guard.ts`te kapatılır; yazılabilir küme beyan anlık görüntüsü, yeni kolon karar ister.
-- **[PROFİL]** Dar izin kapsamı ayarla daralır (varsayılan geniş): `workOrderQuickOwnOnlyEnabled` (`mobile:hizli-is-emri` yalnız kendi İE'sine, aksi 403 `PERMISSION_DENIED`) · `supportOwnTicketsOnlyEnabled` (`admin:settings`siz yalnız kendi talebi, başkası 404).
+- **[PROFİL]** Dar izin kapsamı ayarla daralır (varsayılan geniş): `workOrderQuickOwnOnlyEnabled` (`mobile:hizli-is-emri` yalnız kendi İE'sine, aksi 403 `PERMISSION_DENIED`).
 - **[ÇEKİRDEK]** `admin:*` kısayolu KORUNUR: `tambur-undo`/`import`/`demo` kapıları `matchesPermission(p, X) || matchesPermission(p, "admin:*")`; düz `matchesPermission(p, X)`e çevirme, düz `includes("admin:*")` yasak.
 
 ## Panel (Electron)

@@ -258,8 +258,6 @@ export interface FeatureFlags {
   kk1DuplicateGuardEnabled: boolean;
   /** Hızlı iş emri izni yalnız kendi başlattığı iş emrini düzenler (default false). Backend ENFORCE. */
   workOrderQuickOwnOnlyEnabled: boolean;
-  /** Destek talepleri yalnız sahibine görünür, yönetici hepsini (default false). Backend ENFORCE. */
-  supportOwnTicketsOnlyEnabled: boolean;
   /** KK1 ham giriş çevrimdışı kuyruksuz (online-only) rejimde mi (default false).
    *  Client (mobil) ENFORCE — açıkken KK1 çevrimdışı kayıt almaz, kayıt+etiket
    *  tek nefeste yürür. */

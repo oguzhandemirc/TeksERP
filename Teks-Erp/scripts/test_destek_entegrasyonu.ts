@@ -21,8 +21,8 @@
 //    502, merkez kökeni dışı adres → 502 ve o adrese istek YOK, 410 aynen,
 //    yönlendirme izlenmez, 10 MB+pay tavanı, kapalıyken 403 ve dış istek yok
 //
-// §9 eski destek talebi (3d-2, `/api/destek`, satıcıya) ile ÇAKIŞMA yok: ayrı önek, eski uç izinsizde
-//    yine 403, yeni `/durum` `support:create`siz kullanıcıya açık; eski önek 1 MB global gövde sınırında kalır
+// §9 eski destek talebi (3d-2, `/api/destek`) 2026-11-20 söküldü: eski önek bağlı değil (404), yeni `/durum`
+//    izinsiz kullanıcıya açık; eski önek 1 MB global gövde sınırında kalır (büyük gövde yolu açılmadı)
 // §8 firma kimliği lisans HAK'ındaki `tesis.id` (küçük harf; patron bulutuyla aynı): sabit müşteri adı yok
 // §10 lisans kapısı: her `/api/etkili-destek` ucu HER kademede ve etkinleştirme kilidinde açık (kurtarma yolu)
 // §11 geliştirme yedeği `DESTEK_TENANT_ID`: yalnız lisansta tesis kimliği YOKSA ve biçim [a-z0-9-]{1,64} ise;
@@ -446,11 +446,11 @@ async function section7(u: { token: string }, admin: { token: string }, fakeUrl:
 }
 
 async function section9(u: { token: string }): Promise<void> {
-  console.log("\n=== §9 eski destek talebiyle (3d-2) çakışma yok ===");
+  console.log("\n=== §9 eski destek talebi (3d-2) söküldü ===");
   const yeni = await call(u.token, "GET", "/api/etkili-destek/durum");
-  check("§9 support:create'siz kullanıcı yeni /durum'u okur (eski guard'a takılmaz)", yeni.status === 200 && yeni.json.data?.etkin === true, `${yeni.status}`);
+  check("§9 izinsiz kullanıcı yeni /durum'u okur", yeni.status === 200 && yeni.json.data?.etkin === true, `${yeni.status}`);
   const eski = await call(u.token, "GET", "/api/destek");
-  check("§9 eski /api/destek izinsizde hâlâ 403 (davranış değişmedi)", eski.status === 403, `${eski.status}`);
+  check("§9 eski /api/destek artık bağlı değil (404)", eski.status === 404, `${eski.status}`);
   check("§9 eski önek 1 MB global sınırda, yeni önek kendi sınırında",
     !buyukGovdeYolu("/api/destek") && effectiveBodyLimit("/api/destek") === VARSAYILAN_GOVDE_LIMITI
       && effectiveBodyLimit("/api/etkili-destek/talepler") === SUPPORT_BODY_LIMIT);

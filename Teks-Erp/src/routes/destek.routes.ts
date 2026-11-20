@@ -5,8 +5,8 @@
 // `docs/ops/DESTEK-ENTEGRASYONU.md`. İzin kodu YOK: giriş yapmış her kullanıcı
 // kendi taleplerini görür; firma geneli (`scope=tenant`) servis içinde
 // `admin:settings`/sistem hesabıyla sınırlanır.
-// Önek `/api/destek` DEĞİL: orası satıcıya giden eski destek talebinin (3d-2,
-// `support.routes.ts`, `support:create` guard'ı her isteğe) yeridir; iki router aynı önekte çakışırdı.
+// Önek `/api/destek` DEĞİL: orası eski destek talebinindi (3d-2, 2026-11-20 söküldü); eski panel
+// 404 alsın diye önek boş tutulur (`test_route_mount_reachability` §4).
 //
 // ⚠️ SIRA LOAD-BEARING: `/durum` destek kapısından ÖNCE tanımlanır (kapalıyken de
 // `{ etkin: false }` dönmeli); diğer HER uç `router.use(requireSupportDeskEnabled)`

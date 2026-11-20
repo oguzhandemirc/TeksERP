@@ -1,8 +1,6 @@
 import { Server } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useRoleAccess } from "@/hooks/useRoleAccess";
-import { useTabsStore } from "@/store/tabs";
 import { ApprovalAction } from "../ServerUpdates/UpdateApprovalCard";
 import { serverRowState, UNREADABLE, type ProblemAction } from "../ServerUpdates/serverRow";
 import { UpdateRow } from "./UpdateRow";
@@ -27,13 +25,10 @@ function ServerActions({ v, awaiting }: { v: ServerUpdateView; awaiting: boolean
 
 /** "Sunucu" satırı — kurulu sürüm, tek durum, en fazla iki onay düğmesi; sorun varsa tek cümle + tek eylem. */
 export function ServerRow({ v }: { v: ServerUpdateView }) {
-  const canSupport = useRoleAccess().hasPermission("support:create");
-  const navigateActive = useTabsStore((s) => s.navigateActive);
   if (v.isLoading) return <Skeleton className="h-20 w-full" />;
   const st = v.summary ? serverRowState(v.summary) : UNREADABLE;
   const actionFor = (a: ProblemAction) => {
     if (a === "retry") return <Button size="sm" variant="outline" onClick={v.refetch}>Yeniden dene</Button>;
-    if (a === "support" && canSupport) return <Button size="sm" variant="outline" onClick={() => navigateActive("/system/support")}>Destek iste</Button>;
     return undefined;
   };
   return (

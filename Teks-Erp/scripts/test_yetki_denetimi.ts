@@ -9,7 +9,7 @@
 //   B3 PATCH /warehouses/:id isDefault · kullanimdaki istasyonun kind'i
 //   B4 production.enabled=false iken /api/rolls uretim uclari (open-fabric) 403 MODULE_DISABLED
 //   B5 workOrderQuickOwnOnlyEnabled acikken hizli is emri yalniz kendi is emrini duzenler
-//   B6 supportOwnTicketsOnlyEnabled acikken destek talebi yalniz sahibine (yonetici hepsini)
+//   B6 [SOKULDU 2026-11-20] eski destek talebi (3d-2) kapsami — sistem kaldirildi, numara bos birakildi
 //   B7 [KALAN, beyanli] mobile:kk1-yalniz hesap /api/feature-flags anlik goruntusu (izdusum yok)
 //
 // Kosum (yalniz _test DB; kendi sunucusunu bekci kosucusu acar):
@@ -33,7 +33,7 @@ function check(label: string, ok: boolean, detail = ""): void {
 }
 const ATLAMA = atlamaDefteri(() => { fail++; });
 const BASE = process.env.TEST_API_URL ?? "http://localhost:4112";
-const HTTP_CHECKS = 20;
+const HTTP_CHECKS = 15;
 const ek = Date.now().toString(36);
 
 interface Cevap { status: number; json: Record<string, unknown> }
@@ -51,7 +51,7 @@ const dataOf = <T>(j: Record<string, unknown>): T => j.data as T;
 const ozet = (c: Cevap): string => `${c.status} ${String(codeOf(c.json) ?? "")} ${String(c.json.message ?? "")}`.trim().slice(0, 160);
 
 interface Kisi { id: string; username: string; password: string }
-const ids = { users: [] as string[], shipments: [] as string[], customers: [] as string[], items: [] as string[], stations: [] as string[], machines: [] as string[], workOrders: [] as string[], tickets: [] as string[], requests: [] as string[] };
+const ids = { users: [] as string[], shipments: [] as string[], customers: [] as string[], items: [] as string[], stations: [] as string[], machines: [] as string[], workOrders: [] as string[], requests: [] as string[] };
 const parola = (): string => `Dny-${randomBytes(8).toString("hex")}-Aa9!`;
 
 async function kisi(etiket: string, codes: string[]): Promise<Kisi> {
@@ -76,7 +76,7 @@ async function giris(k: { username: string; password: string }, clientType = "el
   return { token: c.status === 200 ? (dataOf<{ token?: string }>(c.json).token ?? null) : null, c };
 }
 
-const YONETILEN = [SETTING_KEYS.PRODUCTION_ENABLED, SETTING_KEYS.AUTH_LOGIN_METHODS, SETTING_KEYS.WORKORDER_QUICK_OWN_ONLY_ENABLED, SETTING_KEYS.SUPPORT_OWN_TICKETS_ONLY_ENABLED];
+const YONETILEN = [SETTING_KEYS.PRODUCTION_ENABLED, SETTING_KEYS.AUTH_LOGIN_METHODS, SETTING_KEYS.WORKORDER_QUICK_OWN_ONLY_ENABLED];
 const ilk = new Map<string, unknown>();
 async function ayarYaz(key: string, value: unknown): Promise<void> {
   await prisma.systemSetting.upsert({ where: { key }, create: { key, value: value as never }, update: { value: value as never } });
@@ -97,7 +97,6 @@ async function main(): Promise<void> {
     await b3();
     await b4();
     await b5(admin);
-    await b6();
     await b7();
   } finally {
     for (const [key, value] of ilk) {
@@ -350,40 +349,6 @@ async function b5(admin: string): Promise<void> {
   await ayarYaz(SETTING_KEYS.WORKORDER_QUICK_OWN_ONLY_ENABLED, false);
 }
 
-// ── B6: support:create baskasinin talebini okur ─────────────────────────────────
-async function b6(): Promise<void> {
-  console.log("\n§B6 — support:create okuma kapsami (ayar: supportOwnTicketsOnlyEnabled)");
-  const A = await kisi("B6A", ["support:create"]);
-  const B = await kisi("B6B", ["support:create"]);
-  const Y = await kisi("B6Y", ["support:create", "admin:settings"]);
-  const a = await giris(A);
-  const b = await giris(B);
-  const y = await giris(Y);
-  if (!a.token || !b.token || !y.token) { check("§B6 on kosul: uc support aktoru giris yapar", false, `${ozet(a.c)} | ${ozet(b.c)} | ${ozet(y.c)}`); return; }
-  const created = await call(a.token, "POST", "/api/destek", { konu: `TSTDNY gizli ${ek}`, aciklama: "A kullanicisinin ozel yazismasi", clientToken: crypto.randomUUID() });
-  if (created.status !== 201) { check("§B6 on kosul: A talep acar", false, ozet(created)); return; }
-  const tid = dataOf<{ id: string }>(created.json).id;
-  if (tid) ids.tickets.push(tid);
-  const listede = async (token: string): Promise<boolean> => JSON.stringify((await call(token, "GET", "/api/destek")).json).includes(`TSTDNY gizli ${ek}`);
-
-  await ayarYaz(SETTING_KEYS.SUPPORT_OWN_TICKETS_ONLY_ENABLED, false);
-  const d0 = await call(b.token, "GET", `/api/destek/${tid}`);
-  check("§B6a ayar KAPALI (varsayilan = bugun): B, A'nin talebini listede ve detayda gorur",
-    (await listede(b.token)) && d0.status === 200, ozet(d0));
-
-  await ayarYaz(SETTING_KEYS.SUPPORT_OWN_TICKETS_ONLY_ENABLED, true);
-  const gorur = await listede(b.token);
-  const d1 = await call(b.token, "GET", `/api/destek/${tid}`);
-  check("§B6b ayar ACIK: B, A'nin talebini LISTEDE GORMEZ", !gorur, `listede=${gorur}`);
-  check("§B6c ayar ACIK: B, A'nin talebini DETAYDA OKUYAMAZ (404 SUPPORT_TICKET_NOT_FOUND)",
-    d1.status === 404 && codeOf(d1.json) === "SUPPORT_TICKET_NOT_FOUND", ozet(d1));
-  const dA = await call(a.token, "GET", `/api/destek/${tid}`);
-  check("§B6d ayar ACIK: sahibi kendi talebini gorur", (await listede(a.token)) && dA.status === 200, ozet(dA));
-  const dY = await call(y.token, "GET", `/api/destek/${tid}`);
-  check("§B6e ayar ACIK: admin:settings tasiyan yonetici hepsini gorur", (await listede(y.token)) && dY.status === 200, ozet(dY));
-  await ayarYaz(SETTING_KEYS.SUPPORT_OWN_TICKETS_ONLY_ENABLED, false);
-}
-
 // ── B7: mobile:kk1-yalniz hesap feature-flags anlik goruntusunu okur ────────────
 async function b7(): Promise<void> {
   console.log("\n§B7 — kimlikli-izinsiz feature-flags okuma [KARAR]");
@@ -402,8 +367,6 @@ async function b7(): Promise<void> {
 }
 
 async function temizle(): Promise<void> {
-  await prisma.supportTicketReply.deleteMany({ where: { ticketId: { in: ids.tickets } } }).catch(() => {});
-  await prisma.supportTicket.deleteMany({ where: { id: { in: ids.tickets } } }).catch(() => {});
   await prisma.workOrder.deleteMany({ where: { id: { in: ids.workOrders } } }).catch(() => {});
   await prisma.sack.deleteMany({ where: { shipmentId: { in: ids.shipments } } }).catch(() => {});
   await prisma.shipment.deleteMany({ where: { id: { in: ids.shipments } } }).catch(() => {});

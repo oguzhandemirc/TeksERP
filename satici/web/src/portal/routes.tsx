@@ -19,8 +19,6 @@ import { HardwareRequestsPage } from "./pages/HardwareRequests";
 import { InstallationsPage } from "./pages/Installations";
 import { MaintenanceDuePage } from "./pages/MaintenanceDue";
 import { NotificationsPage } from "./pages/Notifications";
-import { SupportPage } from "./pages/Support";
-import { SupportDetailPage } from "./pages/SupportDetail";
 import { CopyAlertsPage, DrPage, PlannedActionsPage, TransfersPage } from "./pages/Queues";
 import { ReleasesPage } from "./pages/Releases";
 import { RevocationsPage } from "./pages/Revocations";
@@ -43,7 +41,6 @@ export const PORTAL_NAV: readonly NavItem[] = [
   { to: "/kok-kuyrugu", label: "Kök imzası kuyruğu", permission: "portal:oku" },
   { to: "/gecici-kod-talepleri", label: "Geçici kod talepleri", permission: "portal:oku" },
   { to: "/dr", label: "DR", permission: "portal:oku" },
-  { to: "/destek", label: "Destek kutusu", permission: "portal:oku" },
   { to: "/hata-raporlari", label: "Hata raporları", permission: "portal:oku" },
   { to: "/bildirimler", label: "Bildirimler", permission: "bildirim:oku" },
   { to: "/bayiler", label: "Bayiler", permission: "portal:oku" },
@@ -77,8 +74,6 @@ export const PORTAL_ROUTES: RouteObject[] = [
       { path: "kok-kuyrugu", element: <RootQueuePage /> },
       { path: "gecici-kod-talepleri", element: <TempCodeQueuePage /> },
       { path: "dr", element: <DrPage /> },
-      { path: "destek", element: <SupportPage /> },
-      { path: "destek/:id", element: <SupportDetailPage /> },
       { path: "hata-raporlari", element: <ErrorReportsPage /> },
       { path: "hata-raporlari/:id", element: <ErrorReportGroupsPage /> },
       { path: "bildirimler", element: <NotificationsPage /> },
