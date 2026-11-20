@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useIsTabActive } from "@/components/layout/tabs/tab-active";
 import { toOutgoing, type DraftAttachment } from "./attachments";
 import { useDestekStore } from "./destek-store";
 import { readDestekError, type DestekError } from "./errors";
@@ -15,12 +16,13 @@ export const LIST_KEY = "destek-talepler";
 export const DETAIL_KEY = "destek-talep";
 
 export function useTicketList(scope: TicketScope, statuses: TicketStatus[] | undefined, filterKey: string) {
+  const tabActive = useIsTabActive();
   return useInfiniteQuery({
     queryKey: [LIST_KEY, scope, filterKey],
     queryFn: ({ pageParam }) => destekService.list({ scope, status: statuses, page: pageParam, limit: PAGE_SIZE }),
     initialPageParam: 1,
     getNextPageParam: (last) => (last.page * last.limit < last.total ? last.page + 1 : undefined),
-    refetchInterval: OPEN_REFRESH_MS,
+    refetchInterval: tabActive ? OPEN_REFRESH_MS : false,
     retry: false,
   });
 }
@@ -34,11 +36,12 @@ function refreshBadge(canTenant: boolean) {
 /** Ayrıntı: açılışta bir kez `okundu` çağrılır (yeni ekip yanıtı gelince yeniden). */
 export function useTicketDetail(id: string | null, canTenant: boolean) {
   const qc = useQueryClient();
+  const tabActive = useIsTabActive();
   const query = useQuery({
     queryKey: [DETAIL_KEY, id],
     queryFn: () => destekService.detail(id ?? ""),
     enabled: Boolean(id),
-    refetchInterval: OPEN_REFRESH_MS,
+    refetchInterval: tabActive ? OPEN_REFRESH_MS : false,
     retry: false,
   });
   const lastMarked = useRef<string | null>(null);

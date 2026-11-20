@@ -1,12 +1,10 @@
+import { formatFactory } from "@/lib/factory-time";
 import { cn } from "@/lib/utils";
 import { AttachmentPreview } from "./AttachmentPreview";
 import type { TicketMessage } from "./types";
 
-const TIME = new Intl.DateTimeFormat("tr-TR", { dateStyle: "short", timeStyle: "short" });
-
 export function formatWhen(iso: string): string {
-  const t = Date.parse(iso);
-  return Number.isFinite(t) ? TIME.format(new Date(t)) : "";
+  return formatFactory(iso, "dd.MM.yyyy HH:mm", "");
 }
 
 /** Yazışma satırı: müşteri SAĞDA, destek ekibi SOLDA, sistem kaydı ORTADA küçük. */
