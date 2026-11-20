@@ -236,8 +236,8 @@ export const TABLE_LABELS: Record<string, string> = {
   WARP_BEAM_EVENT: "Levent Olayı",
   BEAM_BODY: "Levent Gövdesi",
   BEAM_BODY_EVENT: "Levent Gövdesi Olayı",
-  BEAM_BODY_RETURN: "Levent Gövdesi İade Belgesi", WARPING_BEAM_REJECTION: "Kusurlu Levent Ret Belgesi",
-
+  BEAM_BODY_RETURN: "Levent Gövdesi İade Belgesi",
+  WARPING_BEAM_REJECTION: "Kusurlu Levent Ret Belgesi",
   // Fabrika tarafında da etiketsiz kalmış olanlar (aynı tarama).
   ROLL_QTY_ADJUST: "Top Metraj Düzeltmesi",
   // Patron bulutu gelen kutusu makbuzu (B3) · destek talebi (3d-2) · lisans sözleşmesi kabulü (Ek-7).
@@ -402,6 +402,4 @@ export const EVENT_ACTION_LABELS: Record<string, string> = {
 };
 
 /** Sistem olayının Türkçe adı; bilinmeyen → ham değer (fail-open). */
-export function eventActionLabel(action: string): string {
-  return EVENT_ACTION_LABELS[action] ?? action;
-}
+export function eventActionLabel(action: string): string { return EVENT_ACTION_LABELS[action] ?? action; }

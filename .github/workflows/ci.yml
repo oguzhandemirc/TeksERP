@@ -279,6 +279,9 @@ jobs:
       - name: Type-check (yalnız src)
         run: set -o pipefail; npx tsc --noEmit 2>&1 | tee -a /tmp/ci-backend.log
         shell: bash
+        # src programı ~4,1–4,2 GB tutuyor (2026-11-21 ölçüldü); varsayılan ~4 GB sınırı OOM verdi.
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
       # scripts/ + prisma/ AYRI adım: kök tsconfig `include: ["src/**/*"]` ile sınırlı
       # olduğu için 222 test dosyası uzun süre HİÇ derlenmedi → bir servisin imzası ya
       # da bir enum değişince src yeşil kalıyor, testler de yeşil kalıyor, ama testin

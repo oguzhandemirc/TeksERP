@@ -2,8 +2,8 @@
 // TeksERP — KUSURLU LEVENT RET BELGESİ (`/api/warping-beam-rejections`, devere ek C1)
 // =============================================================================
 // Kapı sırası load-bearing: `router.use` satırı HER uçtan önce. Bu yol global 1 MB JSON katmanını ATLAR
-// (`BUYUK_GOVDE_YOLLARI`) ve kendi katmanını taşır — ret fotoğrafları base64 gövdeyle gelir. Ret iplik tutmasını
-// değiştirdiği için iplik kapısı da router düzeyinde. Okuma `warping-order:read`; ret/foto `write`; iptal `cancel`.
+// (`BUYUK_GOVDE_YOLLARI`) ve kendi katmanını taşır — ret fotoğrafları base64 gövdeyle gelir. İplik kapısı uç başına:
+// yalnız iplik tutmasını ölçen/değiştiren ret ve iptal uçlarında (emsal settle). Okuma `read`; ret/foto `write`; iptal `cancel`.
 // =============================================================================
 import express, { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
@@ -20,7 +20,7 @@ import { addRejectionPhotos, readRejectionPhoto, WARPING_REJECT_PHOTOS_PER_REQUE
 import "../types/express-augment";
 
 const router = Router();
-router.use(verifyToken, requireDevereEnabled, requireIplikEnabled, express.json({ limit: WARPING_REJECTION_BODY_LIMIT }));
+router.use(verifyToken, requireDevereEnabled, express.json({ limit: WARPING_REJECTION_BODY_LIMIT }));
 
 const wrap = (fn: (req: Request) => Promise<{ status: number; body: unknown }>) => async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -88,7 +88,7 @@ const STATUS = ["active", "cancelled", "all"] as const;
  *     responses:
  *       200: { description: "{ success, data: { order, beams, returnedYarn, totals, reason, photoRequired, blockers, warnings, rejectable } }" }
  */
-router.post("/preview", requirePermission("warping-order:write"), wrap(async (req) => {
+router.post("/preview", requirePermission("warping-order:write"), requireIplikEnabled, wrap(async (req) => {
   const body = parse(PreviewBody, req.body);
   return { status: 200, body: { success: true, data: await previewWarpingBeamRejection(body) } };
 }));
@@ -152,7 +152,7 @@ router.get("/", requirePermission("warping-order:read"), wrap(async (req) => {
   return { status: 200, body: { success: true, ...out } };
 }));
 
-router.post("/", requirePermission("warping-order:write"), wrap(async (req) => {
+router.post("/", requirePermission("warping-order:write"), requireIplikEnabled, wrap(async (req) => {
   const body = parse(CreateBody, req.body);
   const out = await createWarpingBeamRejection(body, req.user!.userId);
   return { status: out.replayed ? 200 : 201, body: { success: true, data: out.data, message: out.replayed ? `${out.data.docNo} zaten kayıtlı` : `Ret belgesi ${out.data.docNo} açıldı (${out.data.items.length} sarım)` } };
@@ -243,12 +243,12 @@ router.get("/:id/photos/:photoId", requirePermission("warping-order:read"), asyn
   }
 });
 
-router.get("/:id/cancel-preview", requirePermission("warping-order:cancel"), wrap(async (req) => {
+router.get("/:id/cancel-preview", requirePermission("warping-order:cancel"), requireIplikEnabled, wrap(async (req) => {
   const id = parse(Id, req.params.id);
   return { status: 200, body: { success: true, data: await previewCancelWarpingBeamRejection(id) } };
 }));
 
-router.post("/:id/cancel", requirePermission("warping-order:cancel"), wrap(async (req) => {
+router.post("/:id/cancel", requirePermission("warping-order:cancel"), requireIplikEnabled, wrap(async (req) => {
   const id = parse(Id, req.params.id);
   const body = parse(CancelBody, req.body);
   const data = await cancelWarpingBeamRejection(id, body.reason, req.user!.userId);

@@ -14,6 +14,7 @@ import { applyWarpBeamEventTx, logWarpBeamEventAudit } from "../helpers/warp-bea
 import { loadWarpingYarnHoldings, lockDispatchItemsTx } from "../helpers/warping-yarn-open.helper";
 import { activeWarpingReceiptInvoiceTx } from "../helpers/warping-receipt-guard.helper";
 import { beamBodyEventNeighborsTx } from "../helpers/beam-body.helper";
+import { qtyText } from "../helpers/qty-text.helper";
 import { WARPING_BEAM_REJECTION_TABLE } from "./beam-rejection-photo";
 import { loadRejectBeams, loadRejectionDto, yarnLinesOf, type RejectBeamRow, type RejectYarnLine, type WarpingBeamRejectionDto } from "./beam-rejection-read";
 
@@ -64,7 +65,7 @@ async function bodyMoved(db: Db, b: RejectBeamRow): Promise<boolean> {
 }
 
 /** `selfCancelled`: iptal tx'i başlığı az önce kendisi damgaladı — "zaten iptal" engeli sayılmaz, kalemler ölçülür. */
-async function measure(db: Db, id: string, selfCancelled = false): Promise<Measure> {
+async function measureCancel(db: Db, id: string, selfCancelled = false): Promise<Measure> {
   const loaded = await loadHead(db, id);
   const head = selfCancelled ? { ...loaded, cancelledAt: null } : loaded;
   const beams = await loadRejectBeams(db, head.items.map((i) => i.warpBeamId));
@@ -92,13 +93,13 @@ async function measure(db: Db, id: string, selfCancelled = false): Promise<Measu
   const yarn = head.cancelledAt ? [] : await measureYarn(db, head.subcontractorId, beams);
   const short = yarn.find((y) => !y.enough);
   if (short) {
-    blockers.push({ code: "WARPING_HOLDING_INSUFFICIENT", message: `${short.dispatchNo} (${short.name || short.code}) ${short.holderOrderNo} tutması ${short.holdingKg} kg — iptal ${short.kg} kg ister (iplik iade/aktarma/fire ile tüketilmiş).` });
+    blockers.push({ code: "WARPING_HOLDING_INSUFFICIENT", message: `${short.dispatchNo} (${short.name || short.code}) ${short.holderOrderNo} tutması ${qtyText(short.holdingKg)} kg — iptal ${qtyText(short.kg)} kg ister (iplik iade/aktarma/fire ile tüketilmiş).` });
   }
   return { head, orderNo: head.warpingOrder.orderNo, orderStatus: st, beams, items: head.items, blockers, rows, yarn };
 }
 
 export async function previewCancelWarpingBeamRejection(id: string): Promise<WarpingBeamRejectionCancelPreview> {
-  const m = await measure(prisma, id);
+  const m = await measureCancel(prisma, id);
   return { doc: await loadRejectionDto(prisma, id), cancellable: m.blockers.length === 0, blockers: m.blockers, items: m.rows, yarn: m.yarn, reasonRequired: true };
 }
 
@@ -114,7 +115,7 @@ async function cancelTx(tx: Prisma.TransactionClient, id: string, reason: string
   if (hc.count === 0) throw AppError.conflict(`${head.docNo} zaten iptal edilmiş.`, { code: "WARPING_REJECTION_CANCELLED" });
   await lockDispatchItemsTx(tx, yarnLinesOf(await loadRejectBeams(tx, head.items.map((i) => i.warpBeamId))).map((l) => l.dispatchItemId));
   // Kilitlerden sonra TAZE ölçüm (eşzamanlı iade/aktarma/yeniden sarım aynı kalemi/sarımı değiştirmiş olabilir).
-  const m = await measure(tx, id, true);
+  const m = await measureCancel(tx, id, true);
   const blocker = m.blockers[0];
   if (blocker) throw AppError.conflict(blocker.message, { code: blocker.code });
   const lenOf = new Map(m.beams.map((b) => [b.id, b.events.find((e) => e.kind === "REJECT_OUT" && e.reversal === null)?.lengthM ?? null]));
