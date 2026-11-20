@@ -1,0 +1,18 @@
+// =============================================================================
+// AUDIT DEĞER ETİKETLERİ — ÜÇÜNCÜ PARÇA (devere ek B1, 2026-11-20)
+// -----------------------------------------------------------------------------
+// `audit-enum-etiketleri.ts`deki `ENUM_LABELS`in devamıdır (ilk iki parça dosya boyu tavanında;
+// anlam tek harita). `Electron/src/lib/` altındaki aynı adlı dosya BAYT-EŞİT aynadır.
+// =============================================================================
+
+/** `ENUM_LABELS`in üçüncü parçası — tek başına kullanılmaz, ana haritaya yayılır. */
+export const ENUM_LABELS_EK2: Record<string, string> = {
+  // Levent gövdesi: BeamBodyStatus · BeamBodyOwnerRole · LabelKind — AT_SUBCONTRACTOR/MOUNTED/SCRAPPED ortak (paylaşım beyanı)
+  EMPTY_STOCK: "Depoda boş",
+  FULL_STOCK: "Dolu bekliyor",
+  FULL_OUT: "Dolu dışarıda",
+  MAINTENANCE: "Bakımda",
+  RETURNED_TO_OWNER: "Sahibine iade edildi",
+  WARPER: "Devereci",
+  BEAM_BODY: "Levent gövdesi",
+};

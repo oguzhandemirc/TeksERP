@@ -9,7 +9,7 @@
 import prisma from "../../lib/prisma";
 import { applyModuleCeiling } from "../../lib/license/module-ceiling";
 import { asBoolean, asNumber } from "./core";
-import { DEFAULT_DEVERE_FASON_LOT_POLICY, DEFAULT_DOKUMA_ROLL_BIRTH, DEVERE_FASON_LOT_POLICIES, DOKUMA_ROLL_BIRTH_MODES, type DevereFasonLotPolicy, type DokumaRollBirth } from "./defaults";
+import { DEFAULT_DEVERE_BEAM_BODY_MACHINE_FIT, DEFAULT_DEVERE_BEAM_BODY_MODE, DEFAULT_DEVERE_FASON_LOT_POLICY, DEFAULT_DOKUMA_ROLL_BIRTH, DEVERE_BEAM_BODY_MACHINE_FITS, DEVERE_BEAM_BODY_MODES, DEVERE_FASON_LOT_POLICIES, DOKUMA_ROLL_BIRTH_MODES, type DevereBeamBodyMachineFit, type DevereBeamBodyMode, type DevereFasonLotPolicy, type DokumaRollBirth } from "./defaults";
 import { SETTING_KEYS } from "./keys";
 export { readDevereSettleDefault } from "./devere-settle";
 
@@ -280,6 +280,20 @@ export async function readDevereFasonLotPolicy(tx?: Pick<typeof prisma, "systemS
   const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.DEVERE_FASON_LOT_POLICY }, select: { value: true } });
   const v = setting?.value;
   return typeof v === "string" && DEVERE_FASON_LOT_POLICIES.includes(v as DevereFasonLotPolicy) ? (v as DevereFasonLotPolicy) : DEFAULT_DEVERE_FASON_LOT_POLICY;
+}
+
+/** Devere ek B1: levent gövdesi kipi — satır yok / tanınmayan değer → `OFF` (bugünkü davranış). Aksiyon anında. */
+export async function readDevereBeamBodyMode(tx?: Pick<typeof prisma, "systemSetting">): Promise<DevereBeamBodyMode> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.DEVERE_BEAM_BODY_MODE }, select: { value: true } });
+  const v = setting?.value;
+  return typeof v === "string" && DEVERE_BEAM_BODY_MODES.includes(v as DevereBeamBodyMode) ? (v as DevereBeamBodyMode) : DEFAULT_DEVERE_BEAM_BODY_MODE;
+}
+
+/** Devere ek B1: gövde–tezgâh uyumu — satır yok / tanınmayan değer → `WARN`. */
+export async function readDevereBeamBodyMachineFit(tx?: Pick<typeof prisma, "systemSetting">): Promise<DevereBeamBodyMachineFit> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.DEVERE_BEAM_BODY_MACHINE_FIT }, select: { value: true } });
+  const v = setting?.value;
+  return typeof v === "string" && DEVERE_BEAM_BODY_MACHINE_FITS.includes(v as DevereBeamBodyMachineFit) ? (v as DevereBeamBodyMachineFit) : DEFAULT_DEVERE_BEAM_BODY_MACHINE_FIT;
 }
 
 /** Fason devere D4: kapama fire toleransı (%) — 0 = denetim yok (varsayılan); üst sınır dahil. */

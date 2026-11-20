@@ -41,6 +41,7 @@ export const PANEL_SETTING_ROW = {
   shipmentLooseLoadEnabled: { ekran: "shipping", baslik: "Çuvalsız sevk (dökme / araba)" },
   shipmentHandheldCreateEnabled: { ekran: "shipping", baslik: "El terminalinden sevk kurma" },
   devereMountTracking: { ekran: "devere", baslik: "Levent tezgah bağı defteri" },
+  devereBeamBodyMode: { ekran: "devere", baslik: "Levent gövdesi takibi" },
   yarnBlockNegativeBalanceEnabled: { ekran: "yarn", baslik: "İplik stoğu eksi bakiyeye düşemesin" },
   goodsReceiptRequirePriceEnabled: { ekran: "warehouse", baslik: "Mal kabul satırında birim fiyat zorunlu olsun" },
   purchaseBlockOverReceiptEnabled: { ekran: "warehouse", baslik: "Siparişten fazla mal kabulünü engelle" },

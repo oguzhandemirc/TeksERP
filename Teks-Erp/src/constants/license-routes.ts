@@ -111,6 +111,7 @@ export const RESTRICTED_OPEN_ROUTES: readonly LicenseRouteRule[] = [
   { method: "POST", path: "/api/labels/sacks/:id/print-event", reason: "çuval etiketi baskı ayak izi" },
   { method: "POST", path: "/api/labels/machines/:id/print-event", reason: "tezgah etiketi baskı ayak izi" },
   { method: "POST", path: "/api/labels/warp-beams/:id/print-event", reason: "levent etiketi baskı ayak izi" },
+  { method: "POST", path: "/api/labels/beam-bodies/:id/print-event", reason: "levent gövdesi etiketi baskı ayak izi" },
   { method: "POST", path: "/api/labels/test-native", reason: "yazıcı deneme baskısı; iş verisi yazmaz" },
   { method: "POST", path: "/api/traveler-cards/:id/print-event", reason: "refakat kartı baskı ayak izi" },
   { method: "POST", path: "/api/work-orders/:id/traveler-cards/reprint", reason: "refakat kartı yeniden basımı" },

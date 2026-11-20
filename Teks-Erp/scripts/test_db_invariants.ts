@@ -787,6 +787,13 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // devere 1b (2026-09-14, migration 20260914125000): levent + olay defteri + iplik bağı.
   { table: "warp_beams", name: "warp_beams_planned_length_positive" },
   { table: "warp_beams", name: "warp_beams_origin_party_ck" },
+  // devere ek B1 (2026-11-20, migration 20261120165100): levent gövdesi sahip/ölçü/yer + olay türü/ters bağı.
+  { table: "beam_bodies", name: "beam_bodies_owner_ck" },
+  { table: "beam_bodies", name: "beam_bodies_dims_ck" },
+  { table: "beam_bodies", name: "beam_bodies_location_ck" },
+  { table: "beam_body_events", name: "beam_body_events_kind_ck" },
+  { table: "beam_body_events", name: "beam_body_events_from_ck" },
+  { table: "beam_body_events", name: "beam_body_events_reverses_ck" },
   { table: "warp_beam_events", name: "warp_beam_events_kind_ck" },
   { table: "warp_beam_events", name: "warp_beam_events_length_positive" },
   { table: "warp_beam_events", name: "warp_beam_events_cancel_link_ck" },

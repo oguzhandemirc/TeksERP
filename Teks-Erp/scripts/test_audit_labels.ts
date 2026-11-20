@@ -253,7 +253,8 @@ const enumValues = new Map<string, string>([...enumOwners].map(([v, e]) => [v, e
 // B2: harita iki parçaya bölündü (dosya boyu tavanı) — anlam tek harita, ikisi birleşik okunur.
 const enumAna = readMap(ENUM_KAYNAK, "ENUM_LABELS_ANA");
 const enumEk = readMap(path.join(BACKEND_CONST, "audit-enum-etiketleri-ek.ts"), "ENUM_LABELS_EK");
-const enumLabels = enumAna && enumEk ? { ...enumAna, ...enumEk } : null;
+const enumEk2 = readMap(path.join(BACKEND_CONST, "audit-enum-etiketleri-ek2.ts"), "ENUM_LABELS_EK2");
+const enumLabels = enumAna && enumEk && enumEk2 ? { ...enumAna, ...enumEk, ...enumEk2 } : null;
 check("ENUM_LABELS okunabildi", enumLabels !== null);
 // Zemin ölçüme göre: 2026-08-25'te 140 üye. Yorum kırpması düşerse ~60'a
 // iner ve bekçi sessizce kör kalırdı — bu satır tam onu yakalar.
@@ -349,7 +350,7 @@ check(
 // 6) SÖZLÜK AYNASI — backend kaynağı ≡ Electron kopyası (B2, sha256 bayt-eşit)
 // =============================================================================
 console.log("\n=== 6) Modül/olay/değer sözlüğü aynası (bayt-eşit) ===");
-for (const ad of ["audit-tablo-etiketleri.ts", "audit-enum-etiketleri.ts", "audit-enum-etiketleri-ek.ts", "audit-enum-paylasim.ts"]) {
+for (const ad of ["audit-tablo-etiketleri.ts", "audit-enum-etiketleri.ts", "audit-enum-etiketleri-ek.ts", "audit-enum-etiketleri-ek2.ts", "audit-enum-paylasim.ts"]) {
   const kaynak = path.join(BACKEND_CONST, ad);
   const ayna = path.join(ELECTRON_LIB, ad);
   const ozet = (f: string) => (fs.existsSync(f) ? crypto.createHash("sha256").update(fs.readFileSync(f)).digest("hex") : null);

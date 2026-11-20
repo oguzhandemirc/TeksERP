@@ -436,6 +436,10 @@ export interface FeatureFlags {
   devereFasonWasteTolerancePct: number;
   /** Fason devere D4b (K4): lot karışımı kuralı (backend `DEFAULT_DEVERE_FASON_LOT_POLICY` = WARN). */
   devereFasonLotPolicy: DevereFasonLotPolicy;
+  /** Devere ek B1: levent gövdesi envanteri kipi (backend `DEFAULT_DEVERE_BEAM_BODY_MODE` = OFF). */
+  devereBeamBodyMode: DevereBeamBodyMode;
+  /** Devere ek B1: gövde–tezgâh uyumsuzluğu (backend `DEFAULT_DEVERE_BEAM_BODY_MACHINE_FIT` = WARN). */
+  devereBeamBodyMachineFit: DevereBeamBodyMachineFit;
   /** Devere H1: kapanışta kalan ipliğin varsayılan önerisi (backend `DEFAULT_DEVERE_SETTLE_DEFAULT` = WASTE_UP_TO_PLAN). */
   devereSettleDefault: DevereSettleDefault;
   /** Devere A1: yeniden sarılan levent beklenen devere ücretine girer mi (backend `readDevereReworkBillable`, kayıt yok = true). */
@@ -942,6 +946,9 @@ export type KursunMeterCapture = "OFF" | "OUT" | "IN_OUT";
 
 /** Fason devere D4b (K4) — backend `DevereFasonLotPolicy` aynası. */
 export type DevereFasonLotPolicy = "FREE" | "WARN" | "SINGLE_LOT";
+/** Devere ek B1 — backend `DevereBeamBodyMode` / `DevereBeamBodyMachineFit` aynası. */
+export type DevereBeamBodyMode = "OFF" | "OPTIONAL" | "REQUIRED";
+export type DevereBeamBodyMachineFit = "WARN" | "BLOCK";
 /** Devere H1 — backend `DevereSettleDefault` aynası. */
 export type DevereSettleDefault = "WASTE_UP_TO_PLAN" | "KEEP" | "RETURN" | "WASTE_ALL";
 /** S1: top doğuş yolu — backend `DokumaRollBirth` aynası. */

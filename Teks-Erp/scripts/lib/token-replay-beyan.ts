@@ -48,6 +48,8 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}warping-order/dispatch.ts::dispatchClaimedWarpingOrderTx`]: { giris: { [`${S}warping-order/dispatch.ts::dispatchWarpingOrder`]: "R" } },
   [`${S}warping-order/yarn-transfer.ts::transferWarpingYarn`]: { giris: { [`${S}warping-order/yarn-transfer.ts::transferWarpingYarn`]: "R" } },
   [`${S}warping-order/receive.ts::receiveWarpingOrder`]: { giris: { [`${S}warping-order/receive.ts::receiveWarpingOrder`]: "R" } },
+  // Levent gövdesi kaydı (devere ek B1): panelden clientToken ile doğar; kart silinmez (iptal pasife alır, replay aynı kartı döndürür).
+  [`${S}beam-body/write.ts::createBeamBody`]: { giris: { [`${S}beam-body/write.ts::createBeamBody`]: "R" } },
   [`${S}warping-order/settle.ts::settleWarpingOrder`]: { giris: { [`${S}warping-order/settle.ts::settleWarpingOrder`]: "R" } },
   // Devere iade(+fire): token iade hareketine yazılır (returnYarnTx → applyYarnMovementTx); giriş elle iade ucu.
   [`${S}subcontractor-yarn.service.ts::returnYarnTx`]: { giris: { [`${S}warping-order/yarn-return-waste.ts::returnWarpingYarn`]: "R" } },
@@ -117,6 +119,7 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   // ── Tek yazar helper'ları ───────────────────────────────────────────────────
   [`${S}helpers/cash-ledger.helper.ts::applyCashTxTx`]: { helper: "kasa/banka satırı + bakiye tek yazarı" },
   [`${S}helpers/warp-beam-wind-write.helper.ts::writeWoundTx`]: { helper: "sarım satırı yazarı (raşel kardeşleri token'sız)" },
+  [`${S}helpers/beam-body.helper.ts::registerBeamBodyTx`]: { helper: "levent gövdesi doğuş yazarı (kart + REGISTER)" },
   [`${S}shipping/create.ts::createShipmentCoreTx`]: { helper: "sevkiyat çekirdek yazarı" },
   [`${S}batch.service.ts::createBatchTx`]: { helper: "parti yazarı" },
   // Hizmet fiyat tablosu (2026-11-06): token tek yazar `itemPriceService.upsert` → sürüm helper'ına aktarılır; replay `servicePriceService.write`ta.
@@ -328,6 +331,7 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}warping-order/dispatch.ts::dispatchReplay`]: ["warpingOrderId", "lines"],
   [`${S}warping-order/yarn-transfer.ts::transferReplay`]: ["fromWarpingOrderId", "toWarpingOrderId", "lines"],
   [`${S}warping-order/receive.ts::receiveReplay`]: ["warpingOrderId", "deliveryNoteNo", "beams"],
+  [`${S}beam-body/write.ts::replayFor`]: ["bodyNo", "owner"],
   [`${S}warping-order/settle.ts::settleReplay`]: ["warpingOrderId", "requestHash"],
   [`${S}warping-order/yarn-return-waste.ts::returnReplay`]: ["dispatchItemId", "requestHash"],
   [`${S}certificate.service.ts::replayFor`]: ["certificateNo", "renewsId"],

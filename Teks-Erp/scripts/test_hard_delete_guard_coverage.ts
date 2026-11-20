@@ -311,6 +311,8 @@ const MACHINE_GUARD_EXEMPT: Record<string, string> = {
     "maliyet modülü tablosu: Restrict FK silmeyi P2003 ile durdurur; guard sayımı rejim kapısız router'ı maliyete bağlardı",
   "machineStopCodeMap.machineId":
     "yapılandırma BLOKLAMAZ: tezgah üst-yazımı makineyle Cascade gider; duruş satırı sebebi kopyasıyla taşır (D2)",
+  "beamBodyMachine.machineId":
+    "yapılandırma BLOKLAMAZ: gövde–tezgâh uyum pivotu makine silmede deleteTx içinde silinir (devere ek B1)",
   "peripheralDevice.machineId":
     "donanım BLOKLAMAZ: silmede machineId=null'a çekilir (kayıt + ayar korunur, atamasız boşa çıkar)",
   // Dokuma P2b-1 (2026-09-13) — ikisi de YAZMA YÜZEYİ olmadan indi.

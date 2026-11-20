@@ -100,6 +100,10 @@ const OTHER_MODEL: ReadonlySet<string> = new Set([
   "src/services/workorder-scan-route.service.ts",
   // PB1: emanet iplik lotu (`yarn_lots`) + levent (`warp_beams`) sahibi — top değil, ayrı modeller.
   "src/services/helpers/consigned-material.helper.ts",
+  // Devere ek B1: `BeamBody.ownerCustomerId` (levent gövdesinin sahibi, NULL = bizim) — top değil.
+  "src/constants/beam-body.ts",
+  "src/services/beam-body/read.ts",
+  "src/services/beam-body/write.ts",
 ]);
 
 function walk(dir: string, out: string[] = []): string[] {

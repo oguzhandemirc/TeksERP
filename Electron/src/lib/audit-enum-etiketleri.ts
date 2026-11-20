@@ -7,6 +7,7 @@
 // =============================================================================
 
 import { ENUM_LABELS_EK } from "./audit-enum-etiketleri-ek";
+import { ENUM_LABELS_EK2 } from "./audit-enum-etiketleri-ek2";
 import { TERIM } from "./terim";
 export { SHARED_ENUM_VALUES } from "./audit-enum-paylasim";
 
@@ -343,7 +344,7 @@ const ENUM_LABELS_ANA: Record<string, string> = {
 /** Enum DEĞERLERİ (durum/tür kolonlarının içeriği) → Türkçe. Bilinmeyen → ham. */
 // K20: tanımlayıcılar korunur — yayma (`...`) iş emri adı getter'larını birleşim anında dondururdu.
 export const ENUM_LABELS: Record<string, string> = Object.defineProperties(
-  {}, { ...Object.getOwnPropertyDescriptors(ENUM_LABELS_ANA), ...Object.getOwnPropertyDescriptors(ENUM_LABELS_EK) },
+  {}, { ...Object.getOwnPropertyDescriptors(ENUM_LABELS_ANA), ...Object.getOwnPropertyDescriptors(ENUM_LABELS_EK), ...Object.getOwnPropertyDescriptors(ENUM_LABELS_EK2) },
 );
 
 // =============================================================================

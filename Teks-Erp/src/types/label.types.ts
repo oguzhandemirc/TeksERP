@@ -161,6 +161,15 @@ export interface LabelPayload {
   weavingOrderNumber?: string | null;
   /** WOUND anı (ISO) — sarılmamış leventte null. */
   woundAt?: string | null;
+
+  // --- BEAM_BODY (levent gövdesi, devere ek B1) — yalnız `kind === BEAM_BODY` iken dolu. ---
+  /** Gövde no (`BeamBody.bodyNo`) — barkod/QR ile AYNI değer. */
+  bodyNo?: string | null;
+  /** Sahip cari adı; bizim gövdede "Bizim". */
+  ownerName?: string | null;
+  bodyWidthCm?: number | null;
+  flangeDiameterCm?: number | null;
+  tareKg?: number | null;
 }
 
 export interface SwatchLabelPayload {

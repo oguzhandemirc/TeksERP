@@ -18,6 +18,7 @@ export type PrintSubjectKind =
   | "ETIKET_NUMUNE"
   | "ETIKET_TEZGAH"
   | "ETIKET_LEVENT"
+  | "ETIKET_LEVENT_GOVDE"
   | "ETIKET_SERBEST"
   | "ETIKET_TOPLU"
   | "BELGE"

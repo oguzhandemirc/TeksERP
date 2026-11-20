@@ -39,6 +39,7 @@ export type PrintReportSubjectKind =
   | 'ETIKET_TOP'
   | 'ETIKET_CUVAL'
   | 'ETIKET_LEVENT'
+  | 'ETIKET_LEVENT_GOVDE'
   | 'ETIKET_SERBEST'
   | 'REFAKAT_KARTI'
   | 'FASON_CEKI'

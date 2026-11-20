@@ -153,6 +153,8 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "warpbeam:read",
       // Fason devere siparişi: planlama açar ve ipliği sevk eder; iptal (ters kayıt) süpervizörde.
       "warping-order:read",
+      "beam-body:read",
+      "beam-body:write",
       "warping-order:write",
       // Dokuma işi planlamanın OKUDUĞU şeydir; kapat/iptal kararı süpervizörde.
       // Ekranı henüz yok (yüzey önce, ekran sonra) — sahada bir şey AÇMAZ.
@@ -205,6 +207,7 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "consignment:write",
       // Devereciye giden ipliği depo çıkarır; sipariş/sevk yazma planlamada.
       "warping-order:read",
+      "beam-body:read",
       // ⚠️ `goods-receipt:*` BİLEREK YOK: Mal Kabul ekranı yalnız izinle kapılı
       // (tek depolu ticaret kurulumu da kullanacağı için multiWarehouse şartı
       // konamaz) → şablona akarsa fabrikada karo BELİRİR. Alım-satım kurulumunda
@@ -448,6 +451,8 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "warpbeam:cancel",
       // Fason devere: aç/sevk et + iptal (ters kayıt; ayrı kod, aynı kişide).
       "warping-order:read",
+      "beam-body:read",
+      "beam-body:write",
       "warping-order:write",
       "warping-order:cancel",
       // Kapanış (fire beyanı + iade) ve yeniden açma: aynı kişide, ayrı kod — fire defteri sayıyı değiştirir.
