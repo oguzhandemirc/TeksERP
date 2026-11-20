@@ -2,3 +2,6 @@ PORT=4000
 DATABASE_URL="postgresql://****:****@****:****/****?schema=public"
 # JWT_SECRET kurulumda ÜRETİLİR (openssl rand -hex 32); örnek değer yok — boşken backend açılmaz.
 JWT_SECRET=
+# Etkili Destek talepleri (varsayılan KAPALI; ikisi de doluysa açılır — docs/ops/DESTEK-ENTEGRASYONU.md)
+# DESTEK_API_URL=https://<destek merkezi>/api/v1/integration
+# DESTEK_API_KEY=<kılavuzdaki API anahtarı; repoya ve log'a GİRMEZ>

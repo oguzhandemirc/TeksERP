@@ -1,4 +1,5 @@
-import { Settings as SettingsIcon, Download, FilePlus2, ScrollText, BellRing, Bell } from "lucide-react";
+import { Settings as SettingsIcon, Download, FilePlus2, ScrollText, BellRing, Bell, LifeBuoy } from "lucide-react";
+import { useDestekStore } from "@/pages/Destek/destek-store";
 import { navGroups } from "./nav-config";
 import { definitionTiles } from "@/pages/Definitions/tile-config";
 import { definitionGroups } from "@/pages/Definitions/groups-config";
@@ -279,6 +280,17 @@ export const commandSections: CommandSection[] = [
         icon: ScrollText,
         to: "/release-notes",
         keywords: "sürüm notu güncelleme yenilik değişiklik changelog versiyon",
+      },
+      {
+        key: "personal:destek",
+        label: "Destek Talepleri",
+        description: "Etkili Destek'e açtığınız talepler ve yanıtları",
+        icon: LifeBuoy,
+        to: "/destek",
+        // KOŞULLU: yalnız sunucu `/api/etkili-destek/durum` etkin dediyse görünür (kapalı kurulumda iz yok).
+        // Yüklem modül bağlamını değil destek deposunu okur; palet her açılışta yeniden süzer.
+        visibleWhen: () => useDestekStore.getState().enabled,
+        keywords: "destek talep sorun bildir hata soru istek yardım etkili",
       },
     ],
   },

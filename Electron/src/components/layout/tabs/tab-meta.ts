@@ -16,6 +16,7 @@ import {
   Handshake,
   Users,
   History,
+  LifeBuoy,
   AlertOctagon,
   ShoppingCart,
   Warehouse,
@@ -36,6 +37,8 @@ const STATIC: Record<string, TabMeta> = {
   "/": { title: "Anasayfa", icon: LayoutDashboard },
   "/settings": { title: "Kullanıcı Tercihleri", icon: Settings },
   "/release-notes": { title: "Sürüm Notları", icon: FileText },
+  // Kapısız Etkili Destek sayfası (talepler); giriş üst çubuktaki Destek düğmesinden.
+  "/destek": { title: "Destek", icon: LifeBuoy },
   "/system/updates": { title: "Güncellemeler", icon: Download },
   "/forbidden": { title: "Yetki yok", icon: ShieldAlert },
   "/definitions": { title: "Tanımlar", icon: Library },

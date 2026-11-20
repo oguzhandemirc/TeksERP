@@ -16,6 +16,8 @@ export const TABLE_LABELS: Record<string, string> = {
   NumberSeriesLine: "Numara serisi biçim satırı",
   number_series: "Numara serisi",
   number_series_lines: "Numara serisi biçim satırı",
+  // Etkili Destek talepleri (merkezde durur; recordId = merkezdeki talep kimliği).
+  destek_talepleri: "Etkili Destek talebi",
   // Sistem event kategorileri (tableName = kategori string'i)
   AUTH: "Kimlik Doğrulama",
   SYSTEM: "Sistem",

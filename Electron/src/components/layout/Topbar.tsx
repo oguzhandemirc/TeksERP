@@ -11,6 +11,7 @@ import { TopbarActivityButton, TopbarSearch, TopbarUserMenu } from "./topbar-par
 import { LoomAlarmBell } from "@/pages/Operations/LoomAlarms/LoomAlarmBell";
 import { GuncellemeDugmesi } from "./GuncellemeDugmesi";
 import { BildirimZili } from "./BildirimZili";
+import { DestekTopbarButton } from "@/pages/Destek/DestekTopbarButton";
 import { useShellReload } from "@/store/shell-reload";
 import { useSpinWhile } from "@/hooks/useSpinWhile";
 import { MasaustuBildirimKoprusu } from "@/components/bildirim/MasaustuBildirimKoprusu";
@@ -72,6 +73,9 @@ export function Topbar({ onToggleSidebar, onOpenCommand, narrow = false, drawerO
 
         {/* Güncelleme denetleme — durum eşlemesi tek kaynaktan (`@/lib/updater-durum`); web panelinde hiç çizilmez. */}
         <GuncellemeDugmesi />
+
+        {/* Etkili Destek girişi — `/api/etkili-destek/durum` kapalı derse hiç çizilmez. */}
+        <DestekTopbarButton />
 
         {/* Tezgah alarmı — Etkinlik akışından AYRI zil; bayrak/izin yoksa hiç çizilmez. */}
         <LoomAlarmBell />
