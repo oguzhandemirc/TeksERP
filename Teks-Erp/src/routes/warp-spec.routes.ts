@@ -20,6 +20,7 @@ import { requirePermission } from "../middlewares/rbac.middleware";
 import { requireDevereEnabled } from "../middlewares/module.middleware";
 import { z } from "zod";
 import { applyDenierSuggestion, getDenierDeviationReport } from "../services/denier-deviation.service";
+import { denierDeviationQuerySchema } from "./reports/dokuma.report.routes";
 import "../types/express-augment";
 
 export const warpSpecService = new WarpSpecService({
@@ -69,13 +70,8 @@ router.get("/", requirePermission("warpspec:read"), controller.findAll);
 router.get("/similar-names", requirePermission("warpspec:write"), controller.similarNames);
 
 // ── Devere F1: denye sapma raporu + [Uygula] (`/:id`den ÖNCE) ──────────────────
-const YMD = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Geçersiz gün (YYYY-MM-DD)");
-export const denierDeviationQuerySchema = z.object({
-  from: YMD.optional(),
-  to: YMD.optional(),
-  yarnItemId: z.string().uuid("Geçersiz iplik").optional(),
-  subcontractorId: z.string().uuid("Geçersiz devereci").optional(),
-}).strict();
+// Sorgu şeması tek tanım: rapor ucu (`/api/reports/dokuma/denye-sapma`, F2) ile aynı.
+export { denierDeviationQuerySchema };
 const DenierValue = z.union([z.string().trim().min(1, "Denye boş olamaz").max(32), z.number()]).transform((v) => String(v));
 export const denierApplyBodySchema = z.object({
   yarnItemId: z.string().uuid("Geçersiz iplik"),

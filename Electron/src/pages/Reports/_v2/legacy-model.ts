@@ -1,7 +1,7 @@
 // Geçiş yüzeyi (R0-GECIS) — SAF. Eski (v1) rapor nereye gitti, bu kişiye gösterilebilir mi:
 // band, taşınan araç karoları ve palet AYNI yüklemleri okur ("Eski raporlar" bölümü 2026-11-12 kalktı).
 import type { LucideIcon } from "lucide-react";
-import { CalendarClock, ClipboardList, FileSearch, Footprints, Scale, ScrollText, UserRoundSearch, Waypoints } from "lucide-react";
+import { CalendarClock, ClipboardList, FileSearch, Footprints, ScrollText, UserRoundSearch, Waypoints } from "lucide-react";
 import { REPORT_BY_KEY } from "@/lib/report-catalog";
 import { isRouteModuleOpen } from "@/lib/route-modules";
 import { reportKeyOfPath } from "@/lib/report-gate";
@@ -41,8 +41,6 @@ const RELOCATED_TOOL_SPECS: readonly RelocatedToolSpec[] = [
     to: "/reports/dokuma/karne", permission: "report:production", hostLabel: "Tezgah Salonu", hostPermission: "loom:live-view" },
   { title: "Levent Bitiş Tahmini", description: "Tezgahtaki leventler ne zaman biter", icon: CalendarClock,
     to: "/reports/dokuma/levent-bitis-tahmini", permission: "report:production", hostLabel: "Leventler", hostPermission: "warpbeam:read" },
-  { title: "Denye Sapması", description: "Tartılan devere leventleri iplik kartı denyesiyle uyuşuyor mu; öneriyi onayla uygula", icon: Scale,
-    to: "/reports/dokuma/denye-sapma", permission: "report:production", hostLabel: "Fason Devere Siparişleri", hostPermission: "warping-order:read" },
   // Cari Ekstre diyalogdur, kendi adresi yok: anahtar elle.
   { reportKey: "finance/statement", title: "Cari Ekstre", description: "Cari satırındaki Ekstre düğmesi: dönem hareketleri ve bakiye", icon: ScrollText,
     to: "/finance/cari", permission: "finance:read", hostLabel: "Cari Hesaplar", hostPermission: "finance:read" },

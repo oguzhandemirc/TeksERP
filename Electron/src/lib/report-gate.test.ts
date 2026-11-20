@@ -49,7 +49,7 @@ describe("report-gate", () => {
   it("§5 v2 satırı ucu inene kadar (`hazir:false`) çizilmez; kategoriyi tek başına açık göstermez", () => {
     const v1 = REPORT_CATALOG.filter((r) => r.nesil === "v1");
     const v2 = REPORT_CATALOG.find((r) => r.nesil === "v2");
-    expect(v1.length).toBe(37); // körlük zemini: bugünkü yüzeyler 37 v1 satırını çizer (Devere F2 denye sapması)
+    expect(v1.length).toBe(36); // körlük zemini: bugünkü yüzeyler 36 v1 satırını çizer
     expect(v2).toBeDefined();
     // Emekli v1 (panelden kalktı, uç bir sürüm açık) çizilmez; kalanlar çizilir.
     expect(v1.filter((r) => r.nesil === "v1" && r.emekli !== true).every(isReportOnPanel)).toBe(true);

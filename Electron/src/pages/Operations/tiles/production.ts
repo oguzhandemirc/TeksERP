@@ -172,7 +172,7 @@ export const productionTiles: OperationsTile[] = [
     offHint: flagOffHint("devereEnabled"),
   },
   {
-    // DENYE SAPMASI (devere F2): rapor yaprağı; izin route ile birebir (`report:production`). Rapor kapalıyken
+    // DENYE SAPMASI (devere F2): v2 rapor yaprağı; izin uç/route ile birebir (`warpspec:read`). Rapor kapalıyken
     // soluk karo anlamsız (sebep bayrak değil) — offHint yok, gizlenir.
     key: "denye-sapma",
     title: "Denye Sapması",
@@ -180,7 +180,7 @@ export const productionTiles: OperationsTile[] = [
     icon: Scale,
     to: "/reports/dokuma/denye-sapma",
     group: "production",
-    permission: "report:production",
+    permission: "warpspec:read",
     visibleWhen: isDenierReportVisible,
   },
   {

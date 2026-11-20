@@ -23,12 +23,13 @@ export const dokumaReportTiles: HubTile[] = [
     to: "/reports/dokuma/levent-bitis-tahmini",
   },
   {
-    // Devere F2: uç `/api/warp-specs/denier-deviation` (devere kapısı) — katalogda yabancı uç.
+    // Devere F2: v2 uç `/api/reports/dokuma/denye-sapma` (devere kapısı); izin kategoriden farklı.
     key: "denye-sapma",
     title: "Denye Sapması",
     description: "Tartılan devere leventlerinin net kilosu iplik kartının denyesiyle uyuşuyor mu; öneriyi onayla karta uygula",
     icon: Scale,
     to: "/reports/dokuma/denye-sapma",
+    permission: "warpspec:read",
   },
 ];
 

@@ -139,10 +139,9 @@ describe("route-modules — K19 bağlı modül", () => {
     expect(line).toContain("requireFinanceEnabled");
     expect(Object.keys(ROUTE_ALSO_REQUIRES)).toEqual(["reports/maliyet/karlilik", "reports/dokuma/denye-sapma"]);
     expect(ROUTE_ALSO_REQUIRES["reports/maliyet/karlilik"]).toEqual(["financeEnabled"]);
-    // Devere F2: denye sapma ucu `warp-spec.routes` router düzeyinde devere kapısında.
-    const warpSpec = readFileSync(resolve(__dirname, "../../../Teks-Erp/src/routes/warp-spec.routes.ts"), "utf8");
-    expect(warpSpec).toMatch(/router\.use\([^)]*requireDevereEnabled/);
-    expect(warpSpec).toContain('router.get("/denier-deviation"');
+    // Devere F2: denye sapma rapor ucu kendi satırında devere kapısında.
+    const dokuma = readFileSync(resolve(__dirname, "../../../Teks-Erp/src/routes/reports/dokuma.report.routes.ts"), "utf8");
+    expect(dokuma.split("\n").find((l) => l.startsWith('router.get("/denye-sapma"')) ?? "").toContain("requireDevereEnabled");
     expect(ROUTE_ALSO_REQUIRES["reports/dokuma/denye-sapma"]).toEqual(["devereEnabled"]);
     expect(isRouteModuleOpen("/reports/dokuma/denye-sapma", ctx({ devereEnabled: false }))).toBe(false);
     expect(isRouteModuleOpen("/reports/dokuma/denye-sapma", ctx())).toBe(true);

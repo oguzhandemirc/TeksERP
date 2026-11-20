@@ -112,7 +112,7 @@ describe("§2 band yalnız ReportPageLayout'ta — panelde kalan v1", () => {
   const files = sources(REPORTS_DIR);
   it("⭐ her v1 yaprak `ReportPageLayout`u kendi anahtarıyla çizer (adressiz diyalog — Cari Ekstre — kendi ekranında, bandsız)", () => {
     const missing = v1Entries.filter((e) => e.yuzey !== "diyalog" && !files.some((f) => f.text.includes("<ReportPageLayout") && f.text.includes(`reportKey="${e.key}"`)));
-    expect(v1Entries).toHaveLength(11); // + Devere F2 denye sapması
+    expect(v1Entries).toHaveLength(10);
     expect(missing.map((e) => e.key)).toEqual([]);
   });
   it("band sayfa sayfa elle eklenmez; bileşen yönlendirme yapmaz", () => {
@@ -149,7 +149,7 @@ describe("§5 taşınan yedi araç", () => {
   it("⭐ liste katalogdaki `tasindi` satırlarıyla bire bir; yer katalogdan, adres/izin değişmez", () => {
     const moved = v1Entries.filter((e) => e.yeniHali.tur === "tasindi").map((e) => e.key).sort();
     expect(RELOCATED_TOOLS.map((t) => t.reportKey).sort()).toEqual(moved);
-    expect(moved).toHaveLength(8); // + Devere F2 denye sapması (Fason Devere Siparişleri)
+    expect(moved).toHaveLength(7);
     for (const t of RELOCATED_TOOLS) {
       const e = REPORT_BY_KEY.get(t.reportKey)!;
       expect(relocatedHostOf(t.reportKey)).not.toBeNull();
@@ -179,8 +179,7 @@ describe("§6 palet", () => {
     const keys = new Set(visible().map((e) => e.key));
     expect(keys.has("report:dokuma:karne")).toBe(false); // taşındı: `relocated:` girişi görünür
     const moved = visible().filter((e) => e.key.startsWith("relocated:"));
-    expect(moved).toHaveLength(8);
-    expect(moved.find((e) => e.key === "relocated:dokuma/denye-sapma")?.label).toBe("Fason Devere Siparişleri · Denye Sapması");
+    expect(moved).toHaveLength(7);
     expect(moved.find((e) => e.key === "relocated:dokuma/karne")?.label).toBe("Tezgah Salonu · Karne Listesi ve Mühür");
   });
 });

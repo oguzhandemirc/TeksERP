@@ -1,8 +1,8 @@
 // =============================================================================
 // DENYE SAPMASI (Devere F2) — HTTP istemcisi + TEK kolon kurucusu (ekran tablosu ve Excel/PDF aynı listeden)
 // =============================================================================
-// Uç `/api/warp-specs/denier-deviation` (F1; devere kapısı, `warpspec:read`) — rapor router'ı dışında, katalogda
-// `yaprak-yabanci-uc`. İstemci HESAP YAPMAZ: sayılar sunucunun ondalık metinleri, burada yalnız biçimlenir.
+// Uç `/api/reports/dokuma/denye-sapma` (v2 katalog satırı; devere kapısı, `warpspec:read`); [Uygula] F1 ucunda
+// (`/api/warp-specs/denier-deviation/apply`). İstemci HESAP YAPMAZ: sayılar sunucunun ondalık metinleri, burada yalnız biçimlenir.
 // =============================================================================
 import axios from "axios";
 import apiClient from "@/services/apiClient";
@@ -59,7 +59,7 @@ const qs = (p: DenierQuery): string => {
 export const denyeSapmaApi = {
   // Hata sayfada kalıcı kutuda gösterilir (toast kaybolur) — genel toast bastırılır.
   report: async (p: DenierQuery) =>
-    (await apiClient.get<ApiResponse<DenierReport>>(`/api/warp-specs/denier-deviation${qs(p)}`, { suppressErrorToast: true })).data,
+    (await apiClient.get<ApiResponse<DenierReport>>(`/api/reports/dokuma/denye-sapma${qs(p)}`, { suppressErrorToast: true })).data,
   apply: async (body: DenierApplyBody) =>
     (await apiClient.post<ApiResponse<DenierApplyResult>>("/api/warp-specs/denier-deviation/apply", body, { suppressErrorToast: true })).data,
 };

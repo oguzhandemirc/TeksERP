@@ -1772,7 +1772,8 @@ export const contentRoutes: RouteObject[] = [
   {
     path: "reports/dokuma",
     element: (
-      <ProtectedRoute requirePermission="report:production">
+      // Dokuma raporları (`report:production`) ya da Denye Sapması (`warpspec:read`, devere F2) okuyana açık; karolar kendi izniyle süzülür.
+      <ProtectedRoute requireAnyPermission={["report:production", "warpspec:read"]}>
         <DokumaReportsHubPage />
       </ProtectedRoute>
     ),
@@ -1796,7 +1797,7 @@ export const contentRoutes: RouteObject[] = [
   {
     path: "reports/dokuma/denye-sapma",
     element: (
-      <ProtectedRoute requirePermission="report:production">
+      <ProtectedRoute requirePermission="warpspec:read">
         <DenyeSapmaPage />
       </ProtectedRoute>
     ),
