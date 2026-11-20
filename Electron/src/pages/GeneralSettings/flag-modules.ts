@@ -113,6 +113,8 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   devereFasonLotPolicy: "devereEnabled",
   // Z1 üretim belge zinciri (2026-09-18): levent→iş bağı devere'nin, koşum→iş ve iş→sipariş bağı dokumanın davranış bayrağı.
   devereBeamWeavingLinkRequired: "devereEnabled",
+  // Devere A1 (2026-11-20): yeniden sarımın beklenen ücrete girmesi devere modülünün davranış bayrağı.
+  devereReworkBillable: "devereEnabled",
   dokumaRunWeavingOrderRequired: "dokumaEnabled",
   dokumaOrderLineLinkRequired: "dokumaEnabled",
   // S1 (2026-10-21): top doğuş yolu dokumanın enum bayrağı (panel satırı S4b).

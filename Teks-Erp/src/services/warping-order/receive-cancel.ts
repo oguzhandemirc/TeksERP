@@ -11,7 +11,7 @@ import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { AuditService } from "../audit.service";
 import { applyWarpBeamEventTx, logWarpBeamEventAudit } from "../helpers/warp-beam-event.helper";
-import { claimWarpingOrderForWoundCancelTx, newestLiveWarpingWoundTx } from "../helpers/warping-receipt-guard.helper";
+import { activeWarpingReceiptInvoiceTx, assertWarpingReceiptNotInvoicedTx, claimWarpingOrderForWoundCancelTx, newestLiveWarpingWoundTx } from "../helpers/warping-receipt-guard.helper";
 import { sequentialTx } from "../helpers/tx-sequential-relations.helper";
 import { WARPING_ORDER_TABLE } from "./create";
 
@@ -57,6 +57,8 @@ export async function previewCancelWarpingReceipt(id: string, receiptKey: string
   if (newest && newest.beam.warpingReceiptKey !== receiptKey) blockers.push(`Daha yeni bir kabul var (${newest.beam.beamNo}) — kabuller sondan başa (LIFO) geri alınır.`);
   const live = beams.filter((b) => b.events[0] && !b.events[0].reversal);
   if (live.length === 0) blockers.push("Bu kabulün bütün leventleri zaten geri alınmış.");
+  const invoiced = await activeWarpingReceiptInvoiceTx(prisma, receiptKey);
+  if (invoiced) blockers.push(`Kabul faturalı (${invoiced.docNo}) — önce faturayı iptal edin ya da bağını kaldırın.`);
   const released = new Map<string, { dispatchItemId: string; dispatchNo: string; yarnItemId: string; holderWarpingOrderId: string; kg: Prisma.Decimal }>();
   for (const b of live) {
     for (const y of b.events[0]!.yarns) {
@@ -82,6 +84,7 @@ export async function cancelWarpingReceipt(id: string, receiptKey: string, reaso
   if (why.length < 3) throw AppError.badRequest("İptal sebebi en az 3 karakter olmalı");
   const out = await prisma.$transaction(async (tx) => {
     await claimWarpingOrderForWoundCancelTx(tx, id, userId);
+    await assertWarpingReceiptNotInvoicedTx(tx, receiptKey);
     const newest = await newestLiveWarpingWoundTx(tx, id);
     const beams = (await receiptBeams(tx, id, receiptKey)).filter((b) => b.events[0] && !b.events[0].reversal);
     if (beams.length === 0) throw AppError.conflict("Bu kabulde geri alınacak canlı levent yok.", { code: "WARPING_RECEIPT_NOT_OPEN" });

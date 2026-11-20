@@ -398,6 +398,8 @@ export const updateSchema = z.strictObject({
   /** Fason devere D4: kapama fire toleransı (%; `DEVERE_FASON_WASTE_TOLERANCE_PCT_MAX` ile birebir); 0 = denetim yok; null = varsayılana dön. */
   /** Fason devere D4b (K4): lot karışımı kuralı (enum; `DEVERE_FASON_LOT_POLICIES` ile birebir). */
   devereFasonLotPolicy: z.enum(["FREE", "WARN", "SINGLE_LOT"]).optional(),
+  /** Devere A1: yeniden sarım beklenen devere ücretine girer mi (varsayılan true). */
+  devereReworkBillable: z.boolean().optional(),
   devereFasonWasteTolerancePct: z.number({ message: "Fire toleransı sayı olmalı" }).min(0, "Fire toleransı negatif olamaz").max(99, "Fire toleransı en çok %99 olabilir").nullable().optional(),
   dokumaEnabled: z.boolean().optional(),
   // maliyet.enabled — Maliyet & Teklif modülü (MAL-0); üretime bağımlı, bağımlılık serviste.

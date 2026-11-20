@@ -296,6 +296,9 @@ export const SETTING_KEYS = {
   /** [PROFİL] Fason devere D4b (K4): siparişte iplik başına lot karışımı — `FREE` serbest · `WARN` uyarı (VARSAYILAN,
    *  kullanıcı kararı 2026-11-17) · `SINGLE_LOT` ikinci lot 409. Enum; kalıp `DEVERE_FASON_LOT_POLICIES`. */
   DEVERE_FASON_LOT_POLICY: "devere.fasonLotPolicy",
+  /** [PROFİL] Devere A1: deverecinin kendi kusuruyla yeniden sardığı levent beklenen ücrete girer mi. DEFAULT true
+   *  (kullanıcı kararı 2026-11-20; bugün yeniden sarım işareti yok → beklenen bayt-aynı). Yalnız UYARI hesabını etkiler. */
+  DEVERE_REWORK_BILLABLE: "devere.reworkBillable",
   /** Dokuma işi modülü: dokuma işi planlama · tezgah koşumu · top indirme.
    *  ÜRETİME BAĞIMLI (`MODULE_DEPENDENCIES`), tezgah izlemenin KARDEŞİ — fasona
    *  dokutan firmada dokuma işi var tezgah yok (DOKUMA-IS-EMRI §2.5). */

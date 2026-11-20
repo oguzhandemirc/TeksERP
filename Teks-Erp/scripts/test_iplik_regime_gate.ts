@@ -175,6 +175,13 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
       "EKLENEMEZ: fatura kesmek iplik modülü olmadan da meşrudur (kumaş faturası).",
   },
   {
+    dosya: "routes/finance-warping-fee.routes.ts",
+    neden:
+      "DEVERECİ FATURASI (devere A1, 2026-11-20). Router `finance.routes.ts`in ALT router'ıdır (kendi başına mount edilmez), `verifyToken` + `requireFinanceEnabled` kapısını miras alır, aday/taslak uçları ayrıca `requireDevereEnabled`. " +
+      "İplik dokunuşu GEÇİŞLİ ve finance.routes ile AYNIDIR: `invoiceService` satış faturası stok düşümü `resolveYarnOutOnInvoiceEnabled` " +
+      "resolver'ından geçer; bu uçlar yalnız ALIŞ taslağı yazar, kg defterine dokunmaz. Route kapısı EKLENEMEZ: devereci faturası iplik modülünden bağımsızdır.",
+  },
+  {
     dosya: "routes/goods-receipt.routes.ts",
     neden:
       "MAL KABUL. Router `requireTicaretEnabled` taşır, İPLİK kapısı TAŞIMAZ ve bu DOĞRU: " +

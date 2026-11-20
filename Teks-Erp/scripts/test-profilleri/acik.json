@@ -92,6 +92,7 @@
     "devereAutoConsume": true,
     "devereWarpFixedWasteM": 20,
     "devereFasonLotPolicy": "WARN",
+    "devereReworkBillable": true,
     "devereFasonWasteTolerancePct": 3,
     "devereBeamWeavingLinkRequired": true,
     "dokumaRunWeavingOrderRequired": true,

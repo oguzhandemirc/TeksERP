@@ -65,6 +65,14 @@ import {
   receiptMatchTx,
   toInvoiceReceiptDto,
 } from "./helpers/invoice-receipts.helper";
+import {
+  INVOICE_WARPING_RECEIPT_SELECT,
+  assertWarpingReceiptsLinkableTx,
+  lockWarpingReceiptOrdersTx,
+  replaceInvoiceWarpingReceiptsTx,
+  toInvoiceWarpingReceiptDto,
+  writeInvoiceWarpingReceiptsTx,
+} from "./helpers/invoice-warping-receipts.helper";
 import { factoryDateTr } from "../constants/time";
 import { qtyText } from "./helpers/qty-text.helper";
 
@@ -126,6 +134,18 @@ export interface InvoiceLineInput extends InvoiceLineSubjectInput {
   withholdingRate?: Prisma.Decimal.Value;
 }
 
+export interface UpdateInvoiceDraftInput {
+  lines?: InvoiceLineInput[];
+  dueDate?: Date | null;
+  externalNo?: string | null;
+  notes?: string | null;
+  exchangeRate?: Prisma.Decimal.Value;
+  /** n irsaliye → 1 fatura: bağlı fişler REPLACE (`[]` temizler; yoksa dokunulmaz). */
+  goodsReceiptIds?: string[];
+  /** Devere A1: bağlı devere kabulleri REPLACE (`[]` temizler; yoksa dokunulmaz). */
+  warpingReceiptKeys?: string[];
+}
+
 export interface CreateInvoiceInput {
   type: InvoiceType;
   customerId?: string | null;
@@ -145,6 +165,8 @@ export interface CreateInvoiceInput {
   goodsReceiptId?: string | null;
   /** n irsaliye → 1 fatura (2026-09-18): bağlı mal kabul fişleri — küme REPLACE; `goodsReceiptId` ile birleşir (tek yazar pivot). */
   goodsReceiptIds?: string[] | null;
+  /** Devere A1: bağlı devere dönüş kabulleri (`warpingReceiptKey`) — yalnız ALIŞ; kabul başına tek aktif fatura. */
+  warpingReceiptKeys?: string[] | null;
   clientToken?: string | null;
   /**
    * H7 hizmet işi bağları — YALNIZ sunucu içi (route şeması taşımaz). Verilmezse ve SALES taslağı bir
@@ -256,6 +278,7 @@ const DETAIL_SELECT = {
     },
   },
   goodsReceipt: { select: { id: true, receiptNo: true, deliveryNoteNo: true } },
+  warpingReceiptLinks: INVOICE_WARPING_RECEIPT_SELECT,
   // KAYNAK BAĞLARI İNSANCA ADIYLA (2026-08-15, fatura detay yüzeyinin bulgusu):
   // sevkiyattan/fasondan doğan faturada detay ekranı kaynak satırı basamıyordu —
   // çıplak FK bilinçli dışarıda kalmaya devam eder, bağ ilişkinin kendi id'si +
@@ -448,6 +471,7 @@ export class InvoiceService {
     const panelService = await this.isPanelShipmentServiceDraft(input);
     const givenLinks = reconcileServiceLinksWithLines(input.lines, input.serviceLinks ?? []).keep;
     const receiptIds = normalizeInvoiceReceiptIds(input) ?? [];
+    const warpingKeys = [...new Set(input.warpingReceiptKeys ?? [])];
 
     // ⚠️ ÖN KONTROL TEK BAŞINA YETMEZ (check-then-act): aynı token'la İKİ
     // PARALEL istek ikisi de "token yok" görür, ikisi de INSERT eder ve biri
@@ -473,11 +497,11 @@ export class InvoiceService {
       await this.assertSourceFree(tx, input);
       // n irsaliye → 1 fatura: fişler kilitlenir, cari/para birimi/açık-fiş kapıları; pivot yazımı create'ten sonra.
       // H7 kilit sırası: fişler + hizmet okumaları (FOR UPDATE ORDER BY id) → fatura → bağ.
-      await lockReceiptsTx(tx, receiptIds).then(() => lockServiceReadingsTx(tx, serviceLinks));
-      if (receiptIds.length > 0) {
-        const cariRow = await tx.cariAccount.findUniqueOrThrow({ where: { id: cari.id }, select: { customerId: true, subcontractorId: true } });
-        await assertReceiptsLinkableTx(tx, { receiptIds, invoiceId: null, type: input.type, currency, cari: cariRow });
-      }
+      // Devere A1: fişlerden SONRA devere siparişleri (id sırası) — kabul stornosunun sipariş claim'iyle serileşir.
+      await lockReceiptsTx(tx, receiptIds).then(() => lockServiceReadingsTx(tx, serviceLinks)).then(() => lockWarpingReceiptOrdersTx(tx, warpingKeys));
+      const cariRow = receiptIds.length > 0 || warpingKeys.length > 0 ? await tx.cariAccount.findUniqueOrThrow({ where: { id: cari.id }, select: { customerId: true, subcontractorId: true } }) : null;
+      if (cariRow && receiptIds.length > 0) await assertReceiptsLinkableTx(tx, { receiptIds, invoiceId: null, type: input.type, currency, cari: cariRow });
+      const warpingLinks = cariRow ? await assertWarpingReceiptsLinkableTx(tx, { receiptKeys: warpingKeys, invoiceId: null, type: input.type, cari: cariRow }) : [];
 
       await lockInvoiceServiceItemsTx(tx, input.lines);
       const docNo = await nextInvoiceNoTx(tx, input.type, issueDate);
@@ -530,6 +554,7 @@ export class InvoiceService {
         select: { id: true, docNo: true },
       });
       if (receiptIds.length > 0) await writeInvoiceReceiptsTx(tx, invoice.id, receiptIds);
+      if (warpingLinks.length > 0) await writeInvoiceWarpingReceiptsTx(tx, invoice.id, warpingLinks);
       return insertServiceLinksTx(tx, invoice.id, serviceLinks).then((linkCount) => ({ ...invoice, linkCount, adopted: cari.adopted }));
     });
 
@@ -538,7 +563,7 @@ export class InvoiceService {
       action: "CREATE",
       tableName: "INVOICE",
       recordId: result.id,
-      newData: { docNo: result.docNo, type: input.type, ...(result.linkCount > 0 ? { serviceLinkCount: result.linkCount } : {}) },
+      newData: { docNo: result.docNo, type: input.type, ...(result.linkCount > 0 ? { serviceLinkCount: result.linkCount } : {}), ...(warpingKeys.length > 0 ? { warpingReceiptKeys: warpingKeys } : {}) },
     });
     logLegacyLegAdoption(result.adopted, userId);
     return { success: true, data: { id: result.id, docNo: result.docNo }, message: `${result.docNo} taslağı oluşturuldu.` };
@@ -930,15 +955,7 @@ export class InvoiceService {
    */
   async updateDraft(
     id: string,
-    rawInput: {
-      lines?: InvoiceLineInput[];
-      dueDate?: Date | null;
-      externalNo?: string | null;
-      notes?: string | null;
-      exchangeRate?: Prisma.Decimal.Value;
-      /** n irsaliye → 1 fatura: bağlı fişler REPLACE (`[]` temizler; yoksa dokunulmaz). */
-      goodsReceiptIds?: string[];
-    },
+    rawInput: UpdateInvoiceDraftInput,
     userId?: string,
   ): Promise<ApiResponse<{ id: string }>> {
     // D1c: satır konusu tx'ten ÖNCE kanonikleşir (bağ eşitlemesi `serviceItemId`'den okur).
@@ -971,6 +988,7 @@ export class InvoiceService {
         await assertReceiptsLinkableTx(tx, { receiptIds, invoiceId: id, type: existing.type, currency: existing.currency, cari: existing.cari });
         await writeInvoiceReceiptsTx(tx, id, receiptIds);
       }
+      if (input.warpingReceiptKeys !== undefined) await replaceInvoiceWarpingReceiptsTx(tx, { invoiceId: id, receiptKeys: input.warpingReceiptKeys, type: existing.type, cari: existing.cari });
 
       // H7: bağ ↔ satır (çıkarılan hizmet satırının bağı damgalanır, miktar değişimi 409); satırsız düzenlemede 0.
       // F1: sevk taslağına emanet işinin bağsız hizmet satırı düzenlemeyle de eklenemez (kapalıyken no-op).
@@ -1018,7 +1036,8 @@ export class InvoiceService {
       }).then(() => revoked);
     });
 
-    void AuditService.log({ userId, action: "UPDATE", tableName: "INVOICE", recordId: id, ...(serviceLinksRevoked > 0 ? { newData: { serviceLinksRevoked } } : {}) });
+    const auditData = { ...(serviceLinksRevoked > 0 ? { serviceLinksRevoked } : {}), ...(input.warpingReceiptKeys !== undefined ? { warpingReceiptKeys: input.warpingReceiptKeys } : {}) };
+    void AuditService.log({ userId, action: "UPDATE", tableName: "INVOICE", recordId: id, ...(Object.keys(auditData).length > 0 ? { newData: auditData } : {}) });
     return { success: true, data: { id }, message: "Taslak güncellendi." };
   }
 
@@ -1810,14 +1829,14 @@ export class InvoiceService {
       select: DETAIL_SELECT,
     });
     if (!row) throw AppError.notFound("Fatura bulunamadı.");
-    const { goodsReceiptLinks, lines, ...rest } = row;
+    const { goodsReceiptLinks, warpingReceiptLinks, lines, ...rest } = row;
     const receiptIds = goodsReceiptLinks.map((l) => l.goodsReceipt.id);
     // Tolerans karşılaştırması BİLGİ olarak (taslakta sarı uyarı); kapı ONAY'da (`assertReceiptMatchTx`).
     const receiptMatch = await receiptMatchTx(prisma, { receiptIds, lines });
     // Eski panel taslağı `item?.id` ile yeniden yollar (`invoiceForm.ts`); hizmet satırında null dönseydi bağ koparı
     // (satır TEXT'e düşer, H7 bağı damgalanırdı). Ayna: hizmetin {id, code, name}'i — normalize SERVICE'e çevirir.
     const shaped = lines.map((l) => ({ ...l, item: l.item ?? (l.serviceItem ? { id: l.serviceItem.id, code: l.serviceItem.code, name: l.serviceItem.name } : null) }));
-    return { success: true, data: { ...rest, lines: shaped, goodsReceipts: goodsReceiptLinks.map(toInvoiceReceiptDto), receiptMatch } };
+    return { success: true, data: { ...rest, lines: shaped, goodsReceipts: goodsReceiptLinks.map(toInvoiceReceiptDto), receiptMatch, warpingReceipts: warpingReceiptLinks.map(toInvoiceWarpingReceiptDto) } };
   }
 }
 
