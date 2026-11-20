@@ -65,7 +65,8 @@ describe("rapor özet şeridi kapsamı", () => {
 
   it("⭐ <ReportBody istisnası yalnız V2_KEYS_WITH_OWN_PAGE anahtarlarında; her anahtarın yaprağı okundu", () => {
     expect(OWN_PAGE_PATHS.size).toBe(V2_KEYS_WITH_OWN_PAGE.size);
-    expect([...OWN_PAGE_PATHS].filter((p) => !yapraklar.some((y) => y.yol === p && V2_BODY_RE.test(y.src)))).toEqual([]);
+    // Kendi sayfalı v2 ya zarfı çizer ya kendi <MetricCard şeridini (Devere F2 Denye Sapması: [Uygula]lı tablo, zarf yok).
+    expect([...OWN_PAGE_PATHS].filter((p) => !yapraklar.some((y) => y.yol === p && (V2_BODY_RE.test(y.src) || METRIC_RE.test(y.src))))).toEqual([]);
     // Kümede olmayan yaprak <ReportBody çizse de MetricCard'sız geçemez.
     expect(v2BodyExempt({ yol: "reports/x/kumede-yok", src: "<ReportBody />" })).toBe(false);
   });

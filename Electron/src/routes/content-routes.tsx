@@ -86,6 +86,7 @@ import { WeavingEfficiencyPage } from "@/pages/Reports/Maliyet/WeavingEfficiency
 import { ProfitabilityReportPage } from "@/pages/Reports/Maliyet/ProfitabilityReportPage";
 import { KarnePage } from "@/pages/Reports/Dokuma/KarnePage";
 import { LeventBitisTahminiPage } from "@/pages/Reports/Dokuma/LeventBitisTahminiPage";
+import { DenyeSapmaPage } from "@/pages/Reports/Dokuma/DenyeSapmaPage";
 import { CashBookPage } from "@/pages/Reports/Finance/CashBookPage";
 import { VatSummaryPage } from "@/pages/Reports/Finance/VatSummaryPage";
 import { FxDiffPage } from "@/pages/Reports/Finance/FxDiffPage";
@@ -1791,7 +1792,8 @@ export const contentRoutes: RouteObject[] = [
   {
     path: "reports/dokuma",
     element: (
-      <ProtectedRoute requirePermission="report:production">
+      // Dokuma raporları (`report:production`) ya da Denye Sapması (`warpspec:read`, devere F2) okuyana açık; karolar kendi izniyle süzülür.
+      <ProtectedRoute requireAnyPermission={["report:production", "warpspec:read"]}>
         <DokumaReportsHubPage />
       </ProtectedRoute>
     ),
@@ -1809,6 +1811,14 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="report:production">
         <LeventBitisTahminiPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "reports/dokuma/denye-sapma",
+    element: (
+      <ProtectedRoute requirePermission="warpspec:read">
+        <DenyeSapmaPage />
       </ProtectedRoute>
     ),
   },

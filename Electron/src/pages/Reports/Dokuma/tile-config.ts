@@ -1,4 +1,4 @@
-import { ListChecks, Hourglass } from "lucide-react";
+import { ListChecks, Hourglass, Scale } from "lucide-react";
 import type { HubTile } from "../_components/ReportHubGrid";
 
 /**
@@ -22,10 +22,19 @@ export const dokumaReportTiles: HubTile[] = [
     icon: Hourglass,
     to: "/reports/dokuma/levent-bitis-tahmini",
   },
+  {
+    // Devere F2: v2 uç `/api/reports/dokuma/denye-sapma` (devere kapısı); izin kategoriden farklı.
+    key: "denye-sapma",
+    title: "Denye Sapması",
+    description: "Tartılan devere leventlerinin net kilosu iplik kartının denyesiyle uyuşuyor mu; öneriyi onayla karta uygula",
+    icon: Scale,
+    to: "/reports/dokuma/denye-sapma",
+    permission: "warpspec:read",
+  },
 ];
 
 /** Uçları Devere modülüne de bağlı karolar (`dokuma.report.routes` `requireDevereEnabled`). */
-export const DEVERE_GEREKEN_KAROLAR: ReadonlySet<string> = new Set(["levent-bitis-tahmini"]);
+export const DEVERE_GEREKEN_KAROLAR: ReadonlySet<string> = new Set(["levent-bitis-tahmini", "denye-sapma"]);
 
 /** Hub süzmesi — Devere kapalıyken levent karoları çizilmez (çizilse uç 403 `MODULE_DISABLED` döner). */
 export function visibleDokumaTiles(tiles: readonly HubTile[], devereEnabled: boolean): HubTile[] {
