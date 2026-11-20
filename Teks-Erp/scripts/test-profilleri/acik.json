@@ -93,6 +93,7 @@
     "devereWarpFixedWasteM": 20,
     "devereFasonLotPolicy": "WARN",
     "devereSettleDefault": "WASTE_UP_TO_PLAN",
+    "devereReworkBillable": true,
     "devereFasonWasteTolerancePct": 3,
     "devereBeamWeavingLinkRequired": true,
     "dokumaRunWeavingOrderRequired": true,

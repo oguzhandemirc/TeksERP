@@ -438,6 +438,8 @@ export interface FeatureFlags {
   devereFasonLotPolicy: DevereFasonLotPolicy;
   /** Devere H1: kapanışta kalan ipliğin varsayılan önerisi (backend `DEFAULT_DEVERE_SETTLE_DEFAULT` = WASTE_UP_TO_PLAN). */
   devereSettleDefault: DevereSettleDefault;
+  /** Devere A1: yeniden sarılan levent beklenen devere ücretine girer mi (backend `readDevereReworkBillable`, kayıt yok = true). */
+  devereReworkBillable: boolean;
   /** Z1 üretim belge zinciri (2026-09-18) — üç davranış bayrağı, varsayılan KAPALI = bağ opsiyonel (bugünkü davranış). */
   devereBeamWeavingLinkRequired: boolean;
   dokumaRunWeavingOrderRequired: boolean;

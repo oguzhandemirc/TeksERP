@@ -221,6 +221,8 @@ export interface FeatureFlags {
   devereFasonLotPolicy: DevereFasonLotPolicy;
   /** Devere H1: kapanış önizlemesinde kalan ipliğin varsayılan önerisi (varsayılan `WASTE_UP_TO_PLAN` = A1-a, bugün). */
   devereSettleDefault: DevereSettleDefault;
+  /** Devere A1: yeniden sarım beklenen ücrete girer mi (varsayılan AÇIK). */
+  devereReworkBillable: boolean;
   /** Z1: tezgah koşumu dokuma işine bağlı açılmalı (varsayılan KAPALI = stoka dokuma meşru). HAM; etkin `dokuma && bayrak`. */
   dokumaRunWeavingOrderRequired: boolean;
   /** Z1: dokuma işi en az bir sipariş satırına bağlı olmalı (varsayılan KAPALI). HAM; etkin `dokuma && bayrak`. */

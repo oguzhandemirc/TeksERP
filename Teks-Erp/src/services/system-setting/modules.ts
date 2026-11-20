@@ -257,6 +257,13 @@ export async function readDevereAutoConsume(tx?: Pick<typeof prisma, "systemSett
   return asBoolean(setting?.value);
 }
 
+/** Devere A1: yeniden sarım beklenen ücrete girer mi — satır yoksa TRUE (kullanıcı kararı; asBoolean false'a düşürürdü). */
+export async function readDevereReworkBillable(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.DEVERE_REWORK_BILLABLE }, select: { value: true } });
+  if (!setting) return true;
+  return asBoolean(setting.value);
+}
+
 /** Fason devere D1: sabit çözgü firesi (m) — varsayılan 0 (firesiz formül); üst sınır dahil. */
 export const DEFAULT_DEVERE_WARP_FIXED_WASTE_M = 0;
 export const DEVERE_WARP_FIXED_WASTE_M_MAX = 1000;

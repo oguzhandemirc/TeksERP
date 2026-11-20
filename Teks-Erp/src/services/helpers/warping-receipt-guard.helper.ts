@@ -5,7 +5,7 @@
 //    eden kabul/kapanış/iade ile sıraya girer. ② LIFO: yalnız siparişin EN YENİ canlı dönüşü geri alınır — dağıtım
 //    sevk sırasıyla yazıldığından ortadan bir dönüşün geri alınması sonraki dağıtımların sırasını bozardı.
 // =============================================================================
-import { Prisma, WarpingOrderStatus } from "@prisma/client";
+import { InvoiceStatus, Prisma, WarpingOrderStatus } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 
 type Tx = Prisma.TransactionClient;
@@ -44,10 +44,25 @@ export async function claimWarpingOrderForWoundCancelTx(tx: Tx, warpingOrderId: 
   throw AppError.conflict(`${o?.orderNo ?? "Sipariş"} durumu ${o?.status ?? "?"} — levent dönüşü geri alınamaz${hint}`, { code: "WARPING_ORDER_COMPLETED", status: o?.status });
 }
 
-/** Tekil levent stornosu kapısı: devere doğumlu değilse no-op; değilse claim + LIFO. */
-export async function assertWarpingWoundCancellableTx(tx: Tx, beam: { id: string; beamNo: string; warpingOrderId: string | null }, userId: string | null): Promise<void> {
+/** Kabulün iptal edilmemiş faturası (devere A1) — yoksa null. */
+export async function activeWarpingReceiptInvoiceTx(tx: Pick<Tx, "invoiceToWarpingReceipt">, receiptKey: string): Promise<{ docNo: string } | null> {
+  const l = await tx.invoiceToWarpingReceipt.findFirst({ where: { warpingReceiptKey: receiptKey, invoice: { status: { not: InvoiceStatus.CANCELLED } } }, select: { invoice: { select: { docNo: true } } } });
+  return l?.invoice ?? null;
+}
+
+/** K4: faturalı kabul geri alınmaz — sipariş claim'inden SONRA okunur (fatura bağlama aynı satırı FOR UPDATE kilitler). */
+export async function assertWarpingReceiptNotInvoicedTx(tx: Tx, receiptKey: string | null): Promise<void> {
+  if (!receiptKey) return;
+  const inv = await activeWarpingReceiptInvoiceTx(tx, receiptKey);
+  if (inv) throw AppError.conflict(`Bu levent kabulü faturalı (${inv.docNo}) — geri alınamaz; önce faturayı iptal edin ya da bağını kaldırın.`, { code: "WARPING_RECEIPT_INVOICED", docNo: inv.docNo });
+}
+
+/** Tekil levent stornosu kapısı: devere doğumlu değilse no-op; değilse claim + faturalı mı + LIFO. */
+export async function assertWarpingWoundCancellableTx(tx: Tx, beam: { id: string; beamNo: string; warpingOrderId: string | null; warpingReceiptKey?: string | null }, userId: string | null): Promise<void> {
   if (!beam.warpingOrderId) return;
   await claimWarpingOrderForWoundCancelTx(tx, beam.warpingOrderId, userId);
+  const key = beam.warpingReceiptKey !== undefined ? beam.warpingReceiptKey : (await tx.warpBeam.findUnique({ where: { id: beam.id }, select: { warpingReceiptKey: true } }))?.warpingReceiptKey ?? null;
+  await assertWarpingReceiptNotInvoicedTx(tx, key);
   const newest = await newestLiveWarpingWoundTx(tx, beam.warpingOrderId);
   if (newest && newest.beamId !== beam.id) {
     throw AppError.conflict(`${beam.beamNo} dönüşü geri alınamaz — siparişin daha yeni bir dönüşü var (${newest.beam.beamNo}); dönüşler sondan başa (LIFO) geri alınır.`, {
