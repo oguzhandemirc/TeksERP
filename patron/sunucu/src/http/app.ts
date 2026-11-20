@@ -5,6 +5,7 @@ import express, { type Express } from "express";
 import { z } from "zod";
 import type { CloudContext } from "../services/context";
 import { createApiRouter } from "./api-routes";
+import { WEBHOOK_PATH, supportWebhookHandlers } from "./destek-routes";
 import { accessLog, errorHandler, notFoundHandler } from "./error-handler";
 import { createFactoryRouter } from "./factory-routes";
 import { createWebRouter } from "./web-static";
@@ -21,6 +22,8 @@ export function createApp(ctx: CloudContext): Express {
     res.set("Cache-Control", "no-store").json({ success: true });
   });
   app.use("/v1", createFactoryRouter(ctx));
+  // Etkili Destek webhook'u: oturumsuz, HAM gövde (imza) — /api yönlendiricisinin JSON ayrıştırıcısından ÖNCE.
+  app.post(WEBHOOK_PATH, ...supportWebhookHandlers(ctx));
   app.use("/api", createApiRouter(ctx));
   if (ctx.config.PATRON_WEB_DIZINI) app.use(createWebRouter(ctx.config.PATRON_WEB_DIZINI));
   app.use(notFoundHandler);

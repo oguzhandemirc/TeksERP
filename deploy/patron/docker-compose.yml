@@ -103,7 +103,9 @@ services:
       KOPRU_SORGU_BUTCE_DK:
       KOPRU_BAYAT_AZAMI_SAAT:
       KOPRU_DURT_SURE_SN:
-    secrets: [uygulama_parolasi, esitleme_parolasi, ic_api_belirteci, tesis_rol_anahtari, guvenlik_telegram_bot_token, guvenlik_telegram_chat_id, expo_erisim_belirteci]
+      # Etkili Destek merkez adresi (HTTPS); boş = destek uçları KAPALI (403 MODULE_DISABLED), merkeze istek yok.
+      DESTEK_API_URL: ${DESTEK_API_URL:-}
+    secrets: [uygulama_parolasi, esitleme_parolasi, ic_api_belirteci, tesis_rol_anahtari, guvenlik_telegram_bot_token, guvenlik_telegram_chat_id, expo_erisim_belirteci, destek_api_anahtari, destek_webhook_sirri]
     volumes:
       # Anahtar birimi SALT OKUNUR: patron-totp.key önceden üretilir (runbook §2.1); yoksa açılış DURUR.
       - ${ANAHTAR_DIZINI_HOST:?ANAHTAR_DIZINI_HOST gerekli}:/anahtarlar:ro
@@ -238,6 +240,11 @@ secrets:
   # sunucu açılır (sırsız yükseltme). Değişken VERİLİRSE dosya VAR olmalı — yoksa `up` bağlama hatasıyla düşer (runbook §4c).
   expo_erisim_belirteci:
     file: ${EXPO_ERISIM_BELIRTECI_DOSYASI_HOST:-/dev/null}
+  # Etkili Destek İSTEĞE BAĞLI, aynı kalıp: yol verilmezse /dev/null (boş) → özellik KAPALI, sunucu yine açılır.
+  destek_api_anahtari:
+    file: ${DESTEK_API_ANAHTARI_DOSYASI_HOST:-/dev/null}
+  destek_webhook_sirri:
+    file: ${DESTEK_WEBHOOK_SIRRI_DOSYASI_HOST:-/dev/null}
 
 volumes:
   patron-pg:

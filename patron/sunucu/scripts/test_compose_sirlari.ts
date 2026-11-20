@@ -15,6 +15,8 @@
 //      kurar, yok/boş/biçimsiz sırda açılır ve kurmaz; sır değeri betiğin ve compose-denetle'nin ÇIKTISINA düşmez;
 //      ⑪ ornek.env ile ✅; negatif: sır compose'dan düşer · `:?` zorunlu olur · ayar geçirilmez · boş dize geçer · varsayılan
 //      acik olur · ortama düz değer konur → ❌ (2026-11-13 sondası, dosya DIŞI: origin/main compose + betik + denetçi + örnekle 26/42, §5 16 ❌)
+//   §6 Etkili Destek sırları (destek_api_anahtari · destek_webhook_sirri) İSTEĞE BAĞLI: dolu → yol kurulur, yok → sunucu açılır,
+//      yol kurulmaz, uyarı; göç rolü okumaz; compose yolsuzken /dev/null + DESTEK_API_URL boş varsayılan; sonda: zorunlu dosya ❌
 // NEGATİF SONDA (2026-10-09, dosya DIŞI, origin/main'deki patron-baslat.sh + duman.sh yerine konup geri alındı):
 //   eski betik → §1 hazırlayıcı/fazla/zorunlu/rol · §2 rol tablosu YOK · §3 sondalar · §4 desen 0/66 ❌ (10/23).
 // Koşum: npx tsx scripts/test_compose_sirlari.ts   (DB GEREKMEZ)
@@ -81,6 +83,22 @@ const DORT = ["uygulama_parolasi", "esitleme_parolasi", "tesis_rol_anahtari", "i
 }
 kontrol("§1 sunucu iç API belirteci sırrı yoksa çıkış 1 (zorunlu, boş = kapalı)", baslat("sunucu", DORT.slice(0, 3)).status === 1);
 kontrol("§1 hazırlayıcı tesis anahtarı yoksa çıkış 1", baslat("hazirla", ["goc_parolasi"]).status === 1);
+
+// §6 Etkili Destek sırları İSTEĞE BAĞLI (yoksa özellik KAPALI, sunucu yine açılır)
+{
+  const DESTEK = ["destek_api_anahtari", "destek_webhook_sirri"];
+  const dolu = baslat("sunucu", [...DORT, ...DESTEK]);
+  kontrol("§6 destek sırları dolu → iki yol kurulur, sunucu açılır", dolu.status === 0 && !!dolu.env.DESTEK_API_KEY_DOSYASI && !!dolu.env.DESTEK_WEBHOOK_SECRET_DOSYASI, `${dolu.status} · ${dolu.hata.trim()}`);
+  const yok = baslat("sunucu", DORT);
+  kontrol("§6 destek sırları YOKKEN sunucu açılır, yollar kurulmaz, uyarı basılır", yok.status === 0 && !!yok.env.DATABASE_URL && !yok.env.DESTEK_API_KEY_DOSYASI && !yok.env.DESTEK_WEBHOOK_SECRET_DOSYASI && /destek_api_anahtari okunamıyor[^\n]*KAPALI/.test(yok.hata) && /destek_webhook_sirri okunamıyor[^\n]*KAPALI/.test(yok.hata), `${yok.status} · ${yok.hata.trim()}`);
+  const goc = baslat("goc", ["goc_parolasi", "uygulama_parolasi", "esitleme_parolasi", "tesis_rol_anahtari", ...DESTEK]);
+  kontrol("§6 göç rolü destek sırlarını OKUMAZ", goc.status === 0 && !goc.env.DESTEK_API_KEY_DOSYASI && !goc.env.DESTEK_WEBHOOK_SECRET_DOSYASI, goc.hata.trim());
+  const ana = readFileSync(path.join(D, "docker-compose.yml"), "utf8");
+  const varsayilan = (c: string): boolean => /destek_api_anahtari:\n\s+file: \$\{DESTEK_API_ANAHTARI_DOSYASI_HOST:-\/dev\/null\}/.test(c) && /destek_webhook_sirri:\n\s+file: \$\{DESTEK_WEBHOOK_SIRRI_DOSYASI_HOST:-\/dev\/null\}/.test(c) && /^\s+DESTEK_API_URL: \$\{DESTEK_API_URL:-\}$/m.test(c);
+  kontrol("§6 compose: destek sırları yolsuzken /dev/null (KAPALI), DESTEK_API_URL boş varsayılan", varsayilan(ana));
+  const zorunlu = ana.replace("${DESTEK_API_ANAHTARI_DOSYASI_HOST:-/dev/null}", "./sirlar/destek_api_anahtari");
+  kontrol("§6 sonda: destek anahtarı zorunlu dosyaya bağlanır → ❌", zorunlu !== ana && !varsayilan(zorunlu));
+}
 kontrol("§1 tanınmayan PATRON_ROL çıkış 1", baslat("yedek", DORT).status === 1);
 
 // §2–§3 compose-denetle ⑩
@@ -189,7 +207,7 @@ if (docker.status !== 0) {
       kontrol(`§5 negatif: ${aciklama}`, bek.test(c), c.split("\n").filter((l) => l.startsWith("❌") || l.startsWith("ÖLÇÜLEMEDİ")).join(" | ").slice(0, 300) || "kırmızı YOK");
     };
     // Kalıplar compose-denetle'nin yerel (Mac) koşumunda bile `${…}`/override'sız tam dosya varyantıyla ölçülür.
-    sonda("n1.yml", (x) => x.replace(", expo_erisim_belirteci]", "]"), /^❌ .*patron:.*EKSİK.*expo_erisim_belirteci/m, "sır sunucunun secrets listesinden düşer → ⑩ EKSİK");
+    sonda("n1.yml", (x) => x.replace(", expo_erisim_belirteci,", ","), /^❌ .*patron:.*EKSİK.*expo_erisim_belirteci/m, "sır sunucunun secrets listesinden düşer → ⑩ EKSİK");
     sonda("n2.yml", (x) => x.replace("${EXPO_ERISIM_BELIRTECI_DOSYASI_HOST:-/dev/null}", "${EXPO_ERISIM_BELIRTECI_DOSYASI_HOST:?gerekli}"), /ÖLÇÜLEMEDİ/, "sır ZORUNLU (`:?`) olur → sırsız .env'le config çözülmez");
     sonda("n3.yml", (x) => x.replace(/^ {6}KOPRU_DURT_DK:\n/m, ""), /^❌ ⑪ KOPRU_DURT_DK.*compose geçirmiyor/m, "KOPRU_DURT_DK konteynere geçirilmez");
     sonda("n4.yml", (x) => x.replace(/^ {6}KOPRU_DURT_SURE_SN:$/m, "      KOPRU_DURT_SURE_SN: ${KOPRU_DURT_SURE_SN:-}"), /^❌ ⑪ KOPRU_DURT_SURE_SN/m, "köprü ayarı boş dizeyle geçer (sayı 0 → açılış durur)");
