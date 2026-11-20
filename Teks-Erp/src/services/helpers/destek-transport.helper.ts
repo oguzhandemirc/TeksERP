@@ -3,8 +3,8 @@
 // =============================================================================
 // Kapatma düğmesi `.env`tir: `DESTEK_API_URL` ve `DESTEK_API_KEY` ikisi de dolu ve
 // adres izinli (HTTPS; düz HTTP yalnız döngü adresi) değilse özellik KAPALIDIR ve
-// hiçbir dış istek yapılmaz. Lisans HAK'ında tesis kimliği yoksa (lisanssız kurulum) da
-// KAPALIDIR. Ortam her çağrıda okunur (önbellek yok): açılışta istek yok.
+// hiçbir dış istek yapılmaz. Lisans HAK'ında tesis kimliği yoksa (lisanssız kurulum) ve
+// `DESTEK_TENANT_ID` (geliştirme yedeği) de yoksa KAPALIDIR. Ortam her çağrıda okunur.
 //
 // Hazır istemci (`integrations/destek`) `fetch` ister; isteği fabrikanın tek dış
 // çıkışından (`lib/http-egress.ts`) geçiren küçük bir uyarlayıcı verilir:
@@ -49,13 +49,24 @@ export function setSupportTenantIdForTests(value: string | null | undefined): vo
   tenantIdOverride = value;
 }
 
+/** Geliştirme yedeği `DESTEK_TENANT_ID` biçimi: küçük harf, rakam, tire; en çok 64. */
+const DEV_TENANT_RE = /^[a-z0-9-]{1,64}$/;
+
 /**
- * Firma kimliği = lisans HAK'ındaki `tesis.id`, küçük harf (patron bulutu `supportTenantId` ile aynı).
- * Lisanssız/okunamayan kurulumda `null` → özellik KAPALI (FAIL-CLOSED; uydurma kimlik yok).
+ * Firma kimliği kararı (saf). Lisans HAK'ındaki `tesis.id` varsa HER ZAMAN o kazanır (küçük harf;
+ * patron bulutu `supportTenantId` ile aynı) — env onu ezemez. Yoksa açıkça verilmiş ve biçimi
+ * geçerli `DESTEK_TENANT_ID` (lisanssız geliştirme önizlemesi); bozuksa yok sayılır → `null` (KAPALI).
  */
-export function readSupportTenantId(): string | null {
+export function resolveSupportTenantId(licenseTenantId: string | null | undefined, env: NodeJS.ProcessEnv): string | null {
+  if (licenseTenantId) return licenseTenantId.toLowerCase();
+  const dev = env.DESTEK_TENANT_ID?.trim() ?? "";
+  return DEV_TENANT_RE.test(dev) ? dev : null;
+}
+
+/** Etkin firma kimliği; bekçi kancası yalnız LİSANS ayağını değiştirir, env yedeği yine uygulanır. */
+export function readSupportTenantId(env: NodeJS.ProcessEnv = process.env): string | null {
   const raw = tenantIdOverride !== undefined ? tenantIdOverride : licenseFacilityId();
-  return raw ? raw.toLowerCase() : null;
+  return resolveSupportTenantId(raw, env);
 }
 
 function licenseFacilityId(): string | null {
@@ -71,7 +82,7 @@ export function readSupportDeskConfig(env: NodeJS.ProcessEnv = process.env): Sup
   const baseUrl = env.DESTEK_API_URL?.trim() ?? "";
   const apiKey = env.DESTEK_API_KEY?.trim() ?? "";
   if (!baseUrl || !apiKey) return null;
-  const tenantId = readSupportTenantId();
+  const tenantId = readSupportTenantId(env);
   if (!tenantId) return null;
   if (!isAllowedUrl(baseUrl)) {
     if (!warnedInvalidUrl) {

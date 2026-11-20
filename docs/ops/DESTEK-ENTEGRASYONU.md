@@ -28,6 +28,7 @@ DESTEK_API_KEY=<kılavuzdaki anahtar>
 
 - İkisi de doluysa ve adres HTTPS ise özellik AÇIK. Biri eksik, adres bozuk ya da düz HTTP ise (yalnız `127.0.0.1`/`localhost` test sunucusuna izin var) özellik KAPALI; açılışta ve çalışırken dış istek YAPILMAZ.
 - Açmak/kapatmak: `.env` satırlarını ekle/sil, backend'i yeniden başlat. Varsayılan (satır yok) = bugünkü davranış.
+- Geliştirme yedeği `DESTEK_TENANT_ID=<firma-kimliği>` (küçük harf, rakam, tire; ≤64): YALNIZ lisansta tesis kimliği YOKSA (lisanssız geliştirme önizlemesi) firma kimliği olarak kullanılır; lisans kimliği varsa HER ZAMAN o kazanır, bozuk değer yok sayılır (özellik kapalı kalır). Müşteri kurulumunda bu satır konmaz.
 - Kurumsal proxy varsa `HTTPS_PROXY`/`NO_PROXY` ortamdan okunur (patron bulutuyla aynı çıkış; Node 22.21+ / 24.5+ gerekir).
 - Anahtar hiçbir log satırına, hata gövdesine ya da audit yüküne girmez. Merkez anahtarı reddederse (anahtar yenilendi/kurulum pasif) istemci 502 `DESTEK_YAPILANDIRMA` görür ve sunucu log'unda `destek` alanında tek satır uyarı çıkar.
 - Merkez erişilemezken yalnız bu uçlar hata döner (istek başına zaman aşımı: 15 sn; ekli istek 60 sn; rozet 5 sn). Fabrikanın başka hiçbir yolu bu servise uğramaz.
