@@ -3,14 +3,14 @@
 // =============================================================================
 // Girdi: kabul edilmiş (K3 `ACCEPTED_WARPING_BEAM_WHERE`) ve tartılı (WOUND brüt + dara dolu) devere sarımları.
 // Tek iplikli sarım iplik satırına, çok iplikli sarım "karma" satırına girer (tartı ipliklere bölünemez).
-// Tartı denyesi = Σ net kg × 9e6 ÷ Σ (tel × metre) — doğuş kopyaları farklı denyeli olsa da doğru kalır.
+// Tartı denyesi = `denierFromKgExact(Σ net kg, Σ tel × metre)` — doğuş kopyaları farklı denyeli olsa da doğru kalır.
 // Öneri: örnek ≥ `minBeams` ∧ |tartı denyesi − GÜNCEL kart denyesi| / kart > eşik% (uygulanmış öneri tekrar önerilmez).
 // =============================================================================
 import { Prisma } from "@prisma/client";
+import { denierFromKgExact } from "../../constants/warp-beam";
 
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 const ZERO = D(0);
-const DENIER_DIVISOR = D(9_000_000);
 
 export type DenierDeviationStatus = "SUGGEST" | "WITHIN_THRESHOLD" | "INSUFFICIENT";
 
@@ -98,7 +98,7 @@ export function computeDenierDeviation(
   const rows: DenierDeviationRow[] = [];
   for (const [yarnItemId, a] of byYarn) {
     const card = cards.get(yarnItemId);
-    const weighed = a.endsM.isZero() ? null : a.net.mul(DENIER_DIVISOR).div(a.endsM).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
+    const weighed = a.endsM.isZero() ? null : denierFromKgExact(a.net, a.endsM).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
     const cardDen = card?.linearDensityDen ?? null;
     const cardDev = weighed && cardDen && !cardDen.isZero() ? pct(weighed, cardDen) : null;
     let status: DenierDeviationStatus;
