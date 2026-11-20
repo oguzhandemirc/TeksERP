@@ -28,6 +28,7 @@ import { hasAlarmEscalation } from "../../services/helpers/loom-alarm-recipient.
 import { beamResultReport } from "../../services/reports/levent-sonucu.report.service";
 import { capacityUsageReport } from "../../services/reports/kapasite-kullanimi.report.service";
 import { finishForecastReport } from "../../services/reports/levent-bitis-tahmini.report.service";
+import { getDenierDeviationReport } from "../../services/denier-deviation.service";
 
 const router = Router();
 router.use(verifyToken, requireDokumaEnabled);
@@ -267,6 +268,40 @@ router.get("/levent-bitis-tahmini", requireDevereEnabled, requireReportOpen("dok
     const { data, dusenSatir } = await finishForecastReport(q);
     const capped = capReportLists(data, FINISH_FORECAST_LISTS, DOKUMA_LIST_MAX);
     res.status(200).json(reportEnvelope(capped.data, resolveDateRange({}), null, { suzgec: filterEcho(q, ["machineId"], dusenSatir), warnings: capped.warnings }));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** Devere F2: denye sapma sorgusu — TEK tanım; `/api/warp-specs/denier-deviation` (F1 ucu) da bunu okur. */
+export const denierDeviationQuerySchema = z.object({
+  from: YMD.optional(),
+  to: YMD.optional(),
+  yarnItemId: z.string().uuid("Geçersiz iplik").optional(),
+  subcontractorId: z.string().uuid("Geçersiz devereci").optional(),
+}).strict();
+
+/**
+ * @openapi
+ * /api/reports/dokuma/denye-sapma:
+ *   get:
+ *     tags: [Reports]
+ *     summary: "Denye sapması (Devere F2, Rapor Merkezi satırı) — `/api/warp-specs/denier-deviation` ile aynı servis ve gövde; kabul edilmiş tartılı devere sarımlarından iplik başına nominal ↔ tartı farkı ve denye önerisi. [Uygula] F1 ucunda kalır."
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: from, schema: { type: string, format: date }, description: "Kabulün fabrika günü (verilmezse bitişten 90 gün önce)" }
+ *       - { in: query, name: to, schema: { type: string, format: date }, description: "Verilmezse bugün; aralık en çok 366 gün" }
+ *       - { in: query, name: yarnItemId, schema: { type: string, format: uuid } }
+ *       - { in: query, name: subcontractorId, schema: { type: string, format: uuid }, description: Devereci }
+ *     responses:
+ *       200: { description: "data.range · settings · rows[] (status SUGGEST|WITHIN_THRESHOLD|INSUFFICIENT, suggestedDenier, cardDenier) · mixed" }
+ *       400: { description: "INVALID_RANGE ya da tanınmayan parametre" }
+ *       403: { description: Dokuma/devere modülü kapalı (MODULE_DISABLED), rapor kapalı ya da yetki yok }
+ */
+router.get("/denye-sapma", requireDevereEnabled, requireReportOpen("dokuma/denye-sapma"), requirePermission("warpspec:read"), async (req, res, next) => {
+  try {
+    const q = denierDeviationQuerySchema.parse(req.query);
+    res.status(200).json({ success: true, data: await getDenierDeviationReport(q) });
   } catch (e) {
     next(e);
   }

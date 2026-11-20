@@ -145,7 +145,9 @@ const DOKUMA_UC_METINLERI = ["/api/weaving-orders", "/api/machine-runs", "/api/m
 const UC_METNI_TASIYAN_SABITLER: readonly string[] = ["Electron/src/lib/report-catalog.ts"];
 // `rejimAlani`: karo dokuma yerine bağlamın REJİM alanını okur (D4-A3: `machineStopEnabled` = dokuma ∨ üretim ∧ ayar;
 // çözümü `MachineStops/stop-regime.ts`, Electron vitest dokumanın onu açtığını ölçer). Manifesto yine `dokumaEnabled`.
-const IZINLI_ISTEMCI_DOSYALARI: ReadonlyArray<{ dosya: string; ekranKey: string; izinler: readonly string[]; karo: "operations" | "reports" | "definitions"; rejimAlani?: string }> = [
+const IZINLI_ISTEMCI_DOSYALARI: ReadonlyArray<{ dosya: string; ekranKey: string; izinler: readonly string[]; karo: "operations" | "reports" | "definitions"; rejimAlani?: string;
+  /** Kategori izninden FARKLI izinli alt rapor: izin Raporlar hub karosunda değil, kategori hub'ının alt karosunda (`to`) beyanlı. */
+  altKaro?: { dosya: string; to: string } }> = [
   { dosya: "Electron/src/pages/Operations/WeavingOrders/service.ts", ekranKey: "operations/weaving-orders", izinler: ["weavingorder:read"], karo: "operations" },
   // Fason dokuma (G2p, 2026-09-14): aynı ekranın "Fason" bölümü — dokuma işi detayı, ayrı karo/route yok.
   { dosya: "Electron/src/pages/Operations/WeavingOrders/fason/service.ts", ekranKey: "operations/weaving-orders", izinler: ["weavingorder:read"], karo: "operations" },
@@ -157,6 +159,9 @@ const IZINLI_ISTEMCI_DOSYALARI: ReadonlyArray<{ dosya: string; ekranKey: string;
   { dosya: "Electron/src/pages/ShiftDefinitions/service.ts", ekranKey: "definitions/shift-definitions", izinler: ["loom:spec-manage"], karo: "definitions", rejimAlani: "machineStopEnabled" },
   // Dokuma raporları (Dilim 5, 2026-09-14): Raporlar hub'ı karosu; okuma `report:production` (1e hükmü ③).
   { dosya: "Electron/src/pages/Reports/Dokuma/service.ts", ekranKey: "reports/dokuma", izinler: ["report:production"], karo: "reports" },
+  // Denye Sapması (devere F2): v2 rapor ucu `/api/reports/dokuma/denye-sapma`; okuma `warpspec:read` (uç ve katalogla aynı).
+  { dosya: "Electron/src/pages/Reports/Dokuma/denyeSapma.ts", ekranKey: "reports/dokuma", izinler: ["warpspec:read"], karo: "reports",
+    altKaro: { dosya: "Electron/src/pages/Reports/Dokuma/tile-config.ts", to: "/reports/dokuma/denye-sapma" } },
 ];
 
 /**
@@ -438,7 +443,7 @@ async function main(): Promise<void> {
     definitions: yorumlariSok(hubKaroMetni(ELECTRON_SRC, "Definitions")),
   };
   const contentRoutes = fs.readFileSync(path.join(ELECTRON_SRC, "routes/content-routes.tsx"), "utf8");
-  for (const { ekranKey, izinler, karo, rejimAlani } of IZINLI_ISTEMCI_DOSYALARI) {
+  for (const { ekranKey, izinler, karo, rejimAlani, altKaro } of IZINLI_ISTEMCI_DOSYALARI) {
     const tileConfig = tileConfigs[karo];
     const manifesto = SCREEN_CATALOG.find((s) => s.key === ekranKey);
     check(
@@ -459,9 +464,14 @@ async function main(): Promise<void> {
       );
     } else {
       const bayrak = /featureFlag:\s*"([A-Za-z]+)"/.exec(blok)?.[1] ?? null;
+      // Alt rapor karosu: izin kategori hub'ının alt karosunda (`permission: "<izin>"`), Raporlar hub karosunda değil.
+      const altMetin = altKaro ? yorumlariSok(fs.readFileSync(path.join(KOK, altKaro.dosya), "utf8")) : "";
+      const altIdx = altKaro ? altMetin.indexOf(`to: "${altKaro.to}"`) : -1;
+      const altBlok = altIdx >= 0 ? altMetin.slice(altMetin.lastIndexOf("{", altIdx), altMetin.indexOf("}", altIdx)) : "";
+      const izinBlogu = altKaro ? altBlok : blok;
       check(
-        `§7d ⭐ ${ekranKey} karosu (Raporlar hub'ı) \`featureFlag: "dokumaEnabled"\` taşıyor`,
-        bayrak === "dokumaEnabled" && izinler.every((p) => blok.includes(`"${p}"`)),
+        `§7d ⭐ ${ekranKey} karosu (Raporlar hub'ı) \`featureFlag: "dokumaEnabled"\` taşıyor${altKaro ? ` · alt karo ${altKaro.to} izni beyanlı` : ""}`,
+        bayrak === "dokumaEnabled" && izinler.every((p) => izinBlogu.includes(`"${p}"`)),
         bayrak ? `featureFlag=${bayrak}` : "karo yok ya da featureFlag eksik — referans fabrikada karo BELİRİR",
       );
     }

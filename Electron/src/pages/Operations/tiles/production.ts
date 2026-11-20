@@ -1,11 +1,11 @@
 // Üretim karoları (menü kökü Üretim, `/production`; sıra = hub sırası). Fason karolarının ikisi `warehouse.ts`te.
-import { Factory, FilePlus2, Gauge, History, Ruler, Share2, SwatchBook, Spool, AlertOctagon, MonitorPlay, Siren, Layers, CalendarClock, Calculator, Truck } from "lucide-react";
+import { Factory, FilePlus2, Gauge, History, Ruler, Share2, SwatchBook, Spool, AlertOctagon, MonitorPlay, Siren, Layers, CalendarClock, Calculator, Truck, Scale } from "lucide-react";
 import { isKursunPlanningVisible, isMeterDeviationsVisible, isWorkOrdersVisible } from "../production-regime";
 import { isWeavingOrdersVisible } from "../WeavingOrders/weaving-regime";
 import { isMachineStopsVisible, machineStopsTitle } from "../MachineStops/stop-regime";
 import { isWeavingFloorVisible } from "../WeavingFloor/floor-regime";
 import { isLoomAlarmsVisible } from "../LoomAlarms/alarm-regime";
-import { isWarpBeamsVisible } from "../WarpBeams/warp-beam-regime";
+import { isDenierReportVisible, isWarpBeamsVisible } from "../WarpBeams/warp-beam-regime";
 import { TERIM, TERIM_AD, terimDokumaRejimi } from "@/lib/terim";
 import { flagOffHint, flagSettingTrail } from "@/lib/flag-setting-path";
 import type { OperationsTile } from "../tile-config";
@@ -170,6 +170,18 @@ export const productionTiles: OperationsTile[] = [
     permission: "warping-order:read",
     visibleWhen: isWarpBeamsVisible,
     offHint: flagOffHint("devereEnabled"),
+  },
+  {
+    // DENYE SAPMASI (devere F2): v2 rapor yaprağı; izin uç/route ile birebir (`warpspec:read`). Rapor kapalıyken
+    // soluk karo anlamsız (sebep bayrak değil) — offHint yok, gizlenir.
+    key: "denye-sapma",
+    title: "Denye Sapması",
+    description: "Tartılan devere leventleri iplik kartı denyesiyle uyuşuyor mu; öneriyi onayla karta uygula (denye, tartı, nominal kg, iplik kartı)",
+    icon: Scale,
+    to: "/reports/dokuma/denye-sapma",
+    group: "production",
+    permission: "warpspec:read",
+    visibleWhen: isDenierReportVisible,
   },
   {
     key: "kartela",

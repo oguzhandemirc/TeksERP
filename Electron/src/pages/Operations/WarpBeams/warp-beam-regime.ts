@@ -15,3 +15,11 @@ export interface WarpBeamVisibilityContext {
 export function isWarpBeamsVisible(ctx: WarpBeamVisibilityContext): boolean {
   return ctx.devereEnabled;
 }
+
+/**
+ * Devere F2: Üretim › Devere / Çözgü grubundaki "Denye Sapması" karosu (rapor yaprağı `/reports/dokuma/denye-sapma`).
+ * Route kapısıyla aynı: dokuma (rapor kategorisi) ∧ devere (`ROUTE_ALSO_REQUIRES`) ∧ rapor açık.
+ */
+export function isDenierReportVisible(ctx: WarpBeamVisibilityContext & { dokumaEnabled: boolean; isReportOpen: (key: string) => boolean }): boolean {
+  return ctx.devereEnabled && ctx.dokumaEnabled && ctx.isReportOpen("dokuma/denye-sapma");
+}

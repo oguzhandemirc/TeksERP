@@ -202,8 +202,10 @@ describe("karo bağlantıları", () => {
     // 2026-11-17: `cozgu-hesabi` (Çözgü Hesabı, fason devere D3) — Leventler ile AYNI devere kapısı.
     // 2026-11-18: `fason-devere` (Fason Devere Siparişleri, D6a) — Leventler ile AYNI devere kapısı.
     // 2026-11-18: `fasondaki-iplik` (Fasondaki İplik, D6c) — Leventler ile AYNI devere kapısı.
+    // 2026-11-20: `denye-sapma` (Denye Sapması raporu, devere F2) — devere ∧ dokuma ∧ rapor açık (`isDenierReportVisible`).
     expect(conditional.sort()).toEqual([
       "cozgu-hesabi",
+      "denye-sapma",
       "emanet-cikis",
       "fason-devere",
       "fasondaki-iplik",
