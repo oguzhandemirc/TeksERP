@@ -2,7 +2,9 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { TERIM_AD } from "@/lib/terim";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
-import { HubCard, HubGrid } from "@/components/hub/HubCard";
+import { HubCard } from "@/components/hub/HubCard";
+import { HubSubgroups } from "@/components/hub/HubSubgroups";
+import { layoutSubgroups } from "@/components/layout/nav-subgroups";
 import { financeTiles } from "./tile-config";
 import { useMenuLayout } from "@/hooks/useMenuLayout";
 import { isHubTileHidden } from "@/lib/menu-layout";
@@ -23,8 +25,9 @@ export function FinanceHubPage() {
         description="Cari hesaplar, faturalar, tahsilat/ödeme ve kasa-banka. Bu bir ön muhasebe defteridir — resmî fatura dış programda kesilir, buradaki kayıt onun izini tutar."
       />
       <PageBody className="p-6">
-        <HubGrid>
-          {visible.map((tile, i) => (
+        <HubSubgroups
+          groups={layoutSubgroups("/finance", visible, ctx)}
+          renderCard={(tile, i) => (
             <HubCard
               key={tile.key}
               to={tile.to}
@@ -34,8 +37,8 @@ export function FinanceHubPage() {
               tone={tile.tone}
               index={i}
             />
-          ))}
-        </HubGrid>
+          )}
+        />
       </PageBody>
     </PageShell>
   );

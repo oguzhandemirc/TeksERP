@@ -27,6 +27,13 @@ export interface NavChild {
   offHint?: string;
 }
 
+/** Kök alt listesinin süreç alt grubu (`nav-subgroups.ts`); boş ad = başlıksız düz liste. */
+export interface NavChildGroup {
+  key: string;
+  label: string;
+  children: NavChild[];
+}
+
 export interface NavItem {
   label: string;
   to: string;
@@ -42,6 +49,8 @@ export interface NavItem {
   section?: OperationGroupKey;
   /** Bölümün GÖRÜNÜR karoları (Sidebar doldurur; statik katalogda boş). */
   children?: NavChild[];
+  /** `children`ın süreç alt gruplarına bölünmüş hali (Sidebar doldurur); `children` bunun düz halidir. */
+  childGroups?: NavChildGroup[];
   permission?: string;
   /** İzinlerden BİRİ yeter — route'un `requireAnyPermission`ıyla AYNI küme. */
   permissionAny?: string[];
@@ -101,9 +110,9 @@ export const navGroups: NavGroup[] = [
       { label: "Anasayfa", to: "/", icon: LayoutDashboard, tone: "violet", description: "Fabrikanın bugünkü durumu" },
       // T5: eski "Operasyon" kökü dört bölüme ayrıldı; ekran adresleri `/operations/...` kalır.
       { label: "Satış", to: "/sales", icon: ShoppingCart, tone: "blue", section: "planning", description: "Siparişler, teklifler ve talep–üretim dengesi", keywords: "sipariş teklif kumaş dengesi" },
-      { label: "Üretim", to: "/production", icon: Factory, tone: "orange", section: "production", get description() { return `${TERIM.terbiyeIsEmri.cumleBasiCogul.yalin}, dokuma, kurşun, kartela ve fason`; }, get keywords() { return `${TERIM.terbiyeIsEmri.tekilKucuk} dokuma kurşun fason kartela tezgah`; } },
-      { label: "Depo", to: "/warehouse", icon: Warehouse, tone: "teal", section: "warehouse", description: "Stok, paketleme, mal kabul ve gelen belgeler", keywords: "stok top iplik sarf çuval mal kabul sayım" },
-      { label: "Sevkiyat", to: "/shipping", icon: Truck, tone: "green", section: "shipping", description: "Sevk çıkışı, sevk edilenler ve iadeler", keywords: "sevk irsaliye iade" },
+      // Süreç sırası (2026-11-20): sipariş → mal kabul/stok → üretim → kalite → sevk; bölüm içi alt gruplar `nav-subgroups.ts`.
+      { label: "Depo", to: "/warehouse", icon: Warehouse, tone: "teal", section: "warehouse", description: "Mal kabul, iplik ve kumaş stoğu, paketleme, sayım", keywords: "stok top iplik sarf çuval mal kabul sayım" },
+      { label: "Üretim", to: "/production", icon: Factory, tone: "orange", section: "production", get description() { return `Devere, dokuma, ${TERIM.terbiyeIsEmri.cogulKucuk}, kurşun ve fason`; }, get keywords() { return `${TERIM.terbiyeIsEmri.tekilKucuk} devere çözgü dokuma kurşun fason kartela tezgah`; } },
       {
         // UX-2: kalite karoları Operasyon'dan ayrı kök; bayrak kapalıyken satır yalnız modülü açabilene soluk (`off-module-visibility`).
         label: TERIM_AD.kaliteGuvence,
@@ -115,6 +124,7 @@ export const navGroups: NavGroup[] = [
         featureFlag: "kaliteGuvenceEnabled",
         keywords: "kalite muayene laboratuvar test sertifika 4 puan kusur",
       },
+      { label: "Sevkiyat", to: "/shipping", icon: Truck, tone: "green", section: "shipping", description: "Sevk çıkışı, sevk edilenler ve iadeler", keywords: "sevk irsaliye iade" },
       {
         // MAL-3: hub + alt ekranlar `cost/*` bu satırın bayrağını miras alır (test_screen_catalog §9 nav-miras).
         // T5: Teklifler menüde Satış'ta (adres `/cost/quotes` kalır, miras buradan sürer).

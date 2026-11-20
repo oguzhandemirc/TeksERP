@@ -53,18 +53,20 @@ vi.mock("./sidebar-brand", () => ({ SidebarBrand: () => null, SidebarFooter: () 
 const nav = () => screen.getByRole("navigation");
 // dnd-kit sürüklenebilir <li> da role="button" taşır (menü sıralama) — gerçek düğmeyi seç.
 const rootBtn = (name: string) => within(nav()).queryAllByRole("button", { name }).find((b) => b.tagName === "BUTTON") ?? null;
+const subHead = (name: string) => [...document.querySelectorAll<HTMLButtonElement>("[data-nav-subgroup]")].find((b) => b.textContent?.includes(name))!;
 
 describe("Sidebar — T5 bölüm kökleri", () => {
   beforeEach(() => {
     perms = ["order:read", "workorder:read", "roll:read", "shipping:read"];
     activePath = null;
     openTab.mockClear();
+    localStorage.clear();
   });
 
   it("⭐ kökler sırayla çizilir; eski 'Operasyon' kökü yok", () => {
     render(<Sidebar collapsed={false} />);
     const labels = within(nav()).getAllByRole("button").filter((b) => b.tagName === "BUTTON").map((b) => b.textContent?.trim());
-    const order = ["Satış", "Üretim", "Depo", "Sevkiyat"].map((l) => labels.indexOf(l));
+    const order = ["Satış", "Depo", "Üretim", "Sevkiyat"].map((l) => labels.indexOf(l));
     expect(order.every((i) => i >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
     expect(labels).not.toContain("Operasyon");
@@ -116,6 +118,52 @@ describe("Sidebar — T5 bölüm kökleri", () => {
     expect(screen.getByText("tüm kartlar")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Siparişler"));
     expect(openTab).toHaveBeenLastCalledWith("/operations/orders");
+  });
+});
+
+describe("Sidebar — süreç alt grupları (2026-11-20)", () => {
+  beforeEach(() => {
+    activePath = null;
+    openTab.mockClear();
+    localStorage.clear();
+  });
+
+  it("⭐ süreç alt grubu: bölüm açılınca grup başlığı, başlık tıklanınca ekranlar (2026-11-20)", () => {
+    perms = ["roll:read", "shipping:read"];
+    render(<Sidebar collapsed={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Sevkiyat alt menüsü" }));
+    const head = subHead("Sevk Çıkışı");
+    expect(head).toHaveAttribute("data-nav-subgroup");
+    expect(head).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Sevkiyatlar")).toBeNull();
+    fireEvent.click(head);
+    expect(head).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(screen.getByText("Sevkiyatlar"));
+    expect(openTab).toHaveBeenLastCalledWith("/operations/shipments");
+  });
+
+  it("süreç alt grubu: etkin ekranın grubu kendiliğinden açık; daraltılmış panelde başlık etiket", () => {
+    perms = ["roll:read", "shipping:read"];
+    activePath = "/operations/rolls";
+    const { unmount } = render(<Sidebar collapsed={false} />);
+    expect(subHead("Kumaş ve Paketleme")).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Kumaş Stoğu").closest("button")).toHaveAttribute("aria-current", "page");
+    unmount();
+    activePath = null;
+    render(<Sidebar collapsed />);
+    fireEvent.click(rootBtn("Sevkiyat")!);
+    expect(screen.getByText("Sevk Çıkışı").tagName).toBe("P");
+    expect(screen.getByText("Sevkiyatlar")).toBeInTheDocument();
+  });
+
+  it("⭐ bölüm olmayan hub kökü (Maliyet) de açılır grup; alt öğeler palet süzgecinden, alt gruplu", () => {
+    perms = ["cost:read"];
+    render(<Sidebar collapsed={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Maliyet alt menüsü" }));
+    fireEvent.click(subHead("Girdi Fiyatları"));
+    expect(screen.getByText("İplik Maliyet Fiyatları")).toBeInTheDocument();
+    // Raporlar alt listesiz kalır (kendi gezinmesi var).
+    expect(screen.queryByRole("button", { name: "Raporlar alt menüsü" })).toBeNull();
   });
 
   it("activeChildOf: en uzun ön ek kazanır, ilgisiz yol null", () => {

@@ -7,6 +7,7 @@ import { operationGroups, type OperationGroupKey } from "./groups-config";
 import { sectionTiles } from "./sections";
 import type { OperationsTile } from "./tile-config";
 import { isPathLicenseClosed } from "@/lib/license/module-enabled";
+import { layoutSubgroups, type NavSubgroup } from "@/components/layout/nav-subgroups";
 
 export interface VisibleSectionTile extends OperationsTile {
   /** Bağlama göre çözülmüş ad (`titleWhen`). */
@@ -18,7 +19,10 @@ export interface VisibleSectionTile extends OperationsTile {
 export interface SectionTilesState {
   /** Bayraklar yüklendi mi — yüklenmeden modüllü karo gizlenip sonra belirmesin diye çağıran iskelet çizer. */
   ready: boolean;
+  /** Bölümün görünür karoları, süreç sırasıyla (alt grupların düz hali; çapraz listelenenler dahil). */
   tiles: Record<OperationGroupKey, VisibleSectionTile[]>;
+  /** Süreç alt grupları — yan menü ve bölüm sayfası aynı başlıkları çizer. */
+  groups: Record<OperationGroupKey, NavSubgroup<VisibleSectionTile>[]>;
   /** İzin açısından en az bir karosu var mı (bayrak yüklenmeden menü kökünü titretmemek için). */
   permitted: Record<OperationGroupKey, boolean>;
 }
@@ -38,14 +42,23 @@ export function useSectionTiles(): SectionTilesState {
     t.permissionAny ? hasAnyPermission(t.permissionAny) : !t.permission || hasPermission(t.permission);
   const isOff = (t: OperationsTile) => Boolean(t.visibleWhen && !t.visibleWhen(ctx));
 
-  const tiles = {} as Record<OperationGroupKey, VisibleSectionTile[]>;
+  const home = {} as Record<OperationGroupKey, VisibleSectionTile[]>;
   const permitted = {} as Record<OperationGroupKey, boolean>;
   for (const g of operationGroups) {
     const allowed = sectionTiles(g.key).filter((t) => !isHubTileHidden(menu, t.to) && permittedTile(t));
     permitted[g.key] = allowed.length > 0;
-    tiles[g.key] = allowed
+    home[g.key] = allowed
       .filter((t) => !isOff(t) || offEntryMode(true, Boolean(t.offHint), canSeeOff && !isPathLicenseClosed(t.to, ctx.licenseClosedModules)) !== "hide")
       .map((t) => ({ ...t, label: t.titleWhen?.(ctx) ?? t.title, off: isOff(t) }));
   }
-  return { ready: ctx.flagsReady, tiles, permitted };
+  // Süreç alt grupları (`nav-subgroups.ts`): havuz bütün bölümlerin GÖRÜNÜR karoları — çapraz listelenen karo
+  // kendi süzgecinden geçmiş haliyle gelir, kapı ikinci kez yazılmaz.
+  const pool = operationGroups.flatMap((g) => home[g.key]);
+  const tiles = {} as Record<OperationGroupKey, VisibleSectionTile[]>;
+  const groups = {} as Record<OperationGroupKey, NavSubgroup<VisibleSectionTile>[]>;
+  for (const g of operationGroups) {
+    groups[g.key] = layoutSubgroups(g.route, home[g.key], ctx, pool);
+    tiles[g.key] = groups[g.key].flatMap((s) => s.items);
+  }
+  return { ready: ctx.flagsReady, tiles, groups, permitted };
 }

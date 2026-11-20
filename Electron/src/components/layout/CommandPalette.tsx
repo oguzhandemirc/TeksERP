@@ -21,12 +21,11 @@ import {
   CommandItem,
 } from "@/components/ui/command";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
-import { useOperationsVisibilityContext } from "@/pages/Operations/useOperationsVisibility";
 import { useFavorites } from "@/hooks/useFavorites";
 import { usePreferences } from "@/providers/PreferencesProvider";
 import { useAuthStore } from "@/store/auth";
-import { isSuperadminGateOpen } from "@/lib/superadmin-gate";
 import { useOpenTopLevel } from "@/components/layout/tabs/use-tab-target";
+import { useCommandEntryAccess } from "./command-entry-access";
 import { commandSections, findCommandEntry, type CommandEntry } from "./command-entries";
 import { foldSearchText } from "@/lib/search-fold";
 import { scoreCommandValue } from "./command-score";
@@ -41,7 +40,6 @@ import {
 } from "@/lib/search/search-targets";
 import { isRollTabEntryVisible } from "@/pages/Operations/Rolls/tabs-regime";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
-import { useLicenseScreenVisible } from "@/hooks/useLicenseStatus";
 import { lowerTr } from "../../lib/tr-case";
 import { useMenuLayout } from "@/hooks/useMenuLayout";
 import { isMenuHidden } from "@/lib/menu-layout";
@@ -60,19 +58,10 @@ const DESC_CLS = "ml-2 min-w-0 truncate text-xs text-muted-foreground";
 
 export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
   const openTarget = useOpenTopLevel();
-  const { isAdmin, hasPermission, hasAnyPermission } = useRoleAccess();
-  // Operasyon karolarının duruma bağlı görünürlüğü palette de geçerlidir — aksi
-  // halde hub'da gizlenen ekran buradan hâlâ açılırdı. "Kurşun Sırası"nda bu
-  // somut bir hataydı: route kapısı aynı koşulu uyguladığı için paletten seçen
-  // kullanıcı sayfa yerine hub'a atılıyordu.
-  const visibilityCtx = useOperationsVisibilityContext();
-  // ⚠️ Sistem hub'ının süzgeciyle AYNI kaynak (`lib/superadmin-gate.ts`): palet
-  // üçüncü giriş kapısıdır ve hub'da gizlenen satıcı ekranını göstermemeli.
-  const isSystemAccount = useAuthStore((s) => s.isSystemAccount);
-  const systemAccountExists = useAuthStore((s) => s.systemAccountExists);
-  // Palet de GÖRÜNÜRLÜK yüklemini kullanır (hub karosuyla aynı soru).
-  const superadminGateOpen = isSuperadminGateOpen({ isSystemAccount, systemAccountExists });
-  const licenseScreenVisible = useLicenseScreenVisible();
+  const { hasAnyPermission } = useRoleAccess();
+  // Operasyon karolarının duruma bağlı görünürlüğü + satıcı/lisans kapısı palette de geçerlidir — süzgeç yan
+  // menü alt öğeleriyle ORTAK (`useCommandEntryAccess`); "Kurşun Sırası" dersi: hub'da gizlenen ekran buradan açılmasın.
+  const { isAllowed, labelOf } = useCommandEntryAccess();
   const { favorites } = useFavorites();
   const { prefs, setPreference } = usePreferences();
   const { theme, setTheme } = useTheme();
@@ -112,23 +101,6 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
   const runAction = (fn: () => void) => {
     onOpenChange(false);
     fn();
-  };
-
-  /** Görünen ad bağlamdan (karo `titleWhen` aynası); arama değeri de aynı adı taşır. */
-  const labelOf = (entry: CommandEntry) => entry.labelWhen?.(visibilityCtx) ?? entry.label;
-
-  /** Kullanıcı bu girişi AÇABİLİR mi (izin + duruma bağlı görünürlük). */
-  const isAllowed = (entry: CommandEntry) => {
-    // Durum süzgeci İZİNDEN ÖNCE: yüklem "bu ekranın şu an yapacağı iş var mı"
-    // sorusunu yanıtlar, izinden bağımsızdır ve ikisi VE ile birleşir.
-    if (entry.visibleWhen && !entry.visibleWhen(visibilityCtx)) return false;
-    // Kimlik kapısı (satıcı ekranları) — hub karosuyla AYNI yüklem, tek kaynak.
-    if (entry.superadminOnly && !superadminGateOpen) return false;
-    if (entry.licenseObservationGate && !licenseScreenVisible) return false;
-    if (entry.permissionAny) return hasAnyPermission(entry.permissionAny);
-    if (entry.permission) return hasPermission(entry.permission);
-    if (entry.adminOnly) return isAdmin;
-    return true;
   };
 
   /** Katalog listesinde ŞU AN çizilir mi — alt başlıklar yalnız arama sırasında. */
