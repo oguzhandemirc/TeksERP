@@ -48,6 +48,6 @@ describe("groupScreens — menü bölümleri", () => {
 
   it("bölüm sırası kenar menü sırasıdır", () => {
     const g = groupScreens(["operations/shipments", "operations/rolls", "operations/work-orders", "operations/orders"].map((k) => ekran(k)));
-    expect(g.map((x) => x.id)).toEqual(["planning", "production", "warehouse", "shipping"]);
+    expect(g.map((x) => x.id)).toEqual(["planning", "warehouse", "production", "shipping"]);
   });
 });
