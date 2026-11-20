@@ -153,6 +153,8 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "devereBeamBodyMachineFit",
       "devereSettleDefault",
       "devereReworkBillable",
+      "devereDenierSuggestMinBeams",
+      "devereDenierSuggestThresholdPct",
       "devereBeamWeavingLinkRequired",
     ],
   },

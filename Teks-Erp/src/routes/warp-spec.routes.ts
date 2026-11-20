@@ -18,6 +18,9 @@ import { WARP_SPEC_YARN_DENIER_INCLUDE } from "../services/helpers/warp-spec-yar
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { requireDevereEnabled } from "../middlewares/module.middleware";
+import { z } from "zod";
+import { applyDenierSuggestion, getDenierDeviationReport } from "../services/denier-deviation.service";
+import "../types/express-augment";
 
 export const warpSpecService = new WarpSpecService({
   modelName: "warpSpec",
@@ -64,6 +67,81 @@ router.get("/", requirePermission("warpspec:read"), controller.findAll);
 // sanar, `assertValidUuid` 400 verir ve panelde geliştirici jargonlu bir toast
 // çıkar (uyarı ise hiç çizilmez). On üç ana veri router'ında emsali var.
 router.get("/similar-names", requirePermission("warpspec:write"), controller.similarNames);
+
+// ── Devere F1: denye sapma raporu + [Uygula] (`/:id`den ÖNCE) ──────────────────
+const YMD = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Geçersiz gün (YYYY-MM-DD)");
+export const denierDeviationQuerySchema = z.object({
+  from: YMD.optional(),
+  to: YMD.optional(),
+  yarnItemId: z.string().uuid("Geçersiz iplik").optional(),
+  subcontractorId: z.string().uuid("Geçersiz devereci").optional(),
+}).strict();
+const DenierValue = z.union([z.string().trim().min(1, "Denye boş olamaz").max(32), z.number()]).transform((v) => String(v));
+export const denierApplyBodySchema = z.object({
+  yarnItemId: z.string().uuid("Geçersiz iplik"),
+  expectedDenier: DenierValue.nullable(),
+  newDenier: DenierValue,
+}).strict();
+
+/**
+ * @openapi
+ * /api/warp-specs/denier-deviation:
+ *   get:
+ *     tags: [WarpSpecs]
+ *     summary: "Denye sapma raporu — kabul edilmiş, tartılı (brüt+dara) devere sarımlarından iplik başına nominal ↔ tartı farkı; tek iplikli sarım iplik satırına, çok iplikli tek karma satırına; öneri örnek ≥ devere.denierSuggestMinBeams ve kart sapması > devere.denierSuggestThresholdPct"
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: from, schema: { type: string, format: date }, description: "Kabulün fabrika günü (verilmezse bitişten 90 gün önce)" }
+ *       - { in: query, name: to, schema: { type: string, format: date }, description: "Verilmezse bugün; aralık en çok 366 gün" }
+ *       - { in: query, name: yarnItemId, schema: { type: string, format: uuid } }
+ *       - { in: query, name: subcontractorId, schema: { type: string, format: uuid }, description: Devereci }
+ *     responses:
+ *       200: { description: "data.range · settings · rows[] (status SUGGEST|WITHIN_THRESHOLD|INSUFFICIENT, suggestedDenier, cardDenier) · mixed" }
+ *       400: { description: "INVALID_RANGE ya da tanınmayan parametre" }
+ *       403: { description: Devere modülü kapalı (MODULE_DISABLED) ya da yetki yok }
+ */
+router.get("/denier-deviation", requirePermission("warpspec:read"), async (req, res, next) => {
+  try {
+    const q = denierDeviationQuerySchema.parse(req.query);
+    res.status(200).json({ success: true, data: await getDenierDeviationReport(q) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/warp-specs/denier-deviation/apply:
+ *   post:
+ *     tags: [WarpSpecs]
+ *     summary: "Denye önerisini iplik kartına uygula (kullanıcı onayı) — atomik; kart arada değiştiyse 409; geçmiş sarım kopyaları değişmez"
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [yarnItemId, expectedDenier, newDenier]
+ *             properties:
+ *               yarnItemId: { type: string, format: uuid }
+ *               expectedDenier: { type: string, nullable: true, description: "Raporun cardDenier değeri" }
+ *               newDenier: { type: string, description: "Raporun suggestedDenier değeri" }
+ *     responses:
+ *       200: { description: "data.oldDenier · newDenier · unchanged (aynı değer zaten yazılı: tekrar deneme)" }
+ *       400: { description: "DENIER_INVALID · DENIER_NOT_YARN" }
+ *       404: { description: İplik kartı yok }
+ *       409: { description: "DENIER_CHANGED (details.currentDenier)" }
+ */
+router.post("/denier-deviation/apply", requirePermission("item:write"), async (req, res, next) => {
+  try {
+    const body = denierApplyBodySchema.parse(req.body);
+    const data = await applyDenierSuggestion(body, req.user!.userId);
+    res.status(200).json({ success: true, data, message: data.unchanged ? "Kart zaten bu denyede" : `İplik kartı denyesi ${data.newDenier} oldu` });
+  } catch (e) {
+    next(e);
+  }
+});
 
 /**
  * @openapi

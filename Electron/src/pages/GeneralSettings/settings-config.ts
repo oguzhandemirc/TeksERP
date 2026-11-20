@@ -2058,6 +2058,32 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         step: 0.5,
         audience: ["Planlamacı", "Yönetim"],
       },
+      {
+        // Devere F1: backend `readDevereDenierSuggestMinBeams` (kayıt yok = 3) ve üst sınır 1000 ile birebir.
+        group: DEVERE_GROUP.denier,
+        key: "devereDenierSuggestMinBeams",
+        title: "Denye önerisi için en az levent",
+        desc: "Denye sapma raporu bir iplik için kart denyesi önerisini ancak bu kadar tek iplikli, tartılı levent döndükten sonra verir. Daha az leventte satır “yetersiz örnek” görünür. Kart hiçbir zaman kendiliğinden değişmez; öneriyi kullanıcı onaylar. Varsayılan 3.",
+        min: 1,
+        max: 1000,
+        fallback: 3,
+        unit: "levent",
+        step: 1,
+        audience: ["Planlamacı", "Yönetim"],
+      },
+      {
+        // Devere F1: backend `readDevereDenierSuggestThresholdPct` (kayıt yok = 2) ve üst sınır 50 ile birebir.
+        group: DEVERE_GROUP.denier,
+        key: "devereDenierSuggestThresholdPct",
+        title: "Denye önerisi sapma eşiği (%)",
+        desc: "Tartıyla bulunan denye kart denyesinden bu yüzdeden fazla saparsa raporda yeni denye önerilir. Nem ve büküm de tartıyı oynatır; eşik küçük farkları ayıklar. Varsayılan %2.",
+        min: 0.1,
+        max: 50,
+        fallback: 2,
+        unit: "%",
+        step: 0.5,
+        audience: ["Planlamacı", "Yönetim"],
+      },
     ],
   },
   {

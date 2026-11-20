@@ -264,6 +264,28 @@ export async function readDevereReworkBillable(tx?: Pick<typeof prisma, "systemS
   return asBoolean(setting.value);
 }
 
+/** Devere F1: denye önerisi için iplik başına en az tartılı levent sayısı (tam sayı; kullanıcı kararı 3). */
+export const DEFAULT_DEVERE_DENIER_SUGGEST_MIN_BEAMS = 3;
+export const DEVERE_DENIER_SUGGEST_MIN_BEAMS_MAX = 1000;
+/** Ham değer — satır yok / çöp / tam sayı değil / aralık dışı → 3 (öneri sessizce gevşemez). */
+export async function readDevereDenierSuggestMinBeams(tx?: Pick<typeof prisma, "systemSetting">): Promise<number> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.DEVERE_DENIER_SUGGEST_MIN_BEAMS }, select: { value: true } });
+  if (!setting) return DEFAULT_DEVERE_DENIER_SUGGEST_MIN_BEAMS;
+  const n = asNumber(setting.value);
+  return n === null || !Number.isInteger(n) || n < 1 || n > DEVERE_DENIER_SUGGEST_MIN_BEAMS_MAX ? DEFAULT_DEVERE_DENIER_SUGGEST_MIN_BEAMS : n;
+}
+
+/** Devere F1: denye önerisi sapma eşiği (%; > 0, kullanıcı kararı 2). Eşiği AŞAN sapma öneri doğurur. */
+export const DEFAULT_DEVERE_DENIER_SUGGEST_THRESHOLD_PCT = 2;
+export const DEVERE_DENIER_SUGGEST_THRESHOLD_PCT_MAX = 50;
+/** Ham değer — satır yok / çöp / ≤ 0 / aralık dışı → 2. */
+export async function readDevereDenierSuggestThresholdPct(tx?: Pick<typeof prisma, "systemSetting">): Promise<number> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.DEVERE_DENIER_SUGGEST_THRESHOLD_PCT }, select: { value: true } });
+  if (!setting) return DEFAULT_DEVERE_DENIER_SUGGEST_THRESHOLD_PCT;
+  const n = asNumber(setting.value);
+  return n === null || !Number.isFinite(n) || n <= 0 || n > DEVERE_DENIER_SUGGEST_THRESHOLD_PCT_MAX ? DEFAULT_DEVERE_DENIER_SUGGEST_THRESHOLD_PCT : n;
+}
+
 /** Fason devere D1: sabit çözgü firesi (m) — varsayılan 0 (firesiz formül); üst sınır dahil. */
 export const DEFAULT_DEVERE_WARP_FIXED_WASTE_M = 0;
 export const DEVERE_WARP_FIXED_WASTE_M_MAX = 1000;
