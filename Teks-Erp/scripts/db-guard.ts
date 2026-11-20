@@ -22,6 +22,7 @@
 // =============================================================================
 
 import { BILINEN_GUVENLI_DB_ADLARI } from "./lib/bilinen-guvenli-db";
+import { uzakTestDbKabulu } from "./lib/uzak-test-db";
 
 /**
  * Adı BİREBİR bu olan veritabanı geliştirme hedefi sayılır.
@@ -39,7 +40,7 @@ const IZINLI_DB_ADLARI = BILINEN_GUVENLI_DB_ADLARI;
  * (iki kapı aynı adı zıt sınıflandırıyordu).
  */
 const IZINLI_SON_EKLER = ["_dev", "_test", "_local", "_demo"];
-/** Yalnız bu makinedeki PostgreSQL. Uzak host = üretim varsayılır. */
+/** Yalnız bu makinedeki PostgreSQL. Uzak host = üretim varsayılır; tek istisna `uzakTestDbKabulu` (beyanlı host+port + `_test`). */
 const IZINLI_HOSTLAR = new Set(["localhost", "127.0.0.1", "::1", ""]);
 
 export interface KapiSonucu {
@@ -50,12 +51,12 @@ export interface KapiSonucu {
   apply: boolean;
 }
 
-function hedefiCoz(): { host: string; db: string } {
+function hedefiCoz(): { host: string; port: string; db: string } {
   const ham = process.env.DATABASE_URL ?? "";
   if (!ham) throw new Error("DATABASE_URL tanımsız");
   // `new URL` postgres:// şemasını ayrıştırır; parola/parametre önemsiz.
   const u = new URL(ham);
-  return { host: u.hostname, db: decodeURIComponent(u.pathname.replace(/^\//, "")) };
+  return { host: u.hostname, port: u.port, db: decodeURIComponent(u.pathname.replace(/^\//, "")) };
 }
 
 /**
@@ -71,7 +72,7 @@ export function assertGelistirmeVeritabani(
   opts: { applyGerekli?: boolean } = {},
 ): KapiSonucu {
   const apply = process.argv.includes("--apply");
-  let hedef: { host: string; db: string };
+  let hedef: { host: string; port: string; db: string };
   try {
     hedef = hedefiCoz();
   } catch (e) {
@@ -79,8 +80,8 @@ export function assertGelistirmeVeritabani(
     process.exit(1);
   }
 
-  const { host, db } = hedef;
-  const hostOk = IZINLI_HOSTLAR.has(host);
+  const { host, port, db } = hedef;
+  const hostOk = IZINLI_HOSTLAR.has(host) || uzakTestDbKabulu({ host, port, db });
   const dbOk = IZINLI_DB_ADLARI.has(db) || IZINLI_SON_EKLER.some((s) => db.endsWith(s));
   const prodOrtam = process.env.NODE_ENV === "production" || process.env.APP_ENV === "production";
 
@@ -93,7 +94,7 @@ export function assertGelistirmeVeritabani(
       `\n   Bu betik geri alınamaz veri kaybı yapar. İzinli hedefler: ` +
         `${IZINLI_SON_EKLER.join("/")} ile biten adlar` +
         `${IZINLI_DB_ADLARI.size ? ` ya da ${[...IZINLI_DB_ADLARI].join(", ")}` : ""},\n` +
-        `   yalnız yerel PostgreSQL üzerinde.\n`,
+        `   yalnız yerel PostgreSQL üzerinde (uzak: TEKSERP_TEST_DB_HOST/_PORT ile beyanlı host + _test adı).\n`,
     );
     console.error(
       `   ⚠️ Fabrikanın verisini gerçekten sıfırlamak istiyorsanız bu kapıyı ATLAMAYIN —\n` +

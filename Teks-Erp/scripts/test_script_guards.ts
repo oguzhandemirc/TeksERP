@@ -20,6 +20,7 @@
 //   §6 paket hedefi fixture ADI taşıyor  (fabrika adı durur, fixture adı geçer)
 //   §7 hedefin HACMİ fabrika ölçeğinde değil (ad kalıbı yanılabilir, sayı yanılmaz)
 //   §8 silen temizlik yolları da aynı kapıdan geçiyor (`--apply` olmadan bile)
+//   §15 uzak test DB YALNIZ beyanlı host + port + `_test` adıyla geçer (ThinkPad PG)
 // =============================================================================
 import { readFileSync } from "fs";
 import { git } from "./lib/git";
@@ -27,6 +28,8 @@ import { join, relative } from "path";
 import { execFileSync, spawnSync } from "child_process";
 import { walkTs } from "./lib/ts-tarama";
 import { FABRIKA_HACIM_ESIGI, hacimEngeliMetni, cocukOrtami } from "./lib/hedef-db-kapisi";
+import { uzakTestDbKabulu } from "./lib/uzak-test-db";
+import { assertGelistirmeVeritabani } from "./db-guard";
 
 let pass = 0;
 let fail = 0;
@@ -439,6 +442,78 @@ function main(): void {
     fixtureCikti.includes("Hedef DB: tekserp_kapi_sondasi_test") && !fixtureCikti.includes("fixture kalıbına uymuyor"),
     fixtureCikti.split("\n").find((l) => l.includes("Hedef DB"))?.trim().slice(0, 70) ?? "(satır yok)",
   );
+
+  // ═══ §15 — UZAK TEST DB: beyanlı host + port + `_test` (2026-11-20) ═══════
+  // Geliştirme PG'si ThinkPad'de (TEKSERP_TEST_DB_HOST/_PORT); iki host kapısı
+  // onu "UZAK HOST" diye reddediyordu. Kabul üç ayağın HEPSİYLE; her ayak tek
+  // tek düşürülüp RED ölçülür (yalnız "geçer" ölçmek açık kapıyı da yeşil gösterirdi).
+  // `.invalid` alanı DNS'te hemen düşer — sonda gerçek bir hosta bağlanmaz.
+  const UZAK = "uzak-test.invalid";
+  const beyan = { TEKSERP_TEST_DB_HOST: UZAK, TEKSERP_TEST_DB_PORT: "5433" };
+  const yuklem: Array<[string, Parameters<typeof uzakTestDbKabulu>[0], NodeJS.ProcessEnv, boolean]> = [
+    ["üç ayak tutuyor → KABUL", { host: UZAK, port: "5433", db: "tekserp_x_test" }, beyan, true],
+    ["host büyük harfle de aynı host → KABUL", { host: UZAK.toUpperCase(), port: "5433", db: "tekserp_x_test" }, beyan, true],
+    ["port beyanı yok → port serbest, KABUL", { host: UZAK, port: "6000", db: "tekserp_x_test" }, { TEKSERP_TEST_DB_HOST: UZAK }, true],
+    ["TEKSERP_TEST_DB_HOST yok → RED", { host: UZAK, port: "5433", db: "tekserp_x_test" }, { TEKSERP_TEST_DB_PORT: "5433" }, false],
+    ["TEKSERP_TEST_DB_HOST boş → RED", { host: "", port: "", db: "tekserp_x_test" }, { TEKSERP_TEST_DB_HOST: " " }, false],
+    ["host farklı → RED", { host: "10.0.0.9", port: "5433", db: "tekserp_x_test" }, beyan, false],
+    ["port farklı → RED", { host: UZAK, port: "5432", db: "tekserp_x_test" }, beyan, false],
+    ["port boş (=5432) ama beyan 5433 → RED", { host: UZAK, port: "", db: "tekserp_x_test" }, beyan, false],
+    ["ad _dev → RED (uzakta yalnız _test)", { host: UZAK, port: "5433", db: "tekserp_x_dev" }, beyan, false],
+    ["fabrika adı → RED", { host: UZAK, port: "5433", db: "tekserp" }, beyan, false],
+  ];
+  for (const [ad, hedef, env, beklenen] of yuklem) {
+    check(`§15a ${ad}`, uzakTestDbKabulu(hedef, env) === beklenen);
+  }
+  check(
+    "§15b ⭐ iki host kapısı da AYNI yüklemi çağırıyor (tek kaynak)",
+    ["db-guard.ts", "run-all-tests.ts"].every((f) => /uzakTestDbKabulu\(/.test(kodSatirlari(readFileSync(join(__dirname, f), "utf8")))),
+  );
+
+  // Uçtan uca, db-guard KABUL yönü: süreç içinde (RED yönü process.exit eder, aşağıda çocukta ölçülür).
+  const eskiOrtam = { url: process.env.DATABASE_URL, h: process.env.TEKSERP_TEST_DB_HOST, p: process.env.TEKSERP_TEST_DB_PORT };
+  const geriYukle = (k: string, v: string | undefined) => (v === undefined ? delete process.env[k] : (process.env[k] = v));
+  try {
+    process.env.DATABASE_URL = `postgresql://u:p@${UZAK}:5433/tekserp_kapi_sondasi_test`;
+    process.env.TEKSERP_TEST_DB_HOST = UZAK;
+    process.env.TEKSERP_TEST_DB_PORT = "5433";
+    const sonuc = assertGelistirmeVeritabani("§15-sonda");
+    check("§15c db-guard beyanlı uzak test DB'sini GEÇİRİYOR", sonuc.host === UZAK && sonuc.db === "tekserp_kapi_sondasi_test");
+  } finally {
+    geriYukle("DATABASE_URL", eskiOrtam.url);
+    geriYukle("TEKSERP_TEST_DB_HOST", eskiOrtam.h);
+    geriYukle("TEKSERP_TEST_DB_PORT", eskiOrtam.p);
+  }
+  // RED yönü: beyan başka host / port tutmuyor → betik veriye dokunmadan düşer.
+  for (const [ad, ek] of [
+    ["beyan başka host", { TEKSERP_TEST_DB_HOST: "baska.invalid", TEKSERP_TEST_DB_PORT: "5433" }],
+    ["port tutmuyor", { TEKSERP_TEST_DB_HOST: UZAK, TEKSERP_TEST_DB_PORT: "5999" }],
+  ] as const) {
+    const r15 = spawnSync("npx", ["tsx", join(dizin, "reset-operational.ts")], {
+      encoding: "utf8",
+      env: cocukOrtami({ DATABASE_URL: `postgresql://u:p@${UZAK}:5433/tekserp_kapi_sondasi_test`, ...ek }),
+      timeout: 60_000,
+    });
+    const c15 = `${r15.stdout ?? ""}${r15.stderr ?? ""}`;
+    check(`§15d db-guard ${ad} → DURDURULDU (UZAK HOST)`, r15.status === 1 && c15.includes("UZAK HOST"), `exit ${r15.status}`);
+  }
+  // Paket kapısı (run-all-tests productionDbGate): kabul satırı yalnız beyan tutunca basılır.
+  const paketKos = (ek: NodeJS.ProcessEnv) => {
+    const r = spawnSync("npx", ["tsx", kosucu, "__eslesmeyen_ad__"], {
+      encoding: "utf8",
+      env: cocukOrtami({ DATABASE_URL: `postgresql://u:p@${UZAK}:5433/tekserp_kapi_sondasi_test`, ...ek }),
+      timeout: 120_000,
+    });
+    return `${r.stdout ?? ""}${r.stderr ?? ""}`;
+  };
+  const pKabul = paketKos(beyan);
+  check(
+    "§15e paket kapısı beyanlı uzak test DB'sini kabul ediyor",
+    pKabul.includes("beyanlı uzak test DB") && !pKabul.includes("YEREL DEĞİL"),
+    pKabul.split("\n").find((l) => l.includes("Hedef DB") || l.includes("YEREL"))?.trim().slice(0, 80) ?? "(satır yok)",
+  );
+  const pRed = paketKos({ TEKSERP_TEST_DB_HOST: UZAK, TEKSERP_TEST_DB_PORT: "5999" });
+  check("§15f paket kapısı port tutmayınca bugünkü gibi RED", pRed.includes("YEREL DEĞİL") && !pRed.includes("beyanlı uzak test DB"));
 
   // ═══ §7 — HACİM AYAĞI: ad kalıbı yanılabilir, veri hacmi yanılmaz ═══
   // Fabrikanın `..._test` adlı yeni bir kopyası ad kapısından GEÇER. İkinci sed

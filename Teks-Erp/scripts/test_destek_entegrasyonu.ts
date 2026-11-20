@@ -25,6 +25,8 @@
 //    yine 403, yeni `/durum` `support:create`siz kullanıcıya açık; eski önek 1 MB global gövde sınırında kalır
 // §8 firma kimliği lisans HAK'ındaki `tesis.id` (küçük harf; patron bulutuyla aynı): sabit müşteri adı yok
 // §10 lisans kapısı: her `/api/etkili-destek` ucu HER kademede ve etkinleştirme kilidinde açık (kurtarma yolu)
+// §11 geliştirme yedeği `DESTEK_TENANT_ID`: yalnız lisansta tesis kimliği YOKSA ve biçim [a-z0-9-]{1,64} ise;
+//     lisans kimliği varsa env onu EZEMEZ; bozuk değer yok sayılır (KAPALI)
 //
 // DB: kendi kullanıcılarını (zaman damgalı ad) yaratır; `finally`de oturum/izinleri siler, kullanıcıyı
 // pasifleştirir (audit FK — sert silinmez).
@@ -41,7 +43,7 @@ import { AuthService } from "../src/services/auth.service";
 import { reconcilePermissionCatalog } from "../src/jobs/permission-catalog.job";
 import { APP_VERSION } from "../src/lib/app-version";
 import { buyukGovdeYolu, effectiveBodyLimit, SUPPORT_BODY_LIMIT, VARSAYILAN_GOVDE_LIMITI } from "../src/constants/body-limits";
-import { setSupportTenantIdForTests } from "../src/services/helpers/destek-transport.helper";
+import { resolveSupportTenantId, setSupportTenantIdForTests } from "../src/services/helpers/destek-transport.helper";
 import { isOpenInTier, isOpenWhenActivationLocked } from "../src/constants/license-routes";
 import { STATE_TIERS } from "../src/lib/license/protocol";
 import { hmacHex, multipartBodyHash, requestStringToSign, sha256Hex, signRequest } from "../src/integrations/destek/signature";
@@ -346,7 +348,7 @@ async function section6(u: { token: string }, fakeUrl: string): Promise<void> {
   check("§8 serviste sabit firma kimliği yok (tenant yapılandırmadan)", /resolveTenantId\(cfg\)/.test(serviceSrc) && !/tenant:\s*\{\s*id:\s*["'`]/.test(serviceSrc) && !/TENANT_ID\s*=\s*["'`]/.test(serviceSrc) && !/installationId/.test(serviceSrc));
   const transportSrc = readFileSync(join(__dirname, "../src/services/helpers/destek-transport.helper.ts"), "utf8");
   check("§8 tenant kaynağı lisans HAK tesis kimliği, küçük harf",
-    /entitlement\?\.document\.tesis\.id/.test(transportSrc) && /raw\.toLowerCase\(\)/.test(transportSrc) && /if \(!tenantId\) return null;/.test(transportSrc));
+    /entitlement\?\.document\.tesis\.id/.test(transportSrc) && /licenseTenantId\.toLowerCase\(\)/.test(transportSrc) && /if \(!tenantId\) return null;/.test(transportSrc));
 }
 
 interface Raw {
@@ -478,7 +480,55 @@ function section10(): void {
   check("§10 desen yalnız kendi önekini açar (/api/etkili-destekx kapalı)", !isOpenInTier("DURDURULMUS", "POST", "/api/etkili-destekx/talepler"));
 }
 
+async function section11(u: { token: string }, fakeUrl: string): Promise<void> {
+  console.log("\n=== §11 DESTEK_TENANT_ID geliştirme yedeği ===");
+  const LIS = "5B0C6A4E-DE57-4000-8000-0000000000D1";
+  const saf: Array<[string, string | null, string | undefined, string | null]> = [
+    ["lisans var + env var → LİSANS kazanır (küçük harf)", LIS, "seyitoglu", LIS.toLowerCase()],
+    ["lisans yok + geçerli env → env", null, "seyitoglu", "seyitoglu"],
+    ["lisans yok + kenar boşluklu env → kırpılır", null, "  dev-1  ", "dev-1"],
+    ["lisans yok + env yok → null (KAPALI)", null, undefined, null],
+    ["lisans yok + boş env → null", null, "", null],
+    ["lisans yok + büyük harfli env → yok sayılır", null, "Seyitoglu", null],
+    ["lisans yok + boşluklu env → yok sayılır", null, "seyit oglu", null],
+    ["lisans yok + alt çizgili env → yok sayılır", null, "seyit_oglu", null],
+    ["lisans yok + 65 karakter → yok sayılır", null, "a".repeat(65), null],
+    ["lisans yok + 64 karakter → kabul (sınır)", null, "a".repeat(64), "a".repeat(64)],
+  ];
+  for (const [label, lis, env, beklenen] of saf) {
+    const got = resolveSupportTenantId(lis, env === undefined ? {} : { DESTEK_TENANT_ID: env });
+    check(`§11 ${label}`, got === beklenen, String(got));
+  }
+  // Uçtan uca: kanca null = lisans tesis kimliği yok (lisanssız önizleme).
+  setEnv(fakeUrl, TEST_KEY);
+  setSupportTenantIdForTests(null);
+  try {
+    process.env.DESTEK_TENANT_ID = "dev-onizleme";
+    const a = await call(u.token, "GET", "/api/etkili-destek/durum");
+    check("§11 lisanssız + DESTEK_TENANT_ID → /durum etkin=true", a.status === 200 && a.json.data?.etkin === true, JSON.stringify(a.json.data));
+    const n = seen.length;
+    await call(u.token, "GET", "/api/etkili-destek/talepler");
+    const q = new URL(seen[n]?.url ?? "/", "http://x").searchParams;
+    check("§11 merkeze giden tenantId = env değeri", seen.length === n + 1 && q.get("tenantId") === "dev-onizleme", q.toString());
+    process.env.DESTEK_TENANT_ID = "BOZUK DEGER";
+    const b = await call(u.token, "GET", "/api/etkili-destek/durum");
+    check("§11 bozuk DESTEK_TENANT_ID → /durum etkin=false (yok sayıldı)", b.status === 200 && b.json.data?.etkin === false);
+    // Lisans kimliği varken env onu ezemez.
+    setSupportTenantIdForTests(TEST_TESIS_ID);
+    process.env.DESTEK_TENANT_ID = "ezmeye-calisan";
+    const k = seen.length;
+    await call(u.token, "GET", "/api/etkili-destek/talepler");
+    const q2 = new URL(seen[k]?.url ?? "/", "http://x").searchParams;
+    check("§11 lisans kimliği varken tenantId = LİSANS (env ezemedi)", q2.get("tenantId") === tenantId, q2.toString());
+  } finally {
+    delete process.env.DESTEK_TENANT_ID;
+    setSupportTenantIdForTests(TEST_TESIS_ID);
+  }
+}
+
 async function main(): Promise<void> {
+  const eskiDevTenant = process.env.DESTEK_TENANT_ID;
+  delete process.env.DESTEK_TENANT_ID;
   section1();
   section10();
   await reconcilePermissionCatalog();
@@ -504,7 +554,10 @@ async function main(): Promise<void> {
     await section6(u, fakeUrl);
     await section7(u, admin, fakeUrl);
     await section9(u);
+    await section11(u, fakeUrl);
   } finally {
+    if (eskiDevTenant === undefined) delete process.env.DESTEK_TENANT_ID;
+    else process.env.DESTEK_TENANT_ID = eskiDevTenant;
     setEnv(undefined, undefined);
     setSupportTenantIdForTests(undefined);
     await prisma.session.deleteMany({ where: { userId: { in: ids } } });

@@ -15,6 +15,7 @@
 // Çocuk süreçlere `env: process.env` aynen geçtiği için davranış değişmez:
 // dotenv var olan değişkenin ÜSTÜNE YAZMAZ.
 import "dotenv/config";
+import { uzakTestDbKabulu } from "./lib/uzak-test-db";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -218,11 +219,13 @@ function productionDbGate(): void {
   }
 
   let host: string;
+  let port: string;
   let dbName: string;
   try {
     // postgresql:// şeması URL ile çözülür; hostname IPv6'da köşeli parantezsiz gelir.
     const u = new URL(url as string);
     host = u.hostname.toLowerCase();
+    port = u.port;
     dbName = decodeURIComponent(u.pathname.replace(/^\//, "")) || "<isimsiz>";
   } catch {
     console.error(
@@ -249,6 +252,12 @@ function productionDbGate(): void {
   const YEREL = new Set(["localhost", "127.0.0.1", "::1", "0.0.0.0"]);
   if (YEREL.has(host)) {
     console.log(`→ Hedef DB: ${dbName} @ ${host} (yerel) ✅\n`);
+    return;
+  }
+
+  // Beyanlı uzak test DB'si (ThinkPad geliştirme PG'si): host+port TEKSERP_TEST_DB_* ile eşit ve ad `_test`.
+  if (uzakTestDbKabulu({ host, port, db: dbName })) {
+    console.log(`→ Hedef DB: ${dbName} @ ${host}:${port || "5432"} (beyanlı uzak test DB, TEKSERP_TEST_DB_HOST) ✅\n`);
     return;
   }
 
