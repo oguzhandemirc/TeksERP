@@ -47,6 +47,7 @@ import {
   settingsCategoryVisibleWhen,
   settingsHitCount,
   settingsModuleLabel,
+  orderSettingGroups,
 } from "./settings-groups";
 import { MODULE_LABELS } from "@/lib/module-flags";
 
@@ -544,5 +545,22 @@ describe("devere kategorisi — lot zorunluluğu modülün arkasında", () => {
   });
   it("③ devere HAM bayrak — üretim kapalıyken de açık kalır (K3: bağımlılık yok)", () => {
     expect(resolveSettingsModuleState({ productionEnabled: false, devereEnabled: true }).devereEnabled).toBe(true);
+  });
+  // Devere H2: bütün devere ayarları grupta; grubu `groupOrder` dışında kalan satır "Genel" kartına düşerdi.
+  it("④ her devere satırı groupOrder'daki bir grupta; kapanış önerisi ve yeniden sarım kendi fason gruplarında", () => {
+    const order = devere.groupOrder ?? [];
+    const rows = [...(devere.flags ?? []), ...(devere.enumFlags ?? []), ...(devere.numberFlags ?? [])];
+    for (const r of rows) expect(order).toContain(r.group);
+    expect(devere.enumFlags?.find((f) => f.enumKey === "devereSettleDefault")?.group).toBe("Fason devere — dönüş ve kapanış");
+    expect(devere.flags?.find((f) => f.key === "devereReworkBillable")?.group).toBe("Fason devere — fatura");
+  });
+});
+
+describe("orderSettingGroups — grup kartı sırası", () => {
+  const g = (name: string) => ({ name });
+  it("listedekiler liste sırasıyla, listede olmayan sona (kararlı); liste yoksa dokunmaz", () => {
+    const groups = [g("Genel"), g("B"), g("A"), g("C")];
+    expect(orderSettingGroups(groups, ["A", "Boş grup", "B"]).map((x) => x.name)).toEqual(["A", "B", "Genel", "C"]);
+    expect(orderSettingGroups(groups)).toBe(groups);
   });
 });

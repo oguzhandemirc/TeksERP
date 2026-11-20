@@ -34,6 +34,9 @@ export interface WarpingYarnReturnBody {
   wasteKg?: number | null;
   /** Fire gerekçesi — serbest metin, isteğe bağlı. */
   wasteReason?: string | null;
+  /** H1: koli / bobin adedi — bilgi (defter değil); yalnız girilince gider. */
+  packageCount?: number;
+  bobbinCount?: number;
   clientToken?: string;
 }
 
@@ -87,6 +90,9 @@ export interface WarpingYarnReturnRow {
   qtyKg: string;
   /** Bu iadeyle yazılan fire (canlı); eski sunucuda yok. */
   wasteKg?: string;
+  /** H1: koli / bobin adedi (bilgi); girilmediyse null, eski sunucuda yok. */
+  packageCount?: number | null;
+  bobbinCount?: number | null;
   reasonCode: string | null;
   reasonLabel: string | null;
   note: string | null;

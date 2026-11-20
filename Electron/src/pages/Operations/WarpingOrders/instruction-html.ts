@@ -44,10 +44,17 @@ function instructionSection(i: WarpingInstruction): string {
   </section>`;
 }
 
+const countCell = (v: number | null | undefined) => `<td class="n">${v == null ? "—" : String(v)}</td>`;
+
 function dispatchSection(d: WarpingDispatchRow, i: WarpingInstruction): string {
+  // H2: koli/bobin sütunu yalnız bir kalemde girildiyse basılır — adetsiz sevkin irsaliyesi H1 öncesiyle aynı.
+  const pc = d.items.some((it) => it.packageCount != null);
+  const bc = d.items.some((it) => it.bobbinCount != null);
   const items = d.items
-    .map((it) => `<tr><td>${yarnCell(it.yarnItemName, it.yarnItemCode)}</td><td>${esc(it.lotNo ?? "—")}</td><td>${esc(it.warehouseName ?? "—")}</td><td class="n">${esc(fmtKg(it.outKg))}</td></tr>`)
+    .map((it) => `<tr><td>${yarnCell(it.yarnItemName, it.yarnItemCode)}</td><td>${esc(it.lotNo ?? "—")}</td><td>${esc(it.warehouseName ?? "—")}</td>${pc ? countCell(it.packageCount) : ""}${bc ? countCell(it.bobbinCount) : ""}<td class="n">${esc(fmtKg(it.outKg))}</td></tr>`)
     .join("");
+  const countHead = `${pc ? `<th class="n">Koli</th>` : ""}${bc ? `<th class="n">Bobin</th>` : ""}`;
+  const countFoot = `${pc ? `<td class="n"><b>${String(d.totalPackageCount ?? d.items.reduce((s, it) => s + (it.packageCount ?? 0), 0))}</b></td>` : ""}${bc ? `<td class="n"><b>${String(d.totalBobbinCount ?? d.items.reduce((s, it) => s + (it.bobbinCount ?? 0), 0))}</b></td>` : ""}`;
   return `<section class="break">
     <h1>İPLİK SEVK İRSALİYESİ</h1>
     <div class="sub">${esc(d.dispatchNo)} · ${esc(fmtFactoryDateTime(d.dispatchedAt))}</div>
@@ -55,9 +62,9 @@ function dispatchSection(d: WarpingDispatchRow, i: WarpingInstruction): string {
       ${row("Devereci", `${i.subcontractor.name} (${i.subcontractor.code})`)}
       ${row("Sipariş", `${i.orderNo} — ${i.warpSpec.name}`)}
     </table>
-    <table class="grid"><thead><tr><th>İplik</th><th>Lot</th><th>Çıkış deposu</th><th class="n">Kg</th></tr></thead>
+    <table class="grid"><thead><tr><th>İplik</th><th>Lot</th><th>Çıkış deposu</th>${countHead}<th class="n">Kg</th></tr></thead>
       <tbody>${items}</tbody>
-      <tfoot><tr><td colspan="3"><b>Toplam</b></td><td class="n"><b>${esc(fmtKg(d.totalOutKg))}</b></td></tr></tfoot></table>
+      <tfoot><tr><td colspan="3"><b>Toplam</b></td>${countFoot}<td class="n"><b>${esc(fmtKg(d.totalOutKg))}</b></td></tr></tfoot></table>
     <div class="sign"><div>Teslim eden</div><div>Teslim alan</div></div>
   </section>`;
 }

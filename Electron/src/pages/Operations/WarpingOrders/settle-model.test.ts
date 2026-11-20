@@ -1,7 +1,7 @@
 // BEKÇİ — kapanış gövde kurucusu (D7b): varsayılandan taslak, hızlı kova, aşım, iade sebebi, depo yalnız iadede.
 // NEGATİF SONDA: bkz. arşiv notu "Fason devere D7b".
 import { describe, expect, it } from "vitest";
-import { buildSettleBody, draftsFromPlan, fillLine, keepOf, pctText } from "./settle-model";
+import { buildSettleBody, draftsFromPlan, fillLine, keepOf, pctText, settleSuggestionText } from "./settle-model";
 import type { WarpingSettlePlanLine } from "./settle-types";
 
 const line = (over: Partial<WarpingSettlePlanLine> = {}): WarpingSettlePlanLine => ({
@@ -42,5 +42,16 @@ describe("settle-model", () => {
     expect(buildSettleBody([d!], { reason: "fazla fire", returnReasonCode: "K" })).toMatchObject({ ok: true, body: { reason: "fazla fire", returnReasonCode: null } });
     expect(pctText("4.88")).toBe("%4,88");
     expect(pctText(null)).toBe("—");
+  });
+});
+
+// Devere H2: kapanış önerisinin cümlesi sunucunun kipinden; eski sunucu kip göndermez → bugünkü A1-a cümlesi.
+describe("settleSuggestionText", () => {
+  it("kip başına cümle; kip yok = plan firesi kadar fire", () => {
+    expect(settleSuggestionText(undefined)).toContain("planlanan fire kadarı fire");
+    expect(settleSuggestionText(null)).toBe(settleSuggestionText("WASTE_UP_TO_PLAN"));
+    expect(settleSuggestionText("KEEP")).toContain("deverecide kalır");
+    expect(settleSuggestionText("RETURN")).toContain("iade sebebini seçin");
+    expect(settleSuggestionText("WASTE_ALL")).toContain("fire yazılır");
   });
 });

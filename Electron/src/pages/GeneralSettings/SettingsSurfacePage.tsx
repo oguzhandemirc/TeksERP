@@ -293,6 +293,7 @@ export function SettingsSurfacePage({
                     settingFields={rows.settingFields}
                     superadminOnly={cat.superadminOnly}
                     writePermissions={cat.permissionAny}
+                    groupOrder={cat.groupOrder}
                     moduleClosed={isCategoryModuleClosed(cat, modules)}
                     moduleLabel={cat.moduleKey ? settingsModuleLabel(cat.moduleKey) : undefined}
                     // Arama açıkken isabetsiz kategori BOŞ isabet alır: aksi

@@ -272,6 +272,19 @@ export function groupSettingsCategories(
   })).filter((g) => g.categories.length > 0);
 }
 
+/**
+ * Satır gruplarını kategorinin `groupOrder`una göre dizer (kararlı): listede olan önce o sırayla, olmayan
+ * sonra ilk görülme sırasıyla. Satırsız grup zaten gelmez — listede beklemesi ekranda boş kart açmaz.
+ */
+export function orderSettingGroups<T extends { name: string }>(groups: T[], order?: readonly string[]): T[] {
+  if (!order || order.length === 0) return groups;
+  const rank = (n: string) => {
+    const i = order.indexOf(n);
+    return i === -1 ? order.length : i;
+  };
+  return groups.map((g, i) => ({ g, i })).sort((a, b) => rank(a.g.name) - rank(b.g.name) || a.i - b.i).map((x) => x.g);
+}
+
 /** Bölümlenmiş listeyi düz kategori dizisine indirger (aktif sekme çözümü için). */
 export function flattenSettingsGroups(groups: SettingsSectionGroup[]): SettingsCategory[] {
   return groups.flatMap((g) => g.categories);

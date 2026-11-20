@@ -5,6 +5,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { InfoPopover } from "@/components/ui/info-popover";
 import { cn } from "@/lib/utils";
 import { addLotLine, lineNotes, overPlanNote, type DispatchLineDraft } from "./dispatch-model";
 import { fmtKg } from "./order-model";
@@ -44,7 +45,7 @@ function LineRow({ line, first, yarn, preview, lines, onChange }: RowProps) {
           {first ? (
             <>
               <YarnLabel prefix={`${yarn.letter} · `} name={yarn.name} code={yarn.code} />
-              <span className="block text-xs text-muted-foreground">{contextText(yarn)}</span>
+              <span className="block max-w-xs whitespace-normal text-xs text-muted-foreground">{contextText(yarn)}</span>
             </>
           ) : (
             <span className="pl-4 text-xs text-muted-foreground">↳ aynı iplik, başka lot</span>
@@ -53,8 +54,14 @@ function LineRow({ line, first, yarn, preview, lines, onChange }: RowProps) {
         <TableCell className={cn(num, "align-top")}>{first ? fmtKg(yarn.suggestedKg) : ""}</TableCell>
         <TableCell className="w-44 align-top"><WarehousePicker itemId={yarn.yarnItemId} code={yarn.code} value={line.warehouse} onChange={(warehouse) => set({ warehouse })} /></TableCell>
         <TableCell className="w-40 align-top"><LotPicker itemId={yarn.yarnItemId} code={yarn.code} value={line.lot} onChange={(lot) => set({ lot })} /></TableCell>
-        <TableCell className="w-28 align-top">
+        <TableCell className="w-28 min-w-28 align-top">
           <Input aria-label={`${yarn.code} sevk kg`} inputMode="decimal" className="h-8 text-right tabular-nums" value={line.qtyKg} onChange={(e) => set({ qtyKg: e.target.value })} />
+        </TableCell>
+        <TableCell className="w-20 min-w-20 align-top">
+          <Input aria-label={`${yarn.code} koli adedi`} inputMode="numeric" placeholder="—" className="h-8 text-right tabular-nums" value={line.packageCount ?? ""} onChange={(e) => set({ packageCount: e.target.value })} />
+        </TableCell>
+        <TableCell className="w-20 min-w-20 align-top">
+          <Input aria-label={`${yarn.code} bobin adedi`} inputMode="numeric" placeholder="—" className="h-8 text-right tabular-nums" value={line.bobbinCount ?? ""} onChange={(e) => set({ bobbinCount: e.target.value })} />
         </TableCell>
         <TableCell className="w-10 align-top">
           {first ? (
@@ -70,7 +77,7 @@ function LineRow({ line, first, yarn, preview, lines, onChange }: RowProps) {
       </TableRow>
       {(notes.length > 0 || over) && (
         <TableRow>
-          <TableCell colSpan={6} className="pt-0 text-xs">
+          <TableCell colSpan={8} className="pt-0 text-xs">
             {notes.map((n) => (
               <span key={n.text} className={cn("mr-3 block sm:inline", n.blocking ? "text-destructive" : "text-amber-700 dark:text-amber-400")}>{n.text}</span>
             ))}
@@ -94,6 +101,10 @@ export function DispatchLinesTable({ preview, lines, onChange }: { preview: Warp
             <TableHead>Depo</TableHead>
             <TableHead>Lot</TableHead>
             <TableHead className={num}>Sevk kg</TableHead>
+            <TableHead className={num}>Koli</TableHead>
+            <TableHead className={num}>
+              <span className="inline-flex items-center justify-end gap-1">Bobin <InfoPopover label="Koli ve bobin adedi" desc="Bilgi amaçlıdır: irsaliyeye basılır, devereciyle sayım kolaylaşır. Stok ve kapanış hesabı yalnız kg ile yapılır; boş bırakılabilir." /></span>
+            </TableHead>
             <TableHead><span className="sr-only">Satır</span></TableHead>
           </TableRow>
         </TableHeader>

@@ -8,13 +8,14 @@ import { Callout } from "@/components/ui/callout";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FormField } from "@/components/forms/FormField";
+import { Input } from "@/components/ui/input";
 import { useMultiWarehouse } from "@/hooks/useWarehouses";
 import { formatQty } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { reasonPresetService } from "@/pages/ReasonPresets/service";
 import { fmtKg } from "./order-model";
 import { SourcePicker } from "./YarnSourcePickers";
-import type { PickedRef } from "./dispatch-model";
+import { parsePieceCount, type PickedRef } from "./dispatch-model";
 import type { WarpingYarnReturnPreview } from "./holding-types";
 
 /** İade sebebi — `YARN_SUBCONTRACT_RETURN` kataloğundan açılır liste (iade ve kapanış penceresi aynı bileşen). */
@@ -43,6 +44,23 @@ export function ReturnWarehouseField({ exitName, value, onChange }: { exitName: 
         value={value} onChange={onChange} clearable queryKey={["warping-return", "warehouses", warehouses.length]} emptyText="Aktif depo yok."
         load={async () => warehouses.map((w) => ({ id: w.id, label: w.name, hint: w.code, balanceKg: null }))} />
     </FormField>
+  );
+}
+
+const PIECE_INFO = "Bilgi amaçlıdır (defter değil): iade belgesinde görünür, sayımı kolaylaştırır. Stok ve kapanış yalnız kg ile hesaplanır; boş bırakılabilir.";
+
+/** Koli / bobin adedi — iki kısa alan; geçersiz girdide alan altı uyarı (boş ya da pozitif tam sayı). */
+export function PieceCountFields({ packageCount, bobbinCount, onPackage, onBobbin }: { packageCount: string; bobbinCount: string; onPackage: (v: string) => void; onBobbin: (v: string) => void }) {
+  const err = (v: string) => (parsePieceCount(v).ok ? undefined : { message: "Boş ya da sıfırdan büyük tam sayı." });
+  return (
+    <>
+      <FormField label="Koli adedi" htmlFor="wr-packages" error={err(packageCount)} info={PIECE_INFO}>
+        <Input id="wr-packages" inputMode="numeric" placeholder="Boş = girilmedi" value={packageCount} onChange={(e) => onPackage(e.target.value)} />
+      </FormField>
+      <FormField label="Bobin adedi" htmlFor="wr-bobbins" error={err(bobbinCount)} info={PIECE_INFO}>
+        <Input id="wr-bobbins" inputMode="numeric" placeholder="Boş = girilmedi" value={bobbinCount} onChange={(e) => onBobbin(e.target.value)} />
+      </FormField>
+    </>
   );
 }
 

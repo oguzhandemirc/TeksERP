@@ -22,7 +22,7 @@ import { FlagToggle, ReadOnlyRow, SettingMeta } from "./SettingRow";
 import { SettingsSaveBar } from "./SettingsSaveBar";
 import { SettingsGroupCard } from "./SettingsGroupCard";
 import { useRegisterSettingsDirty } from "./settings-dirty";
-import { isSettingRowVisible, type SettingsSearchHit } from "./settings-groups";
+import { isSettingRowVisible, orderSettingGroups, type SettingsSearchHit } from "./settings-groups";
 import { isSuperadminGateOpen } from "@/lib/superadmin-gate";
 import { SETTINGS_ADMIN_PERMISSION } from "./settings-config";
 import { EnumRadioOptions } from "./EnumRadioOptions";
@@ -63,6 +63,7 @@ export function FeatureFlagSection({
   moduleLabel,
   searchHit,
   searchQuery,
+  groupOrder,
 }: {
   flags: FlagDef[];
   /** Sekmeye gömülü SAYISAL feature-flag alanları — toggle'larla AYNI taslak +
@@ -99,6 +100,8 @@ export function FeatureFlagSection({
   searchHit?: SettingsSearchHit;
   /** Arama metni — eşleşen kelimeler satırlarda vurgulanır. */
   searchQuery?: string;
+  /** Grup kartlarının sırası — kategorinin `groupOrder`ı (bkz. `SettingsCategory.groupOrder`). */
+  groupOrder?: readonly string[];
 }) {
   const qc = useQueryClient();
   const { hasAnyPermission } = useRoleAccess();
@@ -752,7 +755,7 @@ export function FeatureFlagSection({
       )}
 
       <div className="space-y-3">
-        {groups.map((g) => (
+        {orderSettingGroups(groups, groupOrder).map((g) => (
           <SettingsGroupCard
             key={g.name}
             name={g.name}
