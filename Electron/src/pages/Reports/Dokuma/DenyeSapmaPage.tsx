@@ -21,6 +21,8 @@ import { DENYE_COLUMNS, buildDenyeExport, denyeLines, denyeSapmaApi, type Denier
 function buildColumns(settings: DenierReport["settings"] | undefined, onApply: ((r: DenierRow) => void) | null): ColumnDef<DenyeLine, unknown>[] {
   return DENYE_COLUMNS.map((c) => ({
     id: c.key,
+    // Tablo dışa aktarımı da ekrandaki metni aynı kurucudan alır.
+    meta: { exportValue: (l: DenyeLine) => c.display(l, settings) },
     header: () => <span className={c.align === "right" ? "block text-right" : undefined}>{c.header}</span>,
     cell: ({ row }) => {
       const l = row.original;
