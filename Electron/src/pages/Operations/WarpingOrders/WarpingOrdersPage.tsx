@@ -27,6 +27,9 @@ import { WARPING_ORDERS_QUERY_KEY, warpingOrderPath, warpingOrderService, type W
 import { WarpingOrderFormDialog } from "./WarpingOrderFormDialog";
 import { SEED_PARAM_KEYS, seedFromParams } from "./seed-params";
 import { WARPING_ORDER_STATUSES, WARPING_STATUS_META, type WarpingOrderRow } from "./types";
+import { FEE_FILTER_OPTIONS } from "@/pages/Finance/warpingFee";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 
 export const FILTERS: FilterDef[] = [
   { kind: "multi-select", key: "status", label: "Durum", options: WARPING_ORDER_STATUSES.map((s) => ({ value: s, label: WARPING_STATUS_META[s].label })) },
@@ -34,6 +37,8 @@ export const FILTERS: FilterDef[] = [
   { kind: "lookup", key: "warpSpecId", label: "Çözgü kartı", service: warpSpecService, queryKey: "warp-specs-warping-filter" },
   { kind: "dateRange", label: "Açılış", defaultField: "createdAt" },
 ];
+/** Devere A2: fatura durumu süzgeci fatura bilgisidir — yalnız `finance:read` ∧ ön muhasebe açıkken çizilir. */
+export const FEE_FILTER: FilterDef = { kind: "multi-select", key: "feeInvoiced", label: "Fatura", options: FEE_FILTER_OPTIONS };
 const PERSIST = persistConfigOf(FILTERS);
 const PRIMARY = ["status", "subcontractorId", "warpSpecId"];
 
@@ -56,6 +61,10 @@ export function WarpingOrdersPage() {
     persistFilters: PERSIST,
   });
   const summary = (query.data?.pages[0] as WarpingOrderPage | undefined)?.summary ?? null;
+  const canReadFinance = useRoleAccess().hasPermission("finance:read");
+  const financeOn = useFeatureFlags().data?.data?.financeEnabled ?? false;
+  const canFee = canReadFinance && financeOn;
+  const filters = canFee ? [...FILTERS.slice(0, 3), FEE_FILTER, ...FILTERS.slice(3)] : FILTERS;
 
   return (
     <PageShell>
@@ -88,7 +97,7 @@ export function WarpingOrdersPage() {
           />
         </ListBand>
       )}
-      <DefFilterRow filters={FILTERS} primaryKeys={PRIMARY} search={search} onSearchChange={setSearch} searchHint="Sipariş no ile ara" tools={{ table, fetchAll, exportName: "Fason devere siparişleri" }} />
+      <DefFilterRow filters={filters} primaryKeys={canFee ? [...PRIMARY, "feeInvoiced"] : PRIMARY} search={search} onSearchChange={setSearch} searchHint="Sipariş no ile ara" tools={{ table, fetchAll, exportName: "Fason devere siparişleri" }} />
       <DataTable<WarpingOrderRow>
         table={table}
         isLoading={query.isLoading}

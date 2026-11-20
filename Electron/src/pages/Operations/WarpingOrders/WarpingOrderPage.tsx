@@ -18,6 +18,7 @@ import { apiErrorMessage } from "@/services/apiClient";
 import { cn } from "@/lib/utils";
 import { CancelOrderDialog } from "./CancelOrderDialog";
 import { DispatchesSection } from "./DispatchesSection";
+import { FeeInvoiceSection } from "./FeeInvoiceSection";
 import { HoldingsSection } from "./HoldingsSection";
 import { InstructionPrintDialog } from "./InstructionPrintDialog";
 import { OrderSummary } from "./OrderSummary";
@@ -66,6 +67,7 @@ export function WarpingOrderPage() {
             <DispatchesSection order={o} />
             <HoldingsSection order={o} />
             <ReceiptsSection order={o} />
+            {o.status !== "CANCELLED" && <FeeInvoiceSection order={o} />}
             <SettlementsSection order={o} />
           </>
         )}

@@ -16,7 +16,7 @@ export const WARPING_ORDERS_QUERY_KEY = "warping-orders";
 export const WARPING_ORDERS_PATH = "/operations/fason-devere";
 export const warpingOrderPath = (id: string) => `${WARPING_ORDERS_PATH}/${id}`;
 
-const LIST_FILTERS = ["status", "subcontractorId", "warpSpecId", "salesOrderId"] as const;
+const LIST_FILTERS = ["status", "subcontractorId", "warpSpecId", "salesOrderId", "feeInvoiced"] as const;
 
 export type WarpingOrderPage = CursorPaginatedResponse<WarpingOrderRow> & { summary: WarpingOrderSummary | null };
 
