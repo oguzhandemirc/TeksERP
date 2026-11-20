@@ -15,8 +15,7 @@ import { useEmanetEnabled } from "@/hooks/usePricingEnabled";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { cn } from "@/lib/utils";
 import { ReportExportBar } from "@/pages/Reports/_components/ReportExportBar";
-import { kg } from "../Yarn/qty";
-import { subLabel } from "./model";
+import { kg, subLabel } from "./model";
 import { buildSubcontractorStatement } from "./statementExport";
 import { useYarnAtSubcontractor, type YarnAtSubRow } from "./service";
 

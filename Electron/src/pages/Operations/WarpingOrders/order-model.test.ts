@@ -1,7 +1,8 @@
 // BEKÇİ — fason devere sipariş formu gövde kurucusu (route Zod'u `strictObject` ile birebir; bilinmeyen anahtar 400).
 // NEGATİF SONDA (2026-11-18): plan dalı `edit-meta`de de koştu → "sevkli sipariş plan anahtarı göndermez" ❌. Geri alındı.
+// NEGATİF SONDA (2026-11-20): `rememberExtraOptions` belleği her çağrıda sıfırlanınca 3 ek-grup testi ❌. Geri alındı.
 import { describe, expect, it } from "vitest";
-import { beamLinesBody, beamLinesText, buildOrderBody, dueText, editModeOf, emptyOrderForm, formFromOrder, previewBody, trimNum } from "./order-model";
+import { beamLinesBody, beamLinesText, buildOrderBody, dueText, editModeOf, emptyOrderForm, formFromOrder, previewBody, rememberExtraOptions, trimNum } from "./order-model";
 import type { WarpingOrder } from "./types";
 
 const SPEC = "11111111-1111-4111-8111-111111111111";
@@ -72,5 +73,27 @@ describe("önizleme ve biçim", () => {
   it("kayıtlı siparişten form: sayılar sadeleşir, tolerans boşsa boş", () => {
     const o = { warpSpec: { id: SPEC }, subcontractor: { id: SUB }, beamLines: [{ beamCount: 2, beamLengthM: "1500.000" }], extraSpecs: [], salesOrders: [], fee: { unit: "KG", unitPrice: null, currency: null }, expectedReturnAt: null, fixedWasteM: "0.000", wasteTolerancePct: null, notes: null } as unknown as WarpingOrder;
     expect(formFromOrder(o)).toMatchObject({ beamLines: [{ beamCount: "2", beamLengthM: "1500" }], feeUnit: "KG", fixedWasteM: "0", wasteTolerancePct: "", feeCurrency: "USD" });
+  });
+});
+
+describe("rememberExtraOptions — işaretli ek grup listeden kaybolmaz", () => {
+  const L = { id: "l", code: "LENO", name: "Döner" };
+  const K = { id: "k", code: "KNR", name: "Kenar" };
+  const pv = (spec: string, suggested: typeof L[], extras: typeof L[]) => ({ warpSpec: { id: spec }, suggestedExtraSpecs: suggested, extras });
+  it("seçilince öneriden düşen kart bellekte kalır; aynı önizlemede nesne kararlı", () => {
+    const m1 = rememberExtraOptions(null, SPEC, pv(SPEC, [L, K], []));
+    const m2 = rememberExtraOptions(m1, SPEC, pv(SPEC, [K], [L]));
+    expect(m2).toBe(m1);
+    expect(m2?.options.map((x) => x.id)).toEqual(["l", "k"]);
+  });
+  it("400 dönen önizleme (veri yok) seçenekleri silmez", () => {
+    const m1 = rememberExtraOptions(null, SPEC, pv(SPEC, [L], []));
+    expect(rememberExtraOptions(m1, SPEC, undefined)?.options.map((x) => x.id)).toEqual(["l"]);
+  });
+  it("kart değişince sıfırlanır; eski kartın önizlemesi yeni karta karışmaz", () => {
+    const m1 = rememberExtraOptions(null, SPEC, pv(SPEC, [L], []));
+    const m2 = rememberExtraOptions(m1, SUB, pv(SPEC, [L], []));
+    expect(m2?.options).toEqual([]);
+    expect(rememberExtraOptions(m2, SUB, undefined)).toBe(m2);
   });
 });

@@ -8,8 +8,7 @@ import { Button } from "@/components/ui/button";
 import { fmtFactoryDate } from "@/lib/factory-time";
 import { formatAmount, formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { kg } from "../Yarn/qty";
-import { ageDays, ageText, CARRIED_HINT, CARRIED_LABEL, LONG_WAIT_DAYS, priceMissingText, subLabel, yarnLabel, type YarnAtSubLine, type YarnAtSubView } from "./model";
+import { ageDays, ageText, CARRIED_HINT, CARRIED_LABEL, kg, LONG_WAIT_DAYS, priceMissingText, subLabel, yarnLabel, type YarnAtSubLine, type YarnAtSubView } from "./model";
 import { warpingOrderHref } from "./service";
 
 const ownerText = (r: YarnAtSubLine) => (r.ownerCustomerId ? r.ownerCustomerName ?? "Müşteri (adı yok)" : "Bizim");
@@ -44,7 +43,7 @@ function GroupCell({ r, code }: { r: YarnAtSubLine; code: string | null }) {
 const subCol = (main: boolean): ColumnDef<YarnAtSubLine> => ({
   id: "subcontractor",
   header: "Fasoncu",
-  size: main ? 230 : 190,
+  size: main ? 270 : 190,
   meta: { label: "Fasoncu", exportValue: (r: YarnAtSubLine) => subLabel(r) },
   cell: ({ row: { original: r } }) => (main ? <GroupCell r={r} code={r.subcontractorCode} /> : <NameCode name={subLabel(r)} code={r.subcontractorCode} />),
 });
@@ -100,20 +99,22 @@ const ORDERS: ColumnDef<YarnAtSubLine> = {
   header: "Sipariş",
   size: 190,
   meta: { label: "Sipariş", exportValue: (r: YarnAtSubLine) => r.orders.map((o) => `${o.orderNo} ${kg(o.kg)}${o.status === "COMPLETED" ? ` (${CARRIED_LABEL})` : ""}`).join("; ") },
-  cell: ({ row }) => (
-    <span className="flex flex-col gap-0.5">
-      {row.original.orders.map((o) => (
-        <span key={o.warpingOrderId} className="flex items-baseline gap-x-1.5 whitespace-nowrap text-xs">
-          <Link to={warpingOrderHref(o.warpingOrderId)} className="font-mono text-foreground underline decoration-dotted underline-offset-4 hover:decoration-solid" onClick={(e) => e.stopPropagation()} title="Sipariş detayını aç">
-            {o.orderNo}
-          </Link>
-          {o.status === "COMPLETED" && <span className="shrink-0 rounded bg-amber-100 px-1 text-[11px] text-amber-900 dark:bg-amber-950 dark:text-amber-200" title={CARRIED_HINT}>{CARRIED_LABEL}</span>}
-          {/* Tek siparişte pay = Miktar sütunu; yalnız dağılımda ve rozetten SONRA (kırpılan kg olur, rozet değil). */}
-          {row.original.orders.length > 1 && <span className="tabular-nums text-muted-foreground">{kg(o.kg)}</span>}
-        </span>
-      ))}
-    </span>
-  ),
+  // Hücre tek satıra katlanır (data-cell-clip): ikinci sipariş yan yana taşıp kırpılıyordu → ilk sipariş + "+N" rozeti,
+  // tüm dağılım (sipariş · pay kg) rozetin ipucunda.
+  cell: ({ row }) => {
+    const [first, ...rest] = row.original.orders;
+    if (!first) return <span className="text-muted-foreground">—</span>;
+    const spread = row.original.orders.map((o) => `${o.orderNo} · ${kg(o.kg)}${o.status === "COMPLETED" ? ` (${CARRIED_LABEL})` : ""}`).join("\n");
+    return (
+      <span className="flex items-baseline gap-x-1.5 whitespace-nowrap text-xs">
+        <Link to={warpingOrderHref(first.warpingOrderId)} className="font-mono text-foreground underline decoration-dotted underline-offset-4 hover:decoration-solid" onClick={(e) => e.stopPropagation()} title="Sipariş detayını aç">
+          {first.orderNo}
+        </Link>
+        {first.status === "COMPLETED" && <span className="shrink-0 rounded bg-amber-100 px-1 text-[11px] text-amber-900 dark:bg-amber-950 dark:text-amber-200" title={CARRIED_HINT}>{CARRIED_LABEL}</span>}
+        {rest.length > 0 && <span className="shrink-0 rounded bg-muted px-1.5 tabular-nums text-foreground" title={spread}>+{rest.length} sipariş</span>}
+      </span>
+    );
+  },
 };
 
 const AGE: ColumnDef<YarnAtSubLine> = {

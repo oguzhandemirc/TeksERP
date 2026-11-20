@@ -5,8 +5,8 @@ import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPicker
 import { Input } from "@/components/ui/input";
 import { warpSpecService } from "@/pages/WarpSpecs/service";
 import type { WarpSpec } from "@/pages/WarpSpecs/types";
-import { subcontractorService } from "@/pages/Subcontractors/service";
-import type { Subcontractor } from "@/pages/Subcontractors/types";
+import { SubcontractorCategoryPicker } from "@/components/forms/SubcontractorCategoryPicker";
+import { DEVERE_CATEGORY_CODE } from "@/lib/subcontractor-category-codes";
 import { fmtM, type WarpPlanState } from "./warp-plan-model";
 
 interface Props {
@@ -26,18 +26,18 @@ export function WarpPlanInputs({ s, up, defaultFixedWasteM }: Props) {
           onChange={(id) => up({ warpSpecId: id })}
           service={warpSpecService}
           queryKey="warp-specs-plan-picker"
-          getLabel={(w) => `${w.code} — ${w.name}`}
-          getSubLabel={(w) => `${w.endsCount} tel`}
+          getLabel={(w) => w.name}
+          getSubLabel={(w) => `${w.code} · ${w.endsCount} tel`}
           icon={Layers}
           title="Çözgü kartı seç"
           placeholder="Çözgü kartı seç"
         />
       </FormField>
       <FormField label="Devereci" hint="Seçilirse o deverecide duran iplik de sayılır.">
-        <EntityPickerModal<Subcontractor>
+        <SubcontractorCategoryPicker
           value={s.subcontractorId}
           onChange={(id) => up({ subcontractorId: id })}
-          service={subcontractorService}
+          categoryCode={DEVERE_CATEGORY_CODE}
           queryKey="subcontractors-warp-plan"
           getLabel={(x) => x.name}
           icon={Handshake}

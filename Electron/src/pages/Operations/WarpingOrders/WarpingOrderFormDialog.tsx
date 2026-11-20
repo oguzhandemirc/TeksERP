@@ -25,7 +25,9 @@ import {
   formFromOrder,
   isBeamCountOpen,
   previewBody,
+  rememberExtraOptions,
   trimNum,
+  type ExtraOptionMemo,
   type WarpingOrderFormState,
 } from "./order-model";
 import { useWarpingPreview, warpingOrderService, WARPING_ORDERS_QUERY_KEY } from "./service";
@@ -54,7 +56,10 @@ export function WarpingOrderFormDialog({ order, seed, onClose, onSaved }: Props)
   const pq = useWarpingPreview(planLocked ? null : previewBody(s));
   const preview = pq.data?.data;
   const fresh = preview && preview.warpSpec.id === s.warpSpecId;
-  const extraOptions = mergeSpecs(preview?.suggestedExtraSpecs ?? [], order?.extraSpecs ?? []);
+  const [extraMemo, setExtraMemo] = useState<ExtraOptionMemo | null>(null);
+  const nextMemo = rememberExtraOptions(extraMemo, s.warpSpecId, preview);
+  if (nextMemo !== extraMemo) setExtraMemo(nextMemo);
+  const extraOptions = mergeSpecs(nextMemo?.options ?? [], order?.extraSpecs ?? []);
   const attempt = useAttemptToken();
   const qc = useQueryClient();
   const save = useMutation({

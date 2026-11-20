@@ -1,11 +1,14 @@
-// Tarife yaz/değiştir — fason firma seçici DOĞRUDAN modal (EntityPickerModal); kod sabit kalırsa yeni sürüm olur.
+// Tarife yaz/değiştir — geniş form iskeleti (kısa alanlar ızgarada, açıklama ⓘ); fason firma seçici DOĞRUDAN modal
+// (EntityPickerModal); kod sabit kalırsa yeni sürüm olur. Devere ücreti de buradan yazılır (terbiye/boya/apre ile aynı tablo).
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Handshake } from "lucide-react";
+import { Coins, Handshake, Tag } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { FormField } from "@/components/forms/FormField";
+import { FieldGrid, FormCard, WideFormDialog } from "@/components/forms/WideFormDialog";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { subcontractorService } from "@/pages/Subcontractors/service";
 import type { Subcontractor } from "@/pages/Subcontractors/types";
@@ -41,42 +44,61 @@ export function FinishingRateDialog({ onClose, current }: Props) {
       onClose();
     },
   });
+  const canSave = !!code.trim() && !!name.trim() && !!priceText && !save.isPending;
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{current ? `Tarife ${current.code} — yeni fiyat` : "Yeni tarife"}</DialogTitle>
-          <DialogDescription>Aynı kodla kaydetmek yeni sürüm yazar; eski tarife damgalı kalır. Kayıtlı standart maliyetler değişmez.</DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-3 text-sm sm:grid-cols-2">
-          <label><span className="text-muted-foreground">Kod</span>
-            <Input className="mt-1" maxLength={FINISHING_MAX.code} disabled={!!current} value={code} onChange={(e) => setCode(e.target.value)} /></label>
-          <label><span className="text-muted-foreground">Ad</span>
-            <Input className="mt-1" maxLength={FINISHING_MAX.name} value={name} onChange={(e) => setName(e.target.value)} /></label>
-          <div className="sm:col-span-2">
-            <span className="text-muted-foreground">Fason firma (opsiyonel)</span>
-            <EntityPickerModal<Subcontractor> value={subId} onChange={setSubId} service={subcontractorService} queryKey="subcontractors-finishing-rate"
-              getLabel={(s) => s.name} icon={Handshake} title="Fason firma seç" placeholder="Fason firma seç" nullable />
-          </div>
-          <label><span className="text-muted-foreground">Fiyat bazı</span>
-            <select className="mt-1 h-9 w-full rounded-md border bg-background px-2" value={basis} onChange={(e) => setBasis(e.target.value as FinishingBasis)}>
-              {(Object.keys(FINISHING_BASIS_LABEL) as FinishingBasis[]).map((b) => <option key={b} value={b}>{FINISHING_BASIS_LABEL[b]}</option>)}
-            </select></label>
-          <div className="flex items-end gap-2">
-            <label className="flex-1"><span className="text-muted-foreground">{basis === "KG" ? "Fiyat (kilo başına)" : "Fiyat (metre başına)"}</span>
-              <Input className="mt-1 text-right tabular-nums" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} /></label>
-            <CurrencySelect value={currency} onChange={setCurrency} />
-          </div>
-          <label><span className="text-muted-foreground">Tipik boy çekmesi (%)</span>
-            <Input className="mt-1 text-right tabular-nums" inputMode="decimal" value={shrink} onChange={(e) => setShrink(e.target.value)} /></label>
-          <label className="sm:col-span-2"><span className="text-muted-foreground">Not</span>
-            <Input className="mt-1" maxLength={FINISHING_MAX.note} value={note} onChange={(e) => setNote(e.target.value)} /></label>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Vazgeç</Button>
-          <Button disabled={!code.trim() || !name.trim() || !priceText || save.isPending} onClick={() => save.mutate()}>Kaydet</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <WideFormDialog
+      open
+      onOpenChange={(o) => !o && onClose()}
+      title={current ? `${current.name} — yeni fiyat` : "Yeni tarife"}
+      description="Aynı kodla kaydetmek yeni sürüm yazar; eski tarife damgalı kalır. Kayıtlı standart maliyetler değişmez."
+      onSubmit={(e) => { e.preventDefault(); if (canSave) save.mutate(); }}
+      footer={
+        <>
+          <Button type="button" variant="outline" onClick={onClose}>Vazgeç</Button>
+          <Button type="submit" disabled={!canSave}>Kaydet</Button>
+        </>
+      }
+    >
+      <div className="space-y-4">
+        <FormCard title="Tarife" icon={Tag}>
+          <FieldGrid cols={3}>
+            <FormField label="Ad" htmlFor="fr-name" required>
+              <Input id="fr-name" maxLength={FINISHING_MAX.name} value={name} onChange={(e) => setName(e.target.value)} />
+            </FormField>
+            <FormField label="Kod" htmlFor="fr-code" required info={current ? "Kod sabittir: değişiklik aynı tarifenin yeni sürümüdür." : undefined}>
+              <Input id="fr-code" maxLength={FINISHING_MAX.code} disabled={!!current} value={code} onChange={(e) => setCode(e.target.value)} />
+            </FormField>
+            <FormField label="Fason firma" info="Boş bırakılırsa tarife firmaya bağlı olmaz (genel fiyat). Devere ücreti için devereciyi seçin; sipariş formu ücreti buradan doldurur.">
+              <EntityPickerModal<Subcontractor> value={subId} onChange={setSubId} service={subcontractorService} queryKey="subcontractors-finishing-rate"
+                getLabel={(s) => s.name} icon={Handshake} title="Fason firma seç" placeholder="Seçilmedi" nullable />
+            </FormField>
+          </FieldGrid>
+        </FormCard>
+        <FormCard title="Fiyat" icon={Coins}>
+          <FieldGrid cols={4}>
+            <FormField label="Fiyat bazı">
+              <Select value={basis} onValueChange={(v) => setBasis(v as FinishingBasis)}>
+                <SelectTrigger aria-label="Fiyat bazı"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(FINISHING_BASIS_LABEL) as FinishingBasis[]).map((b) => <SelectItem key={b} value={b}>{FINISHING_BASIS_LABEL[b]}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </FormField>
+            <FormField label={basis === "KG" ? "Fiyat (kilo başına)" : "Fiyat (metre başına)"} htmlFor="fr-price" required>
+              <div className="flex gap-2">
+                <Input id="fr-price" className="text-right tabular-nums" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} />
+                <CurrencySelect value={currency} onChange={setCurrency} />
+              </div>
+            </FormField>
+            <FormField label="Tipik boy çekmesi (%)" htmlFor="fr-shrink" info="Standart maliyette mamul metreye geçişte kullanılır; devere ücretinde boş bırakılabilir.">
+              <Input id="fr-shrink" className="text-right tabular-nums" inputMode="decimal" value={shrink} onChange={(e) => setShrink(e.target.value)} />
+            </FormField>
+            <FormField label="Not" htmlFor="fr-note">
+              <Input id="fr-note" maxLength={FINISHING_MAX.note} value={note} onChange={(e) => setNote(e.target.value)} />
+            </FormField>
+          </FieldGrid>
+        </FormCard>
+      </div>
+    </WideFormDialog>
   );
 }
