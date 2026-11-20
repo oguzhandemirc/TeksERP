@@ -15,6 +15,7 @@ import { expectedSchemaVersion } from "./lib/tesis-goc";
 import { createApp } from "./http/app";
 import { changeHub } from "./services/change-feed";
 import type { CloudContext } from "./services/context";
+import { createSupportRuntime } from "./services/destek/config";
 import { createDoorbell } from "./services/doorbell";
 import { InstallationDirectory } from "./services/installation-directory";
 import { MaintenanceScheduler } from "./services/maintenance-scheduler";
@@ -58,6 +59,8 @@ async function main(): Promise<void> {
     doorbell: createDoorbell(config),
     now: () => Date.now(),
     notifications: createNotificationRuntime(config),
+    // Etkili Destek: anahtar/sır yoksa KAPALI (dış istek yok); açılışta merkeze istek atılmaz.
+    destek: createSupportRuntime(process.env),
   };
   const server = http.createServer(createApp(ctx));
   const address = await listen(server, config.PORT, config.BIND);
@@ -69,6 +72,7 @@ async function main(): Promise<void> {
   const notifier = ctx.notifications ? new NotificationScheduler(ctx, ctx.notifications) : null;
   notifier?.start();
   console.log(`PATRON_BILDIRIM kip=${config.BILDIRIM_KIPI}`);
+  console.log(`[patron] ${ctx.destek!.summary}`);
   // Köprü kapısı kipten bağımsız (yalnız-kopru birleşimi dahil); makbuz döngüsü köprü kapalıyken DB'ye dokunmaz.
   const bridgeReceipts = new BridgeReceiptScheduler(ctx);
   bridgeReceipts.start();

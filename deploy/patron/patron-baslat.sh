@@ -2,7 +2,8 @@
 # Patron konteyner girişi: DB URL'lerini ve satıcı iç API belirtecini docker SECRET dosyalarından kurar,
 # komutu çalıştırır — sırlar imaj yapılandırmasına ve `docker inspect`e girmez. Rol (PATRON_ROL) hangi sırların
 # okunacağını belirler; her rol YALNIZ kendi sırlarını okur ve hepsini ZORUNLU sayar (en az yetki) — tek istisna
-# güvenlik bildirimi sırları (guvenlik_telegram_*) ve Expo erişim belirteci: İSTEĞE BAĞLI, okunamazsa kanal KAPALI:
+# güvenlik bildirimi sırları (guvenlik_telegram_*), Expo erişim belirteci ve Etkili Destek sırları (destek_api_anahtari,
+# destek_webhook_sirri): İSTEĞE BAĞLI, okunamazsa (ya da boşsa) o özellik KAPALI:
 #   sunucu  → uygulama + eşitleme parolası · tesis rol anahtarı · iç API belirteci (boş = kapalı) · Expo belirteci (boş = telefon push kapalı)
 #   goc     → göç + uygulama + eşitleme parolası · tesis rol anahtarı (migrate deploy · db-rolleri · tesis CLI'leri)
 #   hazirla → göç parolası · tesis rol anahtarı (tesis-db izle; uygulama parolasını ALMAZ)
@@ -15,7 +16,7 @@ DB="${DB_HOST:-patron-db}:5432/${DB_ADI:-patron}?schema=public"
 
 rol_sirlari() {
   case "$1" in
-    sunucu) echo "uygulama_parolasi esitleme_parolasi tesis_rol_anahtari ic_api_belirteci guvenlik_telegram_bot_token guvenlik_telegram_chat_id expo_erisim_belirteci" ;;
+    sunucu) echo "uygulama_parolasi esitleme_parolasi tesis_rol_anahtari ic_api_belirteci guvenlik_telegram_bot_token guvenlik_telegram_chat_id expo_erisim_belirteci destek_api_anahtari destek_webhook_sirri" ;;
     goc) echo "goc_parolasi uygulama_parolasi esitleme_parolasi tesis_rol_anahtari" ;;
     hazirla) echo "goc_parolasi tesis_rol_anahtari" ;;
     *) return 1 ;;
@@ -110,6 +111,21 @@ for sir in $SIRLAR; do
           unset e
         else
           echo "[patron] bilgi: expo_erisim_belirteci boş — telefon push KAPALI" >&2
+        fi
+      fi ;;
+    destek_api_anahtari)
+      # Etkili Destek İSTEĞE BAĞLI: okunamazsa yol verilmez; boş (/dev/null) ya da biçimsizse sunucu özelliği KAPALI sayar.
+      if [ -z "${DESTEK_API_KEY_DOSYASI:-}" ] && [ -z "${DESTEK_API_KEY:-}" ]; then
+        if istege_bagli_sir destek_api_anahtari; then
+          DESTEK_API_KEY_DOSYASI="$S/destek_api_anahtari"
+          export DESTEK_API_KEY_DOSYASI
+        fi
+      fi ;;
+    destek_webhook_sirri)
+      if [ -z "${DESTEK_WEBHOOK_SECRET_DOSYASI:-}" ] && [ -z "${DESTEK_WEBHOOK_SECRET:-}" ]; then
+        if istege_bagli_sir destek_webhook_sirri; then
+          DESTEK_WEBHOOK_SECRET_DOSYASI="$S/destek_webhook_sirri"
+          export DESTEK_WEBHOOK_SECRET_DOSYASI
         fi
       fi ;;
     *) echo "[patron] rol tablosunda tanınmayan sır: $sir" >&2; exit 1 ;;
