@@ -195,7 +195,7 @@ export async function listRecords(p: RecordProjection, q: PatronListQuery, sub: 
   const and = await filterWhere(p, q, nowMs);
   if (and === null) return { kayitlar: [], sonraki: null };
   const sort = sortPlan(p, q);
-  if (sort) return listSorted(p, q, sort, and, sub, nowMs);
+  if (sort) return listSorted({ p, q, sub, nowMs }, sort, and);
   const sortSrc = sortSourceOf(p.name);
   if (q.cursor) {
     const c = decodeCursor(q.cursor);
@@ -214,7 +214,7 @@ export async function listRecords(p: RecordProjection, q: PatronListQuery, sub: 
   };
 }
 
-async function listSorted(p: RecordProjection, q: PatronListQuery, s: SortPlan, and: Where[], sub: { finans: boolean; kisisel: boolean }, nowMs: number): Promise<{ kayitlar: PatronRecord[]; sonraki: string | null }> {
+async function listSorted({ p, q, sub, nowMs }: { p: RecordProjection; q: PatronListQuery; sub: { finans: boolean; kisisel: boolean }; nowMs: number }, s: SortPlan, and: Where[]): Promise<{ kayitlar: PatronRecord[]; sonraki: string | null }> {
   if (q.cursor) and.push(sortCursorWhere(s, decodeSortCursor(q.cursor, s)));
   const found = await delegateOf(p).findMany({
     where: and.length > 0 ? { AND: and } : {}, select: { id: true, [s.source]: true },

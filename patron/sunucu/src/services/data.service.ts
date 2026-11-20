@@ -229,7 +229,8 @@ export function rowView(r: Row, sub: { finans: boolean; kisisel: boolean }): Pro
 }
 
 /** Kök + (izinliyse) alt satırlar tek sorguda; imleç `(sort_at, record_id)` azalan (liste ve dışa aktarma aynı sıra). */
-export function selectRows(s: SessionContext, def: ProjectionDef, where: Prisma.Sql, limit: number, sort: SortSpec | null = null): Prisma.Sql {
+export function selectRows(s: SessionContext, def: ProjectionDef, where: Prisma.Sql, page: { limit: number; sort?: SortSpec | null }): Prisma.Sql {
+  const { limit, sort = null } = page;
   const key = sort ? Prisma.sql`, (${sortKeySql(sort.field, sort.kind)})::text AS sort_key` : Prisma.empty;
   return Prisma.sql`
     SELECT r.record_id, r.data, r.version_at, r.sort_at, f.data AS finans, k.data AS kisisel${key}
@@ -254,7 +255,7 @@ export async function listProjection(ctx: CloudContext, s: SessionContext, name:
   }
   const sub = visibleSubRows(s, def);
   const rows = await withTesis(ctx.app, { tesisId: s.tesisId, projections: s.projections }, (tx) =>
-    tx.$queryRaw<Row[]>(selectRows(s, def, filters.length > 0 ? Prisma.join(filters, " ") : Prisma.empty, q.limit + 1, sort)),
+    tx.$queryRaw<Row[]>(selectRows(s, def, filters.length > 0 ? Prisma.join(filters, " ") : Prisma.empty, { limit: q.limit + 1, sort })),
   );
   const page = rows.slice(0, q.limit);
   const last = page[page.length - 1];
@@ -267,7 +268,7 @@ export async function getProjectionRecord(ctx: CloudContext, s: SessionContext, 
   if (!UUID.test(id)) throw notFound("Kayıt");
   const sub = visibleSubRows(s, def);
   const rows = await withTesis(ctx.app, { tesisId: s.tesisId, projections: s.projections }, (tx) =>
-    tx.$queryRaw<Row[]>(selectRows(s, def, Prisma.sql`AND r.record_id = ${id}::uuid`, 1)),
+    tx.$queryRaw<Row[]>(selectRows(s, def, Prisma.sql`AND r.record_id = ${id}::uuid`, { limit: 1 })),
   );
   if (!rows[0]) throw notFound("Kayıt");
   return rowView(rows[0], sub);
