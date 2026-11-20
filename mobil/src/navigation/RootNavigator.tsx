@@ -33,6 +33,10 @@ import DocDeskSettingsScreen from '../screens/Common/settings/DocDeskSettingsScr
 import LicenseSettingsScreen from '../screens/Common/settings/LicenseSettingsScreen';
 import NotificationPreferencesScreen from '../screens/Common/settings/NotificationPreferencesScreen';
 import DevicePairingScreen from '../screens/Common/DevicePairingScreen';
+import DestekYeniScreen from '../screens/Destek/DestekYeniScreen';
+import DestekCizimScreen from '../screens/Destek/DestekCizimScreen';
+import DestekTaleplerimScreen from '../screens/Destek/DestekTaleplerimScreen';
+import DestekDetayScreen from '../screens/Destek/DestekDetayScreen';
 import MainNavigator from './MainNavigator';
 import { rootNavigationRef } from './navigationRef';
 import type { RootStackParamList } from './types';
@@ -309,6 +313,16 @@ export default function RootNavigator() {
           component={DevicePairingScreen}
           options={{ animation: 'slide_from_right' }}
         />
+        {/* Destek — yalnız oturum açıkken kayıtlı: çıkışta (401 dahil) açık destek
+            ekranları da yığından kalkar. Girişler destek etkin değilse hiç çizilmez. */}
+        {user ? (
+          <>
+            <Stack.Screen name="DestekYeni" component={DestekYeniScreen} options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="DestekCizim" component={DestekCizimScreen} options={{ animation: 'fade' }} />
+            <Stack.Screen name="DestekTaleplerim" component={DestekTaleplerimScreen} options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="DestekDetay" component={DestekDetayScreen} options={{ animation: 'slide_from_right' }} />
+          </>
+        ) : null}
       </Stack.Navigator>
     </NavigationContainer>
   );

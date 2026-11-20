@@ -10,6 +10,7 @@ import { useAuthStore } from '../store/authStore';
 import { useLicenseStore } from '../store/licenseStore';
 import { classifyLicenseError, licenseBlockToast } from '../lib/license';
 import { recordNetSample } from './netStats';
+import { recordLastError } from './lastError';
 import {
   offlineReason,
   reportServerReachable,
@@ -329,6 +330,13 @@ apiClient.interceptors.response.use(
             : 'Sunucu hatası';
     // Vekil gövdesi HTML'dir; `.message` yalnız backend zarfından okunur.
     const message = (transient !== 'gateway' && error.response?.data?.message) || fallback;
+    // Destek talebinin "son hata" bağlamı — yalnız yol + durum + mesaj (bkz. lastError.ts).
+    recordLastError({
+      method: error.config?.method,
+      url,
+      status: status ?? (error.code === 'ECONNABORTED' ? 'ZAMAN_ASIMI' : 'AG'),
+      message,
+    });
     // Backend AppError.details payload'ı koru — frontend "ITEM_MISMATCH" gibi
     // özel handling için (modal göster, override ile retry) bu yapıya bakar.
     const details = error.response?.data?.details;

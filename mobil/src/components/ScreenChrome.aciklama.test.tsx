@@ -20,6 +20,8 @@ jest.mock('./bildirim/NotificationStrip', () => () => null);
 jest.mock('./session/PlaceChip', () => () => null);
 jest.mock('./AppMenu', () => Object.assign(({ anchor }: { anchor: React.ReactNode }) => anchor, { Item: () => null }));
 jest.mock('./LogoutModals', () => () => null);
+// Destek girişleri kendi görünürlük testinde ölçülür (screens/Destek/DestekGirisleri.test.tsx).
+jest.mock('../screens/Destek/DestekGirisleri', () => ({ DestekMenuOgeleri: () => null, DestekRozetNoktasi: () => null }));
 jest.mock('./session/PlaceActions', () => ({
   usePlaceActions: () => ({ showMachine: false, showStation: false, expectedKind: null }),
   MachinePickerModal: () => null,

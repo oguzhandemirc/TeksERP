@@ -36,6 +36,8 @@ import { printReportsSummary } from './settings/PrintReportsScreen';
 import { docDeskSummary } from './settings/DocDeskSettingsScreen';
 import { isLiveCameraAvailable } from '../../services/liveCamera';
 import { useVisibleScreens } from '../../hooks/useVisibleScreens';
+import { useDestekEtkin, useDestekOkunmamis } from '../Destek/useDestek';
+import { rozetMetni } from '../Destek/destekGorunurluk';
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -45,7 +47,8 @@ interface MenuRow {
   title: string;
   /** Satırın altındaki "şu an ne ayarlı" özeti — menüye bakınca içeri girmeden görünür. */
   value: string;
-  route: keyof RootStackParamList;
+  /** Parametresiz kök rotalar (DestekDetay talep kimliği ister, menüden açılmaz). */
+  route: Exclude<keyof RootStackParamList, 'DestekDetay'>;
 }
 
 export default function SettingsScreen() {
@@ -61,6 +64,9 @@ export default function SettingsScreen() {
   const active = useSessionStore((s) => s.active);
   // Kişisel tercih (2026-08-09) — menü satırında özet göstermek için.
   const { mode: firmMode } = useSubcontractorDefault();
+  // Destek satırı yalnız oturum açıkken VE destek etkinken (useDestekEtkin oturumsuz false).
+  const destekEtkin = useDestekEtkin();
+  const destekRozet = rozetMetni(useDestekOkunmamis());
   // Lisans satırı yalnız girişliye (kimliksiz durum çağrısı ayrıntı döndürmez).
   const signedIn = useAuthStore((s) => !!s.user);
   // Belge masası yalnız "İE oluştur" ekranını görebilen kullanıcıda anlamlı (K23).
@@ -153,6 +159,15 @@ export default function SettingsScreen() {
       route: 'SettingsSurumNotlari',
     },
   ];
+  if (destekEtkin) {
+    rows.push({
+      key: 'destek',
+      icon: 'lifebuoy',
+      title: 'Destek',
+      value: destekRozet ? `Taleplerim · ${destekRozet} yeni yanıt` : 'Taleplerim · sorun bildir',
+      route: 'DestekTaleplerim',
+    });
+  }
   if (canDocDesk) {
     rows.push({ key: 'docDesk', icon: 'file-document-outline', title: 'Belge Masası', value: docDeskSummary(docDesk, docDeskCapture, effectiveScanEngine(docScanEngine, isLiveCameraAvailable())), route: 'SettingsDocDesk' });
   }
