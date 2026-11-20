@@ -266,7 +266,19 @@ async function main(): Promise<void> {
       : `UYGULANMAMIŞ: ${uygulanmayan.join(", ")} — \`npx prisma migrate deploy\` koşulmamış, §2 sonuçları anlamsız olurdu`,
   );
 
-  const topVar = (await prisma.roll.count({ take: 1 })) > 0;
+  // "Geçmiş" = damga migration'ı koşarken DB'de top vardı. Topların HEPSİ son damga
+  // migration'ından SONRA doğduysa (CI: taze DB'de önceki bekçiler top bırakır) geçmiş YOKTUR;
+  // yalnız sayıya bakmak bekçiyi parça sırasına bağımlı yapıyordu (2026-11-20, PR #804).
+  const sonDamga = await prisma.$queryRawUnsafe<Array<{ t: Date | null }>>(
+    `SELECT max(finished_at) AS t FROM "_prisma_migrations" WHERE migration_name = ANY($1::text[])`,
+    MIG_DIZINLERI,
+  );
+  const sonDamgaAni = sonDamga[0]?.t ?? null;
+  const topVar =
+    (await prisma.roll.count({
+      where: sonDamgaAni ? { createdAt: { lte: sonDamgaAni } } : {},
+      take: 1,
+    })) > 0;
   const aktifDepo = await prisma.warehouse.count({ where: { isActive: true } });
   // ⚠️ ticaret/iplik damgası DÜNKÜ DAVRANIŞTAN türer: o dört yüzey (alış
   // siparişi · fiyat · sayım · iplik) bu paketten önce `finance.enabled`

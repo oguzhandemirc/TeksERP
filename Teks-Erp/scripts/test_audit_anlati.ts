@@ -46,9 +46,9 @@ function check(label: string, ok: boolean, detay = ""): void {
 const ATLAMA = atlamaDefteri((mesaj) => check(mesaj, false));
 
 /** Kodda şablonsuz kalan (tablo, olay|işlem) çifti sayısı — yalnız DÜŞER (çürüme kolu). */
-const ANLATI_KAPSAMA_TABANI = 153;
+const ANLATI_KAPSAMA_TABANI = 151;
 /** Mutasyon ucu olup ROUTE_EYLEM_KATALOGU'nda cümlesi olmayan uç sayısı (B4, 2026-10-26) — yalnız DÜŞER. */
-const UC_KATALOG_TABANI = 617;
+const UC_KATALOG_TABANI = 616;
 
 const UUID_RE = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 const AHMET = { fullName: "Ahmet Yılmaz", username: "ahmet" };
