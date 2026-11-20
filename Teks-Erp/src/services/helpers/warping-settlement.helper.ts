@@ -10,6 +10,7 @@ import { Prisma, WarpBeamStatus } from "@prisma/client";
 import { sequentialTx } from "./tx-sequential-relations.helper";
 import { loadWarpingYarnItems, sumByYarn } from "./warping-yarn-open.helper";
 import { loadWarpingOrderDto } from "../warping-order/read";
+import { isRejectedBeam } from "./warping-beam-rejection.helper";
 
 type Db = Prisma.TransactionClient;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
@@ -35,7 +36,8 @@ export interface WarpingSettlementYarn {
 }
 
 export interface WarpingSettlement {
-  metre: { targetM: string; receivedM: string; diffM: string; diffPct: string | null; planBeamCount: number | null; planBeamCountOpen: boolean; receivedBeamCount: number };
+  /** Gelen/fark/fire % reddedilen sarımı DÜŞER (C1); reddedilen ayrı `rejectedM`/`rejectedBeamCount`ta. */
+  metre: { targetM: string; receivedM: string; diffM: string; diffPct: string | null; planBeamCount: number | null; planBeamCountOpen: boolean; receivedBeamCount: number; rejectedM: string; rejectedBeamCount: number };
   yarns: WarpingSettlementYarn[];
   weighing: { weighedBeamCount: number; weighedNetKg: string; nominalKg: string; diffKg: string; diffPct: string | null } | null;
 }
@@ -51,7 +53,7 @@ export async function loadOrderBeams(db: Db, warpingOrderId: string) {
   return sequentialTx(db).warpBeam.findMany({
     where: { warpingOrderId },
     select: {
-      id: true, beamNo: true, status: true, physicalBeamNo: true, warpingReceiptKey: true, ownerCustomerId: true,
+      id: true, beamNo: true, status: true, physicalBeamNo: true, warpingReceiptKey: true, ownerCustomerId: true, reworkOfBeamId: true,
       events: { where: { kind: "WOUND" }, select: LIVE_WOUND_SELECT },
     },
     orderBy: { beamNo: "asc" },
@@ -65,7 +67,10 @@ export function weighedNetKg(w: { grossKg: Prisma.Decimal | null; tareKg: Prisma
 
 export async function loadWarpingSettlement(db: Db, warpingOrderId: string): Promise<WarpingSettlement> {
   const order = await loadWarpingOrderDto(sequentialTx(db), warpingOrderId);
-  const beams = (await loadOrderBeams(db, warpingOrderId)).filter((b) => b.status !== WarpBeamStatus.CANCELLED);
+  const all = (await loadOrderBeams(db, warpingOrderId)).filter((b) => b.status !== WarpBeamStatus.CANCELLED);
+  const beams = all.filter((b) => !isRejectedBeam(b));
+  const rejected = all.filter(isRejectedBeam);
+  const rejectedM = rejected.reduce((s, b) => s.plus(b.events.find((e) => !e.reversal)?.lengthM ?? 0), D(0));
   const sums = sumByYarn(await loadWarpingYarnItems(db, { warpingOrderId }));
   let receivedM = D(0);
   let wN = 0;
@@ -91,7 +96,7 @@ export async function loadWarpingSettlement(db: Db, warpingOrderId: string): Pro
   const target = D(order.targetLengthM);
   const diff = receivedM.minus(target);
   return {
-    metre: { targetM: kg(target), receivedM: kg(receivedM), diffM: kg(diff), diffPct: pct(diff, target), planBeamCount: order.beamCount, planBeamCountOpen: order.beamCountOpen, receivedBeamCount: beams.filter((b) => b.events.some((e) => !e.reversal)).length },
+    metre: { targetM: kg(target), receivedM: kg(receivedM), diffM: kg(diff), diffPct: pct(diff, target), planBeamCount: order.beamCount, planBeamCountOpen: order.beamCountOpen, receivedBeamCount: beams.filter((b) => b.events.some((e) => !e.reversal)).length, rejectedM: kg(rejectedM), rejectedBeamCount: rejected.length },
     yarns: order.yarns.map((y) => {
       const s = sums.get(y.yarnItemId);
       const w = wound.get(y.yarnItemId) ?? { total: D(0), own: D(0), carry: D(0) };

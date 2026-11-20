@@ -444,6 +444,8 @@ export interface FeatureFlags {
   devereSettleDefault: DevereSettleDefault;
   /** Devere A1: yeniden sarılan levent beklenen devere ücretine girer mi (backend `readDevereReworkBillable`, kayıt yok = true). */
   devereReworkBillable: boolean;
+  /** Devere ek C1: kusurlu levent reddinde fotoğraf zorunlu (backend `readDevereRejectPhotoRequired`, kayıt yok = false). */
+  devereRejectPhotoRequired: boolean;
   /** Devere F1: denye önerisi için iplik başına en az tartılı levent (backend `DEFAULT_DEVERE_DENIER_SUGGEST_MIN_BEAMS` = 3). */
   devereDenierSuggestMinBeams: number;
   /** Devere F1: denye önerisi sapma eşiği % (backend `DEFAULT_DEVERE_DENIER_SUGGEST_THRESHOLD_PCT` = 2). */

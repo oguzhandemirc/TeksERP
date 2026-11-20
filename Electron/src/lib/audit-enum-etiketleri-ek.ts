@@ -168,6 +168,7 @@ export const ENUM_LABELS_EK: Record<string, string> = {
   YARN_SUBCONTRACT_RETURN: "Fasondan iplik dönüş sebebi",
   get WORK_ORDER_PLAN_CHANGE() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} plan düzeltme sebebi`; },
   INSPECTION_VOID: "Muayene iptal sebebi",
+  WARP_BEAM_REJECT: "Kusurlu levent ret sebebi",
   // ───────────────────────────────────────────────────────────────────────
   // TİCARET PAKETİ ENUM DEĞERLERİ (merge, 2026-09-01)
   // Bekçi `test_audit_labels` §4 her Prisma enum değerinin Türkçesini ister;

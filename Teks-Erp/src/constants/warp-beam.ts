@@ -14,6 +14,8 @@ export const WARP_BEAM_EVENT_KINDS = [
   "ADJUST_IN", "ADJUST_OUT", "EXHAUSTED", "EXHAUST_CANCEL", "SCRAPPED", "SCRAP_CANCEL",
   // Genel fason F5 (şema öncüsü) — emanet leventin sahibine çıkışı; `consignmentItemId` zorunlu (CHECK). Yazıcısı F5.
   "SHIP_TO_OWNER", "SHIP_TO_OWNER_CANCEL",
+  // Devere ek C1 — kusurlu sarımın devereciye geri gönderilmesi (ret belgesi kalemi) ve ret iptali.
+  "REJECT_OUT", "REJECT_OUT_CANCEL",
 ] as const;
 export type WarpBeamEventKind = (typeof WARP_BEAM_EVENT_KINDS)[number];
 
@@ -41,10 +43,12 @@ export const WARP_BEAM_EVENT_KIND_LABEL: Record<WarpBeamEventKind, string> = {
   SCRAP_CANCEL: "Hurda iptali",
   SHIP_TO_OWNER: "Sahibine gönderildi",
   SHIP_TO_OWNER_CANCEL: "Sahibine çıkış iptali",
+  REJECT_OUT: "Devereciye geri gönderildi (ret)",
+  REJECT_OUT_CANCEL: "Ret iptali",
 };
 
 /** Faz 3: DURUM DEĞİŞTİREN ileri olaylar — LIFO iptal zinciri yalnız bunları kilitler (§4.7). CONSUMED/ADJUST zinciri kilitlemez. */
-export const WARP_BEAM_STATUS_EVENT_KINDS = ["WOUND", "SHIP_OUT", "RETURNED_IN", "MOUNTED", "DISMOUNTED", "EXHAUSTED", "SCRAPPED", "SHIP_TO_OWNER"] as const satisfies readonly WarpBeamEventKind[];
+export const WARP_BEAM_STATUS_EVENT_KINDS = ["WOUND", "SHIP_OUT", "RETURNED_IN", "MOUNTED", "DISMOUNTED", "EXHAUSTED", "SCRAPPED", "SHIP_TO_OWNER", "REJECT_OUT"] as const satisfies readonly WarpBeamEventKind[];
 
 /** İleri tür → tipli tersi (Faz 3 çiftleri + eski üçlü). `*_CANCEL` yazarken `reversesEventId` ZORUNLU. */
 export const WARP_BEAM_CANCEL_OF: Partial<Record<WarpBeamEventKind, WarpBeamEventKind>> = {
@@ -57,6 +61,7 @@ export const WARP_BEAM_CANCEL_OF: Partial<Record<WarpBeamEventKind, WarpBeamEven
   EXHAUSTED: "EXHAUST_CANCEL",
   SCRAPPED: "SCRAP_CANCEL",
   SHIP_TO_OWNER: "SHIP_TO_OWNER_CANCEL",
+  REJECT_OUT: "REJECT_OUT_CANCEL",
 };
 
 /**
@@ -74,6 +79,7 @@ export function warpBeamLengthSign(kind: WarpBeamEventKind): 1 | -1 | 0 {
     case "EXHAUST_CANCEL":
     case "SCRAP_CANCEL":
     case "SHIP_TO_OWNER_CANCEL":
+    case "REJECT_OUT_CANCEL":
       return 1;
     case "WOUND_CANCEL":
     case "SHIP_OUT":
@@ -83,6 +89,7 @@ export function warpBeamLengthSign(kind: WarpBeamEventKind): 1 | -1 | 0 {
     case "EXHAUSTED":
     case "SCRAPPED":
     case "SHIP_TO_OWNER":
+    case "REJECT_OUT":
       return -1;
     // Bağlama/söküm metre taşımaz (lengthM null) — kalanı değiştirmez.
     case "MOUNTED":

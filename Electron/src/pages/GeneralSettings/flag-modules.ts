@@ -119,6 +119,8 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   devereBeamWeavingLinkRequired: "devereEnabled",
   // Devere A1 (2026-11-20): yeniden sarımın beklenen ücrete girmesi devere modülünün davranış bayrağı.
   devereReworkBillable: "devereEnabled",
+  // Devere ek C1 (2026-11-21): ret fotoğrafı zorunluluğu devere modülünün davranış bayrağı.
+  devereRejectPhotoRequired: "devereEnabled",
   // Devere F1 (2026-11-20): denye sapma raporunun öneri eşikleri devere modülünün sayısal ayarları.
   devereDenierSuggestMinBeams: "devereEnabled",
   devereDenierSuggestThresholdPct: "devereEnabled",

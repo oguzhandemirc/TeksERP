@@ -18,6 +18,8 @@ export interface WarpingReceiptBeamDto {
   /** Tartı net − hesap (yalnız bilgi). */
   weighedNetKg: string | null; weighDiffKg: string | null;
   cancelled: boolean;
+  /** C1: reddedilen sarımın yeniden sarımıysa onun kimliği. */
+  reworkOfBeamId: string | null;
   yarns: Array<{ yarnItemId: string; kg: string; allocations: Array<{ dispatchItemId: string; holderWarpingOrderId: string; carryOver: boolean; kg: string }> }>;
 }
 export interface WarpingReceiptSummaryDto {
@@ -40,6 +42,7 @@ function beamDto(b: BeamRow, orderId: string): WarpingReceiptBeamDto {
     lengthM: kg(ev?.lengthM ?? null), nominalKg: kg(ev?.theoreticalKg ?? null), grossKg: kg(ev?.grossKg ?? null), tareKg: kg(ev?.tareKg ?? null),
     weighedNetKg: kg(net), weighDiffKg: net && ev?.theoreticalKg ? kg(net.minus(ev.theoreticalKg)) : null,
     cancelled: !!ev?.reversal,
+    reworkOfBeamId: b.reworkOfBeamId,
     yarns: (ev?.yarns ?? []).map((y) => ({
       yarnItemId: y.yarnItemId, kg: kg(y.theoreticalKg)!,
       allocations: y.allocations.map((a) => ({ dispatchItemId: a.dispatchItemId, holderWarpingOrderId: a.holderWarpingOrderId, carryOver: a.holderWarpingOrderId !== orderId, kg: kg(a.kg)! })),

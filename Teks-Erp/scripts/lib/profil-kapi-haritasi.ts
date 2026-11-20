@@ -21,7 +21,7 @@ export const MODUL_SONDALARI: readonly ModulSondasi[] = [
   { alan: "financeEnabled", uclar: ["/api/finance/cari", "/api/finance/invoices", "/api/finance/cash-boxes"] },
   { alan: "ticaretEnabled", uclar: ["/api/stock-counts", "/api/item-prices", "/api/purchase-orders", "/api/goods-receipts"] },
   { alan: "iplikEnabled", uclar: ["/api/yarn/stocks"] },
-  { alan: "devereEnabled", uclar: ["/api/warp-specs", "/api/warping-orders"] },
+  { alan: "devereEnabled", uclar: ["/api/warp-specs", "/api/warping-orders", "/api/warping-beam-rejections"] },
   { alan: "dokumaEnabled", uclar: ["/api/weaving-orders"] },
   { alan: "maliyetEnabled", uclar: ["/api/cost/parameter-sets"] },
   { alan: "emanetEnabled", uclar: ["/api/consigned-work", "/api/consignment-dispatches"] },

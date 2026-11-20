@@ -7,6 +7,7 @@
 // =============================================================================
 import { InvoiceStatus, Prisma, WarpingOrderStatus } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
+import { assertNoRejectedBeamTx } from "./warping-beam-rejection.helper";
 
 type Tx = Prisma.TransactionClient;
 
@@ -63,6 +64,7 @@ export async function assertWarpingWoundCancellableTx(tx: Tx, beam: { id: string
   await claimWarpingOrderForWoundCancelTx(tx, beam.warpingOrderId, userId);
   const key = beam.warpingReceiptKey !== undefined ? beam.warpingReceiptKey : (await tx.warpBeam.findUnique({ where: { id: beam.id }, select: { warpingReceiptKey: true } }))?.warpingReceiptKey ?? null;
   await assertWarpingReceiptNotInvoicedTx(tx, key);
+  await assertNoRejectedBeamTx(tx, { beamIds: [beam.id] });
   const newest = await newestLiveWarpingWoundTx(tx, beam.warpingOrderId);
   if (newest && newest.beamId !== beam.id) {
     throw AppError.conflict(`${beam.beamNo} dönüşü geri alınamaz — siparişin daha yeni bir dönüşü var (${newest.beam.beamNo}); dönüşler sondan başa (LIFO) geri alınır.`, {

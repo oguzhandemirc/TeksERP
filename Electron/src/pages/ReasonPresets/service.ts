@@ -26,7 +26,9 @@ export type ReasonPresetKind =
   | "YARN_SUBCONTRACT_RETURN"
   | "WORK_ORDER_PLAN_CHANGE"
   // K4P: muayene iptali (seçim isteğe bağlı)
-  | "INSPECTION_VOID";
+  | "INSPECTION_VOID"
+  // Devere ek C1: kusurlu levent reddi (kod + metin ret belgesine)
+  | "WARP_BEAM_REJECT";
 
 export interface ReasonPreset {
   id: string;
@@ -97,6 +99,7 @@ export const KIND_STORES_TEXT: Record<ReasonPresetKind, boolean> = {
   WORK_ORDER_PLAN_CHANGE: true,
   // Muayene iptalinde seçilen metin `voidReason`a yazılır; kod saklanmaz. Sunucu tablosuyla birebir.
   INSPECTION_VOID: true,
+  WARP_BEAM_REJECT: true,
 };
 
 /**
@@ -181,6 +184,12 @@ export const KIND_TABS: { kind: ReasonPresetKind; title: string; hint: string; m
     title: "Muayene İptali",
     hint: "Muayene iptal penceresinde İSTEĞE BAĞLI hazır sebep. Seçilen metin gerekçe kutusuna dolar ve düzenlenebilir; listede olmayan sebep serbest metinle yazılır.",
     modul: "kaliteGuvenceEnabled",
+  },
+  {
+    kind: "WARP_BEAM_REJECT",
+    title: "Kusurlu Levent Reddi",
+    hint: "Devereden dönen sarım kusurlu diye devereciye geri gönderilirken sebep ZORUNLUDUR: tel kopuk, gergi, tel sayısı ya da Diğer (serbest metin). Ret belgesine basılır.",
+    modul: "devereEnabled",
   },
 ];
 

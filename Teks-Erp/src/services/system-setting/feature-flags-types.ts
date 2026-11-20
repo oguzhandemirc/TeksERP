@@ -227,6 +227,8 @@ export interface FeatureFlags {
   devereSettleDefault: DevereSettleDefault;
   /** Devere A1: yeniden sarım beklenen ücrete girer mi (varsayılan AÇIK). */
   devereReworkBillable: boolean;
+  /** Devere ek C1: kusurlu levent reddinde fotoğraf zorunlu (varsayılan KAPALI). */
+  devereRejectPhotoRequired: boolean;
   /** Devere F1: denye önerisi için iplik başına en az tartılı levent (varsayılan 3). */
   devereDenierSuggestMinBeams: number;
   /** Devere F1: denye önerisi sapma eşiği % (varsayılan 2). */

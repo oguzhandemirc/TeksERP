@@ -288,7 +288,7 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     [{ dosya: "src/services/warping-order/reopen.ts", sembol: "reopenWarpingOrder" }],
     ["src/services/warping-order/settle.ts", "src/services/warping-order/auto-settle.ts", "src/services/warping-order/reopen.ts"]),
 
-  D("WarpBeamEvent", "levent olay defteri (devere 1b + fason F1 + Faz 3 tezgah bağı) — WOUND doğuş gerçekleri değişmez; ters yol tipli çiftler, orijinaline `reversesEventId` (tek ters, çift iptal DB'de imkânsız): WOUND↔WOUND_CANCEL (CANCELLED terminal, PLANNED'a dönmez) · SHIP_OUT↔SHIP_OUT_CANCEL (sevk iptali) · RETURNED_IN↔RETURNED_IN_CANCEL (fason dönüşü stornosu) · Faz 3: MOUNTED/DISMOUNTED/EXHAUSTED/SCRAPPED ↔ *_CANCEL (LIFO — yalnız en yeni aktif durum olayı) · CONSUMED↔CONSUMED_CANCEL (LIFO dışı; Faz 4 `rollId`li satır top iptalinde `cancelConsumedForRollTx`, SCRAP'ta dokunulmaz) · ADJUST_IN/ADJUST_OUT karşı düzeltmeyle kapanır (ters bağ yok, sebep zorunlu); fason satırları sevk kalemine bağlı (`dispatchItemId`, CHECK iki yönlü) · genel fason F5: SHIP_TO_OWNER↔SHIP_TO_OWNER_CANCEL (emanet çıkış belgesi iptali; `consignmentItemId`, CHECK iki yönlü)",
+  D("WarpBeamEvent", "levent olay defteri (devere 1b + fason F1 + Faz 3 tezgah bağı) — WOUND doğuş gerçekleri değişmez; ters yol tipli çiftler, orijinaline `reversesEventId` (tek ters, çift iptal DB'de imkânsız): WOUND↔WOUND_CANCEL (CANCELLED terminal, PLANNED'a dönmez) · SHIP_OUT↔SHIP_OUT_CANCEL (sevk iptali) · RETURNED_IN↔RETURNED_IN_CANCEL (fason dönüşü stornosu) · Faz 3: MOUNTED/DISMOUNTED/EXHAUSTED/SCRAPPED ↔ *_CANCEL (LIFO — yalnız en yeni aktif durum olayı) · CONSUMED↔CONSUMED_CANCEL (LIFO dışı; Faz 4 `rollId`li satır top iptalinde `cancelConsumedForRollTx`, SCRAP'ta dokunulmaz) · ADJUST_IN/ADJUST_OUT karşı düzeltmeyle kapanır (ters bağ yok, sebep zorunlu); fason satırları sevk kalemine bağlı (`dispatchItemId`, CHECK iki yönlü) · genel fason F5: SHIP_TO_OWNER↔SHIP_TO_OWNER_CANCEL (emanet çıkış belgesi iptali; `consignmentItemId`, CHECK iki yönlü) · devere ek C1: REJECT_OUT↔REJECT_OUT_CANCEL (kusurlu levent ret belgesi iptali; kalem `WarpingBeamRejectionItem.eventId`)",
     { tur: "TERS_BAG", kolon: "reversesEventId" },
     [
       { dosya: "src/services/warp-beam-wind.service.ts", sembol: "cancelWound" },
@@ -299,6 +299,7 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
       { dosya: "src/services/warp-beam-auto-consume.service.ts", sembol: "cancelConsumedForRollTx" },
       { dosya: "src/services/consignment-dispatch/cancel.ts", sembol: "cancelConsignmentDispatch" },
       { dosya: "src/services/warping-order/receive-cancel.ts", sembol: "cancelWarpingReceipt" },
+      { dosya: "src/services/warping-order/beam-rejection-cancel.ts", sembol: "cancelTx" },
     ],
     ["src/services/helpers/warp-beam-event.helper.ts"]),
 
@@ -635,6 +636,7 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
   SATIR("WarpBeamEventYarn", "WarpBeamEvent", "fason devere D2: WOUND doğuş kırılımı (iplik başına tel/denye/kg kopyası) — ebeveyn WOUND ile aynı tx'te doğar, değişmez; ters yolu ebeveynin tipli tersi (WOUND_CANCEL), kırılım `reversal: null` süzgeciyle sayılmaz"),
   SATIR("WarpBeamYarnAllocation", "WarpBeamEvent", "fason devere D5: dönen leventin ipliğinin sevk kalemine DAĞITIMI (kırılım satırının çocuğu; silinirse deverecide kalan/tutma değişir) — ebeveyn WOUND ile aynı tx'te doğar, değişmez; ters yolu ebeveynin tipli tersi (WOUND_CANCEL: tekil `cancelWound` ya da kabul stornosu `cancelWarpingReceipt`), dağıtım `LIVE_ALLOCATION` süzgeciyle sayılmaz"),
   SATIR("InvoiceLine", "Invoice", "fatura satırı; düzenleme sil-yaz ama ATOMİK CLAIM `status: DRAFT` arkasında ⇒ hard-delete sınıf ④ (deftere hiç yazmamış taslak), \"bağımsız sil-yaz\" ile KARIŞTIRILMAZ — fark claim'dir"),
+  SATIR("WarpingBeamRejectionItem", "WarpingBeamRejection", "kusurlu levent ret belgesi kalemi (devere ek C1) — defteri WarpBeamEvent REJECT_OUT (kaleme `eventId` ile bağlı, olay başına tek); iptal başlıkta damgalanır, kalem değişmez, olay tipli tersle (REJECT_OUT_CANCEL) geri alınır"),
   SATIR("BeamBodyReturnItem", "BeamBodyReturn", "levent gövdesi iade belgesi kalemi (devere ek B2) — defteri BeamBodyEvent RETURN_TO_OWNER (kaleme `eventId` ile bağlı); iptal başlıkta damgalanır, kalem değişmez, olay tipli tersle geri alınır"),
   SATIR("ConsignmentDispatchItem", "ConsignmentDispatch", "emanet çıkış kalemi (genel fason F5) — polimorfik (WARP_BEAM | YARN); defteri WarpBeamEvent SHIP_TO_OWNER / YarnMovement CONSIGNMENT_OUT (kaleme bağlı); iptal başlıkta damgalanır, kalem değişmez"),
   SATIR("SubcontractorDispatchItem", "SubcontractorDispatch", "fason sevk kalemi ⚠️ SINIRDA: 5 bağımsız yazım, 0 silme — bağımsız düzenlenebilir tarafa yakın (ölçüldü 2026-09-13); F1: polimorfik (ROLL | WARP_BEAM), levent kaleminin defteri WarpBeamEvent (SHIP_OUT kaleme bağlı), kabul makbuzuna girmez"),

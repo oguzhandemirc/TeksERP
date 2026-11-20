@@ -180,6 +180,7 @@ const BEKLENEN: Record<string, string> = {
   serviceItem: "HZM-000001",
   beamBody: "LG-00001",
   beamBodyReturn: `LGI-${yymm}-0001`,
+  warpingBeamRejection: `DR-${yymm}-0001`,
   // GİB e-İrsaliye: 3 karakter seri + 4 hane yıl + 9 hane sıra (sabit biçim).
   eIrsaliye: `EIR${ymd.slice(0, 4)}000000001`,
   // MAL-4: teklif yıl + 5 hane, fiyat listesi yıl + 4 hane.

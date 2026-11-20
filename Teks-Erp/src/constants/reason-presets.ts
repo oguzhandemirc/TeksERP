@@ -90,6 +90,8 @@ export const KIND_STORES_TEXT = {
   // K4P muayene iptali: seçilen metin `RollInspection.voidReason`a yazılır; KOD SAKLANMAZ (kolon yok,
   // seçim isteğe bağlı — serbest metin kalır).
   INSPECTION_VOID: true,
+  // Devere ek C1: ret belgesine kod (`reasonCode`) + görünen metin (`reasonText`) yazılır.
+  WARP_BEAM_REJECT: true,
   // `as const satisfies` — değerler LİTERAL kalsın (true/false), ama eksik kind
   // yine derlemede düşsün. `Record<..., boolean>` yazılsaydı literaller boolean'a
   // genişler ve `TextReasonKind` bu tablodan TÜRETİLEMEZDİ (aşağıdaki nota bak).
@@ -110,6 +112,7 @@ export const KIND_LABELS: Record<ReasonPresetKind, string> = {
   YARN_SUBCONTRACT_RETURN: "Fasondan iplik dönüş sebepleri",
   get WORK_ORDER_PLAN_CHANGE() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} plan düzeltme sebepleri`; },
   INSPECTION_VOID: "Muayene iptal sebepleri",
+  WARP_BEAM_REJECT: "Kusurlu levent ret sebepleri",
 };
 
 /**
@@ -335,6 +338,14 @@ export const INSPECTION_VOID_REASONS: readonly ReasonPresetSeed[] = [
   { code: "DIGER", label: "Diğer", requiresText: true },
 ] as const;
 
+/** Devere ek C1 — kusurlu levent reddi (devereciye geri gönder). "Diğer" serbest metin ister. */
+export const WARP_BEAM_REJECT_REASONS: readonly ReasonPresetSeed[] = [
+  { code: "TEL_KOPUK", label: "Tel kopuk", fullText: "Tel kopuk" },
+  { code: "GERGI", label: "Gergi bozuk (gevşek / sıkı)", fullText: "Gergi bozuk" },
+  { code: "TEL_SAYISI", label: "Tel sayısı hatalı", fullText: "Tel sayısı hatalı" },
+  { code: "DIGER", label: "Diğer", requiresText: true },
+] as const;
+
 /** Kind → sistem satırları. Sıra ANLAMLIDIR (dizideki sıra `sortOrder` olur). */
 export const REASON_PRESET_CATALOG: Record<ReasonPresetKind, readonly ReasonPresetSeed[]> = {
   ROLL_SCRAP: SCRAP_REASONS,
@@ -350,6 +361,7 @@ export const REASON_PRESET_CATALOG: Record<ReasonPresetKind, readonly ReasonPres
   YARN_SUBCONTRACT_RETURN: YARN_SUBCONTRACT_RETURN_REASONS,
   WORK_ORDER_PLAN_CHANGE: WORK_ORDER_PLAN_CHANGE_REASONS,
   INSPECTION_VOID: INSPECTION_VOID_REASONS,
+  WARP_BEAM_REJECT: WARP_BEAM_REJECT_REASONS,
 };
 
 export const REASON_PRESET_KINDS = Object.keys(REASON_PRESET_CATALOG) as ReasonPresetKind[];

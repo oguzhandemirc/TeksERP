@@ -119,7 +119,7 @@ async function main(): Promise<void> {
     check("A8 ENDS_METRE: 3000 tel × 1000 m × 0,0001 = 300,00", sE!.receipts[0]!.qty === "3000000.000" && sE!.totals.expectedAmount === "300.00", JSON.stringify(sE!.totals));
     check("A9 ücretsiz sipariş: beklenen null (0 uydurulmaz), ölçü yine var", sF!.totals.expectedAmount === null && sF!.receipts[0]!.expectedAmount === null && sF!.receipts[0]!.qty === "1000.000");
     check("K3 geri alınmış kabul sayılmaz: H kabulsüz, fatura durumu null", sH!.receipts.length === 0 && sH!.invoiceState === null);
-    const beams = await prisma.warpBeam.findMany({ where: { warpingOrderId: { in: orderIds } }, select: { id: true, warpingOrderId: true, events: { where: { kind: "WOUND" }, select: { kind: true, reversal: { select: { id: true } } } } } });
+    const beams = await prisma.warpBeam.findMany({ where: { warpingOrderId: { in: orderIds } }, select: { id: true, warpingOrderId: true, status: true, events: { where: { kind: "WOUND" }, select: { kind: true, reversal: { select: { id: true } } } } } });
     const dbAccepted = new Set((await prisma.warpBeam.findMany({ where: { AND: [{ warpingOrderId: { in: orderIds } }, ACCEPTED_WARPING_BEAM_WHERE] }, select: { id: true } })).map((b) => b.id));
     const twinOk = beams.every((b) => isAcceptedWarpingBeam(b) === dbAccepted.has(b.id));
     check("K3 boğaz-ikiz: bellek-içi yüklem ↔ Prisma parçası her levent için aynı (geri alınmış dahil)", twinOk && beams.length === 13 && dbAccepted.size === 12, `${beams.length}/${dbAccepted.size}`);

@@ -96,6 +96,7 @@
     "devereFasonLotPolicy": "WARN",
     "devereSettleDefault": "WASTE_UP_TO_PLAN",
     "devereReworkBillable": true,
+    "devereRejectPhotoRequired": true,
     "devereDenierSuggestMinBeams": 3,
     "devereDenierSuggestThresholdPct": 2,
     "devereFasonWasteTolerancePct": 3,

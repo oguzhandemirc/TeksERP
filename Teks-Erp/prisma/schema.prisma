@@ -199,6 +199,8 @@ enum ReasonPresetKind {
   /// K4P: muayene iptali sebebi. Seçim İSTEĞE BAĞLI (serbest metin kalır); seçilen metin
   /// `RollInspection.voidReason`a yazılır, kod saklanmaz (kolon yok).
   INSPECTION_VOID
+  /// Devere ek C1: kusurlu levent reddi sebebi (tel kopuk · gergi · tel sayısı · diğer) — kod ret belgesine, metin yanına.
+  WARP_BEAM_REJECT
 }
 
 /// Çuval brüt tartısının kaynağı (`Sack.weightSource`). İÇ izdir — belgeye basılmaz.
@@ -2113,6 +2115,8 @@ model WarpingOrder {
   yarnWastes          WarpingYarnWaste[]
   /// Devere A1: devereci faturası bağları (kabul düzeyi; pivot `InvoiceToWarpingReceipt`).
   invoiceReceiptLinks InvoiceToWarpingReceipt[]
+  /// Devere ek C1: kusurlu levent ret belgeleri.
+  beamRejections      WarpingBeamRejection[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -2537,6 +2541,9 @@ enum WarpBeamStatus {
   /// Genel fason F5 (şema öncüsü 2026-11-08): emanet levent SAHİBİNE çıkış belgesiyle verildi — terminal DEĞİL:
   /// `SHIP_TO_OWNER_CANCEL` ile READY'ye döner. Yazıcısı F5 dilimi (`READY→SHIPPED_TO_OWNER` atomik claim).
   SHIPPED_TO_OWNER
+  /// Devere ek C1: devereciye kusurlu diye geri gönderildi (`REJECT_OUT`) — terminal DEĞİL: ret iptali
+  /// (`REJECT_OUT_CANCEL`) READY'ye döndürür. Bu durumdaki sarımın ipliği deverecinin tutmasına döner (dağıtım sayılmaz).
+  REJECTED
 }
 
 /// Faz 3 — leventi tezgaha BAĞLAMA yöntemi (#16): düğüm · tahar · takım değişimi. Beyan; öneri
@@ -2616,6 +2623,9 @@ model WarpBeam {
   warpingReceiptKey String?        @db.Uuid
   /// Devere ek B3: sarıldığı levent gövdesi (demirbaş) — DOĞUM niteliği, yalnız kabul yazar (PATCH şemasında yok).
   beamBodyId        String?        @db.Uuid
+  /// Devere ek C1: bu sarım hangi reddedilen sarımın YENİDEN SARIMI — DOĞUM niteliği, yalnız kabul yazar. İptal edilmemiş
+  /// sarımlar arasında tekil (partial unique `warp_beams_rework_of_live_uq`); dolu ise `warpingOrderId` dolu (CHECK).
+  reworkOfBeamId    String?        @db.Uuid
 
   warpSpec          WarpSpec                    @relation("WarpBeamSpec", fields: [warpSpecId], references: [id], onDelete: Restrict)
   warpingOrder        WarpingOrder?               @relation("WarpBeamWarpingOrder", fields: [warpingOrderId], references: [id], onDelete: Restrict)
@@ -2638,6 +2648,10 @@ model WarpBeam {
   /// Devere ek B3: sarımın gövdesi + gövdenin "şu an üstündeki sarım" geri ilişkisi.
   beamBody            BeamBody?                   @relation("WarpBeamBody", fields: [beamBodyId], references: [id], onDelete: Restrict)
   currentOnBody       BeamBody?                   @relation("BeamBodyCurrentWarp")
+  /// Devere ek C1: yeniden sarım bağı (reddedilen ← yeniden sarılanlar) + ret belgesi kalemleri.
+  reworkOf            WarpBeam?                   @relation("WarpBeamRework", fields: [reworkOfBeamId], references: [id], onDelete: Restrict)
+  reworks             WarpBeam[]                  @relation("WarpBeamRework")
+  rejectionItems      WarpingBeamRejectionItem[]
 
   createdAt   DateTime @default(now()) @db.Timestamptz
   updatedAt   DateTime @updatedAt @db.Timestamptz
@@ -2655,6 +2669,7 @@ model WarpBeam {
   @@index([warpingOrderId])
   @@index([warpingReceiptKey])
   @@index([beamBodyId])
+  @@index([reworkOfBeamId])
   @@map("warp_beams")
 }
 
@@ -2739,6 +2754,8 @@ model WarpBeamEvent {
   roll            Roll?                      @relation("WarpBeamEventRoll", fields: [rollId], references: [id], onDelete: Restrict)
   /// Fason devere D2: WOUND doğuş kırılımı (iplik başına tel/denye/kg kopyası).
   yarns           WarpBeamEventYarn[]
+  /// Devere ek C1: REJECT_OUT olayının ret belgesi kalemi (olay başına tek).
+  rejectionItem   WarpingBeamRejectionItem?
 
   @@index([beamId, createdAt])
   @@index([machineId, createdAt])
@@ -2954,6 +2971,82 @@ model BeamBodyReturnItem {
   @@unique([returnId, bodyId])
   @@index([bodyId])
   @@map("beam_body_return_items")
+}
+
+/// KUSURLU LEVENT RET BELGESİ (devere ek C1, 2026-11-21) — dönen sarım(lar)ın devereciye "geri gönder" İLERİ olayı
+/// (storno DEĞİL). No `DR-YYMM-NNNN` doğuşta; sarım başına `REJECT_OUT` (READY→REJECTED) kalemde. Kip `expectRework`:
+/// true = "yeniden sarılsın" (kabulde `WarpBeam.reworkOfBeamId`), false = "iptal, iplik deverecide kalsın". İplik için satır
+/// YAZILMAZ: reddedilen sarımın dağıtımı tutmadan düşmez (`LIVE_ALLOCATION`). İptal başlıkta damgalanır (üçlü CHECK) +
+/// her kalemin olayına tipli ters (`REJECT_OUT_CANCEL`).
+model WarpingBeamRejection {
+  id              String    @id @default(uuid()) @db.Uuid
+  docNo           String    @unique @db.VarChar(64)
+  clientToken     String?   @unique @db.Uuid
+  warpingOrderId  String    @db.Uuid
+  /// Devereci (siparişin fason firması — kopya; belge başlığı).
+  subcontractorId String    @db.Uuid
+  /// Sebep kodu (`ReasonPresetKind.WARP_BEAM_REJECT`) + görünen metin (DIGER'de serbest metin zorunlu).
+  reasonCode      String    @db.VarChar(64)
+  reasonText      String    @db.VarChar(300)
+  notes           String?   @db.VarChar(500)
+  expectRework    Boolean
+  /// İş tarihi (sarımın fiilen gönderildiği an); kayıt anı `createdAt`.
+  rejectedAt      DateTime  @db.Timestamptz
+  cancelledAt     DateTime? @db.Timestamptz
+  cancelledById   String?   @db.Uuid
+  cancelReason    String?   @db.VarChar(300)
+  createdById     String?   @db.Uuid
+
+  warpingOrder  WarpingOrder                @relation(fields: [warpingOrderId], references: [id], onDelete: Restrict)
+  subcontractor Subcontractor               @relation("WarpingBeamRejectionSubcontractor", fields: [subcontractorId], references: [id], onDelete: Restrict)
+  items         WarpingBeamRejectionItem[]
+  photos        WarpingBeamRejectionPhoto[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([warpingOrderId, createdAt])
+  @@index([subcontractorId, createdAt])
+  @@index([createdAt])
+  @@map("warping_beam_rejections")
+}
+
+/// Ret belgesi kalemi — sarım + onu gönderen REJECT_OUT olayı (olay başına tek kalem). Append-only: iptal başlıkta.
+model WarpingBeamRejectionItem {
+  id          String @id @default(uuid()) @db.Uuid
+  rejectionId String @db.Uuid
+  warpBeamId  String @db.Uuid
+  eventId     String @unique @db.Uuid
+
+  rejection WarpingBeamRejection @relation(fields: [rejectionId], references: [id], onDelete: Restrict)
+  warpBeam  WarpBeam             @relation(fields: [warpBeamId], references: [id], onDelete: Restrict)
+  event     WarpBeamEvent        @relation(fields: [eventId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@unique([rejectionId, warpBeamId])
+  @@index([warpBeamId])
+  @@map("warping_beam_rejection_items")
+}
+
+/// Ret fotoğrafı — baytlar DB'de (≤ 5 MB, CHECK); tür SİHİRLİ BAYTTAN (JPEG/PNG). Baytlar audit/log yüküne GİRMEZ.
+/// Aynı dosya (sha256) aynı belgeye ikinci kez yazılmaz.
+model WarpingBeamRejectionPhoto {
+  id           String   @id @default(uuid()) @db.Uuid
+  rejectionId  String   @db.Uuid
+  fileName     String   @db.VarChar(200)
+  mimeType     String   @db.VarChar(32)
+  sizeBytes    Int
+  sha256       String   @db.VarChar(64)
+  content      Bytes
+  uploadedById String?  @db.Uuid
+  createdAt    DateTime @default(now()) @db.Timestamptz
+  updatedAt    DateTime @updatedAt @db.Timestamptz
+
+  rejection WarpingBeamRejection @relation(fields: [rejectionId], references: [id], onDelete: Restrict)
+
+  @@unique([rejectionId, sha256])
+  @@map("warping_beam_rejection_photos")
 }
 
 /// GÖVDE–TEZGÂH UYUMU — ③b saf yapılandırma pivotu (REPLACE meşru, defter değil). Satırsız gövde = her tezgâha uyar.
@@ -8844,6 +8937,7 @@ model Subcontractor {
   beamBodies               BeamBody[]                @relation("BeamBodySubcontractor")
   beamBodyEvents           BeamBodyEvent[]           @relation("BeamBodyEventSubcontractor")
   warpingOrders            WarpingOrder[]            @relation("WarpingOrderSubcontractor")
+  warpingBeamRejections    WarpingBeamRejection[]    @relation("WarpingBeamRejectionSubcontractor")
   plannedRouteSteps        RouteStep[]               @relation("RouteStepPlannedSubcontractor")
   kartelaDispatches        KartelaDispatch[]         @relation("KartelaDispatchSub")
   kartelaReceipts          KartelaReceipt[]          @relation("KartelaReceiptSub")

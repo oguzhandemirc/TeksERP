@@ -10,6 +10,7 @@
 // =============================================================================
 import { Prisma, SubcontractorDispatchItemKind, WarpingOrderStatus, YarnMovementKind } from "@prisma/client";
 import { sequentialTx } from "./tx-sequential-relations.helper";
+import { NOT_REJECTED_BEAM_WHERE } from "./warping-beam-rejection.helper";
 
 type Db = Pick<Prisma.TransactionClient, "subcontractorDispatchItem" | "warpingOrder">;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
@@ -17,8 +18,11 @@ export const WARPING_TRANSFER = "TRANSFER" as const;
 export const WARPING_TRANSFER_CANCEL = "TRANSFER_CANCEL" as const;
 export const WARPING_WASTE = "WASTE" as const;
 export const WARPING_WASTE_CANCEL = "WASTE_CANCEL" as const;
-/** Canlı dağıtım yüklemi — ebeveyn WOUND ters kayıtla geri alınmamış (tek tanım; okuyucular bunu kullanır). */
-export const LIVE_ALLOCATION = { eventYarn: { event: { reversal: null } } } satisfies Prisma.WarpBeamYarnAllocationWhereInput;
+/**
+ * Canlı dağıtım yüklemi — ebeveyn WOUND ters kayıtla geri alınmamış VE sarım reddedilmemiş (C1: reddedilenin ipliği satır
+ * yazılmadan tutan siparişin tutmasına döner; ret iptali geri düşer). Tek tanım; okuyucular bunu kullanır.
+ */
+export const LIVE_ALLOCATION = { eventYarn: { event: { reversal: null, beam: NOT_REJECTED_BEAM_WHERE } } } satisfies Prisma.WarpBeamYarnAllocationWhereInput;
 
 export interface WarpingYarnItem {
   dispatchItemId: string;

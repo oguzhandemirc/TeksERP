@@ -512,6 +512,14 @@ const PARTIAL_INDEXES: Array<{
     predicate: `((kind)::text = 'SHIP_OUT'::text)`,
     why: "kalem başına TEK SHIP_OUT — aynı levent aynı sevkten iki kez çıkamaz",
   },
+  // Devere ek C1 (migration 20261121090100): reddedilen sarımın en çok BİR canlı yeniden sarımı; iptal edilen sarım bağı serbest bırakır.
+  {
+    table: "warp_beams",
+    index: "warp_beams_rework_of_live_uq",
+    uniq: true,
+    predicate: `(("reworkOfBeamId" IS NOT NULL) AND (status <> 'CANCELLED'::"WarpBeamStatus"))`,
+    why: "reddedilen sarım başına TEK canlı yeniden sarım — eşzamanlı iki kabulün seddi (receive-rework.ts)",
+  },
   // G1 (2026-09-15, migration 20260915023000): iplik kalemi bir kez çıkar; dönüş (SUBCONTRACT_RETURN) kısmi ve
   // tekrarlanabilir olduğundan yüklem YALNIZ SUBCONTRACT_OUT'tur (F1 ship_out_item_uq ikizi).
   {
@@ -797,6 +805,11 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // Devere ek B2: sevk bağı yalnız SHIP_EMPTY · iade belgesi iptal üçlüsü.
   { table: "beam_body_events", name: "beam_body_events_dispatch_ck" },
   { table: "beam_body_returns", name: "beam_body_returns_cancel_ck" },
+  // Devere ek C1 (migration 20261121090100): yeniden sarım bağı · ret belgesi iptal üçlüsü/sebep · foto boyu.
+  { table: "warp_beams", name: "warp_beams_rework_ck" },
+  { table: "warping_beam_rejections", name: "warping_beam_rejections_cancel_ck" },
+  { table: "warping_beam_rejections", name: "warping_beam_rejections_reason_ck" },
+  { table: "warping_beam_rejection_photos", name: "warping_beam_rejection_photos_size_ck" },
   // Devere ek B3: gövde durumu ↔ üstündeki sarım · sarım bağı yalnız sarım türlü olaylarda.
   { table: "beam_bodies", name: "beam_bodies_current_warp_ck" },
   { table: "beam_body_events", name: "beam_body_events_warp_ck" },
