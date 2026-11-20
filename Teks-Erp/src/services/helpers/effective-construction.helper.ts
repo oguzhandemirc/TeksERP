@@ -286,11 +286,12 @@ export async function readSharedBeamSpecsForGround(db: Pick<Db, "itemWarpLayer">
 }
 
 /** Devere D4a: verilen kartların, ana kartı zemin kullanan kumaşlardaki katman kipleri (ek tel grubu kapısı). */
-export async function readLayerModesOnGround(db: Pick<Db, "itemWarpLayer">, warpSpecId: string, specIds: string[]): Promise<Array<{ beamMode: string; specCode: string; itemCode: string }>> {
+export async function readLayerModesOnGround(db: Pick<Db, "itemWarpLayer">, warpSpecId: string, specIds: string[]): Promise<Array<{ beamMode: string; specId: string; specCode: string; itemCode: string }>> {
+  if (specIds.length === 0) return [];
   const rows = await db.itemWarpLayer.findMany({
     where: { item: { warpSpecId }, warpSpecId: { in: specIds } },
-    select: { beamMode: true, warpSpec: { select: { code: true } }, item: { select: { code: true } } },
+    select: { beamMode: true, warpSpecId: true, warpSpec: { select: { code: true } }, item: { select: { code: true } } },
     orderBy: [{ warpSpecId: "asc" }, { itemId: "asc" }],
   });
-  return rows.map((r) => ({ beamMode: r.beamMode, specCode: r.warpSpec.code, itemCode: r.item.code }));
+  return rows.map((r) => ({ beamMode: r.beamMode, specId: r.warpSpecId, specCode: r.warpSpec.code, itemCode: r.item.code }));
 }

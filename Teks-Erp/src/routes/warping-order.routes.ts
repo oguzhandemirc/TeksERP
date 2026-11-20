@@ -22,6 +22,7 @@ import { WARPING_ORDER_MAX_BEAM_LINES, WARPING_ORDER_MAX_EXTRA_SPECS, WARPING_OR
 import warpingOrderYarnRoutes from "./warping-order-yarn.routes";
 import warpingOrderReceiveRoutes from "./warping-order-receive.routes";
 import warpingOrderSettleRoutes from "./warping-order-settle.routes";
+import { qtyText } from "../services/helpers/qty-text.helper";
 import "../types/express-augment";
 
 const router = Router();
@@ -350,7 +351,7 @@ router.post("/:id/dispatch", requirePermission("warping-order:write"), requireIp
   const { warnings, replayed, ...data } = out;
   return {
     status: replayed ? 200 : 201,
-    body: { success: true, data, message: replayed ? `${data.dispatch.dispatchNo} zaten kayıtlı` : `İplik sevki ${data.dispatch.dispatchNo} açıldı (${data.yarnTotalKg} kg)`, ...(warnings.length > 0 ? { warnings } : {}) },
+    body: { success: true, data, message: replayed ? `${data.dispatch.dispatchNo} zaten kayıtlı` : `İplik sevki ${data.dispatch.dispatchNo} açıldı (${qtyText(data.yarnTotalKg)} kg)`, ...(warnings.length > 0 ? { warnings } : {}) },
   };
 }));
 
