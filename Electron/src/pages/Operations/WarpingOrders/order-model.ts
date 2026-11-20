@@ -218,9 +218,10 @@ export function dueText(expectedReturnAt: string | null, status: WarpingOrderSta
   return diff > 0 ? { text: `${text} · ${diff} gün gecikti`, late: true } : { text, late: false };
 }
 
+/** Tel × metre fiyatı 8 ondalık taşır (A1 genişletmesi) → gösterim 8'e kadar, sondaki sıfırlar atılır. */
 export function feeText(fee: WarpingOrder["fee"]): string {
   const unit = fee.unit === "METRE" ? "m" : fee.unit === "KG" ? "kg" : "tel×m";
-  return fee.unitPrice === null ? `Ücret girilmedi (${unit} başına)` : `${formatQty(fee.unitPrice, 4)} ${fee.currency ?? ""} / ${unit}`;
+  return fee.unitPrice === null ? `Ücret girilmedi (${unit} başına)` : `${formatQty(fee.unitPrice, 8)} ${fee.currency ?? ""} / ${unit}`;
 }
 
 /** Ek tel grubu seçenek belleği: önizleme seçili kartları önerilerden düşer, 400 dönen önizleme hiç veri getirmez —

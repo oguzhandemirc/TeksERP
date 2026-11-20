@@ -2,6 +2,7 @@
 // ⚠️ Yollar TAM yazılır ("/api/finance/...") — `apiClient.baseURL` `/api`
 // İÇERMEZ. Öneksiz yol 404 alır ve çağıran hatayı yutarsa ekran "boş liste"
 // gösterir (2026-08-12'de FilterBar lookup'larında tam bu yaşandı).
+import type { InvoiceWarpingReceiptRef } from "./warpingFee";
 import apiClient from "@/services/apiClient";
 import { partnerRoleText } from "@/lib/partnerRoles";
 // H1 (2026-08-14): gecikme yüklemi + kuruş aritmetiği TEK kaynaktan — kapama
@@ -335,6 +336,8 @@ export interface InvoiceDetail extends Omit<InvoiceRow, "cari"> {
   goodsReceipts?: InvoiceGoodsReceiptRef[];
   /** Fatura ↔ fişler TOPLAM karşılaştırması — fişsiz faturada null; kontrol kapalıyken `exceeded` hep false. */
   receiptMatch?: InvoiceReceiptMatch | null;
+  /** Devere A1: bağlı devere kabulleri (sipariş no ile). Eski backend göndermez. */
+  warpingReceipts?: InvoiceWarpingReceiptRef[];
   lines: InvoiceLineRow[];
 }
 
@@ -681,6 +684,8 @@ export async function updateInvoice(
     exchangeRate?: number;
     /** Fiş kümesi REPLACE (`[]` temizler) — yalnız TASLAK + ALIŞ; değişmeyen küme gönderilmez (`buildUpdateBody`). */
     goodsReceiptIds?: string[];
+    /** Devere kabul kümesi REPLACE — aynı kural (yalnız TASLAK + ALIŞ; değişmeyen küme gönderilmez). */
+    warpingReceiptKeys?: string[];
   },
 ) {
   const res = await apiClient.patch(`/api/finance/invoices/${id}`, body);

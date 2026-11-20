@@ -23,6 +23,8 @@
 // =============================================================================
 import { useQuery } from "@tanstack/react-query";
 import { InvoiceReceiptMatchBand } from "./InvoiceReceiptMatchBand";
+import { WarpingFeeMatchBand } from "./WarpingFeeMatchBand";
+import { linkedOrdersText } from "./warpingFee";
 import { receiptLabel } from "./invoiceReceipts";
 import { Pencil, Printer } from "lucide-react";
 import {
@@ -238,6 +240,7 @@ export function InvoiceDetailDialog({
               )}
             </div>
             <InvoiceReceiptMatchBand match={inv.receiptMatch} currency={cur} />
+            {(inv.warpingReceipts?.length ?? 0) > 0 && <WarpingFeeMatchBand invoiceId={inv.id} />}
 
             {/* ── Künye ─────────────────────────────────────────────────── */}
             <div className="grid grid-cols-2 gap-3 rounded-md border p-3 sm:grid-cols-3">
@@ -281,6 +284,9 @@ export function InvoiceDetailDialog({
               )}
               {(inv.goodsReceipts?.length ?? 0) > 1 && (
                 <Field label="Kaynak (mal kabul fişleri)" value={inv.goodsReceipts!.map(receiptLabel).join(" · ")} />
+              )}
+              {(inv.warpingReceipts?.length ?? 0) > 0 && (
+                <Field label="Kaynak (devere siparişleri)" value={linkedOrdersText(inv.warpingReceipts!, inv.warpingReceipts!.map((r) => r.receiptKey))} />
               )}
               {inv.shipment && (
                 <Field
