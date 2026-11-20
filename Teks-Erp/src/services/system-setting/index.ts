@@ -227,3 +227,5 @@ export type {
   TravelerCardPageSize, TravelerCardMargins, TravelerCardFontWeight, TravelerCardFieldSize, TravelerCardCellWeight,
   TravelerCardSpecField, TravelerCardSpecFields, TravelerCardOrderFields, TravelerCardBatchFields, TravelerCardConfig,
 } from "./traveler-card";
+export { readDevereSettleDefault, DEVERE_SETTLE_DEFAULTS, DEFAULT_DEVERE_SETTLE_DEFAULT } from "./devere-settle";
+export type { DevereSettleDefault } from "./devere-settle";

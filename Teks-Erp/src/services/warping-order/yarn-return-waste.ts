@@ -55,7 +55,10 @@ export interface WarpingYarnReturnResult {
 
 /** Gövde özeti — sipariş dahil (replay kimliği: aynı token farklı sipariş/gövde 409). */
 export function returnRequestHash(id: string, b: WarpingYarnReturnInput): string {
-  const norm = [id, b.dispatchItemId, kg(kg3(b.qtyKg)), kg(kg3(b.wasteKg)), b.reasonCode.trim(), b.warehouseId ?? "", b.lotId ?? "", b.wasteReason?.trim() || ""].join("|");
+  const parts = [id, b.dispatchItemId, kg(kg3(b.qtyKg)), kg(kg3(b.wasteKg)), b.reasonCode.trim(), b.warehouseId ?? "", b.lotId ?? "", b.wasteReason?.trim() || ""];
+  // H1: koli/bobin yalnız girilince özete eklenir — adetsiz iadenin özeti H1 öncesiyle bayt-aynı.
+  if (b.packageCount != null || b.bobbinCount != null) parts.push(`P${b.packageCount ?? ""}`, `B${b.bobbinCount ?? ""}`);
+  const norm = parts.join("|");
   return createHash("sha256").update(norm).digest("hex");
 }
 
@@ -68,7 +71,7 @@ async function returnPlanTx(db: Tx, id: string, b: { dispatchItemId: string; qty
     const parts = b.wasteKg.gt(0) ? ["İade + fire", ` + fire ${qtyText(b.wasteKg)} kg`] : ["İade", ""];
     throw AppError.badRequest(`${parts[0]}, siparişin deverecide tuttuğu ipliği aşamaz (tutulan ${qtyText(it.openKg)} kg, iade ${qtyText(b.qtyKg)} kg${parts[1]}).`, { code: "YARN_RETURN_EXCEEDS", holdingKg: kg(it.openKg) });
   }
-  const ev = await evaluateSettle(db, id, { lines: [{ dispatchItemId: b.dispatchItemId, returnKg: Number(b.qtyKg), wasteKg: Number(b.wasteKg), returnReasonCode: b.reasonCode }] }, tolerance);
+  const ev = await evaluateSettle(db, id, { lines: [{ dispatchItemId: b.dispatchItemId, returnKg: Number(b.qtyKg), wasteKg: Number(b.wasteKg), returnReasonCode: b.reasonCode }] }, { tolerance });
   const yarn = ev.plan.yarns.find((y) => y.yarnItemId === it.yarnItemId);
   const others = ev.items.filter((i) => i.dispatchItemId !== it.dispatchItemId).some((i) => i.openKg.gt(0));
   const keep = it.openKg.minus(b.qtyKg).minus(b.wasteKg);
@@ -152,6 +155,7 @@ export async function returnWarpingYarn(id: string, input: WarpingYarnReturnInpu
   const hash = returnRequestHash(id, input);
   const ret: ReturnYarnInput = {
     dispatchItemId: input.dispatchItemId, qtyKg: input.qtyKg, reasonCode: input.reasonCode, warehouseId: input.warehouseId, lotId: input.lotId,
+    packageCount: input.packageCount ?? null, bobbinCount: input.bobbinCount ?? null,
     token: clientToken ? { clientToken, requestHash: hash } : null,
   };
   return returnReplay(id, input, hash).run(clientToken, async () => {

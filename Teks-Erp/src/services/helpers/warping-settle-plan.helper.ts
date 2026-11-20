@@ -4,11 +4,13 @@
 // Kalan iplik kalem kalem (sevk kalemi × lot) üçe bölünür: İADE (depoya döner) · FİRE (defter satırı) · DEVERECİDE
 // KALIR (kayıt yok; tutma açık kalır, sonraki siparişe devreder). Gövdede satır yoksa VARSAYILAN A1-a: iplik başına
 // fire = min(kalan, plan brüt − plan net), sevk sırasıyla (FIFO) kalemlere; fazlası kalır, iade 0.
+// H1: gövdesiz kipi `devere.settleDefault` seçer (KEEP hepsi kalır · RETURN hepsi iade · WASTE_ALL hepsi fire); varsayılan A1-a.
 // fire % = Σ fire / (Σ sarılan nominal + Σ fire); tolerans (siparişte donmuş, NULL/0 = denetim yok) yalnız UYARIR.
 // =============================================================================
 import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
+import { DEFAULT_DEVERE_SETTLE_DEFAULT, type DevereSettleDefault } from "../system-setting/devere-settle";
 import type { WarpingYarnItem } from "./warping-yarn-open.helper";
 import { qtyText, pctText } from "./qty-text.helper";
 
@@ -46,6 +48,8 @@ export interface SettlePlanYarn {
 }
 export interface SettlePlan {
   isDefault: boolean;
+  /** Gövdesiz planın kipi (`devere.settleDefault`); satırlı planda null. */
+  defaultMode: DevereSettleDefault | null;
   lines: SettlePlanLine[];
   yarns: SettlePlanYarn[];
   wastePct: Prisma.Decimal | null;
@@ -68,7 +72,8 @@ const dec3 = (v: number, ad: string) => {
 };
 const pct = (part: Prisma.Decimal, whole: Prisma.Decimal) => (whole.isZero() ? null : part.div(whole).mul(100).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP));
 
-function defaultSplit(held: WarpingYarnItem[], yarns: SettlePlanYarnInput[]): Map<string, Prisma.Decimal> {
+/** A1-a: iplik başına plan firesi kadar fire, sevk sırasıyla (FIFO). */
+function wasteUpToPlan(held: WarpingYarnItem[], yarns: SettlePlanYarnInput[]): Map<string, Prisma.Decimal> {
   const waste = new Map<string, Prisma.Decimal>();
   for (const y of yarns) {
     const items = held.filter((i) => i.yarnItemId === y.yarnItemId);
@@ -81,6 +86,21 @@ function defaultSplit(held: WarpingYarnItem[], yarns: SettlePlanYarnInput[]): Ma
     }
   }
   return waste;
+}
+
+type LineSplit = { ret: Prisma.Decimal; waste: Prisma.Decimal; reason: string | null; wh: string | null };
+
+/** Gövdesiz plan — kip başına kalem bölüşümü (iade satırının sebebi gövdenin `returnReasonCode`u, yoksa boş). */
+function defaultLines(held: WarpingYarnItem[], yarns: SettlePlanYarnInput[], body: WarpingSettleBody, mode: DevereSettleDefault): Map<string, LineSplit> {
+  const out = new Map<string, LineSplit>();
+  const reason = body.returnReasonCode?.trim() || null;
+  if (mode === "WASTE_UP_TO_PLAN") {
+    for (const [id, w] of wasteUpToPlan(held, yarns)) out.set(id, { ret: ZERO, waste: w, reason: null, wh: null });
+    return out;
+  }
+  if (mode === "KEEP") return out;
+  for (const it of held) out.set(it.dispatchItemId, mode === "RETURN" ? { ret: it.openKg, waste: ZERO, reason, wh: null } : { ret: ZERO, waste: it.openKg, reason: null, wh: null });
+  return out;
 }
 
 function explicitLines(held: WarpingYarnItem[], body: WarpingSettleBody): Map<string, { ret: Prisma.Decimal; waste: Prisma.Decimal; reason: string | null; wh: string | null }> {
@@ -104,16 +124,19 @@ function explicitLines(held: WarpingYarnItem[], body: WarpingSettleBody): Map<st
   return out;
 }
 
+/** Plan bağlamı — siparişte donmuş tolerans + gövdesiz kip (`devere.settleDefault`; yoksa A1-a). */
+export interface SettlePlanCtx { tolerance: Prisma.Decimal | null; mode?: DevereSettleDefault }
+
 /** Kapanış planı — `held` siparişin TAZE tutması (sevk sırası), `yarns` plan + sarılan nominal. */
-export function buildSettlePlan(held0: WarpingYarnItem[], yarns: SettlePlanYarnInput[], body: WarpingSettleBody, tolerance: Prisma.Decimal | null): SettlePlan {
+export function buildSettlePlan(held0: WarpingYarnItem[], yarns: SettlePlanYarnInput[], body: WarpingSettleBody, ctx: SettlePlanCtx): SettlePlan {
+  const { tolerance, mode = DEFAULT_DEVERE_SETTLE_DEFAULT } = ctx;
   const held = held0.filter((i) => i.openKg.gt(0));
   const isDefault = body.lines === undefined;
-  const dflt = isDefault ? defaultSplit(held, yarns) : new Map<string, Prisma.Decimal>();
-  const expl = isDefault ? new Map() : explicitLines(held, body);
+  const split = isDefault ? defaultLines(held, yarns, body, mode) : explicitLines(held, body);
   const lines: SettlePlanLine[] = held.map((it) => {
-    const e = expl.get(it.dispatchItemId);
+    const e = split.get(it.dispatchItemId);
     const returnKg = e?.ret ?? ZERO;
-    const wasteKg = isDefault ? (dflt.get(it.dispatchItemId) ?? ZERO) : (e?.waste ?? ZERO);
+    const wasteKg = e?.waste ?? ZERO;
     return {
       dispatchItemId: it.dispatchItemId, dispatchId: it.dispatchId, dispatchNo: it.dispatchNo, yarnItemId: it.yarnItemId, lotId: it.lotId, lotNo: it.lotNo,
       own: it.own, holdingKg: it.openKg, returnKg, wasteKg, keepKg: it.openKg.minus(returnKg).minus(wasteKg),
@@ -145,12 +168,13 @@ export function buildSettlePlan(held0: WarpingYarnItem[], yarns: SettlePlanYarnI
   const wastePct = pct(totWaste, totWound.plus(totWaste));
   const overAll = tol !== null && wastePct !== null && wastePct.gt(tol);
   if (overAll) warnings.unshift(`Sipariş geneli fire %${pctText(wastePct!)} toleransı (%${pctText(tol!)}) aşıyor — kapanış engellenmez.`);
-  return { isDefault, lines, yarns: yarnRows, wastePct, tolerancePct: tol, overTolerance: overAll || yarnRows.some((y) => y.overTolerance), warnings };
+  return { isDefault, defaultMode: isDefault ? mode : null, lines, yarns: yarnRows, wastePct, tolerancePct: tol, overTolerance: overAll || yarnRows.some((y) => y.overTolerance), warnings };
 }
 
-/** Kapanış gövdesinin özeti — replay kimliği (aynı token farklı gövde 409). */
-export function settleRequestHash(body: WarpingSettleBody): string {
-  const lines = body.lines === undefined ? "A1-a" : [...body.lines]
+/** Kapanış gövdesinin özeti — replay kimliği (aynı token farklı gövde 409). Gövdesiz A1-a özeti H1 öncesiyle bayt-aynı. */
+export function settleRequestHash(body: WarpingSettleBody, mode: DevereSettleDefault = DEFAULT_DEVERE_SETTLE_DEFAULT): string {
+  const dflt = mode === "WASTE_UP_TO_PLAN" ? "A1-a" : `DEFAULT:${mode}`;
+  const lines = body.lines === undefined ? dflt : [...body.lines]
     .sort((a, b) => a.dispatchItemId.localeCompare(b.dispatchItemId))
     .map((l) => [l.dispatchItemId, D(l.returnKg ?? 0).toFixed(3), D(l.wasteKg ?? 0).toFixed(3), l.returnReasonCode?.trim() || "", l.warehouseId ?? ""].join("|"));
   const norm = JSON.stringify({ reason: body.reason?.trim() || "", returnReasonCode: body.returnReasonCode?.trim() || "", lines });
@@ -162,6 +186,7 @@ export function settlePlanDto(p: SettlePlan) {
   const k = (v: Prisma.Decimal) => kg(v);
   return {
     isDefault: p.isDefault,
+    defaultMode: p.defaultMode,
     wastePct: p.wastePct?.toFixed(2) ?? null,
     tolerancePct: p.tolerancePct?.toFixed(2) ?? null,
     overTolerance: p.overTolerance,

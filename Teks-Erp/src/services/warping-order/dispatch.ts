@@ -37,6 +37,9 @@ export interface WarpingDispatchLineInput {
   warehouseId: string;
   lotId?: string | null;
   qtyKg: number;
+  /** H1: koli / bobin adedi — bilgi (defter değil), irsaliyeye basılır. */
+  packageCount?: number | null;
+  bobbinCount?: number | null;
 }
 export interface WarpingDispatchInput {
   clientToken?: string;
@@ -51,7 +54,7 @@ export interface WarpingDispatchInput {
 export interface WarpingDispatchResult {
   dispatch: { id: string; dispatchNo: string; warpingOrderId: string; subcontractorId: string; dispatchedAt: string; expectedReturnAt: string | null };
   orderStatus: WarpingOrderStatus;
-  yarnItems: Array<{ dispatchItemId: string; yarnItemId: string; code: string; warehouseId: string; lotId: string | null; qtyKg: string }>;
+  yarnItems: Array<{ dispatchItemId: string; yarnItemId: string; code: string; warehouseId: string; lotId: string | null; qtyKg: string; packageCount: number | null; bobbinCount: number | null }>;
   yarnTotalKg: string;
   ownerCustomerId: string | null;
   instruction: WarpingInstruction;
@@ -91,15 +94,16 @@ export function openItems(items: WarpingYarnItem[]): WarpingYarnItem[] {
 
 // ── Sevk ─────────────────────────────────────────────────────────────────────
 
-const lineSig = (lines: Array<{ yarnItemId: string; warehouseId: string; lotId: string | null; qty: Prisma.Decimal.Value }>) =>
-  lines.map((l) => `${l.yarnItemId}|${l.warehouseId}|${l.lotId ?? ""}|${D(l.qty).toFixed(3)}`).sort().join(",");
+// H1: koli/bobin imzaya girer (aynı token farklı adet → 409); iki taraf da bu fonksiyondan, eski kayıt null ↔ boş.
+const lineSig = (lines: Array<{ yarnItemId: string; warehouseId: string; lotId: string | null; qty: Prisma.Decimal.Value; packageCount?: number | null; bobbinCount?: number | null }>) =>
+  lines.map((l) => `${l.yarnItemId}|${l.warehouseId}|${l.lotId ?? ""}|${D(l.qty).toFixed(3)}|${l.packageCount ?? ""}|${l.bobbinCount ?? ""}`).sort().join(",");
 
 async function loadDispatchResult(dispatchId: string, warnings: string[], replayed: boolean): Promise<WarpingDispatchResult> {
   const d = await prisma.subcontractorDispatch.findUnique({
     where: { id: dispatchId },
     select: {
       id: true, dispatchNo: true, warpingOrderId: true, subcontractorId: true, dispatchedAt: true, expectedReturnAt: true,
-      items: { select: { id: true, yarnItemId: true, warehouseId: true, lotId: true, dispatchedQty: true, yarnItem: { select: { code: true } }, lot: { select: { ownerCustomerId: true } } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
+      items: { select: { id: true, yarnItemId: true, warehouseId: true, lotId: true, dispatchedQty: true, packageCount: true, bobbinCount: true, yarnItem: { select: { code: true } }, lot: { select: { ownerCustomerId: true } } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
     },
   });
   if (!d || !d.warpingOrderId) throw AppError.notFound("Sevk belgesi bulunamadı.");
@@ -109,7 +113,7 @@ async function loadDispatchResult(dispatchId: string, warnings: string[], replay
   return {
     dispatch: { id: d.id, dispatchNo: d.dispatchNo, warpingOrderId: d.warpingOrderId, subcontractorId: d.subcontractorId, dispatchedAt: d.dispatchedAt.toISOString(), expectedReturnAt: d.expectedReturnAt?.toISOString() ?? null },
     orderStatus: order.status,
-    yarnItems: d.items.map((i) => ({ dispatchItemId: i.id, yarnItemId: i.yarnItemId!, code: i.yarnItem?.code ?? "", warehouseId: i.warehouseId!, lotId: i.lotId, qtyKg: kg(D(i.dispatchedQty)) })),
+    yarnItems: d.items.map((i) => ({ dispatchItemId: i.id, yarnItemId: i.yarnItemId!, code: i.yarnItem?.code ?? "", warehouseId: i.warehouseId!, lotId: i.lotId, qtyKg: kg(D(i.dispatchedQty)), packageCount: i.packageCount, bobbinCount: i.bobbinCount })),
     yarnTotalKg: kg(total),
     ownerCustomerId: d.items.find((i) => i.lot?.ownerCustomerId)?.lot?.ownerCustomerId ?? null,
     instruction: buildWarpingInstruction(order),
@@ -119,7 +123,7 @@ async function loadDispatchResult(dispatchId: string, warnings: string[], replay
 }
 
 function dispatchReplay(warpingOrderId: string, input: WarpingDispatchInput) {
-  const select = { id: true, dispatchNo: true, warpingOrderId: true, cancelledAt: true, items: { select: { yarnItemId: true, warehouseId: true, lotId: true, dispatchedQty: true } } } as const;
+  const select = { id: true, dispatchNo: true, warpingOrderId: true, cancelledAt: true, items: { select: { yarnItemId: true, warehouseId: true, lotId: true, dispatchedQty: true, packageCount: true, bobbinCount: true } } } as const;
   type Hit = Prisma.SubcontractorDispatchGetPayload<{ select: typeof select }>;
   return tokenReplay<Hit, WarpingDispatchResult>({
     find: (db, clientToken) => db.subcontractorDispatch.findUnique({ where: { clientToken }, select }),
@@ -129,7 +133,7 @@ function dispatchReplay(warpingOrderId: string, input: WarpingDispatchInput) {
     },
     identity: (hit) => [
       { ad: "warpingOrderId", mevcut: hit.warpingOrderId ?? "", gelen: warpingOrderId },
-      { ad: "lines", mevcut: lineSig(hit.items.map((i) => ({ yarnItemId: i.yarnItemId ?? "", warehouseId: i.warehouseId ?? "", lotId: i.lotId, qty: i.dispatchedQty }))), gelen: lineSig(input.lines.map((l) => ({ yarnItemId: l.yarnItemId, warehouseId: l.warehouseId, lotId: l.lotId ?? null, qty: D(l.qtyKg).toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP) }))) },
+      { ad: "lines", mevcut: lineSig(hit.items.map((i) => ({ yarnItemId: i.yarnItemId ?? "", warehouseId: i.warehouseId ?? "", lotId: i.lotId, qty: i.dispatchedQty, packageCount: i.packageCount, bobbinCount: i.bobbinCount }))), gelen: lineSig(input.lines.map((l) => ({ yarnItemId: l.yarnItemId, warehouseId: l.warehouseId, lotId: l.lotId ?? null, qty: D(l.qtyKg).toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP), packageCount: l.packageCount ?? null, bobbinCount: l.bobbinCount ?? null }))) },
     ],
     collision: (hit) => `Bu işlem kimliği başka içerikli bir sevke (${hit.dispatchNo}) ait — formu yeniden açıp gönderin.`,
     respond: async (hit) => loadDispatchResult(hit.id, [], true),
@@ -214,7 +218,7 @@ export async function dispatchClaimedWarpingOrderTx(
   });
   const yarn = await dispatchYarnItemsTx(tx, {
     dispatchId: dispatch.id, userId,
-    lines: input.lines.map((l) => ({ itemId: l.yarnItemId, warehouseId: l.warehouseId, lotId: l.lotId ?? null, qtyKg: l.qtyKg })),
+    lines: input.lines.map((l) => ({ itemId: l.yarnItemId, warehouseId: l.warehouseId, lotId: l.lotId ?? null, qtyKg: l.qtyKg, packageCount: l.packageCount ?? null, bobbinCount: l.bobbinCount ?? null })),
   });
   // S10: plandan fazla gönderim meşru — bilgi uyarısı (fazlası deverecide kalır / iade edilir).
   const sums = sumByYarn(await loadWarpingYarnItems(tx, { warpingOrderId: id }));

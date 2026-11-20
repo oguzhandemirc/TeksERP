@@ -8308,6 +8308,10 @@ model SubcontractorDispatchItem {
   lotId            String?                       @db.Uuid
   dispatchedQty    Decimal                       @db.Decimal(12, 3)
   dispatchedWeight Decimal?                      @db.Decimal(12, 3)
+  /// Devere H1: iplik kaleminde koli / bobin adedi — BİLGİ, defter değil; kg tek kaynak, irsaliyeye basılır
+  /// (CHECK `subcontractor_dispatch_items_package_positive` / `_bobbin_positive`: null ya da > 0).
+  packageCount     Int?
+  bobbinCount      Int?
 
   /// "Kalan gelmeyecek" kapaması (fasonda zayi) — kalemi kabul BEKLEMEDEN kapatır.
   /// ⚠️ DAMGA DEĞİL, DURUM BAYRAĞI: kim/neden/miktar taşımaz, kararın kendisi
@@ -13377,6 +13381,8 @@ model YarnMovement {
   lotId             String? @db.Uuid
   /// Bobin adedi — BİLGİ alanıdır, bakiye değil (CHECK `yarn_movements_bobbin_positive`: null ya da > 0).
   bobbinCount       Int?
+  /// Devere H1: koli adedi (iade satırı) — BİLGİ, defter değil; kg tek kaynak (CHECK `yarn_movements_package_positive`).
+  packageCount      Int?
   /// G1: fason iplik kalemi bağı — `SUBCONTRACT_*` satırı ⇔ bağ dolu (CHECK `yarn_movements_fason_link_ck`);
   /// kalem başına tek `SUBCONTRACT_OUT` (`yarn_movements_subcontract_out_uq` partial); dönüşte sebep ZORUNLU.
   dispatchItemId    String? @db.Uuid

@@ -301,6 +301,9 @@ export const SETTING_KEYS = {
   DEVERE_BEAM_BODY_MODE: "devere.beamBodyMode",
   /** [PROFİL] Devere ek B1: gövde–tezgâh uyumsuzluğu — `WARN` (VARSAYILAN) · `BLOCK`. Enum; kalıp `DEVERE_BEAM_BODY_MACHINE_FITS`. */
   DEVERE_BEAM_BODY_MACHINE_FIT: "devere.beamBodyMachineFit",
+  /** [PROFİL] Devere H1: kapanış önizlemesinde kalan ipliğin varsayılan önerisi — `WASTE_UP_TO_PLAN` (VARSAYILAN, A1-a) ·
+   *  `KEEP` · `RETURN` · `WASTE_ALL`. Enum; kalıp `DEVERE_SETTLE_DEFAULTS` (`devere-settle.ts`). */
+  DEVERE_SETTLE_DEFAULT: "devere.settleDefault",
   /** [PROFİL] Devere A1: deverecinin kendi kusuruyla yeniden sardığı levent beklenen ücrete girer mi. DEFAULT true
    *  (kullanıcı kararı 2026-11-20; bugün yeniden sarım işareti yok → beklenen bayt-aynı). Yalnız UYARI hesabını etkiler. */
   DEVERE_REWORK_BILLABLE: "devere.reworkBillable",

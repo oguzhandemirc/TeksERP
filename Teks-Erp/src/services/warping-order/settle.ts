@@ -15,10 +15,11 @@ import { tokenReplay } from "../helpers/token-replay.helper";
 import { loadWarpingYarnItems, lockDispatchItemsTx } from "../helpers/warping-yarn-open.helper";
 import { writeWastesTx } from "./waste-write";
 import { loadWarpingSettlement } from "../helpers/warping-settlement.helper";
-import { buildSettlePlan, settlePlanDto, settleRequestHash, type SettlePlan, type WarpingSettleBody } from "../helpers/warping-settle-plan.helper";
+import { buildSettlePlan, settlePlanDto, settleRequestHash, type SettlePlan, type SettlePlanCtx, type WarpingSettleBody } from "../helpers/warping-settle-plan.helper";
 import { WARPING_ORDER_TABLE } from "./create";
 import { loadSettlementRecord, WARPING_SETTLE, type WarpingSettlementRecord } from "./settle-record";
 import { returnWarpingYarnTx } from "./yarn-return";
+import { readDevereSettleDefault } from "../system-setting.service";
 
 type Tx = Prisma.TransactionClient;
 const kg = (v: Prisma.Decimal) => v.toFixed(3);
@@ -41,11 +42,11 @@ const notSettleable = (o: { orderNo: string; status: WarpingOrderStatus }) =>
  * Planın girdileri — TAZE tutma + plan satırları + sarılan nominal + önceden yazılmış fire (aynı tx ya da kök istemci).
  * Kapanış, kapanış önizlemesi, iade(+fire) önizlemesi ve otomatik kapanış AYNI fonksiyondan (tolerans tek hesap).
  */
-export async function evaluateSettle(db: Tx, id: string, body: WarpingSettleBody, tolerance: Prisma.Decimal | null) {
+export async function evaluateSettle(db: Tx, id: string, body: WarpingSettleBody, ctx: SettlePlanCtx) {
   const items = await loadWarpingYarnItems(db, { warpingOrderId: id });
   const st = await loadWarpingSettlement(db, id);
   const yarns = st.yarns.map((y) => ({ yarnItemId: y.yarnItemId, code: y.code, name: y.name, netKg: y.planNetKg, grossKg: y.planGrossKg, woundKg: y.woundKg, unallocatedKg: y.unallocatedKg, priorWasteKg: y.wasteKg }));
-  const plan = buildSettlePlan(items, yarns, body, tolerance);
+  const plan = buildSettlePlan(items, yarns, body, ctx);
   return { items, settlement: st, plan, liveBeams: st.metre.receivedBeamCount };
 }
 
@@ -70,10 +71,11 @@ export interface WarpingSettlePreview {
   warnings: string[];
 }
 
-/** Kapanış önizlemesi — gövdesiz = varsayılan A1-a; gövdeli = kullanıcının bölüşümü. Yazmaz. */
+/** Kapanış önizlemesi — gövdesiz = `devere.settleDefault` kipi (varsayılan A1-a); gövdeli = kullanıcının bölüşümü. Yazmaz. */
 export async function previewSettleWarpingOrder(id: string, body: WarpingSettleBody = {}): Promise<WarpingSettlePreview> {
   const o = await orderHead(prisma, id);
-  const ev = await prisma.$transaction(async (tx) => evaluateSettle(tx, id, body, o.wasteTolerancePct));
+  const mode = await readDevereSettleDefault();
+  const ev = await prisma.$transaction(async (tx) => evaluateSettle(tx, id, body, { tolerance: o.wasteTolerancePct, mode }));
   const blockers = settleBlockers(o, ev);
   return { order: { id: o.id, orderNo: o.orderNo, status: o.status }, canSettle: blockers.length === 0, blockers, plan: settlePlanDto(ev.plan), settlement: ev.settlement, warnings: ev.plan.warnings };
 }
@@ -110,7 +112,9 @@ export async function claimForSettleTx(tx: Tx, id: string, userId: string): Prom
 export async function settleWarpingOrder(id: string, input: WarpingSettleInput, userId: string): Promise<WarpingSettlementRecord & { warnings: string[]; replayed: boolean }> {
   const { clientToken, ...body } = input;
   const reason = body.reason?.trim() || null;
-  const hash = settleRequestHash(body);
+  // Gövdesiz kapanış önizlemeyle aynı kipi uygular; kip özete girer (ayar denemeler arası değişirse 409 çakışma).
+  const mode = body.lines === undefined ? await readDevereSettleDefault() : undefined;
+  const hash = settleRequestHash(body, mode);
   return settleReplay(id, hash).run(clientToken, async () => {
     const out = await prisma.$transaction(async (tx) => {
       await claimForSettleTx(tx, id, userId);
@@ -118,10 +122,12 @@ export async function settleWarpingOrder(id: string, input: WarpingSettleInput, 
       const pre = await loadWarpingYarnItems(tx, { warpingOrderId: id });
       await lockDispatchItemsTx(tx, pre.map((i) => i.dispatchItemId));
       // Kilitten sonra TAZE: eşzamanlı kabul/iade/devir dağıtımı tutmayı değiştirmiş olabilir.
-      const ev = await evaluateSettle(tx, id, body, o.wasteTolerancePct);
+      const ev = await evaluateSettle(tx, id, body, { tolerance: o.wasteTolerancePct, mode });
       // Claim'den sonra durum COMPLETED okunur; yüklemin durum dalı claim'in kendisidir, burada yalnız içerik.
       const empty = settleBlockers({ ...o, status: WarpingOrderStatus.IN_PROGRESS }, ev);
       if (empty.length > 0) throw AppError.conflict(empty[0]!, { code: "WARPING_SETTLE_EMPTY" });
+      const noReason = ev.plan.lines.find((l) => l.returnKg.gt(0) && !l.returnReasonCode);
+      if (noReason) throw AppError.badRequest("İade satırında iade sebebi zorunlu.", { code: "WARPING_SETTLE_RETURN_REASON", dispatchItemId: noReason.dispatchItemId });
       const returnMovementIds: string[] = [];
       const backTransferIds: string[] = [];
       for (const l of ev.plan.lines.filter((x) => x.returnKg.gt(0))) {
@@ -148,7 +154,7 @@ export async function settleWarpingOrder(id: string, input: WarpingSettleInput, 
     await AuditService.log({
       userId, action: "UPDATE", tableName: WARPING_ORDER_TABLE, recordId: id,
       oldData: { status: WarpingOrderStatus.IN_PROGRESS },
-      newData: { status: WarpingOrderStatus.COMPLETED, settlementId: out.settlementId, returnKg: sum((l) => l.returnKg), wasteKg: sum((l) => l.wasteKg), keepKg: sum((l) => l.keepKg), wastePct: p.wastePct?.toFixed(2) ?? null, overTolerance: p.overTolerance, reason, defaultSplit: p.isDefault },
+      newData: { status: WarpingOrderStatus.COMPLETED, settlementId: out.settlementId, returnKg: sum((l) => l.returnKg), wasteKg: sum((l) => l.wasteKg), keepKg: sum((l) => l.keepKg), wastePct: p.wastePct?.toFixed(2) ?? null, overTolerance: p.overTolerance, reason, defaultSplit: p.isDefault, ...(p.defaultMode && p.defaultMode !== "WASTE_UP_TO_PLAN" ? { defaultMode: p.defaultMode } : {}) },
     });
     const rec = await loadSettlementRecord(prisma, out.settlementId);
     const dispatchOf = new Map(p.lines.map((l) => [l.dispatchItemId, l.dispatchId]));
