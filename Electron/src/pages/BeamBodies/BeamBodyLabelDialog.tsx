@@ -76,7 +76,7 @@ function MultiLabelDialog({ bodies, onClose }: { bodies: Array<Pick<BeamBody, "i
         <div className="space-y-3">
           <div className="flex max-h-40 flex-wrap gap-1.5 overflow-y-auto rounded-md border p-2" aria-label="Basılacak gövdeler">
             {bodies.map((b, i) => (
-              <span key={b.id} className={i < done ? "rounded bg-emerald-100 px-1.5 py-0.5 font-mono text-xs text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" : "rounded bg-muted px-1.5 py-0.5 font-mono text-xs"}>
+              <span key={b.id} className={i < done ? "rounded-badge bg-emerald-100 px-1.5 py-0.5 font-mono text-xs text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" : "rounded-badge bg-muted px-1.5 py-0.5 font-mono text-xs"}>
                 {b.bodyNo}
               </span>
             ))}

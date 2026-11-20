@@ -6,6 +6,7 @@
 // =============================================================================
 import { useQuery } from "@tanstack/react-query";
 import apiClient from "@/services/apiClient";
+import { loadAllCursorPagesForPicker } from "@/lib/picker-loader";
 import type { ApiResponse, CursorPaginatedResponse, CursorParams } from "@/types/api";
 import type {
   BeamBody,
@@ -79,10 +80,9 @@ export const beamBodyService = {
   cancelRegistration: (id: string, reason: string) => apiClient.post<ApiResponse<BeamBody>>(`${BASE}/${id}/cancel-registration`, { reason }).then((r) => r.data),
 };
 
-/** Seçici için hafif tam liste (ör. sevkte "Depoda boş" gövdeler) — süzme sunucuda, en çok 200. */
-export async function listBeamBodiesForPicker(filters: Record<string, string>, search?: string): Promise<BeamBody[]> {
-  const page = await listBeamBodies({ limit: 200, filters, search });
-  return page.data;
+/** Seçici için tam liste (ör. sevkte "Depoda boş" gövdeler) — süzme sunucuda, sayfalar ortak yükleyiciden. */
+export function listBeamBodiesForPicker(filters: Record<string, string>, search?: string): Promise<BeamBody[]> {
+  return loadAllCursorPagesForPicker((cursor, limit) => listBeamBodies({ cursor, limit, filters, search }));
 }
 
 export const beamBodyReturnService = {

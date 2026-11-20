@@ -90,6 +90,8 @@ const OTOMATIK_YAZIMLAR: readonly { yer: string; sinif: Sinif; zarfUyarisi: bool
   { yer: "Electron/src/components/merge/MergeDialog.tsx::mergeService.preview", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
   // Devere iade+fire canlı özeti: kg/fire yazdıkça sorar; yazmaz, zarf uyarısız (uyarı pencerede gösterilir).
   { yer: "Electron/src/pages/Operations/WarpingOrders/YarnReturnDialog.tsx::warpingHoldingService.returnPreview", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
+  // Devere B4 gövde elle geçiş önizlemesi: hareket/alan değiştikçe (debounce) sorar; yazmaz, uyarılar pencerede.
+  { yer: "Electron/src/pages/BeamBodies/TransitionDialog.tsx::beamBodyService.transitionPreview", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
   // İZL-D4 cihaz kopyası birleştirme önizlemesi: diyalog açılınca/seçim değişince sorar; yazmaz, zarf uyarısız.
   { yer: "Electron/src/pages/Devices/MergeDialog.tsx::deviceService.mergePreview", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
   // K4P-PANEL muayene önizlemesi: hata tablosu değiştikçe (debounce) puan/derece sorar; yazmaz.

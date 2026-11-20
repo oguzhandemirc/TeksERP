@@ -45,7 +45,7 @@ export function ReturnCreateDialog({ owner, bodies, onClose, onDone }: { owner: 
         <div className="space-y-4">
           <div className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto rounded-md border p-2">
             {bodies.map((b) => (
-              <span key={b.id} className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{b.bodyNo}</span>
+              <span key={b.id} className="rounded-badge bg-muted px-1.5 py-0.5 font-mono text-xs">{b.bodyNo}</span>
             ))}
           </div>
           <FieldGrid cols={3}>
