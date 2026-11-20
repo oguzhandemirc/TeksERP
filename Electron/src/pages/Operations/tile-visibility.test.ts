@@ -203,7 +203,9 @@ describe("karo bağlantıları", () => {
     // 2026-11-18: `fason-devere` (Fason Devere Siparişleri, D6a) — Leventler ile AYNI devere kapısı.
     // 2026-11-18: `fasondaki-iplik` (Fasondaki İplik, D6c) — Leventler ile AYNI devere kapısı.
     // 2026-11-20: `denye-sapma` (Denye Sapması raporu, devere F2) — devere ∧ dokuma ∧ rapor açık (`isDenierReportVisible`).
+    // 2026-11-21: `beam-bodies` (Levent Gövdeleri, devere B4) — devere ∧ beamBodyMode≠OFF.
     expect(conditional.sort()).toEqual([
+      "beam-bodies",
       "cozgu-hesabi",
       "denye-sapma",
       "emanet-cikis",

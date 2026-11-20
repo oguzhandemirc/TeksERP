@@ -46,7 +46,12 @@ export interface WarpingDispatchBody {
   plateNumber?: string | null;
   driverName?: string | null;
   notes?: string | null;
+  /** Devere ek B2: iplikle giden boş levent gövdeleri (yalnız seçilince gider; OFF kipte alan çizilmez). */
+  beamBodyIds?: string[];
 }
+
+/** B2: sevkle giden gövde; eski sunucu göndermez. */
+export interface DispatchBeamBodyRef { id: string; bodyNo: string; ownerName: string | null }
 
 export interface WarpingDispatchItem {
   dispatchItemId: string;
@@ -92,6 +97,7 @@ export interface WarpingDispatchRow {
   canCancel: boolean;
   cancelBlockedReason: string | null;
   items: WarpingDispatchItem[];
+  beamBodies?: DispatchBeamBodyRef[];
 }
 
 export interface WarpingDispatchCancelPreview {
@@ -100,6 +106,8 @@ export interface WarpingDispatchCancelPreview {
   blockedReason: string | null;
   items: Array<{ dispatchItemId: string; yarnItemId: string; lotNo: string | null; warehouseId: string; outKg: string; returnedKg: string }>;
   orderReturnsToOpen: boolean;
+  /** B2: sevkle giden gövdeler; iptalde ters kayıtla depoya döner. Eski sunucu göndermez. */
+  beamBodies?: DispatchBeamBodyRef[];
 }
 
 export interface WarpingInstruction {

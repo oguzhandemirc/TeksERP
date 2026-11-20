@@ -46,6 +46,14 @@ function instructionSection(i: WarpingInstruction): string {
 
 const countCell = (v: number | null | undefined) => `<td class="n">${v == null ? "—" : String(v)}</td>`;
 
+/** B4: iplikle giden boş gövdeler — yalnız varsa basılır (gövdesiz irsaliye B2 öncesiyle bayt-aynı). */
+function beamBodiesBox(d: WarpingDispatchRow): string {
+  const bs = d.beamBodies ?? [];
+  if (bs.length === 0) return "";
+  const list = bs.map((b) => `${esc(b.bodyNo)}${b.ownerName ? ` (${esc(b.ownerName)})` : ""}`).join(", ");
+  return `<div class="box"><b>Boş levent gövdeleri (${String(bs.length)}):</b> ${list}</div>`;
+}
+
 function dispatchSection(d: WarpingDispatchRow, i: WarpingInstruction): string {
   // H2: koli/bobin sütunu yalnız bir kalemde girildiyse basılır — adetsiz sevkin irsaliyesi H1 öncesiyle aynı.
   const pc = d.items.some((it) => it.packageCount != null);
@@ -65,6 +73,7 @@ function dispatchSection(d: WarpingDispatchRow, i: WarpingInstruction): string {
     <table class="grid"><thead><tr><th>İplik</th><th>Lot</th><th>Çıkış deposu</th>${countHead}<th class="n">Kg</th></tr></thead>
       <tbody>${items}</tbody>
       <tfoot><tr><td colspan="3"><b>Toplam</b></td>${countFoot}<td class="n"><b>${esc(fmtKg(d.totalOutKg))}</b></td></tr></tfoot></table>
+    ${beamBodiesBox(d)}
     <div class="sign"><div>Teslim eden</div><div>Teslim alan</div></div>
   </section>`;
 }

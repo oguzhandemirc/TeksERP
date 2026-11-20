@@ -1,5 +1,5 @@
 // Üretim karoları (menü kökü Üretim, `/production`; sıra = hub sırası). Fason karolarının ikisi `warehouse.ts`te.
-import { Factory, FilePlus2, Gauge, History, Ruler, Share2, SwatchBook, Spool, AlertOctagon, MonitorPlay, Siren, Layers, CalendarClock, Calculator, Truck, Scale } from "lucide-react";
+import { Factory, FilePlus2, Gauge, History, Ruler, Share2, SwatchBook, Spool, AlertOctagon, MonitorPlay, Siren, Layers, CalendarClock, Calculator, Truck, Cylinder, Scale } from "lucide-react";
 import { isKursunPlanningVisible, isMeterDeviationsVisible, isWorkOrdersVisible } from "../production-regime";
 import { isWeavingOrdersVisible } from "../WeavingOrders/weaving-regime";
 import { isMachineStopsVisible, machineStopsTitle } from "../MachineStops/stop-regime";
@@ -8,6 +8,7 @@ import { isLoomAlarmsVisible } from "../LoomAlarms/alarm-regime";
 import { isDenierReportVisible, isWarpBeamsVisible } from "../WarpBeams/warp-beam-regime";
 import { TERIM, TERIM_AD, terimDokumaRejimi } from "@/lib/terim";
 import { flagOffHint, flagSettingTrail } from "@/lib/flag-setting-path";
+import { isBeamBodiesVisible } from "@/pages/BeamBodies/beam-body-regime";
 import type { OperationsTile } from "../tile-config";
 
 export const productionTiles: OperationsTile[] = [
@@ -170,6 +171,18 @@ export const productionTiles: OperationsTile[] = [
     permission: "warping-order:read",
     visibleWhen: isWarpBeamsVisible,
     offHint: flagOffHint("devereEnabled"),
+  },
+  {
+    // LEVENT GÖVDELERİ (devere ek B4) — Tanımlar karosuyla AYNI yol/izin/yüklem; burada Devere / Çözgü grubuna düşer.
+    key: "beam-bodies",
+    title: "Levent Gövdeleri",
+    description: "Boş gövde nerede, kimin, dolu mu boş mu; QR etiket, sahibine iade (levent gövdesi, boş levent, gövde iade)",
+    icon: Cylinder,
+    to: "/definitions/beam-bodies",
+    group: "production",
+    permission: "beam-body:read",
+    visibleWhen: isBeamBodiesVisible,
+    offHint: flagOffHint("devereBeamBodyMode"),
   },
   {
     // DENYE SAPMASI (devere F2): v2 rapor yaprağı; izin uç/route ile birebir (`warpspec:read`). Rapor kapalıyken

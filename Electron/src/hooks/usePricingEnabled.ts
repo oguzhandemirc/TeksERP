@@ -138,6 +138,12 @@ export function useDevereMountTracking(): boolean {
   return q.data?.data?.devereMountTracking ?? false;
 }
 
+/** Devere ek B4: levent gövdesi takibi kipi (`devere.beamBodyMode`). Yüklenene dek OFF = bugünkü davranış (gövde yüzeyi çizilmez; backend 403). */
+export function useDevereBeamBodyMode(): "OFF" | "OPTIONAL" | "REQUIRED" {
+  const q = useFeatureFlags();
+  return q.data?.data?.devereBeamBodyMode ?? "OFF";
+}
+
 /** Devere Faz 3: bağlamada yöntem + başlangıç saati zorunlu mu (`devere.mountTrackingRequired`). */
 export function useDevereMountTrackingRequired(): boolean {
   const q = useFeatureFlags();

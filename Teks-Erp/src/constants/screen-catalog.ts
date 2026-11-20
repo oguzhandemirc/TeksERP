@@ -154,6 +154,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // ÇÖZGÜ KARTLARI (devere Faz 1a) — bir çözgü tanımı N deseni besler; levent
   // bu karta göre sarılır. Modül kapalıyken karo çizilmez, uçlar 403 verir.
   { key: "definitions/warp-specs", app: "desktop", modul: "devereEnabled", title: "Çözgü Kartları", requires: ["warpspec:read"], capabilities: ["warpspec:write"] },
+  { key: "definitions/beam-bodies", app: "desktop", modul: "devereEnabled", title: "Levent Gövdeleri", requires: ["beam-body:read"], capabilities: ["beam-body:write"] },
   // DESEN KARTLARI (Seyitoğlu SY-A3) — armür/örgü kataloğu + atkı sırası + varyant; dokuma modülü.
   { key: "definitions/weave-designs", app: "desktop", modul: "dokumaEnabled", title: "Desen Kartları", requires: ["warpspec:read"], capabilities: ["warpspec:write"] },
   { key: "definitions/quality-grades", app: "desktop", modul: "cekirdek:ana-veri", title: "Kalite Sınıfları", requires: ["quality:read"], capabilities: [] },
@@ -486,8 +487,6 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   { code: "loom:doff", reason: "Panel doff yüzeyi yok; tablet `mobile:dokuma` ile kaydeder — web kodu API/entegrasyon için." },
   { code: "loom:doff-revoke", reason: "Panel geri alma yüzeyi yok; tablet `mobile:dokuma-geri-al` ile — web kodu API/entegrasyon için." },
   // Devere ek B1 (2026-11-20): gövde envanteri backend'de doğdu; "Levent Gövdeleri" ekranı B4 diliminde — ekranla ölü muaf olur.
-  { code: "beam-body:read", reason: "Levent Gövdeleri ekranı B4 diliminde doğacak; menü kaydı MN diliminde." },
-  { code: "beam-body:write", reason: "Levent Gövdeleri ekranı B4 diliminde doğacak; menü kaydı MN diliminde." },
   // Tezgah künyesi + gölge mod (B3, 2026-09-14): "Devreye Alma" ekranı AYRI dilim (Faz 2 ingest ile, `tezgah.enabled`).
 ];
 
