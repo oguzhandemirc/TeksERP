@@ -1,6 +1,8 @@
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
-import { HubCard, HubGrid } from "@/components/hub/HubCard";
+import { HubCard } from "@/components/hub/HubCard";
+import { HubSubgroups } from "@/components/hub/HubSubgroups";
+import type { NavSubgroup } from "@/components/layout/nav-subgroups";
 import { HubSkeleton } from "@/components/hub/HubSkeleton";
 import { RelocatedToolsSection } from "@/pages/Reports/_v2/RelocatedTools";
 import { operationGroups, operationGroup, type OperationGroupKey } from "./groups-config";
@@ -16,7 +18,7 @@ interface Props {
  * YÜKLEME ANI: bayraklar gelene dek iskelet — modüllü karo gizlenip sonra BELİRMEZ (titreme sıfır).
  */
 export function OperationsHubPage({ section }: Props) {
-  const { ready, tiles } = useSectionTiles();
+  const { ready, tiles, groups: subgroups } = useSectionTiles();
   const groups = section ? [operationGroup(section)] : operationGroups;
   const single = section ? operationGroup(section) : null;
 
@@ -37,7 +39,7 @@ export function OperationsHubPage({ section }: Props) {
                     <h2 className="text-sm font-semibold">{group.title}</h2>
                   </div>
                 )}
-                <SectionGrid tiles={groupTiles} />
+                <SectionGrid groups={subgroups[group.key]} />
               </section>
             );
           })}
@@ -50,10 +52,12 @@ export function OperationsHubPage({ section }: Props) {
   );
 }
 
-function SectionGrid({ tiles }: { tiles: VisibleSectionTile[] }) {
+/** Bölüm kartları, yan menüyle aynı süreç alt grup başlıklarıyla (`nav-subgroups.ts`). */
+function SectionGrid({ groups }: { groups: NavSubgroup<VisibleSectionTile>[] }) {
   return (
-    <HubGrid>
-      {tiles.map((tile, i) => (
+    <HubSubgroups
+      groups={groups}
+      renderCard={(tile, i) => (
         <HubCard
           key={tile.key}
           to={tile.to}
@@ -63,7 +67,7 @@ function SectionGrid({ tiles }: { tiles: VisibleSectionTile[] }) {
           index={i}
           offHint={tile.off ? tile.offHint : undefined}
         />
-      ))}
-    </HubGrid>
+      )}
+    />
   );
 }

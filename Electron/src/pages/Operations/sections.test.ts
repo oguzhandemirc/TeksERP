@@ -73,10 +73,10 @@ describe("T5 — bölüm içerikleri (kullanıcı kararı)", () => {
 describe("T5 — menü kökleri", () => {
   const ROUTES = readFileSync(resolve(__dirname, "../../routes/content-routes.tsx"), "utf8");
 
-  it("⭐ menü sırası: Anasayfa, Satış, Üretim, Depo, Sevkiyat, Kalite, Maliyet, Ön muhasebe, Raporlar, Tanımlar, Belgeler; ardından Yönetim", () => {
+  it("⭐ menü sırası (süreç, 2026-11-20): Anasayfa, Satış, Depo, Üretim, Kalite, Sevkiyat, Maliyet, Ön muhasebe, Raporlar, Tanımlar, Belgeler; ardından Yönetim", () => {
     expect(navGroups.map((g) => g.label)).toEqual(["Genel", "Yönetim"]);
     expect(navGroups[0]!.items.map((i) => i.to)).toEqual([
-      "/", "/sales", "/production", "/warehouse", "/shipping", "/quality", "/cost", "/finance", "/reports", "/definitions", "/documents",
+      "/", "/sales", "/warehouse", "/production", "/quality", "/shipping", "/cost", "/finance", "/reports", "/definitions", "/documents",
     ]);
     expect(navGroups[0]!.items.find((i) => i.to === "/cost")?.label).toBe("Maliyet");
     expect(navGroups.flatMap((g) => g.items).some((i) => i.to === "/operations")).toBe(false);
