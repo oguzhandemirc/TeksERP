@@ -401,6 +401,8 @@ export const updateSchema = z.strictObject({
   /** Devere ek B1: levent gövdesi kipi + gövde–tezgâh uyumu (enum; `DEVERE_BEAM_BODY_MODES` / `DEVERE_BEAM_BODY_MACHINE_FITS` ile birebir). */
   devereBeamBodyMode: z.enum(["OFF", "OPTIONAL", "REQUIRED"]).optional(),
   devereBeamBodyMachineFit: z.enum(["WARN", "BLOCK"]).optional(),
+  /** Devere A1: yeniden sarım beklenen devere ücretine girer mi (varsayılan true). */
+  devereReworkBillable: z.boolean().optional(),
   devereFasonWasteTolerancePct: z.number({ message: "Fire toleransı sayı olmalı" }).min(0, "Fire toleransı negatif olamaz").max(99, "Fire toleransı en çok %99 olabilir").nullable().optional(),
   dokumaEnabled: z.boolean().optional(),
   // maliyet.enabled — Maliyet & Teklif modülü (MAL-0); üretime bağımlı, bağımlılık serviste.

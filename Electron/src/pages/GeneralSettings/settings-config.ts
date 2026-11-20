@@ -1930,6 +1930,15 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         audience: ["Operatör", "Yönetim"],
         desc: "Açıkken levent bir dokuma iş emrine bağlanmadan planlanamaz/sarılamaz. Kapalıyken (varsayılan) stoğa serbest levent sarılır ve raporda “işsiz levent” olarak ayrı görünür.",
       },
+      {
+        // Devere A1: backend `readDevereReworkBillable` kayıt yokken true döner (bekçi §12).
+        key: "devereReworkBillable",
+        title: "Yeniden sarılan levent devere ücretine girsin",
+        summary: "Devereci kusurlu leventi yeniden sararsa, yeniden sarım devereci faturasında beklenen tutara eklenir.",
+        defaultOn: true,
+        audience: ["Muhasebeci", "Yönetim"],
+        desc: "Açıkken (varsayılan) yeniden sarılan levent de beklenen devere ücretine girer; reddedilen sarım hiçbir koşulda girmez. Kapalıyken yeniden sarım ücretsiz sayılır ve faturada ücretlendirilirse fark uyarısı görünür. Yalnız uyarı hesabını etkiler, faturayı engellemez.",
+      },
     ],
     enumFlags: [
       {

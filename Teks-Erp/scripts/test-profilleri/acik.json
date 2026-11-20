@@ -94,6 +94,7 @@
     "devereBeamBodyMode": "OPTIONAL",
     "devereBeamBodyMachineFit": "WARN",
     "devereFasonLotPolicy": "WARN",
+    "devereReworkBillable": true,
     "devereFasonWasteTolerancePct": 3,
     "devereBeamWeavingLinkRequired": true,
     "dokumaRunWeavingOrderRequired": true,

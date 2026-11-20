@@ -585,8 +585,9 @@ async function main(): Promise<void> {
       "directShipment", "discountTotal", "docNo", "dueDate", "exchangeRate", "externalNo",
       "goodsReceipt", "goodsReceipts", "grandTotal", "grandTotalTry", "id", "issueDate", "lines", "notes",
       "paidTotal", "receiptMatch", "returnGroupId", "shipment", "status", "subcontractorReceipt",
-      "subtotal", "type", "updatedAt", "vatTotal", "withholdingTotal",
+      "subtotal", "type", "updatedAt", "vatTotal", "warpingReceipts", "withholdingTotal",
     ]; // n irsaliye → 1 fatura (2026-09-18): `goodsReceipts[]` + `receiptMatch` eklendi (test_invoice_receipts ölçer)
+    // Devere A1 (2026-11-20): `warpingReceipts[]` — bağlı devere kabulleri (test_fason_devere_fatura ölçer)
     check(
       "§13a ⭐ detay anahtar kümesi SABİT (alan düşürme/ekleme bekçisiz geçemez)",
       JSON.stringify(Object.keys(data).sort()) === JSON.stringify(EXPECTED_KEYS),

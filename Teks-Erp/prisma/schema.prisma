@@ -2075,7 +2075,7 @@ model WarpingOrder {
   /// Kapamada fire % toleransı; NULL = denetim yok (D5 yalnız uyarır).
   wasteTolerancePct Decimal?           @db.Decimal(5, 2)
   feeUnit           WarpingFeeUnit     @default(METRE)
-  feeUnitPrice      Decimal?           @db.Decimal(12, 4)
+  feeUnitPrice      Decimal?           @db.Decimal(16, 8)
   /// Fiyat girildiyse zorunlu (CHECK); varsayılan USD (müşteri belgesi).
   feeCurrency       Currency?
   expectedReturnAt  DateTime?          @db.Timestamptz
@@ -2111,6 +2111,8 @@ model WarpingOrder {
   /// D5b: kapanış / yeniden açma defteri ve kapanış fire satırları (tutan sipariş).
   settlements         WarpingOrderSettlement[]
   yarnWastes          WarpingYarnWaste[]
+  /// Devere A1: devereci faturası bağları (kabul düzeyi; pivot `InvoiceToWarpingReceipt`).
+  invoiceReceiptLinks InvoiceToWarpingReceipt[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -2120,6 +2122,28 @@ model WarpingOrder {
   @@index([status, createdAt])
   @@index([createdAt])
   @@map("warping_orders")
+}
+
+/// DEVERECİ FATURASI (devere A1, 2026-11-20) — fatura ↔ devere dönüş KABULÜ bağı (③b yapılandırma pivotu, defter değil).
+/// Kabul = aynı `warpingReceiptKey`li leventler (ayrı tablo yok → anahtar FK'siz). "Kabul başına en çok BİR iptal edilmemiş
+/// fatura" DB'de korunamaz (fatura durumu başka tabloda): servis kapısı `warping_orders FOR UPDATE` (id sırası) altında,
+/// tek yazar `invoice-warping-receipts.helper`. Pivot yalnız DRAFT'ta REPLACE; fatura sert silinince (taslak) Cascade.
+model InvoiceToWarpingReceipt {
+  id                String @id @default(uuid()) @db.Uuid
+  invoiceId         String @db.Uuid
+  warpingOrderId    String @db.Uuid
+  warpingReceiptKey String @db.Uuid
+
+  invoice      Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  warpingOrder WarpingOrder @relation(fields: [warpingOrderId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([invoiceId, warpingReceiptKey])
+  @@index([warpingReceiptKey])
+  @@index([warpingOrderId])
+  @@map("invoice_to_warping_receipts")
 }
 
 /// FASON DEVERE D5b — sipariş KAPANIŞ / YENİDEN AÇMA defteri (append-only, `updatedAt` YOK).
@@ -12207,6 +12231,8 @@ model Invoice {
   goodsReceipt         GoodsReceipt?           @relation(fields: [goodsReceiptId], references: [id], onDelete: Restrict)
   /// n irsaliye → 1 fatura (2026-09-18): pivot; `goodsReceiptId` kolonu tek fişte AYRICA dolar (eski okuyucu), n>1 fişte NULL.
   goodsReceiptLinks    InvoiceToGoodsReceipt[]
+  /// Devere A1: bağlı devere dönüş kabulleri (pivot; yalnız ALIŞ).
+  warpingReceiptLinks  InvoiceToWarpingReceipt[]
   serviceBillingLinks  ServiceBillingLink[]
 
   lines         InvoiceLine[]

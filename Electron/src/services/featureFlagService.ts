@@ -440,6 +440,8 @@ export interface FeatureFlags {
   devereBeamBodyMode: DevereBeamBodyMode;
   /** Devere ek B1: gövde–tezgâh uyumsuzluğu (backend `DEFAULT_DEVERE_BEAM_BODY_MACHINE_FIT` = WARN). */
   devereBeamBodyMachineFit: DevereBeamBodyMachineFit;
+  /** Devere A1: yeniden sarılan levent beklenen devere ücretine girer mi (backend `readDevereReworkBillable`, kayıt yok = true). */
+  devereReworkBillable: boolean;
   /** Z1 üretim belge zinciri (2026-09-18) — üç davranış bayrağı, varsayılan KAPALI = bağ opsiyonel (bugünkü davranış). */
   devereBeamWeavingLinkRequired: boolean;
   dokumaRunWeavingOrderRequired: boolean;

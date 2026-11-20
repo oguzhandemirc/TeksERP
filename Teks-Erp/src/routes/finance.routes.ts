@@ -39,6 +39,7 @@ import cariHoldRoutes from "./finance-cari-hold.routes";
 import cariMergeRoutes from "./finance-cari-merge.routes";
 import kursunDefaultRoutes from "./finance-kursun-default.routes";
 import expenseAllocationRoutes, { allocationFieldsSchema } from "./finance-expense-allocation.routes";
+import warpingFeeRoutes from "./finance-warping-fee.routes";
 import { fetchTcmbRates } from "../jobs/exchange-rate.job";
 import { TERIM } from "../constants/terim";
 
@@ -67,6 +68,8 @@ router.use("/cari", cariMergeRoutes);
 router.use("/kursun-customer-defaults", kursunDefaultRoutes);
 // Masraf bağı (D4-H3): `/cash-transactions/:id/allocations` + `/expense-allocations/:id/{change,revoke}`; kapı miras.
 router.use(expenseAllocationRoutes);
+// Devereci faturası (devere A1): `/invoices/warping-orders/candidates` · `/invoices/draft-from-warping` · `/invoices/:id/warping-fee-match`; kapı miras.
+router.use(warpingFeeRoutes);
 
 const decimalString = z.union([z.number(), z.string()]);
 const isoDate = z.string().datetime({ offset: true }).or(z.string().date());
@@ -568,6 +571,8 @@ const invoiceCreateSchema = z
     subcontractorReceiptId: z.string().uuid().nullable().optional(),
     // n irsaliye → 1 fatura (2026-09-18): bağlı mal kabul fişleri (küme; kapılar serviste — aynı cari/para birimi/açık fiş).
     goodsReceiptIds: z.array(z.string().uuid()).max(100).optional(),
+    // Devere A1: bağlı devere dönüş kabulleri (yalnız ALIŞ; kapılar serviste — aynı devereci, kabul başına tek aktif fatura).
+    warpingReceiptKeys: z.array(z.string().uuid("Kabul anahtarı geçersiz")).max(200).optional(),
     clientToken: z.string().uuid().optional(),
   })
   .strict();
@@ -818,6 +823,8 @@ router.patch("/invoices/:id", requirePermission("finance:write"), async (req, re
         exchangeRate: decimalString.optional(),
         // n irsaliye → 1 fatura: bağlı fişler REPLACE (`[]` temizler); yalnız taslakta.
         goodsReceiptIds: z.array(z.string().uuid()).max(100).optional(),
+        // Devere A1: bağlı devere kabulleri REPLACE (`[]` temizler); yalnız taslakta.
+        warpingReceiptKeys: z.array(z.string().uuid("Kabul anahtarı geçersiz")).max(200).optional(),
       })
       .strict()
       .parse(req.body);

@@ -189,6 +189,13 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
       "YOK) ve fatura kesmek fiyat kartı olmadan da mümkündür (birim fiyat elle girilir).",
   },
   {
+    dosya: "routes/finance-warping-fee.routes.ts",
+    neden:
+      "DEVERECİ FATURASI (devere A1, 2026-11-20). Router `finance.routes.ts`in ALT router'ıdır (kendi başına mount edilmez), `verifyToken` + `requireFinanceEnabled` kapısını miras alır, aday/taslak uçları ayrıca `requireDevereEnabled`. " +
+      "Ticaret dokunuşu GEÇİŞLİ ve finance.routes ile AYNIDIR: taslak `invoiceService.createDraft` üzerinden fatura satırı " +
+      "fiyat çözümüne (item-price) değer; alış siparişine/fiyat kartına YAZMAZ. Ticaret kapısı EKLENEMEZ: ön muhasebe ticaretten bağımsızdır.",
+  },
+  {
     dosya: "routes/dashboard.routes.ts",
     neden:
       "AÇILIŞ PANOSU (çekirdek, pano kutu mimarisi 2026-11). Router SALT-OKUMADIR (CUD yok). Ajanda kutusu açık alış siparişlerinin teslim tarihini OKUR (pano-kutu-ajanda.ts:48), yalnız `can.alis` doğruyken (pano-kutu-ajanda.ts:129). " +

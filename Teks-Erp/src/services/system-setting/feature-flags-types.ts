@@ -222,6 +222,8 @@ export interface FeatureFlags {
   devereBeamBodyMode: DevereBeamBodyMode;
   /** Devere ek B1: gövde–tezgâh uyumsuzluğu takmada uyar/engelle (varsayılan `WARN`). */
   devereBeamBodyMachineFit: DevereBeamBodyMachineFit;
+  /** Devere A1: yeniden sarım beklenen ücrete girer mi (varsayılan AÇIK). */
+  devereReworkBillable: boolean;
   /** Z1: tezgah koşumu dokuma işine bağlı açılmalı (varsayılan KAPALI = stoka dokuma meşru). HAM; etkin `dokuma && bayrak`. */
   dokumaRunWeavingOrderRequired: boolean;
   /** Z1: dokuma işi en az bir sipariş satırına bağlı olmalı (varsayılan KAPALI). HAM; etkin `dokuma && bayrak`. */

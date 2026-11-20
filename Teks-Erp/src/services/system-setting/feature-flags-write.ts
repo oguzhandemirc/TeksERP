@@ -824,6 +824,12 @@ export async function setFeatureFlags(
       }
       await this.set(SETTING_KEYS.DEVERE_MOUNT_TRACKING_REQUIRED, input.devereMountTrackingRequired, "Devere: bağlamada yöntem ve başlangıç saati zorunlu", userId);
     }
+    if (Object.prototype.hasOwnProperty.call(input, "devereReworkBillable")) {
+      if (typeof input.devereReworkBillable !== "boolean") {
+        throw AppError.badRequest("devereReworkBillable boolean olmalı");
+      }
+      await this.set(SETTING_KEYS.DEVERE_REWORK_BILLABLE, input.devereReworkBillable, "Devere: yeniden sarılan levent beklenen devere ücretine girer", userId);
+    }
     if (Object.prototype.hasOwnProperty.call(input, "devereAutoConsume")) {
       if (typeof input.devereAutoConsume !== "boolean") {
         throw AppError.badRequest("devereAutoConsume boolean olmalı");

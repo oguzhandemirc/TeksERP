@@ -7,6 +7,7 @@ import { AppError } from "../../utils/app-error";
 import { buildNextCursor, cursorWhere, decodeCursor } from "../../utils/cursor";
 import { resolveRangeEnd, resolveRangeStart } from "../../constants/time";
 import { isBeamCountOpen } from "./plan";
+import { warpingOrderIdsByFeeState, type WarpingFeeInvoiceState } from "../helpers/warping-fee.helper";
 
 type Db = Pick<Prisma.TransactionClient, "warpingOrder">;
 const kg = (v: Prisma.Decimal) => v.toFixed(3);
@@ -126,6 +127,10 @@ export interface WarpingOrderListParams {
   subcontractorId: IdCond;
   warpSpecId: IdCond;
   salesOrderId: IdCond;
+  /** Devere A1: fatura durumu (NONE · PARTIAL · FULL); boş = süzme yok. */
+  feeInvoiced?: WarpingFeeInvoiceState[];
+  /** `feeInvoiced`ten çözülen kimlikler (where kurucusu senkron kalır; `listWarpingOrders` doldurur). */
+  feeOrderIds?: string[];
   from?: string;
   to?: string;
   search?: string;
@@ -140,6 +145,7 @@ export function buildWarpingOrderListWhere(p: Omit<WarpingOrderListParams, "curs
   if (p.subcontractorId) where.subcontractorId = p.subcontractorId;
   if (p.warpSpecId) where.warpSpecId = p.warpSpecId;
   if (p.salesOrderId) where.salesOrders = { some: { orderId: p.salesOrderId } };
+  if (p.feeOrderIds) where.id = { in: p.feeOrderIds };
   if (p.from || p.to) where.createdAt = { ...(p.from ? { gte: resolveRangeStart(p.from) } : {}), ...(p.to ? { lte: resolveRangeEnd(p.to) } : {}) };
   const q = p.search?.trim();
   if (q) where.orderNo = { contains: q, mode: "insensitive" };
@@ -160,7 +166,8 @@ export interface WarpingOrderListRow {
 }
 
 export async function listWarpingOrders(p: WarpingOrderListParams): Promise<{ data: WarpingOrderListRow[]; nextCursor: string | null; summary: { count: number; byStatus: Record<WarpingOrderStatus, number>; openTargetLengthM: string } }> {
-  const where = buildWarpingOrderListWhere(p);
+  const feeOrderIds = p.feeInvoiced?.length ? await warpingOrderIdsByFeeState(prisma, p.feeInvoiced) : undefined;
+  const where = buildWarpingOrderListWhere({ ...p, feeOrderIds });
   let cursor = null;
   if (p.cursor) {
     cursor = decodeCursor(p.cursor);
