@@ -296,6 +296,11 @@ export const SETTING_KEYS = {
   /** [PROFİL] Fason devere D4b (K4): siparişte iplik başına lot karışımı — `FREE` serbest · `WARN` uyarı (VARSAYILAN,
    *  kullanıcı kararı 2026-11-17) · `SINGLE_LOT` ikinci lot 409. Enum; kalıp `DEVERE_FASON_LOT_POLICIES`. */
   DEVERE_FASON_LOT_POLICY: "devere.fasonLotPolicy",
+  /** [PROFİL] Devere ek B1: levent gövdesi envanteri — `OFF` (VARSAYILAN, bugünkü davranış) · `OPTIONAL` · `REQUIRED`.
+   *  Enum; kalıp `DEVERE_BEAM_BODY_MODES`; OFF'ta gövde uçları 403 `BEAM_BODY_MODE_OFF`. */
+  DEVERE_BEAM_BODY_MODE: "devere.beamBodyMode",
+  /** [PROFİL] Devere ek B1: gövde–tezgâh uyumsuzluğu — `WARN` (VARSAYILAN) · `BLOCK`. Enum; kalıp `DEVERE_BEAM_BODY_MACHINE_FITS`. */
+  DEVERE_BEAM_BODY_MACHINE_FIT: "devere.beamBodyMachineFit",
   /** Dokuma işi modülü: dokuma işi planlama · tezgah koşumu · top indirme.
    *  ÜRETİME BAĞIMLI (`MODULE_DEPENDENCIES`), tezgah izlemenin KARDEŞİ — fasona
    *  dokutan firmada dokuma işi var tezgah yok (DOKUMA-IS-EMRI §2.5). */

@@ -23,6 +23,7 @@ const KIND_TEXT: Record<string, string> = {
   ETIKET_TOP: 'Top etiketi',
   ETIKET_CUVAL: 'Çuval etiketi',
   ETIKET_LEVENT: 'Levent etiketi',
+  ETIKET_LEVENT_GOVDE: 'Levent gövdesi etiketi',
   ETIKET_SERBEST: 'Serbest etiket',
   REFAKAT_KARTI: 'Refakat kartı',
   FASON_CEKI: 'Fason çekisi',

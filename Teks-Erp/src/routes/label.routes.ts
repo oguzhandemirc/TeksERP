@@ -17,6 +17,7 @@ import { z } from "zod";
 import { LabelController } from "../controllers/label.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
+import { requireBeamBodyEnabled } from "../middlewares/module.middleware";
 import { LabelOverrideService } from "../services/label-override.service";
 import { RollLabelEditService } from "../services/roll-label-edit.service";
 
@@ -739,6 +740,84 @@ router.post(
   requireAnyPermission("label:print", "mobile:devere"),
   controller.recordWarpBeamPrintEvent,
 );
+
+// Levent gövdesi etiketi (devere ek B1) — levent kalıbının aynısı; gövde kipi OFF iken 403 `BEAM_BODY_MODE_OFF`.
+const BEAM_BODY_LABEL_READ = requireAnyPermission("label:read", "beam-body:read");
+
+/**
+ * @openapi
+ * /api/labels/beam-bodies/{id}:
+ *   get:
+ *     tags: [Labels]
+ *     summary: Levent gövdesi etiketi payload'ı (JSON) — barkod/QR = BeamBody.bodyNo
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: Gövde etiketi payload'ı }
+ *       403: { description: BEAM_BODY_MODE_OFF · MODULE_DISABLED }
+ *       404: { description: BEAM_BODY_NOT_FOUND }
+ *       409: { description: BEAM_BODY_INACTIVE }
+ */
+router.get("/beam-bodies/:id", verifyToken, requireBeamBodyEnabled, BEAM_BODY_LABEL_READ, controller.getBeamBodyLabel);
+
+/**
+ * @openapi
+ * /api/labels/beam-bodies/{id}/html:
+ *   get:
+ *     tags: [Labels]
+ *     summary: Levent gövdesi etiketinin tam HTML'i (N adet)
+ *     description: |
+ *       Şablon yoksa ya da "Gövde No" alanını bağlamıyorsa **400** (fail-closed). `copies` 1-200.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *       - { in: query, name: copies, schema: { type: integer, minimum: 1, maximum: 200 } }
+ *     responses:
+ *       200: { description: Gövde etiketi HTML }
+ *       400: { description: Şablon yok/uyumsuz · LABEL_COPIES_RANGE }
+ *       404: { description: BEAM_BODY_NOT_FOUND }
+ */
+router.get("/beam-bodies/:id/html", verifyToken, requireBeamBodyEnabled, BEAM_BODY_LABEL_READ, controller.getBeamBodyLabelHtml);
+
+/**
+ * @openapi
+ * /api/labels/beam-bodies/{id}/native:
+ *   get:
+ *     tags: [Labels]
+ *     summary: Levent gövdesi etiketi SEÇİLİ yazıcı dilinde (HTML veya native komut)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *       - { in: query, name: encoding, schema: { type: string, enum: [b64] } }
+ *       - { in: query, name: copies, schema: { type: integer, minimum: 1, maximum: 200 } }
+ *     responses:
+ *       200: { description: Seçili dilde gövde etiketi }
+ *       400: { description: Şablon yok/uyumsuz · LABEL_COPIES_RANGE }
+ *       404: { description: BEAM_BODY_NOT_FOUND }
+ */
+router.get("/beam-bodies/:id/native", verifyToken, requireBeamBodyEnabled, BEAM_BODY_LABEL_READ, controller.getBeamBodyLabelNative);
+
+/**
+ * @openapi
+ * /api/labels/beam-bodies/{id}/print-event:
+ *   post:
+ *     tags: [Labels]
+ *     summary: Levent gövdesi etiketi baskı izi (LABEL_PRINT_EVENT)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema: { type: object, properties: { copies: { type: integer, minimum: 1, maximum: 200 } } }
+ *     responses:
+ *       200: { description: İz kaydedildi }
+ *       400: { description: LABEL_COPIES_RANGE }
+ *       404: { description: BEAM_BODY_NOT_FOUND }
+ */
+router.post("/beam-bodies/:id/print-event", verifyToken, requireBeamBodyEnabled, requirePermission("label:print"), controller.recordBeamBodyPrintEvent);
 
 /**
  * @openapi

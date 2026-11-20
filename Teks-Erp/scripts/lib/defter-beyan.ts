@@ -302,6 +302,11 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
     ],
     ["src/services/helpers/warp-beam-event.helper.ts"]),
 
+  D("BeamBodyEvent", "levent GÖVDESİ olay defteri (devere ek B1) — gövdenin kayıt/gönderim/dönüş/takma/bakım/hurda/iade gerçekleri değişmez; ters yol tipli `<TÜR>_CANCEL`, orijinaline `reversesId` (tek ters, çift iptal DB'de imkânsız); B1 yalnız REGISTER↔REGISTER_CANCEL (kayıt iptali kartı pasife alır)",
+    { tur: "TERS_BAG", kolon: "reversesId" },
+    [{ dosya: "src/services/beam-body/write.ts", sembol: "cancelBeamBodyRegistration" }],
+    ["src/services/helpers/beam-body.helper.ts"]),
+
   D("RollMovement", "topun adım içi giriş/çıkışı; açık satır çıkışta kapanır", { tur: "DAMGA", kolon: "revokedAt" },
     [{ dosya: "src/services/helpers/roll-movement.helper.ts", sembol: "revokeRollMovements" },
      { dosya: "src/services/helpers/roll-movement.helper.ts", sembol: "reopenClosedMovementsTx" }],
@@ -637,7 +642,8 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
   PIVOT("PermissionTemplateItem"), PIVOT("RouteStepProperty"), PIVOT("ProductRecipeProperty"),
   PIVOT("OrderLineRequiredProperty"), PIVOT("SubcontractorReceiptProperty"), PIVOT("SubcontractorToCategory"),
   PIVOT("ItemAllowedProperty"), PIVOT("ItemAllowedColor"), PIVOT("DevicePeripheral"),
-  PIVOT("CustomerStandaloneLabel", "müşteriye bağlı bağımsız etiket tanımı — ayar kümesi (③b)"),
+  PIVOT("BeamBodyMachine", "levent gövdesi ↔ uyumlu tezgâh kümesi — takma uyarısı/engeli için ayar (③b)"),
+  PIVOT("CustomerStandaloneLabel","müşteriye bağlı bağımsız etiket tanımı — ayar kümesi (③b)"),
   PIVOT("MachineCollectorLink", "toplayıcı → makine KAPSAM satırı; iki FK de Cascade, Decimal yok, karar/ölçüm taşımaz — 01'in guard muafiyetiyle aynı okuma: \"yapılandırmadır, defter değil\" (③b)"),
   // ③a TİCARİ pivot → DEFTER (2026-09-14, OZELLIK-PIVOT-SURUMLEME-PLAN Faz 1–2e): satır
   // silinmez, `revokedAt` damgalanır; değişiklik = eski aktif satırın damgası + yeni satır.

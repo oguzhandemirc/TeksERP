@@ -79,6 +79,7 @@ import {
 } from "../services/system-setting.service";
 import { licenseModuleError } from "../lib/license/module-ceiling";
 import { machineStopRegime } from "../services/helpers/machine-stop-regime.helper";
+import { assertBeamBodyEnabled } from "../services/helpers/beam-body.helper";
 import { AppError } from "../utils/app-error";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
 
@@ -168,6 +169,23 @@ export async function requireDevereEnabled(
     if (!enabled) {
       throw licenseModuleError(SETTING_KEYS.DEVERE_ENABLED, "Devere / levent") ?? modulKapali("devere", "Devere / levent");
     }
+    next();
+  } catch (e) {
+    next(e);
+  }
+}
+
+/**
+ * Levent gövdesi envanteri (devere ek B1): devere açık ∧ `devere.beamBodyMode ≠ OFF`; OFF → 403 `BEAM_BODY_MODE_OFF`.
+ * Karar tek yerde (`assertBeamBodyEnabled`); servis yolları da aynı fonksiyonu çağırır.
+ */
+export async function requireBeamBodyEnabled(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    await assertBeamBodyEnabled();
     next();
   } catch (e) {
     next(e);

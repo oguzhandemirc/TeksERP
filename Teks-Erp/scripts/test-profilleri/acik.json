@@ -91,6 +91,8 @@
     "devereMountTrackingRequired": true,
     "devereAutoConsume": true,
     "devereWarpFixedWasteM": 20,
+    "devereBeamBodyMode": "OPTIONAL",
+    "devereBeamBodyMachineFit": "WARN",
     "devereFasonLotPolicy": "WARN",
     "devereFasonWasteTolerancePct": 3,
     "devereBeamWeavingLinkRequired": true,

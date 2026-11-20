@@ -436,6 +436,10 @@ export interface FeatureFlags {
   devereFasonWasteTolerancePct: number;
   /** Fason devere D4b (K4): lot karışımı kuralı (backend `DEFAULT_DEVERE_FASON_LOT_POLICY` = WARN). */
   devereFasonLotPolicy: DevereFasonLotPolicy;
+  /** Devere ek B1: levent gövdesi envanteri kipi (backend `DEFAULT_DEVERE_BEAM_BODY_MODE` = OFF). */
+  devereBeamBodyMode: DevereBeamBodyMode;
+  /** Devere ek B1: gövde–tezgâh uyumsuzluğu (backend `DEFAULT_DEVERE_BEAM_BODY_MACHINE_FIT` = WARN). */
+  devereBeamBodyMachineFit: DevereBeamBodyMachineFit;
   /** Z1 üretim belge zinciri (2026-09-18) — üç davranış bayrağı, varsayılan KAPALI = bağ opsiyonel (bugünkü davranış). */
   devereBeamWeavingLinkRequired: boolean;
   dokumaRunWeavingOrderRequired: boolean;
@@ -938,6 +942,9 @@ export type KursunMeterCapture = "OFF" | "OUT" | "IN_OUT";
 
 /** Fason devere D4b (K4) — backend `DevereFasonLotPolicy` aynası. */
 export type DevereFasonLotPolicy = "FREE" | "WARN" | "SINGLE_LOT";
+/** Devere ek B1 — backend `DevereBeamBodyMode` / `DevereBeamBodyMachineFit` aynası. */
+export type DevereBeamBodyMode = "OFF" | "OPTIONAL" | "REQUIRED";
+export type DevereBeamBodyMachineFit = "WARN" | "BLOCK";
 /** S1: top doğuş yolu — backend `DokumaRollBirth` aynası. */
 export type DokumaRollBirth = "TABLET_DOFF" | "KK1_LABEL_OR_ORDER" | "KK1_LABEL_ONLY";
 export type AlarmShiftNotice = "NO_SHIFT_DEFINED" | "NO_SHIFT_NOW";

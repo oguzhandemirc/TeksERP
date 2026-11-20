@@ -149,6 +149,8 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "devereWarpFixedWasteM",
       "devereFasonWasteTolerancePct",
       "devereFasonLotPolicy",
+      "devereBeamBodyMode",
+      "devereBeamBodyMachineFit",
       "devereBeamWeavingLinkRequired",
     ],
   },

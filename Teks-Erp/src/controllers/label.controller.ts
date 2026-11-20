@@ -640,6 +640,35 @@ export class LabelController {
     } catch (e) { next(e); }
   };
 
+  getBeamBodyLabel = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      res.status(200).json(await this.service.getBeamBodyLabel(req.params.id as string));
+    } catch (e) { next(e); }
+  };
+
+  getBeamBodyLabelHtml = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const opts = { copies: loomCopiesQuery(req), ...(await resolveFormatOpts(req)) };
+      sendLoomHtml(res, await this.service.getBeamBodyLabelHtml(req.params.id as string, opts));
+    } catch (e) { next(e); }
+  };
+
+  getBeamBodyLabelNative = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const wantB64 = req.query.encoding === "b64";
+      const opts = { copies: loomCopiesQuery(req), ...(wantB64 ? { encoding: "b64" as const } : {}), ...(await resolveFormatOpts(req)) };
+      sendLoomNative(res, await this.service.getBeamBodyLabelNative(req.params.id as string, opts), wantB64);
+    } catch (e) { next(e); }
+  };
+
+  recordBeamBodyPrintEvent = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = loomPrintEventSchema.parse(req.body ?? undefined);
+      const report = await jobReport(req, body?.printJob);
+      res.status(200).json(await this.service.recordBeamBodyPrintEvent(req.params.id as string, req.user?.userId, body?.copies, report));
+    } catch (e) { next(e); }
+  };
+
   updateOrderLineCustomerNames = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = updateNamesSchema.parse(req.body);

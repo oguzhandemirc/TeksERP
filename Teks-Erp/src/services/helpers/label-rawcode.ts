@@ -180,5 +180,9 @@ export function mockPayload(kind: LabelKind, qualityCode: string | null = ""): L
       weavingOrderNumber: previewSeriesCode(resolveSeriesFormat("weavingOrder"), 1), itemName: "Pamuk Astar 60s", woundAt: new Date().toISOString(),
     } as LabelPayload;
   }
+  if (kind === ("BEAM_BODY" as LabelKind)) {
+    const bodyNo = previewSeriesCode(resolveSeriesFormat("beamBody"), 1);
+    return { ...base, ...empty, barcode: bodyNo, bodyNo, ownerName: "Bizim", bodyWidthCm: 220, flangeDiameterCm: 80, tareKg: 95 } as LabelPayload;
+  }
   return base as LabelPayload;
 }

@@ -234,6 +234,8 @@ export const TABLE_LABELS: Record<string, string> = {
   WEAVING_ORDER: "Dokuma İş Emri",
   WARP_BEAM: "Levent",
   WARP_BEAM_EVENT: "Levent Olayı",
+  BEAM_BODY: "Levent Gövdesi",
+  BEAM_BODY_EVENT: "Levent Gövdesi Olayı",
 
   // Fabrika tarafında da etiketsiz kalmış olanlar (aynı tarama).
   ROLL_QTY_ADJUST: "Top Metraj Düzeltmesi",
@@ -252,10 +254,7 @@ export const TABLE_LABELS: Record<string, string> = {
 };
 
 /** Ham tableName'i Türkçe etiketle. Boş → "—", bilinmeyen → ham değer. */
-export function tableLabel(raw: string | null | undefined): string {
-  if (!raw) return "—";
-  return TABLE_LABELS[raw] ?? raw;
-}
+export const tableLabel = (raw: string | null | undefined): string => (raw ? (TABLE_LABELS[raw] ?? raw) : "—");
 
 /**
  * SİSTEM OLAYLARI (`category` = AUTH/SYSTEM) — TEK KAYNAK.
