@@ -58,7 +58,7 @@ const ReopenBody = z.strictObject({ reason: z.string().trim().min(3, "Yeniden a�
  * /api/warping-orders/{id}/settlement-preview:
  *   get:
  *     tags: [WarpingOrder]
- *     summary: Kapanış önizlemesi (gövdesiz öneri `devere.settleDefault` kipinden, varsayılan A1-a) — kalem kalem tutulan iplik, önerilen fire (A1-a: plan brüt − net kadar) ve deverecide kalan, fire %, tolerans uyarısı; yazmaz
+ *     summary: Kapanış önizlemesi (gövdesiz öneri `devere.settleDefault` kipinden, varsayılan A1-a) — kalem kalem tutulan iplik, önerilen fire (A1-a ile plan brüt − net kadar) ve deverecide kalan, fire %, tolerans uyarısı; yazmaz
  *     security: [{ bearerAuth: [] }]
  *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
  *     responses:
