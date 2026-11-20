@@ -7,7 +7,7 @@
 // bir kez. Görünürlük burada KARAR VERİLMEZ: girdi zaten süzülmüş listedir, boş grup düşer.
 // =============================================================================
 import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
-import { terimDokumaRejimi } from "@/lib/terim";
+import { TERIM, terimDokumaRejimi } from "@/lib/terim";
 
 export interface NavSubgroupDef {
   key: string;
@@ -45,7 +45,7 @@ export const NAV_SUBGROUPS: Readonly<Record<string, readonly NavSubgroupDef[]>> 
     {
       key: "terbiye",
       // İş emri adı rejimle değişir (`TERIM.terbiyeIsEmri`); başlık aynı kaynağa bakar.
-      label: () => (terimDokumaRejimi() ? "Terbiye" : "İş Emirleri"),
+      label: () => (terimDokumaRejimi() ? "Terbiye" : TERIM.terbiyeIsEmri.cogul),
       paths: [OPS("work-orders"), OPS("work-orders/new"), OPS("kartela"), OPS("work-order-events")],
     },
     { key: "kursun", label: "Kurşun", paths: [OPS("kursun-dagitim"), OPS("kursun-sapmalar")] },
