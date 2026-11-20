@@ -111,12 +111,21 @@ export function planTargetSig(input: PlanTargetInput): string {
   return t.beamCount === null ? `open:${t.targetLengthM.toFixed(3)}` : t.beamLines.map((l) => `${l.beamCount}x${l.beamLengthM.toFixed(3)}`).join(",");
 }
 
-/** Ana kartı zemin olarak kullanan kumaşlarda AYNI LEVENT (SHARED_BEAM) katmanı olan kartlar — ek tel grubu önerisi. */
+/**
+ * Ek tel grubu yüklemi — öneri ile kapının TEK süzgeci: kartın, ana kartı zemin kullanan HERHANGİ bir kumaşta
+ * AYNI LEVENT dışı katmanı varsa ilk böyle katman döner (ret). Öneri bunu atlarsa kapının 400'üne çarpan kart önerilir.
+ */
+export function firstNonSharedLayer<T extends { beamMode: string }>(layers: readonly T[]): T | undefined {
+  return layers.find((l) => !isSharedBeamLayer(l.beamMode));
+}
+
+/** Ana kartı zemin olarak kullanan kumaşlarda AYNI LEVENT katmanı olan VE kapıdan geçen kartlar — ek tel grubu önerisi. */
 export async function suggestExtraSpecs(db: Db, warpSpecId: string): Promise<Array<{ id: string; code: string; name: string }>> {
   const specs = await readSharedBeamSpecsForGround(db, warpSpecId);
   const seen = new Map<string, { id: string; code: string; name: string }>();
   for (const s of specs) seen.set(s.id, s);
-  return [...seen.values()];
+  const layers = await readLayerModesOnGround(db, warpSpecId, [...seen.keys()]);
+  return [...seen.values()].filter((s) => !firstNonSharedLayer(layers.filter((l) => l.specId === s.id)));
 }
 
 /**
@@ -126,7 +135,7 @@ export async function suggestExtraSpecs(db: Db, warpSpecId: string): Promise<Arr
 async function assertExtrasShareBeam(db: Db, warpSpecId: string, extraIds: string[]): Promise<void> {
   if (extraIds.length === 0) return;
   const layers = await readLayerModesOnGround(db, warpSpecId, extraIds);
-  const bad = layers.find((l) => !isSharedBeamLayer(l.beamMode));
+  const bad = firstNonSharedLayer(layers);
   if (bad) {
     const label = WARP_BEAM_MODE_LABEL[bad.beamMode as WarpBeamModeCode] ?? bad.beamMode;
     const hint = bad.beamMode === "CREEL" ? "cağlıktan beslenir, devereye gitmez" : "ayrı levente sarılır — ayrı devere siparişi açın";

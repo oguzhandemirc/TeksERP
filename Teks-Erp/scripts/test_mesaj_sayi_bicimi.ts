@@ -9,7 +9,7 @@
 // nokta basar hem sondaki sıfırı tutar ("40.000 m"). `details`/DTO sayısal alanları makine
 // biçiminde kalır — bu bekçi yalnız şablon dizgesi (insan metni) içine bakar.
 //
-// TS AST: `src/services/**` içindeki her şablon dizgesinin her `${…}` yuvası:
+// TS AST: `src/services/**` + `src/routes/**` içindeki her şablon dizgesinin her `${…}` yuvası:
 //   §1a yuvadan hemen sonra birim (` m`, `kg`, `metre`, `mt`) ya da `%` → ifade biçimleyici çağrısı olmalı
 //   §1b yuvadan hemen önce `%` (`%${x}`) → `pctText`
 //   §1c yuvada `.toFixed(` → hiç olmaz (birimsiz de: nokta ondalık)
@@ -36,6 +36,8 @@ function check(label: string, ok: boolean, detail = ""): void {
 
 const ROOT = path.resolve(__dirname, "..");
 const SVC = path.join(ROOT, "src/services");
+// Route başarı mesajı da insan metnidir (2026-11-20: devere sevk/kapanış "233.093 kg" route şablonundaydı).
+const ROUTES = path.join(ROOT, "src/routes");
 
 /**
  * Biçimleyiciler: ölçü (`qtyText`/`pctText`), anlatı (`sayiMetni`/`oranMetni`), para (`paraMetni`, binlik ayrı kural);
@@ -205,7 +207,7 @@ function scanSource(rel: string, text: string): Hit[] {
 function main(): void {
   console.log("=== İNSAN METNİNDE ÖLÇÜ SAYISI BİÇİMİ ===\n");
   // §0 körlük zemini — tarayıcı boşa düşerse "ihlal yok" ile "bakmadım" aynı yeşile çıkar.
-  const files = walk(SVC);
+  const files = [...walk(SVC), ...walk(ROUTES)];
   let templates = 0;
   const all: Hit[] = [];
   for (const f of files) {
@@ -213,7 +215,7 @@ function main(): void {
     templates += (text.match(/`/g) ?? []).length;
     all.push(...scanSource(path.relative(ROOT, f).split(path.sep).join("/"), text));
   }
-  check(`§0 zemin: src/services taraması (${files.length} dosya ≥ 800; ${templates} ters tırnak ≥ 5000)`, files.length >= 800 && templates >= 5000);
+  check(`§0 zemin: src/services + src/routes taraması (${files.length} dosya ≥ 800; ${templates} ters tırnak ≥ 5000)`, files.length >= 800 && templates >= 5000);
   check("§0b tek kaynak biçimleyici var (qty-text.helper qtyText/pctText)", /export const qtyText/.test(readFileSync(path.join(SVC, "helpers/qty-text.helper.ts"), "utf8")));
   // Tarayıcı `qtyText(`/`pctText(` çağrısını ADINDAN biçimli sayar: başka bir modül aynı adı tanımlarsa
   // (2026-11-18: mal kabul ön-uçuşunda ham `toString()` basan `qtyText` vardı) bekçi kör olur.

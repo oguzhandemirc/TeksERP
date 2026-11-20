@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { kg } from "../Yarn/qty";
+import { kg } from "./model";
 
 export interface HoldingLine {
   key: string;

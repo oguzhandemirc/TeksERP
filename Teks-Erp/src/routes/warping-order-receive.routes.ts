@@ -13,6 +13,7 @@ import { requireIplikEnabled } from "../middlewares/module.middleware";
 import { previewWarpingReceive, receiveWarpingOrder, WARPING_RECEIVE_MAX_BEAMS } from "../services/warping-order/receive";
 import { cancelWarpingReceipt, previewCancelWarpingReceipt } from "../services/warping-order/receive-cancel";
 import { listWarpingReceipts } from "../services/warping-order/receipts";
+import { qtyText } from "../services/helpers/qty-text.helper";
 import "../types/express-augment";
 
 const router = Router();
@@ -111,7 +112,7 @@ router.post("/:id/receive", requirePermission("warping-order:write"), requireIpl
   const { warnings, replayed, ...data } = await receiveWarpingOrder(id, body, req.user!.userId);
   return {
     status: replayed ? 200 : 201,
-    body: { success: true, data, message: replayed ? "Bu kabul zaten kayıtlı" : `${data.liveBeamCount} levent kabul edildi (${data.lengthM} m)`, ...(warnings.length > 0 ? { warnings } : {}) },
+    body: { success: true, data, message: replayed ? "Bu kabul zaten kayıtlı" : `${data.liveBeamCount} levent kabul edildi (${qtyText(data.lengthM)} m)`, ...(warnings.length > 0 ? { warnings } : {}) },
   };
 }));
 

@@ -3,9 +3,8 @@
 import { useDevereEnabled } from "@/hooks/usePricingEnabled";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { HoldingSection } from "./HoldingSection";
-import { ageDays, ageText, carriedKg, yarnLabel } from "./model";
+import { ageDays, ageText, carriedKg, kg, yarnLabel } from "./model";
 import { useYarnAtSubcontractor, YARN_AT_SUB_PATH } from "./service";
-import { kg } from "../Yarn/qty";
 
 export function SubcontractorYarnSection({ subcontractorId }: { subcontractorId: string }) {
   const { hasPermission } = useRoleAccess();

@@ -4,7 +4,7 @@ import { BandStats, ListBand, type BandStatItem } from "@/components/layout/List
 import { formatAmount, formatQty } from "@/lib/format";
 import { ageText, CARRIED_HINT, LONG_WAIT_DAYS, type YarnAtSubSummary } from "./model";
 
-const kgText = (v: number) => formatQty(v, 3, 2);
+const kgText = (v: number) => formatQty(v, 3, 3);
 
 export function summaryItems(s: YarnAtSubSummary, showValue: boolean): BandStatItem[] {
   const items: BandStatItem[] = [

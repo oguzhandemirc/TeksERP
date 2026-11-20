@@ -6,6 +6,7 @@
 //   S2  MONO zemin 165 den×5250 + döner 70 den×5250 (ek tel grubu, AYNI LEVENT); 2×2500 m → 481,250 + 204,167
 //   K6  satır satır boy: 1×600 + 2×200 = 1000 m → S1 ile aynı kg; levent adedi 3
 //   S29 ek grup: SHARED_BEAM katman önerilir · SEPARATE_BEAM/CREEL 400 · aynı iplik iki kartta → teller TOPLANIR
+//   S29d bir kumaşta SHARED, ötekinde SEPARATE olan kart önerilmez (öneri = kapı süzgeci `firstNonSharedLayer`), seçilirse 400
 //   Replay: aynı token aynı sipariş · farklı gövde 409 · iptal sonrası 409 (4. durum)
 //   Düzenleme kapısı: plan alanı yalnız OPEN; IN_PROGRESS'te meta serbest, plan 409; iptal yalnız OPEN
 //   İptal claim yarışı: iki eşzamanlı iptal → biri başarılı, biri 409
@@ -13,6 +14,7 @@
 //   DB seddi: CANCELLED + cancelledAt NULL doğrudan yazımı `warping_orders_status_ck` reddeder
 // NEGATİF SONDA (koşuldu 2026-11-17): plan.ts birleştirmede `cur.endsCount += l.endsCount` → `+= 0` iken S29c kırmızı;
 // cancel.ts claim WHERE'inden `status: OPEN` çıkarılınca IN_PROGRESS iptali + iptal yarışı kırmızı.
+// (2026-11-20) plan.ts `suggestExtraSpecs` süzgeci `true ||` ile kapatılınca S29d (çelişen katmanlı kart önerilmez) kırmızı.
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım; kendi kayıtlarını siler (fason firma kalıcı fixture).
 // =============================================================================
 import { Currency, OrderStatus, WarpingFeeUnit, WarpingOrderStatus } from "@prisma/client";
@@ -83,6 +85,7 @@ async function main(): Promise<void> {
   const specIds = [cXYZ.id, cMono.id, cLeno.id, cXadd.id];
   const fabric = await prisma.item.create({ data: { code: `${TAG}-KM`, name: `${TAG} tül`, itemType: "FABRIC", warpSpecId: cMono.id }, select: { id: true } });
   const fabric2 = await prisma.item.create({ data: { code: `${TAG}-KX`, name: `${TAG} kumaş x`, itemType: "FABRIC", warpSpecId: cXYZ.id }, select: { id: true } });
+  const fabric3 = await prisma.item.create({ data: { code: `${TAG}-KM2`, name: `${TAG} tül 2`, itemType: "FABRIC", warpSpecId: cMono.id }, select: { id: true } });
   const so = await prisma.order.create({ data: { orderNumber: `${TAG}-SP1`, customerId: customer.id }, select: { id: true } });
   const soDead = await prisma.order.create({ data: { orderNumber: `${TAG}-SP2`, customerId: customer.id, status: OrderStatus.CANCELLED, cancelledAt: new Date(), cancelReason: "bekçi" }, select: { id: true } });
   const orderIds: string[] = [];
@@ -141,6 +144,15 @@ async function main(): Promise<void> {
     check("S29b CAĞLIK katmanı ek grup → 400 WARPING_EXTRA_NOT_SHARED", eCreel?.status === 400 && eCreel.code === "WARPING_EXTRA_NOT_SHARED", JSON.stringify(eCreel));
     const pvSep = await previewWarpingOrder({ warpSpecId: cMono.id, beamLines: [{ beamCount: 1, beamLengthM: 100 }], extraWarpSpecIds: [], fixedWasteM: 0 });
     check("S29b CAĞLIK katmanı önerilmez", !pvSep.suggestedExtraSpecs.some((s) => s.id === cLeno.id));
+
+    // ── S29d çelişen katman: bir kumaşta AYNI LEVENT, ötekinde AYRI LEVENT → öneri kapıyla aynı süzgeç ──
+    await replaceItemWarpLayers(fabric.id, [{ warpSpecId: cLeno.id, role: "LENO", beamMode: "SHARED_BEAM" }]);
+    await replaceItemWarpLayers(fabric3.id, [{ warpSpecId: cLeno.id, role: "LENO", beamMode: "SEPARATE_BEAM" }]);
+    const pvMix = await previewWarpingOrder({ warpSpecId: cMono.id, beamLines: [{ beamCount: 1, beamLengthM: 100 }], extraWarpSpecIds: [], fixedWasteM: 0 });
+    check("S29d çelişen katmanlı kart ÖNERİLMEZ (kapı 400 verecekti)", !pvMix.suggestedExtraSpecs.some((s) => s.id === cLeno.id), JSON.stringify(pvMix.suggestedExtraSpecs.map((s) => s.code)));
+    const eMix = await errOf(() => previewWarpingOrder({ warpSpecId: cMono.id, beamLines: [{ beamCount: 1, beamLengthM: 100 }], extraWarpSpecIds: [cLeno.id], fixedWasteM: 0 }));
+    check("S29d kapı gevşemedi: çelişen katmanlı kart seçilirse 400 WARPING_EXTRA_NOT_SHARED", eMix?.status === 400 && eMix.code === "WARPING_EXTRA_NOT_SHARED", JSON.stringify(eMix));
+    await replaceItemWarpLayers(fabric3.id, []);
 
     // ── S29c aynı iplik iki kartta → teller toplanır ────────────────────
     await replaceItemWarpLayers(fabric2.id, [{ warpSpecId: cXadd.id, role: "LENO", beamMode: "SHARED_BEAM" }]);
@@ -213,10 +225,10 @@ async function main(): Promise<void> {
     await prisma.warpingOrderExtraSpec.deleteMany({ where: { warpingOrderId: { in: oids } } });
     await prisma.warpingOrderBeamLine.deleteMany({ where: { warpingOrderId: { in: oids } } });
     await prisma.warpingOrder.deleteMany({ where: { id: { in: oids } } });
-    await prisma.systemLog.deleteMany({ where: { recordId: { in: [...oids, fabric.id, fabric2.id] } } });
+    await prisma.systemLog.deleteMany({ where: { recordId: { in: [...oids, fabric.id, fabric2.id, fabric3.id] } } });
     await prisma.order.deleteMany({ where: { id: { in: [so.id, soDead.id] } } });
-    await prisma.itemWarpLayer.deleteMany({ where: { itemId: { in: [fabric.id, fabric2.id] } } });
-    await prisma.item.deleteMany({ where: { id: { in: [fabric.id, fabric2.id] } } });
+    await prisma.itemWarpLayer.deleteMany({ where: { itemId: { in: [fabric.id, fabric2.id, fabric3.id] } } });
+    await prisma.item.deleteMany({ where: { id: { in: [fabric.id, fabric2.id, fabric3.id] } } });
     await prisma.warpSpec.deleteMany({ where: { id: { in: specIds } } });
     await prisma.item.deleteMany({ where: { id: { in: yarnIds } } });
   }
