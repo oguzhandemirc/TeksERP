@@ -84,7 +84,7 @@ function recordDataset(ctx: CloudContext, s: SessionContext, def: ProjectionDef)
     async *pages() {
       let cursor: Prisma.Sql = Prisma.empty;
       for (;;) {
-        const rows = await withTesis(ctx.app, { tesisId: s.tesisId, projections: s.projections }, (tx) => tx.$queryRaw<Row[]>(selectRows(s, def, cursor, PAGE)));
+        const rows = await withTesis(ctx.app, { tesisId: s.tesisId, projections: s.projections }, (tx) => tx.$queryRaw<Row[]>(selectRows(s, def, cursor, { limit: PAGE })));
         if (rows.length === 0) return;
         yield rows.map((r) => ({ json: rowView(r, sub), cells: flatCells(r, layout) }));
         if (rows.length < PAGE) return;

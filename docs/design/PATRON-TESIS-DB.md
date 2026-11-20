@@ -35,7 +35,7 @@ Bugün buluttaki tesis sayısı 0'dır (hazırlık tesisi imha edildi): taşına
 
 Merkezde düz e-posta, ad ya da fabrika verisi DURMAZ; e-posta yalnız anahtarlı özet olarak kimlik satırındadır. Parola ve TOTP 2026-10-15'ten beri merkez `identities`tedir (tek kimlik, çok tesis).
 
-**Tesis** (`TESIS_TABLES` = `CLOUD_TABLES` − merkez tabloları): `facilities` (tesisin kendi kaydı: ad, saklama, durum, hizmet bitişi) · `installations` (açık anahtar + eşitleme hakkı) · `accounts` · `sessions` · `account_audit` · `operation_receipts` · `inbox_messages` · `report_requests` · `report_results` · `push_devices` · `notification_defaults` · `notification_preferences` · `notifications` · `projection_rows` · `sync_watermarks` · `package_receipts` · `sync_state` · `full_sync_runs` · `request_nonces` · `support_access`.
+**Tesis** (`TESIS_TABLES` = `CLOUD_TABLES` − merkez tabloları): `facilities` (tesisin kendi kaydı: ad, saklama, durum, hizmet bitişi) · `installations` (açık anahtar + eşitleme hakkı) · `accounts` · `sessions` · `account_audit` · `operation_receipts` · `inbox_messages` · `report_requests` · `report_results` · `view_preferences` · `sync_requests` · `push_devices` · `notification_defaults` · `notification_preferences` · `notifications` · `projection_rows` · `sync_watermarks` · `package_receipts` · `sync_state` · `full_sync_runs` · `request_nonces` · `support_access`.
 
 `facilities` ve `installations` tesis DB'sindedir: bir tesis işinin tx'i kendi tesisinin olgularını (hizmet aşaması, hak) AYNI tx'te okur; merkez yalnız "bu kimlik hangi DB'de" sorusunu cevaplar. Merkez satırı ile tesis satırı arasında çift yazım yalnız yönlendirme satırlarındadır (kurulum → tesis değişmez; e-posta özeti bayatlarsa zararsızdır, §6).
 

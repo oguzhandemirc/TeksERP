@@ -296,6 +296,8 @@ export const ReportClaimResponseSchema = z.object({
     .array(z.object({ istekId: Uuid, raporAnahtari: z.string().max(80), parametreler: z.record(z.string(), z.unknown()).default({}), olusturulma: Iso.optional() }))
     .max(REPORT_CLAIM_MAX)
     .default([]),
+  /** D8 "şimdi eşitle": claim tx'inde tüketilen işaret (yoksa alan yok). Eski fabrika yok sayar, eski bulut göndermez. */
+  esitlemeIstegi: z.object({ kapsam: z.enum(["KISMI", "TAM"]), istendi: Iso }).optional(),
 });
 export type ReportClaimResponse = z.input<typeof ReportClaimResponseSchema>;
 

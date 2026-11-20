@@ -502,6 +502,38 @@ model NotificationPreference {
   @@map("notification_preferences")
 }
 
+/// Hesabın görünüm tercihi (liste sıralaması · görünen sütunlar) — KULLANICI TERCİHİ, iş kararı okumaz.
+/// Anahtar beyaz listeli (`VIEW_PREF_KEYS`), değer boyut sınırlı JSON; hesap yalnız KENDİ satırını okur/yazar.
+model ViewPreference {
+  id        String   @id @default(uuid()) @db.Uuid
+  tesisId   String   @map("tesis_id") @db.Uuid
+  accountId String   @map("account_id") @db.Uuid
+  key       String   @map("key")
+  value     Json     @map("value")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@unique([tesisId, accountId, key])
+  @@map("view_preferences")
+}
+
+/// "Şimdi eşitle" isteği — tesis başına TEK DURUM satırı ("şu an bekleyen istek var mı"), defter değil.
+/// Hesap API'si atomik upsert'le işaret açar (aralık WHERE'de); fabrika `rapor/al` claim'inde atomik tüketir.
+model SyncRequest {
+  id              String    @id @default(uuid()) @db.Uuid
+  tesisId         String    @unique @map("tesis_id") @db.Uuid
+  pending         Boolean   @default(false) @map("pending")
+  scope           String    @map("scope")
+  accountId       String    @map("account_id") @db.Uuid
+  requestedAt     DateTime  @map("requested_at") @db.Timestamptz
+  fullRequestedAt DateTime? @map("full_requested_at") @db.Timestamptz
+  consumedAt      DateTime? @map("consumed_at") @db.Timestamptz
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("sync_requests")
+}
+
 /// Bildirim — kuyruk + gönderim kaydı; TELEMETRİ (raporlanan sayı okumaz, sonuçlanmış satır budanır).
 /// `dedup_key` idempotent bildirim kimliğidir: aynı olay aynı hesaba İKİNCİ kez doğamaz (tekrar gönderim yok).
 model Notification {

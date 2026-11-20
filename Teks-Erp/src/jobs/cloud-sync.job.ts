@@ -14,11 +14,13 @@ import { reportJobFailure } from "./job-failure";
 import { onDoorbellTopic } from "./doorbell-topics";
 import { bilgi, uyari } from "../lib/logger";
 import { factoryMinuteOfDay, factoryYmd } from "../constants/time";
-import { cloudEligibility, type CloudBlockReason } from "../cloud-sync/eligibility";
+import { cloudEligibility } from "../cloud-sync/eligibility";
 import { getCloudUrl } from "../cloud-sync/cloud-url";
 import { egressCloudTransport, type CloudTransport } from "../cloud-sync/cloud-client";
 import { runSyncRound, type RoundOutcome } from "../cloud-sync/sync-round";
-import { pushStandardReportSnapshots } from "../cloud-sync/report-requests";
+import { pushStandardReportSnapshots, setSyncNowHandler } from "../cloud-sync/report-requests";
+import { createSyncNowQueue } from "./cloud-sync-now";
+import { clampInterval, INITIAL_STATUS, type CloudSyncStatus, type CloudSyncTrigger } from "./cloud-sync-status";
 import { reportGate, runGatedReportClaims } from "../cloud-sync/report-gate";
 import { readPatronCloudGuardSettings } from "../services/patron-cloud-guard.service";
 import { pruneSyncMarks } from "../cloud-sync/marks-pruning";
@@ -31,9 +33,6 @@ import { readPatronBulutOlayGudumluEnabled } from "../services/system-setting.se
 const TICK_MS = 60 * 1000;
 const STARTUP_DELAY_MS = 90 * 1000;
 const IDENTITY_WAIT_MS = 5 * 60 * 1000;
-/** B1 kararı: aralık 1–60 dk (kira şeması 1440'a izin verir; fabrika üst sınırı ayrıca uygular). */
-export const SYNC_INTERVAL_MIN = 1;
-export const SYNC_INTERVAL_MAX = 60;
 /** Zil yağmuruna karşı: iki anlık tur arası en az bu kadar (§6.5 "30 sn'de en çok bir"). */
 const DOORBELL_MIN_GAP_MS = 30 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
@@ -45,22 +44,7 @@ export const EVENT_DEBOUNCE_MS = 3 * 1000;
 /** Olay turu: herhangi iki tur arası en az bu kadar (sıcak tabloda tur yağmuru olmasın). */
 export const EVENT_MIN_GAP_MS = 15 * 1000;
 
-export function clampInterval(minutes: number): number {
-  return Math.min(SYNC_INTERVAL_MAX, Math.max(SYNC_INTERVAL_MIN, Math.round(minutes)));
-}
-
-export interface CloudSyncStatus {
-  readonly eligible: boolean;
-  readonly blockReason: CloudBlockReason | null;
-  readonly lastRoundAt: number | null;
-  readonly lastOutcome: Pick<RoundOutcome, "status" | "reason" | "packets" | "horizon" | "contractWarning"> | null;
-  readonly lastReconcileYmd: string | null;
-  /** Son turu ne tetikledi (panel gösterimi): kira aralığı · kirli bayrak · zil. */
-  readonly lastTrigger: CloudSyncTrigger | null;
-  readonly lastEventRoundAt: number | null;
-}
-
-export type CloudSyncTrigger = "periyodik" | "olay" | "zil";
+export { clampInterval, SYNC_INTERVAL_MAX, SYNC_INTERVAL_MIN, type CloudSyncStatus, type CloudSyncTrigger } from "./cloud-sync-status";
 
 let started = false;
 let stopped = false;
@@ -94,7 +78,6 @@ const realEventTimer: EventTimerFactory = (fn, delayMs) => {
   return { cancel: () => clearTimeout(t) };
 };
 let eventTimerFactory: EventTimerFactory = realEventTimer;
-const INITIAL_STATUS: CloudSyncStatus = { eligible: false, blockReason: null, lastRoundAt: null, lastOutcome: null, lastReconcileYmd: null, lastTrigger: null, lastEventRoundAt: null };
 let status: CloudSyncStatus = INITIAL_STATUS;
 
 export function getCloudSyncStatus(): CloudSyncStatus {
@@ -213,6 +196,16 @@ async function runSnapshotRound(): Promise<void> {
   requestEventRound();
 }
 
+/** D8 "şimdi eşitle" turu: ARTIMLI = kirli küme + her tur/saatlik anlıklar; UZLASTIRMA = sayısı tutmayan küme baştan. */
+async function syncNowRound(kind: "ARTIMLI" | "UZLASTIRMA", t: number): Promise<boolean> {
+  if (kind === "ARTIMLI") takeDirty();
+  const o = await runSyncRound({ kind, cadences: new Set<SnapshotCadence>(kind === "ARTIMLI" ? ["HER_TUR", "SAATLIK"] : []) }, { transport, nowMs: () => t });
+  remember(o, t, "istek");
+  if (kind === "ARTIMLI" && o.status !== "HATA" && o.more) lastRoundAt = 0;
+  return o.status !== "HATA";
+}
+const syncNow = createSyncNowQueue({ now: () => clock(), eligible: (t) => cloudEligibility(t).ok, exclusive, round: syncNowRound });
+
 /**
  * Olay turu iste — kirli bayrak dinleyicisi ve gelen kutusu çağırır. Kirli küme boşsa,
  * ön koşul kapalıysa (fail-closed; dışarı istek yok) ya da zamanlayıcı kuruluysa no-op.
@@ -271,6 +264,7 @@ function schedule(delayMs: number): void {
         pendingReports = false;
         await exclusive(() => runReportClaims(Date.now()));
       }
+      await syncNow.drain().catch((err) => reportJobFailure("cloud-sync", err));
       requestEventRound();
     })().finally(() => schedule(TICK_MS));
   }, delayMs);
@@ -284,13 +278,14 @@ export function startCloudSync(): void {
   if (started) return;
   started = true;
   onDirty(requestEventRound);
+  setSyncNowHandler(syncNow.trigger);
   offDoorbell = [
     onDoorbellTopic("ozet", () => {
       if (!running) void runSnapshotRound().catch((err) => reportJobFailure("cloud-sync", err));
       else pendingSnapshot = true;
     }),
     onDoorbellTopic("rapor", () => {
-      if (!running) void exclusive(() => runReportClaims(Date.now()));
+      if (!running) void exclusive(() => runReportClaims(Date.now())).then(syncNow.drain).catch((err) => reportJobFailure("cloud-sync", err));
       else pendingReports = true;
     }),
   ];
@@ -309,6 +304,7 @@ export function startCloudSync(): void {
 export function stopCloudSync(): void {
   stopped = true;
   onDirty(null);
+  setSyncNowHandler(null);
   eventTimer?.cancel();
   eventTimer = null;
   for (const off of offDoorbell) off();
@@ -361,6 +357,7 @@ export function __configureCloudSyncForTests(p: { transport?: CloudTransport; re
     eventTimer = null;
     lastEventAttemptAt = 0;
     ineligibleUntil = 0;
+    syncNow.reset();
     status = INITIAL_STATUS;
     reportGate.reset();
   }

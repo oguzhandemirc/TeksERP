@@ -31,6 +31,10 @@ import type {
   ReportRequestDetail,
   Snapshot,
   SnapshotRefresh,
+  SyncNowResponse,
+  SyncNowScope,
+  ViewPreference,
+  ViewPrefKey,
   TestNotificationResult,
 } from "./wire";
 
@@ -78,6 +82,11 @@ export const ENDPOINTS = {
   exportDownload: ["get", "/disa-aktar/:kume"],
   /** Değişim akışı (uzun yoklama `?since=&bekle=`); istemcisi `state/changes.ts`, eski sunucu 404 → 60 sn yoklama. */
   changes: ["get", "/degisim"],
+  /** D7 görünüm tercihi (yalnız bulut; sunucu `liste.siralama` beyan ettiyse); ERP kipinde tercih cihazda. */
+  viewPrefGet: ["get", "/oturum/tercihler/:anahtar"],
+  viewPrefSet: ["post", "/oturum/tercihler/:anahtar"],
+  /** D8 "şimdi eşitle" (yalnız bulut; sunucu `simdiEsitle` beyan ettiyse). */
+  syncNow: ["post", "/esitleme/simdi"],
 } as const satisfies Record<string, readonly ["get" | "post" | "patch", string]>;
 
 type Name = keyof typeof ENDPOINTS;
@@ -106,10 +115,13 @@ export interface ListParams {
   readonly kategoriAnahtari?: string;
   /** Üyelik süzgeçleri (`LIST_MEMBER_FILTERS`); yalnız sunucu `liste.uyelikSuzgecleri`nde beyanlıysa gönderilir. */
   readonly uyelik?: Partial<Readonly<Record<ListMemberFilterKey, string>>>;
+  /** Sıralama (`LIST_SORT`); yalnız sunucu `liste.siralama`da beyanlıysa gönderilir. */
+  readonly sirala?: string;
+  readonly yon?: "artan" | "azalan";
 }
 
 /** Liste sorgusu — bulut ve ERP aynı parametre adlarıyla (üyelik anahtarı düz sorgu parametresidir). */
-export const listQuery = (p: ListParams): Query => ({ ...p.uyelik, imlec: p.imlec, limit: p.limit, durum: p.durum, cariKartId: p.uyelik?.cariKartId ?? p.cariKartId, cariHesapId: p.cariHesapId, siparisId: p.uyelik?.siparisId ?? p.siparisId, teklifId: p.teklifId, ara: p.ara, suzgec: p.suzgec, kategoriAnahtari: p.kategoriAnahtari });
+export const listQuery = (p: ListParams): Query => ({ ...p.uyelik, imlec: p.imlec, limit: p.limit, durum: p.durum, cariKartId: p.uyelik?.cariKartId ?? p.cariKartId, cariHesapId: p.cariHesapId, siparisId: p.uyelik?.siparisId ?? p.siparisId, teklifId: p.teklifId, ara: p.ara, suzgec: p.suzgec, kategoriAnahtari: p.kategoriAnahtari, sirala: p.sirala, yon: p.sirala ? p.yon : undefined });
 
 export function createApi(c: ApiClient) {
   const q = listQuery;
@@ -134,6 +146,9 @@ export function createApi(c: ApiClient) {
     snapshot: (projeksiyon: string) => c.get<Snapshot>(pathOf("snapshot", { projeksiyon })),
     /** Ekran açılınca `ozet` zili (S47) — içerik taşımaz; aralığa saygı `lib/refresh.ts`te. */
     refresh: () => c.post<SnapshotRefresh>(pathOf("refresh"), {}),
+    viewPrefGet: (anahtar: ViewPrefKey) => c.get<ViewPreference>(pathOf("viewPrefGet", { anahtar })),
+    viewPrefSet: (anahtar: ViewPrefKey, deger: Readonly<Record<string, unknown>>) => c.post<ViewPreference>(pathOf("viewPrefSet", { anahtar }), { deger }),
+    syncNow: (kapsam: SyncNowScope = "KISMI") => c.post<SyncNowResponse>(pathOf("syncNow"), { kapsam }),
     inboxCreate: (mesajId: string, tur: InboxItemKind, govde: OrderMessageBody | CustomerMessageBody) =>
       c.post<InboxItem>(pathOf("inboxCreate"), { mesajId, tur, govde }),
     inboxList: (p: { durum?: InboxStatus; imlec?: string; limit?: number } = {}) => c.get<Page<InboxItem>>(pathOf("inboxList"), p),
