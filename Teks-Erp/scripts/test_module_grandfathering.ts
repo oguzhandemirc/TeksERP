@@ -318,10 +318,13 @@ async function main(): Promise<void> {
         `system.profile=${JSON.stringify(profilDamgasi.value).slice(0, 90)}`,
       );
     } else {
+      // Migration'ın yazdığı satır son damga anından ÖNCE doğar; sonra doğan satır başka
+      // bekçinin ayar yazımıdır (CI'da aynı DB'yi paylaşan parça), koşulu çürütmez.
+      const migSatirlari = satirlar.filter((s) => !sonDamgaAni || s.createdAt <= sonDamgaAni);
       check(
-        "§2b ⭐ Geçmişi olmayan kurulumda modül satırı YOK (koşulun canlı kanıtı)",
-        satirlar.length === 0,
-        satirlar.length ? `beklenmedik satır: ${satirlar.map((s) => s.key).join(", ")}` : "",
+        "§2b ⭐ Geçmişi olmayan kurulumda migration modül satırı YAZMADI (koşulun canlı kanıtı)",
+        migSatirlari.length === 0,
+        migSatirlari.length ? `beklenmedik satır: ${migSatirlari.map((s) => s.key).join(", ")}` : `${satirlar.length - migSatirlari.length} sonradan yazılmış satır yok sayıldı`,
       );
     }
   } else {
