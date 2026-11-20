@@ -38,7 +38,9 @@ export type ReasonPresetKind =
   | 'YARN_SUBCONTRACT_RETURN'
   | 'WORK_ORDER_PLAN_CHANGE'
   // K4P: muayene iptali (panelde; tablet yalnız tipi taşır — sunucu yükünde gelir)
-  | 'INSPECTION_VOID';
+  | 'INSPECTION_VOID'
+  // Devere ek C1: kusurlu levent reddi (panelde; tablet yalnız tipi taşır)
+  | 'WARP_BEAM_REJECT';
 
 export interface ReasonPreset {
   id: string;
@@ -81,6 +83,7 @@ export const KIND_STORES_TEXT: Record<ReasonPresetKind, boolean> = {
   YARN_SUBCONTRACT_RETURN: false,
   WORK_ORDER_PLAN_CHANGE: true,
   INSPECTION_VOID: true,
+  WARP_BEAM_REJECT: true,
 };
 
 export const KIND_LABELS: Record<ReasonPresetKind, string> = {
@@ -97,6 +100,7 @@ export const KIND_LABELS: Record<ReasonPresetKind, string> = {
   YARN_SUBCONTRACT_RETURN: 'Fasondan iplik dönüş sebepleri',
   get WORK_ORDER_PLAN_CHANGE() { return `${TERIM.terbiyeIsEmri.cumleBasi.yalin} plan düzeltme sebepleri`; },
   INSPECTION_VOID: 'Muayene iptal sebepleri',
+  WARP_BEAM_REJECT: 'Kusurlu levent ret sebepleri',
 };
 
 export const reasonPresetService = {

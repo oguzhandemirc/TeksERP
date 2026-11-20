@@ -26,6 +26,7 @@ import { loadWarpingSettlement, type WarpingSettlement } from "../helpers/warpin
 import { WARPING_ORDER_TABLE } from "./create";
 import { loadWarpingReceipt, type WarpingReceiptDto } from "./receipts";
 import { qtyText } from "../helpers/qty-text.helper";
+import { planReceiveReworks, reworkReplaySig, type ReceiveReworkRef, type WarpingReceiveReworkLine } from "./receive-rework";
 import { auditReceiveBodies, bodyTareWarnings, planReceiveBodies, receiveLinePhysicalSig, registerReceiveBodiesTx, type ReceiveBodyPlan, type WarpingReceiveBodyLine } from "./receive-body";
 
 type Tx = Prisma.TransactionClient;
@@ -34,7 +35,7 @@ const kg3 = (v: Prisma.Decimal) => v.toFixed(3);
 export const WARPING_RECEIVE_MAX_BEAMS = 50;
 const RECEIVABLE: WarpingOrderStatus[] = [WarpingOrderStatus.OPEN, WarpingOrderStatus.IN_PROGRESS];
 
-export interface WarpingReceiveBeamInput extends WarpingReceiveBodyLine {
+export interface WarpingReceiveBeamInput extends WarpingReceiveBodyLine, WarpingReceiveReworkLine {
   lengthM: number;
   /** İsteğe bağlı tartı — saklanır, tüketimi/bakiyeyi DEĞİŞTİRMEZ (fark raporlanır). */
   grossKg?: number | null;
@@ -124,7 +125,7 @@ function weighWarnings(beams: BeamPlan[]): string[] {
 
 export interface WarpingReceivePreview {
   order: { id: string; orderNo: string; status: WarpingOrderStatus };
-  beams: Array<{ index: number; lengthM: string; nominalKg: string; weighedNetKg: string | null; body: ReceiveBodyDto | null; yarns: Array<{ yarnItemId: string; code: string; name: string; kg: string }> }>;
+  beams: Array<{ index: number; lengthM: string; nominalKg: string; weighedNetKg: string | null; body: ReceiveBodyDto | null; reworkOf: ReceiveReworkRef | null; yarns: Array<{ yarnItemId: string; code: string; name: string; kg: string }> }>;
   allocations: Array<{ beamIndex: number; yarnItemId: string; dispatchItemId: string; dispatchNo: string; lotNo: string | null; holderWarpingOrderId: string; holderOrderNo: string | null; carryOver: boolean; kg: string }>;
   incoming: { beamCount: number; lengthM: string };
   /** Kabulden ÖNCEKİ mutabakat — panel gelenle yan yana koyar (istemci sayı türetmez: `incoming` + `after` hazır). */
@@ -146,6 +147,7 @@ export async function previewWarpingReceive(id: string, input: Omit<WarpingRecei
   const beams = planBeams(lines, order.planYarns);
   const ev = await evaluate(prisma, order, beams);
   const bodies = await planReceiveBodies(prisma, { lines: input.beams, subcontractorId: order.subcontractorId, lotOwnerCustomerId: ev.ownerCustomerId });
+  const reworks = await planReceiveReworks(prisma, { warpingOrderId: id, lines: input.beams, lock: false });
   const before = await loadWarpingSettlement(prisma, id);
   const incomingM = beams.reduce((s, b) => s.plus(b.lengthM), D(0));
   const receivedAfter = D(before.metre.receivedM).plus(incomingM);
@@ -155,6 +157,7 @@ export async function previewWarpingReceive(id: string, input: Omit<WarpingRecei
       index: b.idx, lengthM: kg3(b.lengthM), nominalKg: kg3(b.yarns.reduce((s, y) => s.plus(y.kg), D(0))),
       weighedNetKg: b.grossKg && b.tareKg ? kg3(b.grossKg.minus(b.tareKg)) : null,
       body: bodyDto(bodies[b.idx] ?? null),
+      reworkOf: reworks[b.idx] ?? null,
       yarns: b.yarns.map((y) => {
         const p = order.planYarns.find((x) => x.yarnItemId === y.yarnItemId)!;
         return { yarnItemId: y.yarnItemId, code: p.code, name: p.name, kg: kg3(y.kg) };
@@ -186,7 +189,7 @@ const beamSig = (rows: Array<{ lengthM: Prisma.Decimal.Value; physicalBeamNo: st
   rows.map((r) => `${D(r.lengthM).toFixed(3)}|${r.physicalBeamNo ?? ""}|${r.grossKg === null ? "" : D(r.grossKg).toFixed(3)}|${r.tareKg === null ? "" : D(r.tareKg).toFixed(3)}`).join(",");
 
 function receiveReplay(id: string, input: WarpingReceiveInput) {
-  type Hit = { warpingOrderId: string; receiptKey: string; deliveryNoteNo: string; beams: string; dead: string | null };
+  type Hit = { warpingOrderId: string; receiptKey: string; deliveryNoteNo: string; beams: string; reworks: string; dead: string | null };
   return tokenReplay<Hit, WarpingReceiptDto & { replayed: boolean }>({
     find: async (db, clientToken) => {
       const ev = await db.warpBeamEvent.findUnique({ where: { clientToken }, select: { beam: { select: { warpingOrderId: true, warpingReceiptKey: true } } } });
@@ -194,12 +197,12 @@ function receiveReplay(id: string, input: WarpingReceiveInput) {
       const key = ev.beam.warpingReceiptKey ?? "";
       const beams = await sequentialTx(db).warpBeam.findMany({
         where: { warpingReceiptKey: key },
-        select: { beamNo: true, status: true, physicalBeamNo: true, beamBodyId: true, events: { where: { kind: "WOUND" }, select: { lengthM: true, grossKg: true, tareKg: true, deliveryNoteNo: true } } },
+        select: { beamNo: true, status: true, physicalBeamNo: true, beamBodyId: true, reworkOfBeamId: true, events: { where: { kind: "WOUND" }, select: { lengthM: true, grossKg: true, tareKg: true, deliveryNoteNo: true } } },
         orderBy: { beamNo: "asc" },
       });
       const dead = beams.find((b) => b.status === WarpBeamStatus.CANCELLED)?.beamNo ?? null;
       return {
-        warpingOrderId: ev.beam.warpingOrderId ?? "", receiptKey: key, deliveryNoteNo: beams[0]?.events[0]?.deliveryNoteNo ?? "", dead,
+        warpingOrderId: ev.beam.warpingOrderId ?? "", receiptKey: key, deliveryNoteNo: beams[0]?.events[0]?.deliveryNoteNo ?? "", dead, reworks: reworkReplaySig(beams.map((b) => b.reworkOfBeamId)),
         beams: beamSig(beams.map((b) => ({ lengthM: b.events[0]?.lengthM ?? 0, physicalBeamNo: b.beamBodyId ? "#body" : b.physicalBeamNo, grossKg: b.events[0]?.grossKg ?? null, tareKg: b.events[0]?.tareKg ?? null }))),
       };
     },
@@ -211,6 +214,7 @@ function receiveReplay(id: string, input: WarpingReceiveInput) {
       { ad: "warpingOrderId", mevcut: hit.warpingOrderId, gelen: id },
       { ad: "deliveryNoteNo", mevcut: hit.deliveryNoteNo, gelen: input.deliveryNoteNo?.trim() ?? "" },
       { ad: "beams", mevcut: hit.beams, gelen: beamSig(normalizeReceiveBeams(input.beams).map((l) => ({ ...l, physicalBeamNo: receiveLinePhysicalSig(input.beams[l.idx]!) || null }))) },
+      { ad: "reworkOfBeamIds", mevcut: hit.reworks, gelen: reworkReplaySig(input.beams.map((b) => b.reworkOfBeamId)) },
     ],
     collision: "Bu işlem kimliği başka içerikli bir levent kabulüne ait — formu yeniden açıp gönderin.",
     respond: async (hit) => ({ ...(await loadWarpingReceipt(prisma, id, hit.receiptKey)), replayed: true }),
@@ -239,6 +243,8 @@ export async function receiveWarpingOrder(id: string, input: WarpingReceiveInput
       // B3: gövde satırları (doğrulama + yerinde tanım); gövdenin dolu dönüşünü WOUND kancası yazar.
       const bodies = await planReceiveBodies(tx, { lines: input.beams, subcontractorId: order.subcontractorId, lotOwnerCustomerId: ev.ownerCustomerId });
       const registered = await registerReceiveBodiesTx(tx, bodies, order.subcontractorId, userId);
+      // C1: yeniden sarım bağı — reddedilen sarımlar kalem kilitlerinden sonra kilitlenir.
+      const reworks = await planReceiveReworks(tx, { warpingOrderId: order.id, lines: input.beams, lock: true });
       const receiptKey = randomUUID();
       const created: Array<{ id: string; beamNo: string; eventId: string; beamBodyId: string | null }> = [];
       for (const b of beams) {
@@ -250,7 +256,7 @@ export async function receiveWarpingOrder(id: string, input: WarpingReceiveInput
           data: {
             beamNo: await nextBeamNoTx(tx, new Date()), warpSpecId: order.warpSpecId, status: WarpBeamStatus.PLANNED, plannedLengthM: b.lengthM,
             physicalBeamNo, beamBodyId: body?.beamBodyId ?? null, originKind: WarpBeamOrigin.SUBCONTRACT, subcontractorId: order.subcontractorId,
-            ownerCustomerId: body ? body.warpOwnerCustomerId : ev.ownerCustomerId, warpingOrderId: order.id, warpingReceiptKey: receiptKey, createdById: userId, updatedById: userId,
+            ownerCustomerId: body ? body.warpOwnerCustomerId : ev.ownerCustomerId, warpingOrderId: order.id, warpingReceiptKey: receiptKey, reworkOfBeamId: reworks[b.idx]?.beamId ?? null, createdById: userId, updatedById: userId,
           },
           select: { id: true, beamNo: true },
         });

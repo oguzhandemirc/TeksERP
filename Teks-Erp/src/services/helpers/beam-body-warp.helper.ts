@@ -15,7 +15,7 @@ import { reverseLatestBeamBodyEventTx, transitionBeamBodyTx, type BeamBodyEventR
 type Tx = Prisma.TransactionClient;
 const S = BeamBodyStatus;
 
-interface ForwardRule { kind: BeamBodyWarpKind; from: readonly BeamBodyStatus[]; to: BeamBodyStatus; place: "none" | "machine" | "dispatchSubcontractor" }
+interface ForwardRule { kind: BeamBodyWarpKind; from: readonly BeamBodyStatus[]; to: BeamBodyStatus; place: "none" | "machine" | "dispatchSubcontractor" | "warpSubcontractor" }
 type Rule = { forward: ForwardRule } | { reverse: BeamBodyWarpKind };
 
 /** Sarım olay türü → gövde hareketi. Listede olmayan tür (tüketim, düzeltme…) gövdeye dokunmaz. */
@@ -36,11 +36,20 @@ export const WARP_EVENT_BODY_RULES: Partial<Record<WarpBeamEventKind, Rule>> = {
   RETURNED_IN_CANCEL: { reverse: "RETURNED_FULL" },
   SHIP_TO_OWNER: { forward: { kind: "SHIPPED_FULL", from: [S.FULL_STOCK], to: S.FULL_OUT, place: "none" } },
   SHIP_TO_OWNER_CANCEL: { reverse: "SHIPPED_FULL" },
+  // Devere ek C1: ret — gövde sarımla devereciye gider ve orada "Deverecide" sayılır (üstündeki sarım boşalır:
+  // reddedilen sarımın ipliği deverecinin tutmasına döner); yeniden sarım aynı gövdeye FILLED ile dolabilir.
+  REJECT_OUT: { forward: { kind: "SHIPPED_FULL", from: [S.FULL_STOCK], to: S.AT_SUBCONTRACTOR, place: "warpSubcontractor" } },
+  REJECT_OUT_CANCEL: { reverse: "SHIPPED_FULL" },
 };
 
 const NOWHERE: BeamBodyPlace = { warehouseId: null, subcontractorId: null, machineId: null };
 
-async function placeFor(tx: Tx, rule: ForwardRule, data: { machineId?: string | null; dispatchItemId?: string | null }): Promise<BeamBodyPlace> {
+async function placeFor(tx: Tx, rule: ForwardRule, data: { machineId?: string | null; dispatchItemId?: string | null }, beamId: string): Promise<BeamBodyPlace> {
+  if (rule.place === "warpSubcontractor") {
+    const w = await tx.warpBeam.findUnique({ where: { id: beamId }, select: { subcontractorId: true } });
+    if (!w?.subcontractorId) throw AppError.badRequest("Sarımın deverecisi yok — gövde yeri yazılamaz", { code: "BEAM_BODY_PLACE_REQUIRED" });
+    return { ...NOWHERE, subcontractorId: w.subcontractorId };
+  }
   if (rule.place === "machine") {
     if (!data.machineId) throw AppError.badRequest("Takma olayında tezgâh yok — gövde yeri yazılamaz", { code: "BEAM_BODY_PLACE_REQUIRED" });
     return { ...NOWHERE, machineId: data.machineId };
@@ -86,7 +95,7 @@ export async function advanceBeamBodyForWarpEventTx(
     );
   }
   return transitionBeamBodyTx(tx, {
-    bodyId: beam.beamBodyId, kind: f.kind, from: body.status, to: f.to, place: await placeFor(tx, f, input.data),
+    bodyId: beam.beamBodyId, kind: f.kind, from: body.status, to: f.to, place: await placeFor(tx, f, input.data, input.beamId),
     warpBeamId: input.beamId, userId: input.data.createdById ?? null,
   });
 }

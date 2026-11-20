@@ -98,6 +98,9 @@ function builtin(kind: ReasonPresetKind): ReasonPreset[] {
     case 'INSPECTION_VOID':
       // Muayene iptali panel işidir ve seçim isteğe bağlıdır — zemin bilerek BOŞ.
       return [];
+    case 'WARP_BEAM_REJECT':
+      // Kusurlu levent reddi panel işidir (online) — zemin bilerek BOŞ.
+      return [];
   }
 }
 
@@ -115,6 +118,7 @@ const BUILTIN: Record<ReasonPresetKind, ReasonPreset[]> = {
   YARN_SUBCONTRACT_RETURN: builtin('YARN_SUBCONTRACT_RETURN'),
   WORK_ORDER_PLAN_CHANGE: builtin('WORK_ORDER_PLAN_CHANGE'),
   INSPECTION_VOID: builtin('INSPECTION_VOID'),
+  WARP_BEAM_REJECT: builtin('WARP_BEAM_REJECT'),
 };
 
 /** Gömülü satır düzenlenemez — henüz sunucudan okunmamış bir zemindir. */

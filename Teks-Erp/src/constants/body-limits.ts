@@ -18,7 +18,8 @@
 /** Global (1 MB) JSON katmanının ATLAYACAĞI mount ön ekleri. */
 // `/api/gelen-belge`: belge fotoğrafı base64 gövdeyle gelir (≤ 5 MB dosya ≈ 6,7 MB gövde; D2, 2026-10-29).
 // `/api/etkili-destek`: destek talebi ekleri base64 gelir (5 × 10 MB); yalnız ekli iki POST ucu `SUPPORT_BODY_LIMIT` taşır.
-export const BUYUK_GOVDE_YOLLARI = ["/api/import", "/api/config-bundle", "/api/certificates", "/api/gelen-belge", "/api/etkili-destek"] as const;
+// `/api/warping-beam-rejections`: kusurlu levent ret fotoğrafları base64 (≤ 3 × 5 MB; devere ek C1).
+export const BUYUK_GOVDE_YOLLARI = ["/api/import", "/api/config-bundle", "/api/certificates", "/api/gelen-belge", "/api/etkili-destek", "/api/warping-beam-rejections"] as const;
 
 /** Global JSON gövde limiti — 413 mesajı da buradan okunur (metin sabiti YOK). */
 export const VARSAYILAN_GOVDE_LIMITI = "1mb";
@@ -32,10 +33,14 @@ export const CERTIFICATE_BODY_LIMIT = "8mb";
 /** Etkili Destek ekli uçlarının limiti: 5 dosya × 10 MB, base64 (×4/3) + metin payı. */
 export const SUPPORT_BODY_LIMIT = "70mb";
 
+/** Kusurlu levent ret uçları (devere ek C1): ret isteği en çok 3 fotoğrafı base64 taşır (3 × 5 MB × 4/3 + pay). */
+export const WARPING_REJECTION_BODY_LIMIT = "22mb";
+
 /** Kendi limiti `BUYUK_GOVDE_LIMITI`ten farklı olan büyük-gövde ön ekleri. */
 const PREFIX_LIMITS: Readonly<Record<string, string>> = {
   "/api/certificates": CERTIFICATE_BODY_LIMIT,
   "/api/etkili-destek": SUPPORT_BODY_LIMIT,
+  "/api/warping-beam-rejections": WARPING_REJECTION_BODY_LIMIT,
 };
 
 function matchesPrefix(url: string, p: string): boolean {

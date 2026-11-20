@@ -60,6 +60,7 @@ const BeamLine = z.strictObject({
   tareKg: Kg.nullable().optional(),
   beamBodyId: Id.nullable().optional(),
   newBody: NewBody.nullable().optional(),
+  reworkOfBeamId: Id.nullable().optional(),
 });
 const ReceiveFields = {
   deliveryNoteNo: z.string().trim().max(64, "İrsaliye no en çok 64 karakter").nullable().optional(),
@@ -111,13 +112,13 @@ router.get("/:id/receipts", requirePermission("warping-order:read"), requireIpli
  *             properties:
  *               clientToken: { type: string, format: uuid }
  *               deliveryNoteNo: { type: string, nullable: true }
- *               beams: { type: array, items: { type: object, properties: { lengthM: { type: number }, physicalBeamNo: { type: string, nullable: true }, grossKg: { type: number, nullable: true }, tareKg: { type: number, nullable: true }, beamBodyId: { type: string, format: uuid, nullable: true, description: "B3 okutulan levent gövdesi" }, newBody: { type: object, nullable: true, description: "B3 tanımsız gövde yerinde: bodyNo?, owner{kind OURS/WARPER/CUSTOMER/OTHER, customerId?, subcontractorId?}, widthCm?, flangeDiameterCm?, tareKg?, machineIds?" } } } }
+ *               beams: { type: array, items: { type: object, properties: { lengthM: { type: number }, physicalBeamNo: { type: string, nullable: true }, grossKg: { type: number, nullable: true }, tareKg: { type: number, nullable: true }, beamBodyId: { type: string, format: uuid, nullable: true, description: "B3 okutulan levent gövdesi" }, newBody: { type: object, nullable: true, description: "B3 tanımsız gövde yerinde: bodyNo?, owner{kind OURS/WARPER/CUSTOMER/OTHER, customerId?, subcontractorId?}, widthCm?, flangeDiameterCm?, tareKg?, machineIds?" }, reworkOfBeamId: { type: string, format: uuid, nullable: true, description: "C1 yeniden sarılan reddedilen sarım (aynı sipariş, kip yeniden sarılsın)" } } } }
  *     responses:
  *       201: { description: "Kabul edildi — { data: WarpingReceiptDto, warnings }" }
  *       200: { description: Aynı denemenin tekrarı (replay) }
- *       400: { description: "WARPING_RECEIVE_EMPTY · WARPING_RECEIVE_DUPLICATE_PHYSICAL · WARPING_RECEIVE_TARE_EXCEEDS · BEAM_BODY_REQUIRED · BEAM_BODY_INPUT_AMBIGUOUS · WARPING_RECEIVE_DUPLICATE_BODY · BEAM_BODY_PHYSICAL_MISMATCH · BEAM_BODY_OWNER_*" }
+ *       400: { description: "WARPING_REWORK_TARGET_INVALID · WARPING_REWORK_NOT_EXPECTED · WARPING_REWORK_DUPLICATE · WARPING_RECEIVE_EMPTY · WARPING_RECEIVE_DUPLICATE_PHYSICAL · WARPING_RECEIVE_TARE_EXCEEDS · BEAM_BODY_REQUIRED · BEAM_BODY_INPUT_AMBIGUOUS · WARPING_RECEIVE_DUPLICATE_BODY · BEAM_BODY_PHYSICAL_MISMATCH · BEAM_BODY_OWNER_*" }
  *       403: { description: "BEAM_BODY_MODE_OFF (gövde girdisi, ayar kapalı)" }
- *       409: { description: "WARPING_ORDER_NOT_RECEIVABLE · OWNER_MISMATCH · WARP_BEAM_PHYSICAL_BUSY · WARP_BEAM_CANCELLED · CLIENT_TOKEN_COLLISION · BEAM_BODY_BUSY · BEAM_BODY_ELSEWHERE · BEAM_BODY_STATE · BEAM_BODY_INACTIVE · BEAM_BODY_NO_TAKEN" }
+ *       409: { description: "WARPING_REWORK_TAKEN · WARPING_ORDER_NOT_RECEIVABLE · OWNER_MISMATCH · WARP_BEAM_PHYSICAL_BUSY · WARP_BEAM_CANCELLED · CLIENT_TOKEN_COLLISION · BEAM_BODY_BUSY · BEAM_BODY_ELSEWHERE · BEAM_BODY_STATE · BEAM_BODY_INACTIVE · BEAM_BODY_NO_TAKEN" }
  */
 router.post("/:id/receive/preview", requirePermission("warping-order:write"), requireIplikEnabled, wrap(async (req) => {
   const id = parse(Id, req.params.id);

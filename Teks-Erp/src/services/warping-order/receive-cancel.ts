@@ -13,6 +13,7 @@ import { AuditService } from "../audit.service";
 import { applyWarpBeamEventTx, logWarpBeamEventAudit } from "../helpers/warp-beam-event.helper";
 import { activeWarpingReceiptInvoiceTx, assertWarpingReceiptNotInvoicedTx, claimWarpingOrderForWoundCancelTx, newestLiveWarpingWoundTx } from "../helpers/warping-receipt-guard.helper";
 import { sequentialTx } from "../helpers/tx-sequential-relations.helper";
+import { assertNoRejectedBeamTx, isRejectedBeam } from "../helpers/warping-beam-rejection.helper";
 import { WARPING_ORDER_TABLE } from "./create";
 
 type Tx = Prisma.TransactionClient;
@@ -59,6 +60,8 @@ export async function previewCancelWarpingReceipt(id: string, receiptKey: string
   if (live.length === 0) blockers.push("Bu kabulün bütün leventleri zaten geri alınmış.");
   const invoiced = await activeWarpingReceiptInvoiceTx(prisma, receiptKey);
   if (invoiced) blockers.push(`Kabul faturalı (${invoiced.docNo}) — önce faturayı iptal edin ya da bağını kaldırın.`);
+  const rejected = beams.filter(isRejectedBeam);
+  if (rejected.length > 0) blockers.push(`${rejected.map((b) => b.beamNo).join(", ")} devereciye geri gönderilmiş (ret) — önce ret belgesini iptal edin.`);
   const released = new Map<string, { dispatchItemId: string; dispatchNo: string; yarnItemId: string; holderWarpingOrderId: string; kg: Prisma.Decimal }>();
   for (const b of live) {
     for (const y of b.events[0]!.yarns) {
@@ -85,6 +88,7 @@ export async function cancelWarpingReceipt(id: string, receiptKey: string, reaso
   const out = await prisma.$transaction(async (tx) => {
     await claimWarpingOrderForWoundCancelTx(tx, id, userId);
     await assertWarpingReceiptNotInvoicedTx(tx, receiptKey);
+    await assertNoRejectedBeamTx(tx, { warpingOrderId: id, receiptKey });
     const newest = await newestLiveWarpingWoundTx(tx, id);
     const beams = (await receiptBeams(tx, id, receiptKey)).filter((b) => b.events[0] && !b.events[0].reversal);
     if (beams.length === 0) throw AppError.conflict("Bu kabulde geri alınacak canlı levent yok.", { code: "WARPING_RECEIPT_NOT_OPEN" });

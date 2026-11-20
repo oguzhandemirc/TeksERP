@@ -3,27 +3,29 @@
 // =============================================================================
 // K2: beklenen = siparişin DONUK `feeUnitPrice` × ölçü (METRE Σ lengthM · KG Σ nominal kg · ENDS_METRE Σ tel × metre);
 // fiyatsız sipariş → tutar `null` (ücretsiz ≠ 0 uydurulmaz). K3: "kabul edilen sarım" = WOUND'u geri alınmamış devere
-// leventi; bellek-içi `isAcceptedWarpingBeam` ↔ Prisma `ACCEPTED_WARPING_BEAM_WHERE` BOĞAZ-İKİZ (C1 aktif ret koşulunu
-// İKİSİNE birden ekler; bekçi `test_fason_devere_fatura` ikizin eşitliğini ölçer). Yeniden sarım (`isRework`) C1'de doğar;
-// `devere.reworkBillable=false` onu beklenen dışında tutar. YALNIZ OKUR.
+// leventi, reddedilmemiş (C1, `warping-beam-rejection.helper`); bellek-içi `isAcceptedWarpingBeam` ↔ Prisma
+// `ACCEPTED_WARPING_BEAM_WHERE` BOĞAZ-İKİZ (bekçi `test_fason_devere_fatura` ikizin eşitliğini ölçer). Yeniden sarım
+// (`reworkOfBeamId` dolu) `devere.reworkBillable=false` iken beklenen dışında kalır. YALNIZ OKUR.
 // =============================================================================
-import { InvoiceStatus, Prisma, WarpingFeeUnit, type Currency, type WarpingOrderStatus } from "@prisma/client";
+import { InvoiceStatus, Prisma, WarpingFeeUnit, type Currency, type WarpBeamStatus, type WarpingOrderStatus } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { sequentialTx } from "./tx-sequential-relations.helper";
+import { isRejectedBeam, NOT_REJECTED_BEAM_WHERE } from "./warping-beam-rejection.helper";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 const ZERO = D(0);
 
-/** K3 Prisma parçası — devere doğumlu ve WOUND'u geri alınmamış levent. */
+/** K3 Prisma parçası — devere doğumlu, WOUND'u geri alınmamış ve reddedilmemiş levent. */
 export const ACCEPTED_WARPING_BEAM_WHERE = {
   warpingOrderId: { not: null },
   events: { some: { kind: "WOUND", reversal: { is: null } } },
+  ...NOT_REJECTED_BEAM_WHERE,
 } satisfies Prisma.WarpBeamWhereInput;
 
 /** K3 bellek-içi ikiz — `ACCEPTED_WARPING_BEAM_WHERE` ile aynı soruyu cevaplar. */
-export function isAcceptedWarpingBeam(b: { warpingOrderId: string | null; events: ReadonlyArray<{ kind: string; reversal: { id: string } | null }> }): boolean {
-  return b.warpingOrderId !== null && b.events.some((e) => e.kind === "WOUND" && e.reversal === null);
+export function isAcceptedWarpingBeam(b: { warpingOrderId: string | null; status: WarpBeamStatus; events: ReadonlyArray<{ kind: string; reversal: { id: string } | null }> }): boolean {
+  return b.warpingOrderId !== null && b.events.some((e) => e.kind === "WOUND" && e.reversal === null) && !isRejectedBeam(b);
 }
 
 export interface WarpingWoundMeasure { lengthM: Prisma.Decimal | null; theoreticalKg: Prisma.Decimal | null; endsCount: number | null }
@@ -40,7 +42,7 @@ export function warpingFeeQty(unit: WarpingFeeUnit, w: WarpingWoundMeasure): Pri
 export const WARPING_FEE_LINE_UNIT: Record<WarpingFeeUnit, string> = { METRE: "m", KG: "kg", ENDS_METRE: "tel×m" };
 
 const BEAM_SELECT = {
-  id: true, beamNo: true, warpingOrderId: true, warpingReceiptKey: true,
+  id: true, beamNo: true, status: true, warpingOrderId: true, warpingReceiptKey: true, reworkOfBeamId: true,
   events: { where: { kind: "WOUND" }, select: { kind: true, lengthM: true, theoreticalKg: true, endsCount: true, deliveryNoteNo: true, createdAt: true, reversal: { select: { id: true } } } },
 } satisfies Prisma.WarpBeamSelect;
 
@@ -82,7 +84,7 @@ export interface WarpingOrderFee {
 
 /**
  * Siparişlerin (ya da kabul anahtarlarının) beklenen ücret dökümü. `reworkBillable` çağıranın okuduğu ayardır
- * (`readDevereReworkBillable`); yeniden sarım işareti C1'e kadar yok → bugün etkisiz.
+ * (`readDevereReworkBillable`); yeniden sarım = `reworkOfBeamId` dolu sarım (C1).
  */
 export async function loadWarpingOrderFeesTx(
   db: Db,
@@ -107,7 +109,7 @@ export async function loadWarpingOrderFeesTx(
     for (const b of beams) {
       if (b.warpingOrderId !== o.id || !b.warpingReceiptKey || !isAcceptedWarpingBeam(b)) continue;
       const w = b.events.find((e) => e.reversal === null)!;
-      const isRework = false; // C1: `reworkOfBeamId` dolu sarım
+      const isRework = b.reworkOfBeamId !== null;
       const r = byKey.get(b.warpingReceiptKey) ?? {
         receiptKey: b.warpingReceiptKey, warpingOrderId: o.id, deliveryNoteNo: w.deliveryNoteNo, receivedAt: w.createdAt,
         beamCount: 0, lengthM: ZERO, qty: ZERO, expectedAmount: null, invoice: invByKey.get(b.warpingReceiptKey) ?? null,

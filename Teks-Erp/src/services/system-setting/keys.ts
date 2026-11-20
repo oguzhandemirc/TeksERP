@@ -307,6 +307,9 @@ export const SETTING_KEYS = {
   /** [PROFİL] Devere A1: deverecinin kendi kusuruyla yeniden sardığı levent beklenen ücrete girer mi. DEFAULT true
    *  (kullanıcı kararı 2026-11-20; bugün yeniden sarım işareti yok → beklenen bayt-aynı). Yalnız UYARI hesabını etkiler. */
   DEVERE_REWORK_BILLABLE: "devere.reworkBillable",
+  /** [PROFİL] Devere ek C1: kusurlu levent reddinde fotoğraf zorunlu mu (DEFAULT false = bugün: ret fotoğrafsız da
+   *  yazılır). Açıkken fotoğrafsız ret 400 `WARPING_REJECT_PHOTO_REQUIRED`; okuma aksiyon anında. */
+  DEVERE_REJECT_PHOTO_REQUIRED: "devere.rejectPhotoRequired",
   /** [PROFİL] Devere F1: denye sapma raporunda öneri için iplik başına en az tek iplikli tartılı levent (DEFAULT 3,
    *  kullanıcı kararı 2026-11-20). Yalnız raporun öneri sütununu etkiler; kartı hiçbir şey otomatik değiştirmez. */
   DEVERE_DENIER_SUGGEST_MIN_BEAMS: "devere.denierSuggestMinBeams",

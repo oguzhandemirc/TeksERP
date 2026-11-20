@@ -34,6 +34,8 @@
  * şişmiş bir liste kapının kendisi olur.
  */
 export const SHARED_ENUM_VALUES: Record<string, string> = {
+  REJECTED:
+    "SalesQuoteStatus(teklif reddedildi) ve WarpBeamStatus(sarım kusurlu diye devereciye geri gönderildi, devere ek C1) — 'Reddedildi' ikisinde de doğru",
   // ── Top aşaması (2026-11-10)
   SEMI_FINISHED:
     "RollEntrySource(dışarıdan alınan yarı mamul girişi) ve RollStage(topun aşaması yarı mamul) — 'Yarı Mamul' ikisinde de doğru",

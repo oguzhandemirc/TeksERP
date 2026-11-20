@@ -835,6 +835,12 @@ export async function setFeatureFlags(
       }
       await this.set(SETTING_KEYS.DEVERE_REWORK_BILLABLE, input.devereReworkBillable, "Devere: yeniden sarılan levent beklenen devere ücretine girer", userId);
     }
+    if (Object.prototype.hasOwnProperty.call(input, "devereRejectPhotoRequired")) {
+      if (typeof input.devereRejectPhotoRequired !== "boolean") {
+        throw AppError.badRequest("devereRejectPhotoRequired boolean olmalı");
+      }
+      await this.set(SETTING_KEYS.DEVERE_REJECT_PHOTO_REQUIRED, input.devereRejectPhotoRequired, "Devere: kusurlu levent reddinde fotoğraf zorunlu", userId);
+    }
     if (Object.prototype.hasOwnProperty.call(input, "devereAutoConsume")) {
       if (typeof input.devereAutoConsume !== "boolean") {
         throw AppError.badRequest("devereAutoConsume boolean olmalı");

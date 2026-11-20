@@ -1964,6 +1964,16 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         audience: ["Muhasebeci", "Yönetim"],
         desc: "Açıkken (varsayılan) yeniden sarılan levent de beklenen devere ücretine girer; reddedilen sarım hiçbir koşulda girmez. Kapalıyken yeniden sarım ücretsiz sayılır ve faturada ücretlendirilirse fark uyarısı görünür. Yalnız uyarı hesabını etkiler, faturayı engellemez.",
       },
+      {
+        // Devere ek C1: backend `readDevereRejectPhotoRequired` kayıt yokken false döner.
+        group: DEVERE_GROUP.fasonClose,
+        key: "devereRejectPhotoRequired",
+        title: "Kusurlu levent reddinde fotoğraf zorunlu olsun",
+        summary: "Dönen sarım devereciye geri gönderilirken en az bir fotoğraf eklenmeden ret belgesi kesilmez.",
+        defaultOn: false,
+        audience: ["Depocu", "Yönetim"],
+        desc: "Kapalıyken (varsayılan) fotoğraf isteğe bağlıdır. Açıkken ret penceresinde fotoğraf eklenmeden gönderilemez; sunucu da fotoğrafsız reddi geri çevirir.",
+      },
     ],
     enumFlags: [
       {

@@ -258,6 +258,12 @@ export async function readDevereAutoConsume(tx?: Pick<typeof prisma, "systemSett
 }
 
 /** Devere A1: yeniden sarım beklenen ücrete girer mi — satır yoksa TRUE (kullanıcı kararı; asBoolean false'a düşürürdü). */
+/** Devere ek C1: ret fotoğrafı zorunlu mu — satır yoksa FALSE (bugünkü davranış). */
+export async function readDevereRejectPhotoRequired(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
+  const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.DEVERE_REJECT_PHOTO_REQUIRED }, select: { value: true } });
+  return setting ? asBoolean(setting.value) : false;
+}
+
 export async function readDevereReworkBillable(tx?: Pick<typeof prisma, "systemSetting">): Promise<boolean> {
   const setting = await (tx ?? prisma).systemSetting.findUnique({ where: { key: SETTING_KEYS.DEVERE_REWORK_BILLABLE }, select: { value: true } });
   if (!setting) return true;
