@@ -51,6 +51,8 @@ export interface OperationsVisibilityContext {
    * ekranındaki toggle'ın kendi yazdığını geri okuması için döner.
    */
   devereEnabled: boolean;
+  /** Levent gövdesi takibi (devere ek B4): devere ETKİN ∧ `devere.beamBodyMode≠OFF`. İsteğe bağlı: yoksa KAPALI. */
+  beamBodyEnabled?: boolean;
   /**
    * DOKUMA İŞİ modülü (`dokuma.enabled`) — ETKİN değer (`production && dokuma`),
    * ham değil; tek çözüm noktası `useOperationsVisibilityContext`. Tezgah

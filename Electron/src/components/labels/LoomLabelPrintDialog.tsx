@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { printTracked } from "@/lib/print";
+import type { PrintSubject } from "@/lib/print-report";
 import {
   LOOM_LABEL_COPIES_MAX,
   LOOM_LABEL_COPIES_MIN,
@@ -30,6 +31,13 @@ export interface LoomLabelPrintDialogProps {
   title: string;
   description: string;
   onOpenChange: (open: boolean) => void;
+}
+
+/** Baskı izinin konusu. Gövde tablosu backend `PRINT_SUBJECT_TABLES`te yok: başarı izi iş ucundan, hata izi yalnız no ile. */
+export function loomLabelSubject(target: LoomLabelTarget, subject: { id: string; label: string }, copies: number): PrintSubject {
+  if (target === "machines") return { kind: "ETIKET_TEZGAH", table: "machines", id: subject.id, itemCount: copies };
+  if (target === "beam-bodies") return { kind: "ETIKET_LEVENT_GOVDE", no: subject.label, itemCount: copies };
+  return { kind: "ETIKET_LEVENT", table: "warp_beams", id: subject.id, itemCount: copies };
 }
 
 export function LoomLabelPrintDialog({ target, subject, title, description, onOpenChange }: LoomLabelPrintDialogProps) {
@@ -52,9 +60,7 @@ export function LoomLabelPrintDialog({ target, subject, title, description, onOp
       const html = copies === 1 && preview.data ? preview.data : await loomLabelService.getHtml(target, subject.id, copies);
       // Adet HTML'in içinde: işletim sistemi kopyası verilmez (N×N basılırdı).
       const out = await printTracked({
-        subject: target === "machines"
-          ? { kind: "ETIKET_TEZGAH", table: "machines", id: subject.id, itemCount: copies }
-          : { kind: "ETIKET_LEVENT", table: "warp_beams", id: subject.id, itemCount: copies },
+        subject: loomLabelSubject(target, subject, copies),
         html,
         workEndpoint: true,
       });

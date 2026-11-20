@@ -114,6 +114,7 @@ export function buildDispatchBody(
   lines: DispatchLineDraft[],
   p: WarpingDispatchPreview,
   meta: { plateNumber: string; driverName: string; notes: string },
+  beamBodyIds: readonly string[] = [],
 ): DispatchBodyResult {
   const used = lines.filter(active);
   if (used.length === 0) return { ok: false, error: "En az bir iplik satırına miktar girin." };
@@ -131,6 +132,8 @@ export function buildDispatchBody(
       plateNumber: opt(meta.plateNumber),
       driverName: opt(meta.driverName),
       notes: opt(meta.notes),
+      // Gövdesiz sevkte alan HİÇ gitmez — gövde takibi kapalı sunucuya bayt-aynı gövde.
+      ...(beamBodyIds.length > 0 ? { beamBodyIds: [...beamBodyIds] } : {}),
     },
   };
 }

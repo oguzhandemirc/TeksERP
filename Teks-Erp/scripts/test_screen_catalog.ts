@@ -177,8 +177,10 @@ function yuklemAlani(dosya: string, fnAdi: string): { alan: string; negatif: boo
   ).exec(govde);
   if (!fn) return null;
   const ret = new RegExp(`return\\s+(!)?${fn[1]!}\\.([A-Za-z0-9_]+)\\s*;`).exec(fn[2]!);
-  if (!ret) return null;
-  return { alan: ret[2]!, negatif: Boolean(ret[1]) };
+  if (ret) return { alan: ret[2]!, negatif: Boolean(ret[1]) };
+  // `return ctx.<modül> && <ek koşul>;` — ilk birleşen modül kapısıdır; ek koşul karoyu yalnız DARALTIR (B4 gövde modu).
+  const ve = new RegExp(`return\\s+${fn[1]!}\\.([A-Za-z0-9_]+)\\s*&&[^;]*;`).exec(fn[2]!);
+  return ve ? { alan: ve[1]!, negatif: false } : null;
 }
 
 /** Bir `to:` eşleşmesini saran `{ … }` bloğunu süslü parantez sayarak bulur. */

@@ -49,6 +49,7 @@ function DispatchHead({ d, onPrint, onCancel }: { d: WarpingDispatchRow; onPrint
       <TableCell colSpan={2}>
         <span className="font-medium">{d.dispatchNo}</span> <span className="text-xs text-muted-foreground">{fmtFactoryDateTime(d.dispatchedAt)}</span>
         {d.goodsReceiptId && <Badge variant="secondary" className="ml-2 font-normal">Tedarikçiden doğrudan</Badge>}
+        {(d.beamBodies?.length ?? 0) > 0 && <span className="block text-xs text-muted-foreground">Boş gövde: {d.beamBodies!.map((b) => b.bodyNo).join(", ")}</span>}
         {cancelled && (
           <span className="block text-xs">
             <Badge variant="outline" className="mr-1 font-normal">İptal</Badge>

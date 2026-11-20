@@ -1,5 +1,5 @@
 // Tanımlar › Üretim & Kalite karoları (sıra = hub sırası).
-import { Factory, Route as RouteIcon, FlaskConical, AlertTriangle, Bookmark, Undo2, Warehouse, Printer, Ruler, MessageSquareText, Clock3, BellRing, Cpu, Binary, Grid3x3 } from "lucide-react";
+import { Factory, Route as RouteIcon, FlaskConical, AlertTriangle, Bookmark, Undo2, Warehouse, Printer, Ruler, MessageSquareText, Clock3, BellRing, Cpu, Binary, Grid3x3, Cylinder } from "lucide-react";
 import { isProductRecipesVisible, isRoutesVisible } from "../production-regime";
 import { isShiftDefinitionsVisible } from "@/pages/ShiftDefinitions/shift-regime";
 import { isLoomAlarmDutyVisible } from "@/pages/LoomAlarmDuty/duty-regime";
@@ -7,6 +7,7 @@ import { isMachineCollectorsVisible } from "@/pages/MachineCollectors/collector-
 import { isMachineStopCodeMapsVisible } from "@/pages/MachineStopCodeMaps/code-map-model";
 import { TERIM, TERIM_AD } from "@/lib/terim";
 import { flagOffHint, flagSettingTrail } from "@/lib/flag-setting-path";
+import { isBeamBodiesVisible } from "@/pages/BeamBodies/beam-body-regime";
 import type { DefinitionTile } from "../tile-config";
 
 export const productionTiles: DefinitionTile[] = [
@@ -167,6 +168,19 @@ export const productionTiles: DefinitionTile[] = [
     permission: "warpspec:read",
     visibleWhen: (ctx) => ctx.devereEnabled,
     offHint: flagOffHint("devereEnabled"),
+  },
+  {
+    // LEVENT GÖVDELERİ (devere ek B4) — devere modülü + `devere.beamBodyMode≠OFF` (backend `requireBeamBodyTracking`).
+    // Üretim › Devere / Çözgü altında aynı yol çapraz listelenir (operasyon karosu `beam-bodies`).
+    key: "beam-bodies",
+    title: "Levent Gövdeleri",
+    description: "Boş levent gövdesi demirbaşı: no, QR etiket, sahip, en/flanş/dara, uyumlu tezgâhlar, hareket geçmişi (levent gövdesi, boş levent, gövde iade)",
+    icon: Cylinder,
+    to: "/definitions/beam-bodies",
+    group: "production",
+    permission: "beam-body:read",
+    visibleWhen: isBeamBodiesVisible,
+    offHint: flagOffHint("devereBeamBodyMode"),
   },
   {
     // DESEN KARTLARI (Seyitoğlu SY-A3) — dokuma modülü; uçlar `requireDokumaEnabled` arkasında.

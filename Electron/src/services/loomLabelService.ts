@@ -13,7 +13,7 @@ export const LOOM_LABEL_COPIES_MIN = 1;
 /** Backend `LABEL_BATCH_COPIES_MAX` (üstü 400 `LABEL_COPIES_RANGE`). */
 export const LOOM_LABEL_COPIES_MAX = 200;
 
-export type LoomLabelTarget = "machines" | "warp-beams";
+export type LoomLabelTarget = "machines" | "warp-beams" | "beam-bodies";
 
 /**
  * Metin istenen uçta hata gövdesi JSON gelir (şablon yok 400 `LABEL_TEMPLATE_MISSING`).

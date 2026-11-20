@@ -29,6 +29,8 @@ import { NotificationsPage } from "@/pages/Notifications/NotificationsPage"; // 
 import { NotificationProfilesPage } from "@/pages/System/NotificationProfiles/NotificationProfilesPage"; // bildirim:
 import { DefinitionsHubPage } from "@/pages/Definitions/DefinitionsHubPage";
 import { WarpSpecsPage } from "@/pages/WarpSpecs/WarpSpecsPage";
+import { BeamBodiesPage } from "@/pages/BeamBodies/BeamBodiesPage";
+import { BeamBodyPage } from "@/pages/BeamBodies/BeamBodyPage";
 import { WeaveDesignsPage } from "@/pages/WeaveDesigns/WeaveDesignsPage";
 import { WeaveDesignDetailPage } from "@/pages/WeaveDesigns/WeaveDesignDetailPage";
 import { AccessHubPage } from "@/pages/Access/AccessHubPage";
@@ -368,6 +370,24 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="warpspec:read">
         <WarpSpecsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // LEVENT GÖVDELERİ (devere ek B4) — karo izniyle BİREBİR (`beam-body:read`); modül kapısı ROUTE_MODULE (devere),
+    // ayar kapısı (`devere.beamBodyMode`) sayfa içinde `BeamBodyModeGate`; yazma `PermissionGate`.
+    path: "definitions/beam-bodies",
+    element: (
+      <ProtectedRoute requirePermission="beam-body:read">
+        <BeamBodiesPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "definitions/beam-bodies/:id",
+    element: (
+      <ProtectedRoute requirePermission="beam-body:read">
+        <BeamBodyPage />
       </ProtectedRoute>
     ),
   },

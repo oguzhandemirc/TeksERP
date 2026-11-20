@@ -106,6 +106,21 @@ describe("dispatch-model", () => {
     expect(counted).toContain("<b>4</b>");
   });
 
+  // Devere B4: boş gövde BİLGİSİ — seçilmezse alan hiç gitmez (gövdesiz sevk bayt-aynı); irsaliyede yalnız varsa.
+  it("⑦ boş gövdeler: seçilince beamBodyIds gider, seçilmezse alan yok; irsaliyeye gövde no basılır", () => {
+    const p = preview();
+    const line = { ...initialDispatchLines(p)[0]!, warehouse: wh };
+    const none = buildDispatchBody([line], p, meta);
+    expect(none.ok && "beamBodyIds" in none.body).toBe(false);
+    const withBodies = buildDispatchBody([line], p, meta, ["b1", "b2"]);
+    expect(withBodies.ok && withBodies.body.beamBodyIds).toEqual(["b1", "b2"]);
+    const i = { orderNo: "FDV1", subcontractor: { code: "S1", name: "D" }, warpSpec: { code: "CZ", name: "K" }, extraSpecs: [], totalEnds: 1, yarns: [], sequenceNote: null, reed: null, beamLines: [], beamCount: 0, targetLengthM: "0", expectedReturnAt: null, notes: null } as WarpingInstruction;
+    const d = { dispatchNo: "FS1", dispatchedAt: "2026-11-18T08:00:00Z", totalOutKg: "30.000", items: [] } as unknown as WarpingDispatchRow;
+    expect(buildInstructionHtml(i, d)).not.toContain("Boş levent gövdeleri");
+    const html = buildInstructionHtml(i, { ...d, beamBodies: [{ id: "b1", bodyNo: "LG-00007", ownerName: null }, { id: "b2", bodyNo: "YD-22", ownerName: "Yıldız" }] });
+    expect(html).toContain("Boş levent gövdeleri (2):</b> LG-00007, YD-22 (Yıldız)");
+  });
+
   it("⑤ fire metni: yüzde + kaynak", () => {
     const o = { yarns: [{ yarnItemId: "a", wastePct: "2.50", letter: "A" }, { yarnItemId: "b", wastePct: "3.00", letter: "B" }] } as never;
     const pv = { yarns: [{ yarnItemId: "a", wastePct: "2.50" }, { yarnItemId: "b", wastePct: "4.00" }], wasteSources: [{ kind: "KART_PCT", value: 2.5 }] } as unknown as WarpingOrderPreview;
