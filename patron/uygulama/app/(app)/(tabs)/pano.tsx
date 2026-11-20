@@ -61,6 +61,13 @@ const YEREL_KATALOG: readonly (KatalogKutusu & { readonly projeksiyon: string; r
   { anahtar: "fason", baslik: "Fason", aciklama: "Fason özeti", varsayilan: false, projeksiyon: "ozet.fason", modul: "uretim" },
 ];
 
+/** ISO bir sonraki an → "40 sn" / "12 dk" (geçmişse "birkaç sn"). */
+function kalanSure(iso: string): string {
+  const ms = Date.parse(iso) - Date.now();
+  if (!Number.isFinite(ms) || ms <= 0) return "birkaç sn";
+  return ms < 60_000 ? `${Math.ceil(ms / 1000)} sn` : `${Math.ceil(ms / 60_000)} dk`;
+}
+
 /** Yerel kutunun modülü kurulumda kapalı mı (menüyle aynı kaynak: `moduleClosed`). */
 function yerelKutuKapali(k: { readonly modul: ModuleKey }): boolean {
   const m = MODULES.find((x) => x.key === k.modul);
@@ -74,7 +81,7 @@ function anlikKapali(projeksiyon: string): boolean {
 }
 
 export default function Dashboard() {
-  const { facility, permissions, factoryStamp, offline, refresh } = useSession();
+  const { api, facility, permissions, factoryStamp, offline, refresh } = useSession();
   const router = useRouter();
   const wide = useWide();
   const s = useStyles();
@@ -82,6 +89,14 @@ export default function Dashboard() {
   const uzak = yetenek().pano;
   const cards = visibleCards(permissions);
   const [duzenle, setDuzenle] = useState(false);
+  const [esitleNotu, setEsitleNotu] = useState<string | null>(null);
+  // Elle eylem (otomatik POST değil): bulut tek işaret açar, fabrika bir sonraki rapor yoklamasında tur koşar.
+  const simdiEsitle = () => {
+    api.syncNow().then(
+      (r) => setEsitleNotu(r.durum === "BEKLIYOR" ? "İstendi, fabrika birazdan gönderir." : `Az önce istendi; ${kalanSure(r.sonrakiMumkun)} sonra yeniden isteyebilirsin.`),
+      () => setEsitleNotu("Eşitleme isteği gönderilemedi."),
+    );
+  };
   // Kutucuk yalnız açılabilen bölüme götürür (bölüm bu sunucuda yoksa dokunma bir şey yapmaz).
   const go = (route: string | undefined) => {
     if (!route) return undefined;
@@ -119,10 +134,18 @@ export default function Dashboard() {
       back={false}
       titleRight={<SyncIndicator last={factoryStamp} offline={offline} onPress={reloadAll} />}
       subtitle={!wide ? <FacilityName /> : undefined}
-      headerRight={showPano ? <HeaderIconButton label="Panoyu düzenle" icon="options-outline" onPress={() => setDuzenle(true)} testID="pano-duzenle" /> : undefined}
+      headerRight={
+        facility?.simdiEsitle === true || showPano ? (
+          <View style={s.actions}>
+            {facility?.simdiEsitle === true ? <HeaderIconButton label="Şimdi eşitle" icon="cloud-download-outline" onPress={simdiEsitle} testID="pano-simdi-esitle" /> : null}
+            {showPano ? <HeaderIconButton label="Panoyu düzenle" icon="options-outline" onPress={() => setDuzenle(true)} testID="pano-duzenle" /> : null}
+          </View>
+        ) : undefined
+      }
       onRefresh={reloadAll}
       refreshing={all.refreshing}
     >
+      {esitleNotu ? <Text style={s.note} testID="pano-esitle-notu">{esitleNotu}</Text> : null}
       {!showPano ? (
         <Reachable permissions={permissions} onOpen={(route) => router.push(route as never)} />
       ) : (
@@ -316,4 +339,5 @@ function Reachable({ permissions, onOpen }: { readonly permissions: readonly str
 const useStyles = makeStyles((t) => ({
   intro: { ...typography.callout, color: t.textSecondary, marginTop: space.s },
   note: { ...typography.footnote, color: t.textSecondary, marginTop: space.m },
+  actions: { flexDirection: "row" as const, alignItems: "center" as const, gap: space.xs },
 }));

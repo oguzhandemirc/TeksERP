@@ -10,9 +10,9 @@ import { AppError } from "../../utils/app-error";
 import { buildRecords } from "../../cloud-sync/record-builder";
 import { foldSearchTerm, foldSearchTokens } from "../../utils/search-fold";
 import type { RecordProjection } from "../../cloud-sync/projections";
-import { KEY_FILTERS, KEY_FILTER_MAX, MEMBER_FILTERS, MEMBER_FILTER_KEYS, RESOLVED_ID_FILTERS, SEARCH, keyFilterWhere, sortSourceOf, type MemberFilterKey, type Where } from "./kume-arama";
+import { KEY_FILTERS, KEY_FILTER_MAX, MEMBER_FILTERS, MEMBER_FILTER_KEYS, RESOLVED_ID_FILTERS, SEARCH, SORT, keyFilterWhere, sortSourceOf, type MemberFilterKey, type SortField, type Where } from "./kume-arama";
 
-export { SEARCH, KEY_FILTERS } from "./kume-arama";
+export { SEARCH, KEY_FILTERS, SORT } from "./kume-arama";
 
 /** Bulut liste sorgusu (`patron/sunucu/src/services/data.service.ts` `ListQuery` ile aynı alanlar). */
 export interface PatronListQuery {
@@ -26,6 +26,59 @@ export interface PatronListQuery {
   readonly anahtar: Partial<Readonly<Record<keyof typeof KEY_FILTERS, string>>>;
   /** Bulut `LIST_MEMBER_FILTERS`; beyansız kümede 400 (kimlik anahtarıyla aynı adlıysa kimlik süzgecine kalır). */
   readonly uyelik?: Partial<Readonly<Record<MemberFilterKey, string>>>;
+  /** Bulut `LIST_SORT` (ERP'de yalnız `SORT` beyanlı saklı kolon); beyansız alan 400, yoksa eski sıra. */
+  readonly sirala?: string;
+  readonly yon?: string;
+}
+
+interface SortPlan extends SortField { readonly dir: "asc" | "desc" }
+
+/** `sirala`/`yon` → plan; bulutla aynı fail-closed: beyansız alan, tanınmayan yön, tek başına `yon` 400. */
+function sortPlan(p: RecordProjection, q: PatronListQuery): SortPlan | null {
+  if (q.yon !== undefined && q.yon !== "artan" && q.yon !== "azalan") throw bad("yon artan ya da azalan olmalı");
+  if (q.sirala === undefined) {
+    if (q.yon !== undefined) throw bad("yon yalnız sirala ile");
+    return null;
+  }
+  const fields = Object.hasOwn(SORT, p.name) ? SORT[p.name]! : {};
+  const f = Object.hasOwn(fields, q.sirala) ? fields[q.sirala] : undefined;
+  if (!f) throw bad(`Bu listede ${q.sirala} sıralaması yok`);
+  return { ...f, dir: q.yon === "azalan" ? "desc" : "asc" };
+}
+
+/** Sıralı imleç `[anahtar | null, id]` — bulutla aynı biçim; anahtar türü plana göre geri çevrilir. */
+function decodeSortCursor(cursor: string, s: SortPlan): { key: Date | string | number | null; id: string } {
+  try {
+    const [raw, id] = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as [unknown, string];
+    if (!UUID.test(id) || (raw !== null && typeof raw !== "string")) throw new Error("biçim");
+    if (raw === null) return { key: null, id };
+    if (s.kind === "tarih") {
+      const d = new Date(raw);
+      if (!Number.isFinite(d.getTime())) throw new Error("biçim");
+      return { key: d, id };
+    }
+    if (s.kind === "sayi") {
+      if (!/^-?[0-9]+(\.[0-9]+)?$/.test(raw)) throw new Error("biçim");
+      return { key: raw, id };
+    }
+    return { key: raw, id };
+  } catch {
+    throw bad("İmleç biçimsiz");
+  }
+}
+
+function sortKeyText(v: unknown): string | null {
+  if (v === null || v === undefined) return null;
+  if (v instanceof Date) return v.toISOString();
+  return String(v);
+}
+
+/** Boşlar her iki yönde SONDA (bulutla aynı): imleçten sonrası = daha ileri anahtar · eşit anahtarda ileri id · boşlar. */
+function sortCursorWhere(s: SortPlan, c: { key: Date | string | number | null; id: string }): Where {
+  const op = s.dir === "asc" ? "gt" : "lt";
+  if (c.key === null) return { [s.source]: null, id: { [op]: c.id } };
+  const after: Where[] = [{ [s.source]: { [op]: c.key } }, { [s.source]: c.key, id: { [op]: c.id } }];
+  return { OR: s.nullable ? [...after, { [s.source]: null }] : after };
 }
 
 /** Bulut `LIST_ID_FILTER_KEYS` ile aynı sıra; bir küme yalnız o adda KOLONU varsa kabul eder. */
@@ -141,6 +194,8 @@ async function assemble(p: RecordProjection, ids: string[], sub: { finans: boole
 export async function listRecords(p: RecordProjection, q: PatronListQuery, sub: { finans: boolean; kisisel: boolean }, nowMs: number): Promise<{ kayitlar: PatronRecord[]; sonraki: string | null }> {
   const and = await filterWhere(p, q, nowMs);
   if (and === null) return { kayitlar: [], sonraki: null };
+  const sort = sortPlan(p, q);
+  if (sort) return listSorted({ p, q, sub, nowMs }, sort, and);
   const sortSrc = sortSourceOf(p.name);
   if (q.cursor) {
     const c = decodeCursor(q.cursor);
@@ -156,6 +211,21 @@ export async function listRecords(p: RecordProjection, q: PatronListQuery, sub: 
   return {
     kayitlar: page.map((r) => rows.get(r.id)).filter((r): r is PatronRecord => r !== undefined),
     sonraki: found.length > q.limit && last ? encodeCursor(last[sortSrc] as Date, last.id) : null,
+  };
+}
+
+async function listSorted({ p, q, sub, nowMs }: { p: RecordProjection; q: PatronListQuery; sub: { finans: boolean; kisisel: boolean }; nowMs: number }, s: SortPlan, and: Where[]): Promise<{ kayitlar: PatronRecord[]; sonraki: string | null }> {
+  if (q.cursor) and.push(sortCursorWhere(s, decodeSortCursor(q.cursor, s)));
+  const found = await delegateOf(p).findMany({
+    where: and.length > 0 ? { AND: and } : {}, select: { id: true, [s.source]: true },
+    orderBy: [{ [s.source]: s.nullable ? { sort: s.dir, nulls: "last" } : s.dir }, { id: s.dir }], take: q.limit + 1,
+  });
+  const page = found.slice(0, q.limit);
+  const rows = await assemble(p, page.map((r) => r.id), sub, nowMs);
+  const last = page[page.length - 1];
+  return {
+    kayitlar: page.map((r) => rows.get(r.id)).filter((r): r is PatronRecord => r !== undefined),
+    sonraki: found.length > q.limit && last ? Buffer.from(JSON.stringify([sortKeyText(last[s.source]), last.id])).toString("base64url") : null,
   };
 }
 

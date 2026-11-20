@@ -126,3 +126,31 @@ export const SORT_SOURCE: Readonly<Record<string, string>> = {
   fatura: "issueDate", "tahsilat-odeme": "paymentDate", teklif: "quoteDate", "standart-maliyet": "computedAt",
 };
 export const sortSourceOf = (name: string): string => SORT_SOURCE[name] ?? "createdAt";
+
+/** Bulut `ListSortKind` aynası. */
+export type SortKind = "metin" | "sayi" | "tarih";
+export interface SortField { readonly kind: SortKind; readonly source: string; readonly nullable: boolean }
+
+/**
+ * Bulut `LIST_SORT`un ERP'de SAKLI kolonu olan alt kümesi (D7): türetilmiş alan (müşteri adı, açık miktar, top/metre)
+ * sıralanmaz. Metin yalnız ASCII kod/no alanlarında (fabrika DB'sinin harmanlaması Türkçe katlama yapmaz). `nullable`
+ * kolonun şemadaki boşluğudur (Prisma `nulls: "last"` yalnız boş olabilen kolonda geçerli).
+ */
+export const SORT: Readonly<Record<string, Readonly<Record<string, SortField>>>> = {
+  siparis: {
+    siparisNo: { kind: "metin", source: "orderNumber", nullable: false },
+    siparisTarihi: { kind: "tarih", source: "orderDate", nullable: false },
+    termin: { kind: "tarih", source: "deadline", nullable: true },
+    sevkMiktari: { kind: "sayi", source: "shippedQty", nullable: false },
+  },
+  "is-emri": {
+    isEmriNo: { kind: "metin", source: "workOrderNumber", nullable: false },
+    planBitis: { kind: "tarih", source: "plannedEndDate", nullable: true },
+    olusturulma: { kind: "tarih", source: "createdAt", nullable: false },
+  },
+  sevkiyat: {
+    sevkNo: { kind: "metin", source: "shipmentNo", nullable: false },
+    cikisTarihi: { kind: "tarih", source: "dispatchedAt", nullable: false },
+  },
+  "cari-kart": { kod: { kind: "metin", source: "code", nullable: false } },
+};

@@ -18,6 +18,7 @@ import type { ReportRequest as ReportRequestWire, ReportRequestDetail } from "..
 import type { CloudContext } from "./context";
 import { assertFacilityCloudOpen } from "./facility-gate";
 import type { FactoryCaller } from "./installation-auth";
+import { consumeSyncRequest } from "./sync-now.service";
 
 const DEDUPE_WINDOW_MS = 5 * 60_000;
 const MAX_PARAMS_BYTES = 8 * 1024;
@@ -160,8 +161,8 @@ function paramsObject(v: unknown): Record<string, unknown> {
 
 export async function claimReports(ctx: CloudContext, caller: FactoryCaller, req: z.infer<typeof ReportClaimRequestSchema>, nowMs: number): Promise<ReportClaimResponse> {
   const until = new Date(nowMs + ctx.config.RAPOR_CLAIM_DK * 60_000);
-  const rows = await withTesis(ctx.sync, { tesisId: caller.tesisId }, (tx) =>
-    tx.$queryRaw<ClaimedReport[]>`
+  const { rows, mark } = await withTesis(ctx.sync, { tesisId: caller.tesisId }, async (tx) => ({
+    rows: await tx.$queryRaw<ClaimedReport[]>`
       WITH picked AS MATERIALIZED (
         SELECT id FROM report_requests
          WHERE tesis_id = ${caller.tesisId}::uuid AND status = 'BEKLIYOR'
@@ -172,9 +173,15 @@ export async function claimReports(ctx: CloudContext, caller: FactoryCaller, req
              claim_until = ${until}::timestamptz, claim_count = t.claim_count + 1, updated_at = now()
         FROM picked WHERE t.id = picked.id
       RETURNING t.id, t.report_key, t.params, t.created_at`,
-  );
+    // D8: bekleyen "şimdi eşitle" işareti aynı tx'te tüketilir (yoklama imzalıdır; işaret yalnız bir kez verilir).
+    mark: await consumeSyncRequest(tx, caller.tesisId, nowMs),
+  }));
   rows.sort((a, b) => a.created_at.getTime() - b.created_at.getTime() || a.id.localeCompare(b.id));
-  return { v: 1 as const, istekler: rows.map((r) => ({ istekId: r.id, raporAnahtari: r.report_key, parametreler: paramsObject(r.params), olusturulma: r.created_at.toISOString() })) };
+  return {
+    v: 1 as const,
+    istekler: rows.map((r) => ({ istekId: r.id, raporAnahtari: r.report_key, parametreler: paramsObject(r.params), olusturulma: r.created_at.toISOString() })),
+    ...(mark ? { esitlemeIstegi: mark } : {}),
+  };
 }
 
 /**
