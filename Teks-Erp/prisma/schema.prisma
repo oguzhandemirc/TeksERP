@@ -2838,6 +2838,7 @@ model BeamBody {
   machine       Machine?           @relation("BeamBodyMachineNow", fields: [machineId], references: [id], onDelete: Restrict)
   events        BeamBodyEvent[]
   machineFits   BeamBodyMachine[]
+  returnItems   BeamBodyReturnItem[]
 
   createdAt   DateTime @default(now()) @db.Timestamptz
   updatedAt   DateTime @updatedAt @db.Timestamptz
@@ -2868,6 +2869,8 @@ model BeamBodyEvent {
   machineId     String?         @db.Uuid
   /// B3: dolu dönüş/takma olayının sarımı.
   warpBeamId    String?         @db.Uuid
+  /// B2: boş gövdenin iplik sevkiyle gidişi (SHIP_EMPTY) — irsaliyede gövde no; sevk iptali bu olayı ters çevirir.
+  subcontractorDispatchId String? @db.Uuid
   reasonCode    String?         @db.VarChar(64)
   reason        String?         @db.VarChar(300)
   createdById   String?         @db.Uuid
@@ -2880,6 +2883,8 @@ model BeamBodyEvent {
   subcontractor Subcontractor?  @relation("BeamBodyEventSubcontractor", fields: [subcontractorId], references: [id], onDelete: Restrict)
   machine       Machine?        @relation("BeamBodyEventMachine", fields: [machineId], references: [id], onDelete: Restrict)
   warpBeam      WarpBeam?       @relation("BeamBodyEventWarpBeam", fields: [warpBeamId], references: [id], onDelete: Restrict)
+  subcontractorDispatch SubcontractorDispatch? @relation("BeamBodyEventDispatch", fields: [subcontractorDispatchId], references: [id], onDelete: Restrict)
+  returnItem    BeamBodyReturnItem?
 
   @@index([bodyId, createdAt])
   @@index([kind, createdAt])
@@ -2887,7 +2892,57 @@ model BeamBodyEvent {
   @@index([subcontractorId])
   @@index([machineId])
   @@index([warpBeamId])
+  @@index([subcontractorDispatchId])
   @@map("beam_body_events")
+}
+
+/// SAHİBİNE İADE BELGESİ (devere ek B2) — bizim olmayan boş gövdelerin sahibine çıkışı (`LGI-YYMM-NNNN`).
+/// Durum tablosu: iptal `cancelledAt` (CHECK üçlü birlikte); "ne oldu" kalemlerin RETURN_TO_OWNER olaylarıdır,
+/// iptal her kalemin olayını tipli tersle (`RETURN_TO_OWNER_CANCEL`) geri alır. Tek yazar `beam-body/returns.ts`.
+model BeamBodyReturn {
+  id              String    @id @default(uuid()) @db.Uuid
+  docNo           String    @unique @db.VarChar(64)
+  clientToken     String?   @unique @db.Uuid
+  /// Belgedeki bütün gövdelerin TEK sahibi (gövdenin `ownerCustomerId`i ile eşit — servis kapısı).
+  ownerCustomerId String    @db.Uuid
+  /// İş tarihi (gövdenin fiilen çıktığı an); kayıt anı `createdAt`.
+  returnedAt      DateTime  @db.Timestamptz
+  plateNumber     String?   @db.VarChar(32)
+  driverName      String?   @db.VarChar(100)
+  notes           String?   @db.VarChar(500)
+  cancelledAt     DateTime? @db.Timestamptz
+  cancelledById   String?   @db.Uuid
+  cancelReason    String?   @db.VarChar(300)
+  createdById     String?   @db.Uuid
+
+  ownerCustomer Customer             @relation("BeamBodyReturnOwner", fields: [ownerCustomerId], references: [id], onDelete: Restrict)
+  items         BeamBodyReturnItem[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([ownerCustomerId, returnedAt])
+  @@index([returnedAt])
+  @@map("beam_body_returns")
+}
+
+/// İade belgesi kalemi — gövde + onu çıkaran RETURN_TO_OWNER olayı (olay başına tek kalem).
+model BeamBodyReturnItem {
+  id       String @id @default(uuid()) @db.Uuid
+  returnId String @db.Uuid
+  bodyId   String @db.Uuid
+  eventId  String @unique @db.Uuid
+
+  beamReturn BeamBodyReturn @relation(fields: [returnId], references: [id], onDelete: Restrict)
+  body       BeamBody       @relation(fields: [bodyId], references: [id], onDelete: Restrict)
+  event      BeamBodyEvent  @relation(fields: [eventId], references: [id], onDelete: Restrict)
+
+  /// Append-only kalem (emsal ConsignmentDispatchItem): iptal başlıkta damgalanır, kalem değişmez → `updatedAt` yok.
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@unique([returnId, bodyId])
+  @@index([bodyId])
+  @@map("beam_body_return_items")
 }
 
 /// GÖVDE–TEZGÂH UYUMU — ③b saf yapılandırma pivotu (REPLACE meşru, defter değil). Satırsız gövde = her tezgâha uyar.
@@ -5142,6 +5197,8 @@ model Customer {
   ownedWarpBeams        WarpBeam[]                    @relation("WarpBeamOwner")
   /// Devere ek B1: sahibi bu cari olan levent gövdeleri.
   ownedBeamBodies       BeamBody[]                    @relation("BeamBodyOwner")
+  /// Devere ek B2: bu cariye gövde iade belgeleri.
+  beamBodyReturns       BeamBodyReturn[]              @relation("BeamBodyReturnOwner")
   /// F5: emanet malın sahibine çıkış belgeleri.
   consignmentDispatches ConsignmentDispatch[]         @relation("ConsignmentDispatchOwner")
   ownedYarnLots         YarnLot[]                     @relation("YarnLotOwner")
@@ -8257,6 +8314,8 @@ model SubcontractorDispatch {
   items                 SubcontractorDispatchItem[]
   directShipAllocations SubcontractorDirectShipAllocation[]
   directShipments       DirectShipment[]
+  /// Devere ek B2: bu sevkle giden boş levent gövdeleri (SHIP_EMPTY olayları).
+  beamBodyEvents        BeamBodyEvent[]                     @relation("BeamBodyEventDispatch")
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz

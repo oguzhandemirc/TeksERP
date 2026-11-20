@@ -11,6 +11,7 @@ import { AppError } from "../../utils/app-error";
 import { sequentialTx } from "../helpers/tx-sequential-relations.helper";
 import { toWarpingYarnItem, WARPING_YARN_ITEM_SELECT, woundOfItem, type WarpingYarnItem } from "../helpers/warping-yarn-open.helper";
 import { warpingDispatchCancelBlock } from "./dispatch-cancel";
+import { dispatchBeamBodyCancelBlock, loadDispatchBeamBodies, type DispatchBeamBodyRef } from "../beam-body/dispatch-link";
 
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 const kg = (v: Prisma.Decimal) => v.toFixed(3);
@@ -66,6 +67,8 @@ export interface WarpingDispatchListRow {
   canCancel: boolean;
   cancelBlockedReason: string | null;
   items: WarpingDispatchListItem[];
+  /** B2: sevkle giden boş levent gövdeleri (irsaliyeye basılır); gövde takibi hiç kullanılmadıysa boş. */
+  beamBodies: DispatchBeamBodyRef[];
 }
 
 export async function listWarpingDispatches(id: string): Promise<WarpingDispatchListRow[]> {
@@ -88,11 +91,15 @@ export async function listWarpingDispatches(id: string): Promise<WarpingDispatch
     list.push({ it: toWarpingYarnItem(r), code: r.yarnItem?.code ?? "", name: r.yarnItem?.name ?? "", warehouseName: r.warehouse?.name ?? null, packageCount: r.packageCount, bobbinCount: r.bobbinCount });
     byDispatch.set(r.dispatch.id, list);
   }
+  const bodies = await loadDispatchBeamBodies(prisma, heads.map((h) => h.id));
+  // Gövde engeli (sevkten sonra hareket etmiş gövde) yalnız gövdeli canlı sevkte ölçülür — iptal önizlemesiyle aynı tanım.
+  const bodyBlocks = new Map<string, string | null>();
+  for (const h of heads) if (!h.cancelledAt && bodies.has(h.id)) bodyBlocks.set(h.id, await dispatchBeamBodyCancelBlock(prisma, h.id));
   const statusBlock = order.status === WarpingOrderStatus.IN_PROGRESS ? null : `${order.orderNo} durumu ${order.status} — sevk iptal edilemez.`;
   return heads.map((h) => {
     const list = byDispatch.get(h.id) ?? [];
     const cancelled = h.cancelledAt !== null;
-    const blocked = warpingDispatchCancelBlock(h.cancelledAt, list.map((x) => x.it)) ?? statusBlock;
+    const blocked = warpingDispatchCancelBlock(h.cancelledAt, list.map((x) => x.it)) ?? statusBlock ?? bodyBlocks.get(h.id) ?? null;
     const items = list.map(({ it, code, name, warehouseName, packageCount, bobbinCount }) => {
       return {
         dispatchItemId: it.dispatchItemId, yarnItemId: it.yarnItemId, yarnItemCode: code, yarnItemName: name,
@@ -110,6 +117,7 @@ export async function listWarpingDispatches(id: string): Promise<WarpingDispatch
       totalAllocatedKg: sum("allocatedKg"), totalWasteKg: sum("wasteKg"), totalHoldingKg: sum("holdingKg"),
       totalPackageCount: countSum(items.map((x) => x.packageCount)), totalBobbinCount: countSum(items.map((x) => x.bobbinCount)),
       canCancel: blocked === null, cancelBlockedReason: blocked,
+      beamBodies: bodies.get(h.id) ?? [],
       items: items.map((x) => ({
         ...x, outKg: kg(x.outKg), returnedKg: kg(x.returnedKg), transferOutKg: kg(x.transferOutKg), transferInKg: kg(x.transferInKg), allocatedKg: kg(x.allocatedKg), wasteKg: kg(x.wasteKg), holdingKg: kg(x.holdingKg),
       })),

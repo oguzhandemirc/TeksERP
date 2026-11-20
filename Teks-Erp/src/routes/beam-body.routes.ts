@@ -2,7 +2,7 @@
 // TeksERP — LEVENT GÖVDESİ ENVANTERİ (`/api/beam-bodies`, devere ek B1)
 // =============================================================================
 // Kapı sırası: `verifyToken` → `requireDevereEnabled` → `requireBeamBodyTracking` (OFF → 403 BEAM_BODY_MODE_OFF,
-// okuma dahil: yüzey yok = bugünkü davranış) → izin. Durum değişimi bu uçlarda YOK (B2/B3); B1 kayıt/düzenleme/kayıt iptali.
+// okuma dahil: yüzey yok = bugünkü davranış) → izin. Durum değişimi bu dosyada YOK: elle geçişler alt-router beam-body-movement.routes (B2), dolu/takma B3.
 // =============================================================================
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
@@ -17,10 +17,13 @@ import {
   BEAM_BODY_MAX_MACHINES, cancelBeamBodyRegistration, createBeamBody, patchBeamBody, previewCancelBeamBodyRegistration,
 } from "../services/beam-body/write";
 import { BEAM_BODY_OWNER_KINDS, BEAM_BODY_REGISTER_STATUSES, type BeamBodyOwnerKind } from "../constants/beam-body";
+import beamBodyMovementRoutes from "./beam-body-movement.routes";
 import "../types/express-augment";
 
 const router = Router();
 router.use(verifyToken, requireDevereEnabled, requireBeamBodyTracking);
+// B2: elle geçiş + geri alma alt-router'ı kapıyı miras alır.
+router.use("/", beamBodyMovementRoutes);
 
 const wrap = (fn: (req: Request) => Promise<{ status: number; body: unknown }>) => async (req: Request, res: Response, next: NextFunction) => {
   try {

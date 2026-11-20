@@ -50,6 +50,8 @@ export const TOKEN_YOLLARI: Record<string, TokenYolu> = {
   [`${S}warping-order/receive.ts::receiveWarpingOrder`]: { giris: { [`${S}warping-order/receive.ts::receiveWarpingOrder`]: "R" } },
   // Levent gövdesi kaydı (devere ek B1): panelden clientToken ile doğar; kart silinmez (iptal pasife alır, replay aynı kartı döndürür).
   [`${S}beam-body/write.ts::createBeamBody`]: { giris: { [`${S}beam-body/write.ts::createBeamBody`]: "R" } },
+  // Gövde sahibine iade belgesi (devere ek B2): clientToken ile doğar; iptal edilmiş belgenin token'ı 409 (4. durum).
+  [`${S}beam-body/returns.ts::createBeamBodyReturn`]: { giris: { [`${S}beam-body/returns.ts::createBeamBodyReturn`]: "R" } },
   [`${S}warping-order/settle.ts::settleWarpingOrder`]: { giris: { [`${S}warping-order/settle.ts::settleWarpingOrder`]: "R" } },
   // Devere iade(+fire): token iade hareketine yazılır (returnYarnTx → applyYarnMovementTx); giriş elle iade ucu.
   [`${S}subcontractor-yarn.service.ts::returnYarnTx`]: { giris: { [`${S}warping-order/yarn-return-waste.ts::returnWarpingYarn`]: "R" } },
@@ -328,10 +330,11 @@ export const KIMLIK_BEYANI: Record<string, readonly string[]> = {
   [`${S}lab-test.service.ts::replayFor`]: ["rollId", "batchId"],
   [`${S}consignment-dispatch/create.ts::replayFor`]: ["ownerCustomerId", "items"],
   [`${S}warping-order/create.ts::replayFor`]: ["warpSpecId", "subcontractorId", "beamLines", "extraWarpSpecIds", "salesOrderIds"],
-  [`${S}warping-order/dispatch.ts::dispatchReplay`]: ["warpingOrderId", "lines"],
+  [`${S}warping-order/dispatch.ts::dispatchReplay`]: ["warpingOrderId", "lines", "beamBodyIds"],
   [`${S}warping-order/yarn-transfer.ts::transferReplay`]: ["fromWarpingOrderId", "toWarpingOrderId", "lines"],
   [`${S}warping-order/receive.ts::receiveReplay`]: ["warpingOrderId", "deliveryNoteNo", "beams"],
   [`${S}beam-body/write.ts::replayFor`]: ["bodyNo", "owner"],
+  [`${S}beam-body/returns.ts::replayFor`]: ["ownerCustomerId", "bodyIds"],
   [`${S}warping-order/settle.ts::settleReplay`]: ["warpingOrderId", "requestHash"],
   [`${S}warping-order/yarn-return-waste.ts::returnReplay`]: ["dispatchItemId", "requestHash"],
   [`${S}certificate.service.ts::replayFor`]: ["certificateNo", "renewsId"],

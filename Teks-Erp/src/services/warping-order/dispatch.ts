@@ -25,6 +25,7 @@ import { WARPING_ORDER_TABLE } from "./create";
 import { loadWarpingOrderDto } from "./read";
 import { buildWarpingInstruction, type WarpingInstruction } from "./instruction";
 import { qtyText } from "../helpers/qty-text.helper";
+import { auditShippedBeamBodies, loadDispatchBeamBodies, normalizeBeamBodyIds, shipBeamBodiesWithDispatchTx, type DispatchBeamBodyRef } from "../beam-body/dispatch-link";
 
 type Tx = Prisma.TransactionClient;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
@@ -49,6 +50,8 @@ export interface WarpingDispatchInput {
   notes?: string | null;
   /** undefined ⇒ siparişin termini; null ⇒ termin yok. */
   expectedReturnAt?: string | null;
+  /** B2: iplikle birlikte giden boş levent gövdeleri (`devere.beamBodyMode ≠ OFF`; boş/yok = bugünkü davranış). */
+  beamBodyIds?: string[];
 }
 
 export interface WarpingDispatchResult {
@@ -57,6 +60,8 @@ export interface WarpingDispatchResult {
   yarnItems: Array<{ dispatchItemId: string; yarnItemId: string; code: string; warehouseId: string; lotId: string | null; qtyKg: string; packageCount: number | null; bobbinCount: number | null }>;
   yarnTotalKg: string;
   ownerCustomerId: string | null;
+  /** B2: bu sevkle giden boş gövdeler (irsaliyeye basılır). */
+  beamBodies: DispatchBeamBodyRef[];
   instruction: WarpingInstruction;
   warnings: string[];
   replayed: boolean;
@@ -116,6 +121,7 @@ async function loadDispatchResult(dispatchId: string, warnings: string[], replay
     yarnItems: d.items.map((i) => ({ dispatchItemId: i.id, yarnItemId: i.yarnItemId!, code: i.yarnItem?.code ?? "", warehouseId: i.warehouseId!, lotId: i.lotId, qtyKg: kg(D(i.dispatchedQty)), packageCount: i.packageCount, bobbinCount: i.bobbinCount })),
     yarnTotalKg: kg(total),
     ownerCustomerId: d.items.find((i) => i.lot?.ownerCustomerId)?.lot?.ownerCustomerId ?? null,
+    beamBodies: (await loadDispatchBeamBodies(prisma, [d.id])).get(d.id) ?? [],
     instruction: buildWarpingInstruction(order),
     warnings,
     replayed,
@@ -123,7 +129,7 @@ async function loadDispatchResult(dispatchId: string, warnings: string[], replay
 }
 
 function dispatchReplay(warpingOrderId: string, input: WarpingDispatchInput) {
-  const select = { id: true, dispatchNo: true, warpingOrderId: true, cancelledAt: true, items: { select: { yarnItemId: true, warehouseId: true, lotId: true, dispatchedQty: true, packageCount: true, bobbinCount: true } } } as const;
+  const select = { id: true, dispatchNo: true, warpingOrderId: true, cancelledAt: true, items: { select: { yarnItemId: true, warehouseId: true, lotId: true, dispatchedQty: true, packageCount: true, bobbinCount: true } }, beamBodyEvents: { where: { kind: "SHIP_EMPTY" }, select: { bodyId: true } } } as const;
   type Hit = Prisma.SubcontractorDispatchGetPayload<{ select: typeof select }>;
   return tokenReplay<Hit, WarpingDispatchResult>({
     find: (db, clientToken) => db.subcontractorDispatch.findUnique({ where: { clientToken }, select }),
@@ -134,6 +140,8 @@ function dispatchReplay(warpingOrderId: string, input: WarpingDispatchInput) {
     identity: (hit) => [
       { ad: "warpingOrderId", mevcut: hit.warpingOrderId ?? "", gelen: warpingOrderId },
       { ad: "lines", mevcut: lineSig(hit.items.map((i) => ({ yarnItemId: i.yarnItemId ?? "", warehouseId: i.warehouseId ?? "", lotId: i.lotId, qty: i.dispatchedQty, packageCount: i.packageCount, bobbinCount: i.bobbinCount }))), gelen: lineSig(input.lines.map((l) => ({ yarnItemId: l.yarnItemId, warehouseId: l.warehouseId, lotId: l.lotId ?? null, qty: D(l.qtyKg).toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP), packageCount: l.packageCount ?? null, bobbinCount: l.bobbinCount ?? null }))) },
+      // B2: boş gövde kümesi kimliğe girer (aynı token farklı gövdeler → 409); eski kayıt/istemci boş ↔ boş.
+      { ad: "beamBodyIds", mevcut: hit.beamBodyEvents.map((e) => e.bodyId).sort().join(","), gelen: normalizeBeamBodyIds(input.beamBodyIds).join(",") },
     ],
     collision: (hit) => `Bu işlem kimliği başka içerikli bir sevke (${hit.dispatchNo}) ait — formu yeniden açıp gönderin.`,
     respond: async (hit) => loadDispatchResult(hit.id, [], true),
@@ -176,6 +184,7 @@ export interface WarpingDispatchTxOut {
   warnings: string[];
   wasOpen: boolean;
   orderNo: string;
+  beamBodies: Awaited<ReturnType<typeof shipBeamBodiesWithDispatchTx>>;
 }
 
 /**
@@ -227,16 +236,19 @@ export async function dispatchClaimedWarpingOrderTx(
     const net = s ? receivedKg(s) : D(0);
     if (net.gt(y.grossKg)) warnings.push(`${y.yarnItem.code}: plan ${qtyText(D(y.grossKg))} kg, gönderilen ${qtyText(net)} kg — fazla ${qtyText(net.minus(y.grossKg))} kg deverecide kalır ya da iade edilir.`);
   }
+  // B2: boş gövdeler sipariş claim'inden SONRA, id sırasıyla (gövdesiz sevkte hiçbir şey okunmaz).
+  const beamBodies = await shipBeamBodiesWithDispatchTx(tx, { dispatchId: dispatch.id, subcontractorId: order.subcontractorId, bodyIds: normalizeBeamBodyIds(input.beamBodyIds), userId });
   await emitSubcontractDispatchedTx(tx, dispatch.id, userId);
-  return { dispatch, yarn, ownerCustomerId, warnings, wasOpen: order.wasOpen, orderNo: order.orderNo };
+  return { dispatch, yarn, ownerCustomerId, warnings, wasOpen: order.wasOpen, orderNo: order.orderNo, beamBodies };
 }
 
 /** Sevk audit'i (tx DIŞINDA) — elle sevk ve doğrudan devere kabulü aynı ayak izini bırakır. */
 export async function auditWarpingDispatch(id: string, out: WarpingDispatchTxOut, userId: string, goodsReceiptId?: string): Promise<void> {
   await AuditService.log({
     userId, action: "CREATE", tableName: "SUBCONTRACTOR_DISPATCH", recordId: out.dispatch.id,
-    newData: { dispatchNo: out.dispatch.dispatchNo, kind: "WARPING", warpingOrderId: id, yarnItemCount: out.yarn.lines.length, yarnTotalKg: out.yarn.totalKg.toString(), ownerCustomerId: out.ownerCustomerId, goodsReceiptId: goodsReceiptId ?? null },
+    newData: { dispatchNo: out.dispatch.dispatchNo, kind: "WARPING", warpingOrderId: id, yarnItemCount: out.yarn.lines.length, yarnTotalKg: out.yarn.totalKg.toString(), ownerCustomerId: out.ownerCustomerId, goodsReceiptId: goodsReceiptId ?? null, beamBodyCount: out.beamBodies.length },
   });
+  await auditShippedBeamBodies(out.beamBodies, out.dispatch.id, userId);
   if (out.wasOpen) {
     await AuditService.log({ userId, action: "UPDATE", tableName: WARPING_ORDER_TABLE, recordId: id, oldData: { status: WarpingOrderStatus.OPEN }, newData: { status: WarpingOrderStatus.IN_PROGRESS, dispatchNo: out.dispatch.dispatchNo } });
   }
@@ -244,6 +256,7 @@ export async function auditWarpingDispatch(id: string, out: WarpingDispatchTxOut
 
 export async function dispatchWarpingOrder(id: string, input: WarpingDispatchInput, userId: string): Promise<WarpingDispatchResult> {
   validateLines(input.lines);
+  normalizeBeamBodyIds(input.beamBodyIds);
   return dispatchReplay(id, input).run(input.clientToken, async () => {
     const out = await prisma.$transaction(async (tx) => dispatchClaimedWarpingOrderTx(tx, await claimForDispatchTx(tx, id, userId), input, { userId }));
     await auditWarpingDispatch(id, out, userId);

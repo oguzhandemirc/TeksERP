@@ -25,6 +25,7 @@ import warpingOrderReceiveRoutes from "./warping-order-receive.routes";
 import warpingOrderSettleRoutes from "./warping-order-settle.routes";
 import { qtyText } from "../services/helpers/qty-text.helper";
 import "../types/express-augment";
+import { BEAM_BODY_DISPATCH_MAX } from "../constants/beam-body";
 
 const router = Router();
 router.use(verifyToken, requireDevereEnabled);
@@ -335,6 +336,8 @@ const DispatchBody = z.strictObject({
   driverName: z.string().max(100, "Şoför adı en çok 100 karakter").nullable().optional(),
   notes: z.string().max(500, "Not en çok 500 karakter").nullable().optional(),
   expectedReturnAt: z.iso.datetime({ offset: true, message: "Termin ISO tarih-saat olmalı" }).nullable().optional(),
+  // Devere ek B2: iplikle giden boş levent gövdeleri (beamBodyMode OFF iken dolu gelirse 403 BEAM_BODY_MODE_OFF).
+  beamBodyIds: z.array(Id).max(BEAM_BODY_DISPATCH_MAX, `En çok ${BEAM_BODY_DISPATCH_MAX} boş gövde`).optional(),
 });
 
 /**
@@ -368,11 +371,13 @@ const DispatchBody = z.strictObject({
  *               driverName: { type: string, nullable: true }
  *               notes: { type: string, nullable: true }
  *               expectedReturnAt: { type: string, format: date-time, nullable: true }
+ *               beamBodyIds: { type: array, items: { type: string, format: uuid }, description: "B2: iplikle giden boş levent gövdeleri (EMPTY_STOCK → AT_SUBCONTRACTOR); beamBodyMode OFF iken 403" }
  *     responses:
- *       201: { description: "Sevk açıldı — { data: { dispatch, yarnItems, instruction, warnings } }" }
+ *       201: { description: "Sevk açıldı — { data: { dispatch, yarnItems, beamBodies, instruction, warnings } }" }
  *       200: { description: Aynı denemenin tekrarı (replay) }
  *       400: { description: "WARPING_YARN_NOT_IN_PLAN · YARN_LOT_REQUIRED · WARPING_DISPATCH_DUPLICATE_LINE · eksi bakiye" }
- *       409: { description: "WARPING_ORDER_NOT_DISPATCHABLE · OWNER_MISMATCH · WARPING_LOT_MIXED · DISPATCH_CANCELLED · CLIENT_TOKEN_COLLISION" }
+ *       403: { description: "MODULE_DISABLED · BEAM_BODY_MODE_OFF (gövde gönderildi, takip kapalı)" }
+ *       409: { description: "WARPING_ORDER_NOT_DISPATCHABLE · OWNER_MISMATCH · WARPING_LOT_MIXED · DISPATCH_CANCELLED · CLIENT_TOKEN_COLLISION · BEAM_BODY_STATE · BEAM_BODY_INACTIVE" }
  */
 router.get("/:id/dispatch-preview", requirePermission("warping-order:write"), requireIplikEnabled, wrap(async (req) => {
   const id = parse(Id, req.params.id);

@@ -75,3 +75,22 @@ export const BEAM_BODY_OWNER_RETURN_DUE_WHERE = {
   status: BeamBodyStatus.EMPTY_STOCK,
   isActive: true,
 } as const;
+
+/**
+ * Elle geçişler (B2, `POST /api/beam-bodies/:id/transition`): tür → izinli kaynak durumlar + hedef. Dolu/takma/boşalma
+ * (B3) ve sahibine iade (belgeyle) burada YOK. Geri alma yalnız son hareket ve yalnız bu türler (belgesiz olay).
+ */
+export const BEAM_BODY_MANUAL_TRANSITIONS = {
+  SHIP_EMPTY: { from: [BeamBodyStatus.EMPTY_STOCK], to: BeamBodyStatus.AT_SUBCONTRACTOR },
+  RETURN_EMPTY: { from: [BeamBodyStatus.AT_SUBCONTRACTOR], to: BeamBodyStatus.EMPTY_STOCK },
+  MAINTENANCE_IN: { from: [BeamBodyStatus.EMPTY_STOCK], to: BeamBodyStatus.MAINTENANCE },
+  MAINTENANCE_OUT: { from: [BeamBodyStatus.MAINTENANCE], to: BeamBodyStatus.EMPTY_STOCK },
+  SCRAP: { from: [BeamBodyStatus.EMPTY_STOCK, BeamBodyStatus.MAINTENANCE], to: BeamBodyStatus.SCRAPPED },
+} as const satisfies Partial<Record<BeamBodyForwardKind, { from: readonly BeamBodyStatus[]; to: BeamBodyStatus }>>;
+export type BeamBodyManualKind = keyof typeof BEAM_BODY_MANUAL_TRANSITIONS;
+export const BEAM_BODY_MANUAL_KINDS = Object.keys(BEAM_BODY_MANUAL_TRANSITIONS) as BeamBodyManualKind[];
+
+/** İade belgesinde en çok gövde (tek tx, gövde id sırasıyla claim). */
+export const BEAM_BODY_RETURN_MAX_ITEMS = 200;
+/** İplik sevkinde en çok boş gövde. */
+export const BEAM_BODY_DISPATCH_MAX = 50;

@@ -104,6 +104,8 @@ const OTHER_MODEL: ReadonlySet<string> = new Set([
   "src/constants/beam-body.ts",
   "src/services/beam-body/read.ts",
   "src/services/beam-body/write.ts",
+  // Devere ek B2: gövde iade belgesi sahibi (`BeamBodyReturn.ownerCustomerId`) — top değil.
+  "src/services/beam-body/returns.ts",
 ]);
 
 function walk(dir: string, out: string[] = []): string[] {
