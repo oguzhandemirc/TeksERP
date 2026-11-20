@@ -29,6 +29,7 @@ import * as structure from "../src/services/cost-structure.service";
 import { requireMaliyetEnabled } from "../src/middlewares/module.middleware";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { assertGelistirmeVeritabani } from "./db-guard";
+import { ensureTestDyeHouse } from "./fixture-subcontractor";
 
 let pass = 0,
   fail = 0;
@@ -124,6 +125,15 @@ async function bolum3(): Promise<string> {
   const aktif = await rates.resolveActiveFinishingRate(code);
   const toplam = await prisma.finishingRate.count({ where: { code } });
   check("§3b ⭐ Yeni sürüm aktif, eski satır duruyor", aktif?.id === r3.row.id && toplam === 2, `aktif=${aktif?.id === r3.row.id} toplam=${toplam}`);
+  // Devere siparişi ücret önerisi firmanın aktif tarifelerini `subcontractorId` süzgeciyle okur.
+  const firm = await ensureTestDyeHouse();
+  const firmRate = await rates.changeFinishingRate({ ...base, code: `${TAG}F`, name: "Test firma tarifesi", subcontractorId: firm.id });
+  const firmList = await rates.listFinishingRates({ subcontractorId: firm.id });
+  check(
+    "§3c ⭐ Firma süzgeci yalnız o firmanın aktif tarifesini döner",
+    firmList.some((r) => r.id === firmRate.row.id) && firmList.every((r) => r.subcontractorId === firm.id && r.revokedAt === null) && !firmList.some((r) => r.code === code),
+    `n=${firmList.length}`,
+  );
   return code;
 }
 
