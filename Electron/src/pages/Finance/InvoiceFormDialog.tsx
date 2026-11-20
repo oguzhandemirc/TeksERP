@@ -10,6 +10,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CustomerPickerField } from "@/components/forms/CustomerPickerField";
 import { InvoiceReceiptsSection } from "./InvoiceReceiptsSection";
+import { InvoiceWarpingOrdersSection } from "./InvoiceWarpingOrdersSection";
+import { WarpingFeeMatchBand } from "./WarpingFeeMatchBand";
 import { InvoiceLineSubjectField } from "./InvoiceLineSubjectField";
 import { lineSubjectFrom, lineSubjectId, withLineType, type InvoiceLineType } from "./invoiceLineSubject";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
@@ -86,6 +88,8 @@ export interface InvoicePrefill {
   notice?: { tone: "warn" | "info"; message: string } | null;
   /** F4: sevk taslağındaki hizmet satırlarının iş kırılımı (yalnız bilgi; satırlar `lines`ta). */
   serviceWorks?: ServiceDraftWorkRow[];
+  /** Devere A2 "Fatura gir": bu siparişlerin faturasız kabulleri seçili açılır (taslak sunucuda doğar). */
+  warpingOrderIds?: string[];
 }
 
 interface Props {
@@ -385,6 +389,9 @@ function InvoiceFormBody({
   const [notes, setNotes] = useState(initial?.notes ?? "");
   // Bağlı mal kabul fişleri (yalnız ALIŞ): yeni faturada seçim taslağı SUNUCUDA doğurur, düzenlemede küme PATCH'lenir.
   const [goodsReceiptIds, setGoodsReceiptIds] = useState<string[]>(initial?.goodsReceiptIds ?? []);
+  // Devere A2: bağlı devere kabulleri (yalnız ALIŞ) — fişlerle aynı iki yol (yeni: sunucu taslağı · düzenleme: PATCH REPLACE).
+  const [warpingReceiptKeys, setWarpingReceiptKeys] = useState<string[]>(initial?.warpingReceiptKeys ?? []);
+  const devereEnabled = useFeatureFlags().data?.data?.devereEnabled ?? false;
   // Vade alanına en son YAZDIĞIMIZ öneri — kullanıcı dokunduysa artık eşleşmez
   // ve alana bir daha dokunulmaz (fiyat önerisiyle aynı saf yüklem).
   const [appliedDueSuggestion, setAppliedDueSuggestion] = useState<string | null>(null);
@@ -554,7 +561,7 @@ function InvoiceFormBody({
    * aittir; güncelleme zaten kaydın kimliğiyle (id) adreslenir.
    */
   const updateM = useMutation({
-    mutationFn: () => updateInvoice(edit!.id, buildUpdateBody({ lines, dueDate, externalNo, notes, goodsReceiptIds, initialGoodsReceiptIds: initial?.goodsReceiptIds ?? [] })),
+    mutationFn: () => updateInvoice(edit!.id, buildUpdateBody({ lines, dueDate, externalNo, notes, goodsReceiptIds, initialGoodsReceiptIds: initial?.goodsReceiptIds ?? [], warpingReceiptKeys, initialWarpingReceiptKeys: initial?.warpingReceiptKeys ?? [] })),
     onSuccess: (r) => {
       toast.success(r.message ?? "Taslak güncellendi.");
       onSaved();
@@ -676,6 +683,21 @@ function InvoiceFormBody({
             disabled={saving}
           />
         )}
+        {type === "PURCHASE" && isCustomerParty && (devereEnabled || (initial?.warpingReceiptKeys?.length ?? 0) > 0) && (
+          <InvoiceWarpingOrdersSection
+            mode={isEdit ? "edit" : "create"}
+            customerId={customerId}
+            cariId={initial?.cariId}
+            invoiceId={edit?.id}
+            value={warpingReceiptKeys}
+            onChange={setWarpingReceiptKeys}
+            linked={initial?.warpingReceipts}
+            preselectOrderIds={prefill?.warpingOrderIds}
+            onDraftCreated={(id) => { onSaved(); onOpenChange(false); onDraftCreated?.(id); }}
+            disabled={saving}
+          />
+        )}
+        {edit && (initial?.warpingReceiptKeys?.length ?? 0) > 0 && <WarpingFeeMatchBand invoiceId={edit.id} saved />}
 
         <div className="flex flex-wrap items-start gap-3">
           <div>
