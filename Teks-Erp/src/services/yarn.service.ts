@@ -132,6 +132,8 @@ export interface YarnMovementTxInput {
   lotId?: string | null;
   /** Bobin adedi — bilgi, bakiye değil (DB CHECK > 0). */
   bobbinCount?: number | null;
+  /** Devere H1: koli adedi — bilgi, bakiye değil (DB CHECK > 0). */
+  packageCount?: number | null;
   /** G1: SUBCONTRACT_* türlerinde ZORUNLU (CHECK `yarn_movements_fason_link_ck`), diğerlerinde YAZILMAZ. */
   dispatchItemId?: string | null;
   /** F5: CONSIGNMENT_OUT(_CANCEL) türlerinde ZORUNLU (CHECK `yarn_movements_consignment_link_ck`), diğerlerinde YAZILMAZ. */
@@ -227,7 +229,7 @@ export async function applyYarnMovementTx(tx: Tx, input: YarnMovementTxInput): P
       reason: input.reason?.trim() || null,
       userId: input.userId ?? null,
       warpBeamId: input.warpBeamId ?? null, reasonCode: input.reasonCode ?? null,
-      lotId: input.lotId ?? null, bobbinCount: input.bobbinCount ?? null,
+      lotId: input.lotId ?? null, bobbinCount: input.bobbinCount ?? null, packageCount: input.packageCount ?? null,
       dispatchItemId: input.dispatchItemId ?? null,
       consignmentItemId: input.consignmentItemId ?? null,
       clientToken: input.clientToken ?? null, requestHash: input.requestHash ?? null,

@@ -318,11 +318,15 @@ router.post("/:id/cancel", requirePermission("warping-order:cancel"), wrap(async
 }));
 
 // ── D4b: iplik sevki · sevk iptali · çözgü talimatı ─────────────────────────
+/** Devere H1: koli / bobin adedi — BİLGİ (defter değil, kg tek kaynak); boş = girilmedi. */
+const PieceCount = (ad: string) => z.number({ message: `${ad} sayı olmalı` }).int(`${ad} tam sayı olmalı`).positive(`${ad} sıfırdan büyük olmalı`).max(100_000, `${ad} çok büyük`).nullable().optional();
 const DispatchLine = z.strictObject({
   yarnItemId: Id,
   warehouseId: Id,
   lotId: Id.nullable().optional(),
   qtyKg: z.number({ message: "İplik kg sayı olmalı" }).positive("İplik kg sıfırdan büyük olmalı").max(1_000_000, "İplik kg çok büyük"),
+  packageCount: PieceCount("Koli adedi"),
+  bobbinCount: PieceCount("Bobin adedi"),
 });
 const DispatchBody = z.strictObject({
   clientToken: z.uuid("clientToken geçersiz (UUID)"),
@@ -359,7 +363,7 @@ const DispatchBody = z.strictObject({
  *             required: [clientToken, lines]
  *             properties:
  *               clientToken: { type: string, format: uuid }
- *               lines: { type: array, items: { type: object, properties: { yarnItemId: { type: string }, warehouseId: { type: string }, lotId: { type: string, nullable: true }, qtyKg: { type: number } } } }
+ *               lines: { type: array, items: { type: object, properties: { yarnItemId: { type: string }, warehouseId: { type: string }, lotId: { type: string, nullable: true }, qtyKg: { type: number }, packageCount: { type: integer, nullable: true, description: "Koli adedi (bilgi)" }, bobbinCount: { type: integer, nullable: true, description: "Bobin adedi (bilgi)" } } } }
  *               plateNumber: { type: string, nullable: true }
  *               driverName: { type: string, nullable: true }
  *               notes: { type: string, nullable: true }

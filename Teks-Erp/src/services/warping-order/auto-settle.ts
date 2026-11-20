@@ -25,7 +25,7 @@ export async function autoSettleIfDrainedTx(tx: Tx, id: string, userId: string, 
   const o = await tx.warpingOrder.findUnique({ where: { id }, select: { orderNo: true, status: true, wasteTolerancePct: true } });
   if (!o || o.status !== WarpingOrderStatus.IN_PROGRESS) return null;
   const body = { lines: [] };
-  const ev = await evaluateSettle(tx, id, body, o.wasteTolerancePct);
+  const ev = await evaluateSettle(tx, id, body, { tolerance: o.wasteTolerancePct });
   if (ev.items.some((i) => i.openKg.gt(0))) return null;
   if (settleBlockers(o, ev).length > 0) return null;
   await claimForSettleTx(tx, id, userId);

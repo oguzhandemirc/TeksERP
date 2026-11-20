@@ -46,6 +46,9 @@ export interface YarnDispatchLineInput {
   warehouseId: string;
   lotId?: string | null;
   qtyKg: number | string;
+  /** Devere H1: koli / bobin adedi — bilgi kolonu (DB CHECK > 0), defter değil. */
+  packageCount?: number | null;
+  bobbinCount?: number | null;
 }
 export interface YarnDispatchLine {
   dispatchItemId: string;
@@ -140,7 +143,7 @@ export async function dispatchYarnItemsTx(
     const wh = await tx.warehouse.findUnique({ where: { id: line.warehouseId }, select: { id: true, isActive: true } });
     if (!wh || !wh.isActive) throw AppError.badRequest("Çıkış deposu yok ya da pasif", { code: "WAREHOUSE_INVALID", warehouseId: line.warehouseId });
     const created = await tx.subcontractorDispatchItem.create({
-      data: { dispatchId: input.dispatchId, kind: SubcontractorDispatchItemKind.YARN, yarnItemId: item.id, warehouseId: wh.id, lotId: line.lotId ?? null, dispatchedQty: qty, dispatchedWeight: null },
+      data: { dispatchId: input.dispatchId, kind: SubcontractorDispatchItemKind.YARN, yarnItemId: item.id, warehouseId: wh.id, lotId: line.lotId ?? null, dispatchedQty: qty, dispatchedWeight: null, packageCount: line.packageCount ?? null, bobbinCount: line.bobbinCount ?? null },
       select: { id: true },
     });
     // Lot kimliği ve eksi bakiye kapısı tek yazıcıda; iplik modülü kapalıysa burada 403.
@@ -212,6 +215,9 @@ export interface ReturnYarnInput {
   lotId?: string | null;
   /** Sunucu içi: devere iade ucunun deneme kimliği + gövde özeti (HTTP gövdesinden gelmez; Zod şeması taşımaz). */
   token?: { clientToken: string; requestHash: string } | null;
+  /** Devere H1: iade satırının koli / bobin adedi — bilgi kolonu, defter değil. */
+  packageCount?: number | null;
+  bobbinCount?: number | null;
 }
 export interface YarnReturnDto {
   movementId: string;
@@ -251,6 +257,7 @@ export async function returnYarnTx(tx: Tx, dispatchId: string, input: ReturnYarn
     itemId: item.yarnItemId!, warehouseId: input.warehouseId ?? out.warehouseId, kind: YarnMovementKind.SUBCONTRACT_RETURN, qtyKg: qty,
     lotId: input.lotId === undefined ? out.lotId : input.lotId, reasonCode, dispatchItemId: item.id, userId: userId ?? null,
     clientToken: input.token?.clientToken ?? null, requestHash: input.token?.requestHash ?? null,
+    packageCount: input.packageCount ?? null, bobbinCount: input.bobbinCount ?? null,
   });
   return { movementId, item, qty, remainingKg: out.qtyKg.minus(already).minus(qty) };
 }
