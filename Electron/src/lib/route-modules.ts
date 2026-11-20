@@ -76,6 +76,7 @@ export const ROUTE_MODULE: Readonly<Record<string, RouteModuleFlag>> = {
   "operations/warehouse-transfers": "depoMultiEnabled",
   // ── DEVERE · DOKUMA ─────────────────────────────────────────────────────
   "definitions/warp-specs": "devereEnabled",
+  "definitions/beam-bodies": "devereEnabled",
   "operations/fasondaki-iplik": "devereEnabled",
   "definitions/weave-designs": "dokumaEnabled",
   "operations/weaving-orders": "dokumaEnabled",

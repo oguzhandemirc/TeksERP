@@ -17,6 +17,8 @@ import { toastServerSuccess } from "@/lib/serverNotes";
 import { apiErrorMessage } from "@/services/apiClient";
 import { buildDispatchBody, initialDispatchLines, type DispatchLineDraft } from "./dispatch-model";
 import { DispatchLinesTable } from "./DispatchLinesTable";
+import { DispatchBeamBodies } from "./DispatchBeamBodies";
+import type { BeamBody } from "@/pages/BeamBodies/types";
 import { fmtKg, parseNum } from "./order-model";
 import { loadWarehouseOptions } from "./YarnSourcePickers";
 import { WARPING_ORDERS_QUERY_KEY } from "./service";
@@ -77,7 +79,8 @@ export function YarnDispatchDialog({ order, onClose, onDone }: { order: WarpingO
   const attempt = useAttemptToken();
   const { pv, p, lines, setLines } = useDispatchDraft(order.id);
   const [meta, setMeta] = useState<Meta>({ plateNumber: "", driverName: "", notes: "" });
-  const built = p && lines ? buildDispatchBody(lines, p, meta) : null;
+  const [bodies, setBodies] = useState<BeamBody[]>([]);
+  const built = p && lines ? buildDispatchBody(lines, p, meta, bodies.map((b) => b.id)) : null;
   const total = (lines ?? []).reduce((s, l) => s + (parseNum(l.qtyKg) ?? 0), 0);
   const save = useMutation({
     mutationFn: (body: Omit<WarpingDispatchBody, "clientToken">) => warpingYarnService.dispatch(order.id, { ...body, clientToken: attempt.token() }),
@@ -104,6 +107,7 @@ export function YarnDispatchDialog({ order, onClose, onDone }: { order: WarpingO
         {p && !p.stock.known && <Callout tone="muted">İplik stoğu izlenmiyor — depo bakiyesi gösterilemiyor.</Callout>}
         {p && lines && <DispatchLinesTable preview={p} lines={lines} onChange={setLines} />}
         {p && lines && <MetaFields meta={meta} setMeta={setMeta} />}
+        {p && lines && <DispatchBeamBodies value={bodies} onChange={setBodies} />}
         {built && !built.ok && <p className="text-sm text-muted-foreground">{built.error}</p>}
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Vazgeç</Button>

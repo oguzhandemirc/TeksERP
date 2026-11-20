@@ -95,6 +95,7 @@ export function useOperationsVisibilityContext(): OperationsVisibilityContext {
     iplikEnabled,
     depoMultiEnabled,
     devereEnabled,
+    beamBodyEnabled: devereEnabled && (flags?.devereBeamBodyMode ?? "OFF") !== "OFF",
     dokumaEnabled,
     tezgahEnabled,
     machineStopEnabled,

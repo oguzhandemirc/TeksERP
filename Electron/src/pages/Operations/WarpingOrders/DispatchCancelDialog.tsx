@@ -27,6 +27,7 @@ function AffectedList({ p, row }: { p: WarpingDispatchCancelPreview; row: Warpin
           </li>
         );
       })}
+      {(p.beamBodies?.length ?? 0) > 0 && <li>Boş gövdeler depoya döner (ters kayıt): {p.beamBodies!.map((b) => b.bodyNo).join(", ")}</li>}
       {p.orderReturnsToOpen && <li className="text-muted-foreground">Siparişte başka canlı sevk kalmaz → sipariş “Açık” durumuna döner.</li>}
     </ul>
   );
