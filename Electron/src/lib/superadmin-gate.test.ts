@@ -29,7 +29,8 @@ const TUKETICILER = [
   "../pages/GeneralSettings/FeatureFlagSection.tsx",
   "../pages/System/SystemHubPage.tsx",
   "../pages/System/ModuleProfile/ModuleProfilePage.tsx",
-  "../components/layout/CommandPalette.tsx",
+  // 2026-11-20: palet süzgeci yan menü alt öğeleriyle ortak dosyaya taşındı (CommandPalette onu kullanır).
+  "../components/layout/command-entry-access.ts",
   // 2026-09-04: satıcı ekranının ROUTE kapısı da bu yüklemi kullanıyor. Liste
   // dışında kalması ölçüldü (negatif sonda: route supapsız bir kurala
   // çevrildiğinde §2 yeşil kaldı, kırmızıyı yalnız ekran bekçisi verdi).

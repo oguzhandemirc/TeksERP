@@ -7,6 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import type { NavChild, NavItem } from "./nav-config";
 import { navRowClass, navTone, useNavTarget } from "./sidebar-items";
 import { NavContextMenu } from "./sidebar-context-menu";
+import { NavSubgroup, hasSubgroupHeads } from "./sidebar-subgroups";
 
 // T5 bölüm kökü (Satış · Üretim · Depo · Sevkiyat): kökün kendisi bölüm kart sayfasını açar, yanındaki
 // ok alt listeyi menüde açar/kapatır; daraltılmış menüde alt liste yana açılan panelde (flyout) gelir.
@@ -26,7 +27,7 @@ function useSectionState(item: NavItem) {
 }
 
 // Panel (flyout) menü dışında, açılır yüzeyde çizilir → menü stili (koyu/birincil) renkleri orada kullanılmaz.
-function ChildLink({ child, active, inPopover }: { child: NavChild; active: boolean; inPopover?: boolean }) {
+function ChildLink({ child, active, inPopover, nested }: { child: NavChild; active: boolean; inPopover?: boolean; nested?: boolean }) {
   const target = useNavTarget(child);
   const Icon = child.icon;
   return (
@@ -46,7 +47,9 @@ function ChildLink({ child, active, inPopover }: { child: NavChild; active: bool
                   "bg-primary-soft font-semibold text-primary-soft-foreground",
                   // Kılavuz çizgisi üstünde seçili işaret — kök + alt öğe birlikte okunur.
                   !inPopover &&
-                    "before:absolute before:inset-y-1.5 before:-left-[13px] before:w-[3px] before:rounded-full before:bg-primary",
+                    "before:absolute before:inset-y-1.5 before:w-[3px] before:rounded-full before:bg-primary",
+                  // Alt grup içinde liste 0.5rem daha içeride: işaret yine kılavuz çizgisine oturur.
+                  !inPopover && (nested ? "before:-left-[21px]" : "before:-left-[13px]"),
                 )
               : inPopover
                 ? "text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -69,6 +72,23 @@ function ChildList(props: {
   inPopover?: boolean;
 }) {
   const { item, activeChild, className, inPopover } = props;
+  // Süreç alt grupları varsa başlıklı bloklar (`sidebar-subgroups.tsx`); yoksa eski düz liste.
+  if (hasSubgroupHeads(item.childGroups)) {
+    return (
+      <ul className={cn("space-y-0.5", className)}>
+        {item.childGroups.map((g) => (
+          <NavSubgroup
+            key={g.key}
+            rootTo={item.to}
+            group={g}
+            activeChild={activeChild}
+            inPopover={inPopover}
+            renderChild={(c) => <ChildLink key={c.to} child={c} active={c.to === activeChild} inPopover={inPopover} nested />}
+          />
+        ))}
+      </ul>
+    );
+  }
   return (
     <ul className={cn("space-y-0.5", className)}>
       {(item.children ?? []).map((c) => (
@@ -178,7 +198,7 @@ export function CollapsedSectionItem({ item }: { item: NavItem }) {
             <IconTile icon={item.icon} tone={navTone(item)} size="sm" />
           </button>
         </PopoverTrigger>
-        <PopoverContent side="right" align="start" sideOffset={10} className="w-64 p-2" onClick={closeOnPick}>
+        <PopoverContent side="right" align="start" sideOffset={10} className="max-h-[80vh] w-64 overflow-y-auto p-2" onClick={closeOnPick}>
           <button
             type="button"
             {...rootTarget}
