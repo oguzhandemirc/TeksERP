@@ -139,6 +139,8 @@ export const ROUTE_REGIME: Readonly<Record<string, Extract<keyof OperationsVisib
  */
 export const ROUTE_ALSO_REQUIRES: Readonly<Record<string, readonly RouteModuleFlag[]>> = {
   "reports/maliyet/karlilik": ["financeEnabled"],
+  // Devere F2: uç `dokuma.report.routes` `/denye-sapma` satırında `requireDevereEnabled` taşır.
+  "reports/dokuma/denye-sapma": ["devereEnabled"],
 };
 
 /** `:id` · `new` · `edit` segmentleri ebeveyne katlanır (manifesto EKRAN seviyesinde). */

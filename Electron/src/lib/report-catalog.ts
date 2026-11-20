@@ -257,6 +257,12 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
     sinif: "basit", izin: "report:production", modul: "dokumaEnabled", varsayilanGun: 30, tarih: "aralik-gun",
     panelYolu: "reports/dokuma/levent-dengesi", uc: "/api/reports/dokuma/levent-dengesi", kapiTasiyici: [{ dosya: "src/routes/reports/temel-dokuma-finans.routes.ts", yol: "/dokuma/levent-dengesi" }], yuzey: "yaprak",
     nesil: "v2", kategoriV2: "dokuma", persona: ["dokuma", "patron"], varyantBoyutlari: ["cozguKarti", "tezgah"], hazir: true },
+  // Devere F2: denye sapması (tartılı devere sarımı ↔ iplik kartı denyesi); servis F1 `denier-deviation.service` (ince sarmal),
+  // [Uygula] `/api/warp-specs/denier-deviation/apply`te. Panelde kendi sayfası (V2_KEYS_WITH_OWN_PAGE); devere ayrıca gerekir (ROUTE_ALSO_REQUIRES).
+  { key: "dokuma/denye-sapma", baslik: "Denye Sapması", soru: "Tartılan devere leventleri iplik kartındaki denyeyle uyuşuyor mu, hangi kartın denyesi düzeltilmeli?",
+    sinif: "basit", izin: "warpspec:read", modul: "dokumaEnabled", varsayilanGun: 90, tarih: "aralik-gun",
+    panelYolu: "reports/dokuma/denye-sapma", uc: "/api/reports/dokuma/denye-sapma", kapiTasiyici: [{ dosya: "src/routes/reports/dokuma.report.routes.ts", yol: "/denye-sapma" }], yuzey: "yaprak",
+    nesil: "v2", kategoriV2: "dokuma", persona: ["dokuma", "patron"], varyantBoyutlari: ["fasoncu"], hazir: true, yeniRapor: true },
   { key: "finance/alacaklar", baslik: "Kimden ne alacağız?", soru: "Vadesi geçmiş alacak ne kadar ve önümüzdeki günlerde hangi çeklerin vadesi geliyor?",
     sinif: "basit", izin: "report:finance", modul: "financeEnabled", varsayilanGun: null, tarih: "kesit",
     panelYolu: "reports/finance/alacaklar", uc: "/api/reports/finance/alacaklar", kapiTasiyici: [{ dosya: "src/routes/reports/temel-dokuma-finans.routes.ts", yol: "/finance/alacaklar" }], yuzey: "yaprak",

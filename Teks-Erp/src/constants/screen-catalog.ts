@@ -325,7 +325,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // Dokuma raporları (Dilim 5, 2026-09-14): okuma `report:production` (1e hükmü ③); karne eylemleri ekran içi
   // PermissionGate — `loom:manual-entry` (terim düzelt · mühürle; machine-stops ekranıyla PAYLAŞILIR) ve
   // `loom:shift-unseal` (mühür aç; geçmiş rakamı değiştirir, SCREENLESS'tan düştü).
-  { key: "reports/dokuma", app: "desktop", modul: "dokumaEnabled", title: "Dokuma Raporları", requires: ["report:production"], capabilities: ["loom:manual-entry", "loom:shift-unseal"] },
+  { key: "reports/dokuma", app: "desktop", modul: "dokumaEnabled", title: "Dokuma Raporları", requires: ["report:production", "warpspec:read"], capabilities: ["loom:manual-entry", "loom:shift-unseal"] },
   // D4-G3: Kârlılık yaprağı (`reports/maliyet/karlilik`) `cost:read` ister; hub karosu Maliyet & Teklif hub'ında da.
   { key: "reports/maliyet", app: "desktop", modul: "maliyetEnabled", title: "Maliyet Raporları", requires: ["report:yarn-need", "cost:read"], capabilities: [] },
   // Depo tarafı. ⚠️ `operations/yarn-stock` ve `operations/stock-counts` giriş
