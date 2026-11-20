@@ -606,6 +606,11 @@ export interface SettingsCategory {
   /** Feature-flag sözleşmesi DIŞINDAKİ ham system-setting alanları (opsiyonel). */
   settingFields?: SettingFieldDef[];
   /**
+   * Satır gruplarının (`group`) ekrandaki SIRASI. Verilmezse ilk görülme sırası (aç/kapa → seçim → sayı);
+   * listede olmayan grup sona düşer, satırı olmayan grup çizilmez — gelecek dilimin grubu önceden yer tutabilir.
+   */
+  groupOrder?: readonly string[];
+  /**
    * Komut paletinde (arama) bu kategoriyi bulduran ek anahtar kelimeler. İçindeki
    * tek tek ayarların adları/eş anlamlıları burada; aramada görünmez ama eşleşir.
    */
@@ -618,6 +623,17 @@ export interface SettingsCategory {
  * dizisine bir satır ekle (başlık + tek cümle + `defaultOn` + `audience`).
  * Sayfa otomatik render eder (ayrı kart/mutation gerekmez).
  */
+/** Ayarlar › Devere / Levent grup adları (Devere H2) — sıra kategorinin `groupOrder`ında. */
+const DEVERE_GROUP = {
+  inhouse: "İçeride levent sarımı",
+  mount: "Tezgah bağı",
+  beamBody: "Levent gövdesi",
+  fasonDispatch: "Fason devere — plan ve sevk",
+  fasonClose: "Fason devere — dönüş ve kapanış",
+  fasonInvoice: "Fason devere — fatura",
+  denier: "Denye sapma raporu",
+} as const;
+
 export const SETTINGS_CATEGORIES: SettingsCategory[] = [
   {
     // ⚠️ REJİM ANAHTARLARININ EVİ. Bu kategori HİÇBİR rejim kapısının arkasında
@@ -1879,14 +1895,18 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     id: "devere",
     label: "Devere / Levent",
     icon: Layers,
-    description: "Levent sarımı ve iplik lotu katılık ayarları.",
-    keywords: "devere levent lot iplik lotu bobin çözgü sarım mal kabul",
+    description: "İçeride levent sarımı, tezgah bağı ve fason devere (sevk, dönüş, kapanış, fatura) ayarları.",
+    keywords: "devere levent lot iplik lotu bobin koli çözgü sarım mal kabul fason devereci kapanış kalan iplik fire tolerans yeniden sarım fatura levent gövdesi denye",
     kind: "flags",
     section: "production",
     permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:devere"],
     moduleKey: "devereEnabled",
+    // Devere H2: bütün devere ayarlarının tek evi. Yeni devere ayarı uygun gruba `group` ile girer;
+    // "Levent gövdesi" B1/B3 (beamBodyMode, beamBodyMachineFit), "Denye sapma raporu" F1 satırları için yer tutar.
+    groupOrder: [DEVERE_GROUP.inhouse, DEVERE_GROUP.mount, DEVERE_GROUP.beamBody, DEVERE_GROUP.fasonDispatch, DEVERE_GROUP.fasonClose, DEVERE_GROUP.fasonInvoice, DEVERE_GROUP.denier],
     flags: [
       {
+        group: DEVERE_GROUP.inhouse,
         key: "devereLotRequired",
         title: "İplik lotu zorunlu olsun",
         summary:
@@ -1896,6 +1916,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         desc: "Açıkken içeride sarımda lotsuz iplik çıkışı ve mal kabulde lotsuz iplik satırı reddedilir. Kapalıyken (varsayılan) lot isteğe bağlıdır; lotsuz satır uyarıyla yazılır ve lot izlemesine girmez.",
       },
       {
+        group: DEVERE_GROUP.mount,
         key: "devereMountTracking",
         title: "Levent tezgah bağı defteri",
         summary:
@@ -1905,6 +1926,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         desc: "Açıkken levent tezgaha takılır, sökülür, tüketimi ve bitişi kaydedilir (Leventler ekranında Tak / Sök / Tüket / Bitir / Hurda). Kapalıyken (varsayılan) levent sarıldıktan sonra “hazır” kalır, bu eylemler görünmez.",
       },
       {
+        group: DEVERE_GROUP.mount,
         key: "devereMountTrackingRequired",
         title: "Bağlamada yöntem ve başlangıç saati zorunlu olsun",
         summary:
@@ -1914,6 +1936,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         desc: "Açıkken levent takılırken bağlama yöntemi (düğüm / tahar / takım) ve başlangıç saati zorunludur; kurulum süresi raporlarına girer. Kapalıyken (varsayılan) isteğe bağlıdır. Yalnız levent tezgah bağı açıkken anlamlıdır.",
       },
       {
+        group: DEVERE_GROUP.mount,
         key: "devereAutoConsume",
         title: "Tezgahtan inen top leventten otomatik düşsün",
         summary:
@@ -1923,6 +1946,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         desc: "Açıkken tezgahtan inen top kaydedilince metresi o tezgahta bağlı leventlerden otomatik düşer. Kapalıyken (varsayılan) tüketim yalnız elle yazılır; KK1 kaydı değişmez.",
       },
       {
+        group: DEVERE_GROUP.inhouse,
         key: "devereBeamWeavingLinkRequired",
         title: "Levent sarımında dokuma iş emri zorunlu olsun",
         summary: "Levent planlanırken/sarılırken hangi dokuma iş emri için sarıldığı seçilmeden kayıt alınmaz.",
@@ -1932,6 +1956,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       },
       {
         // Devere A1: backend `readDevereReworkBillable` kayıt yokken true döner (bekçi §12).
+        group: DEVERE_GROUP.fasonInvoice,
         key: "devereReworkBillable",
         title: "Yeniden sarılan levent devere ücretine girsin",
         summary: "Devereci kusurlu leventi yeniden sararsa, yeniden sarım devereci faturasında beklenen tutara eklenir.",
@@ -1943,6 +1968,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     enumFlags: [
       {
         // Fason devere D4b (K4): `defaultValue` backend `DEFAULT_DEVERE_FASON_LOT_POLICY` ile birebir (bekçi §16).
+        group: DEVERE_GROUP.fasonDispatch,
         enumKey: "devereFasonLotPolicy",
         title: "Fason devere siparişinde lot karışımı",
         summary: "Bir devere siparişine aynı ipliğin birden çok lotu gönderildiğinde ne olsun.",
@@ -1958,6 +1984,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       },
       {
         // Devere H1: `defaultValue` backend `DEFAULT_DEVERE_SETTLE_DEFAULT` ile birebir (bekçi §16).
+        group: DEVERE_GROUP.fasonClose,
         enumKey: "devereSettleDefault",
         title: "Fason devere kapanışında kalan iplik önerisi",
         summary: "Sipariş kapatılırken deverecide kalan ipliğe kapanış ekranının ilk önerdiği.",
@@ -1976,6 +2003,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     numberFlags: [
       {
         // Fason devere D1: backend `readDevereWarpFixedWasteM` (kayıt yok = 0) ve üst sınır 1000 ile birebir.
+        group: DEVERE_GROUP.fasonDispatch,
         key: "devereWarpFixedWasteM",
         title: "Sabit çözgü firesi (m)",
         desc: "Çözgü hesabında her siparişin metresine baş, son ve düğüm için bu kadar metre eklenir; fireli öneri buna göre büyür. 0 (varsayılan) = müşterinin kâğıttaki formülü (firesiz).",
@@ -1988,6 +2016,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       },
       {
         // Fason devere D4: backend `readDevereFasonWasteTolerancePct` (kayıt yok = 0) ve üst sınır 99 ile birebir.
+        group: DEVERE_GROUP.fasonClose,
         key: "devereFasonWasteTolerancePct",
         title: "Fason devere fire toleransı (%)",
         desc: "Fason devere siparişi kapanırken fire yüzdesi bu değeri aşarsa uyarı gösterilir; işlem engellenmez. Sipariş açılırken bu değer siparişe yazılır. 0 (varsayılan) = denetim yok.",

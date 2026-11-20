@@ -2,7 +2,8 @@
 // Satır kayıttan (`SETTINGS_CATEGORIES`) bulunur; elle yol yazılmaz — ekran bölünüp adı değişince eski yol yalan söyler.
 import { SETTINGS_CATEGORIES, settingsCategoryPath, settingsCategoryTrail } from "@/pages/GeneralSettings/settings-config";
 
-const categoryOf = (flagKey: string) => SETTINGS_CATEGORIES.find((c) => c.flags?.some((f) => f.key === flagKey));
+// Seçim (enum) satırı da aranır: kapanış önerisi gibi enum ayarına da aynı yoldan gidilir.
+const categoryOf = (flagKey: string) => SETTINGS_CATEGORIES.find((c) => c.flags?.some((f) => f.key === flagKey) || c.enumFlags?.some((f) => f.enumKey === flagKey));
 
 /** Bayrağın ayar ekranı adresi; satır bulunamazsa Sistem hub'ı. */
 export function flagSettingPath(flagKey: string): string {

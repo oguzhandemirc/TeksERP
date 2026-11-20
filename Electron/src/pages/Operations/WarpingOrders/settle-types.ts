@@ -6,6 +6,7 @@
 // =============================================================================
 import type { WarpingOrderStatus } from "./types";
 import type { WarpingSettlement } from "./receive-types";
+import type { DevereSettleDefault } from "@/services/featureFlagService";
 
 export interface WarpingSettlePlanLine {
   dispatchItemId: string;
@@ -42,6 +43,8 @@ export interface WarpingSettlePreview {
   blockers: string[];
   plan: {
     isDefault: boolean;
+    /** H1: gövdesiz önerinin kipi (`devere.settleDefault`); satırlı planda null, eski sunucuda yok (= A1-a). */
+    defaultMode?: DevereSettleDefault | null;
     wastePct: string | null;
     tolerancePct: string | null;
     overTolerance: boolean;

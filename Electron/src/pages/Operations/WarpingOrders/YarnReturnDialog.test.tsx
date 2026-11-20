@@ -102,4 +102,19 @@ describe("YarnReturnDialog — iade + fire", () => {
     await user.click(save());
     await waitFor(() => expect(svc.returnYarn).toHaveBeenCalledWith("wo-1", { dispatchItemId: "i1", qtyKg: 288.75, reasonCode: "KALAN", clientToken: expect.any(String) }));
   });
+
+  // Devere H2: koli/bobin bilgi alanı — geçersiz adet kaydı kapatır, geçerli adet gövdeye girer.
+  it("⑤ koli/bobin: geçersiz adet kaydı kapatır; girilen adet gövdeye girer", async () => {
+    svc.returnPreview.mockResolvedValue(preview({ returnKg: "288.750", wasteKg: "0.000" }));
+    const { user, dlg, save, pickReason } = await open();
+    await pickReason();
+    const koli = within(dlg).getByLabelText(/Koli adedi/);
+    await user.type(koli, "0");
+    expect(save().disabled).toBe(true);
+    await user.clear(koli);
+    await user.type(koli, "6");
+    await user.type(within(dlg).getByLabelText(/Bobin adedi/), "48");
+    await user.click(save());
+    await waitFor(() => expect(svc.returnYarn).toHaveBeenCalledWith("wo-1", { dispatchItemId: "i1", qtyKg: 288.75, reasonCode: "KALAN", packageCount: 6, bobbinCount: 48, clientToken: expect.any(String) }));
+  });
 });

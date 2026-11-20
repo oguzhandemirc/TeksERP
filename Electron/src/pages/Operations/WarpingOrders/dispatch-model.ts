@@ -20,6 +20,32 @@ export interface DispatchLineDraft {
   warehouse: PickedRef | null;
   lot: PickedRef | null;
   qtyKg: string;
+  /** Koli / bobin adedi — BİLGİ (irsaliyeye basılır, kg'ı değiştirmez); boş = girilmedi. */
+  packageCount?: string;
+  bobbinCount?: string;
+}
+
+/** Koli/bobin girdisi: boş → null; pozitif tam sayı → sayı; aksi → hata (sunucu kuralı: tam sayı, > 0, ≤ 100 000). */
+export function parsePieceCount(v: string | undefined): { ok: true; value: number | null } | { ok: false } {
+  const t = (v ?? "").trim();
+  if (t === "") return { ok: true, value: null };
+  if (!/^\d+$/.test(t)) return { ok: false };
+  const n = Number(t);
+  return n > 0 && n <= 100_000 ? { ok: true, value: n } : { ok: false };
+}
+
+/** Gövdeye yalnız girilen adet girer (adetsiz satır H1 öncesiyle bayt-aynı gider). */
+export function pieceCountFields(packageCount: string | undefined, bobbinCount: string | undefined): { packageCount?: number; bobbinCount?: number } | null {
+  const p = parsePieceCount(packageCount);
+  const b = parsePieceCount(bobbinCount);
+  if (!p.ok || !b.ok) return null;
+  return { ...(p.value !== null ? { packageCount: p.value } : {}), ...(b.value !== null ? { bobbinCount: b.value } : {}) };
+}
+
+/** "3 koli · 120 bobin" — girilmeyen atlanır; ikisi de yoksa null (listede satır çizilmez). */
+export function pieceText(packageCount: number | null | undefined, bobbinCount: number | null | undefined): string | null {
+  const parts = [packageCount != null && `${packageCount} koli`, bobbinCount != null && `${bobbinCount} bobin`].filter(Boolean);
+  return parts.length > 0 ? parts.join(" · ") : null;
 }
 
 export interface LineNote {
@@ -93,6 +119,7 @@ export function buildDispatchBody(
   if (used.length === 0) return { ok: false, error: "En az bir iplik satırına miktar girin." };
   for (const l of lines) {
     if (l.qtyKg.trim() !== "" && parseNum(l.qtyKg) === null) return { ok: false, error: "Miktar sayı olmalı." };
+    if (pieceCountFields(l.packageCount, l.bobbinCount) === null) return { ok: false, error: "Koli ve bobin adedi boş ya da sıfırdan büyük tam sayı olmalı." };
   }
   const blocked = used.some((l) => lineNotes(l, lines, p.yarns.find((y) => y.yarnItemId === l.yarnItemId)!, p).some((n) => n.blocking));
   if (blocked) return { ok: false, error: "Kırmızı satır notlarını giderin." };
@@ -100,7 +127,7 @@ export function buildDispatchBody(
   return {
     ok: true,
     body: {
-      lines: used.map((l) => ({ yarnItemId: l.yarnItemId, warehouseId: l.warehouse!.id, lotId: l.lot?.id ?? null, qtyKg: parseNum(l.qtyKg)! })),
+      lines: used.map((l) => ({ yarnItemId: l.yarnItemId, warehouseId: l.warehouse!.id, lotId: l.lot?.id ?? null, qtyKg: parseNum(l.qtyKg)!, ...pieceCountFields(l.packageCount, l.bobbinCount) })),
       plateNumber: opt(meta.plateNumber),
       driverName: opt(meta.driverName),
       notes: opt(meta.notes),

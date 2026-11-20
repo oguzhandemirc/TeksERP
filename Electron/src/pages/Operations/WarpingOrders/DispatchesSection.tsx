@@ -11,6 +11,7 @@ import { fmtFactoryDateTime } from "@/lib/factory-time";
 import { cn } from "@/lib/utils";
 import { apiErrorMessage } from "@/services/apiClient";
 import { DispatchCancelDialog } from "./DispatchCancelDialog";
+import { pieceText } from "./dispatch-model";
 import { InstructionPrintDialog } from "./InstructionPrintDialog";
 import { fmtKg } from "./order-model";
 import { transferText } from "./holding-model";
@@ -30,7 +31,7 @@ function ItemRow({ it, muted }: { it: WarpingDispatchItem; muted: boolean }) {
     <TableRow className={cn("text-xs", muted && "text-muted-foreground line-through decoration-muted-foreground/40")}>
       <TableCell className="pl-8"><YarnLabel name={it.yarnItemName} code={it.yarnItemCode} /></TableCell>
       <TableCell>{it.lotNo ?? "lotsuz"} · {it.warehouseName ?? "—"}</TableCell>
-      <TableCell className={num}>{fmtKg(it.outKg)}</TableCell>
+      <TableCell className={num}>{fmtKg(it.outKg)}{pieceText(it.packageCount, it.bobbinCount) && <span className="block text-muted-foreground">{pieceText(it.packageCount, it.bobbinCount)}</span>}</TableCell>
       <TableCell className={num}>{kgOrDash(it.returnedKg)}</TableCell>
       <TableCell className={num}>{transferText(it.transferOutKg, it.transferInKg)}</TableCell>
       <TableCell className={num}>{kgOrDash(it.allocatedKg)}</TableCell>
@@ -55,7 +56,7 @@ function DispatchHead({ d, onPrint, onCancel }: { d: WarpingDispatchRow; onPrint
           </span>
         )}
       </TableCell>
-      <TableCell className={cn(num, "font-medium")}>{fmtKg(d.totalOutKg)}</TableCell>
+      <TableCell className={cn(num, "font-medium")}>{fmtKg(d.totalOutKg)}{pieceText(d.totalPackageCount, d.totalBobbinCount) && <span className="block text-xs font-normal text-muted-foreground">{pieceText(d.totalPackageCount, d.totalBobbinCount)}</span>}</TableCell>
       <TableCell className={num}>{kgOrDash(d.totalReturnedKg)}</TableCell>
       <TableCell className={num}>{transferText(d.totalTransferOutKg, d.totalTransferInKg)}</TableCell>
       <TableCell className={num}>{kgOrDash(d.totalAllocatedKg)}</TableCell>

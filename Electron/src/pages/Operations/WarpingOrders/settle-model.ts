@@ -5,6 +5,7 @@ import { formatQty } from "@/lib/format";
 import { parseNum } from "./order-model";
 import type { PickedRef } from "./dispatch-model";
 import type { WarpingSettleFields, WarpingSettlePlanLine } from "./settle-types";
+import type { DevereSettleDefault } from "@/services/featureFlagService";
 
 export interface SettleLineDraft {
   line: WarpingSettlePlanLine;
@@ -60,6 +61,18 @@ export function buildSettleBody(drafts: SettleLineDraft[], opts: BuildOpts): Set
     ok: true, hasReturn,
     body: { reason: opts.reason.trim() || null, returnReasonCode: hasReturn ? opts.returnReasonCode : null, lines },
   };
+}
+
+/** Kapanış önerisinin cümlesi — sunucunun uyguladığı `devere.settleDefault` kipinden (eski sunucu kip göndermez = A1-a). */
+const SETTLE_MODE_TEXT: Record<DevereSettleDefault, string> = {
+  WASTE_UP_TO_PLAN: "planlanan fire kadarı fire, fazlası deverecide kalır",
+  KEEP: "kalanın tamamı deverecide kalır",
+  RETURN: "kalanın tamamı iade edilir (iade sebebini seçin)",
+  WASTE_ALL: "kalanın tamamı fire yazılır",
+};
+
+export function settleSuggestionText(mode: DevereSettleDefault | null | undefined): string {
+  return `Öneri (fabrika ayarı): ${SETTLE_MODE_TEXT[mode ?? "WASTE_UP_TO_PLAN"] ?? SETTLE_MODE_TEXT.WASTE_UP_TO_PLAN}.`;
 }
 
 /** Yüzde metni (sunucu `12.50` → `%12,5`). */
