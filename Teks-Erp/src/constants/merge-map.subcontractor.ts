@@ -45,6 +45,9 @@ export const SUBCONTRACTOR_MERGE_RULES: MoveRule[] = [
     { kind: "MOVE", model: "WeavingOrder", table: "weaving_orders", column: "subcontractorId", label: "Dokuma iş emri (fason)" },
     // Fason devere D4a: devereci bağı referanstır (tekillik yok) — dokuma iş emri emsali.
     { kind: "MOVE", model: "WarpingOrder", table: "warping_orders", column: "subcontractorId", label: "Fason devere siparişi" },
+    // Devere ek B1: gövdenin şu an bulunduğu devereci + gövde olayının yeri — referanstır (tekillik yok).
+    { kind: "MOVE", model: "BeamBody", table: "beam_bodies", column: "subcontractorId", label: "Levent gövdesi (bulunduğu devereci)" },
+    { kind: "MOVE", model: "BeamBodyEvent", table: "beam_body_events", column: "subcontractorId", label: "Levent gövdesi hareketi (devereci)" },
     { kind: "MOVE", model: "GoodsReceipt", table: "goods_receipts", column: "subcontractorId", label: "Mal kabul fişi (fason tedarikçi)" },
     { kind: "MOVE", model: "PurchaseOrder", table: "purchase_orders", column: "subcontractorId", label: "Alış siparişi (fason tedarikçi)" },
     { kind: "MOVE", model: "FinishingRate", table: "finishing_rates", column: "subcontractorId", label: "Apre tarifesi (fason firma)" },

@@ -53,6 +53,7 @@ const IDENTITY_BIND: Partial<Record<LabelKind, IdentityBind>> = {
   [LabelKind.SACK]: { key: "sackNo", label: "Çuval No", noun: "çuval", idNoun: "çuval numarası", dative: "çuvala", context: "Çuval" },
   [LabelKind.MACHINE]: { key: "machineCode", label: "Tezgah Kodu", noun: "tezgah", idNoun: "tezgah kodu", dative: "tezgaha", context: "Tezgah" },
   [LabelKind.WARP_BEAM]: { key: "beamNo", label: "Levent No", noun: "levent", idNoun: "levent numarası", dative: "levente", context: "Levent" },
+  [LabelKind.BEAM_BODY]: { key: "bodyNo", label: "Gövde No", noun: "levent gövdesi", idNoun: "gövde numarası", dative: "levent gövdesine", context: "Levent gövdesi" },
 };
 
 /**

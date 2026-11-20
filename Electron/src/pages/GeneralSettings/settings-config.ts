@@ -1957,6 +1957,35 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         ],
       },
       {
+        // Devere ek B1: `defaultValue` backend `DEFAULT_DEVERE_BEAM_BODY_MODE` ile birebir (bekçi §16).
+        enumKey: "devereBeamBodyMode",
+        title: "Levent gövdesi takibi",
+        summary: "Boş levent gövdeleri numara ve QR etiketle demirbaş olarak izlensin mi.",
+        desc: "Açıkken her levent gövdesi (bizim, deverecinin, müşterinin ya da başka firmanın) numarası, sahibi, eni, flanş çapı, darası ve uyduğu tezgâhlarla kayıt altına alınır; gövde nerede, dolu mu boş mu görünür. Kapalıyken (varsayılan) gövde kaydı tutulmaz, levent numarası serbest metin kalır. Zorunluda devereden dönen her sarımda gövde okutulmadan kabul alınmaz.",
+        defaultValue: "OFF",
+        display: "radio",
+        audience: ["Depocu", "Planlamacı", "Yönetim"],
+        options: [
+          { value: "OFF", label: "Kapalı (varsayılan)", hint: "Gövde kaydı tutulmaz." },
+          { value: "OPTIONAL", label: "İsteğe bağlı", hint: "Gövde okutmak serbest; okutulmayan sarım da kabul edilir." },
+          { value: "REQUIRED", label: "Zorunlu", hint: "Dönen her sarımda gövde okutulur." },
+        ],
+      },
+      {
+        // Devere ek B1: `defaultValue` backend `DEFAULT_DEVERE_BEAM_BODY_MACHINE_FIT` ile birebir (bekçi §16).
+        enumKey: "devereBeamBodyMachineFit",
+        title: "Gövde uymayan tezgâha takılırsa",
+        summary: "Levent gövdesi, kartında uyumlu yazmayan bir tezgâha takılmak istendiğinde ne olsun.",
+        desc: "Gövde kartında uyumlu tezgâhlar seçilir. Uyar seçiliyken (varsayılan) takma yapılır ve ekranda uyarı görünür; engelle seçiliyse uyumsuz tezgâha takma reddedilir. Gövdenin uyumlu tezgâh listesi boşsa her tezgâha uyar sayılır.",
+        defaultValue: "WARN",
+        display: "radio",
+        audience: ["Operatör", "Planlamacı", "Yönetim"],
+        options: [
+          { value: "WARN", label: "Uyar (varsayılan)", hint: "Takma yapılır; uyumsuzluk uyarısı gösterilir." },
+          { value: "BLOCK", label: "Engelle", hint: "Uyumsuz tezgâha takma reddedilir." },
+        ],
+      },
+      {
         // Devere H1: `defaultValue` backend `DEFAULT_DEVERE_SETTLE_DEFAULT` ile birebir (bekçi §16).
         enumKey: "devereSettleDefault",
         title: "Fason devere kapanışında kalan iplik önerisi",

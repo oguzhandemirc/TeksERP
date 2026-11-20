@@ -101,7 +101,8 @@ const AYIRT_EDICI_ESIK = 4;
  * İkisi de kullanıcının istediği KISA, tarihsiz numaralardır (`P-1`), yani
  * kusur serilerde değil: bu tarayıcı onları ayırt edemez ve bunu söyler.
  */
-const OLCULEMEZ = new Set(["batchShort", "packingLotName"]);
+// `beamBody` (devere ek B1): demirbaş gövde no `LG-00001` — sabit parça "LG-" 3 karakter; kısa ön ek plan kararı (gövde etiketi küçük).
+const OLCULEMEZ = new Set(["batchShort", "packingLotName", "beamBody"]);
 
 const KOK = join(__dirname, "..", "..");
 const TARANAN = ["Teks-Erp/src", "Electron/src", "mobil/src"];

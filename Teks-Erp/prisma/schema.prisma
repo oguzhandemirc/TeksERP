@@ -353,6 +353,8 @@ enum LabelKind {
   SACK
   MACHINE
   WARP_BEAM
+  /// Devere ek B1: levent gövdesi etiketi — barkod/QR = `BeamBody.bodyNo` (tek kod kuralı).
+  BEAM_BODY
 }
 
 /// Yazıcı dili — etiket render driver registry anahtarı. Faz-1: yalnız
@@ -1315,6 +1317,9 @@ model Machine {
   rollsCreated       Roll[]                   @relation("RollCreatedMachine") // KK1 girişi makine atfı
   warpBeamEvents     WarpBeamEvent[]          @relation("WarpBeamEventMachine") // devere: WOUND.machineId
   mountedBeams       WarpBeam[]               @relation("WarpBeamCurrentMachine") // Faz 3: yuvadaki leventler
+  beamBodiesNow      BeamBody[]               @relation("BeamBodyMachineNow") // devere ek B1: takılı gövdeler
+  beamBodyEvents     BeamBodyEvent[]          @relation("BeamBodyEventMachine")
+  beamBodyFits       BeamBodyMachine[]        @relation("BeamBodyMachineFit")
   /// Kurşun bypass: bu MAKİNEYE atanan işler. Atama makine bazındadır — tek
   /// PROCESS_QC istasyonu altında N fiziksel kurşun makinesi vardır.
   kursunBypasses     KursunBypassAssignment[]
@@ -2626,6 +2631,8 @@ model WarpBeam {
   serviceBillingLinks ServiceBillingLink[]        @relation("ServiceBillingLinkWarpBeam")
   /// F5: sahibine (emanet) çıkış belgesi kalemleri.
   consignmentItems    ConsignmentDispatchItem[]   @relation("ConsignmentItemWarpBeam")
+  /// Devere ek B1: bu sarımı anan gövde olayları (yazıcısı B3).
+  beamBodyEvents      BeamBodyEvent[]             @relation("BeamBodyEventWarpBeam")
 
   createdAt   DateTime @default(now()) @db.Timestamptz
   updatedAt   DateTime @updatedAt @db.Timestamptz
@@ -2762,6 +2769,139 @@ model WarpBeamEventYarn {
   @@unique([eventId, yarnItemId])
   @@index([yarnItemId])
   @@map("warp_beam_event_yarns")
+}
+
+// =============================================================================
+// LEVENT GÖVDESİ (BeamBody) — devere ek B1 (2026-11-20). Plan: ~/.tekserp/plan/PLAN-devere-ek-1120.md §5
+// =============================================================================
+// Gövde = metal demirbaş (kalıcı no + QR); sarım (`WarpBeam`) geçicidir. Durum tablosu "şu an ne",
+// `BeamBodyEvent` "ne oldu". Durum yalnız `transitionBeamBodyTx` ile değişir (claim + aynı tx olay).
+
+/// GÖVDE DURUMU — B1 yalnız EMPTY_STOCK/AT_SUBCONTRACTOR doğurur; öteki değerlerin yazıcısı B2 (sevk/bakım/hurda/iade)
+/// ve B3 (dolu dönüş/takma) dilimlerindedir. Değerler planın tek seferlik enum'u (ADD VALUE migration'ı çoğaltmamak için).
+enum BeamBodyStatus {
+  /// Boş, bizim depoda.
+  EMPTY_STOCK
+  /// Boş ya da sarılıyor — devereci/fasoncuda (`subcontractorId` dolu, CHECK).
+  AT_SUBCONTRACTOR
+  /// Dolu (sarım bağlı), bizim depoda.
+  FULL_STOCK
+  /// Tezgâhta (`machineId` dolu, CHECK).
+  MOUNTED
+  /// Dolu, dışarıda (fason dokumacı / müşteri / reddedilip devereciye dönen).
+  FULL_OUT
+  /// Bakımda.
+  MAINTENANCE
+  /// Hurda — terminal.
+  SCRAPPED
+  /// Sahibine iade edildi (bizim olmayan gövde) — terminal.
+  RETURNED_TO_OWNER
+}
+
+/// GÖVDE SAHİBİNİN ROLÜ — yalnız GÖSTERİM; kimlik tek FK `ownerCustomerId` (XOR çift bağ YOK). NULL = bizim.
+enum BeamBodyOwnerRole {
+  WARPER
+  CUSTOMER
+  OTHER
+}
+
+/// LEVENT GÖVDESİ — demirbaş kartı. `BaseController` YOK (yazılabilir alan beyaz listesi servis Zod'unda).
+/// Sahiplik DOĞUM niteliği değildir ama yalnız boş + bizde iken değişir (servis kapısı).
+model BeamBody {
+  id               String             @id @default(uuid()) @db.Uuid
+  /// Gövde no = QR değeri (tek kod kuralı); seriden (`beamBody`, LG-NNNNN) ya da elle. Büyük/küçük harf
+  /// katlanmış tekillik servis kapısında (`lockCodeScopeTx` 8029), DB'de `@unique` birebir.
+  bodyNo           String             @unique @db.VarChar(32)
+  clientToken      String?            @unique @db.Uuid
+  /// NULL = bizim gövdemiz. Dolu ise `ownerRole` dolu (CHECK `beam_bodies_owner_ck`).
+  ownerCustomerId  String?            @db.Uuid
+  ownerRole        BeamBodyOwnerRole?
+  /// Levent eni (cm) — CHECK > 0.
+  widthCm          Decimal?           @db.Decimal(8, 2)
+  /// Flanş (kenar diski) çapı (cm) — CHECK > 0.
+  flangeDiameterCm Decimal?           @db.Decimal(8, 2)
+  /// Boş gövde darası (kg) — CHECK > 0; tartılı dönüşte dara önerisi (F/B3).
+  tareKg           Decimal?           @db.Decimal(10, 3)
+  status           BeamBodyStatus     @default(EMPTY_STOCK)
+  /// "Şu an nerede" — duruma bağlı, CHECK `beam_bodies_location_ck`: MOUNTED ⇔ machineId; AT_SUBCONTRACTOR ⇒
+  /// subcontractorId; subcontractorId ⇒ AT_SUBCONTRACTOR|FULL_OUT; warehouseId ⇒ EMPTY_STOCK|FULL_STOCK|MAINTENANCE.
+  warehouseId      String?            @db.Uuid
+  subcontractorId  String?            @db.Uuid
+  machineId        String?            @db.Uuid
+  notes            String?            @db.VarChar(500)
+  /// Pasif gövde listede varsayılan gizli; yalnız boş/terminal durumda pasife alınır (servis kapısı).
+  isActive         Boolean            @default(true)
+
+  ownerCustomer Customer?          @relation("BeamBodyOwner", fields: [ownerCustomerId], references: [id], onDelete: Restrict)
+  warehouse     Warehouse?         @relation("BeamBodyWarehouse", fields: [warehouseId], references: [id], onDelete: Restrict)
+  subcontractor Subcontractor?     @relation("BeamBodySubcontractor", fields: [subcontractorId], references: [id], onDelete: Restrict)
+  machine       Machine?           @relation("BeamBodyMachineNow", fields: [machineId], references: [id], onDelete: Restrict)
+  events        BeamBodyEvent[]
+  machineFits   BeamBodyMachine[]
+
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+  createdById String?  @db.Uuid
+  updatedById String?  @db.Uuid
+
+  @@index([status, ownerCustomerId])
+  @@index([ownerCustomerId])
+  @@index([warehouseId])
+  @@index([subcontractorId])
+  @@index([machineId])
+  @@map("beam_bodies")
+}
+
+/// GÖVDE OLAY DEFTERİ — append-only (`updatedAt` YOK). Tür kümesi `BEAM_BODY_EVENT_KINDS` ↔ CHECK
+/// `beam_body_events_kind_ck` iki yönlü. Ters kayıt tipli `*_CANCEL`, orijinaline `reversesId` (tek ters).
+/// Bağlam kolonları olayın YERİ/NEDENİ (kopya, kronoloji `createdAt`).
+model BeamBodyEvent {
+  id            String          @id @default(uuid()) @db.Uuid
+  bodyId        String          @db.Uuid
+  kind          String          @db.VarChar(32)
+  /// REGISTER'da NULL (doğuş); diğerlerinde dolu (CHECK `beam_body_events_from_ck`).
+  fromStatus    BeamBodyStatus?
+  toStatus      BeamBodyStatus
+  reversesId    String?         @unique @db.Uuid
+  warehouseId   String?         @db.Uuid
+  subcontractorId String?       @db.Uuid
+  machineId     String?         @db.Uuid
+  /// B3: dolu dönüş/takma olayının sarımı.
+  warpBeamId    String?         @db.Uuid
+  reasonCode    String?         @db.VarChar(64)
+  reason        String?         @db.VarChar(300)
+  createdById   String?         @db.Uuid
+  createdAt     DateTime        @default(now()) @db.Timestamptz
+
+  body          BeamBody        @relation(fields: [bodyId], references: [id], onDelete: Restrict)
+  reverses      BeamBodyEvent?  @relation("BeamBodyEventReversal", fields: [reversesId], references: [id], onDelete: Restrict)
+  reversal      BeamBodyEvent?  @relation("BeamBodyEventReversal")
+  warehouse     Warehouse?      @relation("BeamBodyEventWarehouse", fields: [warehouseId], references: [id], onDelete: Restrict)
+  subcontractor Subcontractor?  @relation("BeamBodyEventSubcontractor", fields: [subcontractorId], references: [id], onDelete: Restrict)
+  machine       Machine?        @relation("BeamBodyEventMachine", fields: [machineId], references: [id], onDelete: Restrict)
+  warpBeam      WarpBeam?       @relation("BeamBodyEventWarpBeam", fields: [warpBeamId], references: [id], onDelete: Restrict)
+
+  @@index([bodyId, createdAt])
+  @@index([kind, createdAt])
+  @@index([warehouseId])
+  @@index([subcontractorId])
+  @@index([machineId])
+  @@index([warpBeamId])
+  @@map("beam_body_events")
+}
+
+/// GÖVDE–TEZGÂH UYUMU — ③b saf yapılandırma pivotu (REPLACE meşru, defter değil). Satırsız gövde = her tezgâha uyar.
+model BeamBodyMachine {
+  bodyId    String   @db.Uuid
+  machineId String   @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  body    BeamBody @relation(fields: [bodyId], references: [id], onDelete: Cascade)
+  machine Machine  @relation("BeamBodyMachineFit", fields: [machineId], references: [id], onDelete: Restrict)
+
+  @@id([bodyId, machineId])
+  @@index([machineId])
+  @@map("beam_body_machines")
 }
 
 /// FASON DEVERE D5 — dönen leventin ipliğinin sevk kalemlerine DAĞITIMI (DEFTER, append-only, `updatedAt` yok).
@@ -5000,6 +5140,8 @@ model Customer {
   ownedRolls            Roll[]                        @relation("RollOwner")
   workOrders            WorkOrder[]                   @relation("WorkOrderCustomer")
   ownedWarpBeams        WarpBeam[]                    @relation("WarpBeamOwner")
+  /// Devere ek B1: sahibi bu cari olan levent gövdeleri.
+  ownedBeamBodies       BeamBody[]                    @relation("BeamBodyOwner")
   /// F5: emanet malın sahibine çıkış belgeleri.
   consignmentDispatches ConsignmentDispatch[]         @relation("ConsignmentDispatchOwner")
   ownedYarnLots         YarnLot[]                     @relation("YarnLotOwner")
@@ -8629,6 +8771,8 @@ model Subcontractor {
   plannedSteps             WorkOrderStep[]           @relation("StepPlannedSubcontractor")
   weavingOrders            WeavingOrder[]            @relation("WeavingOrderSubcontractor")
   warpBeams                WarpBeam[]                @relation("WarpBeamSubcontractor")
+  beamBodies               BeamBody[]                @relation("BeamBodySubcontractor")
+  beamBodyEvents           BeamBodyEvent[]           @relation("BeamBodyEventSubcontractor")
   warpingOrders            WarpingOrder[]            @relation("WarpingOrderSubcontractor")
   plannedRouteSteps        RouteStep[]               @relation("RouteStepPlannedSubcontractor")
   kartelaDispatches        KartelaDispatch[]         @relation("KartelaDispatchSub")
@@ -11503,6 +11647,8 @@ model Warehouse {
   notes     String? @db.VarChar(500)
 
   rolls         Roll[]
+  beamBodies    BeamBody[]          @relation("BeamBodyWarehouse")
+  beamBodyEvents BeamBodyEvent[]    @relation("BeamBodyEventWarehouse")
   transfersFrom WarehouseTransfer[] @relation("TransferFrom")
   transfersTo   WarehouseTransfer[] @relation("TransferTo")
   movementsFrom WarehouseMovement[] @relation("MovementFrom")

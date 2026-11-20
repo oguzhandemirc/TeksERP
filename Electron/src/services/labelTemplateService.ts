@@ -13,6 +13,7 @@ export const LabelKind = {
   SACK: "SACK",
   MACHINE: "MACHINE",
   WARP_BEAM: "WARP_BEAM",
+  BEAM_BODY: "BEAM_BODY",
 } as const;
 export type LabelKind = (typeof LabelKind)[keyof typeof LabelKind];
 
@@ -23,6 +24,7 @@ export const labelKindLabels: Record<LabelKind, string> = {
   SACK: "Çuval Etiketi",
   MACHINE: "Tezgah Etiketi",
   WARP_BEAM: "Levent Etiketi",
+  BEAM_BODY: "Levent Gövdesi Etiketi",
 };
 
 /** Bağlam adı FAIL-SOFT: sunucu bu panelin tanımadığı bir tür dönerse ham ad basılır

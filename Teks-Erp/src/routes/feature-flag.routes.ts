@@ -398,6 +398,9 @@ export const updateSchema = z.strictObject({
   /** Fason devere D4: kapama fire toleransı (%; `DEVERE_FASON_WASTE_TOLERANCE_PCT_MAX` ile birebir); 0 = denetim yok; null = varsayılana dön. */
   /** Fason devere D4b (K4): lot karışımı kuralı (enum; `DEVERE_FASON_LOT_POLICIES` ile birebir). */
   devereFasonLotPolicy: z.enum(["FREE", "WARN", "SINGLE_LOT"]).optional(),
+  /** Devere ek B1: levent gövdesi kipi + gövde–tezgâh uyumu (enum; `DEVERE_BEAM_BODY_MODES` / `DEVERE_BEAM_BODY_MACHINE_FITS` ile birebir). */
+  devereBeamBodyMode: z.enum(["OFF", "OPTIONAL", "REQUIRED"]).optional(),
+  devereBeamBodyMachineFit: z.enum(["WARN", "BLOCK"]).optional(),
   devereSettleDefault: z.enum(["WASTE_UP_TO_PLAN", "KEEP", "RETURN", "WASTE_ALL"]).optional(),
   /** Devere A1: yeniden sarım beklenen devere ücretine girer mi (varsayılan true). */
   devereReworkBillable: z.boolean().optional(),

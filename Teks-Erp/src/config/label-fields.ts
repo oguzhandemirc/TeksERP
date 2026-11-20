@@ -209,6 +209,23 @@ export const WARP_BEAM_FIELDS: readonly FieldDef[] = [
 ] as const;
 
 // =============================================================================
+// BEAM_BODY — Levent gövdesi etiketi (devere ek B1)
+// =============================================================================
+// Metal gövdeye kalıcı yapışır; barkod + QR = `BeamBody.bodyNo` (tek kod). Sahip/ölçüler kart
+// bilgisidir; boş alan baskıda atlanır (present:false).
+// =============================================================================
+export const BEAM_BODY_FIELDS: readonly FieldDef[] = [
+  { key: "barcode",          defaultLabel: "Barkod",          type: "barcode" },
+  { key: "qrCode",           defaultLabel: "QR Kod",          type: "qr" },
+  { key: "bodyNo",           defaultLabel: "Gövde No",        type: "text", required: true },
+  { key: "ownerName",        defaultLabel: "Sahibi",          type: "text" },
+  { key: "bodyWidthCm",      defaultLabel: "Levent Eni (cm)", type: "number" },
+  { key: "flangeDiameterCm", defaultLabel: "Flanş Çapı (cm)", type: "number" },
+  { key: "tareKg",           defaultLabel: "Dara (kg)",       type: "number" },
+  { key: "printedAt",        defaultLabel: "Baskı Tarihi",    type: "date" },
+] as const;
+
+// =============================================================================
 // Aggregation + lookup
 // =============================================================================
 
@@ -219,6 +236,7 @@ export const FIELD_CATALOG: Record<LabelKind, readonly FieldDef[]> = {
   [LabelKind.SACK]:          SACK_FIELDS,
   [LabelKind.MACHINE]:       MACHINE_FIELDS,
   [LabelKind.WARP_BEAM]:     WARP_BEAM_FIELDS,
+  [LabelKind.BEAM_BODY]:     BEAM_BODY_FIELDS,
 };
 
 /**

@@ -49,6 +49,10 @@ export const SHARED_ENUM_VALUES: Record<string, string> = {
     "CASH_TRANSACTION.kind override'ı 'Ödeme' ile ayrıldı (2026-09-18)",
   // ── Fason F1 polimorfik kalem (2026-09-14)
   ROLL: "StockCountLineKind(sayım satırı top) ve SubcontractorDispatchItemKind(fason sevk kalemi top) — ikisi de kalemin TOP olduğunu söyler; ortak Türkçe doğru",
+  // ── Levent gövdesi (devere ek B1, 2026-11-20)
+  AT_SUBCONTRACTOR: "RollStatus(top fasonda) ve BeamBodyStatus(gövde deverecide) — devereci bir fasoncudur; ortak 'Fasonda' doğru",
+  MOUNTED: "WarpBeamStatus(levent tezgahta) ve BeamBodyStatus(gövde tezgahta) — aynı fiziksel takma; ortak 'Tezgahta (bağlı)' doğru",
+  SCRAPPED: "WarpBeamStatus(levent hurdaya ayrıldı) ve BeamBodyStatus(gövde hurdaya ayrıldı) — ortak 'Hurdaya ayrıldı' doğru",
   // ── Devere 1b (2026-09-14)
   WEIGHED: "SackWeighingKind(çuval tartıldı) ve WarpKgSource(levent kg tartıyla bilindi) — ikisi de 'Tartıldı'; ortak Türkçe doğru",
   IN_HOUSE:
