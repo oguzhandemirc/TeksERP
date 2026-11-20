@@ -6,6 +6,7 @@ import type { BildirimKanali, BildirimOlayi } from "@prisma/client";
 import { z } from "zod";
 
 export const NOTIFICATION_EVENTS = [
+  // Eski destek talebi (3d-2) 2026-11-20 söküldü: yeni satır doğmaz; değer geçmiş iletim kayıtları için durur.
   "DESTEK_TALEBI",
   "KOPYA_SUPHESI",
   "KOPYA_KIRA_REDDI",

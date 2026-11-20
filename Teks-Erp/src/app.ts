@@ -170,7 +170,6 @@ import mobileUpdateRoutes from "./routes/mobile-update.routes";
 import clientPolicyRoutes from "./routes/client-policy.routes";
 import licenseRoutes from "./routes/license.routes";
 import updateRoutes from "./routes/update.routes";
-import supportRoutes from "./routes/support.routes";
 import labTestRoutes from "./routes/lab-test.routes";
 import labTestTypeRoutes from "./routes/lab-test-type.routes";
 import certificateRoutes from "./routes/certificate.routes";
@@ -761,8 +760,6 @@ app.use("/api/client-policy", clientPolicyRoutes);
 app.use("/api/license", licenseRoutes);
 // Backend güncelleme durumu (Dağıtım v2): kiradaki politika + güncelleyicinin durum dosyası; salt okunur.
 app.use("/api/guncelleme", updateRoutes);
-// Destek talepleri (3d-2): panel → satıcı `/v1/destek`; yanıtlar zil `destek` + yoklamayla döner.
-app.use("/api/destek", supportRoutes);
 // K4P lab testleri (kaliteGuvence modülü): test + sonuç + onay/iptal; tür kataloğu ayrı router.
 app.use("/api/lab-tests", labTestRoutes);
 app.use("/api/lab-test-types", labTestTypeRoutes);

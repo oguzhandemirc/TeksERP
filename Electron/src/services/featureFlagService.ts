@@ -467,8 +467,6 @@ export interface FeatureFlags {
   kk1DuplicateGuardEnabled: boolean;
   /** Hızlı iş emri izni yalnız kendi başlattığı iş emrini düzenler — default false; backend ENFORCE. */
   workOrderQuickOwnOnlyEnabled: boolean;
-  /** Destek talepleri yalnız sahibine görünür (yönetici hepsini) — default false; backend ENFORCE. */
-  supportOwnTicketsOnlyEnabled: boolean;
   /** Patron bulutu olay güdümlü tur (3 sn birleştirme, ≥15 sn aralık) — default false; backend ENFORCE. */
   patronBulutOlayGudumluEnabled: boolean;
   /** KK1 ham giriş çevrimdışı kuyruksuz (online-only) rejimde mi — default false;

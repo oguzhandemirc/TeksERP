@@ -50,8 +50,6 @@ export const PORTAL_PERMISSIONS = {
   "yayinci:yonet": ADMIN,
   /** Yayıncı imza anahtarı KAYDI (yayın bildirimi güvenini genişletir — yalnız yönetici). */
   "yayinci:anahtar": ADMIN,
-  /** Destek kutusu: fabrikanın talebine yanıt yazma ve talebi kapatma (okuma `portal:oku`). */
-  "destek:yanitla": VENDOR,
   "anahtar:oku": VENDOR,
   /** Bildirimler: kanal durumu + son bildirimler (salt okuma). */
   "bildirim:oku": VENDOR,

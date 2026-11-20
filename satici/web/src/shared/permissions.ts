@@ -25,7 +25,6 @@ export const PORTAL_PERMISSIONS = {
   "dagitim:yaz": VENDOR,
   "yayinci:yonet": ADMIN,
   "yayinci:anahtar": ADMIN,
-  "destek:yanitla": VENDOR,
   "anahtar:oku": VENDOR,
   "bildirim:oku": VENDOR,
   "bildirim:yonet": ADMIN,

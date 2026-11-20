@@ -10,7 +10,6 @@
 import type { DiscoveredServer, ServerGroup, ServerIdentity } from "./discovery";
 import type { TlsAdvert, TlsPin, TlsPinVia } from "./lan-tls";
 import type { LicenseRelayRequest, LicenseRelayResult } from "./license-relay";
-import type { ScreenshotResult } from "./screenshot";
 import type { TvDisplayInfo, TvWindowOpenRequest, TvWindowOpenResult } from "./tv-window";
 import type { LoomAlarmNotifyRequest, LoomAlarmNotifyResult } from "./loom-alarm-notify";
 import type { BildirimNotifyRequest, BildirimNotifyResult, BildirimOpenEvent, BildirimRozetRequest } from "./bildirim-notify";
@@ -44,8 +43,6 @@ export interface WindowApi {
   maximize: () => void;
   close: () => void;
   isMaximized: () => Promise<boolean>;
-  /** Destek talebi (3d-2): YALNIZ bu pencerenin görüntüsü, ≤600 KB JPEG; yakalanamazsa null. */
-  captureScreenshot: () => Promise<ScreenshotResult | null>;
 }
 
 /**

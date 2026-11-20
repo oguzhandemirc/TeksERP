@@ -445,7 +445,7 @@ Bugün `Electron/eslint.config.mjs` `KATALOG_DOSYALARI` iki karo dosyasını `ma
 | OK | `/system/read-only-db` | Sistem › Veritabanı Okuma Erişimi | var | admin:settings +sistem | — | 10-13 panel |
 | OK | `/system/roll-archive` | Sistem › Top Arşivi | var | SYSTEM_ROLL_ARCHIVE_ACCESS | — | 08-05 rolls |
 | OK | `/system/server-status` | Sistem › Sunucu Durumu | var | SYSTEM_SERVER_STATUS_ACCESS | — | 06-10  |
-| OK | `/system/support` | Sistem › Destek | var | support:create | — | 09-29 panel |
+| OK | `/system/error-reports` | Sistem › Bakım › Hata Raporları | var | admin:settings | — | 11-20 eski Destek ekranı söküldü |
 | OK | `/system/updates` | Sistem › Güncellemeler | var | — | — | 10-12 guncellemeler |
 | OK | `/system/work-sessions` | Sistem › Çalışma Oturumları | var | SYSTEM_WORK_SESSIONS_ACCESS | — | 07-02 Faz 4 |
 | OK | `/system/workstation` | Sistem › Bu Bilgisayar | var | SETTINGS_WORKSTATION_ACCESS | — | 09-24 yetki |

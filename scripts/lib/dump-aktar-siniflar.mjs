@@ -47,8 +47,6 @@ export const OZEL_TABLOLAR = {
   license_acceptances: [SINIF.KIMLIK, "lisans metni kabulü (DURUM beyanı)"],
   update_approvals: [SINIF.KIMLIK, "güncelleme onayı (DURUM beyanı)"],
   short_credential_key_escrows: [SINIF.KIMLIK, "LICENSE_DIR HMAC anahtar emaneti — kurulumun anahtarı"],
-  support_tickets: [SINIF.KIMLIK, "satıcı destek talepleri kuruluma bağlı"],
-  support_ticket_replies: [SINIF.KIMLIK, "satıcı destek yanıtları"],
   cloud_inbox_receipts: [SINIF.KIMLIK, "bulut gelen kutusu makbuzları DENEME'nin bulut tesisine ait"],
   error_report_entries: [SINIF.KIMLIK, "satıcıya hata raporu telemetrisi"],
   endpoint_latency_daily: [SINIF.KIMLIK, "uç gecikme telemetrisi — kurulumun ölçümü"],

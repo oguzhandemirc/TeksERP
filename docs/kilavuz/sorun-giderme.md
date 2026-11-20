@@ -53,4 +53,4 @@ Sunucu güncellemesi sorun çıkarsa kendiliğinden eski sürüme döner. Sistem
 
 ## 5. Destek talebi nasıl açılır
 
-Sistem → **Destek** → "Yeni destek talebi" → **Konu**, **Açıklama**, istenirse **Ekran görüntüsü ekle** → **Talebi gönder**. Yanıt aynı sayfada "Satıcı yanıtları"nda görünür. Onay verirseniz hataların türü/yeri/sürümü satıcıya kendiliğinden de gider: Sistem → **Destek** → **Hata raporları** kartı ([panel-yonetici.md](panel-yonetici.md) bölüm 9; varsayılan kapalı).
+Panel içindeki eski "Destek" ekranı kaldırıldı (2026-11-20); programı sağlayan firmanın verdiği destek kanalını kullanın. Onay verirseniz hataların türü/yeri/sürümü satıcıya kendiliğinden gider: Sistem → **Bakım** → **Hata Raporları** ([panel-yonetici.md](panel-yonetici.md) bölüm 9; varsayılan kapalı).

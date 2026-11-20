@@ -3,7 +3,7 @@
 // (`allowEnded`) bu anahtar `ended` ile gelir ve kapanış kirası alır (K6); aksi hâlde burada yalnız güncel anahtar.
 // Kira verildikten SONRA (ayrı, idempotent adımlar): fabrikanın kurulum kayıtları, güncelleme raporu ve açık modül adları deftere/duruma
 // yazılır, yanıta kurulumun destek güncellemeleri eklenir — hiçbiri kirayı düşüremez (hata yutulur, sonraki yoklama tekrarlar).
-import type { LicenseResponse, PollRequest, SupportTicketUpdate } from "../lisans-protokol";
+import type { LicenseResponse, PollRequest } from "../lisans-protokol";
 import { prisma } from "../lib/prisma";
 import { closeEndedKey } from "./closing-lease";
 import type { VendorContext } from "./context";
@@ -12,7 +12,6 @@ import { recordInstallHistory } from "./install-record.service";
 import { recordOpenModules } from "./open-modules";
 import { pollV2Report } from "./local-intervention";
 import { renewLease } from "./renewal.service";
-import { supportUpdatesFor } from "./support.service";
 import { recordUpdateReport } from "./update-policy.service";
 import { evaluateWaveAlert } from "./update-wave-view.service";
 
@@ -21,9 +20,9 @@ export async function processPoll(
   auth: AuthenticatedRequest,
   body: PollRequest,
   nowMs: number,
-): Promise<LicenseResponse & { destek?: SupportTicketUpdate[] }> {
+): Promise<LicenseResponse> {
   const telemetry = { durum: body.durum, saat: body.saat, ortam: body.ortam, saglik: body.saglik, gozlem: body.gozlem };
-  // K6: sonu gelmiş anahtar (kapanış kirasını anlayan istemci) kapanış kirası alır; kurulum kaydı/destek yazılmaz.
+  // K6: sonu gelmiş anahtar (kapanış kirasını anlayan istemci) kapanış kirası alır; kurulum kaydı yazılmaz.
   if (auth.ended) return closeEndedKey(ctx, auth, { presentedLeaseId: body.sonKiraId, measured: body.parmakIzi, capabilities: body.yetenekler ?? [], held: body.hak, telemetry, nowMs });
   const { response } = await renewLease(ctx, {
     installationDbId: auth.installation.id,
@@ -54,11 +53,5 @@ export async function processPoll(
   } catch (err) {
     console.error(`[yoklama] açık modüller yazılamadı: ${err instanceof Error ? err.message : String(err)}`);
   }
-  let destek: SupportTicketUpdate[] = [];
-  try {
-    destek = await supportUpdatesFor(prisma, auth.installation.id, nowMs);
-  } catch (err) {
-    console.error(`[yoklama] destek güncellemesi okunamadı: ${err instanceof Error ? err.message : String(err)}`);
-  }
-  return destek.length > 0 ? { ...response, destek } : response;
+  return response;
 }

@@ -86,7 +86,7 @@
 | `GET /v1/zil` (SSE) | Kurulum imzalı abonelik; `event: zil`, `data: {konu: lisans|gelen-kutusu|ozet|rapor|guncelleme|destek}`; içerik TAŞIMAZ; 25 sn'de bir yorum satırı (CF Proxy Read Timeout 125 sn); `Cache-Control: no-transform`, bu yol `compression`dan dışlanır ve Worker rotasının dışında kalır; CF sunucu yeniden başlatmaları bağlantıyı keser → istemci yeniden bağlanır, saatlik yoklama yedektir |
 | `POST /v1/cevrimdisi` | QR/aktarma ile gelen imzalı isteği yanıtlar (aynı mantık) |
 | `GET /q` | QR sayfası (telefon): `#<istek>` parçası sunucu loglarına girmez; yanıtı QR olarak gösterir |
-| `POST /v1/destek` · `GET /d/<belirteç>` · `PUT /y/<belirteç>` | Destek talebi; süreli imzalı indirme/yükleme bağlantıları |
+| `GET /d/<belirteç>` · `PUT /y/<belirteç>` | Süreli imzalı indirme/yükleme bağlantıları (eski `POST /v1/destek` 2026-11-20 söküldü) |
 
 **Fabrika uçları (`Teks-Erp`, `/api/license/*`, yeni izinler `license:view`, `license:manage` — katalog koda, atama panelde):** `GET durum` (herkes: kademe, bant, gün, sınıf, lisans sahibi/no) · `GET detay` · `POST etkinlestir` · `GET cevrimdisi-istek` · `POST cevrimdisi-yanit` · `GET aktarma-istegi` + `POST aktarma-yaniti` (panel aktarma; imza sayesinde panel sahtecilik yapamaz) · `POST tasima-talebi` · `POST dr-devral` · `GET indirme-belirteci?kanal=` (onaylı cihaz) · `GET veri-disari` (K5 kapısı: yedek + dışa aktarma).
 

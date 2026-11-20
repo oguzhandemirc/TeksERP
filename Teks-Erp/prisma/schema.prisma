@@ -751,8 +751,6 @@ model User {
   duplicateReviewsDecided             DuplicateReview[]             @relation("DuplicateReviewDecidedBy")
   mergedColors                        Color[]                       @relation("ColorMergedBy")
   mergedSubcontractors                Subcontractor[]               @relation("SubcontractorMergedBy")
-  /// Destek talebi künyesi (kim açtı).
-  supportTickets                      SupportTicket[]               @relation("SupportTicketCreatedBy")
   /// İlk kurulum sözleşme kabulleri (kim kabul etti — Ek-7).
   licenseAcceptances                  LicenseAcceptance[]           @relation("LicenseAcceptanceAcceptedBy")
   updateApprovals                     UpdateApproval[]              @relation("UpdateApprovalApprovedBy")
@@ -13876,55 +13874,6 @@ model CloudInboxReceipt {
   createdAt        DateTime          @default(now()) @db.Timestamptz
 
   @@map("cloud_inbox_receipts")
-}
-
-/// DESTEK TALEBİ (3d-2) — panelden açılır, satıcıya kurulum imzalı `POST /v1/destek` ile gider.
-/// DURUM tablosudur: yerel `GONDERILMEDI` (giden kutusu; yoklama sonrası yeniden denenir) → satıcının
-/// aynası `ACIK · YANITLANDI · KAPANDI` (yoklama yanıtından). Kimliği (`id`) satıcıya `talepId` olarak
-/// gider — tekrar gönderim aynı talebi döndürür. Değer kümesi satıcı protokolüyle büyüyebilir: VarChar.
-model SupportTicket {
-  id             String    @id @default(uuid()) @db.Uuid
-  clientToken    String?   @unique @db.Uuid
-  subject        String    @db.VarChar(200)
-  description    String
-  /// Panelin yakaladığı ekran görüntüsü (PNG/JPEG, ≤1 MB); gönderildikten sonra da talebin parçası.
-  screenshot     Bytes?
-  screenshotType String?   @db.VarChar(20)
-  panelVersion   String?   @db.VarChar(60)
-  status         String    @default("GONDERILMEDI") @db.VarChar(20)
-  /// Satıcının doğuşta materyalize ettiği numara (`DST-NNNNNN`); gönderilene dek NULL.
-  ticketNo       String?   @db.VarChar(40)
-  sentAt         DateTime? @db.Timestamptz
-  lastSyncedAt   DateTime? @db.Timestamptz
-  sendAttempts   Int       @default(0)
-  /// Son gönderim hatasının KODU (ham metin değil).
-  lastErrorCode  String?   @db.VarChar(60)
-  /// Talebi açan (künye): servis her zaman yazar; kolon künye kuralı gereği NULL alabilir (test_record_provenance §3).
-  createdById    String?   @db.Uuid
-  createdAt      DateTime  @default(now()) @db.Timestamptz
-  updatedAt      DateTime  @updatedAt @db.Timestamptz
-
-  createdBy User?                @relation("SupportTicketCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  replies   SupportTicketReply[]
-
-  @@index([status, updatedAt])
-  @@map("support_tickets")
-}
-
-/// Satıcı yanıtının yerel kopyası — ekleme-yalnız (satıcı defterinin aynası; `updatedAt` yok).
-/// `vendorReplyId` satıcının olay kimliğidir: aynı yanıt iki yoklamada gelse de tek satır.
-model SupportTicketReply {
-  id            String   @id @default(uuid()) @db.Uuid
-  ticketId      String   @db.Uuid
-  vendorReplyId String   @unique @db.Uuid
-  body          String
-  repliedAt     DateTime @db.Timestamptz
-  createdAt     DateTime @default(now()) @db.Timestamptz
-
-  ticket SupportTicket @relation(fields: [ticketId], references: [id])
-
-  @@index([ticketId, repliedAt])
-  @@map("support_ticket_replies")
 }
 
 /// HATA RAPORU KUYRUĞU — müşteri onaylı, kişisel verisiz hata GRUBU (satıcıya `POST /v1/hata-raporu`).

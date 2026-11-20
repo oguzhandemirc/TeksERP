@@ -1,7 +1,7 @@
 import apiClient from "./apiClient";
 import { withSettingsPassword } from "@/lib/settings-password";
 import type { ApiResponse } from "@/types/api";
-import type { ErrorReportConsent, ErrorReportOverview } from "@/pages/System/Support/error-report-types";
+import type { ErrorReportConsent, ErrorReportOverview } from "@/pages/System/ErrorReports/error-report-types";
 
 const BASE = "/api/hata-raporlari";
 const QUIET = { suppressErrorToast: true } as const;

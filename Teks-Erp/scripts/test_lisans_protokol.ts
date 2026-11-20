@@ -915,7 +915,7 @@ function yolDonanimBolumu(): void {
   const dogrula = (t: string, g: { path?: string; amaclar?: ("yokla" | "donanim")[] } = {}) =>
     verifyRequest(t, { publicKeyX: f.kurulum.x, body: govde, nowMs: SIMDI, purposes: g.amaclar ?? ["yokla"], installationId: f.kurulumId, ...(g.path ? { path: g.path } : {}) });
   beklenen("§14a yol imzalı istek kendi ucunda", dogrula(bas({ path: ENDPOINTS.POLL }), { path: ENDPOINTS.POLL }), "OK");
-  beklenen("§14b ⭐ yol imzalı istek başka uca", dogrula(bas({ path: ENDPOINTS.POLL }), { path: ENDPOINTS.SUPPORT }), "ISTEK_YOL");
+  beklenen("§14b ⭐ yol imzalı istek başka uca", dogrula(bas({ path: ENDPOINTS.POLL }), { path: ENDPOINTS.HARDWARE }), "ISTEK_YOL");
   beklenen("§14c eski doğrulayıcı (yol vermez) yol taşıyan isteği geçirir", dogrula(bas({ path: ENDPOINTS.POLL })), "OK");
   beklenen("§14d eski istemci (yolsuz istek) yeni doğrulayıcıda geçer (alan zorunlu değil)", dogrula(bas(), { path: ENDPOINTS.POLL }), "OK");
   const anahtar = { ...f.kurulum, kid: installationKeyId(f.kurulum.x) };

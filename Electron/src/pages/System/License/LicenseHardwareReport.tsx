@@ -9,7 +9,7 @@ import { useLicenseAction } from "./hooks";
 const RESULT_TEXT: Record<LicenseHardwareReportResult["durum"], string> = {
   BEKLIYOR: "Bildirim iletildi; lisans sunucusu onaylayınca yeni donanım kendiliğinden tanınır.",
   ONAYLANDI: "Donanım değişikliği kabul edildi; lisans yenilendi.",
-  REDDEDILDI: "Donanım değişikliği bildirimi reddedildi; destek talebi açın.",
+  REDDEDILDI: "Donanım değişikliği bildirimi reddedildi; satıcınızla görüşün.",
 };
 
 /**

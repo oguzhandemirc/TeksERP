@@ -39,7 +39,6 @@ import {
 import { closeTempOnActivation, evaluateLicenseTransitions, refreshLicenseTrace } from "./license-trail.service";
 import { adoptFromRejected, adoptOffered, refreshLicenseRevocation, revocationOffer, type RevocationOffer } from "./license-revocation.service";
 import { assertLiveResponseBinding, logLeaseAccepted, sanctionView, verifyResponseDocuments } from "./helpers/license-accept.helper";
-import { syncSupportAfterPoll } from "./support-sync.service";
 import { updateReportField } from "./update-status.service";
 import { systemSettingService } from "./system-setting.service";
 import { refreshUpdaterIntentQuietly } from "./update-intent.service";
@@ -304,8 +303,6 @@ async function pollOnce(transport: VendorTransport): Promise<{ outcome: PollOutc
     recordPollOutcome({ ok: false, code: result.code });
     return { outcome: "BASARISIZ", code: result.code };
   }
-  // Destek (3d-2): yanıtın `destek` alanı + giden kutusu — kira alışverişi kuyruğunun DIŞINDA, yoklamayı düşürmez.
-  void syncSupportAfterPoll(result.json, transport);
   try {
     const accepted = await acceptLicenseResponse(result.json, "yoklama", liveArrival(result));
     if (!accepted.yeniKira) {

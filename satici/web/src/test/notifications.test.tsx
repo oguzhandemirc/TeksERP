@@ -29,7 +29,7 @@ const MOVED: NotificationOverview = {
 
 const ROW: NotificationRow = {
   id: "7f1e2d3c-0000-4000-8000-00000000b001",
-  olay: "DESTEK_TALEBI",
+  olay: "KOPYA_SUPHESI",
   kanal: "TELEGRAM",
   durum: "GONDERILDI",
   deneme: 1,
@@ -37,7 +37,7 @@ const ROW: NotificationRow = {
   sonHata: null,
   gonderimZamani: "2026-09-30T10:00:05.000Z",
   yeniSohbetKimligi: null,
-  govde: { musteri: "Örnek Tekstil", tesis: "Ana tesis", kurulum: "Merkez sunucu", lisansNo: "TKS-2026-0042", sinif: "URETIM", konu: "Tartı ekranı donuyor", referans: "DST-000012", tarih: null, portalYolu: `/destek/${TALEP}` },
+  govde: { musteri: "Örnek Tekstil", tesis: "Ana tesis", kurulum: "Merkez sunucu", lisansNo: "TKS-2026-0042", sinif: "URETIM", konu: "Tartı ekranı donuyor", referans: "PARMAK_IZI_UYUSMAZ", tarih: null, portalYolu: `/kopya-uyarilari/${TALEP}` },
   kurulumId: "5b0c6a4e-1111-4000-8000-000000000001",
   createdAt: "2026-09-30T10:00:00.000Z",
   updatedAt: "2026-09-30T10:00:05.000Z",
@@ -64,9 +64,9 @@ describe("bildirimler görünümü", () => {
     expect(screen.getByText("Çalışıyor")).toBeInTheDocument();
     expect(screen.getByText(/Gönderildi/, { selector: ".badge" })).toBeInTheDocument();
     const row = (await screen.findByText("Örnek Tekstil › Ana tesis › Merkez sunucu")).closest("tr")!;
-    expect(within(row).getByText("Yeni destek talebi")).toBeInTheDocument();
+    expect(within(row).getByText("Kopya şüphesi uyarısı")).toBeInTheDocument();
     expect(within(row).getByText("Tartı ekranı donuyor")).toBeInTheDocument();
-    expect(within(row).getByRole("link", { name: "Aç" })).toHaveAttribute("href", `/destek/${TALEP}`);
+    expect(within(row).getByRole("link", { name: "Aç" })).toHaveAttribute("href", `/kopya-uyarilari/${TALEP}`);
     expect(screen.getByText("24 saat başarılı yoklama yok")).toBeInTheDocument();
   });
 

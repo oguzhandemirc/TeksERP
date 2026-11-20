@@ -1,4 +1,4 @@
-// BİLDİRİMLER — satıcı olaylarının (destek · kopya şüphesi · taşıma · DR · sessiz kurulum · yaklaşan vade · planlı
+// BİLDİRİMLER — satıcı olaylarının (kopya şüphesi · taşıma · DR · sessiz kurulum · yaklaşan vade · planlı
 // eylem) e-posta + Telegram iletim kaydı. Gönderimi çıkışı olan yan konteyner yapar; satıcı dışarı bağlanmaz ve kanal
 // sırlarını görmez — kanal durumu satırların SONUCUNDAN türer (sunucu). Deneme bildirimi yalnız `bildirim:yonet`.
 import { useState } from "react";
@@ -124,7 +124,7 @@ export function NotificationsPage() {
     <>
       <PageTitle
         title="Bildirimler"
-        sub="Destek talebi, kopya şüphesi, taşıma, DR devri, ses vermeyen kurulum ve yaklaşan vadeler e-posta + Telegram grubuna gider. Kanal ayarları (Telegram belirteci, Resend anahtarı, alıcı) satıcıda değil bildirim yan konteynerindedir; burada yalnız sonuçlar görünür."
+        sub="Kopya şüphesi, taşıma, DR devri, ses vermeyen kurulum ve yaklaşan vadeler e-posta + Telegram grubuna gider. Kanal ayarları (Telegram belirteci, Resend anahtarı, alıcı) satıcıda değil bildirim yan konteynerindedir; burada yalnız sonuçlar görünür."
         actions={canManage ? <TestButton /> : undefined}
       />
       <Section title="Kanallar">

@@ -66,6 +66,15 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
   // çoğunda ikincisidir.)
 ];
 
+// SÖKÜLMÜŞ UÇLAR — kullanıcı kararıyla kaldırılan yüzey geri bağlanırsa §4 kırmızı.
+const SOKULEN_ONEKLER: ReadonlyArray<{ yol: string; dosyalar: readonly string[]; neden: string }> = [
+  {
+    yol: "/api/destek",
+    dosyalar: ["routes/support.routes.ts", "services/support.service.ts", "services/support-sync.service.ts"],
+    neden: "eski satıcı üzerinden destek talebi (3d-2) 2026-11-20 söküldü; yerine Etkili Destek (`/api/etkili-destek`)",
+  },
+];
+
 // -----------------------------------------------------------------------------
 // AST YARDIMCILARI
 // -----------------------------------------------------------------------------
@@ -124,6 +133,20 @@ function mountEdilenler(dosya: string): string[] {
     if (hedef) kenarlar.push(hedef);
   }
   return kenarlar;
+}
+
+/** Dosyadaki `x.use("<yol>", …)` çağrılarının ilk argümanı olan dize ön ekleri (AST; yorumdaki örnek sayılmaz). */
+function mountYollari(dosya: string): string[] {
+  const cikti: string[] = [];
+  const gez = (n: ts.Node): void => {
+    if (ts.isCallExpression(n) && ts.isPropertyAccessExpression(n.expression) && n.expression.name.text === "use") {
+      const ilk = n.arguments[0];
+      if (ilk && (ts.isStringLiteral(ilk) || ts.isNoSubstitutionTemplateLiteral(ilk))) cikti.push(ilk.text);
+    }
+    ts.forEachChild(n, gez);
+  };
+  gez(oku(dosya));
+  return cikti;
 }
 
 // -----------------------------------------------------------------------------
@@ -196,6 +219,19 @@ async function main(): Promise<void> {
   if (MUAF.length > 0) {
     console.log(`   ℹ️  muaf (${MUAF.length}): ${MUAF.map((m) => `${m.dosya} — ${m.neden}`).join(" | ")}`);
   }
+
+  // ── §4 SÖKÜLMÜŞ UÇ ÖNEKLERİ GERİ BAĞLANMAMIŞ ─────────────────────────────
+  // Söküm kararı verilmiş ön ek sessizce geri dönmesin (eski panel o yola gidince 404 almalı).
+  const yollar = erisilen.size > 0 ? [...erisilen].flatMap((f) => mountYollari(f).map((y) => ({ y, f }))) : [];
+  check("§4a Körlük zemini: mount ön ekleri okundu", yollar.length >= 40, `bulunan=${yollar.length}`);
+  const diriler = yollar.filter(({ y }) => SOKULEN_ONEKLER.some((s) => y === s.yol || y.startsWith(`${s.yol}/`)));
+  check(
+    "§4b ⭐ Sökülmüş uç önekleri hiçbir router'da mount edilmiyor",
+    diriler.length === 0,
+    diriler.map(({ y, f }) => `${y} (${path.relative(SRC, f)})`).join(", "),
+  );
+  const kalanDosya = SOKULEN_ONEKLER.flatMap((s) => s.dosyalar).filter((d) => fs.existsSync(path.join(SRC, d)));
+  check("§4c Sökülmüş uçların dosyaları geri gelmedi", kalanDosya.length === 0, kalanDosya.join(", "));
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   if (fail > 0) {

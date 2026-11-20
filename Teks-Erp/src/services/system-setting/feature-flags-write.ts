@@ -1004,18 +1004,6 @@ export async function setFeatureFlags(
       );
     }
 
-    if (Object.prototype.hasOwnProperty.call(input, "supportOwnTicketsOnlyEnabled")) {
-      if (typeof input.supportOwnTicketsOnlyEnabled !== "boolean") {
-        throw AppError.badRequest("supportOwnTicketsOnlyEnabled boolean olmalı");
-      }
-      await this.set(
-        SETTING_KEYS.SUPPORT_OWN_TICKETS_ONLY_ENABLED,
-        input.supportOwnTicketsOnlyEnabled,
-        "Destek talepleri: herkes yalnız kendininkini görür",
-        userId
-      );
-    }
-
     if (Object.prototype.hasOwnProperty.call(input, "kk1OnlineOnlyEnabled")) {
       if (typeof input.kk1OnlineOnlyEnabled !== "boolean") {
         throw AppError.badRequest("kk1OnlineOnlyEnabled boolean olmalı");

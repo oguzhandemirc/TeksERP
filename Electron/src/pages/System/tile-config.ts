@@ -98,7 +98,7 @@ export const systemTileSections: SystemTileSection[] = [
   {
     group: "maintenance",
     title: "Bakım",
-    description: "Güncelleme, yedek, lisans, destek ve veri bakımı",
+    description: "Güncelleme, yedek, lisans, hata raporları ve veri bakımı",
   },
 ];
 // Karolar bölüm dosyalarında (`tiles/*.ts`, UX-2 bölünmesi); bekçiler `scripts/lib/panel-karo-dosyalari.ts` ile hepsini okur.

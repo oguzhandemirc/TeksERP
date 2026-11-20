@@ -149,7 +149,7 @@ import { FeatureFlagsPage } from "@/pages/GeneralSettings/FeatureFlagsPage";
 import { NumberingPage } from "@/pages/GeneralSettings/Numbering/NumberingPage";
 import { UpdatesPage } from "@/pages/System/Updates/UpdatesPage";
 import { LicensePage } from "@/pages/System/License/LicensePage";
-import { SupportPage } from "@/pages/System/Support/SupportPage";
+import { ErrorReportsPage } from "@/pages/System/ErrorReports/ErrorReportsPage";
 import { AboutPage } from "@/pages/System/About/AboutPage";
 import { SystemEventsPage } from "@/pages/System/Events/SystemEventsPage";
 import { ActivityArchivePage } from "@/pages/System/Archive/ActivityArchivePage";
@@ -1344,11 +1344,11 @@ export const contentRoutes: RouteObject[] = [
     ),
   },
   {
-    // Destek (3d-2) — satıcıya talep + yanıtlar; karo ile AYNI kod (`system/support` manifestosu).
-    path: "system/support",
+    // Hata raporları (3.6) — müşteri onayı + şeffaflık listesi; karo ile AYNI kod (`system/error-reports`).
+    path: "system/error-reports",
     element: (
-      <ProtectedRoute requirePermission="support:create">
-        <SupportPage />
+      <ProtectedRoute requirePermission="admin:settings">
+        <ErrorReportsPage />
       </ProtectedRoute>
     ),
   },

@@ -127,8 +127,8 @@ async function main(): Promise<void> {
     const akislar = [];
     for (let i = 0; i < 3; i++) akislar.push(await zilAboneOl(sunucu.genel, { kurulumId: k.kurulumId, anahtar }));
     await bekle(300);
-    const ucBekle = akislar.map((a) => a.bekleKonu("destek", 2_000));
-    await notifyDoorbell(prisma, k.kurulumDbId, "destek");
+    const ucBekle = akislar.map((a) => a.bekleKonu("rapor", 2_000));
+    await notifyDoorbell(prisma, k.kurulumDbId, "rapor");
     const ucSonuc = await Promise.all(ucBekle);
     kontrol("§7a ✓K tavan içinde üç akışın ÜÇÜ de zili alır", ucSonuc.every((x) => x !== null) && (await saglik()).abone === 3, ucSonuc.map((x) => (x === null ? "yok" : "ok")).join(","));
     const dorduncu = await zilAboneOl(sunucu.genel, { kurulumId: k.kurulumId, anahtar });

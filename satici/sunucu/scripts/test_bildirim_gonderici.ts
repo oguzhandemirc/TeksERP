@@ -3,7 +3,7 @@
 // gerçek Telegram/Resend çağrısı YOK).
 //   §0 yapılandırma: kanal yalnız sırrı + hedefiyle açılır; eksik/biçimsiz/herkese açık/boş sır kanalı KAPALI yapar,
 //      gerekçe yalnız DEĞİŞKEN ADI taşır; sağlayıcı kökü https (düz http yalnız geri döngü)
-//   §1 uçtan uca: fabrikanın destek talebi → giden kutusu → Telegram (HTML, bağlantı) + Resend (Bearer · Idempotency-
+//   §1 uçtan uca: kurulum olayı (kurucu `enqueueNotificationTx`) → giden kutusu → Telegram (HTML, bağlantı) + Resend (Bearer · Idempotency-
 //      Key = satır · alıcı/gönderen/konu); talep metni · açan · sağlık İLETİYE GİRMEZ; satır GONDERILDI + sağlayıcı kimliği
 //   §2 geri çekilme ve tavan: 5xx → üstel bekleme (vadesi gelmeden alınmaz) → tavanda HATA · 429 → sağlayıcının
 //      bekleme süresi · 4xx → hemen HATA · ağ kopması geçici · süper gruba taşınan sohbet kalıcı · belirteç hata kaydına girmez
@@ -35,7 +35,6 @@ import { ResendTransport, TelegramTransport, type NotificationTransport, type Se
 import { gondericiRoluKur, type GondericiRolu } from "./lib/bildirim-rolu";
 import { sahteSaglayici, type SahteSaglayici } from "./lib/bildirim-sahte";
 import {
-  ORTAM,
   SATICI_KOKU,
   anahtarOrtamiKur,
   etkinlestirmeGovdesi,
@@ -48,7 +47,6 @@ import {
   portalSunuculariKur,
   sonuc,
   temizleKurulumlar,
-  yoklamaGovdesi,
 } from "./lib/test-ortam";
 
 type Prisma = (typeof import("../src/lib/prisma"))["prisma"];
@@ -148,7 +146,7 @@ function yapilandirma(): void {
 }
 
 async function ucdanUca(o: Ortak): Promise<string[]> {
-  console.log("\n§1 uçtan uca: destek talebi → giden kutusu → sahte Telegram + Resend");
+  console.log("\n§1 uçtan uca: kurulum olayı → giden kutusu → sahte Telegram + Resend");
   const ortam = await anahtarOrtamiKur();
   const { f, ctx } = ortam;
   const sunucu = await portalSunuculariKur(ctx);
@@ -159,14 +157,17 @@ async function ucdanUca(o: Ortak): Promise<string[]> {
     kurulumlar.push(k.kurulumDbId);
     const e = await imzaliPost(sunucu.genel, ENDPOINTS.ACTIVATE, { kurulumId: k.kurulumId, amac: "etkinlestir", anahtar, govde: etkinlestirmeGovdesi({ kod: k.kod, kurulumId: k.kurulumId, anahtar, parmakIzi: f.parmakIzi }) });
     kiraIdOf(e.json);
-    const saglik = yoklamaGovdesi({ sonKiraId: null, parmakIzi: f.parmakIzi }).saglik;
-    const govde = { v: 1, talepId: randomUUID(), konu: "Tartı <ekranı> donuyor & kilitleniyor", aciklama: `Ayrıntı ${KANARYA}-ACIKLAMA`, acan: `Ayşe ${KANARYA}-ACAN`, panelSurum: "1.3.2", ek: null, saglik, ortam: ORTAM };
-    const d = await imzaliPost(sunucu.genel, ENDPOINTS.SUPPORT, { kurulumId: k.kurulumId, amac: "destek", anahtar, govde });
-    const talep = await o.prisma.destekTalebi.findFirstOrThrow({ where: { kurulumId: k.kurulumDbId } });
+    // Kurucu yazımı: fazla anahtar (kanarya) gövdeye GİRMEZ; konu serbest metin, kaçış göndericide.
+    const { enqueueNotificationTx } = await import("../src/notifications/outbox");
+    const ilgili = randomUUID();
+    const talep = { id: k.kurulumDbId, talepNo: `REF-${RUN}` };
+    const giris = { event: "DENEME" as const, keyParts: ["uctan-uca", ilgili], installationDbId: k.kurulumDbId, relatedId: ilgili, portalPath: `/kurulumlar/${k.kurulumDbId}`, konu: "Tartı <ekranı> donuyor & kilitleniyor", referans: talep.talepNo };
+    const yazilan = await o.prisma.$transaction((tx) => enqueueNotificationTx(tx, { ...giris, ...({ aciklama: `Ayrıntı ${KANARYA}-ACIKLAMA` } as object) }));
+    const d = { status: yazilan === 2 ? 200 : 500 };
     const tg0 = o.tg.istekler.length;
     const rs0 = o.rs.istekler.length;
     const t = await runSenderCycle(deps(o.db, ikisi(o)), Date.now());
-    const rows = await o.prisma.bildirim.findMany({ where: { olay: "DESTEK_TALEBI", kurulumId: k.kurulumDbId } });
+    const rows = await o.prisma.bildirim.findMany({ where: { olay: "DENEME", kurulumId: k.kurulumDbId, ilgiliKayit: ilgili } });
     kontrol("§1a iki satır GONDERILDI + sağlayıcı kimliği (Telegram message_id · Resend id)", d.status === 200 && t.sent >= 2 && rows.length === 2 && rows.every((r) => r.durum === "GONDERILDI" && !!r.saglayiciKimligi && r.gonderimZamani !== null), JSON.stringify(t));
     // Sahte sağlayıcı bu turdaki BÜTÜN bekleyenleri alır: bu talebin iletisi numarasından/satır kimliğinden seçilir.
     const eposta = rows.find((r) => r.kanal === "EPOSTA")!;
@@ -176,20 +177,20 @@ async function ucdanUca(o: Ortak): Promise<string[]> {
     kontrol(
       "§1b Telegram: bot yolu · sohbet · HTML (kaçışlı) · başlık · konu · fabrika adı · portal bağlantısı · önizleme kapalı",
       tgIstek.length === 1 && tgIstek[0]!.yol === `/bot${TOKEN}/sendMessage` && tgIstek[0]!.govde.chat_id === CHAT && tgIstek[0]!.govde.parse_mode === "HTML" &&
-        tgMetin.includes("<b>Yeni destek talebi</b>") && tgMetin.includes("Tartı &lt;ekranı&gt; donuyor &amp; kilitleniyor") && tgMetin.includes(talep.talepNo) &&
-        tgMetin.includes(`href="${PORTAL}/destek/${talep.id}"`) && JSON.stringify(tgIstek[0]!.govde.link_preview_options) === '{"is_disabled":true}',
+        tgMetin.includes("<b>Deneme bildirimi</b>") && tgMetin.includes("Tartı &lt;ekranı&gt; donuyor &amp; kilitleniyor") && tgMetin.includes(talep.talepNo) &&
+        tgMetin.includes(`href="${PORTAL}/kurulumlar/${talep.id}"`) && JSON.stringify(tgIstek[0]!.govde.link_preview_options) === '{"is_disabled":true}',
       tgMetin.slice(0, 160),
     );
     const rsG = rsIstek[0]?.govde ?? {};
     kontrol(
       "§1c Resend: Bearer anahtar · Idempotency-Key = satır · gönderen/alıcı (env) · konu · metin (konu + bağlantı)",
       rsIstek.length === 1 && rsIstek[0]!.basliklar.authorization === `Bearer ${RESEND_KEY}` && rsIstek[0]!.basliklar["idempotency-key"] === `bildirim-${eposta.id}` &&
-        rsG.from === GONDEREN && JSON.stringify(rsG.to) === JSON.stringify([ALICI]) && String(rsG.subject).includes("Yeni destek talebi") &&
-        String(rsG.text).includes("Tartı <ekranı> donuyor") && String(rsG.text).includes(`${PORTAL}/destek/${talep.id}`),
+        rsG.from === GONDEREN && JSON.stringify(rsG.to) === JSON.stringify([ALICI]) && String(rsG.subject).includes("Deneme bildirimi") &&
+        String(rsG.text).includes("Tartı <ekranı> donuyor") && String(rsG.text).includes(`${PORTAL}/kurulumlar/${talep.id}`),
       String(rsG.subject),
     );
     const ham = [...tgIstek, ...rsIstek].map((i) => i.ham).join("\n");
-    kontrol("§1d talep metni · açan · sağlık/ortam İLETİYE GİRMEZ (kanarya yok, sürüm/disk yok)", !ham.includes(KANARYA) && !ham.includes("diskDolulukYuzde") && !ham.includes(ORTAM.isletimSistemi), `${ham.length} bayt`);
+    kontrol("§1d kurucuya verilen fazla alan (kanarya) İLETİYE GİRMEZ", !ham.includes(KANARYA), `${ham.length} bayt`);
   } finally {
     await sunucu.kapat();
     await temizleKurulumlar(kurulumlar, ortam.kidler);

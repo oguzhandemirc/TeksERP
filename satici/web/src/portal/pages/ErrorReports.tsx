@@ -5,12 +5,12 @@ import { Link, useParams } from "react-router-dom";
 import { fmtDateTime } from "../../shared/format";
 import { useGet } from "../../shared/hooks";
 import { Badge, PageTitle, QueryState, Section, Table } from "../../shared/ui";
-import { installationPath, type SupportInstallation } from "./Support";
+import { installationPath, type InstallationRef } from "./installation-ref";
 
 export const ERROR_SOURCE_LABEL: Record<string, string> = { sunucu: "Sunucu", panel: "Panel", tablet: "Tablet" };
 
 export interface ErrorReportSummaryRow {
-  readonly kurulum: SupportInstallation | null;
+  readonly kurulum: InstallationRef | null;
   readonly grupSayisi: number;
   readonly toplam: number;
   readonly sonGorulme: string | null;
@@ -32,7 +32,7 @@ export interface ErrorReportGroupRow {
 
 export function ErrorReportsPage() {
   const q = useGet<{ items: ErrorReportSummaryRow[] }>(["hata-raporlari"], "/hata-raporlari", { limit: 200 });
-  const rows = (q.data?.items ?? []).filter((r): r is ErrorReportSummaryRow & { kurulum: SupportInstallation } => r.kurulum !== null);
+  const rows = (q.data?.items ?? []).filter((r): r is ErrorReportSummaryRow & { kurulum: InstallationRef } => r.kurulum !== null);
   return (
     <>
       <PageTitle title="Hata raporları" sub="Fabrikanın onay verdiği kurulumlardan gelen hata özetleri: hata kodu, sınıfı, sürüm, yer ve sayı. Mesaj metni ve kişisel veri gelmez." />

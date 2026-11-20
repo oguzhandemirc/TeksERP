@@ -8,7 +8,6 @@
 // kimliği/olguları gelmezse başlatma aralıklarla yeniden denenir; başarısız yoklamanın ardından
 // kısa aralıklarla (üstel, olağan aralıkla tavanlı) yeniden yoklanır. Durum `/api/admin/health`te.
 // =============================================================================
-import { onDoorbellTopic } from "./doorbell-topics";
 import { getCachedInstallationIdentity, whenIdentityReady } from "./installation-identity.job";
 import { reportJobFailure } from "./job-failure";
 import { bilgi, uyari } from "../lib/logger";
@@ -228,15 +227,11 @@ function scheduleBoot(): void {
   bootTimer.unref();
 }
 
-let offSupportBell: (() => void) | null = null;
-
 export function startLicensePoll(): void {
   if (started) return;
   started = true;
   // İndirme belirteci dolmak üzere/yoksa istemcinin isteği yoklamayı dürter (kiraya eşlik eder).
   onDownloadTokenStale(requestImmediateLicensePoll);
-  // Zil `destek` (3d-2): satıcı yanıt yazdı/kapattı → beklemeden yokla; yanıt yoklama yanıtıyla gelir.
-  offSupportBell = onDoorbellTopic("destek", requestImmediateLicensePoll);
   // Güncelleme onayının yürürlük zamanlayıcısı bellektedir: açılışta kalan süreyle yeniden kurulur (doğrulama kipinde kurulmaz).
   scheduleApprovalActivationQuietly();
   void bootstrap();
@@ -245,8 +240,6 @@ export function startLicensePoll(): void {
 /** Kapanış: zamanlayıcılar durur, birikim diske yazılır. */
 export function stopLicensePoll(): void {
   stopped = true;
-  offSupportBell?.();
-  offSupportBell = null;
   generation++;
   for (const t of [pollTimer, bootTimer, housekeepingTimer, fingerprintTimer, integrityTimer]) if (t) clearTimeout(t);
   pollTimer = bootTimer = housekeepingTimer = fingerprintTimer = integrityTimer = null;

@@ -149,8 +149,8 @@ async function main(): Promise<void> {
     console.log("\n§5 İSTEK yol bağı (L2-1)");
     const yoklama = (sonKiraId: string) => yoklamaGovdesi({ sonKiraId, parmakIzi: f.parmakIzi });
     const kira0 = kiraIdOf(kabul.json);
-    const yanlis = await imzaliPost(sunucu.genel, ENDPOINTS.POLL, { kurulumId: k.kurulumId, amac: "yokla", anahtar, govde: yoklama(kira0), imzaYolu: ENDPOINTS.SUPPORT });
-    kontrol("§5a ⭐ destek ucu için imzalanmış yoklama yokla ucunda → 401 ISTEK_YOL", yanlis.status === 401 && yanlis.kod === "ISTEK_YOL", `${yanlis.status} ${yanlis.kod}`);
+    const yanlis = await imzaliPost(sunucu.genel, ENDPOINTS.POLL, { kurulumId: k.kurulumId, amac: "yokla", anahtar, govde: yoklama(kira0), imzaYolu: ENDPOINTS.HARDWARE });
+    kontrol("§5a ⭐ donanım ucu için imzalanmış yoklama yokla ucunda → 401 ISTEK_YOL", yanlis.status === 401 && yanlis.kod === "ISTEK_YOL", `${yanlis.status} ${yanlis.kod}`);
     const dogru = await imzaliPost(sunucu.genel, ENDPOINTS.POLL, { kurulumId: k.kurulumId, amac: "yokla", anahtar, govde: yoklama(kira0), imzaYolu: ENDPOINTS.POLL });
     kontrol("§5b kendi ucu için imzalanmış yoklama → 200", dogru.status === 200, `${dogru.status} ${dogru.kod ?? ""}`);
     const zarfla = async (yol: string, sonKiraId: string) => {

@@ -1,10 +1,10 @@
-// Ayarla açılan yetki kapsamı daraltmaları (B5/B6). Bayrak kapalıyken bugünkü
+// Ayarla açılan yetki kapsamı daraltmaları (B5). Bayrak kapalıyken bugünkü
 // geniş kapsam aynen sürer; açıkken dar izinli aktör yalnız kendi kaydına dokunur.
 import type { NextFunction, Request, Response } from "express";
 import prisma from "../../lib/prisma";
 import { matchesPermission, RBAC_DENIED_CODE } from "../../middlewares/rbac.middleware";
 import { AppError } from "../../utils/app-error";
-import { readSupportOwnTicketsOnlyEnabled, readWorkOrderQuickOwnOnlyEnabled } from "../system-setting.service";
+import { readWorkOrderQuickOwnOnlyEnabled } from "../system-setting.service";
 import { TERIM } from "../../constants/terim";
 
 /**
@@ -29,10 +29,4 @@ export async function requireQuickWorkOrderOwnership(req: Request, _res: Respons
   } catch (err) {
     next(err);
   }
-}
-
-/** Destek talebi okuma kapsamı: bayrak açıkken `admin:settings` taşımayan aktör yalnız kendininkini görür. */
-export async function supportTicketOwnerScope(user: { userId: string; permissions: readonly string[] }): Promise<string | undefined> {
-  if (matchesPermission(user.permissions, "admin:settings")) return undefined;
-  return (await readSupportOwnTicketsOnlyEnabled()) ? user.userId : undefined;
 }
