@@ -177,6 +177,8 @@ const ETIKET_OKUYUCULARI = new Map<string, string>([
    "basım satırının cihaz/kaynak/sürüm etiketi — yalnız `PrintJobRequestContext` nesnesine konur"],
   ["middlewares/request-trace.middleware.ts",
    "istek künyesi satırının kurulum/tür/sürüm etiketi (izlenebilirlik B1) — yalnız `recordTrace` kaydına konur"],
+  ["routes/destek.routes.ts",
+   "Etkili Destek talebinin bağlam bilgisine istemci türü/sürümü (GÖZLEM) — yalnız `meta` nesnesine konur, kabul/red kararına girmez"],
   ["middlewares/latency.middleware.ts",
    "yavaş istek log satırının istemci türü etiketi (ölçüm A1) — yalnız log yüküne konur"],
 ]);

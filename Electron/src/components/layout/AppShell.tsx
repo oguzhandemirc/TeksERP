@@ -26,6 +26,7 @@ import { useDeviceScanner } from "@/hooks/useDeviceScanner";
 import { useDeviceAnnounce } from "@/hooks/useDeviceAnnounce";
 import { useScannerStore } from "@/store/scanner";
 import { useMachineConfig } from "@/hooks/useMachineConfig";
+import { DestekRoot } from "@/pages/Destek/DestekRoot";
 import { useHashPath } from "@/lib/use-hash-path";
 import { TEZGAH_TV_PATH } from "@/pages/Operations/WeavingFloor/tv-entry";
 import { WeavingFloorTvScreen } from "@/pages/Operations/WeavingFloor/WeavingFloorTvScreen";
@@ -127,6 +128,7 @@ function MenuShell() {
       <ShortcutsDialog open={helpOpen} onOpenChange={setHelpOpen} />
       <ScanResultOverlay />
       <SurumNotlariDialog kuruluSurum={kuruluSurum} />
+      <DestekRoot />
     </div>
   );
 }

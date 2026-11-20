@@ -108,6 +108,9 @@ const TANIM_DOSYALARI = ["src/middlewares/rbac.middleware.ts"] as const;
 const DELEGE = "delege:";
 
 const DINAMIK_IZIN_KAYNAKLARI: Record<string, readonly string[]> = {
+  // ETKİLİ DESTEK (2026-11-20): firma yöneticisi kararı (`scope=tenant` + `/durum.firmaYoneticisi`) TEK helper'da
+  // (`isTenantAdmin`); kod dosya-içi sabitte (`SUPPORT_TENANT_ADMIN_PERMISSION` = `admin:settings`), AST değeri çözer.
+  "src/services/destek.service.ts": ["SUPPORT_TENANT_ADMIN_PERMISSION"],
   // matchesPermission(permissions, PATRON_LOGIN_PERMISSION) — patron türü giriş kanalı kapısı (V1); sabit permission-catalog.ts'te,
   // katalog satırını ve kapının ısırdığını test_patron_giris §4a/§7b ölçer — burada devir.
   "src/services/auth.service.ts": [`${DELEGE}scripts/test_patron_giris.ts`],

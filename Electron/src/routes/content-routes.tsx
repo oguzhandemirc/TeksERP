@@ -24,6 +24,7 @@ import { DashboardPage } from "@/pages/Dashboard/DashboardPage";
 import { SettingsPage } from "@/pages/Settings/SettingsPage";
 import { NotificationSettingsPage } from "@/pages/Settings/Notifications/NotificationSettingsPage";
 import { ReleaseNotesPage } from "@/pages/ReleaseNotes/ReleaseNotesPage";
+import { DestekPage } from "@/pages/Destek/DestekPage";
 import { NotificationsPage } from "@/pages/Notifications/NotificationsPage"; // bildirim:
 import { NotificationProfilesPage } from "@/pages/System/NotificationProfiles/NotificationProfilesPage"; // bildirim:
 import { DefinitionsHubPage } from "@/pages/Definitions/DefinitionsHubPage";
@@ -220,6 +221,9 @@ export const contentRoutes: RouteObject[] = [
   { path: "settings/notifications", element: <NotificationSettingsPage /> }, // bildirim: kişisel tercih, kapısız (bayrak kapalıysa sayfa söyler)
   // Kapısız: sürüm notlarını operatör de okur (`system/*` altı `admin:settings` ister).
   { path: "release-notes", element: <ReleaseNotesPage /> },
+  // Kapısız: kullanıcı yalnız KENDİ talebini görür (kimlik oturumdan, süzme sunucuda); firma kapsamını backend
+  // `admin:settings` ile kapılar. Etkili Destek kapalıyken sayfa istek atmaz, "kapalı" kutusu çizer (`DestekPage`).
+  { path: "destek", element: <DestekPage /> },
   { path: "notifications", element: <NotificationsPage /> }, // bildirim: kişisel, kapısız (bayrak kapalıysa sayfa söyler)
   { path: "forbidden", element: <ForbiddenPage /> },
 

@@ -64,6 +64,9 @@ const api: ApiBridge = {
     openExternal: (url) => ipcRenderer.invoke("system:open-external", url),
     showInFolder: (path) => ipcRenderer.send("system:show-in-folder", path),
   },
+  screen: {
+    capture: () => ipcRenderer.invoke("screen:capture"),
+  },
   power: {
     getSystemIdleTime: () => ipcRenderer.invoke("power:get-system-idle-time"),
   },

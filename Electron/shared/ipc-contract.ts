@@ -76,6 +76,19 @@ export interface SystemApi {
   showInFolder: (path: string) => void;
 }
 
+/** Panel penceresinin anlık görüntüsü (Etkili Destek talebi eki). PNG, uzun kenar ≤ 1920 px. */
+export interface ScreenCaptureResult {
+  /** Düz base64 (`data:` öneki YOK). */
+  dataBase64: string;
+  width: number;
+  height: number;
+}
+
+export interface ScreenApi {
+  /** Çağıran pencerenin içeriğini yakalar; pencere yoksa ya da görüntü boşsa `null`. */
+  capture: () => Promise<ScreenCaptureResult | null>;
+}
+
 export interface PdfSaveOpts {
   /** Basılacak tam HTML belge (backend renderer çıktısı). */
   html: string;
@@ -494,6 +507,7 @@ export interface ApiBridge {
   deviceIdentity: DeviceIdentityApi;
   window: WindowApi;
   system: SystemApi;
+  screen: ScreenApi;
   power: PowerApi;
   scanner: ScannerDeviceApi;
   printer: PrinterTransportApi;

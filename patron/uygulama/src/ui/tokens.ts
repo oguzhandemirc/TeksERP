@@ -220,6 +220,8 @@ export const radius = { sheet: 28, card: 20, cardInner: 12, control: 12, button:
 export const STRIPE = 4;
 /** En küçük dokunma hedefi (iOS 44pt / Android 48dp → 48). */
 export const TOUCH = 48;
+/** Destek çizim ekranı: ekran görüntüsünün ÜSTÜNE çizilir → her temada aynı sabit tonlar; karartma TAM siyah örtü. */
+export const CIZIM_PALETI = { kirmizi: "#DC2626", sari: "#F59E0B", yesil: "#16A34A", mavi: "#2563EB", karartma: "#000000", tuvalZemini: "#E2E8F0" } as const;
 /** Bu genişlikten itibaren sol ray + iki sütun. */
 export const WIDE_MIN = 768;
 /** Geniş ekranda içerik kabı (ray hariç) en fazla bu kadar yayılır, ortalanır. */

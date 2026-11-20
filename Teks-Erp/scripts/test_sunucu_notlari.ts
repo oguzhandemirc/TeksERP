@@ -77,7 +77,9 @@ const SAYFA_ICI: readonly { dosya: string; servis: string; gerekce: string }[] =
     gerekce: "yazarken çağrılan önizleme: \"etikete SIĞMIYOR\" önizlemenin altında satır içi, her tuşta tost olmaz" },
 ];
 
-type Sinif = "PREVIEW_ON_TYPING" | "PREVIEW_ON_OPEN" | "AUTOSAVE" | "BOOT" | "TIMER";
+// READ_RECEIPT_ON_OPEN (2026-11-20, Etkili Destek): önizleme DEĞİL, gerçek bir yazım — ayrıntı ekranı veriyi
+// gösterdiği için "okundu" kaydı düşer (kullanıcı talebi açtı ama ayrı bir düğmeye basmadı).
+type Sinif = "PREVIEW_ON_TYPING" | "PREVIEW_ON_OPEN" | "AUTOSAVE" | "BOOT" | "TIMER" | "READ_RECEIPT_ON_OPEN";
 /**
  * Kullanıcı eylemi olmadan giden yazımlar (alt ajan envanteri 2026-09-25, 316 yazım çağrısının 19'u).
  * `zarfUyarisi`: yanıt zarfına üst düzey `warnings` basıyor mu (backend ölçüldü) — basan
@@ -126,6 +128,12 @@ const OTOMATIK_YAZIMLAR: readonly { yer: string; sinif: Sinif; zarfUyarisi: bool
   { yer: "Electron/src/pages/Definitions/DocumentDesigner/versions/CompareDialog.tsx::documentTemplateService.preview", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
   { yer: "Electron/src/pages/Definitions/DocumentDesigner/versions/PublishDialog.tsx::documentTemplateService.preview", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
   { yer: "Electron/src/hooks/useDeviceAnnounce.ts::apiClient", sinif: "BOOT", zarfUyarisi: false },
+  // Etkili Destek okundu işareti (`POST /api/etkili-destek/talepler/:id/okundu`, docs/ops/DESTEK-ENTEGRASYONU.md §5.4/§5.7).
+  // NE ZAMAN: talep ayrıntısı yüklenince `useTicketDetail` useEffect'i — `talep:son-mesaj-kimliği` çifti başına BİR kez
+  // (useRef); ayrıntı 30 sn'de bir tazelenir ama istek yalnız yeni mesaj gelince yeniden gider. ETKİ: yalnız talep ×
+  // kullanıcı okuma zamanı ilerler → rozet düşer; iş verisi, defter ve audit izi YOK (merkeze iletilir). BAŞARISIZLIK:
+  // `suppressErrorToast` + boş `.catch` → sessiz, kendiliğinden yeniden denenmez. Zarfta `warnings` yok.
+  { yer: "Electron/src/pages/Destek/useTicketQueries.ts::destekService.markRead", sinif: "READ_RECEIPT_ON_OPEN", zarfUyarisi: false },
   { yer: "Electron/src/pages/Definitions/DocumentTemplates/DocumentPreview.tsx::printedDocumentService.getSampleHtml", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
   { yer: "Electron/src/pages/Definitions/DocumentTemplates/TravelerCardPreview.tsx::workOrderService.getTravelerCardSampleHtml", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
   { yer: "Electron/src/pages/Definitions/TravelerCardStudio/RawHtmlEditor.tsx::travelerTemplateService.inspect", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },

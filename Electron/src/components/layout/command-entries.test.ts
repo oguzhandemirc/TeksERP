@@ -5,6 +5,7 @@ import { allCommandEntries, commandSections, findBreadcrumbParent } from "./comm
 import { leafPermission } from "./command-entries.reports";
 import { navGroups } from "./nav-config";
 import { reportTiles } from "@/pages/Reports/tile-config";
+import { useDestekStore } from "@/pages/Destek/destek-store";
 
 /**
  * KOMUT PALETİ BEKÇİSİ.
@@ -166,5 +167,17 @@ describe("komut paleti kataloğu", () => {
         expect(e.visibleWhen?.(ctxFalse), `${cat.key}/${e.key}`).toBe(false);
       }
     }
+  });
+});
+
+describe("destek girişi (koşullu)", () => {
+  it("/destek palette yalnız Etkili Destek etkinken görünür", () => {
+    const entry = allCommandEntries.find((e) => e.to === "/destek");
+    expect(entry?.visibleWhen).toBeDefined();
+    useDestekStore.getState().reset();
+    expect(entry?.visibleWhen?.({} as never)).toBe(false);
+    useDestekStore.getState().setEnabled(true);
+    expect(entry?.visibleWhen?.({} as never)).toBe(true);
+    useDestekStore.getState().reset();
   });
 });

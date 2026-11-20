@@ -26,6 +26,8 @@ jest.mock('../../components/ScreenChrome', () => ({
 }));
 jest.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: () => null }));
 jest.mock('../../components/SyncStatusChip', () => ({ __esModule: true, default: () => null }));
+// Destek çipi kendi görünürlük testinde ölçülür (Destek/DestekGirisleri.test.tsx).
+jest.mock('../Destek/DestekGirisleri', () => ({ DestekCipi: () => null }));
 jest.mock('../../hooks/useDeviceType', () => ({ useDeviceType: () => 'tablet' }));
 jest.mock('../../hooks/useModuleOrder', () => ({
   useModuleOrder: () => ({ orderedScreens: mockScreens, setModuleOrder: jest.fn() }),

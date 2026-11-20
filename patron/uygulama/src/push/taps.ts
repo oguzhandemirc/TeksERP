@@ -9,8 +9,9 @@
 import { useRouter } from "expo-router";
 import { useEffect, useRef } from "react";
 import { Platform } from "react-native";
+import { destekRozetiniTazele } from "../destek/gorunurluk";
 import { BILDIRIM_TAG } from "../lib/erp-bildirim";
-import { safeRoute } from "../lib/notification-form";
+import { isSupportRoute, safeRoute } from "../lib/notification-form";
 import { invalidate } from "../state/changes";
 import { useSession } from "../state/session";
 import { NATIVE_PUSH_ETKIN } from "./support";
@@ -25,6 +26,8 @@ export interface TapDeps {
   push(route: string): void;
   /** ERP: kayda gidilince bildirim satırı okundu sayılır (listede vurgu da okundu sayar); hata yutulur. */
   okundu?(bildirimId: string): Promise<unknown>;
+  /** Destek yanıtı bildirimi açıldı: rozet tazelenir (hata yutulur). */
+  onSupport?(): void;
 }
 
 /** Saf dokunuş akışı: güvenli yol → (gerekirse) tesis geçişi → yol. Açıldıysa true. */
@@ -39,6 +42,7 @@ export async function openNotification(data: unknown, d: TapDeps): Promise<boole
   const liste = d.yedekRota && route === d.yedekRota;
   d.push(liste && id ? `${route}?vurgu=${id}` : route);
   if (d.yedekRota && !liste && id && d.okundu) void d.okundu(id).catch(() => undefined);
+  if (isSupportRoute(route)) d.onSupport?.();
   return true;
 }
 
@@ -60,12 +64,13 @@ export function webTapFromUrl(href: string): { rota: string; tesisId: string } |
 
 export function useNotificationTaps(enabled: boolean): void {
   const router = useRouter();
-  const { facilityId, switchFacility, yetenek, bildirimci } = useSession();
+  const { facilityId, switchFacility, yetenek, bildirimci, api } = useSession();
   const yedekRota = yetenek.bildirimKutusu && !yetenek.bildirim ? ERP_BILDIRIM_ROTASI : null;
   const okundu = (id: string) => bildirimci.okundu(id).then(() => invalidate([BILDIRIM_TAG]));
+  const onSupport = () => void destekRozetiniTazele(api);
   // Tesis değişince dinleyici yeniden kurulmasın (son bildirim yeniden açılırdı): güncel değerler ref'te.
-  const deps = useRef<TapDeps>({ facilityId, switchFacility, yedekRota, okundu, push: (r) => router.push(r as never) });
-  deps.current = { facilityId, switchFacility, yedekRota, okundu, push: (r) => router.push(r as never) };
+  const deps = useRef<TapDeps>({ facilityId, switchFacility, yedekRota, okundu, onSupport, push: (r) => router.push(r as never) });
+  deps.current = { facilityId, switchFacility, yedekRota, okundu, onSupport, push: (r) => router.push(r as never) };
   useEffect(() => {
     if (!enabled || Platform.OS !== "web" || typeof window === "undefined") return;
     const tap = webTapFromUrl(window.location.href);

@@ -59,6 +59,8 @@ export const ALWAYS_OPEN_ROUTES: readonly LicenseRouteRule[] = [
   // Giriş akışının parçası: sıfırlanan yönetici TOTP'yi kuramazsa K5'te "verilerimi al" için giremez.
   { method: "GET", path: "/api/auth/totp/enroll", reason: "iki adımlı doğrulama kurulumu (giriş akışı; K5'te veri erişimi için)" },
   { method: "POST", path: "/api/auth/totp/enroll", reason: "iki adımlı doğrulama kurulumu (giriş akışı; K5'te veri erişimi için)" },
+  // Kilitli kurulum da destek merkezine ulaşabilmeli: destek talebi kurtarma yoludur, iş verisi yazmaz.
+  { method: "*", path: "/api/etkili-destek/*", reason: "Etkili Destek talebi aç / yanıtla / gör (kurtarma yolu; merkezde durur, iş verisi yazmaz)" },
   // Müşteri onayı her kademede geri alınabilmeli (kişisel veri kararı); iş verisi yazmaz.
   { method: "PUT", path: "/api/hata-raporlari/onay", reason: "hata raporu onayı ver / geri al (müşteri kararı her kademede)" },
   { method: "POST", path: "/api/hata-raporlari/istemci", reason: "panel/tablet hata kaydı (telemetri; onaylıysa); iş verisi yazmaz — K5 ekranı da çöker" },
