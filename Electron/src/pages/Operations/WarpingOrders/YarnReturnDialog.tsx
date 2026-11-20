@@ -18,8 +18,8 @@ import { checkReturn, kgInput, remainingAsWaste, yarnTitle, type ReturnCheck, ty
 import { warpingHoldingService } from "./holding-service";
 import { fmtKg } from "./order-model";
 import { WARPING_ORDERS_QUERY_KEY } from "./service";
-import { ReasonSelect, ReturnPreviewNotes, ReturnSummary, ReturnWarehouseField } from "./YarnReturnParts";
-import type { PickedRef } from "./dispatch-model";
+import { PieceCountFields, ReasonSelect, ReturnPreviewNotes, ReturnSummary, ReturnWarehouseField } from "./YarnReturnParts";
+import { pieceCountFields, type PickedRef } from "./dispatch-model";
 import type { WarpingYarnHolding } from "./holding-types";
 
 interface Props {
@@ -55,9 +55,12 @@ function useReturnForm(holding: WarpingYarnHolding) {
   const [wasteReason, setWasteReason] = useState("");
   const [reasonCode, setReasonCode] = useState("");
   const [warehouse, setWarehouse] = useState<PickedRef | null>(null);
+  const [packageCount, setPackageCount] = useState("");
+  const [bobbinCount, setBobbinCount] = useState("");
+  const pieces = pieceCountFields(packageCount, bobbinCount);
   const check = checkReturn(kg, wasteKg, holding.holdingKg);
   const fillWaste = remainingAsWaste(kg, holding.holdingKg);
-  return { kg, setKg, wasteKg, setWasteKg, wasteReason, setWasteReason, reasonCode, setReasonCode, warehouse, setWarehouse, check, fillWaste };
+  return { kg, setKg, wasteKg, setWasteKg, wasteReason, setWasteReason, reasonCode, setReasonCode, warehouse, setWarehouse, check, fillWaste, packageCount, setPackageCount, bobbinCount, setBobbinCount, pieces };
 }
 
 export function YarnReturnDialog({ orderId, holding, names, exitWarehouseName, onClose }: Props) {
@@ -72,7 +75,7 @@ export function YarnReturnDialog({ orderId, holding, names, exitWarehouseName, o
   const save = useMutation({
     mutationFn: (c: { qty: number; waste: number }) => warpingHoldingService.returnYarn(orderId, {
       dispatchItemId: holding.dispatchItemId, qtyKg: c.qty, reasonCode: f.reasonCode, ...(f.warehouse ? { warehouseId: f.warehouse.id } : {}),
-      ...(c.waste > 0 ? { wasteKg: c.waste, wasteReason: f.wasteReason.trim() || null } : {}), clientToken: attempt.token(),
+      ...(c.waste > 0 ? { wasteKg: c.waste, wasteReason: f.wasteReason.trim() || null } : {}), ...f.pieces, clientToken: attempt.token(),
     }),
     onSuccess: (res) => {
       attempt.onSuccess();
@@ -85,7 +88,7 @@ export function YarnReturnDialog({ orderId, holding, names, exitWarehouseName, o
   const waste = f.check.ok ? f.check.waste : 0;
   // Fire varsa tolerans önizlemesi görülmeden kaydedilmez; aşımda onay kutusu şart.
   const previewOk = waste === 0 || (pv.fresh && (!pv.data!.overTolerance || ack));
-  const ok = f.check.ok && f.reasonCode !== "" && previewOk;
+  const ok = f.check.ok && f.reasonCode !== "" && previewOk && f.pieces !== null;
   const qtyErr = !f.check.ok && f.check.field === "qty" && f.check.error ? { message: f.check.error } : undefined;
   const wasteErr = !f.check.ok && f.check.field === "waste" && f.check.error ? { message: f.check.error } : undefined;
   return (
@@ -115,6 +118,7 @@ export function YarnReturnDialog({ orderId, holding, names, exitWarehouseName, o
             </FormField>
             <FormField label="İade sebebi" htmlFor="wr-reason" required><ReasonSelect id="wr-reason" value={f.reasonCode} onChange={f.setReasonCode} /></FormField>
             <ReturnWarehouseField exitName={exitName} value={f.warehouse} onChange={f.setWarehouse} />
+            <PieceCountFields packageCount={f.packageCount} bobbinCount={f.bobbinCount} onPackage={f.setPackageCount} onBobbin={f.setBobbinCount} />
             {waste > 0 && (
               <FormField label="Fire gerekçesi" htmlFor="wr-waste-reason" className="col-span-2" info="İsteğe bağlı; kapanış firesindeki gerekçeyle aynı serbest metin.">
                 <Input id="wr-waste-reason" maxLength={300} placeholder="Ör. kopuk, ıslak, karışmış bobin" value={f.wasteReason} onChange={(e) => f.setWasteReason(e.target.value)} />

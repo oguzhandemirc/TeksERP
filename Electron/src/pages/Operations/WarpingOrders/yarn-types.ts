@@ -41,7 +41,8 @@ export interface WarpingDispatchPreview {
 
 export interface WarpingDispatchBody {
   clientToken: string;
-  lines: Array<{ yarnItemId: string; warehouseId: string; lotId: string | null; qtyKg: number }>;
+  /** `packageCount` / `bobbinCount` H1: bilgi (defter değil); yalnız girilince gider. */
+  lines: Array<{ yarnItemId: string; warehouseId: string; lotId: string | null; qtyKg: number; packageCount?: number; bobbinCount?: number }>;
   plateNumber?: string | null;
   driverName?: string | null;
   notes?: string | null;
@@ -65,6 +66,9 @@ export interface WarpingDispatchItem {
   /** Fire (ayrı sütun; eski sunucu göndermez). */
   wasteKg?: string;
   holdingKg: string;
+  /** H1: koli / bobin adedi (bilgi); girilmediyse null, eski sunucuda yok. */
+  packageCount?: number | null;
+  bobbinCount?: number | null;
 }
 
 export interface WarpingDispatchRow {
@@ -82,6 +86,9 @@ export interface WarpingDispatchRow {
   totalAllocatedKg: string;
   totalWasteKg?: string;
   totalHoldingKg: string;
+  /** H1: Σ koli / bobin (girilen kalemler); hiçbiri girilmediyse null, eski sunucuda yok. */
+  totalPackageCount?: number | null;
+  totalBobbinCount?: number | null;
   canCancel: boolean;
   cancelBlockedReason: string | null;
   items: WarpingDispatchItem[];

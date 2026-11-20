@@ -1,7 +1,7 @@
 // =============================================================================
 // SİPARİŞ KAPANIŞI — kalan iplik kalem kalem İADE / FİRE / DEVERECİDE KALIR → `POST /:id/settle` (plan E9, D7b)
 // =============================================================================
-// Açılışta `GET /:id/settlement-preview` sunucunun varsayılanını (A1-a: fire = min(kalan, plan fire payı), fazlası kalır)
+// Açılışta `GET /:id/settlement-preview` sunucunun varsayılanını (`devere.settleDefault` kipi; varsayılan A1-a: fire = min(kalan, plan fire payı), fazlası kalır)
 // getirir; satırlar onunla dolu ve o önizleme tazedir. Kullanıcı değiştirince "Önizle" (`POST …/settle/preview`) ister;
 // girdi önizlemeden sonra değişirse "Kapat" kapanır. Tolerans aşımı yalnız uyarır, gerekçe İSTEĞE BAĞLI.
 // =============================================================================
@@ -12,13 +12,15 @@ import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { FormField } from "@/components/forms/FormField";
 import { Input } from "@/components/ui/input";
+import { InfoPopover } from "@/components/ui/info-popover";
+import { flagSettingTrail } from "@/lib/flag-setting-path";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { toastServerSuccess } from "@/lib/serverNotes";
 import { apiErrorMessage } from "@/services/apiClient";
 import { yarnNamesOf } from "./holding-model";
 import { parseNum } from "./order-model";
 import { WARPING_ORDERS_QUERY_KEY } from "./service";
-import { buildSettleBody, draftsFromPlan, type SettleLineDraft } from "./settle-model";
+import { buildSettleBody, draftsFromPlan, settleSuggestionText, type SettleLineDraft } from "./settle-model";
 import { warpingSettleService } from "./settle-service";
 import { SettleLinesTable, SettlePreviewView } from "./SettleParts";
 import { useWarpingDispatches } from "./yarn-service";
@@ -49,7 +51,7 @@ function useSettleForm(order: WarpingOrder, initial: WarpingSettlePreview) {
 // Geniş form iskeleti (WideFormDialog): kapanış tablosu yedi sütun + iade deposu taşıdığı için dar modalda yatay
 // taşıyordu; gövde kendi kaydırıcısında, alt düğmeler hep görünür. Tablo yalnız çok dar ekranda kendi içinde kayar.
 const DESCRIPTION = (
-  <>Deverecide kalan iplik her satırda üçe bölünür: <b>iade</b> depoya döner, <b>fire</b> kayıp yazılır, <b>kalır</b> deverecide durur ve sonraki siparişe devreder. Satırlar önerilen bölüşümle dolu gelir.</>
+  <>Deverecide kalan iplik her satırda üçe bölünür: <b>iade</b> depoya döner, <b>fire</b> kayıp yazılır, <b>kalır</b> deverecide durur ve sonraki siparişe devreder. Satırlar fabrika ayarındaki öneriyle dolu gelir.</>
 );
 
 function SettleForm({ order, initial, onClose }: { order: WarpingOrder; initial: WarpingSettlePreview; onClose: () => void }) {
@@ -76,6 +78,12 @@ function SettleForm({ order, initial, onClose }: { order: WarpingOrder; initial:
   return (
     <WideFormDialog open onOpenChange={(o) => !o && onClose()} title={`${order.orderNo} — siparişi kapat`} description={DESCRIPTION} footer={footer}>
       <div className="space-y-4 text-sm">
+        {initial.plan.lines.length > 0 && (
+          <p className="flex items-center gap-1 text-muted-foreground" data-testid="settle-suggestion">
+            {settleSuggestionText(initial.plan.defaultMode)}
+            <InfoPopover label="Önerinin kaynağı" desc={`Satırların ilk bölüşümü kapanıştaki kalan iplik önerisi ayarından gelir (${flagSettingTrail("devereSettleDefault")}). Satırları burada değiştirebilirsiniz; ayar yalnız ilk öneriyi belirler.`} />
+          </p>
+        )}
         <SettleLinesTable drafts={f.drafts} names={names} exitNames={f.exitNames} onChange={f.setDrafts} />
         <div className="grid gap-4 md:grid-cols-2">
           {f.anyReturn && <FormField label="İade sebebi" htmlFor="ws-return-reason" required><ReasonSelect id="ws-return-reason" value={f.reasonCode} onChange={f.setReasonCode} /></FormField>}

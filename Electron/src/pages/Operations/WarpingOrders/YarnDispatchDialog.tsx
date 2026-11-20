@@ -91,7 +91,7 @@ export function YarnDispatchDialog({ order, onClose, onDone }: { order: WarpingO
   });
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-5xl">
+      <DialogContent className="max-w-6xl">
         <DialogHeader>
           <DialogTitle>{order.orderNo} — devereciye iplik sevki</DialogTitle>
           <DialogDescription>

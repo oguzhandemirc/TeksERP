@@ -15,6 +15,7 @@ import { fmtFactoryDateTime } from "@/lib/factory-time";
 import { toastServerSuccess } from "@/lib/serverNotes";
 import { cn } from "@/lib/utils";
 import { warpingHoldingService, useWarpingReturns } from "./holding-service";
+import { pieceText } from "./dispatch-model";
 import { fmtKg } from "./order-model";
 import { YarnLabel, yarnText } from "./YarnLabel";
 import { WARPING_ORDERS_QUERY_KEY } from "./service";
@@ -69,6 +70,7 @@ function ReturnRow({ r, onCancel }: { r: WarpingYarnReturnRow; onCancel: () => v
       <TableCell className={num}>
         {fmtKg(r.qtyKg)}
         {Number(r.wasteKg ?? 0) > 0 && <span className="block text-xs text-amber-700 dark:text-amber-400">fire {fmtKg(r.wasteKg!)} kg</span>}
+        {pieceText(r.packageCount, r.bobbinCount) && <span className="block text-xs text-muted-foreground">{pieceText(r.packageCount, r.bobbinCount)}</span>}
       </TableCell>
       <TableCell className="whitespace-nowrap text-right">
         {cancelled ? <Badge variant="outline" className="font-normal no-underline">Geri alındı</Badge> : (
