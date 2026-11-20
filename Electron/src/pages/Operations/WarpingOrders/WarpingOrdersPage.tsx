@@ -9,6 +9,7 @@ import { Plus } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
+import { RelocatedToolStrip } from "@/pages/Reports/_v2/RelocatedTools";
 import { BandStats, ListBand } from "@/components/layout/ListPage";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
@@ -83,6 +84,8 @@ export function WarpingOrdersPage() {
           </div>
         }
       />
+      {/* Devere F2: Denye Sapması raporunun bu ekrandaki girişi (rapor kapalı / izinsizse çizilmez). */}
+      <RelocatedToolStrip host="/operations/fason-devere" />
       {summary && (
         <ListBand>
           <BandStats

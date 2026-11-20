@@ -133,6 +133,11 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
     sinif: "basit", izin: "report:production", modul: "dokumaEnabled", varsayilanGun: null, tarih: "yok",
     panelYolu: "reports/dokuma/levent-bitis-tahmini", uc: "/api/reports/dokuma/levent-bitis-tahmini", kapiTasiyici: [{ dosya: "src/routes/reports/dokuma.report.routes.ts", yol: "/levent-bitis-tahmini" }], yuzey: "yaprak",
     nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "tasindi", panelYolu: "operations/warp-beams", aciklama: "Levent planı ekranındaki bitiş tahmini" } },
+  // Devere F2: uç `/api/warp-specs/denier-deviation` (rapor router'ı dışında, devere kapısı) → yabancı uç; yeni yeri Fason Devere ekranı.
+  { key: "dokuma/denye-sapma", baslik: "Denye Sapması", soru: "Tartılan devere leventleri iplik kartındaki denyeyle uyuşuyor mu, hangi kartın denyesi düzeltilmeli?",
+    sinif: "gelismis", izin: "report:production", modul: "dokumaEnabled", varsayilanGun: 90, tarih: "aralik-gun",
+    panelYolu: "reports/dokuma/denye-sapma", uc: null, kapiTasiyici: null, yuzey: "yaprak-yabanci-uc",
+    nesil: "v1", kategoriV2: null, persona: [], varyantBoyutlari: [], yeniHali: { tur: "tasindi", panelYolu: "operations/fason-devere", aciklama: "Fason Devere Siparişleri ekranının araç şeridi (Üretim › Devere / Çözgü)" } },
 
   // ── ÖN MUHASEBE ───────────────────────────────────────────────────────────
   { key: "finance/aging", baslik: "Cari Yaşlandırma", soru: "Cari bakiyeler bu tarihte hangi vade kovalarında duruyor?",

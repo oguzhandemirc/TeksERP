@@ -84,6 +84,7 @@ import { WeavingEfficiencyPage } from "@/pages/Reports/Maliyet/WeavingEfficiency
 import { ProfitabilityReportPage } from "@/pages/Reports/Maliyet/ProfitabilityReportPage";
 import { KarnePage } from "@/pages/Reports/Dokuma/KarnePage";
 import { LeventBitisTahminiPage } from "@/pages/Reports/Dokuma/LeventBitisTahminiPage";
+import { DenyeSapmaPage } from "@/pages/Reports/Dokuma/DenyeSapmaPage";
 import { CashBookPage } from "@/pages/Reports/Finance/CashBookPage";
 import { VatSummaryPage } from "@/pages/Reports/Finance/VatSummaryPage";
 import { FxDiffPage } from "@/pages/Reports/Finance/FxDiffPage";
@@ -1789,6 +1790,14 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="report:production">
         <LeventBitisTahminiPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "reports/dokuma/denye-sapma",
+    element: (
+      <ProtectedRoute requirePermission="report:production">
+        <DenyeSapmaPage />
       </ProtectedRoute>
     ),
   },
