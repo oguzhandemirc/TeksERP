@@ -103,6 +103,7 @@ export const RESTRICTED_OPEN_ROUTES: readonly LicenseRouteRule[] = [
   { method: "POST", path: "/api/printed-documents/:docType/sample-html", reason: "belge örneği; yazmaz" },
   { method: "POST", path: "/api/traveler-cards/sample-html", reason: "refakat kartı örneği; yazmaz" },
   { method: "POST", path: "/api/traveler-templates/inspect", reason: "şablon incelemesi; yazmaz" },
+  { method: "POST", path: "/api/beam-bodies/:id/transition-preview", reason: "levent gövdesi hareket önizlemesi; yazmaz" },
   // Baskı ve yeniden basım (yalnız ayak izi yazar; yeni resmi belge sürümü DEĞİL)
   { method: "POST", path: "/api/labels/rolls/:id/print", reason: "etiket baskı ayak izi (yeniden basım)" },
   { method: "POST", path: "/api/labels/rolls/:id/print-native", reason: "etiket yeniden basımı" },

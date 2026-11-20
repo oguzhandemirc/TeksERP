@@ -89,5 +89,6 @@ export const NUMBER_SERIES_CODE_CAPACITY: Readonly<Record<string, number>> = {
   consignmentDispatch: 64, // consignmentDispatch.dispatchNo
   warpingOrder: 64, // warpingOrder.orderNo
   beamBody: 32, // beamBody.bodyNo
+  beamBodyReturn: 64, // beamBodyReturn.docNo
   customerDeliveryNote: 32, // customerDeliveryNote.noteNo
 };

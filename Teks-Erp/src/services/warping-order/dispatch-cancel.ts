@@ -12,6 +12,7 @@ import { cancelYarnItemsTx, countReturnedYarnItems } from "../subcontractor-yarn
 import { assertWarpingBound } from "../helpers/dispatch-header.helper";
 import { loadWarpingYarnItems, type WarpingYarnItem } from "../helpers/warping-yarn-open.helper";
 import { WARPING_ORDER_TABLE } from "./create";
+import { auditReversedBeamBodies, dispatchBeamBodyCancelBlock, loadDispatchBeamBodies, reverseDispatchBeamBodiesTx } from "../beam-body/dispatch-link";
 
 type Tx = Prisma.TransactionClient;
 const kg = (v: Prisma.Decimal) => v.toFixed(3);
@@ -26,6 +27,8 @@ export interface WarpingDispatchCancelPreview {
   items: Array<{ dispatchItemId: string; yarnItemId: string; lotNo: string | null; warehouseId: string; outKg: string; returnedKg: string }>;
   /** Bu sevk düşünce siparişte canlı sevk kalmazsa sipariş OPEN'a döner. */
   orderReturnsToOpen: boolean;
+  /** B2: sevkle giden boş gövdeler — iptalde depoya (boş) döner. */
+  beamBodies: Array<{ id: string; bodyNo: string; ownerName: string | null }>;
 }
 
 async function loadOwnDispatch(db: Pick<Tx, "subcontractorDispatch">, id: string, dispatchId: string) {
@@ -49,17 +52,18 @@ export async function previewCancelWarpingDispatch(id: string, dispatchId: strin
   const d = await loadOwnDispatch(prisma, id, dispatchId);
   const items = await loadWarpingYarnItems(prisma, { dispatchId });
   const others = await prisma.subcontractorDispatch.count({ where: { warpingOrderId: id, cancelledAt: null, id: { not: dispatchId } } });
-  const blockedReason = warpingDispatchCancelBlock(d.cancelledAt, items);
+  const blockedReason = warpingDispatchCancelBlock(d.cancelledAt, items) ?? (d.cancelledAt ? null : await dispatchBeamBodyCancelBlock(prisma, dispatchId));
   return {
     dispatch: { id: d.id, dispatchNo: d.dispatchNo, cancelledAt: d.cancelledAt?.toISOString() ?? null },
     canCancel: blockedReason === null,
     blockedReason,
     items: items.map((i) => ({ dispatchItemId: i.dispatchItemId, yarnItemId: i.yarnItemId, lotNo: i.lotNo, warehouseId: i.warehouseId, outKg: kg(i.outKg), returnedKg: kg(i.returnedKg) })),
     orderReturnsToOpen: !d.cancelledAt && others === 0,
+    beamBodies: (await loadDispatchBeamBodies(prisma, [dispatchId])).get(dispatchId) ?? [],
   };
 }
 
-export interface WarpingDispatchCancelTxOut { dispatchNo: string; reverted: number; status: WarpingOrderStatus }
+export interface WarpingDispatchCancelTxOut { dispatchNo: string; reverted: number; status: WarpingOrderStatus; beamBodies: Awaited<ReturnType<typeof reverseDispatchBeamBodiesTx>> }
 
 /**
  * Sevk iptalinin tx gövdesi — sipariş satırını kilitleyen claim burada (çağıranın tx'inde ilk ya da fiş claim'inin
@@ -86,20 +90,23 @@ export async function cancelWarpingDispatchTx(tx: Tx, { id, dispatchId, why, use
   const claim = await tx.subcontractorDispatch.updateMany({ where: { id: d.id, cancelledAt: null }, data: { cancelledAt: new Date(), cancelledById: userId, cancelReason: why } });
   if (claim.count === 0) throw AppError.conflict(`Sevk ${d.dispatchNo} zaten iptal edilmiş.`, { code: "DISPATCH_CANCELLED" });
   const reverted = await cancelYarnItemsTx(tx, { dispatchId: d.id, reason: why, userId });
+  // B2: sevkle giden boş gövdeler depoya döner (SHIP_EMPTY_CANCEL); sonradan hareket ettiyse 409, tx tümüyle geri.
+  const beamBodies = await reverseDispatchBeamBodiesTx(tx, { dispatchId: d.id, reason: why, userId });
   const live = await tx.subcontractorDispatch.count({ where: { warpingOrderId: id, cancelledAt: null } });
   let status: WarpingOrderStatus = WarpingOrderStatus.IN_PROGRESS;
   if (live === 0) {
     const back = await tx.warpingOrder.updateMany({ where: { id, status: WarpingOrderStatus.IN_PROGRESS }, data: { status: WarpingOrderStatus.OPEN, updatedById: userId } });
     if (back.count === 1) status = WarpingOrderStatus.OPEN;
   }
-  return { dispatchNo: d.dispatchNo, reverted, status };
+  return { dispatchNo: d.dispatchNo, reverted, status, beamBodies };
 }
 
 /** Sevk iptali audit'i (tx DIŞINDA). */
 export async function auditWarpingDispatchCancel(
   { id, dispatchId, why, userId }: WarpingDispatchCancelArgs, out: WarpingDispatchCancelTxOut, goodsReceiptId?: string,
 ): Promise<void> {
-  await AuditService.log({ userId, action: "UPDATE", tableName: "SUBCONTRACTOR_DISPATCH", recordId: dispatchId, newData: { cancelled: true, kind: "WARPING", warpingOrderId: id, reason: why, yarnItemsReverted: out.reverted, goodsReceiptId: goodsReceiptId ?? null } });
+  await AuditService.log({ userId, action: "UPDATE", tableName: "SUBCONTRACTOR_DISPATCH", recordId: dispatchId, newData: { cancelled: true, kind: "WARPING", warpingOrderId: id, reason: why, yarnItemsReverted: out.reverted, goodsReceiptId: goodsReceiptId ?? null, beamBodiesReverted: out.beamBodies.length } });
+  await auditReversedBeamBodies(out.beamBodies, dispatchId, why, userId);
   if (out.status === WarpingOrderStatus.OPEN) {
     await AuditService.log({ userId, action: "UPDATE", tableName: WARPING_ORDER_TABLE, recordId: id, oldData: { status: WarpingOrderStatus.IN_PROGRESS }, newData: { status: WarpingOrderStatus.OPEN, reason: "son canlı sevk iptal edildi" } });
   }

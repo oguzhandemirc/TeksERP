@@ -794,6 +794,9 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "beam_body_events", name: "beam_body_events_kind_ck" },
   { table: "beam_body_events", name: "beam_body_events_from_ck" },
   { table: "beam_body_events", name: "beam_body_events_reverses_ck" },
+  // Devere ek B2: sevk bağı yalnız SHIP_EMPTY · iade belgesi iptal üçlüsü.
+  { table: "beam_body_events", name: "beam_body_events_dispatch_ck" },
+  { table: "beam_body_returns", name: "beam_body_returns_cancel_ck" },
   { table: "warp_beam_events", name: "warp_beam_events_kind_ck" },
   { table: "warp_beam_events", name: "warp_beam_events_length_positive" },
   { table: "warp_beam_events", name: "warp_beam_events_cancel_link_ck" },

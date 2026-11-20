@@ -12,7 +12,7 @@ import {
   BEAM_BODY_EVENT_LABELS, BEAM_BODY_OWNER_LABELS, BEAM_BODY_OWNER_RETURN_DUE_WHERE, BEAM_BODY_STATUS_LABELS,
   type BeamBodyForwardKind, type BeamBodyOwnerKind,
 } from "../../constants/beam-body";
-import { BEAM_BODY_EVENT_SELECT } from "../helpers/beam-body.helper";
+import { BEAM_BODY_EVENT_SELECT, beamBodyEventUndoBlock } from "../helpers/beam-body.helper";
 
 type Db = Pick<Prisma.TransactionClient, "beamBody">;
 type IdCond = string | { in: string[] } | null;
@@ -155,6 +155,10 @@ export interface BeamBodyEventDto {
   toStatusLabel: string;
   place: { warehouse: { id: string; name: string } | null; subcontractor: { id: string; name: string } | null; machine: { id: string; code: string; name: string } | null };
   warpBeam: { id: string; beamNo: string } | null;
+  /** B2: olayı doğuran belge — iplik sevki (boş gidiş) ya da sahibine iade belgesi; geri alma o belgenin iptalidir. */
+  document: { kind: "DISPATCH" | "OWNER_RETURN"; id: string; no: string } | null;
+  /** B2: "Geri al" düğmesi — son, belgesiz, iptal edilmemiş elle geçiş (`BEAM_BODY_MANUAL_KINDS`). */
+  undoable: boolean;
   reasonCode: string | null;
   reason: string | null;
   createdAt: string;
@@ -165,15 +169,21 @@ export async function listBeamBodyEvents(bodyId: string): Promise<BeamBodyEventD
   const exists = await prisma.beamBody.findUnique({ where: { id: bodyId }, select: { id: true } });
   if (!exists) throw AppError.notFound("Levent gövdesi bulunamadı", { code: "BEAM_BODY_NOT_FOUND" });
   const rows = await prisma.beamBodyEvent.findMany({ where: { bodyId }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { ...BEAM_BODY_EVENT_SELECT, reversal: { select: { id: true } } } });
-  return rows.map((r) => {
+  // "Son hareket" = son etkin ileri olay (geri alınmış çiftler sayılmaz) — helper'daki `BEAM_BODY_EFFECTIVE_EVENT_WHERE` ile aynı anlam.
+  let lastEffective = -1;
+  rows.forEach((r, i) => { if (!r.kind.endsWith("_CANCEL") && r.reversal === null) lastEffective = i; });
+  return rows.map((r, i) => {
     const isReversal = r.kind.endsWith("_CANCEL");
+    const document = r.subcontractorDispatch ? { kind: "DISPATCH" as const, id: r.subcontractorDispatch.id, no: r.subcontractorDispatch.dispatchNo }
+      : r.returnItem ? { kind: "OWNER_RETURN" as const, id: r.returnItem.beamReturn.id, no: r.returnItem.beamReturn.docNo } : null;
+    const undoable = beamBodyEventUndoBlock({ kind: r.kind, hasDocument: document !== null, reversed: r.reversal !== null, isLatest: i === lastEffective }) === null;
     const base = (isReversal ? r.kind.slice(0, -"_CANCEL".length) : r.kind) as BeamBodyForwardKind;
     return {
       id: r.id, kind: r.kind, label: isReversal ? `${BEAM_BODY_EVENT_LABELS[base] ?? base} — iptal` : (BEAM_BODY_EVENT_LABELS[base] ?? r.kind),
       isReversal, reversesId: r.reversesId, reversed: r.reversal !== null,
       fromStatus: r.fromStatus, toStatus: r.toStatus, toStatusLabel: BEAM_BODY_STATUS_LABELS[r.toStatus],
       place: { warehouse: r.warehouse, subcontractor: r.subcontractor, machine: r.machine },
-      warpBeam: r.warpBeam, reasonCode: r.reasonCode, reason: r.reason, createdAt: r.createdAt.toISOString(),
+      warpBeam: r.warpBeam, document, undoable, reasonCode: r.reasonCode, reason: r.reason, createdAt: r.createdAt.toISOString(),
     };
   });
 }
