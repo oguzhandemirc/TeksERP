@@ -14,6 +14,8 @@ import { previewWarpingReceive, receiveWarpingOrder, WARPING_RECEIVE_MAX_BEAMS }
 import { cancelWarpingReceipt, previewCancelWarpingReceipt } from "../services/warping-order/receive-cancel";
 import { listWarpingReceipts } from "../services/warping-order/receipts";
 import { qtyText } from "../services/helpers/qty-text.helper";
+import { BEAM_BODY_MAX_MACHINES } from "../services/beam-body/write";
+import { BEAM_BODY_OWNER_KINDS, type BeamBodyOwnerKind } from "../constants/beam-body";
 import "../types/express-augment";
 
 const router = Router();
@@ -37,11 +39,27 @@ function parse<T>(schema: z.ZodType<T>, value: unknown): T {
 
 const Id = z.uuid("Geçersiz kimlik");
 const Kg = z.number({ message: "Tartı (kg) sayı olmalı" }).min(0, "Tartı negatif olamaz").max(100_000, "Tartı çok büyük");
+const Cm = z.number({ message: "Ölçü sayı olmalı" }).positive("Ölçü sıfırdan büyük olmalı").max(10_000, "Ölçü çok büyük");
+// B3: tanımsız gövde yerinde (sahip zorunlu); `devere.beamBodyMode=OFF`ta servis 403 verir.
+const NewBody = z.strictObject({
+  bodyNo: z.string().trim().max(32, "Gövde no en çok 32 karakter").nullable().optional(),
+  owner: z.strictObject({
+    kind: z.enum(BEAM_BODY_OWNER_KINDS as [BeamBodyOwnerKind, ...BeamBodyOwnerKind[]], { message: "Gövde sahibi geçersiz" }),
+    customerId: Id.nullable().optional(),
+    subcontractorId: Id.nullable().optional(),
+  }),
+  widthCm: Cm.nullable().optional(),
+  flangeDiameterCm: Cm.nullable().optional(),
+  tareKg: Kg.positive("Gövde darası sıfırdan büyük olmalı").nullable().optional(),
+  machineIds: z.array(Id).max(BEAM_BODY_MAX_MACHINES, `En çok ${BEAM_BODY_MAX_MACHINES} tezgâh`).optional(),
+});
 const BeamLine = z.strictObject({
   lengthM: z.number({ message: "Levent metresi sayı olmalı" }).positive("Levent metresi sıfırdan büyük olmalı").max(1_000_000, "Levent metresi çok büyük"),
   physicalBeamNo: z.string().trim().max(32, "Gövde no en çok 32 karakter").nullable().optional(),
   grossKg: Kg.nullable().optional(),
   tareKg: Kg.nullable().optional(),
+  beamBodyId: Id.nullable().optional(),
+  newBody: NewBody.nullable().optional(),
 });
 const ReceiveFields = {
   deliveryNoteNo: z.string().trim().max(64, "İrsaliye no en çok 64 karakter").nullable().optional(),
@@ -93,12 +111,13 @@ router.get("/:id/receipts", requirePermission("warping-order:read"), requireIpli
  *             properties:
  *               clientToken: { type: string, format: uuid }
  *               deliveryNoteNo: { type: string, nullable: true }
- *               beams: { type: array, items: { type: object, properties: { lengthM: { type: number }, physicalBeamNo: { type: string, nullable: true }, grossKg: { type: number, nullable: true }, tareKg: { type: number, nullable: true } } } }
+ *               beams: { type: array, items: { type: object, properties: { lengthM: { type: number }, physicalBeamNo: { type: string, nullable: true }, grossKg: { type: number, nullable: true }, tareKg: { type: number, nullable: true }, beamBodyId: { type: string, format: uuid, nullable: true, description: "B3 okutulan levent gövdesi" }, newBody: { type: object, nullable: true, description: "B3 tanımsız gövde yerinde: bodyNo?, owner{kind OURS/WARPER/CUSTOMER/OTHER, customerId?, subcontractorId?}, widthCm?, flangeDiameterCm?, tareKg?, machineIds?" } } } }
  *     responses:
  *       201: { description: "Kabul edildi — { data: WarpingReceiptDto, warnings }" }
  *       200: { description: Aynı denemenin tekrarı (replay) }
- *       400: { description: "WARPING_RECEIVE_EMPTY · WARPING_RECEIVE_DUPLICATE_PHYSICAL · WARPING_RECEIVE_TARE_EXCEEDS" }
- *       409: { description: "WARPING_ORDER_NOT_RECEIVABLE · OWNER_MISMATCH · WARP_BEAM_PHYSICAL_BUSY · WARP_BEAM_CANCELLED · CLIENT_TOKEN_COLLISION" }
+ *       400: { description: "WARPING_RECEIVE_EMPTY · WARPING_RECEIVE_DUPLICATE_PHYSICAL · WARPING_RECEIVE_TARE_EXCEEDS · BEAM_BODY_REQUIRED · BEAM_BODY_INPUT_AMBIGUOUS · WARPING_RECEIVE_DUPLICATE_BODY · BEAM_BODY_PHYSICAL_MISMATCH · BEAM_BODY_OWNER_*" }
+ *       403: { description: "BEAM_BODY_MODE_OFF (gövde girdisi, ayar kapalı)" }
+ *       409: { description: "WARPING_ORDER_NOT_RECEIVABLE · OWNER_MISMATCH · WARP_BEAM_PHYSICAL_BUSY · WARP_BEAM_CANCELLED · CLIENT_TOKEN_COLLISION · BEAM_BODY_BUSY · BEAM_BODY_ELSEWHERE · BEAM_BODY_STATE · BEAM_BODY_INACTIVE · BEAM_BODY_NO_TAKEN" }
  */
 router.post("/:id/receive/preview", requirePermission("warping-order:write"), requireIplikEnabled, wrap(async (req) => {
   const id = parse(Id, req.params.id);
