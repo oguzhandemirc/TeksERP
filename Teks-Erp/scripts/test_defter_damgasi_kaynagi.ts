@@ -38,6 +38,7 @@ const YAZAR: Record<string, string> = {
   warehouseMovementStampTx: "src/services/helpers/warehouse-ledger.helper.ts",
   swatchEventStampTx: "src/services/helpers/swatch-event.helper.ts",
   warpBeamEventStampTx: "src/services/helpers/warp-beam-event.helper.ts",
+  beamBodyEventStampTx: "src/services/helpers/beam-body.helper.ts",
   factoryTimezonePeriodStampTx: "src/services/factory-timezone.service.ts",
   loomAlarmEventStampTx: "src/services/loom-alarm.service.ts",
 };

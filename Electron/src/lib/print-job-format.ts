@@ -29,6 +29,7 @@ export const PRINT_SUBJECT_LABELS: Record<PrintSubjectKind, string> = {
   ETIKET_NUMUNE: "Kartela etiketi",
   ETIKET_TEZGAH: "Tezgah etiketi",
   ETIKET_LEVENT: "Levent etiketi",
+  ETIKET_LEVENT_GOVDE: "Levent gövdesi etiketi",
   ETIKET_SERBEST: "Serbest etiket",
   ETIKET_TOPLU: "Toplu top etiketi",
   BELGE: "Belge",

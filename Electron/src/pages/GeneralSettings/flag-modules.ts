@@ -111,6 +111,9 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   // Fason devere D4 (2026-11-17): kapama fire toleransı devere modülünün sayısal ayarı.
   devereFasonWasteTolerancePct: "devereEnabled",
   devereFasonLotPolicy: "devereEnabled",
+  // Devere ek B1 (2026-11-20): levent gövdesi envanteri kipi ve gövde–tezgâh uyumu devere modülünün ayarı.
+  devereBeamBodyMode: "devereEnabled",
+  devereBeamBodyMachineFit: "devereEnabled",
   devereSettleDefault: "devereEnabled",
   // Z1 üretim belge zinciri (2026-09-18): levent→iş bağı devere'nin, koşum→iş ve iş→sipariş bağı dokumanın davranış bayrağı.
   devereBeamWeavingLinkRequired: "devereEnabled",

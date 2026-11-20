@@ -262,6 +262,18 @@ const MACHINE_DELETE_GUARDS: DependencyGuard[] = [
     message: (n) => `Bu makinede ${n} bağlı levent var — önce leventleri sökün.`,
   },
   {
+    // Devere ek B1: gövde olay defteri (takma/söküm tezgâhı) — iptal edilmiş satırlar DAHİL (iş yapıldı).
+    key: "beamBodyEventCount",
+    count: (id) => prisma.beamBodyEvent.count({ where: { machineId: id } }),
+    message: (n) => `Bu tezgâhta ${n} levent gövdesi hareketi var — kalıcı silinemez. Pasife alın.`,
+  },
+  {
+    // Devere ek B1: tezgâhta TAKILI gövde ("şu an ne", FK RESTRICT) — önce sökülür.
+    key: "mountedBeamBodyCount",
+    count: (id) => prisma.beamBody.count({ where: { machineId: id } }),
+    message: (n) => `Bu tezgâhta ${n} takılı levent gövdesi var — önce gövdeleri sökün.`,
+  },
+  {
     key: "rollMeterReadingCount",
     // H1 + D4-B1b: metre defteri (kurşun IN/OUT + Tambur CUT) — damgalı (düzeltilmiş) okumalar DAHİL sayılır (ölçüm yapıldı).
     count: (id) => prisma.rollMeterReading.count({ where: { machineId: id } }),
@@ -358,6 +370,8 @@ export const machineHardRemove = makeGuardedHardRemove({
     // kaydı + ayarı (COM/adres/kalibrasyon) korunur, atamasız kalır; sonra başka
     // makineye atanabilir. Şema onDelete:SetNull ile de garanti; burada açık + auditable.
     await tx.peripheralDevice.updateMany({ where: { machineId: id }, data: { machineId: null } });
+    // Gövde–tezgâh uyum satırı saf yapılandırma pivotudur (BLOKLAMAZ): makineyle birlikte gider.
+    await tx.beamBodyMachine.deleteMany({ where: { machineId: id } });
     await tx.machine.delete({ where: { id } });
   },
   successMessage: "Makine kalıcı olarak silindi",

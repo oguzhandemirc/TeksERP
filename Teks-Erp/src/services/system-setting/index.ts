@@ -19,7 +19,7 @@ export {
 export {
   DEFAULT_SESSION_DURATION_HOURS, DEFAULT_SESSION_DURATION_MINUTES, DEFAULT_IDLE_TIMEOUT_MINUTES, DEFAULT_WORK_SESSION_IDLE_MINUTES,
   SAME_TYPE_SESSION_POLICIES, DEFAULT_SAME_TYPE_SESSION_POLICY, SHIPMENT_ORDER_REQUIREMENTS, DEFAULT_SHIPMENT_ORDER_REQUIREMENT,
-  TEZGAH_ALARM_NO_SHIFT_MODES, DEFAULT_TEZGAH_ALARM_NO_SHIFT_MODE, DOKUMA_ROLL_BIRTH_MODES, DEFAULT_DOKUMA_ROLL_BIRTH, DEVERE_FASON_LOT_POLICIES, DEFAULT_DEVERE_FASON_LOT_POLICY,
+  TEZGAH_ALARM_NO_SHIFT_MODES, DEFAULT_TEZGAH_ALARM_NO_SHIFT_MODE, DOKUMA_ROLL_BIRTH_MODES, DEFAULT_DOKUMA_ROLL_BIRTH, DEVERE_FASON_LOT_POLICIES, DEVERE_BEAM_BODY_MODES, DEFAULT_DEVERE_BEAM_BODY_MODE, DEVERE_BEAM_BODY_MACHINE_FITS, DEFAULT_DEVERE_BEAM_BODY_MACHINE_FIT, DEFAULT_DEVERE_FASON_LOT_POLICY,
   KURSUN_METER_CAPTURE_MODES, DEFAULT_KURSUN_METER_CAPTURE, KURSUN_METER_VARIANCE_BASES, DEFAULT_KURSUN_METER_VARIANCE_BASIS,
   KURSUN_METER_VARIANCE_APPROVALS, DEFAULT_KURSUN_METER_VARIANCE_APPROVAL, KURSUN_METER_STOCK_MODES, DEFAULT_KURSUN_METER_STOCK_MODE,
   KURSUN_MACHINE_ASSIGN_MODES, DEFAULT_KURSUN_MACHINE_ASSIGN_MODE, PRODUCTION_ROUTE_MODES, DEFAULT_PRODUCTION_ROUTE_MODE,
@@ -65,7 +65,7 @@ export {
   DEFAULT_PIN_LOCKOUT_LONG_PENALTY_MIN, LOGIN_METHODS, DEFAULT_LOGIN_METHODS,
 } from "./defaults";
 export type {
-  SameTypeSessionPolicy, ShipmentOrderRequirement, TezgahAlarmNoShiftMode, DokumaRollBirth, DevereFasonLotPolicy, KursunMeterCapture,
+  SameTypeSessionPolicy, ShipmentOrderRequirement, TezgahAlarmNoShiftMode, DokumaRollBirth, DevereFasonLotPolicy, DevereBeamBodyMode, DevereBeamBodyMachineFit, KursunMeterCapture,
   KursunMeterVarianceBasis, KursunMeterVarianceApproval, KursunMeterStockMode, KursunMachineAssignMode, ProductionRouteMode,
   ProductionScanRouteStations, ServiceBillingMeterBasis, ServiceBillingMissingMeter, ServiceBillingBrodeUnit, ServiceBillingTrigger,
   ServiceBillingPriceDate, KursunGramPriceBasis, ExpenseCategorySuggestions, ExpenseAllocationField,
@@ -164,7 +164,7 @@ export {
   readKaliteGuvenceEnabled, readDevereLotRequired, readDevereMountTracking, readDevereMountTrackingRequired, readDevereAutoConsume,
   readDevereBeamWeavingLinkRequired, readDokumaRunWeavingOrderRequired, readDokumaOrderLineLinkRequired, readDokumaRollBirth, readDokumaWeavingWastePct, readDokumaYarnReservationEnabled, DEFAULT_DOKUMA_WEAVING_WASTE_PCT, DOKUMA_WEAVING_WASTE_PCT_MAX,
   readDevereWarpFixedWasteM, DEFAULT_DEVERE_WARP_FIXED_WASTE_M, DEVERE_WARP_FIXED_WASTE_M_MAX,
-  readDevereFasonWasteTolerancePct, DEFAULT_DEVERE_FASON_WASTE_TOLERANCE_PCT, DEVERE_FASON_WASTE_TOLERANCE_PCT_MAX, readDevereFasonLotPolicy, readDevereReworkBillable,
+  readDevereFasonWasteTolerancePct, DEFAULT_DEVERE_FASON_WASTE_TOLERANCE_PCT, DEVERE_FASON_WASTE_TOLERANCE_PCT_MAX, readDevereFasonLotPolicy, readDevereReworkBillable, readDevereBeamBodyMode, readDevereBeamBodyMachineFit,
   readDevereDenierSuggestMinBeams, DEFAULT_DEVERE_DENIER_SUGGEST_MIN_BEAMS, DEVERE_DENIER_SUGGEST_MIN_BEAMS_MAX,
   readDevereDenierSuggestThresholdPct, DEFAULT_DEVERE_DENIER_SUGGEST_THRESHOLD_PCT, DEVERE_DENIER_SUGGEST_THRESHOLD_PCT_MAX,
   readReportsClosedKeys, readDokumaEnabledRaw, readDokumaEnabled, readMaliyetEnabledRaw, readMaliyetEnabled,

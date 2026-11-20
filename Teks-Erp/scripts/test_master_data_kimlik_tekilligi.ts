@@ -251,6 +251,8 @@ async function main(): Promise<void> {
      "borç — `PURCHASED` leventte 'TAM BİRİ' XOR'u; satın alınan levent bir TEDARİKÇİDEN ya da fason devereciden gelir ve ikisi AYNI firma olabilir. Rol modeli indikten sonra tek kimliğe (kart + roller) çekilmeli"],
     ["WarpBeam: ownerCustomerId(Customer) ↔ subcontractorId(Subcontractor)",
      "iki-rol — `ownerCustomer` EMANET SAHİBİ, `subcontractor` İŞLEYEN taraf; ikisi aynı satırda BİRLİKTE dolu olabilir ve aynı nesnenin iki kimliği DEĞİLDİR"],
+    ["BeamBody: ownerCustomerId(Customer) ↔ subcontractorId(Subcontractor)",
+     "iki-rol — `ownerCustomer` gövdenin SAHİBİ (NULL = bizim), `subcontractor` gövdenin ŞU AN BULUNDUĞU devereci (yer); ikisi BİRLİKTE dolu olabilir, XOR değildir (devere ek B1)"],
   ]);
   const teklesenCiftler = [...new Set(kimlikCiftleri)];
   const beyansizCift = teklesenCiftler.filter((k) => !KIMLIK_CIFTI_BEYANLARI.has(k));

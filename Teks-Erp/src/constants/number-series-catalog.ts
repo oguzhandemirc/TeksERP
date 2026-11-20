@@ -1,5 +1,5 @@
 // =============================================================================
-// NUMARA SERİSİ KATALOĞU — ENVANTER (53 seri)
+// NUMARA SERİSİ KATALOĞU — ENVANTER (54 seri)
 // =============================================================================
 // ⚠️ SÖZLEŞME AYRI DOSYADA (`number-series-catalog.types.ts`): satır TİPİ, panel
 // grupları ve etiket yardımcıları orada. Bölme ekseni bu depodaki alışılmış
@@ -334,6 +334,8 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   { key: "consignmentDispatch", scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor ve yükleyici doğuş anını taşıyor; kapsam kilidi 8029 tx'in ilk ifadesi (F5, 2026-11-08).", uretec: "services/consignment-dispatch/create.ts" }, panelGroup: "fason-kartela", countTable: { model: "consignmentDispatch", field: "dispatchNo", birim: "belge" }, label: "Emanet çıkış belge no", seedPrefix: "EC", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
   // Fason devere siparişi (D4a, 2026-11-17): okutulmaz — iplik sevki ve çözgü talimatı bu numarayı anar.
   { key: "warpingOrder", scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor ve yükleyici doğuş anını taşıyor; kapsam kilidi 8029 tx'in ilk ifadesi (devere D4a, 2026-11-17).", uretec: "services/warping-order/create.ts" }, panelGroup: "fason-kartela", countTable: { model: "warpingOrder", field: "orderNo", birim: "belge" }, label: "Fason devere sipariş no", seedPrefix: "FDV", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
+  // Devere ek B1: levent gövdesi demirbaş no = QR değeri; tarihsiz (gövde kalıcıdır, yıllık sıfırlanmaz), elle no da serbest.
+  { key: "beamBody", scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor ve yükleyici doğuş anını taşıyor; kapsam kilidi 8029 tx'in ilk ifadesi; gövde no = QR değeri, tarihsiz (gövde kalıcı), elle no serbest (devere ek B1, 2026-11-20).", uretec: "services/beam-body/write.ts" }, panelGroup: "uretim", countTable: { model: "beamBody", field: "bodyNo", birim: "kayıt", kapsam: "seri-onekli" }, label: "Levent gövdesi no", seedPrefix: "LG", seedDateSegment: NONE, seedDigits: 5, seedSeparator: "-" },
   { key: "reconciliationLetter", scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor ve yükleyici doğuş anını taşıyor: kapsam damgası + çakışma atlaması tek yerde (E2 finans dilimi, 2026-09-23).", uretec: "services/reconciliation-letter.service.ts" }, panelGroup: "finans", countTable: { model: "reconciliationLetter", field: "docNo", birim: "belge" }, label: "Mutabakat mektubu no", seedPrefix: "MBT", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
 
   // ── Master data kodları ────────────────────────────────────────────────────
@@ -370,8 +372,7 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
     label: "Rota kodu",
     seedPrefix: "ROT",
     seedDateSegment: D,
-    seedDigits: 4,
-    seedSeparator: "",
+    seedDigits: 4, seedSeparator: "",
   },
 ] as const;
 

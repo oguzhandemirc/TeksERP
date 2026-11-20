@@ -6,9 +6,10 @@
 //   ③ Gövde: depo/lot zorunlu engelleri düğmeyi kapatır; boş meta null gider; miktarsız satır gövdeye girmez.
 //   ④ Talimat HTML'i iç kolon taşımaz (kg/fire/fiyat yok), HTML kaçışlı; irsaliye seçilirse kalemler + toplam basılır.
 //   ⑤ Fire metni yüzdeyi kaynağıyla verir; bugünkü değer farklıysa "açılıştaki değer", önizleme yoksa kaynaksız.
+//   ⑥ Koli/bobin (H2) bilgi alanı: girilen gövdeye girer, geçersiz adet engeller; irsaliye sütunu yalnız girilince basılır.
 // =============================================================================
 import { describe, expect, it } from "vitest";
-import { addLotLine, buildDispatchBody, initialDispatchLines, lineNotes, overPlanNote } from "./dispatch-model";
+import { addLotLine, buildDispatchBody, initialDispatchLines, lineNotes, overPlanNote, parsePieceCount, pieceText } from "./dispatch-model";
 import { buildInstructionHtml } from "./instruction-html";
 import { percentWasteText } from "./waste-model";
 import type { WarpingDispatchPreview, WarpingDispatchRow, WarpingInstruction } from "./yarn-types";
@@ -83,6 +84,26 @@ describe("dispatch-model", () => {
     const both = buildInstructionHtml(i, d);
     expect(both.indexOf("İPLİK SEVK İRSALİYESİ")).toBeLessThan(both.indexOf("ÇÖZGÜ TALİMATI"));
     expect(both).toContain("30,000");
+  });
+
+  // Devere H2: koli/bobin BİLGİ alanı — yalnız girilince gövdeye ve irsaliyeye girer; geçersiz adet düğmeyi kapatır.
+  it("⑥ koli/bobin: girilen gövdeye girer, boş girmez, geçersiz engeller; irsaliye sütunu yalnız girilince", () => {
+    const p = preview();
+    const base = { ...initialDispatchLines(p)[0]!, warehouse: wh };
+    const withCounts = buildDispatchBody([{ ...base, packageCount: "3", bobbinCount: " " }], p, meta);
+    expect(withCounts.ok && withCounts.body.lines[0]).toEqual({ yarnItemId: "a", warehouseId: "w1", lotId: "L1", qtyKg: 10.5, packageCount: 3 });
+    for (const bad of ["0", "1,5", "-2", "abc", "100001"]) expect(buildDispatchBody([{ ...base, bobbinCount: bad }], p, meta).ok).toBe(false);
+    expect(parsePieceCount("12")).toEqual({ ok: true, value: 12 });
+    expect(pieceText(3, null)).toBe("3 koli");
+    expect(pieceText(null, undefined)).toBeNull();
+    const i = { orderNo: "FDV1", subcontractor: { code: "S1", name: "D" }, warpSpec: { code: "CZ", name: "K" }, extraSpecs: [], totalEnds: 1, yarns: [], sequenceNote: null, reed: null, beamLines: [], beamCount: 0, targetLengthM: "0", expectedReturnAt: null, notes: null } as WarpingInstruction;
+    const item = { yarnItemCode: "IPL", yarnItemName: "5X", lotNo: null, warehouseName: "M", outKg: "30.000" };
+    const plain = buildInstructionHtml(i, { dispatchNo: "FS1", dispatchedAt: "2026-11-18T08:00:00Z", totalOutKg: "30.000", items: [item] } as unknown as WarpingDispatchRow);
+    expect(plain).not.toMatch(/Koli|Bobin/);
+    const counted = buildInstructionHtml(i, { dispatchNo: "FS1", dispatchedAt: "2026-11-18T08:00:00Z", totalOutKg: "30.000", totalPackageCount: 4, totalBobbinCount: null, items: [{ ...item, packageCount: 4, bobbinCount: null }] } as unknown as WarpingDispatchRow);
+    expect(counted).toContain("<th class=\"n\">Koli</th>");
+    expect(counted).not.toContain("Bobin");
+    expect(counted).toContain("<b>4</b>");
   });
 
   it("⑤ fire metni: yüzde + kaynak", () => {

@@ -74,6 +74,7 @@ import {
   buildLoomRenderInput,
   loadMachineLabelPayload,
   loadWarpBeamLabelPayload,
+  loadBeamBodyLabelPayload,
   renderLoomHtml,
   renderLoomNative,
   resolveBatchCopies,
@@ -2001,6 +2002,26 @@ export class LabelService {
     const p = await loadWarpBeamLabelPayload(beamId);
     const job = { report, subjectKind: "ETIKET_LEVENT" as const, subjectTable: "warp_beams", subjectNo: p.beamNo };
     return this.loomPrintEvent({ recordId: beamId, ident: { kind: LabelKind.WARP_BEAM, beamNo: p.beamNo }, userId, copies, noun: "Levent", job });
+  }
+
+  /** Levent gövdesi etiketi (devere ek B1) — barkod/QR = `BeamBody.bodyNo`; levent kalıbının aynısı. */
+  async getBeamBodyLabel(bodyId: string): Promise<ApiResponse<LabelPayload>> {
+    return { success: true, data: await loadBeamBodyLabelPayload(bodyId) };
+  }
+
+  async getBeamBodyLabelHtml(bodyId: string, opts: LoomLabelOpts = {}): Promise<ApiResponse<{ html: string; kind: LabelKind }>> {
+    const input = await buildLoomRenderInput(await loadBeamBodyLabelPayload(bodyId), opts);
+    return { success: true, data: { html: await renderLoomHtml(input), kind: LabelKind.BEAM_BODY } };
+  }
+
+  async getBeamBodyLabelNative(bodyId: string, opts: LoomLabelOpts & { encoding?: "b64" } = {}) {
+    return this.loomNative(await loadBeamBodyLabelPayload(bodyId), opts);
+  }
+
+  async recordBeamBodyPrintEvent(bodyId: string, userId?: string, copies?: number, report?: PrintJobReportOpt): Promise<ApiResponse<unknown>> {
+    const p = await loadBeamBodyLabelPayload(bodyId);
+    const job = { report, subjectKind: "ETIKET_LEVENT_GOVDE" as const, subjectTable: "beam_bodies", subjectNo: p.barcode };
+    return this.loomPrintEvent({ recordId: bodyId, ident: { kind: LabelKind.BEAM_BODY, bodyNo: p.barcode }, userId, copies, noun: "Levent gövdesi", job });
   }
 
   private async loomNative(payload: LabelPayload, opts: LoomLabelOpts & { encoding?: "b64" }) {

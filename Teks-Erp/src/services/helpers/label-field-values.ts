@@ -251,6 +251,18 @@ function loomFieldValue(payload: LabelPayload, key: string): FieldValue {
         ? { value: formatDate(payload.woundAt), present: true, role: "row" }
         : NONE;
 
+    // ── BEAM_BODY (levent gövdesi) — gövde no kimlik → headline; bilinmeyen ölçü boş ──
+    case "bodyNo":
+      return str(payload.bodyNo, "headline");
+    case "ownerName":
+      return str(payload.ownerName);
+    case "bodyWidthCm":
+      return num(payload.bodyWidthCm, "cm");
+    case "flangeDiameterCm":
+      return num(payload.flangeDiameterCm, "cm");
+    case "tareKg":
+      return num(payload.tareKg, "kg");
+
     default:
       return NONE;
   }

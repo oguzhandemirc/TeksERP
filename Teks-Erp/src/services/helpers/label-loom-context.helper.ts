@@ -130,7 +130,28 @@ export async function loadWarpBeamLabelPayload(beamId: string): Promise<LabelPay
   };
 }
 
-const CONTEXT_NOUN: Partial<Record<LabelKind, string>> = { MACHINE: "Tezgah", WARP_BEAM: "Levent" };
+/**
+ * Levent gövdesi etiketi payload'ı (devere ek B1) — barkod/QR = `BeamBody.bodyNo`. Pasif gövde basılmaz (409
+ * `BEAM_BODY_INACTIVE`): kayıt iptal edilmiş/pasif gövdenin QR'ı okutulup hareket yazamaz.
+ */
+export async function loadBeamBodyLabelPayload(bodyId: string): Promise<LabelPayload> {
+  const b = await prisma.beamBody.findUnique({
+    where: { id: bodyId },
+    select: { id: true, bodyNo: true, isActive: true, widthCm: true, flangeDiameterCm: true, tareKg: true, ownerCustomer: { select: { name: true } } },
+  });
+  if (!b) throw AppError.notFound("Levent gövdesi bulunamadı", { code: "BEAM_BODY_NOT_FOUND" });
+  if (!b.isActive) throw AppError.conflict(`${b.bodyNo} pasif — etiketi basılamaz.`, { code: "BEAM_BODY_INACTIVE" });
+  return {
+    ...neutralPayload(b.id, b.bodyNo, LabelKind.BEAM_BODY),
+    bodyNo: b.bodyNo,
+    ownerName: b.ownerCustomer?.name ?? "Bizim",
+    bodyWidthCm: dec(b.widthCm),
+    flangeDiameterCm: dec(b.flangeDiameterCm),
+    tareKg: dec(b.tareKg),
+  };
+}
+
+const CONTEXT_NOUN: Partial<Record<LabelKind, string>> = { MACHINE: "Tezgah", WARP_BEAM: "Levent", BEAM_BODY: "Levent gövdesi" };
 
 /**
  * Render girdisi — FAIL-CLOSED: şablon çözülemezse 400 (SACK emsali metni), çözülen şablon

@@ -76,6 +76,17 @@ export const DEVERE_FASON_LOT_POLICIES: DevereFasonLotPolicy[] = ["FREE", "WARN"
 /** Varsayılan `WARN` — kullanıcı kararı 2026-11-17 (K4); devere sevki yeni yol, "bugünkü davranış" yok. */
 export const DEFAULT_DEVERE_FASON_LOT_POLICY: DevereFasonLotPolicy = "WARN";
 
+/** Devere ek B1: levent gövdesi envanteri — `OFF` bugünkü davranış (gövde yüzeyi yok, uçlar 403);
+ *  `OPTIONAL` gövde okutmak serbest; `REQUIRED` dönüş kabulünde gövde zorunlu (B3). */
+export type DevereBeamBodyMode = "OFF" | "OPTIONAL" | "REQUIRED";
+export const DEVERE_BEAM_BODY_MODES: DevereBeamBodyMode[] = ["OFF", "OPTIONAL", "REQUIRED"];
+export const DEFAULT_DEVERE_BEAM_BODY_MODE: DevereBeamBodyMode = "OFF";
+
+/** Devere ek B1: gövde–tezgâh uyumsuzluğu takmada — `WARN` uyarır (varsayılan), `BLOCK` 409 (yazıcısı B3). */
+export type DevereBeamBodyMachineFit = "WARN" | "BLOCK";
+export const DEVERE_BEAM_BODY_MACHINE_FITS: DevereBeamBodyMachineFit[] = ["WARN", "BLOCK"];
+export const DEFAULT_DEVERE_BEAM_BODY_MACHINE_FIT: DevereBeamBodyMachineFit = "WARN";
+
 /** H1: kurşun metre ölçümü — `OFF` bugünkü davranış (okuma yazılmaz, `meterOut` yok sayılır); `OUT` çıkış; `IN_OUT` giriş + çıkış. */
 export type KursunMeterCapture = "OFF" | "OUT" | "IN_OUT";
 export const KURSUN_METER_CAPTURE_MODES: KursunMeterCapture[] = ["OFF", "OUT", "IN_OUT"];
