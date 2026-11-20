@@ -14,6 +14,7 @@ import { warpingDispatchCancelBlock } from "./dispatch-cancel";
 
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 const kg = (v: Prisma.Decimal) => v.toFixed(3);
+const countSum = (xs: Array<number | null>) => (xs.some((x) => x !== null) ? xs.reduce<number>((a, x) => a + (x ?? 0), 0) : null);
 
 export interface WarpingDispatchListItem {
   dispatchItemId: string;
@@ -39,6 +40,9 @@ export interface WarpingDispatchListItem {
   wasteKg: string;
   /** Bu siparişin bu kalemden bugün tuttuğu (iptal edilmiş sevkte 0). */
   holdingKg: string;
+  /** H1: koli / bobin adedi — bilgi (defter değil); girilmediyse null. */
+  packageCount: number | null;
+  bobbinCount: number | null;
 }
 
 export interface WarpingDispatchListRow {
@@ -56,6 +60,9 @@ export interface WarpingDispatchListRow {
   totalAllocatedKg: string;
   totalWasteKg: string;
   totalHoldingKg: string;
+  /** H1: Σ koli / bobin (girilen kalemler); hiçbiri girilmediyse null. */
+  totalPackageCount: number | null;
+  totalBobbinCount: number | null;
   canCancel: boolean;
   cancelBlockedReason: string | null;
   items: WarpingDispatchListItem[];
@@ -72,13 +79,13 @@ export async function listWarpingDispatches(id: string): Promise<WarpingDispatch
   if (heads.length === 0) return [];
   const rows = await sequentialTx(prisma).subcontractorDispatchItem.findMany({
     where: { kind: SubcontractorDispatchItemKind.YARN, dispatchId: { in: heads.map((h) => h.id) } },
-    select: { ...WARPING_YARN_ITEM_SELECT, yarnItem: { select: { code: true, name: true } }, warehouse: { select: { name: true } } },
+    select: { ...WARPING_YARN_ITEM_SELECT, packageCount: true, bobbinCount: true, yarnItem: { select: { code: true, name: true } }, warehouse: { select: { name: true } } },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
-  const byDispatch = new Map<string, Array<{ it: WarpingYarnItem; code: string; name: string; warehouseName: string | null }>>();
+  const byDispatch = new Map<string, Array<{ it: WarpingYarnItem; code: string; name: string; warehouseName: string | null; packageCount: number | null; bobbinCount: number | null }>>();
   for (const r of rows) {
     const list = byDispatch.get(r.dispatch.id) ?? [];
-    list.push({ it: toWarpingYarnItem(r), code: r.yarnItem?.code ?? "", name: r.yarnItem?.name ?? "", warehouseName: r.warehouse?.name ?? null });
+    list.push({ it: toWarpingYarnItem(r), code: r.yarnItem?.code ?? "", name: r.yarnItem?.name ?? "", warehouseName: r.warehouse?.name ?? null, packageCount: r.packageCount, bobbinCount: r.bobbinCount });
     byDispatch.set(r.dispatch.id, list);
   }
   const statusBlock = order.status === WarpingOrderStatus.IN_PROGRESS ? null : `${order.orderNo} durumu ${order.status} — sevk iptal edilemez.`;
@@ -86,12 +93,12 @@ export async function listWarpingDispatches(id: string): Promise<WarpingDispatch
     const list = byDispatch.get(h.id) ?? [];
     const cancelled = h.cancelledAt !== null;
     const blocked = warpingDispatchCancelBlock(h.cancelledAt, list.map((x) => x.it)) ?? statusBlock;
-    const items = list.map(({ it, code, name, warehouseName }) => {
+    const items = list.map(({ it, code, name, warehouseName, packageCount, bobbinCount }) => {
       return {
         dispatchItemId: it.dispatchItemId, yarnItemId: it.yarnItemId, yarnItemCode: code, yarnItemName: name,
         warehouseId: it.warehouseId, warehouseName, lotId: it.lotId, lotNo: it.lotNo, ownerCustomerId: it.ownerCustomerId,
         outKg: it.outKg, returnedKg: it.returnedKg, transferOutKg: it.transferOutKg, transferInKg: it.transferInKg, allocatedKg: woundOfItem(it), wasteKg: it.wasteKg,
-        holdingKg: cancelled ? D(0) : it.openKg,
+        holdingKg: cancelled ? D(0) : it.openKg, packageCount, bobbinCount,
       };
     });
     const sum = (k: "outKg" | "returnedKg" | "transferOutKg" | "transferInKg" | "allocatedKg" | "wasteKg" | "holdingKg") => kg(items.reduce((a, x) => a.plus(x[k]), D(0)));
@@ -101,6 +108,7 @@ export async function listWarpingDispatches(id: string): Promise<WarpingDispatch
       goodsReceiptId: h.goodsReceiptId,
       totalOutKg: sum("outKg"), totalReturnedKg: sum("returnedKg"), totalTransferOutKg: sum("transferOutKg"), totalTransferInKg: sum("transferInKg"),
       totalAllocatedKg: sum("allocatedKg"), totalWasteKg: sum("wasteKg"), totalHoldingKg: sum("holdingKg"),
+      totalPackageCount: countSum(items.map((x) => x.packageCount)), totalBobbinCount: countSum(items.map((x) => x.bobbinCount)),
       canCancel: blocked === null, cancelBlockedReason: blocked,
       items: items.map((x) => ({
         ...x, outKg: kg(x.outKg), returnedKg: kg(x.returnedKg), transferOutKg: kg(x.transferOutKg), transferInKg: kg(x.transferInKg), allocatedKg: kg(x.allocatedKg), wasteKg: kg(x.wasteKg), holdingKg: kg(x.holdingKg),

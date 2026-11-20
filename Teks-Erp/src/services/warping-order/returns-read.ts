@@ -32,6 +32,9 @@ export interface WarpingYarnReturnRow {
   qtyKg: string;
   /** İadeyle aynı istekte yazılan fire (canlı; iade stornosuyla geri alınır). */
   wasteKg: string;
+  /** H1: iade satırının koli / bobin adedi — bilgi (defter değil); girilmediyse null. */
+  packageCount: number | null;
+  bobbinCount: number | null;
   reasonCode: string | null;
   reasonLabel: string | null;
   note: string | null;
@@ -59,7 +62,7 @@ export async function listWarpingYarnReturns(id: string): Promise<WarpingYarnRet
       yarnItem: { select: { code: true, name: true } },
       yarnMovements: {
         where: { kind: { in: [YarnMovementKind.SUBCONTRACT_RETURN, YarnMovementKind.SUBCONTRACT_RETURN_CANCEL] } },
-        select: { id: true, kind: true, qtyKg: true, warehouseId: true, lotId: true, reasonCode: true, reason: true, createdAt: true, warehouse: { select: { name: true } }, lot: { select: { lotNo: true } },
+        select: { id: true, kind: true, qtyKg: true, warehouseId: true, lotId: true, reasonCode: true, reason: true, createdAt: true, packageCount: true, bobbinCount: true, warehouse: { select: { name: true } }, lot: { select: { lotNo: true } },
           warpingWastes: { where: { kind: WARPING_WASTE, reversal: null }, select: { qtyKg: true } } },
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       },
@@ -83,7 +86,7 @@ export async function listWarpingYarnReturns(id: string): Promise<WarpingYarnRet
         movementId: m.id, createdAt: m.createdAt.toISOString(), dispatchItemId: it.id, dispatchId: it.dispatch.id, dispatchNo: it.dispatch.dispatchNo,
         ownDispatch: it.dispatch.warpingOrderId === id, yarnItemId: it.yarnItemId!, yarnItemCode: it.yarnItem?.code ?? "", yarnItemName: it.yarnItem?.name ?? "",
         warehouseId: m.warehouseId, warehouseName: m.warehouse?.name ?? null, lotId: m.lotId, lotNo: m.lot?.lotNo ?? null,
-        qtyKg: D(m.qtyKg).toFixed(3), wasteKg: m.warpingWastes.reduce((a, w) => a.plus(w.qtyKg), D(0)).toFixed(3), reasonCode: m.reasonCode, reasonLabel: m.reasonCode ? labels.get(m.reasonCode) ?? null : null, note: m.reason,
+        qtyKg: D(m.qtyKg).toFixed(3), wasteKg: m.warpingWastes.reduce((a, w) => a.plus(w.qtyKg), D(0)).toFixed(3), packageCount: m.packageCount, bobbinCount: m.bobbinCount, reasonCode: m.reasonCode, reasonLabel: m.reasonCode ? labels.get(m.reasonCode) ?? null : null, note: m.reason,
         status: cancelled ? "CANCELLED" : "ACTIVE", canCancel: blocked === null, cancelBlockedReason: blocked,
       });
     }

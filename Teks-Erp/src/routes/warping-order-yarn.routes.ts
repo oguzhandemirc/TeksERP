@@ -51,12 +51,16 @@ const TransferFields = {
 };
 const TransferBody = z.strictObject({ clientToken: z.uuid("clientToken geçersiz (UUID)"), ...TransferFields });
 const TransferPreviewBody = z.strictObject(TransferFields);
+/** Devere H1: koli / bobin adedi — BİLGİ (defter değil, kg tek kaynak); boş = girilmedi. */
+const PieceCount = (ad: string) => z.number({ message: `${ad} sayı olmalı` }).int(`${ad} tam sayı olmalı`).positive(`${ad} sıfırdan büyük olmalı`).max(100_000, `${ad} çok büyük`).nullable().optional();
 const ReturnFields = {
   dispatchItemId: Id,
   qtyKg: Kg,
   reasonCode: z.string().trim().min(1, "Dönüş sebebi zorunlu").max(64, "Sebep kodu en çok 64 karakter"),
   /** Kullanılamaz (fire) kg — isteğe bağlı; boş/0 = yalnız iade. */
   wasteKg: z.number({ message: "Fire (kg) sayı olmalı" }).min(0, "Fire negatif olamaz").max(1_000_000, "Miktar çok büyük").nullable().optional(),
+  packageCount: PieceCount("Koli adedi"),
+  bobbinCount: PieceCount("Bobin adedi"),
 };
 const ReturnBody = z.strictObject({
   ...ReturnFields,
@@ -142,7 +146,7 @@ router.get("/yarn-at-subcontractor", requirePermission("warping-order:read"), re
  *       404: { description: WARPING_ORDER_NOT_FOUND }
  *   post:
  *     tags: [WarpingOrder]
- *     summary: Kapanış dışında iplik İADESİ (SUBCONTRACT_RETURN) + isteğe bağlı FİRE (wasteKg, kapanış firesiyle aynı defter) — tavan siparişin tutması (iade + fire); aktarımla gelen kalemde aynı tx'te geri aktarım; kalan 0 ve kapanış yüklemi izin verirse sipariş aynı tx'te kapanır (data.autoClosed); clientToken isteğe bağlı (replay 200)
+ *     summary: Kapanış dışında iplik İADESİ (SUBCONTRACT_RETURN) + isteğe bağlı FİRE (wasteKg, kapanış firesiyle aynı defter) — tavan siparişin tutması (iade + fire); aktarımla gelen kalemde aynı tx'te geri aktarım; kalan 0 ve kapanış yüklemi izin verirse sipariş aynı tx'te kapanır (data.autoClosed); clientToken isteğe bağlı (replay 200); packageCount / bobbinCount isteğe bağlı koli/bobin adedi (bilgi, defter değil)
  *     security: [{ bearerAuth: [] }]
  *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
  *     responses:
