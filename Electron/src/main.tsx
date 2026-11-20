@@ -1,3 +1,4 @@
+import "./lib/crypto-polyfill";
 import "./lib/terim-acilis";
 import { Buffer } from "buffer";
 import React from "react";

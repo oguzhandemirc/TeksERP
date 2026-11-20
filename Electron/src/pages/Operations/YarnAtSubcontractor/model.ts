@@ -5,7 +5,11 @@
 // sıralamak satır gizlemez). Bekçi: `model.test.ts`.
 // =============================================================================
 import { factoryDayDiff } from "@/lib/factory-time";
+import { formatQty } from "@/lib/format";
 import type { YarnAtSubRow } from "./service";
+
+/** Bu ekranın kg biçimi: SABİT 3 hane (sipariş sayfasıyla aynı) — "10,00" ile "2,667" yan yana karışık okunuyordu. */
+export const kg = (v: number | string | null | undefined): string => (v === null || v === undefined || v === "" ? "—" : `${formatQty(v, 3, 3)} kg`);
 
 export type YarnAtSubView = "subcontractor" | "yarn";
 

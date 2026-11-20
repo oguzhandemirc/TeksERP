@@ -64,6 +64,11 @@ export interface YarnMovementRow {
   /** Devere Faz 2: lot etiketi (lotsuz satırda null) + bobin adedi (bilgi). */
   lot?: { id: string; lotNo: string } | null;
   bobbinCount?: number | null;
+  /** Kaynak belge (eski backend göndermez → opsiyonel): fason/devere sevk-iade · emanet sevki · levent · sayım. */
+  dispatchItem?: { dispatch: { dispatchNo: string; warpingOrder: { orderNo: string } | null } } | null;
+  consignmentItem?: { dispatch: { dispatchNo: string } } | null;
+  warpBeam?: { beamNo: string } | null;
+  stockCount?: { countNo: string } | null;
 }
 
 // ── İPLİK LOTLARI (devere Faz 2) ──────────────────────────────────────────────
@@ -259,6 +264,11 @@ export function movementSource(row: YarnMovementRow): string {
   if (row.goodsReceipt) return `Mal kabul ${row.goodsReceipt.receiptNo}`;
   if (row.goodsReceiptId) return "Mal kabul fişi";
   if (row.invoiceId) return "Fatura";
+  const d = row.dispatchItem?.dispatch;
+  if (d) return d.warpingOrder ? `Devere ${d.warpingOrder.orderNo} · ${d.dispatchNo}` : `Fason sevki ${d.dispatchNo}`;
+  if (row.consignmentItem) return `Emanet sevki ${row.consignmentItem.dispatch.dispatchNo}`;
+  if (row.warpBeam) return `Levent ${row.warpBeam.beamNo}`;
+  if (row.stockCount) return `Sayım ${row.stockCount.countNo}`;
   return "Elle giriş";
 }
 

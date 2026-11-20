@@ -64,7 +64,11 @@ export interface WarpBeam {
   ownerCustomer?: { id: string; name: string } | null;
   createdAt: string;
   updatedAt: string;
-  warpSpec: { id: string; code: string; name: string; endsCount: number; yarnItem: { id: string; code: string; name: string; linearDensityDen: number | null } };
+  warpSpec: {
+    id: string; code: string; name: string; endsCount: number; yarnItem: { id: string; code: string; name: string; linearDensityDen: number | null };
+    /** Çok iplikli kartın satırları (sıralı); eski backend göndermez → tek ana iplik. */
+    yarns?: Array<{ yarnItemId: string; endsCount: number; sortOrder: number; yarnItem: { id: string; code: string; name: string } }>;
+  };
   subcontractor: { id: string; name: string } | null;
   supplier: { id: string; name: string } | null;
   wound: WarpBeamEvent | null;

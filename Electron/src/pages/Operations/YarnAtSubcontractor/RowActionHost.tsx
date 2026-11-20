@@ -11,7 +11,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from "@/components/ui/button";
 import { fmtFactoryDate } from "@/lib/factory-time";
 import { apiErrorMessage } from "@/services/apiClient";
-import { kg } from "../Yarn/qty";
 import { holdsYarn, yarnNamesOf } from "../WarpingOrders/holding-model";
 import { useWarpingHoldings } from "../WarpingOrders/holding-service";
 import { useWarpingOrder } from "../WarpingOrders/service";
@@ -20,7 +19,7 @@ import { useWarpingDispatches } from "../WarpingOrders/yarn-service";
 import { YarnReturnDialog } from "../WarpingOrders/YarnReturnDialog";
 import type { WarpingYarnHolding } from "../WarpingOrders/holding-types";
 import type { YarnRowAction } from "./columns";
-import { CARRIED_LABEL, yarnLabel, type YarnAtSubLine } from "./model";
+import { CARRIED_LABEL, kg, yarnLabel, type YarnAtSubLine } from "./model";
 import { YARN_AT_SUB_QUERY_KEY } from "./service";
 
 export interface RowActionTarget {
