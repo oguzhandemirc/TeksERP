@@ -1947,6 +1947,22 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
           { value: "SINGLE_LOT", label: "Tek lot zorunlu", hint: "Bir siparişte her iplik tek lottan gider; ikinci lot reddedilir." },
         ],
       },
+      {
+        // Devere H1: `defaultValue` backend `DEFAULT_DEVERE_SETTLE_DEFAULT` ile birebir (bekçi §16).
+        enumKey: "devereSettleDefault",
+        title: "Fason devere kapanışında kalan iplik önerisi",
+        summary: "Sipariş kapatılırken deverecide kalan ipliğe kapanış ekranının ilk önerdiği.",
+        desc: "Kapanış ekranı açıldığında kalan iplik için hazır gelen öneri; kullanıcı satır satır değiştirebilir. Plan firesi kadar fire (varsayılan) planlanan fire kadarını fire yazar, fazlası deverecide kalır; diğer seçenekler kalanın tamamını deverecide bırakır, iade önerir ya da fire önerir.",
+        defaultValue: "WASTE_UP_TO_PLAN",
+        display: "radio",
+        audience: ["Depocu", "Planlamacı", "Yönetim"],
+        options: [
+          { value: "WASTE_UP_TO_PLAN", label: "Plan firesi kadar fire (varsayılan)", hint: "Planlanan fire kadarı fire yazılır, fazlası deverecide kalır." },
+          { value: "KEEP", label: "Deverecide kalsın", hint: "Kalanın tamamı deverecide kalır, sonraki siparişe devreder." },
+          { value: "RETURN", label: "İade edilsin", hint: "Kalanın tamamı iade önerilir; iade sebebi kapanışta seçilir." },
+          { value: "WASTE_ALL", label: "Hepsi fire", hint: "Kalanın tamamı fire önerilir; tolerans aşımı uyarılır." },
+        ],
+      },
     ],
     numberFlags: [
       {

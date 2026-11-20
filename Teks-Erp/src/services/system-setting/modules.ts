@@ -11,6 +11,7 @@ import { applyModuleCeiling } from "../../lib/license/module-ceiling";
 import { asBoolean, asNumber } from "./core";
 import { DEFAULT_DEVERE_FASON_LOT_POLICY, DEFAULT_DOKUMA_ROLL_BIRTH, DEVERE_FASON_LOT_POLICIES, DOKUMA_ROLL_BIRTH_MODES, type DevereFasonLotPolicy, type DokumaRollBirth } from "./defaults";
 import { SETTING_KEYS } from "./keys";
+export { readDevereSettleDefault } from "./devere-settle";
 
 
 /**

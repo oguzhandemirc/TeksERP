@@ -37,6 +37,7 @@ import { MODULE_SETTING_KEY_BY_FLAG, type FeatureFlags } from "./feature-flags-t
 import { DEFAULT_INVOICE_TOLERANCE_PCT, assertBrodeUnitHasPieceInput, readFinanceEnabledRaw, readFinanceServiceBillingBrodeUnit } from "./finance";
 import { effectiveIncomingDocsEnabled } from "./incoming-docs";
 import { SETTING_KEYS } from "./keys";
+import { DEVERE_SETTLE_DEFAULTS, type DevereSettleDefault } from "./devere-settle";
 import { readKursunMeterCapture } from "./kursun-batch";
 import { LABEL_COPIES_MAX, readNotificationInboxEnabled, type DefaultLabelMedia } from "./labels";
 import { DEFAULT_DEVERE_FASON_WASTE_TOLERANCE_PCT, DEVERE_FASON_WASTE_TOLERANCE_PCT_MAX, DEFAULT_DEVERE_WARP_FIXED_WASTE_M, DEVERE_WARP_FIXED_WASTE_M_MAX, DEFAULT_DOKUMA_WEAVING_WASTE_PCT, DOKUMA_WEAVING_WASTE_PCT_MAX, readDepoMultiEnabledRaw, readDevereEnabledRaw, readDokumaEnabledRaw, readEmanetEnabledRaw, readGelenBelgeEnabledRaw, readIplikEnabledRaw, readKaliteGuvenceEnabledRaw, readKumasTeknikEnabledRaw, readMaliyetEnabledRaw, readProductionEnabledRaw, readTezgahEnabledRaw, readTicaretEnabledRaw } from "./modules";
@@ -1671,6 +1672,13 @@ export async function setFeatureFlags(
         throw AppError.badRequest(`Fason devere lot kuralı ${DEVERE_FASON_LOT_POLICIES.join(", ")} değerlerinden biri olmalı`);
       }
       await this.set(SETTING_KEYS.DEVERE_FASON_LOT_POLICY, v, "Devere: fason devere siparişinde lot karışımı — serbest · uyar · tek lot zorunlu", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "devereSettleDefault")) {
+      const v = input.devereSettleDefault;
+      if (typeof v !== "string" || !DEVERE_SETTLE_DEFAULTS.includes(v as DevereSettleDefault)) {
+        throw AppError.badRequest(`Devere kapanış varsayılanı ${DEVERE_SETTLE_DEFAULTS.join(", ")} değerlerinden biri olmalı`);
+      }
+      await this.set(SETTING_KEYS.DEVERE_SETTLE_DEFAULT, v, "Devere: kapanışta kalan ipliğin varsayılan önerisi — plan firesi kadar fire · kalır · iade · hepsi fire", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "devereFasonWasteTolerancePct")) {
       const v = input.devereFasonWasteTolerancePct;

@@ -827,6 +827,10 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "yarn_movements", name: "yarn_movements_fason_return_reason_ck" },
   // Devere Faz 2 (lot): bobin adedi bilgi alanı, null ya da pozitif.
   { table: "yarn_movements", name: "yarn_movements_bobbin_positive" },
+  // Devere H1 (migration 20261120170850): koli/bobin adedi bilgi alanları, null ya da pozitif.
+  { table: "yarn_movements", name: "yarn_movements_package_positive" },
+  { table: "subcontractor_dispatch_items", name: "subcontractor_dispatch_items_package_positive" },
+  { table: "subcontractor_dispatch_items", name: "subcontractor_dispatch_items_bobbin_positive" },
   // Vardiya karnesi (dokuma raporları Dilim 1, 2026-09-14, migration 20260914130000):
   // terimler saniye/atkı sayacı (negatif olamaz) · eşik pozitif · SEALED ⇒ kuşak ≥ 1 ∧
   // sealedAt dolu (claim atlanarak yazılmış satırın imzası) · kırılım sayaçları negatif olamaz.

@@ -12,6 +12,7 @@ import { type CompanyLegalIdentity, type EIrsaliyeConfig } from "../e-irsaliye/e
 import { licenseModuleBlock, type LicenseModuleBlock } from "../../lib/license/module-ceiling";
 import { MODULE_SETTING_KEYS } from "../../constants/module-flags";
 import { type CariHoldDefaultScope, type CariHoldEmanetShipment, type CariHoldReleaseBySamePerson, type CostPresentationCurrency, type DevereFasonLotPolicy, type DokumaRollBirth, type ExpenseAllocationClosedWorkOrder, type ExpenseAllocationField, type ExpenseCategorySuggestions, type KursunGramPriceBasis, type KursunMachineAssignMode, type KursunMeterCapture, type KursunMeterStockMode, type KursunMeterVarianceApproval, type KursunMeterVarianceBasis, type LabelCopiesSource, type LabelCustomerCodeAt, type LabelCustomerCodeMissing, type LoginMethodsConfig, type OrderProductionProposalMode, type PackageNoMode, type PackageNumbering, type PackingGroupMode, type PackingGroupNumbering, type PackingPoolPackageNo, type ProductionRouteMode, type ProductionScanRouteStations, type ProfitCategoryClassMap, type ProfitConsumablePriceSource, type ProfitMachineTimeMode, type ProfitOverheadKey, type ProfitSubcontractSource, type RiskLimitCurrencyMode, type SackDumpNameMode, type SameTypeSessionPolicy, type ServiceBillingBrodeUnit, type ServiceBillingMeterBasis, type ServiceBillingMissingMeter, type ServiceBillingPriceDate, type ServiceBillingTrigger, type ShipReadyNotifyUnit, type ShipReadyRule, type ShipmentOrderRequirement, type ShippingDocCekiNameMode, type ShippingDocItemNameMode, type ShippingInvoiceMode, type ShippingOrderCoverage, type ShippingSackSeqPrefix, type StockAgingScope, type StockAgingSource, type TamburCalibrationCheck, type TamburChildWidthSource, type TamburLabelPrintTiming, type TamburPlanWidthCheck, type TezgahAlarmNoShiftMode, type WeavingStandardMethod, type WebTotpPolicy } from "./defaults";
+import { type DevereSettleDefault } from "./devere-settle";
 import { type CompanyLetterhead, type DocumentsConfig } from "./documents";
 import { SETTING_KEYS } from "./keys";
 import { type DefaultLabelMedia } from "./labels";
@@ -218,6 +219,8 @@ export interface FeatureFlags {
   devereFasonWasteTolerancePct: number;
   /** Fason devere D4b (K4): lot karışımı kuralı (varsayılan `WARN`). */
   devereFasonLotPolicy: DevereFasonLotPolicy;
+  /** Devere H1: kapanış önizlemesinde kalan ipliğin varsayılan önerisi (varsayılan `WASTE_UP_TO_PLAN` = A1-a, bugün). */
+  devereSettleDefault: DevereSettleDefault;
   /** Z1: tezgah koşumu dokuma işine bağlı açılmalı (varsayılan KAPALI = stoka dokuma meşru). HAM; etkin `dokuma && bayrak`. */
   dokumaRunWeavingOrderRequired: boolean;
   /** Z1: dokuma işi en az bir sipariş satırına bağlı olmalı (varsayılan KAPALI). HAM; etkin `dokuma && bayrak`. */

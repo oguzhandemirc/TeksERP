@@ -58,7 +58,7 @@ const ReopenBody = z.strictObject({ reason: z.string().trim().min(3, "Yeniden a�
  * /api/warping-orders/{id}/settlement-preview:
  *   get:
  *     tags: [WarpingOrder]
- *     summary: Kapanış önizlemesi (varsayılan A1-a) — kalem kalem tutulan iplik, önerilen fire (plan brüt − net kadar) ve deverecide kalan, fire %, tolerans uyarısı; yazmaz
+ *     summary: Kapanış önizlemesi (gövdesiz öneri `devere.settleDefault` kipinden, varsayılan A1-a) — kalem kalem tutulan iplik, önerilen fire (A1-a: plan brüt − net kadar) ve deverecide kalan, fire %, tolerans uyarısı; yazmaz
  *     security: [{ bearerAuth: [] }]
  *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
  *     responses:
@@ -88,7 +88,7 @@ router.post("/:id/settle/preview", requirePermission("warping-order:settle"), re
  * /api/warping-orders/{id}/settle:
  *   post:
  *     tags: [WarpingOrder]
- *     summary: Sipariş kapanışı — kalan iplik satır satır İADE (depoya, lot korunur) / FİRE (fire defteri) / DEVERECİDE KALIR (kayıt yok, sonraki siparişe devreder); satırsız gövde = varsayılan A1-a; tolerans aşımı yalnız uyarır; sipariş COMPLETED
+ *     summary: Sipariş kapanışı — kalan iplik satır satır İADE (depoya, lot korunur) / FİRE (fire defteri) / DEVERECİDE KALIR (kayıt yok, sonraki siparişe devreder); satırsız gövde = `devere.settleDefault` kipi (varsayılan A1-a; RETURN kipinde returnReasonCode zorunlu); tolerans aşımı yalnız uyarır; sipariş COMPLETED
  *     security: [{ bearerAuth: [] }]
  *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
  *     requestBody:
