@@ -24,6 +24,8 @@ const router = Router();
 router.use(verifyToken, requireDevereEnabled, requireBeamBodyTracking);
 // Devere ek D1: tablet dönüş kabulünde gövde QR çözümü (yalnız `/resolve`; yazma uçları panelde).
 const MOBILE_DEVERE_KABUL = ["mobile:devere-kabul"] as const;
+// Devere ek-2 r: Levent Sarım tableti içeride sarımda gövde QR'ını çözer (aynı salt okuma ucu).
+const MOBILE_DEVERE = ["mobile:devere"] as const;
 // B2: elle geçiş + geri alma alt-router'ı kapıyı miras alır.
 router.use("/", beamBodyMovementRoutes);
 
@@ -182,7 +184,7 @@ router.post("/", requirePermission("beam-body:write"), wrap(async (req) => {
  *       200: { description: "{ success, data: BeamBody }" }
  *       404: { description: BEAM_BODY_NOT_FOUND }
  */
-router.get("/resolve", requireAnyPermission("beam-body:read", ...MOBILE_DEVERE_KABUL), wrap(async (req) => {
+router.get("/resolve", requireAnyPermission("beam-body:read", ...MOBILE_DEVERE_KABUL, ...MOBILE_DEVERE), wrap(async (req) => {
   const q = parse(ResolveQuery, req.query);
   return { status: 200, body: { success: true, data: await resolveBeamBody(q.code) } };
 }));

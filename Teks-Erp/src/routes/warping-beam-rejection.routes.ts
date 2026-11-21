@@ -10,13 +10,14 @@ import { z } from "zod";
 import { AppError } from "../utils/app-error";
 import { WARPING_REJECTION_BODY_LIMIT } from "../constants/body-limits";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
 import { requireDevereEnabled, requireIplikEnabled } from "../middlewares/module.middleware";
 import { assertNoBareFilterParams, parseQueryParams, readFilterList, readIdCondition } from "../utils/query-parser";
 import { createWarpingBeamRejection, previewWarpingBeamRejection, WARPING_REJECT_MAX_BEAMS } from "../services/warping-order/beam-rejection";
 import { cancelWarpingBeamRejection, previewCancelWarpingBeamRejection } from "../services/warping-order/beam-rejection-cancel";
 import { getWarpingBeamRejection, listWarpingBeamRejections } from "../services/warping-order/beam-rejection-read";
 import { addRejectionPhotos, readRejectionPhoto, WARPING_REJECT_PHOTOS_PER_REQUEST } from "../services/warping-order/beam-rejection-photo";
+import { lookupWarpingRejectBeam } from "../services/warping-order/beam-rejection-lookup";
 import "../types/express-augment";
 
 const router = Router();
@@ -63,6 +64,29 @@ const ListQuery = z.object({
 }).passthrough();
 const FILTERS = ["warpingOrderId", "subcontractorId", "status"];
 const STATUS = ["active", "cancelled", "all"] as const;
+// Devere ek-2 r: tablet (Devere Dönüş Kabulü) ret YETENEĞİ — yalnız okutma çözümü, önizleme ve ret; liste/iptal/foto ekleme panelde.
+const MOBILE_DEVERE_RET = ["mobile:devere-ret"] as const;
+const RET_WRITE = requireAnyPermission("warping-order:write", ...MOBILE_DEVERE_RET);
+const LookupQuery = z.object({ code: z.string().trim().min(1, "Kod okutun").max(64) });
+
+/**
+ * @openapi
+ * /api/warping-beam-rejections/lookup:
+ *   get:
+ *     tags: [WarpingOrder]
+ *     summary: Tablet ret — okunan levent etiketi / gövde QR / gövde no → devere siparişinden dönen sarım + sipariş (salt okuma)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: code, required: true, schema: { type: string } }
+ *     responses:
+ *       200: { description: "{ success, data: { beam{id,beamNo,status,physicalBeamNo,bodyNo,lengthM}, order{id,orderNo,subcontractor{id,name}} } }" }
+ *       404: { description: WARP_BEAM_NOT_FOUND }
+ *       409: { description: WARPING_REJECT_NOT_WARPING_BEAM }
+ */
+router.get("/lookup", RET_WRITE, wrap(async (req) => {
+  const q = parse(LookupQuery, req.query);
+  return { status: 200, body: { success: true, data: await lookupWarpingRejectBeam(q.code) } };
+}));
 
 /**
  * @openapi
@@ -88,7 +112,7 @@ const STATUS = ["active", "cancelled", "all"] as const;
  *     responses:
  *       200: { description: "{ success, data: { order, beams, returnedYarn, totals, reason, photoRequired, blockers, warnings, rejectable } }" }
  */
-router.post("/preview", requirePermission("warping-order:write"), requireIplikEnabled, wrap(async (req) => {
+router.post("/preview", RET_WRITE, requireIplikEnabled, wrap(async (req) => {
   const body = parse(PreviewBody, req.body);
   return { status: 200, body: { success: true, data: await previewWarpingBeamRejection(body) } };
 }));
@@ -152,7 +176,7 @@ router.get("/", requirePermission("warping-order:read"), wrap(async (req) => {
   return { status: 200, body: { success: true, ...out } };
 }));
 
-router.post("/", requirePermission("warping-order:write"), requireIplikEnabled, wrap(async (req) => {
+router.post("/", RET_WRITE, requireIplikEnabled, wrap(async (req) => {
   const body = parse(CreateBody, req.body);
   const out = await createWarpingBeamRejection(body, req.user!.userId);
   return { status: out.replayed ? 200 : 201, body: { success: true, data: out.data, message: out.replayed ? `${out.data.docNo} zaten kayıtlı` : `Ret belgesi ${out.data.docNo} açıldı (${out.data.items.length} sarım)` } };
