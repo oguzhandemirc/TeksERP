@@ -144,7 +144,9 @@ export const TABLE_DEFS: TableDef[] = [
       col("musteri_renk", "Müşterideki renk", "metin", { hiza: "l", ornek: "SAND", kaynakKolon: "customerColor" }),
       col("top_adedi", "Top adedi", "sayi", { hiza: "r", ornek: 3, ondalik: 0, kaynakKolon: "rollCount", toplam: "top_adedi" }),
       col("metre", "Toplam metre", "sayi", { hiza: "r", ornek: 480, ondalik: 2, birim: "m", kaynakKolon: "totalMeters", toplam: "metre" }),
-    ],
+      // SY-C4: sipariş fiyatı iç veridir — opt-in; tutar = BRÜT metre × birim fiyat.
+      col("birim_fiyat", "Birim fiyat", "sayi", { hiza: "r", ornek: 2.5, ondalik: 2, kaynakKolon: "unitPrice", sinif: "ic", icKod: "urun_birim_fiyat" }),
+      col("tutar", "Tutar", "sayi", { hiza: "r", ornek: 1200, ondalik: 2, kaynakKolon: "amount", sinif: "ic", icKod: "urun_tutar" }),    ],
   },
   {
     anahtar: "cuval",

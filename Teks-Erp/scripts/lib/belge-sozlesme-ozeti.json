@@ -4077,7 +4077,7 @@
   }
  },
  "SHIPMENT_DISPATCH": {
-  "contractVersion": 4,
+  "contractVersion": 5,
   "alanlar": {
    "ayar.blankGrid": {
     "tur": "nesne",
@@ -4527,6 +4527,14 @@
     "tur": "mantiksal",
     "sinif": "musteri"
    },
+   "ic_acik.urun_birim_fiyat": {
+    "tur": "mantiksal",
+    "sinif": "musteri"
+   },
+   "ic_acik.urun_tutar": {
+    "tur": "mantiksal",
+    "sinif": "musteri"
+   },
    "karsi_taraf.ad": {
     "tur": "metin",
     "sinif": "musteri"
@@ -4667,6 +4675,10 @@
     "tur": "metin",
     "sinif": "musteri"
    },
+   "tablolar.urun[].birim_fiyat": {
+    "tur": "sayi",
+    "sinif": "ic"
+   },
    "tablolar.urun[].metre": {
     "tur": "sayi",
     "sinif": "musteri"
@@ -4686,6 +4698,10 @@
    "tablolar.urun[].top_adedi": {
     "tur": "sayi",
     "sinif": "musteri"
+   },
+   "tablolar.urun[].tutar": {
+    "tur": "sayi",
+    "sinif": "ic"
    },
    "toplamlar.cuval_adedi": {
     "tur": "sayi",

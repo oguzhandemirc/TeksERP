@@ -93,5 +93,20 @@ console.log("§4 Hata notu sütunu (KQ-D8) — opt-in, kaçışlı, rakama dokun
   check("sütun açılınca toplam rakam aynı kalır (brüt)", toplam(acik) === toplam(kapali), `${toplam(acik)} / ${toplam(kapali)}`);
 }
 
+console.log("§5 Ürün fiyat sütunları (SY-C4) — opt-in, fiyatsız satır boş, metre brüt");
+{
+  const html = (ad: string) => {
+    const k = kombinasyonlar.find((x) => x.ad === ad);
+    return k ? renderShipmentDispatchHtml(k.snapshot, k.meta) : "";
+  };
+  const acik = html("zengin/fiyat/yok");
+  const kapali = html("zengin/yok/yok");
+  check("açık kombinasyonda birim fiyat + tutar başlığı", /B[İI]R[İI]M F[İI]YAT/i.test(acik) && /TUTAR/i.test(acik));
+  check("açık kombinasyonda tutar hücresi (859,25 USD)", acik.includes("859,25"));
+  check("varsayılan (ayar yok) belgede fiyat sütunu YOK", !/TUTAR/i.test(kapali) && !kapali.includes("859,25") && !kapali.includes("2,75"));
+  const metre = (h: string) => (h.match(/312[.,]4/g) ?? []).length;
+  check("sütun açılınca metre rakamı aynı kalır (brüt)", metre(acik) === metre(kapali) && metre(acik) > 0, `${metre(acik)} / ${metre(kapali)}`);
+}
+
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exitCode = fail > 0 ? 1 : 0;

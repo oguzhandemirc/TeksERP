@@ -129,6 +129,9 @@ function productRows(products: Row[]): RowValues[] {
       musteri_renk: asText(p.customerColorOnly),
       top_adedi: asNumber(p.rollCount),
       metre: asNumber(p.totalMeters),
+      // SY-C4: sevk anında donan tek fiyat; çok fiyat/fiyatsız satırda anahtar yok → null (uydurma yok).
+      birim_fiyat: asNumber(p.unitPrice),
+      tutar: asNumber(p.amount),
     };
   });
 }
@@ -264,7 +267,7 @@ function internalFlags(optIn: ReadonlySet<string>): Record<string, boolean> {
 export const shipmentDispatchContract: DocumentContract<DispatchNoteConfig, DispatchLiveOptions> = {
   docType: "SHIPMENT_DISPATCH",
   hedef: "musteri",
-  contractVersion: 4, // 2: KQ-D8 ceki hata_notu (iç, opt-in) · 3: K18 teslim_yeri/teslim_adresi · 4: toplamlar.yuk_ozeti (karışık yük)
+  contractVersion: 5, // 2: KQ-D8 ceki hata_notu (iç, opt-in) · 3: K18 teslim_yeri/teslim_adresi · 4: toplamlar.yuk_ozeti (karışık yük) · 5: SY-C4 urun birim_fiyat/tutar (iç, opt-in)
   kokler: ROOT_FIELDS,
   tablolar: TABLE_DEFS,
   ayarSemasi: CONFIG_SCHEMA,
