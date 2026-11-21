@@ -124,7 +124,8 @@ async function loadSourcesTx(tx: Db, a: { itemIds: string[]; extraRateCodes: str
   const rates = codes.size ? await tx.finishingRate.findMany({ where: { ...ACTIVE_FINISHING_RATE, code: { in: [...codes] } } }) : [];
   const weavingMethod = await readCostWeavingStandardMethod(tx);
   const wasteMethod = await readCostWasteMethod(tx);
-  const formulaRows = await tx.costFormula.findMany({ where: ACTIVE_COST_FORMULA, orderBy: [{ sortOrder: "asc" }, { code: "asc" }], select: { id: true, code: true, name: true, versionNo: true, expression: true, currency: true } });
+  // Formül yalnız PARA'dır: fiyatsız yükleme (gramaj, ihtiyaç) sorguyu koşturmaz.
+  const formulaRows = !a.withPrices ? [] : await tx.costFormula.findMany({ where: ACTIVE_COST_FORMULA, orderBy: [{ sortOrder: "asc" }, { code: "asc" }], select: { id: true, code: true, name: true, versionNo: true, expression: true, currency: true } });
   // Metre tabanlı tarifelerde ayar okunmaz (sorgu sayısı bugünkü).
   const kgBasis = rates.some((r) => r.basis === "KG") ? await readCostFinishingKgBasis(tx) : undefined;
   return {

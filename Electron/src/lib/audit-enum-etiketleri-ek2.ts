@@ -15,4 +15,6 @@ export const ENUM_LABELS_EK2: Record<string, string> = {
   RETURNED_TO_OWNER: "Sahibine iade edildi",
   WARPER: "Devereci",
   BEAM_BODY: "Levent gövdesi",
+  // CostComponent (SY-C1): ek maliyet formülü satırı
+  FORMULA: "Ek maliyet formülü",
 };

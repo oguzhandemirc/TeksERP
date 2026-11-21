@@ -106,6 +106,16 @@ const MODEL_MUAF: ReadonlyArray<{ dosya: string; model: string; neden: string }>
     neden: "Hesaplanan gramaj loadCostStructureSourcesTx'i çağırır — iplik fiyatı sorgusu KOŞMAZ; tarayıcı dosya düzeyinde gördüğü için muaf (machineCostRate komşu-fonksiyon emsali).",
   },
   {
+    dosya: "routes/item-computed-gsm.routes.ts",
+    model: "costFormula",
+    neden: "Ek maliyet formülleri (SY-C1) yalnız fiyatlı yüklemede okunur; gramaj fiyatsız yükleyiciyi (loadCostStructureSourcesTx) çağırır — sorgu KOŞMAZ, tarayıcı dosya düzeyinde gördüğü için muaf (yarnCostPrice emsali).",
+  },
+  ...["routes/production-proposal.routes.ts", "routes/weaving-order.routes.ts"].map((dosya) => ({
+    dosya,
+    model: "costFormula",
+    neden: "Öneri/iplik ayırma zinciri ortak yükleyiciden (loadCostSourcesTx) aktif formülleri de alır ama yalnız iplik MİKTARINI (yarnUsagePerM) kullanır; formül satırı paradır, miktara girmez, çıktıda para yok — maliyet kapalıyken zincir yine çalışır (SY-C1).",
+  })),
+  {
     dosya: "routes/loom-suggestion.routes.ts",
     model: "costParameterSet",
     neden: "Tezgâh önerisi (SY-M2) levent boyunu yalnız ihtiyaç satırı için parametre setinden OKUR (beam-need.helper); fiyat okumaz, maliyet kapalıyken öneri yine çalışır.",

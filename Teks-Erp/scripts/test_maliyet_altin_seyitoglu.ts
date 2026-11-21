@@ -65,6 +65,27 @@ function section1(): Map<string, Map<GoldenComponent, Prisma.Decimal>> {
   return out;
 }
 
+/** SY-C2 CARPMA: Excel'in şişirme oranı (360/300 = ×1,20 · 185/165 ≈ ×1,1212) fire % olarak doğrudan girilir. */
+function sectionCarpma(): void {
+  console.log("\n--- §1C fire yöntemi CARPMA (maliyet.fireYontemi) ---");
+  const c = GOLDEN_CASES.find((x) => x.key === "S3000")!;
+  const base = goldenPureInput(c);
+  const input = {
+    ...base,
+    wasteMethod: "CARPMA" as const,
+    warp: base.warp && { ...base.warp, wastePct: { value: D("20"), source: "KART" as const } },
+    weft: base.weft && { ...base.weft, wastePct: { value: D("12.12"), source: "YAPI" as const } },
+  };
+  const res = computeFabricCost(input, { USD: USD_RATE });
+  reportCase("§1C", c, goldenComponents(res, USD_RATE, (id) => id ?? "?"), res.missing);
+  const total = res.result ? toPresentationAmount(res.result.totalCostPerMTry, PRESENT) : null;
+  check("§1C 3000 SERİSİ: CARPMA sunum toplamı 1.6134 $/m (Excel 1,6134)", total === "1.6134", String(total));
+  // Negatif sonda gömülü: aynı yüzdeler BÖLME'de Excel'i TUTMAZ (yöntem gerçekten okunuyor).
+  const bolme = computeFabricCost({ ...input, wasteMethod: undefined }, { USD: USD_RATE });
+  const bTotal = bolme.result ? toPresentationAmount(bolme.result.totalCostPerMTry, PRESENT) : null;
+  check("§1C aynı yüzdeler BOLME'de farklı toplam verir (yöntem okunuyor)", bTotal !== null && bTotal !== total, `${bTotal} / ${total}`);
+}
+
 const SETTING_KEYS_USED = [SETTING_KEYS.COST_WEAVING_STANDARD_METHOD, SETTING_KEYS.COST_FINISHING_KG_BASIS, SETTING_KEYS.COST_PRESENTATION_CURRENCY];
 
 async function importRows(entity: string, rows: Array<Record<string, string>>, ctx: { runIds: string[]; userId: string }): Promise<void> {
@@ -163,6 +184,7 @@ async function cleanup(ids: CleanupIds, prevSettings: Array<{ key: string; value
 async function main(): Promise<void> {
   console.log("=== SEYİTOĞLU ALTIN TEST (SY-H3) ===");
   const pure = section1();
+  sectionCarpma();
   assertGelistirmeVeritabani("test_maliyet_altin_seyitoglu");
   const engel = hedefDbEngeli();
   if (engel) throw new Error(`global ayar yazımı durduruldu — ${engel}`);

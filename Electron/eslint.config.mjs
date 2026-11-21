@@ -241,6 +241,8 @@ const KATALOG_DOSYALARI = [
   "src/services/documentConfig.ts",
   "src/pages/Operations/WorkOrders/service.ts",
   "src/routes/content-routes.tsx",
+  // Backend `src/constants/audit-tablo-etiketleri.ts`in BAYT-EŞİT aynası; bekçi satır satır okur (SY-C1).
+  "src/lib/audit-tablo-etiketleri.ts",
   // Hub karo katalogları muafiyeti UX-2'de kalktı: karolar `pages/<Hub>/tiles/*.ts` grup dosyalarında (≤300 satır).
 ];
 
