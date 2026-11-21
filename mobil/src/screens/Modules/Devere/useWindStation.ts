@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type 
 import Toast from 'react-native-toast-message';
 import type { TabletContext, WarpBeam } from '../../../services/warpBeam.service';
 import { signalScan } from '../../../services/scanFeedback';
+import { devereKabulService } from '../../../services/devereKabul.service';
 import { planFingerprint, tokenForBeam, windFingerprint, type BeamAttempt } from './devereAttempt';
 import { lastPlannedWarpSpecId, soleMachineId, soleWeavingOrderId } from './beamPayload';
 import { useBeamMutations } from './useBeamMutations';
@@ -21,6 +22,7 @@ import {
   initialStationForm,
   resolveStationScan,
   resolveTarget,
+  stationBodyFromResolve,
   stationPlanForm,
   toWindForm,
   validateStation,
@@ -83,7 +85,7 @@ function useStationSubmit({ form, context, spec, target, isOnline, setFormState,
   const submit = useCallback(() => {
     if (!form || !context) return;
     if (!isOnline) return setError('Bağlantı yok — sarım yalnız çevrimiçi kaydedilir (levent no sunucuda doğar).');
-    const v = validateStation(form, spec, target, { lotRequired: context.lotRequired ?? false, beamWeavingLinkRequired: context.beamWeavingLinkRequired ?? false });
+    const v = validateStation(form, spec, target, { lotRequired: context.lotRequired ?? false, beamWeavingLinkRequired: context.beamWeavingLinkRequired ?? false, beamBodyMode: context.beamBodyMode ?? 'OFF' });
     if (!v.ok) return setError(v.message);
     setError(null);
     if (target) return windBeam(target.id, form);
@@ -106,6 +108,33 @@ function useStationSubmit({ form, context, spec, target, isOnline, setFormState,
   }, [form, context, isOnline, spec, target, windBeam, mutations.plan, setError, onPlanned, setFormState]);
 
   return { submit, busy: mutations.plan.isPending || mutations.wind.isPending };
+}
+
+/** Ek-2 r: gövde QR/no → `/beam-bodies/resolve` → yalnız boş depo gövdesi forma bağlanır (son karar sunucuda, 409 BEAM_BODY_*). */
+function useStationBodyScan(setFormState: Dispatch<SetStateAction<StationForm | null>>, setScanMessage: (m: string | null) => void) {
+  const [bodyResolving, setResolving] = useState(false);
+  const scanBody = useCallback(async (raw: string) => {
+    const code = raw.trim();
+    if (!code) return;
+    setResolving(true);
+    try {
+      const v = stationBodyFromResolve(code, await devereKabulService.resolveBody(code));
+      if (typeof v === 'string') {
+        signalScan('reject');
+        setScanMessage(v);
+      } else {
+        signalScan('accept');
+        setScanMessage(null);
+        setFormState((f) => (f ? { ...f, beamBody: v } : f));
+      }
+    } catch (e) {
+      signalScan('reject');
+      setScanMessage(`Gövde okunamadı — ${((e ?? {}) as { message?: string }).message?.trim() || 'ağ ya da yetki'}`);
+    } finally {
+      setResolving(false);
+    }
+  }, [setFormState, setScanMessage]);
+  return { scanBody, bodyResolving };
 }
 
 export function useWindStation({ context, planned, recent, isOnline }: Deps) {
@@ -154,17 +183,26 @@ export function useWindStation({ context, planned, recent, isOnline }: Deps) {
   );
   const setTarget = useCallback((t: StationTarget) => patch({ target: t, physicalBeamNo: '' }), [patch]);
 
+  const bodyMode = context?.beamBodyMode ?? 'OFF';
+  const { scanBody, bodyResolving } = useStationBodyScan(setFormState, setScanMessage);
   const submitScan = useCallback(
     (raw: string) => {
       if (!form) return;
-      const r = applyStationScan(form, resolveStationScan(raw, [...livePlanned, ...recent]), target);
+      const scan = resolveStationScan(raw, [...livePlanned, ...recent]);
+      // Gövde kipi açıkken levent no olmayan kod GÖVDE QR'ıdır → kayıtlı gövde çözülür (metin gövde no'ya düşmez).
+      if (scan.kind === 'body' && bodyMode !== 'OFF') {
+        setScanValue('');
+        void scanBody(scan.physicalBeamNo);
+        return;
+      }
+      const r = applyStationScan(form, scan, target);
       signalScan(r.outcome);
       setFormState(r.form);
       setScanMessage(r.message);
       setScanValue('');
       setError(null);
     },
-    [form, livePlanned, recent, target]
+    [form, livePlanned, recent, target, bodyMode, scanBody]
   );
 
   const onWound = useCallback((id: string) => {
@@ -174,7 +212,7 @@ export function useWindStation({ context, planned, recent, isOnline }: Deps) {
   const onPlanned = useCallback((b: WarpBeam) => setCreated((c) => [...c, b]), []);
   const { submit, busy } = useStationSubmit({ form, context, spec, target, isOnline, setFormState, setError, onWound, onPlanned });
 
-  return { form, spec, target, livePlanned, error, patch, selectSpec, setTarget, scanValue, setScanValue, scanMessage, submitScan, submit, busy };
+  return { form, spec, target, livePlanned, error, patch, selectSpec, setTarget, scanValue, setScanValue, scanMessage, submitScan, submit, busy, bodyMode, scanBody, bodyResolving };
 }
 
 export type WindStationState = ReturnType<typeof useWindStation>;

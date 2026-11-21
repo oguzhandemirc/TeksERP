@@ -27,6 +27,7 @@ import { resolveOwnerFromLotsTx } from "./helpers/emanet-owner.helper";
 import { assertWarpingWoundCancellableTx } from "./helpers/warping-receipt-guard.helper";
 import { assertBeamWeavingLinkGate, assertWeavingOrderLinkableTx, warpSpecMismatchWarning } from "./helpers/production-chain-gates.helper";
 import { qtyText } from "./helpers/qty-text.helper";
+import { planWindBodies, windOwnerFor } from "./helpers/warp-beam-wind-body.helper";
 
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 
@@ -67,6 +68,8 @@ export interface WindWarpBeamInput {
   weavingOrderId?: string | null;
   /** Takımda gövde numarası öneki → `${önek}-${k}`; ilkinin kendi gövde no'su varsa korunur. */
   physicalBeamNoPrefix?: string | null;
+  /** Devere ek-2 r: içeride sarımda levent gövdeleri (adet kadar; `devere.beamBodyMode` OFF'ta 403, REQUIRED'da zorunlu). */
+  beamBodyIds?: string[] | null;
 }
 
 /** G1c — iplik kalemi bağı kapısı (köken kapısı çağıranda): kalem YARN · sevk iptal edilmemiş · fasoncu leventinki · iplik kartı çözgünün ipliği. */
@@ -166,7 +169,10 @@ async function windWarpBeamFresh(id: string, input: WindWarpBeamInput, userId?: 
     if (issueKg.minus(nominalSet).abs().gt(nominalSet.mul(0.25))) warnings.push(`Takım çıkışı ${qtyText(issueKg)} kg, ${count} × nominal ${qtyText(nominalSet)} kg'dan %25'ten fazla sapıyor — adet ya da kg'yi kontrol edin.`);
   }
   const prefix = input.physicalBeamNoPrefix?.trim() || null;
-  const firstPhysical = siblingPhysicalNo(prefix, 1, beam.physicalBeamNo);
+  // Devere ek-2 r: okutulan gövde (takımda k. levente k. gövde) gövde no'yu da verir — önek/plandaki no'nun önüne geçer.
+  const bodies = await planWindBodies(prisma, { beamNo: beam.beamNo, originKind: beam.originKind, count, beamBodyIds: input.beamBodyIds });
+  const physicalOf = (k: number, own: string | null) => bodies?.[k - 1]?.bodyNo ?? siblingPhysicalNo(prefix, k, own);
+  const firstPhysical = physicalOf(1, beam.physicalBeamNo);
   // K5 — aynı metal gövdede canlı çözgü ön kontrolü (Türkçe 409; `physical_live_uq` ikinci hat, ham P2002 dönmesin).
   await assertPhysicalBeamFreeTx(prisma, beam.id, firstPhysical, beam.beamNo);
   const setKey = count > 1 ? crypto.randomUUID() : null;
@@ -181,27 +187,30 @@ async function windWarpBeamFresh(id: string, input: WindWarpBeamInput, userId?: 
     throw AppError.conflict(`${beam.beamNo} başka bir müşterinin emanet leventi — bu lotların sahibiyle uyuşmuyor`, { code: "OWNER_MISMATCH" });
   }
   const ownerCustomerId = beam.ownerCustomerId ?? lotOwner;
+  const firstOwner = windOwnerFor(bodies?.[0], ownerCustomerId, beam.beamNo);
   const wound = await prisma.$transaction(async (tx) => {
     if (input.machineId) await assertDevereMachineTx(tx, input.machineId);
     if (input.dispatchItemId) await assertYarnDispatchItemTx(tx, input.dispatchItemId, { subcontractorId: beam.subcontractorId, yarnItemId });
-    if (setKey || firstPhysical !== beam.physicalBeamNo || ownerCustomerId !== beam.ownerCustomerId || weavingOrderId !== beam.weavingOrderId) {
-      await tx.warpBeam.updateMany({ where: { id, status: WarpBeamStatus.PLANNED }, data: { setKey, physicalBeamNo: firstPhysical, ownerCustomerId, weavingOrderId } });
+    if (setKey || bodies || firstPhysical !== beam.physicalBeamNo || firstOwner !== beam.ownerCustomerId || weavingOrderId !== beam.weavingOrderId) {
+      // Gövde bağı WOUND'dan ÖNCE yazılır: gövde durumunu (EMPTY_STOCK → FULL_STOCK) WOUND kancası yürütür.
+      await tx.warpBeam.updateMany({ where: { id, status: WarpBeamStatus.PLANNED }, data: { setKey, physicalBeamNo: firstPhysical, ownerCustomerId: firstOwner, weavingOrderId, beamBodyId: bodies?.[0]?.beamBodyId } });
     }
     // Token yalnız ilk leventin WOUND'unda (raşel kardeşleri token'sız); yazım yerinde açık alan — tarama görsün.
     const first = await writeWoundTx(tx, { id, endsCount: beam.warpSpec.endsCount }, { ...ctx, clientToken: input.clientToken ?? null }, { issues: issueShares[0], returns: returnShares[0] });
     for (let k = 2; k <= count; k++) {
-      const physicalBeamNo = siblingPhysicalNo(prefix, k, null);
+      const physicalBeamNo = physicalOf(k, null);
+      const sibOwner = windOwnerFor(bodies?.[k - 1], ownerCustomerId, `${beam.beamNo} takımı ${k}. levent`);
       await assertPhysicalBeamFreeTx(tx, null, physicalBeamNo, `${beam.beamNo} takımı ${k}. levent`);
       // k. kardeş AYNI tx'te PLANNED doğar (8029 sıralı LV no; klon: kart/köken/taraf/plan m/not) ve hemen sarılır.
       const sib = await tx.warpBeam.create({
-        data: { beamNo: await nextBeamNoTx(tx, new Date()), warpSpecId: beam.warpSpecId, status: WarpBeamStatus.PLANNED, plannedLengthM: beam.plannedLengthM, physicalBeamNo, notes: beam.notes, originKind: beam.originKind, subcontractorId: beam.subcontractorId, supplierId: beam.supplierId, ownerCustomerId, weavingOrderId, setKey, createdById: userId ?? null },
+        data: { beamNo: await nextBeamNoTx(tx, new Date()), warpSpecId: beam.warpSpecId, status: WarpBeamStatus.PLANNED, plannedLengthM: beam.plannedLengthM, physicalBeamNo, notes: beam.notes, originKind: beam.originKind, subcontractorId: beam.subcontractorId, supplierId: beam.supplierId, ownerCustomerId: sibOwner, beamBodyId: bodies?.[k - 1]?.beamBodyId ?? null, weavingOrderId, setKey, createdById: userId ?? null },
         select: { id: true, beamNo: true },
       });
       await writeWoundTx(tx, { id: sib.id, endsCount: beam.warpSpec.endsCount }, { ...ctx, clientToken: null }, { issues: issueShares[k - 1], returns: returnShares[k - 1] });
     }
     return first;
   });
-  await logWarpBeamEventAudit({ userId, eventId: wound.id, kind: "WOUND", data: { beamId: id, lengthM: Number(lengthM), theoreticalKg: Number(theoreticalKg), kgSource: input.kgSource, ...(yarnLines.length > 1 ? { yarnLines: yarnLines.map((l) => ({ yarnItemId: l.yarnItemId, endsCount: l.endsCount, theoreticalKg: Number(l.theoreticalKg) })) } : {}), issues: issues.length, returns: returns.length, count, setKey, ...(lotOwner ? { ownerCustomerId: lotOwner, ownerInherited: true } : {}) } });
+  await logWarpBeamEventAudit({ userId, eventId: wound.id, kind: "WOUND", data: { beamId: id, lengthM: Number(lengthM), theoreticalKg: Number(theoreticalKg), kgSource: input.kgSource, ...(yarnLines.length > 1 ? { yarnLines: yarnLines.map((l) => ({ yarnItemId: l.yarnItemId, endsCount: l.endsCount, theoreticalKg: Number(l.theoreticalKg) })) } : {}), issues: issues.length, returns: returns.length, count, setKey, ...(lotOwner ? { ownerCustomerId: lotOwner, ownerInherited: true } : {}), ...(bodies ? { beamBodyIds: bodies.map((b) => b.beamBodyId) } : {}) } });
   const sibs = await siblingsOf(setKey, id);
   // Kardeş doğuşları audit'e (best-effort, tx dışında): her biri ayrı WARP_BEAM kaydıdır.
   for (const s of sibs) await AuditService.log({ userId, action: "CREATE", tableName: "WARP_BEAM", recordId: s.id, newData: { beamNo: s.beamNo, setKey, siblingOf: beam.beamNo, lengthM: Number(lengthM) } }).catch(() => undefined);

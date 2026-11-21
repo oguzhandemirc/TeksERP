@@ -9,7 +9,7 @@ import { StyleSheet, View } from 'react-native';
 import { Text, Button } from 'react-native-paper';
 import ModuleSheet, { sheet } from '../../../components/ModuleSheet';
 import StationActionButton from '../../../components/StationActionButton';
-import { moduleAccents, spacing, typography } from '../../../theme';
+import { moduleAccents, palette, spacing, typography } from '../../../theme';
 import { fmtMeters } from '../../../utils/meters';
 import type { DuplicateNoteMode, ReceiveDocPreview, ReceiveDocResult } from '../../../services/devereKabul.service';
 
@@ -56,7 +56,10 @@ export function PreviewSheet({ preview, duplicateMode, pending, isOnline, onAcce
   );
 }
 
-export function ResultSheet({ result, onClose }: { result: ReceiveDocResult; onClose: () => void }) {
+type ResultBeam = ReceiveDocResult['orders'][number]['receipt']['beams'][number];
+
+/** `onReject` yalnız `mobile:devere-ret` yetkisinde verilir — yoksa satır düğmesi çizilmez. */
+export function ResultSheet({ result, onClose, onReject }: { result: ReceiveDocResult; onClose: () => void; onReject?: (b: ResultBeam, order: { id: string; orderNo: string }) => void }) {
   return (
     <ModuleSheet
       visible
@@ -69,9 +72,14 @@ export function ResultSheet({ result, onClose }: { result: ReceiveDocResult; onC
         <View key={o.warpingOrderId} style={sheet.box}>
           <Text style={styles.orderTitle}>{o.orderNo}</Text>
           {o.receipt.beams.map((b) => (
-            <View key={b.id} style={sheet.summaryRow}>
+            <View key={b.id} style={[sheet.summaryRow, styles.beamRow]}>
               <Text style={sheet.summaryLabel}>{b.beamNo}</Text>
-              <Text style={sheet.summaryValue}>{[b.physicalBeamNo, m(b.lengthM)].filter(Boolean).join(' · ')}</Text>
+              <Text style={[sheet.summaryValue, styles.grow]}>{[b.physicalBeamNo, m(b.lengthM)].filter(Boolean).join(' · ')}</Text>
+              {onReject ? (
+                <Button mode="outlined" icon="truck-fast-outline" textColor={palette.orange[800]} onPress={() => onReject(b, { id: o.warpingOrderId, orderNo: o.orderNo })} contentStyle={styles.tall} testID={`devere-ret-satir-${b.beamNo}`}>
+                  Geri gönder
+                </Button>
+              ) : null}
             </View>
           ))}
         </View>
@@ -84,4 +92,6 @@ const styles = StyleSheet.create({
   orderTitle: { fontSize: typography.size.base, fontWeight: typography.weight.bold, marginBottom: spacing.xs },
   action: { marginTop: spacing.md },
   tall: { height: 56 },
+  beamRow: { alignItems: 'center' },
+  grow: { flex: 1 },
 });

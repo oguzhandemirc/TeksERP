@@ -399,7 +399,7 @@ const mobile: ScreenEntry[] = [
   // Tablet LEVENT SARIM ekranı (2026-09-14, DEVERE-LEVENT-TARAMASI §11): plan · sar · taslak sil; iptal yetenek.
   { key: "Devere", app: "mobile", modul: "devereEnabled", title: "Levent Sarım", requires: ["mobile:devere"], capabilities: [{ code: "mobile:devere-iptal", label: "Sarımı iptal edebilir (iplik defterine ters satır)" }] },
   // Devere ek M1 (2026-11-21): depoda devere dönüş kabulü — gövde QR, metre, tartı; panelle aynı kabul belgesi (oturumsuz).
-  { key: "DevereKabul", app: "mobile", modul: "devereEnabled", title: "Devere Dönüş Kabulü", requires: ["mobile:devere-kabul"], capabilities: [] },
+  { key: "DevereKabul", app: "mobile", modul: "devereEnabled", title: "Devere Dönüş Kabulü", requires: ["mobile:devere-kabul"], capabilities: [{ code: "mobile:devere-ret", label: "Kusurlu leventi devereciye geri gönderebilir (ret belgesi)" }] },
   // Tezgah alarmı A3: usta/amir telefonu + tablet — aktif alarmlar, üstlen/sustur/not, alarm sayfası, yerel bildirim.
   { key: "Uyarilar", app: "mobile", modul: "tezgahEnabled", title: TERIM_AD.tezgahAlarmlari, requires: ["mobile:tezgah-uyari"], capabilities: [] },
   // G2t (2026-09-14): fason dokuma kabulü — aynı izin ikinci ekranda (levent dönüşü + top kabulü; sevk/iptal panelden).

@@ -46,6 +46,8 @@ export type MobilePermission =
   | 'mobile:devere-iptal'
   // Devere ek M1 (2026-11-21): DEVERE DÖNÜŞ KABULÜ ekranı (depo) — panel kabul belgesi uçlarının dar mobil ikizi.
   | 'mobile:devere-kabul'
+  // Devere ek-2 r (2026-11-22): kabul ekranında kusurlu levent reddi — ayrı yetenek (iplik tutmasını değiştirir).
+  | 'mobile:devere-ret'
   // Tezgah alarmı A3: Uyarılar ekranı — `loom:alarm-view` + `loom:alarm-ack`'in DAR mobil ikizi (bildirim dahil).
   | 'mobile:tezgah-uyari'
   // K4P-EKRAN: istasyondan bağımsız Muayene ekranı (top okut → 4 puan muayene).

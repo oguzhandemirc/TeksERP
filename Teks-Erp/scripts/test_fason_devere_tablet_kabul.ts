@@ -87,16 +87,18 @@ function statik(): void {
   const order = read("src/routes/warping-order.routes.ts");
   const konst = /const MOBILE_DEVERE_KABUL = \["mobile:devere-kabul"\] as const;/;
   check("§1a izin kümesi üç dosyada adlı sabit (bekçi tarayıcıları çözer)", konst.test(recv) && konst.test(docs) && konst.test(body));
-  const acik: Array<[string, string, string, string]> = [
-    [recv, "get", "/tablet-context", "warping-order:read"],
-    [docs, "post", "/preview", "warping-order:write"],
-    [docs, "post", "/", "warping-order:write"],
-    [docs, "get", "/:id", "warping-order:read"],
-    [body, "get", "/resolve", "beam-body:read"],
+  // ek-2 r: gövde çözümü Levent Sarım tabletine de açık (`...MOBILE_DEVERE`, içeride sarımda gövde QR'ı).
+  const acik: Array<[string, string, string, string, string]> = [
+    [recv, "get", "/tablet-context", "warping-order:read", ""],
+    [docs, "post", "/preview", "warping-order:write", ""],
+    [docs, "post", "/", "warping-order:write", ""],
+    [docs, "get", "/:id", "warping-order:read", ""],
+    [body, "get", "/resolve", "beam-body:read", ", ...MOBILE_DEVERE"],
   ];
-  for (const [src, m, p, web] of acik) {
+  for (const [src, m, p, web, extra] of acik) {
     const g = guardOf(src, m, p);
-    check(`§1b ${m.toUpperCase()} ${p} → requireAnyPermission("${web}", ...MOBILE_DEVERE_KABUL)`, g != null && g.trim() === `requireAnyPermission("${web}", ...MOBILE_DEVERE_KABUL)`, g ?? "route yok");
+    const want = `requireAnyPermission("${web}", ...MOBILE_DEVERE_KABUL${extra})`;
+    check(`§1b ${m.toUpperCase()} ${p} → ${want}`, g != null && g.trim() === want, g ?? "route yok");
   }
   const kapali: Array<[string, string, string, string]> = [
     [docs, "get", "/", "belge listesi"],
@@ -149,11 +151,12 @@ const setSetting = (key: string, value: Prisma.InputJsonValue) => prisma.systemS
 
 const ALLOW = {
   root: ["limits", "orders", "settings", "subcontractors", "truncated"],
-  order: ["beamLines", "expectedReturnAt", "id", "orderNo", "plannedBeamCount", "receivedBeamCount", "receivedM", "remainingBeamCount", "remainingM", "status", "subcontractor", "targetLengthM", "warpSpec"],
+  order: ["beamLines", "expectedReturnAt", "id", "orderNo", "plannedBeamCount", "receivedBeamCount", "receivedM", "remainingBeamCount", "remainingM", "reworkCandidates", "status", "subcontractor", "targetLengthM", "warpSpec"],
   subcontractor: ["id", "name"],
   warpSpec: ["code", "name"],
   sub: ["id", "name", "openOrderCount"],
-  settings: ["beamBodyMode", "duplicateDeliveryNote", "receiveWeighing"],
+  // ek-2 r: rejectPhotoRequired (tablet ret sayfası); reworkCandidates alt anahtarları test_devere_tablet_ret_govde'de.
+  settings: ["beamBodyMode", "duplicateDeliveryNote", "receiveWeighing", "rejectPhotoRequired"],
 };
 const keysOf = (o: object) => Object.keys(o).sort().join();
 const same = (o: object, allow: string[]) => keysOf(o) === [...allow].sort().join();

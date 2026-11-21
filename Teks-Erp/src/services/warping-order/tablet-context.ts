@@ -6,7 +6,9 @@
 // "Gelen" = K3 kabul edilen sarım (`ACCEPTED_WARPING_BEAM_WHERE`); açık = kabul edilebilir durum (`RECEIVABLE`). Kabulün
 // kendisi E1 belge ucundadır (`/api/warping-receive-docs`), burada ikinci kabul mantığı YOK. Modül kapısı serviste de.
 // =============================================================================
-import { Prisma } from "@prisma/client";
+import { Prisma, WarpBeamStatus } from "@prisma/client";
+import { LIVE_REWORK_WHERE } from "../helpers/warping-beam-rejection.helper";
+import { readDevereRejectPhotoRequired } from "../system-setting";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { licenseModuleError } from "../../lib/license/module-ceiling";
@@ -41,14 +43,44 @@ export interface WarpingTabletOrder {
   /** Hedef − gelen, alt sınır 0 (fazla gelen eksiye düşmez; fark panel mutabakatında). */
   remainingM: string;
   expectedReturnAt: string | null;
+  /** Devere ek-2 r: kabulde yeniden sarım adayı — REJECTED ∧ aktif ret kipi "yeniden sarılsın" ∧ canlı yeniden sarımı yok. */
+  reworkCandidates: Array<{ beamId: string; beamNo: string; lengthM: string | null; bodyNo: string | null; rejectionDocNo: string }>;
 }
 
 export interface WarpingTabletContext {
   subcontractors: Array<{ id: string; name: string; openOrderCount: number }>;
   orders: WarpingTabletOrder[];
   truncated: boolean;
-  settings: { beamBodyMode: DevereBeamBodyMode; receiveWeighing: DevereReceiveWeighing; duplicateDeliveryNote: DevereDuplicateDeliveryNote };
+  /** `rejectPhotoRequired` (ek-2 r): tablet ret sayfası fotosuz göndermeyi kapatır; sunucu da 400 verir. */
+  settings: { beamBodyMode: DevereBeamBodyMode; receiveWeighing: DevereReceiveWeighing; duplicateDeliveryNote: DevereDuplicateDeliveryNote; rejectPhotoRequired: boolean };
   limits: { maxOrders: number; maxBeamsPerOrder: number };
+}
+
+/** Yeniden sarım adayları — `planReceiveReworks` kapısının okuma ikizi (son karar kabulde, 400/409). */
+async function reworkCandidatesByOrder(orderIds: string[]): Promise<Map<string, WarpingTabletOrder["reworkCandidates"]>> {
+  const out = new Map<string, WarpingTabletOrder["reworkCandidates"]>();
+  if (orderIds.length === 0) return out;
+  const rows = await prisma.warpBeam.findMany({
+    where: {
+      warpingOrderId: { in: orderIds }, status: WarpBeamStatus.REJECTED,
+      rejectionItems: { some: { rejection: { cancelledAt: null, expectRework: true } } },
+      reworks: { none: LIVE_REWORK_WHERE },
+    },
+    orderBy: [{ beamNo: "asc" }],
+    select: {
+      id: true, beamNo: true, warpingOrderId: true, beamBody: { select: { bodyNo: true } },
+      events: { where: { kind: "WOUND" }, select: { lengthM: true }, take: 1 },
+      rejectionItems: { where: { rejection: { cancelledAt: null } }, select: { rejection: { select: { docNo: true } } }, take: 1 },
+    },
+  });
+  for (const r of rows) {
+    if (!r.warpingOrderId) continue;
+    const len = r.events[0]?.lengthM;
+    const list = out.get(r.warpingOrderId) ?? [];
+    list.push({ beamId: r.id, beamNo: r.beamNo, lengthM: len == null ? null : m3(len), bodyNo: r.beamBody?.bodyNo ?? null, rejectionDocNo: r.rejectionItems[0]?.rejection.docNo ?? "" });
+    out.set(r.warpingOrderId, list);
+  }
+  return out;
 }
 
 export async function getWarpingTabletContext(params: { subcontractorId: string | null }): Promise<WarpingTabletContext> {
@@ -75,6 +107,8 @@ export async function getWarpingTabletContext(params: { subcontractorId: string 
       },
     },
   });
+  const reworks = await reworkCandidatesByOrder(rows.slice(0, WARPING_TABLET_MAX_ORDERS).map((o) => o.id));
+  const rejectPhotoRequired = await readDevereRejectPhotoRequired();
   const beamBodyMode = await readDevereBeamBodyMode();
   const receiveWeighing = await readDevereReceiveWeighing();
   const duplicateDeliveryNote = await readDevereDuplicateDeliveryNote();
@@ -98,6 +132,7 @@ export async function getWarpingTabletContext(params: { subcontractorId: string 
       remainingBeamCount: o.beamCount === null ? null : Math.max(0, o.beamCount - o.warpBeams.length),
       remainingM: m3(rest.isNegative() ? D(0) : rest),
       expectedReturnAt: o.expectedReturnAt?.toISOString() ?? null,
+      reworkCandidates: reworks.get(o.id) ?? [],
     };
   });
   return {
@@ -106,7 +141,7 @@ export async function getWarpingTabletContext(params: { subcontractorId: string 
       .sort((a, b) => a.name.localeCompare(b.name, "tr")),
     orders,
     truncated: rows.length > WARPING_TABLET_MAX_ORDERS,
-    settings: { beamBodyMode, receiveWeighing, duplicateDeliveryNote },
+    settings: { beamBodyMode, receiveWeighing, duplicateDeliveryNote, rejectPhotoRequired },
     limits: { maxOrders: WARPING_RECEIVE_DOC_MAX_ORDERS, maxBeamsPerOrder: WARPING_RECEIVE_MAX_BEAMS },
   };
 }
