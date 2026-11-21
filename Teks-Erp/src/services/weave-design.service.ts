@@ -24,6 +24,7 @@ export const WEAVE_DESIGN_SELECT = {
   liftPlan: true,
   loomFileName: true,
   lenoSetup: true,
+  lenoFrames: true,
   notes: true,
   isActive: true,
   createdAt: true,
@@ -38,7 +39,7 @@ const WEAVE_DESIGN_LIST_SELECT = { ...WEAVE_DESIGN_SELECT, liftPlan: false } sat
 export type WeaveDesignRow = Prisma.WeaveDesignGetPayload<{ select: typeof WEAVE_DESIGN_SELECT }>;
 export type WeaveDesignListRow = Prisma.WeaveDesignGetPayload<{ select: typeof WEAVE_DESIGN_LIST_SELECT }>;
 
-const ALLOWED = new Set(["code", "name", "kind", "familyLabel", "frameCount", "repeatCm", "liftPlan", "loomFileName", "lenoSetup", "notes"]);
+const ALLOWED = new Set(["code", "name", "kind", "familyLabel", "frameCount", "repeatCm", "liftPlan", "loomFileName", "lenoSetup", "lenoFrames", "notes"]);
 
 function rejectUnknown(body: Record<string, unknown>): void {
   const unknown = Object.keys(body).filter((k) => !ALLOWED.has(k));
@@ -60,6 +61,22 @@ export function parseLiftPlan(raw: unknown): number[][] | null | undefined {
       return c;
     });
   });
+}
+
+/** Döner çerçeveleri: 1-tabanlı çerçeve no listesi; tekil + sıralı normalize edilir (DB CHECK 1..32 ikizi). */
+export function parseLenoFrames(raw: unknown): number[] | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null) return [];
+  if (!Array.isArray(raw)) throw AppError.badRequest("Döner çerçeveleri çerçeve numarası listesi olmalı.", { code: "LENO_FRAMES_INVALID" });
+  const seen = new Set<number>();
+  for (const v of raw) {
+    if (!Number.isInteger(v) || (v as number) < 1 || (v as number) > LIFT_PLAN_MAX_FRAMES) {
+      throw AppError.badRequest(`Döner çerçeve numarası 1–${LIFT_PLAN_MAX_FRAMES} arası tam sayı olmalı.`, { code: "LENO_FRAMES_INVALID" });
+    }
+    if (seen.has(v as number)) throw AppError.badRequest(`Döner çerçeve ${String(v)} iki kez yazılmış.`, { code: "LENO_FRAMES_INVALID" });
+    seen.add(v as number);
+  }
+  return [...seen].sort((a, b) => a - b);
 }
 
 function parseFrameCount(raw: unknown): number | null | undefined {
@@ -97,6 +114,8 @@ function parseScalars(body: Record<string, unknown>, partial: boolean): Prisma.W
   if (repeat !== undefined) out.repeatCm = repeat;
   const plan = parseLiftPlan(body.liftPlan);
   if (plan !== undefined) out.liftPlan = plan === null ? Prisma.DbNull : plan;
+  const leno = parseLenoFrames(body.lenoFrames);
+  if (leno !== undefined) out.lenoFrames = leno;
   return out;
 }
 
@@ -108,7 +127,7 @@ function conflict(e: unknown): never {
 function auditView(r: WeaveDesignRow): Record<string, unknown> {
   return {
     code: r.code, name: r.name, kind: r.kind, familyLabel: r.familyLabel, frameCount: r.frameCount,
-    repeatCm: r.repeatCm?.toString() ?? null, loomFileName: r.loomFileName, lenoSetup: r.lenoSetup, notes: r.notes,
+    repeatCm: r.repeatCm?.toString() ?? null, loomFileName: r.loomFileName, lenoSetup: r.lenoSetup, lenoFrames: r.lenoFrames, notes: r.notes,
     liftPlanSize: Array.isArray(r.liftPlan) ? r.liftPlan.length : null,
   };
 }

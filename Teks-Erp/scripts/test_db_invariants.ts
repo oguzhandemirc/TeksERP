@@ -1159,6 +1159,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // SEYİTOĞLU MİG-1 (20261031200000_desen_karti_varyant)
   { table: "warp_specs", name: "warp_specs_waste_pct_range" },
   { table: "weave_designs", name: "weave_designs_values_ck" },
+  // Seyitoğlu dilim b (20261121152314_desen_karti_doner_cerceve) — döner çerçeve no 1..32
+  { table: "weave_designs", name: "weave_designs_leno_frames_range_chk" },
   { table: "item_warp_layers", name: "item_warp_layers_sort_ck" },
   { table: "product_recipe_weft_yarns", name: "product_recipe_weft_yarns_sort_ck" },
   // SEYİTOĞLU MİG-2b (20261031200200_maliyet_tul) — atkı ücreti çifti ikisi birlikte dolu/boş

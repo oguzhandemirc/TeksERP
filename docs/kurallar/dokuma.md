@@ -126,6 +126,8 @@
 - [ÇEKİRDEK] Katman yeri yalnız `beamLayerTag`; SHARED_BEAM/CREEL'e levent önerme.
 - [ÇEKİRDEK] `sequenceCode` doluysa adet ondan; sıra yok olursa 409 `WEFT_OVERRIDE_ORPHAN`.
 - [ÇEKİRDEK] İş emri atkı/desen kartını doğuşta taşır; kart değişse iş emri değişmez.
+- [ÇEKİRDEK] İş emrinin yapısını okuyan yüzey (tablet iş kartı) iş emrinin `weftSpecId`/`weaveDesignId`ini `resolveEffectiveConstruction(…, pin)` ile sabitler (boşsa ürünün kartı); kart İÇERİĞİ canlıdır, geçmiş rakam koşum snapshot'ından (`MachineRun.unitsPerCm`) ve maliyet sürümünden okunur. <sub>(arşiv:2026-11-21 Desen kartı basımı)</sub>
+- [ÇEKİRDEK] Atkı seçici sütununu yalnız etkin yapının `weft.pickSequence`i (sunucu `expandWeftSequence`) verir; döner çerçeve `WeaveDesign.lenoFrames` (1-tabanlı); desen kartı A4 basımı `weave-card.service` → `weave-design-card.html` ANLIK iç belgedir (donmaz). <sub>(arşiv:2026-11-21 Desen kartı basımı)</sub>
 - [ÇEKİRDEK] Üretim önerisi `production-proposal.helper`; 8036 → `FOR NO KEY UPDATE` → 8032; `siparis.uretimOnerisi` kapalı.
 - [ÇEKİRDEK] Önizleme karar özetleri yalnız `production-proposal-insight.helper`den: tezgâh `suggestLoomsForDrafts` (zemin grup sayısından bağımsız tek okuma), iplik `yarnKgByYarn` + `yarnShortKg` (rapor çekirdeği), süre `theoreticalMPerHourDecimal`; eksik veri null, varsayılan uydurma, uygula yolu okumaz.
 - [ÇEKİRDEK] Tezgâh önerisi `suggestLoomsForWeaving`, ihtiyaç `beam-need.helper`; öneri engellemez; takip kapalı → `MOUNT_TRACKING_OFF`.

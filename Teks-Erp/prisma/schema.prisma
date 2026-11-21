@@ -2453,6 +2453,9 @@ model WeaveDesign {
   loomFileName String?         @db.VarChar(64)
   /// Leno düzeni ("20'li normal döner") — fabrika teyidine kadar serbest metin.
   lenoSetup    String?         @db.VarChar(100)
+  /// Döner (leno/doup) çerçeveleri — 1-tabanlı çerçeve no, sıralı tekil; CHECK 1..32. Boş = işaret yok
+  /// (bugünkü görünüm; `lenoSetup` metni ayrıca kalır). Izgarada ve desen kartı basımında ayrı blok.
+  lenoFrames   Int[]           @default([])
   notes        String?         @db.VarChar(500)
   isActive     Boolean         @default(true)
 

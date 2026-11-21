@@ -1,0 +1,156 @@
+// =============================================================================
+// DESEN KARTI A4 basımı (Seyitoğlu dilim b) — ustaya giden kâğıt, SAF renderer
+// =============================================================================
+// Fabrikanın bugünkü kâğıdının düzeni: başlık DESEN NO, armür ızgarası (döner çerçeveler ayrı blok),
+// sağda atkı seçici bloğu (1./2./3.), altta çözgü, atkı sıklığı, atkı iplikleri; ek olarak varyantlar.
+// ANLIK iç belge: donmuş PrintedDocument yok (kart canlı, basım = o anki kart); içerik görünüm modelinden
+// (`weave-card.service`), burada hesap yok. Saat yalnız `fmt-date` (fabrika dilimi).
+// =============================================================================
+import { escapeHtml } from "../helpers/label-html.shared";
+
+export interface WeaveCardYarn {
+  code: string;
+  name: string;
+  /** Biçimlenmiş denye ("70"); boşsa null. */
+  denier: string | null;
+}
+
+export interface WeaveCardView {
+  /** Desen no = satılan kumaşın kodu (K1). */
+  designNo: string;
+  itemName: string;
+  design: {
+    code: string; name: string; kindLabel: string; familyLabel: string | null; frameCount: number | null;
+    repeatCm: string | null; loomFileName: string | null; lenoSetup: string | null;
+  } | null;
+  liftPlan: number[][] | null;
+  /** 1-tabanlı döner çerçeve no'ları. */
+  lenoFrames: number[];
+  /** Atkı başına 1-tabanlı iplik satırı no; null = seçici kodu yok. */
+  pickSequence: number[] | null;
+  weft: {
+    code: string; name: string; picksPerCm: string | null; weftProgramNo: string | null; sequenceCode: string | null;
+    yarns: Array<WeaveCardYarn & { no: number; picksInRepeat: number }>;
+  } | null;
+  warps: Array<{ roleLabel: string; code: string; name: string; lines: Array<WeaveCardYarn & { endsCount: number }> }>;
+  widthCm: string | null;
+  variants: Array<{ variantCode: string | null; name: string; swaps: Array<WeaveCardYarn & { no: number }> }>;
+  warnings: string[];
+  printedAtText: string;
+}
+
+const e = (v: unknown): string => escapeHtml(String(v ?? ""));
+/** Boş bırakılan alt satır: usta kâğıda elle ekleyebilsin (bugünkü form gibi). */
+const BLANK_ROWS = 6;
+
+function yarnText(y: WeaveCardYarn): string {
+  return `${e(y.name)}${y.denier ? ` <span class="den">${e(y.denier)} DN</span>` : ""}`;
+}
+
+/** Çerçeve sütunlarını ardışık bloklara böler: döner ↔ zemin geçişinde yeni blok (kâğıttaki ayrık kutular). */
+export function frameBlocks(frames: number, leno: ReadonlySet<number>): number[][] {
+  const blocks: number[][] = [];
+  for (let f = 1; f <= frames; f++) {
+    const last = blocks[blocks.length - 1];
+    if (last && leno.has(last[0]!) === leno.has(f)) last.push(f);
+    else blocks.push([f]);
+  }
+  return blocks;
+}
+
+function gridHtml(v: WeaveCardView): string {
+  const plan = v.liftPlan ?? [];
+  const frames = plan.reduce((m, r) => Math.max(m, r.length), 0);
+  const selCount = v.pickSequence ? (v.weft?.yarns.length ?? 0) : 0;
+  const filled = Math.max(plan.length, v.pickSequence?.length ?? 0);
+  if (frames === 0 && selCount === 0) return `<p class="empty">Armür planı girilmemiş.</p>`;
+  const leno = new Set(v.lenoFrames.filter((f) => f <= frames));
+  const blocks = frameBlocks(frames, leno);
+  const cols = frames + selCount + 1 + blocks.length + (selCount ? 1 : 0);
+  const cell = Math.max(3.2, Math.min(6.5, 176 / cols));
+  const gap = `<td class="gap"></td>`;
+  const head = [
+    `<th class="no"></th>`,
+    ...blocks.map((b) => gap + b.map((f) => `<th class="${leno.has(f) ? "leno" : ""}">${f}</th>`).join("")),
+    selCount ? gap + Array.from({ length: selCount }, (_, i) => `<th class="sel">${i + 1}.</th>`).join("") : "",
+  ].join("");
+  const body: string[] = [];
+  for (let r = 0; r < filled + BLANK_ROWS; r++) {
+    const row = plan[r];
+    const pick = r < filled ? v.pickSequence?.[r] : undefined;
+    body.push(`<tr><td class="no">${r < filled ? r + 1 : ""}</td>${blocks.map((b) => gap + b.map((f) => {
+      const on = row?.[f - 1] === 1;
+      return `<td class="c${leno.has(f) ? " leno" : ""}">${on ? "X" : ""}</td>`;
+    }).join("")).join("")}${selCount ? gap + Array.from({ length: selCount }, (_, i) => `<td class="c sel">${pick === i + 1 ? "X" : ""}</td>`).join("") : ""}</tr>`);
+  }
+  const legend = [
+    leno.size ? `<span class="lg"><i class="sw leno"></i>Döner çerçeve: ${[...leno].join(", ")}</span>` : "",
+    selCount ? `<span class="lg">Sağ blok: atkı seçici (hangi atkı ipliği atılır)</span>` : "",
+  ].filter(Boolean).join("");
+  // CSS ölçüsü (para değil): yüzde birlik mm yeter.
+  const mm = Math.round(cell * 100) / 100;
+  const pt = Math.round(Math.min(9, cell * 1.6) * 10) / 10;
+  return `<style>.grid td.c,.grid th{width:${mm}mm;height:${mm}mm;font-size:${pt}pt}</style>
+<table class="grid"><thead><tr>${head}</tr></thead><tbody>${body.join("")}</tbody></table>${legend ? `<div class="legend">${legend}</div>` : ""}`;
+}
+
+function warpsHtml(v: WeaveCardView): string {
+  if (v.warps.length === 0) return `<div class="kv"><b>ÇÖZGÜ :</b> —</div>`;
+  return v.warps.map((w) => `<div class="kv"><b>ÇÖZGÜ${w.roleLabel ? ` (${e(w.roleLabel)})` : ""} :</b> ${w.lines.map((l) => `${yarnText(l)} <span class="muted">× ${l.endsCount} tel</span>`).join(" + ")} <span class="muted">· ${e(w.code)}</span></div>`).join("");
+}
+
+function variantsHtml(v: WeaveCardView): string {
+  if (v.variants.length === 0) return "";
+  const rows = v.variants.map((x) => `<tr><td>${e(x.variantCode ?? "—")}</td><td>${e(x.name)}</td><td>${x.swaps.length ? x.swaps.map((s) => `${s.no}. atkı → ${yarnText(s)}`).join("<br>") : `<span class="muted">Kart iplikleri</span>`}</td></tr>`).join("");
+  return `<h3>VARYANTLAR</h3><table class="list"><thead><tr><th>Varyant</th><th>Ad</th><th>Değişen atkı ipliği</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+export function renderWeaveDesignCardHtml(v: WeaveCardView): string {
+  const d = v.design;
+  const meta = [
+    d ? `Örgü: <b>${e(d.code)}</b> · ${e(d.name)} (${e(d.kindLabel)})` : "",
+    d?.familyLabel ? `Aile: ${e(d.familyLabel)}` : "",
+    d?.frameCount ? `Çerçeve: ${d.frameCount}` : "",
+    d?.repeatCm ? `Rapor: ${e(d.repeatCm)} cm` : "",
+    v.widthCm ? `En: ${e(v.widthCm)} cm` : "",
+    d?.loomFileName ? `Tezgâh dosyası: ${e(d.loomFileName)}` : "",
+    d?.lenoSetup ? `Döner: ${e(d.lenoSetup)}` : "",
+  ].filter(Boolean).join(" · ");
+  const w = v.weft;
+  const weftYarns = w?.yarns.length
+    ? `<ol class="yarns">${w.yarns.map((y) => `<li value="${y.no}">${yarnText(y)} <span class="muted">· ${y.picksInRepeat} atkı/rapor</span></li>`).join("")}</ol>`
+    : `<p class="muted">—</p>`;
+  return `<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>Desen kartı ${e(v.designNo)}</title><style>
+@page{size:A4 portrait;margin:10mm}
+*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;font-size:10pt}
+@media screen{body{padding:10mm}}
+h1{text-align:center;font-size:16pt;margin:0 0 2mm}h3{font-size:10pt;margin:4mm 0 1mm}
+.sub{text-align:center;font-size:9pt;color:#333;margin-bottom:3mm}
+.grid{border-collapse:collapse;margin:0 auto}.grid thead{display:table-header-group}.grid tr{page-break-inside:avoid}
+.grid th{font-weight:bold;text-align:center;padding:0}.grid th.leno{background:#e5e5e5}
+.grid td.c{border:0.3mm solid #333;text-align:center;font-weight:bold;padding:0;line-height:1}
+.grid td.c.leno{background:#f0f0f0}.grid td.gap{width:2.5mm;border:none}
+.grid td.no,.grid th.no{width:7mm;text-align:right;padding-right:1mm;font-size:7pt;color:#555;border:none}
+.legend{text-align:center;font-size:8pt;margin-top:1.5mm;color:#333}.lg{margin:0 3mm}
+.sw{display:inline-block;width:3mm;height:3mm;border:0.3mm solid #333;margin-right:1mm;vertical-align:middle}.sw.leno{background:#e5e5e5}
+.bottom{display:flex;gap:8mm;margin-top:4mm;page-break-inside:avoid}.bottom>div{flex:1}
+.kv{margin:1mm 0}.den{font-weight:bold}.muted{color:#666;font-size:8.5pt}
+.yarns{margin:1mm 0 0 5mm;padding:0}.yarns li{margin:0.6mm 0}
+.list{border-collapse:collapse;width:100%;font-size:9pt}.list th,.list td{border:0.3mm solid #999;padding:1mm 1.5mm;text-align:left;vertical-align:top}
+.warn{font-size:8pt;color:#8a4b00;margin-top:2mm}.empty{text-align:center;color:#666}
+.foot{margin-top:4mm;font-size:7.5pt;color:#666;text-align:right}
+</style></head><body>
+<h1>DESEN NO : ${e(v.designNo)}</h1>
+<div class="sub">${e(v.itemName)}${meta ? `<br>${meta}` : ""}</div>
+${gridHtml(v)}
+<div class="bottom">
+<div><h3>ATKI İPLİKLERİ</h3>${weftYarns}${w?.sequenceCode ? `<div class="kv muted">Seçici sırası: ${e(w.sequenceCode)}</div>` : ""}</div>
+<div>${warpsHtml(v)}
+<div class="kv"><b>ATKI SIKLIĞI :</b> ${w?.picksPerCm ? `${e(w.picksPerCm)} ATKI/CM` : "—"}</div>
+${w ? `<div class="kv muted">Atkı kartı: ${e(w.code)} · ${e(w.name)}${w.weftProgramNo ? ` · Program ${e(w.weftProgramNo)}` : ""}</div>` : ""}</div>
+</div>
+${variantsHtml(v)}
+${v.warnings.length ? `<div class="warn">${v.warnings.map((x) => `⚠ ${e(x)}`).join("<br>")}</div>` : ""}
+<div class="foot">Basım: ${e(v.printedAtText)}</div>
+</body></html>`;
+}

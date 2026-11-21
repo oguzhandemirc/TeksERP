@@ -40,6 +40,29 @@ export function parseWeftSequence(raw: string, yarnCount: number): ParsedWeftSeq
   return { normalized: tokens.join(" "), picksBySortOrder: picks };
 }
 
+/**
+ * Atkı seçici sütunu: kodu atkı atkı açar ("A2 C1" → [1, 1, 3]; 1-tabanlı iplik satırı no).
+ * Gösterim içindir (armür ızgarası + desen kartı basımı); kod geçersizse ya da tavanı aşarsa null
+ * (yazım yolu zaten `parseWeftSequence` ile reddeder — eski/bozuk kayıt ekranı düşürmesin).
+ */
+export function expandWeftSequence(raw: string | null | undefined, yarnCount: number, maxPicks: number): number[] | null {
+  if (!raw || yarnCount <= 0) return null;
+  let parsed: ParsedWeftSequence;
+  try {
+    parsed = parseWeftSequence(raw, yarnCount);
+  } catch {
+    return null;
+  }
+  const out: number[] = [];
+  for (const t of parsed.normalized.split(" ")) {
+    const m = TOKEN.exec(t)!;
+    const n = Number(m[2]);
+    if (out.length + n > maxPicks) return null;
+    for (let i = 0; i < n; i++) out.push(m[1]!.charCodeAt(0) - 64);
+  }
+  return out;
+}
+
 /** Satır sırasının harfi (0 → "A"); 26'dan sonrası sıra numarasıyla yazılır. */
 export function weftLetter(sortOrder: number): string {
   return sortOrder < 26 ? String.fromCharCode(65 + sortOrder) : `#${sortOrder + 1}`;
