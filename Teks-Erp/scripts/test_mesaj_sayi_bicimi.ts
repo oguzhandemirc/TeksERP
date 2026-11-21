@@ -79,9 +79,9 @@ const ALLOWED: Record<string, string> = {
   "src/services/warping-order/plan.ts::t.targetLengthM.toFixed(3)": "devere emri açık adet imzası (token replay)",
   "src/services/warping-order/plan.ts::l.beamLengthM.toFixed(3)": "devere emri levent satırı imzası (token replay)",
   "src/services/warping-order/dispatch.ts::D(l.qty).toFixed(3)": "devere sevk imzası (token replay)",
-  "src/services/warping-order/receive.ts::D(r.lengthM).toFixed(3)": "devere kabul imzası (token replay)",
-  "src/services/warping-order/receive.ts::r.grossKg === null ? \"\" : D(r.grossKg).toFixed(3)": "devere kabul imzası (token replay)",
-  "src/services/warping-order/receive.ts::r.tareKg === null ? \"\" : D(r.tareKg).toFixed(3)": "devere kabul imzası (token replay)",
+  "src/services/warping-order/receive-core.ts::D(r.lengthM).toFixed(3)": "devere kabul imzası (token replay)",
+  "src/services/warping-order/receive-core.ts::r.grossKg === null ? \"\" : D(r.grossKg).toFixed(3)": "devere kabul imzası (token replay)",
+  "src/services/warping-order/receive-core.ts::r.tareKg === null ? \"\" : D(r.tareKg).toFixed(3)": "devere kabul imzası (token replay)",
   "src/services/warping-order/yarn-transfer.ts::q.toFixed(3)": "iplik aktarım imzası (token replay)",
   // ── Para: binlik ayırıcılı ayrı kural (`paraMetni`), bu bekçinin kapsamı dışı ──
   "src/services/invoice.service.ts::D(negative.unitPrice).toFixed(2)": "para (birim fiyat)",
