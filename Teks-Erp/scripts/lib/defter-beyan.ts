@@ -299,6 +299,7 @@ export const DEFTER_BEYANI: DefterBeyani[] = [
       { dosya: "src/services/warp-beam-auto-consume.service.ts", sembol: "cancelConsumedForRollTx" },
       { dosya: "src/services/consignment-dispatch/cancel.ts", sembol: "cancelConsignmentDispatch" },
       { dosya: "src/services/warping-order/receive-cancel.ts", sembol: "cancelWarpingReceipt" },
+      { dosya: "src/services/warping-order/receive-doc-cancel.ts", sembol: "cancelWarpingReceiveDoc" },
       { dosya: "src/services/warping-order/beam-rejection-cancel.ts", sembol: "cancelTx" },
     ],
     ["src/services/helpers/warp-beam-event.helper.ts"]),

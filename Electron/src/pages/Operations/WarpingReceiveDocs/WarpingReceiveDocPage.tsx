@@ -2,10 +2,15 @@
 // DEVERE DÖNÜŞ KABUL BELGESİ — kayıt sayfası (devere ek E2) · `operations/devere-donus/:id`
 // =============================================================================
 // Başlık (devereci · irsaliye · tarih · toplam) + sipariş başı kabul (leventler; iptal edilen üstü çizili) + aynı
-// irsaliye no ile yapılmış DİĞER kabuller (belgeli + eski tek-sipariş). Geri alma sipariş sayfasından (kabul
-// başına, LIFO) — belge stornosu yok (E6 sonraya).
+// irsaliye no ile yapılmış DİĞER kabuller (belgeli + eski tek-sipariş). "Belgeyi iptal et" (E6) bütün siparişleri
+// hep-ya-hiç geri alır; tek siparişin kabulü sipariş sayfasından (kabul başına, LIFO).
 // =============================================================================
+import { useState } from "react";
 import { useParams } from "react-router-dom";
+import { Undo2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { PermissionGate } from "@/components/PermissionGate";
+import { ReceiveDocCancelDialog } from "./ReceiveDocCancelDialog";
 import { PageBody, PageShell } from "@/components/layout/PageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
@@ -85,6 +90,7 @@ export function WarpingReceiveDocPage() {
   const openTarget = useOpenTarget();
   const q = useWarpingReceiveDoc(id);
   const d = q.data;
+  const [cancelOpen, setCancelOpen] = useState(false);
   return (
     <PageShell>
       <PageHeader
@@ -92,6 +98,11 @@ export function WarpingReceiveDocPage() {
         description={d ? `Devereci ${d.subcontractor.name} · ${d.deliveryNoteNo ? `irsaliye ${d.deliveryNoteNo}` : "irsaliyesiz"} · ${fmtFactoryDateTime(d.createdAt)}` : undefined}
         onBack={() => openTarget(WARPING_RECEIVE_DOCS_PATH)}
         parent={{ label: "Devere Dönüş Kabulleri", to: WARPING_RECEIVE_DOCS_PATH }}
+        actions={d && d.totals.liveBeamCount > 0 ? (
+          <PermissionGate permission="warpbeam:cancel">
+            <Button size="sm" variant="outline" className="text-destructive" onClick={() => setCancelOpen(true)}><Undo2 className="mr-1 h-4 w-4" /> Belgeyi iptal et</Button>
+          </PermissionGate>
+        ) : undefined}
       />
       <PageBody className="space-y-6 p-4 sm:p-6">
         {q.isLoading && <p className="text-sm text-muted-foreground">Yükleniyor…</p>}
@@ -111,6 +122,7 @@ export function WarpingReceiveDocPage() {
               </section>
             ))}
             <OtherUses doc={d} />
+            {cancelOpen && <ReceiveDocCancelDialog doc={d} onClose={() => setCancelOpen(false)} />}
           </>
         )}
       </PageBody>

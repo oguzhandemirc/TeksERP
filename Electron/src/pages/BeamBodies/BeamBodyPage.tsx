@@ -22,7 +22,7 @@ import { BeamBodyModeGate } from "./BeamBodyModeGate";
 import { BeamBodyTimeline } from "./BeamBodyTimeline";
 import { dimsText, ownerText, placeText } from "./model";
 import { BEAM_BODIES_PATH, useBeamBody, useBeamBodyEvents } from "./service";
-import { MANUAL_LABELS, TransitionDialog, manualKindsFor } from "./TransitionDialog";
+import { TransitionDialog, manualKindsFor, manualLabel } from "./TransitionDialog";
 import { CancelRegistrationDialog, UndoEventDialog } from "./UndoDialogs";
 import { beamBodyStatusMeta, type BeamBody, type BeamBodyEvent, type BeamBodyManualKind } from "./types";
 
@@ -129,7 +129,7 @@ function Actions({ b, onOpen }: { b: BeamBody; onOpen: (d: DialogState) => void 
               <Fragment key={k}>
                 {k === "SCRAP" && i > 0 && <DropdownMenuSeparator />}
                 <DropdownMenuItem className={k === "SCRAP" ? "text-destructive" : undefined} onSelect={() => onOpen({ kind: "move", move: k })}>
-                  {MANUAL_LABELS[k]}
+                  {manualLabel(k, b.status)}
                 </DropdownMenuItem>
               </Fragment>
             ))}

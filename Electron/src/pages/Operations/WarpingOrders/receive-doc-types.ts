@@ -38,6 +38,21 @@ export interface WarpingReceiveDoc {
   totals: { orderCount: number; beamCount: number; liveBeamCount: number; lengthM: string };
 }
 
+/** E6 belge stornosu önizlemesi (`GET /:id/cancel-preview`) — etkilenen her sipariş/levent; engel varsa hiçbiri geri alınmaz. */
+export interface WarpingReceiveDocCancelPreview {
+  doc: { id: string; docNo: string; deliveryNoteNo: string | null; subcontractor: { id: string; code: string; name: string } };
+  orders: Array<{
+    warpingOrderId: string; orderNo: string; receiptKey: string; orderStatus: string; alreadyCancelled: boolean;
+    beams: Array<{ id: string; beamNo: string; status: string; lengthM: string | null; live: boolean; cancellable: boolean; blocker: string | null }>;
+    released: Array<{ dispatchItemId: string; dispatchNo: string; yarnItemId: string; yarnCode: string; yarnName: string; holderWarpingOrderId: string; holderOrderNo: string; kg: string }>;
+    blockers: string[];
+  }>;
+  blockers: string[];
+  cancellable: boolean;
+  totals: { orderCount: number; beamCount: number; lengthM: string };
+  reasonRequired: true;
+}
+
 export interface WarpingReceiveDocRow {
   id: string;
   docNo: string;

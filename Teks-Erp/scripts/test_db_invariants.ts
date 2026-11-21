@@ -821,6 +821,7 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   // Devere ek B3: gövde durumu ↔ üstündeki sarım · sarım bağı yalnız sarım türlü olaylarda.
   { table: "beam_bodies", name: "beam_bodies_current_warp_ck" },
   { table: "beam_body_events", name: "beam_body_events_warp_ck" },
+  { table: "beam_body_events", name: "beam_body_events_warp_allowed_ck" }, // devere ek P: sarım dolu ⇒ sarım türü ∨ RETURN_EMPTY
   { table: "warp_beam_events", name: "warp_beam_events_kind_ck" },
   { table: "warp_beam_events", name: "warp_beam_events_length_positive" },
   { table: "warp_beam_events", name: "warp_beam_events_cancel_link_ck" },

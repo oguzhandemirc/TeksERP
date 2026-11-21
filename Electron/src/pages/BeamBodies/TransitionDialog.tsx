@@ -22,7 +22,7 @@ import { BEAM_BODY_STATUS_META, type BeamBody, type BeamBodyManualKind, type Bea
 /** Backend `BEAM_BODY_MANUAL_TRANSITIONS.from` aynası — yalnız menüde hangi seçeneğin açık olacağı için. */
 export const MANUAL_FROM: Record<BeamBodyManualKind, readonly BeamBodyStatus[]> = {
   SHIP_EMPTY: ["EMPTY_STOCK"],
-  RETURN_EMPTY: ["AT_SUBCONTRACTOR"],
+  RETURN_EMPTY: ["AT_SUBCONTRACTOR", "FULL_OUT"],
   MAINTENANCE_IN: ["EMPTY_STOCK"],
   MAINTENANCE_OUT: ["MAINTENANCE"],
   SCRAP: ["EMPTY_STOCK", "MAINTENANCE"],
@@ -36,7 +36,13 @@ export const MANUAL_LABELS: Record<BeamBodyManualKind, string> = {
   SCRAP: "Hurdaya ayır",
 };
 
-export const manualKindsFor = (b: Pick<BeamBody, "status" | "isActive">): BeamBodyManualKind[] =>
+/** Dolu dışarıdaki (fason dokumacı/sahibi) gövdenin boş dönüşü: sarım orada tükendi; sebep zorunlu (backend aynı kural). */
+const isOutsideReturn = (kind: BeamBodyManualKind, status: BeamBodyStatus) => kind === "RETURN_EMPTY" && status === "FULL_OUT";
+
+export const manualLabel = (kind: BeamBodyManualKind, status: BeamBodyStatus): string =>
+  isOutsideReturn(kind, status) ? "Boş döndü (dışarıdan)" : MANUAL_LABELS[kind];
+
+export const manualKindsFor =(b: Pick<BeamBody, "status" | "isActive">): BeamBodyManualKind[] =>
   b.isActive ? (Object.keys(MANUAL_FROM) as BeamBodyManualKind[]).filter((k) => MANUAL_FROM[k].includes(b.status)) : [];
 
 export function TransitionDialog({ body, kind, onClose }: { body: BeamBody; kind: BeamBodyManualKind; onClose: () => void }) {
@@ -50,7 +56,10 @@ export function TransitionDialog({ body, kind, onClose }: { body: BeamBody; kind
     ...(kind === "RETURN_EMPTY" || kind === "MAINTENANCE_IN" || kind === "MAINTENANCE_OUT" ? { warehouseId } : {}),
     reason: reason.trim() || null,
   };
-  const ready = (kind !== "SHIP_EMPTY" || Boolean(subcontractorId)) && (kind !== "SCRAP" || reason.trim().length >= 3);
+  const outside = isOutsideReturn(kind, body.status);
+  const reasonRequired = kind === "SCRAP" || outside;
+  const label = manualLabel(kind, body.status);
+  const ready = (kind !== "SHIP_EMPTY" || Boolean(subcontractorId)) && (!reasonRequired || reason.trim().length >= 3);
   const settled = useDebouncedValue(ready ? JSON.stringify(input) : null, 300);
   const pv = useQuery({
     queryKey: [BEAM_BODIES_QUERY_KEY, "transition-preview", body.id, settled],
@@ -62,7 +71,7 @@ export function TransitionDialog({ body, kind, onClose }: { body: BeamBody; kind
   const apply = useMutation({
     mutationFn: () => beamBodyService.transition(body.id, input),
     onSuccess: (res) => {
-      toastServerSuccess(res, `${body.bodyNo}: ${MANUAL_LABELS[kind].toLowerCase()} yazıldı.`);
+      toastServerSuccess(res, `${body.bodyNo}: ${label.toLowerCase()} yazıldı.`);
       void qc.invalidateQueries({ queryKey: [BEAM_BODIES_QUERY_KEY] });
       onClose();
     },
@@ -73,8 +82,12 @@ export function TransitionDialog({ body, kind, onClose }: { body: BeamBody; kind
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>{body.bodyNo} — {MANUAL_LABELS[kind]}</DialogTitle>
-          <DialogDescription>Hareket gövdenin geçmişine yazılır; son hareket gerekirse “Geri al” ile ters kayıtla geri alınır.</DialogDescription>
+          <DialogTitle>{body.bodyNo} — {label}</DialogTitle>
+          <DialogDescription>
+            {outside
+              ? `Gövde ${body.currentWarpBeam?.beamNo ?? "sarımı"} ile dışarıdaydı; sarım orada tükendi ve gövde boş geri geldi. Sarımın kendi durumu değişmez.`
+              : "Hareket gövdenin geçmişine yazılır; son hareket gerekirse “Geri al” ile ters kayıtla geri alınır."}
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           {kind === "SHIP_EMPTY" && (
@@ -87,8 +100,8 @@ export function TransitionDialog({ body, kind, onClose }: { body: BeamBody; kind
               <WarehousePicker value={warehouseId} onChange={setWh} />
             </FormField>
           )}
-          <FormField label={kind === "SCRAP" ? "Hurda sebebi" : "Not"} required={kind === "SCRAP"} htmlFor="bb-tr-reason">
-            <Textarea id="bb-tr-reason" rows={2} maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={kind === "SCRAP" ? "Ör. flanş çatlak, mil eğik" : "İsteğe bağlı"} />
+          <FormField label={kind === "SCRAP" ? "Hurda sebebi" : outside ? "Sebep" : "Not"} required={reasonRequired} htmlFor="bb-tr-reason">
+            <Textarea id="bb-tr-reason" rows={2} maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={kind === "SCRAP" ? "Ör. flanş çatlak, mil eğik" : outside ? "Ör. fason dokumacıda bitti, boş gövde irsaliyeyle geldi" : "İsteğe bağlı"} />
           </FormField>
           {pv.isError && <Callout tone="danger">{apiErrorMessage(pv.error)}</Callout>}
           {plan && (
@@ -103,7 +116,7 @@ export function TransitionDialog({ body, kind, onClose }: { body: BeamBody; kind
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Vazgeç</Button>
           <Button variant={kind === "SCRAP" ? "destructive" : "default"} disabled={!fresh || pv.isFetching || apply.isPending} onClick={() => apply.mutate()}>
-            {apply.isPending ? "Yazılıyor…" : MANUAL_LABELS[kind]}
+            {apply.isPending ? "Yazılıyor…" : label}
           </Button>
         </DialogFooter>
       </DialogContent>

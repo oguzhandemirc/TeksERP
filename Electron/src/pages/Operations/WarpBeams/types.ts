@@ -81,6 +81,8 @@ export interface WarpBeam {
   currentMachine: { id: string; code: string; name: string } | null;
   /** Z1 (01): "bu levent hangi iş için sarıldı" — opsiyonel bağ; eski backend göndermez → opsiyonel okunur. */
   weavingOrder?: { id: string; weavingOrderNumber: string } | null;
+  /** Fason devere: dönüş kabulünde doğduğu devere siparişi (satırdan "Devereciye geri gönder"); eski backend göndermez. */
+  warpingOrderId?: string | null;
 }
 
 export interface CancelWoundPreview {

@@ -34,7 +34,7 @@ import { getBeamBody } from "../src/services/beam-body/read";
 import { applyBeamBodyTransition } from "../src/services/beam-body/transition";
 import { cancelStatusEvent, dismountBeam, mountBeam } from "../src/services/warp-beam-mount.service";
 import { exhaustBeam } from "../src/services/warp-beam-consume.service";
-import { BEAM_BODY_FULL_STATUSES, BEAM_BODY_WARP_KINDS } from "../src/constants/beam-body";
+import { BEAM_BODY_FULL_STATUSES, BEAM_BODY_WARP_KINDS, BEAM_BODY_WARP_OPTIONAL_KINDS } from "../src/constants/beam-body";
 
 let pass = 0;
 let fail = 0;
@@ -129,6 +129,10 @@ async function main(): Promise<void> {
     const warpKinds = [...BEAM_BODY_WARP_KINDS.flatMap((k) => [k, `${k}_CANCEL`])];
     const inDef = [...warpDef.matchAll(/'([A-Z_]+)'/g)].map((m) => m[1]!);
     check("§0a BEAM_BODY_WARP_KINDS (+_CANCEL) = beam_body_events_warp_ck (iki yönlü)", inDef.length === warpKinds.length && warpKinds.every((k) => inDef.includes(k)), `${inDef.length}/${warpKinds.length}`);
+    const allowDef = await checkDef("beam_body_events_warp_allowed_ck");
+    const allowKinds = [...warpKinds, ...BEAM_BODY_WARP_OPTIONAL_KINDS.flatMap((k) => [k, `${k}_CANCEL`])];
+    const allowIn = [...allowDef.matchAll(/'([A-Z_]+)'/g)].map((m) => m[1]!);
+    check("§0a2 WARP_KINDS ∪ WARP_OPTIONAL_KINDS (+_CANCEL) = beam_body_events_warp_allowed_ck (iki yönlü)", allowIn.length === allowKinds.length && allowKinds.every((k) => allowIn.includes(k)), `${allowIn.length}/${allowKinds.length}`);
     const curDef = await checkDef("beam_bodies_current_warp_ck");
     const curIn = [...curDef.matchAll(/'([A-Z_]+)'/g)].map((m) => m[1]!);
     check("§0b BEAM_BODY_FULL_STATUSES = beam_bodies_current_warp_ck", curIn.length === BEAM_BODY_FULL_STATUSES.length && BEAM_BODY_FULL_STATUSES.every((s) => curIn.includes(s)), curDef);
