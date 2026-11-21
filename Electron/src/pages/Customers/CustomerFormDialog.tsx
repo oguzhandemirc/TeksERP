@@ -28,6 +28,7 @@ import { CustomerBranchesPanel } from "./CustomerBranchesPanel";
 import { exportCodeVisible } from "./branch-schema";
 import { CustomerItemAliasesPanel } from "./CustomerItemAliasesPanel";
 import { CustomerColorAliasesPanel } from "./CustomerColorAliasesPanel";
+import { SupplierItemCodesPanel } from "./SupplierItemCodesPanel";
 import { CustomerTemplateRoutesPanel } from "./CustomerTemplateRoutesPanel";
 import { CustomerTamburLabelSettings } from "./CustomerTamburLabelSettings";
 import { CustomerStandaloneLabelsPanel } from "./CustomerStandaloneLabelsPanel";
@@ -77,6 +78,9 @@ export function CustomerFormDialog({
   const { hasPermission } = useRoleAccess();
   const emanetEnabled = useFeatureFlags().data?.data?.emanetEnabled ?? false;
   const seriesVisible = emanetEnabled && hasPermission("customer:read");
+  // Seyitoğlu d5: tedarikçi kalem kodları — mal kabul uçları ticaret kapısının ve mal kabul izninin arkasında.
+  const ticaretEnabled = useFeatureFlags().data?.data?.ticaretEnabled ?? false;
+  const itemCodesVisible = Boolean(initial?.isSupplierRole) && ticaretEnabled && (hasPermission("goods-receipt:read") || hasPermission("goods-receipt:write"));
   const defaults: CustomerFormValues = initial
     ? {
         ...financeFormDefaults,
@@ -306,6 +310,7 @@ export function CustomerFormDialog({
                 {branchesEnabled && <TabsTrigger value="branches">Şubeler</TabsTrigger>}
                 <TabsTrigger value="item-aliases">Müşterideki Kumaş Adları</TabsTrigger>
                 <TabsTrigger value="color-aliases">Müşterideki Renk Adları</TabsTrigger>
+                {itemCodesVisible && <TabsTrigger value="supplier-item-codes">Tedarikçi Kalem Kodları</TabsTrigger>}
                 <TabsTrigger value="label-templates">Etiket Şablonları</TabsTrigger>
                 {financeAccess.canSeeHold && <TabsTrigger value="cari-hold">Kilit</TabsTrigger>}
                 {seriesVisible && <TabsTrigger value="barcode-series">Barkod serisi</TabsTrigger>}
@@ -334,6 +339,12 @@ export function CustomerFormDialog({
               <TabsContent value="color-aliases">
                 {initial && <CustomerColorAliasesPanel customerId={initial.id} />}
               </TabsContent>
+
+              {itemCodesVisible && initial && (
+                <TabsContent value="supplier-item-codes">
+                  <SupplierItemCodesPanel supplierId={initial.id} />
+                </TabsContent>
+              )}
 
               <TabsContent value="label-templates" className="space-y-5">
                 {initial && (

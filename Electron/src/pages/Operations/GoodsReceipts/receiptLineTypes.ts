@@ -31,6 +31,8 @@ export interface DraftLine {
   lotNo?: string | null;
   /** İPLİK satırı: bobin adedi (bilgi; opsiyonel). */
   bobbinCount?: number | null;
+  /** İPLİK satırı (Seyitoğlu d5): tedarikçi irsaliyesindeki kalem kodu — eşliyse iplik kartı önerilir. */
+  supplierItemCode?: string | null;
   /** KUMAŞ satırı TOP SINIFI (EK 7): Ham · Yarı mamul · Bitmiş — satır tek yer, fiş kutusu YOK; iplikte anlamsız. */
   lineClass?: ReceiptLineClass;
 }
@@ -50,6 +52,7 @@ export function emptyLine(kind: ReceiptLineKind = "FABRIC", lineClass: ReceiptLi
     count: 1,
     lotNo: null,
     bobbinCount: null,
+    supplierItemCode: null,
     lineClass: kind === "FABRIC" ? lineClass : undefined,
   };
 }

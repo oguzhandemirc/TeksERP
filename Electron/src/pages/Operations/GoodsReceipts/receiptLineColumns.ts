@@ -35,6 +35,8 @@ export const FABRIC_COLUMNS: readonly ReceiptLineColumn[] = [
 
 /** İplik kalemleri — lot + bobin; miktar KG; renk/en/kat/özellik/top sınıfı YOK (kg defteri raf taşımaz). */
 export const YARN_COLUMNS: readonly ReceiptLineColumn[] = [
+  // Seyitoğlu d5: irsaliyedeki kalem kodu ÖNCE yazılır — eşliyse iplik kartı kendiliğinden gelir.
+  { header: "Tedarikçi kodu", label: "Tedarikçi kalem kodu" },
   { header: "İplik", label: "İplik kalemi" },
   { header: "Lot", label: "Lot numarası" },
   { header: "Kg", label: "Miktar (kg)" },
@@ -71,7 +73,7 @@ export function cellLabel(kind: ReceiptLineKind, index: number): string {
 export function receiptLineGridCols(kind: ReceiptLineKind): string {
   if (kind === "CONSUMABLE") return "grid-cols-[minmax(0,2fr)_110px_70px_100px_76px]";
   return kind === "YARN"
-    ? "grid-cols-[minmax(0,2fr)_minmax(0,1.2fr)_90px_80px_100px_64px_76px]"
+    ? "grid-cols-[minmax(0,1.1fr)_minmax(0,2fr)_minmax(0,1.2fr)_90px_80px_100px_64px_76px]"
     : "grid-cols-[minmax(0,2fr)_minmax(0,1fr)_84px_74px_74px_88px_96px_60px_168px_60px_76px]";
 }
 

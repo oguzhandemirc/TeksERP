@@ -287,7 +287,7 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
               400 verir ve "kg" rozeti hiç çizilmez (sözleşme ReceiptLineRows
               Props yorumunda). */}
           <ModalSection id="lines" title="Satırlar" required>
-            <ReceiptLineRows lines={lines} onChange={setLinesAndClear} yarnItemIds={yarnIds} lineIssues={lineIssues} consumableItemIds={consumableIds} consumableEnabled={consumableEnabled} />
+            <ReceiptLineRows lines={lines} onChange={setLinesAndClear} yarnItemIds={yarnIds} lineIssues={lineIssues} consumableItemIds={consumableIds} consumableEnabled={consumableEnabled} supplierId={supplier?.kind === "CUSTOMER" ? supplier.id : null} />
           </ModalSection>
 
           {/* Satır ekleme düğmeleri grupların kendisinde (EK 5) — burada yalnız özet. */}

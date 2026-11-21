@@ -88,6 +88,15 @@ describe("expandLines — iplik payload sözleşmesi", () => {
     expect(k && "lotNo" in k).toBe(false);
     expect(k && "bobbinCount" in k).toBe(false);
   });
+  // Seyitoğlu d5. NEGATİF SONDA: yarn dalından `supplierItemCode` düşünce ❌ (Zod bilinmeyeni sessizce atar — iki uç).
+  it("iplik satırı tedarikçi kalem kodunu TRIM'li taşır (boş → null), kumaş satırı taşımaz", () => {
+    const [p] = expandLines([line({ itemId: "yarn-1", initialQty: 5, supplierItemCode: " 153.01.0652 " })], YARN);
+    expect(p).toMatchObject({ supplierItemCode: "153.01.0652" });
+    const [e] = expandLines([line({ itemId: "yarn-1", initialQty: 5, supplierItemCode: "  " })], YARN);
+    expect(e).toMatchObject({ supplierItemCode: null });
+    const [k] = expandLines([line({ itemId: "fabric-1", initialQty: 5, supplierItemCode: "X" })], YARN);
+    expect(k && "supplierItemCode" in k).toBe(false);
+  });
   it("② lot boş/boşluk → null (sunucu da null sayar), çevresi TRIM, içi AYNEN (normalize yok)", () => {
     const [a] = expandLines([line({ itemId: "yarn-1", initialQty: 1, lotNo: "   " })], YARN);
     expect(a).toMatchObject({ lotNo: null, bobbinCount: null });

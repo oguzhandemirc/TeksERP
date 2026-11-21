@@ -37,6 +37,8 @@ interface Props {
   consumableItemIds?: ReadonlySet<string>;
   /** `consumable.stockEnabled` — kapalıyken Sarf grubu/düğmesi yok, kumaş seçici yalnız kumaş (bayt-aynı). */
   consumableEnabled?: boolean;
+  /** Seyitoğlu d5: fişin cari tedarikçisi — iplik satırında tedarikçi kodundan kart önerisi için. */
+  supplierId?: string | null;
 }
 
 /** İplik satırının TAŞIYAMAYACAĞI alanlar dolu mu? (backend 400 kümesinin aynası) */
@@ -61,7 +63,7 @@ function GroupHeader({ kind }: { kind: ReceiptLineKind }) {
   );
 }
 
-export function ReceiptLineRows({ lines, onChange, yarnItemIds, lineIssues, consumableItemIds, consumableEnabled = false }: Props) {
+export function ReceiptLineRows({ lines, onChange, yarnItemIds, lineIssues, consumableItemIds, consumableEnabled = false, supplierId = null }: Props) {
   const { values: foldValues } = useFoldValues();
 
   // ⚠️ İPLİĞE GEÇEN SATIRIN KUMAŞ ALANLARI SIFIRLANIR (rota editörünün "istasyon değişince hedef sıfırlanır" kuralının
@@ -100,7 +102,7 @@ export function ReceiptLineRows({ lines, onChange, yarnItemIds, lineIssues, cons
             <div className="max-h-[32vh] space-y-2 overflow-auto p-3">
               {groups[kind].map((l) =>
                 kind === "YARN" ? (
-                  <ReceiptYarnRow key={l.key} {...rowProps(l)} issue={lineIssues?.get(l.key)} />
+                  <ReceiptYarnRow key={l.key} {...rowProps(l)} issue={lineIssues?.get(l.key)} supplierId={supplierId} />
                 ) : kind === "CONSUMABLE" ? (
                   <ReceiptConsumableRow key={l.key} {...rowProps(l)} />
                 ) : (
@@ -180,6 +182,8 @@ export function expandLines(lines: DraftLine[], yarnItemIds: ReadonlySet<string>
               // Devere Faz 2: lot + bobin yalnız iplik satırında (Zod bilinmeyeni sessizce atar — iki uçta da beyanlı).
               lotNo: l.lotNo?.trim() ? l.lotNo.trim() : null,
               bobbinCount: l.bobbinCount ?? null,
+              // Seyitoğlu d5: tedarikçi kalem kodu — yalnız iplik satırı (backend kumaşta 400).
+              supplierItemCode: l.supplierItemCode?.trim() ? l.supplierItemCode.trim() : null,
               clientToken: lineToken(`${l.key}#${i}`),
             }
           : {
