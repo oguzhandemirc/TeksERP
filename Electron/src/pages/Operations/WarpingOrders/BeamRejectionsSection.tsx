@@ -63,21 +63,20 @@ export function BeamRejectionsSection({ orderId }: { orderId: string }) {
     <section className="space-y-2" aria-label="Reddedilen leventler">
       <h2 className="text-base font-semibold">Reddedilen leventler</h2>
       <p className="text-xs text-muted-foreground">Devereciye geri gönderilen kusurlu sarımlar. Reddedilen sarım faturalanmaz; ipliği deverecinin bakiyesine döner.</p>
-      <div className="overflow-x-auto rounded-md border">
-        <Table aria-label="Ret belgeleri">
-          <TableHeader>
-            <TableRow>
-              <TableHead>Belge</TableHead>
-              <TableHead>Sebep</TableHead>
-              <TableHead>Karar</TableHead>
-              <TableHead>Sarımlar</TableHead>
-              <TableHead className={num}>Metre</TableHead>
-              <TableHead><span className="sr-only">İşlem</span></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>{rows.map((d) => <RejectionRow key={d.id} d={d} onOpen={() => setOpenId(d.id)} />)}</TableBody>
-        </Table>
-      </div>
+      {/* Liste standardı: kart çerçevesi yok (kardeş FeeInvoiceSection gibi); Table kendi kaydırıcısını taşır. */}
+      <Table aria-label="Ret belgeleri">
+        <TableHeader>
+          <TableRow>
+            <TableHead>Belge</TableHead>
+            <TableHead>Sebep</TableHead>
+            <TableHead>Karar</TableHead>
+            <TableHead>Sarımlar</TableHead>
+            <TableHead className={num}>Metre</TableHead>
+            <TableHead><span className="sr-only">İşlem</span></TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>{rows.map((d) => <RejectionRow key={d.id} d={d} onOpen={() => setOpenId(d.id)} />)}</TableBody>
+      </Table>
       {openId && <BeamRejectionDocDialog docId={openId} initial={rows.find((r) => r.id === openId)} onClose={() => setOpenId(null)} />}
     </section>
   );
