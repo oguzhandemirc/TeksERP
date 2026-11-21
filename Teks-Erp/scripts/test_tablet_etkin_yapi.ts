@@ -30,8 +30,8 @@ function staticChecks(): void {
   const line = src.split("\n").find((l) => l.includes('router.get("/construction"')) ?? "";
   check("§0a GET /construction mobil dokuma ekran izniyle açılır", /requireAnyPermission\("loom:run", "loom:doff", \.\.\.MOBILE_DOKUMA\)/.test(line), line.trim());
   check("§0b gövde yok, yalnız weavingOrderId sorgusu (strict)", /weavingOrderId: z\.string\(\)\.uuid\([^)]*\) \}\)\.strict\(\)\.parse\(req\.query\)/.test(src));
-  check("§0c tablet helper yapıyı yalnız resolveEffectiveConstruction'dan okur",
-    /resolveEffectiveConstruction\(prisma, wo\.itemId, wo\.recipeId\)/.test(fs.readFileSync(path.join(__dirname, "..", "src", "services", "helpers", "tablet-construction.helper.ts"), "utf8")));
+  check("§0c tablet helper yapıyı yalnız resolveEffectiveConstruction'dan okur (iş emrinin kartı sabit)",
+    /resolveEffectiveConstruction\(prisma, wo\.itemId, wo\.recipeId, pin\)/.test(fs.readFileSync(path.join(__dirname, "..", "src", "services", "helpers", "tablet-construction.helper.ts"), "utf8")));
 }
 
 async function main(): Promise<void> {

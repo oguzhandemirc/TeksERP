@@ -40,7 +40,10 @@ export const constructionApi = {
     apiClient
       .get<ApiResponse<EffectiveConstruction>>(`/api/item-construction/${itemId}${recipeId ? `?recipeId=${recipeId}` : ""}`)
       .then((r) => r.data.data),
-  putWarpLayers: (itemId: string, layers: Array<{ warpSpecId: string; role: string; beamMode: WarpBeamMode }>) =>
+  /** Desen kartı A4 basımı — HTML sunucuda üretilir (tek kaynak), panel yalnız basar. */
+  cardHtml: (itemId: string) =>
+    apiClient.get<ApiResponse<{ html: string }>>(`/api/item-construction/${itemId}/card-html`).then((r) => r.data.data.html),
+  putWarpLayers:(itemId: string, layers: Array<{ warpSpecId: string; role: string; beamMode: WarpBeamMode }>) =>
     apiClient
       .put<ApiResponse<EffectiveConstruction>>(`/api/item-construction/${itemId}/warp-layers`, { layers })
       .then((r) => r.data.data),

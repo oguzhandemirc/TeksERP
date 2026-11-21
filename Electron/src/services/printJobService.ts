@@ -26,6 +26,7 @@ export type PrintSubjectKind =
   | "CEKI_LISTESI"
   | "FASON_CEKI"
   | "SERBEST_BELGE"
+  | "DESEN_KARTI"
   | "RAPOR"
   | "LISTE"
   | "KIMLIK_KARTI"

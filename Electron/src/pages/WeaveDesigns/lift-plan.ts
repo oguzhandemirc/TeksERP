@@ -25,6 +25,19 @@ export function toggleLiftCell(plan: LiftPlan, pick: number, frame: number): Lif
   return plan.map((row, r) => (r === pick ? row.map((v, c) => (c === frame ? (v === 1 ? 0 : 1) : v)) : row));
 }
 
+/** Döner çerçeve işaretini çevirir (1-tabanlı çerçeve no); sıralı tekil liste döner. */
+export function toggleLenoFrame(frames: readonly number[], frame: number): number[] {
+  const set = new Set(frames);
+  if (set.has(frame)) set.delete(frame);
+  else set.add(frame);
+  return [...set].sort((a, b) => a - b);
+}
+
+/** Izgara daralınca kalan döner işaretleri (çerçeve sayısını aşanlar düşer). */
+export function lenoWithin(frames: readonly number[], frameCount: number): number[] {
+  return frames.filter((f) => f >= 1 && f <= frameCount);
+}
+
 /** Kayda giden değer: boş ızgara `null` (sunucuda temizler). */
 export function liftPlanForSave(plan: LiftPlan): LiftPlan | null {
   return plan.length === 0 || (plan[0]?.length ?? 0) === 0 ? null : plan;

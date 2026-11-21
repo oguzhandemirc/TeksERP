@@ -37,6 +37,8 @@ export interface WeaveDesign {
   liftPlan?: LiftPlan | null;
   loomFileName: string | null;
   lenoSetup: string | null;
+  /** Döner (leno) çerçeveleri — 1-tabanlı çerçeve no; eski backend göndermez. */
+  lenoFrames?: number[];
   notes: string | null;
   isActive: boolean;
 }
@@ -67,6 +69,8 @@ export interface EffectiveConstruction {
   weft: {
     weftSpecId: string; code: string; name: string; picksPerCm: string | null;
     sequenceCode: string | null; weftProgramNo: string | null; picksInRepeatTotal: number; yarns: EffectiveWeftYarn[];
+    /** Atkı seçici sütunu: atkı başına 1-tabanlı iplik satırı no (sunucu `sequenceCode`tan açar); eski backend göndermez. */
+    pickSequence?: number[] | null;
   } | null;
   warnings: Array<{ code: string; message: string }>;
 }
