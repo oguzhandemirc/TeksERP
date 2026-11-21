@@ -24,6 +24,8 @@ vi.mock("./receive-service", () => ({
   useWarpingReceipts: (id: string) => useQuery({ queryKey: ["wr-test", id], queryFn: () => svc.receipts(id) }),
 }));
 
+vi.mock("./rejection-service", () => ({ warpingRejectionService: {}, useWarpingRejections: () => ({ data: undefined, isSuccess: false, isError: false }) }));
+
 import { ReceiptsSection } from "./ReceiptsSection";
 
 const order = (status: WarpingOrder["status"] = "IN_PROGRESS") => ({

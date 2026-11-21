@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { apiErrorMessage } from "@/services/apiClient";
 import { cn } from "@/lib/utils";
+import { BeamRejectionsSection } from "./BeamRejectionsSection";
 import { CancelOrderDialog } from "./CancelOrderDialog";
 import { DispatchesSection } from "./DispatchesSection";
 import { FeeInvoiceSection } from "./FeeInvoiceSection";
@@ -67,6 +68,7 @@ export function WarpingOrderPage() {
             <DispatchesSection order={o} />
             <HoldingsSection order={o} />
             <ReceiptsSection order={o} />
+            <BeamRejectionsSection orderId={o.id} />
             {o.status !== "CANCELLED" && <FeeInvoiceSection order={o} />}
             <SettlementsSection order={o} />
           </>

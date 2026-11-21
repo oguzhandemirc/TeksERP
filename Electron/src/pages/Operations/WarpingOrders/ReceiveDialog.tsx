@@ -18,6 +18,7 @@ import { buildReceiveBody, draftsFromPlan, type ReceiveBeamDraft } from "./recei
 import { warpingReceiveService } from "./receive-service";
 import { ReceiveBeamsTable, ReceivePreviewView } from "./ReceiveParts";
 import { WARPING_ORDERS_QUERY_KEY } from "./service";
+import type { ReworkCandidate } from "./rejection-model";
 import type { WarpingOrder } from "./types";
 import type { WarpingReceiveFields, WarpingReceivePreview } from "./receive-types";
 
@@ -28,7 +29,7 @@ function useReceiveDraft(order: WarpingOrder) {
   return { drafts, setDrafts, noteNo, setNoteNo, built, body: built.ok ? built.body : null, key: built.ok ? JSON.stringify(built.body) : null };
 }
 
-export function ReceiveDialog({ order, onClose }: { order: WarpingOrder; onClose: () => void }) {
+export function ReceiveDialog({ order, reworks = [], onClose }: { order: WarpingOrder; reworks?: ReworkCandidate[]; onClose: () => void }) {
   const qc = useQueryClient();
   const attempt = useAttemptToken();
   const d = useReceiveDraft(order);
@@ -62,7 +63,7 @@ export function ReceiveDialog({ order, onClose }: { order: WarpingOrder; onClose
           <FormField label="Devereci irsaliye no" htmlFor="wr-note" hint="İsteğe bağlı; kabulün bütün leventlerine yazılır.">
             <Input id="wr-note" maxLength={64} value={d.noteNo} onChange={(e) => d.setNoteNo(e.target.value)} />
           </FormField>
-          <ReceiveBeamsTable drafts={d.drafts} onChange={d.setDrafts} />
+          <ReceiveBeamsTable drafts={d.drafts} onChange={d.setDrafts} reworks={reworks} />
           {!d.built.ok && d.built.error && <p className="text-destructive">{d.built.error}</p>}
           {fresh && <ReceivePreviewView p={preview.data} />}
           {preview && !fresh && <p className="text-muted-foreground">Girdi değişti — kabul etmeden önce yeniden önizleyin.</p>}
