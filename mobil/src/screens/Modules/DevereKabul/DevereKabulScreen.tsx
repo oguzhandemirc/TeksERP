@@ -98,7 +98,7 @@ export default function DevereKabulScreen() {
         onSelect={(id) => { s.addOrder(id); setPicker(null); }}
       />
       {s.sheet ? <BeamLineSheet value={s.sheet} weighing={s.settings.receiveWeighing} subcontractorName={s.subcontractor?.name ?? 'devereci'} onSave={s.saveLine} onRemove={s.removeLine} onDismiss={() => s.setSheet(null)} /> : null}
-      {s.preview ? <PreviewSheet preview={s.preview} duplicateMode={s.settings.duplicateDeliveryNote} pending={s.accept.isPending} isOnline={s.isOnline} onAccept={() => s.accept.mutate()} onBack={() => s.setPreview(null)} /> : null}
+      {s.preview ? <PreviewSheet preview={s.preview} sent={s.build.ok ? s.build.body : null} duplicateMode={s.settings.duplicateDeliveryNote} pending={s.accept.isPending} isOnline={s.isOnline} onAccept={() => s.accept.mutate()} onBack={() => s.setPreview(null)} /> : null}
       {s.result ? <ResultSheet result={s.result} onClose={() => s.setResult(null)} /> : null}
       <WarpBeamLabelPrinter />
     </ScreenChrome>

@@ -11,13 +11,16 @@ import ModuleSheet, { sheet } from '../../../components/ModuleSheet';
 import StationActionButton from '../../../components/StationActionButton';
 import { moduleAccents, spacing, typography } from '../../../theme';
 import { fmtMeters } from '../../../utils/meters';
-import type { DuplicateNoteMode, ReceiveDocPreview, ReceiveDocResult } from '../../../services/devereKabul.service';
+import type { DuplicateNoteMode, ReceiveDocFields, ReceiveDocPreview, ReceiveDocResult } from '../../../services/devereKabul.service';
+import { previewBeamName } from './receiveDocPayload';
 
 const m = (v: string | null | undefined) => (v == null ? '—' : `${fmtMeters(Number(v))} m`);
 const kg = (v: string | null | undefined) => (v == null ? '' : `${Number(v).toLocaleString('tr-TR', { maximumFractionDigits: 1 })} kg`);
 
 interface PreviewProps {
   preview: ReceiveDocPreview;
+  /** Önizlemeye gönderilen gövde — gövdesiz satırın elle yazılan no'su buradan. */
+  sent: ReceiveDocFields | null;
   duplicateMode: DuplicateNoteMode;
   pending: boolean;
   isOnline: boolean;
@@ -25,7 +28,7 @@ interface PreviewProps {
   onBack: () => void;
 }
 
-export function PreviewSheet({ preview, duplicateMode, pending, isOnline, onAccept, onBack }: PreviewProps) {
+export function PreviewSheet({ preview, sent, duplicateMode, pending, isOnline, onAccept, onBack }: PreviewProps) {
   const blocked = duplicateMode === 'BLOCK' && preview.deliveryNoteUses.length > 0;
   return (
     <ModuleSheet
@@ -43,7 +46,7 @@ export function PreviewSheet({ preview, duplicateMode, pending, isOnline, onAcce
           <Text style={styles.orderTitle}>{`${o.preview.order.orderNo} — ${o.preview.incoming.beamCount} levent · ${m(o.preview.incoming.lengthM)}`}</Text>
           {o.preview.beams.map((b) => (
             <View key={b.index} style={sheet.summaryRow}>
-              <Text style={sheet.summaryLabel}>{`${b.index + 1}. ${b.body?.bodyNo ?? 'gövdesiz'}${b.body?.isNew ? ' (yeni gövde)' : ''}`}</Text>
+              <Text style={sheet.summaryLabel}>{`${b.index + 1}. ${previewBeamName(sent, o.warpingOrderId, b.index, b.body)}`}</Text>
               <Text style={sheet.summaryValue}>{[m(b.lengthM), `hesap ${kg(b.nominalKg)}`, b.weighedNetKg ? `tartı net ${kg(b.weighedNetKg)}` : ''].filter(Boolean).join(' · ')}</Text>
             </View>
           ))}

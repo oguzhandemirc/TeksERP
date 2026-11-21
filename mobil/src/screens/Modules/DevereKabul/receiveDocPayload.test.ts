@@ -1,4 +1,4 @@
-import { beamLine, bodyFromResolve, buildDocBody, draftsHaveBody, inputText, nextPlanLength, parseNum, progressText, validateBeam, type BeamDraft, type OrderDraft } from './receiveDocPayload';
+import { beamLine, bodyFromResolve, buildDocBody, draftsHaveBody, inputText, nextPlanLength, parseNum, previewBeamName, progressText, validateBeam, type BeamDraft, type OrderDraft } from './receiveDocPayload';
 import type { ResolvedBeamBody } from '../../../services/devereKabul.service';
 
 const beam = (p: Partial<BeamDraft> = {}): BeamDraft => ({ key: 'k', body: null, physicalBeamNo: '', lengthM: '1200', grossKg: '', tareKg: '', ...p });
@@ -88,5 +88,13 @@ describe('receiveDocPayload — devere dönüş kabulü (M1)', () => {
   it('ilerleme metni', () => {
     expect(progressText(3, 4)).toBe('3/4 levent');
     expect(progressText(2, null)).toBe('2 levent');
+  });
+
+  it('önizleme satır adı: gövde no > gönderilen elle no > gövdesiz', () => {
+    const sent = { subcontractorId: 's1', deliveryNoteNo: null, orders: [{ warpingOrderId: 'o1', beams: [{ lengthM: 1480, physicalBeamNo: ' TEST-G1 ' }, { lengthM: 1500, physicalBeamNo: null }] }] };
+    expect(previewBeamName(sent, 'o1', 0, { bodyNo: 'LG-1', isNew: true })).toBe('LG-1 (yeni gövde)');
+    expect(previewBeamName(sent, 'o1', 0, null)).toBe('TEST-G1 (gövdesiz)');
+    expect(previewBeamName(sent, 'o1', 1, null)).toBe('gövdesiz');
+    expect(previewBeamName(null, 'o1', 0, null)).toBe('gövdesiz');
   });
 });
