@@ -293,6 +293,7 @@ export function GoodsReceiptDetailSheet({ id, onOpenChange, sync }: Props) {
                             <td className="p-2 text-xs">
                               {l.lot ? <span className="font-mono">{l.lot.lotNo}</span> : <span className="text-muted-foreground">Lot yok</span>}
                               {l.bobbinCount != null ? <span className="ml-1 text-muted-foreground">· {l.bobbinCount} bobin</span> : null}
+                              {l.supplierItemCode ? <span className="ml-1 text-muted-foreground" title="Tedarikçi kalem kodu">· kod <span className="font-mono">{l.supplierItemCode}</span></span> : null}
                             </td>
                             {/* Kg POZİTİF basılır — yönü rozet söyler (backend
                                 sözleşmesi: qtyKg her zaman pozitif). */}

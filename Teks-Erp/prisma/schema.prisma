@@ -4521,6 +4521,7 @@ model Item {
   yarnStocks         YarnStock[]
   yarnMovements      YarnMovement[]
   yarnLots           YarnLot[]           @relation("YarnLotItem")
+  supplierItemCodes  SupplierItemCode[]  @relation("SupplierItemCodeItem")
   prices             ItemPrice[]
   purchaseOrderLines PurchaseOrderLine[]
   stockCountLines    StockCountLine[]
@@ -5361,7 +5362,8 @@ model Customer {
   purchaseOrders        PurchaseOrder[]               @relation("PurchaseOrderSupplier")
   suppliedWarpBeams     WarpBeam[]                    @relation("WarpBeamSupplier")
   yarnLots              YarnLot[]                     @relation("YarnLotSupplier")
-  directShipments       DirectShipment[]
+  supplierItemCodes     SupplierItemCode[]            @relation("SupplierItemCodeSupplier")
+  directShipments      DirectShipment[]
   templateRoutes        CustomerTemplateRoute[]
   standaloneLabels      CustomerStandaloneLabel[]
   /// Bu müşterinin ek etiket şablonu seçenekleri (varsayılan `CustomerTemplateRoute`ta).
@@ -13584,6 +13586,8 @@ model YarnMovement {
   lotId             String? @db.Uuid
   /// Bobin adedi — BİLGİ alanıdır, bakiye değil (CHECK `yarn_movements_bobbin_positive`: null ya da > 0).
   bobbinCount       Int?
+  /// Seyitoğlu d5: tedarikçi irsaliyesindeki ham kalem kodu (yalnız mal kabul IN satırı) — İZ, bakiye değil.
+  supplierItemCode  String?                    @db.VarChar(64)
   /// Devere H1: koli adedi (iade satırı) — BİLGİ, defter değil; kg tek kaynak (CHECK `yarn_movements_package_positive`).
   packageCount      Int?
   /// G1: fason iplik kalemi bağı — `SUBCONTRACT_*` satırı ⇔ bağ dolu (CHECK `yarn_movements_fason_link_ck`);
@@ -13665,6 +13669,32 @@ model YarnLot {
   @@index([ownerCustomerId])
   @@index([qualityStatus])
   @@map("yarn_lots")
+}
+
+/// TEDARİKÇİ KALEM KODU ↔ İPLİK KARTI (Seyitoğlu d5, 2026-11-22) — tedarikçinin irsaliyedeki kalem kodu
+/// ("153.01.0652") bizim iplik kartımıza eşlenir; mal kabulde öneri gelir. SAF YAPILANDIRMA PİVOTU (defter
+/// değil): kaldırma sert silmedir + audit. Öğrenme tek ifade `INSERT … ON CONFLICT` (son kabul kazanır),
+/// tek yazar `supplier-item-code.service.ts`. Kapsam yalnız `Customer` (tedarikçi rolü) — fason firma
+/// bacağı XOR çift bağ olacağından yok. `codeKey` katlanmış anahtar (`supplierItemCodeKey`, tek kaynak).
+model SupplierItemCode {
+  id         String    @id @default(uuid()) @db.Uuid
+  supplierId String    @db.Uuid
+  /// Katlanmış anahtar: TRIM + boşluklar silinir + büyük harf (kod ASCII'dir; TR katlaması gerekmez).
+  codeKey    String    @db.VarChar(64)
+  /// Son görülen yazım (listede gösterilir).
+  rawCode    String    @db.VarChar(64)
+  itemId     String    @db.Uuid
+  hitCount   Int       @default(1)
+  lastUsedAt DateTime? @db.Timestamptz
+  createdAt  DateTime  @default(now()) @db.Timestamptz
+  updatedAt  DateTime  @updatedAt @db.Timestamptz
+
+  supplier Customer @relation("SupplierItemCodeSupplier", fields: [supplierId], references: [id], onDelete: Restrict)
+  item     Item     @relation("SupplierItemCodeItem", fields: [itemId], references: [id], onDelete: Restrict)
+
+  @@unique([supplierId, codeKey])
+  @@index([itemId])
+  @@map("supplier_item_codes")
 }
 
 /// İplik lotu kalite durumu (2026-09-18): RELEASED serbest (varsayılan) · ON_HOLD kalite bekletmede (mal kabulde doğuş,

@@ -106,6 +106,7 @@ import returnRoutes from "./routes/return.routes";
 import returnReasonRoutes from "./routes/return-reason.routes";
 import warehouseRoutes from "./routes/warehouse.routes";
 import goodsReceiptRoutes from "./routes/goods-receipt.routes";
+import supplierItemCodeRoutes from "./routes/supplier-item-code.routes";
 import consumableStockRoutes from "./routes/consumable-stock.routes";
 import financeRoutes from "./routes/finance.routes";
 import chequeRoutes from "./routes/cheque.routes";
@@ -661,6 +662,8 @@ app.use("/api/warehouses", warehouseRoutes);
 // Mal kabul — 2026-09-02'den beri `verifyToken + requireTicaretEnabled`
 // kapısını KENDİ taşır (modül paketinin tek bilinçli davranış farkı).
 app.use("/api/goods-receipts", goodsReceiptRoutes);
+// Seyitoğlu d5 — tedarikçi kalem kodu ↔ iplik kartı (mal kabul izinleri + ticaret kapısı kendi router'ında).
+app.use("/api/supplier-item-codes", supplierItemCodeRoutes);
 app.use("/api/consumable-stock", consumableStockRoutes);
 // Paket D — iplik kg-defteri · kalem fiyatı · alış siparişi. Kapıları
 // 2026-09-02'de modül anahtarlarına TAŞINDI: iplik `iplik.enabled` (ticarete

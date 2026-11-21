@@ -49,6 +49,7 @@ import { applyYarnMovementTx } from "./yarn.service";
 import { reverseGoodsReceiptYarnTx } from "./helpers/yarn-receipt-reversal.helper";
 import { recordConsumableReceiptTx, reverseConsumableReceiptTx } from "./helpers/consumable-stock.helper";
 import { ensureYarnLotTx, normalizeLotNo } from "./helpers/yarn-lot.helper";
+import { learnSupplierItemCodesSafely, normalizeSupplierItemCode } from "./supplier-item-code.service";
 import { assertReceiptLinesValid, overReceiptMessage, priceRequiredMessage, YARN_LOT_REQUIRED_MESSAGE, type PreflightContext } from "./helpers/goods-receipt-preflight.helper";
 import { yarnMovementSign } from "./helpers/yarn-sign.helper";
 // J1 — iki OPT-IN katılık bayrağı (ikisi de varsayılan KAPALI; kapalıyken tek
@@ -118,6 +119,9 @@ export interface GoodsReceiptLineInput {
   lotNo?: string | null;
   /** İPLİK satırı: bobin adedi (bilgi). */
   bobbinCount?: number | null;
+  /** İPLİK satırı (Seyitoğlu d5): tedarikçi irsaliyesindeki kalem kodu — harekete iz olarak yazılır, fiş tedarikçiliyse
+   *  (tedarikçi, kod) → kart eşlemesi kabulden SONRA öğrenilir (best-effort). Kumaş/sarf satırında ön-uçuş 400. */
+  supplierItemCode?: string | null;
   /** KUMAŞ satırı TOP SINIFI (EK 7, kullanıcı kararı 2026-09-18): `RAW` ham (`STOCK`) · `SEMI_FINISHED` yarı mamul
    *  (`STOCK` + `entrySource=SEMI_FINISHED`, elle yarı mamul girişiyle aynı doğuş) · `FINISHED` bitmiş (`WAREHOUSE`);
    *  yoksa `rawStock`, o da yoksa fişin `rawStockEntry` varsayılanı. İplik satırında yok sayılır (kg defteri raf taşımaz). */
@@ -254,6 +258,7 @@ const RECEIPT_YARN_SELECT = {
   reason: true,
   createdAt: true,
   bobbinCount: true,
+  supplierItemCode: true,
   lot: { select: { id: true, lotNo: true } },
   item: { select: { id: true, name: true, code: true } },
   warehouse: { select: { id: true, name: true } },
@@ -300,6 +305,8 @@ export interface ReceiptYarnLine {
   createdAt: Date;
   lot: { id: string; lotNo: string } | null;
   bobbinCount: number | null;
+  /** Tedarikçi irsaliyesindeki ham kalem kodu (Seyitoğlu d5) — iz. */
+  supplierItemCode: string | null;
 }
 
 export type ReceiptLine = ReceiptFabricLine | ReceiptYarnLine;
@@ -1101,6 +1108,8 @@ export class GoodsReceiptService {
     const createdYarn: string[] = [];
     const createdConsumable: string[] = [];
     const failed: LineFailure[] = [];
+    // Seyitoğlu d5 — yalnız BAŞARILI iplik satırının (kod, kart) çifti; satır tx'lerinden SONRA öğrenilir.
+    const learnPairs: Array<{ rawCode: string; itemId: string }> = [];
 
     /**
      * ① sayacı — YALNIZ BAŞARILI satır sayılır (`created`/`createdYarn`
@@ -1181,6 +1190,7 @@ export class GoodsReceiptService {
           // kalemden hem top hem kg doğuran bir yol eklenirse sessizce yanlış
           // damga üretirdi.
           createdYarn.push(await this.addYarnLine(receipt, line, priceFor(line), { userId, itemUsage: yarnUsage, warnings: directWarpingWarnings }));
+          if (line.supplierItemCode) learnPairs.push({ rawCode: line.supplierItemCode, itemId: line.itemId });
           noteAccepted(line, claim);
           continue;
         }
@@ -1269,6 +1279,8 @@ export class GoodsReceiptService {
     // ⚠️ Sipariş bağı yoksa TEK SORGU BİLE koşmaz — üretici fabrikada bu satır
     // görünmez (`syncPurchaseOrderSafely` null'da hemen döner).
     const purchaseOrder = await syncPurchaseOrderSafely(receipt.purchaseOrderId);
+    // Tedarikçi kalem kodu öğrenmesi — tx DIŞI, best-effort (hata kabulü düşürmez); fason bacaklı fişte supplierId yok → no-op.
+    await learnSupplierItemCodesSafely(receipt.supplierId, learnPairs, userId);
 
     return {
       created,
@@ -1325,6 +1337,7 @@ export class GoodsReceiptService {
     // LOT (devere Faz 2): irsaliye metni TRIM'lenir, boş → null. `devere.lotRequired`
     // AÇIKKEN lotsuz iplik satırı 400 (varsayılan KAPALI = bugünkü davranış: lotsuz yazılır).
     const lotNo = normalizeLotNo(line.lotNo);
+    const supplierItemCode = normalizeSupplierItemCode(line.supplierItemCode);
     // Ön-uçuş bunu zaten yakalar (create + POST /:id/lines); burada satır düzeyi koruma bayt bayt kalır.
     if (!lotNo && (await readDevereLotRequired())) {
       throw AppError.badRequest(YARN_LOT_REQUIRED_MESSAGE, { code: "YARN_LOT_REQUIRED" });
@@ -1354,10 +1367,13 @@ export class GoodsReceiptService {
         lotId: lot?.id ?? null,
         bobbinCount: line.bobbinCount ?? null,
       });
-      if (unitPrice != null) {
+      if (unitPrice != null || supplierItemCode) {
         await tx.yarnMovement.update({
           where: { id: applied.movementId },
-          data: { unitPrice: new Prisma.Decimal(unitPrice) },
+          data: {
+            ...(unitPrice != null ? { unitPrice: new Prisma.Decimal(unitPrice) } : {}),
+            ...(supplierItemCode ? { supplierItemCode } : {}),
+          },
         });
       }
       // D4c: aynı depo + aynı lot + aynı kg sevki → depo net 0; sevk düşerse (lot kuralı, tek sahip, bekletme) IN de yok.
@@ -1384,6 +1400,7 @@ export class GoodsReceiptService {
         kind: YarnMovementKind.IN,
         qtyKg: qtyKg.toString(),
         unitPrice: unitPrice != null ? new Prisma.Decimal(unitPrice).toString() : null,
+        supplierItemCode,
         balanceAfter: res.balanceKg.toString(),
       },
     });
@@ -1826,6 +1843,7 @@ export class GoodsReceiptService {
           createdAt: m.createdAt,
           lot: m.lot,
           bobbinCount: m.bobbinCount,
+          supplierItemCode: m.supplierItemCode,
         }),
       ),
     ];

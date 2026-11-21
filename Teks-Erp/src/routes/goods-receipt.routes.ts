@@ -43,6 +43,8 @@ const lineSchema = z.object({
   // İplik satırı (devere Faz 2): lot numarası + bobin adedi — Zod tanımadığını sessizce atar.
   lotNo: z.string().max(64).nullable().optional(),
   bobbinCount: z.number().int().positive().nullable().optional(),
+  // Seyitoğlu d5 — tedarikçi kalem kodu (yalnız iplik satırı); Zod tanımadığını sessizce atar.
+  supplierItemCode: z.string().max(64).nullable().optional(),
   // EK 7 — kumaş satırı TOP SINIFI: RAW ham (STOCK) · SEMI_FINISHED yarı mamul (STOCK + entrySource) · FINISHED bitmiş
   // (WAREHOUSE) · yok = eski `rawStock` (true ham / false bitmiş), o da yoksa fişin `rawStockEntry`i.
   lineClass: z.enum(RECEIPT_LINE_CLASSES).nullable().optional(),

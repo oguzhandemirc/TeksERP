@@ -163,6 +163,8 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
       policy: "BLOCK",
       why: "Aynı lot numarası iki kalemde: lotlar hareketlerin kimliğidir, birleştirilemez — önce birini pasife alıp hareketlerini karşı lota düzeltme belgesiyle taşıyın.",
     },
+    // Seyitoğlu d5 — itemId tekilliğe girmez (tekil [supplierId, codeKey]) → eşleme hedef karta taşınır.
+    { kind: "MOVE", model: "SupplierItemCode", table: "supplier_item_codes", column: "itemId", label: "Tedarikçi kalem kodu eşlemesi" },
     { kind: "MOVE", model: "PurchaseOrderLine", table: "purchase_order_lines", column: "itemId", label: "Alış siparişi kalemi" },
     {
       kind: "CONFLICT",

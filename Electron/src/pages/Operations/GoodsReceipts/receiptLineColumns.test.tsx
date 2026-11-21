@@ -45,10 +45,10 @@ function cellLabelAt(row: HTMLElement, i: number): string | null {
 describe("Mal kabul satır editörü — türe göre iki alt tablo (EK 5)", () => {
   it("sütun tablosu: kumaş 10 · iplik 6; her hücre etiketi kendi başlığının altında; iki tablonun grid şablonu farklı", () => {
     expect(receiptLineHeaders("FABRIC")).toEqual(["Kumaş", "Renk", "Metre (top başına)", "En (cm)", "Kg", "Kat", "Birim Fiyat", "Özellik", "Sınıf", "Adet"]);
-    expect(receiptLineHeaders("YARN")).toEqual(["İplik", "Lot", "Kg", "Bobin", "Birim Fiyat", "Adet"]);
-    expect(cellLabel("YARN", 1)).toBe("Lot numarası");
+    expect(receiptLineHeaders("YARN")).toEqual(["Tedarikçi kodu", "İplik", "Lot", "Kg", "Bobin", "Birim Fiyat", "Adet"]);
+    expect(cellLabel("YARN", 2)).toBe("Lot numarası");
     expect(cellLabel("FABRIC", 8)).toBe("Top sınıfı");
-    expect(() => cellLabel("YARN", 6)).toThrow();
+    expect(() => cellLabel("YARN", 7)).toThrow();
     expect(receiptLineGridCols("YARN")).not.toBe(receiptLineGridCols("FABRIC"));
 
     renderWithProviders(<ReceiptLineRows lines={[fabricLine(), yarnLine()]} onChange={() => {}} yarnItemIds={YARN} />);

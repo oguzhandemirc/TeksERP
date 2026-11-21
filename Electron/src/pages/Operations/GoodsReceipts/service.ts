@@ -42,6 +42,8 @@ export interface GoodsReceiptLineInput {
   /** İPLİK satırı (devere Faz 2): lot numarası + bobin adedi — kumaş satırında gönderilmez. */
   lotNo?: string | null;
   bobbinCount?: number | null;
+  /** İPLİK satırı (Seyitoğlu d5): tedarikçi irsaliyesindeki kalem kodu — backend iz yazar ve eşlemeyi öğrenir. */
+  supplierItemCode?: string | null;
 }
 
 // ── SINIF 5 (2026-08-14): fişin satırları backend'de TEK assembler'dan gelir
@@ -81,6 +83,8 @@ export interface ReceiptDetailYarnLine {
   /** Devere Faz 2: lot ve bobin (lotsuz satırda null). */
   lot?: { id: string; lotNo: string } | null;
   bobbinCount?: number | null;
+  /** Seyitoğlu d5: tedarikçi kalem kodu izi (eski backend göndermez → undefined). */
+  supplierItemCode?: string | null;
 }
 
 export type ReceiptDetailLine = ReceiptDetailFabricLine | ReceiptDetailYarnLine;

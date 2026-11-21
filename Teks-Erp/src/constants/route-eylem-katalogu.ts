@@ -254,6 +254,8 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/gelen-belge/sablonlar/oneri": e("belge tipi için şablon önerisi aldı", "belge tipi için şablon önerisi almaya çalıştı"),
   "PUT /api/gelen-belge/varsayilan-urunler/:customerId": e("müşterinin gelen belge varsayılan ürününü yazdı", "müşterinin gelen belge varsayılan ürününü yazmaya çalıştı"),
   "DELETE /api/gelen-belge/varsayilan-urunler/:customerId": e("müşterinin gelen belge varsayılan ürününü kaldırdı", "müşterinin gelen belge varsayılan ürününü kaldırmaya çalıştı"),
+  "PATCH /api/supplier-item-codes/:id": e("tedarikçi kalem kodunu başka iplik kartına bağladı", "tedarikçi kalem kodunu başka iplik kartına bağlamaya çalıştı"),
+  "DELETE /api/supplier-item-codes/:id": e("tedarikçi kalem kodu eşlemesini kaldırdı", "tedarikçi kalem kodu eşlemesini kaldırmaya çalıştı"),
 };
 
 /** Uç anahtarı: `request_traces` ile aynı biçim. */
