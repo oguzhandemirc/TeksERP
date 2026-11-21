@@ -9,6 +9,8 @@
 //       allowlist (ücret/iplik/satış siparişi sızmaz), ayarlar, modül kapalı 403 · gövde QR → bağlı sarım (D8)
 // NEGATİF SONDA (2026-11-21): `warping-receive-doc.routes` POST "/" guard'ından `...MOBILE_DEVERE_KABUL` düşünce §1b
 // KIRMIZI · `tablet-context.ts` sipariş `map`ine `fee: o.feeUnitPrice` eklenince §3c KIRMIZI (arşiv "Devere ek D1").
+// M1 (2026-11-21): §1h ekran SCREEN_CATALOG'da (muaf silindi) · §1i levent etiket kapısı; sonda: print-event guard'ından
+// `"mobile:devere-kabul"` düşünce §1i KIRMIZI.
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım; ayarlar FOTOĞRAFINA döndürülür, kendi kayıtlarını siler.
 // =============================================================================
 import fs from "node:fs";
@@ -34,7 +36,7 @@ import { resolveBeamBody } from "../src/services/beam-body/read";
 import { requireAnyPermission } from "../src/middlewares/rbac.middleware";
 import { PERMISSION_CATALOG } from "../src/constants/permission-catalog";
 import { ROLE_TEMPLATE_CATALOG } from "../src/constants/role-template-catalog";
-import { SCREENLESS_PERMISSIONS } from "../src/constants/screen-catalog";
+import { SCREEN_CATALOG, SCREENLESS_PERMISSIONS } from "../src/constants/screen-catalog";
 
 const ROOT = path.resolve(__dirname, "..");
 const TAG = `TEST-FDTK-${process.pid}`;
@@ -117,7 +119,12 @@ function statik(): void {
   check("§1f katalog satırı: mobile:devere-kabul · MOBILE/mobile", p?.module === "MOBILE" && p.category === "mobile");
   const depo = ROLE_TEMPLATE_CATALOG.find((t) => t.code === "MOBILE_DEPO");
   check("§1g Mobil — Depo Operatörü şablonu izni taşır (KARAR 4: depo rolüne ayrı izin)", !!depo && "codes" in depo && Array.isArray(depo.codes) && depo.codes.includes(PERM));
-  check("§1h ekran M1'e kadar SCREENLESS muafı (ekran doğunca ölü muaf → test_screen_catalog kırmızı)", SCREENLESS_PERMISSIONS.some((s) => s.code === PERM));
+  const screen = SCREEN_CATALOG.find((s) => s.key === "DevereKabul");
+  check("§1h tablet ekranı SCREEN_CATALOG'da (M1): DevereKabul · mobile · devereEnabled · requires mobile:devere-kabul; SCREENLESS muafı yok",
+    screen?.app === "mobile" && screen.modul === "devereEnabled" && screen.requires.length === 1 && screen.requires[0] === PERM && !SCREENLESS_PERMISSIONS.some((s) => s.code === PERM));
+  const label = read("src/routes/label.routes.ts");
+  check("§1i M1: kabul edilen leventin etiketi — levent etiket okuma + baskı izi kapısı mobile:devere-kabul alır",
+    /const WARP_BEAM_LABEL_READ = requireAnyPermission\([^)]*"mobile:devere-kabul"\)/.test(label) && /"\/warp-beams\/:id\/print-event",\s*verifyToken,\s*requireAnyPermission\([^)]*"mobile:devere-kabul"\)/.test(label));
 }
 
 async function kapiIslevi(): Promise<void> {

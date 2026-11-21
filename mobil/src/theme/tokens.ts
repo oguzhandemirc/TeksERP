@@ -15,7 +15,7 @@ import type { MobileScreenKey } from '../types/permissions';
 /** Ham renk skalaları — semantik `colors` bunların üstüne kurulur. */
 export const palette = {
   // Tambur künye kartı zemini (2026-11-11): turuncu-600 üstünde siyah 5.9:1, blue-950 4.1:1.
-  orange: { 600: '#ea580c' },
+  orange: { 100: '#ffedd5', 600: '#ea580c', 800: '#9a3412' },
   indigo: { 50: '#eef2ff', 100: '#e0e7ff', 200: '#c7d2fe', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca' },
   slate: {
     50: '#f8fafc', 100: '#f1f5f9', 200: '#e2e8f0', 300: '#cbd5e1', 400: '#94a3b8',
@@ -196,6 +196,7 @@ export const moduleAccents: Record<MobileScreenKey, { tint: string; bg: string }
   Dokuma: { tint: '#0f766e', bg: '#ccfbf1' },
   // Devere (levent) — dokuma ailesi ama tezgahtan ayrışsın diye kayısı tonu.
   Devere: { tint: '#c2410c', bg: '#fed7aa' },
+  DevereKabul: { tint: palette.orange[800], bg: palette.orange[100] }, // devere ailesi (kayısı) — depo kabul yüzü koyu tonla ayrışır
   FasonDokuma: { tint: '#db2777', bg: '#fce7f3' }, // fason kabulün kardeşi — aynı renk ailesi
   Uyarilar: { tint: '#b91c1c', bg: '#fee2e2' }, // alarm — kırmızı aile (panel şeridiyle aynı ton)
   Muayene: { tint: '#7c3aed', bg: '#ede9fe' }, // kalite güvence — üretim ailelerinden ayrışan mor

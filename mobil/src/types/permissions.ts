@@ -44,6 +44,8 @@ export type MobilePermission =
   // Devere (2026-09-14, §11): LEVENT SARIM ekranı + sarım iptali yeteneği (ayrı yetki, iplik defterine ters satır).
   | 'mobile:devere'
   | 'mobile:devere-iptal'
+  // Devere ek M1 (2026-11-21): DEVERE DÖNÜŞ KABULÜ ekranı (depo) — panel kabul belgesi uçlarının dar mobil ikizi.
+  | 'mobile:devere-kabul'
   // Tezgah alarmı A3: Uyarılar ekranı — `loom:alarm-view` + `loom:alarm-ack`'in DAR mobil ikizi (bildirim dahil).
   | 'mobile:tezgah-uyari'
   // K4P-EKRAN: istasyondan bağımsız Muayene ekranı (top okut → 4 puan muayene).
@@ -98,6 +100,7 @@ export type MobileScreenKey =
   | 'KursunDagitim'
   | 'Dokuma'
   | 'Devere'
+  | 'DevereKabul'
   | 'FasonDokuma'
   | 'Uyarilar'
   | 'Muayene'
@@ -259,6 +262,15 @@ export const MOBILE_SCREENS: MobileScreenMeta[] = [
     label: 'Levent Sarım',
     icon: 'rotate-right',
     description: 'Levent planla, sar (iplik çıkışı + dip iadesi), taslak sil',
+  },
+  {
+    // Devere ek M1 (2026-11-21): devereciden dönen dolu leventlerin depoda kabulü — gövde QR, metre, tartı;
+    // panelle aynı kabul belgesi (hep-ya-hiç). OTURUMSUZ, online-only.
+    key: 'DevereKabul',
+    permission: 'mobile:devere-kabul',
+    label: 'Devere Dönüş Kabulü',
+    icon: 'truck-delivery-outline',
+    description: 'Devereciden dönen leventleri gövde QR\'ı okutarak kabul et',
   },
   {
     // Tablet FASON DOKUMA KABUL ekranı (G2t, 2026-09-14): fasonda dokunan işin levent
