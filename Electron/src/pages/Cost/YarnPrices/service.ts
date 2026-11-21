@@ -11,10 +11,18 @@ export const YARN_PRICE_SOURCE_LABEL: Record<YarnPriceSource, string> = {
   PURCHASE_PRICE: "Kart alış fiyatı",
 };
 
+/** SY-a: fiyatın birimi (kartın satın alma biriminden donar; eski sunucuda yok = kg). */
+export type YarnPriceUnit = "KG" | "ADET" | "METRE";
+const UNIT_SUFFIX: Record<YarnPriceUnit, string> = { KG: "kg", ADET: "adet", METRE: "m" };
+/** "USD/kg" · "USD/adet" · "USD/m". */
+export const yarnPriceUnitText = (currency: string, unit: YarnPriceUnit | null | undefined): string => `${currency}/${UNIT_SUFFIX[unit ?? "KG"]}`;
+/** Fiyat satırının birimi kartın bugünkü birimiyle uyuşmuyor mu (maliyet bu fiyatı okumaz)? */
+export const yarnPriceUnitStale = (p: Pick<YarnCostPrice, "unit" | "yarnItem">): boolean => (p.unit ?? "KG") !== (p.yarnItem.yarnPurchaseUnit ?? "KG");
+
 export interface YarnCostPrice {
-  id: string; yarnItemId: string; currency: Currency; pricePerKg: string; source: YarnPriceSource; sourceRef: string | null;
+  id: string; yarnItemId: string; currency: Currency; pricePerKg: string; unit?: YarnPriceUnit; source: YarnPriceSource; sourceRef: string | null;
   note: string | null; revokedAt: string | null; revokeReason: string | null; createdAt: string;
-  yarnItem: { id: string; code: string; name: string; linearDensityDen: string | number | null };
+  yarnItem: { id: string; code: string; name: string; linearDensityDen: string | number | null; yarnPurchaseUnit?: YarnPriceUnit | null };
 }
 
 export interface YarnPriceInput { yarnItemId: string; currency: Currency; pricePerKg: string; note?: string | null }

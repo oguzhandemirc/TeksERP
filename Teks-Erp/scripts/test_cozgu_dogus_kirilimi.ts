@@ -148,7 +148,7 @@ async function main(): Promise<void> {
     const uMono = yarnUsagePerM(inMono);
     check("§5a ⭐ kg/m = Σ satır (165×5250 + 70×5250)/9e6", uMono.warp?.kgPerM.equals(kgPerM) === true, `${uMono.warp?.kgPerM.toString()} ↔ ${kgPerM.toString()}`);
     check("§5b iplik başına kırılım (ihtiyaç planı iki ipliği ayrı görür)", uMono.warp?.yarns.length === 2 && uMono.warp.yarns.find((y) => y.yarnItemId === yB.id)?.kgPerM.equals(warpYarnKgExact(5250, 70, 1)) === true);
-    const prices = new Map([[yA.id, { pricePerKg: D(5), currency: "TRY", createdAt: new Date() }], [yB.id, { pricePerKg: D(3), currency: "TRY", createdAt: new Date() }]]);
+    const prices = new Map([[yA.id, { pricePerKg: D(5), currency: "TRY", unit: "KG", createdAt: new Date() }], [yB.id, { pricePerKg: D(3), currency: "TRY", unit: "KG", createdAt: new Date() }]]);
     const priced = buildCostInput({ ...costSrc(monoRow), prices } as unknown as CostSources, { itemId: "i1" });
     const yarnLinesOk = priced.warp?.yarns?.length === 2 && priced.warp.yarns.map((y) => y.price?.amount.toString()).join(",") === "5,3";
     check("§5c iplik başına fiyat girdide (her ipliğin WARP_YARN satırı kendi fiyatıyla)", yarnLinesOk);

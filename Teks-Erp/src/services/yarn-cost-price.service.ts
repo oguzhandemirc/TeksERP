@@ -14,12 +14,14 @@ import { AuditService } from "./audit.service";
 import { ACTIVE_YARN_COST_PRICE, COST_PRICE_REVOKE_REASON } from "./helpers/cost-price-validity.helper";
 import { isUniqueViolation, logStampedVersionAudit, parseDecimalField, parseTextField } from "./helpers/cost-input.helper";
 import { listSearchWhere } from "../utils/list-search";
+import { effectiveYarnUnit } from "../constants/yarn-unit";
 
 export const YARN_COST_PRICE_SELECT = {
   id: true,
   yarnItemId: true,
   currency: true,
   pricePerKg: true,
+  unit: true,
   source: true,
   sourceRef: true,
   note: true,
@@ -28,7 +30,7 @@ export const YARN_COST_PRICE_SELECT = {
   revokeReason: true,
   createdAt: true,
   createdById: true,
-  yarnItem: { select: { id: true, code: true, name: true, linearDensityDen: true } },
+  yarnItem: { select: { id: true, code: true, name: true, linearDensityDen: true, yarnPurchaseUnit: true } },
 } satisfies Prisma.YarnCostPriceSelect;
 
 export type YarnCostPriceRow = Prisma.YarnCostPriceGetPayload<{ select: typeof YARN_COST_PRICE_SELECT }>;
@@ -58,25 +60,27 @@ export async function changeYarnCostPrice(
   input: YarnCostPriceChangeInput,
   userId?: string,
 ): Promise<{ row: YarnCostPriceRow; wrote: boolean; previousId: string | null }> {
-  const price = parseDecimalField(input.pricePerKg, { label: "Kg fiyatı", min: 0, minExclusive: true, scale: 4 });
-  if (!price) throw AppError.badRequest("Kg fiyatı zorunludur.");
+  const price = parseDecimalField(input.pricePerKg, { label: "Birim fiyat", min: 0, minExclusive: true, scale: 4 });
+  if (!price) throw AppError.badRequest("Birim fiyat zorunludur.");
   const sourceRef = parseTextField(input.sourceRef, "Kaynak referansı", 64) ?? null;
   const note = parseTextField(input.note, "Not", 300) ?? null;
   const source = input.source ?? YarnCostPriceSource.MANUAL;
 
-  const yarn = await prisma.item.findUnique({ where: { id: input.yarnItemId }, select: { id: true, name: true, itemType: true } });
+  const yarn = await prisma.item.findUnique({ where: { id: input.yarnItemId }, select: { id: true, name: true, itemType: true, yarnPurchaseUnit: true } });
   if (!yarn) throw AppError.badRequest("İplik kalemi bulunamadı.");
   if (yarn.itemType !== ItemType.YARN) {
     throw AppError.badRequest(`"${yarn.name}" bir İPLİK kalemi değil — maliyet fiyatı yalnız ipliğe girilir.`, { code: "COST_YARN_NOT_YARN" });
   }
 
+  // SY-a: fiyat kartın bugünkü satın alma biriminde donar (kg/adet/metre başına); birim değişince eski fiyat okunmaz.
+  const unit = effectiveYarnUnit(yarn);
   const at = new Date();
   let outcome: { id: string; wrote: boolean; previous: { id: string; pricePerKg: Prisma.Decimal; currency: Currency } | null };
   try {
     outcome = await prisma.$transaction(async (tx) => {
       const current = await tx.yarnCostPrice.findFirst({
         where: { yarnItemId: input.yarnItemId, ...ACTIVE_YARN_COST_PRICE },
-        select: { id: true, pricePerKg: true, currency: true, source: true, sourceRef: true, note: true },
+        select: { id: true, pricePerKg: true, unit: true, currency: true, source: true, sourceRef: true, note: true },
       });
       if (input.expectedActiveId !== undefined && (current?.id ?? null) !== input.expectedActiveId) {
         throw AppError.conflict("İplik fiyatı sonradan değişti — beklenen sürüm yürürlükte değil.", { code: "COST_PRICE_CONFLICT" });
@@ -84,6 +88,7 @@ export async function changeYarnCostPrice(
       if (
         current &&
         current.pricePerKg.equals(price) &&
+        current.unit === unit &&
         current.currency === input.currency &&
         current.source === source &&
         current.sourceRef === sourceRef &&
@@ -103,6 +108,7 @@ export async function changeYarnCostPrice(
           yarnItemId: input.yarnItemId,
           currency: input.currency,
           pricePerKg: price,
+          unit,
           source,
           sourceRef,
           note,
@@ -129,7 +135,7 @@ export async function changeYarnCostPrice(
       revokeReason: COST_PRICE_REVOKE_REASON.CHANGED,
       rowId: row.id,
       oldData: outcome.previous ? { pricePerKg: outcome.previous.pricePerKg.toFixed(4), currency: outcome.previous.currency } : null,
-      newData: { yarnItemId: row.yarnItemId, currency: row.currency, pricePerKg: row.pricePerKg.toFixed(4), source: row.source },
+      newData: { yarnItemId: row.yarnItemId, currency: row.currency, pricePerKg: row.pricePerKg.toFixed(4), unit: row.unit, source: row.source },
     });
   }
   return { row, wrote: outcome.wrote, previousId: outcome.previous?.id ?? null };

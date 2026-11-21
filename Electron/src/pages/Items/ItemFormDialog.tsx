@@ -28,8 +28,9 @@ import {
   makeItemFormSchema,
   type ItemFormValues,
 } from "./schema";
-import { buildItemPayload, fabricDetailPayload, fabricDetailToFormText, itemCarriesAllowedLists, yarnWastePayload } from "./itemPayload.helper";
+import { buildItemPayload, fabricDetailPayload, fabricDetailToFormText, itemCarriesAllowedLists, yarnUnitPayload, yarnWastePayload } from "./itemPayload.helper";
 import { ItemYarnWasteField } from "./ItemYarnWasteField";
+import { ItemYarnFields } from "./ItemYarnFields";
 import { ItemWeavingDetails } from "./ItemWeavingDetails";
 import { AllowedColorsDialog } from "./AllowedColorsDialog";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
@@ -74,6 +75,8 @@ export function ItemFormDialog({
         unit: initial.unit,
         linearDensityDen: decimalToFormText(initial.linearDensityDen),
         yarnWastePct: fabricDetailToFormText(initial.yarnWastePct),
+        yarnPurchaseUnit: initial.yarnPurchaseUnit ?? "KG",
+        yarnPiecesPerM: fabricDetailToFormText(initial.yarnPiecesPerM),
         widthCm: initial.widthCm == null ? "" : String(Number(initial.widthCm)).replace(".", ","),
         rawWidthCm: fabricDetailToFormText(initial.rawWidthCm),
         rawGsm: fabricDetailToFormText(initial.rawGsm),
@@ -167,7 +170,7 @@ export function ItemFormDialog({
   }, [allowedPropertyIds, propsQ.data?.data]);
 
   const handleSubmit = form.handleSubmit(async (v) => {
-    await onSubmit({ ...buildItemPayload(v, isEdit, kaliteGuvenceEnabled), ...constructionPayload(v, initial, constructionVisible), ...fabricDetailPayload(v, initial), ...yarnWastePayload(v, initial, yarnWasteVisible) });
+    await onSubmit({ ...buildItemPayload(v, isEdit, kaliteGuvenceEnabled), ...constructionPayload(v, initial, constructionVisible), ...fabricDetailPayload(v, initial), ...yarnWastePayload(v, initial, yarnWasteVisible), ...yarnUnitPayload(v, initial) });
   });
 
   return (
@@ -251,25 +254,9 @@ export function ItemFormDialog({
               />
             </FormField>
 
-          {/* Denye yalnız iplikte sorulur: kumaş/sarf kaleminde karşılığı yok.
-              Zorunlu DEĞİL — mevcut iplik kayıtları bu alan olmadan doğdu ve
-              zorunlu yapmak onların düzenlenmesini kilitlerdi; çözgü kartı
-              açarken sunucu zaten anlaşılır bir 400 veriyor. */}
-          {itemType === ItemType.YARN && (
-            <FormField
-              label="Denye (iplik inceliği)"
-              htmlFor="linearDensityDen"
-              error={form.formState.errors.linearDensityDen}
-              info="Çözgü kartı açmak için gerekli — kg = tel × denye × metre ÷ 9.000.000"
-            >
-              <Input
-                id="linearDensityDen"
-                inputMode="decimal"
-                placeholder="150"
-                {...form.register("linearDensityDen")}
-              />
-            </FormField>
-          )}
+          {/* Denye + satın alma birimi yalnız iplikte (SY-a). Denye zorunlu DEĞİL — eski kayıtlar boş doğdu;
+              çözgü/atkı kartı açarken sunucu anlaşılır 400 verir. */}
+          {itemType === ItemType.YARN && <ItemYarnFields form={form} />}
 
           {yarnWasteVisible && <ItemYarnWasteField form={form} />}
 

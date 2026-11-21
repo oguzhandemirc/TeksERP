@@ -18,6 +18,7 @@ import {
   type EffectiveConstruction,
 } from "./helpers/effective-construction.helper";
 import { weftLetter } from "./helpers/weft-sequence.helper";
+import { assertWeftYarnDenier } from "./helpers/yarn-unit.helper";
 
 export interface WarpLayerInput {
   warpSpecId: string;
@@ -67,10 +68,10 @@ export async function replaceItemWarpLayers(itemId: string, layers: WarpLayerInp
 
 async function assertOverrideYarns(rows: WeftOverrideInput[]): Promise<void> {
   for (const r of rows) {
-    const yarn = await prisma.item.findUnique({ where: { id: r.yarnItemId }, select: { id: true, name: true, itemType: true, linearDensityDen: true } });
+    const yarn = await prisma.item.findUnique({ where: { id: r.yarnItemId }, select: { id: true, name: true, itemType: true, linearDensityDen: true, yarnPurchaseUnit: true } });
     if (!yarn) throw AppError.badRequest("Değişim ipliği bulunamadı.");
     if (yarn.itemType !== ItemType.YARN) throw AppError.badRequest(`"${yarn.name}" bir İPLİK kalemi değil.`);
-    if (yarn.linearDensityDen === null) throw AppError.badRequest(`"${yarn.name}" kaleminin denye değeri boş — kalem kartından girin.`);
+    assertWeftYarnDenier(yarn);
     await assertItemUsable(prisma, yarn.id, "DEFINITION");
   }
 }
