@@ -13,12 +13,15 @@ const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 const ZERO = D(0);
 
 export type DenierDeviationStatus = "SUGGEST" | "WITHIN_THRESHOLD" | "INSUFFICIENT";
+export type DenierTareSource = "WEIGHED" | "BODY";
 
 /** Bir tartılı sarımın hesaba giren gerçekleri (WOUND + kırılım). */
 export interface DenierSampleBeam {
   lengthM: Prisma.Decimal;
   grossKg: Prisma.Decimal;
   tareKg: Prisma.Decimal;
+  /** F6: dara kaynağı — `WEIGHED` kabulde tartılan, `BODY` sarımın darası boş, gövde kartındaki dara (yedek). */
+  tareSource?: DenierTareSource;
   yarns: ReadonlyArray<{ yarnItemId: string; endsCount: number; denier: Prisma.Decimal; theoreticalKg: Prisma.Decimal }>;
 }
 
@@ -29,6 +32,8 @@ export interface DenierDeviationRow {
   code: string;
   name: string;
   beamCount: number;
+  /** F6: darası gövde kartından alınan sarım sayısı (0 = hepsi kabulde tartılmış dara). */
+  bodyTareBeamCount: number;
   lengthM: string;
   nominalKg: string;
   weighedNetKg: string;
@@ -49,6 +54,7 @@ export interface DenierDeviationRow {
 
 export interface DenierDeviationMixed {
   beamCount: number;
+  bodyTareBeamCount: number;
   lengthM: string;
   nominalKg: string;
   weighedNetKg: string;
@@ -68,15 +74,17 @@ export function computeDenierDeviation(
   cards: ReadonlyMap<string, DenierYarnCard>,
   opts: { minBeams: number; thresholdPct: number },
 ): DenierDeviationResult {
-  type Acc = { beamCount: number; lengthM: Prisma.Decimal; nominal: Prisma.Decimal; net: Prisma.Decimal; endsM: Prisma.Decimal; deniers: Set<string> };
+  type Acc = { beamCount: number; bodyTare: number; lengthM: Prisma.Decimal; nominal: Prisma.Decimal; net: Prisma.Decimal; endsM: Prisma.Decimal; deniers: Set<string> };
   const byYarn = new Map<string, Acc>();
-  const mixed = { beamCount: 0, lengthM: ZERO, nominal: ZERO, net: ZERO, yarns: new Set<string>() };
+  const mixed = { beamCount: 0, bodyTare: 0, lengthM: ZERO, nominal: ZERO, net: ZERO, yarns: new Set<string>() };
   for (const b of beams) {
     if (b.yarns.length === 0) continue;
     const net = b.grossKg.minus(b.tareKg);
     const nominal = b.yarns.reduce((s, y) => s.plus(y.theoreticalKg), ZERO);
+    const bodyTare = b.tareSource === "BODY" ? 1 : 0;
     if (b.yarns.length > 1) {
       mixed.beamCount += 1;
+      mixed.bodyTare += bodyTare;
       mixed.lengthM = mixed.lengthM.plus(b.lengthM);
       mixed.nominal = mixed.nominal.plus(nominal);
       mixed.net = mixed.net.plus(net);
@@ -84,8 +92,9 @@ export function computeDenierDeviation(
       continue;
     }
     const y = b.yarns[0]!;
-    const a = byYarn.get(y.yarnItemId) ?? { beamCount: 0, lengthM: ZERO, nominal: ZERO, net: ZERO, endsM: ZERO, deniers: new Set<string>() };
+    const a = byYarn.get(y.yarnItemId) ?? { beamCount: 0, bodyTare: 0, lengthM: ZERO, nominal: ZERO, net: ZERO, endsM: ZERO, deniers: new Set<string>() };
     a.beamCount += 1;
+    a.bodyTare += bodyTare;
     a.lengthM = a.lengthM.plus(b.lengthM);
     a.nominal = a.nominal.plus(nominal);
     a.net = a.net.plus(net);
@@ -110,6 +119,7 @@ export function computeDenierDeviation(
       code: card?.code ?? "",
       name: card?.name ?? "",
       beamCount: a.beamCount,
+      bodyTareBeamCount: a.bodyTare,
       lengthM: kg(a.lengthM),
       nominalKg: kg(a.nominal),
       weighedNetKg: kg(a.net),
@@ -127,6 +137,7 @@ export function computeDenierDeviation(
     rows,
     mixed: mixed.beamCount === 0 ? null : {
       beamCount: mixed.beamCount,
+      bodyTareBeamCount: mixed.bodyTare,
       lengthM: kg(mixed.lengthM),
       nominalKg: kg(mixed.nominal),
       weighedNetKg: kg(mixed.net),

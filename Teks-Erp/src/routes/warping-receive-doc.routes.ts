@@ -16,6 +16,7 @@ import { qtyText } from "../services/helpers/qty-text.helper";
 import { WARPING_RECEIVE_MAX_BEAMS } from "../services/warping-order/receive-core";
 import { createWarpingReceiveDoc, previewWarpingReceiveDoc, WARPING_RECEIVE_DOC_MAX_ORDERS } from "../services/warping-order/receive-doc";
 import { getDeliveryNoteGroup, getWarpingReceiveDoc, listWarpingReceiveDocs } from "../services/warping-order/receive-doc-read";
+import { cancelWarpingReceiveDoc, previewCancelWarpingReceiveDoc } from "../services/warping-order/receive-doc-cancel";
 import { DeliveryNoteNo, ReceiveBeamLine, ReceiveId } from "./warping-receive.schemas";
 import "../types/express-augment";
 
@@ -160,6 +161,44 @@ router.get("/by-delivery-note", requirePermission("warping-order:read"), wrap(as
 router.get("/:id", requireAnyPermission("warping-order:read", ...MOBILE_DEVERE_KABUL), wrap(async (req) => {
   const id = parse(ReceiveId, req.params.id);
   return { status: 200, body: { success: true, data: await getWarpingReceiveDoc(id) } };
+}));
+
+const CancelBody = z.strictObject({ reason: z.string().trim().min(3, "İptal sebebi en az 3 karakter").max(300, "İptal sebebi en çok 300 karakter") });
+
+/**
+ * @openapi
+ * /api/warping-receive-docs/{id}/cancel-preview:
+ *   get:
+ *     tags: [WarpingOrder]
+ *     summary: Kabul belgesi stornosu önizlemesi (E6) — etkilenen her sipariş/levent, serbest kalacak iplik, engeller (LIFO, faturalı, ret, HAZIR olmayan levent); yazmaz
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: "{ success, data: WarpingReceiveDocCancelPreview }" }
+ *       404: { description: WARPING_RECEIVE_DOC_NOT_FOUND }
+ * /api/warping-receive-docs/{id}/cancel:
+ *   post:
+ *     tags: [WarpingOrder]
+ *     summary: Kabul belgesi stornosu (E6) — belgenin canlı bütün kabulleri tek işlemde WOUND_CANCEL; bir engel varsa hiçbiri geri alınmaz
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     requestBody: { required: true, content: { application/json: { schema: { type: object, required: [reason], properties: { reason: { type: string, minLength: 3, maxLength: 300 } } } } } }
+ *     responses:
+ *       200: { description: Geri alındı }
+ *       404: { description: WARPING_RECEIVE_DOC_NOT_FOUND }
+ *       409: { description: "WARPING_RECEIVE_DOC_NOT_OPEN · WARPING_RECEIPT_LIFO · WARPING_ORDER_COMPLETED · WARPING_RECEIPT_INVOICED · WARPING_RECEIPT_HAS_REJECTION · WARP_BEAM_STATE" }
+ */
+router.get("/:id/cancel-preview", requirePermission("warpbeam:cancel"), requireIplikEnabled, wrap(async (req) => {
+  const id = parse(ReceiveId, req.params.id);
+  return { status: 200, body: { success: true, data: await previewCancelWarpingReceiveDoc(id) } };
+}));
+
+router.post("/:id/cancel", requirePermission("warpbeam:cancel"), requireIplikEnabled, wrap(async (req) => {
+  const id = parse(ReceiveId, req.params.id);
+  const body = parse(CancelBody, req.body);
+  const data = await cancelWarpingReceiveDoc(id, body.reason, req.user!.userId);
+  const n = data.orders.reduce((s, o) => s + o.cancelledBeams.length, 0);
+  return { status: 200, body: { success: true, data, message: `${data.docNo}: ${data.orders.length} siparişte ${n} levent dönüşü geri alındı` } };
 }));
 
 export default router;

@@ -35,6 +35,8 @@ export interface BeamBodyTransitionPlan {
   to: BeamBodyStatus;
   toLabel: string;
   place: BeamBodyPlace;
+  /** Yalnız FULL_OUT'tan boş dönüşte: gövdeden ayrılan sarım (olaya yazılır). */
+  warpBeamId: string | null;
   warnings: string[];
 }
 
@@ -62,6 +64,7 @@ async function planTransition(db: Db, id: string, input: BeamBodyTransitionInput
   }
   const reason = input.reason?.trim() || null;
   const warnings: string[] = [];
+  let warpBeamId: string | null = null;
   let place: BeamBodyPlace = { warehouseId: null, subcontractorId: null, machineId: null };
   switch (input.kind) {
     case "SHIP_EMPTY":
@@ -71,6 +74,13 @@ async function planTransition(db: Db, id: string, input: BeamBodyTransitionInput
       place = { ...place, subcontractorId: input.subcontractorId };
       break;
     case "RETURN_EMPTY":
+      if (body.status === BeamBodyStatus.FULL_OUT) {
+        if (!reason || reason.length < 3) throw AppError.badRequest("Dolu dışarıdaki gövdenin boş dönüşünde sebep zorunlu (en az 3 karakter)", { code: "BEAM_BODY_RETURN_REASON_REQUIRED" });
+        if (!body.currentWarpBeam) throw AppError.conflict(`${body.bodyNo} üstünde sarım görünmüyor — boş dönüş yazılamaz`, { code: "BEAM_BODY_STATE", status: body.status });
+        warpBeamId = body.currentWarpBeam.id;
+        warnings.push(`${body.currentWarpBeam.beamNo} sarımı gövdeden ayrılır (dışarıda tükendi sayılır); sarımın kendi durumu değişmez.`);
+      }
+    // fallthrough
     case "MAINTENANCE_IN":
     case "MAINTENANCE_OUT":
       if (input.subcontractorId) throw AppError.badRequest("Bu harekette devereci seçilmez", { code: "BEAM_BODY_PLACE_INVALID" });
@@ -84,7 +94,7 @@ async function planTransition(db: Db, id: string, input: BeamBodyTransitionInput
       if (body.owner.kind !== "OURS") warnings.push(`${body.bodyNo} ${body.owner.customer?.name ?? "başka firma"} gövdesi — hurdaya ayırmadan önce sahibine haber verin.`);
       break;
   }
-  return { body, kind: input.kind, kindLabel: BEAM_BODY_EVENT_LABELS[input.kind], from: body.status, to: rule.to, toLabel: BEAM_BODY_STATUS_LABELS[rule.to], place, warnings };
+  return { body, kind: input.kind, kindLabel: BEAM_BODY_EVENT_LABELS[input.kind], from: body.status, to: rule.to, toLabel: BEAM_BODY_STATUS_LABELS[rule.to], place, warpBeamId, warnings };
 }
 
 export async function previewBeamBodyTransition(id: string, input: BeamBodyTransitionInput): Promise<BeamBodyTransitionPlan> {
@@ -97,10 +107,10 @@ export async function applyBeamBodyTransition(id: string, input: BeamBodyTransit
   const out = await prisma.$transaction(async (tx) => {
     // Claim (helper) tx'in ilk YAZISI; plan okuması claim'in beklenen durumunu verir — araya giren geçiş 409 alır.
     const plan = await planTransition(tx, id, input);
-    const ev = await transitionBeamBodyTx(tx, { bodyId: id, kind: input.kind, from: plan.from, to: plan.to, place: plan.place, reason: input.reason?.trim() || null, userId });
+    const ev = await transitionBeamBodyTx(tx, { bodyId: id, kind: input.kind, from: plan.from, to: plan.to, place: plan.place, warpBeamId: plan.warpBeamId, reason: input.reason?.trim() || null, userId });
     return { plan, ev };
   });
-  await logBeamBodyEventAudit({ userId, eventId: out.ev.id, kind: input.kind, data: { bodyId: id, bodyNo: out.plan.body.bodyNo, fromStatus: out.plan.from, toStatus: out.plan.to, ...out.plan.place, reason: input.reason ?? null } });
+  await logBeamBodyEventAudit({ userId, eventId: out.ev.id, kind: input.kind, data: { bodyId: id, bodyNo: out.plan.body.bodyNo, fromStatus: out.plan.from, toStatus: out.plan.to, ...out.plan.place, warpBeamId: out.plan.warpBeamId, reason: input.reason ?? null } });
   return { body: await loadBeamBodyDto(prisma, id), warnings: out.plan.warnings };
 }
 

@@ -106,7 +106,9 @@ export interface WarpingReceivePreview {
 export interface WarpingReceiptCancelPreview {
   receiptKey: string;
   orderStatus: WarpingOrderStatus;
-  beams: Array<{ id: string; beamNo: string; status: string; lengthM: string | null; cancellable: boolean; blocker: string | null }>;
+  /** Henüz geri alınmamış levent sayısı (eski backend göndermez). */
+  liveBeamCount?: number;
+  beams: Array<{ id: string; beamNo: string; status: string; lengthM: string | null; live?: boolean; cancellable: boolean; blocker: string | null }>;
   released: Array<{ dispatchItemId: string; dispatchNo: string; yarnItemId: string; holderWarpingOrderId: string; kg: string }>;
   blockers: string[];
   reasonRequired: true;

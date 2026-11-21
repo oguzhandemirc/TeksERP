@@ -86,7 +86,9 @@ export const BEAM_BODY_OWNER_RETURN_DUE_WHERE = {
  */
 export const BEAM_BODY_MANUAL_TRANSITIONS = {
   SHIP_EMPTY: { from: [BeamBodyStatus.EMPTY_STOCK], to: BeamBodyStatus.AT_SUBCONTRACTOR },
-  RETURN_EMPTY: { from: [BeamBodyStatus.AT_SUBCONTRACTOR], to: BeamBodyStatus.EMPTY_STOCK },
+  // Devere ek P: FULL_OUT (sarımla fason dokumacıya/sahibine gitmiş) gövde boş döner — sarım orada tükendi; olay
+  // sarımı taşır (geri alma gövdeyi aynı sarımla "Dolu dışarıda"ya döndürür), sebep zorunlu.
+  RETURN_EMPTY: { from: [BeamBodyStatus.AT_SUBCONTRACTOR, BeamBodyStatus.FULL_OUT], to: BeamBodyStatus.EMPTY_STOCK },
   MAINTENANCE_IN: { from: [BeamBodyStatus.EMPTY_STOCK], to: BeamBodyStatus.MAINTENANCE },
   MAINTENANCE_OUT: { from: [BeamBodyStatus.MAINTENANCE], to: BeamBodyStatus.EMPTY_STOCK },
   SCRAP: { from: [BeamBodyStatus.EMPTY_STOCK, BeamBodyStatus.MAINTENANCE], to: BeamBodyStatus.SCRAPPED },
@@ -102,6 +104,9 @@ export const BEAM_BODY_DISPATCH_MAX = 50;
 /** Sarım türlü olaylar (B3): olay satırı `warpBeamId` taşır — CHECK `beam_body_events_warp_ck` ile aynı küme (tersleri dahil). */
 export const BEAM_BODY_WARP_KINDS = ["FILLED", "MOUNTED", "DISMOUNTED", "EMPTIED", "SHIPPED_FULL", "RETURNED_FULL"] as const satisfies readonly BeamBodyForwardKind[];
 export type BeamBodyWarpKind = (typeof BEAM_BODY_WARP_KINDS)[number];
+
+/** Sarımı İSTEĞE BAĞLI taşıyan elle türler (devere ek P: FULL_OUT'tan boş dönüş) — CHECK `beam_body_events_warp_allowed_ck`. */
+export const BEAM_BODY_WARP_OPTIONAL_KINDS = ["RETURN_EMPTY"] as const satisfies readonly BeamBodyForwardKind[];
 
 /** Üstünde sarım olan gövde durumları — CHECK `beam_bodies_current_warp_ck` (currentWarpBeamId dolu ⇔ bu küme). */
 export const BEAM_BODY_FULL_STATUSES: readonly BeamBodyStatus[] = [BeamBodyStatus.FULL_STOCK, BeamBodyStatus.MOUNTED, BeamBodyStatus.FULL_OUT];
