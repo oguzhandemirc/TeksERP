@@ -159,6 +159,21 @@ export function docFingerprint(body: ReceiveDocFields): string {
   return JSON.stringify(body);
 }
 
+/**
+ * Önizleme satır adı. Sunucu önizlemesi gövdesiz satırın elle yazılan gövde no'sunu döndürmez; gönderilen gövdeden
+ * (aynı sıra) okunur — yoksa operatör yazdığı no yerine "gövdesiz" görür.
+ */
+export function previewBeamName(
+  sent: ReceiveDocFields | null,
+  orderId: string,
+  index: number,
+  body: { bodyNo: string | null; isNew: boolean } | null,
+): string {
+  if (body?.bodyNo) return `${body.bodyNo}${body.isNew ? ' (yeni gövde)' : ''}`;
+  const no = sent?.orders.find((o) => o.warpingOrderId === orderId)?.beams[index]?.physicalBeamNo?.trim();
+  return no ? `${no} (gövdesiz)` : 'gövdesiz';
+}
+
 /** "3/4 levent" — beklenen bilinmiyorsa yalnız sayı. */
 export function progressText(drafted: number, remaining: number | null): string {
   return remaining === null ? `${drafted} levent` : `${drafted}/${remaining} levent`;

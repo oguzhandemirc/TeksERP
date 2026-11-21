@@ -100,3 +100,15 @@ describe('api.ts — Zod 400 gövdesinin alan mesajları korunur', () => {
     expect(c.validationErrors).toBeUndefined();
   });
 });
+
+describe('api.ts — metin yanıtlı uçta (etiket HTML) backend zarfı çözülür', () => {
+  it('400 JSON metni → sunucunun Türkçe mesajı + details; 500 JSON metni vekil sayılmaz', async () => {
+    const msg = 'Levent etiket şablonu tanımlı değil';
+    const e = await post(failWith(400, JSON.stringify({ success: false, message: msg, details: { code: 'LABEL_TEMPLATE_MISSING' } })));
+    expect(e.message).toBe(msg);
+    expect(e.details).toEqual({ code: 'LABEL_TEMPLATE_MISSING' });
+    const s = await post(failWith(500, JSON.stringify({ success: false, message: 'İç hata' })));
+    expect(s.transient).not.toBe('gateway');
+    expect(s.message).toBe('İç hata');
+  });
+});
