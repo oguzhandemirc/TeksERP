@@ -52,7 +52,7 @@ describe("nav-subgroups — süreç sırası (kullanıcı kararı)", () => {
     expect(labels("/production").slice(1, 2)).toEqual(["Dokuma"]);
     expect(labels("/production").slice(-2)).toEqual(["Kurşun", "Fason"]);
     const devere = layoutSubgroups("/production", HOME["/production"]!, ctx(), POOL)[0]!;
-    expect(devere.items.map((t) => t.to)).toEqual(["/operations/fason-devere", "/operations/cozgu-hesabi", "/operations/warp-beams", "/definitions/beam-bodies", "/operations/fasondaki-iplik", "/reports/dokuma/denye-sapma"]);
+    expect(devere.items.map((t) => t.to)).toEqual(["/operations/fason-devere", "/operations/cozgu-hesabi", "/definitions/beam-bodies", "/operations/warp-beams", "/operations/fasondaki-iplik", "/reports/dokuma/denye-sapma"]);
   });
 
   it("Depo: mal kabul önce, sayım/transfer sonda; Fasondaki İplik İplik grubunda", () => {

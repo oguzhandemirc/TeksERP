@@ -35,7 +35,8 @@ export const NAV_SUBGROUPS: Readonly<Record<string, readonly NavSubgroupDef[]>> 
     { key: "sayim-transfer", label: "Sayım ve Transfer", paths: [OPS("stock-counts"), OPS("warehouse-transfers")] },
   ],
   "/production": [
-    { key: "devere", label: "Devere / Çözgü", paths: [OPS("fason-devere"), OPS("cozgu-hesabi"), OPS("warp-beams"), "/definitions/beam-bodies", OPS("fasondaki-iplik"), "/reports/dokuma/denye-sapma"] },
+    // Devere: planla (sipariş, hesap) → yürüt (gövde iplikle gider, levent dolu döner) → izle (fasonda iplik, denye).
+    { key: "devere", label: "Devere / Çözgü", paths: [OPS("fason-devere"), OPS("cozgu-hesabi"), "/definitions/beam-bodies", OPS("warp-beams"), OPS("fasondaki-iplik"), "/reports/dokuma/denye-sapma"] },
     {
       key: "dokuma",
       // Dokumasız profilde (Gülkesim) grupta yalnız "Makine Duruşları" kalır — başlık da onu anlatır.
