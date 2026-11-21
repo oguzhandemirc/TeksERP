@@ -397,6 +397,8 @@ const mobile: ScreenEntry[] = [
   { key: "Dokuma", app: "mobile", modul: "dokumaEnabled", title: TERIM_AD.tezgahEkrani, requires: ["mobile:dokuma"], capabilities: [{ code: "mobile:dokuma-geri-al", label: "Top indirmeyi, koşumu ve duruşu geri alabilir" }] },
   // Tablet LEVENT SARIM ekranı (2026-09-14, DEVERE-LEVENT-TARAMASI §11): plan · sar · taslak sil; iptal yetenek.
   { key: "Devere", app: "mobile", modul: "devereEnabled", title: "Levent Sarım", requires: ["mobile:devere"], capabilities: [{ code: "mobile:devere-iptal", label: "Sarımı iptal edebilir (iplik defterine ters satır)" }] },
+  // Devere ek M1 (2026-11-21): depoda devere dönüş kabulü — gövde QR, metre, tartı; panelle aynı kabul belgesi (oturumsuz).
+  { key: "DevereKabul", app: "mobile", modul: "devereEnabled", title: "Devere Dönüş Kabulü", requires: ["mobile:devere-kabul"], capabilities: [] },
   // Tezgah alarmı A3: usta/amir telefonu + tablet — aktif alarmlar, üstlen/sustur/not, alarm sayfası, yerel bildirim.
   { key: "Uyarilar", app: "mobile", modul: "tezgahEnabled", title: TERIM_AD.tezgahAlarmlari, requires: ["mobile:tezgah-uyari"], capabilities: [] },
   // G2t (2026-09-14): fason dokuma kabulü — aynı izin ikinci ekranda (levent dönüşü + top kabulü; sevk/iptal panelden).
@@ -488,9 +490,6 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   // çağırır; `loom:*` web kodları panelsiz kalır — panel doff yüzeyi yok, kod API/entegrasyon için.
   { code: "loom:doff", reason: "Panel doff yüzeyi yok; tablet `mobile:dokuma` ile kaydeder — web kodu API/entegrasyon için." },
   { code: "loom:doff-revoke", reason: "Panel geri alma yüzeyi yok; tablet `mobile:dokuma-geri-al` ile — web kodu API/entegrasyon için." },
-  // Devere ek D1 (2026-11-21): tablet dönüş kabulü uçları backend'de doğdu; "Devere Dönüş Kabulü" tablet ekranı M1
-  // diliminde — ekran SCREEN_CATALOG'a girince bu satır ölü muaf olur ve bekçi kırmızı verir (silinmesi M1'in işi).
-  { code: "mobile:devere-kabul", reason: "Tablet ekranı (DevereKabul) M1 diliminde; uçlar hazır — ekranla birlikte buradan silinir." },
   // Devere ek B1 (2026-11-20): gövde envanteri backend'de doğdu; "Levent Gövdeleri" ekranı B4 diliminde — ekranla ölü muaf olur.
   // Tezgah künyesi + gölge mod (B3, 2026-09-14): "Devreye Alma" ekranı AYRI dilim (Faz 2 ingest ile, `tezgah.enabled`).
 ];

@@ -578,7 +578,8 @@ router.post(
 // şablon atanmamışsa ya da kimlik alanını (machineCode / beamNo) bağlamıyorsa 400.
 // `copies` 1-200 (toplu rulo basımı), üstü 400 `LABEL_COPIES_RANGE`. Yeni izin kodu YOK.
 const MACHINE_LABEL_READ = requireAnyPermission("label:read", "station:read");
-const WARP_BEAM_LABEL_READ = requireAnyPermission("label:read", "warpbeam:read", "mobile:devere");
+// Devere ek M1: tablet dönüş kabulü (depo) kabul ettiği leventin etiketini basar — okuma + baskı izi `mobile:devere-kabul` ile de açık.
+const WARP_BEAM_LABEL_READ = requireAnyPermission("label:read", "warpbeam:read", "mobile:devere", "mobile:devere-kabul");
 
 /**
  * @openapi
@@ -737,7 +738,7 @@ router.get("/warp-beams/:id/native", verifyToken, WARP_BEAM_LABEL_READ, controll
 router.post(
   "/warp-beams/:id/print-event",
   verifyToken,
-  requireAnyPermission("label:print", "mobile:devere"),
+  requireAnyPermission("label:print", "mobile:devere", "mobile:devere-kabul"),
   controller.recordWarpBeamPrintEvent,
 );
 

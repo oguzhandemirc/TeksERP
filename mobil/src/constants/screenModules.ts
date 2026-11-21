@@ -37,6 +37,8 @@ export const SCREEN_MODULE: Partial<Record<MobileScreenKey, MobileModuleFlag>> =
   Dokuma: 'dokumaEnabled',
   // Tablet LEVENT SARIM ekranı (2026-09-14, §11) — devere modülü; üretim zincirine BAĞLI DEĞİL.
   Devere: 'devereEnabled',
+  // Devere Dönüş Kabulü (devere ek M1) — devere modülü; backend kabul belgesi uçlarının modül kapısıyla aynı anahtar.
+  DevereKabul: 'devereEnabled',
   // Tablet FASON DOKUMA KABUL ekranı (G2t, 2026-09-14) — dokuma modülü; oturumsuz.
   FasonDokuma: 'dokumaEnabled',
   // Uyarılar (tezgah alarmı A3) — tezgah izleme modülü; backend `requireTezgahEnabled` ile aynı zincir.

@@ -92,6 +92,7 @@ export const MENU_PRESETS: readonly MenuPreset[] = [
       { key: "KK1", reason: "Ham giriş yok — toplar gelen belgeden doğar." },
       { key: "Dokuma", reason: DOKUMA_YOK },
       { key: "Devere", reason: DOKUMA_YOK },
+      { key: "DevereKabul", reason: DOKUMA_YOK },
       { key: "FasonDokuma", reason: DOKUMA_YOK },
       { key: "FasonSevk", reason: "Dışarıya fasona mal gönderilmiyor." },
       { key: "FasonKabul", reason: "Dışarıdan fason dönüşü kabul edilmiyor." },
