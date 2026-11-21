@@ -89,7 +89,9 @@ describe('receiveDocPayload — devere dönüş kabulü (M1)', () => {
     expect(progressText(3, 4)).toBe('3/4 levent');
     expect(progressText(2, null)).toBe('2 levent');
   });
+});
 
+describe('receiveDocPayload — önizleme satır adı', () => {
   it('önizleme satır adı: gövde no > gönderilen elle no > gövdesiz', () => {
     const sent = { subcontractorId: 's1', deliveryNoteNo: null, orders: [{ warpingOrderId: 'o1', beams: [{ lengthM: 1480, physicalBeamNo: ' TEST-G1 ' }, { lengthM: 1500, physicalBeamNo: null }] }] };
     expect(previewBeamName(sent, 'o1', 0, { bodyNo: 'LG-1', isNew: true })).toBe('LG-1 (yeni gövde)');
