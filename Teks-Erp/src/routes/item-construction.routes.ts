@@ -16,6 +16,7 @@ import {
   replaceItemWarpLayers,
   replaceRecipeWeftOverrides,
 } from "../services/item-construction.service";
+import { renderWeaveCard } from "../services/weave-card.service";
 
 const router = Router();
 router.use(verifyToken, requireDokumaEnabled);
@@ -60,6 +61,24 @@ router.get("/:itemId", requirePermission("warpspec:read"), wrap(async (req, res)
   const { itemId } = itemParam.parse(req.params);
   const { recipeId } = constructionQuery.parse(req.query);
   res.status(200).json({ success: true, data: await getEffectiveConstruction(itemId, recipeId) });
+}));
+
+/**
+ * @openapi
+ * /api/item-construction/{itemId}/card-html:
+ *   get:
+ *     tags: [ItemConstruction]
+ *     summary: Desen kartı A4 basımı (armür + döner çerçeve + atkı seçici + iplikler + sıklık + varyantlar)
+ *     description: ANLIK iç belge; donmaz, numara almaz. Basım izini panel `printTracked` ile yazar.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: itemId, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: "`{ html }`" }
+ *       404: { description: Ürün yok }
+ */
+router.get("/:itemId/card-html", requirePermission("warpspec:read"), wrap(async (req, res) => {
+  const { itemId } = itemParam.parse(req.params);
+  res.status(200).json({ success: true, data: { html: await renderWeaveCard(itemId) } });
 }));
 
 /**
