@@ -85,6 +85,16 @@ export const makeItemFormSchema = (isEdit: boolean) =>
         .refine((v) => v === "" || /^\d+([.,]\d{1,2})?$/.test(v), "İplik firesi sayı olmalı (en fazla 2 ondalık)")
         .refine((v) => v === "" || Number(v.replace(",", ".")) <= 50, "İplik firesi en fazla %50 olabilir"),
     ),
+    /** SY-a: satın alma birimi (yalnız İPLİK; KG = bugünkü) + metredeki adet Decimal(10,3), yalnız ADET. */
+    yarnPurchaseUnit: z.enum(["KG", "ADET", "METRE"]),
+    yarnPiecesPerM: acceptNumberAsText(
+      z
+        .string()
+        .trim()
+        .refine((v) => v === "" || /^\d+([.,]\d{1,3})?$/.test(v), "Metredeki adet sayı olmalı (en fazla 3 ondalık)")
+        .refine((v) => v === "" || Number(v.replace(",", ".")) > 0, "Metredeki adet sıfırdan büyük olmalı")
+        .refine((v) => v === "" || Number(v.replace(",", ".")) < 10_000_000, "Metredeki adet çok büyük"),
+    ),
     /** Dokuma ayrıntıları (yalnız KUMAŞ): ham en Decimal(6,2), gramajlar Decimal(7,2). */
     rawWidthCm: positiveDecimalText("Ham en", 10_000),
     rawGsm: positiveDecimalText("Ham gramaj", 100_000),
@@ -107,6 +117,8 @@ export const itemFormDefaults: ItemFormValues = {
   unit: "MT",
   linearDensityDen: "",
   yarnWastePct: "",
+  yarnPurchaseUnit: "KG",
+  yarnPiecesPerM: "",
   widthCm: "",
   rawWidthCm: "",
   rawGsm: "",

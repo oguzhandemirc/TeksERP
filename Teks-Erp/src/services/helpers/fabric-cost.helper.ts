@@ -13,6 +13,7 @@ import { theoreticalMPerHourDecimal } from "./dokuma-levent-rapor.helper";
 import { ratePerM, type FinishingKgBasis, type RateContext } from "./fabric-cost-kg.helper";
 import { fastestGroupTakeUpPct } from "./warp-layer-beam.helper";
 import { resolveYarnWastePct, type YarnWasteSource } from "./yarn-waste.helper";
+import type { NonKgYarnUnit } from "../../constants/yarn-unit";
 import type {
   CostComponent, CostInput, CostLine, CostMissing, CostOutcome, CostPrice, CostResult, CostSource, CostWarning,
   CostWarp, CostWarpLayer, CostWarpYarn, CostWeftYarn, CostYarn, FxRates, Sourced,
@@ -101,8 +102,16 @@ function warpKgs(input: CostInput, c: Collector): { kg: Dec; net: Dec; groundKg:
   return { kg: out.reduce((a, l) => a.plus(l.kg), ground.kg), net, groundKg: ground.kg, groundYarns: ground.perYarn, takeUp: ground.takeUp, layers: out };
 }
 
-/** Kⱼ = p × 100 × W × sⱼ × dⱼ / 9 000 000 / (1 − fᵃ), sⱼ = picksInRepeat / Σ — kg/m. */
-function weftKgs(input: CostInput, c: Collector): { picksPerCm: Dec; perYarn: Array<{ yarn: CostWeftYarn; kg: Dec; net: Dec; wasteSource: YarnWasteSource }> } | null {
+type WeftKgYarn = { yarn: CostWeftYarn; kg: Dec; net: Dec; wasteSource: YarnWasteSource };
+/** SY-a: KG dışı birimli atkı ipliği — `qty` metre başına birim miktarı (METRE: m/m · ADET: adet/m). */
+type WeftUnitYarn = { yarn: CostWeftYarn; unit: NonKgYarnUnit; qty: Dec };
+
+/**
+ * Kⱼ = p × 100 × W × sⱼ × dⱼ / 9 000 000 / (1 − fᵃ), sⱼ = picksInRepeat / Σ — kg/m.
+ * SY-a: KG dışı iplik denye istemez; iplik boyu Lⱼ = p × 100 × W × sⱼ / (1 − fᵃ) (ADET'te × adet/m) ve
+ * `perYarn`a (kg kümesi) GİRMEZ; `rows` kart sırasıyla iki türü birlikte taşır.
+ */
+function weftKgs(input: CostInput, c: Collector, requirePieces = true): { picksPerCm: Dec; perYarn: WeftKgYarn[]; rows: Array<WeftKgYarn | WeftUnitYarn> } | null {
   const w = input.weft;
   if (!w) {
     c.missing.add("WEFT_SPEC_MISSING");
@@ -116,15 +125,22 @@ function weftKgs(input: CostInput, c: Collector): { picksPerCm: Dec; perYarn: Ar
   const f = chainNeeded ? c.take(w.wastePct, "PARAMETER_SET_MISSING") : w.wastePct.value;
   const total = w.yarns.reduce((a, y) => a + y.picksInRepeat, 0);
   if (total <= 0) c.missing.add("WEFT_SPEC_MISSING");
-  const deniers = w.yarns.map((y) => c.take(y.denier, "DENIER_MISSING"));
-  if (p === null || !p.gt(0) || lengthCm === null || (chainNeeded && f === null) || total <= 0 || deniers.some((d) => d === null)) return null;
+  const deniers = w.yarns.map((y) => (y.unit ? null : c.take(y.denier, "DENIER_MISSING")));
+  const pieces = w.yarns.map((y) => (y.unit !== "ADET" ? null : y.piecesPerM?.gt(0) ? y.piecesPerM : (requirePieces && c.missing.add("YARN_PIECES_MISSING"), null)));
+  const yarnGap = w.yarns.some((y, i) => (y.unit ? requirePieces && y.unit === "ADET" && pieces[i] === null : deniers[i] === null));
+  if (p === null || !p.gt(0) || lengthCm === null || (chainNeeded && f === null) || total <= 0 || yarnGap) return null;
   const weftMPerM = p.mul(HUNDRED).mul(lengthCm.div(HUNDRED));
-  const perYarn = w.yarns.map((yarn, i) => {
-    const net = yarnKgFromLengthExact(weftMPerM.mul(D(yarn.picksInRepeat).div(total)), deniers[i]!);
+  const rows = w.yarns.map((yarn, i): WeftKgYarn | WeftUnitYarn => {
+    const lengthM = weftMPerM.mul(D(yarn.picksInRepeat).div(total));
     const ws = resolveYarnWastePct(yarn.wastePct, { value: f, source: w.wastePct.source });
+    if (yarn.unit) {
+      const m = lengthM.div(ONE.minus(pct(ws.value!)));
+      return { yarn, unit: yarn.unit, qty: pieces[i] ? m.mul(pieces[i]!) : m };
+    }
+    const net = yarnKgFromLengthExact(lengthM, deniers[i]!);
     return { yarn, kg: net.div(ONE.minus(pct(ws.value!))), net, wasteSource: ws.source };
   });
-  return { picksPerCm: p, perYarn };
+  return { picksPerCm: p, perYarn: rows.filter((r): r is WeftKgYarn => !("unit" in r)), rows };
 }
 
 /** Fire payları 0'a çekilmiş girdi — AYNI formülden net (firesiz) kg/m; kaynak etiketi korunur. */
@@ -143,7 +159,7 @@ function withoutYarnWaste(input: CostInput): CostInput {
 type UsageYarn = { yarnItemId: string | null; kgPerM: Dec; wasteSource: YarnWasteSource };
 const usageYarns = (p: WarpYarnKg[]): UsageYarn[] => p.map((y) => ({ yarnItemId: y.yarn.yarnItemId, kgPerM: y.kg, wasteSource: y.wasteSource }));
 
-/** İplik tüketimi (kg/m; MAL-7 fiyat istemez). `includeWaste: false` = firesiz net kumaş (gramaj); varsayılan fireli. */
+/** İplik tüketimi (kg/m; MAL-7 fiyat istemez). KG dışı birimli atkı ipliği (SY-a) listede YOK — kg defterine girmez. `includeWaste: false` = firesiz net kumaş (gramaj); varsayılan fireli. */
 export function yarnUsagePerM(input: CostInput, opts: { includeWaste?: boolean } = {}): {
   missing: CostMissing[];
   /** `wasteSource` (SY-3 I2): `IPLIK` = iplik kartı firesi, `KART` = çözgü/atkı fire zinciri. */
@@ -157,7 +173,8 @@ export function yarnUsagePerM(input: CostInput, opts: { includeWaste?: boolean }
   const c = new Collector();
   const warp = warpKg(input.warp, c);
   const layers = (input.warpLayers ?? []).map((l) => ({ l, r: warpKg(l, c) }));
-  const weft = weftKgs(input, c);
+  // SY-a: kg sorusu adet/m istemez (KG dışı iplik zaten bu listeye girmez).
+  const weft = weftKgs(input, c, false);
   return {
     missing: [...c.missing].sort(),
     warp: warp && input.warp ? { yarnItemId: input.warp.yarn.yarnItemId, kgPerM: warp.kg, wasteSource: warp.wasteSource, yarns: usageYarns(warp.perYarn) } : null,
@@ -246,9 +263,10 @@ function yarnLines(input: CostInput, fx: FxRates, kg: { warp: ReturnType<typeof 
   for (const [i, l] of (input.warpLayers ?? []).entries()) warpYarnLines(l, `Çözgü (${WARP_LAYER_ROLE_LABEL[l.role]})`, warp?.layers[i]?.perYarn);
   for (const [i, y] of (input.weft?.yarns ?? []).entries()) {
     const p = toTry(y.price, fx, c);
-    const kg = weft?.perYarn[i]?.kg;
+    const r = weft?.rows[i];
     if (p === null) ok = false;
-    else if (kg) out.push(line("WEFT_YARN", `Atkı — ${y.name}`, kg.mul(p), { yarnItemId: y.yarnItemId, qty: kg, qtyUnit: "kg", unitPriceTry: p }));
+    else if (r && "unit" in r) out.push(line("WEFT_YARN", `Atkı — ${y.name}`, r.qty.mul(p), { yarnItemId: y.yarnItemId, qty: r.qty, qtyUnit: r.unit === "ADET" ? "adet" : "m", unitPriceTry: p }));
+    else if (r) out.push(line("WEFT_YARN", `Atkı — ${y.name}`, r.kg.mul(p), { yarnItemId: y.yarnItemId, qty: r.kg, qtyUnit: "kg", unitPriceTry: p }));
   }
   return ok ? out : null;
 }

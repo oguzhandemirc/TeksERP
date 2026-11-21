@@ -15,6 +15,7 @@ import { AuditService } from "./audit.service";
 import { assertItemUsable } from "./helpers/item-usage.helper";
 import { isUniqueViolation, parseDecimalField, parseTextField } from "./helpers/cost-input.helper";
 import { parseWeftSequence } from "./helpers/weft-sequence.helper";
+import { assertWeftYarnDenier } from "./helpers/yarn-unit.helper";
 import { findWeftOverrideOrphans, throwWeftOverrideOrphan } from "./helpers/effective-construction.helper";
 
 export const WEFT_SPEC_SELECT = {
@@ -58,7 +59,7 @@ function rejectUnknown(body: Record<string, unknown>): void {
   if (unknown.length > 0) throw AppError.badRequest(`Tanınmayan alan: ${unknown.join(", ")}`);
 }
 
-/** İplik satırları: her biri İPLİK + denyesi dolu + kullanılabilir; aynı iplik iki kez yazılmaz. */
+/** İplik satırları: her biri İPLİK + (kg birimliyse) denyesi dolu + kullanılabilir; aynı iplik iki kez yazılmaz. */
 async function parseYarns(raw: unknown, picksOptional: boolean): Promise<YarnLine[]> {
   if (!Array.isArray(raw)) throw AppError.badRequest("Atkı iplikleri bir liste olmalı.");
   const lines: YarnLine[] = raw.map((r, i) => {
@@ -73,13 +74,11 @@ async function parseYarns(raw: unknown, picksOptional: boolean): Promise<YarnLin
     throw AppError.badRequest("Aynı iplik atkı kartına iki kez yazılamaz — rapordaki adedini artırın.");
   }
   for (const l of lines) {
-    const item = await prisma.item.findUnique({ where: { id: l.yarnItemId }, select: { id: true, name: true, itemType: true, linearDensityDen: true } });
+    const item = await prisma.item.findUnique({ where: { id: l.yarnItemId }, select: { id: true, name: true, itemType: true, linearDensityDen: true, yarnPurchaseUnit: true } });
     if (!item) throw AppError.badRequest("Atkı ipliği bulunamadı.");
     if (item.itemType !== ItemType.YARN) throw AppError.badRequest(`"${item.name}" bir İPLİK kalemi değil — atkıya yalnız iplik seçilir.`);
     await assertItemUsable(prisma, item.id, "DEFINITION");
-    if (item.linearDensityDen === null) {
-      throw AppError.badRequest(`"${item.name}" kaleminin denye değeri boş — atkı ipliği kg hesabı denye olmadan yapılamaz; kalem kartından girin.`);
-    }
+    assertWeftYarnDenier(item);
   }
   return lines;
 }

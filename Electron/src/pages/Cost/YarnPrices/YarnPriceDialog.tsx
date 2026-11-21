@@ -9,14 +9,18 @@ import { ItemPickerModal } from "@/components/forms/ItemPickerModal";
 import type { Currency } from "@/pages/Finance/service";
 import { CurrencySelect } from "../shared/CurrencySelect";
 import { decToInput, toDecimalText } from "../shared/format";
-import { yarnPriceService, type YarnCostPrice } from "./service";
+import { yarnPriceService, yarnPriceUnitText, type YarnCostPrice, type YarnPriceUnit } from "./service";
+
+const UNIT_PRICE_LABEL: Record<YarnPriceUnit, string> = { KG: "kg", ADET: "adet", METRE: "metre" };
 import { YARN_NOTE_MAX } from "./schema";
 
 interface Props { open: boolean; onOpenChange: (o: boolean) => void; current?: YarnCostPrice | null }
 
 export function YarnPriceDialog({ open, onOpenChange, current }: Props) {
   const qc = useQueryClient();
-  const [yarn, setYarn] = useState<{ id: string; code: string; name: string } | null>(current?.yarnItem ?? null);
+  const [yarn, setYarn] = useState<{ id: string; code: string; name: string; yarnPurchaseUnit?: YarnPriceUnit | null } | null>(current?.yarnItem ?? null);
+  // SY-a: fiyat kartın satın alma birimi başınadır (sunucu yazımda dondurur); etiket buradan.
+  const unit: YarnPriceUnit = yarn?.yarnPurchaseUnit ?? "KG";
   const [pickerOpen, setPickerOpen] = useState(false);
   const [currency, setCurrency] = useState<Currency>(current?.currency ?? "TRY");
   const [price, setPrice] = useState(decToInput(current?.pricePerKg));
@@ -47,12 +51,12 @@ export function YarnPriceDialog({ open, onOpenChange, current }: Props) {
           </div>
           <div className="flex flex-wrap items-end gap-2">
             <label className="min-w-[10rem] flex-1">
-              <span className="text-muted-foreground">Fiyat (kg başına)</span>
+              <span className="text-muted-foreground">Fiyat ({UNIT_PRICE_LABEL[unit]} başına)</span>
               <Input className="mt-1 text-right tabular-nums" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} />
             </label>
             <CurrencySelect value={currency} onChange={setCurrency} />
           </div>
-          {current && <p className="text-xs text-muted-foreground">Şu anki fiyat: {decToInput(current.pricePerKg)} {current.currency}/kg</p>}
+          {current && <p className="text-xs text-muted-foreground">Şu anki fiyat: {decToInput(current.pricePerKg)} {yarnPriceUnitText(current.currency, current.unit)}</p>}
           <label>
             <span className="text-muted-foreground">Not</span>
             <Input className="mt-1" maxLength={YARN_NOTE_MAX} value={note} onChange={(e) => setNote(e.target.value)} />
@@ -63,7 +67,7 @@ export function YarnPriceDialog({ open, onOpenChange, current }: Props) {
           <Button disabled={!yarn || !priceText || save.isPending} onClick={() => save.mutate()}>Kaydet</Button>
         </DialogFooter>
       </DialogContent>
-      <ItemPickerModal open={pickerOpen} onOpenChange={setPickerOpen} allowedTypes={["YARN"]} onPick={(r) => { setYarn({ id: r.id, code: r.code, name: r.name }); setPickerOpen(false); }} />
+      <ItemPickerModal open={pickerOpen} onOpenChange={setPickerOpen} allowedTypes={["YARN"]} onPick={(r) => { setYarn({ id: r.id, code: r.code, name: r.name, yarnPurchaseUnit: r.yarnPurchaseUnit ?? null }); setPickerOpen(false); }} />
     </Dialog>
   );
 }

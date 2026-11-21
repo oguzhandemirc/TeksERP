@@ -16,6 +16,7 @@ const TARGETS: Record<string, MissingTarget> = {
   TAKEUP_MISSING: { kind: "link", to: "/definitions/warp-specs", label: "Çözgü kartı" },
   DENIER_MISSING: { kind: "link", to: "/definitions/items", label: "İplik kartı" },
   PICKS_MISSING: { kind: "link", to: "/definitions/items", label: "Atkı kartı" },
+  YARN_PIECES_MISSING: { kind: "link", to: "/definitions/items", label: "İplik kartı" },
 };
 
 export function missingTarget(code: string): MissingTarget | null {

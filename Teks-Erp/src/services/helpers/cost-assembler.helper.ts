@@ -20,6 +20,7 @@ import { readWarpLayersForItems, readWeftOverridesForRecipes, weftOverrideFor, t
 import { resolveFinishingRateCode } from "./finishing-rate-code.helper";
 import { layerOwnCardWastePct } from "./warp-layer-beam.helper";
 import { resolveLengthShrinkPct } from "./raw-need.helper";
+import { costYarnUnitFields, readNonKgYarnUnitsTx, type YarnUnitRow } from "./yarn-unit.helper";
 
 
 type Dec = Prisma.Decimal;
@@ -81,6 +82,8 @@ export interface CostSources {
   weftOverrides?: Map<string, Map<number, CostYarnRow>>;
   /** SY-3 I2: iplik kartı firesi DOLU olan iplikler (boş harita/yok = bugünkü girdi, bayt-aynı). */
   yarnWaste?: Map<string, Dec>;
+  /** SY-a: KG DIŞI birimli iplikler (yok = hepsi KG, girdi bayt-aynı). */
+  yarnUnits?: Map<string, YarnUnitRow>;
 }
 
 type Db = Prisma.TransactionClient;
@@ -114,6 +117,7 @@ async function loadSourcesTx(tx: Db, a: { itemIds: string[]; extraRateCodes: str
   }
   // SY-3 I2: iplik firesi ayrı, dar sorgu — etkin yapı seçimine (tablet yanıtları) kolon eklenmez.
   const wasteRows = yarnIds.size ? await tx.item.findMany({ where: { id: { in: [...yarnIds] }, yarnWastePct: { not: null } }, select: { id: true, yarnWastePct: true } }) : [];
+  const unitRows = yarnIds.size ? await readNonKgYarnUnitsTx(tx, [...yarnIds]) : [];
   const prices = yarnIds.size && a.withPrices ? await tx.yarnCostPrice.findMany({ where: { ...ACTIVE_YARN_COST_PRICE, yarnItemId: { in: [...yarnIds] } } }) : [];
   const rates = codes.size ? await tx.finishingRate.findMany({ where: { ...ACTIVE_FINISHING_RATE, code: { in: [...codes] } } }) : [];
   const weavingMethod = await readCostWeavingStandardMethod(tx);
@@ -131,6 +135,7 @@ async function loadSourcesTx(tx: Db, a: { itemIds: string[]; extraRateCodes: str
     warpLayers,
     ...(weftOverrides.size ? { weftOverrides } : {}),
     ...(wasteRows.length ? { yarnWaste: new Map(wasteRows.map((r) => [r.id, r.yarnWastePct!])) } : {}),
+    ...(unitRows.length ? { yarnUnits: new Map(unitRows.map((r) => [r.id, r])) } : {}),
   };
 }
 
@@ -143,7 +148,8 @@ const dec = (v: Dec | number | null | undefined): Dec | null => (v === null || v
 
 function yarnPrice(src: CostSources, yarnItemId: string): CostPrice | null {
   const p = src.prices.get(yarnItemId);
-  if (!p) return null;
+  // SY-a: fiyat kartın bugünkü birimiyle yazılmadıysa okunmaz (kg fiyatı adet fiyatı sanılmasın).
+  if (!p || p.unit !== (src.yarnUnits?.get(yarnItemId)?.unit ?? "KG")) return null;
   const stale = src.asOf.getTime() - p.createdAt.getTime() > PRICE_STALE_DAYS * 86_400_000;
   return { amount: p.pricePerKg, currency: p.currency, source: "KART", ...(stale ? { flag: "PRICE_STALE" as const } : {}) };
 }
@@ -192,7 +198,10 @@ function weftYarnsOf(
 ): CostWeftYarn[] {
   const swaps = recipe && recipe.itemId === item?.id ? src.weftOverrides?.get(recipe.id) : undefined;
   return item?.weftSpec
-    ? item.weftSpec.yarns.map((y) => ({ ...cardYarn(src, weftOverrideFor(swaps, y.sortOrder) ?? y.yarnItem), picksInRepeat: y.picksInRepeat }))
+    ? item.weftSpec.yarns.map((y) => {
+        const row = weftOverrideFor(swaps, y.sortOrder) ?? y.yarnItem;
+        return { ...cardYarn(src, row), ...costYarnUnitFields(src.yarnUnits?.get(row.id)), picksInRepeat: y.picksInRepeat };
+      })
     : (ah?.weft?.yarns ?? []).map((y) => ({ ...adHocYarn(y), picksInRepeat: y.picksInRepeat ?? 1 }));
 }
 

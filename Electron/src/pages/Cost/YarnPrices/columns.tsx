@@ -6,7 +6,7 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { fmtFactoryDate } from "@/lib/factory-time";
 import { cn } from "@/lib/utils";
 import { STALE_DAYS, ageDays, fmtDecFull, fmtQtyDecFull } from "../shared/format";
-import { YARN_PRICE_SOURCE_LABEL, type YarnCostPrice } from "./service";
+import { YARN_PRICE_SOURCE_LABEL, yarnPriceUnitStale, yarnPriceUnitText, type YarnCostPrice } from "./service";
 
 const right = (label: string) => ({ label, align: "right" as const });
 
@@ -19,7 +19,17 @@ const BASE: ColumnDef<YarnCostPrice>[] = [
     cell: ({ row: { original: r } }) => <span><span className="font-medium">{r.yarnItem.code}</span> <span className="text-muted-foreground">{r.yarnItem.name}</span></span>,
   },
   { id: "den", header: "Denye", meta: { ...right("Denye"), exportValue: (r) => fmtQtyDecFull(r.yarnItem.linearDensityDen, 2) }, cell: ({ row }) => fmtQtyDecFull(row.original.yarnItem.linearDensityDen, 2) },
-  { id: "price", header: "Fiyat", meta: { ...right("Fiyat"), exportValue: (r) => `${fmtDecFull(r.pricePerKg)} ${r.currency}/kg` }, cell: ({ row: { original: r } }) => `${fmtDecFull(r.pricePerKg)} ${r.currency}/kg` },
+  {
+    id: "price",
+    header: "Fiyat",
+    meta: { ...right("Fiyat"), exportValue: (r) => `${fmtDecFull(r.pricePerKg)} ${yarnPriceUnitText(r.currency, r.unit)}` },
+    // SY-a: kartın birimi sonradan değiştiyse bu fiyat maliyette okunmaz — satırda uyarı.
+    cell: ({ row: { original: r } }) => (
+      <span className={cn(yarnPriceUnitStale(r) && "text-amber-600 dark:text-amber-400")} title={yarnPriceUnitStale(r) ? "İpliğin satın alma birimi değişti — fiyatı yeni birimle yeniden girin" : undefined}>
+        {fmtDecFull(r.pricePerKg)} {yarnPriceUnitText(r.currency, r.unit)}
+      </span>
+    ),
+  },
   { id: "source", header: "Kaynak", meta: { label: "Kaynak" }, accessorFn: (r) => YARN_PRICE_SOURCE_LABEL[r.source] ?? r.source },
   { id: "createdAt", header: "Tarih", meta: { label: "Tarih", exportValue: (r) => fmtFactoryDate(r.createdAt) }, accessorFn: (r) => r.createdAt, cell: ({ row }) => fmtFactoryDate(row.original.createdAt) },
   {

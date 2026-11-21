@@ -18,6 +18,9 @@ import { weftRowsMatchSaved, weftShareCell, weftShareNote, weftShareVisible } fr
 interface Row { yarnItemId: string; picks: string }
 const MAX_WEFT_LINES = 26;
 export const weftLetter = (i: number) => String.fromCharCode(65 + i);
+// SY-a: pul/payet satırı seçicide ayırt edilsin — denyesiz girer, maliyeti adet/metre fiyatından.
+const FANCY_SUB: Record<string, string> = { ADET: "pul/payet · adetle", METRE: "fantezi · metreyle" };
+const yarnSubLabel = (it: Item): string => (it.yarnPurchaseUnit && FANCY_SUB[it.yarnPurchaseUnit] ? `${it.code} · ${FANCY_SUB[it.yarnPurchaseUnit]}` : it.code);
 
 export function buildWeftBody(seq: string, picksPerCm: string, program: string, rows: Row[]): Record<string, unknown> {
   const sequence = seq.trim();
@@ -77,7 +80,7 @@ export function WeftSpecEditor({ spec, fabricId, canWrite }: { spec: WeftSpecDet
               queryKey="items-weft-yarn"
               filters={{ itemType: "YARN", lifecycleStatus: "ACTIVE" }}
               getLabel={(it) => it.name}
-              getSubLabel={(it) => it.code}
+              getSubLabel={yarnSubLabel}
               icon={Package}
               title={`Atkı ${weftLetter(i)} ipliği seç`}
               placeholder="İplik seç"
