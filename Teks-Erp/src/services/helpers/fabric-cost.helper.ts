@@ -13,6 +13,7 @@ import { theoreticalMPerHourDecimal } from "./dokuma-levent-rapor.helper";
 import { ratePerM, type FinishingKgBasis, type RateContext } from "./fabric-cost-kg.helper";
 import { fastestGroupTakeUpPct } from "./warp-layer-beam.helper";
 import { resolveYarnWastePct, type YarnWasteSource } from "./yarn-waste.helper";
+import { applyWastePct, formulaLines } from "./fabric-cost-formula.helper";
 import type {
   CostComponent, CostInput, CostLine, CostMissing, CostOutcome, CostPrice, CostResult, CostSource, CostWarning,
   CostWarp, CostWarpLayer, CostWarpYarn, CostWeftYarn, CostYarn, FxRates, Sourced,
@@ -67,7 +68,7 @@ type WarpYarnKg = { yarn: CostWarpYarn; kg: Dec; net: Dec; wasteSource: YarnWast
  * Kᶜ = Σ satır (Nᵢ × dᵢ / 9 000 000) / (1 − t) / (1 − fᵢ) — kg/m. Zemin ve HER ek katman bunu çağırır (kopya yok).
  * Fason devere D2: çok iplikli kartta satır başına (kendi teli, denyesi, iplik firesi); tek iplikte tek satır, bayt-aynı.
  */
-function warpKg(w: CostWarp | null, c: Collector): { kg: Dec; net: Dec; takeUp: Dec; wasteSource: YarnWasteSource; perYarn: WarpYarnKg[] } | null {
+function warpKg(w: CostWarp | null, c: Collector, m: CostInput["wasteMethod"]): { kg: Dec; net: Dec; takeUp: Dec; wasteSource: YarnWasteSource; perYarn: WarpYarnKg[] } | null {
   if (!w) {
     c.missing.add("WARP_SPEC_MISSING");
     return null;
@@ -83,7 +84,7 @@ function warpKg(w: CostWarp | null, c: Collector): { kg: Dec; net: Dec; takeUp: 
   // `net` = take-up'lı, FİRESİZ ara değer (KG terbiye tabanı NET_HAM); `kg` aynı işlem sırasıyla bayt-aynı.
   const perYarn = lines.map((yarn, i): WarpYarnKg => {
     const net = warpYarnKgExact(yarn.endsCount, ds[i]!, 1).div(ONE.minus(takeUp));
-    return { yarn, kg: net.div(ONE.minus(pct(fs[i]!))), net, wasteSource: wss[i]!.source };
+    return { yarn, kg: applyWastePct(net, fs[i]!, m), net, wasteSource: wss[i]!.source };
   });
   if (perYarn.length === 1) return { kg: perYarn[0]!.kg, net: perYarn[0]!.net, takeUp, wasteSource: perYarn[0]!.wasteSource, perYarn };
   const sum = (k: "kg" | "net") => perYarn.reduce((a, p) => a.plus(p[k]), ZERO);
@@ -92,8 +93,8 @@ function warpKg(w: CostWarp | null, c: Collector): { kg: Dec; net: Dec; takeUp: 
 
 /** Zemin + ek katmanlar; herhangi biri eksikse null (yarım çözgü kg'ı gösterilmez). */
 function warpKgs(input: CostInput, c: Collector): { kg: Dec; net: Dec; groundKg: Dec; groundYarns: WarpYarnKg[]; takeUp: Dec; layers: Array<{ layer: CostWarpLayer; kg: Dec; perYarn: WarpYarnKg[] }> } | null {
-  const ground = warpKg(input.warp, c);
-  const layers = (input.warpLayers ?? []).map((layer) => ({ layer, r: warpKg(layer, c) }));
+  const ground = warpKg(input.warp, c, input.wasteMethod);
+  const layers = (input.warpLayers ?? []).map((layer) => ({ layer, r: warpKg(layer, c, input.wasteMethod) }));
   if (!ground || layers.some((l) => l.r === null)) return null;
   const out = layers.map((l) => ({ layer: l.layer, kg: l.r!.kg, perYarn: l.r!.perYarn }));
   // `net` (KG terbiye tabanı NET_HAM) katmanları da toplar; katmansızda zeminin net'i (bayt-aynı).
@@ -122,7 +123,7 @@ function weftKgs(input: CostInput, c: Collector): { picksPerCm: Dec; perYarn: Ar
   const perYarn = w.yarns.map((yarn, i) => {
     const net = yarnKgFromLengthExact(weftMPerM.mul(D(yarn.picksInRepeat).div(total)), deniers[i]!);
     const ws = resolveYarnWastePct(yarn.wastePct, { value: f, source: w.wastePct.source });
-    return { yarn, kg: net.div(ONE.minus(pct(ws.value!))), net, wasteSource: ws.source };
+    return { yarn, kg: applyWastePct(net, ws.value!, input.wasteMethod), net, wasteSource: ws.source };
   });
   return { picksPerCm: p, perYarn };
 }
@@ -155,8 +156,8 @@ export function yarnUsagePerM(input: CostInput, opts: { includeWaste?: boolean }
 } {
   if (opts.includeWaste === false) return yarnUsagePerM(withoutYarnWaste(input));
   const c = new Collector();
-  const warp = warpKg(input.warp, c);
-  const layers = (input.warpLayers ?? []).map((l) => ({ l, r: warpKg(l, c) }));
+  const warp = warpKg(input.warp, c, input.wasteMethod);
+  const layers = (input.warpLayers ?? []).map((l) => ({ l, r: warpKg(l, c, input.wasteMethod) }));
   const weft = weftKgs(input, c);
   return {
     missing: [...c.missing].sort(),
@@ -306,21 +307,27 @@ export function computeFabricCost(input: CostInput, fx: FxRates): CostOutcome {
   const procs = processLines(input, fin?.keep ?? ONE, ctx);
   if (!fin || c.missing.size) return { result: null, missing: [...c.missing].sort(), warnings: [...c.warnings].sort() };
   const mamul = procs.reduce((a, l) => a.plus(l.amountPerMTry), fin.finished ?? raw);
-  const sound = mamul.div(ONE.minus(pct(fk)));
+  // SY-C1: ek formül satırları ek işlemlerden SONRA, kalite firesi + genel giderden ÖNCE (gider tabanına girer).
+  const weftKgPerM = weft.perYarn.reduce((a, x) => a.plus(x.kg), ZERO);
+  const formulas = formulaLines(input, { picksPerCm: weft.picksPerCm, lengthCm: input.weft?.lengthCm.value ?? null, endsCount: input.warp?.endsCount ?? null, warpKg: warp.kg, weftKg: weftKgPerM, raw, mamul }, fx, (m) => c.missing.add(m));
+  if (c.missing.size) return { result: null, missing: [...c.missing].sort(), warnings: [...c.warnings].sort() };
+  const base = formulas.reduce((a, l) => a.plus(l.amountPerMTry), mamul);
+  const sound = applyWastePct(base, fk, input.wasteMethod);
   const overhead = sound.mul(pct(g));
   const extra = input.extra?.amountTry ?? ZERO;
   const lines = [
     ...rawLines,
     ...fin.lines,
     ...procs,
-    line("FABRIC_WASTE", "Kalite firesi", sound.minus(mamul), { qty: fk, qtyUnit: "%" }),
+    ...formulas,
+    line("FABRIC_WASTE", "Kalite firesi", sound.minus(base), { qty: fk, qtyUnit: "%" }),
     line("OVERHEAD", "Genel gider", overhead, { qty: g, qtyUnit: "%" }),
     ...(input.extra ? [line("EXTRA", input.extra.label ?? "Ek kalem", extra)] : []),
   ];
   const result: CostResult = {
     lines,
     warpKgPerM: warp.kg,
-    weftKgPerM: weft.perYarn.reduce((a, x) => a.plus(x.kg), ZERO),
+    weftKgPerM,
     loomMPerHour: loom.v,
     rawCostPerMTry: raw,
     finishedCostPerMTry: procs.length ? mamul : fin.finished, // ek işlem mamul aşamasıdır

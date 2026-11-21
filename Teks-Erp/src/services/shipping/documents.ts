@@ -51,6 +51,7 @@ import {
   exportCodeForDestination,
 } from "../helpers/shipment-destination.helper";
 import { ACTIVE_SACK_ALLOCATION } from "../helpers/sack-allocation.helper";
+import { loadDispatchUnitPrices } from "./dispatch-unit-price";
 import { LIVE_LOAD_UNIT_WHERE, loadSummaryText } from "../helpers/load-unit.helper";
 import { DELIVERY_TO_SELECT, deliveryToSnapshot } from "../helpers/shipment-delivery.helper";
 
@@ -269,6 +270,8 @@ async function collectShipmentDocContent(
       customerItemOnly: string | null;
       customerColorOnly: string | null;
       skipsCustomerName: boolean;
+      /** SY-C4: grubun ürün × renk kimlikleri — birim fiyat çözümü için (kendisi snapshot'a girmez). */
+      priceKeys: Map<string, { itemId: string; colorId: string | null }>;
       rollCount: number;
       totalMeters: Prisma.Decimal;
     }
@@ -311,6 +314,7 @@ async function collectShipmentDocContent(
           customerItemOnly: custItemOnly,
           customerColorOnly: custColorOnly,
           skipsCustomerName: false,
+          priceKeys: new Map(),
           rollCount: 0,
           totalMeters: D0(),
         };
@@ -318,6 +322,7 @@ async function collectShipmentDocContent(
       // TÜM toplara sorulur ve OR'lanır. Tek bir işaretli top satırı bizim adımıza
       // düşürür — "en az bir alt kalite varsa müşterinin adını iliştirme".
       if (rollSkips) g.skipsCustomerName = true;
+      g.priceKeys.set(`${r.itemId}|${r.colorId ?? ""}`, { itemId: r.itemId, colorId: r.colorId ?? null });
       g.rollCount += 1;
       g.totalMeters = g.totalMeters.plus(r.currentQty);
       productMap.set(stokAdi, g);
@@ -354,7 +359,16 @@ async function collectShipmentDocContent(
   // "MÜŞTERİ STOK ADI" birleşik adı basmaya devam ediyordu — yani bayrağın var
   // oluş gerekçesi ("yarı çevrilmiş ad basılmasın") sağlanmıyordu.
   // Fail-safe aynen uygulanır: işaretli kalite satırında ikizler de düşer.
-  const products = [...productMap.values()].map((p) => ({ name: p.name, customerName: p.skipsCustomerName ? null : p.customerName, customerItemOnly: p.skipsCustomerName ? null : p.customerItemOnly, customerColorOnly: p.skipsCustomerName ? null : p.customerColorOnly, rollCount: p.rollCount, totalMeters: Number(p.totalMeters) }));
+  // SY-C4: birim fiyat sevk anında DONAR (yalnız tek fiyat çözülen satırda anahtar; fiyatsız belge bayt-aynı).
+  // Tutar = BRÜT metre × fiyat; kolon opt-in (`defaultHidden`) — müşteri belgesinde iç veri.
+  const priceFor = await loadDispatchUnitPrices(db, sh.sacks.map((s) => s.id));
+  const products = [...productMap.values()].map((p) => {
+    const price = priceFor([...p.priceKeys.values()]);
+    return {
+      name: p.name, customerName: p.skipsCustomerName ? null : p.customerName, customerItemOnly: p.skipsCustomerName ? null : p.customerItemOnly, customerColorOnly: p.skipsCustomerName ? null : p.customerColorOnly, rollCount: p.rollCount, totalMeters: Number(p.totalMeters),
+      ...(price ? { unitPrice: Number(price.unitPrice), currency: price.currency, amount: Number(p.totalMeters.mul(price.unitPrice).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP)) } : {}),
+    };
+  });
   const totalRolls = products.reduce((s, p) => s + p.rollCount, 0);
   const totalMeters = Number(sackRows.reduce((s, r) => s.plus(r.totalMeters), D0()));
   const totalKg = Number(sackRows.reduce((s, r) => s.plus(r.totalKg), D0()));

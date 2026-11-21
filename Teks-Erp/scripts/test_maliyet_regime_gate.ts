@@ -39,6 +39,8 @@ const MALIYET_MODELLERI = new Set([
   "yarnCostPrice",
   "finishingRate",
   "costStructure",
+  // SY-C1: ek maliyet formülleri (damgalı sürüm)
+  "costFormula",
   // MAL-2: standart maliyet sürümü (donmuş fotoğraf) + kalemleri
   "standardCostVersion",
   "standardCostLine",
@@ -230,6 +232,7 @@ const ADLA_BEKLENEN_KAPILI: ReadonlyArray<{ dosya: string; neden: string }> = [
     dosya: "routes/cost.routes.ts",
     neden: "Maliyet yüzeyi: girdiler (MAL-1) + önizleme, kumaş maliyet listesi, standart maliyet sürümleri (MAL-2).",
   },
+  { dosya: "routes/cost-formula.routes.ts", neden: "Ek maliyet formülleri (SY-C1) + desen ailesine toplu atkı ücreti (SY-C3)." },
   { dosya: "routes/quote.routes.ts", neden: "Satış teklifi (MAL-4): maliyet tabanlı fiyat önerisi — modül kapalıyken uç kapalı." },
   { dosya: "routes/price-list.routes.ts", neden: "Fiyat listesi (MAL-4): standart maliyetten doldurma + teklif önerisi kaynağı." },
 ];

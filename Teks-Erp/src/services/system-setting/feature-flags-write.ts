@@ -17,6 +17,7 @@ import { licenseModuleError } from "../../lib/license/module-ceiling";
 import { ApiResponse } from "../../types/api.types";
 import { TERIM } from "../../constants/terim";
 import { FINISHING_KG_BASES, type FinishingKgBasis } from "../helpers/fabric-cost-kg.helper";
+import { COST_WASTE_METHODS, type CostWasteMethod } from "../helpers/fabric-cost-types.helper";
 import { REPORT_BY_KEY, isRetiredReportKey } from "../../constants/report-catalog";
 import { updateSeriesNumberSource } from "../helpers/series-write.helper";
 import { isHostedInstallation } from "../helpers/install-class.helper";
@@ -555,6 +556,13 @@ export async function setFeatureFlags(
         throw AppError.badRequest(`costWeavingStandardMethod şunlardan biri olmalı: ${WEAVING_STANDARD_METHODS.join(", ")}`);
       }
       await this.set(SETTING_KEYS.COST_WEAVING_STANDARD_METHOD, v, "Dokuma standart maliyet yöntemi — tezgah saati · atkı ücreti", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "costWasteMethod")) {
+      const v = input.costWasteMethod;
+      if (typeof v !== "string" || !COST_WASTE_METHODS.includes(v as CostWasteMethod)) {
+        throw AppError.badRequest(`costWasteMethod şunlardan biri olmalı: ${COST_WASTE_METHODS.join(", ")}`);
+      }
+      await this.set(SETTING_KEYS.COST_WASTE_METHOD, v, "Maliyette fire uygulaması — bölme ÷(1−f) · çarpma ×(1+f)", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "orderProductionProposal")) {
       const v = input.orderProductionProposal;

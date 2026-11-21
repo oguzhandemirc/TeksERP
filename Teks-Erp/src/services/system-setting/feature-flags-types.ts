@@ -7,6 +7,7 @@
 // =============================================================================
 
 import { type FinishingKgBasis } from "../helpers/fabric-cost-kg.helper";
+import { type CostWasteMethod } from "../helpers/fabric-cost-types.helper";
 import { type PhaseOutLineQty, type PhaseOutNewOrder } from "../helpers/item-lifecycle-settings.helper";
 import { type CompanyLegalIdentity, type EIrsaliyeConfig } from "../e-irsaliye/e-irsaliye-settings";
 import { licenseModuleBlock, type LicenseModuleBlock } from "../../lib/license/module-ceiling";
@@ -119,6 +120,8 @@ export interface FeatureFlags {
   costProfitConsumablePriceSource: ProfitConsumablePriceSource;
   /** SY-D2: dokuma standart maliyet yöntemi (varsayılan `TEZGAH_SAATI`). */
   costWeavingStandardMethod: WeavingStandardMethod;
+  /** SY-C2: fire yöntemi (varsayılan `BOLME`). */
+  costWasteMethod: CostWasteMethod;
   /** SY-M1: siparişten üretim önerisi (varsayılan `KAPALI`). */
   orderProductionProposal: OrderProductionProposalMode;
   /** D4-G2b: kârlılık makine süresi kaynağı (varsayılan `OTURUM`). */

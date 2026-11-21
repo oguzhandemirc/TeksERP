@@ -376,6 +376,13 @@ const PARTIAL_INDEXES: Array<{
     predicate: `("revokedAt" IS NULL)`,
     why: "apre tarifesi kodu başına TEK AKTİF sürüm (damgalı geçmiş kısıta girmez)",
   },
+  {
+    table: "cost_formulas",
+    index: "cost_formulas_active_code_uq",
+    uniq: true,
+    predicate: `("revokedAt" IS NULL)`,
+    why: "ek maliyet formülü kodu başına TEK AKTİF sürüm (damgalı geçmiş kısıta girmez)",
+  },
   // 2026-08-14 — sağlamlık paketi (migration 20260814110200_saglamlik_paketi).
   // Storno bağı: bir defter satırı EN FAZLA BİR KEZ terslenebilir.
   {
@@ -1160,6 +1167,10 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "product_recipe_weft_yarns", name: "product_recipe_weft_yarns_sort_ck" },
   // SEYİTOĞLU MİG-2b (20261031200200_maliyet_tul) — atkı ücreti çifti ikisi birlikte dolu/boş
   { table: "cost_structures", name: "cost_structures_loom_pick_pair_ck" },
+  // SY-C1 ek maliyet formülleri (migration 20261121152422_maliyet_formulleri).
+  { table: "cost_formulas", name: "cost_formulas_sort_order_ck" },
+  { table: "cost_formulas", name: "cost_formulas_version_no_ck" },
+  { table: "cost_formulas", name: "cost_formulas_expression_ck" },
   { table: "cost_parameter_sets", name: "cost_parameter_sets_loom_pick_pair_ck" },
   { table: "cost_structure_processes", name: "cost_structure_processes_sort_ck" },
   // MAL-4 teklif + fiyat listesi (20261025170000_teklif_fiyat_listesi)
