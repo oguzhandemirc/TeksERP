@@ -7,14 +7,31 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { fmtKg, fmtM, isBeamCountOpen } from "./order-model";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { emptyBeamDraft, MAX_RECEIVE_BEAMS, receiveYarnRows, signedKg, type ReceiveBeamDraft } from "./receive-model";
+import type { ReworkCandidate } from "./rejection-model";
 import type { WarpingReceivePreview } from "./receive-types";
 import { YarnLabel } from "./YarnLabel";
 
 const num = "text-right tabular-nums";
 type Field = keyof ReceiveBeamDraft;
 
-export function ReceiveBeamsTable({ drafts, onChange }: { drafts: ReceiveBeamDraft[]; onChange: (d: ReceiveBeamDraft[]) => void }) {
+const NO_REWORK = "none";
+
+/** C2: satırı reddedilen bir sarımın yeniden sarımı olarak bağlar; aday yoksa sütun hiç çizilmez. */
+function ReworkSelect({ i, value, reworks, onChange }: { i: number; value: string; reworks: ReworkCandidate[]; onChange: (v: string) => void }) {
+  return (
+    <Select value={value || NO_REWORK} onValueChange={(v) => onChange(v === NO_REWORK ? "" : v)}>
+      <SelectTrigger className="h-8" aria-label={`${i + 1}. levent yeniden sarım`}><SelectValue /></SelectTrigger>
+      <SelectContent>
+        <SelectItem value={NO_REWORK}>Yeni sarım</SelectItem>
+        {reworks.map((r) => <SelectItem key={r.beamId} value={r.beamId}>{r.beamNo} yerine ({r.docNo})</SelectItem>)}
+      </SelectContent>
+    </Select>
+  );
+}
+
+export function ReceiveBeamsTable({ drafts, onChange, reworks = [] }: { drafts: ReceiveBeamDraft[]; onChange: (d: ReceiveBeamDraft[]) => void; reworks?: ReworkCandidate[] }) {
   const set = (i: number, k: Field, v: string) => onChange(drafts.map((d, j) => (j === i ? { ...d, [k]: v } : d)));
   const cell = (i: number, k: Field, label: string, decimal = true) => (
     <Input aria-label={`${i + 1}. levent ${label}`} className={cn("h-8", decimal && "text-right")} inputMode={decimal ? "decimal" : undefined}
@@ -27,10 +44,11 @@ export function ReceiveBeamsTable({ drafts, onChange }: { drafts: ReceiveBeamDra
           <TableHeader>
             <TableRow>
               <TableHead className="w-10">#</TableHead>
-              <TableHead title="Leventin üzerindeki numara (isteğe bağlı)">Gövde no</TableHead>
+              <TableHead className="min-w-28" title="Leventin üzerindeki numara (isteğe bağlı)">Gövde no</TableHead>
               <TableHead className="w-32 text-right">Metre</TableHead>
               <TableHead className="w-28 text-right" title="İsteğe bağlı tartı — tüketimi değiştirmez">Brüt kg</TableHead>
               <TableHead className="w-28 text-right" title="Boş levent ağırlığı (isteğe bağlı)">Dara kg</TableHead>
+              {reworks.length > 0 && <TableHead className="w-48" title="Reddedilen bir sarımın yerine gelen levent">Yeniden sarım</TableHead>}
               <TableHead className="w-10"><span className="sr-only">Sil</span></TableHead>
             </TableRow>
           </TableHeader>
@@ -42,6 +60,7 @@ export function ReceiveBeamsTable({ drafts, onChange }: { drafts: ReceiveBeamDra
                 <TableCell>{cell(i, "lengthM", "metre")}</TableCell>
                 <TableCell>{cell(i, "grossKg", "brüt kg")}</TableCell>
                 <TableCell>{cell(i, "tareKg", "dara kg")}</TableCell>
+                {reworks.length > 0 && <TableCell><ReworkSelect i={i} value={drafts[i]?.reworkOfBeamId ?? ""} reworks={reworks} onChange={(v) => set(i, "reworkOfBeamId", v)} /></TableCell>}
                 <TableCell>
                   <Button size="sm" variant="ghost" className="h-7 px-2" aria-label={`${i + 1}. leventi sil`} disabled={drafts.length === 1}
                     onClick={() => onChange(drafts.filter((_row, j) => j !== i))}><Trash2 className="h-4 w-4" /></Button>
@@ -143,6 +162,11 @@ export function ReceivePreviewView({ p }: { p: WarpingReceivePreview }) {
     <div className="space-y-2" aria-label="Kabul önizlemesi">
       <MetreLine p={p} />
       <YarnTable p={p} />
+      {p.beams.some((b) => b.reworkOf) && (
+        <ul className="space-y-0.5 rounded-md border p-3 text-xs" aria-label="Yeniden sarım bağları">
+          {p.beams.filter((b) => b.reworkOf).map((b) => <li key={b.index}>{b.index + 1}. levent → reddedilen <b>{b.reworkOf?.beamNo}</b> yerine ({b.reworkOf?.rejectionDocNo})</li>)}
+        </ul>
+      )}
       <AllocationList p={p} />
       <WeighTable p={p} />
       {p.warnings.length > 0 && (

@@ -11,9 +11,11 @@ export interface ReceiveBeamDraft {
   lengthM: string;
   grossKg: string;
   tareKg: string;
+  /** C2: yeniden sarılan reddedilen sarımın kimliği ("" = yeniden sarım değil). */
+  reworkOfBeamId: string;
 }
 
-export const emptyBeamDraft = (lengthM = ""): ReceiveBeamDraft => ({ physicalBeamNo: "", lengthM, grossKg: "", tareKg: "" });
+export const emptyBeamDraft = (lengthM = ""): ReceiveBeamDraft => ({ physicalBeamNo: "", lengthM, grossKg: "", tareKg: "", reworkOfBeamId: "" });
 
 /** "Plandaki gibi doldur": sipariş satırlarındaki adet × boy kadar satır (gövde no boş). */
 export function draftsFromPlan(lines: ReadonlyArray<BeamLine>): ReceiveBeamDraft[] {
@@ -30,7 +32,7 @@ function trimLen(v: string): string {
 
 export type ReceiveBuild = { ok: true; body: WarpingReceiveFields; totalM: number } | { ok: false; error: string | null };
 
-const isBlank = (r: ReceiveBeamDraft) => !r.physicalBeamNo.trim() && !r.lengthM.trim() && !r.grossKg.trim() && !r.tareKg.trim();
+const isBlank = (r: ReceiveBeamDraft) => !r.physicalBeamNo.trim() && !r.lengthM.trim() && !r.grossKg.trim() && !r.tareKg.trim() && !r.reworkOfBeamId;
 
 function optKg(text: string, row: number, label: string): number | null | string {
   if (text.trim() === "") return null;
@@ -49,13 +51,16 @@ function buildBeam(r: ReceiveBeamDraft, row: number): WarpingReceiveBeamBody | s
   if (tare !== null && gross === null) return `${row}. satır: dara yazıldıysa brüt kg da yazılmalı.`;
   if (tare !== null && gross !== null && tare >= gross) return `${row}. satır: dara brütten küçük olmalı.`;
   const no = r.physicalBeamNo.trim();
-  return { lengthM: Math.round(len * 1000) / 1000, physicalBeamNo: no || null, grossKg: gross, tareKg: tare };
+  const base = { lengthM: Math.round(len * 1000) / 1000, physicalBeamNo: no || null, grossKg: gross, tareKg: tare };
+  // Alan yalnız seçiliyse gider: yeniden sarımsız kabulün gövdesi C2 öncesiyle bayt-aynı kalır.
+  return r.reworkOfBeamId ? { ...base, reworkOfBeamId: r.reworkOfBeamId } : base;
 }
 
 /** Tamamen boş satır atlanır; yarım satır hata verir. Hata metni yoksa (hiç satır yok) düğme sessizce kapalı. */
 export function buildReceiveBody(drafts: ReceiveBeamDraft[], deliveryNoteNo: string): ReceiveBuild {
   const beams: WarpingReceiveBeamBody[] = [];
   const seen = new Set<string>();
+  const reworks = new Set<string>();
   for (const [i, r] of drafts.entries()) {
     if (isBlank(r)) continue;
     const b = buildBeam(r, i + 1);
@@ -63,6 +68,10 @@ export function buildReceiveBody(drafts: ReceiveBeamDraft[], deliveryNoteNo: str
     if (b.physicalBeamNo) {
       if (seen.has(b.physicalBeamNo)) return { ok: false, error: `"${b.physicalBeamNo}" gövde numarası iki kez yazılmış.` };
       seen.add(b.physicalBeamNo);
+    }
+    if (b.reworkOfBeamId) {
+      if (reworks.has(b.reworkOfBeamId)) return { ok: false, error: `${i + 1}. satır: aynı reddedilen sarım iki satıra bağlanmış.` };
+      reworks.add(b.reworkOfBeamId);
     }
     beams.push(b);
   }

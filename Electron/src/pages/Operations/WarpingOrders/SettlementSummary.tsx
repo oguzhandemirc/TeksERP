@@ -19,7 +19,7 @@ function MetreStrip({ m }: { m: WarpingSettlement["metre"] }) {
   return (
     <dl className="grid grid-cols-2 gap-x-6 gap-y-1 rounded-md border p-3 text-sm sm:grid-cols-4" aria-label="Metre mutabakatı">
       <div><dt className="text-xs text-muted-foreground">Hedef</dt><dd className="font-medium tabular-nums">{fmtM(m.targetM)} m · {isBeamCountOpen({ beamCount: m.planBeamCount, beamCountOpen: m.planBeamCountOpen }) ? "adet belli değil" : `${m.planBeamCount} levent`}</dd></div>
-      <div><dt className="text-xs text-muted-foreground">Gelen</dt><dd className="font-medium tabular-nums">{fmtM(m.receivedM)} m · {m.receivedBeamCount} levent</dd></div>
+      <div><dt className="text-xs text-muted-foreground">Gelen</dt><dd className="font-medium tabular-nums">{fmtM(m.receivedM)} m · {m.receivedBeamCount} levent{m.rejectedBeamCount ? <span className="block text-xs font-normal text-orange-700 dark:text-orange-400">reddedilen {fmtM(m.rejectedM ?? "0")} m · {m.rejectedBeamCount} levent (gelene sayılmaz)</span> : null}</dd></div>
       <div>
         <dt className="text-xs text-muted-foreground">Fark</dt>
         <dd className={cn("font-medium tabular-nums", short && "text-amber-700 dark:text-amber-400")}>{signedKg(m.diffM, fmtM)} m{pctText(m.diffPct)}</dd>
