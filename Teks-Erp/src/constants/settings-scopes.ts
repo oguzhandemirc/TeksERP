@@ -195,7 +195,6 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "costProfitSubcontractSource",
       "costProfitConsumablePriceSource",
       "costWeavingStandardMethod",
-      "costWasteMethod",
       "costProfitMachineTime",
       "costProfitOverheadKey",
       "financeServiceBillingPriceDate",

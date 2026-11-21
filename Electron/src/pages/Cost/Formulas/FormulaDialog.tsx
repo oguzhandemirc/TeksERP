@@ -108,8 +108,8 @@ export function FormulaDialog({ onClose, current }: Props) {
             <FormField label="Kod" htmlFor="cf-code" required info={current ? "Kod sabittir: değişiklik aynı formülün yeni sürümüdür." : "Harf, rakam, - ve _ (en çok 32)."}>
               <Input id="cf-code" maxLength={FORMULA_MAX.code} disabled={!!current} value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} />
             </FormField>
-            <FormField label="Para birimi" info="Formül sonucu bu para biriminde metre başı tutardır; TL dışı ise hesap günün kuruyla çevirir.">
-              <CurrencySelect value={currency} onChange={setCurrency} />
+            <FormField label="Para birimi" htmlFor="cf-currency" info="Formül sonucu bu para biriminde metre başı tutardır; TL dışı ise hesap günün kuruyla çevirir.">
+              <CurrencySelect id="cf-currency" className="block w-full" value={currency} onChange={setCurrency} />
             </FormField>
             <FormField label="Sıra" htmlFor="cf-sort" info="Birden çok formül varsa maliyet dökümünde bu sırayla listelenir (0–999).">
               <Input id="cf-sort" className="text-right tabular-nums" inputMode="numeric" value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} />

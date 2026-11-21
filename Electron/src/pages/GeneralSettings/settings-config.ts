@@ -2413,8 +2413,8 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     id: "maliyet",
     label: "Maliyet",
     icon: Calculator,
-    description: "Maliyet ve teklif ekranlarının sunum ayarları; hesap her zaman TL'de sunucuda yapılır.",
-    keywords: "maliyet teklif fiyat listesi döviz usd dolar euro kur sunum standart maliyet terbiye boyahane kilo kg",
+    description: "Maliyet ve teklif ekranlarının sunum ve hesap ayarları; hesap her zaman TL'de sunucuda yapılır.",
+    keywords: "maliyet teklif fiyat listesi döviz usd dolar euro kur sunum standart maliyet terbiye boyahane kilo kg fire bölme çarpma şişirme",
     kind: "flags",
     section: "sales",
     permissionAny: [SETTINGS_ADMIN_PERMISSION],
@@ -2446,6 +2446,21 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         options: [
           { value: "NET_HAM", label: "Ham kumaş kilosu (varsayılan)", hint: "Çözgü + atkı, fire hariç." },
           { value: "IPLIK_TUKETIMI", label: "İplik tüketimi", hint: "Fire dahil iplik kilosu (Excel uyumu)." },
+        ],
+      },
+      {
+        // SY-C2: `defaultValue` backend `DEFAULT_COST_WASTE_METHOD` ile birebir; yalnız YENİ hesabı etkiler.
+        // Muhasebe kategorisi finans rejimine kapılı; fire her standart maliyeti etkilediği için burada (finanssız kurulumda da görünür).
+        enumKey: "costWasteMethod",
+        title: "Fire yöntemi",
+        summary: "İplik ve kalite firesi maliyete bölerek mi, çarparak mı eklensin.",
+        desc: "Bölerek (varsayılan): fireli miktar = net ÷ (1 − fire %); %10 fire 100 kg'ı 111,1 kg yapar. Çarparak: fireli miktar = net × (1 + fire %); %10 fire 100 kg'ı 110 kg yapar — Excel'de \"şişirme oranı\" ile çalışan işletmeler bunu seçer. Çözgü, atkı, iplik kartı ve kalite firesini etkiler; çekmeler fizik olduğu için hep bölerek kalır. Ayar yalnız yeni hesaplanan maliyeti etkiler; kayıtlı standart maliyet sürümleri değişmez.",
+        defaultValue: "BOLME",
+        display: "radio",
+        audience: ["Muhasebeci", "Yönetim"],
+        options: [
+          { value: "BOLME", label: "Bölerek (varsayılan)", hint: "net ÷ (1 − fire %)" },
+          { value: "CARPMA", label: "Çarparak", hint: "net × (1 + fire %)" },
         ],
       },
     ],
@@ -2934,21 +2949,6 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         options: [
           { value: "TEZGAH_SAATI", label: "Tezgâh saati (varsayılan)", hint: "Devir × randıman × saat ücretleri." },
           { value: "ATKI_UCRETI", label: "Atkı ücreti", hint: "Atkı/cm × atkı başı ücret (ör. cent)." },
-        ],
-      },
-      {
-        // SY-C2: `defaultValue` backend `DEFAULT_COST_WASTE_METHOD` ile birebir; yalnız YENİ hesabı etkiler.
-        enumKey: "costWasteMethod",
-        group: "Maliyet",
-        title: "Fire yöntemi",
-        summary: "İplik ve kalite firesi maliyete bölerek mi, çarparak mı eklensin.",
-        desc: "Bölerek (varsayılan): fireli miktar = net ÷ (1 − fire %); %10 fire 100 kg'ı 111,1 kg yapar. Çarparak: fireli miktar = net × (1 + fire %); %10 fire 100 kg'ı 110 kg yapar — Excel'de \"şişirme oranı\" ile çalışan işletmeler bunu seçer. Çözgü, atkı, iplik kartı ve kalite firesini etkiler; çekmeler fizik olduğu için hep bölerek kalır. Ayar yalnız yeni hesaplanan maliyeti etkiler; kayıtlı standart maliyet sürümleri değişmez.",
-        defaultValue: "BOLME",
-        display: "radio",
-        audience: ["Muhasebeci", "Yönetim"],
-        options: [
-          { value: "BOLME", label: "Bölerek (varsayılan)", hint: "net ÷ (1 − fire %)" },
-          { value: "CARPMA", label: "Çarparak", hint: "net × (1 + fire %)" },
         ],
       },
       {
