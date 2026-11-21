@@ -7,6 +7,7 @@
 // =============================================================================
 
 import { type FinishingKgBasis } from "../helpers/fabric-cost-kg.helper";
+import { type CostWasteMethod } from "../helpers/fabric-cost-types.helper";
 
 
 export const DEFAULT_DEADLINE_DAYS = 7;
@@ -191,6 +192,8 @@ export const DEFAULT_PROFIT_CONSUMABLE_PRICE_SOURCE: ProfitConsumablePriceSource
 export const WEAVING_STANDARD_METHODS = ["TEZGAH_SAATI", "ATKI_UCRETI"] as const;
 export type WeavingStandardMethod = (typeof WEAVING_STANDARD_METHODS)[number];
 export const DEFAULT_WEAVING_STANDARD_METHOD: WeavingStandardMethod = "TEZGAH_SAATI";
+/** SY-C2: fire yöntemi (motor girdisi derlenirken okunur; CARPMA girdide donar). */
+export const DEFAULT_COST_WASTE_METHOD: CostWasteMethod = "BOLME";
 /** SY-M1: siparişten üretim önerisi kipi. */
 export const ORDER_PRODUCTION_PROPOSAL_MODES = ["KAPALI", "ONIZLEME", "ONAYDA_TASLAK"] as const;
 export type OrderProductionProposalMode = (typeof ORDER_PRODUCTION_PROPOSAL_MODES)[number];

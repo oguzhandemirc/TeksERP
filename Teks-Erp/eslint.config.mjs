@@ -374,6 +374,9 @@ export default [
   // ── 4b) Patron bulutu eşitleme teli: `patron/sunucu/src/wire/esitleme.ts`in BAYT-EŞİT aynası (`test_bulut_tel_aynasi`);
   //        tek dosyadır, bölünemez — boyut tavanı yok (bulutta aynı istisna, 2026-11-14).
   { files: ["src/cloud-sync/wire/esitleme.ts"], rules: { "max-lines": "off" } },
+  // ── 4c) Audit tablo/olay sözlüğü: panelde BAYT-EŞİT aynası var ve `test_audit_labels` satır satır okur
+  //        (anahtar başına tek satır) — veri sözlüğüdür, bölünmez; boyut tavanı yok (SY-C1, 2026-11-21).
+  { files: ["src/constants/audit-tablo-etiketleri.ts"], rules: { "max-lines": "off" } },
 
   // ── 5) KAPSAM: bekçiler ve seed (2026-09-05'te açıldı) ─────────────────────
   // `scripts/` 555 dosya ve 455 bekçi taşıyor, `prisma/` seed'leri var; ikisi de

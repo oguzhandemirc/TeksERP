@@ -135,6 +135,7 @@ export const AUDIT_ISIMLERI: Readonly<Record<string, TermCases>> = {
   SERVICE_ITEM: onEkli("hizmet", iyelik("kart", "ı", "a", "ı")),
   get PRODUCT_RECIPE() { return onEkli(TERIM.terbiyeIsEmri.tekilKucuk, iyelik("şablon", "u", "a", "u")); },
   YARN_COST_PRICE: onEkli("iplik maliyet", iyelik("fiyat", "ı", "a", "ı")),
+  COST_FORMULA: onEkli("ek maliyet", iyelik("formül", "ü", "e", "ü")),
   MACHINE_COST_RATE: onEkli("makine saat", iyelik("ücret", "i", "e", "i")),
   EXPENSE_ALLOCATION: onEkli("masraf", iyelik("bağ", "ı", "a", "ı")),
   SERVICE_CONSUMABLE_NORM: onEkli("hizmet sarf", iyelik("norm", "u", "a", "u")),

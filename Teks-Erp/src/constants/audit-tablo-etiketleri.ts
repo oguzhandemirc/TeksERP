@@ -219,6 +219,7 @@ export const TABLE_LABELS: Record<string, string> = {
   WEFT_SPEC: "Atkı Spesifikasyonu",
   WEAVE_DESIGN: "Desen Kartı",
   YARN_COST_PRICE: "İplik Maliyet Fiyatı",
+  COST_FORMULA: "Ek Maliyet Formülü",
   MACHINE_COST_RATE: "Makine Saat Ücreti",
   EXPENSE_ALLOCATION: "Masraf Bağı",
   SERVICE_CONSUMABLE_NORM: "Hizmet Sarf Normu",

@@ -773,6 +773,9 @@ export const DOC_DEFS: DocDef[] = [
           { key: "customerColor", label: "Müşteri varyant" },
           { key: "rollCount", label: "Top adedi" },
           { key: "totalMeters", label: "Toplam metre" },
+          // SY-C4: sipariş fiyatı iç veridir — varsayılan KAPALI; açılırsa müşteriye gider.
+          { key: "unitPrice", label: "Birim fiyat — müşteriye gider", defaultHidden: true },
+          { key: "amount", label: "Tutar — müşteriye gider", defaultHidden: true },
         ],
       },
       {

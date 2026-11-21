@@ -62,6 +62,8 @@ const EXEMPT: Record<string, string> = {
     "içe aktarım önizlemesi kartın MEVCUT alanlarını diff için okur — karar değil, alan taşıma",
   "services/import/adapters/item.adapter.ts::exportRows":
     "dışa aktarım Excel'e kolon yazar — karar değil; geri yükleme `itemService.update` → yazıcıdan geçer",
+  "services/cost-pick-rate-family.service.ts::previewPickRateFamily":
+    "aile önizlemesi ailenin HER kumaşını listeler; isActive yalnız \"(pasif)\" rozeti + panel ön seçimi — sunucu kararı değil",
 };
 
 /** Düğümü kapsayan en yakın adlı fonksiyon/metot (muaf anahtarı). */

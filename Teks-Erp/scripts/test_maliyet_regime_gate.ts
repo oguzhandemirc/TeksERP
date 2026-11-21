@@ -39,6 +39,8 @@ const MALIYET_MODELLERI = new Set([
   "yarnCostPrice",
   "finishingRate",
   "costStructure",
+  // SY-C1: ek maliyet formülleri (damgalı sürüm)
+  "costFormula",
   // MAL-2: standart maliyet sürümü (donmuş fotoğraf) + kalemleri
   "standardCostVersion",
   "standardCostLine",
@@ -103,6 +105,16 @@ const MODEL_MUAF: ReadonlyArray<{ dosya: string; model: string; neden: string }>
     model: "yarnCostPrice",
     neden: "Hesaplanan gramaj loadCostStructureSourcesTx'i çağırır — iplik fiyatı sorgusu KOŞMAZ; tarayıcı dosya düzeyinde gördüğü için muaf (machineCostRate komşu-fonksiyon emsali).",
   },
+  {
+    dosya: "routes/item-computed-gsm.routes.ts",
+    model: "costFormula",
+    neden: "Ek maliyet formülleri (SY-C1) yalnız fiyatlı yüklemede okunur; gramaj fiyatsız yükleyiciyi (loadCostStructureSourcesTx) çağırır — sorgu KOŞMAZ, tarayıcı dosya düzeyinde gördüğü için muaf (yarnCostPrice emsali).",
+  },
+  ...["routes/production-proposal.routes.ts", "routes/weaving-order.routes.ts"].map((dosya) => ({
+    dosya,
+    model: "costFormula",
+    neden: "Öneri/iplik ayırma zinciri ortak yükleyiciden (loadCostSourcesTx) aktif formülleri de alır ama yalnız iplik MİKTARINI (yarnUsagePerM) kullanır; formül satırı paradır, miktara girmez, çıktıda para yok — maliyet kapalıyken zincir yine çalışır (SY-C1).",
+  })),
   {
     dosya: "routes/loom-suggestion.routes.ts",
     model: "costParameterSet",
@@ -230,6 +242,7 @@ const ADLA_BEKLENEN_KAPILI: ReadonlyArray<{ dosya: string; neden: string }> = [
     dosya: "routes/cost.routes.ts",
     neden: "Maliyet yüzeyi: girdiler (MAL-1) + önizleme, kumaş maliyet listesi, standart maliyet sürümleri (MAL-2).",
   },
+  { dosya: "routes/cost-formula.routes.ts", neden: "Ek maliyet formülleri (SY-C1) + desen ailesine toplu atkı ücreti (SY-C3)." },
   { dosya: "routes/quote.routes.ts", neden: "Satış teklifi (MAL-4): maliyet tabanlı fiyat önerisi — modül kapalıyken uç kapalı." },
   { dosya: "routes/price-list.routes.ts", neden: "Fiyat listesi (MAL-4): standart maliyetten doldurma + teklif önerisi kaynağı." },
 ];

@@ -26,6 +26,8 @@ export const COST_COMPONENT_GROUP: Readonly<Record<CostComponent, CostGroup>> = 
   // SEYİTOĞLU MİG-2a: atkı ücreti tezgah/işçilik/enerji yerine geçer; proses tarifesi terbiye ailesindedir.
   WEAVING_PICK: "dokumaTl",
   PROCESS: "terbiyeTl",
+  // SY-C1: kullanıcı tanımlı ek formül satırı ek kalem ailesindedir.
+  FORMULA: "genelGiderTl",
 };
 
 /** Sürüm kalemlerinin grup toplamları (TL/m, 4 hane — kalem `amountPerMTry` hassasiyeti). */

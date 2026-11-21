@@ -64,6 +64,12 @@ export const costInputSnapshotSchema = z
     extra: z.object({ amountTry: dec, label: z.string().nullable() }).strict().nullable(),
     // SY-D2: yalnız ATKI_UCRETI'de yazılır; eski fotoğraflarda yok (opsiyonel → eski hash bayt-aynı).
     loomPick: z.object({ rate: price.nullable() }).strict().optional(),
+    // SY-C2/C1: yalnız CARPMA'da / aktif formül varken yazılır; eski fotoğraflar anahtarsız aynen okunur.
+    wasteMethod: z.literal("CARPMA").optional(),
+    formulas: z
+      .array(z.object({ formulaId: z.string(), code: z.string(), name: z.string(), versionNo: z.number().int(), expression: z.string(), currency: currencyEnum }).strict())
+      .min(1)
+      .optional(),
   })
   .strict();
 export type CostInputSnapshot = z.infer<typeof costInputSnapshotSchema>;

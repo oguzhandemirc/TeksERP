@@ -39,7 +39,7 @@ const ZENGIN_DOC = {
     orderNos: "SIP-1, SIP-2",
   },
   products: [
-    { name: "Linen 330cm.", customerName: "BS-6650 EKRU 330cm.", customerItemOnly: "BS-6650 330cm.", customerColorOnly: "EKRU", rollCount: 3, totalMeters: 312.456 },
+    { name: "Linen 330cm.", customerName: "BS-6650 EKRU 330cm.", customerItemOnly: "BS-6650 330cm.", customerColorOnly: "EKRU", rollCount: 3, totalMeters: 312.456, unitPrice: 2.75, currency: "USD", amount: 859.25 },
     { name: "Saten Siyah 150cm.", customerName: null, customerItemOnly: null, customerColorOnly: null, rollCount: 1, totalMeters: 40 },
   ],
   sacks: [
@@ -127,6 +127,8 @@ export const SEVK_BELGE_CFGS: Record<string, DocumentConfig | null> = {
   yalnizOptIn: { columns: { cuval: { shown: ["packingGroupCode"] }, ceki: { shown: ["packingGroupCode"] } } },
   // KQ-D8 açık kombinasyon: "Hata notu" sütunu belge ayarından açılmış (varsayılan KAPALI).
   hataNotu: { columns: { ceki: { shown: ["defectNote"] } } },
+  // SY-C4 açık kombinasyon: ürün listesinde birim fiyat + tutar (varsayılan KAPALI; fiyatsız satır boş).
+  fiyat: { columns: { urun: { shown: ["unitPrice", "amount"] } } },
   bolumKapali: { sections: { urun: false, docNo: false, date: false, direction: false, vehicleInfo: false } },
   seritEn: { sections: { listHeader: true }, language: "en", blankWidths: true },
   otoDil: { language: "auto", titleOverride: "Sevk Fişi", footerNote: "not <b>", footerNotePlacement: "top" },

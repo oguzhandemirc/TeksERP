@@ -337,6 +337,8 @@ export interface FeatureFlags {
   costProfitConsumablePriceSource: "ALIS_FIYATI" | "SON_ALIS_FATURASI";
   /** SY-D2: dokuma standart maliyet yöntemi (backend aynası; varsayılan `TEZGAH_SAATI`). */
   costWeavingStandardMethod: "TEZGAH_SAATI" | "ATKI_UCRETI";
+  /** SY-C2: fire yöntemi (backend aynası; varsayılan `BOLME`). */
+  costWasteMethod: "BOLME" | "CARPMA";
   /** SY-M1: siparişten üretim önerisi (backend aynası; varsayılan `KAPALI`). */
   orderProductionProposal: "KAPALI" | "ONIZLEME" | "ONAYDA_TASLAK";
   /** D4-G2b: kârlılıkta makine süresi kaynağı (backend aynası; varsayılan `OTURUM`). */

@@ -110,6 +110,8 @@ const LABELS = {
     metre: "METRE",
     kg: "KG",
     toplam: "TOPLAM",
+    birimFiyat: "BİRİM FİYAT",
+    tutar: "TUTAR",
     sigDefaults: ["Teslim Eden", "Teslim Alan"],
     wmDraft: "TASLAK",
     wmVoid: "İPTAL",
@@ -169,6 +171,8 @@ const LABELS = {
     metre: "METERS",
     kg: "KG",
     toplam: "TOTAL",
+    birimFiyat: "UNIT PRICE",
+    tutar: "AMOUNT",
     sigDefaults: ["Delivered By", "Received By"],
     wmDraft: "DRAFT",
     wmVoid: "VOID",
@@ -197,6 +201,11 @@ interface ShipmentDocProduct {
   customerColorOnly?: string | null;
   rollCount: number;
   totalMeters: number;
+  /** SY-C4: sevk anında donan birim fiyat (tek fiyat çözülürse); eski snapshot'ta YOK → hücre boş. */
+  unitPrice?: number;
+  currency?: string;
+  /** Brüt metre × birim fiyat (2 hane). */
+  amount?: number;
 }
 
 interface ShipmentDocSack {
@@ -470,6 +479,30 @@ interface DispatchSection<R> {
   cols: DocColSpec<R>[];
 }
 
+/** SY-C4 ürün listesi fiyat kolonları — ikisi de `defaultHidden` (müşteri belgesinde iç kolon OPT-IN). */
+function priceCols(
+  products: ShipmentDocProduct[],
+  labels: (typeof LABELS)["tr"] | (typeof LABELS)["en"],
+  fmtTr: (n: number | null | undefined, dec: number) => string,
+): DocColSpec<ShipmentDocProduct>[] {
+  const L = labels;
+  const currencies = new Set(products.filter((p) => p.unitPrice != null).map((p) => p.currency ?? ""));
+  const single = currencies.size <= 1 ? [...currencies][0] ?? null : null;
+  const mixedText = (v: number | undefined, cur: string | undefined, dec: number) => (v == null ? null : `${fmtTr(v, dec)} ${cur ?? ""}`.trim());
+  if (single !== null || currencies.size === 0) {
+    const suffix = single ? ` ${single}` : undefined;
+    const total = products.reduce((s, p) => s + (p.amount ?? 0), 0);
+    return [
+      { key: "unitPrice", label: L.birimFiyat, align: "r", defaultHidden: true, kind: { t: "num", dec: 2, suffix }, value: (p) => p.unitPrice ?? null },
+      { key: "amount", label: L.tutar, align: "r", defaultHidden: true, kind: { t: "num", dec: 2, suffix }, value: (p) => p.amount ?? null, foot: { value: currencies.size ? Math.round(total * 100) / 100 : null } },
+    ];
+  }
+  return [
+    { key: "unitPrice", label: L.birimFiyat, align: "r", defaultHidden: true, kind: TEXT, value: (p) => mixedText(p.unitPrice, p.currency, 2) },
+    { key: "amount", label: L.tutar, align: "r", defaultHidden: true, kind: TEXT, value: (p) => mixedText(p.amount, p.currency, 2) },
+  ];
+}
+
 /**
  * Sevk irsaliyesinin İÇERİK kararları — TEK ÇÖZÜCÜ. HTML (`renderShipmentDispatchHtml`)
  * ve Excel (`renderShipmentDispatchTables`) buradan türer; hangi kolonun, hangi
@@ -602,6 +635,9 @@ function shipmentDispatchParts(snapshot: PrintedDocSnapshot, meta: RenderMeta) {
           : []),
         { key: "rollCount", label: L.topAdedi, align: "r", kind: COUNT, value: (p) => p.rollCount, foot: { value: t.totalRolls } },
         { key: "totalMeters", label: L.toplamMetre, align: "r", kind: QTY, value: (p) => p.totalMeters, foot: { value: t.totalMeters } },
+        // SY-C4: birim fiyat + tutar — İÇ veri, OPT-IN (`defaultHidden`; Belge Kişiselleştirme → columns.urun.shown).
+        // Tek döviz: sayı + döviz eki, tutar toplamlı; karışık döviz: hücre "1,70 USD" metni, toplam yok.
+        ...priceCols(products, L, docNum(snapshot).tr),
       ],
     });
   }

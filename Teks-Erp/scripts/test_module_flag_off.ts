@@ -263,7 +263,7 @@ const MODULLER: ModulTanimi[] = [
     middleware: "requireMaliyetEnabled",
     okuyucu: "readMaliyetEnabled",
     modulKodu: "maliyet",
-    routeDosyalari: ["routes/cost.routes.ts"],
+    routeDosyalari: ["routes/cost.routes.ts", "routes/cost-formula.routes.ts"],
     sondalar: modulUclari("maliyetEnabled"),
     onKosul: { alan: "productionEnabled", beklenenModulKodu: "production" },
   },

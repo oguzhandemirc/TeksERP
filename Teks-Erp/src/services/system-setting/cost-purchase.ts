@@ -8,6 +8,8 @@
 
 import prisma from "../../lib/prisma";
 import { FINISHING_KG_BASES, type FinishingKgBasis } from "../helpers/fabric-cost-kg.helper";
+import { COST_WASTE_METHODS, type CostWasteMethod } from "../helpers/fabric-cost-types.helper";
+import { DEFAULT_COST_WASTE_METHOD } from "./defaults";
 import { Prisma } from "@prisma/client";
 import { asBoolean } from "./core";
 import { CARI_HOLD_EMANET_SHIPMENT_MODES, CARI_HOLD_RELEASE_BY_SAME_PERSON_MODES, COST_PRESENTATION_CURRENCIES, DEFAULT_CARI_HOLD_EMANET_SHIPMENT, DEFAULT_CARI_HOLD_RELEASE_BY_SAME_PERSON, DEFAULT_COST_FINISHING_KG_BASIS, DEFAULT_COST_PRESENTATION_CURRENCY, DEFAULT_ORDER_PRODUCTION_PROPOSAL, DEFAULT_PROFIT_CONSUMABLE_PRICE_SOURCE, DEFAULT_PROFIT_MACHINE_TIME_MODE, DEFAULT_PROFIT_OVERHEAD_KEY, DEFAULT_PROFIT_SUBCONTRACT_SOURCE, DEFAULT_RISK_LIMIT_CURRENCY_MODE, DEFAULT_WEAVING_STANDARD_METHOD, ORDER_PRODUCTION_PROPOSAL_MODES, PROFIT_CATEGORY_CLASSES, PROFIT_CATEGORY_CLASS_MAX_ENTRIES, PROFIT_CATEGORY_CLASS_MAX_KEY, PROFIT_CONSUMABLE_PRICE_SOURCES, PROFIT_MACHINE_TIME_MODES, PROFIT_OVERHEAD_KEYS, PROFIT_SUBCONTRACT_SOURCES, RISK_LIMIT_CURRENCY_MODES, WEAVING_STANDARD_METHODS, type CariHoldEmanetShipment, type CariHoldReleaseBySamePerson, type CostPresentationCurrency, type KursunGramPriceBasis, type OrderProductionProposalMode, type ProfitCategoryClass, type ProfitCategoryClassMap, type ProfitConsumablePriceSource, type ProfitMachineTimeMode, type ProfitOverheadKey, type ProfitSubcontractSource, type RiskLimitCurrencyMode, type ServiceBillingBrodeUnit, type ServiceBillingMeterBasis, type ServiceBillingMissingMeter, type ServiceBillingPriceDate, type ServiceBillingTrigger, type WeavingStandardMethod } from "./defaults";
@@ -39,6 +41,11 @@ export function readCostProfitConsumablePriceSource(tx?: Pick<typeof prisma, "sy
 /** SY-D2: dokuma standart maliyet yöntemi — tanınmayan değer varsayılana (`TEZGAH_SAATI`, bugünkü motor) düşer. */
 export function readCostWeavingStandardMethod(tx?: Pick<typeof prisma, "systemSetting">): Promise<WeavingStandardMethod> {
   return readServiceEnum(SETTING_KEYS.COST_WEAVING_STANDARD_METHOD, WEAVING_STANDARD_METHODS, DEFAULT_WEAVING_STANDARD_METHOD, tx);
+}
+
+/** SY-C2: fire yöntemi — tanınmayan değer varsayılana (`BOLME`, bugünkü motor) düşer. */
+export function readCostWasteMethod(tx?: Pick<typeof prisma, "systemSetting">): Promise<CostWasteMethod> {
+  return readServiceEnum(SETTING_KEYS.COST_WASTE_METHOD, COST_WASTE_METHODS, DEFAULT_COST_WASTE_METHOD, tx);
 }
 
 /** SY-M1: siparişten üretim önerisi — tanınmayan değer varsayılana (`KAPALI`, bugünkü davranış) düşer. */

@@ -120,6 +120,7 @@ import yarnRoutes from "./routes/yarn.routes";
 import itemPriceRoutes from "./routes/item-price.routes";
 import servicePriceRoutes from "./routes/service-price.routes";
 import costRoutes from "./routes/cost.routes";
+import costFormulaRoutes from "./routes/cost-formula.routes";
 import quoteRoutes from "./routes/quote.routes";
 import priceListRoutes from "./routes/price-list.routes";
 import purchaseOrderRoutes from "./routes/purchase-order.routes";
@@ -671,6 +672,8 @@ app.use("/api/yarn", yarnRoutes);
 app.use("/api/item-prices", itemPriceRoutes);
 app.use("/api/service-prices", servicePriceRoutes);
 // MAL-1: maliyet girdileri — router kendi kapısını taşır (`requireMaliyetEnabled`).
+// SY-C1/C3: ek maliyet formülleri + desen ailesine atkı ücreti (aynı modül kapısı, ayrı dosya — boyut).
+app.use("/api/cost", costFormulaRoutes);
 app.use("/api/cost", costRoutes);
 app.use("/api/quotes", quoteRoutes);
 app.use("/api/price-lists", priceListRoutes);

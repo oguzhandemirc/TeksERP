@@ -804,6 +804,7 @@ model User {
   yarnCostPricesCreated       YarnCostPrice[]               @relation("YarnCostPriceCreatedBy")
   finishingRatesCreated       FinishingRate[]               @relation("FinishingRateCreatedBy")
   costStructuresCreated       CostStructure[]               @relation("CostStructureCreatedBy")
+  costFormulasCreated         CostFormula[]                 @relation("CostFormulaCreatedBy")
   costStructuresUpdated       CostStructure[]               @relation("CostStructureUpdatedBy")
   standardCostVersionsCreated StandardCostVersion[]         @relation("StandardCostVersionCreatedBy")
   salesQuotesCreated          SalesQuote[]                  @relation("SalesQuoteCreatedBy")
@@ -15474,6 +15475,38 @@ model CostStructureProcess {
   @@map("cost_structure_processes")
 }
 
+/// EK MALİYET FORMÜLÜ (SY-C1) — ③a DAMGALI SÜRÜM (YarnCostPrice deseni): değişim = eski satıra
+/// `revokedAt` + aynı kodla yeni satır (`versionNo + 1`), aynı tx; satır silinmez. Motor aktif
+/// sürümü girdiye DONDURUR (standart maliyet sürümü yazıldığı formülle kalır). Yalnız para; stok
+/// düşümüne/ihtiyaç planına girmez. Kod başına tek aktif: ŞEMA-DIŞI partial unique
+/// `cost_formulas_active_code_uq (code) WHERE revokedAt IS NULL`.
+model CostFormula {
+  id           String    @id @default(uuid()) @db.Uuid
+  code         String    @db.VarChar(32)
+  name         String    @db.VarChar(100)
+  /// Paketsiz değerlendiricinin ifadesi (`cost-formula-expr.helper`); kayıtta ayrıştırılır.
+  expression   String    @db.VarChar(500)
+  /// Sonucun para birimi (metre başına); TL dışı motor kuruyla çevrilir.
+  currency     Currency  @default(TRY)
+  /// CHECK ≥ 0 — motorda satır sırası.
+  sortOrder    Int       @default(0) @db.SmallInt
+  /// Kod başına 1'den artar — CHECK ≥ 1.
+  versionNo    Int       @default(1)
+  note         String?   @db.VarChar(300)
+  revokedAt    DateTime? @db.Timestamptz
+  revokedById  String?   @db.Uuid
+  revokeReason String?   @db.VarChar(300)
+
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+  createdById String?  @db.Uuid
+  createdBy   User?    @relation("CostFormulaCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([code, createdAt])
+  @@index([createdById])
+  @@map("cost_formulas")
+}
+
 // =============================================================================
 // STANDART MALİYET SÜRÜMÜ (MAL-2) — plan §3.2. DONMUŞ FOTOĞRAF, defter değil: satır ve
 // kalemleri yazıldıktan sonra güncellenmez; yalnız `status/supersededAt` DURUM kolonudur.
@@ -15502,6 +15535,8 @@ enum CostComponent {
   WEAVING_PICK
   /// SEYİTOĞLU MİG-2a (§8) — ürün yapısının dış/iç proses tarifesi satırı (`CostStructureProcess`).
   PROCESS
+  /// SY-C1 — kullanıcı tanımlı ek maliyet formülü satırı (`CostFormula`; yalnız para, stoğa girmez).
+  FORMULA
 }
 
 model StandardCostVersion {

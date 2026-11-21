@@ -5,7 +5,10 @@
 import { useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Calculator, Search } from "lucide-react";
+import { Calculator, Layers, Search } from "lucide-react";
+import { PermissionGate } from "@/components/PermissionGate";
+import { useWeavingPickMethod } from "../shared/loom-pick";
+import { FamilyPickRateDialog } from "./FamilyPickRateDialog";
 import { PageShell } from "@/components/layout/PageShell";
 import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
 import { DataTable } from "@/components/data-table/DataTable";
@@ -27,6 +30,9 @@ const EMPTY: CostItemFilter = { q: "", durum: "", girdiDegisti: false };
 export function CostItemsPage() {
   const nav = useNavigate();
   const [f, setF] = useState<CostItemFilter>(EMPTY);
+  const [familyOpen, setFamilyOpen] = useState(false);
+  // SY-C3: toplu atkı ücreti yalnız dokuma atkı ücretiyle hesaplanırken anlamlı (varsayılan TEZGAH_SAATI'nda düğme yok).
+  const pickMethod = useWeavingPickMethod();
   const query = { ...f, q: useDebouncedValue(f.q) };
   const q = useInfiniteQuery({
     queryKey: ["cost-items", "list", query],
@@ -47,6 +53,11 @@ export function CostItemsPage() {
           <div className="flex gap-2">
             <RefreshButton queryKey={["cost-items", "list"]} />
             <Button variant="outline" onClick={() => nav("/cost/calculator")}><Calculator className="mr-1 h-4 w-4" />Hızlı hesapla</Button>
+            {pickMethod && (
+              <PermissionGate permission="cost:write">
+                <Button variant="outline" onClick={() => setFamilyOpen(true)}><Layers className="mr-1 h-4 w-4" />Aileye atkı ücreti</Button>
+              </PermissionGate>
+            )}
           </div>
         }
       />
@@ -87,6 +98,7 @@ export function CostItemsPage() {
           </Button>
         )}
       </ListFooter>
+      {familyOpen && <FamilyPickRateDialog onClose={() => setFamilyOpen(false)} />}
     </PageShell>
   );
 }

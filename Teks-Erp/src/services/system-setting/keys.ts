@@ -125,6 +125,8 @@ export const SETTING_KEYS = {
   COST_PROFIT_CONSUMABLE_PRICE_SOURCE: "maliyet.karlilik.sarfFiyatKaynagi",
   /** SY-D2: dokuma standart maliyet yöntemi — `TEZGAH_SAATI` (varsayılan; devir × randıman × saat ücreti) · `ATKI_UCRETI` (atkı/cm × ücret). */
   COST_WEAVING_STANDARD_METHOD: "maliyet.dokumaStandartYontemi",
+  /** SY-C2: fire uygulama yöntemi — `BOLME` (varsayılan; net ÷ (1 − f)) · `CARPMA` (net × (1 + f), Excel alışkanlığı). */
+  COST_WASTE_METHOD: "maliyet.fireYontemi",
   /** SY-M1: siparişten üretim önerisi — `KAPALI` (varsayılan; düğme/uç yok) · `ONIZLEME` · `ONAYDA_TASLAK` (onayda önizleme açılır; sessiz yaratma yok). */
   ORDER_PRODUCTION_PROPOSAL: "siparis.uretimOnerisi",
   /** D4-G2b: kârlılıkta makine süresi — `OTURUM` (varsayılan; iş oturumu, IDLE `lastActivityAt`ta kesilir) · `VARDIYA` · `NORM`. */

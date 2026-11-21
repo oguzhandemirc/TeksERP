@@ -2,7 +2,7 @@
   "contract": {
     "docType": "SHIPMENT_DISPATCH",
     "hedef": "musteri",
-    "contractVersion": 4,
+    "contractVersion": 5,
     "kokler": [
       {
         "yol": "belge.no",
@@ -412,6 +412,28 @@
             "birim": "m",
             "kaynakKolon": "totalMeters",
             "toplam": "metre"
+          },
+          {
+            "yol": "birim_fiyat",
+            "etiket": "Birim fiyat",
+            "tur": "sayi",
+            "sinif": "ic",
+            "hiza": "r",
+            "ornek": 2.5,
+            "ondalik": 2,
+            "kaynakKolon": "unitPrice",
+            "icKod": "urun_birim_fiyat"
+          },
+          {
+            "yol": "tutar",
+            "etiket": "Tutar",
+            "tur": "sayi",
+            "sinif": "ic",
+            "hiza": "r",
+            "ornek": 1200,
+            "ondalik": 2,
+            "kaynakKolon": "amount",
+            "icKod": "urun_tutar"
           }
         ]
       },
@@ -1018,6 +1040,18 @@
     ],
     "icAlanlar": [
       {
+        "kod": "urun_birim_fiyat",
+        "yol": "tablolar.urun[].birim_fiyat",
+        "tablo": "urun",
+        "kaynakKolon": "unitPrice"
+      },
+      {
+        "kod": "urun_tutar",
+        "yol": "tablolar.urun[].tutar",
+        "tablo": "urun",
+        "kaynakKolon": "amount"
+      },
+      {
         "kod": "cuval_parti_kodu",
         "yol": "tablolar.cuval[].parti_kodu",
         "tablo": "cuval",
@@ -1190,6 +1224,20 @@
           "etiket": "TOPLAM METRE",
           "hiza": "r",
           "toplam": "metre"
+        },
+        {
+          "anahtar": "birim_fiyat",
+          "kaynak": "unitPrice",
+          "etiket": "BİRİM FİYAT",
+          "hiza": "r",
+          "toplam": null
+        },
+        {
+          "anahtar": "tutar",
+          "kaynak": "amount",
+          "etiket": "TUTAR",
+          "hiza": "r",
+          "toplam": null
         }
       ],
       "cuval": [

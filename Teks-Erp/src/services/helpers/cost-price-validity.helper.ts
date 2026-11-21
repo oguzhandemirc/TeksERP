@@ -15,6 +15,9 @@ export const ACTIVE_YARN_COST_PRICE = { revokedAt: null } as const;
 /** Bugün geçerli (damgasız) terbiye/fason tarifesi. */
 export const ACTIVE_FINISHING_RATE = { revokedAt: null } as const;
 
+/** Bugün yürürlükteki (damgasız) ek maliyet formülü sürümü (SY-C1). */
+export const ACTIVE_COST_FORMULA = { revokedAt: null } as const;
+
 /** `at` anında geçerli iplik fiyatı. ⚠️ Yalnız `{ AND: [...] }` içine konur (kendi `OR`u var). */
 export function yarnCostPriceValidAt(at: Date): Prisma.YarnCostPriceWhereInput {
   return { createdAt: { lte: at }, OR: [{ revokedAt: null }, { revokedAt: { gt: at } }] };

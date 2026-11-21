@@ -19,6 +19,8 @@ export const COST_MISSING_CODES = [
   "FINISHING_RATE_MISSING",
   // SY-D2: ATKI_UCRETI yönteminde ne yapıda ne parametre setinde atkı ücreti var — dokuma sessizce 0 olmasın.
   "PICK_RATE_MISSING",
+  // SY-C1: ek maliyet formülü hesaplanamadı (sıfıra bölme, değeri olmayan değişken) — satır sessizce 0 olmasın.
+  "FORMULA_FAILED",
   // SY-a: ADET birimli (pul) iplikte metredeki adet girilmemiş — maliyet sessizce 0 olmasın.
   "YARN_PIECES_MISSING",
 ] as const;
@@ -30,7 +32,13 @@ export const COST_WARNING_CODES = [
 export type CostWarning = (typeof COST_WARNING_CODES)[number];
 export type CostComponent =
   | "WARP_YARN" | "WEFT_YARN" | "LOOM_MACHINE" | "LOOM_LABOR" | "ENERGY" | "BEAM_PREP"
-  | "FINISHING" | "LENGTH_SHRINK" | "FABRIC_WASTE" | "OVERHEAD" | "EXTRA" | "PROCESS" | "WEAVING_PICK";
+  | "FINISHING" | "LENGTH_SHRINK" | "FABRIC_WASTE" | "OVERHEAD" | "EXTRA" | "PROCESS" | "WEAVING_PICK" | "FORMULA";
+
+/** SY-C2 `maliyet.fireYontemi`: BOLME = net ÷ (1 − f) (bugünkü) · CARPMA = net × (1 + f) (Excel alışkanlığı). */
+export const COST_WASTE_METHODS = ["BOLME", "CARPMA"] as const;
+export type CostWasteMethod = (typeof COST_WASTE_METHODS)[number];
+/** SY-C1: girdiye DONAN formül sürümü — standart maliyet sürümü yazıldığı formülle kalır. */
+export interface CostFormulaInput { formulaId: string; code: string; name: string; versionNo: number; expression: string; currency: Currency }
 
 /** Kaynağıyla değer; `flag` derleyicinin türettiği uyarıdır (ör. atkı boyu enden türedi). */
 export interface Sourced<T> { value: T | null; source: CostSource; flag?: CostWarning }
@@ -81,6 +89,10 @@ export interface CostInput {
    * TEZGAH_SAATI girdisi/hash'i bayt-aynı). Ücret birimi: 1 atkı/cm sıklık için metre başına.
    */
   loomPick?: { rate: CostPrice | null };
+  /** SY-C2: yalnız CARPMA'da yazılır (BOLME = anahtar yok → girdi/hash bayt-aynı). Çekme bölmede kalır. */
+  wasteMethod?: "CARPMA";
+  /** SY-C1: yalnız aktif ek maliyet formülü varken yazılır (yoksa girdi + hash bayt-aynı). */
+  formulas?: CostFormulaInput[];
 }
 /** 1 birim döviz kaç TL; TRY verilmese de 1'dir. Eksik döviz → FX_RATE_MISSING. */
 export type FxRates = Partial<Record<Currency, Dec>>;

@@ -32,6 +32,7 @@ Sınıf: [ÇEKİRDEK] her kurulumda aynı · [PROFİL] bu fabrikanın seçimi. R
 - [ÇEKİRDEK] Basım hareketini yalnız `recordPrintJob`/`reportPrintJob` (`services/print-job.service.ts`) yazar; `print_jobs` telemetridir (karar okumaz, iptal guard'ı `labelPrintedAt` okur), audit'ten türetilmez, kullanıcı token'dan, yaşa göre budanır.
 - [ÇEKİRDEK] Barkod/QR değerini yalnız `scanElementValue` (`source`: yok/ROLL iç barkod, CUSTOMER_CODE müşteri kodu) verir.
 - [ÇEKİRDEK] Eksik müşteri kodu kararı render'dan önce `applyCustomerCodeGate` (`label.customerCodeMissing`: BLOCK → 400 `CUSTOMER_CODE_MISSING`, `print_jobs` yok · ROLL_BARCODE → iç barkod + uyarı).
+- [ÇEKİRDEK] İrsaliye ürün satırında `unitPrice/amount` sevk anında YALNIZ tek fiyat çözülürse donar (çok fiyat/fiyatsız → anahtar yok), tutar = BRÜT metre × fiyat; kolonlar `defaultHidden`, sözleşmede `sinif: "ic"` (`dispatch-unit-price.ts`).
 - [ÇEKİRDEK] Çeki `customerCode` sevkte donar, kolon opt-in; çuval bağlamında CUSTOMER_CODE elemanı 400 `CUSTOMER_CODE_SOURCE_NOT_ROLL` (ayar esnetmez); tablet BLOCK'ta okut-bağla sayfasını açar.
 - [ÇEKİRDEK] Toplu top etiketi de `labelPrintedAt` damgalar; damgayı yalnız `label.service#stampRollLabelPrinted` yazar.
 - [ÇEKİRDEK] Panelde her basım `lib/print.ts` boğazından (`printTracked` · `trackPdfSave` · `reportLabelSend`); iş ucu olan türde künye iş ucuna (başarıda `/print-jobs`a ayrıca yazma), iptal/hatada iş ucu çağrılmaz; sessiz basımı yalnız bilgisayar ayarı açar.

@@ -9,13 +9,15 @@
 // =============================================================================
 import { Prisma, type Currency } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
-import { ACTIVE_FINISHING_RATE, ACTIVE_YARN_COST_PRICE } from "./cost-price-validity.helper";
+import { ACTIVE_COST_FORMULA, ACTIVE_FINISHING_RATE, ACTIVE_YARN_COST_PRICE } from "./cost-price-validity.helper";
 import type { CostInput, CostPrice, CostRate, CostSource, CostWarpLayer, CostWarpYarn, CostWeftYarn, CostYarn, Sourced } from "./fabric-cost.helper";
 import { costWarpYarns } from "./fabric-cost-types.helper";
 import { WARP_SPEC_YARN_DENIER_SELECT, warpSpecDenierLines } from "./warp-spec-yarn.helper";
 import type { FinishingKgBasis } from "./fabric-cost-kg.helper";
 import { resolveDenier } from "../../constants/warp-beam";
-import { DEFAULT_COST_FINISHING_KG_BASIS, readCostFinishingKgBasis, readCostWeavingStandardMethod, type WeavingStandardMethod } from "../system-setting.service";
+import { DEFAULT_COST_FINISHING_KG_BASIS, readCostFinishingKgBasis, readCostWasteMethod, readCostWeavingStandardMethod, type WeavingStandardMethod } from "../system-setting.service";
+import type { CostFormulaInput, CostWasteMethod } from "./fabric-cost-types.helper";
+import { formulaCurrencies } from "./fabric-cost-formula.helper";
 import { readWarpLayersForItems, readWeftOverridesForRecipes, weftOverrideFor, type CostWarpLayerRow } from "./effective-construction.helper";
 import { resolveFinishingRateCode } from "./finishing-rate-code.helper";
 import { layerOwnCardWastePct } from "./warp-layer-beam.helper";
@@ -82,6 +84,10 @@ export interface CostSources {
   weftOverrides?: Map<string, Map<number, CostYarnRow>>;
   /** SY-3 I2: iplik kartı firesi DOLU olan iplikler (boş harita/yok = bugünkü girdi, bayt-aynı). */
   yarnWaste?: Map<string, Dec>;
+  /** SY-C2 `maliyet.fireYontemi`; yalnız CARPMA girdiye yazılır (BOLME/yok = bayt-aynı). */
+  wasteMethod?: CostWasteMethod;
+  /** SY-C1 aktif ek maliyet formülleri (sıralı); boş/yok = girdi bayt-aynı. */
+  formulas?: CostFormulaInput[];
   /** SY-a: KG DIŞI birimli iplikler (yok = hepsi KG, girdi bayt-aynı). */
   yarnUnits?: Map<string, YarnUnitRow>;
 }
@@ -121,6 +127,9 @@ async function loadSourcesTx(tx: Db, a: { itemIds: string[]; extraRateCodes: str
   const prices = yarnIds.size && a.withPrices ? await tx.yarnCostPrice.findMany({ where: { ...ACTIVE_YARN_COST_PRICE, yarnItemId: { in: [...yarnIds] } } }) : [];
   const rates = codes.size ? await tx.finishingRate.findMany({ where: { ...ACTIVE_FINISHING_RATE, code: { in: [...codes] } } }) : [];
   const weavingMethod = await readCostWeavingStandardMethod(tx);
+  const wasteMethod = await readCostWasteMethod(tx);
+  // Formül yalnız PARA'dır: fiyatsız yükleme (gramaj, ihtiyaç) sorguyu koşturmaz.
+  const formulaRows = !a.withPrices ? [] : await tx.costFormula.findMany({ where: ACTIVE_COST_FORMULA, orderBy: [{ sortOrder: "asc" }, { code: "asc" }], select: { id: true, code: true, name: true, versionNo: true, expression: true, currency: true } });
   // Metre tabanlı tarifelerde ayar okunmaz (sorgu sayısı bugünkü).
   const kgBasis = rates.some((r) => r.basis === "KG") ? await readCostFinishingKgBasis(tx) : undefined;
   return {
@@ -130,6 +139,8 @@ async function loadSourcesTx(tx: Db, a: { itemIds: string[]; extraRateCodes: str
     rates: new Map(rates.map((r) => [r.code, r])),
     asOf: new Date(),
     weavingMethod,
+    ...(wasteMethod === "CARPMA" ? { wasteMethod } : {}),
+    ...(formulaRows.length ? { formulas: formulaRows.map((f) => ({ formulaId: f.id, code: f.code, name: f.name, versionNo: f.versionNo, expression: f.expression, currency: f.currency })) } : {}),
     ...(recipes.length ? { recipes: new Map(recipes.map((r) => [r.id, r])) } : {}),
     ...(kgBasis ? { kgBasis } : {}),
     warpLayers,
@@ -290,7 +301,16 @@ export function buildCostInput(src: CostSources, ref: CostSourceRef, o: CostOver
     fabricWastePct: firstOf([o.fabricWastePct, "ELLE"], [cs?.fabricWastePct, "YAPI"], [p?.defaultFabricWastePct, "PARAMETRE"]),
     overheadPct: firstOf([p?.overheadPct, "PARAMETRE"]),
     extra: extraTry ? { amountTry: extraTry, label: cs?.extraCostLabel ?? null } : null,
+    ...methodPartsOf(src, cs),
+  };
+}
+
+/** Yöntem ayarlarına bağlı OPSİYONEL girdi parçaları; ayar bugünkü değerdeyse anahtar yok (girdi + hash bayt-aynı). */
+function methodPartsOf(src: CostSources, cs: CostItemRow["costStructure"]): Pick<CostInput, "loomPick" | "wasteMethod" | "formulas"> {
+  return {
     ...(src.weavingMethod === "ATKI_UCRETI" ? { loomPick: loomPickOf(src, cs) } : {}),
+    ...(src.wasteMethod === "CARPMA" ? { wasteMethod: "CARPMA" as const } : {}),
+    ...(src.formulas?.length ? { formulas: src.formulas } : {}),
   };
 }
 
@@ -319,5 +339,6 @@ export function costCurrencies(input: CostInput): Currency[] {
   add(input.finishing?.price);
   add(input.loomPick?.rate);
   input.processes?.forEach((p) => add(p.price));
+  for (const c of formulaCurrencies(input.formulas)) set.add(c);
   return [...set].sort();
 }
