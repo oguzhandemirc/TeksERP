@@ -32,7 +32,12 @@ export interface StationForm {
   issues: YarnLineDraft[];
   returns: YarnLineDraft[];
   breakCount: string;
+  /** Ek-2 r: okutulan BOŞ gövde (gövde kipi açıkken); doluysa gövde no'nun önüne geçer (sunucu). */
+  beamBody: StationBody | null;
 }
+
+export interface StationBody { id: string; bodyNo: string; ownerLabel: string }
+export type BeamBodyMode = 'OFF' | 'OPTIONAL' | 'REQUIRED';
 
 export interface StationSpec {
   id: string;
@@ -111,7 +116,21 @@ export function initialStationForm(warpSpecId: string | null, deps: StationDeps,
     issues: linesFromDefault(def, deps.defaultWarehouseId),
     returns: [],
     breakCount: '',
+    beamBody: null,
   };
+}
+
+/**
+ * Sarımda gövde okutması: yalnız aktif + BOŞ + bizde (EMPTY_STOCK) gövde bağlanır — sunucu `planWindBodies`
+ * kümesinin aynası (son karar sunucuda). Tanımsız gövde sarımda yerinde tanımlanmaz (dönüş kabulünün işi).
+ */
+export function stationBodyFromResolve(code: string, body: { id: string; bodyNo: string; status: string; statusLabel: string; isActive: boolean; owner: { label: string }; currentWarpBeam: { beamNo: string } | null } | null): StationBody | string {
+  if (body === null) return `${code.trim()} — kayıtlı gövde değil. Gövdeyi panelden tanımlayın ya da gövdesiz sarın.`;
+  if (!body.isActive || body.status !== 'EMPTY_STOCK') {
+    const on = body.currentWarpBeam ? ` (üstünde ${body.currentWarpBeam.beamNo})` : '';
+    return `${body.bodyNo} şu an "${body.statusLabel}"${on} — yalnız depodaki boş gövde sarılabilir.`;
+  }
+  return { id: body.id, bodyNo: body.bodyNo, ownerLabel: body.owner.label };
 }
 
 /** Varsayılan kart: son levent (plan/sarım) kartı → son sarım önerisinin kartı → tek kart → null. */
@@ -167,18 +186,24 @@ export function effectiveIssues(form: StationForm, spec: StationSpec | null): Ya
 
 /** İstasyon formu → sayfalı formun `WindForm`u (doğrulama + yük aynı zincirden geçer). Adet 1: raşel takımı listedeki SAR'da. */
 export function toWindForm(form: StationForm, spec: StationSpec | null): WindForm {
-  return { lengthM: form.lengthM, kgSource: form.kgSource, machineId: form.machineId, issues: effectiveIssues(form, spec), returns: form.returns, breakCount: form.breakCount, count: '1', physicalBeamNoPrefix: '' };
+  return {
+    lengthM: form.lengthM, kgSource: form.kgSource, machineId: form.machineId, issues: effectiveIssues(form, spec), returns: form.returns, breakCount: form.breakCount, count: '1', physicalBeamNoPrefix: '',
+    ...(form.beamBody ? { beamBodyIds: [form.beamBody.id] } : {}),
+  };
 }
 
 export interface StationRules {
   lotRequired: boolean;
   beamWeavingLinkRequired: boolean;
+  /** Eski sunucu göndermez → OFF (gövde sorulmaz). */
+  beamBodyMode?: BeamBodyMode;
 }
 
 /** Ekran kuralları önce (kart · hedef · kg), sonra sayfalı formun AYNI zinciri (`validateWind`, IN_HOUSE). */
 export function validateStation(form: StationForm, spec: StationSpec | null, target: WarpBeam | null, rules: StationRules): Validation {
   if (!spec) return { ok: false, message: 'Çözgü kartı seçin.' };
   if (form.target.kind === 'beam' && !target) return { ok: false, message: 'Seçilen levent artık planlı değil — listeyi yenileyin ya da kartı yeniden seçin.' };
+  if (rules.beamBodyMode === 'REQUIRED' && !form.beamBody) return { ok: false, message: 'Levent gövdesinin QR\'ını okutun (bu kurulumda gövde takibi zorunlu).' };
   if (!target && rules.beamWeavingLinkRequired && !form.weavingOrderId) return { ok: false, message: `Bu kurulumda levent bir ${TERIM.dokumaIsEmri.cekimKucuk.yonelme} bağlanmalı — "${TERIM.dokumaIsEmri.tekil}" seçin.` };
   if (form.issues.length === 1) {
     if (form.kgSource === 'THEORETICAL' && spec.denier == null) return { ok: false, message: 'İplik kartında denye yok — nominal kg hesaplanamaz; tartıp girin.' };
@@ -204,7 +229,7 @@ export function afterPlanCreated(form: StationForm, beamId: string): StationForm
 
 /** Sarım sonrası: kart, makine, metre, kg kaynağı, iplik depo/lot kalır; ölçümler (kg, gövde, iade, kopuş) temizlenir; hedef yeniden otomatik. */
 export function afterWind(form: StationForm): StationForm {
-  return { ...form, target: { kind: 'auto' }, weighedKg: '', physicalBeamNo: '', issues: form.issues.map((l) => ({ ...l, qtyKg: '' })), returns: [], breakCount: '' };
+  return { ...form, target: { kind: 'auto' }, weighedKg: '', physicalBeamNo: '', issues: form.issues.map((l) => ({ ...l, qtyKg: '' })), returns: [], breakCount: '', beamBody: null };
 }
 
 /** Kartın iplik kalemi (lot seçicisini süzmek için): bağlam kartı iplik id'si taşımaz → aynı karttaki herhangi bir leventten; yoksa null (süzülmez, sunucu doğrular). */

@@ -9,7 +9,7 @@ import { ApiResponse } from "../types/api.types";
 import { WARP_SPEC_YARN_DENIER_SELECT, warpSpecDenierLines, warpSpecKgPerMExact } from "./helpers/warp-spec-yarn.helper";
 import { listDevereMachines, listLoomMachines } from "./warp-beam.service";
 import { yarnLotBalancesTx } from "./helpers/yarn-lot.helper";
-import { readDevereAutoConsume, readDevereLotRequired, readDevereMountTracking, readDevereMountTrackingRequired, resolveBeamWeavingLinkRequired, resolveYarnQualityHoldEnabled } from "./system-setting.service";
+import { readDevereAutoConsume, readDevereBeamBodyMode, readDevereLotRequired, readDevereMountTracking, readDevereMountTrackingRequired, resolveBeamWeavingLinkRequired, resolveYarnQualityHoldEnabled } from "./system-setting.service";
 import { listOpenInHouseWeavingOrders, type MachineRunTabletContextDto } from "./helpers/machine-run-suggest.helper";
 import { lastWindDefaults, type LastWindDefault } from "./helpers/warp-beam-wind-defaults.helper";
 
@@ -57,6 +57,8 @@ export interface WarpBeamTabletContextDto {
   autoConsume: boolean;
   /** Z5/E6: çözgü kartı başına son IN_HOUSE sarımın makine + iplik satırları — SAR formu ön-dolumu, yalnız öneri. */
   lastWindDefaults: LastWindDefault[];
+  /** Devere ek-2 r: `devere.beamBodyMode` — SAR formunda gövde QR alanı OFF'ta yok, REQUIRED'da zorunlu (sunucu da 400). Eski tablet okumaz. */
+  beamBodyMode: "OFF" | "OPTIONAL" | "REQUIRED";
 }
 
 type TabletSpecRow = Parameters<typeof warpSpecDenierLines>[0] & { id: string; code: string; name: string };
@@ -87,6 +89,7 @@ export async function getWarpBeamTabletContext(): Promise<ApiResponse<WarpBeamTa
   const weavingOrders = await listOpenInHouseWeavingOrders(prisma);
   const beamWeavingLinkRequired = await resolveBeamWeavingLinkRequired();
   const autoConsume = await readDevereAutoConsume();
+  const beamBodyMode = await readDevereBeamBodyMode();
   const windDefaults = await lastWindDefaults(prisma, specs.map((w) => w.id));
   return {
     success: true,
@@ -106,6 +109,7 @@ export async function getWarpBeamTabletContext(): Promise<ApiResponse<WarpBeamTa
       beamWeavingLinkRequired,
       autoConsume,
       lastWindDefaults: windDefaults,
+      beamBodyMode,
     },
   };
 }

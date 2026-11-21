@@ -50,6 +50,22 @@ describe('BeamLineSheet', () => {
     expect(r.onSave.mock.calls[0][0].draft.body).toEqual({ kind: 'new', bodyNo: 'YD-22', ownerKind: 'WARPER' });
   });
 
+  it('yeniden sarım adayı: seçim yalnız aday varken; seçince metre aday boyuyla dolar', async () => {
+    const onSave = jest.fn();
+    const r = renderWithPaper(<BeamLineSheet value={sheetOf(draft())} weighing="OFF" subcontractorName="X" reworkCandidates={[{ beamId: 'wb1', beamNo: 'LV-7', lengthM: '950.000', bodyNo: 'LG-3', rejectionDocNo: 'DR-2611-0001' }]} onSave={onSave} onRemove={jest.fn()} onDismiss={jest.fn()} />);
+    await act(async () => {});
+    fireEvent.press(r.getByTestId('devere-kabul-rework-LV-7'));
+    await act(async () => {});
+    fireEvent.press(r.getByTestId('devere-kabul-satir-kaydet'));
+    await act(async () => {});
+    expect(onSave.mock.calls[0][0].draft).toMatchObject({ reworkOfBeamId: 'wb1', lengthM: '950' });
+  });
+
+  it('aday yoksa yeniden sarım seçimi çizilmez', async () => {
+    const r = await setup(sheetOf(draft()), 'OFF');
+    expect(r.queryByText('Yeniden sarım mı?')).toBeNull();
+  });
+
   it('düzeltmede satır silinebilir', async () => {
     const r = await setup(sheetOf(draft(), true), 'OPTIONAL');
     fireEvent.press(r.getByText('Satırı sil'));
