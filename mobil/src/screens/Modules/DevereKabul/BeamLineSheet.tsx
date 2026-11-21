@@ -15,6 +15,7 @@ import { colors } from '../../../theme';
 import type { DevereMode3, ReworkCandidate } from '../../../services/devereKabul.service';
 import { inputText, validateBeam, type BeamDraft } from './receiveDocPayload';
 import type { LineSheet } from './useDevereKabul';
+import { ds } from './devereKabul.styles';
 
 interface Props {
   value: LineSheet;
@@ -70,23 +71,23 @@ export default function BeamLineSheet({ value, weighing, subcontractorName, rewo
       {!body ? (
         <>
           <Text style={sheet.label}>Gövde no (isteğe bağlı)</Text>
-          <ModalTextInput mode="outlined" value={d.physicalBeamNo} onChangeText={(t) => setD({ ...d, physicalBeamNo: t })} maxLength={32} placeholder="L-12" style={sheet.input} />
+          <ModalTextInput mode="outlined" value={d.physicalBeamNo} onChangeText={(t) => setD({ ...d, physicalBeamNo: t })} maxLength={32} placeholder="L-12" autoCapitalize="characters" style={ds.bigInput} />
         </>
       ) : null}
       <View style={sheet.row}>
         <View style={sheet.col}>
           <Text style={sheet.label}>Metre</Text>
-          <NumpadInput value={d.lengthM} onChangeText={(t) => setD({ ...d, lengthM: t })} allowDecimal numpadMaxLength={9} numpadLabel="Metre" placeholder="1200" style={sheet.input} testID="devere-kabul-metre" />
+          <NumpadInput value={d.lengthM} onChangeText={(t) => setD({ ...d, lengthM: t })} allowDecimal numpadMaxLength={9} numpadLabel="Metre" placeholder="1200" mode="outlined" style={ds.bigInput} testID="devere-kabul-metre" />
         </View>
         {weighing !== 'OFF' ? (
           <>
             <View style={sheet.col}>
               <Text style={sheet.label}>{weighing === 'REQUIRED' ? 'Brüt kg (zorunlu)' : 'Brüt kg (isteğe bağlı)'}</Text>
-              <NumpadInput value={d.grossKg} onChangeText={(t) => setD({ ...d, grossKg: t })} allowDecimal numpadMaxLength={9} numpadLabel="Brüt kg" placeholder="—" style={sheet.input} />
+              <NumpadInput value={d.grossKg} onChangeText={(t) => setD({ ...d, grossKg: t })} allowDecimal numpadMaxLength={9} numpadLabel="Brüt kg" placeholder="—" mode="outlined" style={ds.bigInput} />
             </View>
             <View style={sheet.col}>
               <Text style={sheet.label}>Dara kg (isteğe bağlı)</Text>
-              <NumpadInput value={d.tareKg} onChangeText={(t) => setD({ ...d, tareKg: t })} allowDecimal numpadMaxLength={9} numpadLabel="Dara kg" placeholder="—" style={sheet.input} />
+              <NumpadInput value={d.tareKg} onChangeText={(t) => setD({ ...d, tareKg: t })} allowDecimal numpadMaxLength={9} numpadLabel="Dara kg" placeholder="—" mode="outlined" style={ds.bigInput} />
             </View>
           </>
         ) : null}

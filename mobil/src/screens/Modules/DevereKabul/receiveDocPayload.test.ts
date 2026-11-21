@@ -1,4 +1,4 @@
-import { beamLine, bodyFromResolve, buildDocBody, draftsHaveBody, inputText, nextPlanLength, parseNum, previewBeamName, progressText, validateBeam, type BeamDraft, type OrderDraft } from './receiveDocPayload';
+import { autoPickOrderId, heroFigure, beamLine, bodyFromResolve, buildDocBody, draftsHaveBody, inputText, nextPlanLength, parseNum, previewBeamName, progressText, validateBeam, type BeamDraft, type OrderDraft } from './receiveDocPayload';
 import type { ResolvedBeamBody } from '../../../services/devereKabul.service';
 
 const beam = (p: Partial<BeamDraft> = {}): BeamDraft => ({ key: 'k', body: null, physicalBeamNo: '', lengthM: '1200', grossKg: '', tareKg: '', ...p });
@@ -108,5 +108,19 @@ describe('receiveDocPayload — yeniden sarım adayı (ek-2 r)', () => {
     const r = buildDocBody([order('FDV-1', [beam({ reworkOfBeamId: 'wb1' }), beam({ key: 'k2', reworkOfBeamId: 'wb1' })])], P);
     expect(r).toMatchObject({ ok: false, error: expect.stringMatching(/yeniden sarım/) });
     expect(buildDocBody([order('FDV-1', [beam({ reworkOfBeamId: 'wb1' }), beam({ key: 'k2', reworkOfBeamId: 'wb2' })])], P).ok).toBe(true);
+  });
+});
+
+describe('receiveDocPayload — tasarım dili (devere-t)', () => {
+  it('tek açık sipariş kendiliğinden seçilir; birden çok, taslak dolu ya da zaten seçildiyse seçilmez', () => {
+    expect(autoPickOrderId([{ id: 'o1' }], 0, false)).toBe('o1');
+    expect(autoPickOrderId([{ id: 'o1' }, { id: 'o2' }], 0, false)).toBeNull();
+    expect(autoPickOrderId([{ id: 'o1' }], 1, false)).toBeNull();
+    expect(autoPickOrderId([{ id: 'o1' }], 0, true)).toBeNull();
+    expect(autoPickOrderId([], 0, false)).toBeNull();
+  });
+  it('kahraman sayı: beklenen levent varsa "0/2 levent", yoksa kalan metre', () => {
+    expect(heroFigure(0, { remainingBeamCount: 2, remainingM: '3000' })).toEqual({ value: '0/2', unit: 'levent' });
+    expect(heroFigure(1, { remainingBeamCount: null, remainingM: '3000.000' })).toEqual({ value: '3.000', unit: 'm kalan' });
   });
 });

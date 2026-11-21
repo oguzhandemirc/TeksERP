@@ -66,6 +66,8 @@ export interface WindPayload {
   physicalBeamNoPrefix?: string | null;
   /** Z1 (01): sarımda da bağ kurulabilir (plan diyaloğunda seçilmediyse). */
   weavingOrderId?: string | null;
+  /** Devere ek-2 r: içeride sarımın gövdeleri (adet kadar, sırayla); boşsa gönderilmez. */
+  beamBodyIds?: string[];
 }
 
 export interface DevereMachine {

@@ -10,7 +10,9 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useMultiWarehouse } from "@/hooks/useWarehouses";
-import { useDevereBeamWeavingLinkRequired, useDevereLotRequired } from "@/hooks/usePricingEnabled";
+import { useDevereBeamBodyMode, useDevereBeamWeavingLinkRequired, useDevereLotRequired } from "@/hooks/usePricingEnabled";
+import type { BeamBody } from "@/pages/BeamBodies/types";
+import { DispatchBeamBodies, type BeamBodyCardCopy } from "../WarpingOrders/DispatchBeamBodies";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { listAllActiveYarnLots } from "@/pages/Operations/Yarn/service";
 import { reasonPresetService } from "@/pages/ReasonPresets/service";
@@ -35,11 +37,30 @@ function toLines(lines: YarnLineDraft[], withReason: boolean) {
 interface WindDraft {
   lengthM: string; kgSource: WarpKgSource; inHouse: boolean; machineId: string; issues: YarnLineDraft[]; returns: YarnLineDraft[];
   breakCount: string; clientToken: string; weavingOrderId: string; count: string; prefix: string;
+  beamBodyIds?: string[];
 }
 
-/** Diyalog taslağı → uç gövdesi (saf). Adet 1 → raşel alanları GİDMEZ (bugünkü istek bayt bayt); bağ "" → null. */
+/** İçeride sarım için gövde kartı metni (adet kadar, sırayla takımın 1..N leventine). */
+function windBodyCopy(required: boolean): BeamBodyCardCopy {
+  return {
+    hint: required ? "· ZORUNLU — her levente bir boş gövde okutun (sırayla 1..N)" : "· isteğe bağlı — okutursanız her levente bir gövde (sırayla 1..N)",
+    empty: required ? "Gövde okutulmadı — bu kurulumda içeride sarım gövdesiz yapılamaz." : "Gövde seçilmedi — sarım gövdesiz yapılır.",
+    notEmptyStock: "yalnız depoda boş gövde sarılır.",
+    overMax: (max) => `${max} levent sarılıyor — en çok ${max} gövde.`,
+    pickDescription: (max) => `Sarılacak leventlerin gövdelerini işaretleyin (adet kadar: ${max}).`,
+  };
+}
+
+/** Gövde kapısı (sunucu aynası): OFF/fason → serbest; içeride REQUIRED → adet kadar; OPTIONAL → hiç ya da adet kadar. */
+export function windBodiesOk(mode: "OFF" | "OPTIONAL" | "REQUIRED", inHouse: boolean, picked: number, count: number): boolean {
+  if (mode === "OFF" || !inHouse) return true;
+  return picked === count || (mode === "OPTIONAL" && picked === 0);
+}
+
+/** Diyalog taslağı → uç gövdesi (saf). Adet 1 → raşel alanları GİDMEZ (bugünkü istek bayt bayt); bağ "" → null; gövde yoksa alan yok. */
 export function buildWindPayload(d: WindDraft): WindPayload {
   return {
+    ...(d.inHouse && d.beamBodyIds?.length ? { beamBodyIds: [...d.beamBodyIds] } : {}),
     lengthM: Number(d.lengthM),
     kgSource: d.kgSource,
     machineId: d.inHouse ? d.machineId : null,
@@ -63,6 +84,8 @@ export function WindDialog({ target, isPending, onClose, onConfirm }: Props) {
   const [count, setCount] = useState("1");
   const [weavingOrderId, setWeavingOrderId] = useState(target.weavingOrder?.id ?? "");
   const [prefix, setPrefix] = useState("");
+  const [bodies, setBodies] = useState<BeamBody[]>([]);
+  const bodyMode = useDevereBeamBodyMode();
   const { multiWarehouse, warehouses } = useMultiWarehouse();
   const machines = useQuery({ queryKey: ["warp-beams", "devere-machines"], queryFn: () => warpBeamService.devereMachines(), enabled: inHouse });
   const presets = useQuery({ queryKey: ["reason-presets", "WARP_RETURN", "wind"], queryFn: () => reasonPresetService.list(false) });
@@ -76,7 +99,8 @@ export function WindDialog({ target, isPending, onClose, onConfirm }: Props) {
   const nominal = theoreticalKg(target.warpSpec.endsCount, target.warpSpec.yarnItem.linearDensityDen, Number(lengthM));
   const linesOk = (ls: YarnLineDraft[], needReason: boolean) => ls.every((l) => l.warehouseId && Number(l.qtyKg) > 0 && (!needReason || l.reasonCode));
   const countOk = Number.isInteger(Number(count)) && Number(count) >= 1 && Number(count) <= 24;
-  const ok = countOk && Number(lengthM) > 0 && (!inHouse || (machineId !== "" && issues.length > 0 && linesOk(issues, false) && linesOk(returns, true) && lotsOk(issues)));
+  const bodiesOk = windBodiesOk(bodyMode, inHouse, bodies.length, Number(count));
+  const ok = bodiesOk && countOk && Number(lengthM) > 0 && (!inHouse || (machineId !== "" && issues.length > 0 && linesOk(issues, false) && linesOk(returns, true) && lotsOk(issues)));
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -108,6 +132,7 @@ export function WindDialog({ target, isPending, onClose, onConfirm }: Props) {
             <YarnLinesEditor title="Dönen bobin dipleri (ayrı satır, sebep zorunlu)" lines={returns} onChange={setReturns} warehouses={warehouses} multiWarehouse={multiWarehouse} reasons={returnReasons} lots={lots} />
           </>
         )}
+        {inHouse && <DispatchBeamBodies value={bodies} onChange={setBodies} max={countOk ? Number(count) : 1} copy={windBodyCopy(bodyMode === "REQUIRED")} />}
         <WeavingOrderPicker value={weavingOrderId} onChange={setWeavingOrderId} required={weavingLinkRequired} />
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={isPending}>
@@ -116,7 +141,7 @@ export function WindDialog({ target, isPending, onClose, onConfirm }: Props) {
           <Button
             disabled={!ok || isPending}
             onClick={() =>
-              void onConfirm(buildWindPayload({ lengthM, kgSource, inHouse, machineId, issues, returns, breakCount, clientToken: attempt.token(), weavingOrderId, count, prefix }))
+              void onConfirm(buildWindPayload({ lengthM, kgSource, inHouse, machineId, issues, returns, breakCount, clientToken: attempt.token(), weavingOrderId, count, prefix, beamBodyIds: bodies.map((b) => b.id) }))
                 .then(() => attempt.onSuccess(), (e: unknown) => attempt.onFailure(e))
             }
           >

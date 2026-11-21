@@ -4,6 +4,7 @@
 // yasak, ≤20 sipariş / ≤50 levent. Tablet hesap YAPMAZ — dağıtım, irsaliye tekrarı, uygunluk sunucuda.
 // =============================================================================
 import { foldSearchText } from '../../../utils/searchFold';
+import { fmtMeters } from '../../../utils/meters';
 import type { DevereMode3, ReceiveBeamLine, ReceiveDocFields, ResolvedBeamBody, WarpingTabletOrder } from '../../../services/devereKabul.service';
 
 export const MAX_DOC_ORDERS = 20;
@@ -172,6 +173,22 @@ export function previewBeamName(
   if (body?.bodyNo) return `${body.bodyNo}${body.isNew ? ' (yeni gövde)' : ''}`;
   const no = sent?.orders.find((o) => o.warpingOrderId === orderId)?.beams[index]?.physicalBeamNo?.trim();
   return no ? `${no} (gövdesiz)` : 'gövdesiz';
+}
+
+/**
+ * Tek açık sipariş varsa kendiliğinden seçilecek sipariş id'si (bir dokunuş az). Taslakta sipariş varken ya da
+ * bu devereci için otomatik seçim zaten yapıldıysa (operatör kaldırdıysa geri eklenmesin) null.
+ */
+export function autoPickOrderId(ctxOrders: readonly { id: string }[], draftOrderCount: number, alreadyAuto: boolean): string | null {
+  if (alreadyAuto || draftOrderCount > 0 || ctxOrders.length !== 1) return null;
+  return ctxOrders[0].id;
+}
+
+/** Kahraman sayı: beklenen levent biliniyorsa "eklenen/beklenen levent", yoksa kalan metre. */
+export function heroFigure(drafted: number, o: Pick<WarpingTabletOrder, 'remainingBeamCount' | 'remainingM'>): { value: string; unit: string } {
+  if (o.remainingBeamCount !== null) return { value: `${drafted}/${o.remainingBeamCount}`, unit: 'levent' };
+  const m = Number(o.remainingM);
+  return { value: Number.isFinite(m) ? fmtMeters(m) : '—', unit: 'm kalan' };
 }
 
 /** "3/4 levent" — beklenen bilinmiyorsa yalnız sayı. */

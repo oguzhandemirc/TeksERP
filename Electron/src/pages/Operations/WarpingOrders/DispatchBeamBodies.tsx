@@ -21,7 +21,24 @@ import type { BeamBody } from "@/pages/BeamBodies/types";
 /** Backend `BEAM_BODY_DISPATCH_MAX`. */
 export const DISPATCH_BEAM_BODY_MAX = 50;
 
-export function DispatchBeamBodies({ value, onChange }: { value: BeamBody[]; onChange: (v: BeamBody[]) => void }) {
+/** Kartın bağlama göre metni — varsayılan iplik sevki; içeride sarım (SAR) kendi metnini verir. */
+export interface BeamBodyCardCopy {
+  hint: string;
+  empty: string;
+  notEmptyStock: string;
+  overMax: (max: number) => string;
+  pickDescription: (max: number) => string;
+}
+
+const DISPATCH_COPY: BeamBodyCardCopy = {
+  hint: "· isteğe bağlı — iplikle birlikte devereciye giden boş gövdeler; irsaliyeye basılır",
+  empty: "Gövde seçilmedi — sevk gövdesiz gider.",
+  notEmptyStock: "yalnız depoda boş gövde iplikle gönderilir.",
+  overMax: (max) => `Bir sevkte en çok ${max} gövde.`,
+  pickDescription: (max) => `İplikle birlikte devereciye gidecek gövdeleri işaretleyin (en çok ${max}).`,
+};
+
+export function DispatchBeamBodies({ value, onChange, max = DISPATCH_BEAM_BODY_MAX, copy = DISPATCH_COPY }: { value: BeamBody[]; onChange: (v: BeamBody[]) => void; max?: number; copy?: BeamBodyCardCopy }) {
   const mode = useDevereBeamBodyMode();
   const [code, setCode] = useState("");
   const [picking, setPicking] = useState(false);
@@ -30,11 +47,11 @@ export function DispatchBeamBodies({ value, onChange }: { value: BeamBody[]; onC
   const add = (b: BeamBody) => {
     if (value.some((x) => x.id === b.id)) return;
     if (!b.isActive || b.status !== "EMPTY_STOCK") {
-      toast.error(`${b.bodyNo} şu an “${b.statusLabel}” — yalnız depoda boş gövde iplikle gönderilir.`);
+      toast.error(`${b.bodyNo} şu an “${b.statusLabel}” — ${copy.notEmptyStock}`);
       return;
     }
-    if (value.length >= DISPATCH_BEAM_BODY_MAX) {
-      toast.error(`Bir sevkte en çok ${DISPATCH_BEAM_BODY_MAX} gövde.`);
+    if (value.length >= max) {
+      toast.error(copy.overMax(max));
       return;
     }
     onChange([...value, b]);
@@ -55,7 +72,7 @@ export function DispatchBeamBodies({ value, onChange }: { value: BeamBody[]; onC
       <header className="flex flex-wrap items-center gap-2 border-b px-4 py-2">
         <Cylinder className="h-4 w-4 text-primary" />
         <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Boş levent gövdeleri</h3>
-        <span className="hidden text-xs text-muted-foreground sm:inline">· isteğe bağlı — iplikle birlikte devereciye giden boş gövdeler; irsaliyeye basılır</span>
+        <span className="hidden text-xs text-muted-foreground sm:inline">{copy.hint}</span>
       </header>
       <div className="space-y-3 px-4 py-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -80,7 +97,7 @@ export function DispatchBeamBodies({ value, onChange }: { value: BeamBody[]; onC
           </Button>
         </div>
         {value.length === 0 ? (
-          <p className="text-xs text-muted-foreground">Gövde seçilmedi — sevk gövdesiz gider.</p>
+          <p className="text-xs text-muted-foreground">{copy.empty}</p>
         ) : (
           <ul className="flex flex-wrap gap-1.5" aria-label="Seçili gövdeler">
             {value.map((b) => (
@@ -95,12 +112,12 @@ export function DispatchBeamBodies({ value, onChange }: { value: BeamBody[]; onC
           </ul>
         )}
       </div>
-      {picking && <PickDialog selected={value} onClose={() => setPicking(false)} onPick={(bs) => onChange(bs.slice(0, DISPATCH_BEAM_BODY_MAX))} />}
+      {picking && <PickDialog selected={value} max={max} description={copy.pickDescription(max)} onClose={() => setPicking(false)} onPick={(bs) => onChange(bs.slice(0, max))} />}
     </section>
   );
 }
 
-function PickDialog({ selected, onClose, onPick }: { selected: BeamBody[]; onClose: () => void; onPick: (b: BeamBody[]) => void }) {
+function PickDialog({ selected, max, description, onClose, onPick }: { selected: BeamBody[]; max: number; description: string; onClose: () => void; onPick: (b: BeamBody[]) => void }) {
   const q = useQuery({ queryKey: [BEAM_BODIES_QUERY_KEY, "dispatch-picker"], queryFn: () => listBeamBodiesForPicker({ status: "EMPTY_STOCK", active: "active" }), staleTime: 0 });
   const [ids, setIds] = useState<string[]>(selected.map((b) => b.id));
   const list = q.data ?? [];
@@ -110,14 +127,14 @@ function PickDialog({ selected, onClose, onPick }: { selected: BeamBody[]; onClo
       <DialogContent className="sm:max-w-5xl">
         <DialogHeader>
           <DialogTitle>Depoda boş gövdeler</DialogTitle>
-          <DialogDescription>İplikle birlikte devereciye gidecek gövdeleri işaretleyin (en çok {DISPATCH_BEAM_BODY_MAX}).</DialogDescription>
+          <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <MultiSelectCheckboxList items={items} value={ids} onChange={setIds} columns={3} placeholder="Gövde no ara…" emptyHint={q.isLoading ? "Yükleniyor…" : "Depoda boş gövde yok."} />
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={onClose}>Vazgeç</Button>
           <Button
             type="button"
-            disabled={ids.length > DISPATCH_BEAM_BODY_MAX}
+            disabled={ids.length > max}
             onClick={() => {
               const byId = new Map([...selected, ...list].map((b) => [b.id, b]));
               onPick(ids.map((id) => byId.get(id)).filter((b): b is BeamBody => Boolean(b)));
