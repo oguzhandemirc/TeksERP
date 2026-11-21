@@ -45,11 +45,16 @@ vi.mock("./rejection-service", () => ({
   useWarpingRejections: (id: string) => useQuery({ queryKey: ["rj-test", id], queryFn: () => rj.listForOrder(id) }),
 }));
 
+// E2: kabul diyaloğu dönüş kabul belgesi bileşenidir; açık sipariş listesi ve devereci seçicisi ağsız.
+vi.mock("./service", async (orig) => ({ ...(await orig<typeof import("./service")>()), listWarpingOrders: () => Promise.resolve({ success: true, data: [], pagination: { nextCursor: null, hasMore: false, limit: 100 }, summary: null }) }));
+vi.mock("@/components/forms/SubcontractorCategoryPicker", () => ({ SubcontractorCategoryPicker: () => null }));
+
 import { ReceiptsSection } from "./ReceiptsSection";
 import { BeamRejectionDocDialog } from "./BeamRejectionDocDialog";
 
 const order = (status: WarpingOrder["status"] = "IN_PROGRESS") => ({
   id: "wo-1", orderNo: "FDV1", status, subcontractor: { id: "s1", code: "S", name: "Devereci A" },
+  warpSpec: { id: "ws1", code: "CK1", name: "Tül zemin" }, targetLengthM: "1000.000", beamCount: 1,
   beamLines: [{ beamCount: 1, beamLengthM: "500.000" }], yarns: [{ yarnItemId: "y1", code: "IPL-5X", name: "5X" }],
 }) as unknown as WarpingOrder;
 const settlement: WarpingSettlement = { metre: { targetM: "1000.000", receivedM: "1000.000", diffM: "0.000", diffPct: "0.00", planBeamCount: 2, receivedBeamCount: 2 }, yarns: [], weighing: null };

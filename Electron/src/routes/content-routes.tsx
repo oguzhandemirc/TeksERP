@@ -107,6 +107,8 @@ import { WarpBeamsPage } from "@/pages/Operations/WarpBeams/WarpBeamsPage";
 import { WarpPlanPage } from "@/pages/Operations/WarpPlan/WarpPlanPage";
 import { WarpingOrdersPage } from "@/pages/Operations/WarpingOrders/WarpingOrdersPage";
 import { WarpingOrderPage } from "@/pages/Operations/WarpingOrders/WarpingOrderPage";
+import { WarpingReceiveDocsPage } from "@/pages/Operations/WarpingReceiveDocs/WarpingReceiveDocsPage";
+import { WarpingReceiveDocPage } from "@/pages/Operations/WarpingReceiveDocs/WarpingReceiveDocPage";
 import { PurchaseOrdersPage } from "@/pages/Operations/PurchaseOrders/PurchaseOrdersPage";
 import { ItemPricesPage } from "@/pages/Definitions/ItemPrices/ItemPricesPage";
 import { ServicePricesPage } from "@/pages/Definitions/ServicePrices/ServicePricesPage";
@@ -757,6 +759,23 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="warping-order:read">
         <WarpingOrderPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Devere Dönüş Kabulleri (devere ek E2) — karo izniyle BİREBİR (`warping-order:read`); kabul ekran içinde `PermissionGate`.
+    path: "operations/devere-donus",
+    element: (
+      <ProtectedRoute requirePermission="warping-order:read">
+        <WarpingReceiveDocsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "operations/devere-donus/:id",
+    element: (
+      <ProtectedRoute requirePermission="warping-order:read">
+        <WarpingReceiveDocPage />
       </ProtectedRoute>
     ),
   },

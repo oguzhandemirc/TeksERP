@@ -6,6 +6,7 @@
 import { Fragment, useState } from "react";
 import { PackageCheck, Undo2, Undo } from "lucide-react";
 import { PermissionGate } from "@/components/PermissionGate";
+import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -18,10 +19,11 @@ import { BeamRejectionDocDialog } from "./BeamRejectionDocDialog";
 import { yarnNamesOf } from "./holding-model";
 import { fmtKg, fmtM } from "./order-model";
 import { ReceiptCancelDialog } from "./ReceiptCancelDialog";
-import { ReceiveDialog } from "./ReceiveDialog";
+import { ReceiveDocDialog } from "./ReceiveDocDialog";
+import { warpingReceiveDocPath } from "./receive-doc-service";
 import { signedKg } from "./receive-model";
 import { useWarpingReceipts } from "./receive-service";
-import { activeRejectionByBeam, rejectableBeams, reworkCandidates } from "./rejection-model";
+import { activeRejectionByBeam, rejectableBeams } from "./rejection-model";
 import { useWarpingRejections } from "./rejection-service";
 import { SettlementSummary } from "./SettlementSummary";
 import type { WarpingOrder } from "./types";
@@ -81,12 +83,19 @@ function BeamRow({ b, ctx }: { b: WarpingReceiptBeam; ctx: BeamCtx }) {
 
 function ReceiptHead({ r, canUndo, onUndo }: { r: WarpingReceipt; canUndo: boolean; onUndo: () => void }) {
   const dead = r.liveBeamCount === 0;
+  const openTarget = useOpenTarget();
+  const doc = r.receiveDoc ?? null;
   return (
     <TableRow className={cn("bg-muted/30", dead && "text-muted-foreground")}>
       <TableCell>
         <span className="font-medium">{r.deliveryNoteNo ? `İrsaliye ${r.deliveryNoteNo}` : "İrsaliyesiz kabul"}</span>{" "}
         <span className="text-xs text-muted-foreground">· {r.liveBeamCount} levent{r.beamCount !== r.liveBeamCount ? ` (${r.beamCount - r.liveBeamCount} iptal)` : ""} ·</span>{" "}
         <span className="text-xs text-muted-foreground">{fmtFactoryDateTime(r.receivedAt)}</span>
+        {doc && (
+          <button type="button" onClick={(e) => openTarget(warpingReceiveDocPath(doc.id), e)} className="ml-2 text-xs text-primary underline-offset-2 hover:underline" title="Dönüş kabul belgesini aç">
+            {doc.docNo}
+          </button>
+        )}
         {dead && <Badge variant="outline" className="ml-2 font-normal">Geri alındı</Badge>}
       </TableCell>
       <TableCell className={cn(num, "font-medium")}>{fmtM(r.lengthM)}</TableCell>
@@ -161,7 +170,7 @@ export function ReceiptsSection({ order }: { order: WarpingOrder }) {
       {q.data && <SettlementSummary s={q.data.settlement} />}
       {q.isSuccess && rows.length === 0 && <p className="text-sm text-muted-foreground">Henüz levent dönmedi.{receivable ? " Devereci leventleri getirince “Levent kabulü” ile girin." : ""}</p>}
       {rows.length > 0 && <ReceiptTable rows={rows} canUndo={order.status !== "CANCELLED"} onUndo={(r) => setOpen({ kind: "undo", r })} ctx={ctx} />}
-      {open?.kind === "receive" && <ReceiveDialog order={order} reworks={reworkCandidates(docs)} onClose={() => setOpen(null)} />}
+      {open?.kind === "receive" && <ReceiveDocDialog fixedOrder={order} onClose={() => setOpen(null)} />}
       {open?.kind === "undo" && <ReceiptCancelDialog orderId={order.id} receipt={open.r} names={yarnNamesOf(order)} onClose={() => setOpen(null)} />}
       {open?.kind === "reject" && (
         <BeamRejectDialog order={order} options={rejectableBeams(rows)} initialBeamId={open.beamId} onClose={() => setOpen(null)} onCreated={(doc) => setOpen({ kind: "doc", doc })} />

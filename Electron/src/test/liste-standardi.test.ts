@@ -66,6 +66,8 @@ const EXEMPT: Record<string, string> = {
   // D7b: kapanış diyaloğunun kalem satırları ve iplik başına önizleme, kapanış geçmişi (birkaç kayıt) — kayıt listesi değil.
   "Operations/WarpingOrders/SettleParts.tsx": GOMULU,
   "Operations/WarpingOrders/SettlementsSection.tsx": GOMULU,
+  // E2: kabul belgesi kayıt sayfasında sipariş başı levent tablosu (belgenin satırları) — ana liste değil.
+  "Operations/WarpingReceiveDocs/WarpingReceiveDocPage.tsx": GOMULU,
   "Operations/WeavingFloor/jobs/BulkParts.tsx": GOMULU,
   "Operations/WeavingFloor/stops/StopBulkParts.tsx": GOMULU,
   "Operations/WorkOrders/BranchLanes.tsx": GOMULU,
