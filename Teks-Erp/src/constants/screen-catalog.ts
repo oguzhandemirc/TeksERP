@@ -486,6 +486,9 @@ export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: strin
   // çağırır; `loom:*` web kodları panelsiz kalır — panel doff yüzeyi yok, kod API/entegrasyon için.
   { code: "loom:doff", reason: "Panel doff yüzeyi yok; tablet `mobile:dokuma` ile kaydeder — web kodu API/entegrasyon için." },
   { code: "loom:doff-revoke", reason: "Panel geri alma yüzeyi yok; tablet `mobile:dokuma-geri-al` ile — web kodu API/entegrasyon için." },
+  // Devere ek D1 (2026-11-21): tablet dönüş kabulü uçları backend'de doğdu; "Devere Dönüş Kabulü" tablet ekranı M1
+  // diliminde — ekran SCREEN_CATALOG'a girince bu satır ölü muaf olur ve bekçi kırmızı verir (silinmesi M1'in işi).
+  { code: "mobile:devere-kabul", reason: "Tablet ekranı (DevereKabul) M1 diliminde; uçlar hazır — ekranla birlikte buradan silinir." },
   // Devere ek B1 (2026-11-20): gövde envanteri backend'de doğdu; "Levent Gövdeleri" ekranı B4 diliminde — ekranla ölü muaf olur.
   // Tezgah künyesi + gölge mod (B3, 2026-09-14): "Devreye Alma" ekranı AYRI dilim (Faz 2 ingest ile, `tezgah.enabled`).
 ];

@@ -8,8 +8,9 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
 import { AppError } from "../utils/app-error";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
 import { requireIplikEnabled } from "../middlewares/module.middleware";
+import { getWarpingTabletContext } from "../services/warping-order/tablet-context";
 import { previewWarpingReceive, receiveWarpingOrder, WARPING_RECEIVE_MAX_BEAMS } from "../services/warping-order/receive";
 import { cancelWarpingReceipt, previewCancelWarpingReceipt } from "../services/warping-order/receive-cancel";
 import { listWarpingReceipts } from "../services/warping-order/receipts";
@@ -44,6 +45,30 @@ const ReceiveFields = {
 const ReceiveBody = z.strictObject({ clientToken: z.uuid("clientToken geçersiz (UUID)"), ...ReceiveFields });
 const ReceivePreviewBody = z.strictObject(ReceiveFields);
 const CancelBody = z.strictObject({ reason: z.string().trim().min(3, "İptal sebebi en az 3 karakter").max(300, "İptal sebebi en çok 300 karakter") });
+// Devere ek D1: tablet dönüş kabulü ayrı izni (depo) — yalnız bağlam ucu; kabul E1 belge ucundan.
+const MOBILE_DEVERE_KABUL = ["mobile:devere-kabul"] as const;
+const TabletContextQuery = z.strictObject({ subcontractorId: Id.optional() });
+
+/**
+ * @openapi
+ * /api/warping-orders/tablet-context:
+ *   get:
+ *     tags: [WarpingOrder]
+ *     summary: Tablet devere dönüş kabulü bağlamı — açık siparişler (kalan levent/metre), devereciler, kabul ayarları (opt-in allowlist)
+ *     description: >
+ *       Depocuya ücret/fiyat, iplik dağıtımı, satış siparişi İNMEZ. `subcontractorId` verilirse yalnız o deverecinin
+ *       siparişleri; geçersiz kimlik 400. Kapalı modülde servis düzeyinde de 403 MODULE_DISABLED.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: query, name: subcontractorId, required: false, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: "{ success, data: { subcontractors[], orders[], truncated, settings, limits } }" }
+ *       400: { description: VALIDATION_ERROR }
+ *       403: { description: Devere modülü kapalı (MODULE_DISABLED) ya da yetki yok }
+ */
+router.get("/tablet-context", requireAnyPermission("warping-order:read", ...MOBILE_DEVERE_KABUL), wrap(async (req) => {
+  const q = parse(TabletContextQuery, req.query);
+  return { status: 200, body: { success: true, data: await getWarpingTabletContext({ subcontractorId: q.subcontractorId ?? null }) } };
+}));
 
 /**
  * @openapi
