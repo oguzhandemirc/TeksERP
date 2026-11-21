@@ -74,6 +74,8 @@ export interface TabletContext {
   }[];
   /** `devere.beamWeavingLinkRequired` ETKİN değeri SUNUCUDAN — form zorunluluğu buradan okur, tahmin etmez (sunucu da 400 verir). Alan yoksa false. */
   beamWeavingLinkRequired?: boolean;
+  /** Ek-2 r: `devere.beamBodyMode` SUNUCUDAN — SAR formunda gövde alanı. Eski sunucu göndermez → OFF say (alan yok). */
+  beamBodyMode?: 'OFF' | 'OPTIONAL' | 'REQUIRED';
   /** Z5/E6: çözgü kartı başına SON IN_HOUSE sarımın makine + iplik satırları — SAR açılış ÖNERİSİ (operatör değiştirir). Eski sunucu göndermez → ön-dolgu yok. */
   lastWindDefaults?: {
     warpSpecId: string;
@@ -153,6 +155,8 @@ export interface WindWarpBeamRequest {
   /** Raşel takımı (#23): N adet → N−1 kardeş aynı işlemde doğar, iplik ÷ N; 1 ise alanlar GÖNDERİLMEZ (bugünkü istek). */
   count?: number;
   physicalBeamNoPrefix?: string | null;
+  /** Ek-2 r: içeride sarımda gövde bağı (adet kadar, yalnız IN_HOUSE). Boşsa GÖNDERİLMEZ (bugünkü istek). */
+  beamBodyIds?: string[];
 }
 
 export interface CancelWoundPreview {

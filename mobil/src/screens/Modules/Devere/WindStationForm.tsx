@@ -7,7 +7,7 @@
 // =============================================================================
 import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Chip, SegmentedButtons, Text } from 'react-native-paper';
+import { Button, Chip, SegmentedButtons, Text } from 'react-native-paper';
 import NumpadInput from '../../../components/NumpadInput';
 import ModalTextInput from '../../../components/ModalTextInput';
 import PickerModal from '../../../components/PickerModal';
@@ -79,6 +79,26 @@ function KgBlock({ station }: { station: WindStationState }) {
   );
 }
 
+/** Ek-2 r: gövde kipi açıkken okutulan boş gövde (okutma bandından) — doluysa gövde no'nun yerine geçer. OFF'ta hiç çizilmez. */
+function BodyBlock({ station }: { station: WindStationState }) {
+  const { form, bodyMode, patch } = station;
+  if (!form || bodyMode === 'OFF') return null;
+  const body = form.beamBody;
+  return (
+    <View style={styles.bodyRow} testID="sar-govde">
+      <View style={styles.bodyText}>
+        <Text style={sheet.label}>{`Levent gövdesi ${bodyMode === 'REQUIRED' ? '(zorunlu)' : '(isteğe bağlı)'}`}</Text>
+        {body ? (
+          <Text style={styles.bodyNo}>{`${body.bodyNo} · ${body.ownerLabel}`}</Text>
+        ) : (
+          <Text style={sheet.hint}>{station.bodyResolving ? 'Gövde aranıyor…' : 'Boş gövdenin QR\'ını okutun.'}</Text>
+        )}
+      </View>
+      {body ? <Button mode="outlined" icon="close" onPress={() => patch({ beamBody: null })} contentStyle={styles.tall} testID="sar-govde-kaldir">Kaldır</Button> : null}
+    </View>
+  );
+}
+
 export default function WindStationForm({ station, context, isOnline, busyBeams, knownBeams }: Props) {
   const [picker, setPicker] = useState<Picker>(null);
   const { form, spec, target, patch } = station;
@@ -97,7 +117,8 @@ export default function WindStationForm({ station, context, isOnline, busyBeams,
       <Text style={sheet.label}>Sarılan metre</Text>
       <NumpadInput value={form.lengthM} onChangeText={(t) => patch({ lengthM: t })} allowDecimal numpadMaxLength={8} numpadLabel="Sarılan metre" placeholder="m" autoActivate style={sheet.input} />
       <KgBlock station={station} />
-      {target ? (
+      <BodyBlock station={station} />
+      {form.beamBody || station.bodyMode === 'REQUIRED' ? null : target ? (
         <Text style={sheet.hint}>{`Gövde no: ${target.physicalBeamNo ?? '—'} (planda yazılı)`}</Text>
       ) : (
         <>
@@ -128,4 +149,8 @@ const styles = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.xs },
   nominal: { fontSize: typography.size.lg, fontWeight: typography.weight.bold, color: colors.text, marginTop: spacing.xs },
   action: { marginTop: spacing.md },
+  bodyRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  bodyText: { flex: 1 },
+  bodyNo: { fontSize: typography.size.xl, fontWeight: typography.weight.bold, color: colors.text },
+  tall: { height: 56 },
 });

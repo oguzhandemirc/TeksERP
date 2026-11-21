@@ -9,7 +9,7 @@
 //   §4 içeride sarım + gövde: OFF'ta 403 · OPTIONAL'da gövde dolar (FULL_STOCK, üstündeki sarım, gövde no) · dolu gövde
 //      409 · adet uyuşmazlığı 400 · fason köken 400 · gövdesiz bayt-aynı · REQUIRED gövdesiz 400 · iptal gövdeyi boşaltır
 // NEGATİF SONDA (2026-11-22): `warp-beam-wind.service` updateMany'den `beamBodyId` çıkarılınca §4b kırmızı;
-//   ret rotasında `RET_WRITE` yerine `requirePermission("warping-order:write")` yazılınca §1a kırmızı.
+//   ret önizleme rotasında satır içi guard `requirePermission("warping-order:write")` yapılınca §1a kırmızı.
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım; ayarlar FOTOĞRAFINA döndürülür, kendi kayıtlarını siler.
 // =============================================================================
 import * as fs from "node:fs";
@@ -66,9 +66,10 @@ const src = (rel: string) => fs.readFileSync(path.join(__dirname, "..", rel), "u
 function staticChecks(): void {
   console.log("\n=== §1 statik: izin ve uç kapıları ===");
   const r = src("src/routes/warping-beam-rejection.routes.ts");
-  const retW = /const RET_WRITE = requireAnyPermission\("warping-order:write", \.\.\.MOBILE_DEVERE_RET\);/.test(r) && /const MOBILE_DEVERE_RET = \["mobile:devere-ret"\] as const;/.test(r);
-  check("§1a ret önizleme · ret · okutma `RET_WRITE` (warping-order:write | mobile:devere-ret)",
-    retW && /router\.post\("\/preview", RET_WRITE,/.test(r) && /router\.post\("\/", RET_WRITE,/.test(r) && /router\.get\("\/lookup", RET_WRITE,/.test(r));
+  const G = 'requireAnyPermission\\("warping-order:write", \\.\\.\\.MOBILE_DEVERE_RET\\)';
+  const retW = /const MOBILE_DEVERE_RET = \["mobile:devere-ret"\] as const;/.test(r);
+  check("§1a ret önizleme · ret · okutma satır içi guard (warping-order:write | mobile:devere-ret)",
+    retW && new RegExp(`router\\.post\\("/preview", ${G},`).test(r) && new RegExp(`router\\.post\\("/", ${G},`).test(r) && new RegExp(`router\\.get\\("/lookup", ${G},`).test(r));
   check("§1b liste · belge · foto ekleme · iptal tablete AÇILMAZ (yalnız web izni)",
     /router\.get\("\/", requirePermission\("warping-order:read"\)/.test(r) && /router\.post\("\/:id\/photos", requirePermission\("warping-order:write"\)/.test(r) && !/\/:id\/cancel"[^\n]*MOBILE_DEVERE_RET/.test(r));
   check("§1c okutma ucu `/:id`den ÖNCE (Express sırası)", r.indexOf('router.get("/lookup"') > 0 && r.indexOf('router.get("/lookup"') < r.indexOf('router.get("/:id"'));

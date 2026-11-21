@@ -65,8 +65,8 @@ const ListQuery = z.object({
 const FILTERS = ["warpingOrderId", "subcontractorId", "status"];
 const STATUS = ["active", "cancelled", "all"] as const;
 // Devere ek-2 r: tablet (Devere Dönüş Kabulü) ret YETENEĞİ — yalnız okutma çözümü, önizleme ve ret; liste/iptal/foto ekleme panelde.
+// Guard her rotada SATIR İÇİ yazılır: `test_mobile_screen_permissions` sabite atanmış guard'ı okuyamaz (uç "eşleşmeyen" sayılırdı).
 const MOBILE_DEVERE_RET = ["mobile:devere-ret"] as const;
-const RET_WRITE = requireAnyPermission("warping-order:write", ...MOBILE_DEVERE_RET);
 const LookupQuery = z.object({ code: z.string().trim().min(1, "Kod okutun").max(64) });
 
 /**
@@ -83,7 +83,7 @@ const LookupQuery = z.object({ code: z.string().trim().min(1, "Kod okutun").max(
  *       404: { description: WARP_BEAM_NOT_FOUND }
  *       409: { description: WARPING_REJECT_NOT_WARPING_BEAM }
  */
-router.get("/lookup", RET_WRITE, wrap(async (req) => {
+router.get("/lookup", requireAnyPermission("warping-order:write", ...MOBILE_DEVERE_RET), wrap(async (req) => {
   const q = parse(LookupQuery, req.query);
   return { status: 200, body: { success: true, data: await lookupWarpingRejectBeam(q.code) } };
 }));
@@ -112,7 +112,7 @@ router.get("/lookup", RET_WRITE, wrap(async (req) => {
  *     responses:
  *       200: { description: "{ success, data: { order, beams, returnedYarn, totals, reason, photoRequired, blockers, warnings, rejectable } }" }
  */
-router.post("/preview", RET_WRITE, requireIplikEnabled, wrap(async (req) => {
+router.post("/preview", requireAnyPermission("warping-order:write", ...MOBILE_DEVERE_RET), requireIplikEnabled, wrap(async (req) => {
   const body = parse(PreviewBody, req.body);
   return { status: 200, body: { success: true, data: await previewWarpingBeamRejection(body) } };
 }));
@@ -176,7 +176,7 @@ router.get("/", requirePermission("warping-order:read"), wrap(async (req) => {
   return { status: 200, body: { success: true, ...out } };
 }));
 
-router.post("/", RET_WRITE, requireIplikEnabled, wrap(async (req) => {
+router.post("/", requireAnyPermission("warping-order:write", ...MOBILE_DEVERE_RET), requireIplikEnabled, wrap(async (req) => {
   const body = parse(CreateBody, req.body);
   const out = await createWarpingBeamRejection(body, req.user!.userId);
   return { status: out.replayed ? 200 : 201, body: { success: true, data: out.data, message: out.replayed ? `${out.data.docNo} zaten kayıtlı` : `Ret belgesi ${out.data.docNo} açıldı (${out.data.items.length} sarım)` } };
