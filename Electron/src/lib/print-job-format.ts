@@ -37,6 +37,7 @@ export const PRINT_SUBJECT_LABELS: Record<PrintSubjectKind, string> = {
   CEKI_LISTESI: "Çeki listesi",
   FASON_CEKI: "Fason çekisi",
   SERBEST_BELGE: "Serbest belge",
+  DESEN_KARTI: "Desen kartı",
   RAPOR: "Rapor",
   LISTE: "Liste",
   KIMLIK_KARTI: "Kimlik kartı",

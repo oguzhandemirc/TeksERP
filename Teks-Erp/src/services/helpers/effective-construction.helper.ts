@@ -11,8 +11,8 @@ import { sequentialTx } from "./tx-sequential-relations.helper";
 import { Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
-import { CONSTRUCTION_WARNING, REPEAT_PICKS_TOLERANCE_PCT } from "../../constants/weave-design";
-import { weftLetter } from "./weft-sequence.helper";
+import { CONSTRUCTION_WARNING, LIFT_PLAN_MAX_PICKS, REPEAT_PICKS_TOLERANCE_PCT } from "../../constants/weave-design";
+import { expandWeftSequence, weftLetter } from "./weft-sequence.helper";
 import { WARP_SPEC_YARN_DENIER_SELECT } from "./warp-spec-yarn.helper";
 import { pctText, qtyText } from "./qty-text.helper";
 
@@ -25,21 +25,26 @@ const WARP_SELECT = {
 } satisfies Prisma.WarpSpecSelect;
 const DESIGN_SELECT = {
   id: true, code: true, name: true, kind: true, familyLabel: true, frameCount: true, repeatCm: true,
-  liftPlan: true, loomFileName: true, lenoSetup: true, isActive: true,
+  liftPlan: true, loomFileName: true, lenoSetup: true, lenoFrames: true, isActive: true,
 } satisfies Prisma.WeaveDesignSelect;
+const WEFT_SELECT = {
+  id: true, code: true, name: true, picksPerCm: true, sequenceCode: true, weftProgramNo: true,
+  yarns: { orderBy: { sortOrder: "asc" }, select: { sortOrder: true, picksInRepeat: true, yarnItem: { select: YARN_SELECT } } },
+} satisfies Prisma.WeftSpecSelect;
 
 const ITEM_CONSTRUCTION_SELECT = {
   id: true, code: true, name: true, itemType: true, widthCm: true,
   warpSpec: { select: WARP_SELECT },
   warpLayers: { orderBy: { sortOrder: "asc" }, select: { role: true, beamMode: true, sortOrder: true, warpSpec: { select: WARP_SELECT } } },
-  weftSpec: {
-    select: {
-      id: true, code: true, name: true, picksPerCm: true, sequenceCode: true, weftProgramNo: true,
-      yarns: { orderBy: { sortOrder: "asc" }, select: { sortOrder: true, picksInRepeat: true, yarnItem: { select: YARN_SELECT } } },
-    },
-  },
+  weftSpec: { select: WEFT_SELECT },
   weaveDesign: { select: DESIGN_SELECT },
 } satisfies Prisma.ItemSelect;
+
+/** İş emrinin doğuşta TAŞIDIĞI kartlar; null = iş emrinde seçim yok → ürünün güncel kartı (eski iş emri emsali, loom-load ile aynı). */
+export interface ConstructionPin {
+  weftSpecId: string | null;
+  weaveDesignId: string | null;
+}
 
 type YarnRef = Prisma.ItemGetPayload<{ select: typeof YARN_SELECT }>;
 type WarpRef = Prisma.WarpSpecGetPayload<{ select: typeof WARP_SELECT }>;
@@ -63,6 +68,8 @@ export interface EffectiveConstruction {
   weft: {
     weftSpecId: string; code: string; name: string; picksPerCm: Prisma.Decimal | null;
     sequenceCode: string | null; weftProgramNo: string | null; picksInRepeatTotal: number; yarns: EffectiveWeftYarn[];
+    /** Atkı seçici sütunu: atkı başına 1-tabanlı iplik satırı no (`sequenceCode` açılımı); kod yoksa/geçersizse null. */
+    pickSequence: number[] | null;
   } | null;
   weaveDesign: Prisma.WeaveDesignGetPayload<{ select: typeof DESIGN_SELECT }> | null;
   warnings: Array<{ code: string; message: string }>;
@@ -119,9 +126,18 @@ export async function readWeftOverridesForRecipes(db: Db, recipeIds: string[]): 
  * ürün/varyant yoksa 404. Maliyet derleyicisi, Dokuma İş Emri ön dolgusu, üretim önerisi ve tablet
  * iş kartı yapıyı YALNIZ buradan okur.
  */
-export async function resolveEffectiveConstruction(db: Db, itemId: string, recipeId?: string | null): Promise<EffectiveConstruction> {
+export async function resolveEffectiveConstruction(
+  db: Db, itemId: string, recipeId?: string | null, pin?: ConstructionPin,
+): Promise<EffectiveConstruction> {
   const item = await db.item.findUnique({ where: { id: itemId }, select: ITEM_CONSTRUCTION_SELECT });
   if (!item) throw AppError.notFound("Ürün bulunamadı.");
+  // İş emri kendi kartını taşır (kart sonradan değişse/ürün başka karta geçse de); kart İÇERİĞİ canlıdır.
+  if (pin?.weftSpecId && pin.weftSpecId !== item.weftSpec?.id) {
+    item.weftSpec = await db.weftSpec.findUnique({ where: { id: pin.weftSpecId }, select: WEFT_SELECT });
+  }
+  if (pin?.weaveDesignId && pin.weaveDesignId !== item.weaveDesign?.id) {
+    item.weaveDesign = await db.weaveDesign.findUnique({ where: { id: pin.weaveDesignId }, select: DESIGN_SELECT });
+  }
   let variantCode: string | null = null;
   const overrides = new Map<number, YarnRef>();
   if (recipeId) {
@@ -156,6 +172,7 @@ export async function resolveEffectiveConstruction(db: Db, itemId: string, recip
       ? {
         weftSpecId: ws.id, code: ws.code, name: ws.name, picksPerCm: ws.picksPerCm, sequenceCode: ws.sequenceCode,
         weftProgramNo: ws.weftProgramNo, picksInRepeatTotal: yarns.reduce((s, y) => s + y.picksInRepeat, 0), yarns,
+        pickSequence: expandWeftSequence(ws.sequenceCode, yarns.length, LIFT_PLAN_MAX_PICKS),
       }
       : null,
     weaveDesign: item.weaveDesign,

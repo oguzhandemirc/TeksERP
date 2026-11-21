@@ -7,10 +7,13 @@
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
 import { AppError } from "../src/utils/app-error";
-import { parseWeftSequence } from "../src/services/helpers/weft-sequence.helper";
+import { expandWeftSequence, parseWeftSequence } from "../src/services/helpers/weft-sequence.helper";
 import { resolveEffectiveConstruction } from "../src/services/helpers/effective-construction.helper";
+import { weavingOrderTabletConstruction } from "../src/services/helpers/tablet-construction.helper";
+import { buildWeaveCardView } from "../src/services/weave-card.service";
+import { frameBlocks, renderWeaveDesignCardHtml } from "../src/services/document-render/weave-design-card.html";
 import { createWeftSpec, updateWeftSpec } from "../src/services/weft-spec.service";
-import { createWeaveDesign, deactivateWeaveDesign, getWeaveDesign, listWeaveDesigns } from "../src/services/weave-design.service";
+import { createWeaveDesign, deactivateWeaveDesign, getWeaveDesign, listWeaveDesigns, updateWeaveDesign } from "../src/services/weave-design.service";
 import { replaceItemWarpLayers, replaceRecipeWeftOverrides } from "../src/services/item-construction.service";
 import { itemService } from "../src/routes/item.routes";
 import { productRecipeService } from "../src/routes/product-recipe.routes";
@@ -35,7 +38,7 @@ async function errOf(fn: () => Promise<unknown>): Promise<{ status: number; code
 }
 
 const TAG = `TEST-SYA2-${Date.now()}`;
-const ids = { items: [] as string[], warp: [] as string[], weft: [] as string[], design: [] as string[], recipe: [] as string[] };
+const ids = { items: [] as string[], warp: [] as string[], weft: [] as string[], design: [] as string[], recipe: [] as string[], wo: [] as string[] };
 
 async function main(): Promise<void> {
   const admin = await ensureTestAdmin();
@@ -134,6 +137,35 @@ async function main(): Promise<void> {
   const lay = await replaceItemWarpLayers(fabric.id, [{ warpSpecId: leno.id, role: "LENO" }], admin.id);
   check("§6d döner katman yazıldı, sarım varsayılanı SEPARATE_BEAM", lay.warpLayers.length === 1 && lay.warpLayers[0]!.beamMode === "SEPARATE_BEAM" && lay.groundWarp?.id === ground.id);
 
+  console.log("§8 seçici sütunu + döner çerçeve + desen kartı basımı + iş emri sabitleme (dilim b)");
+  check("§8a seçici açılımı A2 C1 B1 → [1,1,3,2]", JSON.stringify(expandWeftSequence("A2 C1 B1", 3, 512)) === "[1,1,3,2]");
+  check("§8b bozuk/boş kod → null (ekran düşmez)", expandWeftSequence("A2 Q1", 3, 512) === null && expandWeftSequence(null, 3, 512) === null);
+  check("§8c tavanı aşan açılım → null", expandWeftSequence("A9 B9 C9", 3, 20) === null);
+  const seqEff = await resolveEffectiveConstruction(prisma, fabric.id, null);
+  check("§8d etkin yapı pickSequence = kod açılımı (A2 B2 C1)", JSON.stringify(seqEff.weft?.pickSequence) === "[1,1,2,2,3]", JSON.stringify(seqEff.weft?.pickSequence));
+  check("§8e eski kayıt döner çerçevesiz ([])", JSON.stringify(seqEff.weaveDesign?.lenoFrames) === "[]");
+  check("§8f döner çerçeve aralık dışı → 400 LENO_FRAMES_INVALID", (await errOf(() => updateWeaveDesign(d.id, { lenoFrames: [0] }, admin.id)))?.code === "LENO_FRAMES_INVALID");
+  check("§8g yinelenen döner çerçeve → 400", (await errOf(() => updateWeaveDesign(d.id, { lenoFrames: [2, 2] }, admin.id)))?.code === "LENO_FRAMES_INVALID");
+  const dl = await updateWeaveDesign(d.id, { lenoFrames: [2, 1] }, admin.id);
+  check("§8h döner çerçeve sıralı yazıldı [1,2]", JSON.stringify(dl.lenoFrames) === "[1,2]");
+  const view = await buildWeaveCardView(fabric.id, new Date("2026-11-21T09:00:00Z"));
+  const html = renderWeaveDesignCardHtml(view);
+  check("§8i basım: desen no = kumaş kodu, sıklık 20, varyant V02 değişimi", html.includes(`DESEN NO : ${TAG}-KM`) && html.includes("20 ATKI/CM") && view.variants.some((v) => v.variantCode === "V02" && v.swaps[0]?.no === 3));
+  const xCount = (html.match(/<td class="c[^"]*">X<\/td>/g) ?? []).length;
+  check("§8j basım: X adedi = ızgaradaki 1'ler (6) + seçici (5)", xCount === 11, String(xCount));
+  check("§8k basım: döner çerçeve sütunları işaretli + ayrık blok", (html.match(/<th class="leno">/g) ?? []).length === 2 && frameBlocks(4, new Set([1, 2])).length === 2);
+  const esc = renderWeaveDesignCardHtml({ ...view, itemName: "<script>x</script>" });
+  check("§8l basım: metin kaçışlı", !esc.includes("<script>x") && esc.includes("&lt;script&gt;"));
+  const pinned = await resolveEffectiveConstruction(prisma, fabric.id, null, { weftSpecId: w0.id, weaveDesignId: null });
+  check("§8m sabitleme: iş emrinin atkı kartı ürünün kartının yerine geçer; desen ürünün", pinned.weft?.weftSpecId === w0.id && pinned.weaveDesign?.id === d.id);
+  const wo = await prisma.weavingOrder.create({ data: { weavingOrderNumber: `${TAG}-WO`, itemId: fabric.id, executionKind: "IN_HOUSE", weftSpecId: w0.id, weaveDesignId: d.id }, select: { id: true } });
+  ids.wo.push(wo.id);
+  const tab = await weavingOrderTabletConstruction(wo.id);
+  check("§8n tablet iş kartı iş emrinin KENDİ atkı kartını gösterir (W0, ürün W1'de)", tab?.weft?.code === `${TAG}-W0`, String(tab?.weft?.code));
+  const woLegacy = await prisma.weavingOrder.create({ data: { weavingOrderNumber: `${TAG}-WO2`, itemId: fabric.id, executionKind: "IN_HOUSE" }, select: { id: true } });
+  ids.wo.push(woLegacy.id);
+  check("§8o seçimsiz (eski) iş emri ürünün güncel kartına düşer", (await weavingOrderTabletConstruction(woLegacy.id))?.weft?.code === `${TAG}-W1`);
+
   console.log("§7 yapısız ürün (bugün): etkin yapı boş");
   const bare = await resolveEffectiveConstruction(prisma, y1, null);
   check("§7a katman/atkı/desen/uyarı yok", bare.warpLayers.length === 0 && bare.weft === null && bare.weaveDesign === null && bare.groundWarp === null && bare.warnings.length === 0);
@@ -141,6 +173,7 @@ async function main(): Promise<void> {
 
 async function cleanup(): Promise<void> {
   const t = async (f: () => Promise<unknown>): Promise<void> => { await f().catch((e) => { fail++; console.log(`  ✗ temizlik: ${(e as Error).message.slice(0, 160)}`); }); };
+  await t(() => prisma.weavingOrder.deleteMany({ where: { id: { in: ids.wo } } }));
   await t(() => prisma.productRecipeWeftYarn.deleteMany({ where: { recipeId: { in: ids.recipe } } }));
   await t(() => prisma.productRecipe.deleteMany({ where: { id: { in: ids.recipe } } }));
   await t(() => prisma.itemWarpLayer.deleteMany({ where: { itemId: { in: ids.items } } }));

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { liftPlanForSave, liftPlanSize, resizeLiftPlan, toggleLiftCell } from "./lift-plan";
+import { lenoWithin, liftPlanForSave, liftPlanSize, resizeLiftPlan, toggleLenoFrame, toggleLiftCell } from "./lift-plan";
 
 describe("armür ızgarası yardımcıları", () => {
   it("büyütmede mevcut hücreler korunur, yeniler 0 doğar", () => {
@@ -24,5 +24,11 @@ describe("armür ızgarası yardımcıları", () => {
     expect(liftPlanForSave([])).toBeNull();
     expect(liftPlanForSave(resizeLiftPlan(null, 4, 0))).toBeNull();
     expect(liftPlanForSave([[1]])).toEqual([[1]]);
+  });
+
+  it("döner çerçeve işareti sıralı tekil çevrilir, ızgara dışı düşer", () => {
+    expect(toggleLenoFrame([2], 1)).toEqual([1, 2]);
+    expect(toggleLenoFrame([1, 2], 2)).toEqual([1]);
+    expect(lenoWithin([1, 2, 15], 14)).toEqual([1, 2]);
   });
 });

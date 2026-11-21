@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useOperationsVisibilityContext } from "@/pages/Operations/useOperationsVisibility";
 import { FabricChooser } from "./FabricChooser";
+import { WeaveCardPrintButton } from "./WeaveCardPrintButton";
 import { listDesignFabrics, weaveDesignApi } from "./service";
 import { CostTab } from "./tabs/CostTab";
 import { LiftPlanTab } from "./tabs/LiftPlanTab";
@@ -50,6 +51,7 @@ export function WeaveDesignDetailPage() {
         actions={d && (
           <div className="flex items-center gap-2">
             {d.isActive ? <Badge variant="default">Aktif</Badge> : <Badge variant="muted">Pasif</Badge>}
+            <WeaveCardPrintButton fabric={fabric} />
             {canWrite && (
               <Button size="sm" variant="outline" disabled={toggleActive.isPending} onClick={() => toggleActive.mutate()}>
                 {d.isActive ? "Pasife al" : "Aktif et"}
@@ -79,7 +81,7 @@ export function WeaveDesignDetailPage() {
               </TabsContent>
               <TabsContent value="weft" className="mt-4"><WeftTab fabric={fabric} canWrite={canWrite} /></TabsContent>
               <TabsContent value="lift" className="mt-4">
-                <LiftPlanTab key={d.id + JSON.stringify(d.liftPlan ?? null)} design={d} canWrite={canWrite} />
+                <LiftPlanTab key={d.id + JSON.stringify(d.liftPlan ?? null) + JSON.stringify(d.lenoFrames ?? [])} design={d} fabric={fabric} canWrite={canWrite} />
               </TabsContent>
               <TabsContent value="variants" className="mt-4"><VariantsTab fabric={fabric} /></TabsContent>
               {showCost && <TabsContent value="cost" className="mt-4"><CostTab fabrics={fabricList} /></TabsContent>}
