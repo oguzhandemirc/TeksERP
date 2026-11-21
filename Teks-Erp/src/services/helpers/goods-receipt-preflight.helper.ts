@@ -72,7 +72,8 @@ export type ReceiptLineIssueCode =
   | "COLOR_NOT_ALLOWED"
   | "PROPERTY_INVALID"
   | "PRICE_REQUIRED"
-  | "OVER_RECEIPT";
+  | "OVER_RECEIPT"
+  | "SUPPLIER_ITEM_CODE_YARN_ONLY";
 
 /** Ölçü + birim ("12,5 m") — sayı tek kaynaktan (`qty-text.helper`). */
 export const qtyUnitText = (v: Prisma.Decimal, unit: string): string => `${qtyText(v)} ${unit}`;
