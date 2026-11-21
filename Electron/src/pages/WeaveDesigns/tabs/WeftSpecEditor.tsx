@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { itemService } from "@/pages/Items/service";
 import type { Item } from "@/pages/Items/types";
+import { SpecOpenOrdersNotice } from "@/components/production/SpecOpenOrdersNotice";
 import { weftSpecApi } from "../service";
 import type { WeftSpecDetail } from "../types";
 import { decimalToFormText } from "@/lib/decimal-form-text";
@@ -45,6 +46,7 @@ export function WeftSpecEditor({ spec, fabricId, canWrite }: { spec: WeftSpecDet
       toast.success("Atkı kartı güncellendi.");
       void qc.invalidateQueries({ queryKey: ["weft-specs"] });
       void qc.invalidateQueries({ queryKey: ["item-construction", fabricId] });
+      void qc.invalidateQueries({ queryKey: ["spec-open-orders"] });
     },
   });
   const setRow = (i: number, patch: Partial<Row>) => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
@@ -54,6 +56,7 @@ export function WeftSpecEditor({ spec, fabricId, canWrite }: { spec: WeftSpecDet
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">Atkı kartı: <span className="font-mono text-xs">{spec.code}</span> · {spec.name}</p>
+      {canWrite && <SpecOpenOrdersNotice kind="weft" id={spec.id} />}
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="space-y-1.5">
           <Label htmlFor="wf-seq">Atkı sırası kodu</Label>

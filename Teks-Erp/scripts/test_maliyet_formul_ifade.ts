@@ -3,17 +3,18 @@
 // =============================================================================
 // Çalıştır: npx tsx scripts/test_maliyet_formul_ifade.ts   (yalnız *_test DB; aktif formül GLOBAL durumdur)
 // §1 değerlendirici (paketsiz, Decimal): öncelik, işlevler, virgül, ; ayırıcı; kaçış/uzunluk/derinlik reddi.
-// §2 kayıt kapısı: bilinmeyen değişken/işlev 400, yer tutucu (pulAdet) 400, önizleme yazmaz.
+// §2 kayıt kapısı: bilinmeyen değişken/işlev 400, pulAdet bağlı (SY-d), önizleme yazmaz.
 // §3 damgalı sürüm: değişim eski satırı damgalar + versionNo+1; eski id ile değişim/kaldırma 409; kod çakışması 409.
 // §4 motor: formül satırı FORMULA bileşeni; sıfıra bölme FORMULA_FAILED (sonuç yok); formülsüz girdi bayt-aynı;
-//    sürüm donması: dondurulan girdi formül değişse de aynı sayı, yeni derleme yeni formülü okur.
+//    sürüm donması: dondurulan girdi formül değişse de aynı sayı, yeni derleme yeni formülü okur;
+//    pulAdet = ADET birimli atkı ipliğinin metre başı adedi, ADET yoksa 0 (§4j–§4k).
 // =============================================================================
 import "dotenv/config";
 import { Prisma } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import { AppError } from "../src/utils/app-error";
 import { CostFormulaError, evaluateCostFormula, parseCostFormula, COST_FORMULA_MAX_DEPTH } from "../src/services/helpers/cost-formula-expr.helper";
-import { COST_FORMULA_VARIABLE_NAMES } from "../src/services/helpers/cost-formula-vars.helper";
+import { COST_FORMULA_UNBOUND_VARIABLES, COST_FORMULA_VARIABLE_NAMES } from "../src/services/helpers/cost-formula-vars.helper";
 import { changeCostFormula, createCostFormula, previewCostFormula, revokeCostFormula, validateCostFormulaExpression } from "../src/services/cost-formula.service";
 import { assembleCostInputTx } from "../src/services/helpers/cost-assembler.helper";
 import { computeFabricCost } from "../src/services/helpers/fabric-cost.helper";
@@ -79,13 +80,31 @@ function section1(): void {
 
 function section2(): void {
   console.log("\n--- §2 kayıt kapısı + önizleme ---");
-  check("§2a yer tutucu değişken (pulAdet) kayıtta 400 VARIABLE_UNAVAILABLE", errCode(() => validateCostFormulaExpression("pulAdet * 0,02")) === "COST_FORMULA_VARIABLE_UNAVAILABLE");
+  // SY-d: pulAdet iplik kartı birimine bağlandı → kayıtta kabul; bağlı olmayan değişken kalmadı.
+  check("§2a pulAdet bağlı: kayıtta kabul, katalogda yer tutucu yok",
+    errCode(() => validateCostFormulaExpression("pulAdet * 0,02")) === null && COST_FORMULA_UNBOUND_VARIABLES.size === 0);
   check("§2b bilinmeyen değişken kayıtta 400", errCode(() => validateCostFormulaExpression("kur * 2")) === "COST_FORMULA_UNKNOWN_VARIABLE");
   const p = previewCostFormula({ expression: "atkiSikligi * 0,1", values: { atkiSikligi: "20" } });
   check("§2c önizleme örnek değeri ezer: 20 × 0,1 = 2", p.sonuc === "2" && p.hata === null && p.degiskenler.join() === "atkiSikligi", JSON.stringify(p));
   const z = previewCostFormula({ expression: "metre / (metre - 1)" });
   check("§2d önizlemede hesap hatası 200 + hata metni (400 gürültüsü yok)", z.sonuc === null && !!z.hata);
   check("§2e önizlemede ayrıştırma hatası 400", errCode(() => previewCostFormula({ expression: "metre +" })) === "COST_FORMULA_INVALID");
+}
+
+/** SY-d: `pulAdet` = ADET birimli atkı ipliğinin metre başı adedi (iplik satırıyla aynı sayı); ADET yoksa 0. */
+function sectionPul(f: NonNullable<CostInput["formulas"]>[number]): void {
+  const base = withFormulas([{ ...f, expression: "pulAdet * 0,01" }]);
+  const weft = base.weft!;
+  const last = weft.yarns.length - 1;
+  const pulInput: CostInput = { ...base, weft: { ...weft, yarns: weft.yarns.map((y, i) => (i === last ? { ...y, unit: "ADET" as const, piecesPerM: D(2) } : y)) } };
+  const out = computeFabricCost(pulInput, { USD });
+  const pulLine = out.result?.lines.find((l) => l.component === "WEFT_YARN" && l.qtyUnit === "adet");
+  const fLine = out.result?.lines.find((l) => l.component === "FORMULA");
+  check("§4j pulAdet = adetle alınan atkının metre başı adedi (iplik satırıyla aynı) × 0,01",
+    !!pulLine?.qty && pulLine.qty.gt(0) && !!fLine && fLine.amountPerMTry.eq(pulLine.qty.mul(D("0.01"))), `${pulLine?.qty?.toString()} / ${fLine?.amountPerMTry.toString()}`);
+  const none = computeFabricCost(withFormulas([{ ...f, expression: "pulAdet + 1" }]), { USD });
+  const noneLine = none.result?.lines.find((l) => l.component === "FORMULA");
+  check("§4k adetle alınan atkı yoksa pulAdet = 0 (eksik değil, satır 1)", !!noneLine && noneLine.amountPerMTry.eq(D(1)), noneLine?.amountPerMTry.toString());
 }
 
 /** Formülsüz golden girdi + verilen formüller (motor kur listesi: USD). */
@@ -143,6 +162,7 @@ async function section3and4(tag: string, userId: string, ids: string[]): Promise
   check("§4h hesapta sıfıra bölme → FORMULA_FAILED eksik, sonuç yok", bad.result === null && bad.missing.includes("FORMULA_FAILED"), bad.missing.join(","));
   const usdF = computeFabricCost(withFormulas([{ ...f1[0], currency: "USD", expression: "0,05" }]), {});
   check("§4i USD formül kursuz → FX_RATE_MISSING (uydurma kur yok)", usdF.result === null && usdF.missing.includes("FX_RATE_MISSING"));
+  sectionPul(f1[0]);
 
   const rv = await revokeCostFormula(v2.row.id, userId);
   const after = await prisma.$transaction((tx) => assembleCostInputTx(tx, { adHoc }));

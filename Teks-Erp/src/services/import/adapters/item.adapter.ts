@@ -16,6 +16,8 @@ import type { ImportAdapter, ImportColumn, ImportContext, PreparedRow } from "..
 import { importKey } from "../import-key";
 import { normalizeItemWidthBody } from "../../helpers/four-point-catalog-fields.helper";
 import { AppError } from "../../../utils/app-error";
+import type { YarnPurchaseUnit } from "@prisma/client";
+import { effectiveYarnUnit } from "../../../constants/yarn-unit";
 
 const COLUMNS: ImportColumn[] = [
   {
@@ -77,6 +79,26 @@ const COLUMNS: ImportColumn[] = [
     help: "Yalnız İPLİK kalemlerinde anlamlıdır ve çözgü kartı açmanın ön koşuludur (kg = tel × denye × metre ÷ 9.000.000). Ondalık ayracı virgül ya da nokta.",
     example: "150",
   },
+  // SY-d: iplik satın alma birimi (SY-a). Kolon yoksa alan gönderilmez: yeni kart KG (NULL) doğar, mevcut kartın birimi değişmez.
+  {
+    key: "yarnPurchaseUnit",
+    label: "İplik Alış Birimi",
+    type: "enum",
+    enumValues: [
+      { value: "KG", label: "Kilogram" },
+      { value: "ADET", label: "Adet" },
+      { value: "METRE", label: "Metre" },
+    ],
+    help: "Yalnız İPLİK kalemlerinde: pul adetle, payet şerit metreyle alınır. Boş bırakılırsa yeni kart Kilogram; mevcut kartın birimi DEĞİŞMEZ.",
+    example: "",
+  },
+  {
+    key: "yarnPiecesPerM",
+    label: "Metredeki Adet",
+    type: "number",
+    help: "Yalnız alış birimi Adet olan iplikte: ipliğin bir metresindeki adet (ör. pul). Ondalık ayracı virgül ya da nokta.",
+    example: "",
+  },
   {
     key: "widthCm",
     label: "En (cm)",
@@ -114,6 +136,8 @@ export const itemImportAdapter: ImportAdapter = {
         itemType: true,
         unit: true,
         linearDensityDen: true,
+        yarnPurchaseUnit: true,
+        yarnPiecesPerM: true,
         widthCm: true,
         isActive: true,
         allowedColors: { select: { color: { select: { code: true } } } },
@@ -128,6 +152,9 @@ export const itemImportAdapter: ImportAdapter = {
         // sorusu dokunulmamış her satırda YANLIŞ 'evet' derdi.
         linearDensityDen: r.linearDensityDen === null ? null : Number(r.linearDensityDen),
         widthCm: r.widthCm === null ? null : Number(r.widthCm),
+        // NULL = KG (SY-a): iplikte "KG" yazan satır değişiklik sayılmasın.
+        yarnPurchaseUnit: exportYarnUnit(r),
+        yarnPiecesPerM: r.yarnPiecesPerM === null ? null : Number(r.yarnPiecesPerM),
         // Diff karşılaştırması sütun anahtarlarıyla yapılır — mevcut hâli de
         // aynı anahtarla (kod listesi) sun ki "değişti mi" doğru cevaplansın.
         allowedColorCodes: r.allowedColors.map((a) => a.color.code),
@@ -144,6 +171,13 @@ export const itemImportAdapter: ImportAdapter = {
         column: "code",
         message: "Kumaş kodu STK- ile başlayamaz — bu önek otomatik stok kodlarına ayrılmıştır (boş bırakın, sistem üretsin).",
       });
+    }
+    // İplik birimi kuralı önizlemede görünsün (servis `readYarnUnitFields` uygulamada da reddeder).
+    const unit = row.values.yarnPurchaseUnit;
+    if (row.values.itemType && row.values.itemType !== "YARN" && ((unit && unit !== "KG") || (row.values.yarnPiecesPerM ?? null) !== null)) {
+      row.result.errors.push({ column: "yarnPurchaseUnit", message: "İplik alış birimi ve metredeki adet yalnız İPLİK kalemlerinde girilir." });
+    } else if (unit !== undefined && unit !== "ADET" && (row.values.yarnPiecesPerM ?? null) !== null) {
+      row.result.errors.push({ column: "yarnPiecesPerM", message: "Metredeki adet yalnız alış birimi Adet olan iplikte girilir." });
     }
     // En biçimi HTTP ucuyla aynı helper'dan (DB CHECK'e düşmeden Türkçe satır hatası).
     if (row.values.widthCm !== undefined) {
@@ -198,6 +232,8 @@ export const itemImportAdapter: ImportAdapter = {
         itemType: true,
         unit: true,
         linearDensityDen: true,
+        yarnPurchaseUnit: true,
+        yarnPiecesPerM: true,
         widthCm: true,
         isActive: true,
         allowedColors: { select: { color: { select: { code: true } } } },
@@ -210,6 +246,8 @@ export const itemImportAdapter: ImportAdapter = {
       itemType: r.itemType,
       unit: r.unit,
       linearDensityDen: r.linearDensityDen === null ? "" : String(Number(r.linearDensityDen)),
+      yarnPurchaseUnit: exportYarnUnit(r) ?? "",
+      yarnPiecesPerM: r.yarnPiecesPerM === null ? "" : String(Number(r.yarnPiecesPerM)),
       widthCm: r.widthCm === null ? "" : String(Number(r.widthCm)),
       allowedColorCodes: r.allowedColors.map((a) => a.color.code).join(";"),
       allowedPropertyCodes: r.allowedProperties.map((a) => a.property.code).join(";"),
@@ -218,11 +256,16 @@ export const itemImportAdapter: ImportAdapter = {
   },
 };
 
+/** İplik kartında etkin alış birimi (NULL = KG); iplik dışı kartta null (kolon boş kalır). */
+function exportYarnUnit(r: { itemType: string; yarnPurchaseUnit: YarnPurchaseUnit | null }): YarnPurchaseUnit | null {
+  return r.itemType === "YARN" ? effectiveYarnUnit(r) : r.yarnPurchaseUnit;
+}
+
 /** Satır değerlerini `ItemService`'in beklediği gövdeye çevirir. */
 function toServicePayload(row: PreparedRow): Record<string, unknown> {
   const v = row.values;
   const out: Record<string, unknown> = {};
-  for (const key of ["code", "name", "itemType", "unit", "linearDensityDen", "widthCm", "isActive"]) {
+  for (const key of ["code", "name", "itemType", "unit", "linearDensityDen", "yarnPurchaseUnit", "yarnPiecesPerM", "widthCm", "isActive"]) {
     if (v[key] !== undefined) out[key] = v[key];
   }
   if (v.allowedColorCodes__ids !== undefined) out.allowedColorIds = v.allowedColorCodes__ids;

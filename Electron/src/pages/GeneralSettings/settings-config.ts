@@ -2463,6 +2463,21 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
           { value: "CARPMA", label: "Çarparak", hint: "net × (1 + fire %)" },
         ],
       },
+      {
+        // SY-D2: `defaultValue` backend `DEFAULT_WEAVING_STANDARD_METHOD` ile birebir; yalnız YENİ hesabı etkiler.
+        // Finans rejimine kapılı Muhasebe'den taşındı (fire yöntemiyle aynı neden; dokuma modülüne bağlı kalır).
+        enumKey: "costWeavingStandardMethod",
+        title: "Dokuma maliyeti nasıl hesaplansın",
+        summary: "Standart maliyette dokuma satırı tezgâh saatinden mi, atkı ücretinden mi gelsin.",
+        desc: "Tezgâh saati (varsayılan): tezgâh devri ve randımandan saatte kaç metre dokunduğu bulunur; tezgâh, işçilik ve enerji saat ücretleri metreye bölünür. Atkı ücreti: dokuma = atkı sıklığı (atkı/cm) × atkı başı ücret (ör. 17 atkı × 0,02 $ = 0,34 $/m); ücret maliyet parametrelerinde ya da ürünün maliyet yapısında girilir. Ayar yalnız yeni hesaplanan maliyeti etkiler; kayıtlı standart maliyet sürümleri değişmez.",
+        defaultValue: "TEZGAH_SAATI",
+        display: "radio",
+        audience: ["Muhasebeci", "Yönetim"],
+        options: [
+          { value: "TEZGAH_SAATI", label: "Tezgâh saati (varsayılan)", hint: "Devir × randıman × saat ücretleri." },
+          { value: "ATKI_UCRETI", label: "Atkı ücreti", hint: "Atkı/cm × atkı başı ücret (ör. cent)." },
+        ],
+      },
     ],
   },
   {
@@ -2934,21 +2949,6 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         options: [
           { value: "ALIS_FIYATI", label: "Kartın alış fiyatı (varsayılan)", hint: "Fiyat geçmişindeki o günkü değer." },
           { value: "SON_ALIS_FATURASI", label: "Son alış faturası", hint: "O güne kadarki son onaylı alış faturası." },
-        ],
-      },
-      {
-        // SY-D2: `defaultValue` backend `DEFAULT_WEAVING_STANDARD_METHOD` ile birebir; yalnız YENİ hesabı etkiler.
-        enumKey: "costWeavingStandardMethod",
-        group: "Maliyet",
-        title: "Dokuma maliyeti nasıl hesaplansın",
-        summary: "Standart maliyette dokuma satırı tezgâh saatinden mi, atkı ücretinden mi gelsin.",
-        desc: "Tezgâh saati (varsayılan): tezgâh devri ve randımandan saatte kaç metre dokunduğu bulunur; tezgâh, işçilik ve enerji saat ücretleri metreye bölünür. Atkı ücreti: dokuma = atkı sıklığı (atkı/cm) × atkı başı ücret (ör. 17 atkı × 0,02 $ = 0,34 $/m); ücret maliyet parametrelerinde ya da ürünün maliyet yapısında girilir. Ayar yalnız yeni hesaplanan maliyeti etkiler; kayıtlı standart maliyet sürümleri değişmez.",
-        defaultValue: "TEZGAH_SAATI",
-        display: "radio",
-        audience: ["Muhasebeci", "Yönetim"],
-        options: [
-          { value: "TEZGAH_SAATI", label: "Tezgâh saati (varsayılan)", hint: "Devir × randıman × saat ücretleri." },
-          { value: "ATKI_UCRETI", label: "Atkı ücreti", hint: "Atkı/cm × atkı başı ücret (ör. cent)." },
         ],
       },
       {

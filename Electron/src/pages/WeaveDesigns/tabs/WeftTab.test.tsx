@@ -8,6 +8,7 @@ import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
 
 vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { success: vi.fn(), info: vi.fn(), error: vi.fn() }) }));
+vi.mock("@/components/production/SpecOpenOrdersNotice", () => ({ SpecOpenOrdersNotice: () => null }));
 const { api, countUsers, listUsers } = vi.hoisted(() => ({
   api: { get: vi.fn(), update: vi.fn(), fork: vi.fn() },
   countUsers: vi.fn(),

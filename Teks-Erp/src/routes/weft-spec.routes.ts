@@ -20,6 +20,7 @@ import {
 } from "../services/weft-spec.service";
 import { forkWeftSpecForItem } from "../services/weft-spec-fork.service";
 import { withWeftShares } from "../services/helpers/weft-share.helper";
+import { weftSpecOpenOrders } from "../services/helpers/spec-open-orders.helper";
 
 const router = Router();
 router.use(verifyToken, requireDokumaEnabled);
@@ -69,6 +70,23 @@ router.get("/", requirePermission("warpspec:read"), wrap(async (req, res) => {
 router.get("/:id", requirePermission("warpspec:read"), wrap(async (req, res) => {
   const { id } = idParam.parse(req.params);
   res.status(200).json({ success: true, data: withWeftShares(await getWeftSpec(id)) });
+}));
+
+/**
+ * @openapi
+ * /api/weft-specs/{id}/open-orders:
+ *   get:
+ *     tags: [WeftSpecs]
+ *     summary: Bu atkı kartını kullanan açık dokuma iş emirleri (düzenleme uyarısı; yazmaz)
+ *     description: İş emrinin kendi kartı, boşsa ürünün kartı sayılır. `numbers` en çok 10 numara; `total` tam sayıdır.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: "{ weavingOrders, warpingOrders, total, numbers[] }" }
+ */
+router.get("/:id/open-orders", requirePermission("warpspec:read"), wrap(async (req, res) => {
+  const { id } = idParam.parse(req.params);
+  res.status(200).json({ success: true, data: await weftSpecOpenOrders(id) });
 }));
 
 /**

@@ -39,6 +39,8 @@ export function formulaCurrencies(formulas: CostFormulaInput[] | undefined): Cur
 export interface FormulaContext {
   picksPerCm: Dec; lengthCm: Dec | null; endsCount: number | null;
   warpKg: Dec; weftKg: Dec; raw: Dec; mamul: Dec;
+  /** ADET birimli atkı ipliklerinin metre başı adedi (fireli); adetle alınan atkı yoksa 0. */
+  pulPieces: Dec;
 }
 
 /** Formül satırları (TL/m). Eksik kur → FX_RATE_MISSING; hesap hatası → FORMULA_FAILED; ikisinde satır yazılmaz. */
@@ -48,7 +50,7 @@ export function formulaLines(input: CostInput, ctx: FormulaContext, fx: FxRates,
   const vars = new Map<string, Dec>([
     ["metre", ONE], ["atkiSikligi", ctx.picksPerCm],
     ["cozguKg", ctx.warpKg], ["atkiKg", ctx.weftKg], ["iplikKg", ctx.warpKg.plus(ctx.weftKg)],
-    ["hamMaliyet", ctx.raw], ["mamulMaliyet", ctx.mamul],
+    ["hamMaliyet", ctx.raw], ["mamulMaliyet", ctx.mamul], ["pulAdet", ctx.pulPieces],
   ]);
   if (ctx.lengthCm) vars.set("en", ctx.lengthCm);
   if (ctx.endsCount !== null) vars.set("cozguTel", new Prisma.Decimal(ctx.endsCount));
