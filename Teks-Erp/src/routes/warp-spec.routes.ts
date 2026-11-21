@@ -21,6 +21,7 @@ import { requireDevereEnabled } from "../middlewares/module.middleware";
 import { z } from "zod";
 import { applyDenierSuggestion, getDenierDeviationReport } from "../services/denier-deviation.service";
 import { denierDeviationQuerySchema } from "./reports/dokuma.report.routes";
+import { warpSpecOpenOrders } from "../services/helpers/spec-open-orders.helper";
 import "../types/express-augment";
 
 export const warpSpecService = new WarpSpecService({
@@ -152,6 +153,27 @@ router.post("/denier-deviation/apply", requirePermission("item:write"), async (r
  *       404: { description: Bulunamadı }
  */
 router.get("/:id", requirePermission("warpspec:read"), controller.findById);
+
+/**
+ * @openapi
+ * /api/warp-specs/{id}/open-orders:
+ *   get:
+ *     tags: [WarpSpecs]
+ *     summary: Bu çözgü kartını kullanan açık iş emirleri (düzenleme uyarısı; yazmaz)
+ *     description: "Açık dokuma iş emri (kendi kartı, boşsa ürünün zemin kartı ya da ek katmanı; dokuma kapalıysa 0) + açık çözgü emri (ana ya da ek kart). `numbers` en çok 10 numara; `total` tam sayıdır."
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: "{ weavingOrders, warpingOrders, total, numbers[] }" }
+ */
+router.get("/:id/open-orders", requirePermission("warpspec:read"), async (req, res, next) => {
+  try {
+    const id = z.string().uuid("Geçersiz kayıt ID").parse(req.params.id);
+    res.status(200).json({ success: true, data: await warpSpecOpenOrders(id) });
+  } catch (e) {
+    next(e);
+  }
+});
 
 /**
  * @openapi

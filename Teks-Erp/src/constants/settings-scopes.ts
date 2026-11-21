@@ -194,7 +194,6 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "financeRiskLimitCurrencyMode",
       "costProfitSubcontractSource",
       "costProfitConsumablePriceSource",
-      "costWeavingStandardMethod",
       "costProfitMachineTime",
       "costProfitOverheadKey",
       "financeServiceBillingPriceDate",

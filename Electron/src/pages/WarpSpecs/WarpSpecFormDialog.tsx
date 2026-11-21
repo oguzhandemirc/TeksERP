@@ -8,6 +8,7 @@ import { WarpCalcPanel } from "./WarpCalcPanel";
 import { IdentityFields, NotesField, ReedFields, ReedHelper } from "./WarpSpecFields";
 import type { WarpSpec } from "./types";
 import { ModalSection } from "@/components/forms/modal-sections/ModalSections";
+import { SpecOpenOrdersNotice } from "@/components/production/SpecOpenOrdersNotice";
 
 // Gizli bölümün bu alanlarında doğrulama hatası olursa bölüm kendiliğinden görünür.
 const REED_FIELDS = ["selvedgeEnds", "reedNo", "endsPerDent", "reedWidthCm", "sequenceNote", "takeUpPct", "wastePct"] as const;
@@ -42,6 +43,7 @@ export function WarpSpecFormDialog({ open, onOpenChange, initial, draft, onSubmi
         <WideFormColumns
           main={
             <>
+              {initial && <SpecOpenOrdersNotice kind="warp" id={initial.id} />}
               <FormCard sectionId="identity" sectionRequired title="Kimlik" icon={Fingerprint}>
                 <IdentityFields form={form} excludeId={initial?.id} />
               </FormCard>
