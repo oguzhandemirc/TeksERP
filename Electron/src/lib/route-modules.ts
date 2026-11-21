@@ -87,6 +87,7 @@ export const ROUTE_MODULE: Readonly<Record<string, RouteModuleFlag>> = {
   "operations/warp-beams": "devereEnabled",
   "operations/cozgu-hesabi": "devereEnabled",
   "operations/fason-devere": "devereEnabled",
+  "operations/devere-donus": "devereEnabled",
   // ── TEZGAH İZLEME ───────────────────────────────────────────────────────
   "operations/weaving-floor": "tezgahEnabled",
   "operations/loom-alarms": "tezgahEnabled",

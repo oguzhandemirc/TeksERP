@@ -13,7 +13,16 @@ export interface ReceiveBeamDraft {
   tareKg: string;
   /** C2: yeniden sarılan reddedilen sarımın kimliği ("" = yeniden sarım değil). */
   reworkOfBeamId: string;
+  /** E2 (B3 alanları): okutulan kayıtlı gövde ya da yerinde tanımlanan yeni gövde; yoksa `physicalBeamNo` metni. */
+  body?: ReceiveBodyDraft | null;
 }
+
+/** Okutulan gövde: kayıtlıysa kimliği, tanımsızsa no + sahip (Bizim / bu devereci). */
+export type ReceiveBodyDraft =
+  | { kind: "existing"; id: string; bodyNo: string; hint: string }
+  | { kind: "new"; bodyNo: string; ownerKind: "OURS" | "WARPER"; subcontractorId: string | null };
+
+export type ReceiveWeighing = "OFF" | "OPTIONAL" | "REQUIRED";
 
 export const emptyBeamDraft = (lengthM = ""): ReceiveBeamDraft => ({ physicalBeamNo: "", lengthM, grossKg: "", tareKg: "", reworkOfBeamId: "" });
 
@@ -32,7 +41,7 @@ function trimLen(v: string): string {
 
 export type ReceiveBuild = { ok: true; body: WarpingReceiveFields; totalM: number } | { ok: false; error: string | null };
 
-const isBlank = (r: ReceiveBeamDraft) => !r.physicalBeamNo.trim() && !r.lengthM.trim() && !r.grossKg.trim() && !r.tareKg.trim() && !r.reworkOfBeamId;
+export const isBlankDraft = (r: ReceiveBeamDraft) => !r.physicalBeamNo.trim() && !r.lengthM.trim() && !r.grossKg.trim() && !r.tareKg.trim() && !r.reworkOfBeamId && !r.body;
 
 function optKg(text: string, row: number, label: string): number | null | string {
   if (text.trim() === "") return null;
@@ -41,33 +50,51 @@ function optKg(text: string, row: number, label: string): number | null | string
   return Math.round(n * 1000) / 1000;
 }
 
-function buildBeam(r: ReceiveBeamDraft, row: number): WarpingReceiveBeamBody | string {
+function bodyFields(b: ReceiveBodyDraft | null | undefined): Pick<WarpingReceiveBeamBody, "beamBodyId" | "newBody"> {
+  if (!b) return {};
+  if (b.kind === "existing") return { beamBodyId: b.id };
+  const owner = b.ownerKind === "WARPER" ? { kind: "WARPER" as const, subcontractorId: b.subcontractorId } : { kind: "OURS" as const };
+  return { newBody: { bodyNo: b.bodyNo.trim() || null, owner } };
+}
+
+function buildBeam(r: ReceiveBeamDraft, row: number, weighing: ReceiveWeighing): WarpingReceiveBeamBody | string {
   const len = parseNum(r.lengthM);
   if (len === null || len <= 0) return `${row}. satır: metre girin.`;
-  const gross = optKg(r.grossKg, row, "brüt kg");
+  // Tartı kapalıyken sütun çizilmez; eski taslakta kalan değer gönderilmez (sunucu 400 verirdi).
+  const gross = weighing === "OFF" ? null : optKg(r.grossKg, row, "brüt kg");
   if (typeof gross === "string") return gross;
-  const tare = optKg(r.tareKg, row, "dara kg");
+  const tare = weighing === "OFF" ? null : optKg(r.tareKg, row, "dara kg");
   if (typeof tare === "string") return tare;
+  if (weighing === "REQUIRED" && gross === null) return `${row}. satır: brüt kg yazın (bu kurulumda dönüş tartısı zorunlu).`;
   if (tare !== null && gross === null) return `${row}. satır: dara yazıldıysa brüt kg da yazılmalı.`;
   if (tare !== null && gross !== null && tare >= gross) return `${row}. satır: dara brütten küçük olmalı.`;
-  const no = r.physicalBeamNo.trim();
-  const base = { lengthM: Math.round(len * 1000) / 1000, physicalBeamNo: no || null, grossKg: gross, tareKg: tare };
+  // Gövdeli satırda gövde no sunucuda gövdeden kopyalanır; metin no gönderilmez.
+  const no = r.body ? "" : r.physicalBeamNo.trim();
+  const base = { lengthM: Math.round(len * 1000) / 1000, physicalBeamNo: no || null, grossKg: gross, tareKg: tare, ...bodyFields(r.body) };
   // Alan yalnız seçiliyse gider: yeniden sarımsız kabulün gövdesi C2 öncesiyle bayt-aynı kalır.
   return r.reworkOfBeamId ? { ...base, reworkOfBeamId: r.reworkOfBeamId } : base;
 }
 
+const bodyKey = (b: WarpingReceiveBeamBody): string | null =>
+  b.beamBodyId ? `id:${b.beamBodyId}` : b.newBody?.bodyNo ? `no:${b.newBody.bodyNo}` : b.physicalBeamNo ? `no:${b.physicalBeamNo}` : null;
+const bodyLabel = (b: WarpingReceiveBeamBody, drafts: ReceiveBeamDraft[], i: number) => drafts[i]?.body?.bodyNo ?? b.newBody?.bodyNo ?? b.physicalBeamNo ?? "";
+
+/** Belge düzeyinde (siparişler arası) gövde tekrarı denetimi için dışarı açık anahtar. */
+export const receiveBodyKey = bodyKey;
+
 /** Tamamen boş satır atlanır; yarım satır hata verir. Hata metni yoksa (hiç satır yok) düğme sessizce kapalı. */
-export function buildReceiveBody(drafts: ReceiveBeamDraft[], deliveryNoteNo: string): ReceiveBuild {
+export function buildReceiveBody(drafts: ReceiveBeamDraft[], deliveryNoteNo: string, weighing: ReceiveWeighing = "OPTIONAL"): ReceiveBuild {
   const beams: WarpingReceiveBeamBody[] = [];
   const seen = new Set<string>();
   const reworks = new Set<string>();
   for (const [i, r] of drafts.entries()) {
-    if (isBlank(r)) continue;
-    const b = buildBeam(r, i + 1);
+    if (isBlankDraft(r)) continue;
+    const b = buildBeam(r, i + 1, weighing);
     if (typeof b === "string") return { ok: false, error: b };
-    if (b.physicalBeamNo) {
-      if (seen.has(b.physicalBeamNo)) return { ok: false, error: `"${b.physicalBeamNo}" gövde numarası iki kez yazılmış.` };
-      seen.add(b.physicalBeamNo);
+    const key = bodyKey(b);
+    if (key) {
+      if (seen.has(key)) return { ok: false, error: `"${bodyLabel(b, drafts, i)}" gövde numarası iki kez yazılmış.` };
+      seen.add(key);
     }
     if (b.reworkOfBeamId) {
       if (reworks.has(b.reworkOfBeamId)) return { ok: false, error: `${i + 1}. satır: aynı reddedilen sarım iki satıra bağlanmış.` };

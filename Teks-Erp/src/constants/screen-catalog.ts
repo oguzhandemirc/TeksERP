@@ -258,6 +258,8 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "operations/cozgu-hesabi", app: "desktop", modul: "devereEnabled", title: "Çözgü Hesabı", requires: ["warpspec:read"], capabilities: [] },
   // Fason Devere Siparişleri (devere D6a, 2026-11-18): liste + sipariş sayfası; yeni/düzenle (write), iptal (cancel).
   { key: "operations/fason-devere", app: "desktop", modul: "devereEnabled", title: "Fason Devere Siparişleri", requires: ["warping-order:read"], capabilities: ["warping-order:write", "warping-order:cancel", "warping-order:settle"] },
+  // Devere Dönüş Kabulleri (devere ek E2, 2026-11-21): kabul belgeleri listesi + belge sayfası; yeni dönüş kabulü (write).
+  { key: "operations/devere-donus", app: "desktop", modul: "devereEnabled", title: "Devere Dönüş Kabulleri", requires: ["warping-order:read"], capabilities: ["warping-order:write"] },
   // Tezgah duruşları (Faz 1b web yüzeyi, 2026-09-14): elle giriş/kapatma/geri alma `loom:manual-entry`,
   // sebep atama/yeniden sınıflandırma `loom:classify` — İKİSİNDEN BİRİ ekranı açar, eylemler ekran içinde izinle.
   { key: "operations/machine-stops", app: "desktop", modul: "dokumaEnabled", title: "Tezgah Duruşları", requires: ["loom:manual-entry", "loom:classify"], capabilities: [] },

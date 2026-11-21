@@ -1,5 +1,5 @@
 // Üretim karoları (menü kökü Üretim, `/production`; sıra = hub sırası). Fason karolarının ikisi `warehouse.ts`te.
-import { Factory, FilePlus2, Gauge, History, Ruler, Share2, SwatchBook, Spool, AlertOctagon, MonitorPlay, Siren, Layers, CalendarClock, Calculator, Truck, Cylinder, Scale } from "lucide-react";
+import { Factory, FilePlus2, Gauge, History, Ruler, Share2, SwatchBook, Spool, AlertOctagon, MonitorPlay, Siren, Layers, CalendarClock, Calculator, Truck, Cylinder, Scale, PackageCheck } from "lucide-react";
 import { isKursunPlanningVisible, isMeterDeviationsVisible, isWorkOrdersVisible } from "../production-regime";
 import { isWeavingOrdersVisible } from "../WeavingOrders/weaving-regime";
 import { isMachineStopsVisible, machineStopsTitle } from "../MachineStops/stop-regime";
@@ -127,6 +127,19 @@ export const productionTiles: OperationsTile[] = [
     description: "Devereciye çözgü işi ver, iplik planı ve sevki; levent kabulü, kusurlu levent reddi, devere faturası (devere, fason çözgü, devereci, iplik sevki, irsaliye, ret, fatura)",
     icon: Truck,
     to: "/operations/fason-devere",
+    group: "production",
+    permission: "warping-order:read",
+    visibleWhen: isWarpBeamsVisible,
+    offHint: flagOffHint("devereEnabled"),
+  },
+  {
+    // DEVERE DÖNÜŞ KABULLERİ (devere ek E2): `/api/warping-receive-docs` `requireDevereEnabled` + `warping-order:read`;
+    // karo Fason Devere Siparişleri ile AYNI bayrak ve izin (route `ProtectedRoute` ile birebir).
+    key: "devere-donus",
+    title: "Devere Dönüş Kabulleri",
+    description: "Devereciden dönen leventleri tek irsaliyeyle kabul et — birden çok sipariş tek belgede; irsaliye no ile ara (devere dönüşü, levent kabulü, irsaliye, kabul belgesi, gövde okut)",
+    icon: PackageCheck,
+    to: "/operations/devere-donus",
     group: "production",
     permission: "warping-order:read",
     visibleWhen: isWarpBeamsVisible,

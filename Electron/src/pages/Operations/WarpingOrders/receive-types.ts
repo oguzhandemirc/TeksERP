@@ -57,6 +57,8 @@ export interface WarpingReceiptBeam {
 export interface WarpingReceipt {
   receiptKey: string;
   deliveryNoteNo: string | null;
+  /** Devere ek E1: kabul bir dönüş kabul belgesinin parçasıysa belge no (eski sunucuda yok). */
+  receiveDoc?: { id: string; docNo: string } | null;
   receivedAt: string;
   beamCount: number;
   liveBeamCount: number;
@@ -76,6 +78,10 @@ export interface WarpingReceiveBeamBody {
   tareKg?: number | null;
   /** Devere ek C2: yeniden sarılan reddedilen sarım (aynı sipariş, "yeniden sarılsın" kipli etkin ret). */
   reworkOfBeamId?: string | null;
+  /** Devere ek B3: okutulan kayıtlı gövde. */
+  beamBodyId?: string | null;
+  /** Devere ek B3: tanımsız gövde yerinde (sahibiyle). */
+  newBody?: { bodyNo?: string | null; owner: { kind: "OURS" | "WARPER"; subcontractorId?: string | null } } | null;
 }
 
 export interface WarpingReceiveFields {
@@ -85,7 +91,7 @@ export interface WarpingReceiveFields {
 
 export interface WarpingReceivePreview {
   order: { id: string; orderNo: string; status: WarpingOrderStatus };
-  beams: Array<{ index: number; lengthM: string; nominalKg: string; weighedNetKg: string | null; reworkOf?: { beamId: string; beamNo: string; rejectionDocNo: string } | null; yarns: Array<{ yarnItemId: string; code: string; kg: string }> }>;
+  beams: Array<{ index: number; lengthM: string; nominalKg: string; weighedNetKg: string | null; body?: { beamBodyId: string | null; bodyNo: string | null; isNew: boolean; ownerKind: string } | null; reworkOf?: { beamId: string; beamNo: string; rejectionDocNo: string } | null; yarns: Array<{ yarnItemId: string; code: string; kg: string }> }>;
   allocations: Array<{
     beamIndex: number; yarnItemId: string; dispatchItemId: string; dispatchNo: string; lotNo: string | null;
     holderWarpingOrderId: string; holderOrderNo: string | null; carryOver: boolean; kg: string;

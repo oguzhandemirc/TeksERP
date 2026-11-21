@@ -25,11 +25,21 @@ vi.mock("./receive-service", () => ({
 }));
 
 vi.mock("./rejection-service", () => ({ warpingRejectionService: {}, useWarpingRejections: () => ({ data: undefined, isSuccess: false, isError: false }) }));
+// E2: sipariş sayfasındaki kabul artık dönüş kabul belgesi ucuna gider (tek siparişlik özel hal).
+const docSvc = vi.hoisted(() => ({ preview: vi.fn(), create: vi.fn(), byDeliveryNote: vi.fn(), resolveBody: vi.fn(), get: vi.fn(), listCursor: vi.fn() }));
+vi.mock("./receive-doc-service", async (orig) => ({
+  ...(await orig<typeof import("./receive-doc-service")>()),
+  warpingReceiveDocService: docSvc,
+  useDeliveryNoteGroup: () => ({ data: undefined }),
+}));
+vi.mock("./service", async (orig) => ({ ...(await orig<typeof import("./service")>()), listWarpingOrders: () => Promise.resolve({ success: true, data: [], pagination: { nextCursor: null, hasMore: false, limit: 100 }, summary: null }) }));
+vi.mock("@/components/forms/SubcontractorCategoryPicker", () => ({ SubcontractorCategoryPicker: () => null }));
 
 import { ReceiptsSection } from "./ReceiptsSection";
 
 const order = (status: WarpingOrder["status"] = "IN_PROGRESS") => ({
   id: "wo-1", orderNo: "FDV1", status, subcontractor: { id: "s1", code: "S", name: "Devereci A" },
+  warpSpec: { id: "ws1", code: "CK1", name: "Tül zemin" }, targetLengthM: "1000.000", beamCount: 2,
   beamLines: [{ beamCount: 2, beamLengthM: "500.000" }], yarns: [{ yarnItemId: "y1", code: "IPL-5X", name: "5X" }],
 }) as unknown as WarpingOrder;
 
@@ -86,10 +96,10 @@ describe("ReceiptsSection", () => {
   });
 
   it("② kabul: plandan dolu, önizlemesiz kapalı, değişince kapanır, gövde + token", async () => {
-    svc.receivePreview.mockResolvedValue(preview);
+    docSvc.preview.mockResolvedValue({ subcontractorId: "s1", deliveryNoteNo: "DV-9", deliveryNoteUses: [], orders: [{ warpingOrderId: "wo-1", preview }], totals: { orderCount: 1, beamCount: 1, lengthM: "500.000" }, warnings: ["FDV1: IPL-5X: kontrol"] });
     const tokens: string[] = [];
     const errNet = Object.assign(new Error("Network Error"), { code: "ERR_NETWORK" });
-    svc.receive.mockImplementation((_id: string, b: { clientToken: string }) => { tokens.push(b.clientToken); return tokens.length < 2 ? Promise.reject(errNet) : Promise.resolve({ success: true, data: {} }); });
+    docSvc.create.mockImplementation((b: { clientToken: string }) => { tokens.push(b.clientToken); return tokens.length < 2 ? Promise.reject(errNet) : Promise.resolve({ success: true, data: { id: "d1", docNo: "DK-1" } }); });
     const user = userEvent.setup();
     renderWithProviders(<ReceiptsSection order={order()} />);
     await user.click(await screen.findByRole("button", { name: /Levent kabulü/ }));
@@ -104,8 +114,8 @@ describe("ReceiptsSection", () => {
     await user.click(within(dlg).getByRole("button", { name: "Önizle" }));
     expect(await within(dlg).findByText(/devir: FDV0/)).toBeTruthy();
     expect(within(dlg).getByText("IPL-5X: kontrol")).toBeTruthy();
-    const body = { deliveryNoteNo: "DV-9", beams: [{ lengthM: 500, physicalBeamNo: null, grossKg: 60, tareKg: 30 }] };
-    expect(svc.receivePreview).toHaveBeenCalledWith("wo-1", body);
+    const body = { subcontractorId: "s1", deliveryNoteNo: "DV-9", orders: [{ warpingOrderId: "wo-1", beams: [{ lengthM: 500, physicalBeamNo: null, grossKg: 60, tareKg: 30 }] }] };
+    expect(docSvc.preview).toHaveBeenCalledWith(body);
     expect(send().disabled).toBe(false);
     await user.type(within(dlg).getByLabelText("1. levent gövde no"), "G");
     expect(send().disabled).toBe(true);
@@ -118,7 +128,7 @@ describe("ReceiptsSection", () => {
     await user.click(send());
     await waitFor(() => expect(tokens.length).toBe(2));
     expect(tokens[1]).toBe(tokens[0]);
-    expect(svc.receive).toHaveBeenLastCalledWith("wo-1", { ...body, clientToken: tokens[0] });
+    expect(docSvc.create).toHaveBeenLastCalledWith({ ...body, clientToken: tokens[0] });
   });
 
   it("③ geri alma: her levent listelenir; engelde sunucu cümlesi, sebep yok, düğme kapalı", async () => {

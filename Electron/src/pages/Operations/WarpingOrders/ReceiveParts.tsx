@@ -8,13 +8,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { cn } from "@/lib/utils";
 import { fmtKg, fmtM, isBeamCountOpen } from "./order-model";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { emptyBeamDraft, MAX_RECEIVE_BEAMS, receiveYarnRows, signedKg, type ReceiveBeamDraft } from "./receive-model";
+import { emptyBeamDraft, MAX_RECEIVE_BEAMS, receiveYarnRows, signedKg, type ReceiveBeamDraft, type ReceiveBodyDraft, type ReceiveWeighing } from "./receive-model";
+import { ReceiveBodyCell } from "./ReceiveBodyCell";
 import type { ReworkCandidate } from "./rejection-model";
 import type { WarpingReceivePreview } from "./receive-types";
 import { YarnLabel } from "./YarnLabel";
 
 const num = "text-right tabular-nums";
-type Field = keyof ReceiveBeamDraft;
+type Field = Exclude<keyof ReceiveBeamDraft, "body">;
 
 const NO_REWORK = "none";
 
@@ -31,8 +32,15 @@ function ReworkSelect({ i, value, reworks, onChange }: { i: number; value: strin
   );
 }
 
-export function ReceiveBeamsTable({ drafts, onChange, reworks = [] }: { drafts: ReceiveBeamDraft[]; onChange: (d: ReceiveBeamDraft[]) => void; reworks?: ReworkCandidate[] }) {
+/** Ayarların tabloya etkisi: tartı OFF → brüt/dara sütunu yok; gövde modu OFF → gövde no METNİ (bugünkü), açıkken okutma hücresi. */
+export interface ReceiveTableOptions { weighing?: ReceiveWeighing; bodyMode?: "OFF" | "OPTIONAL" | "REQUIRED"; subcontractorId?: string | null; minRows?: number }
+
+export function ReceiveBeamsTable({ drafts, onChange, reworks = [], options = {} }: { drafts: ReceiveBeamDraft[]; onChange: (d: ReceiveBeamDraft[]) => void; reworks?: ReworkCandidate[]; options?: ReceiveTableOptions }) {
+  const { weighing = "OPTIONAL", bodyMode = "OFF", subcontractorId = null, minRows = 1 } = options;
+  const weigh = weighing !== "OFF";
+  const bodies = bodyMode !== "OFF";
   const set = (i: number, k: Field, v: string) => onChange(drafts.map((d, j) => (j === i ? { ...d, [k]: v } : d)));
+  const setBody = (i: number, v: ReceiveBodyDraft | null) => onChange(drafts.map((d, j) => (j === i ? { ...d, body: v } : d)));
   const cell = (i: number, k: Field, label: string, decimal = true) => (
     <Input aria-label={`${i + 1}. levent ${label}`} className={cn("h-8", decimal && "text-right")} inputMode={decimal ? "decimal" : undefined}
       maxLength={decimal ? 12 : 32} value={drafts[i]?.[k] ?? ""} onChange={(e) => set(i, k, e.target.value)} />
@@ -44,10 +52,12 @@ export function ReceiveBeamsTable({ drafts, onChange, reworks = [] }: { drafts: 
           <TableHeader>
             <TableRow>
               <TableHead className="w-10">#</TableHead>
-              <TableHead className="min-w-28" title="Leventin üzerindeki numara (isteğe bağlı)">Gövde no</TableHead>
+              {bodies
+                ? <TableHead className="min-w-56" title="Gövdenin QR'ını okutun ya da no yazıp Enter'a basın; tanımsız gövde yerinde tanımlanır">Gövde{bodyMode === "REQUIRED" ? " *" : ""}</TableHead>
+                : <TableHead className="min-w-28" title="Leventin üzerindeki numara (isteğe bağlı)">Gövde no</TableHead>}
               <TableHead className="w-32 text-right">Metre</TableHead>
-              <TableHead className="w-28 text-right" title="İsteğe bağlı tartı — tüketimi değiştirmez">Brüt kg</TableHead>
-              <TableHead className="w-28 text-right" title="Boş levent ağırlığı (isteğe bağlı)">Dara kg</TableHead>
+              {weigh && <TableHead className="w-28 text-right" title={weighing === "REQUIRED" ? "Tartı zorunlu — tüketimi değiştirmez" : "İsteğe bağlı tartı — tüketimi değiştirmez"}>Brüt kg{weighing === "REQUIRED" ? " *" : ""}</TableHead>}
+              {weigh && <TableHead className="w-28 text-right" title="Boş levent ağırlığı (isteğe bağlı)">Dara kg</TableHead>}
               {reworks.length > 0 && <TableHead className="w-48" title="Reddedilen bir sarımın yerine gelen levent">Yeniden sarım</TableHead>}
               <TableHead className="w-10"><span className="sr-only">Sil</span></TableHead>
             </TableRow>
@@ -56,13 +66,17 @@ export function ReceiveBeamsTable({ drafts, onChange, reworks = [] }: { drafts: 
             {drafts.map((_, i) => (
               <TableRow key={i}>
                 <TableCell className="text-muted-foreground">{i + 1}</TableCell>
-                <TableCell>{cell(i, "physicalBeamNo", "gövde no", false)}</TableCell>
+                <TableCell>
+                  {bodies
+                    ? <ReceiveBodyCell row={i + 1} value={drafts[i]?.body} subcontractorId={subcontractorId} onChange={(v) => setBody(i, v)} />
+                    : cell(i, "physicalBeamNo", "gövde no", false)}
+                </TableCell>
                 <TableCell>{cell(i, "lengthM", "metre")}</TableCell>
-                <TableCell>{cell(i, "grossKg", "brüt kg")}</TableCell>
-                <TableCell>{cell(i, "tareKg", "dara kg")}</TableCell>
+                {weigh && <TableCell>{cell(i, "grossKg", "brüt kg")}</TableCell>}
+                {weigh && <TableCell>{cell(i, "tareKg", "dara kg")}</TableCell>}
                 {reworks.length > 0 && <TableCell><ReworkSelect i={i} value={drafts[i]?.reworkOfBeamId ?? ""} reworks={reworks} onChange={(v) => set(i, "reworkOfBeamId", v)} /></TableCell>}
                 <TableCell>
-                  <Button size="sm" variant="ghost" className="h-7 px-2" aria-label={`${i + 1}. leventi sil`} disabled={drafts.length === 1}
+                  <Button size="sm" variant="ghost" className="h-7 px-2" aria-label={`${i + 1}. leventi sil`} disabled={drafts.length <= minRows}
                     onClick={() => onChange(drafts.filter((_row, j) => j !== i))}><Trash2 className="h-4 w-4" /></Button>
                 </TableCell>
               </TableRow>
@@ -166,6 +180,11 @@ export function ReceivePreviewView({ p }: { p: WarpingReceivePreview }) {
         <ul className="space-y-0.5 rounded-md border p-3 text-xs" aria-label="Yeniden sarım bağları">
           {p.beams.filter((b) => b.reworkOf).map((b) => <li key={b.index}>{b.index + 1}. levent → reddedilen <b>{b.reworkOf?.beamNo}</b> yerine ({b.reworkOf?.rejectionDocNo})</li>)}
         </ul>
+      )}
+      {p.beams.some((b) => b.body) && (
+        <p className="text-xs text-muted-foreground" aria-label="Gövde bağları">
+          Gövdeler: {p.beams.filter((b) => b.body).map((b) => `${b.index + 1}. ${b.body?.bodyNo ?? "seri no"}${b.body?.isNew ? " (yeni tanım)" : ""}`).join(" · ")}
+        </p>
       )}
       <AllocationList p={p} />
       <WeighTable p={p} />

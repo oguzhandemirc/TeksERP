@@ -144,6 +144,18 @@ export function useDevereBeamBodyMode(): "OFF" | "OPTIONAL" | "REQUIRED" {
   return q.data?.data?.devereBeamBodyMode ?? "OFF";
 }
 
+/** Devere ek E1: dönüşte tartı (`devere.receiveWeighing`). Yüklenene dek OPTIONAL = bugünkü davranış (brüt/dara isteğe bağlı). */
+export function useDevereReceiveWeighing(): "OFF" | "OPTIONAL" | "REQUIRED" {
+  const q = useFeatureFlags();
+  return q.data?.data?.devereReceiveWeighing ?? "OPTIONAL";
+}
+
+/** Devere ek E1: aynı irsaliye no ile ikinci dönüş kabulü (`devere.duplicateDeliveryNote`). Yüklenene dek WARN (backend varsayılanı). */
+export function useDevereDuplicateDeliveryNote(): "ALLOW" | "WARN" | "BLOCK" {
+  const q = useFeatureFlags();
+  return q.data?.data?.devereDuplicateDeliveryNote ?? "WARN";
+}
+
 /** Devere Faz 3: bağlamada yöntem + başlangıç saati zorunlu mu (`devere.mountTrackingRequired`). */
 export function useDevereMountTrackingRequired(): boolean {
   const q = useFeatureFlags();
