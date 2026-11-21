@@ -10,19 +10,29 @@ import { View, StyleSheet } from 'react-native';
 import { Text, Button } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import ScreenChrome from '../../../components/ScreenChrome';
-import PickerModal from '../../../components/PickerModal';
 import ScannerEntryBar from '../../../components/ScannerEntryBar';
 import StationActionButton from '../../../components/StationActionButton';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
-import { colors, moduleAccents, spacing, typography } from '../../../theme';
+import { usePermissions } from '../../../hooks/usePermission';
+import { colors, moduleAccents, palette, spacing, typography } from '../../../theme';
 import { fmtMeters } from '../../../utils/meters';
+import type { ReceiveDocResult, RejectLookup } from '../../../services/devereKabul.service';
 import WarpBeamLabelPrinter from '../Devere/WarpBeamLabelPrinter';
 import { useDevereKabul } from './useDevereKabul';
-import { HeaderFields, LinesList, OrderCard } from './DevereKabulParts';
+import { HeaderFields, HeaderPickers, LinesList, OrderCard } from './DevereKabulParts';
 import BeamLineSheet from './BeamLineSheet';
 import { PreviewSheet, ResultSheet } from './ReceiveSheets';
+import RejectSheet from './RejectSheet';
+
+/** Az önce kabul edilen satırdan ret hedefi — okutma turu yok (kimlik zaten elde). */
+function resultTarget(b: ReceiveDocResult['orders'][number]['receipt']['beams'][number], o: { id: string; orderNo: string }, sub: { id: string; name: string } | null): RejectLookup {
+  return {
+    beam: { id: b.id, beamNo: b.beamNo, status: 'READY', physicalBeamNo: b.physicalBeamNo, bodyNo: null, lengthM: b.lengthM },
+    order: { id: o.id, orderNo: o.orderNo, subcontractor: { id: sub?.id ?? '', name: sub?.name ?? 'devereci' } },
+  };
+}
 
 export default function DevereKabulScreen() {
   const compact = useDeviceType() === 'phone';
@@ -32,11 +42,12 @@ export default function DevereKabulScreen() {
   const [picker, setPicker] = useState<null | 'sub' | 'order'>(null);
   const [camera, setCamera] = useState(false);
   const [code, setCode] = useState('');
+  const [rejectScan, setRejectScan] = useState(false);
+  const canReject = usePermissions().has('mobile:devere-ret');
   const bodyMode = s.settings.beamBodyMode;
   const canAdd = !!s.activeOrder && s.isOnline && !s.busy;
   const beamCount = s.orders.reduce((n, o) => n + o.beams.length, 0);
   const totalM = s.build.ok ? s.build.totalM : 0;
-  const pickedIds = new Set(s.orders.map((o) => o.orderId));
   return (
     <ScreenChrome title="Devere Dönüş Kabulü" subtitle="Devereciden dönen dolu leventleri gövde QR'ı okutarak kabul edin" statusLine={s.subcontractor ? `${s.subcontractor.openOrderCount} açık sipariş` : undefined}>
       <View style={styles.root}>
@@ -65,6 +76,11 @@ export default function DevereKabulScreen() {
           {!s.build.ok && s.build.error ? <Text style={styles.danger}>{s.build.error}</Text> : null}
           <View style={styles.buttons}>
             <Button mode="outlined" icon="refresh" onPress={s.refresh} contentStyle={styles.tall}>Yenile</Button>
+            {canReject ? (
+              <Button mode="outlined" icon="truck-fast-outline" textColor={palette.orange[800]} onPress={() => setRejectScan(true)} disabled={!s.isOnline || s.reject.rejectLooking} loading={s.reject.rejectLooking} contentStyle={styles.tall} testID="devere-ret-ac">
+                Kusurlu levent
+              </Button>
+            ) : null}
             <Text style={styles.total}>{beamCount ? `${beamCount} levent · ${fmtMeters(totalM)} m` : ''}</Text>
             <View style={styles.accept}>
               <StationActionButton label="KABUL ET" icon="check-decagram" onPress={() => s.previewMut.mutate()} tint={moduleAccents.DevereKabul.tint} loading={s.previewMut.isPending} loadingLabel="Önizleniyor…" disabled={!s.build.ok || !s.isOnline || s.busy} large testID="devere-kabul-kabul" />
@@ -72,34 +88,13 @@ export default function DevereKabulScreen() {
           </View>
         </View>
       </View>
-      <BarcodeScannerModal visible={camera} listenWhileHidden={canAdd && bodyMode !== 'OFF' && !s.sheet && !s.preview} title="Leventin gövde QR'ını okutun" trigger="auto" onDismiss={() => setCamera(false)} onScan={(c) => { setCamera(false); void s.scanBody(c); }} />
-      <PickerModal
-        visible={picker === 'sub'}
-        title="Devereci"
-        options={s.subcontractors.map((x) => ({ value: x.id, label: x.name, sublabel: `${x.openOrderCount} açık sipariş` }))}
-        selectedValue={s.subcontractorId ?? ''}
-        loading={s.context.isLoading}
-        emptyText="Açık fason devere siparişi olan devereci yok — sipariş panelden açılır (Üretim › Devere / Çözgü)."
-        onDismiss={() => setPicker(null)}
-        onSelect={(id) => { s.selectSubcontractor(id); setPicker(null); }}
-      />
-      <PickerModal
-        visible={picker === 'order'}
-        title="Açık sipariş"
-        options={s.ctxOrders.filter((o) => !pickedIds.has(o.id)).map((o) => ({
-          value: o.id,
-          label: `${o.orderNo} — ${o.warpSpec.name}`,
-          sublabel: o.remainingBeamCount === null ? `kalan ${fmtMeters(Number(o.remainingM))} m` : `${o.remainingBeamCount} levent bekleniyor · kalan ${fmtMeters(Number(o.remainingM))} m`,
-        }))}
-        selectedValue=""
-        loading={s.context.isFetching}
-        emptyText="Bu deverecinin kabul bekleyen başka açık siparişi yok."
-        onDismiss={() => setPicker(null)}
-        onSelect={(id) => { s.addOrder(id); setPicker(null); }}
-      />
-      {s.sheet ? <BeamLineSheet value={s.sheet} weighing={s.settings.receiveWeighing} subcontractorName={s.subcontractor?.name ?? 'devereci'} onSave={s.saveLine} onRemove={s.removeLine} onDismiss={() => s.setSheet(null)} /> : null}
+      <BarcodeScannerModal visible={camera} listenWhileHidden={canAdd && bodyMode !== 'OFF' && !s.sheet && !s.preview && !s.reject.rejectDraft && !rejectScan} title="Leventin gövde QR'ını okutun" trigger="auto" onDismiss={() => setCamera(false)} onScan={(c) => { setCamera(false); void s.scanBody(c); }} />
+      <HeaderPickers state={s} picker={picker} onClose={() => setPicker(null)} />
+      {s.sheet ? <BeamLineSheet value={s.sheet} weighing={s.settings.receiveWeighing} subcontractorName={s.subcontractor?.name ?? 'devereci'} reworkCandidates={s.reworkFor(s.sheet)} onSave={s.saveLine} onRemove={s.removeLine} onDismiss={() => s.setSheet(null)} /> : null}
       {s.preview ? <PreviewSheet preview={s.preview} sent={s.build.ok ? s.build.body : null} duplicateMode={s.settings.duplicateDeliveryNote} pending={s.accept.isPending} isOnline={s.isOnline} onAccept={() => s.accept.mutate()} onBack={() => s.setPreview(null)} /> : null}
-      {s.result ? <ResultSheet result={s.result} onClose={() => s.setResult(null)} /> : null}
+      {s.result ? <ResultSheet result={s.result} onClose={() => s.setResult(null)} onReject={canReject ? (b, o) => s.reject.openReject(resultTarget(b, o, s.subcontractor)) : undefined} /> : null}
+      <BarcodeScannerModal visible={rejectScan} title="Kusurlu leventin etiketini ya da gövde QR'ını okutun" trigger="auto" onDismiss={() => setRejectScan(false)} onScan={(c) => { setRejectScan(false); void s.reject.rejectLookup(c); }} />
+      {s.reject.rejectDraft ? <RejectSheet state={s.reject} draft={s.reject.rejectDraft} isOnline={s.isOnline} photoRequiredHint={s.settings.rejectPhotoRequired} /> : null}
       <WarpBeamLabelPrinter />
     </ScreenChrome>
   );

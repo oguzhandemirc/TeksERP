@@ -327,7 +327,9 @@ export function computeFabricCost(input: CostInput, fx: FxRates): CostOutcome {
   const mamul = procs.reduce((a, l) => a.plus(l.amountPerMTry), fin.finished ?? raw);
   // SY-C1: ek formül satırları ek işlemlerden SONRA, kalite firesi + genel giderden ÖNCE (gider tabanına girer).
   const weftKgPerM = weft.perYarn.reduce((a, x) => a.plus(x.kg), ZERO);
-  const formulas = formulaLines(input, { picksPerCm: weft.picksPerCm, lengthCm: input.weft?.lengthCm.value ?? null, endsCount: input.warp?.endsCount ?? null, warpKg: warp.kg, weftKg: weftKgPerM, raw, mamul }, fx, (m) => c.missing.add(m));
+  // SY-d: `pulAdet` = ADET birimli atkı ipliklerinin fireli metre başı adedi (iplik satırıyla aynı sayı).
+  const pulPieces = weft.rows.reduce((a, r) => ("unit" in r && r.unit === "ADET" ? a.plus(r.qty) : a), ZERO);
+  const formulas = formulaLines(input, { picksPerCm: weft.picksPerCm, lengthCm: input.weft?.lengthCm.value ?? null, endsCount: input.warp?.endsCount ?? null, warpKg: warp.kg, weftKg: weftKgPerM, pulPieces, raw, mamul }, fx, (m) => c.missing.add(m));
   if (c.missing.size) return { result: null, missing: [...c.missing].sort(), warnings: [...c.warnings].sort() };
   const base = formulas.reduce((a, l) => a.plus(l.amountPerMTry), mamul);
   const sound = applyWastePct(base, fk, input.wasteMethod);

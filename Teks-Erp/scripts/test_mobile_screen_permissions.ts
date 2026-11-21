@@ -430,6 +430,23 @@ const EXEMPT: { screen: string; path: string; why: string }[] = [
     path: "POST /warp-beams/:p/cancel",
     why: "Sarım iptali ayrı bir YETENEK yetkisi (`mobile:devere-iptal`, 2026-09-14) — iplik defterine ters satır yazar; izni olmayanda buton çizilmez.",
   },
+  // Devere ek-2 r: Devere Dönüş Kabulü ekranında kusurlu levent reddi ayrı YETENEK (`mobile:devere-ret`) — ret iplik
+  // tutmasını değiştirir; "Kusurlu levent" ve "Geri gönder" düğmeleri yetkisizde çizilmez (DevereKabulScreen `canReject`).
+  {
+    screen: "mobile:devere-kabul",
+    path: "GET /warping-beam-rejections/lookup",
+    why: "Ret okutması (levent etiketi/gövde → sarım) — retle AYNI yetenek (`mobile:devere-ret`); düğme yetkisizde çizilmez.",
+  },
+  {
+    screen: "mobile:devere-kabul",
+    path: "POST /warping-beam-rejections/preview",
+    why: "Ret önizlemesi — retle AYNI yetenek (`mobile:devere-ret`); kararı verecek bilgi yetkisiz kişiye açılmaz.",
+  },
+  {
+    screen: "mobile:devere-kabul",
+    path: "POST /warping-beam-rejections",
+    why: "Kusurlu levent reddi ayrı YETENEK (`mobile:devere-ret`) — iplik deverecinin tutmasına döner; yetkisizde düğme çizilmez.",
+  },
   // ── Tambur ekranının EK yetenek yetkileri (2026-08-17'de burada belgelendi) ──
   // Ekranın ana yetkisi `mobile:tambur`; aşağıdaki dört aksiyon BİLİNÇLİ olarak
   // ayrı yetki ister. "Ekran açılıyor ama şu tuş çalışmıyor" sorusunun cevabı

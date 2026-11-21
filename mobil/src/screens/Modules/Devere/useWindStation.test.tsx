@@ -16,6 +16,8 @@ const mockWind = { mutate: jest.fn(), isPending: false };
 jest.mock('./useBeamMutations', () => ({ useBeamMutations: () => ({ plan: mockPlan, wind: mockWind }) }));
 const mockSignalScan = jest.fn();
 jest.mock('../../../services/scanFeedback', () => ({ signalScan: (o: string) => mockSignalScan(o) }));
+const mockResolveBody = jest.fn();
+jest.mock('../../../services/devereKabul.service', () => ({ devereKabulService: { resolveBody: (c: string) => mockResolveBody(c) } }));
 
 const ctx = {
   warpSpecs: [
@@ -88,6 +90,20 @@ it('§4 okutma: levent no kabul, sarılmış levent ret', () => {
   act(() => h.result.current.submitScan('LV-r1'));
   expect(mockSignalScan).toHaveBeenLastCalledWith('reject');
   expect(h.result.current.scanMessage).toContain('yeniden sarılamaz');
+});
+
+it('§6 gövde kipi açık: bilinmeyen kod gövde QR olarak çözülür → form gövdesi; OFF\'ta gövde no metnine düşer', async () => {
+  mockResolveBody.mockResolvedValue({ id: 'g1', bodyNo: 'LG-12', status: 'EMPTY_STOCK', statusLabel: 'Depoda boş', isActive: true, owner: { kind: 'OURS', label: 'Bizim' }, currentWarpBeam: null });
+  const on = renderHook(() => useWindStation({ context: { ...ctx, beamBodyMode: 'OPTIONAL' }, planned: [], recent: [], isOnline: true }));
+  await act(async () => on.result.current.submitScan('LG-12'));
+  expect(mockResolveBody).toHaveBeenCalledWith('LG-12');
+  expect(on.result.current.form?.beamBody).toEqual({ id: 'g1', bodyNo: 'LG-12', ownerLabel: 'Bizim' });
+  expect(on.result.current.form?.physicalBeamNo).toBe('');
+  mockResolveBody.mockClear();
+  const off = setup();
+  act(() => off.result.current.submitScan('LG-12'));
+  expect(mockResolveBody).not.toHaveBeenCalled();
+  expect(off.result.current.form?.physicalBeamNo).toBe('LG-12');
 });
 
 it('§5 çevrimdışı → mutasyon yok, gerekçe', () => {

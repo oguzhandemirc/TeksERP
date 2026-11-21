@@ -12,20 +12,22 @@ import NumpadInput from '../../../components/NumpadInput';
 import ModalTextInput from '../../../components/ModalTextInput';
 import TruncatedText from '../../../components/TruncatedText';
 import { colors } from '../../../theme';
-import type { DevereMode3 } from '../../../services/devereKabul.service';
-import { validateBeam, type BeamDraft } from './receiveDocPayload';
+import type { DevereMode3, ReworkCandidate } from '../../../services/devereKabul.service';
+import { inputText, validateBeam, type BeamDraft } from './receiveDocPayload';
 import type { LineSheet } from './useDevereKabul';
 
 interface Props {
   value: LineSheet;
   weighing: DevereMode3;
   subcontractorName: string;
+  /** Ek-2 r: siparişin yeniden sarım adayları (eski sunucu → boş; seçim gizli). */
+  reworkCandidates?: ReworkCandidate[];
   onSave: (s: LineSheet) => void;
   onRemove: (orderId: string, key: string) => void;
   onDismiss: () => void;
 }
 
-export default function BeamLineSheet({ value, weighing, subcontractorName, onSave, onRemove, onDismiss }: Props) {
+export default function BeamLineSheet({ value, weighing, subcontractorName, reworkCandidates = [], onSave, onRemove, onDismiss }: Props) {
   const [d, setD] = useState<BeamDraft>(value.draft);
   const [tried, setTried] = useState(false);
   const error = validateBeam(d, weighing);
@@ -89,9 +91,35 @@ export default function BeamLineSheet({ value, weighing, subcontractorName, onSa
           </>
         ) : null}
       </View>
+      <ReworkPicker candidates={reworkCandidates} draft={d} onChange={setD} />
       {tried && error ? <Text style={sheet.error}>{error}</Text> : null}
     </ModuleSheet>
   );
 }
 
-const styles = StyleSheet.create({ tall: { height: 56 } });
+/** Ek-2 r: "bu levent reddedilen hangi sarımın yeniden sarımı?" — aday yoksa hiç çizilmez; seçim metreyi aday boyuyla doldurur. */
+function ReworkPicker({ candidates, draft: d, onChange }: { candidates: ReworkCandidate[]; draft: BeamDraft; onChange: (d: BeamDraft) => void }) {
+  if (candidates.length === 0) return null;
+  return (
+    <>
+      <Text style={sheet.label}>Yeniden sarım mı?</Text>
+      <View style={styles.chips}>
+        <Button mode={!d.reworkOfBeamId ? 'contained' : 'outlined'} onPress={() => onChange({ ...d, reworkOfBeamId: undefined })} contentStyle={styles.tall} testID="devere-kabul-rework-yok">Hayır — yeni levent</Button>
+        {candidates.map((c) => (
+          <Button
+            key={c.beamId}
+            mode={d.reworkOfBeamId === c.beamId ? 'contained' : 'outlined'}
+            onPress={() => onChange({ ...d, reworkOfBeamId: c.beamId, lengthM: c.lengthM ? inputText(c.lengthM) : d.lengthM })}
+            contentStyle={styles.tall}
+            testID={`devere-kabul-rework-${c.beamNo}`}
+          >
+            {`${c.beamNo}${c.bodyNo ? ` · ${c.bodyNo}` : ''} (${c.rejectionDocNo})`}
+          </Button>
+        ))}
+      </View>
+      <Text style={sheet.hint}>Reddedilip devereciye geri gönderilen levent yeniden sarıldıysa onu seçin.</Text>
+    </>
+  );
+}
+
+const styles = StyleSheet.create({ tall: { height: 56 }, chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 } });

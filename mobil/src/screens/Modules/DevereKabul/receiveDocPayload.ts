@@ -22,6 +22,8 @@ export interface BeamDraft {
   lengthM: string;
   grossKg: string;
   tareKg: string;
+  /** Ek-2 r: bu levent reddedilen hangi sarımın yeniden sarımı (siparişin `reworkCandidates`inden). */
+  reworkOfBeamId?: string;
 }
 
 export interface OrderDraft {
@@ -96,6 +98,7 @@ export function beamLine(d: BeamDraft, weighing: DevereMode3, subcontractorId: s
   else if (d.body?.kind === 'new') {
     line.newBody = { bodyNo: d.body.bodyNo.trim() || null, owner: d.body.ownerKind === 'WARPER' ? { kind: 'WARPER', subcontractorId } : { kind: 'OURS' } };
   } else line.physicalBeamNo = d.physicalBeamNo.trim() || null;
+  if (d.reworkOfBeamId) line.reworkOfBeamId = d.reworkOfBeamId;
   return line;
 }
 
@@ -119,6 +122,7 @@ export type DocBuild = { ok: true; body: ReceiveDocFields; beamCount: number; to
 export function buildDocBody(orders: OrderDraft[], p: { subcontractorId: string | null; deliveryNoteNo: string; weighing: DevereMode3 }): DocBuild {
   const out: ReceiveDocFields['orders'] = [];
   const seen = new Map<string, string>();
+  const reworkSeen = new Set<string>();
   let beamCount = 0;
   let totalM = 0;
   for (const o of orders) {
@@ -132,6 +136,10 @@ export function buildDocBody(orders: OrderDraft[], p: { subcontractorId: string 
         const other = seen.get(key);
         if (other) return { ok: false, error: `Aynı gövde iki kez okutulmuş (${other === o.orderNo ? o.orderNo : `${other} ve ${o.orderNo}`}).` };
         seen.set(key, o.orderNo);
+      }
+      if (d.reworkOfBeamId) {
+        if (reworkSeen.has(d.reworkOfBeamId)) return { ok: false, error: `${o.orderNo}: aynı reddedilen levent iki satırda yeniden sarım seçilmiş.` };
+        reworkSeen.add(d.reworkOfBeamId);
       }
       const line = beamLine(d, p.weighing, p.subcontractorId);
       totalM += line.lengthM;

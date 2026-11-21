@@ -6,10 +6,11 @@
 // =============================================================================
 import { useCallback, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { devereKabulService, type WarpingTabletOrder } from '../../../services/devereKabul.service';
+import { devereKabulService, type WarpingTabletContext, type WarpingTabletOrder } from '../../../services/devereKabul.service';
 import { useIsOnline, useOfflineReason } from '../../../offline/hooks';
 import { buildDocBody, nextPlanLength, type BeamDraft, type OrderDraft } from './receiveDocPayload';
 import { useBodyScan, useReceiveSubmit } from './useReceiveSubmit';
+import { useBeamReject } from './useBeamReject';
 
 export const DEVERE_KABUL_CTX_KEY = ['devere-kabul', 'context'] as const;
 /** Açık satır sayfası: hangi siparişe, hangi taslak; `editing` doluysa mevcut satır düzeltiliyor. */
@@ -17,7 +18,7 @@ export interface LineSheet { orderId: string; draft: BeamDraft; editing: boolean
 
 let seq = 0;
 const newKey = () => `l${Date.now().toString(36)}${(seq++).toString(36)}`;
-const DEFAULT_SETTINGS = { beamBodyMode: 'OFF', receiveWeighing: 'OPTIONAL', duplicateDeliveryNote: 'ALLOW' } as const;
+const DEFAULT_SETTINGS: WarpingTabletContext['settings'] = { beamBodyMode: 'OFF', receiveWeighing: 'OPTIONAL', duplicateDeliveryNote: 'ALLOW' };
 
 /** Taslak siparişler + satır sayfası (saf durum; ağ yok). */
 function useOrderDrafts(ctxOrders: WarpingTabletOrder[]) {
@@ -67,6 +68,7 @@ export function useDevereKabul() {
   const refresh = useCallback(() => void qc.invalidateQueries({ queryKey: DEVERE_KABUL_CTX_KEY }), [qc]);
   const { clear, addOrder: addDraft } = drafts;
   const submit = useReceiveSubmit(build, useCallback(() => { clear(); setDeliveryNoteNo(''); refresh(); }, [clear, refresh]));
+  const reject = useBeamReject({ isOnline, onRejected: refresh });
   const scan = useBodyScan({ hasOrder: !!drafts.activeOrder, orders: drafts.orders, onBody: drafts.openNewLine });
   const selectSubcontractor = useCallback((id: string) => {
     if (id === subcontractorId) return;
@@ -77,9 +79,14 @@ export function useDevereKabul() {
     const o = ctxOrders.find((x) => x.id === id);
     if (o) addDraft(o);
   }, [ctxOrders, addDraft]);
+  /** Satır sayfasının yeniden sarım adayları: siparişin adayları − bu taslağın başka satırında seçilmişler. */
+  const reworkFor = useCallback((sh: LineSheet) => {
+    const used = new Set(drafts.orders.find((o) => o.orderId === sh.orderId)?.beams.filter((b) => b.key !== sh.draft.key).map((b) => b.reworkOfBeamId) ?? []);
+    return (ctxOrders.find((o) => o.id === sh.orderId)?.reworkCandidates ?? []).filter((c) => !used.has(c.beamId));
+  }, [drafts.orders, ctxOrders]);
   return {
-    context, isOnline, offlineReason, refresh, settings, subcontractors: context.data?.subcontractors ?? [], subcontractor, subcontractorId, selectSubcontractor,
-    ctxOrders, ...drafts, addOrder, deliveryNoteNo, setDeliveryNoteNo, build, ...scan, ...submit,
+    reworkFor, context, isOnline, offlineReason, refresh, settings, subcontractors: context.data?.subcontractors ?? [], subcontractor, subcontractorId, selectSubcontractor,
+    ctxOrders, ...drafts, addOrder, deliveryNoteNo, setDeliveryNoteNo, build, ...scan, ...submit, reject,
   };
 }
 

@@ -22,6 +22,7 @@ import {
   oldestPlannedFor,
   resolveStationScan,
   resolveTarget,
+  stationBodyFromResolve,
   stationNominalKg,
   stationPlanForm,
   validateStation,
@@ -59,7 +60,7 @@ function filled(over: Partial<StationForm> = {}): StationForm {
 }
 
 // backend `windSchema` (Teks-Erp/src/routes/warp-beam.routes.ts) anahtarları — `.strict()`: fazlası 400.
-const WIND_SCHEMA_KEYS = ['lengthM', 'kgSource', 'machineId', 'yarnIssues', 'yarnReturns', 'sectionCount', 'endsPerSection', 'breakCount', 'startedAt', 'clientToken', 'count', 'physicalBeamNoPrefix', 'dispatchItemId', 'weavingOrderId'];
+const WIND_SCHEMA_KEYS = ['lengthM', 'kgSource', 'machineId', 'yarnIssues', 'yarnReturns', 'sectionCount', 'endsPerSection', 'breakCount', 'startedAt', 'clientToken', 'count', 'physicalBeamNoPrefix', 'dispatchItemId', 'weavingOrderId', 'beamBodyIds'];
 
 describe('§1 kg hesabı', () => {
   it('nominal = tel × m × denye ÷ 9e6 (3 hane)', () => {
@@ -190,5 +191,28 @@ describe('§7 lot süzgeci', () => {
     expect(yarnItemIdFor('s1', [beam('b1')])).toBe('y');
     expect(yarnItemIdFor('s9', [beam('b1')])).toBeNull();
     expect(yarnItemIdFor(null, [beam('b1')])).toBeNull();
+  });
+});
+
+describe('§8 sarımda gövde (ek-2 r)', () => {
+  const resolved = (p: Record<string, unknown> = {}) => ({ id: 'g1', bodyNo: 'LG-12', status: 'EMPTY_STOCK', statusLabel: 'Depoda boş', isActive: true, owner: { label: 'Bizim' }, currentWarpBeam: null, ...p });
+  it('yalnız aktif + depoda boş gövde bağlanır; tanımsız/dolu/deverecide/pasif → metin', () => {
+    expect(stationBodyFromResolve('LG-12', resolved())).toEqual({ id: 'g1', bodyNo: 'LG-12', ownerLabel: 'Bizim' });
+    expect(typeof stationBodyFromResolve('X-9', null)).toBe('string');
+    expect(stationBodyFromResolve('x', resolved({ status: 'FULL_STOCK', statusLabel: 'Dolu', currentWarpBeam: { beamNo: 'LV-3' } }))).toMatch(/LV-3/);
+    expect(typeof stationBodyFromResolve('x', resolved({ status: 'AT_SUBCONTRACTOR' }))).toBe('string');
+    expect(typeof stationBodyFromResolve('x', resolved({ isActive: false }))).toBe('string');
+  });
+  it('yük: gövde varsa beamBodyIds tek kimlik; yoksa alan GİTMEZ (bugünkü istek)', () => {
+    const body = { id: 'g1', bodyNo: 'LG-12', ownerLabel: 'Bizim' };
+    expect(buildStationWindPayload(filled({ beamBody: body }), spec, 'tok').beamBodyIds).toEqual(['g1']);
+    expect(buildStationWindPayload(filled(), spec, 'tok')).not.toHaveProperty('beamBodyIds');
+  });
+  it('REQUIRED gövdesiz SAR kapalı; OPTIONAL/OFF/eski sunucu (alan yok) geçer; sarım sonrası gövde temizlenir', () => {
+    expect(validateStation(filled(), spec, null, { ...rules, beamBodyMode: 'REQUIRED' })).toMatchObject({ ok: false, message: expect.stringMatching(/gövde/) });
+    expect(validateStation(filled({ beamBody: { id: 'g1', bodyNo: 'LG', ownerLabel: '' } }), spec, null, { ...rules, beamBodyMode: 'REQUIRED' })).toEqual({ ok: true });
+    expect(validateStation(filled(), spec, null, { ...rules, beamBodyMode: 'OPTIONAL' })).toEqual({ ok: true });
+    expect(validateStation(filled(), spec, null, rules)).toEqual({ ok: true });
+    expect(afterWind(filled({ beamBody: { id: 'g1', bodyNo: 'LG', ownerLabel: '' } })).beamBody).toBeNull();
   });
 });

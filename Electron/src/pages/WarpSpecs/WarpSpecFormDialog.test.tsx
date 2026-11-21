@@ -36,6 +36,7 @@ vi.mock("@/pages/Items/service", () => ({
   itemService: { getById: vi.fn(async (id: string) => ({ success: true, data: { id, code: id.toUpperCase(), name: `İplik ${id}` } })), listCursor: vi.fn(), list: vi.fn() },
 }));
 vi.mock("@/components/forms/SimilarNamesWarning", () => ({ SimilarNamesWarning: () => null }));
+vi.mock("@/components/production/SpecOpenOrdersNotice", () => ({ SpecOpenOrdersNotice: () => null }));
 
 const spec: WarpSpec = {
   id: "s1", code: "UA-Ç", name: "UA çözgüsü", yarnItemId: "y1", endsCount: 7000, selvedgeEnds: null, reedNo: 20, endsPerDent: 1,
