@@ -9,7 +9,7 @@ import { Router, type NextFunction, type Request, type Response } from "express"
 import { z } from "zod";
 import { AppError } from "../utils/app-error";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
 import { requireDevereEnabled, requireIplikEnabled } from "../middlewares/module.middleware";
 import { assertNoBareFilterParams, parseQueryParams, readIdCondition } from "../utils/query-parser";
 import { qtyText } from "../services/helpers/qty-text.helper";
@@ -21,6 +21,8 @@ import "../types/express-augment";
 
 const router = Router();
 router.use(verifyToken, requireDevereEnabled);
+// Devere ek D1: tablet dönüş kabulü (depo) önizleme/kabul/belge okuma — aynı servis, ayrı izin; liste/irsaliye grubu panelde kalır.
+const MOBILE_DEVERE_KABUL = ["mobile:devere-kabul"] as const;
 
 const wrap = (fn: (req: Request) => Promise<{ status: number; body: unknown }>) => async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -99,12 +101,12 @@ const ByNoteQuery = z.object({ subcontractorId: ReceiveId, deliveryNoteNo: z.str
  *     responses:
  *       200: { description: "{ success, data[], nextCursor, summary{count, beamCount} }" }
  */
-router.post("/preview", requirePermission("warping-order:write"), requireIplikEnabled, wrap(async (req) => {
+router.post("/preview", requireAnyPermission("warping-order:write", ...MOBILE_DEVERE_KABUL), requireIplikEnabled, wrap(async (req) => {
   const body = parse(PreviewBody, req.body);
   return { status: 200, body: { success: true, data: await previewWarpingReceiveDoc(body) } };
 }));
 
-router.post("/", requirePermission("warping-order:write"), requireIplikEnabled, wrap(async (req) => {
+router.post("/", requireAnyPermission("warping-order:write", ...MOBILE_DEVERE_KABUL), requireIplikEnabled, wrap(async (req) => {
   const body = parse(CreateBody, req.body);
   const { data, warnings, replayed } = await createWarpingReceiveDoc(body, req.user!.userId);
   return {
@@ -155,7 +157,7 @@ router.get("/by-delivery-note", requirePermission("warping-order:read"), wrap(as
   return { status: 200, body: { success: true, data: await getDeliveryNoteGroup(q.subcontractorId, q.deliveryNoteNo) } };
 }));
 
-router.get("/:id", requirePermission("warping-order:read"), wrap(async (req) => {
+router.get("/:id", requireAnyPermission("warping-order:read", ...MOBILE_DEVERE_KABUL), wrap(async (req) => {
   const id = parse(ReceiveId, req.params.id);
   return { status: 200, body: { success: true, data: await getWarpingReceiveDoc(id) } };
 }));

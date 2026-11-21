@@ -236,7 +236,9 @@ async function main(): Promise<void> {
     const ends = ["get\\(\"/:id/receipts\"", "post\\(\"/:id/receive/preview\"", "post\\(\"/:id/receive\"", "get\\(\"/:id/receipts/:receiptKey/cancel-preview\"", "post\\(\"/:id/receipts/:receiptKey/cancel\""];
     const gated = ends.map((p) => new RegExp(`router\\.${p}[^\\n]*requireIplikEnabled`).test(routes));
     const mainR = fs.readFileSync(path.join(__dirname, "../src/routes/warping-order.routes.ts"), "utf8");
-    check("Modül: beş dönüş ucu `requireIplikEnabled` uç başına; alt router devere kapısının arkasında, `/:id`den önce", gated.every(Boolean) && (routes.match(/^router\.(get|post)\(/gm) ?? []).length === ends.length
+    // D1: tablet bağlamı (`/tablet-context`) iplik okumaz/yazmaz → iplik kapısı almaz; sayımdan bilerek düşülür.
+    const counted = (routes.match(/^router\.(get|post)\("(?!\/tablet-context")/gm) ?? []).length;
+    check("Modül: beş dönüş ucu `requireIplikEnabled` uç başına; alt router devere kapısının arkasında, `/:id`den önce", gated.every(Boolean) && counted === ends.length
       && mainR.indexOf("router.use(verifyToken, requireDevereEnabled)") < mainR.indexOf('router.use("/", warpingOrderReceiveRoutes)') && mainR.indexOf('router.use("/", warpingOrderReceiveRoutes)') < mainR.indexOf('router.get("/:id"'), JSON.stringify(gated));
   } finally {
     const beamIds = (await prisma.warpBeam.findMany({ where: { OR: [{ warpingOrderId: { in: orderIds } }, { beamNo: { startsWith: TAG } }] }, select: { id: true } })).map((b) => b.id);
