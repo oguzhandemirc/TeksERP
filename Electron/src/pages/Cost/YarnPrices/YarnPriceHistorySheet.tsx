@@ -9,7 +9,7 @@ import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { PermissionGate } from "@/components/PermissionGate";
 import { fmtFactoryDateTime } from "@/lib/factory-time";
 import { fmtDecFull } from "../shared/format";
-import { YARN_PRICE_SOURCE_LABEL, yarnPriceService, type YarnCostPrice } from "./service";
+import { YARN_PRICE_SOURCE_LABEL, yarnPriceService, yarnPriceUnitText, type YarnCostPrice } from "./service";
 
 export function YarnPriceHistorySheet({ row, onClose }: { row: YarnCostPrice; onClose: () => void }) {
   const qc = useQueryClient();
@@ -35,7 +35,7 @@ export function YarnPriceHistorySheet({ row, onClose }: { row: YarnCostPrice; on
           {(q.data ?? []).map((p) => (
             <li key={p.id} className="rounded-md border p-2">
               <div className="flex items-center justify-between gap-2">
-                <span className="font-medium tabular-nums">{fmtDecFull(p.pricePerKg)} {p.currency}/kg</span>
+                <span className="font-medium tabular-nums">{fmtDecFull(p.pricePerKg)} {yarnPriceUnitText(p.currency, p.unit)}</span>
                 {p.revokedAt ? <Badge variant="muted">Damgalı</Badge> : <Badge>Aktif</Badge>}
               </div>
               <p className="text-xs text-muted-foreground">
@@ -54,7 +54,7 @@ export function YarnPriceHistorySheet({ row, onClose }: { row: YarnCostPrice; on
           open={revokeOpen}
           onOpenChange={setRevokeOpen}
           title="Aktif fiyat kaldırılsın mı?"
-          description={`${row.yarnItem.code}: ${fmtDecFull(row.pricePerKg)} ${row.currency}/kg damgalanır (silinmez). Bu ipliği kullanan kumaşların maliyeti fiyat girilene dek "iplik fiyatı yok" eksikliği verir; kayıtlı standart maliyetler değişmez.`}
+          description={`${row.yarnItem.code}: ${fmtDecFull(row.pricePerKg)} ${yarnPriceUnitText(row.currency, row.unit)} damgalanır (silinmez). Bu ipliği kullanan kumaşların maliyeti fiyat girilene dek "iplik fiyatı yok" eksikliği verir; kayıtlı standart maliyetler değişmez.`}
           confirmLabel="Kaldır"
           destructive
           isPending={revoke.isPending}

@@ -6,6 +6,7 @@
 // =============================================================================
 import type { Prisma, Currency } from "@prisma/client";
 import type { FinishingKgBasis } from "./fabric-cost-kg.helper";
+import type { NonKgYarnUnit } from "../../constants/yarn-unit";
 
 type Dec = Prisma.Decimal;
 
@@ -18,6 +19,8 @@ export const COST_MISSING_CODES = [
   "FINISHING_RATE_MISSING",
   // SY-D2: ATKI_UCRETI yönteminde ne yapıda ne parametre setinde atkı ücreti var — dokuma sessizce 0 olmasın.
   "PICK_RATE_MISSING",
+  // SY-a: ADET birimli (pul) iplikte metredeki adet girilmemiş — maliyet sessizce 0 olmasın.
+  "YARN_PIECES_MISSING",
 ] as const;
 export type CostMissing = (typeof COST_MISSING_CODES)[number];
 export const COST_WARNING_CODES = [
@@ -33,7 +36,11 @@ export type CostComponent =
 export interface Sourced<T> { value: T | null; source: CostSource; flag?: CostWarning }
 export interface CostPrice { amount: Dec; currency: Currency; source: CostSource; flag?: CostWarning }
 /** `wastePct` (SY-3 I2) = iplik kartı firesi; yalnız doluyken yazılır — boşken girdi + hash bayt-aynı. */
-export interface CostYarn { yarnItemId: string | null; name: string; denier: Sourced<Dec>; price: CostPrice | null; wastePct?: Dec }
+/**
+ * `unit`/`piecesPerM` (SY-a) yalnız KG DIŞI birimli atkı ipliğinde yazılır (KG iplikte girdi + hash bayt-aynı): fiyat o birim
+ * başınadır, iplik kg hesabına girmez; `piecesPerM` = iplik metresindeki adet (yalnız ADET).
+ */
+export interface CostYarn { yarnItemId: string | null; name: string; denier: Sourced<Dec>; price: CostPrice | null; wastePct?: Dec; unit?: NonKgYarnUnit; piecesPerM?: Dec }
 export interface CostWeftYarn extends CostYarn { picksInRepeat: number }
 /** `kgBase` yalnız KG tabanında yazılır — metre tabanlı tarifenin girdisi + hash'i bayt-aynı kalır. */
 export interface CostRate { code: string; name: string; basis: "RAW_M" | "FINISHED_M" | "KG"; kgBase?: FinishingKgBasis; price: CostPrice | null }

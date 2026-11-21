@@ -14,6 +14,7 @@ export const MISSING_LABEL: Record<string, string> = {
   PARAMETER_SET_MISSING: "Yürürlükte parametre seti yok — önce Maliyet Parametreleri'nden bir set yürürlüğe alın.",
   FINISHING_RATE_MISSING: "Yapıdaki terbiye tarifesi kodu aktif bir tarifeye çözülmüyor — Fason Tarifeleri'ni kontrol edin.",
   PICK_RATE_MISSING: "Atkı ücreti yok — dokuma atkı ücretiyle hesaplanıyor; parametre setine varsayılan ya da ürün yapısına atkı ücreti girin.",
+  YARN_PIECES_MISSING: "Adetle alınan (pul/payet) atkı ipliğinde metredeki adet yok — iplik kartına girin.",
 };
 
 export const WARNING_LABEL: Record<string, string> = {

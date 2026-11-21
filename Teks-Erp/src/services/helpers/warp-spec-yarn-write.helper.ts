@@ -8,6 +8,7 @@ import { ItemType, type Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { assertItemUsable } from "./item-usage.helper";
+import { isKgYarnUnit } from "../../constants/yarn-unit";
 import type { WarpSpecYarnLine } from "./warp-spec-yarn.helper";
 
 /** Kartta en çok iplik satırı (talimatta A…T harfleri; hesap ucunun sınırıyla aynı). */
@@ -19,7 +20,7 @@ const SEQUENCE_NOTE_MAX = 160;
 export async function assertWarpYarnItem(yarnItemId: string): Promise<void> {
   const item = await prisma.item.findUnique({
     where: { id: yarnItemId },
-    select: { id: true, name: true, itemType: true, linearDensityDen: true },
+    select: { id: true, name: true, itemType: true, linearDensityDen: true, yarnPurchaseUnit: true },
   });
   if (!item) throw AppError.badRequest("Çözgü ipliği bulunamadı.");
   if (item.itemType !== ItemType.YARN) {
@@ -27,6 +28,10 @@ export async function assertWarpYarnItem(yarnItemId: string): Promise<void> {
   }
   // Çözgü kartı karta yeni TANIM ekler (B) — "Tükenene kadar"/Pasif iplik seçilemez.
   await assertItemUsable(prisma, item.id, "DEFINITION");
+  // SY-a: çözgü kg ile sarılır/düşülür — adet/metre ile alınan fantezi iplik çözgüye giremez.
+  if (!isKgYarnUnit(item.yarnPurchaseUnit)) {
+    throw AppError.badRequest(`"${item.name}" adet/metre ile alınan fantezi iplik — çözgü ipliği kg birimli olmalı.`, { code: "WARP_YARN_NON_KG_UNIT" });
+  }
   if (item.linearDensityDen === null) {
     throw AppError.badRequest(
       `"${item.name}" kaleminin denye değeri boş. Devere hesabı (tel × denye × metre ÷ 9.000.000) ` +

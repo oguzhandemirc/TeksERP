@@ -4374,10 +4374,16 @@ model Item {
 
   /// İPLİK NUMARASI — denye (`ItemType.YARN`). Devere formülünün girdisi:
   /// `kg = tel × denye × metre / 9.000.000` (denye = 9.000 m'nin gramı).
-  /// ⚠️ ELLE GİRİLİR: stok kartı ADI ("600 KAR İPİ 70 DN") ASLA ayrıştırılmaz ve
-  /// bu alana otomatik taşınmaz — ad satın alınan malın tanımlayıcısıdır, sayı
-  /// değildir. Devere kapalıyken hiçbir yüzeyde çizilmez.
+  /// ⚠️ ELLE GİRİLİR: stok kartı ADI ("600 KAR İPİ 70 DN") sunucuda ASLA ayrıştırılmaz ve
+  /// bu alana otomatik taşınmaz — panel yalnız ÖNERİ gösterir, kullanıcı onaylarsa yazılır.
+  /// KG dışı birimli (fantezi) iplikte boş olabilir.
   linearDensityDen Decimal? @db.Decimal(10, 4)
+  /// SY-a: SATIN ALMA BİRİMİ — yalnız YARN (CHECK `items_yarn_purchase_unit_ck`). NULL = KG (bugünkü davranış;
+  /// servis "KG"yi NULL yazar). ADET/METRE iplik kg hesabına (stok, ihtiyaç, gramaj) girmez; maliyeti birim
+  /// fiyattan (tek okuyucu `constants/yarn-unit.ts`).
+  yarnPurchaseUnit YarnPurchaseUnit?
+  /// SY-a: iplik METRESİNDEKİ adet (pul/payet) — yalnız ADET birimde, > 0 (CHECK `items_yarn_pieces_per_m_ck`).
+  yarnPiecesPerM   Decimal?          @db.Decimal(10, 3)
   /// SY-3 I2: İPLİK BAŞINA FİRE (%) — yalnız `ItemType.YARN`; doluysa bu ipliğin kg/m'sinde çözgü/atkı
   /// fire zinciri (yapı/kart/parametre) YERİNE kullanılır (tek çözücü `yarn-waste.helper`). NULL = bugünkü
   /// davranış. CHECK `items_yarn_waste_pct_ck` (0..50, yalnız YARN).
@@ -15177,6 +15183,13 @@ enum CostParamStatus {
   SUPERSEDED
 }
 
+/// SY-a: ipliğin satın alma birimi (Seyitoğlu: pul adetle, payet şerit metreyle alınır).
+enum YarnPurchaseUnit {
+  KG
+  ADET
+  METRE
+}
+
 enum YarnCostPriceSource {
   MANUAL
   LAST_RECEIPT
@@ -15247,8 +15260,11 @@ model YarnCostPrice {
   id           String              @id @default(uuid()) @db.Uuid
   yarnItemId   String              @db.Uuid
   currency     Currency
-  /// CHECK > 0.
+  /// CHECK > 0. Adı tarihsel: değer `unit` başına birim fiyattır (KG satırlarında kg fiyatı).
   pricePerKg   Decimal             @db.Decimal(14, 4)
+  /// SY-a: fiyatın birimi — yazım anında kartın satın alma biriminden DONAR; kartın birimiyle uyuşmayan
+  /// fiyat maliyette okunmaz (`YARN_PRICE_MISSING`). Eski satırlar KG.
+  unit         YarnPurchaseUnit    @default(KG)
   source       YarnCostPriceSource @default(MANUAL)
   sourceRef    String?             @db.VarChar(64)
   note         String?             @db.VarChar(300)

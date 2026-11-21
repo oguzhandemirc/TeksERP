@@ -49,6 +49,7 @@ import { assertItemUsable } from "./helpers/item-usage.helper";
 import { takeExpectedUpdatedAt, updatedAtVersionWhere } from "./helpers/stale-record.helper";
 import { parseDecimalField, parseTextField } from "./helpers/cost-input.helper";
 import { YARN_WASTE_PCT_MAX } from "./helpers/yarn-waste.helper";
+import { readYarnUnitFields } from "./helpers/yarn-unit.helper";
 import { findWeftOverrideOrphans, throwWeftOverrideOrphan } from "./helpers/effective-construction.helper";
 import { TERIM } from "../constants/terim";
 import { CARD_CODE_LOCK_SCOPE, assertCodeFreeInOtherKind, assertNameFreeInOtherKind, cardCodesWithPrefix } from "./helpers/card-identity.helper";
@@ -307,7 +308,11 @@ export class ItemService extends BaseService {
       return legacyResponse(await serviceItemService.create({ code, name, unit, isActive }, actorId));
     }
     await assertWarpSpecAssignable(input.itemType, input.warpSpecId);
-    const fabricStructure = { ...(await readFabricStructureFields(input.itemType, data)), ...readYarnWasteField(input.itemType, data) };
+    const fabricStructure = {
+      ...(await readFabricStructureFields(input.itemType, data)),
+      ...readYarnWasteField(input.itemType, data),
+      ...(await readYarnUnitFields(prisma, input.itemType, data)),
+    };
 
     // Stok kodu hibrit: boş bırakıldıysa backend STK-NNNNNN üretir; kullanıcı
     // girdiyse manuel kod aynen kabul edilir (trim + regex + max 32).
@@ -601,6 +606,10 @@ export class ItemService extends BaseService {
     if (Object.prototype.hasOwnProperty.call(data, "yarnWastePct")) {
       const cur = await prisma.item.findUnique({ where: { id }, select: { itemType: true } });
       Object.assign(data, readYarnWasteField(cur?.itemType, data));
+    }
+    if (Object.prototype.hasOwnProperty.call(data, "yarnPurchaseUnit") || Object.prototype.hasOwnProperty.call(data, "yarnPiecesPerM")) {
+      const cur = await prisma.item.findUnique({ where: { id }, select: { id: true, itemType: true, yarnPurchaseUnit: true } });
+      if (cur) Object.assign(data, await readYarnUnitFields(prisma, cur.itemType, data, cur));
     }
     if (FABRIC_STRUCTURE_KEYS.some((k) => Object.prototype.hasOwnProperty.call(data, k))) {
       const cur = await prisma.item.findUnique({ where: { id }, select: { itemType: true } });

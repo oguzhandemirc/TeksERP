@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildItemPayload, yarnWastePayload } from "./itemPayload.helper";
+import { buildItemPayload, yarnUnitPayload, yarnWastePayload } from "./itemPayload.helper";
 import { makeItemFormSchema, itemFormDefaults, type ItemFormValues } from "./schema";
 import { ItemType } from "@/types/enums";
 
@@ -161,5 +161,31 @@ describe("yarnWastePayload (SY-3 I2)", () => {
     const create = makeItemFormSchema(false);
     for (const ok of ["", "0", "50", "3,25", "12.5"]) expect(create.safeParse(values({ yarnWastePct: ok })).success).toBe(true);
     for (const bad of ["50.01", "-1", "3,125", "abc"]) expect(create.safeParse(values({ yarnWastePct: bad })).success).toBe(false);
+  });
+});
+
+describe("yarnUnitPayload (SY-a satın alma birimi)", () => {
+  const yarn = (over: Partial<ItemFormValues> = {}) => values({ itemType: ItemType.YARN, ...over });
+  it("KG kalan kg kartında anahtar hiç gitmez (gövde bugünküyle aynı)", () => {
+    expect(yarnUnitPayload(yarn(), null)).toEqual({});
+    expect(yarnUnitPayload(yarn(), { yarnPurchaseUnit: null })).toEqual({});
+  });
+  it("ADET: birim + noktalı adet/m; boş adet/m null", () => {
+    expect(yarnUnitPayload(yarn({ yarnPurchaseUnit: "ADET", yarnPiecesPerM: "333,5" }), null)).toEqual({ yarnPurchaseUnit: "ADET", yarnPiecesPerM: "333.5" });
+    expect(yarnUnitPayload(yarn({ yarnPurchaseUnit: "ADET" }), null)).toEqual({ yarnPurchaseUnit: "ADET", yarnPiecesPerM: null });
+  });
+  it("METRE: yalnız birim (adet/m'yi sunucu temizler)", () => {
+    expect(yarnUnitPayload(yarn({ yarnPurchaseUnit: "METRE", yarnPiecesPerM: "5" }), null)).toEqual({ yarnPurchaseUnit: "METRE" });
+  });
+  it("fanteziden KG'ye dönüş birimi gönderir", () => {
+    expect(yarnUnitPayload(yarn(), { yarnPurchaseUnit: "ADET" })).toEqual({ yarnPurchaseUnit: "KG" });
+  });
+  it("İPLİK dışında hiçbir şey gitmez", () => {
+    expect(yarnUnitPayload(values({ yarnPurchaseUnit: "ADET" }), null)).toEqual({});
+  });
+  it("şema: adet/m > 0, en çok 3 ondalık", () => {
+    const create = makeItemFormSchema(false);
+    for (const ok of ["", "333", "1,125"]) expect(create.safeParse(yarn({ yarnPiecesPerM: ok })).success).toBe(true);
+    for (const bad of ["0", "-1", "1,1255", "abc"]) expect(create.safeParse(yarn({ yarnPiecesPerM: bad })).success).toBe(false);
   });
 });

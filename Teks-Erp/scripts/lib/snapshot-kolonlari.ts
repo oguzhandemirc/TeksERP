@@ -224,6 +224,14 @@ WHERE r.status = 'TAMBUR_CONSUMED' AND r."preTamburCloseQty" IS NULL AND r."stat
     bekci: [{ dosya: "test_kursun_metre.ts", bolum: "6", ne: "okuma satırı politika kopyasını taşır" }],
   },
   {
+    model: "YarnCostPrice",
+    alan: "unit",
+    sinif: "DONMUS_ILERI",
+    yazan: [SVC + "yarn-cost-price.service.ts"],
+    neden: "SY-a: fiyatın birimi yazım anında kartın satın alma biriminden kopyalanır; kart birimi sonradan değişse de satır kendi birimini korur, uyuşmayan fiyat maliyette okunmaz (YARN_PRICE_MISSING). Düzeltme yeni fiyat satırıdır",
+    bekci: [{ dosya: "test_iplik_satin_alma_birimi.ts", bolum: "2c", ne: "fiyat yazımı kartın birimini dondurur" }],
+  },
+  {
     model: "RollMeterReading",
     alan: "thresholdPct",
     sinif: "DONMUS_ILERI",

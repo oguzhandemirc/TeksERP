@@ -92,3 +92,19 @@ export function yarnWastePayload(
   if (text !== "") return { yarnWastePct: text.replace(",", ".") };
   return initial?.yarnWastePct != null && initial.yarnWastePct !== "" ? { yarnWastePct: null } : {};
 }
+
+/**
+ * SY-a satın alma birimi gövdesi — yalnız İPLİK. KG kalan kg kartında anahtar hiç gitmez (gövde bugünküyle aynı);
+ * birim değiştiyse ya da KG dışıysa birim gider; ADET'te metredeki adet (boş = `null`). ADET dışına geçişte
+ * adet/m'yi sunucu temizler.
+ */
+export function yarnUnitPayload(
+  v: Pick<ItemFormValues, "itemType" | "yarnPurchaseUnit" | "yarnPiecesPerM">,
+  initial: { yarnPurchaseUnit?: string | null } | null | undefined,
+): { yarnPurchaseUnit?: ItemFormValues["yarnPurchaseUnit"]; yarnPiecesPerM?: string | null } {
+  if (v.itemType !== ItemType.YARN) return {};
+  if (v.yarnPurchaseUnit === "KG" && (initial?.yarnPurchaseUnit ?? "KG") === "KG") return {};
+  if (v.yarnPurchaseUnit !== "ADET") return { yarnPurchaseUnit: v.yarnPurchaseUnit };
+  const text = v.yarnPiecesPerM.trim();
+  return { yarnPurchaseUnit: "ADET", yarnPiecesPerM: text === "" ? null : text.replace(",", ".") };
+}
