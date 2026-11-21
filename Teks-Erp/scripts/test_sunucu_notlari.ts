@@ -92,6 +92,8 @@ const OTOMATIK_YAZIMLAR: readonly { yer: string; sinif: Sinif; zarfUyarisi: bool
   { yer: "Electron/src/pages/Operations/WarpingOrders/YarnReturnDialog.tsx::warpingHoldingService.returnPreview", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
   // Devere B4 gövde elle geçiş önizlemesi: hareket/alan değiştikçe (debounce) sorar; yazmaz, uyarılar pencerede.
   { yer: "Electron/src/pages/BeamBodies/TransitionDialog.tsx::beamBodyService.transitionPreview", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
+  // SY-C1 ek maliyet formülü: ifade yazıldıkça örnek değerlerle hesaplar; yazmaz, hata metni pencerede.
+  { yer: "Electron/src/pages/Cost/Formulas/FormulaDialog.tsx::costFormulaService.preview", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
   // İZL-D4 cihaz kopyası birleştirme önizlemesi: diyalog açılınca/seçim değişince sorar; yazmaz, zarf uyarısız.
   { yer: "Electron/src/pages/Devices/MergeDialog.tsx::deviceService.mergePreview", sinif: "PREVIEW_ON_OPEN", zarfUyarisi: false },
   // K4P-PANEL muayene önizlemesi: hata tablosu değiştikçe (debounce) puan/derece sorar; yazmaz.

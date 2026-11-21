@@ -60,7 +60,7 @@ export const NAV_SUBGROUPS: Readonly<Record<string, readonly NavSubgroupDef[]>> 
     { key: "sevk-sonrasi", label: "Sevk Sonrası", paths: [OPS("accounting-dispatch"), OPS("e-irsaliye"), OPS("returns")] },
   ],
   "/cost": [
-    { key: "girdi", label: "Girdi Fiyatları", paths: ["/cost/parameters", "/cost/yarn-prices", "/cost/finishing-rates", "/cost/machine-rates", "/cost/consumable-norms"] },
+    { key: "girdi", label: "Girdi Fiyatları", paths: ["/cost/parameters", "/cost/yarn-prices", "/cost/finishing-rates", "/cost/formulas", "/cost/machine-rates", "/cost/consumable-norms"] },
     { key: "hesap", label: "Hesap ve Fiyat", paths: ["/cost/items", "/cost/calculator", "/cost/price-lists"] },
     { key: "analiz", label: "İhtiyaç ve Kârlılık", paths: ["/cost/yarn-need", "/reports/maliyet/karlilik"] },
   ],

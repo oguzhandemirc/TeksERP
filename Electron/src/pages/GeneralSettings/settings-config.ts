@@ -2937,6 +2937,21 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         ],
       },
       {
+        // SY-C2: `defaultValue` backend `DEFAULT_COST_WASTE_METHOD` ile birebir; yalnız YENİ hesabı etkiler.
+        enumKey: "costWasteMethod",
+        group: "Maliyet",
+        title: "Fire yöntemi",
+        summary: "İplik ve kalite firesi maliyete bölerek mi, çarparak mı eklensin.",
+        desc: "Bölerek (varsayılan): fireli miktar = net ÷ (1 − fire %); %10 fire 100 kg'ı 111,1 kg yapar. Çarparak: fireli miktar = net × (1 + fire %); %10 fire 100 kg'ı 110 kg yapar — Excel'de \"şişirme oranı\" ile çalışan işletmeler bunu seçer. Çözgü, atkı, iplik kartı ve kalite firesini etkiler; çekmeler fizik olduğu için hep bölerek kalır. Ayar yalnız yeni hesaplanan maliyeti etkiler; kayıtlı standart maliyet sürümleri değişmez.",
+        defaultValue: "BOLME",
+        display: "radio",
+        audience: ["Muhasebeci", "Yönetim"],
+        options: [
+          { value: "BOLME", label: "Bölerek (varsayılan)", hint: "net ÷ (1 − fire %)" },
+          { value: "CARPMA", label: "Çarparak", hint: "net × (1 + fire %)" },
+        ],
+      },
+      {
         // D4-G2b: `defaultValue` backend `DEFAULT_PROFIT_MACHINE_TIME_MODE` ile birebir; yalnız kârlılık okumasını etkiler.
         enumKey: "costProfitMachineTime",
         group: "Kârlılık",

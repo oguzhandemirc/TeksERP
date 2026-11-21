@@ -127,6 +127,7 @@ import { YarnPricesPage as CostYarnPricesPage } from "@/pages/Cost/YarnPrices/Ya
 import { MachineRatesPage as CostMachineRatesPage } from "@/pages/Cost/MachineRates/MachineRatesPage";
 import { ConsumableNormsPage as CostConsumableNormsPage } from "@/pages/Cost/ConsumableNorms/ConsumableNormsPage";
 import { FinishingRatesPage as CostFinishingRatesPage } from "@/pages/Cost/FinishingRates/FinishingRatesPage";
+import { FormulasPage as CostFormulasPage } from "@/pages/Cost/Formulas/FormulasPage";
 import { CostItemsPage } from "@/pages/Cost/Items/CostItemsPage";
 import { CostItemDetailPage } from "@/pages/Cost/Items/CostItemDetailPage";
 import { CalculatorPage as CostCalculatorPage } from "@/pages/Cost/Calculator/CalculatorPage";
@@ -897,6 +898,14 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="cost:read">
         <CostFinishingRatesPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "cost/formulas",
+    element: (
+      <ProtectedRoute requirePermission="cost:read">
+        <CostFormulasPage />
       </ProtectedRoute>
     ),
   },

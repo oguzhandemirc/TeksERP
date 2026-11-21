@@ -14,6 +14,7 @@ export const MISSING_LABEL: Record<string, string> = {
   PARAMETER_SET_MISSING: "Yürürlükte parametre seti yok — önce Maliyet Parametreleri'nden bir set yürürlüğe alın.",
   FINISHING_RATE_MISSING: "Yapıdaki terbiye tarifesi kodu aktif bir tarifeye çözülmüyor — Fason Tarifeleri'ni kontrol edin.",
   PICK_RATE_MISSING: "Atkı ücreti yok — dokuma atkı ücretiyle hesaplanıyor; parametre setine varsayılan ya da ürün yapısına atkı ücreti girin.",
+  FORMULA_FAILED: "Bir ek maliyet formülü bu kumaşta hesaplanamadı (ör. sıfıra bölme) — Maliyet Formülleri'nden formülü düzeltin.",
 };
 
 export const WARNING_LABEL: Record<string, string> = {
@@ -34,6 +35,7 @@ export const COMPONENT_LABEL: Record<string, string> = {
   WARP_YARN: "Çözgü ipliği", WEFT_YARN: "Atkı ipliği", LOOM_MACHINE: "Makine", LOOM_LABOR: "İşçilik", ENERGY: "Enerji",
   BEAM_PREP: "Levent hazırlık", FINISHING: "Terbiye", LENGTH_SHRINK: "Boy çekmesi", FABRIC_WASTE: "Kalite firesi",
   OVERHEAD: "Genel gider", EXTRA: "Ek kalem", PROCESS: "Ek işlem", WEAVING_PICK: "Dokuma (atkı ücreti)",
+  FORMULA: "Ek formül",
 };
 
 export const STRUCTURE_STATUS_LABEL: Record<string, string> = { TAM: "Güncel yapı", VARSAYILAN: "Varsayılanla", YAPI_EKSIK: "Yapı eksik" };
