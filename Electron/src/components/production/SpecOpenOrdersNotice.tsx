@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Callout } from "@/components/ui/callout";
 import apiClient from "@/services/apiClient";
+import { TERIM } from "@/lib/terim";
 import type { ApiResponse } from "@/types/api";
 
 export interface SpecOpenOrders {
@@ -16,7 +17,7 @@ const PATH = { weft: "/api/weft-specs", warp: "/api/warp-specs" } as const;
 
 export function specOpenOrdersTitle(d: SpecOpenOrders): string {
   const parts = [
-    d.weavingOrders > 0 ? `${d.weavingOrders} açık dokuma iş emri` : null,
+    d.weavingOrders > 0 ? `${d.weavingOrders} açık ${TERIM.dokumaIsEmri.tekilKucuk}` : null,
     d.warpingOrders > 0 ? `${d.warpingOrders} açık çözgü emri` : null,
   ].filter(Boolean);
   return `Bu kartı ${parts.join(" ve ")} kullanıyor`;
@@ -24,7 +25,7 @@ export function specOpenOrdersTitle(d: SpecOpenOrders): string {
 
 export function specOpenOrdersDetail(d: SpecOpenOrders): string {
   const more = d.total > d.numbers.length ? ` ve ${d.total - d.numbers.length} diğer` : "";
-  return `${d.numbers.join(", ")}${more}. Kaydettiğiniz değişiklik bu iş emirlerinin iş kartına ve planına hemen yansır; bitmiş işlerin kayıtları değişmez.`;
+  return `${d.numbers.join(", ")}${more}. Kaydettiğiniz değişiklik bu açık işlerin iş kartına ve planına hemen yansır; bitmiş işlerin kayıtları değişmez.`;
 }
 
 export function SpecOpenOrdersNotice({ kind, id }: { kind: "weft" | "warp"; id: string }) {
