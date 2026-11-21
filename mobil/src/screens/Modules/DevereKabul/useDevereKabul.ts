@@ -4,11 +4,11 @@
 // Online-only (kuyruk YOK). Bağlam devereci süzgeciyle yeniden çekilir; belge tek deverecili olduğundan
 // devereci değişince taslak boşalır. Gönderim (`useReceiveSubmit`) panelle AYNI belge ucunu kullanır.
 // =============================================================================
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { devereKabulService, type WarpingTabletContext, type WarpingTabletOrder } from '../../../services/devereKabul.service';
 import { useIsOnline, useOfflineReason } from '../../../offline/hooks';
-import { buildDocBody, nextPlanLength, type BeamDraft, type OrderDraft } from './receiveDocPayload';
+import { autoPickOrderId, buildDocBody, nextPlanLength, type BeamDraft, type OrderDraft } from './receiveDocPayload';
 import { useBodyScan, useReceiveSubmit } from './useReceiveSubmit';
 import { useBeamReject } from './useBeamReject';
 
@@ -67,7 +67,18 @@ export function useDevereKabul() {
   const build = useMemo(() => buildDocBody(drafts.orders, { subcontractorId, deliveryNoteNo, weighing: settings.receiveWeighing }), [drafts.orders, subcontractorId, deliveryNoteNo, settings.receiveWeighing]);
   const refresh = useCallback(() => void qc.invalidateQueries({ queryKey: DEVERE_KABUL_CTX_KEY }), [qc]);
   const { clear, addOrder: addDraft } = drafts;
-  const submit = useReceiveSubmit(build, useCallback(() => { clear(); setDeliveryNoteNo(''); refresh(); }, [clear, refresh]));
+  // Tek açık sipariş kendiliğinden seçilir — devereci başına bir kez (kaldırılırsa geri gelmez); kabulden sonra yeniden.
+  const autoDone = useRef<string | null>(null);
+  const fetching = context.isFetching;
+  useEffect(() => {
+    if (fetching) return; // kabul sonrası tazelenirken eski (artık kapanmış) sipariş seçilmesin
+    const id = autoPickOrderId(ctxOrders, drafts.orders.length, autoDone.current === subcontractorId);
+    const o = id ? ctxOrders.find((x) => x.id === id) : undefined;
+    if (!o) return;
+    autoDone.current = subcontractorId;
+    addDraft(o);
+  }, [fetching, ctxOrders, drafts.orders.length, subcontractorId, addDraft]);
+  const submit = useReceiveSubmit(build, useCallback(() => { clear(); setDeliveryNoteNo(''); autoDone.current = null; refresh(); }, [clear, refresh]));
   const reject = useBeamReject({ isOnline, onRejected: refresh });
   const scan = useBodyScan({ hasOrder: !!drafts.activeOrder, orders: drafts.orders, onBody: drafts.openNewLine });
   const selectSubcontractor = useCallback((id: string) => {
