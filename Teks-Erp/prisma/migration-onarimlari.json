@@ -36,5 +36,11 @@
     "sha256": "1b3c12fdf9b2d78246c0762594810d090b896897d2c3da9ae6fffd0cb206f125",
     "tarih": "2026-11-08",
     "gerekce": "PR #623 bağımsız incelemesinde onarıldı; dal main'e inmedi, migration hiçbir canlı kuruluma uygulanmadı (yalnız oturum test DB'leri). Eski hâli iki yerde sonraki bir migration'la düzeltilemiyordu: (1) FK kapısı hizmete bağlı saf yapılandırma pivotu satırı (izinli renk/özellik, müşteri ürün/renk adı) olan HER kurulumda deploy'u RAISE ile durduruyordu — kapı bu dosyada koştuğu için sonraki migration'a hiç sıra gelmez; pivotlar artık kapı listesinden çıktı ve aynı tx'te silinir (defter ③b). (2) items'tan SERVICE silmesi items_sync_deleted tetiğiyle buluta 'silindi' işareti yazıyordu; silme anında tetik kapatılır, service_items'a aynı tetik kurulur. Yeni adla ikinci migration test_migration_hygiene §2b'yi (aynı tabloya ikinci yaratıcı) kırardı. Ölçüm: test_hizmet_karti_tasima §2g–§2j, test_bulut_hizmet_karti."
+  },
+  {
+    "migration": "20261121152421_maliyet_formul_bileseni",
+    "sha256": "a0fcd43f1715563b88406e4377f3482e34d397e5bff5e777153e3a156831dad9",
+    "tarih": "2026-11-21",
+    "gerekce": "CI'da test_migration_enum_add_value §2 kırmızı: ALTER TYPE ADD VALUE 'FORMULA' IF NOT EXISTS taşımıyordu (elle açılmış değer olan kurulumda deploy düşerdi). Dosya feat/sy-c dalında doğdu, main'e inmeden ve hiçbir canlı kuruluma uygulanmadan onarıldı: tek değişiklik IF NOT EXISTS. Uygulanmış test DB'lerinde yalnız checksum farkı doğar (migrate deploy bunu reddetmez)."
   }
 ]

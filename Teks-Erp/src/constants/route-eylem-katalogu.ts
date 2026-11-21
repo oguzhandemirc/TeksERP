@@ -191,6 +191,11 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/cost/consumable-norms": e("hizmet sarf normu yazdı", "hizmet sarf normu yazmaya çalıştı"),
   "POST /api/cost/consumable-norms/:id/change": e("hizmet sarf normunu değiştirdi", "hizmet sarf normunu değiştirmeye çalıştı"),
   "POST /api/cost/consumable-norms/:id/revoke": e("hizmet sarf normunu kaldırdı", "hizmet sarf normunu kaldırmaya çalıştı"),
+  "POST /api/cost/formulas/preview": e("maliyet formülünü önizledi", "maliyet formülünü önizlemeye çalıştı"),
+  "POST /api/cost/formulas": e("maliyet formülü yazdı", "maliyet formülü yazmaya çalıştı"),
+  "POST /api/cost/formulas/:id/change": e("maliyet formülünü değiştirdi", "maliyet formülünü değiştirmeye çalıştı"),
+  "POST /api/cost/formulas/:id/revoke": e("maliyet formülünü kaldırdı", "maliyet formülünü kaldırmaya çalıştı"),
+  "POST /api/cost/pick-rate-families/apply": e("desen ailesine atkı ücreti yazdı", "desen ailesine atkı ücreti yazmaya çalıştı"),
   "DELETE /api/rolls/:id": e("topu sildi", "topu silmeye çalıştı"),
   // ── Çuval / paketleme
   "POST /api/shipping/sacks": e("çuval açtı", "çuval açmaya çalıştı"),
