@@ -24,7 +24,7 @@ export function buildCostFormulaBody(i: CostFormulaInput): CostFormulaInput {
 const BASE = "/api/cost/formulas";
 
 export const costFormulaService = {
-  listActive: async () => (await apiClient.get<ApiResponse<CostFormula[]>>(BASE)).data.data,
+  listActive: async (search?: string) => (await apiClient.get<ApiResponse<CostFormula[]>>(BASE, { params: search ? { search } : {} })).data.data,
   history: async (code: string) => (await apiClient.get<ApiResponse<CostFormula[]>>(BASE, { params: { code, includeRevoked: "1" } })).data.data,
   variables: async () => (await apiClient.get<ApiResponse<CostFormulaVariable[]>>(`${BASE}/variables`)).data.data,
   /** Hiçbir şey yazmaz — canlı önizleme (sunucu notu: OTOMATIK_YAZIMLAR beyanlı). */

@@ -11,6 +11,7 @@ import { z } from "zod";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { requireMaliyetEnabled } from "../middlewares/module.middleware";
+import { listSearchParam } from "../utils/list-search";
 import {
   changeCostFormula,
   createCostFormula,
@@ -50,11 +51,16 @@ const formulaBody = z.object({
  *     tags: [Cost]
  *     summary: Ek maliyet formülleri (varsayılan yalnız yürürlükteki; includeRevoked=1 geçmiş sürümler)
  *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema: { type: string, maxLength: 100 }
+ *         description: "Metin araması — formül kodu, adı ya da ifadesi; boş = arama yok"
  *     responses:
  *       200: { description: Liste }
  */
 router.get("/formulas", requirePermission("cost:read"), wrap(async (req, res) => {
-  const q = z.object({ includeRevoked: includeRevokedQ, code: z.string().max(32).optional() }).parse(req.query);
+  const q = z.object({ includeRevoked: includeRevokedQ, code: z.string().max(32).optional(), search: listSearchParam }).parse(req.query);
   res.status(200).json({ success: true, data: await listCostFormulas(q) });
 }));
 

@@ -30,7 +30,7 @@ function VariableChips({ vars, onPick }: { vars: CostFormulaVariable[]; onPick: 
           disabled={!v.bagli}
           onClick={() => onPick(v.name)}
           title={`${v.label} (${v.unit}) — örnek ${v.sample}${v.bagli ? "" : " · henüz bağlı değil"}`}
-          className="rounded-md border bg-muted/40 px-2 py-0.5 font-mono text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-badge border bg-muted/40 px-2 py-0.5 font-mono text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
         >
           {v.name}
         </button>

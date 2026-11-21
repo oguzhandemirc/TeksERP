@@ -19,9 +19,12 @@ import { formulaColumns } from "./columns";
 import { FormulaDialog } from "./FormulaDialog";
 import { FormulaHistorySheet } from "./FormulaHistorySheet";
 import { costFormulaService, type CostFormula } from "./service";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { useListSearch } from "@/hooks/useListSearch";
 
 export function FormulasPage() {
-  const q = useQuery({ queryKey: ["cost-formulas", "active"], queryFn: costFormulaService.listActive });
+  const { search, setSearch, term } = useListSearch();
+  const q = useQuery({ queryKey: ["cost-formulas", "active", term ?? ""], queryFn: () => costFormulaService.listActive(term) });
   const [edit, setEdit] = useState<{ row: CostFormula | null } | null>(null);
   const [history, setHistory] = useState<CostFormula | null>(null);
   const rows = q.data ?? [];
@@ -42,6 +45,7 @@ export function FormulasPage() {
         }
       />
       <ListToolbar className="flex-row items-center justify-end gap-1.5">
+        <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Formül kodu, adı ya da ifadesi ara" />
         <DataTableTools table={table} compact exportName="Maliyet formülleri" />
       </ListToolbar>
       {!q.isLoading && !q.isError && rows.length > 0 ? (
@@ -54,6 +58,8 @@ export function FormulasPage() {
             <ListMessage>
               <CostQueryError error={q.error} what="Formüller" onRetry={() => void q.refetch()} />
             </ListMessage>
+          ) : term ? (
+            <ListMessage className="text-sm text-muted-foreground">Aramaya uyan kayıt yok.</ListMessage>
           ) : (
             <ListMessage>
               <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">

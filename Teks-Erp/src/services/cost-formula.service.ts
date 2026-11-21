@@ -9,6 +9,7 @@
 import { Currency, Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
+import { listSearchWhere } from "../utils/list-search";
 import { AuditService } from "./audit.service";
 import { ACTIVE_COST_FORMULA } from "./helpers/cost-price-validity.helper";
 import { isUniqueViolation, logStampedVersionAudit, parseTextField } from "./helpers/cost-input.helper";
@@ -68,8 +69,9 @@ function parseFields(body: CostFormulaInputBody, requireCode: boolean) {
 }
 
 /** Liste — varsayılan YALNIZ aktif; geçmiş açıkça istenir. */
-export async function listCostFormulas(opts: { includeRevoked?: boolean; code?: string }): Promise<CostFormulaRow[]> {
-  const where: Prisma.CostFormulaWhereInput = { AND: [opts.includeRevoked ? {} : ACTIVE_COST_FORMULA, opts.code ? { code: opts.code } : {}] };
+export async function listCostFormulas(opts: { includeRevoked?: boolean; code?: string; search?: string }): Promise<CostFormulaRow[]> {
+  const search = listSearchWhere<Prisma.CostFormulaWhereInput>(opts.search, { code: ["code"], plain: ["name", "expression"] });
+  const where: Prisma.CostFormulaWhereInput = { AND: [opts.includeRevoked ? {} : ACTIVE_COST_FORMULA, opts.code ? { code: opts.code } : {}, search ?? {}] };
   return prisma.costFormula.findMany({ where, select: COST_FORMULA_SELECT, orderBy: [{ revokedAt: { sort: "asc", nulls: "first" } }, { sortOrder: "asc" }, { code: "asc" }, { createdAt: "desc" }, { id: "desc" }] });
 }
 
