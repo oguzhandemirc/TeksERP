@@ -24,6 +24,8 @@ export interface WarpingReceiptBeamDto {
 }
 export interface WarpingReceiptSummaryDto {
   receiptKey: string; deliveryNoteNo: string | null; receivedAt: string; beamCount: number; liveBeamCount: number; lengthM: string;
+  /** E1: çok siparişli dönüş kabul belgesiyle geldiyse belge (eski tek-sipariş kabulünde null). */
+  receiveDoc: { id: string; docNo: string } | null;
   beams: WarpingReceiptBeamDto[];
 }
 export interface WarpingReceiptDto extends WarpingReceiptSummaryDto {
@@ -61,7 +63,7 @@ function groupReceipts(beams: BeamRow[], orderId: string): WarpingReceiptSummary
     const live = rows.filter((r) => r.events[0] && !r.events[0].reversal);
     const at = evs.reduce((min, e) => (e.createdAt < min ? e.createdAt : min), evs[0]?.createdAt ?? new Date(0));
     return {
-      receiptKey, deliveryNoteNo: evs[0]?.deliveryNoteNo ?? null, receivedAt: at.toISOString(), beamCount: rows.length, liveBeamCount: live.length,
+      receiptKey, deliveryNoteNo: evs[0]?.deliveryNoteNo ?? null, receiveDoc: rows[0]?.warpingReceiveDoc ?? null, receivedAt: at.toISOString(), beamCount: rows.length, liveBeamCount: live.length,
       lengthM: kg(live.reduce((s, r) => s.plus(r.events[0]!.lengthM ?? 0), new Prisma.Decimal(0)))!,
       beams: rows.map((r) => beamDto(r, orderId)),
     };

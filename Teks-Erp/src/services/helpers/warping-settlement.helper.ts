@@ -54,6 +54,7 @@ export async function loadOrderBeams(db: Db, warpingOrderId: string) {
     where: { warpingOrderId },
     select: {
       id: true, beamNo: true, status: true, physicalBeamNo: true, warpingReceiptKey: true, ownerCustomerId: true, reworkOfBeamId: true,
+      warpingReceiveDoc: { select: { id: true, docNo: true } },
       events: { where: { kind: "WOUND" }, select: LIVE_WOUND_SELECT },
     },
     orderBy: { beamNo: "asc" },

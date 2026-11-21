@@ -238,6 +238,7 @@ export const TABLE_LABELS: Record<string, string> = {
   BEAM_BODY_EVENT: "Levent Gövdesi Olayı",
   BEAM_BODY_RETURN: "Levent Gövdesi İade Belgesi",
   WARPING_BEAM_REJECTION: "Kusurlu Levent Ret Belgesi",
+  WARPING_RECEIVE_DOC: "Devere Dönüş Kabul Belgesi",
   // Fabrika tarafında da etiketsiz kalmış olanlar (aynı tarama).
   ROLL_QTY_ADJUST: "Top Metraj Düzeltmesi",
   // Patron bulutu gelen kutusu makbuzu (B3) · destek talebi (3d-2) · lisans sözleşmesi kabulü (Ek-7).

@@ -12,6 +12,7 @@ import { asBoolean, asNumber } from "./core";
 import { DEFAULT_DEVERE_BEAM_BODY_MACHINE_FIT, DEFAULT_DEVERE_BEAM_BODY_MODE, DEFAULT_DEVERE_FASON_LOT_POLICY, DEFAULT_DOKUMA_ROLL_BIRTH, DEVERE_BEAM_BODY_MACHINE_FITS, DEVERE_BEAM_BODY_MODES, DEVERE_FASON_LOT_POLICIES, DOKUMA_ROLL_BIRTH_MODES, type DevereBeamBodyMachineFit, type DevereBeamBodyMode, type DevereFasonLotPolicy, type DokumaRollBirth } from "./defaults";
 import { SETTING_KEYS } from "./keys";
 export { readDevereSettleDefault } from "./devere-settle";
+export { readDevereDuplicateDeliveryNote, readDevereReceiveWeighing } from "./devere-receive";
 
 
 /**

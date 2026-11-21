@@ -310,6 +310,12 @@ export const SETTING_KEYS = {
   /** [PROFİL] Devere ek C1: kusurlu levent reddinde fotoğraf zorunlu mu (DEFAULT false = bugün: ret fotoğrafsız da
    *  yazılır). Açıkken fotoğrafsız ret 400 `WARPING_REJECT_PHOTO_REQUIRED`; okuma aksiyon anında. */
   DEVERE_REJECT_PHOTO_REQUIRED: "devere.rejectPhotoRequired",
+  /** [PROFİL] Devere ek E1: aynı deverecide kullanılmış irsaliye no ile yeni kabul — `ALLOW` · `WARN` (VARSAYILAN, KARAR 5)
+   *  · `BLOCK` 409 `WARPING_DELIVERY_NOTE_USED`. Enum; kalıp `DEVERE_DUPLICATE_DELIVERY_NOTE_MODES` (`devere-receive.ts`). */
+  DEVERE_DUPLICATE_DELIVERY_NOTE: "devere.duplicateDeliveryNote",
+  /** [PROFİL] Devere ek E1: dönüş kabulünde tartı — `OFF` · `OPTIONAL` (VARSAYILAN, bugün) · `REQUIRED` (brütsüz satır 400).
+   *  Enum; kalıp `DEVERE_RECEIVE_WEIGHING_MODES` (`devere-receive.ts`). */
+  DEVERE_RECEIVE_WEIGHING: "devere.receiveWeighing",
   /** [PROFİL] Devere F1: denye sapma raporunda öneri için iplik başına en az tek iplikli tartılı levent (DEFAULT 3,
    *  kullanıcı kararı 2026-11-20). Yalnız raporun öneri sütununu etkiler; kartı hiçbir şey otomatik değiştirmez. */
   DEVERE_DENIER_SUGGEST_MIN_BEAMS: "devere.denierSuggestMinBeams",

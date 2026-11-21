@@ -1,5 +1,5 @@
 // =============================================================================
-// NUMARA SERİSİ KATALOĞU — ENVANTER (56 seri)
+// NUMARA SERİSİ KATALOĞU — ENVANTER (57 seri)
 // =============================================================================
 // ⚠️ SÖZLEŞME AYRI DOSYADA (`number-series-catalog.types.ts`): satır TİPİ, panel
 // grupları ve etiket yardımcıları orada. Bölme ekseni bu depodaki alışılmış
@@ -337,6 +337,8 @@ export const NUMBER_SERIES_CATALOG: readonly NumberSeriesCatalogEntry[] = [
   { key: "beamBodyReturn", scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor ve yükleyici doğuş anını taşıyor; kapsam kilidi 8029 tx'in ilk ifadesi (devere ek B2, 2026-11-20).", uretec: "services/beam-body/returns.ts" }, panelGroup: "uretim", countTable: { model: "beamBodyReturn", field: "docNo", birim: "belge" }, label: "Levent gövdesi iade belgesi no", seedPrefix: "LGI", seedDateSegment: YYMM, seedDigits: 4, seedSeparator: "-" },
   // Devere ek C1: kusurlu levent ret belgesi (aylık sıra).
   { key: "warpingBeamRejection", scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor ve yükleyici doğuş anını taşıyor; kapsam kilidi 8029 tx'in ilk ifadesi (devere ek C1, 2026-11-21).", uretec: "services/warping-order/beam-rejection.ts" }, panelGroup: "uretim", countTable: { model: "warpingBeamRejection", field: "docNo", birim: "belge" }, label: "Kusurlu levent ret belgesi no", seedPrefix: "DR", seedDateSegment: YYMM, seedDigits: 4, seedSeparator: "-" },
+  // Devere ek E1: dönüş kabul belgesi (tek irsaliye, N sipariş; aylık sıra).
+  { key: "warpingReceiveDoc", scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor ve yükleyici doğuş anını taşıyor; kapsam kilidi 8029 tx'in ilk ifadesi (devere ek E1, 2026-11-21).", uretec: "services/warping-order/receive-doc.ts" }, panelGroup: "uretim", countTable: { model: "warpingReceiveDoc", field: "docNo", birim: "belge" }, label: "Devere dönüş kabul belgesi no", seedPrefix: "DK", seedDateSegment: YYMM, seedDigits: 4, seedSeparator: "-" },
   { key: "reconciliationLetter", scopedCounter: { durum: "hazir", not: "Üreteç `nextSeriesNo` yolundan geçiyor ve yükleyici doğuş anını taşıyor: kapsam damgası + çakışma atlaması tek yerde (E2 finans dilimi, 2026-09-23).", uretec: "services/reconciliation-letter.service.ts" }, panelGroup: "finans", countTable: { model: "reconciliationLetter", field: "docNo", birim: "belge" }, label: "Mutabakat mektubu no", seedPrefix: "MBT", seedDateSegment: D, seedDigits: 4, seedSeparator: "" },
 
   // ── Master data kodları ────────────────────────────────────────────────────

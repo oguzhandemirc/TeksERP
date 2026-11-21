@@ -2024,6 +2024,38 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         ],
       },
       {
+        // Devere ek E1: `defaultValue` backend `DEFAULT_DEVERE_DUPLICATE_DELIVERY_NOTE` ile birebir (bekçi §16).
+        group: DEVERE_GROUP.fasonClose,
+        enumKey: "devereDuplicateDeliveryNote",
+        title: "Aynı irsaliye no ile ikinci dönüş kabulü",
+        summary: "Aynı deverecinin daha önce kabulde kullanılmış irsaliye numarası yeniden girildiğinde ne olsun.",
+        desc: "Devereci bir irsaliyenin leventlerini parça parça getirebilir; bu yüzden aynı irsaliye no ikinci kabulde de kullanılabilir. Uyar seçiliyken (varsayılan) kabul yapılır ve “bu irsaliye no daha önce kullanıldı” uyarısı görünür; engelle seçiliyse ikinci kabul reddedilir; izin verde uyarı da gösterilmez. Geri alınmış kabul sayılmaz.",
+        defaultValue: "WARN",
+        display: "radio",
+        audience: ["Depocu", "Yönetim"],
+        options: [
+          { value: "ALLOW", label: "İzin ver", hint: "Uyarısız kabul edilir." },
+          { value: "WARN", label: "Uyar (varsayılan)", hint: "Kabul yapılır; tekrar uyarısı gösterilir." },
+          { value: "BLOCK", label: "Engelle", hint: "Aynı irsaliye no ikinci kez kabul edilmez." },
+        ],
+      },
+      {
+        // Devere ek E1: `defaultValue` backend `DEFAULT_DEVERE_RECEIVE_WEIGHING` ile birebir (bekçi §16).
+        group: DEVERE_GROUP.fasonClose,
+        enumKey: "devereReceiveWeighing",
+        title: "Devere dönüşünde tartı",
+        summary: "Devereden dönen leventin brüt/dara tartısı kabulde istensin mi.",
+        desc: "Tartı yalnız bilgi içindir: tüketim ve iplik bakiyesi tel × denye × metre hesabından gelir, tartı farkı raporda görünür. İsteğe bağlıda (varsayılan) brüt/dara yazmak serbesttir; zorunluda brütü yazılmamış levent kabul edilmez; kapalıda tartı alanları gösterilmez ve sunucu tartıyı geri çevirir.",
+        defaultValue: "OPTIONAL",
+        display: "radio",
+        audience: ["Depocu", "Yönetim"],
+        options: [
+          { value: "OFF", label: "Kapalı", hint: "Tartı alınmaz." },
+          { value: "OPTIONAL", label: "İsteğe bağlı (varsayılan)", hint: "Brüt/dara yazmak serbest." },
+          { value: "REQUIRED", label: "Zorunlu", hint: "Her levent için brüt kg yazılır." },
+        ],
+      },
+      {
         // Devere H1: `defaultValue` backend `DEFAULT_DEVERE_SETTLE_DEFAULT` ile birebir (bekçi §16).
         group: DEVERE_GROUP.fasonClose,
         enumKey: "devereSettleDefault",
