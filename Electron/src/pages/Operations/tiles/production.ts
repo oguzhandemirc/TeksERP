@@ -120,16 +120,15 @@ export const productionTiles: OperationsTile[] = [
     permission: "loom:alarm-view", visibleWhen: isLoomAlarmsVisible, offHint: flagOffHint("tezgahEnabled"),
   },
   {
-    // LEVENTLER (2026-09-14, devere Faz 1b): backend `warp-beam.routes` `requireDevereEnabled`
-    // taşır; karo aynı bayrağa bağlı (ETKİN değer: devere → iplik → ticaret). Referans
-    // profilde KAPALI, karo çizilmez. Yüklem SAF (palet kimlik testi `toBe`).
-    key: "warp-beams",
-    title: "Leventler",
-    description: "Levent planla, sar (iplik brüt çıkar, dip ayrı döner), hazır levent stoğu",
-    icon: Layers,
-    to: "/operations/warp-beams",
+    // FASON DEVERE SİPARİŞLERİ (D6a): `/api/warping-orders` `requireDevereEnabled` + `warping-order:read`; karo aynı
+    // bayrak ve izinle (route `ProtectedRoute` ile birebir). Devere ETKİN değeri iplik zincirini zaten taşır.
+    key: "fason-devere",
+    title: "Fason Devere Siparişleri",
+    description: "Devereciye çözgü işi ver, iplik planı ve sevki; levent kabulü, kusurlu levent reddi, devere faturası (devere, fason çözgü, devereci, iplik sevki, irsaliye, ret, fatura)",
+    icon: Truck,
+    to: "/operations/fason-devere",
     group: "production",
-    permission: "warpbeam:read",
+    permission: "warping-order:read",
     visibleWhen: isWarpBeamsVisible,
     offHint: flagOffHint("devereEnabled"),
   },
@@ -147,15 +146,28 @@ export const productionTiles: OperationsTile[] = [
     offHint: flagOffHint("devereEnabled"),
   },
   {
-    // FASON DEVERE SİPARİŞLERİ (D6a): `/api/warping-orders` `requireDevereEnabled` + `warping-order:read`; karo aynı
-    // bayrak ve izinle (route `ProtectedRoute` ile birebir). Devere ETKİN değeri iplik zincirini zaten taşır.
-    key: "fason-devere",
-    title: "Fason Devere Siparişleri",
-    description: "Devereciye çözgü işi ver, iplik planı ve sevki (devere, fason çözgü, devereci, iplik sevki)",
-    icon: Truck,
-    to: "/operations/fason-devere",
+    // LEVENT GÖVDELERİ (devere ek B4) — Tanımlar karosuyla AYNI yol/izin/yüklem; burada Devere / Çözgü grubuna düşer.
+    key: "beam-bodies",
+    title: "Levent Gövdeleri",
+    description: "Boş gövde nerede, kimin, dolu mu boş mu; QR etiket, sahibine iade (levent gövdesi, boş levent, gövde iade)",
+    icon: Cylinder,
+    to: "/definitions/beam-bodies",
     group: "production",
-    permission: "warping-order:read",
+    permission: "beam-body:read",
+    visibleWhen: isBeamBodiesVisible,
+    offHint: flagOffHint("devereBeamBodyMode"),
+  },
+  {
+    // LEVENTLER (2026-09-14, devere Faz 1b): backend `warp-beam.routes` `requireDevereEnabled`
+    // taşır; karo aynı bayrağa bağlı (ETKİN değer: devere → iplik → ticaret). Referans
+    // profilde KAPALI, karo çizilmez. Yüklem SAF (palet kimlik testi `toBe`).
+    key: "warp-beams",
+    title: "Leventler",
+    description: "Levent planla, sar (iplik brüt çıkar, dip ayrı döner), hazır levent stoğu (levent, sarım, QR etiket, tezgaha takma)",
+    icon: Layers,
+    to: "/operations/warp-beams",
+    group: "production",
+    permission: "warpbeam:read",
     visibleWhen: isWarpBeamsVisible,
     offHint: flagOffHint("devereEnabled"),
   },
@@ -171,18 +183,6 @@ export const productionTiles: OperationsTile[] = [
     permission: "warping-order:read",
     visibleWhen: isWarpBeamsVisible,
     offHint: flagOffHint("devereEnabled"),
-  },
-  {
-    // LEVENT GÖVDELERİ (devere ek B4) — Tanımlar karosuyla AYNI yol/izin/yüklem; burada Devere / Çözgü grubuna düşer.
-    key: "beam-bodies",
-    title: "Levent Gövdeleri",
-    description: "Boş gövde nerede, kimin, dolu mu boş mu; QR etiket, sahibine iade (levent gövdesi, boş levent, gövde iade)",
-    icon: Cylinder,
-    to: "/definitions/beam-bodies",
-    group: "production",
-    permission: "beam-body:read",
-    visibleWhen: isBeamBodiesVisible,
-    offHint: flagOffHint("devereBeamBodyMode"),
   },
   {
     // DENYE SAPMASI (devere F2): v2 rapor yaprağı; izin uç/route ile birebir (`warpspec:read`). Rapor kapalıyken
