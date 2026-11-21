@@ -412,6 +412,9 @@ export const PERMISSION_CATALOG = [
   { code: "mobile:devere", module: "MOBILE", category: "mobile", description: "Mobil — Levent Sarım (devere) ekranı: plan · sar · taslak sil" },
   // Sarım iptali AYRI yetenek (§11 D3): defterden NET iplik döndürür (`warpbeam:cancel` tablet eşi).
   { code: "mobile:devere-iptal", module: "MOBILE", category: "mobile", description: "Levent Sarım ekranı — sarımı iptal edebilir (ayrı yetenek; iplik defterine ters satır yazar)" },
+  // Devere ek D1 (KARAR 4): depocu devereciden dönen leventi tabletten kabul eder — panel kabul belgesi servisiyle aynı
+  // çekirdek; `warping-order:write` VERMEZ (sipariş/sevk/iade yazamaz). Ekran M1 diliminde.
+  { code: "mobile:devere-kabul", module: "MOBILE", category: "mobile", description: "Mobil — Devere Dönüş Kabulü ekranı: devereciden dönen leventi gövde QR'ı okutup kabul et" },
   // Tezgah alarmı mobil "Uyarılar" ekranı (A3): `loom:alarm-view` + `loom:alarm-ack`'in DAR mobil ikizi
   // (`mobile:siparis` emsali); başkasının üstlenmesini bırakmak yine yalnız `loom:alarm-escalation`.
   { code: "mobile:tezgah-uyari", module: "MOBILE", category: "mobile", description: "Mobil — Uyarılar ekranı: tezgah alarmlarını görme, üstlenme/bırakma, susturma, not; bildirim" },
