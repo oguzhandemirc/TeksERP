@@ -487,6 +487,9 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       // Devere tablet ekranı + sarım iptali (§11 D3): iptal yalnız süpervizörde.
       "mobile:devere",
       "mobile:devere-iptal",
+      // Devere ek-2 r: tablette dönüş kabulü + kusurlu levent reddi (ret iplik tutmasını değiştirir — süpervizör).
+      "mobile:devere-kabul",
+      "mobile:devere-ret",
       // Kalite Güvence (K4P): muayene · 4 puan kuralı · lab testi · sertifika — modül kapalıyken yüzey çizilmez.
       "inspection:read",
       "inspection:write",

@@ -73,6 +73,8 @@ const windSchema = z
     dispatchItemId: z.string().uuid().nullable().optional(),
     /** Z1 (Y2): sarım anında iş bağı (verilirse plana yazılır); `devere.beamWeavingLinkRequired` açıkken zorunlu. */
     weavingOrderId: uuidOrNull,
+    /** Devere ek-2 r: içeride sarımın levent gövdeleri (adet kadar, sırayla); OFF'ta 403, REQUIRED'da zorunlu. */
+    beamBodyIds: z.array(z.string().uuid()).max(24).nullable().optional(),
   })
   .strict();
 const cancelSchema = z.object({ reason: z.string().trim().min(3, "Gerekçe en az 3 karakter").max(300) }).strict();

@@ -99,7 +99,7 @@ function builtin(kind: ReasonPresetKind): ReasonPreset[] {
       // Muayene iptali panel işidir ve seçim isteğe bağlıdır — zemin bilerek BOŞ.
       return [];
     case 'WARP_BEAM_REJECT':
-      // Kusurlu levent reddi panel işidir (online) — zemin bilerek BOŞ.
+      // Kusurlu levent reddi panelde ve tablette (Devere Dönüş Kabulü, ek-2 r) — ikisi de online; zemin bilerek BOŞ.
       return [];
   }
 }

@@ -74,6 +74,8 @@ export interface WindForm {
   /** Raşel takımı (#23): adet metni ("1" = tek levent, bugünkü); önek yalnız adet > 1'de anlamlı. */
   count: string;
   physicalBeamNoPrefix: string;
+  /** Ek-2 r: okutulan gövde(ler) — yalnız IN_HOUSE sarımda ve doluysa gider. */
+  beamBodyIds?: string[];
 }
 
 export type Validation = { ok: true } | { ok: false; message: string };
@@ -231,6 +233,8 @@ export function buildWindPayload(f: WindForm, originKind: WarpBeamOrigin, client
     ...(weavingOrderId !== undefined ? { weavingOrderId } : {}),
     // Raşel takımı: adet 1 → alanlar GİDMEZ (istek bugünkü ile birebir).
     ...((setCount(f) ?? 1) > 1 ? { count: setCount(f) ?? 1, physicalBeamNoPrefix: f.physicalBeamNoPrefix.trim() || null } : {}),
+    // Ek-2 r: gövde bağı yalnız içeride ve okutulduysa (boş → alan GİTMEZ, eski sunucu da bayt-aynı istek görür).
+    ...(inHouse && f.beamBodyIds?.length ? { beamBodyIds: f.beamBodyIds } : {}),
   };
 }
 

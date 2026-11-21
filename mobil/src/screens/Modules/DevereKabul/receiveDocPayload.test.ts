@@ -90,3 +90,13 @@ describe('receiveDocPayload — devere dönüş kabulü (M1)', () => {
     expect(progressText(2, null)).toBe('2 levent');
   });
 });
+
+describe('receiveDocPayload — yeniden sarım adayı (ek-2 r)', () => {
+  it('seçili aday gövdeye gider; aynı aday iki satırda yasak', () => {
+    expect(beamLine(beam({ reworkOfBeamId: 'wb1' }), 'OFF', 's1')).toEqual({ lengthM: 1200, physicalBeamNo: null, reworkOfBeamId: 'wb1' });
+    expect(beamLine(beam(), 'OFF', 's1')).not.toHaveProperty('reworkOfBeamId');
+    const r = buildDocBody([order('FDV-1', [beam({ reworkOfBeamId: 'wb1' }), beam({ key: 'k2', reworkOfBeamId: 'wb1' })])], P);
+    expect(r).toMatchObject({ ok: false, error: expect.stringMatching(/yeniden sarım/) });
+    expect(buildDocBody([order('FDV-1', [beam({ reworkOfBeamId: 'wb1' }), beam({ key: 'k2', reworkOfBeamId: 'wb2' })])], P).ok).toBe(true);
+  });
+});
