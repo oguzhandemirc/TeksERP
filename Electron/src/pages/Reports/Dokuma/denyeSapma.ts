@@ -17,6 +17,8 @@ export interface DenierRow {
   code: string;
   name: string;
   beamCount: number;
+  /** F6: darası gövde kartından alınan levent sayısı (eski sunucuda yok). */
+  bodyTareBeamCount?: number;
   lengthM: string;
   nominalKg: string;
   weighedNetKg: string;
@@ -31,6 +33,7 @@ export interface DenierRow {
 
 export interface DenierMixed {
   beamCount: number;
+  bodyTareBeamCount?: number;
   lengthM: string;
   nominalKg: string;
   weighedNetKg: string;
@@ -112,6 +115,15 @@ const yarn = (l: DenyeLine): DenierRow | null => (l.kind === "yarn" ? l.row : nu
 const both = <K extends "beamCount" | "lengthM" | "nominalKg" | "weighedNetKg" | "deviationPct">(l: DenyeLine, k: K) =>
   l.kind === "yarn" ? l.row[k] : l.mixed[k];
 
+/** F6 dara kaynağı etiketi: kabulde tartılan dara mı, gövde kartındaki yedek dara mı (kısmen ise sayısı). */
+export function tareSourceText(l: DenyeLine): string {
+  const total = both(l, "beamCount");
+  const body = (l.kind === "yarn" ? l.row.bodyTareBeamCount : l.mixed.bodyTareBeamCount) ?? 0;
+  if (body === 0) return "Tartılan";
+  if (body >= total) return "Gövde kartından";
+  return `Gövde kartından (${body}/${total})`;
+}
+
 export const DENYE_COLUMNS: DenyeColumn[] = [
   { header: "İplik", key: "iplik", width: 30,
     value: (l) => (l.kind === "yarn" ? `${l.row.name}${l.row.code ? ` (${l.row.code})` : ""}` : "Karma (çok iplikli leventler)"),
@@ -122,6 +134,8 @@ export const DENYE_COLUMNS: DenyeColumn[] = [
     value: (l) => num(both(l, "nominalKg")), display: (l) => formatDisplay(num(both(l, "nominalKg")), 1) },
   { header: "Tartı neti (kg)", key: "net", width: 13, numFmt: KG, align: "right",
     value: (l) => num(both(l, "weighedNetKg")), display: (l) => formatDisplay(num(both(l, "weighedNetKg")), 1) },
+  { header: "Dara", key: "dara", width: 16,
+    value: (l) => tareSourceText(l), display: (l) => tareSourceText(l) },
   { header: "Sapma", key: "sapma", width: 10, align: "right",
     value: (l) => signedPct(both(l, "deviationPct")), display: (l) => signedPct(both(l, "deviationPct")) },
   { header: "Kart denyesi", key: "kart", width: 12, align: "right",
@@ -151,7 +165,7 @@ export function buildDenyeExport(opts: { report: DenierReport; filterNotes: stri
       name: "Denye sapması",
       columns: DENYE_COLUMNS.map(({ header, key, width, numFmt, align }) => ({ header, key, width, numFmt, align })),
       rows: lines.map((l) => Object.fromEntries(DENYE_COLUMNS.map((c) => [c.key, c.value(l, report.settings) ?? "—"]))),
-      notes: ["Öneri iplik kartını kendiliğinden değiştirmez; geçmiş sarımlar değişmez."],
+      notes: ["Öneri iplik kartını kendiliğinden değiştirmez; geçmiş sarımlar değişmez.", "Dara kabulde tartılmadıysa levent gövdesi kartındaki dara kullanılır (Dara kolonu)."],
     }],
   };
 }

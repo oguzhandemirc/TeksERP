@@ -1,4 +1,5 @@
-import { Pencil, Trash2, Disc3, Ban, Cable, Unplug, Scissors, SlidersHorizontal, Flag, Trash, Undo2, Tag } from "lucide-react";
+import { Pencil, Trash2, Disc3, Ban, Cable, Unplug, Scissors, SlidersHorizontal, Flag, Trash, Undo2, Tag, PackageX } from "lucide-react";
+import { isBeamRejectable } from "./BeamRejectLauncher";
 import { ContextMenuItem, ContextMenuSeparator } from "@/components/ui/context-menu";
 import { PermissionGate } from "@/components/PermissionGate";
 import { undoMenuEnabled } from "./tezgah/beam-undo";
@@ -17,10 +18,12 @@ interface Props {
   /** Levent etiketi (WARP_BEAM) — `label:print`; Faz 3 bayrağından bağımsız. */
   onPrintLabel: (r: WarpBeam) => void;
   onBeamAction: (kind: BeamActionKind, r: WarpBeam) => void;
+  /** Devere ek P: kusurlu sarımı devereciye geri gönder (ret diyaloğu) — `warping-order:write`. */
+  onReject: (r: WarpBeam) => void;
 }
 
 /** Satır menüsü — plan/sar/sil + tak/sök/tüket/düzelt/bitir `warpbeam:write`; sarım iptali · hurda · geri alma AYRI yetenek `warpbeam:cancel`. */
-export function WarpBeamRowMenu({ row, mountTracking, onEdit, onDelete, onWind, onCancel, onPrintLabel, onBeamAction }: Props) {
+export function WarpBeamRowMenu({ row, mountTracking, onEdit, onDelete, onWind, onCancel, onPrintLabel, onBeamAction, onReject }: Props) {
   const planned = row.status === "PLANNED";
   const ready = row.status === "READY";
   const mounted = row.status === "MOUNTED";
@@ -75,6 +78,14 @@ export function WarpBeamRowMenu({ row, mountTracking, onEdit, onDelete, onWind, 
           </>
         )}
       </PermissionGate>
+      {row.warpingOrderId && (
+        <PermissionGate permission="warping-order:write">
+          <ContextMenuSeparator />
+          <ContextMenuItem disabled={!isBeamRejectable(row)} onSelect={() => onReject(row)}>
+            <PackageX /> Devereciye geri gönder
+          </ContextMenuItem>
+        </PermissionGate>
+      )}
       <PermissionGate permission="label:print">
         <ContextMenuSeparator />
         <ContextMenuItem disabled={!isBeamLabelPrintable(row)} onSelect={() => onPrintLabel(row)}>

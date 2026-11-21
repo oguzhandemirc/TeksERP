@@ -53,11 +53,11 @@ function resolveRange(q: DenierDeviationQuery): { from: string; to: string; gte:
 /** Rapor: iplik başına nominal ↔ tartı farkı + öneri durumu; çok iplikli sarımlar tek "karma" satırı. */
 export async function getDenierDeviationReport(q: DenierDeviationQuery): Promise<DenierDeviationReport> {
   const range = resolveRange(q);
+  // F6: dara kabulde tartılmadıysa gövde kartındaki dara yedektir (örnek `tareSource: BODY` etiketiyle sayılır).
   const woundWhere = {
     kind: "WOUND",
     reversal: { is: null },
     grossKg: { not: null },
-    tareKg: { not: null },
     lengthM: { not: null },
     createdAt: { gte: range.gte, lte: range.lte },
   } satisfies Prisma.WarpBeamEventWhereInput;
@@ -65,12 +65,13 @@ export async function getDenierDeviationReport(q: DenierDeviationQuery): Promise
     where: {
       AND: [
         ACCEPTED_WARPING_BEAM_WHERE,
-        { events: { some: woundWhere } },
+        { OR: [{ events: { some: { ...woundWhere, tareKg: { not: null } } } }, { events: { some: woundWhere }, beamBody: { tareKg: { not: null } } }] },
         ...(q.subcontractorId ? [{ warpingOrder: { subcontractorId: q.subcontractorId } }] : []),
         ...(q.yarnItemId ? [{ events: { some: { ...woundWhere, yarns: { some: { yarnItemId: q.yarnItemId } } } } }] : []),
       ],
     },
     select: {
+      beamBody: { select: { tareKg: true } },
       events: {
         where: woundWhere,
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
@@ -82,8 +83,10 @@ export async function getDenierDeviationReport(q: DenierDeviationQuery): Promise
   const samples: DenierSampleBeam[] = [];
   for (const b of beams) {
     const e = b.events[0];
-    if (!e || e.lengthM === null || e.grossKg === null || e.tareKg === null) continue;
-    samples.push({ lengthM: e.lengthM, grossKg: e.grossKg, tareKg: e.tareKg, yarns: e.yarns });
+    if (!e || e.lengthM === null || e.grossKg === null) continue;
+    const bodyTare = b.beamBody?.tareKg ?? null;
+    if (e.tareKg !== null) samples.push({ lengthM: e.lengthM, grossKg: e.grossKg, tareKg: e.tareKg, tareSource: "WEIGHED", yarns: e.yarns });
+    else if (bodyTare !== null) samples.push({ lengthM: e.lengthM, grossKg: e.grossKg, tareKg: bodyTare, tareSource: "BODY", yarns: e.yarns });
   }
   const yarnIds = [...new Set(samples.flatMap((s) => s.yarns.map((y) => y.yarnItemId)))];
   const cards = yarnIds.length === 0 ? [] : await prisma.item.findMany({

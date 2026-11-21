@@ -10,7 +10,7 @@ import { useQuery } from "@tanstack/react-query";
 import apiClient from "@/services/apiClient";
 import type { ApiResponse, CursorPaginatedResponse, CursorParams } from "@/types/api";
 import type { BeamBody } from "@/pages/BeamBodies/types";
-import type { DeliveryNoteGroup, WarpingReceiveDoc, WarpingReceiveDocFields, WarpingReceiveDocPreview, WarpingReceiveDocRow, WarpingReceiveDocSummary } from "./receive-doc-types";
+import type { DeliveryNoteGroup, WarpingReceiveDoc, WarpingReceiveDocCancelPreview, WarpingReceiveDocFields, WarpingReceiveDocPreview, WarpingReceiveDocRow, WarpingReceiveDocSummary } from "./receive-doc-types";
 
 const BASE = "/api/warping-receive-docs";
 export const WARPING_RECEIVE_DOCS_QUERY_KEY = "warping-receive-docs";
@@ -46,6 +46,8 @@ export const warpingReceiveDocService = {
   preview: (body: WarpingReceiveDocFields) => apiClient.post<ApiResponse<WarpingReceiveDocPreview>>(`${BASE}/preview`, body).then((r) => r.data.data as WarpingReceiveDocPreview),
   create: (body: WarpingReceiveDocFields & { clientToken: string }) => apiClient.post<ApiResponse<WarpingReceiveDoc>>(BASE, body).then((r) => r.data),
   get: (id: string) => apiClient.get<ApiResponse<WarpingReceiveDoc>>(`${BASE}/${id}`).then((r) => r.data.data as WarpingReceiveDoc),
+  cancelPreview: (id: string) => apiClient.get<ApiResponse<WarpingReceiveDocCancelPreview>>(`${BASE}/${id}/cancel-preview`).then((r) => r.data.data as WarpingReceiveDocCancelPreview),
+  cancel: (id: string, reason: string) => apiClient.post<ApiResponse<{ docNo: string }>>(`${BASE}/${id}/cancel`, { reason }).then((r) => r.data),
   byDeliveryNote: (subcontractorId: string, deliveryNoteNo: string) =>
     apiClient.get<ApiResponse<DeliveryNoteGroup>>(`${BASE}/by-delivery-note`, { params: { subcontractorId, deliveryNoteNo }, suppressErrorToast: true }).then((r) => r.data.data as DeliveryNoteGroup),
   /** Gövde okutma: bulunamazsa `null` (tanımsız gövde → satırda "yeni gövde"); diğer hatalar fırlar. */

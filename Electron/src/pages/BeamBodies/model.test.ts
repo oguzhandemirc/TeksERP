@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { beamBodyDefaults, beamBodyFormSchema, buildCreateBody, buildPatchBody, dimsText, placeText } from "./model";
 import { isBeamBodiesVisible } from "./beam-body-regime";
-import { manualKindsFor } from "./TransitionDialog";
+import { manualKindsFor, manualLabel } from "./TransitionDialog";
 import { buildReturnHtml } from "./returns/return-html";
 import type { BeamBody, BeamBodyReturnDoc } from "./types";
 
@@ -80,6 +80,10 @@ describe("görüntü ve kapılar", () => {
     expect(manualKindsFor(body())).toEqual(["SHIP_EMPTY", "MAINTENANCE_IN", "SCRAP"]);
     expect(manualKindsFor(body({ status: "AT_SUBCONTRACTOR" }))).toEqual(["RETURN_EMPTY"]);
     expect(manualKindsFor(body({ status: "MOUNTED" }))).toEqual([]);
+    // Devere ek P: dışarıdaki dolu gövde boş dönebilir; etiket kaynağı ayırır.
+    expect(manualKindsFor(body({ status: "FULL_OUT" }))).toEqual(["RETURN_EMPTY"]);
+    expect(manualLabel("RETURN_EMPTY", "FULL_OUT")).toBe("Boş döndü (dışarıdan)");
+    expect(manualLabel("RETURN_EMPTY", "AT_SUBCONTRACTOR")).toBe("Devereciden boş döndü");
     expect(manualKindsFor(body({ isActive: false }))).toEqual([]);
   });
 
