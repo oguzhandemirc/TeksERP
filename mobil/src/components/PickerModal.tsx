@@ -116,6 +116,9 @@ interface BaseProps {
    *  listesinde "düzenle" / "çoğalt"). Verilmezse hiç çizilmez — diğer picker
    *  kullanıcılarının yerleşimi değişmez. Dönen dizi boşsa da çizilmez. */
   optionActions?: (option: PickerOption) => PickerOptionAction[];
+  /** true: uzun ad iki satıra sarar (kesilmez) ve alt satır düz yazıdır (monospace değil) — adla
+   *  seçilen listeler (devereci, sipariş). Verilmezse bugünkü tek satır + monospace görünüm. */
+  wrapLabels?: boolean;
 }
 
 export interface PickerOptionAction {
@@ -180,6 +183,7 @@ export default function PickerModal(props: Props) {
     disableSort = false,
     quickAddSlot,
     leadingAction,
+    wrapLabels = false,
   } = props;
 
   // Yenileme: ham isFetching yerine standart hook → offline guard + zaman aşımı
@@ -340,6 +344,7 @@ export default function PickerModal(props: Props) {
                 option={item}
                 selected={item.value === selectedValue}
                 onPress={handlePick}
+                wrap={wrapLabels}
               />
             </View>
           ))}
@@ -365,9 +370,10 @@ export default function PickerModal(props: Props) {
           selected={item.value === selectedValue}
           onPress={handlePick}
           actions={props.optionActions?.(item)}
+          wrap={wrapLabels}
         />
       ),
-    [selectedValue, handlePick, leadIcon, leadDisabled, handleLeadingPress, props.optionActions],
+    [selectedValue, handlePick, leadIcon, leadDisabled, handleLeadingPress, props.optionActions, wrapLabels],
   );
 
   // Paginated submit handler
@@ -645,12 +651,15 @@ const PickerCard = React.memo(function PickerCard({
   selected,
   onPress,
   actions,
+  wrap = false,
 }: {
   option: PickerOption;
   selected: boolean;
   onPress: (value: string) => void;
   /** Kartın sağ kenarındaki ikon tuşları — verilmezse hiç çizilmez. */
   actions?: PickerOptionAction[];
+  /** bkz. `wrapLabels`. */
+  wrap?: boolean;
 }) {
   const hasDetails = !!option.details?.length;
   return (
@@ -684,9 +693,15 @@ const PickerCard = React.memo(function PickerCard({
       >
         <View style={styles.cardContent}>
           <View style={styles.cardHeader}>
-            <TruncatedText variant="titleMedium" style={styles.cardLabel} testID={`secici-secenek-${option.value}`}>
-              {option.label}
-            </TruncatedText>
+            {wrap ? (
+              <Text variant="titleMedium" style={styles.cardLabel} numberOfLines={2} testID={`secici-secenek-${option.value}`}>
+                {option.label}
+              </Text>
+            ) : (
+              <TruncatedText variant="titleMedium" style={styles.cardLabel} testID={`secici-secenek-${option.value}`}>
+                {option.label}
+              </TruncatedText>
+            )}
             {option.badge ? (
               <View style={[styles.cardBadge, { backgroundColor: option.badge.color }]}>
                 <Text style={styles.cardBadgeText}>{option.badge.text}</Text>
@@ -694,7 +709,7 @@ const PickerCard = React.memo(function PickerCard({
             ) : null}
           </View>
           {option.sublabel ? (
-            <Text variant="bodySmall" style={styles.cardSublabel} numberOfLines={1}>
+            <Text variant="bodySmall" style={wrap ? styles.cardSublabelPlain : styles.cardSublabel} numberOfLines={wrap ? 2 : 1}>
               {option.sublabel}
             </Text>
           ) : null}
@@ -938,6 +953,7 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
     fontSize: 12,
   },
+  cardSublabelPlain: { color: colors.textMuted, fontSize: 13 },
   cardDetail: {
     color: '#475569',
     fontSize: 11,

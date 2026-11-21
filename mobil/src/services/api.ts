@@ -172,6 +172,17 @@ apiClient.interceptors.request.use(async (config) => {
   return config;
 });
 
+/** Metin olarak gelmiş backend zarfını (`{"success":false,…}`) nesneye çevirir; başka her şey olduğu gibi döner. */
+export function parseTextEnvelope(data: unknown): unknown {
+  if (typeof data !== 'string' || !data.trimStart().startsWith('{')) return data;
+  try {
+    const parsed: unknown = JSON.parse(data);
+    return parsed && typeof parsed === 'object' && 'success' in parsed ? parsed : data;
+  } catch {
+    return data;
+  }
+}
+
 apiClient.interceptors.response.use(
   (res) => {
     sampleFromConfig(res.config, res.status, (res.config as TimedConfig).__startedAt);
@@ -182,6 +193,9 @@ apiClient.interceptors.response.use(
     return res;
   },
   (error) => {
+    // `responseType:'text'` uçlarında (etiket HTML/native) hata zarfı JSON METNİ gelir: çözülmezse sunucunun
+    // Türkçe mesajı "Sunucu hatası"na düşer ve backend 5xx'i vekil hatası sanılır.
+    if (error.response) error.response.data = parseTextEnvelope(error.response.data);
     // Kanıt reddi (sır yok/bayat ya da saat kayık): saat hizalanır, sır status'tan tazelenir,
     // istek BİR kez yeniden denenir; ikinci ret normal 401 akışına düşer.
     const cfg = error.config as (InternalAxiosRequestConfig & { __proofRetried?: boolean }) | undefined;
