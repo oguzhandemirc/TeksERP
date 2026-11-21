@@ -29,6 +29,8 @@ export interface PreflightLine {
   initialQty: number;
   lotNo?: string | null;
   bobbinCount?: number | null;
+  /** Tedarikçi irsaliyesindeki kalem kodu (Seyitoğlu d5) — yalnız iplik satırı. */
+  supplierItemCode?: string | null;
   colorId?: string | null;
   propertyIds?: string[];
   unitPrice?: number | null;
@@ -151,6 +153,9 @@ export async function collectReceiptLineIssues(lines: PreflightLine[], ctx: Pref
       return issues.push({ lineNo, code: "ITEM_TYPE_NOT_ALLOWED", message: `"${it.name}" ${noun} — mal kabul fişi yalnız kumaş ve iplik alır.` });
     }
     if (!(Number(l.initialQty) > 0)) return issues.push({ lineNo, code: "QTY_INVALID", message: "Miktar sıfırdan büyük olmalı." });
+    if (it.itemType !== ItemType.YARN && l.supplierItemCode?.trim()) {
+      return issues.push({ lineNo, code: "SUPPLIER_ITEM_CODE_YARN_ONLY", message: `"${it.name}" iplik değil — tedarikçi kalem kodu yalnız iplik satırına yazılır.` });
+    }
     if (it.itemType === ItemType.YARN) {
       if (lotRequired && !normalizeLotNo(l.lotNo)) return issues.push({ lineNo, code: "YARN_LOT_REQUIRED", message: YARN_LOT_REQUIRED_MESSAGE });
       if (l.bobbinCount != null && (!Number.isInteger(l.bobbinCount) || l.bobbinCount <= 0)) return issues.push({ lineNo, code: "BOBBIN_INVALID", message: "Bobin adedi pozitif tam sayı olmalı." });

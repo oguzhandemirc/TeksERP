@@ -272,6 +272,17 @@ export const CUSTOMER_MERGE_RULES: MoveRule[] = [
     },
     {
       kind: "CONFLICT",
+      model: "SupplierItemCode",
+      table: "supplier_item_codes",
+      column: "supplierId",
+      label: "Tedarikçi kalem kodu eşlemesi",
+      uniqueOn: ["supplierId", "codeKey"],
+      crossSourceOn: { columns: ["codeKey"] },
+      policy: "SKIP",
+      why: "Aynı kalem kodu iki tedarikçide de eşliyse survivor'ın eşlemesi kalır; kaynağınki düşer (sonraki kabul yeniden öğrenir).",
+    },
+    {
+      kind: "CONFLICT",
       model: "ItemPrice",
       table: "item_prices",
       column: "customerId",
