@@ -8,7 +8,7 @@ import { renderWithProviders } from "@/test/render";
 import { REPORT_CATALOG } from "@/lib/report-catalog";
 import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
 import { dokumaReportTiles, visibleDokumaTiles } from "./tile-config";
-import { enYakinBitis, secenekOptions, warpSpecCellText, type BeamResultReport, type FinishForecastRow } from "./leventReportTypes";
+import { enYakinBitis, leadText, secenekOptions, spareText, warpSpecCellText, type BeamResultReport, type FinishForecastRow } from "./leventReportTypes";
 
 const leventBitisTahmini = vi.fn();
 vi.mock("./service", async (orig) => ({ ...(await orig<typeof import("./service")>()), dokumaReportsApi: { leventBitisTahmini: (...a: unknown[]) => leventBitisTahmini(...a) } }));
@@ -71,5 +71,30 @@ describe("sayfa render", () => {
     expect(satir).toHaveTextContent("son 7 günde tüketim yok");
     expect(leventBitisTahmini).toHaveBeenCalledWith({ machineId: "" });
     expect(screen.queryByLabelText(/Başlangıç|Bitiş tarihi/)).toBeNull();
+  });
+  it("⭐ S1 devere zamanlaması: yedek yok + gün geldi → 'Devereye ver' rozeti; yedekli satırda rozet yok", async () => {
+    const base = { machine: { id: "m1", code: "T-07", name: "Tezgah 7" }, position: 1, kalanM: 300, gunlukOrtM: 100, kaynak: { otomatik: 0, elle: 700 }, tahminiBitisGun: "2026-11-25", kalanGun: 3, hesaplanamadi: null, warpSpec: { id: "w1", code: "CZ-1", name: "Siyah" }, leadDays: 4, lead: { kaynak: "OLCUM", ornek: 3, devereci: "Devereci A" }, orderByDay: "2026-11-21", orderByGerekce: null };
+    leventBitisTahmini.mockResolvedValue({ success: true, data: {
+      satirlar: [
+        { ...base, beamId: "b1", beamNo: "LV-1", spare: { count: 0, m: 0, yoldaM: 0, yoldaSiparis: 0 }, devereAcil: true },
+        { ...base, beamId: "b2", beamNo: "LV-2", spare: { count: 1, m: 400, yoldaM: 0, yoldaSiparis: 0 }, devereAcil: false },
+      ],
+      ozet: { leventSayisi: 2, tahminli: 2, hesaplanamadi: 0, devereAcil: 1 },
+      meta: { ufuk: "2026-09-14", ufukOncesiSatir: 0, pencereBaslangic: "2026-11-16", pencereGun: 7, secenekler: { machineId: [] } },
+    } });
+    renderWithProviders(<LeventBitisTahminiPage />);
+    const acil = (await screen.findByText("LV-1")).closest("tr")!;
+    expect(acil).toHaveTextContent("Devereye ver");
+    expect(acil).toHaveTextContent("Yok");
+    expect(acil).toHaveTextContent("son 3 siparişin ortancası");
+    const yedekli = screen.getByText("LV-2").closest("tr")!;
+    expect(yedekli).toHaveTextContent("1 hazır");
+    expect(yedekli.textContent).not.toMatch(/Devereye ver/);
+  });
+  it("S1 yardımcıları: eski sunucu (alan yok) → '—'; ayar yedeği beyanlı", () => {
+    expect(spareText(undefined, String)).toBe("—");
+    expect(spareText({ count: 0, m: 0, yoldaM: 500, yoldaSiparis: 1 }, (m) => `${m} m`)).toBe("yolda 500 m (1 sipariş)");
+    expect(leadText({ leadDays: 7, lead: { kaynak: "AYAR", ornek: 0, devereci: null } })).toBe("7 gün (ayardaki varsayılan)");
+    expect(leadText({ leadDays: null, lead: undefined })).toBeNull();
   });
 });

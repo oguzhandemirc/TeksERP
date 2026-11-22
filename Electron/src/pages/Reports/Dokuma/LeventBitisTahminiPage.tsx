@@ -1,6 +1,7 @@
 // =============================================================================
 // LEVENT BİTİŞ TAHMİNİ — KESİT: tezgahtaki leventin kalanı ÷ son 7 fabrika günü ortalama tüketim.
 // Tüketim yoksa tahmin "hesaplanamadı" + gerekçe; gün uydurulmaz. Tarih süzgeci YOK (katalog `tarih: "yok"`).
+// S1: aynı kartın yedeği + "devereye ver" günü (bitiş − devere teslim süresi) sunucudan; panel hesaplamaz.
 // =============================================================================
 import { useMemo } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
@@ -47,11 +48,12 @@ export function LeventBitisTahminiPage() {
       actions={<ReportExportBar disabled={!rapor} buildSpec={spec} />}
     >
       <ReportFilterNotes notes={filterNotes} />
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <MetricCard label="Tezgahtaki levent" value={o ? fmtInt(o.leventSayisi) : null} isLoading={q.isLoading} />
         <MetricCard label="Tahminli" value={o ? fmtInt(o.tahminli) : null} hint="son 7 günde tüketimi olan" isLoading={q.isLoading} />
         <MetricCard label="Hesaplanamadı" value={o ? fmtInt(o.hesaplanamadi) : null} hint="tüketim yok — gün uydurulmaz" tone={o && o.hesaplanamadi > 0 ? "warn" : "neutral"} isLoading={q.isLoading} />
         <MetricCard label="En yakın bitiş" value={rapor ? fmtCalendarDate(enYakinBitis(rapor.satirlar)) : null} isLoading={q.isLoading} />
+        <MetricCard label="Devereye verilmeli" value={o?.devereAcil != null ? fmtInt(o.devereAcil) : null} hint="yedeği yok, verme günü geldi" tone={o?.devereAcil ? "warn" : "neutral"} isLoading={q.isLoading} />
       </div>
       <KumasKaynakStrip kaynak={sourceTotals} baslik="Son 7 gün tüketim kaynağı" />
       <DetailTable<FinishForecastRow> title="Tezgahtaki leventler" data={rapor?.satirlar ?? []} columns={bitisColumns} isLoading={q.isLoading} emptyLabel="Tezgahta levent yok." />

@@ -1,7 +1,7 @@
 // =============================================================================
 // DEVERE DÖNÜŞ KABULÜ — görünüm parçaları (tablet tasarım dili, Tambur referansı)
 // =============================================================================
-// Üst şerit devereci çipi · SOL: şu anki iş kartı (devereci, irsaliye, siparişler, kahraman sayı) + levent ekleme ·
+// SOL: şu anki iş kartı (devereci, irsaliye, siparişler, kahraman sayı) + levent ekleme ·
 // SAĞ: eklenen leventler. Seçici pencerelerde uzun ad iki satıra sarar.
 // =============================================================================
 import React from 'react';
@@ -11,23 +11,10 @@ import ModalTextInput from '../../../components/ModalTextInput';
 import PickerModal from '../../../components/PickerModal';
 import ScannerEntryBar from '../../../components/ScannerEntryBar';
 import TruncatedText from '../../../components/TruncatedText';
-import { colors } from '../../../theme';
 import { fmtMeters } from '../../../utils/meters';
 import { heroFigure, parseNum, type BeamDraft } from './receiveDocPayload';
 import type { DevereKabulState } from './useDevereKabul';
 import { ds, MAIN_BLUE } from './devereKabul.styles';
-
-/** Başlık satırında devereci çipi — dokununca devereci seçici açılır. */
-export function SubChip({ name, onPress }: { name: string | null; onPress: () => void }) {
-  return (
-    <TouchableRipple onPress={onPress} style={ds.subChip} borderless rippleColor="rgba(255,255,255,0.2)" accessibilityRole="button" accessibilityLabel={name ? `Devereci ${name}. Değiştir` : 'Devereci seç'} testID="devere-kabul-devereci">
-      <View style={ds.subChipInner}>
-        <Icon source="account-hard-hat-outline" size={18} color={colors.textOnDark} />
-        <TruncatedText style={ds.subChipText}>{name ?? 'Devereci seç'}</TruncatedText>
-      </View>
-    </TouchableRipple>
-  );
-}
 
 /** Devereci ve açık sipariş seçicileri (seçilmiş sipariş listeden düşer). */
 export function HeaderPickers({ state: s, picker, onClose }: { state: DevereKabulState; picker: null | 'sub' | 'order'; onClose: () => void }) {
@@ -69,16 +56,17 @@ export function HeaderPickers({ state: s, picker, onClose }: { state: DevereKabu
 /** Seçili siparişin künyesi + kahraman sayı ("0/2 levent" ya da "3.000 m kalan"). */
 function OrderInfo({ state }: { state: DevereKabulState }) {
   const o = state.activeOrder;
-  if (!o) return <Text style={ds.hint}>{state.subcontractorId ? 'Siparişi seçin.' : 'Önce devereciyi seçin (üst şeritteki çip).'}</Text>;
+  // Sipariş yokken ipucu yazılmaz: hemen üstteki "Devereci seç" / "Sipariş seç" düğmesi ne yapılacağını söyler.
+  if (!o) return null;
   const drafted = state.orders.find((x) => x.orderId === o.id)?.beams.length ?? 0;
   const hero = heroFigure(drafted, o);
   return (
     <View style={ds.row}>
       <View style={ds.grow}>
-        <TruncatedText style={ds.orderTitle}>{`${o.orderNo} · ${o.warpSpec.name}`}</TruncatedText>
+        <TruncatedText style={ds.orderTitle}>{o.warpSpec.name}</TruncatedText>
         <Text style={ds.gray}>{`Kalan ${fmtMeters(Number(o.remainingM))} m · gelen ${o.receivedBeamCount} levent / ${fmtMeters(Number(o.receivedM))} m`}</Text>
       </View>
-      <View style={ds.hero} testID="devere-kabul-kahraman">
+      <View style={[ds.hero, hero.over && ds.heroOver]} testID="devere-kabul-kahraman">
         <Text style={ds.heroValue}>{hero.value}</Text>
         <Text style={ds.heroUnit}>{hero.unit}</Text>
       </View>
@@ -86,36 +74,41 @@ function OrderInfo({ state }: { state: DevereKabulState }) {
   );
 }
 
-/** SOL üst: şu anki iş — devereci, irsaliye no (büyük kutu), sipariş seçimi, sipariş künyesi. */
+/**
+ * SOL üst: şu anki iş — devereci adı (tam genişlik: uzun ünvan yarım sütuna sığmıyordu), irsaliye no + sipariş
+ * düğmesi, seçili sipariş çipleri, sipariş künyesi. Devereci adı yalnız burada (üst şeritte tekrar yok).
+ */
 export function JobCard({ state, onPickSub, onPickOrder }: { state: DevereKabulState; onPickSub: () => void; onPickOrder: () => void }) {
   return (
     <View style={ds.card}>
-      <View style={ds.row}>
-        <View style={ds.grow}>
-          <Text style={ds.caps}>DEVERECİ</Text>
-          {state.subcontractor ? (
-            <TouchableRipple onPress={onPickSub} accessibilityRole="button" accessibilityLabel="Devereciyi değiştir">
-              <TruncatedText style={ds.bigName}>{state.subcontractor.name}</TruncatedText>
-            </TouchableRipple>
-          ) : (
-            <Button mode="contained" icon="account-hard-hat-outline" buttonColor={MAIN_BLUE} onPress={onPickSub} contentStyle={ds.tall}>Devereci seç</Button>
-          )}
-        </View>
+      <View>
+        <Text style={ds.caps}>DEVERECİ</Text>
+        {state.subcontractor ? (
+          <TouchableRipple onPress={onPickSub} accessibilityRole="button" accessibilityLabel="Devereciyi değiştir" testID="devere-kabul-devereci">
+            <TruncatedText style={ds.bigName}>{state.subcontractor.name}</TruncatedText>
+          </TouchableRipple>
+        ) : (
+          <Button mode="contained" icon="account-hard-hat-outline" buttonColor={MAIN_BLUE} onPress={onPickSub} contentStyle={ds.tall} testID="devere-kabul-devereci">Devereci seç</Button>
+        )}
+      </View>
+      <View style={ds.rowBottom}>
         <View style={ds.grow}>
           <Text style={ds.label}>İrsaliye no</Text>
           <ModalTextInput mode="outlined" value={state.deliveryNoteNo} onChangeText={state.setDeliveryNoteNo} maxLength={64} autoCapitalize="characters" placeholder="Devereci irsaliyesi" style={ds.bigInput} testID="devere-kabul-irsaliye" />
         </View>
-      </View>
-      {state.subcontractorId ? (
-        <ScrollView horizontal contentContainerStyle={ds.row} keyboardShouldPersistTaps="handled">
-          {state.orders.map((o) => (
-            <Chip key={o.orderId} selected={o.orderId === state.activeOrderId} showSelectedOverlay onPress={() => state.setActiveOrderId(o.orderId)} onClose={() => state.removeOrder(o.orderId)} style={ds.chip} textStyle={ds.chipText}>
-              {`${o.orderNo} · ${o.beams.length}`}
-            </Chip>
-          ))}
-          <Button mode="outlined" icon="plus" onPress={onPickOrder} contentStyle={ds.tall} testID="devere-kabul-siparis-ekle">
+        {state.subcontractorId ? (
+          <Button mode="outlined" icon="plus" onPress={onPickOrder} contentStyle={ds.tall} style={ds.orderBtn} testID="devere-kabul-siparis-ekle">
             {state.orders.length ? 'Sipariş ekle' : 'Sipariş seç'}
           </Button>
+        ) : null}
+      </View>
+      {state.orders.length ? (
+        <ScrollView horizontal contentContainerStyle={ds.row} keyboardShouldPersistTaps="handled">
+          {state.orders.map((o) => (
+            <Chip key={o.orderId} selected={o.orderId === state.activeOrderId} onPress={() => state.setActiveOrderId(o.orderId)} onClose={() => state.removeOrder(o.orderId)} style={[ds.chip, o.orderId === state.activeOrderId ? ds.chipOn : ds.chipOff]} textStyle={ds.chipText}>
+              {`${o.orderNo} · ${o.beams.length} levent`}
+            </Chip>
+          ))}
         </ScrollView>
       ) : null}
       <OrderInfo state={state} />
@@ -145,7 +138,6 @@ export function AddBeamCard({ state: s, code, setCode, canAdd, onCamera }: AddPr
           {mode === 'OFF' ? 'LEVENT EKLE' : 'Gövdesiz levent ekle'}
         </Button>
       ) : null}
-      {mode !== 'OFF' ? <Text style={ds.hint}>QR okunmuyorsa kamera penceresinde gövde numarasını yazın.</Text> : null}
     </View>
   );
 }

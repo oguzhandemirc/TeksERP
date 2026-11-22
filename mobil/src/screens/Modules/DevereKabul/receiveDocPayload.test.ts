@@ -1,4 +1,4 @@
-import { autoPickOrderId, heroFigure, beamLine, bodyFromResolve, buildDocBody, draftsHaveBody, inputText, nextPlanLength, parseNum, previewBeamName, progressText, validateBeam, type BeamDraft, type OrderDraft } from './receiveDocPayload';
+import { autoPickOrderId, autoPickSubcontractorId, heroFigure, beamLine, bodyFromResolve, buildDocBody, draftsHaveBody, inputText, nextPlanLength, parseNum, previewBeamName, progressText, validateBeam, type BeamDraft, type OrderDraft } from './receiveDocPayload';
 import type { ResolvedBeamBody } from '../../../services/devereKabul.service';
 
 const beam = (p: Partial<BeamDraft> = {}): BeamDraft => ({ key: 'k', body: null, physicalBeamNo: '', lengthM: '1200', grossKg: '', tareKg: '', ...p });
@@ -119,8 +119,22 @@ describe('receiveDocPayload — tasarım dili (devere-t)', () => {
     expect(autoPickOrderId([{ id: 'o1' }], 0, true)).toBeNull();
     expect(autoPickOrderId([], 0, false)).toBeNull();
   });
+  it('tek devereci kendiliğinden seçilir; birden çok ya da seçili devereci varken seçilmez', () => {
+    expect(autoPickSubcontractorId([{ id: 's1' }], null)).toBe('s1');
+    expect(autoPickSubcontractorId([{ id: 's1' }, { id: 's2' }], null)).toBeNull();
+    expect(autoPickSubcontractorId([{ id: 's1' }], 's1')).toBeNull();
+    expect(autoPickSubcontractorId([], null)).toBeNull();
+  });
   it('kahraman sayı: beklenen levent varsa "0/2 levent", yoksa kalan metre', () => {
-    expect(heroFigure(0, { remainingBeamCount: 2, remainingM: '3000' })).toEqual({ value: '0/2', unit: 'levent' });
-    expect(heroFigure(1, { remainingBeamCount: null, remainingM: '3000.000' })).toEqual({ value: '3.000', unit: 'm kalan' });
+    expect(heroFigure(0, { remainingBeamCount: 2, remainingM: '3000' })).toEqual({ value: '0/2', unit: 'levent', over: false });
+    expect(heroFigure(2, { remainingBeamCount: 2, remainingM: '3000' })).toEqual({ value: '2/2', unit: 'levent', over: false });
+    expect(heroFigure(1, { remainingBeamCount: null, remainingM: '3000.000' })).toEqual({ value: '3.000', unit: 'm kalan', over: false });
+  });
+  it('kahraman sayı: beklenenden fazla levent eklenince "planı aşıyor" işaretlenir', () => {
+    expect(heroFigure(2, { remainingBeamCount: 1, remainingM: '1500' })).toEqual({ value: '2/1', unit: 'levent — planı aşıyor', over: true });
+    expect(heroFigure(1, { remainingBeamCount: 0, remainingM: '20' })).toMatchObject({ value: '1/0', over: true });
+  });
+  it('kahraman sayı: plan leventleri bitmiş, levent eklenmemişse "0/0" değil kalan metre', () => {
+    expect(heroFigure(0, { remainingBeamCount: 0, remainingM: '20.000' })).toEqual({ value: '20', unit: 'm kalan', over: false });
   });
 });

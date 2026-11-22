@@ -28,6 +28,7 @@ import { assertWarpingWoundCancellableTx } from "./helpers/warping-receipt-guard
 import { assertBeamWeavingLinkGate, assertWeavingOrderLinkableTx, warpSpecMismatchWarning } from "./helpers/production-chain-gates.helper";
 import { qtyText } from "./helpers/qty-text.helper";
 import { planWindBodies, windOwnerFor } from "./helpers/warp-beam-wind-body.helper";
+import { beamBodyWidthWarningsTx } from "./helpers/beam-body-fit.helper";
 
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 
@@ -171,6 +172,8 @@ async function windWarpBeamFresh(id: string, input: WindWarpBeamInput, userId?: 
   const prefix = input.physicalBeamNoPrefix?.trim() || null;
   // Devere ek-2 r: okutulan gövde (takımda k. levente k. gövde) gövde no'yu da verir — önek/plandaki no'nun önüne geçer.
   const bodies = await planWindBodies(prisma, { beamNo: beam.beamNo, originKind: beam.originKind, count, beamBodyIds: input.beamBodyIds });
+  // S9: tarak eni gövde eninden büyükse bilgi uyarısı (engel değil; veri eksikse sessiz).
+  warnings.push(...(await beamBodyWidthWarningsTx(prisma, beam.warpSpecId, (bodies ?? []).map((b, i) => ({ label: count > 1 ? `${i + 1}. levent: ` : "", beamBodyId: b.beamBodyId })))));
   const physicalOf = (k: number, own: string | null) => bodies?.[k - 1]?.bodyNo ?? siblingPhysicalNo(prefix, k, own);
   const firstPhysical = physicalOf(1, beam.physicalBeamNo);
   // K5 — aynı metal gövdede canlı çözgü ön kontrolü (Türkçe 409; `physical_live_uq` ikinci hat, ham P2002 dönmesin).

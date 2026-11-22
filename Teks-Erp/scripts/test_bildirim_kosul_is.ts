@@ -20,6 +20,7 @@
 //  ④ 8040 satırı `period-guard.helper.ts` envanterinden silindi → `test_advisory_lock_namespaces` ❌
 //  ⑤ (2026-10-26) taban turundaki `continue` silindi → §W1 ❌ (807 ACILDI)
 //  ⑥ (2026-10-26) bayrak yazımındaki `resetNotificationBaselines` silindi → §W1 ❌ (damga düşmedi, 83.928 kutu satırı)
+//  ⑦ (2026-11-22, S1) `devere.siparis-gecikti` varsayılanı HERKES yapıldı → §V ❌ (tercihsiz kişiye kutu 2)
 // Global ayar yazar (`bildirim.gelenKutusuEnabled`, `production.enabled`, `devere.enabled`); `finally`de döner.
 // =============================================================================
 import { randomUUID } from "node:crypto";
@@ -42,6 +43,7 @@ import { getQualityScorecard } from "../src/services/reports/quality-scorecard.r
 import { getSubcontractScorecard } from "../src/services/reports/subcontract-scorecard.report.service";
 import type { FinishForecastRow } from "../src/services/reports/levent-bitis-tahmini.report.service";
 import type { OpenDispatchAgeRow } from "../src/services/helpers/subcontract-scorecard-query.helper";
+import type { WarpingDelayRow } from "../src/services/warping-order/delays";
 import {
   WORK_CONDITION_KINDS,
   WORK_SOURCE_EVALUATORS,
@@ -85,7 +87,7 @@ const GUN = 24 * SAAT;
 const SRC = join(__dirname, "..", "src");
 
 // ── Sahte dünya ──────────────────────────────────────────────────────────────────────────────────
-const ids = { o1: randomUUID(), o2: randomUUID(), wo: randomUUID(), item: randomUUID(), firma: randomUUID(), firma2: randomUUID(), sevk: randomUUID(), levent: randomUUID() };
+const ids = { o1: randomUUID(), o2: randomUUID(), wo: randomUUID(), item: randomUUID(), firma: randomUUID(), firma2: randomUUID(), sevk: randomUUID(), levent: randomUUID(), devere: randomUUID() };
 const d = {
   now: Date.now(),
   orders: [] as DeadlineOrderRow[],
@@ -94,6 +96,7 @@ const d = {
   dispatches: [] as OpenDispatchAgeRow[],
   shipments: [] as PlannedShipmentRow[],
   beams: [] as FinishForecastRow[],
+  warpingOrders: [] as WarpingDelayRow[],
   moduleOff: new Set<string>(),
   params: {} as Record<string, Record<string, unknown>>,
   firlat: false,
@@ -107,6 +110,11 @@ const beam = (kalanGun: number | null) => ({
   beamId: ids.levent, beamNo: `LV-${ek}`, machine: { id: randomUUID(), code: `T-${ek}`, name: "Tezgah" }, position: 1,
   kalanM: 100, gunlukOrtM: 50, kaynak: { otomatik: 50, elle: 0 }, tahminiBitisGun: null, kalanGun, hesaplanamadi: null,
 }) as FinishForecastRow;
+const devereSiparis = (state: WarpingDelayRow["state"], overdueDays: number | null) => ({
+  warpingOrderId: ids.devere, orderNo: `DV-${ek}`, status: "IN_PROGRESS", subcontractor: { id: ids.firma, name: `DEVERECI ${ek}` },
+  warpSpec: { id: randomUUID(), code: `CK-${ek}`, name: "Çözgü" }, expectedReturnAt: null, dueSource: "ORDER", overdueDays, state,
+  firstDispatchedAt: null, targetLengthM: "1000.000", receivedLengthM: "0.000", remainingLengthM: "1000.000",
+}) as WarpingDelayRow;
 const SAHTE: Partial<WorkSourceDeps> = {
   now: () => d.now,
   moduleOpen: async (kind) => okuyucu(() => !d.moduleOff.has(kind)),
@@ -116,6 +124,7 @@ const SAHTE: Partial<WorkSourceDeps> = {
   openDispatchAges: async () => okuyucu(() => d.dispatches),
   plannedShipments: async () => okuyucu(() => d.shipments),
   beamForecast: async () => okuyucu(() => d.beams),
+  overdueWarpingOrders: async () => okuyucu(() => d.warpingOrders),
   params: (kind) => ({ ...WORK_SOURCE_REAL_DEPS.params(kind), ...(d.params[kind] ?? {}) }),
 };
 
@@ -224,6 +233,8 @@ function statik(): void {
   check("§B1 fason: karne listesi ve koşul okuyucusu AYNI açık kalem parçasını kullanır",
     (fasonQ.match(/\$\{openDispatchItemsSql\(/g) ?? []).length === 2 && /queryOpenDispatchAges/.test(isKod));
   check("§B1 levent: koşul `finishForecastReport`u doğrudan çağırır", /finishForecastReport\(\{\}\)/.test(isKod));
+  check("§B1 devere: koşul kokpitin gecikme listesini (`listWarpingDelays` OVERDUE) çağırır, termin yüklemi kopyalamaz",
+    /listWarpingDelays\(\{ state: "OVERDUE" \}\)/.test(isKod) && !/expectedReturnStateOf|overdueDaysOf/.test(isKod));
   // B2 · eşik kopyası yok: is.ts'te sayı sabiti yalnız beyanlı küme (eşikler katalog paramSemasi'ndan).
   // 60_000 = dakika birimi (D4-J2 sevke hazır tarama saati; periyot ayardan `shipping.ready.scanMinutes`), eşik değil.
   const izinli = new Set([0, 1, 100, 60_000, 300_000, 86_400_000]);
@@ -262,7 +273,10 @@ async function govde(): Promise<void> {
   const geri = overrideWorkSourceDeps(SAHTE);
   try {
     const kim = await kisi("yon", ["order:read", "order:write", "workorder:read", "workorder:write", "report:quality", "quality:write",
-      "report:subcontract", "shipping:read", "shipping:write", "warpbeam:read", "warpbeam:write"]);
+      "report:subcontract", "shipping:read", "shipping:write", "warpbeam:read", "warpbeam:write", "warping-order:read"]);
+    // devere.siparis-gecikti varsayılanı KAPALI → yaşam döngüsü kutusu için tercihle açılır; ikinci kişi tercihsiz kalır.
+    await prisma.notificationPreference.create({ data: { userId: kim, kind: "devere.siparis-gecikti", channel: "UYGULAMA", enabled: true } });
+    const tercihsiz = await kisi("dvk", ["warping-order:read"]);
     const ord = (id: string, deadlineMs: number): DeadlineOrderRow => ({ id, orderNumber: `SIP-${ek}-${id.slice(0, 4)}`, deadline: new Date(deadlineMs), customerName: "TEST MUSTERI" });
 
     // ── Yaşam döngüleri ─────────────────────────────────────────────────────
@@ -281,6 +295,18 @@ async function govde(): Promise<void> {
       bozuk: () => { d.shipments = [{ id: ids.sevk, shipmentNo: `SVK-${ek}`, customerName: "TEST MUSTERI" }]; }, saglam: () => { d.shipments = []; } });
     await yasamDongusu({ kind: "dokuma.levent-bitiyor", key: () => ids.levent, user: kim,
       bozuk: () => { d.beams = [beam(0.6)]; }, saglam: () => { d.beams = [beam(3)]; } });
+    await yasamDongusu({ kind: "devere.siparis-gecikti", key: () => ids.devere, user: kim,
+      bozuk: () => { d.warpingOrders = [devereSiparis("OVERDUE", 3)]; }, saglam: () => { d.warpingOrders = []; } });
+    // §V varsayılan KAPALI: tercihsiz kişiye kutu satırı düşmez; OVERDUE dışı satır konu değildir (okuyucu süzse de).
+    const dvKutu = await prisma.notificationInbox.count({ where: { userId: tercihsiz, kind: "devere.siparis-gecikti" } });
+    d.warpingOrders = [devereSiparis("DUE_SOON", null)];
+    const dvSoon = await WORK_SOURCE_EVALUATORS["devere.siparis-gecikti"]();
+    d.warpingOrders = [devereSiparis("OVERDUE", 4)];
+    const dvLate = await WORK_SOURCE_EVALUATORS["devere.siparis-gecikti"]();
+    d.warpingOrders = [];
+    check("§V devere.siparis-gecikti: varsayılan KAPALI (tercihsiz kişiye kutu 0) · DUE_SOON konu değil · OVERDUE payload gecikmeGun",
+      dvKutu === 0 && dvSoon.length === 0 && dvLate.length === 1 && dvLate[0]!.payload.gecikmeGun === "4" && dvLate[0]!.payload.siparisNo === `DV-${ek}`,
+      `kutu=${dvKutu} soon=${dvSoon.length} late=${JSON.stringify(dvLate[0]?.payload ?? {})}`);
 
     // ── §T termin yaklaştı → geçti ──────────────────────────────────────────
     const t0 = d.now;

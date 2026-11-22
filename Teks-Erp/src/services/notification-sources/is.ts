@@ -4,7 +4,8 @@
 // Her kaynak "şu an doğru olan konu kümesini" döner; aç/kapa, tekrar bastırma ve 8040 kilidi
 // `notification-condition.job.ts`te. Rapor/ekranla AYNI soruyu soran yüklem kopyalanmaz, TEK helper'dan
 // okunur: termin `order-deadline.helper` · KK1 oranı `quality-first-share.helper` (karne `byItem`) ·
-// fason açık kalem `subcontract-scorecard-query.helper` · levent kalan gün `finishForecastReport`.
+// fason açık kalem `subcontract-scorecard-query.helper` · levent kalan gün `finishForecastReport` ·
+// devere gecikmesi `warping-order/delays` (OVERDUE).
 // Eşikler katalog `paramSemasi` ⊕ fabrika varsayılanı (`notification-params.helper`); payload'da tutar ve kişi adı yok.
 // Modülü kapalı türün kümesi boştur. Ölçülemeyen kaynak (1. kalite rolü yok) açık koşulu KORUR.
 // =============================================================================
@@ -21,6 +22,7 @@ import { collectPeriod, firstQualityCode, qualityByItem, type ScorecardBreakdown
 import { queryOpenDispatchAges, type OpenDispatchAgeRow } from "../helpers/subcontract-scorecard-query.helper";
 import { loadNotificationVisibilityEnv } from "../helpers/notification-visibility.helper";
 import { finishForecastReport, type FinishForecastRow } from "../reports/levent-bitis-tahmini.report.service";
+import { listWarpingDelays, type WarpingDelayRow } from "../warping-order/delays";
 import { registerConditionSource, type ConditionSubject } from "../../jobs/notification-condition.job";
 import { computeReadyWorks, NOTIFY_UNIT_READY_UNIT, notifyUnitNeedsIncomingDoc, type ReadyWorkUnit } from "../ready-works.service";
 import { READY_WORK_KIND as READY_WORK_KIND_CODE } from "../../constants/notification-catalog-sevkiyat";
@@ -39,6 +41,7 @@ export const WORK_CONDITION_KINDS = [
   "fason.donus-gecikti",
   "sevkiyat.onay-bekliyor",
   "dokuma.levent-bitiyor",
+  "devere.siparis-gecikti",
 ] as const satisfies readonly NotificationKind[];
 export type WorkConditionKind = (typeof WORK_CONDITION_KINDS)[number];
 
@@ -59,6 +62,8 @@ export interface WorkSourceDeps {
   openDispatchAges: () => Promise<OpenDispatchAgeRow[]>;
   plannedShipments: () => Promise<PlannedShipmentRow[]>;
   beamForecast: () => Promise<FinishForecastRow[]>;
+  /** Termini geçmiş açık devere siparişleri — fason kokpiti gecikme listesinin OVERDUE kümesi (`warping-order/delays`). */
+  overdueWarpingOrders: () => Promise<WarpingDelayRow[]>;
   /** Sevke hazır (D4-J2): ayar okuyucuları + birim satırları — yüklem `computeReadyWorks` → `ship-readiness.helper`. */
   notifyUnits: () => Promise<ShipReadyNotifyUnit[]>;
   scanMinutes: () => Promise<number>;
@@ -101,6 +106,7 @@ export const WORK_SOURCE_REAL_DEPS: Readonly<WorkSourceDeps> = {
     return rows.map((r) => ({ id: r.id, shipmentNo: r.shipmentNo, customerName: r.customer.name }));
   },
   beamForecast: async () => (await finishForecastReport({})).data.satirlar,
+  overdueWarpingOrders: async () => (await listWarpingDelays({ state: "OVERDUE" })).data.data,
   notifyUnits: () => readShippingReadyNotifyUnits(),
   scanMinutes: () => readShippingReadyScanMinutes(),
   incomingDocOpen: () => effectiveIncomingDocsEnabled(),
@@ -228,6 +234,18 @@ export async function beamEndingSubjects(): Promise<ConditionSubject[]> {
     }));
 }
 
+// ── 12b · Devere siparişi gecikti (fason kokpiti gecikme bandıyla AYNI küme; kapanan/iptal sipariş düşer) ──────
+export async function lateWarpingOrderSubjects(): Promise<ConditionSubject[]> {
+  const kind = "devere.siparis-gecikti";
+  if (!(await deps.moduleOpen(kind))) return [];
+  return (await deps.overdueWarpingOrders())
+    .filter((r) => r.state === "OVERDUE")
+    .map((r) => ({
+      key: r.warpingOrderId, type: "devere-siparis", id: r.warpingOrderId,
+      payload: { siparisId: r.warpingOrderId, siparisNo: r.orderNo, firmaAd: r.subcontractor.name, kartKod: r.warpSpec.code, gecikmeGun: String(r.overdueDays ?? 0) },
+    }));
+}
+
 // ── 13 · İş sevke hazır (D4-J2) — birim türü başına tek toplu okuma; hazırlık kararı helper'ın `state`i ──────
 export const READY_WORK_KIND = READY_WORK_KIND_CODE satisfies NotificationKind;
 /** Kaynak dakikada bir uyanır; tarama `shipping.ready.scanMinutes`te bir koşar (ayar yeniden başlatmasız değişir). */
@@ -284,9 +302,10 @@ export const WORK_SOURCE_EVALUATORS: Record<WorkConditionKind, () => Promise<Con
   "fason.donus-gecikti": lateSubcontractSubjects,
   "sevkiyat.onay-bekliyor": pendingShipmentSubjects,
   "dokuma.levent-bitiyor": beamEndingSubjects,
+  "devere.siparis-gecikti": lateWarpingOrderSubjects,
 };
 
-/** Yedi kaynağı tarayıcıya kaydeder (tekrar çağrı aynı kaydı yeniler). */
+/** Sekiz kaynağı tarayıcıya kaydeder (tekrar çağrı aynı kaydı yeniler). */
 export function registerWorkConditionSources(): void {
   for (const kind of WORK_CONDITION_KINDS) {
     registerConditionSource({ kind, periodMs: WORK_CONDITION_PERIOD_MS, evaluate: () => WORK_SOURCE_EVALUATORS[kind]() });

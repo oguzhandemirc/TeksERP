@@ -112,13 +112,13 @@ router.post("/:id/transition", requirePermission("beam-body:write"), wrap(async 
  *       200: { description: Geri alındı }
  *       409: { description: "BEAM_BODY_EVENT_NOT_LATEST · BEAM_BODY_EVENT_DOCUMENT · BEAM_BODY_EVENT_KIND · BEAM_BODY_EVENT_REVERSED" }
  */
-router.get("/:id/events/:eventId/undo-preview", requirePermission("beam-body:write"), wrap(async (req) => {
+router.get("/:id/events/:eventId/undo-preview", requirePermission("beam-body:cancel"), wrap(async (req) => {
   const id = parse(Id, req.params.id);
   const eventId = parse(Id, req.params.eventId);
   return { status: 200, body: { success: true, data: await previewUndoBeamBodyEvent(id, eventId) } };
 }));
 
-router.post("/:id/events/:eventId/undo", requirePermission("beam-body:write"), wrap(async (req) => {
+router.post("/:id/events/:eventId/undo", requirePermission("beam-body:cancel"), wrap(async (req) => {
   const id = parse(Id, req.params.id);
   const eventId = parse(Id, req.params.eventId);
   const body = parse(UndoBody, req.body);
