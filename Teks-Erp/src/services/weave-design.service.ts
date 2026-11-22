@@ -25,6 +25,7 @@ export const WEAVE_DESIGN_SELECT = {
   loomFileName: true,
   lenoSetup: true,
   lenoFrames: true,
+  drawingInNote: true,
   notes: true,
   isActive: true,
   createdAt: true,
@@ -39,7 +40,7 @@ const WEAVE_DESIGN_LIST_SELECT = { ...WEAVE_DESIGN_SELECT, liftPlan: false } sat
 export type WeaveDesignRow = Prisma.WeaveDesignGetPayload<{ select: typeof WEAVE_DESIGN_SELECT }>;
 export type WeaveDesignListRow = Prisma.WeaveDesignGetPayload<{ select: typeof WEAVE_DESIGN_LIST_SELECT }>;
 
-const ALLOWED = new Set(["code", "name", "kind", "familyLabel", "frameCount", "repeatCm", "liftPlan", "loomFileName", "lenoSetup", "lenoFrames", "notes"]);
+const ALLOWED = new Set(["code", "name", "kind", "familyLabel", "frameCount", "repeatCm", "liftPlan", "loomFileName", "lenoSetup", "lenoFrames", "drawingInNote", "notes"]);
 
 function rejectUnknown(body: Record<string, unknown>): void {
   const unknown = Object.keys(body).filter((k) => !ALLOWED.has(k));
@@ -102,7 +103,8 @@ function parseScalars(body: Record<string, unknown>, partial: boolean): Prisma.W
     out.kind = body.kind as WeaveDesignKind;
   }
   const texts: Array<[keyof typeof body & string, string, number]> = [
-    ["familyLabel", "Aile etiketi", 40], ["loomFileName", "Tezgâh desen dosyası", 64], ["lenoSetup", "Döner kurulumu", 100], ["notes", "Not", 500],
+    ["familyLabel", "Aile etiketi", 40], ["loomFileName", "Tezgâh desen dosyası", 64], ["lenoSetup", "Döner kurulumu", 100],
+    ["drawingInNote", "Tahar düzeni", 300], ["notes", "Not", 500],
   ];
   for (const [k, label, max] of texts) {
     const v = parseTextField(body[k], label, max);
@@ -127,7 +129,7 @@ function conflict(e: unknown): never {
 function auditView(r: WeaveDesignRow): Record<string, unknown> {
   return {
     code: r.code, name: r.name, kind: r.kind, familyLabel: r.familyLabel, frameCount: r.frameCount,
-    repeatCm: r.repeatCm?.toString() ?? null, loomFileName: r.loomFileName, lenoSetup: r.lenoSetup, lenoFrames: r.lenoFrames, notes: r.notes,
+    repeatCm: r.repeatCm?.toString() ?? null, loomFileName: r.loomFileName, lenoSetup: r.lenoSetup, lenoFrames: r.lenoFrames, drawingInNote: r.drawingInNote, notes: r.notes,
     liftPlanSize: Array.isArray(r.liftPlan) ? r.liftPlan.length : null,
   };
 }
