@@ -31,8 +31,17 @@ export interface MachineRunTabletContext {
 export interface RunConstruction {
   weavingOrderId: string;
   variantCode: string | null;
-  design: { code: string; name: string; loomFileName: string | null; frameCount: number | null; repeatCm: number | null } | null;
+  design: {
+    code: string; name: string; loomFileName: string | null; frameCount: number | null; repeatCm: number | null;
+    /** Kart görsel alanları (2026-11) — eski sunucuda YOK; yoksa görsel gizlenir. Armür: satır = atkı, sütun = çerçeve, 0/1. */
+    liftPlan?: number[][] | null;
+    lenoFrames?: number[];
+    kind?: string;
+    drawingInNote?: string | null;
+  } | null;
   weft: {
+    /** Atkı başına 1-tabanlı iplik no (sunucu açar; istemci hesaplamaz) — eski sunucuda YOK. */
+    pickSequence?: number[] | null;
     code: string;
     name: string;
     picksPerCm: number | null;
