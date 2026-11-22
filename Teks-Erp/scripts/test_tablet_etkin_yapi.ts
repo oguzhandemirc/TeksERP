@@ -2,7 +2,8 @@
 // test_tablet_etkin_yapi — tablet iş kartında dokuma işinin etkin yapısı, SALT-OKUNUR (Seyitoğlu SY-M4).
 // Kabul (§16.1): yapısız işte ekran aynı (uç `null` döner → tablet hiçbir şey çizmez); yeni zorunlu alan 0
 // (uç salt-okuma GET'tir, gövde almaz). Yapılı işte atkı sırası + armür dosya adı + sıklık + varyant iplik
-// değişimi etkin yapı tek kaynağından gelir; armür ızgarası tablete gitmez. Fikstür `TEST-SYM4-<ts>`.
+// değişimi etkin yapı tek kaynağından gelir; kart görseli için armür planı + seçici EKLEME alan olarak
+// gider (2026-11-22, eski alanlar yerinde). Fikstür `TEST-SYM4-<ts>`.
 // =============================================================================
 import * as fs from "fs";
 import * as path from "path";
@@ -74,7 +75,16 @@ async function main(): Promise<void> {
   const seq = (c?.weft?.yarns ?? []).map((y) => `${y.letter}:${y.yarnCode.slice(TAG.length + 1)}:${y.picksInRepeat}${y.swapped ? "*" : ""}`).join(" ");
   check("§2c varyant değişimi uygulanmış atkı sırası (C → Y1, işaretli)", seq === "A:Y1:8 B:Y2:1 C:Y1:1*", seq);
   check("§2d varyant kodu taşınır", c?.variantCode === "V02");
-  check("§2e armür ızgarası tablete gitmez", c !== null && !JSON.stringify(c).includes("liftPlan"));
+  // Kart görseli (2026-11-22): armür planı + seçici EKLEME alan olarak gider; eski alanlar yerinde.
+  check("§2e kart görseli alanları: armür planı, tür, döner çerçeve, tahar notu",
+    JSON.stringify(c?.design?.liftPlan) === "[[1,0],[0,1]]" && c?.design?.kind === "DOBBY" && JSON.stringify(c.design.lenoFrames) === "[]" && c.design.drawingInNote === null,
+    JSON.stringify(c?.design));
+  check("§2f atkı seçici = sıra kodu açılımı (A4 B1 A4 C1 → 10 atkı)", c?.weft?.pickSequence?.join("") === "1111211113", JSON.stringify(c?.weft?.pickSequence));
+  const keys = (o: object | null | undefined): string => Object.keys(o ?? {}).sort().join(",");
+  check("§2g eski alanların hepsi yerinde (yalnız EKLEME)",
+    ["code", "frameCount", "loomFileName", "name", "repeatCm"].every((k) => keys(c?.design).split(",").includes(k))
+    && ["code", "name", "picksInRepeatTotal", "picksPerCm", "sequenceCode", "weftProgramNo", "yarns"].every((k) => keys(c?.weft).split(",").includes(k)),
+    `${keys(c?.design)} | ${keys(c?.weft)}`);
 
   console.log("§3 kapılar");
   let nf: AppError | null = null;

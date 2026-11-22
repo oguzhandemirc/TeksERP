@@ -16,7 +16,7 @@ export const WARPING_ORDER_SELECT = {
   id: true, orderNo: true, status: true, beamCount: true, targetLengthM: true, fixedWasteM: true, wasteTolerancePct: true,
   feeUnit: true, feeUnitPrice: true, feeCurrency: true, expectedReturnAt: true, notes: true,
   completedAt: true, cancelledAt: true, cancelReason: true, createdAt: true, updatedAt: true, createdById: true,
-  warpSpec: { select: { id: true, code: true, name: true, sequenceNote: true, reedNo: true, reedWidthCm: true, endsPerDent: true, endsCount: true } },
+  warpSpec: { select: { id: true, code: true, name: true, sequenceNote: true, reedNo: true, reedWidthCm: true, endsPerDent: true, endsCount: true, selvedgeEnds: true } },
   subcontractor: { select: { id: true, code: true, name: true } },
   beamLines: { select: { beamCount: true, beamLengthM: true, sortOrder: true }, orderBy: { sortOrder: "asc" } },
   extraSpecs: { select: { sortOrder: true, warpSpec: { select: { id: true, code: true, name: true } } }, orderBy: { sortOrder: "asc" } },
@@ -32,7 +32,7 @@ export interface WarpingOrderDto {
   id: string;
   orderNo: string;
   status: WarpingOrderStatus;
-  warpSpec: { id: string; code: string; name: string; sequenceNote: string | null; reedNo: string | null; reedWidthCm: string | null; endsPerDent: number | null };
+  warpSpec: { id: string; code: string; name: string; sequenceNote: string | null; reedNo: string | null; reedWidthCm: string | null; endsPerDent: number | null; selvedgeEnds: number | null };
   subcontractor: { id: string; code: string; name: string };
   beamLines: Array<{ beamCount: number; beamLengthM: string }>;
   /** NULL = levent adedi belli değil (`beamLines` boş); eski istemci yalnız metinde gösterir. */
@@ -84,6 +84,7 @@ export function toWarpingOrderDto(r: Row): WarpingOrderDto {
     warpSpec: {
       id: r.warpSpec.id, code: r.warpSpec.code, name: r.warpSpec.name, sequenceNote: r.warpSpec.sequenceNote,
       reedNo: r.warpSpec.reedNo?.toString() ?? null, reedWidthCm: r.warpSpec.reedWidthCm?.toString() ?? null, endsPerDent: r.warpSpec.endsPerDent,
+      selvedgeEnds: r.warpSpec.selvedgeEnds,
     },
     subcontractor: r.subcontractor,
     beamLines: r.beamLines.map((l) => ({ beamCount: l.beamCount, beamLengthM: l.beamLengthM.toFixed(3) })),

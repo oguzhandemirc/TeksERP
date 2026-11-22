@@ -100,7 +100,8 @@ router.get("/tablet-context", requireAnyPermission("loom:run", ...MOBILE_DOKUMA)
  *     tags: [MachineRuns]
  *     summary: Tablet iş kartı — dokuma iş emrinin etkin yapısı (atkı sırası, armür dosyası, sıklık), SALT-OKUNUR (SY-M4)
  *     description: >
- *       `resolveEffectiveConstruction(itemId, recipeId)`in dar tablet biçimi; armür ızgarası gönderilmez.
+ *       `resolveEffectiveConstruction(itemId, recipeId)`in dar tablet biçimi; kart görseli için armür planı,
+ *       döner çerçeveler ve atkı seçici (`weft.pickSequence`) EKLEME alan olarak gider.
  *       Yapısız iş → `data: null` (tablet hiçbir şey çizmez).
  *     security: [{ bearerAuth: [] }]
  *     parameters:

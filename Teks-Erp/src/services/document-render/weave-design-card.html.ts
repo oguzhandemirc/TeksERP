@@ -7,6 +7,8 @@
 // (`weave-card.service`), burada hesap yok. Saat yalnız `fmt-date` (fabrika dilimi).
 // =============================================================================
 import { escapeHtml } from "../helpers/label-html.shared";
+import type { WeaveDrawdown } from "../helpers/weave-drawdown.helper";
+import { TERIM } from "../../constants/terim";
 
 export interface WeaveCardYarn {
   code: string;
@@ -39,6 +41,43 @@ export interface WeaveCardView {
   variants: Array<{ variantCode: string | null; name: string; swaps: Array<WeaveCardYarn & { no: number }> }>;
   warnings: string[];
   printedAtText: string;
+  /** İş emrinden basımda iş emri no; ürün kartında null/yok (bugünkü başlık). */
+  weavingOrderNumber?: string | null;
+  /** Kumaş görünümü (servis `computeDrawdown`); LENO = açıklama, null/yok = armür yok (blok basılmaz). */
+  fabric?: ({ kind: "DRAWDOWN" } & WeaveDrawdown) | { kind: "LENO" } | null;
+}
+
+/** Basım gri tonları (siyah-beyaz yazıcı): 0 = çözgü üstte, k = k. atkı ipliği. */
+const FABRIC_TONES = ["#222", "#fff", "#b8b8b8", "#7a7a7a", "#e0e0e0", "#999", "#d0d0d0", "#5c5c5c"];
+const fabricTone = (v: number): string => FABRIC_TONES[v] ?? FABRIC_TONES[1 + ((v - 1) % (FABRIC_TONES.length - 1))]!;
+
+/** Tahar şeridi (üstte, 1. çerçeve alt satırda) + kumaş görünümü; tek SVG, renk başına tek `<path>`. */
+function fabricHtml(v: WeaveCardView): string {
+  const f = v.fabric;
+  if (!f) return "";
+  // Stil blokla birlikte: kumaş görünümü olmayan kartın basımı bayt-aynı kalır.
+  const css = `<style>.bottom>.fabric{flex:0 0 52mm}.fab{display:block;margin:1mm 0}</style>`;
+  if (f.kind === "LENO") {
+    return `<div class="fabric">${css}<h3>KUMAŞ GÖRÜNÜMÜ</h3><p class="muted">Döner (leno) desende kumaş görünümü çizilmez: çapraz dönen teller kare ızgarayla gösterilemez.</p></div>`;
+  }
+  const g = f.groundFrames.length;
+  const top = g + 1;
+  const rows = top + f.picks;
+  const cell = Math.round(Math.min(2.2, 48 / f.ends, 70 / rows) * 100) / 100;
+  const paths = new Map<number, string[]>();
+  const add = (val: number, x: number, y: number): void => { (paths.get(val) ?? paths.set(val, []).get(val)!).push(`M${x} ${y}h1v1h-1z`); };
+  f.threading.forEach((fr, x) => add(0, x, g - 1 - f.groundFrames.indexOf(fr)));
+  f.cells.forEach((row, j) => row.forEach((val, x) => { if (val !== 1) add(val, x, top + j); }));
+  const lines: string[] = [];
+  for (let x = 0; x <= f.ends; x++) lines.push(`M${x} 0v${g}M${x} ${top}v${f.picks}`);
+  for (let y = 0; y <= g; y++) lines.push(`M0 ${y}h${f.ends}`);
+  for (let y = 0; y <= f.picks; y++) lines.push(`M0 ${top + y}h${f.ends}`);
+  const body = [...paths.entries()].map(([val, d]) => `<path fill="${fabricTone(val)}" d="${d.join("")}"/>`).join("");
+  const svg = `<svg class="fab" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${f.ends} ${rows}" width="${Math.round(f.ends * cell * 100) / 100}mm" height="${Math.round(rows * cell * 100) / 100}mm" shape-rendering="crispEdges">`
+    + `<rect x="0" y="0" width="${f.ends}" height="${g}" fill="#fff"/><rect x="0" y="${top}" width="${f.ends}" height="${f.picks}" fill="${fabricTone(1)}"/>`
+    + `${body}<path fill="none" stroke="#999" stroke-width="0.06" d="${lines.join("")}"/></svg>`;
+  const tones = (v.weft?.yarns.length ?? 0) > 1 ? ` · atkı ipliği: ${v.weft!.yarns.map((y) => `${y.no}. <i class="sw" style="background:${fabricTone(y.no)}"></i>`).join(" ")}` : "";
+  return `<div class="fabric">${css}<h3>KUMAŞ GÖRÜNÜMÜ</h3>${svg}<div class="muted">Üstte tahar (düz tahar varsayıldı, ${g} zemin çerçevesi) · dolu kare = çözgü üstte${tones}</div></div>`;
 }
 
 const e = (v: unknown): string => escapeHtml(String(v ?? ""));
@@ -143,13 +182,13 @@ h1{text-align:center;font-size:16pt;margin:0 0 2mm}h3{font-size:10pt;margin:4mm 
 .foot{margin-top:4mm;font-size:7.5pt;color:#666;text-align:right}
 </style></head><body>
 <h1>DESEN NO : ${e(v.designNo)}</h1>
-<div class="sub">${e(v.itemName)}${meta ? `<br>${meta}` : ""}</div>
+<div class="sub">${e(v.itemName)}${v.weavingOrderNumber ? ` · ${TERIM.dokumaIsEmri.tekil}: <b>${e(v.weavingOrderNumber)}</b>` : ""}${meta ? `<br>${meta}` : ""}</div>
 ${gridHtml(v)}
 <div class="bottom">
 <div><h3>ATKI İPLİKLERİ</h3>${weftYarns}${w?.sequenceCode ? `<div class="kv muted">Seçici sırası: ${e(w.sequenceCode)}</div>` : ""}</div>
 <div>${warpsHtml(v)}
 ${d?.drawingInNote ? `<div class="kv"><b>TAHAR :</b> ${e(d.drawingInNote)}</div>` : ""}<div class="kv"><b>ATKI SIKLIĞI :</b> ${w?.picksPerCm ? `${e(w.picksPerCm)} ATKI/CM` : "—"}</div>
-${w ? `<div class="kv muted">Atkı kartı: ${e(w.code)} · ${e(w.name)}${w.weftProgramNo ? ` · Program ${e(w.weftProgramNo)}` : ""}</div>` : ""}</div>
+${w ? `<div class="kv muted">Atkı kartı: ${e(w.code)} · ${e(w.name)}${w.weftProgramNo ? ` · Program ${e(w.weftProgramNo)}` : ""}</div>` : ""}</div>${fabricHtml(v)}
 </div>
 ${variantsHtml(v)}
 ${v.warnings.length ? `<div class="warn">${v.warnings.map((x) => `⚠ ${e(x)}`).join("<br>")}</div>` : ""}

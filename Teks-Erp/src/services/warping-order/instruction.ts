@@ -5,6 +5,7 @@
 // kart(lar), iplik başına harf + tel + denye, dizilim notu, tarak, levent adedi × boy, termin, not.
 // =============================================================================
 import type { WarpingOrderDto } from "./read";
+import { expandWarpSequence, type WarpEndsSequence } from "../helpers/warp-sequence.helper";
 
 export interface WarpingInstruction {
   orderNo: string;
@@ -15,6 +16,10 @@ export interface WarpingInstruction {
   totalEnds: number;
   yarns: Array<{ letter: string; code: string; name: string; endsCount: number; denier: string }>;
   sequenceNote: string | null;
+  /** Kart görseli (2026-11-22): dizilim notunun tel tel açılımı (harfler `yarns` sırası); not yok/okunamaz → null. */
+  endsSequence: WarpEndsSequence | null;
+  /** Kenar teli (toplam telin içinde) — tarak planında ayrı çizilir; bilinmiyorsa null. */
+  selvedgeEnds: number | null;
   reed: { reedNo: string | null; reedWidthCm: string | null; endsPerDent: number | null } | null;
   beamLines: Array<{ beamCount: number; beamLengthM: string }>;
   beamCount: number | null;
@@ -36,6 +41,8 @@ export function buildWarpingInstruction(o: WarpingOrderDto): WarpingInstruction 
     totalEnds: o.totals.endsCount,
     yarns: o.yarns.map((y) => ({ letter: y.letter, code: y.code, name: y.name, endsCount: y.endsCount, denier: y.denier })),
     sequenceNote: r.sequenceNote,
+    endsSequence: expandWarpSequence(r.sequenceNote, o.yarns.map((y) => y.endsCount)),
+    selvedgeEnds: r.selvedgeEnds,
     reed: hasReed ? { reedNo: r.reedNo, reedWidthCm: r.reedWidthCm, endsPerDent: r.endsPerDent } : null,
     beamLines: o.beamLines,
     beamCount: o.beamCount,
