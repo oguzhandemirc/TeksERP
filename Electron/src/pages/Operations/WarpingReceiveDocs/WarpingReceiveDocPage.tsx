@@ -7,7 +7,9 @@
 // =============================================================================
 import { useState } from "react";
 import { useParams } from "react-router-dom";
-import { Undo2 } from "lucide-react";
+import { IdCard, Undo2 } from "lucide-react";
+import { liveBeamsOfDoc } from "@/pages/Operations/WarpingOrders/receive-doc-model";
+import { printBeamCardsWithToast } from "@/pages/Operations/WarpBeams/beamCardPrint";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
 import { ReceiveDocCancelDialog } from "./ReceiveDocCancelDialog";
@@ -99,9 +101,14 @@ export function WarpingReceiveDocPage() {
         onBack={() => openTarget(WARPING_RECEIVE_DOCS_PATH)}
         parent={{ label: "Devere Dönüş Kabulleri", to: WARPING_RECEIVE_DOCS_PATH }}
         actions={d && d.totals.liveBeamCount > 0 ? (
-          <PermissionGate permission="warpbeam:cancel">
-            <Button size="sm" variant="outline" className="text-destructive" onClick={() => setCancelOpen(true)}><Undo2 className="mr-1 h-4 w-4" /> Belgeyi iptal et</Button>
-          </PermissionGate>
+          <div className="flex gap-2">
+            <PermissionGate permission="warpbeam:read">
+              <Button size="sm" variant="outline" onClick={() => void printBeamCardsWithToast(liveBeamsOfDoc(d))}><IdCard className="mr-1 h-4 w-4" /> Levent kartlarını bas</Button>
+            </PermissionGate>
+            <PermissionGate permission="warpbeam:cancel">
+              <Button size="sm" variant="outline" className="text-destructive" onClick={() => setCancelOpen(true)}><Undo2 className="mr-1 h-4 w-4" /> Belgeyi iptal et</Button>
+            </PermissionGate>
+          </div>
         ) : undefined}
       />
       <PageBody className="space-y-6 p-4 sm:p-6">

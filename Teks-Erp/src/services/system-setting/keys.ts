@@ -309,6 +309,9 @@ export const SETTING_KEYS = {
   /** [PROFİL] Devere H1: kapanış önizlemesinde kalan ipliğin varsayılan önerisi — `WASTE_UP_TO_PLAN` (VARSAYILAN, A1-a) ·
    *  `KEEP` · `RETURN` · `WASTE_ALL`. Enum; kalıp `DEVERE_SETTLE_DEFAULTS` (`devere-settle.ts`). */
   DEVERE_SETTLE_DEFAULT: "devere.settleDefault",
+  /** [PROFİL] Devere-levent S5: panelde kabul kaydedilince A6 levent kartları — `OFF` (VARSAYILAN, bugün) · `ASK` öner ·
+   *  `ALWAYS` doğrudan toplu basım. Enum; kalıp `DEVERE_BEAM_CARD_AUTO_PRINTS` (`devere-beam-card.ts`). Yalnız panel okur. */
+  DEVERE_BEAM_CARD_AUTO_PRINT: "devere.beamCardAutoPrint",
   /** [PROFİL] Devere A1: deverecinin kendi kusuruyla yeniden sardığı levent beklenen ücrete girer mi. DEFAULT true
    *  (kullanıcı kararı 2026-11-20; bugün yeniden sarım işareti yok → beklenen bayt-aynı). Yalnız UYARI hesabını etkiler. */
   DEVERE_REWORK_BILLABLE: "devere.reworkBillable",
