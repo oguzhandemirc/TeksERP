@@ -43,7 +43,9 @@ export type PrintedDocType =
   | "RECONCILIATION_LETTER"
   | "CHEQUE_DELIVERY_NOTE"
   // Tam stok sayımı (2026-08-15, J2 #19) — fark fişinin donmuş tutanağı.
-  | "STOCK_COUNT";
+  | "STOCK_COUNT"
+  // Levent kartı (A6, 2026-11-22) — sarımdan sonra levent kılıfına takılır.
+  | "WARP_BEAM_CARD";
 
 export type PrintedDocStatus = "ACTIVE" | "SUPERSEDED" | "VOIDED";
 

@@ -14,6 +14,7 @@ import { licenseModuleBlock, type LicenseModuleBlock } from "../../lib/license/m
 import { MODULE_SETTING_KEYS } from "../../constants/module-flags";
 import { type CariHoldDefaultScope, type CariHoldEmanetShipment, type CariHoldReleaseBySamePerson, type CostPresentationCurrency, type DevereFasonLotPolicy, type DevereBeamBodyMode, type DevereBeamBodyMachineFit, type DokumaRollBirth, type ExpenseAllocationClosedWorkOrder, type ExpenseAllocationField, type ExpenseCategorySuggestions, type KursunGramPriceBasis, type KursunMachineAssignMode, type KursunMeterCapture, type KursunMeterStockMode, type KursunMeterVarianceApproval, type KursunMeterVarianceBasis, type LabelCopiesSource, type LabelCustomerCodeAt, type LabelCustomerCodeMissing, type LoginMethodsConfig, type OrderProductionProposalMode, type PackageNoMode, type PackageNumbering, type PackingGroupMode, type PackingGroupNumbering, type PackingPoolPackageNo, type ProductionRouteMode, type ProductionScanRouteStations, type ProfitCategoryClassMap, type ProfitConsumablePriceSource, type ProfitMachineTimeMode, type ProfitOverheadKey, type ProfitSubcontractSource, type RiskLimitCurrencyMode, type SackDumpNameMode, type SameTypeSessionPolicy, type ServiceBillingBrodeUnit, type ServiceBillingMeterBasis, type ServiceBillingMissingMeter, type ServiceBillingPriceDate, type ServiceBillingTrigger, type ShipReadyNotifyUnit, type ShipReadyRule, type ShipmentOrderRequirement, type ShippingDocCekiNameMode, type ShippingDocItemNameMode, type ShippingInvoiceMode, type ShippingOrderCoverage, type ShippingSackSeqPrefix, type StockAgingScope, type StockAgingSource, type TamburCalibrationCheck, type TamburChildWidthSource, type TamburLabelPrintTiming, type TamburPlanWidthCheck, type TezgahAlarmNoShiftMode, type WeavingStandardMethod, type WebTotpPolicy } from "./defaults";
 import { type DevereSettleDefault } from "./devere-settle";
+import { type DevereBeamCardAutoPrint } from "./devere-beam-card";
 import { type DevereDuplicateDeliveryNote, type DevereReceiveWeighing } from "./devere-receive";
 import { type CompanyLetterhead, type DocumentsConfig } from "./documents";
 import { SETTING_KEYS } from "./keys";
@@ -231,6 +232,8 @@ export interface FeatureFlags {
   devereBeamBodyMachineFit: DevereBeamBodyMachineFit;
   /** Devere H1: kapanış önizlemesinde kalan ipliğin varsayılan önerisi (varsayılan `WASTE_UP_TO_PLAN` = A1-a, bugün). */
   devereSettleDefault: DevereSettleDefault;
+  /** Devere-levent S5: kabul sonrası levent kartı basımı kapalı/sor/hep (varsayılan `OFF` = bugün). */
+  devereBeamCardAutoPrint: DevereBeamCardAutoPrint;
   /** Devere A1: yeniden sarım beklenen ücrete girer mi (varsayılan AÇIK). */
   devereReworkBillable: boolean;
   /** Devere ek C1: kusurlu levent reddinde fotoğraf zorunlu (varsayılan KAPALI). */

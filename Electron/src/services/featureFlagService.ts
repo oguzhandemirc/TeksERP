@@ -446,6 +446,8 @@ export interface FeatureFlags {
   devereBeamBodyMachineFit: DevereBeamBodyMachineFit;
   /** Devere H1: kapanışta kalan ipliğin varsayılan önerisi (backend `DEFAULT_DEVERE_SETTLE_DEFAULT` = WASTE_UP_TO_PLAN). */
   devereSettleDefault: DevereSettleDefault;
+  /** Devere-levent S5: kabul sonrası levent kartı basımı (backend `DEFAULT_DEVERE_BEAM_CARD_AUTO_PRINT` = OFF). */
+  devereBeamCardAutoPrint: DevereBeamCardAutoPrint;
   /** Devere A1: yeniden sarılan levent beklenen devere ücretine girer mi (backend `readDevereReworkBillable`, kayıt yok = true). */
   devereReworkBillable: boolean;
   /** Devere ek C1: kusurlu levent reddinde fotoğraf zorunlu (backend `readDevereRejectPhotoRequired`, kayıt yok = false). */
@@ -965,6 +967,8 @@ export type DevereBeamBodyMode = "OFF" | "OPTIONAL" | "REQUIRED";
 export type DevereBeamBodyMachineFit = "WARN" | "BLOCK";
 /** Devere H1 — backend `DevereSettleDefault` aynası. */
 export type DevereSettleDefault = "WASTE_UP_TO_PLAN" | "KEEP" | "RETURN" | "WASTE_ALL";
+/** Devere-levent S5 — backend `DevereBeamCardAutoPrint` aynası. */
+export type DevereBeamCardAutoPrint = "OFF" | "ASK" | "ALWAYS";
 /** Devere ek E1 — backend `DevereDuplicateDeliveryNote` / `DevereReceiveWeighing` aynası. */
 export type DevereDuplicateDeliveryNote = "ALLOW" | "WARN" | "BLOCK";
 export type DevereReceiveWeighing = "OFF" | "OPTIONAL" | "REQUIRED";

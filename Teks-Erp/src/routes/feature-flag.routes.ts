@@ -406,6 +406,8 @@ export const updateSchema = z.strictObject({
   devereBeamBodyMode: z.enum(["OFF", "OPTIONAL", "REQUIRED"]).optional(),
   devereBeamBodyMachineFit: z.enum(["WARN", "BLOCK"]).optional(),
   devereSettleDefault: z.enum(["WASTE_UP_TO_PLAN", "KEEP", "RETURN", "WASTE_ALL"]).optional(),
+  /** Devere-levent S5: kabul sonrası levent kartı basımı (enum; `DEVERE_BEAM_CARD_AUTO_PRINTS` ile birebir). */
+  devereBeamCardAutoPrint: z.enum(["OFF", "ASK", "ALWAYS"]).optional(),
   /** Devere A1: yeniden sarım beklenen devere ücretine girer mi (varsayılan true). */
   devereReworkBillable: z.boolean().optional(),
   /** Devere ek C1: kusurlu levent reddinde fotoğraf zorunlu (varsayılan false). */

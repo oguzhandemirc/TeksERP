@@ -158,6 +158,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   devereBeamBodyMachineFit: A("WARN"), // takmayı engellemeden uyumsuzluğu görünür kılar (varsayılan)
   devereFasonLotPolicy: A("WARN"), // üç kip de iş görür; WARN sevki engellemeden karışımı görünür kılar (varsayılan)
   devereSettleDefault: A("WASTE_UP_TO_PLAN"), // varsayılan = bugünkü A1-a; diğer kipler yalnız gövdesiz kapanış önerisini değiştirir
+  devereBeamCardAutoPrint: A("ASK"), // panel kabulünden sonra kart önerisini açar; ALWAYS baskı penceresini zorla açardı
   devereReworkBillable: A(true), // yeniden sarımı beklenen ücrete katan değer (varsayılan)
   devereRejectPhotoRequired: A(true), // fotoğraf kapısını devreye sokan değer: fotoğrafsız ret 400 (C1)
   devereDuplicateDeliveryNote: A("WARN"), // tekrarı görünür kılar, eski fikstürlerin aynı irsaliyesini engellemez (varsayılan)
