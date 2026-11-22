@@ -14,6 +14,8 @@ import {
 } from "../../constants/beam-body";
 import { BEAM_BODY_EVENT_SELECT, beamBodyEventUndoBlock } from "../helpers/beam-body.helper";
 import { sequentialTx } from "../helpers/tx-sequential-relations.helper";
+import { matchBeamBodyNo } from "../helpers/beam-body-no.helper";
+import { readDevereBodyNoLooseMatch } from "../system-setting/modules";
 
 type Db = Pick<Prisma.TransactionClient, "beamBody">;
 type IdCond = string | { in: string[] } | null;
@@ -193,10 +195,24 @@ export async function listBeamBodyEvents(bodyId: string): Promise<BeamBodyEventD
   });
 }
 
-/** QR/barkod çözümü: gövde no büyük/küçük harf duyarsız tam eşleşme (QR değeri = `bodyNo`). */
-export async function resolveBeamBody(code: string): Promise<BeamBodyDto> {
+export interface ResolvedBeamBody {
+  data: BeamBodyDto & { matchedBy?: "NORMALIZED" };
+  warnings?: string[];
+}
+
+/**
+ * QR/barkod çözümü: gövde no büyük/küçük harf duyarsız tam eşleşme (QR değeri = `bodyNo`). Birebir yoksa ve
+ * `devere.bodyNoLooseMatch` açıksa normalize eşleşme (S3): tek aday → döner + `matchedBy` + uyarı; çok aday → 409.
+ */
+export async function resolveBeamBody(code: string): Promise<ResolvedBeamBody> {
   const c = code.trim();
-  const row = c ? await prisma.beamBody.findFirst({ where: { bodyNo: { equals: c, mode: "insensitive" } }, select: BEAM_BODY_SELECT }) : null;
+  const m = await matchBeamBodyNo(prisma, c, { loose: await readDevereBodyNoLooseMatch() });
+  if (m.ids.length > 1 && m.matchedBy === "NORMALIZED") {
+    const candidates = await prisma.beamBody.findMany({ where: { id: { in: m.ids } }, select: { id: true, bodyNo: true, status: true }, orderBy: { bodyNo: "asc" } });
+    throw AppError.conflict(`"${c}" birden çok gövdeye uyuyor (${candidates.map((x) => x.bodyNo).join(", ")}) — gövde no'yu tam yazın ya da QR'ı okutun`, { code: "BEAM_BODY_NO_AMBIGUOUS", bodyNo: c, candidates });
+  }
+  const row = m.ids[0] ? await prisma.beamBody.findUnique({ where: { id: m.ids[0] }, select: BEAM_BODY_SELECT }) : null;
   if (!row) throw AppError.notFound(`"${c}" numaralı levent gövdesi tanımlı değil`, { code: "BEAM_BODY_NOT_FOUND", bodyNo: c });
-  return toBeamBodyDto(row);
+  if (m.matchedBy === "EXACT") return { data: toBeamBodyDto(row) };
+  return { data: { ...toBeamBodyDto(row), matchedBy: "NORMALIZED" }, warnings: [`"${c}" birebir yok — ${row.bodyNo} ile eşleştirildi (esnek gövde no). Doğru gövde olduğunu kontrol edin.`] };
 }

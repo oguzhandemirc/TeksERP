@@ -159,6 +159,8 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   devereSettleDefault: A("WASTE_UP_TO_PLAN"), // varsayılan = bugünkü A1-a; diğer kipler yalnız gövdesiz kapanış önerisini değiştirir
   devereReworkBillable: A(true), // yeniden sarımı beklenen ücrete katan değer (varsayılan)
   devereRejectPhotoRequired: A(true), // fotoğraf kapısını devreye sokan değer: fotoğrafsız ret 400 (C1)
+  devereBodyNoLooseMatch: A(true), // birebir yoksa normalize eşleşme devreye girer (S3)
+  devereResidualTareFromBody: A(true), // darasız tartılı bitişte gövde darası kullanılır (S3)
   devereDuplicateDeliveryNote: A("WARN"), // tekrarı görünür kılar, eski fikstürlerin aynı irsaliyesini engellemez (varsayılan)
   devereReceiveWeighing: A("OPTIONAL"), // REQUIRED tartısız eski kabul fikstürlerini düşürür; varsayılan = bugün
   devereDenierSuggestMinBeams: A(3), // yalnız rapor önerisi; varsayılan (kullanıcı kararı)

@@ -18,6 +18,8 @@ import {
 } from "../helpers/beam-body.helper";
 import { BEAM_BODY_DEACTIVATABLE_STATUSES, BEAM_BODY_REGISTER_STATUSES, BEAM_BODY_STATUS_LABELS, type BeamBodyOwnerKind } from "../../constants/beam-body";
 import { loadBeamBodyDto, type BeamBodyDto } from "./read";
+import { looseMatchBeamBodies } from "../helpers/beam-body-no.helper";
+import { readDevereBodyNoLooseMatch } from "../system-setting/modules";
 
 type Tx = Prisma.TransactionClient;
 const CODE_SCOPE = "beamBody";
@@ -135,7 +137,7 @@ export async function registerNewBeamBodyTx(
 }
 
 interface PriorBody { id: string; bodyNo: string; ownerCustomerId: string | null; ownerRole: BeamBodyOwnerRole | null }
-export interface CreateBeamBodyResult { data: BeamBodyDto; replayed: boolean }
+export interface CreateBeamBodyResult { data: BeamBodyDto; replayed: boolean; warnings?: string[] }
 
 function replayFor(input: BeamBodyCreateInput, manualNo: string | null) {
   return tokenReplay<PriorBody, CreateBeamBodyResult>({
@@ -165,8 +167,16 @@ export async function createBeamBody(input: BeamBodyCreateInput, userId: string)
       newData: { bodyNo: out.bodyNo, ...owner, status, ...place, widthCm: dims.widthCm?.toString() ?? null, flangeDiameterCm: dims.flangeDiameterCm?.toString() ?? null, tareKg: dims.tareKg?.toString() ?? null, machineIds },
     });
     await logBeamBodyEventAudit({ userId, eventId: out.eventId, kind: "REGISTER", data: { bodyId: out.bodyId, bodyNo: out.bodyNo, toStatus: status } });
-    return { data: await loadBeamBodyDto(prisma, out.bodyId), replayed: false };
+    const warnings = await looseNoCollisionWarnings(out.bodyId, out.bodyNo);
+    return { data: await loadBeamBodyDto(prisma, out.bodyId), replayed: false, ...(warnings.length ? { warnings } : {}) };
   });
+}
+
+/** S3: esnek eşleşme açıkken yeni no başka gövdelerle normalize çakışıyorsa uyarır (engellemez; okutma 409'a düşer). */
+async function looseNoCollisionWarnings(bodyId: string, bodyNo: string): Promise<string[]> {
+  if (!(await readDevereBodyNoLooseMatch())) return [];
+  const others = (await looseMatchBeamBodies(prisma, bodyNo)).filter((r) => r.id !== bodyId);
+  return others.length ? [`${bodyNo} esnek okumada ${others.map((r) => r.bodyNo).join(", ")} ile karışabilir — elle yazılan no'da birden çok gövde çıkar; QR okutun.`] : [];
 }
 
 /**

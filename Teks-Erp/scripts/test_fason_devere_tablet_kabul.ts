@@ -234,7 +234,7 @@ async function main(): Promise<void> {
       all.settings.beamBodyMode === "OPTIONAL" && all.settings.duplicateDeliveryNote === "BLOCK" && all.settings.receiveWeighing === "REQUIRED" && all.limits.maxOrders > 0 && all.limits.maxBeamsPerOrder > 0);
     const only2 = await getWarpingTabletContext({ subcontractorId: sub2.id });
     check("§3f devereci süzgeci sunucuda: yalnız C'nin deverecisi", only2.orders.length >= 1 && only2.orders.every((o) => o.subcontractor.id === sub2.id) && only2.orders.some((o) => o.id === C));
-    const res = await resolveBeamBody(bodyNo.toLowerCase());
+    const res = (await resolveBeamBody(bodyNo.toLowerCase())).data;
     const bodyBeam = beams.find((b) => b.beamBodyId !== null)!;
     check("§3g gövde QR çözümü (harf duyarsız) → bağlı sarım (D8 takma; B3 DTO)", res.currentWarpBeam?.id === bodyBeam.id, JSON.stringify(res.currentWarpBeam ?? null));
     await setSetting(SETTING_KEYS.DEVERE_ENABLED, "false");

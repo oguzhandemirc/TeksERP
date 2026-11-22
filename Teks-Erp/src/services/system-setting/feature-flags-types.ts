@@ -233,6 +233,10 @@ export interface FeatureFlags {
   devereReworkBillable: boolean;
   /** Devere ek C1: kusurlu levent reddinde fotoğraf zorunlu (varsayılan KAPALI). */
   devereRejectPhotoRequired: boolean;
+  /** Devere S3: gövde no esnek eşleşme (varsayılan KAPALI = birebir). */
+  devereBodyNoLooseMatch: boolean;
+  /** Devere S3: tartılı bitişte dara boşsa gövde darası (varsayılan KAPALI). */
+  devereResidualTareFromBody: boolean;
   /** Devere ek E1: aynı irsaliye no tekrarı izin/uyar/engelle (varsayılan `WARN`). */
   devereDuplicateDeliveryNote: DevereDuplicateDeliveryNote;
   /** Devere ek E1: dönüş kabulünde tartı kapalı/isteğe bağlı/zorunlu (varsayılan `OPTIONAL` = bugün). */

@@ -850,6 +850,18 @@ export async function setFeatureFlags(
       }
       await this.set(SETTING_KEYS.DEVERE_REJECT_PHOTO_REQUIRED, input.devereRejectPhotoRequired, "Devere: kusurlu levent reddinde fotoğraf zorunlu", userId);
     }
+    if (Object.prototype.hasOwnProperty.call(input, "devereBodyNoLooseMatch")) {
+      if (typeof input.devereBodyNoLooseMatch !== "boolean") {
+        throw AppError.badRequest("devereBodyNoLooseMatch boolean olmalı");
+      }
+      await this.set(SETTING_KEYS.DEVERE_BODY_NO_LOOSE_MATCH, input.devereBodyNoLooseMatch, "Devere: gövde no esnek eşleşme", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "devereResidualTareFromBody")) {
+      if (typeof input.devereResidualTareFromBody !== "boolean") {
+        throw AppError.badRequest("devereResidualTareFromBody boolean olmalı");
+      }
+      await this.set(SETTING_KEYS.DEVERE_RESIDUAL_TARE_FROM_BODY, input.devereResidualTareFromBody, "Devere: tartılı levent bitişinde dara gövdeden", userId);
+    }
     if (Object.prototype.hasOwnProperty.call(input, "devereAutoConsume")) {
       if (typeof input.devereAutoConsume !== "boolean") {
         throw AppError.badRequest("devereAutoConsume boolean olmalı");

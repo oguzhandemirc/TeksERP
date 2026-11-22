@@ -154,6 +154,8 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "devereSettleDefault",
       "devereReworkBillable",
       "devereRejectPhotoRequired",
+      "devereBodyNoLooseMatch",
+      "devereResidualTareFromBody",
       "devereDuplicateDeliveryNote",
       "devereReceiveWeighing",
       "devereDenierSuggestMinBeams",

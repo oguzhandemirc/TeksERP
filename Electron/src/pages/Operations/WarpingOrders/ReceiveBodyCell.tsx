@@ -35,7 +35,11 @@ export function ReceiveBodyCell({ row, value, subcontractorId, onChange }: { row
       } else {
         const v = existingOf(b);
         if (typeof v === "string") toast.error(v);
-        else onChange(v);
+        else {
+          onChange(v);
+          // S3 esnek eşleşme: okunan no gövde no'dan farklıysa operatör hangi gövdenin seçildiğini görsün.
+          if (b.bodyNo.toLowerCase() !== c.toLowerCase()) toast.info(`"${c}" → ${b.bodyNo} gövdesi seçildi (esnek gövde no).`);
+        }
       }
       setCode("");
     } catch (e) {

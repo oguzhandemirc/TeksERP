@@ -1974,6 +1974,26 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         audience: ["Depocu", "Yönetim"],
         desc: "Kapalıyken (varsayılan) fotoğraf isteğe bağlıdır. Açıkken ret penceresinde fotoğraf eklenmeden gönderilemez; sunucu da fotoğrafsız reddi geri çevirir.",
       },
+      {
+        // Devere S3: backend `readDevereBodyNoLooseMatch` kayıt yokken false döner.
+        group: DEVERE_GROUP.beamBody,
+        key: "devereBodyNoLooseMatch",
+        title: "Gövde numarası farklı yazılsa da bulunsun",
+        summary: "Flanşa boyanan numara \"12\", \"012\" ya da \"lg 12\" diye okunsa da LG-12 gövdesi bulunur.",
+        defaultOn: false,
+        audience: ["Depocu", "Operatör"],
+        desc: "Kapalıyken (varsayılan) gövde no birebir (büyük/küçük harf farkı hariç) eşleşmelidir. Açıkken birebir bulunamazsa boşluk, tire ve nokta yok sayılır, baştaki sıfırlar atılır; yalnız rakam yazılırsa ön ekli gövdenin numarasıyla da eşleşir. Birden çok gövde uyarsa hiçbiri seçilmez, liste gösterilir.",
+      },
+      {
+        // Devere S3: backend `readDevereResidualTareFromBody` kayıt yokken false döner.
+        group: DEVERE_GROUP.beamBody,
+        key: "devereResidualTareFromBody",
+        title: "Levent bitişinde dara gövde kartından gelsin",
+        summary: "Biten levent tartılırken dara yazılmazsa gövde kartındaki dara kullanılır, kalan metre tartıdan hesaplanır.",
+        defaultOn: false,
+        audience: ["Operatör", "Yönetim"],
+        desc: "Kapalıyken (varsayılan) dara yazılmayan tartıda metre hesaplanamaz ve artık 0 sayılır. Açıkken leventin gövdesinin darası kullanılır; kayıtta \"dara gövdeden\" notu görünür. Elle yazılan dara her zaman önceliklidir.",
+      },
     ],
     enumFlags: [
       {

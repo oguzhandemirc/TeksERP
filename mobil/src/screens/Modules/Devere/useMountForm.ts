@@ -20,9 +20,11 @@ interface Deps {
   onDone: () => void;
   /** Tezgah ekranı: oturum makinesi — tezgah adımı atlanır. */
   presetMachineId?: string | null;
+  /** S3: bağlamın `bodyNoLooseMatch` değeri — gövde no esnek okutma. */
+  looseBodyNo?: boolean;
 }
 
-export function useMountForm({ loomMachines, methodRequired, onDone, presetMachineId = null }: Deps) {
+export function useMountForm({ loomMachines, methodRequired, onDone, presetMachineId = null, looseBodyNo = false }: Deps) {
   const qc = useQueryClient();
   const attemptRef = useRef<BeamAttempt | null>(null);
   const [beam, setBeam] = useState<WarpBeam | null>(null);
@@ -62,7 +64,7 @@ export function useMountForm({ loomMachines, methodRequired, onDone, presetMachi
   /** ① Levent etiketi: listede HAZIR levent → TAK formu açılır; değilse ret + sebep. */
   const scanBeam = useCallback(
     (raw: string, beams: readonly WarpBeam[]): boolean => {
-      const scan = resolveMountScan(raw, beams, loomMachines);
+      const scan = resolveMountScan(raw, beams, loomMachines, { looseBodyNo });
       const out = mountScanOutcome(scan, 'beam');
       signalScan(out.ok ? 'accept' : 'reject');
       if (!out.ok || scan.kind !== 'beam') {
@@ -72,20 +74,20 @@ export function useMountForm({ loomMachines, methodRequired, onDone, presetMachi
       open(scan.beam);
       return true;
     },
-    [loomMachines, open]
+    [loomMachines, open, looseBodyNo]
   );
   /** ② Tezgah etiketi: makine kodu → seçili makine (yuva 1'e döner). */
   const scanMachine = useCallback(
     (raw: string) => {
       // Formdaki levent de tanınır: tezgah yerine onun etiketi okutulursa "şimdi tezgahı okutun" denir.
-      const scan = resolveMountScan(raw, beam ? [beam] : [], loomMachines);
+      const scan = resolveMountScan(raw, beam ? [beam] : [], loomMachines, { looseBodyNo });
       const out = mountScanOutcome(scan, 'machine');
       signalScan(out.ok ? 'accept' : 'reject');
       if (!out.ok || scan.kind !== 'machine') return setError(out.ok ? null : out.message);
       setError(null);
       setForm((f) => ({ ...f, machineId: scan.machine.id, position: '1' }));
     },
-    [beam, loomMachines]
+    [beam, loomMachines, looseBodyNo]
   );
   const close = useCallback(() => setBeam(null), []);
   const submit = useCallback(() => {

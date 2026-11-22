@@ -57,7 +57,7 @@ export const WARP_BEAM_SELECT = {
   status: true,
   plannedLengthM: true,
   physicalBeamNo: true,
-  beamBody: { select: { id: true, bodyNo: true } },
+  beamBody: { select: { id: true, bodyNo: true, tareKg: true } },
   notes: true,
   originKind: true,
   subcontractorId: true,

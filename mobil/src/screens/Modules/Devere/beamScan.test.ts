@@ -41,6 +41,30 @@ describe('resolveMountScan', () => {
   });
 });
 
+describe('resolveMountScan esnek gövde no (S3)', () => {
+  const pool = [beam('5', { physicalBeamNo: 'LG-0012' }), beam('6', { beamBody: { id: 'b6', bodyNo: 'LG-0034' } }), beam('7', { physicalBeamNo: 'MX-34' })];
+
+  it('⭐ ayar kapalı → "012" bulunmaz (bugünkü birebir)', () => {
+    expect(resolveMountScan('012', pool, machines)).toEqual({ kind: 'unknown', code: '012' });
+    expect(resolveMountScan('lg 12', pool, machines, { looseBodyNo: false }).kind).toBe('unknown');
+  });
+
+  it('⭐ ayar açık + tek aday → levent (physicalBeamNo ya da gövde no)', () => {
+    expect(resolveMountScan('012', pool, machines, { looseBodyNo: true })).toMatchObject({ kind: 'beam', beam: { id: '5' } });
+    expect(resolveMountScan('lg 34', pool, machines, { looseBodyNo: true })).toMatchObject({ kind: 'beam', beam: { id: '6' } });
+  });
+
+  it('⭐ iki aday → ambiguous, ret metni adayları sayar', () => {
+    const r = resolveMountScan('34', pool, machines, { looseBodyNo: true });
+    expect(r).toEqual({ kind: 'ambiguous', code: '34', beamNos: ['LV261021-0006', 'LV261021-0007'] });
+    expect(mountScanOutcome(r, 'beam')).toEqual({ ok: false, message: '34 birden çok levente uyuyor (LV261021-0006, LV261021-0007) — levent etiketini okutun.' });
+  });
+
+  it('birebir eşleşme esnekten önce gelir', () => {
+    expect(resolveMountScan('MX-34', pool, machines, { looseBodyNo: true })).toMatchObject({ kind: 'beam', beam: { id: '7' } });
+  });
+});
+
 describe('mountScanOutcome adım kuralı', () => {
   it('⭐ levent adımında tezgah etiketi ret; tezgah adımında levent etiketi ret', () => {
     expect(mountScanOutcome(resolveMountScan('T-07', beams, machines), 'beam')).toEqual({ ok: false, message: 'Bu tezgah etiketi — önce leventin etiketini okutun.' });
