@@ -9,6 +9,7 @@
 import { Prisma, WarpBeamStatus } from "@prisma/client";
 import { LIVE_REWORK_WHERE } from "../helpers/warping-beam-rejection.helper";
 import { readDevereRejectPhotoRequired } from "../system-setting";
+import { readDevereBeamCardAutoPrint, type DevereBeamCardAutoPrint } from "../system-setting/devere-beam-card";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { licenseModuleError } from "../../lib/license/module-ceiling";
@@ -52,7 +53,8 @@ export interface WarpingTabletContext {
   orders: WarpingTabletOrder[];
   truncated: boolean;
   /** `rejectPhotoRequired` (ek-2 r): tablet ret sayfası fotosuz göndermeyi kapatır; sunucu da 400 verir. */
-  settings: { beamBodyMode: DevereBeamBodyMode; receiveWeighing: DevereReceiveWeighing; duplicateDeliveryNote: DevereDuplicateDeliveryNote; rejectPhotoRequired: boolean };
+  /** `beamCardAutoPrint` (S5t): tablet kabul sonrası A6 levent kartı — OFF bugün · ASK sor · ALWAYS doğrudan pencere. */
+  settings: { beamBodyMode: DevereBeamBodyMode; receiveWeighing: DevereReceiveWeighing; duplicateDeliveryNote: DevereDuplicateDeliveryNote; rejectPhotoRequired: boolean; beamCardAutoPrint: DevereBeamCardAutoPrint };
   limits: { maxOrders: number; maxBeamsPerOrder: number };
 }
 
@@ -112,6 +114,7 @@ export async function getWarpingTabletContext(params: { subcontractorId: string 
   const beamBodyMode = await readDevereBeamBodyMode();
   const receiveWeighing = await readDevereReceiveWeighing();
   const duplicateDeliveryNote = await readDevereDuplicateDeliveryNote();
+  const beamCardAutoPrint = await readDevereBeamCardAutoPrint();
 
   const count = new Map(groups.map((g) => [g.subcontractorId, g._count._all]));
   // ALLOWLIST `map`: yeni bir `select` alanı buradan geçmeden cihaza inmez.
@@ -141,7 +144,7 @@ export async function getWarpingTabletContext(params: { subcontractorId: string 
       .sort((a, b) => a.name.localeCompare(b.name, "tr")),
     orders,
     truncated: rows.length > WARPING_TABLET_MAX_ORDERS,
-    settings: { beamBodyMode, receiveWeighing, duplicateDeliveryNote, rejectPhotoRequired },
+    settings: { beamBodyMode, receiveWeighing, duplicateDeliveryNote, rejectPhotoRequired, beamCardAutoPrint },
     limits: { maxOrders: WARPING_RECEIVE_DOC_MAX_ORDERS, maxBeamsPerOrder: WARPING_RECEIVE_MAX_BEAMS },
   };
 }

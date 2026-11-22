@@ -7,12 +7,15 @@
 // §4 levent etiketi payload'ı: eski anahtarlar bayt-aynı, S5 alanları (bodyNo, subcontractorName, deliveryNoteNo) yalnız EK.
 // §5 printed-doc defteri: ilk okuma v1 dondurur; veri değişince v1 içeriği değişmez.
 // §6 varsayılan levent etiket şablonu: bağlam varsayılanı yokken baskı girdisi kurulur (400 değil), ikinci çağrı yeni şablon doğurmaz.
-// DB'YE YAZAR: `TEST-LK-<pid>` iplik/kart/levent; `finally`de FK sırasıyla silinir; levent bağlam varsayılanı birebir geri yüklenir.
+// §7 tahar (S5t): iş emri pinli desenin `drawingInNote`u "Tahar" satırı basar, pinsiz iş emri ürünün desenine düşer;
+//    notsuz kartın HTML'i anahtarı hiç taşımayan (eski donmuş) kartla bayt-aynı.
+// DB'YE YAZAR: `TEST-LK-<pid>` iplik/kart/levent/desen/kumaş/dokuma iş emri; `finally`de FK sırasıyla silinir; levent bağlam varsayılanı birebir geri yüklenir.
 // Koşum: npx tsx scripts/run-all-tests.ts levent_karti
 //
 // NEGATİF SONDA (2026-11-22 koşuldu, geri alındı):
 //   · `applyWarpBeamEventTx` içindeki `voidWarpBeamCardTx` satırı kapatıldı → §2b kırmızı
 //   · `buildLoomRenderInput` içindeki `ensureDefaultWarpBeamLabelTemplate` dalı kapatıldı → §6a kırmızı
+//   · `warpBeamCardInfoRows` içindeki "Tahar" satırı kapatıldı → §7a/§7b kırmızı; pin önceliği ters çevrildi → §7a kırmızı
 // =============================================================================
 import { LabelKind, Prisma, PrintedDocType, WarpBeamOrigin, WarpKgSource } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
@@ -20,7 +23,8 @@ import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { createWarpBeam } from "../src/services/warp-beam.service";
 import { cancelWound, windWarpBeam } from "../src/services/warp-beam-wind.service";
-import { printedDocumentService } from "../src/services/printed-document.service";
+import { printedDocumentService, type PrintedDocSnapshot } from "../src/services/printed-document.service";
+import { renderWarpBeamCardHtml } from "../src/services/document-render/warp-beam-card.html";
 import "../src/services/warp-beam-card.service";
 import { buildLoomRenderInput, loadWarpBeamLabelPayload } from "../src/services/helpers/label-loom-context.helper";
 import { DEFAULT_WARP_BEAM_TEMPLATE_NAME } from "../src/services/helpers/label-default-warp-beam.helper";
@@ -71,6 +75,9 @@ async function main(): Promise<void> {
   await prisma.warpSpecYarn.createMany({ data: [{ warpSpecId: mono.id, yarnItemId: yA.id, endsCount: 5250, sortOrder: 0 }, { warpSpecId: mono.id, yarnItemId: yB.id, endsCount: 5250, sortOrder: 1 }] });
   const beamIds: string[] = [];
   const createdTemplateIds: string[] = [];
+  const woIds: string[] = [];
+  const designIds: string[] = [];
+  let fabricId: string | null = null;
   const wound = async () => {
     const b = await createWarpBeam({ warpSpecId: mono.id, plannedLengthM: 2500, originKind: WarpBeamOrigin.SUBCONTRACT, subcontractorId: sub.id });
     beamIds.push(b.data.id);
@@ -133,6 +140,37 @@ async function main(): Promise<void> {
     await buildLoomRenderInput(p as never, {});
     const after = await prisma.labelTemplate.count({ where: { name: DEFAULT_WARP_BEAM_TEMPLATE_NAME } });
     check("§6b ikinci baskı yeni şablon doğurmaz (en çok bir şablon eklendi; aynı adlı varsa o atandı)", after === Math.max(before, 1), `${before} → ${after}`);
+
+    console.log("\n── §7 Tahar satırı ──");
+    const NOTE_ITEM = `${TAG} ürün taharı 1-2-3-4`;
+    const NOTE_PIN = `${TAG} pin taharı döner 1-2`;
+    const dItem = await prisma.weaveDesign.create({ data: { code: `${TAG}-D1`, name: `${TAG} D1`, kind: "PLAIN", drawingInNote: NOTE_ITEM }, select: { id: true } });
+    designIds.push(dItem.id);
+    const dPin = await prisma.weaveDesign.create({ data: { code: `${TAG}-D2`, name: `${TAG} D2`, kind: "PLAIN", drawingInNote: NOTE_PIN }, select: { id: true } });
+    designIds.push(dPin.id);
+    const fabric = await prisma.item.create({ data: { code: `${TAG}-KM`, name: `${TAG} KUMAŞ`, itemType: "FABRIC", weaveDesignId: dItem.id }, select: { id: true } });
+    fabricId = fabric.id;
+    const woPin = await prisma.weavingOrder.create({ data: { weavingOrderNumber: `${TAG}-WO1`, itemId: fabric.id, executionKind: "IN_HOUSE", weaveDesignId: dPin.id }, select: { id: true } });
+    woIds.push(woPin.id);
+    const woBare = await prisma.weavingOrder.create({ data: { weavingOrderNumber: `${TAG}-WO2`, itemId: fabric.id, executionKind: "IN_HOUSE" }, select: { id: true } });
+    woIds.push(woBare.id);
+    const onWo = async (woId: string) => {
+      const id = await wound();
+      await prisma.warpBeam.update({ where: { id }, data: { weavingOrderId: woId } });
+      return htmlOf(id);
+    };
+    const hPin = await onWo(woPin.id);
+    check("§7a ⭐ pinli iş emri: pinlenen desenin taharı basılır, ürününki değil", hPin.includes("<th>Tahar</th>") && hPin.includes(NOTE_PIN) && !hPin.includes(NOTE_ITEM));
+    const hBare = await onWo(woBare.id);
+    check("§7b pinsiz iş emri ürünün desen taharına düşer", hBare.includes("<th>Tahar</th>") && hBare.includes(NOTE_ITEM));
+    const plain = docOf(await printedDocumentService.getCurrent(CARD, b1)).snapshot as unknown as PrintedDocSnapshot;
+    const legacyDoc = JSON.parse(JSON.stringify(plain.doc)) as CardDoc;
+    delete legacyDoc.header.drawingInNote;
+    const blankDoc = JSON.parse(JSON.stringify(plain.doc)) as CardDoc;
+    blankDoc.header.drawingInNote = "   ";
+    const hPlain = renderWarpBeamCardHtml(plain);
+    check("§7c iş emirsiz kartta Tahar satırı yok", !hPlain.includes("Tahar"));
+    check("§7d notsuz/boşluklu kart, anahtarı taşımayan eski kartla BAYT-AYNI", hPlain === renderWarpBeamCardHtml({ ...plain, doc: legacyDoc as never }) && hPlain === renderWarpBeamCardHtml({ ...plain, doc: blankDoc as never }));
   } finally {
     await prisma.labelContextDefault.deleteMany({ where: { kind: LabelKind.WARP_BEAM } });
     if (createdTemplateIds.length) {
@@ -143,6 +181,9 @@ async function main(): Promise<void> {
     await prisma.printedDocument.deleteMany({ where: { docType: CARD, sourceId: { in: beamIds } } });
     await prisma.warpBeamEvent.deleteMany({ where: { beamId: { in: beamIds } } });
     await prisma.warpBeam.deleteMany({ where: { id: { in: beamIds } } });
+    await prisma.weavingOrder.deleteMany({ where: { id: { in: woIds } } });
+    if (fabricId) await prisma.item.deleteMany({ where: { id: fabricId } });
+    await prisma.weaveDesign.deleteMany({ where: { id: { in: designIds } } });
     await prisma.warpSpec.deleteMany({ where: { id: mono.id } });
     await prisma.item.deleteMany({ where: { id: { in: [yA.id, yB.id] } } });
     for (const key of FLAGS) {

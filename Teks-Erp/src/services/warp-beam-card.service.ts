@@ -16,7 +16,14 @@ const num = (v: Prisma.Decimal | null | undefined): number | null => (v == null 
 const BEAM_CARD_SELECT = {
   beamNo: true, status: true, physicalBeamNo: true,
   warpSpec: { select: { code: true, name: true } },
-  weavingOrder: { select: { weavingOrderNumber: true, item: { select: { name: true } } } },
+  // Tahar notu: iş emrinin pinlediği desen, yoksa ürünün güncel deseni (pin=null emsali, etkin yapı ile aynı).
+  weavingOrder: {
+    select: {
+      weavingOrderNumber: true,
+      weaveDesign: { select: { drawingInNote: true } },
+      item: { select: { name: true, weaveDesign: { select: { drawingInNote: true } } } },
+    },
+  },
   beamBody: { select: { bodyNo: true } },
   ownerCustomer: { select: { name: true } },
   subcontractor: { select: { name: true } },
@@ -51,6 +58,15 @@ function issueLotsByYarn(moves: ReadonlyArray<{ itemId: string; lot: { lotNo: st
   return m;
 }
 
+type CardWeavingOrder = Prisma.WarpBeamGetPayload<{ select: typeof BEAM_CARD_SELECT }>["weavingOrder"];
+
+/** İş emri pini > ürünün deseni; pin dolu ama notu boşsa ürüne DÜŞMEZ (pinlenen desen o tahar'ı taşımıyor). */
+function drawingInNoteOf(wo: CardWeavingOrder): string | null {
+  if (!wo) return null;
+  const note = wo.weaveDesign ? wo.weaveDesign.drawingInNote : wo.item.weaveDesign?.drawingInNote;
+  return note?.trim() || null;
+}
+
 async function collectBeam(db: PrintedDocDb, beamId: string): Promise<BuiltDocContent> {
   const b = await db.warpBeam.findUnique({ where: { id: beamId }, select: BEAM_CARD_SELECT });
   if (!b) throw AppError.notFound("Levent bulunamadı", { code: "WARP_BEAM_NOT_FOUND" });
@@ -78,6 +94,7 @@ async function collectBeam(db: PrintedDocDb, beamId: string): Promise<BuiltDocCo
       ownerName: b.ownerCustomer?.name ?? null, subcontractorName: b.subcontractor?.name ?? null,
       deliveryNoteNo: b.warpingReceiveDoc?.deliveryNoteNo ?? w.deliveryNoteNo ?? null,
       receiveDocNo: b.warpingReceiveDoc?.docNo ?? null, warpingOrderNo: b.warpingOrder?.orderNo ?? null,
+      drawingInNote: drawingInNoteOf(b.weavingOrder),
     },
     yarns,
     totals: {
