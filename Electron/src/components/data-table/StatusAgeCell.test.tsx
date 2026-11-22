@@ -18,7 +18,8 @@ describe("StatusAgeCell (devere S4)", () => {
 
   it("süzgeç: minAgeDays anahtarı, seçenekler 'N+ gün'", () => {
     const f = minAgeFilter([7, 30]);
+    if (f.kind !== "select") throw new Error("select bekleniyordu");
     expect(f.key).toBe("minAgeDays");
-    expect(f.kind === "select" && f.options.map((o) => o.label)).toEqual(["7+ gün", "30+ gün"]);
+    expect(f.options.map((o) => o.label)).toEqual(["7+ gün", "30+ gün"]);
   });
 });
