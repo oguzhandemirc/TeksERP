@@ -61,7 +61,7 @@ export function WeavingOrderWeave({ weavingOrderId }: { weavingOrderId: string }
   const q = useRunConstruction(weavingOrderId);
   return q.data && canShowWeave(q.data) ? (
     <View style={styles.weaveSection} testID="dokuma-detay-armur">
-      <Text style={styles.sectionTitle}>Armür planı</Text>
+      {/* Bölüm başlığı yok: mini kartın kendi "Armür planı" başlığı var (çift başlık). */}
       <WeaveMini c={q.data} />
     </View>
   ) : null;
@@ -73,6 +73,5 @@ const styles = StyleSheet.create({
   line: { fontSize: typography.size.sm, color: colors.textSecondary },
   yarn: { fontSize: typography.size.sm, color: colors.text },
   swapped: { fontWeight: typography.weight.semibold },
-  weaveSection: { gap: spacing.xs },
-  sectionTitle: { fontSize: typography.size.base, fontWeight: typography.weight.bold, color: colors.text, marginTop: spacing.sm },
+  weaveSection: { gap: spacing.xs, marginTop: spacing.sm },
 });

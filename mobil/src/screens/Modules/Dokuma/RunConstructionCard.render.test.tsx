@@ -6,7 +6,7 @@ import { TextInput } from 'react-native';
 import { act, fireEvent } from '@testing-library/react-native';
 import { renderWithPaper } from '../../../test/render';
 import { machineRunService, type RunConstruction } from '../../../services/machineRun.service';
-import RunConstructionCard from './RunConstructionCard';
+import RunConstructionCard, { WeavingOrderWeave } from './RunConstructionCard';
 
 jest.mock('../../../services/machineRun.service', () => ({ machineRunService: { construction: jest.fn() } }));
 const construction = machineRunService.construction as jest.Mock;
@@ -75,4 +75,14 @@ test('sunucu armür + seçici gönderiyorsa mini görsel; dokununca tam ekran, y
   fireEvent.press(r.getByTestId('weave-direction'));
   await act(async () => {});
   expect(r.getByText(/1\. atkı en üstte/)).toBeTruthy();
+});
+
+test('iş emri detayı: "Armür planı" başlığı TEK (mini kartın kendi başlığı; bölüm başlığı yok)', async () => {
+  construction.mockResolvedValue({
+    ...full,
+    design: { ...full.design!, liftPlan: [[1, 0], [0, 1]], lenoFrames: [], kind: 'PLAIN' },
+  } as RunConstruction);
+  const r = renderWithPaper(<WeavingOrderWeave weavingOrderId="wo1" />);
+  await r.findByTestId('dokuma-detay-armur');
+  expect(r.getAllByText('Armür planı')).toHaveLength(1);
 });
