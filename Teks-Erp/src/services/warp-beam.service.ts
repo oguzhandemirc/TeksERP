@@ -39,6 +39,7 @@ import { assertEmanetWritableTx } from "./helpers/emanet-owner.helper";
 import { resolvePartyToCardTx } from "./helpers/party-card.helper";
 import { assertWeavingOrderLinkableTx, warpSpecMismatchWarning } from "./helpers/production-chain-gates.helper";
 import { p2002OnField } from "../utils/p2002";
+import { BEAM_STALE_FULL_DAYS, warpBeamMinAgeWhere, warpBeamStatusAges } from "./helpers/status-age.helper";
 
 const WARP_BEAM_TABLE = "WARP_BEAM";
 const WARP_BEAM_EVENT_TABLE = "WARP_BEAM_EVENT";
@@ -58,11 +59,20 @@ export interface WarpBeamListParams {
   cursor?: string | null;
   limit?: number | null;
   withTotal?: boolean;
+  /** S4: şimdiki durumunda en az bu kadar fabrika günüdür duranlar. */
+  minAgeDays?: number | null;
 }
 
-export async function listWarpBeams(params: WarpBeamListParams): Promise<CursorPaginatedResponse<WarpBeamDto>> {
+/** S4 özet şeridi: süzgece uyan, `BEAM_STALE_FULL_DAYS`+ gündür dolu (READY) bekleyen levent sayısı — yalnız ilk sayfada. */
+export interface WarpBeamListSummary {
+  staleFull: number;
+  staleFullDays: number;
+}
+
+export async function listWarpBeams(params: WarpBeamListParams, now: Date = new Date()): Promise<CursorPaginatedResponse<WarpBeamDto> & { summary?: WarpBeamListSummary }> {
   const limit = Math.min(Math.max(1, params.limit ?? 50), 100);
   const where: Prisma.WarpBeamWhereInput = {};
+  if (params.minAgeDays && params.minAgeDays > 0) where.AND = [warpBeamMinAgeWhere(params.minAgeDays, now)];
   if (params.status && params.status.length > 0) where.status = { in: params.status };
   if (params.warpSpecId) where.warpSpecId = params.warpSpecId;
   if (params.weavingOrderId) where.weavingOrderId = params.weavingOrderId;
@@ -80,10 +90,18 @@ export async function listWarpBeams(params: WarpBeamListParams): Promise<CursorP
   const page = hasMore ? rows.slice(0, limit) : rows;
   const last = page[page.length - 1] as Record<string, unknown> | undefined;
   const remaining = await remainingByBeam(prisma, page.map((r) => r.id));
+  const ages = await warpBeamStatusAges(prisma, page, now);
+  const summary = cur
+    ? undefined
+    : {
+        staleFull: await prisma.warpBeam.count({ where: { AND: [where, { status: WarpBeamStatus.READY }, warpBeamMinAgeWhere(BEAM_STALE_FULL_DAYS, now)] } }),
+        staleFullDays: BEAM_STALE_FULL_DAYS,
+      };
   return {
     success: true,
-    data: page.map((r) => toWarpBeamDto(r, remaining.get(r.id))),
+    data: page.map((r) => ({ ...toWarpBeamDto(r, remaining.get(r.id)), ...ages.get(r.id) })),
     pagination: { nextCursor: hasMore ? buildNextDynamicCursor(last, "createdAt") : null, hasMore, limit, ...(totalEstimate !== undefined ? { totalEstimate } : {}) },
+    ...(summary ? { summary } : {}),
   };
 }
 

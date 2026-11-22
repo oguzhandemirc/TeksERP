@@ -31,7 +31,7 @@ function wrap(node: React.ReactNode) {
 const rowChips = () => within(screen.getByTestId("filter-row-scroll")).getAllByTestId(/^filter-chip-/).map((c) => c.dataset.testid?.replace("filter-chip-", ""));
 
 describe.each([
-  ["Leventler", warp, ["status", "warpSpecId", "weavingOrderId"], ["originKind"]],
+  ["Leventler", warp, ["status", "warpSpecId", "weavingOrderId"], ["originKind", "minAgeDays"]],
   ["Dokuma İş Emirleri", weaving, ["status", "itemId", "subcontractorId"], ["orderId"]],
   ["e-İrsaliye Kayıtları", eirs, ["status", "adapter"], []],
 ] as const)("%s — tek satır + kayıt", (_name, mod, primary, more) => {

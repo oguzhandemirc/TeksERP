@@ -85,6 +85,15 @@ export interface WarpBeam {
   weavingOrder?: { id: string; weavingOrderNumber: string } | null;
   /** Fason devere: dönüş kabulünde doğduğu devere siparişi (satırdan "Devereciye geri gönder"); eski backend göndermez. */
   warpingOrderId?: string | null;
+  /** S4: şimdiki duruma giriş + fabrika günü farkı — yalnız liste ucu; eski backend göndermez. */
+  statusSince?: string;
+  statusAgeDays?: number;
+}
+
+/** S4 liste özeti — yalnız ilk sayfada. */
+export interface WarpBeamListSummary {
+  staleFull: number;
+  staleFullDays: number;
 }
 
 export interface CancelWoundPreview {

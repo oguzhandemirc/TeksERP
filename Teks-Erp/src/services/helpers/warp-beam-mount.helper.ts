@@ -32,9 +32,12 @@ export async function assertMountTrackingOnTx(tx: Pick<Client, "systemSetting">)
  * alınabilir (WOUND · SHIP_OUT · RETURNED_IN · MOUNTED · DISMOUNTED · EXHAUSTED · SCRAPPED);
  * CONSUMED/ADJUST zinciri kilitlemez (§4.7). SQL ikizi `ACTIVE_FORWARD_EVENT_SQL` (mutabakat §43).
  */
+/** LIFO yükleminin Prisma parçası — bekleme yaşı (S4) da AYNI kümeyi okur (`warp-beam-age.helper`). */
+export const ACTIVE_FORWARD_STATUS_EVENT_WHERE = { kind: { in: [...WARP_BEAM_STATUS_EVENT_KINDS] }, reversal: null } satisfies Prisma.WarpBeamEventWhereInput;
+
 export async function activeForwardStatusEventTx(client: Pick<Client, "warpBeamEvent">, beamId: string) {
   return client.warpBeamEvent.findFirst({
-    where: { beamId, kind: { in: [...WARP_BEAM_STATUS_EVENT_KINDS] }, reversal: null },
+    where: { beamId, ...ACTIVE_FORWARD_STATUS_EVENT_WHERE },
     orderBy: { createdAt: "desc" },
     select: { id: true, kind: true, fromStatus: true, toStatus: true, machineId: true, mountPosition: true, lengthM: true, createdAt: true },
   });
