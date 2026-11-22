@@ -41,6 +41,8 @@ const SCREEN_LOADERS: Record<MobileScreenKey, () => GatedScreen> = {
   Devere: () => require('../screens/Modules/Devere/DevereScreen').default,
   // eslint-disable-next-line @typescript-eslint/no-require-imports -- tembel yükleyici deseni (dosya başlığı); ekran yalnız navigate edilince parse edilir
   DevereKabul: () => require('../screens/Modules/DevereKabul/DevereKabulScreen').default,
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- tembel yükleyici deseni (dosya başlığı); ekran yalnız navigate edilince parse edilir
+  GovdeSayim: () => require('../screens/Modules/BeamBodyCount/BeamBodyCountScreen').default,
   // Tembel yükleyici deseni (dosya başlığı); tavan 25'te doluydu — yeni satır tavanı yükseltmek yerine gerekçeli istisna.
   // eslint-disable-next-line @typescript-eslint/no-require-imports -- ekran yalnız navigate edilince parse edilir, statik import deseni bozar
   FasonDokuma: () => require('../screens/Modules/FasonDokuma/FasonDokumaScreen').default,

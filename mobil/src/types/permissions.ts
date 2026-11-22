@@ -48,6 +48,8 @@ export type MobilePermission =
   | 'mobile:devere-kabul'
   // Devere ek-2 r (2026-11-22): kabul ekranında kusurlu levent reddi — ayrı yetenek (iplik tutmasını değiştirir).
   | 'mobile:devere-ret'
+  // Devere S7 (2026-11-22): GÖVDE SAYIMI ekranı — salt okuma okut-say; düzeltme web izni `beam-body:write` ister.
+  | 'mobile:govde-sayim'
   // Tezgah alarmı A3: Uyarılar ekranı — `loom:alarm-view` + `loom:alarm-ack`'in DAR mobil ikizi (bildirim dahil).
   | 'mobile:tezgah-uyari'
   // K4P-EKRAN: istasyondan bağımsız Muayene ekranı (top okut → 4 puan muayene).
@@ -103,6 +105,7 @@ export type MobileScreenKey =
   | 'Dokuma'
   | 'Devere'
   | 'DevereKabul'
+  | 'GovdeSayim'
   | 'FasonDokuma'
   | 'Uyarilar'
   | 'Muayene'
@@ -273,6 +276,14 @@ export const MOBILE_SCREENS: MobileScreenMeta[] = [
     label: 'Devere Dönüş Kabulü',
     icon: 'truck-delivery-outline',
     description: 'Devereciden dönen leventleri gövde QR\'ı okutarak kabul et',
+  },
+  {
+    // Devere S7 (2026-11-22): depoda/deverecide gövde okut-say — beklenen ↔ okunan; kayıt yazmaz. OTURUMSUZ, online-only.
+    key: 'GovdeSayim',
+    permission: 'mobile:govde-sayim',
+    label: 'Gövde Sayımı',
+    icon: 'counter',
+    description: 'Depodaki ya da deverecideki levent gövdelerini okutup say',
   },
   {
     // Tablet FASON DOKUMA KABUL ekranı (G2t, 2026-09-14): fasonda dokunan işin levent

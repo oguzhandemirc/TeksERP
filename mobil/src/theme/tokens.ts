@@ -197,6 +197,7 @@ export const moduleAccents: Record<MobileScreenKey, { tint: string; bg: string }
   // Devere (levent) — dokuma ailesi ama tezgahtan ayrışsın diye kayısı tonu.
   Devere: { tint: '#c2410c', bg: '#fed7aa' },
   DevereKabul: { tint: palette.orange[800], bg: palette.orange[100] }, // devere ailesi (kayısı) — depo kabul yüzü koyu tonla ayrışır
+  GovdeSayim: { tint: palette.orange[600], bg: palette.orange[100] }, // devere ailesi — gövde sayımı (depo)
   FasonDokuma: { tint: '#db2777', bg: '#fce7f3' }, // fason kabulün kardeşi — aynı renk ailesi
   Uyarilar: { tint: '#b91c1c', bg: '#fee2e2' }, // alarm — kırmızı aile (panel şeridiyle aynı ton)
   Muayene: { tint: '#7c3aed', bg: '#ede9fe' }, // kalite güvence — üretim ailelerinden ayrışan mor
