@@ -6,6 +6,7 @@ import { buildDefaults } from "./payload";
 import { YarnRowsEditor } from "./YarnRowsEditor";
 import { WarpCalcPanel } from "./WarpCalcPanel";
 import { WarpSpecVisualPanel } from "./WarpSpecVisualPanel";
+import { WarpSequenceBoxes } from "./WarpSequenceBoxes";
 import { IdentityFields, NotesField, ReedFields, ReedHelper } from "./WarpSpecFields";
 import type { WarpSpec } from "./types";
 import { ModalSection } from "@/components/forms/modal-sections/ModalSections";
@@ -53,6 +54,7 @@ export function WarpSpecFormDialog({ open, onOpenChange, initial, draft, onSubmi
               </FormCard>
               <FormCard sectionId="reed" errorFields={REED_FIELDS} title="Tarak ve dizilim" icon={Ruler} note="Kenar teli, tarak ve dizilim hesaba girmez" aside={<ReedHelper form={form} />}>
                 <ReedFields form={form} />
+                <WarpSequenceBoxes />
               </FormCard>
             </>
           }

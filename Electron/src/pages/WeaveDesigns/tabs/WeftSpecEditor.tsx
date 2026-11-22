@@ -6,7 +6,10 @@ import { Package, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { Button } from "@/components/ui/button";
+import { useDirtyTab } from "@/components/layout/tabs/dirty-tabs";
+import { InfoPopover } from "@/components/ui/info-popover";
 import { Input } from "@/components/ui/input";
+import { SequenceBoxEditor } from "@/components/weave/SequenceBoxEditor";
 import { Label } from "@/components/ui/label";
 import { itemService } from "@/pages/Items/service";
 import type { Item } from "@/pages/Items/types";
@@ -77,6 +80,7 @@ export function WeftSpecEditor({ spec, fabricId, canWrite, onSequenceChange }: E
           <Input id="wf-prog" value={program} maxLength={16} disabled={!canWrite} onChange={(e) => setProgram(e.target.value)} placeholder="6037" />
         </div>
       </div>
+      <WeftBoxSection seq={seq} saved={spec.sequenceCode ?? ""} letterCount={rows.length} canWrite={canWrite} onChange={(c) => { setSeq(c); onSequenceChange?.(c); }} />
       {shares && <WeftShareHeader />}
       <ul className="space-y-2">
         {rows.map((r, i) => (
@@ -118,6 +122,29 @@ export function WeftSpecEditor({ spec, fabricId, canWrite, onSequenceChange }: E
     </div>
   );
 }
+
+// Sıra kodunun kutu şeridi: kod alanıyla iki yönlü; kaydedilen değer koddur (sunucu açar ve doğrular).
+function WeftBoxSection({ seq, saved, letterCount, canWrite, onChange }: {
+  seq: string; saved: string; letterCount: number; canWrite: boolean; onChange: (c: string) => void;
+}) {
+  // Kaydedilmemiş sıra kodu sekmeyi kirli yapar (kapatırken onay sorulur).
+  useDirtyTab(seq.trim() !== saved.trim());
+  if (!canWrite && seq.trim() === "") return null;
+  return (
+    <section className="space-y-1.5" aria-label="Atkı sırası kutuları">
+      <h4 className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Atkı sırası — kutularla
+        <InfoPopover label="Kutularla atkı sırası" desc={BOX_INFO} />
+      </h4>
+      <SequenceBoxEditor value={seq} onChange={onChange} letterCount={letterCount} defaultStyle="letter-first" unit="atkı"
+        label="Atkı sırası kutuları" disabled={!canWrite} />
+    </section>
+  );
+}
+
+const BOX_INFO = "Her kutu bir atkıdır; rengi ve harfi o atkıda atılan ipliktir (A = 1. iplik satırı). Kutuya tıklamak ipliği sıradakine çevirir; "
+  + "seçili kutu harf düğmeleriyle ya da klavyeden harf tuşuyla değişir, Delete siler, + sonrasına ekler. Kutular yukarıdaki sıra kodunu "
+  + "yazar, kod değişince kutular da değişir. Kaydedince sağdaki atkı seçici sunucudan yeniden çizilir.";
 
 // Pay % başlığı ve hücresi — yalnız sunucu payı gönderdiyse çizilir (weftShareVisible).
 function WeftShareHeader() {
