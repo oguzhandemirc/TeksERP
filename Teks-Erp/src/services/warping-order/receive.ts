@@ -18,7 +18,8 @@ import { type AllocationCandidate } from "../helpers/wound-allocation.helper";
 import { loadWarpingSettlement, type WarpingSettlement } from "../helpers/warping-settlement.helper";
 import { loadWarpingReceipt, type WarpingReceiptDto } from "./receipts";
 import { planReceiveReworks, reworkReplaySig, type ReceiveReworkRef } from "./receive-rework";
-import { bodyTareWarnings, planReceiveBodies } from "./receive-body";
+import { bodyTareWarnings, planReceiveBodies, receiveBodyWidthProbes } from "./receive-body";
+import { beamBodyWidthWarningsTx } from "../helpers/beam-body-fit.helper";
 import { assertReceiveWeighing, deliveryNoteVerdict, lockDeliveryNoteTx, normalizeDeliveryNoteNo } from "./receive-note";
 import { readDevereDuplicateDeliveryNote, readDevereReceiveWeighing } from "../system-setting/devere-receive";
 import { claimForReceiveTx, auditReceiveOrder, bodyDto, evaluate, inputBeamSig, loadOrderForReceive, normalizeReceiveBeams, notReceivable, planBeams, receiveOrderLinesTx, RECEIVABLE, storedBeamSig, tareLines, weighWarnings, type NeedKey, type WarpingReceiveInput, type ReceiveBodyDto } from "./receive-core";
@@ -59,6 +60,7 @@ export async function previewWarpingReceive(id: string, input: Omit<WarpingRecei
   const beams = planBeams(lines, order.planYarns);
   const ev = await evaluate(prisma, order, beams);
   const bodies = await planReceiveBodies(prisma, { lines: input.beams, subcontractorId: order.subcontractorId, lotOwnerCustomerId: ev.ownerCustomerId });
+  const widthWarnings = await beamBodyWidthWarningsTx(prisma, order.warpSpecId, receiveBodyWidthProbes(bodies));
   const reworks = await planReceiveReworks(prisma, { warpingOrderId: id, lines: input.beams, lock: false });
   const before = await loadWarpingSettlement(prisma, id);
   const incomingM = beams.reduce((s, b) => s.plus(b.lengthM), D(0));
@@ -86,7 +88,7 @@ export async function previewWarpingReceive(id: string, input: Omit<WarpingRecei
       }),
     },
     ownerCustomerId: ev.ownerCustomerId,
-    warnings: [...note.warnings, ...ev.warnings, ...weighWarnings(beams), ...bodyTareWarnings(tareLines(beams), bodies)],
+    warnings: [...note.warnings, ...ev.warnings, ...weighWarnings(beams), ...bodyTareWarnings(tareLines(beams), bodies), ...widthWarnings],
   };
 }
 
