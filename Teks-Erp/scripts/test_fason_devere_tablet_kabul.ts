@@ -153,7 +153,9 @@ const ALLOW = {
   root: ["limits", "orders", "settings", "subcontractors", "truncated"],
   order: ["beamLines", "expectedReturnAt", "id", "orderNo", "plannedBeamCount", "receivedBeamCount", "receivedM", "remainingBeamCount", "remainingM", "reworkCandidates", "status", "subcontractor", "targetLengthM", "warpSpec"],
   subcontractor: ["id", "name"],
-  warpSpec: ["code", "name"],
+  // Kart görseli G: tel düzeni bandı (kart satırı harf/kod/ad/tel; dağıtım kg'ı DEĞİL).
+  warpSpec: ["code", "endsSequence", "name", "sequenceNote", "yarns"],
+  warpYarn: ["code", "endsCount", "letter", "name"],
   sub: ["id", "name", "openOrderCount"],
   // ek-2 r: rejectPhotoRequired (tablet ret sayfası); reworkCandidates alt anahtarları test_devere_tablet_ret_govde'de.
   // S5t: beamCardAutoPrint (kabul sonrası A6 levent kartı).
@@ -224,9 +226,12 @@ async function main(): Promise<void> {
     check("§3b kalan K3: 3 kabul − 1 ret = 2 levent · gelen metre ret düşülmüş · kalan 8 levent / hedef − gelen",
       !!oA && oA.plannedBeamCount === 10 && oA.receivedBeamCount === 2 && oA.receivedM === wantM && oA.remainingBeamCount === 8
       && oA.remainingM === (10000 - Number(wantM)).toFixed(3) && oA.targetLengthM === "10000.000" && oA.beamLines[0]?.beamLengthM === "1000.000", JSON.stringify(oA));
-    const leak = JSON.stringify(all);
+    // Kart iplik satırları (bant) anahtar düzeyinde ölçülür; sızıntı taraması kart dışı yükte.
+    const leak = JSON.stringify({ ...all, orders: all.orders.map((o) => ({ ...o, warpSpec: null })) });
     check("§3c OPT-IN allowlist: kök/sipariş/devereci/kart/ayar anahtarları birebir · ücret, iplik, satış siparişi sızmaz",
-      same(all, ALLOW.root) && all.orders.every((o) => same(o, ALLOW.order) && same(o.subcontractor, ALLOW.subcontractor) && same(o.warpSpec, ALLOW.warpSpec))
+      same(all, ALLOW.root) && all.orders.every((o) => same(o, ALLOW.order) && same(o.subcontractor, ALLOW.subcontractor) && same(o.warpSpec, ALLOW.warpSpec)
+        && o.warpSpec.yarns.every((y) => same(y, ALLOW.warpYarn)))
+      && !!oA && oA.warpSpec.yarns.length === 1 && oA.warpSpec.yarns[0]!.letter === "A" && oA.warpSpec.yarns[0]!.endsCount === 3000
       && all.subcontractors.every((s) => same(s, ALLOW.sub)) && same(all.settings, ALLOW.settings) && !/fee|price|USD|yarn|salesOrder|netKg|grossKg/i.test(leak),
       oA ? keysOf(oA) : "A yok");
     const sA = all.subcontractors.find((s) => s.id === sub.id);

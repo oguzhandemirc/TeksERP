@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { WeaveGrid } from "./WeaveGrid";
 import { YarnLegend } from "./YarnLegend";
 import { yarnColor, yarnLetter } from "./weave-palette";
+import { slotOf } from "./shared-palette";
 import {
   endsPerYarnFromSequence, proportionalSegments, repeatsToShow, stripCell, type WarpEndsSequenceView,
 } from "./warp-ends";
@@ -37,8 +38,17 @@ export interface WarpEndsStripProps {
   compact?: boolean;
   /** Şeridin sığacağı genişlik (px); kare boyu ve gösterilen rapor adedi buna göre seçilir. Varsayılan 640. */
   maxWidth?: number;
+  /** Ortak palet yuvaları (satır i → yuva; `shared-palette`); yoksa kartın kendi sırası (A = 1. satır). */
+  slots?: readonly number[] | null;
   className?: string;
 }
+
+/** Kart satırı (1-tabanlı) → harf + renk; ortak palette aynı iplik her kartta aynı harf/renk. */
+interface RowMark { color: (row1: number) => string; letter: (row1: number) => string }
+const rowMark = (slots: readonly number[] | null | undefined): RowMark => ({
+  color: (row1) => yarnColor(slotOf(slots, row1)),
+  letter: (row1) => yarnLetter(slotOf(slots, row1) - 1),
+});
 
 function fallbackNote(pending: boolean | undefined, note: string | null | undefined): string {
   if (pending) return "Kaydedince dizilim tel tel çözülür; şimdilik ipliklerin tel payı gösteriliyor.";
@@ -47,27 +57,28 @@ function fallbackNote(pending: boolean | undefined, note: string | null | undefi
 }
 
 export function WarpEndsStrip(props: WarpEndsStripProps) {
-  const { yarns, endsSequence, sequenceNote, cardEnds, pending, fallbackHint, title, compact, maxWidth = 640, className } = props;
+  const { yarns, endsSequence, sequenceNote, cardEnds, pending, fallbackHint, title, compact, maxWidth = 640, slots, className } = props;
   const seq = !pending && endsSequence && endsSequence.repeat.length > 0 ? endsSequence : null;
   if (!seq && !yarns.some((y) => y.endsCount > 0)) {
     return <p className={cn("text-xs text-muted-foreground", className)} data-testid="warp-ends-empty">Tel adedi girilince görünür.</p>;
   }
+  const mark = rowMark(slots);
   const legend = yarns.map((y, i) => ({
-    color: yarnColor(i + 1), mark: yarnLetter(i), label: y.label, note: `${formatQty(y.endsCount, 0)} tel`,
+    color: mark.color(i + 1), mark: mark.letter(i + 1), label: y.label, note: `${formatQty(y.endsCount, 0)} tel`,
   }));
   return (
     <figure className={cn("min-w-0 space-y-1.5", className)} data-testid="warp-ends-strip">
       {title && <figcaption className="text-xs font-medium text-muted-foreground">{title}</figcaption>}
-      {seq ? <SequenceBand seq={seq} yarns={yarns} cardEnds={cardEnds} compact={compact} maxWidth={maxWidth} />
-        : <ProportionalBand yarns={yarns} />}
+      {seq ? <SequenceBand seq={seq} yarns={yarns} cardEnds={cardEnds} compact={compact} maxWidth={maxWidth} mark={mark} />
+        : <ProportionalBand yarns={yarns} mark={mark} />}
       {!compact && !seq && <p className="text-xs text-muted-foreground" data-testid="warp-ends-fallback">{fallbackHint ?? fallbackNote(pending, sequenceNote)}</p>}
       {!compact && <YarnLegend entries={legend} />}
     </figure>
   );
 }
 
-function SequenceBand({ seq, yarns, cardEnds, compact, maxWidth }: {
-  seq: WarpEndsSequenceView; yarns: readonly WarpEndsStripYarn[]; cardEnds?: number | null; compact?: boolean; maxWidth: number;
+function SequenceBand({ seq, yarns, cardEnds, compact, maxWidth, mark }: {
+  seq: WarpEndsSequenceView; yarns: readonly WarpEndsStripYarn[]; cardEnds?: number | null; compact?: boolean; maxWidth: number; mark: RowMark;
 }) {
   const len = seq.repeat.length;
   // Tekrarın görünmesi için rapor en az 6 px'lik karelerle 2–3 kez sığmalı; sığmazsa tek rapor.
@@ -83,8 +94,8 @@ function SequenceBand({ seq, yarns, cardEnds, compact, maxWidth }: {
         <WeaveGrid
           rows={1} cols={cols} cell={cell} rowLabel={false}
           ariaLabel={`Tel düzeni: ${len} tellik rapor, ${shown} rapor gösteriliyor`}
-          fill={(_r, c) => yarnColor(seq.repeat[c % len]!)}
-          colLabel={cell >= 10 ? (c) => yarnLetter(seq.repeat[c % len]! - 1) : undefined}
+          fill={(_r, c) => mark.color(seq.repeat[c % len]!)}
+          colLabel={cell >= 10 ? (c) => mark.letter(seq.repeat[c % len]!) : undefined}
           colBandEvery={shown > 1 ? len : undefined}
         />
       </div>
@@ -101,7 +112,7 @@ function SequenceBand({ seq, yarns, cardEnds, compact, maxWidth }: {
           <div className="space-y-0.5">
             {yarnMismatch && (
               <p>Dizilim iplik satırlarındaki telleri tutmuyor:{" "}
-                {yarns.map((y, i) => `${yarnLetter(i)} dizilimde ${formatQty(byYarn[i] ?? 0, 0)} / kartta ${formatQty(y.endsCount, 0)}`).join(" · ")}
+                {yarns.map((y, i) => `${mark.letter(i + 1)} dizilimde ${formatQty(byYarn[i] ?? 0, 0)} / kartta ${formatQty(y.endsCount, 0)}`).join(" · ")}
               </p>
             )}
             {cardMismatch && <p>Kartın toplam teli {formatQty(cardEnds, 0)}, iplik satırlarının toplamı {formatQty(seq.totalEnds, 0)}.</p>}
@@ -112,16 +123,16 @@ function SequenceBand({ seq, yarns, cardEnds, compact, maxWidth }: {
   );
 }
 
-function ProportionalBand({ yarns }: { yarns: readonly WarpEndsStripYarn[] }) {
+function ProportionalBand({ yarns, mark }: { yarns: readonly WarpEndsStripYarn[]; mark: RowMark }) {
   const segs = proportionalSegments(yarns.map((y) => y.endsCount));
   return (
     <div className="flex h-6 w-full overflow-hidden rounded-md border" role="img"
-      aria-label={`Tel payı: ${segs.map((s) => `${yarnLetter(s.yarn - 1)} ${formatQty(s.ends, 0)} tel`).join(", ")}`}
+      aria-label={`Tel payı: ${segs.map((s) => `${mark.letter(s.yarn)} ${formatQty(s.ends, 0)} tel`).join(", ")}`}
       data-testid="warp-ends-proportional">
       {segs.map((s) => (
         <div key={s.yarn} className="flex min-w-0 items-center justify-center overflow-hidden border-r border-background text-[11px] font-semibold text-background last:border-r-0"
-          style={{ width: `${s.pct}%`, background: yarnColor(s.yarn) }} title={`${yarnLetter(s.yarn - 1)} · ${formatQty(s.ends, 0)} tel`}>
-          {s.pct >= 8 && <span className="truncate px-1">{yarnLetter(s.yarn - 1)}</span>}
+          style={{ width: `${s.pct}%`, background: mark.color(s.yarn) }} title={`${mark.letter(s.yarn)} · ${formatQty(s.ends, 0)} tel`}>
+          {s.pct >= 8 && <span className="truncate px-1">{mark.letter(s.yarn)}</span>}
         </div>
       ))}
     </div>

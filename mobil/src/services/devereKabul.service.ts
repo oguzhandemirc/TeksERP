@@ -7,6 +7,7 @@
 // =============================================================================
 import { apiClient } from './api';
 import type { ApiResponse } from '../types/api';
+import type { WarpEndsSequence, WarpSpecYarnRow } from './warpBeam.service';
 
 export type DevereMode3 = 'OFF' | 'OPTIONAL' | 'REQUIRED';
 export type DuplicateNoteMode = 'ALLOW' | 'WARN' | 'BLOCK';
@@ -16,7 +17,8 @@ export interface WarpingTabletOrder {
   orderNo: string;
   status: string;
   subcontractor: { id: string; name: string };
-  warpSpec: { name: string; code: string };
+  /** `yarns`/`sequenceNote`/`endsSequence`: kart görseli G (levent satırında tel düzeni bandı); eski sunucu göndermez → bant yok. */
+  warpSpec: { name: string; code: string; yarns?: WarpSpecYarnRow[]; sequenceNote?: string | null; endsSequence?: WarpEndsSequence | null };
   beamLines: { beamCount: number; beamLengthM: string }[];
   plannedBeamCount: number | null;
   targetLengthM: string;

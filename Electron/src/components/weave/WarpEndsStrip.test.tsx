@@ -27,6 +27,17 @@ describe("WarpEndsStrip", () => {
     expect(w).toMatch(/toplam teli 3\.?600/);
   });
 
+  it("ortak palet: satırlar verilen yuvaların harfini taşır (döner kartın 1. satırı = B)", () => {
+    render(<WarpEndsStrip yarns={[{ label: "Simli", endsCount: 3000 }, { label: "Naylon", endsCount: 500 }]}
+      endsSequence={{ ...seq, matchesYarnEnds: false }} cardEnds={3500} slots={[2, 3]} />);
+    const w = screen.getByTestId("warp-ends-warning").textContent ?? "";
+    expect(w).toMatch(/B dizilimde 2\.?334 \/ kartta 3\.?000/);
+    expect(w).toMatch(/C dizilimde/);
+    const legend = screen.getByRole("list", { name: "Renk açıklaması" }).textContent ?? "";
+    expect(legend).toMatch(/BSimli/);
+    expect(legend).toMatch(/CNaylon/);
+  });
+
   it("açılım yok: oransal blok; not girilmemiş / okunamadı / düzenleniyor ayrı yazılır", () => {
     const { rerender } = render(<WarpEndsStrip yarns={yarns} endsSequence={null} />);
     expect(screen.getByTestId("warp-ends-proportional")).toBeTruthy();

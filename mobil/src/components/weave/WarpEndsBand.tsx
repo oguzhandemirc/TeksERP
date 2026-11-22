@@ -13,18 +13,22 @@ import { colors, radius, spacing, typography } from '../../theme';
 import type { WarpEndsSequence, WarpSpecYarnRow } from '../../services/warpBeam.service';
 import { hasWarpBand, warpBandCaption, warpBandLayout } from './warpBandLayout';
 import { WEAVE_COLORS, yarnColor } from './weavePalette';
+import { slotLetter, slotOf } from './sharedPalette';
 
 export interface WarpEndsBandProps {
   yarns?: readonly WarpSpecYarnRow[] | null;
   endsSequence?: WarpEndsSequence | null;
   sequenceNote?: string | null;
   compact?: boolean;
+  /** Ortak palet yuvaları (satır i → yuva; `sharedPalette`) — aynı ekrandaki kartlarda aynı iplik aynı harf/renk. */
+  slots?: readonly number[] | null;
   testID?: string;
 }
 
-export default function WarpEndsBand({ yarns, endsSequence, sequenceNote, compact = false, testID }: WarpEndsBandProps) {
+export default function WarpEndsBand({ yarns, endsSequence, sequenceNote, compact = false, slots, testID }: WarpEndsBandProps) {
   const [width, setWidth] = useState(0);
   if (!hasWarpBand({ yarns })) return null;
+  const color = (row1: number) => yarnColor(slotOf(slots, row1));
   const height = compact ? 12 : 28;
   const model = warpBandLayout({ yarns, endsSequence }, width, height);
   const onLayout = (e: LayoutChangeEvent) => setWidth(Math.floor(e.nativeEvent.layout.width));
@@ -32,7 +36,7 @@ export default function WarpEndsBand({ yarns, endsSequence, sequenceNote, compac
     <View onLayout={onLayout} style={[styles.bandBox, { height }]}>
       {model ? (
         <Svg width={model.width} height={height} testID={testID ? `${testID}-svg` : undefined}>
-          {model.segments.map((s, i) => <Rect key={i} x={s.x} y={0} width={s.w} height={height} fill={yarnColor(s.yarn)} />)}
+          {model.segments.map((s, i) => <Rect key={i} x={s.x} y={0} width={s.w} height={height} fill={color(s.yarn)} />)}
           {model.ticksPath ? <Path d={model.ticksPath} stroke={WEAVE_COLORS.bg} strokeWidth={1} /> : null}
         </Svg>
       ) : null}
@@ -46,8 +50,8 @@ export default function WarpEndsBand({ yarns, endsSequence, sequenceNote, compac
       <View style={styles.legend}>
         {yarns!.map((y, i) => (
           <View key={y.letter} style={styles.legendItem}>
-            <View style={[styles.swatch, { backgroundColor: yarnColor(i + 1) }]}>
-              <Text style={styles.swatchLetter}>{y.letter}</Text>
+            <View style={[styles.swatch, { backgroundColor: color(i + 1) }]}>
+              <Text style={styles.swatchLetter}>{slots ? slotLetter(slotOf(slots, i + 1)) : y.letter}</Text>
             </View>
             <Text style={styles.legendText}>{`${y.code} · ${y.endsCount} tel`}</Text>
           </View>

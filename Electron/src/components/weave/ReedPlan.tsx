@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { WeaveGrid } from "./WeaveGrid";
 import { YarnLegend } from "./YarnLegend";
 import { yarnColor } from "./weave-palette";
+import { slotOf } from "./shared-palette";
 import { reedSample, type WarpEndsSequenceView } from "./warp-ends";
 
 export const SELVEDGE_COLOR = "hsl(var(--muted-foreground) / 0.55)";
@@ -19,6 +20,8 @@ export interface ReedPlanProps {
   endsSequence?: WarpEndsSequenceView | null;
   /** Örneğin sığacağı genişlik (px); çizilen diş adedi buna göre. Varsayılan 640. */
   maxWidth?: number;
+  /** Ortak palet yuvaları (satır i → yuva); yoksa kartın kendi sırası. */
+  slots?: readonly number[] | null;
   className?: string;
 }
 
@@ -31,7 +34,7 @@ export function groundDentsFor(maxWidth: number, endsPerDent: number): number {
   return Math.max(3, Math.min(12, Math.floor((maxWidth - 2 * dent) / dent)));
 }
 
-export function ReedPlan({ endsPerDent, reedNo, totalEnds, selvedgeEnds, endsSequence, maxWidth = 640, className }: ReedPlanProps) {
+export function ReedPlan({ endsPerDent, reedNo, totalEnds, selvedgeEnds, endsSequence, maxWidth = 640, slots, className }: ReedPlanProps) {
   const epdIn = endsPerDent && endsPerDent > 0 ? endsPerDent : 1;
   const s = reedSample({ endsPerDent, totalEnds, selvedgeEnds, repeat: endsSequence?.repeat, groundDentsShown: groundDentsFor(maxWidth, epdIn) });
   if (!s) {
@@ -51,7 +54,7 @@ export function ReedPlan({ endsPerDent, reedNo, totalEnds, selvedgeEnds, endsSeq
           rows={1} cols={s.cells.length} cell={CELL} rowLabel={false}
           ariaLabel={`Tarak planı örneği: dişe ${epd} tel, sol kenardan ilk ${s.dentStarts.length} diş`}
           colGapsBefore={s.dentStarts}
-          fill={(_r, c) => (s.cells[c] === 0 ? SELVEDGE_COLOR : yarnColor(s.cells[c]!))}
+          fill={(_r, c) => (s.cells[c] === 0 ? SELVEDGE_COLOR : yarnColor(slotOf(slots, s.cells[c]!)))}
         />
       </div>
       <p className="text-xs tabular-nums" data-testid="reed-plan-summary">{parts.join(" · ")}</p>

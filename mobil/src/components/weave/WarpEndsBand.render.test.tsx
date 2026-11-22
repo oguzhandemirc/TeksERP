@@ -4,6 +4,7 @@ import { fireEvent } from '@testing-library/react-native';
 import { Rect } from 'react-native-svg';
 import { renderWithPaper } from '../../test/render';
 import WarpEndsBand from './WarpEndsBand';
+import { yarnColor } from './weavePalette';
 
 const yarns = [
   { letter: 'A', code: 'P150', name: 'P150', endsCount: 4 },
@@ -25,6 +26,21 @@ describe('WarpEndsBand', () => {
     expect(r.UNSAFE_getAllByType(Rect)).toHaveLength(2);
     expect(r.getByText('Rapor 3 tel × 2 = 6 tel')).toBeTruthy();
     expect(r.queryByTestId('b-uyari')).toBeNull();
+  });
+
+  it('ortak palet: lejant harfi ve renk yuvadan (B, C), yuvasızda kartın kendi harfi', () => {
+    const r = renderWithPaper(<WarpEndsBand yarns={yarns} endsSequence={seq} slots={[2, 3]} testID="b" />);
+    expect(r.getByText('B')).toBeTruthy();
+    expect(r.getByText('C')).toBeTruthy();
+    expect(r.queryByText('A')).toBeNull();
+    fireEvent(r.getByTestId('b').children[1] as never, 'layout', { nativeEvent: { layout: { width: 300, height: 28 } } });
+    const fills = r.UNSAFE_getAllByType(Rect).map((x) => x.props.fill);
+    expect(fills).toEqual([yarnColor(2), yarnColor(3)]);
+  });
+
+  it('veri yoksa (eski sunucu) hiçbir şey çizmez', () => {
+    const r = renderWithPaper(<WarpEndsBand yarns={undefined} endsSequence={undefined} compact testID="b" />);
+    expect(r.queryByTestId('b')).toBeNull();
   });
 
   it('dizilim kart tel sayılarıyla tutmuyorsa uyarır; ince kipte lejant yok', () => {

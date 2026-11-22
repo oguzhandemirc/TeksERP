@@ -12,7 +12,7 @@ import { yarnLotBalancesTx } from "./helpers/yarn-lot.helper";
 import { readDevereAutoConsume, readDevereBeamBodyMode, readDevereBodyNoLooseMatch,readDevereLotRequired, readDevereMountTracking, readDevereMountTrackingRequired, resolveBeamWeavingLinkRequired, resolveYarnQualityHoldEnabled } from "./system-setting.service";
 import { listOpenInHouseWeavingOrders, type MachineRunTabletContextDto } from "./helpers/machine-run-suggest.helper";
 import { lastWindDefaults, type LastWindDefault } from "./helpers/warp-beam-wind-defaults.helper";
-import { expandWarpSequence, type WarpEndsSequence } from "./helpers/warp-sequence.helper";
+import { tabletWarpLayout, type WarpEndsSequence } from "./helpers/warp-sequence.helper";
 
 /**
  * Tablet form bağlamı — TEK uç, TEK izin (`mobile:devere`), DEVERE-LEVENT-TARAMASI §11 D2.
@@ -76,9 +76,8 @@ function tabletWarpSpec(w: TabletSpecRow): WarpBeamTabletContextDto["warpSpecs"]
   const lines = warpSpecDenierLines(w);
   const kgPerM = warpSpecKgPerMExact(lines);
   const d = lines.length === 1 ? lines[0]!.denier : null;
-  const yarns = lines.map((l, i) => ({ letter: String.fromCharCode(65 + i), code: l.yarnItem.code, name: l.yarnItem.name, endsCount: l.endsCount }));
-  const endsSequence = expandWarpSequence(w.sequenceNote, lines.map((l) => l.endsCount));
-  return { id: w.id, code: w.code, name: w.name, endsCount: w.endsCount, denier: d == null ? null : Number(d), kgPerM: kgPerM == null ? null : Number(kgPerM), yarnCount: lines.length, yarns, sequenceNote: w.sequenceNote, endsSequence };
+  const { yarns, sequenceNote, endsSequence } = tabletWarpLayout(lines, w.sequenceNote);
+  return { id: w.id, code: w.code, name: w.name, endsCount: w.endsCount, denier: d == null ? null : Number(d), kgPerM: kgPerM == null ? null : Number(kgPerM), yarnCount: lines.length, yarns, sequenceNote, endsSequence };
 }
 
 export async function getWarpBeamTabletContext(): Promise<ApiResponse<WarpBeamTabletContextDto>> {

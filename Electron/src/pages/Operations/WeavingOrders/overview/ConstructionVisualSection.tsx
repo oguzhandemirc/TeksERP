@@ -14,6 +14,7 @@ import { YarnLegend } from "@/components/weave/YarnLegend";
 import { useWeaveDirection } from "@/components/weave/weave-direction";
 import { LENO_LABEL, LENO_TINT, LIFT_COLOR, yarnColor, yarnLetter } from "@/components/weave/weave-palette";
 import { V3Section } from "@/pages/Operations/WorkOrders/detail-v3/V3Section";
+import { constructionSlots, slotOf } from "@/components/weave/shared-palette";
 import { stripYarnsOf } from "@/pages/WeaveDesigns/tabs/WarpLayersVisual";
 import { WARP_LAYER_ROLE_LABEL, WEAVE_KIND_LABEL, type WarpRef } from "@/pages/WeaveDesigns/types";
 import { weavingOrderService } from "../service";
@@ -72,6 +73,8 @@ function ConstructionBody({ c, itemId, onNavigate, print }: { c: WeavingOrderCon
   const bands: Array<{ key: string; title: string; warp: WarpRef }> = [];
   if (c.groundWarp) bands.push({ key: "ground", title: "Zemin", warp: c.groundWarp });
   for (const l of c.warpLayers) bands.push({ key: l.warpSpec.id, title: WARP_LAYER_ROLE_LABEL[l.role] ?? l.role, warp: l.warpSpec });
+  // Ortak palet: çözgü bantları harf+renk, atkı seçici renk (harfi atkı kartının kendi kodundaki harftir).
+  const palette = constructionSlots(bands.map((b) => b.warp), (w?.yarns ?? []).map((y) => y.yarnItem.id));
   return (
     <>
       <dl className="grid grid-cols-[5.5rem_1fr] gap-x-2 gap-y-0.5 text-xs">
@@ -81,12 +84,12 @@ function ConstructionBody({ c, itemId, onNavigate, print }: { c: WeavingOrderCon
           <dd className="min-w-0 break-words">{w.name} <span className="text-muted-foreground">({w.code}{w.sequenceCode ? ` · ${w.sequenceCode}` : ""})</span></dd></>)}
         {c.variantCode && (<><dt className="text-muted-foreground">Varyant</dt><dd>{c.variantCode}</dd></>)}
       </dl>
-      {d && <MiniLiftPlan c={c} onOpen={openDesign} />}
+      {d && <MiniLiftPlan c={c} onOpen={openDesign} weftSlots={palette.weft} />}
       {bands.length > 0 && (
         <div className="space-y-2">
           <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Tel düzeni (çözgü raporu)</h3>
-          {bands.map((b) => (
-            <WarpEndsStrip key={b.key} maxWidth={520} title={`${b.title} · ${b.warp.name === b.title ? b.warp.code : b.warp.name}`} yarns={stripYarnsOf(b.warp)}
+          {bands.map((b, i) => (
+            <WarpEndsStrip key={b.key} maxWidth={520} title={`${b.title} · ${b.warp.name === b.title ? b.warp.code : b.warp.name}`} yarns={stripYarnsOf(b.warp)} slots={palette.warp[i]}
               endsSequence={b.warp.endsSequence ?? null} sequenceNote={b.warp.sequenceNote} cardEnds={b.warp.endsCount} />
           ))}
         </div>
@@ -106,7 +109,8 @@ function ConstructionBody({ c, itemId, onNavigate, print }: { c: WeavingOrderCon
 /** Küçük karede iki haneli çerçeve noları sıkışmasın: yalnız çiftler yazılır. */
 const frameLabel = (n: number, cell: number) => (n < 10 || cell >= 14 || n % 2 === 0 ? String(n) : null);
 
-function MiniLiftPlan({ c, onOpen }: { c: WeavingOrderConstruction; onOpen?: (e: MouseEvent) => void }) {
+function MiniLiftPlan({ c, onOpen, weftSlots }: { c: WeavingOrderConstruction; onOpen?: (e: MouseEvent) => void; weftSlots: readonly number[] }) {
+  const weftColor = (n: number) => yarnColor(slotOf(weftSlots, n));
   const [direction] = useWeaveDirection();
   const d = c.weaveDesign!;
   const leno = d.lenoFrames ?? [];
@@ -125,7 +129,7 @@ function MiniLiftPlan({ c, onOpen }: { c: WeavingOrderConstruction; onOpen?: (e:
       fill={(r, col) => {
         if (col < lay.frames) return plan[r]?.[col] === 1 ? LIFT_COLOR : null;
         const n = col - lay.frames + 1;
-        return seq?.[r] === n ? yarnColor(n) : null;
+        return seq?.[r] === n ? weftColor(n) : null;
       }} />
   );
   return (
@@ -144,7 +148,7 @@ function MiniLiftPlan({ c, onOpen }: { c: WeavingOrderConstruction; onOpen?: (e:
       <YarnLegend entries={[
         { color: LIFT_COLOR, label: "Çerçeve kalkık" },
         ...(lenoSet.size > 0 ? [{ color: LENO_TINT, label: "Döner çerçeve" }] : []),
-        ...yarns.map((y, i) => ({ color: yarnColor(i + 1), mark: y.letter || yarnLetter(i), label: y.yarnItem.name })),
+        ...yarns.map((y, i) => ({ color: weftColor(i + 1), mark: y.letter || yarnLetter(i), label: `${y.yarnItem.name} (atkı)` })),
       ]} />
     </div>
   );
