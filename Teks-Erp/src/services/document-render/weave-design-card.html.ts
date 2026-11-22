@@ -8,6 +8,7 @@
 // =============================================================================
 import { escapeHtml } from "../helpers/label-html.shared";
 import type { WeaveDrawdown } from "../helpers/weave-drawdown.helper";
+import { TERIM } from "../../constants/terim";
 
 export interface WeaveCardYarn {
   code: string;
@@ -181,7 +182,7 @@ h1{text-align:center;font-size:16pt;margin:0 0 2mm}h3{font-size:10pt;margin:4mm 
 .foot{margin-top:4mm;font-size:7.5pt;color:#666;text-align:right}
 </style></head><body>
 <h1>DESEN NO : ${e(v.designNo)}</h1>
-<div class="sub">${e(v.itemName)}${v.weavingOrderNumber ? ` · İş emri: <b>${e(v.weavingOrderNumber)}</b>` : ""}${meta ? `<br>${meta}` : ""}</div>
+<div class="sub">${e(v.itemName)}${v.weavingOrderNumber ? ` · ${TERIM.dokumaIsEmri.tekil}: <b>${e(v.weavingOrderNumber)}</b>` : ""}${meta ? `<br>${meta}` : ""}</div>
 ${gridHtml(v)}
 <div class="bottom">
 <div><h3>ATKI İPLİKLERİ</h3>${weftYarns}${w?.sequenceCode ? `<div class="kv muted">Seçici sırası: ${e(w.sequenceCode)}</div>` : ""}</div>
