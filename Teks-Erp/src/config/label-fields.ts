@@ -206,6 +206,10 @@ export const WARP_BEAM_FIELDS: readonly FieldDef[] = [
   { key: "itemName",           defaultLabel: "Kumaş",             type: "text" },
   { key: "woundAt",            defaultLabel: "Sarım Tarihi",      type: "date" },
   { key: "printedAt",          defaultLabel: "Baskı Tarihi",      type: "date" },
+  // Devere-levent S5: opt-in — mevcut şablonlar bu alanları eklemedikçe baskı bayt-aynı.
+  { key: "bodyNo",             defaultLabel: "Levent Gövdesi",    type: "text" },
+  { key: "subcontractorName",  defaultLabel: "Devereci",          type: "text" },
+  { key: "deliveryNoteNo",     defaultLabel: "İrsaliye No",       type: "text" },
 ] as const;
 
 // =============================================================================
