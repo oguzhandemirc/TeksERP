@@ -71,18 +71,20 @@ function SummaryBand({ page }: { page: unknown }) {
   );
 }
 
+const TABLE_OPTIONS = {
+  queryKey: WARP_BEAMS_QUERY_KEY,
+  fetchFn: warpBeamService.listCursor,
+  columns: warpBeamColumns,
+  defaultPageSize: 50,
+  enableSelection: false,
+  persistFilters: PERSIST,
+};
+
 export function WarpBeamsPage() {
   const { dialog, setDialog, actions } = usePageDialog();
   const { save, deleteDraft, wind, cancel, act } = useWarpBeamMutations(() => setDialog(null));
   const mountTracking = useDevereMountTracking();
-  const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<WarpBeam>({
-    queryKey: WARP_BEAMS_QUERY_KEY,
-    fetchFn: warpBeamService.listCursor,
-    columns: warpBeamColumns,
-    defaultPageSize: 50,
-    enableSelection: false,
-    persistFilters: PERSIST,
-  });
+  const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<WarpBeam>(TABLE_OPTIONS);
   const formTarget = dialog?.kind === "new" ? null : dialog?.kind === "edit" ? dialog.target : undefined;
   return (
     <PageShell>
