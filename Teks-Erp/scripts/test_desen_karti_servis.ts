@@ -156,6 +156,20 @@ async function main(): Promise<void> {
   check("§8k basım: döner çerçeve sütunları işaretli + ayrık blok", (html.match(/<th class="leno">/g) ?? []).length === 2 && frameBlocks(4, new Set([1, 2])).length === 2);
   const esc = renderWeaveDesignCardHtml({ ...view, itemName: "<script>x</script>" });
   check("§8l basım: metin kaçışlı", !esc.includes("<script>x") && esc.includes("&lt;script&gt;"));
+  // Devere/levent S8: tahar düzeni notu — boş = bugünkü basım (bayt-aynı), dolu = "TAHAR" satırı, 300 tavanı.
+  // Bugünkü basımda çözgü bloğunun son satırını doğrudan sıklık satırı izler; boş not araya bayt koymaz.
+  check("§8p tahar boş: alan null, basım tahar satırsız (çözgü → sıklık arası bayt-aynı)",
+    view.design?.drawingInNote === null && !html.includes("TAHAR") && html.includes(`</div>\n<div class="kv"><b>ATKI SIKLIĞI :</b>`));
+  const tooLong = await errOf(() => updateWeaveDesign(d.id, { drawingInNote: "x".repeat(301) }, admin.id));
+  check("§8q tahar 301 karakter → 400", tooLong?.status === 400, JSON.stringify(tooLong));
+  const dn = await updateWeaveDesign(d.id, { drawingInNote: "  1-2-3-4 düz, kenar 2'li <döner> 1-2  " }, admin.id);
+  check("§8r tahar kırpılıp yazıldı", dn.drawingInNote === "1-2-3-4 düz, kenar 2'li <döner> 1-2");
+  const tHtml = renderWeaveDesignCardHtml(await buildWeaveCardView(fabric.id, new Date("2026-11-21T09:00:00Z")));
+  const tLine = /<b>TAHAR :<\/b> ([^<]*)<\/div>/.exec(tHtml)?.[1] ?? "";
+  check("§8s tahar dolu: basımda kaçışlı TAHAR satırı", tLine.startsWith("1-2-3-4 düz, kenar 2") && tLine.endsWith("&lt;döner&gt; 1-2"), tLine);
+  check("§8t tahar 300 karakter sınırda geçer; boş metin null'a döner",
+    (await updateWeaveDesign(d.id, { drawingInNote: "y".repeat(300) }, admin.id)).drawingInNote?.length === 300
+    && (await updateWeaveDesign(d.id, { drawingInNote: "   " }, admin.id)).drawingInNote === null);
   const pinned = await resolveEffectiveConstruction(prisma, fabric.id, null, { weftSpecId: w0.id, weaveDesignId: null });
   check("§8m sabitleme: iş emrinin atkı kartı ürünün kartının yerine geçer; desen ürünün", pinned.weft?.weftSpecId === w0.id && pinned.weaveDesign?.id === d.id);
   const wo = await prisma.weavingOrder.create({ data: { weavingOrderNumber: `${TAG}-WO`, itemId: fabric.id, executionKind: "IN_HOUSE", weftSpecId: w0.id, weaveDesignId: d.id }, select: { id: true } });

@@ -149,6 +149,7 @@
 - [ÇEKİRDEK] Atkı iplik payını yalnız `weft-share.helper` (`withWeftShares`) hesaplasın: kütlece maliyet motorunun `yarnUsagePerM` atkı kg/m oranı, denye eksikse atım payı (`shareBasis: "PICKS"`), satırsız kart null; kart dönen her yanıt süslenir.
 - [ÇEKİRDEK] Tezgâh yük çizelgesini (`GET /api/weaving-orders/loom-load`) yalnız `loom-load.service` doğursun: iş tezgâhta = açık koşum ya da işe bağlı takılı levent, saat öneri önizlemesinin `weavingHoursDecimal`ı, tek bilinmeyen terim (devir/randıman/atkı/kalan, çok tezgâhlı iş) toplamı ve boşalmayı null yapar, boşalma "şimdi başlar, kesintisiz 24 saat" varsayımıdır; sorgu sayısı sabit kalır.
 - [ÇEKİRDEK] Devere teslim süresini yalnız `warping-order/lead-time` hesaplasın (deverecinin son 5 kapanmış siparişinde iptalsiz ilk sevk → ilk canlı kabul, fabrika günü, MEDYAN; örnek yoksa `devere.defaultLeadDays` > 0, o da yoksa null + gerekçe); "devereye ver" günü = bitiş − ⌈süre⌉, yedek = aynı kartın READY leventi + açık devere kalanı (`readBeamStockBySpec`/`readWarpSupplyBySpec`), devere gecikme bildirimi kokpitin `listWarpingDelays` OVERDUE kümesinden.
+- Tahar düzenini `WeaveDesign.drawingInNote` (serbest metin ≤300, boş = null) olarak tut; hesaba sokma, desen kartı basımında yalnız doluysa "TAHAR" satırı bas (boş → basım bayt-aynı). <sub>(arşiv:2026-11-22 Devere/levent S8)</sub>
 
 ## Panel (Electron)
 

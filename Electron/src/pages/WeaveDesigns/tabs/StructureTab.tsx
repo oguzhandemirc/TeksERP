@@ -7,15 +7,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { InfoPopover } from "@/components/ui/info-popover";
 import { NATIVE_SELECT_CLASS } from "../WeaveDesignCreateDialog";
 import { weaveDesignApi } from "../service";
 import { WEAVE_DESIGN_KINDS, WEAVE_KIND_LABEL, type DesignFabric, type WeaveDesign, type WeaveDesignKind } from "../types";
 import { WarpLayersSection } from "./WarpLayersSection";
 import { decimalToFormText } from "@/lib/decimal-form-text";
 
-type Form = Record<"code" | "name" | "familyLabel" | "frameCount" | "repeatCm" | "loomFileName" | "lenoSetup" | "notes", string> & { kind: WeaveDesignKind };
+type Form = Record<"code" | "name" | "familyLabel" | "frameCount" | "repeatCm" | "loomFileName" | "lenoSetup" | "drawingInNote" | "notes", string> & { kind: WeaveDesignKind };
 
-const TEXT_FIELDS: Array<{ key: keyof Omit<Form, "kind" | "notes">; label: string; max: number; mode?: "numeric" | "decimal" }> = [
+const DRAWING_IN_HINT = "Tellerin hangi çerçeveden ve tarağın hangi dişinden geçtiği (tahar ve tarak taharı). Örnek: \"1-2-3-4 düz, kenar 2'li, döner 1-2\". Desen kartı basımında \"Tahar\" satırı olarak çıkar; hesaba girmez. Boş bırakılabilir.";
+
+const TEXT_FIELDS: Array<{ key: keyof Omit<Form, "kind" | "notes" | "drawingInNote">; label: string; max: number; mode?: "numeric" | "decimal" }> = [
   { key: "code", label: "Desen kodu *", max: 32 },
   { key: "name", label: "Desen adı *", max: 100 },
   { key: "familyLabel", label: "Aile etiketi (TERGAL-DÖNER, BALIK…)", max: 40 },
@@ -28,7 +31,8 @@ const TEXT_FIELDS: Array<{ key: keyof Omit<Form, "kind" | "notes">; label: strin
 function toForm(d: WeaveDesign): Form {
   return {
     code: d.code, name: d.name, kind: d.kind, familyLabel: d.familyLabel ?? "", frameCount: d.frameCount?.toString() ?? "",
-    repeatCm: decimalToFormText(d.repeatCm), loomFileName: d.loomFileName ?? "", lenoSetup: d.lenoSetup ?? "", notes: d.notes ?? "",
+    repeatCm: decimalToFormText(d.repeatCm), loomFileName: d.loomFileName ?? "", lenoSetup: d.lenoSetup ?? "",
+    drawingInNote: d.drawingInNote ?? "", notes: d.notes ?? "",
   };
 }
 
@@ -42,7 +46,8 @@ export function StructureTab({ design, fabric, canWrite }: { design: WeaveDesign
     mutationFn: () => weaveDesignApi.update(design.id, {
       code: form.code.trim(), name: form.name.trim(), kind: form.kind, familyLabel: orNull(form.familyLabel),
       frameCount: form.frameCount.trim() === "" ? null : Number(form.frameCount), repeatCm: orNull(form.repeatCm.replace(",", ".")),
-      loomFileName: orNull(form.loomFileName), lenoSetup: orNull(form.lenoSetup), notes: orNull(form.notes),
+      loomFileName: orNull(form.loomFileName), lenoSetup: orNull(form.lenoSetup),
+      drawingInNote: orNull(form.drawingInNote), notes: orNull(form.notes),
     }),
     onSuccess: () => {
       toast.success("Desen kartı güncellendi.");
@@ -63,6 +68,13 @@ export function StructureTab({ design, fabric, canWrite }: { design: WeaveDesign
           <select id="wd-kind-edit" className={NATIVE_SELECT_CLASS} value={form.kind} disabled={!canWrite} onChange={(e) => set("kind", e.target.value)}>
             {WEAVE_DESIGN_KINDS.map((k) => <option key={k} value={k}>{WEAVE_KIND_LABEL[k]}</option>)}
           </select>
+        </div>
+        <div className="space-y-1.5 sm:col-span-2 lg:col-span-3">
+          <div className="flex items-center gap-1.5">
+            <Label htmlFor="wd-drawingInNote">Tahar düzeni</Label>
+            <InfoPopover desc={DRAWING_IN_HINT} label="Tahar düzeni açıklaması" />
+          </div>
+          <Input id="wd-drawingInNote" value={form.drawingInNote} maxLength={300} placeholder="1-2-3-4 düz, kenar 2'li, döner 1-2" disabled={!canWrite} onChange={(e) => set("drawingInNote", e.target.value)} />
         </div>
         <div className="space-y-1.5 sm:col-span-2 lg:col-span-3">
           <Label htmlFor="wd-notes">Not</Label>
