@@ -233,5 +233,7 @@ export type {
 export { readDevereSettleDefault, DEVERE_SETTLE_DEFAULTS, DEFAULT_DEVERE_SETTLE_DEFAULT } from "./devere-settle";
 export { readDevereDefaultLeadDays, DEFAULT_DEVERE_DEFAULT_LEAD_DAYS, DEVERE_DEFAULT_LEAD_DAYS_MAX } from "./devere-lead";
 export type { DevereSettleDefault } from "./devere-settle";
+export { readDevereBeamCardAutoPrint, DEVERE_BEAM_CARD_AUTO_PRINTS, DEFAULT_DEVERE_BEAM_CARD_AUTO_PRINT } from "./devere-beam-card";
+export type { DevereBeamCardAutoPrint } from "./devere-beam-card";
 export { readDevereDuplicateDeliveryNote, readDevereReceiveWeighing, DEVERE_DUPLICATE_DELIVERY_NOTE_MODES, DEFAULT_DEVERE_DUPLICATE_DELIVERY_NOTE, DEVERE_RECEIVE_WEIGHING_MODES, DEFAULT_DEVERE_RECEIVE_WEIGHING } from "./devere-receive";
 export type { DevereDuplicateDeliveryNote, DevereReceiveWeighing } from "./devere-receive";

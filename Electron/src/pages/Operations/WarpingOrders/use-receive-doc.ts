@@ -3,10 +3,12 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import { useDevereBeamBodyMode, useDevereDuplicateDeliveryNote, useDevereReceiveWeighing } from "@/hooks/usePricingEnabled";
+import { useDevereBeamBodyMode, useDevereBeamCardAutoPrint, useDevereDuplicateDeliveryNote, useDevereReceiveWeighing } from "@/hooks/usePricingEnabled";
+import { offerBeamCards } from "@/pages/Operations/WarpBeams/beamCardPrint";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { toastServerSuccess } from "@/lib/serverNotes";
-import { buildReceiveDocBody, deliveryNoteUsesOf, type DocOrderDraft } from "./receive-doc-model";
+import { buildReceiveDocBody, deliveryNoteUsesOf, liveBeamsOfDoc, type DocOrderDraft } from "./receive-doc-model";
 import { useDeliveryNoteGroup, WARPING_RECEIVE_DOCS_QUERY_KEY, warpingReceiveDocService } from "./receive-doc-service";
 import { draftsFromPlan, type ReceiveBeamDraft } from "./receive-model";
 import { listWarpingOrders, WARPING_ORDERS_QUERY_KEY } from "./service";
@@ -36,6 +38,10 @@ export function useReceiveDoc(fixedOrder: WarpingOrder | undefined, onDone: (doc
   const weighing = useDevereReceiveWeighing();
   const bodyMode = useDevereBeamBodyMode();
   const dupMode = useDevereDuplicateDeliveryNote();
+  const { hasPermission } = useRoleAccess();
+  // Kart okuma izni olmayana öneri çıkmaz (sunucu 403 verirdi) — OFF ile aynı davranış.
+  const cardSetting = useDevereBeamCardAutoPrint();
+  const cardMode = hasPermission("warpbeam:read") ? cardSetting : "OFF";
   const [sub, setSubState] = useState<{ id: string; name: string } | null>(fixedOrder ? { id: fixedOrder.subcontractor.id, name: fixedOrder.subcontractor.name } : null);
   const [noteNo, setNoteNo] = useState("");
   const [drafts, setDrafts] = useState<Record<string, ReceiveBeamDraft[]>>(() => (fixedOrder ? { [fixedOrder.id]: draftsFromPlan(fixedOrder.beamLines) } : {}));
@@ -68,7 +74,10 @@ export function useReceiveDoc(fixedOrder: WarpingOrder | undefined, onDone: (doc
       toastServerSuccess(res, "Leventler kabul edildi.");
       void qc.invalidateQueries({ queryKey: [WARPING_ORDERS_QUERY_KEY] });
       void qc.invalidateQueries({ queryKey: [WARPING_RECEIVE_DOCS_QUERY_KEY] });
-      if (res.data) onDone(res.data);
+      if (res.data) {
+        offerBeamCards(cardMode, liveBeamsOfDoc(res.data));
+        onDone(res.data);
+      }
     },
     onError: (e) => attempt.onFailure(e),
   });

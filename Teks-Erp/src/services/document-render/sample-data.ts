@@ -189,7 +189,7 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
     totals: { rollCount: 2, qty: 312.5, returnedQty: 304.5 },
   },
 
-  ...SAMPLE_CUSTOMER_EXTRA_DOCS, // muayene raporu, satış teklifi, fiyat listesi (ayrı dosya: satır tavanı)
+  ...SAMPLE_CUSTOMER_EXTRA_DOCS, // muayene raporu, satış teklifi, fiyat listesi, levent kartı (ayrı dosya: satır tavanı)
 
   // Kalite Sertifikası (renderQualityCertificateHtml).
   QUALITY_CERTIFICATE: {

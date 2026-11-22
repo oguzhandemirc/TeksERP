@@ -22,6 +22,7 @@ import type { LabelPayload } from "../../types/label.types";
 import { renderCode128Svg, renderQrSvg } from "./barcode-svg.helper";
 import { resolveLabelRouting } from "./label-routing.resolver";
 import { assertContextRenderable } from "./label-context-fit";
+import { ensureDefaultWarpBeamLabelTemplate } from "./label-default-warp-beam.helper";
 import { applyCopies } from "./label-html.shared";
 import { renderLabel, type LabelRenderInput, type RenderedLabel } from "./label-renderer.registry";
 
@@ -105,9 +106,12 @@ export async function loadWarpBeamLabelPayload(beamId: string): Promise<LabelPay
       id: true, beamNo: true, physicalBeamNo: true, plannedLengthM: true,
       warpSpec: { select: { code: true, name: true } },
       weavingOrder: { select: { weavingOrderNumber: true, item: { select: { name: true } } } },
+      beamBody: { select: { bodyNo: true } },
+      subcontractor: { select: { name: true } },
+      warpingReceiveDoc: { select: { deliveryNoteNo: true } },
       events: {
         where: { kind: "WOUND", reversal: null },
-        select: { lengthM: true, theoreticalKg: true, createdAt: true },
+        select: { lengthM: true, theoreticalKg: true, createdAt: true, deliveryNoteNo: true },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         take: 1,
       },
@@ -127,6 +131,10 @@ export async function loadWarpBeamLabelPayload(beamId: string): Promise<LabelPay
     woundKg: dec(wound?.theoreticalKg),
     weavingOrderNumber: b.weavingOrder?.weavingOrderNumber ?? null,
     woundAt: wound ? wound.createdAt.toISOString() : null,
+    // S5 opt-in alanları (yalnız EK; yukarıdaki anahtarlar bayt-aynı kalır).
+    bodyNo: b.beamBody?.bodyNo ?? null,
+    subcontractorName: b.subcontractor?.name ?? null,
+    deliveryNoteNo: b.warpingReceiveDoc?.deliveryNoteNo ?? wound?.deliveryNoteNo ?? null,
   };
 }
 
@@ -160,13 +168,19 @@ const CONTEXT_NOUN: Partial<Record<LabelKind, string>> = { MACHINE: "Tezgah", WA
  */
 export async function buildLoomRenderInput(payload: LabelPayload, opts: LoomLabelOpts): Promise<LabelRenderInput> {
   const kind = payload.kind!;
-  const routing = await resolveLabelRouting({
+  const route = () => resolveLabelRouting({
     kind,
     peripheralId: opts.peripheralId,
     templateId: opts.templateId,
     machineId: opts.machineId,
     deviceId: opts.deviceId,
   });
+  let routing = await route();
+  // S5: levent bağlam varsayılanı HİÇ tanımlı değilse standart şablon ihtiyaç anında kurulur (helper başlığı).
+  if (!routing.template && kind === LabelKind.WARP_BEAM && !opts.templateId) {
+    await ensureDefaultWarpBeamLabelTemplate();
+    routing = await route();
+  }
   const noun = CONTEXT_NOUN[kind] ?? kind;
   if (!routing.template) {
     throw AppError.badRequest(

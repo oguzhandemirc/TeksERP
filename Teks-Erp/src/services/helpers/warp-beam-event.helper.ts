@@ -23,6 +23,7 @@ import { WARP_BEAM_EVENT_SELECT, type WarpBeamEventRow } from "./warp-beam.helpe
 import { warpBeamEventStampTx } from "./ledger-stamp.helper";
 import { advanceBeamBodyForWarpEventTx } from "./beam-body-warp.helper";
 import { settingScreenPath } from "../../constants/panel-ayar-yolu";
+import { voidWarpBeamCardTx } from "../warp-beam-card.service";
 
 export const WARP_BEAM_EVENT_TABLE = "WARP_BEAM_EVENT";
 
@@ -67,6 +68,8 @@ export async function applyWarpBeamEventTx(
   const ev = await sequentialTx(tx).warpBeamEvent.create({ data: { beamId: input.beamId, kind: input.kind, fromStatus: input.from, toStatus: input.to, ...input.data, createdAt }, select: WARP_BEAM_EVENT_SELECT });
   // Devere ek B3: gövdeli sarımda gövde durumu aynı tx'te yürür (kilit sırası sarım → gövde); gövdesizde yazım yok.
   await advanceBeamBodyForWarpEventTx(tx, { beamId: input.beamId, kind: input.kind, data: input.data });
+  // Devere S5: iptal edilen leventin basılmış kartı aynı tx'te VOIDED (sahada geçersiz kart dolaşmasın).
+  if (input.to === WarpBeamStatus.CANCELLED) await voidWarpBeamCardTx(tx, input.beamId, input.data.reason ?? "Levent iptal edildi");
   // Bildirim (S2): levent bağlandı / bitti — durum geçişinin tek boğazı, aynı tx.
   await emitWarpBeamEventTx(tx, { beamId: input.beamId, kind: input.kind, machineId: input.data.machineId ?? null }, input.data.createdById ?? null);
   return ev;

@@ -167,6 +167,11 @@ export const DOC_PERMISSIONS: Record<string, { read: string[]; write: string[] }
     read: ["order:read", "order:write"],
     write: ["order:write"],
   },
+  // Devere S5 — levent kartı leventler ekranıyla HİZALI (okuyan basar); tablet devere kabul rolleri de basar.
+  WARP_BEAM_CARD: {
+    read: ["warpbeam:read", "warpbeam:write", "mobile:devere", "mobile:devere-kabul"],
+    write: ["warpbeam:write"],
+  },
 };
 
 /** docType path paramına göre ilgili modülün izinlerini uygular. */

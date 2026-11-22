@@ -1,5 +1,6 @@
-import { Pencil, Trash2, Disc3, Ban, Cable, Unplug, Scissors, SlidersHorizontal, Flag, Trash, Undo2, Tag, PackageX } from "lucide-react";
+import { Pencil, Trash2, Disc3, Ban, Cable, Unplug, Scissors, SlidersHorizontal, Flag, Trash, Undo2, Tag, PackageX, IdCard } from "lucide-react";
 import { isBeamRejectable } from "./BeamRejectLauncher";
+import { isBeamCardPrintable } from "./BeamCardDialog";
 import { ContextMenuItem, ContextMenuSeparator } from "@/components/ui/context-menu";
 import { PermissionGate } from "@/components/PermissionGate";
 import { undoMenuEnabled } from "./tezgah/beam-undo";
@@ -20,10 +21,12 @@ interface Props {
   onBeamAction: (kind: BeamActionKind, r: WarpBeam) => void;
   /** Devere ek P: kusurlu sarımı devereciye geri gönder (ret diyaloğu) — `warping-order:write`. */
   onReject: (r: WarpBeam) => void;
+  /** A6 levent kartı (WARP_BEAM_CARD) — `warpbeam:read`; sarılmamış/iptal levent pasif. */
+  onPrintCard: (r: WarpBeam) => void;
 }
 
 /** Satır menüsü — plan/sar/sil + tak/sök/tüket/düzelt/bitir `warpbeam:write`; sarım iptali · hurda · geri alma AYRI yetenek `warpbeam:cancel`. */
-export function WarpBeamRowMenu({ row, mountTracking, onEdit, onDelete, onWind, onCancel, onPrintLabel, onBeamAction, onReject }: Props) {
+export function WarpBeamRowMenu({ row, mountTracking, onEdit, onDelete, onWind, onCancel, onPrintLabel, onBeamAction, onReject, onPrintCard }: Props) {
   const planned = row.status === "PLANNED";
   const ready = row.status === "READY";
   const mounted = row.status === "MOUNTED";
@@ -90,6 +93,11 @@ export function WarpBeamRowMenu({ row, mountTracking, onEdit, onDelete, onWind, 
         <ContextMenuSeparator />
         <ContextMenuItem disabled={!isBeamLabelPrintable(row)} onSelect={() => onPrintLabel(row)}>
           <Tag /> Levent etiketi bas
+        </ContextMenuItem>
+      </PermissionGate>
+      <PermissionGate permission="warpbeam:read">
+        <ContextMenuItem disabled={!isBeamCardPrintable(row)} onSelect={() => onPrintCard(row)}>
+          <IdCard /> Levent kartı (A6)
         </ContextMenuItem>
       </PermissionGate>
     </>

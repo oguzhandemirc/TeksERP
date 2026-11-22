@@ -51,6 +51,7 @@ import "../src/services/stock-count.service";
 import "../src/services/quality-inspection-shipment.service";
 import "../src/services/quote-documents.service";
 import "../src/services/order-documents.service";
+import "../src/services/warp-beam-card.service";
 
 let pass = 0;
 let fail = 0;
@@ -115,6 +116,8 @@ const REAL_SOURCE: Record<PrintedDocType, () => Promise<string | null>> = {
   [PrintedDocType.PRICE_LIST]: async () => null,
   // Seyitoğlu L1: sipariş teyidi — gerçek kaynakla basım `test_siparis_teyidi` kendi fikstürüyle.
   [PrintedDocType.ORDER_CONFIRMATION]: async () => null,
+  // Devere S5: levent kartı — gerçek kaynakla basım `test_levent_karti` kendi fikstürüyle.
+  [PrintedDocType.WARP_BEAM_CARD]: async () => null,
 };
 
 /** Çağrıyı koşar; YALNIZ şema/sorgu-şekli hatasında `false` döner.
