@@ -173,6 +173,7 @@ export {
 export type {
   ReportsClosedKeysRead,
 } from "./modules";
+export { readDevereBodyNoLooseMatch, readDevereResidualTareFromBody } from "./devere-body";
 export {
   readPackingGroupsEnabled, readSackDumpNameMode, readPackingGroupNumbering, readPackingGroupMode, readPackageNoStartsAtZero,
   readPackageNoMode, readPackageNumbering, readPackingLotRequired, readPackingLotPartialDispatch, readShippingDocPackingLot,

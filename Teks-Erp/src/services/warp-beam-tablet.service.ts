@@ -9,7 +9,7 @@ import { ApiResponse } from "../types/api.types";
 import { WARP_SPEC_YARN_DENIER_SELECT, warpSpecDenierLines, warpSpecKgPerMExact } from "./helpers/warp-spec-yarn.helper";
 import { listDevereMachines, listLoomMachines } from "./warp-beam.service";
 import { yarnLotBalancesTx } from "./helpers/yarn-lot.helper";
-import { readDevereAutoConsume, readDevereBeamBodyMode, readDevereLotRequired, readDevereMountTracking, readDevereMountTrackingRequired, resolveBeamWeavingLinkRequired, resolveYarnQualityHoldEnabled } from "./system-setting.service";
+import { readDevereAutoConsume, readDevereBeamBodyMode, readDevereBodyNoLooseMatch,readDevereLotRequired, readDevereMountTracking, readDevereMountTrackingRequired, resolveBeamWeavingLinkRequired, resolveYarnQualityHoldEnabled } from "./system-setting.service";
 import { listOpenInHouseWeavingOrders, type MachineRunTabletContextDto } from "./helpers/machine-run-suggest.helper";
 import { lastWindDefaults, type LastWindDefault } from "./helpers/warp-beam-wind-defaults.helper";
 
@@ -59,6 +59,8 @@ export interface WarpBeamTabletContextDto {
   lastWindDefaults: LastWindDefault[];
   /** Devere ek-2 r: `devere.beamBodyMode` — SAR formunda gövde QR alanı OFF'ta yok, REQUIRED'da zorunlu (sunucu da 400). Eski tablet okumaz. */
   beamBodyMode: "OFF" | "OPTIONAL" | "REQUIRED";
+  /** Devere S3: `devere.bodyNoLooseMatch` — TAK okutmasında gövde no esnek eşleşme (istemci aynası `utils/beamBodyNo.ts`). */
+  bodyNoLooseMatch: boolean;
 }
 
 type TabletSpecRow = Parameters<typeof warpSpecDenierLines>[0] & { id: string; code: string; name: string };
@@ -90,6 +92,7 @@ export async function getWarpBeamTabletContext(): Promise<ApiResponse<WarpBeamTa
   const beamWeavingLinkRequired = await resolveBeamWeavingLinkRequired();
   const autoConsume = await readDevereAutoConsume();
   const beamBodyMode = await readDevereBeamBodyMode();
+  const bodyNoLooseMatch = await readDevereBodyNoLooseMatch();
   const windDefaults = await lastWindDefaults(prisma, specs.map((w) => w.id));
   return {
     success: true,
@@ -110,6 +113,7 @@ export async function getWarpBeamTabletContext(): Promise<ApiResponse<WarpBeamTa
       autoConsume,
       lastWindDefaults: windDefaults,
       beamBodyMode,
+      bodyNoLooseMatch,
     },
   };
 }

@@ -450,6 +450,10 @@ export interface FeatureFlags {
   devereReworkBillable: boolean;
   /** Devere ek C1: kusurlu levent reddinde fotoğraf zorunlu (backend `readDevereRejectPhotoRequired`, kayıt yok = false). */
   devereRejectPhotoRequired: boolean;
+  /** Devere S3: gövde no esnek eşleşme (backend `readDevereBodyNoLooseMatch`, kayıt yok = false). */
+  devereBodyNoLooseMatch: boolean;
+  /** Devere S3: tartılı bitişte dara gövdeden (backend `readDevereResidualTareFromBody`, kayıt yok = false). */
+  devereResidualTareFromBody: boolean;
   /** Devere ek E1: aynı irsaliye no tekrarı (backend `DEFAULT_DEVERE_DUPLICATE_DELIVERY_NOTE` = WARN). */
   devereDuplicateDeliveryNote: DevereDuplicateDeliveryNote;
   /** Devere ek E1: dönüşte tartı (backend `DEFAULT_DEVERE_RECEIVE_WEIGHING` = OPTIONAL). */

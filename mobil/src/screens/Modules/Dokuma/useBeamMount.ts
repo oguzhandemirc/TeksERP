@@ -20,7 +20,8 @@ export function useBeamMount({ machineId, enabled, onDone }: { machineId: string
   const ctx = useQuery({ queryKey: CONTEXT_KEY, queryFn: warpBeamService.tabletContext, enabled: canMount, staleTime: 60_000 });
   const loomMachines = ctx.data?.loomMachines ?? [];
   const methodRequired = ctx.data?.mountTrackingRequired === true;
-  const form = useMountForm({ loomMachines, methodRequired, onDone, presetMachineId: machineId });
+  const looseBodyNo = ctx.data?.bodyNoLooseMatch === true;
+  const form = useMountForm({ loomMachines, methodRequired, onDone, presetMachineId: machineId, looseBodyNo });
   const [lookup, setLookup] = useState(false);
 
   const scan = useCallback(
@@ -29,7 +30,8 @@ export function useBeamMount({ machineId, enabled, onDone }: { machineId: string
       if (!code) return;
       setLookup(true);
       try {
-        form.scanBeam(code, await warpBeamService.list(['READY', 'MOUNTED'], 10, code));
+        // S3 esnek gövde no: sunucu araması birebir metin arar ("012" ≠ "LG-12") → canlı listeyi al, yerelde eşleştir.
+        form.scanBeam(code, looseBodyNo ? await warpBeamService.list(['READY', 'MOUNTED'], 100) : await warpBeamService.list(['READY', 'MOUNTED'], 10, code));
       } catch (e) {
         signalScan('reject');
         Toast.show({ type: 'error', text1: 'Levent aranamadı', text2: (e as Error).message, visibilityTime: 5000 });
@@ -37,7 +39,7 @@ export function useBeamMount({ machineId, enabled, onDone }: { machineId: string
         setLookup(false);
       }
     },
-    [form]
+    [form, looseBodyNo]
   );
 
   return { canMount, form, scan, lookup, loomMachines, methodRequired };

@@ -534,7 +534,7 @@ describe("devere kategorisi — lot zorunluluğu modülün arkasında", () => {
   it("① kategori var, moduleKey devereEnabled, yedi satır (lot · tezgah bağı · bağlama zorunlu · otomatik tüketim · Z1 iş bağı zorunlu · yeniden sarım ücreti · ret fotoğrafı); yalnız yeniden sarım ücreti defaultOn true = bugün", () => {
     expect(devere).toBeDefined();
     expect(devere.moduleKey).toBe("devereEnabled");
-    expect(devere.flags?.map((f) => f.key)).toEqual(["devereLotRequired", "devereMountTracking", "devereMountTrackingRequired", "devereAutoConsume", "devereBeamWeavingLinkRequired", "devereReworkBillable", "devereRejectPhotoRequired"]);
+    expect(devere.flags?.map((f) => f.key)).toEqual(["devereLotRequired", "devereMountTracking", "devereMountTrackingRequired", "devereAutoConsume", "devereBeamWeavingLinkRequired", "devereReworkBillable", "devereRejectPhotoRequired", "devereBodyNoLooseMatch", "devereResidualTareFromBody"]);
     expect(devere.flags?.filter((f) => f.defaultOn !== false).map((f) => f.key)).toEqual(["devereReworkBillable"]);
   });
   it("② devere KAPALI → kategori DONUK; AÇIK → değil", () => {

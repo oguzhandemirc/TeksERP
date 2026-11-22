@@ -6,7 +6,8 @@
 // Gövde kartı (BeamBody, B1) doğmadan önce sarımın metal gövdesi yalnız serbest metin `WarpBeam.physicalBeamNo`da
 // duruyordu. Gövde kartı sonradan aynı numarayla açılınca bağ (`WarpBeam.beamBodyId`, doğum niteliği) boş kalır.
 //
-// EŞLEŞME: `physicalBeamNo` (kırpılmış) = `BeamBody.bodyNo`, büyük/küçük harf duyarsız (kayıt kapısıyla aynı yüklem).
+// EŞLEŞME: `physicalBeamNo` (kırpılmış) = `BeamBody.bodyNo`, büyük/küçük harf duyarsız (kayıt kapısıyla aynı yüklem);
+// `devere.bodyNoLooseMatch` açıksa birebir yoksa normalize eşleşme — TEK boğaz `helpers/beam-body-no.helper.ts` (S3).
 // HÜKÜM (sarımın bugünkü durumuna göre; gövde yalnız sarım kancasının kuralıyla yürür — `WARP_EVENT_BODY_RULES`):
 //   GEÇMİŞ   EXHAUSTED · SCRAPPED  → yalnız bağ yazılır; gövde durumu/defteri DEĞİŞMEZ (sarım çoktan boşaldı).
 //   DOLDUR   READY                 → bağ + gövde FILLED (boş → "dolu, bizde", üstündeki sarım bu).
@@ -26,6 +27,8 @@ import { BeamBodyOwnerRole, BeamBodyStatus, WarpBeamStatus } from "@prisma/clien
 import prisma, { pool } from "../src/lib/prisma";
 import { AuditService } from "../src/services/audit.service";
 import { BEAM_BODY_EVENT_TABLE, transitionBeamBodyTx } from "../src/services/helpers/beam-body.helper";
+import { matchBeamBodyNo } from "../src/services/helpers/beam-body-no.helper";
+import { readDevereBodyNoLooseMatch } from "../src/services/system-setting/devere-body";
 import { hedefDbAdi } from "./lib/hedef-db-kapisi";
 
 const SOURCE = "scripts/fix_beam_body_from_physical_no.ts";
@@ -79,6 +82,7 @@ export async function diagnose(opts: { onlyBeamIds?: string[] } = {}): Promise<D
     orderBy: { beamNo: "asc" },
   });
   const out: Diagnosis = { proposals: [], skipped: [] };
+  const loose = await readDevereBodyNoLooseMatch();
   const live = new Map<string, LinkProposal[]>();
   const bodyCache = new Map<string, Array<{ id: string; bodyNo: string; status: BeamBodyStatus; isActive: boolean; ownerRole: BeamBodyOwnerRole | null; ownerCustomerId: string | null; currentWarpBeamId: string | null }>>();
   for (const b of beams) {
@@ -90,8 +94,9 @@ export async function diagnose(opts: { onlyBeamIds?: string[] } = {}): Promise<D
     const key = no.toLowerCase();
     let bodies = bodyCache.get(key);
     if (!bodies) {
+      const match = await matchBeamBodyNo(prisma, no, { loose });
       bodies = await prisma.beamBody.findMany({
-        where: { bodyNo: { equals: no, mode: "insensitive" } },
+        where: { id: { in: match.ids } },
         select: { id: true, bodyNo: true, status: true, isActive: true, ownerRole: true, ownerCustomerId: true, currentWarpBeamId: true },
         orderBy: { bodyNo: "asc" },
       });

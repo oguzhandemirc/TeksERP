@@ -169,7 +169,7 @@ router.get("/", requirePermission("beam-body:read"), wrap(async (req) => {
 router.post("/", requirePermission("beam-body:write"), wrap(async (req) => {
   const body = parse(CreateBody, req.body);
   const out = await createBeamBody(body, req.user!.userId);
-  return { status: out.replayed ? 200 : 201, body: { success: true, data: out.data, message: out.replayed ? `${out.data.bodyNo} zaten kayıtlı` : `Levent gövdesi ${out.data.bodyNo} kaydedildi` } };
+  return { status: out.replayed ? 200 : 201, body: { success: true, data: out.data, message: out.replayed ? `${out.data.bodyNo} zaten kayıtlı` : `Levent gövdesi ${out.data.bodyNo} kaydedildi`, ...(out.warnings ? { warnings: out.warnings } : {}) } };
 }));
 
 /**
@@ -177,16 +177,18 @@ router.post("/", requirePermission("beam-body:write"), wrap(async (req) => {
  * /api/beam-bodies/resolve:
  *   get:
  *     tags: [BeamBody]
- *     summary: QR/barkod çözümü — gövde no (büyük/küçük harf duyarsız tam eşleşme)
+ *     summary: QR/barkod çözümü — gövde no (büyük/küçük harf duyarsız tam eşleşme; ayarla esnek eşleşme)
  *     security: [{ bearerAuth: [] }]
  *     parameters: [{ in: query, name: code, required: true, schema: { type: string } }]
  *     responses:
- *       200: { description: "{ success, data: BeamBody }" }
+ *       200: { description: "{ success, data: BeamBody (+ matchedBy NORMALIZED), warnings? }" }
  *       404: { description: BEAM_BODY_NOT_FOUND }
+ *       409: { description: "BEAM_BODY_NO_AMBIGUOUS (details.candidates)" }
  */
 router.get("/resolve", requireAnyPermission("beam-body:read", ...MOBILE_DEVERE_KABUL, ...MOBILE_DEVERE), wrap(async (req) => {
   const q = parse(ResolveQuery, req.query);
-  return { status: 200, body: { success: true, data: await resolveBeamBody(q.code) } };
+  const out = await resolveBeamBody(q.code);
+  return { status: 200, body: { success: true, data: out.data, ...(out.warnings ? { warnings: out.warnings } : {}) } };
 }));
 
 /**

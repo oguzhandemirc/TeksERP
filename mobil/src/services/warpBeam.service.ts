@@ -30,6 +30,8 @@ export interface WarpBeam {
   status: WarpBeamStatus;
   plannedLengthM: number;
   physicalBeamNo: string | null;
+  /** B3 gövde bağı (S3 esnek okutma bu no'ya da bakar); eski sunucu göndermez → undefined. */
+  beamBody?: { id: string; bodyNo: string; tareKg?: number | null } | null;
   notes: string | null;
   originKind: WarpBeamOrigin;
   warpSpec: { id: string; code: string; name: string; endsCount: number; yarnItem: { id: string; code: string; name: string; linearDensityDen: number | null } };
@@ -76,6 +78,8 @@ export interface TabletContext {
   beamWeavingLinkRequired?: boolean;
   /** Ek-2 r: `devere.beamBodyMode` SUNUCUDAN — SAR formunda gövde alanı. Eski sunucu göndermez → OFF say (alan yok). */
   beamBodyMode?: 'OFF' | 'OPTIONAL' | 'REQUIRED';
+  /** Devere S3: `devere.bodyNoLooseMatch` SUNUCUDAN — TAK okutmasında gövde no esnek eşleşme. Eski sunucu göndermez → birebir. */
+  bodyNoLooseMatch?: boolean;
   /** Z5/E6: çözgü kartı başına SON IN_HOUSE sarımın makine + iplik satırları — SAR açılış ÖNERİSİ (operatör değiştirir). Eski sunucu göndermez → ön-dolgu yok. */
   lastWindDefaults?: {
     warpSpecId: string;
