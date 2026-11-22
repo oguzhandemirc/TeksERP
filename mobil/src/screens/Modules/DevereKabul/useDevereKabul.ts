@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { devereKabulService, type WarpingTabletContext, type WarpingTabletOrder } from '../../../services/devereKabul.service';
 import { useIsOnline, useOfflineReason } from '../../../offline/hooks';
-import { autoPickOrderId, buildDocBody, nextPlanLength, type BeamDraft, type OrderDraft } from './receiveDocPayload';
+import { autoPickOrderId, autoPickSubcontractorId, buildDocBody, nextPlanLength, type BeamDraft, type OrderDraft } from './receiveDocPayload';
 import { useBodyScan, useReceiveSubmit } from './useReceiveSubmit';
 import { useBeamReject } from './useBeamReject';
 
@@ -86,6 +86,12 @@ export function useDevereKabul() {
     setSubId(id);
     clear();
   }, [subcontractorId, clear]);
+  // Kabul bekleyen tek devereci varsa seçici penceresi açtırılmaz (sahayı yavaşlatmasın).
+  const subs = context.data?.subcontractors;
+  useEffect(() => {
+    const id = autoPickSubcontractorId(subs ?? [], subcontractorId);
+    if (id) setSubId(id);
+  }, [subs, subcontractorId]);
   const addOrder = useCallback((id: string) => {
     const o = ctxOrders.find((x) => x.id === id);
     if (o) addDraft(o);
