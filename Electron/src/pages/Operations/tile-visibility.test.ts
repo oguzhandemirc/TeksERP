@@ -206,6 +206,7 @@ describe("karo bağlantıları", () => {
     // 2026-11-21: `beam-bodies` (Levent Gövdeleri, devere B4) — devere ∧ beamBodyMode≠OFF.
     // 2026-11-21: `devere-donus` (Devere Dönüş Kabulleri, devere E2) — Leventler ile AYNI devere kapısı.
     // 2026-11-22: `devereci-karnesi` (Devereci Karnesi, devere-levent S2) — denye sapma ile aynı kapı, kendi rapor anahtarı.
+    // 2026-11-22: `levent-bitis-tahmini` (Levent Bitiş Tahmini, Devere grubunda) — aynı kapı, kendi rapor anahtarı.
     expect(conditional.sort()).toEqual([
       "beam-bodies",
       "cozgu-hesabi",
@@ -220,6 +221,7 @@ describe("karo bağlantıları", () => {
       "icerideki-isler",
       "kursun-dagitim",
       "kursun-sapmalar",
+      "levent-bitis-tahmini",
       "loom-alarms",
       "loom-load",
       "machine-stops",

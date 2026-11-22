@@ -7,6 +7,7 @@
 //   §2 gövde: geri alınan elle geçiş (RETURN_EMPTY → geri al) yaşı REGISTER'a (40 gün) döndürür
 //   §3 `minAgeDays` liste + cursor + özet AYNI where (levent `staleFull`, gövde `staleOut`)
 //   §4 sorgu sayısı sayfa boyundan bağımsız (1 satır = 3 satır)
+//   §5 eşikler sistem ayarından (`devere.staleFullBeamDays` / `devere.staleOutBodyDays`); çöp değer varsayılana düşer
 // NEGATİF SONDA: helper'daki `reversal: null` (geri alma süzgeci) kaldırılınca §1b kırmızı (2026-11-22).
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım; ayarlar FOTOĞRAFINA döndürülür, kendi kayıtlarını siler.
 // Olay damgaları fikstürde GERİYE çekilir (geçmişte sarılmış levent benzetimi) — yalnız kendi `TAG`li satırları.
@@ -40,7 +41,7 @@ function check(label: string, ok: boolean, detail = ""): void {
 }
 const TAG = `TSTBY${process.pid}`;
 const DAY = 86_400_000;
-const SETTING_FOTO = [SETTING_KEYS.DEVERE_ENABLED, SETTING_KEYS.DOKUMA_ENABLED, SETTING_KEYS.DEVERE_MOUNT_TRACKING, SETTING_KEYS.DEVERE_BEAM_BODY_MODE, SETTING_KEYS.DEVERE_AUTO_CONSUME] as const;
+const SETTING_FOTO = [SETTING_KEYS.DEVERE_ENABLED, SETTING_KEYS.DOKUMA_ENABLED, SETTING_KEYS.DEVERE_MOUNT_TRACKING, SETTING_KEYS.DEVERE_BEAM_BODY_MODE, SETTING_KEYS.DEVERE_AUTO_CONSUME, SETTING_KEYS.DEVERE_STALE_FULL_BEAM_DAYS, SETTING_KEYS.DEVERE_STALE_OUT_BODY_DAYS] as const;
 const setSetting = (key: string, value: Prisma.InputJsonValue) => prisma.systemSetting.upsert({ where: { key }, create: { key, value }, update: { value } });
 
 // Sorgu sayacı: pg havuzunun bütün istemcileri `pg.Client` örneğidir (emsal test_kursun_adim_sayac).
@@ -118,6 +119,8 @@ async function main(): Promise<void> {
   try {
     for (const [k, v] of [[SETTING_KEYS.DEVERE_ENABLED, "true"], [SETTING_KEYS.DOKUMA_ENABLED, "true"], [SETTING_KEYS.DEVERE_MOUNT_TRACKING, "true"],
       [SETTING_KEYS.DEVERE_BEAM_BODY_MODE, "OPTIONAL"], [SETTING_KEYS.DEVERE_AUTO_CONSUME, "false"]] as const) await setSetting(k, v);
+    // Eşik ayarı yok = varsayılan (14 / 30) — §3c/§3f bugünkü davranışı ölçer, §5 ayarı değiştirir.
+    await prisma.systemSetting.deleteMany({ where: { key: { in: [SETTING_KEYS.DEVERE_STALE_FULL_BEAM_DAYS, SETTING_KEYS.DEVERE_STALE_OUT_BODY_DAYS] } } });
 
     // ── §1 levent: geri alınan son olay ───────────────────────────────────
     const A = await sar(20);
@@ -181,6 +184,19 @@ async function main(): Promise<void> {
     const body1 = await measure(() => listBeamBodies(bodyParams({ limit: 1 }), now));
     const body3 = await measure(() => listBeamBodies(bodyParams({ limit: 3 }), now));
     check("§4b gövde listesi: 1 satır ve 3 satır sayfada sorgu sayısı eşit", body1 === body3 && body1 > 0, `${body1} / ${body3}`);
+
+    // ── §5 eşikler ayardan (devere.staleFullBeamDays / devere.staleOutBodyDays) ─
+    await setSetting(SETTING_KEYS.DEVERE_STALE_FULL_BEAM_DAYS, 25);
+    await setSetting(SETTING_KEYS.DEVERE_STALE_OUT_BODY_DAYS, 45);
+    const s25 = await beamList();
+    const s45 = await listBeamBodies(bodyParams(), now);
+    check("§5a ⭐ levent eşiği 25 → staleFullDays 25, 20 günlük A/B sayılmaz (0)", s25.summary?.staleFullDays === 25 && s25.summary.staleFull === 0, `${s25.summary?.staleFullDays}/${s25.summary?.staleFull}`);
+    check("§5b ⭐ gövde eşiği 45 → staleOutDays 45, 40 günlük G1/G2 sayılmaz (0)", s45.summary.staleOutDays === 45 && s45.summary.staleOut === 0, `${s45.summary.staleOutDays}/${s45.summary.staleOut}`);
+    await setSetting(SETTING_KEYS.DEVERE_STALE_FULL_BEAM_DAYS, 10);
+    await setSetting(SETTING_KEYS.DEVERE_STALE_OUT_BODY_DAYS, "çöp");
+    const s10 = await beamList();
+    const sJunk = await listBeamBodies(bodyParams(), now);
+    check("§5c levent eşiği 10 → A/B sayılır (2) · çöp gövde eşiği varsayılana (30) düşer", s10.summary?.staleFullDays === 10 && s10.summary.staleFull === 2 && sJunk.summary.staleOutDays === 30 && sJunk.summary.staleOut === 2, `${s10.summary?.staleFull}/${sJunk.summary.staleOutDays}`);
   } finally {
     const bodies = await prisma.beamBody.findMany({ where: { bodyNo: { startsWith: TAG } }, select: { id: true } });
     const ids = bodies.map((x) => x.id);

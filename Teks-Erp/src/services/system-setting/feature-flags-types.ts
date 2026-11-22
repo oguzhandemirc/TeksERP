@@ -222,6 +222,10 @@ export interface FeatureFlags {
   devereWarpFixedWasteM: number;
   /** Devere-levent S1: geçmişsiz çözgü kartında yedek devere teslim süresi (gün); 0 = yok (bugünkü davranış). */
   devereDefaultLeadDays: number;
+  /** Devere-levent S4: "N+ gündür dolu bekliyor" levent eşiği (gün; varsayılan 14 = bugünkü sabit). */
+  devereStaleFullBeamDays: number;
+  /** Devere-levent S4: "N+ gündür dışarıda" gövde eşiği (gün; varsayılan 30 = bugünkü sabit). */
+  devereStaleOutBodyDays: number;
   /** Fason devere D4: kapama fire toleransı (%); 0 = denetim yok (bugünkü davranış). */
   devereFasonWasteTolerancePct: number;
   /** Fason devere D4b (K4): lot karışımı kuralı (varsayılan `WARN`). */

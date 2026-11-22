@@ -39,7 +39,8 @@ import { assertEmanetWritableTx } from "./helpers/emanet-owner.helper";
 import { resolvePartyToCardTx } from "./helpers/party-card.helper";
 import { assertWeavingOrderLinkableTx, warpSpecMismatchWarning } from "./helpers/production-chain-gates.helper";
 import { p2002OnField } from "../utils/p2002";
-import { BEAM_STALE_FULL_DAYS, warpBeamMinAgeWhere, warpBeamStatusAges } from "./helpers/status-age.helper";
+import { warpBeamMinAgeWhere, warpBeamStatusAges } from "./helpers/status-age.helper";
+import { readDevereStaleFullBeamDays } from "./system-setting/devere-stale";
 
 const WARP_BEAM_TABLE = "WARP_BEAM";
 const WARP_BEAM_EVENT_TABLE = "WARP_BEAM_EVENT";
@@ -63,7 +64,7 @@ export interface WarpBeamListParams {
   minAgeDays?: number | null;
 }
 
-/** S4 özet şeridi: süzgece uyan, `BEAM_STALE_FULL_DAYS`+ gündür dolu (READY) bekleyen levent sayısı — yalnız ilk sayfada. */
+/** S4 özet şeridi: süzgece uyan, `devere.staleFullBeamDays`+ gündür dolu (READY) bekleyen levent sayısı — yalnız ilk sayfada. */
 export interface WarpBeamListSummary {
   staleFull: number;
   staleFullDays: number;
@@ -91,11 +92,12 @@ export async function listWarpBeams(params: WarpBeamListParams, now: Date = new 
   const last = page[page.length - 1] as Record<string, unknown> | undefined;
   const remaining = await remainingByBeam(prisma, page.map((r) => r.id));
   const ages = await warpBeamStatusAges(prisma, page, now);
+  const staleFullDays = cur ? 0 : await readDevereStaleFullBeamDays();
   const summary = cur
     ? undefined
     : {
-        staleFull: await prisma.warpBeam.count({ where: { AND: [where, { status: WarpBeamStatus.READY }, warpBeamMinAgeWhere(BEAM_STALE_FULL_DAYS, now)] } }),
-        staleFullDays: BEAM_STALE_FULL_DAYS,
+        staleFull: await prisma.warpBeam.count({ where: { AND: [where, { status: WarpBeamStatus.READY }, warpBeamMinAgeWhere(staleFullDays, now)] } }),
+        staleFullDays,
       };
   return {
     success: true,

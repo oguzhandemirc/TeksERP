@@ -399,6 +399,9 @@ export const updateSchema = z.strictObject({
   devereWarpFixedWasteM: z.number({ message: "Sabit çözgü firesi sayı olmalı" }).min(0, "Sabit çözgü firesi negatif olamaz").max(1000, "Sabit çözgü firesi en çok 1000 m olabilir").nullable().optional(),
   /** Devere-levent S1: yedek devere teslim süresi (gün; `DEVERE_DEFAULT_LEAD_DAYS_MAX` ile birebir); 0 = yok; null = varsayılana dön. */
   devereDefaultLeadDays: z.number({ message: "Varsayılan teslim süresi sayı olmalı" }).min(0, "Varsayılan teslim süresi negatif olamaz").max(120, "Varsayılan teslim süresi en çok 120 gün olabilir").nullable().optional(),
+  /** Devere-levent S4: bekleme yaşı eşikleri (gün; `DEVERE_STALE_DAYS_MIN/MAX` ile birebir); null = varsayılana dön (14 / 30). */
+  devereStaleFullBeamDays: z.number({ message: "Dolu levent bekleme eşiği sayı olmalı" }).int("Dolu levent bekleme eşiği tam gün olmalı").min(1, "Dolu levent bekleme eşiği en az 1 gün olmalı").max(365, "Dolu levent bekleme eşiği en çok 365 gün olabilir").nullable().optional(),
+  devereStaleOutBodyDays: z.number({ message: "Dışarıdaki gövde bekleme eşiği sayı olmalı" }).int("Dışarıdaki gövde bekleme eşiği tam gün olmalı").min(1, "Dışarıdaki gövde bekleme eşiği en az 1 gün olmalı").max(365, "Dışarıdaki gövde bekleme eşiği en çok 365 gün olabilir").nullable().optional(),
   /** Fason devere D4: kapama fire toleransı (%; `DEVERE_FASON_WASTE_TOLERANCE_PCT_MAX` ile birebir); 0 = denetim yok; null = varsayılana dön. */
   /** Fason devere D4b (K4): lot karışımı kuralı (enum; `DEVERE_FASON_LOT_POLICIES` ile birebir). */
   devereFasonLotPolicy: z.enum(["FREE", "WARN", "SINGLE_LOT"]).optional(),

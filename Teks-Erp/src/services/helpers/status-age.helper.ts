@@ -11,9 +11,8 @@ import { ACTIVE_FORWARD_STATUS_EVENT_WHERE } from "./warp-beam-mount.helper";
 import { BEAM_BODY_EFFECTIVE_EVENT_WHERE } from "./beam-body.helper";
 import { factoryDaysSince, fasonDayThreshold } from "./order-where.helper";
 
-/** Özet şeridi eşikleri (bilgi; engel değil — plan §4 "eskime kuralı yok"). */
-export const BEAM_STALE_FULL_DAYS = 14;
-export const BODY_STALE_OUT_DAYS = 30;
+// Özet şeridi eşikleri ayardır (`devere.staleFullBeamDays` / `devere.staleOutBodyDays`, okuyucu
+// `system-setting/devere-stale.ts`); bilgi, engel değil — plan §4 "eskime kuralı yok".
 
 export interface StatusAge {
   statusSince: Date;

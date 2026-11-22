@@ -1,6 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { StatusAgeCell, minAgeFilter, statusAgeText } from "./StatusAgeCell";
+import { DevereStaleAgeCell, StatusAgeCell, minAgeFilter, statusAgeText } from "./StatusAgeCell";
+
+const flags = vi.hoisted(() => ({ current: undefined as Record<string, number> | undefined }));
+vi.mock("@/hooks/usePricingEnabled", () => ({ useFeatureFlags: () => ({ data: flags.current ? { data: flags.current } : undefined }) }));
 
 describe("StatusAgeCell (devere S4)", () => {
   it("metin: alan yok → —, 0 → Bugün, n → n gün", () => {
@@ -14,6 +17,19 @@ describe("StatusAgeCell (devere S4)", () => {
     expect(screen.getByText("30 gün").className).toContain("text-warning");
     rerender(<StatusAgeCell days={30} staleAt={null} />);
     expect(screen.getByText("30 gün").className).not.toContain("text-warning");
+  });
+
+  it("devere hücresi: eşik ayardan, ayar yoksa renk yok (istemci uydurmaz)", () => {
+    flags.current = { devereStaleFullBeamDays: 5, devereStaleOutBodyDays: 40 };
+    const { rerender } = render(<DevereStaleAgeCell days={6} watch kind="fullBeam" />);
+    expect(screen.getByText("6 gün").className).toContain("text-warning");
+    rerender(<DevereStaleAgeCell days={6} watch kind="outBody" />);
+    expect(screen.getByText("6 gün").className).not.toContain("text-warning");
+    rerender(<DevereStaleAgeCell days={6} watch={false} kind="fullBeam" />);
+    expect(screen.getByText("6 gün").className).not.toContain("text-warning");
+    flags.current = undefined;
+    rerender(<DevereStaleAgeCell days={600} watch kind="outBody" />);
+    expect(screen.getByText("600 gün").className).not.toContain("text-warning");
   });
 
   it("süzgeç: minAgeDays anahtarı, seçenekler 'N+ gün'", () => {

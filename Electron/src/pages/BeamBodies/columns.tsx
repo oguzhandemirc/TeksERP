@@ -1,12 +1,9 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
-import { StatusAgeCell, statusAgeText } from "@/components/data-table/StatusAgeCell";
+import { DevereStaleAgeCell, statusAgeText } from "@/components/data-table/StatusAgeCell";
 import { cn } from "@/lib/utils";
 import { dimsText, ownerText, placeText } from "./model";
 import { beamBodyStatusMeta, type BeamBody } from "./types";
-
-/** Sunucu özetindeki `staleOutDays` ile aynı eşik (yalnız hücre rengi; sayı sunucudan). */
-export const BODY_STALE_OUT_DAYS = 30;
 
 /** Sıralama başlığı YOK: uç gövde no sırasıyla döner; süzme sunucuda. Ad birincil, kod ikincil. */
 export const beamBodyColumns: ColumnDef<BeamBody>[] = [
@@ -58,7 +55,7 @@ export const beamBodyColumns: ColumnDef<BeamBody>[] = [
     cell: ({ row }) => {
       const r = row.original;
       const watch = r.status === "AT_SUBCONTRACTOR" || r.status === "FULL_OUT" || r.ownerReturnDue;
-      return <StatusAgeCell days={r.statusAgeDays} since={r.statusSince} staleAt={watch ? BODY_STALE_OUT_DAYS : null} />;
+      return <DevereStaleAgeCell days={r.statusAgeDays} since={r.statusSince} watch={!!watch} kind="outBody" />;
     },
   },
   { id: "place", header: "Nerede", meta: { exportValue: (r: BeamBody) => placeText(r.place) }, cell: ({ row }) => placeText(row.original.place) },

@@ -124,6 +124,17 @@ interface Props {
    * bu bileşenin bugünkü çıktısı birebir korunur.
    */
   flash?: ScanFlash | null;
+  /**
+   * Dokunarak okut kipinde kadraj ipuçları — ekran neyi okuttuğunu söyler (ör. gövde sayımı).
+   * Verilmeyen alan bugünkü top metnine düşer.
+   */
+  tapHints?: TapHints;
+}
+
+/** `trigger='tap'` kadraj metinleri: silahsız (`idle`) ve OKUT'a basılmış (`armed`) durum. */
+export interface TapHints {
+  idle?: string;
+  armed?: string;
 }
 
 // Sürekli modda iki okuma arası yeniden silahlanma gecikmesi (ms).
@@ -164,6 +175,7 @@ export function BarcodeScannerView({
   initialFacing,
   trigger = 'auto',
   flash = null,
+  tapHints,
 }: Props) {
   const [permission, requestPermission] = useCameraPermissions();
   const scannedRef = useRef(false);
@@ -397,10 +409,10 @@ export function BarcodeScannerView({
     ? 'Okundu'
     : tapMode
       ? armed
-        ? 'Topu çerçeveye alın'
+        ? (tapHints?.armed ?? 'Topu çerçeveye alın')
         : armExpired
           ? 'Okunamadı — tekrar OKUT’a basın'
-          : 'OKUT’a basınca tek top okunur'
+          : (tapHints?.idle ?? 'OKUT’a basınca tek top okunur')
       : "QR'ı çerçeve içine alın · otomatik okunur";
 
   const body = !permission ? (

@@ -7,6 +7,7 @@ import {
   BarcodeScannerView,
   type ScanFlash,
   type SupportedBarcodeType,
+  type TapHints,
 } from './BarcodeScannerView';
 import { useDeviceType } from '../hooks/useDeviceType';
 import { useHardwareScanMode } from '../hooks/useScanMethod';
@@ -53,6 +54,8 @@ interface Props {
   /** Kadrajın ortasında kısa süre duran bildirim (mükerrer / ret).
    *  bkz. BarcodeScannerView.flash + hooks/useScanFeedback. */
   flash?: ScanFlash | null;
+  /** Dokunarak okut kadraj metinleri (ekran neyi okuttuğunu söyler). bkz. BarcodeScannerView.tapHints. */
+  tapHints?: TapHints;
   /** Donanım okuyucu modunda modal KAPALIYKEN de okumayı al (tek amaçlı ekran: OKUT'a basmadan tuşla okut).
    *  Yalnız ekranda tek tarayıcı olan ekranlar açar; çok amaçlı ekranlar hedefi kendisi seçer (D3). */
   listenWhileHidden?: boolean;
@@ -85,6 +88,7 @@ export function BarcodeScannerModal({
   trigger,
   footer,
   flash,
+  tapHints,
   listenWhileHidden = false,
 }: Props) {
   const hardware = useHardwareScanMode();
@@ -177,6 +181,7 @@ export function BarcodeScannerModal({
               initialFacing={initialFacing}
               trigger={trigger}
               flash={flash}
+              tapHints={tapHints}
             />
             {onPickFromList && (
               <View style={styles.pickRow}>

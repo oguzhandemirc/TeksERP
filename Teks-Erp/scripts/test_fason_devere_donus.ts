@@ -172,6 +172,7 @@ async function main(): Promise<void> {
     const tokB = randomUUID();
     const r2 = await receive(A, [{ lengthM: 400 }], tokB, "IRS-2");
     check("S24 ikinci kabul: X 20 dağıtılamadı (uyarı), Y 16 devirden, Z 14 devir + 10 dağıtılamadı; bakiye eksiye inmedi", r2.warnings.length === 2 && (await holds(C, Y)) === 0 && (await holds(C, Z)) === 0 && r2.settlement.yarns.find((v) => v.yarnItemId === X)!.unallocatedKg === "20.000", JSON.stringify(r2.warnings));
+    check("S24 uyarı metni günlük dilde: 'deverecideki iplikten 20 kg fazla görünüyor', teknik terim yok", r2.warnings.some((w) => w.includes("deverecideki iplikten 20 kg fazla görünüyor")) && !r2.warnings.some((w) => /nominal|denye/.test(w)), JSON.stringify(r2.warnings));
     const eOld = await errOf(() => cancelWarpingReceipt(A, r1.receiptKey, `${TAG} geri`, U));
     const eOldB = await errOf(() => cancelWound(beams[1]!.id, `${TAG} geri`, U));
     const cpv = await previewCancelWarpingReceipt(A, r1.receiptKey);

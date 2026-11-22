@@ -16,7 +16,8 @@ import { BEAM_BODY_EVENT_SELECT, beamBodyEventUndoBlock } from "../helpers/beam-
 import { sequentialTx } from "../helpers/tx-sequential-relations.helper";
 import { matchBeamBodyNo } from "../helpers/beam-body-no.helper";
 import { readDevereBodyNoLooseMatch } from "../system-setting/devere-body";
-import { BODY_STALE_OUT_DAYS, beamBodyMinAgeWhere, beamBodyStatusAges } from "../helpers/status-age.helper";
+import { beamBodyMinAgeWhere, beamBodyStatusAges } from "../helpers/status-age.helper";
+import { readDevereStaleOutBodyDays } from "../system-setting/devere-stale";
 
 type Db = Pick<Prisma.TransactionClient, "beamBody">;
 type IdCond = string | { in: string[] } | null;
@@ -154,8 +155,9 @@ export async function listBeamBodies(p: BeamBodyListParams, now: Date = new Date
 async function summarize(where: Prisma.BeamBodyWhereInput, now: Date): Promise<BeamBodyListSummary> {
   const groups = await prisma.beamBody.groupBy({ by: ["status", "ownerRole"], where, _count: { _all: true } });
   const returnDue = await prisma.beamBody.count({ where: { AND: [where, BEAM_BODY_OWNER_RETURN_DUE_WHERE] } });
+  const staleOutDays = await readDevereStaleOutBodyDays();
   const staleOut = await prisma.beamBody.count({
-    where: { AND: [where, { status: { in: [BeamBodyStatus.AT_SUBCONTRACTOR, BeamBodyStatus.FULL_OUT] } }, beamBodyMinAgeWhere(BODY_STALE_OUT_DAYS, now)] },
+    where: { AND: [where, { status: { in: [BeamBodyStatus.AT_SUBCONTRACTOR, BeamBodyStatus.FULL_OUT] } }, beamBodyMinAgeWhere(staleOutDays, now)] },
   });
   const byOwner = Object.fromEntries((["OURS", ...Object.values(BeamBodyOwnerRole)] as BeamBodyOwnerKind[]).map((k) => [k, 0])) as Record<BeamBodyOwnerKind, number>;
   const byStatus = Object.fromEntries(Object.values(BeamBodyStatus).map((s) => [s, 0])) as Record<BeamBodyStatus, number>;
@@ -165,7 +167,7 @@ async function summarize(where: Prisma.BeamBodyWhereInput, now: Date): Promise<B
     byStatus[g.status] += g._count._all;
     count += g._count._all;
   }
-  return { count, byOwner, byStatus, ownerReturnDue: returnDue, staleOut, staleOutDays: BODY_STALE_OUT_DAYS };
+  return { count, byOwner, byStatus, ownerReturnDue: returnDue, staleOut, staleOutDays };
 }
 
 export interface BeamBodyEventDto {

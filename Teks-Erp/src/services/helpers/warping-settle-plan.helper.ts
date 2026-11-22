@@ -14,6 +14,12 @@ import { DEFAULT_DEVERE_SETTLE_DEFAULT, type DevereSettleDefault } from "../syst
 import type { WarpingYarnItem } from "./warping-yarn-open.helper";
 import { qtyText, pctText } from "./qty-text.helper";
 
+/** Dönüş kabulü + kapanış ortak uyarısı: leventlere sarılan hesap deverecideki iplikten fazla (dağıtılmadı).
+ *  Operatör dili; "nominal tüketim / tel / denye" gibi terimler mutabakat ekranında kalır. */
+export function beamOverYarnWarning(yarnName: string, overKg: Prisma.Decimal.Value): string {
+  return `${yarnName}: leventler, deverecideki iplikten ${qtyText(overKg)} kg fazla görünüyor. Eksik sevk kaydı ya da çözgü kartında hata olabilir; fazlası hesaba yazılmadı.`;
+}
+
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
 const kg = (v: Prisma.Decimal) => v.toFixed(3);
 const ZERO = D(0);
@@ -159,7 +165,7 @@ export function buildSettlePlan(held0: WarpingYarnItem[], yarns: SettlePlanYarnI
     const p = pct(allWaste, woundKg.plus(allWaste));
     const over = tol !== null && p !== null && p.gt(tol);
     if (over) warnings.push(`${y.name || y.code}: fire %${pctText(p!)} toleransı (%${pctText(tol!)}) aşıyor — kapanış engellenmez, gerekçe yazmanız önerilir.`);
-    if (D(y.unallocatedKg).gt(0)) warnings.push(`${y.name || y.code}: nominal tüketim deverecideki iplikten ${qtyText(D(y.unallocatedKg))} kg fazla (bilgi).`);
+    if (D(y.unallocatedKg).gt(0)) warnings.push(beamOverYarnWarning(y.name || y.code, D(y.unallocatedKg)));
     return {
       yarnItemId: y.yarnItemId, code: y.code, plannedWasteKg: Prisma.Decimal.max(ZERO, D(y.grossKg).minus(y.netKg)), woundKg,
       holdingKg: sum((l) => l.holdingKg), returnKg: sum((l) => l.returnKg), wasteKg, priorWasteKg, keepKg: sum((l) => l.keepKg), wastePct: p, overTolerance: over,

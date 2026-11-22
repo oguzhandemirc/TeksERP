@@ -57,6 +57,15 @@ const EXEMPT: Record<string, string> = {
 const KATEGORI_IZNI_ISTISNASI: Record<string, string> = { dokuma: "report:production", ozel: "report:builder", maliyet: "report:yarn-need" };
 // Alt rapor izni kategoriden farklıysa karo `permission` taşır ve route aynı izni ister: dokuma verimliliği
 // tutar gösterir → `cost:read` (SY-D3; backend ucu aynı izin).
+describe("breadcrumb — Devere / Çözgü rapor yaprakları", () => {
+  it("üçü aynı üst yolu gösterir (Üretim)", () => {
+    // 2026-11-22: Levent Bitiş Tahmini yalnız Raporlar › Dokuma'daydı ("Dokuma >"), karne/denye Üretim karosuydu ("Üretim >").
+    const parents = ["levent-bitis-tahmini", "denye-sapma", "devereci-karnesi"].map((k) => findBreadcrumbParent(`/reports/dokuma/${k}`));
+    expect(parents[0]?.label).toBe("Üretim");
+    expect(new Set(parents.map((p) => JSON.stringify(p))).size).toBe(1);
+  });
+});
+
 describe("komut paleti kataloğu", () => {
   const paths = new Set(allCommandEntries.map((e) => e.to.split("?")[0]));
 
