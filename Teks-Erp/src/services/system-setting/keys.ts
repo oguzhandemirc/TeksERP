@@ -295,6 +295,11 @@ export const SETTING_KEYS = {
   /** [PROFİL] Devere-levent S1: devere geçmişi olmayan çözgü kartı için yedek teslim süresi (gün). DEFAULT 0 = yok →
    *  "devereye ver" günü ölçülemedi (bugünkü yanıt: alan yok). Yalnız rapor tahminini besler, hiçbir şeyi engellemez. */
   DEVERE_DEFAULT_LEAD_DAYS: "devere.defaultLeadDays",
+  /** [PROFİL] Devere-levent S4: "N+ gündür dolu bekliyor" levent eşiği (gün). DEFAULT 14 = bugünkü sabit; yalnız
+   *  özet şeridi + hücre rengi, hiçbir şeyi engellemez. */
+  DEVERE_STALE_FULL_BEAM_DAYS: "devere.staleFullBeamDays",
+  /** [PROFİL] Devere-levent S4: "N+ gündür dışarıda" gövde eşiği (gün). DEFAULT 30 = bugünkü sabit; yalnız bilgi. */
+  DEVERE_STALE_OUT_BODY_DAYS: "devere.staleOutBodyDays",
   /** [PROFİL] Fason devere D4: kapamada fire % toleransı — sipariş açılırken DONAR. DEFAULT 0 = denetim yok
    *  (bugünkü davranış); aşım yalnız UYARIR, hiçbir işlemi engellemez. */
   DEVERE_FASON_WASTE_TOLERANCE_PCT: "devere.fasonWasteTolerancePct",

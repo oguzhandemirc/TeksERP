@@ -24,6 +24,11 @@ export function isDenierReportVisible(ctx: WarpBeamVisibilityContext & { dokumaE
   return ctx.devereEnabled && ctx.dokumaEnabled && ctx.isReportOpen("dokuma/denye-sapma");
 }
 
+/** "Levent Bitiş Tahmini" karosu (Üretim › Devere / Çözgü) — uç `requireDevereEnabled` + dokuma rapor kategorisi + rapor açık. */
+export function isBeamForecastVisible(ctx: WarpBeamVisibilityContext & { dokumaEnabled: boolean; isReportOpen: (key: string) => boolean }): boolean {
+  return ctx.devereEnabled && ctx.dokumaEnabled && ctx.isReportOpen("dokuma/levent-bitis-tahmini");
+}
+
 /** Devere-levent S2: "Devereci Karnesi" karosu — denye sapma karosuyla aynı kapı, kendi rapor anahtarıyla. */
 export function isWarperScorecardVisible(ctx: WarpBeamVisibilityContext & { dokumaEnabled: boolean; isReportOpen: (key: string) => boolean }): boolean {
   return ctx.devereEnabled && ctx.dokumaEnabled && ctx.isReportOpen("dokuma/devereci-karnesi");

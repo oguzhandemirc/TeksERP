@@ -57,8 +57,8 @@ export function BeamBodiesList() {
               { key: "all", label: "Toplam", value: s.count },
               ...BEAM_BODY_OWNER_KINDS.map((k) => ({ key: k, label: BEAM_BODY_OWNER_LABELS[k], value: s.byOwner[k] ?? 0 })),
               { key: "due", label: "Sahibine iade edilecek", value: s.ownerReturnDue, tone: s.ownerReturnDue > 0 ? ("warn" as const) : undefined, title: "Bizim olmayan, boş ve bizde duran gövdeler" },
-              ...(s.staleOut !== undefined
-                ? [{ key: "stale", label: `${s.staleOutDays ?? 30}+ gündür dışarıda`, value: s.staleOut, tone: s.staleOut > 0 ? ("warn" as const) : undefined, title: "Deverecide/fasoncuda ya da dolu dışarıda bu kadar gündür duran gövdeler — kayıp gövdeyi yakalamak için" }]
+              ...(s.staleOut !== undefined && s.staleOutDays !== undefined
+                ? [{ key: "stale", label: `${s.staleOutDays}+ gündür dışarıda`, value: s.staleOut, tone: s.staleOut > 0 ? ("warn" as const) : undefined, title: "Deverecide/fasoncuda ya da dolu dışarıda bu kadar gündür duran gövdeler — kayıp gövdeyi yakalamak için" }]
                 : []),
             ]}
           />

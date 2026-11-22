@@ -116,6 +116,16 @@ describe("BarcodeScannerView — dokunarak okut", () => {
     expect(handler()).toBeUndefined();
   });
 
+  it("§5b kadraj ipucu: varsayılan top metni, ekran kendi metnini geçebilir (gövde sayımı)", () => {
+    const first = renderTap();
+    expect(first.getByText("OKUT’a basınca tek top okunur")).toBeTruthy();
+    first.unmount();
+    const hints = { idle: "OKUT’a basınca bir gövde numarası okunur", armed: "Gövde QR’ını çerçeveye alın" };
+    const { getByText, queryByText } = renderWithPaper(<BarcodeScannerView active onScan={jest.fn()} trigger="tap" continuous tapHints={hints} />);
+    expect(getByText(hints.idle)).toBeTruthy();
+    expect(queryByText("OKUT’a basınca tek top okunur")).toBeNull();
+  });
+
   it("§6 auto mod (varsayılan) DEĞİŞMEDİ — açılışta bağlı, OKUT tuşu yok", () => {
     // KK1 / Tambur / Paketleme / Kartela ekranları bu daldan geçiyor; tap modu
     // onlara sızarsa saha sessizce "kamera okumuyor" der. (Fason Sevk top

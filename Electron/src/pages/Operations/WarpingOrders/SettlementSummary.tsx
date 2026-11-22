@@ -76,7 +76,7 @@ export function SettlementSummary({ s }: { s: WarpingSettlement }) {
         </Table>
       </div>
       {s.yarns.some((y) => Number(y.unallocatedKg) > 0) && (
-        <p className="text-xs text-destructive">Dağıtılamayan: leventlere sarılan hesap, deverecideki iplikten fazla — tel/denye/metre ya da eksik sevk kaydını kontrol edin.</p>
+        <p className="text-xs text-destructive">Dağıtılamayan: leventler, deverecideki iplikten fazla görünüyor. Eksik sevk kaydı ya da çözgü kartında hata olabilir.</p>
       )}
       {s.weighing && <WeighLine w={s.weighing} />}
     </div>

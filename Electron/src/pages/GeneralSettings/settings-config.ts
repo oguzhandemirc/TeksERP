@@ -2137,6 +2137,32 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         audience: ["Planlamacı", "Yönetim"],
       },
       {
+        // Devere-levent S4: backend `readDevereStaleFullBeamDays` (kayıt yok = 14) ve 1–365 aralığı ile birebir.
+        group: DEVERE_GROUP.mount,
+        key: "devereStaleFullBeamDays",
+        title: "Dolu levent bekleme uyarısı (gün)",
+        desc: "Sarılmış, tezgâha takılmayı bekleyen levent bu kadar gün dolu beklerse Leventler listesinde yaşı turuncu görünür ve üstteki “gündür dolu bekliyor” sayısına girer. Yalnız bilgi verir, hiçbir işlemi engellemez. Varsayılan 14 gün.",
+        min: 1,
+        max: 365,
+        fallback: 14,
+        unit: "gün",
+        step: 1,
+        audience: ["Planlamacı", "Yönetim"],
+      },
+      {
+        // Devere-levent S4: backend `readDevereStaleOutBodyDays` (kayıt yok = 30) ve 1–365 aralığı ile birebir.
+        group: DEVERE_GROUP.beamBody,
+        key: "devereStaleOutBodyDays",
+        title: "Dışarıdaki gövde bekleme uyarısı (gün)",
+        desc: "Deverecide/fasoncuda ya da dolu dışarıda duran levent gövdesi bu kadar gün dönmezse Levent Gövdeleri listesinde yaşı turuncu görünür ve üstteki “gündür dışarıda” sayısına girer. Kayıp gövdeyi yakalamak içindir; hiçbir işlemi engellemez. Varsayılan 30 gün.",
+        min: 1,
+        max: 365,
+        fallback: 30,
+        unit: "gün",
+        step: 1,
+        audience: ["Planlamacı", "Yönetim"],
+      },
+      {
         // Fason devere D4: backend `readDevereFasonWasteTolerancePct` (kayıt yok = 0) ve üst sınır 99 ile birebir.
         group: DEVERE_GROUP.fasonClose,
         key: "devereFasonWasteTolerancePct",

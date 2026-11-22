@@ -2,10 +2,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { WARP_BEAM_ORIGIN_LABEL, WARP_BEAM_STATUS_META, WARP_KG_SOURCE_LABEL, formatKg, formatM, type WarpBeam } from "./types";
 import { TERIM } from "@/lib/terim";
-import { StatusAgeCell, statusAgeText } from "@/components/data-table/StatusAgeCell";
-
-/** Sunucu özetindeki `staleFullDays` ile aynı eşik (yalnız hücre rengi; sayı sunucudan). */
-export const BEAM_STALE_FULL_DAYS = 14;
+import { DevereStaleAgeCell, statusAgeText } from "@/components/data-table/StatusAgeCell";
 
 /** Kartın iplikleri: çok iplikli kartta hepsi ("A · B"); satırsız/eski backend yanıtında ana iplik. */
 export function specYarnsText(s: WarpBeam["warpSpec"]): string {
@@ -89,7 +86,7 @@ export const warpBeamColumns: ColumnDef<WarpBeam>[] = [
     id: "age",
     header: "Bu durumda",
     meta: { exportValue: (r: WarpBeam) => statusAgeText(r.statusAgeDays) },
-    cell: ({ row }) => <StatusAgeCell days={row.original.statusAgeDays} since={row.original.statusSince} staleAt={row.original.status === "READY" ? BEAM_STALE_FULL_DAYS : null} />,
+    cell: ({ row }) => <DevereStaleAgeCell days={row.original.statusAgeDays} since={row.original.statusSince} watch={row.original.status === "READY"} kind="fullBeam" />,
   },
   {
     id: "machine",

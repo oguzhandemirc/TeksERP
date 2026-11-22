@@ -148,6 +148,8 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "devereAutoConsume",
       "devereWarpFixedWasteM",
       "devereDefaultLeadDays",
+      "devereStaleFullBeamDays",
+      "devereStaleOutBodyDays",
       "devereFasonWasteTolerancePct",
       "devereFasonLotPolicy",
       "devereBeamBodyMode",

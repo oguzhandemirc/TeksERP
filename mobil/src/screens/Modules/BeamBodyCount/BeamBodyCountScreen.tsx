@@ -24,6 +24,9 @@ import { FinishSheet, FixSheet } from './BeamBodyCountSheets';
 import { scopeLabel } from './beamBodyCount';
 import { useBeamBodyCount, type BeamBodyCountState } from './useBeamBodyCount';
 
+/** Ortak tarayıcının top metni yerine gövde metni (kadraj ipucu). */
+const BODY_TAP_HINTS = { idle: 'OKUT’a basınca bir gövde numarası okunur', armed: 'Gövde QR’ını çerçeveye alın' } as const;
+
 /** Alt bant: OKUT (en geniş, mavi) + BİTİR (yeşil). */
 function BottomBand({ s, onScan, onFinish }: { s: BeamBodyCountState; onScan: () => void; onFinish: () => void }) {
   const insets = useSafeAreaInsets();
@@ -77,6 +80,7 @@ export default function BeamBodyCountScreen() {
         listenWhileHidden={s.isOnline && !overlay}
         title="Gövde QR'ını okutun"
         trigger="tap"
+        tapHints={BODY_TAP_HINTS}
         onDismiss={() => setCamera(false)}
         onScan={(c) => s.scan(c)}
         footer={<ManualCodeFooter placeholder="Gövde no (ör. LG-00012)" onSubmit={(c) => s.scan(c)} testID="govde-sayim-numara" />}

@@ -154,6 +154,8 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   devereAutoConsume: A(true),
   devereWarpFixedWasteM: A(20), // sabit fireyi devreye sokan değer: çözgü hesabının fireli önerisi büyür
   devereDefaultLeadDays: A(7), // geçmişsiz kartta "devereye ver" günü hesabını devreye sokan değer
+  devereStaleFullBeamDays: V("bilgi eşiği (özet şeridi + hücre rengi); her değer aynı yolu işletir, bekçi sayıyı fikstürle sabitler"),
+  devereStaleOutBodyDays: V("bilgi eşiği (özet şeridi + hücre rengi); her değer aynı yolu işletir, bekçi sayıyı fikstürle sabitler"),
   devereBeamBodyMode: A("OPTIONAL"), // gövde yüzeyini açar; REQUIRED gövdesiz eski kabul fikstürlerini düşürür
   devereBeamBodyMachineFit: A("WARN"), // takmayı engellemeden uyumsuzluğu görünür kılar (varsayılan)
   devereFasonLotPolicy: A("WARN"), // üç kip de iş görür; WARN sevki engellemeden karışımı görünür kılar (varsayılan)

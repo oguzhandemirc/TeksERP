@@ -19,6 +19,7 @@ import { writeWarpingWoundYarnsTx } from "../helpers/warping-receipt-guard.helpe
 import { allocateWoundYarn, loadAllocationCandidates } from "../helpers/wound-allocation.helper";
 import { WARPING_ORDER_TABLE } from "./create";
 import { qtyText } from "../helpers/qty-text.helper";
+import { beamOverYarnWarning } from "../helpers/warping-settle-plan.helper";
 import { planReceiveReworks, type WarpingReceiveReworkLine } from "./receive-rework";
 import { auditReceiveBodies, bodyTareWarnings, planReceiveBodies, receiveBodyWidthProbes, receiveLinePhysicalSig, registerReceiveBodiesTx, type ReceiveBodyPlan, type WarpingReceiveBodyLine } from "./receive-body";
 import { beamBodyWidthWarningsTx } from "../helpers/beam-body-fit.helper";
@@ -93,7 +94,8 @@ export async function evaluate(db: Tx | typeof prisma, order: Awaited<ReturnType
   const codeOf = (y: string) => { const p = order.planYarns.find((x) => x.yarnItemId === y); return p?.name || p?.code || y; };
   const warnings: string[] = [];
   for (const [y, rest] of alloc.unallocated) {
-    warnings.push(`${codeOf(y)}: nominal tüketim deverecideki iplikten ${qtyText(rest)} kg fazla — tel/denye/metre ya da eksik sevk kaydını kontrol edin (fazlası dağıtılmadı, bakiye eksiye inmez).`);
+    // Operatör metni: "nominal tüketim" yerine sahadaki dil; ayrıntı (tel/denye) mutabakat ekranında.
+    warnings.push(beamOverYarnWarning(codeOf(y), rest));
   }
   return { candidates, ownerCustomerId, alloc, warnings };
 }

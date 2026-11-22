@@ -232,6 +232,7 @@ export type {
 } from "./traveler-card";
 export { readDevereSettleDefault, DEVERE_SETTLE_DEFAULTS, DEFAULT_DEVERE_SETTLE_DEFAULT } from "./devere-settle";
 export { readDevereDefaultLeadDays, DEFAULT_DEVERE_DEFAULT_LEAD_DAYS, DEVERE_DEFAULT_LEAD_DAYS_MAX } from "./devere-lead";
+export { readDevereStaleFullBeamDays, readDevereStaleOutBodyDays, DEFAULT_DEVERE_STALE_FULL_BEAM_DAYS, DEFAULT_DEVERE_STALE_OUT_BODY_DAYS, DEVERE_STALE_DAYS_MIN, DEVERE_STALE_DAYS_MAX } from "./devere-stale";
 export type { DevereSettleDefault } from "./devere-settle";
 export { readDevereBeamCardAutoPrint, DEVERE_BEAM_CARD_AUTO_PRINTS, DEFAULT_DEVERE_BEAM_CARD_AUTO_PRINT } from "./devere-beam-card";
 export type { DevereBeamCardAutoPrint } from "./devere-beam-card";

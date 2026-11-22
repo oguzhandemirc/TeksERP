@@ -40,6 +40,7 @@ import { effectiveIncomingDocsEnabled } from "./incoming-docs";
 import { SETTING_KEYS } from "./keys";
 import { DEVERE_SETTLE_DEFAULTS, type DevereSettleDefault } from "./devere-settle";
 import { DEFAULT_DEVERE_DEFAULT_LEAD_DAYS, DEVERE_DEFAULT_LEAD_DAYS_MAX } from "./devere-lead";
+import { DEFAULT_DEVERE_STALE_FULL_BEAM_DAYS, DEFAULT_DEVERE_STALE_OUT_BODY_DAYS, DEVERE_STALE_DAYS_MAX, DEVERE_STALE_DAYS_MIN } from "./devere-stale";
 import { DEVERE_BEAM_CARD_AUTO_PRINTS, type DevereBeamCardAutoPrint } from "./devere-beam-card";
 import { DEVERE_DUPLICATE_DELIVERY_NOTE_MODES, DEVERE_RECEIVE_WEIGHING_MODES, type DevereDuplicateDeliveryNote, type DevereReceiveWeighing } from "./devere-receive";
 import { readKursunMeterCapture } from "./kursun-batch";
@@ -225,7 +226,7 @@ export async function setFeatureFlags(
     // 400'e düşürür ya da API sözleşmesine olmayan bir null sokar.
     input: Omit<
       Partial<FeatureFlags>,
-      "fasonShrinkTolerancePct" | "dokumaWeavingWastePct" | "devereWarpFixedWasteM" | "devereDefaultLeadDays" | "devereFasonWasteTolerancePct" | "devereDenierSuggestMinBeams" | "devereDenierSuggestThresholdPct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "shippingReadyTolerancePct" | "tamburPlanGateWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "financeWithholdingNumerator" | "financeWithholdingDenominator" | "financePurchaseWithholdingNumerator" | "financePurchaseWithholdingDenominator" | "shippingSackSeqStart" | "tezgahEscalationGraceMinutes" | "tezgahAlarmRenotifyMinutes" | "tezgahMaxOpenStopHours" | "tezgahCollectorSilenceMinutes" | "license"
+      "fasonShrinkTolerancePct" | "dokumaWeavingWastePct" | "devereWarpFixedWasteM" | "devereDefaultLeadDays" | "devereStaleFullBeamDays" | "devereStaleOutBodyDays" | "devereFasonWasteTolerancePct" | "devereDenierSuggestMinBeams" | "devereDenierSuggestThresholdPct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "shippingReadyTolerancePct" | "tamburPlanGateWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "financeWithholdingNumerator" | "financeWithholdingDenominator" | "financePurchaseWithholdingNumerator" | "financePurchaseWithholdingDenominator" | "shippingSackSeqStart" | "tezgahEscalationGraceMinutes" | "tezgahAlarmRenotifyMinutes" | "tezgahMaxOpenStopHours" | "tezgahCollectorSilenceMinutes" | "license"
     > & {
       /** null = fabrika varsayılanına dön (1). */
       shippingSackSeqStart?: number | null;
@@ -237,6 +238,10 @@ export async function setFeatureFlags(
       devereWarpFixedWasteM?: number | null;
       /** null = fabrika varsayılanına dön (0 = yok). */
       devereDefaultLeadDays?: number | null;
+      /** null = fabrika varsayılanına dön (14 gün). */
+      devereStaleFullBeamDays?: number | null;
+      /** null = fabrika varsayılanına dön (30 gün). */
+      devereStaleOutBodyDays?: number | null;
       /** null = fabrika varsayılanına dön (0 = denetim yok). */
       devereFasonWasteTolerancePct?: number | null;
       /** null = varsayılana dön (3 levent). */
@@ -1714,6 +1719,18 @@ export async function setFeatureFlags(
         throw AppError.badRequest(`Varsayılan devere teslim süresi 0 ile ${qtyText(DEVERE_DEFAULT_LEAD_DAYS_MAX)} gün arasında olmalı`);
       }
       await this.set(SETTING_KEYS.DEVERE_DEFAULT_LEAD_DAYS, v === null ? DEFAULT_DEVERE_DEFAULT_LEAD_DAYS : v, "Devere: geçmişi olmayan çözgü kartı için yedek devere teslim süresi (gün)", userId);
+    }
+    // S4 bekleme yaşı eşikleri: `null` = alan temizlendi → fabrika varsayılanı (14 / 30 = bugünkü sabit).
+    const staleDaysValid = (v: unknown) => typeof v === "number" && Number.isInteger(v) && v >= DEVERE_STALE_DAYS_MIN && v <= DEVERE_STALE_DAYS_MAX;
+    if (Object.prototype.hasOwnProperty.call(input, "devereStaleFullBeamDays")) {
+      const v = input.devereStaleFullBeamDays;
+      if (v !== null && !staleDaysValid(v)) throw AppError.badRequest(`Dolu levent bekleme eşiği ${DEVERE_STALE_DAYS_MIN} ile ${DEVERE_STALE_DAYS_MAX} gün arasında tam sayı olmalı`);
+      await this.set(SETTING_KEYS.DEVERE_STALE_FULL_BEAM_DAYS, v === null || v === undefined ? DEFAULT_DEVERE_STALE_FULL_BEAM_DAYS : v, "Devere: 'N+ gündür dolu bekliyor' levent eşiği (gün)", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "devereStaleOutBodyDays")) {
+      const v = input.devereStaleOutBodyDays;
+      if (v !== null && !staleDaysValid(v)) throw AppError.badRequest(`Dışarıdaki gövde bekleme eşiği ${DEVERE_STALE_DAYS_MIN} ile ${DEVERE_STALE_DAYS_MAX} gün arasında tam sayı olmalı`);
+      await this.set(SETTING_KEYS.DEVERE_STALE_OUT_BODY_DAYS, v === null || v === undefined ? DEFAULT_DEVERE_STALE_OUT_BODY_DAYS : v, "Devere: 'N+ gündür dışarıda' gövde eşiği (gün)", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "devereFasonLotPolicy")) {
       const v = input.devereFasonLotPolicy;
