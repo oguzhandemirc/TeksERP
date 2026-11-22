@@ -26,7 +26,7 @@ export function ResultCard({ result, onClose, onReject, cards }: { result: Recei
       <View style={ds.cardTitleRow}>
         <View style={ds.grow}>
           <Text style={[ds.cardTitle, styles.ok]}>{`Kabul kaydedildi — ${result.docNo}`}</Text>
-          <Text style={ds.lineSub}>{`${result.totals.beamCount} levent · ${m(result.totals.lengthM)} · etiketler yazıcıya gönderiliyor`}</Text>
+          <Text style={ds.lineSub} testID="devere-kabul-sonuc-ozet">{`${result.totals.beamCount} levent · ${m(result.totals.lengthM)} · ${cards && !cards.labelsQueued ? 'etiket yerine levent kartı basılır' : 'etiketler yazıcıya gönderiliyor'}`}</Text>
         </View>
         {cards && !cards.ask ? (
           <Button mode="outlined" icon="card-text-outline" onPress={cards.print} loading={cards.printing} disabled={cards.printing} contentStyle={ds.tall} testID="devere-kart-bas">

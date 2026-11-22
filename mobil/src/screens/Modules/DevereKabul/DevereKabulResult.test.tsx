@@ -33,7 +33,16 @@ describe('ResultCard', () => {
 });
 
 describe('ResultCard levent kartı (S5t)', () => {
-  const cards = (over: Partial<{ ask: boolean; printed: boolean; printing: boolean }> = {}) => ({ print: jest.fn(), printing: false, printed: false, ask: false, ...over });
+  const cards = (over: Partial<{ ask: boolean; printed: boolean; printing: boolean; labelsQueued: boolean }> = {}) => ({ print: jest.fn(), printing: false, printed: false, ask: false, labelsQueued: true, ...over });
+
+  it('özet metni: OFF etiket gönderilir der; kart açıkken (ASK/ALWAYS) etiket yerine kart der', async () => {
+    const r = renderWithPaper(<ResultCard result={result} onClose={jest.fn()} cards={cards()} />);
+    await act(async () => {});
+    expect(r.getByTestId('devere-kabul-sonuc-ozet').props.children).toMatch(/etiketler yazıcıya gönderiliyor/);
+    r.rerender(<ResultCard result={result} onClose={jest.fn()} cards={cards({ ask: true, labelsQueued: false })} />);
+    await act(async () => {});
+    expect(r.getByTestId('devere-kabul-sonuc-ozet').props.children).toMatch(/etiket yerine levent kartı basılır/);
+  });
 
   it('cards verilmezse kart düğmesi yok (eski görünüm)', async () => {
     const r = renderWithPaper(<ResultCard result={result} onClose={jest.fn()} />);

@@ -16,6 +16,12 @@ export function normalizeAutoPrint(v: unknown): BeamCardAutoPrint {
   return v === 'ASK' || v === 'ALWAYS' ? v : 'OFF';
 }
 
+/** Kabul sonrası levent ETİKETİ kendiliğinden kuyruğa girsin mi? Kart açıksa (ASK/ALWAYS) kart etiketin yerini
+ *  alır (çelik leventten etiket düşer — kullanıcı 2026-11-22); OFF = bugünkü davranış, etiket basılır. */
+export function labelsAutoQueued(mode: BeamCardAutoPrint): boolean {
+  return mode === 'OFF';
+}
+
 /** Kabul sonucundaki leventler, belge sırasıyla. */
 export function resultBeamTargets(result: ReceiveDocResult | null): BeamCardTarget[] {
   if (!result) return [];
@@ -29,6 +35,8 @@ export interface BeamCardPrintState {
   printed: boolean;
   /** ASK ve henüz basılmadı → sonuç kartı soruyu öne çıkarır. */
   ask: boolean;
+  /** Etiketler kendiliğinden kuyruğa girdi mi (yalnız OFF) — sonuç kartı metni buna uyar. */
+  labelsQueued: boolean;
 }
 
 export function useBeamCardPrint(result: ReceiveDocResult | null, mode: BeamCardAutoPrint): BeamCardPrintState {
@@ -71,5 +79,5 @@ export function useBeamCardPrint(result: ReceiveDocResult | null, mode: BeamCard
     if (result) void run(result);
   }, [result, run]);
   const printed = docNo !== null && printedDoc === docNo;
-  return { print, printing, printed, ask: mode === 'ASK' && !printed };
+  return { print, printing, printed, ask: mode === 'ASK' && !printed, labelsQueued: labelsAutoQueued(mode) };
 }

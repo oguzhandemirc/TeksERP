@@ -2,7 +2,8 @@
 // DEVERE DÖNÜŞ KABULÜ — gönderim: gövde okutma (resolve) · önizleme · kabul (clientToken denemesi)
 // =============================================================================
 // Token MANTIKSAL DENEME başına: aynı belge gövdesi + pencere içi + önceki deneme belirsiz hatayla
-// düştüyse AYNI token; kesin 4xx ya da başarıdan sonra taze. Kabul sonrası etiketler kuyruğa.
+// düştüyse AYNI token; kesin 4xx ya da başarıdan sonra taze. Kabul sonrası etiketler kuyruğa — yalnız levent
+// kartı ayarı OFF iken (ASK/ALWAYS'te A6 kart etiketin yerini alır).
 // =============================================================================
 import { useCallback, useRef, useState } from 'react';
 import Toast from 'react-native-toast-message';
@@ -53,7 +54,16 @@ export function useBodyScan(p: { hasOrder: boolean; orders: OrderDraft[]; onBody
   return { scanBody, resolving };
 }
 
-export function useReceiveSubmit(build: DocBuild, onAccepted: () => void) {
+/** Kabul sonrası levent etiketleri: yalnız `autoLabels` (kart ayarı OFF) iken kuyruğa; kart açıksa kart yerini alır. */
+export function queueReceiveLabels(res: ReceiveDocResult, autoLabels: boolean): number {
+  if (!autoLabels) return 0;
+  const q = useBeamLabelQueue.getState();
+  let n = 0;
+  for (const o of res.orders) for (const b of o.receipt.beams) { q.enqueue(b.id, b.beamNo); n++; }
+  return n;
+}
+
+export function useReceiveSubmit(build: DocBuild, onAccepted: () => void, autoLabels = true) {
   const [preview, setPreview] = useState<ReceiveDocPreview | null>(null);
   const [result, setResult] = useState<ReceiveDocResult | null>(null);
   const attempt = useRef<BeamAttempt | null>(null);
@@ -83,8 +93,7 @@ export function useReceiveSubmit(build: DocBuild, onAccepted: () => void) {
       }
     },
     onSuccess: (res) => {
-      const q = useBeamLabelQueue.getState();
-      for (const o of res.data.orders) for (const b of o.receipt.beams) q.enqueue(b.id, b.beamNo);
+      queueReceiveLabels(res.data, autoLabels);
       setPreview(null);
       setResult(res.data);
       onAccepted();

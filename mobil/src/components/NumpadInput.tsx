@@ -24,6 +24,22 @@ export interface NumpadInputProps
   useNativeKeyboard?: boolean;
   /** Odak (native klavye) ya da numpad hedefi bu kutuya geçti/çıktı — çağıran çerçevesini vurgular. */
   onFocusChange?: (focused: boolean) => void;
+  /**
+   * Ön-dolu değer: odaklanınca içerik tümden seçili gelir, ilk tuş eskisinin YERİNE geçer (1500 → "2" yazınca 2,
+   * 150020 değil). Native kipte `selectTextOnFocus`; tuş takımı kipinde açılıştan sonraki ilk tuş değeri değiştirir.
+   */
+  selectAllOnFocus?: boolean;
+}
+
+/** Tuş takımı kipi: açılıştan sonraki ilk değişiklik eski değerin yerine geçer (saf; test ölçer). */
+export function replaceFirstKey(prev: string, next: string): string {
+  if (next === prev) return next;
+  if (next.length < prev.length) return ''; // ilk silme → alanı boşalt
+  if (prev !== '' && next.startsWith(prev)) {
+    const typed = next.slice(prev.length);
+    return typed === '.' ? '0.' : typed;
+  }
+  return next;
 }
 
 const ACTIVE_COLOR = '#4f46e5';
@@ -84,24 +100,29 @@ function cleanNumericText(text: string, allowDecimal: boolean): string {
 function useOpenTarget(
   openTarget: (t: NumpadTarget) => void,
   nativeMode: boolean,
-  t: { id: string; label?: string; allowDecimal: boolean; maxLength?: number; value: string; onChangeText: (next: string) => void },
+  t: { id: string; label?: string; allowDecimal: boolean; maxLength?: number; value: string; onChangeText: (next: string) => void; selectAll?: boolean },
 ) {
-  const { id, label, allowDecimal, maxLength } = t;
+  const { id, label, allowDecimal, maxLength, selectAll } = t;
   const valueRef = useRef(t.value);
   valueRef.current = t.value;
   const onChangeRef = useRef(t.onChangeText);
   onChangeRef.current = t.onChangeText;
   return useCallback(() => {
     if (nativeMode) return;
+    let fresh = !!selectAll;
     openTarget({
       id,
       label,
       allowDecimal,
       maxLength,
       getValue: () => valueRef.current,
-      onChange: (next) => onChangeRef.current(next),
+      onChange: (next) => {
+        const out = fresh ? replaceFirstKey(valueRef.current, next) : next;
+        fresh = false;
+        onChangeRef.current(out);
+      },
     });
-  }, [openTarget, nativeMode, id, label, allowDecimal, maxLength]);
+  }, [openTarget, nativeMode, id, label, allowDecimal, maxLength, selectAll]);
 }
 
 const NumpadInput = forwardRef<RNTextInput, NumpadInputProps>(function NumpadInput(
@@ -114,6 +135,7 @@ const NumpadInput = forwardRef<RNTextInput, NumpadInputProps>(function NumpadInp
     autoActivate = false,
     useNativeKeyboard = false,
     onFocusChange,
+    selectAllOnFocus = false,
     ...rest
   },
   forwardedRef
@@ -157,7 +179,7 @@ const NumpadInput = forwardRef<RNTextInput, NumpadInputProps>(function NumpadInp
   }, [value, notifyChange, id]);
 
   const handleFocus = useOpenTarget(openTarget, nativeMode, {
-    id, label: numpadLabel, allowDecimal, maxLength: numpadMaxLength, value, onChangeText,
+    id, label: numpadLabel, allowDecimal, maxLength: numpadMaxLength, value, onChangeText, selectAll: selectAllOnFocus,
   });
 
   useBlurOnRelease(innerRef, isActive, nativeMode);
@@ -191,6 +213,7 @@ const NumpadInput = forwardRef<RNTextInput, NumpadInputProps>(function NumpadInp
         onBlur={(e) => { focusRef.current?.(false); rest.onBlur?.(e); }}
         keyboardType={allowDecimal ? 'decimal-pad' : 'number-pad'}
         maxLength={numpadMaxLength}
+        selectTextOnFocus={selectAllOnFocus || rest.selectTextOnFocus}
       />
     );
   }
