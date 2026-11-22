@@ -8,6 +8,7 @@
 import { fmtFactoryDate, fmtFactoryDateTime } from "@/lib/factory-time";
 import { fmtKg, fmtM, isBeamCountOpen, trimNum } from "./order-model";
 import type { WarpingDispatchRow, WarpingInstruction } from "./yarn-types";
+import { reedPlanHtml, reedPlanText, VISUAL_CSS, warpEndsStripHtml } from "./instruction-visual-html";
 
 const esc = (s: string): string => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -25,6 +26,7 @@ function instructionSection(i: WarpingInstruction): string {
   const cards = [`${i.warpSpec.name} (${i.warpSpec.code})`, ...i.extraSpecs.map((e) => `${e.name} (${e.code}, ek tel grubu)`)].join("; ");
   const beams = i.beamLines.map((b) => `${b.beamCount} × ${fmtM(b.beamLengthM)} m`).join(" + ");
   const beamRow = isBeamCountOpen(i) ? row("Levent adedi", `devereciye bırakıldı, toplam ${fmtM(i.targetLengthM)} m`) : row("Levent", `${beams} — toplam ${i.beamCount} levent, ${fmtM(i.targetLengthM)} m`);
+  const reedPlan = reedPlanText(i.reed?.endsPerDent ?? null, i.totalEnds, i.selvedgeEnds);
   const yarns = i.yarns
     .map((y) => `<tr><td class="c">${esc(y.letter)}</td><td>${yarnCell(y.name, y.code)}</td><td class="n">${String(y.endsCount)}</td><td class="n">${esc(trimNum(y.denier))}</td></tr>`)
     .join("");
@@ -36,10 +38,13 @@ function instructionSection(i: WarpingInstruction): string {
       ${beamRow}
       ${row("Toplam tel", String(i.totalEnds))}
       ${row("Tarak", reedText(i.reed))}
+      ${reedPlan ? row("Tarak planı", reedPlan) : ""}
       ${row("Termin", i.expectedReturnAt ? fmtFactoryDate(i.expectedReturnAt) : "—")}
     </table>
     <table class="grid"><thead><tr><th class="c">Harf</th><th>İplik</th><th class="n">Tel</th><th class="n">Denye</th></tr></thead><tbody>${yarns}</tbody></table>
     <div class="box"><b>Dizilim:</b> ${i.sequenceNote ? esc(i.sequenceNote) : "—"}</div>
+    ${warpEndsStripHtml(i.endsSequence, i.yarns)}
+    ${reedPlanHtml(i.reed?.endsPerDent ?? null, i.totalEnds, i.selvedgeEnds, i.endsSequence)}
     ${i.notes ? `<div class="box"><b>Not:</b> ${esc(i.notes)}</div>` : ""}
   </section>`;
 }
@@ -83,7 +88,8 @@ h1{font-size:16pt;margin:0 0 2mm}.code{color:#666;font-size:8pt}.sub{color:#444;
 .kv th{text-align:left;width:32%;font-weight:600;padding:1.5mm 2mm;border-bottom:1px solid #ddd}.kv td{padding:1.5mm 2mm;border-bottom:1px solid #ddd}
 .grid th,.grid td{border:1px solid #999;padding:1.5mm 2mm}.grid th{background:#f2f2f2;text-align:left}.grid th.n{text-align:right}.grid th.c{text-align:center}.n{text-align:right;font-variant-numeric:tabular-nums}.c{text-align:center;width:12mm}
 .box{border:1px solid #999;padding:2mm 3mm;margin-bottom:3mm;white-space:pre-wrap}.break{page-break-after:always}
-.sign{display:flex;gap:20mm;margin-top:14mm}.sign div{flex:1;border-top:1px solid #333;padding-top:1.5mm;text-align:center}`;
+.sign{display:flex;gap:20mm;margin-top:14mm}.sign div{flex:1;border-top:1px solid #333;padding-top:1.5mm;text-align:center}
+${VISUAL_CSS}`;
 
 /** Tam belge; `dispatch` verilirse irsaliye önce, talimat ayrı sayfada. */
 export function buildInstructionHtml(i: WarpingInstruction, dispatch?: WarpingDispatchRow | null): string {

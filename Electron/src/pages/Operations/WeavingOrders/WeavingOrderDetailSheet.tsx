@@ -6,7 +6,7 @@
 // "kayıt yok" YAZILMAZ — hata + yeniden dene. Alan gelmezse bölüm çizilmez.
 // Eylemler sayfanın mevcut diyaloglarına callback'tir (ikinci yazar yok).
 // =============================================================================
-import type { MouseEvent, ReactNode } from "react";
+import type { CSSProperties, MouseEvent, ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Ban, CheckCircle2, Pencil, RotateCw, Truck } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -24,6 +24,7 @@ import { isFasonSectionVisible } from "./fason/fason-summary";
 import { isList, liveEmptyText } from "./overview/overview-model";
 import { WeavingCostSection } from "./overview/WeavingCostSection";
 import { WarpNeedSection } from "./overview/WarpNeedSection";
+import { ConstructionVisualSection } from "./overview/ConstructionVisualSection";
 import { FollowButton } from "@/components/bildirim/FollowButton";
 import { BeamsSection, LiveRunsSection, OrderLinesSection, OverviewKpis, RecentDoffsSection, RecentRunsSection } from "./overview/OverviewSections";
 
@@ -33,6 +34,8 @@ const STATUS_PILL: Record<WeavingOrderStatus, string> = {
   COMPLETED: "ok",
   CANCELLED: "bad",
 };
+
+const APP_TOKENS = { "--app-border": "var(--border)", "--app-muted": "var(--muted)" } as CSSProperties;
 
 /** Panel açıkken canlı durum bu aralıkla tazelenir. */
 export const OVERVIEW_REFETCH_MS = 20_000;
@@ -74,7 +77,8 @@ export function WeavingOrderDetailSheet({ order, onClose, onEdit, onCloseOrder, 
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent side="right" className="w-full overflow-y-auto p-0 sm:max-w-2xl">
+      {/* `.wo-v3` --border/--muted'u hex olarak ezer; panel bileşenleri (kart görseli) için asıl tema değeri burada saklanır. */}
+      <SheetContent side="right" className="w-full overflow-y-auto p-0 sm:max-w-2xl" style={APP_TOKENS}>
         <SheetHeader className="sr-only">
           <SheetTitle>{wo?.weavingOrderNumber ?? TERIM.dokumaIsEmri.tekil}</SheetTitle>
           <SheetDescription>{TERIM.dokumaIsEmri.tekil} — canlı durum</SheetDescription>
@@ -109,6 +113,7 @@ export function WeavingOrderDetailSheet({ order, onClose, onEdit, onCloseOrder, 
                   </>
                 )
               )}
+              <ConstructionVisualSection weavingOrderId={wo.id} weavingOrderNumber={wo.weavingOrderNumber} itemId={wo.item.id} onNavigate={onClose} />
               <WarpNeedSection weavingOrderId={wo.id} isOpen={WEAVING_STATUS_META[wo.status]?.open ?? false} onNavigate={onClose} />
               {wo.orderLines && <OrderLinesSection lines={wo.orderLines} />}
               <WeavingCostSection itemId={wo.item.id} />

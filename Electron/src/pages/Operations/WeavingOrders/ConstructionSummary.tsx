@@ -6,6 +6,9 @@
 // =============================================================================
 import { AlertTriangle } from "lucide-react";
 import type { EffectiveConstruction } from "@/pages/Items/construction-service";
+import { WeaveGrid } from "@/components/weave/WeaveGrid";
+import { stripCell } from "@/components/weave/warp-ends";
+import { yarnColor, yarnLetter } from "@/components/weave/weave-palette";
 
 const LAYER_MODE: Record<string, string> = { SEPARATE_BEAM: "ayrı levent", SHARED_BEAM: "zeminle aynı levent", CREEL: "cağlık" };
 
@@ -15,6 +18,19 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
       <span className="w-20 shrink-0 text-muted-foreground">{label}</span>
       <span className="min-w-0 break-words">{children}</span>
     </div>
+  );
+}
+
+/** Mini atkı seçici: bir rapor boyunca her atkı bir kare, iplik harfinin rengiyle (açılım sunucudan). */
+function PickStrip({ seq }: { seq: number[] }) {
+  const cell = stripCell(seq.length, 420);
+  return (
+    <Row label="Seçici">
+      <span className="block w-fit max-w-full overflow-x-auto rounded border bg-background p-1" data-testid="construction-pick-strip">
+        <WeaveGrid rows={1} cols={seq.length} cell={cell} rowLabel={false} ariaLabel={`Atkı seçici: ${seq.length} atkılık rapor`}
+          fill={(_r, c) => yarnColor(seq[c]!)} colLabel={cell >= 10 ? (c) => yarnLetter(seq[c]! - 1) : undefined} />
+      </span>
+    </Row>
   );
 }
 
@@ -47,6 +63,7 @@ export function ConstructionSummary({ data, loading }: { data: EffectiveConstruc
           {y.cardYarnItem ? <span className="text-amber-700 dark:text-amber-400"> (varyant: kartta {y.cardYarnItem.code})</span> : null}
         </Row>
       ))}
+      {w?.pickSequence && w.pickSequence.length > 0 && <PickStrip seq={w.pickSequence} />}
       {data.weaveDesign && (
         <Row label="Desen">
           {data.weaveDesign.code} · {data.weaveDesign.kind}
