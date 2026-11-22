@@ -39,6 +39,8 @@ export interface WeaveDesign {
   lenoSetup: string | null;
   /** Döner (leno) çerçeveleri — 1-tabanlı çerçeve no; eski backend göndermez. */
   lenoFrames?: number[];
+  /** Tahar düzeni notu (serbest metin, ≤300); eski backend göndermez. */
+  drawingInNote?: string | null;
   notes: string | null;
   isActive: boolean;
 }

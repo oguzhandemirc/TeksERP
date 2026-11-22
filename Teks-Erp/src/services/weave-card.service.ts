@@ -41,6 +41,7 @@ export async function buildWeaveCardView(itemId: string, now: Date = new Date())
       ? {
         code: d.code, name: d.name, kindLabel: KIND_LABEL[d.kind] ?? d.kind, familyLabel: d.familyLabel, frameCount: d.frameCount,
         repeatCm: dec(d.repeatCm), loomFileName: d.loomFileName, lenoSetup: d.lenoSetup,
+        drawingInNote: d.drawingInNote,
       }
       : null,
     liftPlan: Array.isArray(d?.liftPlan) ? (d.liftPlan as number[][]) : null,
