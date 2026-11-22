@@ -322,7 +322,7 @@ export class SystemSettingService {
     // 400'e düşürür ya da API sözleşmesine olmayan bir null sokar.
     input: Omit<
       Partial<FeatureFlags>,
-      "fasonShrinkTolerancePct" | "dokumaWeavingWastePct" | "devereWarpFixedWasteM" | "devereFasonWasteTolerancePct" | "devereDenierSuggestMinBeams" | "devereDenierSuggestThresholdPct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "shippingReadyTolerancePct" | "tamburPlanGateWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "financeWithholdingNumerator" | "financeWithholdingDenominator" | "financePurchaseWithholdingNumerator" | "financePurchaseWithholdingDenominator" | "shippingSackSeqStart" | "tezgahEscalationGraceMinutes" | "tezgahAlarmRenotifyMinutes" | "tezgahMaxOpenStopHours" | "tezgahCollectorSilenceMinutes" | "license"
+      "fasonShrinkTolerancePct" | "dokumaWeavingWastePct" | "devereWarpFixedWasteM" | "devereDefaultLeadDays" | "devereFasonWasteTolerancePct" | "devereDenierSuggestMinBeams" | "devereDenierSuggestThresholdPct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "shippingReadyTolerancePct" | "tamburPlanGateWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "financeWithholdingNumerator" | "financeWithholdingDenominator" | "financePurchaseWithholdingNumerator" | "financePurchaseWithholdingDenominator" | "shippingSackSeqStart" | "tezgahEscalationGraceMinutes" | "tezgahAlarmRenotifyMinutes" | "tezgahMaxOpenStopHours" | "tezgahCollectorSilenceMinutes" | "license"
     > & {
       /** null = fabrika varsayılanına dön (1). */
       shippingSackSeqStart?: number | null;
@@ -332,6 +332,8 @@ export class SystemSettingService {
       dokumaWeavingWastePct?: number | null;
       /** null = fabrika varsayılanına dön (0 m). */
       devereWarpFixedWasteM?: number | null;
+      /** null = fabrika varsayılanına dön (0 = yok). */
+      devereDefaultLeadDays?: number | null;
       /** null = fabrika varsayılanına dön (0 = denetim yok). */
       devereFasonWasteTolerancePct?: number | null;
       /** null = varsayılana dön (3 levent). */

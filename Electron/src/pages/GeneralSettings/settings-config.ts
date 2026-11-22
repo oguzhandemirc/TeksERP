@@ -2088,6 +2088,19 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         audience: ["Planlamacı", "Yönetim"],
       },
       {
+        // Devere-levent S1: backend `readDevereDefaultLeadDays` (kayıt yok = 0) ve üst sınır 120 ile birebir.
+        group: DEVERE_GROUP.fasonDispatch,
+        key: "devereDefaultLeadDays",
+        title: "Varsayılan devere teslim süresi (gün)",
+        desc: "Levent Bitiş Tahmini raporu “devereye en geç ne zaman verilmeli” gününü deverecinin son kapanmış siparişlerindeki sevk → ilk kabul süresinin ortancasından hesaplar. Henüz devere geçmişi olmayan çözgü kartında bu süre kullanılır. 0 (varsayılan) = kullanılmaz; o kartta gün “ölçülemedi” görünür.",
+        min: 0,
+        max: 120,
+        fallback: 0,
+        unit: "gün",
+        step: 1,
+        audience: ["Planlamacı", "Yönetim"],
+      },
+      {
         // Fason devere D4: backend `readDevereFasonWasteTolerancePct` (kayıt yok = 0) ve üst sınır 99 ile birebir.
         group: DEVERE_GROUP.fasonClose,
         key: "devereFasonWasteTolerancePct",

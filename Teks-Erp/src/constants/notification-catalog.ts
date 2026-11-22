@@ -17,7 +17,7 @@ import { z } from "zod";
 import { TERIM } from "./terim";
 import { NOTIFICATION_DEFAULT_CHANNELS, NOTIFICATION_DEFAULT_RETENTION, NOTIFICATION_DESKTOP_CHANNELS, type NotificationCatalogEntry } from "./notification-catalog.types";
 import { CARI_NOTIFICATION_ENTRIES } from "./notification-catalog-cari";
-import { READY_WORK_NOTIFICATION_ENTRIES } from "./notification-catalog-sevkiyat";
+import { READY_WORK_NOTIFICATION_ENTRIES } from "./notification-catalog-sevkiyat"; import { DEVERE_NOTIFICATION_ENTRIES } from "./notification-catalog-devere";
 import { KIMLIK_NOTIFICATION_ENTRIES } from "./notification-catalog-kimlik";
 import { SATIS_NOTIFICATION_ENTRIES } from "./notification-catalog-satis";
 import { URETIM_NOTIFICATION_ENTRIES } from "./notification-catalog-uretim";
@@ -312,6 +312,7 @@ export const NOTIFICATION_CATALOG = {
     payloadAlanlari: ["leventId", "leventNo", "tezgahNo", "kalanGun"],
     tahminiHaftalik: 10, saklama: SAKLAMA,
   },
+  ...DEVERE_NOTIFICATION_ENTRIES, // devere-levent S1 — ayrı dosyada (dosya boyu)
   "dokuma.tezgah-alarmi": {
     kod: "dokuma.tezgah-alarmi", ad: "Tezgah alarmı",
     sinif: "ALARM", altTur: null, grup: "Dokuma",

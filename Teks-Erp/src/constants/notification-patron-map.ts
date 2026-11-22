@@ -118,6 +118,7 @@ export const NOTIFICATION_PATRON_MAP: Readonly<Record<NotificationKind, PatronEs
   "yetki.iki-adim-sifirlandi": { patronKind: null, neden: BULUT_TURU_YOK },
   "cihaz.onay-bekliyor": { patronKind: null, neden: BULUT_TURU_YOK },
   "dokuma.levent-bitiyor": { patronKind: null, neden: "yalnız fabrika içi (salon işi)" },
+  "devere.siparis-gecikti": { patronKind: null, neden: BULUT_TURU_YOK },
   "dokuma.tezgah-alarmi": { patronKind: null, neden: "yalnız fabrika içi (nöbet/kademe alarmı)" },
   // S6a (2026-11-15)
   "fason.fire-farki": { patronKind: null, neden: BULUT_TURU_YOK },
