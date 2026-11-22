@@ -218,7 +218,7 @@ async function main(): Promise<void> {
     await prisma.rollError.deleteMany({ where: { rollId: { in: rollIds } } });
     await prisma.warpingBeamRejectionItem.deleteMany({ where: { rejectionId: { in: rejectionIds } } });
     await prisma.warpingBeamRejection.deleteMany({ where: { id: { in: rejectionIds } } });
-    await prisma.warpingOrderSettlement.deleteMany({ where: { warpingOrderId: { in: orderIds }, kind: "REOPEN" } });
+    await prisma.warpingOrderSettlement.deleteMany({ where: { warpingOrderId: { in: orderIds }, reversesId: { not: null } } });
     await prisma.warpingOrderSettlement.deleteMany({ where: { warpingOrderId: { in: orderIds } } });
     await prisma.warpBeamEvent.deleteMany({ where: { beamId: { in: beamIds }, reversesEventId: { not: null } } });
     await prisma.warpBeamEvent.deleteMany({ where: { beamId: { in: beamIds } } });

@@ -38,6 +38,7 @@ export const dokumaReportTiles: HubTile[] = [
     description: "Devereci başına zamanında dönüş, teslim süresi, fire, ret oranı, denye sapması ve çözgü kaynaklı kumaş hatası",
     icon: Award,
     to: "/reports/dokuma/devereci-karnesi",
+    permission: "report:production",
   },
 ];
 

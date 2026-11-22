@@ -303,6 +303,14 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
       "`SUBCONTRACTOR_RECEIPT_INVOICED`). Ön muhasebe kapalıyken `invoices` boştur, engel doğmaz; router fatura tablosuna yazmaz.",
   },
   {
+    dosya: "routes/reports/dokuma.report.routes.ts",
+    neden:
+      "DEVERECİ KARNESİ (devere-levent S2, 2026-11-22). Finans dokunuşu GEÇİŞLİDİR: karne servisi teslim süresi/termin/kapanış " +
+      "tek kaynaklarını `warping-order/*` ailesinden (`lead-time`, `delays`, `settle-record`) okur; tarama aileyi tek düğüm saydığı için " +
+      "aynı ailedeki ücret faturası dosyasına ulaşır. Router hiçbir finans tablosuna yazmaz ne okur; dokuma raporlarını ön muhasebeye " +
+      "bağlamak bütün dokuma raporlarını finanssız kurulumda kapatırdı.",
+  },
+  {
     dosya: "routes/warping-order.routes.ts",
     neden:
       "FASON DEVERE SİPARİŞİ (D4b-1, 2026-11-17). Finans dokunuşu GEÇİŞLİ ve YANILTICIDIR: sevk belge numarası " +
