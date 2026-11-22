@@ -25,7 +25,7 @@ const WARP_SELECT = {
 } satisfies Prisma.WarpSpecSelect;
 const DESIGN_SELECT = {
   id: true, code: true, name: true, kind: true, familyLabel: true, frameCount: true, repeatCm: true,
-  liftPlan: true, loomFileName: true, lenoSetup: true, lenoFrames: true, isActive: true,
+  liftPlan: true, loomFileName: true, lenoSetup: true, lenoFrames: true, drawingInNote: true, isActive: true,
 } satisfies Prisma.WeaveDesignSelect;
 const WEFT_SELECT = {
   id: true, code: true, name: true, picksPerCm: true, sequenceCode: true, weftProgramNo: true,

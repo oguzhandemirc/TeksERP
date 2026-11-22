@@ -22,6 +22,8 @@ export interface WeaveCardView {
   design: {
     code: string; name: string; kindLabel: string; familyLabel: string | null; frameCount: number | null;
     repeatCm: string | null; loomFileName: string | null; lenoSetup: string | null;
+    /** Tahar düzeni notu; null = satır basılmaz (bugünkü görünüm). */
+    drawingInNote: string | null;
   } | null;
   liftPlan: number[][] | null;
   /** 1-tabanlı döner çerçeve no'ları. */
@@ -146,7 +148,7 @@ ${gridHtml(v)}
 <div class="bottom">
 <div><h3>ATKI İPLİKLERİ</h3>${weftYarns}${w?.sequenceCode ? `<div class="kv muted">Seçici sırası: ${e(w.sequenceCode)}</div>` : ""}</div>
 <div>${warpsHtml(v)}
-<div class="kv"><b>ATKI SIKLIĞI :</b> ${w?.picksPerCm ? `${e(w.picksPerCm)} ATKI/CM` : "—"}</div>
+${d?.drawingInNote ? `<div class="kv"><b>TAHAR :</b> ${e(d.drawingInNote)}</div>` : ""}<div class="kv"><b>ATKI SIKLIĞI :</b> ${w?.picksPerCm ? `${e(w.picksPerCm)} ATKI/CM` : "—"}</div>
 ${w ? `<div class="kv muted">Atkı kartı: ${e(w.code)} · ${e(w.name)}${w.weftProgramNo ? ` · Program ${e(w.weftProgramNo)}` : ""}</div>` : ""}</div>
 </div>
 ${variantsHtml(v)}
