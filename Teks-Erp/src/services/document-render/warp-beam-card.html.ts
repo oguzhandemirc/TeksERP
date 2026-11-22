@@ -48,6 +48,8 @@ export interface WarpBeamCardDoc {
     deliveryNoteNo: string | null;
     receiveDocNo: string | null;
     warpingOrderNo: string | null;
+    /** Tahar düzeni notu (S8 desen kartı `drawingInNote`; iş emri pini > ürünün deseni). Eski donmuş kartta anahtar yok. */
+    drawingInNote?: string | null;
   };
   /** Doğuş kırılımı (WOUND kopyası) — kart sonradan değişse de leventin ipliği değişmez. */
   yarns: WarpBeamCardYarn[];
@@ -86,6 +88,8 @@ export function warpBeamCardInfoRows(doc: WarpBeamCardDoc, sections: Record<stri
   const h = doc.header;
   const rows: Array<[string, string | null]> = [
     ["Çözgü kartı", `${h.warpSpecCode} — ${h.warpSpecName}`],
+    // Boş/eksik not satır doğurmaz → tahar'sız kart bayt-aynı (bekçi `test_levent_karti` §7).
+    ["Tahar", h.drawingInNote?.trim() || null],
     ["Kumaş", h.itemName],
     ["Dokuma iş emri", h.weavingOrderNumber],
     ["Metre", h.lengthM == null ? null : `${fmt(h.lengthM, 1)} m`],

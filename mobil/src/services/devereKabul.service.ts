@@ -35,8 +35,9 @@ export interface WarpingTabletContext {
   subcontractors: { id: string; name: string; openOrderCount: number }[];
   orders: WarpingTabletOrder[];
   truncated: boolean;
-  /** `rejectPhotoRequired` ek-2 r; eski sunucu göndermez (sunucu yine 400 ile korur). */
-  settings: { beamBodyMode: DevereMode3; receiveWeighing: DevereMode3; duplicateDeliveryNote: DuplicateNoteMode; rejectPhotoRequired?: boolean };
+  /** `rejectPhotoRequired` ek-2 r; eski sunucu göndermez (sunucu yine 400 ile korur).
+   *  `beamCardAutoPrint` S5t (`devere.beamCardAutoPrint`); eski sunucu göndermez → OFF (bugünkü davranış). */
+  settings: { beamBodyMode: DevereMode3; receiveWeighing: DevereMode3; duplicateDeliveryNote: DuplicateNoteMode; rejectPhotoRequired?: boolean; beamCardAutoPrint?: 'OFF' | 'ASK' | 'ALWAYS' };
   limits: { maxOrders: number; maxBeamsPerOrder: number };
 }
 

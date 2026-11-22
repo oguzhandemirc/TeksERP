@@ -17,6 +17,7 @@ import {
   BEAM_BODY_MAX_MACHINES, cancelBeamBodyRegistration, createBeamBody, patchBeamBody, previewCancelBeamBodyRegistration,
 } from "../services/beam-body/write";
 import { BEAM_BODY_OWNER_KINDS, BEAM_BODY_REGISTER_STATUSES, type BeamBodyOwnerKind } from "../constants/beam-body";
+import { BEAM_BODY_COUNT_MAX_CODES, beamBodyCountContext, previewBeamBodyCount } from "../services/beam-body/count";
 import beamBodyMovementRoutes from "./beam-body-movement.routes";
 import beamBodyStatementRoutes from "./beam-body-statement.routes";
 import "../types/express-augment";
@@ -27,6 +28,8 @@ router.use(verifyToken, requireDevereEnabled, requireBeamBodyTracking);
 const MOBILE_DEVERE_KABUL = ["mobile:devere-kabul"] as const;
 // Devere ek-2 r: Levent Sarım tableti içeride sarımda gövde QR'ını çözer (aynı salt okuma ucu).
 const MOBILE_DEVERE = ["mobile:devere"] as const;
+// Devere S7: Gövde Sayımı tableti — yalnız sayım bağlamı + önizleme (salt okuma); düzeltme `beam-body:write` ister.
+const MOBILE_BEAM_BODY_COUNT = ["mobile:govde-sayim"] as const;
 // B2: elle geçiş + geri alma alt-router'ı kapıyı miras alır.
 router.use("/", beamBodyMovementRoutes);
 // S6: devereci mutabakatı (statik `/statement`, `/:id`den ÖNCE).
@@ -77,6 +80,10 @@ const CreateBody = z.strictObject({
 const PatchBody = z.strictObject({ owner: Owner.optional(), ...Dims, machineIds: MachineIds.optional(), notes: Notes, isActive: z.boolean().optional() });
 const CancelBody = z.strictObject({ reason: z.string().trim().min(3, "İptal sebebi en az 3 karakter").max(300, "İptal sebebi en çok 300 karakter") });
 const ResolveQuery = z.object({ code: z.string().trim().min(1, "Gövde no gerekli").max(64, "Gövde no çok uzun") });
+const CountPreviewBody = z.strictObject({
+  scope: z.union([z.strictObject({ warehouseId: Id.nullable() }), z.strictObject({ subcontractorId: Id })], { message: "Kapsam depo ya da devereci olmalı" }),
+  codes: z.array(z.string().trim().min(1, "Boş gövde no").max(64, "Gövde no çok uzun")).max(BEAM_BODY_COUNT_MAX_CODES, `Tek sayımda en çok ${BEAM_BODY_COUNT_MAX_CODES} okutma`),
+});
 const ListQuery = z.object({
   search: z.string().max(64).optional(),
   cursor: z.string().max(200).optional(),
@@ -196,6 +203,43 @@ router.get("/resolve", requireAnyPermission("beam-body:read", ...MOBILE_DEVERE_K
   const q = parse(ResolveQuery, req.query);
   const out = await resolveBeamBody(q.code);
   return { status: 200, body: { success: true, data: out.data, ...(out.warnings ? { warnings: out.warnings } : {}) } };
+}));
+
+/**
+ * @openapi
+ * /api/beam-bodies/count-context:
+ *   get:
+ *     tags: [BeamBody]
+ *     summary: Gövde sayımı kapsam seçimi — aktif depolar + gövde bulunduran devereciler, beklenen sayılarıyla (devere S7)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ success, data: { warehouses[], subcontractors[], stockTotal } }" }
+ * /api/beam-bodies/count-preview:
+ *   post:
+ *     tags: [BeamBody]
+ *     summary: Gövde okut-say önizlemesi — beklenen ↔ okunan (eşleşen · eksik · başka yerde · tanımsız). YAZMAZ; düzeltme satır başına /{id}/transition
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [scope, codes]
+ *             properties:
+ *               scope: { type: object, description: "{ warehouseId: uuid | null (bütün depolar) } ya da { subcontractorId: uuid }" }
+ *               codes: { type: array, items: { type: string }, maxItems: 1000 }
+ *     responses:
+ *       200: { description: "{ success, data: { scope, expectedCount, matched[], missing[], unexpected[], unknown[] } }" }
+ *       400: { description: "VALIDATION_ERROR · BEAM_BODY_PLACE_INVALID" }
+ */
+router.get("/count-context", requireAnyPermission("beam-body:read", ...MOBILE_BEAM_BODY_COUNT), wrap(async () => {
+  return { status: 200, body: { success: true, data: await beamBodyCountContext() } };
+}));
+
+router.post("/count-preview", requireAnyPermission("beam-body:read", ...MOBILE_BEAM_BODY_COUNT), wrap(async (req) => {
+  const body = parse(CountPreviewBody, req.body);
+  return { status: 200, body: { success: true, data: await previewBeamBodyCount(body.scope, body.codes) } };
 }));
 
 /**

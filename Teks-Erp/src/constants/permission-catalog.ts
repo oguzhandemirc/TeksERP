@@ -419,6 +419,8 @@ export const PERMISSION_CATALOG = [
   { code: "mobile:devere-kabul", module: "MOBILE", category: "mobile", description: "Mobil — Devere Dönüş Kabulü ekranı: devereciden dönen leventi gövde QR'ı okutup kabul et" },
   // Devere ek-2 r: kusurlu leventi devereciye geri gönderme AYRI yetenek — iplik tutmasını değiştirir (`warping-order:write` tablet eşi, dar).
   { code: "mobile:devere-ret", module: "MOBILE", category: "mobile", description: "Devere Dönüş Kabulü ekranı — kusurlu leventi devereciye geri gönderebilir (ret belgesi; iplik deverecinin tutmasına döner)" },
+  // Devere S7: depoda/deverecide gövde okut-say — salt okuma (beklenen ↔ okunan); düzeltme elle geçişle (`beam-body:write`).
+  { code: "mobile:govde-sayim", module: "MOBILE", category: "mobile", description: "Mobil — Gövde Sayımı ekranı: depodaki/deverecideki levent gövdelerini okutup beklenenle karşılaştır (kayıt yazmaz)" },
   // Tezgah alarmı mobil "Uyarılar" ekranı (A3): `loom:alarm-view` + `loom:alarm-ack`'in DAR mobil ikizi
   // (`mobile:siparis` emsali); başkasının üstlenmesini bırakmak yine yalnız `loom:alarm-escalation`.
   { code: "mobile:tezgah-uyari", module: "MOBILE", category: "mobile", description: "Mobil — Uyarılar ekranı: tezgah alarmlarını görme, üstlenme/bırakma, susturma, not; bildirim" },
