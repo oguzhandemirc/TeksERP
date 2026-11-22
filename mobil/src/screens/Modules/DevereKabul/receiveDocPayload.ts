@@ -184,11 +184,24 @@ export function autoPickOrderId(ctxOrders: readonly { id: string }[], draftOrder
   return ctxOrders[0].id;
 }
 
-/** Kahraman sayı: beklenen levent biliniyorsa "eklenen/beklenen levent", yoksa kalan metre. */
-export function heroFigure(drafted: number, o: Pick<WarpingTabletOrder, 'remainingBeamCount' | 'remainingM'>): { value: string; unit: string } {
-  if (o.remainingBeamCount !== null) return { value: `${drafted}/${o.remainingBeamCount}`, unit: 'levent' };
+/** Kabul bekleyen tek devereci varsa o seçilir (seçici penceresi açılmadan). Devereci zaten seçiliyse null. */
+export function autoPickSubcontractorId(subs: readonly { id: string }[], currentId: string | null): string | null {
+  if (currentId || subs.length !== 1) return null;
+  return subs[0].id;
+}
+
+/**
+ * Kahraman sayı: beklenen levent biliniyorsa "eklenen/beklenen levent", yoksa kalan metre.
+ * `over`: beklenenden fazla levent eklendi — blok turuncuya döner (kabul engellenmez, sunucu karar verir).
+ */
+export function heroFigure(drafted: number, o: Pick<WarpingTabletOrder, 'remainingBeamCount' | 'remainingM'>): { value: string; unit: string; over: boolean } {
+  // Plan leventleri bitmiş ama metre kalmışsa "0/0" yerine kalan metre gösterilir.
+  if (o.remainingBeamCount !== null && !(o.remainingBeamCount === 0 && drafted === 0)) {
+    const over = drafted > o.remainingBeamCount;
+    return { value: `${drafted}/${o.remainingBeamCount}`, unit: over ? 'levent — planı aşıyor' : 'levent', over };
+  }
   const m = Number(o.remainingM);
-  return { value: Number.isFinite(m) ? fmtMeters(m) : '—', unit: 'm kalan' };
+  return { value: Number.isFinite(m) ? fmtMeters(m) : '—', unit: 'm kalan', over: false };
 }
 
 /** "3/4 levent" — beklenen bilinmiyorsa yalnız sayı. */
