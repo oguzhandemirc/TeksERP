@@ -39,3 +39,22 @@ export async function matchBeamBodyNo(db: Db, raw: string, opts: { loose: boolea
   if (exact.length > 0 || !opts.loose) return { ids: exact, matchedBy: "EXACT" };
   return { ids: (await looseMatchBeamBodies(db, no)).map((r) => r.id), matchedBy: "NORMALIZED" };
 }
+
+/**
+ * Toplu eşleştirme (devere S7 gövde sayımı): `matchBeamBodyNo`ın tek okumalı ikizi — envanter bir kez okunur,
+ * kural aynı (önce birebir katlanmış eşitlik, yoksa ve `loose` açıksa normalize). Anahtar = kırpılmış okuma.
+ * Katlama `toLowerCase` — gövde no ASCII (seri `LG-00001` / boyalı no); bekçi tekli çözümle birebirliği ölçer.
+ */
+export async function matchBeamBodyNos(db: Db, raws: readonly string[], opts: { loose: boolean }): Promise<Map<string, BeamBodyNoMatch>> {
+  const out = new Map<string, BeamBodyNoMatch>();
+  const codes = [...new Set(raws.map((r) => r.trim()).filter((c) => c.length > 0))];
+  if (codes.length === 0) return out;
+  const rows = await db.beamBody.findMany({ select: { id: true, bodyNo: true }, orderBy: { bodyNo: "asc" } });
+  for (const no of codes) {
+    const folded = no.toLowerCase();
+    const exact = rows.filter((r) => r.bodyNo.toLowerCase() === folded).map((r) => r.id);
+    if (exact.length > 0 || !opts.loose) out.set(no, { ids: exact, matchedBy: "EXACT" });
+    else out.set(no, { ids: rows.filter((r) => beamBodyNoLooseMatch(no, r.bodyNo)).map((r) => r.id), matchedBy: "NORMALIZED" });
+  }
+  return out;
+}

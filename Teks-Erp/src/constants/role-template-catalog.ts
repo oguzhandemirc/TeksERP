@@ -495,6 +495,8 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       // Devere ek-2 r: tablette dönüş kabulü + kusurlu levent reddi (ret iplik tutmasını değiştirir — süpervizör).
       "mobile:devere-kabul",
       "mobile:devere-ret",
+      // Devere S7: tablette gövde okut-say (salt okuma).
+      "mobile:govde-sayim",
       // Kalite Güvence (K4P): muayene · 4 puan kuralı · lab testi · sertifika — modül kapalıyken yüzey çizilmez.
       "inspection:read",
       "inspection:write",
@@ -711,9 +713,9 @@ const MOBILE_ROLES: readonly RoleTemplateEntry[] = [
   {
     code: "MOBILE_DEPO",
     name: "Mobil — Depo Operatörü",
-    description: "Depo ekranı (stok görüntüleme) + emanet levent/ipliği sahibine çıkış belgesi oluşturma + devereciden dönen levent kabulü (devere modülü açıkken)",
+    description: "Depo ekranı (stok görüntüleme) + emanet levent/ipliği sahibine çıkış belgesi oluşturma + devereciden dönen levent kabulü + levent gövdesi sayımı (devere modülü açıkken)",
     mode: "list",
-    codes: ["mobile:depo", "mobile:devere-kabul"],
+    codes: ["mobile:depo", "mobile:devere-kabul", "mobile:govde-sayim"],
   },
   { code: "MOBILE_FASON_SEVK", name: "Mobil — Fason Sevk Operatörü", description: "Fason firmaya sevk ekranı", mode: "list", codes: ["mobile:fason-sevk"] },
   { code: "MOBILE_FASON_KABUL", name: "Mobil — Fason Kabul Operatörü", description: "Fason firmadan mal kabul ekranı", mode: "list", codes: ["mobile:fason-kabul"] },
