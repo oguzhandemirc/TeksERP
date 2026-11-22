@@ -121,6 +121,8 @@ export const DOC_FIELD_CATALOGS: Record<string, DocFieldDef[]> = {
   fiyatListesi: [...COMMON, TBL_CAP, DECL],
   // Seyitoğlu L1 sipariş teyidi (ticari belge iskeleti).
   siparisTeyidi: [...COMMON, TBL_CAP, DECL],
+  // Devere S6 gövde mutabakatı (ticari belge iskeleti).
+  govdeMutabakat: [...COMMON, TBL_CAP, DECL],
   iadeIrsaliyesi: [...COMMON, ...BOXES, SEC_CAPTION],
   // Ticaret paketi — iç depo belgeleri (iade irsaliyesiyle aynı iskelet).
   depoTransfer: [...COMMON, ...BOXES, SEC_CAPTION],

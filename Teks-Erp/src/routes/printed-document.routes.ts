@@ -172,6 +172,12 @@ export const DOC_PERMISSIONS: Record<string, { read: string[]; write: string[] }
     read: ["warpbeam:read", "warpbeam:write", "mobile:devere", "mobile:devere-kabul"],
     write: ["warpbeam:write"],
   },
+  // Devere S6 — gövde mutabakatı gövde ekranıyla HİZALI: okuyan basar ("Mutabakat bas" ucu da `beam-body:read`);
+  // gerekçeli elle yeniden basım gövde yazma izniyle. Gövde kipi OFF ise builder 403 BEAM_BODY_MODE_OFF verir.
+  BEAM_BODY_STATEMENT: {
+    read: ["beam-body:read", "beam-body:write"],
+    write: ["beam-body:write"],
+  },
 };
 
 /** docType path paramına göre ilgili modülün izinlerini uygular. */

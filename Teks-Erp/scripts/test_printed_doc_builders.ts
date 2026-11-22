@@ -52,6 +52,7 @@ import "../src/services/quality-inspection-shipment.service";
 import "../src/services/quote-documents.service";
 import "../src/services/order-documents.service";
 import "../src/services/warp-beam-card.service";
+import "../src/services/beam-body/statement";
 
 let pass = 0;
 let fail = 0;
@@ -118,6 +119,8 @@ const REAL_SOURCE: Record<PrintedDocType, () => Promise<string | null>> = {
   [PrintedDocType.ORDER_CONFIRMATION]: async () => null,
   // Devere S5: levent kartı — gerçek kaynakla basım `test_levent_karti` kendi fikstürüyle.
   [PrintedDocType.WARP_BEAM_CARD]: async () => null,
+  // Devere S6: gövde mutabakatı (kaynak devereci) — gerçek kaynakla basım `test_govde_mutabakat` kendi fikstürüyle.
+  [PrintedDocType.BEAM_BODY_STATEMENT]: async () => null,
 };
 
 /** Çağrıyı koşar; YALNIZ şema/sorgu-şekli hatasında `false` döner.

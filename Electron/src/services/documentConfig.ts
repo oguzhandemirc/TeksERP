@@ -359,6 +359,7 @@ export const DOC_TYPE_TO_KEY: Record<string, string> = {
   // Tam stok sayımı (2026-08-15, J2 #19) — depo belgesi ailesi.
   STOCK_COUNT: "stokSayimi",
   WARP_BEAM_CARD: "leventKarti",
+  BEAM_BODY_STATEMENT: "govdeMutabakat",
 };
 
 /**
@@ -518,6 +519,26 @@ export const DOC_FIELD_CATALOGS: Record<string, DocFieldDef[]> = {
     { key: "title", label: "Belge başlığı", group: "header" },
     { key: "lnLabel", label: "Sağ blok etiketleri (Belge No: / Tarih:)", group: "header" },
     { key: "lnValue", label: "Sağ blok DEĞERLERİ (belge no, tarih…)", group: "header" },
+    { key: "vehicle", label: "Araç / referans satırı", group: "header" },
+    { key: "secHead", label: "Tablo başlıkları", group: "table" },
+    { key: "secCell", label: "Tablo hücreleri", group: "table" },
+    { key: "secTot", label: "TOPLAM satırı", group: "table" },
+    { key: "note", label: "Not / alt bilgi", group: "footer" },
+    { key: "signLabel", label: "İmza etiketleri", group: "footer" },
+    { key: "stamp", label: "Basım damgası (tarih / basan)", group: "footer" },
+    { key: "tblCap", label: "Tablo üstü başlık", group: "table" },
+    { key: "decl", label: "Beyan metni", group: "footer" },
+  ],
+  // Devere S6 gövde mutabakatı — backend `doc-fields.ts` govdeMutabakat aynası (ticari belge iskeleti).
+  govdeMutabakat: [
+    { key: "company", label: "Firma adı", group: "header" },
+    { key: "letterhead", label: "Künye satırları (adres/tel/vergi)", group: "header" },
+    { key: "sayinLabel", label: '"SAYIN:" etiketi', group: "header" },
+    { key: "sayin", label: "Devereci adı", group: "header" },
+    { key: "subLine", label: "Alt bilgi satırı (kod)", group: "header" },
+    { key: "title", label: "Belge başlığı", group: "header" },
+    { key: "lnLabel", label: "Sağ blok etiketleri (Tarih: / Dönem:)", group: "header" },
+    { key: "lnValue", label: "Sağ blok DEĞERLERİ (tarih, dönem)", group: "header" },
     { key: "vehicle", label: "Araç / referans satırı", group: "header" },
     { key: "secHead", label: "Tablo başlıkları", group: "table" },
     { key: "secCell", label: "Tablo hücreleri", group: "table" },
@@ -1451,6 +1472,50 @@ export const DOC_DEFS: DocDef[] = [
           { key: "denier", label: "Denye" },
           { key: "kg", label: "Kg" },
           { key: "lots", label: "Lot" },
+        ],
+      },
+    ],
+  },
+  {
+    // Devere S6 — devereciye giden gövde mutabakatı; backend `document-render/beam-body-statement.html.ts`.
+    key: "govdeMutabakat",
+    label: "Gövde Mutabakatı (devereci)",
+    defaultTitle: "GÖVDE MUTABAKATI",
+    fields: DOC_FIELD_CATALOGS.govdeMutabakat,
+    defaultSignatures: ["Gönderen", "Devereci Onayı"],
+    sections: [
+      { key: "date", label: "Tarih" },
+      { key: "subcontractorCode", label: "Devereci kodu" },
+      { key: "summary", label: "Özet (sizdeki / bizim / dolu / giden / dönen)" },
+      { key: "bodyTable", label: "Sizdeki gövdeler tablosu" },
+      { key: "moveTable", label: "Dönem hareketleri tablosu" },
+      // İç veri: renderer `cfg.sections?.internalNotes === true` ister.
+      { key: "internalNotes", label: "Gövde notu kolonu (iç not)", defaultHidden: true },
+    ],
+    tables: [
+      {
+        key: "govdeler",
+        label: "Sizdeki Gövdeler",
+        columns: [
+          { key: "seq", label: "#" },
+          { key: "bodyNo", label: "Gövde no" },
+          { key: "state", label: "Durum" },
+          { key: "owner", label: "Sahibi" },
+          { key: "since", label: "Sizde (tarih)" },
+          { key: "age", label: "Gün" },
+          { key: "notes", label: "Not" },
+        ],
+      },
+      {
+        key: "hareketler",
+        label: "Dönem Hareketleri",
+        columns: [
+          { key: "seq", label: "#" },
+          { key: "date", label: "Tarih" },
+          { key: "bodyNo", label: "Gövde no" },
+          { key: "direction", label: "Yön" },
+          { key: "kind", label: "Hareket" },
+          { key: "document", label: "Belge" },
         ],
       },
     ],

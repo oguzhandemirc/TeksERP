@@ -17,4 +17,6 @@ export const ENUM_LABELS_EK2: Record<string, string> = {
   BEAM_BODY: "Levent gövdesi",
   // CostComponent (SY-C1): ek maliyet formülü satırı
   FORMULA: "Ek maliyet formülü",
+  // PrintedDocType (devere S6): devereci gövde mutabakatı
+  BEAM_BODY_STATEMENT: "Gövde mutabakatı",
 };

@@ -97,6 +97,7 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/beam-bodies/count-preview": e("levent gövdesi sayımını karşılaştırdı", "levent gövdesi sayımını karşılaştırmaya çalıştı"),
   "POST /api/beam-bodies/:id/transition": e("bir levent gövdesini hareket ettirdi (gönder/dön/bakım/hurda)", "bir levent gövdesini hareket ettirmeye çalıştı"),
   "POST /api/beam-bodies/:id/events/:eventId/undo": e("bir levent gövdesi hareketini geri aldı", "bir levent gövdesi hareketini geri almaya çalıştı"),
+  "POST /api/beam-bodies/statement/print": e("devereci gövde mutabakatını basıma hazırladı", "devereci gövde mutabakatını basıma hazırlamaya çalıştı"),
   "POST /api/beam-body-returns": e("levent gövdelerini sahibine iade etti", "levent gövdelerini sahibine iade etmeye çalıştı"),
   "POST /api/beam-body-returns/:id/cancel": e("bir gövde iade belgesini iptal etti", "bir gövde iade belgesini iptal etmeye çalıştı"),
   "POST /api/warping-receive-docs/preview": e("devere dönüş kabul belgesi önizlemesi aldı", "devere dönüş kabul belgesi önizlemesi almaya çalıştı"),

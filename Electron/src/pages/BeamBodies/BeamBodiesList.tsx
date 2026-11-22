@@ -16,6 +16,7 @@ import { machineService } from "@/pages/Machines/service";
 import { subcontractorService } from "@/pages/Subcontractors/service";
 import { warehouseService } from "@/pages/Warehouses/service";
 import { beamBodyColumns } from "./columns";
+import { StatementButton, singleSubcontractorId } from "./StatementButton";
 import { BeamBodyLabelDialog, isBeamBodyLabelPrintable } from "./BeamBodyLabelDialog";
 import { BEAM_BODIES_QUERY_KEY, beamBodyPath, beamBodyService, type BeamBodyPage } from "./service";
 import { BEAM_BODY_OWNER_KINDS, BEAM_BODY_OWNER_LABELS, BEAM_BODY_STATUSES, BEAM_BODY_STATUS_META, type BeamBody } from "./types";
@@ -36,7 +37,7 @@ const PRIMARY = ["owner", "status", "subcontractorId"];
 export function BeamBodiesList() {
   const openTarget = useOpenTarget();
   const [printing, setPrinting] = useState<BeamBody[] | null>(null);
-  const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<BeamBody>({
+  const { table, query, search, setSearch, pagination, fetchAll, listScope } = useDataTable<BeamBody>({
     queryKey: BEAM_BODIES_QUERY_KEY,
     fetchFn: beamBodyService.listCursor,
     columns: beamBodyColumns,
@@ -44,6 +45,7 @@ export function BeamBodiesList() {
     persistFilters: PERSIST,
   });
   const s = (query.data?.pages[0] as BeamBodyPage | undefined)?.summary ?? null;
+  const statementSub = singleSubcontractorId(listScope.filters.subcontractorId);
   return (
     <>
       {s && (
@@ -62,7 +64,7 @@ export function BeamBodiesList() {
           />
         </ListBand>
       )}
-      <DefFilterRow filters={FILTERS} primaryKeys={PRIMARY} search={search} onSearchChange={setSearch} searchHint="Gövde no ile ara" tools={{ table, fetchAll, exportName: "Levent gövdeleri" }} />
+      <DefFilterRow filters={FILTERS} primaryKeys={PRIMARY} search={search} onSearchChange={setSearch} searchHint="Gövde no ile ara" trailing={statementSub ? <StatementButton subcontractorId={statementSub} /> : undefined} tools={{ table, fetchAll, exportName: "Levent gövdeleri" }} />
       <DataTable<BeamBody>
         table={table}
         isLoading={query.isLoading}

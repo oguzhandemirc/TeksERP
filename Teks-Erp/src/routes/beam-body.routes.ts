@@ -19,6 +19,7 @@ import {
 import { BEAM_BODY_OWNER_KINDS, BEAM_BODY_REGISTER_STATUSES, type BeamBodyOwnerKind } from "../constants/beam-body";
 import { BEAM_BODY_COUNT_MAX_CODES, beamBodyCountContext, previewBeamBodyCount } from "../services/beam-body/count";
 import beamBodyMovementRoutes from "./beam-body-movement.routes";
+import beamBodyStatementRoutes from "./beam-body-statement.routes";
 import "../types/express-augment";
 
 const router = Router();
@@ -31,6 +32,8 @@ const MOBILE_DEVERE = ["mobile:devere"] as const;
 const MOBILE_BEAM_BODY_COUNT = ["mobile:govde-sayim"] as const;
 // B2: elle geçiş + geri alma alt-router'ı kapıyı miras alır.
 router.use("/", beamBodyMovementRoutes);
+// S6: devereci mutabakatı (statik `/statement`, `/:id`den ÖNCE).
+router.use("/", beamBodyStatementRoutes);
 
 const wrap = (fn: (req: Request) => Promise<{ status: number; body: unknown }>) => async (req: Request, res: Response, next: NextFunction) => {
   try {
