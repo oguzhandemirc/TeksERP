@@ -1,11 +1,11 @@
 // Üretim karoları (menü kökü Üretim, `/production`; sıra = hub sırası). Fason karolarının ikisi `warehouse.ts`te.
-import { Factory, FilePlus2, Gauge, History, Ruler, Share2, SwatchBook, Spool, AlertOctagon, MonitorPlay, Siren, Layers, CalendarClock, Calculator, Truck, Cylinder, Scale, PackageCheck } from "lucide-react";
+import { Factory, FilePlus2, Gauge, History, Ruler, Share2, SwatchBook, Spool, AlertOctagon, MonitorPlay, Siren, Layers, CalendarClock, Calculator, Truck, Cylinder, Scale, PackageCheck, Award } from "lucide-react";
 import { isKursunPlanningVisible, isMeterDeviationsVisible, isWorkOrdersVisible } from "../production-regime";
 import { isWeavingOrdersVisible } from "../WeavingOrders/weaving-regime";
 import { isMachineStopsVisible, machineStopsTitle } from "../MachineStops/stop-regime";
 import { isWeavingFloorVisible } from "../WeavingFloor/floor-regime";
 import { isLoomAlarmsVisible } from "../LoomAlarms/alarm-regime";
-import { isDenierReportVisible, isWarpBeamsVisible } from "../WarpBeams/warp-beam-regime";
+import { isDenierReportVisible, isWarpBeamsVisible, isWarperScorecardVisible } from "../WarpBeams/warp-beam-regime";
 import { TERIM, TERIM_AD, terimDokumaRejimi } from "@/lib/terim";
 import { flagOffHint, flagSettingTrail } from "@/lib/flag-setting-path";
 import { isBeamBodiesVisible } from "@/pages/BeamBodies/beam-body-regime";
@@ -208,6 +208,17 @@ export const productionTiles: OperationsTile[] = [
     group: "production",
     permission: "warpspec:read",
     visibleWhen: isDenierReportVisible,
+  },
+  {
+    // DEVERECİ KARNESİ (devere-levent S2): v2 rapor yaprağı; izin uç/route ile birebir (`report:production`).
+    key: "devereci-karnesi",
+    title: "Devereci Karnesi",
+    description: "Devereci zamanında getiriyor mu: teslim süresi, fire, ret oranı, denye sapması, çözgü kaynaklı kumaş hatası",
+    icon: Award,
+    to: "/reports/dokuma/devereci-karnesi",
+    group: "production",
+    permission: "report:production",
+    visibleWhen: isWarperScorecardVisible,
   },
   {
     key: "kartela",

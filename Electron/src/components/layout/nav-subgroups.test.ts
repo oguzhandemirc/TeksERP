@@ -52,7 +52,7 @@ describe("nav-subgroups — süreç sırası (kullanıcı kararı)", () => {
     expect(labels("/production").slice(1, 2)).toEqual(["Dokuma"]);
     expect(labels("/production").slice(-2)).toEqual(["Kurşun", "Fason"]);
     const devere = layoutSubgroups("/production", HOME["/production"]!, ctx(), POOL)[0]!;
-    expect(devere.items.map((t) => t.to)).toEqual(["/operations/fason-devere", "/operations/devere-donus", "/operations/cozgu-hesabi", "/definitions/beam-bodies", "/operations/warp-beams", "/operations/fasondaki-iplik", "/reports/dokuma/denye-sapma"]);
+    expect(devere.items.map((t) => t.to)).toEqual(["/operations/fason-devere", "/operations/devere-donus", "/operations/cozgu-hesabi", "/definitions/beam-bodies", "/operations/warp-beams", "/operations/fasondaki-iplik", "/reports/dokuma/denye-sapma", "/reports/dokuma/devereci-karnesi"]);
   });
 
   it("Depo: mal kabul önce, sayım/transfer sonda; Fasondaki İplik İplik grubunda", () => {
@@ -68,7 +68,7 @@ describe("nav-subgroups — süreç sırası (kullanıcı kararı)", () => {
   });
 
   it("⭐ dokumasız profil: devere/dokuma karoları süzülünce gruplar düşer; duruşlar 'Makine Takibi' başlığında", () => {
-    const home = HOME["/production"]!.filter((t) => !/fason-devere|devere-donus|cozgu-hesabi|warp-beams|beam-bodies|fasondaki-iplik|denye-sapma|weaving|loom/.test(t.to));
+    const home = HOME["/production"]!.filter((t) => !/fason-devere|devere-donus|cozgu-hesabi|warp-beams|beam-bodies|fasondaki-iplik|denye-sapma|devereci-karnesi|weaving|loom/.test(t.to));
     const g = layoutSubgroups("/production", home, ctx({ dokumaEnabled: false, tezgahEnabled: false }), home);
     expect(g.map((x) => x.label)).not.toContain("Devere / Çözgü");
     expect(g.find((x) => x.key === "dokuma")?.label).toBe("Makine Takibi");

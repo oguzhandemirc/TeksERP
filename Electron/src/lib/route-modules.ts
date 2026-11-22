@@ -144,6 +144,8 @@ export const ROUTE_ALSO_REQUIRES: Readonly<Record<string, readonly RouteModuleFl
   "reports/maliyet/karlilik": ["financeEnabled"],
   // Devere F2: uç `dokuma.report.routes` `/denye-sapma` satırında `requireDevereEnabled` taşır.
   "reports/dokuma/denye-sapma": ["devereEnabled"],
+  // Devere-levent S2: `/devereci-karnesi` satırı da `requireDevereEnabled` taşır.
+  "reports/dokuma/devereci-karnesi": ["devereEnabled"],
 };
 
 /** `:id` · `new` · `edit` segmentleri ebeveyne katlanır (manifesto EKRAN seviyesinde). */
