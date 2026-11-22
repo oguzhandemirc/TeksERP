@@ -28,7 +28,7 @@ import prisma, { pool } from "../src/lib/prisma";
 import { AuditService } from "../src/services/audit.service";
 import { BEAM_BODY_EVENT_TABLE, transitionBeamBodyTx } from "../src/services/helpers/beam-body.helper";
 import { matchBeamBodyNo } from "../src/services/helpers/beam-body-no.helper";
-import { readDevereBodyNoLooseMatch } from "../src/services/system-setting/modules";
+import { readDevereBodyNoLooseMatch } from "../src/services/system-setting/devere-body";
 import { hedefDbAdi } from "./lib/hedef-db-kapisi";
 
 const SOURCE = "scripts/fix_beam_body_from_physical_no.ts";

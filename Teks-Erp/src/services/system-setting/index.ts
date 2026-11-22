@@ -165,7 +165,6 @@ export {
   readDevereBeamWeavingLinkRequired, readDokumaRunWeavingOrderRequired, readDokumaOrderLineLinkRequired, readDokumaRollBirth, readDokumaWeavingWastePct, readDokumaYarnReservationEnabled, DEFAULT_DOKUMA_WEAVING_WASTE_PCT, DOKUMA_WEAVING_WASTE_PCT_MAX,
   readDevereWarpFixedWasteM, DEFAULT_DEVERE_WARP_FIXED_WASTE_M, DEVERE_WARP_FIXED_WASTE_M_MAX,
   readDevereFasonWasteTolerancePct, DEFAULT_DEVERE_FASON_WASTE_TOLERANCE_PCT, DEVERE_FASON_WASTE_TOLERANCE_PCT_MAX, readDevereFasonLotPolicy, readDevereReworkBillable, readDevereRejectPhotoRequired, readDevereBeamBodyMode, readDevereBeamBodyMachineFit,
-  readDevereBodyNoLooseMatch, readDevereResidualTareFromBody,
   readDevereDenierSuggestMinBeams, DEFAULT_DEVERE_DENIER_SUGGEST_MIN_BEAMS, DEVERE_DENIER_SUGGEST_MIN_BEAMS_MAX,
   readDevereDenierSuggestThresholdPct, DEFAULT_DEVERE_DENIER_SUGGEST_THRESHOLD_PCT, DEVERE_DENIER_SUGGEST_THRESHOLD_PCT_MAX,
   readReportsClosedKeys, readDokumaEnabledRaw, readDokumaEnabled, readMaliyetEnabledRaw, readMaliyetEnabled,
@@ -174,6 +173,7 @@ export {
 export type {
   ReportsClosedKeysRead,
 } from "./modules";
+export { readDevereBodyNoLooseMatch, readDevereResidualTareFromBody } from "./devere-body";
 export {
   readPackingGroupsEnabled, readSackDumpNameMode, readPackingGroupNumbering, readPackingGroupMode, readPackageNoStartsAtZero,
   readPackageNoMode, readPackageNumbering, readPackingLotRequired, readPackingLotPartialDispatch, readShippingDocPackingLot,

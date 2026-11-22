@@ -19,7 +19,7 @@ import {
 import { BEAM_BODY_DEACTIVATABLE_STATUSES, BEAM_BODY_REGISTER_STATUSES, BEAM_BODY_STATUS_LABELS, type BeamBodyOwnerKind } from "../../constants/beam-body";
 import { loadBeamBodyDto, type BeamBodyDto } from "./read";
 import { looseMatchBeamBodies } from "../helpers/beam-body-no.helper";
-import { readDevereBodyNoLooseMatch } from "../system-setting/modules";
+import { readDevereBodyNoLooseMatch } from "../system-setting/devere-body";
 
 type Tx = Prisma.TransactionClient;
 const CODE_SCOPE = "beamBody";

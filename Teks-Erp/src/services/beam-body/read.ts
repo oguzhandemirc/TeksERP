@@ -15,7 +15,7 @@ import {
 import { BEAM_BODY_EVENT_SELECT, beamBodyEventUndoBlock } from "../helpers/beam-body.helper";
 import { sequentialTx } from "../helpers/tx-sequential-relations.helper";
 import { matchBeamBodyNo } from "../helpers/beam-body-no.helper";
-import { readDevereBodyNoLooseMatch } from "../system-setting/modules";
+import { readDevereBodyNoLooseMatch } from "../system-setting/devere-body";
 
 type Db = Pick<Prisma.TransactionClient, "beamBody">;
 type IdCond = string | { in: string[] } | null;
