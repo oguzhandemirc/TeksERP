@@ -13,6 +13,7 @@ import type { WeavingOrderOverview } from '../../../../services/weavingOrder.ser
 import { colors, radius, spacing, typography } from '../../../../theme';
 import { kumasMetni } from './dokumaListe';
 import { useDokumaGenelBakis } from './useDokumaListesi';
+import { WeavingOrderWeave } from '../../Dokuma/RunConstructionCard';
 
 const metre = (n: number | null | undefined) => (n == null ? '—' : `${Math.round(n).toLocaleString('tr-TR')} m`);
 const saat = (iso: string | null | undefined) => formatFactory(iso ?? null, 'dd.MM HH:mm');
@@ -60,6 +61,7 @@ function OverviewBody({ d }: { d: WeavingOrderOverview }) {
       </View>
       {k.alt ? <InfoLine etiket="Desen · renk" deger={k.alt} /> : null}
       {d.order.subcontractor ? <InfoLine etiket="Fasoncu" deger={d.order.subcontractor.name} /> : null}
+      <WeavingOrderWeave weavingOrderId={d.order.id} />
 
       <Section baslik="Şu an tezgahta" toplam={d.liveRuns.total} kirpik={d.liveRuns.truncated}>
         {d.liveRuns.items.length === 0 ? <Text style={styles.muted}>Açık koşum yok.</Text> : d.liveRuns.items.map((r) => (

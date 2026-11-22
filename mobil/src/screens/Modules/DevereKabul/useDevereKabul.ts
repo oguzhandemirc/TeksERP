@@ -10,6 +10,7 @@ import { devereKabulService, type WarpingTabletContext, type WarpingTabletOrder 
 import { useIsOnline, useOfflineReason } from '../../../offline/hooks';
 import { autoPickOrderId, autoPickSubcontractorId, buildDocBody, nextPlanLength, type BeamDraft, type OrderDraft } from './receiveDocPayload';
 import { useBodyScan, useReceiveSubmit } from './useReceiveSubmit';
+import { labelsAutoQueued, normalizeAutoPrint } from './useBeamCardPrint';
 import { useBeamReject } from './useBeamReject';
 
 export const DEVERE_KABUL_CTX_KEY = ['devere-kabul', 'context'] as const;
@@ -78,7 +79,11 @@ export function useDevereKabul() {
     autoDone.current = subcontractorId;
     addDraft(o);
   }, [fetching, ctxOrders, drafts.orders.length, subcontractorId, addDraft]);
-  const submit = useReceiveSubmit(build, useCallback(() => { clear(); setDeliveryNoteNo(''); autoDone.current = null; refresh(); }, [clear, refresh]));
+  const submit = useReceiveSubmit(
+    build,
+    useCallback(() => { clear(); setDeliveryNoteNo(''); autoDone.current = null; refresh(); }, [clear, refresh]),
+    labelsAutoQueued(normalizeAutoPrint(settings.beamCardAutoPrint)),
+  );
   const reject = useBeamReject({ isOnline, onRejected: refresh });
   const scan = useBodyScan({ hasOrder: !!drafts.activeOrder, orders: drafts.orders, onBody: drafts.openNewLine });
   const selectSubcontractor = useCallback((id: string) => {

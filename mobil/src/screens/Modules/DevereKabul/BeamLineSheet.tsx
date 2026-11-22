@@ -77,17 +77,17 @@ export default function BeamLineSheet({ value, weighing, subcontractorName, rewo
       <View style={sheet.row}>
         <View style={sheet.col}>
           <Text style={sheet.label}>Metre</Text>
-          <NumpadInput value={d.lengthM} onChangeText={(t) => setD({ ...d, lengthM: t })} allowDecimal numpadMaxLength={9} numpadLabel="Metre" placeholder="1200" mode="outlined" style={ds.bigInput} testID="devere-kabul-metre" />
+          <NumpadInput value={d.lengthM} onChangeText={(t) => setD({ ...d, lengthM: t })} allowDecimal numpadMaxLength={9} selectAllOnFocus numpadLabel="Metre" placeholder="1200" mode="outlined" style={ds.bigInput} testID="devere-kabul-metre" />
         </View>
         {weighing !== 'OFF' ? (
           <>
             <View style={sheet.col}>
               <Text style={sheet.label}>{weighing === 'REQUIRED' ? 'Brüt kg (zorunlu)' : 'Brüt kg (isteğe bağlı)'}</Text>
-              <NumpadInput value={d.grossKg} onChangeText={(t) => setD({ ...d, grossKg: t })} allowDecimal numpadMaxLength={9} numpadLabel="Brüt kg" placeholder="—" mode="outlined" style={ds.bigInput} />
+              <NumpadInput value={d.grossKg} onChangeText={(t) => setD({ ...d, grossKg: t })} allowDecimal numpadMaxLength={9} selectAllOnFocus numpadLabel="Brüt kg" placeholder="—" mode="outlined" style={ds.bigInput} testID="devere-kabul-brut" />
             </View>
             <View style={sheet.col}>
               <Text style={sheet.label}>Dara kg (isteğe bağlı)</Text>
-              <NumpadInput value={d.tareKg} onChangeText={(t) => setD({ ...d, tareKg: t })} allowDecimal numpadMaxLength={9} numpadLabel="Dara kg" placeholder="—" mode="outlined" style={ds.bigInput} />
+              <NumpadInput value={d.tareKg} onChangeText={(t) => setD({ ...d, tareKg: t })} allowDecimal numpadMaxLength={9} selectAllOnFocus numpadLabel="Dara kg" placeholder="—" mode="outlined" style={ds.bigInput} testID="devere-kabul-dara" />
             </View>
           </>
         ) : null}

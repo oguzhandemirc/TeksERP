@@ -4,6 +4,7 @@
 // Koşum bir dokuma işine bağlıysa ustanın tezgâha girdiği yapıyı gösterir: desen + armür dosya adı,
 // atkı sırası (varyant değişimi işaretli), sıklık, ek çözgü katmanları. Operatör hiçbir şey yazmaz.
 // Yapısız iş (`null`), eski sunucu (404) ya da ağ hatası → hiçbir şey çizilmez (bugünkü ekran).
+// Sunucu armür gönderiyorsa mini armür + seçici (dokununca tam ekran); göndermiyorsa yalnız metin.
 // =============================================================================
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
@@ -11,6 +12,7 @@ import { Text } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 import { machineRunService, type RunConstruction } from '../../../services/machineRun.service';
 import TruncatedText from '../../../components/TruncatedText';
+import { WeaveMini, canShowWeave } from './WeaveGridSheet';
 import { colors, spacing, typography } from '../../../theme';
 
 const LAYER_ROLE: Record<string, string> = { LENO: 'Döner çözgü', SECONDARY: 'Ek çözgü' };
@@ -26,6 +28,7 @@ export function ConstructionDetails({ c }: { c: RunConstruction }) {
     <View style={styles.box} testID="run-construction">
       <Text style={styles.title}>Etkin yapı{c.variantCode ? ` · Varyant ${c.variantCode}` : ''}</Text>
       {d ? <Text style={styles.line}>Desen: {designBits.filter(Boolean).join(' · ')}</Text> : null}
+      <WeaveMini c={c} />
       {w ? <Text style={styles.line}>Atkı: {weftBits.filter(Boolean).join(' · ') || w.code}</Text> : null}
       {w?.yarns.map((y) => (
         <TruncatedText key={y.letter} style={[styles.yarn, y.swapped && styles.swapped]}>
@@ -39,14 +42,29 @@ export function ConstructionDetails({ c }: { c: RunConstruction }) {
   );
 }
 
-export default function RunConstructionCard({ weavingOrderId }: { weavingOrderId: string }) {
-  const q = useQuery({
+function useRunConstruction(weavingOrderId: string) {
+  return useQuery({
     queryKey: ['machine-runs', 'construction', weavingOrderId],
     queryFn: () => machineRunService.construction(weavingOrderId),
     staleTime: 60_000,
     retry: false,
   });
+}
+
+export default function RunConstructionCard({ weavingOrderId }: { weavingOrderId: string }) {
+  const q = useRunConstruction(weavingOrderId);
   return q.data ? <ConstructionDetails c={q.data} /> : null;
+}
+
+/** İş emri detayında yalnız armür görseli (metin özeti orada zaten var); armür yoksa / eski sunucu → hiçbir şey. */
+export function WeavingOrderWeave({ weavingOrderId }: { weavingOrderId: string }) {
+  const q = useRunConstruction(weavingOrderId);
+  return q.data && canShowWeave(q.data) ? (
+    <View style={styles.weaveSection} testID="dokuma-detay-armur">
+      <Text style={styles.sectionTitle}>Armür planı</Text>
+      <WeaveMini c={q.data} />
+    </View>
+  ) : null;
 }
 
 const styles = StyleSheet.create({
@@ -55,4 +73,6 @@ const styles = StyleSheet.create({
   line: { fontSize: typography.size.sm, color: colors.textSecondary },
   yarn: { fontSize: typography.size.sm, color: colors.text },
   swapped: { fontWeight: typography.weight.semibold },
+  weaveSection: { gap: spacing.xs },
+  sectionTitle: { fontSize: typography.size.base, fontWeight: typography.weight.bold, color: colors.text, marginTop: spacing.sm },
 });

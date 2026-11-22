@@ -3,6 +3,7 @@
 // =============================================================================
 import React from 'react';
 import { TextInput } from 'react-native';
+import { act, fireEvent } from '@testing-library/react-native';
 import { renderWithPaper } from '../../../test/render';
 import { machineRunService, type RunConstruction } from '../../../services/machineRun.service';
 import RunConstructionCard from './RunConstructionCard';
@@ -52,4 +53,26 @@ test('yapılı iş → armür dosyası, sıklık, atkı sırası, varyant işare
   expect(r.getByText(/C × 1 — SIM-1 Sim \(varyant\)/)).toBeTruthy();
   expect(r.getByText(/Döner çözgü: CZ-D/)).toBeTruthy();
   expect(r.UNSAFE_queryAllByType(TextInput)).toHaveLength(0);
+  // Eski sunucu armür alanı göndermez → görsel yok, metin kart aynen.
+  expect(r.queryByTestId('weave-mini')).toBeNull();
+});
+
+test('sunucu armür + seçici gönderiyorsa mini görsel; dokununca tam ekran, yön çevrilir', async () => {
+  const withGrid: RunConstruction = {
+    ...full,
+    design: { ...full.design!, liftPlan: [[1, 0, 1], [0, 1, 0], [1, 1, 0]], lenoFrames: [1], kind: 'LENO' },
+    weft: { ...full.weft!, pickSequence: [1, 2, 1] },
+  };
+  construction.mockResolvedValue(withGrid);
+  const r = renderWithPaper(<RunConstructionCard weavingOrderId="wo1" />);
+  await r.findByTestId('weave-mini');
+  expect(r.getByText('3 atkı · 3 çerçeve')).toBeTruthy();
+  fireEvent.press(r.getByTestId('weave-mini'));
+  await act(async () => {});
+  expect(await r.findByTestId('weave-full')).toBeTruthy();
+  expect(r.getByText('Döner çerçeve')).toBeTruthy();
+  expect(r.getByText(/1\. atkı en altta/)).toBeTruthy();
+  fireEvent.press(r.getByTestId('weave-direction'));
+  await act(async () => {});
+  expect(r.getByText(/1\. atkı en üstte/)).toBeTruthy();
 });

@@ -72,4 +72,11 @@ describe('BeamLineSheet', () => {
     await act(async () => {});
     expect(r.onRemove).toHaveBeenCalledWith('o1', 'k1');
   });
+
+  it('ön-dolu metre/brüt/dara: odakta içerik tümden seçili (yazılan eskisinin yerine geçer, 1500→20 ≠ 150020)', async () => {
+    const r = await setup(sheetOf(draft({ lengthM: '1500', grossKg: '80', tareKg: '12' })), 'OPTIONAL');
+    for (const id of ['devere-kabul-metre', 'devere-kabul-brut', 'devere-kabul-dara']) {
+      expect(r.getByTestId(id).props.selectTextOnFocus).toBe(true);
+    }
+  });
 });
