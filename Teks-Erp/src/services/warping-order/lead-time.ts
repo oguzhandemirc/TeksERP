@@ -44,6 +44,23 @@ export function orderLeadDays(firstDispatchAt: Date | null, firstReceiptAt: Date
   return d < 0 ? null : d;
 }
 
+/** Sipariş başına ilk canlı sevk + ilk canlı kabul seçimi — süre örneğinin TEK tanımı (devereci karnesi S2 de okur). */
+export const LEAD_ORDER_SELECT = {
+  dispatches: { where: { cancelledAt: null }, select: { dispatchedAt: true } },
+  warpBeams: {
+    where: { status: { not: WarpBeamStatus.CANCELLED } },
+    select: { events: { where: { kind: "WOUND", reversal: null }, select: { createdAt: true } } },
+  },
+} satisfies Prisma.WarpingOrderSelect;
+type LeadOrderRow = Prisma.WarpingOrderGetPayload<{ select: typeof LEAD_ORDER_SELECT }>;
+
+/** `LEAD_ORDER_SELECT` satırından ilk sevk, ilk kabul ve süre (örnek değilse `leadDays` null). */
+export function orderLeadSample(o: LeadOrderRow): { firstDispatchAt: Date | null; firstReceiptAt: Date | null; leadDays: number | null } {
+  const firstDispatchAt = minDate(o.dispatches.map((d) => d.dispatchedAt));
+  const firstReceiptAt = minDate(o.warpBeams.flatMap((b) => b.events.map((e) => e.createdAt)));
+  return { firstDispatchAt, firstReceiptAt, leadDays: orderLeadDays(firstDispatchAt, firstReceiptAt) };
+}
+
 /** Devereci başına medyan süre + örnek sayısı; örneği olmayan devereci haritada YOK. */
 export async function readLeadDaysBySubcontractor(db: Db, subcontractorIds: readonly string[]): Promise<Map<string, { leadDays: number; sampleCount: number }>> {
   const out = new Map<string, { leadDays: number; sampleCount: number }>();
@@ -52,20 +69,12 @@ export async function readLeadDaysBySubcontractor(db: Db, subcontractorIds: read
       where: { subcontractorId: subId, status: WarpingOrderStatus.COMPLETED },
       orderBy: [{ completedAt: "desc" }, { id: "desc" }],
       take: LEAD_CANDIDATE_CAP,
-      select: {
-        dispatches: { where: { cancelledAt: null }, select: { dispatchedAt: true } },
-        warpBeams: {
-          where: { status: { not: WarpBeamStatus.CANCELLED } },
-          select: { events: { where: { kind: "WOUND", reversal: null }, select: { createdAt: true } } },
-        },
-      },
+      select: LEAD_ORDER_SELECT,
     });
     const samples: number[] = [];
     for (const o of orders) {
       if (samples.length >= LEAD_SAMPLE_N) break;
-      const firstDispatch = minDate(o.dispatches.map((d) => d.dispatchedAt));
-      const firstReceipt = minDate(o.warpBeams.flatMap((b) => b.events.map((e) => e.createdAt)));
-      const d = orderLeadDays(firstDispatch, firstReceipt);
+      const d = orderLeadSample(o).leadDays;
       if (d !== null) samples.push(d);
     }
     const m = median(samples);

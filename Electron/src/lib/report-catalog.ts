@@ -263,6 +263,11 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
     sinif: "basit", izin: "warpspec:read", modul: "dokumaEnabled", varsayilanGun: 90, tarih: "aralik-gun",
     panelYolu: "reports/dokuma/denye-sapma", uc: "/api/reports/dokuma/denye-sapma", kapiTasiyici: [{ dosya: "src/routes/reports/dokuma.report.routes.ts", yol: "/denye-sapma" }], yuzey: "yaprak",
     nesil: "v2", kategoriV2: "dokuma", persona: ["dokuma", "patron"], varyantBoyutlari: ["fasoncu"], hazir: true, yeniRapor: true },
+  // Devere-levent S2: devereci karnesi (zamanında · süre · fire · ret · denye · çözgü hatası); denye-sapma emsali, kendi sayfası.
+  { key: "dokuma/devereci-karnesi", baslik: "Devereci Karnesi", soru: "Hangi devereci leventleri zamanında, az fireyle ve kusursuz getiriyor?",
+    sinif: "basit", izin: "report:production", modul: "dokumaEnabled", varsayilanGun: 90, tarih: "aralik-gun",
+    panelYolu: "reports/dokuma/devereci-karnesi", uc: "/api/reports/dokuma/devereci-karnesi", kapiTasiyici: [{ dosya: "src/routes/reports/dokuma.report.routes.ts", yol: "/devereci-karnesi" }], yuzey: "yaprak",
+    nesil: "v2", kategoriV2: "dokuma", persona: ["dokuma", "patron"], varyantBoyutlari: ["fasoncu"], hazir: true, yeniRapor: true },
   { key: "finance/alacaklar", baslik: "Kimden ne alacağız?", soru: "Vadesi geçmiş alacak ne kadar ve önümüzdeki günlerde hangi çeklerin vadesi geliyor?",
     sinif: "basit", izin: "report:finance", modul: "financeEnabled", varsayilanGun: null, tarih: "kesit",
     panelYolu: "reports/finance/alacaklar", uc: "/api/reports/finance/alacaklar", kapiTasiyici: [{ dosya: "src/routes/reports/temel-dokuma-finans.routes.ts", yol: "/finance/alacaklar" }], yuzey: "yaprak",

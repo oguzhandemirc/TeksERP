@@ -162,6 +162,9 @@ const IZINLI_ISTEMCI_DOSYALARI: ReadonlyArray<{ dosya: string; ekranKey: string;
   // Denye Sapması (devere F2): v2 rapor ucu `/api/reports/dokuma/denye-sapma`; okuma `warpspec:read` (uç ve katalogla aynı).
   { dosya: "Electron/src/pages/Reports/Dokuma/denyeSapma.ts", ekranKey: "reports/dokuma", izinler: ["warpspec:read"], karo: "reports",
     altKaro: { dosya: "Electron/src/pages/Reports/Dokuma/tile-config.ts", to: "/reports/dokuma/denye-sapma" } },
+  // Devereci Karnesi (devere-levent S2): v2 rapor ucu `/api/reports/dokuma/devereci-karnesi`; okuma `report:production`.
+  { dosya: "Electron/src/pages/Reports/Dokuma/devereciKarnesi.ts", ekranKey: "reports/dokuma", izinler: ["report:production"], karo: "reports",
+    altKaro: { dosya: "Electron/src/pages/Reports/Dokuma/tile-config.ts", to: "/reports/dokuma/devereci-karnesi" } },
 ];
 
 /**

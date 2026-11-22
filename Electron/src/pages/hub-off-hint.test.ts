@@ -9,8 +9,8 @@ import { definitionTiles } from "@/pages/Definitions/tile-config";
 import { qualityTiles } from "@/pages/Quality/tile-config";
 import { documentTiles } from "@/pages/Documents/tile-config";
 
-/** Rejim istisnaları: depoMulti (tek depoda transfer yok) · sevk onayı rejimi · finans cari takası · gelen belge + İçerideki İşler (fason işlemci olmayan fabrikada gürültü) · Denye Sapması (rapor kapalıyken de gizli — sebep bayrak değil). */
-const REJIM_ISTISNA = ["warehouse-transfers", "sack-store", "cariler", "customers", "subcontractors", "gelen-belgeler", "gelen-belge-sablonlari", "gelen-belge-tanit", "gelen-belge-varsayilan-urunler", "icerideki-isler", "emanet-cikis", "denye-sapma"];
+/** Rejim istisnaları: depoMulti (tek depoda transfer yok) · sevk onayı rejimi · finans cari takası · gelen belge + İçerideki İşler (fason işlemci olmayan fabrikada gürültü) · Denye Sapması + Devereci Karnesi (rapor kapalıyken de gizli — sebep bayrak değil). */
+const REJIM_ISTISNA = ["warehouse-transfers", "sack-store", "cariler", "customers", "subcontractors", "gelen-belgeler", "gelen-belge-sablonlari", "gelen-belge-tanit", "gelen-belge-varsayilan-urunler", "icerideki-isler", "emanet-cikis", "denye-sapma", "devereci-karnesi"];
 
 const KATALOG = [
   ["Operasyon", operationsTiles],
