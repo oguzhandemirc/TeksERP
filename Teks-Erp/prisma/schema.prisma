@@ -2457,6 +2457,9 @@ model WeaveDesign {
   /// Döner (leno/doup) çerçeveleri — 1-tabanlı çerçeve no, sıralı tekil; CHECK 1..32. Boş = işaret yok
   /// (bugünkü görünüm; `lenoSetup` metni ayrıca kalır). Izgarada ve desen kartı basımında ayrı blok.
   lenoFrames   Int[]           @default([])
+  /// Tahar düzeni notu (tel → çerçeve + tarak taharı; "1-2-3-4 düz, kenar 2'li, döner 1-2"). Serbest metin,
+  /// hesaba girmez; desen kartı basımında "Tahar" satırı. Boş = bugünkü görünüm.
+  drawingInNote String?        @db.VarChar(300)
   notes        String?         @db.VarChar(500)
   isActive     Boolean         @default(true)
 
