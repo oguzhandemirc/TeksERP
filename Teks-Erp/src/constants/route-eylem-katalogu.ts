@@ -94,6 +94,7 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "PATCH /api/beam-bodies/:id": e("bir levent gövdesini düzenledi", "bir levent gövdesini düzenlemeye çalıştı"),
   "POST /api/beam-bodies/:id/cancel-registration": e("bir levent gövdesi kaydını iptal etti", "bir levent gövdesi kaydını iptal etmeye çalıştı"),
   "POST /api/beam-bodies/:id/transition-preview": e("levent gövdesi hareket önizlemesi aldı", "levent gövdesi hareket önizlemesi almaya çalıştı"),
+  "POST /api/beam-bodies/count-preview": e("levent gövdesi sayımını karşılaştırdı", "levent gövdesi sayımını karşılaştırmaya çalıştı"),
   "POST /api/beam-bodies/:id/transition": e("bir levent gövdesini hareket ettirdi (gönder/dön/bakım/hurda)", "bir levent gövdesini hareket ettirmeye çalıştı"),
   "POST /api/beam-bodies/:id/events/:eventId/undo": e("bir levent gövdesi hareketini geri aldı", "bir levent gövdesi hareketini geri almaya çalıştı"),
   "POST /api/beam-body-returns": e("levent gövdelerini sahibine iade etti", "levent gövdelerini sahibine iade etmeye çalıştı"),
