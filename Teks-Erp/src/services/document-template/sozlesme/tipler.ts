@@ -145,4 +145,6 @@ export interface DocumentContract<A extends object = object, C = unknown, S = Pr
   ayarNormalize(raw: unknown): A;
   insa(snapshot: S, ayar: unknown, internalFields: readonly string[], ek?: BuildExtras<C>): TemplateContext;
   senaryolar(): Scenario<C, S>[];
+  /** Sistem'de iç alanı `columns.shown` DIŞINDAKİ anahtarla açan tür: ham ayar → opt-in kodları (kopya + eşitlik). */
+  sistemIcAlanlari?(raw: unknown): string[];
 }

@@ -12,12 +12,15 @@ describe("sayfa kanvası", () => {
     expect(pageDimensions("A4", "landscape")).toMatchObject({ widthPx: 1123, heightPx: 794, widthMm: 297 });
     expect(pageDimensions("A5", "landscape")).toMatchObject({ widthPx: 794, heightPx: 559 });
     expect(pageDimensions("LETTER", "portrait")).toMatchObject({ widthPx: 816, heightPx: 1056 });
+    // A6 levent kartı (105 × 148 mm).
+    expect(pageDimensions("A6", "portrait")).toMatchObject({ widthPx: 397, heightPx: 559, widthMm: 105 });
   });
 
-  it("altı cihaz, Türkçe adlı, benzersiz kimlikli", () => {
+  it("sekiz cihaz, Türkçe adlı, benzersiz kimlikli", () => {
     const d = pageDevices();
-    expect(d).toHaveLength(6);
-    expect(new Set(d.map((x) => x.id)).size).toBe(6);
+    expect(d).toHaveLength(8);
+    expect(new Set(d.map((x) => x.id)).size).toBe(8);
+    expect(d.find((x) => x.id === deviceId("A6", "portrait"))).toMatchObject({ name: "A6 dikey", width: "397px" });
     expect(d.find((x) => x.id === deviceId("A5", "landscape"))).toMatchObject({ name: "A5 yatay", width: "794px" });
   });
 

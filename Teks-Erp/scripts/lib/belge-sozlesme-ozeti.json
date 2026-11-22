@@ -1,4 +1,393 @@
 {
+ "BEAM_BODY_STATEMENT": {
+  "contractVersion": 1,
+  "alanlar": {
+   "ayar.blankGrid": {
+    "tur": "nesne",
+    "sinif": "ayar"
+   },
+   "ayar.blocks": {
+    "tur": "liste",
+    "sinif": "ayar"
+   },
+   "ayar.columns.govdeler.blankLabels": {
+    "tur": "liste",
+    "sinif": "ayar"
+   },
+   "ayar.columns.govdeler.hidden": {
+    "tur": "liste",
+    "sinif": "ayar"
+   },
+   "ayar.columns.govdeler.labels": {
+    "tur": "nesne",
+    "sinif": "ayar"
+   },
+   "ayar.columns.govdeler.order": {
+    "tur": "liste",
+    "sinif": "ayar"
+   },
+   "ayar.columns.hareketler.blankLabels": {
+    "tur": "liste",
+    "sinif": "ayar"
+   },
+   "ayar.columns.hareketler.hidden": {
+    "tur": "liste",
+    "sinif": "ayar"
+   },
+   "ayar.columns.hareketler.labels": {
+    "tur": "nesne",
+    "sinif": "ayar"
+   },
+   "ayar.columns.hareketler.order": {
+    "tur": "liste",
+    "sinif": "ayar"
+   },
+   "ayar.fields": {
+    "tur": "nesne",
+    "sinif": "ayar"
+   },
+   "ayar.footerNote": {
+    "tur": "metin",
+    "sinif": "ayar"
+   },
+   "ayar.kolonlar.govdeler": {
+    "tur": "liste",
+    "sinif": "ayar"
+   },
+   "ayar.kolonlar.govdeler[].anahtar": {
+    "tur": "metin",
+    "sinif": "ayar"
+   },
+   "ayar.kolonlar.govdeler[].etiket": {
+    "tur": "metin",
+    "sinif": "ayar"
+   },
+   "ayar.kolonlar.govdeler[].hiza": {
+    "tur": "metin",
+    "sinif": "ayar"
+   },
+   "ayar.kolonlar.govdeler[].kaynak": {
+    "tur": "metin",
+    "sinif": "ayar"
+   },
+   "ayar.kolonlar.govdeler[].toplam": {
+    "tur": "metin",
+    "sinif": "ayar"
+   },
+   "ayar.kolonlar.hareketler": {
+    "tur": "liste",
+    "sinif": "ayar"
+   },
+   "ayar.kolonlar.hareketler[].anahtar": {
+    "tur": "metin",
+    "sinif": "ayar"
+   },
+   "ayar.kolonlar.hareketler[].etiket": {
+    "tur": "metin",
+    "sinif": "ayar"
+   },
+   "ayar.kolonlar.hareketler[].hiza": {
+    "tur": "metin",
+    "sinif": "ayar"
+   },
+   "ayar.kolonlar.hareketler[].kaynak": {
+    "tur": "metin",
+    "sinif": "ayar"
+   },
+   "ayar.kolonlar.hareketler[].toplam": {
+    "tur": "metin",
+    "sinif": "ayar"
+   },
+   "ayar.logoPosition": {
+    "tur": "secim",
+    "sinif": "ayar"
+   },
+   "ayar.qr": {
+    "tur": "mantiksal",
+    "sinif": "ayar"
+   },
+   "ayar.sections.bodyTable": {
+    "tur": "mantiksal",
+    "sinif": "ayar"
+   },
+   "ayar.sections.date": {
+    "tur": "mantiksal",
+    "sinif": "ayar"
+   },
+   "ayar.sections.moveTable": {
+    "tur": "mantiksal",
+    "sinif": "ayar"
+   },
+   "ayar.sections.subcontractorCode": {
+    "tur": "mantiksal",
+    "sinif": "ayar"
+   },
+   "ayar.sections.summary": {
+    "tur": "mantiksal",
+    "sinif": "ayar"
+   },
+   "ayar.sections.taxNo": {
+    "tur": "mantiksal",
+    "sinif": "ayar"
+   },
+   "ayar.showLetterhead": {
+    "tur": "mantiksal",
+    "sinif": "ayar"
+   },
+   "ayar.showLogo": {
+    "tur": "mantiksal",
+    "sinif": "ayar"
+   },
+   "ayar.showSignatures": {
+    "tur": "mantiksal",
+    "sinif": "ayar"
+   },
+   "ayar.signatureLabels": {
+    "tur": "liste",
+    "sinif": "ayar"
+   },
+   "ayar.stamps.copyLabel": {
+    "tur": "metin",
+    "sinif": "ayar"
+   },
+   "ayar.stamps.printedAt": {
+    "tur": "mantiksal",
+    "sinif": "ayar"
+   },
+   "ayar.stamps.printedBy": {
+    "tur": "mantiksal",
+    "sinif": "ayar"
+   },
+   "ayar.style.fontScale": {
+    "tur": "sayi",
+    "sinif": "ayar"
+   },
+   "ayar.style.fontWeight": {
+    "tur": "secim",
+    "sinif": "ayar"
+   },
+   "ayar.style.margins.bottom": {
+    "tur": "sayi",
+    "sinif": "ayar"
+   },
+   "ayar.style.margins.left": {
+    "tur": "sayi",
+    "sinif": "ayar"
+   },
+   "ayar.style.margins.right": {
+    "tur": "sayi",
+    "sinif": "ayar"
+   },
+   "ayar.style.margins.top": {
+    "tur": "sayi",
+    "sinif": "ayar"
+   },
+   "ayar.style.pageSize": {
+    "tur": "secim",
+    "sinif": "ayar"
+   },
+   "ayar.style.tableDensity": {
+    "tur": "secim",
+    "sinif": "ayar"
+   },
+   "ayar.style.tableStyle": {
+    "tur": "secim",
+    "sinif": "ayar"
+   },
+   "ayar.titleOverride": {
+    "tur": "metin",
+    "sinif": "ayar"
+   },
+   "baski.basan": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "baski.not": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "baski.nusha": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "baski.qr": {
+    "tur": "gorsel",
+    "sinif": "musteri"
+   },
+   "baski.taslak": {
+    "tur": "mantiksal",
+    "sinif": "musteri"
+   },
+   "baski.zaman": {
+    "tur": "tarih_saat",
+    "sinif": "musteri"
+   },
+   "belge.baslik": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "belge.donem_baslangic": {
+    "tur": "tarih",
+    "sinif": "musteri"
+   },
+   "belge.donem_gun": {
+    "tur": "sayi",
+    "sinif": "musteri"
+   },
+   "belge.donem_metni": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "belge.durum": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "belge.iptal_nedeni": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "belge.no": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "belge.surum": {
+    "tur": "sayi",
+    "sinif": "musteri"
+   },
+   "belge.tarih": {
+    "tur": "tarih",
+    "sinif": "musteri"
+   },
+   "belge.tur": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "firma.ad": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "firma.adres": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "firma.logo": {
+    "tur": "gorsel",
+    "sinif": "musteri"
+   },
+   "firma.telefon": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "firma.vergi_bilgisi": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "ic_acik.govde_notu": {
+    "tur": "mantiksal",
+    "sinif": "musteri"
+   },
+   "karsi_taraf.ad": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "karsi_taraf.kod": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "tablolar.antet_ek[].metin": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "tablolar.govdeler[].durum": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "tablolar.govdeler[].govde_no": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "tablolar.govdeler[].gun": {
+    "tur": "sayi",
+    "sinif": "musteri"
+   },
+   "tablolar.govdeler[].notlar": {
+    "tur": "metin",
+    "sinif": "ic"
+   },
+   "tablolar.govdeler[].sahibi": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "tablolar.govdeler[].sira": {
+    "tur": "sayi",
+    "sinif": "musteri"
+   },
+   "tablolar.govdeler[].tarih": {
+    "tur": "tarih",
+    "sinif": "musteri"
+   },
+   "tablolar.hareketler[].belge_no": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "tablolar.hareketler[].govde_no": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "tablolar.hareketler[].hareket": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "tablolar.hareketler[].sira": {
+    "tur": "sayi",
+    "sinif": "musteri"
+   },
+   "tablolar.hareketler[].tarih": {
+    "tur": "tarih",
+    "sinif": "musteri"
+   },
+   "tablolar.hareketler[].yon": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "tablolar.hareketler[].yon_kodu": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "tablolar.ozet[].deger": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "tablolar.ozet[].etiket": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "toplamlar.baska": {
+    "tur": "sayi",
+    "sinif": "musteri"
+   },
+   "toplamlar.bizim": {
+    "tur": "sayi",
+    "sinif": "musteri"
+   },
+   "toplamlar.dolu": {
+    "tur": "sayi",
+    "sinif": "musteri"
+   },
+   "toplamlar.donen": {
+    "tur": "sayi",
+    "sinif": "musteri"
+   },
+   "toplamlar.gonderilen": {
+    "tur": "sayi",
+    "sinif": "musteri"
+   },
+   "toplamlar.govde": {
+    "tur": "sayi",
+    "sinif": "musteri"
+   }
+  }
+ },
  "CHEQUE_DELIVERY_NOTE": {
   "contractVersion": 1,
   "alanlar": {
@@ -6954,6 +7343,279 @@
     "sinif": "musteri"
    },
    "toplamlar.siparis_sayisi": {
+    "tur": "sayi",
+    "sinif": "musteri"
+   }
+  }
+ },
+ "WARP_BEAM_CARD": {
+  "contractVersion": 1,
+  "alanlar": {
+   "ayar.columns.iplikler.blankLabels": {
+    "tur": "liste",
+    "sinif": "ayar"
+   },
+   "ayar.columns.iplikler.hidden": {
+    "tur": "liste",
+    "sinif": "ayar"
+   },
+   "ayar.columns.iplikler.labels": {
+    "tur": "nesne",
+    "sinif": "ayar"
+   },
+   "ayar.columns.iplikler.order": {
+    "tur": "liste",
+    "sinif": "ayar"
+   },
+   "ayar.footerNote": {
+    "tur": "metin",
+    "sinif": "ayar"
+   },
+   "ayar.kolonlar.iplikler": {
+    "tur": "liste",
+    "sinif": "ayar"
+   },
+   "ayar.kolonlar.iplikler[].anahtar": {
+    "tur": "metin",
+    "sinif": "ayar"
+   },
+   "ayar.kolonlar.iplikler[].etiket": {
+    "tur": "metin",
+    "sinif": "ayar"
+   },
+   "ayar.kolonlar.iplikler[].hiza": {
+    "tur": "metin",
+    "sinif": "ayar"
+   },
+   "ayar.kolonlar.iplikler[].kaynak": {
+    "tur": "metin",
+    "sinif": "ayar"
+   },
+   "ayar.kolonlar.iplikler[].toplam": {
+    "tur": "metin",
+    "sinif": "ayar"
+   },
+   "ayar.sections.fason": {
+    "tur": "mantiksal",
+    "sinif": "ayar"
+   },
+   "ayar.sections.handwriting": {
+    "tur": "mantiksal",
+    "sinif": "ayar"
+   },
+   "ayar.sections.lots": {
+    "tur": "mantiksal",
+    "sinif": "ayar"
+   },
+   "ayar.sections.yarnTable": {
+    "tur": "mantiksal",
+    "sinif": "ayar"
+   },
+   "ayar.style.fontScale": {
+    "tur": "sayi",
+    "sinif": "ayar"
+   },
+   "ayar.style.fontWeight": {
+    "tur": "secim",
+    "sinif": "ayar"
+   },
+   "ayar.style.margins.bottom": {
+    "tur": "sayi",
+    "sinif": "ayar"
+   },
+   "ayar.style.margins.left": {
+    "tur": "sayi",
+    "sinif": "ayar"
+   },
+   "ayar.style.margins.right": {
+    "tur": "sayi",
+    "sinif": "ayar"
+   },
+   "ayar.style.margins.top": {
+    "tur": "sayi",
+    "sinif": "ayar"
+   },
+   "ayar.titleOverride": {
+    "tur": "metin",
+    "sinif": "ayar"
+   },
+   "baski.basan": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "baski.not": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "baski.nusha": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "baski.qr": {
+    "tur": "gorsel",
+    "sinif": "musteri"
+   },
+   "baski.taslak": {
+    "tur": "mantiksal",
+    "sinif": "musteri"
+   },
+   "baski.zaman": {
+    "tur": "tarih_saat",
+    "sinif": "musteri"
+   },
+   "belge.baslik": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "belge.cozgu_adi": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "belge.cozgu_kodu": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "belge.devere_siparisi_no": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "belge.devereci": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "belge.dokuma_is_emri": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "belge.durum": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "belge.govde_no": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "belge.hesap_kg": {
+    "tur": "sayi",
+    "sinif": "musteri"
+   },
+   "belge.iptal_nedeni": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "belge.irsaliye_no": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "belge.kabul_belgesi_no": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "belge.kumas": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "belge.levent_no": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "belge.metre": {
+    "tur": "sayi",
+    "sinif": "musteri"
+   },
+   "belge.no": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "belge.sahibi": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "belge.sarim_tarihi": {
+    "tur": "tarih",
+    "sinif": "musteri"
+   },
+   "belge.surum": {
+    "tur": "sayi",
+    "sinif": "musteri"
+   },
+   "belge.tahar": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "belge.tarti_kg": {
+    "tur": "sayi",
+    "sinif": "musteri"
+   },
+   "belge.tel": {
+    "tur": "sayi",
+    "sinif": "musteri"
+   },
+   "belge.tur": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "firma.ad": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "firma.adres": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "firma.logo": {
+    "tur": "gorsel",
+    "sinif": "musteri"
+   },
+   "firma.telefon": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "firma.vergi_bilgisi": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "tablolar.bilgi[].deger": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "tablolar.bilgi[].etiket": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "tablolar.iplikler[].denye": {
+    "tur": "sayi",
+    "sinif": "musteri"
+   },
+   "tablolar.iplikler[].iplik_adi": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "tablolar.iplikler[].iplik_kodu": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "tablolar.iplikler[].kg": {
+    "tur": "sayi",
+    "sinif": "musteri"
+   },
+   "tablolar.iplikler[].lotlar": {
+    "tur": "metin",
+    "sinif": "musteri"
+   },
+   "tablolar.iplikler[].sira": {
+    "tur": "sayi",
+    "sinif": "musteri"
+   },
+   "tablolar.iplikler[].tel": {
+    "tur": "sayi",
+    "sinif": "musteri"
+   },
+   "toplamlar.kg": {
+    "tur": "sayi",
+    "sinif": "musteri"
+   },
+   "toplamlar.tel": {
     "tur": "sayi",
     "sinif": "musteri"
    }
