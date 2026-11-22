@@ -318,6 +318,12 @@ export const SETTING_KEYS = {
   /** [PROFİL] Devere ek C1: kusurlu levent reddinde fotoğraf zorunlu mu (DEFAULT false = bugün: ret fotoğrafsız da
    *  yazılır). Açıkken fotoğrafsız ret 400 `WARPING_REJECT_PHOTO_REQUIRED`; okuma aksiyon anında. */
   DEVERE_REJECT_PHOTO_REQUIRED: "devere.rejectPhotoRequired",
+  /** [PROFİL] Devere S3: gövde no esnek eşleşme (DEFAULT false = bugün: büyük/küçük harf duyarsız birebir). Açıkken
+   *  birebir yoksa `beamBodyNoKey` (ayraç at, baştaki sıfırları at) ile eşleşir; tek kaynak `utils/beam-body-no.ts`. */
+  DEVERE_BODY_NO_LOOSE_MATCH: "devere.bodyNoLooseMatch",
+  /** [PROFİL] Devere S3: tartılı levent bitişinde dara boşsa gövde darası kullanılır (DEFAULT false = bugün: dara yoksa
+   *  artık ESTIMATED 0). Okuma aksiyon anında (`exhaustBeam`). */
+  DEVERE_RESIDUAL_TARE_FROM_BODY: "devere.residualTareFromBody",
   /** [PROFİL] Devere ek E1: aynı deverecide kullanılmış irsaliye no ile yeni kabul — `ALLOW` · `WARN` (VARSAYILAN, KARAR 5)
    *  · `BLOCK` 409 `WARPING_DELIVERY_NOTE_USED`. Enum; kalıp `DEVERE_DUPLICATE_DELIVERY_NOTE_MODES` (`devere-receive.ts`). */
   DEVERE_DUPLICATE_DELIVERY_NOTE: "devere.duplicateDeliveryNote",

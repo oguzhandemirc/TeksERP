@@ -35,6 +35,11 @@ export const SEYITOGLU_SETTINGS: readonly PaketSatiri[] = [
   { anahtar: "dokuma.rollBirth", alan: "dokumaRollBirth", hedef: "KK1_LABEL_OR_ORDER", dilim: "S1" },
   { anahtar: "devere.mountTracking", alan: "devereMountTracking", hedef: true, dilim: "devere" },
   { anahtar: "devere.autoConsume", alan: "devereAutoConsume", hedef: true, dilim: "devere" },
+  // Koordinatör kararı 2026-11-22 (PLAN-devere-levent §0-1 a): gövde envanteri isteğe bağlı; boyalı flanş no'su
+  // farklı yazılsa da bulunur, tartılı bitişte dara gövde kartından gelir (S3).
+  { anahtar: "devere.beamBodyMode", alan: "devereBeamBodyMode", hedef: "OPTIONAL", dilim: "devere-S3" },
+  { anahtar: "devere.bodyNoLooseMatch", alan: "devereBodyNoLooseMatch", hedef: true, dilim: "devere-S3" },
+  { anahtar: "devere.residualTareFromBody", alan: "devereResidualTareFromBody", hedef: true, dilim: "devere-S3" },
   // Boyahaneye fason sevk kg'ı topun KK1 tartısından (`Roll.weightKg` → `dispatchedWeight`) gelir; kapalıyken
   // fason kg kontrolü NO_WEIGHT döner (boyahane kg ile faturalar).
   { anahtar: "kk1.weightEntryEnabled", alan: "kk1WeightEntryEnabled", hedef: true, dilim: "kk1" },

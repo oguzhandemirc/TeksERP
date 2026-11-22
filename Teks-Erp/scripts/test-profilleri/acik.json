@@ -99,6 +99,8 @@
     "devereBeamCardAutoPrint": "ASK",
     "devereReworkBillable": true,
     "devereRejectPhotoRequired": true,
+    "devereBodyNoLooseMatch": true,
+    "devereResidualTareFromBody": true,
     "devereDuplicateDeliveryNote": "WARN",
     "devereReceiveWeighing": "OPTIONAL",
     "devereDenierSuggestMinBeams": 3,

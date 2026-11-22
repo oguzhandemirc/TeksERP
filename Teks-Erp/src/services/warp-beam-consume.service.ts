@@ -11,7 +11,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
 import { applyWarpBeamEventTx, logWarpBeamEventAudit } from "./helpers/warp-beam-event.helper";
-import { assertDismountAllowedTx, assertMountTrackingOnTx, warpLengthFromWeight } from "./helpers/warp-beam-mount.helper";
+import { assertDismountAllowedTx, assertMountTrackingOnTx, resolveWeighTareTx, warpLengthFromWeight } from "./helpers/warp-beam-mount.helper";
 import { warpSpecDenierLines, warpSpecKgPerMExact } from "./helpers/warp-spec-yarn.helper";
 import { assertCoversRemaining, BEAM_TERMINAL, closeToMeasuredTx, loadBeamTx, positiveM, readRemainingM, remainingMTx } from "./helpers/warp-beam-ledger.helper";
 import { assertWarpBeamConsumeReplayAlive, tokenReplay } from "./helpers/token-replay.helper";
@@ -159,11 +159,13 @@ export async function exhaustBeam(id: string, input: ExhaustInput, userId?: stri
     // Artık: beyan > tartı > 0 (ESTIMATED). Tartıda dara yoksa metre türetilemez → ESTIMATED 0 + uyarı (#13).
     let source: WarpLengthSource = input.lengthSource ?? "ESTIMATED";
     let residual: Prisma.Decimal;
+    // S3: dara boşsa (ayar açıkken) gövde darası; yalnız tartı yolunda okunur, olay satırına kopyalanır.
+    const tare = input.residualM == null && input.grossKg != null ? await resolveWeighTareTx(tx, beam.id, input.tareKg) : { tareKg: input.tareKg ?? null, fromBody: false };
     if (input.residualM != null) {
       residual = D(input.residualM).toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP);
       if (residual.lt(0)) throw AppError.badRequest("Artık negatif olamaz");
     } else if (input.grossKg != null) {
-      const w = warpLengthFromWeight(input.grossKg, input.tareKg ?? null, warpSpecKgPerMExact(warpSpecDenierLines(beam.warpSpec)));
+      const w = warpLengthFromWeight(input.grossKg, tare.tareKg, warpSpecKgPerMExact(warpSpecDenierLines(beam.warpSpec)));
       if (w) {
         residual = w;
         source = "WEIGHED";
@@ -175,7 +177,10 @@ export async function exhaustBeam(id: string, input: ExhaustInput, userId?: stri
     } else {
       residual = D(0);
     }
-    const closed = await closeToMeasuredTx(tx, beam, residual, { lengthSource: source, machineCounter: input.machineCounter ?? null, grossKg: input.grossKg ?? null, tareKg: input.tareKg ?? null, userId, reason: "Bitiş öncesi ölçülen artığa kapatma" });
+    const tareNote = tare.fromBody ? `Dara gövdeden (${qtyText(tare.tareKg ?? 0)} kg)` : null;
+    const closed = await closeToMeasuredTx(tx, beam, residual, { lengthSource: source, machineCounter: input.machineCounter ?? null, grossKg: input.grossKg ?? null, tareKg: tare.tareKg, userId, reason: tareNote ? `Bitiş öncesi ölçülen artığa kapatma · ${tareNote}` : "Bitiş öncesi ölçülen artığa kapatma" });
+    const userReason = input.reason?.trim() || null;
+    const reasonText = tareNote ? (userReason ? `${userReason} · ${tareNote}` : tareNote) : userReason;
     const ev = await applyWarpBeamEventTx(tx, {
       beamId: beam.id,
       kind: "EXHAUSTED",
@@ -184,7 +189,7 @@ export async function exhaustBeam(id: string, input: ExhaustInput, userId?: stri
       whereMachineId: beam.currentMachineId,
       place: { currentMachineId: null, currentPosition: null },
       // Söküm gibi makine + yuvayı KOPYALAR (EXHAUST_CANCEL yuvaya geri koyar); artık 0 ise lengthM null (CHECK > 0).
-      data: { lengthM: residual.gt(0) ? residual : null, lengthSource: source, machineId: beam.currentMachineId, mountPosition: beam.currentPosition, grossKg: input.grossKg == null ? null : D(input.grossKg), tareKg: input.tareKg == null ? null : D(input.tareKg), reasonCode, reason: input.reason?.trim() || null, createdById: userId ?? null },
+      data: { lengthM: residual.gt(0) ? residual : null, lengthSource: source, machineId: beam.currentMachineId, mountPosition: beam.currentPosition, grossKg: input.grossKg == null ? null : D(input.grossKg), tareKg: tare.tareKg == null ? null : D(tare.tareKg), reasonCode, reason: reasonText, createdById: userId ?? null },
     });
     return { ev, beamNo: beam.beamNo, residual, closed, warnings };
   });

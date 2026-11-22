@@ -123,6 +123,9 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   devereReworkBillable: "devereEnabled",
   // Devere ek C1 (2026-11-21): ret fotoğrafı zorunluluğu devere modülünün davranış bayrağı.
   devereRejectPhotoRequired: "devereEnabled",
+  // Devere S3 (2026-11-22): gövde no esnek eşleşme + bitişte dara gövdeden — devere modülünün davranış bayrakları.
+  devereBodyNoLooseMatch: "devereEnabled",
+  devereResidualTareFromBody: "devereEnabled",
   // Devere ek E1 (2026-11-21): irsaliye no tekrarı ve dönüş tartısı devere modülünün davranış ayarları.
   devereDuplicateDeliveryNote: "devereEnabled",
   devereReceiveWeighing: "devereEnabled",

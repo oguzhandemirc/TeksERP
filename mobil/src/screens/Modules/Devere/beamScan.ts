@@ -9,6 +9,7 @@
 import type { WarpBeam } from '../../../services/warpBeam.service';
 import { foldSearchText } from '../../../utils/searchFold';
 import { normalizeScanCode } from '../../../utils/scanCode';
+import { beamBodyNoLooseMatch } from '../../../utils/beamBodyNo';
 import { STATUS_LABEL } from './beamPayload';
 
 export interface ScanMachine {
@@ -22,10 +23,14 @@ export type MountScan<M extends ScanMachine = ScanMachine> =
   | { kind: 'beam'; beam: WarpBeam }
   | { kind: 'beam-blocked'; beam: WarpBeam; message: string }
   | { kind: 'machine'; machine: M }
+  | { kind: 'ambiguous'; code: string; beamNos: string[] }
   | { kind: 'unknown'; code: string };
 
-/** Okunan kod → levent (beamNo > tezgah kodu > gövde no) ya da bilinmeyen. */
-export function resolveMountScan<M extends ScanMachine>(raw: string, beams: readonly WarpBeam[], machines: readonly M[]): MountScan<M> {
+/**
+ * Okunan kod → levent (beamNo > tezgah kodu > gövde no) ya da bilinmeyen. `looseBodyNo` (S3, sunucu
+ * `devere.bodyNoLooseMatch`): gövde no birebir yoksa esnek kural (`utils/beamBodyNo.ts`, sunucuyla bayt-aynı).
+ */
+export function resolveMountScan<M extends ScanMachine>(raw: string, beams: readonly WarpBeam[], machines: readonly M[], opts: { looseBodyNo?: boolean } = {}): MountScan<M> {
   const code = normalizeScanCode(raw);
   if (!code) return { kind: 'empty' };
   const fold = foldSearchText(code);
@@ -35,6 +40,11 @@ export function resolveMountScan<M extends ScanMachine>(raw: string, beams: read
   if (machine) return { kind: 'machine', machine };
   const byBody = beams.find((b) => b.physicalBeamNo != null && foldSearchText(b.physicalBeamNo) === fold);
   if (byBody) return beamResult(byBody);
+  if (opts.looseBodyNo) {
+    const loose = beams.filter((b) => [b.physicalBeamNo, b.beamBody?.bodyNo].some((n) => n != null && beamBodyNoLooseMatch(code, n)));
+    if (loose.length === 1 && loose[0]) return beamResult(loose[0]);
+    if (loose.length > 1) return { kind: 'ambiguous', code, beamNos: loose.map((b) => b.beamNo) };
+  }
   return { kind: 'unknown', code };
 }
 
@@ -53,6 +63,7 @@ export type MountStep = 'beam' | 'machine';
 export function mountScanOutcome<M extends ScanMachine>(scan: MountScan<M>, step: MountStep): { ok: true } | { ok: false; message: string | null } {
   if (scan.kind === 'empty') return { ok: false, message: null };
   if (scan.kind === 'beam-blocked') return { ok: false, message: scan.message };
+  if (scan.kind === 'ambiguous') return { ok: false, message: `${scan.code} birden çok levente uyuyor (${scan.beamNos.join(', ')}) — levent etiketini okutun.` };
   if (scan.kind === 'unknown') return { ok: false, message: step === 'beam' ? `${scan.code} — hazır levent listesinde yok.` : `${scan.code} — levent tüketen tezgahlarda yok.` };
   if (step === 'beam' && scan.kind === 'machine') return { ok: false, message: 'Bu tezgah etiketi — önce leventin etiketini okutun.' };
   if (step === 'machine' && scan.kind === 'beam') return { ok: false, message: 'Bu levent etiketi — şimdi tezgahın etiketini okutun.' };
