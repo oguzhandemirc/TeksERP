@@ -9503,6 +9503,9 @@ enum PrintedDocType {
   // 2026-11-12 Seyitoğlu L1 (yine SONA). Müşteriye gider; kaynak Order, no = sipariş no. İlk açılışta
   // donar (taslağı yok), değişiklikten sonra yeniden basım; sipariş iptalinde VOIDED. İç kolon yok.
   ORDER_CONFIRMATION // Sipariş teyidi (Order)
+  // 2026-11-22 devere S5 (SONA). İç belge (A6, kılıflı kart, flanş askısı); kaynak WarpBeam, no = levent no.
+  // İlk açılışta donar; sarım iptalinde (→ CANCELLED) `applyWarpBeamEventTx` aynı tx'te VOIDED yapar. Ücret yok.
+  WARP_BEAM_CARD // Levent kartı (WarpBeam)
 }
 
 enum PrintedDocStatus {

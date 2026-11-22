@@ -12,6 +12,7 @@ import { PrintedDocType } from "@prisma/client";
 
 import { previewSeriesCode, resolveSeriesFormat } from "../number-series.service";
 import { SAMPLE_CUSTOMER_EXTRA_DOCS } from "./sample-data-commercial";
+import { SAMPLE_WARP_BEAM_CARD } from "./sample-data-warp-beam-card";
 
 const ISO = "2026-06-07T10:30:00.000Z";
 
@@ -190,6 +191,7 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
   },
 
   ...SAMPLE_CUSTOMER_EXTRA_DOCS, // muayene raporu, satış teklifi, fiyat listesi (ayrı dosya: satır tavanı)
+  WARP_BEAM_CARD: SAMPLE_WARP_BEAM_CARD, // devere S5 levent kartı (ayrı dosya)
 
   // Kalite Sertifikası (renderQualityCertificateHtml).
   QUALITY_CERTIFICATE: {
