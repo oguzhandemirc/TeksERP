@@ -182,7 +182,8 @@ export function renderWarpBeamCardHtml(snapshot: PrintedDocSnapshot, meta: Comme
   const info = warpBeamCardInfoRows(doc, cfg.sections, docNum(snapshot).tr);
   const yarns = p.yarnTable
     ? `<div class="tbl-cap">İplik kırılımı</div>` +
-      buildDocTable<WarpBeamCardYarn>({ className: "sec", colCfg: p.colCfg, footLabel: "TOPLAM", rows: doc.yarns, cols: toHtmlCols(p.cols, p.kit) })
+      // Toplam etiketi ilk (dar "#") kolona oturur; A6'da "TOPLAM" harf harf kırılıyordu → "Σ".
+    buildDocTable<WarpBeamCardYarn>({ className: "sec", colCfg: p.colCfg, footLabel: "Σ", rows: doc.yarns, cols: toHtmlCols(p.cols, p.kit) })
     : "";
 
   return `<!doctype html><html lang="tr"><head><meta charset="utf-8"><style>${warpBeamCardPageCss(style)}${warpBeamCardCss(style)}</style></head>
