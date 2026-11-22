@@ -85,6 +85,17 @@ function useBlurOnRelease(innerRef: React.RefObject<RNTextInput | null>, isActiv
   }, [innerRef, isActive, nativeMode]);
 }
 
+// Yerel kip: `selectTextOnFocus` yalnız İLK odakta seçer; odaklı kutuya yeniden dokununca imleç araya düşüp yazılan
+// eskinin sonuna ekleniyordu (12 → 10 = "1210"). Her dokunuştan sonra (yerel imleç yerleşince) tümünü seç.
+function useNativeSelectAll(innerRef: React.RefObject<RNTextInput | null>, value: string, enabled: boolean) {
+  const valueRef = useRef(value);
+  valueRef.current = value;
+  return useCallback(() => {
+    if (!enabled) return;
+    setTimeout(() => innerRef.current?.setSelection?.(0, valueRef.current.length), 0);
+  }, [enabled, innerRef]);
+}
+
 /**
  * Native klavye girdisini süzer. Türkçe decimal-pad ondalık ayırıcı olarak VİRGÜL gösteriyor; sistem
  * yalnız NOKTA kabul ediyor → virgülü noktaya çevir (silme!). Aksi halde "40,5" yazınca virgül düşüp "405" oluyordu.
@@ -193,6 +204,8 @@ const NumpadInput = forwardRef<RNTextInput, NumpadInputProps>(function NumpadInp
   // Native klavye modu: iOS/Android decimal-pad açılır. Karakter filtresiyle
   // harf/sembol girişini engelle (Android'in numeric kbd'si bazı semboller
   // gösterir).
+  const handleNativePressOut = useNativeSelectAll(innerRef, value, selectAllOnFocus);
+
   const handleNativeChange = useCallback(
     (text: string) => {
       const cleaned = cleanNumericText(text, allowDecimal);
@@ -214,6 +227,7 @@ const NumpadInput = forwardRef<RNTextInput, NumpadInputProps>(function NumpadInp
         keyboardType={allowDecimal ? 'decimal-pad' : 'number-pad'}
         maxLength={numpadMaxLength}
         selectTextOnFocus={selectAllOnFocus || rest.selectTextOnFocus}
+        onPressOut={(e) => { handleNativePressOut(); rest.onPressOut?.(e); }}
       />
     );
   }
