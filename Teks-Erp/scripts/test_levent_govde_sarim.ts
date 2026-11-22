@@ -12,7 +12,9 @@
 //   §8 söküm → DISMOUNTED (FULL_STOCK) · söküm geri al → gövde tezgâhta
 //   §9 bitiş → EMPTIED (EMPTY_STOCK, sarım boş) · müşteri gövdesi sahibine iade adayı · §10 bitiş iptali → gövde geri tezgâhta
 //   §11 kabul stornosu → FILLED_CANCEL: gövdeler önceki durum/yerine, ters satır sarımı taşır
+//   §12 S9 en uyarısı: tarak eni > gövde eni → kabul önizleme/kabul/takma `warnings` · eksik veri sessiz · geri kalan bayt-aynı
 // NEGATİF SONDA: §11 — `WARP_EVENT_BODY_RULES.WOUND_CANCEL` satırı çıkarılınca §11a kırmızı (2026-11-21).
+// NEGATİF SONDA: §12 — `beamBodyWidthWarning` karşılaştırması `gt`→`lt` çevrilince §12a/§12d/§12e kırmızı (2026-11-22).
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım; ayarlar FOTOĞRAFINA döndürülür, kendi kayıtlarını siler.
 // =============================================================================
 import { randomUUID } from "node:crypto";
@@ -113,8 +115,8 @@ async function main(): Promise<void> {
     const c2 = await prisma.customer.create({ data: { code: `${TAG}-C2`, name: `${TAG} FIRMA 2` }, select: { id: true } });
     customerIds.push(c1.id, c2.id);
 
-    const newOrder = async () => {
-      const r = await createWarpingOrder({ subcontractorId: sub.id, fixedWasteM: 0, clientToken: randomUUID(), warpSpecId: spec.id, beamLines: [{ beamCount: 2, beamLengthM: 100 }] }, U);
+    const newOrder = async (warpSpecId = spec.id) => {
+      const r = await createWarpingOrder({ subcontractorId: sub.id, fixedWasteM: 0, clientToken: randomUUID(), warpSpecId, beamLines: [{ beamCount: 2, beamLengthM: 100 }] }, U);
       orderIds.push(r.data.id);
       await dispatchWarpingOrder(r.data.id, { clientToken: randomUUID(), lines: [{ yarnItemId: yarn.id, warehouseId: W, lotId: lot.id, qtyKg: 20 }] }, U);
       return r.data.id;
@@ -240,6 +242,33 @@ async function main(): Promise<void> {
     check("§11a storno → depodaki gövde EMPTY_STOCK + depo W · üstündeki sarım yok", b2.status === BeamBodyStatus.EMPTY_STOCK && b2.place.warehouse?.id === W && b2.currentWarpBeam === null, `${b2.status} ${b2.place.warehouse?.id}`);
     check("§11b yerinde tanımlı gövde Deverecide kalır (kayıt silinmez)", n2?.status === BeamBodyStatus.AT_SUBCONTRACTOR && n2.place.subcontractor?.id === sub.id && n2.isActive);
     check("§11c ters satır FILLED_CANCEL sarımı taşır", bCancel?.kind === "FILLED_CANCEL" && bCancel.warpBeamId === beamB.id);
+
+    // ── §12 S9: gövde eni ↔ tarak eni uyarısı (bilgi; engel değil) ───────
+    const isWidth = (w: string) => w.includes("tarak eni");
+    const wide = await prisma.warpSpec.create({ data: { code: `${TAG}-SW`, name: `${TAG} geniş kart`, yarnItemId: yarn.id, endsCount: 3000, reedWidthCm: 200, yarns: { create: [{ yarnItemId: yarn.id, endsCount: 3000, sortOrder: 0 }] } }, select: { id: true } });
+    specIds.push(wide.id);
+    const widthBody = async (widthCm: number | null) =>
+      (await createBeamBody({ clientToken: randomUUID(), bodyNo: `${TAG}-${++n}`, owner: { kind: "OURS" }, warehouseId: W, machineIds: [], widthCm }, U)).data;
+    const narrow = await widthBody(180);
+    const broad = await widthBody(220);
+    const blank = await widthBody(null);
+    const o5 = await newOrder(wide.id);
+    const lines5 = [L({ beamBodyId: narrow.id }), L({ beamBodyId: broad.id }), L({ beamBodyId: blank.id }), L({ physicalBeamNo: `${TAG}-NW`, newBody: { owner: { kind: "OURS" }, widthCm: 150 } })];
+    const pvW = await previewWarpingReceive(o5, { beams: lines5 });
+    const ww = pvW.warnings.filter(isWidth);
+    check("§12a dar gövde (180) + dar yeni gövde (150) < tarak 200 → iki uyarı, satır no'lu; geniş/ensiz gövde sessiz", ww.length === 2 && ww[0]!.startsWith("1. levent: ") && ww[0]!.includes(narrow.bodyNo) && ww[1]!.startsWith("4. levent: "), ww.join(" | "));
+    const o6 = await newOrder();
+    const pvNoReed = await previewWarpingReceive(o6, { beams: [L({ beamBodyId: narrow.id })] });
+    check("§12b kartta tarak eni yok → uyarı yok", !pvNoReed.warnings.some(isWidth), pvNoReed.warnings.join(" | "));
+    await prisma.warpSpec.update({ where: { id: wide.id }, data: { reedWidthCm: null } });
+    const pvBare = await previewWarpingReceive(o5, { beams: lines5 });
+    await prisma.warpSpec.update({ where: { id: wide.id }, data: { reedWidthCm: 200 } });
+    check("§12c yanıtın geri kalanı bayt-aynı (yalnız en uyarısı eklenir)", JSON.stringify(pvBare) === JSON.stringify({ ...pvW, warnings: pvW.warnings.filter((w) => !isWidth(w)) }));
+    const r5 = await receive(o5, [L({ beamBodyId: narrow.id })]);
+    check("§12d kabul engellenmez · uyarı yanıtta", r5.warnings.some(isWidth), r5.warnings.join(" | "));
+    const [beamN] = await beamsOf(r5.receiptKey);
+    const m5 = await mountBeam(beamN!.id, { machineId: loom2.id, position: 1 }, U);
+    check("§12e takma engellenmez · uyarı yanıtta", (m5.warnings ?? []).some(isWidth) && (await st(narrow.id)).status === BeamBodyStatus.MOUNTED, JSON.stringify(m5.warnings));
   } finally {
     const bodies = await prisma.beamBody.findMany({ where: { bodyNo: { startsWith: TAG } }, select: { id: true } });
     const ids = bodies.map((x) => x.id);

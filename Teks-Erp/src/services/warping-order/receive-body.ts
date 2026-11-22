@@ -15,6 +15,7 @@ import { BEAM_BODY_TABLE, assertBeamBodyEnabled, logBeamBodyEventAudit } from ".
 import { assertBeamBodyMachines, normalizeBeamBodyNo, registerNewBeamBodyTx, resolveBeamBodyOwner, type BeamBodyOwnerInput } from "../beam-body/write";
 import { BEAM_BODY_FULL_STATUSES, BEAM_BODY_STATUS_LABELS, type BeamBodyOwnerKind } from "../../constants/beam-body";
 import { qtyText } from "../helpers/qty-text.helper";
+import type { BeamBodyWidthProbe } from "../helpers/beam-body-fit.helper";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 type Tx = Prisma.TransactionClient;
@@ -44,6 +45,8 @@ export interface ReceiveBodyPlan {
   /** Sarıma yazılacak sahip (emanet kalıtımı sonrası). */
   warpOwnerCustomerId: string | null;
   tareKg: Prisma.Decimal | null;
+  /** Gövde eni (S9 en uyarısı); bilinmiyorsa null. */
+  widthCm: Prisma.Decimal | null;
   register: null | { manualNo: string | null; owner: { ownerCustomerId: string | null; ownerRole: BeamBodyOwnerRole | null }; dims: { widthCm: Prisma.Decimal | null; flangeDiameterCm: Prisma.Decimal | null; tareKg: Prisma.Decimal | null }; machineIds: string[] };
 }
 
@@ -80,7 +83,7 @@ export async function planReceiveBodies(
       seenIds.add(l.beamBodyId);
       const b = await db.beamBody.findUnique({
         where: { id: l.beamBodyId },
-        select: { bodyNo: true, status: true, isActive: true, subcontractorId: true, ownerCustomerId: true, ownerRole: true, tareKg: true, subcontractor: { select: { name: true } } },
+        select: { bodyNo: true, status: true, isActive: true, subcontractorId: true, ownerCustomerId: true, ownerRole: true, tareKg: true, widthCm: true, subcontractor: { select: { name: true } } },
       });
       if (!b) throw AppError.notFound(`${row}: levent gövdesi bulunamadı.`, { code: "BEAM_BODY_NOT_FOUND" });
       if (!b.isActive) throw AppError.conflict(`${row}: ${b.bodyNo} pasif — kabulde kullanılamaz.`, { code: "BEAM_BODY_INACTIVE" });
@@ -93,7 +96,7 @@ export async function planReceiveBodies(
       }
       if (physical && physical.toLowerCase() !== b.bodyNo.toLowerCase()) throw AppError.badRequest(`${row}: gövde no (${physical}) okutulan gövdeyle (${b.bodyNo}) aynı değil.`, { code: "BEAM_BODY_PHYSICAL_MISMATCH" });
       seenNos.add(b.bodyNo.toLowerCase());
-      out.push({ idx, beamBodyId: l.beamBodyId, bodyNo: b.bodyNo, ownerKind: b.ownerRole ?? "OURS", warpOwnerCustomerId: inheritOwner(row, { bodyNo: b.bodyNo, role: b.ownerRole, owner: b.ownerCustomerId }, input.lotOwnerCustomerId), tareKg: b.tareKg, register: null });
+      out.push({ idx, beamBodyId: l.beamBodyId, bodyNo: b.bodyNo, ownerKind: b.ownerRole ?? "OURS", warpOwnerCustomerId: inheritOwner(row, { bodyNo: b.bodyNo, role: b.ownerRole, owner: b.ownerCustomerId }, input.lotOwnerCustomerId), tareKg: b.tareKg, widthCm: b.widthCm, register: null });
       continue;
     }
     if (l.newBody) {
@@ -112,7 +115,7 @@ export async function planReceiveBodies(
       out.push({
         idx, beamBodyId: null, bodyNo: manualNo, ownerKind: owner.ownerRole ?? "OURS",
         warpOwnerCustomerId: inheritOwner(row, { bodyNo: manualNo ?? "Yeni gövde", role: owner.ownerRole, owner: owner.ownerCustomerId }, input.lotOwnerCustomerId),
-        tareKg: dims.tareKg, register: { manualNo, owner, dims, machineIds },
+        tareKg: dims.tareKg, widthCm: dims.widthCm, register: { manualNo, owner, dims, machineIds },
       });
       continue;
     }
@@ -158,6 +161,10 @@ export async function auditReceiveBodies(userId: string, subcontractorId: string
     await logBeamBodyEventAudit({ userId, eventId: r.eventId, kind: "REGISTER", data: { bodyId: r.bodyId, bodyNo: r.bodyNo, toStatus: BeamBodyStatus.AT_SUBCONTRACTOR } });
   }
 }
+
+/** S9: gövdeli satırlar → en yoklaması (karar `beamBodyWidthWarningsTx`te; gövdesiz kabulde boş → sorgu yok). */
+export const receiveBodyWidthProbes = (plans: Array<ReceiveBodyPlan | null>): BeamBodyWidthProbe[] =>
+  plans.flatMap((p) => (p ? [{ label: `${p.idx + 1}. levent: `, bodyNo: p.bodyNo, widthCm: p.widthCm }] : []));
 
 /** Darasız tartıda gövde darası bilgisi (F6 öncüsü): tüketimi değiştirmez, yalnız uyarı metni. */
 export function bodyTareWarnings(beams: Array<{ idx: number; grossKg: Prisma.Decimal | null; tareKg: Prisma.Decimal | null; nominalKg: Prisma.Decimal }>, plans: Array<ReceiveBodyPlan | null>): string[] {
