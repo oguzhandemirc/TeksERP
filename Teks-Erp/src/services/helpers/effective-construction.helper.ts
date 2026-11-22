@@ -13,7 +13,8 @@ import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { CONSTRUCTION_WARNING, LIFT_PLAN_MAX_PICKS, REPEAT_PICKS_TOLERANCE_PCT } from "../../constants/weave-design";
 import { expandWeftSequence, weftLetter } from "./weft-sequence.helper";
-import { WARP_SPEC_YARN_DENIER_SELECT } from "./warp-spec-yarn.helper";
+import { WARP_SPEC_YARN_DENIER_SELECT, warpSpecYarnLines } from "./warp-spec-yarn.helper";
+import { expandWarpSequence, type WarpEndsSequence } from "./warp-sequence.helper";
 import { pctText, qtyText } from "./qty-text.helper";
 
 type Db = Prisma.TransactionClient | typeof prisma;
@@ -22,6 +23,8 @@ const YARN_SELECT = { id: true, code: true, name: true, linearDensityDen: true }
 const WARP_SELECT = {
   // Fason devere D2: iplik + denye kart satırlarından (`yarns`); `yarnItem` = ana iplik.
   id: true, code: true, name: true, takeUpPct: true, wastePct: true, ...WARP_SPEC_YARN_DENIER_SELECT,
+  // Kart görseli (tel düzeni şeridi + tarak planı) — gösterim alanları.
+  sequenceNote: true, endsPerDent: true, reedNo: true, selvedgeEnds: true,
 } satisfies Prisma.WarpSpecSelect;
 const DESIGN_SELECT = {
   id: true, code: true, name: true, kind: true, familyLabel: true, frameCount: true, repeatCm: true,
@@ -47,7 +50,13 @@ export interface ConstructionPin {
 }
 
 type YarnRef = Prisma.ItemGetPayload<{ select: typeof YARN_SELECT }>;
-type WarpRef = Prisma.WarpSpecGetPayload<{ select: typeof WARP_SELECT }>;
+type WarpRow = Prisma.WarpSpecGetPayload<{ select: typeof WARP_SELECT }>;
+/** Çözgü kartı + dizilim açılımı (`endsSequence`; not yok/okunamaz → null). İstemci açılımı yeniden hesaplamaz. */
+export type WarpRef = WarpRow & { endsSequence: WarpEndsSequence | null };
+
+function withEndsSequence(spec: WarpRow): WarpRef {
+  return { ...spec, endsSequence: expandWarpSequence(spec.sequenceNote, warpSpecYarnLines(spec).map((l) => l.endsCount)) };
+}
 
 export interface EffectiveWeftYarn {
   sortOrder: number;
@@ -166,8 +175,8 @@ export async function resolveEffectiveConstruction(
     recipeId: recipeId ?? null,
     variantCode,
     widthCm: item.widthCm,
-    groundWarp: item.warpSpec,
-    warpLayers: item.warpLayers.map((l) => ({ role: l.role, beamMode: l.beamMode, sortOrder: l.sortOrder, warpSpec: l.warpSpec })),
+    groundWarp: item.warpSpec ? withEndsSequence(item.warpSpec) : null,
+    warpLayers: item.warpLayers.map((l) => ({ role: l.role, beamMode: l.beamMode, sortOrder: l.sortOrder, warpSpec: withEndsSequence(l.warpSpec) })),
     weft: ws
       ? {
         weftSpecId: ws.id, code: ws.code, name: ws.name, picksPerCm: ws.picksPerCm, sequenceCode: ws.sequenceCode,

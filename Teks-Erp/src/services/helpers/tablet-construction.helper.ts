@@ -2,7 +2,8 @@
 // TABLET İŞ KARTI — dokuma işinin ETKİN YAPISI, salt-okunur (Seyitoğlu SY-M4, tasarım §14.8 / K3)
 // =============================================================================
 // Yapı yalnız `resolveEffectiveConstruction`tan okunur (ikinci okuma yok); burası onu operatörün
-// göreceği dar biçime indirir (armür ızgarası, iplik denyesi, uyarılar tablete gitmez). Yapısız iş
+// göreceği dar biçime indirir (iplik denyesi, uyarılar tablete gitmez; armür planı + seçici kart görseli
+// için 2026-11-22'den beri EKLEME alan olarak gider). Yapısız iş
 // (atkı kartı, desen kartı, ek çözgü katmanı yok) → `null`: tablet hiçbir şey çizmez (bugünkü ekran).
 // =============================================================================
 import prisma from "../../lib/prisma";
@@ -12,7 +13,17 @@ import { resolveEffectiveConstruction, type EffectiveConstruction } from "./effe
 export interface TabletConstructionDto {
   weavingOrderId: string;
   variantCode: string | null;
-  design: { code: string; name: string; loomFileName: string | null; frameCount: number | null; repeatCm: number | null } | null;
+  design: {
+    code: string; name: string; loomFileName: string | null; frameCount: number | null; repeatCm: number | null;
+    // Kart görseli (2026-11-22) — EKLEME alanlar; eski tablet bilinmeyen alanı yok sayar.
+    /** PLAIN · DOBBY · JACQUARD · LENO. */
+    kind: string;
+    /** Armür planı: satır = atkı, sütun = çerçeve, 1 = kalkık; girilmemişse null. */
+    liftPlan: number[][] | null;
+    /** 1-tabanlı döner çerçeve no'ları. */
+    lenoFrames: number[];
+    drawingInNote: string | null;
+  } | null;
   weft: {
     code: string;
     name: string;
@@ -21,6 +32,8 @@ export interface TabletConstructionDto {
     weftProgramNo: string | null;
     picksInRepeatTotal: number;
     yarns: Array<{ letter: string; picksInRepeat: number; yarnCode: string; yarnName: string; swapped: boolean }>;
+    /** Atkı seçici: atkı başına 1-tabanlı iplik satırı no (sunucu `expandWeftSequence`); kod yoksa null. */
+    pickSequence: number[] | null;
   } | null;
   warpLayers: Array<{ role: string; beamMode: string; warpCode: string; warpName: string }>;
 }
@@ -34,7 +47,12 @@ export function toTabletConstruction(weavingOrderId: string, c: EffectiveConstru
   return {
     weavingOrderId,
     variantCode: c.variantCode,
-    design: d ? { code: d.code, name: d.name, loomFileName: d.loomFileName, frameCount: d.frameCount, repeatCm: num(d.repeatCm) } : null,
+    design: d
+      ? {
+        code: d.code, name: d.name, loomFileName: d.loomFileName, frameCount: d.frameCount, repeatCm: num(d.repeatCm),
+        kind: d.kind, liftPlan: Array.isArray(d.liftPlan) ? (d.liftPlan as number[][]) : null, lenoFrames: d.lenoFrames, drawingInNote: d.drawingInNote,
+      }
+      : null,
     weft: c.weft
       ? {
         code: c.weft.code,
@@ -46,19 +64,25 @@ export function toTabletConstruction(weavingOrderId: string, c: EffectiveConstru
         yarns: c.weft.yarns.map((y) => ({
           letter: y.letter, picksInRepeat: y.picksInRepeat, yarnCode: y.yarnItem.code, yarnName: y.yarnItem.name, swapped: y.cardYarnItem !== null,
         })),
+        pickSequence: c.weft.pickSequence,
       }
       : null,
     warpLayers: c.warpLayers.map((l) => ({ role: l.role, beamMode: l.beamMode, warpCode: l.warpSpec.code, warpName: l.warpSpec.name })),
   };
 }
 
-/** `GET /machine-runs/construction?weavingOrderId=` — dokuma işinin ürün + varyantından etkin yapı; iş yoksa 404. */
-export async function weavingOrderTabletConstruction(weavingOrderId: string): Promise<TabletConstructionDto | null> {
+/** İş emrinin pin'li etkin yapısı (tablet iş kartı, panel iş emri "Yapı" bölümü ve iş emri desen kartı aynı yol); iş yoksa 404. */
+export async function weavingOrderConstruction(weavingOrderId: string): Promise<{ weavingOrderNumber: string; recipeId: string | null; construction: EffectiveConstruction }> {
   const wo = await prisma.weavingOrder.findUnique({
-    where: { id: weavingOrderId }, select: { id: true, itemId: true, recipeId: true, weftSpecId: true, weaveDesignId: true },
+    where: { id: weavingOrderId }, select: { id: true, weavingOrderNumber: true, itemId: true, recipeId: true, weftSpecId: true, weaveDesignId: true },
   });
   if (!wo) throw AppError.notFound("Dokuma iş emri bulunamadı");
   // İş emrinin doğuşta seçtiği atkı/desen kartı (ürün sonradan başka karta geçse de iş kartı onu gösterir).
   const pin = { weftSpecId: wo.weftSpecId, weaveDesignId: wo.weaveDesignId };
-  return toTabletConstruction(wo.id, await resolveEffectiveConstruction(prisma, wo.itemId, wo.recipeId, pin));
+  return { weavingOrderNumber: wo.weavingOrderNumber, recipeId: wo.recipeId, construction: await resolveEffectiveConstruction(prisma, wo.itemId, wo.recipeId, pin) };
+}
+
+/** `GET /machine-runs/construction?weavingOrderId=` — dokuma işinin ürün + varyantından etkin yapı; iş yoksa 404. */
+export async function weavingOrderTabletConstruction(weavingOrderId: string): Promise<TabletConstructionDto | null> {
+  return toTabletConstruction(weavingOrderId, (await weavingOrderConstruction(weavingOrderId)).construction);
 }

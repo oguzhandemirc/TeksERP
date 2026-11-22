@@ -26,6 +26,8 @@ import {
 } from "../services/weaving-order.service";
 import { getWeavingOrderOverview } from "../services/weaving-order-overview.service";
 import { getLoomLoad } from "../services/loom-load.service";
+import { weavingOrderConstruction } from "../services/helpers/tablet-construction.helper";
+import { renderWeavingOrderWeaveCard } from "../services/weave-card.service";
 import "../types/express-augment";
 
 const router = Router();
@@ -216,6 +218,64 @@ router.get(
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       res.status(200).json(await getWeavingOrderOverview(assertValidUuid(req.params.id)));
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+/**
+ * @openapi
+ * /api/weaving-orders/{id}/construction:
+ *   get:
+ *     tags: [WeavingOrders]
+ *     summary: Dokuma işinin etkin yapısı — iş emrinin taşıdığı atkı/desen kartıyla (pin), salt okuma
+ *     description: >
+ *       `resolveEffectiveConstruction(itemId, recipeId, pin)` — `GET /api/item-construction/{itemId}` ile aynı biçim
+ *       (armür planı, döner çerçeveler, `weft.pickSequence`, çözgü kartlarında `endsSequence`). Ürün sonradan
+ *       başka karta geçse de iş emrinin kartı döner; kart İÇERİĞİ canlıdır.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: "{ success, data: EffectiveConstruction & { weavingOrderNumber } }" }
+ *       400: { description: Geçersiz kimlik }
+ *       403: { description: Dokuma modülü kapalı (MODULE_DISABLED) ya da yetki yok }
+ *       404: { description: Bulunamadı }
+ */
+router.get(
+  "/:id/construction",
+  requirePermission("weavingorder:read"),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const o = await weavingOrderConstruction(assertValidUuid(req.params.id));
+      res.status(200).json({ success: true, data: { ...o.construction, weavingOrderNumber: o.weavingOrderNumber } });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+/**
+ * @openapi
+ * /api/weaving-orders/{id}/card-html:
+ *   get:
+ *     tags: [WeavingOrders]
+ *     summary: İş emrinin desen kartı A4 basımı (iş emrinin kartları + varyantı)
+ *     description: ANLIK iç belge; donmaz, numara almaz. Basım izini panel `printTracked` ile yazar.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: "`{ success, data: { html } }`" }
+ *       400: { description: Geçersiz kimlik }
+ *       403: { description: Dokuma modülü kapalı (MODULE_DISABLED) ya da yetki yok }
+ *       404: { description: Bulunamadı }
+ */
+router.get(
+  "/:id/card-html",
+  requirePermission("weavingorder:read"),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      res.status(200).json({ success: true, data: { html: await renderWeavingOrderWeaveCard(assertValidUuid(req.params.id)) } });
     } catch (error) {
       next(error);
     }
