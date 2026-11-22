@@ -165,7 +165,7 @@ function PrintCardButton({ weavingOrderId, no, disabled }: { weavingOrderId: str
   };
   return (
     <button type="button" className="btn sm" disabled={disabled || busy} onClick={() => void print()} data-testid="wo-print-card"
-      title={disabled ? "Bu işin desen kartı yok" : "İş emrinin kartlarıyla A4 desen kartını bas"}>
+      title={disabled ? "Bu işin desen kartı yok" : "Bu işin kartlarıyla A4 desen kartını bas"}>
       <Printer className="h-3.5 w-3.5" /> Desen kartını yazdır
     </button>
   );
