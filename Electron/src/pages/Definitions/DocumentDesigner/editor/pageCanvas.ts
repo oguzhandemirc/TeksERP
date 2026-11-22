@@ -7,7 +7,7 @@
  * iframe'inin <head>'ine ayrı bir <style> olarak girer (getCss() onu görmez).
  */
 
-export type PaperSize = "A4" | "A5" | "LETTER";
+export type PaperSize = "A4" | "A5" | "A6" | "LETTER";
 export type Orientation = "portrait" | "landscape";
 
 export interface PaperSpec {
@@ -19,6 +19,7 @@ export interface PaperSpec {
 export const PAPER_SIZES: Record<PaperSize, PaperSpec> = {
   A4: { label: "A4", widthMm: 210, heightMm: 297 },
   A5: { label: "A5", widthMm: 148, heightMm: 210 },
+  A6: { label: "A6", widthMm: 105, heightMm: 148 },
   LETTER: { label: "Letter", widthMm: 215.9, heightMm: 279.4 },
 };
 

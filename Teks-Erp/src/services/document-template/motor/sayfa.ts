@@ -9,7 +9,8 @@
 import { cssFixed } from "../../document-render/fmt-num";
 import { cssString } from "./filtreler";
 
-export type PaperSize = "A4" | "A5" | "LETTER";
+/** A6: kılıflı levent kartı (devere S5) — Sistem renderer'ı `@page size: A6` basar. */
+export type PaperSize = "A4" | "A5" | "A6" | "LETTER";
 export type Orientation = "dikey" | "yatay";
 export type PageNumberPosition = "alt-sag" | "alt-orta" | "yok";
 
@@ -80,7 +81,7 @@ export function normalizePageSettings(raw: unknown): PageSettings {
   };
 
   unknownKeys(raw, ["kagit", "yon", "kenar", "ustBilgi", "altBilgi", "sayfaNo", "ilkSayfaFarkli"], "");
-  const kagit = pick(raw.kagit, ["A4", "A5", "LETTER"] as const, DEFAULT_PAGE_SETTINGS.kagit, "kagit");
+  const kagit = pick(raw.kagit, ["A4", "A5", "A6", "LETTER"] as const, DEFAULT_PAGE_SETTINGS.kagit, "kagit");
   const yon = pick(raw.yon, ["dikey", "yatay"] as const, DEFAULT_PAGE_SETTINGS.yon, "yon");
 
   const k = group(raw.kenar, "kenar");
