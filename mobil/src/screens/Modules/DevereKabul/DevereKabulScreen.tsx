@@ -4,7 +4,7 @@
 // Akış: devereci → irsaliye no → açık sipariş(ler) (tek açık sipariş kendiliğinden seçilir) → her levent için gövde
 // QR (tek huni `BarcodeScannerModal`, altta "Numara yaz"; tanımsız gövde yerinde tanımlanır) + metre + tartı →
 // önizleme → KABUL ET (panelle aynı belge ucu, hep-ya-hiç). OTURUMSUZ, online-only (kuyruk YOK).
-// Yerleşim tablet tasarım dili (Tambur): üst şerit · SOL şu anki iş · SAĞ leventler + sonuç · alt bant eylemler.
+// Yerleşim tablet tasarım dili (Tambur): üst şerit (Yenile) · SOL şu anki iş · SAĞ leventler + sonuç · alt bant eylemler.
 // =============================================================================
 import React, { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
@@ -22,7 +22,7 @@ import { fmtMeters } from '../../../utils/meters';
 import type { ReceiveDocResult, RejectLookup } from '../../../services/devereKabul.service';
 import WarpBeamLabelPrinter from '../Devere/WarpBeamLabelPrinter';
 import { useDevereKabul, type DevereKabulState } from './useDevereKabul';
-import { AddBeamCard, HeaderPickers, JobCard, LinesCard, SubChip } from './DevereKabulParts';
+import { AddBeamCard, HeaderPickers, JobCard, LinesCard } from './DevereKabulParts';
 import { ManualCodeFooter, ResultCard } from './DevereKabulResult';
 import BeamLineSheet from './BeamLineSheet';
 import { PreviewSheet } from './ReceiveSheets';
@@ -75,13 +75,7 @@ export default function DevereKabulScreen() {
     <ScreenChrome
       title="Devere Dönüş Kabulü"
       subtitle="Devereciden dönen dolu leventleri gövde QR'ı okutarak kabul edin"
-      titleRowExtras={<SubChip name={s.subcontractor?.name ?? null} onPress={() => setPicker('sub')} />}
-      headerExtras={
-        <View style={styles.headerRow}>
-          {s.subcontractorId && !compact ? <HeaderPill icon="plus" label="Sipariş ekle" onPress={() => setPicker('order')} testID="devere-kabul-ust-siparis" /> : null}
-          <HeaderPill icon="refresh" label="Yenile" onPress={s.refresh} testID="devere-kabul-yenile" />
-        </View>
-      }
+      headerExtras={<HeaderPill icon="refresh" label="Yenile" onPress={s.refresh} testID="devere-kabul-yenile" />}
       flushBottom={!compact}
     >
       <View style={styles.root}>
@@ -131,7 +125,6 @@ const styles = StyleSheet.create({
   left: { flex: 1.1, gap: spacing.md },
   full: { flex: 0 },
   right: { flex: 1, gap: spacing.md },
-  headerRow: { flexDirection: 'row', alignItems: 'center' },
   bottomBar: { paddingHorizontal: spacing.md, paddingTop: spacing.md, gap: spacing.sm, borderTopWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   buttons: { flexDirection: 'row', gap: spacing.md, alignItems: 'center' },
   reject: { width: 280 },

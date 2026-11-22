@@ -2,7 +2,7 @@
 // TeksERP — LEVENT GÖVDESİ SAHİBİNE İADE BELGESİ (`/api/beam-body-returns`, devere ek B2)
 // =============================================================================
 // Kapı sırası gövde uçlarıyla aynı: `verifyToken` → `requireDevereEnabled` → `requireBeamBodyTracking` (OFF → 403
-// BEAM_BODY_MODE_OFF) → izin (`beam-body:read` / `beam-body:write`). Aday listesi statik yol, `/:id`den ÖNCE.
+// BEAM_BODY_MODE_OFF) → izin (`beam-body:read` / `beam-body:write`; iptal `beam-body:cancel`). Aday listesi statik yol, `/:id`den ÖNCE.
 // =============================================================================
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
@@ -175,12 +175,12 @@ router.get("/:id", requirePermission("beam-body:read"), wrap(async (req) => {
   return { status: 200, body: { success: true, data: await getBeamBodyReturn(id) } };
 }));
 
-router.get("/:id/cancel-preview", requirePermission("beam-body:write"), wrap(async (req) => {
+router.get("/:id/cancel-preview", requirePermission("beam-body:cancel"), wrap(async (req) => {
   const id = parse(Id, req.params.id);
   return { status: 200, body: { success: true, data: await previewCancelBeamBodyReturn(id) } };
 }));
 
-router.post("/:id/cancel", requirePermission("beam-body:write"), wrap(async (req) => {
+router.post("/:id/cancel", requirePermission("beam-body:cancel"), wrap(async (req) => {
   const id = parse(Id, req.params.id);
   const body = parse(CancelBody, req.body);
   const data = await cancelBeamBodyReturn(id, body.reason, req.user!.userId);

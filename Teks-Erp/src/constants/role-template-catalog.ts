@@ -152,6 +152,7 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       // Levent planlamanın OKUDUĞU şeydir (hazır levent stoğu); sarım/iptal süpervizörde.
       "warpbeam:read",
       // Fason devere siparişi: planlama açar ve ipliği sevk eder; iptal (ters kayıt) süpervizörde.
+      // Gövde kaydı/hareketi planlamada da; gövde düzeltmesi (`beam-body:cancel`) süpervizörde.
       "warping-order:read",
       "beam-body:read",
       "beam-body:write",
@@ -207,7 +208,9 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "consignment:write",
       // Devereciye giden ipliği depo çıkarır; sipariş/sevk yazma planlamada.
       "warping-order:read",
+      // Gövdenin günlük hareketi (boş gönder/dön, bakım, sahibine iade belgesi) depo işi; düzeltme (`beam-body:cancel`) süpervizörde.
       "beam-body:read",
+      "beam-body:write",
       // ⚠️ `goods-receipt:*` BİLEREK YOK: Mal Kabul ekranı yalnız izinle kapılı
       // (tek depolu ticaret kurulumu da kullanacağı için multiWarehouse şartı
       // konamaz) → şablona akarsa fabrikada karo BELİRİR. Alım-satım kurulumunda
@@ -453,6 +456,8 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "warping-order:read",
       "beam-body:read",
       "beam-body:write",
+      // Gövde düzeltmesi (hareket geri al · kayıt iptali · iade belgesi iptali): ters kayıt, yalnız burada.
+      "beam-body:cancel",
       "warping-order:write",
       "warping-order:cancel",
       // Kapanış (fire beyanı + iade) ve yeniden açma: aynı kişide, ayrı kod — fire defteri sayıyı değiştirir.
