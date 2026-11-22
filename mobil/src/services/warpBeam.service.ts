@@ -48,8 +48,19 @@ export interface WarpBeam {
   currentMachine?: { id: string; code: string; name: string } | null;
 }
 
+/** Çözgü kartı iplik satırı (harf = kart satır sırası, A = 1). */
+export interface WarpSpecYarnRow { letter: string; code: string; name: string; endsCount: number }
+/** Sunucu `warp-sequence.helper` açılımı — bir raporun tel tel iplik no'su (1-tabanlı) + tekrar. */
+export interface WarpEndsSequence { repeat: number[]; repeatCount: number; remainder: number; totalEnds: number; matchesYarnEnds: boolean }
+
 export interface TabletContext {
-  warpSpecs: { id: string; code: string; name: string; endsCount: number; denier: number | null }[];
+  warpSpecs: {
+    id: string; code: string; name: string; endsCount: number; denier: number | null;
+    /** Kart görseli F: tel düzeni bandı verisi SUNUCUDAN (tablet açılım hesaplamaz). Eski sunucu göndermez → bant çizilmez. */
+    yarns?: WarpSpecYarnRow[];
+    sequenceNote?: string | null;
+    endsSequence?: WarpEndsSequence | null;
+  }[];
   machines: { id: string; code: string; name: string; stationName: string }[];
   warehouses: { id: string; name: string; isDefault: boolean }[];
   subcontractors: { id: string; name: string }[];

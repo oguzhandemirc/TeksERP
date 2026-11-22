@@ -8,6 +8,8 @@
 //   vergi no, adres, bakiye gibi başka alan SIZMAZ (1e ek şart ②, `test_kimlik_sizintisi`
 //   sınıfı). Fikstürlü ölçüm: her liste ≥1 satır (boş liste = sessiz yeşil).
 // SORU 3 (DB): denye TEK kaynaktan (`resolveDenier`) — kartta denye yoksa `null` döner.
+//   §3c–e kart görseli F: tel düzeni bandı verisi (`yarns` + sunucu `endsSequence`); negatif sonda
+//   (2026-11-22): servis `endsSequence`i null döndürünce §3d KIRMIZI.
 //
 // ⭐ NEGATİF SONDA (ölçüldü 2026-09-14): `POST /:id/wind` guard'ından `...MOBILE_DEVERE`
 //    düşürülünce §1b KIRMIZI · `/:id/cancel` guard'ına `mobile:devere` eklenince §1c KIRMIZI ·
@@ -72,7 +74,8 @@ function statik(): void {
 }
 
 const ALLOW = {
-  warpSpecs: ["id", "code", "name", "endsCount", "denier", "kgPerM", "yarnCount"],
+  // Kart görseli F: tel düzeni bandı — iplik satırı yalnız harf/kod/ad/tel (allowlist `map`).
+  warpSpecs: ["id", "code", "name", "endsCount", "denier", "kgPerM", "yarnCount", "yarns", "sequenceNote", "endsSequence"],
   machines: ["id", "code", "name", "stationName"],
   warehouses: ["id", "name", "isDefault"],
   subcontractors: ["id", "name"],
@@ -97,6 +100,8 @@ async function main(): Promise<void> {
   const yarnDenyesiz = await prisma.item.create({ data: { code: `${TAG}-IP0`, name: `${TAG} denyesiz`, itemType: "YARN", unit: "KG" }, select: { id: true } });
   const spec = await prisma.warpSpec.create({ data: { code: `${TAG}-CK`, name: `${TAG} çözgü`, yarnItemId: yarn.id, endsCount: 3500 }, select: { id: true } });
   const specDenyesiz = await prisma.warpSpec.create({ data: { code: `${TAG}-CK0`, name: `${TAG} denyesiz`, yarnItemId: yarnDenyesiz.id, endsCount: 100 }, select: { id: true } });
+  const specDizilim = await prisma.warpSpec.create({ data: { code: `${TAG}-CKD`, name: `${TAG} dizilim`, yarnItemId: yarn.id, endsCount: 6, sequenceNote: "2A 1B" }, select: { id: true } });
+  await prisma.warpSpecYarn.createMany({ data: [{ warpSpecId: specDizilim.id, yarnItemId: yarn.id, endsCount: 4, sortOrder: 0 }, { warpSpecId: specDizilim.id, yarnItemId: yarnDenyesiz.id, endsCount: 2, sortOrder: 1 }] });
   const specPasif = await prisma.warpSpec.create({ data: { code: `${TAG}-CKP`, name: `${TAG} pasif`, yarnItemId: yarn.id, endsCount: 100, isActive: false }, select: { id: true } });
   const st = await prisma.station.create({ data: { name: `${TAG}-DEVERE`, code: `${TAG}-DV`.slice(0, 32), type: StationType.INTERNAL, producesWarpBeam: true }, select: { id: true } });
   const mk = await prisma.machine.create({ data: { stationId: st.id, name: `${TAG}-M1`, code: `${TAG}-M1`.slice(0, 32) }, select: { id: true } });
@@ -133,6 +138,11 @@ async function main(): Promise<void> {
     const s0 = ctx.warpSpecs.find((s) => s.id === specDenyesiz.id);
     check("§3a denyeli kart: `denier` = resolveDenier(item) (300)", s1?.denier === 300, String(s1?.denier));
     check("§3b denyesiz kart: `denier` null (form 'kartta denye yok' uyarısı çizer, kaydet 400 bekler)", s0 != null && s0.denier === null);
+    console.log("\n── §3c tel düzeni bandı verisi (kart görseli F; tablet hesaplamaz) ──");
+    const sd = ctx.warpSpecs.find((s) => s.id === specDizilim.id);
+    check("§3c iki iplikli kart: yarns harf sırasıyla (A=1. satır, B=2.) tel adediyle", sd != null && sd.yarns.length === 2 && sd.yarns[0]!.letter === "A" && sd.yarns[0]!.endsCount === 4 && sd.yarns[1]!.letter === "B" && sd.yarns[1]!.endsCount === 2, JSON.stringify(sd?.yarns));
+    check("§3d \"2A 1B\" → sunucu açılımı repeat [1,1,2] × 2, artık 0, kartla tutarlı", sd != null && sd.sequenceNote === "2A 1B" && JSON.stringify(sd.endsSequence) === JSON.stringify({ repeat: [1, 1, 2], repeatCount: 2, remainder: 0, totalEnds: 6, matchesYarnEnds: true }), JSON.stringify(sd?.endsSequence));
+    check("§3e notsuz tek iplikli kart: endsSequence null, yarns tek satır (bugünkü kart)", s1 != null && s1.endsSequence === null && s1.sequenceNote === null && s1.yarns.length === 1 && s1.yarns[0]!.endsCount === 3500);
     console.log("\n── §4 lot adayları + lotRequired (A3) ──");
     const lotSatir = ctx.yarnLots.find((l) => l.id === lot.id);
     check("§4a kart ipliğinin aktif lotu listede, türetilen bakiyeyle (0 — hareket yok)", lotSatir != null && lotSatir.lotNo === `${TAG}-LOT` && lotSatir.itemId === yarn.id && lotSatir.balanceKg === 0);
@@ -149,7 +159,7 @@ async function main(): Promise<void> {
     await prisma.yarnLot.deleteMany({ where: { id: { in: [lot.id, lotPasif.id, lotYabanci.id] } } });
     await prisma.item.delete({ where: { id: yarnKartsiz.id } }).catch(() => undefined);
     if (lotRequiredFoto) await prisma.systemSetting.upsert({ where: { key: SETTING_KEYS.DEVERE_LOT_REQUIRED }, create: { key: SETTING_KEYS.DEVERE_LOT_REQUIRED, value: lotRequiredFoto.value as Prisma.InputJsonValue }, update: { value: lotRequiredFoto.value as Prisma.InputJsonValue } });
-    await prisma.warpSpec.deleteMany({ where: { id: { in: [spec.id, specDenyesiz.id, specPasif.id] } } });
+    await prisma.warpSpec.deleteMany({ where: { id: { in: [spec.id, specDenyesiz.id, specPasif.id, specDizilim.id] } } });
     await prisma.item.deleteMany({ where: { id: { in: [yarn.id, yarnDenyesiz.id] } } });
     await prisma.machine.delete({ where: { id: mk.id } }).catch(() => undefined);
     await prisma.station.delete({ where: { id: st.id } }).catch(() => undefined);

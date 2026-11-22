@@ -5,6 +5,7 @@
 //   §2 nominal seçilince hesap görünür ve SAR sarım mutasyonunu çağırır (iplik kg = nominal)
 //   §3 okutma bandı: elle yazılan levent no hedefi değiştirir (ana düğme etiketi izler)
 //   §4 planlı yok → "PLANLA + SAR" + gövde no alanı; çevrimdışı → gerekçe, düğme kilitli
+//   §5 iki iplikli kart → tel düzeni bandı (sunucu açılımı); eski sunucu/tek iplik → bant yok
 // =============================================================================
 import React from 'react';
 import { act, fireEvent } from '@testing-library/react-native';
@@ -34,11 +35,11 @@ function beam(id: string, over: Partial<WarpBeam> = {}): WarpBeam {
   return { id, beamNo: `LV-${id}`, status: 'PLANNED', plannedLengthM: 1000, physicalBeamNo: null, notes: null, originKind: 'IN_HOUSE', warpSpec: { id: 's1', code: 'CZ-1', name: 'Siyah', endsCount: 4000, yarnItem: { id: 'y', code: 'Y', name: 'Y', linearDensityDen: 150 } }, subcontractor: null, supplier: null, wound: null, remainingM: 0, createdAt: '2026-10-20T08:00:00Z', ...over } as WarpBeam;
 }
 
-function Harness({ planned, isOnline = true }: { planned: WarpBeam[]; isOnline?: boolean }) {
-  const station = useWindStation({ context: ctx, planned, recent: [], isOnline });
+function Harness({ planned, isOnline = true, context = ctx }: { planned: WarpBeam[]; isOnline?: boolean; context?: TabletContext }) {
+  const station = useWindStation({ context, planned, recent: [], isOnline });
   return (
     <NumpadProvider>
-      <WindStationForm station={station} context={ctx} isOnline={isOnline} busyBeams={[]} knownBeams={planned} />
+      <WindStationForm station={station} context={context} isOnline={isOnline} busyBeams={[]} knownBeams={planned} />
       <WindScanColumn station={station} />
       <NumpadHost />
     </NumpadProvider>
@@ -90,4 +91,19 @@ it('§4 planlı yok → PLANLA + SAR ve gövde alanı; çevrimdışı gerekçe',
   expect(r.getByLabelText('PLANLA + SAR')).toBeTruthy();
   expect(r.getByText('Gövde no (okutun ya da yazın)')).toBeTruthy();
   expect(r.getByText('Bağlantı yok — sarım yalnız çevrimiçi (levent no sunucuda doğar).')).toBeTruthy();
+});
+
+it('§5 iki iplikli kart: tel düzeni bandı sunucu açılımından (rapor satırı); eski sunucu/tek iplik → bant yok', async () => {
+  const plain = renderWithPaper(<Harness planned={[beam('p1')]} />);
+  await act(async () => {});
+  expect(plain.queryByTestId('sar-tel-duzeni')).toBeNull();
+  plain.unmount();
+  const spec = { id: 's1', code: 'CZ-1', name: 'Siyah', endsCount: 3500, denier: null, sequenceNote: '2A 1B', yarns: [{ letter: 'A', code: 'P150', name: 'P150', endsCount: 2334 }, { letter: 'B', code: 'P75', name: 'P75', endsCount: 1166 }], endsSequence: { repeat: [1, 1, 2], repeatCount: 1166, remainder: 2, totalEnds: 3500, matchesYarnEnds: true } };
+  const r = renderWithPaper(<Harness planned={[beam('p1')]} context={{ ...ctx, warpSpecs: [spec] } as TabletContext} />);
+  await act(async () => {});
+  expect(r.getByTestId('sar-tel-duzeni')).toBeTruthy();
+  expect(r.getByText('Tel düzeni · 2A 1B')).toBeTruthy();
+  expect(r.getByText('Rapor 3 tel × 1166 + 2 = 3500 tel')).toBeTruthy();
+  expect(r.getByText('P75 · 1166 tel')).toBeTruthy();
+  expect(r.queryByTestId('sar-tel-duzeni-uyari')).toBeNull();
 });
