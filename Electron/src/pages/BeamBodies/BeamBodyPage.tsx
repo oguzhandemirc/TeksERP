@@ -2,7 +2,7 @@
 // LEVENT GÖVDESİ — kayıt sayfası · `definitions/beam-bodies/:id` (devere ek B4)
 // =============================================================================
 // Özet (sahip · durum · yer · ölçü · uyumlu tezgâhlar) + hareket geçmişi. Eylemler: düzenle, elle geçiş (önizlemeli),
-// QR bas, kayıt iptali; son hareketin "Geri al"ı geçmiş satırında. Yazma `beam-body:write`, basım `label:print`.
+// QR bas, kayıt iptali; son hareketin "Geri al"ı geçmiş satırında. Yazma `beam-body:write`, geri al/kayıt iptali `beam-body:cancel`, basım `label:print`.
 // =============================================================================
 import { Fragment, useState, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
@@ -138,6 +138,8 @@ function Actions({ b, onOpen }: { b: BeamBody; onOpen: (d: DialogState) => void 
         <Button size="sm" variant="outline" disabled={!b.isActive} onClick={() => onOpen({ kind: "edit" })}>
           <Pencil className="mr-1 h-4 w-4" /> Düzenle
         </Button>
+      </PermissionGate>
+      <PermissionGate permission="beam-body:cancel">
         <Button size="sm" variant="outline" className="text-destructive" disabled={!b.isActive} onClick={() => onOpen({ kind: "cancel" })} title="Yanlış açılmış kartı iptal et (yalnız hareketsizken)">
           <Ban className="mr-1 h-4 w-4" /> Kaydı iptal et
         </Button>

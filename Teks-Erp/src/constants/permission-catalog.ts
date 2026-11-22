@@ -117,7 +117,9 @@ export const PERMISSION_CATALOG = [
   { code: "warping-order:cancel", module: "PRODUCTION", category: "web", description: "Fason devere siparişi ve iplik sevki iptali (ters kayıt; ayrı yetenek)" },
   { code: "warping-order:settle", module: "PRODUCTION", category: "web", description: "Fason devere siparişi kapanışı (kalan iplik iade / fire / deverecide kalır) ve yeniden açma (ters kayıt; ayrı yetenek)" },
   { code: "beam-body:read", module: "PRODUCTION", category: "web", description: "Levent gövdesi listesi/detayı (sahip · durum · yer · uyumlu tezgâhlar · hareket geçmişi), QR çözümü" },
-  { code: "beam-body:write", module: "PRODUCTION", category: "web", description: "Levent gövdesi kaydı/düzenleme (sahip · ölçüler · uyumlu tezgâhlar · pasife alma) ve kayıt iptali" },
+  { code: "beam-body:write", module: "PRODUCTION", category: "web", description: "Levent gövdesi kaydı/düzenleme (sahip · ölçüler · uyumlu tezgâhlar · pasife alma), elle hareket ve sahibine iade belgesi" },
+  // Gövde düzeltmeleri AYRI yetenek (`warpbeam:cancel` · `warping-order:cancel` emsali): üçü de olay defterine ters satır yazar.
+  { code: "beam-body:cancel", module: "PRODUCTION", category: "web", description: "Levent gövdesi düzeltmesi: son hareketi geri alma, yanlış kaydı iptal, sahibine iade belgesi iptali (ters kayıt; ayrı yetenek)" },
   // ── Dokuma / tezgah koşumu (2026-09-13, P2b) ───────────────────────────────
   // Geri alma AYRI kod: koşum randımanın PAYDASINI taşır, geri almak günlük
   // aç/kapa işinden ayrı bir yetkidir (`shipping:undo-dispatch` emsali).
