@@ -1,7 +1,7 @@
 // =============================================================================
 // FASON DEVERE SİPARİŞİ — kayıt sayfası (plan E4) · `operations/fason-devere/:id`
 // =============================================================================
-// Bölümler: özet · iplik planı (sunucuda donmuş) · sevkler (D6b; yeni sevk, iptal, irsaliye + çözgü talimatı) · deverecide tutulan iplik (iade, aktarma, geçmiş) · dönen leventler (D7a; kabul, mutabakat, geri alma) · kapanış (D7b; kapat, geçmiş, yeniden aç). Yazma düğmeleri izinle (`PermissionGate`) ve durumla çizilir:
+// Bölümler: özet · iplik planı (sunucuda donmuş) · çözgü düzeni (tel düzeni + tarak planı) · sevkler (D6b; yeni sevk, iptal, irsaliye + çözgü talimatı) · deverecide tutulan iplik (iade, aktarma, geçmiş) · dönen leventler (D7a; kabul, mutabakat, geri alma) · kapanış (D7b; kapat, geçmiş, yeniden aç). Yazma düğmeleri izinle (`PermissionGate`) ve durumla çizilir:
 // düzenle OPEN/IN_PROGRESS (sevkliyken yalnız meta), iptal yalnız OPEN'da anlamlı — sevkli siparişte önizleme
 // "önce sevkleri iptal edin" der. Kapalı/iptal siparişte yazma yüzeyi HİÇ çizilmez.
 // =============================================================================
@@ -27,6 +27,7 @@ import { PlanTable } from "./PlanTable";
 import { ReceiptsSection } from "./ReceiptsSection";
 import { SettlementsSection } from "./SettlementsSection";
 import { WarpingOrderFormDialog } from "./WarpingOrderFormDialog";
+import { WarpLayoutSection } from "./WarpLayoutSection";
 import { editModeOf } from "./order-model";
 import { useWarpingOrder, WARPING_ORDERS_PATH } from "./service";
 import { warpingStatusMeta, type WarpingOrder } from "./types";
@@ -65,6 +66,7 @@ export function WarpingOrderPage() {
               <p className="text-xs text-muted-foreground">Sipariş açılırken hesaplandı ve saklandı; kart sonradan değişse de bu plan değişmez.</p>
               <PlanTable yarns={o.yarns} hasWaste={o.hasWaste} totals={o.totals} />
             </section>
+            {o.status !== "CANCELLED" && <WarpLayoutSection orderId={o.id} />}
             <DispatchesSection order={o} />
             <HoldingsSection order={o} />
             <ReceiptsSection order={o} />

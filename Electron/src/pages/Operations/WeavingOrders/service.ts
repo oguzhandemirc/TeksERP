@@ -19,6 +19,7 @@ import type { ApiResponse, CursorPaginatedResponse, CursorParams } from "@/types
 import type { CrudService } from "@/services/crudService";
 import type { WeavingExecutionKind, WeavingOrder } from "./types";
 import type { WeavingOrderOverview } from "./overview/types";
+import type { WeavingOrderConstruction } from "./overview/construction-visual";
 
 const BASE = "/api/weaving-orders";
 
@@ -72,6 +73,12 @@ export const weavingOrderService = {
   getById: (id: string) => apiClient.get<ApiResponse<WeavingOrder>>(`${BASE}/${id}`).then((r) => r.data),
   /** Sağ panel: "şu an ne hâlde" — açık koşumlar, son koşum/indirmeler, leventler (salt okuma). */
   overview: (id: string) => apiClient.get<ApiResponse<WeavingOrderOverview>>(`${BASE}/${id}/overview`).then((r) => r.data),
+  /** Kart görseli: iş emrinin taşıdığı kartlarla (pin) etkin yapı — armür, seçici, çözgü `endsSequence`. */
+  construction: (id: string) =>
+    apiClient.get<ApiResponse<WeavingOrderConstruction>>(`${BASE}/${id}/construction`).then((r) => r.data.data),
+  /** İş emrinin A4 desen kartı (sunucuda üretilir; basım izi `printTracked`). */
+  cardHtml: (id: string) =>
+    apiClient.get<ApiResponse<{ html: string }>>(`${BASE}/${id}/card-html`).then((r) => r.data.data.html),
   /** `clientToken` MANTIKSAL DENEME başına bir kez üretilir (idempotency). */
   create: (body: WeavingOrderPayload, clientToken: string) =>
     apiClient.post<ApiResponse<WeavingOrder>>(BASE, { ...body, clientToken }).then((r) => r.data),

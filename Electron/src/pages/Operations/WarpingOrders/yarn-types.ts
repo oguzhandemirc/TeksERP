@@ -5,6 +5,7 @@
 // sayılar METİN gelir (Decimal `toFixed(3)`), panel hesaplamaz — yalnız biçimler ve satır içi uyarı üretir.
 // =============================================================================
 import type { WarpingOrderStatus } from "./types";
+import type { WarpEndsSequenceView } from "@/components/weave/warp-ends";
 
 export type DevereLotPolicy = "FREE" | "WARN" | "SINGLE_LOT";
 
@@ -118,6 +119,10 @@ export interface WarpingInstruction {
   totalEnds: number;
   yarns: Array<{ letter: string; code: string; name: string; endsCount: number; denier: string }>;
   sequenceNote: string | null;
+  /** Kart görseli: dizilimin sunucu açılımı (harfler `yarns` sırası); not yok/okunamaz → null; eski backend göndermez. */
+  endsSequence?: WarpEndsSequenceView | null;
+  /** Kenar teli (toplam telin içinde); eski backend göndermez. */
+  selvedgeEnds?: number | null;
   reed: { reedNo: string | null; reedWidthCm: string | null; endsPerDent: number | null } | null;
   beamLines: Array<{ beamCount: number; beamLengthM: string }>;
   beamCount: number | null;

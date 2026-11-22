@@ -3,7 +3,7 @@
 // Maliyet sekmesi `cost:read` + `maliyetEnabled` yoksa çizilmez (koşulsuz 403 verecek sorgu atılmaz).
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { PageBody, PageShell } from "@/components/layout/PageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -22,6 +22,8 @@ import { VariantsTab } from "./tabs/VariantsTab";
 import { WeftTab } from "./tabs/WeftTab";
 import { WEAVE_KIND_LABEL } from "./types";
 
+const DETAIL_TABS = new Set(["structure", "weft", "lift", "variants"]);
+
 export function WeaveDesignDetailPage() {
   const { id = "" } = useParams();
   const qc = useQueryClient();
@@ -29,8 +31,10 @@ export function WeaveDesignDetailPage() {
   const { maliyetEnabled } = useOperationsVisibilityContext();
   const canWrite = hasPermission("warpspec:write");
   const showCost = maliyetEnabled && hasPermission("cost:read");
-  const [tab, setTab] = useState("structure");
-  const [chosen, setChosen] = useState<string | null>(null);
+  // Dış bağlantı (dokuma iş emri "Yapı") `?tab=lift&fabric=<itemId>` ile doğrudan Armür sekmesini açar.
+  const [params] = useSearchParams();
+  const [tab, setTab] = useState(() => (DETAIL_TABS.has(params.get("tab") ?? "") ? params.get("tab")! : "structure"));
+  const [chosen, setChosen] = useState<string | null>(() => params.get("fabric"));
   const design = useQuery({ queryKey: ["weave-designs", "detail", id], queryFn: () => weaveDesignApi.get(id), enabled: !!id });
   const fabrics = useQuery({ queryKey: ["weave-designs", "fabrics", id], queryFn: () => listDesignFabrics(id), enabled: !!id });
   const fabricList = fabrics.data ?? [];

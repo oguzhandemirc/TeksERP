@@ -29,7 +29,7 @@ export function InstructionPrintDialog({ orderId, dispatch, onClose }: { orderId
       <DialogContent className="flex h-[90vh] max-h-[90vh] max-w-4xl flex-col gap-3">
         <DialogHeader>
           <DialogTitle>{dispatch ? `${dispatch.dispatchNo} — irsaliye ve çözgü talimatı` : "Çözgü talimatı"}</DialogTitle>
-          <DialogDescription>Devereciye giden belge: kart, iplik başına harf/tel/denye, dizilim, tarak, levent ve termin. Fiyat ve stok bilgisi yer almaz.</DialogDescription>
+          <DialogDescription>Devereciye giden belge: kart, iplik başına harf/tel/denye, dizilim ve tel düzeni şeridi, tarak planı, levent ve termin. Fiyat ve stok bilgisi yer almaz.</DialogDescription>
         </DialogHeader>
         {dispatch && (
           <div className="flex items-center gap-2">

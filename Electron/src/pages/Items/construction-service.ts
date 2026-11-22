@@ -65,6 +65,8 @@ export interface EffectiveConstruction {
     weftProgramNo: string | null;
     picksInRepeatTotal: number;
     yarns: Array<{ sortOrder: number; letter: string; picksInRepeat: number; yarnItem: YarnRef; cardYarnItem: YarnRef | null }>;
+    /** Atkı seçici: atkı başına 1-tabanlı iplik satırı no (sunucu açar); eski backend göndermez. */
+    pickSequence?: number[] | null;
   } | null;
   weaveDesign: { id: string; code: string; name: string; kind: string; loomFileName: string | null; frameCount: number | null } | null;
   warnings: Array<{ code: string; message: string }>;

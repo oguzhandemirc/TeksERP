@@ -13,12 +13,18 @@ import type { WeavingOrderOverview } from "./overview/types";
 
 const overview = vi.fn();
 const listCursor = vi.fn();
+const construction = vi.fn();
+const cardHtml = vi.fn();
 vi.mock("./service", () => ({
   weavingOrderService: {
     overview: (...a: unknown[]) => overview(...a),
     listCursor: (...a: unknown[]) => listCursor(...a),
+    construction: (...a: unknown[]) => construction(...a),
+    cardHtml: (...a: unknown[]) => cardHtml(...a),
   },
 }));
+const printTracked = vi.fn();
+vi.mock("@/lib/print", () => ({ printTracked: (...a: unknown[]) => printTracked(...a) }));
 const openTarget = vi.fn();
 vi.mock("@/components/layout/tabs/use-tab-target", () => ({ useOpenTarget: () => openTarget }));
 let tezgahEnabled = true;
@@ -64,6 +70,10 @@ function renderSheet(order: WeavingOrder = ROW) {
 beforeEach(() => {
   overview.mockReset();
   openTarget.mockReset();
+  construction.mockReset();
+  construction.mockResolvedValue({ itemId: "i1", recipeId: null, variantCode: null, widthCm: null, groundWarp: null, warpLayers: [], weft: null, weaveDesign: null, warnings: [] });
+  cardHtml.mockReset();
+  printTracked.mockReset();
   tezgahEnabled = true;
   useAuthStore.getState().setUser({ userId: "u1", username: "planci", permissions: ["weavingorder:read", "weavingorder:write", "loom:live-view"] } as never);
 });
@@ -175,5 +185,55 @@ describe("WeavingOrderDetailSheet — kalan metre", () => {
     await screen.findByTestId("wo-ov-progress");
     if (text) expect(screen.getByTestId("wo-ov-remaining")).toHaveTextContent(text);
     else expect(screen.queryByTestId("wo-ov-remaining")).toBeNull();
+  });
+});
+
+describe("WeavingOrderDetailSheet — Yapı (kart görseli)", () => {
+  const YARN = { id: "y", code: "IP1", name: "75 den", linearDensityDen: "75" };
+  const CONSTRUCTION = {
+    itemId: "i1", recipeId: null, variantCode: null, widthCm: null, warnings: [], weavingOrderNumber: "DK-0007",
+    groundWarp: {
+      id: "w1", code: "Ç1", name: "UA6007-Ç", endsCount: 30, takeUpPct: null, wastePct: null, yarnItem: YARN,
+      yarns: [{ yarnItemId: "y", endsCount: 20, sortOrder: 0, yarnItem: YARN }, { yarnItemId: "y2", endsCount: 10, sortOrder: 1, yarnItem: { ...YARN, name: "150 den" } }],
+      sequenceNote: "2A 1B", endsSequence: { repeat: [1, 1, 2], repeatCount: 10, remainder: 0, totalEnds: 30, matchesYarnEnds: true },
+    },
+    warpLayers: [],
+    weft: { weftSpecId: "f1", code: "A1", name: "Atkı 1", picksPerCm: null, sequenceCode: "A2 B1", weftProgramNo: null, picksInRepeatTotal: 3,
+      yarns: [{ sortOrder: 0, letter: "A", picksInRepeat: 2, yarnItem: YARN, cardYarnItem: null }, { sortOrder: 1, letter: "B", picksInRepeat: 1, yarnItem: YARN, cardYarnItem: null }],
+      pickSequence: [1, 1, 2] },
+    weaveDesign: { id: "d1", code: "UA6007", name: "Döner", kind: "LENO", loomFileName: "X.DOP", frameCount: 4, liftPlan: [[1, 0, 1, 0], [0, 1, 0, 1], [1, 1, 0, 0]], lenoFrames: [1] },
+  };
+
+  it("⭐ mini armür + seçici + çözgü bandı; ızgara tık → desen kartının Armür sekmesi; yazdır → DESEN_KARTI", async () => {
+    overview.mockReturnValue(ok({ progress: PROGRESS, liveRuns: EMPTY }));
+    construction.mockResolvedValue(CONSTRUCTION);
+    cardHtml.mockResolvedValue("<html>kart</html>");
+    useAuthStore.getState().setUser({ userId: "u1", username: "planci", permissions: ["weavingorder:read", "warpspec:read"] } as never);
+    const h = renderSheet();
+    const lift = await screen.findByTestId("wo-construction-lift");
+    expect(construction).toHaveBeenCalledWith("wo1");
+    expect(lift.querySelector("svg")?.getAttribute("aria-label")).toContain("3 atkı, 4 çerçeve, atkı seçici");
+    expect(screen.getByTestId("warp-ends-strip")).toHaveTextContent("Rapor 3 tel");
+    fireEvent.click(lift.querySelector("button") ?? lift);
+    expect(h.onClose).toHaveBeenCalled();
+    expect(openTarget.mock.calls[0]![0]).toBe("/definitions/weave-designs/d1?tab=lift&fabric=i1");
+    fireEvent.click(screen.getByTestId("wo-print-card"));
+    await waitFor(() => expect(printTracked).toHaveBeenCalledWith({ subject: { kind: "DESEN_KARTI", no: "DK-0007" }, html: "<html>kart</html>" }));
+  });
+
+  it("desen kartı yoksa armür çizilmez, çözgü bandı kalır, yazdır kapalı", async () => {
+    overview.mockReturnValue(ok({ progress: PROGRESS, liveRuns: EMPTY }));
+    construction.mockResolvedValue({ ...CONSTRUCTION, weaveDesign: null });
+    renderSheet();
+    await screen.findByTestId("warp-ends-strip");
+    expect(screen.queryByTestId("wo-construction-lift")).toBeNull();
+    expect(screen.getByTestId("wo-print-card")).toBeDisabled();
+  });
+
+  it("yapısız ürün → boş cümle, yazdır yok", async () => {
+    overview.mockReturnValue(ok({ progress: PROGRESS, liveRuns: EMPTY }));
+    renderSheet();
+    expect(await screen.findByTestId("wo-construction-empty")).toBeTruthy();
+    expect(screen.queryByTestId("wo-print-card")).toBeNull();
   });
 });
