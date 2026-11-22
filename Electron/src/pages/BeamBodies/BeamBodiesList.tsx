@@ -7,6 +7,7 @@ import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
 import { PermissionGate } from "@/components/PermissionGate";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/data-table/DataTable";
+import { minAgeFilter } from "@/components/data-table/StatusAgeCell";
 import type { FilterDef } from "@/components/data-table/FilterBar";
 import { DefFilterRow } from "@/components/data-table/filter-row/DefFilterRow";
 import { persistConfigOf } from "@/components/data-table/filter-row/def-row-filters";
@@ -27,6 +28,7 @@ export const FILTERS: FilterDef[] = [
   { kind: "lookup", key: "warehouseId", label: "Depo", service: warehouseService, queryKey: "warehouses-beam-body-filter" },
   { kind: "lookup", key: "machineId", label: "Tezgâh (takılı)", service: machineService, queryKey: "machines-beam-body-filter" },
   { kind: "select", key: "ownerReturnDue", label: "Sahibine iade", options: [{ value: "true", label: "Yalnız iade edilecekler" }] },
+  minAgeFilter([7, 14, 30, 60, 90]),
   { kind: "select", key: "active", label: "Kart", options: [{ value: "active", label: "Aktif" }, { value: "inactive", label: "Pasif" }, { value: "all", label: "Hepsi" }] },
 ];
 const PERSIST = persistConfigOf(FILTERS);
@@ -55,6 +57,9 @@ export function BeamBodiesList() {
               { key: "all", label: "Toplam", value: s.count },
               ...BEAM_BODY_OWNER_KINDS.map((k) => ({ key: k, label: BEAM_BODY_OWNER_LABELS[k], value: s.byOwner[k] ?? 0 })),
               { key: "due", label: "Sahibine iade edilecek", value: s.ownerReturnDue, tone: s.ownerReturnDue > 0 ? ("warn" as const) : undefined, title: "Bizim olmayan, boş ve bizde duran gövdeler" },
+              ...(s.staleOut !== undefined
+                ? [{ key: "stale", label: `${s.staleOutDays ?? 30}+ gündür dışarıda`, value: s.staleOut, tone: s.staleOut > 0 ? ("warn" as const) : undefined, title: "Deverecide/fasoncuda ya da dolu dışarıda bu kadar gündür duran gövdeler — kayıp gövdeyi yakalamak için" }]
+                : []),
             ]}
           />
         </ListBand>

@@ -82,7 +82,7 @@ const ListQuery = z.object({
   cursor: z.string().max(200).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
 }).passthrough();
-const FILTERS = ["owner", "ownerCustomerId", "status", "subcontractorId", "machineId", "warehouseId", "ownerReturnDue", "active"];
+const FILTERS = ["owner", "ownerCustomerId", "status", "subcontractorId", "machineId", "warehouseId", "ownerReturnDue", "active", "minAgeDays"];
 const ACTIVE = ["active", "inactive", "all"] as const;
 
 /**
@@ -152,8 +152,12 @@ router.get("/", requirePermission("beam-body:read"), wrap(async (req) => {
   if (due.length > 1 || (due[0] !== undefined && due[0] !== "true" && due[0] !== "false")) throw AppError.badRequest("filter[ownerReturnDue] true ya da false olmalı", { code: "FILTER_INVALID" });
   const active = readFilterList(f.active);
   if (active.length > 1 || (active[0] !== undefined && !(ACTIVE as readonly string[]).includes(active[0]))) throw AppError.badRequest("filter[active] active, inactive ya da all olmalı", { code: "FILTER_INVALID" });
+  const age = readFilterList(f.minAgeDays);
+  const minAgeDays = age[0] === undefined ? undefined : Number(age[0]);
+  if (age.length > 1 || (minAgeDays !== undefined && !(Number.isInteger(minAgeDays) && minAgeDays >= 1 && minAgeDays <= 3650))) throw AppError.badRequest("filter[minAgeDays] 1–3650 arası tam gün olmalı", { code: "FILTER_INVALID" });
   const q = parse(ListQuery, req.query);
   const out = await listBeamBodies({
+    minAgeDays,
     owner: owner as BeamBodyOwnerKind[],
     ownerCustomerId: readIdCondition(f.ownerCustomerId),
     status: status as BeamBodyStatus[],

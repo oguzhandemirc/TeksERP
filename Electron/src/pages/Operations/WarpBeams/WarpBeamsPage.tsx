@@ -26,7 +26,9 @@ import { weavingOrderPickerService } from "@/pages/Operations/WeavingOrders/serv
 import type { WeavingOrder } from "@/pages/Operations/WeavingOrders/types";
 import { warpSpecService } from "@/pages/WarpSpecs/service";
 import { warpBeamColumns } from "./columns";
-import { warpBeamService } from "./service";
+import { warpBeamService, type WarpBeamPage } from "./service";
+import { BandStats, ListBand } from "@/components/layout/ListPage";
+import { minAgeFilter } from "@/components/data-table/StatusAgeCell";
 import { WarpBeamFormDialog } from "./WarpBeamFormDialog";
 import { WindDialog } from "./WindDialog";
 import { CancelDialog } from "./CancelDialog";
@@ -46,6 +48,7 @@ export const FILTERS: FilterDef[] = [
   { kind: "lookup", key: "warpSpecId", label: "Çözgü kartı", service: warpSpecService, queryKey: "warp-specs-beam-filter" },
   // Z2: `filter[weavingOrderId]` (Z1 ucu) — etiket dokuma no.
   { kind: "lookup", key: "weavingOrderId", label: TERIM.dokumaIsEmri.tekil, service: weavingOrderPickerService, queryKey: "weaving-orders-beam-filter", getLabel: (w) => (w as unknown as WeavingOrder).weavingOrderNumber },
+  minAgeFilter([7, 14, 30, 60]),
 ];
 
 export const PERSIST = persistConfigOf(FILTERS);
@@ -53,20 +56,36 @@ export const PRIMARY = ["status", "warpSpecId", "weavingOrderId"];
 
 const BEAM_ACTION_KINDS = new Set<string>(["mount", "dismount", "consume", "adjust", "exhaust", "scrap", "undo"]);
 
+/** S4 özet şeridi — sayı sunucuda, liste ile aynı where (ilk sayfa). */
+function SummaryBand({ page }: { page: unknown }) {
+  const s = (page as WarpBeamPage | undefined)?.summary;
+  if (!s) return null;
+  return (
+    <ListBand>
+      <BandStats
+        label="Levent özeti"
+        scope="Süzgece uyan"
+        items={[{ key: "staleFull", label: `${s.staleFullDays}+ gündür dolu bekliyor`, value: s.staleFull, tone: s.staleFull > 0 ? "warn" : undefined, title: "Sarılmış, hazır (tezgâha takılmamış) ve bu kadar gündür bekleyen leventler — bağlı sermaye" }]}
+      />
+    </ListBand>
+  );
+}
+
+const TABLE_OPTIONS = {
+  queryKey: WARP_BEAMS_QUERY_KEY,
+  fetchFn: warpBeamService.listCursor,
+  columns: warpBeamColumns,
+  defaultPageSize: 50,
+  enableSelection: false,
+  persistFilters: PERSIST,
+};
+
 export function WarpBeamsPage() {
   const { dialog, setDialog, actions } = usePageDialog();
   const { save, deleteDraft, wind, cancel, act } = useWarpBeamMutations(() => setDialog(null));
   const mountTracking = useDevereMountTracking();
-  const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<WarpBeam>({
-    queryKey: WARP_BEAMS_QUERY_KEY,
-    fetchFn: warpBeamService.listCursor,
-    columns: warpBeamColumns,
-    defaultPageSize: 50,
-    enableSelection: false,
-    persistFilters: PERSIST,
-  });
+  const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<WarpBeam>(TABLE_OPTIONS);
   const formTarget = dialog?.kind === "new" ? null : dialog?.kind === "edit" ? dialog.target : undefined;
-
   return (
     <PageShell>
       <PageHeader
@@ -85,6 +104,7 @@ export function WarpBeamsPage() {
         }
       />
       <RelocatedToolStrip host="/operations/warp-beams" />
+      <SummaryBand page={query.data?.pages[0]} />
       <DefFilterRow filters={FILTERS} primaryKeys={PRIMARY} search={search} onSearchChange={setSearch} searchHint="Levent no, gövde no ya da çözgü kartıyla ara" trailing={<SavedViewsMenu compact />} tools={{ table, fetchAll, exportName: "Leventler" }} />
       <DataTable<WarpBeam>
         table={table}
