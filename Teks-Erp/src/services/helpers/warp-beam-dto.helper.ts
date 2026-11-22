@@ -90,6 +90,9 @@ export interface WarpBeamDto {
   setKey: string | null;
   /** Fason devere D5: dönüş kabulünde doğduğu devere siparişi (yoksa null). */
   warpingOrderId: string | null;
+  /** S4 bekleme yaşı: şimdiki duruma giriş anı + fabrika günü farkı — yalnız liste ucunda dolu (`status-age.helper`). */
+  statusSince?: Date;
+  statusAgeDays?: number;
 }
 
 export function toWarpBeamEventDto(e: WarpBeamEventRow): WarpBeamEventDto {

@@ -62,6 +62,9 @@ export interface BeamBody {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  /** S4: şimdiki duruma giriş + fabrika günü farkı — yalnız liste ucu; eski backend göndermez. */
+  statusSince?: string;
+  statusAgeDays?: number;
 }
 
 export interface BeamBodySummary {
@@ -69,6 +72,9 @@ export interface BeamBodySummary {
   byOwner: Record<BeamBodyOwnerKind, number>;
   byStatus: Record<BeamBodyStatus, number>;
   ownerReturnDue: number;
+  /** S4: `staleOutDays`+ gündür dışarıda (devereci/fasoncu ya da dolu dışarıda) — eski backend göndermez. */
+  staleOut?: number;
+  staleOutDays?: number;
 }
 
 export interface BeamBodyEvent {

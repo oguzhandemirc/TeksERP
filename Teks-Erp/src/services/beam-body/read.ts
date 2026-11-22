@@ -16,6 +16,7 @@ import { BEAM_BODY_EVENT_SELECT, beamBodyEventUndoBlock } from "../helpers/beam-
 import { sequentialTx } from "../helpers/tx-sequential-relations.helper";
 import { matchBeamBodyNo } from "../helpers/beam-body-no.helper";
 import { readDevereBodyNoLooseMatch } from "../system-setting/devere-body";
+import { BODY_STALE_OUT_DAYS, beamBodyMinAgeWhere, beamBodyStatusAges } from "../helpers/status-age.helper";
 
 type Db = Pick<Prisma.TransactionClient, "beamBody">;
 type IdCond = string | { in: string[] } | null;
@@ -52,6 +53,9 @@ export interface BeamBodyDto {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  /** S4 bekleme yaşı ("X gündür deverecide/iade bekliyor") — yalnız liste ucunda dolu (`status-age.helper`). */
+  statusSince?: string;
+  statusAgeDays?: number;
 }
 
 export function toBeamBodyDto(r: BeamBodyRow): BeamBodyDto {
@@ -85,6 +89,8 @@ export interface BeamBodyListParams {
   machineId: IdCond;
   warehouseId: IdCond;
   ownerReturnDue?: boolean;
+  /** S4: şimdiki durumunda en az bu kadar fabrika günüdür duranlar. */
+  minAgeDays?: number;
   /** Varsayılan yalnız aktif; `all` pasifleri de getirir. */
   active: "active" | "inactive" | "all";
   search?: string;
@@ -93,7 +99,7 @@ export interface BeamBodyListParams {
 }
 
 /** Liste + cursor + özet şeridi TEK where'den. */
-export function buildBeamBodyListWhere(p: Omit<BeamBodyListParams, "cursor" | "limit">): Prisma.BeamBodyWhereInput {
+export function buildBeamBodyListWhere(p: Omit<BeamBodyListParams, "cursor" | "limit">, now: Date = new Date()): Prisma.BeamBodyWhereInput {
   const and: Prisma.BeamBodyWhereInput[] = [];
   if (p.active !== "all") and.push({ isActive: p.active === "active" });
   if (p.owner.length > 0) {
@@ -109,6 +115,7 @@ export function buildBeamBodyListWhere(p: Omit<BeamBodyListParams, "cursor" | "l
   if (p.machineId) and.push({ machineId: p.machineId });
   if (p.warehouseId) and.push({ warehouseId: p.warehouseId });
   if (p.ownerReturnDue === true) and.push(BEAM_BODY_OWNER_RETURN_DUE_WHERE);
+  if (p.minAgeDays && p.minAgeDays > 0) and.push(beamBodyMinAgeWhere(p.minAgeDays, now));
   const q = p.search?.trim();
   if (q) and.push({ bodyNo: { contains: q, mode: "insensitive" } });
   return and.length > 0 ? { AND: and } : {};
@@ -119,10 +126,13 @@ export interface BeamBodyListSummary {
   byOwner: Record<BeamBodyOwnerKind, number>;
   byStatus: Record<BeamBodyStatus, number>;
   ownerReturnDue: number;
+  /** S4: `staleOutDays`+ gündür dışarıda (devereci/fasoncu ya da dolu dışarıda) duran gövde. */
+  staleOut: number;
+  staleOutDays: number;
 }
 
-export async function listBeamBodies(p: BeamBodyListParams): Promise<{ data: BeamBodyDto[]; nextCursor: string | null; summary: BeamBodyListSummary }> {
-  const where = buildBeamBodyListWhere(p);
+export async function listBeamBodies(p: BeamBodyListParams, now: Date = new Date()): Promise<{ data: BeamBodyDto[]; nextCursor: string | null; summary: BeamBodyListSummary }> {
+  const where = buildBeamBodyListWhere(p, now);
   const cursor = p.cursor ? decodeCursor(p.cursor) : null;
   if (p.cursor && !cursor) throw AppError.badRequest("Geçersiz sayfa imleci.", { code: "CURSOR_INVALID" });
   const rows = await prisma.beamBody.findMany({
@@ -133,12 +143,20 @@ export async function listBeamBodies(p: BeamBodyListParams): Promise<{ data: Bea
   });
   const hasMore = rows.length > p.limit;
   const page = hasMore ? rows.slice(0, p.limit) : rows;
-  return { data: page.map(toBeamBodyDto), nextCursor: hasMore ? buildNextCursor(page[page.length - 1]) : null, summary: await summarize(where) };
+  const ages = await beamBodyStatusAges(prisma, page, now);
+  const data = page.map((r) => {
+    const a = ages.get(r.id);
+    return { ...toBeamBodyDto(r), ...(a ? { statusSince: a.statusSince.toISOString(), statusAgeDays: a.statusAgeDays } : {}) };
+  });
+  return { data, nextCursor: hasMore ? buildNextCursor(page[page.length - 1]) : null, summary: await summarize(where, now) };
 }
 
-async function summarize(where: Prisma.BeamBodyWhereInput): Promise<BeamBodyListSummary> {
+async function summarize(where: Prisma.BeamBodyWhereInput, now: Date): Promise<BeamBodyListSummary> {
   const groups = await prisma.beamBody.groupBy({ by: ["status", "ownerRole"], where, _count: { _all: true } });
   const returnDue = await prisma.beamBody.count({ where: { AND: [where, BEAM_BODY_OWNER_RETURN_DUE_WHERE] } });
+  const staleOut = await prisma.beamBody.count({
+    where: { AND: [where, { status: { in: [BeamBodyStatus.AT_SUBCONTRACTOR, BeamBodyStatus.FULL_OUT] } }, beamBodyMinAgeWhere(BODY_STALE_OUT_DAYS, now)] },
+  });
   const byOwner = Object.fromEntries((["OURS", ...Object.values(BeamBodyOwnerRole)] as BeamBodyOwnerKind[]).map((k) => [k, 0])) as Record<BeamBodyOwnerKind, number>;
   const byStatus = Object.fromEntries(Object.values(BeamBodyStatus).map((s) => [s, 0])) as Record<BeamBodyStatus, number>;
   let count = 0;
@@ -147,7 +165,7 @@ async function summarize(where: Prisma.BeamBodyWhereInput): Promise<BeamBodyList
     byStatus[g.status] += g._count._all;
     count += g._count._all;
   }
-  return { count, byOwner, byStatus, ownerReturnDue: returnDue };
+  return { count, byOwner, byStatus, ownerReturnDue: returnDue, staleOut, staleOutDays: BODY_STALE_OUT_DAYS };
 }
 
 export interface BeamBodyEventDto {

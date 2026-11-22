@@ -32,7 +32,7 @@ export const BEAM_BODIES_PATH = "/definitions/beam-bodies";
 export const beamBodyPath = (id: string) => `${BEAM_BODIES_PATH}/${id}`;
 
 /** Backend `FILTERS` (beam-body.routes.ts) ile birebir — tanınmayan anahtar 400. */
-export const BEAM_BODY_LIST_FILTERS = ["owner", "ownerCustomerId", "status", "subcontractorId", "machineId", "warehouseId", "ownerReturnDue", "active"] as const;
+export const BEAM_BODY_LIST_FILTERS = ["owner", "ownerCustomerId", "status", "subcontractorId", "machineId", "warehouseId", "ownerReturnDue", "active", "minAgeDays"] as const;
 
 export type BeamBodyPage = CursorPaginatedResponse<BeamBody> & { summary: BeamBodySummary | null };
 
