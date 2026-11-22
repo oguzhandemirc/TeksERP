@@ -66,8 +66,9 @@ export function ScanCard({ s, code, setCode, onCamera }: { s: BeamBodyCountState
   return (
     <View style={ds.card}>
       <Text style={ds.cardTitle}>Gövde okut</Text>
-      <ScannerEntryBar value={code} onChangeText={setCode} placeholder="Gövde QR / no okut-yaz…" onResolve={() => { s.scan(code); setCode(''); }} onScan={s.isOnline ? onCamera : undefined} scanCtaLabel="GÖVDE QR OKUT" tone="blue" hardwareListening />
-      <Text style={ds.hint}>Sayım kaydı tutulmaz; fark satırındaki öneriyle düzeltilir.</Text>
+      <ScannerEntryBar value={code} onChangeText={setCode} placeholder="Gövde QR / no okut-yaz…" onResolve={() => { s.scan(code); setCode(''); }} onScan={s.isOnline ? onCamera : undefined} scanCtaLabel="GÖVDE QR OKUT" tone="blue" hardwareListening compactCta />
+      {/* compactCta: kamera düğmesi alt bantta (GÖVDE OKUT); kartta ikinci kopya çizilmez */}
+      <Text style={ds.hint}>Alttaki GÖVDE OKUT kamerayı açar; el terminali tetiği de okur, kamerada no elle yazılabilir. Sayım kaydı tutulmaz; fark satırındaki öneriyle düzeltilir.</Text>
     </View>
   );
 }
