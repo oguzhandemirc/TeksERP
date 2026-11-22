@@ -33,7 +33,7 @@ export function useDevereScreen() {
   // Faz 3 (E3): "Tezgahta" sekmesi — yalnız bağlam `mountTracking` derse çizilir ve sorgulanır (kapalıyken sıfır fark).
   const mountTracking = context.data?.mountTracking === true;
   const live = useQuery({ queryKey: [...BEAMS_KEY, 'LIVE'], queryFn: () => warpBeamService.list(['READY', 'MOUNTED'], 100), staleTime: 15_000, enabled: mountTracking });
-  const mountForm = useMountForm({ loomMachines: context.data?.loomMachines ?? [], methodRequired: context.data?.mountTrackingRequired === true, onDone: () => void live.refetch() });
+  const mountForm = useMountForm({ loomMachines: context.data?.loomMachines ?? [], methodRequired: context.data?.mountTrackingRequired === true, onDone: () => void live.refetch(), looseBodyNo: context.data?.bodyNoLooseMatch === true });
   // Gövde çakışması ERKEN uyarısı (sunucu `assertPhysicalBeamFreeTx` aynası): canlı levent = READY · SHIPPED_OUT (ready) ∪ MOUNTED (live).
   const physicalBusyBeams = useMemo(() => {
     const seen = new Map<string, WarpBeam>();
