@@ -185,6 +185,8 @@ const OLAY_SABLONLARI: Record<string, Sablon> = {
   "LABEL_PRINT_EVENT:CREATE": (_s, b) => [b.kisi, m(", etiket basımını kaydetti")],
   // Basılı belge (kayıt şablonsuz basıldı: sistem şablonu)
   "PRINTED_DOCUMENT:SYSTEM_TEMPLATE_PRINT": olay("belirtme", "sistem şablonuyla bastı"),
+  // Gövde mutabakatı (devere S6): ilk basım v1'i dondurur
+  "PRINTED_DOCUMENT:FREEZE": olay("belirtme", "ilk sürümünü dondurdu"),
   // Sarf stok defteri: yalnız mal kabul girişi audit'lenir (defter satırı düzenlenmez/silinmez)
   "CONSUMABLE_MOVEMENT:CREATE": olusturdu,
   // Kurşun istasyonu gramaj düğmeleri + gram fiyatı (OIE 2026-11): kayıt istasyondur

@@ -11,9 +11,10 @@ import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { AuditService } from "../audit.service";
 import { BEAM_BODY_EVENT_LABELS, BEAM_BODY_OWNER_LABELS, type BeamBodyForwardKind } from "../../constants/beam-body";
-import { BEAM_BODY_EFFECTIVE_EVENT_WHERE, assertBeamBodyEnabled } from "../helpers/beam-body.helper";
+import { assertBeamBodyEnabled } from "../helpers/beam-body.helper";
 import { factoryYmd } from "../../constants/time";
-import { factoryDaysSince, fasonDayThreshold } from "../helpers/order-where.helper";
+import { fasonDayThreshold } from "../helpers/order-where.helper";
+import { beamBodyStatusAges, toStatusAge } from "../helpers/status-age.helper";
 import {
   renderBeamBodyStatementHtml, renderBeamBodyStatementTables,
   type BeamBodyStatementBody, type BeamBodyStatementDoc, type BeamBodyStatementMove,
@@ -83,18 +84,16 @@ export async function buildBeamBodyStatement(db: PrintedDocDb, subcontractorId: 
       ownerCustomer: { select: { name: true } }, currentWarpBeam: { select: { beamNo: true } },
     },
   });
-  const last = rows.length
-    ? await db.beamBodyEvent.groupBy({ by: ["bodyId"], where: { bodyId: { in: rows.map((r) => r.id) }, ...BEAM_BODY_EFFECTIVE_EVENT_WHERE }, _max: { createdAt: true } })
-    : [];
-  const sinceOf = new Map(last.map((g) => [g.bodyId, g._max.createdAt]));
+  // "Kaç gündür orada" — liste yaşıyla aynı tek kaynak (status-age helper, S4).
+  const ages = await beamBodyStatusAges(db, rows, now);
   const bodies: BeamBodyStatementBody[] = rows.map((r, i) => {
-    const since = sinceOf.get(r.id) ?? r.createdAt;
+    const age = ages.get(r.id) ?? toStatusAge(r.createdAt, now);
     const full = r.status === BeamBodyStatus.FULL_OUT;
     return {
       seq: i + 1, bodyNo: r.bodyNo,
       stateText: full ? `Dolu${r.currentWarpBeam ? ` — ${r.currentWarpBeam.beamNo}` : ""}` : "Boş",
       ownerText: r.ownerCustomer?.name ?? BEAM_BODY_OWNER_LABELS.OURS,
-      sinceAt: since.toISOString(), ageDays: factoryDaysSince(since, now), notes: r.notes,
+      sinceAt: age.statusSince.toISOString(), ageDays: age.statusAgeDays, notes: r.notes,
     };
   });
   const from = fasonDayThreshold(BEAM_BODY_STATEMENT_PERIOD_DAYS - 1, now);
@@ -168,7 +167,9 @@ export async function printBeamBodyStatement(subcontractorId: string, userId: st
   if (!created) throw AppError.internal("Mutabakat dondurulamadı.");
   await AuditService.log({
     userId, action: "CREATE", tableName: "PRINTED_DOCUMENT", recordId: created.id,
-    newData: { docType: DOC_TYPE, sourceId: subcontractorId, documentNo: created.documentNo, version: created.version, event: latest ? "REISSUE" : "FREEZE", reason: latest ? AUTO_REISSUE_REASON : null },
+    newData: { docType: DOC_TYPE, sourceId: subcontractorId, documentNo: created.documentNo, version: created.version,
+      // Olay literal yazılır: anlatı kapsama taraması (`test_audit_anlati` §5) çifti böyle görür.
+      ...(latest ? { event: "REISSUE", reason: AUTO_REISSUE_REASON } : { event: "FREEZE", reason: null }) },
   });
   return { version: created.version, documentNo: created.documentNo, created: true };
 }

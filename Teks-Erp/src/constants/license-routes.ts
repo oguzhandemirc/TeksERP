@@ -201,6 +201,7 @@ export const DECLARED_CLOSED_ROUTES: readonly LicenseRouteRule[] = [
   { method: "POST", path: "/api/printed-documents/:docType/:sourceId/reissue", reason: "yeni resmi belge sürümü = yeni iş" },
   { method: "POST", path: "/api/labels/rolls/:id/seed-snapshot", reason: "etiket içeriğini dondurur (yazma)" },
   { method: "POST", path: "/api/labels/rolls/seed-snapshot-bulk", reason: "etiket içeriğini dondurur (yazma)" },
+  { method: "POST", path: "/api/beam-bodies/statement/print", reason: "içerik değiştiyse yeni mutabakat sürümü dondurur (yazma); son sürüm GET ile okunur" },
 ];
 
 function splitPath(path: string): string[] {

@@ -72,8 +72,10 @@ async function main(): Promise<void> {
     (await createBeamBody({ clientToken: randomUUID(), bodyNo: `${TAG}-${++n}`, owner, warehouseId: W, notes }, U)).data;
   const ship = (id: string, subId: string) => applyBeamBodyTransition(id, { kind: "SHIP_EMPTY", subcontractorId: subId }, U);
   const mine = <T extends { bodyNo: string }>(rows: T[]) => rows.filter((r) => r.bodyNo.startsWith(TAG));
+  // Ortak fikstür firmaları: önceki koşudan kalan mutabakat sürümleri baştan da süpürülür.
+  const temizleMutabakat = () => prisma.printedDocument.deleteMany({ where: { docType: DOC, sourceId: { in: [X.id, Y.id] } } });
   try {
-    await prisma.printedDocument.deleteMany({ where: { docType: DOC, sourceId: { in: [X.id, Y.id] } } });
+    await temizleMutabakat();
     await setSetting(SETTING_KEYS.DEVERE_ENABLED, "true");
     await setSetting(SETTING_KEYS.DEVERE_BEAM_BODY_MODE, "OPTIONAL");
     const c1 = await prisma.customer.create({ data: { code: `${TAG}-C1`, name: `${TAG} SAHIP` }, select: { id: true, name: true } });
@@ -153,7 +155,7 @@ async function main(): Promise<void> {
     const mount = routes.indexOf("router.use(\"/\", beamBodyStatementRoutes)");
     check("§7 `/statement` alt-router'ı `/:id`den önce bağlı", mount > 0 && mount < routes.indexOf("router.get(\"/:id\""));
   } finally {
-    await prisma.printedDocument.deleteMany({ where: { docType: DOC, sourceId: { in: [X.id, Y.id] } } });
+    await temizleMutabakat();
     const bodies = await prisma.beamBody.findMany({ where: { bodyNo: { startsWith: TAG } }, select: { id: true } });
     const ids = bodies.map((x) => x.id);
     const rets = await prisma.beamBodyReturn.findMany({ where: { OR: [{ clientToken: { in: returnTokens } }, { items: { some: { bodyId: { in: ids } } } }] }, select: { id: true } });
