@@ -27,7 +27,7 @@ export function BeamBodyTimeline({ events, onUndo }: { events: BeamBodyEvent[]; 
               {e.reversed && <Badge variant="outline" className="font-normal">geri alındı</Badge>}
               <span className="text-xs tabular-nums text-muted-foreground">{eventTimeText(e.createdAt)}</span>
               {e.undoable && (
-                <PermissionGate permission="beam-body:write">
+                <PermissionGate permission="beam-body:cancel">
                   <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => onUndo(e)}>
                     <Undo2 className="mr-1 h-3.5 w-3.5" /> Geri al
                   </Button>

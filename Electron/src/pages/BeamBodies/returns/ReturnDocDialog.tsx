@@ -34,7 +34,7 @@ export function ReturnDocDialog({ docId, initial, onClose }: { docId: string; in
         </div>
         <DialogFooter>
           {d?.status === "ACTIVE" && (
-            <PermissionGate permission="beam-body:write">
+            <PermissionGate permission="beam-body:cancel">
               <Button variant="outline" className="mr-auto text-destructive" onClick={() => setCancelling(true)}>
                 <Ban className="mr-1 h-4 w-4" /> Belgeyi iptal et
               </Button>

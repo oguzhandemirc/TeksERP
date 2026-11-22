@@ -257,12 +257,12 @@ router.get("/:id/events", requirePermission("beam-body:read"), wrap(async (req) 
  *       200: { description: İptal edildi }
  *       409: { description: "BEAM_BODY_HAS_HISTORY · BEAM_BODY_EVENT_REVERSED · BEAM_BODY_INACTIVE" }
  */
-router.get("/:id/cancel-registration/preview", requirePermission("beam-body:write"), wrap(async (req) => {
+router.get("/:id/cancel-registration/preview", requirePermission("beam-body:cancel"), wrap(async (req) => {
   const id = parse(Id, req.params.id);
   return { status: 200, body: { success: true, data: await previewCancelBeamBodyRegistration(id) } };
 }));
 
-router.post("/:id/cancel-registration", requirePermission("beam-body:write"), wrap(async (req) => {
+router.post("/:id/cancel-registration", requirePermission("beam-body:cancel"), wrap(async (req) => {
   const id = parse(Id, req.params.id);
   const body = parse(CancelBody, req.body);
   const data = await cancelBeamBodyRegistration(id, body.reason, req.user!.userId);
