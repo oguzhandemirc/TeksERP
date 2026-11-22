@@ -41,6 +41,7 @@ const ON_EK_GRUP: Readonly<Record<string, string>> = {
   planlama: "Planlama",
   kalite: "Kalite",
   dokuma: "Dokuma",
+  devere: "Dokuma",
   sevkiyat: "Sevkiyat",
   fason: "Fason",
   stok: "Depo",
