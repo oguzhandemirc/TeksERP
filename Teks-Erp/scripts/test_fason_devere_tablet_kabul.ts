@@ -228,12 +228,15 @@ async function main(): Promise<void> {
       && oA.remainingM === (10000 - Number(wantM)).toFixed(3) && oA.targetLengthM === "10000.000" && oA.beamLines[0]?.beamLengthM === "1000.000", JSON.stringify(oA));
     // Kart iplik satırları (bant) anahtar düzeyinde ölçülür; sızıntı taraması kart dışı yükte.
     const leak = JSON.stringify({ ...all, orders: all.orders.map((o) => ({ ...o, warpSpec: null })) });
+    const badOrder = all.orders.find((o) => !(same(o, ALLOW.order) && same(o.subcontractor, ALLOW.subcontractor) && same(o.warpSpec, ALLOW.warpSpec)
+      && o.warpSpec.yarns.every((y) => same(y, ALLOW.warpYarn))));
+    const leakHit = /fee|price|USD|yarn|salesOrder|netKg|grossKg/i.exec(leak);
     check("§3c OPT-IN allowlist: kök/sipariş/devereci/kart/ayar anahtarları birebir · ücret, iplik, satış siparişi sızmaz",
-      same(all, ALLOW.root) && all.orders.every((o) => same(o, ALLOW.order) && same(o.subcontractor, ALLOW.subcontractor) && same(o.warpSpec, ALLOW.warpSpec)
-        && o.warpSpec.yarns.every((y) => same(y, ALLOW.warpYarn)))
-      && !!oA && oA.warpSpec.yarns.length === 1 && oA.warpSpec.yarns[0]!.letter === "A" && oA.warpSpec.yarns[0]!.endsCount === 3000
-      && all.subcontractors.every((s) => same(s, ALLOW.sub)) && same(all.settings, ALLOW.settings) && !/fee|price|USD|yarn|salesOrder|netKg|grossKg/i.test(leak),
-      oA ? keysOf(oA) : "A yok");
+      same(all, ALLOW.root) && !badOrder && all.subcontractors.every((s) => same(s, ALLOW.sub)) && same(all.settings, ALLOW.settings) && !leakHit,
+      badOrder ? `${keysOf(badOrder)} · kart ${keysOf(badOrder.warpSpec)}` : leakHit ? `sızıntı: …${leak.slice(Math.max(0, leakHit.index - 60), leakHit.index + 40)}…` : keysOf(all));
+    check("§3c' kart görseli G: A'nın kartı tek satır (harf A, 3000 tel) tel düzeni bandı için iner",
+      !!oA && oA.warpSpec.yarns.length === 1 && oA.warpSpec.yarns[0]!.letter === "A" && oA.warpSpec.yarns[0]!.endsCount === 3000,
+      oA ? JSON.stringify(oA.warpSpec) : "A yok");
     const sA = all.subcontractors.find((s) => s.id === sub.id);
     check("§3d devereci listesi açık sipariş sayısıyla (iptal sayılmaz)", !!sA && sA.openOrderCount >= 1 && all.subcontractors.some((s) => s.id === sub2.id));
     check("§3e kabul ayarları ve sınırlar aynen iner (tablet alanı ayara göre çizer)",
