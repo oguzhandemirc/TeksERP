@@ -1,7 +1,9 @@
 // Armür ızgarası çizimi: başlıkta çerçeve no (döner çerçeve turuncu), gövdede kaldırma hücreleri,
-// sağda salt-okunur atkı seçici bloğu (1./2./3.). Tıklama olayı üstte tek dinleyicide çözülür
-// (`data-pick`/`data-frame` hücre, `data-leno` başlık).
-import type { MouseEvent } from "react";
+// sağda salt-okunur atkı seçici bloğu (1./2./3., iplik renginde). Tıklama olayı üstte tek dinleyicide çözülür
+// (`data-pick`/`data-frame` hücre, `data-leno` başlık). `direction` yalnız ÇİZİM sırasını çevirir; `data-pick` veri satırıdır.
+import { useLayoutEffect, useRef, type MouseEvent } from "react";
+import { rowsInDisplayOrder, type WeaveDirection } from "@/components/weave/weave-direction";
+import { yarnColor } from "@/components/weave/weave-palette";
 import { cn } from "@/lib/utils";
 import type { LiftPlan } from "../types";
 
@@ -17,6 +19,8 @@ interface Props {
   selector: number[] | null;
   selCount: number;
   canWrite: boolean;
+  /** Varsayılan "top-down" (eski çağıranlar için bugünkü çizim). */
+  direction?: WeaveDirection;
   onClick: (e: MouseEvent<HTMLDivElement>) => void;
 }
 
@@ -33,18 +37,25 @@ function HeaderRow({ frames, leno, selCount, canWrite }: Pick<Props, "frames" | 
       ))}
       {selCount > 0 && <span className="w-3 shrink-0" />}
       {Array.from({ length: selCount }, (_, i) => (
-        <div key={i} role="columnheader" className={cn(HEAD, "font-semibold text-sky-700 dark:text-sky-400")}>{i + 1}.</div>
+        <div key={i} role="columnheader" className={cn(HEAD, "font-semibold text-foreground")}>{i + 1}.</div>
       ))}
     </div>
   );
 }
 
-export function LiftPlanGrid({ plan, frames, rows, leno, selector, selCount, canWrite, onClick }: Props) {
+export function LiftPlanGrid({ plan, frames, rows, leno, selector, selCount, canWrite, direction = "top-down", onClick }: Props) {
+  const header = <HeaderRow frames={frames} leno={leno} selCount={selCount} canWrite={canWrite} />;
+  const box = useRef<HTMLDivElement>(null);
+  // Alttan yukarı görünümde 1. atkı en altta: uzun ızgara kutusu açılışta alta kaydırılır.
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (el) el.scrollTop = direction === "bottom-up" ? el.scrollHeight : 0;
+  }, [direction]);
   return (
-    <div className="overflow-auto rounded-md border p-2" onClick={onClick} role="grid" aria-label="Armür ızgarası">
-      <HeaderRow frames={frames} leno={leno} selCount={selCount} canWrite={canWrite} />
-      {Array.from({ length: rows }, (_, r) => (
-        <div key={r} className="flex" role="row">
+    <div ref={box} className="max-h-[70vh] w-fit max-w-full overflow-auto rounded-md border p-2" onClick={onClick} role="grid" aria-label="Armür ızgarası">
+      {direction === "top-down" && header}
+      {rowsInDisplayOrder(rows, direction).map((r) => (
+        <div key={r} className="flex" role="row" data-row={r}>
           <span className="w-10 shrink-0 pr-1 text-right text-[10px] tabular-nums text-muted-foreground">{r + 1}</span>
           {Array.from({ length: frames }, (_, c) => {
             const v = plan[r]?.[c];
@@ -55,12 +66,16 @@ export function LiftPlanGrid({ plan, frames, rows, leno, selector, selCount, can
             );
           })}
           {selCount > 0 && <span className="w-3 shrink-0" />}
-          {Array.from({ length: selCount }, (_, i) => (
-            <div key={i} role="gridcell" aria-label={`Atkı ${r + 1}: ${i + 1}. iplik`} aria-selected={selector?.[r] === i + 1}
-              className={cn(CELL, selector?.[r] === i + 1 ? "bg-sky-600" : "bg-sky-50 dark:bg-sky-950")} />
-          ))}
+          {Array.from({ length: selCount }, (_, i) => {
+            const on = selector?.[r] === i + 1;
+            return (
+              <div key={i} role="gridcell" aria-label={`Atkı ${r + 1}: ${i + 1}. iplik`} aria-selected={on}
+                className={cn(CELL, !on && "bg-muted/50")} style={on ? { background: yarnColor(i + 1) } : undefined} />
+            );
+          })}
         </div>
       ))}
+      {direction === "bottom-up" && header}
     </div>
   );
 }
