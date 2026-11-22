@@ -93,6 +93,8 @@ export const DOC_CONFIG_KEYS: Record<PrintedDocType, string> = {
   ORDER_CONFIRMATION: "siparisTeyidi",
   // Devere S5 — levent kartı (iç belge, A6 sabit; ücret yok).
   WARP_BEAM_CARD: "leventKarti",
+  // Devere S6 — devereci gövde mutabakatı (devereciye gider; iç not kolonu opt-in).
+  BEAM_BODY_STATEMENT: "govdeMutabakat",
 };
 
 /** Snapshot zarfı — `doc` tip-bazlı payload, geri kalanı ortak meta. */
@@ -340,7 +342,7 @@ function canonicalize(v: unknown): unknown {
   }
   return v;
 }
-const jsonEqual = (a: unknown, b: unknown): boolean =>
+export const jsonEqual = (a: unknown, b: unknown): boolean =>
   JSON.stringify(canonicalize(a)) === JSON.stringify(canonicalize(b));
 
 /** Donmuş görünüm katmanı (docConfigOverride + firma adı/künye/logo) güncel çözülenden

@@ -78,6 +78,9 @@ export const beamBodyService = {
   undo: (id: string, eventId: string, reason: string) => apiClient.post<ApiResponse<BeamBody>>(`${BASE}/${id}/events/${eventId}/undo`, { reason }).then((r) => r.data),
   cancelRegistrationPreview: (id: string) => data<BeamBodyCancelRegistrationPreview>(apiClient.get(`${BASE}/${id}/cancel-registration/preview`)),
   cancelRegistration: (id: string, reason: string) => apiClient.post<ApiResponse<BeamBody>>(`${BASE}/${id}/cancel-registration`, { reason }).then((r) => r.data),
+  /** S6: mutabakatı basıma hazırla — içerik son sürümden farklıysa sunucu yeni sürüm dondurur. */
+  printStatement: (subcontractorId: string) =>
+    data<{ version: number; documentNo: string; created: boolean }>(apiClient.post(`${BASE}/statement/print`, { subcontractorId })),
 };
 
 /** Seçici için tam liste (ör. sevkte "Depoda boş" gövdeler) — süzme sunucuda, sayfalar ortak yükleyiciden. */

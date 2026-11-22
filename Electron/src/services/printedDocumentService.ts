@@ -45,7 +45,9 @@ export type PrintedDocType =
   // Tam stok sayımı (2026-08-15, J2 #19) — fark fişinin donmuş tutanağı.
   | "STOCK_COUNT"
   // Levent kartı (A6, 2026-11-22) — sarımdan sonra levent kılıfına takılır.
-  | "WARP_BEAM_CARD";
+  | "WARP_BEAM_CARD"
+  // Gövde mutabakatı (devere S6) — kaynak devereci; "Mutabakat bas" içerik değiştiyse yeni sürüm.
+  | "BEAM_BODY_STATEMENT";
 
 export type PrintedDocStatus = "ACTIVE" | "SUPERSEDED" | "VOIDED";
 

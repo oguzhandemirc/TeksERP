@@ -9509,6 +9509,9 @@ enum PrintedDocType {
   // 2026-11-22 devere S5 (SONA). İç belge (A6, kılıflı kart, flanş askısı); kaynak WarpBeam, no = levent no.
   // İlk açılışta donar; sarım iptalinde (→ CANCELLED) `applyWarpBeamEventTx` aynı tx'te VOIDED yapar. Ücret yok.
   WARP_BEAM_CARD // Levent kartı (WarpBeam)
+  // 2026-11-22 devere S6 (SONA). Devereciye gider ("sizdeki gövdelerimiz"); kaynak Subcontractor, no = fason kodu.
+  // Panel "Mutabakat bas" içerik değiştiyse yeni sürüm dondurur (sürüm geçmişi = gönderilen mutabakatlar). İç kolon OPT-IN.
+  BEAM_BODY_STATEMENT // Gövde mutabakatı (Subcontractor)
 }
 
 enum PrintedDocStatus {
