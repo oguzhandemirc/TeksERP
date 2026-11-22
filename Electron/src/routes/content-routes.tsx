@@ -87,6 +87,7 @@ import { ProfitabilityReportPage } from "@/pages/Reports/Maliyet/ProfitabilityRe
 import { KarnePage } from "@/pages/Reports/Dokuma/KarnePage";
 import { LeventBitisTahminiPage } from "@/pages/Reports/Dokuma/LeventBitisTahminiPage";
 import { DenyeSapmaPage } from "@/pages/Reports/Dokuma/DenyeSapmaPage";
+import { DevereciKarnesiPage } from "@/pages/Reports/Dokuma/DevereciKarnesiPage";
 import { CashBookPage } from "@/pages/Reports/Finance/CashBookPage";
 import { VatSummaryPage } from "@/pages/Reports/Finance/VatSummaryPage";
 import { FxDiffPage } from "@/pages/Reports/Finance/FxDiffPage";
@@ -1847,6 +1848,14 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="warpspec:read">
         <DenyeSapmaPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "reports/dokuma/devereci-karnesi",
+    element: (
+      <ProtectedRoute requirePermission="report:production">
+        <DevereciKarnesiPage />
       </ProtectedRoute>
     ),
   },

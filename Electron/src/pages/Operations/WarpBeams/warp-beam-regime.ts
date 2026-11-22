@@ -23,3 +23,8 @@ export function isWarpBeamsVisible(ctx: WarpBeamVisibilityContext): boolean {
 export function isDenierReportVisible(ctx: WarpBeamVisibilityContext & { dokumaEnabled: boolean; isReportOpen: (key: string) => boolean }): boolean {
   return ctx.devereEnabled && ctx.dokumaEnabled && ctx.isReportOpen("dokuma/denye-sapma");
 }
+
+/** Devere-levent S2: "Devereci Karnesi" karosu — denye sapma karosuyla aynı kapı, kendi rapor anahtarıyla. */
+export function isWarperScorecardVisible(ctx: WarpBeamVisibilityContext & { dokumaEnabled: boolean; isReportOpen: (key: string) => boolean }): boolean {
+  return ctx.devereEnabled && ctx.dokumaEnabled && ctx.isReportOpen("dokuma/devereci-karnesi");
+}
