@@ -55,6 +55,8 @@ export interface WarpBeam {
   status: WarpBeamStatus;
   plannedLengthM: number;
   physicalBeamNo: string | null;
+  /** B3 gövde bağı; `tareKg` S3 (bitiş tartısında dara önerisi). Eski backend göndermez → opsiyonel. */
+  beamBody?: { id: string; bodyNo: string; tareKg?: number | null } | null;
   notes: string | null;
   originKind: WarpBeamOrigin;
   subcontractorId: string | null;

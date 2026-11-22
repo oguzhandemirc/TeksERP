@@ -410,6 +410,9 @@ export const updateSchema = z.strictObject({
   devereReworkBillable: z.boolean().optional(),
   /** Devere ek C1: kusurlu levent reddinde fotoğraf zorunlu (varsayılan false). */
   devereRejectPhotoRequired: z.boolean().optional(),
+  /** Devere S3: gövde no esnek eşleşme · tartılı bitişte dara gövdeden (ikisi de varsayılan false). */
+  devereBodyNoLooseMatch: z.boolean().optional(),
+  devereResidualTareFromBody: z.boolean().optional(),
   /** Devere ek E1: irsaliye no tekrarı + dönüş tartısı (enum; `devere-receive.ts` kalıplarıyla birebir). */
   devereDuplicateDeliveryNote: z.enum(["ALLOW", "WARN", "BLOCK"]).optional(),
   devereReceiveWeighing: z.enum(["OFF", "OPTIONAL", "REQUIRED"]).optional(),

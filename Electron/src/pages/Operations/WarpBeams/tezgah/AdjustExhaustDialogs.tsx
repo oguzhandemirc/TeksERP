@@ -12,6 +12,8 @@ import { type AdjustPayload, type ExhaustPayload } from "../service";
 import { formatM, type WarpBeam, type WarpLengthSource } from "../types";
 import { BeamDialogShell, NumField, ReasonCodeSelect, ReasonField, SourceSelect, num } from "./BeamDialogShell";
 import { useBeamReasons } from "./useBeamReasons";
+import { useFeatureFlags } from "@/hooks/usePricingEnabled";
+import { formatQty } from "@/lib/format";
 
 interface AdjustProps {
   target: WarpBeam;
@@ -71,6 +73,18 @@ interface ExhaustProps {
 type Mode = "measured" | "weighed" | "none";
 const NO_REASON = "__none__";
 
+/** S3: ayar açık ∧ leventin gövdesinde dara varsa öneri (alan boş kalır; sunucu gövde darasını kendisi okur). */
+export function exhaustBodyTare(beam: Pick<WarpBeam, "beamBody">, tareFromBody: boolean): number | null {
+  const t = beam.beamBody?.tareKg ?? null;
+  return tareFromBody && t !== null && t > 0 ? t : null;
+}
+
+export function tareHint(bodyTare: number | null): string {
+  return bodyTare !== null
+    ? `Boş bırakılırsa gövde darası ${formatQty(bodyTare)} kg kullanılır (gövde kartından).`
+    : "Dara bilinmiyorsa metre türetilemez; sunucu artığı 0 sayar ve uyarır.";
+}
+
 export function ExhaustDialog({ target, isPending, onClose, onConfirm }: ExhaustProps) {
   const [mode, setMode] = useState<Mode>("none");
   const [residual, setResidual] = useState("");
@@ -80,6 +94,7 @@ export function ExhaustDialog({ target, isPending, onClose, onConfirm }: Exhaust
   const [reasonCode, setReasonCode] = useState(NO_REASON);
   const [reason, setReason] = useState("");
   const presets = useBeamReasons("WARP_BEAM_SCRAP");
+  const bodyTare = exhaustBodyTare(target, useFeatureFlags().data?.data?.devereResidualTareFromBody === true);
   const r = num(residual);
   const g = num(gross);
   const ok = mode === "none" || (mode === "measured" && r != null && r >= 0) || (mode === "weighed" && g != null && g > 0);
@@ -125,7 +140,7 @@ export function ExhaustDialog({ target, isPending, onClose, onConfirm }: Exhaust
         {mode === "weighed" && (
           <>
             <NumField id="wb-ex-gross" label="Brüt (kg)" value={gross} onChange={setGross} />
-            <NumField id="wb-ex-tare" label="Dara (kg)" value={tare} onChange={setTare} hint="Dara bilinmiyorsa metre türetilemez; sunucu artığı 0 sayar ve uyarır." />
+            <NumField id="wb-ex-tare" label="Dara (kg)" value={tare} onChange={setTare} hint={tareHint(bodyTare)} />
           </>
         )}
         <div className="col-span-2">

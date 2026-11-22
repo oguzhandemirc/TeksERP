@@ -9,7 +9,7 @@
 // =============================================================================
 import { Prisma, WarpBeamStatus } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
-import { readDevereEnabled, readDevereMountTracking, readDokumaEnabled } from "../system-setting.service";
+import { readDevereEnabled, readDevereMountTracking, readDevereResidualTareFromBody, readDokumaEnabled } from "../system-setting.service";
 import { WARP_BEAM_STATUS_EVENT_KINDS, type WarpBeamEventKind } from "../../constants/warp-beam";
 import { OPEN_MACHINE_RUN_WHERE } from "./machine-run-open.helper";
 import { remainingByBeam } from "./warp-beam.helper";
@@ -212,6 +212,20 @@ export function warpLengthFromWeight(grossKg: Prisma.Decimal.Value, tareKg: Pris
   const net = new Prisma.Decimal(grossKg).minus(tareKg);
   if (net.lt(0)) return null;
   return net.div(kgPerM).toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP);
+}
+
+/**
+ * Tartı darası (S3): beyan edilen dara > (`devere.residualTareFromBody` açık ∧ leventin gövdesi darası) > null.
+ * `fromBody` olay notuna "dara gövdeden" yazdırır; ayar kapalıyken bayt-aynı (`input ?? null`).
+ */
+export async function resolveWeighTareTx(
+  tx: Pick<Client, "systemSetting" | "warpBeam">, beamId: string, inputTareKg: Prisma.Decimal.Value | null | undefined,
+): Promise<{ tareKg: Prisma.Decimal.Value | null; fromBody: boolean }> {
+  if (inputTareKg != null) return { tareKg: inputTareKg, fromBody: false };
+  if (!(await readDevereResidualTareFromBody(tx))) return { tareKg: null, fromBody: false };
+  const b = await tx.warpBeam.findUnique({ where: { id: beamId }, select: { beamBody: { select: { tareKg: true } } } });
+  const t = b?.beamBody?.tareKg ?? null;
+  return t !== null && t.gt(0) ? { tareKg: t, fromBody: true } : { tareKg: null, fromBody: false };
 }
 
 export type StatusEventKind = (typeof WARP_BEAM_STATUS_EVENT_KINDS)[number];

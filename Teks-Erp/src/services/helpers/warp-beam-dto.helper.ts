@@ -51,7 +51,7 @@ export interface WarpBeamDto {
   plannedLengthM: number;
   physicalBeamNo: string | null;
   /** B3: sarıldığı gövde (demirbaş) — gövdesiz sarımda null. */
-  beamBody: { id: string; bodyNo: string } | null;
+  beamBody: { id: string; bodyNo: string; /** S3: tartılı bitişte dara önerisi. */ tareKg: number | null } | null;
   notes: string | null;
   originKind: WarpBeamOrigin;
   subcontractorId: string | null;
@@ -148,7 +148,7 @@ export function toWarpBeamDto(r: WarpBeamRow, remainingM?: number): WarpBeamDto 
     status: r.status,
     plannedLengthM: Number(r.plannedLengthM),
     physicalBeamNo: r.physicalBeamNo,
-    beamBody: r.beamBody,
+    beamBody: r.beamBody ? { id: r.beamBody.id, bodyNo: r.beamBody.bodyNo, tareKg: num(r.beamBody.tareKg) } : null,
     notes: r.notes,
     originKind: r.originKind,
     subcontractorId: r.subcontractorId,
