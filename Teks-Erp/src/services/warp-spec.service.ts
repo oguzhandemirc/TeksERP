@@ -18,7 +18,8 @@ import { BaseService, type CreateTxContext, type UpdateTxContext } from "./base.
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
 import { AuditService } from "./audit.service";
-import { warpSpecSummaryFromLines, WARP_SPEC_YARN_DENIER_INCLUDE, type WarpSpecYarnLine } from "./helpers/warp-spec-yarn.helper";
+import { warpSpecSummaryFromLines, warpSpecYarnLines, WARP_SPEC_YARN_DENIER_INCLUDE, type WarpSpecYarnLine } from "./helpers/warp-spec-yarn.helper";
+import { expandWarpSequence } from "./helpers/warp-sequence.helper";
 import {
   assertWarpYarnItem,
   normalizeSequenceNote,
@@ -128,6 +129,15 @@ export class WarpSpecService extends BaseService {
     }
     const fresh = await prisma.warpSpec.findUnique({ where: { id }, include: WARP_SPEC_YARN_DENIER_INCLUDE });
     return { ...res, data: fresh ?? res.data };
+  }
+
+  /** Tekil okuma kart görseli için dizilim açılımını da taşır (`endsSequence`; liste taşımaz). Panel notu açmaz. */
+  async findById(id: string): Promise<ApiResponse<unknown>> {
+    const res = await super.findById(id);
+    const spec = res.data as (Parameters<typeof warpSpecYarnLines>[0] & { sequenceNote: string | null }) | null;
+    if (!res.success || !spec) return res;
+    const endsSequence = expandWarpSequence(spec.sequenceNote, warpSpecYarnLines(spec).map((l) => l.endsCount));
+    return { ...res, data: { ...spec, endsSequence } };
   }
 
   async create(rawData: Record<string, unknown>, userId?: string): Promise<ApiResponse<unknown>> {
