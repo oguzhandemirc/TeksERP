@@ -13,7 +13,10 @@ import {
 } from "../lift-plan";
 import { constructionApi, weaveDesignApi } from "../service";
 import { LiftPlanGrid } from "./LiftPlanGrid";
-import type { DesignFabric, LiftPlan, WeaveDesign } from "../types";
+import { FabricPreviewSection } from "./FabricPreviewSection";
+import { useWeaveDirection } from "@/components/weave/weave-direction";
+import { WeaveDirectionToggle } from "@/components/weave/WeaveViewControls";
+import type { DesignFabric, EffectiveConstruction, LiftPlan, WeaveDesign } from "../types";
 
 const LEGEND = "Çerçeve numarasına tıklayınca o çerçeve döner (leno) diye işaretlenir; ızgarada ve basılan desen kartında ayrı blok olur. "
   + "Sağdaki 1., 2., 3. sütunları seçili kumaşın atkı kartındaki sıra kodundan gelir (hangi atkıda hangi iplik atılır); "
@@ -28,6 +31,7 @@ export function LiftPlanTab({ design, fabric, canWrite }: { design: WeaveDesign;
   const size = liftPlanSize(plan);
   const [frames, setFrames] = useState(String(size.frames || design.frameCount || ""));
   const [picks, setPicks] = useState(String(size.picks || ""));
+  const [direction, setDirection] = useWeaveDirection();
   const construction = useQuery({
     queryKey: ["item-construction", fabric?.id ?? null, null],
     queryFn: () => constructionApi.get(fabric!.id),
@@ -76,15 +80,34 @@ export function LiftPlanTab({ design, fabric, canWrite }: { design: WeaveDesign;
       {rows === 0 ? (
         <p className="text-sm text-muted-foreground">Armür planı girilmemiş.</p>
       ) : (
-        <LiftPlanGrid plan={plan} frames={size.frames} rows={rows} leno={lenoSet} selector={selector} selCount={selCount} canWrite={canWrite} onClick={onCell} />
+        // Desen kâğıdı düzeni: solda armür + seçici, sağda tahar + kumaş görünümü (dar pencerede alt alta).
+        <div className="flex flex-wrap items-start gap-x-10 gap-y-6">
+          <section className="min-w-0 max-w-full space-y-2" aria-label="Armür planı">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold">Armür planı{selCount > 0 ? " ve atkı seçici" : ""}</h3>
+              <WeaveDirectionToggle value={direction} onChange={setDirection} />
+            </div>
+            <LiftPlanGrid plan={plan} frames={size.frames} rows={rows} leno={lenoSet} selector={selector} selCount={selCount} canWrite={canWrite}
+              direction={direction} onClick={onCell} />
+            {weft && <SelectorNote weft={weft} hasSelector={!!selector} />}
+          </section>
+          {size.picks > 0 && (
+            <FabricPreviewSection design={design} plan={plan} lenoFrames={lenoWithin(leno, size.frames)} selector={selector}
+              yarnNames={weft?.yarns.map((y) => y.yarnItem.name) ?? []} direction={direction} />
+          )}
+        </div>
       )}
-      {weft && (
-        <p className="text-xs text-muted-foreground">
-          {selector
-            ? `Atkı seçici: ${weft.code} · ${weft.yarns.map((y) => `${y.sortOrder + 1}. ${y.yarnItem.name}`).join(" · ")}`
-            : `${weft.code} atkı kartında sıra kodu yok — seçici sütunu için Atkı sırası sekmesinde kodu girin (ör. A4 B1 A4 C1).`}
-        </p>
-      )}
+      {rows === 0 && weft && <SelectorNote weft={weft} hasSelector={!!selector} />}
     </div>
+  );
+}
+
+function SelectorNote({ weft, hasSelector }: { weft: NonNullable<EffectiveConstruction["weft"]>; hasSelector: boolean }) {
+  return (
+    <p className="max-w-md text-xs text-muted-foreground">
+      {hasSelector
+        ? `Atkı seçici: ${weft.code} · ${weft.yarns.map((y) => `${y.sortOrder + 1}. ${y.yarnItem.name}`).join(" · ")}`
+        : `${weft.code} atkı kartında sıra kodu yok — seçici sütunu için Atkı sırası sekmesinde kodu girin (ör. A4 B1 A4 C1).`}
+    </p>
   );
 }

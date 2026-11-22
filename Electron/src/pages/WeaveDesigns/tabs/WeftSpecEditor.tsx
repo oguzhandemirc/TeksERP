@@ -33,7 +33,13 @@ export function buildWeftBody(seq: string, picksPerCm: string, program: string, 
   };
 }
 
-export function WeftSpecEditor({ spec, fabricId, canWrite }: { spec: WeftSpecDetail; fabricId: string; canWrite: boolean }) {
+interface EditorProps {
+  spec: WeftSpecDetail; fabricId: string; canWrite: boolean;
+  /** Yazılan (kaydedilmemiş) sıra kodu — yan görselin "kaydedince güncellenir" notu için. */
+  onSequenceChange?: (seq: string) => void;
+}
+
+export function WeftSpecEditor({ spec, fabricId, canWrite, onSequenceChange }: EditorProps) {
   const qc = useQueryClient();
   const [seq, setSeq] = useState(spec.sequenceCode ?? "");
   const [picksPerCm, setPicksPerCm] = useState(() => decimalToFormText(spec.picksPerCm));
@@ -60,7 +66,7 @@ export function WeftSpecEditor({ spec, fabricId, canWrite }: { spec: WeftSpecDet
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="space-y-1.5">
           <Label htmlFor="wf-seq">Atkı sırası kodu</Label>
-          <Input id="wf-seq" value={seq} maxLength={120} disabled={!canWrite} onChange={(e) => setSeq(e.target.value)} placeholder="A4 B1 A4 C1" />
+          <Input id="wf-seq" value={seq} maxLength={120} disabled={!canWrite} onChange={(e) => { setSeq(e.target.value); onSequenceChange?.(e.target.value); }} placeholder="A4 B1 A4 C1" />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="wf-ppc">Atkı sıklığı (atkı/cm)</Label>

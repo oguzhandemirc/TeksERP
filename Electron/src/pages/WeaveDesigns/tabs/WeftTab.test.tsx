@@ -9,13 +9,15 @@ import { renderWithProviders } from "@/test/render";
 
 vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { success: vi.fn(), info: vi.fn(), error: vi.fn() }) }));
 vi.mock("@/components/production/SpecOpenOrdersNotice", () => ({ SpecOpenOrdersNotice: () => null }));
-const { api, countUsers, listUsers } = vi.hoisted(() => ({
+const { api, countUsers, listUsers, construction } = vi.hoisted(() => ({
+  construction: { current: { weft: null } as unknown },
   api: { get: vi.fn(), update: vi.fn(), fork: vi.fn() },
   countUsers: vi.fn(),
   listUsers: vi.fn(),
 }));
 vi.mock("../service", () => ({
   weftSpecApi: api,
+  constructionApi: { get: () => Promise.resolve(construction.current) },
   countWeftSpecUsers: (...a: unknown[]) => countUsers(...a),
   listWeftSpecUsers: (...a: unknown[]) => listUsers(...a),
 }));
@@ -28,6 +30,7 @@ const BUTTON = /Bu desene özel kopya/;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  construction.current = { weft: null };
   api.get.mockResolvedValue(SPEC);
   listUsers.mockResolvedValue({ rows: [FABRIC, { ...FABRIC, id: "it-b", code: "D2058", name: "TÜL D2058" }, { ...FABRIC, id: "it-c", code: "D2059", name: "TÜL D2059" }], total: 3 });
 });
@@ -113,5 +116,40 @@ describe("WeftSpecEditor — iplik payı % (SY-3 L3)", () => {
     fireEvent.change(screen.getByLabelText("Atkı A rapordaki adet"), { target: { value: "5" } });
     await waitFor(() => expect(screen.getByLabelText("Atkı A pay")).toHaveTextContent("—"));
     expect(screen.getByTestId("weft-share-note")).toHaveTextContent("kütlece");
+  });
+});
+
+describe("WeftSequenceStrip — atkı seçici görseli (kart görsel B)", () => {
+  const yarn = (letter: string, name: string, sortOrder: number) => ({ sortOrder, letter, picksInRepeat: 0, yarnItem: { id: name, code: name, name, linearDensityDen: null }, cardYarnItem: null });
+  const WEFT = {
+    weftSpecId: "w-1", code: "ATK-ORTAK", name: "Ortak atkı", picksPerCm: "20", sequenceCode: "A2 B1 A2 C1", weftProgramNo: null, picksInRepeatTotal: 6,
+    yarns: [yarn("A", "PES 50", 0), yarn("B", "Sim", 1), yarn("C", "Pamuk", 2)],
+    pickSequence: [1, 1, 2, 1, 1, 3],
+  };
+  it("kayıtlı pickSequence'ten seçici + pay özeti çizer", async () => {
+    countUsers.mockResolvedValue(1);
+    api.get.mockResolvedValue({ ...SPEC, sequenceCode: "A2 B1 A2 C1" });
+    construction.current = { weft: WEFT };
+    renderWithProviders(<WeftTab fabric={FABRIC} canWrite />);
+    expect(await screen.findByTestId("weft-pick-summary")).toHaveTextContent("A 4 · B 1 · C 1 = 6 atkı/rapor");
+    expect(screen.getByRole("img", { name: "Atkı seçici sütunu" })).toBeInTheDocument();
+    expect(screen.queryByText(/kaydedince görünüm güncellenir/)).toBeNull();
+  });
+  it("sıra kodu yazılıp kaydedilmeyince 'kaydedince güncellenir' notu; geri alınınca kalkar", async () => {
+    countUsers.mockResolvedValue(1);
+    api.get.mockResolvedValue({ ...SPEC, sequenceCode: "A2 B1 A2 C1" });
+    construction.current = { weft: WEFT };
+    renderWithProviders(<WeftTab fabric={FABRIC} canWrite />);
+    const input = await screen.findByLabelText("Atkı sırası kodu");
+    fireEvent.change(input, { target: { value: "A4 B1" } });
+    expect(await screen.findByText(/kaydedince görünüm güncellenir/)).toBeInTheDocument();
+    fireEvent.change(input, { target: { value: "A2 B1 A2 C1 " } });
+    await waitFor(() => expect(screen.queryByText(/kaydedince görünüm güncellenir/)).toBeNull());
+  });
+  it("sıra kodu yoksa çizim yerine yönlendirme", async () => {
+    countUsers.mockResolvedValue(1);
+    construction.current = { weft: { ...WEFT, sequenceCode: null, pickSequence: null } };
+    renderWithProviders(<WeftTab fabric={FABRIC} canWrite={false} />);
+    expect(await screen.findByText(/atkı seçici burada çizilir/)).toBeInTheDocument();
   });
 });

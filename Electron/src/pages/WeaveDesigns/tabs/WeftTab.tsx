@@ -11,10 +11,12 @@ import { countWeftSpecUsers, weftSpecApi } from "../service";
 import type { DesignFabric } from "../types";
 import { WeftSpecEditor } from "./WeftSpecEditor";
 import { WeftSpecForkDialog } from "./WeftSpecForkDialog";
+import { WeftSequenceStrip } from "./WeftSequenceStrip";
 
 export function WeftTab({ fabric, canWrite }: { fabric: DesignFabric | null; canWrite: boolean }) {
   const weftId = fabric?.weftSpecId ?? null;
   const [forking, setForking] = useState(false);
+  const [draftSeq, setDraftSeq] = useState<string | null>(null);
   const spec = useQuery({ queryKey: ["weft-specs", "detail", weftId], queryFn: () => weftSpecApi.get(weftId!), enabled: !!weftId });
   const users = useQuery({ queryKey: ["weft-specs", "users", weftId], queryFn: () => countWeftSpecUsers(weftId!), enabled: !!weftId });
   if (!fabric) return <p className="text-sm text-muted-foreground">Önce desene bir kumaş bağlayın.</p>;
@@ -38,7 +40,10 @@ export function WeftTab({ fabric, canWrite }: { fabric: DesignFabric | null; can
         </Callout>
       )}
       {forking && shared && <WeftSpecForkDialog spec={spec.data} fabric={fabric} onClose={() => setForking(false)} />}
-      <WeftSpecEditor key={spec.dataUpdatedAt} spec={spec.data} fabricId={fabric.id} canWrite={canWrite} />
+      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(16rem,24rem)]">
+        <WeftSpecEditor key={spec.dataUpdatedAt} spec={spec.data} fabricId={fabric.id} canWrite={canWrite} onSequenceChange={setDraftSeq} />
+        <WeftSequenceStrip fabricId={fabric.id} stale={draftSeq !== null && draftSeq.trim() !== (spec.data.sequenceCode ?? "").trim()} />
+      </div>
     </div>
   );
 }
