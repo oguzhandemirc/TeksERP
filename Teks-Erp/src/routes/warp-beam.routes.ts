@@ -144,6 +144,7 @@ router.get("/devere-machines", requireAnyPermission("warpbeam:read", ...MOBILE_D
  *     description: >
  *       Z5 ön-dolgu alanları (yalnız öneri, eski istemci etkilenmez): `autoConsume` (devere.autoConsume aynası) ·
  *       `lastWindDefaults[]` (çözgü kartı başına son IN_HOUSE sarımın machineId + yarnIssues/yarnReturns satırları).
+ *       Kart görseli: `warpSpecs[].yarns` (harf/kod/ad/tel) + `sequenceNote` + `endsSequence` (sunucu açılımı; tel düzeni bandı).
  *     responses:
  *       200: { description: Bağlam }
  *       403: { description: Devere modülü kapalı (MODULE_DISABLED) ya da yetki yok }

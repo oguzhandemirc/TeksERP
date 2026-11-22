@@ -7,7 +7,7 @@
 // Yükler `beamPayload.buildPlanPayload` / `buildWindPayload` üstünden kurulur — backend
 // `createSchema` / `windSchema` ile birebirliğin TEK yeri orasıdır, burada ikinci kopya yok.
 // =============================================================================
-import type { WarpBeam, WarpKgSource, WindWarpBeamRequest } from '../../../services/warpBeam.service';
+import type { WarpBeam, WarpEndsSequence, WarpKgSource, WarpSpecYarnRow, WindWarpBeamRequest } from '../../../services/warpBeam.service';
 import { TERIM } from '../../../lib/terim';
 import { foldSearchText } from '../../../utils/searchFold';
 import { normalizeScanCode } from '../../../utils/scanCode';
@@ -45,6 +45,10 @@ export interface StationSpec {
   name: string;
   endsCount: number;
   denier: number | null;
+  /** Kart görseli F: tel düzeni bandı verisi SUNUCUDAN; eski sunucu göndermez → bant yok. */
+  yarns?: WarpSpecYarnRow[];
+  sequenceNote?: string | null;
+  endsSequence?: WarpEndsSequence | null;
 }
 
 export interface StationDeps {

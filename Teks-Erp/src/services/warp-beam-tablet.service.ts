@@ -12,6 +12,7 @@ import { yarnLotBalancesTx } from "./helpers/yarn-lot.helper";
 import { readDevereAutoConsume, readDevereBeamBodyMode, readDevereBodyNoLooseMatch,readDevereLotRequired, readDevereMountTracking, readDevereMountTrackingRequired, resolveBeamWeavingLinkRequired, resolveYarnQualityHoldEnabled } from "./system-setting.service";
 import { listOpenInHouseWeavingOrders, type MachineRunTabletContextDto } from "./helpers/machine-run-suggest.helper";
 import { lastWindDefaults, type LastWindDefault } from "./helpers/warp-beam-wind-defaults.helper";
+import { expandWarpSequence, type WarpEndsSequence } from "./helpers/warp-sequence.helper";
 
 /**
  * Tablet form bağlamı — TEK uç, TEK izin (`mobile:devere`), DEVERE-LEVENT-TARAMASI §11 D2.
@@ -31,7 +32,13 @@ import { lastWindDefaults, type LastWindDefault } from "./helpers/warp-beam-wind
  */
 export interface WarpBeamTabletContextDto {
   /** Fason devere D2: `denier` yalnız tek iplikli kartta dolu (çok iplikli kart içeride sarılamaz, 400); Σ kg/m `kgPerM`, satır sayısı `yarnCount`. */
-  warpSpecs: Array<{ id: string; code: string; name: string; endsCount: number; denier: number | null; kgPerM: number | null; yarnCount: number }>;
+  warpSpecs: Array<{
+    id: string; code: string; name: string; endsCount: number; denier: number | null; kgPerM: number | null; yarnCount: number;
+    /** Kart görseli F (EKLEME; eski tablet okumaz): tel düzeni bandı için iplik satırları (harf = sıra) + dizilim notu ve sunucu açılımı — tablet hesaplamaz. */
+    yarns: Array<{ letter: string; code: string; name: string; endsCount: number }>;
+    sequenceNote: string | null;
+    endsSequence: WarpEndsSequence | null;
+  }>;
   machines: Array<{ id: string; code: string; name: string; stationName: string }>;
   warehouses: Array<{ id: string; name: string; isDefault: boolean }>;
   subcontractors: Array<{ id: string; name: string }>;
@@ -63,18 +70,20 @@ export interface WarpBeamTabletContextDto {
   bodyNoLooseMatch: boolean;
 }
 
-type TabletSpecRow = Parameters<typeof warpSpecDenierLines>[0] & { id: string; code: string; name: string };
+type TabletSpecRow = Parameters<typeof warpSpecDenierLines>[0] & { id: string; code: string; name: string; sequenceNote: string | null };
 /** Tek iplikte `denier` bugünkü değer (bayt-aynı); çok iplikte null — tablet `endsCount × denye` ön hesabı yanlış kg vermesin. */
 function tabletWarpSpec(w: TabletSpecRow): WarpBeamTabletContextDto["warpSpecs"][number] {
   const lines = warpSpecDenierLines(w);
   const kgPerM = warpSpecKgPerMExact(lines);
   const d = lines.length === 1 ? lines[0]!.denier : null;
-  return { id: w.id, code: w.code, name: w.name, endsCount: w.endsCount, denier: d == null ? null : Number(d), kgPerM: kgPerM == null ? null : Number(kgPerM), yarnCount: lines.length };
+  const yarns = lines.map((l, i) => ({ letter: String.fromCharCode(65 + i), code: l.yarnItem.code, name: l.yarnItem.name, endsCount: l.endsCount }));
+  const endsSequence = expandWarpSequence(w.sequenceNote, lines.map((l) => l.endsCount));
+  return { id: w.id, code: w.code, name: w.name, endsCount: w.endsCount, denier: d == null ? null : Number(d), kgPerM: kgPerM == null ? null : Number(kgPerM), yarnCount: lines.length, yarns, sequenceNote: w.sequenceNote, endsSequence };
 }
 
 export async function getWarpBeamTabletContext(): Promise<ApiResponse<WarpBeamTabletContextDto>> {
   const [specs, machines, warehouses, subcontractors, suppliers] = await Promise.all([
-    prisma.warpSpec.findMany({ where: { isActive: true }, orderBy: { code: "asc" }, select: { id: true, code: true, name: true, ...WARP_SPEC_YARN_DENIER_SELECT } }),
+    prisma.warpSpec.findMany({ where: { isActive: true }, orderBy: { code: "asc" }, select: { id: true, code: true, name: true, sequenceNote: true, ...WARP_SPEC_YARN_DENIER_SELECT } }),
     listDevereMachines().then((r) => r.data),
     prisma.warehouse.findMany({ where: { isActive: true }, orderBy: [{ isDefault: "desc" }, { name: "asc" }], select: { id: true, name: true, isDefault: true } }),
     prisma.subcontractor.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),

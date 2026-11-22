@@ -1,5 +1,5 @@
 // =============================================================================
-// SAR İSTASYONU — sol sütun: kart · hedef levent · metre (numpad) · kg · gövde · makine · iplik → SAR
+// SAR İSTASYONU — sol sütun: kart (+ tel düzeni bandı) · hedef levent · metre (numpad) · kg · gövde · makine · iplik → SAR
 // =============================================================================
 // İstasyon dili (KK1/Kurşun/Tambur): sol form + büyük ana düğme; okutma bandı ve numpad sağda.
 // Metre TEK `autoActivate` alan (açılışta numpad ona bağlı). Seçiciler `PickerModal`; iplik
@@ -12,6 +12,7 @@ import NumpadInput from '../../../components/NumpadInput';
 import ModalTextInput from '../../../components/ModalTextInput';
 import PickerModal from '../../../components/PickerModal';
 import StationActionButton from '../../../components/StationActionButton';
+import WarpEndsBand from '../../../components/weave/WarpEndsBand';
 import { SheetField, sheet } from '../../../components/ModuleSheet';
 import { TERIM } from '../../../lib/terim';
 import { colors, moduleAccents, spacing, typography } from '../../../theme';
@@ -113,6 +114,7 @@ export default function WindStationForm({ station, context, isOnline, busyBeams,
   return (
     <View style={styles.root}>
       <SheetField label="Çözgü kartı" value={spec ? `${spec.code} — ${spec.name} · ${spec.endsCount} tel` : ''} placeholder="Seçin" onPress={() => setPicker('spec')} />
+      {spec ? <WarpEndsBand yarns={spec.yarns} endsSequence={spec.endsSequence} sequenceNote={spec.sequenceNote} testID="sar-tel-duzeni" /> : null}
       <TargetChips station={station} />
       <Text style={sheet.label}>Sarılan metre</Text>
       <NumpadInput value={form.lengthM} onChangeText={(t) => patch({ lengthM: t })} allowDecimal numpadMaxLength={8} numpadLabel="Sarılan metre" placeholder="m" autoActivate style={sheet.input} />
