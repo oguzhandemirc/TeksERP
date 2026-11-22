@@ -12,13 +12,15 @@ import { colors, palette, spacing } from '../../../theme';
 import { fmtMeters } from '../../../utils/meters';
 import type { ReceiveDocResult } from '../../../services/devereKabul.service';
 import { ds, MAIN_BLUE } from './devereKabul.styles';
+import type { BeamCardPrintState } from './useBeamCardPrint';
 
 export type ResultBeam = ReceiveDocResult['orders'][number]['receipt']['beams'][number];
 
 const m = (v: string | null | undefined) => (v == null ? '—' : `${fmtMeters(Number(v))} m`);
 
-/** `onReject` yalnız `mobile:devere-ret` yetkisinde verilir — yoksa satır düğmesi çizilmez. */
-export function ResultCard({ result, onClose, onReject }: { result: ReceiveDocResult; onClose: () => void; onReject?: (b: ResultBeam, order: { id: string; orderNo: string }) => void }) {
+/** `onReject` yalnız `mobile:devere-ret` yetkisinde verilir — yoksa satır düğmesi çizilmez.
+ *  `cards` (S5t): A6 levent kartı düğmesi; ASK ayarında soru bandı olarak öne çıkar. */
+export function ResultCard({ result, onClose, onReject, cards }: { result: ReceiveDocResult; onClose: () => void; onReject?: (b: ResultBeam, order: { id: string; orderNo: string }) => void; cards?: BeamCardPrintState }) {
   return (
     <View style={[ds.card, styles.card]} testID="devere-kabul-sonuc">
       <View style={ds.cardTitleRow}>
@@ -26,8 +28,22 @@ export function ResultCard({ result, onClose, onReject }: { result: ReceiveDocRe
           <Text style={[ds.cardTitle, styles.ok]}>{`Kabul kaydedildi — ${result.docNo}`}</Text>
           <Text style={ds.lineSub}>{`${result.totals.beamCount} levent · ${m(result.totals.lengthM)} · etiketler yazıcıya gönderiliyor`}</Text>
         </View>
+        {cards && !cards.ask ? (
+          <Button mode="outlined" icon="card-text-outline" onPress={cards.print} loading={cards.printing} disabled={cards.printing} contentStyle={ds.tall} testID="devere-kart-bas">
+            {cards.printed ? 'Kartları yeniden bas' : 'Levent kartları'}
+          </Button>
+        ) : null}
         <Button mode="outlined" onPress={onClose} contentStyle={ds.tall} testID="devere-kabul-sonuc-kapat">Tamam</Button>
       </View>
+      {cards?.ask ? (
+        <View style={styles.askBand} testID="devere-kart-sor">
+          <Icon source="card-text-outline" size={28} color={MAIN_BLUE} />
+          <Text style={[ds.grow, styles.askText]}>Kılıfa takılacak A6 levent kartları basılsın mı?</Text>
+          <Button mode="contained" icon="printer" buttonColor={MAIN_BLUE} onPress={cards.print} loading={cards.printing} disabled={cards.printing} contentStyle={ds.tall} testID="devere-kart-bas">
+            Kartları bas
+          </Button>
+        </View>
+      ) : null}
       <ScrollView>
         {result.orders.map((o) => o.receipt.beams.map((b) => (
           <View key={b.id} style={ds.lineRow}>
@@ -74,5 +90,7 @@ export function ManualCodeFooter({ placeholder, onSubmit, testID }: { placeholde
 const styles = StyleSheet.create({
   card: { maxHeight: '50%' },
   ok: { color: palette.emerald[700] },
+  askBand: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, borderRadius: 12, backgroundColor: palette.blue[50] },
+  askText: { fontSize: 16, fontWeight: '700', color: colors.text },
   footer: { padding: spacing.md, gap: spacing.xs, borderTopWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
 });

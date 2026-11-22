@@ -32,6 +32,39 @@ describe('ResultCard', () => {
   });
 });
 
+describe('ResultCard levent kartı (S5t)', () => {
+  const cards = (over: Partial<{ ask: boolean; printed: boolean; printing: boolean }> = {}) => ({ print: jest.fn(), printing: false, printed: false, ask: false, ...over });
+
+  it('cards verilmezse kart düğmesi yok (eski görünüm)', async () => {
+    const r = renderWithPaper(<ResultCard result={result} onClose={jest.fn()} />);
+    await act(async () => {});
+    expect(r.queryByTestId('devere-kart-bas')).toBeNull();
+    expect(r.queryByTestId('devere-kart-sor')).toBeNull();
+  });
+
+  it('OFF/ALWAYS: ikincil düğme basar; basıldıktan sonra "yeniden bas" der', async () => {
+    const c = cards();
+    const r = renderWithPaper(<ResultCard result={result} onClose={jest.fn()} cards={c} />);
+    await act(async () => {});
+    expect(r.queryByTestId('devere-kart-sor')).toBeNull();
+    fireEvent.press(r.getByTestId('devere-kart-bas'));
+    expect(c.print).toHaveBeenCalled();
+    r.rerender(<ResultCard result={result} onClose={jest.fn()} cards={cards({ printed: true })} />);
+    await act(async () => {});
+    expect(r.getByText('Kartları yeniden bas')).toBeTruthy();
+  });
+
+  it('ASK: soru bandı öne çıkar, düğmesi basar', async () => {
+    const c = cards({ ask: true });
+    const r = renderWithPaper(<ResultCard result={result} onClose={jest.fn()} cards={c} />);
+    await act(async () => {});
+    expect(r.getByTestId('devere-kart-sor')).toBeTruthy();
+    expect(r.getByText('Kılıfa takılacak A6 levent kartları basılsın mı?')).toBeTruthy();
+    fireEvent.press(r.getByTestId('devere-kart-bas'));
+    expect(c.print).toHaveBeenCalled();
+  });
+});
+
 describe('ManualCodeFooter', () => {
   it('yazılan numara kırpılıp gönderilir; boşken gönderilmez', async () => {
     const onSubmit = jest.fn();

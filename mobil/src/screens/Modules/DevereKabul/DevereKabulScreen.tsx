@@ -22,6 +22,7 @@ import { fmtMeters } from '../../../utils/meters';
 import type { ReceiveDocResult, RejectLookup } from '../../../services/devereKabul.service';
 import WarpBeamLabelPrinter from '../Devere/WarpBeamLabelPrinter';
 import { useDevereKabul, type DevereKabulState } from './useDevereKabul';
+import { normalizeAutoPrint, useBeamCardPrint } from './useBeamCardPrint';
 import { AddBeamCard, HeaderPickers, JobCard, LinesCard } from './DevereKabulParts';
 import { ManualCodeFooter, ResultCard } from './DevereKabulResult';
 import BeamLineSheet from './BeamLineSheet';
@@ -70,6 +71,7 @@ export default function DevereKabulScreen() {
   const [rejectScan, setRejectScan] = useState(false);
   const canReject = usePermissions().has('mobile:devere-ret');
   const bodyMode = s.settings.beamBodyMode;
+  const cards = useBeamCardPrint(s.result, normalizeAutoPrint(s.settings.beamCardAutoPrint));
   const canAdd = !!s.activeOrder && s.isOnline && !s.busy;
   return (
     <ScreenChrome
@@ -87,7 +89,7 @@ export default function DevereKabulScreen() {
           </View>
           <View style={styles.right}>
             <LinesCard state={s} />
-            {s.result ? <ResultCard result={s.result} onClose={() => s.setResult(null)} onReject={canReject ? (b, o) => s.reject.openReject(resultTarget(b, o, s.subcontractor)) : undefined} /> : null}
+            {s.result ? <ResultCard result={s.result} onClose={() => s.setResult(null)} cards={cards} onReject={canReject ? (b, o) => s.reject.openReject(resultTarget(b, o, s.subcontractor)) : undefined} /> : null}
           </View>
         </View>
         <BottomBand s={s} canReject={canReject} onReject={() => setRejectScan(true)} />

@@ -24,6 +24,7 @@ export const SAMPLE_WARP_BEAM_CARD: Record<string, unknown> = {
     deliveryNoteNo: "IRS-5521",
     receiveDocNo: "DDK-0007",
     warpingOrderNo: "DS-0019",
+    drawingInNote: "1-2-3-4 düz, kenar 2'li, döner 1-2",
   },
   yarns: [
     { seq: 1, yarnCode: "PES-50D/24F", yarnName: "Polyester 50 denye 24 filament", endsCount: 7200, denier: 50, kg: 46.7, lots: "L2406-1, L2406-2" },

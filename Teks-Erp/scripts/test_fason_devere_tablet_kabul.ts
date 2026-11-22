@@ -156,7 +156,8 @@ const ALLOW = {
   warpSpec: ["code", "name"],
   sub: ["id", "name", "openOrderCount"],
   // ek-2 r: rejectPhotoRequired (tablet ret sayfası); reworkCandidates alt anahtarları test_devere_tablet_ret_govde'de.
-  settings: ["beamBodyMode", "duplicateDeliveryNote", "receiveWeighing", "rejectPhotoRequired"],
+  // S5t: beamCardAutoPrint (kabul sonrası A6 levent kartı).
+  settings: ["beamBodyMode", "beamCardAutoPrint", "duplicateDeliveryNote", "receiveWeighing", "rejectPhotoRequired"],
 };
 const keysOf = (o: object) => Object.keys(o).sort().join();
 const same = (o: object, allow: string[]) => keysOf(o) === [...allow].sort().join();
