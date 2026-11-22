@@ -21,6 +21,7 @@ export const ENUM_LABELS_EK: Record<string, string> = {
   INSPECTION_REPORT: "Muayene raporu",
   SALES_QUOTE: "Satış teklifi", // PrintedDocType (MAL-6)
   ORDER_CONFIRMATION: "Sipariş teyidi", // PrintedDocType (Seyitoğlu L1)
+  WARP_BEAM_CARD: "Levent kartı", // PrintedDocType (devere S5)
   PIECE: "Adet", // ServiceQtyUnit (EKS-E2 brode fiyat birimi)
   STITCH: "Vuruş",
   WEIGH: "Tartım",

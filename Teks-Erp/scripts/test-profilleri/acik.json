@@ -96,6 +96,7 @@
     "devereBeamBodyMachineFit": "WARN",
     "devereFasonLotPolicy": "WARN",
     "devereSettleDefault": "WASTE_UP_TO_PLAN",
+    "devereBeamCardAutoPrint": "ASK",
     "devereReworkBillable": true,
     "devereRejectPhotoRequired": true,
     "devereBodyNoLooseMatch": true,

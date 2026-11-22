@@ -161,6 +161,10 @@ export interface LabelPayload {
   weavingOrderNumber?: string | null;
   /** WOUND anı (ISO) — sarılmamış leventte null. */
   woundAt?: string | null;
+  /** Devere-levent S5 (opt-in): devereci adı — yalnız fason levent. Gövde no `bodyNo` ile (aşağıda) aynı anahtar. */
+  subcontractorName?: string | null;
+  /** Devere-levent S5 (opt-in): dönüş irsaliye no — kabul belgesinden, yoksa sarım satırından. */
+  deliveryNoteNo?: string | null;
 
   // --- BEAM_BODY (levent gövdesi, devere ek B1) — yalnız `kind === BEAM_BODY` iken dolu. ---
   /** Gövde no (`BeamBody.bodyNo`) — barkod/QR ile AYNI değer. */

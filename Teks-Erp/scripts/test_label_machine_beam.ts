@@ -4,7 +4,7 @@
 // =============================================================================
 // Sözleşme (docs/design/DOKUMA-MANUEL-PLAN.md § S1b, D3, D12):
 //   §1 payload barkod = Machine.code / WarpBeam.beamNo (tek kod; ayrı barkod kolonu yok)
-//   §2 şablon atanmamış → 400 (fail-closed, ROLL şablonuna SAPMAZ)
+//   §2 şablon atanmamış → 400 (fail-closed, ROLL şablonuna SAPMAZ); levent: bağlam varsayılanı hiç yoksa standart şablon kurulur (S5)
 //   §3 copies=3 → 3 etiket · 200 → 200 (emit tavanı 100 aşıldı) · 201/0 → 400 ·
 //      native 150 → ≤100'lük iki iş (^PQ100 + ^PQ50)
 //   §4 `machineCode`/`beamNo` bağlamayan şablon analyzeContextFit'e UYMAZ + atanamaz
@@ -21,6 +21,7 @@ import prisma, { pool } from "../src/lib/prisma";
 import { LabelService } from "../src/services/label.service";
 import { LabelTemplateService } from "../src/services/label-template.service";
 import { analyzeContextFit } from "../src/services/helpers/label-context-fit";
+import { DEFAULT_WARP_BEAM_TEMPLATE_NAME } from "../src/services/helpers/label-default-warp-beam.helper";
 import { AppError } from "../src/utils/app-error";
 import { LabelKind } from "@prisma/client";
 import { testActorId } from "./fixture-test-user";
@@ -139,8 +140,13 @@ async function run(): Promise<void> {
   console.log("\n=== §2 şablon atanmamış → 400 (fail-closed) ===");
   let e = await errOf(() => labels.getMachineLabelHtml(loom.id));
   check("tezgah şablonsuz 400", statusOf(e) === 400 && codeOf(e) === "LABEL_TEMPLATE_MISSING", (e as Error)?.message?.slice(0, 80));
+  // Devere-levent S5: levent bağlam varsayılanı HİÇ yoksa standart şablon baskı anında kurulur (400 yerine baskı).
+  const hadStd = await prisma.labelTemplate.count({ where: { name: DEFAULT_WARP_BEAM_TEMPLATE_NAME } });
   e = await errOf(() => labels.getWarpBeamLabelNative(beamId));
-  check("levent şablonsuz native 400", statusOf(e) === 400);
+  const autoDef = await prisma.labelContextDefault.findUnique({ where: { kind: LabelKind.WARP_BEAM }, select: { templateId: true } });
+  if (autoDef && hadStd === 0) ids.templates.push(autoDef.templateId);
+  check("levent şablonsuz → standart levent şablonu kurulur, baskı 400 değil", e === undefined && !!autoDef, (e as Error)?.message?.slice(0, 80));
+  await prisma.labelContextDefault.deleteMany({ where: { kind: LabelKind.WARP_BEAM } });
 
   console.log("\n=== §4 kimlik alanını bağlamayan şablon uymaz ===");
   const noId = await makeTemplate("kimliksiz", LabelKind.MACHINE, ["machineName", "stationName"]);

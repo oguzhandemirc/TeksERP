@@ -40,6 +40,7 @@ import { effectiveIncomingDocsEnabled } from "./incoming-docs";
 import { SETTING_KEYS } from "./keys";
 import { DEVERE_SETTLE_DEFAULTS, type DevereSettleDefault } from "./devere-settle";
 import { DEFAULT_DEVERE_DEFAULT_LEAD_DAYS, DEVERE_DEFAULT_LEAD_DAYS_MAX } from "./devere-lead";
+import { DEVERE_BEAM_CARD_AUTO_PRINTS, type DevereBeamCardAutoPrint } from "./devere-beam-card";
 import { DEVERE_DUPLICATE_DELIVERY_NOTE_MODES, DEVERE_RECEIVE_WEIGHING_MODES, type DevereDuplicateDeliveryNote, type DevereReceiveWeighing } from "./devere-receive";
 import { readKursunMeterCapture } from "./kursun-batch";
 import { LABEL_COPIES_MAX, readNotificationInboxEnabled, type DefaultLabelMedia } from "./labels";
@@ -1755,6 +1756,13 @@ export async function setFeatureFlags(
         throw AppError.badRequest(`Devere kapanış varsayılanı ${DEVERE_SETTLE_DEFAULTS.join(", ")} değerlerinden biri olmalı`);
       }
       await this.set(SETTING_KEYS.DEVERE_SETTLE_DEFAULT, v, "Devere: kapanışta kalan ipliğin varsayılan önerisi — plan firesi kadar fire · kalır · iade · hepsi fire", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "devereBeamCardAutoPrint")) {
+      const v = input.devereBeamCardAutoPrint;
+      if (typeof v !== "string" || !DEVERE_BEAM_CARD_AUTO_PRINTS.includes(v as DevereBeamCardAutoPrint)) {
+        throw AppError.badRequest(`Levent kartı otomatik basımı ${DEVERE_BEAM_CARD_AUTO_PRINTS.join(", ")} değerlerinden biri olmalı`);
+      }
+      await this.set(SETTING_KEYS.DEVERE_BEAM_CARD_AUTO_PRINT, v, "Devere: kabul sonrası levent kartı basımı — kapalı · sor · her zaman", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "devereFasonWasteTolerancePct")) {
       const v = input.devereFasonWasteTolerancePct;

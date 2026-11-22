@@ -91,6 +91,8 @@ export const DOC_CONFIG_KEYS: Record<PrintedDocType, string> = {
   PRICE_LIST: "fiyatListesi",
   // Seyitoğlu L1 — sipariş teyidi (müşteriye gider; iç kolon yok).
   ORDER_CONFIRMATION: "siparisTeyidi",
+  // Devere S5 — levent kartı (iç belge, A6 sabit; ücret yok).
+  WARP_BEAM_CARD: "leventKarti",
 };
 
 /** Snapshot zarfı — `doc` tip-bazlı payload, geri kalanı ortak meta. */

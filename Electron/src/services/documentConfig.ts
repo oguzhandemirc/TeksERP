@@ -358,6 +358,7 @@ export const DOC_TYPE_TO_KEY: Record<string, string> = {
   CHEQUE_DELIVERY_NOTE: "cekTeslimBordrosu",
   // Tam stok sayımı (2026-08-15, J2 #19) — depo belgesi ailesi.
   STOCK_COUNT: "stokSayimi",
+  WARP_BEAM_CARD: "leventKarti",
 };
 
 /**
@@ -1422,6 +1423,34 @@ export const DOC_DEFS: DocDef[] = [
           { key: "bank", label: "Banka" },
           { key: "currency", label: "Para birimi" },
           { key: "amount", label: "Tutar" },
+        ],
+      },
+    ],
+  },
+  {
+    // A6 levent kartı — backend `document-render/warp-beam-card.html.ts`; imza yok, el yazısı satırları var.
+    key: "leventKarti",
+    label: "Levent Kartı (A6)",
+    defaultTitle: "LEVENT KARTI",
+    defaultSignatures: [],
+    defaultMarginMm: 5,
+    sections: [
+      { key: "fason", label: "Fason bilgileri (devereci / irsaliye / kabul / sipariş)" },
+      { key: "yarnTable", label: "İplik kırılım tablosu" },
+      { key: "lots", label: "Lot kolonu" },
+      { key: "handwriting", label: "El yazısı satırları (tezgah / takan / not)" },
+    ],
+    tables: [
+      {
+        key: "iplikler",
+        label: "İplik Kırılımı",
+        columns: [
+          { key: "seq", label: "#" },
+          { key: "yarn", label: "İplik" },
+          { key: "ends", label: "Tel" },
+          { key: "denier", label: "Denye" },
+          { key: "kg", label: "Kg" },
+          { key: "lots", label: "Lot" },
         ],
       },
     ],
