@@ -10,11 +10,12 @@ import { MOBILE_SCREENS } from '../types/permissions';
 describe('screenModules — ekran → modül aynası', () => {
   it('üretim modülünün beş ekranı tabloda; çekirdek/planlanan ekranlar tabloda DEĞİL', () => {
     expect(Object.keys(SCREEN_MODULE).sort()).toEqual(
-      ['Devere', 'DevereKabul', 'Dokuma', 'FasonDokuma', 'HizliIsEmri', 'KK1', 'KursunDagitim', 'KursunQc', 'KaliteKontrol', 'Muayene', 'Tambur', 'Uyarilar', 'GelenBelge', 'IsEmirleri'].sort()
+      ['Devere', 'DevereKabul', 'GovdeSayim', 'Dokuma', 'FasonDokuma', 'HizliIsEmri', 'KK1', 'KursunDagitim', 'KursunQc', 'KaliteKontrol', 'Muayene', 'Tambur', 'Uyarilar', 'GelenBelge', 'IsEmirleri'].sort()
     );
     expect(SCREEN_MODULE.Dokuma).toBe('dokumaEnabled');
     expect(SCREEN_MODULE.Devere).toBe('devereEnabled');
     expect(SCREEN_MODULE.DevereKabul).toBe('devereEnabled');
+    expect(SCREEN_MODULE.GovdeSayim).toBe('devereEnabled');
     // G2t: fason dokuma kabulü dokuma modülüne bağlı — üretim kapalıyken ETKİN kapalı (Dokuma ile aynı zincir).
     expect(SCREEN_MODULE.FasonDokuma).toBe('dokumaEnabled');
     // Uyarılar (tezgah alarmı A3) — tezgah izleme modülü, backend `requireTezgahEnabled` zinciri.
