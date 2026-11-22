@@ -397,6 +397,8 @@ export const updateSchema = z.strictObject({
   devereAutoConsume: z.boolean().optional(),
   /** Fason devere D1: sabit çözgü firesi (m; `DEVERE_WARP_FIXED_WASTE_M_MAX` ile birebir); null = varsayılana (0) dön. */
   devereWarpFixedWasteM: z.number({ message: "Sabit çözgü firesi sayı olmalı" }).min(0, "Sabit çözgü firesi negatif olamaz").max(1000, "Sabit çözgü firesi en çok 1000 m olabilir").nullable().optional(),
+  /** Devere-levent S1: yedek devere teslim süresi (gün; `DEVERE_DEFAULT_LEAD_DAYS_MAX` ile birebir); 0 = yok; null = varsayılana dön. */
+  devereDefaultLeadDays: z.number({ message: "Varsayılan teslim süresi sayı olmalı" }).min(0, "Varsayılan teslim süresi negatif olamaz").max(120, "Varsayılan teslim süresi en çok 120 gün olabilir").nullable().optional(),
   /** Fason devere D4: kapama fire toleransı (%; `DEVERE_FASON_WASTE_TOLERANCE_PCT_MAX` ile birebir); 0 = denetim yok; null = varsayılana dön. */
   /** Fason devere D4b (K4): lot karışımı kuralı (enum; `DEVERE_FASON_LOT_POLICIES` ile birebir). */
   devereFasonLotPolicy: z.enum(["FREE", "WARN", "SINGLE_LOT"]).optional(),

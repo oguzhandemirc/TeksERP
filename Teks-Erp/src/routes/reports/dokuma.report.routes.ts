@@ -259,7 +259,7 @@ router.get("/kapasite-kullanimi", requireReportOpen("dokuma/kapasite-kullanimi")
  *     parameters:
  *       - { in: query, name: machineId, schema: { type: string, format: uuid } }
  *     responses:
- *       200: { description: "Rapor zarfı — data.satirlar (kalanM · gunlukOrtM · kaynak otomatik/elle · tahminiBitisGun · kalanGun) · ozet · meta.ufuk/secenekler; süzgeçliyse kökte suzgec (+dusenSatir)" }
+ *       200: { description: "Rapor zarfı — data.satirlar (kalanM · gunlukOrtM · kaynak otomatik/elle · tahminiBitisGun · kalanGun · warpSpec · spare (hazır levent + yolda devere) · leadDays/lead · orderByDay/orderByGerekce · devereAcil) · ozet · meta.ufuk/secenekler; süzgeçliyse kökte suzgec (+dusenSatir)" }
  *       403: { description: Dokuma/devere modülü kapalı (MODULE_DISABLED), rapor kapalı ya da yetki yok }
  */
 router.get("/levent-bitis-tahmini", requireDevereEnabled, requireReportOpen("dokuma/levent-bitis-tahmini"), guard, async (req, res, next) => {

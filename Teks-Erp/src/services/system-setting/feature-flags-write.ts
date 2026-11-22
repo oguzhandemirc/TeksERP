@@ -39,6 +39,7 @@ import { DEFAULT_INVOICE_TOLERANCE_PCT, assertBrodeUnitHasPieceInput, readFinanc
 import { effectiveIncomingDocsEnabled } from "./incoming-docs";
 import { SETTING_KEYS } from "./keys";
 import { DEVERE_SETTLE_DEFAULTS, type DevereSettleDefault } from "./devere-settle";
+import { DEFAULT_DEVERE_DEFAULT_LEAD_DAYS, DEVERE_DEFAULT_LEAD_DAYS_MAX } from "./devere-lead";
 import { DEVERE_DUPLICATE_DELIVERY_NOTE_MODES, DEVERE_RECEIVE_WEIGHING_MODES, type DevereDuplicateDeliveryNote, type DevereReceiveWeighing } from "./devere-receive";
 import { readKursunMeterCapture } from "./kursun-batch";
 import { LABEL_COPIES_MAX, readNotificationInboxEnabled, type DefaultLabelMedia } from "./labels";
@@ -223,7 +224,7 @@ export async function setFeatureFlags(
     // 400'e düşürür ya da API sözleşmesine olmayan bir null sokar.
     input: Omit<
       Partial<FeatureFlags>,
-      "fasonShrinkTolerancePct" | "dokumaWeavingWastePct" | "devereWarpFixedWasteM" | "devereFasonWasteTolerancePct" | "devereDenierSuggestMinBeams" | "devereDenierSuggestThresholdPct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "shippingReadyTolerancePct" | "tamburPlanGateWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "financeWithholdingNumerator" | "financeWithholdingDenominator" | "financePurchaseWithholdingNumerator" | "financePurchaseWithholdingDenominator" | "shippingSackSeqStart" | "tezgahEscalationGraceMinutes" | "tezgahAlarmRenotifyMinutes" | "tezgahMaxOpenStopHours" | "tezgahCollectorSilenceMinutes" | "license"
+      "fasonShrinkTolerancePct" | "dokumaWeavingWastePct" | "devereWarpFixedWasteM" | "devereDefaultLeadDays" | "devereFasonWasteTolerancePct" | "devereDenierSuggestMinBeams" | "devereDenierSuggestThresholdPct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm" | "shippingReadyTolerancePct" | "tamburPlanGateWidthToleranceCm" | "financeInvoiceQtyTolerancePct" | "financeInvoicePriceTolerancePct" | "financeWithholdingNumerator" | "financeWithholdingDenominator" | "financePurchaseWithholdingNumerator" | "financePurchaseWithholdingDenominator" | "shippingSackSeqStart" | "tezgahEscalationGraceMinutes" | "tezgahAlarmRenotifyMinutes" | "tezgahMaxOpenStopHours" | "tezgahCollectorSilenceMinutes" | "license"
     > & {
       /** null = fabrika varsayılanına dön (1). */
       shippingSackSeqStart?: number | null;
@@ -233,6 +234,8 @@ export async function setFeatureFlags(
       dokumaWeavingWastePct?: number | null;
       /** null = fabrika varsayılanına dön (0 m). */
       devereWarpFixedWasteM?: number | null;
+      /** null = fabrika varsayılanına dön (0 = yok). */
+      devereDefaultLeadDays?: number | null;
       /** null = fabrika varsayılanına dön (0 = denetim yok). */
       devereFasonWasteTolerancePct?: number | null;
       /** null = varsayılana dön (3 levent). */
@@ -1702,6 +1705,14 @@ export async function setFeatureFlags(
         throw AppError.badRequest(`Sabit çözgü firesi 0 ile ${qtyText(DEVERE_WARP_FIXED_WASTE_M_MAX)} metre arasında olmalı`);
       }
       await this.set(SETTING_KEYS.DEVERE_WARP_FIXED_WASTE_M, v === null ? DEFAULT_DEVERE_WARP_FIXED_WASTE_M : v, "Devere: çözgü hesabında sipariş başına sabit fire metresi", userId);
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "devereDefaultLeadDays")) {
+      const v = input.devereDefaultLeadDays;
+      // `null` = alan temizlendi → varsayılan 0 (yedek süre yok = bugünkü davranış).
+      if (v !== null && (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > DEVERE_DEFAULT_LEAD_DAYS_MAX)) {
+        throw AppError.badRequest(`Varsayılan devere teslim süresi 0 ile ${qtyText(DEVERE_DEFAULT_LEAD_DAYS_MAX)} gün arasında olmalı`);
+      }
+      await this.set(SETTING_KEYS.DEVERE_DEFAULT_LEAD_DAYS, v === null ? DEFAULT_DEVERE_DEFAULT_LEAD_DAYS : v, "Devere: geçmişi olmayan çözgü kartı için yedek devere teslim süresi (gün)", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "devereFasonLotPolicy")) {
       const v = input.devereFasonLotPolicy;

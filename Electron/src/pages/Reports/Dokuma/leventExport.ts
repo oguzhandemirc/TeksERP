@@ -5,8 +5,9 @@
 // (otomatik/elle) ve ufuk notu kâğıda da basılır. (Levent Sonucu · Kapasite spec'leri sayfalarıyla kalktı.)
 // =============================================================================
 import type { ReportExportSpec } from "../_components/reportExport";
+import { formatQty } from "@/lib/format";
 import { horizonNote } from "./leventShared";
-import type { FinishForecastReport } from "./leventReportTypes";
+import { leadText, spareText, type FinishForecastReport } from "./leventReportTypes";
 
 const M = "0.0";
 const INT = "0";
@@ -30,11 +31,15 @@ export function buildBitisTahminiExport(opts: Ortak & { rapor: FinishForecastRep
         { header: "Kalan (m)", key: "kalan", width: 12, numFmt: M, align: "right" }, { header: "Günlük ort. (m)", key: "ort", width: 14, numFmt: M, align: "right" },
         { header: "Otomatik (m)", key: "otomatik", width: 12, numFmt: M, align: "right" }, { header: "Elle (m)", key: "elle", width: 10, numFmt: M, align: "right" },
         { header: "Tahmini bitiş", key: "bitis", width: 14 }, { header: "Kalan gün", key: "gun", width: 10, numFmt: M, align: "right" }, { header: "Hesaplanamadı", key: "gerekce", width: 18 },
+        { header: "Çözgü", key: "cozgu", width: 20 }, { header: "Yedek", key: "yedek", width: 24 },
+        { header: "Devereye ver", key: "devereyeVer", width: 14 }, { header: "Teslim süresi", key: "teslim", width: 30 },
       ],
       rows: rapor.satirlar.map((r) => ({
         levent: r.beamNo, tezgah: `${r.machine.code} · ${r.machine.name}`, yuva: sayiYaDa(r.position, "—"), kalan: r.kalanM,
         ort: sayiYaDa(r.gunlukOrtM, "—"), otomatik: r.kaynak.otomatik, elle: r.kaynak.elle,
         bitis: r.tahminiBitisGun ?? "—", gun: sayiYaDa(r.kalanGun, "—"), gerekce: r.hesaplanamadi ?? "—",
+        cozgu: r.warpSpec ? `${r.warpSpec.code} · ${r.warpSpec.name}` : "—", yedek: spareText(r.spare, (m) => `${formatQty(m)} m`),
+        devereyeVer: r.orderByDay ?? r.orderByGerekce ?? "—", teslim: leadText(r) ?? "—",
       })),
     }],
   };

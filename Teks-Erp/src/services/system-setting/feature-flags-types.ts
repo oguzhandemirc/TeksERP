@@ -219,6 +219,8 @@ export interface FeatureFlags {
   devereBeamWeavingLinkRequired: boolean;
   /** Fason devere D1: çözgü hesabında sabit fire metresi (0 = firesiz formül, bugünkü davranış). */
   devereWarpFixedWasteM: number;
+  /** Devere-levent S1: geçmişsiz çözgü kartında yedek devere teslim süresi (gün); 0 = yok (bugünkü davranış). */
+  devereDefaultLeadDays: number;
   /** Fason devere D4: kapama fire toleransı (%); 0 = denetim yok (bugünkü davranış). */
   devereFasonWasteTolerancePct: number;
   /** Fason devere D4b (K4): lot karışımı kuralı (varsayılan `WARN`). */
