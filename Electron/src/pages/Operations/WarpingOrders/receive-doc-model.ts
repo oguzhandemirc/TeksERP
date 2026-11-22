@@ -2,7 +2,7 @@
 // belge gövdesi, satır içi doğrulama (sipariş no önekli), belge düzeyi sınırlar ve gövde tekrarı. Dağıtım,
 // tüketim, irsaliye tekrarı kararı sunucudan gelir.
 import { buildReceiveBody, MAX_RECEIVE_BEAMS, receiveBodyKey, type ReceiveBeamDraft, type ReceiveWeighing } from "./receive-model";
-import type { DeliveryNoteGroup, WarpingReceiveDocFields, WarpingReceiveDocOrderInput, WarpingReceiveDocPreview } from "./receive-doc-types";
+import type { DeliveryNoteGroup, WarpingReceiveDoc, WarpingReceiveDocFields, WarpingReceiveDocOrderInput, WarpingReceiveDocPreview } from "./receive-doc-types";
 
 /** Backend `WARPING_RECEIVE_DOC_MAX_ORDERS` / `WARPING_RECEIVE_MAX_BEAMS`. */
 export const MAX_DOC_ORDERS = 20;
@@ -47,6 +47,11 @@ export function buildReceiveDocBody(orders: DocOrderDraft[], p: { subcontractorI
 export function noteWarnings(p: WarpingReceiveDocPreview): string[] {
   const perOrder = p.orders.reduce((s, o) => s + o.preview.warnings.length, 0);
   return p.warnings.slice(0, Math.max(0, p.warnings.length - perOrder));
+}
+
+/** Levent kartı basılacak leventler: geri alınmamış ve reddedilmemiş olanlar, belgedeki sırayla. */
+export function liveBeamsOfDoc(doc: Pick<WarpingReceiveDoc, "orders">): Array<{ id: string; beamNo: string }> {
+  return doc.orders.flatMap((o) => o.receipt.beams.filter((b) => !b.cancelled && b.status !== "REJECTED").map((b) => ({ id: b.id, beamNo: b.beamNo })));
 }
 
 /** İrsaliye no ile önceki CANLI kabuller — belge no (yoksa "tek sipariş") ve sipariş no listesi. */

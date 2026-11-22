@@ -2092,6 +2092,22 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
           { value: "WASTE_ALL", label: "Hepsi fire", hint: "Kalanın tamamı fire önerilir; tolerans aşımı uyarılır." },
         ],
       },
+      {
+        // Devere-levent S5: `defaultValue` backend `DEFAULT_DEVERE_BEAM_CARD_AUTO_PRINT` ile birebir (bekçi §16).
+        group: DEVERE_GROUP.fasonClose,
+        enumKey: "devereBeamCardAutoPrint",
+        title: "Kabulden sonra levent kartı basımı",
+        summary: "Devere kabulü kaydedilince A6 levent kartlarının basılıp basılmayacağı.",
+        desc: "Panelde devere kabul belgesi kaydedildiğinde gelen leventlerin A6 kartı (kılıfa takılan) için davranış. Kapalı (varsayılan) bugünkü gibidir; kart her zaman kabul belgesi sayfasından ya da leventler listesinden elle basılabilir.",
+        defaultValue: "OFF",
+        display: "radio",
+        audience: ["Depocu", "Yönetim"],
+        options: [
+          { value: "OFF", label: "Kapalı (varsayılan)", hint: "Kabulden sonra kart önerilmez; elle basılır." },
+          { value: "ASK", label: "Sor", hint: "Kabul kaydedilince \"Levent kartlarını bas\" önerisi çıkar." },
+          { value: "ALWAYS", label: "Her zaman", hint: "Kabul kaydedilince kartların baskı penceresi kendiliğinden açılır." },
+        ],
+      },
     ],
     numberFlags: [
       {

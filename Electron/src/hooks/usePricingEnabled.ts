@@ -144,6 +144,12 @@ export function useDevereBeamBodyMode(): "OFF" | "OPTIONAL" | "REQUIRED" {
   return q.data?.data?.devereBeamBodyMode ?? "OFF";
 }
 
+/** Devere-levent S5: kabul sonrası levent kartı basımı (`devere.beamCardAutoPrint`). Yüklenene dek OFF = bugünkü davranış. */
+export function useDevereBeamCardAutoPrint(): "OFF" | "ASK" | "ALWAYS" {
+  const q = useFeatureFlags();
+  return q.data?.data?.devereBeamCardAutoPrint ?? "OFF";
+}
+
 /** Devere ek E1: dönüşte tartı (`devere.receiveWeighing`). Yüklenene dek OPTIONAL = bugünkü davranış (brüt/dara isteğe bağlı). */
 export function useDevereReceiveWeighing(): "OFF" | "OPTIONAL" | "REQUIRED" {
   const q = useFeatureFlags();

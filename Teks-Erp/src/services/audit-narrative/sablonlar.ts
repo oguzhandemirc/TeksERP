@@ -145,6 +145,7 @@ const OLAY_SABLONLARI: Record<string, Sablon> = {
   "ROLL:TAMBUR_UNDO_SINGLE": olay("ilgi", "tambur kaydını geri aldı"),
   "ROLL:ROLL_LABEL_TEMPLATE": olay("ilgi", "etiket şablonunu değiştirdi"),
   // Etiket seti (kayıt kimliği: genelde etiket türü, müşteride müşteri)
+  "LABEL_TEMPLATE:SET_CONTEXT_DEFAULT": olay("belirtme", "bağlam varsayılanı yaptı"),
   "LABEL_TEMPLATE_GLOBAL_OPTION:SET_GLOBAL_LABEL_OPTIONS": olay("ilgi", "genel etiket setini düzenledi"),
   "CUSTOMER_LABEL_TEMPLATE_OPTION:SET_CUSTOMER_LABEL_OPTIONS": olay("ilgi", "etiket setini düzenledi"),
   // Etiket alıcısı (tambur emanet, 2026-11-10)

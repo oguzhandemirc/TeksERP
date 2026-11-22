@@ -30,6 +30,7 @@ import "../src/services/cheque-delivery-note.service";
 import "../src/services/stock-count.service";
 import "../src/services/quote-documents.service";
 import "../src/services/order-documents.service";
+import "../src/services/warp-beam-card.service";
 import {
   systemSettingService,
   readDocumentsLogo,
@@ -94,8 +95,10 @@ async function main(): Promise<void> {
   // şablon/config zincirini taşır ve generic sample-html yolu ona kapalıdır
   // (SELF_MANAGED_DOC_TYPES). Kartın stil bekçileri ayrı: test_traveler_template
   // + test_traveler_card_a5_batches.
+  // Levent kartı (devere S5) da dışarıda: kâğıdı A6 SABİT (kılıflı bilet), A4/A5 seçimi yok;
+  // ölçek/kenar bekçisi `test_levent_karti`.
   const STYLED_TYPES = Object.values(PrintedDocType).filter(
-    (t) => t !== PrintedDocType.TRAVELER_CARD,
+    (t) => t !== PrintedDocType.TRAVELER_CARD && t !== PrintedDocType.WARP_BEAM_CARD,
   );
   check("körlük zemini: en az 7 belge tipi stil için denendi", STYLED_TYPES.length >= 7, `${STYLED_TYPES.length} tip`);
   for (const docType of STYLED_TYPES) {
