@@ -16,6 +16,7 @@ import { ApiResponse } from "../types/api.types";
 import { readDevereMountTrackingRequired } from "./system-setting.service";
 import { applyWarpBeamEventTx, logWarpBeamEventAudit } from "./helpers/warp-beam-event.helper";
 import { beamBodyMachineFitVerdictTx } from "./helpers/beam-body.helper";
+import { beamBodyWidthWarningsTx } from "./helpers/beam-body-fit.helper";
 import { WARP_BEAM_SELECT } from "./helpers/warp-beam.helper";
 import { toWarpBeamDto, type WarpBeamDto } from "./warp-beam.service";
 import { WARP_BEAM_CANCEL_OF, type WarpBeamEventKind } from "../constants/warp-beam";
@@ -100,6 +101,8 @@ async function mountBeamFresh(id: string, input: MountBeamInput, userId?: string
     // Devere ek B3: gövde–tezgâh uyumu (`devere.beamBodyMachineFit`: WARN uyarı, BLOCK 409); gövde durumu kancada yürür.
     const link = await tx.warpBeam.findUnique({ where: { id: beam.id }, select: { beamBodyId: true } });
     if (link?.beamBodyId) warnings.push(...(await beamBodyMachineFitVerdictTx(tx, link.beamBodyId, machine.id)));
+    // S9: gövde eni ↔ tarak eni bilgi uyarısı (engel değil).
+    if (link?.beamBodyId) warnings.push(...(await beamBodyWidthWarningsTx(tx, beam.warpSpecId, [{ label: "", beamBodyId: link.beamBodyId }])));
     // Yarım levent (daha önce tüketim görmüş) başka makineye — UYARI, red değil (§4.7).
     const remaining = await remainingMTx(tx, beam.id);
     const wound = await tx.warpBeamEvent.findFirst({ where: { beamId: beam.id, kind: "WOUND", reversal: null }, select: { lengthM: true } });

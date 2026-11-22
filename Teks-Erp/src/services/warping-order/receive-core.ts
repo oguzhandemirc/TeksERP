@@ -20,7 +20,8 @@ import { allocateWoundYarn, loadAllocationCandidates } from "../helpers/wound-al
 import { WARPING_ORDER_TABLE } from "./create";
 import { qtyText } from "../helpers/qty-text.helper";
 import { planReceiveReworks, type WarpingReceiveReworkLine } from "./receive-rework";
-import { auditReceiveBodies, bodyTareWarnings, planReceiveBodies, receiveLinePhysicalSig, registerReceiveBodiesTx, type ReceiveBodyPlan, type WarpingReceiveBodyLine } from "./receive-body";
+import { auditReceiveBodies, bodyTareWarnings, planReceiveBodies, receiveBodyWidthProbes, receiveLinePhysicalSig, registerReceiveBodiesTx, type ReceiveBodyPlan, type WarpingReceiveBodyLine } from "./receive-body";
+import { beamBodyWidthWarningsTx } from "../helpers/beam-body-fit.helper";
 
 type Tx = Prisma.TransactionClient;
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
@@ -166,6 +167,7 @@ export async function receiveOrderLinesTx(tx: Tx, p: { order: ReceiveOrder; wasO
   // B3: gövde satırları (doğrulama + yerinde tanım); gövdenin dolu dönüşünü WOUND kancası yazar.
   const bodies = await planReceiveBodies(tx, { lines: p.beams, subcontractorId: order.subcontractorId, lotOwnerCustomerId: ev.ownerCustomerId });
   const registered = await registerReceiveBodiesTx(tx, bodies, order.subcontractorId, userId);
+  const widthWarnings = await beamBodyWidthWarningsTx(tx, order.warpSpecId, receiveBodyWidthProbes(bodies));
   // C1: yeniden sarım bağı — reddedilen sarımlar kalem kilitlerinden sonra kilitlenir.
   const reworks = await planReceiveReworks(tx, { warpingOrderId: order.id, lines: p.beams, lock: true });
   const receiptKey = randomUUID();
@@ -206,7 +208,7 @@ export async function receiveOrderLinesTx(tx: Tx, p: { order: ReceiveOrder; wasO
   }
   return {
     orderId: order.id, receiptKey, created, wasOpen: p.wasOpen, registered, subcontractorId: order.subcontractorId, ownerCustomerId: ev.ownerCustomerId,
-    warnings: [...ev.warnings, ...weighWarnings(beams), ...bodyTareWarnings(tareLines(beams), bodies)], carry: ev.alloc.rows.filter((r) => r.candidate.carryOver),
+    warnings: [...ev.warnings, ...weighWarnings(beams), ...bodyTareWarnings(tareLines(beams), bodies), ...widthWarnings], carry: ev.alloc.rows.filter((r) => r.candidate.carryOver),
   };
 }
 
