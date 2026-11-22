@@ -20,6 +20,8 @@ import { readDevereDuplicateDeliveryNote, readDevereReceiveWeighing, type Devere
 import { ACCEPTED_WARPING_BEAM_WHERE } from "../helpers/warping-fee.helper";
 import { RECEIVABLE, WARPING_RECEIVE_MAX_BEAMS } from "./receive-core";
 import { WARPING_RECEIVE_DOC_MAX_ORDERS } from "./receive-doc";
+import { WARP_SPEC_YARN_DENIER_SELECT, warpSpecDenierLines } from "../helpers/warp-spec-yarn.helper";
+import { tabletWarpLayout, type TabletWarpLayout } from "../helpers/warp-sequence.helper";
 
 /** Tablet listesinin üst sınırı — açık sipariş bundan fazlaysa devereci süzgeci gerekir (`truncated`). */
 export const WARPING_TABLET_MAX_ORDERS = 200;
@@ -32,7 +34,8 @@ export interface WarpingTabletOrder {
   orderNo: string;
   status: string;
   subcontractor: { id: string; name: string };
-  warpSpec: { name: string; code: string };
+  /** Kart görseli G (EKLEME; eski tablet okumaz): `yarns` (harf = kart sırası), `sequenceNote`, `endsSequence` — levent satırındaki tel düzeni bandı. */
+  warpSpec: { name: string; code: string } & TabletWarpLayout;
   /** Plan satırları (adet × boy) — tablet metre alanını önerir; boş = levent adedi belli değil. */
   beamLines: Array<{ beamCount: number; beamLengthM: string }>;
   /** NULL = levent adedi belli değil; kalan adet de NULL döner. */
@@ -101,7 +104,7 @@ export async function getWarpingTabletContext(params: { subcontractorId: string 
     select: {
       id: true, orderNo: true, status: true, beamCount: true, targetLengthM: true, expectedReturnAt: true,
       subcontractor: { select: { id: true, name: true } },
-      warpSpec: { select: { name: true, code: true } },
+      warpSpec: { select: { name: true, code: true, sequenceNote: true, ...WARP_SPEC_YARN_DENIER_SELECT } },
       beamLines: { select: { beamCount: true, beamLengthM: true }, orderBy: { sortOrder: "asc" } },
       warpBeams: {
         where: ACCEPTED_WARPING_BEAM_WHERE,
@@ -126,7 +129,7 @@ export async function getWarpingTabletContext(params: { subcontractorId: string 
       orderNo: o.orderNo,
       status: o.status,
       subcontractor: { id: o.subcontractor.id, name: o.subcontractor.name },
-      warpSpec: { name: o.warpSpec.name, code: o.warpSpec.code },
+      warpSpec: { name: o.warpSpec.name, code: o.warpSpec.code, ...tabletWarpLayout(warpSpecDenierLines(o.warpSpec), o.warpSpec.sequenceNote) },
       beamLines: o.beamLines.map((l) => ({ beamCount: l.beamCount, beamLengthM: m3(l.beamLengthM) })),
       plannedBeamCount: o.beamCount,
       targetLengthM: m3(o.targetLengthM),

@@ -70,3 +70,19 @@ export function expandWarpSequence(
   const matchesYarnEnds = perLetter.every((n, i) => n === endsByLetter[i]);
   return { repeat, repeatCount, remainder, totalEnds, matchesYarnEnds };
 }
+
+/** Tablet tel düzeni bandı yükü: kart satırları (harf = sıra) + dizilim notu + açılım — tablet hesaplamaz. */
+export interface TabletWarpLayout {
+  yarns: Array<{ letter: string; code: string; name: string; endsCount: number }>;
+  sequenceNote: string | null;
+  endsSequence: WarpEndsSequence | null;
+}
+
+/** Sıralı kart satırlarından tablet bandı yükü (devere bağlamı ve devere kabul bağlamı aynı biçim). */
+export function tabletWarpLayout(
+  lines: ReadonlyArray<{ endsCount: number; yarnItem: { code: string; name: string } }>,
+  sequenceNote: string | null,
+): TabletWarpLayout {
+  const yarns = lines.map((l, i) => ({ letter: String.fromCharCode(65 + i), code: l.yarnItem.code, name: l.yarnItem.name, endsCount: l.endsCount }));
+  return { yarns, sequenceNote, endsSequence: expandWarpSequence(sequenceNote, lines.map((l) => l.endsCount)) };
+}

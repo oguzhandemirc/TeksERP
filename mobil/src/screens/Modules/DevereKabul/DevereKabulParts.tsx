@@ -11,6 +11,8 @@ import ModalTextInput from '../../../components/ModalTextInput';
 import PickerModal from '../../../components/PickerModal';
 import ScannerEntryBar from '../../../components/ScannerEntryBar';
 import TruncatedText from '../../../components/TruncatedText';
+import WarpEndsBand from '../../../components/weave/WarpEndsBand';
+import { sharedYarnSlots } from '../../../components/weave/sharedPalette';
 import { fmtMeters } from '../../../utils/meters';
 import { heroFigure, parseNum, type BeamDraft } from './receiveDocPayload';
 import type { DevereKabulState } from './useDevereKabul';
@@ -151,6 +153,11 @@ export function LinesCard({ state }: { state: DevereKabulState }) {
   const o = state.orders.find((x) => x.orderId === state.activeOrderId);
   const beams = o?.beams ?? [];
   const total = beams.reduce((n, b) => n + (parseNum(b.lengthM) ?? 0), 0);
+  // Kabuldeki bütün siparişlerin kartları tek palette: aynı iplik her siparişin bandında aynı renk.
+  const specOf = (orderId: string) => state.ctxOrders.find((c) => c.id === orderId)?.warpSpec;
+  const slotsAll = sharedYarnSlots(state.orders.map((x) => (specOf(x.orderId)?.yarns ?? []).map((y) => y.code)));
+  const spec = o ? specOf(o.orderId) : undefined;
+  const slots = o ? slotsAll[state.orders.indexOf(o)] : undefined;
   return (
     <View style={[ds.card, ds.grow]}>
       <View style={ds.cardTitleRow}>
@@ -169,6 +176,7 @@ export function LinesCard({ state }: { state: DevereKabulState }) {
                 <View style={ds.grow}>
                   <TruncatedText style={ds.lineName}>{lineName(b)}</TruncatedText>
                   {gross !== null ? <Text style={ds.lineSub}>{`tartı ${fmtMeters(gross)} kg`}</Text> : null}
+                  {spec ? <WarpEndsBand yarns={spec.yarns} endsSequence={spec.endsSequence} sequenceNote={spec.sequenceNote} slots={slots} compact testID={`devere-kabul-tel-${i + 1}`} /> : null}
                 </View>
                 <Text style={ds.lineM}>{parseNum(b.lengthM) === null ? '— m' : `${fmtMeters(parseNum(b.lengthM) as number)} m`}</Text>
                 <View style={[ds.squareBtn, ds.squareBlue]}>
