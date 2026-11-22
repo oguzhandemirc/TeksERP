@@ -65,6 +65,7 @@ export function shownToInternalFields(s: RegisteredContract, rawConfig: unknown)
     const shown = columns?.[a.tablo]?.shown;
     if (Array.isArray(shown) && shown.includes(a.kaynakKolon)) out.push(a.kod);
   }
+  for (const kod of s.sistemIcAlanlari?.(rawConfig) ?? []) if (!out.includes(kod)) out.push(kod);
   return out;
 }
 

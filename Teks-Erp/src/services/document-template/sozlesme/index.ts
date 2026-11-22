@@ -5,6 +5,7 @@
 // çakışmada iki satır da korunur. Okuma `kayit.ts` üzerinden yapılır (bekçi sırayı ölçer).
 // =============================================================================
 
+export { beamBodyStatementContract } from "./beam-body-statement"; // BEAM_BODY_STATEMENT
 export { chequeDeliveryNoteContract } from "./cheque-delivery-note"; // CHEQUE_DELIVERY_NOTE
 export { freeDocumentContract } from "./free-document"; // FREE_DOCUMENT
 export { goodsReceiptContract } from "./goods-receipt"; // GOODS_RECEIPT
@@ -25,3 +26,4 @@ export { subcontractorDispatchContract } from "./subcontractor-dispatch"; // SUB
 export { subcontractorReceiptContract } from "./subcontractor-receipt"; // SUBCONTRACTOR_RECEIPT
 export { transferDispatchContract } from "./transfer-dispatch"; // TRANSFER_DISPATCH
 export { travelerCardContract } from "./traveler-card"; // TRAVELER_CARD
+export { warpBeamCardContract } from "./warp-beam-card"; // WARP_BEAM_CARD

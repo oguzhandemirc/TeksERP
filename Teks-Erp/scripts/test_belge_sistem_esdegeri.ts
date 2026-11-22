@@ -15,6 +15,8 @@
  * Çalıştır: npx tsx scripts/test_belge_sistem_esdegeri.ts   (DB'siz)
  */
 
+import { renderBeamBodyStatementHtml } from "../src/services/document-render/beam-body-statement.html";
+import { renderWarpBeamCardHtml } from "../src/services/document-render/warp-beam-card.html";
 import { renderInspectionReportHtml } from "../src/services/document-render/inspection-report.html";
 import { renderOrderConfirmationHtml } from "../src/services/document-render/order-confirmation.html";
 import { renderPriceListHtml } from "../src/services/document-render/price-list.html";
@@ -63,6 +65,7 @@ type SystemRenderer = (snapshot: PrintedDocSnapshot, meta: SystemMeta) => string
 
 // docType başına TEK satır, alfabetik (port dilimleri ekler).
 const RENDERERS: Readonly<Record<string, SystemRenderer>> = {
+  BEAM_BODY_STATEMENT: (s, m) => renderBeamBodyStatementHtml(s, m as Parameters<typeof renderBeamBodyStatementHtml>[1]),
   CHEQUE_DELIVERY_NOTE: (s, m) => renderChequeDeliveryNoteHtml(s, m as Parameters<typeof renderChequeDeliveryNoteHtml>[1]),
   FREE_DOCUMENT: (s, m) => renderFreeDocumentHtml({ ...(s as unknown as FreeDocumentSnapshot), config: (s.docConfigOverride ?? {}) as DocumentConfig }, m),
   GOODS_RECEIPT: (s, m) => renderGoodsReceiptHtml(s, m as Parameters<typeof renderGoodsReceiptHtml>[1]),
@@ -83,6 +86,7 @@ const RENDERERS: Readonly<Record<string, SystemRenderer>> = {
   SUBCONTRACTOR_RECEIPT: (s, m) => renderFasonReceiptHtml(s, m as Parameters<typeof renderFasonReceiptHtml>[1]),
   TRANSFER_DISPATCH: (s, m) => renderWarehouseTransferHtml(s, m as Parameters<typeof renderWarehouseTransferHtml>[1]),
   TRAVELER_CARD: (s, m) => renderTravelerCardSystem(s as unknown as TravelerCardSource & { docConfigOverride: unknown }, m),
+  WARP_BEAM_CARD: (s, m) => renderWarpBeamCardHtml(s, m as Parameters<typeof renderWarpBeamCardHtml>[1]),
 };
 
 /** Refakat kartı: servis yolunun eşi — ayar `normalizeTravelerCardConfig`ten, QR `renderQrSvg`den (P-e, canlı). */

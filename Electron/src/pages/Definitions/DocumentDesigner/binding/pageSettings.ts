@@ -54,7 +54,7 @@ export function normalizePageSettings(raw: unknown): PageSettings {
   const sn = obj("sayfaNo");
   const d = DEFAULT_PAGE_SETTINGS;
   return {
-    kagit: r.kagit === "A5" || r.kagit === "LETTER" ? r.kagit : "A4",
+    kagit: r.kagit === "A5" || r.kagit === "A6" || r.kagit === "LETTER" ? r.kagit : "A4",
     yon: r.yon === "yatay" ? "yatay" : "dikey",
     kenar: { ust: num(k.ust, d.kenar.ust), sag: num(k.sag, d.kenar.sag), alt: num(k.alt, d.kenar.alt), sol: num(k.sol, d.kenar.sol) },
     ustBilgi: { sol: str(ub.sol), orta: str(ub.orta), sag: str(ub.sag) },

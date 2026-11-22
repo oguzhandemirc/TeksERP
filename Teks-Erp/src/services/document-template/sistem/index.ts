@@ -8,6 +8,7 @@
 // index satırı (burası + `scripts/test_belge_sistem_esdegeri.ts` RENDERERS); eşitlik yeşil olmalı.
 // =============================================================================
 
+export { beamBodyStatementSystem } from "./beam-body-statement"; // BEAM_BODY_STATEMENT
 export { chequeDeliveryNoteSystem } from "./cheque-delivery-note"; // CHEQUE_DELIVERY_NOTE
 export { freeDocumentSystem } from "./free-document"; // FREE_DOCUMENT
 export { goodsReceiptSystem } from "./goods-receipt"; // GOODS_RECEIPT
@@ -28,3 +29,4 @@ export { subcontractorDispatchSystem } from "./subcontractor-dispatch"; // SUBCO
 export { subcontractorReceiptSystem } from "./subcontractor-receipt"; // SUBCONTRACTOR_RECEIPT
 export { transferDispatchSystem } from "./transfer-dispatch"; // TRANSFER_DISPATCH
 export { travelerCardSystem } from "./traveler-card"; // TRAVELER_CARD
+export { warpBeamCardSystem } from "./warp-beam-card"; // WARP_BEAM_CARD
