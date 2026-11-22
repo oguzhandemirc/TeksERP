@@ -1,8 +1,12 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
+import { StatusAgeCell, statusAgeText } from "@/components/data-table/StatusAgeCell";
 import { cn } from "@/lib/utils";
 import { dimsText, ownerText, placeText } from "./model";
 import { beamBodyStatusMeta, type BeamBody } from "./types";
+
+/** Sunucu özetindeki `staleOutDays` ile aynı eşik (yalnız hücre rengi; sayı sunucudan). */
+export const BODY_STALE_OUT_DAYS = 30;
 
 /** Sıralama başlığı YOK: uç gövde no sırasıyla döner; süzme sunucuda. Ad birincil, kod ikincil. */
 export const beamBodyColumns: ColumnDef<BeamBody>[] = [
@@ -44,6 +48,17 @@ export const beamBodyColumns: ColumnDef<BeamBody>[] = [
           {row.original.ownerReturnDue && <Badge variant="outline" className="border-amber-400 font-normal text-amber-700 dark:text-amber-300">Sahibine iade edilecek</Badge>}
         </span>
       );
+    },
+  },
+  {
+    // S4: "X gündür deverecide / iade bekliyor" — dışarıdaki ya da iade bekleyen gövdede eşik üstü uyarı rengi.
+    id: "age",
+    header: "Bu durumda",
+    meta: { exportValue: (r: BeamBody) => statusAgeText(r.statusAgeDays) },
+    cell: ({ row }) => {
+      const r = row.original;
+      const watch = r.status === "AT_SUBCONTRACTOR" || r.status === "FULL_OUT" || r.ownerReturnDue;
+      return <StatusAgeCell days={r.statusAgeDays} since={r.statusSince} staleAt={watch ? BODY_STALE_OUT_DAYS : null} />;
     },
   },
   { id: "place", header: "Nerede", meta: { exportValue: (r: BeamBody) => placeText(r.place) }, cell: ({ row }) => placeText(row.original.place) },

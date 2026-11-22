@@ -6,7 +6,7 @@
 // =============================================================================
 import apiClient from "@/services/apiClient";
 import type { ApiResponse, CursorPaginatedResponse, CursorParams } from "@/types/api";
-import type { CancelWoundPreview, WarpBeam, WarpBeamEvent, WarpBeamMountMethod, WarpBeamOrigin, WarpBeamStatus, WarpKgSource, WarpLengthSource } from "./types";
+import type { CancelWoundPreview, WarpBeam, WarpBeamEvent, WarpBeamListSummary, WarpBeamMountMethod, WarpBeamOrigin, WarpBeamStatus, WarpKgSource, WarpLengthSource } from "./types";
 
 const BASE = "/api/warp-beams";
 
@@ -15,7 +15,10 @@ function csv(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v.join(",") : v;
 }
 
-export function listWarpBeams(params: CursorParams): Promise<CursorPaginatedResponse<WarpBeam>> {
+/** S4: ilk sayfa özet taşır (`summary`); eski backend göndermez → opsiyonel. */
+export type WarpBeamPage = CursorPaginatedResponse<WarpBeam> & { summary?: WarpBeamListSummary };
+
+export function listWarpBeams(params: CursorParams): Promise<WarpBeamPage> {
   const sp = new URLSearchParams();
   sp.set("limit", String(params.limit));
   if (params.cursor) sp.set("cursor", params.cursor);
@@ -29,7 +32,9 @@ export function listWarpBeams(params: CursorParams): Promise<CursorPaginatedResp
   if (warpSpecId) sp.set("warpSpecId", warpSpecId);
   if (originKind) sp.set("originKind", originKind);
   if (weavingOrderId) sp.set("filter[weavingOrderId]", weavingOrderId); // sunucu `readFilterList` (01 sözleşmesi)
-  return apiClient.get<CursorPaginatedResponse<WarpBeam>>(`${BASE}?${sp.toString()}`).then((r) => r.data);
+  const minAgeDays = csv(params.filters.minAgeDays);
+  if (minAgeDays) sp.set("minAgeDays", minAgeDays); // S4: sunucu süzer, özet aynı where
+  return apiClient.get<WarpBeamPage>(`${BASE}?${sp.toString()}`).then((r) => r.data);
 }
 
 export interface WarpBeamPlanPayload {

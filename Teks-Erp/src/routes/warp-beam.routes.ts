@@ -90,6 +90,8 @@ const listSchema = z
     cursor: z.string().optional(),
     limit: z.coerce.number().int().min(1).max(100).optional(),
     withTotal: z.literal("true").optional(),
+    // S4: "en az N gündür bu durumda" (fabrika günü); sunucu süzer, özet aynı where'den.
+    minAgeDays: z.coerce.number().int("Gün tam sayı olmalı").min(1, "Gün en az 1").max(3650, "Gün çok büyük").optional(),
   })
   .strict();
 
@@ -108,7 +110,7 @@ router.get("/", requireAnyPermission("warpbeam:read", ...MOBILE_DEVERE), async (
   try {
     const q = listSchema.parse(req.query);
     const status = readFilterList(q.status).filter((s): s is WarpBeamStatus => (Object.values(WarpBeamStatus) as string[]).includes(s));
-    res.json(await listWarpBeams({ status, warpSpecId: q.warpSpecId, weavingOrderId: q.weavingOrderId, originKind: q.originKind, search: q.search, cursor: q.cursor, limit: q.limit, withTotal: q.withTotal === "true" }));
+    res.json(await listWarpBeams({ status, warpSpecId: q.warpSpecId, weavingOrderId: q.weavingOrderId, originKind: q.originKind, search: q.search, cursor: q.cursor, limit: q.limit, withTotal: q.withTotal === "true", minAgeDays: q.minAgeDays }));
   } catch (e) {
     next(e);
   }
