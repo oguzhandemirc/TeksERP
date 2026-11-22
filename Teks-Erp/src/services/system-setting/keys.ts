@@ -292,6 +292,9 @@ export const SETTING_KEYS = {
   /** [PROFİL] Fason devere D1: çözgü hesabında sipariş başına SABİT fire metresi (baş/son/düğüm). DEFAULT 0 =
    *  müşterinin kâğıttaki formülü (firesiz); yalnız öneriyi büyütür, hiçbir defteri değiştirmez. */
   DEVERE_WARP_FIXED_WASTE_M: "devere.warpFixedWasteM",
+  /** [PROFİL] Devere-levent S1: devere geçmişi olmayan çözgü kartı için yedek teslim süresi (gün). DEFAULT 0 = yok →
+   *  "devereye ver" günü ölçülemedi (bugünkü yanıt: alan yok). Yalnız rapor tahminini besler, hiçbir şeyi engellemez. */
+  DEVERE_DEFAULT_LEAD_DAYS: "devere.defaultLeadDays",
   /** [PROFİL] Fason devere D4: kapamada fire % toleransı — sipariş açılırken DONAR. DEFAULT 0 = denetim yok
    *  (bugünkü davranış); aşım yalnız UYARIR, hiçbir işlemi engellemez. */
   DEVERE_FASON_WASTE_TOLERANCE_PCT: "devere.fasonWasteTolerancePct",

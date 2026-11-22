@@ -434,6 +434,8 @@ export interface FeatureFlags {
   devereAutoConsume: boolean;
   /** Fason devere D1: çözgü hesabında sabit fire metresi (backend `DEFAULT_DEVERE_WARP_FIXED_WASTE_M` = 0). */
   devereWarpFixedWasteM: number;
+  /** Devere-levent S1: geçmişsiz çözgü kartında yedek devere teslim süresi (gün; backend `DEFAULT_DEVERE_DEFAULT_LEAD_DAYS` = 0 = yok). */
+  devereDefaultLeadDays: number;
   /** Fason devere D4: kapama fire toleransı % (backend `DEFAULT_DEVERE_FASON_WASTE_TOLERANCE_PCT` = 0 = denetim yok). */
   devereFasonWasteTolerancePct: number;
   /** Fason devere D4b (K4): lot karışımı kuralı (backend `DEFAULT_DEVERE_FASON_LOT_POLICY` = WARN). */

@@ -108,6 +108,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   devereAutoConsume: "devereEnabled",
   // Fason devere D1 (2026-11-17): çözgü hesabının sabit fire metresi devere modülünün sayısal ayarı.
   devereWarpFixedWasteM: "devereEnabled",
+  devereDefaultLeadDays: "devereEnabled",
   // Fason devere D4 (2026-11-17): kapama fire toleransı devere modülünün sayısal ayarı.
   devereFasonWasteTolerancePct: "devereEnabled",
   devereFasonLotPolicy: "devereEnabled",
