@@ -5,6 +5,7 @@ import { warpSpecFormSchema, type WarpSpecFormValues } from "./schema";
 import { buildDefaults } from "./payload";
 import { YarnRowsEditor } from "./YarnRowsEditor";
 import { WarpCalcPanel } from "./WarpCalcPanel";
+import { WarpSpecVisualPanel } from "./WarpSpecVisualPanel";
 import { IdentityFields, NotesField, ReedFields, ReedHelper } from "./WarpSpecFields";
 import type { WarpSpec } from "./types";
 import { ModalSection } from "@/components/forms/modal-sections/ModalSections";
@@ -59,6 +60,9 @@ export function WarpSpecFormDialog({ open, onOpenChange, initial, draft, onSubmi
             <>
               <ModalSection id="calc" title="Hesap">
                 <WarpCalcPanel />
+              </ModalSection>
+              <ModalSection id="visual" title="Görünüm">
+                <WarpSpecVisualPanel initial={initial} />
               </ModalSection>
               <ModalSection id="notes" title="Not" fields={NOTE_FIELDS}>
                 <div className="rounded-xl border border-card-border bg-card px-5 py-4 shadow-card">

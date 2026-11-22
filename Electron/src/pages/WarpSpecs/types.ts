@@ -1,3 +1,5 @@
+import type { WarpEndsSequenceView } from "@/components/weave/warp-ends";
+
 /** Çözgü kartındaki iplik özeti — listede "hangi iplikten" sorusunu kod/ad
  *  olmadan cevaplayamayız; denye de formülün girdisi olduğu için taşınır. */
 export interface WarpSpecYarnItem {
@@ -36,6 +38,8 @@ export interface WarpSpec {
   yarns?: WarpSpecYarnRow[];
   /** Dizilim talimatı (≤160) — hesaba girmez. */
   sequenceNote?: string | null;
+  /** Dizilimin tel tel açılımı — yalnız tekil okumada (`GET /:id`); eski sunucu göndermez. */
+  endsSequence?: WarpEndsSequenceView | null;
   notes: string | null;
   isActive: boolean;
   createdAt: string;

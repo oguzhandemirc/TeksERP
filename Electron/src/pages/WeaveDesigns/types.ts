@@ -1,5 +1,6 @@
 // Desen kartı (WeaveDesign) + etkin yapı tel tipleri — backend `weave-design.service` /
 // `effective-construction.helper` yanıtlarının aynası (Seyitoğlu SY-A3). Decimal alanlar metin gelir.
+import type { WarpEndsSequenceView } from "@/components/weave/warp-ends";
 
 export const WEAVE_DESIGN_KINDS = ["PLAIN", "DOBBY", "JACQUARD", "LENO"] as const;
 export type WeaveDesignKind = (typeof WEAVE_DESIGN_KINDS)[number];
@@ -50,6 +51,14 @@ export type WeaveDesignInput = Partial<Omit<WeaveDesign, "id" | "isActive">>;
 export interface YarnRef { id: string; code: string; name: string; linearDensityDen: string | null }
 export interface WarpRef {
   id: string; code: string; name: string; endsCount: number; takeUpPct: string | null; wastePct: string | null; yarnItem: YarnRef | null;
+  /** Kart görseli alanları — eski backend göndermez. */
+  yarns?: Array<{ yarnItemId: string; endsCount: number; sortOrder: number; yarnItem?: YarnRef | null }>;
+  sequenceNote?: string | null;
+  endsPerDent?: number | null;
+  reedNo?: string | number | null;
+  selvedgeEnds?: number | null;
+  /** Dizilimin sunucu açılımı; null = not yok/okunamadı (oransal blok). */
+  endsSequence?: WarpEndsSequenceView | null;
 }
 
 export interface EffectiveWeftYarn {

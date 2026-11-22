@@ -10,6 +10,7 @@ import { NATIVE_SELECT_CLASS } from "../WeaveDesignCreateDialog";
 import { constructionApi } from "../service";
 import { BEAM_MODE_OPTIONS, WARP_LAYER_ROLE_LABEL, type DesignFabric, type WarpBeamMode } from "../types";
 import { ConstructionWarnings } from "./ConstructionWarnings";
+import { WarpLayersVisual } from "./WarpLayersVisual";
 
 export function WarpLayersSection({ fabric, canWrite }: { fabric: DesignFabric; canWrite: boolean }) {
   const qc = useQueryClient();
@@ -62,6 +63,7 @@ export function WarpLayersSection({ fabric, canWrite }: { fabric: DesignFabric; 
         </ul>
       )}
       {canSave && dirty && <Button size="sm" disabled={save.isPending} onClick={() => save.mutate()}>Sarım biçimini kaydet</Button>}
+      <WarpLayersVisual construction={c.data} />
       <ConstructionWarnings warnings={c.data.warnings} />
     </section>
   );

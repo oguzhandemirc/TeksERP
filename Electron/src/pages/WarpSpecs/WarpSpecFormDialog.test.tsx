@@ -35,6 +35,8 @@ vi.mock("@/pages/Operations/WarpPlan/service", () => ({
 vi.mock("@/pages/Items/service", () => ({
   itemService: { getById: vi.fn(async (id: string) => ({ success: true, data: { id, code: id.toUpperCase(), name: `İplik ${id}` } })), listCursor: vi.fn(), list: vi.fn() },
 }));
+const getById = vi.fn();
+vi.mock("./service", () => ({ warpSpecService: { getById: (id: string) => getById(id) } }));
 vi.mock("@/components/forms/SimilarNamesWarning", () => ({ SimilarNamesWarning: () => null }));
 vi.mock("@/components/production/SpecOpenOrdersNotice", () => ({ SpecOpenOrdersNotice: () => null }));
 
@@ -59,6 +61,8 @@ function renderDialog(props: Partial<Parameters<typeof WarpSpecFormDialog>[0]> =
 
 beforeEach(() => {
   suggest.mockReset();
+  getById.mockReset();
+  getById.mockResolvedValue({ success: true, data: { ...spec, endsSequence: { repeat: [1, 1, 1, 2, 2, 2, 2], repeatCount: 1000, remainder: 0, totalEnds: 7000, matchesYarnEnds: true } } });
   bodies.length = 0;
 });
 
@@ -143,5 +147,29 @@ describe("WarpSpecFormDialog — D3 satır editörü", () => {
     expect(screen.getByLabelText("Kod", { exact: false })).toHaveProperty("value", "");
     expect(screen.getByLabelText("B tel adedi")).toHaveProperty("value", "4000");
     expect(buildDefaults(null).yarns).toHaveLength(1);
+  });
+});
+
+describe("WarpSpecFormDialog — Görünüm (tel düzeni + tarak)", () => {
+  it("Görünüm: kayıtlı kartta sunucu açılımı; dizilim değişince oransal blok + 'kaydedince'", async () => {
+    const user = userEvent.setup();
+    renderDialog({ initial: spec });
+    const summary = await screen.findByTestId("warp-ends-summary");
+    expect(getById).toHaveBeenCalledWith("s1");
+    expect(summary.textContent).toMatch(/Rapor 7 tel × 1\.?000 tekrar = 7\.?000 tel/);
+    expect(screen.getByTestId("reed-plan-summary").textContent).toContain("Dişe 1 tel");
+    const note = screen.getByLabelText("Dizilim (talimat)", { exact: false });
+    await user.clear(note);
+    await user.type(note, "1A 1B");
+    expect(screen.queryByTestId("warp-ends-summary")).toBeNull();
+    expect(screen.getByTestId("warp-ends-proportional")).toBeTruthy();
+    expect(screen.getByTestId("warp-ends-fallback").textContent).toContain("Kaydedince");
+  });
+
+  it("Görünüm: yeni kartta sunucuya gidilmez", () => {
+    renderDialog();
+    expect(getById).not.toHaveBeenCalled();
+    expect(screen.getByTestId("warp-ends-empty")).toBeTruthy();
+    expect(screen.getByTestId("reed-plan-empty")).toBeTruthy();
   });
 });

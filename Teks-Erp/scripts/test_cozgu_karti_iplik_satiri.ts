@@ -92,6 +92,10 @@ async function writeArms({ a, b, c, mk, specIds }: Arms): Promise<void> {
   check("§7a çok iplikli kart gövdeden doğar: 3 satır, sıra = gövde sırası", J(await rowsOf(s1Id)) === J([{ yarnItemId: a, endsCount: 3000, sortOrder: 0 }, { yarnItemId: b, endsCount: 2400, sortOrder: 1 }, { yarnItemId: c, endsCount: 1800, sortOrder: 2 }]), J(await rowsOf(s1Id)));
   check("§7b kolonlar satırlardan türer (gövdedeki iplik/tel yok sayılır)", s1Spec.yarnItemId === a && s1Spec.endsCount === 7200, J(s1Spec));
   check("§7c dizilim notu yazılır (kırpılmış)", s1Spec.sequenceNote === "1 A 1 B 1 C", J(s1Spec.sequenceNote));
+  // Kart görseli: tekil okuma açılımı taşır; tel payı 3000/2400/1800 ≠ eşit rapor → uyuşmazlık bayrağı.
+  const one = (await warpSpecService.findById(s1Id)).data as { endsSequence?: { repeat: number[]; repeatCount: number; remainder: number; totalEnds: number; matchesYarnEnds: boolean } | null };
+  const es = one.endsSequence;
+  check("§7c2 GET /:id endsSequence: rapor [1,2,3] × 2400, uyuşmazlık işaretli", J(es?.repeat) === "[1,2,3]" && es?.repeatCount === 2400 && es.remainder === 0 && es.totalEnds === 7200 && es.matchesYarnEnds === false, J(es));
   const ret = (s1 as { data?: { yarns?: unknown[] } }).data?.yarns ?? [];
   check("§7d yanıt satırları TAZE taşır (kanca sonrası okunur)", ret.length === 3, `${ret.length}`);
   const log1 = (await yarnLogs(s1Id))[0];
