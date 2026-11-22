@@ -29,6 +29,7 @@ import { beamResultReport } from "../../services/reports/levent-sonucu.report.se
 import { capacityUsageReport } from "../../services/reports/kapasite-kullanimi.report.service";
 import { finishForecastReport } from "../../services/reports/levent-bitis-tahmini.report.service";
 import { getDenierDeviationReport } from "../../services/denier-deviation.service";
+import { devereciKarnesiReport } from "../../services/reports/devereci-karnesi.report.service";
 
 const router = Router();
 router.use(verifyToken, requireDokumaEnabled);
@@ -302,6 +303,35 @@ router.get("/denye-sapma", requireDevereEnabled, requireReportOpen("dokuma/denye
   try {
     const q = denierDeviationQuerySchema.parse(req.query);
     res.status(200).json({ success: true, data: await getDenierDeviationReport(q) });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/** Devere-levent S2: devereci karnesi — dönem zorunlu (fabrika günü), devereci süzgeci opsiyonel. */
+export const devereciKarnesiQuerySchema = z.object({ from: YMD, to: YMD, subcontractorId: uuidOpt("Geçersiz devereci") }).strict();
+
+/**
+ * @openapi
+ * /api/reports/dokuma/devereci-karnesi:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Devereci karnesi — zamanında dönüş %, teslim süresi medyanı, sipariş firesi ve tolerans aşımı, ret oranı, denye sapması, 100 m başına çözgü hatası (top↔levent bağı yoksa "ölçülemedi")
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: from, required: true, schema: { type: string, format: date } }
+ *       - { in: query, name: to, required: true, schema: { type: string, format: date } }
+ *       - { in: query, name: subcontractorId, schema: { type: string, format: uuid }, description: Devereci süzgeci }
+ *     responses:
+ *       200: { description: "Rapor zarfı — data.satirlar · data.ozet · data.meta.ufuk · meta.otomatikTuketim · meta.secenekler.subcontractorId; süzgeçliyse suzgec" }
+ *       400: { description: Geçersiz gün ya da aralık (INVALID_RANGE) }
+ *       403: { description: Dokuma ya da devere modülü kapalı (MODULE_DISABLED), rapor kapalı ya da yetki yok }
+ */
+router.get("/devereci-karnesi", requireDevereEnabled, requireReportOpen("dokuma/devereci-karnesi"), guard, async (req, res, next) => {
+  try {
+    const q = devereciKarnesiQuerySchema.parse(req.query);
+    const { data, dusenSatir, range } = await devereciKarnesiReport(q);
+    res.status(200).json(reportEnvelope(data, range, null, { suzgec: filterEcho(q, ["subcontractorId"], dusenSatir) }));
   } catch (e) {
     next(e);
   }

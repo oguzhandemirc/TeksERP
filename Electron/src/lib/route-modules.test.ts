@@ -137,7 +137,10 @@ describe("route-modules — K19 bağlı modül", () => {
     const src = readFileSync(resolve(__dirname, "../../../Teks-Erp/src/routes/reports/maliyet.report.routes.ts"), "utf8");
     const line = src.split("\n").find((l) => l.startsWith('router.get("/karlilik"')) ?? "";
     expect(line).toContain("requireFinanceEnabled");
-    expect(Object.keys(ROUTE_ALSO_REQUIRES)).toEqual(["reports/maliyet/karlilik", "reports/dokuma/denye-sapma"]);
+    expect(Object.keys(ROUTE_ALSO_REQUIRES)).toEqual(["reports/maliyet/karlilik", "reports/dokuma/denye-sapma", "reports/dokuma/devereci-karnesi"]);
+    // Devere-levent S2: devereci karnesi ucu da kendi satırında devere kapısında.
+    expect(readFileSync(resolve(__dirname, "../../../Teks-Erp/src/routes/reports/dokuma.report.routes.ts"), "utf8").split("\n").find((l) => l.startsWith('router.get("/devereci-karnesi"')) ?? "").toContain("requireDevereEnabled");
+    expect(isRouteModuleOpen("/reports/dokuma/devereci-karnesi", ctx({ devereEnabled: false }))).toBe(false);
     expect(ROUTE_ALSO_REQUIRES["reports/maliyet/karlilik"]).toEqual(["financeEnabled"]);
     // Devere F2: denye sapma rapor ucu kendi satırında devere kapısında.
     const dokuma = readFileSync(resolve(__dirname, "../../../Teks-Erp/src/routes/reports/dokuma.report.routes.ts"), "utf8");
