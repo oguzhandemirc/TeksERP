@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBand, ListBody, ListFooter } from "@/components/layout/ListPage";
+import { ListFooter } from "@/components/layout/ListPage";
 import { RefreshButton } from "@/components/RefreshButton";
 import { isUuid, fromSearchParams, toQueryParams, toSearchParams, dayChipLabel, type PrintHistoryFilterState } from "@/lib/print-history-query";
 import { printDeviceText, printPrinterText, printUserText } from "@/lib/print-job-format";
@@ -60,7 +60,6 @@ export function PrintHistoryPage() {
   return (
     <PageShell>
       <PageHeader title="Yazdırma Geçmişi" actions={<RefreshButton queryKey={PRINT_HISTORY_QUERY_KEY} />} />
-      {summary && <SummaryStrip summary={summary} prefix={dayChipLabel(filters)} items={items} />}
       <PrintHistoryFilters
         value={filters}
         onChange={setFilters}
@@ -72,42 +71,25 @@ export function PrintHistoryPage() {
         tools={<DataTableTools table={table} hideExport />}
       />
 
-      {!unsupported && !query.isError && items.length > 0 ? (
-        <PrintHistoryTable table={table} items={items} loading={query.isLoading} onSelect={handleSelect} loadMore={loadMore} />
-      ) : (
-        <ListBody>
-          {unsupported ? (
-            <EmptyState text="Bu sunucu sürümü yazdırma geçmişini desteklemiyor. Sunucu güncellendiğinde kayıtlar burada görünür." />
-          ) : query.isError ? (
-            <EmptyState text="Yazdırma geçmişi okunamadı. Bağlantıyı kontrol edip yenileyin." tone="danger" />
-          ) : (
-            <PrintHistoryTable table={table} items={items} loading={query.isLoading} onSelect={handleSelect} loadMore={loadMore} />
-          )}
-        </ListBody>
-      )}
+      <PrintHistoryTable
+        table={table}
+        loading={query.isLoading}
+        isError={query.isError}
+        errorText={unsupported ? "Bu sunucu sürümü yazdırma geçmişini desteklemiyor. Sunucu güncellendiğinde kayıtlar burada görünür." : "Yazdırma geçmişi okunamadı. Bağlantıyı kontrol edip yenileyin."}
+        onRetry={unsupported ? undefined : () => void query.refetch()}
+        onSelect={handleSelect}
+        loadMore={loadMore}
+      />
       <ListFooter
         loaded={items.length}
         total={summary?.toplam ?? null}
         hasMore={query.hasNextPage}
         isFetchingMore={query.isFetchingNextPage}
+        summary={summary ? <SummaryStrip summary={summary} prefix={dayChipLabel(filters)} items={items} /> : undefined}
       />
 
       <PrintJobDetailSheet jobId={detailId} onClose={() => setDetailId(null)} />
     </PageShell>
-  );
-}
-
-function EmptyState({ text, tone }: { text: string; tone?: "danger" }) {
-  return (
-    <div
-      className={
-        tone === "danger"
-          ? "flex flex-1 items-center justify-center p-12 text-center text-sm text-red-700 dark:text-red-300"
-          : "flex flex-1 items-center justify-center p-12 text-center text-sm text-muted-foreground"
-      }
-    >
-      {text}
-    </div>
   );
 }
 
@@ -134,9 +116,9 @@ function SummaryStrip({ summary, prefix, items }: { summary: PrintJobSummary; pr
     : null;
   const hasError = summary.durum.HATA > 0;
   return (
-    <ListBand className={hasError ? "text-sm text-foreground" : "text-sm text-muted-foreground"} data-testid="print-summary" data-has-error={hasError || undefined}>
+    <span className={hasError ? "text-foreground" : undefined} data-testid="print-summary" data-has-error={hasError || undefined}>
       {summaryText(summary, prefix, worstLabel)}
-    </ListBand>
+    </span>
   );
 }
 

@@ -56,6 +56,8 @@ interface Props {
   exportName?: string;
   /** Sayfalama çubuğunun sağına eklenen aksiyonlar ("Tümünü İndir" + "Envanter Özeti"). */
   paginationActions?: ReactNode;
+  /** Alt çubuktaki özet (stok sayıları) — sayfa üstünde ayrı bant çizilmez. */
+  footerSummary?: ReactNode;
 }
 
 /**
@@ -74,6 +76,7 @@ export function RollsTableBody({
   hideFilterBar = false,
   exportName,
   paginationActions,
+  footerSummary,
 }: Props) {
   const [selected, setSelected] = useState<Roll | null>(null);
   const [bulkCancelOpen, setBulkCancelOpen] = useState(false);
@@ -141,6 +144,7 @@ export function RollsTableBody({
         isLoading={isLoading}
         pagination={pagination}
         paginationActions={paginationActions}
+        footerSummary={footerSummary}
         emptyText="Top bulunamadı."
         exportName={exportName}
         // Seçim çubuğunda ipucu metni yok (sevkiyat ekranlarıyla tutarlı) — "Seçili

@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
-import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable } from "@/components/data-table/DataTable";
 import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
@@ -20,7 +19,6 @@ import { RebindRequestsPanel } from "./RebindRequestsPanel";
 import { DuplicateCandidates } from "./DuplicateCandidates";
 import { ProofLostPanel } from "./ProofLostPanel";
 import { PendingBulkReject } from "./PendingBulkReject";
-import { DevicesEmptyState as EmptyState } from "./DevicesEmptyState";
 import { useProofLost } from "./proof";
 import { DeviceContextItems } from "./DeviceRow";
 import { DEVICE_EXPORT_COLUMNS, useDevicesTable } from "./deviceColumns";
@@ -33,6 +31,8 @@ import {
 import { foldSearchText } from "@/lib/search-fold";
 
 const QUERY_KEY = "admin-devices";
+const NO_DEVICES_HINT =
+  "Tablet ilk açıldığında kendini otomatik bildirir ve burada \"Onay bekliyor\" olarak listelenir. Onaylayıp bir makineye atayınca tablet çalışmaya başlar.";
 
 export function DevicesPage() {
   const qc = useQueryClient();
@@ -152,18 +152,17 @@ export function DevicesPage() {
           <PendingBulkReject devices={devices} onDone={invalidate} />
           <DuplicateCandidates initiallyOpen={params.get("kopya") === "1"} />
         </ListMessage>
-        {query.isLoading ? (
-          <ListMessage className="space-y-2">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</ListMessage>
-        ) : devices.length === 0 ? (
-          <ListMessage><EmptyState /></ListMessage>
-        ) : (
-          <DataTable
-            table={table}
-            emptyText="Filtreye uyan cihaz yok."
-            rowClassName={(d) => (d.isActive ? undefined : "opacity-60")}
-            rowContextMenu={canManage ? (d) => <DeviceContextItems device={d} handlers={handlers.current} /> : undefined}
-          />
-        )}
+        <DataTable
+          table={table}
+          isLoading={query.isLoading}
+          isError={query.isError}
+          errorText="Cihaz listesi yüklenemedi."
+          onRetry={() => void query.refetch()}
+          emptyText={devices.length === 0 ? "Henüz cihaz yok" : "Filtreye uyan cihaz yok."}
+          emptyDescription={devices.length === 0 ? NO_DEVICES_HINT : undefined}
+          rowClassName={(d) => (d.isActive ? undefined : "opacity-60")}
+          rowContextMenu={canManage ? (d) => <DeviceContextItems device={d} handlers={handlers.current} /> : undefined}
+        />
       </ListBody>
       <ListFooter loaded={filtered.length} total={devices.length} />
 

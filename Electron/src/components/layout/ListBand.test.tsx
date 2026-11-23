@@ -49,15 +49,13 @@ const BANDED: Array<[page: string, strip: string]> = [
   ["pages/Operations/Orders/OrdersPage.tsx", "pages/Operations/Orders/OrdersStats.tsx"],
   ["pages/Cost/Quotes/QuotesPage.tsx", "pages/Cost/Quotes/QuoteSummaryStrip.tsx"],
   ["pages/Operations/Shipments/eirsaliye/EIrsaliyeSummaryStrip.tsx", "pages/Operations/Shipments/eirsaliye/EIrsaliyeSummaryStrip.tsx"],
-  ["pages/Operations/Rolls/RollsPage.tsx", "pages/Operations/Rolls/RollsStats.tsx"],
   ["pages/Operations/FasonCockpit/FasonCockpitPage.tsx", "pages/Operations/FasonCockpit/CockpitSummary.tsx"],
   ["pages/Operations/ConsignmentDispatches/ConsignmentDispatchesPage.tsx", "pages/Operations/ConsignmentDispatches/ConsignmentDispatchFilters.tsx"],
   ["pages/Operations/LoomAlarms/LoomAlarmsPage.tsx", "pages/Operations/LoomAlarms/LoomAlarmsTable.tsx"],
   ["pages/Operations/KursunMeterDeviations/MeterDeviationsPage.tsx", "pages/Operations/KursunMeterDeviations/SummaryStrip.tsx"],
   ["pages/Operations/ReadyWorks/ReadyWorksPage.tsx", "pages/Operations/ReadyWorks/ReadyWorksTable.tsx"],
   ["pages/Operations/ConsignedWork/ConsignedWorkPage.tsx", "pages/Operations/ConsignedWork/ConsignedWorkTable.tsx"],
-  // Muayene / Lab / Sertifika özetleri alt çubukta (`ListFooter summary`) — UI denetimi D2, bant yok.
-  ["pages/System/PrintHistory/PrintHistoryPage.tsx", "pages/System/PrintHistory/PrintHistoryPage.tsx"],
+  // Muayene / Lab / Sertifika / Yazdırma Geçmişi / Kumaş Stoğu özetleri alt çubukta (`ListFooter summary`) — UI denetimi D2, bant yok.
 ];
 
 describe("liste özet şeritleri ListBand içinde", () => {

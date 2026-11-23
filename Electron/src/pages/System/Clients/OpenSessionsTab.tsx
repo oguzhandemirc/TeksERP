@@ -2,14 +2,11 @@
 import { useCallback, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AlertTriangle, KeyRound } from "lucide-react";
-import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { ListFooter, ListToolbar } from "@/components/layout/ListPage";
 import { DataTable } from "@/components/data-table/DataTable";
 import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { ListSearchBox } from "@/components/data-table/ListSearchBox";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
-import { Callout } from "@/components/ui/callout";
-import { EmptyState } from "@/components/ui/empty-state";
 import { useListSearch } from "@/hooks/useListSearch";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { cn } from "@/lib/utils";
@@ -25,12 +22,9 @@ function VersionStrip({ sessions }: { sessions: OpenSession[] }) {
   const items = versionStrip(sessions);
   if (items.length === 0) return null;
   return (
-    <div className="flex flex-wrap items-center gap-1.5 text-xs" aria-label="Sürüm dağılımı">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs" aria-label="Sürüm dağılımı">
       {items.map((i) => (
-        <span
-          key={`${i.deviceType}|${i.version ?? ""}`}
-          className={cn("rounded-md border px-2 py-0.5", i.outdated ? "border-warning/50 text-warning" : "text-muted-foreground")}
-        >
+        <span key={`${i.deviceType}|${i.version ?? ""}`} className={cn(i.outdated ? "text-warning" : "text-muted-foreground")}>
           {sessionTypeLabel(i.deviceType)} <b className="tabular-nums">{i.version ?? "ölçülemedi"}</b> · {i.count}
         </span>
       ))}
@@ -66,29 +60,27 @@ export function OpenSessionsTab() {
   return (
     <>
       <ListToolbar className="flex-row items-center">
-        <VersionStrip sessions={sessions} />
+        <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Kullanıcı, cihaz adı, tür ya da sürüm ara" />
         <div className="ml-auto flex items-center gap-1.5">
-          <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Kullanıcı, cihaz adı, tür ya da sürüm ara" />
           <DataTableTools table={table} compact exportName="Açık oturumlar" />
         </div>
       </ListToolbar>
-      <ListMessage className="shrink-0 space-y-4 empty:hidden">
-        {q.isError && (
-          <Callout tone="danger" icon={AlertTriangle} title="Liste alınamadı">
-            Sunucuya ulaşılamıyor. "Yenile" ile tekrar deneyin.
-          </Callout>
-        )}
-        {snap?.truncated && (
-          <Callout tone="warning" title={`İlk ${snap.limit} oturum gösteriliyor`}>
-            Daha fazla açık oturum var; aramayla daraltın.
-          </Callout>
-        )}
-        {snap && sessions.length === 0 && (
-          <EmptyState icon={KeyRound} title={term ? "Aramaya uyan oturum yok" : "Açık oturum yok"} description="Süresi dolan ya da çıkış yapılan oturumlar burada görünmez." />
-        )}
-      </ListMessage>
-      {sessions.length > 0 ? <DataTable table={table} exportName="Açık oturumlar" /> : <ListBody />}
-      <ListFooter loaded={sessions.length} />
+      <DataTable
+        table={table}
+        exportName="Açık oturumlar"
+        isLoading={q.isLoading}
+        isError={q.isError}
+        errorText="Sunucuya ulaşılamıyor — liste alınamadı."
+        onRetry={() => void q.refetch()}
+        emptyText={term ? "Aramaya uyan oturum yok" : "Açık oturum yok"}
+        emptyDescription="Süresi dolan ya da çıkış yapılan oturumlar burada görünmez."
+      />
+      <ListFooter
+        loaded={sessions.length}
+        // Kırpma uyarısı kaybolmasın: sayı satırında söylenir.
+        label={snap?.truncated ? `İlk ${snap.limit} oturum gösteriliyor — daha fazlası var, aramayla daraltın` : undefined}
+        summary={sessions.length > 0 ? <VersionStrip sessions={sessions} /> : undefined}
+      />
       <ConfirmDialog
         open={target !== null}
         onOpenChange={(o) => !o && setTarget(null)}

@@ -1,14 +1,17 @@
 import { AlertTriangle } from "lucide-react";
 import type { Table } from "@tanstack/react-table";
 import { DataTable } from "@/components/data-table/DataTable";
-import { Skeleton } from "@/components/ui/skeleton";
 import { printErrorHint } from "@/lib/print-error-hints";
 import type { PrintJobRow } from "@/services/printHistoryService";
 
 interface Props {
   table: Table<PrintJobRow>;
-  items: PrintJobRow[];
   loading: boolean;
+  isError: boolean;
+  /** Hata cümlesi — eski sunucuda "desteklemiyor", aksi hâlde bağlantı hatası. */
+  errorText: string;
+  /** Eski sunucuda yeniden deneme anlamsız → verilmez. */
+  onRetry?: () => void;
   onSelect: (row: PrintJobRow) => void;
   loadMore: { hasMore: boolean; isFetchingMore: boolean; onLoadMore: () => unknown };
 }
@@ -32,26 +35,15 @@ function ErrorHint({ row }: { row: PrintJobRow }) {
 }
 
 /** Yazdırma geçmişi listesi — ortak DataTable; sütunlar `printHistoryColumns.tsx`, Sütunlar menüsü süzgeç çubuğunda. */
-export function PrintHistoryTable({ table, items, loading, onSelect, loadMore }: Props) {
-  if (loading && items.length === 0) {
-    return (
-      <div className="space-y-2 p-6">
-        {Array.from({ length: 8 }).map((_, i) => (
-          <Skeleton key={i} className="h-10 w-full" />
-        ))}
-      </div>
-    );
-  }
-  if (items.length === 0) {
-    return (
-      <div className="flex flex-1 items-center justify-center p-12 text-center text-sm text-muted-foreground">
-        Filtreye uyan baskı kaydı yok.
-      </div>
-    );
-  }
+export function PrintHistoryTable({ table, loading, isError, errorText, onRetry, onSelect, loadMore }: Props) {
   return (
     <DataTable
       table={table}
+      isLoading={loading}
+      isError={isError}
+      errorText={errorText}
+      onRetry={onRetry}
+      emptyText="Filtreye uyan baskı kaydı yok."
       onRowClick={onSelect}
       rowClassName={(r) => (hintOf(r) ? "bg-red-500/10 hover:bg-red-500/15" : undefined)}
       renderSubRow={(r) => (hintOf(r) ? <ErrorHint row={r} /> : null)}

@@ -7,7 +7,6 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { DemoBar } from "@/components/demo/DemoBar";
 import { SimulatedMeterBanner } from "@/components/operations/SimulatedMeterBanner";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBand } from "@/components/layout/ListPage";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
@@ -309,19 +308,6 @@ export function RollsPage() {
         open={Boolean(scanRoll)}
         onOpenChange={(o) => !o && setScanRoll(null)}
       />
-      {isTableTab && (
-        <ListBand>
-          <RollsStats
-            data={statsQuery.data?.data}
-            isLoading={statsQuery.isLoading}
-            scopeLabel={
-              tab === "SUBCONTRACTOR"
-                ? fasonScopeLabel ?? "Fasonda"
-                : TABS.find((t) => t.key === tab)?.label ?? ""
-            }
-          />
-        </ListBand>
-      )}
       <ReorderableTabBar
         tabs={orderedTabs}
         activeKey={tab}
@@ -354,6 +340,15 @@ export function RollsPage() {
           pagination={dataTable.pagination}
           exportName="Kumaş Stoğu"
           hideFilterBar
+          footerSummary={
+            isTableTab ? (
+              <RollsStats
+                data={statsQuery.data?.data}
+                isLoading={statsQuery.isLoading}
+                scopeLabel={tab === "SUBCONTRACTOR" ? fasonScopeLabel ?? "Fasonda" : TABS.find((t) => t.key === tab)?.label ?? ""}
+              />
+            ) : undefined
+          }
           paginationActions={
             <>
               {exportAll.confirmDialog}
