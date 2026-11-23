@@ -105,6 +105,8 @@ export const ROLL_FINISHED_FIELDS: readonly FieldDef[] = [
   { key: "kartelaMark",      defaultLabel: "Kartelalık",             type: "text" },
   // Açık (kararsız) hatalar — tambursuz rotada bilgi (KQ-D8). OPT-IN: şablonda açılmadıkça basılmaz.
   { key: "openDefects",      defaultLabel: "Hata Notu",              type: "text", defaultVisible: false },
+  // Ton grubu harfi (A, B…; 2026-11-23) — OPT-IN: şablonda açılmadıkça basılmaz; tonsuz topta boş.
+  { key: "shadeCode",        defaultLabel: "Ton",                    type: "text", defaultVisible: false },
   // Müşterinin GELEN BELGESİNDEKİ kumaş adı/rengi (hizmet ekseni E3) — ham metin, Tambur çocuğunda ata topun
   // satırından. OPT-IN: şablonda açılmadıkça basılmaz (müşteri metni bizim ürün adımızın yerine geçmez).
   { key: "deliveryNoteItemText",  defaultLabel: "Kumaş (müşteri belgesindeki)", type: "text", defaultVisible: false },

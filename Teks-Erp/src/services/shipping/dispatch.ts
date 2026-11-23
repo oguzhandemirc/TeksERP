@@ -35,6 +35,7 @@ import { recomputeOrderStatusForOrdersTx, touchOrderLinesTx } from "../helpers/o
 import { ApiResponse } from "../../types/api.types";
 import { LIVE_LOAD_UNIT_WHERE } from "../helpers/load-unit.helper";
 import { assertOwnerMatchesTx } from "../helpers/emanet-owner.helper";
+import { assertShadeMixAllowedTx } from "../helpers/shade-group.helper";
 import { emanetShipmentReleaseTx } from "../helpers/emanet-shipment.helper";
 import { assertShipmentNotHeldTx } from "../helpers/cari-hold.helper";
 import { assertCustomerRiskLimitTx } from "../helpers/risk-exposure.helper";
@@ -125,6 +126,8 @@ export async function performDispatchTx(this: ShippingServiceThis,
     const shipmentHeader = await tx.shipment.findUniqueOrThrow({ where: { id: shipmentId }, select: { customerId: true, shipmentNo: true } });
     const shipmentRollIds = (await tx.roll.findMany({ where: { shipmentId }, select: { id: true } })).map((r) => r.id);
     await assertOwnerMatchesTx(tx, { rollIds: shipmentRollIds, customerId: shipmentHeader.customerId, belge: `sevkiyat ${shipmentHeader.shipmentNo}` });
+    // TON GRUBU — aynı ortak boğaz: `shipping.shadeMixPolicy=block` iken aynı ürün+renge farklı ton 409 `SHADE_MIX`.
+    await assertShadeMixAllowedTx(tx, { rollIds: shipmentRollIds, belge: `sevkiyat ${shipmentHeader.shipmentNo}` });
 
     // ÇUVAL İZLERİ (ETİKET) TEMİZLENİR — sevk ANINDA, SOFT damgayla (2026-09-04).
     // İz depodaki işi anlatır ("kontrol et", "eksik"); mal çıktıktan sonra artık

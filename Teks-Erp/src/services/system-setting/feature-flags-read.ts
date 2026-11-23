@@ -23,7 +23,7 @@ import { readPackageNoMode, readPackageNoStartsAtZero, readPackageNumbering, rea
 import { readBackupHour, readLoginMethods, readPinLockoutAttempts, readPinLockoutEnabled, readPinLockoutEscalateAfter, readPinLockoutLongPenaltyMin, readPinLockoutPenaltySec } from "./pin-backup";
 import { readFasonNoteMobileEntry, readKartelaMeasurementEnabled, readKk1DuplicateGuardEnabled, readKk1HistoryAllEntriesEnabled, readKk1LabelScanVerifyEnabled, readKk1OnlineOnlyEnabled, readKk1WeightEntryEnabled, readPartyCodeAuto, readRawWidthEnabled, readReturnGradingEnabled, readSimulatedWeightEnabled, readTargetQuantityEnabled, readTargetWidthEnabled, readWorkOrderQuickOwnOnlyEnabled } from "./production";
 import { readAbsoluteSessionCapDays, readAutoLogoutOnExpiry, readIdleTimeoutMinutes, readMobileIdleLockEnabled, readMobileIdleLockMinutes, readMobileLockOnBackground, readMobileOfflineLockDefer, readRememberLastUser, readSameTypeSessionPolicy, readSessionDurationMinutes, readWorkSessionIdleTimeoutMinutes } from "./session";
-import { readItemPhaseOutLineQty, readItemPhaseOutNewOrder, readItemPhaseOutNewPlan, readShipmentConfirmationEnabled, readShipmentHandheldCreateEnabled, readShipmentLooseLoadEnabled, readShipmentManualSackCountEnabled, readShipmentUndoSameDayOnly, readShippingAllocWidthToleranceCm, readShippingAllocWidthToleranceEnabled, readShippingAllowOverAllocation, readShippingDocCekiNameMode, readShippingDocItemNameMode, readShippingDocProductColorSplit, readShippingInvoiceMode, readShippingManualWeightRestrictedEnabled, readShippingOrderCoverage, readShippingOrderRequirement, readShippingReadyNotifyUnits, readShippingReadyRule, readShippingReadyScanMinutes, readShippingReadyTolerancePct, readShippingWeighRequiredEnabled } from "./shipping";
+import { readItemPhaseOutLineQty, readItemPhaseOutNewOrder, readItemPhaseOutNewPlan, readShipmentConfirmationEnabled, readShipmentHandheldCreateEnabled, readShipmentLooseLoadEnabled, readShipmentManualSackCountEnabled, readShipmentUndoSameDayOnly, readShippingAllocWidthToleranceCm, readShippingAllocWidthToleranceEnabled, readShippingAllowOverAllocation, readShippingDocCekiNameMode, readShippingDocItemNameMode, readShippingDocProductColorSplit, readShippingInvoiceMode, readShippingManualWeightRestrictedEnabled, readShippingOrderCoverage, readShippingOrderRequirement, readShippingShadeMixPolicy, readShippingReadyNotifyUnits, readShippingReadyRule, readShippingReadyScanMinutes, readShippingReadyTolerancePct, readShippingWeighRequiredEnabled } from "./shipping";
 import { readCustomerBranchesEnabled, readDemoModeEnabled, readDuplicatesFuzzyEnabled, readDuplicatesFuzzyThresholdPct, readFasonReceiptApplyTargetVariant, readFasonExpectedReturnDays, readFasonShrinkTolerancePct, readFasonShrinkWarnEnabled, readMachineStopOpenWarningEnabled, readMachineStopTrackingEnabled, readTamburCalibrationCheck, readTamburChildWidthSource, readTamburLabelPrintTiming, readTamburListByStationEnabled, readTamburMeasureSourceRequired, readTamburOverQuantityEnabled, readTamburPlanGateWidthCheck, readTamburPlanGateWidthToleranceCm, readTamburShortCutA1Enabled, readTamburShortCutA1ThresholdM, readTamburSimulatedMeterEnabled, readTamburUndoFullSameDayOnly } from "./tambur-fason";
 import { readTravelerCardConfig } from "./traveler-card";
 
@@ -220,6 +220,7 @@ export async function getFeatureFlags(): Promise<ApiResponse<FeatureFlags>> {
       shipmentHandheldCreateEnabled: await readShipmentHandheldCreateEnabled(cacheClient),
       shipmentUndoSameDayOnly: await readShipmentUndoSameDayOnly(cacheClient),
       shippingOrderRequirement: await readShippingOrderRequirement(cacheClient),
+      shippingShadeMixPolicy: await readShippingShadeMixPolicy(cacheClient),
       itemPhaseOutNewOrder: await readItemPhaseOutNewOrder(cacheClient),
       itemPhaseOutLineQty: await readItemPhaseOutLineQty(cacheClient),
       itemPhaseOutNewPlan: await readItemPhaseOutNewPlan(cacheClient),
@@ -344,8 +345,6 @@ export async function getFeatureFlags(): Promise<ApiResponse<FeatureFlags>> {
     };
     // Yalnız okuma sürerken invalidate OLMADIYSA cache'le; olduysa bayat veriyi
     // pinleme (taze değeri döndür, cache'i bir sonraki okuma tazeler).
-    if (cacheGeneration === gen) {
-      featureFlagsCache = { value: flags, expiresAt: now + FEATURE_FLAGS_TTL_MS };
-    }
+    if (cacheGeneration === gen) featureFlagsCache = { value: flags, expiresAt: now + FEATURE_FLAGS_TTL_MS };
     return { success: true, data: applyTermRegime(withLicenseBlock(flags)) };
   }

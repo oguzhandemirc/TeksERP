@@ -712,6 +712,15 @@
             "ornek": "12,5 m Leke · 40 m Delik",
             "kaynakKolon": "defectNote",
             "icKod": "ceki_hata_notu"
+          },
+          {
+            "yol": "ton",
+            "etiket": "Ton",
+            "tur": "metin",
+            "sinif": "musteri",
+            "hiza": "c",
+            "ornek": "A",
+            "kaynakKolon": "shadeCode"
           }
         ]
       }

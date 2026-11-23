@@ -212,6 +212,8 @@ const receiveSchema = z.object({
         qty: z.number().positive("Metraj pozitif olmalı"),
         weightKg: z.number().positive().nullish(),
         notes: z.string().max(500).nullish(),
+        // Ton grubu harfi (A, B…) — biçimi servis `normalizeShadeCode` doğrular; eski tablet göndermez.
+        shadeCode: z.string().max(8).nullish(),
       })
     )
     // Cap: her parça tx içinde ayrı roll.create+rollMovement üretir (per-row).
@@ -436,6 +438,7 @@ export class SubcontractorController {
             qty: nr.qty,
             weightKg: nr.weightKg ?? null,
             notes: nr.notes ?? null,
+            shadeCode: nr.shadeCode ?? null,
           })),
         },
         req.user?.userId

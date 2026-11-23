@@ -11,6 +11,8 @@ import { getRollTabletContext } from "../services/roll-tablet.service";
 import { listRollOwnerCustomers } from "../services/roll-owner.service";
 import { getRollMeterTrail } from "../services/meter-comparison.service";
 import { RollCustomerCodeService } from "../services/roll-customer-code.service";
+import { ROLL_SHADE_MAX_BATCH, setRollShade } from "../services/inventory/roll-shade";
+import { z } from "zod";
 
 // Mobil ekran yetkileri web yetkilerine alternatif olarak kabul edilir:
 // `mobile:depo` operatörü `roll:read` web yetkisi olmadan da depo ekranını
@@ -934,6 +936,50 @@ router.patch(
   requireAnyPermission("roll:write", "label:edit", "mobile:tambur"),
   controller.fixLabelTexts,
 );
+
+const rollShadeSchema = z.strictObject({
+  rollIds: z.array(z.uuid()).min(1, "En az bir top seçilmeli").max(ROLL_SHADE_MAX_BATCH),
+  shadeCode: z.string().max(8).nullable(),
+  reason: z.string().max(500).nullish(),
+});
+
+/**
+ * @openapi
+ * /api/rolls/shade:
+ *   post:
+ *     tags: [Inventory]
+ *     summary: Seçili toplara ton grubu harfi ata / kaldır (ton grubu, 2026-11-23)
+ *     description: |
+ *       `Roll.shadeCode` (A, B, A2…; 1–4 harf/rakam, ASCII büyük harfe çevrilir). `shadeCode: null` tonu kaldırır.
+ *       Sevk edilmiş / fason-kartelada / tüketilmiş top 409 (etkilenen barkodlar listelenir); değişen topta
+ *       `labelDirty=true` + audit (eski→yeni). Sevk karışım kuralı `shipping.shadeMixPolicy`.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [rollIds, shadeCode]
+ *             properties:
+ *               rollIds: { type: array, items: { type: string, format: uuid }, maxItems: 500 }
+ *               shadeCode: { type: string, nullable: true, maxLength: 4 }
+ *               reason: { type: string, nullable: true, maxLength: 500 }
+ *     responses:
+ *       200: { description: "Ton atandı ({ shadeCode, updated, unchanged })" }
+ *       400: { description: Validasyon · SHADE_CODE_INVALID }
+ *       403: { description: Yetki yok }
+ *       404: { description: Top bulunamadı }
+ *       409: { description: ROLL_SHIPPED · ROLL_DEAD · ROLL_CHANGED }
+ */
+router.post("/shade", verifyToken, requireAnyPermission("roll:write", "label:edit"), async (req, res, next) => {
+  try {
+    const body = rollShadeSchema.parse(req.body);
+    res.json(await setRollShade({ rollIds: body.rollIds, shadeCode: body.shadeCode, reason: body.reason ?? null }, req.user?.userId));
+  } catch (e) {
+    next(e);
+  }
+});
 
 /**
  * @openapi

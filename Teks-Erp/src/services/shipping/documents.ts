@@ -160,7 +160,7 @@ async function collectShipmentDocContent(
         // dolu, kod eski/iade satırlarında tek kalan olabilir.
         // `packageNo`/`packingGroup.name` (2026-09-21, sevk partisi) — belgeye yalnız
         // `shipping.docPackingLot` açıkken basılır; snapshot'a her zaman girer (donuk içerik).
-        select: { id: true, seq: true, sackNo: true, unitKind: true, unitLabel: true, weightKg: true, packageNo: true, packingGroup: { select: { name: true, code: true } }, rolls: { where: { status: { notIn: SACK_ABSENT_STATUSES } }, orderBy: { createdAt: "asc" }, select: { id: true, barcode: true, currentQty: true, width: true, itemId: true, colorId: true, qualityGradeId: true, qualityGrade: true, item: { select: { name: true } }, color: { select: { name: true } }, batch: { select: { batchNumber: true } } } } },
+        select: { id: true, seq: true, sackNo: true, unitKind: true, unitLabel: true, weightKg: true, packageNo: true, packingGroup: { select: { name: true, code: true } }, rolls: { where: { status: { notIn: SACK_ABSENT_STATUSES } }, orderBy: { createdAt: "asc" }, select: { id: true, barcode: true, currentQty: true, width: true, itemId: true, colorId: true, qualityGradeId: true, qualityGrade: true, shadeCode: true, item: { select: { name: true } }, color: { select: { name: true } }, batch: { select: { batchNumber: true } } } } },
       },
     },
   });
@@ -191,7 +191,7 @@ async function collectShipmentDocContent(
       // doğru olandır (top sonradan yeniden derecelenmiş olabilir).
       prevQualityGradeId: true,
       prevQualityGrade: true,
-      roll: { select: { barcode: true, batch: { select: { batchNumber: true } } } },
+      roll: { select: { barcode: true, shadeCode: true, batch: { select: { batchNumber: true } } } },
     },
   });
 
@@ -221,6 +221,7 @@ async function collectShipmentDocContent(
       qualityGradeId: rr.prevQualityGradeId,
       qualityGrade: rr.prevQualityGrade,
       batch: rr.roll.batch ? { batchNumber: rr.roll.batch.batchNumber } : null,
+      shadeCode: rr.roll.shadeCode,
     } as unknown as (typeof sh.sacks)[number]["rolls"][number];
     const arr = returnsBySack.get(rr.prevSackId);
     if (arr) arr.push(row);
@@ -349,7 +350,7 @@ async function collectShipmentDocContent(
   const cekiRows = sacksGross.flatMap((sk) =>
     sk.rolls.map((r, idx) => {
       const skips = namePolicy.skips(r.qualityGradeId, r.qualityGrade);
-      return { rollId: r.id, sackCode: loadUnitCekiCode(sk) ?? sk.sackNo ?? `#${sk.seq}`, seq: sk.seq ?? null, packageNo: sk.packageNo ?? null, packingGroupName: sk.packingGroup?.name ?? null, packingGroupCode: sk.packingGroup?.code ?? null, barcode: r.barcode, desen: r.item.name, varyant: r.color?.name ?? "", customerDesen: skips ? null : customerNames.itemName(r.itemId, r.colorId), customerVaryant: skips ? null : customerNames.colorName(r.itemId, r.colorId), width: r.width != null ? Number(r.width) : null, meters: Number(r.currentQty), kg: idx === 0 && sk.weightKg != null ? Number(sk.weightKg) : 0, batchNumber: r.batch?.batchNumber ?? null, ...(defectNotes.has(r.id) ? { defectNote: defectNotes.get(r.id) } : {}), ...(customerCodes.has(r.id) ? { customerCode: customerCodes.get(r.id) } : {}) };
+      return { rollId: r.id, sackCode: loadUnitCekiCode(sk) ?? sk.sackNo ?? `#${sk.seq}`, seq: sk.seq ?? null, packageNo: sk.packageNo ?? null, packingGroupName: sk.packingGroup?.name ?? null, packingGroupCode: sk.packingGroup?.code ?? null, barcode: r.barcode, desen: r.item.name, varyant: r.color?.name ?? "", customerDesen: skips ? null : customerNames.itemName(r.itemId, r.colorId), customerVaryant: skips ? null : customerNames.colorName(r.itemId, r.colorId), width: r.width != null ? Number(r.width) : null, meters: Number(r.currentQty), kg: idx === 0 && sk.weightKg != null ? Number(sk.weightKg) : 0, batchNumber: r.batch?.batchNumber ?? null, ...(defectNotes.has(r.id) ? { defectNote: defectNotes.get(r.id) } : {}), ...(r.shadeCode ? { shadeCode: r.shadeCode } : {}),...(customerCodes.has(r.id) ? { customerCode: customerCodes.get(r.id) } : {}) };
     })
   );
 

@@ -116,6 +116,7 @@ export function buildLandscapeRollLabelHtml({
   if (isVisibleDefaultOn(fields, "labelBatchNo") && payload.labelBatchNo) rows.push(row("labelBatchNo", "Parti", escapeHtml(payload.labelBatchNo)));
   const openDefects = payload.openDefects ? escapeHtml(payload.openDefects) : "";
   if (isVisibleOptIn(fields, "openDefects") && openDefects) rows.push(row("openDefects", "Hata Notu", openDefects));
+  if (isVisibleOptIn(fields, "shadeCode") && payload.shadeCode) rows.push(row("shadeCode", "Ton", escapeHtml(payload.shadeCode)));
   // Müşteri belgesindeki kumaş/renk (E3) — OPT-IN, gelen belgesiz topta boş.
   if (isVisibleOptIn(fields, "deliveryNoteItemText") && payload.deliveryNoteItemText) rows.push(row("deliveryNoteItemText", "Müşteri kumaşı", escapeHtml(payload.deliveryNoteItemText)));
   if (isVisibleOptIn(fields, "deliveryNoteColorText") && payload.deliveryNoteColorText) rows.push(row("deliveryNoteColorText", "Müşteri rengi", escapeHtml(payload.deliveryNoteColorText)));

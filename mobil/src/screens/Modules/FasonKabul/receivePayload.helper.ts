@@ -206,7 +206,9 @@ export function parseNewRolls(newRolls: NewRollRow[]): ReceiveNewRollInput[] {
   for (const r of newRolls) {
     const qty = parseFloat(r.qty.replace(',', '.'));
     if (!Number.isFinite(qty) || qty <= 0) continue;
-    out.push({ qty, notes: r.notes.trim() || null });
+    const shade = r.shadeCode?.trim();
+    // Ton yalnız seçildiyse gider: eski sunucu bilinmeyen alanı atar, boş alan hiç yazılmaz.
+    out.push({ qty, notes: r.notes.trim() || null, ...(shade ? { shadeCode: shade } : {}) });
   }
   return out;
 }

@@ -226,3 +226,26 @@ describe('switchReceiveMode', () => {
     expect(out[0].notes).toBe('leke var · kenar hatası');
   });
 });
+
+describe('ton grubu — yeniden kurulumda ton korunur', () => {
+  it('SINGLE: işaret değişince ön-dolu satırın tonu kalır, metre tazelenir', () => {
+    const first = rebuildPrefilledNewRolls([], [100, 120], 'SINGLE');
+    const shaded = [{ ...first[0]!, shadeCode: 'B' }];
+    const out = rebuildPrefilledNewRolls(shaded, [100], 'SINGLE');
+    expect(out).toHaveLength(1);
+    expect(out[0]!.qty).toBe('100');
+    expect(out[0]!.prefilled).toBe(true);
+    expect(out[0]!.shadeCode).toBe('B');
+  });
+
+  it('PER_ROLL: tonlar sırayla devralınır; yeni satır tonsuz doğar', () => {
+    const first = rebuildPrefilledNewRolls([], [100, 120], 'PER_ROLL');
+    const shaded = [{ ...first[0]!, shadeCode: 'A' }, { ...first[1]!, shadeCode: 'C' }];
+    const out = rebuildPrefilledNewRolls(shaded, [100, 120, 90], 'PER_ROLL');
+    expect(out.map((r) => r.shadeCode)).toEqual(['A', 'C', '']);
+  });
+
+  it('yeni satır tonsuz doğar', () => {
+    expect(makeNewRollRow('5').shadeCode).toBe('');
+  });
+});

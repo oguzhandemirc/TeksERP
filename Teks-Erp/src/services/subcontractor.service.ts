@@ -319,6 +319,7 @@ export class SubcontractorService {
         qty: number;
         weightKg?: number | null;
         notes?: string | null;
+        shadeCode?: string | null;
       }>;
     },
     userId?: string

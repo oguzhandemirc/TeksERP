@@ -789,6 +789,7 @@ export async function finalize(
             // Parti (batch) kimliğini parent'tan kalıt → bölünen toplar depoya
             // gitse bile hangi partiden geldiği lane'de izlenir.
             batchId: roll.batchId,
+            shadeCode: roll.shadeCode ?? null, // ton grubu kalıtılır (aynı kumaş)
             // DEPO: üretim çıktısı (ebeveyn IN_PRODUCTION, depoda durmuyor) — sahipli ise emanet deposu, yoksa
             // ebeveynin kayıtlı deposu (yukarıda bir kez çözüldü).
             warehouseId: cutWarehouseId,

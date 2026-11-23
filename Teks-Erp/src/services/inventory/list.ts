@@ -12,6 +12,7 @@ import { customerCodeSearchRollIds } from "../helpers/roll-scan-resolve.helper";
 import { attachCustomerBatchNo } from "../helpers/roll-delivery-note-line.helper";
 import { normalizeScanCode } from "../../utils/code-format";
 import { normalizeFoldType } from "../helpers/fold-type";
+import { SHADE_CODE_RE, SHADE_FILTER_NONE } from "../helpers/shade-group.helper";
 import { AppError } from "../../utils/app-error";
 import { ApiResponse, PaginatedResponse, QueryParams } from "../../types/api.types";
 import {
@@ -281,6 +282,27 @@ export function buildRollWhere(
       // eleyen boş `in: []` üretmeyelim).
       if (canonical.length > 0) {
         where.foldType = canonical.length === 1 ? canonical[0] : { in: canonical };
+      }
+    }
+
+    // ── TON GRUBU (shadeCode) FİLTRESİ — çoklu; `__none__` = tonsuz. Ham kopya tuzağı (yukarı) yüzünden açıkça
+    // ele alınır; değer büyük harfe çevrilir, biçim dışı değer süzgece girmez (boş `in: []` üretilmez).
+    const shadeRaw = readList(f["shadeCode"]);
+    delete where.shadeCode;
+    if (shadeRaw.length > 0) {
+      const wantNone = shadeRaw.includes(SHADE_FILTER_NONE);
+      const codes = shadeRaw
+        .filter((v) => v !== SHADE_FILTER_NONE)
+        .map((v) => v.trim().replace(/[a-z]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 32)))
+        .filter((v) => SHADE_CODE_RE.test(v));
+      const ors: Record<string, unknown>[] = [];
+      if (codes.length > 0) ors.push({ shadeCode: { in: codes } });
+      if (wantNone) ors.push({ shadeCode: null });
+      if (ors.length > 0) {
+        where.AND = [
+          ...(Array.isArray(where.AND) ? (where.AND as Record<string, unknown>[]) : []),
+          ors.length === 1 ? ors[0]! : { OR: ors },
+        ];
       }
     }
 

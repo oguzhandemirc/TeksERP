@@ -8,7 +8,7 @@ import { subcontractorService } from "@/pages/Subcontractors/service";
 import { subcontractorCategoryService } from "@/pages/SubcontractorCategories/service";
 import { stationService } from "@/pages/Stations/service";
 import { useFoldValues } from "@/hooks/useFoldValues";
-import { useEmanetEnabled } from "@/hooks/usePricingEnabled";
+import { useEmanetEnabled, useShippingShadeMixPolicy } from "@/hooks/usePricingEnabled";
 import { useMultiWarehouse } from "@/hooks/useWarehouses";
 import { entryStationLookupService, entryUserLookupService, ownerCustomerLookupService, warehouseLookupService } from "./entryLookupServices";
 import type { RollStatusTabKey } from "./service";
@@ -19,6 +19,17 @@ const FOLD_FILTER_PLACEHOLDER: FilterDef = {
   key: "foldType",
   label: "Kat",
   options: [],
+};
+
+/** Ton grubu süzgeci — yalnız `shipping.shadeMixPolicy` açıkken; `__none__` = tonsuz (sunucu `SHADE_FILTER_NONE`). */
+export const SHADE_FILTER: FilterDef = {
+  kind: "multi-select",
+  key: "shadeCode",
+  label: "Ton",
+  options: [
+    ...["A", "B", "C", "D", "E", "F"].map((s) => ({ value: s, label: `Ton ${s}` })),
+    { value: "__none__", label: "Tonsuz" },
+  ],
 };
 
 /** Mülkiyet çipi (genel fason P1): Bizim / Emanet; "Tümü" = anahtar yok (backend boşu ALL okur, bugünkü şekil). */
@@ -290,8 +301,12 @@ export function useRollFilterDefs(tab: RollStatusTabKey): FilterDef[] {
   const { values: foldValues } = useFoldValues();
   const { multiWarehouse } = useMultiWarehouse();
   const emanetEnabled = useEmanetEnabled();
+  const shadeEnabled = useShippingShadeMixPolicy() !== "off";
   return useMemo(
-    () => buildRollFilterDefs(tab, foldValues.map((v) => ({ value: v.code, label: v.name })), multiWarehouse, emanetEnabled),
-    [tab, foldValues, multiWarehouse, emanetEnabled],
+    () => {
+      const defs = buildRollFilterDefs(tab, foldValues.map((v) => ({ value: v.code, label: v.name })), multiWarehouse, emanetEnabled);
+      return shadeEnabled ? [...defs, SHADE_FILTER] : defs;
+    },
+    [tab, foldValues, multiWarehouse, emanetEnabled, shadeEnabled],
   );
 }

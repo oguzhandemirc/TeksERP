@@ -326,6 +326,7 @@ export async function cutWarehouseRollInner(
         ownerCustomerId: parent.ownerCustomerId ?? null,
         // Parti (batch) kimliğini parent'tan kalıt → bölünen top depoya gitse bile partisi lane'de izlenir.
         batchId: parent.batchId,
+        shadeCode: parent.shadeCode ?? null, // ton grubu kalıtılır (aynı kumaş)
         // DEPO parent'tan MİRAS ALINIR (giriş istasyonunun TERSİNE): kesmek malı
         // TAŞIMAZ, çocuk ebeveynin durduğu depodadır. Sorgu yalnız ebeveyn deposuz
         // ise (backfill öncesi kayıt) koşar — `??` sağ tarafı kısa devre yapar.

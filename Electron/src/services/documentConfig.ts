@@ -848,6 +848,8 @@ export const DOC_DEFS: DocDef[] = [
           { key: "kg", label: "Kg" },
           // HATA NOTU (KQ-D8) — topun karar verilmemiş hataları; varsayılan KAPALI, müşteriye gider.
           { key: "defectNote", label: "Hata notu — müşteriye gider", defaultHidden: true },
+          // TON GRUBU — topun ton harfi (A, B…); varsayılan KAPALI, açılınca müşteriye gider.
+          { key: "shadeCode", label: "Ton — müşteriye gider", defaultHidden: true },
         ],
       },
     ],

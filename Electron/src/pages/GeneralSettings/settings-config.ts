@@ -36,6 +36,7 @@ import { RollBirthGate } from "./RollBirthGate";
 import { PHASE_OUT_LINE_QTY_OPTIONS, PHASE_OUT_NEW_ORDER_OPTIONS } from "@/lib/item-lifecycle-flags";
 import {
   SHIPMENT_ORDER_REQUIREMENT_OPTIONS,
+  SHIPPING_SHADE_MIX_POLICY_OPTIONS,
   SHIPPING_DOC_CEKI_NAME_MODE_OPTIONS,
   SHIPPING_ORDER_COVERAGE_OPTIONS,
   SHIPPING_DOC_ITEM_NAME_MODE_OPTIONS,
@@ -1227,6 +1228,15 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         options: SHIPMENT_ORDER_REQUIREMENT_OPTIONS,
         audience: ["Sevkiyat", "Planlamacı"],
         desc: "Siparişsiz sevkte ne olsun: “Sorma” · “Uyar” (varsayılan: sevkiyat kurulur, uyarı görünür) · “Zorunlu tut” (sipariş seçilmeden kurulmaz). ⚠️ ÖNKOŞUL: “Zorunlu tut” için tablette sipariş seçici olan APK kurulu olmalı; yoksa sahada sevk kurulamaz.",
+      },
+      {
+        enumKey: "shippingShadeMixPolicy",
+        title: "Ton grubu (aynı siparişe tek ton)",
+        summary: "Boyamadan dönen toplara ton harfi (A, B, C…) verilsin; aynı ürün+renge farklı ton giderse uyar ya da engelle.",
+        defaultValue: "off",
+        options: SHIPPING_SHADE_MIX_POLICY_OPTIONS,
+        audience: ["Sevkiyat", "Depocu"],
+        desc: "Perde/tül gibi yan yana asılan kumaşta aynı renk farklı boyama partisinden ton farkı taşır. “Uyar”/“Engelle” seçilince tablet Fason Kabul ekranında dönen parçaya ton harfi sorulur (tamburda kesilen toplar harfi alır); panelde Envanter → Toplar listesinden seçili toplara “Ton ata” yapılır. Sevk önizlemesi aynı ürün+renkte farklı ton görürse uyarır; “Engelle”de Sevk Et reddedilir. Tonu girilmemiş top karışım sayılmaz. Çeki listesinde “Ton” sütunu belge ayarından açılır.",
       },
       {
         enumKey: "shippingInvoiceMode",

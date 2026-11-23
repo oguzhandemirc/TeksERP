@@ -38,7 +38,7 @@ import { buildLandscapeRollLabelHtml } from "./label-html-landscape.helper";
 import { DEFAULT_COMPANY_NAME } from "../../constants/company";
 
 /** Şablonda AÇIKÇA işaretlenmedikçe basılmayan serbest satırlar. */
-const OPT_IN_ROW_KEYS: ReadonlySet<string> = new Set(["openDefects", "deliveryNoteItemText", "deliveryNoteColorText", "deliveryNoteRollNo", "customerCode", "consigneeName"]);
+const OPT_IN_ROW_KEYS: ReadonlySet<string> = new Set(["openDefects", "shadeCode", "deliveryNoteItemText", "deliveryNoteColorText", "deliveryNoteRollNo", "customerCode", "consigneeName"]);
 
 // Resolver (label-format.resolver) bunları buradan import ediyor → re-export.
 export { DEFAULT_LABEL_FORMAT };
@@ -125,6 +125,7 @@ function buildPortraitRollLabelHtml(
     { key: "orderNumber", value: orderNumber, def: "Sipariş" },
     { key: "labelBatchNo", value: payload.labelBatchNo ? escapeHtml(payload.labelBatchNo) : "", def: "Parti" },
     { key: "openDefects", value: payload.openDefects ? escapeHtml(payload.openDefects) : "", def: "Hata Notu" },
+    { key: "shadeCode", value: payload.shadeCode ? escapeHtml(payload.shadeCode) : "", def: "Ton" },
     { key: "deliveryNoteItemText", value: payload.deliveryNoteItemText ? escapeHtml(payload.deliveryNoteItemText) : "", def: "Müşteri kumaşı" },
     { key: "deliveryNoteColorText", value: payload.deliveryNoteColorText ? escapeHtml(payload.deliveryNoteColorText) : "", def: "Müşteri rengi" },
     { key: "deliveryNoteRollNo", value: payload.deliveryNoteRollNo ? escapeHtml(payload.deliveryNoteRollNo) : "", def: "Müşteri top no" },

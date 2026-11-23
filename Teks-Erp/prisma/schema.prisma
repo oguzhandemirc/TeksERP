@@ -4739,6 +4739,11 @@ model Roll {
   /// `customerBatchNo`'su DEĞİL. Yalnız cari `tamburLabelBatchEnabled` açıkken yazılır.
   labelBatchNo String? @db.VarChar(64)
 
+  /// TON GRUBU (2026-11-23) — boyamadan dönen topun ton harfi (A, B, C…; `^[A-Z0-9]{1,4}$`, DB CHECK).
+  /// Fason kabulde ya da panel "Ton ata"da yazılır; kesimde çocuğa KALITILIR (aynı kumaş, aynı ton).
+  /// NULL = tonlanmamış. Sevk karışım kuralı tek kaynak `helpers/shade-group.helper.ts`; BaseController yazamaz.
+  shadeCode String? @db.VarChar(4)
+
   /// Müşterinin etikete basılmasını istediği KUMAŞ ADI / RENK metni — tamburda kesim/bitirme
   /// anında yazılır, MİRAS ALINMAZ (bölünen çocuğa kopyalanmaz); kumaşın gerçek adı (`itemId`)
   /// değişmez. Doluyken etiket ad zincirinin en önünde (`itemNameSource`/`colorNameSource` = ROLL);

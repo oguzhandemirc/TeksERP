@@ -4,7 +4,7 @@ import type { FilterDef } from "@/components/data-table/FilterBar";
 import { FilterRow } from "@/components/data-table/filter-row/FilterRow";
 import { dateRowFilter, persistConfigOf, splitDefFilters, urlToggleRowFilter } from "@/components/data-table/filter-row/def-row-filters";
 import type { TableFilterPersistConfig } from "@/components/data-table/filter-row/filter-persist";
-import { buildRollFilterDefs, DATE_FILTER, KARTELA_MARKED_PARAM } from "./roll-filter-defs";
+import { buildRollFilterDefs, DATE_FILTER, KARTELA_MARKED_PARAM, SHADE_FILTER } from "./roll-filter-defs";
 import type { RollStatusTabKey } from "./service";
 
 /** "Fire kaliteyi de göster" — liste ve özet şeridi aynı anahtarı okur (sunucu süzer). */
@@ -19,7 +19,8 @@ const PRIMARY_KEYS = ["mulkiyet", "itemId", "colorId", "shipmentScope", "subcont
  * Sekme değişince bu küme eski sekmenin süzgecini URL'den siler.
  */
 export function rollPersistConfig(tab: RollStatusTabKey): TableFilterPersistConfig {
-  const all = buildRollFilterDefs(tab, [{ value: "*", label: "*" }], true, true);
+  // Ton süzgeci bayrağa bağlı ama allowlist'te hep durur (bayrak yüklenmeden URL'den düşmesin).
+  const all = [...buildRollFilterDefs(tab, [{ value: "*", label: "*" }], true, true), SHADE_FILTER];
   const extra = tab === "FINISHED_STOCK" ? [INCLUDE_FIRE_PARAM, KARTELA_MARKED_PARAM] : [INCLUDE_FIRE_PARAM];
   return persistConfigOf(all, { extraFilterKeys: extra });
 }

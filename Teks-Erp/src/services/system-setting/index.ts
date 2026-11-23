@@ -18,7 +18,7 @@ export {
 } from "./cost-purchase";
 export {
   DEFAULT_SESSION_DURATION_HOURS, DEFAULT_SESSION_DURATION_MINUTES, DEFAULT_IDLE_TIMEOUT_MINUTES, DEFAULT_WORK_SESSION_IDLE_MINUTES,
-  SAME_TYPE_SESSION_POLICIES, DEFAULT_SAME_TYPE_SESSION_POLICY, SHIPMENT_ORDER_REQUIREMENTS, DEFAULT_SHIPMENT_ORDER_REQUIREMENT,
+  SAME_TYPE_SESSION_POLICIES, DEFAULT_SAME_TYPE_SESSION_POLICY, SHIPMENT_ORDER_REQUIREMENTS, DEFAULT_SHIPMENT_ORDER_REQUIREMENT, SHIPPING_SHADE_MIX_POLICIES, DEFAULT_SHIPPING_SHADE_MIX_POLICY,
   TEZGAH_ALARM_NO_SHIFT_MODES, DEFAULT_TEZGAH_ALARM_NO_SHIFT_MODE, DOKUMA_ROLL_BIRTH_MODES, DEFAULT_DOKUMA_ROLL_BIRTH, DEVERE_FASON_LOT_POLICIES, DEVERE_BEAM_BODY_MODES, DEFAULT_DEVERE_BEAM_BODY_MODE, DEVERE_BEAM_BODY_MACHINE_FITS, DEFAULT_DEVERE_BEAM_BODY_MACHINE_FIT, DEFAULT_DEVERE_FASON_LOT_POLICY,
   KURSUN_METER_CAPTURE_MODES, DEFAULT_KURSUN_METER_CAPTURE, KURSUN_METER_VARIANCE_BASES, DEFAULT_KURSUN_METER_VARIANCE_BASIS,
   KURSUN_METER_VARIANCE_APPROVALS, DEFAULT_KURSUN_METER_VARIANCE_APPROVAL, KURSUN_METER_STOCK_MODES, DEFAULT_KURSUN_METER_STOCK_MODE,
@@ -65,7 +65,7 @@ export {
   DEFAULT_PIN_LOCKOUT_LONG_PENALTY_MIN, LOGIN_METHODS, DEFAULT_LOGIN_METHODS,
 } from "./defaults";
 export type {
-  SameTypeSessionPolicy, ShipmentOrderRequirement, TezgahAlarmNoShiftMode, DokumaRollBirth, DevereFasonLotPolicy, DevereBeamBodyMode, DevereBeamBodyMachineFit, KursunMeterCapture,
+  SameTypeSessionPolicy, ShipmentOrderRequirement, ShippingShadeMixPolicy,TezgahAlarmNoShiftMode, DokumaRollBirth, DevereFasonLotPolicy, DevereBeamBodyMode, DevereBeamBodyMachineFit, KursunMeterCapture,
   KursunMeterVarianceBasis, KursunMeterVarianceApproval, KursunMeterStockMode, KursunMachineAssignMode, ProductionRouteMode,
   ProductionScanRouteStations, ServiceBillingMeterBasis, ServiceBillingMissingMeter, ServiceBillingBrodeUnit, ServiceBillingTrigger,
   ServiceBillingPriceDate, KursunGramPriceBasis, ExpenseCategorySuggestions, ExpenseAllocationField,
@@ -209,7 +209,7 @@ export {
 } from "./session";
 export {
   readShipmentManualSackCountEnabled, readShipmentLooseLoadEnabled, readShipmentHandheldCreateEnabled, readShipmentConfirmationEnabled, readShipmentUndoSameDayOnly,
-  readShippingOrderRequirement, readItemPhaseOutNewOrder, readItemPhaseOutLineQty, readItemPhaseOutNewPlan,
+  readShippingOrderRequirement, readShippingShadeMixPolicy, readItemPhaseOutNewOrder, readItemPhaseOutLineQty, readItemPhaseOutNewPlan,
   readShippingWeighRequiredEnabled, readShippingManualWeightRestrictedEnabled, readShippingInvoiceMode, readShippingDocItemNameMode,
   readShippingDocCekiNameMode, readShippingOrderCoverage, readShippingDocProductColorSplit, readShippingAllocWidthToleranceEnabled,
   readShippingAllocWidthToleranceCm, readShippingReadyRule, readShippingReadyTolerancePct, readShippingReadyNotifyUnits,
