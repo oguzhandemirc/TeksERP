@@ -20,11 +20,12 @@
 // kendiliğinden belirir.
 // =============================================================================
 import type { ReactNode } from "react";
-import { RotateCcw, Search } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
+import { ListToolbar } from "@/components/layout/ListPage";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { SelectChip } from "@/components/data-table/filter-row/SelectChip";
+import { ToolbarToggle } from "@/components/data-table/ToolbarToggle";
 import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { itemService } from "@/pages/Items/service";
 import type { Item } from "@/pages/Items/types";
@@ -98,18 +99,10 @@ export function YarnFilterBar({ value, onChange, tools }: Props) {
     onChange({ ...value, [key]: v });
 
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-6 py-3">
-      <div className="relative w-72">
-        <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          className="pl-8"
-          placeholder="Ara…" title="İplik adı / stok kodu ara" aria-label="İplik adı / stok kodu ara"
-          value={value.search}
-          onChange={(e) => set("search", e.target.value)}
-        />
-      </div>
+    <ListToolbar className="flex-row flex-wrap items-center">
+      <ListSearchBox value={value.search} onSearchChange={(v) => set("search", v)} searchHint="İplik adı / stok kodu ara" />
 
-      <div className="w-64">
+      <div className="w-56 [&_button]:h-8 [&_button]:text-xs">
         <ReferenceSelect<Item>
           value={value.itemId}
           onChange={(v) => set("itemId", v)}
@@ -124,38 +117,24 @@ export function YarnFilterBar({ value, onChange, tools }: Props) {
       </div>
 
       {multiWarehouse && (
-        <select
-          className="h-9 rounded-md border bg-background px-2 text-sm"
-          value={value.warehouseId}
-          onChange={(e) => set("warehouseId", e.target.value)}
-        >
-          <option value="">Tüm depolar</option>
-          {warehouses.map((w) => (
-            <option key={w.id} value={w.id}>
-              {w.name}
-            </option>
-          ))}
-        </select>
+        <SelectChip
+          id="yarn-warehouse"
+          label="Depo"
+          value={value.warehouseId || null}
+          options={warehouses.map((w) => ({ value: w.id, label: w.name }))}
+          onChange={(v) => set("warehouseId", v ?? "")}
+        />
       )}
 
-      <div className="flex items-center gap-2">
-        <Checkbox
-          id="yarn-only-nonzero"
-          checked={value.onlyNonZero}
-          onCheckedChange={(c) => set("onlyNonZero", c === true)}
-        />
-        <Label htmlFor="yarn-only-nonzero" className="cursor-pointer text-sm font-normal">
-          Yalnız bakiyesi olanlar
-        </Label>
-      </div>
+      <ToolbarToggle checked={value.onlyNonZero} onCheckedChange={(c) => set("onlyNonZero", c)} label="Yalnız bakiyesi olanlar" />
 
       {isYarnFilterDirty(value) && (
-        <Button variant="ghost" size="sm" onClick={() => onChange(EMPTY_YARN_FILTERS)}>
+        <Button variant="ghost" size="sm" className="h-8" onClick={() => onChange(EMPTY_YARN_FILTERS)}>
           <RotateCcw className="mr-1 h-3.5 w-3.5" />
           Filtreleri temizle
         </Button>
       )}
       {tools ? <div className="ml-auto flex items-center gap-1.5">{tools}</div> : null}
-    </div>
+    </ListToolbar>
   );
 }

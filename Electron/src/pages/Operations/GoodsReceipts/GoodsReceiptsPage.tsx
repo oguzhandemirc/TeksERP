@@ -5,13 +5,13 @@ import { useQuery } from "@tanstack/react-query";
 import { Plus, FileText } from "lucide-react";
 import { PageShell } from "@/components/layout/PageShell";
 import { RefreshButton } from "@/components/RefreshButton";
-import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
+import { ListFooter, ListToolbar } from "@/components/layout/ListPage";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/data-table/DataTable";
 import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
 import { useLocalTable } from "@/hooks/useLocalTable";
-import { Input } from "@/components/ui/input";
 import { PermissionGate } from "@/components/PermissionGate";
 import { GOODS_RECEIPT_COLUMNS } from "./GoodsReceiptTable";
 import { listGoodsReceipts } from "./service";
@@ -68,67 +68,46 @@ export function GoodsReceiptsPage() {
         }
       />
 
-      <div className="flex shrink-0 items-center gap-2 border-b px-6 py-3">
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Ara…" title="Fiş no veya tedarikçi irsaliye no ara" aria-label="Fiş no veya tedarikçi irsaliye no ara"
-          className="max-w-sm"
-        />
+      <ListToolbar className="flex-row flex-wrap items-center">
+        <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Fiş no veya tedarikçi irsaliye no ara" />
         <div className="ml-auto flex items-center gap-1.5">
           <DataTableTools table={table} compact exportName="Mal kabul fişleri" />
         </div>
-      </div>
+      </ListToolbar>
 
-      {!q.isLoading && rows.length > 0 ? (
-        <>
-          <DataTable table={table} markEntity="goodsReceipt" isError={q.isError} onRetry={() => void q.refetch()} onRowClick={(r) => setDetailId(r.id)} exportName="Mal kabul fişleri" />
-          {/* KIRPMA SESSİZ DEĞİL (norm: CashTransactionsPage). */}
-          {total > rows.length && (
-            <p className="shrink-0 border-t px-4 py-2 text-xs text-amber-700 dark:text-amber-500">
-              {total} fişin ilk {rows.length} tanesi gösteriliyor (en yeniden geriye).
-              Aradığınızı bulmak için fiş no / irsaliye no aramasını kullanın.
-            </p>
-          )}
-        </>
-      ) : (
-      <ListBody>
-        {q.isLoading ? (
-          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
-        ) : q.isError && rows.length === 0 ? (
-          /* ⚠️ HATA, "HENÜZ FİŞ YOK"UN ÖNÜNDE: boş-durum cümlesi doğrudan
-             "Yeni Mal Kabul" davetidir. Hata anında basılırsa depocu az önce
-             kaydettiği fişi yok sanıp AYNI MALI ikinci kez girer — stok iki
-             katına çıkar ve iki fişin de barkodları basılmış olur. */
-          <ListMessage>
-            <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-              <p className="font-medium text-destructive">Mal kabul listesi yüklenemedi.</p>
-              <p className="mt-1 text-muted-foreground">
-                Bu bir “fiş yok” cevabı DEĞİLDİR — istek sunucuya ulaşamadı ya da reddedildi.
-                Yeni fiş açmadan önce tekrar deneyin; kaydettiğiniz fiş duruyor olabilir.
-              </p>
-              <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
-                Tekrar dene
-              </Button>
-            </div>
-          </ListMessage>
-        ) : rows.length === 0 ? (
-          <ListMessage>
-            <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-              Henüz mal kabul fişi yok. “Yeni Mal Kabul” ile tedarikçiden gelen malı depoya alın.
-            </div>
-          </ListMessage>
-        ) : null}
-      </ListBody>
-      )}
-      {rows.length > 0 && (
-        <ListFooter loaded={rows.length} total={total}>
+      {/* ⚠️ HATA, "HENÜZ FİŞ YOK"UN ÖNÜNDE (DataTable sırası): boş-durum cümlesi "Yeni Mal Kabul" davetidir; hata
+          anında basılırsa depocu kaydettiği fişi yok sanıp AYNI MALI ikinci kez girer. */}
+      <DataTable
+        table={table}
+        markEntity="goodsReceipt"
+        isLoading={q.isLoading}
+        isError={q.isError}
+        errorText="Mal kabul listesi yüklenemedi. Yeni fiş açmadan önce tekrar deneyin; kaydettiğiniz fiş duruyor olabilir."
+        onRetry={() => void q.refetch()}
+        onRowClick={(r) => setDetailId(r.id)}
+        exportName="Mal kabul fişleri"
+        emptyText={search ? "Aramaya uyan fiş yok." : "Henüz mal kabul fişi yok."}
+        emptyDescription={search ? undefined : "“Yeni Mal Kabul” ile tedarikçiden gelen malı depoya alın."}
+      />
+      <ListFooter
+        loaded={rows.length}
+        total={total}
+        label={
+          // KIRPMA SESSİZ DEĞİL (norm: CashTransactionsPage): ilk 100 fiş gösterilir, aramayla daraltılır.
+          total > rows.length ? (
+            <span className="text-amber-700 dark:text-amber-500" title="En yeniden geriye; aradığınızı fiş no / irsaliye no aramasıyla bulun.">
+              {total} fişin ilk {rows.length} tanesi gösteriliyor
+            </span>
+          ) : undefined
+        }
+      >
+        {rows.length > 0 && (
           <span className="flex items-center gap-1">
             <FileText className="h-3 w-3" />
-            Satıra tıklayarak fişi açın; oradan fiş belgesini basabilir veya fişi iptal edebilirsiniz.
+            Fişi açmak için satıra tıklayın
           </span>
-        </ListFooter>
-      )}
+        )}
+      </ListFooter>
 
       <GoodsReceiptFormDialog
         open={formOpen}

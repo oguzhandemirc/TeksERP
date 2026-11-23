@@ -7,10 +7,11 @@
 // =============================================================================
 import { useMemo, useState } from "react";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
 import { toast } from "sonner";
-import { PermissionGate } from "@/components/PermissionGate";
 import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { SelectChip } from "@/components/data-table/filter-row/SelectChip";
+import { ToolbarToggle } from "@/components/data-table/ToolbarToggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { DataTable } from "@/components/data-table/DataTable";
@@ -21,22 +22,21 @@ import type { Item } from "@/pages/Items/types";
 import { customerService } from "@/pages/Customers/service";
 import type { Customer } from "@/pages/Customers/types";
 import { useEmanetEnabled } from "@/hooks/usePricingEnabled";
-import { LabeledSelect } from "@/components/forms/LabeledSelect";
 import { YARN_ITEM_FILTER } from "./YarnFilterBar";
 import { useYarnLotTable } from "./YarnLotTable";
 import { qualityFilterParam, YARN_LOT_QUALITY_FILTER_ALL, YARN_LOT_QUALITY_FILTER_OPTIONS } from "./yarnLotQuality";
 import { createYarnLot, listYarnLots, updateYarnLot, type YarnLotRow } from "./service";
-import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { ListFooter, ListToolbar } from "@/components/layout/ListPage";
 
 const LOTS_KEY = ["yarn", "lots"] as const;
 
-export function YarnLotsPanel() {
+/** "Lot Aç" sayfa başlığındadır (ikinci birincil düğme filtre satırında durmaz); panel yalnız diyaloğu çizer. */
+export function YarnLotsPanel({ creating = false, onCreatingChange = () => {} }: { creating?: boolean; onCreatingChange?: (open: boolean) => void } = {}) {
   const qc = useQueryClient();
   const [itemId, setItemId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [showPassive, setShowPassive] = useState(false);
   const [quality, setQuality] = useState(YARN_LOT_QUALITY_FILTER_ALL);
-  const [creating, setCreating] = useState(false);
   const q = useInfiniteQuery({
     queryKey: [...LOTS_KEY, itemId, search, showPassive, quality],
     queryFn: ({ pageParam }) => listYarnLots({ limit: 50, cursor: pageParam, itemId: itemId ?? undefined, search: search || undefined, isActive: showPassive ? undefined : true, qualityStatus: qualityFilterParam(quality) }),
@@ -56,49 +56,37 @@ export function YarnLotsPanel() {
 
   return (
     <>
-      <ListToolbar className="flex-row flex-wrap items-end">
-        <div className="w-72">
+      <ListToolbar className="flex-row flex-wrap items-center">
+        <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Lot no ya da kalem ara" />
+        <div className="w-56 [&_button]:h-8 [&_button]:text-xs">
           <ReferenceSelect<Item> value={itemId} onChange={setItemId} service={itemService} queryKey="items-yarn-lots" getLabel={(it) => `${it.code} — ${it.name}`} placeholder="İplik (hepsi)" extraFilters={YARN_ITEM_FILTER} />
         </div>
-        <Input className="w-56" placeholder="Ara…" title="Lot no ya da kalem ara" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Lot ara" />
-        <LabeledSelect label="Kalite" value={quality} options={YARN_LOT_QUALITY_FILTER_OPTIONS} onChange={setQuality} />
-        <label className="flex items-center gap-1 text-sm">
-          <input type="checkbox" checked={showPassive} onChange={(e) => setShowPassive(e.target.checked)} /> Pasifleri de göster
-        </label>
-        <PermissionGate permission="yarn:write">
-          <Button size="sm" onClick={() => setCreating(true)}>
-            <Plus className="mr-1 h-4 w-4" /> Lot Aç
-          </Button>
-        </PermissionGate>
+        <SelectChip
+          id="yarn-lot-quality"
+          label="Kalite"
+          value={quality === YARN_LOT_QUALITY_FILTER_ALL ? null : quality}
+          options={YARN_LOT_QUALITY_FILTER_OPTIONS.filter((o) => o.value !== YARN_LOT_QUALITY_FILTER_ALL)}
+          onChange={(v) => setQuality(v ?? YARN_LOT_QUALITY_FILTER_ALL)}
+        />
+        <ToolbarToggle checked={showPassive} onCheckedChange={setShowPassive} label="Pasifleri de göster" />
         <div className="ml-auto flex items-center gap-1.5">
           <DataTableTools table={table} compact exportName="İplik lotları" />
         </div>
       </ListToolbar>
-      {!q.isLoading && !q.isError && rows.length > 0 ? (
-        <DataTable table={table} rowClassName={(r) => (r.isActive ? undefined : "opacity-60")} exportName="İplik lotları" />
-      ) : (
-      <ListBody>
-        {q.isLoading ? (
-          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
-        ) : q.isError ? (
-          <ListMessage className="text-sm text-destructive">Lot listesi yüklenemedi.</ListMessage>
-        ) : rows.length === 0 ? (
-          <ListMessage>
-            <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">Lot yok — lotlar mal kabulde iplik satırına lot numarası yazılınca kendiliğinden doğar; elle de açılabilir.</div>
-          </ListMessage>
-        ) : null}
-      </ListBody>
-      )}
-      {rows.length > 0 && (
-        <ListFooter loaded={rows.length} hasMore={Boolean(q.hasNextPage)} isFetchingMore={q.isFetchingNextPage}>
-          {q.hasNextPage && (
-            <Button variant="outline" size="sm" className="h-7" onClick={() => void q.fetchNextPage()} disabled={q.isFetchingNextPage}>
-              Daha fazla
-            </Button>
-          )}
-        </ListFooter>
-      )}
-      {creating && <CreateLotDialog defaultItemId={itemId} onClose={() => setCreating(false)} onDone={invalidate} />}
+      <DataTable
+        table={table}
+        rowClassName={(r) => (r.isActive ? undefined : "opacity-60")}
+        exportName="İplik lotları"
+        isLoading={q.isLoading}
+        isError={q.isError}
+        errorText="Lot listesi yüklenemedi."
+        onRetry={() => void q.refetch()}
+        emptyText="Lot yok."
+        emptyDescription="Lotlar mal kabulde iplik satırına lot numarası yazılınca kendiliğinden doğar; elle de açılabilir."
+        loadMore={{ hasMore: Boolean(q.hasNextPage), isFetchingMore: q.isFetchingNextPage, onLoadMore: () => q.fetchNextPage() }}
+      />
+      <ListFooter loaded={rows.length} hasMore={rows.length > 0 ? Boolean(q.hasNextPage) : undefined} isFetchingMore={q.isFetchingNextPage} />
+      {creating && <CreateLotDialog defaultItemId={itemId} onClose={() => onCreatingChange(false)} onDone={invalidate} />}
     </>
   );
 }

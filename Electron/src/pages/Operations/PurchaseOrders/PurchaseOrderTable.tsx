@@ -13,7 +13,7 @@
 // iptal edilmemiş siparişte. Gri bir düğme "burada bir yol var ama sana kapalı"
 // der; oysa gerçek şudur — mal görmüş sipariş revize edilmez, yenisi açılır.
 // =============================================================================
-import { useMemo } from "react";
+import { useMemo, type ComponentProps } from "react";
 import type { ColumnDef, Table } from "@tanstack/react-table";
 import { Eye, Pencil, Ban } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -163,6 +163,13 @@ export function usePurchaseOrderTable(rows: Row[], { onDetail, onEdit, onCancel 
 
 const cancelledRow = (o: Row) => (o.status === "CANCELLED" ? "opacity-60" : undefined);
 
-export function PurchaseOrderTable({ table, onDetail }: { table: Table<Row>; onDetail: (row: Row) => void }) {
-  return <DataTable<Row> table={table} markEntity="purchaseOrder" onRowClick={onDetail} rowClassName={cancelledRow} exportName="Alış siparişleri" />;
+export function PurchaseOrderTable({
+  table,
+  onDetail,
+  ...state
+}: { table: Table<Row>; onDetail: (row: Row) => void } & Pick<
+  ComponentProps<typeof DataTable<Row>>,
+  "isLoading" | "isError" | "errorText" | "onRetry" | "emptyText" | "emptyDescription"
+>) {
+  return <DataTable<Row> table={table} markEntity="purchaseOrder" onRowClick={onDetail} rowClassName={cancelledRow} exportName="Alış siparişleri" {...state} />;
 }

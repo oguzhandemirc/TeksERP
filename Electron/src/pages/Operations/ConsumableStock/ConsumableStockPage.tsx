@@ -11,11 +11,11 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { AlertTriangle } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { BandStats, ListFooter, ListToolbar } from "@/components/layout/ListPage";
 import { DataTable } from "@/components/data-table/DataTable";
 import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
 import { useLocalTable } from "@/hooks/useLocalTable";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { formatNumber } from "@/lib/format";
 import { flagSettingTrail } from "@/lib/flag-setting-path";
@@ -81,32 +81,35 @@ export function ConsumableStockPage() {
         </p>
       )}
       <ListToolbar className="flex-row flex-wrap items-center">
-        <Input className="w-full sm:w-72" placeholder="Ara…" title="Kalem adı ya da kodu ara" aria-label="Kalem adı ya da kodu ara" value={search} onChange={(e) => setSearch(e.target.value)} />
-        {data && (
-          <span className="text-sm text-muted-foreground">
-            {data.summary.itemCount} kalem{data.summary.negativeCount > 0 ? ` · ${data.summary.negativeCount} eksi bakiye` : ""}
-          </span>
-        )}
+        <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Kalem adı ya da kodu ara" />
         <div className="ml-auto flex items-center gap-1.5">
           <DataTableTools table={table} compact exportName="Sarf stoğu" />
         </div>
       </ListToolbar>
-      {!q.isError && rows.length > 0 ? (
-        <DataTable table={table} exportName="Sarf stoğu" />
-      ) : (
-        <ListBody>
-          <ListMessage>
-            {q.isError ? (
-              <p className="text-sm text-destructive">Sarf stoğu yüklenemedi — bağlantıyı, Ticaret modülünü ve yetkinizi kontrol edin.</p>
-            ) : data ? (
-              <p className="text-sm text-muted-foreground">Sarf türünde kalem yok. Ürün kartında türü &quot;Sarf&quot; olan kalemler burada listelenir.</p>
-            ) : (
-              <p className="text-sm text-muted-foreground">Yükleniyor…</p>
-            )}
-          </ListMessage>
-        </ListBody>
-      )}
-      <ListFooter loaded={rows.length} />
+      <DataTable
+        table={table}
+        exportName="Sarf stoğu"
+        isLoading={q.isLoading}
+        isError={q.isError}
+        errorText="Sarf stoğu yüklenemedi — bağlantıyı, Ticaret modülünü ve yetkinizi kontrol edin."
+        onRetry={() => void q.refetch()}
+        emptyText={search ? "Aramaya uyan kalem yok." : "Sarf türünde kalem yok."}
+        emptyDescription={search ? undefined : "Ürün kartında türü “Sarf” olan kalemler burada listelenir."}
+      />
+      <ListFooter
+        loaded={rows.length}
+        summary={
+          data && (
+            <BandStats
+              label="Sarf stoğu özeti"
+              items={[
+                { key: "items", label: "Kalem", value: data.summary.itemCount },
+                ...(data.summary.negativeCount > 0 ? [{ key: "neg", label: "Eksi bakiye", value: data.summary.negativeCount, tone: "warn" as const }] : []),
+              ]}
+            />
+          )
+        }
+      />
       <ConsumableMovementsSheet row={open} onClose={() => setOpen(null)} />
     </PageShell>
   );

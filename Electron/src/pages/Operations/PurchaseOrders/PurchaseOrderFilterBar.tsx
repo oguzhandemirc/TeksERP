@@ -27,13 +27,15 @@
 // karıştırır.
 // =============================================================================
 import type { ReactNode } from "react";
-import { RotateCcw, Search } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { InfoPopover } from "@/components/ui/info-popover";
+import { ListToolbar } from "@/components/layout/ListPage";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { DayRangeChip, SelectChip } from "@/components/data-table/filter-row/SelectChip";
 import { SupplierSelect } from "@/components/forms/SupplierSelect";
 import type { SupplierParty } from "@/components/forms/supplierParty";
 import { poFilterControls, type PoFilterScope } from "./filterScope";
-import { DateRangeInput } from "@/components/forms/DateRangeInput";
 
 /** Canlı kovalar — "işi bitmemiş" siparişler. Backend CSV'yi `IN`'e çevirir. */
 export const LIVE_PO_STATUS = "OPEN,PARTIAL";
@@ -80,9 +82,14 @@ interface Props {
   scope?: PoFilterScope;
   /** Sağ uçtaki standart tablo araçları (Sütunlar + Dışa aktar). */
   tools?: ReactNode;
+  /** true → sarmalayıcı satır çizilmez, kutular çağıranın araç satırına girer. */
+  inline?: boolean;
 }
 
-export function PurchaseOrderFilterBar({ value, onChange, scope = "orders", tools }: Props) {
+/** "Tümü" seçeneğinin kutudaki anahtarı — durumda boş dize süzgeçsiz demektir, kutu `null`u ✕'e ayırır. */
+const ALL_STATUS = "__ALL__";
+
+export function PurchaseOrderFilterBar({ value, onChange, scope = "orders", tools, inline = false }: Props) {
   const set = <K extends keyof PurchaseOrderFilterState>(key: K, v: PurchaseOrderFilterState[K]) =>
     onChange({ ...value, [key]: v });
 
@@ -95,23 +102,15 @@ export function PurchaseOrderFilterBar({ value, onChange, scope = "orders", tool
   // yüzünden belirseydi kullanıcı neyi temizlediğini göremezdi.
   const showClear = orderScope ? isPoFilterDirty(value) : Boolean(value.supplier);
 
-  return (
-    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-6 py-3">
+  const controls = (
+    <>
       {show.search && (
-        <div className="relative w-72">
-          <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            className="pl-8"
-            placeholder="Ara…" title="Sipariş no / tedarikçi / not ara" aria-label="Sipariş no / tedarikçi / not ara"
-            value={value.search}
-            onChange={(e) => set("search", e.target.value)}
-          />
-        </div>
+        <ListSearchBox value={value.search} onSearchChange={(v) => set("search", v)} searchHint="Sipariş no / tedarikçi / not ara" />
       )}
 
       {show.supplier && (
         <SupplierSelect
-          className="w-60"
+          className="w-56 [&_button]:h-8 [&_button]:text-xs"
           value={value.supplier}
           onChange={(v) => set("supplier", v)}
           placeholder="Tüm tedarikçiler"
@@ -127,42 +126,34 @@ export function PurchaseOrderFilterBar({ value, onChange, scope = "orders", tool
 
       {show.status && (
         <>
-          <select
-            className="h-9 rounded-md border bg-background px-2 text-sm"
-            value={value.status}
-            onChange={(e) => set("status", e.target.value)}
-          >
-            {STATUS_OPTIONS.map((o) => (
-              <option key={o.label} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-
-          <span className="text-xs text-muted-foreground">Sipariş tarihi</span>
-          <DateRangeInput
+          {/* Varsayılan "Açık olanlar" (✕ oraya döner); "Tümü" ayrı seçenektir — boş değer süzgeçsiz demek. */}
+          <SelectChip
+            id="po-status"
+            label="Durum"
+            value={value.status === "" ? ALL_STATUS : value.status}
+            resetValue={LIVE_PO_STATUS}
+            options={STATUS_OPTIONS.map((o) => ({ value: o.value === "" ? ALL_STATUS : o.value, label: o.label }))}
+            onChange={(v) => set("status", v === ALL_STATUS ? "" : (v ?? LIVE_PO_STATUS))}
+          />
+          <DayRangeChip
+            id="po-date"
+            label="Sipariş tarihi"
             from={value.dateFrom}
             to={value.dateTo}
-            onFrom={(v) => set("dateFrom", v)}
-            onTo={(v) => set("dateTo", v)}
-            inputClassName="w-36"
-            fromLabel="Sipariş tarihi başlangıcı"
-            toLabel="Sipariş tarihi bitişi"
+            onChange={(r) => onChange({ ...value, dateFrom: r.from, dateTo: r.to })}
           />
         </>
       )}
 
       {hasHidden && (
-        <span className="text-xs text-muted-foreground">
-          Bu sekme her zaman AÇIK kalemleri gösterir; arama, durum ve tarih filtreleri “Siparişler”
-          sekmesine aittir.
-        </span>
+        <InfoPopover label="Bu sekmenin filtreleri" desc="Bu sekme her zaman açık kalemleri gösterir; durum ve tarih filtreleri “Siparişler” sekmesine aittir." />
       )}
 
       {showClear && (
         <Button
           variant="ghost"
           size="sm"
+          className="h-8"
           onClick={() =>
             // Kalem sekmesinde yalnız GÖRÜNEN filtre temizlenir — diğer
             // sekmenin daraltmasını haber vermeden sıfırlamak, kullanıcının
@@ -175,6 +166,9 @@ export function PurchaseOrderFilterBar({ value, onChange, scope = "orders", tool
         </Button>
       )}
       {tools ? <div className="ml-auto flex items-center gap-1.5">{tools}</div> : null}
-    </div>
+    </>
   );
+  // `inline`: kalem panelinin kendi araç satırına gömülür (sekme altında ikinci satır açılmaz).
+  if (inline) return controls;
+  return <ListToolbar className="flex-row flex-wrap items-center">{controls}</ListToolbar>;
 }
