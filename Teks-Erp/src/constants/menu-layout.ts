@@ -78,7 +78,6 @@ export const MENU_PRESETS: readonly MenuPreset[] = [
       { key: "definitions/subcontractor-categories", reason: "Fason firma kategorileri kullanılmıyor." },
       { key: "definitions/traveler-card", reason: "Refakat kartı kullanılmıyor (etiketteki numara yeter)." },
       { key: "definitions/traveler-card-studio", reason: "Refakat kartı şablonu gerekmiyor." },
-      { key: "cost/yarn-prices", reason: "İplik alınmıyor; maliyet makine saati ve sarf normundan." },
       { key: "cost/yarn-need", reason: "İplik ihtiyacı hesaplanmıyor (dokuma yok)." },
       { key: "operations/purchase-orders", reason: "Ticari mal alınmıyor; sarf mal kabulü siparişsiz yapılabilir." },
       { key: "definitions/warp-specs", reason: DOKUMA_YOK },

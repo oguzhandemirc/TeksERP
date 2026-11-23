@@ -29,7 +29,7 @@ describe("foreignCurrencies", () => {
 describe("missing-targets", () => {
   it("COST_INPUT_MISSING kodları alana eşlenir", () => {
     expect([...missingFields(["FX_RATE_MISSING", "RPM_MISSING", "YARN_PRICE_MISSING"])].sort()).toEqual(["fx", "loomRpm"]);
-    expect(missingTarget("YARN_PRICE_MISSING")).toEqual({ kind: "link", to: "/cost/yarn-prices", label: "İplik Maliyet Fiyatları", cta: "Fiyat gir" });
+    expect(missingTarget("YARN_PRICE_MISSING")).toEqual({ kind: "link", to: "/cost/input-prices?tab=yarn", label: "İplik Maliyet Fiyatları", cta: "Fiyat gir" });
     expect(missingTarget("BILINMEYEN")).toBeNull();
   });
 });

@@ -22,7 +22,7 @@ export function SubcontractorRatesSection({ subcontractorId }: { subcontractorId
     <section aria-label="Tarifeler" className="rounded-md border p-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-sm font-semibold">Tarifeler</h3>
-        <Link to="/cost/finishing-rates" className="text-xs text-primary underline-offset-4 hover:underline">Fason Tarifeleri ekranında aç</Link>
+        <Link to="/cost/input-prices?tab=finishing" className="text-xs text-primary underline-offset-4 hover:underline">Fason Tarifeleri ekranında aç</Link>
       </div>
       {q.isLoading ? (
         <p className="mt-2 text-xs text-muted-foreground">Yükleniyor…</p>

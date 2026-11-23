@@ -294,6 +294,8 @@ export function useChequeTable(rows: ChequeRow[], { onDetail, onAction, selectio
 
 const cancelledRow = (c: ChequeRow) => (c.status === "CANCELLED" ? "opacity-60" : undefined);
 
-export function ChequeTable({ table }: { table: Table<ChequeRow> }) {
-  return <DataTable<ChequeRow> table={table} rowClassName={cancelledRow} exportName="Çek ve senetler" />;
+type TableState = { isLoading?: boolean; isError?: boolean; onRetry?: () => void; errorText?: string; emptyText?: string; emptyDescription?: string };
+
+export function ChequeTable({ table, ...state }: { table: Table<ChequeRow> } & TableState) {
+  return <DataTable<ChequeRow> table={table} rowClassName={cancelledRow} exportName="Çek ve senetler" {...state} />;
 }

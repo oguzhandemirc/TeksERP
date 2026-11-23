@@ -2,6 +2,8 @@ import { Send, Cog, Copy, KeyRound, ServerCog, Settings2, Link2, FileText, Calen
 import type { CommandEntry, CommandSection } from "./command-entries.types";
 import { ROLL_TABS } from "@/pages/Operations/Rolls/tabs-config";
 import { ETIKET_TABS } from "@/pages/Labels/tabs-config";
+import { COST_INPUT_DESCRIPTIONS, COST_INPUT_TABS, costInputTabPath } from "@/pages/Cost/InputPrices/tabs-config";
+import { regimePredicate } from "@/lib/regime-predicate";
 import { KARTELA_TABS, NEW_DISPATCH_ACTION } from "@/pages/Operations/Kartela/tabs-config";
 import {
   SETTINGS_ADMIN_PERMISSION,
@@ -86,6 +88,19 @@ const labelTabEntries: CommandEntry[] = ETIKET_TABS.map((t) => ({
   to: `/definitions/labels?tab=${t.key}`,
   permission: "station:read",
   keywords: "etiket barkod şablon stüdyo sekme",
+  deep: true,
+}));
+
+/** Girdi Fiyatları sekmeleri — eski dört ekranın adıyla aranır, `/cost/input-prices?tab=<key>` açar. */
+const costInputTabEntries: CommandEntry[] = COST_INPUT_TABS.map((t) => ({
+  key: `cost-input-tab:${t.key}`,
+  get label() { return t.paletteLabel; },
+  get description() { return `Girdi Fiyatları · ${COST_INPUT_DESCRIPTIONS[t.key]}`; },
+  icon: t.icon,
+  to: costInputTabPath(t.key),
+  permission: "cost:read",
+  keywords: "maliyet girdi fiyat sekme",
+  visibleWhen: regimePredicate("maliyetEnabled"),
   deep: true,
 }));
 
@@ -286,6 +301,7 @@ const orphanPageEntries: CommandEntry[] = [
 export const deepCommandSections: CommandSection[] = [
   { heading: "Sayfa İçi · Kumaş Stoğu", entries: rollTabEntries },
   { heading: "Sayfa İçi · Etiketler", entries: labelTabEntries },
+  { heading: "Sayfa İçi · Girdi Fiyatları", entries: costInputTabEntries },
   { heading: "Sayfa İçi · Siparişler", entries: orderTabEntries },
   { heading: "Sayfa İçi · Kartela Takibi", entries: kartelaTabEntries },
   { heading: "Ayar Satırları", entries: settingsFlagEntries },

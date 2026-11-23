@@ -5,7 +5,8 @@ import { toast } from "sonner";
 import { ArrowDownLeft, ArrowUpRight } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
+import { ListFooter } from "@/components/layout/ListPage";
+import { TruncatedHint } from "./TruncatedHint";
 import { Button } from "@/components/ui/button";
 import { PrintedDocDialog } from "@/components/print/PrintedDocDialog";
 import { DataTable } from "@/components/data-table/DataTable";
@@ -87,48 +88,24 @@ export function PaymentsPage() {
 
       <PaymentsFilterBar value={filters} onChange={setFilters} tools={<DataTableTools table={table} compact exportName="Tahsilat ve ödemeler" />} />
 
-      {!q.isLoading && !q.isError && rows.length > 0 ? (
-        <DataTable table={table} rowClassName={cancelledPaymentRow} exportName="Tahsilat ve ödemeler" />
-      ) : (
-      <ListBody>
-        {q.isLoading ? (
-          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
-        ) : q.isError ? (
-          /* "HATA" ile "KAYIT YOK" AYRI EKRANLAR: boş diziyi "kayıt yok" diye
-             basmak, kullanıcıyı aynı tahsilatı ikinci kez girmeye iter. */
-          <ListMessage>
-            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-              <p className="font-medium text-destructive">Tahsilat/ödeme listesi yüklenemedi.</p>
-              <p className="mt-1 text-muted-foreground">
-                Bu bir “kayıt yok” cevabı DEĞİLDİR — istek sunucuya ulaşamadı ya da reddedildi.
-                Kayıtlarınız yerinde duruyor; yeni kayıt girmeden önce tekrar deneyin.
-              </p>
-              <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
-                Tekrar dene
-              </Button>
-            </div>
-          </ListMessage>
-        ) : rows.length === 0 ? (
-          <ListMessage>
-            <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-              {isPaymentFilterDirty(filters)
-                ? "Bu filtreyle kayıt yok. Daraltmayı gevşetin ya da “Filtreleri temizle” deyin."
-                : "Kayıt yok. Tahsilat veya ödeme girmek için üstteki düğmeleri kullanın."}
-            </div>
-          </ListMessage>
-        ) : null}
-      </ListBody>
-      )}
-        {/* ⚠️ KIRPMA SESSİZ DEĞİL: sunucudaki toplam gösterilen satırı aşarsa
-            yazılır. Aksi halde 100. satırdan sonrası "yok" sanılır ve aranan
-            tahsilat ikinci kez girilir. */}
-        {rows.length > 0 && total > rows.length && (
-          <p className="shrink-0 border-t px-4 py-2 text-xs text-amber-700 dark:text-amber-500">
-            {total} kaydın ilk {rows.length} tanesi gösteriliyor. Aradığınızı bulmak için tarih, cari
-            ya da yöntem filtresini kullanın.
-          </p>
-        )}
-      <ListFooter loaded={rows.length} total={q.data ? total : null} />
+      {/* "HATA" ile "KAYIT YOK" AYRI EKRANLAR (DataTable.isError): boş diziyi "kayıt yok"
+          diye basmak, kullanıcıyı aynı tahsilatı ikinci kez girmeye iter. */}
+      <DataTable
+        table={table}
+        rowClassName={cancelledPaymentRow}
+        exportName="Tahsilat ve ödemeler"
+        isLoading={q.isLoading}
+        isError={q.isError}
+        onRetry={() => void q.refetch()}
+        errorText="Tahsilat/ödeme listesi yüklenemedi — istek sunucuya ulaşamadı ya da reddedildi."
+        emptyText={isPaymentFilterDirty(filters) ? "Bu filtreyle kayıt yok." : "Henüz tahsilat ya da ödeme yok."}
+        emptyDescription={isPaymentFilterDirty(filters) ? "Filtreyi gevşetin ya da “Filtreleri temizle” deyin." : "Üstteki Tahsilat / Ödeme düğmeleriyle girin."}
+      />
+      {/* ⚠️ KIRPMA SESSİZ DEĞİL: toplam gösterilen satırı aşarsa alt çubukta yazılır —
+          aksi halde 100. satırdan sonrası "yok" sanılır ve tahsilat ikinci kez girilir. */}
+      <ListFooter loaded={rows.length} total={q.data ? total : null}>
+        {total > rows.length && rows.length > 0 ? <TruncatedHint /> : null}
+      </ListFooter>
 
       <PaymentFormDialog
         open={formOpen}

@@ -1,34 +1,46 @@
 // =============================================================================
-// TAHSİLAT / ÖDEME FİLTRE ŞERİDİ (B4)
+// TAHSİLAT / ÖDEME FİLTRE SATIRI (B4 · UI D2-f ortak kutular)
 // =============================================================================
-// ⚠️ Şerit `PageBody`'nin DIŞINDA ve `shrink-0` — içine konursa liste kaydıkça
-// filtreler yukarı kaçar ve kullanıcı hangi daraltmaya baktığını göremez
-// (`CashTxnFilterBar`/`ChequeFilterBar` emsali).
+// ⚠️ Satır `PageBody`'nin DIŞINDA ve `shrink-0` (ListToolbar) — liste kaydıkça
+// filtreler yukarı kaçmasın; kullanıcı hangi daraltmaya baktığını görür.
 //
 // ⚠️ VARSAYILAN "TÜMÜ"dür, "yalnız aktifler" DEĞİL. Burası bir DEFTERDİR: iptal
 // edilmiş tahsilat silinmez, ters kayıtla kapanır ve tam da "bu para nereye
-// gitti" sorusunda aranır. Varsayılan olarak gizlemek, kullanıcının aradığı
-// kaydı "yok" sanmasına yol açardı; iptal satırları listede soluk + üstü çizili
-// tutarla zaten ayrışıyor.
+// gitti" sorusunda aranır; iptal satırları listede soluk + üstü çizili ayrışır.
 //
 // ⚠️ CARİ SEÇİCİ `cariPickerService` kullanır (kopya DEĞİL): uç `cariId` ister
-// ve o servis `isActive` süzgecini bilerek DÜŞÜRÜR — pasifleştirilmiş bir
+// ve o servis `isActive` filtresini bilerek DÜŞÜRÜR — pasifleştirilmiş bir
 // carinin geçmiş tahsilatı hâlâ aranır (cariyi kapatmak geçmişini kilitlemez).
 // =============================================================================
 import type { ReactNode } from "react";
-import { RotateCcw, Search } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
+import { ListToolbar } from "@/components/layout/ListPage";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { DayRangeChip, SelectChip } from "@/components/data-table/filter-row/SelectChip";
+import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { cariPickerService } from "./Allocations/service";
 import type { CariRow } from "./service";
-import { DateRangeInput } from "@/components/forms/DateRangeInput";
 import {
   EMPTY_PAYMENT_FILTERS,
   PAYMENT_METHOD_LABEL,
   isPaymentFilterDirty,
   type PaymentFilterState,
 } from "./paymentFilters";
+
+/** Modal açan seçici tetiği çip görünümünde ("Cari: Tümü") — satırın diğer kutularıyla aynı boy (DeviationFilters emsali). */
+export const PICKER_CHIP =
+  "h-8 min-h-8 w-auto max-w-64 gap-1 px-2.5 py-0 text-xs font-normal [&>span:first-child]:font-normal [&>span:first-child]:text-muted-foreground";
+
+const DIRECTION_OPTIONS = [
+  { value: "IN", label: "Tahsilat" },
+  { value: "OUT", label: "Ödeme" },
+] as const;
+const STATUS_OPTIONS = [
+  { value: "ACTIVE", label: "Aktif" },
+  { value: "CANCELLED", label: "İptal" },
+] as const;
+const METHOD_OPTIONS = Object.entries(PAYMENT_METHOD_LABEL).map(([value, label]) => ({ value, label }));
 
 interface Props {
   /** Sağ uçtaki standart tablo araçları (Sütunlar + Dışa aktar). */
@@ -42,76 +54,31 @@ export function PaymentsFilterBar({ value, onChange, tools }: Props) {
     onChange({ ...value, [key]: v });
 
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-6 py-3">
-      <div className="relative w-64">
-        <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          className="pl-8"
-          placeholder="Ara…" title="Belge no / referans ara" aria-label="Belge no / referans ara"
-          value={value.search}
-          onChange={(e) => set("search", e.target.value)}
-        />
-      </div>
-
-      <select
-        className="h-9 rounded-md border bg-background px-2 text-sm"
-        value={value.direction}
-        onChange={(e) => set("direction", e.target.value)}
-      >
-        <option value="">Tahsilat + Ödeme</option>
-        <option value="IN">Yalnız tahsilat</option>
-        <option value="OUT">Yalnız ödeme</option>
-      </select>
-
-      <div className="w-64">
-        <ReferenceSelect<CariRow>
-          value={value.cariId}
-          onChange={(v) => set("cariId", v)}
-          service={cariPickerService}
-          queryKey="finance-cari"
-          getLabel={(c) => `${c.code} — ${c.name}`}
-          placeholder="Tüm cariler"
-          nullable
-          noneLabel="Tüm cariler"
-        />
-      </div>
-
-      <select
-        className="h-9 rounded-md border bg-background px-2 text-sm"
-        value={value.method}
-        onChange={(e) => set("method", e.target.value)}
-      >
-        <option value="">Tüm yöntemler</option>
-        {Object.entries(PAYMENT_METHOD_LABEL).map(([k, label]) => (
-          <option key={k} value={k}>
-            {label}
-          </option>
-        ))}
-      </select>
-
-      <select
-        className="h-9 rounded-md border bg-background px-2 text-sm"
-        value={value.status}
-        onChange={(e) => set("status", e.target.value)}
-      >
-        <option value="">Aktif + iptal</option>
-        <option value="ACTIVE">Yalnız aktif</option>
-        <option value="CANCELLED">Yalnız iptal</option>
-      </select>
-
-      <span className="text-xs text-muted-foreground">Tarih</span>
-      <DateRangeInput
-        from={value.from}
-        to={value.to}
-        onFrom={(v) => set("from", v)}
-        onTo={(v) => set("to", v)}
-        inputClassName="w-36"
-        fromLabel="Ödeme tarihi başlangıcı"
-        toLabel="Ödeme tarihi bitişi"
+    <ListToolbar className="flex-row flex-wrap items-center">
+      <ListSearchBox value={value.search} onSearchChange={(v) => set("search", v)} searchHint="Belge no / referans ara" />
+      <SelectChip<string> id="payment-direction" label="Yön" value={value.direction || null} options={DIRECTION_OPTIONS} onChange={(v) => set("direction", v ?? "")} />
+      <EntityPickerModal<CariRow>
+        value={value.cariId}
+        onChange={(id) => set("cariId", id)}
+        service={cariPickerService}
+        queryKey="finance-cari"
+        getLabel={(c) => c.name}
+        getSubLabel={(c) => c.code}
+        nullable
+        noneLabel="Tüm cariler"
+        label="Cari:"
+        placeholder="Tümü"
+        title="Cari seç"
+        countLabel="cari"
+        triggerClassName={PICKER_CHIP}
+        placeholderClassName="text-foreground"
+        hideChevron
       />
+      <SelectChip<string> id="payment-method" label="Yöntem" value={value.method || null} options={METHOD_OPTIONS} onChange={(v) => set("method", v ?? "")} />
+      <SelectChip<string> id="payment-status" label="Durum" value={value.status || null} options={STATUS_OPTIONS} onChange={(v) => set("status", v ?? "")} />
+      <DayRangeChip id="payment-date" label="Tarih" from={value.from} to={value.to} onChange={({ from, to }) => onChange({ ...value, from, to })} />
 
-      {/* Temizle YALNIZ bir şey seçiliyken çıkar — hep duran bir düğme, hiçbir
-          filtre yokken de "bir şey açık" izlenimi verir. */}
+      {/* Temizle YALNIZ bir şey seçiliyken çıkar — hep duran düğme "bir şey açık" izlenimi verir. */}
       {isPaymentFilterDirty(value) && (
         <Button variant="ghost" size="sm" onClick={() => onChange(EMPTY_PAYMENT_FILTERS)}>
           <RotateCcw className="mr-1 h-3.5 w-3.5" />
@@ -119,6 +86,6 @@ export function PaymentsFilterBar({ value, onChange, tools }: Props) {
         </Button>
       )}
       {tools ? <div className="ml-auto flex items-center gap-1.5">{tools}</div> : null}
-    </div>
+    </ListToolbar>
   );
 }

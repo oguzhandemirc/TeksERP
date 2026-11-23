@@ -22,8 +22,10 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ShieldCheck, Unlock } from "lucide-react";
+import { AlertTriangle, Inbox, ShieldCheck, Unlock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ToolbarToggle } from "@/components/data-table/ToolbarToggle";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
 import { PeriodLockStatusCardBase } from "./LockStatusCard";
@@ -79,14 +81,8 @@ export function CashPeriodSection({ formOpen, onFormOpenChange }: Props) {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-2">
-        <CashAccountPicker className="w-72" nullable value={account} onChange={setAccount} />
-        <Button
-          variant={includeReopened ? "default" : "outline"}
-          onClick={() => setIncludeReopened((v) => !v)}
-          title="Yeniden açılmış kapanışlar da listelensin (denetim görünümü)"
-        >
-          Yeniden açılanlar
-        </Button>
+        <CashAccountPicker chipLabel="Hesap:" nullable value={account} onChange={setAccount} />
+        <ToolbarToggle checked={includeReopened} onCheckedChange={setIncludeReopened} label="Yeniden açılanlar" title="Yeniden açılmış kapanışlar da listelensin (denetim görünümü)" />
       </div>
 
       {account ? (
@@ -117,11 +113,11 @@ export function CashPeriodSection({ formOpen, onFormOpenChange }: Props) {
           </div>
         </div>
       ) : rows.length === 0 ? (
-        <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-          {includeReopened
-            ? "Bu filtreyle kapanış kaydı yok."
-            : "Aktif kapanış yok — seçili kapsamda tüm dönemler açık. Yeniden açılmış eski kapanışlar için “Yeniden açılanlar” düğmesine basın."}
-        </div>
+        <EmptyState
+          icon={Inbox}
+          title={includeReopened ? "Bu filtreyle kapanış kaydı yok." : "Aktif kapanış yok — seçili kapsamda tüm dönemler açık."}
+          description={includeReopened ? undefined : "Yeniden açılmış eski kapanışlar için “Yeniden açılanlar” kutusunu işaretleyin."}
+        />
       ) : (
         <div className="space-y-2">
           {q.isError && (
