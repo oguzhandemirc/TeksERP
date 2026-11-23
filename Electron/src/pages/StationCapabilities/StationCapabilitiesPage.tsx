@@ -1,21 +1,17 @@
 import { useMemo, useState } from "react";
 import { foldedIncludes } from "@/lib/search-fold";
 import { useQuery } from "@tanstack/react-query";
+import type { ColumnDef } from "@tanstack/react-table";
 import { Sparkles, Settings2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { PageShell, PageBody } from "@/components/layout/PageShell";
+import { PageShell } from "@/components/layout/PageShell";
+import { ListFooter, ListToolbar } from "@/components/layout/ListPage";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { DataTable } from "@/components/data-table/DataTable";
+import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { useLocalTable } from "@/hooks/useLocalTable";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import {
   Tooltip,
   TooltipContent,
@@ -65,6 +61,58 @@ function DisabledEditButton({ hint }: { hint: string }) {
       <TooltipContent>{hint}</TooltipContent>
     </Tooltip>
   );
+}
+
+function EditCell({ cap, onEdit }: { cap: StationCapabilitySummary; onEdit: (c: StationCapabilitySummary) => void }) {
+  return (
+    <div className="flex justify-end">
+      {/* Rota yalnız `station:read` ister; yazma kapısı BURADA. `canApplyProperty` VERİ koşuludur, izin yerine geçmez. */}
+      <PermissionGate permission="station:write" fallback={<DisabledEditButton hint={NO_WRITE_HINT} />}>
+        {cap.canApplyProperty ? (
+          <Button size="sm" variant="outline" className="gap-1.5" onClick={() => onEdit(cap)}>
+            <Settings2 className="h-3.5 w-3.5" /> Yetenekleri Düzenle
+          </Button>
+        ) : (
+          <DisabledEditButton hint={disabledHint(cap)} />
+        )}
+      </PermissionGate>
+    </div>
+  );
+}
+
+const MUTED = <span className="text-xs text-muted-foreground">—</span>;
+
+function capabilityColumns(onEdit: (c: StationCapabilitySummary) => void): ColumnDef<StationCapabilitySummary>[] {
+  return [
+    { accessorKey: "stationCode", header: "Kod", meta: { label: "Kod" }, cell: ({ row }) => <span className="font-mono text-xs">{row.original.stationCode}</span> },
+    { accessorKey: "stationName", header: "İstasyon", meta: { label: "İstasyon" }, cell: ({ row }) => <span className="font-medium">{row.original.stationName}</span> },
+    {
+      id: "stationKind",
+      header: "Tür",
+      meta: { label: "Tür", exportValue: (c) => stationKindLabels[c.stationKind] },
+      cell: ({ row }) => <span className="text-xs text-muted-foreground">{stationKindLabels[row.original.stationKind]}</span>,
+    },
+    {
+      id: "propertyCount",
+      header: () => (
+        <span className="flex items-center gap-1.5">
+          <Sparkles className="h-3.5 w-3.5" /> Özellik
+        </span>
+      ),
+      meta: { label: "Özellik", exportValue: (c) => (c.canApplyProperty ? String(c.propertyCount) : "") },
+      cell: ({ row: { original: c } }) =>
+        c.canApplyProperty ? <Badge variant={c.propertyCount === 0 ? "secondary" : "muted"}>{c.propertyCount}</Badge> : MUTED,
+    },
+    {
+      // Kalite: SALT ROZET — kalite kademesi `QualityGrade` kataloğundan gelir, istasyona atanmaz.
+      id: "canApplyQuality",
+      header: "Kalite",
+      meta: { label: "Kalite", exportValue: (c) => (c.canApplyQuality ? "Evet" : "Hayır") },
+      cell: ({ row }) =>
+        row.original.canApplyQuality ? <Badge variant="muted">Evet</Badge> : <span className="text-xs text-muted-foreground">Hayır</span>,
+    },
+    { id: "actions", header: "", size: 180, enableSorting: false, cell: ({ row }) => <EditCell cap={row.original} onEdit={onEdit} /> },
+  ];
 }
 
 /**
@@ -126,6 +174,14 @@ export function StationCapabilitiesPage() {
       (s) => foldedIncludes(s.stationName, q) || foldedIncludes(s.stationCode, q),
     );
   }, [query.data, search]);
+
+  const columns = useMemo(() => capabilityColumns(setEditing), []);
+  const table = useLocalTable({
+    tableKey: "station-capabilities",
+    data: filtered,
+    columns,
+    getRowId: (cap) => cap.stationId,
+  });
 
   // Uzun-biçim dışa aktarım için istasyon başına yetenek LİSTESİ gerekir; özet uç
   // yalnız SAYI döner. Tek istekle hepsi (`?detailed=true`) — istasyon başına
@@ -189,8 +245,14 @@ export function StationCapabilitiesPage() {
     <PageShell>
       <PageHeader
         title="İstasyon Yetenekleri"
-        actions={
-          <>
+        actions={<RefreshButton queryKey={QUERY_KEY} />}
+      />
+
+      <ListToolbar className="flex-row flex-wrap items-center">
+        <ListSearchBox value={search} onSearchChange={setSearch} searchHint="İstasyon ara" />
+        <div className="ml-auto flex items-center gap-1.5">
+            {/* Dosya uzun biçimde (istasyon × yetenek) iner — tablo menüsünde ikinci indirme yok. */}
+            <DataTableTools table={table} compact hideExport />
             <ListExportMenu
               name="İstasyon Yetenekleri"
               rows={exportRows}
@@ -212,121 +274,22 @@ export function StationCapabilitiesPage() {
                 "\"Renk\" satırları eski istasyon-renk kayıtlarıdır — renk 2026-08-02'den beri istasyon bazlı kısıt DEĞİLDİR (bilgi amaçlı; boyahane her rengi boyar).",
               ]}
             />
-            <RefreshButton queryKey={QUERY_KEY} />
-          </>
-        }
-      />
-
-      <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-b">
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="İstasyon ara..."
-          className="h-8 w-64 text-sm"
-        />
-        <div className="ml-auto text-xs text-muted-foreground">
-          <span className="text-foreground font-medium">{filtered.length}</span> istasyon
         </div>
-      </div>
+      </ListToolbar>
 
-      <PageBody>
-        <TooltipProvider delayDuration={150}>
-          <Table containerClassName="overflow-visible">
-            <TableHeader className="sticky top-0 z-10 bg-card">
-              <TableRow>
-                <TableHead>Kod</TableHead>
-                <TableHead>İstasyon</TableHead>
-                <TableHead>Tür</TableHead>
-                <TableHead>
-                  <span className="flex items-center gap-1.5">
-                    <Sparkles className="h-3.5 w-3.5" /> Özellik
-                  </span>
-                </TableHead>
-                {/* Kalite: SALT ROZET — atama listesi YOK (kalite kademesi
-                    `QualityGrade` kataloğundan gelir, istasyona bağlı değil). */}
-                <TableHead>Kalite</TableHead>
-                <TableHead className="text-right">İşlem</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {query.isLoading ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <TableRow key={i}>
-                    {Array.from({ length: 6 }).map((_, j) => (
-                      <TableCell key={j}>
-                        <Skeleton className="h-4 w-full" />
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                ))
-              ) : filtered.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                    İstasyon bulunamadı.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filtered.map((cap) => {
-                  // Renk artık kısıt değil → düzenlenecek tek şey özellik listesi.
-                  const editable = cap.canApplyProperty;
-                  return (
-                    <TableRow
-                      key={cap.stationId}
-                      className={editable ? undefined : "opacity-60"}
-                    >
-                      <TableCell className="font-mono text-xs">{cap.stationCode}</TableCell>
-                      <TableCell className="font-medium">{cap.stationName}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
-                        {stationKindLabels[cap.stationKind]}
-                      </TableCell>
-                      <TableCell>
-                        {cap.canApplyProperty ? (
-                          <Badge variant={cap.propertyCount === 0 ? "secondary" : "muted"}>
-                            {cap.propertyCount}
-                          </Badge>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {cap.canApplyQuality ? (
-                          <Badge variant="muted">Evet</Badge>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">Hayır</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex justify-end">
-                          {/* Rota yalnız `station:read` ister (liste okunabilir);
-                              yazma yüzeyinin kapısı BURADA. `canApplyProperty`
-                              bir VERİ koşuludur, izin yerine geçmez. */}
-                          <PermissionGate
-                            permission="station:write"
-                            fallback={<DisabledEditButton hint={NO_WRITE_HINT} />}
-                          >
-                            {editable ? (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="gap-1.5"
-                                onClick={() => setEditing(cap)}
-                              >
-                                <Settings2 className="h-3.5 w-3.5" /> Yetenekleri Düzenle
-                              </Button>
-                            ) : (
-                              <DisabledEditButton hint={disabledHint(cap)} />
-                            )}
-                          </PermissionGate>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </TooltipProvider>
-      </PageBody>
+      <TooltipProvider delayDuration={150}>
+        <DataTable
+          table={table}
+          exportName="İstasyon Yetenekleri"
+          // Renk artık kısıt değil → düzenlenecek tek şey özellik listesi; uygulamayan istasyon soluk.
+          rowClassName={(cap) => (cap.canApplyProperty ? undefined : "opacity-60")}
+          isLoading={query.isLoading}
+          isError={query.isError}
+          onRetry={() => void query.refetch()}
+          emptyText={search ? "Aramaya uyan istasyon yok." : "İstasyon bulunamadı."}
+        />
+      </TooltipProvider>
+      <ListFooter loaded={filtered.length} label={`${filtered.length} istasyon`} />
 
       <CapabilitiesEditSheet
         station={editing}

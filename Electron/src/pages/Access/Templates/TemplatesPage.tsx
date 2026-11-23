@@ -6,10 +6,9 @@ import { safeFormat } from "@/lib/format";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBody, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { ListFooter, ListToolbar } from "@/components/layout/ListPage";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
 import { DataTable } from "@/components/data-table/DataTable";
 import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
@@ -145,14 +144,7 @@ export function TemplatesPage() {
       />
 
       <ListToolbar className="flex-row flex-wrap items-center">
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Ara…"
-          title="Şablon adı ya da açıklamasıyla ara"
-          aria-label="Şablon adı ya da açıklamasıyla ara"
-          className="h-8 w-64 text-sm"
-        />
+        <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Şablon adı ya da açıklamasıyla ara" />
         <div className="ml-auto flex items-center gap-1.5">
           {/* Dosya kendi sütunlarıyla iner (kod, sistem rolü, durum) — tablo menüsünde ikinci indirme yok. */}
           <DataTableTools table={table} compact hideExport />
@@ -169,21 +161,16 @@ export function TemplatesPage() {
         </div>
       </ListToolbar>
 
-      {!query.isLoading && filtered.length > 0 ? (
-        <DataTable table={table} exportName="Yetki Şablonları" rowClassName={(t) => (t.isActive ? undefined : "opacity-60")} />
-      ) : (
-        <ListBody>
-          {query.isLoading ? (
-            <ListMessage className="space-y-2">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <Skeleton key={i} className="h-8 w-full" />
-              ))}
-            </ListMessage>
-          ) : (
-            <p className="py-10 text-center text-muted-foreground">Şablon bulunamadı.</p>
-          )}
-        </ListBody>
-      )}
+      <DataTable
+        table={table}
+        exportName="Yetki Şablonları"
+        rowClassName={(t) => (t.isActive ? undefined : "opacity-60")}
+        isLoading={query.isLoading}
+        isError={query.isError}
+        onRetry={() => void query.refetch()}
+        emptyText={search ? "Aramaya uyan şablon yok." : "Şablon bulunamadı."}
+      />
+      <ListFooter loaded={filtered.length} />
 
       <TemplateFormDialog
         open={formOpen}
