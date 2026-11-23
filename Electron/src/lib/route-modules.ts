@@ -104,11 +104,8 @@ export const ROUTE_MODULE: Readonly<Record<string, RouteModuleFlag>> = {
   // ── MALİYET & TEKLİF (MAL-3) ────────────────────────────────────────────
   cost: "maliyetEnabled",
   "cost/parameters": "maliyetEnabled",
-  "cost/yarn-prices": "maliyetEnabled",
-  "cost/finishing-rates": "maliyetEnabled",
-  "cost/formulas": "maliyetEnabled",
+  "cost/input-prices": "maliyetEnabled",
   "cost/machine-rates": "maliyetEnabled",
-  "cost/consumable-norms": "maliyetEnabled",
   "cost/items": "maliyetEnabled",
   "cost/calculator": "maliyetEnabled",
   "cost/quotes": "maliyetEnabled",
@@ -137,7 +134,7 @@ export const ROUTE_REGIME: Readonly<Record<string, Extract<keyof OperationsVisib
 /**
  * BAĞLI MODÜL (K19, ölçülerek): yaprak kendi modülüne EK OLARAK bu modüllerin HEPSİNİ ister (VE). Kaynak backend
  * kapısı: `routes/reports/maliyet.report.routes.ts` `/karlilik` → `requireFinanceEnabled` (finans kapalıyken 403).
- * Karo · palet · route aynı yüklemden (`isRouteModuleOpen`) okur. Ölçülüp EKLENMEYENLER: `cost/yarn-prices` ve
+ * Karo · palet · route aynı yüklemden (`isRouteModuleOpen`) okur. Ölçülüp EKLENMEYENLER: `cost/input-prices` (iplik sekmesi) ve
  * `cost/yarn-need` iplik modülü kapalıyken de çalışır (iplik ihtiyacı köprüden null okur; iplik maliyeti elle yapıda).
  */
 export const ROUTE_ALSO_REQUIRES: Readonly<Record<string, readonly RouteModuleFlag[]>> = {

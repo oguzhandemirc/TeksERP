@@ -123,11 +123,9 @@ import { CostHubPage } from "@/pages/Cost/CostHubPage";
 import { QualityHubPage } from "@/pages/Quality/QualityHubPage";
 import { DocumentsHubPage } from "@/pages/Documents/DocumentsHubPage";
 import { ParametersPage as CostParametersPage } from "@/pages/Cost/Parameters/ParametersPage";
-import { YarnPricesPage as CostYarnPricesPage } from "@/pages/Cost/YarnPrices/YarnPricesPage";
+import { InputPricesPage } from "@/pages/Cost/InputPrices/InputPricesPage";
+import { costInputTabPath } from "@/pages/Cost/InputPrices/tabs-config";
 import { MachineRatesPage as CostMachineRatesPage } from "@/pages/Cost/MachineRates/MachineRatesPage";
-import { ConsumableNormsPage as CostConsumableNormsPage } from "@/pages/Cost/ConsumableNorms/ConsumableNormsPage";
-import { FinishingRatesPage as CostFinishingRatesPage } from "@/pages/Cost/FinishingRates/FinishingRatesPage";
-import { FormulasPage as CostFormulasPage } from "@/pages/Cost/Formulas/FormulasPage";
 import { CostItemsPage } from "@/pages/Cost/Items/CostItemsPage";
 import { CostItemDetailPage } from "@/pages/Cost/Items/CostItemDetailPage";
 import { CalculatorPage as CostCalculatorPage } from "@/pages/Cost/Calculator/CalculatorPage";
@@ -895,42 +893,23 @@ export const contentRoutes: RouteObject[] = [
     ),
   },
   {
-    path: "cost/yarn-prices",
+    path: "cost/input-prices",
     element: (
       <ProtectedRoute requirePermission="cost:read">
-        <CostYarnPricesPage />
+        <InputPricesPage />
       </ProtectedRoute>
     ),
   },
-  {
-    path: "cost/finishing-rates",
-    element: (
-      <ProtectedRoute requirePermission="cost:read">
-        <CostFinishingRatesPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "cost/formulas",
-    element: (
-      <ProtectedRoute requirePermission="cost:read">
-        <CostFormulasPage />
-      </ProtectedRoute>
-    ),
-  },
+  // M6: dört girdi listesi "Girdi Fiyatları" sekmelerine taşındı; eski bağlantılar ilgili sekmeye.
+  { path: "cost/yarn-prices", element: <Navigate to={costInputTabPath("yarn")} replace /> },
+  { path: "cost/finishing-rates", element: <Navigate to={costInputTabPath("finishing")} replace /> },
+  { path: "cost/formulas", element: <Navigate to={costInputTabPath("formulas")} replace /> },
+  { path: "cost/consumable-norms", element: <Navigate to={costInputTabPath("norms")} replace /> },
   {
     path: "cost/machine-rates",
     element: (
       <ProtectedRoute requirePermission="cost:read">
         <CostMachineRatesPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "cost/consumable-norms",
-    element: (
-      <ProtectedRoute requirePermission="cost:read">
-        <CostConsumableNormsPage />
       </ProtectedRoute>
     ),
   },

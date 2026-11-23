@@ -131,7 +131,7 @@ describe("route-modules — K19 bağlı modül", () => {
     expect(isRouteModuleOpen("/reports/maliyet/karlilik", ctx({ financeEnabled: false }))).toBe(false);
     expect(isRouteModuleOpen("/reports/maliyet/karlilik", ctx())).toBe(true);
     expect(isRouteModuleOpen("/reports/maliyet", ctx({ financeEnabled: false }))).toBe(true);
-    expect(isRouteModuleOpen("/cost/yarn-prices", ctx({ iplikEnabled: false }))).toBe(true);
+    expect(isRouteModuleOpen("/cost/input-prices", ctx({ iplikEnabled: false }))).toBe(true);
   });
   it("bağlı modül satırı backend uç kapısıyla aynı: /karlilik → requireFinanceEnabled", () => {
     const src = readFileSync(resolve(__dirname, "../../../Teks-Erp/src/routes/reports/maliyet.report.routes.ts"), "utf8");

@@ -162,7 +162,9 @@ describe("Sidebar — süreç alt grupları (2026-11-20)", () => {
     render(<Sidebar collapsed={false} />);
     fireEvent.click(screen.getByRole("button", { name: "Maliyet alt menüsü" }));
     fireEvent.click(subHead("Girdi Fiyatları"));
-    expect(screen.getByText("İplik Maliyet Fiyatları")).toBeInTheDocument();
+    // M6: alt grup başlığı + aynı adlı sekmeli ekran satırı.
+    expect(screen.getAllByText("Girdi Fiyatları")).toHaveLength(2);
+    expect(screen.getByText("Makine Saat Ücretleri")).toBeInTheDocument();
     // Raporlar alt listesiz kalır (kendi gezinmesi var).
     expect(screen.queryByRole("button", { name: "Raporlar alt menüsü" })).toBeNull();
   });
