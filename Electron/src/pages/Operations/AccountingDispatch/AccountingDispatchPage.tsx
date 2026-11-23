@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { useDataTable } from "@/hooks/useDataTable";
 import { formatQty } from "@/lib/format";
 import { TERIM_AD } from "@/lib/terim";
+import { screenTitle } from "@/components/layout/screen-title";
 import { downloadDocsPdf, downloadDocsExcel } from "@/pages/Operations/Shipments/shipmentDocExport";
 import { BulkInvoiceAction } from "./BulkInvoiceAction";
 import { accountingDispatchService } from "./service";
@@ -78,7 +79,7 @@ export function AccountingDispatchPage() {
   return (
     <PageShell>
       <PageHeader
-        title={TERIM_AD.sevkEdilenler}
+        title={screenTitle("/operations/accounting-dispatch")}
         actions={
           <div className="flex items-center gap-2">
             <Button

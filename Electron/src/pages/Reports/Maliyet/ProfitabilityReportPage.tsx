@@ -1,5 +1,6 @@
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageBody, PageShell } from "@/components/layout/PageShell";
+import { screenTitle } from "@/components/layout/screen-title";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { REPORT_BY_KEY } from "@/lib/report-catalog";
@@ -32,7 +33,7 @@ export function ProfitabilityReportPage() {
     <PageShell className="overflow-hidden">
       {blocked ? (
         <>
-          <PageHeader title={ENTRY.baslik} parent={{ label: "Maliyet", to: "/cost" }} />
+          <PageHeader title={screenTitle("/reports/maliyet/karlilik")} parent={{ label: "Maliyet", to: "/cost" }} />
           <PageBody className="p-4"><p className="mx-auto max-w-3xl rounded-md border bg-muted/30 p-4 text-sm">{blocked}</p></PageBody>
         </>
       ) : (

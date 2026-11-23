@@ -148,6 +148,7 @@ import { MenuLayoutPage } from "@/pages/System/MenuLayout/MenuLayoutPage";
 import { ActivityPage } from "@/pages/System/Activity/ActivityPage";
 import { PrintHistoryPage } from "@/pages/System/PrintHistory/PrintHistoryPage";
 import { SettingsSurfacePage } from "@/pages/GeneralSettings/SettingsSurfacePage";
+import { screenTitle } from "@/components/layout/screen-title";
 import { LegacySettingsRedirect } from "@/pages/GeneralSettings/LegacySettingsRedirect";
 import { FeatureFlagsPage } from "@/pages/GeneralSettings/FeatureFlagsPage";
 import { NumberingPage } from "@/pages/GeneralSettings/Numbering/NumberingPage";
@@ -1301,7 +1302,7 @@ export const contentRoutes: RouteObject[] = [
     path: "system/printing",
     element: (
       <ProtectedRoute requireAnyPermission={SETTINGS_PRINTING_ACCESS}>
-        <SettingsSurfacePage surface="printing" title="Baskı & Cihazlar" />
+        <SettingsSurfacePage surface="printing" title={screenTitle("/system/printing")} />
       </ProtectedRoute>
     ),
   },
@@ -1310,7 +1311,7 @@ export const contentRoutes: RouteObject[] = [
     path: "system/workstation",
     element: (
       <ProtectedRoute requireAnyPermission={SETTINGS_WORKSTATION_ACCESS}>
-        <SettingsSurfacePage surface="workstation" title="Bu Bilgisayar" />
+        <SettingsSurfacePage surface="workstation" title={screenTitle("/system/workstation")} />
       </ProtectedRoute>
     ),
   },
@@ -1318,7 +1319,7 @@ export const contentRoutes: RouteObject[] = [
     path: "system/company",
     element: (
       <ProtectedRoute requireAnyPermission={SETTINGS_COMPANY_ACCESS}>
-        <SettingsSurfacePage surface="company" title="Şirket & Güvenlik" />
+        <SettingsSurfacePage surface="company" title={screenTitle("/system/company")} />
       </ProtectedRoute>
     ),
   },

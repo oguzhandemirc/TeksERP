@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { hubTone } from "@/components/hub/HubCard";
 import { TERIM } from "@/lib/terim";
+import { screenTitle } from "@/components/layout/screen-title";
 import { useTabsStore } from "@/store/tabs";
 import { SeciciKaro, PickerRow } from "@/pages/Operations/WorkOrders/oie/SeciciKaro";
 import { WEAVING_ORDERS_PATH, type WeavingNavState } from "@/pages/Operations/WorkOrders/oie/nav";
@@ -55,7 +56,7 @@ export function DokumaIsEmriOlusturPage() {
   return (
     <PageShell>
       <PageHeader
-        title={`Yeni ${TERIM.dokumaIsEmri.tekil}`}
+        title={screenTitle("/operations/weaving-orders/new")}
         description="Standart dokuma iş emri ya da kendi tanımladığınız ön-dolu özel dokuma iş emri."
         parent={{ label: TERIM.dokumaIsEmri.cogul, to: WEAVING_ORDERS_PATH }}
       />

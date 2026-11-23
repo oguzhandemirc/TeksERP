@@ -31,7 +31,8 @@ import { MACHINE_STOPS_QUERY_KEY, useMachineStopMutations } from "./useMachineSt
 import { useStopReasonPresets } from "./useStopReasonPresets";
 import { useMinuteTick, useStopActions, useStopFilters, useStopListParams, type DialogState } from "./useStopsPageState";
 import { todayKey } from "./types";
-import { machineNoun, machineStopsTitle } from "./stop-regime";
+import { machineNoun } from "./stop-regime";
+import { screenTitle } from "@/components/layout/screen-title";
 import { useOperationsVisibilityContext } from "@/pages/Operations/useOperationsVisibility";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
 import { useListSearch } from "@/hooks/useListSearch";
@@ -81,7 +82,7 @@ export function MachineStopsPage() {
   return (
     <PageShell>
       <PageHeader
-        title={machineStopsTitle({ dokumaEnabled })}
+        title={screenTitle("/operations/machine-stops")}
         description="Sebep bekleyen duruşlar (kuyruk), sebep atama ve yeniden sınıflandırma, elle duruş girişi. Kayıp sınıfı sebepten gelir; değişim deftere yazılır."
         actions={
           <div className="flex items-center gap-2">

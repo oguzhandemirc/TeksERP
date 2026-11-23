@@ -1,5 +1,5 @@
 import { PageHeader } from "@/components/layout/PageHeader";
-import { TERIM_AD } from "@/lib/terim";
+import { screenTitle } from "@/components/layout/screen-title";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { HubCard } from "@/components/hub/HubCard";
@@ -21,7 +21,7 @@ export function FinanceHubPage() {
   return (
     <PageShell>
       <PageHeader
-        title={TERIM_AD.onMuhasebe}
+        title={screenTitle("/finance")}
         description="Cari hesaplar, faturalar, tahsilat/ödeme ve kasa-banka. Bu bir ön muhasebe defteridir — resmî fatura dış programda kesilir, buradaki kayıt onun izini tutar."
       />
       <PageBody className="p-6">
