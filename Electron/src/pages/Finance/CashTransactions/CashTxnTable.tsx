@@ -171,16 +171,22 @@ export function CashTxnTable({
   table,
   isError,
   onRetry,
+  ...state
 }: {
   table: Table<CashTxnRow>;
   isError?: boolean;
   onRetry?: () => void;
+  isLoading?: boolean;
+  errorText?: string;
+  emptyText?: string;
+  emptyDescription?: string;
 }) {
   return (
     <DataTable<CashTxnRow>
       table={table}
       isError={isError}
       onRetry={onRetry}
+      {...state}
       rowClassName={cancelledRow}
       exportName="Kasa hareketleri"
     />

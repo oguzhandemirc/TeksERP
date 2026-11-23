@@ -104,7 +104,17 @@ export function useFinanceCariTable(rows: CariRow[], handlers: Handlers) {
   return useLocalTable({ tableKey: "finance:cari", data: rows, columns });
 }
 
-export function CariTable({ table, isError, onRetry }: { table: Table<CariRow>; isError: boolean; onRetry: () => void }) {
+export function CariTable({ table, isError, onRetry, isLoading, emptyText }: { table: Table<CariRow>; isError: boolean; onRetry: () => void; isLoading?: boolean; emptyText?: string }) {
   // Hata + bayat satır: DataTable "Liste tazelenemedi" bandını kendisi çizer (liste gizlenmez).
-  return <DataTable<CariRow> table={table} isError={isError} onRetry={onRetry} exportName="Cari hesaplar" />;
+  return (
+    <DataTable<CariRow>
+      table={table}
+      isLoading={isLoading}
+      isError={isError}
+      onRetry={onRetry}
+      errorText="Cari listesi yüklenemedi — bakiyeye göre karar vermeden önce tekrar deneyin."
+      emptyText={emptyText}
+      exportName="Cari hesaplar"
+    />
+  );
 }

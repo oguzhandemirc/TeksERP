@@ -25,7 +25,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { Link2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { EmptyState } from "@/components/ui/empty-state";
 import { PageShell, PageBody, PageFooter } from "@/components/layout/PageShell";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { money, type Currency } from "../service";
@@ -216,11 +218,11 @@ export function AllocationsPage() {
 
       <PageBody className="space-y-6 p-6">
         {!cariId ? (
-          <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-            Cari hesap seçin. Kapama her zaman TEK bir cari ve TEK bir para birimi
-            içinde yapılır; farklı carinin ödemesiyle fatura kapatmak ayrı bir işlemdir
-            (mahsuplaşma) ve bu ekranda yapılmaz.
-          </div>
+          <EmptyState
+            icon={Link2}
+            title="Kapama için cari seçin"
+            description="Kapama her zaman TEK cari ve TEK para biriminde yapılır; farklı carinin ödemesiyle kapama (mahsuplaşma) bu ekranda yapılmaz."
+          />
         ) : (
           <>
             {/* ⚠️ SARMALAYICILAR `flex … flex-col` OLMAK ZORUNDA — süs değil.

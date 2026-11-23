@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Search } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { RelocatedToolStrip } from "@/pages/Reports/_v2/RelocatedTools";
+import { RelocatedToolButtons } from "@/components/RelocatedToolButtons";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
-import { Input } from "@/components/ui/input";
+import { ListFooter, ListToolbar } from "@/components/layout/ListPage";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { ToolbarToggle } from "@/components/data-table/ToolbarToggle";
 import { Button } from "@/components/ui/button";
+import { TruncatedHint } from "./TruncatedHint";
 import { LabeledSelect } from "@/components/forms/LabeledSelect";
 import { DIRECTION_OPTIONS, ROLE_FILTER_DEFAULTS, SUBCONTRACTOR_OPTIONS, directionFilters, isRoleFilterDirty, subcontractorFilters, type DirectionFilter, type RoleFilterPair, type SubcontractorFilter } from "@/lib/partnerRoles";
 import { listCari, type CariRow } from "./service";
@@ -52,26 +53,22 @@ export function CariPage() {
   const rows = q.data?.data ?? [];
   const total = q.data?.pagination?.total ?? 0;
   const table = useFinanceCariTable(rows, { onStatement: setStatementFor, onHold: setHoldFor, onEdit: setEditFor });
-  const showTable = !q.isLoading && rows.length > 0;
 
   return (
     <PageShell>
       <PageHeader
         title="Cari Hesaplar"
-        actions={<RefreshButton queryKey={["finance", "cari"]} />}
+        actions={
+          <div className="flex items-center gap-2">
+            <RelocatedToolButtons host="/finance/cari" />
+            <RefreshButton queryKey={["finance", "cari"]} />
+          </div>
+        }
         description="Bakiye POZİTİF ise cari size borçlu (alacağınız), NEGATİF ise siz ona borçlusunuz."
       />
 
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-4 py-3 md:px-6">
-        <div className="relative w-72">
-          <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            className="pl-8"
-            placeholder="Cari ara…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
+      <ListToolbar className="flex-row flex-wrap items-center">
+        <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Cari adı ya da kodu ara" />
         <LabeledSelect label="Yön" value={filters.direction} options={DIRECTION_OPTIONS} onChange={(v) => setFilters((f) => ({ ...f, direction: v as DirectionFilter }))} title="Ticari yön: müşteri rolü / tedarikçi rolü / ikisi de" />
         <LabeledSelect label="Fason" value={filters.subcontractor} options={SUBCONTRACTOR_OPTIONS} onChange={(v) => setFilters((f) => ({ ...f, subcontractor: v as SubcontractorFilter }))} title="Fason iş yapan kartların hesapları" />
 
@@ -82,61 +79,25 @@ export function CariPage() {
             Filtreyi temizle
           </Button>
         )}
-        <Button
-          variant={onlyWithBalance ? "default" : "outline"}
-          size="sm"
-          onClick={() => setOnlyWithBalance((v) => !v)}
-        >
-          Yalnız bakiyesi olanlar
-        </Button>
+        <ToolbarToggle checked={onlyWithBalance} onCheckedChange={setOnlyWithBalance} label="Yalnız bakiyesi olanlar" />
         <div className="ml-auto flex items-center gap-1.5">
           <DataTableTools table={table} compact exportName="Cari hesaplar" />
         </div>
-      </div>
-      <RelocatedToolStrip host="/finance/cari" />
+      </ListToolbar>
 
-      {showTable ? (
-        <>
-          <CariTable table={table} isError={q.isError} onRetry={() => void q.refetch()} />
-          {/* KIRPMA SESSİZ DEĞİL (norm: CashTransactionsPage). Kesilen liste bu
-              üründe "o cari yok" diye okunur ve mükerrer karta yol açar. */}
-          {total > rows.length && (
-            <p className="shrink-0 border-t px-4 py-2 text-xs text-amber-700 dark:text-amber-500">
-              {total} carinin ilk {rows.length} tanesi gösteriliyor. Aradığınızı bulmak için
-              arama kutusunu ya da tür/bakiye filtresini kullanın.
-            </p>
-          )}
-        </>
-      ) : (
-      <ListBody>
-        {q.isLoading ? (
-          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
-        ) : q.isError && rows.length === 0 ? (
-          /* ⚠️ HATA, "HENÜZ CARİ YOK"UN ÖNÜNDE. Aşağıdaki boş-durum cümlesi
-             AÇIKLAYICI ve kendinden emin ("kendiliğinden açılır") — hata anında
-             basılırsa kullanıcı sistemin doğru çalıştığına ikna olur ve carinin
-             gerçekten yok olduğunu sanıp elle ikinci bir kart açtırmaya çalışır.
-             Ticaret rejiminde cariye TEK kapı bu ekrandır. */
-          <ListMessage>
-            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-              <p className="font-medium text-destructive">Cari listesi yüklenemedi.</p>
-              <p className="mt-1 text-muted-foreground">
-                Bu bir “cari yok” cevabı DEĞİLDİR — istek sunucuya ulaşamadı ya da reddedildi.
-                Kayıtlarınız yerinde duruyor; bakiyeye göre karar vermeden önce tekrar deneyin.
-              </p>
-              <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
-                Tekrar dene
-              </Button>
-            </div>
-          </ListMessage>
-        ) : (
-          <ListMessage>
-            <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">{held === "held" ? CARI_EMPTY_HELD_HINT : activity === "active" ? CARI_EMPTY_ACTIVE_HINT : CARI_EMPTY_ALL_HINT}</div>
-          </ListMessage>
-        )}
-      </ListBody>
-      )}
-      <ListFooter loaded={rows.length} total={q.data ? total : null} />
+      {/* ⚠️ HATA, "HENÜZ CARİ YOK"UN ÖNÜNDE (DataTable.isError): kendinden emin boş-durum cümlesi hata anında basılırsa
+          kullanıcı carinin gerçekten yok olduğunu sanıp ikinci kart açtırır. Ticaret rejiminde cariye TEK kapı bu ekrandır. */}
+      <CariTable
+        table={table}
+        isLoading={q.isLoading}
+        isError={q.isError}
+        onRetry={() => void q.refetch()}
+        emptyText={held === "held" ? CARI_EMPTY_HELD_HINT : activity === "active" ? CARI_EMPTY_ACTIVE_HINT : CARI_EMPTY_ALL_HINT}
+      />
+      {/* KIRPMA SESSİZ DEĞİL: kesilen liste "o cari yok" diye okunur ve mükerrer karta yol açar — alt çubukta. */}
+      <ListFooter loaded={rows.length} total={q.data ? total : null}>
+        {total > rows.length && rows.length > 0 ? <TruncatedHint /> : null}
+      </ListFooter>
 
       {statementFor && (
         <StatementDialog cari={statementFor} open onOpenChange={() => setStatementFor(null)} />

@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { Plus, Wallet, Landmark } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
+import { ListFooter } from "@/components/layout/ListPage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -214,7 +214,7 @@ function AccountSection({
   const table = useLocalTable({ tableKey, data, columns });
   return (
     <section className="flex min-h-0 flex-1 flex-col border-b">
-      <div className="flex shrink-0 items-center gap-2 border-b px-4 py-2">
+      <div className="flex shrink-0 items-center gap-2 border-b px-6 py-2">
         <h2 className="flex items-center gap-2 text-sm font-semibold">
           {icon}
           {title}
@@ -224,63 +224,18 @@ function AccountSection({
           {addButton}
         </div>
       </div>
-      {!state.loading && data.length > 0 ? (
-        <DataTable table={table} isError={state.isError} onRetry={state.onRetry} rowClassName={inactiveRow} exportName={title} />
-      ) : (
-        <ListBody>
-          <AccountMessage rows={data} {...state} />
-        </ListBody>
-      )}
+      {/* ⚠️ "TANIM YOK" ZİNCİRİNİN KÖKÜ: tahsilat formu kasa listesini okuyamayınca kullanıcıyı buraya yollar;
+          burası da hata anında "Kasa tanımı yok." derse MÜKERRER KASA açılır. DataTable hata dalı boş dalın önündedir. */}
+      <DataTable
+        table={table}
+        isLoading={state.loading}
+        isError={state.isError}
+        onRetry={state.onRetry}
+        errorText={`${state.errorTitle} Bu “tanım yok” cevabı değildir — yeni hesap açmadan önce tekrar deneyin.`}
+        emptyText={state.empty}
+        rowClassName={inactiveRow}
+        exportName={title}
+      />
     </section>
   );
-}
-
-/** Yükleniyor / hata / boş — satır varken tabloyu DataTable çizer. */
-function AccountMessage({
-  rows,
-  loading,
-  isError,
-  onRetry,
-  empty,
-  errorTitle,
-}: {
-  rows: AccountRow[];
-  loading: boolean;
-  isError?: boolean;
-  onRetry?: () => void;
-  empty: string;
-  errorTitle: string;
-}) {
-  if (loading) return <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>;
-  // ⚠️ "TANIM YOK" ZİNCİRİNİN KÖKÜ. Tahsilat formu kasa listesini okuyamayınca
-  // "Önce Muhasebe → Kasa & Banka ekranından ekleyin" der; kullanıcı buraya gelir
-  // ve burası da aynı sebeple "Kasa tanımı yok." derse MÜKERRER KASA açar —
-  // sonraki tahsilatlar yanlış hesaba yazılır ve iki hesabın bakiyesi de eksik
-  // kalır. Hata dalı boş dalın ÖNÜNDE olmak zorunda.
-  if (isError && rows.length === 0) {
-    return (
-      <ListMessage>
-      <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-        <p className="font-medium text-destructive">{errorTitle}</p>
-        <p className="mt-1 text-muted-foreground">
-          Bu “tanım yok” cevabı DEĞİLDİR — istek sunucuya ulaşamadı ya da reddedildi. Yeni hesap
-          açmadan önce tekrar deneyin; hesaplarınız duruyor olabilir.
-        </p>
-        {onRetry ? (
-          <Button variant="outline" size="sm" className="mt-3" onClick={onRetry}>
-            Tekrar dene
-          </Button>
-        ) : null}
-      </div>
-      </ListMessage>
-    );
-  }
-  if (rows.length === 0) {
-    return (
-      <ListMessage>
-        <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">{empty}</div>
-      </ListMessage>
-    );
-  }
-  return null;
 }

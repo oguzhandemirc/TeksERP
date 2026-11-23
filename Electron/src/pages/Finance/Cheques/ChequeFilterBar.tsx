@@ -11,10 +11,11 @@
 // "Canlı olanlar" tek bir seçenek gibi görünür ama arkasında dört durum vardır.
 // =============================================================================
 import type { ReactNode } from "react";
-import { RotateCcw, Search } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DateRangeInput } from "@/components/forms/DateRangeInput";
+import { ListToolbar } from "@/components/layout/ListPage";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { DayRangeChip, SelectChip } from "@/components/data-table/filter-row/SelectChip";
 
 /** Canlı kovalar — alınan tarafın üçü + verdiğimiz çekin ödenmemiş hâli. */
 export const LIVE_STATUS = "PORTFOLIO,AT_BANK,ENDORSED,ISSUED";
@@ -63,6 +64,18 @@ export function isFilterDirty(f: ChequeFilterState): boolean {
   );
 }
 
+const STATUS_ALL = "ALL";
+const STATUS_CHIP_OPTIONS = STATUS_OPTIONS.map((o) => ({ value: o.value === "" ? STATUS_ALL : o.value, label: o.label }));
+const KIND_OPTIONS = [
+  { value: "RECEIVED", label: "Aldığımız" },
+  { value: "ISSUED", label: "Verdiğimiz" },
+] as const;
+const DOC_TYPE_OPTIONS = [
+  { value: "CHEQUE", label: "Çek" },
+  { value: "PROMISSORY_NOTE", label: "Senet" },
+] as const;
+const CURRENCY_OPTIONS = ["TRY", "USD", "EUR", "GBP", "RUB"].map((c) => ({ value: c, label: c }));
+
 interface Props {
   value: ChequeFilterState;
   onChange: (next: ChequeFilterState) => void;
@@ -75,67 +88,21 @@ export function ChequeFilterBar({ value, onChange, tools }: Props) {
     onChange({ ...value, [key]: v });
 
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-6 py-3">
-      <div className="relative w-72">
-        <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          className="pl-8"
-          placeholder="Ara…" title="Belge no / seri no / keşideci / banka ara" aria-label="Belge no / seri no / keşideci / banka ara"
-          value={value.search}
-          onChange={(e) => set("search", e.target.value)}
-        />
-      </div>
-      <select
-        className="h-9 rounded-md border bg-background px-2 text-sm"
-        value={value.status}
-        onChange={(e) => set("status", e.target.value)}
-      >
-        {STATUS_OPTIONS.map((o) => (
-          <option key={o.label} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-      <select
-        className="h-9 rounded-md border bg-background px-2 text-sm"
-        value={value.kind}
-        onChange={(e) => set("kind", e.target.value)}
-      >
-        <option value="">Tüm yönler</option>
-        <option value="RECEIVED">Aldığımız</option>
-        <option value="ISSUED">Verdiğimiz</option>
-      </select>
-      <select
-        className="h-9 rounded-md border bg-background px-2 text-sm"
-        value={value.docType}
-        onChange={(e) => set("docType", e.target.value)}
-      >
-        <option value="">Çek + Senet</option>
-        <option value="CHEQUE">Yalnız çek</option>
-        <option value="PROMISSORY_NOTE">Yalnız senet</option>
-      </select>
-      <select
-        className="h-9 rounded-md border bg-background px-2 text-sm"
-        value={value.currency}
-        onChange={(e) => set("currency", e.target.value)}
-      >
-        <option value="">Tüm para birimleri</option>
-        {["TRY", "USD", "EUR", "GBP", "RUB"].map((c) => (
-          <option key={c} value={c}>
-            {c}
-          </option>
-        ))}
-      </select>
-      <span className="text-xs text-muted-foreground">Vade</span>
-      <DateRangeInput
-        from={value.dueFrom}
-        to={value.dueTo}
-        onFrom={(v) => set("dueFrom", v)}
-        onTo={(v) => set("dueTo", v)}
-        inputClassName="w-36"
-        fromLabel="Vade başlangıcı"
-        toLabel="Vade bitişi"
+    <ListToolbar className="flex-row flex-wrap items-center">
+      <ListSearchBox value={value.search} onSearchChange={(v) => set("search", v)} searchHint="Belge no / seri no / keşideci / banka ara" />
+      {/* Durumun "boş" değeri Canlı olanlar (resetValue); "Tümü (geçmiş dahil)" = "" → kutuda ALL nöbetçisi. */}
+      <SelectChip<string>
+        id="cheque-status"
+        label="Durum"
+        value={value.status === "" ? STATUS_ALL : value.status}
+        options={STATUS_CHIP_OPTIONS}
+        resetValue={LIVE_STATUS}
+        onChange={(v) => set("status", v === STATUS_ALL ? "" : (v ?? LIVE_STATUS))}
       />
+      <SelectChip<string> id="cheque-kind" label="Yön" value={value.kind || null} options={KIND_OPTIONS} onChange={(v) => set("kind", v ?? "")} />
+      <SelectChip<string> id="cheque-doctype" label="Belge" value={value.docType || null} options={DOC_TYPE_OPTIONS} onChange={(v) => set("docType", v ?? "")} />
+      <SelectChip<string> id="cheque-currency" label="Para birimi" value={value.currency || null} options={CURRENCY_OPTIONS} onChange={(v) => set("currency", v ?? "")} />
+      <DayRangeChip id="cheque-due" label="Vade" from={value.dueFrom} to={value.dueTo} onChange={({ from, to }) => onChange({ ...value, dueFrom: from, dueTo: to })} />
       {isFilterDirty(value) && (
         <Button variant="ghost" size="sm" onClick={() => onChange(EMPTY_FILTERS)}>
           <RotateCcw className="mr-1 h-3.5 w-3.5" />
@@ -143,6 +110,6 @@ export function ChequeFilterBar({ value, onChange, tools }: Props) {
         </Button>
       )}
       {tools ? <div className="ml-auto flex items-center gap-1.5">{tools}</div> : null}
-    </div>
+    </ListToolbar>
   );
 }
