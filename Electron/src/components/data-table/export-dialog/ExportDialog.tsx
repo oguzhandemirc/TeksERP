@@ -50,6 +50,8 @@ export interface ExportDialogProps {
   /** Sütun kataloğu; ayrıntı düzeyine göre değişiyorsa fonksiyon. Boş katalog = sütun bölümü çizilmez. */
   catalog: ExportColumnOption[] | ((detail: string | undefined) => ExportColumnOption[]);
   formats?: ExportFormat[];
+  /** Açılışta seçili biçim (ör. "PDF" düğmesiyle açıldı) — hatırlanan biçimin önüne geçer. */
+  defaultFormat?: ExportFormat;
   scopes?: ExportScopeOption[];
   defaultScope?: ExportScope;
   details?: ExportDetailOption[];
@@ -94,7 +96,8 @@ export function ExportDialog(props: ExportDialogProps) {
     if (!open) return;
     const d = details?.some((x) => x.key === saved?.detail) ? saved!.detail : details?.[0]?.key;
     setDetail(d);
-    setFormat(saved?.format && formats.includes(saved.format) ? saved.format : formats[0]!);
+    const asked = props.defaultFormat && formats.includes(props.defaultFormat) ? props.defaultFormat : undefined;
+    setFormat(asked ?? (saved?.format && formats.includes(saved.format) ? saved.format : formats[0]!));
     setScope(props.defaultScope ?? scopes?.find((s) => !s.disabled)?.key ?? "all");
     setRemember(Boolean(saved));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- yalnız açılışta ve kayıt gelince tohumlanır

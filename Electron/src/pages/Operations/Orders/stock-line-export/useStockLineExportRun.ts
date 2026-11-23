@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { buildWorkbook, saveWorkbook } from "@/lib/xlsx-export";
+import { exportSheetsAs } from "@/lib/sheet-export";
 import { exportListName } from "@/lib/table-export";
 import { isExportCancelled, truncatedExportNote } from "@/lib/export-drain";
 import { useExportRange } from "@/hooks/useExportRange";
@@ -32,7 +33,7 @@ export function useStockLineExportRun(props: { fetchAll: OrdersFetchAll; listSco
   const { confirmTotal, confirmDialog } = useExportConfirm();
   const { hasPermission } = useRoleAccess();
 
-  const run = async (options: StockLineOptions): Promise<boolean> => {
+  const run = async (options: StockLineOptions, format: "xlsx" | "pdf" = "xlsx"): Promise<boolean> => {
     if (progress !== null) return false;
     setProgress("Hazırlanıyor…");
     try {
@@ -67,6 +68,8 @@ export function useStockLineExportRun(props: { fetchAll: OrdersFetchAll; listSco
         scopeLines: describeOrderScope(props.listScope, orders),
         notes: stockLineNotes(options, [...stock.notes, ...stockAll.notes, ...live.notes]),
       });
+      // PDF aynı sayfadan (`lib/sheet-export`): hücre metni Excel'in göstereceği metin.
+      if (format === "pdf") return await exportSheetsAs("pdf", TITLE, [sheet], name);
       await saveWorkbook(await buildWorkbook([sheet]), name);
       return true;
     } catch (err) {

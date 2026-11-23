@@ -44,7 +44,8 @@ describe("Kartela Hareketleri", () => {
     const hucreler = within(tablo).getAllByRole("cell").map((c) => c.textContent);
     expect(hucreler).toEqual(KARTELA_EVENT_COLUMNS.map((c) => String(c.value(row))));
     expect(hucreler[4]).toContain("Sebep: müşteri isteği");
-    fireEvent.click(screen.getByRole("button", { name: "Excel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Dışa aktar" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Excel indir" }));
     await waitFor(() => expect(excel).toHaveBeenCalledTimes(1));
     const [cols, rows, ad] = excel.mock.calls[0] as [ExportColumn<KartelaEventItem>[], KartelaEventItem[], string];
     expect(cols.map((c) => c.label)).toEqual(KARTELA_EVENT_COLUMNS.map((c) => c.label));

@@ -38,10 +38,16 @@ afterEach(() => {
   toastError.mockClear();
 });
 
+/** PDF düğmesi ortak çıktı diyaloğunu PDF seçili açar; indirme diyalogdan. */
+async function runPdf() {
+  await userEvent.click(screen.getByRole("button", { name: /PDF/ }));
+  await userEvent.click(await screen.findByRole("button", { name: "PDF indir" }));
+}
+
 describe("Rapor PDF satır kapısı", () => {
   it("⭐① tavan üstü rapor: ana sürece GİDİLMEZ, Excel'e yönlendiren metin", async () => {
     render(<ReportExportBar buildSpec={() => spec(PDF_MAX_ROWS + 1)} />);
-    await userEvent.click(screen.getByRole("button", { name: /PDF/ }));
+    await runPdf();
     expect(save).not.toHaveBeenCalled();
     expect(toastError).toHaveBeenCalledWith(pdfTooManyRowsMessage(PDF_MAX_ROWS + 1, "Rapor"));
   });
@@ -49,7 +55,7 @@ describe("Rapor PDF satır kapısı", () => {
   it("tavanda rapor ana sürece gider; dönen sabit hata metni toast'a basılır", async () => {
     save.mockResolvedValueOnce({ saved: false, error: "Belge PDF için çok büyük (7.000 KB) — PDF yerine Excel indirin." } as never);
     render(<ReportExportBar buildSpec={() => spec(PDF_MAX_ROWS)} />);
-    await userEvent.click(screen.getByRole("button", { name: /PDF/ }));
+    await runPdf();
     expect(save).toHaveBeenCalledTimes(1);
     expect(toastError).toHaveBeenCalledWith("Belge PDF için çok büyük (7.000 KB) — PDF yerine Excel indirin.");
   });
