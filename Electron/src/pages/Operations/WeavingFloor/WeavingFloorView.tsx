@@ -51,7 +51,7 @@ interface ViewProps {
   /** Önizleme verisi — "Örnek veri" rozeti basılır. */
   sampleData: boolean;
   tv?: boolean;
-  /** Başlık altı araç şeridi (Raporlar v2 taşınan araç) — sayfa verir; görünüm kanca çağırmaz. */
+  /** Başlık eylemlerindeki araç düğmeleri (Raporlar v2 taşınan araç) — sayfa verir; görünüm kanca çağırmaz. */
   toolStrip?: React.ReactNode;
   /** Başlıkta veri durumu (örn. "bağlantı koptu") — opsiyonel. */
   notice?: React.ReactNode;
@@ -72,11 +72,12 @@ interface ViewProps {
 interface AppHeaderProps {
   extra: React.ReactNode;
   filter: React.ReactNode;
+  tools?: React.ReactNode;
   tv: React.ReactNode;
   onFullscreen: () => void;
 }
 
-function AppHeader({ extra, filter, tv, onFullscreen }: AppHeaderProps) {
+function AppHeader({ extra, filter, tools, tv, onFullscreen }: AppHeaderProps) {
   return (
     <PageHeader
       title="Tezgah Salonu"
@@ -84,8 +85,9 @@ function AppHeader({ extra, filter, tv, onFullscreen }: AppHeaderProps) {
       actions={
         <>
           {filter}
+          {tools}
           {tv}
-          <Button variant="outline" onClick={onFullscreen}>
+          <Button variant="outline" size="sm" onClick={onFullscreen}>
             <Maximize2 className="mr-1.5 h-4 w-4" />
             Tam ekran
           </Button>
@@ -191,7 +193,8 @@ export function WeavingFloorView({ floor, now, sampleData, tv = false, toolStrip
       <div
         ref={setRoot}
         className={cn("relative flex min-h-0 flex-1 flex-col", fullscreen.active && "fixed inset-0 z-[60] text-[1.3rem]")}
-        style={{ background: hsl("var(--ds-floor)") }}
+        // Salon zemini yalnız TV/tam ekranda; panel içinde öteki sayfalarla aynı zemin (U8).
+        style={tv || fullscreen.active ? { background: hsl("var(--ds-floor)") } : undefined}
       >
         <TabPortalProvider value={root}>
           <FloorHintProvider enabled={!tv}>
@@ -203,10 +206,10 @@ export function WeavingFloorView({ floor, now, sampleData, tv = false, toolStrip
                 <AppHeader
                   extra={sampleData ? <SampleDataBadge /> : notice}
                   filter={<ShowFilterPicker value={filter} onChange={setFilter} />}
+                  tools={toolStrip}
                   tv={onOpenTv && <TvLaunchMenu onOpenHere={onOpenTv} tvUrl={tvUrl} />}
                   onFullscreen={fullscreen.enter}
                 />
-                {toolStrip}
               </>
             )}
             <PageBody className={cn("min-h-0 space-y-4 p-4", fullscreen.active && "space-y-3 px-6 pt-3")}>

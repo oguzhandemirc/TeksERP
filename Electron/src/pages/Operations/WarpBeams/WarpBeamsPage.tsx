@@ -9,7 +9,7 @@
 // =============================================================================
 import { Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { RelocatedToolStrip } from "@/pages/Reports/_v2/RelocatedTools";
+import { RelocatedToolButtons } from "@/components/RelocatedToolButtons";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
@@ -27,7 +27,7 @@ import type { WeavingOrder } from "@/pages/Operations/WeavingOrders/types";
 import { warpSpecService } from "@/pages/WarpSpecs/service";
 import { warpBeamColumns } from "./columns";
 import { warpBeamService, type WarpBeamPage } from "./service";
-import { BandStats, ListBand } from "@/components/layout/ListPage";
+import { BandStats } from "@/components/layout/ListPage";
 import { minAgeFilter } from "@/components/data-table/StatusAgeCell";
 import { WarpBeamFormDialog } from "./WarpBeamFormDialog";
 import { WindDialog } from "./WindDialog";
@@ -57,18 +57,16 @@ export const PRIMARY = ["status", "warpSpecId", "weavingOrderId"];
 
 const BEAM_ACTION_KINDS = new Set<string>(["mount", "dismount", "consume", "adjust", "exhaust", "scrap", "undo"]);
 
-/** S4 özet şeridi — sayı sunucuda, liste ile aynı where (ilk sayfa). */
-function SummaryBand({ page, filtered }: { page: unknown; filtered: boolean }) {
+/** S4 özeti — sayı sunucuda, liste ile aynı where (ilk sayfa); alt çubukta çizilir. */
+function SummaryStats({ page, filtered }: { page: unknown; filtered: boolean }) {
   const s = (page as WarpBeamPage | undefined)?.summary;
   if (!s) return null;
   return (
-    <ListBand>
       <BandStats
         label="Levent özeti"
         scope={filtered ? "Filtreli" : undefined}
         items={[{ key: "staleFull", label: `${s.staleFullDays}+ gündür dolu bekliyor`, value: s.staleFull, tone: s.staleFull > 0 ? "warn" : undefined, title: "Sarılmış, hazır (tezgâha takılmamış) ve bu kadar gündür bekleyen leventler — bağlı sermaye" }]}
       />
-    </ListBand>
   );
 }
 
@@ -94,18 +92,17 @@ export function WarpBeamsPage() {
         description="Levent planla, sar (iplik brüt çıkar, dip ayrı döner), hazır levent stoğunu gör. Kalan metre defterden türetilir."
         actions={
           <div className="flex items-center gap-2">
+            <RelocatedToolButtons host="/operations/warp-beams" />
+            <RefreshButton queryKey={WARP_BEAMS_QUERY_KEY} />
             <PermissionGate permission="warpbeam:write">
               <Button size="sm" onClick={() => setDialog({ kind: "new" })}>
                 <Plus className="mr-1 h-4 w-4" />
                 Yeni Levent
               </Button>
             </PermissionGate>
-            <RefreshButton queryKey={WARP_BEAMS_QUERY_KEY} />
           </div>
         }
       />
-      <RelocatedToolStrip host="/operations/warp-beams" />
-      <SummaryBand page={query.data?.pages[0]} filtered={isListFiltered(listScope)} />
       <DefFilterRow filters={FILTERS} primaryKeys={PRIMARY} search={search} onSearchChange={setSearch} searchHint="Levent no, gövde no ya da çözgü kartıyla ara" trailing={<SavedViewsMenu compact />} tools={{ table, fetchAll, exportName: "Leventler" }} />
       <DataTable<WarpBeam>
         table={table}
@@ -114,6 +111,7 @@ export function WarpBeamsPage() {
         onRetry={() => void query.refetch()}
         errorText="Bu bir “kayıt yok” cevabı DEĞİLDİR — istek reddedildi ya da sunucuya ulaşamadı (modül kapalı, yetki yok, ağ)."
         pagination={pagination}
+        footerSummary={<SummaryStats page={query.data?.pages[0]} filtered={isListFiltered(listScope)} />}
         emptyText="Levent yok. Planlamak için “Yeni Levent”."
         onRowClick={(r) => r.status === "PLANNED" && actions.onEdit(r)}
         rowContextMenu={(r) => <WarpBeamRowMenu row={r} mountTracking={mountTracking} {...actions} />}

@@ -12,7 +12,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBand, ListBody, ListFooter, ListToolbar } from "@/components/layout/ListPage";
+import { ListBody, ListFooter, ListToolbar } from "@/components/layout/ListPage";
 import { RefreshButton } from "@/components/RefreshButton";
 import { isAlarmClosedError, useServerNow } from "./alarm-access";
 import { AlarmClosedNotice } from "./AlarmClosedNotice";
@@ -53,6 +53,7 @@ export function LoomAlarmsPage() {
   const items = useMemo(() => q.data?.pages.flatMap((p) => p.items) ?? [], [q.data]);
   const summary = q.data?.pages[0]?.summary;
   const table = useLoomAlarmsTable(items, now);
+  const closed = q.isError && isAlarmClosedError(q.error);
 
   return (
     <PageShell>
@@ -61,41 +62,43 @@ export function LoomAlarmsPage() {
         description="Hedef süreyi aşan duruşlar: kim üstlendi, ne kadar sürdü, patrona iletildi mi"
         actions={<RefreshButton queryKey={LIST_KEY} />}
       />
-      {summary && (
-        <ListBand>
-          <AlarmSummaryStrip summary={summary} scope={filters.scope} />
-        </ListBand>
+      {/* Modül kapalıyken filtre/arama/dışa aktar işlevsizdir — çizilmez (U10). */}
+      {!closed && (
+        <ListToolbar className="flex-row flex-wrap items-center">
+          <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Tezgah kodu/adı, hol ya da sebep kodu ara" />
+          <LoomAlarmsFilters value={filters} onChange={setFilters} />
+          <div className="ml-auto flex items-center gap-1.5">
+            <DataTableTools table={table} compact exportName="Tezgah alarmları" />
+          </div>
+        </ListToolbar>
       )}
-      <ListToolbar className="flex-row flex-wrap items-center">
-        <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Tezgah kodu/adı, hol ya da sebep kodu ara" />
-        <LoomAlarmsFilters value={filters} onChange={setFilters} />
-        <div className="ml-auto flex items-center gap-1.5">
-          <DataTableTools table={table} compact exportName="Tezgah alarmları" />
-        </div>
-      </ListToolbar>
-      {!q.isError && !q.isPending && items.length > 0 ? (
+      {/* Kapalı modül bir "hata" değil, sayfa durumudur — kendi bildirimiyle çizilir; öteki hata/boş/yükleniyor DataTable'da. */}
+      {closed ? (
+        <ListBody>
+          <AlarmClosedNotice error={q.error} />
+        </ListBody>
+      ) : (
         <DataTable
           table={table}
+          isLoading={q.isPending}
+          isError={q.isError && items.length === 0}
+          onRetry={() => void q.refetch()}
+          errorText="Alarmlar okunamadı — bağlantıyı kontrol edip yenileyin."
+          emptyText={term ? "Aramaya uyan alarm yok." : emptyText(filters.scope)}
           onRowClick={(a) => navigate(`/operations/loom-alarms/${a.id}`)}
           loadMore={{ hasMore: q.hasNextPage, isFetchingMore: q.isFetchingNextPage, onLoadMore: () => void q.fetchNextPage() }}
           exportName="Tezgah alarmları"
         />
-      ) : (
-      <ListBody>
-        {q.isError ? (
-          isAlarmClosedError(q.error) ? (
-            <AlarmClosedNotice error={q.error} />
-          ) : (
-            <p className="py-16 text-center text-muted-foreground">Alarmlar okunamadı — bağlantıyı kontrol edip yenileyin.</p>
-          )
-        ) : q.isPending ? (
-          <p className="py-16 text-center text-muted-foreground">Yükleniyor…</p>
-        ) : items.length === 0 ? (
-          <p className="py-16 text-center text-muted-foreground">{term ? "Aramaya uyan alarm yok." : emptyText(filters.scope)}</p>
-        ) : null}
-      </ListBody>
       )}
-      <ListFooter loaded={items.length} total={summary?.total} hasMore={q.hasNextPage} isFetchingMore={q.isFetchingNextPage} />
+      {!closed && (
+        <ListFooter
+          loaded={items.length}
+          total={summary?.total}
+          hasMore={q.hasNextPage}
+          isFetchingMore={q.isFetchingNextPage}
+          summary={summary ? <AlarmSummaryStrip summary={summary} scope={filters.scope} /> : undefined}
+        />
+      )}
     </PageShell>
   );
 }
