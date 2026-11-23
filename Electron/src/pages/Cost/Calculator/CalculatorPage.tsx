@@ -3,7 +3,12 @@
 // KAYIT YAZMAZ (yalnız `POST /api/cost/preview`); sayı sunucudandır. "Teklife ekle" (quote:write) kalemi teklif ekranına taşır.
 // =============================================================================
 import { useState } from "react";
-import { FilePlus2, PackageSearch } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Calculator, FilePlus2, PackageSearch } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
+import { cn } from "@/lib/utils";
+import { costParamService } from "../Parameters/service";
+import { effectiveDefaults } from "./effective-defaults";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -30,6 +35,7 @@ export function CalculatorPage() {
   const preview = useCostPreview(buildCalculatorBody(s));
   const p = preview.data;
   const flagged = missingFields(p?.eksikler ?? []);
+  const params = useQuery({ queryKey: ["cost-params", "active"], queryFn: costParamService.active });
   const up = (patch: Partial<CalculatorState>) => setS((x) => ({ ...x, ...patch }));
   // Teklife taşınacak kalem: seçili kumaş ya da geçerli elle yapı (gövdesi kurulamıyorsa düğme kapalı).
   const pending: PendingLine | null =
@@ -58,14 +64,12 @@ export function CalculatorPage() {
             onPick={() => setPickerOpen(true)}
           />
           {s.mode === "adHoc" && <AdHocFields value={s.adHoc} onChange={(adHoc) => up({ adHoc })} />}
-          <section className="space-y-2">
-            <h3 className="text-sm font-medium">
-              Ezmeler{" "}
-              <span className="font-normal text-muted-foreground">
-                — boş alan yapı/parametre varsayılanıdır
-              </span>
+          <section className="space-y-3 rounded-xl border bg-card p-4 shadow-soft">
+            <h3 className="text-sm font-semibold" title="Boş alan yapı / parametre değeriyle hesaplanır; kutudaki soluk sayı o değerdir.">
+              Değiştirilecek değerler
             </h3>
             <OverrideFields
+              defaults={effectiveDefaults(p?.girdi, params.data)}
               value={s.overrides}
               onChange={(k, v) => up({ overrides: { ...s.overrides, [k]: v } })}
               rateCode={s.finishingRateCode}
@@ -122,13 +126,13 @@ function CalculatorResult({
   }
   if (!preview.data) {
     return (
-      <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
-        {preview.isFetching
+      <div className="rounded-xl border bg-card shadow-soft">
+        <EmptyState icon={Calculator} title={preview.isFetching
           ? "Hesaplanıyor…"
           : s.mode === "item"
             ? "Hesap için bir kumaş seçin."
-            : "Hesap için tel sayısı ya da atkı sıklığı girin."}
-      </p>
+            : "Hesap için tel sayısı ya da atkı sıklığı girin."} description="Metre maliyeti dökümü burada görünür." />
+      </div>
     );
   }
   return (
@@ -150,13 +154,17 @@ interface SourceBarProps {
 /** Kaynak: kayıtlı kumaş (seçici doğrudan modal) ya da elle yapı. */
 function SourceBar({ mode, itemLabel, onMode, onPick }: SourceBarProps) {
   return (
-    <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Kaynak">
-      <Button size="sm" variant={mode === "item" ? "default" : "outline"} onClick={() => onMode("item")}>
-        Ürün seç
-      </Button>
-      <Button size="sm" variant={mode === "adHoc" ? "default" : "outline"} onClick={() => onMode("adHoc")}>
-        Elle yapı
-      </Button>
+    <div className="flex flex-wrap items-center gap-3">
+      {/* Kip seçimi ayrık bölmeli denetim (M12): eylem düğmesinden görsel olarak ayrışır. */}
+      <div className="inline-flex rounded-lg border bg-muted p-0.5" role="group" aria-label="Kaynak">
+        {(["item", "adHoc"] as const).map((m) => (
+          <button key={m} type="button" aria-pressed={mode === m} onClick={() => onMode(m)}
+            className={cn("h-7 rounded-md px-3 text-xs font-medium transition-colors",
+              mode === m ? "bg-card text-foreground shadow-soft" : "text-muted-foreground hover:text-foreground")}>
+            {m === "item" ? "Ürün seç" : "Elle yapı"}
+          </button>
+        ))}
+      </div>
       {mode === "item" && (
         <Button size="sm" variant="outline" onClick={onPick}>
           <PackageSearch className="mr-1 h-4 w-4" />

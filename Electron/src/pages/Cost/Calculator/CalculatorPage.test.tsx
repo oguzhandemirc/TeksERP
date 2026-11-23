@@ -6,6 +6,7 @@ import { renderWithProviders } from "@/test/render";
 const previewCost = vi.fn();
 vi.mock("../Items/service", async (orig) => ({ ...(await orig<object>()), previewCost: (b: unknown) => previewCost(b) }));
 vi.mock("../FinishingRates/service", async (orig) => ({ ...(await orig<object>()), finishingRateService: { listActive: async () => [] } }));
+vi.mock("../Parameters/service", async (orig) => ({ ...(await orig<object>()), costParamService: { active: async () => null } }));
 vi.mock("@/components/forms/ItemPickerModal", () => ({ ItemPickerModal: () => null }));
 vi.mock("@/providers/PreferencesProvider", () => ({ usePreferences: () => ({ prefs: { density: "comfortable" }, setPreference: vi.fn() }) }));
 import { CalculatorPage } from "./CalculatorPage";

@@ -11,29 +11,34 @@ export function CostBreakdown({ sonuc, eksikler, uyarilar }: { sonuc: CostResult
     <div className="space-y-3">
       <CostIssues eksikler={eksikler} uyarilar={uyarilar} />
       {sonuc && <PresentationNote p={sonuc} />}
-      {sonuc ? <ResultTable s={sonuc} /> : (
-        <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-          Eksikler giderilmeden maliyet hesaplanmaz — sonuç tahminle doldurulmaz.
-        </p>
+      {sonuc ? <ResultTable s={sonuc} /> : !eksikler.length && (
+        <p className="text-sm text-muted-foreground">Maliyet hesaplanamadı — sonuç tahminle doldurulmaz.</p>
       )}
     </div>
   );
 }
 
+// M10: eksikler TEK kartta (başlık + madde listesi); ayrı kesik kutu aynı şeyi yinelemez.
 export function CostIssues({ eksikler, uyarilar }: { eksikler: string[]; uyarilar: string[] }) {
   if (!eksikler.length && !uyarilar.length) return null;
   return (
-    <div className="space-y-1 text-sm">
-      {eksikler.map((c) => (
-        <p key={c} role="alert" data-code={c} className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-1.5 text-destructive">
-          ✕ {missingText(c)}
-        </p>
-      ))}
-      {uyarilar.map((c) => (
-        <p key={c} data-code={c} className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-amber-700 dark:text-amber-300">
-          ⚠ {warningText(c)}
-        </p>
-      ))}
+    <div className="space-y-2 text-sm">
+      {eksikler.length > 0 && (
+        <div role="alert" className="rounded-xl border border-destructive/40 bg-destructive/5 px-4 py-3 text-destructive">
+          <p className="font-semibold">Eksikler giderilmeden maliyet hesaplanmaz — sonuç tahminle doldurulmaz.</p>
+          <ul className="mt-1.5 list-disc space-y-0.5 pl-5">
+            {eksikler.map((c) => <li key={c} data-code={c}>{missingText(c)}</li>)}
+          </ul>
+        </div>
+      )}
+      {uyarilar.length > 0 && (
+        <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-amber-700 dark:text-amber-300">
+          <p className="font-semibold">Uyarılar</p>
+          <ul className="mt-1.5 list-disc space-y-0.5 pl-5">
+            {uyarilar.map((c) => <li key={c} data-code={c}>{warningText(c)}</li>)}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

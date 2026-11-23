@@ -29,8 +29,7 @@ function fxSourceLabel(currency: string, src: HeaderFieldsProps["fxSource"]): st
   return src === "MANUAL" ? "Elle girildi" : src === "TCMB" ? "TCMB" : "Finans kuru önerisi";
 }
 
-function PartyFields({ value, onChange, mode, fxSource, customerName, currencyHint }: HeaderFieldsProps) {
-  const src = fxSourceLabel(value.currency, fxSource);
+function PartyFields({ value, onChange, mode, customerName }: HeaderFieldsProps) {
   return (
     <Grid>
       <FormField label="Müşteri" required className="sm:col-span-2">
@@ -46,9 +45,23 @@ function PartyFields({ value, onChange, mode, fxSource, customerName, currencyHi
       <FormField label="Geçerlilik (son gün)" hint={mode === "create" ? "Boş: teklif tarihinden 30 gün" : undefined}>
         <DatePickerInput value={value.validUntilDate} onChange={(v) => onChange({ validUntilDate: v })} aria-label="Geçerlilik tarihi" />
       </FormField>
+    </Grid>
+  );
+}
+
+function TermFields({ value, onChange, mode, fxSource, currencyHint }: HeaderFieldsProps) {
+  const src = fxSourceLabel(value.currency, fxSource);
+  const num = (label: string, key: "paymentTermDays" | "commissionPct" | "financeChargePct" | "freightPerM", hint?: string) => (
+    <FormField label={label} hint={hint}>
+      <Input inputMode="decimal" value={value[key]} onChange={(e) => onChange({ [key]: e.target.value })} aria-label={label} />
+    </FormField>
+  );
+  return (
+    // M15: kısa alanlar tek ızgarada eşit genişlik; para birimi tek başına satırda kalmaz.
+    <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
       <FormField label="Para birimi" required hint={mode === "create" ? currencyHint : undefined}>
         {mode === "create" ? (
-          <CurrencySelect value={value.currency} onChange={(currency) => onChange({ currency })} />
+          <CurrencySelect className="w-full" value={value.currency} onChange={(currency) => onChange({ currency })} />
         ) : (
           <p className="flex h-9 items-center text-sm font-medium">{value.currency}</p>
         )}
@@ -61,32 +74,20 @@ function PartyFields({ value, onChange, mode, fxSource, customerName, currencyHi
           </div>
         </FormField>
       )}
-    </Grid>
-  );
-}
-
-function TermFields({ value, onChange }: HeaderFieldsProps) {
-  const num = (label: string, key: "paymentTermDays" | "commissionPct" | "financeChargePct" | "freightPerM", hint?: string) => (
-    <FormField label={label} hint={hint}>
-      <Input inputMode="decimal" value={value[key]} onChange={(e) => onChange({ [key]: e.target.value })} aria-label={label} />
-    </FormField>
-  );
-  return (
-    <Grid>
       {num("Vade (gün)", "paymentTermDays")}
       {num("Vade farkı %", "financeChargePct")}
       {num("Komisyon %", "commissionPct")}
       {num(`Navlun (${value.currency}/m)`, "freightPerM")}
-    </Grid>
+      <FormField label="Müşteri referansı">
+        <Input maxLength={100} value={value.customerReference} onChange={(e) => onChange({ customerReference: e.target.value })} />
+      </FormField>
+    </div>
   );
 }
 
 function TextFields({ value, onChange }: HeaderFieldsProps) {
   return (
-    <div className="grid gap-3 lg:grid-cols-3">
-      <FormField label="Müşteri referansı">
-        <Input maxLength={100} value={value.customerReference} onChange={(e) => onChange({ customerReference: e.target.value })} />
-      </FormField>
+    <div className="grid gap-3 lg:grid-cols-2">
       <FormField label="Not (müşteriye)">
         <Textarea rows={2} maxLength={1000} value={value.notes} onChange={(e) => onChange({ notes: e.target.value })} />
       </FormField>

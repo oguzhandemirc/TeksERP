@@ -4,7 +4,8 @@
 // =============================================================================
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
+import { Factory, Plus } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
 import { PageShell } from "@/components/layout/PageShell";
 import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
 import { DataTable } from "@/components/data-table/DataTable";
@@ -61,9 +62,7 @@ export function FinishingRatesPage() {
           <ListMessage className="text-sm text-muted-foreground">Aramaya uyan kayıt yok.</ListMessage>
         ) : (
           <ListMessage>
-            <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-              Henüz tarife yok — ham satılan kumaş için tarife gerekmez; terbiyeye giden kumaş için "Yeni tarife" ile fason ücretini yazın.
-            </div>
+            <EmptyState icon={Factory} title="Henüz tarife yok" description={'Ham satılan kumaş için tarife gerekmez; terbiyeye giden kumaş için "Yeni tarife" ile fason ücretini yazın.'} />
           </ListMessage>
         )}
       </ListBody>

@@ -128,6 +128,8 @@ export const commandSections: CommandSection[] = [
     // MAL-3: Muhasebe'den farklı olarak bayrak yüklemi TAŞINIR — `cost:read` Muhasebe rol şablonunda
     // modül kapalıyken de atanmış olabilir; satır menüyle aynı `maliyetEnabled` kapısından geçer.
     heading: "Maliyet",
+    // Alt sayfaların kırıntısı/geri oku Maliyet merkezine çıkar (O14: kırıntısız sayfalar).
+    parent: { label: "Maliyet", to: "/cost" },
     entries: costTiles
       .filter((tile) => !SALES_COST_TILE_KEYS.includes(tile.key))
       .map<CommandEntry>((tile) => ({

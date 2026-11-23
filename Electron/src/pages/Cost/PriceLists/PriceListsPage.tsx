@@ -5,7 +5,8 @@
 import { useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { Plus } from "lucide-react";
+import { ListOrdered, Plus } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
 import { PageShell } from "@/components/layout/PageShell";
 import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
 import { DataTable } from "@/components/data-table/DataTable";
@@ -71,9 +72,7 @@ export function PriceListsPage() {
           </ListMessage>
         ) : (
           <ListMessage>
-            <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground" data-testid="pl-empty">
-              {filtered ? "Filtreye uyan liste yok." : "Henüz fiyat listesi yok — \"Yeni liste\" ile başlayın; satırları standart maliyetten doldurabilirsiniz."}
-            </div>
+            <div data-testid="pl-empty">{filtered ? <EmptyState icon={ListOrdered} title="Filtreye uyan liste yok" /> : <EmptyState icon={ListOrdered} title="Henüz fiyat listesi yok" description={'"Yeni liste" ile başlayın; satırları standart maliyetten doldurabilirsiniz.'} />}</div>
           </ListMessage>
         )}
       </ListBody>

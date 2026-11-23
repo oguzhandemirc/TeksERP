@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Calculator, Layers, Search } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
 import { PermissionGate } from "@/components/PermissionGate";
 import { useWeavingPickMethod } from "../shared/loom-pick";
 import { FamilyPickRateDialog } from "./FamilyPickRateDialog";
@@ -51,13 +52,13 @@ export function CostItemsPage() {
         description="Her kumaşın yapı durumu ve kayıtlı standart metre maliyeti. 'Girdi değişti' = kayıttan sonra fiyat/parametre/yapı değişti; kayıtlı sayı değişmez."
         actions={
           <div className="flex gap-2">
-            <RefreshButton queryKey={["cost-items", "list"]} />
-            <Button variant="outline" onClick={() => nav("/cost/calculator")}><Calculator className="mr-1 h-4 w-4" />Hızlı hesapla</Button>
             {pickMethod && (
               <PermissionGate permission="cost:write">
                 <Button variant="outline" onClick={() => setFamilyOpen(true)}><Layers className="mr-1 h-4 w-4" />Aileye atkı ücreti</Button>
               </PermissionGate>
             )}
+            <RefreshButton queryKey={["cost-items", "list"]} />
+            <Button onClick={() => nav("/cost/calculator")}><Calculator className="mr-1 h-4 w-4" />Hızlı hesapla</Button>
           </div>
         }
       />
@@ -83,9 +84,7 @@ export function CostItemsPage() {
           </ListMessage>
         ) : (
           <ListMessage>
-            <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-              {filtered ? "Filtreye uyan kumaş yok." : "Aktif kumaş kartı yok — maliyet kartı kumaş (FABRIC) ürünleri için açılır."}
-            </div>
+            {filtered ? <EmptyState icon={Layers} title="Filtreye uyan kumaş yok" /> : <EmptyState icon={Layers} title="Aktif kumaş kartı yok" description="Maliyet kartı kumaş ürünleri için açılır." />}
           </ListMessage>
         )}
       </ListBody>

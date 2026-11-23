@@ -22,7 +22,7 @@ vi.mock("@/services/apiClient", () => ({ default: { put: (...a: unknown[]) => pu
 const params = vi.hoisted(() => ({ active: vi.fn(), draft: vi.fn(), list: vi.fn(), createDraft: vi.fn(), updateDraft: vi.fn(), activate: vi.fn(), remove: vi.fn() }));
 vi.mock("./Parameters/service", async (orig) => ({ ...(await orig<typeof import("./Parameters/service")>()), costParamService: params }));
 vi.mock("@/components/layout/PageHeader", () => ({
-  PageHeader: ({ title, actions }: { title: string; actions?: React.ReactNode }) => <header><h1>{title}</h1>{actions}</header>,
+  PageHeader: ({ title, titleExtra, actions }: { title: string; titleExtra?: React.ReactNode; actions?: React.ReactNode }) => <header><h1>{title}</h1>{titleExtra}{actions}</header>,
 }));
 
 import { StructureTab } from "./Items/StructureTab";
@@ -96,7 +96,7 @@ describe("Parametre seti — varsayılan atkı ücreti", () => {
     renderWithProviders(<ParametersPage />);
     expect(await screen.findByTestId("pick-rate-row")).toHaveTextContent("0,02 USD");
     expect(screen.queryByLabelText("Varsayılan atkı ücreti")).toBeNull();
-    expect(screen.queryByRole("button", { name: /Taslak oluştur/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /taslak aç/ })).toBeNull();
   });
 
   it("⭐ cost:settings YOK + açık taslak → taslak değeri salt okunur, giriş yok", async () => {
@@ -116,7 +116,7 @@ describe("Parametre seti — varsayılan atkı ücreti", () => {
     params.draft.mockResolvedValue({ ...plain, id: "p2", status: "DRAFT", versionNo: 4 });
     params.updateDraft.mockResolvedValue({ success: true });
     renderWithProviders(<ParametersPage />);
-    await screen.findByText(/Açık taslak: v4/);
+    await screen.findByText(/Açık taslak v4/);
     expect(screen.queryByTestId("pick-rate-row")).toBeNull();
     fireEvent.change(screen.getByLabelText("Genel gider (%)"), { target: { value: "7" } });
     fireEvent.click(screen.getByRole("button", { name: /Kaydet/ }));

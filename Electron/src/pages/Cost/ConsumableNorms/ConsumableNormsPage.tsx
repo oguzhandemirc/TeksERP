@@ -4,7 +4,8 @@
 // =============================================================================
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
+import { Package, Plus } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
 import { PageShell } from "@/components/layout/PageShell";
 import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
 import { DataTable } from "@/components/data-table/DataTable";
@@ -62,9 +63,7 @@ export function ConsumableNormsPage() {
           <ListMessage className="text-sm text-muted-foreground">Aramaya uyan kayıt yok.</ListMessage>
         ) : (
           <ListMessage>
-            <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-              Henüz sarf normu yok — normu olmayan hizmetin sarfı kârlılıkta görünmez.
-            </div>
+            <EmptyState icon={Package} title="Henüz sarf normu yok" description="Normu olmayan hizmetin sarfı kârlılıkta görünmez." />
           </ListMessage>
         )}
       </ListBody>

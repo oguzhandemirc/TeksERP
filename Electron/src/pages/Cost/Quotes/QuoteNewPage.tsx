@@ -45,8 +45,15 @@ export function QuoteNewPage() {
   });
   return (
     <PageShell>
-      <PageHeader title="Yeni teklif" description="Önce başlığı kaydedin; kalemler (kart ürünü ya da yeni desen) sonraki ekranda eklenir ve sunucu fiyat önerir." />
+      <PageHeader title="Yeni teklif" description="Önce başlığı kaydedin; kalemler (kart ürünü ya da yeni desen) sonraki ekranda eklenir ve sunucu fiyat önerir."
+        actions={<>
+          <Button variant="outline" onClick={() => nav("/cost/quotes")}>Vazgeç</Button>
+          <Button title={h.customerId ? undefined : "Önce müşteri seçin"} disabled={!h.customerId || create.isPending || suggestionPending} onClick={() => create.mutate()} data-testid="quote-create">
+            {create.isPending ? "Kaydediliyor…" : "Taslağı oluştur"}
+          </Button>
+        </>} />
       <PageBody className="space-y-4 p-4 sm:p-6">
+        <div className="rounded-xl border bg-card p-4 shadow-soft">
         <QuoteHeaderFields
           value={h}
           onChange={(patch) => {
@@ -56,11 +63,6 @@ export function QuoteNewPage() {
           mode="create"
           currencyHint={currencyTouched ? undefined : suggestionHint(suggestion)}
         />
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={() => nav("/cost/quotes")}>Vazgeç</Button>
-          <Button disabled={!h.customerId || create.isPending || suggestionPending} onClick={() => create.mutate()} data-testid="quote-create">
-            {create.isPending ? "Kaydediliyor…" : "Taslağı oluştur"}
-          </Button>
         </div>
       </PageBody>
     </PageShell>

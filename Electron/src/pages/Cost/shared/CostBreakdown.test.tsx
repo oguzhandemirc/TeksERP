@@ -30,7 +30,7 @@ describe("CostBreakdown", () => {
   it("eksik → kırmızı uyarı, sonuç tahminle doldurulmaz; uyarı Türkçe", () => {
     render(<CostBreakdown sonuc={null} eksikler={["FX_RATE_MISSING"]} uyarilar={["PRICE_STALE"]} />);
     const alert = screen.getByRole("alert");
-    expect(alert).toHaveAttribute("data-code", "FX_RATE_MISSING");
+    expect(alert.querySelector('[data-code="FX_RATE_MISSING"]')).not.toBeNull();
     expect(alert).toHaveTextContent("Kur 1 varsayılmaz");
     expect(screen.getByText(/90 günden eski/)).toBeInTheDocument();
     expect(screen.queryByTestId("cost-total")).toBeNull();

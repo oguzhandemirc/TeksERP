@@ -33,7 +33,7 @@ export function BreakdownTab({ preview, loading, fx, onFx, fxFlagged, onSave }: 
       </div>
       <CostBreakdown sonuc={preview.sonuc} eksikler={preview.eksikler} uyarilar={preview.uyarilar} />
       <PermissionGate permission="cost:write">
-        <Button onClick={onSave} disabled={loading}>Standart olarak kaydet</Button>
+        <Button onClick={onSave} disabled={loading || !preview.sonuc} title={preview.sonuc ? undefined : "Eksikler giderilmeden kaydedilemez"}>Standart olarak kaydet</Button>
       </PermissionGate>
     </div>
   );

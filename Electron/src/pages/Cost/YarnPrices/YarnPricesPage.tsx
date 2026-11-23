@@ -4,7 +4,8 @@
 // =============================================================================
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
+import { Plus, Spool } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
 import { PageShell } from "@/components/layout/PageShell";
 import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
 import { DataTable } from "@/components/data-table/DataTable";
@@ -61,9 +62,7 @@ export function YarnPricesPage() {
           <ListMessage className="text-sm text-muted-foreground">Aramaya uyan kayıt yok.</ListMessage>
         ) : (
           <ListMessage>
-            <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-              Henüz iplik maliyet fiyatı yok — "Fiyat gir" ile çözgü ve atkı ipliklerinin kg fiyatını yazın; fiyatı olmayan iplik maliyette eksik sayılır.
-            </div>
+            <EmptyState icon={Spool} title="Henüz iplik maliyet fiyatı yok" description={'"Fiyat gir" ile çözgü ve atkı ipliklerinin kg fiyatını yazın; fiyatı olmayan iplik maliyette eksik sayılır.'} />
           </ListMessage>
         )}
       </ListBody>

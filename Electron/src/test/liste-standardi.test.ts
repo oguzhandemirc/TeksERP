@@ -29,7 +29,6 @@ const EXEMPT: Record<string, string> = {
   "Cost/PriceLists/PriceListLinesEditor.tsx": GOMULU,
   "Cost/Quotes/QuoteLinesTable.tsx": GOMULU,
   "Cost/shared/CostBreakdown.tsx": GOMULU,
-  "Cost/Parameters/ParameterCompareTable.tsx": GOMULU,
   "Definitions/ItemPrices/ItemPricesPanel.tsx": GOMULU,
   "Finance/Allocations/OpenInvoiceTable.tsx": GOMULU,
   "Finance/Allocations/SourceAllocationsTable.tsx": GOMULU,
