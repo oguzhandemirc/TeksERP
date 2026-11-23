@@ -83,8 +83,9 @@ export function WeaveDesignDetailPage() {
               <TabsContent value="structure" className="mt-4">
                 <StructureTab key={d.id + (d.repeatCm ?? "") + d.name} design={d} fabric={fabric} canWrite={canWrite} />
               </TabsContent>
-              <TabsContent value="weft" className="mt-4"><WeftTab fabric={fabric} canWrite={canWrite} /></TabsContent>
-              <TabsContent value="lift" className="mt-4">
+              <TabsContent value="weft" forceMount className="mt-4 data-[state=inactive]:hidden"><WeftTab fabric={fabric} canWrite={canWrite} /></TabsContent>
+              {/* Armür editörü sekme değişince sökülmez: kaydedilmemiş taslak ve geri al yığını korunur. */}
+              <TabsContent value="lift" forceMount className="mt-4 data-[state=inactive]:hidden">
                 <LiftPlanTab key={d.id + JSON.stringify(d.liftPlan ?? null) + JSON.stringify(d.lenoFrames ?? [])} design={d} fabric={fabric} canWrite={canWrite} />
               </TabsContent>
               <TabsContent value="variants" className="mt-4"><VariantsTab fabric={fabric} /></TabsContent>

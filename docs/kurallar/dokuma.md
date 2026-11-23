@@ -157,6 +157,7 @@
 - [ÇEKİRDEK] Devereci karnesi her ölçüyü kendi tek kaynağından alsın, kopya yüklem yazmasın: teslim/süre `lead-time` (`LEAD_ORDER_SELECT` + `orderLeadSample`, termin `effectiveDue` + `overdueDaysOf`), fire canlı SETTLE kapanışı, ret iptalsiz ret belgesi, denye `getDenierDeviationReport`, çözgü hatası yalnız `CONSUMED.rollId` (iptalsiz) bağıyla `ACTIONABLE_ROLL_ERROR_WHERE` + `WARP_DEFECT_GROUP`; bağ yoksa "ölçülemedi" + gerekçe, sıfır değil.
 - Tahar düzenini `WeaveDesign.drawingInNote` (serbest metin ≤300, boş = null) olarak tut; hesaba sokma, desen kartı basımında yalnız doluysa "TAHAR" satırı bas (boş → basım bayt-aynı). <sub>(arşiv:2026-11-22 Devere/levent S8)</sub>
 - Kart görsellerini veriden türet: çözgü dizilim açılımını yalnız `warp-sequence.helper` (`endsSequence`; okunamayan not null), kumaş görünümünü yalnız `weave-drawdown.helper` (düz tahar, LENO çizilmez) üretsin; istemci `pickSequence`/`endsSequence` hesaplamaz, drawdown aynası aynı örnek tabloyla parite testine bağlıdır. · bekçi: `test_warp_sequence`, `test_weave_drawdown` <sub>(arşiv:2026-11-22 Kart görseli A)</sub>
+- Kart editörlerinin kutu şeridi/ızgara taslağını (`lift-plan-edit`, `sequence-edit`) yalnız düzenleme önizlemesi say: kaydedilen değer `liftPlan`/`lenoFrames`, `sequenceCode`, `sequenceNote` metnidir; kayıtlı görünüm ve tel tutma uyarısı sunucunun `pickSequence`/`endsSequence`inden çizilsin. <sub>(arşiv:2026-11-23 Kart görseli I)</sub>
 
 ## Panel (Electron)
 
