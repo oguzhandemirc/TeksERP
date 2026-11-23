@@ -7,7 +7,6 @@ import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { itemLifecycleOf } from "@/lib/item-lifecycle";
 import type { Item } from "./types";
 import { ItemCustomerColorAliasesPanel } from "./ItemCustomerColorAliasesPanel";
-import { ItemCostLink } from "./ItemCostLink";
 import { YarnWhereSection } from "@/pages/Operations/YarnAtSubcontractor/YarnWhereSection";
 
 interface Props {
@@ -18,13 +17,8 @@ interface Props {
 
 export function ItemCardTabs({ item, children }: Props) {
   const { hasPermission } = useRoleAccess();
-  // İplik kartında "Nerede?" (depo / fasonda, devere D6c) — kumaş kartında hiçbir şey çizmez.
-  const costLink = item ? (
-    <>
-      <ItemCostLink itemId={item.id} itemType={item.itemType} />
-      {item.itemType === "YARN" && <YarnWhereSection itemId={item.id} itemType={item.itemType} />}
-    </>
-  ) : null;
+  // İplik kartında "Nerede?" (depo / fasonda, devere D6c). Maliyet kartı bağlantısı başlık satırında (B11).
+  const costLink = item?.itemType === "YARN" ? <YarnWhereSection itemId={item.id} itemType={item.itemType} /> : null;
   // Sabit çerçeveli modalın gövdesi (tabbed-dialog): sekmesizde tek kaydırıcı, sekmelide şerit sabit + panel kayar.
   if (!item || item.itemType !== "FABRIC" || !hasPermission("customer-alias:read")) {
     return <TabbedDialogBody className="space-y-4">{costLink}{children}</TabbedDialogBody>;

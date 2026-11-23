@@ -24,8 +24,8 @@ vi.mock("./AllowedPropertiesDialog", () => ({ AllowedPropertiesDialog: () => nul
 const flags = vi.hoisted(() => ({ kg: false, mal: false }));
 vi.mock("@/hooks/usePricingEnabled", () => ({ useDevereEnabled: () => false, useDokumaEnabled: () => false, useKaliteGuvenceEnabled: () => flags.kg, useMaliyetEnabled: () => flags.mal }));
 
-const COLORS = "İzinli Renkler (opsiyonel)";
-const PROPS = "İzinli Özellikler (opsiyonel)";
+const COLORS = "İzinli Renkler";
+const PROPS = "İzinli Özellikler";
 
 const item = (over: Partial<Item>): Item =>
   ({ id: "i1", code: "STK-000001", name: "PATOS", itemType: "FABRIC", unit: "MT", isActive: true, linearDensityDen: null, createdAt: "2026-01-01", updatedAt: "2026-01-01", ...over }) as Item;

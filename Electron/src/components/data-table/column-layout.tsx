@@ -64,13 +64,39 @@ export function measureContentWidth(tableEl: HTMLTableElement, columnId: string)
   return Math.max(MIN_COL_WIDTH, Math.ceil(max + pad + 2));
 }
 
+const TABLE_WIDTH_KEY = "__tableWidth";
+
+/** Bütün başlıkların görünen genişliğini değişkene yazar (sütun kimliği → px) ve tabloyu içerik genişliğine alır.
+ *  Seçim kutusu sütunu (sabit dar) dondurulmaz. */
+function freezeColumns(th: HTMLTableCellElement, tableEl: HTMLTableElement): { frozen: Record<string, number>; prevVars: Record<string, string> } {
+  const frozen: Record<string, number> = {};
+  const prevVars: Record<string, string> = {};
+  const row = th.parentElement;
+  if (!row) return { frozen, prevVars };
+  // Önce hepsini ölç, sonra yaz: yazmak düzeni değiştirip sonraki ölçümü bozmasın.
+  for (const cell of Array.from(row.children)) {
+    const id = cell.querySelector<HTMLElement>("[data-cell-clip]")?.dataset.cellClip;
+    const w = cell.getBoundingClientRect().width;
+    // Ölçülemeyen (0 px: çizilmemiş) sütun dondurulmaz — yoksa en dar sınırla kalıcı yazılırdı.
+    if (id && id !== "select" && w > 0) frozen[id] = w;
+  }
+  for (const [id, w] of Object.entries(frozen)) {
+    prevVars[id] = tableEl.style.getPropertyValue(widthVar(id));
+    tableEl.style.setProperty(widthVar(id), widthValue(w));
+  }
+  // Tablo = sütun toplamı: w-full'un dağıttığı boşluk artık hiçbir sütunu büyütmez (bırakınca da böyle kalır).
+  prevVars[TABLE_WIDTH_KEY] = tableEl.style.width;
+  tableEl.style.width = "max-content";
+  return { frozen, prevVars };
+}
+
 function commitWidth<T>(table: TanstackTable<T>, columnId: string, px: number): void {
   table.setColumnSizing((prev) => ({ ...prev, [columnId]: Math.max(MIN_COL_WIDTH, Math.round(px)) }));
 }
 
 /** Başlığın sağ kenarındaki tutamaç: sürükle → genişlik, çift tık → içeriğe sığdır. */
 export function ColumnResizeHandle<T>({ table, columnId, label }: { table: TanstackTable<T>; columnId: string; label: string }) {
-  const drag = useRef<{ startX: number; startW: number; tableEl: HTMLTableElement; w: number } | null>(null);
+  const drag = useRef<{ startX: number; startW: number; tableEl: HTMLTableElement; w: number; frozen: Record<string, number>; prevVars: Record<string, string> } | null>(null);
 
   const onPointerDown = useCallback((e: ReactPointerEvent<HTMLDivElement>) => {
     // Sürükle-bırak sıralaması başlıkta dinler; tutamaç kendi işini yapar.
@@ -80,7 +106,10 @@ export function ColumnResizeHandle<T>({ table, columnId, label }: { table: Tanst
     const tableEl = e.currentTarget.closest("table");
     if (!th || !tableEl) return;
     const startW = th.getBoundingClientRect().width;
-    drag.current = { startX: e.clientX, startW, tableEl, w: startW };
+    // B14: w-full tablo boş alanı sütunlara dağıtır; yalnız sürüklenen sütuna değişken verilince boşluk soldakilere
+    // yeniden dağılıp kenar sıçrıyordu. Bütün sütunlar o anki genişlikte dondurulur, tablo içerik genişliğine iner.
+    const { frozen, prevVars } = freezeColumns(th, tableEl);
+    drag.current = { startX: e.clientX, startW, tableEl, w: startW, frozen, prevVars };
     e.currentTarget.setPointerCapture?.(e.pointerId);
     tableEl.dataset.resizing = "true";
   }, []);
@@ -98,7 +127,22 @@ export function ColumnResizeHandle<T>({ table, columnId, label }: { table: Tanst
     if (!d) return;
     e.currentTarget.releasePointerCapture?.(e.pointerId);
     delete d.tableEl.dataset.resizing;
-    if (Math.abs(d.w - d.startW) >= 1) commitWidth(table, columnId, d.w);
+    if (Math.abs(d.w - d.startW) < 1) {
+      // Tık (sürükleme yok): dondurma geri alınır, düzen olduğu gibi kalır.
+      for (const [id, prev] of Object.entries(d.prevVars)) {
+        if (id === TABLE_WIDTH_KEY) d.tableEl.style.width = prev;
+        else if (prev) d.tableEl.style.setProperty(widthVar(id), prev);
+        else d.tableEl.style.removeProperty(widthVar(id));
+      }
+      return;
+    }
+    // Dondurulan soldaki genişlikler de yazılır; yoksa bırakınca değişken düşer ve kenar yine kayar.
+    table.setColumnSizing((prev) => {
+      const next = { ...prev };
+      for (const [id, px] of Object.entries(d.frozen)) if (!((prev[id] ?? 0) > 0)) next[id] = Math.max(MIN_COL_WIDTH, Math.round(px));
+      next[columnId] = Math.max(MIN_COL_WIDTH, Math.round(d.w));
+      return next;
+    });
   }, [table, columnId]);
 
   const onDoubleClick = useCallback((e: ReactMouseEvent<HTMLDivElement>) => {

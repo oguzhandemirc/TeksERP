@@ -8,7 +8,7 @@ import type { ItemFormValues } from "./schema";
 export function ItemYarnWasteField({ form }: { form: UseFormReturn<ItemFormValues> }) {
   return (
     <FormField
-      label="İplik firesi % (opsiyonel)"
+      label="İplik firesi %"
       htmlFor="yarnWastePct"
       error={form.formState.errors.yarnWastePct}
       info="Doluysa bu iplik maliyet ve iplik ihtiyacında bu fireyle hesaplanır; boşsa çözgü/atkı kartındaki fire kullanılır (0–50)"

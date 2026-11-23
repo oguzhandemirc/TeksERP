@@ -10,11 +10,9 @@ export function ItemCostLink({ itemId, itemType }: { itemId: string; itemType: s
   const { hasPermission } = useRoleAccess();
   if (itemType !== "FABRIC" || !enabled || !hasPermission("cost:read")) return null;
   return (
-    <div className="mb-2 flex justify-end">
-      <Link to={`/cost/items/${itemId}`} className="inline-flex items-center gap-1 text-sm text-primary underline-offset-4 hover:underline">
-        <Calculator className="h-4 w-4" />
-        Maliyet kartı
-      </Link>
-    </div>
+    <Link to={`/cost/items/${itemId}`} className="inline-flex items-center gap-1 text-sm text-primary underline-offset-4 hover:underline">
+      <Calculator className="h-4 w-4" />
+      Maliyet kartı
+    </Link>
   );
 }

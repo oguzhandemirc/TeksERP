@@ -94,6 +94,23 @@ describe("DataTable — elle sütun genişliği", () => {
     expect(lastSizing.name).toBe(MIN_COL_WIDTH);
   });
 
+  it("⭐ B14: tutunca bütün sütunlar görünen genişlikte donar, tablo içerik genişliğine iner; bırakınca hepsi yazılır", () => {
+    renderWithProviders(<Harness />);
+    const table = screen.getByRole("table");
+    const widths: Record<string, number> = { Ad: 420, Metre: 380 };
+    for (const th of table.querySelectorAll("th")) {
+      const w = widths[th.textContent?.trim() ?? ""] ?? 0;
+      th.getBoundingClientRect = () => ({ width: w }) as DOMRect;
+    }
+    const handle = screen.getByRole("separator", { name: "Ad sütun genişliği" });
+    fireEvent.pointerDown(handle, { clientX: 100, pointerId: 1 });
+    expect(table.style.getPropertyValue(widthVar("qty"))).toBe("calc(380px - 1.5rem)");
+    expect(table.style.width).toBe("max-content");
+    fireEvent.pointerMove(handle, { clientX: 150, pointerId: 1 });
+    fireEvent.pointerUp(handle, { clientX: 150, pointerId: 1 });
+    expect(lastSizing).toEqual({ name: 470, qty: 380 });
+  });
+
   it("çift tık içeriğe sığdırır (en geniş kutu + dolgu)", () => {
     renderWithProviders(<Harness initial={{ name: 60 }} />);
     for (const el of document.querySelectorAll<HTMLElement>('[data-cell-clip="name"]')) {
