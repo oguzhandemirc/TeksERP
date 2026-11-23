@@ -20,7 +20,7 @@ export function ApiEndpointSection() {
     normalizeApiBaseUrl(active) === normalizeApiBaseUrl(DEFAULT_API_BASE_URL);
 
   return (
-    <div className="flex items-center justify-between gap-4">
+    <div className="flex max-w-3xl items-center justify-between gap-6">
       <div className="space-y-1 text-sm">
         <div className="font-mono">{active}</div>
         <p className="text-xs text-muted-foreground">

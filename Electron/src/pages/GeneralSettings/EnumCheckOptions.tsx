@@ -2,6 +2,7 @@
 // KÜME AYARI — seçenekler alt alta onay kutusu (EnumRadioOptions'ın çoklu seçim ikizi)
 // =============================================================================
 import { decodeEnumSet, toggleEnumSet } from "./enum-set-codec";
+import { OPTION_GRID, optionTileClass } from "./EnumRadioOptions";
 
 interface Props {
   name: string;
@@ -14,9 +15,9 @@ interface Props {
 export function EnumCheckOptions({ name, value, options, disabled, onChange }: Props) {
   const selected = decodeEnumSet(value);
   return (
-    <fieldset className="w-72 shrink-0 space-y-1.5" aria-label={name}>
+    <fieldset className={OPTION_GRID} aria-label={name}>
       {options.map((o) => (
-        <label key={o.value} className="flex cursor-pointer gap-2 text-sm">
+        <label key={o.value} className={optionTileClass(selected.includes(o.value), disabled)}>
           <input
             type="checkbox"
             value={o.value}

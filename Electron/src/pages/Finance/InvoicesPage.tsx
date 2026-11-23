@@ -6,13 +6,14 @@ import { useSearchParams } from "react-router-dom";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
+import { ListFooter, ListToolbar } from "@/components/layout/ListPage";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/data-table/DataTable";
 import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { SelectChip } from "@/components/data-table/filter-row/SelectChip";
 import { PrintedDocDialog } from "@/components/print/PrintedDocDialog";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { PermissionGate } from "@/components/PermissionGate";
 import { apiErrorText } from "@/lib/api-error";
@@ -43,6 +44,12 @@ import { RefreshButton } from "@/components/RefreshButton";
 // ⚠️ Rozet sözlükleri 2026-08-14'te `service.ts`'e TAŞINDI (buradan kopyalanmadı,
 // taşındı): detay yüzeyi ikinci tüketici oldu ve iki kopya, aynı faturayı iki
 // ekranda farklı kelimeyle gösterme riskiydi.
+
+const STATUS_OPTIONS = [
+  { value: "DRAFT", label: "Taslak" },
+  { value: "CONFIRMED", label: "Onaylı" },
+  { value: "CANCELLED", label: "İptal" },
+];
 
 export function InvoicesPage() {
   const qc = useQueryClient();
@@ -133,7 +140,6 @@ export function InvoicesPage() {
   // var" ile "sistemde ne var" ayrımını korur.
   const draftBadge = draftBadgeText(draftCountQ.data?.pagination?.total, status);
   const trimBand = trimNotice(q.data?.pagination?.total, rows.length);
-  const hasRows = !q.isLoading && !q.isError && rows.length > 0;
   const table = useInvoiceTable(rows, {
     onDetail: (inv) => setDetailId(inv.id),
     onPrint: (inv) => setPrintTarget(inv),
@@ -186,89 +192,40 @@ export function InvoicesPage() {
         }
       />
 
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-[var(--list-inset)] py-3">
-        <Input
-          className="w-64"
-          placeholder="Ara…"
-          title="Belge no / cari ara"
-          aria-label="Belge no / cari ara"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+      <ListToolbar className="flex-row flex-wrap items-center">
+        <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Belge no / cari ara" />
+        <SelectChip
+          id="invoice-type"
+          label="Tür"
+          value={type || null}
+          options={Object.entries(INVOICE_TYPE_LABEL).map(([value, label]) => ({ value, label }))}
+          onChange={(v) => setType(v ?? "")}
         />
-        <select
-          className="h-9 rounded-md border bg-background px-2 text-sm"
-          value={type}
-          onChange={(e) => setType(e.target.value)}
-        >
-          <option value="">Tüm türler</option>
-          {Object.entries(INVOICE_TYPE_LABEL).map(([k, v]) => (
-            <option key={k} value={k}>{v}</option>
-          ))}
-        </select>
-        <select
-          className="h-9 rounded-md border bg-background px-2 text-sm"
-          value={status}
-          onChange={(e) => setStatus(e.target.value)}
-        >
-          <option value="">Tüm durumlar</option>
-          <option value="DRAFT">Taslak</option>
-          <option value="CONFIRMED">Onaylı</option>
-          <option value="CANCELLED">İptal</option>
-        </select>
-        <div className="ml-auto">
+        <SelectChip id="invoice-status" label="Durum" value={status || null} options={STATUS_OPTIONS} onChange={(v) => setStatus(v ?? "")} />
+        <div className="ml-auto flex items-center gap-1.5">
           <DataTableTools table={table} exportName="Faturalar" compact />
         </div>
-      </div>
+      </ListToolbar>
 
-      {hasRows ? (
-        <>
-          <DataTable table={table} markEntity="invoice" rowClassName={(inv) => (inv.status === "CANCELLED" ? "opacity-60" : undefined)} />
-          {/* ⚠️ SESSİZ KIRPMA YOK: sunucu sayfası (100) dolduğunda kullanıcı
-              bulamadığı faturayı "yok" sayıp ikinci kez kesebilir. */}
-          {trimBand && (
-            <p className="shrink-0 border-t bg-amber-50 px-4 py-2 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
-              {trimBand}
-            </p>
-          )}
-        </>
-      ) : (
-        <ListBody>
-          {q.isLoading ? (
-            <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
-          ) : q.isError ? (
-            /* ⚠️ "HATA" ile "KAYIT YOK" AYRI EKRANLAR: boş diziyi "fatura yok"
-               diye basmak, kullanıcıyı AYNI FATURAYI İKİNCİ KEZ kesmeye iter —
-               ve fatura, iki kez kesilmesi en pahalı belgedir. Interceptor'ın
-               toast'ı birkaç saniyede kaybolur; ekranda kalan cümle doğruyu
-               söylemek zorunda (emsal: PurchaseOrdersPage). */
-            <ListMessage>
-              <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-                <p className="font-medium text-destructive">Fatura listesi yüklenemedi.</p>
-                {/* Backend'in KENDİ cümlesi ("Ön muhasebe modülü kapalı" gibi) ortak
-                    çıkarıcıdan gelir ve yeniden yazılmaz; altındaki satır ise bu
-                    ekrana özel sonucu söyler. */}
-                <p className="mt-1 text-muted-foreground">
-                  {apiErrorText(q.error, "İstek sunucuya ulaşamadı ya da reddedildi.")}
-                </p>
-                <p className="mt-1 text-muted-foreground">
-                  Bu bir “fatura yok” cevabı DEĞİLDİR. Kayıtlarınız yerinde duruyor; yeni fatura
-                  kesmeden önce tekrar deneyin.
-                </p>
-                <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
-                  Tekrar dene
-                </Button>
-              </div>
-            </ListMessage>
-          ) : (
-            <ListMessage>
-              <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-                Fatura yok. "Yeni Fatura" ile taslak oluşturabilirsiniz.
-              </div>
-            </ListMessage>
-          )}
-        </ListBody>
-      )}
-      <ListFooter loaded={rows.length} total={q.data?.pagination?.total ?? null} />
+      {/* ⚠️ "HATA" ile "KAYIT YOK" AYRI (DataTable hata satırı önde): "fatura yok" sanan kullanıcı AYNI FATURAYI ikinci
+          kez keser. Backend'in kendi cümlesi ("Ön muhasebe modülü kapalı") ortak çıkarıcıdan gelir. */}
+      <DataTable
+        table={table}
+        markEntity="invoice"
+        rowClassName={(inv) => (inv.status === "CANCELLED" ? "opacity-60" : undefined)}
+        isLoading={q.isLoading}
+        isError={q.isError}
+        errorText={`${apiErrorText(q.error, "İstek sunucuya ulaşamadı ya da reddedildi.")} Yeni fatura kesmeden önce tekrar deneyin.`}
+        onRetry={() => void q.refetch()}
+        emptyText={search || status || type ? "Bu filtreyle fatura yok." : "Fatura yok."}
+        emptyDescription={search || status || type ? undefined : "“Yeni Fatura” ile taslak oluşturabilirsiniz."}
+      />
+      {/* ⚠️ SESSİZ KIRPMA YOK: sunucu sayfası (100) dolduğunda bulunamayan fatura "yok" sanılıp ikinci kez kesilebilir. */}
+      <ListFooter
+        loaded={rows.length}
+        total={q.data?.pagination?.total ?? null}
+        label={trimBand ? <span className="text-amber-700 dark:text-amber-400">{trimBand}</span> : undefined}
+      />
 
       <ServicePeriodDraftDialog open={servicePeriodOpen} onOpenChange={setServicePeriodOpen} onCreated={(id) => { invalidate(); setDetailId(id); }} />
       <InvoiceFormDialog open={formOpen} onOpenChange={setFormOpen} onCreated={invalidate} onDraftCreated={(id) => { setFormOpen(false); setEditId(id); }} />

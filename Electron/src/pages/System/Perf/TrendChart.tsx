@@ -26,10 +26,10 @@ export function TrendChart({
         onValueChange={(v) => onRouteChange(v === ALL ? null : v)}
       >
         <SelectTrigger className="w-full max-w-md font-mono text-xs">
-          <SelectValue placeholder="Endpoint seç" />
+          <SelectValue placeholder="Uç seç" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value={ALL}>(tüm endpoint'ler — birleşik)</SelectItem>
+          <SelectItem value={ALL}>Tüm uçlar (birleşik)</SelectItem>
           {routes.map((r) => (
             <SelectItem key={r} value={r} className="font-mono text-xs">
               {r}
@@ -52,8 +52,8 @@ export function TrendChart({
             data={series}
             xKey="day"
             lines={[
-              { key: "p95Ms", label: "p95 (ms)" },
-              { key: "p50Ms", label: "p50 (ms)" },
+              { key: "p95Ms", label: "Yavaş istekler (p95)" },
+              { key: "p50Ms", label: "Ortanca (p50)" },
             ]}
             formatValue={(v) => `${v} ms`}
             formatCategory={(d) => d.slice(5)} // "MM-DD"

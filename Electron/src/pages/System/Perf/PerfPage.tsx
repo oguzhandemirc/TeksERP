@@ -21,12 +21,12 @@ const trStamp = (ms: number): string => factoryLocaleString(ms, "tr-TR");
 // p50/p95/max birer YÜZDELİK — toplanmaları anlamsızdır (ölçüm ≠ miktar), o yüzden
 // summable DEĞİL: dosyanın TOPLAM satırında boş kalırlar.
 const PERF_ROUTE_EXPORT_COLUMNS: ExportColumn<PerfRoute>[] = [
-  { label: "Uç (endpoint)", value: (r) => r.route },
+  { label: "Uç", value: (r) => r.route },
   { label: "İstek", value: (r) => r.count, summable: true },
-  { label: "Hata (5xx)", value: (r) => r.errCount, summable: true },
-  { label: "p50 (ms)", value: (r) => r.p50Ms },
-  { label: "p95 (ms)", value: (r) => r.p95Ms },
-  { label: "En yavaş / max (ms)", value: (r) => r.maxMs },
+  { label: "Sunucu hatası", value: (r) => r.errCount, summable: true },
+  { label: "Ortanca (p50, ms)", value: (r) => r.p50Ms },
+  { label: "Yavaş (p95, ms)", value: (r) => r.p95Ms },
+  { label: "En uzun (ms)", value: (r) => r.maxMs },
   { label: "Son görülme", value: (r) => trStamp(r.lastAt) },
 ];
 
@@ -35,7 +35,7 @@ const PERF_ROUTE_EXPORT_COLUMNS: ExportColumn<PerfRoute>[] = [
 const PERF_SLOW_EXPORT_COLUMNS: ExportColumn<SlowRequest>[] = [
   { label: "Zaman", value: (s) => trStamp(s.at) },
   { label: "Yöntem", value: (s) => s.method },
-  { label: "Uç (endpoint)", value: (s) => s.route },
+  { label: "Uç", value: (s) => s.route },
   { label: "Durum", value: (s) => (s.status === 499 ? "499 (istemci vazgeçti)" : s.status) },
   { label: "Süre (ms)", value: (s) => s.ms },
   { label: "İstek kimliği", value: (s) => s.reqId ?? "" },
@@ -72,7 +72,7 @@ export function PerfPage() {
     <PageShell>
       <PageHeader
         title="Endpoint Performansı"
-        description="Route bazında gecikme istatistikleri ve yavaş istek defteri."
+        description="Sunucunun her uca (adrese) ne kadar sürede yanıt verdiği ve en yavaş istekler."
         // Veri taşıyan cümle ⓘ içinde saklanmaz — başlığın altında görünür (S12).
         statusLine={
           snap
@@ -107,7 +107,7 @@ export function PerfPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Günlük Trend (kalıcı özetlerden)</CardTitle>
+            <CardTitle className="text-base">Son 14 günün eğilimi</CardTitle>
           </CardHeader>
           <CardContent>
             <TrendChart days={14} route={trendRoute} onRouteChange={setTrendRoute} />
@@ -117,7 +117,7 @@ export function PerfPage() {
         <Card>
           <CardHeader className="flex-row items-center justify-between space-y-0">
             <CardTitle className="text-base">
-              Canlı İstatistik — p95'e göre (en şüpheli üstte)
+              Canlı ölçüm — en yavaş uç üstte
             </CardTitle>
             <ListExportMenu
               name="Endpoint Performansı"

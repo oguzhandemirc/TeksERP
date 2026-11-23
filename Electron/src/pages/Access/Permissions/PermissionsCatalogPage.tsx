@@ -1,11 +1,11 @@
 import { Fragment, useMemo, useState } from "react";
 import { foldedIncludes } from "@/lib/search-fold";
 import { useQuery } from "@tanstack/react-query";
-import { Monitor, Smartphone, Shield, Search, Info, Asterisk, UserX } from "lucide-react";
+import { Monitor, Smartphone, Shield, UserX } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
-import { Input } from "@/components/ui/input";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -17,6 +17,11 @@ import { categoryLabels, moduleLabels, isWildcard, type Permission } from "@/typ
 import { cn } from "@/lib/utils";
 
 const QUERY_KEY = "permission-catalog";
+
+// Akıştaki iki bilgi kutusu başlık ⓘ'sine taşındı (kullanıcı 2026-11-23: açıklama akışta değil baloncukta).
+const PAGE_INFO =
+  "“Tüm yetkiler” rozeti taşıyan kodlar (ör. admin:*, mobile:*) kategorisine sonradan eklenen yetkiler dahil o kategorideki tüm yetkileri kapsar — dikkatli atayın. " +
+  "Yetki tanımları koddaki katalogda yaşar; yeni sürüm yeni yetkileri kendiliğinden getirir ama kimseye atamaz (Kullanıcılar → Yetkiler).";
 
 // Dışa aktarım sütunları — ekrandaki gruplama (kategori › modül) düz sütuna açılır,
 // sayaçlar ekrandaki "Kullanıcı" / "Rol" kolonlarının aynısıdır.
@@ -90,29 +95,13 @@ export function PermissionsCatalogPage() {
     <PageShell>
       <PageHeader
         title="Yetki Kataloğu"
+        description={PAGE_INFO}
         actions={<RefreshButton queryKey={QUERY_KEY} />}
       />
 
       <ListToolbar className="flex-row flex-wrap items-center">
-        <div className="relative w-72">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Ara…"
-            title="Kod, açıklama veya modül"
-            aria-label="Yetki ara: kod, açıklama veya modül"
-            className="h-8 pl-8 text-sm"
-          />
-        </div>
+        <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Yetki ara: kod, açıklama veya modül" />
         <div className="ml-auto flex items-center gap-3">
-          <div className="text-xs text-muted-foreground">
-            Toplam{" "}
-            <span className="text-foreground font-medium">
-              {query.data?.data.length ?? 0}
-            </span>{" "}
-            yetki
-          </div>
           <ListExportMenu
             name="Yetki Kataloğu"
             rows={filtered}
@@ -259,23 +248,6 @@ export function PermissionsCatalogPage() {
             </TableBody>
           </Table>
         )}
-
-        <ListMessage className="space-y-2">
-          <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-xs">
-            <Asterisk className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
-            <div>
-              <span className="font-medium text-destructive">"tüm yetkiler" rozeti</span> taşıyan kodlar (örn.{" "}
-              <code className="rounded bg-muted px-1 font-mono">admin:*</code>,{" "}
-              <code className="rounded bg-muted px-1 font-mono">mobile:*</code>) ait olduğu kategoriye yeni eklenen yetkiler dahil <span className="font-medium">o kategorideki tüm yetkileri otomatik kapsar</span>. Dikkatli ata.
-            </div>
-          </div>
-          <div className="flex items-start gap-2 rounded-md border border-dashed p-3 text-xs text-muted-foreground">
-            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            <div>
-              Yetki tanımları koddaki katalogda yaşar ve sunucu her açıldığında eksikler otomatik olarak veritabanına yazılır — yani yeni sürüm, yeni yetkileri kendiliğinden getirir. <span className="font-medium">Ama kimseye atamaz:</span> yetkiyi kullanıcıya vermek her zaman bilinçli bir karardır (Kullanıcılar → Yetkiler). Yeni bir yetki KODU eklemek backend tarafında tanımlanmayı gerektirir.
-            </div>
-          </div>
-        </ListMessage>
       </ListBody>
       <ListFooter loaded={filtered.length} total={query.data?.data.length ?? null} />
     </PageShell>

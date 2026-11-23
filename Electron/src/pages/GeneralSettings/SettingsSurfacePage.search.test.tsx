@@ -93,7 +93,8 @@ vi.mock("@/services/systemSettingService", () => ({
 
 const search = () => screen.getByPlaceholderText("Ayar ara…");
 const type = (text: string) => fireEvent.change(search(), { target: { value: text } });
-const DIRTY_BADGE = "• Kaydedilmemiş değişiklik";
+// Kaydet çubuğu yalnız taslak varken çizilir; rozetin görünmesi = taslak korunmuş.
+const DIRTY_BADGE = "Kaydedilmemiş değişiklik";
 
 describe("Özellik Anahtarları — arama süzer, gezinmez", () => {
   beforeEach(() => {

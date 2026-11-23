@@ -93,7 +93,7 @@ export function KarnePage() {
         <MetricCard label="Uyarılı satır" value={rows.length ? warnedRows : null} tone={warnedRows > 0 ? "warn" : "neutral"} isLoading={isLoading} />
       </div>
       <WarningsBlock warnings={allWarnings} />
-      <DetailTable<ShiftStatRow> title={`Vardiya × tezgah${data ? ` (${data.meta.total}; anlık ${data.meta.live}, mühürlü ${data.meta.sealed})` : ""}`} data={rows} columns={columns} isLoading={isLoading} />
+      <DetailTable<ShiftStatRow> title="Vardiya × tezgah" data={rows} columns={columns} isLoading={isLoading} />
       <LoadMoreRows loaded={rows.length} total={listMeta?.total} hasMore={!!q.hasNextPage} loading={q.isFetchingNextPage} onMore={() => void q.fetchNextPage()} />
       {dialog?.kind === "ledger" && <LedgerDialog target={dialog.target} onClose={() => setDialog(null)} />}
       {dialog && dialog.kind !== "ledger" && <KarneDialogs dialog={dialog} onClose={() => setDialog(null)} />}

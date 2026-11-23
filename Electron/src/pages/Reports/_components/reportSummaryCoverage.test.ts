@@ -87,10 +87,10 @@ describe("rapor özet şeridi kapsamı", () => {
   it("⭐ soru cümlesi TEK YERDEN (ReportPageLayout) gelir — sayfa metni yazmaz", () => {
     const layout = readFileSync(resolve(SRC, "pages/Reports/_components/ReportPageLayout.tsx"), "utf8");
     expect(layout).toContain("REPORT_BY_KEY");
-    expect(layout).toContain("Bu rapor şunu cevaplar");
+    expect(layout).toContain('data-testid="report-question"');
     // Sayfa kendi soru cümlesini yazarsa katalogla ayrışır ve hangisinin doğru
     // olduğu ölçülemez hâle gelir.
-    const kendiYazan = yapraklar.filter((y) => y.src.includes("Bu rapor şunu cevaplar")).map((y) => y.yol);
+    const kendiYazan = yapraklar.filter((y) => y.src.includes("Bu rapor şunu cevaplar") || y.src.includes("report-question")).map((y) => y.yol);
     expect(kendiYazan).toEqual([]);
   });
 });

@@ -646,7 +646,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     label: "Modüller",
     icon: Blocks,
     description:
-      "Bu kurulumda hangi modüller açık. Menüler, ekranlar, backend kapıları ve otomatik kancalar bu anahtarlara bakar.",
+      "Bu kurulumda hangi modüller açık. Menüler, ekranlar, sunucu kapıları ve otomatik işler bu anahtarlara bakar.",
     keywords:
       "modül rejim üretim muhasebe ön muhasebe finance production aç kapat kurulum fabrika ticaret alım satım iplik kg depo çoklu depo transfer menü gizle",
     kind: "flags",
@@ -980,7 +980,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         summary: "Teslim alan personel iade edilen topun kalitesini düzeltebilir.",
         defaultOn: false,
         audience: ["Operatör"],
-        desc: "Açıkken iade teslim alan personel topun kalitesini düzeltebilir (etiket değişir). Kapalıyken tablette kalite kontrolü gizlenir, top çıktığı kaliteyle döner; backend de kalite değişikliğini reddeder.",
+        desc: "Açıkken iade teslim alan personel topun kalitesini düzeltebilir (etiket değişir). Kapalıyken tablette kalite kontrolü gizlenir, top çıktığı kaliteyle döner; sunucu da kalite değişikliğini reddeder.",
       },
       {
         key: "shippingSimulatedWeightEnabled",
@@ -989,7 +989,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
           "Simülasyon modundaki kantarın ürettiği rastgele kg değeri kabul edilir — yalnız demo kurulumu.",
         defaultOn: false,
         audience: ["Sevkiyat", "Yönetim"],
-        desc: "Açıkken “simülasyon” işaretli kantardan gelen rastgele kg kabul edilir — yalnız demo/eğitim için. Kapalıyken (varsayılan) backend bu kg'yi reddeder (400). Kg belgeye basıldığı için gerçek kurulumda kapalı kalır.",
+        desc: "Açıkken “simülasyon” işaretli kantardan gelen rastgele kg kabul edilir — yalnız demo/eğitim için. Kapalıyken (varsayılan) sunucu bu kg'yi reddeder. Kg belgeye basıldığı için gerçek kurulumda kapalı kalır.",
       },
       {
         key: "shippingAllowOverAllocation",
@@ -1457,10 +1457,10 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         key: "kk1WeightEntryEnabled",
         group: "KK1 / Kalite",
         title: "KK1 ham kumaş girişinde ağırlık (kg) alanını göster",
-        summary: "Ham girişte kg alanı açılır; kapalıyken backend gönderilen kg'yi reddeder.",
+        summary: "Ham girişte kg alanı açılır; kapalıyken sunucu gönderilen kg'yi reddeder.",
         defaultOn: false,
         audience: ["Operatör"],
-        desc: "Açıkken KK1 elle girişte kg alanı açılır (makine arızasında metrajın yanına). Kapalıyken (varsayılan) alan gizlenir ve backend gönderilen kg'yi reddeder.",
+        desc: "Açıkken KK1 elle girişte kg alanı açılır (makine arızasında metrajın yanına). Kapalıyken (varsayılan) alan gizlenir ve sunucu gönderilen kg'yi reddeder.",
       },
       {
         key: "kk1DuplicateGuardEnabled",
@@ -3163,7 +3163,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     id: "server",
     label: "Sunucu Adresi",
     icon: Server,
-    description: "Uygulamanın bağlandığı backend (API) adresi — bu bilgisayara özeldir.",
+    description: "Uygulamanın bağlandığı sunucu adresi — bu bilgisayara özeldir.",
     keywords:
       "sunucu adresi API backend bağlantı url endpoint ip port host adres bu bilgisayar yerel workstation",
     kind: "server",

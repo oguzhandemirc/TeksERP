@@ -3,18 +3,36 @@
 // süre biçimi · mühür rozeti · sayfa yükleme
 // =============================================================================
 import { useMemo } from "react";
+import { AlertCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { ReportKey } from "@/lib/report-catalog";
 import { useReportDateRange } from "../_hooks/useReportDateRange";
 import { rangeDayParams } from "../_lib/report-date";
 
+// Sunucu uyarısındaki iç kodlar ekranda insan diline çevrilir (metin sunucudan; yalnız sözcük eşlemesi).
+const WARNING_TERMS: ReadonlyArray<readonly [RegExp, string]> = [
+  [/\s*\(INFERRED\)/g, ""],
+  [/UNPLANNED'a/g, "plansız duruşa"],
+  [/\bUNPLANNED\b/g, "plansız duruş"],
+  [/\bINFERRED\b/g, "çıkarım"],
+  [/\bNULL\b/g, "boş"],
+  [/ÇALIŞMA DIŞI/g, "çalışma dışı"],
+];
+
+export function humanizeWarning(text: string): string {
+  return WARNING_TERMS.reduce((s, [re, to]) => s.replace(re, to), text);
+}
+
 export function WarningsBlock({ warnings }: { warnings: string[] }) {
   if (warnings.length === 0) return null;
   return (
-    <ul className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs">
+    <ul className="space-y-1 rounded-xl border border-warning/40 bg-warning-soft px-4 py-2.5 text-sm text-warning-soft-foreground">
       {warnings.map((w, i) => (
-        <li key={i}>⚠️ {w}</li>
+        <li key={i} className="flex gap-2">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
+          <span>{humanizeWarning(w)}</span>
+        </li>
       ))}
     </ul>
   );

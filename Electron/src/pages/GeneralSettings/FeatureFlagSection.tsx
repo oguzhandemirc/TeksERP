@@ -588,8 +588,8 @@ export function FeatureFlagSection({
     return (
       <div
         key={f.enumKey}
-        // Dar pencerede (<640px) radyo listesi başlığın ALTINA iner: yan yana iken w-72 liste başlığı ezer.
-        className={(f.display === "radio" || isSet) && canEdit ? "flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4" : "flex items-center justify-between gap-4"}
+        // Radyo/onay seçenekleri başlığın ALTINDA yatay ızgara (denetim O28); tek değerli satır en çok ~720 px (O26).
+        className={(f.display === "radio" || isSet) && canEdit ? "flex flex-col gap-2.5" : "flex max-w-3xl items-center justify-between gap-6"}
       >
         {/* Uzun açıklama + künye (i) balonunda (2026-09-07 / 2026-09-22): satırda yalnız
             başlık + tek cümle; seçim sağda, iOS anahtarla aynı hizada. */}
@@ -650,7 +650,7 @@ export function FeatureFlagSection({
     const value = textDraft[f.textKey] ?? serverTextFor(f);
     const valid = value.length <= f.maxLength && f.pattern.test(value);
     return (
-      <div key={f.textKey} className="flex items-center justify-between gap-4">
+      <div key={f.textKey} className="flex max-w-3xl items-center justify-between gap-6">
         <div className="min-w-0 space-y-0.5 text-sm">
           <div className="flex items-center gap-1.5 font-medium">
             <span><Vurgu text={f.title} query={searchQuery} /></span>
@@ -691,7 +691,7 @@ export function FeatureFlagSection({
     serverValue: number,
     onChange: (n: number) => void,
   ) => (
-    <div key={f.key} className="flex items-center justify-between gap-4">
+    <div key={f.key} className="flex max-w-3xl items-center justify-between gap-6">
       <div className="flex items-center gap-1.5 text-sm font-medium">
         <span><Vurgu text={f.title} query={searchQuery} /></span>
         <InfoPopover

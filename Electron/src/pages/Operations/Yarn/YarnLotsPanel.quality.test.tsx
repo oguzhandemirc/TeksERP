@@ -29,7 +29,7 @@ describe("YarnLotsPanel — kalite", () => {
     const blocked = rows.find((r) => r.textContent?.includes("L-BLOKE"))!;
     expect(blocked).toHaveTextContent("Bloke");
     expect(blocked).toHaveTextContent("rapor 18/09");
-    await user.click(screen.getByRole("combobox", { name: "Kalite" }));
+    await user.click(screen.getByRole("button", { name: /^Kalite:/ }));
     await user.click(await screen.findByRole("option", { name: "Serbest + Bekletmede" }));
     await waitFor(() => expect(listYarnLots).toHaveBeenLastCalledWith(expect.objectContaining({ qualityStatus: "RELEASED,ON_HOLD" })));
   });

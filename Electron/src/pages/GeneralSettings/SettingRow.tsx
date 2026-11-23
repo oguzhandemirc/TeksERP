@@ -78,8 +78,9 @@ export function FlagToggle({
       <div>{desc}</div>
     </div>
   ) : desc;
+  // Satır en çok ~720 px: anahtar etiketin gözle eşleşebileceği yakınlıkta durur (denetim O26).
   return (
-    <div className="flex items-center justify-between gap-4">
+    <div className="flex max-w-3xl items-center justify-between gap-6">
       <div className="min-w-0 space-y-0.5 text-sm">
         <div className="flex items-center gap-1.5 font-medium">
           <span><Vurgu text={title} query={highlight} /></span>
@@ -170,7 +171,7 @@ export function FieldLabel({
 /** Salt-okunur "etiket → değer rozeti" satırı (yetkisiz görünüm listelerinde). */
 export function ReadOnlyLine({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between gap-4">
+    <div className="flex max-w-3xl items-center justify-between gap-6">
       <span className="font-medium">{label}</span>
       <span className="shrink-0 rounded-badge border px-2 py-0.5 text-xs">{value}</span>
     </div>
@@ -202,13 +203,13 @@ export function ReadOnlyRow({
   offLabel?: string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 text-sm">
+    <div className="flex max-w-3xl items-center justify-between gap-6 text-sm">
       <div>
         <div className="font-medium">{title}</div>
         <p className="text-xs text-muted-foreground">
           {reason ?? (
             <>
-              Bu ayarı değiştirmek için <code>admin:settings</code> yetkisi gerekir.
+              Bu ayarı değiştirmek için “Ayarlar (yönetici)” yetkisi gerekir.
             </>
           )}
         </p>

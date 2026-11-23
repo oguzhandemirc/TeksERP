@@ -1,6 +1,7 @@
 import { flexRender, getCoreRowModel, useReactTable, type ColumnDef } from "@tanstack/react-table";
 import type { ReactNode } from "react";
 import { Card } from "@/components/ui/card";
+import { InfoPopover } from "@/components/ui/info-popover";
 import {
   Table,
   TableBody,
@@ -46,9 +47,10 @@ export function DetailTable<T>({
   return (
     <Card className="overflow-hidden">
       {title || description ? (
-        <div className="border-b px-4 py-3">
+        <div className="flex items-center gap-1.5 border-b px-4 py-3">
           {title ? <h3 className="text-sm font-semibold tracking-tight">{title}</h3> : null}
-          {description ? <p className="mt-0.5 text-xs text-muted-foreground">{description}</p> : null}
+          {/* Açıklama akışta paragraf değil, başlık yanında ⓘ (denetim O11). */}
+          {description ? <InfoPopover desc={description} label={title ? `${title} — açıklama` : "Açıklama"} /> : null}
         </div>
       ) : null}
       <div className="overflow-auto" style={{ maxHeight }}>

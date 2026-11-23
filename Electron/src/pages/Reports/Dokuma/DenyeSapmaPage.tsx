@@ -87,16 +87,17 @@ export function DenyeSapmaPage() {
     >
       <ReportFilterNotes notes={filterNotes} />
       {q.isError ? <Callout tone="danger">{apiErrorText(q.error, "Denye sapma raporu alınamadı.")}</Callout> : null}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Öneri koşulu bir AYAR, sayı değil: kart olarak değil "Öneri bekleyen" kartının ipucunda. */}
+      <div className="grid gap-3 sm:grid-cols-3">
         <MetricCard label="İplik" value={report ? formatDisplay(report.rows.length, 0) : null} hint="tek iplikli tartılı leventi olan" isLoading={q.isLoading} />
-        <MetricCard label="Öneri bekleyen" value={suggestCount === undefined ? null : formatDisplay(suggestCount, 0)} tone={suggestCount ? "warn" : "neutral"} isLoading={q.isLoading} />
-        <MetricCard label="Karma levent" value={report ? formatDisplay(report.mixed?.beamCount ?? 0, 0) : null} hint="çok iplikli — ipliğe bölünemez" isLoading={q.isLoading} />
         <MetricCard
-          label="Öneri koşulu"
-          value={report ? `≥ ${report.settings.minBeams} levent` : null}
-          hint={report ? `karta göre sapma %${formatDisplay(report.settings.thresholdPct, 2)} üstü (Ayarlar › Devere)` : undefined}
+          label="Öneri bekleyen"
+          value={suggestCount === undefined ? null : formatDisplay(suggestCount, 0)}
+          hint={report ? `en az ${report.settings.minBeams} levent, karta göre %${formatDisplay(report.settings.thresholdPct, 2)} üstü sapma` : undefined}
+          tone={suggestCount ? "warn" : "neutral"}
           isLoading={q.isLoading}
         />
+        <MetricCard label="Karma levent" value={report ? formatDisplay(report.mixed?.beamCount ?? 0, 0) : null} hint="çok iplikli — ipliğe bölünemez" isLoading={q.isLoading} />
       </div>
       <DetailTable<DenyeLine>
         title="İplik başına tartı ↔ nominal"

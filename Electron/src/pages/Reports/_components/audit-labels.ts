@@ -4,16 +4,16 @@
 // paylaşılır — iki harita drift etmesin). Buradan re-export ediliyor.
 export { tableLabel } from "@/lib/audit-labels";
 
-// Bu ekrana özel olan YALNIZ CRUD çekimidir: raporlarda EMİR kipi ("Oluştur"),
-// Aktivite Günlüğü'nde geçmiş zaman ("oluşturdu"). Sistem olaylarının adı ortak
+// Bu ekrana özel olan YALNIZ CRUD çekimidir: raporlarda SAYILAN İŞ adı ("Yeni kayıt"; emir kipi
+// "Oluştur" sayı kartında düğme gibi okunuyordu — denetim 2026-11-23 R6), Aktivite Günlüğü'nde geçmiş zaman ("oluşturdu"). Sistem olaylarının adı ortak
 // sözlükten gelir — burada kopyası tutulduğunda 27 olayın 5'i biliniyordu ve
 // geri kalanı raporda ham İngilizce çıkıyordu (`BACKUP_COMPLETED`, `DB_COPY_*`…).
 import { eventActionLabel } from "@/lib/audit-labels";
 
-const CRUD_LABEL: Record<string, string> = {
-  CREATE: "Oluştur",
-  UPDATE: "Güncelle",
-  DELETE: "Sil",
+export const CRUD_LABEL: Record<string, string> = {
+  CREATE: "Yeni kayıt",
+  UPDATE: "Değişiklik",
+  DELETE: "Silme",
 };
 
 export function actionLabel(raw: string | null | undefined): string {

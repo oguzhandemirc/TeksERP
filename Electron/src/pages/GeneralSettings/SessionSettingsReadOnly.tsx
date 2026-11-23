@@ -81,7 +81,7 @@ export function SessionSettingsReadOnly({
         value={shortCredentialTotpRequired ? "Açık (2FA'lı hesaplarda)" : "Kapalı (süperadminde her zaman)"}
       />
       <p className="pt-2 text-xs text-muted-foreground">
-        Bu ayarları değiştirmek için <code>admin:settings</code> yetkisi gerekir.
+        Bu ayarları değiştirmek için “Ayarlar (yönetici)” yetkisi gerekir.
       </p>
     </div>
   );

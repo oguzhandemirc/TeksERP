@@ -2,8 +2,8 @@
 // RAPOR KAPISI — KARO · ŞERİT · PALET (Raporlar K5, üç yolun birinci ve üçüncüsü)
 // =============================================================================
 // Üç yüzey aynı yüklemi okur (`isReportOpen` / `categoryHasOpenReport`): kapalı rapor alt
-// karoda, sağ şeritte ve komut paletinde yoktur; bütün raporları kapalı kategori palet başlığında
-// yoktur (eski karo sayfası 2026-11-12'de kalktı, §2 onunla gitti). Yüklem ctx'te; bu test ctx'i sahteler ve yüzeylerin ona
+// karoda ve komut paletinde yoktur; bütün raporları kapalı kategori palet başlığında
+// yoktur (eski karo sayfası 2026-11-12'de kalktı, §2 onunla gitti; sağ şerit 2026-11-23 tek iskeletle kalktı, §3 onunla). Yüklem ctx'te; bu test ctx'i sahteler ve yüzeylerin ona
 // UYDUĞUNU ölçer (ctx'in kendisi `report-gate.test.ts` + `ProtectedRoute.report.test.tsx`).
 //
 // Negatif sondalar (bir kezlik, geri alındı — sha commit mesajında): `ReportHubGrid`ten süzme
@@ -73,20 +73,6 @@ describe("Rapor kapısı — karo · şerit · palet", () => {
     closed = null;
     renderWithProviders(<ReportHubGrid title="Ön Muhasebe" tiles={financeReportTiles} />);
     for (const t of financeReportTiles) expect(screen.queryByText(t.title)).toBeNull();
-  });
-
-  it("§3 sağ şerit kapalı raporu listelemez (aynı yüklem)", async () => {
-    closed = [INTAKE];
-    const { ReportSideRail } = await import("./_components/ReportSideRail");
-    const { MemoryRouter } = await import("react-router-dom");
-    const { render } = await import("@testing-library/react");
-    render(
-      <MemoryRouter initialEntries={["/reports/finance/vat-summary"]}>
-        <ReportSideRail />
-      </MemoryRouter>,
-    );
-    expect(screen.queryByText(intakeTile.title)).toBeNull();
-    expect(screen.getByText(financeReportTiles.find((t) => t.to.endsWith("vat-summary"))!.title)).toBeInTheDocument();
   });
 
   it("§4 ⭐ palet: kapalı raporun girişi görünmez; kategorinin hepsi kapalıysa başlık girişi de görünmez", () => {

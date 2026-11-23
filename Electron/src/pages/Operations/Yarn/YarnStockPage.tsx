@@ -38,7 +38,7 @@ import { AlertTriangle, Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { RefreshButton } from "@/components/RefreshButton";
-import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
+import { ListFooter } from "@/components/layout/ListPage";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
 import { useMultiWarehouse } from "@/hooks/useWarehouses";
@@ -78,6 +78,7 @@ export function YarnStockPage() {
   const [detailRow, setDetailRow] = useState<YarnStockRow | null>(null);
   const [draft, setDraft] = useState<MovementDraft | null>(null);
   const [tab, setTab] = useState<"stok" | "lotlar">("stok");
+  const [creatingLot, setCreatingLot] = useState(false);
 
   const { search, itemId, warehouseId, onlyNonZero } = filters;
 
@@ -123,10 +124,17 @@ export function YarnStockPage() {
           <div className="flex flex-wrap gap-2">
             <RefreshButton queryKey="yarn" />
             <PermissionGate permission="yarn:write">
-              <Button onClick={() => setDraft({ itemId: itemId ?? null, warehouseId: warehouseId || null })}>
-                <Plus className="mr-1 h-4 w-4" />
-                Hareket Ekle
-              </Button>
+              {tab === "lotlar" ? (
+                <Button onClick={() => setCreatingLot(true)}>
+                  <Plus className="mr-1 h-4 w-4" />
+                  Lot Aç
+                </Button>
+              ) : (
+                <Button onClick={() => setDraft({ itemId: itemId ?? null, warehouseId: warehouseId || null })}>
+                  <Plus className="mr-1 h-4 w-4" />
+                  Hareket Ekle
+                </Button>
+              )}
             </PermissionGate>
           </div>
         }
@@ -139,55 +147,22 @@ export function YarnStockPage() {
             <PageTabsTrigger value="lotlar">Lotlar</PageTabsTrigger>
         </PageTabsList>
         <TabsContent value="lotlar" className={TAB_PANE}>
-          <YarnLotsPanel />
+          <YarnLotsPanel creating={creatingLot} onCreatingChange={setCreatingLot} />
         </TabsContent>
         <TabsContent value="stok" className={TAB_PANE}>
       <YarnFilterBar value={filters} onChange={applyFilters} tools={<DataTableTools table={table} compact exportName="İplik stoğu" />} />
 
-      {!q.isLoading && !q.isError && rows.length > 0 ? (
-        <>
-          <YarnStockTable table={table} onOpenMovements={setDetailRow} />
-          {negativeCount > 0 && (
-            <div className="m-4 flex shrink-0 items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-              <span>
-                Bu sayfada <b>{negativeCount}</b> satırın bakiyesi eksi. Bu bir sistem hatası değildir:
-                açılış ya da sayım girilmeden çıkış yazıldığında defter gerçekten eksiye düşer. Düzeltmek
-                için sayım sonucunu “Sayım düzeltmesi (+)” hareketi olarak girin.
-              </span>
-            </div>
-          )}
-        </>
-      ) : (
-      <ListBody>
-        {q.isLoading ? (
-          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
-        ) : q.isError ? (
-          <ListMessage>
-            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-              <p className="font-medium text-destructive">İplik stok listesi yüklenemedi.</p>
-              <p className="mt-1 text-muted-foreground">
-                Bu bir “stok yok” cevabı DEĞİLDİR — istek sunucuya ulaşamadı ya da reddedildi. Defter yerinde
-                duruyor; hareket yazmadan önce tekrar deneyin.
-              </p>
-              <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
-                Tekrar dene
-              </Button>
-            </div>
-          </ListMessage>
-        ) : rows.length === 0 ? (
-          <ListMessage>
-            <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-              {/* ⚠️ Cümle saf kuraldan gelir: varsayılan süzgeç (“yalnız bakiyesi
-                  olanlar”) AÇIK olduğu için boş liste “hiç kayıt yok” DEMEK
-                  DEĞİLDİR — bkz. `yarnEmptyStateMessage`. */}
-              {yarnEmptyStateMessage(filters)}
-            </div>
-          </ListMessage>
-        ) : null}
-      </ListBody>
-      )}
-      {rows.length > 0 && (
+      {/* ⚠️ Boş cümle saf kuraldan (`yarnEmptyStateMessage`): varsayılan filtre ("yalnız bakiyesi olanlar") AÇIK
+          olduğu için boş liste "hiç kayıt yok" DEMEK DEĞİLDİR. Hata satırı boş durumun önünde (DataTable). */}
+      <YarnStockTable
+        table={table}
+        onOpenMovements={setDetailRow}
+        isLoading={q.isLoading}
+        isError={q.isError}
+        errorText="İplik stok listesi yüklenemedi. Defter yerinde duruyor; hareket yazmadan önce tekrar deneyin."
+        onRetry={() => void q.refetch()}
+        emptyText={yarnEmptyStateMessage(filters)}
+      />
         <ListFooter
           loaded={rows.length}
           label={
@@ -198,6 +173,16 @@ export function YarnStockPage() {
               <span>
                 {total} satır{totalPages > 1 ? ` · sayfa ${page}/${totalPages}` : ""}
               </span>
+              {/* Eksi bakiye hata değildir (dosya başı): görünür kalır, açıklaması ipucunda. */}
+              {negativeCount > 0 && (
+                <span
+                  className="flex items-center gap-1 text-amber-700 dark:text-amber-400"
+                  title="Bu bir sistem hatası değildir: açılış ya da sayım girilmeden çıkış yazıldığında defter gerçekten eksiye düşer. Düzeltmek için sayım sonucunu “Sayım düzeltmesi (+)” hareketi olarak girin."
+                >
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  {negativeCount} satır eksi bakiye
+                </span>
+              )}
             </span>
           }
         >
@@ -215,7 +200,6 @@ export function YarnStockPage() {
             </div>
           )}
         </ListFooter>
-      )}
         </TabsContent>
       </Tabs>
 
