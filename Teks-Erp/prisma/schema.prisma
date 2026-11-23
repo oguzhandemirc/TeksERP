@@ -3241,6 +3241,33 @@ model WeavingOrder {
   @@map("weaving_orders")
 }
 
+/// KATALOG — ÖZEL DOKUMA İŞ EMRİ ŞABLONU ("Dokuma İş Emri oluştur" › Özel; terbiyedeki kısayol rotasının karşılığı).
+/// Yalnız formu ÖN-DOLDURUR: iş emri şablona bağlanmaz, şablon değişse iş emri değişmez. Her alan opsiyonel
+/// (boş = formun varsayılanı); doğrulama iş emri kaydında (`createWeavingOrder`). Sil = `isActive=false`.
+model WeavingOrderTemplate {
+  id              String                @id @default(uuid()) @db.Uuid
+  name            String                @db.VarChar(100)
+  description     String?               @db.VarChar(300)
+  itemId          String?               @db.Uuid
+  executionKind   WeavingExecutionKind?
+  subcontractorId String?               @db.Uuid
+  plannedM        Decimal?              @db.Decimal(12, 3)
+  notes           String?               @db.VarChar(500)
+  /// Seçicideki sıra (küçük önce; eşitlikte ad) — `Route.shortcutOrder` emsali.
+  sortOrder       Int                   @default(0)
+  isActive        Boolean               @default(true)
+
+  item          Item?          @relation("WeavingOrderTemplateItem", fields: [itemId], references: [id], onDelete: Restrict)
+  subcontractor Subcontractor? @relation("WeavingOrderTemplateSubcontractor", fields: [subcontractorId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([itemId])
+  @@index([subcontractorId])
+  @@map("weaving_order_templates")
+}
+
 /// AĞIZLIK DÜZENİ — dokumaya özgü FİZİK. Ad `Loom*` KALIR ve bu bilinçlidir:
 /// ağızlık açmak gerçekten dokuma tezgahının işidir; nötr bir ada çevirmek
 /// "her makinenin ağızlığı var" ima ederdi. Çözgülü örmede (raşel) alan NULL
@@ -4431,6 +4458,7 @@ model Item {
   customerColorAliases           CustomerItemColorAlias[]
   productRecipes                 ProductRecipe[]
   weavingOrders                  WeavingOrder[]              @relation("WeavingOrderItem")
+  weavingOrderTemplates          WeavingOrderTemplate[]      @relation("WeavingOrderTemplateItem")
   machineRuns                    MachineRun[]                @relation("MachineRunItem")
   rollReturns                    RollReturn[]
   swatchReductions               SwatchStockReduction[]
@@ -8981,6 +9009,7 @@ model Subcontractor {
   receipts                 SubcontractorReceipt[]    @relation("ReceiptSubcontractor")
   plannedSteps             WorkOrderStep[]           @relation("StepPlannedSubcontractor")
   weavingOrders            WeavingOrder[]            @relation("WeavingOrderSubcontractor")
+  weavingOrderTemplates    WeavingOrderTemplate[]    @relation("WeavingOrderTemplateSubcontractor")
   warpBeams                WarpBeam[]                @relation("WarpBeamSubcontractor")
   beamBodies               BeamBody[]                @relation("BeamBodySubcontractor")
   beamBodyEvents           BeamBodyEvent[]           @relation("BeamBodyEventSubcontractor")

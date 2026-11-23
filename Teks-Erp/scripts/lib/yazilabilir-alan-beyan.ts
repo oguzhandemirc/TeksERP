@@ -22,4 +22,5 @@ export const YAZILABILIR_ALAN_BEYANI: Readonly<Record<string, readonly string[]>
   station: ["allowAsWorkOrderStep", "appliesColor", "appliesProperty", "appliesQuality", "capturesWidth", "code", "consumesWarpBeam", "createdById", "defaultCategoryId", "defaultLabelCopies", "department", "inspectionEnabled", "isActive", "kind", "machineStopEnabled", "name", "producesWarpBeam", "scanAddAllowed", "scanNotSkippable", "type", "updatedById"],
   warehouse: ["address", "code", "isActive", "name", "notes"],
   warpSpec: ["code", "createdById", "endsCount", "endsPerDent", "isActive", "name", "notes", "reedNo", "reedWidthCm", "selvedgeEnds", "sequenceNote", "takeUpPct", "updatedById", "wastePct", "yarnItemId"],
+  weavingOrderTemplate: ["description", "executionKind", "isActive", "itemId", "name", "notes", "plannedM", "sortOrder", "subcontractorId"],
 };

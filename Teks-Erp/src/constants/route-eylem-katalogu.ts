@@ -23,6 +23,10 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/etkili-destek/talepler/:id/mesajlar": e("destek talebine yanıt yazdı", "destek talebine yanıt yazmaya çalıştı"),
   "POST /api/etkili-destek/talepler/:id/kapat": e("destek talebini kapattı", "destek talebini kapatmaya çalıştı"),
   "POST /api/etkili-destek/talepler/:id/okundu": e("destek talebini okundu işaretledi", "destek talebini okundu işaretlemeye çalıştı"),
+  // ── Özel dokuma iş emri şablonları (İE ayrımı 2026-11-23)
+  "POST /api/weaving-order-templates": e("özel dokuma şablonu tanımladı", "özel dokuma şablonu tanımlamaya çalıştı"),
+  "PATCH /api/weaving-order-templates/:id": e("bir özel dokuma şablonunu düzenledi", "bir özel dokuma şablonunu düzenlemeye çalıştı"),
+  "DELETE /api/weaving-order-templates/:id": e("bir özel dokuma şablonunu kaldırdı", "bir özel dokuma şablonunu kaldırmaya çalıştı"),
   // ── Devere F1 (2026-11-20) — denye önerisini iplik kartına uygular
   "POST /api/warp-specs/denier-deviation/apply": e("denye önerisini iplik kartına uyguladı", "denye önerisini iplik kartına uygulamaya çalıştı"),
   // ── Fason devere D1 (2026-11-17) — hesap ucu, yazmaz

@@ -100,6 +100,7 @@ const VARLIK_KAPILI: ReadonlyArray<{ dosya: string; eslem: RegExp }> = [
 // `requireDokumaEnabled`e devreder — §6i ölçer).
 const KAPILI: ReadonlyArray<{ dosya: string; mount: string; kimlik?: string; kapi?: string }> = [
   { dosya: "routes/weaving-order.routes.ts", mount: "/api/weaving-orders" },
+  { dosya: "routes/weaving-order-template.routes.ts", mount: "/api/weaving-order-templates" }, // İE ayrımı: özel dokuma şablonu
   { dosya: "routes/machine-run.routes.ts", mount: "/api/machine-runs" },
   { dosya: "routes/machine-doff.routes.ts", mount: "/api/machine-doffs" },
   { dosya: "routes/subcontractor-weaving.routes.ts", mount: "/api/subcontractor-weaving" }, // G2 fason dokuma
@@ -126,7 +127,7 @@ const DOKUMA_MODELLERI = ["weavingOrder", "machineRun", "doffEvent", "machineSto
 const DOKUMA_SERVISLERI = ["weaving-order.service", "machine-run.service", "machine-doff.service", "machine-stop.service", "machine-shift-stat.service", "machine-shift-seal.service", "machine-spec.service", "shift-definition.service"];
 
 /** Dokuma uçlarının mount adresleri — istemci kaynağında aranan metinler. */
-const DOKUMA_UC_METINLERI = ["/api/weaving-orders", "/api/machine-runs", "/api/machine-doffs", "/api/machine-stops", "/api/machine-shift-stats", "/api/reports/dokuma", "/api/machine-specs", "/api/shift-definitions", "/api/subcontractor-weaving"];
+const DOKUMA_UC_METINLERI = ["/api/weaving-orders", "/api/weaving-order-templates","/api/machine-runs", "/api/machine-doffs", "/api/machine-stops", "/api/machine-shift-stats", "/api/reports/dokuma", "/api/machine-specs", "/api/shift-definitions", "/api/subcontractor-weaving"];
 
 /**
  * §7 — dokuma uçlarını çağırmasına İZİN VERİLEN istemci dosyaları (repo köküne göre).
@@ -151,6 +152,8 @@ const IZINLI_ISTEMCI_DOSYALARI: ReadonlyArray<{ dosya: string; ekranKey: string;
   { dosya: "Electron/src/pages/Operations/WeavingOrders/service.ts", ekranKey: "operations/weaving-orders", izinler: ["weavingorder:read"], karo: "operations" },
   // Fason dokuma (G2p, 2026-09-14): aynı ekranın "Fason" bölümü — dokuma işi detayı, ayrı karo/route yok.
   { dosya: "Electron/src/pages/Operations/WeavingOrders/fason/service.ts", ekranKey: "operations/weaving-orders", izinler: ["weavingorder:read"], karo: "operations" },
+  // İE ayrımı (2026-11-23): "Dokuma İş Emri oluştur" (`/operations/weaving-orders/new`) özel şablonları — aynı ekran kökü.
+  { dosya: "Electron/src/pages/Operations/WeavingOrders/templates/service.ts", ekranKey: "operations/weaving-orders", izinler: ["weavingorder:read"], karo: "operations" },
   // Tezgâh Yükü (SY-3 L2): salt okuma `/api/weaving-orders/loom-load`; router `requireDokumaEnabled`, route `weavingorder:read`.
   { dosya: "Electron/src/pages/Operations/LoomLoad/service.ts", ekranKey: "operations/loom-load", izinler: ["weavingorder:read"], karo: "operations" },
   // Tezgah Duruşları (2026-09-14): iki izinden BİRİ açar — route `requireAnyPermission`, manifesto `requires` ikisini de anar.

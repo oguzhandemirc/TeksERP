@@ -21,6 +21,7 @@ import {
   ShoppingCart,
   Warehouse,
   Truck,
+  Spool,
   type LucideIcon,
 } from "lucide-react";
 import { allCommandEntries } from "@/components/layout/command-entries";
@@ -49,6 +50,7 @@ const STATIC: Record<string, TabMeta> = {
   "/warehouse": { title: "Depo", icon: Warehouse },
   "/shipping": { title: "Sevkiyat", icon: Truck },
   "/operations/work-orders/new": { get title() { return `Yeni ${TERIM.terbiyeIsEmri.tekil}`; }, icon: Factory },
+  "/operations/weaving-orders/new": { get title() { return `Yeni ${TERIM.dokumaIsEmri.tekil}`; }, icon: Spool },
   "/reports": { title: "Raporlar", icon: ScrollText },
   "/access": { title: "Yetkilendirme", icon: ShieldCheck },
   "/system": { title: "Sistem", icon: ServerCog },

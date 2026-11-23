@@ -41,7 +41,7 @@ export const NAV_SUBGROUPS: Readonly<Record<string, readonly NavSubgroupDef[]>> 
       key: "dokuma",
       // Dokumasız profilde (Gülkesim) grupta yalnız "Makine Duruşları" kalır — başlık da onu anlatır.
       label: (ctx) => (ctx.dokumaEnabled || ctx.tezgahEnabled ? "Dokuma" : "Makine Takibi"),
-      paths: [OPS("weaving-orders"), OPS("weaving-floor"), OPS("loom-load"), OPS("machine-stops"), OPS("loom-alarms")],
+      paths: [OPS("weaving-orders"), OPS("weaving-orders/new"), OPS("weaving-floor"), OPS("loom-load"), OPS("machine-stops"), OPS("loom-alarms")],
     },
     {
       key: "terbiye",
