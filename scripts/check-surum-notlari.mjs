@@ -374,6 +374,7 @@ console.log("\n§9 — Tırnaklı ETİKET ADI koddan mı (§9a kısa ad · §9b 
     { etiket: "İhracat (sipariş yönü)", sinif: "EMEKLI", gerekce: "Eski Sipariş/İptal Karnesi yön seçicisi (DestinationSelect); 0e3bf2ede eski sayfayı emekli etti." },
     { etiket: "Müşteriye (m)", sinif: "EMEKLI", gerekce: "Eski Fasoncu Karnesi Excel kolonu (Subcontract/scorecard.ts); 83de0c735 eski raporları panelden kaldırdı." },
     { etiket: "Destek Talepleri", sinif: "EMEKLI", gerekce: "supportOwnTicketsOnlyEnabled ayar kategorisi; eski destek talebi sistemi (3d-2) 2026-11-20'de söküldü." },
+    { etiket: "Süzgeci temizle", sinif: "EMEKLI", gerekce: "2026-11-23'te panelde \"süzgeç\" → \"filtre\" oldu; düğme artık \"Filtreyi temizle\" (geçmiş not değişmez)." },
   ];
 
   let dosyaSayisi = 0;

@@ -229,9 +229,8 @@ apiClient.interceptors.response.use(
     useServerStatusStore.getState().markReachable(readDateHeader(response.headers));
     // Sunucunun engel olmayan notu (`warnings`) her yazım yanıtında GENEL basılır —
     // servis zarfı soysa da; ekranı kendi gösteren/otomatik istek `serverWarnings` taşır.
-    if (shouldToastWarnings(response.config, response.data)) {
-      showServerWarnings(response.data as { warnings?: unknown }, Date.now(), { oncePerSession: isReportRead(response.config) });
-    }
+    // Rapor okumasının uyarısı oturumda bir kez (balon birikmesin).
+    if (shouldToastWarnings(response.config, response.data)) showServerWarnings(response.data as { warnings?: unknown }, Date.now(), { oncePerSession: isReportRead(response.config) });
     return response;
   },
   async (error) => {
