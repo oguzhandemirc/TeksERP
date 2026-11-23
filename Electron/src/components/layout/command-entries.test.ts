@@ -48,6 +48,7 @@ const EXEMPT: Record<string, string> = {
   "/system/update": "eski panel güncelleme adresi → /system/updates'e yönlendirir",
   "/system/server-updates": "eski sunucu güncellemeleri adresi → /system/updates'e yönlendirir",
   "/access/devices/:id": "detay yolu",
+  "/definitions/label-templates": "eski Etiket Tasarımı adresi → Etiketler › Düzenler'e yönlendirir",
 };
 
 // Kategori izni KURAL olarak `report:<kategori>`; istisna ADIYLA ve gerekçesiyle (listeye
