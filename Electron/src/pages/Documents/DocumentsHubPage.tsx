@@ -1,5 +1,5 @@
 import { PageHeader } from "@/components/layout/PageHeader";
-import { TERIM_AD } from "@/lib/terim";
+import { screenTitle } from "@/components/layout/screen-title";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { offEntryMode, useCanSeeOffModules } from "@/lib/off-module-visibility";
@@ -25,7 +25,7 @@ export function DocumentsHubPage() {
   return (
     <PageShell>
       <PageHeader
-        title={TERIM_AD.belgeler}
+        title={screenTitle("/documents")}
         description="Etiketler, belge şablonları ve tasarımcısı, serbest belgeler, refakat kartı"
       />
       <PageBody className="p-4 sm:p-6">

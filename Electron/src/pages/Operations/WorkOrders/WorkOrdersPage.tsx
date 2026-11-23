@@ -32,6 +32,7 @@ import type { BulkWorkOrder } from "./bulkDocs";
 import { useTargetQuantityEnabled } from "@/hooks/usePricingEnabled";
 import type { WorkOrder } from "./types";
 import { TERIM } from "@/lib/terim";
+import { screenTitle } from "@/components/layout/screen-title";
 import { buildPlaceFilters, isInvalidFilterValueError, stripPlaceFilters } from "./work-order-filters";
 
 // "Durum" kutusu (Durum + Şu an nerede + Özel) `WorkOrdersFilterRow`da.
@@ -139,7 +140,7 @@ export function WorkOrdersPage() {
   return (
     <PageShell>
       <PageHeader
-        title={TERIM.terbiyeIsEmri.cogul}
+        title={screenTitle("/operations/work-orders")}
         actions={
           <>
             <RefreshButton queryKey={QUERY_KEY} />

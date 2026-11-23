@@ -11,6 +11,7 @@ import { ArrowLeft, Copy, PanelRight, RotateCcw } from "lucide-react";
 import { PageShell } from "@/components/layout/PageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
+import { screenTitle } from "@/components/layout/screen-title";
 import { DataTable } from "@/components/data-table/DataTable";
 import { ToolbarToggle } from "@/components/data-table/ToolbarToggle";
 import { toast } from "sonner";
@@ -89,7 +90,7 @@ export function SenderTemplatesPage() {
   return (
     <PageShell>
       <PageHeader
-        title={DOCUMENT_TYPES_TITLE}
+        title={screenTitle("/operations/gelen-belgeler/sablonlar")}
         description="Tanıtılan belge tipleri. Tipe bağlanan gönderen cari, o tipte okunan taslakta gönderen önerisi olur. Satıra tıklayınca ayrıntı açılır; Düzenle fotoğrafsızdır; Sıfırla tipi unutturur, geri alınabilir."
         actions={
           <div className="flex flex-wrap gap-2">

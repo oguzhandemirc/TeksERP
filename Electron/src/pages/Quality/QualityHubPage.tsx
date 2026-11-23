@@ -1,5 +1,5 @@
 import { PageHeader } from "@/components/layout/PageHeader";
-import { TERIM_AD } from "@/lib/terim";
+import { screenTitle } from "@/components/layout/screen-title";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { offEntryMode, useCanSeeOffModules } from "@/lib/off-module-visibility";
@@ -24,7 +24,7 @@ export function QualityHubPage() {
   return (
     <PageShell>
       <PageHeader
-        title={TERIM_AD.kaliteGuvence}
+        title={screenTitle("/quality")}
         description="4 puan muayeneleri, lab testleri, sertifikalar ve muayene raporu"
       />
       <PageBody className="p-4 sm:p-6">

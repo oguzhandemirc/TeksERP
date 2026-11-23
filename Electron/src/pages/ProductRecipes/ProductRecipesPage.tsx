@@ -5,6 +5,7 @@ import { ProductRecipeFormDialog } from "./ProductRecipeFormDialog";
 import type { ProductRecipe } from "./types";
 import { type RecipeFormValues } from "./schema";
 import { TERIM } from "@/lib/terim";
+import { screenTitle } from "@/components/layout/screen-title";
 
 interface RecipePropertyCreate {
   propertyId: string;
@@ -40,7 +41,7 @@ function buildPayload(v: RecipeFormValues): RecipePayload {
 export function ProductRecipesPage() {
   return (
     <CrudPage<ProductRecipe>
-      title={`${TERIM.terbiyeIsEmri.tekil} Şablonları`}
+      title={screenTitle("/definitions/product-recipes")}
       description={`Kumaş + renk + özellik + en + rota — ${TERIM.terbiyeIsEmri.tekilKucuk} açılışını hızlandıran hazır şablonlar.`}
       entityName={`${TERIM.terbiyeIsEmri.tekil} Şablonu`}
       importEntity="productRecipe"

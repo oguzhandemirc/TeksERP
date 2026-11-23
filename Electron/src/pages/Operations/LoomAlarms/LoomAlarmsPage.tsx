@@ -7,7 +7,7 @@
 // bayrak kapalıysa sunucu 403 `LOOM_ALARM_DISABLED` → sayfa "kapalı" der.
 // =============================================================================
 import { useMemo, useState } from "react";
-import { TERIM_AD } from "@/lib/terim";
+import { screenTitle } from "@/components/layout/screen-title";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -58,7 +58,7 @@ export function LoomAlarmsPage() {
   return (
     <PageShell>
       <PageHeader
-        title={TERIM_AD.tezgahAlarmlari}
+        title={screenTitle("/operations/loom-alarms")}
         description="Hedef süreyi aşan duruşlar: kim üstlendi, ne kadar sürdü, patrona iletildi mi"
         actions={<RefreshButton queryKey={LIST_KEY} />}
       />

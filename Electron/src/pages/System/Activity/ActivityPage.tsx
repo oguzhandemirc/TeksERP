@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { TERIM_AD } from "@/lib/terim";
+import { screenTitle } from "@/components/layout/screen-title";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { RelocatedToolStrip } from "@/pages/Reports/_v2/RelocatedTools";
@@ -80,7 +80,7 @@ export function ActivityPage() {
   return (
     <PageShell>
       <PageHeader
-        title={TERIM_AD.etkinlikGunlugu}
+        title={screenTitle("/system/activity")}
         description="Kim ne yaptı — günlük dille işlemler; ayrıntıda teknik iz"
         actions={
           <>

@@ -42,6 +42,7 @@ import { WeavingOrderDetailSheet } from "./WeavingOrderDetailSheet";
 import { WEAVING_ORDERS_QUERY_KEY, WEAVING_ORDER_OVERVIEW_QUERY_KEY, useWeavingOrderMutations } from "./useWeavingOrderMutations";
 import { WEAVING_STATUSES, WEAVING_STATUS_META, type WeavingOrder } from "./types";
 import { TERIM } from "@/lib/terim";
+import { screenTitle } from "@/components/layout/screen-title";
 import type { WeavingFormPreset, WeavingNavState } from "@/pages/Operations/WorkOrders/oie/nav";
 
 export const FILTERS: FilterDef[] = [
@@ -116,7 +117,7 @@ export function WeavingOrdersPage() {
   return (
     <PageShell>
       <PageHeader
-        title={TERIM.dokumaIsEmri.cogul}
+        title={screenTitle("/operations/weaving-orders")}
         description="Ne dokunacak, ne kadar, kim dokuyacak. Koşum ve top indirme tabletten; 'devam ediyor' tezgahta koşum var demektir."
         actions={<HeaderActions onNew={() => setFormTarget("new")} />}
       />

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { TERIM_AD } from "@/lib/terim";
+import { screenTitle } from "@/components/layout/screen-title";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Archive, Database, Clock } from "lucide-react";
@@ -70,7 +70,7 @@ export function ActivityArchivePage() {
   return (
     <PageShell>
       <PageHeader
-        title={TERIM_AD.etkinlikArsivi}
+        title={screenTitle("/system/archive")}
       />
 
       <PageBody>

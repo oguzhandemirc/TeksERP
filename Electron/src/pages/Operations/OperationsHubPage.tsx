@@ -1,5 +1,6 @@
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
+import { screenTitle } from "@/components/layout/screen-title";
 import { HubCard } from "@/components/hub/HubCard";
 import { HubSubgroups } from "@/components/hub/HubSubgroups";
 import type { NavSubgroup } from "@/components/layout/nav-subgroups";
@@ -24,7 +25,7 @@ export function OperationsHubPage({ section }: Props) {
 
   return (
     <PageShell>
-      <PageHeader title={single?.title ?? "Operasyon"} />
+      <PageHeader title={screenTitle(single?.route ?? "/operations")} />
       <PageBody className="flex flex-col gap-8 px-4 pb-6 pt-2 md:px-6">
         {!ready ? <HubSkeleton count={9} /> : null}
         {ready &&

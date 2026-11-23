@@ -62,6 +62,7 @@ const STATIC: Record<string, TabMeta> = {
   "/reports/subcontract": { title: "Fason Raporları", icon: Handshake },
   "/reports/customer": { title: "Müşteri Raporları", icon: Users },
   "/reports/audit": { title: "Denetim Raporları", icon: History },
+  "/reports/maliyet": { title: "Maliyet Raporları", icon: TrendingUp },
   // Karo adı bağlama bağlı (`titleWhen`); sekmede bağlam yok → aynı rejimden (dokuma kapalı "Makine Duruşları").
   "/operations/machine-stops": { get title() { return machineStopsTitle({ dokumaEnabled: terimDokumaRejimi() }); }, icon: AlertOctagon },
 };

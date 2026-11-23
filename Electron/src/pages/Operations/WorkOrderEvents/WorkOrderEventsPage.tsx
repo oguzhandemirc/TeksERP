@@ -18,6 +18,7 @@ import { workOrderStatusLabels, type WorkOrderStatus } from "@/types/enums";
 import { lookupWorkOrdersForEvents, type LookupHit } from "../WorkOrders/events";
 import { WorkOrderEventsPanel } from "../WorkOrders/WorkOrderEventsPanel";
 import { TERIM } from "@/lib/terim";
+import { screenTitle } from "@/components/layout/screen-title";
 import { useCustomerCodeChoice } from "@/components/scanner/useCustomerCodeChoice";
 
 export function WorkOrderEventsPage() {
@@ -35,7 +36,7 @@ export function WorkOrderEventsPage() {
   return (
     <PageShell>
       <PageHeader
-        title={`${TERIM.terbiyeIsEmri.tekil} Hareketleri`}
+        title={screenTitle("/operations/work-order-events")}
         description={`${TERIM.terbiyeIsEmri.cumleBasi.yalin} numarası ya da top barkodu ile ${TERIM.terbiyeIsEmri.cekimKucuk.ilgi} bütün hareketleri`}
       />
       <PageBody className="flex flex-col p-6">

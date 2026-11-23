@@ -17,6 +17,7 @@ import type { WorkOrder } from "./types";
 import { toastServerSuccess } from "@/lib/serverNotes";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { TERIM } from "@/lib/terim";
+import { screenTitle } from "@/components/layout/screen-title";
 import { IsEmriGiris, type OieStart } from "./oie/IsEmriGiris";
 import { newWorkOrderTitle } from "./oie/nav";
 import { toast } from "sonner";
@@ -155,7 +156,7 @@ export function WorkOrderFormPage() {
   return (
     <PageShell>
       <PageHeader
-        title={isEdit ? `${TERIM.terbiyeIsEmri.cekim.belirtme} Düzenle` : newWorkOrderTitle(seed?.oie)}
+        title={isEdit ? `${TERIM.terbiyeIsEmri.cekim.belirtme} Düzenle` : seed?.oie?.kind === "shortcut" ? newWorkOrderTitle(seed.oie) : screenTitle("/operations/work-orders/new")}
         statusLine={isEdit ? wo?.workOrderNumber : undefined}
         description={isEdit ? undefined : "Sipariş bağla ya da stoğa üret — rota ve hedefi belirle."}
         parent={backTo}

@@ -1,4 +1,5 @@
 import { SettingsSurfacePage } from "./SettingsSurfacePage";
+import { screenTitle } from "@/components/layout/screen-title";
 
 /**
  * ÖZELLİK ANAHTARLARI — fabrika yetkilisinin düzenlediği DAVRANIŞ bayrakları
@@ -23,5 +24,5 @@ import { SettingsSurfacePage } from "./SettingsSurfacePage";
  * artık onu yalnız satıcı görür.
  */
 export function FeatureFlagsPage() {
-  return <SettingsSurfacePage surface="flags" title="Özellik Anahtarları" />;
+  return <SettingsSurfacePage surface="flags" title={screenTitle("/system/feature-flags")} />;
 }

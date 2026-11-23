@@ -7,6 +7,7 @@ import { RefreshButton } from "@/components/RefreshButton";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
+import { screenTitle } from "@/components/layout/screen-title";
 import { DESIGNER_DISABLED_TITLE, designerSettingPath, designerSettingTrail, isDocumentDesignerEnabled } from "./designer-flag";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { PageTabsList, PageTabsTrigger } from "@/components/layout/PageTabs";
@@ -66,7 +67,7 @@ export function DocumentDesignerPage() {
   return (
     <PageShell className="h-full">
       <PageHeader
-        title={DOCUMENT_DESIGNER_TITLE}
+        title={screenTitle("/definitions/document-designer")}
         description={isList ? "Belge şablonları: Sistem tasarımını kopyalayıp düzenleyin, sürümleri karşılaştırın, yayınlayın ve atayın." : "Belgeyi sürükle-bırak bloklar ve stil paneliyle sayfa üzerinde tasarlayın."}
         actions={isList && enabled ? <RefreshButton queryKey={["document-templates"]} /> : undefined}
       />

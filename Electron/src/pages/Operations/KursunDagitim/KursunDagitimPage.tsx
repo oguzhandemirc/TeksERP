@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { TERIM_AD } from "@/lib/terim";
+import { screenTitle } from "@/components/layout/screen-title";
 import type { DragEndEvent } from "@dnd-kit/core";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageBody, PageShell } from "@/components/layout/PageShell";
@@ -131,7 +131,7 @@ export function KursunDagitimPage() {
   return (
     <PageShell>
       <PageHeader
-        title={TERIM_AD.kursunPlanlama}
+        title={screenTitle("/operations/kursun-dagitim")}
         description="Havuzdaki işleri sırala ve kurşun makinelerine dağıt; makineler arasında taşı."
         actions={
           <div className="flex flex-wrap items-center gap-2">
