@@ -75,12 +75,16 @@ describe("Siparişler — özet şerit yerleşimi", () => {
     expect(getByTestId("orders-stats-view").className).toContain("ml-auto");
   });
 
-  it("⭐ sayfada özet şerit FİLTRE SATIRININ ÜSTÜNDE", () => {
+  // 2026-11-23 kullanıcı: özet sayılar ayrı satır olmaz, alt çubukta (eski ① "filtrelerin üstünde" GEÇERSİZ).
+  it("⭐ sayfada özet şerit ALT ÇUBUKTA (DataTable footerSummary), ayrı bant yok", () => {
     const stats = PAGE_SRC.indexOf("<OrdersStats");
+    const footer = PAGE_SRC.indexOf("footerSummary={");
     const filters = PAGE_SRC.indexOf("<OrdersFilterRow");
     expect(stats).toBeGreaterThan(-1);
-    expect(filters).toBeGreaterThan(-1);
-    expect(stats).toBeLessThan(filters);
+    expect(footer).toBeGreaterThan(-1);
+    expect(stats).toBeGreaterThan(footer);
+    expect(stats).toBeGreaterThan(filters);
+    expect(PAGE_SRC).not.toMatch(/<ListBand\b/);
   });
 
   it("⭐ şerit sağa dayalı sarmalayıcı TAŞIMAZ (justify-end geri gelmesin)", () => {

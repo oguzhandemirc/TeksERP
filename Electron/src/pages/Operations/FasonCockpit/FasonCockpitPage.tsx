@@ -3,12 +3,11 @@
 import { useMemo, useState } from "react";
 import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBand, ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { ListBand, ListFooter, ListToolbar } from "@/components/layout/ListPage";
 import { DataTable } from "@/components/data-table/DataTable";
 import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { useLocalTable } from "@/hooks/useLocalTable";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Button } from "@/components/ui/button";
 import { RefreshButton } from "@/components/RefreshButton";
 import { FASON_COCKPIT_QUERY_KEY, listCockpit } from "./service";
 import { CockpitFilters } from "./CockpitFilters";
@@ -43,50 +42,30 @@ export function FasonCockpitPage() {
         description="Fasondaki bütün açık sevkler: ne zaman dönmeli, kaç gün gecikti, fasonda ne kaldı."
         actions={<RefreshButton queryKey={FASON_COCKPIT_QUERY_KEY} extraKeys={[DEVERE_DELAY_QUERY_KEY]} />}
       />
+      {/* Bant: devere gecikmeleri paneli + firma kısayolları (firma başına sayı; tıklayınca firma filtresi). Toplam sayılar alt çubukta. */}
       <ListBand>
-        <CockpitSummaryStrip summary={summary} />
         <DevereDelayBand subcontractorId={filter.subcontractorId} />
-      </ListBand>
-      <ListToolbar>
         <CockpitFirmStrip summary={summary} selectedId={filter.subcontractorId} onSelect={(id) => setFilter({ ...filter, subcontractorId: id })} />
-        <div className="flex flex-wrap items-center gap-2">
-          <CockpitFilters filter={filter} onChange={setFilter} />
-          <div className="ml-auto flex items-center gap-1.5">
-            <DataTableTools table={table} compact exportName="Fason kokpiti" />
-          </div>
+      </ListBand>
+      <ListToolbar className="flex-row flex-wrap items-center">
+        <CockpitFilters filter={filter} onChange={setFilter} />
+        <div className="ml-auto flex items-center gap-1.5">
+          <DataTableTools table={table} compact exportName="Fason kokpiti" />
         </div>
       </ListToolbar>
-      {!list.isLoading && items.length > 0 ? (
-        <DataTable
-          table={table}
-          isError={list.isError}
-          onRetry={() => void list.refetch()}
-          rowClassName={cockpitRowClass}
-          loadMore={{ hasMore: Boolean(list.hasNextPage), isFetchingMore: list.isFetchingNextPage, onLoadMore: () => void list.fetchNextPage() }}
-          exportName="Fason kokpiti"
-        />
-      ) : (
-      <ListBody>
-        {list.isLoading ? (
-          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
-        ) : list.isError && items.length === 0 ? (
-          <ListMessage>
-            <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-              <p className="font-medium text-destructive">Liste yüklenemedi.</p>
-              <p className="mt-1 text-muted-foreground">Bu bir “açık sevk yok” cevabı değildir — istek reddedildi ya da sunucuya ulaşılamadı.</p>
-              <Button variant="outline" size="sm" className="mt-3" onClick={() => void list.refetch()}>Tekrar dene</Button>
-            </div>
-          </ListMessage>
-        ) : items.length === 0 ? (
-          <ListMessage>
-            <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-              Bu filtreye uyan açık fason sevki yok. Termin, sevkte girilir ya da firmanın/süreç türünün dönüş süresinden gelir.
-            </div>
-          </ListMessage>
-        ) : null}
-      </ListBody>
-      )}
-      <ListFooter loaded={items.length} total={summary?.openDispatchCount} hasMore={Boolean(list.hasNextPage)} isFetchingMore={list.isFetchingNextPage} />
+      <DataTable
+        table={table}
+        isLoading={list.isLoading}
+        isError={list.isError}
+        onRetry={() => void list.refetch()}
+        errorText="Bu bir “açık sevk yok” cevabı değildir — istek reddedildi ya da sunucuya ulaşılamadı."
+        emptyText="Bu filtreye uyan açık fason sevki yok."
+        emptyDescription="Termin, sevkte girilir ya da firmanın/süreç türünün dönüş süresinden gelir."
+        rowClassName={cockpitRowClass}
+        loadMore={{ hasMore: Boolean(list.hasNextPage), isFetchingMore: list.isFetchingNextPage, onLoadMore: () => void list.fetchNextPage() }}
+        exportName="Fason kokpiti"
+      />
+      <ListFooter loaded={items.length} total={summary?.openDispatchCount} hasMore={Boolean(list.hasNextPage)} isFetchingMore={list.isFetchingNextPage} summary={<CockpitSummaryStrip summary={summary} />} />
     </PageShell>
   );
 }

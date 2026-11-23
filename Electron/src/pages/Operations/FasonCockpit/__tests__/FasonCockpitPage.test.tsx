@@ -63,7 +63,8 @@ describe("Fason Kokpiti", () => {
   it("⭐ filtre sunucuda: durum düğmesi ve firma çipi `filter[...]` olarak gider", async () => {
     renderWithProviders(<FasonCockpitPage />);
     await screen.findByText("FS-001");
-    fireEvent.click(screen.getByRole("button", { name: "Gecikenler" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Termin:/ }));
+    fireEvent.click(await screen.findByRole("option", { name: "Gecikenler" }));
     await waitFor(() => expect(get.mock.calls.at(-1)![1]).toEqual({ params: { limit: "50", "filter[state]": "OVERDUE" } }));
     fireEvent.click(within(screen.getByLabelText("Firma şeridi")).getByRole("button", { pressed: false }));
     await waitFor(() => expect(get.mock.calls.at(-1)![1].params["filter[subcontractorId]"]).toBe("f1"));
@@ -72,7 +73,8 @@ describe("Fason Kokpiti", () => {
   it("hata 'açık sevk yok' gibi gösterilmez", async () => {
     get.mockRejectedValue(new Error("403"));
     renderWithProviders(<FasonCockpitPage />);
-    expect(await screen.findByText("Liste yüklenemedi.")).toBeInTheDocument();
+    expect(await screen.findByText("Liste yüklenemedi")).toBeInTheDocument();
+    expect(screen.queryByText("Bu filtreye uyan açık fason sevki yok.")).toBeNull();
   });
 
   it("gecikme sınıfı sunucu günlerinden", () => {

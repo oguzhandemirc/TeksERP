@@ -15,13 +15,14 @@ import { Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { PermissionGate } from "@/components/PermissionGate";
 import { RefreshButton } from "@/components/RefreshButton";
-import { FilterBar } from "@/components/data-table/FilterBar";
+import { FilterRow } from "@/components/data-table/filter-row/FilterRow";
+import { splitDefFilters } from "@/components/data-table/filter-row/def-row-filters";
+import type { RowFilter } from "@/components/data-table/filter-row/row-filter";
+import { ListFooter } from "@/components/layout/ListPage";
 import { machineStopService } from "./service";
 import { StopsTable, useStopsTable } from "./StopsTable";
-import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { StopEntryDialog } from "./StopEntryDialog";
 import { StopReasonDialog } from "./StopReasonDialog";
 import { StopCloseDialog, StopRevokeDialog } from "./StopSimpleDialogs";
@@ -33,8 +34,27 @@ import { todayKey } from "./types";
 import { machineNoun, machineStopsTitle } from "./stop-regime";
 import { useOperationsVisibilityContext } from "@/pages/Operations/useOperationsVisibility";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
-import { ListSearchBox } from "@/components/data-table/ListSearchBox";
 import { useListSearch } from "@/hooks/useListSearch";
+
+/** Satırda duran sunucu filtreleri (sıra bu). */
+const STOP_FILTER_KEYS = ["machineId", "stationKind", "scope", "shiftInstanceId"];
+
+/** Fabrika günü kutusu — URL'siz yerel durum; ✕ bugüne döner, gün-serbest kapsamda pasif. */
+function dayRowFilter(day: string, setDay: (v: string) => void, dayFree: boolean): RowFilter {
+  return {
+    id: "day",
+    label: "Fabrika günü",
+    keys: [],
+    active: day !== todayKey(),
+    onClear: () => setDay(todayKey()),
+    render: () => (
+      <>
+        <span className="pl-2.5 text-muted-foreground">Gün:</span>
+        <DatePickerInput id="stops-day" aria-label="Fabrika günü" value={day} onChange={(v) => setDay(v || todayKey())} disabled={dayFree} className="h-7 w-40 border-0 bg-transparent px-1.5 text-xs shadow-none" />
+      </>
+    ),
+  };
+}
 
 export function MachineStopsPage() {
   const [day, setDay] = useState(todayKey());
@@ -47,6 +67,7 @@ export function MachineStopsPage() {
   const rows = useMemo(() => query.data?.data ?? [], [query.data]);
   const { dokumaEnabled } = useOperationsVisibilityContext();
   const filters = useStopFilters(rows, dokumaEnabled);
+  const rowFilters = useMemo(() => [dayRowFilter(day, setDay, dayFree), ...splitDefFilters(filters, STOP_FILTER_KEYS).primary], [day, dayFree, filters]);
   const noun = machineNoun({ dokumaEnabled });
   const actions = useStopActions(setDialog);
   const { active, labelOf } = useStopReasonPresets();
@@ -74,24 +95,17 @@ export function MachineStopsPage() {
           </div>
         }
       />
-      {/* Gün seçici süzgeç şeridinin İÇİNDE (`leading`): şeridin iç boşluğunu ve alt çizgisini paylaşır —
-          ayrı satırda içerik alanının sol kenarına yapışıyordu (QA 2026-11-03). */}
-      <FilterBar
-        filters={filters}
-        leading={
-          <div className="flex items-center gap-2">
-            <Label htmlFor="stops-day" className="text-xs">Fabrika günü</Label>
-            <DatePickerInput id="stops-day" value={day} onChange={setDay} disabled={dayFree} className="h-7 w-40 text-xs" />
-          </div>
-        }
-        trailing={
-          <div className="flex items-center gap-1.5">
-            <ListSearchBox value={search} onSearchChange={setSearch} searchHint={`${noun} kodu/adı ya da sebep kodu ara`} />
-            <DataTableTools table={table} compact exportName={`${noun} duruşları`} />
-          </div>
-        }
+      {/* Tek satır: [Ara][Gün][makine · istasyon türü · kapsam · vardiya] … [Sütunlar][Dışa aktar]. Gün kutusu
+          URL'siz yerel durum; ✕ bugüne döner. Gün-serbest kapsamda kutu pasif (sunucu günü yok sayar). */}
+      <FilterRow
+        search={search}
+        onSearchChange={setSearch}
+        searchHint={`${noun} kodu/adı ya da sebep kodu ara`}
+        primary={rowFilters}
+        tools={{ table, exportName: `${noun} duruşları` }}
       />
       <StopsTable table={table} isLoading={query.isLoading} isError={query.isError} onRetry={() => void query.refetch()} noun={noun} />
+      {!query.isLoading && !query.isError && <ListFooter loaded={rows.length} />}
       {/* Diyaloglar KOŞULLU mount: her açılış taze bileşen ve taze `clientToken`. */}
       {dialog?.kind === "entry" && <StopEntryDialog presets={active} isPending={open.isPending} onClose={closeDialog} onConfirm={(b) => open.mutateAsync(b)} stampError={stampError} noun={noun} />}
       {(dialog?.kind === "classify" || dialog?.kind === "reclassify") && (

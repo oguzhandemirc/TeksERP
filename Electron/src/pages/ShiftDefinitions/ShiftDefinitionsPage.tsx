@@ -13,8 +13,8 @@ import { Plus } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
+import { ListFooter, ListToolbar } from "@/components/layout/ListPage";
+import { ToolbarToggle } from "@/components/data-table/ToolbarToggle";
 import { PermissionGate } from "@/components/PermissionGate";
 import { RefreshButton } from "@/components/RefreshButton";
 import { DataTable } from "@/components/data-table/DataTable";
@@ -77,14 +77,13 @@ export function ShiftDefinitionsPage() {
         }
       />
       {/* Arama sunucuda (kod/ad); arşiv anahtarı + standart tablo araçları. */}
-      <div data-list-surface="toolbar" className="flex shrink-0 items-center gap-2 border-b px-3 py-2">
-        <Switch id="shift-inactive" checked={includeInactive} onCheckedChange={setIncludeInactive} />
-        <Label htmlFor="shift-inactive">Arşivdekileri göster</Label>
+      <ListToolbar className="flex-row items-center">
+        <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Vardiya kodu ya da adı ara" />
+        <ToolbarToggle checked={includeInactive} onCheckedChange={setIncludeInactive} label="Arşivdekileri göster" />
         <div className="ml-auto flex items-center gap-1.5">
-          <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Vardiya kodu ya da adı ara" />
           <DataTableTools table={table} compact exportName="Vardiya tanımları" />
         </div>
-      </div>
+      </ListToolbar>
       <DataTable<ShiftDefinition>
         table={table}
         isLoading={query.isLoading}
@@ -94,6 +93,7 @@ export function ShiftDefinitionsPage() {
         emptyText={term ? "Aramaya uyan vardiya yok." : "Henüz vardiya tanımı yok."}
         exportName="Vardiya tanımları"
       />
+      {!query.isLoading && !query.isError && <ListFooter loaded={rows.length} />}
       {/* Diyaloglar KOŞULLU mount: her açılış taze durum. */}
       {dialog?.kind === "form" && (
         <ShiftDefinitionFormDialog

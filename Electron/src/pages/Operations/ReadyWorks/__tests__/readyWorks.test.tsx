@@ -107,10 +107,12 @@ describe("Sevke Hazır İşler", () => {
     // Sunucu süzgeci yok sayıp READY satırı dönse bile istemci onu GİZLEMEZ (süzme sunucuda).
     renderWithProviders(<ReadyWorksPage />);
     await screen.findByText("İE-001");
-    fireEvent.click(screen.getByRole("button", { name: "Kısmi" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Durum:/ }));
+    fireEvent.click(await screen.findByRole("option", { name: "Kısmi" }));
     await waitFor(() => expect(getList).toHaveBeenLastCalledWith(expect.objectContaining({ states: ["PARTIAL"] })));
     expect(await screen.findByText("İE-001")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Tümü" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Durum:/ }));
+    fireEvent.click(await screen.findByRole("option", { name: "Tümü" }));
     await waitFor(() => expect(getList).toHaveBeenLastCalledWith(expect.objectContaining({ states: [] })));
     expect(statesForFilter("ALL")).toEqual([]);
     expect(readyWorksQueryString({ groupBy: "customer", states: [] })).toBe("groupBy=customer");

@@ -48,7 +48,7 @@ describe("İçerideki İşler", () => {
     renderWithProviders(<ConsignedWorkPage />);
     expect(await screen.findByText("Gül Perde")).toBeInTheDocument();
     expect(screen.getAllByText("8 top").length).toBeGreaterThanOrEqual(1);
-    // Toplam şeridi ListBand'de: adet + birim ayrı, metre ortak gösterim biçiminde (gruplamasız).
+    // Toplam şeridi alt çubukta (ListFooter summary): adet + birim ayrı, metre ortak gösterim biçiminde (gruplamasız).
     const band = screen.getByRole("group", { name: "İçerideki işler özeti" });
     expect(band.textContent).toContain("İçeride (toplam)8top");
     expect(band.textContent).toContain("1170 m");
@@ -62,10 +62,10 @@ describe("İçerideki İşler", () => {
     renderWithProviders(<ConsignedWorkPage />);
     await screen.findByText("Gül Perde");
     expect(get).toHaveBeenLastCalledWith(false, undefined);
-    fireEvent.click(screen.getByRole("button", { name: "Yalnız sevke hazır" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Yalnız sevke hazır" }));
     await waitFor(() => expect(get).toHaveBeenLastCalledWith(true, undefined));
     expect(await screen.findByText("Hazırsız Müşteri")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Yalnız sevke hazır" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("checkbox", { name: "Yalnız sevke hazır" })).toBeChecked();
   });
 
   it("hücre bağlantısı kovanın sekmesine sahip filtreyiyle gider", async () => {
@@ -95,7 +95,7 @@ describe("İçerideki İşler", () => {
     unmount();
     get.mockRejectedValueOnce(new Error("403"));
     renderWithProviders(<ConsignedWorkPage />);
-    await waitFor(() => expect(screen.getByText("Liste yüklenemedi.")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Liste yüklenemedi")).toBeInTheDocument());
   });
 
   it("satır tıklaması en kalabalık kovaya gider; bağlantı includeFire taşır", () => {

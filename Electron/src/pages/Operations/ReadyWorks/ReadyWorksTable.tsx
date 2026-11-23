@@ -1,5 +1,5 @@
 // Sevke Hazır İşler — araç çubuğu (sekme + durum süzgeci), özet şeridi ve ilerleme hücresi (sunum; veri sayfada).
-import { Button } from "@/components/ui/button";
+import { SelectChip } from "@/components/data-table/filter-row/SelectChip";
 import { formatMeasure, formatNumber } from "@/lib/format";
 import { BandStats } from "@/components/layout/ListPage";
 import { cn } from "@/lib/utils";
@@ -7,6 +7,7 @@ import type { ReadyWorkRow, ReadyWorkSummary, ReadyWorkUnit } from "./service";
 import { readinessPercent, STATE_FILTERS, type ReadyStateFilter, type ReadyWorksTab } from "./ready-works-view";
 
 const fmtM = (m: number) => `${formatNumber(m, 1)} m`;
+const STATE_OPTIONS = STATE_FILTERS.map((f) => ({ value: f.key, label: f.label }));
 
 export function SummaryStrip({ s }: { s: ReadyWorkSummary }) {
   return (
@@ -66,19 +67,15 @@ export function ReadyWorksToolbar({
           </button>
         ))}
       </div>
-      <div className="inline-flex gap-1" role="group" aria-label="Durum filtresi">
-        {STATE_FILTERS.map((f) => (
-          <Button
-            key={f.key}
-            size="sm"
-            variant={f.key === stateFilter ? "default" : "outline"}
-            aria-pressed={f.key === stateFilter}
-            onClick={() => onStateFilter(f.key)}
-          >
-            {f.label}
-          </Button>
-        ))}
-      </div>
+      {/* Varsayılan "Hazır" — kutu boş sayılır (resetValue); ✕ Hazır'a döner. */}
+      <SelectChip<ReadyStateFilter>
+        id="ready-state"
+        label="Durum"
+        value={stateFilter}
+        options={STATE_OPTIONS}
+        resetValue="READY"
+        onChange={(v) => onStateFilter(v ?? "READY")}
+      />
     </div>
   );
 }
