@@ -88,8 +88,8 @@ export function DocumentPreview({
     // → `h-full` orada sıfıra çöker. Bu yüzden taban `70vh`, lg'de `h-full`.
     <div className="flex h-[70vh] min-h-0 flex-col rounded-md border bg-muted/30 lg:h-full">
       <div className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-1.5">
-        <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          Önizleme — örnek veri (gerçek baskı çıktısı)
+        <span className="text-[11px] font-medium text-muted-foreground" title="Önizleme örnek veriyle gerçek baskı çıktısıdır.">
+          Önizleme
         </span>
         <span className="text-[11px] text-muted-foreground">
           {pageSize} · {dim.w}×{dim.h} mm
@@ -190,7 +190,9 @@ function PagedPreview({
         </div>
       )}
       <div ref={boxRef} className="min-h-0 flex-1 overflow-auto p-3">
+        {/* B9: kâğıt bölmede ortalı ve gölgeli — zeminden ayrışsın, sağda ölü boşluk kalmasın. */}
         <div
+          className="mx-auto shadow-md ring-1 ring-black/10"
           style={{
             width: contentW * scale,
             height: (height ?? contentH) * scale,

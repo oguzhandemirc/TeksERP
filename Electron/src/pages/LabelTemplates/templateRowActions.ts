@@ -49,6 +49,17 @@ export const TEMPLATE_ROW_WRITE_ACTIONS: readonly TemplateRowActionKey[] = [
   "hardDelete",
 ] as const;
 
+/** Satırda görünen düğmeler (B1): sık iş olan baskı + düzenleme; kalanı "⋯" menüsünde. */
+export const TEMPLATE_ROW_INLINE_ACTIONS: readonly TemplateRowActionKey[] = ["print", "edit"] as const;
+
+/** "⋯" menüsünün maddeleri — yalnız anlamlı olanlar, kanonik sırada; yazma maddeleri izinle düşer. */
+export function resolveTemplateMenuActions(row: TemplateRowState, canWrite: boolean): TemplateRowActionKey[] {
+  return resolveTemplateRowActions(row)
+    .filter((s) => s.applicable && !TEMPLATE_ROW_INLINE_ACTIONS.includes(s.key))
+    .filter((s) => canWrite || !TEMPLATE_ROW_WRITE_ACTIONS.includes(s.key))
+    .map((s) => s.key);
+}
+
 export interface TemplateRowActionSlot {
   key: TemplateRowActionKey;
   /** Bu satırda anlamlı mı? false → yer tutucu (görünmez ama yer kaplayan) düğme. */

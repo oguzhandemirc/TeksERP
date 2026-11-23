@@ -24,15 +24,6 @@ export const documentTiles: DocumentTile[] = [
     permissionAny: ["station:read", "label-template:read"],
   },
   {
-    // UX-2: bağımsız etiket tasarım ekranı menüsüzdü (UX-1 tek KIRMIZI); içerik Etiketler › Düzenler sekmesiyle aynı.
-    key: "label-templates",
-    title: "Etiket Tasarımı",
-    description: "Etiket düzeni havuzu — alan yerleşimi ve uzman yazıcı kodu (tam ekran)",
-    icon: LayoutTemplate,
-    to: "/definitions/label-templates",
-    permission: "label-template:read",
-  },
-  {
     key: "document-templates",
     title: "Belge Şablonları",
     description: "İrsaliye/çeki içeriği: bölüm aç-kapa, başlık, künye, imza, alt not (canlı önizleme)",

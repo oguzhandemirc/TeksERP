@@ -76,9 +76,10 @@ export function DocumentDesignerPage() {
         <EmptyState
           icon={PenTool}
           title={DESIGNER_DISABLED_TITLE}
-          description={`Bu kurulumda tasarımcı açık değil. Açma yetkisi olan kullanıcı ${designerSettingTrail()} ekranından açar.`}
+          // B14: yol metinde ve düğmede iki kez söylenmez — düğme götürür, tam yol ipucunda.
+          description="Bu kurulumda tasarımcı açık değil; açma yetkisi olan kullanıcı ayarlardan açar."
           action={
-            <Button size="sm" variant="outline" className="mt-2" onClick={() => navigate(designerSettingPath())}>
+            <Button size="sm" variant="outline" className="mt-2" title={designerSettingTrail()} onClick={() => navigate(designerSettingPath())}>
               Ayarlardan aç
             </Button>
           }

@@ -171,8 +171,8 @@ import { DuplicatesPage } from "@/pages/System/Duplicates/DuplicatesPage";
 import { BackupsPage } from "@/pages/System/Backups/BackupsPage";
 import { DbRestorePage } from "@/pages/System/DbRestore/DbRestorePage";
 import { ReadOnlyDbPage } from "@/pages/System/ReadOnlyDb/ReadOnlyDbPage";
-import { LabelTemplatesPage } from "@/pages/LabelTemplates/LabelTemplatesPage";
 import { LabelStudioPage } from "@/pages/LabelTemplates/editor/LabelStudioPage";
+import { LegacyLabelStudioRedirect } from "@/pages/LabelTemplates/studio-path";
 import { DocumentTemplatesPage } from "@/pages/Definitions/DocumentTemplatesPage";
 import { FreeDocumentsPage } from "@/pages/FreeDocuments/FreeDocumentsPage";
 import { TravelerCardSettingsPage } from "@/pages/Definitions/TravelerCardSettingsPage";
@@ -1079,16 +1079,11 @@ export const contentRoutes: RouteObject[] = [
       </ProtectedRoute>
     ),
   },
+  // B3: ayrı "Etiket Tasarımı" listesi Etiketler › Düzenler'in birebir aynısıydı → tek ekran.
+  { path: "definitions/label-templates", element: <Navigate to="/definitions/labels?tab=templates" replace /> },
+  { path: "definitions/label-templates/:id", element: <LegacyLabelStudioRedirect /> },
   {
-    path: "definitions/label-templates",
-    element: (
-      <ProtectedRoute requirePermission="label-template:read">
-        <LabelTemplatesPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "definitions/label-templates/:id",
+    path: "definitions/labels/studio/:id",
     element: (
       <ProtectedRoute requirePermission="label-template:write">
         <LabelStudioPage />

@@ -28,8 +28,10 @@ import { describe, it, expect, vi } from "vitest";
 import { renderWithProviders } from "@/test/render";
 import { PoolRow } from "./TemplateRow";
 import {
+  resolveTemplateMenuActions,
   resolveTemplateRowActions,
   TEMPLATE_ROW_ACTION_ORDER,
+  TEMPLATE_ROW_INLINE_ACTIONS,
   TEMPLATE_ROW_WRITE_ACTIONS,
   type TemplateRowState,
 } from "./templateRowActions";
@@ -107,21 +109,30 @@ describe("etiket şablonu satırı — aksiyon hizası", () => {
     expect(suffix).toEqual([...TEMPLATE_ROW_WRITE_ACTIONS]);
   });
 
-  it("§2 DOM: yuva sayısı ve sırası dört durumda da AYNI", () => {
-    const rendered = STATES.map(({ name, state }) => ({
-      name,
-      keys: renderRow(state).map((el) => el.getAttribute("data-action-slot")),
-    }));
-    const reference = rendered[0]!.keys;
-    expect(reference).toEqual([...TEMPLATE_ROW_ACTION_ORDER]);
-    for (const row of rendered) expect(row.keys, row.name).toEqual(reference);
+  it("§2 DOM: satırda yalnız Yazdır · Stüdyoda Aç · ⋯ — dört durumda da AYNI sıra", () => {
+    for (const { name, state } of STATES) {
+      const keys = renderRow(state).map((el) => el.getAttribute("data-action-slot"));
+      expect(keys, name).toEqual(["print", "edit", "more"]);
+    }
   });
 
-  it("§3 anlamsız yuva ATIL yer tutucudur (görünmez · disabled · sekmesiz)", () => {
+  it("§2b ⋯ menüsü yalnız anlamlı maddeleri kanonik sırada taşır; yazma maddeleri izinle düşer", () => {
+    expect(resolveTemplateMenuActions({ isActive: true, isAnyDefault: false }, true))
+      .toEqual(["export", "duplicate", "toggle", "hardDelete"]);
+    expect(resolveTemplateMenuActions({ isActive: true, isAnyDefault: true }, true)).toEqual(["export", "duplicate"]);
+    expect(resolveTemplateMenuActions({ isActive: false, isAnyDefault: true }, true)).toEqual(["export", "duplicate", "toggle"]);
+    for (const { state } of STATES) {
+      const keys = resolveTemplateMenuActions(state, true);
+      expect(keys.some((k) => TEMPLATE_ROW_INLINE_ACTIONS.includes(k))).toBe(false);
+      expect(resolveTemplateMenuActions(state, false)).toEqual(["export"]);
+    }
+  });
+
+  it("§3 anlamsız satır yuvası ATIL yer tutucudur (görünmez · disabled · sekmesiz)", () => {
     for (const { name, state } of STATES) {
-      const slots = resolveTemplateRowActions(state);
+      const slots = resolveTemplateRowActions(state).filter((s) => TEMPLATE_ROW_INLINE_ACTIONS.includes(s.key));
       const expected = new Map(slots.map((s) => [s.key, s.applicable] as const));
-      const els = renderRow(state);
+      const els = renderRow(state).filter((e) => e.getAttribute("data-action-slot") !== "more");
       // ⚠️ Kör nokta sondası: yalnız "çizilen yer tutucu doğru mu" diye bakmak,
       // yer tutucu HİÇ çizilmediğinde de yeşil kalır (eski koşullu render).
       expect(els.filter((e) => e.getAttribute("data-slot-state") === "placeholder").length, name)
@@ -146,7 +157,7 @@ describe("etiket şablonu satırı — aksiyon hizası", () => {
     try {
       for (const { name, state } of STATES) {
         const keys = renderRow(state).map((el) => el.getAttribute("data-action-slot"));
-        expect(keys, name).toEqual(["print", "export"]);
+        expect(keys, name).toEqual(["print", "more"]);
       }
     } finally {
       permissions = ["label-template:read", "label-template:write"];

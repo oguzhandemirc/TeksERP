@@ -164,7 +164,8 @@ export function TravelerCardConfigSection({
       anyOf={DOCUMENT_DESIGN_READ}
       fallback={<div className="text-sm text-muted-foreground">Bu ayarı görüntülemek için yetkin yok.</div>}
     >
-      <div className="space-y-5">
+      {/* B11: bölümler arasında ince ayraç — tek kartta ayraçsız akış okunmuyordu. */}
+      <div className="divide-y [&>*]:py-4 [&>*:first-child]:pt-0 [&>*:last-child]:pb-0">
         <div>
           <label htmlFor="tc-company" className="text-sm font-medium">Firma Adı</label>
           <p className="text-xs text-muted-foreground">Refakat kartının üst başlığında basılır.</p>

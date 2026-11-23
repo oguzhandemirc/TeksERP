@@ -102,6 +102,7 @@ export function TravelerCardStudioPage() {
   // Bölüm sürükleme + HTML editörü telefonda düzenlenmez — editör yerine uyarı, kayıt kapalı (UX-3).
   const narrow = useNarrowEditor();
   const canSave = canWrite && !narrow && editing && draft.name.trim().length > 0 && dirty && !busy;
+  const idle = !listQ.isLoading && !narrow && !editing;
 
   return (
     <PageShell>
@@ -110,7 +111,8 @@ export function TravelerCardStudioPage() {
         description="Bölümleri sırala, aç-kapa; ya da uzman modunda kartın tüm HTML'ini kendin yaz. Önizleme gerçek baskı çıktısıdır."
       />
       <PageBody className="p-4">
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[240px_minmax(0,1fr)_minmax(0,520px)]">
+        {/* B13: yerleşik kartta orta bölme boş kart olarak durmaz — önizleme genişler. */}
+        <div className={cn("grid grid-cols-1 gap-4", idle ? "xl:grid-cols-[240px_minmax(0,1fr)]" : "xl:grid-cols-[240px_minmax(0,1fr)_minmax(0,520px)]")}>
           <div className="max-h-[76vh] overflow-auto rounded-md border bg-card p-3 xl:h-[76vh]">
             <TemplateList
               templates={templates}
@@ -131,19 +133,12 @@ export function TravelerCardStudioPage() {
             />
           </div>
 
+          {!idle && (
           <div className={cn("flex min-h-0 flex-col rounded-md border bg-card p-3", narrow ? "h-auto" : "h-[76vh]")}>
             {listQ.isLoading ? (
               <Skeleton className="h-full w-full" />
             ) : narrow ? (
               <WideScreenNotice what="Refakat kartı şablonu" className="m-0" />
-            ) : !editing ? (
-              <div className="flex h-full flex-col items-center justify-center gap-1 text-center">
-                <div className="text-sm font-medium">Yerleşik kart kullanılıyor</div>
-                <p className="max-w-sm text-xs text-muted-foreground">
-                  Kart bugünkü yerleşimiyle basılıyor. Bölümleri sıralamak ya da kendi HTML'ini
-                  yazmak için soldan bir şablon seçin veya <strong>Yeni</strong> ile oluşturun.
-                </p>
-              </div>
             ) : (
               <>
                 <div className="mb-3 flex shrink-0 items-center gap-2">
@@ -203,8 +198,9 @@ export function TravelerCardStudioPage() {
               </>
             )}
           </div>
+          )}
 
-          <div className="xl:sticky xl:top-4 xl:self-start">
+          <div className={cn("xl:sticky xl:top-4 xl:self-start", idle && "mx-auto w-full max-w-[760px]")}>
             <TravelerCardPreview
               config={draft.config}
               template={

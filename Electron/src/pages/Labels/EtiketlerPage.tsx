@@ -23,6 +23,8 @@ export function EtiketlerPage() {
   // Alt sayfaların Yenile/+Yeni butonları başlığa PORTAL'lanır (yıldızın sağına) —
   // ref-callback state'i: element mount olunca alt sayfalara geçer.
   const [actionsEl, setActionsEl] = useState<HTMLDivElement | null>(null);
+  // Sekmenin arama/araç kutusu sekme şeridinin sağına portal'lanır (ayrı araç satırı yok).
+  const [toolsEl, setToolsEl] = useState<HTMLDivElement | null>(null);
   // Sekme anahtarları `tabs-config.ts`te — komut paleti aynı listeden derin
   // bağlantı üretiyor (kopyalanırsa palet olmayan bir sekmeye götürür).
   const tab = resolveEtiketTab(sp.get("tab"));
@@ -39,19 +41,19 @@ export function EtiketlerPage() {
         actions={<div ref={setActionsEl} className="flex items-center gap-2" />}
       />
       <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col">
-        <PageTabsList>
+        <PageTabsList trailing={<div ref={setToolsEl} className="flex items-center gap-2 pr-4" />}>
           <PageTabsTrigger value="templates">Düzenler</PageTabsTrigger>
           <PageTabsTrigger value="assignments">Atamalar</PageTabsTrigger>
           <PageTabsTrigger value="freeprint">Serbest Baskı</PageTabsTrigger>
         </PageTabsList>
         <TabsContent value="templates" className="mt-0 min-h-0 flex-1 overflow-hidden">
-          <LabelTemplatesPage hideHeader actionsPortal={actionsEl} />
+          <LabelTemplatesPage hideHeader actionsPortal={actionsEl} toolsPortal={toolsEl} />
         </TabsContent>
         <TabsContent value="assignments" className="mt-0 min-h-0 flex-1 overflow-hidden">
           <LabelAssignmentsPage hideHeader actionsPortal={actionsEl} />
         </TabsContent>
         <TabsContent value="freeprint" className="mt-0 min-h-0 flex-1 overflow-hidden">
-          <StandalonePrintPage hideHeader actionsPortal={actionsEl} />
+          <StandalonePrintPage hideHeader actionsPortal={actionsEl} toolsPortal={toolsEl} />
         </TabsContent>
       </Tabs>
     </PageShell>

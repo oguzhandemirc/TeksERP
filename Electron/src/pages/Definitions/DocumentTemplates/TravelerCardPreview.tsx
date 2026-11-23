@@ -115,8 +115,11 @@ export function TravelerCardPreview({
               sabittir (1:√2) — A4 ve A5 ekranda BİREBİR aynı şekilde görünür,
               yalnız gerçek boyları farklıdır. Ölçekli bir önizlemede bu fark
               görsel olarak ANLATILAMAZ; tek dürüst yol mm'yi yazmaktır. */}
-          <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            Önizleme — örnek veri · {config.pageSize} ({pageW}×{pageH} mm)
+          <span
+            className="whitespace-nowrap text-[11px] font-medium text-muted-foreground"
+            title="Önizleme örnek veriyle gerçek baskı çıktısıdır."
+          >
+            Önizleme · {config.pageSize} {pageW}×{pageH} mm
           </span>
           {fit != null && (
             <span
