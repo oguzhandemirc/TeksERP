@@ -25,6 +25,8 @@ export interface NavChild {
   to: string;
   icon: LucideIcon;
   offHint?: string;
+  /** Başka bölümün karosu bu kökte çapraz listeleniyor — bağlamsız açılışta etkin konum kendi bölümü olur. */
+  crossListed?: boolean;
 }
 
 /** Kök alt listesinin süreç alt grubu (`nav-subgroups.ts`); boş ad = başlıksız düz liste. */

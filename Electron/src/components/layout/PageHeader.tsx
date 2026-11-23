@@ -8,6 +8,7 @@ import { useFavorites } from "@/hooks/useFavorites";
 import { findBreadcrumbParent, findCommandEntry } from "./command-entries";
 import { useTabId } from "./tabs/tab-active";
 import { canGoBackTab } from "./tabs/history-depth";
+import { menuBreadcrumbParent, useTabMenuContext } from "./menu-context";
 
 interface Props {
   /** Düz metin ya da hazır düğüm (ör. kutulu kimlik) — h1 içinde çizilir. */
@@ -40,7 +41,10 @@ export function PageHeader({ title, titleExtra, description, statusLine, actions
   const { pathname } = location;
   const navigate = useNavigate();
   const entry = pageFavorite ? findCommandEntry(pathname) : undefined;
-  const parent = parentProp === null ? null : (parentProp ?? findBreadcrumbParent(pathname));
+  const tabId = useTabId();
+  // Ekran menüde iki kökteyse kırıntı tıklanan köke uyar (Üretim › Fasondaki İplik); yoksa katalog üstü.
+  const menuParent = menuBreadcrumbParent(useTabMenuContext(tabId), pathname);
+  const parent = parentProp === null ? null : (parentProp ?? menuParent ?? findBreadcrumbParent(pathname));
   const { isFavorite, toggleFavorite } = useFavorites();
   const fav = isFavorite(pathname);
 
@@ -60,7 +64,6 @@ export function PageHeader({ title, titleExtra, description, statusLine, actions
    * kaynak sekme başına tutulan derinlik defteridir. Sekme sistemi dışında
    * (gömülü kullanım/test) kimlik yoktur → anahtar sezgisine düşülür.
    */
-  const tabId = useTabId();
   const canGoBack = tabId ? canGoBackTab(tabId) : location.key !== "default";
 
   /** Tek karar noktası: açık hedef > sekme geçmişi > mantıksal üst sayfa. */
