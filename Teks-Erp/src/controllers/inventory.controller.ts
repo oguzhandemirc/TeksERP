@@ -186,6 +186,11 @@ const statsBatchSchema = z.object({
     .max(12),
 });
 
+// Özet "kalem kalem" — sütun adı kapalı listeye serviste bakılır (tanınmayan 400 UNKNOWN_EXPORT_COLUMN).
+const statsGroupsSchema = statsBatchSchema
+  .extend({ groupBy: z.array(z.string().min(1).max(32)).max(10) })
+  .strict();
+
 // Süpervizör "İstasyondan Kurtar" — IN_PRODUCTION takılı topu depoya alır. Zorunlu sebep (audit).
 const rescueSchema = z.object({
   reason: z.string().trim().min(3, "İşlem nedeni en az 3 karakter").max(500),
@@ -298,6 +303,7 @@ export class InventoryController {
     this.listEntryUsers = this.listEntryUsers.bind(this);
     this.listEntryStations = this.listEntryStations.bind(this);
     this.getRollStatsBatch = this.getRollStatsBatch.bind(this);
+    this.getRollStatsGroups = this.getRollStatsGroups.bind(this);
     this.getWarehouseScope = this.getWarehouseScope.bind(this);
     this.getSubcontractorSummary = this.getSubcontractorSummary.bind(this);
     this.findRollById = this.findRollById.bind(this);
@@ -567,6 +573,22 @@ export class InventoryController {
       }
       const result = await this.service.getRollStatsBatch(parsed.data.items);
       res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/rolls/stats-groups
+   * Kumaş Stoğu Özeti "kalem kalem" — kategori başına ayrım sütunlarıyla top + metre.
+   */
+  async getRollStatsGroups(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const parsed = statsGroupsSchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw AppError.badRequest("Geçersiz istek gövdesi (items, groupBy)", { code: "VALIDATION_ERROR" });
+      }
+      res.status(200).json(await this.service.getRollStatsGroups(parsed.data.items, parsed.data.groupBy));
     } catch (error) {
       next(error);
     }

@@ -1,5 +1,4 @@
 import {
-  createContext,
   useCallback,
   useContext,
   useEffect,
@@ -16,20 +15,11 @@ import { fetchPreferences, savePreferences } from "@/services/preferencesService
 import { DEFAULT_PREFERENCES, type AppPreferences } from "@/types/preferences";
 import { readTabOpenMode, setTabOpenMode } from "@/components/layout/tabs/tab-open-mode";
 import { applyAppearance, resolveAppearance } from "@/lib/theme/appearance";
+import { PreferencesContext, type PreferencePatch,type PreferencesContextValue } from "./preferences-context";
+
+export { useOptionalPreferences, type PreferencePatch } from "./preferences-context";
 
 const SAVE_DEBOUNCE_MS = 600;
-
-interface PreferencesContextValue {
-  prefs: AppPreferences;
-  /** Fonksiyon biçimi önbellekteki EN SON kopyayı alır — aynı tıkta iki yazar birbirini ezmesin. */
-  setPreference: (patch: PreferencePatch) => void;
-  resetPreferences: () => void;
-  ready: boolean;
-}
-
-export type PreferencePatch = Partial<AppPreferences> | ((current: AppPreferences) => Partial<AppPreferences>);
-
-const PreferencesContext = createContext<PreferencesContextValue | null>(null);
 
 export function PreferencesProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
@@ -142,9 +132,4 @@ export function usePreferences(): PreferencesContextValue {
   const ctx = useContext(PreferencesContext);
   if (!ctx) throw new Error("usePreferences must be used within PreferencesProvider");
   return ctx;
-}
-
-/** Sağlayıcı yoksa null (kabuk dışı/izole bileşen testleri) — çağıran varsayılana düşer. */
-export function useOptionalPreferences(): PreferencesContextValue | null {
-  return useContext(PreferencesContext);
 }

@@ -182,6 +182,7 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/rolls/:id/customer-code": e("topa müşteri barkodu bağladı", "topa müşteri barkodu bağlamaya çalıştı"),
   "POST /api/rolls/:id/customer-code/revoke": e("topun müşteri barkodunu kaldırdı", "topun müşteri barkodunu kaldırmaya çalıştı"),
   "POST /api/rolls/shade": e("toplara ton grubu atadı", "toplara ton grubu atamaya çalıştı"),
+  "POST /api/rolls/stats-groups": e("kumaş stoğu özetini indirdi", "kumaş stoğu özetini indirmeye çalıştı"),
   "PATCH /api/rolls/:id/label-texts": e("topun etiket adını/rengini/parti nosunu düzeltti", "topun etiket adını/rengini/parti nosunu düzeltmeye çalıştı"),
   "POST /api/customers/:id/barcode-series": e("müşteri barkod serisi tanımladı", "müşteri barkod serisi tanımlamaya çalıştı"),
   "PUT /api/customers/:id/barcode-series": e("müşteri barkod serisini değiştirdi", "müşteri barkod serisini değiştirmeye çalıştı"),

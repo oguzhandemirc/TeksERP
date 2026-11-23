@@ -382,6 +382,24 @@ router.post("/stats-batch", verifyToken, requireAnyPermission("roll:read", ...MO
 
 /**
  * @openapi
+ * /api/rolls/stats-groups:
+ *   post:
+ *     tags: [Inventory]
+ *     summary: Kumaş Stoğu Özeti — kategori başına ayrım sütunlarıyla (kalem kalem) top + metre
+ *     description: |
+ *       Body `{ items: [{ key, filters }], groupBy: ["item","color","width","qualityGrade","foldType","warehouse"] }`.
+ *       Where liste/stats ile aynı (buildRollWhere); grup toplamı kategorinin şerit rakamına eşittir.
+ *       Tanınmayan sütun 400 `UNKNOWN_EXPORT_COLUMN`; kategori başına 20.000 grup üstü 400 `EXPORT_GROUPS_TOO_MANY`.
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200: { description: "`[{ key, totalCount, totalQty, groups: [{ values, count, qty }] }]`" }
+ *       400: { description: Tanınmayan sütun ya da geçersiz gövde }
+ */
+router.post("/stats-groups", verifyToken, requirePermission("roll:read"), controller.getRollStatsGroups);
+
+/**
+ * @openapi
  * /api/rolls/tablet-context:
  *   get:
  *     tags: [Inventory]
