@@ -23,7 +23,7 @@ export function ChoiceGroup(props: {
   column?: boolean;
 }) {
   return (
-    <div role="radiogroup" aria-label={props.label} className={cn(props.column ? "flex flex-col gap-1" : "inline-flex rounded-md border bg-white p-0.5 dark:bg-background")}>
+    <div role="radiogroup" aria-label={props.label} className={cn(props.column ? "flex flex-col gap-1" : "inline-flex rounded-md border bg-card p-0.5")}>
       {props.options.map((o) => {
         const on = o.key === props.value;
         return (
@@ -43,7 +43,7 @@ export function ChoiceGroup(props: {
               on
                 ? "border-primary bg-primary text-primary-foreground"
                 : props.column
-                  ? "bg-white hover:bg-accent dark:bg-background"
+                  ? "bg-card hover:bg-accent"
                   : "hover:bg-accent",
             )}
           >

@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react";
-import { useOptionalPreferences } from "@/providers/PreferencesProvider";
+import { useOptionalPreferences } from "@/providers/preferences-context";
 import { readSavedExportChoice, type SavedExportChoice } from "@/lib/export-columns";
 
 /**

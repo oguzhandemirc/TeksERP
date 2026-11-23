@@ -190,7 +190,7 @@ export function ExportDialog(props: ExportDialogProps) {
                 </div>
               }
             >
-              <ul className="max-h-80 space-y-0.5 overflow-y-auto rounded-md border bg-white p-1 dark:bg-background" aria-label="Sütunlar">
+              <ul className="max-h-80 space-y-0.5 overflow-y-auto rounded-md border bg-card p-1" aria-label="Sütunlar">
                 {catalog.map((c) => (
                   <li key={c.id}>
                     <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent">

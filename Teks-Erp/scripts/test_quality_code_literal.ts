@@ -178,6 +178,18 @@ const MUAF: Record<string, { gerekce: string; izinli: string[] }> = {
       "kategori anahtarıdır, kalite satırı değil.",
     izinli: ["Kalite"],
   },
+  "Electron/src/pages/Operations/Rolls/inventorySummary.ts": {
+    gerekce:
+      "Kumaş Stoğu Özeti ayrım sütunu → başlık sözlüğü (`GROUP_LABEL`); değer dosyada " +
+      "basılan sütun başlığıdır, kalite kodu değil.",
+    izinli: ["Kalite"],
+  },
+  "Teks-Erp/src/services/inventory/stats-groups.ts": {
+    gerekce:
+      "Çıktı ayrım sütunu → Roll KOLON ADI eşlemesi (`ROLL_GROUP_COLUMNS`); değer Prisma " +
+      "alan adıdır (groupBy anahtarı), kalite kodu değil.",
+    izinli: ["qualityGrade"],
+  },
   "Teks-Erp/src/constants/audit-field-labels.ts": {
     gerekce:
       "Alan adı → Türkçe ETİKET sözlüğü. Değerler kullanıcıya gösterilen metindir, " +

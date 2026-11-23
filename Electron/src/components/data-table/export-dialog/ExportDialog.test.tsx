@@ -6,7 +6,7 @@ import type { ExportColumnOption } from "@/lib/export-columns";
 
 const prefs: { exportDialog?: Record<string, unknown> } = {};
 const setPreference = vi.fn();
-vi.mock("@/providers/PreferencesProvider", () => ({
+vi.mock("@/providers/preferences-context", () => ({
   useOptionalPreferences: () => ({ ready: true, prefs, setPreference }),
 }));
 
