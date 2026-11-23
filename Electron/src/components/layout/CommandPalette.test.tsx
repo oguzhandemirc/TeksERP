@@ -3,6 +3,7 @@ import { fireEvent, screen } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
 import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
 import { EMPTY_MENU_LAYOUT, toMenuLayoutState, type MenuLayoutState } from "@/lib/menu-layout";
+import { DEFAULT_TAB_OPEN_MODE, setTabOpenMode } from "./tabs/tab-open-mode";
 import { CommandPalette } from "./CommandPalette";
 
 /**
@@ -58,8 +59,10 @@ let menu: MenuLayoutState = EMPTY_MENU_LAYOUT;
 vi.mock("@/hooks/useMenuLayout", () => ({ useMenuLayout: () => menu }));
 
 const openTab = vi.fn();
+const navigateActive = vi.fn();
 vi.mock("@/store/tabs", () => ({
-  useTabsStore: (sel: (s: { openTab: unknown }) => unknown) => sel({ openTab }),
+  useTabsStore: (sel: (s: { openTab: unknown; navigateActive: unknown }) => unknown) =>
+    sel({ openTab, navigateActive }),
 }));
 vi.mock("@/store/auth", () => ({
   useAuthStore: (sel: (s: { logout: unknown }) => unknown) => sel({ logout: vi.fn() }),
@@ -80,7 +83,7 @@ describe("CommandPalette", () => {
   beforeEach(() => {
     permissions = ["report:production", "roll:read", "workorder:read", "admin:settings", "admin:users"];
     regime = { productionEnabled: true, financeEnabled: false, dokumaEnabled: false, machineStopEnabled: false };
-    openTab.mockClear();
+    [openTab, navigateActive].forEach((m) => m.mockClear());
     menu = EMPTY_MENU_LAYOUT;
   });
 
@@ -138,7 +141,7 @@ describe("CommandPalette", () => {
     // `/system/feature-flags`. Palet adresi ELLE YAZMAZ, `settingsCategoryPath`ten
     // alır; bu satır o köprünün ekrandaki kanıtıdır (elle yazım geri gelirse
     // kategorilerin yarısı olmayan bir sekmeye giderdi).
-    expect(openTab).toHaveBeenCalledWith("/system/feature-flags?tab=production");
+    expect(navigateActive).toHaveBeenCalledWith("/system/feature-flags?tab=production", { state: undefined });
   });
 
   /**
@@ -188,10 +191,29 @@ describe("CommandPalette", () => {
     expect((await screen.findAllByText(/risk limiti aşımında/i)).length).toBeGreaterThan(0);
   });
 
+  it("seçim varsayılan olarak aktif sekmede açar (yeni sekme/PENCERE açmaz)", () => {
+    open();
+    fireEvent.click(screen.getByText("Operasyon · İz Sürme · Parti"));
+    expect(navigateActive).toHaveBeenCalledWith("/reports/production/batch-trace", { state: undefined });
+  });
+});
+
+describe("CommandPalette — 'Yeni sekmede' tercihi", () => {
+  beforeEach(() => {
+    permissions = ["report:production", "roll:read", "workorder:read", "admin:settings", "admin:users"];
+    regime = { productionEnabled: true, financeEnabled: false, dokumaEnabled: false, machineStopEnabled: false };
+    openTab.mockClear();
+    navigateActive.mockClear();
+    menu = EMPTY_MENU_LAYOUT;
+    setTabOpenMode("newTab");
+  });
+  afterEach(() => setTabOpenMode(DEFAULT_TAB_OPEN_MODE));
+
   it("seçim hedefi sekme olarak açar — varsa odaklar (yeni PENCERE açmaz)", () => {
     open();
     fireEvent.click(screen.getByText("Operasyon · İz Sürme · Parti"));
     expect(openTab).toHaveBeenCalledWith("/reports/production/batch-trace");
+    expect(navigateActive).not.toHaveBeenCalled();
   });
 });
 

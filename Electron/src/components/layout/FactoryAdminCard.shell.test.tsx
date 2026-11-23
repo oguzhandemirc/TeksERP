@@ -17,13 +17,15 @@ import { ShellBanners } from "./ShellBanners";
 
 const refresh = vi.fn(async () => undefined);
 const openTab = vi.fn();
+const navigateActive = vi.fn();
 
 beforeEach(() => {
   api.createFactoryAdmin.mockReset();
   refresh.mockClear();
   openTab.mockClear();
+  navigateActive.mockClear();
   useAuthStore.setState({ isSystemAccount: true, factoryAdminExists: false, refreshSystemAccount: refresh });
-  useTabsStore.setState({ openTab });
+  useTabsStore.setState({ openTab, navigateActive });
 });
 
 describe("FactoryAdminCard — Router dışı (kabuk düzeyi)", () => {
@@ -37,7 +39,7 @@ describe("FactoryAdminCard — Router dışı (kabuk düzeyi)", () => {
     expect(screen.getByTestId("fabrika-yoneticisi-karti")).toBeTruthy();
   });
 
-  it("409 FACTORY_ADMIN_EXISTS → 'Kullanıcılar ekranına git' kullanıcılar sekmesini açar, pencere kapanır", async () => {
+  it("409 FACTORY_ADMIN_EXISTS → 'Kullanıcılar ekranına git' kullanıcılar ekranını açar (varsayılan aynı sekmede), pencere kapanır", async () => {
     api.createFactoryAdmin.mockRejectedValue(
       new AxiosError("409", "ERR_BAD_REQUEST", undefined, undefined, {
         status: 409,
@@ -50,8 +52,9 @@ describe("FactoryAdminCard — Router dışı (kabuk düzeyi)", () => {
     fireEvent.change(screen.getByLabelText(/Ad Soyad/), { target: { value: "Mehmet Yılmaz" } });
     fireEvent.click(screen.getByRole("button", { name: "Hesabı aç" }));
     fireEvent.click(await screen.findByRole("button", { name: "Kullanıcılar ekranına git" }));
-    expect(openTab).toHaveBeenCalledTimes(1);
-    expect(openTab).toHaveBeenCalledWith("/access/users");
+    expect(navigateActive).toHaveBeenCalledTimes(1);
+    expect(navigateActive).toHaveBeenCalledWith("/access/users", { state: undefined });
+    expect(openTab).not.toHaveBeenCalled();
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(screen.queryByText("Fabrika yöneticisi zaten açılmış")).toBeNull();
   });

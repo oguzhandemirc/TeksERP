@@ -1,6 +1,7 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { Package } from "lucide-react";
+import { DEFAULT_TAB_OPEN_MODE, setTabOpenMode } from "@/components/layout/tabs/tab-open-mode";
 import { HubCard } from "./HubCard";
 
 /**
@@ -26,6 +27,8 @@ beforeEach(() => {
   render(<HubCard to="/operations/rolls" title="Envanter" description="" icon={Package} />);
 });
 
+afterEach(() => setTabOpenMode(DEFAULT_TAB_OPEN_MODE));
+
 describe("HubCard", () => {
   it("sol tık: AYNI sekmede açar (yeni sekme açmaz)", () => {
     fireEvent.click(card());
@@ -33,7 +36,14 @@ describe("HubCard", () => {
     expect(openTab).not.toHaveBeenCalled();
   });
 
-  it("sağ tık: arka planda YENİ sekme (kullanıcı hub'da kalır)", () => {
+  it("sağ tık, varsayılan (Aynı sekmede): hiçbir şey açmaz", () => {
+    fireEvent.contextMenu(card());
+    expect(openTab).not.toHaveBeenCalled();
+    expect(navigateActive).not.toHaveBeenCalled();
+  });
+
+  it("sağ tık, 'Yeni sekmede' tercihiyle: arka planda YENİ sekme (kullanıcı hub'da kalır)", () => {
+    setTabOpenMode("newTab");
     fireEvent.contextMenu(card());
     expect(openTab).toHaveBeenCalledWith("/operations/rolls", {
       forceNew: true,

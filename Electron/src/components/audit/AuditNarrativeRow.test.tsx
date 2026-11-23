@@ -4,7 +4,8 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
 const openTab = vi.fn();
-vi.mock("@/store/tabs", () => ({ useTabsStore: { getState: () => ({ openTab }) } }));
+const navigateActive = vi.fn();
+vi.mock("@/store/tabs", () => ({ useTabsStore: { getState: () => ({ openTab, navigateActive }) } }));
 vi.mock("@/hooks/useRoleAccess", () => ({
   useRoleAccess: () => ({ hasAnyPermission: () => true }),
 }));
@@ -33,8 +34,12 @@ describe("AuditNarrativeRow — sunucu anlatısının tek çizicisi", () => {
     expect([...container.querySelectorAll("mark")].map((m) => m.textContent)).toEqual(["18.10.2026", "25.10.2026"]);
     const link = screen.getByRole("link", { name: "SP-2026-0148" });
     fireEvent.click(link);
-    await vi.waitFor(() => expect(openTab).toHaveBeenCalled());
-    expect(openTab).toHaveBeenCalledWith("/operations/orders?focus=11111111-1111-1111-1111-111111111111", undefined);
+    // Varsayılan "Aynı sekmede": bağlantı aktif sekmede gezinir.
+    await vi.waitFor(() => expect(navigateActive).toHaveBeenCalled());
+    expect(navigateActive).toHaveBeenCalledWith("/operations/orders?focus=11111111-1111-1111-1111-111111111111", {
+      state: undefined,
+    });
+    expect(openTab).not.toHaveBeenCalled();
     expect(container.textContent).toBe(ANLATI.metin);
   });
 

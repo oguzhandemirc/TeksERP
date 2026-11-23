@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { readTabOpenMode, setTabOpenMode } from "./tab-open-mode";
+import { DEFAULT_TAB_OPEN_MODE, getTabOpenMode, readTabOpenMode, setTabOpenMode } from "./tab-open-mode";
 import { useOpenTarget, useOpenTopLevel, useTabTarget } from "./use-tab-target";
 
 /**
- * "Sekme davranışı" kişisel tercihi (2026-10-30). Varsayılan = bugünkü davranış;
- * "Aynı sekmede aç" → her tık aktif sekmede, yeni sekme yalnız Ctrl/⌘/Shift + tık ya da orta tık.
+ * "Sekme davranışı" kişisel tercihi (2026-10-30). Varsayılan 2026-11-23'ten beri "Aynı sekmede aç":
+ * her tık aktif sekmede, yeni sekme yalnız Ctrl/⌘/Shift + tık ya da orta tık; "Yeni sekmede" açık seçimdir.
  */
 
 const openTab = vi.fn();
@@ -56,18 +56,40 @@ beforeEach(() => {
   );
 });
 
-afterEach(() => setTabOpenMode("newTab"));
+afterEach(() => setTabOpenMode(DEFAULT_TAB_OPEN_MODE));
 
 describe("readTabOpenMode", () => {
-  it("eksik/bilinmeyen değer → varsayılan newTab", () => {
-    expect(readTabOpenMode(undefined)).toBe("newTab");
-    expect(readTabOpenMode({})).toBe("newTab");
-    expect(readTabOpenMode({ tabs: { openMode: "garip" as never } })).toBe("newTab");
+  it("eksik/bilinmeyen değer → varsayılan sameTab; yalnız açık newTab seçimi yeni sekme", () => {
+    // İlk test: ayna henüz hiç yazılmadı → modül başlangıç değeri de varsayılandır.
+    expect(getTabOpenMode()).toBe("sameTab");
+    expect(DEFAULT_TAB_OPEN_MODE).toBe("sameTab");
+    expect(readTabOpenMode(undefined)).toBe("sameTab");
+    expect(readTabOpenMode(null)).toBe("sameTab");
+    expect(readTabOpenMode({})).toBe("sameTab");
+    expect(readTabOpenMode({ tabs: {} })).toBe("sameTab");
+    expect(readTabOpenMode({ tabs: { openMode: "garip" as never } })).toBe("sameTab");
     expect(readTabOpenMode({ tabs: { openMode: "sameTab" } })).toBe("sameTab");
+    expect(readTabOpenMode({ tabs: { openMode: "newTab" } })).toBe("newTab");
   });
 });
 
-describe("tercih yok (varsayılan) — bugünkü davranış", () => {
+describe("tercih yok (varsayılan) — aynı sekmede", () => {
+  it("menü, palet ve sayfa içi sol tık → aktif sekmede", () => {
+    fireEvent.click(screen.getByText("menu"));
+    fireEvent.click(screen.getByText("palette"));
+    fireEvent.click(screen.getByText("link"));
+    expect(navigateActive.mock.calls.map((c) => c[0])).toEqual([
+      "/operations/orders",
+      "/operations/rolls",
+      "/operations/orders/1",
+    ]);
+    expect(openTab).not.toHaveBeenCalled();
+  });
+});
+
+describe("Yeni sekmede aç (açık tercih)", () => {
+  beforeEach(() => setTabOpenMode("newTab"));
+
   it("menü sol tık → openTab (odakla ya da yeni sekme)", () => {
     fireEvent.click(screen.getByText("menu"));
     expect(openTab).toHaveBeenCalledWith("/operations/orders");
@@ -91,7 +113,7 @@ describe("tercih yok (varsayılan) — bugünkü davranış", () => {
   });
 });
 
-describe("Aynı sekmede aç", () => {
+describe("Aynı sekmede aç (açık tercih)", () => {
   beforeEach(() => setTabOpenMode("sameTab"));
 
   it("menü, palet ve sayfa içi sol tık → aktif sekmede", () => {
