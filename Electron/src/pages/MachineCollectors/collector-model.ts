@@ -6,6 +6,7 @@
 // =============================================================================
 import { z } from "zod";
 import type { AlarmVisibilityContext } from "@/pages/Operations/LoomAlarms/alarm-regime";
+import { SETTINGS_CATEGORIES, settingsCategoryTrail } from "@/pages/GeneralSettings/settings-config";
 
 /** Karo / palet girişi. Gövde `return ctx.<alan>` kalır: karo↔manifesto bekçisi metinden okur. */
 export function isMachineCollectorsVisible(ctx: AlarmVisibilityContext): boolean {
@@ -20,11 +21,15 @@ export interface K4Flags {
 /** Ayarlar okunamadıysa (undefined) uyarı ÇİZİLMEZ — bilinmeyeni "kapalı" diye ilan etmeyiz. */
 export function k4Warning(flags: K4Flags | null | undefined): string | null {
   if (!flags || flags.tezgahAlarmEnabled === undefined || flags.tezgahAlarmUnclassifiedEnabled === undefined) return null;
+  // Yol ayar kataloğundan türer (Alarm Sorumluları'nın kapalı bildirimiyle aynı dil); elle yazılan
+  // "Genel Ayarlar ›" yolu ekran bölününce olmayan menüyü gösteriyordu (T15).
+  const cat = SETTINGS_CATEGORIES.find((c) => c.id === "tezgah");
+  const where = (setting: string) => (cat ? ` ${settingsCategoryTrail(cat)} sekmesindeki "${setting}" ayarından açılır.` : "");
   if (!flags.tezgahAlarmEnabled) {
-    return "Tezgah alarmı kapalı: kartın bildirdiği duruşlar için alarm doğmaz. Ayar: Genel Ayarlar › Tezgah izleme › Tezgah alarmı.";
+    return `Tezgah alarmı kapalı: kartın bildirdiği duruşlar için alarm doğmaz.${where("Tezgah alarmı")}`;
   }
   if (!flags.tezgahAlarmUnclassifiedEnabled) {
-    return "\"Sebepsiz duruşta alarm\" kapalı: kod eşlemesi bulunmayan kart duruşları sebepsiz kalır ve alarm doğmaz. Ayar: Genel Ayarlar › Tezgah izleme.";
+    return `"Sebepsiz duruşta alarm" kapalı: kod eşlemesi bulunmayan kart duruşları sebepsiz kalır ve alarm doğmaz.${where("Sebepsiz duruşta alarm")}`;
   }
   return null;
 }

@@ -19,6 +19,7 @@ import { DataTable } from "@/components/data-table/DataTable";
 import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { useLocalTable } from "@/hooks/useLocalTable";
 import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { ToolbarToggle } from "@/components/data-table/ToolbarToggle";
 import { useListSearch } from "@/hooks/useListSearch";
 
 const SELECT = "h-9 rounded-md border bg-background px-2 text-sm";
@@ -45,7 +46,7 @@ export function CustomerSpecsPanel() {
       <ListToolbar>
         <div className="flex flex-wrap items-center gap-2">
           <div className="w-full sm:w-72"><CustomerPickerField clearable value={customerId} onChange={setCustomerId} placeholder="Tüm müşteriler" /></div>
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} /> Pasifleri de göster</label>
+          <ToolbarToggle checked={showInactive} onCheckedChange={setShowInactive} label="Pasifleri göster" />
           <div className="ml-auto flex items-center gap-1.5">
             <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Müşteri, ürün ya da test türü (ad/kod) ara" />
             <DataTableTools table={table} compact exportName="Müşteri spesifikasyonları" />

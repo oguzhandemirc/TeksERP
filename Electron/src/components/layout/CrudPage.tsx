@@ -172,7 +172,8 @@ export function CrudPage<T extends { id: string }>({
       {
         id: "actions",
         header: "",
-        size: 80,
+        // Genişlik düğme sayısından: sabit 80 px üç simgeyi birbirine değdiriyordu (T11/T17).
+        size: 24 + 32 * (2 + (copyLabel ? 1 : 0) + (permanentDelete ? 1 : 0)),
         cell: ({ row }) => {
           const isActive = (row.original as { isActive?: boolean }).isActive !== false;
           return (

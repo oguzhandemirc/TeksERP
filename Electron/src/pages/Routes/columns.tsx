@@ -2,36 +2,37 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
-import { cn } from "@/lib/utils";
 import type { ProductionRoute } from "./types";
 
 export const routeColumns: ColumnDef<ProductionRoute>[] = [
   {
     accessorKey: "isFavorite",
-    header: "",
-    size: 40,
-    cell: ({ row }) => (
-      <Star
-        className={cn(
-          "h-3.5 w-3.5",
-          row.original.isFavorite ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground/30",
-        )}
-      />
+    // Başlıksız sütun "bu yıldız ne?" sorusu bırakıyordu: başlık simgesi + ipucu.
+    header: () => (
+      <span title="Favori rota" aria-label="Favori">
+        <Star className="h-3.5 w-3.5 text-muted-foreground" />
+      </span>
     ),
+    size: 40,
+    cell: ({ row }) =>
+      row.original.isFavorite ? (
+        <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" aria-label="Favori" />
+      ) : null,
+  },
+  // O25: ad birincil, kod ikinci ve soluk.
+  {
+    accessorKey: "name",
+    header: () => <SortableHeader field="name" label="Ad" />,
   },
   {
     accessorKey: "code",
     header: () => <SortableHeader field="code" label="Kod" />,
     cell: ({ row }) =>
       row.original.code ? (
-        <span className="font-mono text-xs">{row.original.code}</span>
+        <span className="font-mono text-xs text-muted-foreground">{row.original.code}</span>
       ) : (
         <span className="text-muted-foreground">—</span>
       ),
-  },
-  {
-    accessorKey: "name",
-    header: () => <SortableHeader field="name" label="Ad" />,
   },
   {
     id: "stepCount",
@@ -45,7 +46,7 @@ export const routeColumns: ColumnDef<ProductionRoute>[] = [
       row.original.customer ? (
         <span className="text-sm">{row.original.customer.name}</span>
       ) : (
-        <span className="text-muted-foreground">— (genel)</span>
+        <span className="text-muted-foreground">Tüm müşteriler</span>
       ),
   },
   {

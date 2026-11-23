@@ -1,4 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table";
+import { InfoPopover } from "@/components/ui/info-popover";
 import { Badge } from "@/components/ui/badge";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
 import { defectSeverityLabels } from "@/types/enums";
@@ -12,14 +13,15 @@ const severityVariant: Record<string, "default" | "secondary" | "destructive" | 
 };
 
 export const defectTypeColumns: ColumnDef<DefectType>[] = [
-  {
-    accessorKey: "code",
-    header: () => <SortableHeader field="code" label="Kod" />,
-    cell: ({ row }) => <span className="font-mono text-xs">{row.original.code}</span>,
-  },
+  // O25: ad birincil, kod ikinci ve soluk.
   {
     accessorKey: "name",
     header: () => <SortableHeader field="name" label="Ad" />,
+  },
+  {
+    accessorKey: "code",
+    header: () => <SortableHeader field="code" label="Kod" />,
+    cell: ({ row }) => <span className="font-mono text-xs text-muted-foreground">{row.original.code}</span>,
   },
   {
     accessorKey: "severity",
@@ -67,7 +69,15 @@ const fourPointColumns: ColumnDef<DefectType>[] = [
   {
     id: "fixedPoints",
     accessorKey: "fixedPoints",
-    header: "4 puan",
+    header: () => (
+      <span className="inline-flex items-center gap-1">
+        4 puan
+        <InfoPopover
+          label="4 puan nedir?"
+          desc="4 puan muayenesinde bu hatanın sabit cezası. “Boyuttan” = puan hatanın uzunluğuna göre hesaplanır (1–4)."
+        />
+      </span>
+    ),
     cell: ({ row }) =>
       row.original.fixedPoints == null ? (
         <span className="text-sm text-muted-foreground">Boyuttan</span>

@@ -10,24 +10,12 @@ interface HierarchyOptions {
   onToggle: (id: string) => void;
 }
 
-const LEADING: ColumnDef<FabricProperty>[] = [
-  {
-    id: "swatch",
-    header: "",
-    size: 40,
-    cell: ({ row }) =>
-      row.original.color ? (
-        <div className="h-4 w-4 rounded" style={{ backgroundColor: row.original.color }} />
-      ) : (
-        <div className="h-4 w-4 rounded border border-dashed" />
-      ),
-  },
-  {
-    accessorKey: "code",
-    header: () => <SortableHeader field="code" label="Kod" />,
-    cell: ({ row }) => <span className="font-mono text-xs">{row.original.code}</span>,
-  },
-];
+// Renk adın önünde nokta (PropertyNameCell); kod ad'dan sonra, soluk.
+const CODE: ColumnDef<FabricProperty> = {
+  accessorKey: "code",
+  header: () => <SortableHeader field="code" label="Kod" />,
+  cell: ({ row }) => <span className="font-mono text-xs text-muted-foreground">{row.original.code}</span>,
+};
 
 const TRAILING: ColumnDef<FabricProperty>[] = [
   {
@@ -114,7 +102,6 @@ const TRAILING: ColumnDef<FabricProperty>[] = [
 
 /** Ad hücresi ağaç durumunu (daraltma) taşıdığı için kolonlar sayfanın durumundan kurulur. */
 export const buildFabricPropertyColumns = ({ collapsed, onToggle }: HierarchyOptions): ColumnDef<FabricProperty>[] => [
-  ...LEADING,
   {
     accessorKey: "name",
     header: () => <SortableHeader field="name" label="Ad" />,
@@ -122,5 +109,6 @@ export const buildFabricPropertyColumns = ({ collapsed, onToggle }: HierarchyOpt
       <PropertyNameCell row={row.original} collapsed={collapsed.has(row.original.id)} onToggle={onToggle} />
     ),
   },
+  CODE,
   ...TRAILING,
 ];

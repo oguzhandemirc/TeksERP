@@ -8,7 +8,7 @@ export const MISSING_LABEL: Record<string, string> = {
   WEFT_SPEC_MISSING: "Atkı kartı bağlı değil — ürün kartında atkı kartını seçin.",
   PICKS_MISSING: "Atkı sıklığı (atkı/cm) yok — atkı kartına sıklık girin.",
   WEFT_LENGTH_MISSING: "Atkı boyu bulunamadı — yapıya atkı boyu ya da kartlara tarak/ham en girin.",
-  YARN_PRICE_MISSING: "İplik maliyet fiyatı yok — İplik Maliyet Fiyatları'ndan fiyat girin.",
+  YARN_PRICE_MISSING: "İplik maliyet fiyatı yok.",
   FX_RATE_MISSING: "Döviz kuru yok — kuru elle girin ya da Muhasebe → Kurlar'a günün kurunu ekleyin. Kur 1 varsayılmaz.",
   RPM_MISSING: "Tezgah devri yok — yapıya devir girin ya da parametre setine varsayılan devir yazın.",
   PARAMETER_SET_MISSING: "Yürürlükte parametre seti yok — önce Maliyet Parametreleri'nden bir set yürürlüğe alın.",

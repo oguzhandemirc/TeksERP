@@ -58,12 +58,13 @@ export function MachineCollectorsPage() {
           </div>
         }
       />
+      {/* Uyarı kendi satırında: araç çubuğuyla aynı satırda 1000+ px şerit aramayı sağa itiyordu (T16). */}
+      {warning && (
+        <p role="alert" className="mb-2 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> {warning}
+        </p>
+      )}
       <ListToolbar className="flex-row flex-wrap items-center">
-        {warning && (
-          <p role="alert" className="flex flex-1 items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> {warning}
-          </p>
-        )}
         <div className="ml-auto flex items-center gap-1.5">
           <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Kart adı ya da bağlı tezgah kodu/adı ara" />
           <DataTableTools table={table} compact exportName="Tezgah kartları" />

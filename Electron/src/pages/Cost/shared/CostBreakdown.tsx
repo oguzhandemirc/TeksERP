@@ -4,6 +4,8 @@ import { cn } from "@/lib/utils";
 import type { CostLineOut, CostResultOut } from "./cost-types";
 import { fmtDec, fmtDecFull, fmtQtyDec, fmtQtyDecFull } from "./format";
 import { missingText, warningText } from "./labels";
+import { missingTarget } from "./missing-targets";
+import { Link } from "react-router-dom";
 import { PresentationNote, presentationAmount } from "./PresentationNote";
 
 export function CostBreakdown({ sonuc, eksikler, uyarilar }: { sonuc: CostResultOut | null; eksikler: string[]; uyarilar: string[] }) {
@@ -27,7 +29,20 @@ export function CostIssues({ eksikler, uyarilar }: { eksikler: string[]; uyarila
         <div role="alert" className="rounded-xl border border-destructive/40 bg-destructive/5 px-4 py-3 text-destructive">
           <p className="font-semibold">Eksikler giderilmeden maliyet hesaplanmaz — sonuç tahminle doldurulmaz.</p>
           <ul className="mt-1.5 list-disc space-y-0.5 pl-5">
-            {eksikler.map((c) => <li key={c} data-code={c}>{missingText(c)}</li>)}
+            {eksikler.map((c) => {
+              // Eksiğin giderildiği ekrana tek tık (M10): yol metinde anlatılmakla kalmaz.
+              const t = missingTarget(c);
+              return (
+                <li key={c} data-code={c}>
+                  {missingText(c)}
+                  {t?.kind === "link" && (
+                    <Link className="ml-1.5 whitespace-nowrap font-medium underline-offset-4 hover:underline" to={t.to}>
+                      {t.cta ?? t.label} →
+                    </Link>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}

@@ -37,17 +37,19 @@ export function LoomAlarmDutyPage() {
   const actions = useDutyActions();
   const [pending, setPending] = useState<PendingRevoke | null>(null);
   const d = overview.data;
+  const closed = !d && overview.isError && isAlarmClosedError(overview.error);
   const halls = options?.halls ?? [];
   return (
     <PageShell>
       <PageHeader
         title="Alarm Sorumluları"
         description="Tezgah alarmı çaldığında kime bildirilir — hol × vardiya sorumlusu, nöbet değişikliği, kademe kuralı"
-        actions={<RefreshButton queryKey={[LOOM_ALARM_DUTY_QUERY_ROOT]} />}
+        // Alarm kapalıyken yenilemek hiçbir şeyi değiştirmez (çözüm ayardadır) → düğme çizilmez.
+        actions={closed ? undefined : <RefreshButton queryKey={[LOOM_ALARM_DUTY_QUERY_ROOT]} />}
       />
       <PageBody className="space-y-5 p-4">
         {!d ? (
-          overview.isError && isAlarmClosedError(overview.error) ? (
+          closed ? (
             <AlarmClosedNotice error={overview.error} />
           ) : (
             <p className="py-16 text-center text-muted-foreground">{overview.isError ? "Okunamadı — bağlantıyı kontrol edip yenileyin." : "Yükleniyor…"}</p>

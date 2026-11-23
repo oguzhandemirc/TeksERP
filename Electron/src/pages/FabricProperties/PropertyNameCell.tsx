@@ -1,5 +1,6 @@
 import { ChevronDown, ChevronRight, CornerDownRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { ColorDot } from "@/components/ui/color-dot";
 import { genitive, variantsOf } from "./hierarchy";
 import type { FabricProperty } from "./types";
 
@@ -36,6 +37,7 @@ export function PropertyNameCell({ row, collapsed, onToggle }: Props) {
       )}
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-1.5">
+          <ColorDot color={row.color} />
           <span>{row.name}</span>
           {variants.length > 0 && (
             <Badge variant="outline" className="text-[10px]" title={variants.map((v) => v.name).join(", ")}>

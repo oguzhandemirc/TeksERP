@@ -49,7 +49,8 @@ export function BeamBodiesList() {
   const statementSub = singleSubcontractorId(listScope.filters.subcontractorId);
   return (
     <>
-      {s && (
+      {/* Süzgece uyan kayıt yokken yedi "0" sayaç gürültüdür; tablo boş durumu zaten söylüyor. */}
+      {s && s.count > 0 && (
         <ListBand>
           <BandStats
             label="Gövde özeti"

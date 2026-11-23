@@ -76,7 +76,7 @@ describe("SackTagsPage", () => {
     canWrite = false;
     draw();
     expect(await screen.findByText("Kontrol edilecek")).toBeTruthy();
-    expect(screen.queryByText("Yeni Etiket")).toBeNull();
+    expect(screen.queryByText("Yeni İz")).toBeNull();
     expect(screen.queryByLabelText("Kontrol edilecek — düzenle")).toBeNull();
     expect(screen.queryByLabelText("Kontrol edilecek — sil")).toBeNull();
   });
