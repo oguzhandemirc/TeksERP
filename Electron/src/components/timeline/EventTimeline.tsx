@@ -79,7 +79,7 @@ export function TimelineExcelButton<T>(props: { columns: ExportColumn<T>[]; fetc
         open={open}
         onOpenChange={setOpen}
         title="Dışa aktar — hareketler"
-        info="Süzgeçteki hareketlerin tamamı (ekranda yüklenmemiş sayfalar dahil); Excel, PDF ve CSV aynı satırları taşır."
+        info="Filtreye uyan hareketlerin tamamı (ekranda yüklenmemiş sayfalar dahil); Excel, PDF ve CSV aynı satırları taşır."
         catalog={open ? listExportCatalog(props.columns) : []}
         prefKey="zaman-cizelgesi"
         onRun={async (c) => {
