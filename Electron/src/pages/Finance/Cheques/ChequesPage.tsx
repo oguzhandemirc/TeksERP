@@ -38,7 +38,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileClock, FileText, Plus, X } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { ListFooter, ListToolbar } from "@/components/layout/ListPage";
+import { TruncatedHint } from "../TruncatedHint";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
 import { ReportExportBar } from "@/pages/Reports/_components";
@@ -280,9 +281,7 @@ export function ChequesPage() {
       {/* Dışa aktarma üst bantta (süzgeç özetli ReportExportBar) — burada yalnız Sütunlar. */}
       <ChequeFilterBar value={filters} onChange={setFilters} tools={<DataTableTools table={table} compact hideExport />} />
 
-      {!q.isLoading && !q.isError && rows.length > 0 ? (
-          <>
-            {selectedRows.length > 0 && (
+      {selectedRows.length > 0 && (
               // SEÇİM ŞERİDİ — ne seçildiği, hangi yönde ve ne kadar. Sayıyı
               // burada göstermezsek kullanıcı bordroyu basana kadar seçiminin
               // ne olduğunu göremez.
@@ -311,43 +310,20 @@ export function ChequesPage() {
                 </Button>
               </div>
             )}
-            <ChequeTable table={table} />
-            {total > rows.length && (
-              <p className="shrink-0 border-t px-4 py-2 text-xs text-amber-700 dark:text-amber-500">
-                {total} kaydın ilk {rows.length} tanesi gösteriliyor (vade sırasına göre). Aradığınızı bulmak
-                için arama ya da vade aralığı filtresini kullanın.
-              </p>
-            )}
-          </>
-      ) : (
-      <ListBody>
-        {q.isLoading ? (
-          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
-        ) : q.isError ? (
-          <ListMessage>
-            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-              <p className="font-medium text-destructive">Portföy listesi yüklenemedi.</p>
-              <p className="mt-1 text-muted-foreground">
-                Bu bir “kayıt yok” cevabı DEĞİLDİR — istek sunucuya ulaşamadı ya da reddedildi. Kayıtlarınız
-                yerinde duruyor; yeni giriş yapmadan önce tekrar deneyin.
-              </p>
-              <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
-                Tekrar dene
-              </Button>
-            </div>
-          </ListMessage>
-        ) : rows.length === 0 ? (
-          <ListMessage>
-            <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-              {dirty
-                ? "Bu filtreyle kayıt yok. Geçmiş kayıtlar için durum filtresini “Tümü” yapın."
-                : "Portföyde canlı çek/senet yok. “Çek Girişi” ile müşteriden aldığınız çeki kaydedebilirsiniz."}
-            </div>
-          </ListMessage>
-        ) : null}
-      </ListBody>
-      )}
-      <ListFooter loaded={rows.length} total={q.data ? total : null} />
+      {/* Hata ile "kayıt yok" ayrı ekranlar (DataTable.isError). */}
+      <ChequeTable
+        table={table}
+        isLoading={q.isLoading}
+        isError={q.isError}
+        onRetry={() => void q.refetch()}
+        errorText="Portföy listesi yüklenemedi — istek sunucuya ulaşamadı ya da reddedildi."
+        emptyText={dirty ? "Bu filtreyle kayıt yok." : "Portföyde canlı çek/senet yok."}
+        emptyDescription={dirty ? "Geçmiş kayıtlar için Durum filtresini “Tümü” yapın." : "“Çek Girişi” ile müşteriden aldığınız çeki kaydedin."}
+      />
+      {/* KIRPMA SESSİZ DEĞİL — alt çubukta (vade sırasına göre ilk sayfa). */}
+      <ListFooter loaded={rows.length} total={q.data ? total : null}>
+        {total > rows.length && rows.length > 0 ? <TruncatedHint /> : null}
+      </ListFooter>
 
       {/* Diyaloglar KOŞULLU mount edilir: her açılış taze bileşen demektir ve
           ön-doldurma yalnız başlangıç değeri olarak kalır. */}

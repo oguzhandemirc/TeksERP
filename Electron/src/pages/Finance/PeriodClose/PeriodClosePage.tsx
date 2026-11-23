@@ -35,10 +35,16 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Lock } from "lucide-react";
+import { Lock } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
-import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
+import { ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { SelectChip } from "@/components/data-table/filter-row/SelectChip";
+import { ToolbarToggle } from "@/components/data-table/ToolbarToggle";
+import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
+import { cariPickerService } from "../Allocations/service";
+import { PICKER_CHIP } from "../PaymentsFilterBar";
+import { TruncatedHint } from "../TruncatedHint";
 import { DataTable } from "@/components/data-table/DataTable";
 import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { Button } from "@/components/ui/button";
@@ -46,7 +52,6 @@ import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { PageTabsList, PageTabsTrigger } from "@/components/layout/PageTabs";
 import { PermissionGate } from "@/components/PermissionGate";
 import type { CariRow, Currency } from "../service";
-import { CariPicker } from "./CariPicker";
 import { CashPeriodSection } from "./CashPeriodSection";
 import { ClosePeriodDialog } from "./ClosePeriodDialog";
 import { LockStatusCard } from "./LockStatusCard";
@@ -55,6 +60,8 @@ import { VerifyPeriodDialog } from "./VerifyPeriodDialog";
 import { RefreshButton } from "@/components/RefreshButton";
 import { PERIOD_CURRENCIES, listPeriodCloses, type PeriodCloseRow } from "./service";
 import { usePeriodCloseTable } from "./periodCloseColumns";
+
+const CURRENCY_OPTIONS = PERIOD_CURRENCIES.map((c) => ({ value: c, label: c }));
 import { ListSearchBox } from "@/components/data-table/ListSearchBox";
 import { useListSearch } from "@/hooks/useListSearch";
 
@@ -92,7 +99,6 @@ export function PeriodClosePage() {
 
   const rows = q.data?.data ?? [];
   const total = q.data?.pagination.total ?? rows.length;
-  const hasRows = !q.isLoading && rows.length > 0;
   const table = usePeriodCloseTable(rows, { onVerify: setVerifyTarget, onReopen: setReopenTarget });
 
   return (
@@ -128,95 +134,52 @@ export function PeriodClosePage() {
         </PageTabsList>
 
         <TabsContent value="cari" className="mt-0 flex min-h-0 flex-1 flex-col">
-          <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-6 py-3">
-            <CariPicker
-              className="w-72"
-              nullable
+          <ListToolbar className="flex-row flex-wrap items-center">
+            <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Cari adı, cari kodu ya da kapanış notu ara" />
+            <EntityPickerModal<CariRow>
               value={cari?.id ?? null}
-              selectedLabel={cari ? `${cari.code} — ${cari.name}` : null}
-              onChange={setCari}
+              onChange={(_id, item) => setCari(item ?? null)}
+              service={cariPickerService}
+              queryKey="finance-cari"
+              getLabel={(c) => c.name}
+              getSubLabel={(c) => c.code}
+              nullable
+              noneLabel="Tüm cariler"
+              label="Cari:"
+              placeholder="Tümü"
+              title="Cari seç"
+              countLabel="cari"
+              triggerClassName={PICKER_CHIP}
+              placeholderClassName="text-foreground"
+              hideChevron
             />
-            <select
-              className="h-9 rounded-md border bg-background px-2 text-sm"
-              value={currency}
-              onChange={(e) => setCurrency(e.target.value as Currency | "")}
-            >
-              <option value="">Tüm para birimleri</option>
-              {PERIOD_CURRENCIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-            <Button
-              variant={includeReopened ? "default" : "outline"}
-              onClick={() => setIncludeReopened((v) => !v)}
-              title="Yeniden açılmış kapanışlar da listelensin (denetim görünümü)"
-            >
-              Yeniden açılanlar
-            </Button>
+            <SelectChip<Currency> id="period-currency" label="Para birimi" value={currency || null} options={CURRENCY_OPTIONS} onChange={(v) => setCurrency(v ?? "")} />
+            <ToolbarToggle checked={includeReopened} onCheckedChange={setIncludeReopened} label="Yeniden açılanlar" title="Yeniden açılmış kapanışlar da listelensin (denetim görünümü)" />
             <div className="ml-auto flex items-center gap-1.5">
-              <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Cari adı, cari kodu ya da kapanış notu ara" />
               <DataTableTools table={table} exportName="Dönem kapanışları" compact />
             </div>
-          </div>
+          </ListToolbar>
 
           {cari && currency ? (
             <ListMessage className="shrink-0 border-b">
               <LockStatusCard cariId={cari.id} cariLabel={`${cari.code} — ${cari.name}`} currency={currency} />
             </ListMessage>
           ) : null}
-          {hasRows ? (
-            <>
-              {q.isError && (
-                <p className="flex shrink-0 items-start gap-2 border-b bg-amber-100 px-4 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
-                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                  Liste tazelenemedi — aşağıdaki kayıtlar son başarılı okumaya aittir ve eski olabilir.
-                  Bu arada yapılmış bir kapanış burada görünmeyebilir.
-                </p>
-              )}
-              {total > rows.length && (
-                <p className="shrink-0 border-b px-4 py-2 text-xs text-muted-foreground">
-                  Toplam {total} kapanış var, ilk {rows.length} tanesi gösteriliyor. Aradığınızı görmüyorsanız
-                  cari ya da para birimi seçerek daraltın.
-                </p>
-              )}
-              <DataTable table={table} rowClassName={(r) => (r.reopenedAt ? "opacity-60" : undefined)} />
-            </>
-          ) : (
-            <ListBody>
-              {q.isLoading ? (
-                <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
-              ) : q.isError ? (
-                /* Sessiz boş liste YASAK — dosya başındaki nota bak. Yalnız elde satır YOKKEN: başarılı ilk yüklemeden
-                   SONRA düşen tazeleme listeyi silmez, üstüne "eski olabilir" bandı basılır (yukarıda). */
-                <ListMessage>
-                  <div className="flex items-start gap-3 rounded-md border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
-                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                    <div>
-                      <p className="font-medium">Kapanış listesi alınamadı.</p>
-                      <p className="mt-0.5 text-xs">
-                        Bu ekran şu an dönemlerin açık olduğunu SÖYLEMİYOR — bilinmiyor. Kayıt girmeden önce
-                        listeyi yenileyin.
-                      </p>
-                      <Button variant="outline" size="sm" className="mt-2" onClick={() => void q.refetch()}>
-                        Tekrar dene
-                      </Button>
-                    </div>
-                  </div>
-                </ListMessage>
-              ) : (
-                <ListMessage>
-                  <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-                    {includeReopened || term
-                      ? "Bu filtreyle kapanış kaydı yok."
-                      : "Aktif kapanış yok — seçili kapsamda tüm dönemler açık. Yeniden açılmış eski kapanışlar için “Yeniden açılanlar” düğmesine basın."}
-                  </div>
-                </ListMessage>
-              )}
-            </ListBody>
-          )}
-          <ListFooter loaded={rows.length} total={q.data ? total : null} />
+          {/* Sessiz boş liste YASAK (dosya başı): satır yokken hata ayrı ekran; satır varken düşen tazeleme listeyi
+              silmez, DataTable "Liste tazelenemedi" bandını basar. */}
+          <DataTable
+            table={table}
+            rowClassName={(r) => (r.reopenedAt ? "opacity-60" : undefined)}
+            isLoading={q.isLoading}
+            isError={q.isError}
+            onRetry={() => void q.refetch()}
+            errorText="Kapanış listesi alınamadı. Bu ekran şu an dönemlerin açık olduğunu SÖYLEMİYOR — bilinmiyor."
+            emptyText={includeReopened || term ? "Bu filtreyle kapanış kaydı yok." : "Aktif kapanış yok — seçili kapsamda tüm dönemler açık."}
+            emptyDescription={includeReopened || term ? undefined : "Yeniden açılmış eski kapanışlar için “Yeniden açılanlar” kutusunu işaretleyin."}
+          />
+          <ListFooter loaded={rows.length} total={q.data ? total : null}>
+            {total > rows.length && rows.length > 0 ? <TruncatedHint /> : null}
+          </ListFooter>
         </TabsContent>
 
         <TabsContent value="cash" className="mt-0 flex min-h-0 flex-1 flex-col">

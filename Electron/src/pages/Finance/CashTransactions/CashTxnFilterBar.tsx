@@ -1,33 +1,38 @@
 // =============================================================================
-// KASA HAREKETLERİ FİLTRE ŞERİDİ
+// KASA HAREKETLERİ FİLTRE SATIRI (UI D2-f ortak kutular)
 // =============================================================================
-// ⚠️ Şerit `PageBody`'nin DIŞINDA ve `shrink-0` — içine konursa liste kaydıkça
-// filtreler yukarı kaçar ve kullanıcı hangi daraltmaya baktığını göremez
-// (`ChequeFilterBar` emsali).
+// ⚠️ Satır `PageBody`'nin DIŞINDA ve `shrink-0` (ListToolbar) — liste kaydıkça
+// filtreler yukarı kaçmasın; kullanıcı hangi daraltmaya baktığını görür.
 //
 // ⚠️ VARSAYILAN "TÜMÜ"dür, "yalnız aktifler" DEĞİL. Kasa defteri bir DEFTERDİR:
 // iptal edilmiş fiş silinmez, iz olarak kalır ve tam da "bu para nereye gitti"
-// sorusunda aranır. Varsayılan olarak gizlemek, kullanıcının aradığı kaydı
-// "yok" sanmasına yol açardı; iptal satırları listede soluk + üstü çizili
-// tutarla zaten ayrışıyor (çek portföyünde tersi bilinçliydi — orası "elimde ne
-// var" sorusudur, defter değil).
+// sorusunda aranır (çek portföyünde tersi bilinçli — orası "elimde ne var" sorusu).
 //
 // ⚠️ Hesap seçici KOPYALANMAZ: `PeriodClose/CashAccountPicker` import edilir.
 // Kasa+banka tek listede, pasif hesap gizlenmez işaretlenir.
 // =============================================================================
 
 import type { ReactNode } from "react";
-import { RotateCcw, Search } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ListToolbar } from "@/components/layout/ListPage";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { DayRangeChip, SelectChip } from "@/components/data-table/filter-row/SelectChip";
 import { CashAccountPicker, type CashAccountOption } from "../PeriodClose/CashAccountPicker";
 import { EMPTY_FILTERS, KIND_LABEL, isFilterDirty, type CashTxnFilterState } from "./cashTxnRules";
-import { DateRangeInput } from "@/components/forms/DateRangeInput";
 import { CashCategoryFilter } from "./CashCategoryFilter";
+
+// Virmanın iki bacağı AYRI seçenektir: "virman" diye tek seçenek sunmak backend'de CSV
+// desteği olmadığı için sessizce tek bacağı süzerdi (uç `where.kind = <tek değer>`).
+const KIND_OPTIONS = Object.entries(KIND_LABEL).map(([value, label]) => ({ value, label }));
+const STATUS_OPTIONS = [
+  { value: "ACTIVE", label: "Aktif" },
+  { value: "CANCELLED", label: "İptal" },
+] as const;
 
 interface Props {
   value: CashTxnFilterState;
-  /** Seçili hesap nesnesi — süzgeç durumu yalnız tür+id taşır (sorgu şekli). */
+  /** Seçili hesap nesnesi — filtre durumu yalnız tür+id taşır (sorgu şekli). */
   account: CashAccountOption | null;
   onAccountChange: (account: CashAccountOption | null) => void;
   onChange: (next: CashTxnFilterState) => void;
@@ -40,19 +45,10 @@ export function CashTxnFilterBar({ value, account, onAccountChange, onChange, to
     onChange({ ...value, [key]: v });
 
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-6 py-3">
-      <div className="relative w-72">
-        <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          className="pl-8"
-          placeholder="Ara…" title="Belge no / kategori / açıklama / referans ara" aria-label="Belge no / kategori / açıklama / referans ara"
-          value={value.search}
-          onChange={(e) => set("search", e.target.value)}
-        />
-      </div>
-
+    <ListToolbar className="flex-row flex-wrap items-center">
+      <ListSearchBox value={value.search} onSearchChange={(v) => set("search", v)} searchHint="Belge no / kategori / açıklama / referans ara" />
       <CashAccountPicker
-        className="w-64"
+        chipLabel="Hesap:"
         nullable
         value={account}
         onChange={(a) => {
@@ -60,48 +56,12 @@ export function CashTxnFilterBar({ value, account, onAccountChange, onChange, to
           onChange({ ...value, account: a ? { kind: a.kind, id: a.id } : null });
         }}
       />
-
-      <select
-        className="h-9 rounded-md border bg-background px-2 text-sm"
-        value={value.kind}
-        onChange={(e) => set("kind", e.target.value)}
-      >
-        <option value="">Tüm türler</option>
-        {/* Virmanın iki bacağı AYRI seçenektir: "virman" diye tek seçenek
-            sunmak backend'de CSV desteği olmadığı için sessizce tek bacağı
-            süzerdi (uç `where.kind = <tek değer>`). */}
-        {(Object.keys(KIND_LABEL) as Array<keyof typeof KIND_LABEL>).map((k) => (
-          <option key={k} value={k}>
-            {KIND_LABEL[k]}
-          </option>
-        ))}
-      </select>
-
-      <select
-        className="h-9 rounded-md border bg-background px-2 text-sm"
-        value={value.status}
-        onChange={(e) => set("status", e.target.value)}
-      >
-        <option value="">Aktif + iptal</option>
-        <option value="ACTIVE">Yalnız aktif</option>
-        <option value="CANCELLED">Yalnız iptal</option>
-      </select>
-
+      <SelectChip<string> id="cash-kind" label="Tür" value={value.kind || null} options={KIND_OPTIONS} onChange={(v) => set("kind", v ?? "")} />
+      <SelectChip<string> id="cash-status" label="Durum" value={value.status || null} options={STATUS_OPTIONS} onChange={(v) => set("status", v ?? "")} />
       <CashCategoryFilter value={value.category} onChange={(v) => set("category", v)} />
+      <DayRangeChip id="cash-date" label="Tarih" from={value.from} to={value.to} onChange={({ from, to }) => onChange({ ...value, from, to })} />
 
-      <span className="text-xs text-muted-foreground">Tarih</span>
-      <DateRangeInput
-        from={value.from}
-        to={value.to}
-        onFrom={(v) => set("from", v)}
-        onTo={(v) => set("to", v)}
-        inputClassName="w-36"
-        fromLabel="İşlem tarihi başlangıcı"
-        toLabel="İşlem tarihi bitişi"
-      />
-
-      {/* Temizle YALNIZ bir şey seçiliyken çıkar — hep duran bir düğme, hiçbir
-          filtre yokken de "bir şey açık" izlenimi verir. */}
+      {/* Temizle YALNIZ bir şey seçiliyken çıkar — hep duran düğme "bir şey açık" izlenimi verir. */}
       {isFilterDirty(value) && (
         <Button
           variant="ghost"
@@ -116,6 +76,6 @@ export function CashTxnFilterBar({ value, account, onAccountChange, onChange, to
         </Button>
       )}
       {tools ? <div className="ml-auto flex items-center gap-1.5">{tools}</div> : null}
-    </div>
+    </ListToolbar>
   );
 }

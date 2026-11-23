@@ -35,9 +35,10 @@ export function CashCategoryFilter({ value, onChange }: Props) {
 
   return (
     <>
-      <Button type="button" variant={value ? "secondary" : "outline"} size="sm" className="h-9 gap-1.5" onClick={() => setOpen(true)}>
-        <Tags className="h-4 w-4" />
-        {value ? `Kategori: ${selectedLabel ?? "…"}` : "Tüm kategoriler"}
+      {/* Filtre satırı çip görünümü ("Kategori: Tümü") — yanındaki kutularla aynı boy. */}
+      <Button type="button" variant={value ? "secondary" : "outline"} size="sm" className="h-8 gap-1 px-2.5 text-xs font-normal" onClick={() => setOpen(true)}>
+        <span className="text-muted-foreground">Kategori:</span>{" "}
+        {value ? (selectedLabel ?? "…") : "Tümü"}
       </Button>
       <ParamPickerDialog
         open={open}

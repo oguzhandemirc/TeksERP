@@ -15,7 +15,7 @@ describe("kasa hareketleri — kategori filtresi", () => {
     listMock.mockResolvedValue([{ key: "CAT:", label: "Kategorisiz" }, { key: "CAT:Kira", label: "Kira" }]);
     const onChange = vi.fn();
     renderWithProviders(<CashCategoryFilter value="" onChange={onChange} />);
-    fireEvent.click(await screen.findByRole("button", { name: /Tüm kategoriler/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Kategori: Tümü" }));
     fireEvent.click(await screen.findByText("Kira"));
     expect(onChange).toHaveBeenCalledWith("CAT:Kira");
   });

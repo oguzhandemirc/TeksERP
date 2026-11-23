@@ -5,14 +5,15 @@ import { toast } from "sonner";
 import { Plus, RefreshCw } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { ListFooter, ListToolbar } from "@/components/layout/ListPage";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { SelectChip } from "@/components/data-table/filter-row/SelectChip";
 import { PermissionGate } from "@/components/PermissionGate";
 import { listRates, createRate, fetchTcmbRates, type Currency, type RateRow } from "./service";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
-import { factoryDayKey, fmtDayKey, calendarLocaleDateString } from "@/lib/factory-time";
+import { factoryDayKey, fmtDayKey } from "@/lib/factory-time";
+import { formatAmount, safeFormatCalendar } from "@/lib/format";
 import { RefreshButton } from "@/components/RefreshButton";
 import { DataTable } from "@/components/data-table/DataTable";
 import { DataTableTools } from "@/components/data-table/DataTableTools";
@@ -23,20 +24,22 @@ import { useListSearch } from "@/hooks/useListSearch";
 // TL kur tablosuna GİRMEZ: kendi para birimimizin kendine kuru 1'dir ve backend
 // bunu koda gömer. Listede göstermek "girmeyi unuttum mu" sorusu doğururdu.
 const CURRENCIES: Currency[] = ["USD", "EUR", "GBP", "RUB"];
+const CURRENCY_OPTIONS = CURRENCIES.map((c) => ({ value: c, label: c }));
 
 const rateColumns: ColumnDef<RateRow>[] = [
   {
     id: "rateDate",
     header: "Tarih",
-    meta: { label: "Tarih", exportValue: (r) => calendarLocaleDateString(r.rateDate, "tr-TR") },
-    cell: ({ row }) => calendarLocaleDateString(row.original.rateDate, "tr-TR"),
+    meta: { label: "Tarih", exportValue: (r) => safeFormatCalendar(r.rateDate, "dd.MM.yyyy") },
+    cell: ({ row }) => safeFormatCalendar(row.original.rateDate, "dd.MM.yyyy"),
   },
   { accessorKey: "currency", header: "Para Birimi", cell: ({ row }) => <span className="font-medium">{row.original.currency}</span> },
   {
     id: "rate",
     header: "Kur (TL)",
-    meta: { label: "Kur (TL)", align: "right", exportValue: (r) => Number(r.rate).toFixed(4) },
-    cell: ({ row }) => <span className="font-mono">{Number(row.original.rate).toFixed(4)}</span>,
+    // Kur para sınıfıdır (binlik ayraçlı, 4 hane) — `lib/format` tek biçimleyici; çıplak toFixed nokta basıyordu.
+    meta: { label: "Kur (TL)", align: "right", exportValue: (r) => formatAmount(r.rate, 4) },
+    cell: ({ row }) => <span className="tabular-nums">{formatAmount(row.original.rate, 4)}</span>,
   },
   {
     id: "source",
@@ -95,41 +98,27 @@ export function RatesPage() {
         description="1 birim döviz kaç TL. Fatura ve tahsilatlar belge tarihine en yakın (≤) kuru kullanır ve o kuru belgeye DAMGALAR — sonradan kuru düzeltmek geçmiş belgeleri değiştirmez."
       />
 
+      {/* Kur giriş satırı + sağda liste araçları — tek satır, ortak kutu boyu (UI D2-f). */}
       <ListToolbar>
-        <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-wrap items-center gap-2">
         <PermissionGate permission="finance:write">
-          <div className="flex flex-wrap items-end gap-3">
-            <div>
-              <Label className="text-xs">Tarih</Label>
-              <DatePickerInput aria-label="Tarih" className="mt-1" value={rateDate} onChange={setRateDate} />
-            </div>
-            <div>
-              <Label className="text-xs">Para birimi</Label>
-              <select
-                className="mt-1 h-9 rounded-md border bg-background px-2 text-sm"
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value as Currency)}
-              >
-                {CURRENCIES.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <Label className="text-xs">Kur (TL)</Label>
-              <Input
-                type="number" min={0} step="0.000001"
-                className="mt-1 w-36"
-                value={rate || ""}
-                onChange={(e) => setRate(Number(e.target.value))}
-              />
-            </div>
-            <Button disabled={rate <= 0 || createM.isPending} onClick={() => createM.mutate()}>
+          <div className="flex flex-wrap items-center gap-2">
+            <DatePickerInput aria-label="Kur tarihi" title="Kur tarihi" className="h-8 w-40" value={rateDate} onChange={setRateDate} />
+            <SelectChip<Currency> id="rate-currency" label="Para birimi" value={currency} options={CURRENCY_OPTIONS} resetValue="USD" onChange={(v) => setCurrency(v ?? "USD")} />
+            <Input
+              type="number" min={0} step="0.000001"
+              aria-label="Kur (TL)" placeholder="Kur (TL)"
+              className="h-8 w-32 text-sm"
+              value={rate || ""}
+              onChange={(e) => setRate(Number(e.target.value))}
+            />
+            <Button size="sm" disabled={rate <= 0 || createM.isPending} onClick={() => createM.mutate()}>
               <Plus className="mr-1 h-4 w-4" />
               {createM.isPending ? "Kaydediliyor…" : "Kur ekle"}
             </Button>
             <Button
               variant="outline"
+              size="sm"
               disabled={tcmbM.isPending}
               onClick={() => tcmbM.mutate()}
               title="TCMB döviz alış (ForexBuying) kurlarını bülten tarihine yazar. Elle girilmiş kurlar korunur."
@@ -146,42 +135,18 @@ export function RatesPage() {
         </div>
       </ListToolbar>
 
-      {!q.isLoading && rows.length > 0 ? (
-        <DataTable table={table} isError={q.isError} onRetry={() => void q.refetch()} exportName="Kurlar" />
-      ) : (
-      <ListBody>
-        {q.isLoading ? (
-          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
-        ) : q.isError && rows.length === 0 ? (
-          /* ⚠️ BU EKRANDA YANLIŞ BOŞ-DURUM METNİ EYLEME YÖNLENDİRİR: aşağıdaki
-             cümle "önce o güne ait kuru girin" diyor. Hata anında basılırsa
-             kullanıcı zaten var olan kuru İKİNCİ KEZ girer — mükerrer kur satırı,
-             ve fatura hangi satırı damgaladığına göre farklı tutar üretir. */
-          <ListMessage>
-            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-              <p className="font-medium text-destructive">Kur listesi yüklenemedi.</p>
-              <p className="mt-1 text-muted-foreground">
-                Bu “kur girilmemiş” anlamına GELMEZ — istek sunucuya ulaşamadı ya da reddedildi.
-                Yeni kur girmeden önce tekrar deneyin; aksi halde aynı güne ikinci bir kur
-                yazabilirsiniz.
-              </p>
-              <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
-                Tekrar dene
-              </Button>
-            </div>
-          </ListMessage>
-        ) : rows.length === 0 && term ? (
-          /* Aramada boş sonuç "kur girilmemiş" DEĞİLDİR — o cümle mükerrer kur girişine yönlendirir. */
-          <ListMessage className="text-sm text-muted-foreground">Aramaya uyan kur yok.</ListMessage>
-        ) : rows.length === 0 ? (
-          <ListMessage>
-            <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-              Kur girilmemiş. Döviz cinsinden fatura kesmek için önce o güne ait kuru girin.
-            </div>
-          </ListMessage>
-        ) : null}
-      </ListBody>
-      )}
+      {/* ⚠️ YANLIŞ BOŞ-DURUM METNİ EYLEME YÖNLENDİRİR ("önce kuru girin"): hata anında basılırsa mükerrer kur girilir
+          (DataTable hata dalı boşun önünde). Aramada boş sonuç da "kur girilmemiş" DEĞİLDİR. */}
+      <DataTable
+        table={table}
+        exportName="Kurlar"
+        isLoading={q.isLoading}
+        isError={q.isError}
+        onRetry={() => void q.refetch()}
+        errorText="Kur listesi yüklenemedi — “kur girilmemiş” anlamına gelmez; yeni kur girmeden önce tekrar deneyin."
+        emptyText={term ? "Aramaya uyan kur yok." : "Kur girilmemiş."}
+        emptyDescription={term ? undefined : "Döviz cinsinden fatura kesmek için önce o güne ait kuru girin."}
+      />
       <ListFooter loaded={rows.length} />
     </PageShell>
   );

@@ -11,12 +11,18 @@
 // Sıfırlanmasaydı, başka bir cari için yazılmış tutarlar ekranda kalır ve
 // gönderildiğinde uç "başka bir cariye ait" derdi — kullanıcı ise ekranda
 // doğru cariyi görüyor olurdu.
-import { Label } from "@/components/ui/label";
-import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
+import { ListToolbar } from "@/components/layout/ListPage";
+import { SelectChip } from "@/components/data-table/filter-row/SelectChip";
+import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import type { CariRow, Currency } from "../service";
+import { PICKER_CHIP } from "../PaymentsFilterBar";
 import { cariPickerService, type Direction } from "./service";
 
-const CURRENCIES: Currency[] = ["TRY", "USD", "EUR", "GBP", "RUB"];
+const CURRENCY_OPTIONS = (["TRY", "USD", "EUR", "GBP", "RUB"] as const).map((c) => ({ value: c, label: c }));
+const DIRECTION_OPTIONS = [
+  { value: "IN", label: "Tahsilat → Satış faturası" },
+  { value: "OUT", label: "Ödeme → Alış faturası" },
+] as const;
 
 interface Props {
   cariId: string | null;
@@ -39,49 +45,25 @@ export function AllocationFilters({
   onDirectionChange,
 }: Props) {
   return (
-    <div className="flex shrink-0 flex-wrap items-end gap-3 border-b px-6 py-3">
-      <div className="w-80">
-        <Label className="text-xs">Cari hesap</Label>
-        <div className="mt-1">
-          <ReferenceSelect<CariRow>
-            value={cariId}
-            onChange={onCariChange}
-            service={cariPickerService}
-            queryKey="finance-cari"
-            getLabel={(c) => `${c.code} — ${c.name}`}
-            placeholder="Müşteri / fason ara..."
-          />
-        </div>
-      </div>
-
-      <div>
-        <Label className="text-xs">Para birimi</Label>
-        <select
-          className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm"
-          value={currency}
-          onChange={(e) => onCurrencyChange(e.target.value as Currency)}
-        >
-          {CURRENCIES.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div>
-        <Label className="text-xs">Yön</Label>
-        <select
-          className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm"
-          value={direction}
-          onChange={(e) => onDirectionChange(e.target.value as Direction)}
-        >
-          <option value="IN">Tahsilat → Satış faturası</option>
-          <option value="OUT">Ödeme → Alış faturası</option>
-        </select>
-      </div>
-
+    <ListToolbar className="flex-row flex-wrap items-center">
+      {/* Üçü de zorunlu: "Tümü" seçeneği yok (dosya başı); çip yalnız biçimdir. */}
+      <EntityPickerModal<CariRow>
+        value={cariId}
+        onChange={(id) => onCariChange(id)}
+        service={cariPickerService}
+        queryKey="finance-cari"
+        getLabel={(c) => c.name}
+        getSubLabel={(c) => c.code}
+        label="Cari:"
+        placeholder="Seçin"
+        title="Cari seç"
+        countLabel="cari"
+        triggerClassName={PICKER_CHIP}
+        hideChevron
+      />
+      <SelectChip<Currency> id="allocation-currency" label="Para birimi" value={currency} options={CURRENCY_OPTIONS} resetValue="TRY" onChange={(v) => onCurrencyChange(v ?? "TRY")} />
+      <SelectChip<Direction> id="allocation-direction" label="Yön" value={direction} options={DIRECTION_OPTIONS} resetValue="IN" onChange={(v) => onDirectionChange(v ?? "IN")} />
       {cariLabel && <p className="ml-auto text-xs text-muted-foreground">{cariLabel}</p>}
-    </div>
+    </ListToolbar>
   );
 }

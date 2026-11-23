@@ -110,6 +110,8 @@ interface Props {
   nullable?: boolean;
   noneLabel?: string;
   className?: string;
+  /** Filtre satırı çip görünümü ("Hesap: Tümü") — verilirse tetik kısa kutu olur (SelectChip ile aynı boy). */
+  chipLabel?: string;
 }
 
 export function CashAccountPicker({
@@ -118,6 +120,7 @@ export function CashAccountPicker({
   nullable,
   noneLabel = "Tüm hesaplar",
   className,
+  chipLabel,
 }: Props) {
   const [open, setOpen] = useState(false);
   // ⚠️ `isError` HOOK'TA ÜRETİLİYORDU AMA HİÇBİR TÜKETİCİ OKUMUYORDU — niyet
@@ -164,10 +167,23 @@ export function CashAccountPicker({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className={cn("justify-between font-normal", !value && "text-muted-foreground", className)}
+          className={cn(
+            "justify-between font-normal",
+            chipLabel ? "h-8 w-auto max-w-64 gap-1 px-2.5 text-xs" : !value && "text-muted-foreground",
+            className,
+          )}
         >
-          <span className="truncate">{triggerText}</span>
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          {chipLabel ? (
+            <>
+              <span className="text-muted-foreground">{chipLabel}</span>
+              <span className="truncate">{value ? cashAccountLabel(value) : "Tümü"}</span>
+            </>
+          ) : (
+            <>
+              <span className="truncate">{triggerText}</span>
+              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            </>
+          )}
         </Button>
       </PopoverTrigger>
       <PopoverContent
