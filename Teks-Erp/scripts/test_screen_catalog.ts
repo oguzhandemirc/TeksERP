@@ -314,26 +314,11 @@ const KARO_REJIM: ReadonlyArray<{ key: string; alan: string; reason: string }> =
   },
 ];
 
-/** Karosu modül alanına bağlı ama ekranın modülü ÇEKİRDEK — rejim VARYANTI. */
-const KARO_VARYANT: ReadonlyArray<{ key: string; reason: string }> = [
-  {
-    key: "definitions/customers",
-    reason:
-      "Karo `!financeEnabled` ile çizilir: aynı ana veri, ticaret kurulumunda tek " +
-      "'Cariler' ekranında sunulur. Modül aidiyeti değişmez (çekirdek ana veri), " +
-      "değişen SUNUMDUR — negasyonlu yüklem bir modül kapısı değildir.",
-  },
-  {
-    key: "definitions/subcontractors",
-    reason: "customers ile aynı varyant çifti (`!financeEnabled` — fason firma sunumu).",
-  },
-  {
-    key: "definitions/cariler",
-    reason:
-      "Varyantın diğer yüzü (`financeEnabled`): müşteri + fason firma TEK listede. " +
-      "Veri çekirdektir; bayrak yalnız hangi sunumun çizileceğini seçer.",
-  },
-];
+/**
+ * Karosu modül alanına bağlı ama ekranın modülü ÇEKİRDEK — rejim VARYANTI.
+ * 2026-11-23 (T1/T9): Müşteriler / Fason Firmalar / Cariler varyant üçlüsü TEK Cariler ekranına birleşti → liste boş.
+ */
+const KARO_VARYANT: ReadonlyArray<{ key: string; reason: string }> = [];
 
 /**
  * Modülü ModulKey ama karosu HENÜZ bayrağa bağlanmamış ekranlar.

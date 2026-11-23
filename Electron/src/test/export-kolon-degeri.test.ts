@@ -39,7 +39,6 @@ const BASELINE: Record<string, string[]> = {
   "Routes/columns.tsx": ["customer", "stepCount"],
   "ShiftDefinitions/columns.tsx": ["break", "code", "days", "duration", "name", "status", "window"],
   "SubcontractorCategories/columns.tsx": ["appliesColor", "appliesProperty", "subcontractorCount"],
-  "Subcontractors/columns.tsx": ["categories", "customer"],
   "WarpSpecs/columns.tsx": ["reed", "yarn"],
 };
 

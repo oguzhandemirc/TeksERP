@@ -118,7 +118,7 @@ export function CustomerFormDialog({
   const qc = useQueryClient();
   const [confirmClose, setConfirmClose] = useState(false);
   const [activeTab, setActiveTab] = useState("info");
-  // Yeni kartta "Fason iş yapar" — gövdeye `subcontractorRole` gider (CustomersPage.buildCustomerPayload).
+  // Yeni kartta "Fason iş yapar" — gövdeye `subcontractorRole` gider (`customerPayload.buildCustomerPayload`).
   const fasonYeni = form.watch("isSubcontractorRole");
 
   useEffect(() => {

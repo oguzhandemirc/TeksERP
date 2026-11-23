@@ -9,6 +9,7 @@ import { productionReportsApi, type TravelerEvent, type TravelerTraceResult } fr
 import apiClient from "@/services/apiClient";
 import { useScanSeed } from "@/hooks/useScanSeed";
 import { MetricCard, ReportPageLayout } from "../_components";
+import { screenTitle } from "@/components/layout/screen-title";
 import { ReportExportBar } from "../_components/ReportExportBar";
 import { fmtDateTime, fmtMeters } from "../_components/formatters";
 // Etiket sözlükleri dışa aktarım spec'iyle ORTAK: ekranda "Kurşun Geçildi" yazıp
@@ -102,7 +103,7 @@ export function TravelerTracePage() {
   return (
     <ReportPageLayout
       reportKey="production/traveler-trace"
-      title="Refakat Kartı İzleme"
+      title={screenTitle("/reports/production/traveler-trace")}
       description="Tek rulonun istasyon adımları, operatör ve süre geçmişi."
       filters={searchFilter}
       actions={

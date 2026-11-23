@@ -121,9 +121,9 @@ export interface ScreenEntry {
    * tamlık kapısı tamamen bekçiye kalırdı; zorunluyken İLK kapı derleyicidir.
    *
    * ⚠️ AİDİYET BEYANIDIR, GÖRÜNÜRLÜK KURALI DEĞİL. Gizleme `visibleWhen`in işi:
-   * `definitions/customers` çekirdek ana veridir ama karosu `!financeEnabled`
-   * ile çizilir. Bu alanı menü süzmek için kullanan biri o ekranı finans
-   * açıkken de gösterir. Alanın tüketicisi Sistem Profili ekranının
+   * `operations/machine-stops` dokuma modülüne aittir ama karosu daha geniş
+   * duruş rejimiyle çizilir. Bu alanı menü süzmek için kullanan biri iki
+   * kümenin farkında yanlış karar verir. Alanın tüketicisi Sistem Profili ekranının
    * "kapatırsan şunlar gizlenir" ÖNİZLEMESİ ve bekçinin tamlık kapısıdır.
    */
   modul: EkranModul;
@@ -137,7 +137,6 @@ export interface ScreenEntry {
 const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[] }> = [
   { key: "definitions/items", app: "desktop", modul: "cekirdek:ana-veri", title: "Ürün Kartları", requires: ["item:read"], capabilities: ["customer-alias:read", "customer-alias:write", "item:write"] },
   { key: "definitions/services", app: "desktop", modul: "cekirdek:ana-veri", title: "Hizmet Kartları", requires: ["item:read"], capabilities: ["item:write"] },
-  { key: "definitions/customers", app: "desktop", modul: "cekirdek:ana-veri", title: "Müşteriler", requires: ["customer:read"], capabilities: ["customer-alias:write", "customer:write", "label-template:write"] },
   { key: "definitions/stations", app: "desktop", modul: "cekirdek:ana-veri", title: "Üretim İstasyonları", requires: ["station:read"], capabilities: ["station:write"] },
   { key: "definitions/machines", app: "desktop", modul: "cekirdek:ana-veri", title: "Makineler", requires: ["station:read"], capabilities: ["station:write"] },
   { key: "definitions/peripherals", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Donanım", requires: ["station:read"], capabilities: ["station:write"] },
@@ -162,7 +161,6 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "definitions/return-reasons", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "İade Nedenleri", requires: ["return:read"], capabilities: ["return:write"] },
   { key: "definitions/fabric-properties", app: "desktop", modul: "cekirdek:ana-veri", title: "Kumaş Özellikleri", requires: ["property:read"], capabilities: ["property:write"] },
   { key: "definitions/subcontractor-categories", app: "desktop", modul: "cekirdek:ana-veri", title: "Fason Kategorileri", requires: ["subcontractor:read"], capabilities: ["subcontractor:write"] },
-  { key: "definitions/subcontractors", app: "desktop", modul: "cekirdek:ana-veri", title: "Fason Firmalar", requires: ["subcontractor:read"], capabilities: ["subcontractor:write"] },
   { key: "definitions/station-capabilities", app: "desktop", modul: "productionEnabled", title: "İstasyon Yetenekleri", requires: ["station:read"], capabilities: [] },
   { key: "access/devices", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Tabletler", requires: ["admin:settings"], capabilities: [] },
   { key: "access", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Yetkilendirme", requires: ["admin:users"], capabilities: [] },
@@ -348,7 +346,8 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "definitions/service-prices", app: "desktop", modul: "financeEnabled", title: "Hizmet Fiyat Tablosu", requires: ["item:read"], capabilities: ["price:write"] },
   // Cariler = müşteri + fason firma TEK listede (satın alma tarafı da cari
   // gördüğü için). Giriş izni İKİSİNDEN BİRİ yeter — route `requireAnyPermission`.
-  { key: "definitions/cariler", app: "desktop", modul: "cekirdek:ana-veri", title: "Cariler", requires: ["customer:read", "subcontractor:read"], capabilities: ["customer:write", "subcontractor:write"] },
+  // T1/T9 (2026-11-23): eski "Müşteriler" + "Fason Firmalar" ekranları buraya birleşti; yetenekleri de.
+  { key: "definitions/cariler", app: "desktop", modul: "cekirdek:ana-veri", title: "Cariler", requires: ["customer:read", "subcontractor:read"], capabilities: ["customer-alias:write", "customer:write", "label-template:write", "subcontractor:write"] },
   // Kalite Güvence (K4P zemin, 2026-10-24): manifesto önden yazıldı; panel sayfaları PANEL/LAB/SERT
   // dilimlerinde iner (karo yok → bekçide KARO_YOK muafı, karo doğunca muaf ölür).
   { key: "quality", app: "desktop", modul: "kaliteGuvenceEnabled", title: TERIM_AD.kaliteGuvence, requires: ["inspection:read", "labtest:read", "certificate:read"], capabilities: [] },

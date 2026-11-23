@@ -18,7 +18,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/render";
 import { CustomerFormDialog } from "./CustomerFormDialog";
-import { buildCustomerPayload } from "./CustomersPage";
+import { buildCustomerPayload } from "./customerPayload";
 import { NO_ROLE_MESSAGE, SUBCONTRACTOR_NEEDS_SUPPLIER_MESSAGE, customerFormDefaults, customerFormSchema } from "./schema";
 import type { Customer } from "./types";
 
@@ -118,7 +118,7 @@ describe("CustomerFormDialog — rol modeli", () => {
     expect(src).toMatch(/register\("isCustomerRole"\)/);
     expect(src).toMatch(/register\("isSupplierRole"\)/);
     expect(src).toMatch(/"Yeni Cari"/);
-    const page = readFileSync(resolve(__dirname, "CustomersPage.tsx"), "utf8");
+    const page = readFileSync(resolve(__dirname, "customerPayload.ts"), "utf8");
     expect(page).not.toMatch(/type:\s*v\.type/);
     // Formun içinden bir dialog satırı: kutular tek FormField'da
     expect(within(document.body).queryByText("Tip")).toBeNull();

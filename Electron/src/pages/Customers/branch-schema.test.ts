@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { branchFormDefaults, branchFormSchema, branchFormToPayload, exportCodeVisible } from "./branch-schema";
 import { branchDraftDefaults, customerFormDefaults } from "./schema";
-import { buildCustomerPayload } from "./CustomersPage";
+import { buildCustomerPayload } from "./customerPayload";
 
 describe("branchFormToPayload", () => {
   it("⭐ sevk yönü gövdeye girer", () => {

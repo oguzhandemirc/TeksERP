@@ -289,27 +289,19 @@ describe("karo bağlantıları", () => {
  * ilkinden zamanla ayrışırdı).
  */
 /**
- * CARİ REJİMİ (2026-08-14): Tanımlar'da bayrak AÇIKKEN tek "Cariler",
- * KAPALIYKEN (fabrika) Müşteriler + Fason Firmalar. Üç örtüşen liste
- * karışıklığının kilidi: rejim kuralı düşerse ya fabrika menüsü değişir
- * (sıfır-fark ihlali) ya ticarette üç liste geri gelir.
+ * CARİ EKRANI (T1/T9, 2026-11-23): her rejimde TEK "Cariler" karosu (kimlik tek, rol bayrak). Eski
+ * Müşteriler + Fason Firmalar karoları kalktı; adresleri Cariler'e yönlenir. Kural düşerse üç örtüşen
+ * liste geri gelir.
  */
-describe("Tanımlar — cari rejimi", () => {
+describe("Tanımlar — cari ekranı", () => {
   // UX-2 K2: refakat kartı karoları Belgeler köküne taşındı — iki katalog birlikte aranır.
   const tile = (key: string) => [...definitionTiles, ...documentTiles].find((t) => t.key === key);
 
-  it("fabrika rejimi (bayrak kapalı): Müşteriler + Fason görünür, Cariler görünmez", () => {
-    const c = ctx();
-    expect(tile("cariler")?.visibleWhen?.(c)).toBe(false);
-    expect(tile("customers")?.visibleWhen?.(c)).toBe(true);
-    expect(tile("subcontractors")?.visibleWhen?.(c)).toBe(true);
-  });
-
-  it("ticaret rejimi (bayrak açık): yalnız Cariler görünür", () => {
-    const c = ctx({ financeEnabled: true });
-    expect(tile("cariler")?.visibleWhen?.(c)).toBe(true);
-    expect(tile("customers")?.visibleWhen?.(c)).toBe(false);
-    expect(tile("subcontractors")?.visibleWhen?.(c)).toBe(false);
+  it("⭐ Cariler her rejimde görünür (yüklemsiz); Müşteriler / Fason Firmalar karosu YOK", () => {
+    expect(tile("cariler")).toBeDefined();
+    expect(tile("cariler")?.visibleWhen).toBeUndefined();
+    expect(tile("customers")).toBeUndefined();
+    expect(tile("subcontractors")).toBeUndefined();
   });
 
   it("⭐ Tanımlar'ın üretim karoları modül KAPALIYKEN çizilmez, AÇIKKEN çizilir", () => {
@@ -341,9 +333,6 @@ describe("Tanımlar — cari rejimi", () => {
       .filter((s2) => s2.heading.startsWith("Tanımlar") || s2.heading === "Belgeler")
       .flatMap((s2) => s2.entries);
     for (const key of [
-      "cariler",
-      "customers",
-      "subcontractors",
       "item-prices",
       "routes",
       "product-recipes",

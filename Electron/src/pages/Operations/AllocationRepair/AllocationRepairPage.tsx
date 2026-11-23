@@ -4,6 +4,7 @@ import { toast } from "sonner";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
+import { screenTitle } from "@/components/layout/screen-title";
 import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RefreshButton } from "@/components/RefreshButton";
@@ -70,7 +71,7 @@ export function AllocationRepairPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Siparişe yazılamayan sevkiyatlar"
+        title={screenTitle("/operations/allocation-repair")}
         description="Mal çıkmış ama sipariş defterine işlenmemiş sevkiyatlar — tek tek onarılır."
         actions={<RefreshButton queryKey="allocation-repair" />}
       />

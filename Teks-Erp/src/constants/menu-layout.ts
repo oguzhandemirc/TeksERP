@@ -74,7 +74,6 @@ export const MENU_PRESETS: readonly MenuPreset[] = [
     screens: [
       { key: "operations/kartela", reason: "Kartela gönderilmiyor (kartela takibi ticari kumaş satışının işi)." },
       { key: "reports/subcontract", reason: "Dışarıya fasona mal gönderilmiyor; fason raporu boş kalır." },
-      { key: "definitions/subcontractors", reason: "Dışarıdaki fason firmalara iş verilmiyor; müşteriler Cariler'de." },
       { key: "definitions/subcontractor-categories", reason: "Fason firma kategorileri kullanılmıyor." },
       { key: "definitions/traveler-card", reason: "Refakat kartı kullanılmıyor (etiketteki numara yeter)." },
       { key: "definitions/traveler-card-studio", reason: "Refakat kartı şablonu gerekmiyor." },
@@ -126,7 +125,6 @@ export const MENU_PRESET_FORBIDDEN_KEYS: ReadonlySet<string> = new Set([
   "operations/sack-content-edit",
   "definitions/sack-tags",
   "definitions/cariler",
-  "definitions/customers",
   "definitions/stations",
   "definitions/machines",
   "definitions/labels",

@@ -9,17 +9,16 @@
 // Profil aktifken altında kategori çoklu seçimi (`CustomerSubcontractorCategories`, 2026-11-19) — seçiciler buna göre süzer.
 // =============================================================================
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { subcontractorService } from "@/pages/Subcontractors/service";
 import type { Subcontractor } from "@/pages/Subcontractors/types";
 import { partnerRoleLabels } from "@/lib/partnerRoles";
 import type { Customer } from "./types";
 import { CustomerSubcontractorCategories } from "./CustomerSubcontractorCategories";
+import { SubcontractorProfileEdit } from "./SubcontractorProfileEdit";
 
 export const SUBCONTRACTOR_ROLE_LABEL = "Fason iş yapar";
 export const SUBCONTRACTOR_ROLE_TYPE_HINT = `Fason profili için kartın ${partnerRoleLabels.supplier} rolü olmalı (önce Tedarikçi kutusunu işaretleyip kaydedin).`;
-export const SUBCONTRACTORS_PATH = "/definitions/subcontractors";
 
 /** Bu carinin fason profili (aktif ya da pasif) — bağ `customerId` üzerinden, liste süzgeciyle. */
 export function useSubcontractorProfile(customerId: string) {
@@ -76,8 +75,8 @@ export function CustomerSubcontractorRole({ customer }: { customer: Customer }) 
         {!typeOk
           ? SUBCONTRACTOR_ROLE_TYPE_HINT
           : profile.data
-            ? <>Fason profili: <span className="font-mono">{profile.data.code}</span>{profile.data.isActive ? "" : " (pasif)"} — <Link className="underline underline-offset-2" to={SUBCONTRACTORS_PATH}>fason firmaları sayfasında aç</Link></>
-            : "İşaretlenince bu kart için fason profili açılır; altından fason kategorilerini seçebilirsiniz (belge profili fason sayfasından düzenlenir)."}
+            ? <>Fason profili: <span className="font-mono">{profile.data.code}</span>{profile.data.isActive ? "" : " (pasif)"} — <SubcontractorProfileEdit profile={profile.data} onSaved={refresh} /></>
+            : "İşaretlenince bu kart için fason profili açılır; altından fason kategorilerini seçebilirsiniz (belge profili ve ücretler profil düzenleme penceresinden)."}
       </p>
       {checked && profile.data && (
         <CustomerSubcontractorCategories

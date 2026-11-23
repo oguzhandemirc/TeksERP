@@ -41,7 +41,6 @@ import { PermissionsCatalogPage } from "@/pages/Access/Permissions/PermissionsCa
 import { PatronCloudPage } from "@/pages/Access/PatronCloud/PatronCloudPage";
 import { PatronPhonePage } from "@/pages/Access/PatronPhone/PatronPhonePage";
 import { ItemsPage } from "@/pages/Items/ItemsPage";
-import { CustomersPage } from "@/pages/Customers/CustomersPage";
 import { ProductionStationsPage } from "@/pages/Stations/ProductionStationsPage";
 import { EtiketlerPage } from "@/pages/Labels/EtiketlerPage";
 import { MachinesPage } from "@/pages/Machines/MachinesPage";
@@ -66,6 +65,7 @@ import { TeachStartPage } from "@/pages/Operations/GelenBelgeler/tanit/TanitStar
 import { CustomerDefaultsPage } from "@/pages/Operations/GelenBelgeler/MusteriVarsayilanUrunleriPage";
 import { CarilerPage } from "@/pages/Definitions/CarilerPage";
 import { CariRecordPage } from "@/pages/Definitions/cariler/CariRecordPage";
+import { LegacyCariRedirect } from "@/pages/Definitions/cariler/LegacyCariRedirect";
 import { FinanceHubPage } from "@/pages/Finance/FinanceHubPage";
 import { CariPage } from "@/pages/Finance/CariPage";
 import { InvoicesPage } from "@/pages/Finance/InvoicesPage";
@@ -141,7 +141,6 @@ import { RoutesPage } from "@/pages/Routes/RoutesPage";
 import { ProductRecipesPage } from "@/pages/ProductRecipes/ProductRecipesPage";
 import { FabricPropertiesPage } from "@/pages/FabricProperties/FabricPropertiesPage";
 import { SubcontractorCategoriesPage } from "@/pages/SubcontractorCategories/SubcontractorCategoriesPage";
-import { SubcontractorsPage } from "@/pages/Subcontractors/SubcontractorsPage";
 import { StationCapabilitiesPage } from "@/pages/StationCapabilities/StationCapabilitiesPage";
 import { SystemHubPage } from "@/pages/System/SystemHubPage";
 import { ModuleProfilePage } from "@/pages/System/ModuleProfile/ModuleProfilePage";
@@ -278,14 +277,8 @@ export const contentRoutes: RouteObject[] = [
       </ProtectedRoute>
     ),
   },
-  {
-    path: "definitions/customers",
-    element: (
-      <ProtectedRoute requirePermission="customer:read">
-        <CustomersPage />
-      </ProtectedRoute>
-    ),
-  },
+  // T1/T9: eski Müşteriler / Fason Firmalar → tek Cariler ekranı (izin kapısı hedef route'ta).
+  { path: "definitions/customers", element: <LegacyCariRedirect screen="customers" /> },
   {
     path: "definitions/stations",
     element: (
@@ -1042,14 +1035,7 @@ export const contentRoutes: RouteObject[] = [
       </ProtectedRoute>
     ),
   },
-  {
-    path: "definitions/subcontractors",
-    element: (
-      <ProtectedRoute requirePermission="subcontractor:read">
-        <SubcontractorsPage />
-      </ProtectedRoute>
-    ),
-  },
+  { path: "definitions/subcontractors", element: <LegacyCariRedirect screen="subcontractors" /> },
   {
     path: "definitions/station-capabilities",
     element: (

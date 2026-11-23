@@ -2,7 +2,7 @@
 // GÜZERGÂH · MK — sunucuda üretilen master veri kodu panelden KODSUZ açılır (K20)
 // =============================================================================
 //   MK1 Tanımlar → Fason Kategorileri → Yeni → ad → Kaydet → kod sunucudan (KAT…)
-//   MK2 finans KAPALI rejim: Tanımlar → Fason Firmalar → Yeni → ad → Kaydet → kod sunucudan (FSN…)
+//   MK2 finans KAPALI rejim: Tanımlar → Cariler → Yeni cari → ad → Fason iş yapar → Kaydet → kod sunucudan (MUS…)
 // Panel kod GÖNDERMEZ (buildPayload); sunucu üretir. 2026-09-23 ölçümü: controller zod'u `code`u
 // zorunlu tuttuğu için ikisi de 400 alıyordu. Ayar şifresi tanımlıysa `AYAR_SIFRESI_DOSYASI`ndan.
 // =============================================================================
@@ -16,10 +16,10 @@ const AYAR_SIFRESI = process.env.AYAR_SIFRESI_DOSYASI && fs.existsSync(process.e
 const sifre = AYAR_SIFRESI ? { "x-settings-password": AYAR_SIFRESI } : {};
 
 /** CrudPage: sayfa → "Yeni" → ad → Kaydet; POST yanıtının durumunu döndürür. */
-async function crudYeni({ git, page }, sayfa, uc, ad, formuDoldur = async () => {}) {
+async function crudYeni({ git, page }, sayfa, uc, ad, formuDoldur = async () => {}, yeniDugmesi = "Yeni") {
   await git(sayfa);
-  // CrudPage düğmesi TAM "Yeni" (sekme çubuğundaki "+" de "Yeni…" adını taşır — tam eşleşme şart).
-  await page().getByRole("button", { name: "Yeni", exact: true }).filter({ visible: true }).first().click({ timeout: 15_000 });
+  // Düğme adı TAM eşleşir (sekme çubuğundaki "+" de "Yeni…" adını taşır); Cariler'de "Yeni cari".
+  await page().getByRole("button", { name: yeniDugmesi, exact: true }).filter({ visible: true }).first().click({ timeout: 15_000 });
   const d = page().getByRole("dialog").last();
   await d.waitFor({ timeout: 10_000 });
   await d.locator("#name").fill(ad);
@@ -45,7 +45,7 @@ export const MASTER_KOD_ADIMLARI = [
     // Modül anahtarını yalnız SİSTEM HESABI değiştirir (API); panel yönetici oturumuyla açılır — bayrak girişte
     // okunduğu için MK2 taze oturumda koşar (oturumuYenile).
     id: "MK2a", rol: "P", sistemApi: true,
-    yol: "HAZIRLIK (sistem hesabı, API) — finans modülünü KAPAT (fason firma kartı yalnız finans kapalıyken ayrı ekranda)", rota: "system/feature-flags",
+    yol: "HAZIRLIK (sistem hesabı, API) — finans modülünü KAPAT (fabrika rejiminde de tek Cariler ekranı çalışır mı)", rota: "system/feature-flags",
     async yap(ctx) {
       olc.financeOnce = (await ctx.apiRol("S", "/api/feature-flags")).govde?.data?.financeEnabled ?? null;
       const r = await ctx.apiRol("S", "/api/feature-flags", { method: "PATCH", headers: sifre, body: JSON.stringify({ financeEnabled: false }) });
@@ -56,15 +56,14 @@ export const MASTER_KOD_ADIMLARI = [
   },
   {
     id: "MK2", rol: "P", sistemApi: true, gerektirir: ["MK2a"],
-    yol: "finans KAPALI → Tanımlar → Fason Firmalar → Yeni → ad → Kaydet — kod sunucudan (FSN…); finans eski hâline", rota: "definitions/subcontractors",
+    // T1/T9 (2026-11-23): ayrı Fason Firmalar ekranı yok — fason firma bir cari kartıdır; "Fason iş yapar" kutusu
+    // kart + fason profilini tek istekte doğurur (Tedarikçi rolü kendiliğinden işaretlenir).
+    yol: "finans KAPALI → Tanımlar → Cariler → Yeni cari → ad → Fason iş yapar → Kaydet — kart kodu sunucudan (MUS…), profil aynı kodla bağlı; finans eski hâline", rota: "definitions/cariler",
     async yap(ctx) {
       try {
-        // Form: en az bir hizmet kategorisi + bağlı cari ("Cari kart oluştur ve bağla" — rol modeli).
-        olc.firmaDurum = await crudYeni(ctx, "Fason Firmalar", "/api/subcontractors", MK.firma, async (d) => {
-          await d.getByRole("checkbox").filter({ hasNot: ctx.page().locator("#isActive") }).first().click({ timeout: 10_000 });
-          await d.getByRole("button", { name: /Cari kart oluştur ve bağla/ }).click({ timeout: 10_000 });
-          await ctx.page().waitForTimeout(1500);
-        });
+        olc.firmaDurum = await crudYeni(ctx, "Cariler", "/api/customers", MK.firma, async (d) => {
+          await d.getByRole("checkbox", { name: "Fason iş yapar" }).check({ timeout: 10_000 });
+        }, "Yeni cari");
       } finally {
         if (olc.financeOnce !== null) await ctx.apiRol("S", "/api/feature-flags", { method: "PATCH", headers: sifre, body: JSON.stringify({ financeEnabled: olc.financeOnce }) });
         ctx.oturumuYenile();
@@ -72,7 +71,8 @@ export const MASTER_KOD_ADIMLARI = [
     },
     dogrula: [
       { ad: "POST 2xx (kodsuz gövde kabul)", sql: `SELECT 1`, oku: () => olc.firmaDurum, beklenen: (v) => v >= 200 && v < 300 },
-      { ad: "firma doğdu ve kodu sunucu üretti (FSN…)", sql: `SELECT code FROM subcontractors WHERE name ILIKE '%' || $1 || '%'`, params: () => [`MK${K} `], oku: (r) => r[0]?.code ?? r.length, beklenen: (v) => /^FSN/.test(String(v)) },
+      { ad: "kart doğdu ve kodu sunucu üretti (MUS…)", sql: `SELECT code FROM customers WHERE name ILIKE '%' || $1 || '%'`, params: () => [`MK${K} `], oku: (r) => r[0]?.code ?? r.length, beklenen: (v) => /^MUS/.test(String(v)) },
+      { ad: "fason profili karta bağlı ve aynı kodu taşıyor", sql: `SELECT s.code = c.code AS ayni FROM subcontractors s JOIN customers c ON c.id = s."customerId" WHERE c.name ILIKE '%' || $1 || '%'`, params: () => [`MK${K} `], oku: (r) => r[0]?.ayni ?? false, beklenen: (v) => v === true },
       { ad: "finans bayrağı eski hâlinde", uc: "/api/feature-flags", oku: (g) => String(g?.data?.financeEnabled), beklenen: (v) => olc.financeOnce === null || v === String(olc.financeOnce) },
     ],
   },

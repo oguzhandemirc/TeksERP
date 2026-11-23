@@ -86,6 +86,8 @@ const REDIRECT_ALIASES: Record<string, string> = {
   "/operations/kursun-queue": "/operations/kursun-dagitim",
   "/operations/sack-search": "/operations/sack-content-edit",
   "/operations/scan-dispatch": "/operations/sack-store",
+  "/definitions/customers": "/definitions/cariler",
+  "/definitions/subcontractors": "/definitions/cariler",
 };
 
 /**
