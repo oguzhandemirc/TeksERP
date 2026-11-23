@@ -3,6 +3,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { DetailTable, MetricCard, ReportPageLayout } from "../_components";
 import { ReportExportBar } from "../_components/ReportExportBar";
 import { fmtDate, fmtDateTime, fmtInt } from "../_components/formatters";
+import { CRUD_LABEL } from "../_components/audit-labels";
 import { useReportDateRange } from "../_hooks/useReportDateRange";
 import { auditReportsApi, type UserActivityRow } from "./service";
 import { buildUserActivityExport } from "./userActivityExport";
@@ -15,11 +16,11 @@ const columns: ColumnDef<UserActivityRow>[] = [
   },
   { accessorKey: "username", header: "Kullanıcı Adı", cell: ({ getValue }) => (getValue() as string) || "—" },
   { accessorKey: "totalCount", header: "Toplam", cell: ({ getValue }) => fmtInt(getValue() as number) },
-  { accessorKey: "createCount", header: "Oluştur", cell: ({ getValue }) => fmtInt(getValue() as number) },
-  { accessorKey: "updateCount", header: "Güncelle", cell: ({ getValue }) => fmtInt(getValue() as number) },
+  { accessorKey: "createCount", header: CRUD_LABEL.CREATE!, cell: ({ getValue }) => fmtInt(getValue() as number) },
+  { accessorKey: "updateCount", header: CRUD_LABEL.UPDATE!, cell: ({ getValue }) => fmtInt(getValue() as number) },
   {
     accessorKey: "deleteCount",
-    header: "Sil",
+    header: CRUD_LABEL.DELETE!,
     cell: ({ getValue }) => {
       const v = getValue() as number;
       return <span className={v > 0 ? "font-semibold text-warning" : ""}>{fmtInt(v)}</span>;
@@ -50,7 +51,7 @@ export function UserActivityPage() {
     <ReportPageLayout
       reportKey="audit/user-activity"
       title="Kullanıcı Aktivitesi"
-      description="Aralıkta her kullanıcının yaptığı CUD işlem sayısı ve son işlem zamanı."
+      description="Aralıkta her kullanıcının yaptığı kayıt ekleme, değiştirme ve silme sayısı ve son işlem zamanı."
       actions={
         <ReportExportBar
           disabled={!data}

@@ -3,7 +3,6 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { REPORT_BY_KEY, type ReportKey } from "@/lib/report-catalog";
 import { ReportDateFilter } from "./ReportDateFilter";
-import { ReportSideRail } from "./ReportSideRail";
 import { LegacyReportBanner } from "./LegacyReportBanner";
 
 interface Props {
@@ -24,35 +23,40 @@ interface Props {
 }
 
 /**
- * Rapor sayfası iskelet: başlık + (ops.) tarih/özel filtre + kaydırılabilir içerik
- * + sağ kenar kategori-içi hızlı geçiş rail'i. Rail leaf raporlarda otomatik
- * görünür (URL `/reports/<category>/<report>` paternindeyse).
+ * Rapor yaprağının TEK iskeleti — v2 çerçevesiyle (`_v2/view/ReportV2Frame`) aynı düzen: sabit başlık
+ * (açıklama ⓘ'de, eylemler sağda) → TEK kaydırıcı: soluk soru satırı → filtre şeridi → tam genişlik gövde.
+ * Dar ortalanmış sütun ve sağ kategori şeridi yok; kategori içi geçiş Rapor Merkezi'nden.
  */
 export function ReportPageLayout({ title, description, actions, reportKey, showCompare = false, filters, children }: Props) {
-  // ⚠️ SORU CÜMLESİ TEK YERDEN ve KATALOGTAN: her rapor "neyi cevapladığını"
-  // başlığının altında söyler. Metni sayfa yazsaydı katalogla ekran ayrışır ve
-  // hangisinin doğru olduğu ölçülemezdi (kapı: sayfa kendi cümlesini yazarsa
-  // kırmızı). Anahtar `reportKey` propundan gelir — adresten TAHMİN edilmez.
-  // `description` raporun İÇERİĞİNİ tarif eder, `soru` NE SORUYA cevap verdiğini;
-  // ikisi farklı iş yapar, ikisi de kalır.
+  // ⚠️ SORU CÜMLESİ TEK YERDEN ve KATALOGTAN (report-question): sayfa kendi cümlesini yazarsa
+  // katalogla ekran ayrışır. `description` raporun İÇERİĞİNİ, `soru` NE SORUYA cevap verdiğini söyler.
   const soru = reportKey ? (REPORT_BY_KEY.get(reportKey)?.soru ?? null) : null;
+  const info = [soru, description].filter(Boolean).join(" — ") || undefined;
   return (
     <PageShell className="overflow-hidden">
-      <PageHeader title={title} description={description} actions={actions} />
-      {/* Raporlar v2 geçiş bandı: bayrak kapalıyken null döner (DOM bayt-eşit). */}
-      <LegacyReportBanner reportKey={reportKey} />
-      {soru ? (
-        <p className="border-b bg-muted/20 px-4 py-2 text-xs text-muted-foreground">
-          <span className="font-medium text-foreground">Bu rapor şunu cevaplar:</span> {soru}
-        </p>
-      ) : null}
-      {filters ? filters : reportKey ? <ReportDateFilter reportKey={reportKey} showCompare={showCompare} /> : null}
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <PageBody className="p-4">
-          <div className="mx-auto flex max-w-7xl flex-col gap-4">{children}</div>
-        </PageBody>
-        <ReportSideRail />
-      </div>
+      <PageHeader
+        title={title}
+        description={info}
+        actionsAlign="center"
+        actions={
+          <>
+            {/* Taşınan aracın yeni yeri: başlıkta küçük bağlantı (akışta bant değil). */}
+            <LegacyReportBanner reportKey={reportKey} />
+            {actions}
+          </>
+        }
+      />
+      <PageBody className="relative" data-testid="report-scroll">
+        {soru ? (
+          <div className="px-4 pt-2 pb-1.5">
+            <p className="truncate text-sm text-muted-foreground" data-testid="report-question" title={soru}>
+              {soru}
+            </p>
+          </div>
+        ) : null}
+        {filters ? filters : reportKey ? <ReportDateFilter reportKey={reportKey} showCompare={showCompare} /> : null}
+        <div className="flex flex-col gap-4 p-4">{children}</div>
+      </PageBody>
     </PageShell>
   );
 }

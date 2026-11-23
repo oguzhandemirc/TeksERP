@@ -1,4 +1,5 @@
 import { AlertCircle } from "lucide-react";
+import { InfoPopover } from "@/components/ui/info-popover";
 import { fmtFactoryDateTime } from "@/lib/factory-time";
 import { ReportChartCard } from "./grafik/ekran/ReportChartCard";
 import type { RaporSunumu } from "./sunum";
@@ -37,16 +38,22 @@ export function ReportBody({ presentation: p, fetchedAt, rowLink }: Props) {
   const { pref, update } = useReportViewPref(p.anahtar);
   const layout = layoutOf(pref.layout, p.tablo?.kolonlar.length ?? 0);
   const both = Boolean(p.grafik && p.tablo);
+  // Söylenecek cümle yoksa "Öne çıkanlar" kutusu çizilmez; sayı kartları tam satırı eşit sütunlarla doldurur.
+  const hasNarrative = p.anlati.length > 0;
   return (
     <div className="@container flex flex-col gap-4">
-      <div className="grid gap-4 @5xl:grid-cols-12">
-        <div className="@5xl:col-span-8">
-          <HeadlineCard headline={p.anaSayi} sideFigures={p.yanSayilar} comparisonLabel={p.kiyasDonemi?.etiket} />
+      {hasNarrative ? (
+        <div className="grid gap-4 @5xl:grid-cols-12">
+          <div className="@5xl:col-span-8">
+            <HeadlineCard headline={p.anaSayi} sideFigures={p.yanSayilar} comparisonLabel={p.kiyasDonemi?.etiket} />
+          </div>
+          <div className="@5xl:col-span-4">
+            <NarrativeBox sentences={p.anlati} title={HIGHLIGHTS_TITLE} />
+          </div>
         </div>
-        <div className="@5xl:col-span-4">
-          <NarrativeBox sentences={p.anlati} title={HIGHLIGHTS_TITLE} />
-        </div>
-      </div>
+      ) : (
+        <HeadlineCard headline={p.anaSayi} sideFigures={p.yanSayilar} comparisonLabel={p.kiyasDonemi?.etiket} wide />
+      )}
       {p.uyarilar.length > 0 ? (
         <ul className="space-y-1 rounded-xl border border-warning/40 bg-warning-soft px-4 py-2.5 text-sm text-warning-soft-foreground">
           {p.uyarilar.map((u) => (
@@ -80,19 +87,24 @@ export function ReportBody({ presentation: p, fetchedAt, rowLink }: Props) {
           />
         ) : null}
       </div>
-      <footer className="flex flex-col gap-2 border-t pt-3 text-xs text-muted-foreground">
+      <footer className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t pt-3 text-xs text-muted-foreground">
         {p.tanimlar.length > 0 ? (
-          <details>
-            <summary className="cursor-pointer font-medium text-foreground">Bu rapor ne sayar?</summary>
-            <dl className="mt-2 space-y-1.5">
-              {p.tanimlar.map((t) => (
-                <div key={t.ad}>
-                  <dt className="font-medium text-foreground">{t.ad}</dt>
-                  <dd>{t.aciklama}</dd>
-                </div>
-              ))}
-            </dl>
-          </details>
+          <span className="inline-flex items-center gap-1 font-medium text-foreground">
+            Bu rapor ne sayar?
+            <InfoPopover
+              label="Bu rapor ne sayar?"
+              desc={
+                <dl className="space-y-1.5 text-xs">
+                  {p.tanimlar.map((t) => (
+                    <div key={t.ad}>
+                      <dt className="font-medium">{t.ad}</dt>
+                      <dd className="text-muted-foreground">{t.aciklama}</dd>
+                    </div>
+                  ))}
+                </dl>
+              }
+            />
+          </span>
         ) : null}
         <p>
           Dönem: {p.donem.etiket}

@@ -1,9 +1,12 @@
 // =============================================================================
-// ENUM AYARI — seçenekler alt alta, her birinin altında tek cümle (URUN-YASAM-DONGUSU §8)
+// ENUM AYARI — seçenekler ızgarada kutucuk, her birinin altında tek cümle (URUN-YASAM-DONGUSU §8)
 // =============================================================================
 // Seçeneklerin davranışı birbirinden çok farklıysa (ör. "Tükenene kadar" kart ayarları)
 // açılır liste yerine bu çizilir: kullanıcı seçmeden önce her seçeneğin ne yaptığını görür.
+// Başlığın ALTINDA yatay ızgara (dar sütuna sıkışıp 4–5 satıra kırılmaz; denetim O28).
 // =============================================================================
+import { cn } from "@/lib/utils";
+
 interface Props {
   name: string;
   value: string;
@@ -12,11 +15,22 @@ interface Props {
   onChange: (value: string) => void;
 }
 
+/** Seçenek ızgarası — radyo ve onay kutusu ikizinin ortak kabı. */
+export const OPTION_GRID = "grid max-w-3xl gap-2 sm:grid-cols-2 lg:grid-cols-3";
+
+export function optionTileClass(selected: boolean, disabled?: boolean): string {
+  return cn(
+    "flex cursor-pointer gap-2 rounded-lg border p-2.5 text-sm transition-colors",
+    selected ? "border-primary/60 bg-primary/5" : "border-input hover:bg-muted/50",
+    disabled && "cursor-not-allowed opacity-60",
+  );
+}
+
 export function EnumRadioOptions({ name, value, options, disabled, onChange }: Props) {
   return (
-    <fieldset className="w-72 shrink-0 space-y-1.5" aria-label={name}>
+    <fieldset className={OPTION_GRID} aria-label={name}>
       {options.map((o) => (
-        <label key={o.value} className="flex cursor-pointer gap-2 text-sm">
+        <label key={o.value} className={optionTileClass(value === o.value, disabled)}>
           <input
             type="radio"
             name={name}

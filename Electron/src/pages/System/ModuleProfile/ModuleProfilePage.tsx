@@ -8,6 +8,7 @@ import { RefreshButton } from "@/components/RefreshButton";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
+import { InfoPopover } from "@/components/ui/info-popover";
 import {
   Dialog,
   DialogContent,
@@ -100,9 +101,10 @@ function Section({
 }) {
   return (
     <section className="space-y-3">
-      <div>
+      {/* Bölüm açıklaması akışta paragraf değil, başlık yanında ⓘ (denetim O11). */}
+      <div className="flex items-center gap-1.5">
         <h2 className="text-sm font-semibold">{title}</h2>
-        {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
+        {description && <InfoPopover desc={description} label={`${title} — açıklama`} />}
       </div>
       {children}
     </section>
@@ -210,7 +212,7 @@ export function ModuleProfilePage() {
 
           {/* ── ① MODÜL ANAHTARLARI ──────────────────────────────────────── */}
           <Section
-            title="Modüller"
+            title="Modül anahtarları"
             description={MODULES_CATEGORY?.description}
           >
             {MODULES_CATEGORY?.flags ? (
@@ -220,21 +222,17 @@ export function ModuleProfilePage() {
             {/* Yer tutucular — Genel Ayarlar'da BİLEREK yok ("açtım, hiçbir şey
                 olmadı"), ama burası kurulumun TAM fotoğrafı: profil tablosunda
                 yedi sütun varken beşini göstermek satıcıyı yanıltırdı. */}
-            <div className="rounded-md border border-dashed p-3">
-              <p className="mb-2 text-xs font-medium text-muted-foreground">
-                Anahtarı olan ama henüz yüzeyi olmayan modüller
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {MODULE_PLACEHOLDERS.map((k) => (
-                  <Badge key={k} variant="muted">
-                    {MODULE_LABELS[k]} · yüzeyi yok
-                  </Badge>
-                ))}
-              </div>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Bu anahtarlar profillerde taşınır ve kurulumda yazılır, ama arkalarında henüz ekran
-                yok — açmak bugün hiçbir şeyi değiştirmez.
-              </p>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span className="font-medium">Henüz ekranı olmayan modüller</span>
+              <InfoPopover
+                label="Henüz ekranı olmayan modüller — açıklama"
+                desc="Bu anahtarlar profillerde taşınır ve kurulumda yazılır, ama arkalarında henüz ekran yok — açmak bugün hiçbir şeyi değiştirmez."
+              />
+              {MODULE_PLACEHOLDERS.map((k) => (
+                <Badge key={k} variant="muted">
+                  {MODULE_LABELS[k]} · yüzeyi yok
+                </Badge>
+              ))}
             </div>
           </Section>
 

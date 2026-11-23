@@ -10,7 +10,7 @@ import {
 } from "../_components";
 import { ReportExportBar } from "../_components/ReportExportBar";
 import { fmtDate, fmtDayShort, fmtInt } from "../_components/formatters";
-import { actionLabel, tableLabel } from "../_components/audit-labels";
+import { CRUD_LABEL, actionLabel, tableLabel } from "../_components/audit-labels";
 import { useReportDateRange } from "../_hooks/useReportDateRange";
 import { auditReportsApi } from "./service";
 import { buildSystemLogSummaryExport } from "./systemLogSummaryExport";
@@ -45,7 +45,7 @@ export function SystemLogSummaryPage() {
     <ReportPageLayout
       reportKey="audit/system-log-summary"
       title="Denetim Kaydı Özeti"
-      description="SystemLog tablosunda aralık içinde oluşan kayıtların kırılımı."
+      description="Seçilen aralıkta denetim kaydına düşen işlemlerin türe, güne ve kayıt türüne göre dağılımı."
       actions={
         <ReportExportBar
           disabled={!s}
@@ -56,17 +56,17 @@ export function SystemLogSummaryPage() {
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard label="Toplam Kayıt" value={fmtInt(s?.totalLogs ?? 0)} isLoading={isLoading} />
         <MetricCard
-          label="Oluştur"
+          label={CRUD_LABEL.CREATE!}
           value={fmtInt(s?.byAction.find((a) => a.action === "CREATE")?.count ?? 0)}
           isLoading={isLoading}
         />
         <MetricCard
-          label="Güncelle"
+          label={CRUD_LABEL.UPDATE!}
           value={fmtInt(s?.byAction.find((a) => a.action === "UPDATE")?.count ?? 0)}
           isLoading={isLoading}
         />
         <MetricCard
-          label="Sil"
+          label={CRUD_LABEL.DELETE!}
           value={fmtInt(s?.byAction.find((a) => a.action === "DELETE")?.count ?? 0)}
           tone={(s?.byAction.find((a) => a.action === "DELETE")?.count ?? 0) > 0 ? "warn" : "neutral"}
           isLoading={isLoading}
@@ -94,9 +94,9 @@ export function SystemLogSummaryPage() {
             data={s?.daily ?? []}
             xKey="day"
             lines={[
-              { key: "create", label: "Oluştur" },
-              { key: "update", label: "Güncelle" },
-              { key: "delete", label: "Sil", color: "#ef4444" },
+              { key: "create", label: CRUD_LABEL.CREATE! },
+              { key: "update", label: CRUD_LABEL.UPDATE! },
+              { key: "delete", label: CRUD_LABEL.DELETE!, color: "#ef4444" },
             ]}
             formatValue={(v) => fmtInt(v)}
             formatCategory={fmtDayShort}

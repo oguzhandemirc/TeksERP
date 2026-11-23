@@ -107,13 +107,13 @@ export function ServerStatusPage() {
 
         {/* Backend prosesinin kendi kullanımı */}
         <section>
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-            Backend Sunucusu (kendi kullanımı)
+          <h2 className="mb-3 text-sm font-semibold text-foreground">
+            TeksERP sunucu programı (kendi kullanımı)
           </h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <MetricCard
               icon={MemoryStick}
-              label="RAM (RSS)"
+              label="Bellek"
               value={data ? fmtBytes(data.procRssBytes) : "—"}
               sub={
                 data
@@ -138,8 +138,8 @@ export function ServerStatusPage() {
 
         {/* Makinenin geneli */}
         <section>
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-            Makine Geneli (tüm programlar dahil)
+          <h2 className="mb-3 text-sm font-semibold text-foreground">
+            Sunucu bilgisayarı geneli (tüm programlar dahil)
           </h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <MetricCard
@@ -174,8 +174,8 @@ export function ServerStatusPage() {
 
         {/* İkincil bilgiler */}
         <section>
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-            Sunucu Bilgileri
+          <h2 className="mb-3 text-sm font-semibold text-foreground">
+            Sunucu bilgileri
           </h2>
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Card>
@@ -183,7 +183,7 @@ export function ServerStatusPage() {
                 <InfoRow label="Çalışma süresi" value={data ? fmtUptime(data.uptimeSec) : "—"} />
                 <InfoRow label="Sürüm" value={data?.version ?? "—"} />
                 <InfoRow
-                  label="Yanıt gecikmesi (event loop)"
+                  label="Yanıt gecikmesi"
                   value={data ? `${data.eventLoopLagMs} ms` : "—"}
                   danger={levelOf(data?.eventLoopLagMs, 100, 500) === "crit"}
                 />

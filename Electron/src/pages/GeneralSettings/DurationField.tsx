@@ -71,7 +71,7 @@ export function DurationField({
   return (
     <div className="space-y-1.5">
       {toggle ? (
-        <label className="flex cursor-pointer items-center justify-between gap-4">
+        <label className="flex max-w-3xl cursor-pointer items-center justify-between gap-6">
           <span className="flex items-center gap-1.5 text-sm font-medium">
             {toggle.label}
             <HintIcon variant={hint} desc={desc} />

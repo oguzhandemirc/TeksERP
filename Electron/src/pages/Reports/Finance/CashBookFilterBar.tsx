@@ -47,7 +47,7 @@ export function CashBookFilterBar({
   onClearSelection,
 }: Props) {
   return (
-    <div className="flex flex-wrap items-end gap-1 border-b px-3 py-2 text-xs">
+    <div className="flex flex-wrap items-center gap-1 border-b px-3 py-2 text-xs">
       <select
         value={accountKind}
         onChange={(e) => onChangeKind(e.target.value)}

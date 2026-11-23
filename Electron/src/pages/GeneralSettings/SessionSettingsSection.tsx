@@ -317,7 +317,7 @@ export function SessionSettingsSection({
           canSave={s.allValid}
           onSave={s.save}
           onReset={s.reset}
-          note="Oturum süresi + same-type politikası backend tarafından uygulanır; panel hareketsizlik çıkışı her panel bilgisayarında kendi başına, mobil kilit sahadaki cihazlarda çalışır. Çalışma oturumu zaman aşımı tüm saha cihazları için backend tarafından uygulanır."
+          note="Oturum süresi ve aynı türde tek oturum kuralı sunucuda uygulanır; panelde hareketsizlik çıkışı her bilgisayarda kendi başına, mobil kilit sahadaki cihazlarda çalışır. Çalışma oturumu zaman aşımı bütün saha cihazları için sunucuda uygulanır."
         />
       </div>
     </PermissionGate>

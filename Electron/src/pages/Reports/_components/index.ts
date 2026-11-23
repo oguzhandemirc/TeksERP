@@ -1,6 +1,5 @@
 export { ReportPageLayout } from "./ReportPageLayout";
 export { ReportDateFilter, type DateWindowValue } from "./ReportDateFilter";
-export { ReportSideRail } from "./ReportSideRail";
 export { ReportHubGrid, type HubTile } from "./ReportHubGrid";
 export { MetricCard } from "./MetricCard";
 export { ChartCard } from "./ChartCard";

@@ -1,4 +1,4 @@
-import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { CHART_COLORS } from "@/lib/chart-theme";
 
 interface LineDef {
@@ -38,11 +38,13 @@ export function SimpleLineChart<T>({
 
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <LineChart data={data} margin={{ top: 6, right: 12, left: 0, bottom: 6 }}>
+      <LineChart data={data} margin={{ top: 12, right: 12, left: 4, bottom: 6 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
         <XAxis dataKey={xKey} tickFormatter={catFmt} fontSize={11} stroke="hsl(var(--muted-foreground))" />
+        {/* Sabit eksen genişliği: "1000 ms" gibi uzun etiket iki satıra kırılıp kırpılmasın (denetim Y12). */}
         <YAxis
           {...(dual ? { yAxisId: "left" } : {})}
+          width={64}
           tickFormatter={valueFmt}
           fontSize={11}
           stroke="hsl(var(--muted-foreground))"
@@ -68,6 +70,7 @@ export function SimpleLineChart<T>({
           formatter={valueFmt}
           labelFormatter={catFmt}
         />
+        {lines.length > 1 ? <Legend iconType="plainline" wrapperStyle={{ fontSize: 11 }} /> : null}
         {lines.map((l, idx) => (
           <Line
             key={l.key}

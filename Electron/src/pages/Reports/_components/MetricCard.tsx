@@ -1,74 +1,60 @@
-import type { LucideIcon } from "lucide-react";
-import { motion } from "framer-motion";
-import { Card } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
+import { Gauge, type LucideIcon } from "lucide-react";
 import { AnimatedNumber } from "@/components/motion";
-import { fadeInUp, easeOut } from "@/lib/motion";
+import { IconTile, type IconTileTone } from "@/components/ui/icon-tile";
+import { cn } from "@/lib/utils";
 
 interface Props {
   label: string;
   value: string | number | null | undefined;
   hint?: string;
   icon?: LucideIcon;
-  /** "ok" | "warn" | "bad" — üst kenar + (ikon varsa) chip rengi. */
+  /** "ok" | "warn" | "bad" — simge karesi ve (uyarıda) değer rengi. */
   tone?: "neutral" | "ok" | "warn" | "bad";
   isLoading?: boolean;
 }
 
-const TONE_BAR: Record<NonNullable<Props["tone"]>, string> = {
-  neutral: "bg-muted",
-  ok: "bg-success/80",
-  warn: "bg-warning/80",
-  bad: "bg-destructive/80",
+const TONE_TILE: Record<NonNullable<Props["tone"]>, IconTileTone> = {
+  neutral: "sky",
+  ok: "green",
+  warn: "amber",
+  bad: "rose",
 };
 
-const TONE_TEXT: Record<NonNullable<Props["tone"]>, string> = {
-  neutral: "text-muted-foreground",
-  ok: "text-success",
+const TONE_VALUE: Record<NonNullable<Props["tone"]>, string> = {
+  neutral: "",
+  ok: "",
   warn: "text-warning",
   bad: "text-destructive",
 };
 
-/** KPI kart — başlık + büyük sayı + opsiyonel hint. Nazik giriş + tonlu vurgu. */
-export function MetricCard({ label, value, hint, icon: Icon, tone = "neutral", isLoading }: Props) {
+/**
+ * KPI kartı — v2 sayı kartıyla (`_v2/HeadlineCard`) aynı dil: simge karesi + etiket + büyük değer.
+ * `h-full`: ızgaradaki kartlar eşit boy (ipucu olan/olmayan kart farklı yükseklikte durmaz).
+ */
+export function MetricCard({ label, value, hint, icon, tone = "neutral", isLoading }: Props) {
   const display = value === null || value === undefined || value === "" ? "—" : value;
   return (
-    <motion.div variants={fadeInUp} initial="hidden" animate="show" transition={easeOut}>
-      <Card className="relative h-full overflow-hidden bg-gradient-to-br from-muted/25 to-transparent p-4">
-        <div className={cn("absolute inset-x-0 top-0 h-0.5", TONE_BAR[tone])} />
-        {Icon ? (
-          <Icon
-            aria-hidden
-            className={cn(
-              "pointer-events-none absolute -bottom-3 -right-2 h-16 w-16 opacity-[0.05]",
-              TONE_TEXT[tone],
-            )}
-          />
-        ) : null}
-        <div className="relative flex items-start justify-between gap-2">
-          <p className="text-xs font-medium text-muted-foreground">{label}</p>
-          {Icon ? (
-            <div
-              className={cn(
-                "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-current/10",
-                TONE_TEXT[tone],
-              )}
-            >
-              <Icon className="h-4 w-4" />
-            </div>
-          ) : null}
-        </div>
-        <div className="relative mt-2 text-2xl font-semibold tracking-tight tabular-nums">
+    <div className="flex h-full min-w-0 items-center gap-3 rounded-xl border border-card-border bg-card p-4 shadow-card" data-testid="metric-card">
+      <IconTile icon={icon ?? Gauge} tone={TONE_TILE[tone]} size="md" />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-xs font-medium text-muted-foreground" title={label}>
+          {label}
+        </p>
+        <p className={cn("mt-0.5 truncate text-2xl font-bold leading-tight tracking-tight tabular-nums", TONE_VALUE[tone])}>
           {isLoading ? (
-            <span className="text-muted-foreground/40">...</span>
+            <span className="text-muted-foreground/40">…</span>
           ) : typeof display === "number" ? (
             <AnimatedNumber value={display} />
           ) : (
             display
           )}
-        </div>
-        {hint ? <p className="relative mt-1 text-[11px] text-muted-foreground">{hint}</p> : null}
-      </Card>
-    </motion.div>
+        </p>
+        {hint ? (
+          <p className="mt-0.5 truncate text-xs text-muted-foreground" title={hint}>
+            {hint}
+          </p>
+        ) : null}
+      </div>
+    </div>
   );
 }

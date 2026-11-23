@@ -11,7 +11,7 @@
 // satırlarını bir gün kaydırabilir. API ne döndüyse o basılır.
 
 import type { ReportExportSpec } from "../_components/reportExport";
-import { actionLabel, tableLabel } from "../_components/audit-labels";
+import { CRUD_LABEL, actionLabel, tableLabel } from "../_components/audit-labels";
 import type { SystemLogSummary } from "./service";
 import { getFactoryTimezone } from "@/lib/factory-time";
 
@@ -25,9 +25,9 @@ export function buildSystemLogSummaryExport(opts: {
     title: "Denetim Kaydı Özeti",
     subtitle: periodLabel,
     meta: [
-      "Kapsam: SystemLog tablosunda aralık İÇİNDE oluşan kayıtlar (kaydın oluşma anına göre).",
+      "Kapsam: denetim kaydında aralık İÇİNDE oluşan kayıtlar (kaydın oluşma anına göre).",
       `Günlük kırılım FABRİKA takvim gününe göredir (her kayıt kendi anındaki dilimle; şu an ${getFactoryTimezone()}) — gece yarısından sonraki işlemler kendi gününde sayılır.`,
-      "Toplam kayıt, yalnız CUD değildir: giriş/çıkış ve sistem olayları da işlem türü kırılımına dahildir.",
+      "Toplam kayıt yalnız ekleme/değiştirme/silme değildir: giriş/çıkış ve sistem olayları da işlem türü kırılımına dahildir.",
     ],
     tables: [
       {
@@ -43,9 +43,9 @@ export function buildSystemLogSummaryExport(opts: {
         name: "Günlük Aktivite",
         columns: [
           { header: "Gün", key: "day", width: 14 },
-          { header: "Oluştur", key: "create", width: 12, numFmt: "0", align: "right" },
-          { header: "Güncelle", key: "update", width: 12, numFmt: "0", align: "right" },
-          { header: "Sil", key: "delete", width: 12, numFmt: "0", align: "right" },
+          { header: CRUD_LABEL.CREATE!, key: "create", width: 12, numFmt: "0", align: "right" },
+          { header: CRUD_LABEL.UPDATE!, key: "update", width: 12, numFmt: "0", align: "right" },
+          { header: CRUD_LABEL.DELETE!, key: "delete", width: 12, numFmt: "0", align: "right" },
         ],
         // Etiket API'den geldiği gibi (YYYY-AA-GG) — bkz. dosya başlığındaki uyarı.
         rows: s.daily.map((d) => ({ day: d.day, create: d.create, update: d.update, delete: d.delete })),
@@ -57,7 +57,7 @@ export function buildSystemLogSummaryExport(opts: {
         },
         notes: [
           `Gün etiketi fabrika takvim günüdür (kaydın anındaki dilim; şu an ${getFactoryTimezone()}), biçim YYYY-AA-GG.`,
-          "Bu tablo yalnız Oluştur/Güncelle/Sil'i ayırır; diğer olaylar sütunlara girmez, bu yüzden satır toplamı 'İşlem Türü' toplamından küçük olabilir.",
+          "Bu tablo yalnız yeni kayıt / değişiklik / silmeyi ayırır; diğer olaylar sütunlara girmez, bu yüzden satır toplamı 'İşlem Türü' toplamından küçük olabilir.",
         ],
       },
       {
