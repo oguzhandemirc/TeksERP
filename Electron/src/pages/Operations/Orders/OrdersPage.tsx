@@ -130,7 +130,7 @@ export function OrdersPage() {
   const stockLineExports: ExtraExportOption[] = [
     {
       key: "stock-line",
-      label: "Excel (stok kalemi bazında)…",
+      label: "Stok kalemi bazında (Excel / PDF)…",
       title: "Kumaş + renk başına tek satır: sipariş, sevk, açık, üretimde, depoda hazır",
       onSelect: () => setStockLineOpen(true),
     },

@@ -50,6 +50,8 @@ export interface ExportDialogProps {
   /** Sütun kataloğu; ayrıntı düzeyine göre değişiyorsa fonksiyon. Boş katalog = sütun bölümü çizilmez. */
   catalog: ExportColumnOption[] | ((detail: string | undefined) => ExportColumnOption[]);
   formats?: ExportFormat[];
+  /** Açılışta seçili biçim (ör. "PDF" düğmesiyle açıldı) — hatırlanan biçimin önüne geçer. */
+  defaultFormat?: ExportFormat;
   scopes?: ExportScopeOption[];
   defaultScope?: ExportScope;
   details?: ExportDetailOption[];
@@ -61,6 +63,9 @@ export interface ExportDialogProps {
   extras?: ReactNode;
   /** Çalışırken düğme metni (ör. "1200 / ~3000 indiriliyor…"). */
   busyLabel?: string;
+  /** Ekran tablosu olmayan çıktıda (ör. stok kalemi bazında) işaretsiz sütun "ekranda gizli" değil, yalnız seçilmemiştir:
+   *  `screenless` → etiket çizilmez, "Ekrandakiler" düğmesi "Son seçim" olur. */
+  screenless?: boolean;
   /** Filtre seçimi eksikse false (düğme pasif). */
   canRun?: boolean;
   /** true/void → diyalog kapanır; false → açık kalır (iptal/boş). */
@@ -94,7 +99,8 @@ export function ExportDialog(props: ExportDialogProps) {
     if (!open) return;
     const d = details?.some((x) => x.key === saved?.detail) ? saved!.detail : details?.[0]?.key;
     setDetail(d);
-    setFormat(saved?.format && formats.includes(saved.format) ? saved.format : formats[0]!);
+    const asked = props.defaultFormat && formats.includes(props.defaultFormat) ? props.defaultFormat : undefined;
+    setFormat(asked ?? (saved?.format && formats.includes(saved.format) ? saved.format : formats[0]!));
     setScope(props.defaultScope ?? scopes?.find((s) => !s.disabled)?.key ?? "all");
     setRemember(Boolean(saved));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- yalnız açılışta ve kayıt gelince tohumlanır
@@ -182,7 +188,7 @@ export function ExportDialog(props: ExportDialogProps) {
               action={
                 <div className="flex gap-1">
                   <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setColumns(defaultColumnSelection(catalog))}>
-                    Ekrandakiler
+                    {props.screenless ? "Son seçim" : "Ekrandakiler"}
                   </Button>
                   <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setColumns(catalog.map((c) => c.id))}>
                     Tümü
@@ -196,7 +202,7 @@ export function ExportDialog(props: ExportDialogProps) {
                     <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent">
                       <Checkbox checked={columns.includes(c.id)} onCheckedChange={(v) => toggle(c.id, Boolean(v))} aria-label={c.label} />
                       <span className="min-w-0 flex-1 truncate">{c.label}</span>
-                      {!c.visible && <span className="shrink-0 text-[11px] text-muted-foreground">ekranda gizli</span>}
+                      {!c.visible && !props.screenless && <span className="shrink-0 text-[11px] text-muted-foreground">ekranda gizli</span>}
                     </label>
                   </li>
                 ))}

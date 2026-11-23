@@ -63,6 +63,14 @@ describe("ExportDialog", () => {
     expect(setPreference).toHaveBeenCalled();
   });
 
+  it("açan düğmenin biçimi (defaultFormat) hatırlanan biçimin önüne geçer", async () => {
+    prefs.exportDialog = { k: { format: "csv" } };
+    const onRun = vi.fn(async () => {});
+    render(<ExportDialog open onOpenChange={() => {}} title="T" catalog={catalog} prefKey="k" defaultFormat="pdf" onRun={onRun} />);
+    await userEvent.click(screen.getByRole("button", { name: /PDF indir/ }));
+    expect(onRun).toHaveBeenCalledWith(expect.objectContaining({ format: "pdf" }));
+  });
+
   it("hiç sütun seçili değilse indir düğmesi pasif", async () => {
     renderDialog(async () => {});
     await userEvent.click(box("Alfa"));

@@ -3,7 +3,7 @@ import { StatusBadge } from "@/components/operations/StatusBadge";
 import { ReturnsBadge } from "@/components/operations/ReturnsBadge";
 import { Badge } from "@/components/ui/badge";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
-import { safeFormat, formatNumber, formatFixed } from "@/lib/format";
+import { safeFormat, formatQty } from "@/lib/format";
 import { shipmentStatusLabels, shipmentStatusTones, type ShipmentListItem } from "./types";
 import { EIrsaliyeStatusBadge } from "./eirsaliye/EIrsaliyeStatusBadge";
 import { loadKgSuffix, loadUnitsText } from "@/lib/load-unit";
@@ -19,13 +19,15 @@ export const countsText = (s: Pick<S, "kind" | "_count">) => {
   return parts.filter(Boolean).join(" · ");
 };
 // Kg yalnız çuvallarındır: çuvalsız yükte boş, karışıkta "(çuvallar)".
+const kgSuffix = (s: S) => (s.kind === "DIRECT" ? "all" : loadKgSuffix(s._count.sacks, s._count.carts, s._count.bulks));
+/** Dosyadaki Kg sayısı — ekranda kg yazılmayan satırda boş (0 "sıfır kg" diye okunur). */
+const kgValue = (s: S): number | null => (s.totalKg > 0 && kgSuffix(s) !== "none" ? s.totalKg : null);
+// Metre/kg Sevk Edilenler ile AYNI hassasiyet (formatQty ≤3 hane ↔ dosyada upTo3Text): ekran = Excel = PDF.
 const kgText = (s: S) => {
-  if (!(s.totalKg > 0)) return "";
-  const suffix = s.kind === "DIRECT" ? "all" : loadKgSuffix(s._count.sacks, s._count.carts, s._count.bulks);
-  if (suffix === "none") return "";
-  return `${formatNumber(s.totalKg, 1)} kg${suffix === "sacks-only" ? " (çuvallar)" : ""}`;
+  const kg = kgValue(s);
+  return kg === null ? "" : `${formatQty(kg)} kg${kgSuffix(s) === "sacks-only" ? " (çuvallar)" : ""}`;
 };
-const metersText = (s: S) => `${formatFixed(s.totalMeters, 2)} m`;
+const metersText = (s: S) => `${formatQty(s.totalMeters)} m`;
 const vehicleText = (s: S) => [s.plateNumber, s.driverName].filter(Boolean).join(" · ");
 const dateText = (s: S) => safeFormat(s.dispatchedAt ?? s.createdAt, "dd.MM.yyyy HH:mm");
 /** Fatura izi: yalnız çıkmış sevkiyatta anlamlı (PLANNED'da "—"). */
@@ -123,7 +125,15 @@ export const shipmentColumns: ColumnDef<ShipmentListItem>[] = [
   {
     id: "totals",
     header: "Metraj / Kg",
-    meta: { label: "Metraj / Kg", exportValue: (s: S) => [metersText(s), kgText(s)].filter(Boolean).join(" · ") },
+    // Dosyada metre ve kg ayrı toplanabilir sayı (Sevk Edilenler ile aynı sözleşme).
+    meta: {
+      label: "Metraj / Kg",
+      exportLabel: "Metraj (m)",
+      exportValue: (s: S) => s.totalMeters,
+      summable: true,
+      align: "left",
+      exportExtras: [{ label: "Kg", value: kgValue, summable: true }],
+    },
     cell: ({ row }) => {
       const s = row.original;
       const kg = kgText(s);

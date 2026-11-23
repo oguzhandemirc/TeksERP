@@ -10,7 +10,7 @@ import { ExportMenu } from "@/components/data-table/ExportMenu";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Button } from "@/components/ui/button";
 import { useDataTable } from "@/hooks/useDataTable";
-import { formatNumber } from "@/lib/format";
+import { formatQty } from "@/lib/format";
 import { TERIM_AD } from "@/lib/terim";
 import { downloadDocsPdf, downloadDocsExcel } from "@/pages/Operations/Shipments/shipmentDocExport";
 import { BulkInvoiceAction } from "./BulkInvoiceAction";
@@ -33,9 +33,9 @@ const FORCE = { status: "DISPATCHED" } as const;
  * sevkiyat ekranıyla AYNI yüzey) + fatura bilgisi/belgesi (useDispatchRowActions). Rakamlar BRÜT — iade düşülmez, "N iade" rozeti farkı
  * söyler (bkz. kök CLAUDE.md 2026-08-02).
  *
- * Excel çıkışları:
- *  • "Dönem Excel" — filtreli tüm dönem, tek 5-sayfalık dosya (useAccountingExport).
- *  • Seçim çubuğu — "Birleşik Excel" (işaretliler tek dosyada) + "Belgeler" (her sevk
+ * Çıktılar (ortak çıktı diyaloğu — Excel/PDF, sayfa·sütun seçimi):
+ *  • "Dönem dökümü" — filtreli tüm dönem, 5 sayfalık muhasebe dökümü (useAccountingExport).
+ *  • Seçim çubuğu — "Birleşik döküm" (işaretliler tek dosyada) + "Belgeler" (her sevk
  *    ayrı PDF/Excel, sevk no adıyla).
  */
 export function AccountingDispatchPage() {
@@ -60,7 +60,7 @@ export function AccountingDispatchPage() {
   // Dönem özeti — filtreli KÜMENİN TAMAMI (ilk sayfada gelir; ReturnsPage deseni).
   const summary = (query.data?.pages?.[0] as DispatchCursorResponse | undefined)?.summary;
 
-  const { periodMut, busy, exportSelectedSingle } = useAccountingExport();
+  const accountingExport = useAccountingExport();
 
   // Seçili sevkiyatların BELGESİ (irsaliye/fiş) — PDF veya Excel, her biri sevk no
   // adıyla; çoklu → klasöre ayrı ayrı. Hepsi DISPATCHED (liste zaten forceFilter'lı).
@@ -85,11 +85,10 @@ export function AccountingDispatchPage() {
               size="sm"
               variant="outline"
               className="gap-1.5"
-              disabled={periodMut.isPending}
-              onClick={() => periodMut.mutate()}
-              title="Filtreli dönemin tamamını çok-sayfalı Excel olarak indir (muhasebe formatı)"
+              onClick={accountingExport.openPeriod}
+              title="Filtreli dönemin tamamı, muhasebe dökümü (Excel ya da PDF; sayfa ve sütun seçilir)"
             >
-              <FileSpreadsheet className="h-4 w-4" /> Dönem Excel
+              <FileSpreadsheet className="h-4 w-4" /> Dönem dökümü
             </Button>
             <RefreshButton queryKey={QUERY_KEY} />
           </div>
@@ -112,11 +111,11 @@ export function AccountingDispatchPage() {
           </span>
           <span>
             Toplam metraj:{" "}
-            <span className="font-medium tabular-nums">{formatNumber(summary.totalMeters, 1)}</span> m
+            <span className="font-medium tabular-nums">{formatQty(summary.totalMeters)}</span> m
           </span>
           <span>
             Toplam kg:{" "}
-            <span className="font-medium tabular-nums">{formatNumber(summary.totalKg, 1)}</span>
+            <span className="font-medium tabular-nums">{formatQty(summary.totalKg)}</span>
           </span>
           <span className="text-xs text-muted-foreground" title="Sevk anındaki değerler; iade düşülmemiştir">
             (brüt — iade düşülmemiştir)
@@ -150,18 +149,18 @@ export function AccountingDispatchPage() {
                 size="sm"
                 variant="outline"
                 className="gap-1.5"
-                disabled={busy !== null}
-                onClick={() => exportSelectedSingle(rows.map((r) => r.id))}
-                title="Seçili sevkleri TEK birleşik 5-sayfalık Excel'de aktar"
+                onClick={() => accountingExport.openSelected(rows.map((r) => r.id))}
+                title="Seçili sevkleri TEK birleşik muhasebe dökümünde aktar (Excel ya da PDF)"
               >
                 <FileSpreadsheet className="h-4 w-4" />
-                {busy === "single" ? "Hazırlanıyor…" : "Birleşik Excel"}
+                Birleşik döküm
               </Button>
             </>
           )
         }
       />
       {rowDialogs}
+      {accountingExport.dialog}
     </PageShell>
   );
 }
