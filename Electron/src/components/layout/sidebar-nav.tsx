@@ -11,7 +11,8 @@ import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-ki
 import { ChevronDown, ChevronRight, Wrench } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { NavGroup } from "./nav-config";
-import { CollapsedItem, SortableExpandedItem } from "./sidebar-items";
+import { CollapsedItem, NavOwnerCtx, SortableExpandedItem } from "./sidebar-items";
+import { groupOwner } from "./menu-context";
 import { CollapsedSectionItem, OpenSectionCtx, SectionNavItem } from "./sidebar-section";
 
 // Menü gövdesi — grup başlıkları + satırlar. Kendiliğinden animasyon yok (giriş kademesi kaldırıldı).
@@ -42,15 +43,17 @@ export function CollapsedNav({ groups }: { groups: NavGroup[] }) {
             </Tooltip>
           )}
           {(!group.collapsible || advancedOpen) && (
-            <ul className="flex w-full flex-col items-center gap-1">
-              {group.items.map((item) =>
-                item.children ? (
-                  <CollapsedSectionItem key={item.to} item={item} />
-                ) : (
-                  <CollapsedItem key={item.to} item={item} />
-                ),
-              )}
-            </ul>
+            <NavOwnerCtx.Provider value={groupOwner(group.label)}>
+              <ul className="flex w-full flex-col items-center gap-1">
+                {group.items.map((item) =>
+                  item.children ? (
+                    <CollapsedSectionItem key={item.to} item={item} />
+                  ) : (
+                    <CollapsedItem key={item.to} item={item} />
+                  ),
+                )}
+              </ul>
+            </NavOwnerCtx.Provider>
           )}
         </div>
       ))}
@@ -114,17 +117,19 @@ function ExpandedGroup({
         <p className={`mb-2 ${GROUP_HEAD}`}>{group.label}</p>
       )}
       {open && (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-          <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-            <ul className="space-y-0.5">
-              {group.items.map((item) => (
-                <SortableExpandedItem key={item.to} item={item}>
-                  {item.children ? <SectionNavItem item={item} /> : undefined}
-                </SortableExpandedItem>
-              ))}
-            </ul>
-          </SortableContext>
-        </DndContext>
+        <NavOwnerCtx.Provider value={groupOwner(group.label)}>
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+              <ul className="space-y-0.5">
+                {group.items.map((item) => (
+                  <SortableExpandedItem key={item.to} item={item}>
+                    {item.children ? <SectionNavItem item={item} /> : undefined}
+                  </SortableExpandedItem>
+                ))}
+              </ul>
+            </SortableContext>
+          </DndContext>
+        </NavOwnerCtx.Provider>
       )}
     </div>
   );

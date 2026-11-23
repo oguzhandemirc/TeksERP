@@ -11,7 +11,8 @@ import { useSectionNav } from "./use-section-nav";
 import { findCommandEntry, type CommandEntry } from "./command-entries";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarBrand, SidebarFooter } from "./sidebar-brand";
-import { SidebarPathsCtx } from "./sidebar-items";
+import { ActivePlacementCtx } from "./sidebar-items";
+import { useMenuPlacement } from "./use-menu-placement";
 import { CollapsedNav, ExpandedNav } from "./sidebar-nav";
 import { useMenuLayout } from "@/hooks/useMenuLayout";
 import { isMenuHidden } from "@/lib/menu-layout";
@@ -104,7 +105,8 @@ export function Sidebar({ collapsed }: Props) {
     advancedItems.length > 0 ? [{ label: ADVANCED_GROUP_LABEL, items: orderItems(ADVANCED_GROUP_LABEL, advancedItems), collapsible: true }] : [];
 
   const groups = [...favGroup, ...navOrdered, ...advancedGroup];
-  const allPaths = groups.flatMap((g) => g.items.map((i) => i.to));
+  // Aynı ekran iki kökte durabilir: etkin satır tıklanan konumdan, yoksa sekmenin bağlamından, yoksa kanonik.
+  const placement = useMenuPlacement(groups);
 
   return (
     <aside
@@ -116,7 +118,7 @@ export function Sidebar({ collapsed }: Props) {
     >
       <SidebarBrand collapsed={collapsed} />
 
-      <SidebarPathsCtx.Provider value={allPaths}>
+      <ActivePlacementCtx.Provider value={placement}>
         <TooltipProvider delayDuration={150}>
           {collapsed ? (
             <CollapsedNav groups={groups} />
@@ -124,7 +126,7 @@ export function Sidebar({ collapsed }: Props) {
             <ExpandedNav groups={groups} onReorder={handleReorder} />
           )}
         </TooltipProvider>
-      </SidebarPathsCtx.Provider>
+      </ActivePlacementCtx.Provider>
 
       <SidebarFooter collapsed={collapsed} />
     </aside>
