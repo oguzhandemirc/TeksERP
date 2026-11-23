@@ -115,12 +115,23 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: Teks-Erp/package-lock.json
       # test_grup_yayin_kapisi §8 gerçek imza aracını (Teks-Erp/scripts/panel-imza.ts) tsx ile koşturur.
+      # node_modules önbelleği backend işleriyle aynı düzen (anahtar Node 22'ye ayrı).
+      - name: node_modules önbelleği (kilit dosyasından)
+        id: nm
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: Teks-Erp/node_modules
+          key: tekserp-nm-${{ runner.os }}-node22-${{ hashFiles('Teks-Erp/package-lock.json') }}
       - name: Teks-Erp bağımlılıkları (yayın kapısı §8 gerçek imza aracı)
+        if: steps.nm.outputs.cache-hit != 'true'
         run: npm ci
         working-directory: Teks-Erp
+      - if: steps.nm.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: Teks-Erp/node_modules
+          key: ${{ steps.nm.outputs.cache-primary-key }}
       - name: Doküman tutarlılık kontrolü
         run: node scripts/check-docs.mjs
       # Migration hijyeni — asıl değeri YERELDE (untracked migration/test yakalar).
@@ -181,6 +192,7 @@ jobs:
         run: node scripts/test_pg_ornegi.mjs && node scripts/test_pg_ornegi.mjs --sonda
       # Mevcut PostgreSQL'e ayar profili (deploy/pg/pg-ayar.ps1): gerçek pwsh + sahte psql — KURU kip hiçbir
       # ALTER SYSTEM yazmaz, -Uygula auto.conf'taki farklı değeri ezmez, vektörler diller arası eşit. DB'siz, ağsız.
+      # --sonda 14 sondayı çekirdek sayısı kadar çocuk süreçte paralel koşar (sıralıyken bu adım ~6,5 dk idi).
       - name: PG ayar bakımı (pg-ayar.ps1, kuru varsayılan)
         run: node scripts/test_pg_ayar.mjs && node scripts/test_pg_ayar.mjs --sonda
       # Sahaya giden PG paketi (deploy/pg/pg-paketle.mjs): gölge kökte sahte EDB zip'iyle gerçek koşum — EDB özeti,
@@ -239,15 +251,22 @@ jobs:
   # ===========================================================================
   # PARÇALI (2026-10-12): sıralı paket ~40 dk sürüyordu. Üç iş:
   #   backend-lint  — lint + lint tavanı + iki tsc (DB'siz, parçaları beklemez)
-  #   backend-test  — bekçiler 8 parçada; HER parça kendi runner'ında kendi
+  #   backend-test  — bekçiler 12 parçada; HER parça kendi runner'ında kendi
   #                   Postgres'i + migrate + seed + seed:fixtures + HTTP sunucularıyla
   #                   koşar (ortak ayar yazan bekçiler parçalar arası karışmaz)
   #   backend       — ÖZET, ad "Backend (tsc + test)" korunur: iki iş de başarılı ∧
   #                   parçaların GERÇEKTE koştuğu dosyaların birleşimi = diskteki bütün
   #                   bekçiler, kesişim boş (sessiz atlanan bekçi = kırmızı).
   # Dağıtım + birleşim tek kaynak: `Teks-Erp/scripts/lib/parca.ts`; parça sayısı
-  # yalnız aşağıdaki matrix listesi ile `--shard …/8`de yazılı ve `test_ci_parca`
-  # ikisinin hizasını ölçer.
+  # yalnız aşağıdaki matrix listesi ile `--shard …/12`de yazılı ve `test_ci_parca`
+  # ikisinin hizasını ölçer. 8 → 12 (2026-11-23): toplam bekçi süresi ~66 dk; 8 parçada
+  # dengeli bile ~8,3 dk + kurulum, 10 dk hedefini aşıyordu.
+  #
+  # ÖNBELLEK (2026-11-23): `npm ci` (~35–50 sn) ve `prisma generate` (~10–50 sn) her işte
+  # tekrarlanıyordu. `Teks-Erp/node_modules` kilit dosyasından (+ Node sürümü), üretilmiş
+  # istemci `node_modules/.prisma/client` kilit + şemadan türeyen anahtarla önbelleklenir;
+  # anahtar tutmazsa eski yol (npm ci / generate) koşar ve sonucu kaydeder. Kayıt `npm ci`den
+  # HEMEN SONRA alınır (iş sonunda değil): testlerin node_modules'a bıraktığı hiçbir şey girmez.
   backend-lint:
     name: Backend lint + tsc
     runs-on: ubuntu-24.04
@@ -262,11 +281,33 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
-          cache: npm
-          cache-dependency-path: Teks-Erp/package-lock.json
-      - run: npm ci
+      - name: node_modules önbelleği (kilit dosyasından)
+        id: nm
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: Teks-Erp/node_modules
+          key: tekserp-nm-${{ runner.os }}-node24-${{ hashFiles('Teks-Erp/package-lock.json') }}
+      - if: steps.nm.outputs.cache-hit != 'true'
+        run: npm ci
+      - if: steps.nm.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: Teks-Erp/node_modules
+          key: ${{ steps.nm.outputs.cache-primary-key }}
+      - name: Prisma istemci önbelleği (kilit + şemadan)
+        id: pc
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: Teks-Erp/node_modules/.prisma/client
+          key: tekserp-prisma-${{ runner.os }}-${{ hashFiles('Teks-Erp/package-lock.json', 'Teks-Erp/prisma/schema.prisma') }}
       - name: Prisma generate
+        if: steps.pc.outputs.cache-hit != 'true'
         run: npx prisma generate
+      - if: steps.pc.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: Teks-Erp/node_modules/.prisma/client
+          key: ${{ steps.pc.outputs.cache-primary-key }}
       - name: Lint
         run: set -o pipefail; npm run lint 2>&1 | tee -a /tmp/ci-backend.log
         shell: bash
@@ -316,7 +357,7 @@ jobs:
         shell: bash
 
   backend-test:
-    name: Backend test ${{ matrix.parca }}/8
+    name: Backend test ${{ matrix.parca }}/12
     runs-on: ubuntu-24.04
     # İş düzeyi izin üst düzeyin YERİNE geçer: contents:read burada da yazılı.
     permissions:
@@ -326,7 +367,7 @@ jobs:
       # Bir parça düşse de ötekiler sonuna kadar koşar: kırmızıların HEPSİ tek koşumda görünür.
       fail-fast: false
       matrix:
-        parca: [1, 2, 3, 4, 5, 6, 7, 8]
+        parca: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     defaults:
       run:
         working-directory: Teks-Erp
@@ -371,9 +412,19 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
-          cache: npm
-          cache-dependency-path: Teks-Erp/package-lock.json
-      - run: npm ci
+      - name: node_modules önbelleği (kilit dosyasından)
+        id: nm
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: Teks-Erp/node_modules
+          key: tekserp-nm-${{ runner.os }}-node24-${{ hashFiles('Teks-Erp/package-lock.json') }}
+      - if: steps.nm.outputs.cache-hit != 'true'
+        run: npm ci
+      - if: steps.nm.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: Teks-Erp/node_modules
+          key: ${{ steps.nm.outputs.cache-primary-key }}
       # ÖLÇÜM (kapı DEĞİL): istemci ↔ sunucu PostgreSQL sürümleri. `pgTool()`
       # `PG_BIN_DIR` yoksa PATH'ten okur ve HİÇBİR YERDE uyum ölçülmüyor; istemci
       # sunucudan yeniyse alınan dump o sunucuya GERİ YÜKLENEMEZ (ölçüldü
@@ -387,8 +438,20 @@ jobs:
           srv=$(psql "${DATABASE_URL%%\?*}" -tAc "SHOW server_version" 2>&1) \
             && echo "SUNUCU: $srv" \
             || echo "SUNUCU: OKUNAMADI ($srv)"
+      - name: Prisma istemci önbelleği (kilit + şemadan)
+        id: pc
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: Teks-Erp/node_modules/.prisma/client
+          key: tekserp-prisma-${{ runner.os }}-${{ hashFiles('Teks-Erp/package-lock.json', 'Teks-Erp/prisma/schema.prisma') }}
       - name: Prisma generate
+        if: steps.pc.outputs.cache-hit != 'true'
         run: npx prisma generate
+      - if: steps.pc.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: Teks-Erp/node_modules/.prisma/client
+          key: ${{ steps.pc.outputs.cache-primary-key }}
       - name: Migrate deploy (tüm migration'ları uygula)
         run: npx prisma migrate deploy
       - name: Seed (temel kurulum — admin, istasyonlar, şablonlar)
@@ -461,7 +524,7 @@ jobs:
       # ⭐ Yeniden dışlama gerekirse reçete: `scripts/run-all-tests.ts` içinde
       #   `TEKSERP_HARIC` başlığı (giriş ölçütü + ayrı job'ın tuzağı).
       - name: Test suite (scripts/test_*.ts runner)
-        run: set -o pipefail; npm test -- --shard ${{ matrix.parca }}/8 2>&1 | tee -a /tmp/ci-backend.log
+        run: set -o pipefail; npm test -- --shard ${{ matrix.parca }}/12 2>&1 | tee -a /tmp/ci-backend.log
         shell: bash
 
       # Parça kaydı: birleşim denetimi GERÇEKTE koşan dosyaları buradan okur.
@@ -491,7 +554,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           {
-            echo "## ❌ Backend CI hata logu — parça ${{ matrix.parca }}/8 (otomatik teşhis)"
+            echo "## ❌ Backend CI hata logu — parça ${{ matrix.parca }}/12 (otomatik teşhis)"
             echo '```'
             tail -150 /tmp/ci-backend.log || echo "(log yok)"
             echo '```'
@@ -513,9 +576,15 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
-          cache: npm
-          cache-dependency-path: Teks-Erp/package-lock.json
-      - run: npm ci
+      # Kritik yolda (en yavaş parçadan SONRA koşar): parçaların kaydettiği node_modules'u okur.
+      - name: node_modules önbelleği (kilit dosyasından)
+        id: nm
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: Teks-Erp/node_modules
+          key: tekserp-nm-${{ runner.os }}-node24-${{ hashFiles('Teks-Erp/package-lock.json') }}
+      - if: steps.nm.outputs.cache-hit != 'true'
+        run: npm ci
       - name: Parça kayıtlarını indir
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
