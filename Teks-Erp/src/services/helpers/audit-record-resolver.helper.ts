@@ -25,6 +25,7 @@ export const AUDIT_NUMBER_SOURCES: Readonly<Record<string, NumaraKaynagi>> = {
   ROLL: { tablo: "rolls", kolon: "barcode", ara: ["barcode"] },
   WORK_ORDER: { tablo: "work_orders", kolon: "workOrderNumber", ara: ["workOrderNumber"] },
   WEAVING_ORDER: { tablo: "weaving_orders", kolon: "weavingOrderNumber", ara: ["weavingOrderNumber"] },
+  WEAVING_ORDER_TEMPLATE: { tablo: "weaving_order_templates", kolon: "name", ara: [] },
   SHIPMENT: { tablo: "shipments", kolon: "shipmentNo", ara: ["shipmentNo"] },
   SACK: { tablo: "sacks", kolon: "sackNo", ara: ["sackNo"] },
   MANIFEST: { tablo: "manifests", kolon: "manifestNo", ara: ["manifestNo"] },
