@@ -1236,7 +1236,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         defaultValue: "off",
         options: SHIPPING_SHADE_MIX_POLICY_OPTIONS,
         audience: ["Sevkiyat", "Depocu"],
-        desc: "Perde/tül gibi yan yana asılan kumaşta aynı renk farklı boyama partisinden ton farkı taşır. “Uyar”/“Engelle” seçilince tablet Fason Kabul ekranında dönen parçaya ton harfi sorulur (tamburda kesilen toplar harfi alır); panelde Envanter → Toplar listesinden seçili toplara “Ton ata” yapılır. Sevk önizlemesi aynı ürün+renkte farklı ton görürse uyarır; “Engelle”de Sevk Et reddedilir. Tonu girilmemiş top karışım sayılmaz. Çeki listesinde “Ton” sütunu belge ayarından açılır.",
+        desc: "Perde/tül gibi yan yana asılan kumaşta aynı renk farklı boyama partisinden ton farkı taşır. “Uyar”/“Engelle” seçilince tablet Fason Kabul ekranında dönen parçaya ton harfi sorulur (tamburda kesilen toplar harfi alır); panelde Kumaş Stoğu top listesinden seçili toplara “Ton ata” yapılır. Sevk önizlemesi aynı ürün+renkte farklı ton görürse uyarır; “Engelle”de Sevk Et reddedilir. Tonu girilmemiş top karışım sayılmaz. Çeki listesinde “Ton” sütunu belge ayarından açılır.",
       },
       {
         enumKey: "shippingInvoiceMode",

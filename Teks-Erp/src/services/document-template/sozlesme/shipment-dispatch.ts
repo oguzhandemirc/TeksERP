@@ -268,7 +268,7 @@ function internalFlags(optIn: ReadonlySet<string>): Record<string, boolean> {
 export const shipmentDispatchContract: DocumentContract<DispatchNoteConfig, DispatchLiveOptions> = {
   docType: "SHIPMENT_DISPATCH",
   hedef: "musteri",
-  contractVersion: 5, // 2: KQ-D8 ceki hata_notu (iç, opt-in) · 3: K18 teslim_yeri/teslim_adresi · 4: toplamlar.yuk_ozeti (karışık yük) · 5: SY-C4 urun birim_fiyat/tutar (iç, opt-in)
+  contractVersion: 6, // 2: KQ-D8 ceki hata_notu (iç, opt-in) · 3: K18 teslim_yeri/teslim_adresi · 4: toplamlar.yuk_ozeti (karışık yük) · 5: SY-C4 urun birim_fiyat/tutar (iç, opt-in) · 6: ceki ton (ton grubu, iç, opt-in)
   kokler: ROOT_FIELDS,
   tablolar: TABLE_DEFS,
   ayarSemasi: CONFIG_SCHEMA,

@@ -10,6 +10,7 @@
 // =============================================================================
 import { Prisma } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
+import { sequentialTx } from "./tx-sequential-relations.helper";
 import { readShippingShadeMixPolicy } from "../system-setting.service";
 import type { ShippingShadeMixPolicy } from "../system-setting.service";
 
@@ -96,7 +97,8 @@ export async function findShadeMixes(
   if (input.rollIds && input.rollIds.length > 0) scope.push({ id: { in: input.rollIds } });
   if (input.sackIds && input.sackIds.length > 0) scope.push({ sackId: { in: input.sackIds } });
   if (scope.length === 0) return [];
-  const rows = await db.roll.findMany({
+  // Kapı tx içinde çağırır: iki ilişkili select tek bağlantıda sıralı koşsun (pg eşzamanlı sorgu hatası).
+  const rows = await sequentialTx(db).roll.findMany({
     where: { OR: scope },
     select: { id: true, barcode: true, itemId: true, colorId: true, shadeCode: true, item: { select: { name: true } }, color: { select: { name: true } } },
     orderBy: [{ barcode: "asc" }, { id: "asc" }],

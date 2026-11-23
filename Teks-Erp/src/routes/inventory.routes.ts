@@ -11,7 +11,7 @@ import { getRollTabletContext } from "../services/roll-tablet.service";
 import { listRollOwnerCustomers } from "../services/roll-owner.service";
 import { getRollMeterTrail } from "../services/meter-comparison.service";
 import { RollCustomerCodeService } from "../services/roll-customer-code.service";
-import { ROLL_SHADE_MAX_BATCH, setRollShade } from "../services/inventory/roll-shade";
+import { ROLL_SHADE_MAX_BATCH, setRollShade } from "../services/roll-shade.service";
 import { z } from "zod";
 
 // Mobil ekran yetkileri web yetkilerine alternatif olarak kabul edilir:

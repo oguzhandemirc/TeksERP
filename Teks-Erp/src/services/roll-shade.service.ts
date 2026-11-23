@@ -1,17 +1,19 @@
 // =============================================================================
-// Inventory Service / roll-shade — topa ton grubu harfi ata (panel "Ton ata", 2026-11-23)
+// Roll shade service — topa ton grubu harfi ata (panel "Ton ata", 2026-11-23)
 // =============================================================================
+// Envanter servis ailesinin DIŞINDA durur: ailenin içinde olsaydı inventory.routes aileye bir sekme
+// erken girer ve ticaret zinciri rejim kapısı tarama derinliğine düşerdi (test_finance_regime_gate).
 // `Roll.shadeCode` durum alanıdır (defter değil: satır silinince raporlanan sayı değişmez); eski değer
 // audit'te kalır. Kilit kümesi etiket düzeltmesiyle aynı (`LABEL_TEXT_LOCKED_STATUSES`): sevk edilmiş /
 // dışarıdaki / ölü topun tonu değişmez. Uç: POST /api/rolls/shade.
 // =============================================================================
 
-import prisma from "../../lib/prisma";
-import { AuditService } from "../audit.service";
-import { AppError } from "../../utils/app-error";
-import type { ApiResponse } from "../../types/api.types";
-import { LABEL_TEXT_LOCKED_STATUSES, labelTextFixBlock } from "../helpers/label-text-lock.helper";
-import { normalizeShadeCode } from "../helpers/shade-group.helper";
+import prisma from "../lib/prisma";
+import { AuditService } from "./audit.service";
+import { AppError } from "../utils/app-error";
+import type { ApiResponse } from "../types/api.types";
+import { LABEL_TEXT_LOCKED_STATUSES, labelTextFixBlock } from "./helpers/label-text-lock.helper";
+import { normalizeShadeCode } from "./helpers/shade-group.helper";
 
 export const ROLL_SHADE_MAX_BATCH = 500;
 

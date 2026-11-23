@@ -29,7 +29,7 @@ import { ensureTestAdmin } from "./fixture-test-user";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { TamburService } from "../src/services/tambur.service";
-import { setRollShade } from "../src/services/inventory/roll-shade";
+import { setRollShade } from "../src/services/roll-shade.service";
 import { SETTING_KEYS } from "../src/services/system-setting/keys";
 import {
   assertShadeMixAllowedTx,
@@ -52,8 +52,17 @@ function check(label: string, ok: boolean, detail = ""): void {
   else { fail++; console.error(`  ❌ ${label}${detail ? ` — ${detail}` : ""}`); }
 }
 
-type Err = { statusCode?: number; details?: { code?: string } } | null;
-const hataOf = <T,>(p: Promise<T>): Promise<Err> => p.then(() => null, (e: Err) => e ?? {});
+type Err = { statusCode?: number; code?: string; text: string } | null;
+/** Hatayı tip zorlamasız düz biçime indirir (AppError: statusCode + details.code; Prisma: mesaj + meta). */
+function hataBicimi(e: unknown): NonNullable<Err> {
+  const o: object = typeof e === "object" && e !== null ? e : {};
+  const statusCode = "statusCode" in o && typeof o.statusCode === "number" ? o.statusCode : undefined;
+  const details: object = "details" in o && typeof o.details === "object" && o.details !== null ? o.details : {};
+  const code = "code" in details && typeof details.code === "string" ? details.code : undefined;
+  const meta = "meta" in o ? JSON.stringify(o.meta) : "";
+  return { statusCode, code, text: `${e instanceof Error ? e.message : String(e)} ${meta}` };
+}
+const hataOf = <T,>(p: Promise<T>): Promise<Err> => p.then(() => null, hataBicimi);
 
 let ITEM = "", ADMIN = "", ST_BOYA = "", ST_TAMBUR = "", SUB_BOYER = "", GRADE = "", GRADE_CODE = "", COLOR_A = "", COLOR_B = "";
 const woIds: string[] = [];
@@ -104,7 +113,7 @@ function bolum1(): void {
   check("normalize: boş/null → null", normalizeShadeCode("  ") === null && normalizeShadeCode(null) === null);
   let bad = 0;
   for (const raw of ["ı", "ABCDE", "A-1", 5]) {
-    try { normalizeShadeCode(raw); } catch (e) { if ((e as { statusCode?: number }).statusCode === 400) bad++; }
+    try { normalizeShadeCode(raw); } catch (e) { if (hataBicimi(e).statusCode === 400) bad++; }
   }
   check("normalize: geçersiz (ı, 5 karakter, tire, sayı) → 400", bad === 4, `${bad}/4`);
 
@@ -125,7 +134,7 @@ async function bolum2(): Promise<void> {
   const mesajlar: string[] = [];
   for (const bad of ["a", "A-1"]) {
     const e = await hataOf(top({ shadeCode: bad }));
-    const m = e ? JSON.stringify({ msg: (e as unknown as Error).message, meta: (e as unknown as { meta?: unknown }).meta }) : "kabul edildi";
+    const m = e ? e.text : "kabul edildi";
     if (m.includes("rolls_shade_code_format_chk")) reddedilen++;
     else mesajlar.push(m.slice(0, 300));
   }
@@ -211,7 +220,7 @@ async function bolum6(): Promise<void> {
 
   await setPolicy(SETTING_KEYS.SHIPPING_SHADE_MIX_POLICY, "block");
   const blockGate = await hataOf(prisma.$transaction((tx) => assertShadeMixAllowedTx(tx, { rollIds, belge: "test" })));
-  check("block: karışımda 409 SHADE_MIX", blockGate?.statusCode === 409 && blockGate.details?.code === "SHADE_MIX", `${blockGate?.statusCode} ${blockGate?.details?.code}`);
+  check("block: karışımda 409 SHADE_MIX", blockGate?.statusCode === 409 && blockGate.code === "SHADE_MIX", `${blockGate?.statusCode} ${blockGate?.code}`);
   const temiz = await hataOf(prisma.$transaction((tx) => assertShadeMixAllowedTx(tx, { rollIds: [x1, x3, tekRenk], belge: "test" })));
   check("block: tek tonlu küme (NULL dahil) geçer", temiz === null);
 }

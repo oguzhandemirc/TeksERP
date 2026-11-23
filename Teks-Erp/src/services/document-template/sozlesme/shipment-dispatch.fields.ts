@@ -195,7 +195,7 @@ export const TABLE_DEFS: TableDef[] = [
       // KQ-D8: açık hata notu — iç kolon (opt-in), yalnız hatalı topta dolu.
       col("hata_notu", "Hata notu", "metin", { hiza: "l", ornek: "12,5 m Leke · 40 m Delik", kaynakKolon: "defectNote", sinif: "ic", icKod: "ceki_hata_notu" }),
       // Ton grubu (2026-11-23): topun ton harfi — yalnız tonlu topta dolu; şablona eklenmedikçe basılmaz.
-      col("ton", "Ton", "metin", { hiza: "c", ornek: "A", kaynakKolon: "shadeCode" }),
+      col("ton", "Ton", "metin", { hiza: "c", ornek: "A", kaynakKolon: "shadeCode", sinif: "ic", icKod: "ceki_ton" }),
     ],
   },
 ];
