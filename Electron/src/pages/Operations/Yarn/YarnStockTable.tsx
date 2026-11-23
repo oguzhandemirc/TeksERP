@@ -15,7 +15,7 @@
 // ⚠️ DEPO SÜTUNU tek depolu kurulumda çizilmez — "sıfır görünür fark" kuralının
 // sütun ayağı (`useMultiWarehouse` tek kaynak; burada YENİDEN hesaplanmaz).
 // =============================================================================
-import { useMemo } from "react";
+import { useMemo, type ComponentProps } from "react";
 import type { ColumnDef, Table } from "@tanstack/react-table";
 import { AlertTriangle, History, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -102,6 +102,13 @@ export function useYarnStockTable(rows: YarnStockRow[], showWarehouse: boolean, 
   return useLocalTable({ tableKey: "yarn:stocks", data: rows, columns });
 }
 
-export function YarnStockTable({ table, onOpenMovements }: { table: Table<YarnStockRow>; onOpenMovements: (row: YarnStockRow) => void }) {
-  return <DataTable<YarnStockRow> table={table} onRowClick={onOpenMovements} exportName="İplik stoğu" />;
+export function YarnStockTable({
+  table,
+  onOpenMovements,
+  ...state
+}: {
+  table: Table<YarnStockRow>;
+  onOpenMovements: (row: YarnStockRow) => void;
+} & Pick<ComponentProps<typeof DataTable<YarnStockRow>>, "isLoading" | "isError" | "errorText" | "onRetry" | "emptyText">) {
+  return <DataTable<YarnStockRow> table={table} onRowClick={onOpenMovements} exportName="İplik stoğu" {...state} />;
 }

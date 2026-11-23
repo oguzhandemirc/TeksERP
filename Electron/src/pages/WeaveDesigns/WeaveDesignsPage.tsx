@@ -5,15 +5,15 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { Plus } from "lucide-react";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { ListFooter, ListToolbar } from "@/components/layout/ListPage";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { ToolbarToggle } from "@/components/data-table/ToolbarToggle";
 import { DataTable } from "@/components/data-table/DataTable";
 import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { useLocalTable } from "@/hooks/useLocalTable";
 import { RefreshButton } from "@/components/RefreshButton";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Switch } from "@/components/ui/switch";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { WeaveDesignCreateDialog } from "./WeaveDesignCreateDialog";
@@ -49,27 +49,22 @@ export function WeaveDesignsPage() {
           </div>
         }
       />
-      <ListToolbar className="flex-row flex-wrap items-center gap-3">
-        <Input className="max-w-xs" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Ara…" title="Desen kodu veya adı ara" aria-label="Desen ara" />
-        <label className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Switch checked={includeInactive} onCheckedChange={setIncludeInactive} aria-label="Pasifleri göster" />
-          Pasifleri göster
-        </label>
+      <ListToolbar className="flex-row flex-wrap items-center">
+        <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Desen kodu veya adı ara" />
+        <ToolbarToggle checked={includeInactive} onCheckedChange={setIncludeInactive} label="Pasifleri göster" />
         <div className="ml-auto flex items-center gap-1.5">
           <DataTableTools table={table} compact exportName="Desen kartları" />
         </div>
       </ListToolbar>
-      {!list.isLoading && rows.length > 0 ? (
-        <DataTable table={table} onRowClick={(r) => nav(`/definitions/weave-designs/${r.id}`)} exportName="Desen kartları" />
-      ) : (
-      <ListBody>
-        {list.isLoading ? (
-          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
-        ) : (
-          <ListMessage className="text-sm text-muted-foreground">{q ? "Aramaya uyan desen yok." : "Henüz desen kartı yok."}</ListMessage>
-        )}
-      </ListBody>
-      )}
+      <DataTable
+        table={table}
+        onRowClick={(r) => nav(`/definitions/weave-designs/${r.id}`)}
+        exportName="Desen kartları"
+        isLoading={list.isLoading}
+        isError={list.isError}
+        onRetry={() => void list.refetch()}
+        emptyText={q ? "Aramaya uyan desen yok." : "Henüz desen kartı yok."}
+      />
       <ListFooter loaded={rows.length} />
       {createOpen && (
         <WeaveDesignCreateDialog

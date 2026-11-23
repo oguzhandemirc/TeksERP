@@ -1,14 +1,14 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowRight, Ban, Plus, Printer, Search } from "lucide-react";
+import { ArrowRight, Ban, Plus, Printer } from "lucide-react";
 import { PageShell } from "@/components/layout/PageShell";
 import { RefreshButton } from "@/components/RefreshButton";
-import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { ListFooter, ListToolbar } from "@/components/layout/ListPage";
 import { DataTable } from "@/components/data-table/DataTable";
 import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
 import { useLocalTable } from "@/hooks/useLocalTable";
-import { Input } from "@/components/ui/input";
 import { TRANSFER_COLUMNS } from "./TransferTable";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -83,56 +83,34 @@ export function WarehouseTransfersPage() {
       />
 
       <ListToolbar className="flex-row flex-wrap items-center">
-        <div className="relative w-64">
-          <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input className="pl-8" placeholder="Ara…" title="Belge no ya da not ara" aria-label="Belge no ya da not ara" value={search} onChange={(e) => setSearch(e.target.value)} />
-        </div>
+        <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Belge no ya da not ara" />
         <div className="ml-auto flex items-center gap-1.5">
           <DataTableTools table={table} compact exportName="Depo transferleri" />
         </div>
       </ListToolbar>
 
-      {!listQ.isLoading && rows.length > 0 ? (
-        <>
-          <DataTable table={table} isError={listQ.isError} onRetry={() => void listQ.refetch()} onRowClick={(r) => setDetailId(r.id)} exportName="Depo transferleri" />
-          {/* KIRPMA SESSİZ DEĞİL (norm: CashTransactionsPage). */}
-          {total > rows.length && (
-            <p className="shrink-0 border-t px-4 py-2 text-xs text-amber-700 dark:text-amber-500">
-              {total} transferin ilk {rows.length} tanesi gösteriliyor (en yeniden geriye).
-            </p>
-          )}
-        </>
-      ) : (
-      <ListBody>
-        {listQ.isLoading ? (
-          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
-        ) : listQ.isError && rows.length === 0 ? (
-          /* ⚠️ "Henüz transfer yok." hata anında basılırsa depocu az önce yaptığı
-             taşımayı yok sanıp AYNI TOPLARI ikinci kez transfer etmeye kalkar;
-             ikinci deneme reddedilir ("bu depoda değil") ve sebebi de o mesajdan
-             anlaşılmaz — çıkmaz. */
-          <ListMessage>
-            <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-              <p className="font-medium text-destructive">Transfer listesi yüklenemedi.</p>
-              <p className="mt-1 text-muted-foreground">
-                Bu bir “transfer yok” cevabı DEĞİLDİR — istek sunucuya ulaşamadı ya da reddedildi.
-                Yeni transfer açmadan önce tekrar deneyin.
-              </p>
-              <Button variant="outline" size="sm" className="mt-3" onClick={() => void listQ.refetch()}>
-                Tekrar dene
-              </Button>
-            </div>
-          </ListMessage>
-        ) : rows.length === 0 ? (
-          <ListMessage>
-            <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-              {search ? "Bu aramayla transfer yok." : "Henüz transfer yok."}
-            </div>
-          </ListMessage>
-        ) : null}
-      </ListBody>
-      )}
-      {rows.length > 0 && <ListFooter loaded={rows.length} total={total} />}
+      {/* ⚠️ Hata satırı boş durumun önünde (DataTable): "transfer yok" sanan depocu AYNI TOPLARI ikinci kez taşımaya
+          kalkar, ikinci deneme "bu depoda değil" diye reddedilir — çıkmaz. */}
+      <DataTable
+        table={table}
+        isLoading={listQ.isLoading}
+        isError={listQ.isError}
+        errorText="Transfer listesi yüklenemedi. Yeni transfer açmadan önce tekrar deneyin."
+        onRetry={() => void listQ.refetch()}
+        onRowClick={(r) => setDetailId(r.id)}
+        exportName="Depo transferleri"
+        emptyText={search ? "Bu aramayla transfer yok." : "Henüz transfer yok."}
+      />
+      <ListFooter
+        loaded={rows.length}
+        total={total}
+        label={
+          // KIRPMA SESSİZ DEĞİL (norm: CashTransactionsPage).
+          total > rows.length ? (
+            <span className="text-amber-700 dark:text-amber-500">{total} transferin ilk {rows.length} tanesi gösteriliyor (en yeniden geriye)</span>
+          ) : undefined
+        }
+      />
 
       <TransferFormDialog
         open={formOpen}

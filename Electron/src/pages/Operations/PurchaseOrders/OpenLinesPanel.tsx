@@ -21,14 +21,15 @@
 // dizi kalır ve onu "hepsi geldi" diye basmak DÜPEDÜZ YALANDIR — satın almacı
 // bekleyen malı olmadığı sonucuna varır.
 // =============================================================================
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { DataTable } from "@/components/data-table/DataTable";
 import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { useLocalTable } from "@/hooks/useLocalTable";
-import { AlertTriangle, Info } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { AlertTriangle } from "lucide-react";
+import { InfoPopover } from "@/components/ui/info-popover";
+import { ToolbarToggle } from "@/components/data-table/ToolbarToggle";
 import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { itemService } from "@/pages/Items/service";
 import type { Item } from "@/pages/Items/types";
@@ -38,7 +39,7 @@ import {
 import { fmtQty, listOpenLines, type OpenLineRow } from "./service";
 import { FIFO_HINT, fulfillmentOf, remainingText } from "./fulfillment";
 import { EXPECTED_TONE_CLASS, expectedHint, expectedTone, fmtDate } from "./dates";
-import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { ListFooter, ListToolbar } from "@/components/layout/ListPage";
 import { ListSearchBox } from "@/components/data-table/ListSearchBox";
 import { useListSearch } from "@/hooks/useListSearch";
 
@@ -112,9 +113,12 @@ interface Props {
   overdueOnly: boolean;
   onOverdueChange: (v: boolean) => void;
   onOpenOrder: (orderId: string) => void;
+  /** Sayfanın ortak filtre kutuları (tedarikçi) — panelin araç satırına girer; sekme altında ikinci satır açılmaz. */
+  leading?: ReactNode;
 }
 
 export function OpenLinesPanel({
+  leading,
   supplier,
   itemId,
   onItemChange,
@@ -144,7 +148,9 @@ export function OpenLinesPanel({
   return (
     <>
       <ListToolbar className="flex-row flex-wrap items-center">
-        <div className="w-64">
+        <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Sipariş no, ürün adı/kodu ya da tedarikçi ara" />
+        {leading}
+        <div className="w-56 [&_button]:h-8 [&_button]:text-xs">
           <ReferenceSelect<Item>
             value={itemId}
             onChange={onItemChange}
@@ -156,76 +162,51 @@ export function OpenLinesPanel({
             noneLabel="Tüm ürünler"
           />
         </div>
-        <Button
-          variant={overdueOnly ? "default" : "outline"}
-          size="sm"
-          onClick={() => onOverdueChange(!overdueOnly)}
+        <ToolbarToggle
+          checked={overdueOnly}
+          onCheckedChange={onOverdueChange}
+          label="Yalnız gecikmişler"
           title="Beklenen tarihi geçmiş kalemler (termin girilmemiş kalemler bu listeye girmez)"
-        >
-          Yalnız gecikmişler
-        </Button>
-        {rows.length > 0 && (
-          <span className="text-xs text-muted-foreground">
-            {total} açık kalem{rows.length < total ? ` · ilk ${rows.length} tanesi gösteriliyor` : ""}
-          </span>
-        )}
+        />
+        <InfoPopover label="Kalan nasıl hesaplanır" desc={FIFO_HINT} />
         <div className="ml-auto flex items-center gap-1.5">
-          <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Sipariş no, ürün adı/kodu ya da tedarikçi ara" />
           <DataTableTools table={table} compact exportName="Bekleyen kalemler" />
         </div>
       </ListToolbar>
 
-      {!q.isLoading && !q.isError && rows.length > 0 ? (
-        <>
-          <DataTable
-            table={table}
-            onRowClick={(r) => onOpenOrder(r.purchaseOrder.id)}
-            rowTitle={() => "Siparişin tamamını aç"}
-            exportName="Bekleyen kalemler"
-          />
-          <p className="flex shrink-0 items-start gap-1.5 border-t px-4 py-2 text-[11px] text-muted-foreground">
-            <Info className="mt-0.5 h-3 w-3 shrink-0" />
-            {FIFO_HINT}
-          </p>
-          {rows.length < total && (
-            <p className="flex shrink-0 items-start gap-1.5 px-4 py-2 text-xs text-amber-700 dark:text-amber-500">
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              {total} açık kalemin ilk {rows.length} tanesi gösteriliyor (en yakın termin önce).
-              Aradığınızı bulmak için tedarikçi ya da ürün filtresini kullanın.
-            </p>
-          )}
-        </>
-      ) : (
-      <ListBody>
-        {q.isLoading ? (
-          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
-        ) : q.isError ? (
-          <ListMessage>
-            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-              <p className="font-medium text-destructive">Açık kalemler yüklenemedi.</p>
-              <p className="mt-1 text-muted-foreground">
-                Bu “bekleyen mal yok” cevabı DEĞİLDİR — istek sunucuya ulaşamadı ya da reddedildi.
-                Siparişleriniz yerinde duruyor.
-              </p>
-              <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
-                Tekrar dene
-              </Button>
-            </div>
-          </ListMessage>
-        ) : rows.length === 0 ? (
-          <ListMessage>
-            <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-              {overdueOnly
-                ? "Termini geçmiş açık kalem yok. (Beklenen tarihi girilmemiş kalemler bu listeye girmez.)"
-                : supplier || itemId || term
-                  ? "Bu daraltmayla bekleyen kalem yok — filtreleri gevşetip tekrar bakın."
-                  : "Bekleyen kalem yok: açık siparişlerin tamamı karşılanmış."}
-            </div>
-          </ListMessage>
-        ) : null}
-      </ListBody>
-      )}
-      {rows.length > 0 && <ListFooter loaded={rows.length} total={total} />}
+      <DataTable
+        table={table}
+        onRowClick={(r) => onOpenOrder(r.purchaseOrder.id)}
+        rowTitle={() => "Siparişin tamamını aç"}
+        exportName="Bekleyen kalemler"
+        isLoading={q.isLoading}
+        isError={q.isError}
+        errorText="Açık kalemler yüklenemedi. Siparişleriniz yerinde duruyor."
+        onRetry={() => void q.refetch()}
+        emptyText={
+          overdueOnly
+            ? "Termini geçmiş açık kalem yok."
+            : supplier || itemId || term
+              ? "Bu daraltmayla bekleyen kalem yok."
+              : "Bekleyen kalem yok: açık siparişlerin tamamı karşılanmış."
+        }
+        emptyDescription={
+          overdueOnly ? "Beklenen tarihi girilmemiş kalemler bu listeye girmez." : supplier || itemId || term ? "Filtreleri gevşetip tekrar bakın." : undefined
+        }
+      />
+      <ListFooter
+        loaded={rows.length}
+        total={total}
+        label={
+          // KIRPMA SESSİZ DEĞİL (dosya başı): sunucu toplamı gösterilenden büyükse yazar.
+          rows.length < total ? (
+            <span className="flex items-center gap-1 text-amber-700 dark:text-amber-500" title="En yakın termin önce; aradığınızı tedarikçi ya da ürün filtresiyle bulun.">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              {total} açık kalemin ilk {rows.length} tanesi gösteriliyor
+            </span>
+          ) : undefined
+        }
+      />
     </>
   );
 }

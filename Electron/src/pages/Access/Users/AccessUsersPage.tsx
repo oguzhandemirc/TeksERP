@@ -7,11 +7,10 @@ import { safeFormat } from "@/lib/format";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBody, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { ListFooter, ListToolbar } from "@/components/layout/ListPage";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Skeleton } from "@/components/ui/skeleton";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { ToolbarToggle } from "@/components/data-table/ToolbarToggle";
 import { DataTable } from "@/components/data-table/DataTable";
 import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
@@ -215,12 +214,8 @@ export function AccessUsersPage() {
       />
 
       <ListToolbar className="flex-row flex-wrap items-center">
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Ara…" title="Kullanıcı adı veya ad soyad ara" aria-label="Kullanıcı adı veya ad soyad ara"
-          className="h-8 w-64 text-sm"
-        />
+        <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Kullanıcı adı veya ad soyad ara" />
+        <ToolbarToggle checked={showInactive} onCheckedChange={setShowInactive} label="Pasifleri göster" />
         <div className="ml-auto flex items-center gap-1.5">
           {/* Dosya kendi sütunlarıyla iner (kimlik bilgisi asla) — tablo menüsünde ikinci indirme yok. */}
           <DataTableTools table={table} compact hideExport />
@@ -236,32 +231,20 @@ export function AccessUsersPage() {
             ]}
           />
         </div>
-        <label className="flex h-8 cursor-pointer items-center gap-2 whitespace-nowrap rounded-md border bg-background px-3 text-xs">
-          <Checkbox
-            checked={showInactive}
-            onCheckedChange={(c) => setShowInactive(Boolean(c))}
-          />
-          Pasifleri göster
-        </label>
       </ListToolbar>
 
       {hasPermission("admin:users") && <PendingCredentialResets />}
 
-      {!query.isLoading && filtered.length > 0 ? (
-        <DataTable table={table} exportName="Kullanıcılar" rowClassName={(u) => (u.isActive ? undefined : "opacity-60")} />
-      ) : (
-        <ListBody>
-          {query.isLoading ? (
-            <ListMessage className="space-y-2">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Skeleton key={i} className="h-8 w-full" />
-              ))}
-            </ListMessage>
-          ) : (
-            <p className="py-10 text-center text-muted-foreground">Kullanıcı bulunamadı.</p>
-          )}
-        </ListBody>
-      )}
+      <DataTable
+        table={table}
+        exportName="Kullanıcılar"
+        rowClassName={(u) => (u.isActive ? undefined : "opacity-60")}
+        isLoading={query.isLoading}
+        isError={query.isError}
+        onRetry={() => void query.refetch()}
+        emptyText={search ? "Aramaya uyan kullanıcı yok." : "Kullanıcı bulunamadı."}
+      />
+      <ListFooter loaded={filtered.length} />
 
       <UserFormDialog
         open={formOpen}
