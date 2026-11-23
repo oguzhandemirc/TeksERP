@@ -6,10 +6,10 @@ import { PageShell, PageBody } from "@/components/layout/PageShell";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { InfoPopover } from "@/components/ui/info-popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Callout } from "@/components/ui/callout";
 import { RefreshButton } from "@/components/RefreshButton";
@@ -78,14 +78,17 @@ export function LabelAssignmentsPage({
         )}
         {hideHeader && actionsPortal && createPortal(actions, actionsPortal)}
 
-        <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+        {/* B6: iki sütun (bağlam varsayılanları | top etiketi seti + öncelik notu); açıklamalar ⓘ'de. */}
+        <div className="grid w-full items-start gap-4 xl:grid-cols-2">
           <Card>
             <CardHeader>
-              <CardTitle>Bağlam Varsayılanları</CardTitle>
-              <CardDescription>
-                Her bağlam için havuzdan bir varsayılan şablon seçin. Müşteriye veya cihaza
-                özel atama yoksa baskı bu şablonla yapılır.
-              </CardDescription>
+              <CardTitle className="flex items-center gap-1.5">
+                Bağlam Varsayılanları
+                <InfoPopover
+                  label="Bağlam varsayılanları"
+                  desc="Her bağlam için havuzdan bir varsayılan şablon seçin. Müşteriye veya cihaza özel atama yoksa baskı bu şablonla yapılır; varsayılan yoksa şablonsuz (katalog düzeni) basılır."
+                />
+              </CardTitle>
             </CardHeader>
             <CardContent>
               {loading ? (
@@ -109,9 +112,10 @@ export function LabelAssignmentsPage({
             </CardContent>
           </Card>
 
-          <GlobalLabelSetsCard sets={sets} />
-
-          <CustomerPriorityNote />
+          <div className="flex flex-col gap-4">
+            <GlobalLabelSetsCard sets={sets} />
+            <CustomerPriorityNote />
+          </div>
         </div>
       </PageBody>
     </PageShell>

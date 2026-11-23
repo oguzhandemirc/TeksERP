@@ -164,7 +164,6 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "definitions/subcontractor-categories", app: "desktop", modul: "cekirdek:ana-veri", title: "Fason Kategorileri", requires: ["subcontractor:read"], capabilities: ["subcontractor:write"] },
   { key: "definitions/subcontractors", app: "desktop", modul: "cekirdek:ana-veri", title: "Fason Firmalar", requires: ["subcontractor:read"], capabilities: ["subcontractor:write"] },
   { key: "definitions/station-capabilities", app: "desktop", modul: "productionEnabled", title: "İstasyon Yetenekleri", requires: ["station:read"], capabilities: [] },
-  { key: "definitions/label-templates", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Etiket Tasarımı", requires: ["label-template:read"], capabilities: ["label-template:write"] },
   { key: "access/devices", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Tabletler", requires: ["admin:settings"], capabilities: [] },
   { key: "access", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Yetkilendirme", requires: ["admin:users"], capabilities: [] },
   { key: "access/users", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Kullanıcılar", requires: ["admin:users"], capabilities: [] },

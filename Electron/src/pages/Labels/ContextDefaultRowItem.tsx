@@ -1,4 +1,5 @@
 import { AlertTriangle, X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -40,7 +41,19 @@ export function ContextDefaultRowItem({
   return (
     <li className="flex flex-col gap-1.5 py-3 first:pt-0 last:pb-0">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="min-w-40 flex-1 text-sm font-medium">{labelKindLabels[kind]}</span>
+        <span className="flex min-w-40 flex-1 items-center gap-2 text-sm font-medium">
+          {labelKindLabels[kind]}
+          {/* B4: tekrarlanan uyarı cümlesi yerine satır rozeti; açıklama baloncukta. */}
+          {!assigned && (
+            <Badge
+              variant="outline"
+              className="gap-1 border-amber-500/40 text-[10px] font-normal text-amber-700 dark:text-amber-400"
+              title="Varsayılan şablon yok — bu bağlamda şablonsuz (katalog düzeni) basılır."
+            >
+              <AlertTriangle className="h-3 w-3" /> Varsayılan yok
+            </Badge>
+          )}
+        </span>
         <PermissionGate
           permission="label-template:write"
           fallback={
@@ -95,12 +108,6 @@ export function ContextDefaultRowItem({
           </Button>
         </PermissionGate>
       </div>
-      {!assigned && (
-        <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-500">
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-          Varsayılan yok — bu bağlamda şablonsuz (katalog düzeni) basılır.
-        </div>
-      )}
     </li>
   );
 }

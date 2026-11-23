@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/forms/FormField";
+import { labelStudioPath } from "./studio-path";
 import {
   LabelKind,
   labelKindLabels,
@@ -23,6 +24,8 @@ import {
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Açılışta seçili tür — Serbest Baskı boş durumundan "standalone" gelir (B7). */
+  initialType?: TemplateType;
 }
 
 /**
@@ -32,9 +35,9 @@ interface Props {
  */
 /** "bound" = rulo/kartela etiketi (bağlama atanabilir); "standalone" = serbest
  *  (bakım/statik — atama yok, barkodsuz kaydedilebilir). */
-type TemplateType = "bound" | "standalone";
+export type TemplateType = "bound" | "standalone";
 
-export function NewTemplateDialog({ open, onOpenChange }: Props) {
+export function NewTemplateDialog({ open, onOpenChange, initialType = "bound" }: Props) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [name, setName] = useState("");
@@ -44,11 +47,11 @@ export function NewTemplateDialog({ open, onOpenChange }: Props) {
 
   useEffect(() => {
     if (open) {
-      setTemplateType("bound");
+      setTemplateType(initialType);
       setKind(LabelKind.ROLL_FINISHED);
       setName("");
     }
-  }, [open]);
+  }, [open, initialType]);
 
   const catalogQ = useQuery({
     queryKey: ["label-template-catalog", kind],
@@ -83,7 +86,7 @@ export function NewTemplateDialog({ open, onOpenChange }: Props) {
       toast.success("Şablon oluşturuldu — Stüdyoda boyut ekleyip tasarlayın.");
       void qc.invalidateQueries({ queryKey: ["label-templates"] });
       onOpenChange(false);
-      navigate(`/definitions/label-templates/${res.data.id}`);
+      navigate(labelStudioPath(res.data.id));
     },
   });
 

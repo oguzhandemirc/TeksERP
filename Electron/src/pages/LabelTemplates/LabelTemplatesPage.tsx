@@ -10,7 +10,10 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, Upload } from "lucide-react";
+import { LayoutTemplate, Plus, Search, Upload } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { foldedIncludes } from "@/lib/search-fold";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
@@ -18,6 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { RefreshButton } from "@/components/RefreshButton";
 import { PermissionGate } from "@/components/PermissionGate";
+import { labelStudioPath } from "./studio-path";
 import {
   labelTemplateService,
   type LabelTemplateListRow,
@@ -32,8 +36,10 @@ const QUERY_KEY = "label-templates";
 export function LabelTemplatesPage({
   hideHeader,
   actionsPortal,
-}: { hideHeader?: boolean; actionsPortal?: HTMLElement | null } = {}) {
+  toolsPortal,
+}: { hideHeader?: boolean; actionsPortal?: HTMLElement | null; toolsPortal?: HTMLElement | null } = {}) {
   const navigate = useNavigate();
+  const [search, setSearch] = useState("");
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
   const [newOpen, setNewOpen] = useState(false);
@@ -94,8 +100,13 @@ export function LabelTemplatesPage({
           <div className="mb-3 flex items-center justify-end gap-2">{actions}</div>
         )}
         {hideHeader && actionsPortal && createPortal(actions, actionsPortal)}
+        {/* B2: arama sekme şeridinin sağında (ayrı araç satırı yok); havuz tek parça yüklenir. */}
+        {toolsPortal
+          ? createPortal(<ListSearchBox value={search} onSearchChange={setSearch} searchHint="Şablon adı ara" />, toolsPortal)
+          : <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Şablon adı ara" className="mb-3" />}
         <PoolList
-          onEdit={(id) => navigate(`/definitions/label-templates/${id}`)}
+          search={search}
+          onEdit={(id) => navigate(labelStudioPath(id))}
           onDelete={setDeletingId}
           onHardDelete={(t) => setHardDeleting({ id: t.id, name: t.name })}
           onPrint={setPrinting}
@@ -118,7 +129,8 @@ export function LabelTemplatesPage({
   );
 }
 
-function PoolList({ onEdit, onDelete, onHardDelete, onPrint }: {
+function PoolList({ search, onEdit, onDelete, onHardDelete, onPrint }: {
+  search: string;
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
   onHardDelete: (t: LabelTemplateListRow) => void;
@@ -181,18 +193,19 @@ function PoolList({ onEdit, onDelete, onHardDelete, onPrint }: {
   };
 
   if (query.isLoading) return <Skeleton className="h-40 w-full" />;
-  const rows = query.data?.data ?? [];
+  const all = query.data?.data ?? [];
+  const term = search.trim();
+  const rows = term ? all.filter((t) => foldedIncludes(t.name, term)) : all;
   const defaults = defaultsQ.data ?? [];
+  if (all.length === 0) {
+    return <EmptyState icon={LayoutTemplate} title="Henüz etiket şablonu yok" description={'"Yeni Şablon" ile ilk düzeni oluşturun.'} />;
+  }
   if (rows.length === 0) {
-    return (
-      <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
-        Havuzda şablon yok — "Yeni Şablon" ile başlayın.
-      </div>
-    );
+    return <EmptyState icon={Search} title="Aramaya uyan şablon yok" />;
   }
 
   return (
-    <ul className="divide-y rounded-md border">
+    <ul className="divide-y rounded-md border bg-card">
       {rows.map((t) => (
         <PoolRow key={t.id} template={t} defaults={defaults}
           onEdit={() => onEdit(t.id)} onDelete={() => onDelete(t.id)}

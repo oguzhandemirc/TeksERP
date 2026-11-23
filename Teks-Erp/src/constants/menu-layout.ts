@@ -131,7 +131,6 @@ export const MENU_PRESET_FORBIDDEN_KEYS: ReadonlySet<string> = new Set([
   "definitions/stations",
   "definitions/machines",
   "definitions/labels",
-  "definitions/label-templates",
   "definitions/fabric-properties",
   "definitions/station-capabilities",
   "definitions/item-prices",

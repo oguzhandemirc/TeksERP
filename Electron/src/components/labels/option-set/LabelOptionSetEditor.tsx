@@ -41,7 +41,7 @@ export function LabelOptionSetEditor({ title, draft, disabled, onChange, onAdd, 
     <section className="space-y-2" data-testid={testId}>
       <h4 className="text-sm font-medium">{title}</h4>
       {draft.entries.length === 0 ? (
-        <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">Bu sette şablon yok.</p>
+        <p className="text-xs text-muted-foreground">Bu sette şablon yok.</p>
       ) : (
         <ul className="divide-y rounded-md border">
           {draft.entries.map((e, i) => (

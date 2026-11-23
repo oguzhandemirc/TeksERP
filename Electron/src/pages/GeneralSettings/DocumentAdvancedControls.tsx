@@ -62,7 +62,7 @@ function WidthModePanel({
 }) {
   const blank = cfg?.blankWidths === true;
   return (
-    <div className="rounded-md border p-3">
+    <div className="rounded-md bg-muted/40 p-3">
       <div className="pb-1 text-sm font-medium">EN değeri nereden gelsin?</div>
       <p className="pb-2 text-xs text-muted-foreground">
         Bu bir şablon ayarıdır — baskı sırasında ayrıca sorulmaz.
@@ -113,7 +113,7 @@ function GridGroupsPanel({
   const rows = cfg?.gridRows ?? 10;
   const slots = groups * rows;
   return (
-    <div className="rounded-md border p-3">
+    <div className="rounded-md bg-muted/40 p-3">
       <div className="pb-1 text-sm font-medium">Top listesi (grid)</div>
       <p className="pb-2 text-xs text-muted-foreground">
         Sayfada kaç top satırı basılacağını siz belirlersiniz.
@@ -192,7 +192,7 @@ function PlacementsPanel({
 }) {
   const placements = cfg?.placements ?? {};
   return (
-    <div className="rounded-md border p-3">
+    <div className="rounded-md bg-muted/40 p-3">
       <div className="pb-2 text-sm font-medium">Konum</div>
       <div className="space-y-2">
         {def.supportsPlacements?.map((p) => {
@@ -241,7 +241,7 @@ function StampsPanel({
     patch({ stamps: { ...stamps, ...next } });
 
   return (
-    <div className="divide-y divide-border rounded-md border px-3">
+    <div className="divide-y divide-border rounded-md bg-muted/40 px-3">
       <div className="py-3">
         <FlagToggle
           title="Doğrulama karekodu"
@@ -306,7 +306,7 @@ function BlocksPanel({
   const write = (next: NonNullable<DocumentConfig["blocks"]>) => patch({ blocks: next });
 
   return (
-    <div className="rounded-md border p-3">
+    <div className="rounded-md bg-muted/40 p-3">
       <div className="flex items-center justify-between pb-2">
         <div>
           <div className="text-sm font-medium">Metin blokları</div>
@@ -377,7 +377,7 @@ function LanguagePanel({
   patch: (next: Partial<DocumentConfig>) => void;
 }) {
   return (
-    <div className="rounded-md border p-3">
+    <div className="rounded-md bg-muted/40 p-3">
       <div className="text-sm font-medium">Belge dili</div>
       <p className="text-xs text-muted-foreground">
         "Otomatik": ihracat (yurtdışı) sevkiyatlarda İngilizce, diğerlerinde Türkçe.
@@ -438,7 +438,7 @@ export function BlankGridPanel({
     patch({ blankGrid: { ...(g ?? {}), enabled: true, ...next } });
 
   return (
-    <div className="rounded-md border p-3">
+    <div className="rounded-md bg-muted/40 p-3">
       <FlagToggle
         title="Boş grid (elle doldurulan kutular)"
         desc="Belgeye tamamen boş bir tablo ekler — hücreler sahada elle doldurulur (kurşun kaydı, imza listesi vb.). Kapalıyken belgeye hiçbir şey eklenmez."

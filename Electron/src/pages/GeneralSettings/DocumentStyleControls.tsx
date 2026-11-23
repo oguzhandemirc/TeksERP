@@ -51,7 +51,7 @@ export function DocumentStyleControls({
   };
 
   return (
-    <div className="rounded-md border p-3">
+    <div className="rounded-md bg-muted/40 p-3">
       <div className="pb-2 text-sm font-medium">Görünüm</div>
       <div className="grid gap-3 sm:grid-cols-2">
         <SelectField

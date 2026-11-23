@@ -1,17 +1,19 @@
 // =============================================================================
 // Etiket şablonu havuzu — TEK SATIR (ad/rozetler + sabit aksiyon rayı)
 // =============================================================================
-// Aksiyonlar sağa yaslıdır ve HER satırda AYNI yuva dizisini çizer
-// (`templateRowActions.ts`): o satırda anlamsız olan aksiyon yerine BİREBİR aynı
-// genişlikte görünmez bir yer tutucu konur → ikonlar satırdan satıra kaymaz.
+// Satırda yalnız Yazdır + Stüdyoda Aç + "⋯" menüsü (B1); Yazdır anlamsızsa yerine
+// BİREBİR aynı genişlikte görünmez yer tutucu konur → sütun satırdan satıra kaymaz.
 // Yer tutucu "pasif düğme" DEĞİLDİR: `invisible` görünürlükten de erişilebilirlik
 // ağacından da düşer, sekme sırasına girmez, tıklanamaz.
 // =============================================================================
 
-import { Star, Trash2, Pencil, PowerOff, RotateCcw, Printer, Download, Copy } from "lucide-react";
+import { Fragment, type ReactNode } from "react";
+import { Star, Trash2, Pencil, PowerOff, RotateCcw, Printer, Download, Copy, MoreHorizontal, type LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PermissionGate } from "@/components/PermissionGate";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { cn } from "@/lib/utils";
 import {
   labelKindLabel,
@@ -19,8 +21,8 @@ import {
   type LabelTemplateListRow,
 } from "@/services/labelTemplateService";
 import {
+  resolveTemplateMenuActions,
   resolveTemplateRowActions,
-  resolveToggleDirection,
   type TemplateRowActionKey,
 } from "./templateRowActions";
 
@@ -84,49 +86,61 @@ function RowActions({
   onExport,
   onDuplicate,
 }: { template: LabelTemplateListRow; isAnyDefault: boolean } & RowHandlers) {
-  const slots = resolveTemplateRowActions({ isActive: t.isActive, isAnyDefault });
+  const state = { isActive: t.isActive, isAnyDefault };
+  const slots = resolveTemplateRowActions(state);
   const can = (key: TemplateRowActionKey) => slots.find((s) => s.key === key)?.applicable ?? false;
-  const toggleDir = resolveToggleDirection({ isActive: t.isActive, isAnyDefault });
+  const canWrite = useRoleAccess().hasPermission("label-template:write");
+  const menu = resolveTemplateMenuActions(state, canWrite);
+  const items: Record<TemplateRowActionKey, ReactNode> = {
+    print: null,
+    edit: null,
+    export: <MenuItem key="export" icon={Download} label="JSON olarak dışa aktar" onSelect={onExport} />,
+    duplicate: <MenuItem key="duplicate" icon={Copy} label="Çoğalt" onSelect={onDuplicate} />,
+    toggle: t.isActive ? (
+      <MenuItem key="toggle" icon={PowerOff} label="Pasife al" onSelect={onDelete} />
+    ) : (
+      <MenuItem key="toggle" icon={RotateCcw} label="Aktifleştir" onSelect={onRestore} />
+    ),
+    hardDelete: <MenuItem key="hardDelete" icon={Trash2} label="Kalıcı sil" onSelect={onHardDelete} destructive />,
+  };
 
   return (
-    <div className="flex max-w-full flex-wrap items-center gap-2">
-      {/* Baskı + dışa aktar = okuma işlemleri — write gate'inin DIŞINDA. */}
+    <div className="flex shrink-0 items-center gap-2">
       <Slot slot="print" applicable={can("print")} size="sm" variant="outline" className="gap-1"
         title="Şablonu örnek veriyle yazdır (bağımsız baskı)" onClick={onPrint}>
         <Printer className="h-3.5 w-3.5" /> Yazdır
       </Slot>
-      <Slot slot="export" applicable={can("export")} className="h-8 w-8"
-        title="JSON olarak dışa aktar" onClick={onExport}>
-        <Download className="h-3.5 w-3.5" />
-      </Slot>
-      {/* Yazma yuvaları BİTİŞİK son ek — izin yoksa hepsi birlikte düşer, sıra bozulmaz. */}
       <PermissionGate permission="label-template:write">
-        <Slot slot="duplicate" applicable={can("duplicate")} className="h-8 w-8"
-          title="Şablonu çoğalt (kopya)" onClick={onDuplicate}>
-          <Copy className="h-3.5 w-3.5" />
-        </Slot>
         <Slot slot="edit" applicable={can("edit")} size="sm" variant="outline" className="gap-1"
           title="Etiket Stüdyosu'nda düzenle" onClick={onEdit}>
           <Pencil className="h-3.5 w-3.5" /> Stüdyoda Aç
         </Slot>
-        {/* Pasife Al ↔ Aktifleştir TEK yuva: karşılıklı dışlayan iki yön, aynı sütun. */}
-        {toggleDir === "deactivate" ? (
-          <Slot slot="toggle" applicable={can("toggle")} className="h-8 w-8 text-destructive"
-            title="Pasife Al (geri alınabilir)" onClick={onDelete}>
-            <PowerOff className="h-3.5 w-3.5" />
-          </Slot>
-        ) : (
-          <Slot slot="toggle" applicable={can("toggle")} className="h-8 w-8 text-primary"
-            title="Aktifleştir" onClick={onRestore}>
-            <RotateCcw className="h-3.5 w-3.5" />
-          </Slot>
-        )}
-        <Slot slot="hardDelete" applicable={can("hardDelete")} className="h-8 w-8 text-destructive"
-          title="Kalıcı Sil (GERİ ALINAMAZ)" onClick={onHardDelete}>
-          <Trash2 className="h-3.5 w-3.5" />
-        </Slot>
       </PermissionGate>
+      {/* B1: seyrek ve yıkıcı işler tek "⋯" menüsünde — sütun her satırda aynı genişlikte kalır. */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button type="button" variant="ghost" size="icon" className="h-8 w-8" data-action-slot="more" aria-label="Diğer işlemler" title="Diğer işlemler">
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          {menu.map((key, i) => (
+            <Fragment key={key}>
+              {key === "toggle" && i > 0 && <DropdownMenuSeparator />}
+              {items[key]}
+            </Fragment>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
+  );
+}
+
+function MenuItem({ icon: Icon, label, onSelect, destructive }: { icon: LucideIcon; label: string; onSelect: () => void; destructive?: boolean }) {
+  return (
+    <DropdownMenuItem onSelect={onSelect} className={destructive ? "text-destructive focus:text-destructive" : undefined}>
+      <Icon className="mr-2 h-4 w-4" /> {label}
+    </DropdownMenuItem>
   );
 }
 

@@ -1,4 +1,7 @@
+import { useState } from "react";
+import { ChevronRight } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
+import { InfoPopover } from "@/components/ui/info-popover";
 import { cn } from "@/lib/utils";
 import type { TravelerCardConfig } from "@/services/featureFlagService";
 import {
@@ -98,9 +101,11 @@ function Group({
   // Bölüm anahtarı — eskiden ayrı bir "toggle listesi" bölümündeydi; artık
   // kapattığı satırların BAŞINDA duruyor, yani neyi kapattığı görünür.
   const sectionOn = group.toggle ? cfg[group.toggle] !== false : true;
+  // B11: bölüm katlanır — tablo üç ekran boyu açık durmasın; başlık satırı neyin içinde olduğunu söyler.
+  const [open, setOpen] = useState(false);
   return (
-    <div className="overflow-hidden rounded-md border">
-      <div className={cn(GRID, "border-b bg-muted/40 px-3 py-1.5")}>
+    <div className="overflow-hidden rounded-md border bg-card">
+      <div className={cn(GRID, "bg-muted/40 px-3 py-1.5", open && "border-b")}>
         {group.toggle ? (
           <Checkbox
             checked={sectionOn}
@@ -111,25 +116,33 @@ function Group({
         ) : (
           <span />
         )}
-        <div className="min-w-0">
-          <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            {group.title}
-            {group.toggle && !sectionOn && " — kapalı"}
-          </div>
-          {group.desc && (
-            <div className="truncate text-[11px] font-normal normal-case text-muted-foreground">
-              {group.desc}
-            </div>
-          )}
-        </div>
-        <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          Punto
-        </span>
-        <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          Kalınlık
-        </span>
+        <button
+          type="button"
+          className="col-span-3 flex min-w-0 items-center gap-1.5 text-left"
+          aria-expanded={open}
+          onClick={() => setOpen((o) => !o)}
+        >
+          <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform", open && "rotate-90")} />
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-medium">
+              {group.title}
+              <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                {group.rows.length} alan{group.toggle && !sectionOn ? " · bölüm basılmaz" : ""}
+              </span>
+            </span>
+            {group.desc && <span className="block truncate text-[11px] text-muted-foreground">{group.desc}</span>}
+          </span>
+        </button>
       </div>
-      <div className={cn(!sectionOn && "pointer-events-none opacity-40")}>
+      {open && (
+        <div className={cn(GRID, "border-b px-3 py-1 text-[11px] text-muted-foreground")}>
+          <span />
+          <span>Alan</span>
+          <span>Punto</span>
+          <span>Kalınlık</span>
+        </div>
+      )}
+      <div className={cn(!open && "hidden", !sectionOn && "pointer-events-none opacity-40")}>
         {group.rows.map((row) => (
           <Row
             key={row.id}
@@ -163,13 +176,13 @@ export function TravelerCardFieldsPanel({
 }) {
   return (
     <div>
-      <div className="text-sm font-medium">Kart Alanları</div>
-      <p className="text-xs text-muted-foreground">
-        Her alan tek tek: <strong>basılsın mı</strong>, <strong>puntosu</strong> (
-        {FIELD_SIZE_MIN}–{FIELD_SIZE_MAX} px) ve <strong>kalınlığı</strong>. Boş bırakılan punto
-        varsayılanda kalır — varsayılan sayfa boyutuna göre değişir (A4/A5). Yukarıdaki genel
-        “Yazı” ölçeği bunların üstüne biner. Bölüm başlığındaki kutu o bölümün tamamını kapatır.
-      </p>
+      <div className="flex items-center gap-1.5 text-sm font-medium">
+        Kart Alanları
+        <InfoPopover
+          label="Kart alanları"
+          desc={`Her alan tek tek: basılsın mı, puntosu (${FIELD_SIZE_MIN}–${FIELD_SIZE_MAX} px) ve kalınlığı. Boş bırakılan punto varsayılanda kalır — varsayılan sayfa boyutuna göre değişir (A4/A5). Yukarıdaki genel "Yazı" ölçeği bunların üstüne biner. Bölüm başlığındaki kutu o bölümün tamamını kapatır; başlığa tıklayınca bölüm açılır.`}
+        />
+      </div>
       <div className="mt-2 space-y-3">
         {FIELD_GROUPS.map((g) => (
           <Group key={g.key} group={g} cfg={cfg} disabled={disabled} onChange={onChange} />

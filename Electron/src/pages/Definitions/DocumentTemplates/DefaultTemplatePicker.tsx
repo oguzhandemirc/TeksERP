@@ -42,7 +42,7 @@ export function DefaultTemplatePicker({ docKey }: { docKey: string }) {
 
   const current = assignQ.data?.data?.defaults.find((d) => d.docType === docType)?.template ?? null;
   return (
-    <div className="rounded-md border px-3 py-3" data-testid="default-template-row">
+    <div className="rounded-md bg-muted/40 px-3 py-3" data-testid="default-template-row">
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="text-sm font-medium">Varsayılan şablon</div>

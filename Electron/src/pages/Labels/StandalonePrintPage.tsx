@@ -8,20 +8,17 @@
 
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { Printer } from "lucide-react";
+import { Plus, Printer } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { EmptyState } from "@/components/ui/empty-state";
+import { InfoPopover } from "@/components/ui/info-popover";
+import { SelectChip } from "@/components/data-table/filter-row/SelectChip";
 import { RefreshButton } from "@/components/RefreshButton";
+import { NewTemplateDialog } from "@/pages/LabelTemplates/NewTemplateDialog";
 import { PermissionGate } from "@/components/PermissionGate";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { customerService } from "@/pages/Customers/service";
@@ -30,17 +27,18 @@ import { TemplatePrintDialog } from "@/pages/LabelTemplates/TemplatePrintDialog"
 
 // RefreshButton prefix'i — müşteriye özel varyantların hepsini tazeler.
 const QUERY_KEY: [string, string] = ["label-templates", "standalone"];
-const ALL = "__all__";
 
 export function StandalonePrintPage({
   hideHeader,
   actionsPortal,
-}: { hideHeader?: boolean; actionsPortal?: HTMLElement | null } = {}) {
+  toolsPortal,
+}: { hideHeader?: boolean; actionsPortal?: HTMLElement | null; toolsPortal?: HTMLElement | null } = {}) {
   const [printing, setPrinting] = useState<LabelTemplate | null>(null);
+  const [creating, setCreating] = useState(false);
   const [customerId, setCustomerId] = useState<string | null>(null);
 
   const query = useQuery({
-    queryKey: [...QUERY_KEY, customerId ?? ALL],
+    queryKey: [...QUERY_KEY, customerId ?? "__all__"],
     queryFn: () => labelTemplateService.standalonePrintList(customerId ?? undefined),
   });
 
@@ -68,12 +66,19 @@ export function StandalonePrintPage({
             </div>
           }
         >
-          <div className="mx-auto w-full max-w-2xl">
-            <CustomerFilter value={customerId} onChange={setCustomerId} />
-            <TemplateList isLoading={query.isLoading} rows={query.data?.data ?? []} onPick={setPrinting} />
-          </div>
+          {toolsPortal
+            ? createPortal(<CustomerFilter value={customerId} onChange={setCustomerId} />, toolsPortal)
+            : <div className="mb-3"><CustomerFilter value={customerId} onChange={setCustomerId} /></div>}
+          <TemplateList
+            isLoading={query.isLoading}
+            rows={query.data?.data ?? []}
+            filtered={customerId !== null}
+            onPick={setPrinting}
+            onCreate={() => setCreating(true)}
+          />
         </PermissionGate>
       </PageBody>
+      <NewTemplateDialog open={creating} onOpenChange={setCreating} initialType="standalone" />
 
       {printing && (
         <TemplatePrintDialog
@@ -102,27 +107,15 @@ function CustomerFilter({
     queryFn: () => loadAllForPicker(customerService),
     staleTime: 60_000,
   });
-  const customers = customersQ.data?.data ?? [];
+  const options = (customersQ.data?.data ?? []).map((c) => ({ value: c.id, label: c.name }));
 
   return (
-    <div className="mb-3 space-y-1">
-      <Select value={value ?? ALL} onValueChange={(v) => onChange(v === ALL ? null : v)}>
-        <SelectTrigger className="w-full sm:w-80">
-          <SelectValue placeholder="Tüm serbest etiketler" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={ALL}>Tüm serbest etiketler</SelectItem>
-          {customers.map((c) => (
-            <SelectItem key={c.id} value={c.id}>
-              {c.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <p className="text-[11px] text-muted-foreground">
-        Müşteri seçilince o müşteriye bağlı etiketler + genel (bağsız) etiketler
-        listelenir. Genel etiketler her müşteride görünür.
-      </p>
+    <div className="flex items-center gap-1.5">
+      <SelectChip id="standalone-customer" label="Müşteri" value={value} options={options} onChange={onChange} />
+      <InfoPopover
+        label="Müşteri filtresi"
+        desc="Müşteri seçilince o müşteriye bağlı etiketler + genel (bağsız) etiketler listelenir. Genel etiketler her müşteride görünür."
+      />
     </div>
   );
 }
@@ -130,22 +123,36 @@ function CustomerFilter({
 function TemplateList({
   isLoading,
   rows,
+  filtered,
   onPick,
+  onCreate,
 }: {
   isLoading: boolean;
   rows: LabelTemplate[];
+  filtered: boolean;
   onPick: (t: LabelTemplate) => void;
+  onCreate: () => void;
 }) {
   if (isLoading) return <Skeleton className="h-40 w-full" />;
   if (rows.length === 0) {
+    if (filtered) return <EmptyState icon={Printer} title="Bu müşteri için serbest etiket yok" />;
     return (
-      <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
-        Henüz serbest etiket yok — Düzenler sekmesinden "Serbest etiket" oluşturun.
-      </div>
+      <EmptyState
+        icon={Printer}
+        title="Henüz serbest etiket yok"
+        description="Kayda bağlı olmayan tekil etiketler (bakım, raf, statik yazı) burada listelenir."
+        action={
+          <PermissionGate permission="label-template:write">
+            <Button type="button" size="sm" className="gap-1" onClick={onCreate}>
+              <Plus className="h-4 w-4" /> Serbest etiket oluştur
+            </Button>
+          </PermissionGate>
+        }
+      />
     );
   }
   return (
-    <ul className="divide-y rounded-md border">
+    <ul className="divide-y rounded-md border bg-card">
       {rows.map((t) => (
         <TemplateRow key={t.id} template={t} onPick={() => onPick(t)} />
       ))}

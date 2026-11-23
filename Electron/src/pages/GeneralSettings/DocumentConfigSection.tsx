@@ -191,7 +191,7 @@ export function DocumentConfigSection({
             </div>
 
             {/* Künye — belge geneli bir karar, alan listesine girmez. */}
-            <div className="rounded-md border px-3">
+            <div className="rounded-md bg-muted/40 px-3">
               <div className="py-3">
                 <FlagToggle
                   title="Firma künyesini bas"
@@ -204,7 +204,7 @@ export function DocumentConfigSection({
             </div>
 
             {/* İmza kutuları */}
-            <div className="rounded-md border p-3">
+            <div className="rounded-md bg-muted/40 p-3">
               <div className="pb-3">
                 <FlagToggle
                   title="İmza kutuları"
