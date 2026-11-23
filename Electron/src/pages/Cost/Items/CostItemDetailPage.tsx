@@ -22,9 +22,12 @@ import { VersionsTab } from "./VersionsTab";
 import { costItemService } from "./service";
 import { useCostVariants } from "./variant-scope";
 
+// Liste rozetiyle aynı renk dili (listede kırmızı olan burada soluk gri kalmasın — M11).
+const STATUS_VARIANT: Record<string, "success" | "info" | "danger"> = { TAM: "success", VARSAYILAN: "info", YAPI_EKSIK: "danger" };
+
 export function CostItemDetailPage() {
   const { itemId = "" } = useParams();
-  const [tab, setTab] = useState("breakdown");
+  const [tabPick, setTab] = useState<string | null>(null);
   const [fx, setFx] = useState<Partial<Record<Currency, string>>>({});
   const [saveOpen, setSaveOpen] = useState(false);
   const [flagged, setFlagged] = useState<Set<string>>(new Set());
@@ -33,16 +36,18 @@ export function CostItemDetailPage() {
   const variants = useCostVariants(itemId);
   const preview = useCostPreview(itemId ? { itemId, fxRates } : null);
   const d = detail.data;
+  // M9: yapısı eksik kart Yapı sekmesinde açılır (Döküm boş kalırdı); kullanıcı seçince o kalır.
+  const tab = tabPick ?? (d?.yapiDurumu === "YAPI_EKSIK" ? "structure" : "breakdown");
   return (
     <PageShell>
       <PageHeader
-        title={d ? `${d.urun.kod} — Maliyet kartı` : "Maliyet kartı"}
-        statusLine={d ? d.urun.ad : undefined}
-        actions={d && (
-          <div className="flex gap-1">
-            <Badge variant="muted">{STRUCTURE_STATUS_LABEL[d.yapiDurumu] ?? d.yapiDurumu}</Badge>
-            {d.girdiDegisti && <Badge variant="muted" className="bg-amber-500/15 text-amber-700 dark:text-amber-300">Girdi değişti</Badge>}
-          </div>
+        title={d ? (d.urun.ad.startsWith(d.urun.kod) ? d.urun.ad : `${d.urun.kod} ${d.urun.ad}`) : "Maliyet kartı"}
+        parent={{ label: "Maliyet Kartları", to: "/cost/items" }}
+        titleExtra={d && (
+          <span className="flex gap-1">
+            <Badge variant={STATUS_VARIANT[d.yapiDurumu] ?? "muted"}>{STRUCTURE_STATUS_LABEL[d.yapiDurumu] ?? d.yapiDurumu}</Badge>
+            {d.girdiDegisti && <Badge variant="warning">Girdi değişti</Badge>}
+          </span>
         )}
       />
       <PageBody className="p-4 sm:p-6">

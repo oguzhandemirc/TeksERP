@@ -1,6 +1,6 @@
 // Makine saat ücretleri — tablo sütunları (ortak DataTable). Ücretsiz makine satırı "ücret yok" ile uyarır.
 import type { ColumnDef } from "@tanstack/react-table";
-import { History } from "lucide-react";
+import { History, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
 import { fmtFactoryDate } from "@/lib/factory-time";
@@ -16,7 +16,7 @@ const BASE: ColumnDef<MachineRateRow>[] = [
     header: "Makine",
     meta: { label: "Makine", exportValue: (r) => `${r.machine.code} ${r.machine.name}` },
     accessorFn: (r) => r.machine.code,
-    cell: ({ row: { original: r } }) => <span><span className="font-medium">{r.machine.code}</span> <span className="text-muted-foreground">{r.machine.name}</span></span>,
+    cell: ({ row: { original: r } }) => <span><span className="font-medium">{r.machine.name}</span> <span className="ml-1 text-xs text-muted-foreground">{r.machine.code}</span></span>,
   },
   {
     id: "hourRate",
@@ -43,7 +43,7 @@ export function machineRateColumns(
       cell: ({ row: { original: r } }) => (
         <span className="whitespace-nowrap">
           <PermissionGate permission="cost:write">
-            <Button size="sm" variant="outline" className="h-7" onClick={() => onEdit({ current: r.rate, machine: r.machine })}>{r.rate ? "Ücreti değiştir" : "Ücret gir"}</Button>
+            <Button size="sm" variant="ghost" className="h-7" onClick={() => onEdit({ current: r.rate, machine: r.machine })} aria-label={r.rate ? "Ücreti değiştir" : "Ücret gir"} title={r.rate ? "Ücreti değiştir" : "Ücret gir"}><Pencil className="h-4 w-4" /></Button>
           </PermissionGate>
           {r.rate && <Button size="sm" variant="ghost" className="h-7" onClick={() => r.rate && onHistory(r.rate)} aria-label="Geçmiş"><History className="h-4 w-4" /></Button>}
         </span>

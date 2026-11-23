@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { MetricCard } from "./MetricCard";
 import { Sparkline } from "./Sparkline";
 import { BackupButton } from "./BackupButton";
+import { HealthBadge } from "./HealthBadge";
 import {
   useServerHealth,
   evaluateAlerts,
@@ -62,7 +63,7 @@ function AlertBanner({ alerts }: { alerts: Alert[] }) {
 }
 
 export function ServerStatusPage() {
-  const { data, isError, dataUpdatedAt, history } = useServerHealth();
+  const { data, isError, isLoading, refetch, dataUpdatedAt, history } = useServerHealth();
   const online = !isError && !!data;
   const alerts = evaluateAlerts(data);
 
@@ -82,22 +83,7 @@ export function ServerStatusPage() {
         actions={
           <div className="flex items-center gap-3">
             {data && <BackupButton />}
-            <div
-              className={cn(
-                "flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium",
-                online
-                  ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                  : "bg-destructive/15 text-destructive",
-              )}
-            >
-              <span
-                className={cn(
-                  "h-2 w-2 rounded-full",
-                  online ? "animate-pulse bg-emerald-500" : "bg-destructive",
-                )}
-              />
-              {online ? "Çevrimiçi" : "Ulaşılamıyor"}
-            </div>
+            <HealthBadge online={online} loading={isLoading} onRetry={() => void refetch()} />
           </div>
         }
       />

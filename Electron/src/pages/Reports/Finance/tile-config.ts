@@ -3,13 +3,13 @@
 // =============================================================================
 // ⚠️ `to` DEĞERLERİ `routes/content-routes.tsx`'teki path'lerle BİREBİR aynı
 // olmak ZORUNDA: ayrışırsa kullanıcı kartı görür, tıklar ve `/forbidden`'a ya
-// da boş ekrana düşer. Aynı liste sağdaki `ReportSideRail`'i ve komut paletini
-// de besler (`command-entries.reports.ts` bu diziden üretir) — yani tek yazım
-// hatası üç yüzeyde birden kırılır.
+// da boş ekrana düşer. Aynı liste komut paletini de besler
+// (`command-entries.reports.ts` bu diziden üretir) — yani tek yazım hatası
+// iki yüzeyde birden kırılır.
 //
-// ⚠️ URL KALIBI `/reports/<kategori>/<rapor>` OLMALI: `ReportSideRail`
-// kategoriyi path'in İKİNCİ segmentinden çözer ve iki segmentli bir adreste
-// (`/reports/finance-aging`) hiç render etmez — rail sessizce kaybolur.
+// ⚠️ URL KALIBI `/reports/<kategori>/<rapor>` OLMALI: modül kapısı (`ROUTE_MODULE`)
+// kategoriyi path'in İKİNCİ segmentinden çözer; iki segmentli adreste
+// (`/reports/finance-aging`) kapı ayrışır.
 //
 // ⚠️ Bu karolarda İZİN ALANI YOKTUR (`HubTile` taşımaz): izin filtresi kategori
 // seviyesindedir (`Reports/tile-config.ts` → `permission: "report:finance"`)

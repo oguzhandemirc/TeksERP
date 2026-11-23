@@ -20,8 +20,11 @@ import { COMPARE_LABELS, useReportCompare, type CompareMode } from "../_hooks/us
 import { useForwardWindow } from "../_hooks/useForwardWindow";
 import { useReportDateRange } from "../_hooks/useReportDateRange";
 import { useReportDayState } from "../_hooks/useReportDay";
-import { BACK_PRESETS, FORWARD_PRESETS, endOfDayIso, startOfDayIso, toYmd } from "../_lib/report-date";
+import { SelectChip } from "@/components/data-table/filter-row/SelectChip";
+import { DayPresetChip } from "@/components/data-table/filter-row/DayPresetChip";
+import { BACK_PRESETS, FORWARD_PRESETS, backWindowIso, endOfDayIso, startOfDayIso, toYmd } from "../_lib/report-date";
 
+const RANGE = "aralik";
 const COMPARE_ORDER: CompareMode[] = ["none", "prev", "prevYear", "custom"];
 const INPUT = "h-7 w-[180px] px-2 text-xs";
 const BTN = "h-7 px-2 text-xs";
@@ -53,44 +56,32 @@ function Wrap({ bare, children }: { bare?: boolean; children: React.ReactNode })
 
 /** `aralik-iso` + `aralik-gun`: URL'deki ISO çift; iki tarih girdisi + geriye bakan ön ayarlar (+ karşılaştırma). */
 function RangeFilter({ reportKey, showCompare, bare }: { reportKey: ReportKey; showCompare: boolean; bare?: boolean }) {
-  const { dateFrom, dateTo, setRange, applyPreset } = useReportDateRange(reportKey);
+  const { dateFrom, dateTo, setRange, applyPreset, defaultDays } = useReportDateRange(reportKey);
   const compare = useReportCompare();
-  const hasRange = Boolean(dateFrom || dateTo);
+  const days = [...new Set([...BACK_PRESETS.map((x) => x.days as number), defaultDays])].sort((x, y) => x - y);
+  const presets = days.map((d) => ({ value: String(d), label: `Son ${d} gün` }));
+  // URL penceresi bir ön ayarla birebir örtüşüyorsa o seçili; değilse elle aralık.
+  const hit = days.find((d) => { const w = backWindowIso(d); return w.dateFrom === dateFrom && w.dateTo === dateTo; });
+  const current = hit !== undefined ? String(hit) : RANGE;
   return (
     <Wrap bare={bare}>
-      <span className="mr-1 text-muted-foreground">Tarih</span>
-      <DateRangeInput
+      {/* O12: ön ayar düğme grubu yerine tek açılır "Tarih: Son 30 gün ▾" (aralık seçimi açılırın içinde). */}
+      <DayPresetChip
+        id="rapor-tarih"
+        label="Tarih"
+        presets={presets}
+        value={current}
+        rangeValue={RANGE}
+        resetValue={String(defaultDays)}
         from={toYmd(dateFrom)}
         to={toYmd(dateTo)}
-        onFrom={(v) => setRange(v ? startOfDayIso(v) : "", dateTo)}
-        onTo={(v) => setRange(dateFrom, v ? endOfDayIso(v) : "")}
-        inputClassName={INPUT}
-        idPrefix="rapor-tarih"
+        onPreset={(v) => applyPreset(Number(v))}
+        onRange={(r) => setRange(r.from ? startOfDayIso(r.from) : "", r.to ? endOfDayIso(r.to) : "")}
       />
-      {BACK_PRESETS.map((p) => (
-        <Button key={p.days} type="button" size="sm" variant="outline" className={BTN} onClick={() => applyPreset(p.days)}>
-          {p.label}
-        </Button>
-      ))}
-      {hasRange ? (
-        <Button type="button" size="icon" variant="ghost" className="h-7 w-7" onClick={() => setRange("", "")} title="Tarih filtresini kaldır">
-          <X className="h-3.5 w-3.5" />
-        </Button>
-      ) : null}
       {showCompare ? (
         <>
-          <span className="ml-3 mr-1 text-muted-foreground">Karşılaştır</span>
-          <select
-            value={compare.mode}
-            onChange={(e) => compare.setMode(e.target.value as CompareMode)}
-            className="h-7 rounded-md border bg-background px-2 text-xs"
-          >
-            {COMPARE_ORDER.map((m) => (
-              <option key={m} value={m}>
-                {COMPARE_LABELS[m]}
-              </option>
-            ))}
-          </select>
+          <SelectChip id="rapor-karsilastir" label="Karşılaştır" value={compare.mode} resetValue="none"
+            options={COMPARE_ORDER.map((m) => ({ value: m, label: COMPARE_LABELS[m] }))} onChange={(v) => compare.setMode(v ?? "none")} />
           {compare.mode === "custom" ? (
             <>
               <DateRangeInput

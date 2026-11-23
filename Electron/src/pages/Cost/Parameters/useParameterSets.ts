@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { decToInput, toDecimalText } from "../shared/format";
 import { PARAM_FIELDS, type ParamKey } from "./param-fields";
 import { buildParamBody, costParamService, type CostParameterSet } from "./service";
-import type { ParamForm } from "./ParameterCompareTable";
+import type { ParamForm } from "./ParameterGroupCards";
 import { isCostCurrency, showPickFields, useWeavingPickMethod, type PickPair } from "../shared/loom-pick";
 
 const emptyForm = (): ParamForm => Object.fromEntries(PARAM_FIELDS.map((f) => [f.key, ""])) as ParamForm;

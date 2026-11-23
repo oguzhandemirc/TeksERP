@@ -5,7 +5,8 @@
 import { useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Plus } from "lucide-react";
+import { FileText, Plus } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
 import { PageShell } from "@/components/layout/PageShell";
 import { ListBand, ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
 import { DataTable } from "@/components/data-table/DataTable";
@@ -77,9 +78,7 @@ export function QuotesPage() {
           </ListMessage>
         ) : (
           <ListMessage>
-            <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground" data-testid="quotes-empty">
-              {filtered ? "Filtreye uyan teklif yok." : "Henüz teklif yok — \"Yeni teklif\" ile başlayın ya da Hızlı Hesaplayıcı'dan \"Teklife ekle\" deyin."}
-            </div>
+            <div data-testid="quotes-empty">{filtered ? <EmptyState icon={FileText} title="Filtreye uyan teklif yok" /> : <EmptyState icon={FileText} title="Henüz teklif yok" description={'"Yeni teklif" ile başlayın ya da Hızlı Hesaplayıcı\'dan "Teklife ekle" deyin.'} />}</div>
           </ListMessage>
         )}
       </ListBody>

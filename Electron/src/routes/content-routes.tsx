@@ -79,8 +79,6 @@ import { RatesPage } from "@/pages/Finance/RatesPage";
 import { ChequesPage } from "@/pages/Finance/Cheques/ChequesPage";
 import { AllocationsPage } from "@/pages/Finance/Allocations/AllocationsPage";
 import { PeriodClosePage } from "@/pages/Finance/PeriodClose/PeriodClosePage";
-import { FinanceReportsHubPage } from "@/pages/Reports/Finance/FinanceReportsHubPage";
-import { DokumaReportsHubPage } from "@/pages/Reports/Dokuma/DokumaReportsHubPage";
 import { MaliyetReportsHubPage } from "@/pages/Reports/Maliyet/MaliyetReportsHubPage";
 import { WeavingEfficiencyPage } from "@/pages/Reports/Maliyet/WeavingEfficiencyPage";
 import { ProfitabilityReportPage } from "@/pages/Reports/Maliyet/ProfitabilityReportPage";
@@ -186,7 +184,6 @@ import { OperationsHubPage } from "@/pages/Operations/OperationsHubPage";
 import { ReportsHubPage } from "@/pages/Reports/ReportsHubPage";
 import { V2_KEYS_WITH_OWN_PAGE, reportV2Routes } from "@/pages/Reports/_v2/routes";
 import { customReportRoutes } from "@/pages/Reports/_v2/custom/routes";
-import { ProductionReportsHubPage } from "@/pages/Reports/Production/ProductionReportsHubPage";
 import { TravelerTracePage } from "@/pages/Reports/Production/TravelerTracePage";
 import { BatchTracePage } from "@/pages/Reports/Production/BatchTracePage";
 import { AuditReportsHubPage } from "@/pages/Reports/Audit/AuditReportsHubPage";
@@ -1715,7 +1712,7 @@ export const contentRoutes: RouteObject[] = [
     path: "reports/production",
     element: (
       <ProtectedRoute requirePermission="report:production">
-        <ProductionReportsHubPage />
+        <Navigate to="/reports?kategori=uretim" replace />
       </ProtectedRoute>
     ),
   },
@@ -1735,7 +1732,7 @@ export const contentRoutes: RouteObject[] = [
     path: "reports/quality",
     element: (
       <ProtectedRoute requirePermission="report:quality">
-        <Navigate to="/reports" replace />
+        <Navigate to="/reports?kategori=kalite" replace />
       </ProtectedRoute>
     ),
   },
@@ -1743,7 +1740,7 @@ export const contentRoutes: RouteObject[] = [
     path: "reports/inventory",
     element: (
       <ProtectedRoute requirePermission="report:inventory">
-        <Navigate to="/reports" replace />
+        <Navigate to="/reports?kategori=uretim" replace />
       </ProtectedRoute>
     ),
   },
@@ -1751,7 +1748,7 @@ export const contentRoutes: RouteObject[] = [
     path: "reports/subcontract",
     element: (
       <ProtectedRoute requirePermission="report:subcontract">
-        <Navigate to="/reports" replace />
+        <Navigate to="/reports?kategori=uretim" replace />
       </ProtectedRoute>
     ),
   },
@@ -1776,19 +1773,18 @@ export const contentRoutes: RouteObject[] = [
     path: "reports/sales",
     element: (
       <ProtectedRoute requirePermission="report:sales">
-        <Navigate to="/reports" replace />
+        <Navigate to="/reports?kategori=satis-sevkiyat" replace />
       </ProtectedRoute>
     ),
   },
   // ── Paket C4 — ön muhasebe raporları (2026-08-14) ─────────────────────────
   // ⚠️ ADRES KALIBI PAZARLIK DIŞI: `/reports/<kategori>/<rapor>` (ÜÇ segment).
-  // `ReportSideRail` kategoriyi path'in İKİNCİ segmentinden çözer ve
-  // `parts.length < 3` ise `return null` yapar → iki segmentli bir adreste
-  // (`/reports/finance-aging` gibi) sağ şerit SESSİZCE kaybolur ve komut paleti
-  // girişi de doğmaz. Adres değişecekse tek dokunulacak yer
+  // Modül kapısı (`ROUTE_MODULE`) kategoriyi path'in İKİNCİ segmentinden çözer;
+  // iki segmentli adreste (`/reports/finance-aging` gibi) kapı ve komut paleti
+  // girişi ayrışır. Adres değişecekse tek dokunulacak yer
   // `Reports/Finance/tile-config.ts`'teki `to` alanlarıdır.
   // ── Dokuma raporları (Dilim 5, 2026-09-14) — rejim kapısı `ROUTE_MODULE` aynasından
-  //    (`reports/dokuma` → dokumaEnabled); üç segmentli adres (ReportSideRail şartı); izin
+  //    (`reports/dokuma` → dokumaEnabled); üç segmentli adres (modül kapısı şartı); izin
   //    `report:production` (1e hükmü ③); karne eylemleri ekran içinde PermissionGate.
   // Masraf Özeti (D4-H1) — rejim `ROUTE_MODULE` (`reports/finance` → financeEnabled); izin backend ucuyla aynı
   // (`report:finance`). v2 zarfını çizer ama rapor v2 bayrağına bağlı DEĞİL (`V2_KEYS_WITH_OWN_PAGE`).
@@ -1834,7 +1830,7 @@ export const contentRoutes: RouteObject[] = [
     element: (
       // Dokuma raporları (`report:production`) ya da Denye Sapması (`warpspec:read`, devere F2) okuyana açık; karolar kendi izniyle süzülür.
       <ProtectedRoute requireAnyPermission={["report:production", "warpspec:read"]}>
-        <DokumaReportsHubPage />
+        <Navigate to="/reports?kategori=dokuma" replace />
       </ProtectedRoute>
     ),
   },
@@ -1874,7 +1870,7 @@ export const contentRoutes: RouteObject[] = [
     path: "reports/finance",
     element: (
       <ProtectedRoute requirePermission="report:finance">
-        <FinanceReportsHubPage />
+        <Navigate to="/reports?kategori=para" replace />
       </ProtectedRoute>
     ),
   },

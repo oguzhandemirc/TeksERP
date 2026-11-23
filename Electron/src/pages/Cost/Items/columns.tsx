@@ -20,13 +20,18 @@ function costText(r: CostItemRow): string {
   return v.sunumDovizi ? `${presentationAmount(v, v.standartDovizM)} · ${tl}` : tl;
 }
 
+// M8: ad çoğu kartta kodla başlıyor ("D2010 D2010 TÜL…") — kod yalnız adda yoksa öne eklenir.
+function itemLabel(r: CostItemRow): string {
+  return r.ad.startsWith(r.kod) ? r.ad : `${r.kod} ${r.ad}`;
+}
+
 export const COST_ITEM_COLUMNS: ColumnDef<CostItemRow>[] = [
   {
     id: "item",
     header: "Ürün",
-    meta: { label: "Ürün", exportValue: (r) => `${r.kod} ${r.ad}` },
+    meta: { label: "Ürün", exportValue: (r) => itemLabel(r) },
     accessorFn: (r) => r.kod,
-    cell: ({ row: { original: r } }) => <span><span className="font-medium">{r.kod}</span> <span className="text-muted-foreground">{r.ad}</span></span>,
+    cell: ({ row: { original: r } }) => <span className="font-medium">{itemLabel(r)}</span>,
   },
   {
     id: "cost",

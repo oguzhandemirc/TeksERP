@@ -4,7 +4,8 @@
 // =============================================================================
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
+import { FunctionSquare, Plus } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
 import { PageShell } from "@/components/layout/PageShell";
 import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
 import { DataTable } from "@/components/data-table/DataTable";
@@ -62,9 +63,7 @@ export function FormulasPage() {
             <ListMessage className="text-sm text-muted-foreground">Aramaya uyan kayıt yok.</ListMessage>
           ) : (
             <ListMessage>
-              <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-                Henüz ek formül yok — maliyet bugünkü kalemlerle hesaplanır. Fabrikanıza özel bir kalem için "Yeni formül" ile ifadeyi yazın (ör. <code className="font-mono">atkiSikligi * 0,02</code>).
-              </div>
+              <EmptyState icon={FunctionSquare} title="Henüz ek formül yok" description={'Maliyet bugünkü kalemlerle hesaplanır. Fabrikanıza özel bir kalem için "Yeni formül" ile ifadeyi yazın (ör. atkiSikligi * 0,02).'} />
             </ListMessage>
           )}
         </ListBody>

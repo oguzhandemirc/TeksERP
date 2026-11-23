@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageShell } from "@/components/layout/PageShell";
 import { REPORT_BY_KEY } from "@/lib/report-catalog";
-import { cn } from "@/lib/utils";
+import { InfoPopover } from "@/components/ui/info-popover";
 import { useReportV2 } from "@/pages/Reports/_v2/useReportV2";
 import { ReportV2Frame } from "@/pages/Reports/_v2/view/ReportV2Frame";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
@@ -46,7 +46,7 @@ function YarnAtSubLink() {
   if (!hasPermission(YARN_AT_SUB_PERMISSION)) return null;
   return (
     <p className="text-xs text-muted-foreground">
-      Deverecide duran ipliğin firma ve lot ayrıntısı:{" "}
+      · Deverecideki ipliğin lot ayrıntısı:{" "}
       <a
         href={YARN_AT_SUB_PATH}
         className="font-medium text-primary underline-offset-2 hover:underline"
@@ -62,31 +62,28 @@ function YarnAtSubLink() {
 function MetaStrip({ meta, basis, notes }: { meta: YarnNeedMeta; basis: string | null; notes: Array<string | null> }) {
   const [open, setOpen] = useState(false);
   const excluded = excludedText(meta);
+  const badgeList = sourceBadges(meta.kaynaklar, meta.deverecideDus);
   return (
-    <div className="mt-2 flex flex-col gap-2">
-      <ul className="flex flex-wrap gap-1.5" aria-label="Hesaba giren kaynaklar">
-        {sourceBadges(meta.kaynaklar, meta.deverecideDus).map((b) => (
-          <li
-            key={b.key}
-            className={cn(
-              "rounded-badge border px-2.5 py-0.5 text-xs",
-              b.on ? "border-success/40 bg-success-soft text-success" : "border-muted-foreground/30 bg-muted text-muted-foreground",
-            )}
-          >
-            {b.label}
-          </li>
-        ))}
-      </ul>
+    <div className="mt-1 flex flex-wrap items-center gap-2">
+      {/* M17: kaynak çipleri + açıklama satırları içeriği itiyordu → tek satır özet, ayrıntı ⓘ baloncuğunda. */}
+      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground" aria-label="Hesaba giren kaynaklar">
+        Hesaba giren kaynaklar: {badgeList.filter((x) => x.on).length} / {badgeList.length}
+        <InfoPopover label="Hesaba giren kaynaklar" desc={
+          <div className="space-y-2">
+            <ul className="space-y-0.5">
+              {badgeList.map((x) => <li key={x.key} className={x.on ? "text-success" : "text-muted-foreground"}>{x.on ? "✓" : "–"} {x.label}</li>)}
+            </ul>
+            {basis ? <p data-testid="yarn-need-basis">{basis}</p> : null}
+            {notes.map((n) => (n ? <p key={n} data-testid="yarn-need-note">{n}</p> : null))}
+          </div>
+        } />
+      </span>
       {meta.kaynaklar.deverecide ? <YarnAtSubLink /> : null}
-      {basis ? <p className="text-xs text-muted-foreground" data-testid="yarn-need-basis">{basis}</p> : null}
-      {notes.map((n) => (n ? <p key={n} className="text-xs text-muted-foreground" data-testid="yarn-need-note">{n}</p> : null))}
       {excluded ? (
-        <div>
-          <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => setOpen(true)}>
+        <Button type="button" variant="outline" size="sm" className="h-7 gap-1.5" onClick={() => setOpen(true)}>
             <AlertTriangle className="h-4 w-4 text-warning" />
             {excluded}
           </Button>
-        </div>
       ) : null}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[80vh] max-w-2xl overflow-auto">

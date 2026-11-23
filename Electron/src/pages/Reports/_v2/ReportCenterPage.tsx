@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -32,6 +33,20 @@ function spotlightCategory(spot: SpotlightController, groups: readonly CenterGro
   spot.spotlight(key, `${title} bölümü vurgulandı, ${n} rapor.`, `${title} raporları seçili filtreyle gizli; “Sıfırla” ile görünür.`);
 }
 
+/** R3/R4: eski kategori adresleri `?kategori=<anahtar>` ile gelir → bölüm spot ışığıyla öne çıkar (süzmez), parametre tüketilir. */
+function useKategoriSpotlight(spot: SpotlightController, all: readonly CenterGroup[]) {
+  const [sp, setSp] = useSearchParams();
+  const kategori = sp.get("kategori");
+  useEffect(() => {
+    if (!kategori) return;
+    const g = all.find((x) => x.key === kategori);
+    if (g) spotlightCategory(spot, all, g.key, g.title);
+    const next = new URLSearchParams(sp);
+    next.delete("kategori");
+    setSp(next, { replace: true });
+  }, [kategori]); // eslint-disable-line react-hooks/exhaustive-deps -- yalnız gelişte bir kez
+}
+
 /** Rapor Merkezi (plan §4.2) — `/reports`un tek yüzü. */
 export function ReportCenterPage() {
   const { isAdmin, hasPermission } = useRoleAccess();
@@ -50,6 +65,7 @@ export function ReportCenterPage() {
     () => new Map<string, VisibleEntry>(all.flatMap((g) => g.entries.map((e) => [e.key, { entry: e, category: g.key, categoryTitle: g.title }] as const))),
     [all],
   );
+  useKategoriSpotlight(spot, all);
   const narrowed = useMemo(() => narrowGroups(all, filter, foldedIncludes).filter((g) => g.entries.length > 0), [all, filter]);
   const groups = useMemo(() => visibleGroups(all, filter, foldedIncludes), [all, filter]);
 

@@ -3,7 +3,7 @@ import type { HubTile } from "../_components/ReportHubGrid";
 
 /**
  * Dokuma raporları — rapor sözleşmesi `docs/kurallar/dokuma.md` § Raporların sözleşmesi.
- * Üç rapor + karne listesi (mühür eylemleri). Adres kalıbı ÜÇ segment (`ReportSideRail`).
+ * Üç rapor + karne listesi (mühür eylemleri). Adres kalıbı ÜÇ segment (modül kapısı `ROUTE_MODULE`).
  * Karo yalnız `dokuma.enabled` açıkken çizilir (`dokuma-regime.ts`); levent karoları ayrıca
  * `devere.enabled` ister (uçları `requireDevereEnabled` — kapalıyken karo 403'e açılmaz).
  */

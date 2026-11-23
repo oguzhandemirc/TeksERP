@@ -5,7 +5,8 @@
 // =============================================================================
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
+import { Cog, Plus } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
 import { PageShell } from "@/components/layout/PageShell";
 import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
 import { DataTable } from "@/components/data-table/DataTable";
@@ -23,6 +24,9 @@ import { MachineRateDialog } from "./MachineRateDialog";
 import { MachineRateHistorySheet } from "./MachineRateHistorySheet";
 import { machineRateService, type MachineCostRate } from "./service";
 import { RefreshButton } from "@/components/RefreshButton";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { useListSearch } from "@/hooks/useListSearch";
+import { foldedIncludes } from "@/lib/search-fold";
 
 type MachineBrief = { id: string; code: string; name: string };
 export interface MachineRateRow { machine: MachineBrief; rate: MachineCostRate | null }
@@ -48,7 +52,11 @@ export function MachineRatesPage() {
   });
   const [edit, setEdit] = useState<Edit | null>(null);
   const [history, setHistory] = useState<MachineCostRate | null>(null);
-  const rows = mergeMachineRows(q.data ?? [], machinesQ.data ?? null);
+  const { search, setSearch, term } = useListSearch();
+  // Liste tamamen yüklü (tüm makineler) → arama bellekte; sunucu sayfalaması yok.
+  const all = mergeMachineRows(q.data ?? [], machinesQ.data ?? null);
+  const needle = (term ?? "").trim();
+  const rows = needle ? all.filter((r) => foldedIncludes(`${r.machine.code} ${r.machine.name}`, needle)) : all;
   const table = useLocalTable({ tableKey: "cost:machine-rates", data: rows, columns: useMemo(() => machineRateColumns(setEdit, setHistory), []), getRowId: (r) => r.machine.id });
   return (
     <PageShell>
@@ -66,7 +74,8 @@ export function MachineRatesPage() {
           </div>
         }
       />
-      <ListToolbar className="flex-row items-center justify-end">
+      <ListToolbar className="flex-row items-center justify-end gap-1.5">
+        <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Makine adı ya da kodu ara" />
         <DataTableTools table={table} compact exportName="Makine saat ücretleri" />
       </ListToolbar>
       {!q.isLoading && !q.isError && rows.length > 0 ? (
@@ -79,11 +88,11 @@ export function MachineRatesPage() {
           <ListMessage>
             <CostQueryError error={q.error} what="Makine saat ücretleri" onRetry={() => void q.refetch()} />
           </ListMessage>
+        ) : needle ? (
+          <ListMessage className="text-sm text-muted-foreground">Aramaya uyan makine yok.</ListMessage>
         ) : (
           <ListMessage>
-            <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-              Henüz makine saat ücreti yok — ücreti olmayan makinenin çalışması kârlılıkta "ücret eksik" sayılır.
-            </div>
+            <EmptyState icon={Cog} title="Henüz makine saat ücreti yok" description={'Ücreti olmayan makinenin çalışması kârlılıkta "ücret eksik" sayılır.'} />
           </ListMessage>
         )}
       </ListBody>

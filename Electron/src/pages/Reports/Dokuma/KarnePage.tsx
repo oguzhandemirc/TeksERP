@@ -34,7 +34,7 @@ function LedgerDialog({ target, onClose }: { target: ShiftStatRow; onClose: () =
           {rows.length === 0 && <li className="text-muted-foreground">Henüz mühür satırı yok.</li>}
           {rows.map((r) => (
             <li key={r.id} className="rounded border px-2 py-1">
-              <b>{r.action}</b> · kuşak {r.sealGeneration} · {factoryLocaleString(r.createdAt, "tr-TR")} · POT {r.potSec} sn · APT {r.aptSec} sn · atkı {r.unitsActual}
+              <b>{SEAL_ACTION_LABEL[r.action]}</b> · {r.sealGeneration}. mühür · {factoryLocaleString(r.createdAt, "tr-TR")} · planlı süre {r.potSec} sn · fiili çalışma {r.aptSec} sn · atkı {r.unitsActual}
               {r.reason ? <> · gerekçe: {r.reason}</> : null}
             </li>
           ))}
@@ -43,6 +43,9 @@ function LedgerDialog({ target, onClose }: { target: ShiftStatRow; onClose: () =
     </Dialog>
   );
 }
+
+// Mühür defteri ham kodu ekranda gösterilmez (O25).
+const SEAL_ACTION_LABEL: Record<SealLedgerRow["action"], string> = { SEAL: "Mühürlendi", UNSEAL: "Mühür açıldı", RESEAL: "Yeniden mühürlendi" };
 
 export function KarnePage() {
   const range = useFactoryRange("dokuma/karne");

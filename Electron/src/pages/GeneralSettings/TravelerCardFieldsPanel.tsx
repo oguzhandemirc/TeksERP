@@ -47,8 +47,8 @@ function Row({
         onCheckedChange={(x) => onPatch({ visible: x === true })}
       />
       <div className="min-w-0">
-        <div className={cn("truncate text-sm", !v.visible && "text-muted-foreground line-through")}>
-          {row.label}
+        <div className={cn("truncate text-sm", !v.visible && "text-muted-foreground")}>
+          {row.label}{!v.visible && <span className="ml-1.5 text-[11px]">· basılmaz</span>}
         </div>
         {row.hint && <div className="truncate text-[11px] text-muted-foreground">{row.hint}</div>}
       </div>
