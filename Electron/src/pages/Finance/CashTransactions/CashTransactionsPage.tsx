@@ -24,7 +24,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeftRight, BookOpen, PieChart, Receipt } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
+import { ListFooter } from "@/components/layout/ListPage";
+import { TruncatedHint } from "../TruncatedHint";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
 import { RefreshButton } from "@/components/RefreshButton";
@@ -128,45 +129,20 @@ export function CashTransactionsPage() {
         tools={<DataTableTools table={table} compact exportName="Kasa hareketleri" />}
       />
 
-      {!q.isLoading && !q.isError && rows.length > 0 ? (
-        <>
-          <CashTxnTable table={table} />
-          {total > rows.length && (
-            <p className="shrink-0 border-t px-4 py-2 text-xs text-amber-700 dark:text-amber-500">
-              {total} kaydın ilk {rows.length} tanesi gösteriliyor (en yeni tarihten geriye). Aradığınızı
-              bulmak için hesap, tür ya da tarih filtresini kullanın.
-            </p>
-          )}
-        </>
-      ) : (
-      <ListBody>
-        {q.isLoading ? (
-          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
-        ) : q.isError ? (
-          <ListMessage>
-            <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-              <p className="font-medium text-destructive">Hareket listesi yüklenemedi.</p>
-              <p className="mt-1 text-muted-foreground">
-                Bu bir “kayıt yok” cevabı DEĞİLDİR — istek sunucuya ulaşamadı ya da reddedildi. Kayıtlarınız
-                yerinde duruyor; yeni fiş girmeden önce tekrar deneyin.
-              </p>
-              <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
-                Tekrar dene
-              </Button>
-            </div>
-          </ListMessage>
-        ) : rows.length === 0 ? (
-          <ListMessage>
-            <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
-              {isFilterDirty(filters)
-                ? "Bu filtreyle hareket yok. Filtreleri temizleyip tekrar bakın."
-                : "Kasa hareketi yok. “Kasa Fişi” ile masraf/gelir, “Virman” ile hesaplar arası aktarım girebilirsiniz."}
-            </div>
-          </ListMessage>
-        ) : null}
-      </ListBody>
-      )}
-      <ListFooter loaded={rows.length} total={q.data ? total : null} />
+      {/* Hata ile "kayıt yok" ayrı ekranlar (DataTable.isError) — hata anında boş liste mükerrer fiş doğurur. */}
+      <CashTxnTable
+        table={table}
+        isLoading={q.isLoading}
+        isError={q.isError}
+        onRetry={() => void q.refetch()}
+        errorText="Hareket listesi yüklenemedi — istek sunucuya ulaşamadı ya da reddedildi."
+        emptyText={isFilterDirty(filters) ? "Bu filtreyle hareket yok." : "Henüz kasa hareketi yok."}
+        emptyDescription={isFilterDirty(filters) ? "Filtreleri temizleyip tekrar bakın." : "“Kasa Fişi” ile masraf/gelir, “Virman” ile hesaplar arası aktarım girilir."}
+      />
+      {/* KIRPMA SESSİZ DEĞİL — alt çubukta (en yeni tarihten geriye ilk sayfa). */}
+      <ListFooter loaded={rows.length} total={q.data ? total : null}>
+        {total > rows.length && rows.length > 0 ? <TruncatedHint /> : null}
+      </ListFooter>
 
       {/* Diyaloglar KOŞULLU mount: her açılış taze bileşen — ve `clientToken`
           da tazelenir (tek mount = tek mantıksal deneme). */}

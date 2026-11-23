@@ -12,7 +12,7 @@ const setPreference = vi.fn((patch: Partial<AppPreferences>) => {
 vi.mock("@/providers/PreferencesProvider", () => ({
   usePreferences: () => ({ prefs, setPreference, ready: true }),
 }));
-const run = vi.fn(async (_o: StockLineOptions) => true);
+const run = vi.fn(async (_o: StockLineOptions, _f?: "xlsx" | "pdf") => true);
 vi.mock("./useStockLineExportRun", () => ({
   useStockLineExportRun: () => ({ run, progress: null, confirmDialog: null }),
 }));
@@ -42,14 +42,17 @@ describe("StockLineExportDialog — depo sütunları", () => {
     renderDialog();
     expect(box("Depoda hazır (serbest)")).toHaveAttribute("data-state", "checked");
     expect(box("Depoda (tümü)")).toHaveAttribute("data-state", "unchecked");
+    // Ekran tablosu yok: işaretsiz sütun "ekranda gizli" diye etiketlenmez.
+    expect(screen.queryByText("ekranda gizli")).toBeNull();
   });
 
   it("tümü işaretlenince tercihe katalog sırasıyla yazılır ve indirmeye gider", async () => {
     renderDialog();
     fireEvent.click(box("Depoda (tümü)"));
-    fireEvent.click(screen.getByRole("button", { name: /Excel oluştur/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Excel indir/ }));
     await waitFor(() => expect(run).toHaveBeenCalledTimes(1));
     expect(run.mock.calls[0]?.[0].columns).toEqual(["ordered", "inStock", "inStockAll"]);
+    expect(run.mock.calls[0]?.[1]).toBe("xlsx");
     const saved = prefs.orders?.stockLineExport as StockLineOptions;
     expect(saved.columns).toEqual(["ordered", "inStock", "inStockAll"]);
   });

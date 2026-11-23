@@ -1,11 +1,15 @@
 // Olay defteri zaman çizelgesi — İş Emri Hareketleri ve Kartela Hareketleri'nin ORTAK gövdesi:
-// grup çipleri, tablo, "daha fazla", altbilgi ve Excel. Sütunlar çağıranın TEK sütun modelinden
+// grup çipleri, tablo, "daha fazla", altbilgi ve dışa aktarım. Sütunlar çağıranın TEK sütun modelinden
 // türer (ekrandaki sütunlar = Excel sütunları). Depo hareket dökümünün sözleşmesini izler:
 // ⚠️ SATIRLAR SALT-OKUNURDUR · ⚠️ "HATA" ≠ "KAYIT YOK" · ⚠️ KIRPMA SESSİZ DEĞİL.
 import { useEffect, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
+import { Download } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { exportRowsToXlsx, type ExportColumn } from "@/lib/list-export";
+import { ExportDialog } from "@/components/data-table/export-dialog/ExportDialog";
+import { type ExportColumn } from "@/lib/list-export";
+import { exportListAs, listExportCatalog } from "@/lib/list-export-sections";
 
 export interface TimelinePage<T> {
   data: T[];
@@ -66,25 +70,32 @@ export function EventTimelineTable<T extends { id: string }>(props: { columns: E
   );
 }
 
-/** Excel — ekranda yüklenmiş sayfalar değil, süzgeçteki listenin TAMAMI. */
+/** Dışa aktar — ortak çıktı diyaloğu (Excel/PDF/CSV + sütun); satırlar ekranda yüklenenler değil, süzgeçteki TAMAMI. */
 export function TimelineExcelButton<T>(props: { columns: ExportColumn<T>[]; fetchAll: () => Promise<T[]>; fileName: string }) {
-  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
   return (
-    <Button
-      variant="outline"
-      size="sm"
-      disabled={busy}
-      onClick={async () => {
-        setBusy(true);
-        try {
-          await exportRowsToXlsx(props.columns, await props.fetchAll(), props.fileName);
-        } finally {
-          setBusy(false);
-        }
-      }}
-    >
-      {busy ? "Hazırlanıyor…" : "Excel"}
-    </Button>
+    <>
+      <ExportDialog
+        open={open}
+        onOpenChange={setOpen}
+        title="Dışa aktar — hareketler"
+        info="Filtreye uyan hareketlerin tamamı (ekranda yüklenmemiş sayfalar dahil); Excel, PDF ve CSV aynı satırları taşır."
+        catalog={open ? listExportCatalog(props.columns) : []}
+        prefKey="zaman-cizelgesi"
+        onRun={async (c) => {
+          try {
+            return await exportListAs(c.format, props.columns, c.columns, await props.fetchAll(), props.fileName);
+          } catch (e) {
+            // Sınır aşımı kendi cümlesini taşır; ağ hatasını apiClient zaten bastı.
+            if (e instanceof Error && e.message.includes("sınırını aşıyor")) toast.error(e.message);
+            return false;
+          }
+        }}
+      />
+      <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setOpen(true)}>
+        <Download className="h-4 w-4" /> Dışa aktar
+      </Button>
+    </>
   );
 }
 

@@ -231,13 +231,25 @@ describe("Sevkiyatlar — ekran = Excel = PDF", () => {
     shipment({ id: "h2", shipmentNo: "SVK-11", kind: "DIRECT", totalMeters: 77.25, totalKg: 0, _count: { sacks: 0, rolls: 4, orders: 0, returns: 0 } }),
   ];
 
-  it("Metraj / Kg metni ekranda ve iki dosyada birebir", () => {
+  it("Metraj ve Kg Sevk Edilenler ile aynı hassasiyette: ekran hücresi dosyadaki sayıyı taşır, TOPLAM = Σyanıt", () => {
     const table = makeTable(rows, shipmentColumns);
     const screen = screenCells(table);
     const cols = toExportColumns(table, allIds(table));
     const s = assertFilesAgree(cols, rows, screen.length);
-    const ti = cols.findIndex((c) => c.label === "Metraj / Kg");
-    expect(ti).toBeGreaterThanOrEqual(0);
-    rows.forEach((_, i) => expect(screen[i]!.totals).toBe(s.excel[i]![ti]));
+    const mi = cols.findIndex((c) => c.label === "Metraj (m)");
+    const ki = cols.findIndex((c) => c.label === "Kg");
+    expect(cols[mi]?.summable && cols[ki]?.summable).toBe(true);
+    rows.forEach((r, i) => {
+      expect(s.excel[i]![mi]).toBe(upTo3Text(r.totalMeters));
+      expect(screen[i]!.totals).toContain(`${upTo3Text(r.totalMeters)} m`);
+      if (r.totalKg > 0) expect(screen[i]!.totals).toContain(`${upTo3Text(r.totalKg)} kg`);
+    });
+  });
+
+  it("iki ekran aynı metni basar: aynı metre/kg Sevkiyatlar ve Sevk Edilenler hücresinde birebir", () => {
+    const both = { totalMeters: 1234.567, totalKg: 300.125 };
+    const sv = screenCells(makeTable([shipment({ id: "h9", ...both })], shipmentColumns))[0]!.totals;
+    const se = screenCells(makeTable([dispatch({ id: "s9", ...both })], buildDispatchColumns(handlers)))[0]!.totals;
+    expect(sv).toBe(se);
   });
 });

@@ -81,7 +81,8 @@ describe("İş emri Hareketler — karakterizasyon", () => {
     renderWithProviders(<WorkOrderEventsPanel workOrder={wo} />);
     await screen.findByTestId("is-emri-hareketleri");
     expect(screen.getByText(/Liste KIRPILDI/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Excel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Dışa aktar" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Excel indir" }));
     await waitFor(() => expect(excel).toHaveBeenCalledTimes(1));
     const [cols, rows, ad] = excel.mock.calls[0] as [ExportColumn<{ id: string }>[], { id: string }[], string];
     expect(cols.map((c) => c.label)).toEqual(["Zaman", "Olay", "Ayrıntı", "Kim · nereden"]);

@@ -27,7 +27,7 @@
 //   node scripts/test_pg_ayar.mjs --sonda    # kalıcı negatif sondalar (betiğin / vektörün bozuk kopyası)
 // =============================================================================
 
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -228,8 +228,7 @@ function kopya(mutasyon) {
 const DIZIN = path.join(KOK, 'deploy/pg');
 const VEKTOR = path.join(KOK, VEKTOR_REL);
 
-if (process.argv.includes('--sonda')) {
-  console.log('test_pg_ayar — kalıcı sondalar\n');
+function sondalar() {
   const vBozuk = path.join(GECICI, 'vektor-bozuk.json');
   const v = JSON.parse(fs.readFileSync(VEKTOR, 'utf8'));
   v.bellek.find((b) => b.ramMB === 8192).beklenen.SHARED_BUFFERS = '4GB';
@@ -250,14 +249,57 @@ if (process.argv.includes('--sonda')) {
     ['N14 paylaşımlı bellek kapısı söküldü → §10', (m) => m.replace('if ($Uygula.IsPresent) { Dur "$m  (HICBIR SEY YAZILMADI)" }', 'if ($false) { }'), VEKTOR, '§10'],
     ['N9 uzantı ALTER SYSTEM\'den sonra kuruluyor → §3', (m) => m.replace('  if ($uzantiYaz) {', '  if ($false) {').replace('  $a = Psql "postgres" "SELECT pg_reload_conf()"', '  if ($uzantiYaz) { [void](Psql $uzantiVt "CREATE EXTENSION IF NOT EXISTS $uzanti") }\n  $a = Psql "postgres" "SELECT pg_reload_conf()"'), VEKTOR, '§3'],
   ];
-  let kaldi = 0;
-  for (const [ad, mut, vek, iz] of S) {
-    const { d, uygulandi } = kopya(mut);
-    const k = olc(d, vek);
-    const tamam = (mut ? uygulandi : true) && k.some((x) => x.startsWith(iz));
-    if (!tamam) kaldi += 1;
-    console.log(`${tamam ? '✅' : '❌'} ${ad}${mut && !uygulandi ? ' — MUTASYON UYGULANMADI' : ''} · ${k[0] ?? 'YEŞİL kaldı'}`);
-  }
+  return S;
+}
+
+function sondaKos([ad, mut, vek, iz]) {
+  const { d, uygulandi } = kopya(mut);
+  const k = olc(d, vek);
+  const tamam = (mut ? uygulandi : true) && k.some((x) => x.startsWith(iz));
+  return { tamam, satir: `${tamam ? '✅' : '❌'} ${ad}${mut && !uygulandi ? ' — MUTASYON UYGULANMADI' : ''} · ${k[0] ?? 'YEŞİL kaldı'}` };
+}
+
+// Tek sonda (paralel koşumun çocuğu): sonucu son satırda JSON olarak basar.
+const tekArg = process.argv.indexOf('--sonda-tek');
+if (tekArg >= 0) {
+  const S = sondalar();
+  const sonda = S[Number(process.argv[tekArg + 1])];
+  if (!sonda) { console.log(JSON.stringify({ tamam: false, satir: `❌ --sonda-tek ${process.argv[tekArg + 1]}: böyle sonda yok` })); process.exit(1); }
+  console.log(JSON.stringify(sondaKos(sonda)));
+  process.exit(0);
+}
+
+if (process.argv.includes('--sonda')) {
+  // Her sonda ~35 pwsh koşumu, birbirinden bağımsız: çekirdek sayısı kadar çocuk süreçte paralel
+  // (CI'da sıralı ~6 dk sürüyordu). Çıktı sonda sırasıyla basılır; çocuk düşerse sonda KIRMIZI.
+  console.log('test_pg_ayar — kalıcı sondalar\n');
+  const S = sondalar();
+  const esz = Math.max(1, Math.min(S.length, Number(process.env.TEST_PG_AYAR_ESZAMANLI) || os.availableParallelism()));
+  const sonuc = new Array(S.length);
+  const benim = fileURLToPath(import.meta.url);
+  let sira = 0;
+  const isci = async () => {
+    while (sira < S.length) {
+      const i = sira++;
+      sonuc[i] = await new Promise((coz) => {
+        const c = spawn(process.execPath, [benim, '--sonda-tek', String(i)], { stdio: ['ignore', 'pipe', 'pipe'] });
+        let out = '', err = '';
+        c.stdout.on('data', (b) => { out += b; });
+        c.stderr.on('data', (b) => { err += b; });
+        c.on('close', (kod) => {
+          try {
+            const r = JSON.parse(out.trim().split('\n').pop());
+            coz(kod === 0 ? r : { tamam: false, satir: `${r.satir} (çocuk çıkışı ${kod})` });
+          } catch {
+            coz({ tamam: false, satir: `❌ ${S[i][0]} — çocuk süreç sonuç basmadı (çıkış ${kod}): ${(err || out).slice(-300)}` });
+          }
+        });
+      });
+    }
+  };
+  await Promise.all(Array.from({ length: esz }, isci));
+  for (const r of sonuc) console.log(r.satir);
+  const kaldi = sonuc.filter((r) => !r.tamam).length;
   console.log(`\n=== Sonuç: ${S.length - kaldi} geçti, ${kaldi} başarısız ===`);
   process.exit(kaldi ? 1 : 0);
 }

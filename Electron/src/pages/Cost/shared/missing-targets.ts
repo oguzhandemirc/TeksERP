@@ -10,7 +10,7 @@ const TARGETS: Record<string, MissingTarget> = {
   FINISHING_RATE_MISSING: { kind: "field", field: "finishingRateCode" },
   PARAMETER_SET_MISSING: { kind: "link", to: "/cost/parameters", label: "Maliyet Parametreleri" },
   PICK_RATE_MISSING: { kind: "link", to: "/cost/parameters", label: "Maliyet Parametreleri" },
-  YARN_PRICE_MISSING: { kind: "link", to: "/cost/yarn-prices", label: "İplik Maliyet Fiyatları", cta: "Fiyat gir" },
+  YARN_PRICE_MISSING: { kind: "link", to: "/cost/input-prices?tab=yarn", label: "İplik Maliyet Fiyatları", cta: "Fiyat gir" },
   WARP_SPEC_MISSING: { kind: "link", to: "/definitions/items", label: "Ürün kartı" },
   WEFT_SPEC_MISSING: { kind: "link", to: "/definitions/items", label: "Ürün kartı" },
   TAKEUP_MISSING: { kind: "link", to: "/definitions/warp-specs", label: "Çözgü kartı" },

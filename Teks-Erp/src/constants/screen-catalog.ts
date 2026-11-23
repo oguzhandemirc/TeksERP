@@ -359,11 +359,9 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // Hub'a maliyet, teklif ya da fiyat listesi okuyan girer (MAL-5) — giriş izni herhangi biri (route requireAnyPermission).
   { key: "cost", app: "desktop", modul: "maliyetEnabled", title: "Maliyet & Teklif", requires: ["cost:read", "quote:read", "price-list:read", "report:yarn-need"], capabilities: [] },
   { key: "cost/parameters", app: "desktop", modul: "maliyetEnabled", title: "Maliyet Parametreleri", requires: ["cost:read"], capabilities: ["cost:settings"] },
-  { key: "cost/yarn-prices", app: "desktop", modul: "maliyetEnabled", title: "İplik Maliyet Fiyatları", requires: ["cost:read"], capabilities: ["cost:write"] },
-  { key: "cost/finishing-rates", app: "desktop", modul: "maliyetEnabled", title: "Fason Tarifeleri", requires: ["cost:read"], capabilities: ["cost:write"] },
-  { key: "cost/formulas", app: "desktop", modul: "maliyetEnabled", title: "Maliyet Formülleri", requires: ["cost:read"], capabilities: ["cost:settings"] },
+  // M6: iplik fiyatı · fason tarifesi · formül · sarf normu tek sekmeli ekranda (eski dört yol yönlenir).
+  { key: "cost/input-prices", app: "desktop", modul: "maliyetEnabled", title: "Girdi Fiyatları", requires: ["cost:read"], capabilities: ["cost:write", "cost:settings"] },
   { key: "cost/machine-rates", app: "desktop", modul: "maliyetEnabled", title: "Makine Saat Ücretleri", requires: ["cost:read"], capabilities: ["cost:write"] },
-  { key: "cost/consumable-norms", app: "desktop", modul: "maliyetEnabled", title: "Hizmet Sarf Normları", requires: ["cost:read"], capabilities: ["cost:write"] },
   { key: "cost/items", app: "desktop", modul: "maliyetEnabled", title: "Maliyet Kartları", requires: ["cost:read"], capabilities: ["cost:write"] },
   { key: "cost/calculator", app: "desktop", modul: "maliyetEnabled", title: "Hızlı Hesaplayıcı", requires: ["cost:read"], capabilities: ["quote:write"] },
   { key: "cost/quotes", app: "desktop", modul: "maliyetEnabled", title: "Teklifler", requires: ["quote:read"], capabilities: ["quote:write", "quote:convert"] },

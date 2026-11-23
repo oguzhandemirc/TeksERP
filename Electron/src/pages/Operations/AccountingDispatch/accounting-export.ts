@@ -4,14 +4,23 @@
 import type { SheetSpec } from "@/lib/xlsx-export";
 import type { AccountingExportData, DispatchReport } from "./types";
 import { formatQty } from "@/lib/format";
+import { upTo3ExcelNumFmt } from "@/lib/number-format";
+import { factoryOffsetMs } from "@/lib/factory-time";
 
-const NUM1 = "0.0"; // metre/kg (1 ondalık)
+const NUM1 = "0.0"; // fiş metre/kg (1 ondalık — basılı fişin hanesi)
+// Dönem dökümü ekrandaki "Sevk Edilenler" listesinin hassasiyetiyle (≤3 hane, formatQty ↔ upTo3Text): ekran = Excel = PDF.
+const QTY = upTo3ExcelNumFmt();
 const INT = "0"; // adet
 const DATE = "dd.mm.yyyy hh:mm";
 
 /** null = yön kaydı yok (fasondan doğrudan sevk) — yurtiçi sayılmaz. */
 const yon = (d: "DOMESTIC" | "EXPORT" | null) => (d === "EXPORT" ? "Yurtdışı" : d === "DOMESTIC" ? "Yurtiçi" : "Yön kaydı yok (doğrudan sevk)");
-const toDate = (s: string | null) => (s ? new Date(s) : null);
+/** Excel tarih hücresi dilimsizdir: anı fabrika duvar saatine kaydırarak yaz, yoksa dosya UTC saatini gösterir. */
+export const wallDate = (s: string | null): Date | null => {
+  if (!s) return null;
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : new Date(d.getTime() + factoryOffsetMs(d));
+};
 
 /** Dosya adı: Sevk_Edilenler_<from>_<to>.xlsx (yalnız tarih kısmı). */
 export function accountingExportFileName(range: AccountingExportData["range"]): string {
@@ -46,8 +55,8 @@ export function buildAccountingWorkbookSheets(data: AccountingExportData): Sheet
         { header: "Çuval (sistem)", key: "sackCount", width: 13, numFmt: INT },
         { header: "Çuval (fiili)", key: "manualSackCountOrBlank", width: 12, numFmt: INT },
         { header: "Top", key: "rollCount", width: 9, numFmt: INT },
-        { header: "Toplam Metre", key: "totalMeters", width: 14, numFmt: NUM1 },
-        { header: "Toplam Kg", key: "totalKg", width: 12, numFmt: NUM1 },
+        { header: "Toplam Metre", key: "totalMeters", width: 14, numFmt: QTY },
+        { header: "Toplam Kg", key: "totalKg", width: 12, numFmt: QTY },
         // Fatura izi — "hangi sevkin faturası kesilmedi" dönem kapanışında burada okunur.
         { header: "Fatura No", key: "invoiceNo", width: 18 },
         { header: "Fatura Tarihi", key: "invoicedAt", width: 14, numFmt: DATE },
@@ -57,14 +66,14 @@ export function buildAccountingWorkbookSheets(data: AccountingExportData): Sheet
       ],
       rows: data.shipments.map((s) => ({
         ...s,
-        dispatchedAt: toDate(s.dispatchedAt),
-        invoicedAt: toDate(s.invoicedAt),
+        dispatchedAt: wallDate(s.dispatchedAt),
+        invoicedAt: wallDate(s.invoicedAt),
         yon: yon(s.destination),
         // Beyan yoksa hücre BOŞ kalır — 0 yazmak "sıfır çuval gitti" diye okunur.
         manualSackCountOrBlank: s.manualSackCount > 0 ? s.manualSackCount : null,
       })),
       totalRow: {
-        customerName: "TOPLAM",
+        shipmentNo: "TOPLAM",
         sackCount: t.sackCount,
         rollCount: t.rollCount,
         totalMeters: t.totalMeters,
@@ -86,11 +95,11 @@ export function buildAccountingWorkbookSheets(data: AccountingExportData): Sheet
         { header: "Sipariş No", key: "orderNos", width: 20 },
         { header: "Kumaş", key: "itemName", width: 24 },
         { header: "Renk", key: "colorName", width: 18 },
-        { header: "En (cm)", key: "width", width: 10, numFmt: NUM1 },
+        { header: "En (cm)", key: "width", width: 10, numFmt: QTY },
         { header: "Top Adedi", key: "rollCount", width: 10, numFmt: INT },
-        { header: "Metre", key: "meters", width: 12, numFmt: NUM1 },
+        { header: "Metre", key: "meters", width: 12, numFmt: QTY },
       ],
-      rows: data.detail.map((r) => ({ ...r, dispatchedAt: toDate(r.dispatchedAt) })),
+      rows: data.detail.map((r) => ({ ...r, dispatchedAt: wallDate(r.dispatchedAt) })),
     },
     {
       name: "İcmal · Müşteri",
@@ -101,12 +110,12 @@ export function buildAccountingWorkbookSheets(data: AccountingExportData): Sheet
         { header: "Sevk Adedi", key: "shipmentCount", width: 11, numFmt: INT },
         { header: "Çuval", key: "sackCount", width: 9, numFmt: INT },
         { header: "Top", key: "rollCount", width: 9, numFmt: INT },
-        { header: "Toplam Metre", key: "totalMeters", width: 14, numFmt: NUM1 },
-        { header: "Toplam Kg", key: "totalKg", width: 12, numFmt: NUM1 },
+        { header: "Toplam Metre", key: "totalMeters", width: 14, numFmt: QTY },
+        { header: "Toplam Kg", key: "totalKg", width: 12, numFmt: QTY },
       ],
       rows: data.byCustomer,
       totalRow: {
-        customerName: "TOPLAM",
+        customerCode: "TOPLAM",
         shipmentCount: t.shipmentCount,
         sackCount: t.sackCount,
         rollCount: t.rollCount,
@@ -119,9 +128,9 @@ export function buildAccountingWorkbookSheets(data: AccountingExportData): Sheet
       columns: [
         { header: "Kumaş", key: "itemName", width: 24 },
         { header: "Renk", key: "colorName", width: 18 },
-        { header: "En (cm)", key: "width", width: 10, numFmt: NUM1 },
+        { header: "En (cm)", key: "width", width: 10, numFmt: QTY },
         { header: "Top Adedi", key: "rollCount", width: 10, numFmt: INT },
-        { header: "Toplam Metre", key: "totalMeters", width: 14, numFmt: NUM1 },
+        { header: "Toplam Metre", key: "totalMeters", width: 14, numFmt: QTY },
       ],
       rows: data.byProduct,
       totalRow: { itemName: "TOPLAM", rollCount: t.rollCount, totalMeters: t.totalMeters },
@@ -135,12 +144,12 @@ export function buildAccountingWorkbookSheets(data: AccountingExportData): Sheet
         { header: "Barkod", key: "barcode", width: 18 },
         { header: "Kumaş", key: "itemName", width: 24 },
         { header: "Renk", key: "colorName", width: 18 },
-        { header: "En (cm)", key: "width", width: 10, numFmt: NUM1 },
-        { header: "Metre", key: "meters", width: 12, numFmt: NUM1 },
+        { header: "En (cm)", key: "width", width: 10, numFmt: QTY },
+        { header: "Metre", key: "meters", width: 12, numFmt: QTY },
         { header: "Neden", key: "reason", width: 22 },
       ],
-      rows: data.returns.map((r) => ({ ...r, returnedAt: toDate(r.returnedAt) })),
-      totalRow: { customerName: "TOPLAM", meters: t.returnMeters },
+      rows: data.returns.map((r) => ({ ...r, returnedAt: wallDate(r.returnedAt) })),
+      totalRow: { docCustomerName: "TOPLAM", meters: t.returnMeters },
     },
   ];
 }
