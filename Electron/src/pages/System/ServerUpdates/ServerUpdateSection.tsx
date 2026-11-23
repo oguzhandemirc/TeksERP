@@ -23,13 +23,13 @@ export function ServerUpdateSection({ db }: { db: "UP" | "DOWN" | null }) {
   const g = s.guncelleyici;
   return (
     <section data-testid="sunucu-guncelleme-bolumu">
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Hizmetler</h2>
+      {/* Y15: bölüm başlığı + kart başlığı "Hizmetler" çiftti — başlık yalnız kartta. */}
       {g.durum === "DURDU" && (
         <Callout tone="danger" title="Son güncelleme geri alınamadı — müdahale gerekiyor">
           Güncelleyici yeni bir onay gelene dek işlem başlatmaz; destekle görüşmeden yeniden denemeyin.
         </Callout>
       )}
-      <div className="mt-3 grid gap-4 xl:grid-cols-2">
+      <div className="mt-3 max-w-3xl">
         <UpdateCard title="Hizmetler">
           <InfoRow label="Backend">{`Çalışıyor · ${s.kuruluSurum}`}</InfoRow>
           <InfoRow label="Veritabanı">{db === null ? "—" : db === "UP" ? "Bağlı" : "Bağlantı yok"}</InfoRow>

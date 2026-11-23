@@ -150,7 +150,7 @@ export function useServerHealth() {
     );
   }, [q.data, q.dataUpdatedAt]);
 
-  return { data: q.data, isError: q.isError, dataUpdatedAt: q.dataUpdatedAt, history };
+  return { data: q.data, isError: q.isError, isLoading: q.isLoading, refetch: q.refetch, dataUpdatedAt: q.dataUpdatedAt, history };
 }
 
 // ---------------------------------------------------------------------------

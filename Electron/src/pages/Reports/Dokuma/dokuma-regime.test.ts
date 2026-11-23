@@ -27,7 +27,7 @@ describe("rejim (Raporlar hub'ı karosu)", () => {
   it("dokuma modülü açıkken görünür", () => {
     expect(regimePredicate(dokumaKaro!.featureFlag!)(ctx({ dokumaEnabled: true }))).toBe(true);
   });
-  it("alt raporlar üç segmentli adres taşır (ReportSideRail şartı) ve kategori kayıtlı", () => {
+  it("alt raporlar üç segmentli adres taşır (modül kapısı şartı) ve kategori kayıtlı", () => {
     for (const t of reportCategoryTiles.dokuma ?? []) expect(t.to.split("/").filter(Boolean)).toHaveLength(3);
     expect(reportCategoryTiles.dokuma?.length).toBe(4); // karne + levent bitiş tahmini + denye sapması (Devere F2) + devereci karnesi (S2)
   });

@@ -82,7 +82,9 @@ describe("ReportDateFilter — sözleşme katalogdan, parametre adı K7 tablosun
         <RangeProbe reportKey={key} />
       </>,
     );
-    expect(container.querySelectorAll(DATE_INPUT)).toHaveLength(2);
+    // O12: tarih kutuları açılır çipin içinde (aralık seçilince); kapalıyken tek "Tarih: Son N gün" çipi.
+    expect(container.querySelectorAll(DATE_INPUT)).toHaveLength(0);
+    expect(screen.getByText(/^Son \d+ gün$/)).toBeInTheDocument();
     const p = readParams();
     expect(Object.keys(p).sort()).toEqual([...REPORT_DATE_PARAM_KEYS["aralik-iso"]].sort());
     expect(String(p.dateFrom)).toMatch(/T\d{2}:\d{2}:\d{2}\.\d{3}Z$/); // ISO an, gün değil
@@ -113,7 +115,9 @@ describe("ReportDateFilter — sözleşme katalogdan, parametre adı K7 tablosun
         <DayRangeProbe reportKey={key} />
       </>,
     );
-    expect(container.querySelectorAll(DATE_INPUT)).toHaveLength(2);
+    // O12: tarih kutuları açılır çipin içinde (aralık seçilince); kapalıyken tek "Tarih: Son N gün" çipi.
+    expect(container.querySelectorAll(DATE_INPUT)).toHaveLength(0);
+    expect(screen.getByText(/^Son \d+ gün$/)).toBeInTheDocument();
     const p = readParams();
     expect(Object.keys(p).sort()).toEqual([...REPORT_DATE_PARAM_KEYS["aralik-gun"]].sort());
     expect(String(p.from)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
