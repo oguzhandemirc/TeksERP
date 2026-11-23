@@ -207,25 +207,28 @@ export function SettingsSurfacePage({
             listeye bağımlı değil, `value` eşleşmesiyle çalışır.) */}
         {!soleCategory && (
           <div className="flex max-h-56 w-full shrink-0 flex-col border-b bg-muted/30 md:h-full md:max-h-none md:w-60 md:border-b-0 md:border-r">
-            <div className="relative p-3 pb-2">
-              <Search className="pointer-events-none absolute left-5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Ayar ara…"
-                aria-label="Ayarlarda ara"
-                className="h-8 pl-7 pr-7 text-xs"
-              />
-              {query && (
-                <button
-                  type="button"
-                  aria-label="Aramayı temizle"
-                  onClick={() => setQuery("")}
-                  className="absolute right-5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
+            {/* İkon kabı yalnız girdiyi sarar: dış dolgu asimetrik (pb-2) olunca top-1/2 girdinin ortası değildi. */}
+            <div className="p-3 pb-2">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Ayar ara…"
+                  aria-label="Ayarlarda ara"
+                  className="h-8 pl-8 pr-7 text-xs"
+                />
+                {query && (
+                  <button
+                    type="button"
+                    aria-label="Aramayı temizle"
+                    onClick={() => setQuery("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
 
             <TabsList className="h-auto min-h-0 w-full flex-1 flex-col items-stretch justify-start gap-1 overflow-auto rounded-none bg-transparent p-3 pt-1">
@@ -273,7 +276,7 @@ export function SettingsSurfacePage({
             // saklama, görünmeyen satırı her Kaydet'te PATCH'e yazmaya devam ederdi.
             const rows = filterCategoryByModules(cat, modules, vendorView);
             return (
-              <TabsContent key={cat.id} value={cat.id} className="mt-0 max-w-3xl">
+              <TabsContent key={cat.id} value={cat.id} className="mt-0 max-w-5xl">
                 {/* Sade başlık + ayraç — sol ray zaten sekmeyi etiketliyor; kart/çifte
                     çerçeve yok, içerik doğrudan akar. */}
                 <div className="mb-5 border-b pb-3">

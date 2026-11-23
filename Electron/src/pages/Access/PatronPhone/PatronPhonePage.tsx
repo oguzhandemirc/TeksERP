@@ -25,7 +25,7 @@ export function PatronPhonePage() {
   return (
     <PageShell>
       <PageHeader title="Patron Telefonu" description="Patron uygulamasını karekodla bu fabrikanın sunucusuna bağlayın." />
-      <PageBody className="space-y-4">
+      <PageBody className="space-y-4 p-4 sm:p-6">
         <SectionCard title="Sunucu adresi" description="Patron telefonunun internetten ulaşacağı https adresi. Varsayılan, bu panelin bağlandığı adrestir.">
           <div className="max-w-xl space-y-1.5">
             <Label htmlFor="patron-adres">Adres</Label>

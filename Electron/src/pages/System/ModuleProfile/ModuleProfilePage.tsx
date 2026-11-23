@@ -193,7 +193,7 @@ export function ModuleProfilePage() {
         actions={<RefreshButton queryKey={["module-profile"]} successMessage="Profil yenilendi" />}
       />
       <PageBody className="p-6">
-        <div className="max-w-4xl space-y-8">
+        <div className="max-w-5xl space-y-8">
           {!canWrite && (
             <Callout tone="warning" title="Salt-okunur görünüm">
               Modül anahtarlarını yalnız sistem yöneticisi (satıcı hesabı) değiştirir. Bu sayfa size
