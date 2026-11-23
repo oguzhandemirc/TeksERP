@@ -46,8 +46,10 @@ vi.mock("@/providers/PreferencesProvider", () => ({
 vi.mock("next-themes", () => ({ useTheme: () => ({ theme: "light", setTheme: vi.fn() }) }));
 
 const openTab = vi.fn();
+const navigateActive = vi.fn();
 vi.mock("@/store/tabs", () => ({
-  useTabsStore: (sel: (s: { openTab: unknown }) => unknown) => sel({ openTab }),
+  useTabsStore: (sel: (s: { openTab: unknown; navigateActive: unknown }) => unknown) =>
+    sel({ openTab, navigateActive }),
 }));
 vi.mock("@/store/auth", () => ({
   useAuthStore: (sel: (s: { logout: unknown }) => unknown) => sel({ logout: vi.fn() }),
@@ -155,7 +157,8 @@ describe("komut paleti — global arama", () => {
     type("canakkale");
     await vi.advanceTimersByTimeAsync(250);
     fireEvent.click(await screen.findByText("ÇANAKKALE TEKSTİL"));
-    expect(openTab).toHaveBeenCalledWith("/definitions/cariler/c1", undefined);
+    // Varsayılan "Aynı sekmede": seçim aktif sekmede gezinir.
+    expect(navigateActive).toHaveBeenCalledWith("/definitions/cariler/c1", { state: undefined });
   });
 
   it("BİLİNMEYEN kova sessizce düşürülmez — uyarı çizilir", async () => {
