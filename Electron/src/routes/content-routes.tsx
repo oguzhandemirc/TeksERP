@@ -95,6 +95,7 @@ import { FxDiffPage } from "@/pages/Reports/Finance/FxDiffPage";
 import { YarnStockPage } from "@/pages/Operations/Yarn/YarnStockPage";
 import { YarnAtSubcontractorPage } from "@/pages/Operations/YarnAtSubcontractor/YarnAtSubcontractorPage";
 import { WeavingOrdersPage } from "@/pages/Operations/WeavingOrders/WeavingOrdersPage";
+import { DokumaIsEmriOlusturPage } from "@/pages/Operations/WeavingOrders/templates/DokumaIsEmriOlusturPage";
 import { LoomLoadPage } from "@/pages/Operations/LoomLoad/LoomLoadPage";
 import { ShiftDefinitionsPage } from "@/pages/ShiftDefinitions/ShiftDefinitionsPage";
 import { LoomAlarmDutyPage } from "@/pages/LoomAlarmDuty/LoomAlarmDutyPage";
@@ -676,6 +677,16 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="weavingorder:read">
         <WeavingOrdersPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // "Dokuma İş Emri oluştur" (İE ayrımı 2026-11-23) — karo `weaving-order-create` izniyle BİREBİR (`weavingorder:write`);
+    // modül kapısı `ROUTE_MODULE` (`operations/weaving-orders` → dokumaEnabled) + backend `requireDokumaEnabled`.
+    path: "operations/weaving-orders/new",
+    element: (
+      <ProtectedRoute requirePermission="weavingorder:write">
+        <DokumaIsEmriOlusturPage />
       </ProtectedRoute>
     ),
   },

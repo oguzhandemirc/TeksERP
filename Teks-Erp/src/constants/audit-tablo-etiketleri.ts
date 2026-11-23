@@ -234,6 +234,7 @@ export const TABLE_LABELS: Record<string, string> = {
   WARP_SPEC: "Çözgü Kartı",
   WARPING_ORDER: "Fason Devere Siparişi",
   WEAVING_ORDER: "Dokuma İş Emri",
+  WEAVING_ORDER_TEMPLATE: "Özel Dokuma İş Emri Şablonu",
   WARP_BEAM: "Levent",
   WARP_BEAM_EVENT: "Levent Olayı",
   BEAM_BODY: "Levent Gövdesi",

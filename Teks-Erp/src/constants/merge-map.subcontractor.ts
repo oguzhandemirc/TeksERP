@@ -43,6 +43,7 @@ export const SUBCONTRACTOR_MERGE_RULES: MoveRule[] = [
     },
     // —— Ticaret / ön muhasebe bacağı (fason firma = tedarikçi bacağı) ————————
     { kind: "MOVE", model: "WeavingOrder", table: "weaving_orders", column: "subcontractorId", label: "Dokuma iş emri (fason)" },
+    { kind: "MOVE", model: "WeavingOrderTemplate", table: "weaving_order_templates", column: "subcontractorId", label: "Özel dokuma şablonu (fason)" },
     // Fason devere D4a: devereci bağı referanstır (tekillik yok) — dokuma iş emri emsali.
     { kind: "MOVE", model: "WarpingOrder", table: "warping_orders", column: "subcontractorId", label: "Fason devere siparişi" },
     // Devere ek B1: gövdenin şu an bulunduğu devereci + gövde olayının yeri — referanstır (tekillik yok).

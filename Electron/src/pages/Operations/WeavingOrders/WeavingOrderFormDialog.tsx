@@ -12,7 +12,9 @@ import { EntityFormDialog } from "@/components/forms/EntityFormDialog";
 import { useOperationsVisibilityContext } from "../useOperationsVisibility";
 import { useDokumaOrderLineLinkRequired } from "@/hooks/usePricingEnabled";
 import { useAttemptToken } from "@/lib/attemptToken";
-import { weavingOrderFormDefaults, weavingOrderFormSchema, type WeavingOrderFormValues } from "./schema";
+import { weavingOrderFormSchema, type WeavingOrderFormValues } from "./schema";
+import { applyPreset } from "./templates/preset";
+import type { WeavingFormPreset } from "@/pages/Operations/WorkOrders/oie/nav";
 import { FabricFields, PartyFields, PlanFields } from "./WeavingOrderFormFields";
 import { ConstructionFields } from "./ConstructionFields";
 import { WeavingOrderLinesSection } from "./WeavingOrderLinesSection";
@@ -34,13 +36,15 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initial?: WeavingOrder | null;
+  /** Yeni kayıtta özel dokuma şablonunun ön-dolgusu (İE ayrımı); düzenlemede yok sayılır. */
+  preset?: WeavingFormPreset | null;
   /** Sonuç (reddedilen söz dahil) diyaloğa döner: token belirsiz hatada yapışır, kesin 4xx'te yenilenir. */
   onSubmit: (values: WeavingOrderFormValues, clientToken: string) => Promise<unknown>;
   isSubmitting?: boolean;
 }
 
-function buildDefaults(initial?: WeavingOrder | null): WeavingOrderFormValues {
-  if (!initial) return weavingOrderFormDefaults;
+function buildDefaults(initial?: WeavingOrder | null, preset?: WeavingFormPreset | null): WeavingOrderFormValues {
+  if (!initial) return applyPreset(preset);
   return {
     itemId: initial.itemId,
     colorId: initial.colorId ?? "",
@@ -58,7 +62,7 @@ function buildDefaults(initial?: WeavingOrder | null): WeavingOrderFormValues {
   };
 }
 
-export function WeavingOrderFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting }: Props) {
+export function WeavingOrderFormDialog({ open, onOpenChange, initial, preset, onSubmit, isSubmitting }: Props) {
   const attempt = useAttemptToken();
   const { devereEnabled } = useOperationsVisibilityContext();
   const orderLineRequired = useDokumaOrderLineLinkRequired();
@@ -71,7 +75,7 @@ export function WeavingOrderFormDialog({ open, onOpenChange, initial, onSubmit, 
       title={initial ? `${initial.weavingOrderNumber} — Düzenle` : `Yeni ${TERIM.dokumaIsEmri.tekil}`}
       description="Ne dokunacak, ne kadar, kim dokuyacak. Numara sunucuda üretilir (DK+GGAAYY+NNNN)."
       schema={weavingOrderFormSchema}
-      defaultValues={buildDefaults(initial)}
+      defaultValues={buildDefaults(initial, preset)}
       onSubmit={(v) => onSubmit(v, attempt.token()).then(() => attempt.onSuccess(), (e: unknown) => attempt.onFailure(e))}
       isSubmitting={isSubmitting}
       size="wide"

@@ -43,6 +43,7 @@ import weaveDesignRoutes from "./routes/weave-design.routes";
 import itemConstructionRoutes from "./routes/item-construction.routes";
 import warpBeamRoutes from "./routes/warp-beam.routes";
 import weavingOrderRoutes from "./routes/weaving-order.routes";
+import weavingOrderTemplateRoutes from "./routes/weaving-order-template.routes";
 import machineRunRoutes from "./routes/machine-run.routes";
 import machineStopRoutes from "./routes/machine-stop.routes";
 import machineShiftStatRoutes from "./routes/machine-shift-stat.routes";
@@ -593,6 +594,8 @@ app.use("/api/warp-beams", warpBeamRoutes);
 // Dokuma modülü (üç router, tek kapı): verifyToken + requireDokumaEnabled
 // (production → dokuma zinciri kapının içinde) + requirePermission.
 app.use("/api/weaving-orders", weavingOrderRoutes);
+// Özel dokuma iş emri şablonları (İE ayrımı 2026-11-23) — aynı kapı, yeni izin yok.
+app.use("/api/weaving-order-templates", weavingOrderTemplateRoutes);
 // SY-M2: tezgâh önerisi (salt okuma; kendi kapısı: dokuma modülü + weavingorder:read).
 app.use("/api/loom-suggestions", loomSuggestionRoutes);
 // Tezgah koşumu (aç/kapa/geri al) — loom:run · loom:run-revoke.

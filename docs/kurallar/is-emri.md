@@ -106,9 +106,9 @@ Sınıf: [ÇEKİRDEK] her kurulumda aynı · [PROFİL] bu fabrikanın seçimi. �
 
 ### Kararlar
 
-- [ÇEKİRDEK] Yeni WO TEK girişten: Operasyon › "İş emri oluştur" (karo + palet; liste "Yeni" aynı) → seçici 1. satır Standart (Terbiye · Dokuma), 2. satır Özel = `isWorkOrderShortcut` şablonları (`shortcutOrder`); tek seçenek kalırsa seçici atlanır.
+- [ÇEKİRDEK] Yeni WO TEK girişten: Üretim › Terbiye › "Terbiye İş Emri oluştur" (karo + palet; liste "Yeni" aynı) → seçici 1. satır Standart (yalnız Terbiye), 2. satır Özel = `isWorkOrderShortcut` şablonları (`shortcutOrder`); dokuma iş emrini bu seçiciye koyma (Dokuma › "Dokuma İş Emri oluştur", `dokuma.md`); özel seçenek yoksa seçici atlanır (`oie/secici-kural.ts`). <sub>(arşiv:2026-11-23 İE ayrımı)</sub>
 - [ÇEKİRDEK] Kısayol rota UYGULANMIŞ Terbiye formunu açar, "Belge okut" formun üstünde (ayrı mod ekranı yok); kayıt `formApproval`a göre (WITH_WORK_ORDER → `POST /irsaliyeler/:id/is-emri`, değilse taslak + ayrı onay).
-- [PROFİL] İE oluştur/düzenle sayfasına açık geri hedefi verme (geri = sekme geçmişi, yoksa kırıntı üstü); "Özel" bölümü izinliye "+ Yeni özel iş emri" kartı taşır, seçici atlama kuralına girmez.
+- [PROFİL] İE oluştur/düzenle sayfasına açık geri hedefi verme (geri = sekme geçmişi, yoksa kırıntı üstü); "Özel" bölümü izinliye "+ Yeni özel terbiye iş emri" kartı taşır ve kart izinliye seçiciyi gösterir (özel tanımın menüden bulunan yolu).
 - [PROFİL] Kurşun adımında özellik + gramaj + makine TEK "Kurşun ayarları" kutusunda; seçim adım çipinde ve önizlemede yazar ("Hedef yok" yazılmaz).
 - [ÇEKİRDEK] Masaüstü 'Üretime Al / Yeniden Üretime Al' ÜÇ sekmede (RAW_STOCK · SEMI_FINISHED · FINISHED_STOCK; fark başlık/toast, `reworkMode`).
 

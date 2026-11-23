@@ -14,8 +14,16 @@ export const SCAN_ROUTE_REF: RouteRef = { id: null, name: SCAN_ROUTE_NAME };
 export const isScanRouteRef = (r: RouteRef): boolean => r.id === null;
 export type OieStart = { kind: "terbiye" } | { kind: "shortcut"; route: RouteRef; noteId?: string };
 
-/** Dokuma iş emirleri sayfası bu durumla açılınca oluşturma diyaloğu kendiliğinden açılır. */
-export type WeavingNavState = { openNew?: boolean };
+/** "Dokuma İş Emri oluştur" seçicisi (İE ayrımı 2026-11-23): Standart + özel dokuma şablonları. */
+export const WEAVING_ORDER_NEW_PATH = "/operations/weaving-orders/new";
+
+/** Dokuma iş emirleri sayfası bu durumla açılınca oluşturma diyaloğu kendiliğinden açılır; `preset` = özel şablonun ön-dolgusu. */
+export type WeavingNavState = { openNew?: boolean; preset?: WeavingFormPreset };
+
+/** Şablondan gelen form alanları (formun metin biçiminde; boş alan gönderilmez = formun varsayılanı). */
+export type WeavingFormPreset = Partial<Record<"itemId" | "subcontractorId" | "plannedM" | "notes", string>> & {
+  executionKind?: "IN_HOUSE" | "SUBCONTRACTED";
+};
 
 /** "Yeni özel iş emri" (K20): rota şablonları sayfası yeni kayıt diyaloğu açık + "Kısayol" işaretli gelir. */
 export const ROUTES_PATH = "/definitions/routes";

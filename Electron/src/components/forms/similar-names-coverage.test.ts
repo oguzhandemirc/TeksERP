@@ -22,6 +22,8 @@ const PAGES = resolve(__dirname, "../../pages");
 const EXEMPT: Record<string, string> = {
   "Access/Templates/TemplateFormDialog.tsx":
     "yetki şablonu — ana veri değil, benzer-ad ucu yok (rol adı serbest metindir)",
+  "Operations/WeavingOrders/templates/WeavingTemplateFormDialog.tsx":
+    "özel dokuma şablonu — ön-dolgu kısayolu, ana veri/kimlik değil; ad tekilliği aranmaz, benzer-ad ucu yok",
   "Customers/BranchFormDialog.tsx":
     "şube adı YALNIZ müşteri içinde tekil; kapsamlı uç henüz yok (bkz. takip)",
   "MachineCollectors/CollectorFormDialog.tsx":

@@ -6,7 +6,7 @@ import { isMachineStopsVisible, machineStopsTitle } from "../MachineStops/stop-r
 import { isWeavingFloorVisible } from "../WeavingFloor/floor-regime";
 import { isLoomAlarmsVisible } from "../LoomAlarms/alarm-regime";
 import { isBeamForecastVisible, isDenierReportVisible, isWarpBeamsVisible, isWarperScorecardVisible } from "../WarpBeams/warp-beam-regime";
-import { TERIM, TERIM_AD, terimDokumaRejimi } from "@/lib/terim";
+import { TERIM, TERIM_AD } from "@/lib/terim";
 import { flagOffHint, flagSettingTrail } from "@/lib/flag-setting-path";
 import { isBeamBodiesVisible } from "@/pages/BeamBodies/beam-body-regime";
 import type { OperationsTile } from "../tile-config";
@@ -28,15 +28,11 @@ export const productionTiles: OperationsTile[] = [
     offHint: flagOffHint("productionEnabled"),
   },
   {
-    // K6 (Gülkesim 2026-11-02): tek giriş — seçici (Standart: Terbiye · Dokuma / Özel: kısayol rotaları). Adres ve izin
-    // yeni kayıt route'uyla birebir; eski karosuz palet girişinin yerini aldı.
+    // K6 (Gülkesim 2026-11-02): seçici (Standart: Terbiye / Özel: kısayol rotaları). İE ayrımı (2026-11-23): dokuma
+    // kendi girişinde (`weaving-order-create`). Adres ve izin yeni kayıt route'uyla birebir.
     key: "work-order-create",
     get title() { return `${TERIM.terbiyeIsEmri.tekil} oluştur`; },
-    // Dokuma kapalı kurulumda seçicide dokuma iş emri yok — açıklama da anmaz.
-    get description() {
-      const dokuma = terimDokumaRejimi() ? `, ${TERIM.dokumaIsEmri.tekilKucuk}` : "";
-      return `${TERIM.terbiyeIsEmri.tekil}${dokuma} ya da özel kısayol (ör. Kurşun & Tambur) — belge okutarak da`;
-    },
+    get description() { return `Standart ${TERIM.terbiyeIsEmri.tekilKucuk} ya da özel kısayol (ör. Kurşun & Tambur) — belge okutarak da`; },
     icon: FilePlus2,
     to: "/operations/work-orders/new",
     group: "production",
@@ -68,6 +64,19 @@ export const productionTiles: OperationsTile[] = [
     to: "/operations/weaving-orders",
     group: "production",
     permission: "weavingorder:read",
+    visibleWhen: isWeavingOrdersVisible,
+    offHint: flagOffHint("dokumaEnabled"),
+  },
+  {
+    // İE ayrımı (2026-11-23): "Dokuma İş Emri oluştur" — Standart + özel dokuma şablonları. Dokuma iş emirleriyle
+    // AYNI yüklem (dokuma kapalıysa çizilmez); izin route ile birebir (`weavingorder:write`).
+    key: "weaving-order-create",
+    get title() { return `${TERIM.dokumaIsEmri.tekil} oluştur`; },
+    get description() { return `Standart ${TERIM.dokumaIsEmri.tekilKucuk} ya da ön-dolu özel dokuma şablonu (ör. fason dokuma)`; },
+    icon: FilePlus2,
+    to: "/operations/weaving-orders/new",
+    group: "production",
+    permission: "weavingorder:write",
     visibleWhen: isWeavingOrdersVisible,
     offHint: flagOffHint("dokumaEnabled"),
   },
