@@ -86,7 +86,8 @@ function cariColumns({ onEdit, onOpenFull }: Handlers, withBalance: boolean): Co
       id: "taxNumber",
       header: "Vergi no",
       accessorFn: (r) => r.taxNumber ?? "",
-      cell: ({ row }) => <span className="font-mono text-xs tabular-nums">{row.original.taxNumber ?? dash}</span>,
+      // T8: boş değer eş aralıklı yazıya girmez — tire öteki sütunlardakiyle aynı görünsün.
+      cell: ({ row }) => (row.original.taxNumber ? <span className="font-mono text-xs tabular-nums">{row.original.taxNumber}</span> : dash),
     },
     {
       id: "status",

@@ -81,7 +81,8 @@ export function CarilerPage() {
       <RecordSplit
         list={
           <>
-            <CarilerFilterRow search={search} onSearchChange={setSearch} trailing={<span className="whitespace-nowrap px-1 text-xs text-muted-foreground">{pageInfo.total} kart</span>} tools={{ table, exportName: "Cariler" }} />
+            {/* T8: kayıt sayısı yalnız alt çubukta ("Yüklü x / y") — araç satırında ikinci sayaç yok. */}
+            <CarilerFilterRow search={search} onSearchChange={setSearch} tools={{ table, exportName: "Cariler" }} />
             {showTable ? (
               <CariListTable
                 table={table}

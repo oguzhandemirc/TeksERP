@@ -7,7 +7,9 @@ import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Callout } from "@/components/ui/callout";
+import { InfoPopover } from "@/components/ui/info-popover";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { foldedIncludes } from "@/lib/search-fold";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useTezgahAlarmEnabled, useTezgahEnabled } from "@/hooks/usePricingEnabled";
@@ -21,6 +23,12 @@ import {
 import { PresetRowSummary } from "./PresetRowSummary";
 import { StopTargetCell, StopTargetGapCallout, missingTargetCount } from "./StopTargetColumn";
 import { ReasonPresetDialog, type ReasonPresetDialogMode } from "./ReasonPresetDialog";
+
+/** Sekmenin ⓘ metni: tür açıklaması + (metni kayda yazan türlerde) kod/metin notu. */
+function kindInfo(kind: ReasonPresetKind, hint: string): string {
+  if (!KIND_STORES_TEXT[kind]) return hint;
+  return `${hint} Bu listede kayda metin ve kod birlikte yazılır; raporlar koda göre gruplanır. Metni değiştirmek yalnız bundan sonraki kayıtları etkiler — eski kayıtlar eski metinle kalır, kod aynı olduğu için rapor bölünmez.`;
+}
 
 // =============================================================================
 // HAZIR SEBEPLER (2026-08-19)
@@ -67,6 +75,13 @@ export function ReasonPresetsPage() {
         .sort((a, b) => a.sortOrder - b.sortOrder),
     [q.data, tab],
   );
+
+  // Liste tür başına tek parça yüklenir (≤ birkaç düzine satır) — arama yüklü satırda; aramada sıra taşıma kapalı.
+  const [search, setSearch] = useState("");
+  const searching = search.trim().length > 0;
+  const shown = searching
+    ? rows.filter((r) => foldedIncludes(r.label, search.trim()) || foldedIncludes(r.code, search.trim()))
+    : rows;
 
   const toggleActive = useMutation({
     mutationFn: (row: ReasonPreset) =>
@@ -116,26 +131,23 @@ export function ReasonPresetsPage() {
 
       <PageBody className="p-6">
         <Tabs value={tab} onValueChange={(v) => setTab(v as ReasonPresetKind)}>
-          <TabsList>
-            {visibleTabs.map((t) => (
-              <TabsTrigger key={t.kind} value={t.kind}>
-                {t.title}
-              </TabsTrigger>
-            ))}
-          </TabsList>
+          {/* T18/O9: 13 sekme kaydırılır (taşma yok); sekme açıklaması ⓘ'de, arama aynı satırda. */}
+          <div className="flex items-end gap-3">
+            <TabsList className="min-w-0 flex-1 justify-start overflow-x-auto">
+              {visibleTabs.map((t) => (
+                <TabsTrigger key={t.kind} value={t.kind} className="shrink-0">
+                  {t.title}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+            <div className="flex shrink-0 items-center gap-1.5 pb-1">
+              <InfoPopover label={activeTab.title} desc={kindInfo(activeTab.kind, activeTab.hint)} />
+              <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Sebep metni ya da kodu ara" />
+            </div>
+          </div>
 
           {visibleTabs.map((t) => (
             <TabsContent key={t.kind} value={t.kind} className="mt-4 space-y-3">
-              <Callout tone="info">{t.hint}</Callout>
-
-              {KIND_STORES_TEXT[t.kind] && (
-                <Callout tone="info" title="Bu listede kayda metin ve kod birlikte yazılır">
-                  Kayıt hem görünen metni hem de satırın kodunu taşır; raporlar koda göre
-                  gruplanır. Metni değiştirmek yalnız BUNDAN SONRAKİ kayıtların görünen metnini
-                  değiştirir — eski kayıtlar eski metinle kalır ama kod aynı olduğu için rapor
-                  bölünmez.
-                </Callout>
-              )}
 
               {t.kind === "MACHINE_STOP" && tezgahEnabled && !q.isLoading && (
                 <StopTargetGapCallout count={missingTargetCount(q.data ?? [])} alarmOn={alarmOn} />
@@ -156,7 +168,10 @@ export function ReasonPresetsPage() {
                       {canEdit && <span className="w-[7.5rem]" aria-hidden />}
                     </div>
                   )}
-                  {rows.map((row, i) => (
+                  {searching && shown.length === 0 && (
+                    <p className="p-4 text-center text-sm text-muted-foreground">Aramaya uyan sebep yok.</p>
+                  )}
+                  {shown.map((row, i) => (
                     <div
                       key={row.id}
                       className="flex items-center gap-3 border-b p-3 last:border-b-0"
@@ -166,7 +181,7 @@ export function ReasonPresetsPage() {
                           variant="ghost"
                           size="icon"
                           className="size-6"
-                          disabled={!canEdit || i === 0 || reorder.isPending}
+                          disabled={!canEdit || searching || i === 0 || reorder.isPending}
                           onClick={() => move(i, -1)}
                           aria-label="Yukarı taşı"
                         >
@@ -176,7 +191,7 @@ export function ReasonPresetsPage() {
                           variant="ghost"
                           size="icon"
                           className="size-6"
-                          disabled={!canEdit || i === rows.length - 1 || reorder.isPending}
+                          disabled={!canEdit || searching || i === rows.length - 1 || reorder.isPending}
                           onClick={() => move(i, 1)}
                           aria-label="Aşağı taşı"
                         >

@@ -65,7 +65,7 @@ function EditableTarget({ row }: { row: ReasonPreset }) {
         onBlur={commit}
         onKeyDown={(e) => e.key === "Enter" && commit()}
         disabled={save.isPending}
-        placeholder="—"
+        placeholder="süre"
         aria-label={`${row.label} — hedef süre (dk)`}
         aria-invalid={parsed === undefined}
         className={cn("h-8 w-16 text-right tabular-nums", parsed === undefined && "border-destructive")}
