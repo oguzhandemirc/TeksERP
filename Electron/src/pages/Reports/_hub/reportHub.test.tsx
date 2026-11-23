@@ -101,7 +101,7 @@ describe("kategori kartları — kapı ve sayaç", () => {
   });
 });
 
-describe("süzgeç", () => {
+describe("filtre", () => {
   it("⭐ kategori kartı SÜZMEZ: bölüm vurgulanır, diğerleri solar, kart seçili; süre dolunca normal", () => {
     vi.useFakeTimers();
     try {
@@ -126,7 +126,7 @@ describe("süzgeç", () => {
     }
   });
 
-  it("açılır kategori süzgeci gerçek süzgeçtir; süzülmüş kategorinin kartı ışık yakmaz, neden duyurulur", async () => {
+  it("açılır kategori filtresi gerçek filtretir; süzülmüş kategorinin kartı ışık yakmaz, neden duyurulur", async () => {
     Element.prototype.scrollIntoView = vi.fn();
     render();
     fireEvent.keyDown(screen.getByRole("button", { name: /^Kategori:/ }), { key: "Enter" });
@@ -135,13 +135,13 @@ describe("süzgeç", () => {
     expect(screen.queryByRole("region", { name: "Muhasebe araçları" })).toBeNull();
     fireEvent.click(categoryCards().getByRole("button", { name: /Muhasebe araçları/ }));
     expect(screen.getByRole("region", { name: "Dokuma" })).not.toHaveAttribute("data-spotlight");
-    expect(screen.getByRole("status")).toHaveTextContent(/Muhasebe araçları raporları seçili süzgeçle gizli/);
+    expect(screen.getByRole("status")).toHaveTextContent(/Muhasebe araçları raporları seçili filtreyle gizli/);
     expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: /Sıfırla/ }));
     expect(screen.getByRole("region", { name: "Muhasebe araçları" })).toBeInTheDocument();
   });
 
-  it("arama eşleşmeyince süzgeç cümlesi; Sıfırla pasifken basılamaz", () => {
+  it("arama eşleşmeyince filtre cümlesi; Sıfırla pasifken basılamaz", () => {
     render();
     expect(screen.getByRole("button", { name: /Sıfırla/ })).toBeDisabled();
     fireEvent.change(screen.getByLabelText("Rapor ara"), { target: { value: "zzzyok" } });
@@ -234,7 +234,7 @@ describe("dönem çipi", () => {
   it("dönem değişince pano o dönemle istenir", async () => {
     render();
     await waitFor(() => expect(fetchPano).toHaveBeenCalledWith("ay"));
-    const chip = within(screen.getByRole("toolbar", { name: "Süzgeçler" })).getByRole("button", { name: /Dönem/ });
+    const chip = within(screen.getByRole("toolbar", { name: "Filtreler" })).getByRole("button", { name: /Dönem/ });
     fireEvent.keyDown(chip, { key: "Enter" });
     fireEvent.click(await screen.findByRole("menuitem", { name: "Son 7 gün" }));
     await waitFor(() => expect(fetchPano).toHaveBeenCalledWith("hafta"));

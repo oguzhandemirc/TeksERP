@@ -121,4 +121,4 @@ export function itemPickerRow(it: Item): ItemPickerRow {
 export const itemTriggerLabel = (r: { code: string; name: string }): string => `${r.name} — ${r.code}`;
 
 export const ITEM_PICKER_EMPTY = "Ürün kartı yok — Tanımlar → Ürünler'den açın.";
-export const ITEM_PICKER_FILTERED_EMPTY = "Süzgece uyan ürün yok.";
+export const ITEM_PICKER_FILTERED_EMPTY = "Filtreye uyan ürün yok.";

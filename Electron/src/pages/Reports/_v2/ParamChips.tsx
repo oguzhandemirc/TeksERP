@@ -150,7 +150,7 @@ export function ParamChips({ entry, params, personNamed = false }: Props) {
           <PopoverTrigger asChild>
             <Button type="button" variant="outline" size="sm" className={cn("h-7 gap-1.5 bg-card px-2 text-xs", foldedActive > 0 && "border-primary/50 text-primary")}>
               <SlidersHorizontal className="h-3.5 w-3.5" />
-              Süzgeçler ({folded.length})
+              Filtreler ({folded.length})
               {foldedActive > 0 ? <span className="rounded-full bg-primary px-1.5 text-[10px] font-semibold text-primary-foreground">{foldedActive}</span> : null}
             </Button>
           </PopoverTrigger>

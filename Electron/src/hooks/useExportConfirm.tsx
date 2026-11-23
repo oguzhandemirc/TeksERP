@@ -35,7 +35,7 @@ export function useExportConfirm(): {
         if (!open) settle(false);
       }}
       title="Büyük liste indirilecek"
-      description={`Yaklaşık ${formatQty((total ?? 0))} kayıt indirilecek; bu birkaç dakika sürebilir. Süzgeçle daraltmak daha hızlıdır.\nYine de indirilsin mi?`}
+      description={`Yaklaşık ${formatQty((total ?? 0))} kayıt indirilecek; bu birkaç dakika sürebilir. Filtreyle daraltmak daha hızlıdır.\nYine de indirilsin mi?`}
       confirmLabel="İndir"
       cancelLabel="Vazgeç"
       onConfirm={() => settle(true)}

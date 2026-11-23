@@ -68,7 +68,7 @@ export function LabTestList({ onOpen }: { onOpen: (id: string) => void }) {
           <DateRangeInput from={f.from} to={f.to} onFrom={(v) => set("from", v)} onTo={(v) => set("to", v)} inputClassName="h-9 w-[9.5rem]" />
           {isLabFilterDirty(f) && (
             <Button variant="ghost" size="sm" onClick={() => setF(EMPTY_LAB_FILTERS)}>
-              <RotateCcw className="mr-1 h-3.5 w-3.5" /> Süzgeçleri temizle
+              <RotateCcw className="mr-1 h-3.5 w-3.5" /> Filtreleri temizle
             </Button>
           )}
           <div className="ml-auto flex items-center gap-1.5">

@@ -17,10 +17,10 @@ import { supplierOptionLabel } from "./supplierParty";
 
 type Variant = "customer" | "supplier-cari" | "cari";
 const TEXT: Record<Variant, { aria: string; title: string; placeholder: string }> = {
-  customer: { aria: "Müşteri seç (liste)", title: "Tıkla: müşteri ve alıcı + satıcı kartlar listede — rol süzgeci, arama, yeni müşteri", placeholder: "Müşteri seç…" },
+  customer: { aria: "Müşteri seç (liste)", title: "Tıkla: müşteri ve alıcı + satıcı kartlar listede — rol filtresi, arama, yeni müşteri", placeholder: "Müşteri seç…" },
   "supplier-cari": { aria: "Bağlı cari seç (liste)", title: "Tıkla: tedarikçi ve müşteri + tedarikçi cari kartlar listede — fason profili bu karta bağlanır", placeholder: "Bağlı cari yok — bağsız fason" },
   // Muhasebe formları (tahsilat/ödeme/fatura/çek): her rol, yalnız kart — fason firma da kartıyla seçilir, hesap karta yazılır.
-  cari: { aria: "Cari seç (liste)", title: "Tıkla: müşteri, tedarikçi ve fason rollü bütün cari kartlar listede — Yön × Fason süzgeci, arama", placeholder: "Cari seç…" },
+  cari: { aria: "Cari seç (liste)", title: "Tıkla: müşteri, tedarikçi ve fason rollü bütün cari kartlar listede — Yön × Fason filtresi, arama", placeholder: "Cari seç…" },
 };
 
 interface Props {

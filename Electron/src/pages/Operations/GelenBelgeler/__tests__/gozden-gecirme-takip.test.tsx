@@ -36,7 +36,7 @@ const renderTable = (lines: DeliveryNoteLine[]) =>
 const FB = { id: "mk", name: "MÜŞTERİ KUMAŞI (EMANET)", source: "FACTORY" as const };
 
 describe("varsayılan ürünle girecek satır", () => {
-  it("⭐ backend sorunsuz + itemFallback dedi → süzgeç saymaz, Durum'da bilgi etiketi, 'Ürün seçilmedi' yok", async () => {
+  it("⭐ backend sorunsuz + itemFallback dedi → filtre saymaz, Durum'da bilgi etiketi, 'Ürün seçilmedi' yok", async () => {
     renderTable([
       line("a", 1, { itemId: null, item: null, problems: [], itemFallback: FB }),
       line("b", 2, { itemId: null, item: null, problems: [], itemFallback: FB }),

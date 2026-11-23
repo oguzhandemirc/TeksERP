@@ -5,7 +5,7 @@ import { useAuthStore } from "@/store/auth";
 import { useServerStatusStore } from "@/store/serverStatus";
 import { recordNetSample } from "@/services/netStats";
 import { applyClientInfoHeaders } from "@/lib/client-info";
-import { shouldToastWarnings, showServerWarnings } from "@/lib/serverNotes";
+import { isReportRead, shouldToastWarnings, showServerWarnings } from "@/lib/serverNotes";
 import { DEFAULT_TIMEOUT_MS, resolveRequestTimeout } from "@/lib/report-request";
 import { presentLiveReferences } from "@/lib/live-references";
 import { notifyLicenseGate } from "@/lib/license/signal";
@@ -229,7 +229,8 @@ apiClient.interceptors.response.use(
     useServerStatusStore.getState().markReachable(readDateHeader(response.headers));
     // Sunucunun engel olmayan notu (`warnings`) her yazım yanıtında GENEL basılır —
     // servis zarfı soysa da; ekranı kendi gösteren/otomatik istek `serverWarnings` taşır.
-    if (shouldToastWarnings(response.config, response.data)) showServerWarnings(response.data as { warnings?: unknown });
+    // Rapor okumasının uyarısı oturumda bir kez (balon birikmesin).
+    if (shouldToastWarnings(response.config, response.data)) showServerWarnings(response.data as { warnings?: unknown }, Date.now(), { oncePerSession: isReportRead(response.config) });
     return response;
   },
   async (error) => {

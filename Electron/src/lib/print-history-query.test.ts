@@ -8,7 +8,7 @@ import { dayRange, fromSearchParams, printHistoryHref, toQueryParams, toSearchPa
 // 22:30Z = fabrika (İstanbul, +03) saatiyle ERTESİ günün 01:30'u — UTC günü ile fabrika günü ayrışır.
 const NOW = new Date("2026-10-24T22:30:00.000Z");
 
-describe("yazdırma geçmişi süzgeci", () => {
+describe("yazdırma geçmişi filtresi", () => {
   it("zemin: fabrika dilimi varsayılan (İstanbul)", () => {
     expect(getFactoryTimezone()).toBe(DEFAULT_FACTORY_TIMEZONE);
   });
@@ -38,7 +38,7 @@ describe("yazdırma geçmişi süzgeci", () => {
     expect(toQueryParams({ gun: "tumu", printer: "Sevkiyat Argox" }, NOW)).toEqual({ printerName: "Sevkiyat Argox" });
   });
 
-  it("bütün süzgeçler backend parametre adlarıyla gider", () => {
+  it("bütün filtreler backend parametre adlarıyla gider", () => {
     const p = toQueryParams(
       {
         gun: "bugun",

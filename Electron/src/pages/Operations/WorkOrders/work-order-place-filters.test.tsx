@@ -54,7 +54,7 @@ function listQueryFromUrl(search: string) {
   return new URLSearchParams(buildCursorQueryString({ limit: 50, filters: p.filters }));
 }
 
-describe("yer süzgeci etiketleri", () => {
+describe("yer filtresi etiketleri", () => {
   it("seçenek satırı 'Ad · sayı'", () => {
     expect(placeOptionLabel({ id: "f1", name: "NY Hisar", workOrderCount: 7 })).toBe("NY Hisar · 7");
     expect(placeOptionLabel({ id: "f3", name: "Boş Firma", workOrderCount: 0 })).toBe("Boş Firma · 0");
@@ -89,7 +89,7 @@ describe("seçenek servisi (istemci araması)", () => {
   });
 });
 
-describe("faceted kapsam (liste süzgeçleri seçenek ucuna gider)", () => {
+describe("faceted kapsam (liste filtreleri seçenek ucuna gider)", () => {
   const SCOPE: ListScope = {
     filters: { status: "IN_PROGRESS,PLANNED", konumIstasyon: "s1", hideCancelled: "true", fasonFirma: "f2" },
     search: "Tül",
@@ -146,7 +146,7 @@ describe("FilterBar'da yer seçicileri", () => {
     expect(await screen.findByRole("button", { name: /NY Hisar · 7/ })).toBeTruthy();
   });
 
-  it("Temizle seçimi URL'den siler, diğer süzgeç kalır", async () => {
+  it("Temizle seçimi URL'den siler, diğer filtre kalır", async () => {
     const user = userEvent.setup();
     renderBar(
       <FilterBar filters={buildPlaceFilters(async () => OPTIONS)} />,
@@ -183,14 +183,14 @@ describe("400 INVALID_FILTER_VALUE", () => {
     expect(isInvalidFilterValueError(null)).toBe(false);
   });
 
-  it("yalnız fason firma süzgeci düşer; yoksa null (döngü yok)", () => {
+  it("yalnız fason firma filtresi düşer; yoksa null (döngü yok)", () => {
     const sp = new URLSearchParams("filter[fasonFirma]=x&filter[konumIstasyon]=y&search=a");
     const next = stripPlaceFilters(sp)!;
     expect(next.toString()).toBe("filter%5BkonumIstasyon%5D=y&search=a");
     expect(stripPlaceFilters(next)).toBeNull();
   });
 
-  it("İş Emirleri sayfası seçiciyi süzgeç çubuğuna koyar ve 400'de seçimi temizler", async () => {
+  it("İş Emirleri sayfası seçiciyi filtre çubuğuna koyar ve 400'de seçimi temizler", async () => {
     const { readFileSync } = await import("node:fs");
     const { resolve } = await import("node:path");
     const src = readFileSync(resolve(__dirname, "WorkOrdersPage.tsx"), "utf8");

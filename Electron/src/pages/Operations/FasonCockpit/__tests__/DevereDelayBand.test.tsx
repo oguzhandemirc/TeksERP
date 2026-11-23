@@ -47,7 +47,7 @@ describe("Devere gecikmeleri bandı", () => {
     expect(get).not.toHaveBeenCalled();
   });
 
-  it("⭐ varsayılan Geciken: `filter[state]=OVERDUE` + firma süzgeci sunucuya gider; sayaçlar yanıttan", async () => {
+  it("⭐ varsayılan Geciken: `filter[state]=OVERDUE` + firma filtresi sunucuya gider; sayaçlar yanıttan", async () => {
     renderWithProviders(<DevereDelayBand subcontractorId="f1" />);
     await screen.findByText("DV-001");
     expect(get).toHaveBeenCalledWith("/api/warping-orders/delays", { params: { "filter[state]": "OVERDUE", "filter[subcontractorId]": "f1" } });

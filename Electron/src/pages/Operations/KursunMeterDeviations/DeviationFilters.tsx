@@ -18,7 +18,7 @@ export function DeviationFilters({ filter, onChange }: Props) {
   const set = (patch: Partial<DeviationFilter>) => onChange({ ...filter, ...patch });
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Durum süzgeci">
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Durum filtresi">
         <Button size="sm" variant={filter.status === null ? "default" : "outline"} onClick={() => set({ status: null })}>
           Tümü
         </Button>

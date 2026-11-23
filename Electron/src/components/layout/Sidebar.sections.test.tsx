@@ -157,7 +157,7 @@ describe("Sidebar — süreç alt grupları (2026-11-20)", () => {
     expect(screen.getByText("Sevkiyatlar")).toBeInTheDocument();
   });
 
-  it("⭐ bölüm olmayan hub kökü (Maliyet) de açılır grup; alt öğeler palet süzgecinden, alt gruplu", () => {
+  it("⭐ bölüm olmayan hub kökü (Maliyet) de açılır grup; alt öğeler palet filtresinden, alt gruplu", () => {
     perms = ["cost:read"];
     render(<Sidebar collapsed={false} />);
     fireEvent.click(screen.getByRole("button", { name: "Maliyet alt menüsü" }));

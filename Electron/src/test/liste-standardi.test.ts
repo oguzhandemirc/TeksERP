@@ -233,16 +233,16 @@ const NO_SEARCH: Record<string, string> = {
   "Definitions/DocumentDesigner/assignments/AssignmentsView.tsx":
     "kalıcı: atama ucu tek bileşik yanıt; profil kataloğu tür varsayılanı değişikliğinin etki önizlemesini (kalkanlı profiller) de besler — sunucuda süzmek önizlemeyi eksik gösterir; satır = belge profili sayısı",
   "Cost/MachineRates/MachineRatesPage.tsx": COST_ACTIVE,
-  "Operations/KursunMeterDeviations/MeterDeviationsPage.tsx": "sapma ucu durum/makine/müşteri/tarih süzgeçli; metin araması yok (backend gerekiyor)",
-  "Operations/ReadyWorks/ReadyWorksPage.tsx": "hazır iş ucu gruplama + durum süzgeçli; metin araması yok (backend gerekiyor)",
-  "Operations/Orders/OrderPlanView.tsx": "plan-lines ucu renk/durum/müşteri/ürün süzgeçli; metin araması yok (backend gerekiyor)",
+  "Operations/KursunMeterDeviations/MeterDeviationsPage.tsx": "sapma ucu durum/makine/müşteri/tarih filtreli; metin araması yok (backend gerekiyor)",
+  "Operations/ReadyWorks/ReadyWorksPage.tsx": "hazır iş ucu gruplama + durum filtreli; metin araması yok (backend gerekiyor)",
+  "Operations/Orders/OrderPlanView.tsx": "plan-lines ucu renk/durum/müşteri/ürün filtreli; metin araması yok (backend gerekiyor)",
   "Operations/AllocationRepair/RepairTable.tsx": "onarım ucu parametresiz tek liste (yalnız eksikli sevkiyatlar); metin araması yok (backend gerekiyor)",
-  "Operations/FasonCockpit/FasonCockpitPage.tsx": "kokpit ucu durum/firma/süreç türü süzgeçli; metin araması yok (backend gerekiyor)",
-  "Operations/YarnAtSubcontractor/YarnAtSubcontractorPage.tsx": "fasondaki iplik ucu fasoncu/iplik/durum süzgeçli; metin araması yok (backend gerekiyor)",
+  "Operations/FasonCockpit/FasonCockpitPage.tsx": "kokpit ucu durum/firma/süreç türü filtreli; metin araması yok (backend gerekiyor)",
+  "Operations/YarnAtSubcontractor/YarnAtSubcontractorPage.tsx": "fasondaki iplik ucu fasoncu/iplik/durum filtreli; metin araması yok (backend gerekiyor)",
   "Operations/SackContentEdit/SackContentsTable.tsx": "çuval içi gömülü tablo (onlarca top); arama salt-okunur görünümde",
   "Operations/SackContentEdit/SackContentsReadonlyTable.tsx": "çuval içi gömülü tablo; tek çuvalın topları bellekte süzülür (sayfalı liste değil)",
   "Notifications/NotificationsPage.tsx":
-    "kalıcı: başlık/gövde okuma anında katalog şablonu + JSON yükten kurulur (aranabilir metin kolonu yok); sekme + tür süzgeci sunucuda",
+    "kalıcı: başlık/gövde okuma anında katalog şablonu + JSON yükten kurulur (aranabilir metin kolonu yok); sekme + tür filtresi sunucuda",
   "Definitions/cariler/CariDocumentsTab.tsx": "cari kayıt sayfasının belge sekmesi (tek carinin belgeleri, sayfalı); `/api/customers/:id/documents` metin araması almıyor (backend gerekiyor)",
 };
 

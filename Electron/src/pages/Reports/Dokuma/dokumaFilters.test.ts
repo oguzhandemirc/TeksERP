@@ -7,7 +7,7 @@
 import { describe, expect, it } from "vitest";
 import { optionLabel } from "./dokumaFilters";
 
-describe("dokuma rapor süzgeci — saf yarı", () => {
+describe("dokuma rapor filtresi — saf yarı", () => {
   it("etiket çözümü: bilinmeyen id ham basılır, boş seçim etiketsizdir", () => {
     const opts = [{ id: "a", label: "T-01 · Tezgah T-01" }];
     expect(optionLabel(opts, "a")).toBe("T-01 · Tezgah T-01");

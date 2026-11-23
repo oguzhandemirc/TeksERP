@@ -33,7 +33,7 @@ const exportNotes = (n: number): string[] => [
   // ⚠️ Akış TEMBEL yüklenir (sonsuz kaydırma). Bunu yazmazsak indirilen
   // dosya "hepsi buymuş" gibi okunur — sessiz kırpma en tehlikeli hatadır.
   `Yalnız ekrana yüklenen ${n} kayıt — daha fazlası için listeyi aşağı kaydırarak genişletin.`,
-  "Süzgeçler (görünüm / gün / kişi / arama / modül / tarih) dosyaya birebir yansır.",
+  "Filtreler (görünüm / gün / kişi / arama / modül / tarih) dosyaya birebir yansır.",
   "Açıklama, sunucunun okuma anında kurduğu cümledir; eski/yeni değer dökümü satırın ayrıntısında görülür.",
 ];
 

@@ -225,7 +225,7 @@ export function SupplierSelect({
             disabled={disabled}
             aria-label="Tedarikçi seç (liste)"
             aria-haspopup="dialog"
-            title="Tıkla: bütün cariler ve fason firmalar listede — rol süzgeci, arama"
+            title="Tıkla: bütün cariler ve fason firmalar listede — rol filtresi, arama"
             className={cn("w-full min-w-0 justify-between font-normal", !resolvedLabel && "text-muted-foreground")}
             onClick={() => setModalOpen(true)}
           >

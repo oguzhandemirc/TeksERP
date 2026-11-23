@@ -30,7 +30,7 @@ const PAGE_SIZE = 50;
 const LIST_KEY = [LOOM_ALARMS_QUERY_ROOT, "list"];
 
 function emptyText(scope: AlarmFilterState["scope"]): string {
-  return scope === "active" ? "Şu an aktif alarm yok — bütün tezgahlar hedef süre içinde." : "Bu süzgeçte alarm yok.";
+  return scope === "active" ? "Şu an aktif alarm yok — bütün tezgahlar hedef süre içinde." : "Bu filtrede alarm yok.";
 }
 
 export function LoomAlarmsPage() {

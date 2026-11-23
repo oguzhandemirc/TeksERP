@@ -121,7 +121,7 @@ describe("PER_DOCUMENT detay", () => {
     await waitFor(() => expect(header.mutateAsync).toHaveBeenLastCalledWith({ kursunMeters: 1780.5 }));
   });
 
-  it("§5 satırlar bilgi: başlık 'Belgedeki satırlar (bilgi)', ürün/renk sütunu ve sorunlu süzgeci yok, INFO 'Bilgi'", async () => {
+  it("§5 satırlar bilgi: başlık 'Belgedeki satırlar (bilgi)', ürün/renk sütunu ve sorunlu filtresi yok, INFO 'Bilgi'", async () => {
     current = noteOf(GULECSOY);
     renderWithProviders(<IncomingDocumentDetailPage />);
     expect(await screen.findByTestId("info-lines-title")).toHaveTextContent("Belgedeki satırlar (bilgi)");
@@ -133,7 +133,7 @@ describe("PER_DOCUMENT detay", () => {
 });
 
 describe("PER_LINE / eski backend — bugünkü görünüm", () => {
-  it("§6 PER_LINE (sunucu `perDocument` göndermez) — kolonlar dolu olsa da kart yok; sütunlar ve süzgeç yerinde", async () => {
+  it("§6 PER_LINE (sunucu `perDocument` göndermez) — kolonlar dolu olsa da kart yok; sütunlar ve filtre yerinde", async () => {
     current = noteOf({ ...GULECSOY, perDocument: undefined });
     renderWithProviders(<IncomingDocumentDetailPage />);
     expect(await screen.findByTestId("problem-filter")).toBeInTheDocument();

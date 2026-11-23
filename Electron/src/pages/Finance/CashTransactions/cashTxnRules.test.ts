@@ -98,8 +98,8 @@ const FILTERS = (over: Partial<CashTxnFilterState> = {}): CashTxnFilterState => 
 });
 
 // -----------------------------------------------------------------------------
-describe("§1 buildListQuery — süzgeç sözleşmesi", () => {
-  it("boş süzgeçte HİÇBİR değer taşımaz (boş string göndermez)", () => {
+describe("§1 buildListQuery — filtre sözleşmesi", () => {
+  it("boş filtrede HİÇBİR değer taşımaz (boş string göndermez)", () => {
     const q = buildListQuery(FILTERS());
     for (const [key, value] of Object.entries(q)) {
       expect(value, `${key} boş string olarak gidiyor`).toBeUndefined();
@@ -144,7 +144,7 @@ describe("§1 buildListQuery — süzgeç sözleşmesi", () => {
     expect(buildListQuery(FILTERS({ search: "   " })).search).toBeUndefined();
   });
 
-  it("kategori anahtarı AYNEN gider (kırpılmaz, CSV'ye bölünmez); boşsa gitmez; süzgeç kirli sayılır", () => {
+  it("kategori anahtarı AYNEN gider (kırpılmaz, CSV'ye bölünmez); boşsa gitmez; filtre kirli sayılır", () => {
     const key = "CAT:Yemek, içecek";
     expect(buildListQuery(FILTERS({ category: key })).category).toBe(key);
     expect(buildListQuery(FILTERS()).category).toBeUndefined();

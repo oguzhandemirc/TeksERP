@@ -60,7 +60,7 @@ export function NoteListTable({ table, isLoading, isError, onRetry, pagination, 
         onRetry={onRetry}
         errorText="Gelen belge listesi alınamadı; bu bir “belge yok” cevabı değildir."
         pagination={pagination}
-        emptyText="Bu süzgece uyan gelen belge yok. Tabletten irsaliye fotoğrafı çekin, “Belge yükle” ile dosya seçin ya da “Elle taslak” açın."
+        emptyText="Bu filtreye uyan gelen belge yok. Tabletten irsaliye fotoğrafı çekin, “Belge yükle” ile dosya seçin ya da “Elle taslak” açın."
         exportName="Gelen Belgeler"
         selectionHint="Silmek için taslakları işaretleyin; onaylı belge seçilemez."
         selectionBlockedReason={canDelete ? blockedReason : undefined}

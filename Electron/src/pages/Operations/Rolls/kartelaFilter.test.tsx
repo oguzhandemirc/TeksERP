@@ -12,7 +12,7 @@ function Where() {
   return <output data-testid="loc">{decodeURIComponent(useLocation().search)}</output>;
 }
 
-describe("Kartelalık süzgeci", () => {
+describe("Kartelalık filtresi", () => {
   it("onay kutusu filter[markedForKartela]=true yazar, kaldırınca siler; öteki parametreler kalır", () => {
     expect(KARTELA_MARKED_PARAM).toBe("filter[markedForKartela]");
     render(
@@ -33,7 +33,7 @@ describe("Kartelalık süzgeci", () => {
     expect(keys).not.toContain("markedForKartela");
   });
 
-  it("⭐ sekmeden çıkarken Bitmiş Depo süzgeçleri silinir; yeni sekmenin kaydı gelir, arama kalır", () => {
+  it("⭐ sekmeden çıkarken Bitmiş Depo filtreleri silinir; yeni sekmenin kaydı gelir, arama kalır", () => {
     const sp = new URLSearchParams("filter[markedForKartela]=true&filter[shipmentScope]=free&filter[itemId]=a&search=x");
     const raw = { query: "filter%5BcolorId%5D=c1", savedAt: "2026-11-07T00:00:00Z" };
     const { next } = switchTableUrl(sp, rollPersistConfig("FINISHED_STOCK"), rollPersistConfig("RAW_STOCK"), raw);

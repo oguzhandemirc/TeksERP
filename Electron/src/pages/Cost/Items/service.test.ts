@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { buildStructureBody, listParams, STRUCTURE_KEYS, type StructureBody } from "./service";
 
 describe("Maliyet kartları servisi", () => {
-  it("liste parametreleri: süzgeç filter[durum], boş arama gitmez", () => {
+  it("liste parametreleri: filtre filter[durum], boş arama gitmez", () => {
     expect(listParams({ q: "  ", durum: "TAM", girdiDegisti: false }, null, 50)).toEqual({ "filter[durum]": "TAM", limit: "50" });
     expect(listParams({ q: "poplin", durum: "", girdiDegisti: true }, "c1", 20)).toEqual({ q: "poplin", girdiDegisti: "1", cursor: "c1", limit: "20" });
   });

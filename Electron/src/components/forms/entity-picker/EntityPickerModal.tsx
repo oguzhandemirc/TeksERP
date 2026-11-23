@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Check, ChevronsUpDown, Loader2, Plus, Search, type LucideIcon } from "lucide-react";
 import {
@@ -95,6 +95,10 @@ export function EntityPickerModal<T extends { id: string }>({
   headerSlot,
 }: EntityPickerModalProps<T>) {
   const [open, setOpen] = useState(defaultOpen ?? false);
+  // Sekme açıkken URL parametresi (?report=1) sonradan gelirse de pencere açılsın (ilk bağlanmayla sınırlı kalmasın).
+  useEffect(() => {
+    if (defaultOpen) setOpen(true);
+  }, [defaultOpen]);
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 300);
 
@@ -135,7 +139,8 @@ export function EntityPickerModal<T extends { id: string }>({
         }}
         title={disabled ? lockedTooltip : undefined}
         className={cn(
-          "flex w-full items-center gap-2 rounded-md border bg-background px-3 py-2 text-left text-sm transition-colors hover:border-primary/40 hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-60",
+          // Girdi yüzeyi (Input ile aynı zemin/yükseklik): zemin renginde tetik devre dışı sanılıyordu.
+          "flex min-h-[var(--control-h)] w-full items-center gap-2 rounded-md border border-input bg-card px-3 py-1 text-left text-sm shadow-soft transition-colors hover:border-primary/40 disabled:cursor-not-allowed disabled:opacity-60",
           triggerClassName,
         )}
       >

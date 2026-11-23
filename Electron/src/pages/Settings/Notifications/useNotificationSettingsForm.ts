@@ -22,7 +22,7 @@ function saveErrorMessage(kod: string | undefined): string {
   if (kod === "NOTIFICATION_KIND_LOCKED") return "Bu bildirim yöneticiniz tarafından kilitlendi; uygulama içinde kapatılamaz. Tekrar kaydedin.";
   if (kod === "NOTIFICATION_PREFS_LOCKED") return "Tercihlerin yöneticin tarafından kilitlendi; uygulama içi seçim değiştirilemez.";
   if (kod === "NOTIFICATION_KIND_NOT_VISIBLE") return "Bir bildirim türünü artık göremiyorsunuz; liste yenilendi.";
-  if (kod === "NOTIFICATION_SCOPE_INVALID") return "Kapsam süzgeci geçersiz; kapsamı yeniden seçin.";
+  if (kod === "NOTIFICATION_SCOPE_INVALID") return "Kapsam filtresi geçersiz; kapsamı yeniden seçin.";
   return "Tercihler kaydedilemedi.";
 }
 

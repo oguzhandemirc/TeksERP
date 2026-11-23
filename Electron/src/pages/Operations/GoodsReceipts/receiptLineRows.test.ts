@@ -119,7 +119,7 @@ describe("expandLines — iplik payload sözleşmesi", () => {
     expect(new Set(out.map((x) => x.clientToken)).size).toBe(4);
   });
 
-  it("itemId'siz / miktarsız / adetsiz satırlar açılmaz (mevcut süzgeç iplikte de geçerli)", () => {
+  it("itemId'siz / miktarsız / adetsiz satırlar açılmaz (mevcut filtre iplikte de geçerli)", () => {
     const out = expandLines(
       [line({ itemId: "" }), line({ itemId: "yarn-1", initialQty: 0 }), line({ itemId: "yarn-1", count: 0 })],
       YARN,

@@ -39,7 +39,7 @@ describe("InspectionList", () => {
     expect(strip.textContent).toContain("En yok2");
     expect(screen.getAllByText("Uyumsuz").length).toBeGreaterThan(1);
   });
-  it("süzgeçler sorgu parametresine gider", async () => {
+  it("filtreler sorgu parametresine gider", async () => {
     list.mockResolvedValue(page([row("1")]));
     renderWithProviders(<Harness />);
     const filters = await screen.findByTestId("inspection-filters");

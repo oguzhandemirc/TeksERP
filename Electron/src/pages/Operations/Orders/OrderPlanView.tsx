@@ -74,7 +74,7 @@ export function OrderPlanView({ pricingEnabled }: { pricingEnabled: boolean }) {
             <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>Tekrar dene</Button>
           </ListMessage>
         ) : (
-          <ListMessage className="text-center text-sm text-muted-foreground">Bu süzgeçte açık sipariş satırı yok.</ListMessage>
+          <ListMessage className="text-center text-sm text-muted-foreground">Bu filtrede açık sipariş satırı yok.</ListMessage>
         )}
       </ListBody>
       )}
@@ -93,7 +93,7 @@ export function OrderPlanView({ pricingEnabled }: { pricingEnabled: boolean }) {
 function PlanStateChips({ summary, active, onToggle }: { summary?: OrderPlanSummary; active: OrderPlanState[]; onToggle: (s: OrderPlanState | null) => void }) {
   const count: Record<OrderPlanState, number | undefined> = { WHITE: summary?.white, YELLOW: summary?.yellow, GREEN: summary?.green, RED: summary?.red };
   return (
-    <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Renk süzgeci">
+    <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Renk filtresi">
       <Button type="button" size="sm" variant={active.length === 0 ? "default" : "outline"} className="h-8 text-xs" onClick={() => onToggle(null)}>
         Tümü{active.length === 0 && summary ? ` (${summary.lines})` : ""}
       </Button>

@@ -152,7 +152,7 @@ describe("§1 çipler sunucu beyanından", () => {
 });
 
 describe("§2 küçük çoklular", () => {
-  it("§2a ⭐ hücre tıkı süzgece döner: customerId yazılır, varyant kalkar, tarih kalır", () => {
+  it("§2a ⭐ hücre tıkı filtreye döner: customerId yazılır, varyant kalkar, tarih kalır", () => {
     wrap(<ReportBody presentation={base({ varyant: VARIANT })} fetchedAt={Date.parse("2026-10-25T08:00:00Z")} />, `${RANGE}&varyant=musteri`);
     const grid = screen.getByRole("region", { name: "Müşteri kırılımı" });
     expect(within(grid).getAllByRole("listitem")).toHaveLength(2);
@@ -165,7 +165,7 @@ describe("§2 küçük çoklular", () => {
     expect(u.get("dateFrom")).toBe("2026-10-01T00:00:00.000Z");
   });
 
-  it("§2b süzgeç anahtarı beyan edilmemişse hücre tıklanamaz (düğme yok)", () => {
+  it("§2b filtre anahtarı beyan edilmemişse hücre tıklanamaz (düğme yok)", () => {
     wrap(<ReportBody presentation={base({ varyant: { ...VARIANT, suzgecAnahtari: undefined } })} fetchedAt={0} />);
     expect(within(screen.getByRole("region", { name: "Müşteri kırılımı" })).queryByRole("button")).toBeNull();
   });
@@ -208,7 +208,7 @@ describe("§4 varyant/dönem yoksa gövde bugünkü hâli", () => {
 });
 
 describe("§5 ön ayar parametreleri URL'den", () => {
-  it("⭐ tarih + kırılım + dönem + süzgeç; boş ve kural dışı anahtar atlanır; geri dönüşüm aynı URL", () => {
+  it("⭐ tarih + kırılım + dönem + filtre; boş ve kural dışı anahtar atlanır; geri dönüşüm aynı URL", () => {
     const s = new URLSearchParams(`${RANGE}&varyant=musteri&donemler=ay:6&customerId=c1,c2&bos=&x-y=1`);
     const p = presetParamsFromSearch(s);
     expect(p).toEqual({ dateFrom: "2026-10-01T00:00:00.000Z", dateTo: "2026-10-24T20:59:59.999Z", varyant: "musteri", donemler: "ay:6", customerId: "c1,c2" });

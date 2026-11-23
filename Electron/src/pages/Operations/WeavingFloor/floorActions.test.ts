@@ -41,7 +41,7 @@ describe("floorActionsOf", () => {
     expect(keys(ctx({ count: 0 }))).toEqual(["reports", "selectAll"]);
   });
 
-  it("duruş listesi bağlantısı tezgah süzgeciyle", () => {
+  it("duruş listesi bağlantısı tezgah filtreyiyle", () => {
     expect(stopsLinkOf("m 1")).toBe("/operations/machine-stops?filter%5BmachineId%5D=m+1");
   });
 

@@ -86,7 +86,7 @@ export function buildStockLineSheet({ title, result, options, scopeLines, notes 
   const counts = `${result.rows.length} satır · ${result.orderCount} sipariş · ${result.lineCount} kalem`;
   return {
     name: "Stok kalemi bazında",
-    preamble: [[title], [counts], [`Süzgeç: ${scopeLines.length ? scopeLines.join(" · ") : "yok (tüm siparişler)"}`]],
+    preamble: [[title], [counts], [`Filtre: ${scopeLines.length ? scopeLines.join(" · ") : "yok (tüm siparişler)"}`]],
     columns: [...lead, ...data],
     rows,
     totalRow,

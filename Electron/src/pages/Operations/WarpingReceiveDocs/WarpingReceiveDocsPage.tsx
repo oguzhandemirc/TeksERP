@@ -9,7 +9,8 @@ import { useState } from "react";
 import { PackageCheck } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
-import { BandStats, ListBand } from "@/components/layout/ListPage";
+import { BandStats } from "@/components/layout/ListPage";
+import { isListFiltered } from "@/lib/list-scope";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
 import { RefreshButton } from "@/components/RefreshButton";
@@ -33,7 +34,7 @@ const PERSIST = persistConfigOf(FILTERS);
 export function WarpingReceiveDocsPage() {
   const openTarget = useOpenTarget();
   const [creating, setCreating] = useState(false);
-  const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<WarpingReceiveDocRow>({
+  const { table, query, search, setSearch, pagination, fetchAll, listScope } = useDataTable<WarpingReceiveDocRow>({
     queryKey: WARPING_RECEIVE_DOCS_QUERY_KEY,
     fetchFn: warpingReceiveDocService.listCursor,
     columns: receiveDocColumns,
@@ -60,18 +61,6 @@ export function WarpingReceiveDocsPage() {
           </div>
         }
       />
-      {summary && (
-        <ListBand>
-          <BandStats
-            label="Kabul özeti"
-            scope="Süzgece uyan"
-            items={[
-              { key: "count", label: "Belge", value: summary.count },
-              { key: "beams", label: "Levent", value: summary.beamCount },
-            ]}
-          />
-        </ListBand>
-      )}
       <DefFilterRow filters={FILTERS} primaryKeys={["subcontractorId"]} search={search} onSearchChange={setSearch} searchHint="Belge, irsaliye ya da sipariş no ile ara" tools={{ table, fetchAll, exportName: "Devere dönüş kabulleri" }} />
       <DataTable<WarpingReceiveDocRow>
         table={table}
@@ -80,6 +69,18 @@ export function WarpingReceiveDocsPage() {
         onRetry={() => void query.refetch()}
         errorText="Bu bir “kayıt yok” cevabı DEĞİLDİR — istek reddedildi ya da sunucuya ulaşamadı (modül kapalı, yetki yok, ağ)."
         pagination={pagination}
+        footerSummary={
+          summary && (
+            <BandStats
+              label="Kabul özeti"
+              scope={isListFiltered(listScope) ? "Filtreli" : undefined}
+              items={[
+                { key: "count", label: "Belge", value: summary.count },
+                { key: "beams", label: "Levent", value: summary.beamCount },
+              ]}
+            />
+          )
+        }
         emptyText="Dönüş kabul belgesi yok. Devereci leventleri getirince “Yeni Dönüş Kabulü”."
         onRowClick={(r, click) => openTarget(warpingReceiveDocPath(r.id), click)}
       />

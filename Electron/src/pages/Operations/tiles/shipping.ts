@@ -72,7 +72,7 @@ export const shippingTiles: OperationsTile[] = [
     // "yapılandırılmamış — <ayar yolu>" der (bulunabilirlik şartı).
     key: "e-irsaliye",
     title: "e-İrsaliye Kayıtları",
-    description: "Sevkiyatların e-İrsaliye kayıtları — durum, numara/ETTN, süzgeç ve özet",
+    description: "Sevkiyatların e-İrsaliye kayıtları — durum, numara/ETTN, filtre ve özet",
     icon: FileCheck2,
     to: "/operations/e-irsaliye",
     group: "shipping",

@@ -95,7 +95,7 @@ describe("karşı taraf — depo dışına/dışından hareketlerde UYDURULMAZ",
     expect(counterpartName(ship)).toBe("—");
   });
 
-  it("depo süzgeci yokken iki uç birden gösterilir (yön yok, taraf da yok)", () => {
+  it("depo filtresi yokken iki uç birden gösterilir (yön yok, taraf da yok)", () => {
     expect(counterpartName(row({ direction: null }))).toBe("Ana Depo → Şube Depo");
   });
 });
@@ -192,7 +192,7 @@ describe("sözlük bütünlüğü", () => {
     }
   });
 
-  it("süzgeç listesi sözlükten TÜRETİLİR — elle tutulan ikinci bir kaynak yok", () => {
+  it("filtre listesi sözlükten TÜRETİLİR — elle tutulan ikinci bir kaynak yok", () => {
     // Liste elle yazılsaydı sözlükten ayrışabilirdi: süzgeçte görünen bir olayın
     // rozet haritasında karşılığı olmaz ya da tersi olur.
     expect(WAREHOUSE_EVENT_TYPES).toEqual(Object.keys(WAREHOUSE_EVENT_META));

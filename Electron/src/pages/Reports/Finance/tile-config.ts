@@ -45,7 +45,7 @@ export const financeReportTiles: HubTile[] = [
   {
     key: "fx-diff",
     title: "Kur Farkı Raporu",
-    description: "Dövizli kapamalarda gerçekleşen TL kur farkı — lehte/aleyhte ayrı, cari ve para birimi süzgeçli",
+    description: "Dövizli kapamalarda gerçekleşen TL kur farkı — lehte/aleyhte ayrı, cari ve para birimi filtreli",
     icon: ArrowLeftRight,
     to: "/reports/finance/fx-diff",
   },

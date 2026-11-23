@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Tag } from "lucide-react";
 import { BandStats, ListBand } from "@/components/layout/ListPage";
+import { isListFiltered } from "@/lib/list-scope";
 import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
 import { PermissionGate } from "@/components/PermissionGate";
 import { Button } from "@/components/ui/button";
@@ -52,7 +53,7 @@ export function BeamBodiesList() {
         <ListBand>
           <BandStats
             label="Gövde özeti"
-            scope="Süzgece uyan"
+            scope={isListFiltered(listScope) ? "Filtreli" : undefined}
             items={[
               { key: "all", label: "Toplam", value: s.count },
               ...BEAM_BODY_OWNER_KINDS.map((k) => ({ key: k, label: BEAM_BODY_OWNER_LABELS[k], value: s.byOwner[k] ?? 0 })),

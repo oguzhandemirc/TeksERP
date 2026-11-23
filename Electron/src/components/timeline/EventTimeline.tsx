@@ -21,7 +21,7 @@ export type TimelineFetch<T> = (opts: { group: string; cursor?: string; limit: n
 export function timelineFooterText(shown: number, hasMore: boolean): string {
   if (shown === 0) return "";
   const head = `${shown} hareket gösteriliyor (en yeniden eskiye).`;
-  return hasMore ? `${head} Liste KIRPILDI — devamı için “Daha fazla yükle”.` : `${head} Bu süzgeçte başka hareket yok.`;
+  return hasMore ? `${head} Liste KIRPILDI — devamı için “Daha fazla yükle”.` : `${head} Bu filtrede başka hareket yok.`;
 }
 
 /** Dışa aktarım listenin TAMAMINI alır — ekranda yüklenmiş sayfalarla sınırlı değil. */
@@ -35,7 +35,7 @@ export async function fetchAllTimeline<T>(fetchPage: TimelineFetch<T>, group: st
     cursor = page.nextCursor;
   }
   // Kırpılmış bir Excel "tam liste" sanılır — sessizce kesmek yerine dur.
-  throw new Error("Hareket listesi dışa aktarım sınırını aşıyor (20.000 satır); süzgeçle daraltın.");
+  throw new Error("Hareket listesi dışa aktarım sınırını aşıyor (20.000 satır); filtreyle daraltın.");
 }
 
 export function EventTimelineTable<T extends { id: string }>(props: { columns: ExportColumn<T>[]; rows: T[]; testId: string }) {

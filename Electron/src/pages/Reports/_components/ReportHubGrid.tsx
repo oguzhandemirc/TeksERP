@@ -38,7 +38,7 @@ export function sinifOf(to: string): "basit" | "gelismis" | null {
 
 const SECTION_LABELS: Record<"basit" | "gelismis", { baslik: string; aciklama: string }> = {
   basit: { baslik: "Hızlı bakış", aciklama: "Tek eksende sorulur, tek tabloda cevaplanır." },
-  gelismis: { baslik: "Derin analiz", aciklama: "Çok eksenli süzgeç, oran ve dönem karşılaştırması taşır." },
+  gelismis: { baslik: "Derin analiz", aciklama: "Çok eksenli filtre, oran ve dönem karşılaştırması taşır." },
 };
 
 /**

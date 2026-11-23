@@ -85,7 +85,7 @@ export function MeterDeviationsPage() {
         ) : items.length === 0 ? (
           <ListMessage>
             <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-              Bu süzgece uyan metre sapması yok. Eşik ve onay kipi Sistem › Özellik Anahtarları › Üretim — Saha bölümünde seçilir.
+              Bu filtreye uyan metre sapması yok. Eşik ve onay kipi Sistem › Özellik Anahtarları › Üretim — Saha bölümünde seçilir.
             </div>
           </ListMessage>
         ) : null}

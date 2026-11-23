@@ -121,8 +121,8 @@ export function Wells({ block, cube, issues, warning, check, onRemove, onRemoveF
       <h2 className="text-sm font-semibold">Bölümün verisi</h2>
       {wells.map((w) =>
         w === "suzgec" ? (
-          <WellBox key={w} well={w} check={check} issues={forWell(w)} action={<Button type="button" size="sm" variant="ghost" className="h-6 gap-1 px-1.5 text-xs" onClick={onOpenFilter}><Filter className="h-3 w-3" /> Süzgeç kur</Button>}>
-            {filter.rules.length === 0 ? <span className="text-xs text-muted-foreground">Süzgeç yok — tüm kayıtlar.</span> : null}
+          <WellBox key={w} well={w} check={check} issues={forWell(w)} action={<Button type="button" size="sm" variant="ghost" className="h-6 gap-1 px-1.5 text-xs" onClick={onOpenFilter}><Filter className="h-3 w-3" /> Filtre kur</Button>}>
+            {filter.rules.length === 0 ? <span className="text-xs text-muted-foreground">Filtre yok — tüm kayıtlar.</span> : null}
             {filter.rules.map((r, i) => (
               <Fragment key={i}>
                 {i > 0 && filter.combinator === "or" ? <span className="self-center text-xs font-medium text-muted-foreground">veya</span> : null}

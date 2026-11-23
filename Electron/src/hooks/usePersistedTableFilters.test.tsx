@@ -87,7 +87,7 @@ beforeEach(() => {
 });
 
 describe("Filtre kaydı — geri yükleme ve yarış", () => {
-  it("⭐ sayfaya dönünce son kullanılan süzgeç + sıralama gelir; arama metni gelmez", async () => {
+  it("⭐ sayfaya dönünce son kullanılan filtre + sıralama gelir; arama metni gelmez", async () => {
     store.prefs = { tableFilters: rec("filter%5Bstatus%5D=OPEN&sortBy=deadline&search=gizli") };
     mount();
     await tick(200);
@@ -98,7 +98,7 @@ describe("Filtre kaydı — geri yükleme ve yarış", () => {
     expect(calls.every((c) => c.filters.status === "OPEN")).toBe(true);
   });
 
-  it("⭐ tercih yüklenmeden istek YOK; yüklenince kayıtlı süzgeçle TEK istek", async () => {
+  it("⭐ tercih yüklenmeden istek YOK; yüklenince kayıtlı filtreyle TEK istek", async () => {
     store = { prefs: {}, ready: false };
     mount();
     await tick(200);
@@ -148,7 +148,7 @@ describe("Filtre kaydı — sayfa varsayılan tarihi (İş Emirleri/Sevkiyat: so
     expect(calls[0]!.filters).not.toHaveProperty("dateFrom");
   });
 
-  it("⭐ yalnız \"Tümü\" kaydı (başka süzgeç yok) da korunur: tarihsiz TEK istek", async () => {
+  it("⭐ yalnız \"Tümü\" kaydı (başka filtre yok) da korunur: tarihsiz TEK istek", async () => {
     store.prefs = { tableFilters: rec("datePreset=all") };
     mount("/orders", true, DCFG);
     await waitFor(() => expect(calls).toHaveLength(1));
@@ -173,7 +173,7 @@ describe("Filtre kaydı — sayfa varsayılan tarihi (İş Emirleri/Sevkiyat: so
 });
 
 describe("Filtre kaydı — derin bağlantı", () => {
-  it("⭐ URL'de filter[...] varsa kayıtlı süzgeci ezer ve kaydı o an DEĞİŞTİRMEZ", async () => {
+  it("⭐ URL'de filter[...] varsa kayıtlı filtresi ezer ve kaydı o an DEĞİŞTİRMEZ", async () => {
     store.prefs = { tableFilters: rec("filter%5Bstatus%5D=OPEN") };
     mount("/orders?filter%5BcustomerId%5D=MUS-X");
     await tick(700);
@@ -185,7 +185,7 @@ describe("Filtre kaydı — derin bağlantı", () => {
     expect(stored()).toBe("filter%5Bstatus%5D=OPEN");
   });
 
-  it.each(["search=MUS", "focus=o1"])("⭐ genel arama / kayda odak bağlantısı (%s) da kayıtlı süzgeci uygulamaz", async (q) => {
+  it.each(["search=MUS", "focus=o1"])("⭐ genel arama / kayda odak bağlantısı (%s) da kayıtlı filtresi uygulamaz", async (q) => {
     store.prefs = { tableFilters: rec("filter%5Bstatus%5D=OPEN") };
     mount(`/orders?${q}`);
     await tick(700);
@@ -194,7 +194,7 @@ describe("Filtre kaydı — derin bağlantı", () => {
     expect(writes).toHaveLength(0);
   });
 
-  it("derin bağlantıdan sonra kullanıcı süzgeci değiştirirse o kaydedilir", async () => {
+  it("derin bağlantıdan sonra kullanıcı filtresi değiştirirse o kaydedilir", async () => {
     store.prefs = { tableFilters: rec("filter%5Bstatus%5D=OPEN") };
     mount("/orders?filter%5BcustomerId%5D=MUS-X");
     await tick(100);
@@ -205,7 +205,7 @@ describe("Filtre kaydı — derin bağlantı", () => {
 });
 
 describe("Filtre kaydı — yazma", () => {
-  it("⭐ arama metni kaydedilmez; süzgeç + sıralama kaydedilir (debounce'lu tek yazım)", async () => {
+  it("⭐ arama metni kaydedilmez; filtre + sıralama kaydedilir (debounce'lu tek yazım)", async () => {
     mount();
     await tick(100);
     act(() => setParams!(new URLSearchParams("search=abc&filter[status]=OPEN&sortBy=deadline"), { replace: true }));
@@ -216,7 +216,7 @@ describe("Filtre kaydı — yazma", () => {
     expect(writes).toHaveLength(1);
   });
 
-  it("⭐ Temizle (süzgeç anahtarları silinir) → kayıt silinir, bir sonraki açılış temiz", async () => {
+  it("⭐ Temizle (filtre anahtarları silinir) → kayıt silinir, bir sonraki açılış temiz", async () => {
     store.prefs = { tableFilters: rec("filter%5Bstatus%5D=OPEN") };
     mount();
     await tick(200);
@@ -253,7 +253,7 @@ describe("Filtre kaydı — fail-safe", () => {
     expect(api?.query.isSuccess).toBe(true);
   });
 
-  it("kaldırılmış süzgeç anahtarı yok sayılır, geçerli kalanı uygulanır", async () => {
+  it("kaldırılmış filtre anahtarı yok sayılır, geçerli kalanı uygulanır", async () => {
     store.prefs = { tableFilters: rec("filter%5Bkaldirildi%5D=1&filter%5Bstatus%5D=OPEN") };
     mount();
     await tick(300);
@@ -262,7 +262,7 @@ describe("Filtre kaydı — fail-safe", () => {
     expect(u.get("filter[status]")).toBe("OPEN");
   });
 
-  it("⭐ geri yüklenen süzgeç 4xx verirse URL'den ve kayıttan silinir, liste filtresiz gelir", async () => {
+  it("⭐ geri yüklenen filtre 4xx verirse URL'den ve kayıttan silinir, liste filtresiz gelir", async () => {
     store.prefs = { tableFilters: rec("filter%5Bstatus%5D=ESKI") };
     failWhen = (f) => f.status === "ESKI";
     mount();
@@ -273,7 +273,7 @@ describe("Filtre kaydı — fail-safe", () => {
     expect(calls.at(-1)?.filters.status).toBeUndefined();
   });
 
-  it("kullanıcının KENDİ seçtiği süzgeç 4xx verirse silinmez (yalnız geri yüklenen)", async () => {
+  it("kullanıcının KENDİ seçtiği filtre 4xx verirse silinmez (yalnız geri yüklenen)", async () => {
     mount();
     await tick(100);
     failWhen = (f) => f.status === "KOTU";
@@ -284,7 +284,7 @@ describe("Filtre kaydı — fail-safe", () => {
 });
 
 describe("Filtre kaydı — router geçişi gecikirken (belirlenimli)", () => {
-  it("⭐ 4xx sıfırlamasından sonra URL henüz çizilmemişken eski süzgeç kayda GERİ YAZILMAZ", async () => {
+  it("⭐ 4xx sıfırlamasından sonra URL henüz çizilmemişken eski filtre kayda GERİ YAZILMAZ", async () => {
     store.prefs = { tableFilters: rec("filter%5Bstatus%5D=ESKI") };
     const setSp = vi.fn();
     const { result, rerender } = renderHook((p: { q: string }) =>

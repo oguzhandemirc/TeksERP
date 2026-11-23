@@ -26,7 +26,7 @@ export const SUPPLIER_PICKER_EMPTY = "Tedarikçi kartı yok — Tanımlar → İ
 export const CUSTOMER_PICKER_EMPTY = "Müşteri kartı yok — Tanımlar → İş Ortakları → Cariler'den ya da buradaki Yeni müşteri düğmesiyle açın.";
 export const CUSTOMER_ONLY_EMPTY = "Yalnız müşteri tipli kart yok — bütün cari kartlar zaten tedarikçi listesinde.";
 export const CARI_PICKER_EMPTY = "Cari kartı yok — Tanımlar → İş Ortakları → Cariler'den açın.";
-export const SUPPLIER_PICKER_FILTERED_EMPTY = "Süzgece uyan kayıt yok.";
+export const SUPPLIER_PICKER_FILTERED_EMPTY = "Filtreye uyan kayıt yok.";
 /** Kolonlar listeye göre: tedarikçi Rol taşır (cari/fason karışık), müşteri listeleri Şehir taşır (yalnız cari). */
 const HEADERS: Record<PickerList, readonly string[]> = {
   supplier: ["Kod", "Ünvan", "Rol", "Vergi No", "Telefon"],

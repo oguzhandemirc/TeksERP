@@ -231,7 +231,7 @@ export function SettingsSurfacePage({
               </div>
             </div>
 
-            <TabsList className="h-auto min-h-0 w-full flex-1 flex-col items-stretch justify-start gap-1 overflow-auto rounded-none bg-transparent p-3 pt-1">
+            <TabsList className="h-auto min-h-0 w-full flex-1 flex-col items-stretch justify-start gap-1 overflow-auto rounded-none border-b-0 bg-transparent p-3 pt-1">
               {railGroups.map((g) => (
                 <div key={g.section.id} className="mb-1">
                   <p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
@@ -245,7 +245,7 @@ export function SettingsSurfacePage({
                       <TabsTrigger
                         key={cat.id}
                         value={cat.id}
-                        className="w-full justify-start gap-2.5 rounded-md px-3 py-2 text-muted-foreground shadow-none hover:bg-muted/70 hover:text-foreground data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none"
+                        className="mb-0 w-full justify-start gap-2.5 rounded-md border-b-0 px-3 py-2 text-muted-foreground shadow-none hover:bg-muted/70 hover:text-foreground data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:shadow-none"
                       >
                         <Icon className="h-4 w-4 shrink-0" />
                         <span className="truncate">{cat.label}</span>

@@ -403,7 +403,18 @@ export function CrudPage<T extends { id: string }>({
         onRetry={() => void query.refetch()}
         errorText={apiErrorText(query.error, "İstek sunucuya ulaşamadı ya da reddedildi.")}
         pagination={pagination}
-        emptyText="Kayıt bulunamadı."
+        emptyText={search ? "Bu aramayla kayıt yok." : "Henüz kayıt yok."}
+        emptyAction={
+          search ? (
+            <Button size="sm" variant="outline" onClick={() => setSearch("")}>Aramayı temizle</Button>
+          ) : showInactive ? undefined : (
+            <PermissionGate permission={writePermission}>
+              <Button size="sm" onClick={() => { setEditing(null); setCopyFrom(null); setFormOpen(true); }}>
+                <Plus className="h-4 w-4" /> Yeni
+              </Button>
+            </PermissionGate>
+          )
+        }
         rowClassName={rowClassName}
       />
 

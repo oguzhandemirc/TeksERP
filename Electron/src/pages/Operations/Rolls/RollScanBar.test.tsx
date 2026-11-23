@@ -28,14 +28,14 @@ function setup(initial = "/") {
 }
 
 describe("RollScanBar — URL yazımı", () => {
-  it("⭐ açılışta geri yüklenen süzgeç debounce sonunda SİLİNMEZ (arama değişmedi → yazım yok)", async () => {
+  it("⭐ açılışta geri yüklenen filtre debounce sonunda SİLİNMEZ (arama değişmedi → yazım yok)", async () => {
     const url = setup("/?search=PATOS");
     act(() => setSp!(new URLSearchParams("search=PATOS&filter[itemId]=i1"), { replace: true }));
     await tick(450);
     expect(url()).toBe("search=PATOS&filter[itemId]=i1");
   });
 
-  it("yazınca arama güncellenir, URL'deki süzgeç korunur", async () => {
+  it("yazınca arama güncellenir, URL'deki filtre korunur", async () => {
     const url = setup("/?filter[itemId]=i1");
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "MAVI" } });
     act(() => setSp!(new URLSearchParams("filter[itemId]=i1&filter[colorId]=c1"), { replace: true }));

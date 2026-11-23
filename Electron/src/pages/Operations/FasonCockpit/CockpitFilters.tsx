@@ -13,7 +13,7 @@ export function CockpitFilters({ filter, onChange }: { filter: CockpitFilter; on
   const set = (patch: Partial<CockpitFilter>) => onChange({ ...filter, ...patch });
   return (
     <div className="flex flex-wrap items-end gap-2">
-      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Termin süzgeci">
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Termin filtresi">
         {COCKPIT_STATES.map((s) => (
           <Button key={s} size="sm" variant={filter.state === s ? "default" : "outline"} onClick={() => set({ state: s })}>
             {STATE_LABEL[s]}

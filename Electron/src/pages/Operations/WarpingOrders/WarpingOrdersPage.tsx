@@ -10,6 +10,7 @@ import { useSearchParams } from "react-router-dom";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { BandStats, ListBand } from "@/components/layout/ListPage";
+import { isListFiltered } from "@/lib/list-scope";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
 import { RefreshButton } from "@/components/RefreshButton";
@@ -52,7 +53,7 @@ export function WarpingOrdersPage() {
     for (const k of SEED_PARAM_KEYS) next.delete(k);
     setSp(next, { replace: true });
   };
-  const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<WarpingOrderRow>({
+  const { table, query, search, setSearch, pagination, fetchAll, listScope } = useDataTable<WarpingOrderRow>({
     queryKey: WARPING_ORDERS_QUERY_KEY,
     fetchFn: warpingOrderService.listCursor,
     columns: warpingOrderColumns,
@@ -87,7 +88,7 @@ export function WarpingOrdersPage() {
         <ListBand>
           <BandStats
             label="Sipariş özeti"
-            scope="Süzgece uyan"
+            scope={isListFiltered(listScope) ? "Filtreli" : undefined}
             items={[
               { key: "open", label: "Açık", value: summary.byStatus.OPEN },
               { key: "progress", label: "Sevkte", value: summary.byStatus.IN_PROGRESS, tone: summary.byStatus.IN_PROGRESS > 0 ? "warn" : undefined },

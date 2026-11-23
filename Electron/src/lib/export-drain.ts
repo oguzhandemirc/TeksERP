@@ -56,5 +56,5 @@ export async function drainCursor<T>(
 
 /** Tavan uyarısının metni (indirme bildirimi). */
 export function truncatedExportNote(loaded: number): string {
-  return `Liste ${formatQty(loaded)} kayıtta kesildi — dosya listenin TAMAMI DEĞİL; süzgeçle daraltıp yeniden indirin.`;
+  return `Liste ${formatQty(loaded)} kayıtta kesildi — dosya listenin TAMAMI DEĞİL; filtreyle daraltıp yeniden indirin.`;
 }

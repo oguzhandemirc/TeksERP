@@ -61,7 +61,7 @@ const line = (id: string, lineNo: number, o: Partial<DeliveryNoteLine> = {}): De
   }) as DeliveryNoteLine;
 
 describe("el yazısı şüpheli satır", () => {
-  it("⭐ backend SUSPECT_VALUE → 'Şüpheli değer' etiketi; süzgeç şüpheli satırı kapsar", async () => {
+  it("⭐ backend SUSPECT_VALUE → 'Şüpheli değer' etiketi; filtre şüpheli satırı kapsar", async () => {
     renderWithProviders(
       <LinesTable
         note={{ id: "n1", status: "DRAFT", ownerCustomerId: null, lines: [line("a", 1), line("b", 2, { meters: "1370", needsReview: true, problems: ["NEEDS_REVIEW", "SUSPECT_VALUE"] })] } as unknown as DeliveryNoteDetail}

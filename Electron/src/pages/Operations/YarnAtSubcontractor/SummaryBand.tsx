@@ -28,7 +28,7 @@ export function summaryItems(s: YarnAtSubSummary, showValue: boolean): BandStatI
 export function SummaryBand({ s, filtered, showValue }: { s: YarnAtSubSummary; filtered: boolean; showValue: boolean }) {
   return (
     <ListBand>
-      <BandStats label="Fasondaki iplik özeti" scope={filtered ? "Süzgece uyan" : "Tüm fasoncular"} items={summaryItems(s, showValue)} />
+      <BandStats label="Fasondaki iplik özeti" scope={filtered ? "Filtreli" : undefined} items={summaryItems(s, showValue)} />
     </ListBand>
   );
 }

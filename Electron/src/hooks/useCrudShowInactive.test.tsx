@@ -29,7 +29,7 @@ describe("useShowInactive", () => {
     expect(h.result.current.search).toBe(`?${SHOW_INACTIVE_PARAM}=true`);
   });
 
-  it("kayıt: yalnız sıralama + Pasifleri göster (süzgeç anahtarı yok)", () => {
+  it("kayıt: yalnız sıralama + Pasifleri göster (filtre anahtarı yok)", () => {
     expect(isPersistedKey(SHOW_INACTIVE_PARAM, CRUD_PERSIST)).toBe(true);
     expect(isPersistedKey("filter[isActive]", CRUD_PERSIST)).toBe(false);
   });

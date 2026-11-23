@@ -56,7 +56,7 @@ export function DenyeFilterBar({ yarnItemId, subcontractorId, onYarn, onSubcontr
       <div className="space-y-1">
         <Label className="flex items-center gap-1">
           Köken
-          <InfoPopover desc="Levent tartısını (brüt + dara) bugün yalnız fason devere dönüş kabulü yazar; içeride sarılan leventin tartısı geldiğinde bu süzgeç açılır." />
+          <InfoPopover desc="Levent tartısını (brüt + dara) bugün yalnız fason devere dönüş kabulü yazar; içeride sarılan leventin tartısı geldiğinde bu filtre açılır." />
         </Label>
         <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground">Fason devere</div>
       </div>

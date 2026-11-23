@@ -911,7 +911,7 @@ function DependentLookupFilter({
       </PopoverTrigger>
       <PopoverContent className="w-64 p-0" align="start">
         {/* Küme çağıranın verdiği dar listedir (ör. seçili müşterinin şubeleri) —
-            sunucu araması gereksiz. Ama cmdk'nın VARSAYILAN süzgeci yalnız ASCII
+            sunucu araması gereksiz. Ama cmdk'nın VARSAYILAN filtresi yalnız ASCII
             katlar; "kursun" ile "Kurşun" eşleşmez. Katlama sunucudakiyle aynı. */}
         <Command
           filter={(value, search) => {

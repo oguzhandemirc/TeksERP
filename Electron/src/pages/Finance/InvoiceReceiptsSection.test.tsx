@@ -34,7 +34,7 @@ async function pick(user: ReturnType<typeof userEvent.setup>, ...names: string[]
 }
 
 describe("InvoiceReceiptsSection", () => {
-  it("§1 cari yok → tetik pasif; cari var → liste sunucu süzgeciyle", async () => {
+  it("§1 cari yok → tetik pasif; cari var → liste sunucu filtreyiyle", async () => {
     const onChange = vi.fn();
     const { unmount } = renderWithProviders(<InvoiceReceiptsSection mode="create" supplierId={null} value={[]} onChange={onChange} />);
     expect(screen.getByRole("button", { name: /Önce cari seç/ })).toBeDisabled();

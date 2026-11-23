@@ -33,7 +33,7 @@ describe("StatementButton", () => {
     renderWithProviders(<StatementButton subcontractorId="s1" />);
     expect(screen.queryByRole("button", { name: /Mutabakat bas/ })).toBeNull();
   });
-  it("yalnız TEK devereci süzgecinde görünür", () => {
+  it("yalnız TEK devereci filtresinde görünür", () => {
     expect(singleSubcontractorId("a")).toBe("a");
     expect(singleSubcontractorId("a,b")).toBeNull();
     expect(singleSubcontractorId(["a", "b"])).toBeNull();

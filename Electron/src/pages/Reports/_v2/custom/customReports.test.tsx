@@ -91,7 +91,7 @@ const cube: CatalogCube = {
 };
 
 describe("§3 gövde kurucu", () => {
-  it("küp + iki ölçü + kırılım + süzgeç + kıyas → ana sayı, grafik ve tablo blokları; geri okunur", () => {
+  it("küp + iki ölçü + kırılım + filtre + kıyas → ana sayı, grafik ve tablo blokları; geri okunur", () => {
     const state = { ...EMPTY_BUILDER, title: "Müşteriye göre sevk", cube: "sevk", measures: ["sevk.brutMetre", "sevk.adet"], dimensions: ["musteri"], filters: [{ boyut: "urun", degerler: [{ deger: "u1", etiket: "Poplin" }] }] };
     const body = toBody(state) as { bloklar: Array<{ tur: string; sorgu: { olculer: string[]; boyutlar: string[]; zaman: { kiyas?: string }; suzgec?: unknown } }>; parametreler: unknown[] };
     expect(body.bloklar.map((b) => b.tur)).toEqual(["anaSayi", "grafik", "tablo"]);

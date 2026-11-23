@@ -152,7 +152,7 @@ describe("aggregateStockLines — üretimde / depoda hazır / sıra", () => {
     expect(r.rows[0]).toMatchObject({ inStock: null, inStockAll: null, inProduction: 0, toProduce: null });
   });
 
-  it("yalnız açığı olanlar süzgeci + açık çoktan aza sıra + en yakın termin yalnız açık kalemden", () => {
+  it("yalnız açığı olanlar filtresi + açık çoktan aza sıra + en yakın termin yalnız açık kalemden", () => {
     const orders = [
       order("o1", "A", [line({ quantity: 100, shippedQty: 100 })], { deadline: "2026-11-01T00:00:00.000Z" }),
       order("o2", "B", [line({ item: SATEN, itemId: SATEN.id, quantity: 50 })], { deadline: "2026-12-01T00:00:00.000Z" }),

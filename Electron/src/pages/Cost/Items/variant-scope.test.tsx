@@ -74,7 +74,7 @@ describe("SaveVersionDialog — varyant eksik girdisi", () => {
   });
 });
 
-describe("VersionsTab — varyant süzgeci", () => {
+describe("VersionsTab — varyant filtresi", () => {
   it("varsayılan desen geneli; seçici yoksa bugünkü yüzey", async () => {
     renderWithProviders(<VersionsTab itemId="i1" active={null} />);
     expect(await screen.findByText("v1")).toBeInTheDocument();

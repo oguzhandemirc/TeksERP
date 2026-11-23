@@ -116,7 +116,7 @@ describe("Sevk durumu — günlük dil, BRÜT sevk cümlesi", () => {
     expect(tone("CANCELLED", 0)).toBe("muted");
   });
 
-  it("süzgeç seçenekleri liste metniyle aynı; 'Hepsi gönderildi' kovası kapatılanı da söyler", () => {
+  it("filtre seçenekleri liste metniyle aynı; 'Hepsi gönderildi' kovası kapatılanı da söyler", () => {
     expect(ORDER_SHIP_FILTER_OPTIONS).toEqual([
       { value: "PENDING", label: "Henüz onaylanmadı" },
       { value: "APPROVED", label: "Henüz gönderilmedi" },

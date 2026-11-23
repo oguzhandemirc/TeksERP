@@ -18,7 +18,7 @@ const R2 = { id: "r2", barcode: "B-2", itemName: "POLAR", colorName: null, qty: 
 describe("RollPickerDialog", () => {
   beforeEach(() => listPickableRolls.mockReset().mockResolvedValue([R1, R2]));
 
-  it("ilk kapsamla tam liste açılır, dışlanan top görünmez; arama süzgeçle birlikte gider; seçilenler verilir", async () => {
+  it("ilk kapsamla tam liste açılır, dışlanan top görünmez; arama filtreyle birlikte gider; seçilenler verilir", async () => {
     const onConfirm = vi.fn();
     const onOpenChange = vi.fn();
     renderWithProviders(<RollPickerDialog open onOpenChange={onOpenChange} title="Top Seç" scopes={SCOPES} excludeIds={["r2"]} onConfirm={onConfirm} />);

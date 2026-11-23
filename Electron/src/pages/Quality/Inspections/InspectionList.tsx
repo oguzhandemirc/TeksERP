@@ -54,7 +54,7 @@ export function InspectionList({ f, onFilters, onOpen }: Props) {
         <DataTable table={table} onRowClick={(r) => onOpen(r.id)} exportName="Muayeneler" />
       ) : (
       <ListBody>
-        <QualityListState isLoading={q.isLoading} isError={q.isError} errorTitle="Muayeneler yüklenemedi." noneText="muayene yok" emptyText={isInspectionFilterDirty(f) ? "Bu süzgeçlere uyan muayene yok." : "Henüz muayene yok. Tablette KK1/kalite istasyonundan ya da “Kâğıttan muayene” ile girilir."} onRetry={() => void q.refetch()} />
+        <QualityListState isLoading={q.isLoading} isError={q.isError} errorTitle="Muayeneler yüklenemedi." noneText="muayene yok" emptyText={isInspectionFilterDirty(f) ? "Bu filtrelere uyan muayene yok." : "Henüz muayene yok. Tablette KK1/kalite istasyonundan ya da “Kâğıttan muayene” ile girilir."} onRetry={() => void q.refetch()} />
       </ListBody>
       )}
       {/* [EL-09] sapması devralındı: elle "Daha fazla yükle" (davranış korunarak alt şeride taşındı). */}

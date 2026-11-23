@@ -161,7 +161,7 @@ describe("çek/senet portföyü dışa aktarımı", () => {
   });
 
   // ---------------------------------------------------------------------------
-  it("§4 aktif süzgeçler kapakta — varsayılan 'canlı olanlar' DA yazılır", () => {
+  it("§4 aktif filtreler kapakta — varsayılan 'canlı olanlar' DA yazılır", () => {
     expect(build([ROW()]).subtitle).toBe("Durum: Canlı olanlar");
 
     const spec = build(

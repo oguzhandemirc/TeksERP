@@ -9,7 +9,7 @@ import type { OrderLineFormValues } from "./schema";
 const base: OrderLineFormValues = { clientId: "c1", itemId: "i1", colorId: null, quantity: 10, width: null, unitPrice: "", customerItemName: "", customerColorName: "", requiredPropertyIds: [], targetValues: [], cutNote: "" };
 
 describe("üretim planı servisi", () => {
-  it("renk süzgeci query'ye CSV olarak gider (istemcide süzme yok)", () => {
+  it("renk filtresi query'ye CSV olarak gider (istemcide süzme yok)", () => {
     expect(orderPlanQueryString({ states: ["RED", "WHITE"], cursor: "x", limit: 100 })).toBe("state=RED%2CWHITE&cursor=x&limit=100");
     expect(orderPlanQueryString({ states: [] })).toBe("");
   });

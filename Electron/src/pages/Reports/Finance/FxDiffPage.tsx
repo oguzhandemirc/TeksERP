@@ -101,8 +101,8 @@ export function FxDiffPage() {
   // için o sorgu KALKTI — bir istek, tek kaynak.
   const { secenekler, notes: axisNotlari } = useAxisNotes(q.data, axes.sel, FX_AXES, {
     ek: [
-      ...(currency ? [`SÜZGEÇ — Para birimi: ${currency}.`] : []),
-      ...(kind ? [`SÜZGEÇ — Cari türü: ${kind === "CUSTOMER" ? "Müşteri" : "Fason"}.`] : []),
+      ...(currency ? [`FİLTRE — Para birimi: ${currency}.`] : []),
+      ...(kind ? [`FİLTRE — Cari türü: ${kind === "CUSTOMER" ? "Müşteri" : "Fason"}.`] : []),
     ],
   });
   const scopeLines = axisNotlari;
@@ -251,8 +251,8 @@ export function FxDiffPage() {
           Bu dönemde kur farkı doğuran dövizli kapama yok. Satır, faturanın{" "}
           <strong>kapandığı güne</strong> göre döneme girer — kesildiği güne göre değil.
           {/* Kapalı bir süzgeci sebep gibi göstermek kullanıcıyı olmayan bir
-              düğmeyi aramaya gönderir — ipucu yalnız süzgeç AÇIKKEN basılır. */}
-          {axes.any || currency || kind ? " Cari / tür / para birimi süzgecini gevşetip tekrar bakın." : ""}
+              düğmeyi aramaya gönderir — ipucu yalnız filtre AÇIKKEN basılır. */}
+          {axes.any || currency || kind ? " Cari / tür / para birimi filtresini gevşetip tekrar bakın." : ""}
         </div>
       ) : report ? (
         <Card className="overflow-hidden">

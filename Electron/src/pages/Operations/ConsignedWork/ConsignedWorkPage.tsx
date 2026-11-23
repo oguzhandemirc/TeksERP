@@ -105,7 +105,7 @@ function ConsignedNowView({ onStatement }: { onStatement: (customerId: string | 
     <PageShell>
       <PageHeader
         title="İçerideki İşler"
-        description="Müşterilerin işlenmek üzere bıraktığı (emanet) mal — müşteri başına top ve metre. Sevk edilen, hurdaya ayrılan ve iptal/tüketilmiş toplar sayılmaz; fasondaki ve karteladaki emanet içeride sayılır (Diğer). Satıra tıklayınca toplar o müşterinin süzgeciyle açılır."
+        description="Müşterilerin işlenmek üzere bıraktığı (emanet) mal — müşteri başına top ve metre. Sevk edilen, hurdaya ayrılan ve iptal/tüketilmiş toplar sayılmaz; fasondaki ve karteladaki emanet içeride sayılır (Diğer). Satıra tıklayınca toplar o müşterinin filtreyiyle açılır."
         actions={
           <div className="flex items-center gap-2">
             <Button

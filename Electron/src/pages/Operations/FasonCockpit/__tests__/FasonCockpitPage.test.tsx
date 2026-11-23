@@ -46,7 +46,7 @@ beforeEach(() => {
 });
 
 describe("Fason Kokpiti", () => {
-  it("⭐ tek uç: liste + özet aynı yanıttan; varsayılan süzgeç parametre göndermez", async () => {
+  it("⭐ tek uç: liste + özet aynı yanıttan; varsayılan filtre parametre göndermez", async () => {
     renderWithProviders(<FasonCockpitPage />);
     await screen.findByText("FS-001");
     expect(get).toHaveBeenCalledTimes(1);
@@ -60,7 +60,7 @@ describe("Fason Kokpiti", () => {
     expect(screen.getByRole("link", { name: "IE-10" })).toHaveAttribute("href", "/operations/work-orders/w1");
   });
 
-  it("⭐ süzgeç sunucuda: durum düğmesi ve firma çipi `filter[...]` olarak gider", async () => {
+  it("⭐ filtre sunucuda: durum düğmesi ve firma çipi `filter[...]` olarak gider", async () => {
     renderWithProviders(<FasonCockpitPage />);
     await screen.findByText("FS-001");
     fireEvent.click(screen.getByRole("button", { name: "Gecikenler" }));

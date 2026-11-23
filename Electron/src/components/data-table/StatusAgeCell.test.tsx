@@ -32,7 +32,7 @@ describe("StatusAgeCell (devere S4)", () => {
     expect(screen.getByText("600 gün").className).not.toContain("text-warning");
   });
 
-  it("süzgeç: minAgeDays anahtarı, seçenekler 'N+ gün'", () => {
+  it("filtre: minAgeDays anahtarı, seçenekler 'N+ gün'", () => {
     const f = minAgeFilter([7, 30]);
     if (f.kind !== "select") throw new Error("select bekleniyordu");
     expect(f.key).toBe("minAgeDays");

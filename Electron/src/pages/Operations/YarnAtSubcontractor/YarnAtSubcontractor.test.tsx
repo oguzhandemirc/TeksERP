@@ -94,20 +94,20 @@ describe("Fasondaki İplik ekranı", () => {
     expect(band).toHaveTextContent("Devreden20,500");
   });
 
-  it("② süzgeç URL'den sunucuya; süzgeçli boş durum ayrı cümle", async () => {
+  it("② filtre URL'den sunucuya; filtreli boş durum ayrı cümle", async () => {
     list.mockResolvedValue([]);
     renderWithProviders(<YarnAtSubcontractorPage />, { route: "/operations/fasondaki-iplik?filter[subcontractorId]=s9&filter[status]=COMPLETED" });
-    expect(await screen.findByText(/Bu süzgece ya da aramaya uyan fasondaki iplik yok/)).toBeInTheDocument();
+    expect(await screen.findByText(/Bu filtreye ya da aramaya uyan fasondaki iplik yok/)).toBeInTheDocument();
     expect(list).toHaveBeenCalledWith({ subcontractorId: "s9", status: "COMPLETED" });
   });
 
-  it("② süzgeçsiz boş durum", async () => {
+  it("② filtresiz boş durum", async () => {
     list.mockResolvedValue([]);
     renderWithProviders(<YarnAtSubcontractorPage />, { route: "/operations/fasondaki-iplik" });
     expect(await screen.findByText(/Şu an hiçbir fasoncuda iplik yok/)).toBeInTheDocument();
   });
 
-  it("lot süzgeci URL'den sunucuya (filter[lotId])", async () => {
+  it("lot filtresi URL'den sunucuya (filter[lotId])", async () => {
     renderWithProviders(<YarnAtSubcontractorPage />, { route: "/operations/fasondaki-iplik?filter[lotId]=l1" });
     await screen.findByText("LOT-77");
     expect(list).toHaveBeenCalledWith({ lotId: "l1" });

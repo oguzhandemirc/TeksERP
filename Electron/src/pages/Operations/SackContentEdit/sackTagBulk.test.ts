@@ -151,12 +151,12 @@ describe("§3 kısmi sonuç", () => {
   });
 });
 
-describe("§4 süzgeç sentineli", () => {
+describe("§4 filtre sentineli", () => {
   it("değer backend aynasıyla birebir", () => {
     expect(UNTAGGED_FILTER_VALUE).toBe("none");
   });
 
-  it("⭐ 'İz' süzgeci multi-lookup + sentinelOption olarak KURULU", () => {
+  it("⭐ 'İz' filtreyi multi-lookup + sentinelOption olarak KURULU", () => {
     // Filtre tanımı düşerse ya da sentinel unutulursa "izsiz çuvallar" kümesi
     // hiçbir yüzeyden süzülemez (müşterisiz kovasının aynı dersi).
     expect(defsSource).toMatch(/key:\s*"tagId"/);

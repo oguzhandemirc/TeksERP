@@ -84,7 +84,7 @@ export function CostItemsPage() {
         ) : (
           <ListMessage>
             <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-              {filtered ? "Süzgece uyan kumaş yok." : "Aktif kumaş kartı yok — maliyet kartı kumaş (FABRIC) ürünleri için açılır."}
+              {filtered ? "Filtreye uyan kumaş yok." : "Aktif kumaş kartı yok — maliyet kartı kumaş (FABRIC) ürünleri için açılır."}
             </div>
           </ListMessage>
         )}

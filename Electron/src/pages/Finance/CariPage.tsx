@@ -79,7 +79,7 @@ export function CariPage() {
         <LabeledSelect label="Kilit" value={held} options={CARI_HOLD_FILTER_OPTIONS} onChange={(v) => setHeld(v as CariHoldFilter)} title="Kilitli: aktif cari kilidi olan hesaplar" />
         {isRoleFilterDirty(filters) && (
           <Button variant="ghost" size="sm" onClick={() => setFilters(ROLE_FILTER_DEFAULTS)}>
-            Süzgeci temizle
+            Filtreyi temizle
           </Button>
         )}
         <Button
@@ -103,7 +103,7 @@ export function CariPage() {
           {total > rows.length && (
             <p className="shrink-0 border-t px-4 py-2 text-xs text-amber-700 dark:text-amber-500">
               {total} carinin ilk {rows.length} tanesi gösteriliyor. Aradığınızı bulmak için
-              arama kutusunu ya da tür/bakiye süzgecini kullanın.
+              arama kutusunu ya da tür/bakiye filtresini kullanın.
             </p>
           )}
         </>

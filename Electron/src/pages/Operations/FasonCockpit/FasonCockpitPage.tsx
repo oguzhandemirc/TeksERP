@@ -80,7 +80,7 @@ export function FasonCockpitPage() {
         ) : items.length === 0 ? (
           <ListMessage>
             <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-              Bu süzgece uyan açık fason sevki yok. Termin, sevkte girilir ya da firmanın/süreç türünün dönüş süresinden gelir.
+              Bu filtreye uyan açık fason sevki yok. Termin, sevkte girilir ya da firmanın/süreç türünün dönüş süresinden gelir.
             </div>
           </ListMessage>
         ) : null}

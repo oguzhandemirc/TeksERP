@@ -1,6 +1,7 @@
 import { useState, type KeyboardEvent } from "react";
-import { Columns3, TableProperties } from "lucide-react";
+import { Columns3, Inbox, TableProperties } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { ReportColumn } from "@/pages/Reports/_components/reportExport";
 import { formatDisplay } from "@/lib/format";
@@ -123,7 +124,7 @@ export function ReportTable({ table, rowLink, hiddenColumns, onHiddenColumns, ba
   const totalOnTop = Boolean(table.toplam) && table.satirlar.length > TOTAL_ON_TOP_AFTER;
   const max = barColumn ? columnMax(table, barColumn) : 0;
   if (table.satirlar.length === 0) {
-    return <p className="rounded-xl border border-dashed bg-card p-4 text-sm text-muted-foreground">Tabloda gösterilecek satır yok.</p>;
+    return <EmptyState icon={Inbox} title="Tabloda gösterilecek satır yok." description="Tarih aralığını genişletin ya da filtreleri gevşetin." className="rounded-xl border bg-card" />;
   }
   return (
     <section className={cn("min-w-0 overflow-hidden rounded-xl border bg-card", !embedded && "border-card-border shadow-card")} aria-label="Tablo">

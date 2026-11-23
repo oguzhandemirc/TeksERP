@@ -13,7 +13,7 @@ import { useKartelaTab } from "./useKartelaTab";
 beforeEach(() => setSp.mockReset());
 
 describe("useKartelaTab — geçiş kapısı", () => {
-  it("⭐ eski sekmenin süzgeci URL'den çıkana dek settled=false; çıkınca true", () => {
+  it("⭐ eski sekmenin filtresi URL'den çıkana dek settled=false; çıkınca true", () => {
     url = new URLSearchParams("filter[status]=active&search=x&tab=dispatches");
     const { result, rerender } = renderHook(() => useKartelaTab(() => {}));
     expect(result.current.settled).toBe(true);
@@ -28,7 +28,7 @@ describe("useKartelaTab — geçiş kapısı", () => {
     expect(result.current.settled).toBe(true);
   });
 
-  it("süzgeçsiz geçişte URL yazılmaz, bekleme yok", () => {
+  it("filtresiz geçişte URL yazılmaz, bekleme yok", () => {
     url = new URLSearchParams("");
     const { result } = renderHook(() => useKartelaTab(() => {}));
     act(() => result.current.changeTab("stock"));

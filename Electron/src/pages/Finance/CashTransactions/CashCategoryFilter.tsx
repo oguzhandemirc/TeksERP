@@ -27,7 +27,7 @@ export function CashCategoryFilter({ value, onChange }: Props) {
     return (
       <Button type="button" variant="secondary" size="sm" className="h-9 gap-1.5" onClick={() => onChange("")}>
         <Tags className="h-4 w-4" />
-        Kategori süzgecini kaldır
+        Kategori filtresini kaldır
       </Button>
     );
   }

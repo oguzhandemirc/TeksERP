@@ -10,7 +10,7 @@ import { CashCategoryFilter } from "./CashCategoryFilter";
 
 beforeEach(() => listMock.mockReset());
 
-describe("kasa hareketleri — kategori süzgeci", () => {
+describe("kasa hareketleri — kategori filtresi", () => {
   it("seçim anahtarı iletir; seçili etiket düğmede görünür", async () => {
     listMock.mockResolvedValue([{ key: "CAT:", label: "Kategorisiz" }, { key: "CAT:Kira", label: "Kira" }]);
     const onChange = vi.fn();
@@ -30,18 +30,18 @@ describe("kasa hareketleri — kategori süzgeci", () => {
     expect(onChange).toHaveBeenCalledWith("");
   });
 
-  it("seçenek ucu hata verirse (eski backend) süzgeç çizilmez", async () => {
+  it("seçenek ucu hata verirse (eski backend) filtre çizilmez", async () => {
     listMock.mockResolvedValue(null);
     renderWithProviders(<CashCategoryFilter value="" onChange={() => {}} />);
     await waitFor(() => expect(listMock).toHaveBeenCalled());
     await waitFor(() => expect(screen.queryByRole("button")).toBeNull());
   });
 
-  it("seçenek ucu okunamaz ama URL'den süzgeç etkinse görünür kalır ve kaldırılabilir", async () => {
+  it("seçenek ucu okunamaz ama URL'den filtre etkinse görünür kalır ve kaldırılabilir", async () => {
     listMock.mockResolvedValue(null);
     const onChange = vi.fn();
     renderWithProviders(<CashCategoryFilter value="CAT:Kira" onChange={onChange} />);
-    fireEvent.click(await screen.findByRole("button", { name: "Kategori süzgecini kaldır" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Kategori filtresini kaldır" }));
     expect(onChange).toHaveBeenCalledWith("");
   });
 });

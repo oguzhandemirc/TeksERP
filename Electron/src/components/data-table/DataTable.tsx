@@ -75,6 +75,9 @@ interface Props<T> extends RowExpandProps<T> {
   errorText?: string;
   pagination?: Pagination;
   emptyText?: string;
+  /** Boş durumun ikinci satırı ("ne yapılır") ve eylemi (ör. "Yeni kayıt", "Filtreyi temizle"). */
+  emptyDescription?: string;
+  emptyAction?: ReactNode;
   /** Satır açılışı; ikinci argüman tıklamanın değiştiricileri (klavye ↑/↓ ile açılışta yok). */
   onRowClick?: (row: T, click?: RowClick) => void;
   /** Seçim çubuğuna sayfa-özel toplu aksiyon enjekte eder (seçili satırları alır). */
@@ -105,6 +108,8 @@ interface Props<T> extends RowExpandProps<T> {
   /** Sayfalama çubuğunun sağına (kalıcı görünür) eklenen aksiyonlar — ör. "Tümünü
    *  İndir" + "Envanter Özeti". pagination verilmezse gösterilmez. */
   paginationActions?: ReactNode;
+  /** Özet sayıları (`<BandStats>`) — listenin üstünde ayrı bant yerine alt çubukta. */
+  footerSummary?: ReactNode;
   /** Satıra ek sınıf (ağaç görünümünde bağlam satırı soluk, daraltılan çeşit gizli — Kumaş Özellikleri). */
   rowClassName?: (row: T) => string | undefined;
   /** Satır düzeyi ipucu (`title`) — ör. "Siparişin tamamını aç": tıklamanın neyi açtığını söyler. */
@@ -134,6 +139,8 @@ export function DataTable<T>({
   errorText,
   pagination,
   emptyText = "Kayıt yok.",
+  emptyDescription,
+  emptyAction,
   onRowClick,
   bulkActions,
   selectionHint = "Toplu işlem için satırları seçin.",
@@ -142,6 +149,7 @@ export function DataTable<T>({
   rowContextMenu,
   selectionBlockedReason,
   paginationActions,
+  footerSummary,
   rowClassName,
   rowTitle,
   activeRowId,
@@ -364,9 +372,9 @@ export function DataTable<T>({
                     )
                   : rows.length === 0
                   ? (
-                      <TableRow>
+                      <TableRow className="hover:bg-transparent">
                         <TableCell colSpan={colCount} className="h-48">
-                          <EmptyState icon={Inbox} title={emptyText} />
+                          <EmptyState icon={Inbox} title={emptyText} description={emptyDescription} action={emptyAction} />
                         </TableCell>
                       </TableRow>
                     )
@@ -406,11 +414,12 @@ export function DataTable<T>({
         {more ? <div ref={sentinelRef} aria-hidden className="h-px w-full shrink-0" /> : null}
       </div>
 
-      {selectable && showSelectionBar && (rows.length > 0 || selected.length > 0) && (
+      {/* Toplu işlem şeridi yalnız seçim varken (kullanıcı 2026-11-23; "0 seçili" sabit şerit kalktı). */}
+      {selectable && showSelectionBar && selected.length > 0 && (
         <SelectionBar table={table} selected={selected.map((r) => r.original)} bulkActions={bulkActions} selectionHint={selectionHint} exportName={exportName} selectedExportHint={selectedExportHint} />
       )}
 
-      {pagination ? <DataTablePagination pagination={pagination} actions={paginationActions} /> : null}
+      {pagination ? <DataTablePagination pagination={pagination} actions={paginationActions} summary={footerSummary} /> : null}
       {marks.dialog}
     </div>
   );

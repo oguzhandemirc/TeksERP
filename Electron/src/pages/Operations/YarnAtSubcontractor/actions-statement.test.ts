@@ -53,7 +53,7 @@ describe("lot seçenek kaynağı", () => {
   // Aynı lot iki fasoncuda (tekilleşmeli) + lotsuz satır (seçenek olmamalı).
   const withDupes: YarnAtSubRow[] = [...rows, { ...base, subcontractorId: "s2" }, { ...base, lotId: null, lotNo: null }];
   beforeEach(() => get.mockReset().mockResolvedValue({ data: { success: true, data: withDupes } }));
-  it("kendi anahtarı hariç süzgeçler + arama uca; katalog süzgeci (isActive) GİTMEZ; tekil lotlar", async () => {
+  it("kendi anahtarı hariç filtreler + arama uca; katalog filtresi (isActive) GİTMEZ; tekil lotlar", async () => {
     const src = yarnAtSubLotOptions({ subcontractorId: "s1", status: "COMPLETED" });
     const r = await src.getAll({ search: "LOT" });
     const url = decodeURIComponent(String(get.mock.calls[0]![0]));

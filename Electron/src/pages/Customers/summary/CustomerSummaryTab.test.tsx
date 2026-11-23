@@ -75,7 +75,7 @@ beforeEach(() => {
 });
 
 describe("CustomerSummaryTab", () => {
-  it("① her bölüm doğru uca, bu carinin süzgeciyle gider (süzme sunucuda)", async () => {
+  it("① her bölüm doğru uca, bu carinin filtreyiyle gider (süzme sunucuda)", async () => {
     routes();
     renderWithProviders(<CustomerSummaryTab customerId={CID} />);
     await shipmentsReady();
@@ -135,7 +135,7 @@ describe("CustomerSummaryTab", () => {
     await waitFor(() => expect(within(section("İadeler")).getByText("IAD-1")).toBeInTheDocument());
   });
 
-  it("⑦ boş küme 'Kayıt yok'; 'Tümünü gör' liste ekranını cari süzgeciyle yeni sekmede açar", async () => {
+  it("⑦ boş küme 'Kayıt yok'; 'Tümünü gör' liste ekranını cari filtreyiyle yeni sekmede açar", async () => {
     routes({ ret: { success: true, data: [], summary: { count: 0, totalQty: 0 }, pagination: pg } });
     renderWithProviders(<CustomerSummaryTab customerId={CID} />);
     await waitFor(() => expect(within(section("İadeler")).getByText("Kayıt yok")).toBeInTheDocument());

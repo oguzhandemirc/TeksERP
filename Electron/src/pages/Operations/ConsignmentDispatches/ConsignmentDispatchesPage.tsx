@@ -80,7 +80,7 @@ export function ConsignmentDispatchesPage() {
         ) : l.rows.length === 0 ? (
           <ListMessage>
             <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground" data-testid="consignment-empty">
-              {filtered ? "Süzgece uyan emanet çıkışı yok." : "Henüz emanet çıkışı yok — “Yeni Emanet Çıkışı” ile müşterinin leventini ya da ipliğini sahibine verin."}
+              {filtered ? "Filtreye uyan emanet çıkışı yok." : "Henüz emanet çıkışı yok — “Yeni Emanet Çıkışı” ile müşterinin leventini ya da ipliğini sahibine verin."}
             </div>
           </ListMessage>
         ) : null}

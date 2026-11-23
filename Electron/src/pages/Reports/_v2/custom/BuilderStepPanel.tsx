@@ -57,20 +57,20 @@ export function BuilderStepPanel({ step, state, cubes, onChange }: Props) {
       ) : null}
       {step === 3 ? (
         <div className="flex flex-col gap-2">
-          <span className="text-xs font-medium text-muted-foreground">Süzgeçler (isteğe bağlı)</span>
+          <span className="text-xs font-medium text-muted-foreground">Filtreler (isteğe bağlı)</span>
           {state.filters.map((f) => (
             <div key={f.boyut} className="flex flex-wrap items-center gap-2 rounded-md border px-3 py-2 text-sm">
               <span className="font-medium">{dims.find((d) => d.kimlik === f.boyut)?.ad ?? f.boyut}:</span>
               <button type="button" className="min-w-0 flex-1 truncate text-left underline-offset-2 hover:underline" onClick={() => void openValues(f.boyut)}>
                 {f.degerler.map((v) => v.etiket).join(", ") || "Tümü"}
               </button>
-              <Button type="button" size="icon" variant="ghost" aria-label="Süzgeci kaldır" onClick={() => onChange({ ...state, filters: state.filters.filter((x) => x !== f) })}>
+              <Button type="button" size="icon" variant="ghost" aria-label="Filtreyi kaldır" onClick={() => onChange({ ...state, filters: state.filters.filter((x) => x !== f) })}>
                 <X className="h-4 w-4" />
               </Button>
             </div>
           ))}
           <Button type="button" variant="outline" size="sm" className="w-fit gap-1.5" onClick={() => setPicker("filterDim")} disabled={state.filters.length >= 10}>
-            <Plus className="h-4 w-4" /> Süzgeç ekle
+            <Plus className="h-4 w-4" /> Filtre ekle
           </Button>
         </div>
       ) : null}

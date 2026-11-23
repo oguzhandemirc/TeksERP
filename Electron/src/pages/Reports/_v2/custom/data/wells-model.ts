@@ -19,7 +19,7 @@ export type DataField = { cube: string; kind: "measure"; measure: CatalogMeasure
 export const fieldId = (f: DataField) => (f.kind === "measure" ? f.measure.kimlik : f.dimension.kimlik);
 export const fieldName = (f: DataField) => (f.kind === "measure" ? f.measure.ad : f.dimension.ad);
 
-export const WELL_LABELS: Record<WellKind, string> = { satir: "Satır", sutun: "Sütun", olcu: "Ölçü", suzgec: "Süzgeç", varyant: "Varyant" };
+export const WELL_LABELS: Record<WellKind, string> = { satir: "Satır", sutun: "Sütun", olcu: "Ölçü", suzgec: "Filtre", varyant: "Varyant" };
 
 const WELLS_BY_KIND: Record<string, readonly WellKind[]> = {
   anaSayi: ["olcu", "suzgec"],
@@ -79,9 +79,9 @@ function checkDimension(block: DefinitionBlock, cube: CatalogCube, well: WellKin
   const q = block.sorgu!;
   const c = wellContents(block);
   if (well === "suzgec") {
-    if (d.tur === "zaman") return refuse("Zaman süzgeç olamaz; tarih aralığını raporun dönemi belirler.");
-    if (d.islecler.length === 0) return refuse(`“${d.ad}” süzgeç olarak kullanılamaz.`);
-    if (countRules(fromQueryFilter(q.suzgec)) >= MAX_FILTER_RULES) return refuse(`Bir bölümde en çok ${MAX_FILTER_RULES} süzgeç olur.`);
+    if (d.tur === "zaman") return refuse("Zaman filtre olamaz; tarih aralığını raporun dönemi belirler.");
+    if (d.islecler.length === 0) return refuse(`“${d.ad}” filtre olarak kullanılamaz.`);
+    if (countRules(fromQueryFilter(q.suzgec)) >= MAX_FILTER_RULES) return refuse(`Bir bölümde en çok ${MAX_FILTER_RULES} filtre olur.`);
     const blocked = helperConflict(cube, q.olculer, d, "süzülemez");
     return blocked ? refuse(blocked) : { ok: true };
   }

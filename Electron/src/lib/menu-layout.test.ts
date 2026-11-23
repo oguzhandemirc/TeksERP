@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { EMPTY_MENU_LAYOUT, isHubTileHidden, isInAdvancedGroup, isMenuHidden, menuKeyOf, toMenuLayoutState } from "./menu-layout";
 
 // K19 menü süzgeci (saf). Varsayılan/eski sunucu/hata → boş süzgeç = bugünkü menü; Gelişmiş yalnız ayar açıkken.
-describe("menu-layout süzgeci", () => {
+describe("menu-layout filtresi", () => {
   it("route yolu → katalog anahtarı", () => {
     expect(menuKeyOf("/system/perf?tab=x#y")).toBe("system/perf");
     expect(menuKeyOf("/documents/")).toBe("documents");

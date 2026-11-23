@@ -28,7 +28,7 @@ describe("PriceListActions", () => {
     list.mockReset();
     perms = ["price-list:write"];
   });
-  it("yayınla: yayındaki eş listeyi adıyla söyler, müşteri+döviz süzgeciyle sorar; çift tık tek istek", async () => {
+  it("yayınla: yayındaki eş listeyi adıyla söyler, müşteri+döviz filtreyiyle sorar; çift tık tek istek", async () => {
     list.mockResolvedValue({ data: [{ id: "p1", listNo: "FL-1", revisionNo: 1, name: "2026 Bahar" }], ozet: { toplam: 1 }, toplamSuzulen: 1, nextCursor: null });
     publish.mockImplementation(() => new Promise(() => {}));
     renderWithProviders(<PriceListActions list={draft()} />);

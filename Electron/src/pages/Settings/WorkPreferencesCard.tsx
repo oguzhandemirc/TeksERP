@@ -9,7 +9,7 @@ type SubcontractorDefault = "favorite" | "lastUsed";
 
 // Uzun açıklamalar seçeneğin ipucunda (üzerine gelince) — kart yalnız etiket + seçim gösterir.
 const TAB_MODES: Option<TabOpenMode>[] = [
-  { value: "sameTab", label: "Aynı sekmede (varsayılan)", hint: "Her tık açık sekmede açar; yeni sekme için Ctrl/⌘/Shift + tık ya da orta tık. Önceki ekranın süzgeç/kaydırma konumu korunmayabilir." },
+  { value: "sameTab", label: "Aynı sekmede (varsayılan)", hint: "Her tık açık sekmede açar; yeni sekme için Ctrl/⌘/Shift + tık ya da orta tık. Önceki ekranın filtre/kaydırma konumu korunmayabilir." },
   { value: "newTab", label: "Yeni sekmede", hint: "Menüden açılan ekran yeni sekmede açılır (açıksa ona geçilir)." },
 ];
 const SUBCONTRACTOR_DEFAULTS: Option<SubcontractorDefault>[] = [

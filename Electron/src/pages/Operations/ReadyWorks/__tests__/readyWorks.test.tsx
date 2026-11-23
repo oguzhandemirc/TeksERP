@@ -87,7 +87,7 @@ beforeEach(() => {
 });
 
 describe("Sevke Hazır İşler", () => {
-  it("varsayılan: İş emri sekmesi + Hazır süzgeci SUNUCUYA gider (state=READY)", async () => {
+  it("varsayılan: İş emri sekmesi + Hazır filtresi SUNUCUYA gider (state=READY)", async () => {
     renderWithProviders(<ReadyWorksPage />);
     expect(await screen.findByText("İE-001")).toBeInTheDocument();
     expect(getList).toHaveBeenCalledWith(expect.objectContaining({ groupBy: "workOrder", states: ["READY"] }));
@@ -103,7 +103,7 @@ describe("Sevke Hazır İşler", () => {
     }
   });
 
-  it("durum süzgeci query'de: Kısmi → state=PARTIAL, Tümü → state yok; istemci satır elemez", async () => {
+  it("durum filtresi query'de: Kısmi → state=PARTIAL, Tümü → state yok; istemci satır elemez", async () => {
     // Sunucu süzgeci yok sayıp READY satırı dönse bile istemci onu GİZLEMEZ (süzme sunucuda).
     renderWithProviders(<ReadyWorksPage />);
     await screen.findByText("İE-001");

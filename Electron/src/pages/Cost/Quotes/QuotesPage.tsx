@@ -78,7 +78,7 @@ export function QuotesPage() {
         ) : (
           <ListMessage>
             <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground" data-testid="quotes-empty">
-              {filtered ? "Süzgece uyan teklif yok." : "Henüz teklif yok — \"Yeni teklif\" ile başlayın ya da Hızlı Hesaplayıcı'dan \"Teklife ekle\" deyin."}
+              {filtered ? "Filtreye uyan teklif yok." : "Henüz teklif yok — \"Yeni teklif\" ile başlayın ya da Hızlı Hesaplayıcı'dan \"Teklife ekle\" deyin."}
             </div>
           </ListMessage>
         )}

@@ -16,7 +16,7 @@ import { resolveRollTabs, isRollTabEntryVisible, ROLL_TAB_ENTRY_PREFIX } from ".
 const keys = (productionEnabled: boolean, financeEnabled = false) =>
   resolveRollTabs(productionEnabled, financeEnabled).map((t) => t.key);
 
-describe("Envanter sekmeleri — rejim süzgeci", () => {
+describe("Envanter sekmeleri — rejim filtresi", () => {
   it("⭐ FABRİKADA liste BİREBİR ROLL_TABS (sıra dahil)", () => {
     expect(resolveRollTabs(true)).toEqual(ROLL_TABS);
   });
@@ -82,7 +82,7 @@ describe("Komut paleti ile şerit AYNI listeyi okur", () => {
     expect(isRollTabEntryVisible(`${ROLL_TAB_ENTRY_PREFIX}FINISHED_STOCK`, false)).toBe(true);
   });
 
-  it("süzgeç YALNIZ roll sekmesi girişlerine dokunur", () => {
+  it("filtre YALNIZ roll sekmesi girişlerine dokunur", () => {
     // Palet yüzlerce giriş taşıyor; ön ek eşleşmeyen hiçbiri etkilenmemeli.
     for (const other of ["labels-tab:ROLL", "settings:backup", "def:customers", "sys:roll-archive"]) {
       expect(isRollTabEntryVisible(other, true)).toBe(true);

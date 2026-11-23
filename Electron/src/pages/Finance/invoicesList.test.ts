@@ -56,11 +56,11 @@ describe("draftBadgeText", () => {
     expect(draftBadgeText(undefined, "")).toBeNull();
   });
 
-  it("⭐ durum süzgeci TASLAK iken rozet ÇİZİLMEZ (listenin tamamı taslak)", () => {
+  it("⭐ durum filtresi TASLAK iken rozet ÇİZİLMEZ (listenin tamamı taslak)", () => {
     expect(draftBadgeText(5, "DRAFT")).toBeNull();
   });
 
-  it("başka bir durum süzgeci varken sayaç yine sunucudan gelir", () => {
+  it("başka bir durum filtresi varken sayaç yine sunucudan gelir", () => {
     expect(draftBadgeText(3, "CONFIRMED")).toBe("3 taslak");
   });
 });

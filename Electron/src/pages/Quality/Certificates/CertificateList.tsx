@@ -67,7 +67,7 @@ export function CertificateList({ onOpen }: { onOpen: (id: string) => void }) {
           </select>
           {isCertificateFilterDirty(f) && (
             <Button variant="ghost" size="sm" onClick={() => setF(EMPTY_CERTIFICATE_FILTERS)}>
-              <RotateCcw className="mr-1 h-3.5 w-3.5" /> Süzgeçleri temizle
+              <RotateCcw className="mr-1 h-3.5 w-3.5" /> Filtreleri temizle
             </Button>
           )}
           <div className="ml-auto flex items-center gap-1.5">

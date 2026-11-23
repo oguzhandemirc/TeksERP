@@ -32,7 +32,7 @@ describe("arama katlaması", () => {
     expect(foldSearchText("çğıiöşü")).toBe("cgiiosu");
   });
 
-  it("boş arama süzgeci yok sayar (tüm kayıtlar eşleşir)", () => {
+  it("boş arama filtresi yok sayar (tüm kayıtlar eşleşir)", () => {
     expect(foldedIncludes("herhangi", "   ")).toBe(true);
   });
 

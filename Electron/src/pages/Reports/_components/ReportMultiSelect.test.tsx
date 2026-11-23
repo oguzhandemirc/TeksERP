@@ -48,7 +48,7 @@ describe("ReportMultiSelect", () => {
   it("seçim yokken 'Tümü'; temizleme düğmesi de yoktur", () => {
     const { trigger } = mount();
     expect(trigger()).toHaveTextContent("Tümü");
-    expect(screen.queryByTitle("Süzgeci temizle")).toBeNull();
+    expect(screen.queryByTitle("Filtreyi temizle")).toBeNull();
   });
 
   it("seçenek tıklanınca ANAHTARI ile geri döner (id yoksa kod)", async () => {
@@ -73,7 +73,7 @@ describe("ReportMultiSelect", () => {
     const u = userEvent.setup();
     const { onChange, trigger } = mount({ value: ["c1", "c2"] });
     expect(trigger()).toHaveTextContent("2 seçili");
-    await u.click(screen.getByTitle("Süzgeci temizle"));
+    await u.click(screen.getByTitle("Filtreyi temizle"));
     expect(onChange).toHaveBeenCalledWith([]);
   });
 });

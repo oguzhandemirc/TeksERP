@@ -57,7 +57,7 @@ describe("Cariler — tek satır + kayıt", () => {
     expect(seen).toMatchObject({ direction: "CUSTOMER", subcontractor: "YES" });
   });
 
-  it("⭐ derin bağlantı kaydı ezer (URL'deki süzgeç kalır, kayıt uygulanmaz)", async () => {
+  it("⭐ derin bağlantı kaydı ezer (URL'deki filtre kalır, kayıt uygulanmaz)", async () => {
     prefs = { tableFilters: { cariler: { query: "filter[direction]=CUSTOMER", savedAt: "2026-11-07T00:00:00.000Z" } } };
     const url = setup("/?filter[subcontractor]=NO");
     await waitFor(() => expect(seen?.ready).toBe(true));
@@ -65,7 +65,7 @@ describe("Cariler — tek satır + kayıt", () => {
     expect(seen).toMatchObject({ direction: "ALL", subcontractor: "NO" });
   });
 
-  it("Temizle iki süzgeci de kaldırır", async () => {
+  it("Temizle iki filtresi de kaldırır", async () => {
     const url = setup("/?filter[direction]=SUPPLIER&filter[subcontractor]=YES");
     await waitFor(() => expect(seen?.ready).toBe(true));
     act(() => { fireEvent.click(screen.getByRole("button", { name: "Temizle" })); });

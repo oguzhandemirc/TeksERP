@@ -8,7 +8,7 @@ const st = (id: DatePresetState["id"], extra: Partial<DatePresetState> = {}): Da
 const apply = (s: DatePresetState, base = "filter[status]=APPROVED&cursor=x&page=2") => applyDatePreset(new URLSearchParams(base), s, NOW);
 
 describe("Tarih kutusu — hazır seçim → URL (fabrika günü)", () => {
-  it("Bugün: dateFrom=bugünün başı, dateTo=bugünün sonu; öteki süzgeç kalır, cursor/page gider", () => {
+  it("Bugün: dateFrom=bugünün başı, dateTo=bugünün sonu; öteki filtre kalır, cursor/page gider", () => {
     const u = apply(st("today"));
     expect(u.get("dateField")).toBe("deadline");
     expect(u.get("dateFrom")).toBe(factoryDayStartIso(TODAY));
@@ -65,7 +65,7 @@ describe("Tarih kutusu — URL → hazır seçim adı (gidiş-dönüş)", () => 
   });
 });
 
-describe("Tarih kutusu — URL'siz gün anahtarı yolu (yerel süzgeç)", () => {
+describe("Tarih kutusu — URL'siz gün anahtarı yolu (yerel filtre)", () => {
   it("hazır seçim gün uçlarına, uçlar geri aynı ada döner", () => {
     expect(dayKeysOfPreset(st("all"), NOW)).toEqual({ from: "", to: "" });
     expect(dayKeysOfPreset(st("today"), NOW)).toEqual({ from: TODAY, to: TODAY });

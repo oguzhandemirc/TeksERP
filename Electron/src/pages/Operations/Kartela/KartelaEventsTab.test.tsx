@@ -31,7 +31,7 @@ describe("Kartela Hareketleri", () => {
     excel.mockReset().mockResolvedValue(true);
   });
 
-  it("boş süzgeç parametre olarak GİTMEZ; dolu olan gider", () => {
+  it("boş filtre parametre olarak GİTMEZ; dolu olan gider", () => {
     expect(kartelaEventsQueryParams({}, { limit: 50 })).toEqual({ limit: 50 });
     expect(kartelaEventsQueryParams({ search: "  CV1 ", swatchId: "s1" }, { group: "CUVAL", cursor: "c", limit: 2 }))
       .toEqual({ limit: 2, search: "CV1", swatchId: "s1", group: "CUVAL", cursor: "c" });

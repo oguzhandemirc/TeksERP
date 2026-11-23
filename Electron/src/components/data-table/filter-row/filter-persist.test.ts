@@ -9,7 +9,7 @@ const sp = (q: string) => new URLSearchParams(q);
 const rec = (query: unknown) => ({ query, savedAt: "2026-11-06T00:00:00Z" });
 
 describe("Filtre kaydı — neler saklanır", () => {
-  it("arama, sayfa, cursor, sekme SAKLANMAZ; süzgeç + sıralama + ek anahtar saklanır", () => {
+  it("arama, sayfa, cursor, sekme SAKLANMAZ; filtre + sıralama + ek anahtar saklanır", () => {
     const q = encodeForStore(sp("search=abc&cursor=x&page=2&view=plan&pageSize=100&filter[status]=OPEN&sortBy=deadline&sortOrder=asc&showCancelled=1"), CFG, DAY1);
     const back = sp(q);
     expect(back.has("search")).toBe(false);
@@ -64,7 +64,7 @@ describe("Filtre kaydı — bozuk / eskimiş kayıt yok sayılır", () => {
     expect(decodeStored(raw, CFG, DAY1)).toBeNull();
   });
 
-  it("kaldırılmış süzgeç, geçersiz yön, geçersiz tarih, tanınmayan preset düşer; geçerli kalan uygulanır", () => {
+  it("kaldırılmış filtre, geçersiz yön, geçersiz tarih, tanınmayan preset düşer; geçerli kalan uygulanır", () => {
     const out = decodeStored(rec("filter[kaldirildi]=1&filter[status]=OPEN&sortOrder=yan&dateField=deadline&dateFrom=dun&datePreset=uzay"), CFG, DAY1)!;
     expect(out.toString()).toBe("filter%5Bstatus%5D=OPEN");
   });

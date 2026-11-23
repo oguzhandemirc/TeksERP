@@ -372,7 +372,7 @@ export function StockCountDetailPage() {
               ) : rollLines.length === 0 ? (
                 <p className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
                   {/* Süzgeç açıkken "top yok" DEMEZ — liste daraltılmış durumda. */}
-                  Bu süzgeçle top satırı yok. Aramayı temizleyin ya da “Yalnız sayılmayanlar”
+                  Bu filtreyle top satırı yok. Aramayı temizleyin ya da “Yalnız sayılmayanlar”
                   kutusunu kaldırın.
                 </p>
               ) : (

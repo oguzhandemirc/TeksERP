@@ -6,7 +6,7 @@ import { stopListParamsOf, stopStationKindOptions } from "./useStopsPageState";
 const base = { machineId: "", shiftInstanceId: "", day: "2026-10-13" };
 
 describe("stopListParamsOf", () => {
-  it("⭐ istasyon türü süzgeci sunucuya gider (D4-A3); boşsa parametre yok", () => {
+  it("⭐ istasyon türü filtresi sunucuya gider (D4-A3); boşsa parametre yok", () => {
     expect(stopListParamsOf({ ...base, scope: "", stationKind: "TAMBUR" }).stationKind).toBe("TAMBUR");
     expect(stopListParamsOf({ ...base, scope: "" }).stationKind).toBeUndefined();
   });
