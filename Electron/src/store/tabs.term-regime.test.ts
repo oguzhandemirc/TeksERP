@@ -64,9 +64,10 @@ describe("sekme başlığı iş emri rejimini izler", () => {
     expect(titleOf("/operations/work-orders")).toBe("IE0211260001");
   });
 
-  it("palet: 'İş Emri oluştur' açıklaması dokuma kapalıyken dokuma iş emrini anmaz", () => {
+  it("palet: 'İş Emri oluştur' dokuma iş emrini anmaz (İE ayrımı: dokuma kendi girişinde); ad rejimle değişir", () => {
     const entry = allCommandEntries.find((e) => e.key === "ops:work-order-create");
-    expect(entry?.description).toMatch(/dokuma iş emri/);
+    expect(entry?.description).not.toMatch(/dokuma/i);
+    expect(allCommandEntries.find((e) => e.key === "ops:weaving-order-create")?.label).toBe("Dokuma İş Emri oluştur");
     applyTermRegime({ productionEnabled: true, dokumaEnabled: false });
     expect(entry?.label).toBe("İş Emri oluştur");
     expect(entry?.description).not.toMatch(/dokuma/i);

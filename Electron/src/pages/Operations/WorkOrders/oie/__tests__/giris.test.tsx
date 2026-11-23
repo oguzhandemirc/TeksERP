@@ -1,5 +1,5 @@
-// "İş emri oluştur" girişi (K6): seçici iki satır (Standart: Terbiye/Dokuma · Özel: kısayollar); kısayol yok + dokuma yok →
-// bugünkü form; kısayol → rota uygulanmış form + üstte "Belge okut" (formun kendi düğmesi kapalı).
+// "Terbiye İş Emri oluştur" girişi (K6): seçici iki satır (Standart: Terbiye · Özel: kısayollar; dokuma ayrı girişte);
+// kısayol yok + tanım izni yok → bugünkü form; kısayol → rota uygulanmış form + üstte "Belge okut" (formun kendi düğmesi kapalı).
 // Negatif sonda: KisayolIsEmri'de `belgeOkut: false` kaldırılınca "formun kendi düğmesi kapalı" kırmızı; seçicide
 // `&& !scanRoute` kaldırılınca K29 "kısayolsuz SCAN" kırmızı.
 import type { ReactNode } from "react";
@@ -10,6 +10,7 @@ import { renderWithProviders } from "@/test/render";
 import { IsEmriGiris } from "../IsEmriGiris";
 import { newWorkOrderTitle, SCAN_ROUTE_REF } from "../nav";
 import { toShortcuts, type WorkOrderShortcut } from "../service";
+import { TERIM } from "@/lib/terim";
 
 const navigateActive = vi.fn();
 vi.mock("@/store/tabs", () => ({ useTabsStore: (sel: (s: unknown) => unknown) => sel({ navigateActive }) }));
@@ -79,36 +80,23 @@ describe("K29 S14b rotasız seçenek (rota uygulaması Okutmayla)", () => {
 });
 
 describe("İş emri türü seçici", () => {
-  it("kısayol ve dokuma yoksa bugünkü form doğrudan (seçici yok)", async () => {
+  it("⭐ kısayol yok + özel tanım izni yok → dokuma açık ve izinli olsa da bugünkü form doğrudan (seçici yok)", async () => {
+    flags.dokuma = true;
     renderWithProviders(<IsEmriGiris start={null} renderManual={manual} />);
     expect(await screen.findByTestId("manual-form")).toHaveAttribute("data-route", "");
     expect(screen.queryByTestId("oie-picker")).toBeNull();
   });
-  it("⭐ iki satır: Standart (Terbiye + Dokuma) ve Özel (kısayollar); kısayol tıkı rotalı formu açar", async () => {
+  it("⭐ İE ayrımı: yalnız terbiye — Standart'ta Terbiye, Dokuma karosu YOK; kısayol tıkı rotalı formu açar", async () => {
     shortcuts.list = [sc];
     flags.dokuma = true;
     renderWithProviders(<IsEmriGiris start={null} renderManual={manual} />);
-    expect(await screen.findByTestId("oie-row-standard")).toBeInTheDocument();
+    const standard = await screen.findByTestId("oie-row-standard");
+    expect(within(standard).getAllByRole("button")).toHaveLength(1);
     expect(screen.getByTestId("oie-terbiye")).toBeInTheDocument();
-    expect(screen.getByTestId("oie-dokuma")).toBeInTheDocument();
+    expect(screen.queryByTestId("oie-dokuma")).toBeNull();
+    expect(screen.getByText(`Özel ${TERIM.terbiyeIsEmri.cogulKucuk}`)).toBeInTheDocument();
     await userEvent.click(screen.getByText("Kurşun & Tambur"));
     expect(navigateActive).toHaveBeenCalledWith("/operations/work-orders/new", { state: { oie: { kind: "shortcut", route: { id: "rt-k", name: "Kurşun & Tambur", hasKursun: true } } } });
-    await userEvent.click(screen.getByTestId("oie-dokuma"));
-    expect(navigateActive).toHaveBeenLastCalledWith("/operations/weaving-orders", { state: { openNew: true } });
-  });
-  it("kısayol yoksa 2. satır görünmez; dokuma izni yoksa Dokuma gizli", async () => {
-    flags.dokuma = true;
-    perms.list = ["workorder:write"];
-    shortcuts.list = [sc];
-    const { unmount } = renderWithProviders(<IsEmriGiris start={null} renderManual={manual} />);
-    await screen.findByTestId("oie-picker");
-    expect(screen.queryByTestId("oie-dokuma")).toBeNull();
-    unmount();
-    perms.list = ["workorder:write", "weavingorder:write"];
-    shortcuts.list = [];
-    renderWithProviders(<IsEmriGiris start={null} renderManual={manual} />);
-    await screen.findByTestId("oie-picker");
-    expect(screen.queryByTestId("oie-row-shortcuts")).toBeNull();
   });
   it("⭐ K20 'Yeni özel iş emri' kartı: izinli → bölümün sonunda, tık kısayol tanımına (yeni kayıt kipi)", async () => {
     perms.list = ["workorder:write", "station:read", "station:write"];
@@ -120,26 +108,20 @@ describe("İş emri türü seçici", () => {
     await userEvent.click(screen.getByTestId("oie-new-shortcut"));
     expect(navigateActive).toHaveBeenCalledWith("/definitions/routes", { state: { newShortcut: true } });
   });
-  it("⭐ K20 kart izinsizse görünmez; izinliyken kısayol yokken de bölüm kartla görünür (seçici açıksa)", async () => {
+  it("⭐ K20 kart izinsizse görünmez (kısayol varken seçici açık)", async () => {
     perms.list = ["workorder:write", "station:read"]; // yazma yok
     shortcuts.list = [sc];
-    const { unmount } = renderWithProviders(<IsEmriGiris start={null} renderManual={manual} />);
+    renderWithProviders(<IsEmriGiris start={null} renderManual={manual} />);
     await screen.findByTestId("oie-row-shortcuts");
     expect(screen.queryByTestId("oie-new-shortcut")).toBeNull();
-    unmount();
-    flags.dokuma = true;
-    perms.list = ["workorder:write", "weavingorder:write", "station:read", "station:write"];
-    shortcuts.list = [];
+  });
+  it("⭐ İE ayrımı: izinliyse kısayolsuz kurulumda da seçici açılır — 'Yeni özel terbiye iş emri' bulunabilir kalır", async () => {
+    perms.list = ["workorder:write", "station:read", "station:write"];
     renderWithProviders(<IsEmriGiris start={null} renderManual={manual} />);
     const row = await screen.findByTestId("oie-row-shortcuts");
     expect(within(row).getByTestId("oie-new-shortcut")).toBeInTheDocument();
     expect(within(row).queryByTestId("oie-shortcut")).toBeNull();
-  });
-  it("K20 kart bir iş emri türü değil: kısayolsuz + dokumasız kurulumda seçici yine atlanır (bugünkü form)", async () => {
-    perms.list = ["workorder:write", "station:read", "station:write"];
-    renderWithProviders(<IsEmriGiris start={null} renderManual={manual} />);
-    expect(await screen.findByTestId("manual-form")).toBeInTheDocument();
-    expect(screen.queryByTestId("oie-new-shortcut")).toBeNull();
+    expect(screen.queryByTestId("manual-form")).toBeNull();
   });
   it("Terbiye seçimi → bugünkü form, rota yok", () => {
     renderWithProviders(<IsEmriGiris start={{ kind: "terbiye" }} renderManual={manual} />);

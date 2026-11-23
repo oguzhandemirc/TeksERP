@@ -147,6 +147,16 @@ describe("karo bağlantıları", () => {
     expect(t?.visibleWhen?.(ctx({ dokumaEnabled: true, productionEnabled: false }))).toBe(true);
   });
 
+  it("⭐ İE ayrımı: Dokuma İş Emri oluştur karosu dokuma kapısında, yazma izniyle; terbiye karosu dokumayı anmaz", () => {
+    const t = tile("weaving-order-create");
+    expect(t?.visibleWhen).toBe(isWeavingOrdersVisible);
+    expect(t?.permission).toBe("weavingorder:write");
+    expect(t?.to).toBe("/operations/weaving-orders/new");
+    expect(t?.visibleWhen?.(ctx())).toBe(false);
+    expect(t?.visibleWhen?.(ctx({ dokumaEnabled: true }))).toBe(true);
+    expect(tile("work-order-create")?.description).not.toMatch(/dokuma/i);
+  });
+
   it("⭐ Depo Transferi çoklu depo modülü KAPALIYKEN çizilmez", () => {
     const predicate = tile("warehouse-transfers")?.visibleWhen;
     expect(predicate).toBeDefined();
@@ -197,6 +207,7 @@ describe("karo bağlantıları", () => {
     // 2026-10-29: `icerideki-isler` (P1a, ister 3.2) — emanet kapalıyken GİZLİ.
     // 2026-11-08: `emanet-cikis` (Emanet Çıkış, fason F5/P3) — emanet kapalıyken GİZLİ (İçerideki İşler ile aynı kapı).
     // 2026-11-02: `work-order-create` (K6 İş emri oluştur) — üretim modülü kapısı (İş Emirleri ile aynı yüklem).
+    // 2026-11-23: `weaving-order-create` (İE ayrımı, Dokuma İş Emri oluştur) — Dokuma İşleri ile AYNI kapı.
     // 2026-11-11: `loom-load` (Tezgâh Yükü, SY-3) — Dokuma İşleri ile AYNI kapı (isWeavingOrdersVisible).
     // 2026-11-11 (T5 menü): üç gelen belge KURULUM karosu Tanımlar › Gelen Belge Kurulumu'na taşındı (kapı aynı).
     // 2026-11-17: `cozgu-hesabi` (Çözgü Hesabı, fason devere D3) — Leventler ile AYNI devere kapısı.
@@ -233,6 +244,7 @@ describe("karo bağlantıları", () => {
       "warehouse-transfers",
       "warp-beams",
       "weaving-floor",
+      "weaving-order-create",
       "weaving-orders",
       "work-order-create",
       "work-order-events",

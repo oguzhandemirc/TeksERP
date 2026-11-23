@@ -42,7 +42,7 @@ import { WeavingOrderDetailSheet } from "./WeavingOrderDetailSheet";
 import { WEAVING_ORDERS_QUERY_KEY, WEAVING_ORDER_OVERVIEW_QUERY_KEY, useWeavingOrderMutations } from "./useWeavingOrderMutations";
 import { WEAVING_STATUSES, WEAVING_STATUS_META, type WeavingOrder } from "./types";
 import { TERIM } from "@/lib/terim";
-import type { WeavingNavState } from "@/pages/Operations/WorkOrders/oie/nav";
+import type { WeavingFormPreset, WeavingNavState } from "@/pages/Operations/WorkOrders/oie/nav";
 
 export const FILTERS: FilterDef[] = [
   {
@@ -79,14 +79,20 @@ function HeaderActions({ onNew }: { onNew: () => void }) {
   );
 }
 
-/** "İş emri oluştur" seçicisinden (K6) gelince oluşturma diyaloğu açık doğar. */
+/** "Dokuma İş Emri oluştur" seçicisinden gelince oluşturma diyaloğu açık doğar; özel şablon ön-dolgusu YALNIZ o ilk açılışa. */
 function useFormTarget() {
-  const openNew = (useLocation().state as WeavingNavState | null)?.openNew === true;
-  return useState<FormTarget>(openNew ? "new" : null);
+  const nav = useLocation().state as WeavingNavState | null;
+  const [target, setTarget] = useState<FormTarget>(nav?.openNew === true ? "new" : null);
+  const [preset, setPreset] = useState<WeavingFormPreset | null>(nav?.openNew === true ? (nav.preset ?? null) : null);
+  const set = (t: FormTarget) => {
+    setTarget(t);
+    setPreset(null);
+  };
+  return [target, set, preset] as const;
 }
 
 export function WeavingOrdersPage() {
-  const [formTarget, setFormTarget] = useFormTarget();
+  const [formTarget, setFormTarget, preset] = useFormTarget();
   const [closing, setClosing] = useState<WeavingOrder | null>(null);
   const [cancelling, setCancelling] = useState<WeavingOrder | null>(null);
   const [fason, setFason] = useState<WeavingOrder | null>(null);
@@ -131,7 +137,7 @@ export function WeavingOrdersPage() {
         <WeavingOrderFormDialog
           open
           onOpenChange={(o) => !o && setFormTarget(null)}
-          initial={formTarget === "new" ? null : formTarget}
+          initial={formTarget === "new" ? null : formTarget} preset={formTarget === "new" ? preset : null}
           isSubmitting={save.isPending}
           onSubmit={(values, clientToken) =>
             save.mutateAsync({ id: formTarget === "new" ? null : formTarget.id, values, clientToken, initial: formTarget === "new" ? null : formTarget })
