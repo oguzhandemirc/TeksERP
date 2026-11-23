@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { ArrowRight, type LucideIcon } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { IconTile, ICON_TILE_TONES } from "@/components/ui/icon-tile";
+import { InfoPopover } from "@/components/ui/info-popover";
 import { cn } from "@/lib/utils";
 import { staggerContainer, staggerItem, springSnappy } from "@/lib/motion";
 import { useDrillTarget } from "@/components/layout/tabs/use-tab-target";
@@ -64,8 +65,8 @@ interface HubCardProps {
 }
 
 /** Hub kartı (hedef görsel) — renkli simge karesi + başlık; ton verilmezse sıraya göre simge karesi paleti.
- *  Açıklama (subtitle) bilinçli olarak BASILMAZ — başlık zaten kendini anlatıyor. */
-export function HubCard({ to, title, icon: Icon, tone, index = 0, dragHandle, badge, badgeLabel, offHint, note }: HubCardProps) {
+ *  Açıklama (subtitle) BASILMAZ — köşedeki ⓘ balonunda durur. */
+export function HubCard({ to, title, description, icon: Icon, tone, index = 0, dragHandle, badge, badgeLabel, offHint, note }: HubCardProps) {
   const toneClass = tone ?? hubTone(index);
   // Sol tık YERİNDE iner (hub → sayfa aynı sekmede; geri oku gerçek geçmişe basar),
   // sağ/orta tık yeni sekmede açar. Bkz. `useDrillTarget` notu.
@@ -85,7 +86,7 @@ export function HubCard({ to, title, icon: Icon, tone, index = 0, dragHandle, ba
         {/* Soluk görünüm KART üstünde: dış motion.div'in opacity'sini giriş animasyonu ezer. */}
         <Card className={cn("card-glow relative h-full overflow-hidden p-4", offHint && "border-dashed opacity-50 grayscale")}>
           {/* Yatay düzen: simge solda, başlık yanında — dikey kartta başlık altı boş yükseklikti. */}
-          <div className={cn("relative flex items-center gap-4", dragHandle && "pr-6")}>
+          <div className={cn("relative flex items-center gap-4", (dragHandle || (description && !offHint)) && "pr-6")}>
             {tone ? (
               <div className={cn("flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-current/10", toneClass)}>
                 <Icon className="h-6 w-6" />
@@ -111,7 +112,8 @@ export function HubCard({ to, title, icon: Icon, tone, index = 0, dragHandle, ba
               {/* UX-2 K3: kapalı karo nereden açılacağını BASAR ("kapalı — Sistem → Modüller"); title/toast yalnız tekrarı. */}
               {offHint && offHint !== "kapalı" ? <p className="relative mt-1 text-xs text-muted-foreground" data-testid="hub-off-hint">{offHint}</p> : null}
             </div>
-            {!dragHandle && !offHint && (
+            {/* Açıklamalı kartta sağ uçta ⓘ durur (ok yerine); tüm kart zaten tıklanır. */}
+            {!dragHandle && !offHint && !description && (
               <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground/50 transition-all duration-200 group-hover:translate-x-0.5 group-hover:text-primary motion-reduce:transition-none" />
             )}
           </div>
@@ -120,6 +122,12 @@ export function HubCard({ to, title, icon: Icon, tone, index = 0, dragHandle, ba
       {/* Sürükleme tutamacı — kart butonunun KARDEŞİ (içinde değil): iç içe
           buton/interactive sorunu olmaz, tutamaca tık karta yayılmaz. */}
       {dragHandle && <div className="absolute right-2 top-2 z-20">{dragHandle}</div>}
+      {/* Açıklama BASILMAZ ama kaybolmaz: köşede ⓘ (O35). Kart butonunun kardeşi — iç içe buton olmaz. */}
+      {description && !offHint && (
+        <div className={cn("absolute z-20", dragHandle ? "right-9 top-2" : "right-3 top-1/2 -translate-y-1/2")}>
+          <InfoPopover desc={description} />
+        </div>
+      )}
     </motion.div>
   );
 }

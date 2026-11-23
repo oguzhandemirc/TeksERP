@@ -18,11 +18,6 @@ export function buildWarehouseColumns(opts: {
 }): ColumnDef<Warehouse>[] {
   return [
     {
-      accessorKey: "code",
-      header: () => <SortableHeader field="code" label="Kod" />,
-      cell: ({ row }) => <span className="font-mono text-xs">{row.original.code}</span>,
-    },
-    {
       accessorKey: "name",
       header: () => <SortableHeader field="name" label="Depo Adı" />,
       cell: ({ row }) => (
@@ -39,6 +34,12 @@ export function buildWarehouseColumns(opts: {
           )}
         </div>
       ),
+    },
+    // O25: kod addan sonra, soluk.
+    {
+      accessorKey: "code",
+      header: () => <SortableHeader field="code" label="Kod" />,
+      cell: ({ row }) => <span className="font-mono text-xs text-muted-foreground">{row.original.code}</span>,
     },
     {
       accessorKey: "address",
@@ -67,45 +68,44 @@ export function buildWarehouseColumns(opts: {
       // koymak, ekranı gören ama düğmeyi göremeyen bir kullanıcı sınıfı
       // uydururdu — iki listenin ayrışması "tıklıyorum, hiçbir şey olmuyor"un
       // en yaygın sebebi (kart ↔ route hizası dersi).
+      // Hareketler + Varsayılan yap TEK sütunda (iki başlıksız sütun yerine), aralıklı.
       id: "movements",
       header: "",
-      size: 130,
-      cell: ({ row }) => (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={(e) => {
-            e.stopPropagation();
-            opts.onShowMovements(row.original);
-          }}
-        >
-          <ScrollText className="mr-1 h-3.5 w-3.5" />
-          Hareketler
-        </Button>
-      ),
-    },
-    {
-      id: "setDefault",
-      header: "",
-      size: 150,
+      size: 260,
+      meta: { noExport: true },
       cell: ({ row }) => {
         const w = row.original;
         // Pasif depo varsayılan YAPILAMAZ (backend 400) — buton hiç çizilmez;
         // gri buton olmayan bir yolu vaat eder.
-        if (!opts.canWrite || w.isDefault || !w.isActive) return null;
+        const canSetDefault = opts.canWrite && !w.isDefault && w.isActive;
         return (
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={opts.isSettingDefault}
-            onClick={(e) => {
-              e.stopPropagation();
-              opts.onSetDefault(w);
-            }}
-          >
-            <Star className="mr-1 h-3.5 w-3.5" />
-            Varsayılan yap
-          </Button>
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                opts.onShowMovements(w);
+              }}
+            >
+              <ScrollText className="mr-1 h-3.5 w-3.5" />
+              Hareketler
+            </Button>
+            {canSetDefault && (
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={opts.isSettingDefault}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  opts.onSetDefault(w);
+                }}
+              >
+                <Star className="mr-1 h-3.5 w-3.5" />
+                Varsayılan yap
+              </Button>
+            )}
+          </div>
         );
       },
     },

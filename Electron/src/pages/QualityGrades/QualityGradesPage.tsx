@@ -23,15 +23,10 @@ export function QualityGradesPage() {
     <PageShell>
       <PageHeader
         title="Kalite Sınıfları"
+        titleExtra={<Lock className="h-4 w-4 text-muted-foreground" aria-label="Salt okunur" />}
+        description="Kalite sınıfları sistemle birlikte gelir; bu ekrandan eklenemez, değiştirilemez ya da silinemez. Yeni kalite kademesi veya hedef değişikliği için destek ekibine başvurun."
         actions={<RefreshButton queryKey="quality-grades" />}
       />
-
-      <div className="mb-3 flex items-start gap-2 rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
-        <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-        <span>
-          Kalite sınıfları sistemle birlikte gelir; bu ekrandan eklenemez, değiştirilemez ya da silinemez. Yeni kalite kademesi veya hedef değişikliği için destek ekibine başvurun.
-        </span>
-      </div>
 
       <DataTableToolbar
         table={table}

@@ -6,14 +6,15 @@ import { MachineLabelCell } from "./MachineLabelPrintDialog";
 import type { Machine } from "./types";
 
 export const machineColumns: ColumnDef<Machine>[] = [
-  {
-    accessorKey: "code",
-    header: () => <SortableHeader field="code" label="Kod" />,
-    cell: ({ row }) => <span className="font-mono text-xs">{row.original.code}</span>,
-  },
+  // O25: ad birincil, kod ikinci ve soluk.
   {
     accessorKey: "name",
     header: () => <SortableHeader field="name" label="Ad" />,
+  },
+  {
+    accessorKey: "code",
+    header: () => <SortableHeader field="code" label="Kod" />,
+    cell: ({ row }) => <span className="font-mono text-xs text-muted-foreground">{row.original.code}</span>,
   },
   {
     id: "station",
@@ -26,14 +27,16 @@ export const machineColumns: ColumnDef<Machine>[] = [
     header: () => <SortableHeader field="isActive" label="Durum" />,
     cell: ({ row }) => (row.original.isActive ? <Badge>Aktif</Badge> : <Badge variant="muted">Pasif</Badge>),
   },
+  // QR + tezgah etiketi tek "Baskı" sütununda (iki ayrı düğme sütunu yerine).
   {
-    id: "qr",
-    header: "QR",
-    cell: ({ row }) => <MachineQrCell machine={row.original} />,
-  },
-  {
-    id: "loomLabel",
-    header: "Tezgah etiketi",
-    cell: ({ row }) => <MachineLabelCell machine={row.original} />,
+    id: "print",
+    header: "Baskı",
+    meta: { noExport: true },
+    cell: ({ row }) => (
+      <div className="flex items-center gap-2">
+        <MachineQrCell machine={row.original} />
+        <MachineLabelCell machine={row.original} />
+      </div>
+    ),
   },
 ];

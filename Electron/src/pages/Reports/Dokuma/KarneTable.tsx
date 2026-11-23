@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PermissionGate } from "@/components/PermissionGate";
 import { fmtInt } from "../_components/formatters";
+import { fmtDayKey } from "@/lib/factory-time";
 import { SealBadge, fmtSec } from "./DokumaShared";
 import { SOURCE_LABELS, formatPct } from "./dokuma-regime";
 import { SHIFT_STAT_ACTION_PERMISSIONS, type ShiftStatRow } from "./service";
@@ -50,7 +51,7 @@ function RowMenu({ row, a }: { row: ShiftStatRow; a: KarneActions }) {
 export function buildKarneColumns(a: KarneActions): ColumnDef<ShiftStatRow>[] {
   return [
     { accessorKey: "machine.code", header: "Tezgah", cell: ({ row }) => `${row.original.machine.code} · ${row.original.machine.name}` },
-    { accessorKey: "shiftInstance.factoryDayKey", header: "Gün", cell: ({ row }) => row.original.shiftInstance.factoryDayKey.slice(0, 10) },
+    { accessorKey: "shiftInstance.factoryDayKey", header: "Gün", cell: ({ row }) => fmtDayKey(row.original.shiftInstance.factoryDayKey) },
     { accessorKey: "shiftInstance.shiftDefinition.name", header: "Vardiya", cell: ({ row }) => row.original.shiftInstance.shiftDefinition.name },
     { accessorKey: "terms.source", header: "Kaynak", cell: ({ row }) => (row.original.emptyLoom ? "Boş tezgah" : SOURCE_LABELS[row.original.terms.source]) },
     { accessorKey: "terms.potSec", header: "Planlı", cell: ({ row }) => fmtSec(row.original.terms.potSec) },

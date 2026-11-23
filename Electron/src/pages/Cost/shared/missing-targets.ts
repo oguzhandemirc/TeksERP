@@ -1,7 +1,7 @@
 // 400 COST_INPUT_MISSING `details.missing[]` → ekranda hangi alan/bağlantı işaretlenecek. Hesap değil, yönlendirme.
 export type MissingTarget =
   | { kind: "field"; field: "fx" | "loomRpm" | "weftLengthCm" | "finishingRateCode" }
-  | { kind: "link"; to: string; label: string };
+  | { kind: "link"; to: string; label: string; cta?: string };
 
 const TARGETS: Record<string, MissingTarget> = {
   FX_RATE_MISSING: { kind: "field", field: "fx" },
@@ -10,7 +10,7 @@ const TARGETS: Record<string, MissingTarget> = {
   FINISHING_RATE_MISSING: { kind: "field", field: "finishingRateCode" },
   PARAMETER_SET_MISSING: { kind: "link", to: "/cost/parameters", label: "Maliyet Parametreleri" },
   PICK_RATE_MISSING: { kind: "link", to: "/cost/parameters", label: "Maliyet Parametreleri" },
-  YARN_PRICE_MISSING: { kind: "link", to: "/cost/yarn-prices", label: "İplik Maliyet Fiyatları" },
+  YARN_PRICE_MISSING: { kind: "link", to: "/cost/yarn-prices", label: "İplik Maliyet Fiyatları", cta: "Fiyat gir" },
   WARP_SPEC_MISSING: { kind: "link", to: "/definitions/items", label: "Ürün kartı" },
   WEFT_SPEC_MISSING: { kind: "link", to: "/definitions/items", label: "Ürün kartı" },
   TAKEUP_MISSING: { kind: "link", to: "/definitions/warp-specs", label: "Çözgü kartı" },

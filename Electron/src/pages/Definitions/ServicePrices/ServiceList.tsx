@@ -37,10 +37,11 @@ export function ServiceList({ rows, isLoading, isError, onRetry, selectedId, onS
 
   return (
     <div className="flex min-h-0 w-72 shrink-0 flex-col border-r">
-      <div className="relative border-b p-2">
-        <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      {/* Sol boşluk sayfa başlığıyla (px-6) hizalı, yükseklik sağdaki araç şeridiyle aynı (T5). */}
+      <div className="relative border-b py-2 pl-6 pr-3">
+        <Search className="absolute left-9 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          className="h-8 pl-8"
+          className="h-9 pl-8"
           placeholder="Hizmet ara…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
@@ -49,7 +50,7 @@ export function ServiceList({ rows, isLoading, isError, onRetry, selectedId, onS
         />
       </div>
       <div
-        className="min-h-0 flex-1 overflow-y-auto p-1"
+        className="min-h-0 flex-1 overflow-y-auto py-1 pl-5 pr-1"
         role="listbox"
         aria-label="Hizmetler"
         tabIndex={0}

@@ -21,10 +21,10 @@ const SRC = path.dirname(fileURLToPath(import.meta.url)).replace(/\/test$/, "");
 /** Devralınan ihlaller (yol `src/pages`e göre → kolon id'leri, sıralı). YENİ GİRDİ EKLEME — kolona exportValue yaz. */
 const BASELINE: Record<string, string[]> = {
   "Colors/columns.tsx": ["swatch"],
-  "FabricProperties/columns.tsx": ["stations", "swatch", "valueType"],
+  "FabricProperties/columns.tsx": ["stations", "valueType"],
   "Items/columns.tsx": ["allowedColors", "allowedProperties"],
   "MachineStopCodeMaps/columns.tsx": ["scope", "stopReason"],
-  "Machines/columns.tsx": ["loomLabel", "qr", "station"],
+  "Machines/columns.tsx": ["station"],
   "Operations/Kartela/kartelaColumns.tsx": ["subcontractor", "subcontractor"],
   "Operations/MachineStops/columns.tsx": ["duration", "lossClass", "machine", "reason", "shift", "source", "start"],
   "Operations/Returns/returnsColumns.tsx": ["barcode", "customer", "item", "order", "quality", "reason", "receivedBy", "returnNo"],
@@ -34,15 +34,12 @@ const BASELINE: Record<string, string[]> = {
   "Operations/WeavingOrders/columns.tsx": ["dates", "item", "loomFit", "orders", "party", "warpSpec"],
   "PeripheralDevices/columns.tsx": ["connection", "kind", "lang", "name", "owner", "routes", "test"],
   "ProductRecipes/columns.tsx": ["color", "item", "props", "route"],
-  "QualityGrades/columns.tsx": ["color"],
   "Reports/Dokuma/leventColumns.tsx": ["kaynak"],
   "Reports/_components/BreakdownTable.tsx": ["delta", "prevQty", "share"],
-  "ReturnReasons/columns.tsx": ["swatch"],
   "Routes/columns.tsx": ["customer", "stepCount"],
   "ShiftDefinitions/columns.tsx": ["break", "code", "days", "duration", "name", "status", "window"],
   "SubcontractorCategories/columns.tsx": ["appliesColor", "appliesProperty", "subcontractorCount"],
   "Subcontractors/columns.tsx": ["categories", "customer"],
-  "Warehouses/columns.tsx": ["movements", "setDefault"],
   "WarpSpecs/columns.tsx": ["reed", "yarn"],
 };
 

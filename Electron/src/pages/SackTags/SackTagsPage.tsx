@@ -64,10 +64,10 @@ export function SackTagsPage() {
     mutationFn: (row: SackTag) => sackTagService.update(row.id, { isActive: !row.isActive }),
     onSuccess: (row) => {
       invalidate();
-      toast.success(row.isActive ? "Etiket listeye geri alındı" : "Etiket gizlendi", {
+      toast.success(row.isActive ? "İz listeye geri alındı" : "İz gizlendi", {
         description: row.isActive
           ? undefined
-          : "Bu etiketi taşıyan çuvallar etkilenmedi — rozet soluk görünür, yeni iz bırakılamaz.",
+          : "Bu izi taşıyan çuvallar etkilenmedi — rozet soluk görünür, yeni iz bırakılamaz.",
       });
     },
     // onError YOK ([EL-17]): interceptor 4xx'te backend mesajını basar.
@@ -103,7 +103,7 @@ export function SackTagsPage() {
     onSuccess: () => {
       invalidate();
       setConfirmDelete(null);
-      toast.success("Etiket silindi");
+      toast.success("İz silindi");
     },
     // onError YOK ([EL-17]): kullanımdaki etikette sunucu 409 + "… çuvalda
     // kullanılmış" der ve interceptor o mesajı AYNEN basar — operatörün bir
@@ -127,7 +127,7 @@ export function SackTagsPage() {
           canEdit ? (
             <Button onClick={() => setDialog({ tag: null })}>
               <Plus className="mr-2 size-4" />
-              Yeni Etiket
+              Yeni İz
             </Button>
           ) : undefined
         }
@@ -149,8 +149,8 @@ export function SackTagsPage() {
             </div>
           ) : rows.length === 0 ? (
             <div className="rounded-lg border p-8 text-center text-sm text-muted-foreground">
-              Henüz etiket tanımlanmadı.
-              {canEdit ? " “Yeni Etiket” ile başlayın." : ""}
+              Henüz iz tanımlanmadı.
+              {canEdit ? " “Yeni İz” ile başlayın." : ""}
             </div>
           ) : (
             <div className="rounded-lg border">
@@ -246,7 +246,7 @@ export function SackTagsPage() {
         open={!!confirmDelete}
         onOpenChange={(open) => !open && setConfirmDelete(null)}
         title={`“${confirmDelete?.name ?? ""}” silinsin mi?`}
-        description="Silme yalnız HİÇ KULLANILMAMIŞ etiket için mümkündür. Bir çuvalda kullanılmışsa sunucu izin vermez — o durumda “Gizle” ile listeden çıkarın; eski izler yerinde kalır."
+        description="Silme yalnız hiç kullanılmamış iz için mümkündür. Bir çuvalda kullanılmışsa sunucu izin vermez — o durumda “Gizle” ile listeden çıkarın; eski izler yerinde kalır."
         confirmLabel="Sil"
         destructive
         isPending={remove.isPending}

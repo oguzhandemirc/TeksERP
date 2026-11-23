@@ -17,15 +17,15 @@ interface Props {
 export function ItemPricesSubjectBar({ kind, id, onKindChange, onIdChange }: Props) {
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-6 py-3">
-      <span className="text-xs text-muted-foreground">Kart</span>
-      <div className="flex gap-1" role="radiogroup" aria-label="Kart türü">
+      {/* Tek parçalı seçim (segment): iki ayrı düğme "iki eylem" gibi okunuyordu (T4). */}
+      <div className="inline-flex h-9 items-center rounded-md border bg-muted/40 p-0.5" role="radiogroup" aria-label="Kart türü">
         {KINDS.map((k) => (
           <button
             key={k}
             type="button"
             role="radio"
             aria-checked={kind === k}
-            className={`h-9 rounded-md border px-3 text-sm ${kind === k ? "border-primary bg-primary/10 font-medium" : "bg-background"}`}
+            className={`h-full rounded px-3 text-sm ${kind === k ? "bg-background font-medium shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
             onClick={() => kind !== k && onKindChange(k)}
           >
             {PRICE_SUBJECT_LABEL[k]}

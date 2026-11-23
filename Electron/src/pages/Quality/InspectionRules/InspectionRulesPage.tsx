@@ -13,6 +13,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
+import { ToolbarToggle } from "@/components/data-table/ToolbarToggle";
 import { RuleSetSection } from "./RuleSetList";
 import { RuleSetFormDialog } from "./RuleSetFormDialog";
 import { ruleSetErrorText, ruleSetService, type RuleScope, type RuleSet } from "./service";
@@ -49,7 +50,7 @@ export function InspectionRulesPage() {
         }
       />
       <PageBody className="space-y-6 p-4 sm:p-6">
-        <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} /> Pasifleri de göster</label>
+        <ToolbarToggle checked={showInactive} onCheckedChange={setShowInactive} label="Pasifleri göster" />
         {q.isLoading ? <p className="text-sm text-muted-foreground">Yükleniyor…</p>
           : q.isError ? (
             <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">

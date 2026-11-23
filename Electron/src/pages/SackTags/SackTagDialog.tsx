@@ -61,7 +61,7 @@ export function SackTagDialog({
         : sackTagService.create({ name: trimmed, hex: hex.toUpperCase() }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["sack-tags"] });
-      toast.success(tag ? "Etiket güncellendi" : "Etiket eklendi");
+      toast.success(tag ? "İz güncellendi" : "İz eklendi");
       onOpenChange(false);
     },
     // onError YOK ([EL-17]): `apiClient` interceptor'ı 4xx'te backend'in Türkçe
@@ -74,7 +74,7 @@ export function SackTagDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{tag ? "Etiketi düzenle" : "Yeni etiket"}</DialogTitle>
+          <DialogTitle>{tag ? "İzi düzenle" : "Yeni iz"}</DialogTitle>
           <DialogDescription>
             Çuvala bırakılan iz — çuvalın kendisini değiştirmez, yalnız işaret bırakır.
           </DialogDescription>
