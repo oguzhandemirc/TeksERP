@@ -38,7 +38,7 @@ describe("applyClick", () => {
     expect(ids(applyClick(base, "c", CTRL_SHIFT, ORDER))).toEqual(["b", "c", "e"]);
   });
 
-  it("çapa süzgeç dışındaysa Shift aralık kurmaz, düz tık gibi davranır", () => {
+  it("çapa filtre dışındaysa Shift aralık kurmaz, düz tık gibi davranır", () => {
     expect(ids(applyClick(sel(["x"], "x"), "c", SHIFT, ORDER))).toEqual(["c"]);
   });
 });

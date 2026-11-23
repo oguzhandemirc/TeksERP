@@ -184,7 +184,7 @@ describe("supplierListFilters — YAZMA ile FİLTRE aynı kapsamı PAYLAŞMAZ", 
     expect(supplierListFilters(false)).toEqual({ isActive: "true" });
   });
 
-  it("⭐⭐ FİLTRE bağlamında `isActive` süzgeci DÜŞER — kapatılan firmanın geçmişi kilitlenmez", () => {
+  it("⭐⭐ FİLTRE bağlamında `isActive` filtreyi DÜŞER — kapatılan firmanın geçmişi kilitlenmez", () => {
     // Sezon sonunda pasifleştirilen tedarikçinin GEÇMİŞ siparişleri duruyor ve
     // aranabilmeli. Aktif süzgeci burada kalsaydı satın almacı o firmayı
     // "Tüm tedarikçiler" kutusunda hiç göremez, siparişlerini yalnız serbest

@@ -29,7 +29,7 @@ const scrollTo = (el: HTMLElement | null) => el?.scrollIntoView?.({ behavior: "s
 /** Kategori kartı süzmez: bölümü spot ışığıyla öne çıkarır; açılır süzgeç onu gizlemişse nedenini duyurur. */
 function spotlightCategory(spot: SpotlightController, groups: readonly CenterGroup[], key: string, title: string) {
   const n = groups.find((g) => g.key === key)?.entries.length ?? 0;
-  spot.spotlight(key, `${title} bölümü vurgulandı, ${n} rapor.`, `${title} raporları seçili süzgeçle gizli; “Sıfırla” ile görünür.`);
+  spot.spotlight(key, `${title} bölümü vurgulandı, ${n} rapor.`, `${title} raporları seçili filtreyle gizli; “Sıfırla” ile görünür.`);
 }
 
 /** Rapor Merkezi (plan §4.2) — `/reports`un tek yüzü. */
@@ -117,7 +117,7 @@ export function ReportCenterPage() {
 function EmptyListNote({ filter }: { filter: HubFilter }) {
   const term = filter.term.trim();
   let text: string;
-  if (filter.category || filter.persona) text = "Seçili süzgeçlerle eşleşen rapor yok; “Sıfırla” ile hepsini görün.";
+  if (filter.category || filter.persona) text = "Seçili filtrelerle eşleşen rapor yok; “Sıfırla” ile hepsini görün.";
   else if (term) text = `“${term}” ile eşleşen rapor yok.`;
   else text = "Size açık rapor henüz yok.";
   return <p className="text-sm text-muted-foreground">{text}</p>;

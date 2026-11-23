@@ -55,7 +55,7 @@ export function ItemSelect({ value, onChange, selected, placeholder = "Ürün se
         disabled={disabled}
         aria-label={ariaLabel ?? "Ürün seç (liste)"}
         aria-haspopup="dialog"
-        title="Tıkla: bütün ürünler listede — tür, renk, özellik süzgeci ve arama"
+        title="Tıkla: bütün ürünler listede — tür, renk, özellik filtresi ve arama"
         className={cn("w-full min-w-0 justify-between font-normal", !row && "text-muted-foreground", triggerClassName)}
         onClick={() => setModalOpen(true)}
       >

@@ -45,7 +45,7 @@ describe("kalem gövdesi", () => {
 });
 
 describe("liste parametreleri ve başlık gövdesi", () => {
-  it("süzgeçler sunucuya gider (durum, müşteri, süresi dolan, tarih, cursor)", () => {
+  it("filtreler sunucuya gider (durum, müşteri, süresi dolan, tarih, cursor)", () => {
     const p = quoteListParams({ ...EMPTY_QUOTE_FILTER, status: "SENT", customerId: "c1", expired: true, from: "2026-10-01", to: "2026-10-25" }, "abc", 50);
     expect(p).toEqual({ "filter[durum]": "SENT", "filter[customerId]": "c1", "filter[suresiDoldu]": "1", from: "2026-10-01", to: "2026-10-25", cursor: "abc", limit: "50" });
   });

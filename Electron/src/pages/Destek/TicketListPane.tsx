@@ -69,7 +69,7 @@ export function TicketListPane({ scope, statuses, filterKey, selectedId, onSelec
       {q.isError && <div className="p-3"><Callout tone="danger">{readDestekError(q.error).message}</Callout></div>}
       {q.isPending && <p className="p-4 text-sm text-muted-foreground">Yükleniyor…</p>}
       {!q.isPending && !q.isError && items.length === 0 && (
-        <EmptyState icon={Inbox} title="Talep yok" description="Bu süzgece uyan talep bulunmuyor." />
+        <EmptyState icon={Inbox} title="Talep yok" description="Bu filtreye uyan talep bulunmuyor." />
       )}
       <ul aria-label="Talepler">
         {items.map((t) => (

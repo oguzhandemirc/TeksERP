@@ -41,6 +41,7 @@ import { WARP_BEAMS_QUERY_KEY, useWarpBeamMutations } from "./useWarpBeamMutatio
 import { toPlanPayload, usePageDialog, type BeamActionKind } from "./usePageActions";
 import { WARP_BEAM_ORIGIN_LABEL, WARP_BEAM_STATUSES, WARP_BEAM_STATUS_META, type WarpBeam, type WarpBeamOrigin } from "./types";
 import { TERIM } from "@/lib/terim";
+import { isListFiltered } from "@/lib/list-scope";
 
 export const FILTERS: FilterDef[] = [
   { kind: "multi-select", key: "status", label: "Durum", options: WARP_BEAM_STATUSES.map((s) => ({ value: s, label: WARP_BEAM_STATUS_META[s].label })) },
@@ -57,14 +58,14 @@ export const PRIMARY = ["status", "warpSpecId", "weavingOrderId"];
 const BEAM_ACTION_KINDS = new Set<string>(["mount", "dismount", "consume", "adjust", "exhaust", "scrap", "undo"]);
 
 /** S4 özet şeridi — sayı sunucuda, liste ile aynı where (ilk sayfa). */
-function SummaryBand({ page }: { page: unknown }) {
+function SummaryBand({ page, filtered }: { page: unknown; filtered: boolean }) {
   const s = (page as WarpBeamPage | undefined)?.summary;
   if (!s) return null;
   return (
     <ListBand>
       <BandStats
         label="Levent özeti"
-        scope="Süzgece uyan"
+        scope={filtered ? "Filtreli" : undefined}
         items={[{ key: "staleFull", label: `${s.staleFullDays}+ gündür dolu bekliyor`, value: s.staleFull, tone: s.staleFull > 0 ? "warn" : undefined, title: "Sarılmış, hazır (tezgâha takılmamış) ve bu kadar gündür bekleyen leventler — bağlı sermaye" }]}
       />
     </ListBand>
@@ -84,7 +85,7 @@ export function WarpBeamsPage() {
   const { dialog, setDialog, actions } = usePageDialog();
   const { save, deleteDraft, wind, cancel, act } = useWarpBeamMutations(() => setDialog(null));
   const mountTracking = useDevereMountTracking();
-  const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<WarpBeam>(TABLE_OPTIONS);
+  const { table, query, search, setSearch, pagination, fetchAll, listScope } = useDataTable<WarpBeam>(TABLE_OPTIONS);
   const formTarget = dialog?.kind === "new" ? null : dialog?.kind === "edit" ? dialog.target : undefined;
   return (
     <PageShell>
@@ -104,7 +105,7 @@ export function WarpBeamsPage() {
         }
       />
       <RelocatedToolStrip host="/operations/warp-beams" />
-      <SummaryBand page={query.data?.pages[0]} />
+      <SummaryBand page={query.data?.pages[0]} filtered={isListFiltered(listScope)} />
       <DefFilterRow filters={FILTERS} primaryKeys={PRIMARY} search={search} onSearchChange={setSearch} searchHint="Levent no, gövde no ya da çözgü kartıyla ara" trailing={<SavedViewsMenu compact />} tools={{ table, fetchAll, exportName: "Leventler" }} />
       <DataTable<WarpBeam>
         table={table}

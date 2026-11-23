@@ -41,7 +41,7 @@ export function StopsTable({ table, isLoading, isError, onRetry, noun = "Tezgah"
       isError={isError}
       onRetry={onRetry}
       errorText="Bu bir “kayıt yok” cevabı DEĞİLDİR — istek reddedildi ya da sunucuya ulaşamadı (modül kapalı, yetki yok, ağ)."
-      emptyText="Bu süzgeçte duruş yok."
+      emptyText="Bu filtrede duruş yok."
       exportName={`${noun} duruşları`}
     />
   );

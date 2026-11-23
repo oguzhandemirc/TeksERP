@@ -19,7 +19,7 @@ beforeEach(() => {
 });
 
 describe("YarnLotsPanel — kalite", () => {
-  it("⭐ rozet: alanı olmayan lot Serbest, BLOCKED lot Bloke + not; süzgeç seçimi düz CSV ile sunucuya gider", async () => {
+  it("⭐ rozet: alanı olmayan lot Serbest, BLOCKED lot Bloke + not; filtre seçimi düz CSV ile sunucuya gider", async () => {
     const user = userEvent.setup();
     renderWithProviders(<YarnLotsPanel />);
     await screen.findByText("L-BLOKE");

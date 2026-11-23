@@ -67,7 +67,7 @@ async function openModal(onChange: (id: string | null, row: unknown) => void = (
 const trigger = (dialog: HTMLElement, name: string) => within(dialog).getByRole("combobox", { name });
 const names = (dialog: HTMLElement) => within(dialog).getAllByRole("row").slice(1).map((r) => r.querySelectorAll("td")[1]?.textContent);
 
-describe("ItemPickerModal — liste ve süzgeçler", () => {
+describe("ItemPickerModal — liste ve filtreler", () => {
   it("(1) ⭐ kutuya tıkla → dialog; TAM liste (dört tür), kolonlar, sayfa 50, ilk açılışta yalnız isActive; renk rozeti / Tümü", async () => {
     const dialog = await openModal();
     for (const h of ["Kod", "Ad", "Tür", "Birim", "Renkler", "Özellikler"]) expect(within(dialog).getByText(h)).toBeInTheDocument();
@@ -131,13 +131,13 @@ describe("ItemPickerModal — liste ve süzgeçler", () => {
     await waitFor(() => expect(names(dialog)).toEqual(["Poplin", "Saten"]));
   });
 
-  it("(5) arama sunucuya (search), debounce sonrası; süzgeç boşken 'Süzgece uyan ürün yok'", async () => {
+  it("(5) arama sunucuya (search), debounce sonrası; filtre boşken 'Filtreye uyan ürün yok'", async () => {
     const dialog = await openModal();
     await userEvent.type(within(dialog).getByRole("textbox", { name: "Ürün ara" }), "Sat");
     await waitFor(() => expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ search: "Sat" })));
     await waitFor(() => expect(names(dialog)).toEqual(["Saten"]));
     await userEvent.type(within(dialog).getByRole("textbox", { name: "Ürün ara" }), "xyz");
-    await within(dialog).findByText("Süzgece uyan ürün yok.");
+    await within(dialog).findByText("Filtreye uyan ürün yok.");
   });
 
 });
@@ -197,7 +197,7 @@ describe("ItemPickerModal — seçim, katalog, kaynak", () => {
     await waitFor(() => expect(listCursor).toHaveBeenCalledWith(expect.objectContaining({ filters: { isActive: "true", itemType: "FABRIC" } })));
   });
 
-  it("(10) allowedTypes=[FABRIC] (satış siparişi): Tür seçicisi ÇİZİLMEZ, başlık 'Kumaş seç', sunucuya itemType=FABRIC; Renk süzgeci kalır", async () => {
+  it("(10) allowedTypes=[FABRIC] (satış siparişi): Tür seçicisi ÇİZİLMEZ, başlık 'Kumaş seç', sunucuya itemType=FABRIC; Renk filtresi kalır", async () => {
     renderWithProviders(<ItemSelect value={null} onChange={() => {}} allowedTypes={["FABRIC"]} aria-label="Kumaş seç" />);
     await userEvent.click(screen.getByRole("button", { name: "Kumaş seç" }));
     const dialog = await screen.findByRole("dialog");

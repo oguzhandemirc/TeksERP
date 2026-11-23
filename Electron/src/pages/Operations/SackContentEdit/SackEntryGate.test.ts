@@ -151,7 +151,7 @@ describe("cari listesi kararı — §4", () => {
     expect(gateSource).not.toMatch(/customerService/);
   });
 
-  it("⭐ VARSAYILAN tüm cariler — süzgeç kapalı doğar", () => {
+  it("⭐ VARSAYILAN tüm cariler — filtre kapalı doğar", () => {
     // `useState(false)` load-bearing: `true` doğsaydı kullanıcı kararı sessizce
     // geri alınmış olurdu ve kimse fark etmezdi (ekran eskisi gibi görünür).
     expect(gateSource).toMatch(/useState\(false\)/);

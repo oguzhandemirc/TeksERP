@@ -24,7 +24,7 @@ import { SystemHubPage } from "./SystemHubPage";
 
 const HUBS = [
   "Access/AccessHubPage.tsx", "Cost/CostHubPage.tsx", "Definitions/DefinitionsHubPage.tsx", "Documents/DocumentsHubPage.tsx",
-  "Finance/FinanceHubPage.tsx", "Operations/useSectionTiles.ts" /* T5: Operasyon bölüm sayfalarının süzgeci */, "Quality/QualityHubPage.tsx",
+  "Finance/FinanceHubPage.tsx", "Operations/useSectionTiles.ts" /* T5: Operasyon bölüm sayfalarının filtresi */, "Quality/QualityHubPage.tsx",
   "System/SystemHubPage.tsx",
 ];
 
@@ -54,7 +54,7 @@ describe("SystemHubPage — K19 menü düzeni", () => {
     renderWithProviders(<SystemHubPage />);
     expect(screen.queryByText("Sunucu Durumu")).toBeNull();
   });
-  it("dokuz hub da aynı süzgeçten geçer (isHubTileHidden)", () => {
+  it("dokuz hub da aynı filtreden geçer (isHubTileHidden)", () => {
     for (const f of HUBS) {
       const src = readFileSync(resolve(__dirname, "..", f), "utf8");
       expect(src, f).toMatch(/isHubTileHidden\(menu, /);

@@ -215,7 +215,7 @@ export function FilterBuilder({ open, cube, measure, dimensions, initial, seedFi
     <Dialog open={open} onOpenChange={(o) => (o ? undefined : onClose())}>
       <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Süzgeç kur</DialogTitle>
+          <DialogTitle>Filtre kur</DialogTitle>
           <DialogDescription>
             Bölüm yalnız koşullara uyan kayıtları sayar. Koşulları “ve” ya da “veya” ile bağlayın (bağlaca tıklayın); grup, içindeki koşulları tek koşul gibi birlikte değerlendirir. Kesin denetimi sunucu yapar.
           </DialogDescription>
@@ -242,15 +242,15 @@ export function FilterBuilder({ open, cube, measure, dimensions, initial, seedFi
             </div>
           </div>
         ) : (
-          <p className="rounded-md border px-3 py-2 text-sm text-muted-foreground">Bu süzgeç kod modunda iç içe gruplu yazılmış; burada yalnız görüntülenir ya da tümden kaldırılır.</p>
+          <p className="rounded-md border px-3 py-2 text-sm text-muted-foreground">Bu filtre kod modunda iç içe gruplu yazılmış; burada yalnız görüntülenir ya da tümden kaldırılır.</p>
         )}
         <div className="rounded border bg-muted/40 px-3 py-2 text-sm" aria-live="polite">
-          {sentence ? <span>Süzgeç: {sentence}</span> : <span className="text-muted-foreground">Süzgeç yok — bölüm tüm kayıtları sayar.</span>}
+          {sentence ? <span>Filtre: {sentence}</span> : <span className="text-muted-foreground">Filtre yok — bölüm tüm kayıtları sayar.</span>}
           {incomplete ? <span className="mt-1 block text-xs text-amber-700 dark:text-amber-400">Değeri seçilmemiş koşullar kaydedilmez.</span> : null}
         </div>
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={onClose}>Vazgeç</Button>
-          <Button variant="outline" onClick={() => { onApply(undefined); onClose(); }}>Süzgeci kaldır</Button>
+          <Button variant="outline" onClick={() => { onApply(undefined); onClose(); }}>Filtreyi kaldır</Button>
           <Button onClick={() => { onApply(editable ? built : fromQueryFilter(initial)); onClose(); }}>Uygula</Button>
         </DialogFooter>
       </DialogContent>

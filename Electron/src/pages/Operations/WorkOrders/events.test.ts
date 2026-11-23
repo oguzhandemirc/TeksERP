@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { eventsFooterText, eventsQueryParams } from "./events";
 
 describe("eventsQueryParams", () => {
-  it("boş süzgeçte grup parametresi HİÇ gitmez", () => {
+  it("boş filtrede grup parametresi HİÇ gitmez", () => {
     expect(eventsQueryParams({ group: "", limit: 50 })).toEqual({ limit: 50 });
   });
   it("grup ve imleç verilince gider", () => {

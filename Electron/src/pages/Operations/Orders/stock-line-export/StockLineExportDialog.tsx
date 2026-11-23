@@ -65,7 +65,7 @@ export function StockLineExportDialog(props: {
           <DialogHeader>
             <DialogTitle>Excel — stok kalemi bazında</DialogTitle>
             <DialogDescription>
-              Ekrandaki süzgece uyan siparişler kumaş ve renge göre tek satırda toplanır: ne kadar sipariş var, ne kadarı
+              Ekrandaki filtreye uyan siparişler kumaş ve renge göre tek satırda toplanır: ne kadar sipariş var, ne kadarı
               açık, ne kadar daha üretilmeli.
             </DialogDescription>
           </DialogHeader>

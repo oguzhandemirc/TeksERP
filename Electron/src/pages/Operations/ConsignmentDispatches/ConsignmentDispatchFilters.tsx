@@ -69,7 +69,7 @@ export function ConsignmentDispatchFilters({
             variant="ghost"
             size="icon"
             className="h-9 w-9 shrink-0"
-            aria-label="Müşteri süzgecini kaldır"
+            aria-label="Müşteri filtresini kaldır"
             onClick={() => onChange({ ...value, ownerCustomerId: null })}
           >
             <X className="h-4 w-4" />

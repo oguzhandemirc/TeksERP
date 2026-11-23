@@ -82,7 +82,7 @@ const renderTable = (lines: DeliveryNoteLine[]) =>
     />,
   );
 
-describe("yalnız sorunlu satırlar süzgeci", () => {
+describe("yalnız sorunlu satırlar filtresi", () => {
   it("açınca yalnız backend'in sorunlu dediği satırlar kalır ve sayaç '2 / 4 satır' der", async () => {
     renderTable([
       line("a", 1),
@@ -102,7 +102,7 @@ describe("yalnız sorunlu satırlar süzgeci", () => {
     expect(screen.getAllByTestId("line-row")).toHaveLength(4);
   });
 
-  it("sorunlu satır yoksa açık süzgeç boş tablo yerine 'bütün satırlar temiz' der", async () => {
+  it("sorunlu satır yoksa açık filtre boş tablo yerine 'bütün satırlar temiz' der", async () => {
     renderTable([line("a", 1), line("b", 2)]);
     await userEvent.click(screen.getByTestId("problem-filter"));
     expect(screen.queryAllByTestId("line-row")).toHaveLength(0);
@@ -110,7 +110,7 @@ describe("yalnız sorunlu satırlar süzgeci", () => {
     expect(screen.getByTestId("problem-filter-count")).toHaveTextContent("0 / 2 satır");
   });
 
-  it("saf süzgeç: alan yoksa (eski backend) sorunlu sayılmaz", () => {
+  it("saf filtre: alan yoksa (eski backend) sorunlu sayılmaz", () => {
     const v = visibleLines([{ problems: ["NEEDS_REVIEW"] }, {}, { problems: [] }], true);
     expect([v.rows.length, v.problemCount, v.total]).toEqual([1, 1, 3]);
   });

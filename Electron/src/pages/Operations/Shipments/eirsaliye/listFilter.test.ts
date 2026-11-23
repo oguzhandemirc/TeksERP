@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { buildCursorQueryString } from "@/lib/query-builder";
 import { EIRSALIYE_LIST_FILTER, EIRSALIYE_LIST_FILTER_VALUES } from "./listFilter";
 
-describe("e-İrsaliye liste süzgeci", () => {
+describe("e-İrsaliye liste filtresi", () => {
   it("backend EIRSALIYE_LIST_FILTER_VALUES ile aynı küme", () => {
     expect([...EIRSALIYE_LIST_FILTER_VALUES]).toEqual([
       "EKSIK", "TASLAK", "OLUSTURULDU", "GONDERILDI", "KABUL", "KISMI_KABUL", "REDDEDILDI", "HATA", "SIMULASYON",

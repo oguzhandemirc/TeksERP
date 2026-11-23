@@ -42,7 +42,7 @@ function DevereDelayBandInner({ subcontractorId }: { subcontractorId: string | n
           <Layers className="h-4 w-4 text-muted-foreground" aria-hidden />
           Devere gecikmeleri
         </h2>
-        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Devere termin süzgeci">
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Devere termin filtresi">
           {DEVERE_DELAY_STATES.map((s) => (
             <Button
               key={s}

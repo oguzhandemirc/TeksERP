@@ -14,7 +14,7 @@ const islem = (over: Partial<SystemLogIslem> = {}): SystemLogIslem => ({
   satirlar: [{ id: "l1", tableName: "SHIPMENT", recordId: "r", action: "UPDATE", createdAt: "2026-10-25T10:00:00Z" }], ...over,
 });
 
-describe("süzme SUNUCUDA — süzgeç → sorgu parametresi", () => {
+describe("süzme SUNUCUDA — filtre → sorgu parametresi", () => {
   it("varsayılan görünüm işlem; gün çipi tarih aralığını sunucuya bırakır", () => {
     const p = buildFeedParams({ gun: "dun", userId: "u1", dateFrom: "2026-10-01T00:00:00.000Z" }, undefined, 50);
     expect(p).toMatchObject({ gorunum: "islem", gun: "dun", userId: "u1", category: "DOMAIN", limit: 50 });

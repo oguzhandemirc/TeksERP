@@ -77,7 +77,7 @@ export function describeOrderScope(scope: OrderListScope, orders: Order[]): stri
         out.push(`Fasonda ${ids[0]} günden uzun`);
         break;
       case "fasonFirmaId":
-        out.push(`Fason firma süzgeci (${ids.length})`);
+        out.push(`Fason firma filtresi (${ids.length})`);
         break;
       default:
         out.push(`${key}: ${ids.join(", ")}`);

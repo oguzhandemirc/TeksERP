@@ -43,7 +43,7 @@ describe.each([
     expect(menuKeys).toEqual([...more]);
   });
 
-  it("⭐ kayıt allowlist'i sayfanın bütün süzgeçleri", () => {
+  it("⭐ kayıt allowlist'i sayfanın bütün filtreleri", () => {
     for (const k of [...primary, ...more]) expect(isPersistedKey(`filter[${k}]`, mod.PERSIST)).toBe(true);
     expect(isPersistedKey("filter[bilinmeyen]", mod.PERSIST)).toBe(false);
   });

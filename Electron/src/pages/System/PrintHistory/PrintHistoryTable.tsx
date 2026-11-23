@@ -45,7 +45,7 @@ export function PrintHistoryTable({ table, items, loading, onSelect, loadMore }:
   if (items.length === 0) {
     return (
       <div className="flex flex-1 items-center justify-center p-12 text-center text-sm text-muted-foreground">
-        Süzgece uyan baskı kaydı yok.
+        Filtreye uyan baskı kaydı yok.
       </div>
     );
   }

@@ -67,7 +67,7 @@ function setFinance(enabled: boolean): void {
   });
 }
 
-describe("Belge Şablonları — rejim süzgeci", () => {
+describe("Belge Şablonları — rejim filtresi", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });

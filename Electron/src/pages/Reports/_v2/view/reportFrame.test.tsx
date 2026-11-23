@@ -69,7 +69,7 @@ describe("v2 rapor çerçevesi — üst bölüm", () => {
     expect(screen.getByTestId("page-header").dataset.description).toBe("Bu dönemde kaç metre sipariş aldık?");
   });
 
-  it("⭐ yalnız süzgeç bandı yapışkan; kaydırıcının içinde, tema bant belirteçleriyle", () => {
+  it("⭐ yalnız filtre bandı yapışkan; kaydırıcının içinde, tema bant belirteçleriyle", () => {
     wrap(<ReportV2Frame entry={entry} query={q(sunum())} parent={{ label: "Rapor Merkezi", to: "/reports" }} />);
     const band = screen.getByTestId("report-filter-band");
     expect(band.className).toMatch(/\bsticky\b/);
@@ -78,12 +78,12 @@ describe("v2 rapor çerçevesi — üst bölüm", () => {
     expect(screen.getByTestId("report-scroll").contains(band)).toBe(true);
   });
 
-  it("⭐ çok çipte fazlası 'Süzgeçler (n)' paneline katlanır; panelden çip açılır", () => {
+  it("⭐ çok çipte fazlası 'Filtreler (n)' paneline katlanır; panelden çip açılır", () => {
     wrap(<ReportV2Frame entry={entry} query={q(sunum())} parent={{ label: "Rapor Merkezi", to: "/reports" }} />);
     const band = within(screen.getByTestId("report-filter-band"));
     expect(band.getByRole("button", { name: /Kıyas:/ })).toBeInTheDocument();
     expect(band.queryByRole("button", { name: /Renk:/ })).toBeNull();
-    fireEvent.click(band.getByRole("button", { name: /Süzgeçler \(3\)/ }));
+    fireEvent.click(band.getByRole("button", { name: /Filtreler \(3\)/ }));
     const panel = within(screen.getByTestId("folded-filters"));
     fireEvent.click(panel.getByRole("button", { name: /Renk:/ }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();

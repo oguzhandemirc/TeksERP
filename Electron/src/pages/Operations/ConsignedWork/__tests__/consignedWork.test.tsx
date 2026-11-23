@@ -55,7 +55,7 @@ describe("İçerideki İşler", () => {
     expect(get).toHaveBeenCalledTimes(1);
   });
 
-  it("'Yalnız sevke hazır' süzgeci SUNUCUYA gider (onlyReady), sunucu cevabı süzülmeden basılır (D4-KUC2 b)", async () => {
+  it("'Yalnız sevke hazır' filtreyi SUNUCUYA gider (onlyReady), sunucu cevabı süzülmeden basılır (D4-KUC2 b)", async () => {
     const notReady: ConsignedOwnerRow = { ...rowA, ownerCustomerId: "cB", ownerName: "Hazırsız Müşteri", ready: b(0, 0) };
     // Sunucu bu satırı döndürdüyse istemci onu SÜZMEZ (tek where sunucuda; liste ve şerit aynı kapsam).
     get.mockImplementation(async (onlyReady?: boolean) => (onlyReady ? { ...summary, rows: [rowA, notReady] } : summary));
@@ -68,7 +68,7 @@ describe("İçerideki İşler", () => {
     expect(screen.getByRole("button", { name: "Yalnız sevke hazır" })).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("hücre bağlantısı kovanın sekmesine sahip süzgeciyle gider", async () => {
+  it("hücre bağlantısı kovanın sekmesine sahip filtreyiyle gider", async () => {
     renderWithProviders(<ConsignedWorkPage />);
     await screen.findByText("Gül Perde");
     const links = screen.getAllByRole("link").map((a) => a.getAttribute("href") ?? "");

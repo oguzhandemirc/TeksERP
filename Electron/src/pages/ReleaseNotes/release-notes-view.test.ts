@@ -21,8 +21,8 @@ const ENTRIES: ReleaseEntry[] = [
   },
 ];
 
-describe("sürüm notu süzgeci", () => {
-  it("panel süzgeci tablet-only maddeyi ve yayını düşürür, her-ikisi kalır", () => {
+describe("sürüm notu filtresi", () => {
+  it("panel filtresi tablet-only maddeyi ve yayını düşürür, her-ikisi kalır", () => {
     const r = filterReleases(ENTRIES, "panel", "");
     expect(r.map((e) => e.id)).toEqual(["2026-09-10"]);
     expect(r[0]!.maddeler.map((m) => m.metin)).toEqual(["Çuval listesi yenilendi", "İptal sebebi soruluyor"]);

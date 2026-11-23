@@ -84,7 +84,7 @@ beforeEach(() => {
 });
 
 describe("Filtre kaydı — sekme başına anahtar", () => {
-  it("⭐ her sekme kendi kaydını getirir; A'nın süzgeci B'nin URL'ine ve isteğine taşınmaz", async () => {
+  it("⭐ her sekme kendi kaydını getirir; A'nın filtresi B'nin URL'ine ve isteğine taşınmaz", async () => {
     const view = mount();
     await waitFor(() => expect(params().get("filter[status]")).toBe("OPEN"));
     view.rerender(<Probe tab="B" />);
@@ -101,7 +101,7 @@ describe("Filtre kaydı — sekme başına anahtar", () => {
     expect(params().has("filter[customerId]")).toBe(false);
   });
 
-  it("⭐ sekme geçişi kayıtları DEĞİŞTİRMEZ (A'nın süzgeci B'ye yazılmaz)", async () => {
+  it("⭐ sekme geçişi kayıtları DEĞİŞTİRMEZ (A'nın filtresi B'ye yazılmaz)", async () => {
     const view = mount();
     await waitFor(() => expect(params().get("filter[status]")).toBe("OPEN"));
     view.rerender(<Probe tab="B" />);
@@ -122,7 +122,7 @@ describe("Filtre kaydı — sekme başına anahtar", () => {
     expect(store.prefs.tableFilters?.["rolls:A"]?.query).toBe("filter%5Bstatus%5D=OPEN&sortBy=updatedAt");
   });
 
-  it("⭐ B'ye özgü süzgeç (Sevkiyat) kaydı olmayan sekmeye geçince URL'den düşer", async () => {
+  it("⭐ B'ye özgü filtre (Sevkiyat) kaydı olmayan sekmeye geçince URL'den düşer", async () => {
     store.prefs = { tableFilters: { "rolls:A": rec("filter%5BshipmentScope%5D=free") } };
     const view = mount();
     await tick(200);
@@ -136,7 +136,7 @@ describe("Filtre kaydı — sekme başına anahtar", () => {
     expect(params().get("search")).toBe("PATOS");
   });
 
-  it("kayıtsız sekme (Üretim Akışı) eski süzgeci temizler; geri dönünce kayıt gelir", async () => {
+  it("kayıtsız sekme (Üretim Akışı) eski filtresi temizler; geri dönünce kayıt gelir", async () => {
     const view = mount();
     await waitFor(() => expect(params().get("filter[status]")).toBe("OPEN"));
     view.rerender(<Probe tab="K" />);

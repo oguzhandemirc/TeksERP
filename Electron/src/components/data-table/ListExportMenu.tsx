@@ -18,7 +18,7 @@ export function ListExportMenu<T>({
   rows,
   columns,
   name,
-  label = "İndir",
+  label = "Dışa aktar", // tek ad: DataTableExportMenu ile aynı (denetim O23)
   notes,
   disabled,
   size,

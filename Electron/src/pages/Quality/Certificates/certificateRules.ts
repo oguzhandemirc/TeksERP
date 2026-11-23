@@ -36,7 +36,7 @@ export function isCertificateFilterDirty(f: CertificateFilterState): boolean {
 }
 
 export function certificateEmptyMessage(f: CertificateFilterState): string {
-  if (isCertificateFilterDirty(f)) return "Süzgeçlere uyan sertifika yok. Süzgeçleri temizleyip yeniden bakın.";
+  if (isCertificateFilterDirty(f)) return "Filtrelere uyan sertifika yok. Filtreleri temizleyip yeniden bakın.";
   return "Henüz etkin sertifika yok. “Yeni Sertifika” ile OEKO-TEX, GOTS gibi belgelerinizi ve bitiş tarihlerini girin.";
 }
 

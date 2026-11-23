@@ -32,7 +32,7 @@ describe("teklif eylem tablosu", () => {
   it("süresi dolmuş SENT: kabul yok, revizyon var", () => {
     expect(quoteActions("SENT", { expired: true, can: all })).toEqual(["reject", "revise", "cancel"]);
   });
-  it("izin süzgeci: quote:write yalnız → kabul/dönüştür yok; quote:convert yalnız → gönder/iptal yok", () => {
+  it("izin filtresi: quote:write yalnız → kabul/dönüştür yok; quote:convert yalnız → gönder/iptal yok", () => {
     expect(quoteActions("ACCEPTED", { can: (p) => p === "quote:write" })).toEqual([]);
     expect(quoteActions("SENT", { can: (p) => p === "quote:write" })).toEqual(["reject", "revise", "cancel"]);
     expect(quoteActions("DRAFT", { can: (p) => p === "quote:convert" })).toEqual([]);

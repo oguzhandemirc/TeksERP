@@ -92,7 +92,7 @@ describe("paymentFilterKey", () => {
     );
   });
 
-  it("farklı süzgeç farklı anahtar üretir (liste bayat kalmasın)", () => {
+  it("farklı filtre farklı anahtar üretir (liste bayat kalmasın)", () => {
     expect(paymentFilterKey({ ...EMPTY_PAYMENT_FILTERS, direction: "IN" })).not.toBe(
       paymentFilterKey({ ...EMPTY_PAYMENT_FILTERS, direction: "OUT" }),
     );

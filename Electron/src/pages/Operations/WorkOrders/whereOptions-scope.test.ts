@@ -10,7 +10,7 @@ vi.mock("@/services/apiClient", () => ({ default: { get, post: vi.fn(), put: vi.
 import { workOrderService } from "./service";
 
 describe("whereOptions isteği", () => {
-  it("kapsamın tüm süzgeçleri sorgu dizgisinde", async () => {
+  it("kapsamın tüm filtreleri sorgu dizgisinde", async () => {
     await workOrderService.whereOptions({
       filters: { status: "IN_PROGRESS,PLANNED", konumIstasyon: "s1", hideCancelled: "true" },
       search: "Tül",

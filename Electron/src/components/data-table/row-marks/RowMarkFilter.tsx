@@ -39,7 +39,7 @@ interface Props {
 export function RowMarkFilter({ value, onChange, truncated }: Props) {
   const toggle = (v: Exclude<RowMarkFilterValue, null>) => onChange(value === v ? null : v);
   return (
-    <div role="group" aria-label="İşaretliler süzgeci" className="flex items-center gap-1">
+    <div role="group" aria-label="İşaretliler filtresi" className="flex items-center gap-1">
       <button
         type="button"
         aria-pressed={value === "ANY"}

@@ -64,7 +64,7 @@ beforeEach(() => {
 });
 
 describe("Metre Sapmaları sayfası", () => {
-  it("satırları ve özet şeridini çizer; durum süzgeci SUNUCUYA gider", async () => {
+  it("satırları ve özet şeridini çizer; durum filtresi SUNUCUYA gider", async () => {
     renderWithProviders(<MeterDeviationsPage />);
     expect(await screen.findByText("TOP-001")).toBeInTheDocument();
     const strip = screen.getByLabelText("Sapma özeti");
@@ -73,7 +73,7 @@ describe("Metre Sapmaları sayfası", () => {
     expect(within(strip).getByText("Onaysız (toplam)")).toBeInTheDocument();
     expect(screen.getAllByText("İmzasız sapma").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Simüle")).toBeInTheDocument();
-    await userEvent.click(within(screen.getByRole("group", { name: "Durum süzgeci" })).getByText("İmza bekliyor"));
+    await userEvent.click(within(screen.getByRole("group", { name: "Durum filtresi" })).getByText("İmza bekliyor"));
     await waitFor(() => expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ status: "PENDING" }), null));
   });
 
@@ -97,7 +97,7 @@ describe("Metre Sapmaları sayfası", () => {
 });
 
 describe("saf yardımcılar", () => {
-  it("süzgeç → filter[...] parametreleri; boş alan gönderilmez", () => {
+  it("filtre → filter[...] parametreleri; boş alan gönderilmez", () => {
     expect(deviationParams({ status: "UNSIGNED", machineId: "m1", customerId: null, from: "2026-10-01", to: "" }, "cur")).toEqual({
       limit: "50", "filter[status]": "UNSIGNED", "filter[machineId]": "m1", "filter[fromDay]": "2026-10-01", cursor: "cur",
     });

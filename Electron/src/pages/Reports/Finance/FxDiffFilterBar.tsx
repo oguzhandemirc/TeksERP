@@ -72,7 +72,7 @@ export function FxDiffFilterBar({ cariSelect, currency, kind, onChangeKind, onCh
           className="ml-2 h-7 px-2 text-xs"
           onClick={onClear}
         >
-          Süzgeçleri temizle
+          Filtreleri temizle
         </Button>
       ) : null}
     </div>

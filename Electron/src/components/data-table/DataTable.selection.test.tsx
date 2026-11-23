@@ -36,7 +36,7 @@ function Controlled({ onChange, bar = true }: { onChange?: (ids: string[]) => vo
   return (
     <>
       <span data-testid="count">{ids.size}</span>
-      <button type="button" onClick={() => setIds(new Set())}>Süzgeç değişti</button>
+      <button type="button" onClick={() => setIds(new Set())}>Filtre değişti</button>
       <DataTable table={table} selectionLabel={(r) => `Seç: ${r.name}`} showSelectionBar={bar} />
     </>
   );
@@ -71,7 +71,7 @@ describe("DataTable — denetimli seçim", () => {
 
   it("sayfa kümeyi sıfırlayınca kutular boşalır", () => {
     renderWithProviders(<Controlled />);
-    fireEvent.click(screen.getByText("Süzgeç değişti"));
+    fireEvent.click(screen.getByText("Filtre değişti"));
     expect(box("Seç: İkinci")).toHaveAttribute("data-state", "unchecked");
   });
 

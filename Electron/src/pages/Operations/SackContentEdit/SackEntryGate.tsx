@@ -182,7 +182,7 @@ function CustomerStep({ onPick }: { onPick: (bucket: SackCustomerBucket) => void
   return (
     <div className="flex min-h-0 flex-1 flex-col px-4 pb-4 pt-3">
       {/* Geri YOK — sayfa başlığındaki ok bir adım geri alır (tek geri yüzeyi).
-          Arama + süzgeç listenin ÜST ŞERİDİDİR (aynı kartın içinde, eşit dikey boşluk) —
+          Arama + filtre listenin ÜST ŞERİDİDİR (aynı kartın içinde, eşit dikey boşluk) —
           havada duran araç çubuğu değil (saha 2026-09-22). */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border">
       <div className="flex items-center gap-3 border-b bg-muted/30 px-3 py-2">
@@ -223,10 +223,10 @@ function CustomerStep({ onPick }: { onPick: (bucket: SackCustomerBucket) => void
           <div className="p-6 text-sm text-muted-foreground">
             {terim
               ? withSacksOnly
-                ? "Bu aramaya uyan, çuvalı olan cari yok. Süzgeci kapatıp tekrar deneyin."
+                ? "Bu aramaya uyan, çuvalı olan cari yok. Filtreyi kapatıp tekrar deneyin."
                 : "Bu aramaya uyan cari yok."
               : withSacksOnly
-                ? "Depoda çuvalı olan cari yok. Süzgeci kapatıp tüm carileri görebilirsiniz."
+                ? "Depoda çuvalı olan cari yok. Filtreyi kapatıp tüm carileri görebilirsiniz."
                 : "Kayıtlı cari yok."}
           </div>
         ) : (

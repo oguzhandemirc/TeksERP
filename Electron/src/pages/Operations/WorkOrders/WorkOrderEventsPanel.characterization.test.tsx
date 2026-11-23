@@ -60,7 +60,7 @@ describe("İş emri Hareketler — karakterizasyon", () => {
     await screen.findByTestId("is-emri-hareketleri");
     const cipler = within(screen.getByRole("group", { name: "Olay grubu" })).getAllByRole("button").map((b) => b.textContent);
     expect(cipler).toEqual(["Tümü", "Durum 3", "Fason 1"]);
-    expect(screen.getByText("1 hareket gösteriliyor (en yeniden eskiye). Bu süzgeçte başka hareket yok.")).toBeTruthy();
+    expect(screen.getByText("1 hareket gösteriliyor (en yeniden eskiye). Bu filtrede başka hareket yok.")).toBeTruthy();
   });
 
   it("boş durum ve hata durumu metinleri", async () => {

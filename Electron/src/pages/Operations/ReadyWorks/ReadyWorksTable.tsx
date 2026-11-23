@@ -66,7 +66,7 @@ export function ReadyWorksToolbar({
           </button>
         ))}
       </div>
-      <div className="inline-flex gap-1" role="group" aria-label="Durum süzgeci">
+      <div className="inline-flex gap-1" role="group" aria-label="Durum filtresi">
         {STATE_FILTERS.map((f) => (
           <Button
             key={f.key}

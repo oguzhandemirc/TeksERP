@@ -38,7 +38,7 @@ describe("muhasebe formları — taraf yalnız kart", () => {
     expect(src).toMatch(/Eski fason hesabı/);
   });
 
-  it("⭐ §3 Cari Hesaplar: `kind` süzgeci (\"Fason firmalar\") yok, Yön × Fason `LabeledSelect` var; rozet kartın rollerinden", () => {
+  it("⭐ §3 Cari Hesaplar: `kind` filtreyi (\"Fason firmalar\") yok, Yön × Fason `LabeledSelect` var; rozet kartın rollerinden", () => {
     const src = oku("CariPage.tsx");
     expect(src).not.toMatch(/value="SUBCONTRACTOR"|Fason firmalar|kind: kind/);
     expect(src).toMatch(/LabeledSelect label="Yön"/);
@@ -58,7 +58,7 @@ describe("muhasebe formları — taraf yalnız kart", () => {
 });
 
 describe("cari seçici kipi (her rol, yalnız kart)", () => {
-  it("⭐ cari kipi: taban rol yok; Yön Cariler şeridinin süzgeci (Müşteri → role=customer, BOTH → iki bayrak); Fason bayrağı; fason bacağı ASLA", () => {
+  it("⭐ cari kipi: taban rol yok; Yön Cariler şeridinin filtresi (Müşteri → role=customer, BOTH → iki bayrak); Fason bayrağı; fason bacağı ASLA", () => {
     expect(legsFor(PICKER_ROLE_DEFAULTS, "cari")).toEqual({ customers: true, subs: false, customerFilters: {} });
     expect(legsFor({ direction: "CUSTOMER", subcontractor: "ALL" }, "cari").customerFilters).toEqual({ role: "customer" });
     expect(legsFor({ direction: "SUPPLIER", subcontractor: "YES" }, "cari").customerFilters).toEqual({ role: "supplier", isSubcontractorRole: "true" });

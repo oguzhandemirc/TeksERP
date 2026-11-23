@@ -71,7 +71,7 @@ export function ReportMultiSelect({ id, label, options, value, onChange, emptyHi
           </PopoverContent>
         </Popover>
         {value.length > 0 ? (
-          <Button type="button" variant="ghost" size="sm" onClick={() => onChange([])} title="Süzgeci temizle">
+          <Button type="button" variant="ghost" size="sm" onClick={() => onChange([])} title="Filtreyi temizle">
             <X className="h-4 w-4" />
           </Button>
         ) : null}

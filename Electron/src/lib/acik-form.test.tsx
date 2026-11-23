@@ -56,7 +56,7 @@ describe("A6 açık form kaydı", () => {
     render(
       <Sheet open>
         <SheetContent aria-describedby={undefined}>
-          <SheetTitle>Süzgeç</SheetTitle>
+          <SheetTitle>Filtre</SheetTitle>
           <textarea aria-label="Not" />
         </SheetContent>
       </Sheet>,

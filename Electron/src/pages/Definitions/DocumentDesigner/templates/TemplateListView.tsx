@@ -38,7 +38,7 @@ export function TemplateListView() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex overflow-hidden rounded-md border" role="group" aria-label="Durum süzgeci">
+        <div className="flex overflow-hidden rounded-md border" role="group" aria-label="Durum filtresi">
           {STATUS_TABS.map((t) => (
             <button key={t.key} type="button" aria-pressed={status === t.key} onClick={() => setStatus(t.key)}
               className={cn("px-3 py-1.5 text-xs", status === t.key ? "bg-primary text-primary-foreground" : "hover:bg-muted")}>

@@ -28,7 +28,7 @@ function Chip({ label, onClear }: { label: string; onClear: () => void }) {
   return (
     <span className="inline-flex h-9 items-center gap-1 rounded-md border bg-muted/40 px-2 text-xs">
       {label}
-      <button type="button" aria-label={`${label} süzgecini kaldır`} className="rounded p-0.5 hover:bg-muted" onClick={onClear}><X className="h-3.5 w-3.5" /></button>
+      <button type="button" aria-label={`${label} filtresini kaldır`} className="rounded p-0.5 hover:bg-muted" onClick={onClear}><X className="h-3.5 w-3.5" /></button>
     </span>
   );
 }
@@ -70,7 +70,7 @@ export function InspectionFilters({ f, onChange }: Props) {
       {f.rollId && <Chip label={`Top: ${f.rollLabel || "seçili"}`} onClear={() => onChange({ ...f, rollId: "", rollLabel: "" })} />}
       {f.batchId && <Chip label={`Parti: ${f.batchLabel || "seçili"}`} onClear={() => onChange({ ...f, batchId: "", batchLabel: "" })} />}
       {isInspectionFilterDirty(f) && (
-        <Button variant="ghost" size="sm" onClick={() => onChange(EMPTY_INSPECTION_FILTERS)}><RotateCcw className="mr-1 h-3.5 w-3.5" />Süzgeçleri temizle</Button>
+        <Button variant="ghost" size="sm" onClick={() => onChange(EMPTY_INSPECTION_FILTERS)}><RotateCcw className="mr-1 h-3.5 w-3.5" />Filtreleri temizle</Button>
       )}
       <ItemPickerModal open={itemOpen} allowedTypes={FABRIC_ONLY} onOpenChange={setItemOpen} onPick={(row) => { onChange({ ...f, itemId: row.id, itemLabel: `${row.code} · ${row.name}` }); setItemOpen(false); }} />
     </div>

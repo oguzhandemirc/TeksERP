@@ -67,19 +67,19 @@ beforeEach(() => {
 });
 
 describe("liste", () => {
-  it("satırları çizer; durum süzgeci SUNUCUYA gider", async () => {
+  it("satırları çizer; durum filtresi SUNUCUYA gider", async () => {
     renderWithProviders(<IncomingDocumentsPage />);
     expect(await screen.findByText("GB-0001")).toBeInTheDocument();
     expect(listDeliveryNotes).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 50, status: undefined }));
     // Eski çip satırı yok; Durum filtre çubuğunda açılır liste, sayılar sunucu özetinden.
-    expect(screen.queryByRole("group", { name: "Durum süzgeci" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Durum filtresi" })).toBeNull();
     const row = screen.getByTestId("filter-row");
-    await userEvent.click(within(row).getByRole("button", { name: "Durum süzgeci" }));
+    await userEvent.click(within(row).getByRole("button", { name: "Durum filtresi" }));
     const all = await screen.findByRole("option", { name: /Tümü/ });
     expect(all).toHaveTextContent("1");
     await userEvent.click(screen.getByRole("option", { name: /Onaylandı/ }));
     await waitFor(() => expect(listDeliveryNotes).toHaveBeenLastCalledWith(expect.objectContaining({ status: "APPROVED" })));
-    expect(within(row).getByRole("button", { name: "Durum süzgeci" })).toHaveTextContent("Durum: Onaylandı");
+    expect(within(row).getByRole("button", { name: "Durum filtresi" })).toHaveTextContent("Durum: Onaylandı");
     // Kutunun ✕'ü süzgeci kaldırır.
     await userEvent.click(within(row).getByRole("button", { name: "Durum filtresini kaldır" }));
     await waitFor(() => expect(listDeliveryNotes).toHaveBeenLastCalledWith(expect.objectContaining({ status: undefined })));
@@ -100,7 +100,7 @@ describe("liste", () => {
     renderWithProviders(<IncomingDocumentsPage />);
     // Ortak DataTable hata satırı (Kumaş Stoğu ile aynı): boş durum metni basılmaz.
     expect(await screen.findByText("Liste yüklenemedi", {}, { timeout: 4000 })).toBeInTheDocument();
-    expect(screen.queryByText(/Bu süzgece uyan gelen belge yok/)).toBeNull();
+    expect(screen.queryByText(/Bu filtreye uyan gelen belge yok/)).toBeNull();
   });
 });
 

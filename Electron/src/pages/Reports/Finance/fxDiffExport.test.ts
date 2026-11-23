@@ -128,14 +128,14 @@ describe("kur farkı — işaret ve dışa aktarım", () => {
     const spec = buildFxDiffExport({
       report: BASE,
       periodLabel: "01.08.2026 – 14.08.2026",
-      scopeLines: ["Cari süzgeci: ACME Tekstil A.Ş.", "Para birimi süzgeci: USD"],
+      scopeLines: ["Cari filtresi: ACME Tekstil A.Ş.", "Para birimi filtresi: USD"],
     });
-    expect(spec.meta).toContain("Cari süzgeci: ACME Tekstil A.Ş.");
-    expect(spec.meta).toContain("Para birimi süzgeci: USD");
+    expect(spec.meta).toContain("Cari filtresi: ACME Tekstil A.Ş.");
+    expect(spec.meta).toContain("Para birimi filtresi: USD");
     expect((spec.meta ?? []).join(" ")).toContain("her açılışta hesaplanır");
     // Notlar Excel sayfasına da düşer (PDF'teki gibi başlığın altında) — sayfa tek başına paylaşılabiliyor.
     expect((toSheets(spec)[0]!.preamble ?? []).map((r) => String(r[0]))).toEqual(
-      expect.arrayContaining(["Cari süzgeci: ACME Tekstil A.Ş."]),
+      expect.arrayContaining(["Cari filtresi: ACME Tekstil A.Ş."]),
     );
   });
 

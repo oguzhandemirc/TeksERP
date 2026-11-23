@@ -35,6 +35,10 @@ interface Props {
   pageFavorite?: boolean;
 }
 
+// Başlık eylemleri TEK boy (Yenile sm, birincil default karışıyordu): hepsi küçük boy, ikonlular kare.
+const ACTIONS_CLASS =
+  "ml-auto flex max-w-full flex-wrap items-center justify-end gap-2 [&_button[data-size=default]]:h-[var(--control-h-sm)] [&_button[data-size=default]]:px-3 [&_button[data-size=default]]:text-xs [&_button[data-size=lg]]:h-[var(--control-h-sm)] [&_button[data-size=icon]]:h-[var(--control-h-sm)] [&_button[data-size=icon]]:w-[var(--control-h-sm)]";
+
 export function PageHeader({ title, titleExtra, description, statusLine, actions, className, onBack, parent: parentProp, actionsAlign = "start", pageFavorite = true }: Props) {
   const location = useLocation();
   const { pathname } = location;
@@ -115,7 +119,7 @@ export function PageHeader({ title, titleExtra, description, statusLine, actions
         </div>
       </div>
       {(entry || actions) && (
-        <div className={cn("ml-auto flex max-w-full flex-wrap items-center justify-end gap-2", actionsAlign === "center" && "self-center")}>
+        <div className={cn(ACTIONS_CLASS, actionsAlign === "center" && "self-center")}>
           {entry && (
             <Button
               variant="ghost"

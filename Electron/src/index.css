@@ -599,6 +599,10 @@
 .tab-pane [data-list-surface] {
   background-color: hsl(var(--card));
 }
+/* İç kenar PageHeader'ın yatay dolgusuyla (px-4 md:px-6) aynı: liste sayfasında başlık 8 px zıplamasın. */
+@media (min-width: 48rem) {
+  :root { --list-inset: 1.5rem; }
+}
 .tab-pane [data-list-surface]:is([data-list-surface="toolbar"], [data-list-surface="footer"]) {
   padding-inline: var(--list-inset);
 }

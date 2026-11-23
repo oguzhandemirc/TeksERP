@@ -33,7 +33,7 @@ export function NoteStatusFilter({ value, onChange, summary, autoOpen }: Props) 
           type="button"
           variant="outline"
           size="sm"
-          aria-label="Durum süzgeci"
+          aria-label="Durum filtresi"
           className="h-7 min-w-0 justify-between gap-1 border-0 bg-transparent px-2 text-xs font-normal shadow-none hover:bg-transparent"
         >
           <span>{value ? `Durum: ${NOTE_STATUS_LABEL[value]}` : "Durum"}</span>

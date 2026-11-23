@@ -83,7 +83,7 @@ describe("Görünüm — hızlı sekmeler tek açılırda", () => {
     expect(screen.getByTestId("filter-chip-nerede")).toHaveAttribute("data-active", "true");
   });
 
-  it("Tümü anahtarı SİLER, öteki süzgeçler kalır; ✕ de aynı", () => {
+  it("Tümü anahtarı SİLER, öteki filtreler kalır; ✕ de aynı", () => {
     const { url } = setup("/?filter[nerede]=KISMEN&filter[status]=APPROVED");
     openView();
     fireEvent.click(screen.getByRole("option", { name: /Tümü/ }));
@@ -193,7 +193,7 @@ describe("+ Filtre ve Temizle", () => {
     expect(url()).toBe("?filter[fasonFirmaId]=11111111-1111-4111-8111-111111111111");
   });
 
-  it("'Fasonda X günden uzun' yazma durunca URL'e işlenir; geçersiz girdi süzgeci kaldırır", () => {
+  it("'Fasonda X günden uzun' yazma durunca URL'e işlenir; geçersiz girdi filtresi kaldırır", () => {
     vi.useFakeTimers();
     try {
       const { url } = setup("/");

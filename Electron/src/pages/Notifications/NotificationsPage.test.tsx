@@ -79,7 +79,7 @@ describe("NotificationsPage", () => {
     expect(svc.liste).not.toHaveBeenCalled();
   });
 
-  it("liste + özet şeridi sunucu sayısından; alan süzgeci sunucuya `turler` olarak gider", async () => {
+  it("liste + özet şeridi sunucu sayısından; alan filtresi sunucuya `turler` olarak gider", async () => {
     await yukle();
     expect(await screen.findByText("Gece yedeği alınamadı")).toBeTruthy();
     expect(svc.liste).toHaveBeenLastCalledWith(expect.objectContaining({ sekme: "tumu", turler: [] }));

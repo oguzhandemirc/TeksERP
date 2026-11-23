@@ -36,7 +36,7 @@ export function DocumentAdvancedControls({
       ) : null}
       <StampsPanel cfg={cfg} disabled={disabled} patch={patch} />
       {/* BOŞ GRID — TÜM belgelerde var ama OPT-IN (varsayılan kapalı). `def`
-          süzgeci YOK: kullanıcı isteği "belgede istediğim gibi grid
+          filtreyi YOK: kullanıcı isteği "belgede istediğim gibi grid
           ayarlayabileyim" idi, belge listesi değil. Kapalıyken belgeye tek bayt
           eklenmez, yani her belgede göstermek çıktıyı riske atmaz. */}
       <BlankGridPanel

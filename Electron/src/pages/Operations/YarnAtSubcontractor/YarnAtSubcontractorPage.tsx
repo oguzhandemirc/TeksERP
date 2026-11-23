@@ -111,7 +111,7 @@ export function YarnAtSubcontractorPage() {
         isError={q.isError}
         onRetry={() => void q.refetch()}
         errorText="Bu bir “fasonda iplik yok” cevabı DEĞİLDİR — istek reddedildi ya da sunucuya ulaşamadı (modül kapalı, yetki yok, ağ)."
-        emptyText={filtered ? "Bu süzgece ya da aramaya uyan fasondaki iplik yok. Süzgeci temizleyip tekrar bakın." : "Şu an hiçbir fasoncuda iplik yok. Devere siparişine iplik sevk edilince burada görünür."}
+        emptyText={filtered ? "Bu filtreye ya da aramaya uyan fasondaki iplik yok. Filtreyi temizleyip tekrar bakın." : "Şu an hiçbir fasoncuda iplik yok. Devere siparişine iplik sevk edilince burada görünür."}
         rowClassName={(r) => (r.groupFirst ? "border-t-2 border-t-border" : undefined)}
       />
       {action && <RowActionHost target={action} onClose={() => setAction(null)} />}

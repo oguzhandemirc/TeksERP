@@ -68,7 +68,7 @@ const ALLOWED: Record<string, string> = {
   "pages/Operations/WarehouseTransfers/WarehouseTransfersPage.tsx":
     "transfer listesi — 100 sayfa boyutu",
   "pages/Operations/WarehouseTransfers/service.ts":
-    "BARKOD çözümü: okutulan barkodun aday kümesi (statü süzgeçli), picker değil",
+    "BARKOD çözümü: okutulan barkodun aday kümesi (statü filtreli), picker değil",
   "pages/Operations/WorkOrders/OrderPickerDialog.tsx":
     "ARAMA tabanlı picker (debounce'lu sunucu araması + filtre + özel uç). " +
     "Orada 100 bir 'tümünü çek' tavanı değil, sonuç sayfası boyutudur — " +

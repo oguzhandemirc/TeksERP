@@ -63,7 +63,7 @@ export function labelsOf(options: Array<{ id?: string; code?: string; ad: string
 export function filterNotes(parts: Array<{ eksen: string; degerler: string[]; serh?: string }>): string[] {
   return parts
     .filter((p) => p.degerler.length > 0)
-    .map((p) => `SÜZGEÇ — ${p.eksen}: ${p.degerler.join(" · ")}.${p.serh ? ` ${p.serh}` : ""}`);
+    .map((p) => `FİLTRE — ${p.eksen}: ${p.degerler.join(" · ")}.${p.serh ? ` ${p.serh}` : ""}`);
 }
 
 /**
@@ -73,7 +73,7 @@ export function filterNotes(parts: Array<{ eksen: string; degerler: string[]; se
  * ailesine 6e `c52c2bc4` ile geldi (aynı yayın).
  */
 export function droppedNote(dusenSatir: number | undefined): string | null {
-  return dusenSatir && dusenSatir > 0 ? `Süzgeç ${dusenSatir} satırı kapsam dışında bıraktı.` : null;
+  return dusenSatir && dusenSatir > 0 ? `Filtre ${dusenSatir} satırı kapsam dışında bıraktı.` : null;
 }
 
 // -----------------------------------------------------------------------------
@@ -108,7 +108,7 @@ export const AXIS_CAVEATS: Partial<Record<AxisKey, string>> = {
 export const DESTINATION_LABEL = "Sipariş yönü (açılışta)";
 /** Sevk raporlarının yön ekseni — SEVKİYATIN donmuş yönü (sipariş raporlarından AYRI kaynak). */
 export const SHIPMENT_DESTINATION_LABEL = "Sevkiyat yönü (sevk anında)";
-export const SHIPMENT_DESTINATION_CAVEAT = "Sevkiyatın SEVK ANINDA donmuş yönü — cari kartı sonradan değişse de geçmiş değişmez; fasondan doğrudan sevkin yön kaydı yoktur, bu süzgeçte hiçbir kümeye girmez.";
+export const SHIPMENT_DESTINATION_CAVEAT = "Sevkiyatın SEVK ANINDA donmuş yönü — cari kartı sonradan değişse de geçmiş değişmez; fasondan doğrudan sevkin yön kaydı yoktur, bu filtrede hiçbir kümeye girmez.";
 /** `true` = sipariş raporu (siparişin açılışta donmuş yönü) · `"shipment"` = sevk raporu (sevk anında donmuş yön). */
 export type DestinationAxis = boolean | "shipment";
 export const destinationLabelOf = (d: DestinationAxis | undefined): string => (d === "shipment" ? SHIPMENT_DESTINATION_LABEL : DESTINATION_LABEL);
@@ -136,7 +136,7 @@ export function unappliedAxes(sel: Record<string, string[] | string>, eksenler: 
   return secili.filter((a) => !uygulanan || !(a in uygulanan));
 }
 
-export const unappliedNote = (labels: string[]): string => `⚠️ Sunucu şu süzgeci UYGULAMADI: ${labels.join(" · ")} — rakamlar süzülmemiş olabilir; sayfayı yenileyin, sürerse bildirin.`;
+export const unappliedNote = (labels: string[]): string => `⚠️ Sunucu şu filtreyi UYGULAMADI: ${labels.join(" · ")} — rakamlar süzülmemiş olabilir; sayfayı yenileyin, sürerse bildirin.`;
 
 /** Sayfanın süzgeç satırları: ekrana basılan liste ile çıktı meta'sı AYNI dizidir. */
 export function axisNotes({ eksenler, destination, secenekler, sel, dusenSatir, ek = [], uygulanan }: AxisNoteInput): string[] {
@@ -196,8 +196,8 @@ export function beamLotNotes(opts: { beamLabel?: string | null; lotNo?: string; 
   if (suzgec) {
     notes.push(
       suzgec.levent === 0
-        ? "Eşleşen levent YOK — tablo bu yüzden boş; bu bir hata değil, süzgecin sonucudur."
-        : `Süzgeç ${suzgec.levent} leventle eşleşti.`,
+        ? "Eşleşen levent YOK — tablo bu yüzden boş; bu bir hata değil, filtrenin sonucudur."
+        : `Filtre ${suzgec.levent} leventle eşleşti.`,
     );
     const dropped = droppedNote(suzgec.dusenSatir);
     if (dropped) notes.push(dropped);

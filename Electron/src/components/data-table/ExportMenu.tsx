@@ -15,7 +15,7 @@ import {
  * Callback async olabilir; çalışırken buton "İndiriliyor…" ve pasif olur.
  */
 export function ExportMenu({
-  label = "İndir",
+  label = "Dışa aktar", // tek ad: DataTableExportMenu ile aynı (denetim O23)
   onPrint,
   onPdf,
   onExcel,

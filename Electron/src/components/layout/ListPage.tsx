@@ -104,12 +104,14 @@ interface StatusProps {
   label?: ReactNode;
   /** Sağdaki eylemler (ör. "Tümünü indir", sayfa boyu seçici, Önceki/Sonraki). */
   children?: ReactNode;
+  /** Özet sayıları (`<BandStats>`) — listenin üstünde ayrı satır yerine alt çubukta, sayaç yanında. */
+  summary?: ReactNode;
 }
 
 const n = (v: number) => formatDisplay(v, 0);
 
 /** Alt şerit — "Yüklü X / Y kayıt" + yükleniyor / tümü yüklendi. DataTable altlığı da bunu çizer (tek görünüm). */
-export function ListFooter({ loaded, total, hasMore, isFetchingMore = false, label, children }: StatusProps) {
+export function ListFooter({ loaded, total, hasMore, isFetchingMore = false, label, children, summary }: StatusProps) {
   return (
     <div
       data-list-footer=""
@@ -117,7 +119,9 @@ export function ListFooter({ loaded, total, hasMore, isFetchingMore = false, lab
       className="flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1 border-t px-3 py-2 text-xs text-muted-foreground"
     >
       <div>{label ?? (total != null ? `Yüklü ${n(loaded)} / ${n(total)} kayıt` : `Yüklü ${n(loaded)} kayıt`)}</div>
-      <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
+      {summary != null && <div className="min-w-0 border-l pl-4 [&_[data-band-stats]]:text-xs">{summary}</div>}
+      {/* Alt çubuk kontrolleri tek boy (düğme, açılır, sayfa boyu). */}
+      <div className="ml-auto flex flex-wrap items-center justify-end gap-3 [&_button[data-size]]:h-[var(--control-h-sm)] [&_button[data-size=default]]:px-3 [&_button[data-size=default]]:text-xs [&_button[data-size=icon]]:w-[var(--control-h-sm)]">
         {isFetchingMore ? (
           <span className="flex items-center gap-1.5">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />

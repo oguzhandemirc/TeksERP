@@ -50,7 +50,7 @@ const KATEGORI_ETIKET: Record<CashBookCategory, string> = {
   CHEQUE: "Çek",
 };
 /** Bu şerh süzgeç açıkken HER yerde yazılır: sayılar "süzülmüş toplam" sanılmasın. */
-const DOKUM_SERHI = "Bu süzgeçler YALNIZ hareket dökümünü daraltır: özet kartları, devir ve kapanış dönemin tamamını gösterir.";
+const DOKUM_SERHI = "Bu filtreler YALNIZ hareket dökümünü daraltır: özet kartları, devir ve kapanış dönemin tamamını gösterir.";
 import { CashLedgerTable } from "./CashLedgerTable";
 import { ReportErrorCard } from "./ReportErrorCard";
 import { ReportNotesCard } from "./ReportNotesCard";
@@ -251,8 +251,8 @@ export function CashBookPage() {
   // koşar, seçenekler ise hesap seçilmeden de dolu olmalı.
   const { secenekler, notes: axisNotlari } = useAxisNotes(summaryQ.data, axes.sel, CASH_AXES, {
     ek: [
-      ...(kategori ? [`SÜZGEÇ — Hareket türü: ${KATEGORI_ETIKET[kategori]}.`] : []),
-      ...(yon ? [`SÜZGEÇ — Yön: ${yon === "IN" ? "Yalnız giriş" : "Yalnız çıkış"}.`] : []),
+      ...(kategori ? [`FİLTRE — Hareket türü: ${KATEGORI_ETIKET[kategori]}.`] : []),
+      ...(yon ? [`FİLTRE — Yön: ${yon === "IN" ? "Yalnız giriş" : "Yalnız çıkış"}.`] : []),
       DOKUM_SERHI,
     ],
   });

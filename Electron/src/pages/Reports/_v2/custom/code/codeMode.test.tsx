@@ -142,7 +142,7 @@ describe("§2 tamamlama yalnız katalogdan", () => {
     expect(r?.options[0]!.detail).toBe("Brüt sevk");
     expect(r?.options.every((o) => ids.has(o.label))).toBe(true);
   });
-  it("boyut, süzgeç alanı ve küp yuvaları; küp bilinmiyorsa bütün katalog", () => {
+  it("boyut, filtre alanı ve küp yuvaları; küp bilinmiyorsa bütün katalog", () => {
     expect(complete('{"sorgu":{"kup":"uretim","boyutlar":["i"]}}', '["i')?.options.map((o) => o.label)).toEqual(["istasyon"]);
     expect(complete('{"sorgu":{"kup":"sevk","suzgec":{"rules":[{"field":"m"}]}}}', '"field":"m')?.kind).toBe("dimension");
     expect(complete('{"sorgu":{"kup":"s"}}', '"kup":"s')?.options.map((o) => o.label)).toEqual(["sevk", "uretim"]);

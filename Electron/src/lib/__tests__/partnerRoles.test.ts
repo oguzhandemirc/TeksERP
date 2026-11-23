@@ -22,7 +22,7 @@ describe("partnerRoles — etiket ve rozet", () => {
   });
 });
 
-describe("partnerRoles — Yön × Fason → sunucu süzgeci (Cariler şeridi)", () => {
+describe("partnerRoles — Yön × Fason → sunucu filtresi (Cariler şeridi)", () => {
   it("⭐ Müşteri/Tedarikçi → filter[role] (rolü olan hepsi); Müşteri + Tedarikçi → İKİ bayrak da true (skaler AND, OR değil); Tümü → yok", () => {
     expect(directionFilters("CUSTOMER")).toEqual({ role: "customer" });
     expect(directionFilters("SUPPLIER")).toEqual({ role: "supplier" });

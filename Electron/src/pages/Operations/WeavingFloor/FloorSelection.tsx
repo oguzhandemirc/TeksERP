@@ -203,7 +203,7 @@ export function SelectionBar({ s, onDetail, order, jobs }: BarProps) {
   const run = useRunAction(s, onDetail, jobs);
   if (s.sel.ids.size === 0) return null;
   const hidden = [...s.sel.ids].filter((id) => !order.includes(id)).length;
-  const notes = [hidden > 0 && `${hidden} tanesi bu süzgeçte görünmüyor`, s.dropped > 0 && `${s.dropped} tezgah artık listede yok`].filter(Boolean);
+  const notes = [hidden > 0 && `${hidden} tanesi bu filtrede görünmüyor`, s.dropped > 0 && `${s.dropped} tezgah artık listede yok`].filter(Boolean);
   return (
     <div role="toolbar" aria-label="Seçim çubuğu" className="sticky bottom-0 z-[65] flex flex-wrap items-center gap-2 border-t bg-background/95 px-4 py-2 shadow-lg backdrop-blur">
       <span className="font-semibold tabular-nums">{s.sel.ids.size} tezgah seçili</span>

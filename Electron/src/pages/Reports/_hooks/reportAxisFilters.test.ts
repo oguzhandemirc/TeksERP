@@ -13,7 +13,7 @@ import { describe, expect, it } from "vitest";
 import type { AxisKey, Destination } from "./reportAxisFilters";
 import { beamLotNotes, axisNotes, axisParams, droppedNote, filterNotes, labelsOf, parseCsv, toCsv, unappliedAxes, unappliedNote } from "./reportAxisFilters";
 
-describe("eksen süzgeci — saf yarı", () => {
+describe("eksen filtresi — saf yarı", () => {
   it("CSV ayrıştırma: boşluk kırpılır, tekrar elenir, sıra korunur", () => {
     expect(parseCsv("a, b ,a,,c")).toEqual(["a", "b", "c"]);
     expect(parseCsv("")).toEqual([]);
@@ -40,25 +40,25 @@ describe("eksen süzgeci — saf yarı", () => {
     expect(labelsOf(undefined, [])).toEqual([]);
   });
 
-  it("⭐ süzgeç satırı NİTELEYİCİYİ taşır; seçim yoksa satır YOK", () => {
+  it("⭐ filtre satırı NİTELEYİCİYİ taşır; seçim yoksa satır YOK", () => {
     const n = filterNotes([
       { eksen: "Müşteri", degerler: ["Acme"] },
       { eksen: "Sipariş yönü (açılışta)", degerler: ["İhracat"], serh: "Siparişin AÇILIŞTA donmuş yönü (o günkü şube yönü, boşsa carinin) — sevkin yönü değil; cari kartı sonradan değişse de geçmiş rapor değişmez. Yönü belirsiz açılan sipariş hiçbir kümeye girmez." },
       { eksen: "Kumaş", degerler: [] },
     ]);
     expect(n).toHaveLength(2);
-    expect(n[0]).toBe("SÜZGEÇ — Müşteri: Acme.");
+    expect(n[0]).toBe("FİLTRE — Müşteri: Acme.");
     expect(n[1]).toContain("AÇILIŞTA donmuş yönü");
   });
 
-  it("⭐ 'süzgeç kesti' cümlesi boş tabloyu süzülmüş tablodan ayırır", () => {
+  it("⭐ 'filtre kesti' cümlesi boş tabloyu süzülmüş tablodan ayırır", () => {
     expect(droppedNote(0)).toBeNull();
     expect(droppedNote(undefined)).toBeNull();
-    expect(droppedNote(12)).toBe("Süzgeç 12 satırı kapsam dışında bıraktı.");
+    expect(droppedNote(12)).toBe("Filtre 12 satırı kapsam dışında bıraktı.");
   });
 });
 
-describe("axisNotes — sayfanın süzgeç satırları (ekran = çıktı)", () => {
+describe("axisNotes — sayfanın filtre satırları (ekran = çıktı)", () => {
   const secenekler = {
     customerId: [{ id: "c1", ad: "Acme" }],
     itemId: [{ id: "i1", ad: "Poplin" }],
@@ -68,13 +68,13 @@ describe("axisNotes — sayfanın süzgeç satırları (ekran = çıktı)", () =
     customerId: [], itemId: [], colorId: [], subcontractorId: [], reasonCode: [], cariId: [], destination: "",
   };
 
-  it("süzgeç yokken HİÇ satır yok — ek şerh de kesti cümlesi de yazılmaz", () => {
+  it("filtre yokken HİÇ satır yok — ek şerh de kesti cümlesi de yazılmaz", () => {
     expect(axisNotes({ eksenler: ["customerId"], destination: true, secenekler, sel: { ...bos }, dusenSatir: 5, ek: ["ABC şerhi"] })).toEqual([]);
   });
 
   it("etiket SÖZLÜKTEN gelir; her sayfa kendi adını uydurmaz", () => {
     const n = axisNotes({ eksenler: ["itemId"], secenekler, sel: { ...bos, itemId: ["i1"] } });
-    expect(n).toEqual(["SÜZGEÇ — Kumaş: Poplin."]);
+    expect(n).toEqual(["FİLTRE — Kumaş: Poplin."]);
   });
 
   it("⭐ eksenin KENDİ şerhi taşınır: reasonCode 'yalnız PAY' · destination 'açılışta donmuş sipariş yönü'", () => {
@@ -96,7 +96,7 @@ describe("axisNotes — sayfanın süzgeç satırları (ekran = çıktı)", () =
     expect(n[0]).not.toContain("AÇILIŞTA donmuş");
   });
 
-  it("⭐ ek şerh (ABC evreni) ve kesti cümlesi süzgeç AÇIKKEN ve SIRAYLA eklenir", () => {
+  it("⭐ ek şerh (ABC evreni) ve kesti cümlesi filtre AÇIKKEN ve SIRAYLA eklenir", () => {
     const n = axisNotes({
       eksenler: ["customerId"],
       secenekler,
@@ -104,12 +104,12 @@ describe("axisNotes — sayfanın süzgeç satırları (ekran = çıktı)", () =
       dusenSatir: 3,
       ek: ["ABC süzülmüş evrende"],
     });
-    expect(n).toEqual(["SÜZGEÇ — Müşteri: Acme.", "ABC süzülmüş evrende", "Süzgeç 3 satırı kapsam dışında bıraktı."]);
+    expect(n).toEqual(["FİLTRE — Müşteri: Acme.", "ABC süzülmüş evrende", "Filtre 3 satırı kapsam dışında bıraktı."]);
   });
 });
 
 describe("beamLotNotes — levent/lot şerhleri", () => {
-  it("süzgeç yokken satır YOK", () => {
+  it("filtre yokken satır YOK", () => {
     expect(beamLotNotes({})).toEqual([]);
     expect(beamLotNotes({ beamLabel: null, lotNo: "" })).toEqual([]);
   });
@@ -128,8 +128,8 @@ describe("beamLotNotes — levent/lot şerhleri", () => {
 
   it("levent sayısı ve düşen satır sunucunun YANKISINDAN gelir, sayfadan değil", () => {
     const n = beamLotNotes({ beamLabel: "L-77", suzgec: { warpBeamId: "b1", levent: 3, dusenSatir: 0 } });
-    expect(n[0]).toBe("SÜZGEÇ — Levent: L-77.");
-    expect(n[1]).toBe("Süzgeç 3 leventle eşleşti.");
+    expect(n[0]).toBe("FİLTRE — Levent: L-77.");
+    expect(n[1]).toBe("Filtre 3 leventle eşleşti.");
     expect(n).toHaveLength(2);
   });
 });
@@ -146,7 +146,7 @@ describe("sunucu yankısı — seçili eksen uygulanmadıysa şerh söyler (d9 L
     const secenekler = { customerId: [{ id: "c1", ad: "Müşteri A" }] };
     const sel = { customerId: ["c1"], itemId: [], colorId: [], subcontractorId: [], reasonCode: [], cariId: [], destination: "" as const };
     const eski = axisNotes({ eksenler: ["customerId"], secenekler, sel });
-    expect(eski).toEqual(["SÜZGEÇ — Müşteri: Müşteri A."]);
+    expect(eski).toEqual(["FİLTRE — Müşteri: Müşteri A."]);
     expect(axisNotes({ eksenler: ["customerId"], secenekler, sel, uygulanan: { customerId: ["c1"] } })).toEqual(eski);
     expect(axisNotes({ eksenler: ["customerId"], secenekler, sel, uygulanan: null })).toEqual([...eski, unappliedNote(["Müşteri"])]);
     expect(axisNotes({ eksenler: ["customerId"], secenekler, sel, uygulanan: undefined })).toEqual(eski);

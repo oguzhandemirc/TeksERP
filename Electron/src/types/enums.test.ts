@@ -72,7 +72,7 @@ describe("cari tipi — tek standart etiket, `type`ten son kopuş", () => {
     expect(ihlaller(files, YON_DILI, SRC), "yön dili etiketi geri geldi — kaynak `lib/partnerRoles`, kopya yazma").toEqual([]);
   });
 
-  it("⭐ §3 cari dosya kümesinde `type` okuyucu/yazıcı 0 (süzgeç `role`/bayrak ile; `Customer.type` opsiyonel, okunmaz)", () => {
+  it("⭐ §3 cari dosya kümesinde `type` okuyucu/yazıcı 0 (filtre `role`/bayrak ile; `Customer.type` opsiyonel, okunmaz)", () => {
     const files = dosyalar(SRC).filter((f) => {
       const rel = relative(SRC, f);
       return !KAPSAM_DISI(rel) && CARI_DOSYA(rel);

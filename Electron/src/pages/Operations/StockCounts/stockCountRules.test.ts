@@ -247,7 +247,7 @@ describe("ilerleyiş sayaçları", () => {
   });
 });
 
-describe("satır süzgeci", () => {
+describe("satır filtresi", () => {
   const lines = [
     rollLine({ barcode: "R-100" }),
     rollLine({ barcode: "R-200", found: true }),
@@ -259,7 +259,7 @@ describe("satır süzgeci", () => {
     expect(filterRollLines(lines, EMPTY_ROLL_VIEW)).toHaveLength(3);
   });
 
-  it("“sayılmayanlar” süzgeci işaretli satırları eler", () => {
+  it("“sayılmayanlar” filtreyi işaretli satırları eler", () => {
     const out = filterRollLines(lines, { ...EMPTY_ROLL_VIEW, onlyUncounted: true });
     expect(out.map((l) => l.roll?.barcode)).toEqual(["R-100", null]);
   });
@@ -450,8 +450,8 @@ describe("⭐ sayılan miktar girdisi", () => {
   });
 });
 
-describe("süzgeç → sorgu", () => {
-  it("boş süzgeçte TEK parametre gitmez", () => {
+describe("filtre → sorgu", () => {
+  it("boş filtrede TEK parametre gitmez", () => {
     expect(buildListQuery(EMPTY_STOCK_COUNT_FILTERS)).toEqual({
       warehouseId: undefined, status: undefined, from: undefined, to: undefined, search: undefined,
     });
@@ -474,13 +474,13 @@ describe("süzgeç → sorgu", () => {
 });
 
 describe("boş liste mesajı", () => {
-  it("süzgeçliyken “hiç sayım yok” DEMEZ", () => {
+  it("filtreliyken “hiç sayım yok” DEMEZ", () => {
     const msg = stockCountEmptyMessage({ ...EMPTY_STOCK_COUNT_FILTERS, status: "COMPLETED" });
     expect(msg).not.toContain("Henüz stok sayımı yapılmamış");
     expect(msg).toContain("Filtreleri temizleyip");
   });
 
-  it("süzgeçsizken kayıt yokluğunu söyleyebilir + ilk adımı gösterir", () => {
+  it("filtresizken kayıt yokluğunu söyleyebilir + ilk adımı gösterir", () => {
     const msg = stockCountEmptyMessage(EMPTY_STOCK_COUNT_FILTERS);
     expect(msg).toContain("Henüz stok sayımı yapılmamış");
     expect(msg).toContain("hiçbir deftere yazmaz");

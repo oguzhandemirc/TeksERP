@@ -135,12 +135,12 @@ reportCommandSections.push({
     },
     {
       key: "report-custom:data",
-      label: "Özel rapor veri alanları ve süzgeç",
-      description: "Özel raporlarım'dan bir rapor açın → 'Düzeni düzenle' → bölüm seçin: soldaki ağaçtan ölçü/boyutu kuyulara sürükleyin, süzgeç kurun",
+      label: "Özel rapor veri alanları ve filtre",
+      description: "Özel raporlarım'dan bir rapor açın → 'Düzeni düzenle' → bölüm seçin: soldaki ağaçtan ölçü/boyutu kuyulara sürükleyin, filtre kurun",
       icon: Filter,
       to: "/reports",
       permission: "report:builder",
-      keywords: "veri ağacı alan ölçü boyut kuyu satır sütun süzgeç filtre koşul varyant önerilen grafik özel rapor oluşturucu",
+      keywords: "veri ağacı alan ölçü boyut kuyu satır sütun filtre filtre koşul varyant önerilen grafik özel rapor oluşturucu",
     },
     {
       key: "report-custom:code",

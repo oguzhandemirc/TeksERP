@@ -17,9 +17,11 @@ const shown = new WeakSet<object>();
 // Aynı METİN 5 sn içinde ikinci kez basılmaz (yeniden deneme · çift tıklama tost seli).
 const REPEAT_WINDOW_MS = 5000;
 const lastShownAt = new Map<string, number>();
+// Rapor okumasının uyarısı (satır tavanı vb.) oturumda bir kez: her açılan ekranda balon birikmesin.
+const shownThisSession = new Set<string>();
 
 /** Engel olmayan notlar başarı tostunun YANINDA ayrı uyarı olarak basılır (her not 8 sn). */
-export function showServerWarnings(res: ServerResponseLike, now: number = Date.now()): void {
+export function showServerWarnings(res: ServerResponseLike, now: number = Date.now(), opts?: { oncePerSession?: boolean }): void {
   if (!res || typeof res !== "object" || shown.has(res)) return;
   shown.add(res);
   const w = res.warnings;
@@ -28,9 +30,18 @@ export function showServerWarnings(res: ServerResponseLike, now: number = Date.n
     if (typeof note !== "string" || !note.trim()) continue;
     const prev = lastShownAt.get(note);
     if (prev !== undefined && now - prev < REPEAT_WINDOW_MS) continue;
+    if (opts?.oncePerSession) {
+      if (shownThisSession.has(note)) continue;
+      shownThisSession.add(note);
+    }
     lastShownAt.set(note, now);
     toast.warning(note, { duration: 8000 });
   }
+}
+
+/** Rapor GET'i mi (uyarısı oturumda bir kez basılır). */
+export function isReportRead(config: { method?: string; url?: string } | undefined): boolean {
+  return (config?.method ?? "get").toLowerCase() === "get" && isReportUrl(config?.url);
 }
 
 /** Yazım yanıtı genel basıma girer mi: yöntem yazım, bayrak yok, gövde zarf (`success` alanı). */

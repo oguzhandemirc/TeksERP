@@ -2,6 +2,7 @@
 import { useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { BandStats, ListBand } from "@/components/layout/ListPage";
+import { isListFiltered } from "@/lib/list-scope";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/data-table/DataTable";
 import type { FilterDef } from "@/components/data-table/FilterBar";
@@ -34,7 +35,7 @@ const columns: ColumnDef<BeamBodyReturnDoc>[] = [
 
 export function ReturnDocsTab() {
   const [openId, setOpenId] = useState<string | null>(null);
-  const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<BeamBodyReturnDoc>({
+  const { table, query, search, setSearch, pagination, fetchAll, listScope } = useDataTable<BeamBodyReturnDoc>({
     queryKey: BEAM_BODY_RETURNS_QUERY_KEY,
     fetchFn: beamBodyReturnService.list,
     columns,
@@ -46,7 +47,7 @@ export function ReturnDocsTab() {
     <>
       {s && (
         <ListBand>
-          <BandStats label="İade özeti" scope="Süzgece uyan" items={[{ key: "docs", label: "Belge", value: s.count }, { key: "bodies", label: "İade edilen gövde", value: s.bodyCount }]} />
+          <BandStats label="İade özeti" scope={isListFiltered(listScope) ? "Filtreli" : undefined} items={[{ key: "docs", label: "Belge", value: s.count }, { key: "bodies", label: "İade edilen gövde", value: s.bodyCount }]} />
         </ListBand>
       )}
       <DefFilterRow filters={FILTERS} primaryKeys={["ownerCustomerId", "status"]} search={search} onSearchChange={setSearch} searchHint="Belge no ile ara" tools={{ table, fetchAll, exportName: "Gövde iade belgeleri" }} />

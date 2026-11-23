@@ -53,7 +53,7 @@ const renderPicker = (p: { categoryCode?: string; categoryId?: string | null }) 
   );
 
 describe("SubcontractorCategoryPicker", () => {
-  it("⭐ ① DEVERE kodu çözülür, kategoride fason var → categoryId ile süzülür; Tümünü göster → süzgeç kalkar", async () => {
+  it("⭐ ① DEVERE kodu çözülür, kategoride fason var → categoryId ile süzülür; Tümünü göster → filtre kalkar", async () => {
     subGetAll.mockImplementation(() => pageOf([{ id: "s1" }], 3));
     renderPicker({ categoryCode: "DEVERE" });
     await waitFor(() => expect(subGetAll).toHaveBeenCalledWith(expect.objectContaining({ filters: { isActive: "true", categoryId: "cat-dev" } })));
@@ -65,7 +65,7 @@ describe("SubcontractorCategoryPicker", () => {
     expect(screen.getByText("Tüm fasoncular gösteriliyor")).toBeInTheDocument();
   });
 
-  it("⭐ ② kategoride aktif fason yok → süzgeçsiz liste + 'atanmış fason yok' uyarısı", async () => {
+  it("⭐ ② kategoride aktif fason yok → filtresiz liste + 'atanmış fason yok' uyarısı", async () => {
     subGetAll.mockImplementation(() => pageOf([], 0));
     renderPicker({ categoryCode: "DEVERE" });
     await waitFor(() => expect(subGetAll).toHaveBeenCalled());
@@ -76,7 +76,7 @@ describe("SubcontractorCategoryPicker", () => {
     expect(screen.queryByRole("switch")).toBeNull();
   });
 
-  it("⭐ ③ kod tanımlı değil → süzgeçsiz + 'kodlu kategori tanımlı değil' uyarısı, sayım sorgusu yok", async () => {
+  it("⭐ ③ kod tanımlı değil → filtresiz + 'kodlu kategori tanımlı değil' uyarısı, sayım sorgusu yok", async () => {
     catGetAll.mockImplementation(() => pageOf([CATS[0]]));
     renderPicker({ categoryCode: "DEVERE" });
     await waitFor(() => expect(catGetAll).toHaveBeenCalled());
@@ -86,7 +86,7 @@ describe("SubcontractorCategoryPicker", () => {
     expect(subGetAll).not.toHaveBeenCalled();
   });
 
-  it("④ kategori beklenmiyor → bugünkü davranış: süzgeç yok, şerit yok, katalog çekilmez", async () => {
+  it("④ kategori beklenmiyor → bugünkü davranış: filtre yok, şerit yok, katalog çekilmez", async () => {
     renderPicker({ categoryId: null });
     await openPicker();
     await waitFor(() => expect(listCursor).toHaveBeenCalled());

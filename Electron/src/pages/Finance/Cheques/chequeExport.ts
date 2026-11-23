@@ -178,7 +178,7 @@ export function buildChequeExport(opts: {
     // "İlk N kayıt" gerçeği söylenmezse, aradığı çeki bulamayan kullanıcı onun
     // sistemde olmadığı sonucuna varır (ekrandaki kırpma uyarısının dosya ikizi).
     notes.push(
-      `⚠️ Sunucudaki ${total} kaydın ilk ${rows.length} tanesi (vade sırasına göre) dışa aktarıldı — bu dosya TAM LİSTE DEĞİLDİR. Süzgeci daraltıp tekrar aktarın.`,
+      `⚠️ Sunucudaki ${total} kaydın ilk ${rows.length} tanesi (vade sırasına göre) dışa aktarıldı — bu dosya TAM LİSTE DEĞİLDİR. Filtreyi daraltıp tekrar aktarın.`,
     );
   }
   if (rows.length > counted.length) {

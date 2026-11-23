@@ -124,7 +124,7 @@ beforeEach(() => {
 });
 
 describe("Emanet Çıkış listesi", () => {
-  it("satır + özet şeridi sunucudan; durum çipi süzgeci SUNUCUYA gider", async () => {
+  it("satır + özet şeridi sunucudan; durum çipi filtresi SUNUCUYA gider", async () => {
     renderWithProviders(<ConsignmentDispatchesPage />);
     expect(await screen.findByText("EC-2026-0001")).toBeInTheDocument();
     expect(screen.getByTestId("consignment-summary")).toHaveTextContent("Belge1");

@@ -98,7 +98,7 @@ export function DataTableExportMenu<T>({
     : progress
       ? `${formatQty(progress.loaded)}${progress.total ? ` / ~${formatQty(progress.total)}` : ""} indiriliyor…`
       : "Hazırlanıyor…";
-  const scope = fetchAll ? "süzgece uyan tüm kayıtlar" : "ekrandaki kayıtlar";
+  const scope = fetchAll ? "filtreye uyan tüm kayıtlar" : "ekrandaki kayıtlar";
   const extras = extraExports ?? [];
 
   return (

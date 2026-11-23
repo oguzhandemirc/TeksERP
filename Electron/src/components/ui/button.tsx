@@ -8,8 +8,9 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground shadow-soft hover:bg-primary/90",
-        destructive: "bg-destructive text-destructive-foreground shadow-soft hover:bg-destructive/90",
+        // Devre dışı dolgulu düğme nötr gri: soluk mor "bozuk mu, yükleniyor mu" belirsizliği yaratıyordu.
+        default: "bg-primary text-primary-foreground shadow-soft hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 disabled:shadow-none",
+        destructive: "bg-destructive text-destructive-foreground shadow-soft hover:bg-destructive/90 disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 disabled:shadow-none",
         outline: "border border-input bg-card shadow-soft hover:bg-accent hover:text-accent-foreground",
         secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost: "hover:bg-accent hover:text-accent-foreground",
@@ -35,7 +36,8 @@ export interface ButtonProps
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, asChild = false, ...props }, ref) => {
     const Comp = asChild ? Slot : "button";
-    return <Comp className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />;
+    // data-size: kapsayıcı (PageHeader eylemleri) boyu tek elden eşitleyebilsin.
+    return <Comp data-size={size ?? "default"} className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />;
   },
 );
 Button.displayName = "Button";

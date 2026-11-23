@@ -29,7 +29,7 @@ describe("supplierPicker (saf) — tedarikçi kipi, Yön × Fason", () => {
     expect(legsFor(f("SUPPLIER", "YES")).customerFilters).toEqual({ isSupplierRole: "true", isCustomerRole: "false", isSubcontractorRole: "true" });
   });
 
-  it("⭐ tedarikçi kipi MÜŞTERİ-ONLY kartı HİÇBİR yoldan sormaz: 'Müşteri' seçenek değil; gelirse Tümü gibi; `type` süzgeci yok", () => {
+  it("⭐ tedarikçi kipi MÜŞTERİ-ONLY kartı HİÇBİR yoldan sormaz: 'Müşteri' seçenek değil; gelirse Tümü gibi; `type` filtreyi yok", () => {
     expect(pickerDirectionOptions("supplier").some((o) => o.value === "CUSTOMER")).toBe(false);
     expect(legsFor(f("CUSTOMER"))).toEqual(legsFor(PICKER_ROLE_DEFAULTS));
     for (const d of ["ALL", "CUSTOMER", "SUPPLIER", "BOTH"] as const) {
@@ -50,7 +50,7 @@ describe("supplierPicker (saf) — tedarikçi kipi, Yön × Fason", () => {
     expect(nextPageToken(page({ leg: "customers", cursor: null }, null, true), PICKER_ROLE_DEFAULTS)).toEqual({ leg: "subs", page: 1 });
   });
 
-  it("⭐ fason bacağı süzgeci `filter[customerId]=null` — bağlı fason ikinci kez listelenmez", () => {
+  it("⭐ fason bacağı filtresi `filter[customerId]=null` — bağlı fason ikinci kez listelenmez", () => {
     expect(UNLINKED_SUBCONTRACTOR_FILTER).toEqual({ customerId: "null" });
   });
 });
@@ -70,7 +70,7 @@ describe("supplierPicker (saf) — satır eşlemesi (rol modeli)", () => {
 });
 
 describe("supplierPicker — müşteri kipi ve özel listeler", () => {
-  it("⭐ müşteri kipi: tek cari bacağı, taban `isCustomerRole=true`; Müşteri = yalnız müşteri; BOTH = ikisi; Fason süzgeci iner; fason bacağı YOK", () => {
+  it("⭐ müşteri kipi: tek cari bacağı, taban `isCustomerRole=true`; Müşteri = yalnız müşteri; BOTH = ikisi; Fason filtresi iner; fason bacağı YOK", () => {
     expect(legsFor(PICKER_ROLE_DEFAULTS, "customer")).toEqual({ customers: true, subs: false, customerFilters: { isCustomerRole: "true" } });
     expect(legsFor(f("CUSTOMER"), "customer").customerFilters).toEqual({ isCustomerRole: "true", isSupplierRole: "false" });
     expect(legsFor(f("BOTH", "YES"), "customer").customerFilters).toEqual({ isCustomerRole: "true", isSupplierRole: "true", isSubcontractorRole: "true" });
@@ -78,10 +78,10 @@ describe("supplierPicker — müşteri kipi ve özel listeler", () => {
     expect(nextPageToken(page({ leg: "customers", cursor: null }), PICKER_ROLE_DEFAULTS, "customer")).toBeUndefined();
     expect(pickerDirectionOptions("customer").map((o) => o.label)).toEqual(["Tümü", "Müşteri", "Müşteri + Tedarikçi"]);
   });
-  it("dönüştürme görünümü (`customer-only`): yalnız müşteri rolü, tedarikçi rolü YOK; süzgeç uygulanmaz; fason yok", () => {
+  it("dönüştürme görünümü (`customer-only`): yalnız müşteri rolü, tedarikçi rolü YOK; filtre uygulanmaz; fason yok", () => {
     expect(legsFor(f("BOTH", "YES"), "customer-only")).toEqual({ customers: true, subs: false, customerFilters: { isCustomerRole: "true", isSupplierRole: "false" } });
   });
-  it("yalnız-cari liste (`supplier-cari`): tedarikçi tabanı, Fason süzgeci iner, bağsız fason bacağı ASLA", () => {
+  it("yalnız-cari liste (`supplier-cari`): tedarikçi tabanı, Fason filtresi iner, bağsız fason bacağı ASLA", () => {
     expect(legsFor(PICKER_ROLE_DEFAULTS, "supplier-cari")).toEqual({ customers: true, subs: false, customerFilters: { isSupplierRole: "true" } });
     expect(legsFor(f("ALL", "YES"), "supplier-cari")).toEqual({ customers: true, subs: false, customerFilters: { isSupplierRole: "true", isSubcontractorRole: "true" } });
   });

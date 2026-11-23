@@ -41,9 +41,9 @@ export function InspectionExportButton({ params, disabled }: { params: Inspectio
         const page = await inspectionService.list({ ...params, cursor, limit: EXPORT_PAGE });
         return { data: page.items, pagination: { nextCursor: page.nextCursor, totalEstimate: page.summary.total } };
       });
-      const notes = res.truncated ? ["Liste tavana ulaştı; tüm satırlar alınamadı — süzgeci daraltın."] : undefined;
+      const notes = res.truncated ? ["Liste tavana ulaştı; tüm satırlar alınamadı — filtreyi daraltın."] : undefined;
       await exportRowsToXlsx(INSPECTION_EXPORT_COLUMNS, res.rows, "muayeneler", notes);
-      if (res.truncated) toast.warning("Dosya eksik: liste tavanına ulaşıldı. Süzgeci daraltıp yeniden indirin.");
+      if (res.truncated) toast.warning("Dosya eksik: liste tavanına ulaşıldı. Filtreyi daraltıp yeniden indirin.");
     } catch (e) {
       toast.error(apiErrorText(e, "Dışa aktarılamadı."));
     } finally {

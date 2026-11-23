@@ -20,7 +20,7 @@ const FILTERS = [
 const colIds = (productionEnabled: boolean) =>
   buildOrderColumns(false, productionEnabled).map((c) => c.id ?? (c as { accessorKey?: string }).accessorKey);
 
-describe("Siparişler — rejim süzgeci", () => {
+describe("Siparişler — rejim filtresi", () => {
   it("⭐ FABRİKADA filtre şeridi BİREBİR aynı", () => {
     expect(resolveOrderFilters(FILTERS, true)).toEqual(FILTERS);
   });

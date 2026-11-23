@@ -60,7 +60,7 @@ export interface FilterChipBarProps {
 }
 
 /** Süzgeç çipi satırı (hedef görsel üst satır): çipler + Sıfırla + sağda birincil eylem. */
-export function FilterChipBar({ children, onReset, canReset = true, end, label = "Süzgeçler" }: FilterChipBarProps) {
+export function FilterChipBar({ children, onReset, canReset = true, end, label = "Filtreler" }: FilterChipBarProps) {
   return (
     <div role="toolbar" aria-label={label} className="flex flex-wrap items-center gap-2">
       {children}

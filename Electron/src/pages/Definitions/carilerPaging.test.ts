@@ -14,12 +14,12 @@ import { CARI_FILTER_DEFAULTS, cariPageInfo, cariQueryPlan, isCariFilterDirty, m
 import { DIRECTION_OPTIONS, SUBCONTRACTOR_OPTIONS, partnerRoleLabels } from "@/lib/partnerRoles";
 
 describe("cariQueryPlan — Yön × Fason (rol modeli 2026-09-17)", () => {
-  it("süzgeçsiz: iki kaynak da çekilir, cari süzgeci boş (fason bacağı yalnız BAĞSIZ profiller — bağlı fason cari satırında)", () => {
+  it("filtresiz: iki kaynak da çekilir, cari filtresi boş (fason bacağı yalnız BAĞSIZ profiller — bağlı fason cari satırında)", () => {
     expect(cariQueryPlan(CARI_FILTER_DEFAULTS)).toEqual({ customers: true, subcontractors: true, customerFilters: {} });
     expect(isCariFilterDirty(CARI_FILTER_DEFAULTS)).toBe(false);
   });
 
-  it("⭐ Yön → SUNUCU süzgeci tek kaynaktan (partnerRoles): Müşteri/Tedarikçi filter[role], Müşteri + Tedarikçi iki bayrak AND; yön seçiliyken fason bacağı çağrılmaz", () => {
+  it("⭐ Yön → SUNUCU filtresi tek kaynaktan (partnerRoles): Müşteri/Tedarikçi filter[role], Müşteri + Tedarikçi iki bayrak AND; yön seçiliyken fason bacağı çağrılmaz", () => {
     expect(cariQueryPlan({ direction: "SUPPLIER", subcontractor: "ALL" })).toEqual({ customers: true, subcontractors: false, customerFilters: { role: "supplier" } });
     expect(cariQueryPlan({ direction: "CUSTOMER", subcontractor: "ALL" }).customerFilters).toEqual({ role: "customer" });
     expect(cariQueryPlan({ direction: "BOTH", subcontractor: "ALL" }).customerFilters).toEqual({ isCustomerRole: "true", isSupplierRole: "true" });
@@ -92,7 +92,7 @@ describe("cariPageInfo", () => {
     expect(info.hasPrev).toBe(true);
   });
 
-  it("⭐ kapsam dışı kaynak toplama GİRMEZ (Fason süzgecinde müşteri sayısı sızmaz)", () => {
+  it("⭐ kapsam dışı kaynak toplama GİRMEZ (Fason filtresinde müşteri sayısı sızmaz)", () => {
     const info = cariPageInfo({
       page: 1,
       pageSize: 50,

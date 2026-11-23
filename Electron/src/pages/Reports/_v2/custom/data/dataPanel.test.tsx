@@ -96,7 +96,7 @@ describe("§2 bırakma kuralları", () => {
     ["başka küpün alanı", block("tablo", ["sevk.brutMetre"]), "satir", d("vardiya", "hata"), "Bu bölüm “Sevkiyat” verisinden okuyor; başka konudan alan eklenemez."],
     ["yardımcı ölçüye beyansız boyut", block("tablo", ["sevk.tutar"]), "satir", d("renk"), "“Sevk tutarı” ölçüsü “Renk” ile kırılamaz."],
     ["yardımcı ölçü, beyansız boyut zaten varken", block("tablo", ["sevk.brutMetre"], ["renk"]), "olcu", m("sevk.tutar"), "“Sevk tutarı” ölçüsü “Renk” ile kullanılamaz; önce o alanı çıkarın."],
-    ["zaman süzgeç olmaz", block("tablo", ["sevk.brutMetre"]), "suzgec", d("ay"), "Zaman süzgeç olamaz; tarih aralığını raporun dönemi belirler."],
+    ["zaman filtre olmaz", block("tablo", ["sevk.brutMetre"]), "suzgec", d("ay"), "Zaman filtre olamaz; tarih aralığını raporun dönemi belirler."],
     ["varyant zamanla kurulmaz", block("varyant", ["sevk.brutMetre"], ["musteri"]), "varyant", d("ay"), "Kırılım kartları zamanla kurulmaz; bir kategori seçin."],
     ["ana sayıda Satır kuyusu yok", block("anaSayi", ["sevk.brutMetre"]), "satir", d("musteri"), "Bu bölümde Satır kuyusu yok."],
     ["Sütun, Satır boşken", block("grafik", ["sevk.brutMetre"]), "sutun", d("musteri"), "Önce Satır kuyusunu doldurun."],
@@ -118,7 +118,7 @@ describe("§2 bırakma kuralları", () => {
   });
 });
 
-describe("§3 süzgeç JSON'u ve Türkçe cümle", () => {
+describe("§3 filtre JSON'u ve Türkçe cümle", () => {
   it("kurucu çıktısı plan §3.2 fikstürüne birebir; yarım satır düşer, tek değerli işleç dizi yazmaz", () => {
     const out = toQueryFilter(fixture.kurucuGirdisi as FilterGroup);
     expect(out).toEqual(fixture.beklenenSuzgec);
@@ -178,14 +178,14 @@ describe("§5 sunucu doğrulaması kuyuya bağlanır", () => {
     const issues = [
       { yol: "bloklar[1].sorgu.olculer[0]", mesaj: "ölçü yok" },
       { yol: "bloklar[1].sorgu.boyutlar[1]", mesaj: "boyut yok" },
-      { yol: "bloklar[1].sorgu.suzgec.rules[2].field", mesaj: "süzgeç alanı yok" },
+      { yol: "bloklar[1].sorgu.suzgec.rules[2].field", mesaj: "filtre alanı yok" },
       { yol: "bloklar[1].sorgu.zaman.param", mesaj: "tarih değil" },
       { yol: "bloklar[0].sorgu.olculer[0]", mesaj: "başka bölüm" },
     ];
     expect(issuesForBlock(issues, 1, block("grafik", ["x"], ["a", "b"]))).toEqual([
       { well: "olcu", index: 0, mesaj: "ölçü yok" },
       { well: "sutun", index: 0, mesaj: "boyut yok" },
-      { well: "suzgec", index: 2, mesaj: "süzgeç alanı yok" },
+      { well: "suzgec", index: 2, mesaj: "filtre alanı yok" },
       { well: null, index: null, mesaj: "tarih değil" },
     ]);
   });
@@ -244,7 +244,7 @@ describe("§5 ekran", () => {
     validateReply = { gecerli: true, hatalar: [] };
   });
 
-  it("seçili bölümün kuyuları dolu, süzgeç Türkçe cümle; dogrula hatası çipe bağlanır", async () => {
+  it("seçili bölümün kuyuları dolu, filtre Türkçe cümle; dogrula hatası çipe bağlanır", async () => {
     validateReply = { gecerli: false, hatalar: [{ yol: "bloklar[1].sorgu.boyutlar[0]", mesaj: "“Sevkiyat” küpünde “musteri” boyutu yok." }] };
     renderPage();
     fireEvent.click(await screen.findByText("Müşteriye göre"));
@@ -256,7 +256,7 @@ describe("§5 ekran", () => {
     await waitFor(() => expect(within(satir).getByTitle("“Sevkiyat” küpünde “musteri” boyutu yok.")).toBeTruthy());
   });
 
-  it("süzgeç çipi kaldırılınca gövdeden `suzgec` anahtarı düşer ve yeniden doğrulanır", async () => {
+  it("filtre çipi kaldırılınca gövdeden `suzgec` anahtarı düşer ve yeniden doğrulanır", async () => {
     renderPage();
     fireEvent.click(await screen.findByText("Müşteriye göre"));
     const well = await screen.findByTestId("kuyu-suzgec");

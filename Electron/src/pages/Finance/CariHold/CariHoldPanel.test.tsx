@@ -96,7 +96,7 @@ describe("CariHoldPanel", () => {
     expect(screen.getByText("Aktif")).toBeInTheDocument();
   });
 
-  it("§5 yardımcılar: ayar → kapsam, form → gövde, süzgeç sunucuya gider", () => {
+  it("§5 yardımcılar: ayar → kapsam, form → gövde, filtre sunucuya gider", () => {
     expect(scopesFromSetting("INTAKE,SHIPMENT,INVOICE")).toEqual(["INTAKE", "SHIPMENT", "INVOICE"]);
     expect(scopesFromSetting(undefined)).toEqual(["INTAKE", "SHIPMENT"]);
     expect(scopesFromSetting("INVOICE,BILINMEZ")).toEqual(["INVOICE"]);

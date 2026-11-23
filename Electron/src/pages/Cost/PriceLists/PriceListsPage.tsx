@@ -72,7 +72,7 @@ export function PriceListsPage() {
         ) : (
           <ListMessage>
             <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground" data-testid="pl-empty">
-              {filtered ? "Süzgece uyan liste yok." : "Henüz fiyat listesi yok — \"Yeni liste\" ile başlayın; satırları standart maliyetten doldurabilirsiniz."}
+              {filtered ? "Filtreye uyan liste yok." : "Henüz fiyat listesi yok — \"Yeni liste\" ile başlayın; satırları standart maliyetten doldurabilirsiniz."}
             </div>
           </ListMessage>
         )}

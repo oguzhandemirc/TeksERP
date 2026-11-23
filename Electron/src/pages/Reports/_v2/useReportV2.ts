@@ -26,7 +26,8 @@ export function failureOf(error: unknown): ReportFailure {
 export async function fetchPresentation(key: string, params: Record<string, string>): Promise<RaporSunumu> {
   const qs = new URLSearchParams(params).toString();
   // Kapı hatası ekranda kalıcı mesajla anlatılır; genel toast'ı bastır (tekrar eden toast yağmuru olmasın).
-  const res = await apiClient.get<PresentationResponse>(`/api/reports/${key}${qs ? `?${qs}` : ""}`, { suppressErrorToast: true });
+  // Uyarılar (`warnings` = `sunum.uyarilar`) ReportBody'de şerit olarak çizilir → balon basılmaz.
+  const res = await apiClient.get<PresentationResponse>(`/api/reports/${key}${qs ? `?${qs}` : ""}`, { suppressErrorToast: true, serverWarnings: "handled" });
   return res.data.data;
 }
 

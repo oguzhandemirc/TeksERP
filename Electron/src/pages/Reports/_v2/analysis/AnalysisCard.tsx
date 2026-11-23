@@ -40,7 +40,7 @@ function ConfounderDialog({ open, title, body, onClose }: { open: boolean; title
       <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>Aynı dönem ve süzgeçle; her değer ayrı kartta. Fark her kartta sürüyorsa bu etken tek başına açıklamıyor.</DialogDescription>
+          <DialogDescription>Aynı dönem ve filtreyle; her değer ayrı kartta. Fark her kartta sürüyorsa bu etken tek başına açıklamıyor.</DialogDescription>
         </DialogHeader>
         {preview.isLoading ? <p className="text-sm text-muted-foreground">Hazırlanıyor…</p> : null}
         {preview.isError ? <p className="text-sm text-destructive">Hazırlanamadı; biraz sonra yeniden deneyin.</p> : null}

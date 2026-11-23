@@ -83,7 +83,7 @@ describe("yazılmış pencere — DOM algısı", () => {
     expect(ids()).toEqual([]);
   });
 
-  it("pencere dışındaki alan (liste arama/süzgeç) sayılmaz", () => {
+  it("pencere dışındaki alan (liste arama/filtre) sayılmaz", () => {
     document.body.insertAdjacentHTML("beforeend", `<div data-tab-id="t4"><input /></div>`);
     fireEvent.input(document.querySelector("input")!, { target: { value: "süz" } });
     expect(ids()).toEqual([]);

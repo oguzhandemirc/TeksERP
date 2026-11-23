@@ -133,7 +133,7 @@ describe("DataTable — satır işareti", () => {
   });
 });
 
-describe("İşaretliler süzgeci", () => {
+describe("İşaretliler filtresi", () => {
   it("seçilen renk kimlikleri `filter[id]` CSV'sine çevirir; işaretli yoksa hiçbir kayda denk gelmeyen kimlik", async () => {
     api.mine.mockResolvedValueOnce({ recordIds: ROWS.map((r) => r.id), hasMore: false }).mockResolvedValueOnce({ recordIds: [], hasMore: false });
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -150,7 +150,7 @@ describe("İşaretliler süzgeci", () => {
     expect(api.mine).toHaveBeenLastCalledWith("order", null);
   });
 
-  it("süzgeç yalnız `filter[id]` destekleyen listelerde kullanılır (kaynak taraması)", () => {
+  it("filtre yalnız `filter[id]` destekleyen listelerde kullanılır (kaynak taraması)", () => {
     const DESTEKLEYEN = new Set(["pages/Operations/Orders/OrdersPage.tsx"]);
     const src = path.resolve(__dirname, "../..");
     const walk = (d: string): string[] =>

@@ -137,7 +137,7 @@ describe("sevk partisi — kaynak metni kapıları", () => {
 
 describe("sütun kümesi bağlama göre", () => {
   const ids = (cols: ReturnType<typeof sacksKolonlari>) => cols.map((c) => c.id ?? (c as { accessorKey?: string }).accessorKey);
-  it("§8 Ambalaj No yalnız parti modunda, Eşleşen yalnız içerik süzgeciyle", () => {
+  it("§8 Ambalaj No yalnız parti modunda, Eşleşen yalnız içerik filtreyiyle", () => {
     expect(ids(sacksKolonlari(true, false, false))).not.toContain("packageNo");
     expect(ids(sacksKolonlari(true, true, false))).toContain("packageNo");
     expect(ids(sacksKolonlari(true, true, false))).not.toContain("match");

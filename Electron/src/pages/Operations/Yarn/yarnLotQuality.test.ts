@@ -18,7 +18,7 @@ describe("yarnLotQuality", () => {
     expect(qualityNeedsConfirm("ON_HOLD")).toBe(false);
     expect(qualityNeedsConfirm("RELEASED")).toBe(false);
   });
-  it("etiketler ve süzgeç: her durumun rozeti + eylemi var; süzgeç değeri düz CSV", () => {
+  it("etiketler ve filtre: her durumun rozeti + eylemi var; filtre değeri düz CSV", () => {
     for (const s of ["RELEASED", "ON_HOLD", "BLOCKED"] as const) {
       expect(YARN_LOT_QUALITY[s].label).toBeTruthy();
       expect(YARN_LOT_QUALITY_ACTION[s]).toBeTruthy();

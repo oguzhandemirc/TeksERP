@@ -78,7 +78,7 @@ function ReadyWorksState({ isLoading, isError, onRetry }: { isLoading: boolean; 
   ) : (
     <ListMessage>
       <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-        Bu süzgeçte iş yok. Tamamı sevk edilmiş işler listede görünmez.
+        Bu filtrede iş yok. Tamamı sevk edilmiş işler listede görünmez.
       </div>
     </ListMessage>
   );

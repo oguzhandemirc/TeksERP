@@ -57,7 +57,7 @@ async function openCari(onChange: (id: string | null) => void = () => {}) {
 const durum = (d: HTMLElement) => within(d).getByRole("combobox", { name: "Durum" });
 
 describe("CustomerPickerField — cari kipi", () => {
-  it("(1) ⭐ her rol tek listede, taban rol süzgeci YOK, yalnız AKTİF; fason bacağı ve 'Yeni cari' yok; Rol kolonu", async () => {
+  it("(1) ⭐ her rol tek listede, taban rol filtresi YOK, yalnız AKTİF; fason bacağı ve 'Yeni cari' yok; Rol kolonu", async () => {
     const dialog = await openCari();
     expect(within(dialog).getByText("Cari seç")).toBeInTheDocument();
     for (const n of ["İplik A.Ş.", "Yalnız Müşteri", "Boyahane Kart"]) expect(within(dialog).getByText(n)).toBeInTheDocument();
@@ -80,7 +80,7 @@ describe("CustomerPickerField — cari kipi", () => {
     expect(within(dialog).getByText("Yalnız Müşteri")).toBeInTheDocument();
   });
 
-  it("(3) ⭐ Durum: varsayılan listede pasif YOK; 'Tümü' → isActive süzgeci düşer, pasif satır '(pasif)' rozetiyle gelir; 'Pasif' → yalnız pasif", async () => {
+  it("(3) ⭐ Durum: varsayılan listede pasif YOK; 'Tümü' → isActive filtresi düşer, pasif satır '(pasif)' rozetiyle gelir; 'Pasif' → yalnız pasif", async () => {
     const dialog = await openCari();
     await userEvent.click(durum(dialog));
     expect((await screen.findAllByRole("option")).map((o) => o.textContent)).toEqual(["Aktif", "Pasif", "Tümü"]);

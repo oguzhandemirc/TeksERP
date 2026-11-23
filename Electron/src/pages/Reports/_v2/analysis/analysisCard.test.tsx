@@ -98,7 +98,7 @@ describe("§1–§2 sonuç, uyarı, sabit not", () => {
 });
 
 describe("§3 karıştırıcı önerisi", () => {
-  it("⭐ 'Tezgaha göre ayrı bak' tezgah küçük çoklusunu aynı süzgeç ve dönemle önizler; iplik partisi devre dışı", async () => {
+  it("⭐ 'Tezgaha göre ayrı bak' tezgah küçük çoklusunu aynı filtre ve dönemle önizler; iplik partisi devre dışı", async () => {
     renderWithProviders(<AnalysisCard analysis={outcome([{ kural: "korelasyon", metin: STRONG }], 215, [])} block={BLOCK} body={BODY} cubes={[CUBE]} />);
     expect(screen.getByRole("button", { name: /İplik partisine göre ayrı bak/ })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: /Tezgaha göre ayrı bak/ }));

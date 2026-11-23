@@ -60,5 +60,5 @@ export function parseDecimalInput(raw: string): number | null {
 }
 
 export function labEmptyMessage(f: LabFilterState): string {
-  return isLabFilterDirty(f) ? "Süzgeçlere uyan lab testi yok." : "Henüz lab testi yok. “Yeni Test” ile ilk numuneyi kaydedin.";
+  return isLabFilterDirty(f) ? "Filtrelere uyan lab testi yok." : "Henüz lab testi yok. “Yeni Test” ile ilk numuneyi kaydedin.";
 }

@@ -58,7 +58,7 @@ beforeEach(() => {
 });
 
 describe("itemsFilters (saf)", () => {
-  it("⭐ Durum → backend süzgeci: aktif/pasif = isActive, onay = pendingReview (isActive'e dokunmaz), tümü = boş", () => {
+  it("⭐ Durum → backend filtresi: aktif/pasif = isActive, onay = pendingReview (isActive'e dokunmaz), tümü = boş", () => {
     expect(itemStatusFilters("active")).toEqual({ isActive: "true" });
     expect(itemStatusFilters("inactive")).toEqual({ isActive: "false" });
     // Aktif = kullanımdaki kartlar (Tükenene kadar dahil, rozetle ayrılır); ayrı seçenek yalnız o durumu süzer.
@@ -73,14 +73,14 @@ describe("itemsFilters (saf)", () => {
     expect(parseItemStatus("inactive")).toBe("inactive");
   });
 
-  it("Tür ve Birim URL süzgeçleri BACKEND kolon adıyla (itemType · unit); 'Tümü' = ALL başta; Tür listesi ürün seçiciyle ORTAK", () => {
+  it("Tür ve Birim URL filtreleri BACKEND kolon adıyla (itemType · unit); 'Tümü' = ALL başta; Tür listesi ürün seçiciyle ORTAK", () => {
     const byKey = (k: string) => ITEM_URL_FILTERS.find((d) => d.key === k)!;
     // D2: hizmet kartı ayrı tabloda — Tür listesinde "Hizmet" YOK.
     expect(byKey("itemType").options.map((o) => o.value)).toEqual(["ALL", "YARN", "FABRIC", "CONSUMABLE"]);
     expect(byKey("unit").options.map((o) => o.value)).toEqual(["ALL", "MT", "KG", "ADET"]);
   });
 
-  it("⭐ Renk/Özellik süzgeci katalogdan: ALL başta, anahtar backend ilişki süzgeci; katalog sığmadıysa (null) seçici YOK", () => {
+  it("⭐ Renk/Özellik filtresi katalogdan: ALL başta, anahtar backend ilişki filtresi; katalog sığmadıysa (null) seçici YOK", () => {
     const defs = itemCatalogFilterDefs({ colors: [{ id: "c1", label: "Krem" }], properties: null });
     expect(defs.map((d) => d.key)).toEqual(["allowedColorId", "allowedPropertyId"]);
     expect(defs[0]!.options!.map((o) => o.value)).toEqual(["ALL", "c1"]);
@@ -102,7 +102,7 @@ describe("itemsFilters (saf)", () => {
     expect(labeledSelectText("Tür", "YARN", tur)).toBe("Tür: İplik");
   });
 
-  it("⭐ D2 'Hizmet' ne Ürün Kartları süzgecinde ne stok seçicisinde; kumaş dışı tür renk/özellik eksenini kapatır", () => {
+  it("⭐ D2 'Hizmet' ne Ürün Kartları filtresinde ne stok seçicisinde; kumaş dışı tür renk/özellik eksenini kapatır", () => {
     expect(itemTypeFilterOptions().map((o) => o.value)).not.toContain("SERVICE");
     expect(ITEM_URL_FILTERS.find((d) => d.key === "itemType")!.options.map((o) => o.value)).not.toContain("SERVICE");
     const sp = new URLSearchParams("filter[allowedColorId]=c1");
@@ -122,7 +122,7 @@ describe("ItemsPage — hizmet kartı ayrımı", () => {
   });
 });
 
-describe("ItemsPage — ad + süzgeç şeridi", () => {
+describe("ItemsPage — ad + filtre şeridi", () => {
 
   it("⭐ §1/§3 başlık 'Ürün Kartları'; varsayılan istek isActive=true; 'Pasifleri göster' anahtarı YOK", async () => {
     renderPage();
@@ -168,7 +168,7 @@ describe("ItemsPage — ad + süzgeç şeridi", () => {
     expect(screen.getByRole("combobox", { name: "Renk" })).toHaveTextContent("Renk: Tümü");
   });
 
-  it("⭐ paylaşılan bağlantı iplik + renk taşıyorsa renk anahtarı URL'den düşer, gizli süzgeç sunucuya gitmez", async () => {
+  it("⭐ paylaşılan bağlantı iplik + renk taşıyorsa renk anahtarı URL'den düşer, gizli filtre sunucuya gitmez", async () => {
     renderPage("/definitions/items?filter[itemType]=YARN&filter[allowedColorId]=c1");
     await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", itemType: "YARN" }));
     expect(screen.queryByRole("combobox", { name: "Renk" })).toBeNull();
@@ -183,7 +183,7 @@ describe("ItemsPage — ad + süzgeç şeridi", () => {
     expect(screen.getByRole("combobox", { name: "Tür" })).toBeInTheDocument();
   });
 
-  it("⭐ §2 Durum seçimi sunucuya gider: Pasif → isActive=false · Onay bekleyen → pendingReview=true · Tümü → süzgeçsiz", async () => {
+  it("⭐ §2 Durum seçimi sunucuya gider: Pasif → isActive=false · Onay bekleyen → pendingReview=true · Tümü → filtresiz", async () => {
     const user = userEvent.setup();
     renderPage();
     await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", itemType: STOCK_TYPES }));

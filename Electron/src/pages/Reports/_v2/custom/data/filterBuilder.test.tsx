@@ -39,7 +39,7 @@ function open(initial: unknown, onApply = vi.fn()) {
 }
 
 describe("§1 ağaç sözleşmesi", () => {
-  it("kurucu girdisi → beklenen süzgeç → sunucunun derlediği gövde (birebir)", () => {
+  it("kurucu girdisi → beklenen filtre → sunucunun derlediği gövde (birebir)", () => {
     const out = toQueryFilter(fixture.agacKurucuGirdisi as FilterGroup);
     expect(out).toEqual(fixture.agacBeklenenSuzgec);
     expect(fixture.agacGovde.bloklar[0]!.sorgu.suzgec).toEqual(out);

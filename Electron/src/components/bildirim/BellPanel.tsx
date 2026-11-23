@@ -30,7 +30,7 @@ function BellTabs({ sekme, onSekme, sayi, alarm }: { sekme: BellTab; onSekme: (s
     ["alarmlar", alarm > 0 ? `Alarmlar ${badgeText(alarm)}` : "Alarmlar"],
   ];
   return (
-    <div role="tablist" aria-label="Bildirim süzgeci" className="flex gap-1 border-b border-border/60 px-2 py-1.5">
+    <div role="tablist" aria-label="Bildirim filtresi" className="flex gap-1 border-b border-border/60 px-2 py-1.5">
       {tabs.map(([k, ad]) => (
         <button
           key={k}

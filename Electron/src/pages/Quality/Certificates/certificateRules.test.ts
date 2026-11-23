@@ -19,7 +19,7 @@ describe("expiryBadge", () => {
 });
 
 describe("yardımcılar", () => {
-  it("varsayılan süzgeç temiz sayılır", () => {
+  it("varsayılan filtre temiz sayılır", () => {
     expect(isCertificateFilterDirty(EMPTY_CERTIFICATE_FILTERS)).toBe(false);
     expect(isCertificateFilterDirty({ ...EMPTY_CERTIFICATE_FILTERS, status: "expiring" })).toBe(true);
   });

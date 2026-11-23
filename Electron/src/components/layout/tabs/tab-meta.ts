@@ -79,13 +79,21 @@ function titleFromSegment(pathname: string): string {
     .join(" ");
 }
 
+/** content-routes'taki `<Navigate>` eski yolları → hedef: sekme "Operations" gibi segment başlığına düşmesin. */
+const REDIRECT_ALIASES: Record<string, string> = {
+  "/operations/kursun-queue": "/operations/kursun-dagitim",
+  "/operations/sack-search": "/operations/sack-content-edit",
+  "/operations/scan-dispatch": "/operations/sack-store",
+};
+
 /**
  * Bir pathname için sekme başlığı + ikonunu çözer. Sırayla:
  * sabit eşleme → komut kataloğu (label/icon) → son-segment fallback.
  * Dinamik detay yolları (`/x/:id`) prefix eşleşmesiyle ana sayfanın etiketini alır.
  */
 export function resolveTabMeta(path: string): TabMeta {
-  const pathname = tabPathname(path);
+  const raw = tabPathname(path);
+  const pathname = REDIRECT_ALIASES[raw] ?? raw;
 
   const fixed = STATIC[pathname];
   if (fixed) return fixed;

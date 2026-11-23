@@ -194,7 +194,7 @@ describe("ekranlar", () => {
     expect(screen.getAllByTestId("scan-reading")).toHaveLength(1);
     expect(scanFailCode({ mimeType: "image/png", attempts: 1 })).toBe("UNREADABLE");
   });
-  it("tarih süzgeci isteğe parametre olarak gider", async () => {
+  it("tarih filtresi isteğe parametre olarak gider", async () => {
     renderWithProviders(<IncomingDocumentsPage />);
     await waitFor(() => expect(listDeliveryNotes).toHaveBeenCalled());
     // Tarih kutusu PENCERE açar; aralık "Tarih aralığı" → uçlar → Uygula.

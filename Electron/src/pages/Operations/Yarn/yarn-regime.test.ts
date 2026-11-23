@@ -71,7 +71,7 @@ describe("hareket türü sözlüğü", () => {
 });
 
 describe("boş liste mesajı", () => {
-  it("VARSAYILAN süzgeçte “hiç kayıt yok” DEMEZ — süzgeci adıyla söyler", () => {
+  it("VARSAYILAN filtrede “hiç kayıt yok” DEMEZ — filtreyi adıyla söyler", () => {
     // Varsayılan `onlyNonZero=true` bir DARALTMADIR: sıfır bakiyeli kalemler
     // gizlidir. "Henüz iplik stok hareketi yok" cümlesi burada YALANDIR.
     const msg = yarnEmptyStateMessage(EMPTY_YARN_FILTERS);
@@ -79,7 +79,7 @@ describe("boş liste mesajı", () => {
     expect(msg).not.toContain("Henüz iplik stok hareketi yok");
   });
 
-  it("süzgeç GERÇEKTEN kapalıyken “hiç kayıt yok” diyebilir", () => {
+  it("filtre GERÇEKTEN kapalıyken “hiç kayıt yok” diyebilir", () => {
     const msg = yarnEmptyStateMessage({ ...EMPTY_YARN_FILTERS, onlyNonZero: false });
     expect(msg).toContain("Henüz iplik stok hareketi yok");
   });

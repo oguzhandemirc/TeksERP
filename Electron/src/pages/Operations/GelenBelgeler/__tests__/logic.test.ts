@@ -119,7 +119,7 @@ describe("onay akışı", () => {
 });
 
 describe("liste sorgusu ve rejim", () => {
-  it("süzgeçler sunucuya gider; boş süzgeç alan göndermez", () => {
+  it("filtreler sunucuya gider; boş filtre alan göndermez", () => {
     expect(toQuery(EMPTY_FILTER)).toEqual({ status: undefined, ownerCustomerId: undefined, senderCustomerId: undefined, q: undefined, from: undefined, to: undefined, limit: 50 });
     expect(toQuery({ status: "DRAFT", ownerCustomerId: "o", senderCustomerId: "s", q: "  İRS-1 ", from: "2026-10-01", to: "2026-10-29" }))
       .toEqual({ status: "DRAFT", ownerCustomerId: "o", senderCustomerId: "s", q: "İRS-1", from: "2026-10-01", to: "2026-10-29", limit: 50 });

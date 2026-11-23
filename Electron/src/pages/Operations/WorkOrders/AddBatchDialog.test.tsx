@@ -59,7 +59,7 @@ describe("AddBatchDialog", () => {
 });
 
 describe("addBatchModel", () => {
-  it("kapsamlar kumaşa kilitli; Ham Stok ve Bitmiş Depo tablet süzgeçleriyle aynı", () => {
+  it("kapsamlar kumaşa kilitli; Ham Stok ve Bitmiş Depo tablet filtreleriyle aynı", () => {
     const [raw, fin] = addBatchScopes("i1");
     expect(raw?.filters).toEqual({ "filter[rollScope]": "RAW_STOCK", "filter[rollKind]": "WOUND_ROLL", "filter[itemId]": "i1" });
     expect(fin?.filters["filter[status]"]).toBe("WAREHOUSE,A1_STOCK");

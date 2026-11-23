@@ -52,7 +52,7 @@ export interface BuilderState {
 
 export const EMPTY_BUILDER: BuilderState = { title: "", cube: null, measures: [], dimensions: [], filters: [], period: "son30gun", compare: "prev", view: "cubuk" };
 
-export const BUILDER_STEPS = ["Küp", "Ölçüler", "Boyutlar", "Süzgeçler", "Dönem ve kıyas"] as const;
+export const BUILDER_STEPS = ["Küp", "Ölçüler", "Boyutlar", "Filtreler", "Dönem ve kıyas"] as const;
 
 /** Seçili TÜM ölçülerin izin verdiği kategori boyutları (ölçünün `boyutlar`ı null = hepsi). */
 export function allowedDimensions(cube: CatalogCube | undefined, measures: readonly string[]) {

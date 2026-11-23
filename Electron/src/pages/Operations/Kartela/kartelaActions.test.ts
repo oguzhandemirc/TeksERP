@@ -30,7 +30,7 @@ describe("sevk gövdesi", () => {
     expect(body).toEqual({ subcontractorId: "f1", rollIds: ["r1", "r2"], plateNumber: "34 AB 12", driverName: null, notes: null });
   });
 
-  it("seçici kapsamları: varsayılan kartelalık toplar, ikincisi tüm bitmiş toplar (tablet süzgeci)", () => {
+  it("seçici kapsamları: varsayılan kartelalık toplar, ikincisi tüm bitmiş toplar (tablet filtresi)", () => {
     expect(KARTELA_PICKER_SCOPES[0]).toBe(KARTELA_MARKED_ROLL_SCOPE);
     expect(KARTELA_MARKED_ROLL_SCOPE).toMatchObject({ label: "Kartelalık toplar", filters: {
       "filter[status]": "WAREHOUSE", "filter[shipmentScope]": "free", "filter[markedForKartela]": "true" } });

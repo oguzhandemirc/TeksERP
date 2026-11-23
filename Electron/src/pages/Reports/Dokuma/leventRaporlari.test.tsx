@@ -60,7 +60,7 @@ describe("saf yardımcılar", () => {
 });
 
 describe("sayfa render", () => {
-  it("⭐ Bitiş Tahmini: tarih süzgeci yok, tahmin yoksa gerekçe, uydurulmuş gün yok", async () => {
+  it("⭐ Bitiş Tahmini: tarih filtresi yok, tahmin yoksa gerekçe, uydurulmuş gün yok", async () => {
     leventBitisTahmini.mockResolvedValue({ success: true, data: {
       satirlar: [{ beamId: "b1", beamNo: "LV-9", machine: { id: "m1", code: "T-07", name: "Tezgah 7" }, position: 1, kalanM: 412, gunlukOrtM: null, kaynak: { otomatik: 0, elle: 0 }, tahminiBitisGun: null, kalanGun: null, hesaplanamadi: "son 7 günde tüketim yok" }],
       ozet: { leventSayisi: 1, tahminli: 0, hesaplanamadi: 1 },

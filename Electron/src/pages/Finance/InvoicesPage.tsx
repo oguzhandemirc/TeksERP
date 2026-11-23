@@ -157,13 +157,13 @@ export function InvoicesPage() {
                 Faturalar ekranı yok) → onaylanmayı bekleyen fatura sessizce
                 birikiyordu.
                 ⚠️ Sayı SUNUCUDAN gelir (yüklenen sayfadan DEĞİL) ve tıklanınca
-                durum süzgecini TASLAĞA çeker: sayan bir rozet, saydığı satırlara
+                durum filtresini TASLAĞA çeker: sayan bir rozet, saydığı satırlara
                 götürmüyorsa yarım kalır. */}
             {draftBadge && (
               <button
                 type="button"
                 onClick={() => setStatus("DRAFT")}
-                title="Onay bekleyen taslak sayısı (aynı arama/tür süzgeciyle, sunucudan). Tıklayın: yalnız taslaklar listelenir."
+                title="Onay bekleyen taslak sayısı (aynı arama/tür filtreyiyle, sunucudan). Tıklayın: yalnız taslaklar listelenir."
               >
                 <Badge className="cursor-pointer bg-amber-100 text-amber-900 hover:bg-amber-200 dark:bg-amber-950 dark:text-amber-200 dark:hover:bg-amber-900">
                   {draftBadge}
