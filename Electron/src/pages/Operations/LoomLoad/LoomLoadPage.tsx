@@ -92,8 +92,8 @@ export function LoomLoadPage() {
                 looms.map((l) => <LoomGroup key={l.machineId} loom={l} axis={axis} />)
               ) : (
                 <div className="flex items-center justify-between gap-3 px-3 py-6 text-sm text-muted-foreground">
-                  <span>{narrowed ? "Aramaya ya da süzgece uyan tezgâh yok." : "Tanımlı dokuma tezgâhı yok."}</span>
-                  {narrowed && <Button size="sm" variant="outline" onClick={() => { setQuery(""); setFilter("all"); }}>Süzgeci temizle</Button>}
+                  <span>{narrowed ? "Aramaya ya da filtreye uyan tezgâh yok." : "Tanımlı dokuma tezgâhı yok."}</span>
+                  {narrowed && <Button size="sm" variant="outline" onClick={() => { setQuery(""); setFilter("all"); }}>Filtreyi temizle</Button>}
                 </div>
               )}
             </div>

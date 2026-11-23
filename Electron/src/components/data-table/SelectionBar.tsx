@@ -15,9 +15,8 @@ interface Props<T> {
 }
 
 /**
- * Seçim çubuğu kalıcı: satır varsa (ve seçim açıksa) hep görünür. İKİ DURUMDA AYNI İSKELET (saha 2026-09-22:
- * "aktif/pasif arasında çok yer değiştiriyor"): sol slot "N seçili + Seçimi temizle" (0'da pasif, genişlik sabit),
- * hemen ardından toplu eylemler (0'da pasif), sağ slot ipucu (0) ↔ dışa aktarma (seçim).
+ * Seçim çubuğu: DataTable yalnız seçim varken çizer (kullanıcı 2026-11-23). Sol slot "N seçili + Seçimi temizle",
+ * ardından toplu eylemler, sağda seçili dışa aktarma. 0 dalı (ipucu) bileşeni doğrudan kullanan yerler içindir.
  */
 export function SelectionBar<T>({ table, selected, bulkActions, selectionHint, exportName, selectedExportHint }: Props<T>) {
   const fileName = exportListName(exportName, { selected: true });

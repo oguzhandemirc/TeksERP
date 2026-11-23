@@ -414,7 +414,8 @@ export function DataTable<T>({
         {more ? <div ref={sentinelRef} aria-hidden className="h-px w-full shrink-0" /> : null}
       </div>
 
-      {selectable && showSelectionBar && (rows.length > 0 || selected.length > 0) && (
+      {/* Toplu işlem şeridi yalnız seçim varken (kullanıcı 2026-11-23; "0 seçili" sabit şerit kalktı). */}
+      {selectable && showSelectionBar && selected.length > 0 && (
         <SelectionBar table={table} selected={selected.map((r) => r.original)} bulkActions={bulkActions} selectionHint={selectionHint} exportName={exportName} selectedExportHint={selectedExportHint} />
       )}
 

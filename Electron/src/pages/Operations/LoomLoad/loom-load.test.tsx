@@ -53,7 +53,7 @@ describe("loom-load-text", () => {
     expect(freeAtCell(loom({ totalEstimatedHours: null, estimatedFreeAtIfContinuous: null })).hint).toMatch(/bilinmiyor/);
     expect(freeAtCell(loom()).text).toBe(fmtFactoryDateTime("2026-11-12T12:30:00.000Z"));
   });
-  it("süzgeç: dolu/boş/süresi bilinmeyen; arama tezgâh, iş emri ve üründe (Türkçe harf duyarsız)", () => {
+  it("filtre: dolu/boş/süresi bilinmeyen; arama tezgâh, iş emri ve üründe (Türkçe harf duyarsız)", () => {
     const idle = loom({ machineId: "m2", code: "T-02", name: "İkinci", jobs: [], totalEstimatedHours: 0 });
     const unk = loom({ machineId: "m3", totalEstimatedHours: null });
     expect(loomMatches(loom(), "", "busy")).toBe(true);
@@ -113,13 +113,13 @@ describe("LoomLoadPage", () => {
     expect(screen.getByLabelText(/bilinmiyor: İşin plan metresi yok/)).toBeInTheDocument();
   });
 
-  it("arama hiçbir tezgâha uymazsa ne yapılacağını söyler ve süzgeci temizler", async () => {
+  it("arama hiçbir tezgâha uymazsa ne yapılacağını söyler ve filtresi temizler", async () => {
     get.mockResolvedValue(data());
     renderWithProviders(<LoomLoadPage />);
     const user = userEvent.setup();
     await user.type(await screen.findByRole("searchbox"), "zzz");
-    expect(screen.getByText("Aramaya ya da süzgece uyan tezgâh yok.")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Süzgeci temizle" }));
+    expect(screen.getByText("Aramaya ya da filtreye uyan tezgâh yok.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Filtreyi temizle" }));
     expect(screen.getAllByTestId("loom-load-card")).toHaveLength(1);
   });
 
