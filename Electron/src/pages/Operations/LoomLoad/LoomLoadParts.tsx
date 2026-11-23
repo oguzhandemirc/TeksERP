@@ -1,10 +1,8 @@
-// Tezgâh yük çizelgesi parçaları — tezgâh kartı, iş satırı, tezgâhsız işler. Değer yoksa "—" + nedenini söyleyen ipucu.
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+// Tezgâh yük çizelgesi yardımcı parçaları — "—" ipucu, lejant, tezgâhsız işler. Değer yoksa "—" + nedenini söyleyen ipucu.
+import { InfoPopover } from "@/components/ui/info-popover";
 import { cn } from "@/lib/utils";
-import { WEAVING_STATUS_META } from "../WeavingOrders/types";
-import type { LoomLoadJob, LoomLoadJobBase, LoomLoadRow } from "./types";
-import { DASH, assignmentText, freeAtCell, hoursText, jobHoursHint, metersText, remainingHint } from "./loom-load-text";
+import type { LoomLoadJobBase } from "./types";
+import { DASH, metersText, remainingHint } from "./loom-load-text";
 
 /** Değer ya da "—"; "—" ise üzerine gelince neden (ekran okuyucu için aria-label). */
 export function Val({ text, hint, className }: { text: string; hint: string | null; className?: string }) {
@@ -16,71 +14,47 @@ export function Val({ text, hint, className }: { text: string; hint: string | nu
   );
 }
 
-function JobLine({ job, loom }: { job: LoomLoadJob; loom: LoomLoadRow }) {
-  const meta = WEAVING_STATUS_META[job.status];
+const SWATCH = "inline-block h-2.5 w-4 rounded-[2px]";
+
+/** Çubuk renklerinin anahtarı — geniş ekranda araç çubuğunda açık, darda ⓘ balonunda. */
+export function Legend() {
   return (
-    <li className="grid grid-cols-[1fr_auto_auto] items-baseline gap-x-3 py-1.5 text-sm" data-testid="loom-load-job">
-      <div className="min-w-0">
-        <span className="font-mono text-xs">{job.weavingOrderNumber}</span>{" "}
-        <span className="truncate">{job.itemCode} · {job.itemName}</span>
-        <div className="text-xs text-muted-foreground">
-          {assignmentText(job.assignment)}
-          {meta ? <Badge className={cn("ml-1.5 px-1.5 py-0 text-[10px]", meta.badgeClass)}>{meta.label}</Badge> : null}
-        </div>
-      </div>
-      <Val text={metersText(job.remainingM)} hint={remainingHint(job)} className="text-right" />
-      <Val text={hoursText(job.estimatedHours)} hint={jobHoursHint(job, loom)} className="w-28 text-right" />
-    </li>
+    <>
+      <LegendItems className="hidden 2xl:flex" />
+      <span className="2xl:hidden"><InfoPopover label="Çizelge anahtarı" desc={<LegendItems className="flex flex-col items-start gap-1.5" />} /></span>
+    </>
   );
 }
 
-export function LoomCard({ loom }: { loom: LoomLoadRow }) {
-  const free = freeAtCell(loom);
+function LegendItems({ className }: { className?: string }) {
   return (
-    <Card data-testid="loom-load-card">
-      <CardHeader className="flex-row items-baseline justify-between gap-2 space-y-0 pb-2">
-        <CardTitle className="text-base">
-          <span className="font-mono">{loom.code}</span> <span className="font-normal text-muted-foreground">{loom.name}</span>
-        </CardTitle>
-        <span className="text-xs text-muted-foreground">{loom.jobs.length ? `${loom.jobs.length} iş` : "iş yok"}</span>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        {loom.jobs.length > 0 && (
-          <>
-            <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 text-xs text-muted-foreground">
-              <span>İş sırası</span><span className="text-right">Kalan</span><span className="w-28 text-right">Tahmini süre</span>
-            </div>
-            <ol className="divide-y">{loom.jobs.map((j) => <JobLine key={j.weavingOrderId} job={j} loom={loom} />)}</ol>
-          </>
-        )}
-        <dl className="grid grid-cols-2 gap-x-3 border-t pt-2 text-sm">
-          <dt className="text-muted-foreground">Toplam süre</dt>
-          <dd className="text-right">
-            <Val text={hoursText(loom.totalEstimatedHours)} hint={loom.totalEstimatedHours == null ? "En az bir işin süresi hesaplanamadı." : null} />
-          </dd>
-          <dt className="text-muted-foreground">Kesintisiz çalışırsa boşalır</dt>
-          <dd className={cn("text-right", loom.jobs.length === 0 && "text-success")} data-testid="loom-load-free-at">
-            <Val text={free.text} hint={free.hint} />
-          </dd>
-        </dl>
-      </CardContent>
-    </Card>
+    <div className={cn("items-center gap-3 text-xs text-muted-foreground", className)}>
+      <span className="flex items-center gap-1.5"><span className={cn(SWATCH, "bg-primary")} />Dokunuyor</span>
+      <span className="flex items-center gap-1.5"><span className={cn(SWATCH, "border border-primary/60 bg-primary/15")} />Levent takılı</span>
+      <span className="flex items-center gap-1.5">
+        <span className={cn(SWATCH, "border border-dashed border-muted-foreground/50 bg-[repeating-linear-gradient(135deg,hsl(var(--muted-foreground)/0.35)_0_3px,transparent_3px_6px)]")} />Süre bilinmiyor
+      </span>
+      <span className="flex items-center gap-1.5"><span className="inline-block h-3 w-0.5 bg-destructive/70" />Şimdi</span>
+    </div>
   );
 }
 
 export function UnassignedSection({ jobs }: { jobs: LoomLoadJobBase[] }) {
   if (jobs.length === 0) return null;
   return (
-    <section className="space-y-2" aria-labelledby="loom-load-unassigned">
-      <h2 id="loom-load-unassigned" className="text-sm font-semibold">Tezgâh bekleyen işler ({jobs.length})</h2>
-      <p className="text-xs text-muted-foreground">Açık koşumu ya da takılı leventi olmayan planlı işler; bir tezgâhta başlayınca o tezgâhın sırasına girer.</p>
-      <ul className="divide-y border-y">
+    <section className="rounded-lg border border-card-border bg-card shadow-card" aria-labelledby="loom-load-unassigned">
+      <header className="flex h-9 items-center gap-1.5 border-b px-3">
+        <h2 id="loom-load-unassigned" className="text-sm font-semibold">Tezgâh bekleyen işler ({jobs.length})</h2>
+        <InfoPopover label="Tezgâh bekleyen işler" desc="Açık koşumu ya da takılı leventi olmayan planlı işler; bir tezgâhta başlayınca o tezgâhın sırasına girer." />
+      </header>
+      <ul>
         {jobs.map((j) => (
-          <li key={j.weavingOrderId} className="grid grid-cols-[1fr_auto] gap-x-3 py-1.5 text-sm" data-testid="loom-load-unassigned-job">
-            <span className="min-w-0 truncate">
-              <span className="font-mono text-xs">{j.weavingOrderNumber}</span> {j.itemCode} · {j.itemName}
+          <li key={j.weavingOrderId} className="grid h-8 grid-cols-[minmax(0,1fr)_6rem] items-center gap-x-3 border-t border-border/50 px-3 text-sm first:border-t-0" data-testid="loom-load-unassigned-job">
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="font-mono text-xs">{j.weavingOrderNumber}</span>
+              <span className="truncate">{j.itemCode} · {j.itemName}</span>
             </span>
-            <Val text={metersText(j.remainingM)} hint={remainingHint(j)} className="text-right" />
+            <Val text={metersText(j.remainingM)} hint={remainingHint(j)} className="text-right text-xs" />
           </li>
         ))}
       </ul>
