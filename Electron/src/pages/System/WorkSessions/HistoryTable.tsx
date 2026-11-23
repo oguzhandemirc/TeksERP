@@ -2,9 +2,9 @@ import { useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable } from "@/components/data-table/DataTable";
 import { DataTableTools } from "@/components/data-table/DataTableTools";
+import { DayRangeChip, SelectChip } from "@/components/data-table/filter-row/SelectChip";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { safeFormat } from "@/lib/format";
 import { ListExportMenu } from "@/components/data-table/ListExportMenu";
@@ -15,15 +15,13 @@ import { machineService } from "@/pages/Machines/service";
 import { stationService } from "@/pages/Stations/service";
 import { adminUserService } from "@/services/adminUserService";
 import { workSessionService } from "./service";
-import { DateRangeInput } from "@/components/forms/DateRangeInput";
 import { ListSearchBox } from "@/components/data-table/ListSearchBox";
 import { useListSearch } from "@/hooks/useListSearch";
-import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { ListFooter, ListToolbar } from "@/components/layout/ListPage";
 import { endReasonLabels, formatDurationMinutes, sessionDurationMinutes, type WorkSessionItem } from "./types";
 import { useSessionHistoryTable } from "./historyColumns";
 
 const PAGE_SIZE = 25;
-const SELECT_CLS = "h-9 rounded-md border border-input bg-background px-2 text-sm";
 
 // Dışa aktarım sütunları — ekrandaki "Yer" kolonu dosyada İSTASYON + MAKİNE olarak
 // ayrılır (süzülebilsin). Süre İKİ kolon: okunur metin ("3 sa 25 dk") + toplanabilir
@@ -95,95 +93,43 @@ export function HistoryTable() {
   const pagination = q.data?.pagination;
   const table = useSessionHistoryTable(rows, openTarget);
 
-  const resetPage = () => setPage(1);
+  // Her süzgeç değişimi sayfayı başa alır (offset sayfalı liste).
+  const pick = (setter: (v: string) => void) => (v: string | null) => {
+    setter(v ?? "");
+    setPage(1);
+  };
+  const userOptions = (usersQ.data?.data ?? []).map((u) => ({ value: u.id, label: u.fullName }));
+  const stationOptions = (stationsQ.data?.data ?? []).map((s) => ({ value: s.id, label: s.name }));
+  const machineOptions = (machinesQ.data?.data ?? []).map((m) => ({ value: m.id, label: `${m.code} — ${m.name}` }));
+  const deviceOptions = (devicesQ.data?.data ?? []).map((d) => ({ value: d.id, label: d.name }));
 
   return (
     <>
       <ListToolbar className="flex-row flex-wrap items-center">
-        <select
-          className={SELECT_CLS}
-          value={userId}
-          onChange={(e) => {
-            setUserId(e.target.value);
-            resetPage();
+        <ListSearchBox
+          value={search}
+          onSearchChange={(v) => {
+            setSearch(v);
+            setPage(1);
           }}
-        >
-          <option value="">Tüm kullanıcılar</option>
-          {(usersQ.data?.data ?? []).map((u) => (
-            <option key={u.id} value={u.id}>
-              {u.fullName}
-            </option>
-          ))}
-        </select>
-        <select
-          className={SELECT_CLS}
-          value={stationId}
-          onChange={(e) => {
-            setStationId(e.target.value);
-            resetPage();
-          }}
-        >
-          <option value="">Tüm istasyonlar</option>
-          {(stationsQ.data?.data ?? []).map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </select>
-        <select
-          className={SELECT_CLS}
-          value={machineId}
-          onChange={(e) => {
-            setMachineId(e.target.value);
-            resetPage();
-          }}
-        >
-          <option value="">Tüm makineler</option>
-          {(machinesQ.data?.data ?? []).map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.code} — {m.name}
-            </option>
-          ))}
-        </select>
-        <select
-          className={SELECT_CLS}
-          value={deviceId}
-          onChange={(e) => {
-            setDeviceId(e.target.value);
-            resetPage();
-          }}
-        >
-          <option value="">Tüm cihazlar</option>
-          {(devicesQ.data?.data ?? []).map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.name}
-            </option>
-          ))}
-        </select>
-        <DateRangeInput
+          searchHint="Kullanıcı, cihaz, makine ya da istasyon (ad/kod) ara"
+        />
+        <DayRangeChip
+          id="ws-date"
+          label="Tarih"
           from={from}
           to={to}
-          onFrom={(v) => {
-            setFrom(v);
-            resetPage();
+          onChange={(r) => {
+            setFrom(r.from);
+            setTo(r.to);
+            setPage(1);
           }}
-          onTo={(v) => {
-            setTo(v);
-            resetPage();
-          }}
-          inputClassName="h-9 w-40"
-          fromLabel="Oturum tarihi başlangıcı"
-          toLabel="Oturum tarihi bitişi"
         />
+        <SelectChip id="ws-user" label="Kullanıcı" value={userId || null} options={userOptions} onChange={pick(setUserId)} />
+        <SelectChip id="ws-station" label="İstasyon" value={stationId || null} options={stationOptions} onChange={pick(setStationId)} />
+        <SelectChip id="ws-machine" label="Makine" value={machineId || null} options={machineOptions} onChange={pick(setMachineId)} />
+        <SelectChip id="ws-device" label="Cihaz" value={deviceId || null} options={deviceOptions} onChange={pick(setDeviceId)} />
         <div className="ml-auto flex items-center gap-1.5">
-          <ListSearchBox
-            value={search}
-            onSearchChange={(v) => {
-              setSearch(v);
-              resetPage();
-            }}
-            searchHint="Kullanıcı, cihaz, makine ya da istasyon (ad/kod) ara"
-          />
           {/* Dosya kendi sütunlarıyla iner (İstasyon/Makine ayrı, toplanabilir dakika) — tablo menüsünde ikinci indirme yok. */}
           <DataTableTools table={table} compact hideExport />
           <ListExportMenu
@@ -203,19 +149,15 @@ export function HistoryTable() {
         </div>
       </ListToolbar>
 
-      {!q.isLoading && rows.length > 0 ? (
-        <DataTable table={table} exportName="Çalışma Oturumları" />
-      ) : (
-        <ListBody>
-          {q.isLoading ? (
-            <ListMessage>
-              <Skeleton className="h-64 w-full" />
-            </ListMessage>
-          ) : (
-            <p className="py-8 text-center text-sm text-muted-foreground">{term ? "Aramaya uyan oturum yok." : "Filtrelere uyan oturum yok."}</p>
-          )}
-        </ListBody>
-      )}
+      <DataTable
+        table={table}
+        exportName="Çalışma Oturumları"
+        isLoading={q.isLoading}
+        isError={q.isError}
+        errorText="Oturum geçmişi yüklenemedi."
+        onRetry={() => void q.refetch()}
+        emptyText={term ? "Aramaya uyan oturum yok." : "Filtrelere uyan oturum yok."}
+      />
 
       <ListFooter
         loaded={rows.length}

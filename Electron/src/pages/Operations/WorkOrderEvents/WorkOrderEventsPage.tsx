@@ -12,6 +12,8 @@ import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { EmptyState } from "@/components/ui/empty-state";
+import { ScanLine, Search } from "lucide-react";
 import { workOrderStatusLabels, type WorkOrderStatus } from "@/types/enums";
 import { lookupWorkOrdersForEvents, type LookupHit } from "../WorkOrders/events";
 import { WorkOrderEventsPanel } from "../WorkOrders/WorkOrderEventsPanel";
@@ -44,13 +46,18 @@ export function WorkOrderEventsPage() {
             if (q.trim().length >= 2) search.mutate(q.trim());
           }}
         >
-          <Input
-            autoFocus
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder={`${TERIM.terbiyeIsEmri.cumleBasi.yalin} no (IE…) ya da top barkodu okutun`}
-            aria-label={`${TERIM.terbiyeIsEmri.cumleBasi.yalin} no ya da top barkodu`}
-          />
+          <div className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              autoFocus
+              className="pl-8"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="No ya da barkod…"
+              title={`${TERIM.terbiyeIsEmri.cumleBasi.yalin} no (IE…) ya da top barkodu okutun`}
+              aria-label={`${TERIM.terbiyeIsEmri.cumleBasi.yalin} no ya da top barkodu`}
+            />
+          </div>
           <Button type="submit" disabled={q.trim().length < 2 || search.isPending}>
             {search.isPending ? "Aranıyor…" : "Ara"}
           </Button>
@@ -70,6 +77,14 @@ export function WorkOrderEventsPage() {
               </Button>
             ))}
           </div>
+        )}
+        {!selected && hits.length === 0 && !search.isError && !(search.isSuccess && !cancelled) && (
+          <EmptyState
+            icon={ScanLine}
+            className="flex-1"
+            title={`${TERIM.terbiyeIsEmri.cumleBasi.yalin} no yazın ya da top barkodunu okutun`}
+            description="Bulunan işin bütün hareketleri burada listelenir; barkod birden çok işten geçtiyse seçim size sorulur."
+          />
         )}
         {selected && (
           <div className="mt-4 flex min-h-0 flex-1 flex-col">
