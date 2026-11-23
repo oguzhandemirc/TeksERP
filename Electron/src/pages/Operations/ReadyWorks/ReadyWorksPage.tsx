@@ -5,9 +5,8 @@ import { useMemo, useState } from "react";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBand, ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { ListFooter, ListToolbar } from "@/components/layout/ListPage";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/data-table/DataTable";
 import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { useLocalTable } from "@/hooks/useLocalTable";
@@ -61,29 +60,6 @@ function ShipFlow({ openRow, onCloseRow, canShip }: { openRow: ReadyWorkRow | nu
   );
 }
 
-/** Tablo yokken gövde: yükleniyor / hata (boş sanılmaz) / boş süzgeç. */
-function ReadyWorksState({ isLoading, isError, onRetry }: { isLoading: boolean; isError: boolean; onRetry: () => void }) {
-  return isLoading ? (
-    <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
-  ) : isError ? (
-    <ListMessage>
-      <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-        <p className="font-medium text-destructive">Liste yüklenemedi.</p>
-        <p className="mt-1 text-muted-foreground">Bu bir “hazır iş yok” cevabı değildir — istek reddedildi ya da sunucuya ulaşılamadı.</p>
-        <Button variant="outline" size="sm" className="mt-3" onClick={onRetry}>
-          Tekrar dene
-        </Button>
-      </div>
-    </ListMessage>
-  ) : (
-    <ListMessage>
-      <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-        Bu filtrede iş yok. Tamamı sevk edilmiş işler listede görünmez.
-      </div>
-    </ListMessage>
-  );
-}
-
 export function ReadyWorksPage() {
   const incomingDocEnabled = useGelenBelgeEnabled();
   const financeEnabled = useFeatureFlags().data?.data?.financeEnabled ?? false;
@@ -129,32 +105,28 @@ export function ReadyWorksPage() {
         description={`${TERIM.terbiyeIsEmri.tekil}, gelen belge, parti ya da müşteri başına sevke hazırlık. Hazır = Bitmiş Depo / 2. kalite stoktaki toplar; kural fabrika ayarından (tümü bitti ya da metre eşiği). Satıra tıklayınca toplar açılır, hazır olanlar oradan sevke alınır.`}
         actions={<RefreshButton queryKey={READY_WORKS_QUERY_KEY} />}
       />
-      {!q.isLoading && !q.isError && first && (
-        <ListBand>
-          <SummaryStrip s={first.summary} />
-        </ListBand>
-      )}
       <ListToolbar className="flex-row flex-wrap items-center">
         <ReadyWorksToolbar tabs={tabs} unit={unit} onUnit={setPicked} stateFilter={stateFilter} onStateFilter={setStateFilter} />
         <div className="ml-auto flex items-center gap-1.5">
           <DataTableTools table={table} compact exportName="Sevke hazır işler" />
         </div>
       </ListToolbar>
-      {!q.isLoading && !q.isError && rows.length > 0 ? (
-        <DataTable table={table} onRowClick={setOpenRow} rowTitle={(r) => `${r.label} toplarını aç`} exportName="Sevke hazır işler" />
-      ) : (
-      <ListBody>
-        <ReadyWorksState isLoading={q.isLoading} isError={q.isError} onRetry={() => void q.refetch()} />
-      </ListBody>
-      )}
-      {!q.isLoading && !q.isError && rows.length > 0 && (
-        <ListFooter loaded={rows.length} hasMore={Boolean(q.hasNextPage)} isFetchingMore={q.isFetchingNextPage}>
-          {q.hasNextPage && (
-            <Button variant="outline" size="sm" className="h-7" disabled={q.isFetchingNextPage} onClick={() => void q.fetchNextPage()}>
-              {q.isFetchingNextPage ? "Yükleniyor…" : "Daha fazla"}
-            </Button>
-          )}
-        </ListFooter>
+      {/* "HATA" ile "KAYIT YOK" ayrı ekranlar (DataTable.isError); sonraki sayfa dibe inince kendiliğinden gelir. */}
+      <DataTable
+        table={table}
+        isLoading={q.isLoading}
+        isError={q.isError}
+        onRetry={() => void q.refetch()}
+        errorText="Bu bir “hazır iş yok” cevabı değildir — istek reddedildi ya da sunucuya ulaşılamadı."
+        emptyText="Bu filtrede iş yok."
+        emptyDescription="Tamamı sevk edilmiş işler listede görünmez."
+        onRowClick={setOpenRow}
+        rowTitle={(r) => `${r.label} toplarını aç`}
+        exportName="Sevke hazır işler"
+        loadMore={{ hasMore: Boolean(q.hasNextPage), isFetchingMore: q.isFetchingNextPage, onLoadMore: () => void q.fetchNextPage() }}
+      />
+      {!q.isLoading && !q.isError && (
+        <ListFooter loaded={rows.length} hasMore={Boolean(q.hasNextPage)} isFetchingMore={q.isFetchingNextPage} summary={first ? <SummaryStrip s={first.summary} /> : undefined} />
       )}
       <ShipFlow openRow={openRow} onCloseRow={() => setOpenRow(null)} canShip={canShip} />
     </PageShell>

@@ -5,9 +5,9 @@ import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBand, ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { ListFooter, ListToolbar } from "@/components/layout/ListPage";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Button } from "@/components/ui/button";
+import { ToolbarToggle } from "@/components/data-table/ToolbarToggle";
 import { RefreshButton } from "@/components/RefreshButton";
 import { CONSIGNED_WORK_QUERY_KEY, getConsignedWork, type ConsignedOwnerRow } from "./service";
 import { primaryBucket, rollsLinkFor } from "./consigned-links";
@@ -49,33 +49,13 @@ function ViewTabs({ value, onChange }: { value: "anlik" | "ekstre"; onChange: (v
   return <PageTabs label="Emanet görünümü" tabs={[{ key: "anlik", label: "Anlık durum" }, { key: "ekstre", label: "Emanet ekstresi" }]} active={value} onSelect={onChange} />;
 }
 
-/** Tablo yokken gövde: yükleniyor / hata (boş sanılmaz) / boş. */
-function ConsignedState({ isLoading, isError, onlyReady, searching, onRetry }: { isLoading: boolean; isError: boolean; onlyReady: boolean; searching: boolean; onRetry: () => void }) {
-  if (isLoading) return <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>;
-  if (isError) {
-    return (
-      <ListMessage>
-        <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-          <p className="font-medium text-destructive">Liste yüklenemedi.</p>
-          <p className="mt-1 text-muted-foreground">Bu bir “içeride iş yok” cevabı değildir — istek reddedildi ya da sunucuya ulaşılamadı.</p>
-          <Button variant="outline" size="sm" className="mt-3" onClick={onRetry}>
-            Tekrar dene
-          </Button>
-        </div>
-      </ListMessage>
-    );
-  }
-  return (
-    <ListMessage>
-      <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-        {searching
-          ? "Aramaya uyan müşteri yok."
-          : onlyReady
-          ? "Sevke hazır emaneti olan müşteri yok."
-          : "İçeride emanet mal yok. Emanet top, girişte “Sahibi” seçilerek ya da gelen belge onayıyla doğar."}
-      </div>
-    </ListMessage>
-  );
+/** Toplamlar gelmeden (yükleniyor/hata) kolon seti — yalnız boş/hata satırı çizilsin diye; değerler sıfır. */
+const ZERO = { count: 0, qty: 0 };
+const NO_TOTALS = { waiting: ZERO, waitingSemi: ZERO, inProcess: ZERO, ready: ZERO, other: ZERO, total: ZERO };
+
+function emptyText(searching: boolean, onlyReady: boolean): string {
+  if (searching) return "Aramaya uyan müşteri yok.";
+  return onlyReady ? "Sevke hazır emaneti olan müşteri yok." : "İçeride emanet mal yok.";
 }
 
 function ConsignedNowView({ onStatement }: { onStatement: (customerId: string | null) => void }) {
@@ -96,7 +76,7 @@ function ConsignedNowView({ onStatement }: { onStatement: (customerId: string | 
   const readiness = useMemo(() => (canReadShipping ? new Map((readyQ.data ?? []).map((w) => [w.id, w])) : null), [canReadShipping, readyQ.data]);
   const totals = q.data?.totals;
   const columns = useMemo(
-    () => (totals ? ownerColumns({ totals, readiness, readinessStatus, onStatement: (r) => onStatement(r.ownerCustomerId) }) : []),
+    () => ownerColumns({ totals: totals ?? NO_TOTALS, readiness, readinessStatus, onStatement: (r) => onStatement(r.ownerCustomerId) }),
     [totals, readiness, readinessStatus, onStatement],
   );
   const table = useLocalTable({ tableKey: "consigned-work:owners", data: rows, columns, getRowId: (r) => r.ownerCustomerId });
@@ -106,40 +86,30 @@ function ConsignedNowView({ onStatement }: { onStatement: (customerId: string | 
       <PageHeader
         title="İçerideki İşler"
         description="Müşterilerin işlenmek üzere bıraktığı (emanet) mal — müşteri başına top ve metre. Sevk edilen, hurdaya ayrılan ve iptal/tüketilmiş toplar sayılmaz; fasondaki ve karteladaki emanet içeride sayılır (Diğer). Satıra tıklayınca toplar o müşterinin filtreyiyle açılır."
-        actions={
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant={onlyReady ? "default" : "outline"}
-              size="sm"
-              aria-pressed={onlyReady}
-              title="Yalnız sevke hazır (depoda) emaneti olan müşteriler; toplamlar da bu kapsamdan"
-              onClick={() => setOnlyReady((v) => !v)}
-            >
-              Yalnız sevke hazır
-            </Button>
-            <RefreshButton queryKey={CONSIGNED_WORK_QUERY_KEY} />
-          </div>
-        }
+        actions={<RefreshButton queryKey={CONSIGNED_WORK_QUERY_KEY} />}
       />
       <ViewTabs value="anlik" onChange={(v) => v === "ekstre" && onStatement(null)} />
-      {!q.isLoading && !q.isError && q.data && (
-        <ListBand>
-          <TotalsStrip totals={q.data.totals} />
-        </ListBand>
-      )}
-      <ListToolbar className="flex-row items-center justify-end gap-1.5">
+      <ListToolbar className="flex-row items-center gap-1.5">
         <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Müşteri adı ya da kodu ara (toplamlar da süzülür)" />
-        <DataTableTools table={table} compact exportName="İçerideki işler" />
+        <ToolbarToggle checked={onlyReady} onCheckedChange={setOnlyReady} label="Yalnız sevke hazır" title="Yalnız sevke hazır (depoda) emaneti olan müşteriler; toplamlar da bu kapsamdan" />
+        <div className="ml-auto flex items-center gap-1.5">
+          <DataTableTools table={table} compact exportName="İçerideki işler" />
+        </div>
       </ListToolbar>
-      {!q.isLoading && !q.isError && rows.length > 0 ? (
-        <DataTable table={table} onRowClick={open} rowTitle={(r) => `${r.ownerName} toplarını aç`} exportName="İçerideki işler" />
-      ) : (
-      <ListBody>
-        <ConsignedState isLoading={q.isLoading} isError={q.isError} onlyReady={onlyReady} searching={!!term} onRetry={() => void q.refetch()} />
-      </ListBody>
-      )}
-      {rows.length > 0 && <ListFooter loaded={rows.length} />}
+      {/* "HATA" ile "KAYIT YOK" ayrı ekranlar (DataTable.isError). */}
+      <DataTable
+        table={table}
+        isLoading={q.isLoading}
+        isError={q.isError}
+        onRetry={() => void q.refetch()}
+        errorText="Bu bir “içeride iş yok” cevabı değildir — istek reddedildi ya da sunucuya ulaşılamadı."
+        emptyText={emptyText(!!term, onlyReady)}
+        emptyDescription={!term && !onlyReady ? "Emanet top, girişte “Sahibi” seçilerek ya da gelen belge onayıyla doğar." : undefined}
+        onRowClick={open}
+        rowTitle={(r) => `${r.ownerName} toplarını aç`}
+        exportName="İçerideki işler"
+      />
+      {!q.isLoading && !q.isError && <ListFooter loaded={rows.length} summary={q.data ? <TotalsStrip totals={q.data.totals} /> : undefined} />}
     </PageShell>
   );
 }

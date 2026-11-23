@@ -52,7 +52,7 @@ export function ItemsPage() {
   };
   /** URL `filter[key]` ile bağlı seçici; "Tümü" = anahtar silinir, sunucuya gitmez. */
   // Seçenek listesi "Tümü"yü (ALL) zaten taşır → `resetValue` ALL; ✕ da ALL'a döner.
-  const setUrlFilter = (key: string, v: string) =>
+  const setUrlFilter = (key: ItemUrlFilterDef["key"], v: string) =>
     key === "itemType" ? setSearchParams(itemTypeChangeParams(searchParams, v), { replace: true }) : setParam(itemUrlFilterParam(key), v === ITEM_FILTER_ALL ? null : v);
   const urlSelect = (f: ItemUrlFilterDef, title?: string) => (
     <span key={f.key} title={title} className="contents">

@@ -129,7 +129,8 @@ describe("Emanet Çıkış listesi", () => {
     expect(await screen.findByText("EC-2026-0001")).toBeInTheDocument();
     expect(screen.getByTestId("consignment-summary")).toHaveTextContent("Belge1");
     expect(svc.list.mock.calls[0]![0]).toMatchObject({ status: "ALL" });
-    fireEvent.click(screen.getByRole("button", { name: "İptal" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Durum:/ }));
+    fireEvent.click(await screen.findByRole("option", { name: "İptal" }));
     await waitFor(() =>
       expect(svc.list).toHaveBeenLastCalledWith(expect.objectContaining({ status: "CANCELLED" }), null, 50),
     );
@@ -138,7 +139,8 @@ describe("Emanet Çıkış listesi", () => {
   it("hata 'yüklenemedi' der (belge yok sanılmaz); boş liste ayrı cümle", async () => {
     svc.list.mockRejectedValueOnce(Object.assign(new Error("x"), { response: { status: 500 } }));
     const { unmount } = renderWithProviders(<ConsignmentDispatchesPage />);
-    expect(await screen.findByText("Emanet çıkış listesi yüklenemedi.")).toBeInTheDocument();
+    expect(await screen.findByText("Liste yüklenemedi")).toBeInTheDocument();
+    expect(screen.queryByText("Henüz emanet çıkışı yok.")).toBeNull();
     unmount();
     svc.list.mockResolvedValueOnce({
       ...LIST,
@@ -146,7 +148,7 @@ describe("Emanet Çıkış listesi", () => {
       summary: { count: 0, activeCount: 0, beamCount: 0, yarnKg: "0" },
     });
     renderWithProviders(<ConsignmentDispatchesPage />);
-    expect(await screen.findByTestId("consignment-empty")).toHaveTextContent("Henüz emanet çıkışı yok");
+    expect(await screen.findByText("Henüz emanet çıkışı yok.")).toBeInTheDocument();
   });
 });
 

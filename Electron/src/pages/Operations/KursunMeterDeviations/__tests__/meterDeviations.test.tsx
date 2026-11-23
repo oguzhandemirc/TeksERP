@@ -73,7 +73,8 @@ describe("Metre Sapmaları sayfası", () => {
     expect(within(strip).getByText("Onaysız (toplam)")).toBeInTheDocument();
     expect(screen.getAllByText("İmzasız sapma").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Simüle")).toBeInTheDocument();
-    await userEvent.click(within(screen.getByRole("group", { name: "Durum filtresi" })).getByText("İmza bekliyor"));
+    await userEvent.click(screen.getByRole("button", { name: /^Durum:/ }));
+    await userEvent.click(await screen.findByRole("option", { name: "İmza bekliyor" }));
     await waitFor(() => expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ status: "PENDING" }), null));
   });
 
@@ -92,7 +93,8 @@ describe("Metre Sapmaları sayfası", () => {
   it("hata ile boş liste ayrı ekranlardır", async () => {
     list.mockRejectedValue(new Error("403"));
     renderWithProviders(<MeterDeviationsPage />);
-    expect(await screen.findByText("Liste yüklenemedi.")).toBeInTheDocument();
+    expect(await screen.findByText("Liste yüklenemedi")).toBeInTheDocument();
+    expect(screen.queryByText("Bu filtreye uyan metre sapması yok.")).toBeNull();
   });
 });
 

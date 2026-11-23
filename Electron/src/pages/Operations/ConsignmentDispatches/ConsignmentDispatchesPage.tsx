@@ -9,7 +9,7 @@ import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { useLocalTable } from "@/hooks/useLocalTable";
 import { Plus } from "lucide-react";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBand, ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
+import { ListFooter, ListToolbar } from "@/components/layout/ListPage";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PermissionGate } from "@/components/PermissionGate";
 import { RefreshButton } from "@/components/RefreshButton";
@@ -45,48 +45,28 @@ export function ConsignmentDispatchesPage() {
           </div>
         }
       />
-      {l.summary && (
-        <ListBand>
-          <ConsignmentSummaryStrip summary={l.summary} />
-        </ListBand>
-      )}
       <ListToolbar className="flex-row flex-wrap items-center">
         <ConsignmentDispatchFilters value={f} onChange={setF} />
         <div className="ml-auto flex items-center gap-1.5">
           <DataTableTools table={table} compact exportName="Emanet çıkışları" />
         </div>
       </ListToolbar>
-      {!l.isLoading && l.rows.length > 0 ? (
-        <DataTable
-          table={table}
-          isError={l.isError}
-          onRetry={l.refetch}
-          onRowClick={(r) => setDetailId(r.id)}
-          loadMore={{ hasMore: l.hasMore, isFetchingMore: l.isFetchingMore, onLoadMore: l.loadMore }}
-          exportName="Emanet çıkışları"
-        />
-      ) : (
-      <ListBody>
-        {l.isLoading ? (
-          <ListMessage className="text-sm text-muted-foreground">Yükleniyor…</ListMessage>
-        ) : l.isError && l.rows.length === 0 ? (
-          <ListMessage>
-            <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
-              <p className="font-medium text-destructive">Emanet çıkış listesi yüklenemedi.</p>
-              <p className="mt-1 text-muted-foreground">Bu bir “belge yok” cevabı değildir — yeni çıkış açmadan önce tekrar deneyin.</p>
-              <Button variant="outline" size="sm" className="mt-3" onClick={l.refetch}>Tekrar dene</Button>
-            </div>
-          </ListMessage>
-        ) : l.rows.length === 0 ? (
-          <ListMessage>
-            <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground" data-testid="consignment-empty">
-              {filtered ? "Filtreye uyan emanet çıkışı yok." : "Henüz emanet çıkışı yok — “Yeni Emanet Çıkışı” ile müşterinin leventini ya da ipliğini sahibine verin."}
-            </div>
-          </ListMessage>
-        ) : null}
-      </ListBody>
+      {/* "HATA" ile "KAYIT YOK" ayrı ekranlar (DataTable.isError); yüklü satır varken hata satırı tabloyu silmez. */}
+      <DataTable
+        table={table}
+        isLoading={l.isLoading}
+        isError={l.isError}
+        onRetry={l.refetch}
+        errorText="Bu bir “belge yok” cevabı değildir — yeni çıkış açmadan önce tekrar deneyin."
+        emptyText={filtered ? "Filtreye uyan emanet çıkışı yok." : "Henüz emanet çıkışı yok."}
+        emptyDescription={filtered ? undefined : "“Yeni Emanet Çıkışı” ile müşterinin leventini ya da ipliğini sahibine verin."}
+        onRowClick={(r) => setDetailId(r.id)}
+        loadMore={{ hasMore: l.hasMore, isFetchingMore: l.isFetchingMore, onLoadMore: l.loadMore }}
+        exportName="Emanet çıkışları"
+      />
+      {!l.isLoading && (
+        <ListFooter loaded={l.rows.length} total={l.summary?.count ?? null} hasMore={l.hasMore} isFetchingMore={l.isFetchingMore} summary={l.summary ? <ConsignmentSummaryStrip summary={l.summary} /> : undefined} />
       )}
-      {l.rows.length > 0 && <ListFooter loaded={l.rows.length} total={l.summary?.count ?? null} hasMore={l.hasMore} isFetchingMore={l.isFetchingMore} />}
       <ConsignmentDispatchFormDialog open={formOpen} onOpenChange={setFormOpen} onCreated={(d) => { setFormOpen(false); setDetailId(d.id); }} />
       <ConsignmentDispatchDetailSheet dispatchId={detailId} onClose={() => setDetailId(null)} onCancel={setCancelId} />
       <ConsignmentCancelDialog dispatchId={cancelId} onOpenChange={(o) => !o && setCancelId(null)} />
