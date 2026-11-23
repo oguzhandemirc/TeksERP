@@ -169,7 +169,8 @@ function PagedPreview({
       {pages != null && (
         <div
           className={`shrink-0 border-b px-3 py-1 text-[11px] ${
-            pages > 1
+            // B10: %92 üstü tek sayfa "sınıra yakın" uyarı tonundadır, yeşil değil.
+            pages > 1 || (fill != null && fill > 92)
               ? "bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
               : "bg-emerald-50 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200"
           }`}
