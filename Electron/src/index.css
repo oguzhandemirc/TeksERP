@@ -572,8 +572,10 @@
   box-shadow: inset 1px 0 0 var(--table-col-line), -8px 0 8px -8px rgb(0 0 0 / 0.18);
 }
 .data-grid th[data-sticky="right"] { z-index: 2; }
-/* Yapışık (son) sütunun genişlik tutamacı dışarı taşmasın — yoksa tablo 4px yatay kayar. */
-.data-grid th[data-sticky="right"] [data-col-resizer] { right: 0; }
+/* SON sütunun (yapışık olsun olmasın) genişlik tutamacı dışarı taşmasın — yoksa tablo 4px taşar ve
+   sütunlar sığdığı hâlde yatay kaydırma çubuğu çıkar (B7, 2026-11-24). */
+.data-grid th[data-sticky="right"] [data-col-resizer],
+.data-grid th:last-child [data-col-resizer] { right: 0; }
 .data-grid tr:hover > td[data-sticky="right"] {
   background-image: linear-gradient(hsl(var(--accent) / 0.5), hsl(var(--accent) / 0.5));
 }
@@ -671,9 +673,17 @@
   background-color: hsl(var(--band));
   border-bottom: 1px solid hsl(var(--card-border));
 }
+/* Sekme bandında çizgi iç gölge: kayan bantta sekmenin -1px taşması dikey kaydırma çubuğu çıkarıyordu (2026-11-24). */
+.tab-pane [data-page-tabs] {
+  border-bottom: 0;
+  box-shadow: inset 0 -1px 0 hsl(var(--card-border));
+}
 .tab-pane :is([data-ui-dialog], [data-ui-sheet], [data-ui-pop], [data-slot="card"]) :is([data-page-header], [data-list-band], [data-page-tabs]) {
   border-bottom: 0;
   background-color: transparent;
+}
+.tab-pane :is([data-ui-dialog], [data-ui-sheet], [data-ui-pop], [data-slot="card"]) [data-page-tabs] {
+  box-shadow: none;
 }
 
 /* Login ekranı — yavaş hareketli gradient mesh blob'ları */

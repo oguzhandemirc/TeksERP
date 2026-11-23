@@ -15,12 +15,15 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Package, Layers, Search } from "lucide-react";
 import {
-  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+  Dialog, DialogDescription, DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  TabbedDialogContent, TabbedDialogFooter, TabbedDialogHeader, TabbedDialogPanel, TabbedDialogTabList, TabbedDialogTabs,
+} from "@/components/ui/tabbed-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { TabsTrigger } from "@/components/ui/tabs";
 import { listWarehouseRolls, listWarehouseSacks, type PickedRoll, type PickedSack } from "./service";
 import { RollChecklist, toggleInSet } from "@/components/operations/roll-picker/RollChecklist";
 
@@ -69,35 +72,35 @@ export function TransferPickerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
-        <DialogHeader>
+      {/* Sekmeli modal: sabit çerçeve (tabbed-dialog) — Toplar/Çuvallar arasında boyut zıplamaz, Ekle hep görünür. */}
+      <TabbedDialogContent className="h-[min(80vh,44rem)] max-w-3xl">
+        <TabbedDialogHeader className="space-y-3">
           <DialogTitle>Listeden Seç</DialogTitle>
           <DialogDescription>
             Çıkan depodaki mallar. Barkod okutmanız gerekmez — işaretleyip ekleyin.
           </DialogDescription>
-        </DialogHeader>
+          <div className="relative">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              className="pl-8"
+              placeholder="Ara…" title="Kumaş / renk / kod ara" aria-label="Kumaş / renk / kod ara"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+        </TabbedDialogHeader>
 
-        <div className="relative">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            className="pl-8"
-            placeholder="Ara…" title="Kumaş / renk / kod ara" aria-label="Kumaş / renk / kod ara"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-
-        <Tabs defaultValue="rolls">
-          <TabsList>
+        <TabbedDialogTabs defaultValue="rolls">
+          <TabbedDialogTabList>
             <TabsTrigger value="rolls" className="gap-1.5">
               <Package className="h-4 w-4" /> Toplar ({rolls.length})
             </TabsTrigger>
             <TabsTrigger value="sacks" className="gap-1.5">
               <Layers className="h-4 w-4" /> Çuvallar ({sacks.length})
             </TabsTrigger>
-          </TabsList>
+          </TabbedDialogTabList>
 
-          <TabsContent value="rolls">
+          <TabbedDialogPanel value="rolls">
             <RollChecklist
               rolls={rolls}
               selected={rollSel}
@@ -105,10 +108,10 @@ export function TransferPickerDialog({
               loading={rollsQ.isLoading}
               emptyText="Bu depoda transfer edilebilir top bulunamadı."
             />
-          </TabsContent>
+          </TabbedDialogPanel>
 
-          <TabsContent value="sacks">
-            <div className="max-h-[42vh] overflow-auto rounded-md border">
+          <TabbedDialogPanel value="sacks">
+            <div className="rounded-md border">
               {sacksQ.isLoading ? (
                 <p className="p-6 text-center text-sm text-muted-foreground">Yükleniyor…</p>
               ) : sacks.length === 0 ? (
@@ -136,16 +139,16 @@ export function TransferPickerDialog({
                 ))
               )}
             </div>
-          </TabsContent>
-        </Tabs>
+          </TabbedDialogPanel>
+        </TabbedDialogTabs>
 
-        <DialogFooter>
+        <TabbedDialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>İptal</Button>
           <Button disabled={total === 0} onClick={confirm}>
             Ekle ({total})
           </Button>
-        </DialogFooter>
-      </DialogContent>
+        </TabbedDialogFooter>
+      </TabbedDialogContent>
     </Dialog>
   );
 }

@@ -1,49 +1,22 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Controller, useForm, type Resolver } from "react-hook-form";
+import { FormProvider, useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { TabbedDialogBody, TabbedDialogContent, TabbedDialogFooter, TabbedDialogHeader } from "@/components/ui/tabbed-dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FormField } from "@/components/forms/FormField";
-import { FieldGrid, FormCard } from "@/components/forms/WideFormDialog";
 import { ModalSectionsScope } from "@/components/forms/modal-sections/ModalSections";
-import { partnerRoleLabels } from "@/lib/partnerRoles";
-import { useCustomerBranchesEnabled, useFeatureFlags } from "@/hooks/usePricingEnabled";
-import { useRoleAccess } from "@/hooks/useRoleAccess";
-import { customerFormDefaults, customerFormSchema, SUBCONTRACTOR_NEEDS_SUPPLIER_MESSAGE, type CustomerFormValues } from "./schema";
-import { CustomerBranchesDraftField } from "./CustomerBranchesDraftField";
-import { CustomerFinanceSection, useCustomerFinanceAccess } from "./CustomerFinanceSection";
+import { useCustomerBranchesEnabled } from "@/hooks/usePricingEnabled";
+import { customerFormDefaults, customerFormSchema, type CustomerFormValues } from "./schema";
+import { useCustomerFinanceAccess } from "./CustomerFinanceSection";
 import { financeFormDefaults, financeValuesAfterSave } from "./customerFinance";
-import { CustomerBranchesPanel } from "./CustomerBranchesPanel";
-import { exportCodeVisible } from "./branch-schema";
-import { CustomerItemAliasesPanel } from "./CustomerItemAliasesPanel";
-import { CustomerColorAliasesPanel } from "./CustomerColorAliasesPanel";
-import { SupplierItemCodesPanel } from "./SupplierItemCodesPanel";
-import { CustomerTemplateRoutesPanel } from "./CustomerTemplateRoutesPanel";
-import { CustomerTamburLabelSettings } from "./CustomerTamburLabelSettings";
-import { CustomerStandaloneLabelsPanel } from "./CustomerStandaloneLabelsPanel";
-import { CustomerConsigneesPanel } from "./consignees/CustomerConsigneesPanel";
+import { CustomerInfoFields } from "./CustomerInfoFields";
+import { CustomerEditTabs } from "./CustomerEditTabs";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
-import { CariHoldPanel } from "@/pages/Finance/CariHold/CariHoldPanel";
-import { CustomerBarcodeSeriesPanel } from "./BarcodeSeries/CustomerBarcodeSeriesPanel";
-import { CustomerSummaryTab } from "./summary/CustomerSummaryTab";
-import { DocumentProfileSelect } from "@/components/forms/DocumentProfileSelect";
 import type { Customer } from "./types";
 
 import { RecordInfoButton } from "@/components/RecordInfoButton";
 import { CustomerQuotesButton } from "@/pages/Cost/Quotes/CustomerQuotesButton";
-import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
-import { CustomerSubcontractorRole, SUBCONTRACTOR_ROLE_LABEL } from "./CustomerSubcontractorRole";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -59,56 +32,59 @@ interface Props {
   requiredRole?: "isCustomerRole" | "isSupplierRole";
 }
 
-export function CustomerFormDialog({
-  open,
-  onOpenChange,
-  initial,
-  onSubmit,
-  isSubmitting,
-  showBranchDraft = true,
-  requiredRole,
-}: Props) {
+function formDefaults(initial: Customer | null | undefined, requiredRole: Props["requiredRole"]): CustomerFormValues {
+  if (!initial) {
+    // Hızlı ekleme: yalnız istenen rol işaretli gelir (varsayılan "yalnız Müşteri" değil).
+    return { ...customerFormDefaults, ...(requiredRole ? { isCustomerRole: requiredRole === "isCustomerRole", isSupplierRole: requiredRole === "isSupplierRole" } : {}) };
+  }
+  return {
+    ...financeFormDefaults,
+    name: initial.name,
+    taxNumber: initial.taxNumber ?? "",
+    exportCode: initial.exportCode ?? "",
+    address: initial.address ?? "",
+    city: initial.city ?? "",
+    district: initial.district ?? "",
+    country: initial.country ?? "",
+    defaultDestination: initial.defaultDestination ?? null,
+    contactName: initial.contactName ?? "",
+    contactPhone: initial.contactPhone ?? "",
+    email: initial.email ?? "",
+    notes: initial.notes ?? "",
+    documentProfileId: initial.documentProfileId ?? null,
+    isCustomerRole: initial.isCustomerRole,
+    isSupplierRole: initial.isSupplierRole,
+    isSubcontractorRole: initial.isSubcontractorRole,
+    isActive: initial.isActive,
+    branches: [],
+  };
+}
+
+function CustomerFormHeader({ initial }: { initial?: Customer | null }) {
+  return (
+    <TabbedDialogHeader className="pr-20">
+      <div className="flex items-center gap-1.5">
+        <DialogTitle>{initial ? "Cari Kartını Düzenle" : "Yeni Cari"}</DialogTitle>
+        {/* ⓘ — kim oluşturdu / en son kim değiştirdi (2026-08-19). Kaynak: kaydın KENDİ künye kolonları (Plan A);
+            audit 6 ayda arşivlenir, künye kaybolmamalı. */}
+        {initial && <RecordInfoButton table="CUSTOMER" id={initial.id} createdAt={initial.createdAt} updatedAt={initial.updatedAt} />}
+        {initial && <CustomerQuotesButton customerId={initial.id} isCustomerRole={initial.isCustomerRole} />}
+      </div>
+      <DialogDescription>
+        {initial
+          ? "Müşteri bilgileri ve sevk noktası (şube) tanımları."
+          : "Müşteri bilgilerini ve (opsiyonel) sevk noktalarını girin — hepsi tek seferde kaydedilir."}
+      </DialogDescription>
+    </TabbedDialogHeader>
+  );
+}
+
+export function CustomerFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting, showBranchDraft = true, requiredRole }: Props) {
   const isEdit = Boolean(initial);
-  // customers.branchesEnabled kapalıyken şube yüzeyleri (sekme + taslak) gizlenir;
-  // mevcut şube verisi korunur, yalnız UI'dan kalkar.
   const branchesEnabled = useCustomerBranchesEnabled();
   // Z-B: Finans bölümü yalnız finance:read + modül açıkken; yazma yetkisi yoksa salt-okunur (gövdeye alt nesne konmaz).
   const financeAccess = useCustomerFinanceAccess();
-  // D4-F2: müşteri barkod serisi uçları emanet modül kapısının arkasında — izinsiz/kapalıda sorgu atılmaz.
-  const { hasPermission } = useRoleAccess();
-  const emanetEnabled = useFeatureFlags().data?.data?.emanetEnabled ?? false;
-  const seriesVisible = emanetEnabled && hasPermission("customer:read");
-  // Seyitoğlu d5: tedarikçi kalem kodları — mal kabul uçları ticaret kapısının ve mal kabul izninin arkasında.
-  const ticaretEnabled = useFeatureFlags().data?.data?.ticaretEnabled ?? false;
-  const itemCodesVisible = Boolean(initial?.isSupplierRole) && ticaretEnabled && (hasPermission("goods-receipt:read") || hasPermission("goods-receipt:write"));
-  const defaults: CustomerFormValues = initial
-    ? {
-        ...financeFormDefaults,
-        name: initial.name,
-        taxNumber: initial.taxNumber ?? "",
-        exportCode: initial.exportCode ?? "",
-        address: initial.address ?? "",
-        city: initial.city ?? "",
-        district: initial.district ?? "",
-        country: initial.country ?? "",
-        defaultDestination: initial.defaultDestination ?? null,
-        contactName: initial.contactName ?? "",
-        contactPhone: initial.contactPhone ?? "",
-        email: initial.email ?? "",
-        notes: initial.notes ?? "",
-        documentProfileId: initial.documentProfileId ?? null,
-        isCustomerRole: initial.isCustomerRole,
-        isSupplierRole: initial.isSupplierRole,
-        isSubcontractorRole: initial.isSubcontractorRole,
-        isActive: initial.isActive,
-        branches: [],
-      }
-    : {
-        ...customerFormDefaults,
-        // Hızlı ekleme: yalnız istenen rol işaretli gelir (varsayılan "yalnız Müşteri" değil).
-        ...(requiredRole ? { isCustomerRole: requiredRole === "isCustomerRole", isSupplierRole: requiredRole === "isSupplierRole" } : {}),
-      };
-
+  const defaults = formDefaults(initial, requiredRole);
   const form = useForm<CustomerFormValues>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(customerFormSchema as any) as unknown as Resolver<CustomerFormValues>,
@@ -116,10 +92,9 @@ export function CustomerFormDialog({
   });
 
   const qc = useQueryClient();
+  const formId = useId();
   const [confirmClose, setConfirmClose] = useState(false);
   const [activeTab, setActiveTab] = useState("info");
-  // Yeni kartta "Fason iş yapar" — gövdeye `subcontractorRole` gider (`customerPayload.buildCustomerPayload`).
-  const fasonYeni = form.watch("isSubcontractorRole");
 
   useEffect(() => {
     if (open) {
@@ -129,10 +104,8 @@ export function CustomerFormDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initial?.id]);
 
-  // Kirli-form guard: kapatma isteği (X / Esc / dış tıklama / İptal — hepsi
-  // onOpenChange'den geçer) yalnızca formda kaydedilmemiş değişiklik varsa onay
-  // ister. Düzenlemede alt paneller (şube/alias) kendi içlerinde anında sunucuya
-  // yazar; oluşturmada şube taslakları da isDirty'ye dahildir (field array).
+  // Kirli-form guard: kapatma isteği (X / Esc / dış tıklama / İptal — hepsi onOpenChange'den geçer) yalnızca formda
+  // kaydedilmemiş değişiklik varsa onay ister. Düzenlemede alt paneller kendi içlerinde anında sunucuya yazar.
   const requestClose = (next: boolean) => {
     if (!next && form.formState.isDirty) {
       setConfirmClose(true);
@@ -141,6 +114,7 @@ export function CustomerFormDialog({
     onOpenChange(next);
   };
 
+  // Geçersizse Bilgiler sekmesine dön: Kaydet her sekmeden basılabilir, hata gizli panelde kalmasın.
   const submit = form.handleSubmit(async (v) => {
     await onSubmit(v);
     // Başarılı kayıt sonrası formu "temiz" say (guard yanlış tetiklenmesin); tetik tohumu kaydedilen değere eşitlenir.
@@ -148,255 +122,41 @@ export function CustomerFormDialog({
     // Kart terimleri `by-customer` önbelleğinden tohumlanır; yeniden açılışta eski terim/tetik görünmesin.
     void qc.invalidateQueries({ queryKey: ["finance", "cari"] });
     void qc.invalidateQueries({ queryKey: ["finance", "cari-by-customer"] });
-  });
+  }, () => setActiveTab("info"));
 
-  const err = form.formState.errors;
-  const textareaCls =
-    "flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
-  // Geniş form (2026-11-19): kimlik · adres/sevk · iletişim · belge kartları; kısa alanlar ızgarada, uzun açıklama ⓘ'de.
-  const infoFields = (
-    <div className="space-y-4">
-      <FormCard title="Kimlik" sectionId="identity" sectionRequired aside={isEdit && initial?.code ? <span className="text-xs text-muted-foreground">Kod: <span className="font-mono">{initial.code}</span></span> : undefined}>
-        <FieldGrid cols={4}>
-          <FormField label="Ad" htmlFor="name" error={err.name} required className="md:col-span-2">
-            <Input id="name" autoFocus {...form.register("name")} />
-            {/* Mükerreri REDDETMEK yerine ÖNLEMEK: canlı veride "Moda Tekstil" ve "MODA TEKSTİL" iki ayrı AKTİF müşteriydi. */}
-            <SimilarNamesWarning entity="customers" name={form.watch("name") ?? ""} excludeId={initial?.id} />
-          </FormField>
-          <FormField label="Vergi No" htmlFor="taxNumber" error={err.taxNumber} info="İsteğe bağlı — 10-15 haneli VKN/TCKN">
-            <Input id="taxNumber" inputMode="numeric" maxLength={32} placeholder="örn: 1234567890" {...form.register("taxNumber")} />
-          </FormField>
-          <FormField label="Durum">
-            <label className="flex h-9 items-center gap-2 text-sm">
-              <input type="checkbox" {...form.register("isActive")} /> Aktif
-            </label>
-          </FormField>
-          {/* Rol modeli: tip yerine üç kutu. Yeni kartta "Fason iş yapar" kart + profili TEK işlemde doğurur (`subcontractorRole`);
-              işaretliyse Tedarikçi otomatik + kilitli (sunucu kuralı). Düzenlemede üçüncü rol aşağıdaki panel. */}
-          <FormField label="Roller" error={err.isCustomerRole ?? err.isSupplierRole} required hint={!isEdit && fasonYeni ? SUBCONTRACTOR_NEEDS_SUPPLIER_MESSAGE : undefined} className="md:col-span-2">
-            <div className="flex flex-wrap items-center gap-4 pt-1.5 text-sm">
-              <label className="flex items-center gap-2">
-                <input type="checkbox" disabled={requiredRole === "isCustomerRole"} {...form.register("isCustomerRole")} /> {partnerRoleLabels.customer}
-              </label>
-              <label className="flex items-center gap-2">
-                <input type="checkbox" disabled={requiredRole === "isSupplierRole" || (!isEdit && fasonYeni)} {...form.register("isSupplierRole")} /> {partnerRoleLabels.supplier}
-              </label>
-              {!isEdit && (
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={fasonYeni}
-                    onChange={(e) => {
-                      form.setValue("isSubcontractorRole", e.target.checked, { shouldDirty: true });
-                      if (e.target.checked) form.setValue("isSupplierRole", true, { shouldDirty: true });
-                    }}
-                  />{" "}
-                  {SUBCONTRACTOR_ROLE_LABEL}
-                </label>
-              )}
-            </div>
-          </FormField>
-          <FormField label="Belge Şablon Profili" info="Bu müşteriye basılan irsaliyeler seçili profilin görünümünü kullanır; boş = genel ayar">
-            <Controller control={form.control} name="documentProfileId" render={({ field }) => <DocumentProfileSelect value={field.value} onChange={field.onChange} />} />
-          </FormField>
-          {/* Yalnız yurtdışı yönde görünür; gizlenen dolu değer silinmez (form durumunda kalır). */}
-          {exportCodeVisible(form.watch("defaultDestination")) && (
-            <FormField label="İhracat Kodu" htmlFor="exportCode" error={err.exportCode} info="Şirket ihracat kodu — sevk belgesine yalnız şube ihracat kodu yoksa basılır">
-              <Input id="exportCode" placeholder="Opsiyonel" {...form.register("exportCode")} />
-            </FormField>
-          )}
-        </FieldGrid>
-      </FormCard>
-
-      <FormCard title="Adres ve iletişim" sectionId="address">
-        <FieldGrid cols={4}>
-          <FormField label="Ülke" htmlFor="country" error={err.country}>
-            <Input id="country" placeholder="Türkiye" {...form.register("country")} />
-          </FormField>
-          {/* Sevk yönü KİLİDİ — sevkiyatta seçilmez, buradan gelir; boşsa ilk sevkte sorulur ve buraya yazılır. */}
-          <FormField label="Sevk yönü" error={err.defaultDestination}>
-            <Controller
-              control={form.control}
-              name="defaultDestination"
-              render={({ field }) => (
-                <Select value={field.value ?? "NONE"} onValueChange={(v) => field.onChange(v === "NONE" ? null : (v as "DOMESTIC" | "EXPORT"))}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="NONE">Seçilmedi (ilk sevkte sorulur)</SelectItem>
-                    <SelectItem value="DOMESTIC">Yurtiçi</SelectItem>
-                    <SelectItem value="EXPORT">Yurtdışı</SelectItem>
-                  </SelectContent>
-                </Select>
-              )}
-            />
-          </FormField>
-          <FormField label="Şehir" htmlFor="city" error={err.city}>
-            <Input id="city" {...form.register("city")} />
-          </FormField>
-          <FormField label="İlçe" htmlFor="district" error={err.district}>
-            <Input id="district" {...form.register("district")} />
-          </FormField>
-          <FormField label="Yetkili" htmlFor="contactName" error={err.contactName}>
-            <Input id="contactName" {...form.register("contactName")} />
-          </FormField>
-          <FormField label="Telefon" htmlFor="contactPhone" error={err.contactPhone}>
-            <Input id="contactPhone" inputMode="tel" maxLength={40} placeholder="0212 555 0000" {...form.register("contactPhone")} />
-          </FormField>
-          <FormField label="E-posta" htmlFor="email" error={err.email} className="md:col-span-2">
-            <Input id="email" inputMode="email" placeholder="ornek@firma.com" {...form.register("email")} />
-          </FormField>
-          <FormField label="Adres" htmlFor="address" error={err.address} className="md:col-span-2">
-            <textarea id="address" rows={2} className={textareaCls} {...form.register("address")} />
-          </FormField>
-          <FormField label="Notlar" htmlFor="notes" error={err.notes} className="md:col-span-2">
-            <textarea id="notes" rows={2} className={textareaCls} {...form.register("notes")} />
-          </FormField>
-        </FieldGrid>
-      </FormCard>
-      {/* Üçüncü rol — kart kaydedildikten sonra (id var) anında yazan kutu (profil bağı); Tedarikçi kutusunun O ANKİ
-          değeriyle açılır/kapanır (kayıt öncesi de: kural sunucudakiyle aynı). */}
-      {isEdit && initial && <CustomerSubcontractorRole customer={{ ...initial, isSupplierRole: form.watch("isSupplierRole") }} />}
-      {financeAccess.canRead && <CustomerFinanceSection form={form as never} customerId={initial?.id ?? null} canWrite={financeAccess.canWrite} />}
-    </div>
-  );
-
-  const footer = (
-    <DialogFooter className="pt-2">
-      <Button type="button" variant="outline" onClick={() => requestClose(false)}>
-        İptal
-      </Button>
-      <Button type="submit" disabled={isSubmitting}>
-        {isSubmitting ? "Kaydediliyor..." : "Kaydet"}
-      </Button>
-    </DialogFooter>
+  const infoForm = (
+    <form id={formId} onSubmit={submit}>
+      <CustomerInfoFields form={form} initial={initial} requiredRole={requiredRole} finance={financeAccess} showBranchDraft={showBranchDraft && branchesEnabled} />
+    </form>
   );
 
   return (
     <>
       <Dialog open={open} onOpenChange={requestClose}>
-        {/* Geniş form: alanlar ızgarada yan yana; düzenlemede 7 sekmelik şerit dar ekranda sarar. */}
-        <DialogContent className="w-[calc(100%-2rem)] max-w-[88rem]" data-form-size="wide">
+        {/* Sabit boyutlu geniş modal: sekme değişince yükseklik zıplamaz, alt düğmeler hep görünür. */}
+        <TabbedDialogContent className="w-[calc(100%-2rem)] max-w-[88rem]" data-form-size="wide">
+          <FormProvider {...form}>
           <ModalSectionsScope modalId="customer.form">
-          <DialogHeader className="pr-16">
-            <div className="flex items-center gap-1.5">
-            <DialogTitle>{isEdit ? "Cari Kartını Düzenle" : "Yeni Cari"}</DialogTitle>
-            {/* ⓘ — kim oluşturdu / en son kim değiştirdi (2026-08-19).
-                Kaynak: kaydın KENDİ künye kolonları (Plan A). Audit'ten
-                okunmuyor — audit 6 ayda arşivlenir, künye kaybolmamalı. */}
-            {isEdit && initial && (
-              <RecordInfoButton
-                table="CUSTOMER"
-                id={initial.id}
-                createdAt={initial.createdAt}
-                updatedAt={initial.updatedAt}
-              />
-            )}
-            {isEdit && initial && <CustomerQuotesButton customerId={initial.id} isCustomerRole={initial.isCustomerRole} />}
-            </div>
-            <DialogDescription>
-              {isEdit
-                ? "Müşteri bilgileri ve sevk noktası (şube) tanımları."
-                : "Müşteri bilgilerini ve (opsiyonel) sevk noktalarını girin — hepsi tek seferde kaydedilir."}
-            </DialogDescription>
-          </DialogHeader>
+          <CustomerFormHeader initial={initial} />
 
-          {isEdit ? (
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="min-w-0">
-              <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1" data-testid="customer-form-tabs">
-                <TabsTrigger value="info">Bilgiler</TabsTrigger>
-                {initial && <TabsTrigger value="summary">Özet</TabsTrigger>}
-                {branchesEnabled && <TabsTrigger value="branches">Şubeler</TabsTrigger>}
-                <TabsTrigger value="item-aliases">Müşterideki Kumaş Adları</TabsTrigger>
-                <TabsTrigger value="color-aliases">Müşterideki Renk Adları</TabsTrigger>
-                {itemCodesVisible && <TabsTrigger value="supplier-item-codes">Tedarikçi Kalem Kodları</TabsTrigger>}
-                <TabsTrigger value="label-templates">Etiket Şablonları</TabsTrigger>
-                {financeAccess.canSeeHold && <TabsTrigger value="cari-hold">Kilit</TabsTrigger>}
-                {seriesVisible && <TabsTrigger value="barcode-series">Barkod serisi</TabsTrigger>}
-              </TabsList>
-
-              <TabsContent value="info">
-                <form onSubmit={submit} className="space-y-3">
-                  {/* Footer görünür kalsın diye gövde kendi içinde kayar. */}
-                  <div className="max-h-[66vh] overflow-y-auto rounded-lg bg-muted/40 p-4">{infoFields}</div>
-                  {footer}
-                </form>
-              </TabsContent>
-
-              <TabsContent value="summary">{initial && <CustomerSummaryTab customerId={initial.id} />}</TabsContent>
-
-              {branchesEnabled && (
-                <TabsContent value="branches">
-                  {initial && <CustomerBranchesPanel customerId={initial.id} customerDestination={form.watch("defaultDestination")} />}
-                </TabsContent>
-              )}
-
-              <TabsContent value="item-aliases">
-                {initial && <CustomerItemAliasesPanel customerId={initial.id} />}
-              </TabsContent>
-
-              <TabsContent value="color-aliases">
-                {initial && <CustomerColorAliasesPanel customerId={initial.id} />}
-              </TabsContent>
-
-              {itemCodesVisible && initial && (
-                <TabsContent value="supplier-item-codes">
-                  <SupplierItemCodesPanel supplierId={initial.id} />
-                </TabsContent>
-              )}
-
-              <TabsContent value="label-templates" className="space-y-5">
-                {initial && (
-                  <>
-                    <section className="space-y-2">
-                      <h4 className="text-sm font-semibold">Rulo/Kartela şablonları</h4>
-                      <CustomerTemplateRoutesPanel customerId={initial.id} />
-                    </section>
-                    <section className="space-y-2 border-t pt-4">
-                      <h4 className="text-sm font-semibold">Tambur / Etiket</h4>
-                      <CustomerTamburLabelSettings customer={initial} />
-                    </section>
-                    {emanetEnabled && (
-                      <section className="space-y-2 border-t pt-4">
-                        <h4 className="text-sm font-semibold">Etiket alıcıları (emanet)</h4>
-                        <CustomerConsigneesPanel customerId={initial.id} />
-                      </section>
-                    )}
-                    <section className="space-y-2 border-t pt-4">
-                      <h4 className="text-sm font-semibold">Serbest etiketler</h4>
-                      <CustomerStandaloneLabelsPanel customerId={initial.id} />
-                    </section>
-                  </>
-                )}
-              </TabsContent>
-
-              {financeAccess.canSeeHold && initial && (
-                <TabsContent value="cari-hold">
-                  <CariHoldPanel target={{ customerId: initial.id }} cariName={initial.name} />
-                </TabsContent>
-              )}
-              {seriesVisible && initial && (
-                <TabsContent value="barcode-series">
-                  <CustomerBarcodeSeriesPanel customerId={initial.id} />
-                </TabsContent>
-              )}
-            </Tabs>
+          {isEdit && initial ? (
+            <CustomerEditTabs customer={initial} activeTab={activeTab} onTabChange={setActiveTab} infoPanel={infoForm} destination={form.watch("defaultDestination")} />
           ) : (
-            <form onSubmit={submit} className="space-y-4">
-              <div className="max-h-[64vh] space-y-4 overflow-y-auto rounded-lg bg-muted/40 p-4">
-                {infoFields}
-                {showBranchDraft && branchesEnabled && (
-                  <div className="rounded-xl border border-card-border bg-card px-5 py-4 shadow-card">
-                    <CustomerBranchesDraftField form={form} />
-                  </div>
-                )}
-              </div>
-              {footer}
-            </form>
+            <TabbedDialogBody className="border-t border-border/70 bg-muted/40 py-5">{infoForm}</TabbedDialogBody>
           )}
+
+          <TabbedDialogFooter>
+            {isEdit && activeTab !== "info" && (
+              <span className="mr-auto hidden text-xs text-muted-foreground sm:block">Bu sekmedeki değişiklikler anında kaydedilir; Kaydet, Bilgiler'i kaydeder.</span>
+            )}
+            <Button type="button" variant="outline" onClick={() => requestClose(false)}>İptal</Button>
+            <Button type="submit" form={formId} disabled={isSubmitting}>
+              {isSubmitting ? "Kaydediliyor..." : "Kaydet"}
+            </Button>
+          </TabbedDialogFooter>
           </ModalSectionsScope>
-        </DialogContent>
+          </FormProvider>
+        </TabbedDialogContent>
       </Dialog>
 
       <ConfirmDialog
@@ -415,4 +175,3 @@ export function CustomerFormDialog({
     </>
   );
 }
-

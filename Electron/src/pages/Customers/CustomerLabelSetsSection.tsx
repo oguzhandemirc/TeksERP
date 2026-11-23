@@ -1,6 +1,7 @@
 import { Star } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { InfoPopover } from "@/components/ui/info-popover";
 import { PermissionGate } from "@/components/PermissionGate";
 import { OptionSetPair } from "@/components/labels/option-set/OptionSetPair";
 import { useOptionSets } from "@/components/labels/option-set/useOptionSets";
@@ -36,28 +37,35 @@ export function CustomerLabelSetsSection({ sets }: { sets: Sets }) {
     sets.responses[kind]?.globalItems.find((i) => i.isDefault && i.active)?.name ?? null;
 
   return (
-    <div className="space-y-3 rounded-md border p-3" data-testid="customer-label-sets">
-      <p className="text-xs text-muted-foreground">
-        Bu müşterinin top etiketlerinde yıldızlı (★) şablon basılır; tablette setteki diğerleri
-        de seçilebilir. Top etiketinde Ham ya da Bitmiş seti topun aşamasına göre kullanılır.
-      </p>
-      <PermissionGate
-        permission="label-template:write"
-        fallback={<p className="text-xs text-muted-foreground">Herkes için set {showGlobal ? "gösterilir" : "gösterilmez"}.</p>}
-      >
-        <label className="flex items-center gap-2 text-sm">
-          <Switch
-            checked={showGlobal}
-            disabled={sets.pending}
-            aria-label="Herkes için seti de göster"
-            onCheckedChange={(v) =>
-              void sets.apply([{ kind: "ROLL_RAW", draft: sets.drafts.ROLL_RAW, showGlobalTemplates: v }]).catch(() => {})
-            }
-          />
-          Herkes için seti de göster
-        </label>
-      </PermissionGate>
+    <div data-testid="customer-label-sets">
       <OptionSetPair
+        toolbar={
+          <>
+            <span className="flex items-center gap-1 text-sm font-medium">
+              Top etiket setleri
+              <InfoPopover
+                label="Top etiket setleri: açıklama"
+                desc="Bu müşterinin top etiketlerinde yıldızlı (★) şablon basılır; tablette setteki diğerleri de seçilebilir. Top etiketinde Ham ya da Bitmiş seti topun aşamasına göre kullanılır."
+              />
+            </span>
+            <PermissionGate
+              permission="label-template:write"
+              fallback={<p className="text-xs text-muted-foreground">Herkes için set {showGlobal ? "gösterilir" : "gösterilmez"}.</p>}
+            >
+              <label className="flex items-center gap-2 text-sm">
+                <Switch
+                  checked={showGlobal}
+                  disabled={sets.pending}
+                  aria-label="Herkes için seti de göster"
+                  onCheckedChange={(v) =>
+                    void sets.apply([{ kind: "ROLL_RAW", draft: sets.drafts.ROLL_RAW, showGlobalTemplates: v }]).catch(() => {})
+                  }
+                />
+                Herkes için seti de göster
+              </label>
+            </PermissionGate>
+          </>
+        }
         drafts={sets.drafts}
         pending={sets.pending}
         onApply={(c) => void sets.apply(c).catch(() => {})}
@@ -75,7 +83,7 @@ export function CustomerLabelSetsSection({ sets }: { sets: Sets }) {
 function GlobalPreview({ items }: { items: CustomerLabelOptionSetResponse["globalItems"] }) {
   const names = previewNames(items);
   return (
-    <p className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground opacity-80" data-testid="global-preview">
+    <p className="flex flex-wrap items-center gap-1 border-t pt-2 text-xs text-muted-foreground" data-testid="global-preview">
       <span>Herkes için:</span>
       {names.length === 0 ? (
         <span>set boş</span>

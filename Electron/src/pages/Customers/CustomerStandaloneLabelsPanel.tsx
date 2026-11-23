@@ -80,12 +80,6 @@ export function CustomerStandaloneLabelsPanel({ customerId }: Props) {
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-muted-foreground">
-        İşaretlenmeyen serbest etiket <b>genel</b> kalır (tüm müşterilerde görünür).
-        İşaretli etiketler Serbest Baskı ekranında bu müşteri seçilince — genel
-        etiketlerle birlikte — listelenir.
-      </p>
-
       <PermissionGate
         permission="label-template:write"
         fallback={<ReadOnlyLinked names={linkedRows.map((r) => r.name)} />}

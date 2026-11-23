@@ -114,9 +114,11 @@ describe("CustomerFormDialog — rol modeli", () => {
 
   it("⑤ kaynak taraması: formda tip seçici / companyTypeLabels yok; başlıklar 'Yeni Cari' / 'Cari Kartını Düzenle'", () => {
     const src = readFileSync(resolve(__dirname, "CustomerFormDialog.tsx"), "utf8");
-    expect(src).not.toMatch(/EnumSelect<CompanyType>|companyTypeLabels|name="type"/);
-    expect(src).toMatch(/register\("isCustomerRole"\)/);
-    expect(src).toMatch(/register\("isSupplierRole"\)/);
+    // Bilgiler gövdesi 2026-11-24'te ayrı dosyaya taşındı (CustomerInfoFields).
+    const fields = readFileSync(resolve(__dirname, "CustomerInfoFields.tsx"), "utf8");
+    expect(src + fields).not.toMatch(/EnumSelect<CompanyType>|companyTypeLabels|name="type"/);
+    expect(fields).toMatch(/register\("isCustomerRole"\)/);
+    expect(fields).toMatch(/register\("isSupplierRole"\)/);
     expect(src).toMatch(/"Yeni Cari"/);
     const page = readFileSync(resolve(__dirname, "customerPayload.ts"), "utf8");
     expect(page).not.toMatch(/type:\s*v\.type/);

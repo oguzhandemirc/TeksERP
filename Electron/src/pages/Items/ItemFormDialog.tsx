@@ -5,12 +5,11 @@ import { AlertTriangle, ChevronRight, Palette, Ruler, Sparkles } from "lucide-re
 import { useQuery } from "@tanstack/react-query";
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
-  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { TabbedDialogContent, TabbedDialogHeader } from "@/components/ui/tabbed-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -175,8 +174,9 @@ export function ItemFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[calc(100%-2rem)] max-w-6xl" data-form-size="wide">
-        <DialogHeader>
+      {/* Sabit çerçeve (tabbed-dialog): kumaş kartında sekme değişince boyut zıplamaz; alt düğmeler yapışkan. */}
+      <TabbedDialogContent className="w-[calc(100%-2rem)] max-w-6xl" data-form-size="wide">
+        <TabbedDialogHeader>
           <div className="flex items-center gap-1.5">
             <DialogTitle>{isEdit ? "Ürünü Düzenle" : "Yeni Ürün"}</DialogTitle>
             {/* ⓘ — kim oluşturdu / en son kim değiştirdi (2026-08-19).
@@ -194,10 +194,10 @@ export function ItemFormDialog({
           <DialogDescription>
             Ürün tanımı (kumaş · iplik · sarf). Birim, seçilen tipe göre otomatik atanır.
           </DialogDescription>
-        </DialogHeader>
+        </TabbedDialogHeader>
 
         {initial?.pendingReview && (
-          <div className="flex items-start gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+          <div className="mx-6 mb-3 flex shrink-0 items-start gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <span>
               Bu desen sahada (ham giriş) oluşturuldu ve onay bekliyor. Bilgileri
@@ -364,7 +364,7 @@ export function ItemFormDialog({
             register={form.register}
           />
 
-          <DialogFooter className="pt-2">
+          <DialogFooter className="sticky bottom-0 z-10 -mx-6 -mb-4 border-t border-border/70 bg-card px-6 py-3">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               İptal
             </Button>
@@ -399,7 +399,7 @@ export function ItemFormDialog({
             />
           )}
         />
-      </DialogContent>
+      </TabbedDialogContent>
     </Dialog>
   );
 }

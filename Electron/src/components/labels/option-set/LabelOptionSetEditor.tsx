@@ -39,11 +39,38 @@ export function LabelOptionSetEditor({ title, draft, disabled, onChange, onAdd, 
 
   return (
     <section className="space-y-2" data-testid={testId}>
-      <h4 className="text-sm font-medium">{title}</h4>
+      {/* Başlık ve "Şablon ekle" aynı satırda (kompakt düzen 2026-11-24). */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h4 className="text-sm font-medium">{title}</h4>
+        <PermissionGate permission="label-template:write">
+          <div className="w-44">
+            <EntityPickerModal<LabelTemplateListRow>
+              value={null}
+              onChange={(id, item) => id && item && onAdd({ templateId: id, name: item.name, active: item.isActive })}
+              service={assignableTemplatePickerService}
+              queryKey="label-option-set-picker"
+              filters={{ exclude: draft.entries.map((x) => x.templateId).join(",") }}
+              getLabel={(t) => t.name}
+              icon={Plus}
+              placeholder="Şablon ekle"
+              title={`${title} — şablon ekle`}
+              description="Seçilen şablon setin sonuna eklenir; yıldızla varsayılan yapılır."
+              disabled={disabled || draft.entries.length >= MAX_SET_SIZE}
+              lockedTooltip={draft.entries.length >= MAX_SET_SIZE ? `Bir sette en çok ${MAX_SET_SIZE} şablon olur.` : undefined}
+              hideChevron
+              triggerClassName="h-8"
+            />
+          </div>
+        </PermissionGate>
+      </div>
       {draft.entries.length === 0 ? (
-        <p className="text-xs text-muted-foreground">Bu sette şablon yok.</p>
+        // Boş sette tek satır: durum + varsayılanın nereden geldiği (uyarı rengi yok — boş set hata değil).
+        <p className="flex flex-wrap gap-x-1 text-xs text-muted-foreground">
+          <span>Bu sette şablon yok.</span>
+          {!draft.defaultTemplateId && <span>{noDefaultHint}</span>}
+        </p>
       ) : (
-        <ul className="divide-y rounded-md border">
+        <ul className="divide-y rounded-md border bg-card">
           {draft.entries.map((e, i) => (
             <SetRow
               key={e.templateId}
@@ -59,27 +86,7 @@ export function LabelOptionSetEditor({ title, draft, disabled, onChange, onAdd, 
           ))}
         </ul>
       )}
-      {!draft.defaultTemplateId && <p className="text-xs text-amber-600 dark:text-amber-500">{noDefaultHint}</p>}
-      <PermissionGate permission="label-template:write">
-        <div className="w-56">
-          <EntityPickerModal<LabelTemplateListRow>
-            value={null}
-            onChange={(id, item) => id && item && onAdd({ templateId: id, name: item.name, active: item.isActive })}
-            service={assignableTemplatePickerService}
-            queryKey="label-option-set-picker"
-            filters={{ exclude: draft.entries.map((x) => x.templateId).join(",") }}
-            getLabel={(t) => t.name}
-            icon={Plus}
-            placeholder="Şablon ekle"
-            title={`${title} — şablon ekle`}
-            description="Seçilen şablon setin sonuna eklenir; yıldızla varsayılan yapılır."
-            disabled={disabled || draft.entries.length >= MAX_SET_SIZE}
-            lockedTooltip={draft.entries.length >= MAX_SET_SIZE ? `Bir sette en çok ${MAX_SET_SIZE} şablon olur.` : undefined}
-            hideChevron
-            triggerClassName="h-8"
-          />
-        </div>
-      </PermissionGate>
+      {draft.entries.length > 0 && !draft.defaultTemplateId && <p className="text-xs text-amber-600 dark:text-amber-500">{noDefaultHint}</p>}
       <ConfirmDialog
         open={confirmId !== null}
         onOpenChange={(o) => !o && setConfirmId(null)}

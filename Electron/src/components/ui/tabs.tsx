@@ -12,7 +12,9 @@ const TabsList = React.forwardRef<
     ref={ref}
     className={cn(
       // Tek sekme dili (PageTabs ile aynı): alt çizgili düz sekme; dar alanda yatay kayar, sayfayı taşırmaz.
-      "inline-flex max-w-full items-end justify-start gap-1 overflow-x-auto border-b text-muted-foreground",
+      // Taban çizgisi iç gölge (border değil) ve sekme -mb-px taşımaz: overflow-x-auto dikeyi de auto yapar,
+      // 1 px taşma şeritte dikey kaydırma çubuğu çıkarıyordu (2026-11-24).
+      "inline-flex max-w-full items-end justify-start gap-1 overflow-x-auto overflow-y-hidden text-muted-foreground shadow-[inset_0_-1px_0_hsl(var(--border))]",
       className,
     )}
     {...props}
@@ -27,7 +29,7 @@ const TabsTrigger = React.forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      "-mb-px inline-flex shrink-0 items-center justify-center whitespace-nowrap border-b-2 border-transparent px-3 py-2 text-sm font-medium transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:border-primary data-[state=active]:text-foreground",
+      "inline-flex shrink-0 items-center justify-center whitespace-nowrap border-b-2 border-transparent px-3 py-2 text-sm font-medium transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:border-primary data-[state=active]:text-foreground",
       className,
     )}
     {...props}

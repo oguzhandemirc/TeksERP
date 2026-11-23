@@ -6,6 +6,8 @@ import { useQuery } from "@tanstack/react-query";
 import type { UseFormReturn } from "react-hook-form";
 import { FormField } from "@/components/forms/FormField";
 import { Input } from "@/components/ui/input";
+import { InfoPopover } from "@/components/ui/info-popover";
+import { FormCard } from "@/components/forms/WideFormDialog";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { getCariByCustomer, money, type Currency } from "@/pages/Finance/service";
@@ -58,12 +60,18 @@ export function CustomerFinanceSection({ form, customerId, canWrite }: Props) {
   const risk = form.watch("financeRiskLimit") as string;
   const ro = !canWrite;
   return (
-    <div className="rounded-xl border border-card-border bg-card px-5 py-4 shadow-card" data-testid="customer-finance">
-      <div className="mb-2 flex items-baseline justify-between">
-        <h4 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Finans</h4>
-        <span className="text-[11px] text-muted-foreground">{ro ? "Salt okunur — düzenleme için muhasebe yazma yetkisi gerekir" : "Terimler cari hesapta tutulur; fatura vadesi buradan önerilir"}</span>
-      </div>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <FormCard
+      title="Finans"
+      sectionId="finance"
+      aside={
+        <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+          {ro ? "Salt okunur — düzenleme için muhasebe yazma yetkisi gerekir" : null}
+          <InfoPopover label="Finans: açıklama" desc="Terimler cari hesapta tutulur; fatura vadesi buradan önerilir." />
+        </span>
+      }
+    >
+    <div data-testid="customer-finance">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <FormField label="Vade (gün)" error={termDaysError(term ?? "") ? { message: termDaysError(term ?? "") as string } : undefined}>
           <Input type="number" min={0} max={3650} step={1} readOnly={ro} aria-label="Vade (gün)" {...form.register("financePaymentTermDays")} />
         </FormField>
@@ -74,9 +82,9 @@ export function CustomerFinanceSection({ form, customerId, canWrite }: Props) {
           </select>
         </FormField>
         <FormField label="Vergi dairesi"><Input maxLength={100} readOnly={ro} aria-label="Vergi dairesi" {...form.register("financeTaxOffice")} /></FormField>
-        <FormField label="Risk limiti" error={riskLimitError(risk ?? "") ? { message: riskLimitError(risk ?? "") as string } : undefined}>
+        {/* Ölçüm kipi + engel ayarı ⓘ balonunda (2026-11-24): alanın altında iki satır uyarı formu kalabalıklaştırıyordu. */}
+        <FormField label="Risk limiti" info={<RiskLimitModeHint className="text-xs" />} error={riskLimitError(risk ?? "") ? { message: riskLimitError(risk ?? "") as string } : undefined}>
           <Input inputMode="decimal" readOnly={ro} aria-label="Risk limiti" {...form.register("financeRiskLimit")} />
-          <RiskLimitModeHint />
         </FormField>
         <CariServiceBillingTriggerField
           value={trigger as ServiceBillingTriggerChoice | null}
@@ -88,5 +96,6 @@ export function CustomerFinanceSection({ form, customerId, canWrite }: Props) {
         {!customerId ? "Cari hesap kart kaydedilince kendiliğinden açılır." : acc.isLoading ? "Hesap okunuyor…" : acc.isError ? "Hesap okunamadı — bu, hesap yok demek DEĞİLDİR." : !acc.data ? "Bu kartın cari hesabı henüz yok — kurulum göçü tamamlanınca ya da ilk finans kaydında doğar." : `Açık bakiye: ${acc.data.balances.filter((b) => Number(b.balance) !== 0).map((b) => money(b.balance, b.currency)).join(" · ") || "0"}`}
       </p>
     </div>
+    </FormCard>
   );
 }

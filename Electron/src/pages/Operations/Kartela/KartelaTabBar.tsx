@@ -15,7 +15,7 @@ export function KartelaTabBar({
 }) {
   const { hasPermission } = useRoleAccess();
   return (
-    <div className="flex items-center gap-1 overflow-x-auto border-b px-3">
+    <div className="flex items-center gap-1 overflow-x-auto overflow-y-hidden border-b px-3">
       {KARTELA_TABS.filter((t) => !t.permission || hasPermission(t.permission)).map((t) => (
         <button
           key={t.key}

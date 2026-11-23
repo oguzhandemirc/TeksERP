@@ -179,16 +179,17 @@ export function StatementDialog({ cari, open, onOpenChange }: Props) {
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-4xl">
-          <DialogHeader>
+        {/* Geniş modal (2026-11-24): ~900 px'te araç çubuğu ve BAKİYE sütunu kesiliyordu; çubuk sarar, tablo yatay kaymaz. */}
+        <DialogContent className="flex w-[calc(100%-2rem)] max-w-7xl flex-col" data-form-size="wide">
+          <DialogHeader className="pr-8">
             <DialogTitle>{cari.name} — Cari Ekstre</DialogTitle>
             <DialogDescription>
               Dönem devri, hareketler ve yürüyen bakiye. Bakiye pozitifse cari size borçludur.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex items-end gap-3">
-            <div>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex flex-col">
               <Label className="text-xs">Para birimi</Label>
               <select
                 className="mt-1 h-9 rounded-md border bg-background px-2 text-sm"
@@ -200,13 +201,13 @@ export function StatementDialog({ cari, open, onOpenChange }: Props) {
                 ))}
               </select>
             </div>
-            <div>
+            <div className="flex flex-col">
               <Label className="text-xs">Başlangıç</Label>
-              <DatePickerInput aria-label="Başlangıç" className="mt-1" value={from} onChange={setFrom} />
+              <DatePickerInput aria-label="Başlangıç" className="mt-1 w-40" value={from} onChange={setFrom} />
             </div>
-            <div>
+            <div className="flex flex-col">
               <Label className="text-xs">Bitiş</Label>
-              <DatePickerInput aria-label="Bitiş" className="mt-1" value={to} onChange={setTo} />
+              <DatePickerInput aria-label="Bitiş" className="mt-1 w-40" value={to} onChange={setTo} />
             </div>
             {/* Dışa aktarım — izin kapısı YOK: ekranı açabilen kişi zaten bu
                 rakamları görüyor, dosya yalnız aynı görünümü taşınabilir hâle
@@ -221,7 +222,7 @@ export function StatementDialog({ cari, open, onOpenChange }: Props) {
                 deftere YAZAN izinlere bağlamak, mektup kesebilmek için birine
                 fatura onaylama yetkisi vermek olurdu. */}
             <PermissionGate permission="finance:write">
-              <Button variant="outline" onClick={() => setLetterOpen(true)}>
+              <Button variant="outline" size="sm" onClick={() => setLetterOpen(true)}>
                 Mutabakat Mektubu
               </Button>
             </PermissionGate>
@@ -230,7 +231,7 @@ export function StatementDialog({ cari, open, onOpenChange }: Props) {
                 `finance:write` ile kapılı): imzalı mektubun kopyasını istemek
                 bir OKUMA işidir. Bu düğme olmadan kesilen mektuba bir daha
                 ulaşılamıyordu — gerekçe `officialDocs.ts` başlığında. */}
-            <Button variant="outline" onClick={() => setLetterListOpen(true)}>
+            <Button variant="outline" size="sm" onClick={() => setLetterListOpen(true)}>
               Mektuplar
             </Button>
             {/* Devir GİRİŞİ — stornonun ("Devri İptal Et") giriş ayağı, aynı
@@ -238,7 +239,7 @@ export function StatementDialog({ cari, open, onOpenChange }: Props) {
                 yok" sorusunu cevapsız bırakırdı; backend 409'u formun kendi
                 hata alanında yol göstererek söyler ("önce iptal edin"). */}
             <PermissionGate permission="finance:invoice">
-              <Button variant="outline" onClick={() => setOpeningFormOpen(true)}>
+              <Button variant="outline" size="sm" onClick={() => setOpeningFormOpen(true)}>
                 Devir Gir
               </Button>
             </PermissionGate>
@@ -265,7 +266,7 @@ export function StatementDialog({ cari, open, onOpenChange }: Props) {
               </Button>
             </div>
           ) : (
-            <div className="max-h-[52vh] overflow-auto rounded-md border">
+            <div className="max-h-[60vh] min-h-0 overflow-auto rounded-md border">
               <table className="w-full text-sm">
                 <thead className="sticky top-0 bg-muted/80 text-[11px] uppercase text-muted-foreground backdrop-blur">
                   <tr>
