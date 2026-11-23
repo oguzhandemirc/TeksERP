@@ -21,9 +21,9 @@ export type TabOpenAction =
 /**
  * TIKLAMA → SEKME KARARININ TEK YERİ. Bilinçli yeni-sekme eylemleri (sekme çubuğu +,
  * "Yeni sekmede aç" menü maddesi, kısayollar) buradan GEÇMEZ; tercihten etkilenmez.
- *  - newTab (varsayılan, bugünkü): shift/ctrl/cmd/orta/sağ tık → yeni sekme (orta/sağ arka planda);
+ *  - newTab (açıkça seçilirse): shift/ctrl/cmd/orta/sağ tık → yeni sekme (orta/sağ arka planda);
  *    sol tık → üst düzeyde odakla-ya-da-yeni-sekme, sayfa içinde yerinde.
- *  - sameTab: sol tık → her zaman aktif sekmede; shift/ctrl/cmd/orta tık → yeni sekme; sağ tık → hiçbir şey.
+ *  - sameTab (varsayılan, 2026-11-23): sol tık → her zaman aktif sekmede; shift/ctrl/cmd/orta tık → yeni sekme; sağ tık → hiçbir şey.
  */
 export function decideTabOpen(
   scope: TabOpenScope,
