@@ -56,9 +56,7 @@ const BANDED: Array<[page: string, strip: string]> = [
   ["pages/Operations/KursunMeterDeviations/MeterDeviationsPage.tsx", "pages/Operations/KursunMeterDeviations/SummaryStrip.tsx"],
   ["pages/Operations/ReadyWorks/ReadyWorksPage.tsx", "pages/Operations/ReadyWorks/ReadyWorksTable.tsx"],
   ["pages/Operations/ConsignedWork/ConsignedWorkPage.tsx", "pages/Operations/ConsignedWork/ConsignedWorkTable.tsx"],
-  ["pages/Quality/Inspections/InspectionList.tsx", "pages/Quality/Inspections/InspectionList.tsx"],
-  ["pages/Quality/LabTests/LabTestList.tsx", "pages/Quality/LabTests/LabTestList.tsx"],
-  ["pages/Quality/Certificates/CertificateList.tsx", "pages/Quality/Certificates/CertificateList.tsx"],
+  // Muayene / Lab / Sertifika özetleri alt çubukta (`ListFooter summary`) — UI denetimi D2, bant yok.
   ["pages/System/PrintHistory/PrintHistoryPage.tsx", "pages/System/PrintHistory/PrintHistoryPage.tsx"],
 ];
 

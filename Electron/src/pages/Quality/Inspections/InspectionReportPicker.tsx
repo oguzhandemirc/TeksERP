@@ -29,7 +29,9 @@ export function InspectionReportPicker({ defaultOpen = false }: { defaultOpen?: 
         getLabel={(s) => s.shipmentNo}
         getSubLabel={(s) => s.customer?.name}
         icon={FileText}
-        placeholder="Muayene raporu (Yazdır / PDF)"
+        placeholder="Muayene raporu"
+        placeholderClassName="text-foreground"
+        triggerClassName="h-8 w-auto gap-1.5 px-3 text-xs"
         title="Muayene raporu — sevkiyat seç"
         description="Sevk toplarının 4 puan muayeneleri, müşteri kuralına göre etiket ve sonuç."
         hideChevron

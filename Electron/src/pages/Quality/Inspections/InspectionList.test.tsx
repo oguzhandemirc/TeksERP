@@ -43,9 +43,10 @@ describe("InspectionList", () => {
     list.mockResolvedValue(page([row("1")]));
     renderWithProviders(<Harness />);
     const filters = await screen.findByTestId("inspection-filters");
-    fireEvent.click(within(filters).getByRole("button", { name: "Uyumsuz" }));
+    fireEvent.click(within(filters).getByRole("checkbox", { name: "Uyumsuz" }));
     await waitFor(() => expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ mismatch: "1" })));
-    fireEvent.click(within(filters).getByRole("button", { name: "Mamul" }));
+    fireEvent.click(within(filters).getByRole("button", { name: /Aşama:/ }));
+    fireEvent.click(await screen.findByRole("option", { name: "Mamul" }));
     await waitFor(() => expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ phase: "FINAL", mismatch: "1" })));
     fireEvent.click(await screen.findByRole("button", { name: "Ayşe Usta" }));
     await waitFor(() => expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ inspectedById: "u1" })));

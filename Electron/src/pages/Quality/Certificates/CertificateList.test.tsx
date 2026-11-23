@@ -24,10 +24,11 @@ describe("CertificateList", () => {
     expect(screen.getByTestId("certificate-summary").textContent).toContain("Süresi dolmuş1");
     expect(list).toHaveBeenCalledWith(expect.objectContaining({ status: "active", days: 30 }));
   });
-  it("özet kutusuna tık → filtre sunucuya gider (süzme istemcide yapılmaz)", async () => {
+  it("Durum kutusu → filtre sunucuya gider (süzme istemcide yapılmaz)", async () => {
     list.mockResolvedValue(page([]));
     renderWithProviders(<CertificateList onOpen={() => {}} />);
-    fireEvent.click(within(await screen.findByTestId("certificate-summary")).getByText("Süresi dolmuş"));
+    fireEvent.click(await screen.findByRole("button", { name: /Durum:/ }));
+    fireEvent.click(await screen.findByRole("option", { name: "Süresi dolmuş" }));
     await waitFor(() => expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ status: "expired" })));
   });
   it("boş liste rehber metni, hata ayrı mesaj", async () => {
