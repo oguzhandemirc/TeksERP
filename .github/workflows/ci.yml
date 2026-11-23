@@ -251,16 +251,18 @@ jobs:
   # ===========================================================================
   # PARÇALI (2026-10-12): sıralı paket ~40 dk sürüyordu. Üç iş:
   #   backend-lint  — lint + lint tavanı + iki tsc (DB'siz, parçaları beklemez)
-  #   backend-test  — bekçiler 12 parçada; HER parça kendi runner'ında kendi
+  #   backend-test  — bekçiler 16 parçada; HER parça kendi runner'ında kendi
   #                   Postgres'i + migrate + seed + seed:fixtures + HTTP sunucularıyla
   #                   koşar (ortak ayar yazan bekçiler parçalar arası karışmaz)
   #   backend       — ÖZET, ad "Backend (tsc + test)" korunur: iki iş de başarılı ∧
   #                   parçaların GERÇEKTE koştuğu dosyaların birleşimi = diskteki bütün
   #                   bekçiler, kesişim boş (sessiz atlanan bekçi = kırmızı).
   # Dağıtım + birleşim tek kaynak: `Teks-Erp/scripts/lib/parca.ts`; parça sayısı
-  # yalnız aşağıdaki matrix listesi ile `--shard …/12`de yazılı ve `test_ci_parca`
-  # ikisinin hizasını ölçer. 8 → 12 (2026-11-23): toplam bekçi süresi ~66 dk; 8 parçada
-  # dengeli bile ~8,3 dk + kurulum, 10 dk hedefini aşıyordu.
+  # yalnız aşağıdaki matrix listesi ile `--shard …/16`da yazılı ve `test_ci_parca`
+  # ikisinin hizasını ölçer. 8 → 16 (2026-11-23): toplam bekçi süresi ~66 dk; 8 parçada
+  # dengeli bile ~8,3 dk + kurulum. Koşucular iki hız sınıfında (aynı dosya yavaş
+  # koşucuda ×1,3 — ölçüldü, 12 parçalı koşu 45176242616): 12 parçada yavaş koşucuya
+  # düşen parça ~10 dk'yı gördü; 16 parça (~4,1 dk tahmin) o payı karşılar.
   #
   # ÖNBELLEK (2026-11-23): `npm ci` (~35–50 sn) ve `prisma generate` (~10–50 sn) her işte
   # tekrarlanıyordu. `Teks-Erp/node_modules` kilit dosyasından (+ Node sürümü), üretilmiş
@@ -357,7 +359,7 @@ jobs:
         shell: bash
 
   backend-test:
-    name: Backend test ${{ matrix.parca }}/12
+    name: Backend test ${{ matrix.parca }}/16
     runs-on: ubuntu-24.04
     # İş düzeyi izin üst düzeyin YERİNE geçer: contents:read burada da yazılı.
     permissions:
@@ -367,7 +369,7 @@ jobs:
       # Bir parça düşse de ötekiler sonuna kadar koşar: kırmızıların HEPSİ tek koşumda görünür.
       fail-fast: false
       matrix:
-        parca: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+        parca: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
     defaults:
       run:
         working-directory: Teks-Erp
@@ -524,7 +526,7 @@ jobs:
       # ⭐ Yeniden dışlama gerekirse reçete: `scripts/run-all-tests.ts` içinde
       #   `TEKSERP_HARIC` başlığı (giriş ölçütü + ayrı job'ın tuzağı).
       - name: Test suite (scripts/test_*.ts runner)
-        run: set -o pipefail; npm test -- --shard ${{ matrix.parca }}/12 2>&1 | tee -a /tmp/ci-backend.log
+        run: set -o pipefail; npm test -- --shard ${{ matrix.parca }}/16 2>&1 | tee -a /tmp/ci-backend.log
         shell: bash
 
       # Parça kaydı: birleşim denetimi GERÇEKTE koşan dosyaları buradan okur.
@@ -554,7 +556,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           {
-            echo "## ❌ Backend CI hata logu — parça ${{ matrix.parca }}/12 (otomatik teşhis)"
+            echo "## ❌ Backend CI hata logu — parça ${{ matrix.parca }}/16 (otomatik teşhis)"
             echo '```'
             tail -150 /tmp/ci-backend.log || echo "(log yok)"
             echo '```'

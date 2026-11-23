@@ -2,7 +2,7 @@
 // BEKÇİ — CI PARÇALI KOŞUMU: her bekçi TAM bir parçada (sessiz atlanan yok)
 // Çalıştır: npx tsx scripts/run-all-tests.ts ci_parca
 // =============================================================================
-// NEDEN: CI bekçi paketini 12 parçaya böler (`scripts/lib/parca.ts`, `ci.yml`
+// NEDEN: CI bekçi paketini 16 parçaya böler (`scripts/lib/parca.ts`, `ci.yml`
 // `backend-test`). Parçalamanın tek kabul edilemez arızası SESSİZ KAPSAM KAYBIDIR:
 // hiçbir parçaya düşmeyen dosya hiç koşmaz ve yeşil paket onu söylemez. Üç ayak:
 //   §1–§4 dağıtım saf işlevi: birleşim = küme, kesişim boş, belirlenimli, dengeli,
@@ -62,11 +62,11 @@ for (const n of [1, 2, 3, 8, 13]) {
   );
 }
 
-console.log("\n§2 — denge (N=12 — ci.yml'deki parça sayısı, süre tablosuna göre)\n");
+console.log("\n§2 — denge (N=16 — ci.yml'deki parça sayısı, süre tablosuna göre)\n");
 {
-  const p = parcalariKur(dosyalar, 12, sureler);
+  const p = parcalariKur(dosyalar, 16, sureler);
   const yuk = parcaYukleri(p, sureler);
-  const ort = yuk.reduce((s, x) => s + x, 0) / 12;
+  const ort = yuk.reduce((s, x) => s + x, 0) / 16;
   const enUzun = Math.max(...dosyalar.map((f) => sureler[f] ?? 0));
   check(
     "§2 en yüklü parça ≤ max(en uzun dosya, ortalama × 1,15)",
