@@ -3,7 +3,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
 import { EMPTY_MENU_LAYOUT } from "@/lib/menu-layout";
 import { Sidebar } from "./Sidebar";
-import { activeChildOf } from "./sidebar-section";
+import { useMenuContextStore } from "./menu-context";
 
 /**
  * T5 menü bölümleri: kök bölüm sayfasına gider, ok alt listeyi açar, alt liste bölüm sayfasıyla AYNI
@@ -11,6 +11,7 @@ import { activeChildOf } from "./sidebar-section";
  */
 let perms: string[] = [];
 let activePath: string | null = null;
+let devere = false;
 const openTab = vi.fn();
 vi.mock("@/hooks/useMenuLayout", () => ({ useMenuLayout: () => EMPTY_MENU_LAYOUT }));
 vi.mock("@/hooks/useRoleAccess", () => ({
@@ -24,7 +25,7 @@ vi.mock("@/hooks/useRoleAccess", () => ({
 vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
   useOperationsVisibilityContext: (): OperationsVisibilityContext => ({
     shipmentConfirmationEnabled: false, depoMultiEnabled: false, ticaretEnabled: false, iplikEnabled: false,
-    devereEnabled: false, tezgahEnabled: false, kaliteGuvenceEnabled: true, maliyetEnabled: true,
+    devereEnabled: devere, tezgahEnabled: false, kaliteGuvenceEnabled: true, maliyetEnabled: true,
     gelenBelgeEnabled: false, emanetEnabled: false, productionEnabled: true, financeEnabled: true,
     dokumaEnabled: false, machineStopEnabled: false, reportsClosedKeys: [], isReportOpen: () => true,
     flagsReady: true, flagsFailed: false,
@@ -44,7 +45,7 @@ vi.mock("@/store/auth", () => ({
     sel({ isSystemAccount: false, systemAccountExists: true }),
 }));
 vi.mock("@/store/tabs", () => ({
-  useTabsStore: (sel: (s: unknown) => unknown) => sel({ tabs: [], activeId: null, openTab }),
+  useTabsStore: (sel: (s: unknown) => unknown) => sel({ tabs: activePath ? [{ id: "t1", path: activePath }] : [], activeId: activePath ? "t1" : null, openTab }),
   selectActivePath: () => activePath,
 }));
 vi.mock("./tabs/use-tab-target", () => ({ useTabTarget: (to: string) => ({ onClick: () => openTab(to) }) }));
@@ -166,13 +167,45 @@ describe("Sidebar — süreç alt grupları (2026-11-20)", () => {
     expect(screen.queryByRole("button", { name: "Raporlar alt menüsü" })).toBeNull();
   });
 
-  it("activeChildOf: en uzun ön ek kazanır, ilgisiz yol null", () => {
-    const kids = [
-      { label: "A", to: "/operations/gelen-belgeler", icon: () => null },
-      { label: "B", to: "/operations/gelen-belgeler/sablonlar", icon: () => null },
-    ] as never;
-    expect(activeChildOf(kids, "/operations/gelen-belgeler/sablonlar/1")).toBe("/operations/gelen-belgeler/sablonlar");
-    expect(activeChildOf(kids, "/operations/gelen-belgeler/9")).toBe("/operations/gelen-belgeler");
-    expect(activeChildOf(kids, "/operations/rolls")).toBeNull();
+});
+
+describe("Sidebar — aynı ekran iki kökte (menü bağlamı, 2026-11-23)", () => {
+  const FI = "/operations/fasondaki-iplik";
+  // Bölüm kapsayıcısı: ok düğmesi → kök satırı → SectionNavItem sarmalı (alt liste burada).
+  const fiIn = (root: string) => {
+    const box = screen.getByRole("button", { name: `${root} alt menüsü` }).parentElement!.parentElement!;
+    return [...box.querySelectorAll<HTMLButtonElement>("[data-nav-child]")].find((b) => b.textContent?.includes("Fasondaki İplik")) ?? null;
+  };
+  beforeEach(() => {
+    perms = ["warping-order:read", "yarn:read"];
+    devere = true;
+    activePath = FI;
+    openTab.mockClear();
+    localStorage.clear();
+    sessionStorage.clear();
+    useMenuContextStore.setState({ byTab: {}, pending: null });
+  });
+
+  it("⭐ bağlamsız açılış ekranın kendi kökünde (Üretim); Depo'dan tıklanınca Depo açık ve etkin kalır", () => {
+    const { unmount } = render(<Sidebar collapsed={false} />);
+    expect(screen.getByRole("button", { name: "Üretim alt menüsü" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "Depo alt menüsü" })).toHaveAttribute("aria-expanded", "false");
+    expect(document.querySelectorAll('[data-nav-child][aria-current="page"]')).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Depo alt menüsü" }));
+    fireEvent.click(subHead("İplik ve Sarf"));
+    const depoFi = fiIn("Depo")!;
+    fireEvent.click(depoFi);
+    expect(openTab).toHaveBeenLastCalledWith(FI);
+    expect(screen.getByRole("button", { name: "Depo alt menüsü" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: "Üretim alt menüsü" })).toHaveAttribute("aria-expanded", "false");
+    expect(fiIn("Depo")).toHaveAttribute("aria-current", "page");
+    expect(useMenuContextStore.getState().byTab.t1).toMatchObject({ owner: "/warehouse", to: FI, ownerLabel: "Depo" });
+
+    // F5 / yeniden çizim: sekmenin bağlamı korunur.
+    unmount();
+    render(<Sidebar collapsed={false} />);
+    expect(screen.getByRole("button", { name: "Depo alt menüsü" })).toHaveAttribute("aria-expanded", "true");
+    expect(fiIn("Depo")).toHaveAttribute("aria-current", "page");
   });
 });

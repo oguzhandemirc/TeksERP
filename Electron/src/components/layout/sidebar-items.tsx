@@ -1,37 +1,51 @@
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, type MouseEvent, type ReactNode } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
-import { useTabsStore, selectActivePath } from "@/store/tabs";
 import { useTabTarget } from "./tabs/use-tab-target";
+import { recordMenuClick, type MenuContext, type MenuPlacement } from "./menu-context";
 import type { NavItem } from "./nav-config";
 import { IconTile, toneForKey } from "@/components/ui/icon-tile";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { NavContextMenu } from "./sidebar-context-menu";
 
-/** UX-2 K3: kapalı modül satırı gezinmez; tıkta "kapalı — <ayar yolu>" der (HubCard ile aynı davranış). */
-export function useNavTarget(item: Pick<NavItem, "to" | "offHint">) {
+/**
+ * UX-2 K3: kapalı modül satırı gezinmez; tıkta "kapalı — <ayar yolu>" der (HubCard ile aynı davranış).
+ * `place`: tıklanan menü konumu — aynı ekran birden çok kökte durabildiği için sekmeye bağlanır (`menu-context.ts`).
+ */
+export function useNavTarget(item: Pick<NavItem, "to" | "offHint">, place?: MenuContext) {
   const { onContextMenu: _bgTab, ...target } = useTabTarget(item.to);
   const hint = item.offHint;
   // Sağ tık menüde arka plan sekmesi açmaz → bağlam menüsü (`NavContextMenu`); orta/Ctrl+tık yeni sekme kalır.
-  return hint ? { onClick: () => toast.info(hint), title: hint, "aria-disabled": true as const } : target;
+  if (hint) return { onClick: () => toast.info(hint), title: hint, "aria-disabled": true as const };
+  if (!place) return target;
+  return {
+    ...target,
+    onClick: (e: MouseEvent) => {
+      target.onClick(e);
+      recordMenuClick(place);
+    },
+  };
 }
 
-/** Sidebar'daki tüm item path'leri — aktif hesaplamasında parent/child çakışmasını önler. */
-export const SidebarPathsCtx = createContext<string[]>([]);
+/** Menünün etkin konumu (Sidebar tek yerde çözer: tık bağlamı → sekmenin bağlamı → kanonik). */
+export const ActivePlacementCtx = createContext<MenuPlacement | null>(null);
 
-/** Aktiflik: tam eşleşme ya da daha spesifik bir kardeş yoksa prefix eşleşmesi. */
+/** Satırın bulunduğu menü grubu — üst satırların konum sahibi (`grup:<ad>`). */
+export const NavOwnerCtx = createContext<string>("");
+
+/** Üst satırın (ya da bölüm kökünün) hedefi — tık, grubun konumunu sekmeye bağlar. */
+export function useRowTarget(item: Pick<NavItem, "to" | "offHint">) {
+  const owner = useContext(NavOwnerCtx);
+  return useNavTarget(item, owner ? { owner, to: item.to } : undefined);
+}
+
+/** Üst satır etkin mi: çözülen konum bu grubun bu satırıysa. */
 export function useSidebarActive(to: string): boolean {
-  const activePath = useTabsStore(selectActivePath);
-  const allPaths = useContext(SidebarPathsCtx);
-  const isPrefixActive = to !== "/" && (activePath?.startsWith(to + "/") ?? false);
-  const hasMoreSpecificMatch =
-    isPrefixActive &&
-    allPaths.some(
-      (p) => p !== to && p.startsWith(to + "/") && (activePath === p || activePath?.startsWith(p + "/")),
-    );
-  return activePath === to || (isPrefixActive && !hasMoreSpecificMatch);
+  const placement = useContext(ActivePlacementCtx);
+  const owner = useContext(NavOwnerCtx);
+  return placement !== null && placement.owner === owner && placement.to === to;
 }
 
 /** Sayısal rozet — bekleyen iş/uyarı sayısı (veri bağlandığında dolar). */
@@ -57,7 +71,7 @@ export function navRowClass(active: boolean, off?: boolean) {
 
 /** Genişletilmiş nav satırı — simge karesi + etiket; `trailing` (alt menü oku) satırın sağında. */
 export function NavItemLink({ item, active: activeProp }: { item: NavItem; active?: boolean }) {
-  const target = useNavTarget(item);
+  const target = useRowTarget(item);
   const selfActive = useSidebarActive(item.to);
   const isActive = activeProp ?? selfActive;
   return (
@@ -82,7 +96,7 @@ export function NavItemLink({ item, active: activeProp }: { item: NavItem; activ
 
 /** Daraltılmış nav düğmesi — simge karesi; tooltip ile etiket. */
 export function CollapsedItem({ item }: { item: NavItem }) {
-  const target = useNavTarget(item);
+  const target = useRowTarget(item);
   const isActive = useSidebarActive(item.to);
   return (
     <li className="flex w-full justify-center">

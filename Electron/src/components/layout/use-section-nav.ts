@@ -60,7 +60,13 @@ export function useSectionNav() {
       childGroups = sections.groups[item.section].map((g) => ({
         key: g.key,
         label: g.label,
-        children: g.items.map((t) => ({ label: t.label, to: t.to, icon: t.icon, offHint: t.off ? t.offHint : undefined })),
+        children: g.items.map((t) => ({
+          label: t.label,
+          to: t.to,
+          icon: t.icon,
+          offHint: t.off ? t.offHint : undefined,
+          crossListed: t.group !== item.section,
+        })),
       }));
     } else {
       // Kapalı (soluk) kökün alt listesi açılmaz: tık yalnız ipucu verir (UX-2 K3).

@@ -1,34 +1,28 @@
 import { createContext, useContext, useEffect, useState, type MouseEvent } from "react";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useTabsStore, selectActivePath } from "@/store/tabs";
 import { IconTile } from "@/components/ui/icon-tile";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { NavChild, NavItem } from "./nav-config";
-import { navRowClass, navTone, useNavTarget } from "./sidebar-items";
+import { ActivePlacementCtx, NavOwnerCtx, navRowClass, navTone, useNavTarget, useRowTarget } from "./sidebar-items";
 import { NavContextMenu } from "./sidebar-context-menu";
 import { NavSubgroup, hasSubgroupHeads } from "./sidebar-subgroups";
 
 // T5 bölüm kökü (Satış · Üretim · Depo · Sevkiyat): kökün kendisi bölüm kart sayfasını açar, yanındaki
 // ok alt listeyi menüde açar/kapatır; daraltılmış menüde alt liste yana açılan panelde (flyout) gelir.
 
-/** Aktif alt öğe: tam eşleşme ya da en uzun ön ek (detay sayfası `/x/:id` üst ekranını yakar). */
-export function activeChildOf(children: NavChild[], activePath: string | null | undefined): string | null {
-  if (!activePath) return null;
-  const hits = children.filter((c) => activePath === c.to || activePath.startsWith(`${c.to}/`));
-  return hits.sort((a, b) => b.to.length - a.to.length)[0]?.to ?? null;
-}
-
+// Etkinlik Sidebar'ın çözdüğü TEK konumdan: aynı ekran iki kökte dursa da yalnız tıklanan kök yanar.
 function useSectionState(item: NavItem) {
-  const activePath = useTabsStore(selectActivePath);
-  const children = item.children ?? [];
-  const activeChild = activeChildOf(children, activePath);
-  return { activeChild, active: activePath === item.to || activeChild !== null };
+  const placement = useContext(ActivePlacementCtx);
+  const owner = useContext(NavOwnerCtx);
+  const activeChild = placement?.owner === item.to ? placement.to : null;
+  const self = placement !== null && placement.owner === owner && placement.to === item.to;
+  return { activeChild, active: self || activeChild !== null };
 }
 
 // Panel (flyout) menü dışında, açılır yüzeyde çizilir → menü stili (koyu/birincil) renkleri orada kullanılmaz.
-function ChildLink({ child, active, inPopover, nested }: { child: NavChild; active: boolean; inPopover?: boolean; nested?: boolean }) {
-  const target = useNavTarget(child);
+function ChildLink({ child, root, active, inPopover, nested }: { child: NavChild; root: NavItem; active: boolean; inPopover?: boolean; nested?: boolean }) {
+  const target = useNavTarget(child, { owner: root.to, to: child.to, ownerLabel: root.label });
   const Icon = child.icon;
   return (
     <li>
@@ -83,7 +77,7 @@ function ChildList(props: {
             group={g}
             activeChild={activeChild}
             inPopover={inPopover}
-            renderChild={(c) => <ChildLink key={c.to} child={c} active={c.to === activeChild} inPopover={inPopover} nested />}
+            renderChild={(c) => <ChildLink key={c.to} child={c} root={item} active={c.to === activeChild} inPopover={inPopover} nested />}
           />
         ))}
       </ul>
@@ -92,7 +86,7 @@ function ChildList(props: {
   return (
     <ul className={cn("space-y-0.5", className)}>
       {(item.children ?? []).map((c) => (
-        <ChildLink key={c.to} child={c} active={c.to === activeChild} inPopover={inPopover} />
+        <ChildLink key={c.to} child={c} root={item} active={c.to === activeChild} inPopover={inPopover} />
       ))}
     </ul>
   );
@@ -119,7 +113,7 @@ function useSectionOpen(item: NavItem, active: boolean) {
 
 /** Genişletilmiş menüde bölüm kökü + açılır alt liste. */
 export function SectionNavItem({ item }: { item: NavItem }) {
-  const target = useNavTarget(item);
+  const target = useRowTarget(item);
   const { active, activeChild } = useSectionState(item);
   const [open, setOpen] = useSectionOpen(item, active);
   // Kökün KENDİ sayfası seçiliyse dolu degrade; alt öğesi seçiliyse kök yalnız vurgulanır (tek dolu satır).
@@ -177,7 +171,7 @@ export function SectionNavItem({ item }: { item: NavItem }) {
 
 /** Daraltılmış menüde bölüm kökü: tık yana açılan paneli açar (başlığı bölüm sayfasına gider). */
 export function CollapsedSectionItem({ item }: { item: NavItem }) {
-  const rootTarget = useNavTarget(item);
+  const rootTarget = useRowTarget(item);
   const { active, activeChild } = useSectionState(item);
   const [open, setOpen] = useState(false);
   // Paneldeki herhangi bir bağlantı seçilince panel kapanır.
