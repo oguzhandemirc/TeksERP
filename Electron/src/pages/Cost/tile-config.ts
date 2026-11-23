@@ -5,7 +5,7 @@
 // Görüntüleme kapısı `cost:read` (teklif `quote:read`, fiyat listesi `price-list:read`); yazma sayfa İÇİNDE `PermissionGate`.
 // Menü satırı ayrıca `maliyetEnabled` bayrağına bağlıdır (`nav-config`): modül kapalıysa hiçbiri çizilmez.
 // =============================================================================
-import { Calculator, Cog, Factory, FileSignature, FunctionSquare, Layers, ListOrdered, PackageOpen, SlidersHorizontal, Spool, TrendingUp, type LucideIcon } from "lucide-react";
+import { Calculator, Coins, Cog, FileSignature, Layers, ListOrdered, SlidersHorizontal, Spool, TrendingUp, type LucideIcon } from "lucide-react";
 
 export interface CostTile {
   key: string;
@@ -29,29 +29,11 @@ export const costTiles: CostTile[] = [
     permissionAny: ["cost:read"],
   },
   {
-    key: "yarn-prices",
-    title: "İplik Maliyet Fiyatları",
-    description: "Maliyette kullanılan iplik kg fiyatları — eski fiyat silinmez, damgalanır; 90 günden eski fiyat uyarılır.",
-    to: "/cost/yarn-prices",
-    icon: Spool,
-    tone: "text-station-depo",
-    permissionAny: ["cost:read"],
-  },
-  {
-    key: "finishing-rates",
-    title: "Fason Tarifeleri",
-    description: "Terbiye/boya/apre fason ücretleri (ham ya da mamul metre bazlı) — değişiklik yeni sürümdür, eskisi damgalı kalır.",
-    to: "/cost/finishing-rates",
-    icon: Factory,
-    tone: "text-station-fason",
-    permissionAny: ["cost:read"],
-  },
-  {
-    key: "formulas",
-    title: "Maliyet Formülleri",
-    description: "Fabrikaya özel ek kalemler (pul işçiliği, ambalaj payı…) metre başı formülle — genel giderden önce maliyete girer, değişiklik yeni sürümdür.",
-    to: "/cost/formulas",
-    icon: FunctionSquare,
+    key: "input-prices",
+    title: "Girdi Fiyatları",
+    description: "İplik kg fiyatları, fason tarifeleri, ek maliyet formülleri ve hizmet sarf normları — her değişiklik yeni sürümdür, eskisi damgalı kalır.",
+    to: "/cost/input-prices",
+    icon: Coins,
     tone: "text-station-depo",
     permissionAny: ["cost:read"],
   },
@@ -62,15 +44,6 @@ export const costTiles: CostTile[] = [
     to: "/cost/machine-rates",
     icon: Cog,
     tone: "text-station-depo",
-    permissionAny: ["cost:read"],
-  },
-  {
-    key: "consumable-norms",
-    title: "Hizmet Sarf Normları",
-    description: "Hizmetin metresi başına harcanan sarf (ip, kurşun…): hizmet kalemi × sarf kalemi × miktar — değişiklik yeni sürümdür.",
-    to: "/cost/consumable-norms",
-    icon: PackageOpen,
-    tone: "text-warning",
     permissionAny: ["cost:read"],
   },
   {

@@ -49,6 +49,11 @@ const EXEMPT: Record<string, string> = {
   "/system/server-updates": "eski sunucu güncellemeleri adresi → /system/updates'e yönlendirir",
   "/access/devices/:id": "detay yolu",
   "/definitions/label-templates": "eski Etiket Tasarımı adresi → Etiketler › Düzenler'e yönlendirir",
+  // M6: dört girdi listesi Girdi Fiyatları sekmesi oldu; palette sekme derin bağlantısı var.
+  "/cost/yarn-prices": "eski adres → Girdi Fiyatları › İplik Fiyatları'na yönlendirir",
+  "/cost/finishing-rates": "eski adres → Girdi Fiyatları › Fason Tarifeleri'ne yönlendirir",
+  "/cost/formulas": "eski adres → Girdi Fiyatları › Formüller'e yönlendirir",
+  "/cost/consumable-norms": "eski adres → Girdi Fiyatları › Sarf Normları'na yönlendirir",
 };
 
 // Kategori izni KURAL olarak `report:<kategori>`; istisna ADIYLA ve gerekçesiyle (listeye
