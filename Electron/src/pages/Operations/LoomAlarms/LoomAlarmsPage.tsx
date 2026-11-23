@@ -66,10 +66,10 @@ export function LoomAlarmsPage() {
           <AlarmSummaryStrip summary={summary} scope={filters.scope} />
         </ListBand>
       )}
-      <ListToolbar className="flex-row flex-wrap items-end">
+      <ListToolbar className="flex-row flex-wrap items-center">
+        <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Tezgah kodu/adı, hol ya da sebep kodu ara" />
         <LoomAlarmsFilters value={filters} onChange={setFilters} />
         <div className="ml-auto flex items-center gap-1.5">
-          <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Tezgah kodu/adı, hol ya da sebep kodu ara" />
           <DataTableTools table={table} compact exportName="Tezgah alarmları" />
         </div>
       </ListToolbar>

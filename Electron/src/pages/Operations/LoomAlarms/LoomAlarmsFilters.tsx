@@ -1,10 +1,7 @@
 // Alarmlar listesi süzgeçleri — kapsam · kademe · hol · sebep · oluşma günü. Süzme SUNUCUDA:
 // süzgeç durumu liste parametresine birebir çevrilir (`toListParams`), cursor ve özet şeridi aynı where.
 import { useQuery } from "@tanstack/react-query";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { DatePickerInput } from "@/components/forms/DatePickerInput";
+import { DayRangeChip, SelectChip } from "@/components/data-table/filter-row/SelectChip";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { stationService } from "@/pages/Stations/service";
@@ -21,8 +18,6 @@ export interface AlarmFilterState {
 }
 
 export const INITIAL_ALARM_FILTERS: AlarmFilterState = { scope: "active", tier: "", stationId: "", reasonCode: "", from: "", to: "" };
-
-const ALL = "__all__";
 
 /** Süzgeç → sunucu parametresi (boş alan gönderilmez; aktif kapsamda tarih aralığı yok). */
 export function toListParams(f: AlarmFilterState): LoomAlarmListParams {
@@ -50,64 +45,33 @@ interface Props {
   onChange: (next: AlarmFilterState) => void;
 }
 
-function Pick({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
-  return (
-    <div className="space-y-1">
-      <Label>{label}</Label>
-      <Select value={value || ALL} onValueChange={(v) => onChange(v === ALL ? "" : v)}>
-        <SelectTrigger className="w-44" aria-label={label}>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={ALL}>Tümü</SelectItem>
-          {options.map((o) => (
-            <SelectItem key={o.value} value={o.value}>
-              {o.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
-  );
-}
+const SCOPES: { value: LoomAlarmScope; label: string }[] = [
+  { value: "active", label: "Aktif" },
+  { value: "history", label: "Geçmiş" },
+  { value: "all", label: "Tümü" },
+];
+const TIERS: { value: "1" | "2"; label: string }[] = [
+  { value: "1", label: "Görevliye bildirildi" },
+  { value: "2", label: "Patrona iletildi" },
+];
 
+/** Tek satır süzgeç kutuları ("Kademe: Tümü ▾"); üstte etiket + altta açılır düzeni yok (2026-11-23). */
 export function LoomAlarmsFilters({ value, onChange }: Props) {
   const { hasPermission } = useRoleAccess();
   const halls = useWeavingHalls(hasPermission("station:read"));
   const { active: reasons } = useStopReasonPresets();
   const set = (patch: Partial<AlarmFilterState>) => onChange({ ...value, ...patch });
   return (
-    <div className="flex flex-wrap items-end gap-3">
-      <Tabs value={value.scope} onValueChange={(v) => set({ scope: v as LoomAlarmScope })}>
-        <TabsList>
-          <TabsTrigger value="active">Aktif</TabsTrigger>
-          <TabsTrigger value="history">Geçmiş</TabsTrigger>
-          <TabsTrigger value="all">Tümü</TabsTrigger>
-        </TabsList>
-      </Tabs>
-      <Pick
-        label="Kademe"
-        value={value.tier}
-        onChange={(v) => set({ tier: v as AlarmFilterState["tier"] })}
-        options={[
-          { value: "1", label: "Görevliye bildirildi" },
-          { value: "2", label: "Patrona iletildi" },
-        ]}
-      />
-      {halls.length > 0 && <Pick label="Hol" value={value.stationId} onChange={(v) => set({ stationId: v })} options={halls.map((h) => ({ value: h.id, label: h.name }))} />}
-      {reasons.length > 0 && <Pick label="Sebep" value={value.reasonCode} onChange={(v) => set({ reasonCode: v })} options={reasons.map((r) => ({ value: r.code, label: r.label }))} />}
-      {value.scope !== "active" && (
-        <>
-          <div className="space-y-1">
-            <Label htmlFor="alarm-from">Başlangıç günü</Label>
-            <DatePickerInput id="alarm-from" value={value.from} onChange={(v) => set({ from: v })} className="w-40" />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="alarm-to">Bitiş günü</Label>
-            <DatePickerInput id="alarm-to" value={value.to} onChange={(v) => set({ to: v })} invalid={Boolean(value.from && value.to && value.to < value.from)} className="w-40" />
-          </div>
-        </>
+    <div className="flex flex-wrap items-center gap-1.5">
+      <SelectChip id="alarm-scope" label="Görünüm" value={value.scope} resetValue="active" options={SCOPES} onChange={(v) => set({ scope: v ?? "active" })} />
+      <SelectChip id="alarm-tier" label="Kademe" value={value.tier || null} options={TIERS} onChange={(v) => set({ tier: v ?? "" })} />
+      {halls.length > 0 && (
+        <SelectChip id="alarm-hall" label="Hol" value={value.stationId || null} options={halls.map((h) => ({ value: h.id, label: h.name }))} onChange={(v) => set({ stationId: v ?? "" })} />
       )}
+      {reasons.length > 0 && (
+        <SelectChip id="alarm-reason" label="Sebep" value={value.reasonCode || null} options={reasons.map((r) => ({ value: r.code, label: r.label }))} onChange={(v) => set({ reasonCode: v ?? "" })} />
+      )}
+      {value.scope !== "active" && <DayRangeChip id="alarm-day" label="Gün" from={value.from} to={value.to} onChange={(r) => set(r)} />}
     </div>
   );
 }

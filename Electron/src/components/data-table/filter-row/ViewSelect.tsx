@@ -49,7 +49,10 @@ export function ViewSelect({
           size="sm"
           className="h-7 min-w-0 gap-1 border-0 bg-transparent px-2 text-xs font-normal shadow-none hover:bg-transparent"
         >
-          <span>{`${label}: ${current?.label ?? ""}`}</span>
+          <span>
+            <span className="text-muted-foreground">{label}: </span>
+            {current?.label ?? ""}
+          </span>
           <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-60" />
         </Button>
       </PopoverTrigger>

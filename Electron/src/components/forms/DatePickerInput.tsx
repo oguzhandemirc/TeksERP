@@ -92,7 +92,7 @@ export function DatePickerInput({
   };
 
   return (
-    <div className={cn("relative flex h-9 w-full items-center rounded-md border bg-background text-sm transition-colors focus-within:ring-1 focus-within:ring-ring", invalid && "border-amber-500 focus-within:ring-amber-500", className)}>
+    <div className={cn("relative flex h-9 w-full items-center rounded-md border border-input bg-card text-sm shadow-soft transition-colors focus-within:ring-1 focus-within:ring-ring", invalid && "border-amber-500 focus-within:ring-amber-500", className)}>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <button

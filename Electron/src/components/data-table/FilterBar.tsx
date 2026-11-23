@@ -315,11 +315,11 @@ function SelectFilter({ def, sp, update, h, chip, autoOpen }: SubProps<Extract<F
       }
     >
       <SelectTrigger className={chip ? cn(triggerClass(h, false, true, ""), "w-auto") : cn(h, "w-auto min-w-[140px] gap-1 text-xs")}>
-        <SelectValue placeholder={def.label}>{chip ? triggerText(def.label, chosen, true) : undefined}</SelectValue>
+        <SelectValue placeholder={def.label}>{triggerText(def.label, chosen ?? "Tümü", true)}</SelectValue>
       </SelectTrigger>
       <SelectContent>
         <SelectItem value={NONE} className="text-muted-foreground">
-          Tümü ({def.label})
+          Tümü
         </SelectItem>
         {def.options.map((o) => (
           <SelectItem key={o.value} value={o.value}>
@@ -508,7 +508,7 @@ function LookupFilter({ def, sp, update, h, chip, autoOpen }: SubProps<Extract<F
     });
 
   const selectedItem = items.find((it) => it.id === value);
-  const triggerLabel = selectedItem ? triggerText(def.label, labelOf(selectedItem), chip) : def.label;
+  const triggerLabel = selectedItem ? triggerText(def.label, labelOf(selectedItem), chip) : `${def.label}: Tümü`;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -1019,7 +1019,7 @@ function NumberRangeFilter({
       className={cn(
         h,
         "flex items-center gap-1 rounded-md px-1.5",
-        chip ? "border-0 bg-transparent" : cn("border bg-background", hasValue ? "border-primary/50" : "border-input"),
+        chip ? "border-0 bg-transparent" : cn("border bg-card shadow-soft", hasValue ? "border-primary/50" : "border-input"),
       )}
       title={placeholder}
     >

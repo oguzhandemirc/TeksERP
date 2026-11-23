@@ -630,6 +630,12 @@
   background-color: hsl(var(--card));
 }
 
+/* ── GİRDİ YÜZEYİ — `bg-background` sayfa zeminiyle aynı renktir; elle yazılmış girdi/açılır bu zeminle
+   saydam görünüyordu (2026-11-23). Bütün girdi türleri ortak girdi yüzeyini (kart zemini) alır. */
+:is(input:not([type="checkbox"], [type="radio"], [type="range"]), select, textarea, [role="combobox"]).bg-background {
+  background-color: hsl(var(--card));
+}
+
 /* ── SAYFA BANTLARI — başlık bandı ve liste bantları (özet şeridi) ince alt çizgiyle ayrışır.
    Renk tek başına yetmez (beyaz zemin): her katmanın sınırı çizgidir. */
 /* Başlığın altında ek boşluk YOK: liste sayfasında bant/yüzey çizgiye bitişik, kart sayfasında boşluğu gövdenin kendi

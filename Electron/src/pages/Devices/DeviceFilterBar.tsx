@@ -3,8 +3,7 @@ import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
+import { SelectChip } from "@/components/data-table/filter-row/SelectChip";
 
 export type DeviceStatusFilter = "all" | "pending" | "approved" | "inactive" | "proof-lost";
 export type DeviceKindFilter = "all" | "TABLET" | "PHONE" | "DESKTOP";
@@ -46,9 +45,9 @@ export function DeviceFilterBar({
   tools,
 }: Props) {
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b px-6 py-3 text-xs">
-      <div className="relative min-w-[180px] max-w-xs flex-1">
-        <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+    <div data-list-surface="toolbar" className="flex flex-wrap items-center gap-1.5 border-b py-2 text-xs">
+      <div className="relative w-full min-w-[180px] sm:w-56">
+        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
         <Input
           value={search}
           onChange={(e) => onSearch(e.target.value)}
@@ -57,30 +56,33 @@ export function DeviceFilterBar({
         />
       </div>
 
-      <Select value={status} onValueChange={(v) => onStatus(v as DeviceStatusFilter)}>
-        <SelectTrigger className={cn("h-8 w-auto min-w-[150px] gap-1 text-xs", status !== "all" && "border-primary/50")}>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">Durum: Tümü</SelectItem>
-          <SelectItem value="pending">Onay bekliyor</SelectItem>
-          <SelectItem value="approved">Onaylı</SelectItem>
-          <SelectItem value="inactive">Pasif</SelectItem>
-          {(proofLostCount > 0 || status === "proof-lost") && <SelectItem value="proof-lost">Anahtar kaybı</SelectItem>}
-        </SelectContent>
-      </Select>
-
-      <Select value={kind} onValueChange={(v) => onKind(v as DeviceKindFilter)}>
-        <SelectTrigger className={cn("h-8 w-auto min-w-[130px] gap-1 text-xs", kind !== "all" && "border-primary/50")}>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">Tür: Tümü</SelectItem>
-          <SelectItem value="TABLET">Tablet</SelectItem>
-          <SelectItem value="PHONE">Telefon</SelectItem>
-          <SelectItem value="DESKTOP">PC</SelectItem>
-        </SelectContent>
-      </Select>
+      <SelectChip<DeviceStatusFilter>
+        id="device-status"
+        label="Durum"
+        value={status}
+        resetValue="all"
+        options={[
+          { value: "all", label: "Tümü" },
+          { value: "pending", label: "Onay bekliyor" },
+          { value: "approved", label: "Onaylı" },
+          { value: "inactive", label: "Pasif" },
+          ...(proofLostCount > 0 || status === "proof-lost" ? [{ value: "proof-lost" as const, label: "Anahtar kaybı" }] : []),
+        ]}
+        onChange={(v) => onStatus(v ?? "all")}
+      />
+      <SelectChip<DeviceKindFilter>
+        id="device-kind"
+        label="Tür"
+        value={kind}
+        resetValue="all"
+        options={[
+          { value: "all", label: "Tümü" },
+          { value: "TABLET", label: "Tablet" },
+          { value: "PHONE", label: "Telefon" },
+          { value: "DESKTOP", label: "PC" },
+        ]}
+        onChange={(v) => onKind(v ?? "all")}
+      />
 
       <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
         {status !== "proof-lost" && <ProofLostShortcut count={proofLostCount} onClick={() => onStatus("proof-lost")} />}

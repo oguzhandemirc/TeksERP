@@ -188,11 +188,11 @@ export function SettingsSurfacePage({
     <PageShell>
       <PageHeader
         title={soleCategory ? soleCategory.label : title}
+        titleExtra={<SimulatedMeterBanner />}
         actions={
           <RefreshButton queryKey={FEATURE_FLAGS_QUERY_KEY} successMessage="Ayarlar yenilendi" />
         }
       />
-      <SimulatedMeterBanner />
 
       <SettingsDirtyProvider value={registerDirty}>
       <Tabs
