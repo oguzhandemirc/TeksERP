@@ -31,9 +31,10 @@ vi.mock("./ShipmentContentsSheet", () => ({ ShipmentContentsSheet: () => null })
 // PageHeader chrome'u (favoriler/komut paleti → Preferences/Router bağımlılığı)
 // test edilen davranış değil; sade bir başlığa indir.
 vi.mock("@/components/layout/PageHeader", () => ({
-  PageHeader: ({ title, actions }: { title: string; actions?: ReactNode }) => (
+  PageHeader: ({ title, description, actions }: { title: string; description?: string; actions?: ReactNode }) => (
     <div>
       <h1>{title}</h1>
+      {description && <button type="button" aria-label={description} />}
       {actions}
     </div>
   ),
@@ -201,14 +202,15 @@ describe("SackStorePage — Sevk Kapısı (PLANNED board)", () => {
     confirmationEnabled = false;
     renderPage(<SackStorePage />);
     await screen.findByText("SVK-100");
-    expect(screen.getByText(/Sevk onayı kapalı/i)).toBeInTheDocument();
+    // İpucu akışta şerit değil, başlık ⓘ baloncuğunda (erişilebilir ad).
+    expect(screen.getByRole("button", { name: /Sevk onayı kapalı/i })).toBeInTheDocument();
   });
 
   it("sevk onayı AÇIKKEN ipucu gizlenir", async () => {
     confirmationEnabled = true;
     renderPage(<SackStorePage />);
     await screen.findByText("SVK-100");
-    expect(screen.queryByText(/Sevk onayı kapalı/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Sevk onayı kapalı/i })).not.toBeInTheDocument();
   });
 
   it("shipping:write yoksa aksiyon butonları gizlenir (PermissionGate)", async () => {
