@@ -55,6 +55,7 @@ export function StockLineExportDialog(props: {
         info="Ekrandaki filtreye uyan siparişler kumaş ve renge göre tek satırda toplanır: ne kadar sipariş var, ne kadarı açık, ne kadar daha üretilmeli."
         catalog={catalog}
         formats={["xlsx", "pdf"]}
+        screenless
         busyLabel={progress ?? undefined}
         canRun={ready}
         filters={

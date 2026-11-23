@@ -63,6 +63,9 @@ export interface ExportDialogProps {
   extras?: ReactNode;
   /** Çalışırken düğme metni (ör. "1200 / ~3000 indiriliyor…"). */
   busyLabel?: string;
+  /** Ekran tablosu olmayan çıktıda (ör. stok kalemi bazında) işaretsiz sütun "ekranda gizli" değil, yalnız seçilmemiştir:
+   *  `screenless` → etiket çizilmez, "Ekrandakiler" düğmesi "Son seçim" olur. */
+  screenless?: boolean;
   /** Filtre seçimi eksikse false (düğme pasif). */
   canRun?: boolean;
   /** true/void → diyalog kapanır; false → açık kalır (iptal/boş). */
@@ -185,7 +188,7 @@ export function ExportDialog(props: ExportDialogProps) {
               action={
                 <div className="flex gap-1">
                   <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setColumns(defaultColumnSelection(catalog))}>
-                    Ekrandakiler
+                    {props.screenless ? "Son seçim" : "Ekrandakiler"}
                   </Button>
                   <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setColumns(catalog.map((c) => c.id))}>
                     Tümü
@@ -199,7 +202,7 @@ export function ExportDialog(props: ExportDialogProps) {
                     <label className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-accent">
                       <Checkbox checked={columns.includes(c.id)} onCheckedChange={(v) => toggle(c.id, Boolean(v))} aria-label={c.label} />
                       <span className="min-w-0 flex-1 truncate">{c.label}</span>
-                      {!c.visible && <span className="shrink-0 text-[11px] text-muted-foreground">ekranda gizli</span>}
+                      {!c.visible && !props.screenless && <span className="shrink-0 text-[11px] text-muted-foreground">ekranda gizli</span>}
                     </label>
                   </li>
                 ))}

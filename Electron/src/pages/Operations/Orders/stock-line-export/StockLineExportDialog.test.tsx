@@ -42,6 +42,8 @@ describe("StockLineExportDialog — depo sütunları", () => {
     renderDialog();
     expect(box("Depoda hazır (serbest)")).toHaveAttribute("data-state", "checked");
     expect(box("Depoda (tümü)")).toHaveAttribute("data-state", "unchecked");
+    // Ekran tablosu yok: işaretsiz sütun "ekranda gizli" diye etiketlenmez.
+    expect(screen.queryByText("ekranda gizli")).toBeNull();
   });
 
   it("tümü işaretlenince tercihe katalog sırasıyla yazılır ve indirmeye gider", async () => {
