@@ -49,8 +49,7 @@ const BANDED: Array<[page: string, strip: string]> = [
   ["pages/Cost/Quotes/QuotesPage.tsx", "pages/Cost/Quotes/QuoteSummaryStrip.tsx"],
   ["pages/Operations/Shipments/eirsaliye/EIrsaliyeSummaryStrip.tsx", "pages/Operations/Shipments/eirsaliye/EIrsaliyeSummaryStrip.tsx"],
   ["pages/Operations/FasonCockpit/FasonCockpitPage.tsx", "pages/Operations/FasonCockpit/CockpitSummary.tsx"],
-  ["pages/Operations/LoomAlarms/LoomAlarmsPage.tsx", "pages/Operations/LoomAlarms/LoomAlarmsTable.tsx"],
-  // Siparişler / Muayene / Lab / Sertifika / Yazdırma Geçmişi / Kumaş Stoğu özetleri alt çubukta (`ListFooter summary`) — UI denetimi D2, bant yok.
+  // Siparişler / Muayene / Lab / Sertifika / Yazdırma Geçmişi / Kumaş Stoğu / Tezgah Alarmları / Fasondaki İplik / Leventler özetleri alt çubukta (`ListFooter summary`) — UI denetimi D2, bant yok.
 ];
 
 describe("liste özet şeritleri ListBand içinde", () => {

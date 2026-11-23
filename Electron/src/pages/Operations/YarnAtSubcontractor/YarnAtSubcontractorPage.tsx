@@ -32,7 +32,8 @@ import { rowKey, STATUS_OPTIONS, summarize, toLines, type YarnAtSubLine, type Ya
 import { RowActionHost, type RowActionTarget } from "./RowActionHost";
 import { listYarnAtSubcontractor, yarnAtSubLotOptions, yarnAtSubQueryKey, YARN_AT_SUB_QUERY_KEY, type YarnAtSubFilters } from "./service";
 import { StatementDialog } from "./StatementDialog";
-import { SummaryBand } from "./SummaryBand";
+import { SummaryStats } from "./SummaryBand";
+import { ListFooter } from "@/components/layout/ListPage";
 
 /** Süzgeç tanımları — Lot seçenekleri AYNI uçtan, kendi anahtarı hariç öteki süzgeçlerle (faceted). */
 export function yarnAtSubFilters(base: Omit<YarnAtSubFilters, "lotId" | "search">): FilterDef[] {
@@ -103,8 +104,7 @@ export function YarnAtSubcontractorPage() {
           <PageTabsTrigger value="yarn">İpliğe göre</PageTabsTrigger>
         </PageTabsList>
       </Tabs>
-      {!q.isLoading && !q.isError && <SummaryBand s={s} filtered={filtered} showValue={showValue} />}
-      <FilterRow search={search} onSearchChange={setSearch} placeholder="Lot, iplik, sipariş…" searchHint="Lot no, iplik adı/kodu, fasoncu ya da sipariş no ara" primary={split.primary} more={split.more} tools={{ table, exportName: "Fasondaki iplik" }} />
+      <FilterRow search={search} onSearchChange={setSearch} searchHint="Lot no, iplik adı/kodu, fasoncu ya da sipariş no ara" primary={split.primary} more={split.more} tools={{ table, exportName: "Fasondaki iplik" }} />
       <DataTable<YarnAtSubLine>
         table={table}
         isLoading={q.isLoading}
@@ -114,6 +114,7 @@ export function YarnAtSubcontractorPage() {
         emptyText={filtered ? "Bu filtreye ya da aramaya uyan fasondaki iplik yok. Filtreyi temizleyip tekrar bakın." : "Şu an hiçbir fasoncuda iplik yok. Devere siparişine iplik sevk edilince burada görünür."}
         rowClassName={(r) => (r.groupFirst ? "border-t-2 border-t-border" : undefined)}
       />
+      {!q.isLoading && !q.isError && <ListFooter loaded={lines.length} summary={<SummaryStats s={s} filtered={filtered} showValue={showValue} />} />}
       {action && <RowActionHost target={action} onClose={() => setAction(null)} />}
       {statement && <StatementDialog initialSubcontractorId={base.subcontractorId} canSeeValue={showValue} onClose={() => setStatement(false)} />}
     </PageShell>

@@ -1,6 +1,6 @@
 // Fasondaki İplik özet şeridi — listeyle AYNI yanıttan (tek where): kg · fasoncu · çeşit · devreden · en eski · değer.
 // Değer para birimi başına ayrı (kur çevrilmez); yalnız fiyat alanı gelen kullanıcıda; fiyatsız satır sayısı uyarı tonu.
-import { BandStats, ListBand, type BandStatItem } from "@/components/layout/ListPage";
+import { BandStats, type BandStatItem } from "@/components/layout/ListPage";
 import { formatAmount, formatQty } from "@/lib/format";
 import { ageText, CARRIED_HINT, LONG_WAIT_DAYS, type YarnAtSubSummary } from "./model";
 
@@ -25,10 +25,7 @@ export function summaryItems(s: YarnAtSubSummary, showValue: boolean): BandStatI
   return items;
 }
 
-export function SummaryBand({ s, filtered, showValue }: { s: YarnAtSubSummary; filtered: boolean; showValue: boolean }) {
-  return (
-    <ListBand>
-      <BandStats label="Fasondaki iplik özeti" scope={filtered ? "Filtreli" : undefined} items={summaryItems(s, showValue)} />
-    </ListBand>
-  );
+/** Alt çubukta çizilir (ListFooter `summary`) — tablonun üstünde ayrı satır olmaz. */
+export function SummaryStats({ s, filtered, showValue }: { s: YarnAtSubSummary; filtered: boolean; showValue: boolean }) {
+  return <BandStats label="Fasondaki iplik özeti" scope={filtered ? "Filtreli" : undefined} items={summaryItems(s, showValue)} />;
 }

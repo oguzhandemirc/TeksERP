@@ -1,13 +1,13 @@
 import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { Search } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
-import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
+import { ListFooter } from "@/components/layout/ListPage";
 import { RefreshButton } from "@/components/RefreshButton";
-import { Input } from "@/components/ui/input";
-import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
+import type { FilterDef } from "@/components/data-table/FilterBar";
+import { FilterRow } from "@/components/data-table/filter-row/FilterRow";
+import { splitDefFilters } from "@/components/data-table/filter-row/def-row-filters";
 import { ListExportMenu } from "@/components/data-table/ListExportMenu";
 import { itemService } from "@/pages/Items/service";
 import { colorService } from "@/pages/Colors/service";
@@ -15,7 +15,6 @@ import { productBalanceService } from "./service";
 import { ProductBalanceDetail } from "./ProductBalanceRow";
 import { BALANCE_EXPORT_COLUMNS, useProductBalanceTable, type BalanceExportRow } from "./productBalanceColumns";
 import { DataTable } from "@/components/data-table/DataTable";
-import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { ProductBalanceWoDialog } from "./ProductBalanceWoDialog";
 import type { BalanceGroup, BalanceSpecRow, WoTarget } from "./types";
 import { foldSearchText } from "@/lib/search-fold";
@@ -41,6 +40,8 @@ const FILTERS: FilterDef[] = [
     ],
   },
 ];
+/** Üç filtre de ilk açılışta satırda ("Kumaş: Tümü" · "Renk: Tümü" · "Durum: Tümü"). */
+const ROW_FILTERS = splitDefFilters(FILTERS, ["itemId", "colorId", "status"]).primary;
 
 export function ProductBalancePage() {
   const [searchParams] = useSearchParams();
@@ -120,8 +121,17 @@ export function ProductBalancePage() {
     <PageShell>
       <PageHeader
         title="Kumaş Dengesi"
-        actions={
-          <>
+        description="Üretilecek = Talep − Depo − Üretimde. Fabrika kumaş üretmez, işler — ham stok yetmiyorsa “ham açığı” kadar kumaş tedariki gerekir. Ham kumaşın eni önemsizdir: ham havuzu kumaş+renk düzeyinde tutulur, en'lere bölünmez (renksiz ham boyanacağı için her renge sayılır)."
+        actions={<RefreshButton queryKey={QUERY_KEY} />}
+      />
+
+      <FilterRow
+        search={search}
+        onSearchChange={setSearch}
+        searchHint="Kumaş, renk, sipariş no, müşteri, parti ara"
+        primary={ROW_FILTERS}
+        tools={{ table, hideExport: true }}
+        trailing={
             <ListExportMenu
               name="Kumaş Dengesi"
               rows={exportRows}
@@ -143,47 +153,16 @@ export function ProductBalancePage() {
                 `Sipariş / ${TERIM.terbiyeIsEmri.tekilKucuk} sütunları o en alt-satırına bağlı kayıtlardır; ${TERIM.terbiyeIsEmri.cogulKucuk} yalnız CANLI (iptal edilmemiş) olanlardır.`,
               ]}
             />
-            <RefreshButton queryKey={QUERY_KEY} />
-          </>
         }
       />
 
-      <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
-        <div className="relative w-64">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Ara…" title="Kumaş, renk, sipariş no, müşteri, parti ara" aria-label="Kumaş, renk, sipariş no, müşteri, parti ara"
-            className="h-8 pl-8 text-sm"
-          />
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          {!isLoading && <span className="text-xs text-muted-foreground">{filtered.length} kumaş</span>}
-          <DataTableTools table={table} hideExport />
-        </div>
-      </div>
-      <FilterBar filters={FILTERS} />
-
-      {isLoading || groups.length === 0 || filtered.length === 0 ? (
-        <ListBody>
-          <ListMessage className="text-sm text-muted-foreground">
-            {isLoading ? "Hesaplanıyor…" : groups.length === 0 ? "Açık talep veya üretimde kumaş yok." : "Filtreyle eşleşen kumaş yok."}
-          </ListMessage>
-        </ListBody>
-      ) : (
-        <DataTable
-          table={table}
-          renderExpanded={(g) => <ProductBalanceDetail group={g} onOpenWo={openWo} />}
-          rowTitle={(g) => `${g.itemName}${g.colorName ? ` · ${g.colorName}` : ""} — en kırılımı ve siparişler için aç`}
-        />
-      )}
-      <p className="border-t px-4 py-3 text-xs leading-relaxed text-muted-foreground">
-          Üretilecek = Talep − Depo − Üretimde. Fabrika kumaş üretmez, işler —
-          ham stok yetmiyorsa "ham açığı" kadar kumaş tedariki gerekir. Ham
-          kumaşın eni önemsizdir: ham havuzu kumaş+renk düzeyinde tutulur, en'lere
-          bölünmez (renksiz ham boyanacağı için her renge sayılır).
-        </p>
+      <DataTable
+        table={table}
+        isLoading={isLoading}
+        emptyText={groups.length === 0 ? "Açık talep veya üretimde kumaş yok." : "Filtreye uyan kumaş yok."}
+        renderExpanded={(g) => <ProductBalanceDetail group={g} onOpenWo={openWo} />}
+        rowTitle={(g) => `${g.itemName}${g.colorName ? ` · ${g.colorName}` : ""} — en kırılımı ve siparişler için aç`}
+      />
       {!isLoading && <ListFooter loaded={filtered.length} total={groups.length} />}
 
       <ProductBalanceWoDialog

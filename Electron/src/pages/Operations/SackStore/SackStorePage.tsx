@@ -1,13 +1,15 @@
 import { useMemo, useRef, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Search, PackageOpen, CheckCircle2, XCircle, Eraser, Info } from "lucide-react";
+import { PackageOpen, CheckCircle2, XCircle, Eraser } from "lucide-react";
+import { ListToolbar } from "@/components/layout/ListPage";
+import { ListSearchBox } from "@/components/data-table/ListSearchBox";
+import { SelectChip } from "@/components/data-table/filter-row/SelectChip";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { AutoLoadMore } from "@/components/data-table/AutoLoadMore";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { RefreshButton } from "@/components/RefreshButton";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PermissionGate } from "@/components/PermissionGate";
@@ -16,7 +18,6 @@ import { useContinuousScan } from "@/hooks/useContinuousScan";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useScanSeed } from "@/hooks/useScanSeed";
 import { useShipmentConfirmationEnabled } from "@/hooks/usePricingEnabled";
-import { cn } from "@/lib/utils";
 import { sackStoreService } from "./service";
 import { SackStoreCard } from "./SackStoreCard";
 import { ShipmentContentsSheet } from "./ShipmentContentsSheet";
@@ -28,10 +29,9 @@ const PAGE_SIZE = 30;
 
 type DestFilter = "ALL" | ShipmentDestination;
 
-const DEST_TABS: { key: DestFilter; label: string }[] = [
-  { key: "ALL", label: "Tümü" },
-  { key: "DOMESTIC", label: destinationLabels.DOMESTIC },
-  { key: "EXPORT", label: destinationLabels.EXPORT },
+const DEST_OPTIONS: { value: ShipmentDestination; label: string }[] = [
+  { value: "DOMESTIC", label: destinationLabels.DOMESTIC },
+  { value: "EXPORT", label: destinationLabels.EXPORT },
 ];
 
 /** Kapıda okutulmuş çuvalların sevkiyat-bazlı grubu (eski Okutarak Sevk akışı). */
@@ -134,6 +134,12 @@ export function SackStorePage() {
     <PageShell>
       <PageHeader
         title="Sevk Kapısı"
+        // Mod notu akışa ayrı şerit olarak konmaz; başlık ⓘ'sinde (kullanıcı 2026-11-23).
+        description={
+          confirmationEnabled
+            ? undefined
+            : "Sevk onayı kapalı — çuvallar seçilir seçilmez doğrudan sevk edilir. Bu ekran yalnızca Genel Ayarlar'da “Sevk onayı adımı” açıkken planlı sevkleri listeler."
+        }
         actions={
           <div className="flex items-center gap-2">
             {scannedCount > 0 && (
@@ -146,32 +152,39 @@ export function SackStorePage() {
         }
       />
 
-      {!confirmationEnabled && (
-        <div className="flex items-start gap-2 border-b bg-sky-500/10 px-6 py-2 text-xs text-sky-800 dark:text-sky-300">
-          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-          <span>
-            Sevk onayı kapalı — çuvallar seçilir seçilmez doğrudan sevk edilir. Bu ekran yalnızca Genel
-            Ayarlar'da <strong>“Sevk onayı adımı”</strong> açıkken planlı sevkleri listeler.
-          </span>
-        </div>
-      )}
-
       {/* Kapı okutması — çuval kodu okut, sevkiyatı bul ve kartını öne getir. */}
-      <PermissionGate permission="shipping:write">
-        <ScanField
-          className="border-b px-6 py-3"
-          value={scanValue}
-          onChange={setScanValue}
-          onScan={(code) => {
-            push(code);
-            setScanValue("");
-          }}
-          placeholder="Çuval kodu okut (CV-… veya elle yazılan) → sevkiyatı bul"
-          autoFocus
-          inputRef={scanRef}
-          expectPrefix="SACK"
-          submitLabel="Ekle"
+      {/* Okutma, arama ve hedef filtresi TEK araç satırında; geri bildirim şeridi yalnız okutmadan sonra. */}
+      <ListToolbar className="flex-row flex-wrap items-center">
+        <PermissionGate permission="shipping:write">
+          <ScanField
+            value={scanValue}
+            onChange={setScanValue}
+            onScan={(code) => {
+              push(code);
+              setScanValue("");
+            }}
+            placeholder="Çuval kodu okut"
+            hint="Çuval kodu okut (CV-… veya elle yazılan) → sevkiyatı bul"
+            autoFocus
+            inputRef={scanRef}
+            expectPrefix="SACK"
+            submitLabel="Ekle"
+            widthClassName="w-72"
+            inputClassName="h-8 text-sm"
+          />
+        </PermissionGate>
+        <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Çuval kodu, sevk no veya müşteri ara" />
+        {/* Saha #22: yurtiçi/yurtdışı filtresi — düğme grubu yerine tek kutu ("Hedef: Tümü ▾"). */}
+        <SelectChip<ShipmentDestination>
+          id="sack-store-destination"
+          label="Hedef"
+          value={destination === "ALL" ? null : destination}
+          options={DEST_OPTIONS}
+          onChange={(v) => setDestination(v ?? "ALL")}
         />
+      </ListToolbar>
+
+      <PermissionGate permission="shipping:write">
         {lastError ? (
           <div className="flex items-center gap-2 border-b bg-destructive/10 px-6 py-2.5 text-sm font-semibold text-destructive">
             <XCircle className="h-5 w-5 shrink-0" />
@@ -191,34 +204,6 @@ export function SackStorePage() {
           </div>
         )}
       </PermissionGate>
-
-      <div className="flex flex-wrap items-center gap-3 border-b px-6 py-3">
-        <div className="relative max-w-sm flex-1">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Ara…" title="Çuval kodu, sevk no veya müşteri ara" aria-label="Çuval kodu, sevk no veya müşteri ara"
-            className="pl-8"
-          />
-        </div>
-        {/* Saha #22: yurtiçi/yurtdışı filtresi */}
-        <div className="flex items-center gap-1 rounded-md border p-0.5">
-          {DEST_TABS.map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => setDestination(t.key)}
-              className={cn(
-                "rounded px-3 py-1 text-xs font-medium transition-colors",
-                destination === t.key ? "bg-sky-600 text-white" : "text-muted-foreground hover:bg-muted",
-              )}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-      </div>
 
       <PageBody ref={rootRef} className="p-6">
         {query.isLoading ? (
