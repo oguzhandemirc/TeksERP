@@ -8,11 +8,15 @@ import { fmtFactoryDateTime } from "@/lib/factory-time";
 import { ROUTE_MODULE } from "@/lib/route-modules";
 import { productionTiles } from "../tiles/production";
 import type { LoomLoadJob, LoomLoadResponse, LoomLoadRow } from "./types";
-import { assumptionText, freeAtCell, hoursText, jobHoursHint, summaryText } from "./loom-load-text";
+import userEvent from "@testing-library/user-event";
+import { assumptionText, freeAtCell, horizonDays, hoursText, jobHoursHint, jobSlots, loomMatches, summaryText } from "./loom-load-text";
+import { timelineAxis } from "./loom-load-axis";
 
 const get = vi.hoisted(() => vi.fn());
 vi.mock("./service", () => ({ loomLoadService: { get } }));
-vi.mock("@/components/layout/PageHeader", () => ({ PageHeader: ({ title, actions }: { title: string; actions?: ReactNode }) => <header><h1>{title}</h1>{actions}</header> }));
+vi.mock("@/components/layout/PageHeader", () => ({
+  PageHeader: ({ title, titleExtra, actions }: { title: string; titleExtra?: ReactNode; actions?: ReactNode }) => <header><h1>{title}</h1>{titleExtra}{actions}</header>,
+}));
 import { LoomLoadPage } from "./LoomLoadPage";
 
 const job = (over: Partial<LoomLoadJob> = {}): LoomLoadJob => ({
@@ -49,6 +53,36 @@ describe("loom-load-text", () => {
     expect(freeAtCell(loom({ totalEstimatedHours: null, estimatedFreeAtIfContinuous: null })).hint).toMatch(/bilinmiyor/);
     expect(freeAtCell(loom()).text).toBe(fmtFactoryDateTime("2026-11-12T12:30:00.000Z"));
   });
+  it("süzgeç: dolu/boş/süresi bilinmeyen; arama tezgâh, iş emri ve üründe (Türkçe harf duyarsız)", () => {
+    const idle = loom({ machineId: "m2", code: "T-02", name: "İkinci", jobs: [], totalEstimatedHours: 0 });
+    const unk = loom({ machineId: "m3", totalEstimatedHours: null });
+    expect(loomMatches(loom(), "", "busy")).toBe(true);
+    expect(loomMatches(idle, "", "busy")).toBe(false);
+    expect(loomMatches(idle, "", "idle")).toBe(true);
+    expect(loomMatches(loom(), "", "unknown")).toBe(false);
+    expect(loomMatches(unk, "", "unknown")).toBe(true);
+    expect(loomMatches(idle, "ikinci", "all")).toBe(true);
+    expect(loomMatches(loom(), "di-0001", "all")).toBe(true);
+    expect(loomMatches(loom(), "tül", "all")).toBe(true);
+    expect(loomMatches(loom(), "yok", "all")).toBe(false);
+  });
+  it("iş yerleşimi: başlangıç önceki sunucu saatlerinin toplamı; bilinmeyen sonrası konumsuz", () => {
+    const slots = jobSlots(loom({ jobs: [job({ estimatedHours: 10 }), job({ weavingOrderId: "w2", estimatedHours: null }), job({ weavingOrderId: "w3" })] }));
+    expect(slots.map((s) => s.startH)).toEqual([0, 10, null]);
+  });
+  it("ufuk: otomatikte en geç boşalma + 1 gün, 3–30 arası", () => {
+    expect(horizonDays([loom({ totalEstimatedHours: 30.5 })], "auto")).toBe(3);
+    expect(horizonDays([loom({ totalEstimatedHours: 24 * 9 })], "auto")).toBe(10);
+    expect(horizonDays([loom({ totalEstimatedHours: 24 * 90 })], "auto")).toBe(30);
+    expect(horizonDays([loom()], "7")).toBe(7);
+  });
+  it("eksen bugünün fabrika günü başında açılır; şimdi çizgisi generatedAt", () => {
+    const a = timelineAxis("2026-11-11T06:00:00.000Z", 3);
+    expect(a.ticks.filter((t) => t.major)).toHaveLength(3);
+    expect(a.spanH).toBe(72);
+    expect(a.nowH).toBeGreaterThanOrEqual(0);
+    expect(a.nowH).toBeLessThan(24);
+  });
   it("özet şeridi tezgâhsız işi sayar", () => {
     expect(summaryText({ looms: [loom(), loom({ machineId: "m2", jobs: [] })], unassigned: [job()] })).toBe("2 tezgâh · 1 dolu · 1 boş · 1 iş tezgâh bekliyor");
   });
@@ -68,11 +102,25 @@ describe("LoomLoadPage", () => {
     expect(cards[0]).toHaveTextContent("DI-0001");
     expect(cards[0]).toHaveTextContent("800 m");
     expect(cards[0]).toHaveTextContent("30,5 sa · ≈1,3 gün");
-    expect(screen.getByTestId("loom-load-assumption")).toHaveTextContent("Vardiya, duruş ve bakım hesaba katılmaz");
+    // Varsayım satırda değil ⓘ balonunda.
+    expect(screen.queryByText(/Vardiya, duruş ve bakım/)).toBeNull();
+    await userEvent.setup().click(screen.getByRole("button", { name: "Boşalma zamanı nasıl hesaplanır" }));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Vardiya, duruş ve bakım hesaba katılmaz");
+    expect(screen.getAllByTestId("loom-load-job")).toHaveLength(2);
     expect(screen.getByLabelText(/bilinmiyor: Süre hesaplanamadı: atkı sıklığı/)).toBeInTheDocument();
     expect(screen.getByText("Tezgâh bekleyen işler (1)")).toBeInTheDocument();
     expect(screen.getByTestId("loom-load-unassigned-job")).toHaveTextContent("DI-0003");
     expect(screen.getByLabelText(/bilinmiyor: İşin plan metresi yok/)).toBeInTheDocument();
+  });
+
+  it("arama hiçbir tezgâha uymazsa ne yapılacağını söyler ve süzgeci temizler", async () => {
+    get.mockResolvedValue(data());
+    renderWithProviders(<LoomLoadPage />);
+    const user = userEvent.setup();
+    await user.type(await screen.findByRole("searchbox"), "zzz");
+    expect(screen.getByText("Aramaya ya da süzgece uyan tezgâh yok.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Süzgeci temizle" }));
+    expect(screen.getAllByTestId("loom-load-card")).toHaveLength(1);
   });
 
   it("tezgâh ve iş yoksa boş durum; tezgâhsız iş yoksa bölüm yok", async () => {
