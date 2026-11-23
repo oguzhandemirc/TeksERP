@@ -91,30 +91,35 @@ export function CompanySettingsSection({
       }
     >
       <div className="space-y-5">
-        <Field
-          id="company-name"
-          label="Firma Adı"
-          desc="Sol menü başlığında ve uygulama genelinde gösterilir."
-          value={name}
-          maxLength={120}
-          placeholder={DEFAULT_COMPANY_NAME}
-          onChange={setName}
-        />
+        <div className="max-w-xl">
+          <Field
+            id="company-name"
+            label="Firma Adı"
+            desc="Sol menü başlığında ve uygulama genelinde gösterilir."
+            value={name}
+            maxLength={120}
+            placeholder={DEFAULT_COMPANY_NAME}
+            onChange={setName}
+          />
+        </div>
 
         <div className="border-t pt-4">
           <div className="flex items-center gap-1.5">
             <div className="text-sm font-medium">Belge Künyesi</div>
             <InfoPopover desc='Yazdırılan irsaliye/çeki listelerinin üst bloğunda firma adının altına basılır (ilgili belgede "Firma künyesini bas" açıksa). Boş alanlar basılmaz.' />
           </div>
-          <div className="mt-3 space-y-4">
-            <Field
-              id="company-address"
-              label="Adres"
-              value={head.addressLine}
-              maxLength={200}
-              placeholder="Örn. Organize Sanayi Bölgesi 5. Cadde No:12, Bursa"
-              onChange={(v) => setHead((h) => ({ ...h, addressLine: v }))}
-            />
+          {/* Kısa alanlar ızgarada yan yana (geniş form felsefesi); adres ve ek satırlar iki sütun. */}
+          <div className="mt-3 grid gap-4 md:grid-cols-3">
+            <div className="md:col-span-2">
+              <Field
+                id="company-address"
+                label="Adres"
+                value={head.addressLine}
+                maxLength={200}
+                placeholder="Örn. Organize Sanayi Bölgesi 5. Cadde No:12, Bursa"
+                onChange={(v) => setHead((h) => ({ ...h, addressLine: v }))}
+              />
+            </div>
             <Field
               id="company-phone"
               label="Telefon"
@@ -131,7 +136,7 @@ export function CompanySettingsSection({
               placeholder="Örn. Nilüfer V.D. 1234567890"
               onChange={(v) => setHead((h) => ({ ...h, taxInfo: v }))}
             />
-            <div>
+            <div className="md:col-span-2">
               <FieldLabel
                 htmlFor="company-extra"
                 label="Ek Künye Satırları"

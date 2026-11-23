@@ -1,12 +1,13 @@
 import type { ReactNode } from "react";
 import { Save, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { InfoPopover } from "@/components/ui/info-popover";
 
 /**
- * Genel Ayarlar'ın TEK kaydetme standardı — her sekmenin altında aynı çubuk.
- * Kontroller taslak tutulur; "Kaydet" o sekmedeki tüm değişiklikleri yazar,
- * "Geri al" sunucu değerine döner. "Kaydedilmemiş değişiklik" rozeti + sekme
- * değişiminde uyarı ([[settings-dirty]]) ile birlikte tutarlı davranış sağlar.
+ * Genel Ayarlar'ın TEK kaydetme standardı — her bölümde aynı çubuk.
+ * Kontroller taslak tutulur; "Kaydet" o bölümdeki tüm değişiklikleri yazar, "Geri al" sunucu değerine döner.
+ * Çubuk YALNIZ kaydedilmemiş değişiklik varken görünür ve kaydırıcının altına yapışır (opak): sayfa
+ * ortasında içerikle kaymaz, altındaki bölümü örtmez (denetim O27). Sekme değişimi uyarısı [[settings-dirty]].
  */
 export function SettingsSaveBar({
   dirty,
@@ -24,35 +25,33 @@ export function SettingsSaveBar({
   onSave: () => void;
   onReset: () => void;
   saveLabel?: string;
+  /** Kaydetmeyle ilgili bilgi — çubukta ⓘ baloncuğunda. */
   note?: ReactNode;
 }) {
+  if (!dirty && !saving) return null;
   return (
-    <div className="mt-6 flex flex-wrap items-center gap-3 border-t pt-4">
-      <Button
-        type="button"
-        disabled={!dirty || !canSave || saving}
-        onClick={onSave}
-        className="gap-1.5"
-      >
-        <Save className="h-4 w-4" />
-        {saving ? "Kaydediliyor…" : saveLabel}
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        disabled={!dirty || saving}
-        onClick={onReset}
-        className="gap-1.5 text-muted-foreground"
-      >
-        <Undo2 className="h-3.5 w-3.5" /> Geri al
-      </Button>
-      {dirty && (
-        <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
-          • Kaydedilmemiş değişiklik
-        </span>
-      )}
-      {note && <span className="text-xs text-muted-foreground">{note}</span>}
+    <div
+      className="sticky bottom-0 z-20 mt-6 flex flex-wrap items-center gap-3 rounded-xl border border-card-border bg-card px-4 py-3 shadow-card"
+      data-settings-save-bar
+    >
+      <span className="text-xs font-medium text-warning">Kaydedilmemiş değişiklik</span>
+      {note ? <InfoPopover desc={note} label="Kaydetme hakkında" /> : null}
+      <div className="ml-auto flex items-center gap-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={!dirty || saving}
+          onClick={onReset}
+          className="gap-1.5 text-muted-foreground"
+        >
+          <Undo2 className="h-3.5 w-3.5" /> Geri al
+        </Button>
+        <Button type="button" disabled={!dirty || !canSave || saving} onClick={onSave} className="gap-1.5">
+          <Save className="h-4 w-4" />
+          {saving ? "Kaydediliyor…" : saveLabel}
+        </Button>
+      </div>
     </div>
   );
 }

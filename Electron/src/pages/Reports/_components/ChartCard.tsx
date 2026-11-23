@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Card } from "@/components/ui/card";
+import { InfoPopover } from "@/components/ui/info-popover";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -30,11 +31,9 @@ export function ChartCard({
   return (
     <Card className={cn("flex flex-col p-4", className)}>
       <div className="flex items-start justify-between gap-2">
-        <div>
+        <div className="flex items-center gap-1.5">
           <h3 className="text-sm font-semibold tracking-tight">{title}</h3>
-          {description ? (
-            <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
-          ) : null}
+          {description ? <InfoPopover desc={description} label={`${title} — açıklama`} /> : null}
         </div>
         {actions ? <div className="flex items-center gap-1">{actions}</div> : null}
       </div>

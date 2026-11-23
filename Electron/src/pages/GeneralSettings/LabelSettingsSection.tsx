@@ -141,7 +141,7 @@ export function LabelSettingsSection({
           ({currentSource === "STATION" ? "istasyon belirler; bu genel adettir" : "sistem geneli"})
         </span>
         <span className="ml-2 text-xs text-muted-foreground">
-          (değiştirmek için <code>admin:settings</code> gerekir)
+          (değiştirmek için “Ayarlar (yönetici)” yetkisi gerekir)
         </span>
       </p>
     );

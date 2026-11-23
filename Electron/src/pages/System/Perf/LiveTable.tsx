@@ -22,12 +22,12 @@ export function LiveTable({ routes }: { routes: PerfRoute[] }) {
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Endpoint</TableHead>
+          <TableHead>Uç</TableHead>
           <TableHead className="text-right">İstek</TableHead>
-          <TableHead className="text-right">Hata (5xx)</TableHead>
-          <TableHead className="text-right">p50</TableHead>
-          <TableHead className="text-right">p95</TableHead>
-          <TableHead className="text-right">max</TableHead>
+          <TableHead className="text-right">Sunucu hatası</TableHead>
+          <TableHead className="text-right">Ortanca (p50)</TableHead>
+          <TableHead className="text-right">Yavaş (p95)</TableHead>
+          <TableHead className="text-right">En uzun</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>

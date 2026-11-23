@@ -18,7 +18,7 @@ export function SlowList({ items }: { items: SlowRequest[] }) {
       <TableHeader>
         <TableRow>
           <TableHead>Zaman</TableHead>
-          <TableHead>Endpoint</TableHead>
+          <TableHead>Uç</TableHead>
           <TableHead className="text-right">Durum</TableHead>
           <TableHead className="text-right">Süre</TableHead>
           <TableHead>İstek kimliği</TableHead>

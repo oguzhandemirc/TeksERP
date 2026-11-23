@@ -30,7 +30,7 @@ export function MetricCard({ icon: Icon, label, value, sub, pct, level = "ok", c
   return (
     <Card>
       <CardContent className="flex flex-col gap-3 p-5">
-        <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
           <Icon className="h-4 w-4" />
           {label}
         </div>

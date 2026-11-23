@@ -5,6 +5,7 @@
 // Toplam · Oluştur · Güncelle · Sil · Son İşlem).
 
 import type { ReportExportSpec } from "../_components/reportExport";
+import { CRUD_LABEL } from "../_components/audit-labels";
 import { fmtDateTime } from "../_components/formatters";
 import type { UserActivityRow } from "./service";
 
@@ -18,10 +19,10 @@ export function buildUserActivityExport(opts: {
     title: "Kullanıcı Aktivitesi",
     subtitle: periodLabel,
     meta: [
-      "Kapsam: SystemLog tablosunda aralık İÇİNDE oluşan kayıtlar (kaydın oluşma anına göre).",
+      "Kapsam: denetim kaydında aralık İÇİNDE oluşan kayıtlar (kaydın oluşma anına göre).",
       // Bu ayrım ekranda görünmüyor ama dosyada ŞART: Toplam ≠ Oluştur+Güncelle+Sil
       // olduğunda okuyucu "sayılar tutmuyor" diye raporun tamamına güvenini yitirir.
-      "'Toplam' kullanıcının TÜM denetim kayıtlarıdır; giriş/çıkış gibi CUD dışı olaylar da sayılır — bu yüzden Oluştur+Güncelle+Sil toplamından büyük olabilir.",
+      "'Toplam' kullanıcının TÜM denetim kayıtlarıdır; giriş/çıkış gibi kayıt değiştirmeyen olaylar da sayılır — bu yüzden yeni kayıt + değişiklik + silme toplamından büyük olabilir.",
       "En çok işlem yapan 100 kullanıcı ile sınırlıdır.",
       "Kullanıcısı olmayan kayıtlar (arka plan işleri, zamanlanmış görevler) '(sistem)' satırında toplanır.",
     ],
@@ -32,9 +33,9 @@ export function buildUserActivityExport(opts: {
           { header: "Kullanıcı", key: "fullName", width: 28 },
           { header: "Kullanıcı Adı", key: "username", width: 18 },
           { header: "Toplam", key: "totalCount", width: 11, numFmt: "0", align: "right" },
-          { header: "Oluştur", key: "createCount", width: 11, numFmt: "0", align: "right" },
-          { header: "Güncelle", key: "updateCount", width: 11, numFmt: "0", align: "right" },
-          { header: "Sil", key: "deleteCount", width: 11, numFmt: "0", align: "right" },
+          { header: CRUD_LABEL.CREATE!, key: "createCount", width: 11, numFmt: "0", align: "right" },
+          { header: CRUD_LABEL.UPDATE!, key: "updateCount", width: 11, numFmt: "0", align: "right" },
+          { header: CRUD_LABEL.DELETE!, key: "deleteCount", width: 11, numFmt: "0", align: "right" },
           { header: "Son İşlem", key: "lastActionAt", width: 18, align: "right" },
         ],
         rows: rows.map((r) => ({

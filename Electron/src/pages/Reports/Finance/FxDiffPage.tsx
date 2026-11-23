@@ -154,7 +154,7 @@ export function FxDiffPage() {
           gövdesinde yaşar (`ReportErrorCard` başlığı). */}
       <ReportFilterNotes notes={axisNotlari} />
       {/* "Ne görüyoruz?" — sunucunun anlatısı; eski backend göndermez → kutu çizilmez. */}
-      {report?.anlati ? <NarrativeBox sentences={report.anlati} /> : null}
+      {report?.anlati?.length ? <NarrativeBox sentences={report.anlati} /> : null}
       {q.isError ? <ReportErrorCard error={q.error} onRetry={() => void q.refetch()} /> : null}
 
       <div className="flex items-start gap-2 rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">

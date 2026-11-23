@@ -22,6 +22,8 @@ interface Props {
   sideFigures: AnaSayi[];
   /** Kıyas döneminin etiketi ("Eylül 2026"); yoksa "önceki". */
   comparisonLabel?: string;
+  /** Anlatı kutusu çizilmediğinde tam satır: kartlar tek sırada eşit sütun. */
+  wide?: boolean;
 }
 
 /** Birimden simge — kart dili (simge karesi) için; değer ve metin sunucudan. */
@@ -103,10 +105,12 @@ function FigureCard({ figure, comparisonLabel, tone, primary }: { figure: AnaSay
  * Sayı kartları şeridi: TEK ana sayı (vurgulu) + en çok `SIDE_FIGURE_LIMIT` yan sayı, StatCard dili
  * (simge karesi, büyük değer, kıyas hapı). "Ölçülemedi" sayıya çökertilmez; neden altta yazılır.
  */
-export function HeadlineCard({ headline, sideFigures, comparisonLabel }: Props) {
+export function HeadlineCard({ headline, sideFigures, comparisonLabel, wide = false }: Props) {
   const sides = sideFigures.slice(0, SIDE_FIGURE_LIMIT);
+  // Tam satırda (anlatı kutusu yok) kartlar tek sırada eşit sütun: kart sayısı kadar, en çok 4.
+  const wideCols = ["", "@3xl:grid-cols-1", "@3xl:grid-cols-2", "@3xl:grid-cols-3", "@3xl:grid-cols-4"][Math.min(sides.length + 1, 4)];
   return (
-    <section className="grid grid-cols-1 content-start gap-3 sm:grid-cols-2" aria-label="Ana sayı">
+    <section className={cn("grid auto-rows-fr grid-cols-1 content-start gap-3 sm:grid-cols-2", wide && wideCols)} aria-label="Ana sayı">
       <FigureCard figure={headline} comparisonLabel={comparisonLabel} tone="primary" primary />
       {sides.map((f, i) => (
         <FigureCard key={f.olcu} figure={f} comparisonLabel={comparisonLabel} tone={SIDE_TONES[i % SIDE_TONES.length]!} primary={false} />

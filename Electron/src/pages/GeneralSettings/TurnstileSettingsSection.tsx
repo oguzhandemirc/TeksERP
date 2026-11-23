@@ -35,7 +35,7 @@ export function TurnstileSettingsSection() {
   return (
     <PermissionGate anyOf={[SETTINGS_ADMIN_PERMISSION]} fallback={null}>
       <div className="mt-6 space-y-3 border-t pt-4" data-testid="turnstile-settings">
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex max-w-3xl items-center justify-between gap-6">
           <FieldLabel
             htmlFor="turnstile-enabled"
             label="Tarayıcı girişinde robot doğrulaması"

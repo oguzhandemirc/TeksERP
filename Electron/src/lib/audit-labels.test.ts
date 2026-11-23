@@ -57,8 +57,8 @@ describe("sistem olayı adları TEK KAYNAK", () => {
     expect(eventActionLabel("BACKUP_COMPLETED")).toBe("Yedekleme tamamlandı");
   });
 
-  it("CRUD çekimi ekrana ÖZEL kalır (rapor emir kipi)", () => {
-    expect(reportActionLabel("CREATE")).toBe("Oluştur");
+  it("CRUD çekimi rapora ÖZEL kalır (insan dili, ekran = Excel)", () => {
+    expect(reportActionLabel("CREATE")).toBe("Yeni kayıt");
     expect(reportActionLabel(null)).toBe("—");
   });
 

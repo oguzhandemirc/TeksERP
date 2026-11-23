@@ -345,7 +345,7 @@ export function CashBookPage() {
     >
       <ReportFilterNotes notes={axisNotlari} />
       {/* "Ne görüyoruz?" — sunucunun anlatısı; eski backend göndermez → kutu çizilmez. */}
-      {summary?.anlati ? <NarrativeBox sentences={summary.anlati} /> : null}
+      {summary?.anlati?.length && summary.accounts.length > 0 ? <NarrativeBox sentences={summary.anlati} /> : null}
       {/* ⚠️ HATA DALI EN ÜSTTE. Aksi halde 403/500'de ekran "hareketi olan
           kasa/banka hesabı yok" der — kasa raporunda bu, boş ekrandan çok daha
           kötüdür (kullanıcı "para hiç hareket etmemiş" diye okur). Fabrika

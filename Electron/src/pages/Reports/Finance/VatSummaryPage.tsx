@@ -119,7 +119,7 @@ export function VatSummaryPage() {
     >
       <ReportFilterNotes notes={suzgecNotlari} />
       {/* "Ne görüyoruz?" — sunucunun anlatısı; eski backend göndermez → kutu çizilmez. */}
-      {report?.anlati ? <NarrativeBox sentences={report.anlati} /> : null}
+      {report?.anlati?.length ? <NarrativeBox sentences={report.anlati} /> : null}
       {/* Hata dalı EN ÜSTTE — 403/500'de "fatura yok" demek, boş ekrandan
           kötüdür (fabrika kurulumunda en sık sebep `finance.enabled` kapalı). */}
       {q.isError ? <ReportErrorCard error={q.error} onRetry={() => void q.refetch()} /> : null}
