@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
+import { Factory, Plus } from "lucide-react";
+import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { ListBody, ListFooter } from "@/components/layout/ListPage";
@@ -227,6 +228,7 @@ export function ProductionStationsPage() {
 
   const anyFilterActive =
     debouncedSearch.trim() !== "" || stationId !== "__all__" || machinePresence !== "all";
+  const stationCountLabel = anyFilterActive ? `${stations.length} / ${allStations.length} istasyon` : `${stations.length} istasyon`;
 
   const clearFilters = () => {
     setSearch("");
@@ -300,23 +302,6 @@ export function ProductionStationsPage() {
         actions={
           <div className="flex gap-2">
             <StationsViewToggle mode={viewMode} onChange={setViewMode} />
-            <ListExportMenu
-              name="Üretim İstasyonları"
-              rows={listItems}
-              columns={STATION_EXPORT_COLUMNS}
-              // undefined → ListExportMenu kendi "İndirilecek kayıt yok" ipucunu verir.
-              title={listItems.length > 0 ? "Ekrandaki istasyon listesini indir" : undefined}
-              notes={[
-                `Ekranda görünen ${stations.length} istasyon (toplam ${allStations.length}) — filtreler uygulanmış hâliyle.`,
-                "Satır başına bir İSTASYON; makineler \"Makine Sayısı\" ve \"Makineler\" sütunlarında.",
-                showInactive
-                  ? "Pasif istasyon ve makineler de listede."
-                  : "Yalnız AKTİF istasyon ve makineler — pasifler gizli (\"Pasifleri göster\" ile açılır).",
-                "Formda seçilebilen her görev türü listede (dokuma tezgahı yalnız dokuma modülü açıkken); liste ve kart görünümü aynı kümeyi verir.",
-                "\"Kurşun Uygular\" yalnız kurşun açılabilen (ara istasyon / kart akışlı) istasyonlarda dolu.",
-                "Cihaz sütunları yalnız AKTİF donanım kayıtlarını sayar.",
-              ]}
-            />
             <RefreshButton queryKey="stations" />
             {canWrite && (
               <Button size="sm" onClick={() => setStationDlg({ open: true, initial: null })}>
@@ -335,13 +320,32 @@ export function ProductionStationsPage() {
         machinePresence={machinePresence}
         onMachinePresence={setMachinePresence}
         stationOptions={allStations.map((s) => ({ id: s.id, name: s.name }))}
-        visibleCount={stations.length}
-        totalCount={allStations.length}
         anyFilterActive={anyFilterActive}
         onClear={clearFilters}
         showInactive={showInactive}
         onToggleInactive={() => setShowInactive((v) => !v)}
-        tools={viewMode === "list" ? <DataTableTools table={listTable} hideExport /> : undefined}
+        tools={
+          <>
+            {viewMode === "list" && <DataTableTools table={listTable} hideExport compact />}
+            <ListExportMenu
+              name="Üretim İstasyonları"
+              rows={listItems}
+              columns={STATION_EXPORT_COLUMNS}
+              // undefined → ListExportMenu kendi "İndirilecek kayıt yok" ipucunu verir.
+              title={listItems.length > 0 ? "Ekrandaki istasyon listesini indir" : undefined}
+              notes={[
+                `Ekranda görünen ${stations.length} istasyon (toplam ${allStations.length}) — filtreler uygulanmış hâliyle.`,
+                "Satır başına bir İSTASYON; makineler \"Makine Sayısı\" ve \"Makineler\" sütunlarında.",
+                showInactive
+                  ? "Pasif istasyon ve makineler de listede."
+                  : "Yalnız AKTİF istasyon ve makineler — pasifler gizli (\"Pasifleri göster\" ile açılır).",
+                "Formda seçilebilen her görev türü listede (dokuma tezgahı yalnız dokuma modülü açıkken); liste ve kart görünümü aynı kümeyi verir.",
+                "\"Kurşun Uygular\" yalnız kurşun açılabilen (ara istasyon / kart akışlı) istasyonlarda dolu.",
+                "Cihaz sütunları yalnız AKTİF donanım kayıtlarını sayar.",
+              ]}
+            />
+          </>
+        }
       />
 
       {/* Liste görünümü liste standardında (kenardan kenara, yapışkan başlık); kart ızgarası dolgulu gövdede kalır. */}
@@ -350,16 +354,14 @@ export function ProductionStationsPage() {
           <ListBody>
             <StationListView table={listTable} selectedId={selectedStationId} onSelect={(st) => setSelectedStationId(st.id)} />
           </ListBody>
-          <ListFooter loaded={listItems.length} label={`${stations.length} istasyon`} />
+          <ListFooter loaded={listItems.length} label={stationCountLabel} />
         </>
       ) : (
         <PageBody className="p-6">
           {loading && <Skeleton className="h-24 w-full" />}
-          {!loading && allStations.length === 0 && (
-            <div className="text-sm text-muted-foreground">Üretim istasyonu yok.</div>
-          )}
+          {!loading && allStations.length === 0 && <EmptyState icon={Factory} title="Üretim istasyonu yok." />}
           {!loading && allStations.length > 0 && stations.length === 0 && (
-            <div className="text-sm text-muted-foreground">Filtreye uyan istasyon yok.</div>
+            <EmptyState icon={Factory} title="Filtreye uyan istasyon yok." />
           )}
           {stations.length > 0 && viewMode === "cards" && (
             // Responsive kart grid'i — sütun sayısı mevcut genişliğe göre otomatik

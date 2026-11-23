@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { CrudPage } from "@/components/layout/CrudPage";
-import { LabeledSelect } from "@/components/forms/LabeledSelect";
+import { SelectChip } from "@/components/data-table/filter-row/SelectChip";
 import { ITEM_CATALOG_HINT } from "@/components/forms/itemPicker";
 import { useItemPickerCatalogs } from "@/components/forms/useItemPickerData";
 import { itemColumns } from "./columns";
@@ -51,19 +51,13 @@ export function ItemsPage() {
     setSearchParams(next, { replace: true });
   };
   /** URL `filter[key]` ile bağlı seçici; "Tümü" = anahtar silinir, sunucuya gitmez. */
+  // Seçenek listesi "Tümü"yü (ALL) zaten taşır → `resetValue` ALL; ✕ da ALL'a döner.
+  const setUrlFilter = (key: string, v: string) =>
+    key === "itemType" ? setSearchParams(itemTypeChangeParams(searchParams, v), { replace: true }) : setParam(itemUrlFilterParam(key), v === ITEM_FILTER_ALL ? null : v);
   const urlSelect = (f: ItemUrlFilterDef, title?: string) => (
-    <LabeledSelect
-      key={f.key}
-      label={f.label}
-      title={title}
-      options={f.options}
-      value={searchParams.get(itemUrlFilterParam(f.key)) ?? ITEM_FILTER_ALL}
-      onChange={(v) =>
-        f.key === "itemType"
-          ? setSearchParams(itemTypeChangeParams(searchParams, v), { replace: true })
-          : setParam(itemUrlFilterParam(f.key), v === ITEM_FILTER_ALL ? null : v)
-      }
-    />
+    <span key={f.key} title={title} className="contents">
+      <SelectChip id={`item-${f.key}`} label={f.label} options={f.options} resetValue={ITEM_FILTER_ALL} value={searchParams.get(itemUrlFilterParam(f.key)) ?? ITEM_FILTER_ALL} onChange={(v) => setUrlFilter(f.key, v ?? ITEM_FILTER_ALL)} />
+    </span>
   );
   return (
     <>
@@ -88,11 +82,13 @@ export function ItemsPage() {
         <>
           {/* Sıra kullanıcı listesi: Tür · Durum · Birim · Renk · Özellik. */}
           {urlSelect(ITEM_URL_FILTERS[0]!)}
-          <LabeledSelect
+          <SelectChip<ItemStatusFilter>
+            id="item-status"
             label="Durum"
             options={ITEM_STATUS_OPTIONS}
+            resetValue={ITEM_STATUS_DEFAULT}
             value={status}
-            onChange={(v) => setParam(ITEM_STATUS_PARAM, v === ITEM_STATUS_DEFAULT ? null : (v as ItemStatusFilter))}
+            onChange={(v) => setParam(ITEM_STATUS_PARAM, v === null || v === ITEM_STATUS_DEFAULT ? null : v)}
           />
           {urlSelect(ITEM_URL_FILTERS[1]!)}
           {colorAxis && catalogFilters.map((f) => (f.options === null ? null : urlSelect({ ...f, options: f.options }, ITEM_CATALOG_HINT)))}
