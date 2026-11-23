@@ -11,6 +11,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TabbedDialogContent } from "@/components/ui/tabbed-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/forms/FormField";
@@ -76,7 +77,8 @@ export function UserDetailDialog({ user, open, onOpenChange, initialTab = "permi
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[85vh] max-w-7xl flex-col gap-0 overflow-hidden p-0">
+      {/* Sekmeli modal: sabit çerçeve (tabbed-dialog), sekme değişince boyut zıplamaz. */}
+      <TabbedDialogContent className="w-[calc(100%-2rem)] max-w-7xl">
         <DialogHeader className="shrink-0 border-b px-6 py-4">
           <div className="flex items-baseline gap-2">
             <DialogTitle>{fullName || "—"}</DialogTitle>
@@ -172,7 +174,7 @@ export function UserDetailDialog({ user, open, onOpenChange, initialTab = "permi
             </div>
           </Tabs>
         )}
-      </DialogContent>
+      </TabbedDialogContent>
     </Dialog>
   );
 }

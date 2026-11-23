@@ -46,7 +46,15 @@ export function DataTableTools<T>({ table, exportName = "Liste", fetchAll, hideE
             <span className={compact ? "hidden 2xl:inline" : undefined}>Sütunlar</span>
           </Button>
         </PopoverTrigger>
-        <PopoverContent align="end" className="w-72 p-2">
+        {/* Radix ilk kutuya açılış animasyonu sürerken odaklanıp listeyi yarım satır kaydırıyordu (B9) → odak kaydırmasız. */}
+        <PopoverContent
+          align="end"
+          className="w-72 p-2"
+          onOpenAutoFocus={(e) => {
+            e.preventDefault();
+            (e.currentTarget as HTMLElement | null)?.querySelector<HTMLElement>('button[role="checkbox"]')?.focus({ preventScroll: true });
+          }}
+        >
           <p className="px-1 pb-1.5 text-xs font-medium text-muted-foreground">Görünür Sütunlar</p>
           <p className="px-1 pb-1.5 text-[11px] text-muted-foreground">Başlıktan sürükleyerek yer, kenarından genişlik değiştirin.</p>
           <ul className="max-h-64 space-y-0.5 overflow-y-auto">

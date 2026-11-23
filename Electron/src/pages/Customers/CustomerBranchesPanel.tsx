@@ -6,6 +6,7 @@ import { Plus, Pencil, Power, MapPin, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TabbedDialogEmpty } from "@/components/ui/tabbed-dialog";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { PermissionGate } from "@/components/PermissionGate";
 import { BranchFormDialog } from "./BranchFormDialog";
@@ -106,9 +107,7 @@ export function CustomerBranchesPanel({ customerId, customerDestination = null }
           <Skeleton className="h-16 w-full" />
         </div>
       ) : branches.length === 0 ? (
-        <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
-          Henüz şube yok. Yeni şube eklemek için yukarıdaki butonu kullanın.
-        </div>
+        <TabbedDialogEmpty icon={MapPin} text="Henüz şube yok. Sağ üstteki Yeni Şube ile ekleyin." />
       ) : (
         <ul className="space-y-2">
           {branches.map((b) => (

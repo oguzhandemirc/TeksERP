@@ -5,12 +5,11 @@ import { AlertTriangle, ChevronRight, Palette, Ruler, Sparkles } from "lucide-re
 import { useQuery } from "@tanstack/react-query";
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
-  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { TabbedDialogContent, TabbedDialogHeader } from "@/components/ui/tabbed-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -42,6 +41,8 @@ import { ItemCardTabs } from "./ItemCardTabs";
 import { ItemConstructionPickers, constructionPayload, useConstructionPickersVisible } from "./ItemConstructionPickers";
 
 import { RecordInfoButton } from "@/components/RecordInfoButton";
+import { InfoPopover } from "@/components/ui/info-popover";
+import { ItemCostLink } from "./ItemCostLink";
 import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { decimalToFormText } from "@/lib/decimal-form-text";
@@ -175,8 +176,9 @@ export function ItemFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[calc(100%-2rem)] max-w-6xl" data-form-size="wide">
-        <DialogHeader>
+      {/* Sabit çerçeve (tabbed-dialog): kumaş kartında sekme değişince boyut zıplamaz; alt düğmeler yapışkan. */}
+      <TabbedDialogContent className="w-[calc(100%-2rem)] max-w-6xl" data-form-size="wide">
+        <TabbedDialogHeader>
           <div className="flex items-center gap-1.5">
             <DialogTitle>{isEdit ? "Ürünü Düzenle" : "Yeni Ürün"}</DialogTitle>
             {/* ⓘ — kim oluşturdu / en son kim değiştirdi (2026-08-19).
@@ -190,14 +192,26 @@ export function ItemFormDialog({
                 updatedAt={initial.updatedAt}
               />
             )}
+            {/* B11: stok kodu başlıkta rozet (alt şerit satır kaplıyordu); maliyet bağlantısı aynı satırın sağında. */}
+            {isEdit && initial?.code && (
+              <span className="ml-2 inline-flex items-center gap-1 text-xs text-muted-foreground">
+                Kod: <span className="rounded border bg-muted/40 px-1.5 py-0.5 font-mono text-foreground">{initial.code}</span>
+                <InfoPopover label="Stok kodu" desc="Stok kodu oluşturulduktan sonra değiştirilemez." />
+              </span>
+            )}
+            {isEdit && initial && (
+              <span className="ml-auto">
+                <ItemCostLink itemId={initial.id} itemType={initial.itemType} />
+              </span>
+            )}
             </div>
           <DialogDescription>
             Ürün tanımı (kumaş · iplik · sarf). Birim, seçilen tipe göre otomatik atanır.
           </DialogDescription>
-        </DialogHeader>
+        </TabbedDialogHeader>
 
         {initial?.pendingReview && (
-          <div className="flex items-start gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+          <div className="mx-6 mb-3 flex shrink-0 items-start gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <span>
               Bu desen sahada (ham giriş) oluşturuldu ve onay bekliyor. Bilgileri
@@ -208,7 +222,8 @@ export function ItemFormDialog({
         )}
 
         <ItemCardTabs item={initial}>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Form gövdeyi doldurur, alt çubuk `mt-auto` ile sabit çerçevenin dibine iner (kısa formda ortada kalmaz). */}
+        <form onSubmit={handleSubmit} className="flex min-h-full flex-col space-y-4">
           {/* Sıra bilinçli: ÖNCE ad. Stok kodu forma EN ALTA, kapalı bir satır
               olarak alındı (2026-08-17 saha geri bildirimi) — ilk alan olduğu
               sürece personel "boş bırakın" yazsa da oraya kumaşın ADINI
@@ -216,7 +231,7 @@ export function ItemFormDialog({
               ve artık bilinçli bir tıklama istiyor. */}
           {/* Geniş form (2026-11-19): kısa alanlar tek ızgarada yan yana; uzun açıklamalar ⓘ balonunda. */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <FormField label="Ad" htmlFor="name" error={form.formState.errors.name} required className="sm:col-span-2">
+            <FormField label="Ad" htmlFor="name" error={form.formState.errors.name} required className={itemType === ItemType.FABRIC && kaliteGuvenceEnabled ? "sm:col-span-2 lg:col-span-1" : "sm:col-span-2"}>
               <Input id="name" placeholder="Patos" {...form.register("name")} />
               {/* Canlı veride "ACTIVO" ve "ACTİVO" iki ayrı kumaş olarak duruyordu
                   (i/İ tuzağı) — uyarı yazarken görünsün. */}
@@ -230,7 +245,7 @@ export function ItemFormDialog({
               label="Tip"
               error={form.formState.errors.itemType}
               required={!isEdit}
-              hint={isEdit ? "Değiştirilemez." : undefined}
+              info={isEdit ? "Tip kayıttan sonra değiştirilemez." : undefined}
             >
               <Controller
                 control={form.control}
@@ -245,7 +260,9 @@ export function ItemFormDialog({
                 )}
               />
             </FormField>
-            <FormField label="Birim" hint="Otomatik">
+            {/* İpucu ⓘ'de (B8): alt satır ipucu satırı büyütüp En'i boşa aşağı itiyordu. */}
+            <FormField label="Birim" info="Seçilen tipe göre otomatik atanır.">
+
               <Input
                 value={derivedUnit}
                 readOnly
@@ -268,12 +285,12 @@ export function ItemFormDialog({
           )}
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 empty:hidden sm:grid-cols-2 lg:grid-cols-3">
 
           {/* E4 (2026-09-18): kumaşın varsayılan çözgü kartı — dokuma işi formu ve sunucu ön-dolumu buradan okur;
               yalnız KUMAŞ + devere açıkken çizilir (kapalıyken alan hiç yok = bugünkü form). */}
           {itemType === ItemType.FABRIC && devereEnabled && (
-            <FormField label="Varsayılan çözgü kartı (opsiyonel)" error={form.formState.errors.warpSpecId} info="Dokuma iş emri açarken çözgü kartı bundan ön-dolar; boş = her işte elle seçilir">
+            <FormField label="Varsayılan çözgü kartı" error={form.formState.errors.warpSpecId} info="Dokuma iş emri açarken çözgü kartı bundan ön-dolar; boş = her işte elle seçilir">
               <Controller
                 control={form.control}
                 name="warpSpecId"
@@ -301,7 +318,7 @@ export function ItemFormDialog({
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {carriesLists && (
-          <FormField label="İzinli Renkler (opsiyonel)">
+          <FormField label="İzinli Renkler">
             <PickerTrigger
               icon={<Palette className="h-4 w-4 text-muted-foreground" />}
               count={allowedColorIds.length}
@@ -318,7 +335,7 @@ export function ItemFormDialog({
           )}
 
           {carriesLists && (
-          <FormField label="İzinli Özellikler (opsiyonel)">
+          <FormField label="İzinli Özellikler">
             <PickerTrigger
               icon={<Sparkles className="h-4 w-4 text-muted-foreground" />}
               count={allowedPropertyIds.length}
@@ -364,7 +381,7 @@ export function ItemFormDialog({
             register={form.register}
           />
 
-          <DialogFooter className="pt-2">
+          <DialogFooter className="sticky bottom-0 z-10 -mx-6 -mb-4 mt-auto border-t border-border/70 bg-card px-6 py-3">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               İptal
             </Button>
@@ -399,7 +416,7 @@ export function ItemFormDialog({
             />
           )}
         />
-      </DialogContent>
+      </TabbedDialogContent>
     </Dialog>
   );
 }
@@ -428,12 +445,13 @@ function StockCodeRow({
   error?: { message?: string };
   register: ReturnType<typeof useForm<ItemFormValues>>["register"];
 }) {
+  // Düzenlemede kod başlıkta rozet (B11); kodsuz eski kayıtta şerit yine görünür.
   if (isEdit) {
+    if (code) return null;
     return (
       <div className="flex items-center gap-2 rounded-md border border-dashed bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
         <span>Stok Kodu</span>
-        <span className="font-mono text-foreground">{code ?? "—"}</span>
-        <span className="ml-auto">Oluşturulduktan sonra değiştirilemez.</span>
+        <span className="font-mono text-foreground">—</span>
       </div>
     );
   }

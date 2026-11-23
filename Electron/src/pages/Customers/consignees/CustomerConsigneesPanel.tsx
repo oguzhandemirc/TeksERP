@@ -37,10 +37,6 @@ export function CustomerConsigneesPanel({ customerId }: { customerId: string }) 
 
   return (
     <div className="space-y-2" data-testid="customer-consignees">
-      <p className="text-xs text-muted-foreground">
-        Emanet topun etiketinde "kimin için" basılan adlar. Tablette yazılınca burada belirir. Bir alıcıya şablon
-        bağlarsan o alıcının etiketleri bu şablonla basılır (ör. İngilizce/ABD birimli şablon).
-      </p>
       {rows.length === 0 ? (
         <p className="rounded-md border p-3 text-sm text-muted-foreground">Henüz alıcı yok.</p>
       ) : (

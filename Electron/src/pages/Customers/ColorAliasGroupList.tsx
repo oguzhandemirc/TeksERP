@@ -1,4 +1,6 @@
 // Cari kartı renk adı listesi: her renkte genel ad, altında "yalnız X kumaşında" satırları.
+import { Palette } from "lucide-react";
+import { TabbedDialogEmpty } from "@/components/ui/tabbed-dialog";
 import { COLOR_LOCKED_HINT, ITEM_LOCKED_HINT, colorAcceptsAlias, itemAcceptsAlias, type ColorAliasGroup } from "./colorAliasChain";
 import { AliasEditRow, ColorLabel } from "./AliasEditRow";
 import type { CustomerItemColorAlias } from "./aliasService";
@@ -14,11 +16,7 @@ interface Props {
 
 export function ColorAliasGroupList({ groups, canWrite, onSaveGeneral, onDeleteGeneral, onSaveItem, onDeleteItem }: Props) {
   if (groups.length === 0) {
-    return (
-      <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
-        Tanımlı müşteriye özel renk adı yok.
-      </div>
-    );
+    return <TabbedDialogEmpty icon={Palette} text="Tanımlı müşteriye özel renk adı yok." />;
   }
   return (
     <ul className="divide-y rounded-md border">

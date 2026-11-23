@@ -61,7 +61,8 @@ export interface ItemUrlFilterDef {
 
 export const ITEM_URL_FILTERS: readonly ItemUrlFilterDef[] = [
   // Hizmet kartları ayrı tabloda (`service_items`, Tanımlar › Hizmet Kartları) — Tür listesinde "Hizmet" YOK.
-  { key: "itemType", label: "Tür", options: ITEM_TYPE_FILTER_OPTIONS },
+  // Ad "Tip": sütun ve formla aynı kelime (B10 — "Tür" diye aranınca bulunamıyordu).
+  { key: "itemType", label: "Tip", options: ITEM_TYPE_FILTER_OPTIONS },
   { key: "unit", label: "Birim", options: [{ value: ITEM_FILTER_ALL, label: "Tümü" }, ...ITEM_UNIT_CODES.map((u) => ({ value: u, label: ITEM_UNIT_LABEL[u] }))] },
 ];
 

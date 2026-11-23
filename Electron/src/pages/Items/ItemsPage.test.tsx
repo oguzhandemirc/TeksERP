@@ -8,7 +8,7 @@
 //    pendingReview (sayfa URL'si `status`), Tür → filter[itemType], Birim → filter[unit] (URL, useDataTable okur).
 // ⭐ §3 Varsayılan = bugünkü davranış: pasifler gizli (isActive=true); eski "Pasifleri
 //    göster" anahtarı bu sayfada YOK (aynı soruya iki kontrol olmasın).
-// ⭐ §4 Tetik metni süzgecin ADINI taşır: "Tür: Tümü" → "Tür: İplik" (kullanıcı 03:27).
+// ⭐ §4 Tetik metni süzgecin ADINI taşır: "Tip: Tümü" → "Tip: İplik" (kullanıcı 03:27).
 // =============================================================================
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -73,7 +73,7 @@ describe("itemsFilters (saf)", () => {
     expect(parseItemStatus("inactive")).toBe("inactive");
   });
 
-  it("Tür ve Birim URL filtreleri BACKEND kolon adıyla (itemType · unit); 'Tümü' = ALL başta; Tür listesi ürün seçiciyle ORTAK", () => {
+  it("Tip ve Birim URL filtreleri BACKEND kolon adıyla (itemType · unit); 'Tümü' = ALL başta; Tür listesi ürün seçiciyle ORTAK", () => {
     const byKey = (k: string) => ITEM_URL_FILTERS.find((d) => d.key === k)!;
     // D2: hizmet kartı ayrı tabloda — Tür listesinde "Hizmet" YOK.
     expect(byKey("itemType").options.map((o) => o.value)).toEqual(["ALL", "YARN", "FABRIC", "CONSUMABLE"]);
@@ -98,8 +98,8 @@ describe("itemsFilters (saf)", () => {
 
   it("⭐ §4 tetik metni 'Ad: Değer' — ad öneki sabit, seçimsizde Tümü", () => {
     const tur = byKeyOptions("itemType");
-    expect(labeledSelectText("Tür", "ALL", tur)).toBe("Tür: Tümü");
-    expect(labeledSelectText("Tür", "YARN", tur)).toBe("Tür: İplik");
+    expect(labeledSelectText("Tip", "ALL", tur)).toBe("Tip: Tümü");
+    expect(labeledSelectText("Tip", "YARN", tur)).toBe("Tip: İplik");
   });
 
   it("⭐ D2 'Hizmet' ne Ürün Kartları filtresinde ne stok seçicisinde; kumaş dışı tür renk/özellik eksenini kapatır", () => {
@@ -133,7 +133,7 @@ describe("ItemsPage — ad + filtre şeridi", () => {
     await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", itemType: STOCK_TYPES }));
     expect(screen.queryByText("Pasifleri göster")).toBeNull();
     expect(chip("Durum")).toHaveTextContent("Durum: Aktif");
-    expect(chip("Tür")).toHaveTextContent("Tür: Tümü");
+    expect(chip("Tip")).toHaveTextContent("Tip: Tümü");
     expect(chip("Birim")).toHaveTextContent("Birim: Tümü");
     expect(chip("Renk")).toHaveTextContent("Renk: Tümü");
     expect(chip("Özellik")).toHaveTextContent("Özellik: Tümü");
@@ -158,12 +158,12 @@ describe("ItemsPage — ad + filtre şeridi", () => {
     const user = userEvent.setup();
     renderPage("/definitions/items?filter[allowedColorId]=c1");
     await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", allowedColorId: "c1", itemType: STOCK_TYPES }));
-    await user.click(chip("Tür"));
+    await user.click(chip("Tip"));
     await user.click(await screen.findByRole("option", { name: "İplik" }));
     await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", itemType: "YARN" }));
     expect(screen.queryByRole("button", { name: /^Renk:/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /^Özellik:/ })).toBeNull();
-    await user.click(chip("Tür"));
+    await user.click(chip("Tip"));
     await user.click(await screen.findByRole("option", { name: "Kumaş" }));
     await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", itemType: "FABRIC" }));
     expect(chip("Renk")).toHaveTextContent("Renk: Tümü");
@@ -181,7 +181,7 @@ describe("ItemsPage — ad + filtre şeridi", () => {
     await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", itemType: STOCK_TYPES }));
     expect(screen.queryByRole("button", { name: /^Renk:/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /^Özellik:/ })).toBeNull();
-    expect(chip("Tür")).toBeInTheDocument();
+    expect(chip("Tip")).toBeInTheDocument();
   });
 
   it("⭐ §2 Durum seçimi sunucuya gider: Pasif → isActive=false · Onay bekleyen → pendingReview=true · Tümü → filtresiz", async () => {
@@ -212,19 +212,19 @@ describe("ItemsPage — ad + filtre şeridi", () => {
     const user = userEvent.setup();
     renderPage();
     await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", itemType: STOCK_TYPES }));
-    await user.click(chip("Tür"));
+    await user.click(chip("Tip"));
     await user.click(await screen.findByRole("option", { name: "İplik" }));
     await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", itemType: "YARN" }));
-    expect(chip("Tür")).toHaveTextContent("Tür: İplik");
+    expect(chip("Tip")).toHaveTextContent("Tip: İplik");
     await user.click(chip("Birim"));
     await user.click(await screen.findByRole("option", { name: "kg" }));
     await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", itemType: "YARN", unit: "KG" }));
     expect(chip("Birim")).toHaveTextContent("Birim: kg");
     // Tümü'ye dönüş: URL anahtarı silinir, sunucuya gitmez
-    await user.click(chip("Tür"));
+    await user.click(chip("Tip"));
     await user.click(await screen.findByRole("option", { name: "Tümü" }));
     await waitFor(() => expect(lastFilters()).toEqual({ isActive: "true", unit: "KG", itemType: STOCK_TYPES }));
-    expect(chip("Tür")).toHaveTextContent("Tür: Tümü");
+    expect(chip("Tip")).toHaveTextContent("Tip: Tümü");
   });
 });
 

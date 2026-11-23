@@ -61,7 +61,8 @@ export function cariStatCards({ account, stats }: { account: CariRow | null | un
 export function CariGeneralTab({ card, account, moves }: { card: Customer; account: CariRow | null | undefined; moves: { items: CariMovement[]; loading: boolean; error: boolean; retry: () => void } }) {
   const navigate = useNavigate();
   return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+    // 3 sütunlu ızgara (1 + 2): Dönem özetinin 3 kartıyla aynı sütun çizgileri (simetri, 2026-11-24).
+    <div className="grid gap-4 xl:grid-cols-3">
       <SectionCard title="Kart bilgileri">
         <RecordFacts
           empty={<p className="text-sm text-muted-foreground">Kart bilgisi girilmemiş.</p>}
@@ -79,7 +80,7 @@ export function CariGeneralTab({ card, account, moves }: { card: Customer; accou
           ]}
         />
       </SectionCard>
-      <SectionCard title="Son hareketler" description="Sipariş · sevk · tahsilat/ödeme · fason">
+      <SectionCard title="Son hareketler" description="Sipariş · sevk · tahsilat/ödeme · fason" className="xl:col-span-2">
         <RecordActivityList
           loading={moves.loading}
           error={moves.error}

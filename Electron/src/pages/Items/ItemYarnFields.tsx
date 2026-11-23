@@ -78,7 +78,7 @@ export function ItemYarnFields({ form }: { form: UseFormReturn<ItemFormValues> }
       )}
 
       <FormField
-        label={fancy ? "Denye (opsiyonel)" : "Denye (iplik inceliği)"}
+        label={fancy ? "Denye" : "Denye (iplik inceliği)"}
         htmlFor="linearDensityDen"
         error={form.formState.errors.linearDensityDen}
         info="Çözgü kartı ve kg hesabı için gerekli — kg = tel × denye × metre ÷ 9.000.000. Elinizde dtex/Nm/Ne/g/m varsa çeviriciyi kullanın."

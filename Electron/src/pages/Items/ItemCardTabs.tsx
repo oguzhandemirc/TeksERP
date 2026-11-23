@@ -1,12 +1,12 @@
 // Kumaş kartı sekmeleri: "Bilgiler" (form) + "Müşteri Renk Adları". Yalnız düzenlenen KUMAŞ kartında ve
 // `customer-alias:read` varken sekme çizilir; aksi hâlde form bugünkü gibi tek başına durur.
 import type { ReactNode } from "react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TabsTrigger } from "@/components/ui/tabs";
+import { TabbedDialogBody, TabbedDialogPanel, TabbedDialogTabList, TabbedDialogTabs } from "@/components/ui/tabbed-dialog";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { itemLifecycleOf } from "@/lib/item-lifecycle";
 import type { Item } from "./types";
 import { ItemCustomerColorAliasesPanel } from "./ItemCustomerColorAliasesPanel";
-import { ItemCostLink } from "./ItemCostLink";
 import { YarnWhereSection } from "@/pages/Operations/YarnAtSubcontractor/YarnWhereSection";
 
 interface Props {
@@ -17,23 +17,20 @@ interface Props {
 
 export function ItemCardTabs({ item, children }: Props) {
   const { hasPermission } = useRoleAccess();
-  // İplik kartında "Nerede?" (depo / fasonda, devere D6c) — kumaş kartında hiçbir şey çizmez.
-  const costLink = item ? (
-    <>
-      <ItemCostLink itemId={item.id} itemType={item.itemType} />
-      {item.itemType === "YARN" && <YarnWhereSection itemId={item.id} itemType={item.itemType} />}
-    </>
-  ) : null;
-  if (!item || item.itemType !== "FABRIC" || !hasPermission("customer-alias:read")) return <>{costLink}{children}</>;
+  // İplik kartında "Nerede?" (depo / fasonda, devere D6c). Maliyet kartı bağlantısı başlık satırında (B11).
+  const costLink = item?.itemType === "YARN" ? <YarnWhereSection itemId={item.id} itemType={item.itemType} /> : null;
+  // Sabit çerçeveli modalın gövdesi (tabbed-dialog): sekmesizde tek kaydırıcı, sekmelide şerit sabit + panel kayar.
+  if (!item || item.itemType !== "FABRIC" || !hasPermission("customer-alias:read")) {
+    return <TabbedDialogBody className="space-y-4">{costLink}{children}</TabbedDialogBody>;
+  }
   return (
-    <Tabs defaultValue="info">
-      {costLink}
-      <TabsList>
+    <TabbedDialogTabs defaultValue="info">
+      <TabbedDialogTabList>
         <TabsTrigger value="info">Bilgiler</TabsTrigger>
         <TabsTrigger value="customer-color-aliases">Müşteri Renk Adları</TabsTrigger>
-      </TabsList>
-      <TabsContent value="info">{children}</TabsContent>
-      <TabsContent value="customer-color-aliases">
+      </TabbedDialogTabList>
+      <TabbedDialogPanel value="info" className="space-y-4">{costLink}{children}</TabbedDialogPanel>
+      <TabbedDialogPanel value="customer-color-aliases">
         <ItemCustomerColorAliasesPanel
           item={{
             id: item.id,
@@ -42,7 +39,7 @@ export function ItemCardTabs({ item, children }: Props) {
             allowedColorIds: (item.allowedColors ?? []).map((c) => c.colorId),
           }}
         />
-      </TabsContent>
-    </Tabs>
+      </TabbedDialogPanel>
+    </TabbedDialogTabs>
   );
 }

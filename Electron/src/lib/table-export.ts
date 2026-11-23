@@ -40,13 +40,48 @@ declare module "@tanstack/react-table" {
   }
 }
 
-/** Sütun için insan-okunur etiket: meta.label → string header → id. */
+/** Sütun için insan-okunur etiket: meta.label → string header → fonksiyon başlığın ürettiği öğenin `label`/`title`
+ *  prop'u ya da düz metin çocuğu → id. Sıralanır başlık (`() => <SortableHeader label="Kod" />`) "code" diye düşüyordu (B9). */
 export function columnLabel<T>(col: Column<T, unknown>): string {
   const label = col.columnDef.meta?.label;
   if (label) return label;
   const h = col.columnDef.header;
   if (typeof h === "string" && h.trim()) return h;
+  if (typeof h === "function") {
+    const fromEl = labelFromHeaderFn(h as (ctx: unknown) => unknown, col);
+    if (fromEl) return fromEl;
+  }
   return col.id;
+}
+
+/** Başlık fonksiyonunu yalnız ÖĞE yaratmak için çağırır (JSX bileşeni çalıştırmaz, hook tetiklenmez); bağlam isteyen
+ *  ya da patlayan başlık sessizce id'ye düşer. */
+function labelFromHeaderFn<T>(fn: (ctx: unknown) => unknown, col: Column<T, unknown>): string | null {
+  let el: unknown;
+  try {
+    el = fn({ column: col, header: undefined, table: undefined });
+  } catch {
+    return null;
+  }
+  return textOfElement(el, 0);
+}
+
+function textOfElement(node: unknown, depth: number): string | null {
+  if (depth > 3 || node == null || typeof node === "boolean") return null;
+  if (typeof node === "string") return node.trim() || null;
+  if (typeof node === "number") return String(node);
+  if (Array.isArray(node)) {
+    const parts = node.map((n) => textOfElement(n, depth + 1)).filter((s): s is string => Boolean(s));
+    return parts.length ? parts.join(" ") : null;
+  }
+  if (typeof node === "object" && "props" in node) {
+    const props = (node as { props?: Record<string, unknown> }).props ?? {};
+    for (const k of ["label", "title"] as const) {
+      if (typeof props[k] === "string" && (props[k] as string).trim()) return (props[k] as string).trim();
+    }
+    return textOfElement(props.children, depth + 1);
+  }
+  return null;
 }
 
 /** Ham nesneden (TanStack Row DEĞİL) bir kolonun HAM değeri: meta.exportValue →

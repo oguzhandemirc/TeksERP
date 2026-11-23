@@ -107,7 +107,7 @@ export function PageHeader({ title, titleExtra, description, statusLine, actions
             <button
               type="button"
               onClick={() => navigate(parent.to)}
-              className="mb-0.5 flex items-center gap-0.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+              className="mb-0.5 flex items-center gap-0.5 text-xs font-medium text-foreground/70 transition-colors hover:text-foreground"
             >
               {parent.label}
               <ChevronRight className="h-3 w-3 opacity-60" />

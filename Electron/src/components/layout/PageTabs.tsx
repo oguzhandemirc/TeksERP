@@ -6,12 +6,13 @@ import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /** Bant: tam genişlik, sayfa oluğuyla hizalı (`--list-inset`, index.css "SAYFA BANTLARI"), ince alt çizgi. */
-export const PAGE_TABS_BAR_CLASS = "flex shrink-0 items-end gap-1 overflow-x-auto";
+// overflow-y-hidden: x-auto dikeyi de auto yapar; taban çizgisi index.css'te iç gölge (sekme taşmaz, dikey çubuk çıkmaz).
+export const PAGE_TABS_BAR_CLASS = "flex shrink-0 items-end gap-1 overflow-x-auto overflow-y-hidden";
 
 /** Sekme: alt çizgili düz metin; seçili = ana renk alt çizgi + koyu metin. */
 export function pageTabClass(active: boolean): string {
   return cn(
-    "-mb-px inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors",
+    "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors",
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40 disabled:pointer-events-none disabled:opacity-50",
     active ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
   );

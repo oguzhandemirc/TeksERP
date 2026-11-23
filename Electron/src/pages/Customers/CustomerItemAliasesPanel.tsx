@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Tag, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TabbedDialogEmpty } from "@/components/ui/tabbed-dialog";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { PermissionGate } from "@/components/PermissionGate";
 import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
@@ -130,11 +131,7 @@ function AliasList({
   onDelete: (itemId: string) => void;
 }) {
   if (rows.length === 0) {
-    return (
-      <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">
-        Tanımlı müşteriye özel kumaş adı yok.
-      </div>
-    );
+    return <TabbedDialogEmpty icon={Tag} text="Tanımlı müşteriye özel kumaş adı yok." />;
   }
   return (
     <ul className="divide-y rounded-md border">

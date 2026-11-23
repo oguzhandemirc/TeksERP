@@ -50,14 +50,15 @@ export function RecordPageShell({ parent, title, avatar, badges, subtitle, actio
         statusLine={subtitle}
         actions={actions}
       />
-      <PageBody className="px-4 pb-[var(--space-page)] md:px-[var(--space-page)]">
+      {/* pt: sayı kartları kimlik şeridine yapışmasın; sekme şeridi kart yüzeyinde (zemin üstünde kontrast, 2026-11-24). */}
+      <PageBody className="px-4 pb-[var(--space-page)] pt-3 md:px-[var(--space-page)]">
         {shownStats.length > 0 && (
           <div data-record-stats="" className="mb-[var(--space-section)] grid grid-cols-[repeat(auto-fit,minmax(13rem,1fr))] gap-[var(--space-gap)]">
             {shownStats}
           </div>
         )}
         <Tabs value={current} onValueChange={onTabChange}>
-          <TabsList className="h-auto max-w-full flex-wrap justify-start">
+          <TabsList className="flex h-auto w-full flex-wrap justify-start rounded-xl border border-card-border bg-card px-2 text-foreground/70 shadow-card">
             {tabs.map((t) => (
               <TabsTrigger key={t.key} value={t.key} className="gap-1.5">
                 {t.icon && <t.icon className="h-3.5 w-3.5" aria-hidden />}

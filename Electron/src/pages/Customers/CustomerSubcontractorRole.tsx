@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { subcontractorService } from "@/pages/Subcontractors/service";
 import type { Subcontractor } from "@/pages/Subcontractors/types";
 import { partnerRoleLabels } from "@/lib/partnerRoles";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 import type { Customer } from "./types";
 import { CustomerSubcontractorCategories } from "./CustomerSubcontractorCategories";
 import { SubcontractorProfileEdit } from "./SubcontractorProfileEdit";
@@ -66,11 +67,8 @@ export function CustomerSubcontractorRole({ customer }: { customer: Customer }) 
   });
   const disabled = !typeOk || profile.isLoading || mut.isPending;
   return (
-    <div className="space-y-1 rounded-md border p-3">
-      <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={checked} disabled={disabled} onChange={(e) => mut.mutate(e.target.checked)} aria-describedby="fason-rol-ipucu" />
-        {SUBCONTRACTOR_ROLE_LABEL}
-      </label>
+    <div className="space-y-2">
+      <ToggleChip label={SUBCONTRACTOR_ROLE_LABEL} checked={checked} disabled={disabled} onChange={(e) => mut.mutate(e.target.checked)} aria-describedby="fason-rol-ipucu" />
       <p id="fason-rol-ipucu" className="text-xs text-muted-foreground">
         {!typeOk
           ? SUBCONTRACTOR_ROLE_TYPE_HINT

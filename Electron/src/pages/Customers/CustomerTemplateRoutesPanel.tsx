@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PermissionGate } from "@/components/PermissionGate";
+import { InfoPopover } from "@/components/ui/info-popover";
 import {
   customerTemplateRouteService,
   labelTemplateService,
@@ -78,16 +79,10 @@ export function CustomerTemplateRoutesPanel({ customerId }: Props) {
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-muted-foreground">
-        Bu müşteri için basılan etiketlerde kullanılacak şablonlar. Atama; cihaz
-        yönlendirmesinin ve genel varsayılanın önüne geçer. Boş bırakılan bağlamda
-        genel varsayılan kullanılır. Top etiketinde Ham ya da Bitmiş şablonu topun
-        aşamasına göre seçilir (yarı mamul top Ham etiketi basar).
-      </p>
-
+      {/* Açıklama sekme kartının ⓘ balonunda (CustomerLabelTemplatesTab). */}
       <CustomerLabelSetsSection sets={sets} />
 
-      <ul className="divide-y rounded-md border">
+      <ul className="grid gap-x-6 gap-y-2 lg:grid-cols-2">
         {KINDS.filter((kind) => !(setsShown && isOptionSetKind(kind))).map((kind) => (
           <RouteRow
             key={kind}
@@ -123,9 +118,12 @@ function RouteRow({
     route && !activeTemplates.some((t) => t.id === route.templateId);
 
   return (
-    <li className="space-y-1.5 p-3 text-sm">
+    <li className="space-y-1 text-sm">
       <div className="flex items-center gap-2">
-        <span className="w-44 shrink-0 font-medium">{labelKindLabels[kind]}</span>
+        <span className="flex w-36 shrink-0 items-center gap-1 font-medium">
+          {labelKindLabels[kind]}
+          {kind === "SWATCH" && <InfoPopover label="Kartela etiketi: not" desc="Kartela etiketi baskısında müşteri ataması henüz uygulanmaz." />}
+        </span>
 
         <PermissionGate
           permission="label-template:write"
@@ -142,7 +140,7 @@ function RouteRow({
               disabled={isPending}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Şablon seç..." />
+                <SelectValue placeholder="Genel varsayılan" />
               </SelectTrigger>
               <SelectContent>
                 {route && missingFromPool && (
@@ -173,19 +171,10 @@ function RouteRow({
         </PermissionGate>
       </div>
 
-      {!route && (
-        <p className="pl-44 text-xs text-muted-foreground">
-          Genel varsayılan kullanılır.
-        </p>
-      )}
+      {/* Boşken seçici "Genel varsayılan" yazar; yalnız kritik olan (pasif atama) açıkta kalır. */}
       {assignedInactive && (
-        <p className="pl-44 text-xs text-amber-600 dark:text-amber-500">
+        <p className="pl-[9.5rem] text-xs text-amber-600 dark:text-amber-500">
           Atanan şablon pasif — baskıda varsayılana düşülür.
-        </p>
-      )}
-      {kind === "SWATCH" && (
-        <p className="pl-44 text-xs text-muted-foreground">
-          Kartela etiketi baskısında müşteri ataması henüz uygulanmaz.
         </p>
       )}
     </li>

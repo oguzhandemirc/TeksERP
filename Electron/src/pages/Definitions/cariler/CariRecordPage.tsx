@@ -103,7 +103,8 @@ function CariRecordView({ card }: { card: Customer }) {
             {account.data?.hold && <ToneChip tone="rose" className="whitespace-nowrap" title={account.data.hold.reasonLabel}>Kilitli</ToneChip>}
           </span>
         }
-        subtitle={<span className="truncate">{[card.code, card.city, card.contactPhone].filter(Boolean).join(" · ")}</span>}
+        /* Kod alt satırda yok (listede var; kullanıcı 2026-11-24): yalnız şehir · telefon, boşsa satır çizilmez. */
+        subtitle={[card.city, card.contactPhone].some(Boolean) ? <span className="truncate">{[card.city, card.contactPhone].filter(Boolean).join(" · ")}</span> : undefined}
         actions={<CariActionButtons actions={actions} layout="row" />}
         stats={cariStatCards({ account: account.data, stats: stats.data })}
         tabs={tabs}
