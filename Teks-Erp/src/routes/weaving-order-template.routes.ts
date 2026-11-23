@@ -15,7 +15,7 @@ import { requireDokumaEnabled } from "../middlewares/module.middleware";
 export const weavingOrderTemplateService = new WeavingOrderTemplateService({
   modelName: "weavingOrderTemplate",
   tableName: "WEAVING_ORDER_TEMPLATE",
-  searchFields: ["name", "description"],
+  // `?search=` yok: katlanmış gölge kolonu yok ve seçici tüm etkin şablonları tek seferde çizer.
   defaultInclude: {
     item: { select: { id: true, code: true, name: true } },
     subcontractor: { select: { id: true, code: true, name: true } },
