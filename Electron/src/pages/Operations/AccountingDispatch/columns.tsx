@@ -2,7 +2,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { ReturnsBadge } from "@/components/operations/ReturnsBadge";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
-import { safeFormat, formatNumber } from "@/lib/format";
+import { safeFormat, formatQty } from "@/lib/format";
 import { internalInvoiceOf } from "./invoiceDraftVisibility";
 import { DocumentsCell, InvoiceInfoCell, type DispatchRowHandlers } from "./DispatchRowCells";
 import type { DispatchListItem } from "./types";
@@ -88,9 +88,10 @@ export function buildDispatchColumns(h: DispatchRowHandlers): ColumnDef<Dispatch
       },
       cell: ({ row }) => (
         <span className="whitespace-nowrap text-xs tabular-nums">
-          {formatNumber(row.original.totalMeters, 0)} m
+          {/* Dosyayla aynı hassasiyet (≤3 hane, upTo3Text ikizi): ekran = Excel = PDF. */}
+          {formatQty(row.original.totalMeters)} m
           {row.original.totalKg > 0 && (
-            <span className="text-muted-foreground"> · {formatNumber(row.original.totalKg, 1)} kg</span>
+            <span className="text-muted-foreground"> · {formatQty(row.original.totalKg)} kg</span>
           )}
         </span>
       ),

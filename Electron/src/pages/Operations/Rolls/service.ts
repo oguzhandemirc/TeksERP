@@ -99,6 +99,17 @@ export interface RollStats {
 /** İşlem-tipi chip'i — kategori bazında top adedi + Σmetre. Kategorisiz sevkler
  *  (adımda requiredCategory yok) categoryId:null + name:"Bilinmiyor" kovasında
  *  toplanır → chip DISABLED (filtrelenemez). */
+/** `POST /api/rolls/stats-groups` ayrım sütunları (sunucu `ROLL_GROUP_COLUMNS` aynası; sıra = çıktı sırası). */
+export const ROLL_GROUP_COLUMNS = ["item", "color", "width", "qualityGrade", "foldType", "warehouse"] as const;
+export type RollGroupColumn = (typeof ROLL_GROUP_COLUMNS)[number];
+
+export interface RollGroupsResult {
+  key: string;
+  totalCount: number;
+  totalQty: number;
+  groups: Array<{ values: Partial<Record<RollGroupColumn, string | number | null>>; count: number; qty: number }>;
+}
+
 export interface FasonSummaryCategory {
   categoryId: string | null;
   name: string;
@@ -206,6 +217,15 @@ export const rollService = {
         "/api/rolls/stats-batch",
         { items },
       )
+      .then((r) => r.data),
+  /** Kumaş Stoğu Özeti "kalem kalem" — kategori başına ayrım sütunlarıyla grup (stats-batch ile aynı where);
+   *  tanınmayan sütun sunucuda 400 `UNKNOWN_EXPORT_COLUMN`. */
+  getStatsGroups: (
+    items: Array<{ key: string; filters: Record<string, string | string[]> }>,
+    groupBy: string[],
+  ): Promise<ApiResponse<RollGroupsResult[]>> =>
+    apiClient
+      .post<ApiResponse<RollGroupsResult[]>>("/api/rolls/stats-groups", { items, groupBy })
       .then((r) => r.data),
   /** Üretim Akışı (Kanban) panosu — 6 kolon tek istekte (kolon başına ≤10 + toplam). */
   getProductionFlow: (): Promise<ApiResponse<ProductionFlowData>> =>

@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { Plus, ClipboardList, Loader2 } from "lucide-react";
+import { Plus, ClipboardList } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { DemoBar } from "@/components/demo/DemoBar";
 import { SimulatedMeterBanner } from "@/components/operations/SimulatedMeterBanner";
@@ -19,7 +18,7 @@ import { useDataTable } from "@/hooks/useDataTable";
 import { useMultiWarehouse } from "@/hooks/useWarehouses";
 import { useEmanetEnabled } from "@/hooks/usePricingEnabled";
 import { DataTableTools } from "@/components/data-table/DataTableTools";
-import { ExportMenu } from "@/components/data-table/ExportMenu";
+import { ExportAllButton } from "@/components/data-table/export-dialog/ExportAllButton";
 import { useTableExportAll } from "@/hooks/useTableExportAll";
 import { SavedViewsMenu } from "@/components/data-table/SavedViewsMenu";
 import { RollScanBar } from "./RollScanBar";
@@ -47,7 +46,7 @@ import {
 import { isRollTabKey, orderRollTabsByGroup, type RollTabKey } from "./tabs-config";
 import { resolveRollTabs } from "./tabs-regime";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
-import { downloadInventorySummary } from "./inventorySummary";
+import { InventorySummaryDialog } from "./InventorySummaryDialog";
 import type { LabelCustomerContext } from "@/services/labelService";
 import type { Roll } from "./types";
 
@@ -68,9 +67,7 @@ export function RollsPage() {
   // "Ekle ve Etiket Bas": yeni topun etiket diyalogu (önizleme + Bas). ctx = etiket müşterisi.
   const [labelRoll, setLabelRoll] = useState<{ id: string; ctx?: LabelCustomerContext } | null>(null);
   const [scanRoll, setScanRoll] = useState<Roll | null>(null);
-  const [summaryBusy, setSummaryBusy] = useState(false);
-  // "Tümünü İndir" ilerlemesi (sağ alt) — 30k'da "N / ~T" göstergesi için.
-  const [dlProgress, setDlProgress] = useState<{ loaded: number; total?: number } | null>(null);
+  const [summaryOpen, setSummaryOpen] = useState(false);
   // TİCARET REJİMİ: üretim sekmeleri süzülür, depo etiketleri değişir.
   // ⚠️ Şerit, "Kumaş Stoğu Özeti" indirmesi ve sekme sırası AYNI listeyi okur —
   // biri ham `ROLL_TABS`e dönerse ticaret kullanıcısına gizlenen sekme geri
@@ -90,25 +87,11 @@ export function RollsPage() {
   const { multiWarehouse } = useMultiWarehouse();
   const emanetEnabled = useEmanetEnabled();
 
-  // "Kumaş Stoğu Özeti" — her kategori için backend sayımı (top + metre) tek Excel'e.
-  // Tablo-dışı KANBAN hariç tüm sekmeler; ekrandaki 100 değil GERÇEK toplamlar.
-  const handleSummary = async () => {
-    if (summaryBusy) return;
-    setSummaryBusy(true);
-    try {
-      const summaryTabs = TABS.filter((t) => t.key !== "KANBAN").map((t) => ({
-        key: t.key as RollStatusTabKey,
-        label: t.label,
-      }));
-      if (await downloadInventorySummary(summaryTabs)) {
-        toast.success("Kumaş stoğu özeti indirildi.");
-      }
-    } catch {
-      toast.error("Kumaş stoğu özeti oluşturulamadı.");
-    } finally {
-      setSummaryBusy(false);
-    }
-  };
+  // "Kumaş Stoğu Özeti" — tablo-dışı KANBAN hariç sekmeler; ekrandaki 100 değil GERÇEK toplamlar (diyalog).
+  const summaryTabs = useMemo(
+    () => TABS.filter((t) => t.key !== "KANBAN").map((t) => ({ key: t.key as RollStatusTabKey, label: t.label })),
+    [TABS],
+  );
 
   // Barkod → topu getir → detay panelini aç (404 toast'ı interceptor'dan).
   // Not: okut/ara input'u + "okutunca aç" tercihi RollScanBar'a taşındı (perf:
@@ -356,27 +339,16 @@ export function RollsPage() {
           hideFilterBar
           paginationActions={
             <>
-              {exportAll.confirmDialog}
-              <ExportMenu
-                label="Tümünü İndir"
-                busyLabel={exportAll.busyLabel}
-                onPdf={exportAll.onPdf}
-                onExcel={exportAll.onExcel}
-                onCsv={exportAll.onCsv}
-              />
+              <ExportAllButton exp={exportAll} />
+              <InventorySummaryDialog open={summaryOpen} onOpenChange={setSummaryOpen} tabs={summaryTabs} table={dataTable.table} />
               <Button
                 size="sm"
                 variant="outline"
                 className="h-7 gap-1.5"
-                onClick={handleSummary}
-                disabled={summaryBusy}
-                title="Tüm kategorilerin gerçek top/metre sayımını Excel indir"
+                onClick={() => setSummaryOpen(true)}
+                title="Kategori toplamı, kalem kalem ya da top top özet (Excel/PDF)"
               >
-                {summaryBusy ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <ClipboardList className="h-3.5 w-3.5" />
-                )}
+                <ClipboardList className="h-3.5 w-3.5" />
                 Kumaş Stoğu Özeti
               </Button>
             </>

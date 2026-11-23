@@ -46,6 +46,9 @@ export interface AppPreferences {
   /** Modal bölüm görünürlüğü — modal anahtarı → gizlenen bölüm id listesi (yalnız varsayılandan sapma; varsayılan
    *  her şey görünür). Şekli `components/forms/modal-sections/section-visibility.ts` sahiplenir ve okurken süzer. */
   modalSections?: Record<string, string[]>;
+  /** Çıktı diyaloğu — liste anahtarı → hatırlanan seçim (sütunlar · biçim · ayrıntı düzeyi); yalnız "Seçimi hatırla"
+   *  işaretliyken yazılır. Şekli `lib/export-columns.ts` (`readSavedExportChoice`) sahiplenir ve okurken süzer. */
+  exportDialog?: Record<string, unknown>;
   /** Tablo sütun genişliği (px, elle) — queryKey → { columnId: px }; yalnız sürüklenen sütunlar. */
   tableSizing?: Record<string, Record<string, number>>;
   /** Tablo sütun görünürlüğü — queryKey → { columnId: visible }. */

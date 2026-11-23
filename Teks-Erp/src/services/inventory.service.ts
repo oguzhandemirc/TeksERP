@@ -32,6 +32,7 @@ import { createInitialEntry as createInitialEntryImpl, initialEntryReplay as ini
 import { buildRollWhere as buildRollWhereImpl, findAllRolls as findAllRollsImpl, getRollStats as getRollStatsImpl, getRollStatsBatch as getRollStatsBatchImpl, getWarehouseScope as getWarehouseScopeImpl } from "./inventory/list";
 import { getProductionFlow as getProductionFlowImpl, listEntryUsers as listEntryUsersImpl, listEntryStations as listEntryStationsImpl } from "./inventory/production-flow";
 import { getRollSubcontractorSummary as getRollSubcontractorSummaryImpl } from "./inventory/subcontractor-summary";
+import { getRollStatsGroups as getRollStatsGroupsImpl, type RollGroupsResult } from "./inventory/stats-groups";
 import { readManualEntryReason as readManualEntryReasonImpl, findRollById as findRollByIdImpl, buildCancelDiagnostics as buildCancelDiagnosticsImpl, findRollByBarcode as findRollByBarcodeImpl } from "./inventory/detail";
 import { getRelabelContext as getRelabelContextImpl } from "./inventory/relabel";
 import { getRollHistory as getRollHistoryImpl } from "./inventory/history";
@@ -441,6 +442,14 @@ export class InventoryService {
     items: Array<{ key: string; filters?: Record<string, unknown> }>,
   ): Promise<ApiResponse<Array<{ key: string; totalCount: number; totalQty: number }>>> {
     return getRollStatsBatchImpl.call(this as unknown as InventoryServiceThis, items);
+  }
+
+  /** Kumaş Stoğu Özeti "kalem kalem" — kategori başına seçilen ayrım sütunlarıyla grup (stats-batch ile aynı where). */
+  async getRollStatsGroups(
+    items: Array<{ key: string; filters?: Record<string, unknown> }>,
+    columns: readonly string[],
+  ): Promise<ApiResponse<RollGroupsResult[]>> {
+    return getRollStatsGroupsImpl.call(this as unknown as InventoryServiceThis, items, columns);
   }
 
   /**

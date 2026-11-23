@@ -7,6 +7,7 @@ import {
   type ExportColumn,
 } from "./list-export";
 import { factoryDayKey } from "@/lib/factory-time";
+import { assertKnownColumns, orderByCatalog, type ExportColumnOption, type ExportFormat } from "./export-columns";
 
 // TanStack tablosunun dışa aktarım ADAPTÖRÜ. Üretimin kendisi `list-export.ts`te —
 // tablosuz ekranlar (kullanıcılar, cihazlar, yetenek matrisi…) aynı motoru kullanır;
@@ -64,16 +65,33 @@ function rawCellValue<T>(col: Column<T, unknown>, original: T): unknown {
   return (original as Record<string, unknown>)?.[col.id];
 }
 
-/** Görünür kolonlar (select/actions hariç) — export'lar paylaşır. */
-function tableExportCols<T>(table: Table<T>): Column<T, unknown>[] {
-  return table
-    .getVisibleLeafColumns()
-    .filter((c) => c.id !== "select" && c.id !== "actions" && !c.columnDef.meta?.noExport);
+const isExportable = <T,>(c: Column<T, unknown>) =>
+  c.id !== "select" && c.id !== "actions" && !c.columnDef.meta?.noExport;
+
+/** Dosyaya girebilen BÜTÜN sütunlar, ekrandaki sırayla (gizliler dahil) — çıktı diyaloğunun kataloğu. */
+export function tableExportCatalog<T>(table: Table<T>): ExportColumnOption[] {
+  const order = table.getState().columnOrder ?? [];
+  const all = table.getAllLeafColumns().filter(isExportable);
+  const pos = (id: string) => {
+    const i = order.indexOf(id);
+    return i < 0 ? order.length + all.findIndex((c) => c.id === id) : i;
+  };
+  return [...all]
+    .sort((a, b) => pos(a.id) - pos(b.id))
+    .map((c) => ({ id: c.id, label: c.columnDef.meta?.exportLabel ?? columnLabel(c), visible: c.getIsVisible() }));
 }
 
-/** Görünür TanStack kolonları → motorun anladığı sütun tarifleri. */
-function toExportColumns<T>(table: Table<T>): ExportColumn<T>[] {
-  return tableExportCols(table).flatMap((c) => [
+/** Dosyanın sütunları: `columnIds` verilirse o seçim (katalog sırasıyla; tanınmayan id fırlatır), yoksa görünürler. */
+function tableExportCols<T>(table: Table<T>, columnIds?: readonly string[]): Column<T, unknown>[] {
+  if (!columnIds) return table.getVisibleLeafColumns().filter(isExportable);
+  const catalog = tableExportCatalog(table);
+  assertKnownColumns(catalog, columnIds);
+  return orderByCatalog(catalog, columnIds).map((id) => table.getColumn(id)!);
+}
+
+/** TanStack kolonları → motorun anladığı sütun tarifleri. */
+export function toExportColumns<T>(table: Table<T>, columnIds?: readonly string[]): ExportColumn<T>[] {
+  return tableExportCols(table, columnIds).flatMap((c) => [
     {
       label: c.columnDef.meta?.exportLabel ?? columnLabel(c),
       value: (row: T) => rawCellValue(c, row),
@@ -127,8 +145,9 @@ export async function exportTableToXlsx<T>(
   table: Table<T>,
   rows: T[],
   filename = "tablo",
+  columnIds?: readonly string[],
 ): Promise<void> {
-  await exportRowsToXlsx(toExportColumns(table), rows, filename);
+  await exportRowsToXlsx(toExportColumns(table, columnIds), rows, filename);
 }
 
 /**
@@ -140,8 +159,9 @@ export async function exportTableToPdf<T>(
   table: Table<T>,
   rows: T[],
   filename = "tablo",
+  columnIds?: readonly string[],
 ): Promise<boolean> {
-  return exportRowsToPdf(toExportColumns(table), rows, filename);
+  return exportRowsToPdf(toExportColumns(table, columnIds), rows, filename);
 }
 
 /** Verilen satırları .csv olarak kaydeder (; ayraç + ondalık virgül + BOM). */
@@ -149,11 +169,25 @@ export async function exportTableToCsv<T>(
   table: Table<T>,
   rows: T[],
   filename = "tablo",
+  columnIds?: readonly string[],
 ): Promise<boolean> {
-  return exportRowsToCsv(toExportColumns(table), rows, filename);
+  return exportRowsToCsv(toExportColumns(table, columnIds), rows, filename);
+}
+
+/** Çıktı diyaloğunun tek çağrısı: biçim + satırlar + seçili sütunlar (üç biçim aynı sütun tarifinden). */
+export async function exportTableAs<T>(
+  format: ExportFormat,
+  table: Table<T>,
+  rows: T[],
+  filename: string,
+  columnIds?: readonly string[],
+): Promise<boolean | void> {
+  if (format === "pdf") return exportTableToPdf(table, rows, filename, columnIds);
+  if (format === "csv") return exportTableToCsv(table, rows, filename, columnIds);
+  return exportTableToXlsx(table, rows, filename, columnIds);
 }
 
 /** CSV metni (dosyaya yazmadan) — test/önizleme için. */
-export function buildCsv<T>(table: Table<T>, rows: T[]): string {
-  return buildCsvContent(toExportColumns(table), rows);
+export function buildCsv<T>(table: Table<T>, rows: T[], columnIds?: readonly string[]): string {
+  return buildCsvContent(toExportColumns(table, columnIds), rows);
 }

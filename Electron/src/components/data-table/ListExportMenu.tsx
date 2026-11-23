@@ -1,24 +1,28 @@
-import { ExportMenu } from "./ExportMenu";
-import { exportRowsToCsv, exportRowsToPdf, exportRowsToXlsx, type ExportColumn } from "@/lib/list-export";
+import { useState } from "react";
+import { Download } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { type ExportColumn } from "@/lib/list-export";
+import { exportListAs, listExportCatalog } from "@/lib/list-export-sections";
 import { exportListName } from "@/lib/table-export";
 import { useExportRange } from "@/hooks/useExportRange";
+import { ExportDialog } from "./export-dialog/ExportDialog";
 
 /**
- * TanStack tablosu OLMAYAN ekranlar için "İndir ▾" (PDF / Excel / CSV).
+ * TanStack tablosu OLMAYAN ekranlar için "Dışa aktar" — ortak çıktı diyaloğunu açar (biçim + sütunlar).
  * Kullanım: sütunları tarif et, elindeki satırları ver.
  *
  *   <ListExportMenu name="Kullanıcılar" rows={users} columns={USER_EXPORT_COLUMNS} />
  *
- * ⚠️ `rows` EKRANDA GÖRÜNEN satırlardır — sayfalı/sonsuz kaydırmalı bir listede
- * yalnız yüklenenler iner. Sunucudaki tümü gerekiyorsa çağıran önce hepsini
- * çeker (bkz. `useTableExportAll`), yoksa kullanıcı eksik dosya indirdiğini
- * fark etmez.
+ * ⚠️ `rows` EKRANDA GÖRÜNEN satırlardır — sayfalı/sonsuz kaydırmalı bir listede yalnız yüklenenler iner.
+ * Sunucudaki tümü gerekiyorsa çağıran önce hepsini çeker (bkz. `useTableExportAll`). Sütunda `hidden: true`
+ * → diyalogda işaretsiz gelir (ekranda gösterilmeyen ayrıntı).
  */
 export function ListExportMenu<T>({
   rows,
   columns,
   name,
-  label = "Dışa aktar", // tek ad: DataTableExportMenu ile aynı (denetim O23)
+  label = "Dışa aktar",
   notes,
   disabled,
   size,
@@ -37,18 +41,39 @@ export function ListExportMenu<T>({
   variant?: "outline" | "default" | "secondary";
   title?: string;
 }) {
+  const [open, setOpen] = useState(false);
   const range = useExportRange();
-  const filename = () => exportListName(name, { range });
+  const empty = rows.length === 0;
   return (
-    <ExportMenu
-      label={label}
-      size={size ?? "sm"}
-      variant={variant ?? "outline"}
-      disabled={disabled || rows.length === 0}
-      title={title ?? (rows.length === 0 ? "İndirilecek kayıt yok" : undefined)}
-      onPdf={() => exportRowsToPdf(columns, rows, filename(), notes)}
-      onExcel={() => exportRowsToXlsx(columns, rows, filename(), notes)}
-      onCsv={() => exportRowsToCsv(columns, rows, filename())}
-    />
+    <>
+      <ExportDialog
+        open={open}
+        onOpenChange={setOpen}
+        title={`Dışa aktar — ${name}`}
+        info={notes?.length ? notes.join(" ") : "Satırlar ekrandaki liste ile aynıdır; Excel, PDF ve CSV aynı değerleri taşır."}
+        catalog={open ? listExportCatalog(columns) : []}
+        scopes={[{ key: "loaded", label: "Listedeki kayıtlar", count: rows.length }]}
+        prefKey={`liste:${name}`}
+        onRun={async (c) => {
+          try {
+            return await exportListAs(c.format, columns, c.columns, rows, exportListName(name, { range }), notes);
+          } catch {
+            toast.error("İndirme hazırlanamadı.");
+            return false;
+          }
+        }}
+      />
+      <Button
+        type="button"
+        size={size ?? "sm"}
+        variant={variant ?? "outline"}
+        className="gap-1.5"
+        disabled={disabled || empty}
+        title={title ?? (empty ? "İndirilecek kayıt yok" : "Listeyi dosyaya aktar (biçim ve sütunlar seçilir)")}
+        onClick={() => setOpen(true)}
+      >
+        <Download className="h-4 w-4" /> {label}
+      </Button>
+    </>
   );
 }

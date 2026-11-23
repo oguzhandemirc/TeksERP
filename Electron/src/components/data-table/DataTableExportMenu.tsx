@@ -1,22 +1,10 @@
-import { useState, type ReactNode } from "react";
-import { ChevronDown, Download, FileSpreadsheet, FileText, FileType2, Loader2 } from "lucide-react";
+import type { ReactNode } from "react";
+import { Download, FileSpreadsheet, Loader2 } from "lucide-react";
 import type { Table } from "@tanstack/react-table";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { exportTableToPdf, exportTableToXlsx, exportTableToCsv, exportListName } from "@/lib/table-export";
-import { useExportRange } from "@/hooks/useExportRange";
-import { isExportCancelled, truncatedExportNote } from "@/lib/export-drain";
-import { useExportConfirm } from "@/hooks/useExportConfirm";
-import { formatQty } from "@/lib/format";
+import { useTableExportDialog, type TableFetchAll } from "./export-dialog/useTableExportDialog";
 
-type ExportKind = "pdf" | "xlsx" | "csv";
+export type { TableFetchAll } from "./export-dialog/useTableExportDialog";
 
 /** Ekranın kendi dışa aktarma seçeneği (ör. Siparişler "Excel (stok kalemi bazında)…"). */
 export interface ExtraExportOption {
@@ -28,53 +16,10 @@ export interface ExtraExportOption {
   onSelect: () => void;
 }
 
-export type TableFetchAll<T> = (
-  onProgress?: (loaded: number, total?: number) => void,
-  onTruncated?: (loaded: number) => void,
-  confirmTotal?: (total: number) => Promise<boolean>,
-) => Promise<T[]>;
-
-/** Tablo indirme işi — ilerleme, tavan uyarısı, 100K onayı (eski "Sütunlar" menüsündeki davranışın aynısı). */
-function useTableExportRun<T>(table: Table<T>, exportName: string, fetchAll?: TableFetchAll<T>) {
-  const [busy, setBusy] = useState<null | ExportKind>(null);
-  const [progress, setProgress] = useState<{ loaded: number; total?: number } | null>(null);
-  const range = useExportRange();
-  const { confirmTotal, confirmDialog } = useExportConfirm();
-
-  const runExport = async (kind: ExportKind) => {
-    if (busy) return;
-    setBusy(kind);
-    setProgress(null);
-    try {
-      const rows = fetchAll
-        ? await fetchAll(
-            (loaded, total) => setProgress({ loaded, total }),
-            (loaded) => toast.warning(truncatedExportNote(loaded), { duration: 12000 }),
-            confirmTotal,
-          )
-        : table.getRowModel().rows.map((r) => r.original);
-      if (rows.length === 0) {
-        toast.info("İndirilecek kayıt yok.");
-        return;
-      }
-      const name = exportListName(exportName, { range });
-      if (kind === "pdf") await exportTableToPdf(table, rows, name);
-      else if (kind === "csv") await exportTableToCsv(table, rows, name);
-      else await exportTableToXlsx(table, rows, name);
-    } catch (err) {
-      if (!isExportCancelled(err)) toast.error("İndirme hazırlanamadı.");
-    } finally {
-      setBusy(null);
-      setProgress(null);
-    }
-  };
-
-  return { busy, progress, runExport, confirmDialog };
-}
-
 /**
- * "Dışa aktar ▾" — Excel · (ekranın ek seçenekleri) · PDF · CSV. Çıktı ekrandaki sütunlardır;
- * `fetchAll` verilirse süzgece uyan TÜM kayıtlar (sektör standardı), yoksa yüklü satırlar.
+ * "Dışa aktar" — ortak çıktı diyaloğunu açar (biçim · kapsam · sütunlar). `fetchAll` verilirse kapsam
+ * "filtreye uyan tüm kayıtlar" (sektör standardı), yoksa ekrandaki satırlar; seçim varsa "seçili satırlar".
+ * Ekranın ek çıktıları diyaloğun altında düğme olarak durur.
  */
 export function DataTableExportMenu<T>({
   table,
@@ -87,60 +32,35 @@ export function DataTableExportMenu<T>({
   exportName?: string;
   fetchAll?: TableFetchAll<T>;
   extraExports?: ExtraExportOption[];
-  /** 2xl altında yazı düşer (simge + ok kalır); indirme sürerken sayaç yine görünür. */
+  /** 2xl altında yazı düşer (simge kalır); indirme sürerken sayaç yine görünür. */
   compact?: boolean;
 }) {
-  const { busy, progress, runExport, confirmDialog } = useTableExportRun(table, exportName, fetchAll);
-
-  // Uzun "tümünü indir"de sayaç (30K'da 30+ sn sürebilir; belirsiz spinner "dondu mu?" dedirtir).
-  const triggerLabel = !busy
-    ? "Dışa aktar"
-    : progress
-      ? `${formatQty(progress.loaded)}${progress.total ? ` / ~${formatQty(progress.total)}` : ""} indiriliyor…`
-      : "Hazırlanıyor…";
+  const extras = extraExports?.length
+    ? extraExports.map((x) => (
+        <Button key={x.key} type="button" variant="outline" size="sm" className="h-8 gap-1.5" title={x.title} onClick={() => { exp.close(); x.onSelect(); }}>
+          {x.icon ?? <FileSpreadsheet className="h-4 w-4 text-success" />} {x.label}
+        </Button>
+      ))
+    : undefined;
+  const exp = useTableExportDialog({ table, exportName, fetchAll, extras });
+  const label = exp.busy ? exp.busyLabel ?? "Hazırlanıyor…" : "Dışa aktar";
   const scope = fetchAll ? "filtreye uyan tüm kayıtlar" : "ekrandaki kayıtlar";
-  const extras = extraExports ?? [];
 
   return (
     <>
-      {confirmDialog}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1.5"
-            disabled={busy !== null}
-            title={`Listeyi dosyaya aktar (${scope}, ekrandaki sütunlar)`}
-            aria-label={compact && !busy ? "Dışa aktar" : undefined}
-          >
-            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-            <span className={compact && !busy ? "hidden 2xl:inline" : undefined}>{triggerLabel}</span>
-            <ChevronDown className="h-3.5 w-3.5 opacity-60" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="min-w-56">
-          <DropdownMenuItem className="gap-2" onSelect={() => void runExport("xlsx")}>
-            <FileSpreadsheet className="h-4 w-4 text-success" /> Excel
-          </DropdownMenuItem>
-          {extras.map((x) => (
-            <DropdownMenuItem key={x.key} className="gap-2" title={x.title} onSelect={() => x.onSelect()}>
-              {x.icon ?? <FileSpreadsheet className="h-4 w-4 text-success" />} {x.label}
-            </DropdownMenuItem>
-          ))}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem className="gap-2" onSelect={() => void runExport("pdf")}>
-            <FileText className="h-4 w-4 text-destructive" /> PDF
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            className="gap-2"
-            title="Noktalı virgül ayraçlı, Türkçe Excel ile uyumlu düz metin"
-            onSelect={() => void runExport("csv")}
-          >
-            <FileType2 className="h-4 w-4 text-muted-foreground" /> CSV
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      {exp.dialog}
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-8 gap-1.5"
+        disabled={exp.busy}
+        onClick={() => exp.open()}
+        title={`Listeyi dosyaya aktar (${scope}; biçim ve sütunlar seçilir)`}
+        aria-label={compact && !exp.busy ? "Dışa aktar" : undefined}
+      >
+        {exp.busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+        <span className={compact && !exp.busy ? "hidden 2xl:inline" : undefined}>{label}</span>
+      </Button>
     </>
   );
 }

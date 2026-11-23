@@ -20,6 +20,10 @@ export interface ExportColumn<T> {
   value: (row: T) => unknown;
   /** true → Excel/CSV'de SAYI (toplanabilir) + altta TOPLAM satırına girer. */
   summable?: boolean;
+  /** Çıktı diyaloğundaki kimlik (verilmezse `label`). */
+  id?: string;
+  /** true → diyalogda listelenir ama İŞARETSİZ gelir (ekranda gösterilmeyen ayrıntı sütunu). */
+  hidden?: boolean;
 }
 
 
@@ -156,7 +160,13 @@ function totalsOf<T>(cols: ExportColumn<T>[], rows: T[]): Array<string | number 
  * Sayı biçimi PDF metnini izler (`upTo3Text`, ≤3 hane — metre/kg Decimal(x,3)):
  * tam sayıda ondalık ayırıcı görünmez ("#,##0.###" 40'ı "40," gösteriyordu).
  */
-export function buildListSheet<T>(cols: ExportColumn<T>[], rows: T[], filename: string, notes?: string[]): SheetSpec {
+export function buildListSheet<T>(
+  cols: ExportColumn<T>[],
+  rows: T[],
+  filename: string,
+  notes?: string[],
+  opts?: { noTotals?: boolean },
+): SheetSpec {
   const columns = cols.map((c, i) => ({
     header: c.label,
     key: `c${i}`,
@@ -166,7 +176,7 @@ export function buildListSheet<T>(cols: ExportColumn<T>[], rows: T[], filename: 
   const dataRows = rows.map((r) =>
     Object.fromEntries(cols.map((c, i) => [`c${i}`, c.summable ? cellNumber(c.value(r)) : cellText(c.value(r))])),
   );
-  const t = totalsOf(cols, rows);
+  const t = opts?.noTotals ? null : totalsOf(cols, rows);
   const totalRow = t
     ? Object.fromEntries(t.map((v, i) => [`c${i}`, v]).filter(([, v]) => v !== undefined))
     : undefined;
@@ -214,6 +224,11 @@ export function buildListHtml<T>(
   title: string,
   notes?: string[],
 ): string {
+  return wrapListHtml(title, listBlockHtml(cols, rows, notes));
+}
+
+/** "N kayıt" + tablo (+ TOPLAM) + notlar — tek listenin ve bölümlü çıktının her bölümünün gövdesi. */
+export function listBlockHtml<T>(cols: ExportColumn<T>[], rows: T[], notes?: string[], noTotals?: boolean): string {
   const header = cols.map((c) => `<th>${htmlEsc(c.label)}</th>`).join("");
   const body = rows
     .map(
@@ -230,7 +245,7 @@ export function buildListHtml<T>(
     )
     .join("");
 
-  const t = totalsOf(cols, rows);
+  const t = noTotals ? null : totalsOf(cols, rows);
   const foot = t
     ? `<tfoot><tr>${t
         .map((v) =>
@@ -247,6 +262,13 @@ export function buildListHtml<T>(
     ? `<div class="notes">${notes.map((n) => `<div>${htmlEsc(n)}</div>`).join("")}</div>`
     : "";
 
+  return `<div class="meta">${rows.length} kayıt</div>
+    <table><thead><tr>${header}</tr></thead><tbody>${body}</tbody>${foot}</table>
+    ${noteHtml}`;
+}
+
+/** Belge kabuğu: A4 yatay, açık zemin, başlık; `inner` hazır HTML (kaçışlı). */
+export function wrapListHtml(title: string, inner: string): string {
   return `<!doctype html><html lang="tr"><head><meta charset="utf-8"><style>
     @page { size: A4 landscape; margin: 12mm; }
     /* Belge KENDİ zeminini taşır: printToPDF printBackground:true ile koşuyor ve
@@ -258,6 +280,7 @@ export function buildListHtml<T>(
     html, body { background: #fff; }
     body { font-family: Arial, "Helvetica Neue", sans-serif; font-size: 10px; color: #111; margin: 0; }
     h1 { font-size: 14px; margin: 0 0 10px; }
+    h2 { font-size: 12px; margin: 16px 0 6px; }
     .meta { font-size: 10px; color: #555; margin-bottom: 8px; }
     .notes { margin-top: 8px; font-size: 9px; color: #555; }
     table { border-collapse: collapse; width: 100%; }
@@ -268,9 +291,7 @@ export function buildListHtml<T>(
     tfoot td { background: #eee; border-top: 2px solid #333; }
   </style></head><body>
     <h1>${htmlEsc(title)}</h1>
-    <div class="meta">${rows.length} kayıt</div>
-    <table><thead><tr>${header}</tr></thead><tbody>${body}</tbody>${foot}</table>
-    ${noteHtml}
+    ${inner}
   </body></html>`;
 }
 
@@ -281,20 +302,25 @@ export async function exportRowsToPdf<T>(
   filename: string,
   notes?: string[],
 ): Promise<boolean> {
+  return saveListPdf(() => buildListHtml(cols, rows, filename, notes), filename, rows.length);
+}
+
+/** Liste HTML'ini PDF'e kaydeder; HTML yalnız satır kapısından geçince kurulur. PDF API yoksa false. */
+export async function saveListPdf(html: () => string, filename: string, rowCount: number): Promise<boolean> {
   const pdfApi = typeof window !== "undefined" ? window.api?.pdf : undefined;
   if (!pdfApi && !isWebPdf()) return false;
   // Ana süreç bayt kapısının erken aynası: dev HTML'i kurmadan Excel'e yönlendir (iki hedefte aynı sınır).
-  if (rows.length > PDF_MAX_ROWS) {
-    toast.error(pdfTooManyRowsMessage(rows.length));
+  if (rowCount > PDF_MAX_ROWS) {
+    toast.error(pdfTooManyRowsMessage(rowCount));
     return false;
   }
   // Liste çıktısı geçmişe "Liste" türüyle (kayıt bağı yok, satır sayısı adet) düşer.
-  const subject: PrintSubject = { kind: "LISTE", no: filename.slice(0, 64), itemCount: Math.max(rows.length, 1) };
+  const subject: PrintSubject = { kind: "LISTE", no: filename.slice(0, 64), itemCount: Math.max(rowCount, 1) };
   if (!pdfApi) {
-    printAsPdf(buildListHtml(cols, rows, filename, notes), subject);
+    printAsPdf(html(), subject);
     return true;
   }
-  const res = await trackPdfSave(subject, () => pdfApi.save({ html: buildListHtml(cols, rows, filename, notes), suggestedName: filename }));
+  const res = await trackPdfSave(subject, () => pdfApi.save({ html: html(), suggestedName: filename }));
   if (!res.saved && res.error) toast.error(res.error);
   return res.saved;
 }

@@ -32,7 +32,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { useDataTable } from "@/hooks/useDataTable";
 import { useTableExportAll } from "@/hooks/useTableExportAll";
-import { ExportMenu } from "@/components/data-table/ExportMenu";
+import { ExportAllButton } from "@/components/data-table/export-dialog/ExportAllButton";
 import { SavedViewsMenu } from "@/components/data-table/SavedViewsMenu";
 import { DefFilterRow } from "@/components/data-table/filter-row/DefFilterRow";
 import { DATE_FILTER, useRollFilterDefs } from "@/pages/Operations/Rolls/roll-filter-defs";
@@ -132,18 +132,7 @@ export default function RollArchivePage() {
         isLoading={dataTable.query.isLoading}
         pagination={dataTable.pagination}
         exportName="Top-Arsivi"
-        paginationActions={
-          <>
-            {exportAll.confirmDialog}
-            <ExportMenu
-              label="Tümünü İndir"
-              busyLabel={exportAll.busyLabel}
-              onPdf={exportAll.onPdf}
-              onExcel={exportAll.onExcel}
-              onCsv={exportAll.onCsv}
-            />
-          </>
-        }
+        paginationActions={<ExportAllButton exp={exportAll} />}
       />
     </PageShell>
   );
