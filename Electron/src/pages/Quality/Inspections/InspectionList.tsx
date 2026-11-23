@@ -1,19 +1,17 @@
-// Muayene listesi — süzgeç + özet şeridi + cursor "Daha fazla yükle". Şerit ve tablo AYNI yanıttan (tek where);
+// Muayene listesi — tek satır süzgeç + tablo (sonsuz kaydırma) + alt çubukta özet. Özet ve tablo AYNI yanıttan (tek where);
 // süzgeç değişince cursor başa döner (sorgu anahtarı süzgeçten türer). İstemci satır süzmez, toplamaz.
 import { useEffect, useMemo, useRef } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { DataTable } from "@/components/data-table/DataTable";
 import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { useLocalTable } from "@/hooks/useLocalTable";
-import { Button } from "@/components/ui/button";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { inspectionService, type InspectionListRow, type InspectionSummary } from "./service";
 import { isInspectionFilterDirty, numText, toListParams, type InspectionFilterState } from "./inspectionRules";
 import { inspectionColumns } from "./inspectionColumns";
 import { InspectionFilters } from "./InspectionFilters";
 import { InspectionExportButton } from "./InspectionExportButton";
-import { QualityListState } from "../QualityListState";
-import { BandStats, ListBand, ListBody, ListFooter, ListToolbar } from "@/components/layout/ListPage";
+import { BandStats, ListFooter, ListToolbar } from "@/components/layout/ListPage";
 
 const PAGE = 50;
 
@@ -38,33 +36,31 @@ export function InspectionList({ f, onFilters, onOpen }: Props) {
 
   return (
     <>
-      {summary && (
-        <ListBand>
-          <SummaryStrip s={summary} />
-        </ListBand>
-      )}
-      <ListToolbar>
-        <div className="flex flex-wrap items-start gap-2">
-          <div className="min-w-0 flex-1"><InspectionFilters f={f} onChange={onFilters} /></div>
+      <ListToolbar className="flex-row items-center gap-2">
+        <div className="min-w-0 flex-1"><InspectionFilters f={f} onChange={onFilters} /></div>
+        <div className="flex shrink-0 items-center gap-1.5">
           <InspectionExportButton params={params} disabled={!summary || summary.total === 0} />
           <DataTableTools table={table} compact exportName="Muayeneler" />
         </div>
       </ListToolbar>
-      {!q.isLoading && !q.isError && rows.length > 0 ? (
-        <DataTable table={table} onRowClick={(r) => onOpen(r.id)} exportName="Muayeneler" />
-      ) : (
-      <ListBody>
-        <QualityListState isLoading={q.isLoading} isError={q.isError} errorTitle="Muayeneler yüklenemedi." noneText="muayene yok" emptyText={isInspectionFilterDirty(f) ? "Bu filtrelere uyan muayene yok." : "Henüz muayene yok. Tablette KK1/kalite istasyonundan ya da “Kâğıttan muayene” ile girilir."} onRetry={() => void q.refetch()} />
-      </ListBody>
-      )}
-      {/* [EL-09] sapması devralındı: elle "Daha fazla yükle" (davranış korunarak alt şeride taşındı). */}
-      <ListFooter loaded={rows.length} total={summary?.total}>
-        {q.hasNextPage && (
-          <Button variant="outline" size="sm" disabled={q.isFetchingNextPage} onClick={() => void q.fetchNextPage()}>
-            {q.isFetchingNextPage ? "Yükleniyor…" : "Daha fazla yükle"}
-          </Button>
-        )}
-      </ListFooter>
+      <DataTable
+        table={table}
+        onRowClick={(r) => onOpen(r.id)}
+        exportName="Muayeneler"
+        isLoading={q.isLoading}
+        isError={q.isError}
+        errorText="Muayeneler yüklenemedi."
+        onRetry={() => void q.refetch()}
+        emptyText={isInspectionFilterDirty(f) ? "Bu filtrelere uyan muayene yok." : "Henüz muayene yok. Tablette KK1/kalite istasyonundan ya da “Kâğıttan muayene” ile girilir."}
+        loadMore={{ hasMore: Boolean(q.hasNextPage), isFetchingMore: q.isFetchingNextPage, onLoadMore: () => q.fetchNextPage() }}
+      />
+      <ListFooter
+        loaded={rows.length}
+        total={summary?.total}
+        hasMore={rows.length > 0 ? Boolean(q.hasNextPage) : undefined}
+        isFetchingMore={q.isFetchingNextPage}
+        summary={summary ? <SummaryStrip s={summary} /> : undefined}
+      />
     </>
   );
 }
