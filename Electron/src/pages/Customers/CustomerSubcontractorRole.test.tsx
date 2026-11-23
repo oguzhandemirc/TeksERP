@@ -2,7 +2,7 @@
 // BEKÇİ — Cari kartında "Fason iş yapar" (fason = carinin rolü, 2026-09-17) + Cariler listesi "Fason" rozeti
 // =============================================================================
 // ① profil yok → kutu boş; işaretle → `subcontractorService.create({customerId, code/name/... cariden})`
-// ② aktif profil → kutu dolu + kod + fason sayfası bağlantısı; kaldır → `update(id,{isActive:false})` (silme yok)
+// ② aktif profil → kutu dolu + kod + "fason profilini düzenle" penceresi; kaldır → `update(id,{isActive:false})` (silme yok)
 // ③ pasif profil → kutu boş; işaretle → `update(id,{isActive:true})` (ikinci profil DOĞMAZ)
 // ④ Tedarikçi ROLÜ olmayan kart → kutu pasif + "önce Tedarikçi rolü" ipucu (backend 400 ile aynı kural; rol modeli)
 // ⑤ Rol kolonu: bayrak başına rozet — fason rolü (isSubcontractorRole) → "Fason"; yoksa yok
@@ -14,7 +14,8 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/render";
 import { CustomerSubcontractorRole, SUBCONTRACTOR_ROLE_LABEL, SUBCONTRACTOR_ROLE_TYPE_HINT } from "./CustomerSubcontractorRole";
 import { SUBCONTRACTOR_CATEGORIES_LABEL } from "./CustomerSubcontractorCategories";
-import { customerColumns } from "./columns";
+import { SUBCONTRACTOR_PROFILE_EDIT_LABEL } from "./SubcontractorProfileEdit";
+import { partnerRoleBadges } from "@/lib/partnerRoles";
 import type { Customer } from "./types";
 
 const getAll = vi.fn();
@@ -28,6 +29,11 @@ vi.mock("@/pages/SubcontractorCategories/service", () => ({
   subcontractorCategoryService: { getAll: (...a: unknown[]) => catGetAll(...a) },
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ hasPermission: () => true, hasAnyPermission: () => true, hasAllPermissions: () => true }) }));
+// Profil penceresinin içi kendi testinde; burada yalnız açıldığı ölçülür.
+vi.mock("@/pages/Subcontractors/SubcontractorFormDialog", () => ({
+  SubcontractorFormDialog: ({ open, initial }: { open: boolean; initial?: { code?: string } | null }) => (open ? <div role="dialog">profil {initial?.code}</div> : null),
+}));
 const CATS = [
   { id: "cat-boya", code: "BOYA", name: "Boyahane", description: null },
   { id: "cat-dev", code: "DEVERE", name: "Devere", description: null },
@@ -89,7 +95,10 @@ describe("CustomerSubcontractorRole", () => {
     const box = await screen.findByRole("checkbox", { name: SUBCONTRACTOR_ROLE_LABEL });
     await waitFor(() => expect(box).toBeChecked());
     expect(screen.getByText("FSN-1")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /fason firmaları sayfasında aç/ })).toHaveAttribute("href", "/definitions/subcontractors");
+    // T1/T9: ayrı Fason Firmalar ekranı yok → bağlı profil karttan düzenlenir (sayfa bağlantısı değil, pencere).
+    expect(screen.queryByRole("link")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: SUBCONTRACTOR_PROFILE_EDIT_LABEL }));
+    expect(await screen.findByRole("dialog")).toHaveTextContent("profil FSN-1");
     await userEvent.click(box);
     await waitFor(() => expect(update).toHaveBeenCalledWith("s1", { isActive: false }));
     expect(create).not.toHaveBeenCalled();
@@ -121,24 +130,14 @@ describe("CustomerSubcontractorRole", () => {
   });
 });
 
-describe("Cariler listesi Rol kolonu", () => {
-  const rolCell = (c: Customer) => {
-    const col = customerColumns.find((d) => "accessorKey" in d && d.accessorKey === "type")!;
-    const Cell = col.cell as (ctx: { row: { original: Customer } }) => React.ReactNode;
-    return Cell({ row: { original: c } });
-  };
-  const { render } = { render: (node: React.ReactNode) => renderWithProviders(<>{node}</>) };
+// T1/T9: eski Müşteriler tablosunun Rol kolonu kalktı; rozet kuralı ortak yardımcıda (Cariler/seçiciler aynı kaynak).
+describe("Rol rozetleri (partnerRoleBadges)", () => {
   it("⭐ ⑤ üç rol → üç rozet (Müşteri · Tedarikçi · Fason), bayraklardan; 'Müşteri + Tedarikçi' birleşik rozeti YOK", () => {
-    render(rolCell(cari({ isCustomerRole: true, isSupplierRole: true, isSubcontractorRole: true })));
-    expect(screen.getByText("Müşteri")).toBeInTheDocument();
-    expect(screen.getByText("Tedarikçi")).toBeInTheDocument();
-    expect(screen.getByText("Fason")).toBeInTheDocument();
-    expect(screen.queryByText("Müşteri + Tedarikçi")).toBeNull();
+    const badges = partnerRoleBadges(cari({ isCustomerRole: true, isSupplierRole: true, isSubcontractorRole: true }));
+    expect(badges).toEqual(["Müşteri", "Tedarikçi", "Fason"]);
   });
   it("fason rolü false → 'Fason' rozeti YOK (profil pasifse sunucu bayrağı düşürür — bayrak tek kaynak)", () => {
-    render(rolCell(cari({ isSupplierRole: true, isSubcontractorRole: false, subcontractor: { id: "s1", isActive: true } })));
-    expect(screen.getByText("Tedarikçi")).toBeInTheDocument();
-    expect(screen.queryByText("Fason")).toBeNull();
-    expect(screen.queryByText("Müşteri")).toBeNull();
+    const badges = partnerRoleBadges(cari({ isSupplierRole: true, isSubcontractorRole: false, subcontractor: { id: "s1", isActive: true } } as Partial<Customer>));
+    expect(badges).toEqual(["Tedarikçi"]);
   });
 });

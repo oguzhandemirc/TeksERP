@@ -8,10 +8,11 @@
 // Düzenleme sahiplerinin diyaloglarıyla (`useCariEditing`) — payload eşlemesi kopyalanmaz.
 // =============================================================================
 import { useCallback, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Plus, Users2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
+import { screenTitle } from "@/components/layout/screen-title";
 import { ListBody, ListFooter, ListMessage } from "@/components/layout/ListPage";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
@@ -32,7 +33,9 @@ import { CariSidePanel } from "./cariler/CariSidePanel";
 
 export function CarilerPage() {
   const navigate = useNavigate();
-  const [search, setSearch] = useState("");
+  // Derin bağlantı (`?search=`: palet "Tümünü aç", eski Müşteriler/Fason Firmalar adresi) aramayı doldurur.
+  const [searchParams] = useSearchParams();
+  const [search, setSearch] = useState(() => searchParams.get("search") ?? "");
   const { filters, ready: filtersReady } = useCariFilters();
   const list = useCariList(search, filters, filtersReady);
   const counts = useCariRoleCounts(list.debouncedSearch, filtersReady);
@@ -64,7 +67,7 @@ export function CarilerPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Cariler"
+        title={screenTitle("/definitions/cariler")}
         description="Müşteri, tedarikçi ve fason kartları tek listede. Bir cariye tıklayın: bakiyesi, siparişleri ve son hareketleri sağda açılır."
         actions={
           <div className="flex gap-2">

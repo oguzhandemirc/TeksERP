@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
+import { screenTitle } from "@/components/layout/screen-title";
 import { RefreshButton } from "@/components/RefreshButton";
 import { useScanSeed } from "@/hooks/useScanSeed";
 import { SwatchesPanel } from "@/pages/Operations/Rolls/SwatchesPanel";
@@ -61,7 +62,7 @@ export function KartelaPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Kartela"
+        title={screenTitle("/operations/kartela")}
         actions={
           <>
             <PermissionGate permission="kartela:write">

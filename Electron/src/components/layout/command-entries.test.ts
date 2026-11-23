@@ -48,6 +48,8 @@ const EXEMPT: Record<string, string> = {
   "/system/update": "eski panel güncelleme adresi → /system/updates'e yönlendirir",
   "/system/server-updates": "eski sunucu güncellemeleri adresi → /system/updates'e yönlendirir",
   "/access/devices/:id": "detay yolu",
+  "/definitions/customers": "eski Müşteriler adresi → Cariler'e yönlendirir (`LegacyCariRedirect`, T1/T9)",
+  "/definitions/subcontractors": "eski Fason Firmalar adresi → Cariler'e fason süzgeciyle yönlendirir (`LegacyCariRedirect`, T1/T9)",
   "/definitions/label-templates": "eski Etiket Tasarımı adresi → Etiketler › Düzenler'e yönlendirir",
 };
 

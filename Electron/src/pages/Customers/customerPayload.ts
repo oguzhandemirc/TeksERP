@@ -1,9 +1,5 @@
-import { CrudPage } from "@/components/layout/CrudPage";
+// Cari kartı yazma gövdesi — Cariler ekranının diyaloğu (`CariEditDialogs`) kullanır (eski Müşteriler sayfasından taşındı).
 import { financeSubBody, type FinanceSubBody } from "./customerFinance";
-import { useCustomerFinanceAccess } from "./CustomerFinanceSection";
-import { customerColumns } from "./columns";
-import { customerService } from "./service";
-import { CustomerFormDialog } from "./CustomerFormDialog";
 import type { Customer } from "./types";
 import { branchDraftHasContent, customerCardPayload, type CustomerFormValues } from "./schema";
 
@@ -59,34 +55,3 @@ export const buildCustomerPayload = (v: CustomerFormValues, initial: Customer | 
       : {}),
   };
 };
-
-export function CustomersPage() {
-  const financeAccess = useCustomerFinanceAccess();
-  return (
-    <CrudPage<Customer>
-      title="Müşteriler"
-      description="Müşteri ve tedarikçi firmalar."
-      entityName="Cari"
-      mergeEntity="customer"
-      importEntity="customer"
-      queryKey="customers"
-      persistFilters
-      service={customerService}
-      columns={customerColumns}
-      writePermission="customer:write"
-      glowWhenEmpty
-      keepFormOpenAfterSave
-      searchHint="Kod, ad veya vergi no"
-      renderForm={({ open, onOpenChange, initial, onSubmit, isSubmitting }) => (
-        <CustomerFormDialog
-          open={open}
-          onOpenChange={onOpenChange}
-          initial={initial}
-          isSubmitting={isSubmitting}
-          // Yazma gövdesi (finance alt nesnesi) okuma DTO'su değildir — CrudPage yalnız Partial<Customer> tanır.
-          onSubmit={(values) => onSubmit(buildCustomerPayload(values, initial, financeAccess) as Partial<Customer>)}
-        />
-      )}
-    />
-  );
-}

@@ -37,6 +37,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileClock, FileText, Plus, X } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { screenTitle } from "@/components/layout/screen-title";
 import { PageShell } from "@/components/layout/PageShell";
 import { ListBody, ListFooter, ListMessage, ListToolbar } from "@/components/layout/ListPage";
 import { Button } from "@/components/ui/button";
@@ -203,7 +204,7 @@ export function ChequesPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Çek / Senet Portföyü"
+        title={screenTitle("/finance/cheques")}
         description="Alınan çek kaydedildiği AN carinin borcunu azaltır; tahsil edildiğinde kasa/banka bakiyesi artar. Her adım defterde iz bırakır."
         actions={
           <div className="flex items-center gap-2">

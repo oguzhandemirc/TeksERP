@@ -11,6 +11,7 @@ import {
   Truck,
 } from "lucide-react";
 import { TERIM } from "@/lib/terim";
+import { cariSearchPath } from "@/pages/Definitions/cariler/legacy-cari";
 
 // =============================================================================
 // ARAMA SONUCU → HEDEF (2026-08-19)
@@ -58,7 +59,7 @@ export const SEARCH_TARGETS: Record<string, SearchTarget> = {
     permissions: ["customer:read"],
     // (a) gerçek detay sayfası: cari kayıt sayfası (rejimden bağımsız açılır; kapısı customer:read).
     to: (r) => ({ to: `/definitions/cariler/${encodeURIComponent(r.id)}` }),
-    listTo: (t) => `/definitions/customers?search=${q(t)}`,
+    listTo: (t) => cariSearchPath(t),
   },
   item: {
     label: "Ürünler",
@@ -119,8 +120,9 @@ export const SEARCH_TARGETS: Record<string, SearchTarget> = {
     label: "Fason Firmalar",
     icon: Layers,
     permissions: ["subcontractor:read"],
-    to: (r) => ({ to: `/definitions/subcontractors?search=${q(r.code ?? r.title)}` }),
-    listTo: (t) => `/definitions/subcontractors?search=${q(t)}`,
+    // T1/T9: ayrı Fason Firmalar ekranı yok — Cariler, fason süzgeci + arama terimiyle.
+    to: (r) => ({ to: cariSearchPath(r.code ?? r.title, "subcontractors") }),
+    listTo: (t) => cariSearchPath(t, "subcontractors"),
   },
   batch: {
     label: "Partiler",

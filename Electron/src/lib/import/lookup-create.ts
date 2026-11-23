@@ -136,7 +136,7 @@ export const LOOKUP_CREATE_BLOCKED: Record<string, string> = {
   fabricProperty:
     "Özellik en az bir istasyona bağlanmalı (bağsız özellik hiçbir ekranda görünmez) — Tanımlar → Üretim Özellikleri'nden açın.",
   qualityGrade: "Kalite için kod ve hedef statü de gerekir — Tanımlar → Kalite Sınıfları'ndan açın.",
-  subcontractor: "Fason firma kodu elle verilir — Tanımlar → Fason Firmalar'dan açın.",
+  subcontractor: "Fason firma bir cari kartıdır — Tanımlar → Cariler → Yeni cari'de \"Fason iş yapar\" kutusuyla açın.",
   subcontractorCategory:
     "Fason kategorisi kodu elle verilir — Tanımlar → Fason Kategorileri'nden açın.",
 };

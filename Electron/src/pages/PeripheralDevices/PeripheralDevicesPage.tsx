@@ -1,4 +1,5 @@
 import { CrudPage } from "@/components/layout/CrudPage";
+import { screenTitle } from "@/components/layout/screen-title";
 import { peripheralColumns } from "./columns";
 import { peripheralService } from "./service";
 import { PeripheralDeviceFormDialog } from "./PeripheralDeviceFormDialog";
@@ -15,7 +16,7 @@ import type { PeripheralDevice } from "./types";
 export function PeripheralDevicesPage() {
   return (
     <CrudPage<PeripheralDevice>
-      title="Cihaz Kaydı"
+      title={screenTitle("/definitions/peripherals")}
       description="Yazıcılar (ağ/Bluetooth/USB/seri) + kantar/metraj sinyal kaynakları. Dil/medya/şablon yönlendirmesi."
       entityName="Cihaz"
       queryKey="peripherals"
