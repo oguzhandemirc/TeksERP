@@ -514,6 +514,8 @@ export class LabelService {
       labelBatchNo: roll.labelBatchNo ?? null,
       // Tambursuz rotada karar verilmemiş hatalar BİLGİ olarak (KQ-D8); şablonda opt-in.
       openDefects: (preloaded?.openDefectNotes ?? (await loadOpenDefectNotes([roll.id]))).get(roll.id) ?? "",
+      // Ton grubu harfi — yalnız tonlu topta alan eklenir (tonsuz topta payload bayt-aynı); şablonda opt-in.
+      ...(roll.shadeCode ? { shadeCode: roll.shadeCode } : {}),
       printedAt: new Date().toISOString(),
     };
     // Müşteri belgesindeki kumaş/renk (E3): yalnız gelen belge satırı (kendisi ya da atası) olan topta alan EKLENİR —
@@ -751,6 +753,7 @@ export class LabelService {
       // boş bir kutu görüp "çalışmıyor" sanmasın (kartelaMark emsali).
       foldType: "4-KAT",
       openDefects: "12,5 m Leke · 40 m Delik",
+      shadeCode: "A",
       deliveryNoteItemText: "Süprem 30/1 (müşteri adı)",
       deliveryNoteColorText: "Lacivert",
       deliveryNoteRollNo: "17",
@@ -824,6 +827,7 @@ export class LabelService {
       // boş bir kutu görüp "çalışmıyor" sanmasın (kartelaMark emsali).
       foldType: "4-KAT",
       openDefects: "12,5 m Leke · 40 m Delik",
+      shadeCode: "A",
       deliveryNoteItemText: "Süprem 30/1 (müşteri adı)",
       deliveryNoteColorText: "Lacivert",
       deliveryNoteRollNo: "17",
@@ -1234,6 +1238,7 @@ export class LabelService {
       // boş bir kutu görüp "çalışmıyor" sanmasın (kartelaMark emsali).
       foldType: "4-KAT",
       openDefects: "12,5 m Leke · 40 m Delik",
+      shadeCode: "A",
       deliveryNoteItemText: "Süprem 30/1 (müşteri adı)",
       deliveryNoteColorText: "Lacivert",
       deliveryNoteRollNo: "17",

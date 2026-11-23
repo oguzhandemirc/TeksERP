@@ -22,6 +22,7 @@ import { Prisma, PrintedDocType, RollEntrySource, RollOperationType, RollStage, 
 import { printedDocumentService } from "../printed-document.service";
 import { nextSeriesNo } from "../number-series.service";
 import { assertOwnerMatchesTx } from "../helpers/emanet-owner.helper";
+import { assertShadeMixAllowedTx } from "../helpers/shade-group.helper";
 import { completeWorkOrderIfStepsDone } from "../helpers/roll-step.helper";
 import { generateRollBarcodeTx } from "../helpers/roll-barcode.helper";
 import { recomputeOrderStatusForOrdersTx, touchOrderLinesTx } from "../helpers/order-status.helper";
@@ -67,6 +68,8 @@ async function createFasonShipChild(
     ownerCustomerId: string | null;
     /** Top aşaması — kısmi sevk çocuğu atanın aşamasını alır (aynı mal, bölündü). */
     stage: RollStage;
+    /** Ton grubu harfi — bölünen parça kalıtır. Eski çağıran vermezse NULL. */
+    shadeCode?: string | null;
   },
   shipQty: number,
   stepId: string,
@@ -102,6 +105,7 @@ async function createFasonShipChild(
       parentRollId: parent.id,
       ownerCustomerId: parent.ownerCustomerId,
       batchId: parent.batchId,
+      shadeCode: parent.shadeCode ?? null, // ton kalıtılır (aynı kumaş)
       entrySource: RollEntrySource.TAMBUR_SPLIT,
       stage: parent.stage,
       createdById: userId ?? null,
@@ -189,6 +193,7 @@ async function applyDirectShipSplits(
       currentQty: true,
       ownerCustomerId: true,
       stage: true,
+      shadeCode: true,
       // Çocuk depoyu ebeveynden miras alır — select'ten düşerse derleme kırılır
       // (createFasonShipChild parametre tipi bunu ZORUNLU tutar).
       warehouseId: true,
@@ -739,6 +744,8 @@ export async function executeDirectShip(
       // 2b) EMANET SAHİPLİK KAPISI (G3): fasondan müşteriye çıkış da "malın çıktığı yol"dur — başka
       //     müşterinin emanet topu bu müşteriye gidemez (409 OWNER_MISMATCH, barkodlarıyla).
       await assertOwnerMatchesTx(tx, { rollIds: effectiveShipRollIds, customerId: data.customerId!, belge: "fason doğrudan sevki" });
+      // 2c) TON GRUBU kapısı (block kuralında) — sevk yolunun ortak yüklemi.
+      await assertShadeMixAllowedTx(tx, { rollIds: effectiveShipRollIds, belge: "fason doğrudan sevki" });
 
       // 3) Sevk edilen toplar TERMINAL: SUBCONTRACTOR_CONSUMED (gerçek sevk;
       //    batchId KORUNUR — receive deseni). Atomik claim. Seçilmeyen toplar

@@ -4466,7 +4466,7 @@
   }
  },
  "SHIPMENT_DISPATCH": {
-  "contractVersion": 5,
+  "contractVersion": 6,
   "alanlar": {
    "ayar.blankGrid": {
     "tur": "nesne",
@@ -4904,6 +4904,10 @@
     "tur": "mantiksal",
     "sinif": "musteri"
    },
+   "ic_acik.ceki_ton": {
+    "tur": "mantiksal",
+    "sinif": "musteri"
+   },
    "ic_acik.cuval_aciklama": {
     "tur": "mantiksal",
     "sinif": "musteri"
@@ -5011,6 +5015,10 @@
    "tablolar.ceki[].sira_etiketi": {
     "tur": "metin",
     "sinif": "musteri"
+   },
+   "tablolar.ceki[].ton": {
+    "tur": "metin",
+    "sinif": "ic"
    },
    "tablolar.ceki[].varyant": {
     "tur": "metin",

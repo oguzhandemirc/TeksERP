@@ -304,6 +304,7 @@ export async function finalizeWarehouseCut(
             ownerCustomerId: parent.ownerCustomerId ?? null,
             // Parti (batch) kimliğini parent'tan kalıt → bölünen top depoya gitse bile partisi lane'de izlenir.
             batchId: parent.batchId,
+            shadeCode: parent.shadeCode ?? null, // ton grubu kalıtılır (aynı kumaş)
             // DEPO parent'tan MİRAS ALINIR — kesmek malı taşımaz (bkz. kesim çocuğu).
             warehouseId: parent.warehouseId ?? (await resolveTargetWarehouseId(tx)),
             // GİRİŞ İSTASYONU — kesilen parçayla AYNI kaynak — ikisi aynı kesimin ürünü.

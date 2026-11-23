@@ -577,6 +577,19 @@ export interface CreateShipmentPreview {
   totals: { totalMeters: number; sackCount: number; surplusMeters: number };
   /** D4-I3: müşterinin SEVK kapsamlı aktif cari kilidi (metin sunucudan; `warning` warnings[]'teki satırın aynısı). Eski backend göndermez. */
   cariHold?: { sebepEtiketi: string; koyan: string; exempt?: boolean; warning?: string; message: string } | null;
+  /** Ton grubu karışımı (ürün+renk başına ≥2 ton). Kural kapalıyken / eski backend'de yok ya da boş. */
+  shadeMixes?: ShadeMixGroup[];
+  shadeMixPolicy?: "off" | "warn" | "block";
+}
+
+export interface ShadeMixGroup {
+  itemId: string;
+  colorId: string | null;
+  itemName: string | null;
+  colorName: string | null;
+  shades: string[];
+  rollsByShade: Record<string, string[]>;
+  unshadedBarcodes: string[];
 }
 
 export interface CreatedShipment {

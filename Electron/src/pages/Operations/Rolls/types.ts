@@ -111,6 +111,8 @@ export interface Roll {
   restoreBlockReason?: string | null;
   /** Kaç kat sarıldığı ("2-KAT" | "4-KAT"). Kalıcı özellik; NULL = kayıtlı değil. */
   foldType?: string | null;
+  /** Ton grubu harfi (A, B…); NULL = tonlanmamış. Eski backend göndermez. */
+  shadeCode?: string | null;
   /** Müşterinin etikete istediği parti metni (J1/K30); NULL = yok. */
   labelBatchNo?: string | null;
   /** Etikete basılan müşteri kumaş adı / rengi (tamburda topa yazılır); NULL = kumaşın kendi adı. */

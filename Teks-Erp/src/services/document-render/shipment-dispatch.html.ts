@@ -92,6 +92,7 @@ const LABELS = {
     sevkPartisi: "SEVK PARTİSİ",
     partiKodu: "PARTİ KODU",
     hataNotu: "HATA NOTU",
+    ton: "TON",
     musteriBarkodu: "MÜŞTERİ BARKODU",
     metreToplami: "METRE TOPLAMI",
     kgToplami: "KG TOPLAMI",
@@ -153,6 +154,7 @@ const LABELS = {
     sevkPartisi: "LOT",
     partiKodu: "LOT CODE",
     hataNotu: "DEFECT NOTE",
+    ton: "SHADE",
     musteriBarkodu: "CUSTOMER BARCODE",
     metreToplami: "TOTAL METERS",
     kgToplami: "TOTAL KG",
@@ -270,6 +272,8 @@ interface ShipmentDocCeki {
   /** Açık (kararsız) hata notu "12,5 m Leke · 40 m Delik" (KQ-D8) — yalnız hatalı topta;
    *  eski snapshot'ta YOK. Kolon OPT-IN (müşteri belgesinde iç kolon). */
   defectNote?: string | null;
+  /** Ton grubu harfi (A, B…) — yalnız tonlu topta; eski snapshot'ta YOK. Kolon OPT-IN (`defaultHidden`). */
+  shadeCode?: string | null;
   /** Topa bağlı aktif müşteri barkodu (D4-F3) — sevk anında DONAR; kodsuz topta ve eski snapshot'ta YOK ("—"). */
   customerCode?: string | null;
   /** Topun id'si — çalışma anında yazılır, eski snapshot'ta YOK (sevk top listesi gelen belge eşlemesi). */
@@ -780,6 +784,8 @@ function shipmentDispatchParts(snapshot: PrintedDocSnapshot, meta: RenderMeta) {
         // belgesine yalnız belge ayarından bilerek açılınca girer (V-d). Rakama dokunmaz.
         { key: "defectNote", label: L.hataNotu, align: "l", width: "22%", cellClass: "wrap", defaultHidden: true,
           kind: TEXT, value: (c: ShipmentDocCeki) => c.defectNote ?? "" },
+        // Ton grubu — OPT-IN (`defaultHidden`): açılmadıkça belge bayt-aynı; müşteri ton sütununu isterse belge ayarından açılır.
+        { key: "shadeCode", label: L.ton, align: "c", defaultHidden: true, kind: TEXT, value: (c: ShipmentDocCeki) => c.shadeCode ?? "" },
       ],
     });
   }

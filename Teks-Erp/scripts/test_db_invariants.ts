@@ -954,6 +954,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "direct_shipments", name: "direct_shipments_totalQty_pos" },
   { table: "direct_shipments", name: "direct_shipments_rollCount_pos" },
   { table: "roll_returns", name: "roll_returns_qty_pos" },
+  // 2026-11-23 ton grubu (migration 20261123100000_roll_shade_code) — biçim seddi.
+  { table: "rolls", name: "rolls_shade_code_format_chk" },
   { table: "work_orders", name: "work_orders_stockprod_targetItem" },
   { table: "work_orders", name: "work_orders_customer_goods_customer_check" },
   // 2026-08-09 — sapma defteri (migration 20260809015353_roll_variance_ledger).

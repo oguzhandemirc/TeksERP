@@ -135,6 +135,7 @@
     "shipmentHandheldCreateEnabled": true,
     "shipmentUndoSameDayOnly": true,
     "shippingOrderRequirement": "block",
+    "shippingShadeMixPolicy": "block",
     "shippingOrderCoverage": "block",
     "itemPhaseOutNewOrder": "OKUTULAN_TOPLAR",
     "itemPhaseOutLineQty": "KILITLI",

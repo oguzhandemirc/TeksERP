@@ -258,6 +258,7 @@ router.patch(
  *                     qty:      { type: number, description: Açık kumaş metresi }
  *                     weightKg: { type: number, nullable: true }
  *                     notes:    { type: string, nullable: true }
+ *                     shadeCode: { type: string, nullable: true, description: "Ton grubu harfi (A, B, A2…; 1–4 harf/rakam)" }
  *     responses:
  *       201: { description: Mal kabul oluşturuldu (orijinal Roll'lar consumed) }
  *       400: { description: Validasyon hatası / top bu adımda fason'da değil }

@@ -12,7 +12,7 @@ import { notifyUnitNeedsIncomingDoc } from "../../constants/ready-work-units";
 import { resetNotificationBaseline } from "../helpers/notification-baseline.helper";
 import { READY_WORK_KIND } from "../../constants/notification-catalog-sevkiyat";
 import { asBoolean, asNumber } from "./core";
-import { DEFAULT_SHIPMENT_ORDER_REQUIREMENT, DEFAULT_SHIPPING_ALLOC_WIDTH_TOLERANCE_CM, DEFAULT_SHIPPING_ALLOC_WIDTH_TOLERANCE_ENABLED, DEFAULT_SHIPPING_ALLOW_OVER_ALLOCATION, DEFAULT_SHIPPING_DOC_CEKI_NAME_MODE, DEFAULT_SHIPPING_DOC_ITEM_NAME_MODE, DEFAULT_SHIPPING_DOC_PRODUCT_COLOR_SPLIT, DEFAULT_SHIPPING_INVOICE_MODE, DEFAULT_SHIPPING_ORDER_COVERAGE, DEFAULT_SHIP_READY_RULE, DEFAULT_SHIP_READY_SCAN_MINUTES, DEFAULT_SHIP_READY_TOLERANCE_PCT, SHIPMENT_ORDER_REQUIREMENTS, SHIPPING_ALLOC_WIDTH_TOLERANCE_MAX_CM, SHIPPING_DOC_CEKI_NAME_MODES, SHIPPING_DOC_ITEM_NAME_MODES, SHIPPING_INVOICE_MODES, SHIPPING_ORDER_COVERAGES, SHIP_READY_NOTIFY_UNITS, SHIP_READY_RULES, SHIP_READY_SCAN_MINUTES_MAX, SHIP_READY_SCAN_MINUTES_MIN, SHIP_READY_TOLERANCE_MAX_PCT, type ShipReadyNotifyUnit, type ShipReadyRule, type ShipmentOrderRequirement, type ShippingDocCekiNameMode, type ShippingDocItemNameMode, type ShippingInvoiceMode, type ShippingOrderCoverage } from "./defaults";
+import { DEFAULT_SHIPMENT_ORDER_REQUIREMENT, DEFAULT_SHIPPING_SHADE_MIX_POLICY, SHIPPING_SHADE_MIX_POLICIES, type ShippingShadeMixPolicy,DEFAULT_SHIPPING_ALLOC_WIDTH_TOLERANCE_CM, DEFAULT_SHIPPING_ALLOC_WIDTH_TOLERANCE_ENABLED, DEFAULT_SHIPPING_ALLOW_OVER_ALLOCATION, DEFAULT_SHIPPING_DOC_CEKI_NAME_MODE, DEFAULT_SHIPPING_DOC_ITEM_NAME_MODE, DEFAULT_SHIPPING_DOC_PRODUCT_COLOR_SPLIT, DEFAULT_SHIPPING_INVOICE_MODE, DEFAULT_SHIPPING_ORDER_COVERAGE, DEFAULT_SHIP_READY_RULE, DEFAULT_SHIP_READY_SCAN_MINUTES, DEFAULT_SHIP_READY_TOLERANCE_PCT, SHIPMENT_ORDER_REQUIREMENTS, SHIPPING_ALLOC_WIDTH_TOLERANCE_MAX_CM, SHIPPING_DOC_CEKI_NAME_MODES, SHIPPING_DOC_ITEM_NAME_MODES, SHIPPING_INVOICE_MODES, SHIPPING_ORDER_COVERAGES, SHIP_READY_NOTIFY_UNITS, SHIP_READY_RULES, SHIP_READY_SCAN_MINUTES_MAX, SHIP_READY_SCAN_MINUTES_MIN, SHIP_READY_TOLERANCE_MAX_PCT, type ShipReadyNotifyUnit, type ShipReadyRule, type ShipmentOrderRequirement, type ShippingDocCekiNameMode, type ShippingDocItemNameMode, type ShippingInvoiceMode, type ShippingOrderCoverage } from "./defaults";
 import { effectiveIncomingDocsEnabled } from "./incoming-docs";
 import { SETTING_KEYS } from "./keys";
 
@@ -134,6 +134,22 @@ export async function readShippingOrderRequirement(
     return v as ShipmentOrderRequirement;
   }
   return DEFAULT_SHIPMENT_ORDER_REQUIREMENT;
+}
+
+/** Ton grubu karışım kuralı. Satır yoksa / çöp değerse `off` (bugünkü davranış). */
+export async function readShippingShadeMixPolicy(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<ShippingShadeMixPolicy> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.SHIPPING_SHADE_MIX_POLICY },
+    select: { value: true },
+  });
+  const v = setting?.value;
+  if (typeof v === "string" && SHIPPING_SHADE_MIX_POLICIES.includes(v as ShippingShadeMixPolicy)) {
+    return v as ShippingShadeMixPolicy;
+  }
+  return DEFAULT_SHIPPING_SHADE_MIX_POLICY;
 }
 
 /** "Tükenene kadar" karta yeni sipariş. Kayıt yok / kümede değil → OKUTULAN_TOPLAR (kod sigortası). */

@@ -13,6 +13,8 @@ export interface NewRollRow {
   notes: string;
   noteOpen: boolean;
   prefilled: boolean; // sevkten otomatik gelen, henüz dokunulmamış
+  /** Ton grubu harfi (A, B…); boş/yok = tonsuz. Yalnız `shipping.shadeMixPolicy` açıkken seçilir. */
+  shadeCode?: string;
 }
 
 /**
@@ -33,6 +35,7 @@ export const makeNewRollRow = (qty = '', prefilled = false): NewRollRow => ({
   notes: '',
   noteOpen: false,
   prefilled,
+  shadeCode: '',
 });
 
 /**
@@ -69,11 +72,20 @@ export function rebuildPrefilledNewRolls(
     if (manual.length > 0) return [manual[0]!];
     const total = round2(checkedQtys.reduce((s, q) => s + (q > 0 ? q : 0), 0));
     return checkedQtys.length > 0
-      ? [makeNewRollRow(total > 0 ? String(total) : '', true)]
+      ? carryShades(current, [makeNewRollRow(total > 0 ? String(total) : '', true)])
       : [];
   }
   const prefilled = checkedQtys.map((q) => makeNewRollRow(q > 0 ? String(q) : '', true));
-  return [...prefilled, ...manual];
+  return [...carryShades(current, prefilled), ...manual];
+}
+
+/**
+ * Ton seçimi metreyi "elle" yapmaz (otomatik metre işaret değişince tazelenmeye devam eder);
+ * bu yüzden yeniden kurulan ön-dolu satırlar eski ön-dolu satırların tonunu SIRAYLA devralır.
+ */
+function carryShades(current: NewRollRow[], rebuilt: NewRollRow[]): NewRollRow[] {
+  const oldShades = current.filter((r) => r.prefilled).map((r) => r.shadeCode ?? '');
+  return rebuilt.map((r, i) => (oldShades[i] ? { ...r, shadeCode: oldShades[i] } : r));
 }
 
 /**

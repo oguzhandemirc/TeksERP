@@ -6,6 +6,7 @@ import type { SameTypeSessionPolicy } from "@/types/auth";
 import type {
   PackingPoolPackageNo,
   ShipmentOrderRequirement,
+  ShippingShadeMixPolicy,
   ShippingDocItemNameMode,
   ShippingDocCekiNameMode,
   ShippingOrderCoverage,
@@ -561,6 +562,8 @@ export interface FeatureFlags {
    *  bayrak açılmadan kurulmuş PLANNED sevkiyatların çıkışı kilitlenmez.
    *  `orderless: true` (Siparişsiz devam et) 'block'ta da MUAF. */
   shippingOrderRequirement: ShipmentOrderRequirement;
+  /** Ton grubu karışımı sevkte: 'off' (default) | 'warn' | 'block' (Sevk Et 409 `SHADE_MIX`). */
+  shippingShadeMixPolicy: ShippingShadeMixPolicy;
   /** "Tükenene kadar" karta yeni sipariş (default OKUTULAN_TOPLAR). Backend ENFORCE eder;
    *  KAPALI + shippingOrderRequirement=block kaydı `warnings` döner (çıkış "Siparişsiz devam et"). */
   itemPhaseOutNewOrder: PhaseOutNewOrder;

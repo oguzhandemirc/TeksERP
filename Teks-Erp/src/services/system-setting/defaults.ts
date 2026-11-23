@@ -55,6 +55,11 @@ export const SHIPMENT_ORDER_REQUIREMENTS: ShipmentOrderRequirement[] = ["off", "
 /** Varsayılan `warn` — BUGÜNKÜ davranış (siparişsiz sevk kurulur, uyarı döner). */
 export const DEFAULT_SHIPMENT_ORDER_REQUIREMENT: ShipmentOrderRequirement = "warn";
 
+/** Ton grubu karışımı (aynı ürün+renge farklı ton harfi) sevkte: `off` = BUGÜNKÜ davranış (giriş gizli, uyarı yok). */
+export type ShippingShadeMixPolicy = "off" | "warn" | "block";
+export const SHIPPING_SHADE_MIX_POLICIES: ShippingShadeMixPolicy[] = ["off", "warn", "block"];
+export const DEFAULT_SHIPPING_SHADE_MIX_POLICY: ShippingShadeMixPolicy = "off";
+
 /** Vardiyasız zamanda tezgah alarmı. `WARN` = bugünkü davranış (motor vardiya dışında doğurmaz, yüzey uyarır). */
 export type TezgahAlarmNoShiftMode = "WARN" | "ALWAYS" | "REQUIRE_SHIFT";
 export const TEZGAH_ALARM_NO_SHIFT_MODES: TezgahAlarmNoShiftMode[] = ["WARN", "ALWAYS", "REQUIRE_SHIFT"];

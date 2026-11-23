@@ -68,6 +68,7 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "shippingReturnFootnote",
       "shippingWeighRequiredEnabled",
       "shippingManualWeightRestrictedEnabled",
+      "shippingShadeMixPolicy",
       "sackDumpNameMode",
       "packingGroupNumbering",
       "packingGroupMode",

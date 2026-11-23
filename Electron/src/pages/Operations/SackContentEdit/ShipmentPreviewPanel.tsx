@@ -3,6 +3,7 @@ import { Callout } from "@/components/ui/callout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import type { CreateShipmentPreview } from "./types";
+import { SHADE_MIX_PREFIX, ShadeMixCallout } from "./ShadeMixCallout";
 import { lowerTr } from "../../../lib/tr-case";
 import { formatQty } from "@/lib/format";
 
@@ -11,6 +12,14 @@ const fmtM = (n: number) => `${formatQty(n, 1)} m`;
 /** Uyarı tonu — mükerrer sevk kırmızı (danger), diğerleri amber (warning). */
 function warnTone(text: string): "danger" | "warning" {
   return lowerTr(text).includes("mükerrer") ? "danger" : "warning";
+}
+
+/** Düz uyarı listesi. D4-I3: cari kilidi sarı ŞERİTTE, listede tekrar etmez (metin sunucudan, birebir eşleşme); ton karışımı kutuda çizilince metni tekrar etmez (eski backend'de kutu yok, metin kalır). */
+function previewNotes(preview: CreateShipmentPreview): { holdText: string | null; warnings: string[] } {
+  const holdText = preview.cariHold ? (preview.cariHold.warning ?? preview.cariHold.message) : null;
+  const hasShadeBox = (preview.shadeMixes ?? []).length > 0;
+  const warnings = preview.warnings.filter((w) => w !== holdText && !(hasShadeBox && w.startsWith(SHADE_MIX_PREFIX)));
+  return { holdText, warnings };
 }
 
 interface Props {
@@ -27,9 +36,7 @@ export function ShipmentPreviewPanel({ preview, isLoading }: Props) {
   if (!preview) return <p className="py-4 text-center text-sm text-muted-foreground">Önizleme alınamadı.</p>;
 
   const { totals, lines, cariHold } = preview;
-  // D4-I3: cari kilidi sarı ŞERİTTE; aynı satır uyarı listesinde tekrar etmez (metin sunucudan, birebir eşleşme).
-  const holdText = cariHold ? (cariHold.warning ?? cariHold.message) : null;
-  const warnings = preview.warnings.filter((w) => w !== holdText);
+  const { holdText, warnings } = previewNotes(preview);
 
   return (
     <div className="space-y-3">
@@ -53,7 +60,7 @@ export function ShipmentPreviewPanel({ preview, isLoading }: Props) {
           {holdText}
         </Callout>
       )}
-
+      <ShadeMixCallout groups={preview.shadeMixes ?? []} policy={preview.shadeMixPolicy} />
       {/* Uyarılar — BÜYÜK, renkli, ikonlu (kaçırılamaz) */}
       {warnings.length > 0 && (
         <div className="space-y-2">

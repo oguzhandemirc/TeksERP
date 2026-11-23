@@ -294,6 +294,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   shipmentHandheldCreateEnabled: "cekirdek",
   shipmentUndoSameDayOnly: "cekirdek",
   shippingOrderRequirement: "cekirdek",
+  shippingShadeMixPolicy: "cekirdek",
   itemPhaseOutNewOrder: "cekirdek",
   itemPhaseOutLineQty: "cekirdek",
   itemPhaseOutNewPlan: "cekirdek",

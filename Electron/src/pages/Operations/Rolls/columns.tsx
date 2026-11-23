@@ -349,6 +349,20 @@ const BASE_ROLL_COLUMNS: ColumnDef<Roll>[] = [
       ),
   },
   {
+    // TON GRUBU (2026-11-23) — boyamadan dönen topun ton harfi; "Ton ata" ile toplu verilir.
+    accessorKey: "shadeCode",
+    header: () => <span title="Ton grubu: aynı siparişe tek ton gitsin">Ton</span>,
+    meta: { label: "Ton" },
+    cell: ({ row }) =>
+      row.original.shadeCode ? (
+        <span className="inline-flex h-5 min-w-5 items-center justify-center rounded bg-foreground/10 px-1 text-xs font-semibold">
+          {row.original.shadeCode}
+        </span>
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
+  },
+  {
     // Müşterinin parti no'su: etikete basılan (J1/K30) yoksa gelen belgeden türetilen (ata zinciri, sunucu).
     accessorKey: "labelBatchNo",
     header: () => <span title={CUSTOMER_BATCH_HINT}>Müşteri parti no</span>,

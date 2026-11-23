@@ -62,7 +62,7 @@ function measure(
 
 // OPT-IN düz metin satırları — kaynağı olmayan topta boş → satır basılmaz: açık hata notu (KQ-D8) ·
 // müşteri belgesindeki kumaş/renk/top no (E3, H9) · müşteri barkodu (D4-F3) · emanet alıcısı (2026-11-10).
-const OPT_IN_TEXT_KEYS = ["openDefects", "deliveryNoteItemText", "deliveryNoteColorText", "deliveryNoteRollNo", "customerCode", "consigneeName"] as const;
+const OPT_IN_TEXT_KEYS = ["openDefects", "shadeCode", "deliveryNoteItemText", "deliveryNoteColorText", "deliveryNoteRollNo", "customerCode", "consigneeName"] as const;
 type OptInTextKey = (typeof OPT_IN_TEXT_KEYS)[number];
 const isOptInTextKey = (key: string): key is OptInTextKey => (OPT_IN_TEXT_KEYS as readonly string[]).includes(key);
 

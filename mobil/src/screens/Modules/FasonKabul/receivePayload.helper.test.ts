@@ -66,6 +66,20 @@ describe('parseNewRolls', () => {
     ]);
     expect(out).toEqual([{ qty: 50, notes: null }]);
   });
+
+  it('ton: yalnız seçildiyse gider (boş/boşluk → alan YOK, eski sunucu sözleşmesi)', () => {
+    const out = parseNewRolls([
+      { ...makeNewRollRow('100', true), shadeCode: 'B' },
+      { ...makeNewRollRow('80', true), shadeCode: '' },
+      { ...makeNewRollRow('60', true), shadeCode: '  ' },
+    ]);
+    expect(out).toEqual([
+      { qty: 100, notes: null, shadeCode: 'B' },
+      { qty: 80, notes: null },
+      { qty: 60, notes: null },
+    ]);
+    expect('shadeCode' in out[1]!).toBe(false);
+  });
 });
 
 describe('buildReceivePayload — geçersiz durumlar null döner (canSubmit sözleşmesi)', () => {

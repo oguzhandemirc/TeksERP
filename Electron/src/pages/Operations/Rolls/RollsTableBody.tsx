@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import type { Table } from "@tanstack/react-table";
-import { Factory, PanelRight, Recycle, Ruler, Trash2, Truck } from "lucide-react";
+import { Factory, Palette, PanelRight, Recycle, Ruler, Trash2, Truck } from "lucide-react";
+import { ShadeAssignDialog } from "./ShadeAssignDialog";
 import { DataTable } from "@/components/data-table/DataTable";
 import { ContextMenuItem, ContextMenuSeparator } from "@/components/ui/context-menu";
 import { CopyMenuItem } from "@/components/data-table/row-menu-items";
@@ -18,7 +19,7 @@ import { canAdjustRollQty } from "./qtyAdjustService";
 import { RollQtyAdjustDialog } from "./RollQtyAdjustDialog";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import type { RollStatusTabKey } from "./service";
-import { useFeatureFlags } from "@/hooks/usePricingEnabled";
+import { useFeatureFlags, useShippingShadeMixPolicy } from "@/hooks/usePricingEnabled";
 import type { Roll } from "./types";
 
 /**
@@ -76,6 +77,7 @@ export function RollsTableBody({
 }: Props) {
   const [selected, setSelected] = useState<Roll | null>(null);
   const [bulkCancelOpen, setBulkCancelOpen] = useState(false);
+  const [shadeOpen, setShadeOpen] = useState(false);
   const [reworkOpen, setReworkOpen] = useState(false);
   const [quickShipOpen, setQuickShipOpen] = useState(false);
   const [shippedId, setShippedId] = useState<string | null>(null);
@@ -124,6 +126,8 @@ export function RollsTableBody({
   //     yeni bir yol AÇMAK olurdu, mevcut yolu hızlandırmak değil.
   const financeEnabled = useFeatureFlags().data?.data?.financeEnabled ?? false;
   const quickShippable = canQuickShip(tab, financeEnabled);
+  // TON ATA — ton grubu açıkken, topun hâlâ fabrikada olabildiği sekmelerde (arşiv/fason dışı; otorite sunucu 409).
+  const shadeAssignable = useShippingShadeMixPolicy() !== "off" && tab !== "ARCHIVE" && tab !== "SUBCONTRACTOR";
 
   return (
     <>
@@ -146,10 +150,17 @@ export function RollsTableBody({
         // Ham Stok'ta seçim çubuğuna "Stoktan Kaldır" (iptal) — DataTable bunu
         // alt şeride (Seçimi temizle'nin yanına) koyar; ayrı üst şerit yok.
         bulkActions={
-          bulkCancelable || reworkable || quickShippable
+          bulkCancelable || reworkable || quickShippable || shadeAssignable
             ? (rows) =>
                 rows.length > 0 ? (
                   <>
+                    {shadeAssignable && (
+                      <PermissionGate permission="roll:write">
+                        <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setShadeOpen(true)}>
+                          <Palette className="h-4 w-4" /> Ton ata
+                        </Button>
+                      </PermissionGate>
+                    )}
                     {/* HIZLI SEVK — "seçtiklerimi gönder". Yalnız Bitmiş Depo
                         sekmesinde + ticaret rejiminde (bkz. yukarıdaki yüklem). */}
                     {quickShippable && (
@@ -235,6 +246,9 @@ export function RollsTableBody({
         rolls={selectedRolls}
         onDone={() => table.resetRowSelection()}
       />
+      {shadeOpen && (
+        <ShadeAssignDialog open onOpenChange={setShadeOpen} rolls={selectedRolls} onDone={() => table.resetRowSelection()} />
+      )}
       <ReworkRollsDialog
         open={reworkOpen}
         onOpenChange={setReworkOpen}

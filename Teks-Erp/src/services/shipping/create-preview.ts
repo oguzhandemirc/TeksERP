@@ -25,6 +25,7 @@ import {
   buildTextSearch,
 } from "../../utils/query-parser";
 import { previewOwnerMismatches } from "../helpers/emanet-owner.helper";
+import { previewShadeMixes } from "../helpers/shade-group.helper";
 import { emanetShipmentReleaseTx } from "../helpers/emanet-shipment.helper";
 import { cariHoldWarning, shipmentHoldNotice } from "../helpers/cari-hold.helper";
 import type { ShippingServiceThis } from "./shared";
@@ -33,6 +34,20 @@ export async function previewShipmentHold(sackIds: string[], customerId: string 
     if (!customerId) return null;
     return shipmentHoldNotice(prisma, customerId, () => emanetShipmentReleaseTx(prisma, { sackId: { in: sackIds } }, customerId));
   }
+
+/**
+ * ⚠️ REJİME BAĞLI TEK UYARI BU. `off` yalnız BUNU susturur; tahsis fazlası ve başka açık sevkiyatta
+ * bekleyen mükerrer tahsis uyarıları farklı soruların cevabıdır ve her rejimde AYAKTA kalır — diziyi
+ * topluca susturmak, kırmızı tonlu mükerrer sevk uyarısını da öldürürdü.
+ */
+async function orderlessWarning(): Promise<string | null> {
+  const mode = await resolveOrderRequirement();
+  if (mode === "block") {
+    return 'Bu kurulumda sevkiyat siparişe bağlanmalı — sipariş seçin ya da "Siparişsiz devam et" ile niyeti beyan edin.';
+  }
+  if (mode === "warn") return "Sipariş seçilmedi — mal hiçbir siparişten düşülmeden sevk edilecek.";
+  return null;
+}
 
 export async function previewCreateShipment(this: ShippingServiceThis, 
     data: { sackIds: string[]; customerId?: string | null; branchId?: string | null; orderIds?: string[] }
@@ -58,6 +73,9 @@ export async function previewCreateShipment(this: ShippingServiceThis,
 
     // Sahiplik (G3 emanet): dispatch'teki 409 `OWNER_MISMATCH` kapısının önizleme ikizi — RED DEĞİL uyarı + liste.
     const { ownerMismatches, warnings } = await previewOwnerMismatches(prisma, { sackIds, customerId: data.customerId ?? null });
+    // Ton grubu: dispatch'teki 409 `SHADE_MIX` kapısının önizleme ikizi (kural off ise boş).
+    const shade = await previewShadeMixes(prisma, { sackIds });
+    warnings.push(...shade.warnings);
     const holdNotice = await this.previewShipmentHold(sackIds, data.customerId ?? null);
     // D4-I3: şerit metni `warning` = warnings[]'e giden satırın AYNISI (panel şeridi çizer, listede tekrar etmez).
     const cariHold = holdNotice ? { ...holdNotice, warning: cariHoldWarning(holdNotice) } : null;
@@ -102,19 +120,8 @@ export async function previewCreateShipment(this: ShippingServiceThis,
         }
       }
     } else {
-      // ⚠️ REJİME BAĞLI TEK UYARI BU. `off` yalnız BUNU susturur; yukarıdaki iki
-      // uyarı (tahsis fazlası · başka açık sevkiyatta bekleyen mükerrer tahsis)
-      // farklı soruların cevabıdır ve her rejimde AYAKTA kalır — diziyi topluca
-      // susturmak, kırmızı tonlu mükerrer sevk uyarısını da öldürürdü.
-      const mode = await resolveOrderRequirement();
-      if (mode === "block") {
-        warnings.push(
-          "Bu kurulumda sevkiyat siparişe bağlanmalı — sipariş seçin ya da " +
-            '"Siparişsiz devam et" ile niyeti beyan edin.',
-        );
-      } else if (mode === "warn") {
-        warnings.push("Sipariş seçilmedi — mal hiçbir siparişten düşülmeden sevk edilecek.");
-      }
+      const noOrder = await orderlessWarning();
+      if (noOrder) warnings.push(noOrder);
     }
 
     return {
@@ -125,6 +132,9 @@ export async function previewCreateShipment(this: ShippingServiceThis,
         warnings,
         /** Sahiplik uyuşmazlığı (G3): `[{barcode, owner}]`; boş = sorun yok. Eski istemci alanı görmez, `warnings` metnini basar. */
         ownerMismatches,
+        /** Ton karışımı: ürün+renk başına tonlar ve barkodlar; boş = sorun yok / kural kapalı. */
+        shadeMixes: shade.shadeMixes,
+        shadeMixPolicy: shade.shadeMixPolicy,
         cariHold, // D4-I1: aktif SHIPMENT kilidi (exempt = K22) ya da null; eski istemci yok sayar
         totals: { totalMeters: Number(totalMeters), sackCount: sacks.length, surplusMeters: Math.max(0, surplusMeters) },
       },

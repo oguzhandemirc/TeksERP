@@ -692,6 +692,8 @@ export interface ReceiveNewRollInput {
   qty: number;
   weightKg?: number | null;
   notes?: string | null;
+  /** Ton grubu harfi (A, B…); backend `normalizeShadeCode` doğrular. Seçilmediyse gönderilmez. */
+  shadeCode?: string;
 }
 
 export interface ReceiveRequest {

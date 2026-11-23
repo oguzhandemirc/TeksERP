@@ -92,7 +92,8 @@ import { useReasonPresets } from '../../../hooks/useReasonPresets';
 import ReasonPresetPicker, {
   type ReasonPresetValue,
 } from '../../../components/reasonPresets/ReasonPresetPicker';
-import { useFasonShrinkWarn } from '../../../hooks/useFeatureFlags';
+import { useFasonShrinkWarn, useShadeEntryEnabled } from '../../../hooks/useFeatureFlags';
+import { ShadeSegment } from './ShadeSegment';
 import SyncStatusChip from '../../../components/SyncStatusChip';
 import { SkeletonList } from '../../../components/motion';
 import {
@@ -425,10 +426,11 @@ export default function FasonKabulScreen() {
             if (typeof d.manifestNo === 'string' && d.manifestNo) setManifestNo(d.manifestNo);
             if (typeof d.notes === 'string' && d.notes) setNotes(d.notes);
             if (Array.isArray(d.newRolls) && d.newRolls.length > 0) {
-              type StoredNR = { qty: string; notes: string; prefilled: boolean };
+              type StoredNR = { qty: string; notes: string; prefilled: boolean; shadeCode?: string };
               setNewRolls((d.newRolls as StoredNR[]).map((r) => ({
                 ...makeNewRollRow(r.qty, r.prefilled),
                 notes: r.notes,
+                shadeCode: typeof r.shadeCode === 'string' ? r.shadeCode : '',
               })));
             }
             if (typeof d.appliedColorId === 'string') setAppliedColorId(d.appliedColorId);
@@ -467,7 +469,7 @@ export default function FasonKabulScreen() {
         rows: rows.map((r) => ({ ...r, noteOpen: false })),
         manifestNo,
         notes,
-        newRolls: newRolls.map((r) => ({ qty: r.qty, notes: r.notes, prefilled: r.prefilled })),
+        newRolls: newRolls.map((r) => ({ qty: r.qty, notes: r.notes, prefilled: r.prefilled, shadeCode: r.shadeCode ?? '' })),
         appliedColorId,
         appliedWidth,
         appliedProperties,
@@ -1215,6 +1217,7 @@ export default function FasonKabulScreen() {
     [consumedTotal, returnedTotal],
   );
   const shrinkCfg = useFasonShrinkWarn();
+  const shadeEntry = useShadeEntryEnabled();
   /** Uyarı YALNIZ fabrikanın belirlediği toleransın üstünde çıkar. */
   const shrinkWarn = useMemo(
     () => shrinkExceedsTolerance(shrink, shrinkCfg),
@@ -2165,6 +2168,12 @@ export default function FasonKabulScreen() {
                           newRolls[0]!.prefilled ? '  ·  otomatik dolduruldu' : ''
                         }`}
                       </Text>
+                      {shadeEntry && (
+                        <ShadeSegment
+                          value={newRolls[0]!.shadeCode}
+                          onChange={(s) => updateNewRoll(newRolls[0]!.key, { shadeCode: s })}
+                        />
+                      )}
                     </View>
                   ) : (
                     newRolls.map((r, idx) => {
@@ -2218,6 +2227,9 @@ export default function FasonKabulScreen() {
                               accessibilityLabel="Parçayı sil"
                             />
                           </View>
+                          {shadeEntry && (
+                            <ShadeSegment value={r.shadeCode} onChange={(s) => updateNewRoll(r.key, { shadeCode: s })} />
+                          )}
                           {r.noteOpen && (
                             <View style={styles.newRollNoteWrap}>
                               <TextInput

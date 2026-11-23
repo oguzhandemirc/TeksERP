@@ -4,6 +4,7 @@ import {
   DEFAULT_FEATURE_FLAGS,
   featureFlagService,
   resolveDokumaRollBirth,
+  resolveShadeEntryEnabled,
   type DokumaRollBirth,
 } from '../services/featureFlag.service';
 import { useAuthStore } from '../store/authStore';
@@ -220,6 +221,11 @@ export function useFasonShrinkWarn(): { enabled: boolean; tolerancePct: number }
     enabled: d?.fasonShrinkWarnEnabled ?? true,
     tolerancePct: d?.fasonShrinkTolerancePct ?? 10,
   };
+}
+
+/** Fason Kabul ton girişi (`shipping.shadeMixPolicy` ≠ off). Yüklenene kadar kapalı (bugünkü davranış). */
+export function useShadeEntryEnabled(): boolean {
+  return resolveShadeEntryEnabled(useFeatureFlags().data);
 }
 
 /** Token süresi dolunca otomatik logout açık mı? Default TRUE (yüklenene kadar da açık). */

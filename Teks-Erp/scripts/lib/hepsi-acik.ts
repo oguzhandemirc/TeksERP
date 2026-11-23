@@ -201,6 +201,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   shipmentHandheldCreateEnabled: A(true),
   shipmentUndoSameDayOnly: A(true),
   shippingOrderRequirement: A("block"),
+  shippingShadeMixPolicy: A("block"), // tonsuz top engellemez; yalnız ≥2 farklı harf 409
   shippingOrderCoverage: A("block"),
   itemPhaseOutNewOrder: A("OKUTULAN_TOPLAR"), // KAPALI ↔ block çapraz kapıdan geçmez
   itemPhaseOutLineQty: A("KILITLI"),

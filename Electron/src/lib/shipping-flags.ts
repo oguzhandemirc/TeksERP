@@ -30,6 +30,19 @@ export type ShippingDocCekiNameMode = "devral" | "bizdeki" | "musterideki" | "ik
  */
 export type ShippingOrderCoverage = "off" | "warn" | "block";
 
+/** Ton grubu karışımı sevkte (aynı ürün+renge farklı ton harfi). `off` = varsayılan davranış. */
+export type ShippingShadeMixPolicy = "off" | "warn" | "block";
+
+export const SHIPPING_SHADE_MIX_POLICY_OPTIONS: ReadonlyArray<{
+  value: ShippingShadeMixPolicy;
+  label: string;
+  hint: string;
+}> = [
+  { value: "off", label: "Kapalı (varsayılan)", hint: "Ton harfi sorulmaz, sevkte ton uyarısı çıkmaz. Varsayılan davranış." },
+  { value: "warn", label: "Uyar", hint: "Fason kabulde ton harfi girilir; aynı ürün+renge farklı ton giderse sevk ekranında uyarı çıkar." },
+  { value: "block", label: "Engelle", hint: "Karışık tonlu sevk gönderilemez; tonları ayırın ya da topun tonunu düzeltin." },
+];
+
 export const SHIPMENT_ORDER_REQUIREMENT_OPTIONS: ReadonlyArray<{
   value: ShipmentOrderRequirement;
   label: string;

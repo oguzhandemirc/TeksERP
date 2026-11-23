@@ -228,6 +228,9 @@ export interface FeatureFlags {
   /** bildirim: kişisel gelen kutusu (backend `bildirim.gelenKutusuEnabled`, default false).
    *  Eski sunucu alanı göndermez → `resolveNotificationInboxEnabled` false döner. */
   bildirimGelenKutusuEnabled: boolean;
+  /** Ton grubu karışım kuralı (backend `shipping.shadeMixPolicy`, default 'off'). 'off' değilken
+   *  Fason Kabul "Dönen açık kumaş" satırında ton seçimi çizilir. Eski sunucu alanı göndermez → 'off'. */
+  shippingShadeMixPolicy?: 'off' | 'warn' | 'block';
 }
 
 export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
@@ -323,7 +326,16 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   itemPhaseOutNewPlan: true,
   // bildirim: fail-closed — bayrak okunamazsa bugünkü davranış (gelen kutusu yok).
   bildirimGelenKutusuEnabled: false,
+  // Bugünkü davranış: ton girişi yok (backend satır-yok değeri ile aynı).
+  shippingShadeMixPolicy: 'off',
 };
+
+/** Ton girişi açık mı — yalnız tanınan 'warn'/'block'; eksik/çöp değer bugünkü davranış (kapalı). */
+export function resolveShadeEntryEnabled(
+  f: Partial<Pick<FeatureFlags, 'shippingShadeMixPolicy'>> | null | undefined,
+): boolean {
+  return f?.shippingShadeMixPolicy === 'warn' || f?.shippingShadeMixPolicy === 'block';
+}
 
 /** bildirim: gelen kutusu açık mı — yalnız gerçek `true`; eksik/tanınmayan değer bugünkü davranış (false). */
 export function resolveNotificationInboxEnabled(

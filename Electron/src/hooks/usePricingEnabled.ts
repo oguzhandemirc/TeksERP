@@ -288,6 +288,12 @@ export function useShippingOrderRequirement(): ShipmentOrderRequirement {
   return isShipmentOrderRequirement(v) ? v : DEFAULT_SHIPMENT_ORDER_REQUIREMENT;
 }
 
+/** `shipping.shadeMixPolicy` — ton grubu. Varsayılan `off` (ton alanları gizli, bugünkü). */
+export function useShippingShadeMixPolicy(): "off" | "warn" | "block" {
+  const v = useFeatureFlags().data?.data?.shippingShadeMixPolicy;
+  return v === "warn" || v === "block" ? v : "off";
+}
+
 /** `shipping.invoiceMode` — fatura izi rejimi. Varsayılan `dis` (bugünkü). */
 export function useShippingInvoiceMode(): ShippingInvoiceMode {
   const q = useFeatureFlags();

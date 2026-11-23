@@ -600,6 +600,9 @@ export const SETTING_KEYS = {
    *  kilitlenirse mal bina içinde kalır (tasarım §11 "geçmişe etki eden bayrak
    *  yok"). ENFORCE edilir (backend). */
   SHIPPING_ORDER_REQUIREMENT: "shipping.orderRequirement",
+  /** Ton grubu karışımı: off (default, bugünkü) / warn (önizleme uyarır) / block (Sevk Et 409 `SHADE_MIX`).
+   *  Tek okuyucu `shade-group.helper`; kapı `performDispatchTx` + `executeDirectShip`. */
+  SHIPPING_SHADE_MIX_POLICY: "shipping.shadeMixPolicy",
   /** "Tükenene kadar" karta yeni sipariş: OKUTULAN_TOPLAR (default) / KAPALI / SERBEST
    *  (URUN-YASAM-DONGUSU.md §4.1). KAPALI ↔ `shipping.orderRequirement=block` çapraz
    *  kapıyla birlikte kurulamaz (mal çıkamaz). ENFORCE edilir (backend). */
