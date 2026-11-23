@@ -67,7 +67,7 @@ export function PatronCloudPage() {
 function StatusSection({ s, busy, onActivate }: { s: PatronCloudStatus; busy: boolean; onActivate: () => void }) {
   const tk = s.teknikKullanici;
   return (
-    <section className="space-y-3 rounded-lg border p-4">
+    <section className="space-y-3 rounded-xl border border-card-border bg-card p-4 shadow-card">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="space-y-1">
           <div className="flex items-center gap-2 font-medium">

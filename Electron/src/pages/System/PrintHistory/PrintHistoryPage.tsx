@@ -68,12 +68,8 @@ export function PrintHistoryPage() {
         printerOptions={options.printers}
         deviceOptions={options.devices}
         subjectLabel={subjectLabel}
-        tools={
-          <>
-            <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Kayıt/belge no, yazıcı adı ya da hata kodu ara" />
-            <DataTableTools table={table} hideExport />
-          </>
-        }
+        search={<ListSearchBox value={search} onSearchChange={setSearch} searchHint="Kayıt/belge no, yazıcı adı ya da hata kodu ara" />}
+        tools={<DataTableTools table={table} hideExport />}
       />
 
       {!unsupported && !query.isError && items.length > 0 ? (

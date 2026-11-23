@@ -29,12 +29,16 @@ export function SettingsGroupCard({ name, count, forceOpen, highlight, children 
     }
   };
   return (
-    <section className="rounded-lg border">
+    // Kart yüzeyi panel Card token'larından (zemin + kenar + gölge) — saydam kutu sayfa zemininde kayboluyordu.
+    <section data-slot="card" className="rounded-xl border border-card-border bg-card text-card-foreground shadow-card">
       <button
         type="button"
         onClick={toggle}
         aria-expanded={isOpen}
-        className="flex w-full items-center justify-between gap-3 rounded-t-lg bg-muted/30 px-4 py-2.5 text-left hover:bg-muted/50"
+        className={cn(
+          "flex w-full items-center justify-between gap-3 rounded-t-xl px-4 py-3 text-left hover:bg-muted/40",
+          isOpen ? "border-b border-card-border" : "rounded-b-xl",
+        )}
       >
         <span className="text-sm font-semibold"><Vurgu text={name} query={highlight} /></span>
         <span className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -42,7 +46,7 @@ export function SettingsGroupCard({ name, count, forceOpen, highlight, children 
           <ChevronDown className={cn("h-4 w-4 transition-transform", isOpen && "rotate-180")} />
         </span>
       </button>
-      {isOpen && <div className="divide-y divide-border px-4 py-3">{children}</div>}
+      {isOpen && <div className="divide-y divide-border px-4 py-1">{children}</div>}
     </section>
   );
 }

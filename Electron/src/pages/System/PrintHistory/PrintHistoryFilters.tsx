@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { DateRangeInput } from "@/components/forms/DateRangeInput";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
+import { FilterChip } from "@/components/data-table/filter-row/FilterChip";
+import { SelectChip } from "@/components/data-table/filter-row/SelectChip";
+import { DayPresetChip } from "@/components/data-table/filter-row/DayPresetChip";
 import type { PrintDayChip, PrintHistoryFilterState } from "@/lib/print-history-query";
 import type { PrintOutputKind } from "@/services/printHistoryService";
 import {
@@ -26,182 +26,67 @@ interface Props {
   printerOptions: FilterOption[];
   deviceOptions: FilterOption[];
   subjectLabel?: string | null;
+  /** Satırın başı (arama kutusu). */
+  search?: ReactNode;
   /** Tablonun Sütunlar menüsü (çubuğun sağında). */
   tools?: ReactNode;
 }
 
-const ANY = "__any__";
-
-const CHIPS: { key: Exclude<PrintDayChip, "aralik">; label: string }[] = [
-  { key: "bugun", label: "Bugün" },
-  { key: "dun", label: "Dün" },
-  { key: "hafta", label: "Bu hafta" },
-  { key: "tumu", label: "Tümü" },
+const DAYS: { value: Exclude<PrintDayChip, "aralik">; label: string }[] = [
+  { value: "bugun", label: "Bugün" },
+  { value: "dun", label: "Dün" },
+  { value: "hafta", label: "Bu hafta" },
+  { value: "tumu", label: "Tümü" },
 ];
 
-export function PrintHistoryFilters({ value, onChange, userOptions, printerOptions, deviceOptions, subjectLabel, tools }: Props) {
-  const set = <K extends keyof PrintHistoryFilterState>(k: K, v: PrintHistoryFilterState[K] | undefined) =>
-    onChange({ ...value, [k]: v });
+const opts = (labels: Record<string, string>) => Object.entries(labels).map(([value, label]) => ({ value, label }));
+
+/** Tek satır: [Ara][Gün ▾][Kişi ▾]…[Temizle] … [Sütunlar]. Değerler/URL eşlemesi değişmedi (yalnız görünüm, 2026-11-23). */
+export function PrintHistoryFilters({ value, onChange, userOptions, printerOptions, deviceOptions, subjectLabel, search, tools }: Props) {
+  const set = <K extends keyof PrintHistoryFilterState>(k: K, v: PrintHistoryFilterState[K] | undefined | null) =>
+    onChange({ ...value, [k]: v ?? undefined });
   const hasActive =
     value.gun !== "bugun" ||
     !!(value.userId || value.printer || value.deviceRefId || value.subjectKind || value.status || value.outputKind || value.source || value.subjectId);
 
   return (
-    <div className="flex flex-wrap items-end gap-2 border-b bg-card/30 px-4 py-3 sm:px-6">
-      <DayChips value={value} onChange={onChange} />
-
-      {value.gun === "aralik" && (
-        <Field label="Tarih aralığı (fabrika günü)">
-          <DateRangeInput
-            from={value.gunBas ?? ""}
-            to={value.gunBit ?? ""}
-            onFrom={(v) => set("gunBas", v || undefined)}
-            onTo={(v) => set("gunBit", v || undefined)}
-            inputClassName="h-9 w-40"
-            fromLabel="Başlangıç"
-            toLabel="Bitiş"
-          />
-        </Field>
-      )}
-
-      <OptionSelect label="Kişi" value={value.userId} options={userOptions} onChange={(v) => set("userId", v)} />
-      <OptionSelect label="Yazıcı" value={value.printer} options={printerOptions} onChange={(v) => set("printer", v)} />
-      <OptionSelect label="Cihaz" value={value.deviceRefId} options={deviceOptions} onChange={(v) => set("deviceRefId", v)} />
-      <OptionSelect
-        label="Tür"
-        value={value.subjectKind}
-        options={Object.entries(PRINT_SUBJECT_LABELS).map(([k, l]) => ({ value: k, label: l }))}
-        onChange={(v) => set("subjectKind", v as PrintHistoryFilterState["subjectKind"])}
+    <div data-list-surface="toolbar" className="flex flex-wrap items-center gap-1.5 border-b py-2">
+      {search}
+      <DayPresetChip<PrintDayChip>
+        id="print-day"
+        presets={DAYS}
+        value={value.gun}
+        rangeValue="aralik"
+        resetValue="bugun"
+        from={value.gunBas ?? ""}
+        to={value.gunBit ?? ""}
+        onPreset={(g) => onChange({ ...value, gun: g, gunBas: undefined, gunBit: undefined })}
+        onRange={(r) => onChange({ ...value, gun: "aralik", gunBas: r.from || undefined, gunBit: r.to || undefined })}
       />
-      <OptionSelect
-        label="Durum"
-        value={value.status}
-        options={Object.entries(PRINT_STATUS_LABELS).map(([k, l]) => ({ value: k, label: l }))}
-        onChange={(v) => set("status", v as PrintHistoryFilterState["status"])}
-      />
-      <OutputToggle value={value.outputKind} onChange={(v) => set("outputKind", v)} />
-      <OptionSelect
-        label="Kaynak"
-        value={value.source}
-        options={Object.entries(PRINT_SOURCE_LABELS).map(([k, l]) => ({ value: k, label: l }))}
-        onChange={(v) => set("source", v as PrintHistoryFilterState["source"])}
-      />
+      <SelectChip id="print-user" label="Kişi" value={value.userId ?? null} options={userOptions} onChange={(v) => set("userId", v)} />
+      <SelectChip id="print-printer" label="Yazıcı" value={value.printer ?? null} options={printerOptions} onChange={(v) => set("printer", v)} />
+      <SelectChip id="print-device" label="Cihaz" value={value.deviceRefId ?? null} options={deviceOptions} onChange={(v) => set("deviceRefId", v)} />
+      <SelectChip id="print-subject" label="Tür" value={value.subjectKind ?? null} options={opts(PRINT_SUBJECT_LABELS)} onChange={(v) => set("subjectKind", v as PrintHistoryFilterState["subjectKind"])} />
+      <SelectChip id="print-status" label="Durum" value={value.status ?? null} options={opts(PRINT_STATUS_LABELS)} onChange={(v) => set("status", v as PrintHistoryFilterState["status"])} />
+      <SelectChip id="print-output" label="Çıktı" value={value.outputKind ?? null} options={opts(PRINT_OUTPUT_LABELS)} onChange={(v) => set("outputKind", v as PrintOutputKind | null)} />
+      <SelectChip id="print-source" label="Kaynak" value={value.source ?? null} options={opts(PRINT_SOURCE_LABELS)} onChange={(v) => set("source", v as PrintHistoryFilterState["source"])} />
 
       {value.subjectId && (
-        <Field label="Kayıt">
-          <Button type="button" variant="secondary" size="sm" className="h-9 max-w-64 gap-1" onClick={() => set("subjectId", undefined)}>
-            <span className="truncate">{subjectLabel || "Seçili kayıt"}</span>
-            <X className="h-3 w-3 shrink-0" />
-          </Button>
-        </Field>
+        <FilterChip id="print-subject-id" label="Kayıt" active removable onRemove={() => set("subjectId", undefined)}>
+          <span className="max-w-64 truncate px-2 text-xs">
+            <span className="text-muted-foreground">Kayıt: </span>
+            {subjectLabel || "Seçili kayıt"}
+          </span>
+        </FilterChip>
       )}
 
       {hasActive && (
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => onChange({ gun: "bugun" })}
-          className="h-9 gap-1 text-muted-foreground"
-        >
-          <X className="h-3 w-3" />
+        <Button type="button" variant="ghost" size="sm" onClick={() => onChange({ gun: "bugun" })} className="h-8 gap-1 px-2 text-xs text-muted-foreground" title="Bütün filtreleri kaldır">
+          <X className="h-3.5 w-3.5" />
           Temizle
         </Button>
       )}
       {tools && <div className="ml-auto flex items-center gap-1.5">{tools}</div>}
-    </div>
-  );
-}
-
-function DayChips({ value, onChange }: { value: PrintHistoryFilterState; onChange: (next: PrintHistoryFilterState) => void }) {
-  return (
-    <Field label="Gün">
-      <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Gün">
-        {CHIPS.map((c) => (
-          <Button
-            key={c.key}
-            type="button"
-            size="sm"
-            variant={value.gun === c.key ? "default" : "outline"}
-            className="h-9"
-            aria-pressed={value.gun === c.key}
-            onClick={() => onChange({ ...value, gun: c.key, gunBas: undefined, gunBit: undefined })}
-          >
-            {c.label}
-          </Button>
-        ))}
-        <Button
-          type="button"
-          size="sm"
-          variant={value.gun === "aralik" ? "default" : "outline"}
-          className="h-9"
-          aria-pressed={value.gun === "aralik"}
-          onClick={() => onChange({ ...value, gun: "aralik" })}
-        >
-          Tarih…
-        </Button>
-      </div>
-    </Field>
-  );
-}
-
-function OutputToggle({ value, onChange }: { value: PrintOutputKind | undefined; onChange: (v: PrintOutputKind | undefined) => void }) {
-  return (
-    <Field label="Çıktı">
-      <div className="flex items-center gap-1" role="group" aria-label="Çıktı">
-        {([undefined, "PRINTER", "PDF"] as const).map((k) => (
-          <Button
-            key={k ?? "all"}
-            type="button"
-            size="sm"
-            variant={value === k ? "default" : "outline"}
-            className="h-9"
-            aria-pressed={value === k}
-            onClick={() => onChange(k)}
-          >
-            {k ? PRINT_OUTPUT_LABELS[k] : "Tümü"}
-          </Button>
-        ))}
-      </div>
-    </Field>
-  );
-}
-
-function OptionSelect({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: string | undefined;
-  options: FilterOption[];
-  onChange: (v: string | undefined) => void;
-}) {
-  return (
-    <Field label={label}>
-      <Select value={value ?? ANY} onValueChange={(v) => onChange(v === ANY ? undefined : v)}>
-        <SelectTrigger className={cn("h-9 w-40", value && "border-primary")} aria-label={label}>
-          <SelectValue placeholder="Tümü" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value={ANY}>Tümü</SelectItem>
-          {options.map((o) => (
-            <SelectItem key={o.value} value={o.value}>
-              {o.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </Field>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex min-w-0 flex-col gap-1">
-      <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{label}</span>
-      {children}
     </div>
   );
 }

@@ -262,6 +262,7 @@ export function RollsPage() {
     <PageShell>
       <PageHeader
         title="Kumaş Stoğu"
+        titleExtra={<SimulatedMeterBanner />}
         actions={
           <>
             {/* Y2 fix: tablo key'leri artık ["rolls", tab] array formunda —
@@ -292,7 +293,6 @@ export function RollsPage() {
           </>
         }
       />
-      <SimulatedMeterBanner />
       <ManualEntryDialog
         open={manualOpen}
         onOpenChange={setManualOpen}

@@ -32,8 +32,9 @@ export function FilterChip({
         // Tetik yazısı uzun olursa (uzun firma adı) kutu büyümez, yazı kısalır.
         "[&>button:first-child>span:first-child]:truncate [&>button:first-child]:min-w-0",
         // Boş kutunun adı da okunur renkte (soluk yazı "pasif" sanılıyordu); pasif tetik kendi rengini korur.
-        "[&>button:enabled_span]:text-foreground",
-        active ? "border-primary/60 bg-primary/10 text-foreground" : "border-input bg-background",
+        // Yalnız doğrudan yazı: içteki soluk etiket ("Kademe:") soluk kalır, değer koyu.
+        "[&>button:enabled>span]:text-foreground",
+        active ? "border-primary/60 bg-primary/10 text-foreground" : "border-input bg-card shadow-soft",
         className,
       )}
     >

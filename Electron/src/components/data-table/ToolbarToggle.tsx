@@ -19,7 +19,7 @@ export function ToolbarToggle({ checked, onCheckedChange, label, title }: Props)
   return (
     <label
       title={title}
-      className="flex h-8 cursor-pointer items-center gap-2 whitespace-nowrap rounded-md border bg-background px-3 text-xs"
+      className="flex h-8 cursor-pointer items-center gap-2 whitespace-nowrap rounded-md border border-input bg-card px-3 text-xs shadow-soft"
     >
       <Checkbox checked={checked} onCheckedChange={(c) => onCheckedChange(Boolean(c))} />
       {label}

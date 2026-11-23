@@ -3,27 +3,29 @@ import { useQuery } from "@tanstack/react-query";
 import { Ban, Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { FilterChip } from "@/components/data-table/filter-row/FilterChip";
+import { SelectChip } from "@/components/data-table/filter-row/SelectChip";
+import { DayPresetChip } from "@/components/data-table/filter-row/DayPresetChip";
 import { systemLogService } from "@/services/systemLogService";
 import { tableLabel, actionLabels } from "./labels";
 import type { SystemLogDomainAction, SystemLogGun } from "@/types/systemLog";
-import { DateRangeInput } from "@/components/forms/DateRangeInput";
 import type { ActivityFilterState, ActivityView } from "./activity-view";
 
 export type { ActivityFilterState } from "./activity-view";
 
-const GUN_CIPLERI: Array<{ value: SystemLogGun; label: string }> = [
+type DayChoice = SystemLogGun | "tumu" | "aralik";
+
+const DAYS: Array<{ value: DayChoice; label: string }> = [
   { value: "bugun", label: "Bugün" },
   { value: "dun", label: "Dün" },
   { value: "hafta", label: "Bu hafta" },
+  { value: "tumu", label: "Tümü" },
+];
+
+const VIEWS: Array<{ value: ActivityView; label: string }> = [
+  { value: "islem", label: "İşlemler" },
+  { value: "satir", label: "Tüm satırlar" },
 ];
 
 interface Props {
@@ -33,8 +35,7 @@ interface Props {
   rejectedAvailable?: boolean;
 }
 
-const ANY = "__any__";
-
+/** Tek satır: [Kayıt no ara][Görünüm ▾][Gün ▾][Reddedilenler][Kullanıcı ▾][Modül ▾][İşlem ▾]. Değerler değişmedi (2026-11-23). */
 export function ActivityFilters({ value, onChange, rejectedAvailable = false }: Props) {
   const usersQuery = useQuery({
     queryKey: ["system-log-users"],
@@ -47,112 +48,55 @@ export function ActivityFilters({ value, onChange, rejectedAvailable = false }: 
     staleTime: 5 * 60_000,
   });
 
-  const hasActiveFilter = !!(
-    value.gun ||
-    value.reddedilen ||
-    value.q ||
-    value.userId ||
-    value.tableName ||
-    value.action ||
-    value.dateFrom ||
-    value.dateTo
-  );
-
-  const set = <K extends keyof ActivityFilterState>(
-    key: K,
-    raw: string | undefined,
-  ) => {
-    onChange({ ...value, [key]: raw && raw !== ANY ? raw : undefined });
-  };
+  const hasActiveFilter = !!(value.gun || value.reddedilen || value.q || value.userId || value.tableName || value.action || value.dateFrom || value.dateTo);
+  const day: DayChoice = value.gun ?? (value.dateFrom || value.dateTo ? "aralik" : "tumu");
+  const set = <K extends keyof ActivityFilterState>(key: K, raw: string | null) => onChange({ ...value, [key]: raw || undefined });
+  const gorunum = value.gorunum ?? "islem";
 
   return (
-    <div className="flex flex-wrap items-end gap-2 border-b bg-card/30 px-4 py-3 sm:px-6">
-      <Field label="Görünüm">
-        <ViewToggle value={value.gorunum ?? "islem"} onChange={(gorunum) => onChange({ ...value, gorunum })} />
-      </Field>
-      <Field label="Gün">
-        <DayChips
-          value={value.gun}
-          onChange={(gun) => onChange({ ...value, gun, dateFrom: undefined, dateTo: undefined })}
-        />
-      </Field>
-      {rejectedAvailable && (value.gorunum ?? "islem") === "islem" && !value.q && (
-        <Field label="Durum">
-          <RejectedChip on={!!value.reddedilen} onChange={(on) => onChange({ ...value, reddedilen: on || undefined })} />
-        </Field>
+    <div data-list-surface="toolbar" className="flex flex-wrap items-center gap-1.5 border-b py-2">
+      <SearchBox value={value.q} onChange={(q) => onChange({ ...value, q })} />
+      <SelectChip id="activity-view" label="Görünüm" value={gorunum} resetValue="islem" options={VIEWS} onChange={(v) => onChange({ ...value, gorunum: v ?? "islem" })} />
+      <DayPresetChip<DayChoice>
+        id="activity-day"
+        presets={DAYS}
+        value={day}
+        rangeValue="aralik"
+        resetValue="tumu"
+        from={value.dateFrom?.slice(0, 10) ?? ""}
+        to={value.dateTo?.slice(0, 10) ?? ""}
+        onPreset={(g) => onChange({ ...value, gun: g === "tumu" || g === "aralik" ? undefined : g, dateFrom: undefined, dateTo: undefined })}
+        onRange={(r) =>
+          onChange({ ...value, gun: undefined, dateFrom: r.from ? `${r.from}T00:00:00.000Z` : undefined, dateTo: r.to ? `${r.to}T23:59:59.999Z` : undefined })
+        }
+      />
+      {rejectedAvailable && gorunum === "islem" && !value.q && (
+        <RejectedChip on={!!value.reddedilen} onChange={(on) => onChange({ ...value, reddedilen: on || undefined })} />
       )}
-      <Field label="Ara (kayıt no)">
-        <SearchBox value={value.q} onChange={(q) => onChange({ ...value, q })} />
-      </Field>
-
-      <Field label="Kullanıcı">
-        <Select value={value.userId ?? ANY} onValueChange={(v) => set("userId", v)}>
-          <SelectTrigger className="h-9 w-44">
-            <SelectValue placeholder="Tümü" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ANY}>Tümü</SelectItem>
-            {(usersQuery.data ?? []).map((u) => (
-              <SelectItem key={u.id} value={u.id}>
-                {u.fullName || u.username}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </Field>
-
-      <Field label="Modül">
-        <Select value={value.tableName ?? ANY} onValueChange={(v) => set("tableName", v)}>
-          <SelectTrigger className="h-9 w-44">
-            <SelectValue placeholder="Tümü" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ANY}>Tümü</SelectItem>
-            {(tablesQuery.data ?? []).map((t) => (
-              <SelectItem key={t} value={t}>
-                {tableLabel(t)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </Field>
-
-      <Field label="İşlem">
-        <Select value={value.action ?? ANY} onValueChange={(v) => set("action", v)}>
-          <SelectTrigger className="h-9 w-32">
-            <SelectValue placeholder="Tümü" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ANY}>Tümü</SelectItem>
-            {(Object.keys(actionLabels) as SystemLogDomainAction[]).map((a) => (
-              <SelectItem key={a} value={a}>
-                {actionLabels[a]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </Field>
-
-      <Field label="Tarih aralığı">
-        <DateRangeInput
-          from={value.dateFrom?.slice(0, 10) ?? ""}
-          to={value.dateTo?.slice(0, 10) ?? ""}
-          onFrom={(v) => onChange({ ...value, gun: undefined, dateFrom: v ? `${v}T00:00:00.000Z` : undefined })}
-          onTo={(v) => onChange({ ...value, gun: undefined, dateTo: v ? `${v}T23:59:59.999Z` : undefined })}
-          inputClassName="h-9 w-40"
-          fromLabel="Başlangıç"
-          toLabel="Bitiş"
-        />
-      </Field>
-
+      <SelectChip
+        id="activity-user"
+        label="Kullanıcı"
+        value={value.userId ?? null}
+        options={(usersQuery.data ?? []).map((u) => ({ value: u.id, label: u.fullName || u.username }))}
+        onChange={(v) => set("userId", v)}
+      />
+      <SelectChip
+        id="activity-module"
+        label="Modül"
+        value={value.tableName ?? null}
+        options={(tablesQuery.data ?? []).map((t) => ({ value: t, label: tableLabel(t) }))}
+        onChange={(v) => set("tableName", v)}
+      />
+      <SelectChip
+        id="activity-action"
+        label="İşlem"
+        value={value.action ?? null}
+        options={(Object.keys(actionLabels) as SystemLogDomainAction[]).map((a) => ({ value: a, label: actionLabels[a] }))}
+        onChange={(v) => set("action", v)}
+      />
       {hasActiveFilter && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => onChange({ gorunum: value.gorunum })}
-          className="h-9 gap-1 text-muted-foreground"
-        >
-          <X className="h-3 w-3" />
+        <Button variant="ghost" size="sm" onClick={() => onChange({ gorunum: value.gorunum })} className="h-8 gap-1 px-2 text-xs text-muted-foreground" title="Bütün filtreleri kaldır">
+          <X className="h-3.5 w-3.5" />
           Temizle
         </Button>
       )}
@@ -160,67 +104,15 @@ export function ActivityFilters({ value, onChange, rejectedAvailable = false }: 
   );
 }
 
-function ViewToggle({ value, onChange }: { value: ActivityView; onChange: (v: ActivityView) => void }) {
-  const options: Array<[ActivityView, string]> = [
-    ["islem", "İşlemler"],
-    ["satir", "Tüm satırlar"],
-  ];
-  return (
-    <div role="radiogroup" aria-label="Görünüm" className="flex h-9 rounded-md border p-0.5">
-      {options.map(([v, label]) => (
-        <button
-          key={v}
-          type="button"
-          role="radio"
-          aria-checked={value === v}
-          onClick={() => onChange(v)}
-          className={cn(
-            "whitespace-nowrap rounded px-3 text-sm transition-colors",
-            value === v ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent",
-          )}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-/** Fabrika günü çipleri — aralığı SUNUCU hesaplar (`gun=`). Seçili çipe yeniden basmak kaldırır. */
-function DayChips({ value, onChange }: { value?: SystemLogGun; onChange: (v: SystemLogGun | undefined) => void }) {
-  return (
-    <div className="flex flex-wrap gap-1">
-      {GUN_CIPLERI.map((c) => (
-        <Button
-          key={c.value}
-          type="button"
-          size="sm"
-          variant={value === c.value ? "default" : "outline"}
-          aria-pressed={value === c.value}
-          className="h-9 whitespace-nowrap"
-          onClick={() => onChange(value === c.value ? undefined : c.value)}
-        >
-          {c.label}
-        </Button>
-      ))}
-    </div>
-  );
-}
-
-/** "Reddedilenler" çipi — süzme SUNUCUDA (`reddedilen=1`); yalnız trace status ≥ 400 gelir. */
+/** "Reddedilenler" — tek anahtar (aç/kapa) kutu; süzme SUNUCUDA (`reddedilen=1`), yalnız trace status ≥ 400 gelir. */
 function RejectedChip({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
   return (
-    <Button
-      type="button"
-      size="sm"
-      variant={on ? "default" : "outline"}
-      aria-pressed={on}
-      className="h-9 gap-1.5 whitespace-nowrap"
-      onClick={() => onChange(!on)}
-    >
-      <Ban className="h-3.5 w-3.5" />
-      Reddedilenler
-    </Button>
+    <FilterChip id="activity-rejected" label="Reddedilenler" active={on} removable={false} onRemove={() => onChange(false)}>
+      <button type="button" aria-pressed={on} onClick={() => onChange(!on)} className="flex h-7 items-center gap-1.5 whitespace-nowrap px-2 text-xs">
+        <Ban className="h-3.5 w-3.5" />
+        <span>Reddedilenler</span>
+      </button>
+    </FilterChip>
   );
 }
 
@@ -240,26 +132,15 @@ function SearchBox({ value, onChange }: { value?: string; onChange: (q: string |
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
   return (
-    <div className="relative">
-      <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+    <div className="relative w-full min-w-[10rem] sm:w-56">
+      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
       <Input
         value={term}
         onChange={(e) => setTerm(e.target.value)}
-        placeholder="SP-…, CV…, barkod"
+        placeholder="Kayıt no: SP-…, CV…, barkod"
         aria-label="Kayıt numarasıyla ara"
-        className="h-9 w-full min-w-[10rem] pl-7 sm:w-52"
+        className="h-8 pl-8 text-sm"
       />
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1">
-      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-        {label}
-      </span>
-      {children}
     </div>
   );
 }

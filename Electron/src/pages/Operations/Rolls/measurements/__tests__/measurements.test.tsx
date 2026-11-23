@@ -89,8 +89,9 @@ describe("Simüle metre şeridi (kalıcı)", () => {
     flags.data = { productionEnabled: true, tamburSimulatedMeterEnabled: true };
     wrap(<SimulatedMeterBanner />);
     const banner = screen.getByTestId("simulated-meter-banner");
-    expect(banner.textContent).toContain("Simüle metre stoğa giriyor");
-    expect(within(banner).queryByRole("button")).toBeNull(); // kapatılamaz
+    // Başlık yanındaki ünlem: metin baloncukta, kapatma düğmesi yok (2026-11-23).
+    expect(banner.getAttribute("aria-label")).toContain("simüle metre stoğa giriyor");
+    expect(within(banner).queryByRole("button")).toBeNull();
   });
 
   it("iki ekranda bağlı: Ayarlar kabuğu + Kumaş Stoğu (Tambur sekmesi)", () => {

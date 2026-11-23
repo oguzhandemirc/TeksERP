@@ -107,7 +107,7 @@
     --foreground: 240 24% 13%;
     --card: 0 0% 100%;
     --card-foreground: 240 24% 13%;
-    --card-border: 245 30% 93%;
+    --card-border: 245 26% 88%;
     --chrome: 0 0% 100%;
     --chrome-border: 246 30% 87%;
     --tabstrip: 246 40% 92.5%;
@@ -221,7 +221,7 @@
     --foreground: 240 20% 95%;
     --card: 235 22% 12%;
     --card-foreground: 240 20% 95%;
-    --card-border: 235 18% 18%;
+    --card-border: 235 16% 22%;
     --chrome: 236 24% 12.5%;
     --chrome-border: 236 18% 19%;
     --tabstrip: 238 30% 6.5%;
@@ -384,28 +384,28 @@
 
   /* ── ZEMİN TONU ── varsayılan değer de AÇIKÇA yazılır: önizleme kutusu kökün seçimini miras almasın. */
   [data-surface="lavender"] {
-    --background: 247 52% 96%; --card-border: 246 34% 92%;
+    --background: 247 52% 96%; --card-border: 246 26% 87%;
     --chrome: 0 0% 100%; --chrome-border: 246 30% 87%; --tabstrip: 246 40% 92.5%; --band: 250 70% 98.5%;
   }
   .dark[data-surface="lavender"], .dark [data-surface="lavender"] {
-    --background: 238 30% 9%; --card-border: 235 18% 18%;
+    --background: 238 30% 9%; --card-border: 235 16% 22%;
     --chrome: 236 24% 12.5%; --chrome-border: 236 18% 19%; --tabstrip: 238 30% 6.5%; --band: 237 24% 11%;
   }
   [data-surface="neutral"] {
-    --background: 220 12% 94.5%; --card-border: 220 10% 89%;
+    --background: 220 12% 94.5%; --card-border: 220 10% 85%;
     --chrome: 0 0% 100%; --chrome-border: 220 10% 85%; --tabstrip: 220 12% 90.5%; --band: 220 14% 97.5%;
   }
   /* Beyaz zeminde krom ile içerik aynı renktir — katmanlar çizgi ve sekme bandının tonuyla ayrışır. */
   [data-surface="white"] {
-    --background: 0 0% 100%; --card-border: 245 20% 89%;
+    --background: 0 0% 100%; --card-border: 245 18% 85%;
     --chrome: 0 0% 100%; --chrome-border: 245 20% 86%; --tabstrip: 245 24% 95.5%; --band: 245 40% 98%;
   }
   .dark[data-surface="neutral"], .dark [data-surface="neutral"] {
-    --background: 220 6% 9%; --card-border: 225 8% 18%;
+    --background: 220 6% 9%; --card-border: 225 8% 22%;
     --chrome: 220 6% 12.5%; --chrome-border: 225 8% 19%; --tabstrip: 220 6% 6.5%; --band: 220 6% 11%;
   }
   .dark[data-surface="white"], .dark [data-surface="white"] {
-    --background: 235 18% 13%; --card-border: 235 18% 22%;
+    --background: 235 18% 13%; --card-border: 235 18% 26%;
     --chrome: 235 18% 16.5%; --chrome-border: 235 18% 23%; --tabstrip: 235 18% 10%; --band: 235 18% 15%;
   }
 
@@ -616,6 +616,24 @@
 .tab-pane :is([data-ui-dialog], [data-ui-sheet], [data-ui-pop], [data-slot="card"], [data-list-surface]) [data-list-surface] {
   background-color: transparent;
   border: 0;
+}
+
+/* ── ÇERÇEVELİ KUTU = KART YÜZEYİ — sayfada `rounded-* border` ile çizilip zemin vermeyen kutu (ayar grubu, liste
+   kutusu, bölüm) sayfa zemininde saydam kalıyordu ("arkası boş", 2026-11-23). Zemin rengi taşıyan ya da diyalog/
+   çekmece/kart/renkli kap içindeki kutuya dokunulmaz; kesikli boş-durum kutusu saydam kalır. */
+.tab-pane :is(.rounded, .rounded-md, .rounded-lg, .rounded-xl).border:not(
+    [class*="bg-"],
+    .border-dashed,
+    :is([data-ui-dialog], [data-ui-sheet], [data-ui-pop], [data-slot="card"]) *,
+    .tab-pane [class*="bg-"] *
+  ) {
+  background-color: hsl(var(--card));
+}
+
+/* ── GİRDİ YÜZEYİ — `bg-background` sayfa zeminiyle aynı renktir; elle yazılmış girdi/açılır bu zeminle
+   saydam görünüyordu (2026-11-23). Bütün girdi türleri ortak girdi yüzeyini (kart zemini) alır. */
+:is(input:not([type="checkbox"], [type="radio"], [type="range"]), select, textarea, [role="combobox"]).bg-background {
+  background-color: hsl(var(--card));
 }
 
 /* ── SAYFA BANTLARI — başlık bandı ve liste bantları (özet şeridi) ince alt çizgiyle ayrışır.
@@ -852,7 +870,7 @@
   app-region: no-drag;
 }
 
-/* Yoğunluk (satır yüksekliği + genel boşluk) ve yazı boyutu ayrı eksen: `data-density` → --cell-py/--head-h/--space-*/--control-h,
+/* Yoğunluk (satır yüksekliği + genel boşluk) ve yazı boyutu ayrı eksen: `data-density` → --cell-py, --head-h, --space-(card|gap|…), --control-h,
    `data-font` → kök font ölçeği (bkz. @layer base). */
 
 /* App geneli zemin — düz lavanta-gri (hedef görsel); ton `data-surface` ile değişir. */
