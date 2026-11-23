@@ -11,6 +11,7 @@ import { ListSearchBox } from "@/components/data-table/ListSearchBox";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageBody, PageShell } from "@/components/layout/PageShell";
 import { fmtFactoryDateTime, fmtFactoryTime } from "@/lib/factory-time";
+import { TERIM } from "@/lib/terim";
 import { cn } from "@/lib/utils";
 import { loomLoadService } from "./service";
 import {
@@ -49,7 +50,7 @@ export function LoomLoadPage() {
       />
       {d && !noLooms && (
         <div className="flex shrink-0 items-center gap-2 border-b px-4 py-2">
-          <ListSearchBox value={query} onSearchChange={setQuery} searchHint="Tezgâh kodu/adı, iş emri no, ürün kodu/adı" />
+          <ListSearchBox value={query} onSearchChange={setQuery} searchHint={`Tezgâh kodu/adı, ${TERIM.dokumaIsEmri.tekilKucuk} no, ürün kodu/adı`} />
           <Select value={filter} onValueChange={(v) => setFilter(v as LoomFilter)}>
             <SelectTrigger className="h-8 w-44" aria-label="Tezgâh durumu"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -81,7 +82,7 @@ export function LoomLoadPage() {
           <EmptyState
             icon={Spool}
             title="Tanımlı dokuma tezgâhı yok"
-            description="Tanımlar › Üretim İstasyonları ekranından dokuma tezgâhı ekleyin; dokuma iş emri tezgâhta başlayınca yükü burada görünür."
+            description={`Tanımlar › Üretim İstasyonları ekranından dokuma tezgâhı ekleyin; ${TERIM.dokumaIsEmri.tekilKucuk} tezgâhta başlayınca yükü burada görünür.`}
           />
         ) : (
           <div className="flex min-w-[46rem] flex-col gap-3">
