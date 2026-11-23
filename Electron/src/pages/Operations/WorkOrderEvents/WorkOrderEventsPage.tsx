@@ -53,7 +53,7 @@ export function WorkOrderEventsPage() {
               className="pl-8"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="İş emri no ya da barkod"
+              placeholder="No ya da barkod…"
               title={`${TERIM.terbiyeIsEmri.cumleBasi.yalin} no (IE…) ya da top barkodu okutun`}
               aria-label={`${TERIM.terbiyeIsEmri.cumleBasi.yalin} no ya da top barkodu`}
             />
