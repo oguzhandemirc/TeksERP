@@ -95,6 +95,14 @@ export class CustomerAliasController {
     } catch (e) { next(e); }
   };
 
+  /** Ürün kartı girişi (`/api/items/:id/customer-item-aliases`) — yazma yine `PUT/DELETE item-aliases/:itemId`. */
+  listItemAliasesByItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await this.service.listItemAliasesByItem(assertValidUuid(req.params.id, "id"));
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
   /** Kumaş kartı girişi (`/api/items/:id/customer-color-aliases`) — yazma yine C/D'den. */
   listItemColorAliasesByItem = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {

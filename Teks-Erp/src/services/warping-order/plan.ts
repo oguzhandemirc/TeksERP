@@ -9,6 +9,7 @@ import { ItemType, Prisma } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { resolveDenier } from "../../constants/warp-beam";
 import { computeWarpPlanForward, type WarpWasteSource } from "../helpers/warp-plan.helper";
+import type { YarnWasteSource } from "../helpers/yarn-waste.helper";
 import { WARP_SPEC_YARN_LINES_SELECT, warpSpecYarnLines } from "../helpers/warp-spec-yarn.helper";
 import { isSharedBeamLayer, WARP_BEAM_MODE_LABEL, type WarpBeamModeCode } from "../helpers/warp-layer-beam.helper";
 import { readLayerModesOnGround, readSharedBeamSpecsForGround } from "../helpers/effective-construction.helper";
@@ -43,6 +44,10 @@ export interface WarpingPlanYarn {
   endsCount: number;
   denier: Prisma.Decimal;
   wastePct: Prisma.Decimal;
+  /** Uygulanan firenin kaynağı (`resolveYarnWastePct`): IPLIK = iplik kartı, KART = çözgü kartı firesi (yoksa 0). */
+  wasteSource: YarnWasteSource;
+  /** Kaynak çözgü kartının firesi (%) — iplik firesi geçtiğinde "uygulanmayan" değer olarak gösterilir. */
+  specWastePct: Prisma.Decimal | null;
   /** Formül (firesiz) — müşterinin kâğıttaki formülü. */
   netKg: Prisma.Decimal;
   /** Fireli öneri; fire girdisi yoksa `netKg` ile aynı. */
@@ -205,7 +210,8 @@ export async function computeWarpingPlan(db: Db, input: WarpingPlanInput): Promi
       const it = itemById.get(l.yarnItemId)!;
       yarns.push({
         yarnItemId: l.yarnItemId, code: it.code, name: it.name, sourceWarpSpecId: id, endsCount: l.endsCount,
-        denier: resolveDenier(it)!, wastePct: D(l.wastePct), netKg: D(l.netKg), grossKg: D(l.grossKg), sortOrder: 0,
+        denier: resolveDenier(it)!, wastePct: D(l.wastePct), wasteSource: l.wasteSource, specWastePct: byId.get(id)!.wastePct,
+        netKg: D(l.netKg), grossKg: D(l.grossKg), sortOrder: 0,
       });
     }
   }

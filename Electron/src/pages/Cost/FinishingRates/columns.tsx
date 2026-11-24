@@ -18,6 +18,7 @@ const BASE: ColumnDef<FinishingRate>[] = [
     cell: ({ row: { original: r } }) => <span><span className="font-medium">{r.code}</span> <span className="text-muted-foreground">{r.name}</span></span>,
   },
   { id: "subcontractor", header: "Fason firma", meta: { label: "Fason firma" }, accessorFn: (r) => r.subcontractor?.name ?? "—" },
+  { id: "serviceItem", header: "Hizmet kartı", meta: { label: "Hizmet kartı" }, accessorFn: (r) => r.serviceItem?.name ?? "—" },
   { id: "basis", header: "Baz", meta: { label: "Baz" }, accessorFn: (r) => FINISHING_BASIS_LABEL[r.basis] },
   { id: "price", header: "Fiyat", meta: { label: "Fiyat", align: "right", exportValue: priceText }, cell: ({ row }) => priceText(row.original) },
   { id: "shrink", header: "Tipik çekme", meta: { label: "Tipik çekme", align: "right", exportValue: (r) => fmtPct(r.typicalShrinkPct) }, cell: ({ row }) => fmtPct(row.original.typicalShrinkPct) },

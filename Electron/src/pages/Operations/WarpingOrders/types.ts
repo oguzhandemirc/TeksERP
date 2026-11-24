@@ -48,6 +48,10 @@ export interface WarpingPlanYarn {
   endsCount: number;
   denier: string;
   wastePct: string;
+  /** Yalnız önizlemede (kayıtlı sipariş kaynağı saklamaz): IPLIK = iplik kartı firesi, KART = çözgü kartı. */
+  wasteSource?: "IPLIK" | "KART";
+  /** Yalnız önizlemede: kaynak çözgü kartının firesi (%). */
+  specWastePct?: string | null;
   netKg: string;
   grossKg: string;
 }

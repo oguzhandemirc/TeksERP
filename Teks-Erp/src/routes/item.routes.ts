@@ -569,4 +569,30 @@ router.get(
   aliasController.listItemColorAliasesByItem,
 );
 
+/**
+ * @openapi
+ * /api/items/{id}/customer-item-aliases:
+ *   get:
+ *     tags: [Customer Aliases]
+ *     summary: Bu kaleme bütün müşterilerin verdiği ad (müşterideki kumaş adı)
+ *     description: |
+ *       Ürün kartı "Müşteri Kumaş Adları" sekmesi. Yalnız okur; yazma
+ *       `PUT/DELETE /api/customers/{customerId}/item-aliases/{itemId}` üzerinden.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: "Liste — satır + customer özeti; createdAt desc, id desc" }
+ *       404: { description: Ürün bulunamadı }
+ */
+router.get(
+  "/:id/customer-item-aliases",
+  verifyToken,
+  requirePermission("customer-alias:read"),
+  aliasController.listItemAliasesByItem,
+);
+
 export default router;

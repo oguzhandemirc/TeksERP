@@ -37,6 +37,8 @@ export interface WarpPlanForwardLine {
   yarnItemId: string;
   endsCount: number;
   wastePct: number;
+  /** Uygulanan firenin kaynağı (IPLIK = iplik kartı, KART = çözgü kartı); eski backend göndermez. */
+  wasteSource?: "IPLIK" | "KART";
   netKg: number;
   grossKg: number;
   depoKg: number | null;

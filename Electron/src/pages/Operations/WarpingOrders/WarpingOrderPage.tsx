@@ -30,6 +30,7 @@ import { WarpingOrderFormDialog } from "./WarpingOrderFormDialog";
 import { WarpLayoutSection } from "./WarpLayoutSection";
 import { editModeOf } from "./order-model";
 import { useWarpingOrder, WARPING_ORDERS_PATH } from "./service";
+import { useOrderWasteSource } from "./useOrderWasteSource";
 import { warpingStatusMeta, type WarpingOrder } from "./types";
 
 type DialogKind = "edit" | "cancel" | "instruction" | null;
@@ -40,6 +41,7 @@ export function WarpingOrderPage() {
   const q = useWarpingOrder(id);
   const [dialog, setDialog] = useState<DialogKind>(null);
   const o = q.data;
+  const wasteSourceOf = useOrderWasteSource(o);
   const meta = o ? warpingStatusMeta(o.status) : null;
   return (
     <PageShell>
@@ -64,7 +66,7 @@ export function WarpingOrderPage() {
             <section className="space-y-2" aria-label="İplik planı">
               <h2 className="text-base font-semibold">İplik planı</h2>
               <p className="text-xs text-muted-foreground">Sipariş açılırken hesaplandı ve saklandı; kart sonradan değişse de bu plan değişmez.</p>
-              <PlanTable yarns={o.yarns} hasWaste={o.hasWaste} totals={o.totals} />
+              <PlanTable yarns={o.yarns} hasWaste={o.hasWaste} totals={o.totals} sourceOf={wasteSourceOf} />
             </section>
             {o.status !== "CANCELLED" && <WarpLayoutSection orderId={o.id} />}
             <DispatchesSection order={o} />

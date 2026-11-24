@@ -93,6 +93,26 @@ describe("WarpSpecFormDialog — D3 satır editörü", () => {
     expect(bodies).toContainEqual(expect.objectContaining({ beamCount: 1, beamLengthM: 1000, fixedWasteM: 0, lines: [{ yarnItemId: "y1", endsCount: 3000 }, { yarnItemId: "y2", endsCount: 4000 }] }));
   });
 
+  it("⭐ B6: kendi firesi olan iplikte satırda ve Hesap kartında 'iplik kartındaki %X kullanılıyor (çözgü %Y uygulanmaz)'", () => {
+    const saved = planResult.forward;
+    planResult.forward = {
+      ...saved!, hasWaste: true, wasteSources: [{ kind: "KART_PCT", value: 2 }, { kind: "IPLIK_PCT", yarnItemId: "y1", value: 4 }],
+      lines: [
+        { ...saved!.lines[0]!, wastePct: 4, wasteSource: "IPLIK", grossKg: 52.083 },
+        { ...saved!.lines[1]!, wastePct: 2, wasteSource: "KART", grossKg: 34.014 },
+      ],
+    };
+    try {
+      renderDialog({ initial: { ...spec, wastePct: "2" } as unknown as WarpSpec });
+      expect(screen.getByTestId("warp-yarn-waste-note-A").textContent).toBe("Bu iplik için iplik kartındaki %4 kullanılıyor (çözgü firesi %2 uygulanmaz).");
+      expect(screen.queryByTestId("warp-yarn-waste-note-B")).toBeNull();
+      expect(screen.getByTestId("warp-calc-waste-A").textContent).toContain("iplik kartındaki %4");
+      expect(screen.getByTestId("warp-calc-waste-B").textContent).toBe("Fire %2 · çözgü kartı");
+    } finally {
+      planResult.forward = saved;
+    }
+  });
+
   it("levent boyu × adet girilince ikinci hesap istenir, levent sütunu ve toplamı çıkar", async () => {
     const user = userEvent.setup();
     renderDialog({ initial: spec });

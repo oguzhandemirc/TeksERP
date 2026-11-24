@@ -52,6 +52,9 @@ export interface CalcRow {
   sharePct: number | null;
   /** Levent boyu × adet girildiyse o uzunluk için net kg. */
   beamKg: number | null;
+  /** Yalnız fire varsa: uygulanan yüzde ve kaynağı (B6; karar sunucuda). */
+  wastePct: number | null;
+  wasteSource: "IPLIK" | "KART" | null;
 }
 
 export interface CalcView {
@@ -81,6 +84,8 @@ export function buildCalcView(per1000: WarpPlanResult, beam: { input: BeamInput;
       grossKg: f.hasWaste ? l.grossKg : null,
       sharePct: total > 0 ? (l.netKg / total) * 100 : null,
       beamKg: bl ? bl.netKg : null,
+      wastePct: f.hasWaste ? l.wastePct : null,
+      wasteSource: f.hasWaste ? (l.wasteSource ?? null) : null,
     };
   });
   return {

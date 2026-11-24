@@ -11,6 +11,7 @@ export function wasteSourceOf(yarnItemId: string, frozenPct: string, pv: Warping
   if (!pv?.wasteSources) return null;
   const now = pv.yarns.find((y) => y.yarnItemId === yarnItemId);
   if (!now || Number(now.wastePct) !== Number(frozenPct)) return "açılıştaki değer";
+  if (now.wasteSource) return now.wasteSource === "IPLIK" ? "iplik kartı" : "çözgü kartı";
   const own = pv.wasteSources.some((s: WarpWasteSource) => s.kind === "IPLIK_PCT" && s.yarnItemId === yarnItemId);
   return own ? "iplik kartı" : "çözgü kartı";
 }

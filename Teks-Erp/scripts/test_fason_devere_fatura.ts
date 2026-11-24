@@ -27,6 +27,7 @@ import { cancelWarpingReceipt, previewCancelWarpingReceipt } from "../src/servic
 import { listWarpingOrders } from "../src/services/warping-order/read";
 import { createWarpingInvoiceDraft, getWarpingOrderFeeSummary, listWarpingInvoiceCandidates, warpingFeeMatch } from "../src/services/warping-order/fee-invoice";
 import { invoiceService } from "../src/services/invoice.service";
+import { changeFinishingRate } from "../src/services/finishing-rate.service";
 import { ACCEPTED_WARPING_BEAM_WHERE, isAcceptedWarpingBeam } from "../src/services/helpers/warping-fee.helper";
 import { assertWarpingReceiptsLinkableTx, lockWarpingReceiptOrdersTx, writeInvoiceWarpingReceiptsTx } from "../src/services/helpers/invoice-warping-receipts.helper";
 
@@ -72,6 +73,7 @@ async function main(): Promise<void> {
   let yarnId: string | null = null;
   let specId: string | null = null;
   let rateId: string | null = null;
+  let serviceItemId: string | null = null;
   try {
     for (const k of [SETTING_KEYS.DEVERE_ENABLED, SETTING_KEYS.IPLIK_ENABLED, SETTING_KEYS.FINANCE_ENABLED]) await setSetting(k, "true");
     await setSetting(SETTING_KEYS.DEVERE_LOT_REQUIRED, "false");
@@ -193,9 +195,17 @@ async function main(): Promise<void> {
     track(dF);
     const mF = await warpingFeeMatch(dF.data.id);
     check("A9 ücretsiz siparişten taslak: fiyatsız satır + uyarı; fark hesaplanmaz", (dF.warnings ?? []).some((w) => /ücreti yok/.test(w)) && mF?.missingPrice === true && mF.expectedTotal === null);
+    check("B15 tarifede hizmet kartı yokken: satır açıklama (TEXT) + 'tarifeye hizmet kartı bağlayın' uyarısı",
+      (dF.warnings ?? []).some((w) => /hizmet kartı yok/.test(w)) && (await prisma.invoiceLine.findMany({ where: { invoiceId: dF.data.id }, select: { lineType: true } })).every((l) => l.lineType === "TEXT"));
+    // B15: panel tarife formundan bağlanan hizmet kartı (RAW_M ↔ METRE) taslak satırına SERVICE olarak gelir.
+    serviceItemId = (await prisma.serviceItem.create({ data: { code: `${TAG}-H`.slice(0, 32), name: `${TAG} devere hizmeti` }, select: { id: true } })).id;
+    await changeFinishingRate({ code: `${TAG}-T`.slice(0, 32), name: `${TAG} devere`, subcontractorId: sub.id, basis: "RAW_M", currency: "TRY", pricePerM: "1.5", serviceItemId }, U);
     const dG = await createWarpingInvoiceDraft({ warpingOrderIds: [G], clientToken: randomUUID() }, U);
     track(dG);
     check("TRY ücretli siparişin taslağı TRY doğar", (await prisma.invoice.findUniqueOrThrow({ where: { id: dG.data.id }, select: { currency: true } })).currency === "TRY");
+    const lG = await prisma.invoiceLine.findMany({ where: { invoiceId: dG.data.id }, select: { lineType: true, serviceItemId: true } });
+    check("B15 tarifeye bağlı hizmet kartı → taslak satırı SERVICE + o kart; hizmet kartı uyarısı yok",
+      lG.length === 1 && lG[0]!.lineType === "SERVICE" && lG[0]!.serviceItemId === serviceItemId && !(dG.warnings ?? []).some((w) => /hizmet kartı yok/.test(w)), JSON.stringify(lG));
     // A8b: tel×m fiyatı 8 ondalık (16,8) — kolonda kaybolmaz; fatura satırı (4 ondalık) götürü doğar, tutar kaymaz.
     const E8 = await newOrder({ feeUnit: "ENDS_METRE", feeUnitPrice: 0.00002345, feeCurrency: "USD" });
     await receive(E8, [1000], "DV-9");
@@ -290,6 +300,8 @@ async function main(): Promise<void> {
     if (yarnId) await prisma.item.deleteMany({ where: { id: yarnId } });
     if (cardId) await prisma.customer.deleteMany({ where: { id: cardId } });
     if (rateId) await prisma.exchangeRate.deleteMany({ where: { id: rateId } });
+    await prisma.finishingRate.deleteMany({ where: { code: `${TAG}-T`.slice(0, 32) } });
+    if (serviceItemId) await prisma.serviceItem.deleteMany({ where: { id: serviceItemId } });
     for (const key of SETTING_FOTO) {
       const f = foto.find((s) => s.key === key);
       if (f) await prisma.systemSetting.update({ where: { key }, data: { value: f.value as Prisma.InputJsonValue } });

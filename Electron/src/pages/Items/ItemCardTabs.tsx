@@ -1,4 +1,4 @@
-// Kumaş kartı sekmeleri: "Bilgiler" (form) + "Müşteri Renk Adları". Yalnız düzenlenen KUMAŞ kartında ve
+// Kumaş kartı sekmeleri: "Bilgiler" (form) + "Müşteri Kumaş Adları" + "Müşteri Renk Adları". Yalnız düzenlenen KUMAŞ kartında ve
 // `customer-alias:read` varken sekme çizilir; aksi hâlde form bugünkü gibi tek başına durur.
 import type { ReactNode } from "react";
 import { TabsTrigger } from "@/components/ui/tabs";
@@ -7,6 +7,7 @@ import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { itemLifecycleOf } from "@/lib/item-lifecycle";
 import type { Item } from "./types";
 import { ItemCustomerColorAliasesPanel } from "./ItemCustomerColorAliasesPanel";
+import { ItemCustomerItemAliasesPanel } from "./ItemCustomerItemAliasesPanel";
 import { YarnWhereSection } from "@/pages/Operations/YarnAtSubcontractor/YarnWhereSection";
 
 interface Props {
@@ -27,9 +28,13 @@ export function ItemCardTabs({ item, children }: Props) {
     <TabbedDialogTabs defaultValue="info">
       <TabbedDialogTabList>
         <TabsTrigger value="info">Bilgiler</TabsTrigger>
+        <TabsTrigger value="customer-item-aliases">Müşteri Kumaş Adları</TabsTrigger>
         <TabsTrigger value="customer-color-aliases">Müşteri Renk Adları</TabsTrigger>
       </TabbedDialogTabList>
       <TabbedDialogPanel value="info" className="space-y-4">{costLink}{children}</TabbedDialogPanel>
+      <TabbedDialogPanel value="customer-item-aliases">
+        <ItemCustomerItemAliasesPanel item={{ id: item.id, name: item.name, lifecycle: itemLifecycleOf(item) }} />
+      </TabbedDialogPanel>
       <TabbedDialogPanel value="customer-color-aliases">
         <ItemCustomerColorAliasesPanel
           item={{

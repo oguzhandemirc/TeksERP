@@ -7,6 +7,7 @@ import { fmtKg } from "@/pages/Operations/WarpPlan/warp-plan-model";
 import { buildCalcView, parseBeam, type CalcView } from "./preview";
 import { totalEnds } from "./YarnRowsEditor";
 import { useWarpCalc } from "./useWarpCalc";
+import { wasteSourceText, yarnOwnWasteNote } from "@/pages/Operations/WarpPlan/yarn-waste-note";
 
 const num = "text-right tabular-nums";
 
@@ -28,7 +29,7 @@ export function WarpCalcPanel() {
         {!calc.hasBody ? (
           <p className="rounded-md bg-muted/50 px-3 py-4 text-center text-sm text-muted-foreground">Hesap için her satırda iplik ve tel adedi girin.</p>
         ) : view ? (
-          <CalcTable view={view} />
+          <CalcTable view={view} specWastePct={calc.specWastePct} />
         ) : (
           <p className="text-sm text-muted-foreground">{calc.per1000Error ? "Hesaplanamadı." : "Hesaplanıyor…"}</p>
         )}
@@ -72,8 +73,21 @@ export function WarpCalcPanel() {
   );
 }
 
+/** B6: fire varken satır başına uygulanan yüzde + kaynak; iplik kendi firesini taşıyorsa uyarı rengiyle tam cümle. */
+function WasteLine({ row, specWastePct }: { row: CalcView["rows"][number]; specWastePct: number | null }) {
+  if (row.wastePct === null) return null;
+  const note = yarnOwnWasteNote(row.wasteSource ?? undefined, row.wastePct, specWastePct);
+  if (note) return <p className="mt-1 pl-7 text-[11px] text-amber-700 dark:text-amber-400" data-testid={`warp-calc-waste-${row.letter}`}>{note}</p>;
+  const src = wasteSourceText(row.wasteSource ?? undefined, row.wastePct);
+  return (
+    <p className="mt-1 pl-7 text-[11px] text-muted-foreground" data-testid={`warp-calc-waste-${row.letter}`}>
+      Fire {row.wastePct > 0 ? `%${formatQty(row.wastePct, 2, 0)}` : "yok"}{src ? ` · ${src}` : ""}
+    </p>
+  );
+}
+
 /** Her iplik iki satır: üstte harf + AD (birincil) + küçük kod · denye; altta sayılar — dar panelde ad kesilmez. */
-function CalcTable({ view }: { view: CalcView }) {
+function CalcTable({ view, specWastePct }: { view: CalcView; specWastePct: number | null }) {
   const withBeam = view.beam !== null;
   const cols = withBeam ? "grid-cols-5" : "grid-cols-4";
   return (
@@ -102,6 +116,7 @@ function CalcTable({ view }: { view: CalcView }) {
             <span className={num}>{r.sharePct === null ? "—" : `%${formatQty(r.sharePct, 1)}`}</span>
             {withBeam ? <span className={num}>{fmtKg(r.beamKg)}</span> : null}
           </div>
+          <WasteLine row={r} specWastePct={specWastePct} />
         </div>
       ))}
     </div>

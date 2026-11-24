@@ -117,7 +117,7 @@ export interface WarpingOrderPreview {
   hasWaste: boolean;
   wasteSources: WarpingPlan["wasteSources"];
   stock: { known: boolean; emanetAcik: boolean };
-  yarns: Array<{ yarnItemId: string; code: string; name: string; sourceWarpSpecId: string; endsCount: number; denier: string; wastePct: string; netKg: string; grossKg: string; depoKg: string | null; emanetKg: string | null }>;
+  yarns: Array<{ yarnItemId: string; code: string; name: string; sourceWarpSpecId: string; endsCount: number; denier: string; wastePct: string; wasteSource: WarpingPlan["yarns"][number]["wasteSource"]; specWastePct: string | null; netKg: string; grossKg: string; depoKg: string | null; emanetKg: string | null }>;
   totals: { netKg: string; grossKg: string };
 }
 
@@ -147,7 +147,7 @@ export async function previewWarpingOrder(input: Pick<WarpingOrderCreateInput, "
       const s = stock?.byItem.get(y.yarnItemId);
       return {
         yarnItemId: y.yarnItemId, code: y.code, name: y.name, sourceWarpSpecId: y.sourceWarpSpecId, endsCount: y.endsCount,
-        denier: y.denier.toString(), wastePct: y.wastePct.toFixed(2), netKg: y.netKg.toFixed(3), grossKg: y.grossKg.toFixed(3),
+        denier: y.denier.toString(), wastePct: y.wastePct.toFixed(2), wasteSource: y.wasteSource, specWastePct: y.specWastePct?.toFixed(2) ?? null, netKg: y.netKg.toFixed(3), grossKg: y.grossKg.toFixed(3),
         depoKg: stock ? (s?.serbestKg ?? D(0)).toFixed(3) : null,
         emanetKg: s?.emanetKg == null ? null : s.emanetKg.toFixed(3),
       };
