@@ -40,6 +40,7 @@ import {
 import { assertNoBareFilterParams, parseQueryParams, readFilterList, readIdCondition } from "../utils/query-parser";
 import { AppError } from "../utils/app-error";
 import { listSearchParam, readListSearch } from "../utils/list-search";
+import { clientTokenField, currencyEnum, decimalInput, machineRateChangeSchema, machineRateCreateSchema, revokeBody, yarnPriceSchema } from "./cost.schemas";
 
 const router = Router();
 router.use(verifyToken, requireMaliyetEnabled);
@@ -51,24 +52,12 @@ const wrap = (h: H) => (req: Request, res: Response, next: NextFunction): void =
 
 const idParam = z.object({ id: z.string().uuid("Geçersiz kayıt ID") });
 const itemIdParam = z.object({ itemId: z.string().uuid("Geçersiz ürün ID") });
-const currencyEnum = z.enum(["TRY", "USD", "EUR", "GBP", "RUB"], { message: "Geçersiz para birimi" });
-// Sayı metin ya da sayı gelir; Decimal'e çevirme + aralık servis tarafında (`cost-input.helper`).
-const decimalInput = z.union([z.string(), z.number()]);
 const body = z.record(z.string(), z.unknown());
 // Geçmiş açıkça istenir; tanınmayan değer 400 (fail-closed).
 const includeRevokedQ = z
   .enum(["0", "1", "true", "false"], { message: "includeRevoked yalnız 0/1/true/false olabilir" })
   .optional()
   .transform((v) => v === "1" || v === "true");
-
-const yarnPriceSchema = z.object({
-  yarnItemId: z.string().uuid("Geçersiz iplik ID"),
-  currency: currencyEnum,
-  pricePerKg: decimalInput,
-  source: z.enum(["MANUAL", "LAST_RECEIPT", "PURCHASE_PRICE"], { message: "Geçersiz fiyat kaynağı" }).optional(),
-  sourceRef: z.string().nullable().optional(),
-  note: z.string().nullable().optional(),
-}).strict();
 
 const finishingRateSchema = z.object({
   code: z.string(),
@@ -357,17 +346,8 @@ router.post("/finishing-rates/:id/revoke", requirePermission("cost:write"), wrap
 
 // ── MAKİNE SAAT ÜCRETİ + HİZMET SARF NORMU (D4-G1a) ─────────────────────────
 // Damgalı sürüm, "şu andan itibaren"; yaratma/değişim `clientToken` taşır (replay tek boğaz, servis).
+// Makine saat ücreti şemaları + `revokeBody` → `cost.schemas.ts`.
 
-const clientTokenField = z.string().uuid("Geçersiz istemci anahtarı (clientToken)");
-const revokeBody = z.object({ reason: z.string().trim().max(300, "Gerekçe en çok 300 karakter").nullable().optional() }).strict();
-const machineRateValues = {
-  hourRateTry: decimalInput,
-  normMPerHour: decimalInput.nullable().optional(),
-  note: z.string().nullable().optional(),
-  clientToken: clientTokenField,
-};
-const machineRateCreateSchema = z.object({ machineId: z.string().uuid("Geçersiz makine ID"), ...machineRateValues }).strict();
-const machineRateChangeSchema = z.object(machineRateValues).strict();
 const normValues = {
   qtyPerM: decimalInput,
   // Gönderilmezse PER_METER (eski istemci bayt-aynı).
