@@ -441,12 +441,7 @@ export const FIELD_ENUM_OVERRIDES: Record<string, Record<string, string>> = {
   "WORK_ORDER.materialProvidedBy": { CUSTOMER: "Müşteri verdi" },
   // OrderStatus (2026-11-04) — sipariş durumu kullanıcıya SEVK diliyle söylenir (panel `orderStatusLabels`);
   // global PENDING/APPROVED/COMPLETED/CANCELLED cihaz/adım/iş emri ile ortak, onlar değişmez.
-  "ORDER.status": {
-    PENDING: "Henüz onaylanmadı",
-    APPROVED: "Henüz gönderilmedi",
-    COMPLETED: "Hepsi gönderildi ya da elle kapatıldı",
-    CANCELLED: "Sipariş iptal edildi",
-  },
+  "ORDER.status": { PENDING: "Henüz onaylanmadı", APPROVED: "Henüz gönderilmedi", COMPLETED: "Hepsi gönderildi ya da elle kapatıldı", CANCELLED: "Sipariş iptal edildi" },
   // FabricTechnique.WOVEN (2026-11-25) — ürünün üretim tekniği; global "Dokuma metresi" (ServiceMeterBasis) değil.
   "ITEM.fabricTechnique": { WOVEN: "Dokuma" },
 };

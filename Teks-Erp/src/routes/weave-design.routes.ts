@@ -22,7 +22,8 @@ import {
 } from "../services/weave-design.service";
 
 const router = Router();
-router.use(verifyToken, requireDokumaEnabled, express.json({ limit: WEAVE_DESIGN_BODY_LIMIT }));
+router.use(verifyToken, requireDokumaEnabled);
+router.use(express.json({ limit: WEAVE_DESIGN_BODY_LIMIT }));
 
 type H = (req: Request, res: Response) => Promise<void>;
 const wrap = (h: H) => (req: Request, res: Response, next: NextFunction): void => {
