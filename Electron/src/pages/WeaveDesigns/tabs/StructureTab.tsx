@@ -26,6 +26,8 @@ const DRAWING_IN_HINT = "Tellerin hangi çerçeveden ve tarağın hangi dişinde
 interface FieldDef { key: TextKey; label: string; max: number; mode?: "numeric" | "decimal"; info?: string; show: (m: ShedMechanism, f: Form) => boolean }
 
 const ALL = () => true;
+/** FIELDS'in ilk üçü kimlik alanları (her mekanizmada). */
+const IDENTITY_COUNT = 3;
 const FIELDS: FieldDef[] = [
   { key: "code", label: "Desen kodu *", max: 32, show: ALL },
   { key: "name", label: "Desen adı *", max: 100, show: ALL },
@@ -78,19 +80,22 @@ export function StructureTab({ design, fabric, canWrite }: { design: WeaveDesign
   });
   const m = form.shedMechanism;
   const savedMech = resolveWeaveClass(design).shedMechanism;
+  const renderField = (f: FieldDef) => (
+    <div key={`${f.key}-${f.label}`} className="space-y-1.5">
+      <div className="flex items-center gap-1.5">
+        <Label htmlFor={`wd-${f.key}`}>{f.label}</Label>
+        {f.info && <InfoPopover desc={f.info} label={`${f.label} açıklaması`} />}
+      </div>
+      <Input id={`wd-${f.key}`} value={form[f.key]} maxLength={f.max} inputMode={f.mode} disabled={!canWrite} onChange={(e) => set(f.key, e.target.value)} />
+    </div>
+  );
   return (
     <div className="space-y-6">
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {/* Kimlik (kod · ad · aile) önce, sınıf ikinci satırda, mekanizmaya ait alanlar sonra. */}
+        {FIELDS.slice(0, IDENTITY_COUNT).map(renderField)}
         <WeaveClassFields idPrefix="wd-edit" value={form} disabled={!canWrite} onChange={(c) => setForm((f) => ({ ...f, ...c }))} />
-        {FIELDS.filter((f) => f.show(m, form)).map((f) => (
-          <div key={`${f.key}-${f.label}`} className="space-y-1.5">
-            <div className="flex items-center gap-1.5">
-              <Label htmlFor={`wd-${f.key}`}>{f.label}</Label>
-              {f.info && <InfoPopover desc={f.info} label={`${f.label} açıklaması`} />}
-            </div>
-            <Input id={`wd-${f.key}`} value={form[f.key]} maxLength={f.max} inputMode={f.mode} disabled={!canWrite} onChange={(e) => set(f.key, e.target.value)} />
-          </div>
-        ))}
+        {FIELDS.slice(IDENTITY_COUNT).filter((f) => f.show(m, form)).map(renderField)}
         {m === "DOBBY" && (
           <div className="space-y-1.5 sm:col-span-2 lg:col-span-3">
             <div className="flex items-center gap-1.5">
