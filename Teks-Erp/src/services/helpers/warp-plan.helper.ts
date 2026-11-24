@@ -138,7 +138,6 @@ export function computeWarpPlanForward(input: WarpPlanCommonInput & { beamCount:
   if (!beamLength.greaterThan(0)) throw new Error("warp-plan: levent boyu > 0 olmalı");
   const { lines, fixed, hasWaste, wasteSources } = resolveLines(input);
   const L = beamLength.mul(input.beamCount);
-  let tNet = ZERO, tGross = ZERO, tSend = ZERO;
   const out = lines.map((l): WarpPlanForwardLine => {
     const net = warpYarnKgExact(l.input.endsCount, l.input.denier, L);
     const gross = hasWaste ? grossKgExact(l, L, fixed) : net;
@@ -146,7 +145,6 @@ export function computeWarpPlanForward(input: WarpPlanCommonInput & { beamCount:
     const fasonda = st?.fasondaKg == null ? null : D(st.fasondaKg);
     const depo = st?.depoKg == null ? null : D(st.depoKg);
     const send = maxD(ZERO, gross.minus(fasonda ?? ZERO));
-    tNet = tNet.plus(net); tGross = tGross.plus(gross); tSend = tSend.plus(send);
     return {
       yarnItemId: l.input.yarnItemId,
       endsCount: l.input.endsCount,
@@ -160,13 +158,16 @@ export function computeWarpPlanForward(input: WarpPlanCommonInput & { beamCount:
       depoShortKg: depo == null ? null : kgOut(maxD(ZERO, send.minus(depo))),
     };
   });
+  // Toplam = 3 haneli SATIRLARIN toplamı (sipariş satırı yuvarlanmış saklar ve onları toplar): round(Σ kesin) kart
+  // panelinde 1 g farklı çıkıyordu. Kesin kalan Decimal toplamı yine 3 hanedir.
+  const sumOut = (pick: (l: WarpPlanForwardLine) => number): number => kgOut(out.reduce((s, l) => s.plus(pick(l)), ZERO));
   return {
     lengthM: mOut(L),
     grossLengthM: mOut(L.plus(fixed)),
     hasWaste,
     wasteSources,
     lines: out,
-    totals: { netKg: kgOut(tNet), grossKg: kgOut(tGross), sendKg: kgOut(tSend) },
+    totals: { netKg: sumOut((l) => l.netKg), grossKg: sumOut((l) => l.grossKg), sendKg: sumOut((l) => l.sendKg) },
   };
 }
 

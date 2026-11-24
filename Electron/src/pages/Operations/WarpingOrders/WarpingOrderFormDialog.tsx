@@ -12,18 +12,15 @@ import { Calculator, ClipboardList, Coins, Layers } from "lucide-react";
 import { FormCard, WideFormColumns, WideFormDialog } from "@/components/forms/WideFormDialog";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
-import { apiErrorMessage } from "@/services/apiClient";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { toastServerSuccess } from "@/lib/serverNotes";
 import { BeamLinesFieldset, OrderIdentityFields, OrderNotesField, OrderTermsFields, SalesOrderLinks } from "./OrderFormFields";
-import { PlanTable } from "./PlanTable";
+import { PlanPreview } from "./PlanPreview";
 import {
   buildOrderBody,
   editModeOf,
   emptyOrderForm,
-  fmtM,
   formFromOrder,
-  isBeamCountOpen,
   previewBody,
   rememberExtraOptions,
   trimNum,
@@ -143,34 +140,6 @@ export function WarpingOrderFormDialog({ order, seed, onClose, onSaved }: Props)
         }
       />
     </WideFormDialog>
-  );
-}
-
-/** Plan önizlemesi: kilitliyse kayıtlı plan, değilse sunucu önizlemesi (yazmaz); iplik ADI birincil (PlanTable). */
-function PlanPreview({ order, planLocked, pq, hasBody, fresh }: { order?: WarpingOrder; planLocked: boolean; pq: ReturnType<typeof useWarpingPreview>; hasBody: boolean; fresh: boolean }) {
-  const preview = pq.data?.data;
-  return (
-    <section className="space-y-2" aria-label="Plan önizlemesi" aria-busy={pq.isFetching}>
-      {planLocked && order ? (
-        <PlanTable yarns={order.yarns} hasWaste={order.hasWaste} totals={order.totals} />
-      ) : pq.isError ? (
-        <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-          {apiErrorMessage(pq.error)}
-        </p>
-      ) : !hasBody ? (
-        <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">Plan için çözgü kartı seçin ve her levent satırına adet ile boy (ya da adet belli değilse toplam metre) yazın.</p>
-      ) : !fresh || !preview ? (
-        <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">Hesaplanıyor…</p>
-      ) : (
-        <>
-          <p className="text-sm text-muted-foreground">
-            {isBeamCountOpen(preview) ? `Hedef ${fmtM(preview.targetLengthM)} m · adet belli değil` : `${preview.beamCount} levent · ${fmtM(preview.targetLengthM)} m çözgü`}
-            {preview.stock.known ? "" : " · iplik stoğu bilinmiyor (iplik modülü kapalı)"}
-          </p>
-          <PlanTable yarns={preview.yarns} hasWaste={preview.hasWaste} totals={preview.totals} showStock={preview.stock.known} />
-        </>
-      )}
-    </section>
   );
 }
 
