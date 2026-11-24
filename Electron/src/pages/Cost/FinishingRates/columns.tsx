@@ -1,6 +1,6 @@
 // Terbiye tarifeleri — tablo sütunları (ortak DataTable).
 import type { ColumnDef } from "@tanstack/react-table";
-import { History } from "lucide-react";
+import { History, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
 import { fmtFactoryDate } from "@/lib/factory-time";
@@ -25,7 +25,11 @@ const BASE: ColumnDef<FinishingRate>[] = [
   { id: "createdAt", header: "Tarih", meta: { label: "Tarih", exportValue: (r) => fmtFactoryDate(r.createdAt) }, accessorFn: (r) => r.createdAt, cell: ({ row }) => fmtFactoryDate(row.original.createdAt) },
 ];
 
-export function finishingColumns(onEdit: (e: { row: FinishingRate }) => void, onHistory: (r: FinishingRate) => void): ColumnDef<FinishingRate>[] {
+export function finishingColumns(
+  onEdit: (e: { row: FinishingRate }) => void,
+  onHistory: (r: FinishingRate) => void,
+  onDetails: (r: FinishingRate) => void,
+): ColumnDef<FinishingRate>[] {
   return [
     ...BASE,
     {
@@ -35,8 +39,11 @@ export function finishingColumns(onEdit: (e: { row: FinishingRate }) => void, on
       enableHiding: false,
       meta: { label: "İşlem", align: "right" },
       cell: ({ row: { original: r } }) => (
-        <span className="whitespace-nowrap">
+        <span className="inline-flex items-center gap-1 whitespace-nowrap">
           <PermissionGate permission="cost:write">
+            <Button size="sm" variant="outline" className="h-7" onClick={() => onDetails(r)} title="Ad, hizmet kartı, not — yeni sürüm açmaz">
+              <Pencil className="mr-1 h-3.5 w-3.5" />Düzenle
+            </Button>
             <Button size="sm" variant="outline" className="h-7" onClick={() => onEdit({ row: r })}>Fiyat değiştir</Button>
           </PermissionGate>
           <Button size="sm" variant="ghost" className="h-7" onClick={() => onHistory(r)} aria-label="Geçmiş"><History className="h-4 w-4" /></Button>

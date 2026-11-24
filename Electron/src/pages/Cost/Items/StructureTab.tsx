@@ -15,7 +15,7 @@ import { decToInput, fmtDecFull, fmtQtyDecFull, toDecimalText } from "../shared/
 import { SOURCE_LABEL } from "../shared/labels";
 import { CardSummary } from "./CardSummary";
 import { ProcessesEditor } from "./ProcessesEditor";
-import { NARROW_GRID, StructureNumberField } from "./StructureNumberField";
+import { NARROW_GRID, StructureNumberField, useStructureHintContext } from "./StructureNumberField";
 import { FinishingCard, StructureSaveBar } from "./StructureParts";
 import { StructurePickField } from "./StructurePickField";
 import { isCostCurrency, showPickFields, useWeavingPickMethod, type PickPair } from "../shared/loom-pick";
@@ -43,8 +43,7 @@ export function StructureTab({ detail, measured, flagged }: { detail: CostItemDe
     currency: isCostCurrency(detail.yapi?.loomPickCurrency) ? detail.yapi.loomPickCurrency : "",
   }));
   const [pick, setPick] = useState<PickPair>(initialPick);
-  const rates = useQuery({ queryKey: ["cost-finishing-rates", "active"], queryFn: () => finishingRateService.listActive() });
-  const set = (k: keyof Form, v: string) => setF((x) => ({ ...x, [k]: v }));
+  const rates = useQuery({ queryKey: ["cost-finishing-rates", "active"], queryFn: () => finishingRateService.listActive() });  const set = (k: keyof Form, v: string) => setF((x) => ({ ...x, [k]: v }));
   const dirty = JSON.stringify([f, procs, pick]) !== JSON.stringify([initial, initialProcs, initialPick]);
   const save = useMutation({
     mutationFn: () =>
@@ -62,8 +61,9 @@ export function StructureTab({ detail, measured, flagged }: { detail: CostItemDe
       void qc.invalidateQueries({ queryKey: ["cost-preview"] });
     },
   });
+  const ctx = useStructureHintContext(f.finishingRateCode, rates.data);
   const num = (k: StructureKey, footer?: ReactNode) => (
-    <StructureNumberField k={k} value={f[k]} onChange={(v) => set(k, v)} girdi={detail.girdi} disabled={!canWrite} flagged={flagged.has(k)} footer={footer} />
+    <StructureNumberField k={k} value={f[k]} onChange={(v) => set(k, v)} girdi={detail.girdi} disabled={!canWrite} flagged={flagged.has(k)} ctx={ctx} footer={footer} />
   );
   const pickDefault = detail.girdi.loomPick?.rate;
   const info = (desc: string, label: string) => <InfoPopover desc={desc} label={label} />;

@@ -20,6 +20,9 @@ import { useServicePriceMutations } from "./useServicePriceMutations";
 import { useServicePricesData } from "./useServicePricesData";
 import { useServicePricesAccess } from "./useServicePricesAccess";
 
+// Ekran Ön Muhasebe bölümünde de listelenir; o bölümün üst sayfası yok → kırıntı/geri rotanın kendi hub'ına (B18/13).
+const PARENT = { label: "Tanımlar", to: "/definitions" };
+
 export function ServicePricesPage() {
   const access = useServicePricesAccess();
   // Hizmetler listesindeki "Fiyat tablosu" bağlantısı `?item=<id>` ile gelir (yalnız ilk seçim).
@@ -38,6 +41,7 @@ export function ServicePricesPage() {
     <PageShell>
       <PageHeader
         title="Hizmet Fiyat Tablosu"
+        parent={PARENT}
         description="Hizmetin kademe (çeşit) fiyatları: genel ve müşteriye özel, ileri tarihli fiyat dahil. Uygulanan fiyat faturadaki sırayla hesaplanır: müşteri kademe → müşteri gram → genel kademe → istasyon gram → kalem fiyatı."
       />
       {access.isLoading ? (

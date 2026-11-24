@@ -194,6 +194,7 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/finance/cash-transactions/:id/allocations": e("masrafı makineye/işe bağladı", "masrafı bağlamaya çalıştı"),
   "POST /api/finance/expense-allocations/:id/change": e("masraf bağını değiştirdi", "masraf bağını değiştirmeye çalıştı"),
   "POST /api/finance/expense-allocations/:id/revoke": e("masraf bağını kaldırdı", "masraf bağını kaldırmaya çalıştı"),
+  "PATCH /api/cost/finishing-rates/:id": e("terbiye tarifesinin bilgilerini düzenledi", "terbiye tarifesinin bilgilerini düzenlemeye çalıştı"),
   "POST /api/cost/machine-rates": e("makine saat ücreti yazdı", "makine saat ücreti yazmaya çalıştı"),
   "POST /api/cost/machine-rates/:id/change": e("makine saat ücretini değiştirdi", "makine saat ücretini değiştirmeye çalıştı"),
   "POST /api/cost/machine-rates/:id/revoke": e("makine saat ücretini kaldırdı", "makine saat ücretini kaldırmaya çalıştı"),

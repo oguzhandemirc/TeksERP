@@ -20,10 +20,17 @@ interface WideFormDialogProps {
   dirtyManaged?: boolean;
   /** Bölüm görünürlüğü tercih anahtarı (ör. `warp-spec.form`); verilirse `sectionId`li kartlar × yanındaki menüde listelenir. */
   sectionsKey?: string;
+  /** `fit`: az alanlı form — yükseklik içeriğe göre (en çok 92vh), genişlik 64rem; boş büyük pencere olmasın. */
+  size?: "wide" | "fit";
   children: ReactNode;
 }
 
-export function WideFormDialog({ open, onOpenChange, title, description, footer, onSubmit, dirtyManaged, sectionsKey, children }: WideFormDialogProps) {
+const SIZE_CLASS = {
+  wide: "h-[92vh] max-w-[88rem]",
+  fit: "max-h-[92vh] max-w-[64rem]",
+} as const;
+
+export function WideFormDialog({ open, onOpenChange, title, description, footer, onSubmit, dirtyManaged, sectionsKey, size = "wide", children }: WideFormDialogProps) {
   const body = (
     <>
       <div className="min-h-0 flex-1 overflow-y-auto bg-muted/40 px-6 py-5">{children}</div>
@@ -32,7 +39,7 @@ export function WideFormDialog({ open, onOpenChange, title, description, footer,
   );
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[92vh] w-[calc(100%-2rem)] max-w-[88rem] flex-col gap-0 overflow-hidden p-0" data-form-size="wide">
+      <DialogContent className={cn("flex w-[calc(100%-2rem)] flex-col gap-0 overflow-hidden p-0", SIZE_CLASS[size])} data-form-size={size}>
         <MaybeSections sectionsKey={sectionsKey}>
           <DialogHeader className={cn("shrink-0 border-b border-border/70 px-6 pb-3 pt-4", sectionsKey && "pr-20")}>
             <DialogTitle>{title}</DialogTitle>

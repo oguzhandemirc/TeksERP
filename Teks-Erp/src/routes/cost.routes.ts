@@ -21,7 +21,7 @@ import {
   updateDraft,
 } from "../services/cost-parameter.service";
 import { changeYarnCostPrice, listYarnCostPrices, revokeYarnCostPrice } from "../services/yarn-cost-price.service";
-import { changeFinishingRate, listFinishingRates, revokeFinishingRate } from "../services/finishing-rate.service";
+import { changeFinishingRate, listFinishingRates, revokeFinishingRate, updateFinishingRateDetails } from "../services/finishing-rate.service";
 import { getCostStructure, putCostStructure } from "../services/cost-structure.service";
 import { changeMachineCostRate, createMachineCostRate, listMachineCostOptions, listMachineCostRates, revokeMachineCostRate } from "../services/machine-cost-rate.service";
 import { changeConsumableNorm, createConsumableNorm, listConsumableNorms, revokeConsumableNorm } from "../services/consumable-norm.service";
@@ -40,6 +40,7 @@ import {
 import { assertNoBareFilterParams, parseQueryParams, readFilterList, readIdCondition } from "../utils/query-parser";
 import { AppError } from "../utils/app-error";
 import { listSearchParam, readListSearch } from "../utils/list-search";
+import { clientTokenField, currencyEnum, decimalInput, machineRateChangeSchema, machineRateCreateSchema, revokeBody, yarnPriceSchema } from "./cost.schemas";
 
 const router = Router();
 router.use(verifyToken, requireMaliyetEnabled);
@@ -51,24 +52,12 @@ const wrap = (h: H) => (req: Request, res: Response, next: NextFunction): void =
 
 const idParam = z.object({ id: z.string().uuid("Geçersiz kayıt ID") });
 const itemIdParam = z.object({ itemId: z.string().uuid("Geçersiz ürün ID") });
-const currencyEnum = z.enum(["TRY", "USD", "EUR", "GBP", "RUB"], { message: "Geçersiz para birimi" });
-// Sayı metin ya da sayı gelir; Decimal'e çevirme + aralık servis tarafında (`cost-input.helper`).
-const decimalInput = z.union([z.string(), z.number()]);
 const body = z.record(z.string(), z.unknown());
 // Geçmiş açıkça istenir; tanınmayan değer 400 (fail-closed).
 const includeRevokedQ = z
   .enum(["0", "1", "true", "false"], { message: "includeRevoked yalnız 0/1/true/false olabilir" })
   .optional()
   .transform((v) => v === "1" || v === "true");
-
-const yarnPriceSchema = z.object({
-  yarnItemId: z.string().uuid("Geçersiz iplik ID"),
-  currency: currencyEnum,
-  pricePerKg: decimalInput,
-  source: z.enum(["MANUAL", "LAST_RECEIPT", "PURCHASE_PRICE"], { message: "Geçersiz fiyat kaynağı" }).optional(),
-  sourceRef: z.string().nullable().optional(),
-  note: z.string().nullable().optional(),
-}).strict();
 
 const finishingRateSchema = z.object({
   code: z.string(),
@@ -81,6 +70,13 @@ const finishingRateSchema = z.object({
   typicalShrinkPct: decimalInput.nullable().optional(),
   note: z.string().nullable().optional(),
   // F6: alış taslağı kalem kartı; yoksa aktif sürümünkü taşınır, null = köprüyü kaldır.
+  serviceItemId: z.string().uuid("Geçersiz hizmet kartı ID").nullable().optional(),
+}).strict();
+
+// Fiyat dışı alanlar — `.strict()` fiyat/baz/para/çekme/firma alanını 400 ile reddeder (sürümsüz fiyat değişimi YOK).
+const finishingRateDetailsSchema = z.object({
+  name: z.string().optional(),
+  note: z.string().nullable().optional(),
   serviceItemId: z.string().uuid("Geçersiz hizmet kartı ID").nullable().optional(),
 }).strict();
 
@@ -302,6 +298,37 @@ router.post("/finishing-rates", requirePermission("cost:write"), wrap(async (req
 
 /**
  * @openapi
+ * /api/cost/finishing-rates/{id}:
+ *   patch:
+ *     tags: [Cost]
+ *     summary: Tarifenin fiyat dışı alanlarını düzenle (ad, not, hizmet kartı) — sürüm açmaz
+ *     description: "Fiyat, baz, para birimi, tipik çekme ve fason firma bu uçla değişmez (gövdede 400); onlar POST ile yeni sürümdür."
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name: { type: string, maxLength: 100 }
+ *               note: { type: string, nullable: true, maxLength: 300 }
+ *               serviceItemId: { type: string, format: uuid, nullable: true }
+ *     responses:
+ *       200: { description: Güncellendi ya da değerler aynı (wrote=false) }
+ *       400: { description: Fiyat alanı gönderildi, boş ad ya da pasif hizmet kartı }
+ *       404: { description: Tarife yok }
+ *       409: { description: Satır artık geçerli değil ya da eşzamanlı değişim (COST_RATE_STALE) }
+ */
+router.patch("/finishing-rates/:id", requirePermission("cost:write"), wrap(async (req, res) => {
+  const { id } = idParam.parse(req.params);
+  const input = finishingRateDetailsSchema.parse(req.body ?? {});
+  const r = await updateFinishingRateDetails(id, input, req.user?.userId);
+  res.status(200).json({ success: true, data: { ...r.row, wrote: r.wrote }, message: r.wrote ? "Tarife bilgileri güncellendi." : "Tarife zaten bu değerlerde — değişiklik yapılmadı." });
+}));
+
+/**
+ * @openapi
  * /api/cost/finishing-rates/{id}/revoke:
  *   post:
  *     tags: [Cost]
@@ -319,17 +346,8 @@ router.post("/finishing-rates/:id/revoke", requirePermission("cost:write"), wrap
 
 // ── MAKİNE SAAT ÜCRETİ + HİZMET SARF NORMU (D4-G1a) ─────────────────────────
 // Damgalı sürüm, "şu andan itibaren"; yaratma/değişim `clientToken` taşır (replay tek boğaz, servis).
+// Makine saat ücreti şemaları + `revokeBody` → `cost.schemas.ts`.
 
-const clientTokenField = z.string().uuid("Geçersiz istemci anahtarı (clientToken)");
-const revokeBody = z.object({ reason: z.string().trim().max(300, "Gerekçe en çok 300 karakter").nullable().optional() }).strict();
-const machineRateValues = {
-  hourRateTry: decimalInput,
-  normMPerHour: decimalInput.nullable().optional(),
-  note: z.string().nullable().optional(),
-  clientToken: clientTokenField,
-};
-const machineRateCreateSchema = z.object({ machineId: z.string().uuid("Geçersiz makine ID"), ...machineRateValues }).strict();
-const machineRateChangeSchema = z.object(machineRateValues).strict();
 const normValues = {
   qtyPerM: decimalInput,
   // Gönderilmezse PER_METER (eski istemci bayt-aynı).
