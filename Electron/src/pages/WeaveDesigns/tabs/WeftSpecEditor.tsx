@@ -1,38 +1,26 @@
 // Atkı kartı düzenleyici — harf = iplik satırının sırası (A, B, C…). Sıra kodu (`A4 B1 A4 C1`) doluysa
 // rapordaki adetler gövdeye konmaz, sunucu aynı tx'te türetir; boşsa elle adet (bugünkü davranış).
+// Alanlar `WeftContentFields`te (ürün penceresi de aynısını kullanır).
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Package, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { Button } from "@/components/ui/button";
-import { useDirtyTab } from "@/components/layout/tabs/dirty-tabs";
-import { InfoPopover } from "@/components/ui/info-popover";
-import { Input } from "@/components/ui/input";
-import { SequenceBoxEditor } from "@/components/weave/SequenceBoxEditor";
-import { Label } from "@/components/ui/label";
-import { itemService } from "@/pages/Items/service";
-import type { Item } from "@/pages/Items/types";
 import { SpecOpenOrdersNotice } from "@/components/production/SpecOpenOrdersNotice";
 import { weftSpecApi } from "../service";
 import type { WeftSpecDetail } from "../types";
 import { decimalToFormText } from "@/lib/decimal-form-text";
 import { weftRowsMatchSaved, weftShareCell, weftShareNote, weftShareVisible } from "./weft-share";
+import { buildWeftBody, weftContentReady, weftLetter, WeftContentFields, type WeftContent } from "./WeftContentFields";
 
-interface Row { yarnItemId: string; picks: string }
-const MAX_WEFT_LINES = 26;
-export const weftLetter = (i: number) => String.fromCharCode(65 + i);
-// SY-a: pul/payet satırı seçicide ayırt edilsin — denyesiz girer, maliyeti adet/metre fiyatından.
-const FANCY_SUB: Record<string, string> = { ADET: "pul/payet · adetle", METRE: "fantezi · metreyle" };
-const yarnSubLabel = (it: Item): string => (it.yarnPurchaseUnit && FANCY_SUB[it.yarnPurchaseUnit] ? `${it.code} · ${FANCY_SUB[it.yarnPurchaseUnit]}` : it.code);
+export { buildWeftBody, weftLetter } from "./WeftContentFields";
 
-export function buildWeftBody(seq: string, picksPerCm: string, program: string, rows: Row[]): Record<string, unknown> {
-  const sequence = seq.trim();
+/** Kayıtlı kartın içeriği — forma. */
+export function weftContentFromSpec(spec: Pick<WeftSpecDetail, "sequenceCode" | "picksPerCm" | "weftProgramNo" | "yarns">): WeftContent {
   return {
-    sequenceCode: sequence === "" ? null : sequence,
-    picksPerCm: picksPerCm.trim() === "" ? null : picksPerCm.trim().replace(",", "."),
-    weftProgramNo: program.trim() === "" ? null : program.trim(),
-    yarns: rows.map((r) => (sequence === "" ? { yarnItemId: r.yarnItemId, picksInRepeat: Number(r.picks) } : { yarnItemId: r.yarnItemId })),
+    seq: spec.sequenceCode ?? "",
+    picksPerCm: decimalToFormText(spec.picksPerCm),
+    program: spec.weftProgramNo ?? "",
+    rows: spec.yarns.map((y) => ({ yarnItemId: y.yarnItemId, picks: String(y.picksInRepeat) })),
   };
 }
 
@@ -44,13 +32,9 @@ interface EditorProps {
 
 export function WeftSpecEditor({ spec, fabricId, canWrite, onSequenceChange }: EditorProps) {
   const qc = useQueryClient();
-  const [seq, setSeq] = useState(spec.sequenceCode ?? "");
-  const [picksPerCm, setPicksPerCm] = useState(() => decimalToFormText(spec.picksPerCm));
-  const [program, setProgram] = useState(spec.weftProgramNo ?? "");
-  const [rows, setRows] = useState<Row[]>(() => spec.yarns.map((y) => ({ yarnItemId: y.yarnItemId, picks: String(y.picksInRepeat) })));
-  const derived = seq.trim() !== "";
+  const [content, setContent] = useState<WeftContent>(() => weftContentFromSpec(spec));
   const save = useMutation({
-    mutationFn: () => weftSpecApi.update(spec.id, buildWeftBody(seq, picksPerCm, program, rows)),
+    mutationFn: () => weftSpecApi.update(spec.id, buildWeftBody(content.seq, content.picksPerCm, content.program, content.rows)),
     onSuccess: () => {
       toast.success("Atkı kartı güncellendi.");
       void qc.invalidateQueries({ queryKey: ["weft-specs"] });
@@ -58,93 +42,31 @@ export function WeftSpecEditor({ spec, fabricId, canWrite, onSequenceChange }: E
       void qc.invalidateQueries({ queryKey: ["spec-open-orders"] });
     },
   });
-  const setRow = (i: number, patch: Partial<Row>) => setRows((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   const shares = weftShareVisible(spec);
-  const sharesMatch = shares && weftRowsMatchSaved(spec, rows, seq);
-  const ready = rows.length > 0 && rows.every((r) => r.yarnItemId && (derived || Number(r.picks) > 0));
+  const sharesMatch = shares && weftRowsMatchSaved(spec, content.rows, content.seq);
+  const change = (next: WeftContent) => {
+    if (next.seq !== content.seq) onSequenceChange?.(next.seq);
+    setContent(next);
+  };
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">Atkı kartı: <span className="font-mono text-xs">{spec.code}</span> · {spec.name}</p>
       {canWrite && <SpecOpenOrdersNotice kind="weft" id={spec.id} />}
-      <div className="grid gap-3 sm:grid-cols-3">
-        <div className="space-y-1.5">
-          <Label htmlFor="wf-seq">Atkı sırası kodu</Label>
-          <Input id="wf-seq" value={seq} maxLength={120} disabled={!canWrite} onChange={(e) => { setSeq(e.target.value); onSequenceChange?.(e.target.value); }} placeholder="A4 B1 A4 C1" />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="wf-ppc">Atkı sıklığı (atkı/cm)</Label>
-          <Input id="wf-ppc" value={picksPerCm} inputMode="decimal" disabled={!canWrite} onChange={(e) => setPicksPerCm(e.target.value)} />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="wf-prog">Atkı program no</Label>
-          <Input id="wf-prog" value={program} maxLength={16} disabled={!canWrite} onChange={(e) => setProgram(e.target.value)} placeholder="6037" />
-        </div>
-      </div>
-      <WeftBoxSection seq={seq} saved={spec.sequenceCode ?? ""} letterCount={rows.length} canWrite={canWrite} onChange={(c) => { setSeq(c); onSequenceChange?.(c); }} />
-      {shares && <WeftShareHeader />}
-      <ul className="space-y-2">
-        {rows.map((r, i) => (
-          <li key={i} className={shares ? "grid items-center gap-2 sm:grid-cols-[2rem_1fr_8rem_4.5rem_2.5rem]" : "grid items-center gap-2 sm:grid-cols-[2rem_1fr_8rem_2.5rem]"}>
-            <span className="font-mono text-sm font-semibold">{weftLetter(i)}</span>
-            <EntityPickerModal<Item>
-              value={r.yarnItemId || null}
-              onChange={(id) => setRow(i, { yarnItemId: id ?? "" })}
-              service={itemService}
-              queryKey="items-weft-yarn"
-              filters={{ itemType: "YARN", lifecycleStatus: "ACTIVE" }}
-              getLabel={(it) => it.name}
-              getSubLabel={yarnSubLabel}
-              icon={Package}
-              title={`Atkı ${weftLetter(i)} ipliği seç`}
-              placeholder="İplik seç"
-              disabled={!canWrite}
-            />
-            <Input aria-label={`Atkı ${weftLetter(i)} rapordaki adet`} value={r.picks} inputMode="numeric" disabled={!canWrite || derived} title={derived ? "Sıra kodundan sunucu türetir" : undefined}
-              placeholder={derived ? "sıradan türetilir" : "adet"} onChange={(e) => setRow(i, { picks: e.target.value })} />
-            {shares && <WeftShareCell spec={spec} index={i} matches={sharesMatch} />}
-            {canWrite && (
-              <Button variant="ghost" size="icon" aria-label={`Atkı ${weftLetter(i)} satırını sil`} onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))}>
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            )}
-          </li>
-        ))}
-      </ul>
+      <WeftContentFields
+        value={content}
+        onChange={change}
+        canWrite={canWrite}
+        savedSeq={spec.sequenceCode ?? ""}
+        header={shares ? <WeftShareHeader /> : undefined}
+        rowExtra={shares ? (i) => <WeftShareCell spec={spec} index={i} matches={sharesMatch} /> : undefined}
+      />
       {shares && <p className="text-xs text-muted-foreground" data-testid="weft-share-note">{weftShareNote(spec)}</p>}
       {canWrite && (
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" disabled={rows.length >= MAX_WEFT_LINES} onClick={() => setRows((rs) => [...rs, { yarnItemId: "", picks: "" }])}>
-            Atkı ipliği ekle
-          </Button>
-          <Button size="sm" disabled={!ready || save.isPending} onClick={() => save.mutate()}>Kaydet</Button>
-        </div>
+        <Button size="sm" disabled={!weftContentReady(content) || save.isPending} onClick={() => save.mutate()}>Kaydet</Button>
       )}
     </div>
   );
 }
-
-// Sıra kodunun kutu şeridi: kod alanıyla iki yönlü; kaydedilen değer koddur (sunucu açar ve doğrular).
-function WeftBoxSection({ seq, saved, letterCount, canWrite, onChange }: {
-  seq: string; saved: string; letterCount: number; canWrite: boolean; onChange: (c: string) => void;
-}) {
-  // Kaydedilmemiş sıra kodu sekmeyi kirli yapar (kapatırken onay sorulur).
-  useDirtyTab(seq.trim() !== saved.trim());
-  if (!canWrite && seq.trim() === "") return null;
-  return (
-    <section className="space-y-1.5" aria-label="Atkı sırası kutuları">
-      <h4 className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Atkı sırası — kutularla
-        <InfoPopover label="Kutularla atkı sırası" desc={BOX_INFO} />
-      </h4>
-      <SequenceBoxEditor value={seq} onChange={onChange} letterCount={letterCount} defaultStyle="letter-first" unit="atkı"
-        label="Atkı sırası kutuları" disabled={!canWrite} />
-    </section>
-  );
-}
-
-const BOX_INFO = "Her kutu bir atkıdır; rengi ve harfi o atkıda atılan ipliktir (A = 1. iplik satırı). Kutuya tıklamak ipliği sıradakine çevirir; "
-  + "seçili kutu harf düğmeleriyle ya da klavyeden harf tuşuyla değişir, Delete siler, + sonrasına ekler. Kutular yukarıdaki sıra kodunu "
-  + "yazar, kod değişince kutular da değişir. Kaydedince sağdaki atkı seçici sunucudan yeniden çizilir.";
 
 // Pay % başlığı ve hücresi — yalnız sunucu payı gönderdiyse çizilir (weftShareVisible).
 function WeftShareHeader() {

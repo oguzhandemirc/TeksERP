@@ -88,6 +88,11 @@ export const weftSpecApi = {
   /** "Bu desene özel kopya" — kartı kopyalar, YALNIZ `itemId` kumaşını yeni karta geçirir (SY-P3). */
   fork: (id: string, body: { itemId: string; code: string; name: string }) =>
     apiClient.post<ApiResponse<WeftSpecForkResult>>(`/api/weft-specs/${id}/fork`, body).then((r) => r.data.data),
+  /** B19: var olan kumaşa penceredeki atkıyı yeni kart olarak bağlar (kart + bağ tek tx; tekrar = aynı kart). */
+  attachToItem: (body: { itemId: string; expectedWeftSpecId: string | null; weft: Record<string, unknown> }) =>
+    apiClient
+      .post<ApiResponse<{ weftSpec: WeftSpecDetail; itemId: string; replayed: boolean }>>("/api/weft-specs/attach-to-item", body)
+      .then((r) => r.data.data),
 };
 
 /** Kumaşın standart maliyet önizlemesi — sayı yalnız sunucudan (istemci hesaplamaz). */

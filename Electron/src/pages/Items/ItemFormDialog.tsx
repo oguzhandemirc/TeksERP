@@ -1,50 +1,33 @@
 import { useEffect, useId, useMemo, useState } from "react";
-import { Controller, useForm, type Resolver } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { AlertTriangle, ChevronRight, Palette, Ruler, Sparkles } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import {
-  Dialog,
-  DialogDescription,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { AlertTriangle } from "lucide-react";
+import { toast } from "sonner";
+import { Dialog, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { TabbedDialogContent, TabbedDialogFooter, TabbedDialogHeader } from "@/components/ui/tabbed-dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { FormField } from "@/components/forms/FormField";
-import { EnumSelect } from "@/components/forms/EnumSelect";
-import { cn } from "@/lib/utils";
-// `ItemType` DEĞER olarak da gerekli (denye alanı yalnız YARN'da çizilir),
-// bu yüzden `type` import'u değil.
-import { ItemType, itemTypeLabels, productItemTypeLabels, unitForItemType, type ProductItemType } from "@/types/enums";
-import { colorService } from "@/pages/Colors/service";
-import { fabricPropertyService } from "@/pages/FabricProperties/service";
-import type { Item, ItemCreatePayload } from "./types";
-import {
-  itemFormDefaults,
-  makeItemFormSchema,
-  type ItemFormValues,
-} from "./schema";
-import { buildItemPayload, fabricDetailPayload, fabricDetailToFormText, itemCarriesAllowedLists, yarnUnitPayload, yarnWastePayload } from "./itemPayload.helper";
-import { ItemYarnWasteField } from "./ItemYarnWasteField";
-import { ItemYarnFields } from "./ItemYarnFields";
-import { ItemWeavingDetails } from "./ItemWeavingDetails";
-import { AllowedColorsDialog } from "./AllowedColorsDialog";
-import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
-import { warpSpecService } from "@/pages/WarpSpecs/service";
-import type { WarpSpec } from "@/pages/WarpSpecs/types";
-import { useDevereEnabled, useKaliteGuvenceEnabled, useMaliyetEnabled } from "@/hooks/usePricingEnabled";
-import { AllowedPropertiesDialog } from "./AllowedPropertiesDialog";
-import { ItemCardTabs } from "./ItemCardTabs";
-import { ItemConstructionPickers, constructionPayload, useConstructionPickersVisible } from "./ItemConstructionPickers";
-
+import { ItemType, unitForItemType, type ProductItemType } from "@/types/enums";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { useAttemptToken } from "@/lib/attemptToken";
+import { decimalToFormText } from "@/lib/decimal-form-text";
 import { RecordInfoButton } from "@/components/RecordInfoButton";
 import { InfoPopover } from "@/components/ui/info-popover";
+import { useDevereEnabled, useKaliteGuvenceEnabled, useMaliyetEnabled } from "@/hooks/usePricingEnabled";
+import { buildWeftBody } from "@/pages/WeaveDesigns/tabs/WeftContentFields";
+import type { Item, ItemCreatePayload } from "./types";
+import { itemFormDefaults, makeItemFormSchema, type ItemFormValues } from "./schema";
+import { buildItemPayload, fabricDetailPayload, fabricDetailToFormText, itemCarriesAllowedLists, yarnUnitPayload, yarnWastePayload } from "./itemPayload.helper";
+import { ItemCardTabs, INSTANT_SAVE_TABS, type ItemExtraTab } from "./ItemCardTabs";
+import { constructionPayload, useConstructionPickersVisible } from "./ItemConstructionPickers";
 import { ItemCostLink } from "./ItemCostLink";
-import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
-import { loadAllForPicker } from "@/lib/picker-loader";
-import { decimalToFormText } from "@/lib/decimal-form-text";
+import { ItemGeneralFields } from "./ItemGeneralFields";
+import { AllowedListDialogs } from "./ItemFormParts";
+import { useItemWeftDraft, planWeftSave } from "./construction/useItemWeftDraft";
+import { applyWeftPlan } from "./construction/item-save";
+import { ItemWarpSection } from "./construction/ItemWarpSection";
+import { ItemWeftSection } from "./construction/ItemWeftSection";
+import { ItemWeaveSection } from "./construction/ItemWeaveSection";
+
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -53,72 +36,68 @@ interface Props {
   isSubmitting?: boolean;
 }
 
-export function ItemFormDialog({
-  open,
-  onOpenChange,
-  initial,
-  onSubmit,
-  isSubmitting,
-}: Props) {
+function toFormValues(initial: Item): ItemFormValues {
+  return {
+    code: initial.code,
+    name: initial.name,
+    // Hizmet kartı bu tabloda yaşamaz (`items_no_service_ck`); tip daraltması yalnız derleyici içindir.
+    itemType: initial.itemType as ProductItemType,
+    unit: initial.unit,
+    linearDensityDen: decimalToFormText(initial.linearDensityDen),
+    yarnWastePct: fabricDetailToFormText(initial.yarnWastePct),
+    yarnPurchaseUnit: initial.yarnPurchaseUnit ?? "KG",
+    yarnPiecesPerM: fabricDetailToFormText(initial.yarnPiecesPerM),
+    widthCm: initial.widthCm == null ? "" : String(Number(initial.widthCm)).replace(".", ","),
+    rawWidthCm: fabricDetailToFormText(initial.rawWidthCm),
+    rawGsm: fabricDetailToFormText(initial.rawGsm),
+    finishedGsm: fabricDetailToFormText(initial.finishedGsm),
+    warpSpecId: initial.warpSpecId ?? "",
+    weftSpecId: initial.weftSpecId ?? "",
+    weaveDesignId: initial.weaveDesignId ?? "",
+    allowedColorIds: initial.allowedColors?.map((c) => c.colorId) ?? [],
+    allowedPropertyIds: initial.allowedProperties?.map((p) => p.propertyId) ?? [],
+  };
+}
+
+/** Ürün penceresi: Genel · Çözgü · Atkı · Örgü (B19 tek pencere; veri yapısı aynı, birleşme yalnız ekranda). */
+export function ItemFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting }: Props) {
   const isEdit = Boolean(initial);
   const formId = useId();
   const [colorsOpen, setColorsOpen] = useState(false);
   const [propsOpen, setPropsOpen] = useState(false);
   /** Stok kodunu elle yazma modu — varsayılan KAPALI, kutu hiç çizilmez. */
   const [manualCode, setManualCode] = useState(false);
-
-  const defaults: ItemFormValues = initial
-    ? {
-        code: initial.code,
-        name: initial.name,
-        // Hizmet kartı bu tabloda yaşamaz (`items_no_service_ck`); tip daraltması yalnız derleyici içindir.
-        itemType: initial.itemType as ProductItemType,
-        unit: initial.unit,
-        linearDensityDen: decimalToFormText(initial.linearDensityDen),
-        yarnWastePct: fabricDetailToFormText(initial.yarnWastePct),
-        yarnPurchaseUnit: initial.yarnPurchaseUnit ?? "KG",
-        yarnPiecesPerM: fabricDetailToFormText(initial.yarnPiecesPerM),
-        widthCm: initial.widthCm == null ? "" : String(Number(initial.widthCm)).replace(".", ","),
-        rawWidthCm: fabricDetailToFormText(initial.rawWidthCm),
-        rawGsm: fabricDetailToFormText(initial.rawGsm),
-        finishedGsm: fabricDetailToFormText(initial.finishedGsm),
-        warpSpecId: initial.warpSpecId ?? "",
-        weftSpecId: initial.weftSpecId ?? "",
-        weaveDesignId: initial.weaveDesignId ?? "",
-        allowedColorIds: initial.allowedColors?.map((c) => c.colorId) ?? [],
-        allowedPropertyIds:
-          initial.allowedProperties?.map((p) => p.propertyId) ?? [],
-      }
-    : itemFormDefaults;
-
+  const [tab, setTab] = useState("info");
+  const [saving, setSaving] = useState(false);
+  const attempt = useAttemptToken();
+  const defaults = useMemo(() => (initial ? toFormValues(initial) : itemFormDefaults), [initial]);
   const schema = useMemo(() => makeItemFormSchema(isEdit), [isEdit]);
-  const form = useForm<ItemFormValues>({
-    resolver: zodResolver(schema) as Resolver<ItemFormValues>,
-    defaultValues: defaults,
-  });
+  const form = useForm<ItemFormValues>({ resolver: zodResolver(schema) as Resolver<ItemFormValues>, defaultValues: defaults });
 
   useEffect(() => {
     if (open) {
       form.reset(defaults);
       setManualCode(false);
+      setTab("info");
+      attempt.renew();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initial?.id]);
 
   const itemType = form.watch("itemType");
+  const { hasPermission } = useRoleAccess();
   const devereEnabled = useDevereEnabled();
   const kaliteGuvenceEnabled = useKaliteGuvenceEnabled();
-  const maliyetEnabled = useMaliyetEnabled();
-  const yarnWasteVisible = maliyetEnabled && itemType === ItemType.YARN;
+  const yarnWasteVisible = useMaliyetEnabled() && itemType === ItemType.YARN;
   const constructionVisible = useConstructionPickersVisible(itemType);
+  const warpVisible = itemType === ItemType.FABRIC && devereEnabled;
+  const canWriteSpecs = hasPermission("warpspec:write");
   const derivedUnit = unitForItemType[itemType] ?? "MT";
+  const weft = useItemWeftDraft(open, initial?.weftSpecId ?? null);
 
   useEffect(() => {
     form.setValue("unit", derivedUnit, { shouldDirty: true });
   }, [derivedUnit, form]);
-
-  const allowedColorIds = form.watch("allowedColorIds");
-  const allowedPropertyIds = form.watch("allowedPropertyIds");
 
   // İzinli renk/özellik YALNIZ kumaşta: tür iplik/sarfa çevrilince (create) değerler boşalır;
   // düzenlemede tür kilitli, eski iplik kartında kalmış liste NOTLA gösterilir, kaydedince payload `[]` ile kaldırır.
@@ -128,51 +107,42 @@ export function ItemFormDialog({
     if (form.getValues("allowedColorIds").length) form.setValue("allowedColorIds", [], { shouldDirty: true });
     if (form.getValues("allowedPropertyIds").length) form.setValue("allowedPropertyIds", [], { shouldDirty: true });
   }, [carriesLists, form]);
-  const staleLists =
-    isEdit && !carriesLists && ((initial?.allowedColors?.length ?? 0) > 0 || (initial?.allowedProperties?.length ?? 0) > 0);
-
-  // Trigger önizlemesi için seçili kayıtların isim/swatch'ini getir.
-  const colorsQ = useQuery({
-    queryKey: ["colors", "all-active"],
-    queryFn: () =>
-      loadAllForPicker(colorService, {
-        sortBy: "name",
-        sortOrder: "asc",
-        filters: { isActive: "true" },
-      }),
-    staleTime: 60_000,
-    enabled: open,
-  });
-
-  const propsQ = useQuery({
-    queryKey: ["fabric-properties", "all-active"],
-    queryFn: () =>
-      loadAllForPicker(fabricPropertyService, {
-        sortBy: "sortOrder",
-        sortOrder: "asc",
-        filters: { isActive: "true" },
-      }),
-    staleTime: 60_000,
-    enabled: open,
-  });
-
-  const selectedColors = useMemo(() => {
-    const all = colorsQ.data?.data ?? [];
-    return allowedColorIds
-      .map((id) => all.find((c) => c.id === id))
-      .filter((c): c is NonNullable<typeof c> => Boolean(c));
-  }, [allowedColorIds, colorsQ.data?.data]);
-
-  const selectedProperties = useMemo(() => {
-    const all = propsQ.data?.data ?? [];
-    return allowedPropertyIds
-      .map((id) => all.find((p) => p.id === id))
-      .filter((p): p is NonNullable<typeof p> => Boolean(p));
-  }, [allowedPropertyIds, propsQ.data?.data]);
+  const staleLists = isEdit && !carriesLists && ((initial?.allowedColors?.length ?? 0) > 0 || (initial?.allowedProperties?.length ?? 0) > 0);
 
   const handleSubmit = form.handleSubmit(async (v) => {
-    await onSubmit({ ...buildItemPayload(v, isEdit, kaliteGuvenceEnabled), ...constructionPayload(v, initial, constructionVisible), ...fabricDetailPayload(v, initial), ...yarnWastePayload(v, initial, yarnWasteVisible), ...yarnUnitPayload(v, initial) });
+    const plan = planWeftSave(weft, isEdit, (c) => buildWeftBody(c.seq, c.picksPerCm, c.program, c.rows));
+    if (plan.kind === "invalid") {
+      toast.error(plan.message);
+      setTab("weft");
+      return;
+    }
+    // Atkı bağı plandan; desen kartı form alanından (atkı anahtarını `applyWeftPlan` koyar).
+    const base = {
+      ...buildItemPayload(v, isEdit, kaliteGuvenceEnabled),
+      ...constructionPayload({ weftSpecId: "", weaveDesignId: v.weaveDesignId }, { weftSpecId: null, weaveDesignId: initial?.weaveDesignId }, constructionVisible),
+      ...fabricDetailPayload(v, initial),
+      ...yarnWastePayload(v, initial, yarnWasteVisible),
+      ...yarnUnitPayload(v, initial),
+    };
+    setSaving(true);
+    try {
+      const ctx = { visible: constructionVisible, itemId: initial?.id ?? null, savedWeftSpecId: initial?.weftSpecId ?? null, clientToken: isEdit ? undefined : attempt.token() };
+      await onSubmit(await applyWeftPlan(plan, base, ctx));
+      attempt.onSuccess();
+    } catch (e) {
+      attempt.onFailure(e);
+    } finally {
+      setSaving(false);
+    }
   });
+
+  const extraTabs: ItemExtraTab[] = [];
+  if (warpVisible) extraTabs.push({ value: "warp", label: "Çözgü", content: <ItemWarpSection form={form} canWrite={canWriteSpecs} itemId={initial?.id ?? null} /> });
+  if (constructionVisible) {
+    extraTabs.push({ value: "weft", label: "Atkı", content: <ItemWeftSection draft={weft} canWrite={canWriteSpecs} itemId={initial?.id ?? null} /> });
+    extraTabs.push({ value: "weave", label: "Örgü", content: <ItemWeaveSection form={form} canWrite={canWriteSpecs} /> });
+  }
+  const busy = isSubmitting || saving;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -181,32 +151,19 @@ export function ItemFormDialog({
         <TabbedDialogHeader>
           <div className="flex items-center gap-1.5">
             <DialogTitle>{isEdit ? "Ürünü Düzenle" : "Yeni Ürün"}</DialogTitle>
-            {/* ⓘ — kim oluşturdu / en son kim değiştirdi (2026-08-19).
-                Kaynak: kaydın KENDİ künye kolonları (Plan A). Audit'ten
-                okunmuyor — audit 6 ayda arşivlenir, künye kaybolmamalı. */}
-            {isEdit && initial && (
-              <RecordInfoButton
-                table="ITEM"
-                id={initial.id}
-                createdAt={initial.createdAt}
-                updatedAt={initial.updatedAt}
-              />
-            )}
-            {/* B11: stok kodu başlıkta rozet (alt şerit satır kaplıyordu); maliyet bağlantısı aynı satırın sağında. */}
+            {/* ⓘ — kim oluşturdu / en son kim değiştirdi; kaynak kaydın KENDİ künye kolonları (audit arşivlenir). */}
+            {isEdit && initial && <RecordInfoButton table="ITEM" id={initial.id} createdAt={initial.createdAt} updatedAt={initial.updatedAt} />}
+            {/* B11: stok kodu başlıkta rozet; maliyet bağlantısı aynı satırın sağında. */}
             {isEdit && initial?.code && (
               <span className="ml-2 inline-flex items-center gap-1 text-xs text-muted-foreground">
                 Kod: <span className="rounded border bg-muted/40 px-1.5 py-0.5 font-mono text-foreground">{initial.code}</span>
                 <InfoPopover label="Stok kodu" desc="Stok kodu oluşturulduktan sonra değiştirilemez." />
               </span>
             )}
-            {isEdit && initial && (
-              <span className="ml-auto">
-                <ItemCostLink itemId={initial.id} itemType={initial.itemType} />
-              </span>
-            )}
-            </div>
+            {isEdit && initial && <span className="ml-auto"><ItemCostLink itemId={initial.id} itemType={initial.itemType} /></span>}
+          </div>
           <DialogDescription>
-            Ürün tanımı (kumaş · iplik · sarf). Birim, seçilen tipe göre otomatik atanır.
+            {extraTabs.length > 0 ? "Kumaşın genel bilgileri, çözgüsü, atkısı ve örgüsü tek pencerede. Birim, seçilen tipe göre otomatik atanır." : "Ürün tanımı (kumaş · iplik · sarf). Birim, seçilen tipe göre otomatik atanır."}
           </DialogDescription>
         </TabbedDialogHeader>
 
@@ -214,350 +171,56 @@ export function ItemFormDialog({
           <div className="mx-6 mb-3 flex shrink-0 items-start gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <span>
-              Bu desen sahada (ham giriş) oluşturuldu ve onay bekliyor. Bilgileri
-              gözden geçirip <strong>Güncelle</strong>'ye bastığınızda onaylanmış
-              sayılır.
+              Bu desen sahada (ham giriş) oluşturuldu ve onay bekliyor. Bilgileri gözden geçirip <strong>Güncelle</strong>'ye bastığınızda onaylanmış sayılır.
             </span>
           </div>
         )}
 
-        {/* Alt çubuk sekmelerin DIŞINDA (B18/4): her sekmede görünür, Kaydet `form={formId}` ile Bilgiler formunu gönderir. */}
+        {/* Alt çubuk sekmelerin DIŞINDA (B18/4): her sekmede görünür, Kaydet `form={formId}` ile Genel formunu gönderir. */}
         <ItemCardTabs
           item={initial}
-          footer={(tab) => (
+          extraTabs={extraTabs}
+          tab={tab}
+          onTabChange={setTab}
+          footer={(t) => (
             <TabbedDialogFooter>
-              {tab !== "info" && (
+              {INSTANT_SAVE_TABS.has(t) && (
                 <span className="mr-auto hidden text-xs text-muted-foreground sm:block">
-                  Bu sekmedeki eklemeler anında kaydedilir; {isEdit ? "Güncelle" : "Oluştur"}, Bilgiler'i kaydeder.
+                  Bu sekmedeki eklemeler anında kaydedilir; {isEdit ? "Güncelle" : "Oluştur"}, öteki sekmeleri kaydeder.
                 </span>
               )}
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                İptal
-              </Button>
-              <Button type="submit" form={formId} disabled={isSubmitting}>
-                {isSubmitting ? "Kaydediliyor..." : isEdit ? "Güncelle" : "Oluştur"}
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>İptal</Button>
+              <Button type="submit" form={formId} disabled={busy}>
+                {busy ? "Kaydediliyor..." : isEdit ? "Güncelle" : "Oluştur"}
               </Button>
             </TabbedDialogFooter>
           )}
         >
-        <form id={formId} onSubmit={handleSubmit} className="space-y-4">
-          {/* Sıra bilinçli: ÖNCE ad. Stok kodu forma EN ALTA, kapalı bir satır
-              olarak alındı (2026-08-17 saha geri bildirimi) — ilk alan olduğu
-              sürece personel "boş bırakın" yazsa da oraya kumaşın ADINI
-              yazmaya çalışıyordu. Kodu sistem veriyor; elle giriş çok nadir
-              ve artık bilinçli bir tıklama istiyor. */}
-          {/* Geniş form (2026-11-19): kısa alanlar tek ızgarada yan yana; uzun açıklamalar ⓘ balonunda. */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <FormField label="Ad" htmlFor="name" error={form.formState.errors.name} required className={itemType === ItemType.FABRIC && kaliteGuvenceEnabled ? "sm:col-span-2 lg:col-span-1" : "sm:col-span-2"}>
-              <Input id="name" placeholder="Patos" {...form.register("name")} />
-              {/* Canlı veride "ACTIVO" ve "ACTİVO" iki ayrı kumaş olarak duruyordu
-                  (i/İ tuzağı) — uyarı yazarken görünsün. */}
-              <SimilarNamesWarning
-                entity="items"
-                name={form.watch("name") ?? ""}
-                excludeId={initial?.id}
-              />
-            </FormField>
-            <FormField
-              label="Tip"
-              error={form.formState.errors.itemType}
-              required={!isEdit}
-              info={isEdit ? "Tip kayıttan sonra değiştirilemez." : undefined}
-            >
-              <Controller
-                control={form.control}
-                name="itemType"
-                render={({ field }) => (
-                  <EnumSelect<ProductItemType>
-                    value={field.value}
-                    onChange={field.onChange}
-                    labels={productItemTypeLabels}
-                    disabled={isEdit}
-                  />
-                )}
-              />
-            </FormField>
-            {/* İpucu ⓘ'de (B8): alt satır ipucu satırı büyütüp En'i boşa aşağı itiyordu. */}
-            <FormField label="Birim" info="Seçilen tipe göre otomatik atanır.">
-
-              <Input
-                value={derivedUnit}
-                readOnly
-                tabIndex={-1}
-                className="bg-muted font-mono text-center cursor-not-allowed"
-              />
-            </FormField>
-
-          {/* Denye + satın alma birimi yalnız iplikte (SY-a). Denye zorunlu DEĞİL — eski kayıtlar boş doğdu;
-              çözgü/atkı kartı açarken sunucu anlaşılır 400 verir. */}
-          {itemType === ItemType.YARN && <ItemYarnFields form={form} />}
-
-          {yarnWasteVisible && <ItemYarnWasteField form={form} />}
-
-          {/* K4P: ürün kartı eni — muayene puan/100 m² kaynağı #1; modül kapalıyken alan hiç yok (bugünkü form). */}
-          {itemType === ItemType.FABRIC && kaliteGuvenceEnabled && (
-            <FormField label="En (cm)" htmlFor="widthCm" error={form.formState.errors.widthCm} info="4 puan muayenesinde puan/100 m² bu enden hesaplanır; boşsa KK1'de ölçülen en kullanılır">
-              <Input id="widthCm" inputMode="decimal" placeholder="280" {...form.register("widthCm")} />
-            </FormField>
-          )}
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 empty:hidden sm:grid-cols-2 lg:grid-cols-3">
-
-          {/* E4 (2026-09-18): kumaşın varsayılan çözgü kartı — dokuma işi formu ve sunucu ön-dolumu buradan okur;
-              yalnız KUMAŞ + devere açıkken çizilir (kapalıyken alan hiç yok = bugünkü form). */}
-          {itemType === ItemType.FABRIC && devereEnabled && (
-            <FormField label="Varsayılan çözgü kartı" error={form.formState.errors.warpSpecId} info="Dokuma iş emri açarken çözgü kartı bundan ön-dolar; boş = her işte elle seçilir">
-              <Controller
-                control={form.control}
-                name="warpSpecId"
-                render={({ field }) => (
-                  <EntityPickerModal<WarpSpec>
-                    value={field.value || null}
-                    onChange={(id) => field.onChange(id ?? "")}
-                    service={warpSpecService}
-                    queryKey="warp-specs-item-default"
-                    getLabel={(w) => w.name}
-                    getSubLabel={(w) => w.code}
-                    icon={Ruler}
-                    nullable
-                    noneLabel="Çözgü kartı yok"
-                    placeholder="Çözgü kartı seç"
-                  />
-                )}
-              />
-            </FormField>
-          )}
-
-          {/* SY-A4: atkı + desen kartı — kumaş + dokuma + `warpspec:read` yoksa hiç çizilmez (bugünkü form). */}
-          {constructionVisible && <ItemConstructionPickers form={form} />}
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {carriesLists && (
-          <FormField label="İzinli Renkler">
-            <PickerTrigger
-              icon={<Palette className="h-4 w-4 text-muted-foreground" />}
-              count={allowedColorIds.length}
-              emptyText="Tüm aktif renkler serbest"
-              previews={selectedColors.slice(0, 6).map((c) => ({
-                key: c.id,
-                label: c.name,
-                swatch: c.hex ?? null,
-              }))}
-              extra={selectedColors.length - 6}
-              onClick={() => setColorsOpen(true)}
-            />
-          </FormField>
-          )}
-
-          {carriesLists && (
-          <FormField label="İzinli Özellikler">
-            <PickerTrigger
-              icon={<Sparkles className="h-4 w-4 text-muted-foreground" />}
-              count={allowedPropertyIds.length}
-              emptyText="Tüm aktif özellikler serbest"
-              previews={selectedProperties.slice(0, 6).map((p) => ({
-                key: p.id,
-                label: p.name,
-                swatch: p.color ?? null,
-              }))}
-              extra={selectedProperties.length - 6}
-              onClick={() => setPropsOpen(true)}
-            />
-          </FormField>
-          )}
-          </div>
-
-          {staleLists && (
-            <p role="note" className="text-xs text-amber-700 dark:text-amber-300">
-              {itemTypeLabels[itemType]} kartında renk/özellik listesi tutulmaz, kaydedince kaldırılır.
-            </p>
-          )}
-
-          {/* Az kullanılan dokuma alanları katlanır bölümde, kapalı gelir (dolu değer varsa açık). */}
-          {itemType === ItemType.FABRIC && (
-            <ItemWeavingDetails
+          <form id={formId} onSubmit={handleSubmit} className="space-y-4">
+            <ItemGeneralFields
               form={form}
-              itemId={initial?.id ?? null}
-              hasSavedValues={Boolean(defaults.rawWidthCm || defaults.rawGsm || defaults.finishedGsm)}
+              open={open}
+              initial={initial}
+              derivedUnit={derivedUnit}
+              kaliteGuvenceEnabled={kaliteGuvenceEnabled}
+              yarnWasteVisible={yarnWasteVisible}
+              carriesLists={carriesLists}
+              staleLists={staleLists}
+              hasSavedWeavingValues={Boolean(defaults.rawWidthCm || defaults.rawGsm || defaults.finishedGsm)}
+              manualCode={manualCode}
+              onManualCodeChange={(next) => {
+                setManualCode(next);
+                // Otomatiğe dönerken alanı TEMİZLE — yarım yazılmış kod görünmez halde payload'a gidip 409 üretirdi.
+                if (!next) form.setValue("code", "", { shouldValidate: true });
+              }}
+              onOpenColors={() => setColorsOpen(true)}
+              onOpenProps={() => setPropsOpen(true)}
             />
-          )}
-
-          <StockCodeRow
-            isEdit={isEdit}
-            code={initial?.code ?? null}
-            manual={manualCode}
-            onManualChange={(next) => {
-              setManualCode(next);
-              // Otomatiğe dönerken alanı TEMİZLE — yarım yazılmış bir kod
-              // görünmez halde payload'a gidip 409/validasyon hatası üretirdi.
-              if (!next) form.setValue("code", "", { shouldValidate: true });
-            }}
-            error={form.formState.errors.code}
-            register={form.register}
-          />
-        </form>
+          </form>
         </ItemCardTabs>
 
-        <Controller
-          control={form.control}
-          name="allowedColorIds"
-          render={({ field }) => (
-            <AllowedColorsDialog
-              open={colorsOpen}
-              onOpenChange={setColorsOpen}
-              value={field.value}
-              onChange={field.onChange}
-            />
-          )}
-        />
-        <Controller
-          control={form.control}
-          name="allowedPropertyIds"
-          render={({ field }) => (
-            <AllowedPropertiesDialog
-              open={propsOpen}
-              onOpenChange={setPropsOpen}
-              value={field.value}
-              onChange={field.onChange}
-            />
-          )}
-        />
+        <AllowedListDialogs form={form} colorsOpen={colorsOpen} setColorsOpen={setColorsOpen} propsOpen={propsOpen} setPropsOpen={setPropsOpen} />
       </TabbedDialogContent>
     </Dialog>
-  );
-}
-
-/**
- * Stok kodu satırı — formun EN ALTINDA ve varsayılan KAPALI.
- *
- * Gerekçe (2026-08-17): alan formun ilk kutusuydu ve "boş bırakın, sistem
- * versin" ipucuna rağmen personel oraya kumaşın adını yazıyordu. Kapalı
- * durumda `<input>` HİÇ render edilmez — gri/disabled bir kutu bırakmak
- * "buraya bir şey yazılabilir" izlenimini sürdürürdü ve sekme sırasına da
- * girerdi. Elle giriş bilinçli bir tıklama ister.
- */
-function StockCodeRow({
-  isEdit,
-  code,
-  manual,
-  onManualChange,
-  error,
-  register,
-}: {
-  isEdit: boolean;
-  code: string | null;
-  manual: boolean;
-  onManualChange: (next: boolean) => void;
-  error?: { message?: string };
-  register: ReturnType<typeof useForm<ItemFormValues>>["register"];
-}) {
-  // Düzenlemede kod başlıkta rozet (B11); kodsuz eski kayıtta şerit yine görünür.
-  if (isEdit) {
-    if (code) return null;
-    return (
-      <div className="flex items-center gap-2 rounded-md border border-dashed bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-        <span>Stok Kodu</span>
-        <span className="font-mono text-foreground">—</span>
-      </div>
-    );
-  }
-
-  if (!manual) {
-    return (
-      <div className="flex items-center gap-2 rounded-md border border-dashed bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-        <span>
-          Stok kodunu <strong className="text-foreground">sistem verecek</strong>{" "}
-          <span className="font-mono">(STK-000123)</span>
-        </span>
-        <button
-          type="button"
-          onClick={() => onManualChange(true)}
-          className="ml-auto rounded px-2 py-0.5 underline underline-offset-2 transition-colors hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-        >
-          Elle gir
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <FormField
-      label="Stok Kodu (elle)"
-      htmlFor="code"
-      error={error}
-      hint="STK- öneki otomatik kodlara ayrılmıştır; kendi kodunuzu yazın."
-    >
-      <div className="flex items-center gap-2">
-        <Input id="code" autoFocus placeholder="ÖRN-001" {...register("code")} />
-        <Button type="button" variant="outline" size="sm" onClick={() => onManualChange(false)}>
-          Otomatiğe dön
-        </Button>
-      </div>
-    </FormField>
-  );
-}
-
-interface PreviewChip {
-  key: string;
-  label: string;
-  swatch: string | null;
-}
-
-function PickerTrigger({
-  icon,
-  count,
-  emptyText,
-  previews,
-  extra,
-  onClick,
-}: {
-  icon: React.ReactNode;
-  count: number;
-  emptyText: string;
-  previews: PreviewChip[];
-  extra: number;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "flex w-full items-center gap-2 rounded-md border bg-background px-3 py-2 text-left text-sm",
-        "transition-colors hover:bg-accent/40 focus:outline-none focus:ring-2 focus:ring-ring",
-      )}
-    >
-      {icon}
-      <div className="min-w-0 flex-1">
-        {count === 0 ? (
-          <span className="text-muted-foreground italic">{emptyText}</span>
-        ) : (
-          <div className="flex flex-wrap items-center gap-1">
-            {previews.map((p) => (
-              <Badge key={p.key} variant="muted" className="gap-1 text-[10px]">
-                {p.swatch && (
-                  <span
-                    className="h-2 w-2 rounded-full"
-                    style={{ backgroundColor: p.swatch }}
-                  />
-                )}
-                {p.label}
-              </Badge>
-            ))}
-            {extra > 0 && (
-              <Badge variant="muted" className="text-[10px]">
-                +{extra}
-              </Badge>
-            )}
-          </div>
-        )}
-      </div>
-      <span className="text-xs text-muted-foreground tabular-nums">
-        {count > 0 ? `${count} seçili` : "Seç"}
-      </span>
-      <ChevronRight className="h-4 w-4 text-muted-foreground" />
-    </button>
   );
 }
