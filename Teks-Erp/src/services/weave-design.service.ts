@@ -6,18 +6,33 @@
 // atkı kartında, en üründe kalır — ikinci kopya yok. Kart silinmez, pasife alınır; aktif ürün
 // bağlıyken pasif 409 (MV-06). BaseController KULLANILMAZ: alanlar açıkça sayılır.
 // =============================================================================
-import { Prisma, WeaveDesignKind } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { isUniqueViolation, parseDecimalField, parseTextField } from "./helpers/cost-input.helper";
 import { LIFT_PLAN_MAX_FRAMES, LIFT_PLAN_MAX_PICKS, WEAVE_DESIGN_KINDS } from "../constants/weave-design";
+import {
+  KIND_TO_CLASS,
+  kindFromClass,
+  mechanismUsesHooks,
+  mechanismUsesLiftPlan,
+  resolveWeaveClass,
+  WEAVE_SHED_MECHANISMS,
+  WEAVE_STRUCTURES,
+  type WeaveClass,
+  type WeaveKindValue,
+} from "../constants/weave-classification";
 
 export const WEAVE_DESIGN_SELECT = {
   id: true,
   code: true,
   name: true,
   kind: true,
+  shedMechanism: true,
+  weaveStructure: true,
+  hookCount: true,
+  repeatWidthCm: true,
   familyLabel: true,
   frameCount: true,
   repeatCm: true,
@@ -32,15 +47,26 @@ export const WEAVE_DESIGN_SELECT = {
   updatedAt: true,
   createdById: true,
   updatedById: true,
+  image: { select: { id: true, fileName: true, mimeType: true, sizeBytes: true, updatedAt: true } },
 } satisfies Prisma.WeaveDesignSelect;
 
 /** Listede ızgara taşınmaz (JSON büyük olabilir); detayda gelir. */
 const WEAVE_DESIGN_LIST_SELECT = { ...WEAVE_DESIGN_SELECT, liftPlan: false } satisfies Prisma.WeaveDesignSelect;
 
-export type WeaveDesignRow = Prisma.WeaveDesignGetPayload<{ select: typeof WEAVE_DESIGN_SELECT }>;
-export type WeaveDesignListRow = Prisma.WeaveDesignGetPayload<{ select: typeof WEAVE_DESIGN_LIST_SELECT }>;
+type RawRow = Prisma.WeaveDesignGetPayload<{ select: typeof WEAVE_DESIGN_SELECT }>;
+type RawListRow = Prisma.WeaveDesignGetPayload<{ select: typeof WEAVE_DESIGN_LIST_SELECT }>;
+/** Yanıt: sınıflama HER ZAMAN çözülmüş (yeni alan boş eski satırda `kind`dan türetilir). */
+export type WeaveDesignRow = Omit<RawRow, "shedMechanism" | "weaveStructure"> & WeaveClass;
+export type WeaveDesignListRow = Omit<RawListRow, "shedMechanism" | "weaveStructure"> & WeaveClass;
 
-const ALLOWED = new Set(["code", "name", "kind", "familyLabel", "frameCount", "repeatCm", "liftPlan", "loomFileName", "lenoSetup", "lenoFrames", "drawingInNote", "notes"]);
+function present<T extends { kind: string; shedMechanism: string | null; weaveStructure: string | null }>(r: T): Omit<T, "shedMechanism" | "weaveStructure"> & WeaveClass {
+  return { ...r, ...resolveWeaveClass(r) };
+}
+
+const ALLOWED = new Set([
+  "code", "name", "kind", "shedMechanism", "weaveStructure", "hookCount", "repeatWidthCm", "familyLabel", "frameCount", "repeatCm",
+  "liftPlan", "loomFileName", "lenoSetup", "lenoFrames", "drawingInNote", "notes",
+]);
 
 function rejectUnknown(body: Record<string, unknown>): void {
   const unknown = Object.keys(body).filter((k) => !ALLOWED.has(k));
@@ -94,14 +120,72 @@ function requiredText(raw: unknown, label: string, max: number): string {
   return v;
 }
 
-function parseScalars(body: Record<string, unknown>, partial: boolean): Prisma.WeaveDesignUncheckedUpdateInput {
+type ClassData = Pick<Prisma.WeaveDesignUncheckedUpdateInput, "kind" | "shedMechanism" | "weaveStructure">;
+
+/**
+ * Sınıflama yazımı (çift yazım): yeni eksen gelirse `kind` ondan türetilir; yalnız `kind` gelirse (eski istemci)
+ * ve DEĞİŞTİYSE yeni eksenler ondan türetilir. İkisi birlikte gelip çelişirse 400. `effective` = yazım sonrası sınıf.
+ */
+function classWrite(body: Record<string, unknown>, current: RawRow | null): { data: ClassData; effective: WeaveClass } {
+  const hasMech = body.shedMechanism !== undefined;
+  const hasStruct = body.weaveStructure !== undefined;
+  const hasKind = body.kind !== undefined;
+  if (hasKind && !(WEAVE_DESIGN_KINDS as readonly unknown[]).includes(body.kind)) throw AppError.badRequest("Örgü türü PLAIN/DOBBY/JACQUARD/LENO olmalı.");
+  if (hasMech && !(WEAVE_SHED_MECHANISMS as readonly unknown[]).includes(body.shedMechanism)) {
+    throw AppError.badRequest("Mekanizma Eksantrik/Armür/Jakar (CAM/DOBBY/JACQUARD) olmalı.", { code: "WEAVE_DESIGN_MECHANISM_INVALID" });
+  }
+  if (hasStruct && body.weaveStructure !== null && !(WEAVE_STRUCTURES as readonly unknown[]).includes(body.weaveStructure)) {
+    throw AppError.badRequest("Örgü Bezayağı/Dimi/Saten/Döner/Diğer ya da boş olmalı.", { code: "WEAVE_DESIGN_STRUCTURE_INVALID" });
+  }
+  const base = current ? resolveWeaveClass(current) : null;
+  if (hasMech || hasStruct) {
+    const shedMechanism = (body.shedMechanism ?? base?.shedMechanism) as WeaveClass["shedMechanism"] | undefined;
+    if (!shedMechanism) throw AppError.badRequest("Mekanizma zorunludur.", { code: "WEAVE_DESIGN_MECHANISM_REQUIRED" });
+    const weaveStructure = (hasStruct ? body.weaveStructure : base?.weaveStructure ?? null) as WeaveClass["weaveStructure"];
+    const effective = { shedMechanism, weaveStructure };
+    const kind = kindFromClass(effective);
+    if (hasKind && body.kind !== kind) {
+      throw AppError.badRequest(`Örgü türü (${String(body.kind)}) seçilen mekanizma/örgüyle çelişiyor.`, { code: "WEAVE_DESIGN_KIND_CONFLICT" });
+    }
+    return { data: { kind, shedMechanism, weaveStructure }, effective };
+  }
+  if (hasKind) {
+    if (current && base && current.kind === body.kind) return { data: {}, effective: base };
+    const effective = KIND_TO_CLASS[body.kind as WeaveKindValue];
+    return { data: { kind: body.kind as WeaveKindValue, ...effective }, effective };
+  }
+  if (!base) throw AppError.badRequest("Mekanizma zorunludur.", { code: "WEAVE_DESIGN_MECHANISM_REQUIRED" });
+  return { data: {}, effective: base };
+}
+
+/** Mekanizmaya ait olmayan alan YAZILMAZ (saklı eski değer silinmez; okuyucular görmez). */
+function assertMechanismFields(out: Prisma.WeaveDesignUncheckedUpdateInput, effective: WeaveClass): void {
+  if (out.liftPlan !== undefined && out.liftPlan !== Prisma.DbNull && !mechanismUsesLiftPlan(effective.shedMechanism)) {
+    throw AppError.badRequest("Armür ızgarası yalnız Armür mekanizmalı desende girilir.", { code: "WEAVE_DESIGN_LIFT_PLAN_DOBBY_ONLY" });
+  }
+  if (out.hookCount !== undefined && out.hookCount !== null && !mechanismUsesHooks(effective.shedMechanism)) {
+    throw AppError.badRequest("Kanca sayısı yalnız Jakar desende girilir.", { code: "WEAVE_DESIGN_HOOKS_JACQUARD_ONLY" });
+  }
+}
+
+function parseHookCount(raw: unknown): number | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null || raw === "") return null;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1 || n > 30000) throw AppError.badRequest("Kanca sayısı 1–30000 arası tam sayı olmalı.");
+  return n;
+}
+
+function parseScalars(body: Record<string, unknown>, partial: boolean, current: RawRow | null): Prisma.WeaveDesignUncheckedUpdateInput {
   const out: Prisma.WeaveDesignUncheckedUpdateInput = {};
   if (body.code !== undefined || !partial) out.code = requiredText(body.code, "Desen kodu", 32);
   if (body.name !== undefined || !partial) out.name = requiredText(body.name, "Desen adı", 100);
-  if (body.kind !== undefined || !partial) {
-    if (!(WEAVE_DESIGN_KINDS as readonly unknown[]).includes(body.kind)) throw AppError.badRequest("Örgü türü PLAIN/DOBBY/JACQUARD/LENO olmalı.");
-    out.kind = body.kind as WeaveDesignKind;
-  }
+  const cls = classWrite(body, current);
+  Object.assign(out, cls.data);
+  const hooks = parseHookCount(body.hookCount);
+  if (hooks !== undefined) out.hookCount = hooks;
+  const repeatWidth = parseDecimalField(body.repeatWidthCm, { label: "Rapor eni (cm)", min: 0, minExclusive: true, scale: 2 });
+  if (repeatWidth !== undefined) out.repeatWidthCm = repeatWidth;
   const texts: Array<[keyof typeof body & string, string, number]> = [
     ["familyLabel", "Aile etiketi", 40], ["loomFileName", "Tezgâh desen dosyası", 64], ["lenoSetup", "Döner kurulumu", 100],
     ["drawingInNote", "Tahar düzeni", 300], ["notes", "Not", 500],
@@ -118,6 +202,7 @@ function parseScalars(body: Record<string, unknown>, partial: boolean): Prisma.W
   if (plan !== undefined) out.liftPlan = plan === null ? Prisma.DbNull : plan;
   const leno = parseLenoFrames(body.lenoFrames);
   if (leno !== undefined) out.lenoFrames = leno;
+  assertMechanismFields(out, cls.effective);
   return out;
 }
 
@@ -126,9 +211,10 @@ function conflict(e: unknown): never {
   throw e;
 }
 
-function auditView(r: WeaveDesignRow): Record<string, unknown> {
+function auditView(r: RawRow): Record<string, unknown> {
   return {
-    code: r.code, name: r.name, kind: r.kind, familyLabel: r.familyLabel, frameCount: r.frameCount,
+    code: r.code, name: r.name, kind: r.kind, shedMechanism: r.shedMechanism, weaveStructure: r.weaveStructure,
+    hookCount: r.hookCount, repeatWidthCm: r.repeatWidthCm?.toString() ?? null, familyLabel: r.familyLabel, frameCount: r.frameCount,
     repeatCm: r.repeatCm?.toString() ?? null, loomFileName: r.loomFileName, lenoSetup: r.lenoSetup, lenoFrames: r.lenoFrames, drawingInNote: r.drawingInNote, notes: r.notes,
     liftPlanSize: Array.isArray(r.liftPlan) ? r.liftPlan.length : null,
   };
@@ -136,7 +222,7 @@ function auditView(r: WeaveDesignRow): Record<string, unknown> {
 
 export async function listWeaveDesigns(opts: { includeInactive?: boolean; search?: string }): Promise<WeaveDesignListRow[]> {
   const s = opts.search?.trim();
-  return prisma.weaveDesign.findMany({
+  const rows = await prisma.weaveDesign.findMany({
     where: {
       AND: [
         opts.includeInactive ? {} : { isActive: true },
@@ -146,40 +232,45 @@ export async function listWeaveDesigns(opts: { includeInactive?: boolean; search
     select: WEAVE_DESIGN_LIST_SELECT,
     orderBy: [{ code: "asc" }],
   });
+  return rows.map(present);
 }
 
-export async function getWeaveDesign(id: string): Promise<WeaveDesignRow> {
+async function getRaw(id: string): Promise<RawRow> {
   const row = await prisma.weaveDesign.findUnique({ where: { id }, select: WEAVE_DESIGN_SELECT });
   if (!row) throw AppError.notFound("Desen kartı bulunamadı.");
   return row;
 }
 
+export async function getWeaveDesign(id: string): Promise<WeaveDesignRow> {
+  return present(await getRaw(id));
+}
+
 export async function createWeaveDesign(body: Record<string, unknown>, userId?: string): Promise<WeaveDesignRow> {
   rejectUnknown(body);
-  const data = parseScalars(body, false) as Prisma.WeaveDesignUncheckedCreateInput;
-  let row: WeaveDesignRow;
+  const data = parseScalars(body, false, null) as Prisma.WeaveDesignUncheckedCreateInput;
+  let row: RawRow;
   try {
     row = await prisma.weaveDesign.create({ data: { ...data, createdById: userId ?? null, updatedById: userId ?? null }, select: WEAVE_DESIGN_SELECT });
   } catch (e) {
     conflict(e);
   }
   await AuditService.log({ userId, action: "CREATE", tableName: "WEAVE_DESIGN", recordId: row.id, newData: auditView(row) });
-  return row;
+  return present(row);
 }
 
 export async function updateWeaveDesign(id: string, body: Record<string, unknown>, userId?: string): Promise<WeaveDesignRow> {
   rejectUnknown(body);
-  const before = await getWeaveDesign(id);
-  const data = parseScalars(body, true);
+  const before = await getRaw(id);
+  const data = parseScalars(body, true, before);
   if (Object.keys(data).length === 0) throw AppError.badRequest("Güncellenecek alan yok.");
-  let after: WeaveDesignRow;
+  let after: RawRow;
   try {
     after = await prisma.weaveDesign.update({ where: { id }, data: { ...data, updatedById: userId ?? null }, select: WEAVE_DESIGN_SELECT });
   } catch (e) {
     conflict(e);
   }
   await AuditService.log({ userId, action: "UPDATE", tableName: "WEAVE_DESIGN", recordId: id, oldData: auditView(before), newData: auditView(after) });
-  return after;
+  return present(after);
 }
 
 /** Pasife al — aktif kumaş bağlıyken 409 + liste (MV-06); atomik claim. */

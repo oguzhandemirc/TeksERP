@@ -24,6 +24,8 @@ export interface WeaveCardView {
   design: {
     code: string; name: string; kindLabel: string; familyLabel: string | null; frameCount: number | null;
     repeatCm: string | null; loomFileName: string | null; lenoSetup: string | null;
+    /** Jakar: kanca sayısı + rapor eni (yalnız Jakar kartında dolu; null = basılmaz). */
+    hookCount?: number | null; repeatWidthCm?: string | null;
     /** Tahar düzeni notu; null = satır basılmaz (bugünkü görünüm). */
     drawingInNote: string | null;
   } | null;
@@ -152,7 +154,8 @@ export function renderWeaveDesignCardHtml(v: WeaveCardView): string {
     d ? `Örgü: <b>${e(d.code)}</b> · ${e(d.name)} (${e(d.kindLabel)})` : "",
     d?.familyLabel ? `Aile: ${e(d.familyLabel)}` : "",
     d?.frameCount ? `Çerçeve: ${d.frameCount}` : "",
-    d?.repeatCm ? `Rapor: ${e(d.repeatCm)} cm` : "",
+    d?.repeatWidthCm && d.repeatCm ? `Rapor: ${e(d.repeatWidthCm)} × ${e(d.repeatCm)} cm` : d?.repeatCm ? `Rapor: ${e(d.repeatCm)} cm` : "",
+    d?.hookCount ? `Kanca: ${d.hookCount}` : "",
     v.widthCm ? `En: ${e(v.widthCm)} cm` : "",
     d?.loomFileName ? `Tezgâh dosyası: ${e(d.loomFileName)}` : "",
     d?.lenoSetup ? `Döner: ${e(d.lenoSetup)}` : "",

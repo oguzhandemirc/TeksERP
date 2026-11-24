@@ -18,7 +18,10 @@ export interface TabletConstructionDto {
     // Kart görseli (2026-11-22) — EKLEME alanlar; eski tablet bilinmeyen alanı yok sayar.
     /** PLAIN · DOBBY · JACQUARD · LENO. */
     kind: string;
-    /** Armür planı: satır = atkı, sütun = çerçeve, 1 = kalkık; girilmemişse null. */
+    /** Mekanizma (CAM · DOBBY · JACQUARD) + örgü (PLAIN · TWILL · SATIN · LENO · OTHER | null) — 2026-11-25 EKLEME. */
+    shedMechanism: string;
+    weaveStructure: string | null;
+    /** Armür planı: satır = atkı, sütun = çerçeve, 1 = kalkık; girilmemişse ya da Armür dışı mekanizmada null. */
     liftPlan: number[][] | null;
     /** 1-tabanlı döner çerçeve no'ları. */
     lenoFrames: number[];
@@ -50,7 +53,7 @@ export function toTabletConstruction(weavingOrderId: string, c: EffectiveConstru
     design: d
       ? {
         code: d.code, name: d.name, loomFileName: d.loomFileName, frameCount: d.frameCount, repeatCm: num(d.repeatCm),
-        kind: d.kind, liftPlan: Array.isArray(d.liftPlan) ? (d.liftPlan as number[][]) : null, lenoFrames: d.lenoFrames, drawingInNote: d.drawingInNote,
+        kind: d.kind, shedMechanism: d.shedMechanism, weaveStructure: d.weaveStructure, liftPlan: Array.isArray(d.liftPlan) ? (d.liftPlan as number[][]) : null, lenoFrames: d.lenoFrames, drawingInNote: d.drawingInNote,
       }
       : null,
     weft: c.weft

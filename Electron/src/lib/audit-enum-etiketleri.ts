@@ -447,6 +447,8 @@ export const FIELD_ENUM_OVERRIDES: Record<string, Record<string, string>> = {
     COMPLETED: "Hepsi gönderildi ya da elle kapatıldı",
     CANCELLED: "Sipariş iptal edildi",
   },
+  // FabricTechnique.WOVEN (2026-11-25) — ürünün üretim tekniği; global "Dokuma metresi" (ServiceMeterBasis) değil.
+  "ITEM.fabricTechnique": { WOVEN: "Dokuma" },
 };
 
 /** Audit değeri bağlamı — `tableName` yoksa yalnız global harita kullanılır. */

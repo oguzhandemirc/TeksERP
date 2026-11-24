@@ -422,4 +422,11 @@ export const ENUM_LABELS_EK: Record<string, string> = {
   SEPARATE_BEAM: "Ayrı levent",
   SHARED_BEAM: "Zeminle aynı levent",
   CREEL: "Cağlık (bobinden)",
+  // WeaveShedMechanism (2026-11-25) — DOBBY/JACQUARD WeaveDesignKind ile ortak
+  CAM: "Eksantrik",
+  // WeaveStructure (2026-11-25) — PLAIN/LENO WeaveDesignKind ile, OTHER genel ile ortak
+  TWILL: "Dimi",
+  SATIN: "Saten",
+  // FabricTechnique (2026-11-25) — WOVEN ortak (ITEM.fabricTechnique override'ı "Dokuma")
+  KNITTED: "Örme",
 };

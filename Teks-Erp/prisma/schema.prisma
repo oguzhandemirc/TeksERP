@@ -799,6 +799,7 @@ model User {
   weftSpecsUpdated            WeftSpec[]                    @relation("WeftSpecUpdatedBy")
   weaveDesignsCreated         WeaveDesign[]                 @relation("WeaveDesignCreatedBy")
   weaveDesignsUpdated         WeaveDesign[]                 @relation("WeaveDesignUpdatedBy")
+  weaveDesignImagesUploaded   WeaveDesignImage[]            @relation("WeaveDesignImageUploadedBy")
   costParameterSetsCreated    CostParameterSet[]            @relation("CostParameterSetCreatedBy")
   costParameterSetsUpdated    CostParameterSet[]            @relation("CostParameterSetUpdatedBy")
   yarnCostPricesCreated       YarnCostPrice[]               @relation("YarnCostPriceCreatedBy")
@@ -2412,11 +2413,35 @@ model WeftSpecYarn {
 // =============================================================================
 
 /// Örgü/desen türü — rapor gruplaması ve leno kapısı (§2.4).
+/// ⚠️ ESKİ EKSEN (2026-11-25): iki ekseni karıştırır; yeni okuyucu `shedMechanism` + `weaveStructure`
+/// okur (tek çözücü `constants/weave-classification.ts`). Eski istemci uyumu için çift yazılır; contract ayrı sürüm.
 enum WeaveDesignKind {
   PLAIN
   DOBBY
   JACQUARD
   LENO
+}
+
+/// Ağızlık mekanizması (2026-11-25): Eksantrik (kam, programsız) · Armür (ızgara programı) · Jakar (desen dosyası).
+enum WeaveShedMechanism {
+  CAM
+  DOBBY
+  JACQUARD
+}
+
+/// Örgü (2026-11-25): Bezayağı · Dimi · Saten · Döner (leno) · Diğer. NULL = belirtilmemiş.
+enum WeaveStructure {
+  PLAIN
+  TWILL
+  SATIN
+  LENO
+  OTHER
+}
+
+/// Kumaş üretim tekniği (2026-11-25): Dokuma · Örme. Örme bugün kapalı (servis 400); NULL = Dokuma.
+enum FabricTechnique {
+  WOVEN
+  KNITTED
 }
 
 /// Ek çözgü katmanının rolü (§3.4): döner (leno) çözgü ya da ikinci zemin çözgüsü.
@@ -2442,6 +2467,14 @@ model WeaveDesign {
   code         String          @unique @db.VarChar(32)
   name         String          @db.VarChar(100)
   kind         WeaveDesignKind
+  /// Ağızlık mekanizması — EXPAND (nullable; backfill `kind`dan); okuyucu `resolveWeaveClass`.
+  shedMechanism  WeaveShedMechanism?
+  /// Örgü — NULL = belirtilmemiş (eski DOBBY/JACQUARD kartları).
+  weaveStructure WeaveStructure?
+  /// Jakar kanca sayısı — yalnız Jakar kartında yazılır (servis 400); CHECK 1..30000.
+  hookCount      Int?            @db.SmallInt
+  /// Desen raporu eni (cm) — boyu `repeatCm`; CHECK > 0.
+  repeatWidthCm  Decimal?        @db.Decimal(8, 2)
   /// Serbest aile etiketi (TERGAL-DÖNER, BALIK, DİMİ…) — rapor gruplaması.
   familyLabel  String?         @db.VarChar(40)
   /// Çerçeve sayısı — CHECK 1..32.
@@ -2465,6 +2498,7 @@ model WeaveDesign {
 
   fabricItems   Item[]         @relation("ItemWeaveDesign")
   weavingOrders WeavingOrder[] @relation("WeavingOrderWeaveDesign")
+  image         WeaveDesignImage?
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -2480,6 +2514,28 @@ model WeaveDesign {
   /// AD SEDDİ (WeftSpec emsali).
   @@unique([nameFold])
   @@map("weave_designs")
+}
+
+/// DESEN GÖRSELİ (2026-11-25) — kart başına tek görsel; baytlar DB'de (≤ 5 MB, CHECK), tür SİHİRLİ BAYTTAN
+/// (JPEG/PNG; `certificate_files` emsali). Yeni yükleme satırı yerinde günceller; kaldırma saf yapılandırma
+/// ekidir (deftere yazmaz). Baytlar audit/log yüküne GİRMEZ.
+model WeaveDesignImage {
+  id            String   @id @default(uuid()) @db.Uuid
+  weaveDesignId String   @unique @db.Uuid
+  fileName      String   @db.VarChar(200)
+  mimeType      String   @db.VarChar(32)
+  sizeBytes     Int
+  sha256        String   @db.VarChar(64)
+  content       Bytes
+  uploadedById  String?  @db.Uuid
+  createdAt     DateTime @default(now()) @db.Timestamptz
+  updatedAt     DateTime @updatedAt @db.Timestamptz
+
+  weaveDesign WeaveDesign @relation(fields: [weaveDesignId], references: [id], onDelete: Restrict)
+  uploadedBy  User?       @relation("WeaveDesignImageUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([uploadedById])
+  @@map("weave_design_images")
 }
 
 /// KUMAŞIN EK ÇÖZGÜ KATMANI (zemin = `Item.warpSpecId`; burada döner/ikinci çözgü) — ③b SAF
@@ -4442,6 +4498,8 @@ model Item {
   weftSpecId    String?  @db.Uuid
   /// SEYİTOĞLU MİG-1 — KUMAŞ → DESEN KARTI (N:1). Yalnız `ItemType.FABRIC` (servis 400).
   weaveDesignId String?  @db.Uuid
+  /// Üretim tekniği (2026-11-25) — yalnız KUMAŞ; NULL = Dokuma (okuyucu varsayılanı). Örme bugün 400.
+  fabricTechnique FabricTechnique?
 
   // Relations
   rolls                          Roll[]

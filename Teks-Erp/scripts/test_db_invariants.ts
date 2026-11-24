@@ -1343,6 +1343,10 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "notification_preference_profiles", name: "notification_preference_profiles_kinds_disjoint_ck" },
   // Satır işareti: renk ve not ikisi de boş satır tutulmaz (servis siler; 20261113120000_row_marks).
   { table: "row_marks", name: "row_marks_not_empty_chk" },
+  // Desen sınıflaması (20261125120000): eksen değer kümesi + kanca/rapor aralığı; desen görseli boyut ≤5 MB ve JPEG/PNG.
+  { table: "weave_designs", name: "weave_designs_class_values_ck" },
+  { table: "weave_design_images", name: "weave_design_images_size_ck" },
+  { table: "weave_design_images", name: "weave_design_images_mime_ck" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
