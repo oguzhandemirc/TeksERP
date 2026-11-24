@@ -14,6 +14,7 @@ import { CustomerInfoFields } from "./CustomerInfoFields";
 import { CustomerEditTabs } from "./CustomerEditTabs";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import type { Customer } from "./types";
+import { toForm as toTamburForm } from "./tamburLabelSettings";
 
 import { RecordInfoButton } from "@/components/RecordInfoButton";
 import { CustomerQuotesButton } from "@/pages/Cost/Quotes/CustomerQuotesButton";
@@ -57,8 +58,20 @@ function formDefaults(initial: Customer | null | undefined, requiredRole: Props[
     isSubcontractorRole: initial.isSubcontractorRole,
     isActive: initial.isActive,
     branches: [],
+    tamburLabel: toTamburForm(initial),
   };
 }
+
+/** Sekmenin kayıt biçimi — alt çubuk notu buna göre (B18/7): salt okunurda not yok, liste sekmelerinde "anında". */
+const INSTANT_TABS: Record<string, string> = {
+  branches: "Şube ekleme/düzenleme anında kaydedilir.",
+  "item-aliases": "Bu sekmedeki eklemeler anında kaydedilir.",
+  "color-aliases": "Bu sekmedeki eklemeler anında kaydedilir.",
+  "supplier-item-codes": "Bu sekmedeki eklemeler anında kaydedilir.",
+  "label-templates": "Şablon atamaları anında kaydedilir; Tambur / etiket ayarları Kaydet ile.",
+  "cari-hold": "Kilit koyma / açma kendi onayıyla anında yapılır.",
+  "barcode-series": "Bu sekmedeki değişiklikler anında kaydedilir.",
+};
 
 function CustomerFormHeader({ initial }: { initial?: Customer | null }) {
   return (
@@ -105,7 +118,8 @@ export function CustomerFormDialog({ open, onOpenChange, initial, onSubmit, isSu
   }, [open, initial?.id]);
 
   // Kirli-form guard: kapatma isteği (X / Esc / dış tıklama / İptal — hepsi onOpenChange'den geçer) yalnızca formda
-  // kaydedilmemiş değişiklik varsa onay ister. Düzenlemede alt paneller kendi içlerinde anında sunucuya yazar.
+  // kaydedilmemiş değişiklik varsa onay ister. Form = Bilgiler + fason rolü/kategorileri + Tambur/etiket ayarları;
+  // liste sekmeleri (şube, adlar, şablon atamaları) kendi içlerinde anında yazar.
   const requestClose = (next: boolean) => {
     if (!next && form.formState.isDirty) {
       setConfirmClose(true);
@@ -114,7 +128,7 @@ export function CustomerFormDialog({ open, onOpenChange, initial, onSubmit, isSu
     onOpenChange(next);
   };
 
-  // Geçersizse Bilgiler sekmesine dön: Kaydet her sekmeden basılabilir, hata gizli panelde kalmasın.
+  // Geçersizse hatanın sekmesine dön: Kaydet her sekmeden basılabilir, hata gizli panelde kalmasın.
   const submit = form.handleSubmit(async (v) => {
     await onSubmit(v);
     // Başarılı kayıt sonrası formu "temiz" say (guard yanlış tetiklenmesin); tetik tohumu kaydedilen değere eşitlenir.
@@ -122,7 +136,7 @@ export function CustomerFormDialog({ open, onOpenChange, initial, onSubmit, isSu
     // Kart terimleri `by-customer` önbelleğinden tohumlanır; yeniden açılışta eski terim/tetik görünmesin.
     void qc.invalidateQueries({ queryKey: ["finance", "cari"] });
     void qc.invalidateQueries({ queryKey: ["finance", "cari-by-customer"] });
-  }, () => setActiveTab("info"));
+  }, (errors) => setActiveTab(Object.keys(errors).every((k) => k === "tamburLabel") ? "label-templates" : "info"));
 
   const infoForm = (
     <form id={formId} onSubmit={submit}>
@@ -146,8 +160,8 @@ export function CustomerFormDialog({ open, onOpenChange, initial, onSubmit, isSu
           )}
 
           <TabbedDialogFooter>
-            {isEdit && activeTab !== "info" && (
-              <span className="mr-auto hidden text-xs text-muted-foreground sm:block">Bu sekmedeki değişiklikler anında kaydedilir; Kaydet, Bilgiler'i kaydeder.</span>
+            {isEdit && INSTANT_TABS[activeTab] && (
+              <span className="mr-auto hidden text-xs text-muted-foreground sm:block" data-testid="customer-tab-save-note">{INSTANT_TABS[activeTab]}</span>
             )}
             <Button type="button" variant="outline" onClick={() => requestClose(false)}>İptal</Button>
             <Button type="submit" form={formId} disabled={isSubmitting}>

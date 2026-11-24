@@ -64,9 +64,10 @@ export function DataTableToolbar<T>({
       {leading}
       <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
         {table ? (
-          <DataTableTools table={table} exportName={exportName} fetchAll={fetchAll} extraExports={extraExports} />
+          // Simge kipi (geniş ekranda yazılı): 1440'ta araçlar + süzgeçler tek satıra sığsın (B18/13; Cariler ile aynı).
+          <DataTableTools table={table} exportName={exportName} fetchAll={fetchAll} extraExports={extraExports} compact />
         ) : null}
-        <SavedViewsMenu />
+        <SavedViewsMenu compact />
         {actions}
       </div>
     </div>

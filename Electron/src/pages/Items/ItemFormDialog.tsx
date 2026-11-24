@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { Controller, useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AlertTriangle, ChevronRight, Palette, Ruler, Sparkles } from "lucide-react";
@@ -6,10 +6,9 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Dialog,
   DialogDescription,
-  DialogFooter,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { TabbedDialogContent, TabbedDialogHeader } from "@/components/ui/tabbed-dialog";
+import { TabbedDialogContent, TabbedDialogFooter, TabbedDialogHeader } from "@/components/ui/tabbed-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -62,6 +61,7 @@ export function ItemFormDialog({
   isSubmitting,
 }: Props) {
   const isEdit = Boolean(initial);
+  const formId = useId();
   const [colorsOpen, setColorsOpen] = useState(false);
   const [propsOpen, setPropsOpen] = useState(false);
   /** Stok kodunu elle yazma modu — varsayılan KAPALI, kutu hiç çizilmez. */
@@ -221,9 +221,26 @@ export function ItemFormDialog({
           </div>
         )}
 
-        <ItemCardTabs item={initial}>
-        {/* Form gövdeyi doldurur, alt çubuk `mt-auto` ile sabit çerçevenin dibine iner (kısa formda ortada kalmaz). */}
-        <form onSubmit={handleSubmit} className="flex min-h-full flex-col space-y-4">
+        {/* Alt çubuk sekmelerin DIŞINDA (B18/4): her sekmede görünür, Kaydet `form={formId}` ile Bilgiler formunu gönderir. */}
+        <ItemCardTabs
+          item={initial}
+          footer={(tab) => (
+            <TabbedDialogFooter>
+              {tab !== "info" && (
+                <span className="mr-auto hidden text-xs text-muted-foreground sm:block">
+                  Bu sekmedeki eklemeler anında kaydedilir; {isEdit ? "Güncelle" : "Oluştur"}, Bilgiler'i kaydeder.
+                </span>
+              )}
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                İptal
+              </Button>
+              <Button type="submit" form={formId} disabled={isSubmitting}>
+                {isSubmitting ? "Kaydediliyor..." : isEdit ? "Güncelle" : "Oluştur"}
+              </Button>
+            </TabbedDialogFooter>
+          )}
+        >
+        <form id={formId} onSubmit={handleSubmit} className="space-y-4">
           {/* Sıra bilinçli: ÖNCE ad. Stok kodu forma EN ALTA, kapalı bir satır
               olarak alındı (2026-08-17 saha geri bildirimi) — ilk alan olduğu
               sürece personel "boş bırakın" yazsa da oraya kumaşın ADINI
@@ -380,15 +397,6 @@ export function ItemFormDialog({
             error={form.formState.errors.code}
             register={form.register}
           />
-
-          <DialogFooter className="sticky bottom-0 z-10 -mx-6 -mb-4 mt-auto border-t border-border/70 bg-card px-6 py-3">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              İptal
-            </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Kaydediliyor..." : isEdit ? "Güncelle" : "Oluştur"}
-            </Button>
-          </DialogFooter>
         </form>
         </ItemCardTabs>
 

@@ -58,12 +58,13 @@ export function ChoiceChips<T extends string>({
   return (
     <div role="radiogroup" aria-label={ariaLabel} className="flex flex-wrap gap-2">
       {options.map((o) => (
-        <label key={o.value} className={cn(PILL, o.sub && "py-1 leading-tight")}>
+        <label key={o.value} className={PILL}>
           <input type="radio" name={name} value={o.value} className="sr-only" checked={value === o.value} disabled={disabled} onChange={() => onChange(o.value)} />
           <Marks />
-          <span className="flex flex-col">
+          {/* Alt metin aynı satırda: iki satırlı düğme komşularından uzun duruyordu (B18/13). */}
+          <span className="inline-flex items-baseline gap-1 whitespace-nowrap">
             <span>{o.label}</span>
-            {o.sub ? <span className="text-[11px] font-normal opacity-80">{o.sub}</span> : null}
+            {o.sub ? <span className="text-xs font-normal opacity-80">{o.sub}</span> : null}
           </span>
         </label>
       ))}

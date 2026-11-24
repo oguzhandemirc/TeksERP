@@ -37,6 +37,16 @@ export function toForm(c: TamburLabelSettingsFields): TamburLabelSettingsForm {
   };
 }
 
+export const SPLIT_LENGTH_ERROR = "Bölme ölçüsü 0'dan büyük ve en çok 100000 m olmalı.";
+
+/** Bölme ölçüsü metni: boş = öneri yok; doluysa (0, 100000] m. Cari formu şeması da bunu okur (tek kural). */
+export function splitLengthError(raw: string): string | null {
+  const s = raw.trim();
+  if (s === "") return null;
+  const n = Number(s.replace(",", "."));
+  return !Number.isFinite(n) || n <= 0 || n > 100000 ? SPLIT_LENGTH_ERROR : null;
+}
+
 /** Form → PATCH gövdesi; bölme ölçüsü bozuksa hata metni döner. */
 export function toPayload(
   f: TamburLabelSettingsForm,
@@ -44,9 +54,9 @@ export function toPayload(
   const raw = f.splitLength.trim();
   let split: number | null = null;
   if (raw !== "") {
-    const n = Number(raw.replace(",", "."));
-    if (!Number.isFinite(n) || n <= 0 || n > 100000) return { ok: false, error: "Bölme ölçüsü 0'dan büyük ve en çok 100000 m olmalı." };
-    split = Math.round(n * 100) / 100;
+    const err = splitLengthError(raw);
+    if (err) return { ok: false, error: err };
+    split = Math.round(Number(raw.replace(",", ".")) * 100) / 100;
   }
   return {
     ok: true,

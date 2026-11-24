@@ -10,6 +10,7 @@ import { FieldGrid, FormCard } from "@/components/forms/WideFormDialog";
 import { DocumentProfileSelect } from "@/components/forms/DocumentProfileSelect";
 import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
 import { partnerRoleLabels } from "@/lib/partnerRoles";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { SUBCONTRACTOR_NEEDS_SUPPLIER_MESSAGE, type CustomerFormValues } from "./schema";
 import { exportCodeVisible } from "./branch-schema";
 import { CustomerBranchesDraftField } from "./CustomerBranchesDraftField";
@@ -42,11 +43,10 @@ export function CustomerInfoFields({ form, initial, requiredRole, finance, showB
         </FormCard>
       )}
       {finance.canRead && <CustomerFinanceSection form={form as never} customerId={initial?.id ?? null} canWrite={finance.canWrite} />}
-      {/* Üçüncü rol — kart kaydedildikten sonra (id var) anında yazan düğme (profil bağı); Tedarikçi seçiminin O ANKİ
-          değeriyle açılır/kapanır (kayıt öncesi de: kural sunucudakiyle aynı). */}
+      {/* Fason profili durumu + kategoriler (düzenlemede; rol düğmesi Kimlik › Roller'de). Hepsi Kaydet ile yazılır. */}
       {isEdit && initial && (
         <FormCard title="Fason" sectionId="fason">
-          <CustomerSubcontractorRole customer={{ ...initial, isSupplierRole: form.watch("isSupplierRole") }} />
+          <CustomerSubcontractorRole customer={initial} />
         </FormCard>
       )}
       <FormCard title="Notlar" sectionId="notes" errorFields={["notes"]}>
@@ -59,8 +59,11 @@ export function CustomerInfoFields({ form, initial, requiredRole, finance, showB
 function IdentityCard({ form, initial, requiredRole }: Pick<Props, "form" | "initial" | "requiredRole">) {
   const isEdit = Boolean(initial);
   const err = form.formState.errors;
-  // Yeni kartta "Fason iş yapar" — gövdeye `subcontractorRole` gider (`customerPayload.buildCustomerPayload`).
-  const fasonYeni = form.watch("isSubcontractorRole");
+  // "Fason iş yapar": yeni kartta gövdeye `subcontractorRole` gider (`buildCustomerPayload`); düzenlemede Kaydet
+  // kart yazıldıktan sonra profili açar/kapatır (`subcontractorRoleSync`). Profil yazma izni yoksa düzenlemede kilitli.
+  const fason = form.watch("isSubcontractorRole");
+  const { hasPermission } = useRoleAccess();
+  const fasonLocked = isEdit && !hasPermission("subcontractor:write");
   return (
     <FormCard title="Kimlik" sectionId="identity" sectionRequired aside={isEdit && initial?.code ? <span className="text-xs text-muted-foreground">Kod: <span className="font-mono">{initial.code}</span></span> : undefined}>
       <FieldGrid cols={4}>
@@ -77,22 +80,22 @@ function IdentityCard({ form, initial, requiredRole }: Pick<Props, "form" | "ini
             <ToggleChip label="Aktif" {...form.register("isActive")} />
           </div>
         </FormField>
-        {/* Rol modeli: tip yerine üç seçim düğmesi. Yeni kartta "Fason iş yapar" kart + profili TEK işlemde doğurur
-            (`subcontractorRole`); seçiliyse Tedarikçi otomatik + kilitli (sunucu kuralı). Düzenlemede üçüncü rol Fason bölümünde. */}
-        <FormField label="Roller" error={err.isCustomerRole ?? err.isSupplierRole} required hint={!isEdit && fasonYeni ? SUBCONTRACTOR_NEEDS_SUPPLIER_MESSAGE : undefined} className="md:col-span-2">
+        {/* Rol modeli: tip yerine üç seçim düğmesi, yeni kartta da düzenlemede de burada (B18/2). "Fason iş yapar"
+            seçiliyse Tedarikçi otomatik + kilitli (sunucu kuralı: fason profili Tedarikçi rolü ister). */}
+        <FormField label="Roller" error={err.isCustomerRole ?? err.isSupplierRole} required hint={fason ? SUBCONTRACTOR_NEEDS_SUPPLIER_MESSAGE : undefined} className="md:col-span-2">
           <div className="flex flex-wrap items-center gap-2">
             <ToggleChip label={partnerRoleLabels.customer} disabled={requiredRole === "isCustomerRole"} {...form.register("isCustomerRole")} />
-            <ToggleChip label={partnerRoleLabels.supplier} disabled={requiredRole === "isSupplierRole" || (!isEdit && fasonYeni)} {...form.register("isSupplierRole")} />
-            {!isEdit && (
-              <ToggleChip
-                label={SUBCONTRACTOR_ROLE_LABEL}
-                checked={fasonYeni}
-                onChange={(e) => {
-                  form.setValue("isSubcontractorRole", e.target.checked, { shouldDirty: true });
-                  if (e.target.checked) form.setValue("isSupplierRole", true, { shouldDirty: true });
-                }}
-              />
-            )}
+            <ToggleChip label={partnerRoleLabels.supplier} disabled={requiredRole === "isSupplierRole" || fason} {...form.register("isSupplierRole")} />
+            <ToggleChip
+              label={SUBCONTRACTOR_ROLE_LABEL}
+              checked={fason}
+              disabled={fasonLocked}
+              title={fasonLocked ? "Fason profilini değiştirme yetkiniz yok" : undefined}
+              onChange={(e) => {
+                form.setValue("isSubcontractorRole", e.target.checked, { shouldDirty: true });
+                if (e.target.checked) form.setValue("isSupplierRole", true, { shouldDirty: true });
+              }}
+            />
           </div>
         </FormField>
         <FormField label="Belge Şablon Profili" info="Bu müşteriye basılan irsaliyeler seçili profilin görünümünü kullanır; boş = genel ayar">

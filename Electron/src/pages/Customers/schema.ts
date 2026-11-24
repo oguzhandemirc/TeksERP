@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { financeFormDefaults, RISK_LIMIT_ERROR, riskLimitError, TERM_DAYS_ERROR, termDaysError } from "./customerFinance";
+import { SPLIT_LENGTH_ERROR, splitLengthError } from "./tamburLabelSettings";
 
 /**
  * Tek-adım müşteri oluşturmada satır-içi şube taslağı. Kompakt alanlar (Ad zorunlu +
@@ -105,6 +106,17 @@ export const customerFormSchema = z.object({
   isCustomerRole: z.boolean(),
   isSupplierRole: z.boolean(),
   isSubcontractorRole: z.boolean(),
+  // Tek kayıt modeli (B18/7): düzenlemede fason kategorileri ve Tambur/etiket ayarları da form değeridir, alt çubuktaki
+  // Kaydet ile yazılır. `undefined` = dokunulmadı (kategoride sunucu kümesi korunur; tambur alanı yeni kartta yok).
+  subcontractorCategoryIds: z.array(z.string()).optional(),
+  tamburLabel: z
+    .object({
+      widthSource: z.enum(["", "INCOMING", "MEASURED"]),
+      weighRequired: z.boolean(),
+      splitLength: z.string().refine((s) => splitLengthError(s) === null, { message: SPLIT_LENGTH_ERROR }),
+      labelBatchEnabled: z.boolean(),
+    })
+    .optional(),
   isActive: z.boolean(),
   // Yalnız oluşturma formunda dolar; düzenlemede boş kalır (şubeler sekmeden yönetilir).
   // superRefine: bir satırda İÇERİK varsa (herhangi bir alan dolu) ad zorunlu olur;

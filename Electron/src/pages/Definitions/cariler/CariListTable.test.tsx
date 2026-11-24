@@ -54,6 +54,8 @@ describe("Cariler — ortak DataTable", () => {
     renderWithProviders(<Harness compact selectedKey="C:c1" />);
     expect(screen.queryByText("Şehir")).toBeNull();
     expect(screen.queryByText("Vergi no")).toBeNull();
+    // B18/3: satır eylemleri panelde var → panel açıkken eylem sütunu da düşer (1440'ta Bakiye kesilmesin).
+    expect(screen.queryByRole("button", { name: "ÖRNEK PERDE — düzenle" })).toBeNull();
     expect(screen.getByText("ÖRNEK PERDE").closest("tr")).toHaveAttribute("aria-selected", "true");
   });
 
