@@ -19,6 +19,7 @@ import {
   updateWeftSpec,
 } from "../services/weft-spec.service";
 import { forkWeftSpecForItem } from "../services/weft-spec-fork.service";
+import { attachNewWeftSpecToItem } from "../services/weft-spec-draft.service";
 import { withWeftShares } from "../services/helpers/weft-share.helper";
 import { weftSpecOpenOrders } from "../services/helpers/spec-open-orders.helper";
 
@@ -104,6 +105,34 @@ router.get("/:id/open-orders", requirePermission("warpspec:read"), wrap(async (r
 router.post("/", requirePermission("warpspec:write"), wrap(async (req, res) => {
   const data = withWeftShares(await createWeftSpec(body.parse(req.body ?? {}), req.user?.userId));
   res.status(201).json({ success: true, data, message: "Atkı kartı oluşturuldu." });
+}));
+
+const attachBody = z.object({
+  itemId: z.string().uuid("Geçersiz kumaş ID"),
+  expectedWeftSpecId: z.string().uuid("Geçersiz atkı kartı ID").nullable(),
+  weft: z.record(z.string(), z.unknown()),
+}).strict();
+
+/**
+ * @openapi
+ * /api/weft-specs/attach-to-item:
+ *   post:
+ *     tags: [WeftSpecs]
+ *     summary: Var olan kumaşa ürün penceresinden girilen atkıyı yeni kart olarak bağla (B19; kart + bağ tek tx)
+ *     description: |
+ *       Kod/ad üründen türer. `expectedWeftSpecId` kumaşın bilinen kartıdır (yoksa null); tutmazsa 409. Kumaş zaten
+ *       üründen türemiş kodlu ve aynı içerikli karta bağlıysa önceki denemenin tekrarı sayılır (200, replayed=true).
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       201: { description: Kart oluşturuldu ve kumaşa bağlandı }
+ *       200: { description: Tekrar deneme — mevcut kart döndü }
+ *       400: { description: Taslak geçersiz ya da kumaş değil }
+ *       409: { description: WEFT_SPEC_BINDING_CHANGED · WEFT_SPEC_DUPLICATE }
+ */
+router.post("/attach-to-item", requirePermission("warpspec:write"), requirePermission("item:write"), wrap(async (req, res) => {
+  const result = await attachNewWeftSpecToItem(attachBody.parse(req.body ?? {}), req.user?.userId);
+  const data = { ...result, weftSpec: withWeftShares(result.weftSpec) };
+  res.status(data.replayed ? 200 : 201).json({ success: true, data, message: data.replayed ? "Atkı kartı zaten bağlanmıştı." : "Atkı kartı oluşturuldu ve kumaşa bağlandı." });
 }));
 
 const forkBody = z.object({

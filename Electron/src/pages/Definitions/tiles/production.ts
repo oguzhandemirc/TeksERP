@@ -1,5 +1,5 @@
 // Tanımlar › Üretim & Kalite karoları (sıra = hub sırası).
-import { Factory, Route as RouteIcon, FlaskConical, AlertTriangle, Bookmark, Undo2, Warehouse, Printer, Ruler, MessageSquareText, Clock3, BellRing, Cpu, Binary, Grid3x3, Cylinder } from "lucide-react";
+import { Factory, Route as RouteIcon, FlaskConical, AlertTriangle, Bookmark, Undo2, Warehouse, Printer, Ruler, MessageSquareText, Clock3, BellRing, Cpu, Binary, Grid3x3, Cylinder, Rows3 } from "lucide-react";
 import { isProductRecipesVisible, isRoutesVisible } from "../production-regime";
 import { isShiftDefinitionsVisible } from "@/pages/ShiftDefinitions/shift-regime";
 import { isLoomAlarmDutyVisible } from "@/pages/LoomAlarmDuty/duty-regime";
@@ -190,6 +190,18 @@ export const productionTiles: DefinitionTile[] = [
     description: "Örgü türü · armür planı · atkı sırası · varyantlar (bir desen çok kumaşı besler)",
     icon: Grid3x3,
     to: "/definitions/weave-designs",
+    group: "production",
+    permission: "warpspec:read",
+    visibleWhen: (ctx) => ctx.dokumaEnabled,
+    offHint: flagOffHint("dokumaEnabled"),
+  },
+  {
+    // ATKI KARTLARI (B19) — atkı kartı kendi ekranında da açılır/düzenlenir (ürün penceresi dışında); dokuma modülü.
+    key: "weft-specs",
+    title: "Atkı Kartları",
+    description: "Atkı iplikleri · atkı sırası · sıklık · program no (bir atkı kartı çok kumaşı besler)",
+    icon: Rows3,
+    to: "/definitions/weft-specs",
     group: "production",
     permission: "warpspec:read",
     visibleWhen: (ctx) => ctx.dokumaEnabled,

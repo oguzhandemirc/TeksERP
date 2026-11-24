@@ -10,6 +10,7 @@ import { ItemService } from "../services/item.service";
 import { createItemRecord, takeCreateToken } from "../services/color-item-create.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
+import { requireDokumaEnabled } from "../middlewares/module.middleware";
 import { readFilterList } from "../utils/query-parser";
 import { CustomerAliasController } from "../controllers/customer-alias.controller";
 import "../types/express-augment";
@@ -32,6 +33,14 @@ function serviceCreateNeedsItemWrite(req: Request, res: Response, next: NextFunc
   const body = req.body as { itemType?: unknown } | undefined;
   if (body && typeof body === "object" && body.itemType === "SERVICE") return requireItemWrite(req, res, next);
   next();
+}
+
+// B19: gövdede atkı taslağı varsa atkı kartı da doğar → kart ucunun kapıları (dokuma modülü + `warpspec:write`).
+const requireWarpWrite = requirePermission("warpspec:write");
+function weftDraftNeedsDokuma(req: Request, res: Response, next: NextFunction): void {
+  const body = req.body as { weftSpecDraft?: unknown } | undefined;
+  if (!body || typeof body !== "object" || body.weftSpecDraft === undefined || body.weftSpecDraft === null) return next();
+  void requireDokumaEnabled(req, res, (err?: unknown) => (err ? next(err) : requireWarpWrite(req, res, next)));
 }
 
 export const itemService = new ItemService({
@@ -226,6 +235,7 @@ router.get("/:id", verifyToken, requireAnyPermission("item:read", "mobile:kk1"),
  *               clientToken: { type: string, format: uuid, description: "Opsiyonel deneme kimliği — aynı token + aynı ad/tür → ilk kart (201); farklı → 409 CLIENT_TOKEN_COLLISION; kart sonradan pasif/birleşik → 409 ITEM_CREATE_GONE" }
  *               itemType: { type: string, enum: [YARN, FABRIC, CONSUMABLE], description: "SERVICE → hizmet kartı açılır (service_items; eski istemci uyumu, yanıt itemType SERVICE)" }
  *               unit: { type: string, enum: [MT, KG, ADET], default: "MT" }
+ *               weftSpecDraft: { type: object, description: "Opsiyonel (yalnız KUMAŞ) — penceredeki atkı (yarns, sequenceCode, picksPerCm, weftProgramNo); atkı kartı ürünle aynı tx'te doğar. Dokuma modülü + warpspec:write ister." }
  *     responses:
  *       201:
  *         description: Ürün oluşturuldu
@@ -235,7 +245,7 @@ router.get("/:id", verifyToken, requireAnyPermission("item:read", "mobile:kk1"),
 // Mobil "Kumaş Ekle" ekranı da bu ucu kullanır. `mobile:kumas` YALNIZ buraya
 // (yaratma) eklenir — PATCH/DELETE hâlâ `item:write` ister, yoksa saha
 // kullanıcısı mevcut kumaşı düzenleyip pasife de alabilirdi.
-router.post("/", verifyToken, requireAnyPermission("item:write", "mobile:kumas"), serviceCreateNeedsItemWrite, itemWidthGuard, async (req: Request, res: Response, next: NextFunction) => {
+router.post("/", verifyToken, requireAnyPermission("item:write", "mobile:kumas"), serviceCreateNeedsItemWrite, weftDraftNeedsDokuma, itemWidthGuard, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const clientToken = takeCreateToken(req.body);
     res.status(201).json(await createItemRecord(itemService, req.body, req.user?.userId, clientToken));
