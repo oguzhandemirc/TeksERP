@@ -1,7 +1,8 @@
 // Kumaş kartı "Müşteri Renk Adları": bu kumaşta her müşterinin kumaşa özel renk adı. Cari kartıyla AYNI uca yazar.
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
+import { Palette, Plus } from "lucide-react";
+import { TabbedDialogEmpty } from "@/components/ui/tabbed-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -131,7 +132,7 @@ export function ItemCustomerColorAliasesPanel({ item }: Props) {
   const groups = groupByCustomer(q.data?.data ?? []);
 
   return (
-    <div className="space-y-3">
+    <div className="flex h-full flex-col gap-3">
       <p className="text-xs text-muted-foreground">
         Müşterinin bu kumaşta kullandığı renk adı. Burada verilen ad, o müşterinin genel renk adının önüne geçer.
       </p>
@@ -146,7 +147,7 @@ export function ItemCustomerColorAliasesPanel({ item }: Props) {
       {q.isLoading ? (
         <Skeleton className="h-32 w-full" />
       ) : groups.length === 0 ? (
-        <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">Bu kumaşta müşteriye özel renk adı yok.</div>
+        <div className="min-h-0 flex-1"><TabbedDialogEmpty icon={Palette} text="Bu kumaşta müşteriye özel renk adı yok." /></div>
       ) : (
         <CustomerGroupList
           groups={groups}

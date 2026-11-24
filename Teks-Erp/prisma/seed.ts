@@ -300,7 +300,8 @@ async function main() {
     create: {
         code: "BOYA",
         name: "Boyahane",
-        description: "Renk veren fason adım — kabulde Roll.colorId + özellikleri WO'dan kopyalanır",
+        // Açıklama ekranda (cari kartı kategori listesi) görünür → günlük dil, kolon/kısaltma adı yok (B18/12).
+        description: "Kumaşı boyayan firma — top geri gelince rengi ve özellikleri iş emrinden alır",
         appliesColor: true,
         appliesProperty: true,
       },
@@ -311,7 +312,7 @@ async function main() {
     create: {
         code: "ZIMPARA",
         name: "Zımpara",
-        description: "Yüzey işleme — kabulde yalnız özellik (Zımparalı) WO'dan kopyalanır",
+        description: "Yüzey işleme — top geri gelince yalnız özelliği (Zımparalı) iş emrinden alır",
         appliesColor: false,
         appliesProperty: true,
       },
@@ -324,7 +325,7 @@ async function main() {
     create: {
         code: "KARTELA",
         name: "Kartela",
-        description: "Bitmiş top → kartela üretimi (kartela sevk/kabul firmaları)",
+        description: "Bitmiş toptan kartela yapan firmalar (kartela sevk ve kabul)",
         appliesColor: false,
         appliesProperty: false,
       },

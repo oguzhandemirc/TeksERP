@@ -1,43 +1,27 @@
-// Cari kartı → "Fason iş yapar" altındaki kategori ÇOKLU seçimi. Profil aktifken görünür; her tık fason profilinin
-// kategori kümesini değiştirir (`PATCH /api/subcontractors/:id {categoryIds}` — mevcut uç, küme değişimi). Zorunlu değil.
-// Kategoriler fason seçicilerini süzer (devere/dokuma/rota adımı) — boş küme bugünkü davranıştır.
-import { useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { toast } from "sonner";
+// Cari kartı → Fason bölümündeki kategori ÇOKLU seçimi. Tek kayıt modeli (B18/7): seçim form değeridir
+// (`subcontractorCategoryIds`), alt çubuktaki Kaydet profile yazar (`PATCH /api/subcontractors/:id {categoryIds}`), İptal
+// geri alır. Zorunlu değil; kategoriler fason seçicilerini süzer (devere/dokuma/rota adımı) — boş küme bugünkü davranıştır.
+import { useQuery } from "@tanstack/react-query";
 import { MultiSelectCheckboxList } from "@/components/forms/MultiSelectCheckboxList";
 import { InfoPopover } from "@/components/ui/info-popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import { loadAllForPicker } from "@/lib/picker-loader";
-import { subcontractorService } from "@/pages/Subcontractors/service";
 import { subcontractorCategoryService } from "@/pages/SubcontractorCategories/service";
-import type { Subcontractor } from "@/pages/Subcontractors/types";
 
 export const SUBCONTRACTOR_CATEGORIES_LABEL = "Fason kategorileri";
 
-export function CustomerSubcontractorCategories({ profile, onSaved }: { profile: Subcontractor; onSaved: () => void }) {
-  const saved = (profile.categories ?? []).map((c) => c.categoryId);
-  // Sunucu kümesi değişince çağıran `key` ile yeniden kurar; yerel küme yalnız tık anındaki iyimser görüntüdür.
-  const [value, setValue] = useState<string[]>(saved);
-
+export function CustomerSubcontractorCategories({ value, onChange, disabled }: { value: string[]; onChange: (ids: string[]) => void; disabled?: boolean }) {
   const categories = useQuery({
     queryKey: ["subcontractor-categories", "all-active"],
     queryFn: () => loadAllForPicker(subcontractorCategoryService, { sortBy: "name", sortOrder: "asc", filters: { isActive: "true" } }),
     staleTime: 60_000,
   });
-  const mut = useMutation({
-    mutationFn: (categoryIds: string[]) => subcontractorService.update(profile.id, { categoryIds } as Partial<Subcontractor>),
-    onSuccess: () => {
-      toast.success("Fason kategorileri kaydedildi");
-      onSaved();
-    },
-    onError: () => setValue(saved),
-  });
 
   return (
-    <div className="space-y-1.5 pl-6">
+    <div className="space-y-1.5">
       <div className="flex items-center gap-1.5 text-xs font-medium">
         {SUBCONTRACTOR_CATEGORIES_LABEL}
-        <span className="font-normal text-muted-foreground">(isteğe bağlı · seçim anında kaydedilir)</span>
+        <span className="font-normal text-muted-foreground">(isteğe bağlı · Kaydet ile kaydedilir)</span>
         <InfoPopover
           label="Fason kategorileri açıklaması"
           desc="Bu firmanın verdiği fason hizmetler (Boyahane, Devere, Dokuma…). Devere siparişi, dokuma iş emri ve rota adımındaki fason seçicileri yalnız ilgili kategorideki firmaları gösterir; seçilmezse firma yalnız 'Tümünü göster' ile görünür."
@@ -50,12 +34,9 @@ export function CustomerSubcontractorCategories({ profile, onSaved }: { profile:
           <MultiSelectCheckboxList
             items={(categories.data?.data ?? []).map((c) => ({ id: c.id, label: c.name, hint: c.description ?? c.code }))}
             value={value}
-            onChange={(next) => {
-              setValue(next);
-              mut.mutate(next);
-            }}
+            onChange={onChange}
             columns={2}
-            disabled={mut.isPending}
+            disabled={disabled}
             placeholder="Kategori ara..."
             emptyHint="Tanımlı fason kategorisi yok (Tanımlar › Fason Kategorileri)."
           />

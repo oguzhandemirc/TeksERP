@@ -20,8 +20,8 @@ export function CustomerLabelTemplatesTab({ customer }: { customer: Customer }) 
         <CustomerTemplateRoutesPanel customerId={customer.id} />
       </LabelCard>
       <div className="grid gap-4 xl:grid-cols-2">
-        <LabelCard title="Tambur / etiket">
-          <CustomerTamburLabelSettings customer={customer} />
+        <LabelCard title="Tambur / etiket" aside={<span className="text-[11px] normal-case text-muted-foreground">Kaydet ile kaydedilir</span>}>
+          <CustomerTamburLabelSettings />
         </LabelCard>
         <LabelCard
           title="Serbest etiketler"

@@ -49,7 +49,8 @@ export function FormField({
             {label}
             {required && <span className="ml-0.5 font-bold text-destructive">*</span>}
           </Label>
-          <InfoPopover desc={info} className="-my-1 ml-1 align-middle" />
+          {/* Balon etiketin ÜSTÜNDE: altta açılınca tam yazılacak girdiyi örtüyordu (B18/13, risk limiti). */}
+          <InfoPopover desc={info} side="top" className="-my-1 ml-1 align-middle" />
         </div>
       ) : (
         <Label htmlFor={htmlFor}>

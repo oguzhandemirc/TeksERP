@@ -32,9 +32,9 @@ vi.mock("./CustomerColorAliasesPanel", () => ({ CustomerColorAliasesPanel: () =>
 vi.mock("./CustomerTemplateRoutesPanel", () => ({ CustomerTemplateRoutesPanel: () => null }));
 vi.mock("./CustomerStandaloneLabelsPanel", () => ({ CustomerStandaloneLabelsPanel: () => null }));
 vi.mock("@/components/RecordInfoButton", () => ({ RecordInfoButton: () => null }));
-vi.mock("./CustomerSubcontractorRole", async (orig) => ({ ...(await orig<typeof import("./CustomerSubcontractorRole")>()), CustomerSubcontractorRole: (p: { customer: { isSupplierRole: boolean } }) => <div data-testid="fason-paneli" data-supplier={String(p.customer.isSupplierRole)} /> }));
+vi.mock("./CustomerSubcontractorRole", async (orig) => ({ ...(await orig<typeof import("./CustomerSubcontractorRole")>()), CustomerSubcontractorRole: () => <div data-testid="fason-paneli" /> }));
 vi.mock("@/hooks/usePricingEnabled", () => ({ useCustomerBranchesEnabled: () => false, usePricingEnabled: () => false, useMaliyetEnabled: () => false, useFeatureFlags: () => ({ data: { data: { financeEnabled: false } } }) }));
-vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ hasPermission: () => false, hasAnyPermission: () => false, hasAllPermissions: () => false }) }));
+vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ hasPermission: (p: string) => p === "subcontractor:write", hasAnyPermission: () => false, hasAllPermissions: () => false }) }));
 
 const box = (name: string) => screen.getByRole("checkbox", { name });
 
@@ -89,15 +89,22 @@ describe("CustomerFormDialog — rol modeli", () => {
     expect(box("Müşteri")).not.toBeDisabled();
   });
 
-  it("③ düzenleme: kutular kartın bayraklarından; fason paneli Tedarikçi kutusunun O ANKİ değerini görür", async () => {
+  it("⭐ ③ düzenleme (B18/2): 'Fason iş yapar' de Roller satırında, kartın bayrağından; açıkken Tedarikçi kilitli; kapatınca açılır, form kirlenir", async () => {
     const initial = { id: "c1", code: "MUS1", name: "X", taxNumber: null, type: "SUPPLIER", isCustomerRole: false, isSupplierRole: true, isSubcontractorRole: true, exportCode: null, address: null, city: null, district: null, country: null, contactName: null, contactPhone: null, email: null, notes: null, isActive: true, createdAt: "", updatedAt: "" } as Customer;
-    renderWithProviders(<CustomerFormDialog open onOpenChange={() => {}} onSubmit={() => {}} initial={initial} />);
+    const onSubmit = vi.fn();
+    renderWithProviders(<CustomerFormDialog open onOpenChange={() => {}} onSubmit={onSubmit} initial={initial} />);
     expect(screen.getByText("Cari Kartını Düzenle")).toBeInTheDocument();
     expect(box("Müşteri")).not.toBeChecked();
     expect(box("Tedarikçi")).toBeChecked();
-    expect(screen.getByTestId("fason-paneli")).toHaveAttribute("data-supplier", "true");
-    await userEvent.click(box("Tedarikçi"));
-    expect(screen.getByTestId("fason-paneli")).toHaveAttribute("data-supplier", "false");
+    expect(box("Fason iş yapar")).toBeChecked();
+    expect(box("Tedarikçi")).toBeDisabled();
+    expect(screen.getByTestId("fason-paneli")).toBeInTheDocument();
+    await userEvent.click(box("Fason iş yapar"));
+    expect(box("Fason iş yapar")).not.toBeChecked();
+    expect(box("Tedarikçi")).not.toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "Kaydet" }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect(onSubmit.mock.calls[0]![0]).toMatchObject({ isSubcontractorRole: false, isSupplierRole: true });
   });
 
   it("⭐ ④ şema: hiç rol → 'En az bir rol'; fason işaretli ama Tedarikçi değil → 'Tedarikçi rolü de taşır'; fason + tedarikçi → geçer; yalnız Tedarikçi → geçer", () => {

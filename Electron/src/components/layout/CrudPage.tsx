@@ -176,6 +176,9 @@ export function CrudPage<T extends { id: string }>({
         size: 24 + 32 * (2 + (copyLabel ? 1 : 0) + (permanentDelete ? 1 : 0)),
         cell: ({ row }) => {
           const isActive = (row.original as { isActive?: boolean }).isActive !== false;
+          // Simge düğmelerin adı hep dolu (ekran okuyucu + fare ipucu); sayfanın verdiği ad önceliklidir.
+          const removeName = removeLabel ?? (permanentDelete || onRemove ? "Pasife al (geri alınabilir)" : "Sil");
+          const restoreName = restoreLabel ?? "Aktifleştir";
           return (
             <div className="flex justify-end gap-1">
               <PermissionGate permission={writePermission}>
@@ -183,6 +186,8 @@ export function CrudPage<T extends { id: string }>({
                   size="icon"
                   variant="ghost"
                   className="h-7 w-7"
+                  title="Düzenle"
+                  aria-label="Düzenle"
                   onClick={(e) => {
                     e.stopPropagation();
                     setCopyFrom(null);
@@ -214,8 +219,8 @@ export function CrudPage<T extends { id: string }>({
                     size="icon"
                     variant="ghost"
                     className="h-7 w-7 text-destructive"
-                    title={removeLabel ?? (permanentDelete ? "Pasife Al (geri alınabilir)" : undefined)}
-                    aria-label={removeLabel}
+                    title={removeName}
+                    aria-label={removeName}
                     onClick={(e) => {
                       e.stopPropagation();
                       if (onRemove) onRemove(row.original);
@@ -229,8 +234,8 @@ export function CrudPage<T extends { id: string }>({
                     size="icon"
                     variant="ghost"
                     className="h-7 w-7 text-primary"
-                    title={restoreLabel ?? "Aktifleştir"}
-                    aria-label={restoreLabel}
+                    title={restoreName}
+                    aria-label={restoreName}
                     disabled={restoreMutation.isPending}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -247,6 +252,7 @@ export function CrudPage<T extends { id: string }>({
                     variant="ghost"
                     className="h-7 w-7 text-destructive"
                     title="Kalıcı Sil (GERİ ALINAMAZ)"
+                    aria-label="Kalıcı sil"
                     onClick={(e) => {
                       e.stopPropagation();
                       setHardRemoving(row.original);

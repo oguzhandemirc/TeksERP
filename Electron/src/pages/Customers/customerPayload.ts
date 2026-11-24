@@ -1,6 +1,7 @@
 // Cari kartı yazma gövdesi — Cariler ekranının diyaloğu (`CariEditDialogs`) kullanır (eski Müşteriler sayfasından taşındı).
 import { financeSubBody, type FinanceSubBody } from "./customerFinance";
 import type { Customer } from "./types";
+import { toPayload } from "./tamburLabelSettings";
 import { branchDraftHasContent, customerCardPayload, type CustomerFormValues } from "./schema";
 
 /** Tek-adım oluşturmada backend'e gönderilen satır-içi şube gövdesi. */
@@ -14,6 +15,13 @@ interface BranchCreatePayload {
   address: string | null;
   notes: string | null;
   defaultDestination: "DOMESTIC" | "EXPORT" | null;
+}
+
+/** Şema bölme ölçüsünü zaten doğruladı; yine de bozuksa alanlar gönderilmez (sunucudaki değer korunur). */
+function tamburBody(t: CustomerFormValues["tamburLabel"]): Partial<Omit<Customer, "finance">> {
+  if (!t) return {};
+  const r = toPayload(t);
+  return r.ok ? (r.body as Partial<Omit<Customer, "finance">>) : {};
 }
 
 type CustomerWritePayload = Partial<Omit<Customer, "finance">> & { branches?: BranchCreatePayload[]; subcontractorRole?: true; finance?: FinanceSubBody };
@@ -36,6 +44,8 @@ export const buildCustomerPayload = (v: CustomerFormValues, initial: Customer | 
     isSupplierRole: v.isSupplierRole,
     ...(!initial && v.isSubcontractorRole ? { subcontractorRole: true } : {}),
     isActive: v.isActive,
+    // Tambur / etiket ayarları (Etiket Şablonları sekmesi) — tek kayıt modelinde aynı Kaydet ile, yalnız düzenlemede.
+    ...(initial ? tamburBody(v.tamburLabel) : {}),
     // Z-B: terimler HESAPTA — `finance{…}` alt nesnesi yalnız finance:write + modül açıkken (yoksa alt nesne yok, sunucu 403 vermez).
     ...financeSubBody(v, finance),
     ...(branchRows.length > 0

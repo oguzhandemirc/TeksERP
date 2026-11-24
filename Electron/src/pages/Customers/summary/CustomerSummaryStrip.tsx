@@ -49,7 +49,8 @@ function collectTiles(access: CustomerSummaryAccess, q: CustomerSummaryQueries):
     if (q.cari.isLoading) loading = true;
     else if (q.cari.data) {
       const bal = moneyLine(q.cari.data.balances.map((b) => ({ currency: b.currency, amount: b.balance })));
-      tiles.push({ key: "balance", label: "Cari bakiye", value: bal ?? "0", hint: q.cari.data.code });
+      // Sıfır bakiye de para birimiyle ("0,00 $"): çıplak "0" hangi hesap olduğunu söylemiyordu (B18/8).
+      tiles.push({ key: "balance", label: "Cari bakiye", value: bal ?? formatMoney(0, q.cari.data.defaultCurrency ?? "TRY"), hint: q.cari.data.code });
     }
   }
   return { tiles, loading };
@@ -64,7 +65,8 @@ export function CustomerSummaryStrip({ access, q }: { access: CustomerSummaryAcc
   const { tiles, loading } = collectTiles(access, q);
   if (tiles.length === 0 && !loading) return null;
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" data-testid="summary-strip">
+    // Kutular satırı eşit paylaşır (4+1 yetim kutu yok): sütun sayısı kutu sayısından, dar ekranda alta kayar.
+    <div className="grid grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] gap-2" data-testid="summary-strip">
       {tiles.map((t) => (
         <div key={t.key} className="rounded-md border bg-muted/30 px-3 py-2" data-testid={`summary-tile-${t.key}`}>
           <div className="text-[11px] text-muted-foreground">{t.label}</div>

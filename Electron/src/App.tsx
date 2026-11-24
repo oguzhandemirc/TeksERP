@@ -29,6 +29,7 @@ import { DEFAULT_STALE_MS, applyQueryFreshness } from "@/lib/query-freshness";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { useFactoryTimezone } from "@/lib/factory-time-react";
 import { isTvWindowHash } from "@shared/tv-window";
+import { registerSoftRefresh } from "@/store/shell-reload";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -48,6 +49,8 @@ const queryClient = new QueryClient({
   },
 });
 applyQueryFreshness(queryClient);
+// Üst çubuk "yenile" oturumu düşürecek kipte (tarayıcı + bellekteki token) sayfa yerine verileri yeniler (B18/14).
+registerSoftRefresh(() => queryClient.invalidateQueries());
 
 function AuthHydrator() {
   const setUser = useAuthStore((s) => s.setUser);

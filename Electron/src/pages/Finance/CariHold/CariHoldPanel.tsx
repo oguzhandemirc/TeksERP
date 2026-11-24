@@ -58,7 +58,11 @@ export function CariHoldPanel({ target, cariName }: Props) {
       <div>
         <h4 className="mb-2 font-medium">Kilit geçmişi</h4>
         {history.length === 0 ? (
-          <p className="text-muted-foreground">Bu cariye hiç kilit konmadı.</p>
+          // Boş tarihçe ortalı kutu (öteki sekmelerin boş durumuyla aynı görünüm, B18/13).
+          <div className="flex min-h-[8rem] flex-col items-center justify-center gap-2 rounded-md border border-dashed text-center text-muted-foreground">
+            <LockOpen className="h-6 w-6 opacity-60" aria-hidden />
+            <p>Bu cariye hiç kilit konmadı.</p>
+          </div>
         ) : (
           <div className="overflow-x-auto rounded-md border bg-card">
             <table className="w-full text-xs">
