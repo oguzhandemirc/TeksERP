@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { FormField } from "@/components/forms/FormField";
 import { FieldGrid, FormCard, WideFormDialog } from "@/components/forms/WideFormDialog";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
+import { ServiceItemSelect } from "@/components/forms/ServiceItemSelect";
 import { subcontractorService } from "@/pages/Subcontractors/service";
 import type { Subcontractor } from "@/pages/Subcontractors/types";
 import type { Currency } from "@/pages/Finance/service";
@@ -30,12 +31,13 @@ export function FinishingRateDialog({ onClose, current }: Props) {
   const [price, setPrice] = useState(decToInput(current?.pricePerM));
   const [shrink, setShrink] = useState(decToInput(current?.typicalShrinkPct));
   const [note, setNote] = useState("");
+  const [serviceItemId, setServiceItemId] = useState<string | null>(current?.serviceItemId ?? null);
   const priceText = toDecimalText(price);
   const save = useMutation({
     mutationFn: () =>
       finishingRateService.change({
         code: code.trim(), name: name.trim(), subcontractorId: subId, basis, currency, pricePerM: priceText!,
-        typicalShrinkPct: toDecimalText(shrink), note: note.trim() || null,
+        typicalShrinkPct: toDecimalText(shrink), note: note.trim() || null, serviceItemId,
       }),
     onSuccess: (r) => {
       toast.success(r.message ?? "Tarife kaydedildi.");
@@ -61,7 +63,7 @@ export function FinishingRateDialog({ onClose, current }: Props) {
     >
       <div className="space-y-4">
         <FormCard title="Tarife" icon={Tag}>
-          <FieldGrid cols={3}>
+          <FieldGrid cols={4}>
             <FormField label="Ad" htmlFor="fr-name" required>
               <Input id="fr-name" maxLength={FINISHING_MAX.name} value={name} onChange={(e) => setName(e.target.value)} />
             </FormField>
@@ -71,6 +73,9 @@ export function FinishingRateDialog({ onClose, current }: Props) {
             <FormField label="Fason firma" info="Boş bırakılırsa tarife firmaya bağlı olmaz (genel fiyat). Devere ücreti için devereciyi seçin; sipariş formu ücreti buradan doldurur.">
               <EntityPickerModal<Subcontractor> value={subId} onChange={setSubId} service={subcontractorService} queryKey="subcontractors-finishing-rate"
                 getLabel={(s) => s.name} icon={Handshake} title="Fason firma seç" placeholder="Seçilmedi" nullable />
+            </FormField>
+            <FormField label="Hizmet kartı" info="Fason/devereci faturası taslağı bu kartla gelir (devere: Ham metre tarifesi metre ücretine, Kilo tarifesi kg ücretine). Boşsa satır açıklama satırı olur ve kartı her faturada elle seçersiniz.">
+              <ServiceItemSelect value={serviceItemId} onChange={(id) => setServiceItemId(id)} placeholder="Seçilmedi" nullable noneLabel="Hizmet kartı yok" />
             </FormField>
           </FieldGrid>
         </FormCard>

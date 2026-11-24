@@ -48,6 +48,18 @@ export class CustomerAliasService {
     return { success: true, data: rows };
   }
 
+  /** Ürün kartı girişi (B13): bu kaleme bütün müşterilerin verdiği ad; yazma yine `/customers/:id/item-aliases/:itemId`. */
+  async listItemAliasesByItem(itemId: string): Promise<ApiResponse<Array<CustomerItemAlias & { customer: { id: string; code: string; name: string; isActive: boolean } }>>> {
+    const item = await prisma.item.findUnique({ where: { id: itemId }, select: { id: true } });
+    if (!item) throw AppError.notFound("Ürün bulunamadı");
+    const rows = await prisma.customerItemAlias.findMany({
+      where: { itemId },
+      include: { customer: { select: { id: true, code: true, name: true, isActive: true } } },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
+    return { success: true, data: rows };
+  }
+
   async upsertItemAlias(
     customerId: string,
     itemId: string,

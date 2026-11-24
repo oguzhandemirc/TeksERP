@@ -10,6 +10,8 @@ export interface CustomerItemAlias {
   itemId: string;
   alias: string;
   item?: { id: string; code: string; name: string };
+  /** Yalnız ürün tarafı listede (`/api/items/:id/customer-item-aliases`). */
+  customer?: { id: string; code: string; name: string; isActive: boolean };
 }
 
 export interface CustomerColorAlias {
@@ -45,6 +47,10 @@ export const customerAliasService = {
         `/api/customers/${customerId}/item-aliases`,
       )
       .then((r) => r.data),
+
+  /** Ürün kartı "Müşteri Kumaş Adları" (B13): bu kaleme bütün müşterilerin verdiği ad; yazma yukarıdaki cari ucundan. */
+  listItemAliasesByItem: (itemId: string): Promise<ApiResponse<CustomerItemAlias[]>> =>
+    apiClient.get<ApiResponse<CustomerItemAlias[]>>(`/api/items/${itemId}/customer-item-aliases`).then((r) => r.data),
 
   upsertItemAlias: (
     customerId: string,

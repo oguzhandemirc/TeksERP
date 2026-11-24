@@ -11,6 +11,7 @@ import { fmtKg, parseInput, yarnLetter } from "@/pages/Operations/WarpPlan/warp-
 import { formatQty } from "@/lib/format";
 import { WARP_SPEC_MAX_YARNS, type WarpSpecFormValues } from "./schema";
 import { useWarpCalc } from "./useWarpCalc";
+import { yarnOwnWasteNote } from "@/pages/Operations/WarpPlan/yarn-waste-note";
 
 /** Toplam tel (salt-okunur): yalnız geçerli tam sayılar toplanır; özet kolonu sunucuda aynı satırlardan türer. */
 export function totalEnds(yarns: WarpSpecFormValues["yarns"]): number {
@@ -55,7 +56,12 @@ const ROW_GRID = "grid grid-cols-[2rem_minmax(0,1fr)_6.5rem_auto_2.25rem] items-
 export function YarnRowsEditor() {
   const { control, register, formState } = useFormContext<WarpSpecFormValues>();
   const { fields, append, remove } = useFieldArray({ control, name: "yarns" });
-  const { yarns, per1000 } = useWarpCalc();
+  const { yarns, per1000, specWastePct } = useWarpCalc();
+  // B6: iplik kartında kendi firesi olan iplikte çözgü firesi uygulanmaz — sunucunun satır kaynağından söylenir.
+  const ownWasteNote = (id: string) => {
+    const l = per1000?.forward?.lines.find((x) => x.yarnItemId === id);
+    return l ? yarnOwnWasteNote(l.wasteSource, l.wastePct, specWastePct) : null;
+  };
   const [kgRow, setKgRow] = useState<number | null>(null);
   const errs = formState.errors.yarns;
   const info = (id: string) => per1000?.yarns.find((y) => y.yarnItemId === id);
@@ -70,6 +76,7 @@ export function YarnRowsEditor() {
       </div>
       {fields.map((f, i) => {
         const y = info(yarns[i]?.yarnItemId ?? "");
+        const note = ownWasteNote(yarns[i]?.yarnItemId ?? "");
         return (
           <div key={f.id} className={`${ROW_GRID} gap-y-2 rounded-lg border bg-background px-1 py-1.5`}>
             <span className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10 font-mono text-sm font-semibold text-primary">{yarnLetter(i)}</span>
@@ -105,6 +112,7 @@ export function YarnRowsEditor() {
             <Button type="button" size="icon" variant="ghost" className="h-9 w-9 text-destructive" disabled={fields.length <= 1} aria-label={`${yarnLetter(i)} satırını sil`} onClick={() => remove(i)}>
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
+            {note ? <p className="col-span-full text-xs text-amber-700 dark:text-amber-400 sm:ml-10" data-testid={`warp-yarn-waste-note-${yarnLetter(i)}`}>{note}</p> : null}
             {kgRow === i ? <KgHelper index={i} onDone={() => setKgRow(null)} /> : null}
             {errs?.[i] ? <p className="col-span-full text-xs text-destructive sm:ml-10">{errs[i]?.yarnItemId?.message ?? errs[i]?.endsCount?.message}</p> : null}
           </div>

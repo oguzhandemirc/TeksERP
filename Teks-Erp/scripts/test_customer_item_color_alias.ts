@@ -135,6 +135,15 @@ async function yazVeSil(): Promise<void> {
   const pasifListe = await cagir(ctl.listItemColorAliases, { customerId: id.C_PASIF });
   check("A: pasif müşteri 400 (kardeş gibi)", durumu(pasifListe) === 400);
 
+  // B13: ürün kartı "Müşteri Kumaş Adları" — müşterideki kumaş adının ters (ürün tarafı) görünümü; yazma cari ucundan.
+  await cagir(ctl.upsertItemAlias, { customerId: id.C, itemId: id.I }, { alias: "belle" });
+  const kumasAdi = await cagir(ctl.listItemAliasesByItem, { id: id.I });
+  const ka = (kumasAdi.body as { data?: Array<{ alias: string; customer: { id: string; isActive: boolean } }> })?.data ?? [];
+  check("B13: ürün tarafı liste müşteri özetiyle döner (BÜYÜK ad)", kumasAdi.status === 200 && ka.length === 1 && ka[0]?.alias === "BELLE" && ka[0].customer.id === id.C && ka[0].customer.isActive === true,
+    JSON.stringify(ka));
+  const kumasYok = await cagir(ctl.listItemAliasesByItem, { id: "00000000-0000-4000-8000-000000000000" });
+  check("B13: kumaş yok → 404 · UUID değil → 400", durumu(kumasYok) === 404 && durumu(await cagir(ctl.listItemAliasesByItem, { id: "x" })) === 400);
+
   await prisma.item.update({ where: { id: id.I }, data: { lifecycleStatus: ItemLifecycleStatus.PHASE_OUT } });
   const listeB = await cagir(ctl.listItemColorAliasesByItem, { id: id.I });
   check("B: 'Tükenene kadar' kumaşın satırı LİSTELENİR", (listeB.body as { data: unknown[] }).data.length === 1);
@@ -166,6 +175,7 @@ async function yaris(): Promise<void> {
 async function temizle(): Promise<void> {
   const sus = <T>(p: Promise<T>) => p.catch(() => undefined);
   if (id.C) await sus(prisma.customerItemColorAlias.deleteMany({ where: { customerId: id.C } }));
+  if (id.C) await sus(prisma.customerItemAlias.deleteMany({ where: { customerId: id.C } }));
   if (id.I_BIRLESIK) await sus(prisma.item.update({ where: { id: id.I_BIRLESIK }, data: { mergedIntoId: null } }));
   for (const k of ["I_BIRLESIK", "I_PASIF", "I_TUKEN", "I"]) if (id[k]) await sus(prisma.item.delete({ where: { id: id[k] } }));
   for (const k of ["K", "K_PASIF"]) if (id[k]) await sus(prisma.color.delete({ where: { id: id[k] } }));

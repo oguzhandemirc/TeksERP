@@ -217,6 +217,19 @@ async function main(): Promise<void> {
     // ── DB seddi ─────────────────────────────────────────────────────────
     const eCk = await errOf(() => prisma.$executeRawUnsafe(`UPDATE warping_orders SET status = 'CANCELLED' WHERE id = $1::uuid`, rAfter.data.id));
     check("DB seddi: CANCELLED + cancelledAt NULL → warping_orders_status_ck reddeder", !!eCk && /warping_orders_status_ck/.test(eCk.msg), eCk?.msg.slice(0, 120));
+
+    // ── B6 satır başına fire kaynağı: iplik kartı firesi çözgü firesinin YERİNE geçer (hesap aynı, yalnız görünür) ──
+    await prisma.warpSpec.update({ where: { id: cXYZ.id }, data: { wastePct: 2 } });
+    await prisma.item.update({ where: { id: yX.id }, data: { yarnWastePct: 4 } });
+    const pvW = await previewWarpingOrder({ warpSpecId: cXYZ.id, beamLines: [{ beamCount: 1, beamLengthM: 1000 }], extraWarpSpecIds: [], fixedWasteM: 0 });
+    const wx = pvW.yarns.find((y) => y.code === `${TAG}-X`);
+    const wy = pvW.yarns.find((y) => y.code === `${TAG}-Y`);
+    check("B6 önizleme satırı: X iplik kartı %4 (kaynak IPLIK, çözgü %2 uygulanmaz) · Y çözgü kartı %2 (KART)",
+      wx?.wastePct === "4.00" && wx.wasteSource === "IPLIK" && wx.specWastePct === "2.00" && wy?.wastePct === "2.00" && wy.wasteSource === "KART" && wy.specWastePct === "2.00",
+      JSON.stringify([wx, wy].map((y) => y && { p: y.wastePct, s: y.wasteSource, k: y.specWastePct })));
+    check("B6 hesap kuralı değişmedi: X brüt = 50 ÷ 0,96 = 52,083 kg", wx?.grossKg === "52.083", wx?.grossKg);
+    await prisma.item.update({ where: { id: yX.id }, data: { yarnWastePct: null } });
+    await prisma.warpSpec.update({ where: { id: cXYZ.id }, data: { wastePct: null } });
   } finally {
     const ids = await prisma.warpingOrder.findMany({ where: { OR: [{ id: { in: orderIds } }, { warpSpecId: { in: specIds } }] }, select: { id: true } });
     const oids = ids.map((r) => r.id);

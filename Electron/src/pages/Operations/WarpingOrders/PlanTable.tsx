@@ -2,6 +2,8 @@
 // (yalnız önizlemede, iplik modülü açıkken). Sayılar sunucudan; burada yalnız biçim ve sütun görünürlüğü.
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
+import { formatQty } from "@/lib/format";
+import { wasteSourceText, yarnOwnWasteNote } from "@/pages/Operations/WarpPlan/yarn-waste-note";
 import { fmtKg } from "./order-model";
 import type { WarpingPlanYarn } from "./types";
 
@@ -14,11 +16,23 @@ interface Props {
   totals: { netKg: string; grossKg: string; endsCount?: number };
   /** Depo sütunu: önizlemede iplik modülü açıksa (`stock.known`). */
   showStock?: boolean;
+  /** Kayıtlı siparişte fire kaynağı (sipariş saklamaz; `useOrderWasteSource`); önizlemede satırın `wasteSource`u. */
+  sourceOf?: (y: PlanRow) => string | null;
 }
 
-/** Görünür sütunlar — tek kaynak; test de buradan ölçer. */
+/** Görünür sütunlar — tek kaynak; test de buradan ölçer. Fire sütunu fireli öneriyle birlikte görünür. */
 export function planColumns(p: Pick<Props, "hasWaste" | "showStock" | "yarns">) {
-  return { gross: p.hasWaste, stock: Boolean(p.showStock), letter: p.yarns.some((y) => y.letter) };
+  return { gross: p.hasWaste, waste: p.hasWaste, stock: Boolean(p.showStock), letter: p.yarns.some((y) => y.letter) };
+}
+
+/** B6: satırın fire hücresi — yüzde · kaynak · (iplik kendi firesini taşıyorsa) uygulanmayan çözgü firesi notu. */
+export function planWasteCell(y: PlanRow, sourceOf?: (y: PlanRow) => string | null): { pct: string; source: string | null; note: string | null } {
+  if (Number(y.wastePct) <= 0) return { pct: "—", source: null, note: null };
+  return {
+    pct: `%${formatQty(y.wastePct, 2, 0)}`,
+    source: sourceOf ? sourceOf(y) : wasteSourceText(y.wasteSource, y.wastePct),
+    note: yarnOwnWasteNote(y.wasteSource, y.wastePct, y.specWastePct),
+  };
 }
 
 /** Depodaki serbest stok fireli öneriden az mı — renk ve altındaki açıklama aynı yüklemden. */
@@ -26,7 +40,17 @@ export function isStockShort(y: PlanRow, stockShown: boolean): boolean {
   return stockShown && y.depoKg !== null && y.depoKg !== undefined && Number(y.depoKg) < Number(y.grossKg);
 }
 
-export function PlanTable({ yarns, hasWaste, totals, showStock }: Props) {
+function WasteCell({ y, sourceOf }: { y: PlanRow; sourceOf?: (y: PlanRow) => string | null }) {
+  const c = planWasteCell(y, sourceOf);
+  return (
+    <TableCell className="text-right tabular-nums" title={c.note ?? undefined}>
+      {c.pct}
+      {c.source && <span className={cn("block text-xs", c.note ? "font-medium text-amber-700 dark:text-amber-400" : "text-muted-foreground")}>{c.source}</span>}
+    </TableCell>
+  );
+}
+
+export function PlanTable({ yarns, hasWaste, totals, showStock, sourceOf }: Props) {
   const col = planColumns({ hasWaste, showStock, yarns });
   const num = "text-right tabular-nums";
   const anyShort = yarns.some((y) => isStockShort(y, col.stock));
@@ -43,6 +67,11 @@ export function PlanTable({ yarns, hasWaste, totals, showStock }: Props) {
               <TableHead className={num} title="Formül: tel × denye × metre ÷ 9.000.000 — fire katılmadan">
                 Firesiz kg
               </TableHead>
+              {col.waste && (
+                <TableHead className={num} title="Uygulanan fire yüzdesi ve kaynağı: iplik kartında fire varsa o, yoksa çözgü kartının firesi">
+                  Fire
+                </TableHead>
+              )}
               {col.gross && (
                 <TableHead className={num} title="Fireli öneri: kart/iplik fire yüzdesi ve sabit fire metresiyle">
                   Fireli kg
@@ -64,6 +93,7 @@ export function PlanTable({ yarns, hasWaste, totals, showStock }: Props) {
                   <TableCell className={num}>{y.endsCount}</TableCell>
                   <TableCell className={num}>{Number(y.denier)}</TableCell>
                   <TableCell className={num}>{fmtKg(y.netKg)}</TableCell>
+                  {col.waste && <WasteCell y={y} sourceOf={sourceOf} />}
                   {col.gross && <TableCell className={num}>{fmtKg(y.grossKg)}</TableCell>}
                   {col.stock && (
                     <TableCell
@@ -82,12 +112,22 @@ export function PlanTable({ yarns, hasWaste, totals, showStock }: Props) {
               <TableCell className={num}>{totals.endsCount ?? ""}</TableCell>
               <TableCell />
               <TableCell className={num}>{fmtKg(totals.netKg)}</TableCell>
+              {col.waste && <TableCell />}
               {col.gross && <TableCell className={num}>{fmtKg(totals.grossKg)}</TableCell>}
               {col.stock && <TableCell />}
             </TableRow>
           </TableBody>
         </Table>
       </div>
+      {col.waste &&
+        yarns.map((y) => {
+          const note = planWasteCell(y, sourceOf).note;
+          return note ? (
+            <p key={`n-${y.yarnItemId}-${y.sourceWarpSpecId}`} className="text-xs text-amber-700 dark:text-amber-400" data-testid="plan-waste-note">
+              {y.letter ? `${y.letter} · ` : ""}{y.name}: {note}
+            </p>
+          ) : null;
+        })}
       {anyShort && (
         <p className="text-xs text-destructive">
           Kırmızı: depodaki serbest stok fireli öneriden az. Sipariş yine açılır; eksik iplik sevkten önce

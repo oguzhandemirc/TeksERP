@@ -28,7 +28,8 @@ export function CustomerItemAliasesPanel({ customerId }: Props) {
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
 
   const queryKey = ["customer-item-aliases", customerId];
-  const invalidate = () => qc.invalidateQueries({ queryKey });
+  // Ürün kartının "Müşteri Kumaş Adları" sekmesi aynı satırı gösterir (B13) → onun önbelleği de tazelenir.
+  const invalidate = () => Promise.all([qc.invalidateQueries({ queryKey }), qc.invalidateQueries({ queryKey: ["item-customer-item-aliases"] })]);
 
   const { data, isLoading } = useQuery({
     queryKey,

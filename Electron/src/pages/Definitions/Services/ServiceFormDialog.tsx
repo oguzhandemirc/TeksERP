@@ -1,3 +1,6 @@
+// Hizmet kartı Yeni/Düzenle. "Süreçler" (B16) form değeri DEĞİL: kart kaydından sonra aynı küme ucuyla
+// (`PUT /:id/processes`) yazılır — yeni kartta id kayıttan doğar. `processIds: null` = süreçlere dokunulmadı.
+import { Info } from "lucide-react";
 import { EntityFormDialog } from "@/components/forms/EntityFormDialog";
 import { FormField } from "@/components/forms/FormField";
 import { Input } from "@/components/ui/input";
@@ -5,16 +8,19 @@ import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
 import { ITEM_UNIT_CODES, ITEM_UNIT_LABEL } from "@/lib/item-unit";
 import type { ServiceItem } from "./types";
 import { serviceFormDefaults, serviceFormSchema, type ServiceFormValues } from "./schema";
+import { ServiceProcessPicker, useServiceProcessSelection } from "./ServiceProcessPicker";
+import { SERVICE_PROCESS_HELP } from "./ServiceProcessesDialog";
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initial?: ServiceItem | null;
-  onSubmit: (values: ServiceFormValues) => void | Promise<void>;
+  onSubmit: (values: ServiceFormValues, processIds: string[] | null) => void | Promise<void>;
   isSubmitting?: boolean;
 }
 
 export function ServiceFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting }: Props) {
+  const sel = useServiceProcessSelection(initial?.id ?? null, open);
   const defaults: ServiceFormValues = initial
     ? {
         code: initial.code,
@@ -28,9 +34,11 @@ export function ServiceFormDialog({ open, onOpenChange, initial, onSubmit, isSub
       open={open}
       onOpenChange={onOpenChange}
       title={initial ? "Hizmet Kartını Düzenle" : "Yeni Hizmet Kartı"}
+      description="Faturalanan hizmet (kurşun, boya, devere…). Süreç eşlemesi isteğe bağlıdır."
       schema={serviceFormSchema}
       defaultValues={defaults}
-      onSubmit={onSubmit}
+      // Harita yüklenmeden kaydedilirse küme bilinmez → süreçlere dokunulmaz (yanlışlıkla boşaltma yok).
+      onSubmit={(v) => onSubmit(v, !sel.loading && sel.changed ? sel.ids : null)}
       isSubmitting={isSubmitting}
     >
       {(form) => (
@@ -76,6 +84,23 @@ export function ServiceFormDialog({ open, onOpenChange, initial, onSubmit, isSub
               ))}
             </select>
           </FormField>
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-1.5 text-sm font-medium">
+              Süreçler
+              <span title={SERVICE_PROCESS_HELP} aria-label="Süreçler hakkında" className="text-muted-foreground">
+                <Info className="h-3.5 w-3.5" />
+              </span>
+              <span className="ml-auto text-xs font-normal text-muted-foreground">isteğe bağlı · başka karta eşli tür seçilemez</span>
+            </div>
+            <ServiceProcessPicker
+              className="max-h-48"
+              options={sel.options}
+              selected={sel.selected}
+              onToggle={sel.toggle}
+              loading={sel.loading}
+              cardActive={initial ? initial.isActive !== false : true}
+            />
+          </div>
         </>
       )}
     </EntityFormDialog>

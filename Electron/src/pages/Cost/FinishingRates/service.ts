@@ -14,17 +14,22 @@ export interface FinishingRate {
   id: string; code: string; name: string; subcontractorId: string | null; basis: FinishingBasis; currency: Currency;
   pricePerM: string; typicalShrinkPct: string | null; note: string | null; revokedAt: string | null; createdAt: string;
   subcontractor: { id: string; name: string } | null;
+  /** F6 köprüsü: fason/devere alış taslağının kalem kartı (eski backend göndermez). */
+  serviceItemId?: string | null;
+  serviceItem?: { id: string; code: string; name: string } | null;
 }
 
 export interface FinishingRateInput {
   code: string; name: string; subcontractorId: string | null; basis: FinishingBasis; currency: Currency;
   pricePerM: string; typicalShrinkPct: string | null; note: string | null;
+  /** null = köprüsüz; alan HER ZAMAN gider — formda görünen değer yazılır (B15). */
+  serviceItemId: string | null;
 }
 
 export function buildFinishingRateBody(i: FinishingRateInput): FinishingRateInput {
   return {
     code: i.code, name: i.name, subcontractorId: i.subcontractorId, basis: i.basis, currency: i.currency,
-    pricePerM: i.pricePerM, typicalShrinkPct: i.typicalShrinkPct, note: i.note,
+    pricePerM: i.pricePerM, typicalShrinkPct: i.typicalShrinkPct, note: i.note, serviceItemId: i.serviceItemId,
   };
 }
 

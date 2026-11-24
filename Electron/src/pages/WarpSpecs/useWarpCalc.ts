@@ -17,6 +17,8 @@ export function useWarpCalc(beam?: BeamInput | null) {
     hasBody: body !== null,
     per1000: body ? (per1000.data?.data ?? null) : null,
     per1000Error: per1000.isError,
+    /** Formdaki çözgü kartı firesi (%) — iplik firesi geçtiğinde "uygulanmaz" notu için (B6). */
+    specWastePct: body?.specWastePct ?? null,
     beamResult: beamBody ? (beamQ.data?.data ?? null) : null,
   };
 }

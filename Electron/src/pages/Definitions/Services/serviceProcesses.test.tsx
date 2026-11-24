@@ -21,6 +21,8 @@ vi.mock("@/lib/picker-loader", () => ({
 
 const { getServiceProcessMap, processOptions, putServiceItemProcesses, lastServiceProcessMap } = await import("./serviceProcesses");
 const { ServiceProcessesDialog } = await import("./ServiceProcessesDialog");
+const { ServiceFormDialog } = await import("./ServiceFormDialog");
+const { withProcessWrite } = await import("./serviceProcessWrite");
 
 const MAP = [
   { categoryId: "c-boya", categoryCode: "K1", categoryName: "Boyahane", categoryActive: true, serviceItemId: "s1", serviceItemCode: "H1", serviceItemName: "Boya hizmeti" },
@@ -74,5 +76,48 @@ describe("süreç türü eşlemesi", () => {
     await waitFor(() => expect(boya).toBeChecked());
     expect(boya).not.toBeDisabled();
     expect(screen.getByRole("checkbox", { name: "Apre" })).toBeDisabled();
+  });
+});
+
+describe("B16 — hizmet kartı formunda süreçler", () => {
+  const item = { id: "s1", code: "H1", name: "Boya hizmeti", unit: "MT", isActive: true, createdAt: "", updatedAt: "" };
+
+  it("⭐ düzenleme formu kartın süreçlerini işaretli açar; değişen küme onSubmit'e gider", async () => {
+    const onSubmit = vi.fn();
+    renderWithProviders(<ServiceFormDialog open onOpenChange={() => {}} initial={item} onSubmit={onSubmit} />);
+    const boya = await screen.findByRole("checkbox", { name: "Boyahane" });
+    await waitFor(() => expect(boya).toBeChecked());
+    expect(screen.getByRole("checkbox", { name: "Şardon" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Apre" }));
+    fireEvent.click(screen.getByRole("button", { name: "Kaydet" }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect([...(onSubmit.mock.calls[0]![1] as string[])].sort()).toEqual(["c-apre", "c-boya", "c-eski"]);
+  });
+
+  it("süreçlere dokunulmazsa null gider (küme yeniden yazılmaz)", async () => {
+    const onSubmit = vi.fn();
+    renderWithProviders(<ServiceFormDialog open onOpenChange={() => {}} initial={item} onSubmit={onSubmit} />);
+    await waitFor(() => expect(screen.getByRole("checkbox", { name: "Boyahane" })).toBeChecked());
+    fireEvent.click(screen.getByRole("button", { name: "Kaydet" }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect(onSubmit.mock.calls[0]![1]).toBeNull();
+  });
+
+  it("⭐ yeni kart: önce kart doğar, süreçler dönen id'ye PUT edilir; süreç hatası kartı geri almaz", async () => {
+    const base = { create: vi.fn().mockResolvedValue({ success: true, data: { id: "yeni" } }), update: vi.fn().mockResolvedValue({ success: true, data: { id: "s1" } }) };
+    const svc = withProcessWrite(base as never, () => ["c-apre"], () => {});
+    await svc.create({ name: "x" });
+    expect(put).toHaveBeenCalledWith("/api/service-items/yeni/processes", { categoryIds: ["c-apre"] });
+    put.mockRejectedValueOnce(new Error("409"));
+    await expect(svc.create({ name: "y" })).resolves.toMatchObject({ data: { id: "yeni" } });
+  });
+
+  it("düzenlemede süreç 409'u fırlatılır (form açık kalır); null küme PUT atmaz", async () => {
+    const base = { update: vi.fn().mockResolvedValue({ success: true, data: { id: "s1" } }) };
+    put.mockRejectedValueOnce(new Error("409"));
+    await expect(withProcessWrite(base as never, () => ["c-sardon"], () => {}).update("s1", {})).rejects.toThrow("409");
+    put.mockClear();
+    await withProcessWrite(base as never, () => null, () => {}).update("s1", {});
+    expect(put).not.toHaveBeenCalled();
   });
 });
