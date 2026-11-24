@@ -115,7 +115,7 @@ function ReceiptHead({ r, canUndo, onUndo }: { r: WarpingReceipt; canUndo: boole
 
 function ReceiptTable({ rows, canUndo, onUndo, ctx }: { rows: WarpingReceipt[]; canUndo: boolean; onUndo: (r: WarpingReceipt) => void; ctx: BeamCtx }) {
   return (
-    <div className="overflow-x-auto rounded-md border">
+    <div className="overflow-x-auto rounded-md border bg-card">
       <Table aria-label="Levent kabulleri">
         <TableHeader>
           <TableRow>

@@ -34,7 +34,7 @@ function Product({ l }: { l: QuoteLine }) {
 export function QuoteLinesTable({ lines, currency, editable, busy, onPrice, onDelete }: Props) {
   const cost = hasCostColumns(lines);
   return (
-    <div className="overflow-x-auto rounded-md border">
+    <div className="overflow-x-auto rounded-md border bg-card">
       <Table>
         <TableHeader>
           <TableRow>

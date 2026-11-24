@@ -50,19 +50,20 @@ export function CostItemDetailPage() {
           </span>
         )}
       />
-      <PageBody className="p-4 sm:p-6">
+      {/* Gövde flex sütun: Yapı sekmesinin kaydet çubuğu kısa içerikte de sayfanın dibine iner. */}
+      <PageBody className="flex flex-col p-4 sm:p-6">
         {detail.isLoading ? (
           <p className="text-sm text-muted-foreground">Yükleniyor…</p>
         ) : detail.isError || !d ? (
           <CostQueryError error={detail.error} what="Maliyet kartı" onRetry={() => void detail.refetch()} />
         ) : (
-          <Tabs value={tab} onValueChange={setTab}>
+          <Tabs value={tab} onValueChange={setTab} className="flex flex-1 flex-col">
             <TabsList>
               <TabsTrigger value="structure">Yapı</TabsTrigger>
               <TabsTrigger value="breakdown">Döküm</TabsTrigger>
               <TabsTrigger value="versions">Sürümler</TabsTrigger>
             </TabsList>
-            <TabsContent value="structure" className="mt-4">
+            <TabsContent value="structure" className="mt-4 flex flex-1 flex-col">
               <StructureTab key={d.yapi ? JSON.stringify(d.yapi) : "bos"} detail={d} measured={preview.data?.oneriler.warpWaste ?? null} flagged={flagged} />
             </TabsContent>
             <TabsContent value="breakdown" className="mt-4">

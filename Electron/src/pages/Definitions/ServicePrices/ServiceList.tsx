@@ -36,10 +36,10 @@ export function ServiceList({ rows, isLoading, isError, onRetry, selectedId, onS
   };
 
   return (
-    <div className="flex min-h-0 w-72 shrink-0 flex-col border-r">
-      {/* Sol boşluk sayfa başlığıyla (px-6) hizalı, yükseklik sağdaki araç şeridiyle aynı (T5). */}
-      <div className="relative border-b py-2 pl-6 pr-3">
-        <Search className="absolute left-9 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+    <div data-slot="card" className="flex min-h-0 w-72 shrink-0 flex-col overflow-hidden rounded-xl border border-card-border bg-card shadow-card">
+      {/* Yükseklik sağdaki araç şeridiyle aynı (T5). */}
+      <div className="relative border-b px-3 py-2">
+        <Search className="absolute left-6 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           className="h-9 pl-8"
           placeholder="Hizmet ara…"
@@ -50,7 +50,7 @@ export function ServiceList({ rows, isLoading, isError, onRetry, selectedId, onS
         />
       </div>
       <div
-        className="min-h-0 flex-1 overflow-y-auto py-1 pl-5 pr-1"
+        className="min-h-0 flex-1 overflow-y-auto p-2"
         role="listbox"
         aria-label="Hizmetler"
         tabIndex={0}
@@ -102,8 +102,8 @@ function ServiceListItem({
       title={`${row.name} (${row.code})`}
       onClick={() => onSelect(row.id)}
       className={cn(
-        "flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-muted/60",
-        selected && "bg-primary/10 font-medium",
+        "flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted/60",
+        selected && "bg-primary-soft font-medium text-primary-soft-foreground",
         row.lifecycleStatus === "ARCHIVED" && "opacity-60",
       )}
     >

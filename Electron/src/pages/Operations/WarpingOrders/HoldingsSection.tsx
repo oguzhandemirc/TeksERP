@@ -48,7 +48,7 @@ function HoldingRow({ h, names, canWrite, onReturn }: { h: WarpingYarnHolding; n
 
 function HoldingsTable({ rows, names, canWrite, onReturn }: { rows: WarpingYarnHolding[]; names: YarnNames; canWrite: boolean; onReturn: (h: WarpingYarnHolding) => void }) {
   return (
-    <div className="overflow-x-auto rounded-md border">
+    <div className="overflow-x-auto rounded-md border bg-card">
       <Table>
         <TableHeader>
           <TableRow>

@@ -82,7 +82,7 @@ export function SettlementsSection({ order }: { order: WarpingOrder }) {
         </p>
       )}
       {rows.length > 0 && (
-        <div className="overflow-x-auto rounded-md border">
+        <div className="overflow-x-auto rounded-md border bg-card">
           <Table aria-label="Kapanış geçmişi">
             <TableHeader>
               <TableRow>

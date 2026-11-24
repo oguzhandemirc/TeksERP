@@ -68,7 +68,7 @@ function ResultTable({ s }: { s: CostResultOut }) {
   ];
   const cur = s.sunumDovizi;
   return (
-    <div className="overflow-x-auto rounded-md border">
+    <div className="overflow-x-auto rounded-md border bg-card">
       <table className="w-full min-w-[30rem] text-sm">
         <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground">
           <tr><th className="px-3 py-2">Kalem</th><th className="px-3 py-2 text-right">Miktar</th><th className="px-3 py-2 text-right">Birim fiyat (TL)</th><th className="px-3 py-2 text-right">TL/m</th>{cur && <th className="px-3 py-2 text-right">{cur}/m</th>}</tr>

@@ -2,6 +2,8 @@
 // SUNUCUDA (`PROCESS` satırları terbiyeden sonra, genel giderden önce); burada yalnız kod listesi düzenlenir.
 import { ArrowDown, ArrowUp, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { InfoPopover } from "@/components/ui/info-popover";
+import { SectionCard } from "@/components/ui/section-card";
 import type { FinishingRate } from "../FinishingRates/service";
 import { fmtDecFull } from "../shared/format";
 
@@ -11,6 +13,7 @@ interface Props {
   rates: FinishingRate[];
   finishingCode: string;
   disabled: boolean;
+  className?: string;
 }
 
 export function moveCode(codes: string[], i: number, delta: -1 | 1): string[] {
@@ -21,13 +24,13 @@ export function moveCode(codes: string[], i: number, delta: -1 | 1): string[] {
   return out;
 }
 
-export function ProcessesEditor({ codes, onChange, rates, finishingCode, disabled }: Props) {
+export function ProcessesEditor({ codes, onChange, rates, finishingCode, disabled, className }: Props) {
   const byCode = new Map(rates.map((r) => [r.code, r]));
   const addable = rates.filter((r) => !codes.includes(r.code) && r.code !== finishingCode);
   return (
-    <section className="space-y-2" data-field="processes">
-      <h3 className="text-sm font-medium">Ek işlemler</h3>
-      <p className="text-xs text-muted-foreground">Kurşun, devere gibi işlemler; terbiyeden sonra, genel giderden önce maliyete eklenir.</p>
+    <div data-field="processes" className={className}>
+    <SectionCard title="Ek işlemler" className="h-full" contentClassName="space-y-2"
+      titleExtra={<InfoPopover label="Ek işlemler açıklaması" desc="Kurşun, devere gibi işlemler; terbiyeden sonra, genel giderden önce maliyete eklenir. Sıra döküm sırasıdır." />}>
       {codes.length === 0 && <p className="text-sm text-muted-foreground">Ek işlem yok.</p>}
       <ol className="space-y-1">
         {codes.map((c, i) => {
@@ -53,6 +56,7 @@ export function ProcessesEditor({ codes, onChange, rates, finishingCode, disable
           {addable.map((r) => <option key={r.id} value={r.code}>{r.code} — {r.name} ({fmtDecFull(r.pricePerM)} {r.currency}/m)</option>)}
         </select>
       )}
-    </section>
+    </SectionCard>
+    </div>
   );
 }

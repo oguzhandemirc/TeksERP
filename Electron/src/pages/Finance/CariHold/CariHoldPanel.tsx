@@ -60,7 +60,7 @@ export function CariHoldPanel({ target, cariName }: Props) {
         {history.length === 0 ? (
           <p className="text-muted-foreground">Bu cariye hiç kilit konmadı.</p>
         ) : (
-          <div className="overflow-x-auto rounded-md border">
+          <div className="overflow-x-auto rounded-md border bg-card">
             <table className="w-full text-xs">
               <thead className="bg-muted/50 text-[11px] uppercase text-muted-foreground">
                 <tr>

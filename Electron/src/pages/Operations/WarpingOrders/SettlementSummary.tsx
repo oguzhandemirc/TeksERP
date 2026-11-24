@@ -41,7 +41,7 @@ export function SettlementSummary({ s }: { s: WarpingSettlement }) {
   return (
     <div className="space-y-2">
       <MetreStrip m={s.metre} />
-      <div className="overflow-x-auto rounded-md border">
+      <div className="overflow-x-auto rounded-md border bg-card">
         <Table aria-label="İplik mutabakatı">
           <TableHeader>
             <TableRow>

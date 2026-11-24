@@ -56,7 +56,7 @@ export function PlanTable({ yarns, hasWaste, totals, showStock, sourceOf }: Prop
   const anyShort = yarns.some((y) => isStockShort(y, col.stock));
   return (
     <div className="space-y-1.5">
-      <div className="overflow-x-auto rounded-md border">
+      <div className="overflow-x-auto rounded-md border bg-card">
         <Table aria-label="İplik planı">
           <TableHeader>
             <TableRow>

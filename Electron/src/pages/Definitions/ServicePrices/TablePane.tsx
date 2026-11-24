@@ -4,6 +4,7 @@ import { Table2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { EmptyState } from "@/components/ui/empty-state";
+import { InfoPopover } from "@/components/ui/info-popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { ServicePriceTable } from "./service";
 import { ServicePriceGrid } from "./ServicePriceGrid";
@@ -44,9 +45,14 @@ export function TablePane({ itemId, tableQ, canWrite, validFromDay, mutations, o
       ) : (
         <>
           {table.tiers.length === 0 && (
-            <Callout tone="info" title="Bu hizmete bağlı kademe yok" className="mb-3">
-              Kademe fiyatı girmek için Kumaş Özellikleri ekranında özelliği (ya da değeri) bu hizmete
-              eşleyin. Kalem fiyatı aşağıdan girilebilir.
+            <Callout tone="info" className="mb-3">
+              <span className="inline-flex items-center gap-1">
+                <strong>Bu hizmete bağlı kademe yok</strong> — yalnız kalem fiyatı girilir.
+                <InfoPopover
+                  label="Kademe nasıl eklenir"
+                  desc="Kademe fiyatı girmek için Kumaş Özellikleri ekranında özelliği (ya da değeri) bu hizmete eşleyin; kademeler bu tabloda satır olarak belirir."
+                />
+              </span>
             </Callout>
           )}
           <ServicePriceGrid

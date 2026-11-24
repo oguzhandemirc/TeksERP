@@ -25,7 +25,7 @@ export function ReverseResult({ res, reverse }: Props) {
           />
         </div>
       )}
-      <div className="overflow-x-auto rounded-md border">
+      <div className="overflow-x-auto rounded-md border bg-card">
         <Table>
           <TableHeader>
             <TableRow>
@@ -66,7 +66,7 @@ export function ReverseResult({ res, reverse }: Props) {
 
 function Stat({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
-    <div className="rounded-md border p-3">
+    <div className="rounded-md border bg-card p-3">
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className={cn("mt-1 tabular-nums", strong ? "text-2xl font-semibold" : "text-sm font-medium")}>{value}</div>
     </div>

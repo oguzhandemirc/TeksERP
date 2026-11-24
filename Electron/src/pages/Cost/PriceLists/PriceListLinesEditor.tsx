@@ -44,7 +44,7 @@ export function PriceListLinesEditor({ list, onDirtyChange }: { list: PriceListD
       {rows.length === 0 ? (
         <p className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground" data-testid="pl-lines-empty">Satır yok — "Satır ekle" ya da "Standart maliyetten doldur".</p>
       ) : (
-        <div className="overflow-x-auto rounded-md border">
+        <div className="overflow-x-auto rounded-md border bg-card">
           <Table>
             <TableHeader>
               <TableRow>
@@ -99,7 +99,7 @@ export function PriceListLinesView({ list }: { list: PriceListDetail }) {
   const cost = hasListCostColumns(list.lines);
   if (list.lines.length === 0) return <p className="text-sm text-muted-foreground">Satır yok.</p>;
   return (
-    <div className="overflow-x-auto rounded-md border">
+    <div className="overflow-x-auto rounded-md border bg-card">
       <Table>
         <TableHeader>
           <TableRow>

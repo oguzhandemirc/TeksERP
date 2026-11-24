@@ -140,7 +140,7 @@ export function ServicePriceRow(p: Props) {
     </td>
   );
   return (
-    <tr className={cn("border-t", p.first && "bg-muted/30", row.tier && !row.tier.mapped && "opacity-60")}>
+    <tr className={cn("border-t", p.first && "border-b-2 bg-muted/50", row.tier && !row.tier.mapped && "opacity-60")}>
       <td className="px-3 py-1.5">
         <div className="font-medium">{row.label}</div>
         {row.sub && <div className="text-xs text-muted-foreground">{row.sub}</div>}
