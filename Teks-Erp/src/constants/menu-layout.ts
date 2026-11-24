@@ -81,6 +81,7 @@ export const MENU_PRESETS: readonly MenuPreset[] = [
       { key: "operations/purchase-orders", reason: "Ticari mal alınmıyor; sarf mal kabulü siparişsiz yapılabilir." },
       { key: "definitions/warp-specs", reason: DOKUMA_YOK },
       { key: "definitions/weave-designs", reason: DOKUMA_YOK },
+      { key: "definitions/weft-specs", reason: DOKUMA_YOK },
       { key: "operations/weaving-orders", reason: DOKUMA_YOK },
       { key: "operations/fasondaki-iplik", reason: DOKUMA_YOK },
       { key: "operations/warp-beams", reason: DOKUMA_YOK },

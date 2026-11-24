@@ -15,6 +15,7 @@ import type {
   WeaveDesignInput,
   WeftSpecDetail,
   WeftSpecForkResult,
+  WeftSpecListRow,
 } from "./types";
 
 const BASE = "/api/weave-designs";
@@ -82,12 +83,26 @@ export function createVariant(body: { name: string; itemId: string; colorId: str
 }
 
 export const weftSpecApi = {
-  get: (id: string) => apiClient.get<ApiResponse<WeftSpecDetail>>(`/api/weft-specs/${id}`).then((r) => r.data.data),
+  list: (opts: { search?: string; includeInactive?: boolean } = {}) => {
+    const sp = new URLSearchParams();
+    if (opts.search) sp.set("search", opts.search);
+    if (opts.includeInactive) sp.set("includeInactive", "1");
+    const qs = sp.toString();
+    return apiClient.get<ApiResponse<WeftSpecListRow[]>>(`/api/weft-specs${qs ? `?${qs}` : ""}`).then((r) => r.data.data);
+  },
+  create: (body: Record<string, unknown>) =>
+    apiClient.post<ApiResponse<WeftSpecDetail>>("/api/weft-specs", body).then((r) => r.data.data),
+  get:(id: string) => apiClient.get<ApiResponse<WeftSpecDetail>>(`/api/weft-specs/${id}`).then((r) => r.data.data),
   update: (id: string, body: Record<string, unknown>) =>
     apiClient.patch<ApiResponse<WeftSpecDetail>>(`/api/weft-specs/${id}`, body).then((r) => r.data.data),
   /** "Bu desene özel kopya" — kartı kopyalar, YALNIZ `itemId` kumaşını yeni karta geçirir (SY-P3). */
   fork: (id: string, body: { itemId: string; code: string; name: string }) =>
     apiClient.post<ApiResponse<WeftSpecForkResult>>(`/api/weft-specs/${id}/fork`, body).then((r) => r.data.data),
+  /** B19: var olan kumaşa penceredeki atkıyı yeni kart olarak bağlar (kart + bağ tek tx; tekrar = aynı kart). */
+  attachToItem: (body: { itemId: string; expectedWeftSpecId: string | null; weft: Record<string, unknown> }) =>
+    apiClient
+      .post<ApiResponse<{ weftSpec: WeftSpecDetail; itemId: string; replayed: boolean }>>("/api/weft-specs/attach-to-item", body)
+      .then((r) => r.data.data),
 };
 
 /** Kumaşın standart maliyet önizlemesi — sayı yalnız sunucudan (istemci hesaplamaz). */

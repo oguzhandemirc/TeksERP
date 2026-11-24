@@ -149,6 +149,7 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/weave-designs/:id/activate": e("desen kartını yeniden aktif etti", "desen kartını aktif etmeye çalıştı"),
   "PUT /api/item-construction/:itemId/warp-layers": e("ürünün çözgü katmanlarını değiştirdi", "ürünün çözgü katmanlarını değiştirmeye çalıştı"),
   "PUT /api/item-construction/recipes/:recipeId/weft-yarns": e("varyantın atkı ipliği değişimlerini değiştirdi", "varyantın atkı ipliği değişimlerini değiştirmeye çalıştı"),
+  "POST /api/weft-specs/attach-to-item": e("kumaşa atkı kartı açıp bağladı", "kumaşa atkı kartı bağlamaya çalıştı"),
   "POST /api/weft-specs/:id/fork": e("ortak atkı kartının bu desene özel kopyasını aldı", "atkı kartının özel kopyasını almaya çalıştı"),
   // ── Sipariş
   "POST /api/orders": e("sipariş oluşturdu", "sipariş oluşturmaya çalıştı"),
