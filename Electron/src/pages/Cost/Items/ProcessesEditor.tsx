@@ -4,6 +4,7 @@ import { ArrowDown, ArrowUp, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { InfoPopover } from "@/components/ui/info-popover";
 import { SectionCard } from "@/components/ui/section-card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { FinishingRate } from "../FinishingRates/service";
 import { fmtDecFull } from "../shared/format";
 
@@ -51,10 +52,13 @@ export function ProcessesEditor({ codes, onChange, rates, finishingCode, disable
         })}
       </ol>
       {!disabled && addable.length > 0 && (
-        <select aria-label="Ek işlem ekle" value="" onChange={(e) => e.target.value && onChange([...codes, e.target.value])} className="h-9 w-full rounded-md border bg-background px-2 text-sm sm:w-auto">
-          <option value="">+ Ek işlem ekle…</option>
-          {addable.map((r) => <option key={r.id} value={r.code}>{r.code} — {r.name} ({fmtDecFull(r.pricePerM)} {r.currency}/m)</option>)}
-        </select>
+        // Ortak seçici (B18/13); değer hep boş — seçim listeye eklenir, kutu yer tutucuya döner.
+        <Select value="" onValueChange={(v) => v && onChange([...codes, v])}>
+          <SelectTrigger aria-label="Ek işlem ekle" className="w-full sm:w-auto sm:min-w-64"><SelectValue placeholder="+ Ek işlem ekle…" /></SelectTrigger>
+          <SelectContent>
+            {addable.map((r) => <SelectItem key={r.id} value={r.code}>{r.code} — {r.name} ({fmtDecFull(r.pricePerM)} {r.currency}/m)</SelectItem>)}
+          </SelectContent>
+        </Select>
       )}
     </SectionCard>
     </div>

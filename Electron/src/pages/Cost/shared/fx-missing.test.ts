@@ -24,6 +24,19 @@ describe("foreignCurrencies", () => {
     const withProc = { finishing: null, processes: [{ price: { currency: "GBP" } }, { price: null }] } as unknown as CostInputSnap;
     expect(foreignCurrencies(withProc)).toEqual(["GBP"]);
   });
+  it("B18/1: atkı ücreti, çok iplikli çözgü, ek katman ve formül dövizi de kur ister", () => {
+    const g = {
+      warp: { yarn: { price: { currency: "TRY" } }, yarns: [{ price: { currency: "TRY" } }, { price: { currency: "CHF" } }] },
+      warpLayers: [{ yarn: { price: { currency: "GBP" } } }],
+      weft: { yarns: [{ price: { currency: "TRY" } }] },
+      finishing: null,
+      loomPick: { rate: { currency: "USD" } },
+      formulas: [{ code: "F", currency: "EUR" }],
+    } as unknown as CostInputSnap;
+    expect(foreignCurrencies(g)).toEqual(["CHF", "EUR", "GBP", "USD"]);
+    const pickOnly = { warp: null, weft: null, finishing: null, loomPick: { rate: { currency: "USD" } } } as unknown as CostInputSnap;
+    expect(foreignCurrencies(pickOnly)).toEqual(["USD"]);
+  });
 });
 
 describe("missing-targets", () => {

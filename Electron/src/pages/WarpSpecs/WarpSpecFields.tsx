@@ -14,15 +14,18 @@ import type { WarpSpecFormValues } from "./schema";
 
 type Form = UseFormReturn<WarpSpecFormValues>;
 
+/** Örnek yer tutucu: "ör." önekli ve soluk — dolu değer sanılmasın (B18/5). */
+const EXAMPLE_PH = "placeholder:text-muted-foreground/50";
+
 export function IdentityFields({ form, excludeId }: { form: Form; excludeId?: string }) {
   const e = form.formState.errors;
   return (
     <div className="grid gap-4 sm:grid-cols-[12rem_minmax(0,1fr)]">
       <FormField label="Kod" htmlFor="code" error={e.code} required>
-        <Input id="code" {...form.register("code")} placeholder="UA6007-Ç" />
+        <Input id="code" {...form.register("code")} className={EXAMPLE_PH} placeholder="ör. UA6007-Ç" />
       </FormField>
       <FormField label="Çözgü kartı adı" htmlFor="name" error={e.name} required>
-        <Input id="name" autoFocus {...form.register("name")} placeholder="UA6007 çözgüsü" />
+        <Input id="name" autoFocus {...form.register("name")} className={EXAMPLE_PH} placeholder="ör. UA6007 çözgüsü" />
         {/* Mükerreri REDDETMEK yerine ÖNLEMEK — yazarken benzerleri gösterir; `excludeId` kendi ikizini dışlar. */}
         <SimilarNamesWarning entity="warp-specs" name={form.watch("name") ?? ""} excludeId={excludeId} />
       </FormField>
@@ -66,25 +69,25 @@ export function ReedFields({ form }: { form: Form }) {
   return (
     <FieldGrid cols={4}>
       <FormField label="Kenar teli" htmlFor="selvedgeEnds" error={e.selvedgeEnds} info="Satır tel adetleri kenar dahil yazılır; bu alan bilgi içindir, hesaba girmez.">
-        <Input id="selvedgeEnds" {...form.register("selvedgeEnds")} inputMode="numeric" placeholder="24" />
+        <Input id="selvedgeEnds" {...form.register("selvedgeEnds")} inputMode="numeric" className={EXAMPLE_PH} placeholder="ör. 24" />
       </FormField>
       <FormField label="Tarak no" htmlFor="reedNo" error={e.reedNo} info="Birimi fabrikanın kendi kullanımıdır (diş/cm ya da diş/10 cm); hesaba girmez.">
-        <Input id="reedNo" {...form.register("reedNo")} inputMode="decimal" placeholder="14" />
+        <Input id="reedNo" {...form.register("reedNo")} inputMode="decimal" className={EXAMPLE_PH} placeholder="ör. 14" />
       </FormField>
       <FormField label="Dişe tel" htmlFor="endsPerDent" error={e.endsPerDent} info="Taraktan tel önerisinde boşsa 1 sayılır.">
-        <Input id="endsPerDent" {...form.register("endsPerDent")} inputMode="numeric" placeholder="4" />
+        <Input id="endsPerDent" {...form.register("endsPerDent")} inputMode="numeric" className={EXAMPLE_PH} placeholder="ör. 4" />
       </FormField>
       <FormField label="Tarak eni (cm)" htmlFor="reedWidthCm" error={e.reedWidthCm} info="Bilgi alanı; taraktan tel önerisinde kullanılır, hesaba girmez.">
-        <Input id="reedWidthCm" {...form.register("reedWidthCm")} inputMode="decimal" placeholder="280" />
+        <Input id="reedWidthCm" {...form.register("reedWidthCm")} inputMode="decimal" className={EXAMPLE_PH} placeholder="ör. 280" />
       </FormField>
       <FormField className="sm:col-span-2" label="Dizilim (talimat)" htmlFor="sequenceNote" error={e.sequenceNote} info="Devereciye giden talimat: ör. 2A 1B. Hesaba girmez.">
-        <Input id="sequenceNote" {...form.register("sequenceNote")} placeholder="2A 1B" />
+        <Input id="sequenceNote" {...form.register("sequenceNote")} className={EXAMPLE_PH} placeholder="ör. 2A 1B" />
       </FormField>
-      <FormField label={<span className="whitespace-nowrap">Çekme <span className="text-xs font-normal text-muted-foreground">(take-up)</span> %</span>} htmlFor="takeUpPct" error={e.takeUpPct} info="Çözgü ÷ kumaş oranı: çözgü = kumaş ÷ (1 − çekme). Boşsa tezgahtan doğan topun otomatik tüketimi çözgü = kumaş sayar ve uyarır.">
-        <Input id="takeUpPct" {...form.register("takeUpPct")} inputMode="decimal" placeholder="ör. 8" />
+      <FormField label="Çekme (%)" htmlFor="takeUpPct" error={e.takeUpPct} info="Çözgü çekmesi (take-up): dokumada çözgünün kumaştan ne kadar uzun harcandığı. Çözgü ÷ kumaş oranı: çözgü = kumaş ÷ (1 − çekme). Boşsa tezgahtan doğan topun otomatik tüketimi çözgü = kumaş sayar ve uyarır.">
+        <Input id="takeUpPct" {...form.register("takeUpPct")} inputMode="decimal" className={EXAMPLE_PH} placeholder="ör. 8" />
       </FormField>
       <FormField label="Fire (%)" htmlFor="wastePct" error={e.wastePct} info="Çözgü ipliği firesi; hesaptaki fireli kg'yı ve maliyeti etkiler: çözgü = kumaş ÷ (1 − çekme) ÷ (1 − fire). Ürünün maliyet yapısındaki fire bunu ezer; boşsa maliyet parametrelerindeki varsayılan kullanılır.">
-        <Input id="wastePct" {...form.register("wastePct")} inputMode="decimal" placeholder="ör. 3" />
+        <Input id="wastePct" {...form.register("wastePct")} inputMode="decimal" className={EXAMPLE_PH} placeholder="ör. 3" />
       </FormField>
     </FieldGrid>
   );
@@ -93,7 +96,7 @@ export function ReedFields({ form }: { form: Form }) {
 export function NotesField({ form }: { form: Form }) {
   return (
     <FormField label="Not" htmlFor="notes" error={form.formState.errors.notes}>
-      <Textarea id="notes" {...form.register("notes")} rows={2} placeholder="Tahar planı, jakar koşumu…" />
+      <Textarea id="notes" {...form.register("notes")} rows={2} className={EXAMPLE_PH} placeholder="ör. tahar planı, jakar koşumu…" />
     </FormField>
   );
 }

@@ -1,4 +1,5 @@
 // Döküm sekmesi: sunucu önizlemesi (YAZMAZ) + kur alanları + "Standart olarak kaydet". Sayı yalnız yanıttan.
+// Kur bilgisi ve kaydet düğmesi kart yüzeyinde (zemin kuralı, B18/1); kartın sağında eylem, solunda kur.
 import { PermissionGate } from "@/components/PermissionGate";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -24,20 +25,23 @@ export function BreakdownTab({ preview, loading, fx, onFx, fxFlagged, onSave }: 
   const currencies = foreignCurrencies(preview.girdi);
   return (
     <div className="space-y-4">
-      {currencies.length > 0 ? (
-        <Card className="space-y-1 p-4">
-          <FxRateInputs currencies={currencies} value={fx} onChange={onFx} suggestions={preview.oneriler.fx} highlight={fxFlagged} />
-          <p className="text-xs text-muted-foreground">
-            Hesapta kullanılan kur: {FX_SOURCE[preview.kurlar.kaynak] ?? preview.kurlar.kaynak} · {fmtCalendarDay(preview.kurlar.tarih)}
-          </p>
-        </Card>
-      ) : (
-        <FxRateInputs currencies={currencies} value={fx} onChange={onFx} suggestions={preview.oneriler.fx} highlight={fxFlagged} />
-      )}
+      <Card className="flex flex-wrap items-end justify-between gap-3 p-4">
+        <div className="min-w-0 space-y-1">
+          <FxRateInputs
+            currencies={currencies} value={fx} onChange={onFx} suggestions={preview.oneriler.fx} highlight={fxFlagged}
+            incomplete={!preview.sonuc && preview.eksikler.length > 0}
+          />
+          {currencies.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              Hesapta kullanılan kur: {FX_SOURCE[preview.kurlar.kaynak] ?? preview.kurlar.kaynak} · {fmtCalendarDay(preview.kurlar.tarih)}
+            </p>
+          )}
+        </div>
+        <PermissionGate permission="cost:write">
+          <Button onClick={onSave} disabled={loading || !preview.sonuc} title={preview.sonuc ? undefined : "Eksikler giderilmeden kaydedilemez"}>Standart olarak kaydet</Button>
+        </PermissionGate>
+      </Card>
       <CostBreakdown sonuc={preview.sonuc} eksikler={preview.eksikler} uyarilar={preview.uyarilar} />
-      <PermissionGate permission="cost:write">
-        <Button onClick={onSave} disabled={loading || !preview.sonuc} title={preview.sonuc ? undefined : "Eksikler giderilmeden kaydedilemez"}>Standart olarak kaydet</Button>
-      </PermissionGate>
     </div>
   );
 }

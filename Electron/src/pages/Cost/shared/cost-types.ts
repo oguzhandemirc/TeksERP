@@ -10,7 +10,7 @@ export interface CostYarnSnap { yarnItemId: string | null; name: string; denier:
 
 export interface CostInputSnap {
   parameterSetId: string | null;
-  warp: { warpSpecId: string | null; endsCount: number; takeUpPct: Sourced; wastePct: Sourced; yarn: CostYarnSnap } | null;
+  warp: { warpSpecId: string | null; endsCount: number; takeUpPct: Sourced; wastePct: Sourced; yarn: CostYarnSnap; yarns?: CostYarnSnap[] } | null;
   weft: { weftSpecId: string | null; picksPerCm: Sourced; lengthCm: Sourced; wastePct: Sourced; yarns: CostYarnSnap[] } | null;
   loom: Record<"rpm" | "efficiencyPct" | "machineRateTry" | "laborRateTry" | "loomsPerOperator" | "energyKwhPerHour" | "energyPriceTry", Sourced>;
   beam: { prepCostTry: Sourced; lengthM: Sourced };
@@ -24,6 +24,9 @@ export interface CostInputSnap {
   extra: { amountTry: DecStr; label: string | null } | null;
   /** SY-D2: yalnız atkı ücreti yönteminde gelir (backend `CostInput.loomPick` aynası). */
   loomPick?: { rate: CostPriceSnap | null };
+  /** Kur alanı okuyucuları için (B18/1): çok iplikli çözgü satırları, ek çözgü katmanları, ek formüller. */
+  warpLayers?: Array<{ yarn: CostYarnSnap; yarns?: CostYarnSnap[] }>;
+  formulas?: Array<{ code: string; currency: Currency }>;
 }
 
 export interface CostLineOut {

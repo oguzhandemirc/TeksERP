@@ -3,6 +3,7 @@
 // alan çizilmez ve gövdeye `loomPick*` GİRMEZ (Adnan Şahin/dokuma bayt-aynı); (4) ATKI_UCRETI → çift birlikte gider.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/render";
 import type { CostItemDetail } from "./Items/service";
 import type { CostParameterSet } from "./Parameters/service";
@@ -61,7 +62,10 @@ describe("Ürün yapısı — atkı ücreti alanı", () => {
     perms = ["cost:write"];
     renderWithProviders(<StructureTab detail={DETAIL} measured={null} flagged={new Set()} />);
     fireEvent.change(screen.getByLabelText("Atkı ücreti"), { target: { value: "0,02" } });
-    fireEvent.change(screen.getByLabelText("Atkı ücreti dövizi"), { target: { value: "USD" } });
+    // Döviz kutusu ortak seçici (Radix): aç → seçeneğe tıkla.
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("combobox", { name: "Atkı ücreti dövizi" }));
+    await user.click(await screen.findByRole("option", { name: "USD" }));
     fireEvent.click(screen.getByRole("button", { name: "Yapıyı kaydet" }));
     await waitFor(() => expect(put).toHaveBeenCalled());
     expect(lastPutBody()).toMatchObject({ loomPickRate: "0.02", loomPickCurrency: "USD" });

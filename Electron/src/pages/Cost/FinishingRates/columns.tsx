@@ -39,9 +39,9 @@ export function finishingColumns(
       enableHiding: false,
       meta: { label: "İşlem", align: "right" },
       cell: ({ row: { original: r } }) => (
-        <span className="whitespace-nowrap">
+        <span className="inline-flex items-center gap-1 whitespace-nowrap">
           <PermissionGate permission="cost:write">
-            <Button size="sm" variant="outline" className="mr-1 h-7" onClick={() => onDetails(r)} title="Ad, hizmet kartı, not — yeni sürüm açmaz">
+            <Button size="sm" variant="outline" className="h-7" onClick={() => onDetails(r)} title="Ad, hizmet kartı, not — yeni sürüm açmaz">
               <Pencil className="mr-1 h-3.5 w-3.5" />Düzenle
             </Button>
             <Button size="sm" variant="outline" className="h-7" onClick={() => onEdit({ row: r })}>Fiyat değiştir</Button>

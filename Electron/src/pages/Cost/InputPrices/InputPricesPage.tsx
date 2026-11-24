@@ -13,19 +13,18 @@ import { COST_INPUT_DESCRIPTIONS, COST_INPUT_TABS, resolveCostInputTab, type Cos
 /**
  * Maliyet › Girdi Fiyatları — iplik fiyatı, fason tarifesi, ek formül ve sarf normu tek
  * başlık altında sekmeli (M6; Etiketler kalıbı). Sekme URL'de (?tab=) — eski dört yol buraya yönlenir.
- * Alt listelerin eylemleri başlığa, arama/araçları sekme şeridinin sağına portal'lanır.
+ * Alt listelerin eylemleri başlığa portal'lanır; arama/araçlar listenin kart yüzeyindeki araç çubuğunda (B18/13).
  */
 export function InputPricesPage() {
   const [sp, setSp] = useSearchParams();
   const [actionsEl, setActionsEl] = useState<HTMLDivElement | null>(null);
-  const [toolsEl, setToolsEl] = useState<HTMLDivElement | null>(null);
   const tab = resolveCostInputTab(sp.get("tab"));
   const setTab = (v: string) => {
     const n = new URLSearchParams(sp);
     n.set("tab", v);
     setSp(n, { replace: true });
   };
-  const slots = { actions: actionsEl, tools: toolsEl };
+  const slots = { actions: actionsEl };
   // Yalnız etkin sekme bağlanır: dört liste aynı portala aynı anda yazmasın.
   const body: Record<CostInputTabKey, ReactNode> = {
     yarn: <YarnPricesPage embedded={slots} />,
@@ -42,7 +41,7 @@ export function InputPricesPage() {
         actions={<div ref={setActionsEl} className="flex items-center gap-2" />}
       />
       <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col">
-        <PageTabsList trailing={<div ref={setToolsEl} className="flex items-center gap-1.5 pr-4" />}>
+        <PageTabsList>
           {COST_INPUT_TABS.map((t) => (
             <PageTabsTrigger key={t.key} value={t.key}>{t.label}</PageTabsTrigger>
           ))}

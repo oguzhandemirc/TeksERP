@@ -6,11 +6,13 @@ import { InfoPopover } from "@/components/ui/info-popover";
 import { Input } from "@/components/ui/input";
 import { SectionCard } from "@/components/ui/section-card";
 import { cn } from "@/lib/utils";
-import type { FinishingRate } from "../FinishingRates/service";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { finishingBasisUnit, type FinishingRate } from "../FinishingRates/service";
 import { fmtDecFull } from "../shared/format";
 import { STRUCTURE_MAX } from "./schema";
 
 export const FIELD_LABEL = "block font-medium text-foreground/80";
+const RAW_SALE = "__raw";
 
 interface FinishingProps {
   rateCode: string;
@@ -29,15 +31,18 @@ export function FinishingCard({ rateCode, onRateCode, label, onLabel, rates, dis
     <SectionCard title="Terbiye ve ek kalem"
       titleExtra={<InfoPopover label="Terbiye ve ek kalem açıklaması" desc="Fason tarifesi seçilmezse kumaş ham satılır (terbiye maliyeti yok). Ek kalem metre başına sabit TL tutardır; etiket dökümde satır adı olur." />}>
       <div className="space-y-3">
-        <label className="block text-sm" data-field="finishingRateCode">
+        <div className="block text-sm" data-field="finishingRateCode">
           <span className={FIELD_LABEL}>Fason tarifesi</span>
-          <select aria-label="Fason tarifesi" disabled={disabled} value={rateCode} onChange={(e) => onRateCode(e.target.value)}
-            className={cn("mt-1 h-9 w-full rounded-md border bg-background px-2", flagged && "ring-2 ring-destructive")}>
-            <option value="">Ham satış (terbiye yok)</option>
-            {rates.map((r) => <option key={r.id} value={r.code}>{r.code} — {r.name} ({fmtDecFull(r.pricePerM)} {r.currency}/m)</option>)}
-            {rateCode && !rates.some((r) => r.code === rateCode) && <option value={rateCode}>{rateCode} (aktif değil)</option>}
-          </select>
-        </label>
+          {/* Ortak seçici (B18/13); Radix boş değer taşımaz → "ham satış" belirteçle. */}
+          <Select value={rateCode || RAW_SALE} onValueChange={(v) => onRateCode(v === RAW_SALE ? "" : v)} disabled={disabled}>
+            <SelectTrigger aria-label="Fason tarifesi" className={cn("mt-1", flagged && "ring-2 ring-destructive")}><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value={RAW_SALE}>Ham satış (terbiye yok)</SelectItem>
+              {rates.map((r) => <SelectItem key={r.id} value={r.code}>{r.code} — {r.name} ({fmtDecFull(r.pricePerM)} {r.currency}/{finishingBasisUnit(r.basis)})</SelectItem>)}
+              {rateCode && !rates.some((r) => r.code === rateCode) && <SelectItem value={rateCode}>{rateCode} (aktif değil)</SelectItem>}
+            </SelectContent>
+          </Select>
+        </div>
         <div className="grid gap-3 sm:grid-cols-[minmax(9rem,12rem)_1fr]">
           {extraField}
           <label className="text-sm"><span className={FIELD_LABEL}>Ek kalem etiketi</span>
