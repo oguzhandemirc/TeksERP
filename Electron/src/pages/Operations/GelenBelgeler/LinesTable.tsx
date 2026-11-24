@@ -101,7 +101,7 @@ export function LinesTable({ note, suggestions, editable, canWrite, selectedId, 
 /** Satır tablosu iskeleti (gömülü bölüm tablosu: çerçeveli, kendi içinde yatay kayar). */
 function LinesGrid({ perDocument, children }: { perDocument: boolean; children: ReactNode }) {
   return (
-    <div className="overflow-x-auto rounded-lg border">
+    <div className="overflow-x-auto rounded-lg border bg-card">
     <table className="w-full min-w-[900px] text-sm">
       <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
         <tr>

@@ -31,7 +31,7 @@ export function ForwardTable({ res, forward }: Props) {
         {forward.grossLengthM !== forward.lengthM && <span className="text-muted-foreground"> · sabit fire ile {fmtM(forward.grossLengthM)} m sarılır</span>}
         {!res.stock.known && <span className="text-muted-foreground"> · iplik stoğu bilinmiyor (iplik modülü kapalı)</span>}
       </p>
-      <div className="overflow-x-auto rounded-md border">
+      <div className="overflow-x-auto rounded-md border bg-card">
         <Table>
           <TableHeader>
             <TableRow>

@@ -93,7 +93,7 @@ export function YarnReturnsList({ orderId }: { orderId: string }) {
   return (
     <div className="space-y-1 pt-2" aria-label="İadeler">
       <h3 className="text-sm font-semibold">İadeler</h3>
-      <div className="overflow-x-auto rounded-md border">
+      <div className="overflow-x-auto rounded-md border bg-card">
         <Table>
           <TableHeader>
             <TableRow>

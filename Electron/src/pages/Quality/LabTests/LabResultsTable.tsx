@@ -11,7 +11,7 @@ export function LabResultsTable({ results, types, onDelete, busy }: Props) {
   if (results.length === 0) return <p className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">Henüz sonuç girilmedi.</p>;
   const typeById = new Map(types.map((t) => [t.id, t]));
   return (
-    <div className="overflow-x-auto rounded-md border">
+    <div className="overflow-x-auto rounded-md border bg-card">
       <table className="w-full min-w-[560px] text-sm">
         <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
           <tr>

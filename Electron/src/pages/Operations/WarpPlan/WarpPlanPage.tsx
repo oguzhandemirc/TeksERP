@@ -9,6 +9,7 @@ import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Callout } from "@/components/ui/callout";
+import { Card } from "@/components/ui/card";
 import { apiErrorMessage } from "@/services/apiClient";
 import { useWarpPlan } from "./service";
 import { buildWarpPlanBody, emptyWarpPlanState, type WarpPlanState } from "./warp-plan-model";
@@ -59,7 +60,9 @@ export function WarpPlanPage() {
           <NeedTab linked={linkedNeedQuery(sp)} onClearLinked={clearLinked} />
         ) : (
           <>
-            <WarpPlanInputs s={s} up={up} defaultFixedWasteM={res?.fixedWasteM ?? null} />
+            <Card className="p-4">
+              <WarpPlanInputs s={s} up={up} defaultFixedWasteM={res?.fixedWasteM ?? null} />
+            </Card>
             <ResultArea s={s} hasBody={body !== null} q={q} fresh={Boolean(fresh)} />
           </>
         )}

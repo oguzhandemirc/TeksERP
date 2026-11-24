@@ -31,7 +31,7 @@ const kgOr = (v: string | null) => (v === null ? "—" : fmtKg(v));
 
 function BeamsTable({ r, label }: { r: WarpingReceipt; label: string }) {
   return (
-    <div className="overflow-x-auto rounded-md border">
+    <div className="overflow-x-auto rounded-md border bg-card">
       <Table aria-label={label}>
         <TableHeader>
           <TableRow>

@@ -81,7 +81,7 @@ function DispatchHead({ d, onPrint, onCancel }: { d: WarpingDispatchRow; onPrint
 
 function DispatchTable({ rows, onPrint, onCancel }: { rows: WarpingDispatchRow[]; onPrint: (d: WarpingDispatchRow) => void; onCancel: (d: WarpingDispatchRow) => void }) {
   return (
-    <div className="overflow-x-auto rounded-md border">
+    <div className="overflow-x-auto rounded-md border bg-card">
       <Table>
         <TableHeader>
           <TableRow>

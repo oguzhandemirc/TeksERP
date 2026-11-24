@@ -32,9 +32,9 @@ export function ServicePricesToolbar({
 }: Props) {
   return (
     <>
-      <div className="flex shrink-0 flex-wrap items-center gap-3 border-b px-4 py-2 text-sm">
+      <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-card-border bg-muted/40 px-4 py-2 text-sm">
         <label className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Para birimi</span>
+          <span className="text-xs font-medium text-foreground/80">Para birimi</span>
           <select
             className="h-8 rounded-md border bg-background px-2"
             value={currency}
@@ -49,7 +49,7 @@ export function ServicePricesToolbar({
           </select>
         </label>
         <div className="flex w-72 items-center gap-2">
-          <span className="text-xs text-muted-foreground">Müşteri</span>
+          <span className="text-xs font-medium text-foreground/80">Müşteri</span>
           <ReferenceSelect<Customer>
             value={customerId}
             onChange={onCustomer}
@@ -63,7 +63,7 @@ export function ServicePricesToolbar({
         </div>
         <label className="flex items-center gap-2">
           <CalendarClock className="h-4 w-4 text-muted-foreground" />
-          <span className="text-xs text-muted-foreground">Yürürlük</span>
+          <span className="text-xs font-medium text-foreground/80">Yürürlük</span>
           <DatePickerInput
             className="h-8 w-36"
             min={minFutureDayKey()}

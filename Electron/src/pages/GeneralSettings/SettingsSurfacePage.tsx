@@ -276,9 +276,10 @@ export function SettingsSurfacePage({
             // saklama, görünmeyen satırı her Kaydet'te PATCH'e yazmaya devam ederdi.
             const rows = filterCategoryByModules(cat, modules, vendorView);
             return (
-              <TabsContent key={cat.id} value={cat.id} className="mt-0 max-w-5xl">
-                {/* Sade başlık + ayraç — sol ray zaten sekmeyi etiketliyor; kart/çifte
-                    çerçeve yok, içerik doğrudan akar. */}
+              <TabsContent key={cat.id} value={cat.id} data-slot="card"
+                className="mt-0 max-w-5xl rounded-xl border border-card-border bg-card p-4 text-card-foreground shadow-card md:p-6">
+                {/* Ayar formu tek kart yüzeyinde (zeminde düz form yok — genel.md 2026-11-24);
+                    sol ray sekmeyi etiketlediği için başlık sade kalır. */}
                 <div className="mb-5 border-b pb-3">
                   <div className="flex items-center gap-2">
                     <Icon className="h-4 w-4 text-muted-foreground" />

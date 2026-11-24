@@ -51,7 +51,8 @@ export function ServicePricesPage() {
           </Callout>
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1">
+        // Sol liste ve sağ tablo ayrı kart yüzeyinde; zemin yalnız sayfa arka planı (B17).
+        <div className="flex min-h-0 flex-1 gap-4 p-4 sm:px-6">
           <ServiceList
             rows={servicesQ.data}
             isLoading={servicesQ.isLoading}
@@ -60,7 +61,7 @@ export function ServicePricesPage() {
             selectedId={itemId}
             onSelect={setItemId}
           />
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div data-slot="card" className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-card-border bg-card shadow-card">
             <ServicePricesToolbar
               currency={currency}
               onCurrency={setCurrency}
