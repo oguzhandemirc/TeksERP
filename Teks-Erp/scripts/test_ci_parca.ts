@@ -189,10 +189,12 @@ console.log("\n§7 — ci.yml hizası (matrix 1..N ↔ --shard …/N ↔ özet i
       ihlal.push(`matrix [${liste.join(",")}] ≠ 1..${n}`);
     const ozet = /^ {2}backend:\n([\s\S]*?)(?=^ {2}[\w-]+:\n)/m.exec(y)?.[1] ?? "";
     if (!/name: Backend \(tsc \+ test\)/.test(ozet)) ihlal.push("özet iş adı `Backend (tsc + test)` değil");
-    if (!/needs: \[backend-lint, backend-test\]/.test(ozet)) ihlal.push("özet iş iki işi beklemiyor");
+    // lint ve tsc 2026-11-25'ten beri ayrı işler; özet üçünü de bekler ve şart koşar.
+    if (!/needs: \[backend-lint, backend-tsc, backend-test\]/.test(ozet)) ihlal.push("özet iş üç işi beklemiyor");
     if (!/run-all-tests\.ts --birlesim/.test(ozet)) ihlal.push("özet iş birleşim denetimini koşmuyor");
-    if (!/needs\.backend-lint\.result \}\}" = "success" \] && \[ "\$\{\{ needs\.backend-test\.result/.test(ozet))
-      ihlal.push("özet iş iki işin sonucunu şart koşmuyor");
+    const ucluSart = /needs\.backend-lint\.result \}\}" = "success" \] && \[ "\$\{\{ needs\.backend-tsc\.result \}\}" = "success" \] && \[ "\$\{\{ needs\.backend-test\.result/;
+    if (!ucluSart.test(ozet)) ihlal.push("özet iş üç işin sonucunu şart koşmuyor");
+    if (!/^ {2}backend-tsc:\n[\s\S]*?npm run typecheck:scripts/m.test(y)) ihlal.push("backend-tsc işi scripts tip geçidini koşmuyor");
     if (!/TEKSERP_PARCA_KAYIT: \/tmp\/parca\/parca-\$\{\{ matrix\.parca \}\}\.json/.test(y)) ihlal.push("parça kaydı yolu yok");
     return ihlal;
   };
@@ -202,6 +204,8 @@ console.log("\n§7 — ci.yml hizası (matrix 1..N ↔ --shard …/N ↔ özet i
     ["matrix bir parça eksik", ci.replace(/(parca: \[[\d, ]*?), \d+\]/, "$1]")],
     ["birleşim adımı silindi", ci.replace(/run-all-tests\.ts --birlesim/, "run-all-tests.ts --yok")],
     ["özet iş sonucu şart koşmuyor", ci.replace(/\] && \[ "\$\{\{ needs\.backend-test\.result \}\}" = "success" \]/, "]")],
+    ["özet iş tsc sonucunu şart koşmuyor", ci.replace(/ && \[ "\$\{\{ needs\.backend-tsc\.result \}\}" = "success" \]/, "")],
+    ["özet iş tsc işini beklemiyor", ci.replace("needs: [backend-lint, backend-tsc, backend-test]", "needs: [backend-lint, backend-test]")],
   ];
   for (const [ad, mutant] of sondalar) {
     check(`§7 sonda: ${ad} → kırmızı`, mutant !== ci && hiza(mutant).length > 0, mutant === ci ? "MUTASYON UYGULANMADI" : "");
