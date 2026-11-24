@@ -140,18 +140,41 @@ function conflict(e: unknown): never {
   throw e;
 }
 
-export async function listWeftSpecs(opts: { includeInactive?: boolean; search?: string }): Promise<WeftSpecRow[]> {
+export interface WeftSpecContent {
+  scalars: Prisma.WeftSpecUncheckedUpdateInput;
+  sequenceCode: string | null;
+  yarns: Array<{ yarnItemId: string; picksInRepeat: number }>;
+}
+
+const CONTENT_ALLOWED = new Set(["picksPerCm", "sequenceNote", "sequenceCode", "weftProgramNo", "notes", "yarns"]);
+
+/** Kod/adsız atkı içeriği (ürün penceresi taslağı) — kart doğuşunun AYNI doğrulaması; en az bir iplik ister. */
+export async function parseWeftSpecContent(body: Record<string, unknown>): Promise<WeftSpecContent> {
+  const unknown = Object.keys(body).filter((k) => !CONTENT_ALLOWED.has(k));
+  if (unknown.length > 0) throw AppError.badRequest(`Tanınmayan atkı alanı: ${unknown.join(", ")}`);
+  if (!Array.isArray(body.yarns) || body.yarns.length === 0) throw AppError.badRequest("Atkı için en az bir iplik seçin.", { code: "WEFT_DRAFT_EMPTY" });
+  const scalars = parseScalars(body, true);
+  const seq = parseSequenceField(body.sequenceCode) ?? null;
+  const applied = applySequence(seq, await parseYarns(body.yarns, seq !== null));
+  return { scalars, sequenceCode: applied.sequenceCode, yarns: applied.lines };
+}
+
+/** Liste satırı: kart + onu kullanan kumaş sayısı (Atkı Kartları "kaç kumaşta" sütunu; sayım DB'de). */
+export type WeftSpecListRow = WeftSpecRow & { fabricCount: number };
+
+export async function listWeftSpecs(opts: { includeInactive?: boolean; search?: string }): Promise<WeftSpecListRow[]> {
   const s = opts.search?.trim();
-  return prisma.weftSpec.findMany({
+  const rows = await prisma.weftSpec.findMany({
     where: {
       AND: [
         opts.includeInactive ? {} : { isActive: true },
         s ? { OR: [{ code: { contains: s, mode: "insensitive" } }, { name: { contains: s, mode: "insensitive" } }] } : {},
       ],
     },
-    select: WEFT_SPEC_SELECT,
+    select: { ...WEFT_SPEC_SELECT, _count: { select: { fabricItems: true } } },
     orderBy: [{ code: "asc" }],
   });
+  return rows.map(({ _count, ...row }) => ({ ...row, fabricCount: _count.fabricItems }));
 }
 
 export async function getWeftSpec(id: string): Promise<WeftSpecRow> {

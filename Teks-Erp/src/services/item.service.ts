@@ -51,6 +51,7 @@ import { parseDecimalField, parseTextField } from "./helpers/cost-input.helper";
 import { YARN_WASTE_PCT_MAX } from "./helpers/yarn-waste.helper";
 import { readYarnUnitFields } from "./helpers/yarn-unit.helper";
 import { findWeftOverrideOrphans, throwWeftOverrideOrphan } from "./helpers/effective-construction.helper";
+import { createWeftSpecFromDraftTx, logDraftWeftCreate, readItemWeftDraft } from "./weft-spec-draft.service";
 import { TERIM } from "../constants/terim";
 import { CARD_CODE_LOCK_SCOPE, assertCodeFreeInOtherKind, assertNameFreeInOtherKind, cardCodesWithPrefix } from "./helpers/card-identity.helper";
 import {
@@ -320,6 +321,7 @@ export class ItemService extends BaseService {
       return legacyResponse(await serviceItemService.create({ code, name, unit, isActive }, actorId));
     }
     await assertWarpSpecAssignable(input.itemType, input.warpSpecId);
+    const weftDraft = await readItemWeftDraft(input.itemType, data);
     const fabricStructure = {
       // Kumaş doğuşta Dokuma (bugünkü davranış); gövde açıkça verirse o (Örme 400).
       ...(input.itemType === "FABRIC" ? { fabricTechnique: "WOVEN" as FabricTechniqueValue } : {}),
@@ -440,6 +442,9 @@ export class ItemService extends BaseService {
             target = resolveReactivateTarget(manualCode, await tx.item.findMany({ select: ITEM_CODE_CANDIDATE_SELECT }));
             await assertCodeFreeInOtherKind(tx, "item", manualCode);
           }
+          // B19: penceredeki atkı taslağı kart olarak ürünle AYNI tx'te doğar (biri düşerse ikisi de düşer).
+          const draftCard = weftDraft ? await createWeftSpecFromDraftTx(tx, weftDraft, { itemCode: code, itemName: input.name.trim() }, actorId) : null;
+          const draftLink = draftCard ? { weftSpecId: draftCard.id } : {};
           if (target) {
             // Diriltme bir DURUM GEÇİŞİDİR (Pasif → Aktif) ve tek yazardan geçer: atomik
             // claim + eşzamanlı ikinci istek hedefi zaten ACTIVE görür → 409.
@@ -464,12 +469,11 @@ export class ItemService extends BaseService {
                 name: input.name.trim(),
                 unit: (input.unit ?? "MT") as ItemUnit,
                 // Diriltme de yeni gövdeyi uygular (create ile aynı sözleşme).
-                ...(input.linearDensityDen !== undefined
-                  ? { linearDensityDen: input.linearDensityDen }
-                  : {}),
+                ...(input.linearDensityDen !== undefined ? { linearDensityDen: input.linearDensityDen } : {}),
                 ...(input.warpSpecId !== undefined ? { warpSpecId: input.warpSpecId } : {}),
-              ...widthCmData(input.widthCm),
+                ...widthCmData(input.widthCm),
                 ...fabricStructure,
+                ...draftLink,
                 allowedColors:
                   allowedColorIds.length > 0
                     ? { create: allowedColorIds.map((colorId) => ({ colorId })) }
@@ -484,7 +488,7 @@ export class ItemService extends BaseService {
                 allowedProperties: { include: { property: true } },
               },
             });
-            return { record: revived, revivedFrom: target };
+            return { record: revived, revivedFrom: target, draftCard };
           }
           const fresh = await sequentialTx(tx).item.create({
             data: withActor({
@@ -496,12 +500,11 @@ export class ItemService extends BaseService {
               ...itemBirthLifecycleData(input.isActive),
               // Denye YALNIZ gönderildiğinde yazılır: `undefined` kolonu olduğu
               // gibi bırakır, `null` bilinçli temizlemedir (metin → Decimal).
-              ...(input.linearDensityDen !== undefined
-                ? { linearDensityDen: input.linearDensityDen }
-                : {}),
+              ...(input.linearDensityDen !== undefined ? { linearDensityDen: input.linearDensityDen } : {}),
               ...(input.warpSpecId !== undefined ? { warpSpecId: input.warpSpecId } : {}),
               ...widthCmData(input.widthCm),
               ...fabricStructure,
+              ...draftLink,
               // Yalnız iç quick-create (saha KK1) opt'u işaretler; public gövde etkisiz.
               // Doğuş deneme kimliği (`clientToken`) yalnız token boğazından (`color-item-create.service.ts`).
               ...(opts?.pendingReview ? { pendingReview: true } : {}), ...(opts?.clientToken ? { clientToken: opts.clientToken } : {}),
@@ -520,7 +523,7 @@ export class ItemService extends BaseService {
             },
           });
           if (opts?.notify !== false) await emitItemCreatedTx(tx, fresh.id, actorId);
-          return { record: fresh, revivedFrom: null as CodeCandidate | null };
+          return { record: fresh, revivedFrom: null as CodeCandidate | null, draftCard };
         });
       },
       undefined,
@@ -533,6 +536,7 @@ export class ItemService extends BaseService {
     // audit/mesaj da ondan okunur — ön kontrol ile ayrışırsa yanıt yalan söylerdi.
     const created = result.record;
     const revivedFrom = result.revivedFrom;
+    if (result.draftCard && weftDraft) logDraftWeftCreate(result.draftCard, weftDraft, created.id, actorId);
 
     await AuditService.log({
       userId: actorId,

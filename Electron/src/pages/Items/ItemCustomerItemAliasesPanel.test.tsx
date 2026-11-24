@@ -75,9 +75,16 @@ describe("Müşteri Kumaş Adları (B13)", () => {
     expect(screen.getByText(/yeni ad eklenemez/)).toBeInTheDocument();
   });
 
-  it("⭐ kumaş kartında sekme şeridi: Bilgiler · Müşteri Kumaş Adları · Müşteri Renk Adları", () => {
+  it("⭐ kumaş kartında sekme şeridi: Genel · Müşteri Kumaş Adları · Müşteri Renk Adları", () => {
     const item = { id: "x", name: "X", itemType: "FABRIC", lifecycleStatus: "ACTIVE", isActive: true, allowedColors: [] } as unknown as Item;
     renderWithProviders(<ItemCardTabs item={item}><div>form</div></ItemCardTabs>);
-    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Bilgiler", "Müşteri Kumaş Adları", "Müşteri Renk Adları"]);
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Genel", "Müşteri Kumaş Adları", "Müşteri Renk Adları"]);
+  });
+
+  it("⭐ yapı sekmeleri Genel'den sonra, müşteri adlarından önce", () => {
+    const item = { id: "x", name: "X", itemType: "FABRIC", lifecycleStatus: "ACTIVE", isActive: true, allowedColors: [] } as unknown as Item;
+    const extra = [{ value: "warp", label: "Çözgü", content: null }, { value: "weft", label: "Atkı", content: null }, { value: "weave", label: "Desen", content: null }];
+    renderWithProviders(<ItemCardTabs item={item} extraTabs={extra}><div>form</div></ItemCardTabs>);
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Genel", "Çözgü", "Atkı", "Desen", "Müşteri Kumaş Adları", "Müşteri Renk Adları"]);
   });
 });

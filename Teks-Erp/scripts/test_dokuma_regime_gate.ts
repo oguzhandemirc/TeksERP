@@ -95,6 +95,8 @@ const UC_KAPILI: ReadonlyArray<{ dosya: string; yollar: string[] }> = [
 /** Kapıyı VARLIK başına seçen router'lar (SY-H2 içe aktarım): dokuma adaptörünün her ucu `requireDokumaEnabled`den geçer — §6v. */
 const VARLIK_KAPILI: ReadonlyArray<{ dosya: string; eslem: RegExp }> = [
   { dosya: "routes/import.routes.ts", eslem: /dokuma:\s*requireDokumaEnabled\b/ },
+  // B19: ürün oluşturma gövdesinde atkı taslağı (`weftSpecDraft`) varsa atkı kartı da doğar → yalnız o zaman dokuma kapısı.
+  { dosya: "routes/item.routes.ts", eslem: /function weftDraftNeedsDokuma[\s\S]{0,300}requireDokumaEnabled\(req, res,[\s\S]*router\.post\("\/",[^\n]*weftDraftNeedsDokuma/ },
 ];
 // `kapi`: dokuma kapısını DEVRALAN rejim kapısı (D4-A1 `requireMachineStopRegime`: ayar kapalıyken kararı
 // `requireDokumaEnabled`e devreder — §6i ölçer).
