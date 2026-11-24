@@ -11,6 +11,7 @@
 //   ① `grossKgExact` fireyi bölmek yerine ÇARPTI (× (1 + f)) → §3a/§3d/§7l kırmızı (52,530 ≠ 52,577), 34/37.
 //   ② ters yönde kısıt `lessThan` yerine `greaterThan` (min yerine max) → §4a–§4e/§5a/§7d kırmızı (2500 m, kısıt z), 30/37.
 //   ③ servis stok okumasında `excludeHeld: false` → §7d kırmızı (1750 m; bekletmedeki 10 kg serbest sayıldı), 36/37.
+//   ④ (2026-11-24) fireli toplam yeniden round(Σ kesin) → §3e kırmızı (154,639 ≠ 154,638), 37/38.
 // =============================================================================
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -87,6 +88,12 @@ function pureSections(): void {
   check("§3d iplik kartı firesi kart firesini ezer: x 50 ÷ 0,95 = 52,632 (IPLIK), y 40 ÷ 0,97 = 41,237 (KART)",
     s3b.lines[0]!.grossKg === 52.632 && s3b.lines[0]!.wasteSource === "IPLIK" && s3b.lines[1]!.grossKg === 41.237 && s3b.lines[1]!.wasteSource === "KART",
     J(s3b.lines.map((l) => [l.grossKg, l.wasteSource])));
+  // Kart paneli (motor toplamı) ↔ devere siparişi (yuvarlanmış satırların toplamı) aynı sayıyı göstermeli:
+  // 3 × 50 ÷ 0,97 = 3 × 51,546392 → satır 51,546; round(Σ kesin) 154,639 olurdu, Σ satır 154,638.
+  const s3e = computeWarpPlanForward({ lines: [X, { ...X, yarnItemId: "x2" }, { ...X, yarnItemId: "x3" }], specWastePct: 3, fixedWasteM: 0, beamCount: 1, beamLengthM: 1000 });
+  const sumLines = (k: "netKg" | "grossKg") => Number(s3e.lines.reduce((s, l) => s.plus(l[k]), new Prisma.Decimal(0)).toFixed(3));
+  check("§3e toplam = yuvarlanmış satırların toplamı (kart paneli = sipariş planı): fireli 154,638",
+    s3e.totals.grossKg === 154.638 && s3e.totals.grossKg === sumLines("grossKg") && s3e.totals.netKg === sumLines("netKg"), J(s3e.totals));
 
   // ── §4 S4: ters yön — stok x 120, y 60, z 150 kg ──
   const s4 = computeWarpPlanReverse({ lines: [X, Y, Z], specWastePct: null, fixedWasteM: 0, stock: stockOf({ x: [120, null], y: [60, null], z: [150, null] }), beamLengthM: 700 });
