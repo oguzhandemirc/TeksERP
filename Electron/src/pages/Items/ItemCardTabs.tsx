@@ -1,4 +1,4 @@
-// Ürün kartı sekmeleri: "Genel" (form) + kumaş yapısı (Çözgü · Atkı · Örgü — B19 tek pencere) + "Müşteri Kumaş Adları" +
+// Ürün kartı sekmeleri: "Genel" (form) + kumaş yapısı (Çözgü · Atkı · Desen — B19 tek pencere) + "Müşteri Kumaş Adları" +
 // "Müşteri Renk Adları". Yapı sekmeleri KUMAŞ + modül/izin varken (`extraTabs`), müşteri adı sekmeleri düzenlenen KUMAŞ kartında
 // `customer-alias:read` varken çizilir; hiçbiri yoksa form bugünkü gibi tek başına durur.
 // Alt çubuk (`footer`) sekmelerin DIŞINDA çizilir: her sekmede görünür (B18/4); "Genel" paneli `forceMount` — başka

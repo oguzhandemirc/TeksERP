@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { InfoPopover } from "@/components/ui/info-popover";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
-import { countWeftSpecUsers } from "@/pages/WeaveDesigns/service";
+import { weftSpecApi } from "@/pages/WeaveDesigns/service";
 import { WeftContentFields } from "@/pages/WeaveDesigns/tabs/WeftContentFields";
 import { weftContentFromSpec } from "@/pages/WeaveDesigns/tabs/WeftSpecEditor";
 import { weftSpecPickerService, type WeftSpecRef } from "../construction-service";
@@ -15,14 +15,12 @@ import type { ItemWeftDraft } from "./useItemWeftDraft";
 const NEW_INFO = "Atkıyı burada girin; Kaydet'e basınca arkada bu kumaşa ait atkı kartı kendiliğinden açılır (kart kodu kumaş kodudur). "
   + "Aynı atkı başka kumaşta da kullanılacaksa sonra o kumaşta bu kartı seçebilirsiniz.";
 
-export function ItemWeftSection({ draft, canWrite, itemId }: { draft: ItemWeftDraft; canWrite: boolean; itemId: string | null }) {
+export function ItemWeftSection({ draft, canWrite }: { draft: ItemWeftDraft; canWrite: boolean }) {
   const editableCard = draft.mode === "card" && !!draft.cardId && draft.cardId === draft.savedCardId && canWrite;
-  const users = useQuery({
-    queryKey: ["weft-specs", "users", draft.cardId],
-    queryFn: () => countWeftSpecUsers(draft.cardId!),
-    enabled: draft.mode === "card" && !!draft.cardId,
-  });
-  const others = Math.max(0, (users.data ?? 0) - (itemId && draft.cardId === draft.savedCardId ? 1 : 0));
+  const others = draft.others;
+  // Hiç atkı kartı yokken "var olan kartı seç" boş bir liste açardı — o zaman gösterilmez.
+  const anyCard = useQuery({ queryKey: ["weft-specs", "list", "", false], queryFn: () => weftSpecApi.list() });
+  const showPicker = draft.mode === "card" || (anyCard.data?.length ?? 0) > 0;
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -36,7 +34,7 @@ export function ItemWeftSection({ draft, canWrite, itemId }: { draft: ItemWeftDr
               <PencilLine className="mr-1.5 h-4 w-4" />Atkıyı burada gir
             </Button>
           )}
-          <div className="w-64">
+          {showPicker && <div className="w-64">
             <EntityPickerModal<WeftSpecRef>
               value={draft.mode === "card" ? draft.cardId : null}
               onChange={(id) => draft.pickCard(id)}
@@ -48,7 +46,7 @@ export function ItemWeftSection({ draft, canWrite, itemId }: { draft: ItemWeftDr
               title="Var olan atkı kartını seç"
               placeholder="Var olan atkı kartını seç"
             />
-          </div>
+          </div>}
           {draft.mode !== "none" && (
             <Button type="button" size="sm" variant="ghost" onClick={draft.clear} aria-label="Atkıyı kaldır">
               <X className="mr-1 h-4 w-4" />Kaldır
@@ -59,7 +57,7 @@ export function ItemWeftSection({ draft, canWrite, itemId }: { draft: ItemWeftDr
 
       {draft.mode === "none" && (
         <p className="rounded-md border border-dashed px-4 py-6 text-center text-sm text-muted-foreground" data-testid="weft-empty">
-          Bu kumaşa atkı girilmedi. "Atkıyı burada gir" ile iplikleri ve sırayı yazın ya da var olan bir atkı kartını seçin.
+          Bu kumaşa atkı girilmedi. "Atkıyı burada gir" ile iplikleri ve sırayı yazın{showPicker ? " ya da var olan bir atkı kartını seçin" : ""}.
         </p>
       )}
 

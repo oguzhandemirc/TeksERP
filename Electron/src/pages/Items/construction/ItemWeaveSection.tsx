@@ -1,4 +1,4 @@
-// Ürün penceresi > Örgü (B19): desen kartını kısa listeden seç ya da aynı pencereden yeni desen kartı aç (kod · ad · örgü türü);
+// Ürün penceresi > Desen (B19): desen kartını kısa listeden seç ya da aynı pencereden yeni desen kartı aç (kod · ad · örgü türü);
 // armür planı ve tezgâh dosyası Desen Kartları ekranında doldurulur.
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -22,7 +22,7 @@ export function ItemWeaveSection({ form, canWrite }: { form: UseFormReturn<ItemF
   return (
     <div className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-        <FormField label="Desen (örgü) kartı" error={form.formState.errors.weaveDesignId} info="Örgü türü, armür planı ve tezgâh desen dosyası">
+        <FormField label="Desen kartı" error={form.formState.errors.weaveDesignId} info="Örgü türü, armür planı ve tezgâh desen dosyası">
           <Controller
             control={form.control}
             name="weaveDesignId"

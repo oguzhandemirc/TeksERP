@@ -3,7 +3,8 @@
 // salt-okunur görünür, "kopyasını al" içeriği yeni atkıya taşır. Durum sekme değişince kaybolmasın diye pencerede tutulur.
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { weftSpecApi } from "@/pages/WeaveDesigns/service";
+import { countWeftSpecUsers, weftSpecApi } from "@/pages/WeaveDesigns/service";
+import { suggestForkCode, suggestForkName } from "@/pages/WeaveDesigns/tabs/weft-fork-defaults";
 import { EMPTY_WEFT, weftContentBlank, weftContentReady, type WeftContent } from "@/pages/WeaveDesigns/tabs/WeftContentFields";
 import { weftContentFromSpec } from "@/pages/WeaveDesigns/tabs/WeftSpecEditor";
 import type { WeftSpecDetail } from "@/pages/WeaveDesigns/types";
@@ -20,6 +21,8 @@ export interface ItemWeftDraft {
   touched: boolean;
   card: WeftSpecDetail | null;
   cardLoading: boolean;
+  /** Seçili kartı kullanan ÖTEKİ kumaşlar (bu kumaş sayılmaz) — paylaşım bandı ve kayıttaki soru. */
+  others: number;
   setContent: (c: WeftContent) => void;
   startNew: (prefill?: WeftContent) => void;
   pickCard: (id: string | null) => void;
@@ -43,6 +46,12 @@ export function useItemWeftDraft(open: boolean, savedCardId: string | null): Ite
     queryFn: () => weftSpecApi.get(cardId!),
     enabled: open && mode === "card" && !!cardId,
   });
+  const usersQ = useQuery({
+    queryKey: ["weft-specs", "users", cardId],
+    queryFn: () => countWeftSpecUsers(cardId!),
+    enabled: open && mode === "card" && !!cardId,
+  });
+  const others = mode === "card" && cardId ? Math.max(0, (usersQ.data ?? 0) - (cardId === savedCardId ? 1 : 0)) : 0;
   // Kart içeriği gelince (kullanıcı henüz yazmadıysa) forma.
   useEffect(() => {
     if (mode === "card" && cardQ.data && cardQ.data.id === cardId && !touched) setContentState(weftContentFromSpec(cardQ.data));
@@ -55,6 +64,7 @@ export function useItemWeftDraft(open: boolean, savedCardId: string | null): Ite
     touched,
     card: mode === "card" && cardQ.data?.id === cardId ? cardQ.data : null,
     cardLoading: cardQ.isLoading,
+    others,
     setContent: (c) => {
       setContentState(c);
       setTouched(true);
@@ -87,7 +97,21 @@ export type WeftSavePlan =
   | { kind: "create-with-item"; body: Record<string, unknown> }
   | { kind: "attach"; body: Record<string, unknown> }
   | { kind: "patch-card"; weftSpecId: string; body: Record<string, unknown> }
+  | { kind: "fork-patch"; sourceId: string; code: string; name: string; body: Record<string, unknown> }
   | { kind: "invalid"; message: string };
+
+/** Paylaşılan kart sorusu gerekir mi: kayıtlı kart değiştirildi VE başka kumaşlar da kullanıyor. */
+export function needsShareQuestion(plan: WeftSavePlan, others: number): plan is Extract<WeftSavePlan, { kind: "patch-card" }> {
+  return plan.kind === "patch-card" && others > 0;
+}
+
+/**
+ * "Yalnız bu kumaş için kopya" seçimi: düzenleme kopyaya gider (`fork` tek ayırma yazıcısı, dokuma.md) — önerilen kod/ad
+ * Desen > Atkı'daki "Bu desene özel kopya" ile aynı; kod doğal idempotency anahtarı (tekrar Kaydet aynı kopyayı bulur).
+ */
+export function toForkPlan(plan: Extract<WeftSavePlan, { kind: "patch-card" }>, card: { code: string; name: string }, itemCode: string): WeftSavePlan {
+  return { kind: "fork-patch", sourceId: plan.weftSpecId, code: suggestForkCode(card.code, itemCode), name: suggestForkName(card.name, itemCode), body: plan.body };
+}
 
 export function planWeftSave(
   d: Pick<ItemWeftDraft, "mode" | "cardId" | "savedCardId" | "content" | "touched">,

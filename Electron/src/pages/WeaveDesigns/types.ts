@@ -112,5 +112,8 @@ export interface WeftSpecDetail {
   shareBasis?: "MASS" | "PICKS" | null;
 }
 
+/** Atkı Kartları listesi satırı — `fabricCount` = kartı kullanan kumaş sayısı (sunucu sayar). */
+export interface WeftSpecListRow extends WeftSpecDetail { isActive: boolean; fabricCount: number }
+
 /** `POST /api/weft-specs/:id/fork` yanıtı — `replayed` = aynı kodlu kopya bu kumaşa zaten bağlıydı. */
 export interface WeftSpecForkResult { weftSpec: WeftSpecDetail; itemId: string; previousWeftSpecId: string; replayed: boolean }

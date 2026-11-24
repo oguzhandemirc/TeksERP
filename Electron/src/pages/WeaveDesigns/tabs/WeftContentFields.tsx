@@ -65,7 +65,7 @@ export function WeftContentFields({ value, onChange, canWrite, savedSeq, idPrefi
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="space-y-1.5">
           <Label htmlFor={`${idPrefix}-seq`}>Atkı sırası kodu</Label>
-          <Input id={`${idPrefix}-seq`} value={seq} maxLength={120} disabled={!canWrite} onChange={(e) => set({ seq: e.target.value })} placeholder="A4 B1 A4 C1" />
+          <Input id={`${idPrefix}-seq`} value={seq} maxLength={120} disabled={!canWrite} onChange={(e) => set({ seq: e.target.value })} placeholder="ör. A4 B1 A4 C1" />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor={`${idPrefix}-ppc`}>Atkı sıklığı (atkı/cm)</Label>
@@ -73,11 +73,11 @@ export function WeftContentFields({ value, onChange, canWrite, savedSeq, idPrefi
         </div>
         <div className="space-y-1.5">
           <Label htmlFor={`${idPrefix}-prog`}>Atkı program no</Label>
-          <Input id={`${idPrefix}-prog`} value={program} maxLength={16} disabled={!canWrite} onChange={(e) => set({ program: e.target.value })} placeholder="6037" />
+          <Input id={`${idPrefix}-prog`} value={program} maxLength={16} disabled={!canWrite} onChange={(e) => set({ program: e.target.value })} placeholder="ör. 6037" />
         </div>
       </div>
       <WeftBoxSection seq={seq} saved={savedSeq} letterCount={rows.length} canWrite={canWrite} onChange={(c) => set({ seq: c })} />
-      {header}
+      {rows.length > 0 && (header ?? <WeftRowsHeader />)}
       <ul className="space-y-2">
         {rows.map((r, i) => (
           <li key={i} className={grid}>
@@ -95,8 +95,8 @@ export function WeftContentFields({ value, onChange, canWrite, savedSeq, idPrefi
               placeholder="İplik seç"
               disabled={!canWrite}
             />
-            <Input aria-label={`Atkı ${weftLetter(i)} rapordaki adet`} value={r.picks} inputMode="numeric" disabled={!canWrite || derived} title={derived ? "Sıra kodundan sunucu türetir" : undefined}
-              placeholder={derived ? "sıradan türetilir" : "adet"} onChange={(e) => setRow(i, { picks: e.target.value })} />
+            <Input aria-label={`Atkı ${weftLetter(i)} rapordaki atkı adedi`} value={r.picks} inputMode="numeric" disabled={!canWrite || derived} title={derived ? "Sıra kodundan sunucu türetir" : undefined}
+              placeholder={derived ? "sıradan hesaplanır" : "ör. 4"} onChange={(e) => setRow(i, { picks: e.target.value })} />
             {rowExtra?.(i)}
             {canWrite && (
               <Button type="button" variant="ghost" size="icon" aria-label={`Atkı ${weftLetter(i)} satırını sil`} onClick={() => set({ rows: rows.filter((_, j) => j !== i) })}>
@@ -124,9 +124,9 @@ function WeftBoxSection({ seq, saved, letterCount, canWrite, onChange }: {
   if (!canWrite && seq.trim() === "") return null;
   return (
     <section className="space-y-1.5" aria-label="Atkı sırası kutuları">
-      <h4 className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Atkı sırası — kutularla
-        <InfoPopover label="Kutularla atkı sırası" desc={BOX_INFO} />
+      <h4 className="flex items-center gap-1 text-sm font-medium">
+        Atkı sırası
+        <InfoPopover label="Atkı sırası kutuları" desc={BOX_INFO} />
       </h4>
       <SequenceBoxEditor value={seq} onChange={onChange} letterCount={letterCount} defaultStyle="letter-first" unit="atkı"
         label="Atkı sırası kutuları" disabled={!canWrite} />
@@ -134,6 +134,23 @@ function WeftBoxSection({ seq, saved, letterCount, canWrite, onChange }: {
   );
 }
 
-const BOX_INFO = "Her kutu bir atkıdır; rengi ve harfi o atkıda atılan ipliktir (A = 1. iplik satırı). Kutuya tıklamak ipliği sıradakine çevirir; "
+const PICKS_INFO = "Desenin bir tekrarında (raporunda) bu iplikle kaç atkı atıldığı. Ör. sıra A4 B1 ise A ipliği 4, B ipliği 1. "
+  + "Atkı sırası kodu girilmişse bu sayı sıradan kendiliğinden hesaplanır. İpliklerin kumaştaki payı bu sayılardan bulunur.";
+
+/** İplik satırlarının sütun başlıkları — "adet" kutusunun ne olduğunu söyler (ⓘ). `extra` verilirse (pay %) bir sütun daha. */
+export function WeftRowsHeader({ extra }: { extra?: string }) {
+  const grid = extra ? "sm:grid-cols-[2rem_1fr_8rem_4.5rem_2.5rem]" : "sm:grid-cols-[2rem_1fr_8rem_2.5rem]";
+  return (
+    <div className={`hidden gap-2 text-xs text-muted-foreground sm:grid ${grid}`}>
+      <span />
+      <span>Atkı ipliği</span>
+      <span className="flex items-center gap-1">Rapordaki atkı adedi<InfoPopover label="Rapordaki atkı adedi" desc={PICKS_INFO} /></span>
+      {extra && <span className="text-right">{extra}</span>}
+      <span />
+    </div>
+  );
+}
+
+const BOX_INFO ="Her kutu bir atkıdır; rengi ve harfi o atkıda atılan ipliktir (A = 1. iplik satırı). Kutuya tıklamak ipliği sıradakine çevirir; "
   + "seçili kutu harf düğmeleriyle ya da klavyeden harf tuşuyla değişir, Delete siler, + sonrasına ekler. Kutular yukarıdaki sıra kodunu "
   + "yazar, kod değişince kutular da değişir. Kaydedince atkı seçici sunucudan yeniden çizilir.";

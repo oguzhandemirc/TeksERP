@@ -33,6 +33,7 @@ import { BeamBodiesPage } from "@/pages/BeamBodies/BeamBodiesPage";
 import { BeamBodyPage } from "@/pages/BeamBodies/BeamBodyPage";
 import { WeaveDesignsPage } from "@/pages/WeaveDesigns/WeaveDesignsPage";
 import { WeaveDesignDetailPage } from "@/pages/WeaveDesigns/WeaveDesignDetailPage";
+import { WeftSpecsPage } from "@/pages/WeftSpecs/WeftSpecsPage";
 import { AccessHubPage } from "@/pages/Access/AccessHubPage";
 import { AccessUsersPage } from "@/pages/Access/Users/AccessUsersPage";
 import { UserFootprintPage } from "@/pages/Access/Users/footprint/UserFootprintPage";
@@ -399,6 +400,15 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="warpspec:read">
         <WeaveDesignDetailPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // ATKI KARTLARI (B19) — karo izniyle birebir; modül kapısı ROUTE_MODULE (dokuma).
+    path: "definitions/weft-specs",
+    element: (
+      <ProtectedRoute requirePermission="warpspec:read">
+        <WeftSpecsPage />
       </ProtectedRoute>
     ),
   },

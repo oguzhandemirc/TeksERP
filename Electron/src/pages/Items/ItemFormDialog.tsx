@@ -2,28 +2,26 @@ import { useEffect, useId, useMemo, useState } from "react";
 import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AlertTriangle } from "lucide-react";
-import { toast } from "sonner";
 import { Dialog, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { TabbedDialogContent, TabbedDialogFooter, TabbedDialogHeader } from "@/components/ui/tabbed-dialog";
 import { Button } from "@/components/ui/button";
 import { ItemType, unitForItemType, type ProductItemType } from "@/types/enums";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
-import { useAttemptToken } from "@/lib/attemptToken";
 import { decimalToFormText } from "@/lib/decimal-form-text";
 import { RecordInfoButton } from "@/components/RecordInfoButton";
 import { InfoPopover } from "@/components/ui/info-popover";
 import { useDevereEnabled, useKaliteGuvenceEnabled, useMaliyetEnabled } from "@/hooks/usePricingEnabled";
-import { buildWeftBody } from "@/pages/WeaveDesigns/tabs/WeftContentFields";
 import type { Item, ItemCreatePayload } from "./types";
 import { itemFormDefaults, makeItemFormSchema, type ItemFormValues } from "./schema";
-import { buildItemPayload, fabricDetailPayload, fabricDetailToFormText, itemCarriesAllowedLists, yarnUnitPayload, yarnWastePayload } from "./itemPayload.helper";
+import { fabricDetailToFormText, itemCarriesAllowedLists } from "./itemPayload.helper";
 import { ItemCardTabs, INSTANT_SAVE_TABS, type ItemExtraTab } from "./ItemCardTabs";
-import { constructionPayload, useConstructionPickersVisible } from "./ItemConstructionPickers";
+import { useConstructionPickersVisible } from "./ItemConstructionPickers";
 import { ItemCostLink } from "./ItemCostLink";
 import { ItemGeneralFields } from "./ItemGeneralFields";
 import { AllowedListDialogs } from "./ItemFormParts";
-import { useItemWeftDraft, planWeftSave } from "./construction/useItemWeftDraft";
-import { applyWeftPlan } from "./construction/item-save";
+import { useItemWeftDraft } from "./construction/useItemWeftDraft";
+import { useItemFormSave } from "./construction/useItemFormSave";
+import { CopyFromFabricButton } from "./construction/CopyFromFabricButton";
 import { ItemWarpSection } from "./construction/ItemWarpSection";
 import { ItemWeftSection } from "./construction/ItemWeftSection";
 import { ItemWeaveSection } from "./construction/ItemWeaveSection";
@@ -59,7 +57,7 @@ function toFormValues(initial: Item): ItemFormValues {
   };
 }
 
-/** Ürün penceresi: Genel · Çözgü · Atkı · Örgü (B19 tek pencere; veri yapısı aynı, birleşme yalnız ekranda). */
+/** Ürün penceresi: Genel · Çözgü · Atkı · Desen (B19 tek pencere; veri yapısı aynı, birleşme yalnız ekranda). */
 export function ItemFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting }: Props) {
   const isEdit = Boolean(initial);
   const formId = useId();
@@ -68,8 +66,6 @@ export function ItemFormDialog({ open, onOpenChange, initial, onSubmit, isSubmit
   /** Stok kodunu elle yazma modu — varsayılan KAPALI, kutu hiç çizilmez. */
   const [manualCode, setManualCode] = useState(false);
   const [tab, setTab] = useState("info");
-  const [saving, setSaving] = useState(false);
-  const attempt = useAttemptToken();
   const defaults = useMemo(() => (initial ? toFormValues(initial) : itemFormDefaults), [initial]);
   const schema = useMemo(() => makeItemFormSchema(isEdit), [isEdit]);
   const form = useForm<ItemFormValues>({ resolver: zodResolver(schema) as Resolver<ItemFormValues>, defaultValues: defaults });
@@ -79,7 +75,6 @@ export function ItemFormDialog({ open, onOpenChange, initial, onSubmit, isSubmit
       form.reset(defaults);
       setManualCode(false);
       setTab("info");
-      attempt.renew();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initial?.id]);
@@ -109,38 +104,17 @@ export function ItemFormDialog({ open, onOpenChange, initial, onSubmit, isSubmit
   }, [carriesLists, form]);
   const staleLists = isEdit && !carriesLists && ((initial?.allowedColors?.length ?? 0) > 0 || (initial?.allowedProperties?.length ?? 0) > 0);
 
-  const handleSubmit = form.handleSubmit(async (v) => {
-    const plan = planWeftSave(weft, isEdit, (c) => buildWeftBody(c.seq, c.picksPerCm, c.program, c.rows));
-    if (plan.kind === "invalid") {
-      toast.error(plan.message);
-      setTab("weft");
-      return;
-    }
-    // Atkı bağı plandan; desen kartı form alanından (atkı anahtarını `applyWeftPlan` koyar).
-    const base = {
-      ...buildItemPayload(v, isEdit, kaliteGuvenceEnabled),
-      ...constructionPayload({ weftSpecId: "", weaveDesignId: v.weaveDesignId }, { weftSpecId: null, weaveDesignId: initial?.weaveDesignId }, constructionVisible),
-      ...fabricDetailPayload(v, initial),
-      ...yarnWastePayload(v, initial, yarnWasteVisible),
-      ...yarnUnitPayload(v, initial),
-    };
-    setSaving(true);
-    try {
-      const ctx = { visible: constructionVisible, itemId: initial?.id ?? null, savedWeftSpecId: initial?.weftSpecId ?? null, clientToken: isEdit ? undefined : attempt.token() };
-      await onSubmit(await applyWeftPlan(plan, base, ctx));
-      attempt.onSuccess();
-    } catch (e) {
-      attempt.onFailure(e);
-    } finally {
-      setSaving(false);
-    }
+  const { handleSubmit, saving, shareQuestion } = useItemFormSave({
+    open, form, initial, weft, onSubmit,
+    visible: { construction: constructionVisible, yarnWaste: yarnWasteVisible, kaliteGuvence: kaliteGuvenceEnabled },
+    onInvalidWeft: () => setTab("weft"),
   });
 
   const extraTabs: ItemExtraTab[] = [];
   if (warpVisible) extraTabs.push({ value: "warp", label: "Çözgü", content: <ItemWarpSection form={form} canWrite={canWriteSpecs} itemId={initial?.id ?? null} /> });
   if (constructionVisible) {
-    extraTabs.push({ value: "weft", label: "Atkı", content: <ItemWeftSection draft={weft} canWrite={canWriteSpecs} itemId={initial?.id ?? null} /> });
-    extraTabs.push({ value: "weave", label: "Örgü", content: <ItemWeaveSection form={form} canWrite={canWriteSpecs} /> });
+    extraTabs.push({ value: "weft", label: "Atkı", content: <ItemWeftSection draft={weft} canWrite={canWriteSpecs} /> });
+    extraTabs.push({ value: "weave", label: "Desen", content: <ItemWeaveSection form={form} canWrite={canWriteSpecs} /> });
   }
   const busy = isSubmitting || saving;
 
@@ -161,9 +135,10 @@ export function ItemFormDialog({ open, onOpenChange, initial, onSubmit, isSubmit
               </span>
             )}
             {isEdit && initial && <span className="ml-auto"><ItemCostLink itemId={initial.id} itemType={initial.itemType} /></span>}
+            {!isEdit && constructionVisible && <span className="ml-auto"><CopyFromFabricButton form={form} weft={weft} warpVisible={warpVisible} /></span>}
           </div>
           <DialogDescription>
-            {extraTabs.length > 0 ? "Kumaşın genel bilgileri, çözgüsü, atkısı ve örgüsü tek pencerede. Birim, seçilen tipe göre otomatik atanır." : "Ürün tanımı (kumaş · iplik · sarf). Birim, seçilen tipe göre otomatik atanır."}
+            {extraTabs.length > 0 ? "Kumaşın genel bilgileri, çözgüsü, atkısı ve deseni tek pencerede. Birim, seçilen tipe göre otomatik atanır." : "Ürün tanımı (kumaş · iplik · sarf). Birim, seçilen tipe göre otomatik atanır."}
           </DialogDescription>
         </TabbedDialogHeader>
 
@@ -220,6 +195,7 @@ export function ItemFormDialog({ open, onOpenChange, initial, onSubmit, isSubmit
         </ItemCardTabs>
 
         <AllowedListDialogs form={form} colorsOpen={colorsOpen} setColorsOpen={setColorsOpen} propsOpen={propsOpen} setPropsOpen={setPropsOpen} />
+        {shareQuestion}
       </TabbedDialogContent>
     </Dialog>
   );

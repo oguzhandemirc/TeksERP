@@ -159,18 +159,22 @@ export async function parseWeftSpecContent(body: Record<string, unknown>): Promi
   return { scalars, sequenceCode: applied.sequenceCode, yarns: applied.lines };
 }
 
-export async function listWeftSpecs(opts: { includeInactive?: boolean; search?: string }): Promise<WeftSpecRow[]> {
+/** Liste satırı: kart + onu kullanan kumaş sayısı (Atkı Kartları "kaç kumaşta" sütunu; sayım DB'de). */
+export type WeftSpecListRow = WeftSpecRow & { fabricCount: number };
+
+export async function listWeftSpecs(opts: { includeInactive?: boolean; search?: string }): Promise<WeftSpecListRow[]> {
   const s = opts.search?.trim();
-  return prisma.weftSpec.findMany({
+  const rows = await prisma.weftSpec.findMany({
     where: {
       AND: [
         opts.includeInactive ? {} : { isActive: true },
         s ? { OR: [{ code: { contains: s, mode: "insensitive" } }, { name: { contains: s, mode: "insensitive" } }] } : {},
       ],
     },
-    select: WEFT_SPEC_SELECT,
+    select: { ...WEFT_SPEC_SELECT, _count: { select: { fabricItems: true } } },
     orderBy: [{ code: "asc" }],
   });
+  return rows.map(({ _count, ...row }) => ({ ...row, fabricCount: _count.fabricItems }));
 }
 
 export async function getWeftSpec(id: string): Promise<WeftSpecRow> {

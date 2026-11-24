@@ -1,5 +1,5 @@
 // Ürün penceresi > Genel: ad · tip · birim · (iplikte denye/birim/fire) · (kumaşta en) · izinli renk/özellik · dokuma ayrıntıları ·
-// stok kodu. Çözgü/atkı/örgü kendi sekmelerinde (B19). Sıra bilinçli: ÖNCE ad; stok kodu EN ALTTA kapalı satır (2026-08-17).
+// stok kodu. Çözgü/atkı/desen kendi sekmelerinde (B19). Sıra bilinçli: ÖNCE ad; stok kodu EN ALTTA kapalı satır (2026-08-17).
 import { useMemo } from "react";
 import { Controller, type UseFormReturn } from "react-hook-form";
 import { useQuery } from "@tanstack/react-query";

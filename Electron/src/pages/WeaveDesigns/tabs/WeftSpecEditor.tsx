@@ -10,7 +10,7 @@ import { weftSpecApi } from "../service";
 import type { WeftSpecDetail } from "../types";
 import { decimalToFormText } from "@/lib/decimal-form-text";
 import { weftRowsMatchSaved, weftShareCell, weftShareNote, weftShareVisible } from "./weft-share";
-import { buildWeftBody, weftContentReady, weftLetter, WeftContentFields, type WeftContent } from "./WeftContentFields";
+import { buildWeftBody, weftContentReady, weftLetter, WeftContentFields, WeftRowsHeader, type WeftContent } from "./WeftContentFields";
 
 export { buildWeftBody, weftLetter } from "./WeftContentFields";
 
@@ -57,7 +57,7 @@ export function WeftSpecEditor({ spec, fabricId, canWrite, onSequenceChange }: E
         onChange={change}
         canWrite={canWrite}
         savedSeq={spec.sequenceCode ?? ""}
-        header={shares ? <WeftShareHeader /> : undefined}
+        header={shares ? <WeftRowsHeader extra="Pay %" /> : undefined}
         rowExtra={shares ? (i) => <WeftShareCell spec={spec} index={i} matches={sharesMatch} /> : undefined}
       />
       {shares && <p className="text-xs text-muted-foreground" data-testid="weft-share-note">{weftShareNote(spec)}</p>}
@@ -68,15 +68,7 @@ export function WeftSpecEditor({ spec, fabricId, canWrite, onSequenceChange }: E
   );
 }
 
-// Pay % başlığı ve hücresi — yalnız sunucu payı gönderdiyse çizilir (weftShareVisible).
-function WeftShareHeader() {
-  return (
-    <div className="hidden gap-2 text-xs text-muted-foreground sm:grid sm:grid-cols-[2rem_1fr_8rem_4.5rem_2.5rem]">
-      <span /><span>İplik</span><span>Rapordaki adet</span><span className="text-right">Pay %</span><span />
-    </div>
-  );
-}
-
+// Pay % hücresi — yalnız sunucu payı gönderdiyse çizilir (weftShareVisible).
 function WeftShareCell({ spec, index, matches }: { spec: WeftSpecDetail; index: number; matches: boolean }) {
   return (
     <span className="text-right text-sm tabular-nums text-muted-foreground" aria-label={`Atkı ${weftLetter(index)} pay`} title={matches ? "Atkıdaki payı" : "Kaydedince yeniden hesaplanır"}>

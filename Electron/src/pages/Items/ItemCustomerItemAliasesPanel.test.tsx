@@ -83,8 +83,8 @@ describe("Müşteri Kumaş Adları (B13)", () => {
 
   it("⭐ yapı sekmeleri Genel'den sonra, müşteri adlarından önce", () => {
     const item = { id: "x", name: "X", itemType: "FABRIC", lifecycleStatus: "ACTIVE", isActive: true, allowedColors: [] } as unknown as Item;
-    const extra = [{ value: "warp", label: "Çözgü", content: null }, { value: "weft", label: "Atkı", content: null }, { value: "weave", label: "Örgü", content: null }];
+    const extra = [{ value: "warp", label: "Çözgü", content: null }, { value: "weft", label: "Atkı", content: null }, { value: "weave", label: "Desen", content: null }];
     renderWithProviders(<ItemCardTabs item={item} extraTabs={extra}><div>form</div></ItemCardTabs>);
-    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Genel", "Çözgü", "Atkı", "Örgü", "Müşteri Kumaş Adları", "Müşteri Renk Adları"]);
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Genel", "Çözgü", "Atkı", "Desen", "Müşteri Kumaş Adları", "Müşteri Renk Adları"]);
   });
 });

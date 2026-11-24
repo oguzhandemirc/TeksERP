@@ -61,7 +61,7 @@ export async function createWeftSpecFromDraftTx(
   });
   const code = codes.find((c) => !taken.some((t) => t.code === c));
   const name = names.find((n) => !taken.some((t) => t.nameFold === foldNameForCompare(n)));
-  if (!code || !name) throw AppError.conflict("Bu kumaş için atkı kartı kodu üretilemedi — Desen Kartları'ndan elle açın.", { code: "WEFT_SPEC_DUPLICATE" });
+  if (!code || !name) throw AppError.conflict("Bu kumaş için atkı kartı kodu üretilemedi — Atkı Kartları ekranından elle açın.", { code: "WEFT_SPEC_DUPLICATE" });
   return tx.weftSpec.create({
     data: {
       ...(draft.scalars as Prisma.WeftSpecUncheckedCreateInput),

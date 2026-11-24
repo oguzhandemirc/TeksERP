@@ -455,11 +455,9 @@ export class ItemService extends BaseService {
                 name: input.name.trim(),
                 unit: (input.unit ?? "MT") as ItemUnit,
                 // Diriltme de yeni gövdeyi uygular (create ile aynı sözleşme).
-                ...(input.linearDensityDen !== undefined
-                  ? { linearDensityDen: input.linearDensityDen }
-                  : {}),
+                ...(input.linearDensityDen !== undefined ? { linearDensityDen: input.linearDensityDen } : {}),
                 ...(input.warpSpecId !== undefined ? { warpSpecId: input.warpSpecId } : {}),
-              ...widthCmData(input.widthCm),
+                ...widthCmData(input.widthCm),
                 ...fabricStructure,
                 ...draftLink,
                 allowedColors:
@@ -488,9 +486,7 @@ export class ItemService extends BaseService {
               ...itemBirthLifecycleData(input.isActive),
               // Denye YALNIZ gönderildiğinde yazılır: `undefined` kolonu olduğu
               // gibi bırakır, `null` bilinçli temizlemedir (metin → Decimal).
-              ...(input.linearDensityDen !== undefined
-                ? { linearDensityDen: input.linearDensityDen }
-                : {}),
+              ...(input.linearDensityDen !== undefined ? { linearDensityDen: input.linearDensityDen } : {}),
               ...(input.warpSpecId !== undefined ? { warpSpecId: input.warpSpecId } : {}),
               ...widthCmData(input.widthCm),
               ...fabricStructure,

@@ -113,7 +113,7 @@ describe("WeftSpecEditor — iplik payı % (SY-3 L3)", () => {
     renderWithProviders(<WeftTab fabric={FABRIC} canWrite />);
     const cell = await screen.findByLabelText("Atkı A pay");
     expect(cell).toHaveTextContent("%66,67");
-    fireEvent.change(screen.getByLabelText("Atkı A rapordaki adet"), { target: { value: "5" } });
+    fireEvent.change(screen.getByLabelText("Atkı A rapordaki atkı adedi"), { target: { value: "5" } });
     await waitFor(() => expect(screen.getByLabelText("Atkı A pay")).toHaveTextContent("—"));
     expect(screen.getByTestId("weft-share-note")).toHaveTextContent("kütlece");
   });
