@@ -12,6 +12,7 @@ import { computeDrawdown, drawdownRepeatPicks, groundFrameIndexes, threadingMatr
 import type { WeaveDirection } from "@/components/weave/weave-direction";
 import { WARP_COLOR, LIFT_COLOR, yarnColor, yarnLetter } from "@/components/weave/weave-palette";
 import type { LiftPlan, WeaveDesign } from "../types";
+import { isLeno } from "../weave-class";
 
 const REPEATS = [1, 2, 4] as const;
 const ROW_LABEL_W = 30;
@@ -24,7 +25,7 @@ const LENO_INFO = "Döner (leno) desende döner teli zemin telinin etrafında ç
   + "kumaş görünümü çizilmez. Döner çerçeveler yukarıdaki armür ızgarasında turuncu sütunlardır; döner tertibatı tezgâhta ayrıca ayarlanır.";
 
 interface Props {
-  design: Pick<WeaveDesign, "kind" | "drawingInNote" | "lenoSetup">;
+  design: Pick<WeaveDesign, "kind" | "shedMechanism" | "weaveStructure" | "drawingInNote" | "lenoSetup">;
   plan: LiftPlan;
   lenoFrames: readonly number[];
   selector: number[] | null;
@@ -34,13 +35,15 @@ interface Props {
 
 export function FabricPreviewSection({ design, plan, lenoFrames, selector, yarnNames, direction }: Props) {
   const [repeat, setRepeat] = useState<number>(2);
+  // Döner bir ÖRGÜdür (mekanizma değil): Armür · Döner kartta da kumaş görünümü çizilmez.
+  const lenoWeave = isLeno(design);
   const heading = (
     <h3 className="flex items-center gap-1 text-sm font-semibold">
       Kumaş görünümü
-      <InfoPopover label="Kumaş görünümü nasıl çizilir" desc={design.kind === "LENO" ? LENO_INFO : DRAWDOWN_INFO} />
+      <InfoPopover label="Kumaş görünümü nasıl çizilir" desc={lenoWeave ? LENO_INFO : DRAWDOWN_INFO} />
     </h3>
   );
-  if (design.kind === "LENO") {
+  if (lenoWeave) {
     return (
       <section className="min-w-0 max-w-xl flex-1 space-y-2" aria-label="Kumaş görünümü">
         {heading}

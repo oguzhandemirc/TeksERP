@@ -69,7 +69,7 @@ export function WeftContentFields({ value, onChange, canWrite, savedSeq, idPrefi
         </div>
         <div className="space-y-1.5">
           <Label htmlFor={`${idPrefix}-ppc`}>Atkı sıklığı (atkı/cm)</Label>
-          <Input id={`${idPrefix}-ppc`} value={picksPerCm} inputMode="decimal" disabled={!canWrite} onChange={(e) => set({ picksPerCm: e.target.value })} />
+          <Input id={`${idPrefix}-ppc`} value={picksPerCm} inputMode="decimal" disabled={!canWrite} onChange={(e) => set({ picksPerCm: e.target.value })} placeholder="ör. 22" />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor={`${idPrefix}-prog`}>Atkı program no</Label>
@@ -144,7 +144,8 @@ export function WeftRowsHeader({ extra }: { extra?: string }) {
     <div className={`hidden gap-2 text-xs text-muted-foreground sm:grid ${grid}`}>
       <span />
       <span>Atkı ipliği</span>
-      <span className="flex items-center gap-1">Rapordaki atkı adedi<InfoPopover label="Rapordaki atkı adedi" desc={PICKS_INFO} /></span>
+      {/* 8rem sütunda uzun başlık 1440'ta iki satıra kırılıyordu: kısa etiket, tam anlam ⓘ'de. */}
+      <span className="flex items-center gap-1 whitespace-nowrap">Atış adedi<InfoPopover label="Rapordaki atkı adedi" desc={PICKS_INFO} /></span>
       {extra && <span className="text-right">{extra}</span>}
       <span />
     </div>

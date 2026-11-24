@@ -1,5 +1,5 @@
-// Ürün penceresi > Desen (B19): desen kartını kısa listeden seç ya da aynı pencereden yeni desen kartı aç (kod · ad · örgü türü);
-// armür planı ve tezgâh dosyası Desen Kartları ekranında doldurulur.
+// Ürün penceresi > Desen (B19): desen kartını kısa listeden seç ya da aynı pencereden yeni desen kartı aç (kod · ad ·
+// mekanizma · örgü); armür ızgarası / jakar bilgileri Desen Kartları ekranında doldurulur.
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Controller, type UseFormReturn } from "react-hook-form";
@@ -9,20 +9,35 @@ import { FormField } from "@/components/forms/FormField";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { WeaveDesignCreateDialog } from "@/pages/WeaveDesigns/WeaveDesignCreateDialog";
 import { weaveDesignApi } from "@/pages/WeaveDesigns/service";
-import { WEAVE_KIND_LABEL, type WeaveDesignKind } from "@/pages/WeaveDesigns/types";
+import type { WeaveDesign } from "@/pages/WeaveDesigns/types";
+import { SHED_MECHANISM_LABEL, WEAVE_STRUCTURE_LABEL, resolveWeaveClass, weaveClassLabel } from "@/pages/WeaveDesigns/weave-class";
 import { weaveDesignPickerService, type WeaveDesignRef } from "../construction-service";
 import type { ItemFormValues } from "../schema";
 
-const kindLabel = (k: string) => WEAVE_KIND_LABEL[k as WeaveDesignKind] ?? k;
+/** Mekanizmaya ait kısa ayrıntı: Armür → çerçeve + .DOP, Jakar → kanca + rapor + dosya, Eksantrik → yok. */
+export function mechanismDetail(d: WeaveDesign): string[] {
+  const m = resolveWeaveClass(d).shedMechanism;
+  if (m === "DOBBY") return [d.frameCount ? `${d.frameCount} çerçeve` : null, d.loomFileName ? `tezgâh dosyası ${d.loomFileName}` : null].filter((x): x is string => !!x);
+  if (m === "JACQUARD") {
+    return [
+      d.hookCount ? `${d.hookCount} kanca` : null,
+      d.repeatWidthCm && d.repeatCm ? `rapor ${d.repeatWidthCm} × ${d.repeatCm} cm` : null,
+      d.loomFileName ? `desen dosyası ${d.loomFileName}` : null,
+    ].filter((x): x is string => !!x);
+  }
+  return [];
+}
 
 export function ItemWeaveSection({ form, canWrite }: { form: UseFormReturn<ItemFormValues>; canWrite: boolean }) {
   const [creating, setCreating] = useState(false);
   const designId = form.watch("weaveDesignId");
   const design = useQuery({ queryKey: ["weave-designs", "detail", designId], queryFn: () => weaveDesignApi.get(designId), enabled: !!designId });
+  const d = design.data;
+  const cls = d ? resolveWeaveClass(d) : null;
   return (
     <div className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-        <FormField label="Desen kartı" error={form.formState.errors.weaveDesignId} info="Örgü türü, armür planı ve tezgâh desen dosyası">
+        <FormField label="Desen kartı" error={form.formState.errors.weaveDesignId} info="Mekanizma (Eksantrik · Armür · Jakar), örgü, armür ızgarası ya da jakar desen dosyası">
           <Controller
             control={form.control}
             name="weaveDesignId"
@@ -32,8 +47,8 @@ export function ItemWeaveSection({ form, canWrite }: { form: UseFormReturn<ItemF
                 onChange={(id) => field.onChange(id ?? "")}
                 service={weaveDesignPickerService}
                 queryKey="weave-designs-item"
-                getLabel={(d) => d.name}
-                getSubLabel={(d) => `${d.code} · ${kindLabel(d.kind)}`}
+                getLabel={(r) => r.name}
+                getSubLabel={(r) => `${r.code} · ${weaveClassLabel(r)}`}
                 icon={Grid3x3}
                 nullable
                 noneLabel="Desen kartı yok"
@@ -51,14 +66,14 @@ export function ItemWeaveSection({ form, canWrite }: { form: UseFormReturn<ItemF
           </Button>
         )}
       </div>
-      {designId && design.data && (
+      {designId && d && cls && (
         <div className="rounded-md border bg-muted/20 p-4 text-sm" data-testid="weave-summary">
-          <p className="font-medium">{design.data.name} <span className="font-mono text-xs text-muted-foreground">{design.data.code}</span></p>
-          <p className="text-muted-foreground">
-            {kindLabel(design.data.kind)}
-            {design.data.frameCount ? ` · ${design.data.frameCount} çerçeve` : ""}
-            {design.data.loomFileName ? ` · tezgâh dosyası ${design.data.loomFileName}` : ""}
-          </p>
+          <p className="font-medium">{d.name} <span className="font-mono text-xs text-muted-foreground">{d.code}</span></p>
+          <dl className="mt-2 grid grid-cols-[7rem_1fr] gap-x-3 gap-y-1">
+            <dt className="text-muted-foreground">Mekanizma</dt><dd>{SHED_MECHANISM_LABEL[cls.shedMechanism]}</dd>
+            <dt className="text-muted-foreground">Örgü</dt><dd>{cls.weaveStructure ? WEAVE_STRUCTURE_LABEL[cls.weaveStructure] : "Belirtilmedi"}</dd>
+            {mechanismDetail(d).length > 0 && (<><dt className="text-muted-foreground">Ayrıntı</dt><dd>{mechanismDetail(d).join(" · ")}</dd></>)}
+          </dl>
         </div>
       )}
       {creating && (

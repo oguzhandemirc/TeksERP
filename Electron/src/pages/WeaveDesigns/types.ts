@@ -1,6 +1,7 @@
 // Desen kartı (WeaveDesign) + etkin yapı tel tipleri — backend `weave-design.service` /
 // `effective-construction.helper` yanıtlarının aynası (Seyitoğlu SY-A3). Decimal alanlar metin gelir.
 import type { WarpEndsSequenceView } from "@/components/weave/warp-ends";
+import type { ShedMechanism, WeaveStructure } from "./weave-class";
 
 export const WEAVE_DESIGN_KINDS = ["PLAIN", "DOBBY", "JACQUARD", "LENO"] as const;
 export type WeaveDesignKind = (typeof WEAVE_DESIGN_KINDS)[number];
@@ -32,6 +33,13 @@ export interface WeaveDesign {
   code: string;
   name: string;
   kind: WeaveDesignKind;
+  /** Sınıflama (2026-11-25) — eski backend göndermez; okurken `resolveWeaveClass` kullan. */
+  shedMechanism?: ShedMechanism | null;
+  weaveStructure?: WeaveStructure | null;
+  /** Yalnız Jakar: kanca sayısı ve rapor eni (cm; boy = `repeatCm`). */
+  hookCount?: number | null;
+  repeatWidthCm?: string | number | null;
+  image?: WeaveDesignImageMeta | null;
   familyLabel: string | null;
   frameCount: number | null;
   repeatCm: string | number | null;
@@ -46,7 +54,10 @@ export interface WeaveDesign {
   isActive: boolean;
 }
 
-export type WeaveDesignInput = Partial<Omit<WeaveDesign, "id" | "isActive">>;
+export type WeaveDesignInput = Partial<Omit<WeaveDesign, "id" | "isActive" | "image">>;
+
+/** Desen görseli künyesi (bayt ayrı uçtan, `GET /:id/image`). */
+export interface WeaveDesignImageMeta { id: string; fileName: string; mimeType: string; sizeBytes: number; updatedAt: string }
 
 export interface YarnRef { id: string; code: string; name: string; linearDensityDen: string | null }
 export interface WarpRef {

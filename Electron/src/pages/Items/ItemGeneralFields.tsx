@@ -18,6 +18,7 @@ import { ItemYarnWasteField } from "./ItemYarnWasteField";
 import { ItemYarnFields } from "./ItemYarnFields";
 import { ItemWeavingDetails } from "./ItemWeavingDetails";
 import { PickerTrigger, StockCodeRow } from "./ItemFormParts";
+import { FabricTechniqueField } from "./FabricTechniqueField";
 
 interface Props {
   form: UseFormReturn<ItemFormValues>;
@@ -86,6 +87,7 @@ export function ItemGeneralFields(p: Props) {
         <FormField label="Birim" info="Seçilen tipe göre otomatik atanır.">
           <Input value={p.derivedUnit} readOnly tabIndex={-1} className="bg-muted font-mono text-center cursor-not-allowed" />
         </FormField>
+        {itemType === ItemType.FABRIC && <FabricTechniqueField />}
         {/* Denye + satın alma birimi yalnız iplikte (SY-a); zorunlu DEĞİL — çözgü/atkı kartı açarken sunucu anlaşılır 400 verir. */}
         {itemType === ItemType.YARN && <ItemYarnFields form={form} />}
         {p.yarnWasteVisible && <ItemYarnWasteField form={form} />}

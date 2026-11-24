@@ -20,7 +20,7 @@ import { LiftPlanTab } from "./tabs/LiftPlanTab";
 import { StructureTab } from "./tabs/StructureTab";
 import { VariantsTab } from "./tabs/VariantsTab";
 import { WeftTab } from "./tabs/WeftTab";
-import { WEAVE_KIND_LABEL } from "./types";
+import { SHED_MECHANISM_LABEL, resolveWeaveClass, weaveClassLabel } from "./weave-class";
 
 const DETAIL_TABS = new Set(["structure", "weft", "lift", "variants"]);
 
@@ -51,7 +51,7 @@ export function WeaveDesignDetailPage() {
     <PageShell>
       <PageHeader
         title={d ? `${d.code} — Desen kartı` : "Desen kartı"}
-        statusLine={d ? `${d.name} · ${WEAVE_KIND_LABEL[d.kind] ?? d.kind}` : undefined}
+        statusLine={d ? `${d.name} · ${weaveClassLabel(d)}` : undefined}
         actions={d && (
           <div className="flex items-center gap-2">
             {d.isActive ? <Badge variant="default">Aktif</Badge> : <Badge variant="muted">Pasif</Badge>}
@@ -86,7 +86,15 @@ export function WeaveDesignDetailPage() {
               <TabsContent value="weft" forceMount className="mt-4 data-[state=inactive]:hidden"><WeftTab fabric={fabric} canWrite={canWrite} /></TabsContent>
               {/* Armür editörü sekme değişince sökülmez: kaydedilmemiş taslak ve geri al yığını korunur. */}
               <TabsContent value="lift" forceMount className="mt-4 data-[state=inactive]:hidden">
-                <LiftPlanTab key={d.id + JSON.stringify(d.liftPlan ?? null) + JSON.stringify(d.lenoFrames ?? [])} design={d} fabric={fabric} canWrite={canWrite} />
+                {/* Izgara yalnız Armür'de anlamlı; sunucu Armür dışı ızgara yazımını reddeder. */}
+                {resolveWeaveClass(d).shedMechanism === "DOBBY" ? (
+                  <LiftPlanTab key={d.id + JSON.stringify(d.liftPlan ?? null) + JSON.stringify(d.lenoFrames ?? [])} design={d} fabric={fabric} canWrite={canWrite} />
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Bu desenin mekanizması {SHED_MECHANISM_LABEL[resolveWeaveClass(d).shedMechanism]}; armür ızgarası yalnız Armür mekanizmasında çizilir.
+                    Mekanizmayı Yapı sekmesinden değiştirebilirsiniz.
+                  </p>
+                )}
               </TabsContent>
               <TabsContent value="variants" className="mt-4"><VariantsTab fabric={fabric} /></TabsContent>
               {showCost && <TabsContent value="cost" className="mt-4"><CostTab fabrics={fabricList} /></TabsContent>}

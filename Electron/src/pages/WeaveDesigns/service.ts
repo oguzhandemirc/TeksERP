@@ -12,6 +12,7 @@ import type {
   EffectiveConstruction,
   WarpBeamMode,
   WeaveDesign,
+  WeaveDesignImageMeta,
   WeaveDesignInput,
   WeftSpecDetail,
   WeftSpecForkResult,
@@ -34,6 +35,11 @@ export const weaveDesignApi = {
     apiClient.patch<ApiResponse<WeaveDesign>>(`${BASE}/${id}`, body).then((r) => r.data.data),
   deactivate: (id: string) => apiClient.delete<ApiResponse<{ id: string }>>(`${BASE}/${id}`).then((r) => r.data),
   activate: (id: string) => apiClient.post<ApiResponse<{ id: string }>>(`${BASE}/${id}/activate`).then((r) => r.data),
+  /** Jakar desen görseli — kart başına tek; sunucu ≤5 MB ve JPEG/PNG'yi sihirli bayttan denetler. */
+  uploadImage: (id: string, body: { fileName: string; contentBase64: string }) =>
+    apiClient.put<ApiResponse<{ image: WeaveDesignImageMeta; duplicate: boolean }>>(`${BASE}/${id}/image`, body).then((r) => r.data),
+  imageBlob: (id: string) => apiClient.get<Blob>(`${BASE}/${id}/image`, { responseType: "blob" }).then((r) => r.data),
+  deleteImage: (id: string) => apiClient.delete<ApiResponse<unknown>>(`${BASE}/${id}/image`).then((r) => r.data),
 };
 
 export const constructionApi = {

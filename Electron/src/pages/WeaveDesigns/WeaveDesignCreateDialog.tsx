@@ -1,5 +1,5 @@
-// Yeni desen kartı — yalnız kimlik alanları (kod · ad · örgü türü); geri kalanı kart sayfasında.
-// Doğrulamanın asıl kapısı sunucu (mükerrer kod/ad 409); panel `VarChar` sınırlarını aynalar.
+// Yeni desen kartı — kimlik alanları (kod · ad) + sınıf (mekanizma · örgü); geri kalanı kart sayfasında.
+// Doğrulamanın asıl kapısı sunucu (mükerrer kod/ad 409); `kind` gönderilmez, sunucu sınıftan türetir.
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -8,17 +8,18 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { weaveDesignApi } from "./service";
-import { WEAVE_DESIGN_KINDS, WEAVE_KIND_LABEL, type WeaveDesignKind } from "./types";
+import { WeaveClassFields } from "./WeaveClassFields";
+import type { WeaveClass } from "./weave-class";
 
-export const NATIVE_SELECT_CLASS = "h-9 w-full rounded-md border bg-background px-2 text-sm";
+export { NATIVE_SELECT_CLASS } from "./WeaveClassFields";
 
 export function WeaveDesignCreateDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
   const qc = useQueryClient();
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
-  const [kind, setKind] = useState<WeaveDesignKind>("DOBBY");
+  const [cls, setCls] = useState<WeaveClass>({ shedMechanism: "DOBBY", weaveStructure: null });
   const create = useMutation({
-    mutationFn: () => weaveDesignApi.create({ code: code.trim(), name: name.trim(), kind }),
+    mutationFn: () => weaveDesignApi.create({ code: code.trim(), name: name.trim(), ...cls }),
     onSuccess: (row) => {
       toast.success("Desen kartı oluşturuldu.");
       void qc.invalidateQueries({ queryKey: ["weave-designs"] });
@@ -29,9 +30,9 @@ export function WeaveDesignCreateDialog({ onClose, onCreated }: { onClose: () =>
   const ready = code.trim().length > 0 && name.trim().length > 0;
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-2xl">
         <DialogHeader><DialogTitle>Yeni desen kartı</DialogTitle></DialogHeader>
-        <div className="space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="wd-code">Desen kodu *</Label>
             <Input id="wd-code" value={code} maxLength={32} onChange={(e) => setCode(e.target.value)} placeholder="BALIK SIRTI DAR" />
@@ -40,12 +41,7 @@ export function WeaveDesignCreateDialog({ onClose, onCreated }: { onClose: () =>
             <Label htmlFor="wd-name">Desen adı *</Label>
             <Input id="wd-name" value={name} maxLength={100} onChange={(e) => setName(e.target.value)} />
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="wd-kind">Örgü türü *</Label>
-            <select id="wd-kind" className={NATIVE_SELECT_CLASS} value={kind} onChange={(e) => setKind(e.target.value as WeaveDesignKind)}>
-              {WEAVE_DESIGN_KINDS.map((k) => <option key={k} value={k}>{WEAVE_KIND_LABEL[k]}</option>)}
-            </select>
-          </div>
+          <WeaveClassFields idPrefix="wd-new" value={cls} onChange={setCls} />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Vazgeç</Button>
