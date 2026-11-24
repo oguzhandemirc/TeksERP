@@ -18,6 +18,7 @@ import { COST_INPUT_DESCRIPTIONS } from "../InputPrices/tabs-config";
 import { finishingColumns } from "./columns";
 import { FinishingRateDialog } from "./FinishingRateDialog";
 import { FinishingRateHistorySheet } from "./FinishingRateHistorySheet";
+import { FinishingRateDetailsDialog } from "./FinishingRateDetailsDialog";
 import { finishingRateService, type FinishingRate } from "./service";
 import { RefreshButton } from "@/components/RefreshButton";
 import { ListSearchBox } from "@/components/data-table/ListSearchBox";
@@ -28,8 +29,10 @@ export function FinishingRatesPage({ embedded }: { embedded?: CostEmbedSlots } =
   const q = useQuery({ queryKey: ["cost-finishing-rates", "active", term ?? ""], queryFn: () => finishingRateService.listActive(term) });
   const [edit, setEdit] = useState<{ row: FinishingRate | null } | null>(null);
   const [history, setHistory] = useState<FinishingRate | null>(null);
+  const [details, setDetails] = useState<FinishingRate | null>(null);
   const rows = q.data ?? [];
-  const table = useLocalTable({ tableKey: "cost:finishing-rates", data: rows, columns: useMemo(() => finishingColumns(setEdit, setHistory), []), getRowId: (r) => r.id });
+  const columns = useMemo(() => finishingColumns(setEdit, setHistory, setDetails), []);
+  const table = useLocalTable({ tableKey: "cost:finishing-rates", data: rows, columns, getRowId: (r) => r.id });
   return (
     <CostPageFrame
       embedded={embedded}
@@ -73,6 +76,9 @@ export function FinishingRatesPage({ embedded }: { embedded?: CostEmbedSlots } =
       <ListFooter loaded={rows.length} />
       {edit && <FinishingRateDialog current={edit.row} onClose={() => setEdit(null)} />}
       {history && <FinishingRateHistorySheet row={history} onClose={() => setHistory(null)} />}
+      {details && (
+        <FinishingRateDetailsDialog row={details} onClose={() => setDetails(null)} onChangePrice={() => { setDetails(null); setEdit({ row: details }); }} />
+      )}
     </CostPageFrame>
   );
 }

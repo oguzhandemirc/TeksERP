@@ -21,7 +21,7 @@ import {
   updateDraft,
 } from "../services/cost-parameter.service";
 import { changeYarnCostPrice, listYarnCostPrices, revokeYarnCostPrice } from "../services/yarn-cost-price.service";
-import { changeFinishingRate, listFinishingRates, revokeFinishingRate } from "../services/finishing-rate.service";
+import { changeFinishingRate, listFinishingRates, revokeFinishingRate, updateFinishingRateDetails } from "../services/finishing-rate.service";
 import { getCostStructure, putCostStructure } from "../services/cost-structure.service";
 import { changeMachineCostRate, createMachineCostRate, listMachineCostOptions, listMachineCostRates, revokeMachineCostRate } from "../services/machine-cost-rate.service";
 import { changeConsumableNorm, createConsumableNorm, listConsumableNorms, revokeConsumableNorm } from "../services/consumable-norm.service";
@@ -81,6 +81,13 @@ const finishingRateSchema = z.object({
   typicalShrinkPct: decimalInput.nullable().optional(),
   note: z.string().nullable().optional(),
   // F6: alış taslağı kalem kartı; yoksa aktif sürümünkü taşınır, null = köprüyü kaldır.
+  serviceItemId: z.string().uuid("Geçersiz hizmet kartı ID").nullable().optional(),
+}).strict();
+
+// Fiyat dışı alanlar — `.strict()` fiyat/baz/para/çekme/firma alanını 400 ile reddeder (sürümsüz fiyat değişimi YOK).
+const finishingRateDetailsSchema = z.object({
+  name: z.string().optional(),
+  note: z.string().nullable().optional(),
   serviceItemId: z.string().uuid("Geçersiz hizmet kartı ID").nullable().optional(),
 }).strict();
 
@@ -298,6 +305,37 @@ router.post("/finishing-rates", requirePermission("cost:write"), wrap(async (req
   const input = finishingRateSchema.parse(req.body ?? {});
   const r = await changeFinishingRate(input, req.user?.userId);
   res.status(200).json({ success: true, data: { ...r.row, wrote: r.wrote, previousId: r.previousId }, message: r.wrote ? "Tarife kaydedildi." : "Tarife zaten bu değerlerde — değişiklik yapılmadı." });
+}));
+
+/**
+ * @openapi
+ * /api/cost/finishing-rates/{id}:
+ *   patch:
+ *     tags: [Cost]
+ *     summary: Tarifenin fiyat dışı alanlarını düzenle (ad, not, hizmet kartı) — sürüm açmaz
+ *     description: "Fiyat, baz, para birimi, tipik çekme ve fason firma bu uçla değişmez (gövdede 400); onlar POST ile yeni sürümdür."
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name: { type: string, maxLength: 100 }
+ *               note: { type: string, nullable: true, maxLength: 300 }
+ *               serviceItemId: { type: string, format: uuid, nullable: true }
+ *     responses:
+ *       200: { description: Güncellendi ya da değerler aynı (wrote=false) }
+ *       400: { description: Fiyat alanı gönderildi, boş ad ya da pasif hizmet kartı }
+ *       404: { description: Tarife yok }
+ *       409: { description: Satır artık geçerli değil ya da eşzamanlı değişim (COST_RATE_STALE) }
+ */
+router.patch("/finishing-rates/:id", requirePermission("cost:write"), wrap(async (req, res) => {
+  const { id } = idParam.parse(req.params);
+  const input = finishingRateDetailsSchema.parse(req.body ?? {});
+  const r = await updateFinishingRateDetails(id, input, req.user?.userId);
+  res.status(200).json({ success: true, data: { ...r.row, wrote: r.wrote }, message: r.wrote ? "Tarife bilgileri güncellendi." : "Tarife zaten bu değerlerde — değişiklik yapılmadı." });
 }));
 
 /**

@@ -33,6 +33,13 @@ export function buildFinishingRateBody(i: FinishingRateInput): FinishingRateInpu
   };
 }
 
+export interface FinishingRateDetailsInput { name: string; note: string | null; serviceItemId: string | null }
+
+/** Backend gövdesi `.strict()` — fiyat alanı gönderilmez; üç alan her zaman gider (formda görünen değer yazılır). */
+export function buildFinishingRateDetailsBody(i: FinishingRateDetailsInput): FinishingRateDetailsInput {
+  return { name: i.name, note: i.note, serviceItemId: i.serviceItemId };
+}
+
 const BASE = "/api/cost/finishing-rates";
 
 export const finishingRateService = {
@@ -42,5 +49,8 @@ export const finishingRateService = {
     (await apiClient.get<ApiResponse<FinishingRate[]>>(BASE, { params: { subcontractorId } })).data.data,
   history: async (code: string) => (await apiClient.get<ApiResponse<FinishingRate[]>>(BASE, { params: { code, includeRevoked: "1" } })).data.data,
   change: async (i: FinishingRateInput) => (await apiClient.post<ApiResponse<FinishingRate & { wrote: boolean }>>(BASE, buildFinishingRateBody(i))).data,
+  /** Fiyat dışı alanlar (ad · not · hizmet kartı) — sürüm açmaz; fiyat değişimi `change` (yeni sürüm). */
+  updateDetails: async (id: string, i: FinishingRateDetailsInput) =>
+    (await apiClient.patch<ApiResponse<FinishingRate & { wrote: boolean }>>(`${BASE}/${id}`, buildFinishingRateDetailsBody(i))).data,
   revoke: async (id: string) => (await apiClient.post<ApiResponse<{ id: string }>>(`${BASE}/${id}/revoke`, {})).data,
 };

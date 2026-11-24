@@ -204,6 +204,62 @@ export async function changeFinishingRate(
   return { row, wrote: outcome.wrote, previousId: outcome.previous?.id ?? null };
 }
 
+export interface FinishingRateDetailsInput {
+  name?: unknown;
+  note?: unknown;
+  /** null = köprüyü kaldır; undefined = dokunma. */
+  serviceItemId?: string | null;
+}
+
+const DETAILS_SELECT = { id: true, code: true, name: true, note: true, serviceItemId: true, updatedAt: true } satisfies Prisma.FinishingRateSelect;
+
+/**
+ * FİYAT DIŞI ALANLAR (ad · not · hizmet kartı) — aktif satır YERİNDE güncellenir, sürüm açılmaz: bu alanlar hiçbir
+ * maliyet/fatura TUTARINA girmez. Fiyat/baz/para/çekme/firma değişimi hâlâ `changeFinishingRate` (yeni sürüm).
+ */
+export async function updateFinishingRateDetails(
+  id: string,
+  input: FinishingRateDetailsInput,
+  userId?: string,
+): Promise<{ row: FinishingRateRow; wrote: boolean }> {
+  const name = input.name === undefined ? undefined : parseTextField(input.name, "Tarife adı", 100);
+  if (input.name !== undefined && !name) throw AppError.badRequest("Tarife adı zorunludur.");
+  const note = input.note === undefined ? undefined : (parseTextField(input.note, "Not", 300) ?? null);
+  if (name === undefined && note === undefined && input.serviceItemId === undefined) {
+    throw AppError.badRequest("Değiştirilecek alan yok (ad, not ya da hizmet kartı).");
+  }
+  const outcome = await prisma.$transaction(async (tx) => {
+    // Kilit tx'in İLK ifadesi: yeni köprü kartı arşivlemeyle yarışmasın (changeFinishingRate ile aynı sıra).
+    if (input.serviceItemId) await lockServiceItem(tx, input.serviceItemId);
+    // `revokedAt` SÜZÜLMEZ — yoksa 404, damgalıysa 409 (yeni sürüm açılmış; panel listesi bayat).
+    const cur = await tx.finishingRate.findUnique({ where: { id }, select: { ...DETAILS_SELECT, revokedAt: true } });
+    if (!cur) throw AppError.notFound("Tarife bulunamadı.");
+    if (cur.revokedAt) throw AppError.conflict("Bu tarife satırı artık geçerli değil (yeni sürüm ya da kaldırıldı) — listeyi yenileyin.", { code: "COST_RATE_STALE" });
+    const next = {
+      name: name ?? cur.name,
+      note: note === undefined ? cur.note : note,
+      serviceItemId: input.serviceItemId === undefined ? cur.serviceItemId : input.serviceItemId,
+    };
+    if (next.name === cur.name && next.note === cur.note && next.serviceItemId === cur.serviceItemId) return { wrote: false, cur, next };
+    // Atomik claim: hâlâ aktif VE okuduğumuzdan beri dokunulmamış (updatedAt) — aksi 409.
+    const claim = await tx.finishingRate.updateMany({ where: { id, updatedAt: cur.updatedAt, ...ACTIVE_FINISHING_RATE }, data: next });
+    if (claim.count === 0) throw AppError.conflict("Tarife aynı anda başka bir işlemle değişti — listeyi yenileyip tekrar deneyin.", { code: "COST_RATE_STALE" });
+    return { wrote: true, cur, next };
+  });
+  const row = await prisma.finishingRate.findUniqueOrThrow({ where: { id }, select: FINISHING_RATE_SELECT });
+  if (outcome.wrote) {
+    void AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "FINISHING_RATE",
+      recordId: id,
+      oldData: { code: outcome.cur.code, name: outcome.cur.name, note: outcome.cur.note, serviceItemId: outcome.cur.serviceItemId },
+      newData: { code: outcome.cur.code, ...outcome.next },
+    });
+  }
+  return { row, wrote: outcome.wrote };
+}
+
 /** TARİFEYİ KALDIR — damga; kodu gösteren maliyet yapısı artık "tarife yok" görür (MAL-2 eksik kodu). */
 export async function revokeFinishingRate(id: string, userId?: string): Promise<{ id: string }> {
   // `revokedAt` SÜZÜLMEZ — satırın kendisi okunur: yoksa 404, zaten damgalıysa 409.

@@ -30,7 +30,7 @@ export function FinishingRateDialog({ onClose, current }: Props) {
   const [currency, setCurrency] = useState<Currency>(current?.currency ?? "TRY");
   const [price, setPrice] = useState(decToInput(current?.pricePerM));
   const [shrink, setShrink] = useState(decToInput(current?.typicalShrinkPct));
-  const [note, setNote] = useState("");
+  const [note, setNote] = useState(current?.note ?? "");
   const [serviceItemId, setServiceItemId] = useState<string | null>(current?.serviceItemId ?? null);
   const priceText = toDecimalText(price);
   const save = useMutation({
@@ -49,14 +49,14 @@ export function FinishingRateDialog({ onClose, current }: Props) {
   const canSave = !!code.trim() && !!name.trim() && !!priceText && !save.isPending;
   return (
     <WideFormDialog
-      open
+      open size="fit"
       onOpenChange={(o) => !o && onClose()}
       title={current ? `${current.name} — yeni fiyat` : "Yeni tarife"}
       description="Aynı kodla kaydetmek yeni sürüm yazar; eski tarife damgalı kalır. Kayıtlı standart maliyetler değişmez."
       onSubmit={(e) => { e.preventDefault(); if (canSave) save.mutate(); }}
       footer={
         <>
-          <Button type="button" variant="outline" onClick={onClose}>Vazgeç</Button>
+          <Button type="button" variant="outline" onClick={onClose}>İptal</Button>
           <Button type="submit" disabled={!canSave}>Kaydet</Button>
         </>
       }
