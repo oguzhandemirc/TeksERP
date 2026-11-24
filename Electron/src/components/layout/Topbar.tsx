@@ -12,7 +12,7 @@ import { LoomAlarmBell } from "@/pages/Operations/LoomAlarms/LoomAlarmBell";
 import { GuncellemeDugmesi } from "./GuncellemeDugmesi";
 import { BildirimZili } from "./BildirimZili";
 import { DestekTopbarButton } from "@/pages/Destek/DestekTopbarButton";
-import { useShellReload } from "@/store/shell-reload";
+import { reloadDropsSession, reloadTitle, useShellReload } from "@/store/shell-reload";
 import { useSpinWhile } from "@/hooks/useSpinWhile";
 import { MasaustuBildirimKoprusu } from "@/components/bildirim/MasaustuBildirimKoprusu";
 
@@ -62,8 +62,8 @@ export function Topbar({ onToggleSidebar, onOpenCommand, narrow = false, drawerO
         <Button
           variant="ghost"
           size="icon"
-          aria-label="Sayfayı yeniden yükle"
-          title="Sayfayı yeniden yükle (Ctrl+Shift+R)"
+          aria-label={reloadDropsSession() ? "Verileri yeniden yükle" : "Sayfayı yeniden yükle"}
+          title={reloadTitle()}
           className="hidden sm:inline-flex"
           disabled={reloading}
           onClick={reload}

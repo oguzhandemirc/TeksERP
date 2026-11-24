@@ -1,88 +1,66 @@
 // =============================================================================
-// CARİ KARTI — "Fason iş yapar" (fason = carinin rolü, kullanıcı kararı 2026-09-17)
+// CARİ KARTI — Fason bölümü (fason = carinin rolü, kullanıcı kararı 2026-09-17)
 // =============================================================================
-// Kart kaydedildikten sonra (düzenleme) görünür: kutu işaretlenince profil yoksa `Subcontractor`
-// yaratılır (ad/kod/vergi no/telefon/adres cariden, `customerId` bağ), pasif profil varsa aktife
-// döner; kaldırılınca profil `isActive:false` (SİLİNMEZ — sevk/kabul tarihçesi ona bağlı).
-// Tedarikçi ROLÜ olmayan kartta kutu pasif: önce Tedarikçi rolü (backend 400 ile aynı kural, rol modeli).
-// Anında sunucuya yazar (alias panelleri emsali); hata apiClient tek toast.
-// Profil aktifken altında kategori çoklu seçimi (`CustomerSubcontractorCategories`, 2026-11-19) — seçiciler buna göre süzer.
+// "Fason iş yapar" düğmesi Yeni Cari'de olduğu gibi düzenlemede de Kimlik › Roller satırındadır (B18/2, tek yer);
+// bu bölüm yalnız profilin durumu + kategori seçimini taşır. Tek kayıt modeli (B18/7): rol ve kategoriler form
+// değeridir, Kaydet kartla birlikte yazar (`subcontractorRoleSync`), İptal geri alır. Profil SİLİNMEZ — rol
+// kaldırılınca `isActive:false` (sevk/kabul tarihçesi ona bağlı). Profil penceresi (belge profili, ücretler) ayrı kayıttır.
 // =============================================================================
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { subcontractorService } from "@/pages/Subcontractors/service";
-import type { Subcontractor } from "@/pages/Subcontractors/types";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useFormContext } from "react-hook-form";
 import { partnerRoleLabels } from "@/lib/partnerRoles";
-import { ToggleChip } from "@/components/ui/toggle-chip";
+import type { CustomerFormValues } from "./schema";
 import type { Customer } from "./types";
 import { CustomerSubcontractorCategories } from "./CustomerSubcontractorCategories";
 import { SubcontractorProfileEdit } from "./SubcontractorProfileEdit";
+import { fetchSubcontractorProfile } from "./subcontractorRoleSync";
 
 export const SUBCONTRACTOR_ROLE_LABEL = "Fason iş yapar";
-export const SUBCONTRACTOR_ROLE_TYPE_HINT = `Fason profili için kartın ${partnerRoleLabels.supplier} rolü olmalı (önce Tedarikçi kutusunu işaretleyip kaydedin).`;
+export const SUBCONTRACTOR_ROLE_TYPE_HINT = `Fason profili için kartın ${partnerRoleLabels.supplier} rolü olmalı.`;
+export const SUBCONTRACTOR_ROLE_OFF_HINT = `Kimlik › Roller satırında "${SUBCONTRACTOR_ROLE_LABEL}" seçilince fason kategorileri burada seçilir.`;
 
 /** Bu carinin fason profili (aktif ya da pasif) — bağ `customerId` üzerinden, liste süzgeciyle. */
 export function useSubcontractorProfile(customerId: string) {
-  return useQuery({
-    queryKey: ["subcontractor-profile", customerId],
-    queryFn: async () => {
-      const res = await subcontractorService.getAll({ page: 1, pageSize: 1, sortBy: "name", sortOrder: "asc", filters: { customerId } });
-      return (res.data[0] as Subcontractor | undefined) ?? null;
-    },
-    staleTime: 30_000,
-  });
+  return useQuery({ queryKey: ["subcontractor-profile", customerId], queryFn: () => fetchSubcontractorProfile(customerId), staleTime: 30_000 });
 }
 
 export function CustomerSubcontractorRole({ customer }: { customer: Customer }) {
   const qc = useQueryClient();
+  const form = useFormContext<CustomerFormValues>();
   const profile = useSubcontractorProfile(customer.id);
-  const typeOk = customer.isSupplierRole === true;
-  const checked = profile.data?.isActive === true;
+  const on = form.watch("isSubcontractorRole");
+  const draftCats = form.watch("subcontractorCategoryIds");
+  const p = profile.data ?? null;
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ["subcontractor-profile", customer.id] });
-    void qc.invalidateQueries({ queryKey: ["customers"] });
     void qc.invalidateQueries({ queryKey: ["subcontractors"] });
-    void qc.invalidateQueries({ queryKey: ["supplier-picker"] });
   };
-  const mut = useMutation({
-    mutationFn: async (on: boolean) => {
-      const p = profile.data;
-      if (on && !p) {
-        return subcontractorService.create({
-          code: customer.code,
-          name: customer.name,
-          taxNumber: customer.taxNumber ?? null,
-          phone: customer.contactPhone ?? null,
-          address: customer.address ?? null,
-          customerId: customer.id,
-        } as Partial<Subcontractor>);
-      }
-      if (!p) return null;
-      return subcontractorService.update(p.id, { isActive: on } as Partial<Subcontractor>);
-    },
-    onSuccess: (_res, on) => {
-      toast.success(on ? "Fason profili açıldı" : "Fason profili pasife alındı (kayıt silinmedi)");
-      refresh();
-    },
-  });
-  const disabled = !typeOk || profile.isLoading || mut.isPending;
+
+  if (!on) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        {SUBCONTRACTOR_ROLE_OFF_HINT}
+        {p ? <> Önceki profil <span className="font-mono">{p.code}</span> {p.isActive ? "Kaydet ile pasife alınır (silinmez)." : "pasif; yeniden seçilirse aynı profil açılır."}</> : null}
+      </p>
+    );
+  }
   return (
     <div className="space-y-2">
-      <ToggleChip label={SUBCONTRACTOR_ROLE_LABEL} checked={checked} disabled={disabled} onChange={(e) => mut.mutate(e.target.checked)} aria-describedby="fason-rol-ipucu" />
-      <p id="fason-rol-ipucu" className="text-xs text-muted-foreground">
-        {!typeOk
-          ? SUBCONTRACTOR_ROLE_TYPE_HINT
-          : profile.data
-            ? <>Fason profili: <span className="font-mono">{profile.data.code}</span>{profile.data.isActive ? "" : " (pasif)"} — <SubcontractorProfileEdit profile={profile.data} onSaved={refresh} /></>
-            : "İşaretlenince bu kart için fason profili açılır; altından fason kategorilerini seçebilirsiniz (belge profili ve ücretler profil düzenleme penceresinden)."}
+      <p className="text-xs text-muted-foreground">
+        {p ? (
+          <>
+            Fason profili: <span className="font-mono">{p.code}</span>
+            {p.isActive ? "" : " (pasif — Kaydet ile yeniden açılır)"} — <SubcontractorProfileEdit profile={p} onSaved={refresh} />
+          </>
+        ) : (
+          "Kaydet'e basınca bu kart için fason profili açılır (belge profili ve ücretler sonra profil penceresinden)."
+        )}
       </p>
-      {checked && profile.data && (
-        <CustomerSubcontractorCategories
-          key={profile.data.categories?.map((c) => c.categoryId).join(",") ?? ""}
-          profile={profile.data}
-          onSaved={refresh}
-        />
-      )}
+      <CustomerSubcontractorCategories
+        value={draftCats ?? (p?.categories ?? []).map((c) => c.categoryId)}
+        onChange={(ids) => form.setValue("subcontractorCategoryIds", ids, { shouldDirty: true })}
+        disabled={profile.isLoading}
+      />
     </div>
   );
 }

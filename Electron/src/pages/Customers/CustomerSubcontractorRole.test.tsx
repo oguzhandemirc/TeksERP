@@ -1,20 +1,26 @@
 // =============================================================================
-// BEKÇİ — Cari kartında "Fason iş yapar" (fason = carinin rolü, 2026-09-17) + Cariler listesi "Fason" rozeti
+// BEKÇİ — Cari kartında fason rolü (fason = carinin rolü, 2026-09-17) · tek kayıt modeli (B18/7) · rol rozetleri
 // =============================================================================
-// ① profil yok → kutu boş; işaretle → `subcontractorService.create({customerId, code/name/... cariden})`
-// ② aktif profil → kutu dolu + kod + "fason profilini düzenle" penceresi; kaldır → `update(id,{isActive:false})` (silme yok)
-// ③ pasif profil → kutu boş; işaretle → `update(id,{isActive:true})` (ikinci profil DOĞMAZ)
-// ④ Tedarikçi ROLÜ olmayan kart → kutu pasif + "önce Tedarikçi rolü" ipucu (backend 400 ile aynı kural; rol modeli)
-// ⑤ Rol kolonu: bayrak başına rozet — fason rolü (isSubcontractorRole) → "Fason"; yoksa yok
-// Negatif sonda (kırmızı görüldü): rozet bayrak yerine `subcontractor.isActive` okuyunca ⑤ ❌;
-// `CustomerSubcontractorRole` rol kapısı kaldırılınca ④ ❌.
+// ① rol kapalı → Fason bölümünde yalnız ipucu (Roller satırını gösterir); kategori listesi YOK, sunucuya yazım YOK
+// ② rol açık + aktif profil → kod + "fason profilini düzenle" penceresi; kategori tıkı FORM değerini değiştirir,
+//    profil ucuna HİÇ gitmez (Kaydet'e kadar) — İptal geri alabilsin
+// ③ rol açık + profil yok → "Kaydet'e basınca profil açılır"
+// ④ senkron: değişmeyen formda niyet null; açık + profil yok → create(customerId, kart alanları formdan, kategoriler);
+//    açık + pasif profil → update(isActive:true + kategoriler) — ikinci profil doğmaz; kapalı + aktif → update(isActive:false)
+//    (silme yok); kapalı + profil yok → hiçbir yazım
+// ⑤ Rol rozetleri bayraktan
+// Negatif sonda (kırmızı görüldü): kategori bileşenine anında `update` geri konunca ② ❌; senkronda pasif profil için
+// `create` çağrılınca ④ ❌.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { FormProvider, useForm } from "react-hook-form";
 import { renderWithProviders } from "@/test/render";
-import { CustomerSubcontractorRole, SUBCONTRACTOR_ROLE_LABEL, SUBCONTRACTOR_ROLE_TYPE_HINT } from "./CustomerSubcontractorRole";
+import { CustomerSubcontractorRole, SUBCONTRACTOR_ROLE_OFF_HINT } from "./CustomerSubcontractorRole";
 import { SUBCONTRACTOR_CATEGORIES_LABEL } from "./CustomerSubcontractorCategories";
 import { SUBCONTRACTOR_PROFILE_EDIT_LABEL } from "./SubcontractorProfileEdit";
+import { subcontractorIntentOf, syncSubcontractorRole } from "./subcontractorRoleSync";
+import { customerFormDefaults, type CustomerFormValues } from "./schema";
 import { partnerRoleBadges } from "@/lib/partnerRoles";
 import type { Customer } from "./types";
 
@@ -42,6 +48,19 @@ const CATS = [
 const cari = (over: Partial<Customer> = {}): Customer =>
   ({ id: "c1", code: "MUS-1", name: "Boya A.Ş.", taxNumber: "1234567890", type: "SUPPLIER", isCustomerRole: false, isSupplierRole: true, isSubcontractorRole: false, contactPhone: "0212", address: "Bursa", isActive: true, createdAt: "", updatedAt: "", ...over }) as Customer;
 const page = (rows: unknown[]) => Promise.resolve({ success: true, data: rows, pagination: { page: 1, pageSize: 1, total: rows.length, totalPages: 1 } });
+const values = (over: Partial<CustomerFormValues> = {}): CustomerFormValues =>
+  ({ ...customerFormDefaults, name: "Boya A.Ş.", taxNumber: "1234567890", contactPhone: "0212", address: "Bursa", isCustomerRole: false, isSupplierRole: true, ...over }) as CustomerFormValues;
+
+let lastForm: { getValues: () => CustomerFormValues } | null = null;
+function Harness({ customer, on }: { customer: Customer; on: boolean }) {
+  const form = useForm<CustomerFormValues>({ defaultValues: values({ isSubcontractorRole: on }) });
+  lastForm = form;
+  return (
+    <FormProvider {...form}>
+      <CustomerSubcontractorRole customer={customer} />
+    </FormProvider>
+  );
+}
 
 beforeEach(() => {
   getAll.mockReset();
@@ -53,80 +72,67 @@ beforeEach(() => {
   catGetAll.mockImplementation(() => Promise.resolve({ success: true, data: CATS, pagination: { page: 1, pageSize: 500, total: CATS.length, totalPages: 1 } }));
 });
 
-describe("CustomerSubcontractorRole — fason kategorileri (2026-11-19)", () => {
-  it("⭐ ⑥ aktif profil → kategori listesi görünür, mevcut kategori işaretli; tık → update(id,{categoryIds}) küme değişimi", async () => {
-    getAll.mockImplementation(() => page([{ id: "s1", code: "FSN-1", isActive: true, categories: [{ categoryId: "cat-boya" }] }]));
-    renderWithProviders(<CustomerSubcontractorRole customer={cari()} />);
-    const boya = await screen.findByRole("checkbox", { name: /Boyahane/ });
-    expect(boya).toBeChecked();
-    const devere = screen.getByRole("checkbox", { name: /Devere/ });
-    expect(devere).not.toBeChecked();
-    await userEvent.click(devere);
-    await waitFor(() => expect(update).toHaveBeenCalledWith("s1", { categoryIds: ["cat-boya", "cat-dev"] }));
+describe("CustomerSubcontractorRole — Fason bölümü (form değeri)", () => {
+  it("⭐ ① rol kapalı → ipucu; kategori listesi ve yazım yok", async () => {
+    getAll.mockImplementation(() => page([]));
+    renderWithProviders(<Harness customer={cari()} on={false} />);
+    expect(await screen.findByText(SUBCONTRACTOR_ROLE_OFF_HINT)).toBeInTheDocument();
+    expect(screen.queryByText(SUBCONTRACTOR_CATEGORIES_LABEL)).toBeNull();
     expect(create).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
   });
 
-  it("⑦ profil yok / pasif → kategori listesi YOK (önce fason profili açılır)", async () => {
-    getAll.mockImplementation(() => page([{ id: "s1", code: "FSN-1", isActive: false, categories: [] }]));
-    renderWithProviders(<CustomerSubcontractorRole customer={cari()} />);
-    const box = await screen.findByRole("checkbox", { name: SUBCONTRACTOR_ROLE_LABEL });
-    await waitFor(() => expect(box).not.toBeDisabled());
-    expect(screen.queryByText(SUBCONTRACTOR_CATEGORIES_LABEL)).toBeNull();
-    expect(catGetAll).not.toHaveBeenCalled();
+  it("⭐ ② rol açık + aktif profil → kod + profil penceresi; kategori tıkı yalnız formu değiştirir (sunucuya yazmaz)", async () => {
+    getAll.mockImplementation(() => page([{ id: "s1", code: "FSN-1", isActive: true, categories: [{ categoryId: "cat-boya" }] }]));
+    renderWithProviders(<Harness customer={cari({ isSubcontractorRole: true })} on />);
+    const boya = await screen.findByRole("checkbox", { name: /Boyahane/ });
+    await waitFor(() => expect(boya).toBeChecked());
+    expect(screen.getByText("FSN-1")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("checkbox", { name: /Devere/ }));
+    expect(lastForm?.getValues().subcontractorCategoryIds).toEqual(["cat-boya", "cat-dev"]);
+    expect(update).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: SUBCONTRACTOR_PROFILE_EDIT_LABEL }));
+    expect(await screen.findByRole("dialog")).toHaveTextContent("profil FSN-1");
+  });
+
+  it("③ rol açık + profil yok → 'Kaydet'e basınca profil açılır'", async () => {
+    getAll.mockImplementation(() => page([]));
+    renderWithProviders(<Harness customer={cari()} on />);
+    expect(await screen.findByText(/Kaydet'e basınca bu kart için fason profili açılır/)).toBeInTheDocument();
   });
 });
 
-describe("CustomerSubcontractorRole", () => {
-  it("⭐ ① profil yok → kutu boş; işaretle → create(customerId + kart alanları cariden)", async () => {
+describe("subcontractorRoleSync — Kaydet'te profil yazımı", () => {
+  it("⭐ ④a değişmeyen form → niyet null; rol ya da kategori değişince niyet", () => {
+    expect(subcontractorIntentOf(values({ isSubcontractorRole: false }), cari())).toBeNull();
+    expect(subcontractorIntentOf(values({ isSubcontractorRole: true }), cari())).toEqual({ want: true, categoryIds: undefined });
+    expect(subcontractorIntentOf(values({ isSubcontractorRole: true, subcontractorCategoryIds: ["x"] }), cari({ isSubcontractorRole: true }))).toEqual({ want: true, categoryIds: ["x"] });
+  });
+
+  it("⭐ ④b açık + profil yok → create (customerId, kart alanları formdan, kategoriler)", async () => {
     getAll.mockImplementation(() => page([]));
-    renderWithProviders(<CustomerSubcontractorRole customer={cari()} />);
-    const box = await screen.findByRole("checkbox", { name: SUBCONTRACTOR_ROLE_LABEL });
-    await waitFor(() => expect(box).not.toBeDisabled());
-    expect(box).not.toBeChecked();
-    expect(getAll).toHaveBeenCalledWith(expect.objectContaining({ filters: { customerId: "c1" } }));
-    await userEvent.click(box);
-    await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({ customerId: "c1", code: "MUS-1", name: "Boya A.Ş.", taxNumber: "1234567890", phone: "0212", address: "Bursa" })));
+    await syncSubcontractorRole(cari(), values({ isSubcontractorRole: true }), { want: true, categoryIds: ["cat-boya"] });
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ customerId: "c1", code: "MUS-1", name: "Boya A.Ş.", taxNumber: "1234567890", phone: "0212", address: "Bursa", categoryIds: ["cat-boya"] }));
     expect(update).not.toHaveBeenCalled();
   });
 
-  it("⭐ ② aktif profil → kutu dolu + kod + bağlantı; kaldır → update(id,{isActive:false}) — silme yok, create yok", async () => {
-    getAll.mockImplementation(() => page([{ id: "s1", code: "FSN-1", isActive: true }]));
-    renderWithProviders(<CustomerSubcontractorRole customer={cari()} />);
-    const box = await screen.findByRole("checkbox", { name: SUBCONTRACTOR_ROLE_LABEL });
-    await waitFor(() => expect(box).toBeChecked());
-    expect(screen.getByText("FSN-1")).toBeInTheDocument();
-    // T1/T9: ayrı Fason Firmalar ekranı yok → bağlı profil karttan düzenlenir (sayfa bağlantısı değil, pencere).
-    expect(screen.queryByRole("link")).toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: SUBCONTRACTOR_PROFILE_EDIT_LABEL }));
-    expect(await screen.findByRole("dialog")).toHaveTextContent("profil FSN-1");
-    await userEvent.click(box);
-    await waitFor(() => expect(update).toHaveBeenCalledWith("s1", { isActive: false }));
-    expect(create).not.toHaveBeenCalled();
-  });
-
-  it("③ pasif profil → kutu boş '(pasif)'; işaretle → update(id,{isActive:true}) — ikinci profil doğmaz", async () => {
+  it("⭐ ④c açık + pasif profil → update(isActive:true + kategoriler); ikinci profil doğmaz", async () => {
     getAll.mockImplementation(() => page([{ id: "s1", code: "FSN-1", isActive: false }]));
-    renderWithProviders(<CustomerSubcontractorRole customer={cari({ isCustomerRole: true, isSupplierRole: true })} />);
-    const box = await screen.findByRole("checkbox", { name: SUBCONTRACTOR_ROLE_LABEL });
-    await waitFor(() => expect(box).not.toBeDisabled());
-    expect(box).not.toBeChecked();
-    expect(screen.getByText(/\(pasif\)/)).toBeInTheDocument();
-    await userEvent.click(box);
-    await waitFor(() => expect(update).toHaveBeenCalledWith("s1", { isActive: true }));
+    await syncSubcontractorRole(cari(), values({ isSubcontractorRole: true }), { want: true, categoryIds: ["cat-dev"] });
+    expect(update).toHaveBeenCalledWith("s1", { isActive: true, categoryIds: ["cat-dev"] });
     expect(create).not.toHaveBeenCalled();
   });
 
-  it("⭐ ④ Tedarikçi rolü olmayan kart → kutu pasif + rol ipucu; tıklama hiçbir şey yazmaz", async () => {
+  it("⭐ ④d kapalı + aktif profil → update(isActive:false) — silme yok; kapalı + profil yok → yazım yok", async () => {
+    getAll.mockImplementation(() => page([{ id: "s1", code: "FSN-1", isActive: true }]));
+    await syncSubcontractorRole(cari({ isSubcontractorRole: true }), values(), { want: false });
+    expect(update).toHaveBeenCalledWith("s1", { isActive: false });
+    update.mockClear();
     getAll.mockImplementation(() => page([]));
-    renderWithProviders(<CustomerSubcontractorRole customer={cari({ isCustomerRole: true, isSupplierRole: false })} />);
-    const box = await screen.findByRole("checkbox", { name: SUBCONTRACTOR_ROLE_LABEL });
-    await waitFor(() => expect(getAll).toHaveBeenCalled());
-    expect(box).toBeDisabled();
-    expect(screen.getByText(SUBCONTRACTOR_ROLE_TYPE_HINT)).toBeInTheDocument();
-    expect(SUBCONTRACTOR_ROLE_TYPE_HINT).toContain("Tedarikçi rolü");
-    await userEvent.click(box);
-    expect(create).not.toHaveBeenCalled();
+    await syncSubcontractorRole(cari(), values(), { want: false });
     expect(update).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
   });
 });
 

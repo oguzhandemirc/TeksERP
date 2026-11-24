@@ -1,9 +1,10 @@
 // Hizmet kartı Yeni/Düzenle. "Süreçler" (B16) form değeri DEĞİL: kart kaydından sonra aynı küme ucuyla
 // (`PUT /:id/processes`) yazılır — yeni kartta id kayıttan doğar. `processIds: null` = süreçlere dokunulmadı.
-import { Info } from "lucide-react";
+// Geniş form (B18/11): kısa alanlar tek satırda, açıklamalar ⓘ balonunda, kod başlık altında rozet.
 import { EntityFormDialog } from "@/components/forms/EntityFormDialog";
 import { FormField } from "@/components/forms/FormField";
 import { Input } from "@/components/ui/input";
+import { InfoPopover } from "@/components/ui/info-popover";
 import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
 import { ITEM_UNIT_CODES, ITEM_UNIT_LABEL } from "@/lib/item-unit";
 import type { ServiceItem } from "./types";
@@ -35,6 +36,7 @@ export function ServiceFormDialog({ open, onOpenChange, initial, onSubmit, isSub
       onOpenChange={onOpenChange}
       title={initial ? "Hizmet Kartını Düzenle" : "Yeni Hizmet Kartı"}
       description="Faturalanan hizmet (kurşun, boya, devere…). Süreç eşlemesi isteğe bağlıdır."
+      size="medium"
       schema={serviceFormSchema}
       defaultValues={defaults}
       // Harita yüklenmeden kaydedilirse küme bilinmez → süreçlere dokunulmaz (yanlışlıkla boşaltma yok).
@@ -43,57 +45,40 @@ export function ServiceFormDialog({ open, onOpenChange, initial, onSubmit, isSub
     >
       {(form) => (
         <>
-          {initial ? (
-            <div className="text-xs text-muted-foreground">
-              Kod: <span className="font-mono">{initial.code}</span>
+          {initial && (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              Kod:
+              <span className="rounded border bg-muted/40 px-1.5 py-0.5 font-mono text-foreground">{initial.code}</span>
             </div>
-          ) : (
-            <FormField
-              label="Kod"
-              htmlFor="code"
-              error={form.formState.errors.code}
-              hint="Boş bırakılırsa sistem verir."
-            >
-              <Input id="code" placeholder="KURSUN" {...form.register("code")} />
-            </FormField>
           )}
-          <FormField label="Ad" htmlFor="name" error={form.formState.errors.name} required>
-            <Input
-              id="name"
-              autoFocus
-              placeholder="Kurşun dikimi, tambur, brode..."
-              {...form.register("name")}
-            />
-            <SimilarNamesWarning entity="service-items" name={form.watch("name") ?? ""} excludeId={initial?.id} />
-          </FormField>
-          <FormField
-            label="Birim"
-            htmlFor="unit"
-            error={form.formState.errors.unit}
-            hint="Fatura satırındaki miktar birimi."
-          >
-            <select
-              id="unit"
-              className="h-9 w-full rounded-md border bg-background px-2 text-sm"
-              {...form.register("unit")}
-            >
-              {ITEM_UNIT_CODES.map((u) => (
-                <option key={u} value={u}>
-                  {ITEM_UNIT_LABEL[u]}
-                </option>
-              ))}
-            </select>
-          </FormField>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {!initial && (
+              <FormField label="Kod" htmlFor="code" error={form.formState.errors.code} info="Boş bırakılırsa sistem verir.">
+                <Input id="code" placeholder="ör. KURSUN" {...form.register("code")} />
+              </FormField>
+            )}
+            <FormField label="Ad" htmlFor="name" error={form.formState.errors.name} required className={initial ? "sm:col-span-2" : undefined}>
+              <Input id="name" autoFocus placeholder="ör. Kurşun dikimi, tambur, brode" {...form.register("name")} />
+              <SimilarNamesWarning entity="service-items" name={form.watch("name") ?? ""} excludeId={initial?.id} />
+            </FormField>
+            <FormField label="Birim" htmlFor="unit" error={form.formState.errors.unit} info="Fatura satırındaki miktar birimi.">
+              <select id="unit" className="h-9 w-full rounded-md border bg-background px-2 text-sm" {...form.register("unit")}>
+                {ITEM_UNIT_CODES.map((u) => (
+                  <option key={u} value={u}>
+                    {ITEM_UNIT_LABEL[u]}
+                  </option>
+                ))}
+              </select>
+            </FormField>
+          </div>
           <div className="space-y-1.5">
             <div className="flex items-center gap-1.5 text-sm font-medium">
               Süreçler
-              <span title={SERVICE_PROCESS_HELP} aria-label="Süreçler hakkında" className="text-muted-foreground">
-                <Info className="h-3.5 w-3.5" />
-              </span>
+              <InfoPopover label="Süreçler hakkında" desc={SERVICE_PROCESS_HELP} side="top" />
               <span className="ml-auto text-xs font-normal text-muted-foreground">isteğe bağlı · başka karta eşli tür seçilemez</span>
             </div>
             <ServiceProcessPicker
-              className="max-h-48"
+              className="grid max-h-64 grid-cols-1 gap-2 space-y-0 sm:grid-cols-2"
               options={sel.options}
               selected={sel.selected}
               onToggle={sel.toggle}

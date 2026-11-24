@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
+import { Plus, Tags } from "lucide-react";
+import { TabbedDialogEmpty } from "@/components/ui/tabbed-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -81,7 +82,7 @@ export function ItemCustomerItemAliasesPanel({ item }: Props) {
   const rows = [...(q.data?.data ?? [])].sort((a, b) => (a.customer?.name ?? "").localeCompare(b.customer?.name ?? "", "tr"));
 
   return (
-    <div className="space-y-3">
+    <div className="flex h-full flex-col gap-3">
       <p className="text-xs text-muted-foreground">
         Müşterinin bu kumaşa verdiği ad. Sipariş satırına öneri olarak gelir, etiket ve irsaliyede bizim adımızın yerine basılır.
       </p>
@@ -94,7 +95,7 @@ export function ItemCustomerItemAliasesPanel({ item }: Props) {
       {q.isLoading ? (
         <Skeleton className="h-32 w-full" />
       ) : rows.length === 0 ? (
-        <div className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">Bu kumaşa müşteriye özel ad verilmemiş.</div>
+        <div className="min-h-0 flex-1"><TabbedDialogEmpty icon={Tags} text="Bu kumaşa müşteriye özel ad verilmemiş." /></div>
       ) : (
         <ul className="divide-y rounded-md border" aria-label="Müşteri kumaş adları">
           {rows.map((r) => (

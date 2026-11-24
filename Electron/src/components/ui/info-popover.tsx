@@ -25,10 +25,13 @@ export function InfoPopover({
   desc,
   label = "Açıklama",
   className,
+  side,
 }: {
   desc: ReactNode;
   label?: string;
   className?: string;
+  /** Balonun yönü (varsayılan alt); yer yoksa Radix karşı yöne çevirir. */
+  side?: "top" | "bottom" | "left" | "right";
 }) {
   const descId = useId();
   const [open, setOpen] = useState(false);
@@ -94,6 +97,7 @@ export function InfoPopover({
       <PopoverContent
         id={descId}
         role="tooltip"
+        side={side}
         align="start"
         onMouseEnter={openNow}
         onMouseLeave={closeSoon}

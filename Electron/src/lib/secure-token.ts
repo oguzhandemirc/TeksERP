@@ -11,6 +11,10 @@ let cachedToken: string | null = null;
 let primed = false;
 
 export const tokenStore = {
+  /** Önbellekteki token, IPC'siz ve eşzamanlı (henüz okunmadıysa null) — yalnız "bellekte token var mı" sorusu için. */
+  peek(): string | null {
+    return primed ? cachedToken : null;
+  },
   async get(): Promise<string | null> {
     if (primed) return cachedToken;
     const value = await secureStore.get(TOKEN_KEY);

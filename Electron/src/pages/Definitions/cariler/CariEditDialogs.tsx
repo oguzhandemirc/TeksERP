@@ -10,6 +10,8 @@ import { subcontractorService } from "@/pages/Subcontractors/service";
 import { CustomerFormDialog } from "@/pages/Customers/CustomerFormDialog";
 import { SubcontractorFormDialog } from "@/pages/Subcontractors/SubcontractorFormDialog";
 import { buildCustomerPayload } from "@/pages/Customers/customerPayload";
+import { subcontractorIntentOf, syncSubcontractorRole } from "@/pages/Customers/subcontractorRoleSync";
+import type { CustomerFormValues } from "@/pages/Customers/schema";
 import { buildSubcontractorPayload } from "@/pages/Subcontractors/subcontractorPayload";
 import type { Customer } from "@/pages/Customers/types";
 import type { Subcontractor } from "@/pages/Subcontractors/types";
@@ -31,12 +33,24 @@ function useCariMutations(onCustomerDone: () => void, onSubDone: () => void) {
       void qc.invalidateQueries({ queryKey: ["customers"] });
     },
   });
+  // Tek kayıt modeli (B18/7): Kaydet önce kartı, sonra (değiştiyse) fason profilini yazar — profil Tedarikçi rolünü
+  // ister, sıra bu yüzden kart → profil. Profil adımı düşerse pencere açık kalır, ikinci Kaydet ikisini yeniden dener.
   const updateCustomerM = useMutation({
-    mutationFn: (vars: { id: string; payload: Partial<Customer> }) => customerService.update(vars.id, vars.payload),
+    mutationFn: async (vars: { customer: Customer; values: CustomerFormValues; payload: Partial<Customer> }) => {
+      const res = await customerService.update(vars.customer.id, vars.payload);
+      const intent = subcontractorIntentOf(vars.values, vars.customer);
+      if (intent) await syncSubcontractorRole(vars.customer, vars.values, intent);
+      return res;
+    },
     onSuccess: () => {
       toast.success("Kart güncellendi.");
       onCustomerDone();
+    },
+    onSettled: (_r, _e, vars) => {
       void qc.invalidateQueries({ queryKey: ["customers"] });
+      void qc.invalidateQueries({ queryKey: ["subcontractor-profile", vars.customer.id] });
+      void qc.invalidateQueries({ queryKey: ["subcontractors"] });
+      void qc.invalidateQueries({ queryKey: ["supplier-picker"] });
       invalidateDestinationLock(qc);
     },
   });
@@ -73,7 +87,7 @@ export function useCariEditing(): CariEditing {
         initial={editCustomer}
         isSubmitting={updateCustomerM.isPending || createCustomerM.isPending}
         onSubmit={(values) => {
-          if (editCustomer) updateCustomerM.mutate({ id: editCustomer.id, payload: buildCustomerPayload(values, editCustomer, financeAccess) as Partial<Customer> });
+          if (editCustomer) updateCustomerM.mutate({ customer: editCustomer, values, payload: buildCustomerPayload(values, editCustomer, financeAccess) as Partial<Customer> });
           else createCustomerM.mutate(buildCustomerPayload(values, null, financeAccess) as Partial<Customer>);
         }}
       />

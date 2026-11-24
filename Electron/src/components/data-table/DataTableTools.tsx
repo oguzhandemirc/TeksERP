@@ -57,7 +57,8 @@ export function DataTableTools<T>({ table, exportName = "Liste", fetchAll, hideE
         >
           <p className="px-1 pb-1.5 text-xs font-medium text-muted-foreground">Görünür Sütunlar</p>
           <p className="px-1 pb-1.5 text-[11px] text-muted-foreground">Başlıktan sürükleyerek yer, kenarından genişlik değiştirin.</p>
-          <ul className="max-h-64 space-y-0.5 overflow-y-auto">
+          {/* Tavan ekrana göre: sabit 16rem dokuz sütunda son satırı yarım kesip gereksiz iç kaydırma açıyordu (B18/10). */}
+          <ul className="max-h-[min(32rem,calc(var(--radix-popover-content-available-height,70vh)-6rem))] space-y-0.5 overflow-y-auto">
             {hideable.map((col) => (
               <li key={col.id}>
                 <div className="flex items-center gap-1 rounded-md pr-1 transition-colors hover:bg-accent">

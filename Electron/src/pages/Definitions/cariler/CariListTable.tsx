@@ -19,8 +19,12 @@ interface Handlers {
   onOpenFull: (row: CariRowItem) => void;
 }
 
-/** Panel açıkken gizlenen ikincil sütunlar. */
-export const CARI_COMPACT_HIDDEN = ["city", "phone", "taxNumber"] as const;
+/** Panel açıkken gizlenen ikincil sütunlar — satır eylemleri de (panelde aynı Düzenle / tam sayfa düğmeleri var);
+ *  1440'ta panel açıkken Bakiye kesilip liste yatay taşıyordu (B18/3). */
+export const CARI_COMPACT_HIDDEN = ["city", "phone", "taxNumber", "actions"] as const;
+/** Cari sütunu genişliği: geniş listede ad/kod kısalmasın, panel açıkken liste daralsın. */
+const CARI_COL_WIDE = 420;
+const CARI_COL_COMPACT = 240;
 export const CARI_TABLE_KEY = "definitions:cariler";
 
 const dash = <span className="text-muted-foreground">—</span>;
@@ -46,14 +50,14 @@ const balanceColumn: ColumnDef<CariRowItem> = {
   },
 };
 
-function cariColumns({ onEdit, onOpenFull }: Handlers, withBalance: boolean): ColumnDef<CariRowItem>[] {
+function cariColumns({ onEdit, onOpenFull }: Handlers, withBalance: boolean, compact: boolean): ColumnDef<CariRowItem>[] {
   return [
     {
       id: "cari",
       header: "Cari",
       meta: { label: "Cari", exportValue: (r) => `${r.name} (${r.code})` },
       enableHiding: false,
-      size: 320,
+      size: compact ? CARI_COL_COMPACT : CARI_COL_WIDE,
       cell: ({ row: { original: r } }) => (
         <span className="flex min-w-0 items-center gap-3">
           <RecordAvatar name={r.name} tone={toneForKey(r.id)} size="sm" />
@@ -127,7 +131,7 @@ function cariColumns({ onEdit, onOpenFull }: Handlers, withBalance: boolean): Co
 export function useCariTable(rows: CariRowItem[], compact: boolean, handlers: Handlers) {
   const { onEdit, onOpenFull } = handlers;
   const withBalance = rows.some((r) => r.balances !== undefined);
-  const columns = useMemo(() => cariColumns({ onEdit, onOpenFull }, withBalance), [onEdit, onOpenFull, withBalance]);
+  const columns = useMemo(() => cariColumns({ onEdit, onOpenFull }, withBalance, compact), [onEdit, onOpenFull, withBalance, compact]);
   return useLocalTable({
     tableKey: CARI_TABLE_KEY,
     data: rows,
