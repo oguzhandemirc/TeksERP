@@ -35,6 +35,7 @@
 - **[ÇEKİRDEK]** Müşteriye özgü görünüm kanal kaydında ya da veride yaşar. · bekçi: `scripts/test_musteri_adi_kodda_yok.ts`, `scripts/test_firma_adi_dondur.ts`, `scripts/test_lisans_adi.ts`
 
 - **[ÇEKİRDEK]** Tek işletim sisteminde ölçülebilen bekçiyi CI'da o sistemin işinde koş; başka koşucudan çıkarma beyanlı olur ve iş ci.yml'de yoksa KIRMIZI; platforma göre sessiz atlama/gevşetme yasak. · bekçi: `satici/sunucu/scripts/run-all-tests.ts` (`scripts/lib/ci-mac-isi.ts`)
+- **[ÇEKİRDEK]** CI'da iş atlatmayı yalnız `ci.yml` `changes` işinin bayrağı + iş/adım düzeyinde `if:` ile yap (workflow düzeyinde `paths:` yok, yeni action yok); fark alınamazsa ya da ortak dosya değişirse her şey koşar, main push'u tam settir; backend lint, backend tsc ve 16 parça her PR'da koşar. · bekçi: `Teks-Erp/scripts/test_ci_parca.ts` §7
 
 - **[ÇEKİRDEK]** Görünen iş emri adı `TERIM`den OKUMA ANINDA çözülür: `WeavingOrder` = "Dokuma İş Emri", `WorkOrder` = dokuma rejimi açıksa "Terbiye İş Emri", değilse "İş Emri" (`terimDokumaAyarla`, getter). BAYT-EŞİT ayna: backend `src/constants/terim.ts`, panel/tablet/patron `src/lib/terim.ts`.
 - **[ÇEKİRDEK]** Eski ad ("Dokuma işi…", önünde Terbiye/Dokuma olmayan "iş emri") görünen metne giremez, taban yalnız düşer (`--yaz`); kod/model adı, izin kodu, numara, sürüm notu, migration değişmez. · bekçi: `test_terim_eski_ad.ts`
@@ -123,6 +124,6 @@ Backend: `test_process_exit_kalibi`, `test_istek_log`, `test_kisa_kimlik_ozet`, 
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
-- [ÇEKİRDEK] `arsiv/2026-11.md`: §2026-11-03 K20 iş emri adı · §2026-11-03 K24 · §2026-11-23 Sekme varsayılanı · §2026-11-23 Menü adı = sayfa başlığı; tek Cariler
+- [ÇEKİRDEK] `arsiv/2026-11.md`: §2026-11-03 K20 iş emri adı · §2026-11-03 K24 · §2026-11-23 Sekme varsayılanı · §2026-11-23 Menü adı = sayfa başlığı; tek Cariler · §2026-11-25 CI hızlandırma
 - [ÇEKİRDEK] `arsiv/2026-10.md`: §2026-10-11 terim · §2026-10-09 CI kırmızıları · §2026-10-05 PIN bayat özet · §2026-10-01 G21-K · §2026-10-30 Sekme davranışı
 - [ÇEKİRDEK] `arsiv/2026-09.md`: §2026-09-30 B6 · §2026-09-10 · §2026-09-10 künyesiz · §2026-09-17 oturum sürümü · §2026-09-28 firma adı · 2026-09-01 patron modülü (GEÇERSİZ)

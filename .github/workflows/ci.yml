@@ -49,6 +49,7 @@ jobs:
       native: ${{ steps.suz.outputs.native }}
       patron: ${{ steps.suz.outputs.patron }}
       load_test: ${{ steps.suz.outputs.load_test }}
+      pg_ayar: ${{ steps.suz.outputs.pg_ayar }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -61,7 +62,7 @@ jobs:
           TABAN: ${{ github.base_ref }}
         run: |
           set -uo pipefail
-          BAYRAKLAR="electron mobil satici satici_web native patron load_test"
+          BAYRAKLAR="electron mobil satici satici_web native patron load_test pg_ayar"
           hepsi() {
             echo "⏩ süzgeç yok ($1) → bütün işler koşar"
             for b in $BAYRAKLAR; do echo "$b=true" >> "$GITHUB_OUTPUT"; done
@@ -101,6 +102,9 @@ jobs:
           karar patron     '^(patron/|Teks-Erp/src/(cloud-sync/|lib/license/protocol/)|Teks-Erp/scripts/test_bulut_tel_aynasi|satici/sunucu/src/|mobil/)'
           # Yük testi bütün sunucuyu ölçer (src + şema + seed); yalnız doküman/bekçi dosyası değişince atlanır.
           karar load_test  '^Teks-Erp/(src/|prisma/|prisma\.config|package|tsconfig|scripts/load_test)'
+          # Doküman işinin PG ayar adımı (~5 dk) yalnız deploy/pg + kök scripts okur (ikisi de yukarıda "her iş"e düşer;
+          # desen ortak dalı daraltırsa diye ayrıca yazılı).
+          karar pg_ayar    '^(deploy/pg/|scripts/)'
 
   # ===========================================================================
   # DOKÜMAN BEKÇİSİ — docs'un koda karşı bayatlamasını önler (zero-dep, DB'siz, hızlı).
@@ -110,6 +114,8 @@ jobs:
   docs:
     name: Doküman bekçisi (link + bayatlık)
     runs-on: ubuntu-24.04
+    # Yalnız PG ayar adımı süzgeçlidir; işin geri kalanı her PR'da koşar.
+    needs: changes
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -194,6 +200,7 @@ jobs:
       # ALTER SYSTEM yazmaz, -Uygula auto.conf'taki farklı değeri ezmez, vektörler diller arası eşit. DB'siz, ağsız.
       # --sonda 14 sondayı çekirdek sayısı kadar çocuk süreçte paralel koşar (sıralıyken bu adım ~6,5 dk idi).
       - name: PG ayar bakımı (pg-ayar.ps1, kuru varsayılan)
+        if: needs.changes.outputs.pg_ayar == 'true'
         run: node scripts/test_pg_ayar.mjs && node scripts/test_pg_ayar.mjs --sonda
       # Sahaya giden PG paketi (deploy/pg/pg-paketle.mjs): gölge kökte sahte EDB zip'iyle gerçek koşum — EDB özeti,
       # paket manifestosu ya da kök düzeni saparsa DURUR, anahtarsız koşum imza adımında durur. Zero-dep, DB'siz,
@@ -251,6 +258,8 @@ jobs:
   # ===========================================================================
   # PARÇALI (2026-10-12): sıralı paket ~40 dk sürüyordu. Üç iş:
   #   backend-lint  — lint + lint tavanı + iki tsc (DB'siz, parçaları beklemez)
+  #                   2026-11-25: lint ve tsc AYRI işler (backend-lint · backend-tsc) — tek işte
+  #                   ~7 dk sürüp en yavaş parçayla yarışıyordu; ikisi paralel ~3,5–4 dk.
   #   backend-test  — bekçiler 16 parçada; HER parça kendi runner'ında kendi
   #                   Postgres'i + migrate + seed + seed:fixtures + HTTP sunucularıyla
   #                   koşar (ortak ayar yazan bekçiler parçalar arası karışmaz)
@@ -270,7 +279,7 @@ jobs:
   # anahtar tutmazsa eski yol (npm ci / generate) koşar ve sonucu kaydeder. Kayıt `npm ci`den
   # HEMEN SONRA alınır (iş sonunda değil): testlerin node_modules'a bıraktığı hiçbir şey girmez.
   backend-lint:
-    name: Backend lint + tsc
+    name: Backend lint + lint tavanı
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -324,6 +333,63 @@ jobs:
         working-directory: .
         env:
           NODE_OPTIONS: --max-old-space-size=8192
+      # TEŞHİS: iş başarısız olursa logun sonunu PR'a yorum olarak yaz
+      # (GitHub MCP'de Actions log erişimi yok → gerçek hatayı buradan okuruz).
+      - name: Hata logunu PR'a yaz
+        if: failure() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          {
+            echo "## ❌ Backend CI hata logu — lint + lint tavanı (otomatik teşhis)"
+            echo '```'
+            tail -150 /tmp/ci-backend.log || echo "(log yok)"
+            echo '```'
+          } > /tmp/ci-comment.md
+          gh pr comment "${{ github.event.pull_request.number }}" --body-file /tmp/ci-comment.md --repo "${{ github.repository }}"
+        shell: bash
+
+  backend-tsc:
+    name: Backend tsc (src + scripts)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: write
+    defaults:
+      run:
+        working-directory: Teks-Erp
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+      - name: node_modules önbelleği (kilit dosyasından)
+        id: nm
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: Teks-Erp/node_modules
+          key: tekserp-nm-${{ runner.os }}-node24-${{ hashFiles('Teks-Erp/package-lock.json') }}
+      - if: steps.nm.outputs.cache-hit != 'true'
+        run: npm ci
+      - if: steps.nm.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: Teks-Erp/node_modules
+          key: ${{ steps.nm.outputs.cache-primary-key }}
+      - name: Prisma istemci önbelleği (kilit + şemadan)
+        id: pc
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: Teks-Erp/node_modules/.prisma/client
+          key: tekserp-prisma-${{ runner.os }}-${{ hashFiles('Teks-Erp/package-lock.json', 'Teks-Erp/prisma/schema.prisma') }}
+      - name: Prisma generate
+        if: steps.pc.outputs.cache-hit != 'true'
+        run: npx prisma generate
+      - if: steps.pc.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: Teks-Erp/node_modules/.prisma/client
+          key: ${{ steps.pc.outputs.cache-primary-key }}
       - name: Type-check (yalnız src)
         run: set -o pipefail; npx tsc --noEmit 2>&1 | tee -a /tmp/ci-backend.log
         shell: bash
@@ -350,7 +416,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           {
-            echo "## ❌ Backend CI hata logu — lint + tsc (otomatik teşhis)"
+            echo "## ❌ Backend CI hata logu — tsc (otomatik teşhis)"
             echo '```'
             tail -150 /tmp/ci-backend.log || echo "(log yok)"
             echo '```'
@@ -567,7 +633,7 @@ jobs:
   backend:
     name: Backend (tsc + test)
     runs-on: ubuntu-24.04
-    needs: [backend-lint, backend-test]
+    needs: [backend-lint, backend-tsc, backend-test]
     # `always()`: bir parça düşse de birleşim denetimi koşar ve kırmızının ADRESİNİ basar.
     if: always()
     defaults:
@@ -608,8 +674,8 @@ jobs:
       - name: Lint + tsc ve bütün parçalar başarılı mı
         if: always()
         run: |
-          echo "backend-lint: ${{ needs.backend-lint.result }} · backend-test: ${{ needs.backend-test.result }}"
-          [ "${{ needs.backend-lint.result }}" = "success" ] && [ "${{ needs.backend-test.result }}" = "success" ]
+          echo "backend-lint: ${{ needs.backend-lint.result }} · backend-tsc: ${{ needs.backend-tsc.result }} · backend-test: ${{ needs.backend-test.result }}"
+          [ "${{ needs.backend-lint.result }}" = "success" ] && [ "${{ needs.backend-tsc.result }}" = "success" ] && [ "${{ needs.backend-test.result }}" = "success" ]
         shell: bash
 
   # ===========================================================================
