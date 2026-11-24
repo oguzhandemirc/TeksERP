@@ -14,6 +14,7 @@ export const DRAWDOWN_WINDOW_MIN = 24;
 export const DRAWDOWN_WINDOW_MAX = 64;
 
 export interface DrawdownInput {
+  /** Örgü (`weaveStructure`; eski `kind` da kabul) — "LENO" çizilmez. */
   kind: string | null;
   liftPlan: ReadonlyArray<ReadonlyArray<number>> | null;
   /** 1-tabanlı döner çerçeve no'ları. */

@@ -5,8 +5,10 @@
 // `requirePermission`. İzinler çözgü kartıyla AYNI kodlar (`warpspec:read/write`; yeni
 // kod yok — tasarım §2.7). Ekran SY-A3'te (Desen Kartları).
 // =============================================================================
-import { Router, type NextFunction, type Request, type Response } from "express";
+import express, { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
+import { WEAVE_DESIGN_BODY_LIMIT } from "../constants/body-limits";
+import { deleteWeaveDesignImage, readWeaveDesignImage, uploadWeaveDesignImage } from "../services/weave-design-image.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { requireDokumaEnabled } from "../middlewares/module.middleware";
@@ -21,6 +23,7 @@ import {
 
 const router = Router();
 router.use(verifyToken, requireDokumaEnabled);
+router.use(express.json({ limit: WEAVE_DESIGN_BODY_LIMIT }));
 
 type H = (req: Request, res: Response) => Promise<void>;
 const wrap = (h: H) => (req: Request, res: Response, next: NextFunction): void => {
@@ -131,6 +134,56 @@ router.delete("/:id", requirePermission("warpspec:write"), wrap(async (req, res)
 router.post("/:id/activate", requirePermission("warpspec:write"), wrap(async (req, res) => {
   const { id } = idParam.parse(req.params);
   res.status(200).json({ success: true, data: await activateWeaveDesign(id, req.user?.userId), message: "Desen kartı aktif edildi." });
+}));
+
+const imageBody = z.object({
+  fileName: z.string().max(300, "Dosya adı en çok 300 karakter").nullish(),
+  contentBase64: z.string().min(1, "Görsel içeriği boş"),
+}).strict();
+
+/**
+ * @openapi
+ * /api/weave-designs/{id}/image:
+ *   put:
+ *     tags: [WeaveDesigns]
+ *     summary: Desen görselini yükle/değiştir (JPEG/PNG ≤ 5 MB, base64; kart başına tek görsel)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: Yüklendi (aynı dosya zaten kayıtlıysa duplicate=true) }
+ *       400: { description: "WEAVE_DESIGN_IMAGE_TYPE · WEAVE_DESIGN_IMAGE_TOO_LARGE · WEAVE_DESIGN_IMAGE_INVALID" }
+ *   get:
+ *     tags: [WeaveDesigns]
+ *     summary: Desen görseli (ikili; satır içi)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: Görsel }
+ *       404: { description: Görsel yok (WEAVE_DESIGN_IMAGE_NOT_FOUND) }
+ *   delete:
+ *     tags: [WeaveDesigns]
+ *     summary: Desen görselini kaldır
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: Kaldırıldı }
+ */
+router.put("/:id/image", requirePermission("warpspec:write"), wrap(async (req, res) => {
+  const { id } = idParam.parse(req.params);
+  const data = await uploadWeaveDesignImage(id, imageBody.parse(req.body ?? {}), req.user?.userId);
+  res.status(200).json({ success: true, data, message: "Desen görseli kaydedildi." });
+}));
+router.get("/:id/image", requirePermission("warpspec:read"), wrap(async (req, res) => {
+  const { id } = idParam.parse(req.params);
+  const f = await readWeaveDesignImage(id);
+  res.setHeader("Content-Type", f.mimeType);
+  res.setHeader("Content-Length", String(f.content.length));
+  res.setHeader("Cache-Control", "no-store");
+  res.status(200).end(Buffer.from(f.content));
+}));
+router.delete("/:id/image", requirePermission("warpspec:write"), wrap(async (req, res) => {
+  const { id } = idParam.parse(req.params);
+  res.status(200).json({ success: true, data: await deleteWeaveDesignImage(id, req.user?.userId), message: "Desen görseli kaldırıldı." });
 }));
 
 export default router;

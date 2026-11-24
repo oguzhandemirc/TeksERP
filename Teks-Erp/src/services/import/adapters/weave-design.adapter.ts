@@ -16,6 +16,13 @@ import type { ImportAdapter, ImportColumn, PreparedRow } from "../import.types";
 import { importKey } from "../import-key";
 import { AppError } from "../../../utils/app-error";
 import { cellText, encodeLiftPlan, parseLiftPlanCell, setCanonical } from "./weaving-import.shared";
+import {
+  resolveWeaveClass,
+  SHED_MECHANISM_LABEL,
+  WEAVE_SHED_MECHANISMS,
+  WEAVE_STRUCTURE_LABEL,
+  WEAVE_STRUCTURES,
+} from "../../../constants/weave-classification";
 
 const KIND_LABELS: Record<WeaveDesignKind, string> = {
   PLAIN: "Düz",
@@ -28,16 +35,34 @@ const COLUMNS: ImportColumn[] = [
   { key: "code", label: "Desen Kodu", type: "text", required: true, maxLen: 32, example: "D2017" },
   { key: "name", label: "Desen Adı", type: "text", required: true, maxLen: 100, example: "D2017 DÖNER" },
   {
-    key: "kind",
-    label: "Örgü Türü",
+    key: "shedMechanism",
+    label: "Mekanizma",
     type: "enum",
-    required: true,
-    enumValues: Object.values(WeaveDesignKind).map((value) => ({ value, label: KIND_LABELS[value] })),
+    enumValues: WEAVE_SHED_MECHANISMS.map((value) => ({ value, label: SHED_MECHANISM_LABEL[value] })),
+    help: "Eksantrik / Armür / Jakar. Boşsa eski 'Örgü Türü' sütunundan türetilir.",
+    example: "Armür",
+  },
+  {
+    key: "weaveStructure",
+    label: "Örgü",
+    type: "enum",
+    enumValues: WEAVE_STRUCTURES.map((value) => ({ value, label: WEAVE_STRUCTURE_LABEL[value] })),
+    help: "Bezayağı / Dimi / Saten / Döner / Diğer; boş bırakılabilir.",
     example: "Döner",
+  },
+  {
+    key: "kind",
+    label: "Örgü Türü (eski)",
+    type: "enum",
+    enumValues: Object.values(WeaveDesignKind).map((value) => ({ value, label: KIND_LABELS[value] })),
+    help: "Eski şablon uyumu — Mekanizma doluysa boş bırakın.",
+    example: "",
   },
   { key: "familyLabel", label: "Aile", type: "text", maxLen: 40, example: "TERGAL-DÖNER" },
   { key: "frameCount", label: "Çerçeve Sayısı", type: "int", example: "8" },
   { key: "repeatCm", label: "Desen Boyu (cm)", type: "number", example: "1,5" },
+  { key: "repeatWidthCm", label: "Rapor Eni (cm)", type: "number", example: "" },
+  { key: "hookCount", label: "Kanca Sayısı (Jakar)", type: "int", example: "" },
   {
     key: "liftPlan",
     label: "Armür Izgarası",
@@ -52,16 +77,20 @@ const COLUMNS: ImportColumn[] = [
   { key: "isActive", label: "Aktif", type: "bool", example: "Evet" },
 ];
 
-const SCALARS = ["code", "name", "kind", "familyLabel", "frameCount", "repeatCm", "loomFileName", "lenoSetup", "notes"] as const;
+const SCALARS = ["code", "name", "kind", "shedMechanism", "weaveStructure", "familyLabel", "frameCount", "repeatCm", "repeatWidthCm", "hookCount", "loomFileName", "lenoSetup", "notes"] as const;
 
 const SELECT = {
   id: true,
   code: true,
   name: true,
   kind: true,
+  shedMechanism: true,
+  weaveStructure: true,
   familyLabel: true,
   frameCount: true,
   repeatCm: true,
+  repeatWidthCm: true,
+  hookCount: true,
   liftPlan: true,
   loomFileName: true,
   lenoSetup: true,
@@ -69,10 +98,12 @@ const SELECT = {
   isActive: true,
 } as const;
 
-function flatten(r: Record<string, unknown>): Record<string, unknown> {
+function flatten(r: Record<string, unknown> & { kind: string; shedMechanism: string | null; weaveStructure: string | null }): Record<string, unknown> {
   return {
     ...r,
+    ...resolveWeaveClass(r),
     repeatCm: r.repeatCm === null ? null : Number(r.repeatCm),
+    repeatWidthCm: r.repeatWidthCm == null ? null : Number(r.repeatWidthCm),
     liftPlan: encodeLiftPlan(r.liftPlan),
   };
 }
@@ -151,6 +182,8 @@ export const weaveDesignImportAdapter: ImportAdapter = {
 function toBody(row: PreparedRow): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const k of SCALARS) if (row.values[k] !== undefined) out[k] = row.values[k];
+  // Yeni eksen sütunu doluysa eski "Örgü Türü" yok sayılır (dışa aktarılan dosyada ikisi birlikte gelir).
+  if (out.shedMechanism !== undefined || out.weaveStructure !== undefined) delete out.kind;
   if (row.values.liftPlan__grid !== undefined) out.liftPlan = row.values.liftPlan__grid;
   return out;
 }

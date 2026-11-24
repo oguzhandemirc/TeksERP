@@ -66,6 +66,7 @@ import { serviceItemService } from "./service-item.service";
 import type { PaginatedResponse } from "../types/api.types";
 import type { CursorPaginatedResponse } from "./base.service";
 import { emitItemCreatedTx } from "./notification-sources/anaveri";
+import { FABRIC_TECHNIQUES, FABRIC_TECHNIQUES_AVAILABLE, type FabricTechniqueValue } from "../constants/weave-classification";
 
 export interface ItemCreateInput {
   /** Boş/verilmezse backend `STK-NNNNNN` üretir; doluysa manuel kod kabul edilir. */
@@ -196,7 +197,17 @@ async function assertWeftSwitchKeepsOverrides(itemId: string, weftSpecId: unknow
 }
 
 /** MAL-1 (S2 çekirdeği): kumaş yapısı alanları — gövdede adı geçen anahtarlar (`undefined` dokunmaz). */
-const FABRIC_STRUCTURE_KEYS = ["rawWidthCm", "rawGsm", "finishedGsm", "composition", "weftSpecId", "weaveDesignId"] as const;
+const FABRIC_STRUCTURE_KEYS = ["rawWidthCm", "rawGsm", "finishedGsm", "composition", "weftSpecId", "weaveDesignId", "fabricTechnique"] as const;
+
+/** Üretim tekniği (2026-11-25): yalnız bugün açık teknikler (Dokuma); Örme "yakında" → 400; null/"" temizler. */
+function readFabricTechnique(raw: unknown): FabricTechniqueValue | null {
+  if (raw === null || raw === "") return null;
+  if (!(FABRIC_TECHNIQUES as readonly unknown[]).includes(raw)) throw AppError.badRequest("Üretim tekniği Dokuma/Örme (WOVEN/KNITTED) olmalı.", { code: "FABRIC_TECHNIQUE_INVALID" });
+  if (!FABRIC_TECHNIQUES_AVAILABLE.includes(raw as FabricTechniqueValue)) {
+    throw AppError.badRequest("Örme üretim tekniği henüz kullanılamıyor; Dokuma seçin.", { code: "FABRIC_TECHNIQUE_NOT_AVAILABLE" });
+  }
+  return raw as FabricTechniqueValue;
+}
 
 /**
  * Kumaş yapısı alanlarını doğrular ve Prisma verisine çevirir: yalnız KUMAŞ kartında (400), sayılar
@@ -225,6 +236,7 @@ async function readFabricStructureFields(itemType: string | undefined, data: Rec
     }
   }
   if (present.includes("weaveDesignId")) out.weaveDesignId = await readWeaveDesignRef(data.weaveDesignId);
+  if (present.includes("fabricTechnique")) out.fabricTechnique = readFabricTechnique(data.fabricTechnique);
   const setsValue = Object.values(out).some((v) => v !== null);
   if (setsValue && itemType !== undefined && itemType !== "FABRIC") {
     throw AppError.badRequest("En/gramaj/kompozisyon/atkı/desen kartı yalnız KUMAŞ kartına girilir", { code: "ITEM_FABRIC_STRUCTURE_FABRIC_ONLY" });
@@ -311,6 +323,8 @@ export class ItemService extends BaseService {
     await assertWarpSpecAssignable(input.itemType, input.warpSpecId);
     const weftDraft = await readItemWeftDraft(input.itemType, data);
     const fabricStructure = {
+      // Kumaş doğuşta Dokuma (bugünkü davranış); gövde açıkça verirse o (Örme 400).
+      ...(input.itemType === "FABRIC" ? { fabricTechnique: "WOVEN" as FabricTechniqueValue } : {}),
       ...(await readFabricStructureFields(input.itemType, data)),
       ...readYarnWasteField(input.itemType, data),
       ...(await readYarnUnitFields(prisma, input.itemType, data)),

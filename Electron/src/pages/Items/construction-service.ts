@@ -21,6 +21,9 @@ export interface WeaveDesignRef {
   code: string;
   name: string;
   kind: string;
+  /** Sınıflama (2026-11-25); eski backend göndermez → `resolveWeaveClass` kind'tan türetir. */
+  shedMechanism?: string | null;
+  weaveStructure?: string | null;
   isActive: boolean;
 }
 

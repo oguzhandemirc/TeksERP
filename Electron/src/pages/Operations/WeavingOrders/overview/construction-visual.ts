@@ -3,7 +3,7 @@
 // yeniden hesaplanmaz; yalnız mini ızgaranın sütun düzeni (döner | zemin | seçici blokları) ve kare boyu seçilir.
 import type { EffectiveConstruction, LiftPlan, WeaveDesign } from "@/pages/WeaveDesigns/types";
 
-export type ConstructionDesign = Pick<WeaveDesign, "id" | "code" | "name" | "kind" | "loomFileName" | "frameCount"> & {
+export type ConstructionDesign = Pick<WeaveDesign, "id" | "code" | "name" | "kind" | "shedMechanism" | "weaveStructure" | "hookCount" | "repeatWidthCm" | "repeatCm" | "loomFileName" | "frameCount"> & {
   liftPlan?: LiftPlan | null;
   lenoFrames?: number[];
   drawingInNote?: string | null;

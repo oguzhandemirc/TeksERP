@@ -1,5 +1,7 @@
-// Yapı sekmesi: desen kimliği + tezgâh bilgileri (PATCH yalnız değişen alanları değil formun tamamını
-// gönderir; sunucu boşu NULL'a çevirir) + seçili kumaşın çözgü katmanları ve tutarlılık uyarıları.
+// Yapı sekmesi: desen kimliği + sınıf (mekanizma · örgü) + mekanizmaya ait tezgâh bilgileri. Alanlar
+// mekanizmaya göre: Armür → çerçeve/.DOP/tahar · Jakar → desen dosyası, kanca, rapor en×boy, görsel ·
+// Eksantrik → yalnız örgü. Gizli alan GÖNDERİLMEZ (saklı değer silinmez; sunucu zaten Armür dışı ızgarayı,
+// Jakar dışı kancayı reddeder). Boş gönderilen görünür alanı sunucu NULL'a çevirir.
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -8,74 +10,100 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { InfoPopover } from "@/components/ui/info-popover";
-import { NATIVE_SELECT_CLASS } from "../WeaveDesignCreateDialog";
 import { weaveDesignApi } from "../service";
-import { WEAVE_DESIGN_KINDS, WEAVE_KIND_LABEL, type DesignFabric, type WeaveDesign, type WeaveDesignKind } from "../types";
+import type { DesignFabric, WeaveDesign, WeaveDesignInput } from "../types";
+import { resolveWeaveClass, type ShedMechanism, type WeaveClass } from "../weave-class";
+import { WeaveClassFields } from "../WeaveClassFields";
+import { DesignImageSection } from "./DesignImageSection";
 import { WarpLayersSection } from "./WarpLayersSection";
 import { decimalToFormText } from "@/lib/decimal-form-text";
 
-type Form = Record<"code" | "name" | "familyLabel" | "frameCount" | "repeatCm" | "loomFileName" | "lenoSetup" | "drawingInNote" | "notes", string> & { kind: WeaveDesignKind };
+type TextKey = "code" | "name" | "familyLabel" | "frameCount" | "repeatCm" | "repeatWidthCm" | "hookCount" | "loomFileName" | "lenoSetup" | "drawingInNote" | "notes";
+type Form = Record<TextKey, string> & WeaveClass;
 
 const DRAWING_IN_HINT = "Tellerin hangi çerçeveden ve tarağın hangi dişinden geçtiği (tahar ve tarak taharı). Örnek: \"1-2-3-4 düz, kenar 2'li, döner 1-2\". Desen kartı basımında \"Tahar\" satırı olarak çıkar; hesaba girmez. Boş bırakılabilir.";
 
-const TEXT_FIELDS: Array<{ key: keyof Omit<Form, "kind" | "notes" | "drawingInNote">; label: string; max: number; mode?: "numeric" | "decimal" }> = [
-  { key: "code", label: "Desen kodu *", max: 32 },
-  { key: "name", label: "Desen adı *", max: 100 },
-  { key: "familyLabel", label: "Aile etiketi (TERGAL-DÖNER, BALIK…)", max: 40 },
-  { key: "frameCount", label: "Çerçeve sayısı (1–32)", max: 2, mode: "numeric" },
-  { key: "repeatCm", label: "Desen boyu (cm)", max: 10, mode: "decimal" },
-  { key: "loomFileName", label: "Tezgâh desen dosyası (.DOP)", max: 64 },
-  { key: "lenoSetup", label: "Döner kurulumu", max: 100 },
+interface FieldDef { key: TextKey; label: string; max: number; mode?: "numeric" | "decimal"; info?: string; show: (m: ShedMechanism, f: Form) => boolean }
+
+const ALL = () => true;
+const FIELDS: FieldDef[] = [
+  { key: "code", label: "Desen kodu *", max: 32, show: ALL },
+  { key: "name", label: "Desen adı *", max: 100, show: ALL },
+  { key: "familyLabel", label: "Aile etiketi (TERGAL-DÖNER, BALIK…)", max: 40, show: ALL },
+  { key: "frameCount", label: "Çerçeve sayısı (1–32)", max: 2, mode: "numeric", show: (m) => m === "DOBBY" },
+  { key: "repeatCm", label: "Desen boyu (cm)", max: 10, mode: "decimal", show: (m) => m !== "JACQUARD" },
+  { key: "loomFileName", label: "Tezgâh desen dosyası (.DOP)", max: 64, show: (m) => m === "DOBBY" },
+  { key: "loomFileName", label: "Desen dosyası", max: 64, info: "Jakar makinesine yüklenen desen dosyasının adı (ör. GUL-01.JC5). Desen bu dosyadan dokunur.", show: (m) => m === "JACQUARD" },
+  { key: "hookCount", label: "Kanca sayısı", max: 5, mode: "numeric", info: "Jakar makinesinin kullandığı kanca (platin) sayısı; her kanca bir ya da birkaç çözgü telini kaldırır. 1–30.000.", show: (m) => m === "JACQUARD" },
+  { key: "repeatWidthCm", label: "Rapor eni (cm)", max: 10, mode: "decimal", info: "Desenin enine bir kez tekrar ettiği genişlik.", show: (m) => m === "JACQUARD" },
+  { key: "repeatCm", label: "Rapor boyu (cm)", max: 10, mode: "decimal", info: "Desenin boyuna bir kez tekrar ettiği uzunluk.", show: (m) => m === "JACQUARD" },
+  { key: "lenoSetup", label: "Döner kurulumu", max: 100, show: (_m, f) => f.weaveStructure === "LENO" },
 ];
 
 function toForm(d: WeaveDesign): Form {
   return {
-    code: d.code, name: d.name, kind: d.kind, familyLabel: d.familyLabel ?? "", frameCount: d.frameCount?.toString() ?? "",
-    repeatCm: decimalToFormText(d.repeatCm), loomFileName: d.loomFileName ?? "", lenoSetup: d.lenoSetup ?? "",
-    drawingInNote: d.drawingInNote ?? "", notes: d.notes ?? "",
+    code: d.code, name: d.name, ...resolveWeaveClass(d), familyLabel: d.familyLabel ?? "", frameCount: d.frameCount?.toString() ?? "",
+    repeatCm: decimalToFormText(d.repeatCm), repeatWidthCm: decimalToFormText(d.repeatWidthCm ?? null), hookCount: d.hookCount?.toString() ?? "",
+    loomFileName: d.loomFileName ?? "", lenoSetup: d.lenoSetup ?? "", drawingInNote: d.drawingInNote ?? "", notes: d.notes ?? "",
   };
 }
 
 const orNull = (v: string) => (v.trim() === "" ? null : v.trim());
+const decOrNull = (v: string) => orNull(v.replace(",", "."));
+const intOrNull = (v: string) => (v.trim() === "" ? null : Number(v));
+
+/** PATCH gövdesi — yalnız seçili mekanizmada görünen alanlar; `kind` sunucuda sınıftan türer. */
+export function structurePayload(f: Form): WeaveDesignInput {
+  const m = f.shedMechanism;
+  const body: WeaveDesignInput = {
+    code: f.code.trim(), name: f.name.trim(), shedMechanism: m, weaveStructure: f.weaveStructure,
+    familyLabel: orNull(f.familyLabel), repeatCm: decOrNull(f.repeatCm), notes: orNull(f.notes),
+  };
+  if (m === "DOBBY") Object.assign(body, { frameCount: intOrNull(f.frameCount), loomFileName: orNull(f.loomFileName), drawingInNote: orNull(f.drawingInNote) });
+  if (m === "JACQUARD") Object.assign(body, { loomFileName: orNull(f.loomFileName), hookCount: intOrNull(f.hookCount), repeatWidthCm: decOrNull(f.repeatWidthCm) });
+  if (f.weaveStructure === "LENO") body.lenoSetup = orNull(f.lenoSetup);
+  return body;
+}
 
 export function StructureTab({ design, fabric, canWrite }: { design: WeaveDesign; fabric: DesignFabric | null; canWrite: boolean }) {
   const qc = useQueryClient();
   const [form, setForm] = useState<Form>(() => toForm(design));
-  const set = (k: keyof Form, v: string) => setForm((f) => ({ ...f, [k]: v }));
+  const set = (k: TextKey, v: string) => setForm((f) => ({ ...f, [k]: v }));
   const save = useMutation({
-    mutationFn: () => weaveDesignApi.update(design.id, {
-      code: form.code.trim(), name: form.name.trim(), kind: form.kind, familyLabel: orNull(form.familyLabel),
-      frameCount: form.frameCount.trim() === "" ? null : Number(form.frameCount), repeatCm: orNull(form.repeatCm.replace(",", ".")),
-      loomFileName: orNull(form.loomFileName), lenoSetup: orNull(form.lenoSetup),
-      drawingInNote: orNull(form.drawingInNote), notes: orNull(form.notes),
-    }),
+    mutationFn: () => weaveDesignApi.update(design.id, structurePayload(form)),
     onSuccess: () => {
       toast.success("Desen kartı güncellendi.");
       void qc.invalidateQueries({ queryKey: ["weave-designs"] });
     },
   });
+  const m = form.shedMechanism;
+  const savedMech = resolveWeaveClass(design).shedMechanism;
   return (
     <div className="space-y-6">
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {TEXT_FIELDS.map((f) => (
-          <div key={f.key} className="space-y-1.5">
-            <Label htmlFor={`wd-${f.key}`}>{f.label}</Label>
+        <WeaveClassFields idPrefix="wd-edit" value={form} disabled={!canWrite} onChange={(c) => setForm((f) => ({ ...f, ...c }))} />
+        {FIELDS.filter((f) => f.show(m, form)).map((f) => (
+          <div key={`${f.key}-${f.label}`} className="space-y-1.5">
+            <div className="flex items-center gap-1.5">
+              <Label htmlFor={`wd-${f.key}`}>{f.label}</Label>
+              {f.info && <InfoPopover desc={f.info} label={`${f.label} açıklaması`} />}
+            </div>
             <Input id={`wd-${f.key}`} value={form[f.key]} maxLength={f.max} inputMode={f.mode} disabled={!canWrite} onChange={(e) => set(f.key, e.target.value)} />
           </div>
         ))}
-        <div className="space-y-1.5">
-          <Label htmlFor="wd-kind-edit">Örgü türü *</Label>
-          <select id="wd-kind-edit" className={NATIVE_SELECT_CLASS} value={form.kind} disabled={!canWrite} onChange={(e) => set("kind", e.target.value)}>
-            {WEAVE_DESIGN_KINDS.map((k) => <option key={k} value={k}>{WEAVE_KIND_LABEL[k]}</option>)}
-          </select>
-        </div>
-        <div className="space-y-1.5 sm:col-span-2 lg:col-span-3">
-          <div className="flex items-center gap-1.5">
-            <Label htmlFor="wd-drawingInNote">Tahar düzeni</Label>
-            <InfoPopover desc={DRAWING_IN_HINT} label="Tahar düzeni açıklaması" />
+        {m === "DOBBY" && (
+          <div className="space-y-1.5 sm:col-span-2 lg:col-span-3">
+            <div className="flex items-center gap-1.5">
+              <Label htmlFor="wd-drawingInNote">Tahar düzeni</Label>
+              <InfoPopover desc={DRAWING_IN_HINT} label="Tahar düzeni açıklaması" />
+            </div>
+            <Input id="wd-drawingInNote" value={form.drawingInNote} maxLength={300} placeholder="1-2-3-4 düz, kenar 2'li, döner 1-2" disabled={!canWrite} onChange={(e) => set("drawingInNote", e.target.value)} />
           </div>
-          <Input id="wd-drawingInNote" value={form.drawingInNote} maxLength={300} placeholder="1-2-3-4 düz, kenar 2'li, döner 1-2" disabled={!canWrite} onChange={(e) => set("drawingInNote", e.target.value)} />
-        </div>
+        )}
+        {m === "JACQUARD" && savedMech === "JACQUARD" && <DesignImageSection design={design} canWrite={canWrite} />}
+        {m === "JACQUARD" && savedMech !== "JACQUARD" && (
+          <p className="text-xs text-muted-foreground sm:col-span-2 lg:col-span-3">Desen görseli, mekanizma Jakar olarak kaydedildikten sonra yüklenebilir.</p>
+        )}
         <div className="space-y-1.5 sm:col-span-2 lg:col-span-3">
           <Label htmlFor="wd-notes">Not</Label>
           <Textarea id="wd-notes" value={form.notes} maxLength={500} disabled={!canWrite} onChange={(e) => set("notes", e.target.value)} />

@@ -132,6 +132,7 @@ export const AUDIT_ISIMLERI: Readonly<Record<string, TermCases>> = {
   FINISHING_RATE: onEkli("apre", sIyelik("tarife", "i", "e")),
   WEFT_SPEC: onEkli("atkı", iyelik("spesifikasyon", "u", "a", "u")),
   WEAVE_DESIGN: onEkli("desen", iyelik("kart", "ı", "a", "ı")),
+  WEAVE_DESIGN_IMAGE: onEkli("desen", iyelik("görsel", "i", "e", "i")),
   ITEM: onEkli("stok", iyelik("kalem", "i", "e", "i")),
   SERVICE_ITEM: onEkli("hizmet", iyelik("kart", "ı", "a", "ı")),
   get PRODUCT_RECIPE() { return onEkli(TERIM.terbiyeIsEmri.tekilKucuk, iyelik("şablon", "u", "a", "u")); },

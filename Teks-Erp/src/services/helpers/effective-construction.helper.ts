@@ -16,6 +16,7 @@ import { expandWeftSequence, weftLetter } from "./weft-sequence.helper";
 import { WARP_SPEC_YARN_DENIER_SELECT, warpSpecYarnLines } from "./warp-spec-yarn.helper";
 import { expandWarpSequence, type WarpEndsSequence } from "./warp-sequence.helper";
 import { pctText, qtyText } from "./qty-text.helper";
+import { mechanismUsesLiftPlan, resolveWeaveClass, type WeaveClass } from "../../constants/weave-classification";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -27,9 +28,26 @@ const WARP_SELECT = {
   sequenceNote: true, endsPerDent: true, reedNo: true, selvedgeEnds: true,
 } satisfies Prisma.WarpSpecSelect;
 const DESIGN_SELECT = {
-  id: true, code: true, name: true, kind: true, familyLabel: true, frameCount: true, repeatCm: true,
+  id: true, code: true, name: true, kind: true, shedMechanism: true, weaveStructure: true, hookCount: true, repeatWidthCm: true,
+  familyLabel: true, frameCount: true, repeatCm: true,
   liftPlan: true, loomFileName: true, lenoSetup: true, lenoFrames: true, drawingInNote: true, isActive: true,
 } satisfies Prisma.WeaveDesignSelect;
+type RawDesign = Prisma.WeaveDesignGetPayload<{ select: typeof DESIGN_SELECT }>;
+export type EffectiveWeaveDesign = Omit<RawDesign, "shedMechanism" | "weaveStructure"> & WeaveClass;
+
+/**
+ * Desenin okuyucu görünümü — TEK nokta: sınıflama çözülür, Armür dışı mekanizmada saklı armür ızgarası
+ * GÖRÜNMEZ (drawdown, basım, tablet, panel yapı görseli hepsi buradan okur); Jakar dışında kanca sayısı gizli.
+ */
+export function effectiveWeaveDesign(d: RawDesign | null): EffectiveWeaveDesign | null {
+  if (!d) return null;
+  const cls = resolveWeaveClass(d);
+  return {
+    ...d, ...cls,
+    liftPlan: mechanismUsesLiftPlan(cls.shedMechanism) ? d.liftPlan : null,
+    hookCount: cls.shedMechanism === "JACQUARD" ? d.hookCount : null,
+  };
+}
 const WEFT_SELECT = {
   id: true, code: true, name: true, picksPerCm: true, sequenceCode: true, weftProgramNo: true,
   yarns: { orderBy: { sortOrder: "asc" }, select: { sortOrder: true, picksInRepeat: true, yarnItem: { select: YARN_SELECT } } },
@@ -80,7 +98,7 @@ export interface EffectiveConstruction {
     /** Atkı seçici sütunu: atkı başına 1-tabanlı iplik satırı no (`sequenceCode` açılımı); kod yoksa/geçersizse null. */
     pickSequence: number[] | null;
   } | null;
-  weaveDesign: Prisma.WeaveDesignGetPayload<{ select: typeof DESIGN_SELECT }> | null;
+  weaveDesign: EffectiveWeaveDesign | null;
   warnings: Array<{ code: string; message: string }>;
 }
 
@@ -184,7 +202,7 @@ export async function resolveEffectiveConstruction(
         pickSequence: expandWeftSequence(ws.sequenceCode, yarns.length, LIFT_PLAN_MAX_PICKS),
       }
       : null,
-    weaveDesign: item.weaveDesign,
+    weaveDesign: effectiveWeaveDesign(item.weaveDesign),
   };
   return { ...base, warnings: constructionWarnings(base) };
 }

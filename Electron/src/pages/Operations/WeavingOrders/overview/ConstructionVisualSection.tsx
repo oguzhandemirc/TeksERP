@@ -16,7 +16,8 @@ import { LENO_LABEL, LENO_TINT, LIFT_COLOR, yarnColor, yarnLetter } from "@/comp
 import { V3Section } from "@/pages/Operations/WorkOrders/detail-v3/V3Section";
 import { constructionSlots, slotOf } from "@/components/weave/shared-palette";
 import { stripYarnsOf } from "@/pages/WeaveDesigns/tabs/WarpLayersVisual";
-import { WARP_LAYER_ROLE_LABEL, WEAVE_KIND_LABEL, type WarpRef } from "@/pages/WeaveDesigns/types";
+import { WARP_LAYER_ROLE_LABEL, type WarpRef } from "@/pages/WeaveDesigns/types";
+import { resolveWeaveClass, weaveClassLabel } from "@/pages/WeaveDesigns/weave-class";
 import { weavingOrderService } from "../service";
 import { miniLiftLayout, weaveDesignHref, type WeavingOrderConstruction } from "./construction-visual";
 
@@ -79,7 +80,7 @@ function ConstructionBody({ c, itemId, onNavigate, print }: { c: WeavingOrderCon
     <>
       <dl className="grid grid-cols-[5.5rem_1fr] gap-x-2 gap-y-0.5 text-xs">
         {d && (<><dt className="text-muted-foreground">Desen</dt>
-          <dd className="min-w-0 break-words">{d.name} <span className="text-muted-foreground">({d.code} · {WEAVE_KIND_LABEL[d.kind] ?? d.kind}{d.loomFileName ? ` · ${d.loomFileName}` : ""})</span></dd></>)}
+          <dd className="min-w-0 break-words">{d.name} <span className="text-muted-foreground">({d.code} · {weaveClassLabel(d)}{d.loomFileName ? ` · ${d.loomFileName}` : ""})</span></dd></>)}
         {w && (<><dt className="text-muted-foreground">Atkı</dt>
           <dd className="min-w-0 break-words">{w.name} <span className="text-muted-foreground">({w.code}{w.sequenceCode ? ` · ${w.sequenceCode}` : ""})</span></dd></>)}
         {c.variantCode && (<><dt className="text-muted-foreground">Varyant</dt><dd>{c.variantCode}</dd></>)}
@@ -106,6 +107,17 @@ function ConstructionBody({ c, itemId, onNavigate, print }: { c: WeavingOrderCon
   );
 }
 
+/** Izgara yoksa nedeni mekanizmadan: Jakar/Eksantrik kartta armür ızgarası hiç olmaz (sunucu da gizler). */
+function noLiftPlanText(d: NonNullable<WeavingOrderConstruction["weaveDesign"]>): string {
+  const m = resolveWeaveClass(d).shedMechanism;
+  if (m === "JACQUARD") {
+    const parts = [d.hookCount ? `${d.hookCount} kanca` : null, d.repeatWidthCm && d.repeatCm ? `rapor ${d.repeatWidthCm} × ${d.repeatCm} cm` : null].filter(Boolean);
+    return `Jakar desen — tezgâhın desen dosyasından dokunur${parts.length ? ` (${parts.join(", ")})` : ""}.`;
+  }
+  if (m === "CAM") return "Eksantrik desen — armür ızgarası yok; çerçeveleri tezgâhın kamları kaldırır.";
+  return "Desen kartında armür planı girilmemiş.";
+}
+
 /** Küçük karede iki haneli çerçeve noları sıkışmasın: yalnız çiftler yazılır. */
 const frameLabel = (n: number, cell: number) => (n < 10 || cell >= 14 || n % 2 === 0 ? String(n) : null);
 
@@ -117,7 +129,7 @@ function MiniLiftPlan({ c, onOpen, weftSlots }: { c: WeavingOrderConstruction; o
   const yarns = c.weft?.yarns ?? [];
   const seq = c.weft?.pickSequence ?? null;
   const lay = miniLiftLayout(d.liftPlan, leno, seq, yarns.length);
-  if (!lay) return <p className="text-xs text-muted-foreground">Desen kartında armür planı girilmemiş.</p>;
+  if (!lay) return <p className="text-xs text-muted-foreground">{noLiftPlanText(d)}</p>;
   const plan = d.liftPlan!;
   const lenoSet = new Set(leno);
   const grid = (

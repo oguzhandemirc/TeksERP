@@ -1,5 +1,5 @@
 // Ürün penceresi > Atkı (B19): hiç atkı kartı yokken "var olan kartı seç" çizilmez; yeni atkıda sütun başlığı
-// "Rapordaki atkı adedi" ⓘ ile, yer tutucular "ör. …" (dolu değer gibi durmaz).
+// sütun başlığı "Atış adedi" (uzun anlam ⓘ'de), yer tutucular "ör. …" (dolu değer gibi durmaz).
 import { describe, expect, it, vi } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
@@ -35,7 +35,8 @@ describe("ItemWeftSection", () => {
   it("yeni atkı: sütun başlığı açık, yer tutucular örnek biçiminde", async () => {
     list.rows = [];
     renderWithProviders(<ItemWeftSection draft={draft({ mode: "new", content: { ...EMPTY_WEFT, rows: [{ yarnItemId: "", picks: "" }] } })} canWrite />);
-    expect(screen.getByText("Rapordaki atkı adedi")).toBeInTheDocument();
+    expect(screen.getByText("Atış adedi")).toBeInTheDocument();
+    expect(screen.getByLabelText("Atkı sıklığı (atkı/cm)")).toHaveAttribute("placeholder", "ör. 22");
     expect(screen.getByLabelText("Atkı sırası kodu")).toHaveAttribute("placeholder", "ör. A4 B1 A4 C1");
     expect(screen.getByLabelText("Atkı program no")).toHaveAttribute("placeholder", "ör. 6037");
     expect(screen.getByLabelText("Atkı A rapordaki atkı adedi")).toHaveAttribute("placeholder", "ör. 4");

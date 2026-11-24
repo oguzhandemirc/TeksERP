@@ -12,9 +12,9 @@ import { weavingOrderConstruction } from "./helpers/tablet-construction.helper";
 import { computeDrawdown, drawdownWindow } from "./helpers/weave-drawdown.helper";
 import { warpSpecDenierLines } from "./helpers/warp-spec-yarn.helper";
 import { qtyText } from "./helpers/qty-text.helper";
+import { weaveClassLabel } from "../constants/weave-classification";
 import { renderWeaveDesignCardHtml, type WeaveCardView, type WeaveCardYarn } from "./document-render/weave-design-card.html";
 
-const KIND_LABEL: Record<string, string> = { PLAIN: "Bez ayağı", DOBBY: "Armür", JACQUARD: "Jakar", LENO: "Döner (leno)" };
 const LAYER_ROLE_LABEL: Record<string, string> = { LENO: "döner", SECONDARY: "ikinci" };
 
 const dec = (v: Prisma.Decimal | null | undefined): string | null => (v == null ? null : qtyText(v));
@@ -33,11 +33,11 @@ function fabricView(c: EffectiveConstruction): WeaveCardView["fabric"] {
   const d = c.weaveDesign;
   const plan = Array.isArray(d?.liftPlan) ? (d.liftPlan as number[][]) : null;
   if (!d || !plan || plan.length === 0) return null;
-  if (d.kind === "LENO") return { kind: "LENO" };
+  if (d.weaveStructure === "LENO") return { kind: "LENO" };
   const frames = plan.reduce((m, r) => Math.max(m, r.length), 0);
   const ground = Array.from({ length: frames }, (_, i) => i + 1).filter((f) => !d.lenoFrames.includes(f)).length;
   const seq = c.weft?.pickSequence ?? null;
-  const dd = computeDrawdown({ kind: d.kind, liftPlan: plan, lenoFrames: d.lenoFrames, pickSequence: seq, ...drawdownWindow(ground, plan.length, seq?.length ?? 0) });
+  const dd = computeDrawdown({ kind: d.weaveStructure, liftPlan: plan, lenoFrames: d.lenoFrames, pickSequence: seq, ...drawdownWindow(ground, plan.length, seq?.length ?? 0) });
   return dd ? { kind: "DRAWDOWN", ...dd } : null;
 }
 
@@ -62,8 +62,8 @@ export async function buildWeaveCardView(itemId: string, now: Date = new Date(),
     fabric: fabricView(c),
     design: d
       ? {
-        code: d.code, name: d.name, kindLabel: KIND_LABEL[d.kind] ?? d.kind, familyLabel: d.familyLabel, frameCount: d.frameCount,
-        repeatCm: dec(d.repeatCm), loomFileName: d.loomFileName, lenoSetup: d.lenoSetup,
+        code: d.code, name: d.name, kindLabel: weaveClassLabel(d), familyLabel: d.familyLabel, frameCount: d.frameCount,
+        repeatCm: dec(d.repeatCm), repeatWidthCm: dec(d.repeatWidthCm), hookCount: d.hookCount, loomFileName: d.loomFileName, lenoSetup: d.lenoSetup,
         drawingInNote: d.drawingInNote,
       }
       : null,

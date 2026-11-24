@@ -19,4 +19,11 @@ export const ENUM_LABELS_EK2: Record<string, string> = {
   FORMULA: "Ek maliyet formülü",
   // PrintedDocType (devere S6): devereci gövde mutabakatı
   BEAM_BODY_STATEMENT: "Gövde mutabakatı",
+  // WeaveShedMechanism (2026-11-25) — DOBBY/JACQUARD WeaveDesignKind ile ortak
+  CAM: "Eksantrik",
+  // WeaveStructure (2026-11-25) — PLAIN/LENO WeaveDesignKind ile, OTHER genel ile ortak
+  TWILL: "Dimi",
+  SATIN: "Saten",
+  // FabricTechnique (2026-11-25) — WOVEN ortak (ITEM.fabricTechnique override'ı "Dokuma")
+  KNITTED: "Örme",
 };

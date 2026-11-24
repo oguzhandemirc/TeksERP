@@ -19,7 +19,8 @@
 // `/api/gelen-belge`: belge fotoğrafı base64 gövdeyle gelir (≤ 5 MB dosya ≈ 6,7 MB gövde; D2, 2026-10-29).
 // `/api/etkili-destek`: destek talebi ekleri base64 gelir (5 × 10 MB); yalnız ekli iki POST ucu `SUPPORT_BODY_LIMIT` taşır.
 // `/api/warping-beam-rejections`: kusurlu levent ret fotoğrafları base64 (≤ 3 × 5 MB; devere ek C1).
-export const BUYUK_GOVDE_YOLLARI = ["/api/import", "/api/config-bundle", "/api/certificates", "/api/gelen-belge", "/api/etkili-destek", "/api/warping-beam-rejections"] as const;
+// `/api/weave-designs`: desen görseli base64 (≤ 5 MB; 2026-11-25).
+export const BUYUK_GOVDE_YOLLARI = ["/api/import", "/api/config-bundle", "/api/certificates", "/api/gelen-belge", "/api/etkili-destek", "/api/warping-beam-rejections", "/api/weave-designs"] as const;
 
 /** Global JSON gövde limiti — 413 mesajı da buradan okunur (metin sabiti YOK). */
 export const VARSAYILAN_GOVDE_LIMITI = "1mb";
@@ -30,6 +31,9 @@ export const BUYUK_GOVDE_LIMITI = "10mb";
 /** Sertifika belge eki (base64, ≤ 5 MB dosya ≈ 6,7 MB gövde) router'ının kendi limiti (K4P-SERT). */
 export const CERTIFICATE_BODY_LIMIT = "8mb";
 
+/** Desen kartı router'ı (desen görseli base64, ≤ 5 MB dosya ≈ 6,7 MB gövde). */
+export const WEAVE_DESIGN_BODY_LIMIT = "8mb";
+
 /** Etkili Destek ekli uçlarının limiti: 5 dosya × 10 MB, base64 (×4/3) + metin payı. */
 export const SUPPORT_BODY_LIMIT = "70mb";
 
@@ -39,6 +43,7 @@ export const WARPING_REJECTION_BODY_LIMIT = "22mb";
 /** Kendi limiti `BUYUK_GOVDE_LIMITI`ten farklı olan büyük-gövde ön ekleri. */
 const PREFIX_LIMITS: Readonly<Record<string, string>> = {
   "/api/certificates": CERTIFICATE_BODY_LIMIT,
+  "/api/weave-designs": WEAVE_DESIGN_BODY_LIMIT,
   "/api/etkili-destek": SUPPORT_BODY_LIMIT,
   "/api/warping-beam-rejections": WARPING_REJECTION_BODY_LIMIT,
 };
