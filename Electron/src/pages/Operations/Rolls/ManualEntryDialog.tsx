@@ -30,6 +30,7 @@ import { PropertyPickerModal } from "@/components/forms/PropertyPickerModal";
 import { itemService } from "@/pages/Items/service";
 import { qualityGradeService } from "@/pages/QualityGrades/service";
 import { customerService } from "@/pages/Customers/service";
+import { useCustomerRecordForm } from "@/pages/Customers/useCustomerRecordForm";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { useEmanetEnabled, useKk1WeightEntryEnabled } from "@/hooks/usePricingEnabled";
@@ -118,6 +119,7 @@ interface Props {
 
 export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", onCreatedForPrint }: Props) {
   const qc = useQueryClient();
+  const customerForm = useCustomerRecordForm();
   const { hasPermission } = useRoleAccess();
   const canPrint = hasPermission("label:print");
   const isWarehouse = target === "FINISHED_STOCK";
@@ -453,6 +455,7 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
                     value={field.value}
                     onChange={field.onChange}
                     service={customerService}
+                    recordForm={customerForm}
                     queryKey="customers"
                     getLabel={(c) => `${c.code} — ${c.name}`}
                     nullable
@@ -475,6 +478,7 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
                     value={field.value}
                     onChange={field.onChange}
                     service={customerService}
+                    recordForm={customerForm}
                     queryKey="customers"
                     getLabel={(c) => `${c.code} — ${c.name}`}
                     nullable
