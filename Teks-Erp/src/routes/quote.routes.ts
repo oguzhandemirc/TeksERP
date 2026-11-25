@@ -140,7 +140,7 @@ router.patch("/:id", requirePermission("quote:write"), wrap(async (req, res) => 
  *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
  *     responses:
  *       201: { description: "Güncel teklif (+warnings: STANDARD_COST_MISSING vb.)" }
- *       400: { description: "COST_INPUT_MISSING · QUOTE_UNIT_UNSUPPORTED" }
+ *       400: { description: "COST_INPUT_MISSING (missing[]; YARN_PRICE_MISSING'te details.yarns [{id, code, name}]) · QUOTE_UNIT_UNSUPPORTED" }
  *       409: { description: QUOTE_STATUS_CONFLICT }
  */
 router.post("/:id/lines", requirePermission("quote:write"), wrap(async (req, res) => {

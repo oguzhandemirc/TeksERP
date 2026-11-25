@@ -14,6 +14,7 @@ import type { WeftSpecDetail, WeftSpecListRow } from "@/pages/WeaveDesigns/types
 import { buildWeftBody, EMPTY_WEFT, weftContentReady, WeftContentFields, type WeftContent } from "@/pages/WeaveDesigns/tabs/WeftContentFields";
 import { weftContentFromSpec } from "@/pages/WeaveDesigns/tabs/WeftSpecEditor";
 import { WeftCalcPanel } from "./WeftCalcPanel";
+import type { WeftCalcCtx } from "./weft-calc";
 
 export const WEFT_SPECS_QUERY_KEY = "weft-specs";
 const FIRST_ROW: WeftContent = { ...EMPTY_WEFT, rows: [{ yarnItemId: "", picks: "" }] };
@@ -28,9 +29,11 @@ interface Props {
   draft?: Omit<WeftSpecDetail, "id"> | null;
   /** Seçicinin kayıt formu (`useWeftSpecRecordForm`) kaydı kendisi yapar; yoksa pencere kendi kaydeder. */
   onSubmit?: (body: Record<string, unknown>) => Promise<void>;
+  /** Ürün penceresinden açıldıysa kumaş bağlamı: hesap paneli atkı boyunu kumaşın zincirinden alır (kart değişmez). */
+  calcCtx?: WeftCalcCtx;
 }
 
-export function WeftSpecFormDialog({ open, onOpenChange, initial, canWrite, draft = null, onSubmit }: Props) {
+export function WeftSpecFormDialog({ open, onOpenChange, initial, canWrite, draft = null, onSubmit, calcCtx }: Props) {
   const qc = useQueryClient();
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
@@ -84,7 +87,7 @@ export function WeftSpecFormDialog({ open, onOpenChange, initial, canWrite, draf
           {initial && canWrite && <SpecOpenOrdersNotice kind="weft" id={initial.id} />}
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
             <WeftContentFields value={content} onChange={setContent} canWrite={canWrite} savedSeq={initial?.sequenceCode ?? ""} idPrefix="wsf" />
-            <WeftCalcPanel content={content} />
+            <WeftCalcPanel content={content} ctx={calcCtx} />
           </div>
         </div>
         <DialogFooter>

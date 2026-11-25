@@ -55,4 +55,12 @@ describe("WeavingCostSection", () => {
     renderWithProviders(<WeavingCostSection itemId="i1" />);
     expect(await screen.findByText("Bu ürünün kayıtlı standart maliyeti yok.")).toBeInTheDocument();
   });
+
+  it("'Maliyet kartına git' kart kenarına yapışmaz: kendi satır kutusunda (.order) durur", async () => {
+    detail.mockResolvedValue({ aktifSurum: null });
+    renderWithProviders(<WeavingCostSection itemId="i1" />);
+    const link = await screen.findByTestId("wo-cost-link");
+    expect(link).toHaveAttribute("href", expect.stringContaining("/cost/items/i1"));
+    expect(link.parentElement).toHaveClass("order");
+  });
 });

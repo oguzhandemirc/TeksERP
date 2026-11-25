@@ -8,6 +8,7 @@
 // Bekçi: Teks-Erp/scripts/test_sunucu_notlari.ts.
 import { toast, type ExternalToast } from "sonner";
 import { isReportUrl } from "./report-request";
+import { warningNoteText } from "./server-warning-codes";
 
 /** Servislerin bir kısmı zarfı kendi tipine daraltır; okuma bilerek GEVŞEK. */
 type ServerResponseLike = { message?: unknown; warnings?: unknown } | null | undefined;
@@ -26,8 +27,9 @@ export function showServerWarnings(res: ServerResponseLike, now: number = Date.n
   shown.add(res);
   const w = res.warnings;
   if (!Array.isArray(w)) return;
-  for (const note of w) {
-    if (typeof note !== "string" || !note.trim()) continue;
+  for (const raw of w) {
+    if (typeof raw !== "string" || !raw.trim()) continue;
+    const note = warningNoteText(raw);
     const prev = lastShownAt.get(note);
     if (prev !== undefined && now - prev < REPEAT_WINDOW_MS) continue;
     if (opts?.oncePerSession) {

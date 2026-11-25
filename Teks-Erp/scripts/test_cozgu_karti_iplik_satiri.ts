@@ -14,6 +14,7 @@
 // §7 (D3 yazma kolları): gövde `yarns` → satır kümesi REPLACE, kolonlar türetilir, doğrulamalar 400, audit eski/yeni
 //   küme, diriltme, tel önerisi (S6). SONDA (2026-11-17, geri alındı): kanca `pending` kümesini yok sayınca §7a/§7d/§7e/§7f
 //   kırmızı (35/4); aynı iplik denetimi kapatılınca §7i kırmızı (38/1, DB unique 400 vermez).
+// §7w künye: SONDA (2026-11-26, geri alındı): `PROVENANCE_MODELS`ten `warpSpec` çıkarılınca §7w kırmızı.
 // =============================================================================
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -23,6 +24,7 @@ import { warpSpecService } from "../src/routes/warp-spec.routes";
 import { warpSpecSummaryFromLines, warpSpecYarnLines, WARP_SPEC_YARN_LINES_SELECT } from "../src/services/helpers/warp-spec-yarn.helper";
 import { suggestWarpEnds } from "../src/services/warp-plan.service";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
+import { ensureTestAdmin } from "./fixture-test-user";
 
 let pass = 0;
 let fail = 0;
@@ -98,6 +100,12 @@ async function writeArms({ a, b, c, mk, specIds }: Arms): Promise<void> {
   check("§7c2 GET /:id endsSequence: rapor [1,2,3] × 2400, uyuşmazlık işaretli", J(es?.repeat) === "[1,2,3]" && es?.repeatCount === 2400 && es.remainder === 0 && es.totalEnds === 7200 && es.matchesYarnEnds === false, J(es));
   const ret = (s1 as { data?: { yarns?: unknown[] } }).data?.yarns ?? [];
   check("§7d yanıt satırları TAZE taşır (kanca sonrası okunur)", ret.length === 3, `${ret.length}`);
+  // Künye: API'yle açılan kartta oluşturan oturum kullanıcısıdır (PROVENANCE_MODELS'te `warpSpec`).
+  const actor = await ensureTestAdmin();
+  const own = idOf(await warpSpecService.create({ code: `${damga}-KN`, name: `${damga}-KN`, yarns: [{ yarnItemId: a, endsCount: 100 }] }, actor.id));
+  specIds.push(own);
+  const ownRow = await prisma.warpSpec.findUniqueOrThrow({ where: { id: own }, select: { createdById: true, updatedById: true } });
+  check("§7w ⭐ oturumla açılan çözgü kartında createdById/updatedById = kullanıcı", ownRow.createdById === actor.id && ownRow.updatedById === actor.id, J(ownRow));
   const log1 = (await yarnLogs(s1Id))[0];
   check("§7e audit: doğuşta yeni küme yazıldı", J((log1?.newData as { yarns?: unknown[] } | null)?.yarns?.length) === "3" && J((log1?.oldData as { yarns?: unknown[] } | null)?.yarns) === "[]", J(log1));
 

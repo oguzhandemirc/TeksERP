@@ -7,12 +7,16 @@ import { weftSpecApi } from "@/pages/WeaveDesigns/service";
 import type { WeftSpecDetail } from "@/pages/WeaveDesigns/types";
 import type { ApiResponse } from "@/types/api";
 import { weftSpecsPath } from "./open-weft-specs";
+import type { WeftCalcCtx } from "./weft-calc";
 import { WEFT_SPECS_QUERY_KEY, WeftSpecFormDialog } from "./WeftSpecFormDialog";
 
 // Seçici satırı hafif özet (`WeftSpecRef`); örnek almadan önce tam kart çekilir — tip özet, nesne tam kart.
 const asRef = (d: WeftSpecDetail) => d as unknown as WeftSpecRef;
 
-export function useWeftSpecRecordForm(): RecordFormSpec<WeftSpecRef> {
+/** `calcCtx`: ürün penceresinden açılınca kumaş bağlamı — yeni kartın hesap paneli atkı boyunu kumaştan alır. */
+export function useWeftSpecRecordForm(calcCtx?: WeftCalcCtx): RecordFormSpec<WeftSpecRef> {
+  const itemId = calcCtx?.itemId ?? null;
+  const rawWidthCm = calcCtx?.rawWidthCm ?? null;
   return useMemo<RecordFormSpec<WeftSpecRef>>(() => ({
     entityName: "Atkı kartı",
     service: {
@@ -34,7 +38,8 @@ export function useWeftSpecRecordForm(): RecordFormSpec<WeftSpecRef> {
         canWrite
         draft={draft as unknown as Omit<WeftSpecDetail, "id"> | null}
         onSubmit={(body) => onSubmit(body as Partial<WeftSpecRef>)}
+        calcCtx={{ itemId, rawWidthCm }}
       />
     ),
-  }), []);
+  }), [itemId, rawWidthCm]);
 }

@@ -1,7 +1,6 @@
 // Teklif başlığı alanları (yeni + taslak düzenleme). Müşteri seçici DOĞRUDAN modal (yalnız müşteri rollü kartlar
 // sunucuda doğrulanır: CUSTOMER_ROLE_REQUIRED). Müşteri ve döviz yalnız yeni teklifte seçilir (sunucu PATCH'te reddeder).
-import type { ReactNode } from "react";
-import { Badge } from "@/components/ui/badge";
+import { useId, type ReactNode } from "react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { FormField } from "@/components/forms/FormField";
@@ -30,6 +29,7 @@ function fxSourceLabel(currency: string, src: HeaderFieldsProps["fxSource"]): st
 }
 
 function PartyFields({ value, onChange, mode, customerName }: HeaderFieldsProps) {
+  const uid = useId();
   return (
     <Grid>
       <FormField label="Müşteri" required className="sm:col-span-2">
@@ -42,57 +42,58 @@ function PartyFields({ value, onChange, mode, customerName }: HeaderFieldsProps)
       <FormField label="Şube (sevk noktası)">
         <BranchSelect customerId={value.customerId} value={value.branchId} onChange={(branchId) => onChange({ branchId })} />
       </FormField>
-      <FormField label="Geçerlilik (son gün)" hint={mode === "create" ? "Boş: teklif tarihinden 30 gün" : undefined}>
-        <DatePickerInput value={value.validUntilDate} onChange={(v) => onChange({ validUntilDate: v })} aria-label="Geçerlilik tarihi" />
+      <FormField label="Geçerlilik (son gün)" hint={mode === "create" ? "Boş: teklif tarihinden 30 gün" : undefined} htmlFor={`${uid}-valid`}>
+        <DatePickerInput id={`${uid}-valid`} value={value.validUntilDate} onChange={(v) => onChange({ validUntilDate: v })} aria-label="Geçerlilik tarihi" />
       </FormField>
     </Grid>
   );
 }
 
 function TermFields({ value, onChange, mode, fxSource, currencyHint }: HeaderFieldsProps) {
+  const uid = useId();
   const src = fxSourceLabel(value.currency, fxSource);
   const num = (label: string, key: "paymentTermDays" | "commissionPct" | "financeChargePct" | "freightPerM", hint?: string) => (
-    <FormField label={label} hint={hint}>
-      <Input inputMode="decimal" value={value[key]} onChange={(e) => onChange({ [key]: e.target.value })} aria-label={label} />
+    <FormField label={label} hint={hint} htmlFor={`${uid}-${key}`}>
+      <Input id={`${uid}-${key}`} inputMode="decimal" value={value[key]} onChange={(e) => onChange({ [key]: e.target.value })} />
     </FormField>
   );
   return (
     // M15: kısa alanlar tek ızgarada eşit genişlik; para birimi tek başına satırda kalmaz.
     <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
-      <FormField label="Para birimi" required hint={mode === "create" ? currencyHint : undefined}>
+      <FormField label="Para birimi" required hint={mode === "create" ? currencyHint : undefined} htmlFor={mode === "create" ? `${uid}-currency` : undefined}>
         {mode === "create" ? (
-          <CurrencySelect className="w-full" value={value.currency} onChange={(currency) => onChange({ currency })} />
+          <CurrencySelect id={`${uid}-currency`} className="w-full" value={value.currency} onChange={(currency) => onChange({ currency })} />
         ) : (
           <p className="flex h-9 items-center text-sm font-medium">{value.currency}</p>
         )}
       </FormField>
       {value.currency !== "TRY" && (
-        <FormField label={`Kur (1 ${value.currency} = ? TL)`} hint={mode === "create" ? "Boş: finans modülünün kuru önerilir" : undefined}>
-          <div className="flex items-center gap-2">
-            <Input inputMode="decimal" value={value.fxRate} onChange={(e) => onChange({ fxRate: e.target.value })} aria-label="Kur" />
-            {src && <Badge variant="outline" className="whitespace-nowrap" data-testid="fx-source">{src}</Badge>}
-          </div>
+        // Kaynak rozeti girdinin YANINDA dar sütunda girdiyi eziyordu (1440'ta kur kesik): ipucu satırına indi.
+        <FormField label={`Kur (1 ${value.currency} = ? TL)`} htmlFor={`${uid}-fx`}
+          hint={src ? <span data-testid="fx-source">Kaynak: {src}</span> : mode === "create" ? "Boş: finans modülünün kuru önerilir" : undefined}>
+          <Input id={`${uid}-fx`} inputMode="decimal" value={value.fxRate} onChange={(e) => onChange({ fxRate: e.target.value })} />
         </FormField>
       )}
       {num("Vade (gün)", "paymentTermDays")}
       {num("Vade farkı %", "financeChargePct")}
       {num("Komisyon %", "commissionPct")}
       {num(`Navlun (${value.currency}/m)`, "freightPerM")}
-      <FormField label="Müşteri referansı">
-        <Input maxLength={100} value={value.customerReference} onChange={(e) => onChange({ customerReference: e.target.value })} />
+      <FormField label="Müşteri referansı" htmlFor={`${uid}-ref`}>
+        <Input id={`${uid}-ref`} maxLength={100} value={value.customerReference} onChange={(e) => onChange({ customerReference: e.target.value })} />
       </FormField>
     </div>
   );
 }
 
 function TextFields({ value, onChange }: HeaderFieldsProps) {
+  const uid = useId();
   return (
     <div className="grid gap-3 lg:grid-cols-2">
-      <FormField label="Not (müşteriye)">
-        <Textarea rows={2} maxLength={1000} value={value.notes} onChange={(e) => onChange({ notes: e.target.value })} />
+      <FormField label="Not (müşteriye)" htmlFor={`${uid}-notes`}>
+        <Textarea id={`${uid}-notes`} rows={2} maxLength={1000} value={value.notes} onChange={(e) => onChange({ notes: e.target.value })} />
       </FormField>
-      <FormField label="İç not" hint="Müşteri belgesine çıkmaz">
-        <Textarea rows={2} maxLength={1000} value={value.internalNote} onChange={(e) => onChange({ internalNote: e.target.value })} />
+      <FormField label="İç not" hint="Müşteri belgesine çıkmaz" htmlFor={`${uid}-internal`}>
+        <Textarea id={`${uid}-internal`} rows={2} maxLength={1000} value={value.internalNote} onChange={(e) => onChange({ internalNote: e.target.value })} />
       </FormField>
     </div>
   );

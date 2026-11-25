@@ -57,6 +57,8 @@ const PROVENANCE_MODELS = new Set([
   "color", "customer", "customerBranch", "defectType", "fabricProperty", "fourPointRuleSet", "item",
   "machine", "order", "peripheralDevice", "productRecipe", "qualityGrade",
   "returnReason", "route", "station", "machineStopCodeMap", "serviceItem",
+  // Çözgü kartının kolonu vardı ama listede yoktu → API'yle açılan kartta oluşturan boş kalıyordu (yalnız yeni kayıt).
+  "warpSpec",
 ]);
 
 export function withActor(
