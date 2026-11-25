@@ -86,6 +86,8 @@ interface Props<T extends { id: string }> {
   keepFormOpenAfterSave?: boolean;
   /** URL'de `sortBy` yokken sunucuya giden sıralama (ör. Kumaş Özellikleri `hierarchy`); başlık tıklaması ezer. */
   defaultSortBy?: string;
+  /** `defaultSortBy` ile giden yön (ör. sıra numarası küçükten büyüğe "asc"); yoksa sunucu varsayılanı. */
+  defaultSortOrder?: "asc" | "desc";
   /** DataTable satır sınıfı (bkz. `DataTable.rowClassName`). */
   rowClassName?: (row: T) => string | undefined;
   /** Satır seçilebilir mi (ör. daraltılmış/gizli satır) — "tümünü seç" görünmeyeni kapsamasın; yoksa hepsi. */
@@ -135,6 +137,7 @@ export function CrudPage<T extends { id: string }>({
   actionsPortal,
   keepFormOpenAfterSave,
   defaultSortBy,
+  defaultSortOrder,
   rowClassName,
   rowSelectable,
   openCreateOnMount = false,
@@ -278,6 +281,7 @@ export function CrudPage<T extends { id: string }>({
     forceFilters,
     columns: tableColumns,
     defaultSortBy,
+    defaultSortOrder,
     enableSelection: rowSelectable ? (row) => rowSelectable(row.original) : true,
     persistFilters: persistFilters ? CRUD_PERSIST : undefined,
   });

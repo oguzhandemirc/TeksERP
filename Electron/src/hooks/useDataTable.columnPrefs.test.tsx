@@ -8,6 +8,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import type { AppPreferences } from "@/types/preferences";
 import { useDataTable } from "./useDataTable";
 import { resetColumnLayout } from "@/components/data-table/column-arrange";
+import { columnIdsOf, placeNewColumns } from "./useTablePrefs";
 
 // Sunucudaki blob'un yerine bellek içi kopya — setPreference PreferencesProvider gibi birleştirir.
 let store: AppPreferences = {};
@@ -70,5 +71,19 @@ describe("useDataTable — sütun tercihleri", () => {
     expect(store.tableSizing).toEqual({ other: { x: 90 } });
     expect(store.tableOrder).toEqual({});
     expect(store.tableVisibility).toEqual({});
+  });
+
+  it("kayıttan sonra eklenen sütun tanımdaki komşusunun ardına girer (sona, işlem sütununun ötesine değil)", () => {
+    expect(placeNewColumns(["select", "code", "name", "unit", "actions"], ["select", "code", "name", "fabricType", "unit", "actions"]))
+      .toEqual(["select", "code", "name", "fabricType", "unit", "actions"]);
+    expect(placeNewColumns(["b", "a"], ["new", "a", "b"])).toEqual(["new", "b", "a"]);
+    expect(placeNewColumns([], ["a", "b"])).toEqual([]);
+    expect(columnIdsOf<Row>([{ accessorKey: "x.y" } as ColumnDef<Row>, { id: "z" }, { header: "H" }])).toEqual(["x_y", "z", "H"]);
+  });
+
+  it("kayıtlı sırada olmayan yeni sütun tabloda tanım yerinde görünür", () => {
+    store = { ...store, tableOrder: { orders: ["b"] } };
+    mount();
+    expect(api!.table.getVisibleLeafColumns().map((c) => c.id)).toEqual(["a", "b"]);
   });
 });

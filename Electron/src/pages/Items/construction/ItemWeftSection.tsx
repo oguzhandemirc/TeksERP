@@ -4,6 +4,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Copy, ExternalLink, PencilLine, Rows3, X } from "lucide-react";
 import { openWeftSpecsTab } from "@/pages/WeftSpecs/open-weft-specs";
+import { useWeftSpecRecordForm } from "@/pages/WeftSpecs/useWeftSpecRecordForm";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { InfoPopover } from "@/components/ui/info-popover";
@@ -77,6 +78,7 @@ interface SectionProps {
 
 export function ItemWeftSection({ draft, canWrite, itemId, rawWidthText }: SectionProps) {
   const calcCtx = { itemId, rawWidthCm: positiveOrNull(rawWidthText) };
+  const weftForm = useWeftSpecRecordForm(); // seçici: Yeni · Örnek al · Düzenle → kart ekranı (ortak kart burada değişmez)
   const savedCard = draft.mode === "card" && !!draft.cardId && draft.cardId === draft.savedCardId;
   // Yerinde düzenleme yalnız bu kumaşa ait kartta; paylaşılan/bilinmeyen kartta yalnız "kopya" seçildikten sonra.
   const editableCard = savedCard && canWrite && (draft.forking || cardEditableInPlace(draft));
@@ -102,6 +104,7 @@ export function ItemWeftSection({ draft, canWrite, itemId, rawWidthText }: Secti
               value={draft.mode === "card" ? draft.cardId : null}
               onChange={(id) => draft.pickCard(id)}
               service={weftSpecPickerService}
+              recordForm={weftForm}
               queryKey="weft-specs-item"
               getLabel={(w) => w.name}
               getSubLabel={(w) => w.code}

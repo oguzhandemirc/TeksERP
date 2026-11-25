@@ -29,8 +29,9 @@ export function techSummaryCells(d: Partial<ItemComputedGsm> | null | undefined,
     c("repeatsPerM", "1 metrede rapor", "rapor", "1 metre kumaşta desenin kaç kez tekrarlandığı = 100 ÷ rapor boyu."),
     c("warpGPerM", "Çözgü ağırlığı", "g/m", "1 metre kumaştaki çözgü ipliği ağırlığı (fire hariç)."),
     c("weftGPerM", "Atkı ağırlığı", "g/m", "1 metre kumaştaki atkı ipliği ağırlığı (fire hariç)."),
-    c("totalGPerM", "Metre ağırlığı", "g/m", "Çözgü + atkı; 1 metre ham kumaşın ağırlığı."),
-    c("gsm", "Gramaj", "g/m²", "Metrekare ağırlığı = toplam g/m ÷ ham en (m)."),
+    c("totalGPerM", "Metretül ağırlığı", "g/m", "Çözgü + atkı; 1 metre ham kumaşın ağırlığı."),
+    // Birim etikette (terbiyedeki kurşun gramajı g/m'den ayrılsın); değerin yanında tekrar yazılmaz.
+    c("gsm", "Gramaj (g/m²)", "", "Metrekare ağırlığı = toplam g/m ÷ ham en (m)."),
   ];
 }
 

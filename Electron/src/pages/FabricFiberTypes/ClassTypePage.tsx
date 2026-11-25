@@ -37,6 +37,7 @@ export function ClassTypePage({ kind }: { kind: ClassTypeKind }) {
         writePermission="item:write"
         searchHint="Ad"
         defaultSortBy="sortOrder"
+        defaultSortOrder="asc"
         removeLabel="Pasife al (geri alınabilir)"
         onRemove={(row) => setDeactivating(row)}
         restoreLabel="Etkinleştir"

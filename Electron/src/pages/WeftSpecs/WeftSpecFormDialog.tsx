@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SpecOpenOrdersNotice } from "@/components/production/SpecOpenOrdersNotice";
 import { weftSpecApi } from "@/pages/WeaveDesigns/service";
-import type { WeftSpecListRow } from "@/pages/WeaveDesigns/types";
+import type { WeftSpecDetail, WeftSpecListRow } from "@/pages/WeaveDesigns/types";
 import { buildWeftBody, EMPTY_WEFT, weftContentReady, WeftContentFields, type WeftContent } from "@/pages/WeaveDesigns/tabs/WeftContentFields";
 import { weftContentFromSpec } from "@/pages/WeaveDesigns/tabs/WeftSpecEditor";
 import { WeftCalcPanel } from "./WeftCalcPanel";
@@ -24,9 +24,13 @@ interface Props {
   /** Düzenlenen kart; null = yeni kart. */
   initial: WeftSpecListRow | null;
   canWrite: boolean;
+  /** Seçicinin "Örnek al" taslağı (kimliksiz): kod boş, ad "(kopya)" önerisiyle; yalnız YENİ kart açar. */
+  draft?: Omit<WeftSpecDetail, "id"> | null;
+  /** Seçicinin kayıt formu (`useWeftSpecRecordForm`) kaydı kendisi yapar; yoksa pencere kendi kaydeder. */
+  onSubmit?: (body: Record<string, unknown>) => Promise<void>;
 }
 
-export function WeftSpecFormDialog({ open, onOpenChange, initial, canWrite }: Props) {
+export function WeftSpecFormDialog({ open, onOpenChange, initial, canWrite, draft = null, onSubmit }: Props) {
   const qc = useQueryClient();
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
@@ -34,15 +38,18 @@ export function WeftSpecFormDialog({ open, onOpenChange, initial, canWrite }: Pr
   useEffect(() => {
     if (!open) return;
     setCode(initial?.code ?? "");
-    setName(initial?.name ?? "");
-    setContent(initial ? weftContentFromSpec(initial) : FIRST_ROW);
-  }, [open, initial]);
+    setName(initial?.name ?? (draft?.name ? `${draft.name} (kopya)` : ""));
+    const source = initial ?? draft;
+    setContent(source ? weftContentFromSpec(source) : FIRST_ROW);
+  }, [open, initial, draft]);
   const save = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const body = { code: code.trim(), name: name.trim(), ...buildWeftBody(content.seq, content.picksPerCm, content.program, content.rows) };
+      if (onSubmit) return onSubmit(body);
       return initial ? weftSpecApi.update(initial.id, body) : weftSpecApi.create(body);
     },
     onSuccess: () => {
+      if (onSubmit) return; // bildirim, tazeleme ve kapatma kayıt formunda (useRecordForm)
       toast.success(initial ? "Atkı kartı güncellendi." : "Atkı kartı oluşturuldu.");
       void qc.invalidateQueries({ queryKey: [WEFT_SPECS_QUERY_KEY] });
       void qc.invalidateQueries({ queryKey: ["item-construction"] });

@@ -35,7 +35,7 @@ interface Options<T> {
  * Sıralama/süzme/sayfalama tablo içinde YAPILMAZ (manual*) — yalnız sütun düzeni ve seçim burada.
  */
 export function useLocalTable<T>({ tableKey, data, columns, getRowId, enableSelection = false, initialVisibility, hiddenColumns, selectedIds, onSelectedChange }: Options<T>) {
-  const prefs = useOptionalTablePrefs(tableKey, initialVisibility);
+  const prefs = useOptionalTablePrefs(tableKey, initialVisibility, columns);
   const [innerSelection, setInnerSelection] = useState<RowSelectionState>({});
   const controlledSelection = useMemo<RowSelectionState | null>(
     () => (selectedIds ? Object.fromEntries([...selectedIds].map((id) => [id, true])) : null),

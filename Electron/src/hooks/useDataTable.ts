@@ -108,7 +108,7 @@ export function useDataTable<T>({
 
   // Sütun sırası + görünürlüğü + genişliği — kullanıcı tercihinde (tablo anahtarı = queryKey).
   const { columnOrder, columnVisibility, columnSizing, onColumnOrderChange, onColumnVisibilityChange, onColumnSizingChange } =
-    useTablePrefs(queryKey, initialVisibility);
+    useTablePrefs(queryKey, initialVisibility, columns);
 
   // ⚠️ TAZE URL — LOAD-BEARING (2026-09-06). Effect'in bağımlılığı yalnız [search]
   // olduğu için kapanışındaki `searchParams` MOUNT anındaki değerde DONAR. Zamanlayıcı
