@@ -7,6 +7,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/render";
 import { useAuthStore } from "@/store/auth";
+import { PreferencesProvider } from "@/providers/PreferencesProvider";
 import type { JwtPayload } from "@/types/auth";
 
 const ST = { id: "st1", code: "IST-1", name: "Kalite", type: "INTERNAL", kind: "PROCESS_QC", isActive: true };
@@ -121,8 +122,7 @@ describe("İkinci dalga seçiciler — Örnek al / Düzenle (C2)", () => {
     await waitFor(() => expect(onChange).toHaveBeenCalledWith("new-1", expect.objectContaining({ id: "new-1" })));
   });
 
-  // DEVİR: form PreferencesProvider ister (usePreferences) — sarmalayıcı eklenince skip kaldırılacak.
-  it.skip("⭐ İş emri şablonu: Örnek al aynı rotayı referanslar (yeni rota doğmaz, kaynak rota/şablon PATCH yok); Düzenle → şablon ekranı", async () => {
+  it("⭐ İş emri şablonu: Örnek al aynı rotayı referanslar (yeni rota doğmaz, kaynak rota/şablon PATCH yok); Düzenle → şablon ekranı", async () => {
     get.mockImplementation((url: string) => {
       if (url.startsWith("/api/product-recipes/pr1")) return Promise.resolve(one(RECIPE));
       if (url.startsWith("/api/product-recipes")) return Promise.resolve(listBody([RECIPE]));
@@ -130,7 +130,8 @@ describe("İkinci dalga seçiciler — Örnek al / Düzenle (C2)", () => {
       if (url.startsWith("/api/stations")) return Promise.resolve(listBody([ST]));
       return Promise.resolve(listBody([]));
     });
-    renderWithProviders(<RecipeHarness />);
+    // Şablon formu tablo tercihlerini okur (usePreferences) → gerçek sağlayıcı.
+    renderWithProviders(<PreferencesProvider><RecipeHarness /></PreferencesProvider>);
     await userEvent.click(screen.getByRole("button", { name: /Şablon seç/ }));
     await userEvent.click(await screen.findByRole("button", { name: "Poplin beyaz — düzenle" }));
     await userEvent.click(await screen.findByRole("button", { name: /Kart ekranında aç/ }));
@@ -139,7 +140,8 @@ describe("İkinci dalga seçiciler — Örnek al / Düzenle (C2)", () => {
     const form = await screen.findByRole("dialog", { name: /Şablonu \(örnekten\)/ });
     expect(within(form).getByDisplayValue("Poplin beyaz (kopya)")).toBeInTheDocument();
     await waitFor(() => expect(get).toHaveBeenCalledWith(expect.stringMatching(/^\/api\/routes\/r1/)));
-    await userEvent.click(within(form).getByRole("button", { name: /Kaydet|Oluştur/ }));
+    // "Rotayı Kaydet" de var → formun kendi Kaydet'i tam adla.
+    await userEvent.click(within(form).getByRole("button", { name: "Kaydet" }));
     await waitFor(() => expect(post).toHaveBeenCalledWith("/api/product-recipes", expect.objectContaining({ name: "Poplin beyaz (kopya)", itemId: "i1", routeId: "r1" })));
     expect(post.mock.calls.some((c) => c[0] === "/api/routes")).toBe(false);
     expect(patch).not.toHaveBeenCalled();
