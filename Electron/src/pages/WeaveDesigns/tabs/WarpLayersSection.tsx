@@ -1,14 +1,14 @@
 // Kumaşın ek çözgü katmanları (döner / ikinci çözgü); katman satırında SARIM BİÇİMİ tek seçim (kullanıcı kararı 2026-10-31:
 // ayrı levent varsayılan | zeminle aynı levent | cağlık). Kayıt katman kümesini olduğu gibi geri yazar (③b replace).
 // D3/K7: katman kumaşa aittir → asıl yeri ürün penceresi > Çözgü (`place="item"`); desen kartında (`place="design"`) salt
-// okunur özet + "Üründe aç". Ürün penceresinde Çözgü sekmesi yoksa (devere kapalı) tek yazma yeri desen kartı kalır.
+// okunur özet + "Üründe aç". Ürün penceresinde Çözgü sekmesi yoksa (çözgü kartı rejimi kapalı) tek yazma yeri desen kartı kalır.
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
-import { useDevereEnabled } from "@/hooks/usePricingEnabled";
+import { useWarpSpecEnabled } from "@/hooks/usePricingEnabled";
 import { NATIVE_SELECT_CLASS } from "../WeaveDesignCreateDialog";
 import { constructionApi } from "../service";
 import { BEAM_MODE_OPTIONS, WARP_LAYER_ROLE_LABEL, type WarpBeamMode } from "../types";
@@ -26,8 +26,9 @@ interface Props {
 export function WarpLayersSection({ fabric, canWrite, place, onOpenItem }: Props) {
   const qc = useQueryClient();
   const { hasPermission } = useRoleAccess();
-  const devereEnabled = useDevereEnabled();
-  const editable = place === "item" || !devereEnabled;
+  // Ürün penceresindeki Çözgü sekmesiyle AYNI yüklem (D4/K1): sekme varsa desen kartı salt okunur.
+  const warpSpecEnabled = useWarpSpecEnabled();
+  const editable = place === "item" || !warpSpecEnabled;
   const canSave = editable && canWrite && hasPermission("item:write");
   const c = useQuery({ queryKey: ["item-construction", fabric.id, null], queryFn: () => constructionApi.get(fabric.id) });
   const [modes, setModes] = useState<Record<string, WarpBeamMode>>({});

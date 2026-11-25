@@ -40,6 +40,10 @@ export const supplierItemCodeService = {
   list: (supplierId: string): Promise<ApiResponse<SupplierItemCodeRow[]>> =>
     apiClient.get<ApiResponse<SupplierItemCodeRow[]>>("/api/supplier-item-codes", { params: { supplierId } }).then((r) => r.data),
 
+  /** Ürün kartı "Ticari" sekmesi: bu iplik kartına eşlenmiş tedarikçi kodları (salt okuma). */
+  listByItem: (itemId: string): Promise<ApiResponse<SupplierItemCodeRow[]>> =>
+    apiClient.get<ApiResponse<SupplierItemCodeRow[]>>("/api/supplier-item-codes", { params: { itemId } }).then((r) => r.data),
+
   update: (id: string, itemId: string): Promise<ApiResponse<SupplierItemCodeRow>> =>
     apiClient.patch<ApiResponse<SupplierItemCodeRow>>(`/api/supplier-item-codes/${id}`, { itemId }).then((r) => r.data),
 

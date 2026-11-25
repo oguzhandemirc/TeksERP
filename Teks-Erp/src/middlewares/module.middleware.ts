@@ -79,6 +79,7 @@ import {
 } from "../services/system-setting.service";
 import { licenseModuleError } from "../lib/license/module-ceiling";
 import { machineStopRegime } from "../services/helpers/machine-stop-regime.helper";
+import { warpSpecRegimeOpen } from "../services/helpers/warp-spec-regime.helper";
 import { assertBeamBodyEnabled } from "../services/helpers/beam-body.helper";
 import { AppError } from "../utils/app-error";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
@@ -284,6 +285,27 @@ export async function requireMachineStopRegime(
       return;
     }
     await requireDokumaEnabled(req, res, next);
+  } catch (e) {
+    next(e);
+  }
+}
+
+/**
+ * Çözgü kartı rejimi (ürün kartı D4 / K1): `devere ∨ dokuma` — yüklem TEK yerde (`warp-spec-regime.helper`).
+ * Çözgü kartı ürün yapısı tanımıdır; dokuma da okur. Rejim kapalıyken karar `requireDevereEnabled`e DEVREDİLİR:
+ * iki modül de kapalı kurulumda 403 gövdesi (lisans mesajı dahil) bugünküyle bayt-aynı kalır.
+ */
+export async function requireWarpSpecRegime(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (await warpSpecRegimeOpen()) {
+      next();
+      return;
+    }
+    await requireDevereEnabled(req, res, next);
   } catch (e) {
     next(e);
   }

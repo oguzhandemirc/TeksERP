@@ -8,6 +8,7 @@ import { isMachineStopCodeMapsVisible } from "@/pages/MachineStopCodeMaps/code-m
 import { TERIM, TERIM_AD } from "@/lib/terim";
 import { flagOffHint, flagSettingTrail } from "@/lib/flag-setting-path";
 import { isBeamBodiesVisible } from "@/pages/BeamBodies/beam-body-regime";
+import { isWarpSpecsVisible } from "@/lib/warp-spec-regime";
 import type { DefinitionTile } from "../tile-config";
 
 export const productionTiles: DefinitionTile[] = [
@@ -155,10 +156,8 @@ export const productionTiles: DefinitionTile[] = [
     permission: "quality:read",
   },
   {
-    // ÇÖZGÜ KARTLARI — devere modülü. `visibleWhen` ETKİN değeri okur
-    // (ticaret && iplik && devere, `useOperationsVisibilityContext`te tek yerde
-    // çözülür): ham değere bağlansaydı ticaret kapalı bir kurulumda karo çizilir,
-    // tıklayan kullanıcı backend kapısından 403 yerdi.
+    // ÇÖZGÜ KARTLARI — rejim devere ∨ dokuma (D4/K1; backend `requireWarpSpecRegime`). Bağlamın
+    // ETKİN `warpSpecEnabled` alanını okur (tek çözüm `lib/warp-spec-regime.ts`); ham bayrağa bağlanmaz.
     key: "warp-specs",
     title: "Çözgü Kartları",
     description: "Çözgü tanımı: tel adedi · iplik · tarak (bir kart çok deseni besler)",
@@ -166,8 +165,8 @@ export const productionTiles: DefinitionTile[] = [
     to: "/definitions/warp-specs",
     group: "production",
     permission: "warpspec:read",
-    visibleWhen: (ctx) => ctx.devereEnabled,
-    offHint: flagOffHint("devereEnabled"),
+    visibleWhen: isWarpSpecsVisible,
+    offHint: `${flagOffHint("devereEnabled")} · ya da ${flagSettingTrail("dokumaEnabled")}`,
   },
   {
     // LEVENT GÖVDELERİ (devere ek B4) — devere modülü + `devere.beamBodyMode≠OFF` (backend `requireBeamBodyTracking`).

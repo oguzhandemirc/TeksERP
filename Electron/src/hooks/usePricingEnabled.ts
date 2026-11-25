@@ -3,6 +3,7 @@ import { featureFlagService, DEFAULT_COMPANY_NAME, type FactoryTimezonePending }
 import type { SameTypeSessionPolicy } from "@/types/auth";
 import { isSameTypeSessionPolicy } from "@/lib/session-auth";
 import { applyLicenseCeiling, isModuleEnabled } from "@/lib/license/module-enabled";
+import { resolveWarpSpecEnabled } from "@/lib/warp-spec-regime";
 import {
   DEFAULT_SHIPMENT_ORDER_REQUIREMENT,
   DEFAULT_SHIPPING_INVOICE_MODE,
@@ -103,6 +104,13 @@ export function useKaliteGuvenceEnabled(): boolean {
 export function useDevereEnabled(): boolean {
   const q = useFeatureFlags();
   return isModuleEnabled(q.data?.data, "devereEnabled");
+}
+
+/** Çözgü kartı rejimi (devere ∨ dokuma; D4/K1) — tek yüklem `lib/warp-spec-regime.ts`. Yüklenene dek KAPALI. */
+export function useWarpSpecEnabled(): boolean {
+  const q = useFeatureFlags();
+  const flags = q.data?.data;
+  return resolveWarpSpecEnabled({ devereEnabled: isModuleEnabled(flags, "devereEnabled"), dokumaEnabled: isModuleEnabled(flags, "dokumaEnabled") });
 }
 
 /** G3 Emanet / konsinye mülkiyet modülü açık mı (`emanet.enabled`). Yüklenene dek KAPALI — fail-closed:

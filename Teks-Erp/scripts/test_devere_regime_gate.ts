@@ -38,6 +38,8 @@
 //      → §6c kırmızı (alt yönlendirici beyanı ÖLÇÜLÜR: ana kapılı VE alt takılı değilse KAPISIZ).
 //   ⑥ (2026-11-17, devere D1) `warp-plan.routes.ts`ten `requireDevereEnabled` adı silindi
 //      → §6c kırmızı (KAPISIZ: warp-plan.routes.ts); hesap ucu `warp-plan.service` ile yüzeyde ölçülür.
+//   ⑦ (2026-11-25, D4/K1) yüklemden dokuma dalı düşürüldü → §8d "yalnız dokuma" kırmızı; denye
+//      uçlarından `requireDevereEnabled` silindi → §8b kırmızı.
 // =============================================================================
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -48,6 +50,7 @@ import {
   MODULE_SETTING_KEYS,
 } from "../src/constants/module-flags";
 import { readDevereEnabled } from "../src/services/system-setting.service";
+import { warpSpecRegimeOpen } from "../src/services/helpers/warp-spec-regime.helper";
 // §7 akışı için: kartı route'un KULLANDIĞI servis örneğiyle açıyoruz — ikinci
 // bir yapılandırma yazmak, bekçiyi üretimden ayrı bir kurulumu ölçer hâle
 // getirirdi (`uniqueField`/`duplicateNameField` orada tanımlı).
@@ -196,6 +199,42 @@ async function main(): Promise<void> {
     "§6d Kapı ölü değil: middleware dışa aktarılmış",
     new RegExp(`export async function ${KAPI}`).test(kod),
   );
+
+  // ── §8 ⭐ ÇÖZGÜ KARTI REJİMİ (ürün kartı D4/K1): devere ∨ dokuma ─────────────
+  // Çözgü kartı ürün yapısı tanımıdır; dokuma açık + devere kapalı kurulumda ürün penceresinin Çözgü sekmesi
+  // 403'e çarpmasın. Levent verisi okuyan uçlar (denye sapma) devere kapısında KALIR.
+  const wsRoute = yorumlariSok(fs.readFileSync(path.join(routerDizin, "warp-spec.routes.ts"), "utf8"));
+  check("§8a ⭐ warp-spec router kapısı `requireWarpSpecRegime` (router seviyesinde)", /router\.use\(verifyToken, requireWarpSpecRegime\)/.test(wsRoute));
+  const denyeUclari = [...wsRoute.matchAll(/router\.(get|post)\("\/denier-deviation[^"]*",([^\n]*)/g)];
+  check(
+    "§8b ⭐ Denye sapma uçları (levent verisi) devere kapısını AYRICA taşıyor",
+    denyeUclari.length === 2 && denyeUclari.every((m) => /requireDevereEnabled/.test(m[2]!)),
+    `${denyeUclari.length} uç`,
+  );
+  const rejimBas = kod.indexOf("export async function requireWarpSpecRegime");
+  const rejimGovde = rejimBas >= 0 ? kod.slice(rejimBas, kod.indexOf("\n}\n", rejimBas)) : "";
+  check(
+    "§8c ⭐ Rejim kapalıyken karar devere kapısına DEVREDİLİR (403 gövdesi bugünküyle bayt-aynı)",
+    /await requireDevereEnabled\(req, res, next\)/.test(rejimGovde) && /warpSpecRegimeOpen\(\)/.test(rejimGovde),
+    rejimGovde ? "" : "gövde yok",
+  );
+  const ayarIstemci = (acik: Record<string, boolean>) =>
+    ({
+      systemSetting: {
+        findUnique: (a: { where: { key: string } }) =>
+          Promise.resolve(a.where.key in acik ? { value: acik[a.where.key] } : null),
+      },
+    }) as unknown as Pick<typeof prisma, "systemSetting">;
+  const durumlar: Array<[string, Record<string, boolean>, boolean]> = [
+    ["yalnız devere", { "devere.enabled": true, "production.enabled": true }, true],
+    ["yalnız dokuma (üretim açık)", { "dokuma.enabled": true, "production.enabled": true }, true],
+    ["dokuma açık ama üretim kapalı", { "dokuma.enabled": true, "production.enabled": false }, false],
+    ["ikisi de kapalı", { "production.enabled": true }, false],
+  ];
+  for (const [ad, ayar, beklenen] of durumlar) {
+    const sonuc = await warpSpecRegimeOpen(ayarIstemci(ayar));
+    check(`§8d ⭐ Rejim yüklemi: ${ad} → ${beklenen ? "AÇIK" : "KAPALI"}`, sonuc === beklenen, `gelen ${sonuc}`);
+  }
 
   // ── §7 ⭐ "KART AÇ" AKIŞI — fazın ilan ettiği çıktı GERÇEKTEN üretilebiliyor mu
   // §1–§6 METNE bakar; hiçbiri "bir çözgü kartı açılabiliyor mu" sorusunu

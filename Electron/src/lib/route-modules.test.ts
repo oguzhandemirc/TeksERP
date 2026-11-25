@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
 import { ROUTE_ALSO_REQUIRES, ROUTE_MODULE, ROUTE_REGIME, isRouteModuleOpen, routeModuleOf } from "./route-modules";
 import { resolveMachineStopEnabled } from "@/pages/Operations/MachineStops/stop-regime";
+import { resolveWarpSpecEnabled } from "./warp-spec-regime";
 
 // =============================================================================
 // Panel route modül kapısının SAF yarısı. Üç sonda (1e, 2026-09-14): modül
@@ -19,7 +20,7 @@ function ctx(over: Partial<OperationsVisibilityContext> = {}): OperationsVisibil
     shipmentConfirmationEnabled: false,
     depoMultiEnabled: true,
     devereEnabled: true,
-    dokumaEnabled: true, machineStopEnabled: true, tezgahEnabled: true, kaliteGuvenceEnabled: true, maliyetEnabled: true, gelenBelgeEnabled: true, emanetEnabled: true,
+    dokumaEnabled: true, machineStopEnabled: true, warpSpecEnabled: true, tezgahEnabled: true, kaliteGuvenceEnabled: true, maliyetEnabled: true, gelenBelgeEnabled: true, emanetEnabled: true,
     reportsClosedKeys: [],
     isReportOpen: () => true,
     flagsReady: true,
@@ -96,12 +97,27 @@ describe("route-modules — yol → modül aynası", () => {
     expect(isRouteModuleOpen("/operations/machine-stops", kapali)).toBe(false);
     expect(isRouteModuleOpen("/definitions/shift-definitions", kapali)).toBe(false);
   });
-  it("rejim tablosu manifesto aynasını bozmaz: rejimli ekran ROUTE_MODULE'da modülüyle (dokuma) kalır", () => {
-    for (const key of Object.keys(ROUTE_REGIME)) {
+  it("rejim tablosu manifesto aynasını bozmaz: rejimli ekran ROUTE_MODULE'da modülüyle kalır", () => {
+    for (const [key, regime] of Object.entries(ROUTE_REGIME)) {
       // Rapor yaprağı (D4-A4) manifesto satırı değil; modülü kategorisinden gelir (üretim).
       if (key.startsWith("reports/")) expect(routeModuleOf(`/${key}`)).toBe("productionEnabled");
-      else expect(ROUTE_MODULE[key]).toBe("dokumaEnabled");
+      // Çözgü kartı (D4/K1) aidiyeti devere; duruş/vardiya dokuma.
+      else expect(ROUTE_MODULE[key]).toBe(regime === "warpSpecEnabled" ? "devereEnabled" : "dokumaEnabled");
     }
+  });
+
+  // D4/K1: çözgü kartı route'u rejim alanını okur (devere ∨ dokuma); levent ekranları devere modülünde kalır.
+  // NEGATİF SONDA (2026-11-25): ROUTE_REGIME'deki warp-specs satırı silindi → bu test kırmızı.
+  it("⭐ çözgü kartı rejimi: devere kapalı + dokuma açık → çözgü kartları AÇIK, levent yolları kapalı", () => {
+    const dokumaci = ctx({ devereEnabled: false, warpSpecEnabled: resolveWarpSpecEnabled({ devereEnabled: false, dokumaEnabled: true }) });
+    expect(isRouteModuleOpen("/definitions/warp-specs", dokumaci)).toBe(true);
+    expect(isRouteModuleOpen("/definitions/warp-specs/:id", dokumaci)).toBe(true);
+    expect(isRouteModuleOpen("/operations/warp-beams", dokumaci)).toBe(false);
+    expect(isRouteModuleOpen("/operations/fason-devere", dokumaci)).toBe(false);
+    const ikisiKapali = ctx({ devereEnabled: false, dokumaEnabled: false, warpSpecEnabled: resolveWarpSpecEnabled({ devereEnabled: false, dokumaEnabled: false }) });
+    expect(isRouteModuleOpen("/definitions/warp-specs", ikisiKapali)).toBe(false);
+    // Alan yoksa (eski bağlam literali) KAPALI — fail-closed.
+    expect(isRouteModuleOpen("/definitions/warp-specs", ctx({ warpSpecEnabled: undefined }))).toBe(false);
   });
 
   // D4-A4: makine duruşları raporu kategori (üretim) açıkken bile rejim alanına bağlı; kardeş raporlar etkilenmez.
@@ -116,7 +132,7 @@ describe("route-modules — yol → modül aynası", () => {
   });
 
   it("referans fabrika (yalnız üretim açık): kapanan yollar tam olarak ticaret/muhasebe/iplik/depo/devere/dokuma/maliyet ekranları", () => {
-    const fabrika = ctx({ financeEnabled: false, ticaretEnabled: false, iplikEnabled: false, depoMultiEnabled: false, devereEnabled: false, dokumaEnabled: false, machineStopEnabled: false, kaliteGuvenceEnabled: false, maliyetEnabled: false });
+    const fabrika = ctx({ financeEnabled: false, ticaretEnabled: false, iplikEnabled: false, depoMultiEnabled: false, devereEnabled: false, dokumaEnabled: false, machineStopEnabled: false, warpSpecEnabled: false, kaliteGuvenceEnabled: false, maliyetEnabled: false });
     // Rejim yaprağı (D4-A4 makine duruşları raporu) modülü açıkken de kapanır — ayrıca ölçülür, kümeye sayılmaz.
     expect(isRouteModuleOpen("/reports/production/makine-duruslari", fabrika)).toBe(false);
     const kapanan = new Set(ALL_PATHS.filter((p) => !(p in ROUTE_REGIME) && !isRouteModuleOpen(`/${p}`, fabrika)).map((p) => routeModuleOf(`/${p}`)));
