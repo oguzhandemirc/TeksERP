@@ -22,6 +22,46 @@ describe("parseSequenceCode", () => {
   });
 });
 
+// PARİTE TABLOSU — sunucu `Teks-Erp/scripts/test_dizi_tekrar.ts` §5 ile aynı (weft-sequence.helper açılımı).
+const REPEAT_PARITY: Array<{ code: string; expanded: number[] | null }> = [
+  { code: "A4 B1 A4 C1", expanded: [1, 1, 1, 1, 2, 1, 1, 1, 1, 3] },
+  { code: "3x(A1 B1) C2", expanded: [1, 2, 1, 2, 1, 2, 3, 3] },
+  { code: "(A1 B1)x3 C2", expanded: [1, 2, 1, 2, 1, 2, 3, 3] },
+  { code: "2*(A2 C1) B1", expanded: [1, 1, 3, 1, 1, 3, 2] },
+  { code: "B1 2X(A1 C1)", expanded: [2, 1, 3, 1, 3] },
+  { code: "3x((A1) B1)", expanded: null },
+  { code: "3x(A1 B1 C1", expanded: null },
+  { code: "0x(A1 B1 C1)", expanded: null },
+  { code: "(A1 B1 C1)", expanded: null },
+];
+
+describe("tekrar kısaltması", () => {
+  for (const c of REPEAT_PARITY) {
+    it(`parite: ${c.code}`, () => {
+      const p = parseSequenceCode(c.code);
+      expect(p ? runsToBoxes(p.runs) : null).toEqual(c.expanded);
+    });
+  }
+  it("10x(A2 B2 C1) D4 → 54 kutu, repeated işareti, kayıtta açık biçim", () => {
+    const p = parseSequenceCode("10x(A2 B2 C1) D4")!;
+    const boxes = runsToBoxes(p.runs)!;
+    expect(p.repeated).toBe(true);
+    expect(boxes).toHaveLength(54);
+    expect(boxes.slice(0, 5)).toEqual([1, 1, 2, 2, 3]);
+    expect(boxes.slice(-4)).toEqual([4, 4, 4, 4]);
+    expect(boxesToCode(boxes.slice(0, 5), p.style)).toBe("A2 B2 C1");
+  });
+  it("çözgü 5x(2A 1B) 4C sayı-önce biçimi korunur; kısaltmasız kodda işaret yok", () => {
+    const p = parseSequenceCode("5x(2A 1B) 4C")!;
+    expect(p.style).toBe("digit-first");
+    expect(runsToBoxes(p.runs)).toHaveLength(19);
+    expect(parseSequenceCode("A2 B1")?.repeated).toBeUndefined();
+  });
+  it("aşırı açılım null (sunucu tavanlarının üstü)", () => {
+    expect(parseSequenceCode("9999x(A9 B9)")).toBeNull();
+  });
+});
+
 describe("kod ↔ kutu iki yönlü", () => {
   it("A4 B1 A4 C1 → kutular → aynı kod", () => {
     const p = parseSequenceCode("A4 B1 A4 C1")!;
