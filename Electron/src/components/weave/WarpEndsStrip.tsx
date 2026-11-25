@@ -52,15 +52,15 @@ const rowMark = (slots: readonly number[] | null | undefined): RowMark => ({
 
 function fallbackNote(pending: boolean | undefined, note: string | null | undefined): string {
   if (pending) return "Kaydedince dizilim tel tel çözülür; şimdilik ipliklerin tel payı gösteriliyor.";
-  if (note && note.trim()) return `Dizilim “${note.trim()}” okunamadı; ipliklerin tel payı gösteriliyor.`;
-  return "Dizilim girilmemiş; ipliklerin tel payı gösteriliyor.";
+  if (note && note.trim()) return `Çözgü dizimi “${note.trim()}” okunamadı; ipliklerin tel payı gösteriliyor.`;
+  return "Çözgü dizimi girilmemiş; ipliklerin tel payı gösteriliyor.";
 }
 
 export function WarpEndsStrip(props: WarpEndsStripProps) {
   const { yarns, endsSequence, sequenceNote, cardEnds, pending, fallbackHint, title, compact, maxWidth = 640, slots, className } = props;
   const seq = !pending && endsSequence && endsSequence.repeat.length > 0 ? endsSequence : null;
   if (!seq && !yarns.some((y) => y.endsCount > 0)) {
-    return <p className={cn("text-xs text-muted-foreground", className)} data-testid="warp-ends-empty">Tel adedi girilince görünür.</p>;
+    return <p className={cn("text-xs text-muted-foreground", className)} data-testid="warp-ends-empty">Tel sayısı girilince görünür.</p>;
   }
   const mark = rowMark(slots);
   const legend = yarns.map((y, i) => ({
@@ -111,7 +111,7 @@ function SequenceBand({ seq, yarns, cardEnds, compact, maxWidth, mark }: {
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
           <div className="space-y-0.5">
             {yarnMismatch && (
-              <p>Dizilim iplik satırlarındaki telleri tutmuyor:{" "}
+              <p>Çözgü dizimi iplik satırlarındaki telleri tutmuyor:{" "}
                 {yarns.map((y, i) => `${mark.letter(i + 1)} dizilimde ${formatQty(byYarn[i] ?? 0, 0)} / kartta ${formatQty(y.endsCount, 0)}`).join(" · ")}
               </p>
             )}

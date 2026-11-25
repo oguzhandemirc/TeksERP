@@ -48,13 +48,13 @@ export function parseOverrides(raw: Record<string, unknown> = {}): CostOverrides
     takeUpPct: parseDecimalField(raw.takeUpPct, PCT_RULE("Çözgü çekmesi")),
     warpWastePct: parseDecimalField(raw.warpWastePct, PCT_RULE("Çözgü firesi")),
     weftWastePct: parseDecimalField(raw.weftWastePct, PCT_RULE("Atkı firesi")),
-    fabricWastePct: parseDecimalField(raw.fabricWastePct, PCT_RULE("Kalite firesi")),
-    lengthShrinkPct: parseDecimalField(raw.lengthShrinkPct, PCT_RULE("Boy çekmesi")),
+    fabricWastePct: parseDecimalField(raw.fabricWastePct, PCT_RULE("Kumaş firesi")),
+    lengthShrinkPct: parseDecimalField(raw.lengthShrinkPct, PCT_RULE("Boy çekmesi (terbiyede)")),
     efficiencyPct: parseDecimalField(raw.efficiencyPct, EFFICIENCY_RULE("Randıman")),
     weftLengthCm: parseDecimalField(raw.weftLengthCm, POS("Atkı boyu", 2)),
     beamLengthM: parseDecimalField(raw.beamLengthM, POS("Levent boyu", 2)),
-    loomRpm: parseDecimalField(raw.loomRpm, { ...POS("Tezgah devri", 0), integer: true }),
-    extraCostPerMTry: parseDecimalField(raw.extraCostPerMTry, { label: "Ek kalem", min: 0, scale: 4 }),
+    loomRpm: parseDecimalField(raw.loomRpm, { ...POS("Tezgâh devri", 0), integer: true }),
+    extraCostPerMTry: parseDecimalField(raw.extraCostPerMTry, { label: "Ek masraf", min: 0, scale: 4 }),
   };
   if (raw.warpWasteMeasured === true) o.warpWasteMeasured = true;
   if (raw.finishingRateCode !== undefined) o.finishingRateCode = typeof raw.finishingRateCode === "string" && raw.finishingRateCode.trim() ? raw.finishingRateCode.trim() : null;

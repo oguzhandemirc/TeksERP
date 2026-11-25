@@ -76,8 +76,8 @@ export function WeftContentFields({ value, onChange, canWrite, savedSeq, idPrefi
         <div className="space-y-1.5">
           {/* Üç etiket satırı da sabit h-5: ⓘ (20 px) olan satır yandakilerden yüksek kalıp kutuyu aşağı itmesin (önizlemede 4 px kayma ölçüldü). */}
           <div className="flex h-5 items-center gap-1">
-            <Label htmlFor={`${idPrefix}-seq`}>Atkı sırası kodu</Label>
-            <InfoPopover label="Sıra kodu nasıl yazılır" desc={SEQ_INFO} />
+            <Label htmlFor={`${idPrefix}-seq`}>Atkı raporu</Label>
+            <InfoPopover label="Atkı raporu nasıl yazılır" desc={SEQ_INFO} />
           </div>
           <Input id={`${idPrefix}-seq`} value={seq} maxLength={120} disabled={!canWrite} onChange={(e) => set({ seq: e.target.value })} placeholder="ör. 10x(A2 B2 C1) D4" />
         </div>
@@ -139,13 +139,13 @@ function WeftBoxSection({ seq, saved, letterCount, canWrite, onChange }: {
   useDirtyTab(seq.trim() !== saved.trim());
   if (!canWrite && seq.trim() === "") return null;
   return (
-    <section className="space-y-1.5" aria-label="Atkı sırası kutuları">
+    <section className="space-y-1.5" aria-label="Atkı raporu kutuları">
       <h4 className="flex items-center gap-1 text-sm font-medium">
-        Atkı sırası
-        <InfoPopover label="Atkı sırası kutuları" desc={BOX_INFO} />
+        Atkı raporu — kutularla
+        <InfoPopover label="Atkı raporu kutuları" desc={BOX_INFO} />
       </h4>
       <SequenceBoxEditor value={seq} onChange={onChange} letterCount={letterCount} defaultStyle="letter-first" unit="atkı"
-        label="Atkı sırası kutuları" disabled={!canWrite} />
+        label="Atkı raporu kutuları" disabled={!canWrite} />
     </section>
   );
 }
@@ -154,7 +154,7 @@ const SEQ_INFO = "Harf = atkı ipliği satırı (A = 1. satır), sayı = arka ar
   + "Tekrar eden kısmı parantezle kısaltabilirsiniz: 10x(A2 B2 C1) D4 = parantez içi 10 kez, ardından 4 atkı D (54 atkı).";
 
 const PICKS_INFO = "Desenin bir tekrarında (raporunda) bu iplikle kaç atkı atıldığı. Ör. sıra A4 B1 ise A ipliği 4, B ipliği 1. "
-  + "Atkı sırası kodu girilmişse bu sayı sıradan kendiliğinden hesaplanır. İpliklerin kumaştaki payı bu sayılardan bulunur.";
+  + "Atkı raporu girilmişse bu sayı sıradan kendiliğinden hesaplanır. İpliklerin kumaştaki payı bu sayılardan bulunur.";
 
 const CHANNEL_INFO = "Tezgâhın renk seçicisinde bu ipliğin takıldığı kanal (1–16). Boş bırakılabilir; aynı kartta iki iplik aynı kanalda olamaz. "
   + "Tablet dokumacıya \"Kanal 3\" diye gösterir.";

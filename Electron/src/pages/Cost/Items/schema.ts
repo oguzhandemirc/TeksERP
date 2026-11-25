@@ -15,13 +15,13 @@ export const STRUCTURE_MAX = {
 };
 
 export const STRUCTURE_FIELDS = [
-  { key: "loomRpm", label: "Tezgah devri", unit: "devir/dk" },
+  { key: "loomRpm", label: "Tezgâh devri", unit: "devir/dk" },
   { key: "efficiencyPct", label: "Randıman", unit: "%" },
   { key: "warpWastePct", label: "Çözgü firesi", unit: "%" },
   { key: "weftWastePct", label: "Atkı firesi", unit: "%" },
-  { key: "fabricWastePct", label: "Kalite firesi", unit: "%" },
+  { key: "fabricWastePct", label: "Kumaş firesi", unit: "%" },
   { key: "weftLengthCm", label: "Atkı boyu", unit: "cm" },
-  { key: "beamLengthM", label: "Levent çözgü boyu", unit: "m" },
-  { key: "lengthShrinkPct", label: "Boy çekmesi", unit: "%" },
-  { key: "extraCostPerMTry", label: "Ek kalem", unit: "TL/m" },
+  { key: "beamLengthM", label: "Levent boyu", unit: "m" },
+  { key: "lengthShrinkPct", label: "Boy çekmesi (terbiyede)", unit: "%" },
+  { key: "extraCostPerMTry", label: "Ek masraf", unit: "TL/m" },
 ] as const;

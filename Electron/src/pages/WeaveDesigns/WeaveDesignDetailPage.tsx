@@ -55,8 +55,8 @@ export function WeaveDesignDetailPage() {
             <TechSummaryStrip fabric={fabric} frameCount={resolveWeaveClass(d).shedMechanism === "DOBBY" ? d.frameCount : undefined} />
             <Tabs value={tab} onValueChange={setTab}>
               <TabsList className="max-w-full justify-start overflow-x-auto">
-                <TabsTrigger value="structure">Yapı</TabsTrigger>
-                <TabsTrigger value="weft">Atkı sırası</TabsTrigger>
+                <TabsTrigger value="structure">Desen bilgileri</TabsTrigger>
+                <TabsTrigger value="weft">Atkı raporu</TabsTrigger>
                 <TabsTrigger value="lift">Armür</TabsTrigger>
                 <TabsTrigger value="variants">Varyantlar</TabsTrigger>
                 {showCost && <TabsTrigger value="cost">Maliyet</TabsTrigger>}

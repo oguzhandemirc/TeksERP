@@ -90,7 +90,7 @@ export const itemColumns: ColumnDef<Item>[] = [
   },
   {
     id: "allowedColors",
-    header: "İzinli Renkler",
+    header: "Renkler (kartela)",
     cell: ({ row }) => {
       if (!itemCarriesAllowedLists(row.original.itemType)) return NOT_APPLICABLE;
       const colors = row.original.allowedColors ?? [];
@@ -121,7 +121,7 @@ export const itemColumns: ColumnDef<Item>[] = [
   },
   {
     id: "allowedProperties",
-    header: "İzinli Özellikler",
+    header: "Uygulanabilir özellikler",
     cell: ({ row }) => {
       if (!itemCarriesAllowedLists(row.original.itemType)) return NOT_APPLICABLE;
       const props = row.original.allowedProperties ?? [];

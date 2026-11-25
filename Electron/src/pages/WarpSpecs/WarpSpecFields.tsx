@@ -12,6 +12,7 @@ import { suggestWarpEnds } from "@/pages/Operations/WarpPlan/service";
 import { parseInput } from "@/pages/Operations/WarpPlan/warp-plan-model";
 import { useReedUnit } from "@/hooks/useReedUnit";
 import { reedDentsPerCm, reedUnitLabel } from "@/lib/reed-unit";
+import { WASTE_PRECEDENCE_TEXT } from "@/lib/waste-precedence";
 import type { WarpSpecFormValues } from "./schema";
 
 type Form = UseFormReturn<WarpSpecFormValues>;
@@ -59,7 +60,7 @@ export function ReedHelper({ form }: { form: Form }) {
   };
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs">
-      <Button type="button" size="sm" variant="outline" onClick={() => void run()} title="tarak × tarak eni × dişe tel">
+      <Button type="button" size="sm" variant="outline" onClick={() => void run()} title="tarak × tarak eni × dişten geçen tel">
         <Ruler className="h-3.5 w-3.5" /> Taraktan tel öner
       </Button>
       {note ? <span className="text-muted-foreground" data-testid="reed-helper-note">{note}</span> : null}
@@ -80,19 +81,19 @@ export function ReedFields({ form }: { form: Form }) {
         info="Birim firma ayarından gelir (Sistem → Özellik Anahtarları → Devere / Levent). Yalnız taraktan tel önerisinde kullanılır; kg'a ve maliyete girmez.">
         <Input id="reedNo" {...form.register("reedNo")} inputMode="decimal" className={EXAMPLE_PH} placeholder={reedUnit === "DENTS_PER_CM" ? "ör. 10" : "ör. 100"} />
       </FormField>
-      <FormField label="Dişe tel" htmlFor="endsPerDent" error={e.endsPerDent} info="Taraktan tel önerisinde boşsa 1 sayılır.">
+      <FormField label="Dişten geçen tel" htmlFor="endsPerDent" error={e.endsPerDent} info="Tarağın bir dişinden geçen çözgü teli sayısı. Taraktan tel önerisinde boşsa 1 sayılır. (Eski adı: Dişe tel)">
         <Input id="endsPerDent" {...form.register("endsPerDent")} inputMode="numeric" className={EXAMPLE_PH} placeholder="ör. 4" />
       </FormField>
       <FormField label="Tarak eni (cm)" htmlFor="reedWidthCm" error={e.reedWidthCm} info="Maliyette atkı boyu buradan alınır (ürünün maliyet yapısında “Atkı boyu” girilmediyse; o da yoksa ham en + kenar payı). Taraktan tel önerisinde ve tezgâh önerisinde de kullanılır. Çözgü kg'ına girmez.">
         <Input id="reedWidthCm" {...form.register("reedWidthCm")} inputMode="decimal" className={EXAMPLE_PH} placeholder="ör. 280" />
       </FormField>
-      <FormField className="sm:col-span-2" label="Dizilim (talimat)" htmlFor="sequenceNote" error={e.sequenceNote} info="Devereciye giden talimat: ör. 2A 1B. Tekrar eden kısmı parantezle kısaltabilirsiniz: 5x(2A 1B) 4C. Kg ve maliyete girmez.">
+      <FormField className="sm:col-span-2" label="Çözgü dizimi" htmlFor="sequenceNote" error={e.sequenceNote} info="Devereciye giden renk/iplik raporu: ör. 2A 1B. Tekrar eden kısmı parantezle kısaltabilirsiniz: 5x(2A 1B) 4C. Kg ve maliyete girmez. (Eski adı: Dizilim)">
         <Input id="sequenceNote" {...form.register("sequenceNote")} className={EXAMPLE_PH} placeholder="ör. 5x(2A 1B) 4C" />
       </FormField>
-      <FormField label="Çekme (%)" htmlFor="takeUpPct" error={e.takeUpPct} info="Çözgü çekmesi (take-up): dokumada çözgünün kumaştan ne kadar uzun harcandığı. Çözgü ÷ kumaş oranı: çözgü = kumaş ÷ (1 − çekme). Boşsa tezgahtan doğan topun otomatik tüketimi çözgü = kumaş sayar ve uyarır.">
+      <FormField label="Çözgü çekmesi (%)" htmlFor="takeUpPct" error={e.takeUpPct} info="Dokumada çözgünün kumaştan ne kadar uzun harcandığı: çözgü = kumaş ÷ (1 − çekme). Terbiyedeki boy ve en çekmesinden ayrıdır. Boşsa tezgâhtan doğan topun otomatik tüketimi çözgü = kumaş sayar ve uyarır.">
         <Input id="takeUpPct" {...form.register("takeUpPct")} inputMode="decimal" className={EXAMPLE_PH} placeholder="ör. 8" />
       </FormField>
-      <FormField label="Fire (%)" htmlFor="wastePct" error={e.wastePct} info="Çözgü ipliği firesi; hesaptaki fireli kg'yı ve maliyeti etkiler: çözgü = kumaş ÷ (1 − çekme) ÷ (1 − fire). Ürünün maliyet yapısındaki fire bunu ezer; boşsa maliyet parametrelerindeki varsayılan kullanılır.">
+      <FormField label="Çözgü firesi (%)" htmlFor="wastePct" error={e.wastePct} info={`Hesaptaki fireli kg'yı ve maliyeti etkiler: çözgü = kumaş ÷ (1 − çekme) ÷ (1 − fire). ${WASTE_PRECEDENCE_TEXT}`}>
         <Input id="wastePct" {...form.register("wastePct")} inputMode="decimal" className={EXAMPLE_PH} placeholder="ör. 3" />
       </FormField>
     </FieldGrid>

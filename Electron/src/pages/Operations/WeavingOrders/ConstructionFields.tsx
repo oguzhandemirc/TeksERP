@@ -16,6 +16,7 @@ import { productRecipeService } from "@/pages/ProductRecipes/service";
 import type { ProductRecipe } from "@/pages/ProductRecipes/types";
 import { useProductRecipeRecordForm } from "@/pages/ProductRecipes/useProductRecipeRecordForm";
 import { useWeaveDesignRecordForm } from "@/pages/WeaveDesigns/useWeaveDesignRecordForm";
+import { useWeftSpecRecordForm } from "@/pages/WeftSpecs/useWeftSpecRecordForm";
 import type { RecordFormSpec } from "@/components/forms/record-form/types";
 
 type Variant = ProductRecipe & { variantCode?: string | null };
@@ -77,6 +78,7 @@ export function ConstructionFields({ form, initialItemId = null }: { form: Form;
   const { hasPermission } = useRoleAccess();
   const canRead = hasPermission("warpspec:read");
   const weaveForm = useWeaveDesignRecordForm();
+  const weftForm = useWeftSpecRecordForm();
   const itemId = form.watch("itemId");
   useResetOnItemChange(form, itemId);
   // Düzenlemede (ürün aynıyken) boş alan açık null = "kartsız"; oluştururken/ürün değişince ürünün kartı.
@@ -106,6 +108,7 @@ export function ConstructionFields({ form, initialItemId = null }: { form: Form;
                 value={field.value || null}
                 onChange={(id) => field.onChange(id ?? "")}
                 service={weftSpecPickerService}
+                recordForm={weftForm}
                 queryKey="weft-specs-weaving"
                 getLabel={(w) => w.name}
                 getSubLabel={(w) => w.code}

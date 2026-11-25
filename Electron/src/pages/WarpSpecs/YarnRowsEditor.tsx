@@ -71,7 +71,7 @@ export function YarnRowsEditor() {
       <div className={`${ROW_GRID} px-1 text-xs font-medium text-muted-foreground`}>
         <span />
         <span>İplik</span>
-        <span className="inline-flex items-center gap-1">Tel adedi <InfoPopover label="Tel adedi" desc="Kenar telleri dahil yazın; çözgü kg'ı bu adetlerden hesaplanır." /></span>
+        <span className="inline-flex items-center gap-1">Tel sayısı <InfoPopover label="Tel sayısı" desc="Kenar telleri dahil yazın; çözgü kg'ı bu sayılardan hesaplanır." /></span>
         <span />
         <span />
       </div>
@@ -125,7 +125,7 @@ export function YarnRowsEditor() {
           <Plus className="h-3.5 w-3.5" /> İplik ekle
         </Button>
         <span className="text-sm text-muted-foreground" data-testid="warp-total-ends">
-          Toplam tel (kenar dahil): <span className="font-semibold text-foreground tabular-nums">{formatQty(totalEnds(yarns), 0)}</span>
+          Toplam çözgü teli (kenar dahil):<span className="font-semibold text-foreground tabular-nums">{formatQty(totalEnds(yarns), 0)}</span>
         </span>
       </div>
     </div>

@@ -27,8 +27,8 @@ const WIDTH = /Mamul en \(cm\)/;
 
 /** Tip seçicisi formun İLK açılırı (kumaş kartında Yanmazlık da açılır — K8). */
 const tipCombo = () => screen.getAllByRole("combobox")[0]!;
-const COLORS = "İzinli Renkler";
-const PROPS = "İzinli Özellikler";
+const COLORS = "Renkler (kartela)";
+const PROPS = "Uygulanabilir özellikler";
 
 const item = (over: Partial<Item>): Item =>
   ({ id: "i1", code: "STK-000001", name: "PATOS", itemType: "FABRIC", unit: "MT", isActive: true, linearDensityDen: null, createdAt: "2026-01-01", updatedAt: "2026-01-01", ...over }) as Item;
@@ -125,17 +125,19 @@ describe("ItemFormDialog — Mamul en (cm) Kalite Güvence ya da dokuma açıkke
 });
 
 describe("ItemFormDialog — seçici kapsamı Tip'i kilitler (inceleme Not 10b)", () => {
-  it("⭐ yalnız kumaş kapsamı: yeni kayıtta Tip Kumaş ve değiştirilemez; birim 'm'", () => {
+  it("⭐ yalnız kumaş kapsamı: Tip gri salt-okunur kutu (açılır liste değil, yıldızsız); başlık 'Yeni Kumaş'; birim 'm'", () => {
     renderWithProviders(<ItemFormDialog open onOpenChange={() => {}} onSubmit={() => {}} allowedTypes={["FABRIC"]} />);
-    const combo = tipCombo();
-    expect(combo).toHaveTextContent("Kumaş");
-    expect(combo).toBeDisabled();
+    const tip = screen.getByLabelText(/^Tip/);
+    expect(tip).toHaveValue("Kumaş");
+    expect(tip).toHaveAttribute("readonly");
+    expect(screen.queryByText("Tip")?.closest("label")?.textContent).not.toContain("*");
+    expect(screen.getByRole("heading", { name: "Yeni Kumaş" })).toBeInTheDocument();
     expect(screen.getByDisplayValue("m")).toBeInTheDocument();
   });
 
   it("⭐ yalnız iplik kapsamı: varsayılan Kumaş yerine İplik ön-ayarlı gelir", () => {
     renderWithProviders(<ItemFormDialog open onOpenChange={() => {}} onSubmit={() => {}} allowedTypes={["YARN"]} />);
-    expect(tipCombo()).toHaveTextContent("İplik");
+    expect(screen.getByLabelText(/^Tip/)).toHaveValue("İplik");
     expect(screen.getByDisplayValue("kg")).toBeInTheDocument();
   });
 

@@ -17,7 +17,7 @@ const positiveDecimalText = (label: string, max: number) =>
 const itemTypeEnum = z.enum(
   // Hizmet kartı ayrı tabloda (`/api/service-items`) — ürün kartı formu SERVICE sunmaz.
   [ItemType.FABRIC, ItemType.YARN, ItemType.CONSUMABLE],
-  { message: "Kumaş tipi seçilmeli" },
+  { message: "Ürün tipi seçilmeli" },
 );
 
 /** Backend `validateCode` + DB VarChar(32) ile hizalı. Boş = otomatik STK- kodu;
@@ -25,7 +25,7 @@ const itemTypeEnum = z.enum(
 const createCodeSchema = z
   .string()
   .trim()
-  .max(32, "Kumaş kodu en fazla 32 karakter olabilir")
+  .max(32, "Stok kodu en fazla 32 karakter olabilir")
   .regex(/^[A-Za-z0-9_-]*$/, "Kod sadece harf, rakam, tire (-) ve alt çizgi (_) içerebilir")
   .refine(
     (v) => !/^stk-/i.test(v),
@@ -42,8 +42,8 @@ export const makeItemFormSchema = (isEdit: boolean) =>
     name: z
       .string()
       .trim()
-      .min(1, "Kumaş adı boş bırakılamaz")
-      .max(100, "Kumaş adı en fazla 100 karakter olabilir"),
+      .min(1, "Ürün adı boş bırakılamaz")
+      .max(100, "Ürün adı en fazla 100 karakter olabilir"),
     itemType: itemTypeEnum,
     unit: z
       .string()

@@ -34,7 +34,7 @@ export function WarpCalcPanel() {
           <p className="text-sm text-muted-foreground">{calc.per1000Error ? "Hesaplanamadı." : "Hesaplanıyor…"}</p>
         )}
         <div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 rounded-md bg-muted/40 px-3 py-2 text-sm">
-          <span className="text-muted-foreground">Toplam tel (kenar dahil)</span>
+          <span className="text-muted-foreground">Toplam çözgü teli (kenar dahil)</span>
           <span className={cn(num, "font-semibold")} data-testid="warp-calc-total-ends">{formatQty(totalEnds(calc.yarns), 0)}</span>
           <span className="text-muted-foreground">Toplam kg / 1000 m</span>
           <span className={cn(num, "font-semibold")} data-testid="warp-calc-total-kg">{view ? fmtKg(view.totalNetKg) : "—"}</span>

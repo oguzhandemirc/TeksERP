@@ -19,6 +19,7 @@ import { NARROW_GRID, StructureNumberField, useStructureHintContext } from "./St
 import { FinishingCard, StructureSaveBar } from "./StructureParts";
 import { StructurePickField } from "./StructurePickField";
 import { isCostCurrency, showPickFields, useWeavingPickMethod, type PickPair } from "../shared/loom-pick";
+import { WASTE_PRECEDENCE_TEXT } from "@/lib/waste-precedence";
 import { STRUCTURE_MAX } from "./schema";
 import { costItemService, STRUCTURE_KEYS, type CostItemDetail, type StructureKey } from "./service";
 
@@ -71,7 +72,7 @@ export function StructureTab({ detail, measured, flagged }: { detail: CostItemDe
     <div className="flex flex-1 flex-col gap-4">
       <CardSummary g={detail.girdi} />
       <div className="grid gap-4 xl:grid-cols-2">
-        <SectionCard title="Tezgah" titleExtra={info("Boş bırakılan alan aktif parametre setinin değerini kullanır; gri yazı o değeri ve kaynağını gösterir.", "Tezgah açıklaması")}>
+        <SectionCard title="Tezgâh" titleExtra={info("Boş bırakılan alan aktif parametre setinin değerini kullanır; gri yazı o değeri ve kaynağını gösterir.", "Tezgâh açıklaması")}>
           <div className={NARROW_GRID}>
             {num("loomRpm")}
             {num("efficiencyPct")}
@@ -85,7 +86,7 @@ export function StructureTab({ detail, measured, flagged }: { detail: CostItemDe
             {num("beamLengthM")}
           </div>
         </SectionCard>
-        <SectionCard title="Fire ve çekme" titleExtra={info("Çözgü firesi önce bu yapıdan, yoksa çözgü kartından, o da yoksa parametre setinden alınır. Ölçülmüş fire yalnız öneridir; Uygula forma yazar, kaydetmek sizin işinizdir.", "Fire ve çekme açıklaması")}>
+        <SectionCard title="Fire ve çekme" titleExtra={info(`${WASTE_PRECEDENCE_TEXT} Ölçülmüş fire yalnız öneridir; Uygula forma yazar, kaydetmek sizin işinizdir.`, "Fire ve çekme açıklaması")}>
           <div className={NARROW_GRID}>
             {num("warpWastePct", measured && (
               <span className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">

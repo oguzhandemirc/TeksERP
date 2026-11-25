@@ -66,18 +66,18 @@ async function parseProcessCodes(raw: unknown, finishingCode: unknown): Promise<
 export type CostStructureRow = Prisma.CostStructureGetPayload<{ select: typeof COST_STRUCTURE_SELECT }>;
 
 const NUMERIC: Record<string, DecimalRule> = {
-  loomRpm: { label: "Tezgah devri", min: 0, minExclusive: true, scale: 0, integer: true },
+  loomRpm: { label: "Tezgâh devri", min: 0, minExclusive: true, scale: 0, integer: true },
   efficiencyPct: EFFICIENCY_RULE("Randıman"),
   warpWastePct: PCT_RULE("Çözgü firesi"),
   weftWastePct: PCT_RULE("Atkı firesi"),
-  fabricWastePct: PCT_RULE("Kalite firesi"),
+  fabricWastePct: PCT_RULE("Kumaş firesi"),
   weftLengthCm: { label: "Atkı boyu (cm)", min: 0, minExclusive: true, scale: 2 },
   beamLengthM: { label: "Levent boyu (m)", min: 0, minExclusive: true, scale: 2 },
-  lengthShrinkPct: PCT_RULE("Boy çekmesi"),
-  extraCostPerMTry: { label: "Ek maliyet (TL/m)", min: 0, scale: 4 },
+  lengthShrinkPct: PCT_RULE("Boy çekmesi (terbiyede)"),
+  extraCostPerMTry: { label: "Ek masraf (TL/m)", min: 0, scale: 4 },
 };
 const TEXT: Record<string, { label: string; max: number }> = {
-  extraCostLabel: { label: "Ek maliyet etiketi", max: 100 },
+  extraCostLabel: { label: "Ek masraf etiketi", max: 100 },
   notes: { label: "Not", max: 500 },
 };
 

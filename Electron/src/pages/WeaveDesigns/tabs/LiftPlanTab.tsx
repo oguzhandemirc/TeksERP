@@ -24,7 +24,7 @@ import type { DesignFabric, EffectiveConstruction, LiftPlan, WeaveDesign } from 
 const LEGEND = "Çerçeve numarasına bir kez tıklayınca döner (leno), ikinci tıklamada kenar (K), üçüncüde yeniden zemin olur; "
   + "döner ve kenar çerçeveleri ızgarada ve basılan desen kartında ayrı blok olur, kumaş görünümüne girmez. "
   + "Sağdaki 1., 2., 3. sütunları seçili kumaşın atkı kartındaki sıra kodundan gelir (hangi atkıda hangi iplik atılır); "
-  + "değiştirmek için Atkı sırası sekmesindeki kodu düzenleyin.";
+  + "değiştirmek için Atkı raporu sekmesindeki kodu düzenleyin.";
 
 const EMPTY: number[] = [];
 
@@ -144,7 +144,7 @@ function SelectorNote({ weft, hasSelector }: { weft: NonNullable<EffectiveConstr
     <p className="max-w-md text-xs text-muted-foreground">
       {hasSelector
         ? `Atkı seçici: ${weft.code} · ${weft.yarns.map((y) => `${y.sortOrder + 1}. ${y.yarnItem.name}`).join(" · ")}`
-        : `${weft.code} atkı kartında sıra kodu yok — seçici sütunu için Atkı sırası sekmesinde kodu girin (ör. A4 B1 A4 C1).`}
+        : `${weft.code} atkı kartında atkı raporu yok — seçici sütunu için Atkı raporu sekmesinde girin (ör. A4 B1 A4 C1).`}
     </p>
   );
 }

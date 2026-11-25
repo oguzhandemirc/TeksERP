@@ -1,5 +1,5 @@
-// Ürün penceresi > Genel: ad · tip · birim · (iplikte denye/birim/fire) · (kumaşta en) · izinli renk/özellik · dokuma ayrıntıları ·
-// stok kodu. Çözgü/atkı/desen kendi sekmelerinde (B19). Sıra bilinçli: ÖNCE ad; stok kodu EN ALTTA kapalı satır (2026-08-17).
+// Ürün penceresi > Genel: ad · tip · birim · (iplikte numara/alım birimi/fire) · (kumaşta tür/yanmazlık/kompozisyon) ·
+// renkler/özellikler · ölçüler ve gramaj · stok kodu. Çözgü/atkı/desen kendi sekmelerinde (B19). Sıra bilinçli: ÖNCE ad; stok kodu EN ALTTA kapalı satır (2026-08-17).
 import { useMemo } from "react";
 import { Controller, type UseFormReturn } from "react-hook-form";
 import { useQuery } from "@tanstack/react-query";
@@ -17,8 +17,7 @@ import type { ItemFormValues } from "./schema";
 import { ItemYarnWasteField } from "./ItemYarnWasteField";
 import { ItemYarnFields } from "./ItemYarnFields";
 import { ItemWeavingDetails } from "./ItemWeavingDetails";
-import { PickerTrigger, StockCodeRow } from "./ItemFormParts";
-import { FabricTechniqueField } from "./FabricTechniqueField";
+import { LockedValue, PickerTrigger, StockCodeRow } from "./ItemFormParts";
 import { FabricClassFields } from "./FabricClassFields";
 import { ItemCompositionField } from "./ItemCompositionField";
 import { ItemFiberFields } from "./ItemFiberFields";
@@ -36,7 +35,6 @@ interface Props {
   yarnWasteVisible: boolean;
   carriesLists: boolean;
   staleLists: boolean;
-  hasSavedWeavingValues: boolean;
   manualCode: boolean;
   onManualCodeChange: (next: boolean) => void;
   onOpenColors: () => void;
@@ -71,48 +69,44 @@ export function ItemGeneralFields(p: Props) {
     const all = propsQ.data?.data ?? [];
     return allowedPropertyIds.map((id) => all.find((x) => x.id === id)).filter((x): x is NonNullable<typeof x> => Boolean(x));
   }, [allowedPropertyIds, propsQ.data?.data]);
-  const fabricWidth = itemType === ItemType.FABRIC && p.widthVisible;
   const typeScope = itemTypeScope(isEdit ? null : p.allowedTypes);
+  const typeLocked = isEdit || typeScope.locked;
 
   return (
     <>
-      {/* Geniş form (2026-11-19): kısa alanlar tek ızgarada yan yana; uzun açıklamalar ⓘ balonunda. */}
+      {/* Geniş form (2026-11-19): kısa alanlar tek ızgarada yan yana; uzun açıklamalar ⓘ balonunda.
+          Üretim tekniği çizilmez: kullanılabilir tek teknik Dokuma (K10; Örme K12 bekliyor), kumaş sunucuda Dokuma doğar. */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <FormField label="Ad" htmlFor="name" error={errors.name} required className={fabricWidth ? "sm:col-span-2 lg:col-span-1" : "sm:col-span-2"}>
-          <Input id="name" placeholder="Patos" {...form.register("name")} />
+        <FormField label="Ad" htmlFor="name" error={errors.name} required className="sm:col-span-2">
+          <Input id="name" placeholder="ör. Patos" {...form.register("name")} />
           {/* Canlı veride "ACTIVO" ve "ACTİVO" iki ayrı kumaş olarak duruyordu (i/İ tuzağı) — uyarı yazarken görünsün. */}
           <SimilarNamesWarning entity="items" name={form.watch("name") ?? ""} excludeId={initial?.id} />
         </FormField>
-        <FormField label="Tip" error={errors.itemType} required={!isEdit} info={isEdit ? "Tip kayıttan sonra değiştirilemez." : typeScope.info}>
-          <Controller
-            control={form.control}
-            name="itemType"
-            render={({ field }) => (
-              <EnumSelect<ProductItemType> value={field.value} onChange={field.onChange} labels={typeScope.labels} disabled={isEdit || typeScope.locked} />
-            )}
-          />
+        <FormField label="Tip" htmlFor={typeLocked ? "itemTypeLocked" : undefined} error={errors.itemType} required={!typeLocked} info={isEdit ? "Tip kayıttan sonra değiştirilemez." : typeScope.info}>
+          {typeLocked ? (
+            <LockedValue id="itemTypeLocked" text={itemTypeLabels[itemType]} />
+          ) : (
+            <Controller
+              control={form.control}
+              name="itemType"
+              render={({ field }) => <EnumSelect<ProductItemType> value={field.value} onChange={field.onChange} labels={typeScope.labels} />}
+            />
+          )}
         </FormField>
-        <FormField label="Birim" info="Seçilen tipe göre otomatik atanır.">
-          <Input value={unitLabel(p.derivedUnit)} readOnly tabIndex={-1} className="bg-muted text-center cursor-not-allowed" />
+        <FormField label="Birim" htmlFor="itemUnitLocked" info="Seçilen tipe göre otomatik atanır.">
+          <LockedValue id="itemUnitLocked" text={unitLabel(p.derivedUnit)} />
         </FormField>
-        {itemType === ItemType.FABRIC && <FabricTechniqueField />}
         {itemType === ItemType.FABRIC && <FabricClassFields form={form} />}
-        {/* Denye + satın alma birimi yalnız iplikte (SY-a); zorunlu DEĞİL — çözgü/atkı kartı açarken sunucu anlaşılır 400 verir. */}
+        {/* Denye + alım birimi yalnız iplikte (SY-a); zorunlu DEĞİL — çözgü/atkı kartı açarken sunucu anlaşılır 400 verir. */}
         {itemType === ItemType.YARN && <ItemYarnFields form={form} />}
         {p.yarnWasteVisible && <ItemYarnWasteField form={form} />}
-        {/* K4P: ürün kartı eni (= mamul en, dokuma.md) — muayene puan/100 m² kaynağı #1; iki modül de kapalıyken alan yok. */}
-        {fabricWidth && (
-          <FormField label="Mamul en (cm)" htmlFor="widthCm" error={errors.widthCm} info="Bitmiş kumaşın eni. 4 puan muayenesinde puan/100 m² bu enden hesaplanır (boşsa KK1'de ölçülen en); ham en ile birlikte en çekmesini verir.">
-            <Input id="widthCm" inputMode="decimal" placeholder="ör. 280" {...form.register("widthCm")} />
-          </FormField>
-        )}
         {itemType === ItemType.FABRIC && <div className="sm:col-span-2"><ItemCompositionField form={form} itemId={initial?.id ?? null} /></div>}
       </div>
       {itemType === ItemType.YARN && <ItemFiberFields form={form} />}
 
       {p.carriesLists && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <FormField label="İzinli Renkler">
+          <FormField label="Renkler (kartela)" info="Bu kumaş için seçilebilir renkler. Boş bırakılırsa bütün aktif renkler serbest. (Eski adı: İzinli Renkler)">
             <PickerTrigger
               icon={<Palette className="h-4 w-4 text-muted-foreground" />}
               count={allowedColorIds.length}
@@ -122,7 +116,7 @@ export function ItemGeneralFields(p: Props) {
               onClick={p.onOpenColors}
             />
           </FormField>
-          <FormField label="İzinli Özellikler">
+          <FormField label="Uygulanabilir özellikler" info="Bu kumaşa uygulanabilecek özellikler. Boş bırakılırsa bütün aktif özellikler serbest. (Eski adı: İzinli Özellikler)">
             <PickerTrigger
               icon={<Sparkles className="h-4 w-4 text-muted-foreground" />}
               count={allowedPropertyIds.length}
@@ -141,8 +135,8 @@ export function ItemGeneralFields(p: Props) {
         </p>
       )}
 
-      {/* Az kullanılan dokuma alanları katlanır bölümde, kapalı gelir (dolu değer varsa açık). */}
-      {itemType === ItemType.FABRIC && <ItemWeavingDetails form={form} itemId={initial?.id ?? null} hasSavedValues={p.hasSavedWeavingValues} />}
+      {/* K2/K3: en ve gramaj kumaşın günlük bilgisi — tek bölüm, açık. */}
+      {itemType === ItemType.FABRIC && <ItemWeavingDetails form={form} itemId={initial?.id ?? null} widthVisible={p.widthVisible} />}
 
       <StockCodeRow
         isEdit={isEdit}

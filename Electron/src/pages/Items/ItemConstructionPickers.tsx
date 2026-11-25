@@ -1,20 +1,16 @@
 // =============================================================================
-// ÜRÜN FORMU — atkı kartı + desen kartı seçicileri (Seyitoğlu SY-A4, tasarım §2.8)
+// ÜRÜN FORMU — atkı kartı + desen kartı bağının görünürlük/gövde kararı (Seyitoğlu SY-A4, tasarım §2.8)
 // =============================================================================
-// Yalnız KUMAŞ + dokuma modülü açık + `warpspec:read` varken çizilir (uçlar o kapının arkasında;
-// izinsiz kullanıcıda seçici 403 atardı). Görünmüyorsa ya da alan hiç dolmadıysa payload'a anahtar
+// Yalnız KUMAŞ + dokuma modülü açık + `warpspec:read` varken (uçlar o kapının arkasında; izinsiz
+// kullanıcıda seçici 403 atardı). Görünmüyorsa ya da alan hiç dolmadıysa payload'a anahtar
 // GİRMEZ → yapısız üründe istek gövdesi bugünküyle bayt-aynı (`constructionPayload`).
+// Seçiciler ürün penceresinin Atkı / Desen sekmelerinde (`construction/`).
 // =============================================================================
-import { Controller, type UseFormReturn } from "react-hook-form";
-import { Grid3x3, Rows3 } from "lucide-react";
-import { FormField } from "@/components/forms/FormField";
-import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { useDokumaEnabled } from "@/hooks/usePricingEnabled";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { ItemType } from "@/types/enums";
 import type { ItemFormValues } from "./schema";
 import type { Item } from "./types";
-import { weaveDesignPickerService, weftSpecPickerService, type WeaveDesignRef, type WeftSpecRef } from "./construction-service";
 
 /** Seçiciler çizilir mi — payload kararı da AYNI yüklemden (gizli alanın boşu kartı silmesin). */
 export function useConstructionPickersVisible(itemType: ItemType): boolean {
@@ -39,54 +35,4 @@ export function constructionPayload(
   if (v.weaveDesignId) out.weaveDesignId = v.weaveDesignId;
   else if (initial?.weaveDesignId) out.weaveDesignId = null;
   return out;
-}
-
-export function ItemConstructionPickers({ form }: { form: UseFormReturn<ItemFormValues> }) {
-  const err = form.formState.errors;
-  return (
-    <>
-      <FormField label="Atkı kartı" error={err.weftSpecId} info="Atkı sırası, iplikler ve sıklık; maliyet ve dokuma iş emri buradan okur">
-        <Controller
-          control={form.control}
-          name="weftSpecId"
-          render={({ field }) => (
-            <EntityPickerModal<WeftSpecRef>
-              value={field.value || null}
-              onChange={(id) => field.onChange(id ?? "")}
-              service={weftSpecPickerService}
-              queryKey="weft-specs-item"
-              getLabel={(w) => w.name}
-              getSubLabel={(w) => w.code}
-              icon={Rows3}
-              nullable
-              noneLabel="Atkı kartı yok"
-              title="Atkı kartı seç"
-              placeholder="Atkı kartı seç"
-            />
-          )}
-        />
-      </FormField>
-      <FormField label="Desen kartı" error={err.weaveDesignId} info="Örgü türü, armür planı ve tezgâh desen dosyası">
-        <Controller
-          control={form.control}
-          name="weaveDesignId"
-          render={({ field }) => (
-            <EntityPickerModal<WeaveDesignRef>
-              value={field.value || null}
-              onChange={(id) => field.onChange(id ?? "")}
-              service={weaveDesignPickerService}
-              queryKey="weave-designs-item"
-              getLabel={(d) => d.name}
-              getSubLabel={(d) => d.code}
-              icon={Grid3x3}
-              nullable
-              noneLabel="Desen kartı yok"
-              title="Desen kartı seç"
-              placeholder="Desen kartı seç"
-            />
-          )}
-        />
-      </FormField>
-    </>
-  );
 }

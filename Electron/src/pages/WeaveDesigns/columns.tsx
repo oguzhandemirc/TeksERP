@@ -12,7 +12,7 @@ export const WEAVE_DESIGN_COLUMNS: ColumnDef<WeaveDesignRow>[] = [
   { id: "name", header: "Ad", size: 220, meta: { label: "Ad" }, accessorFn: (r) => r.name },
   { id: "mechanism", header: "Mekanizma", meta: { label: "Mekanizma" }, accessorFn: (r) => SHED_MECHANISM_LABEL[resolveWeaveClass(r).shedMechanism] },
   { id: "structure", header: "Örgü", meta: { label: "Örgü" }, accessorFn: (r) => { const s = resolveWeaveClass(r).weaveStructure; return s ? WEAVE_STRUCTURE_LABEL[s] : "—"; } },
-  { id: "family", header: "Aile", meta: { label: "Aile" }, accessorFn: (r) => r.familyLabel ?? "—" },
+  { id: "family", header: "Desen ailesi", meta: { label: "Desen ailesi" }, accessorFn: (r) => r.familyLabel ?? "—" },
   { id: "frames", header: "Çerçeve", meta: right("Çerçeve"), accessorFn: (r) => r.frameCount ?? "—" },
   { id: "repeat", header: "Rapor boyu (cm)", meta: right("Rapor boyu (cm)"), accessorFn: (r) => r.repeatCm ?? "—" },
   {

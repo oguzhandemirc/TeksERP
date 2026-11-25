@@ -298,10 +298,10 @@ const ENUM_LABELS_ANA: Record<string, string> = {
   ENERGY: "Enerji",
   BEAM_PREP: "Levent hazırlığı",
   FINISHING: "Terbiye",
-  LENGTH_SHRINK: "Boy çekmesi",
-  FABRIC_WASTE: "Kalite firesi",
+  LENGTH_SHRINK: "Boy çekmesi (terbiyede)",
+  FABRIC_WASTE: "Kumaş firesi",
   OVERHEAD: "Genel gider",
-  EXTRA: "Ek kalem",
+  EXTRA: "Ek masraf",
   WEAVING_PICK: "Atkı ücreti (dokuma)",
   // PROCESS (proses tarifesi satırı) — global "Süreç hatası"; satır audit'e ALAN olarak yazılmaz (bkz. paylaşım beyanı).
   SIMULATED: "Simüle edildi",

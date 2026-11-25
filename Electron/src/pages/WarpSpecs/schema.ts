@@ -13,8 +13,8 @@ export const warpYarnRowSchema = z.object({
     z
       .string()
       .trim()
-      .min(1, "Tel adedi zorunlu")
-      .refine((v) => Number.isInteger(Number(v)) && Number(v) > 0, "Tel adedi sıfırdan büyük tam sayı olmalı"),
+      .min(1, "Tel sayısı zorunlu")
+      .refine((v) => Number.isInteger(Number(v)) && Number(v) > 0, "Tel sayısı sıfırdan büyük tam sayı olmalı"),
   ),
 });
 
@@ -38,7 +38,7 @@ export const warpSpecFormSchema = z.object({
       (rows) => new Set(rows.map((r) => r.yarnItemId).filter(Boolean)).size === rows.filter((r) => r.yarnItemId).length,
       "Aynı iplik iki satırda olamaz — telini tek satırda topla",
     ),
-  sequenceNote: z.string().max(160, "Dizilim en fazla 160 karakter olabilir").optional().or(z.literal("")),
+  sequenceNote: z.string().max(160, "Çözgü dizimi en fazla 160 karakter olabilir").optional().or(z.literal("")),
   selvedgeEnds: acceptNumberAsText(
     z
       .string()
@@ -59,7 +59,7 @@ export const warpSpecFormSchema = z.object({
     z
       .string()
       .trim()
-      .refine((v) => v === "" || (Number.isInteger(Number(v)) && Number(v) > 0), "Dişe tel tam sayı olmalı")
+      .refine((v) => v === "" || (Number.isInteger(Number(v)) && Number(v) > 0), "Dişten geçen tel tam sayı olmalı")
       .optional()
       .or(z.literal("")),
   ),

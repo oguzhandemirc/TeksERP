@@ -86,7 +86,7 @@ describe("WeftTab — bu desene özel kopya", () => {
     renderWithProviders(<WeftTab fabric={FABRIC} canWrite />);
     fireEvent.click(await screen.findByRole("button", { name: /Atkı Kartları ekranında aç/ }));
     await waitFor(() => expect(openTab).toHaveBeenCalledWith("/definitions/weft-specs?search=ATK-ORTAK", { forceNew: true }));
-    expect(screen.getByLabelText("Atkı sırası kodu")).toBeDisabled();
+    expect(screen.getByLabelText("Atkı raporu")).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Kaydet" })).toBeNull();
     expect(api.update).not.toHaveBeenCalled();
   });
@@ -94,7 +94,7 @@ describe("WeftTab — bu desene özel kopya", () => {
     countUsers.mockRejectedValue(new Error("ağ"));
     renderWithProviders(<WeftTab fabric={FABRIC} canWrite />);
     expect(await screen.findByText("Atkı kartının kaç kumaşta kullanıldığı öğrenilemedi")).toBeInTheDocument();
-    expect(screen.getByLabelText("Atkı sırası kodu")).toBeDisabled();
+    expect(screen.getByLabelText("Atkı raporu")).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Kaydet" })).toBeNull();
   });
   it("§8 yalnız bu kumaşa ait kart burada düzenlenir: Kaydet → PATCH", async () => {
@@ -102,7 +102,7 @@ describe("WeftTab — bu desene özel kopya", () => {
     api.get.mockResolvedValue({ ...SPEC, sequenceCode: "A1", yarns: [{ yarnItemId: "y-a", picksInRepeat: 1, sortOrder: 0 }] });
     api.update.mockResolvedValue({});
     renderWithProviders(<WeftTab fabric={FABRIC} canWrite />);
-    const input = await screen.findByLabelText("Atkı sırası kodu");
+    const input = await screen.findByLabelText("Atkı raporu");
     await waitFor(() => expect(input).not.toBeDisabled());
     fireEvent.change(input, { target: { value: "A2" } });
     fireEvent.click(screen.getByRole("button", { name: "Kaydet" }));
@@ -173,7 +173,7 @@ describe("WeftSequenceStrip — atkı seçici görseli (kart görsel B)", () => 
     api.get.mockResolvedValue({ ...SPEC, sequenceCode: "A2 B1 A2 C1" });
     construction.current = { weft: WEFT };
     renderWithProviders(<WeftTab fabric={FABRIC} canWrite />);
-    const input = await screen.findByLabelText("Atkı sırası kodu");
+    const input = await screen.findByLabelText("Atkı raporu");
     fireEvent.change(input, { target: { value: "A4 B1" } });
     expect(await screen.findByText(/kaydedince görünüm güncellenir/)).toBeInTheDocument();
     fireEvent.change(input, { target: { value: "A2 B1 A2 C1 " } });

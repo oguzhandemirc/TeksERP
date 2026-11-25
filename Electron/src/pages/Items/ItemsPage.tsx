@@ -66,7 +66,7 @@ export function ItemsPage() {
     <>
     <CrudPage<Item>
       title="Ürün Kartları"
-      description="Ürün kataloğu (kumaş · iplik · sarf) — izinli renk ve özellik listesi opsiyoneldir. Hizmetler kendi ekranındadır (Tanımlar › Hizmet Kartları)."
+      description="Ürün kataloğu (kumaş · iplik · sarf) — renk kartelası ve uygulanabilir özellik listesi opsiyoneldir. Hizmetler kendi ekranındadır (Tanımlar › Hizmet Kartları)."
       entityName="Ürün"
       mergeEntity="item"
       importEntity="item"

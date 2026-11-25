@@ -31,11 +31,11 @@ export const WEFT_SPEC_COLUMNS: ColumnDef<WeftSpecListRow>[] = [
       </span>
     ),
   },
-  { id: "seq", header: "Atkı sırası", meta: { label: "Atkı sırası" }, accessorFn: (r) => r.sequenceCode ?? "—", cell: ({ row }) => <span className="font-mono text-xs">{row.original.sequenceCode ?? "—"}</span> },
+  { id: "seq", header: "Atkı raporu", meta: { label: "Atkı raporu" }, accessorFn: (r) => r.sequenceCode ?? "—", cell: ({ row }) => <span className="font-mono text-xs">{row.original.sequenceCode ?? "—"}</span> },
   {
     id: "ppc",
-    header: "Sıklık (atkı/cm)",
-    meta: right("Sıklık (atkı/cm)"),
+    header: "Atkı sıklığı (atkı/cm)",
+    meta: right("Atkı sıklığı (atkı/cm)"),
     accessorFn: (r) => (r.picksPerCm == null || r.picksPerCm === "" ? "—" : formatQty(Number(r.picksPerCm), 2)),
   },
   { id: "program", header: "Program no", meta: { label: "Program no" }, accessorFn: (r) => r.weftProgramNo ?? "—" },
