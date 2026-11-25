@@ -64,8 +64,11 @@ export function WeftContentFields({ value, onChange, canWrite, savedSeq, idPrefi
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="space-y-1.5">
-          <Label htmlFor={`${idPrefix}-seq`}>Atkı sırası kodu</Label>
-          <Input id={`${idPrefix}-seq`} value={seq} maxLength={120} disabled={!canWrite} onChange={(e) => set({ seq: e.target.value })} placeholder="ör. A4 B1 A4 C1" />
+          <div className="flex items-center gap-1">
+            <Label htmlFor={`${idPrefix}-seq`}>Atkı sırası kodu</Label>
+            <InfoPopover label="Sıra kodu nasıl yazılır" desc={SEQ_INFO} />
+          </div>
+          <Input id={`${idPrefix}-seq`} value={seq} maxLength={120} disabled={!canWrite} onChange={(e) => set({ seq: e.target.value })} placeholder="ör. 10x(A2 B2 C1) D4" />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor={`${idPrefix}-ppc`}>Atkı sıklığı (atkı/cm)</Label>
@@ -133,6 +136,9 @@ function WeftBoxSection({ seq, saved, letterCount, canWrite, onChange }: {
     </section>
   );
 }
+
+const SEQ_INFO = "Harf = atkı ipliği satırı (A = 1. satır), sayı = arka arkaya kaç atkı atıldığı: ör. A4 B1 A4 C1. "
+  + "Tekrar eden kısmı parantezle kısaltabilirsiniz: 10x(A2 B2 C1) D4 = parantez içi 10 kez, ardından 4 atkı D (54 atkı).";
 
 const PICKS_INFO = "Desenin bir tekrarında (raporunda) bu iplikle kaç atkı atıldığı. Ör. sıra A4 B1 ise A ipliği 4, B ipliği 1. "
   + "Atkı sırası kodu girilmişse bu sayı sıradan kendiliğinden hesaplanır. İpliklerin kumaştaki payı bu sayılardan bulunur.";
