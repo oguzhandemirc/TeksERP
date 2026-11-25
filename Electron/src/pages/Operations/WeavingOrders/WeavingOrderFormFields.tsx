@@ -1,8 +1,8 @@
 // =============================================================================
 // DOKUMA İŞİ FORMU — alan grupları (diyalog gövdesi 80 satır tavanına sığsın diye)
 // =============================================================================
-// ⚠️ Çözgü kartı seçici yalnız DEVERE modülü açıkken çizilir: `/api/warp-specs`
-// `requireDevereEnabled` arkasındadır, kapalı kurulumda seçici 403 yerdi.
+// ⚠️ Çözgü kartı seçici ÇÖZGÜ KARTI REJİMİNE bağlıdır (devere ∨ dokuma; `useWarpSpecEnabled`, D4/K1):
+// `/api/warp-specs` `requireWarpSpecRegime` arkasında; levent ön-dolumu (BeamPrefillField) devere kapısında kalır.
 // =============================================================================
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
-import { useFeatureFlags } from "@/hooks/usePricingEnabled";
+import { useFeatureFlags, useWarpSpecEnabled } from "@/hooks/usePricingEnabled";
 import { itemLifecycleOf, pickableLifecycle } from "@/lib/item-lifecycle";
 import { itemService } from "@/pages/Items/service";
 import type { Item } from "@/pages/Items/types";
@@ -32,7 +32,7 @@ import { useColorRecordForm } from "@/pages/Colors/useColorRecordForm";
 
 type Form = UseFormReturn<WeavingOrderFormValues>;
 
-/** Kumaş · renk · (devere açıksa) çözgü kartı. */
+/** Kumaş · renk · (çözgü kartı rejimi açıksa) çözgü kartı. */
 /** E4 ön-dolum: kumaş seçilince kartın varsayılan çözgü kartı alana yazılır — YALNIZ alan boşken (kullanıcı seçimi ezilmez);
  *  sunucu da boş gönderilirse aynı varsayılanı uygular (`createWeavingOrder`), yani ekranda görünen = kaydedilecek. */
 function useItemWarpSpecPrefill(form: Form, enabled: boolean): void {
@@ -45,10 +45,11 @@ function useItemWarpSpecPrefill(form: Form, enabled: boolean): void {
   }, [enabled, suggested, form]);
 }
 
-export function FabricFields({ form, devereEnabled }: { form: Form; devereEnabled: boolean }) {
+export function FabricFields({ form }: { form: Form }) {
   const colorForm = useColorRecordForm();
   const itemForm = useItemRecordForm(["FABRIC"]);
-  useItemWarpSpecPrefill(form, devereEnabled);
+  const warpSpecEnabled = useWarpSpecEnabled();
+  useItemWarpSpecPrefill(form, warpSpecEnabled);
   // Yeni dokuma işi = yeni üretim planı (A3): Tükenene kadar kart ayara bağlı listelenir.
   const flags = useFeatureFlags().data?.data;
   const err = form.formState.errors;
@@ -94,7 +95,7 @@ export function FabricFields({ form, devereEnabled }: { form: Form; devereEnable
           )}
         />
       </FormField>
-      {devereEnabled && (
+      {warpSpecEnabled && (
         <FormField label="Çözgü kartı" error={err.warpSpecId}>
           <Controller
             control={form.control}
