@@ -1,21 +1,18 @@
-// Varyantlar sekmesi: varyant = kumaşın iş emri şablonu (`ProductRecipe`, kolon `variantCode`); İş Emri
-// Şablonları ekranı aynı kayıtları gösterir. Varyant boya rengini, terbiye tarifesini ve atkı ipliğini değiştirir.
-import { useState } from "react";
+// Varyantlar sekmesi (desen kartı): varyant = kumaşın iş emri şablonu (`ProductRecipe`, kolon `variantCode`).
+// D3/K7: varyant kumaşa aittir → burada SALT OKUNUR özet; yeni varyant, örnek alma ve atkı değişimi kumaşın ürün
+// penceresinin Varyantlar sekmesinde ("Üründe aç"). İş Emri Şablonları ekranı aynı kayıtları gösterir.
 import { useQuery } from "@tanstack/react-query";
+import { ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { TERIM } from "@/lib/terim";
+import { VARIANT_READ_PERMISSIONS } from "@/pages/Items/variants/ItemVariantsSection";
 import { listItemVariants } from "../service";
 import type { DesignFabric, DesignVariant } from "../types";
-import { VariantCreateDialog } from "./VariantCreateDialog";
-import { VariantWeftOverrides } from "./VariantWeftOverrides";
 
-export function VariantsTab({ fabric }: { fabric: DesignFabric | null }) {
-  const { hasAnyPermission, hasPermission } = useRoleAccess();
-  const canRead = hasAnyPermission(["station:read", "mobile:hizli-is-emri"]);
-  const canCreate = hasPermission("station:write");
-  const [createOpen, setCreateOpen] = useState(false);
-  const [openId, setOpenId] = useState<string | null>(null);
+export function VariantsTab({ fabric, onOpenItem }: { fabric: DesignFabric | null; onOpenItem?: () => void }) {
+  const { hasAnyPermission } = useRoleAccess();
+  const canRead = hasAnyPermission(VARIANT_READ_PERMISSIONS);
   const list = useQuery({
     queryKey: ["product-recipes", "by-item", fabric?.id],
     queryFn: () => listItemVariants(fabric!.id),
@@ -26,30 +23,30 @@ export function VariantsTab({ fabric }: { fabric: DesignFabric | null }) {
   const rows: DesignVariant[] = list.data ?? [];
   return (
     <div className="space-y-3">
-      {canCreate && <Button size="sm" onClick={() => setCreateOpen(true)}>Yeni varyant</Button>}
+      <div className="flex flex-wrap items-center gap-3">
+        <p className="text-sm text-muted-foreground">Varyantlar kumaşa aittir; {fabric.code} kumaşının ürün penceresinde (Varyantlar sekmesi) eklenir ve değiştirilir.</p>
+        {onOpenItem && (
+          <Button size="sm" variant="outline" className="ml-auto" onClick={onOpenItem}>
+            <ExternalLink className="mr-1.5 h-4 w-4" />Üründe aç
+          </Button>
+        )}
+      </div>
       {list.isLoading ? (
         <p className="text-sm text-muted-foreground">Yükleniyor…</p>
       ) : rows.length === 0 ? (
         <p className="text-sm text-muted-foreground">{fabric.code} kumaşının varyantı yok.</p>
       ) : (
-        <ul className="space-y-2">
+        <ul className="space-y-2" aria-label="Varyantlar">
           {rows.map((v) => (
-            <li key={v.id} className="rounded-md border p-2">
-              <div className="flex flex-wrap items-center gap-3 text-sm">
-                <span className="font-mono font-semibold">{v.variantCode ?? "—"}</span>
-                <span>{v.name}</span>
-                <span className="text-muted-foreground">Renk: {v.color?.name ?? "—"}</span>
-                <span className="text-muted-foreground">Tarife: {v.finishingRateCode ?? "kumaşın tarifesi"}</span>
-                <Button variant="outline" size="sm" className="ml-auto" onClick={() => setOpenId(openId === v.id ? null : v.id)}>
-                  {openId === v.id ? "Kapat" : "Atkı değişimi"}
-                </Button>
-              </div>
-              {openId === v.id && <VariantWeftOverrides fabricId={fabric.id} recipeId={v.id} />}
+            <li key={v.id} className="flex flex-wrap items-center gap-3 rounded-md border p-2 text-sm">
+              <span className="font-mono font-semibold">{v.variantCode ?? "—"}</span>
+              <span>{v.name}</span>
+              <span className="text-muted-foreground">Renk: {v.color?.name ?? "—"}</span>
+              <span className="text-muted-foreground">Tarife: {v.finishingRateCode ?? "kumaşın tarifesi"}</span>
             </li>
           ))}
         </ul>
       )}
-      {createOpen && <VariantCreateDialog fabric={fabric} onClose={() => setCreateOpen(false)} />}
     </div>
   );
 }

@@ -3,17 +3,9 @@
 import { formatNumber } from "@/lib/format";
 import type { WeftSpecDetail } from "../types";
 
-export interface WeftRowLike { yarnItemId: string; picks: string }
-
 /** Sütun çizilir mi: esas belli ve en az bir satırda pay var (null'da sütun gizli). */
 export function weftShareVisible(spec: WeftSpecDetail): boolean {
   return spec.shareBasis != null && spec.yarns.some((y) => y.sharePct != null);
-}
-
-/** Satırlar kayıtlı kartla aynı mı (iplik + adet, sıra kodu değişmemiş). */
-export function weftRowsMatchSaved(spec: WeftSpecDetail, rows: readonly WeftRowLike[], seq: string): boolean {
-  if ((spec.sequenceCode ?? "") !== seq.trim() || rows.length !== spec.yarns.length) return false;
-  return rows.every((r, i) => r.yarnItemId === spec.yarns[i]!.yarnItemId && (seq.trim() !== "" || Number(r.picks) === spec.yarns[i]!.picksInRepeat));
 }
 
 /** Hücre metni: "%42,5" · bilinmiyor/düzenlenmiş → "—". */

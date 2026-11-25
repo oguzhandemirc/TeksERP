@@ -15,7 +15,7 @@ import { YarnWhereSection } from "@/pages/Operations/YarnAtSubcontractor/YarnWhe
 
 export interface ItemExtraTab { value: string; label: string; content: ReactNode }
 /** Anında kaydeden (formdan bağımsız) sekmeler — alt çubuk notu bunlarda. */
-export const INSTANT_SAVE_TABS = new Set(["customer-aliases"]);
+export const INSTANT_SAVE_TABS = new Set(["customer-aliases", "variants"]);
 
 interface Props {
   /** Düzenlenen kart; yeni kartta null. */

@@ -18,6 +18,7 @@ import { LiftPlanTab } from "./tabs/LiftPlanTab";
 import { StructureTab } from "./tabs/StructureTab";
 import { VariantsTab } from "./tabs/VariantsTab";
 import { WeftTab } from "./tabs/WeftTab";
+import { useOpenItemCard, type ItemCardTab } from "@/pages/Items/useOpenItemCard";
 import { SHED_MECHANISM_LABEL, resolveWeaveClass, weaveClassLabel } from "./weave-class";
 
 const DETAIL_TABS = new Set(["structure", "weft", "lift", "variants"]);
@@ -37,6 +38,9 @@ export function WeaveDesignDetailPage() {
   const fabricList = fabrics.data ?? [];
   const fabric = fabricList.find((f) => f.id === chosen) ?? fabricList[0] ?? null;
   const d = design.data;
+  // D3/K7: atkı, varyant ve ek çözgü kumaşa aittir → burada salt okunur; "Üründe aç" kumaşın ürün penceresini ilgili sekmede açar.
+  const itemCard = useOpenItemCard();
+  const openItem = (t: ItemCardTab) => (fabric ? () => itemCard.open(fabric, t) : undefined);
   return (
     <PageShell>
       <PageHeader
@@ -62,9 +66,9 @@ export function WeaveDesignDetailPage() {
                 {showCost && <TabsTrigger value="cost">Maliyet</TabsTrigger>}
               </TabsList>
               <TabsContent value="structure" className="mt-4">
-                <StructureTab key={d.id + (d.repeatCm ?? "") + d.name} design={d} fabric={fabric} canWrite={canWrite} />
+                <StructureTab key={d.id + (d.repeatCm ?? "") + d.name} design={d} fabric={fabric} canWrite={canWrite} onOpenItem={openItem("warp")} />
               </TabsContent>
-              <TabsContent value="weft" forceMount className="mt-4 data-[state=inactive]:hidden"><WeftTab fabric={fabric} canWrite={canWrite} /></TabsContent>
+              <TabsContent value="weft" forceMount className="mt-4 data-[state=inactive]:hidden"><WeftTab fabric={fabric} onOpenItem={openItem("weft")} /></TabsContent>
               {/* Armür editörü sekme değişince sökülmez: kaydedilmemiş taslak ve geri al yığını korunur. */}
               <TabsContent value="lift" forceMount className="mt-4 data-[state=inactive]:hidden">
                 {/* Izgara yalnız Armür'de anlamlı; sunucu Armür dışı ızgara yazımını reddeder. */}
@@ -77,9 +81,10 @@ export function WeaveDesignDetailPage() {
                   </p>
                 )}
               </TabsContent>
-              <TabsContent value="variants" className="mt-4"><VariantsTab fabric={fabric} /></TabsContent>
+              <TabsContent value="variants" className="mt-4"><VariantsTab fabric={fabric} onOpenItem={openItem("variants")} /></TabsContent>
               {showCost && <TabsContent value="cost" className="mt-4"><CostTab fabrics={fabricList} /></TabsContent>}
             </Tabs>
+            {itemCard.element}
           </>
         )}
       </PageBody>

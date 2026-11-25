@@ -15,6 +15,8 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/render";
 import { ItemFormDialog } from "./ItemFormDialog";
 import type { Item } from "./types";
+import { useAuthStore } from "@/store/auth";
+import type { JwtPayload } from "@/types/auth";
 
 vi.mock("@/lib/picker-loader", () => ({ loadAllForPicker: () => Promise.resolve({ data: [], pagination: { page: 1, pageSize: 500, total: 0, totalPages: 1 } }) }));
 vi.mock("@/components/forms/SimilarNamesWarning", () => ({ SimilarNamesWarning: () => null }));
@@ -24,6 +26,10 @@ vi.mock("./AllowedPropertiesDialog", () => ({ AllowedPropertiesDialog: () => nul
 const flags = vi.hoisted(() => ({ kg: false, mal: false, dk: false }));
 vi.mock("@/hooks/usePricingEnabled", () => ({ useDevereEnabled: () => false, useDokumaEnabled: () => flags.dk, useKaliteGuvenceEnabled: () => flags.kg, useMaliyetEnabled: () => flags.mal }));
 const WIDTH = /Mamul en \(cm\)/;
+// D3: sekme içerikleri ağ çağırır — burada ölçülen sekmenin görünürlüğü ve açılış sekmesi.
+vi.mock("./variants/ItemVariantsSection", async (orig) => ({ ...(await orig<object>()), ItemVariantsSection: () => <p>varyant listesi</p> }));
+vi.mock("./construction/ItemWeftSection", () => ({ ItemWeftSection: () => null }));
+vi.mock("./construction/ItemWeaveSection", () => ({ ItemWeaveSection: () => null }));
 
 /** Tip seçicisi formun İLK açılırı (kumaş kartında Yanmazlık da açılır — K8). */
 const tipCombo = () => screen.getAllByRole("combobox")[0]!;
@@ -189,5 +195,32 @@ describe("ItemFormDialog — iplik firesi % (SY-3 I2)", () => {
     renderWithProviders(<ItemFormDialog open onOpenChange={() => {}} onSubmit={() => {}} initial={item({ itemType: "FABRIC" })} />);
     expect(screen.queryByLabelText(LABEL)).toBeNull();
     flags.mal = false;
+  });
+});
+
+describe("ItemFormDialog — Varyantlar sekmesi ve açılış sekmesi (D3/K7)", () => {
+  const asUser = (permissions: string[] | null) => useAuthStore.setState({ user: permissions ? ({ userId: "u1", username: "k", permissions } as unknown as JwtPayload) : null });
+  it("⭐ kayıtlı kumaş + dokuma + okuma izni: Varyantlar sekmesi var; initialTab ile o sekmede açılır", () => {
+    flags.dk = true;
+    asUser(["warpspec:read", "station:read"]);
+    renderWithProviders(<ItemFormDialog open onOpenChange={() => {}} onSubmit={() => {}} initial={item({})} initialTab="variants" />);
+    expect(screen.getByRole("tab", { name: "Varyantlar" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("varyant listesi")).toBeInTheDocument();
+    expect(screen.getByText(/anında kaydedilir/)).toBeInTheDocument();
+    flags.dk = false;
+    asUser(null);
+  });
+  it("yeni kumaşta (kimlik yok) ya da şablon okuma izni yoksa sekme yok; olmayan sekme istenirse Genel açılır", () => {
+    flags.dk = true;
+    asUser(["warpspec:read", "station:read"]);
+    const { unmount } = renderWithProviders(<ItemFormDialog open onOpenChange={() => {}} onSubmit={() => {}} />);
+    expect(screen.queryByRole("tab", { name: "Varyantlar" })).toBeNull();
+    unmount();
+    asUser(["warpspec:read"]);
+    renderWithProviders(<ItemFormDialog open onOpenChange={() => {}} onSubmit={() => {}} initial={item({})} initialTab="variants" />);
+    expect(screen.queryByRole("tab", { name: "Varyantlar" })).toBeNull();
+    expect(screen.getByRole("tab", { name: "Genel" })).toHaveAttribute("aria-selected", "true");
+    flags.dk = false;
+    asUser(null);
   });
 });

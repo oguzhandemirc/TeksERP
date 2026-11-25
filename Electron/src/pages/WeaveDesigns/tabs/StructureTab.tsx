@@ -74,7 +74,7 @@ export function structurePayload(f: Form): WeaveDesignInput {
   return body;
 }
 
-export function StructureTab({ design, fabric, canWrite }: { design: WeaveDesign; fabric: DesignFabric | null; canWrite: boolean }) {
+export function StructureTab({ design, fabric, canWrite, onOpenItem }: { design: WeaveDesign; fabric: DesignFabric | null; canWrite: boolean; onOpenItem?: () => void }) {
   const qc = useQueryClient();
   const [form, setForm] = useState<Form>(() => toForm(design));
   const set = (k: TextKey, v: string) => setForm((f) => ({ ...f, [k]: v }));
@@ -115,7 +115,7 @@ export function StructureTab({ design, fabric, canWrite }: { design: WeaveDesign
           </div>
         )}
       </section>
-      {fabric && <WarpLayersSection fabric={fabric} canWrite={canWrite} />}
+      {fabric && <WarpLayersSection fabric={fabric} canWrite={canWrite} place="design" onOpenItem={onOpenItem} />}
     </div>
   );
 }
