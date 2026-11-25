@@ -214,7 +214,7 @@ function parseScalars(body: Record<string, unknown>, partial: boolean, current: 
   }
   const frames = parseFrameCount(body.frameCount);
   if (frames !== undefined) out.frameCount = frames;
-  const repeat = parseDecimalField(body.repeatCm, { label: "Desen boyu (cm)", min: 0, minExclusive: true, scale: 2 });
+  const repeat = parseDecimalField(body.repeatCm, { label: "Rapor boyu (cm)", min: 0, minExclusive: true, scale: 2 });
   if (repeat !== undefined) out.repeatCm = repeat;
   const plan = parseLiftPlan(body.liftPlan);
   if (plan !== undefined) out.liftPlan = plan === null ? Prisma.DbNull : plan;

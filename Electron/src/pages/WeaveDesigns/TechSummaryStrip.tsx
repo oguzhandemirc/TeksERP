@@ -13,9 +13,14 @@ const show = (n: number | null | undefined): string => (n == null || !Number.isF
 
 export interface SummaryCell { key: string; label: string; value: string; unit: string; info: string }
 
-export function techSummaryCells(d: Partial<ItemComputedGsm> | null | undefined): SummaryCell[] {
-  const c = (key: keyof ItemComputedGsm, label: string, unit: string, info: string): SummaryCell => ({ key, label, value: show(d?.[key]), unit, info });
+/** `frameCount`: yalnız Armür deseninde verilir (desen kartının kayıtlı değeri; hesap değil) — undefined → hücre yok. */
+export function techSummaryCells(d: Partial<ItemComputedGsm> | null | undefined, frameCount?: number | null): SummaryCell[] {
+  type NumKey = { [K in keyof ItemComputedGsm]-?: NonNullable<ItemComputedGsm[K]> extends number ? K : never }[keyof ItemComputedGsm];
+  const c = (key: NumKey, label: string, unit: string, info: string): SummaryCell => ({ key, label, value: show(d?.[key]), unit, info });
+  const frame: SummaryCell[] = frameCount === undefined ? []
+    : [{ key: "frameCount", label: "Çerçeve sayısı", value: show(frameCount), unit: "çerçeve", info: "Armürde kullanılan çerçeve sayısı (desen kartından)." }];
   return [
+    ...frame,
     c("endsCount", "Toplam tel", "tel", "Zemin çözgüsü ile döner/ikinci çözgü tellerinin toplamı (çözgü kartlarından)."),
     c("endsPerCm", "Çözgü sıklığı", "tel/cm", "Çözgü sıklığı = toplam tel ÷ ham en."),
     c("picksPerCm", "Atkı sıklığı", "atkı/cm", "Santimetreye düşen atkı sayısı (atkı kartından)."),
@@ -29,10 +34,11 @@ export function techSummaryCells(d: Partial<ItemComputedGsm> | null | undefined)
   ];
 }
 
-export function TechSummaryView({ data }: { data: Partial<ItemComputedGsm> | null | undefined }) {
+export function TechSummaryView({ data, frameCount }: { data: Partial<ItemComputedGsm> | null | undefined; frameCount?: number | null }) {
+  const cells = techSummaryCells(data, frameCount);
   return (
-    <dl className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-md border bg-muted/30 px-3 py-2 sm:grid-cols-5 2xl:grid-cols-10" data-testid="tech-summary">
-      {techSummaryCells(data).map((cell) => (
+    <dl className={`grid grid-cols-2 gap-x-4 gap-y-2 rounded-md border bg-muted/30 px-3 py-2 ${cells.length > 10 ? "sm:grid-cols-4 lg:grid-cols-6 2xl:grid-cols-11" : "sm:grid-cols-5 2xl:grid-cols-10"}`} data-testid="tech-summary">
+      {cells.map((cell) => (
         <div key={cell.key} className="min-w-0">
           <dt className="flex items-center gap-1 text-xs text-muted-foreground">
             <span className="truncate">{cell.label}</span>
@@ -48,7 +54,7 @@ export function TechSummaryView({ data }: { data: Partial<ItemComputedGsm> | nul
   );
 }
 
-export function TechSummaryStrip({ fabric }: { fabric: DesignFabric | null }) {
+export function TechSummaryStrip({ fabric, frameCount }: { fabric: DesignFabric | null; frameCount?: number | null }) {
   const q = useQuery({
     queryKey: ["item-computed-gsm", fabric?.id ?? ""],
     queryFn: () => itemService.computedGsm(fabric!.id),
@@ -56,5 +62,5 @@ export function TechSummaryStrip({ fabric }: { fabric: DesignFabric | null }) {
     retry: false,
   });
   if (!fabric) return null;
-  return <TechSummaryView data={q.isSuccess ? q.data : null} />;
+  return <TechSummaryView data={q.isSuccess ? q.data : null} frameCount={frameCount} />;
 }

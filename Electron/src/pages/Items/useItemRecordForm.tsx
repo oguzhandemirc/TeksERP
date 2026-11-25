@@ -6,10 +6,15 @@ import type { RecordFormSpec } from "@/components/forms/record-form/types";
 const ItemFormDialog = lazy(() => import("./ItemFormDialog").then((m) => ({ default: m.ItemFormDialog })));
 import { itemService } from "./service";
 import type { Item } from "./types";
+import type { ItemType } from "@/types/enums";
 
-/** `R`: seçici satırı (ItemPickerRow özeti ya da Item) — örnek almadan önce tam kart çekilir. */
-export function useItemRecordForm<R extends { id: string; code: string } = Item>(): RecordFormSpec<Item, R> {
-  return useMemo<RecordFormSpec<Item, R>>(() => ({
+/** `R`: seçici satırı (ItemPickerRow özeti ya da Item) — örnek almadan önce tam kart çekilir.
+ *  `allowedTypes`: seçicinin tip kapsamı; Yeni/Örnek al penceresinde Tip bununla sınırlanır (tek tipse kilitli). */
+export function useItemRecordForm<R extends { id: string; code: string } = Item>(allowedTypes?: readonly ItemType[]): RecordFormSpec<Item, R> {
+  const scopeKey = allowedTypes?.join(",") ?? "";
+  return useMemo<RecordFormSpec<Item, R>>(() => {
+    const scope = scopeKey ? (scopeKey.split(",") as ItemType[]) : undefined;
+    return {
     entityName: "Ürün",
     service: itemService,
     writePermission: "item:write", // Ürünler ekranının writePermission'ı
@@ -25,8 +30,10 @@ export function useItemRecordForm<R extends { id: string; code: string } = Item>
         initial={initial}
         draft={draft as Item | null}
         isSubmitting={isSubmitting}
+        allowedTypes={scope}
         onSubmit={(payload) => onSubmit(payload as unknown as Partial<Item>)}
       /></Suspense>
     ),
-  }), []);
+    };
+  }, [scopeKey]);
 }

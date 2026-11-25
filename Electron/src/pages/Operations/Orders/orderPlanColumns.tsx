@@ -4,6 +4,7 @@ import { fmtCalendarDay, fmtFactoryDate } from "@/lib/factory-time";
 import { cn } from "@/lib/utils";
 import { PLAN_STATE_LABEL, type OrderPlanRow, type OrderPlanState } from "./orderPlanService";
 import { formatQty } from "@/lib/format";
+import { unitLabel } from "@/lib/item-unit";
 
 export const DOT_CLASS: Record<OrderPlanState, string> = {
   WHITE: "border border-muted-foreground/50 bg-background",
@@ -15,7 +16,7 @@ export const DOT_CLASS: Record<OrderPlanState, string> = {
 /** Binlik ayırıcısız (liste standardı), en çok `digits` ondalık. */
 export const n = (v: number | null, digits = 1) => (v === null ? "—" : formatQty(v, digits));
 const right = (label: string) => ({ label, align: "right" as const });
-const qtyText = (r: OrderPlanRow) => `${n(r.quantity)} ${r.unit === "MT" ? "" : r.unit}`.trim();
+const qtyText = (r: OrderPlanRow) => `${n(r.quantity)} ${unitLabel(r.unit)}`;
 const priceText = (r: OrderPlanRow) => (r.unitPrice === null ? "—" : `${n(r.unitPrice, 2)} ${r.currency}`);
 const beltText = (r: OrderPlanRow) => (r.targetValues.length > 0 ? r.targetValues.map((t) => t.valueName).join(", ") : "—");
 
@@ -40,7 +41,7 @@ const PLAN_COLUMNS: ColumnDef<OrderPlanRow>[] = [
     cell: ({ row: { original: r } }) => <span>{r.item.code} <span className="text-muted-foreground">{r.item.name}</span></span>,
   },
   { id: "variant", header: "Varyant", meta: { label: "Varyant" }, accessorFn: (r) => (r.recipe ? (r.recipe.variantCode ?? r.recipe.code) : "—") },
-  { id: "quantity", header: "Metre", meta: { ...right("Metre"), exportValue: qtyText }, accessorFn: (r) => r.quantity, cell: ({ row }) => qtyText(row.original) },
+  { id: "quantity", header: "Miktar", meta: { ...right("Miktar"), exportValue: qtyText }, accessorFn: (r) => r.quantity, cell: ({ row }) => qtyText(row.original) },
   { id: "width", header: "En", meta: { ...right("En"), exportValue: (r) => n(r.width) }, accessorFn: (r) => r.width, cell: ({ row }) => n(row.original.width) },
   { id: "customer", header: "Müşteri", meta: { label: "Müşteri" }, accessorFn: (r) => r.customer.code ?? r.customer.name },
 ];

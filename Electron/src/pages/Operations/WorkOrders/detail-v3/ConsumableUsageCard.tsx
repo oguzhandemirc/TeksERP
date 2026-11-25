@@ -8,10 +8,10 @@ import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { V3Section } from "./V3Section";
 import { CONSUMABLE_USAGE_KEY, getWorkOrderConsumableUsage, type ConsumableUsage } from "./consumableUsage";
 import { TERIM } from "@/lib/terim";
+import { unitLabel } from "@/lib/item-unit";
 
-const UNIT_TR: Record<string, string> = { MT: "m", KG: "kg", ADET: "adet" };
 const tl = (v: string | null | undefined) => (v == null ? null : `${formatFixed(v, 2)} ₺`);
-const qtyText = (q: string, unit: string) => `${formatNumber(Number(q), Number.isInteger(Number(q)) ? 0 : 2)} ${UNIT_TR[unit] ?? unit}`;
+const qtyText = (q: string, unit: string) => `${formatNumber(Number(q), Number.isInteger(Number(q)) ? 0 : 2)} ${unitLabel(unit)}`;
 
 function Unknown() {
   return <span className="text-muted-foreground" title="Fiyatlı mal kabul girişi yok ya da kur bulunamadı">bilinmiyor</span>;

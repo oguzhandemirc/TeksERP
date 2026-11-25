@@ -52,7 +52,7 @@ export function WarpSpecFormDialog({ open, onOpenChange, initial, draft, onSubmi
               <FormCard sectionId="yarns" sectionRequired title="Çözgü iplikleri" icon={Layers}>
                 <YarnRowsEditor />
               </FormCard>
-              <FormCard sectionId="reed" errorFields={REED_FIELDS} title="Tarak ve dizilim" icon={Ruler} note="Kenar teli, tarak ve dizilim hesaba girmez" aside={<ReedHelper form={form} />}>
+              <FormCard sectionId="reed" errorFields={REED_FIELDS} title="Tarak ve dizilim" icon={Ruler} note="Tarak eni maliyette atkı boyunu belirler; öteki alanlar çizim ve devere talimatı içindir" aside={<ReedHelper form={form} />}>
                 <ReedFields form={form} />
                 <WarpSequenceBoxes />
               </FormCard>
