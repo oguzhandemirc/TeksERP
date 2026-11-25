@@ -13,6 +13,7 @@ export function classTypeColumns(kind: ClassTypeKind): ColumnDef<ClassTypeRow>[]
           {
             id: "abbreviation",
             header: "Kısaltma",
+            meta: { exportValue: (r: ClassTypeRow) => (r as { abbreviation?: string | null }).abbreviation ?? "" },
             cell: ({ row }) => {
               const a = (row.original as { abbreviation?: string | null }).abbreviation;
               return a ? <span className="font-mono text-xs">{a}</span> : <span className="text-muted-foreground">—</span>;

@@ -5,7 +5,8 @@ import type { ClassTypeRow } from "./types";
 export type ClassTypeKind = "fabric" | "fiber";
 
 interface KindConfig {
-  title: string;
+  /** Menü adresi — sayfa başlığı `screenTitle(screenPath)` ile katalogdan okunur (O34). */
+  screenPath: string;
   description: string;
   entity: string;
   entityLower: string;
@@ -21,7 +22,7 @@ interface KindConfig {
 
 export const CLASS_TYPE_KINDS: Record<ClassTypeKind, KindConfig> = {
   fabric: {
-    title: "Kumaş Türleri",
+    screenPath: "/definitions/fabric-types",
     description: "Kumaş kartında seçilen tür: Tül, Fon, Blackout, Döşemelik…",
     entity: "Kumaş türü",
     entityLower: "kumaş türü",
@@ -34,7 +35,7 @@ export const CLASS_TYPE_KINDS: Record<ClassTypeKind, KindConfig> = {
     service: fabricTypeService as unknown as CrudService<ClassTypeRow>,
   },
   fiber: {
-    title: "Lif Türleri",
+    screenPath: "/definitions/fiber-types",
     description: "İplik kartının lif bileşiminde seçilen lifler; kumaş kompozisyonu bunlardan hesaplanır.",
     entity: "Lif türü",
     entityLower: "lif türü",

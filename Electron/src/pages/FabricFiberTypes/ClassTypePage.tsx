@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { CrudPage } from "@/components/layout/CrudPage";
+import { screenTitle } from "@/components/layout/screen-title";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { ClassTypeFormDialog } from "./ClassTypeFormDialog";
 import { classTypeColumns } from "./columns";
@@ -27,7 +28,7 @@ export function ClassTypePage({ kind }: { kind: ClassTypeKind }) {
   return (
     <>
       <CrudPage<ClassTypeRow>
-        title={cfg.title}
+        title={screenTitle(cfg.screenPath)}
         description={cfg.description}
         entityName={cfg.entity}
         queryKey={cfg.queryKey}
