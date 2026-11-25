@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { FormField } from "@/components/forms/FormField";
-import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
+import { useItemRecordForm } from "@/pages/Items/useItemRecordForm";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { ColorPickerModal } from "@/components/forms/color-picker/ColorPickerModal";
 import { PropertyPickerModal } from "@/components/forms/PropertyPickerModal";
@@ -120,6 +120,7 @@ interface Props {
 export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", onCreatedForPrint }: Props) {
   const qc = useQueryClient();
   const customerForm = useCustomerRecordForm();
+  const itemForm = useItemRecordForm(ROLL_BEARING_ITEM_TYPES);
   const { hasPermission } = useRoleAccess();
   const canPrint = hasPermission("label:print");
   const isWarehouse = target === "FINISHED_STOCK";
@@ -325,14 +326,18 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
               control={form.control}
               name="itemId"
               render={({ field }) => (
-                <ReferenceSelect<Item>
+                <EntityPickerModal<Item>
                   value={field.value || null}
                   onChange={(v) => field.onChange(v ?? "")}
                   service={itemService}
-                  queryKey="items"
-                  extraFilters={MANUAL_ENTRY_ITEM_FILTERS}
-                  getLabel={(it) => `${it.code} — ${it.name}`}
+                  recordForm={itemForm}
+                  queryKey="items-manual-entry"
+                  filters={MANUAL_ENTRY_ITEM_FILTERS}
+                  getLabel={(it) => it.name}
+                  getSubLabel={(it) => it.code}
+                  title="Kumaş seç"
                   placeholder="Kumaş ara..."
+                  countLabel="kumaş"
                 />
               )}
             />
