@@ -56,6 +56,8 @@ export const AUDIT_EXEMPT_MODELS: AuditMuafiyeti[] = [
     gerekce: "cihaz bağlama DEFTERİ — tek yazar `helpers/device-identity.helper.ts#writeBindingEventTx`; audit'i çağıran eylem basar (announce doğuşu · yeniden bağlama · talep · red · revoke · kalıcı silme, `device.service`/`device-rebind.service`)" },
   { model: "KursunGramPriceVersion", sinif: "EBEVEYN_EYLEMDE",
     gerekce: "K14 gram fiyatı sürümünü `helpers/kursun-gram-price-version.helper` yazar (kolonla aynı tx); audit çağıran eylemde (`kursun-station.service` STATION_KURSUN · `cari.service` CARI_ACCOUNT · `cari-merge.helper` CARI_MERGE copiedTerms)" },
+  { model: "ItemFiber", sinif: "EBEVEYN_EYLEMDE",
+    gerekce: "K7: iplik kartının lif bileşimi (saf yapılandırma pivotu, replace); tek yazar `helpers/item-fiber.helper#writeItemFibersTx`; audit çağıran eylemde (`item-fiber.service` ITEM UPDATE yükte fibers · doğuşta `item.service` ITEM CREATE)" },
   { model: "WarpSpecYarn", sinif: "EBEVEYN_EYLEMDE",
     gerekce: "devere D1: çözgü kartının iplik satırı (saf yapılandırma pivotu); D1'de yalnız `warp-spec.service` kartın kolonlarından aynı tx'te eşitler — audit kart eyleminde (BaseService WARP_SPEC CREATE/UPDATE, yükte yarnItemId/endsCount); satır yazma yüzeyi D3'te audit eski/yeni küme ile açılır" },
   { model: "WarpBeamEventYarn", sinif: "EBEVEYN_EYLEMDE",

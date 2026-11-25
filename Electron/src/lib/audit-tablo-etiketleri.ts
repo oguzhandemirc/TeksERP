@@ -44,6 +44,8 @@ export const TABLE_LABELS: Record<string, string> = {
   ROUTE: "Rota",
   COLOR: "Renk",
   FABRIC_PROPERTY: "Kumaş Özelliği",
+  FABRIC_TYPE: "Kumaş Türü",
+  FIBER_TYPE: "Lif Türü",
   QUALITY_GRADE: "Kalite Sınıfı",
   DEFECT_TYPE: "Hata Tipi",
   RETURN_REASON: "İade Sebebi",

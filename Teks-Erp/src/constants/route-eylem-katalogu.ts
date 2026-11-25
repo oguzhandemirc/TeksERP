@@ -27,6 +27,12 @@ export const ROUTE_EYLEM_KATALOGU: Readonly<Record<string, UcEylemi>> = {
   "POST /api/weaving-order-templates": e("özel dokuma şablonu tanımladı", "özel dokuma şablonu tanımlamaya çalıştı"),
   "PATCH /api/weaving-order-templates/:id": e("bir özel dokuma şablonunu düzenledi", "bir özel dokuma şablonunu düzenlemeye çalıştı"),
   "DELETE /api/weaving-order-templates/:id": e("bir özel dokuma şablonunu kaldırdı", "bir özel dokuma şablonunu kaldırmaya çalıştı"),
+  // ── K7/K8 Seyitoğlu (2026-11-25) — kumaş/lif türü listeleri + iplik lif bileşimi
+  "POST /api/fabric-types": e("kumaş türü ekledi", "kumaş türü eklemeye çalıştı"),
+  "PATCH /api/fabric-types/:id": e("bir kumaş türünü düzenledi", "bir kumaş türünü düzenlemeye çalıştı"),
+  "POST /api/fiber-types": e("lif türü ekledi", "lif türü eklemeye çalıştı"),
+  "PATCH /api/fiber-types/:id": e("bir lif türünü düzenledi", "bir lif türünü düzenlemeye çalıştı"),
+  "PUT /api/items/:id/fibers": e("ipliğin lif bileşimini değiştirdi", "ipliğin lif bileşimini değiştirmeye çalıştı"),
   // ── Devere F1 (2026-11-20) — denye önerisini iplik kartına uygular
   "POST /api/warp-specs/denier-deviation/apply": e("denye önerisini iplik kartına uyguladı", "denye önerisini iplik kartına uygulamaya çalıştı"),
   // ── Fason devere D1 (2026-11-17) — hesap ucu, yazmaz

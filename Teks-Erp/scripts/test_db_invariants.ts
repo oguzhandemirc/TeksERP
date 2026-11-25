@@ -1350,6 +1350,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "weave_designs", name: "weave_designs_class_values_ck" },
   { table: "weave_design_images", name: "weave_design_images_size_ck" },
   { table: "weave_design_images", name: "weave_design_images_mime_ck" },
+  // İplik lif bileşimi (20261125150000): satır payı 0 < pct ≤ 100 (Σ = 100 servis kapısı `item-fiber.helper`).
+  { table: "item_fibers", name: "item_fibers_pct_ck" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

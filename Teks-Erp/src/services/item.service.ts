@@ -67,6 +67,8 @@ import type { PaginatedResponse } from "../types/api.types";
 import type { CursorPaginatedResponse } from "./base.service";
 import { emitItemCreatedTx } from "./notification-sources/anaveri";
 import { FABRIC_TECHNIQUES, FABRIC_TECHNIQUES_AVAILABLE, type FabricTechniqueValue } from "../constants/weave-classification";
+import { readFabricTypeRef, readFlameRetardancy } from "./helpers/item-fabric-class.helper";
+import { fibersAuditPayload, parseItemFibers, writeItemFibersTx } from "./helpers/item-fiber.helper";
 
 export interface ItemCreateInput {
   /** Boş/verilmezse backend `STK-NNNNNN` üretir; doluysa manuel kod kabul edilir. */
@@ -197,7 +199,7 @@ async function assertWeftSwitchKeepsOverrides(itemId: string, weftSpecId: unknow
 }
 
 /** MAL-1 (S2 çekirdeği): kumaş yapısı alanları — gövdede adı geçen anahtarlar (`undefined` dokunmaz). */
-const FABRIC_STRUCTURE_KEYS = ["rawWidthCm", "rawGsm", "finishedGsm", "composition", "weftSpecId", "weaveDesignId", "fabricTechnique"] as const;
+const FABRIC_STRUCTURE_KEYS = ["rawWidthCm", "rawGsm", "finishedGsm", "composition", "weftSpecId", "weaveDesignId", "fabricTechnique", "fabricTypeId", "flameRetardancy"] as const;
 
 /** Üretim tekniği (2026-11-25): yalnız bugün açık teknikler (Dokuma); Örme "yakında" → 400; null/"" temizler. */
 function readFabricTechnique(raw: unknown): FabricTechniqueValue | null {
@@ -213,7 +215,7 @@ function readFabricTechnique(raw: unknown): FabricTechniqueValue | null {
  * Kumaş yapısı alanlarını doğrular ve Prisma verisine çevirir: yalnız KUMAŞ kartında (400), sayılar
  * metinden Decimal'e (float yazılmaz; DB CHECK ikinci hat), atkı kartı AKTİF olmalı. `null` temizler.
  */
-async function readFabricStructureFields(itemType: string | undefined, data: Record<string, unknown>): Promise<Record<string, unknown>> {
+async function readFabricStructureFields(itemType: string | undefined, data: Record<string, unknown>, itemId?: string): Promise<Record<string, unknown>> {
   const present = FABRIC_STRUCTURE_KEYS.filter((k) => Object.prototype.hasOwnProperty.call(data, k));
   if (present.length === 0) return {};
   const out: Record<string, unknown> = {};
@@ -237,9 +239,11 @@ async function readFabricStructureFields(itemType: string | undefined, data: Rec
   }
   if (present.includes("weaveDesignId")) out.weaveDesignId = await readWeaveDesignRef(data.weaveDesignId);
   if (present.includes("fabricTechnique")) out.fabricTechnique = readFabricTechnique(data.fabricTechnique);
+  if (present.includes("fabricTypeId")) out.fabricTypeId = await readFabricTypeRef(data.fabricTypeId, itemId);
+  if (present.includes("flameRetardancy")) out.flameRetardancy = readFlameRetardancy(data.flameRetardancy);
   const setsValue = Object.values(out).some((v) => v !== null);
   if (setsValue && itemType !== undefined && itemType !== "FABRIC") {
-    throw AppError.badRequest("En/gramaj/kompozisyon/atkı/desen kartı yalnız KUMAŞ kartına girilir", { code: "ITEM_FABRIC_STRUCTURE_FABRIC_ONLY" });
+    throw AppError.badRequest("En/gramaj/kompozisyon/atkı/desen kartı/kumaş türü/yanmazlık yalnız KUMAŞ kartına girilir", { code: "ITEM_FABRIC_STRUCTURE_FABRIC_ONLY" });
   }
   return out;
 }
@@ -329,6 +333,8 @@ export class ItemService extends BaseService {
       ...readYarnWasteField(input.itemType, data),
       ...(await readYarnUnitFields(prisma, input.itemType, data)),
     };
+    // K7: iplik lif bileşimi doğuşta kartla AYNI tx'te yazılır (düzenleme ayrı uç: PUT /items/:id/fibers).
+    const fiberRows = await parseItemFibers(prisma, data.fibers, { itemType: input.itemType });
 
     // Stok kodu hibrit: boş bırakıldıysa backend STK-NNNNNN üretir; kullanıcı
     // girdiyse manuel kod aynen kabul edilir (trim + regex + max 32).
@@ -488,6 +494,7 @@ export class ItemService extends BaseService {
                 allowedProperties: { include: { property: true } },
               },
             });
+            if (fiberRows) await writeItemFibersTx(tx, target.id, fiberRows);
             return { record: revived, revivedFrom: target, draftCard };
           }
           const fresh = await sequentialTx(tx).item.create({
@@ -522,6 +529,7 @@ export class ItemService extends BaseService {
               allowedProperties: { include: { property: true } },
             },
           });
+          if (fiberRows) await writeItemFibersTx(tx, fresh.id, fiberRows);
           if (opts?.notify !== false) await emitItemCreatedTx(tx, fresh.id, actorId);
           return { record: fresh, revivedFrom: null as CodeCandidate | null, draftCard };
         });
@@ -549,6 +557,7 @@ export class ItemService extends BaseService {
         itemType: created.itemType,
         allowedColorIds,
         allowedPropertyIds,
+        ...(fiberRows ? { fibers: fibersAuditPayload(fiberRows) } : {}),
         ...(revivedFrom ? { reactivated: true } : {}),
         ...(opts?.pendingReview ? { pendingReview: true } : {}),
       },
@@ -617,6 +626,10 @@ export class ItemService extends BaseService {
       }
     }
 
+    // K7: sessiz düşürme yerine açık yönlendirme — lif bileşimi kendi ucundan (replace) yazılır.
+    if (Object.prototype.hasOwnProperty.call(data, "fibers")) {
+      throw AppError.badRequest("Lif bileşimi PUT /api/items/:id/fibers ile değiştirilir.", { code: "ITEM_FIBER_USE_PUT" });
+    }
     if (Object.prototype.hasOwnProperty.call(data, "warpSpecId")) {
       const cur = await prisma.item.findUnique({ where: { id }, select: { itemType: true } });
       await assertWarpSpecAssignable(cur?.itemType, data.warpSpecId as string | null | undefined);
@@ -631,7 +644,7 @@ export class ItemService extends BaseService {
     }
     if (FABRIC_STRUCTURE_KEYS.some((k) => Object.prototype.hasOwnProperty.call(data, k))) {
       const cur = await prisma.item.findUnique({ where: { id }, select: { itemType: true } });
-      Object.assign(data, await readFabricStructureFields(cur?.itemType, data));
+      Object.assign(data, await readFabricStructureFields(cur?.itemType, data, id));
       await assertWeftSwitchKeepsOverrides(id, data.weftSpecId);
     }
 

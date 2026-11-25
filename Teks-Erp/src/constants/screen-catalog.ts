@@ -162,6 +162,9 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "definitions/colors", app: "desktop", modul: "cekirdek:ana-veri", title: "Renkler", requires: ["property:read"], capabilities: ["property:write"] },
   { key: "definitions/return-reasons", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "İade Nedenleri", requires: ["return:read"], capabilities: ["return:write"] },
   { key: "definitions/fabric-properties", app: "desktop", modul: "cekirdek:ana-veri", title: "Kumaş Özellikleri", requires: ["property:read"], capabilities: ["property:write"] },
+  // K7/K8 (Seyitoğlu 2026-11-25): ürün kartının ayarlanabilir listeleri — izin ürün kartıyla aynı.
+  { key: "definitions/fabric-types", app: "desktop", modul: "cekirdek:ana-veri", title: "Kumaş Türleri", requires: ["item:read"], capabilities: ["item:write"] },
+  { key: "definitions/fiber-types", app: "desktop", modul: "cekirdek:ana-veri", title: "Lif Türleri", requires: ["item:read"], capabilities: ["item:write"] },
   { key: "definitions/subcontractor-categories", app: "desktop", modul: "cekirdek:ana-veri", title: "Fason Kategorileri", requires: ["subcontractor:read"], capabilities: ["subcontractor:write"] },
   { key: "definitions/station-capabilities", app: "desktop", modul: "productionEnabled", title: "İstasyon Yetenekleri", requires: ["station:read"], capabilities: [] },
   { key: "access/devices", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Tabletler", requires: ["admin:settings"], capabilities: [] },

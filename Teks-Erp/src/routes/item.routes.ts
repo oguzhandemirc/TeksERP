@@ -54,6 +54,9 @@ export const itemService = new ItemService({
   defaultInclude: {
     allowedColors: { include: { color: true } },
     allowedProperties: { include: { property: true } },
+    // K7/K8: kumaş türü (liste sütunu) + iplik lif bileşimi (kart formu, örnek alma).
+    fabricType: { select: { id: true, name: true, isActive: true } },
+    fibers: { select: { fiberTypeId: true, pct: true, fiberType: { select: { id: true, name: true, abbreviation: true, isActive: true } } }, orderBy: { pct: "desc" } },
   },
   // Create/update ItemService'te custom — assertNameNotDuplicate oradan da
   // açıkça çağrılır (super.create çağrılmayan yol için).
