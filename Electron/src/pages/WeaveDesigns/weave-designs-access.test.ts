@@ -45,6 +45,17 @@ describe("Desen Kartları — bulunabilirlik ve modül kapısı", () => {
   });
 });
 
+describe("Desen kartı — Kopyala yalnız yazma izniyle", () => {
+  const PAGE = readFileSync(resolve(__dirname, "WeaveDesignDetailPage.tsx"), "utf8");
+  const ACTIONS = readFileSync(resolve(__dirname, "WeaveDesignHeaderActions.tsx"), "utf8");
+  it("Kopyala düğmesi `canWrite` (warpspec:write) arkasında", () => {
+    expect(PAGE).toMatch(/const canWrite = hasPermission\("warpspec:write"\)/);
+    expect(PAGE).toMatch(/<WeaveDesignHeaderActions [^\n]*canWrite=\{canWrite\}/);
+    expect(ACTIONS).toMatch(/\{canWrite && <Button[^\n]*>Kopyala<\/Button>\}/);
+    expect(ACTIONS.match(/>Kopyala</g)?.length).toBe(1);
+  });
+});
+
 function preview(sonuc: Partial<CostPreview["sonuc"]> | null, eksikler: string[] = []): CostPreview {
   return { sonuc, eksikler } as unknown as CostPreview;
 }
