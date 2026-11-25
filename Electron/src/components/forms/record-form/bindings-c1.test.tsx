@@ -69,6 +69,17 @@ describe("İkinci dalga seçiciler — Örnek al / Düzenle (C1)", () => {
     await waitFor(() => expect(onChange).toHaveBeenCalledWith("new-1"));
   });
 
+  it("⭐ seçici üst formun içindeyse: örnekten kaydet üst formu GÖNDERMEZ (portal olayı kabarmaz)", async () => {
+    const outerSubmit = vi.fn((e: { preventDefault: () => void }) => e.preventDefault());
+    renderWithProviders(<form onSubmit={outerSubmit}><WarehousePicker value={null} onChange={vi.fn()} /></form>);
+    await userEvent.click(screen.getByRole("button", { name: /Depo seç/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /Merkez — örnek al/ }));
+    const form = await screen.findByRole("dialog", { name: /Yeni Depo \(örnekten\)/ });
+    await userEvent.click(within(form).getByRole("button", { name: "Kaydet" }));
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    expect(outerSubmit).not.toHaveBeenCalled();
+  });
+
   it("⭐ Depo: Düzenle → Depolar ekranı yeni sekmede; PATCH yok", async () => {
     renderWithProviders(<WarehousePicker value={null} onChange={vi.fn()} />);
     await userEvent.click(screen.getByRole("button", { name: /Depo seç/ }));
