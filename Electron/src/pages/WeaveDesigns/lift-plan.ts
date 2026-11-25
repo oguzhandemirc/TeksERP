@@ -33,6 +33,13 @@ export function toggleLenoFrame(frames: readonly number[], frame: number): numbe
   return [...set].sort((a, b) => a - b);
 }
 
+/** Çerçeve rolü döngüsü (başlığa tıklama): zemin → döner → kenar → zemin. Bir çerçeve iki rolde olamaz. */
+export function cycleFrameRole(leno: readonly number[], selv: readonly number[], frame: number): { leno: number[]; selv: number[] } {
+  if (leno.includes(frame)) return { leno: toggleLenoFrame(leno, frame), selv: toggleLenoFrame(selv.filter((f) => f !== frame), frame) };
+  if (selv.includes(frame)) return { leno: [...leno], selv: toggleLenoFrame(selv, frame) };
+  return { leno: toggleLenoFrame(leno, frame), selv: [...selv] };
+}
+
 /** Izgara daralınca kalan döner işaretleri (çerçeve sayısını aşanlar düşer). */
 export function lenoWithin(frames: readonly number[], frameCount: number): number[] {
   return frames.filter((f) => f >= 1 && f <= frameCount);

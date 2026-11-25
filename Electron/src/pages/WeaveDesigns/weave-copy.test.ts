@@ -24,10 +24,19 @@ describe("buildCopyPayload", () => {
   });
 
   it("Eksantrik: saklı ızgara ve kanca taşınmaz (sunucu reddederdi)", () => {
-    const p = buildCopyPayload({ ...base, shedMechanism: "CAM", weaveStructure: "PLAIN" }, { code: "X", name: "Y" });
+    const p = buildCopyPayload({ ...base, shedMechanism: "CAM", weaveStructure: "PLAIN", selvedgeFrames: [2] }, { code: "X", name: "Y" });
     expect(p).not.toHaveProperty("liftPlan");
     expect(p).not.toHaveProperty("hookCount");
     expect(p).not.toHaveProperty("repeatWidthCm");
+    expect(p).not.toHaveProperty("selvedgeFrames");
+  });
+
+  it("Armür: kenar çerçeveleri kopyalanır (yeni dizi); alan yoksa gönderilmez (eski sunucu)", () => {
+    const src = { ...base, selvedgeFrames: [2, 3] };
+    const p = buildCopyPayload(src, { code: "X", name: "Y" });
+    expect(p.selvedgeFrames).toEqual([2, 3]);
+    expect(p.selvedgeFrames).not.toBe(src.selvedgeFrames);
+    expect(buildCopyPayload(base, { code: "X", name: "Y" })).not.toHaveProperty("selvedgeFrames");
   });
 
   it("Jakar: kanca + rapor eni gelir, ızgara gelmez; eski kart `kind`tan çözülür", () => {

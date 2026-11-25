@@ -77,7 +77,7 @@ async function main(): Promise<void> {
   check("§2d varyant kodu taşınır", c?.variantCode === "V02");
   // Kart görseli (2026-11-22): armür planı + seçici EKLEME alan olarak gider; eski alanlar yerinde.
   check("§2e kart görseli alanları: armür planı, tür, döner çerçeve, tahar notu",
-    JSON.stringify(c?.design?.liftPlan) === "[[1,0],[0,1]]" && c?.design?.kind === "DOBBY" && JSON.stringify(c.design.lenoFrames) === "[]" && c.design.drawingInNote === null,
+    JSON.stringify(c?.design?.liftPlan) === "[[1,0],[0,1]]" && c?.design?.kind === "DOBBY" && JSON.stringify(c.design.lenoFrames) === "[]" && JSON.stringify(c.design.selvedgeFrames) === "[]" && c.design.drawingInNote === null,
     JSON.stringify(c?.design));
   check("§2f atkı seçici = sıra kodu açılımı (A4 B1 A4 C1 → 10 atkı)", c?.weft?.pickSequence?.join("") === "1111211113", JSON.stringify(c?.weft?.pickSequence));
   const keys = (o: object | null | undefined): string => Object.keys(o ?? {}).sort().join(",");

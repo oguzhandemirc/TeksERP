@@ -1,4 +1,4 @@
-// Armür ızgarası çizimi: başlıkta çerçeve no (döner çerçeve turuncu), gövdede kaldırma hücreleri,
+// Armür ızgarası çizimi: başlıkta çerçeve no (döner turuncu, kenar yeşil "1K"), gövdede kaldırma hücreleri,
 // sağda salt-okunur atkı seçici bloğu (1./2./3., iplik renginde). Fare olayları üstte tek dinleyicide çözülür
 // (`data-pick`/`data-frame` hücre, `data-leno` başlık): basılı sürükleme boyar/siler ya da seçer; bırakma
 // pencere düzeyinde dinlenir (ızgara dışında bırakılsa da vuruş biter). `direction` yalnız ÇİZİM sırasını çevirir.
@@ -11,12 +11,15 @@ import type { LiftPlan } from "../types";
 
 const CELL = "h-4 w-4 shrink-0 border border-border/60";
 const HEAD = "h-4 w-4 shrink-0 text-center text-[9px] leading-4 tabular-nums";
+const EMPTY_SET: ReadonlySet<number> = new Set();
 
 interface Props {
   plan: LiftPlan;
   frames: number;
   rows: number;
   leno: ReadonlySet<number>;
+  /** Kenar (K) çerçeveleri; yok = işaret yok (eski çağıranlar). */
+  selvedge?: ReadonlySet<number>;
   /** Atkı başına 1-tabanlı iplik no; null = seçici yok. */
   selector: number[] | null;
   selCount: number;
@@ -34,17 +37,28 @@ interface Props {
   onKeyDown?: (e: KeyboardEvent<HTMLDivElement>) => void;
 }
 
-function HeaderRow({ frames, leno, selCount, canWrite }: Pick<Props, "frames" | "leno" | "selCount" | "canWrite">) {
+function headTitle(isLeno: boolean, isSelv: boolean, canWrite: boolean): string | undefined {
+  if (isLeno) return canWrite ? "Döner çerçeve — tıklayınca kenar olur" : "Döner çerçeve";
+  if (isSelv) return canWrite ? "Kenar çerçevesi — tıklayınca zemin olur" : "Kenar çerçevesi";
+  return canWrite ? "Döner çerçeve olarak işaretle (ikinci tıklama: kenar)" : undefined;
+}
+
+function HeaderRow({ frames, leno, selvedge, selCount, canWrite }: Pick<Props, "frames" | "leno" | "selCount" | "canWrite"> & { selvedge: ReadonlySet<number> }) {
   return (
     <div className="flex" role="row">
       <span className="w-10 shrink-0" />
-      {Array.from({ length: frames }, (_, c) => (
-        <div key={c} role="columnheader" data-leno={canWrite ? c + 1 : undefined}
-          title={leno.has(c + 1) ? "Döner çerçeve" : canWrite ? "Döner çerçeve olarak işaretle" : undefined}
-          className={cn(HEAD, leno.has(c + 1) ? "rounded-sm bg-amber-500 font-semibold text-white" : "text-muted-foreground", canWrite && "cursor-pointer")}>
-          {c + 1}
-        </div>
-      ))}
+      {Array.from({ length: frames }, (_, c) => {
+        const isLeno = leno.has(c + 1);
+        const isSelv = !isLeno && selvedge.has(c + 1);
+        return (
+          <div key={c} role="columnheader" data-leno={canWrite ? c + 1 : undefined} data-role={isLeno ? "leno" : isSelv ? "selvedge" : undefined}
+            title={headTitle(isLeno, isSelv, canWrite)}
+            className={cn(HEAD, isLeno ? "rounded-sm bg-amber-500 font-semibold text-white"
+              : isSelv ? "rounded-sm bg-emerald-600 text-[8px] font-semibold tracking-tighter text-white" : "text-muted-foreground", canWrite && "cursor-pointer")}>
+            {c + 1}{isSelv ? "K" : ""}
+          </div>
+        );
+      })}
       {selCount > 0 && <span className="w-3 shrink-0" />}
       {Array.from({ length: selCount }, (_, i) => (
         <div key={i} role="columnheader" className={cn(HEAD, "font-semibold text-foreground")}>{i + 1}.</div>
@@ -54,12 +68,12 @@ function HeaderRow({ frames, leno, selCount, canWrite }: Pick<Props, "frames" | 
 }
 
 interface RowProps {
-  r: number; row: number[] | undefined; frames: number; leno: ReadonlySet<number>; pick: number | undefined; selCount: number;
+  r: number; row: number[] | undefined; frames: number; leno: ReadonlySet<number>; selvedge: ReadonlySet<number>; pick: number | undefined; selCount: number;
   canWrite: boolean; selC0: number; selC1: number; cursorC: number;
 }
 
 /** Satır yalnız kendi verisi/seçimi/imleci değişince yeniden çizilir (512 satırlık ızgarada sürükleme akıcı). */
-const GridRow = memo(function GridRow({ r, row, frames, leno, pick, selCount, canWrite, selC0, selC1, cursorC }: RowProps) {
+const GridRow = memo(function GridRow({ r, row, frames, leno, selvedge, pick, selCount, canWrite, selC0, selC1, cursorC }: RowProps) {
   return (
     <div className="flex" role="row" data-row={r}>
       <span className="w-10 shrink-0 pr-1 text-right text-[10px] tabular-nums text-muted-foreground">{r + 1}</span>
@@ -68,7 +82,8 @@ const GridRow = memo(function GridRow({ r, row, frames, leno, pick, selCount, ca
         const sel = c >= selC0 && c <= selC1;
         return (
           <div key={c} role="gridcell" aria-selected={v === 1} data-pick={v === undefined ? undefined : r} data-frame={c}
-            className={cn(CELL, v === 1 ? "bg-foreground" : leno.has(c + 1) ? "bg-amber-100 dark:bg-amber-950" : "bg-background",
+            className={cn(CELL, v === 1 ? "bg-foreground" : leno.has(c + 1) ? "bg-amber-100 dark:bg-amber-950"
+              : selvedge.has(c + 1) ? "bg-emerald-100 dark:bg-emerald-950" : "bg-background",
               // Seçim iplik renginden ayrışsın: dolu kare koyu kalır, çerçeve çizgisi; boş kare açık ton.
               sel && (v === 1 ? "border-primary shadow-[inset_0_0_0_1px_hsl(var(--primary))]" : "border-primary/60 bg-primary/20"), c === cursorC && "outline outline-2 -outline-offset-1 outline-primary",
               canWrite && v !== undefined && "cursor-crosshair")} />
@@ -92,8 +107,8 @@ function cellOf(target: EventTarget | null): Cell | null {
 }
 
 export function LiftPlanGrid(props: Props) {
-  const { plan, frames, rows, leno, selector, selCount, canWrite, direction = "top-down", selection, cursor } = props;
-  const header = <HeaderRow frames={frames} leno={leno} selCount={selCount} canWrite={canWrite} />;
+  const { plan, frames, rows, leno, selvedge = EMPTY_SET, selector, selCount, canWrite, direction = "top-down", selection, cursor } = props;
+  const header = <HeaderRow frames={frames} leno={leno} selvedge={selvedge} selCount={selCount} canWrite={canWrite} />;
   const box = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
   const handlers = useRef(props);
@@ -137,7 +152,7 @@ export function LiftPlanGrid(props: Props) {
       {rowsInDisplayOrder(rows, direction).map((r) => {
         const inSel = !!selection && r >= selection.r0 && r <= selection.r1;
         return (
-          <GridRow key={r} r={r} row={plan[r]} frames={frames} leno={leno} pick={selector?.[r]} selCount={selCount} canWrite={canWrite}
+          <GridRow key={r} r={r} row={plan[r]} frames={frames} leno={leno} selvedge={selvedge} pick={selector?.[r]} selCount={selCount} canWrite={canWrite}
             selC0={inSel ? selection.c0 : -1} selC1={inSel ? selection.c1 : -2} cursorC={canWrite && cursor?.r === r ? cursor.c : -1} />
         );
       })}

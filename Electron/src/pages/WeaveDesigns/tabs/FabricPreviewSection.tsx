@@ -28,12 +28,15 @@ interface Props {
   design: Pick<WeaveDesign, "kind" | "shedMechanism" | "weaveStructure" | "drawingInNote" | "lenoSetup">;
   plan: LiftPlan;
   lenoFrames: readonly number[];
+  selvedgeFrames?: readonly number[];
   selector: number[] | null;
   yarnNames: readonly string[];
   direction: WeaveDirection;
 }
 
-export function FabricPreviewSection({ design, plan, lenoFrames, selector, yarnNames, direction }: Props) {
+const NONE: readonly number[] = [];
+
+export function FabricPreviewSection({ design, plan, lenoFrames, selvedgeFrames = NONE, selector, yarnNames, direction }: Props) {
   const [repeat, setRepeat] = useState<number>(2);
   // Döner bir ÖRGÜdür (mekanizma değil): Armür · Döner kartta da kumaş görünümü çizilmez.
   const lenoWeave = isLeno(design);
@@ -55,9 +58,9 @@ export function FabricPreviewSection({ design, plan, lenoFrames, selector, yarnN
     );
   }
   const frames = plan.reduce((m, row) => Math.max(m, row.length), 0);
-  const ground = groundFrameIndexes(frames, lenoFrames);
+  const ground = groundFrameIndexes(frames, lenoFrames, selvedgeFrames);
   if (plan.length === 0 || ground.length === 0) return null;
-  const dd = computeDrawdown({ liftPlan: plan, lenoFrames, pickSequence: selector, repeat });
+  const dd = computeDrawdown({ liftPlan: plan, lenoFrames, selvedgeFrames, pickSequence: selector, repeat });
   const basePicks = drawdownRepeatPicks(plan.length, selector?.length ?? 0);
   const threading = threadingMatrix(frames, dd.draw);
   const leno = new Set(lenoFrames);
@@ -88,6 +91,7 @@ export function FabricPreviewSection({ design, plan, lenoFrames, selector, yarnN
       <p className="max-w-xl text-xs text-muted-foreground">
         {design.drawingInNote ? `Düz tahar varsayıldı · tahar notu: ${design.drawingInNote}` : "Düz tahar varsayıldı (tahar planı girilmemiş)."}
         {leno.size > 0 && " Döner çerçeveler kumaş görünümüne girmez."}
+        {selvedgeFrames.length > 0 && ` Kenar çerçeveleri (${selvedgeFrames.join(", ")}) kumaşın iki kenarındadır; zemin raporuna girmez.`}
         {!selector && " Atkı seçici yok — tek atkı ipliğiyle çizildi."}
       </p>
       <YarnLegend entries={[

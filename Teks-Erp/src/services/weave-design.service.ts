@@ -40,6 +40,7 @@ export const WEAVE_DESIGN_SELECT = {
   loomFileName: true,
   lenoSetup: true,
   lenoFrames: true,
+  selvedgeFrames: true,
   drawingInNote: true,
   notes: true,
   isActive: true,
@@ -65,7 +66,7 @@ function present<T extends { kind: string; shedMechanism: string | null; weaveSt
 
 const ALLOWED = new Set([
   "code", "name", "kind", "shedMechanism", "weaveStructure", "hookCount", "repeatWidthCm", "familyLabel", "frameCount", "repeatCm",
-  "liftPlan", "loomFileName", "lenoSetup", "lenoFrames", "drawingInNote", "notes",
+  "liftPlan", "loomFileName", "lenoSetup", "lenoFrames", "selvedgeFrames", "drawingInNote", "notes",
 ]);
 
 function rejectUnknown(body: Record<string, unknown>): void {
@@ -90,20 +91,34 @@ export function parseLiftPlan(raw: unknown): number[][] | null | undefined {
   });
 }
 
-/** Döner çerçeveleri: 1-tabanlı çerçeve no listesi; tekil + sıralı normalize edilir (DB CHECK 1..32 ikizi). */
-export function parseLenoFrames(raw: unknown): number[] | undefined {
+/** Çerçeve no listesi (döner/kenar): 1-tabanlı; tekil + sıralı normalize edilir (DB CHECK 1..32 ikizi). */
+function parseFrameList(raw: unknown, label: "Döner" | "Kenar", code: string): number[] | undefined {
   if (raw === undefined) return undefined;
   if (raw === null) return [];
-  if (!Array.isArray(raw)) throw AppError.badRequest("Döner çerçeveleri çerçeve numarası listesi olmalı.", { code: "LENO_FRAMES_INVALID" });
+  if (!Array.isArray(raw)) throw AppError.badRequest(`${label} çerçeveleri çerçeve numarası listesi olmalı.`, { code });
   const seen = new Set<number>();
   for (const v of raw) {
     if (!Number.isInteger(v) || (v as number) < 1 || (v as number) > LIFT_PLAN_MAX_FRAMES) {
-      throw AppError.badRequest(`Döner çerçeve numarası 1–${LIFT_PLAN_MAX_FRAMES} arası tam sayı olmalı.`, { code: "LENO_FRAMES_INVALID" });
+      throw AppError.badRequest(`${label} çerçeve numarası 1–${LIFT_PLAN_MAX_FRAMES} arası tam sayı olmalı.`, { code });
     }
-    if (seen.has(v as number)) throw AppError.badRequest(`Döner çerçeve ${String(v)} iki kez yazılmış.`, { code: "LENO_FRAMES_INVALID" });
+    if (seen.has(v as number)) throw AppError.badRequest(`${label} çerçeve ${String(v)} iki kez yazılmış.`, { code });
     seen.add(v as number);
   }
   return [...seen].sort((a, b) => a - b);
+}
+
+export const parseLenoFrames = (raw: unknown): number[] | undefined => parseFrameList(raw, "Döner", "LENO_FRAMES_INVALID");
+export const parseSelvedgeFrames = (raw: unknown): number[] | undefined => parseFrameList(raw, "Kenar", "SELVEDGE_FRAMES_INVALID");
+
+/** Bir çerçeve hem döner hem kenar olamaz (DB `weave_designs_selvedge_leno_disjoint_chk` ikizi); yazım sonrası değerle bakılır. */
+function assertFrameRoles(out: Prisma.WeaveDesignUncheckedUpdateInput, current: RawRow | null): void {
+  if (out.lenoFrames === undefined && out.selvedgeFrames === undefined) return;
+  const leno = (out.lenoFrames as number[] | undefined) ?? current?.lenoFrames ?? [];
+  const selvedge = (out.selvedgeFrames as number[] | undefined) ?? current?.selvedgeFrames ?? [];
+  const both = selvedge.filter((f) => leno.includes(f));
+  if (both.length > 0) {
+    throw AppError.badRequest(`Çerçeve ${both.join(", ")} hem döner hem kenar olamaz — birini seçin.`, { code: "WEAVE_DESIGN_FRAME_ROLE_CONFLICT", frames: both });
+  }
 }
 
 function parseFrameCount(raw: unknown): number | null | undefined {
@@ -163,6 +178,9 @@ function assertMechanismFields(out: Prisma.WeaveDesignUncheckedUpdateInput, effe
   if (out.liftPlan !== undefined && out.liftPlan !== Prisma.DbNull && !mechanismUsesLiftPlan(effective.shedMechanism)) {
     throw AppError.badRequest("Armür ızgarası yalnız Armür mekanizmalı desende girilir.", { code: "WEAVE_DESIGN_LIFT_PLAN_DOBBY_ONLY" });
   }
+  if (Array.isArray(out.selvedgeFrames) && out.selvedgeFrames.length > 0 && !mechanismUsesLiftPlan(effective.shedMechanism)) {
+    throw AppError.badRequest("Kenar çerçevesi yalnız Armür mekanizmalı desende işaretlenir.", { code: "WEAVE_DESIGN_SELVEDGE_DOBBY_ONLY" });
+  }
   if (out.hookCount !== undefined && out.hookCount !== null && !mechanismUsesHooks(effective.shedMechanism)) {
     throw AppError.badRequest("Kanca sayısı yalnız Jakar desende girilir.", { code: "WEAVE_DESIGN_HOOKS_JACQUARD_ONLY" });
   }
@@ -202,7 +220,10 @@ function parseScalars(body: Record<string, unknown>, partial: boolean, current: 
   if (plan !== undefined) out.liftPlan = plan === null ? Prisma.DbNull : plan;
   const leno = parseLenoFrames(body.lenoFrames);
   if (leno !== undefined) out.lenoFrames = leno;
+  const selvedge = parseSelvedgeFrames(body.selvedgeFrames);
+  if (selvedge !== undefined) out.selvedgeFrames = selvedge;
   assertMechanismFields(out, cls.effective);
+  assertFrameRoles(out, current);
   return out;
 }
 
@@ -215,7 +236,7 @@ function auditView(r: RawRow): Record<string, unknown> {
   return {
     code: r.code, name: r.name, kind: r.kind, shedMechanism: r.shedMechanism, weaveStructure: r.weaveStructure,
     hookCount: r.hookCount, repeatWidthCm: r.repeatWidthCm?.toString() ?? null, familyLabel: r.familyLabel, frameCount: r.frameCount,
-    repeatCm: r.repeatCm?.toString() ?? null, loomFileName: r.loomFileName, lenoSetup: r.lenoSetup, lenoFrames: r.lenoFrames, drawingInNote: r.drawingInNote, notes: r.notes,
+    repeatCm: r.repeatCm?.toString() ?? null, loomFileName: r.loomFileName, lenoSetup: r.lenoSetup, lenoFrames: r.lenoFrames, selvedgeFrames: r.selvedgeFrames, drawingInNote: r.drawingInNote, notes: r.notes,
     liftPlanSize: Array.isArray(r.liftPlan) ? r.liftPlan.length : null,
   };
 }

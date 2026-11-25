@@ -1171,6 +1171,9 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "weave_designs", name: "weave_designs_values_ck" },
   // Seyitoğlu dilim b (20261121152314_desen_karti_doner_cerceve) — döner çerçeve no 1..32
   { table: "weave_designs", name: "weave_designs_leno_frames_range_chk" },
+  // Seyitoğlu dilim C (…_desen_karti_kenar_cerceve) — kenar çerçeve no 1..32 + döner ile kesişmez
+  { table: "weave_designs", name: "weave_designs_selvedge_frames_range_chk" },
+  { table: "weave_designs", name: "weave_designs_selvedge_leno_disjoint_chk" },
   { table: "item_warp_layers", name: "item_warp_layers_sort_ck" },
   { table: "product_recipe_weft_yarns", name: "product_recipe_weft_yarns_sort_ck" },
   // SEYİTOĞLU MİG-2b (20261031200200_maliyet_tul) — atkı ücreti çifti ikisi birlikte dolu/boş

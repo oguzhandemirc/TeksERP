@@ -9,14 +9,16 @@ import { editorReducer, initEditor, keyToAction } from "./lift-editor-reducer";
 
 const TYPING = "input,textarea,select,[role=combobox],[contenteditable=true]";
 
-export function useLiftPlanEditor(initial: LiftPlan, initialLeno: number[], direction: WeaveDirection) {
-  const [state, dispatch] = useReducer(editorReducer, undefined, () => initEditor(initial, initialLeno));
-  const { plan, leno } = state.hist.present;
+export function useLiftPlanEditor(initial: LiftPlan, initialLeno: number[], initialSelv: number[], direction: WeaveDirection) {
+  const [state, dispatch] = useReducer(editorReducer, undefined, () => initEditor(initial, initialLeno, initialSelv));
+  const { plan, leno, selv } = state.hist.present;
   const size = liftPlanSize(plan);
   const lenoList = useMemo(() => lenoWithin(leno, size.frames), [leno, size.frames]);
   const lenoSet = useMemo(() => new Set(lenoList), [lenoList]);
-  const savedKey = useMemo(() => JSON.stringify([initial, initialLeno]), [initial, initialLeno]);
-  const currentKey = useMemo(() => JSON.stringify([plan, lenoList]), [plan, lenoList]);
+  const selvList = useMemo(() => lenoWithin(selv, size.frames), [selv, size.frames]);
+  const selvSet = useMemo(() => new Set(selvList), [selvList]);
+  const savedKey = useMemo(() => JSON.stringify([initial, initialLeno, initialSelv]), [initial, initialLeno, initialSelv]);
+  const currentKey = useMemo(() => JSON.stringify([plan, lenoList, selvList]), [plan, lenoList, selvList]);
   const dirty = savedKey !== currentKey;
   useDirtyTab(dirty);
 
@@ -34,5 +36,5 @@ export function useLiftPlanEditor(initial: LiftPlan, initialLeno: number[], dire
     e.stopPropagation();
     dispatch(a);
   };
-  return { state, dispatch, plan, size, lenoList, lenoSet, dirty, onKeyDown };
+  return { state, dispatch, plan, size, lenoList, lenoSet, selvList, selvSet, dirty, onKeyDown };
 }

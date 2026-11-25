@@ -1,7 +1,7 @@
 // Armür sekmesi = armür EDİTÖRÜ (satır = atkı, sütun = çerçeve; dolu = çerçeve kalkar): sürükle-boya, seçim,
-// geri al, hazır örgü, atkı/çerçeve ekle-sil (`lift-editor-reducer`). Çerçeve başlığına tıklamak döner (leno)
-// işaretini çevirir; sağdaki salt-okunur blok seçili kumaşın atkı seçicisidir (sunucu açar). Kumaş görünümü
-// taslaktan canlı çizilir; kaydedilen değer liftPlan/lenoFrames, asıl doğrulama sunucuda (LIFT_PLAN_INVALID).
+// geri al, hazır örgü, atkı/çerçeve ekle-sil (`lift-editor-reducer`). Çerçeve başlığına tıklamak rolü döndürür
+// (zemin → döner → kenar); sağdaki salt-okunur blok seçili kumaşın atkı seçicisidir (sunucu açar). Kumaş görünümü
+// taslaktan canlı çizilir; kaydedilen değer liftPlan/lenoFrames/selvedgeFrames, asıl doğrulama sunucuda.
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -21,7 +21,8 @@ import { useWeaveDirection } from "@/components/weave/weave-direction";
 import { WeaveDirectionToggle } from "@/components/weave/WeaveViewControls";
 import type { DesignFabric, EffectiveConstruction, LiftPlan, WeaveDesign } from "../types";
 
-const LEGEND = "Çerçeve numarasına tıklayınca o çerçeve döner (leno) diye işaretlenir; ızgarada ve basılan desen kartında ayrı blok olur. "
+const LEGEND = "Çerçeve numarasına bir kez tıklayınca döner (leno), ikinci tıklamada kenar (K), üçüncüde yeniden zemin olur; "
+  + "döner ve kenar çerçeveleri ızgarada ve basılan desen kartında ayrı blok olur, kumaş görünümüne girmez. "
   + "Sağdaki 1., 2., 3. sütunları seçili kumaşın atkı kartındaki sıra kodundan gelir (hangi atkıda hangi iplik atılır); "
   + "değiştirmek için Atkı sırası sekmesindeki kodu düzenleyin.";
 
@@ -31,9 +32,10 @@ export function LiftPlanTab({ design, fabric, canWrite }: { design: WeaveDesign;
   const qc = useQueryClient();
   const initial = useMemo<LiftPlan>(() => design.liftPlan ?? [], [design.liftPlan]);
   const initialLeno = design.lenoFrames ?? EMPTY;
+  const initialSelv = design.selvedgeFrames ?? EMPTY;
   const [direction, setDirection] = useWeaveDirection();
-  const ed = useLiftPlanEditor(initial, initialLeno, direction);
-  const { state, dispatch, plan, size, lenoList, lenoSet, dirty } = ed;
+  const ed = useLiftPlanEditor(initial, initialLeno, initialSelv, direction);
+  const { state, dispatch, plan, size, lenoList, lenoSet, selvList, selvSet, dirty } = ed;
   const construction = useQuery({
     queryKey: ["item-construction", fabric?.id ?? null, null],
     queryFn: () => constructionApi.get(fabric!.id),
@@ -44,7 +46,10 @@ export function LiftPlanTab({ design, fabric, canWrite }: { design: WeaveDesign;
   const selCount = selector ? weft!.yarns.length : 0;
   const rows = Math.max(plan.length, selector?.length ?? 0);
   const save = useMutation({
-    mutationFn: () => weaveDesignApi.update(design.id, { liftPlan: liftPlanForSave(plan), lenoFrames: lenoList }),
+    // Kenar alanını tanımayan eski sunucu bilinmeyen alana 400 verir: yalnız sunucu alanı gönderdiyse yaz.
+    mutationFn: () => weaveDesignApi.update(design.id, {
+      liftPlan: liftPlanForSave(plan), lenoFrames: lenoList, ...(design.selvedgeFrames !== undefined ? { selvedgeFrames: selvList } : {}),
+    }),
     onSuccess: () => {
       toast.success("Armür planı kaydedildi.");
       void qc.invalidateQueries({ queryKey: ["weave-designs"] });
@@ -54,12 +59,12 @@ export function LiftPlanTab({ design, fabric, canWrite }: { design: WeaveDesign;
     <div className="space-y-4" onKeyDown={canWrite ? ed.onKeyDown : undefined}>
       <p className="flex items-center gap-1 text-sm text-muted-foreground">
         Tezgâh desen dosyası: {design.loomFileName ?? "—"} · Satır = atkı, sütun = çerçeve; dolu hücre çerçevenin kalktığını gösterir.
-        <InfoPopover label="Döner çerçeve ve atkı seçici" desc={LEGEND} />
+        <InfoPopover label="Döner/kenar çerçeve ve atkı seçici" desc={LEGEND} />
       </p>
       {canWrite && (
         <>
           <SaveBar key={`${size.picks}x${size.frames}`} size={size} dirty={dirty} saving={save.isPending} dispatch={dispatch}
-            onSave={() => save.mutate()} onRevert={() => dispatch({ type: "load", snap: { plan: initial, leno: initialLeno } })} />
+            onSave={() => save.mutate()} onRevert={() => dispatch({ type: "load", snap: { plan: initial, leno: initialLeno, selv: initialSelv } })} />
           {size.picks > 0 && (
             <LiftPlanToolbar dispatch={dispatch} tool={state.tool} canUndo={state.hist.past.length > 0} canRedo={state.hist.future.length > 0}
               hasSel={!!state.sel} hasClip={!!state.clip} direction={direction} />
@@ -76,15 +81,15 @@ export function LiftPlanTab({ design, fabric, canWrite }: { design: WeaveDesign;
               <h3 className="text-sm font-semibold">Armür planı{selCount > 0 ? " ve atkı seçici" : ""}</h3>
               <WeaveDirectionToggle value={direction} onChange={setDirection} />
             </div>
-            <LiftPlanGrid plan={plan} frames={size.frames} rows={rows} leno={lenoSet} selector={selector} selCount={selCount} canWrite={canWrite}
+            <LiftPlanGrid plan={plan} frames={size.frames} rows={rows} leno={lenoSet} selvedge={selvSet} selector={selector} selCount={selCount} canWrite={canWrite}
               direction={direction} selection={state.sel} cursor={state.cursor}
               onCellDown={(cell, select) => dispatch({ type: "down", cell, select })} onCellEnter={(cell) => dispatch({ type: "enter", cell })}
-              onStrokeEnd={() => dispatch({ type: "up" })} onLenoToggle={(frame) => dispatch({ type: "toggleLeno", frame })} />
+              onStrokeEnd={() => dispatch({ type: "up" })} onLenoToggle={(frame) => dispatch({ type: "cycleFrame", frame })} />
             {canWrite && size.picks > 0 && <EditorStatus state={state} />}
             {weft && <SelectorNote weft={weft} hasSelector={!!selector} />}
           </section>
           {size.picks > 0 && (
-            <FabricPreviewSection design={design} plan={plan} lenoFrames={lenoList} selector={selector}
+            <FabricPreviewSection design={design} plan={plan} lenoFrames={lenoList} selvedgeFrames={selvList} selector={selector}
               yarnNames={weft?.yarns.map((y) => y.yarnItem.name) ?? []} direction={direction} />
           )}
         </div>

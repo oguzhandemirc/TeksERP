@@ -9,7 +9,7 @@ import prisma from "../lib/prisma";
 import { factoryDateTimeTr } from "../constants/time";
 import { readWeftOverridesForRecipes, resolveEffectiveConstruction, type EffectiveConstruction } from "./helpers/effective-construction.helper";
 import { weavingOrderConstruction } from "./helpers/tablet-construction.helper";
-import { computeDrawdown, drawdownWindow } from "./helpers/weave-drawdown.helper";
+import { computeDrawdown, drawdownWindow, groundFrameNumbers } from "./helpers/weave-drawdown.helper";
 import { warpSpecDenierLines } from "./helpers/warp-spec-yarn.helper";
 import { qtyText } from "./helpers/qty-text.helper";
 import { weaveClassLabel } from "../constants/weave-classification";
@@ -35,9 +35,9 @@ function fabricView(c: EffectiveConstruction): WeaveCardView["fabric"] {
   if (!d || !plan || plan.length === 0) return null;
   if (d.weaveStructure === "LENO") return { kind: "LENO" };
   const frames = plan.reduce((m, r) => Math.max(m, r.length), 0);
-  const ground = Array.from({ length: frames }, (_, i) => i + 1).filter((f) => !d.lenoFrames.includes(f)).length;
+  const ground = groundFrameNumbers(frames, d.lenoFrames, d.selvedgeFrames).length;
   const seq = c.weft?.pickSequence ?? null;
-  const dd = computeDrawdown({ kind: d.weaveStructure, liftPlan: plan, lenoFrames: d.lenoFrames, pickSequence: seq, ...drawdownWindow(ground, plan.length, seq?.length ?? 0) });
+  const dd = computeDrawdown({ kind: d.weaveStructure, liftPlan: plan, lenoFrames: d.lenoFrames, selvedgeFrames: d.selvedgeFrames, pickSequence: seq, ...drawdownWindow(ground, plan.length, seq?.length ?? 0) });
   return dd ? { kind: "DRAWDOWN", ...dd } : null;
 }
 
@@ -69,6 +69,7 @@ export async function buildWeaveCardView(itemId: string, now: Date = new Date(),
       : null,
     liftPlan: Array.isArray(d?.liftPlan) ? (d.liftPlan as number[][]) : null,
     lenoFrames: d?.lenoFrames ?? [],
+    selvedgeFrames: d?.selvedgeFrames ?? [],
     pickSequence: c.weft?.pickSequence ?? null,
     weft: c.weft
       ? {

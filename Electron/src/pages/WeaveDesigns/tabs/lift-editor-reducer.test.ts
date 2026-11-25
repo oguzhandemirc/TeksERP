@@ -42,6 +42,22 @@ describe("seçim işlemleri", () => {
     expect(s.hist.present.leno).toEqual([3]);
     expect(plan(s)[0]).toHaveLength(3);
   });
+  it("başlık tıklaması döngüsü: zemin → döner → kenar → zemin; her adım geri alınır", () => {
+    const s0 = initEditor(blank(2, 4), [], []);
+    const s1 = run(s0, { type: "cycleFrame", frame: 2 });
+    expect([s1.hist.present.leno, s1.hist.present.selv]).toEqual([[2], []]);
+    const s2 = run(s1, { type: "cycleFrame", frame: 2 });
+    expect([s2.hist.present.leno, s2.hist.present.selv]).toEqual([[], [2]]);
+    const s3 = run(s2, { type: "cycleFrame", frame: 2 });
+    expect([s3.hist.present.leno, s3.hist.present.selv]).toEqual([[], []]);
+    expect(run(s3, { type: "undo" }).hist.present.selv).toEqual([2]);
+  });
+  it("hazır örgü kenar sütununu da atlar; çerçeve silinince/daralınca kenar işareti kayar/kırpılır", () => {
+    expect(plan(run(initEditor(blank(2, 3), [], [1]), { type: "template", id: "plain" }))).toEqual([[0, 1, 0], [0, 0, 1]]);
+    const del = run(initEditor(blank(2, 4), [], [4]), { type: "cursor", cell: { r: 0, c: 1 } }, { type: "deleteFrames" });
+    expect(del.hist.present.selv).toEqual([3]);
+    expect(run(initEditor(blank(2, 4), [], [1, 4]), { type: "resize", picks: 2, frames: 2 }).hist.present.selv).toEqual([1]);
+  });
   it("atkı ekle seçili satırların sonrasına seçim kadar", () => {
     const s = run(initEditor([[1], [1]], []), { type: "cursor", cell: { r: 0, c: 0 } }, { type: "insertPicks" });
     expect(plan(s)).toEqual([[1], [0], [1]]);

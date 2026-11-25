@@ -57,6 +57,14 @@ describe("LiftPlanGrid sürükleme", () => {
     fireEvent.pointerDown(screen.getAllByRole("columnheader")[1]!, { button: 0 });
     expect(fns.onLenoToggle).toHaveBeenCalledWith(2);
   });
+  it("kenar çerçevesi başlıkta \"K\" ile ve ayrı rolle çizilir; döner ile çakışırsa döner kazanır", () => {
+    render(<LiftPlanGrid plan={[[1, 0, 1]]} frames={3} rows={1} leno={new Set([3])} selvedge={new Set([1, 3])} selector={null} selCount={0} canWrite={false} />);
+    const heads = screen.getAllByRole("columnheader");
+    expect(heads[0]!.textContent).toBe("1K");
+    expect(heads[0]!.getAttribute("data-role")).toBe("selvedge");
+    expect(heads[1]!.textContent).toBe("2");
+    expect(heads[2]!.getAttribute("data-role")).toBe("leno");
+  });
   it("salt okunur ızgara basmayı yok sayar", () => {
     const fns = setup("top-down", false);
     fireEvent.pointerDown(cell(0, 0), { button: 0 });

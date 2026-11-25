@@ -8,7 +8,7 @@
 import prisma, { pool } from "../src/lib/prisma";
 import { AppError } from "../src/utils/app-error";
 import { expandWeftSequence, parseWeftSequence } from "../src/services/helpers/weft-sequence.helper";
-import { resolveEffectiveConstruction } from "../src/services/helpers/effective-construction.helper";
+import { effectiveWeaveDesign, resolveEffectiveConstruction } from "../src/services/helpers/effective-construction.helper";
 import { weavingOrderConstruction, weavingOrderTabletConstruction } from "../src/services/helpers/tablet-construction.helper";
 import { buildWeaveCardView, renderWeavingOrderWeaveCard } from "../src/services/weave-card.service";
 import { frameBlocks, renderWeaveDesignCardHtml } from "../src/services/document-render/weave-design-card.html";
@@ -40,6 +40,36 @@ async function errOf(fn: () => Promise<unknown>): Promise<{ status: number; code
 
 const TAG = `TEST-SYA2-${Date.now()}`;
 const ids = { items: [] as string[], warp: [] as string[], weft: [] as string[], design: [] as string[], recipe: [] as string[], wo: [] as string[] };
+
+/** Dilim C — kenar çerçevesi (selvedgeFrames): yazım, çakışma, mekanizma kapısı, gizleme, DB seddi, basım. */
+async function checkSelvedgeFrames(adminId: string, view: Awaited<ReturnType<typeof buildWeaveCardView>>, html: string): Promise<void> {
+  console.log("§K kenar çerçevesi (dilim C)");
+  const plan = [[1, 0, 1, 0, 1, 0], [0, 1, 0, 1, 0, 1]];
+  const k = await createWeaveDesign({ code: `${TAG}-DK`, name: `${TAG} KENARLI`, shedMechanism: "DOBBY", weaveStructure: "PLAIN", frameCount: 6, liftPlan: plan, selvedgeFrames: [2, 1] }, adminId);
+  ids.design.push(k.id);
+  check("§Ka oluştururken kenar sıralı yazıldı [1,2]", JSON.stringify(k.selvedgeFrames) === "[1,2]");
+  check("§Kb kenar çerçeve aralık dışı → 400 SELVEDGE_FRAMES_INVALID", (await errOf(() => updateWeaveDesign(k.id, { selvedgeFrames: [33] }, adminId)))?.code === "SELVEDGE_FRAMES_INVALID");
+  const clash = await errOf(() => updateWeaveDesign(k.id, { lenoFrames: [2, 3] }, adminId));
+  check("§Kc aynı çerçeve hem döner hem kenar → 400 WEAVE_DESIGN_FRAME_ROLE_CONFLICT", clash?.status === 400 && clash.code === "WEAVE_DESIGN_FRAME_ROLE_CONFLICT", JSON.stringify(clash?.code));
+  const clash2 = await errOf(() => updateWeaveDesign(k.id, { lenoFrames: [3], selvedgeFrames: [3, 4] }, adminId));
+  check("§Kd tek istekte ikisi çakışırsa da 400, kayıt değişmedi", clash2?.code === "WEAVE_DESIGN_FRAME_ROLE_CONFLICT" && JSON.stringify((await getWeaveDesign(k.id)).selvedgeFrames) === "[1,2]");
+  check("§Ke eski istemci (alan yok) kenara dokunmaz", JSON.stringify((await updateWeaveDesign(k.id, { notes: "kenar 2'li" }, adminId)).selvedgeFrames) === "[1,2]");
+  const cam = await errOf(() => createWeaveDesign({ code: `${TAG}-DKC`, name: `${TAG} KENAR EKS`, shedMechanism: "CAM", weaveStructure: "PLAIN", selvedgeFrames: [1] }, adminId));
+  check("§Kf Armür dışı mekanizmada kenar yazımı → 400 WEAVE_DESIGN_SELVEDGE_DOBBY_ONLY", cam?.code === "WEAVE_DESIGN_SELVEDGE_DOBBY_ONLY", JSON.stringify(cam?.code));
+  check("§Kg Armür dışında boş kenar listesi geçer", (await errOf(() => updateWeaveDesign(k.id, { shedMechanism: "CAM", liftPlan: null, selvedgeFrames: [] }, adminId).then(() => updateWeaveDesign(k.id, { shedMechanism: "DOBBY", liftPlan: plan, selvedgeFrames: [1, 2] }, adminId)))) === null);
+  const raw = await prisma.weaveDesign.findUniqueOrThrow({ where: { id: k.id }, select: { id: true, code: true, name: true, kind: true, shedMechanism: true, weaveStructure: true, hookCount: true, repeatWidthCm: true, familyLabel: true, frameCount: true, repeatCm: true, liftPlan: true, loomFileName: true, lenoSetup: true, lenoFrames: true, selvedgeFrames: true, drawingInNote: true, isActive: true } });
+  const hidden = effectiveWeaveDesign({ ...raw, kind: "PLAIN", shedMechanism: "CAM" });
+  const shown = effectiveWeaveDesign(raw);
+  check("§Kh gizleme: Armür dışı okuyucu kenarı görmez, Armür'de görür", JSON.stringify(hidden?.selvedgeFrames) === "[]" && JSON.stringify(shown?.selvedgeFrames) === "[1,2]");
+  const dbErr = async (sql: string): Promise<boolean> => { try { await prisma.$executeRawUnsafe(sql, k.id); return false; } catch { return true; } };
+  check("§Ki DB seddi: döner ile kesişen kenar reddedilir", await dbErr(`UPDATE weave_designs SET "lenoFrames" = '{2}' WHERE id = $1::uuid`));
+  check("§Kj DB seddi: kenar 0 / 33 reddedilir", await dbErr(`UPDATE weave_designs SET "selvedgeFrames" = '{0}' WHERE id = $1::uuid`) && await dbErr(`UPDATE weave_designs SET "selvedgeFrames" = '{33}' WHERE id = $1::uuid`));
+  check("§Kk DB: kesişmeyen döner geçer (sonda geçerliliği)", !(await dbErr(`UPDATE weave_designs SET "lenoFrames" = '{3}' WHERE id = $1::uuid`)));
+  check("§Kl basım: kenar boşken HTML bayt-aynı (alan yok / boş dizi)", !html.includes("selv") && renderWeaveDesignCardHtml({ ...view, selvedgeFrames: undefined }) === html);
+  const kHtml = renderWeaveDesignCardHtml({ ...view, liftPlan: plan, lenoFrames: [], selvedgeFrames: [1, 2] });
+  check("§Km basım: kenar sütunları \"K\" başlıklı ayrı blok + açıklama", (kHtml.match(/<th class="selv">\dK<\/th>/g) ?? []).length === 2 && kHtml.includes("Kenar çerçeve (K): 1, 2")
+    && frameBlocks(6, new Set(), new Set([1, 2])).length === 2 && frameBlocks(6, new Set([1, 2]), new Set([3])).length === 3);
+}
 
 async function main(): Promise<void> {
   const admin = await ensureTestAdmin();
@@ -157,6 +187,7 @@ async function main(): Promise<void> {
   check("§8k basım: döner çerçeve sütunları işaretli + ayrık blok", (html.match(/<th class="leno">/g) ?? []).length === 2 && frameBlocks(4, new Set([1, 2])).length === 2);
   const esc = renderWeaveDesignCardHtml({ ...view, itemName: "<script>x</script>" });
   check("§8l basım: metin kaçışlı", !esc.includes("<script>x") && esc.includes("&lt;script&gt;"));
+  await checkSelvedgeFrames(admin.id, view, html);
   // Devere/levent S8: tahar düzeni notu — boş = bugünkü basım (bayt-aynı), dolu = "TAHAR" satırı, 300 tavanı.
   // Bugünkü basımda çözgü bloğunun son satırını doğrudan sıklık satırı izler; boş not araya bayt koymaz.
   check("§8p tahar boş: alan null, basım tahar satırsız (çözgü → sıklık arası bayt-aynı)",

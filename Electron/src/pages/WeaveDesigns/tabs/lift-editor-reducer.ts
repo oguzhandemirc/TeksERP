@@ -7,10 +7,11 @@ import {
   invertBlock, lenoAfterDeleteFrames, lenoAfterInsertFrames, mapRect, normRect, pasteAt, repeatRect, setCells, shiftBlock,
   templateById, type Block, type Cell, type History, type Rect, type WeaveTemplateId,
 } from "../lift-plan-edit";
-import { lenoWithin, resizeLiftPlan, toggleLenoFrame } from "../lift-plan";
+import { cycleFrameRole, lenoWithin, resizeLiftPlan, toggleLenoFrame } from "../lift-plan";
 import type { LiftPlan } from "../types";
 
-export interface Snap { plan: LiftPlan; leno: number[] }
+/** `selv` = kenar çerçeveleri (1-tabanlı); döner gibi ızgara yapısıyla birlikte kayar/kırpılır. */
+export interface Snap { plan: LiftPlan; leno: number[]; selv: number[] }
 export type Tool = "paint" | "select";
 interface Stroke { mode: Tool; base: Snap; value: 0 | 1; last: Cell }
 
@@ -33,6 +34,8 @@ export type EditorAction =
   | { type: "cursor"; cell: Cell; extend?: boolean }
   | { type: "toggleCursor" }
   | { type: "toggleLeno"; frame: number }
+  /** Başlık tıklaması: zemin → döner → kenar → zemin. */
+  | { type: "cycleFrame"; frame: number }
   | { type: "undo" } | { type: "redo" }
   | { type: "selectAll" } | { type: "clearSel" }
   | { type: "copy" } | { type: "cut" } | { type: "paste" }
@@ -46,8 +49,8 @@ export type EditorAction =
   | { type: "load"; snap: Snap }
   | { type: "tool"; tool: Tool };
 
-export function initEditor(plan: LiftPlan, leno: number[]): EditorState {
-  return { hist: historyInit({ plan, leno }), sel: null, anchor: null, cursor: { r: 0, c: 0 }, clip: null, tool: "paint", stroke: null };
+export function initEditor(plan: LiftPlan, leno: number[], selv: number[] = []): EditorState {
+  return { hist: historyInit({ plan, leno, selv }), sel: null, anchor: null, cursor: { r: 0, c: 0 }, clip: null, tool: "paint", stroke: null };
 }
 
 const present = (s: EditorState) => s.hist.present;
@@ -55,7 +58,7 @@ const present = (s: EditorState) => s.hist.present;
 export const targetRect = (s: EditorState): Rect | null => (s.sel ? clampRect(present(s).plan, s.sel) : fullRect(present(s).plan));
 
 function commit(s: EditorState, next: Snap): EditorState {
-  return next.plan === present(s).plan && next.leno === present(s).leno ? s : { ...s, hist: historyPush(s.hist, next) };
+  return next.plan === present(s).plan && next.leno === present(s).leno && next.selv === present(s).selv ? s : { ...s, hist: historyPush(s.hist, next) };
 }
 const commitPlan = (s: EditorState, plan: LiftPlan) => commit(s, { ...present(s), plan });
 
@@ -83,13 +86,14 @@ function pointer(s: EditorState, a: Extract<EditorAction, { type: "down" | "ente
 }
 
 function blockOps(s: EditorState, a: Extract<EditorAction, { type: "block" | "shift" | "repeat" | "template" }>): EditorState {
-  const { plan, leno } = present(s);
+  const { plan, leno, selv } = present(s);
   const rect = targetRect(s);
   if (!rect) return s;
   if (a.type === "repeat") return commitPlan(s, repeatRect(plan, rect, a.axis));
   if (a.type === "shift") return commitPlan(s, mapRect(plan, rect, (b) => shiftBlock(b, a.dr, a.dc)));
   if (a.type === "template") {
-    const skip = new Set(lenoWithin(leno, frameCountOf(plan)).map((f) => f - 1));
+    // Hazır örgü yalnız zemine basılır: döner ve kenar sütunları atlanır.
+    const skip = new Set(lenoWithin([...leno, ...selv], frameCountOf(plan)).map((f) => f - 1));
     return commitPlan(s, applyTemplate(plan, templateById(a.id).unit, rect, skip));
   }
   const fn = { flipPicks, flipFrames, invert: invertBlock, clear: clearBlock }[a.op];
@@ -110,19 +114,21 @@ function clipboard(s: EditorState, a: Extract<EditorAction, { type: "copy" | "cu
 }
 
 function structure(s: EditorState, a: Extract<EditorAction, { type: "insertPicks" | "deletePicks" | "insertFrames" | "deleteFrames" }>): EditorState {
-  const { plan, leno } = present(s);
+  const { plan, leno, selv } = present(s);
   if (plan.length === 0) return s;
   const rows = s.sel ? { lo: s.sel.r0, hi: s.sel.r1 } : { lo: s.cursor.r, hi: s.cursor.r };
   const cols = s.sel ? { lo: s.sel.c0, hi: s.sel.c1 } : { lo: s.cursor.c, hi: s.cursor.c };
   let next: Snap;
-  if (a.type === "insertPicks") next = { plan: insertPicks(plan, rows.hi + 1, rows.hi - rows.lo + 1), leno };
-  else if (a.type === "deletePicks") next = { plan: deletePicks(plan, rows.lo, rows.hi), leno };
+  if (a.type === "insertPicks") next = { plan: insertPicks(plan, rows.hi + 1, rows.hi - rows.lo + 1), leno, selv };
+  else if (a.type === "deletePicks") next = { plan: deletePicks(plan, rows.lo, rows.hi), leno, selv };
   else if (a.type === "insertFrames") {
     const p = insertFrames(plan, cols.hi + 1, cols.hi - cols.lo + 1);
-    next = { plan: p, leno: lenoAfterInsertFrames(leno, cols.hi + 1, frameCountOf(p) - frameCountOf(plan)) };
+    const n = frameCountOf(p) - frameCountOf(plan);
+    next = { plan: p, leno: lenoAfterInsertFrames(leno, cols.hi + 1, n), selv: lenoAfterInsertFrames(selv, cols.hi + 1, n) };
   } else {
     const p = deleteFrames(plan, cols.lo, cols.hi);
-    next = { plan: p, leno: p.length === 0 ? [] : lenoAfterDeleteFrames(leno, cols.lo, cols.hi) };
+    const empty = p.length === 0;
+    next = { plan: p, leno: empty ? [] : lenoAfterDeleteFrames(leno, cols.lo, cols.hi), selv: empty ? [] : lenoAfterDeleteFrames(selv, cols.lo, cols.hi) };
   }
   const out = commit({ ...s, sel: null }, next);
   return next.plan.length === 0 ? out : { ...out, cursor: clampCell(next.plan, s.cursor) };
@@ -155,9 +161,11 @@ export function editorReducer(s: EditorState, a: EditorAction): EditorState {
     case "tool": return { ...s, tool: a.tool };
     case "load": return { ...commit(s, a.snap), sel: null, anchor: null, cursor: { r: 0, c: 0 } };
     case "toggleLeno": return commit(s, { ...present(s), leno: toggleLenoFrame(present(s).leno, a.frame) });
+    case "cycleFrame": return commit(s, { ...present(s), ...cycleFrameRole(present(s).leno, present(s).selv, a.frame) });
     case "resize": {
       const plan = resizeLiftPlan(present(s).plan, a.picks, a.frames);
-      return { ...commit(s, { plan, leno: lenoWithin(present(s).leno, frameCountOf(plan)) }), sel: null, cursor: { r: 0, c: 0 } };
+      const n = frameCountOf(plan);
+      return { ...commit(s, { plan, leno: lenoWithin(present(s).leno, n), selv: lenoWithin(present(s).selv, n) }), sel: null, cursor: { r: 0, c: 0 } };
     }
   }
 }
