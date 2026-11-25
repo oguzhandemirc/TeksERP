@@ -89,7 +89,7 @@ export function ItemFormDialog({ open, onOpenChange, initial, draft, onSubmit, i
 
   const extraTabs: ItemExtraTab[] = [];
   if (warpVisible) extraTabs.push({ value: "warp", label: "Çözgü", content: <ItemWarpSection form={form} canWrite={canWriteSpecs} itemId={initial?.id ?? null} /> });
-  if (constructionVisible) extraTabs.push({ value: "weft", label: "Atkı", content: <ItemWeftSection draft={weft} canWrite={canWriteSpecs} /> },
+  if (constructionVisible) extraTabs.push({ value: "weft", label: "Atkı", content: <ItemWeftSection draft={weft} canWrite={canWriteSpecs} itemId={initial?.id ?? null} rawWidthText={form.watch("rawWidthCm")} /> },
     { value: "weave", label: "Desen", content: <ItemWeaveSection form={form} canWrite={canWriteSpecs} /> });
   const busy = isSubmitting || saving;
 

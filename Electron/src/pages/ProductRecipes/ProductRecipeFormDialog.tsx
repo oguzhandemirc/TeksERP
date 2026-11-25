@@ -38,6 +38,8 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initial?: ProductRecipe | null;
+  /** Seçicide "Örnek al": kimliksiz tam şablon — değerler + rota tohumu gelir, kayıt yalnız oluşturur. */
+  draft?: ProductRecipe | null;
   onSubmit: (values: RecipeFormValues) => Promise<void>;
   isSubmitting?: boolean;
 }
@@ -60,16 +62,19 @@ export function ProductRecipeFormDialog({
   open,
   onOpenChange,
   initial,
+  draft,
   onSubmit,
   isSubmitting,
 }: Props) {
   const isEdit = Boolean(initial);
+  // Örnek al: düzenleme değerleriyle aynı yoldan dolar; rota değişirse yeni rota doğar (paylaşılan rota değişmez).
+  const src = initial ?? draft;
   const qc = useQueryClient();
   const { values: foldValues, isEmpty: foldNotConfigured } = useFoldValues();
   const form = useForm<RecipeFormValues>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(recipeFormSchema as any) as unknown as Resolver<RecipeFormValues>,
-    defaultValues: buildDefaults(initial),
+    defaultValues: buildDefaults(src),
   });
 
   // İş emri modalındaki aynı inline rota editörü.
@@ -90,11 +95,11 @@ export function ProductRecipeFormDialog({
 
   useEffect(() => {
     if (!open) return;
-    form.reset(buildDefaults(initial));
+    form.reset(buildDefaults(src));
     setRouteError(null);
-    if (initial?.routeId) {
-      void seedFromRoute(initial.routeId);
-      setSeededRouteId(initial.routeId);
+    if (src?.routeId) {
+      void seedFromRoute(src.routeId);
+      setSeededRouteId(src.routeId);
     } else {
       resetRouteSteps([]);
       setSeededRouteId(null);
@@ -176,7 +181,7 @@ export function ProductRecipeFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[88vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{isEdit ? `${TERIM.terbiyeIsEmri.tekil} Şablonunu Düzenle` : `Yeni ${TERIM.terbiyeIsEmri.tekil} Şablonu`}</DialogTitle>
+          <DialogTitle>{isEdit ? `${TERIM.terbiyeIsEmri.tekil} Şablonunu Düzenle` : `Yeni ${TERIM.terbiyeIsEmri.tekil} Şablonu${draft ? " (örnekten)" : ""}`}</DialogTitle>
           <DialogDescription>
             Kumaş + akış (renk/özellik istasyonlarda) + en'i tek isim altında topla.{" "}
             {TERIM.terbiyeIsEmri.cumleBasi.yalin} açılışında şablonu seçince hepsi otomatik dolar.

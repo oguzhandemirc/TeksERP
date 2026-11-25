@@ -12,6 +12,7 @@ import { WeaveDesignCopyDialog } from "@/pages/WeaveDesigns/WeaveDesignCopyDialo
 import { WeaveDesignCreateDialog } from "@/pages/WeaveDesigns/WeaveDesignCreateDialog";
 import { weaveDesignApi } from "@/pages/WeaveDesigns/service";
 import type { WeaveDesign } from "@/pages/WeaveDesigns/types";
+import { useWeaveDesignRecordForm } from "@/pages/WeaveDesigns/useWeaveDesignRecordForm";
 import { SHED_MECHANISM_LABEL, WEAVE_STRUCTURE_LABEL, resolveWeaveClass, weaveClassLabel } from "@/pages/WeaveDesigns/weave-class";
 import { weaveDesignPickerService, type WeaveDesignRef } from "../construction-service";
 import type { ItemFormValues } from "../schema";
@@ -38,6 +39,7 @@ function openWeaveDesign(id: string) {
 export function ItemWeaveSection({ form, canWrite }: { form: UseFormReturn<ItemFormValues>; canWrite: boolean }) {
   const [creating, setCreating] = useState(false);
   const [copying, setCopying] = useState(false);
+  const weaveForm = useWeaveDesignRecordForm();
   const designId = form.watch("weaveDesignId");
   const design = useQuery({ queryKey: ["weave-designs", "detail", designId], queryFn: () => weaveDesignApi.get(designId), enabled: !!designId });
   const d = design.data;
@@ -62,8 +64,7 @@ export function ItemWeaveSection({ form, canWrite }: { form: UseFormReturn<ItemF
                 noneLabel="Desen kartı yok"
                 title="Desen kartı seç"
                 placeholder="Desen kartı seç"
-                quickAddLabel={canWrite ? "Yeni desen kartı" : undefined}
-                onQuickAdd={canWrite ? () => setCreating(true) : undefined}
+                recordForm={weaveForm}
               />
             )}
           />

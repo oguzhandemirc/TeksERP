@@ -116,6 +116,15 @@ const MODEL_MUAF: ReadonlyArray<{ dosya: string; model: string; neden: string }>
     model,
     neden: "Hesaplanan kompozisyon (K7) hesaplanan gramajla AYNI fiyatsız zinciri (loadCostStructureSourcesTx → buildCostInput → yarnUsagePerM) yalnız iplik kg/m'si için kullanır; para okumaz/döndürmez, yapı/set yoksa kart değerleriyle hesaplar (item-computed-gsm emsali).",
   })),
+  // K4 atkı ihtiyacı (`POST /api/weft-specs/calc`, dokuma kapısı): fiyatsız yükleyiciyle yalnız atkı boyu (yapı) ve atkı firesini
+  // (parametre seti) OKUR; çıktıda para yok, yazmaz. Maliyet kapalıyken yapı/set yoksa boy elle girilir, fireli kg null (computed-gsm emsali).
+  ...[
+    ["costStructure", "Atkı hesabı yalnız yapıdaki atkı boyunu okur; çıktıda para yok."],
+    ["costParameterSet", "Atkı hesabı atkı firesini/kenar payını etkin setten okur; set yoksa fireli kg null, fiyat okumaz."],
+    ["finishingRate", "Ortak yükleyicinin tarife kodu çözümünü geçer; tarife tutarı atkı kg'ına girmez."],
+    ["yarnCostPrice", "Fiyatsız yükleyici (withPrices=false) — iplik fiyatı sorgusu KOŞMAZ; tarayıcı dosya düzeyinde görür."],
+    ["costFormula", "Ek maliyet formülleri yalnız fiyatlı yüklemede okunur; atkı hesabı fiyatsız — sorgu KOŞMAZ."],
+  ].map(([model, neden]) => ({ dosya: "routes/weft-spec.routes.ts", model: model!, neden: neden! })),
   ...["routes/production-proposal.routes.ts", "routes/weaving-order.routes.ts"].map((dosya) => ({
     dosya,
     model: "costFormula",

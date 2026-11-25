@@ -1130,6 +1130,8 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "items", name: "items_gsm_ck" },
   { table: "weft_specs", name: "weft_specs_picks_per_cm_ck" },
   { table: "weft_spec_yarns", name: "weft_spec_yarns_picks_ck" },
+  // K6 renk seçici kanalı (20261125140000_atki_iplik_renk_kanali)
+  { table: "weft_spec_yarns", name: "weft_spec_yarns_color_channel_ck" },
   // Fason devere D1 (20261117161624_warp_spec_yarns)
   { table: "warp_spec_yarns", name: "warp_spec_yarns_ends_ck" },
   // Fason devere D4a (20261117172259_warping_orders)

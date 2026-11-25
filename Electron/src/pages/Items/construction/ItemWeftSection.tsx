@@ -13,6 +13,10 @@ import { WeftContentFields } from "@/pages/WeaveDesigns/tabs/WeftContentFields";
 import { weftContentFromSpec } from "@/pages/WeaveDesigns/tabs/WeftSpecEditor";
 import { weftSpecPickerService, type WeftSpecRef } from "../construction-service";
 import { cardEditableInPlace, type ItemWeftDraft } from "./useItemWeftDraft";
+import { WeftCalcPanel } from "@/pages/WeftSpecs/WeftCalcPanel";
+import { positiveOrNull } from "@/pages/WeftSpecs/weft-calc";
+
+const CALC_GRID = "grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]";
 
 const NEW_INFO = "Atkıyı burada girin; Kaydet'e basınca arkada bu kumaşa ait atkı kartı kendiliğinden açılır (kart kodu kumaş kodudur). "
   + "Aynı atkı başka kumaşta da kullanılacaksa sonra o kumaşta bu kartı seçebilirsiniz.";
@@ -65,13 +69,21 @@ function CardNotice({ draft, code, savedCard, editable, canWrite }: NoticeProps)
   return null;
 }
 
-export function ItemWeftSection({ draft, canWrite }: { draft: ItemWeftDraft; canWrite: boolean }) {
+interface SectionProps {
+  draft: ItemWeftDraft; canWrite: boolean;
+  /** K4 hesap bağlamı: kayıtlı kumaşın zinciri (boy/fire) + formdaki ham en. */
+  itemId?: string | null; rawWidthText?: string;
+}
+
+export function ItemWeftSection({ draft, canWrite, itemId, rawWidthText }: SectionProps) {
+  const calcCtx = { itemId, rawWidthCm: positiveOrNull(rawWidthText) };
   const savedCard = draft.mode === "card" && !!draft.cardId && draft.cardId === draft.savedCardId;
   // Yerinde düzenleme yalnız bu kumaşa ait kartta; paylaşılan/bilinmeyen kartta yalnız "kopya" seçildikten sonra.
   const editableCard = savedCard && canWrite && (draft.forking || cardEditableInPlace(draft));
   // Hiç atkı kartı yokken "var olan kartı seç" boş bir liste açardı — o zaman gösterilmez.
   const anyCard = useQuery({ queryKey: ["weft-specs", "list", "", false], queryFn: () => weftSpecApi.list() });
   const showPicker = draft.mode === "card" || (anyCard.data?.length ?? 0) > 0;
+  const shown = draft.card && !editableCard ? weftContentFromSpec(draft.card) : draft.content;
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -115,7 +127,10 @@ export function ItemWeftSection({ draft, canWrite }: { draft: ItemWeftDraft; can
       {draft.mode === "new" && (
         <>
           <p className="text-xs text-muted-foreground" data-testid="weft-new-note">Kaydedince bu kumaşa ait yeni atkı kartı açılır.</p>
-          <WeftContentFields value={draft.content} onChange={draft.setContent} canWrite={canWrite} savedSeq="" idPrefix="iwf" />
+          <div className={CALC_GRID}>
+            <WeftContentFields value={draft.content} onChange={draft.setContent} canWrite={canWrite} savedSeq="" idPrefix="iwf" />
+            <WeftCalcPanel content={draft.content} ctx={calcCtx} />
+          </div>
         </>
       )}
 
@@ -127,13 +142,10 @@ export function ItemWeftSection({ draft, canWrite }: { draft: ItemWeftDraft; can
             Atkı kartı: <span className="font-mono text-xs">{draft.card.code}</span> · {draft.card.name}
           </p>
           <CardNotice draft={draft} code={draft.card.code} savedCard={savedCard} editable={editableCard} canWrite={canWrite} />
-          <WeftContentFields
-            value={editableCard ? draft.content : weftContentFromSpec(draft.card)}
-            onChange={draft.setContent}
-            canWrite={editableCard}
-            savedSeq={draft.card.sequenceCode ?? ""}
-            idPrefix="iwf"
-          />
+          <div className={CALC_GRID}>
+            <WeftContentFields value={shown} onChange={draft.setContent} canWrite={editableCard} savedSeq={draft.card.sequenceCode ?? ""} idPrefix="iwf" />
+            <WeftCalcPanel content={shown} ctx={calcCtx} />
+          </div>
           {!savedCard && canWrite && (
             <div className="flex flex-wrap gap-2">
               <Button type="button" size="sm" variant="outline" onClick={() => draft.startNew(weftContentFromSpec(draft.card!))}>

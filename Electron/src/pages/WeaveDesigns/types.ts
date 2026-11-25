@@ -78,6 +78,8 @@ export interface EffectiveWeftYarn {
   sortOrder: number;
   letter: string;
   picksInRepeat: number;
+  /** K6: renk seçici kanalı; eski backend göndermez. */
+  colorChannel?: number | null;
   yarnItem: YarnRef;
   /** Varyant bu satırın ipliğini değiştirdiyse kartın özgün ipliği. */
   cardYarnItem: YarnRef | null;
@@ -117,6 +119,8 @@ export interface WeftSpecYarnRow {
   yarnItemId: string; picksInRepeat: number; sortOrder: number; yarnItem?: YarnRef;
   /** SY-3 L3 salt-okunur pay % (2 hane); hesaplanamıyorsa null, eski backend göndermez. */
   sharePct?: number | null;
+  /** K6: tezgâh renk seçicisi kanalı (1..16); null/yok = belirtilmemiş. */
+  colorChannel?: number | null;
 }
 export interface WeftSpecDetail {
   id: string; code: string; name: string; picksPerCm: string | number | null; sequenceCode: string | null; weftProgramNo: string | null;

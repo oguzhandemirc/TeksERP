@@ -27,6 +27,7 @@ function gridInput(c: RunConstruction) {
   return {
     liftPlan: c.design?.liftPlan ?? null,
     lenoFrames: c.design?.lenoFrames ?? [],
+    selvedgeFrames: c.design?.selvedgeFrames ?? [],
     pickSequence: c.weft?.pickSequence ?? null,
     yarnCount: c.weft?.yarns.length ?? 0,
   };
@@ -71,6 +72,7 @@ export default function WeaveGridSheet({ c, visible, onClose }: { c: RunConstruc
   // Kart genişliği − iç boşluk − etiket şeridi; yükseklik: %88 tavan − başlık/lejant/alt çubuk.
   const cell = fitCell(shape, { width: moduleSheetWidth(width, 'xl') - 2 * spacing.lg - 40, height: Math.round(height * 0.88) - 250 });
   const lenoCount = (c.design?.lenoFrames ?? []).length;
+  const selvedgeCount = (c.design?.selvedgeFrames ?? []).length;
   const yarns = c.weft?.yarns ?? [];
 
   // Alttan yukarı kipte 1. atkı en altta: kayan gövde açılışta sona gider.
@@ -92,6 +94,7 @@ export default function WeaveGridSheet({ c, visible, onClose }: { c: RunConstruc
         <View style={styles.legend} testID="weave-legend">
           <Legend color={WEAVE_COLORS.lift} label="Dolu kare = çerçeve kalkık" />
           {lenoCount > 0 ? <Legend color={WEAVE_COLORS.leno} label="Döner çerçeve" /> : null}
+          {selvedgeCount > 0 ? <Legend color={WEAVE_COLORS.selvedge} label="Kenar çerçevesi" /> : null}
           {shape.selCount > 0 ? yarns.map((y, i) => <Legend key={y.letter} color={yarnColor(i + 1)} label={`${y.letter}: ${y.yarnCode}`} />) : null}
         </View>
       }

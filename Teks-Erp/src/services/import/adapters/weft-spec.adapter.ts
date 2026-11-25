@@ -3,7 +3,7 @@
 // Sıra kodu (`A4 B1 A4 C1`) doluysa adetler ONDAN türer — servisin kuralı; önizleme de aynı türetimi
 // yapar ki adet sütunu boş dosya her yüklemede "değişti" görünmesin.
 import prisma from "../../../lib/prisma";
-import { createWeftSpec, updateWeftSpec } from "../../weft-spec.service";
+import { createWeftSpec, updateWeftSpec, WEFT_COLOR_CHANNEL_MAX } from "../../weft-spec.service";
 import { parseWeftSequence } from "../../helpers/weft-sequence.helper";
 import { AppError } from "../../../utils/app-error";
 import type { ImportAdapter, ImportColumn, ImportContext, PreparedRow } from "../import.types";
@@ -29,6 +29,7 @@ const COLUMNS: ImportColumn[] = [
     example: "PES-150",
   },
   { key: "picksInRepeat", label: "Rapordaki Atkı Adedi", type: "int", child: true, help: "Sıra kodu boşsa zorunlu.", example: "20" },
+  { key: "colorChannel", label: "Renk Seçici Kanalı", type: "int", child: true, help: `Tezgâhın renk seçicisinde bu ipliğin takıldığı kanal (1–${WEFT_COLOR_CHANNEL_MAX}); boş = belirtilmemiş. Aynı kartta iki satır aynı kanalı alamaz.`, example: "3" },
 ];
 
 const SELECT = {
@@ -41,23 +42,24 @@ const SELECT = {
   weftProgramNo: true,
   notes: true,
   isActive: true,
-  yarns: { select: { picksInRepeat: true, yarnItem: { select: { code: true } } }, orderBy: { sortOrder: "asc" as const } },
+  yarns: { select: { picksInRepeat: true, colorChannel: true, yarnItem: { select: { code: true } } }, orderBy: { sortOrder: "asc" as const } },
 } as const;
 
-type Child = { yarnCode: string | null; picksInRepeat: number | null };
+type Child = { yarnCode: string | null; picksInRepeat: number | null; colorChannel: number | null };
 
-function flatten(r: Record<string, unknown> & { yarns: Array<{ picksInRepeat: number; yarnItem: { code: string } }> }): Record<string, unknown> {
+function flatten(r: Record<string, unknown> & { yarns: Array<{ picksInRepeat: number; colorChannel: number | null; yarnItem: { code: string } }> }): Record<string, unknown> {
   const { yarns, ...rest } = r;
   return {
     ...rest,
     picksPerCm: rest.picksPerCm === null ? null : Number(rest.picksPerCm),
-    __children: yarns.map((y): Child => ({ yarnCode: y.yarnItem.code, picksInRepeat: y.picksInRepeat })),
+    __children: yarns.map((y): Child => ({ yarnCode: y.yarnItem.code, picksInRepeat: y.picksInRepeat, colorChannel: y.colorChannel })),
   };
 }
 
 const sameChildren = (a: Child[], b: Child[]): boolean =>
   a.length === b.length &&
-  a.every((x, i) => importKey(String(x.yarnCode ?? "")) === importKey(String(b[i]!.yarnCode ?? "")) && x.picksInRepeat === b[i]!.picksInRepeat);
+  a.every((x, i) => importKey(String(x.yarnCode ?? "")) === importKey(String(b[i]!.yarnCode ?? "")) && x.picksInRepeat === b[i]!.picksInRepeat
+    && (x.colorChannel ?? null) === (b[i]!.colorChannel ?? null));
 
 export const weftSpecImportAdapter: ImportAdapter = {
   entity: "weftSpec",
@@ -89,6 +91,13 @@ export const weftSpecImportAdapter: ImportAdapter = {
       ids.push(typeof code === "string" ? await resolveYarnCode(row, { column: "yarnCode", code }, ctx) : null);
     }
     row.values.yarns__ids = ids;
+    // K6: kanal aralığı + çakışma önizlemede görünsün (asıl kapı servis + DB CHECK/unique).
+    const channels = children.map((c) => c.values.colorChannel).filter((v): v is number => typeof v === "number");
+    for (const c of children) {
+      const ch = c.values.colorChannel;
+      if (typeof ch === "number" && (ch < 1 || ch > WEFT_COLOR_CHANNEL_MAX)) row.result.errors.push({ column: "colorChannel", message: `${c.rowNo}. satır: kanal 1–${WEFT_COLOR_CHANNEL_MAX} arasında olmalı.` });
+    }
+    if (new Set(channels).size !== channels.length) row.result.errors.push({ column: "colorChannel", message: "Aynı kartta iki satır aynı kanalı kullanamaz." });
 
     const seqRaw = row.values.sequenceCode !== undefined ? row.values.sequenceCode : (row.existing?.sequenceCode ?? null);
     const seq = typeof seqRaw === "string" && seqRaw.trim() ? seqRaw : null;
@@ -117,7 +126,7 @@ export const weftSpecImportAdapter: ImportAdapter = {
 
     // Türetimden sonra çocuk diff'i yeniden kurulur — yazım biçimi/boş adet değişiklik sayılmaz.
     if (row.existing && row.result.changes) {
-      const next = children.map((c): Child => ({ yarnCode: (c.values.yarnCode as string) ?? null, picksInRepeat: (c.values.picksInRepeat as number) ?? null }));
+      const next = children.map((c): Child => ({ yarnCode: (c.values.yarnCode as string) ?? null, picksInRepeat: (c.values.picksInRepeat as number) ?? null, colorChannel: (c.values.colorChannel as number) ?? null }));
       const prev = (row.existing.__children as Child[]) ?? [];
       if (sameChildren(prev, next)) delete row.result.changes.__children;
       else row.result.changes.__children = { from: prev, to: next };
@@ -154,8 +163,8 @@ export const weftSpecImportAdapter: ImportAdapter = {
         weftProgramNo: r.weftProgramNo ?? "",
         notes: r.notes ?? "",
       };
-      for (const y of r.yarns) out.push({ ...head, yarnCode: y.yarnItem.code, picksInRepeat: String(y.picksInRepeat) });
-      if (r.yarns.length === 0) out.push({ ...head, yarnCode: "", picksInRepeat: "" });
+      for (const y of r.yarns) out.push({ ...head, yarnCode: y.yarnItem.code, picksInRepeat: String(y.picksInRepeat), colorChannel: y.colorChannel === null ? "" : String(y.colorChannel) });
+      if (r.yarns.length === 0) out.push({ ...head, yarnCode: "", picksInRepeat: "", colorChannel: "" });
     }
     return out;
   },
@@ -169,10 +178,11 @@ function headerBody(row: PreparedRow): Record<string, unknown> {
   return out;
 }
 
-function yarnsBody(row: PreparedRow): Array<{ yarnItemId: string; picksInRepeat: number | null }> {
+function yarnsBody(row: PreparedRow): Array<{ yarnItemId: string; picksInRepeat: number | null; colorChannel: number | null }> {
   const ids = (row.values.yarns__ids as Array<string | null>) ?? [];
   return (row.children ?? []).map((c, i) => ({
     yarnItemId: ids[i] as string,
     picksInRepeat: (c.values.picksInRepeat as number | undefined) ?? null,
+    colorChannel: (c.values.colorChannel as number | undefined) ?? null,
   }));
 }

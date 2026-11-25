@@ -11,7 +11,8 @@ import { SequenceBoxEditor } from "@/components/weave/SequenceBoxEditor";
 import { itemService } from "@/pages/Items/service";
 import type { Item } from "@/pages/Items/types";
 
-export interface WeftRow { yarnItemId: string; picks: string }
+/** `channel`: tezgâhın renk seçicisindeki kanal (1..16), boş = girilmedi; satıra aittir. */
+export interface WeftRow { yarnItemId: string; picks: string; channel?: string }
 export interface WeftContent { seq: string; picksPerCm: string; program: string; rows: WeftRow[] }
 
 export const MAX_WEFT_LINES = 26;
@@ -27,8 +28,17 @@ export function buildWeftBody(seq: string, picksPerCm: string, program: string, 
     sequenceCode: sequence === "" ? null : sequence,
     picksPerCm: picksPerCm.trim() === "" ? null : picksPerCm.trim().replace(",", "."),
     weftProgramNo: program.trim() === "" ? null : program.trim(),
-    yarns: rows.map((r) => (sequence === "" ? { yarnItemId: r.yarnItemId, picksInRepeat: Number(r.picks) } : { yarnItemId: r.yarnItemId })),
+    yarns: rows.map((r) => {
+      const colorChannel = channelValue(r.channel);
+      return sequence === "" ? { yarnItemId: r.yarnItemId, picksInRepeat: Number(r.picks), colorChannel } : { yarnItemId: r.yarnItemId, colorChannel };
+    }),
   };
+}
+
+// Boş = kanal yok (null); geçersiz sayı olduğu gibi gider, sunucu 400 WEFT_CHANNEL_INVALID ile Türkçe söyler.
+function channelValue(raw: string | undefined): number | null {
+  const t = (raw ?? "").trim();
+  return t === "" ? null : Number(t);
 }
 
 /** Kaydedilebilir mi: en az bir satır, her satırda iplik, sıra kodu yoksa adet > 0. */
@@ -59,7 +69,7 @@ export function WeftContentFields({ value, onChange, canWrite, savedSeq, idPrefi
   const derived = seq.trim() !== "";
   const set = (patch: Partial<WeftContent>) => onChange({ ...value, ...patch });
   const setRow = (i: number, patch: Partial<WeftRow>) => set({ rows: rows.map((r, j) => (j === i ? { ...r, ...patch } : r)) });
-  const grid = rowExtra ? "grid items-center gap-2 sm:grid-cols-[2rem_1fr_8rem_4.5rem_2.5rem]" : "grid items-center gap-2 sm:grid-cols-[2rem_1fr_8rem_2.5rem]";
+  const grid = `grid items-center gap-2 ${rowGrid(Boolean(rowExtra))}`;
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-3">
@@ -101,6 +111,8 @@ export function WeftContentFields({ value, onChange, canWrite, savedSeq, idPrefi
             />
             <Input aria-label={`Atkı ${weftLetter(i)} rapordaki atkı adedi`} value={r.picks} inputMode="numeric" disabled={!canWrite || derived} title={derived ? "Sıra kodundan sunucu türetir" : undefined}
               placeholder={derived ? "sıradan hesaplanır" : "ör. 4"} onChange={(e) => setRow(i, { picks: e.target.value })} />
+            <Input aria-label={`Atkı ${weftLetter(i)} renk seçici kanalı`} value={r.channel ?? ""} inputMode="numeric" maxLength={2} disabled={!canWrite}
+              placeholder="ör. 3" onChange={(e) => setRow(i, { channel: e.target.value })} />
             {rowExtra?.(i)}
             {canWrite && (
               <Button type="button" variant="ghost" size="icon" aria-label={`Atkı ${weftLetter(i)} satırını sil`} onClick={() => set({ rows: rows.filter((_, j) => j !== i) })}>
@@ -144,15 +156,21 @@ const SEQ_INFO = "Harf = atkı ipliği satırı (A = 1. satır), sayı = arka ar
 const PICKS_INFO = "Desenin bir tekrarında (raporunda) bu iplikle kaç atkı atıldığı. Ör. sıra A4 B1 ise A ipliği 4, B ipliği 1. "
   + "Atkı sırası kodu girilmişse bu sayı sıradan kendiliğinden hesaplanır. İpliklerin kumaştaki payı bu sayılardan bulunur.";
 
+const CHANNEL_INFO = "Tezgâhın renk seçicisinde bu ipliğin takıldığı kanal (1–16). Boş bırakılabilir; aynı kartta iki iplik aynı kanalda olamaz. "
+  + "Tablet dokumacıya \"Kanal 3\" diye gösterir.";
+
+// Satır ve başlık aynı ızgarayı paylaşır: harf · iplik · adet · kanal · [pay %] · sil.
+const rowGrid = (extra: boolean) => (extra ? "sm:grid-cols-[2rem_1fr_8rem_4.5rem_4.5rem_2.5rem]" : "sm:grid-cols-[2rem_1fr_8rem_4.5rem_2.5rem]");
+
 /** İplik satırlarının sütun başlıkları — "adet" kutusunun ne olduğunu söyler (ⓘ). `extra` verilirse (pay %) bir sütun daha. */
 export function WeftRowsHeader({ extra }: { extra?: string }) {
-  const grid = extra ? "sm:grid-cols-[2rem_1fr_8rem_4.5rem_2.5rem]" : "sm:grid-cols-[2rem_1fr_8rem_2.5rem]";
   return (
-    <div className={`hidden gap-2 text-xs text-muted-foreground sm:grid ${grid}`}>
+    <div className={`hidden gap-2 text-xs text-muted-foreground sm:grid ${rowGrid(Boolean(extra))}`}>
       <span />
       <span>Atkı ipliği</span>
       {/* 8rem sütunda uzun başlık 1440'ta iki satıra kırılıyordu: kısa etiket, tam anlam ⓘ'de. */}
       <span className="flex items-center gap-1 whitespace-nowrap">Atış adedi<InfoPopover label="Rapordaki atkı adedi" desc={PICKS_INFO} /></span>
+      <span className="flex items-center gap-1 whitespace-nowrap">Kanal<InfoPopover label="Renk seçici kanalı" desc={CHANNEL_INFO} /></span>
       {extra && <span className="text-right">{extra}</span>}
       <span />
     </div>

@@ -65,20 +65,24 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initial?: DefectType | null;
+  /** Seçicide "Örnek al": kimliksiz taslak (yalnız oluşturur). */
+  draft?: Partial<DefectType> | null;
   onSubmit: (values: DefectTypeFormValues) => void | Promise<void>;
   isSubmitting?: boolean;
 }
 
-export function DefectTypeFormDialog({ fourPoint = false, open, onOpenChange, initial, onSubmit, isSubmitting }: Props) {
-  const defaults: DefectTypeFormValues = initial
+export function DefectTypeFormDialog({ fourPoint = false, open, onOpenChange, initial, draft, onSubmit, isSubmitting }: Props) {
+  const src = (initial ?? draft) as DefectType | null | undefined;
+  const defaults: DefectTypeFormValues = src
     ? {
-        name: initial.name,
-        description: initial.description ?? "",
-        severity: (initial.severity ?? "") as DefectTypeFormValues["severity"],
-        defectGroup: initial.defectGroup ?? "",
-        isActive: initial.isActive,
-        isDefault: initial.isDefault,
-        fixedPoints: (initial.fixedPoints == null ? "" : String(initial.fixedPoints)) as DefectTypeFormValues["fixedPoints"],
+        name: src.name ?? "",
+        description: src.description ?? "",
+        severity: (src.severity ?? "") as DefectTypeFormValues["severity"],
+        defectGroup: src.defectGroup ?? "",
+        isActive: initial ? src.isActive : true,
+        // Örnek al varsayılanı devralmaz: tek-varsayılan tx'i eski varsayılanı düşürürdü (kaynağa dokunmamak).
+        isDefault: initial ? src.isDefault : false,
+        fixedPoints: (src.fixedPoints == null ? "" : String(src.fixedPoints)) as DefectTypeFormValues["fixedPoints"],
       }
     : defectTypeFormDefaults;
 
@@ -86,7 +90,7 @@ export function DefectTypeFormDialog({ fourPoint = false, open, onOpenChange, in
     <EntityFormDialog<DefectTypeFormValues>
       open={open}
       onOpenChange={onOpenChange}
-      title={initial ? "Hata Tipini Düzenle" : "Yeni Hata Tipi"}
+      title={initial ? "Hata Tipini Düzenle" : draft ? "Yeni Hata Tipi (örnekten)" : "Yeni Hata Tipi"}
       schema={defectTypeFormSchema}
       defaultValues={defaults}
       onSubmit={onSubmit}

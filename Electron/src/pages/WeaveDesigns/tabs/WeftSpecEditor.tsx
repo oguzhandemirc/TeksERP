@@ -20,7 +20,7 @@ export function weftContentFromSpec(spec: Pick<WeftSpecDetail, "sequenceCode" | 
     seq: spec.sequenceCode ?? "",
     picksPerCm: decimalToFormText(spec.picksPerCm),
     program: spec.weftProgramNo ?? "",
-    rows: spec.yarns.map((y) => ({ yarnItemId: y.yarnItemId, picks: String(y.picksInRepeat) })),
+    rows: spec.yarns.map((y) => ({ yarnItemId: y.yarnItemId, picks: String(y.picksInRepeat), channel: y.colorChannel != null ? String(y.colorChannel) : "" })),
   };
 }
 

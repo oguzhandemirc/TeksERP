@@ -19,6 +19,7 @@ import {
   updateWeftSpec,
 } from "../services/weft-spec.service";
 import { forkWeftSpecForItem } from "../services/weft-spec-fork.service";
+import { calculateWeftNeed } from "../services/weft-calc.service";
 import { attachNewWeftSpecToItem } from "../services/weft-spec-draft.service";
 import { withWeftShares } from "../services/helpers/weft-share.helper";
 import { weftSpecOpenOrders } from "../services/helpers/spec-open-orders.helper";
@@ -51,6 +52,39 @@ const listQuery = z.object({
  */
 router.get("/", requirePermission("warpspec:read"), wrap(async (req, res) => {
   res.status(200).json({ success: true, data: (await listWeftSpecs(listQuery.parse(req.query))).map(withWeftShares) });
+}));
+
+const positive = (label: string, max: number) => z.number({ message: `${label} sayı olmalı` }).positive(`${label} sıfırdan büyük olmalı`).max(max, `${label} çok büyük`);
+const calcBody = z.strictObject({
+  itemId: z.uuid({ message: "Geçersiz kumaş ID" }).optional(),
+  rawWidthCm: positive("Ham en", 10_000).nullable().optional(),
+  weftLengthCm: positive("Atkı boyu", 10_000).nullable().optional(),
+  picksPerCm: positive("Atkı sıklığı", 1000).nullable().optional(),
+  sequenceCode: z.string().max(120, "Sıra kodu en çok 120 karakter").nullable().optional(),
+  yarns: z.array(z.strictObject({
+    yarnItemId: z.uuid({ message: "İplik kimliği geçersiz" }),
+    picksInRepeat: z.number().int("Atkı adedi tam sayı olmalı").positive("Atkı adedi sıfırdan büyük olmalı").max(100_000).nullable().optional(),
+  })).min(1, "En az bir atkı ipliği gerekli").max(26, "En çok 26 atkı ipliği"),
+});
+
+/**
+ * @openapi
+ * /api/weft-specs/calc:
+ *   post:
+ *     tags: [WeftSpecs]
+ *     summary: Atkı hesabı — 1000 m kumaş için iplik başına kg (fireli/firesiz), YAZMAZ (K4)
+ *     description: |
+ *       Formdaki atkı (kaydedilmemiş olabilir) maliyet motorunun aynı formülüyle hesaplanır. `itemId` verilirse atkı boyu
+ *       ve fire o kumaşın zincirinden (elle → yapı → tarak eni → ham en + kenar payı); verilmezse yalnız elle atkı boyu.
+ *       Eksik veri `missing[]` ile döner (400 değil).
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ perMeters, picksPerCm, lengthCm, lengthSource, wastePct, rows[], totalNetKg, totalGrossKg, missing[] }" }
+ *       400: { description: Gövde geçersiz / iplik bulunamadı }
+ *       404: { description: Kumaş bulunamadı }
+ */
+router.post("/calc", requirePermission("warpspec:read"), wrap(async (req, res) => {
+  res.status(200).json({ success: true, data: await calculateWeftNeed(calcBody.parse(req.body ?? {})) });
 }));
 
 /**
