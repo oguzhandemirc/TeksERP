@@ -6,6 +6,8 @@ import type { EffectiveConstruction, LiftPlan, WeaveDesign } from "@/pages/Weave
 export type ConstructionDesign = Pick<WeaveDesign, "id" | "code" | "name" | "kind" | "shedMechanism" | "weaveStructure" | "hookCount" | "repeatWidthCm" | "repeatCm" | "loomFileName" | "frameCount"> & {
   liftPlan?: LiftPlan | null;
   lenoFrames?: number[];
+  /** Kenar çerçeveleri (1 tabanlı) — sunucu yalnız armürlü mekanizmada doldurur. */
+  selvedgeFrames?: number[];
   drawingInNote?: string | null;
 };
 

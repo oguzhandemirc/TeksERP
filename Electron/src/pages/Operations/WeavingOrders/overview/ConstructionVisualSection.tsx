@@ -12,7 +12,7 @@ import { WeaveGrid } from "@/components/weave/WeaveGrid";
 import { WeaveScrollBox } from "@/components/weave/WeaveScrollBox";
 import { YarnLegend } from "@/components/weave/YarnLegend";
 import { useWeaveDirection } from "@/components/weave/weave-direction";
-import { LENO_LABEL, LENO_TINT, LIFT_COLOR, yarnColor, yarnLetter } from "@/components/weave/weave-palette";
+import { LENO_LABEL, LENO_TINT, LIFT_COLOR, SELVEDGE_LABEL, SELVEDGE_TINT, yarnColor, yarnLetter } from "@/components/weave/weave-palette";
 import { V3Section } from "@/pages/Operations/WorkOrders/detail-v3/V3Section";
 import { constructionSlots, slotOf } from "@/components/weave/shared-palette";
 import { stripYarnsOf } from "@/pages/WeaveDesigns/tabs/WarpLayersVisual";
@@ -132,12 +132,15 @@ function MiniLiftPlan({ c, onOpen, weftSlots }: { c: WeavingOrderConstruction; o
   if (!lay) return <p className="text-xs text-muted-foreground">{noLiftPlanText(d)}</p>;
   const plan = d.liftPlan!;
   const lenoSet = new Set(leno);
+  const selvSet = new Set((d.selvedgeFrames ?? []).filter((f) => !lenoSet.has(f)));
+  const tint = (col: number) => (col >= lay.frames ? null : lenoSet.has(col + 1) ? LENO_TINT : selvSet.has(col + 1) ? SELVEDGE_TINT : null);
+  const labelColor = (col: number) => (col >= lay.frames ? undefined : lenoSet.has(col + 1) ? LENO_LABEL : selvSet.has(col + 1) ? SELVEDGE_LABEL : undefined);
   const grid = (
     <WeaveGrid ariaLabel={`Armür planı: ${lay.rows} atkı, ${lay.frames} çerçeve${lay.selCols ? ", atkı seçici" : ""}`}
       rows={lay.rows} cols={lay.cols} cell={lay.cell} direction={direction} colGapsBefore={lay.gaps}
-      colTint={(col) => (col < lay.frames && lenoSet.has(col + 1) ? LENO_TINT : null)}
+      colTint={tint}
       colLabel={(col) => (col >= lay.frames ? yarnLetter(col - lay.frames) : frameLabel(col + 1, lay.cell))}
-      colLabelColor={(col) => (col < lay.frames && lenoSet.has(col + 1) ? LENO_LABEL : undefined)}
+      colLabelColor={labelColor}
       fill={(r, col) => {
         if (col < lay.frames) return plan[r]?.[col] === 1 ? LIFT_COLOR : null;
         const n = col - lay.frames + 1;
@@ -160,6 +163,7 @@ function MiniLiftPlan({ c, onOpen, weftSlots }: { c: WeavingOrderConstruction; o
       <YarnLegend entries={[
         { color: LIFT_COLOR, label: "Çerçeve kalkık" },
         ...(lenoSet.size > 0 ? [{ color: LENO_TINT, label: "Döner çerçeve" }] : []),
+        ...(selvSet.size > 0 ? [{ color: SELVEDGE_TINT, label: "Kenar çerçevesi" }] : []),
         ...yarns.map((y, i) => ({ color: weftColor(i + 1), mark: y.letter || yarnLetter(i), label: `${y.yarnItem.name} (atkı)` })),
       ]} />
     </div>

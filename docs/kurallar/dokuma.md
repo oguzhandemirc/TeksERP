@@ -163,6 +163,7 @@
 - [ÇEKİRDEK] Desen sınıfını yalnız `weave-classification.ts` `resolveWeaveClass` ile oku (mekanizma Eksantrik/Armür/Jakar + ayrı örgü; `kind` çift yazılan geçiş alanı); Armür dışı ızgara ve Jakar dışı kanca yazımı 400, saklı eski değeri silme, okuyucular `effectiveWeaveDesign` üzerinden görmesin; Örme tekniği açılana dek 400. <sub>(arşiv:2026-11-25 Desen sınıflaması üç eksen)</sub>
 - [ÇEKİRDEK] Kenar çerçevesini yalnız `WeaveDesign.selvedgeFrames`te tut (`lenoFrames` ikizi, döner ile kesişmez: servis 400 + DB CHECK; Armür dışı yazım 400, `effectiveWeaveDesign` gizler); kumaş görünümünün zemin raporuna döner ve kenar çerçevelerini katma; mevcut döner işaretini fabrika teyidi olmadan kenara çevirme. <sub>(arşiv:2026-11-25 Desen kartında kenar çerçevesi işareti)</sub>
 - Desen kartı teknik özetini (tel/cm, rapor/m, gramaj) yalnız `computed-gsm` ucundan bas; kartı kopyalarken tek `POST /api/weave-designs` gönder, etkin görünümü izle (gizli ızgara/kanca taşınmaz), tezgâh dosya adını boş bırak. · bekçi: `test_kumas_hesaplanan_gramaj` §7 <sub>(arşiv:2026-11-25 Desen kartı teknik özet şeridi)</sub>
+- Renk seçici kanalını atkı kartının SATIRINDA tut (`weft_spec_yarns.colorChannel` 1..16, kartta tekil; varyant iplik değişimi kanalı değiştirmez); atkı ihtiyacını (kg/1000 m) yalnız `POST /api/weft-specs/calc` hesaplasın (maliyet motoru, yazmaz) — panel çizer. · bekçi: `test_atki_kanal_hesap` <sub>(arşiv:2026-11-25 Atkı renk seçici kanalı + atkı hesap paneli)</sub>
 
 ## Panel (Electron)
 
