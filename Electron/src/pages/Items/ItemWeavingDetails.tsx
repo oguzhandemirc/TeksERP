@@ -10,6 +10,7 @@ import { FormField } from "@/components/forms/FormField";
 import { CollapsibleFormSection } from "@/components/forms/CollapsibleFormSection";
 import { Callout } from "@/components/ui/callout";
 import { Input } from "@/components/ui/input";
+import { InfoPopover } from "@/components/ui/info-popover";
 import type { ItemFormValues } from "./schema";
 import type { ItemComputedGsm } from "./types";
 import { itemService } from "./service";
@@ -39,13 +40,13 @@ export function ItemWeavingDetails({
     <CollapsibleFormSection title="Dokuma ayrıntıları" defaultOpen={hasSavedValues} forceOpen={hasError} testId="item-weaving-details">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <FormField label="Ham en (cm)" htmlFor="rawWidthCm" error={err.rawWidthCm}>
-          <Input id="rawWidthCm" inputMode="decimal" placeholder="300" {...form.register("rawWidthCm")} />
+          <Input id="rawWidthCm" inputMode="decimal" placeholder="ör. 300" {...form.register("rawWidthCm")} />
         </FormField>
         <FormField label="Ham gramaj (g/m²)" htmlFor="rawGsm" error={err.rawGsm}>
-          <Input id="rawGsm" inputMode="decimal" placeholder="85" {...form.register("rawGsm")} />
+          <Input id="rawGsm" inputMode="decimal" placeholder="ör. 85" {...form.register("rawGsm")} />
         </FormField>
         <FormField label="Mamul gramaj (g/m²)" htmlFor="finishedGsm" error={err.finishedGsm}>
-          <Input id="finishedGsm" inputMode="decimal" placeholder="90" {...form.register("finishedGsm")} />
+          <Input id="finishedGsm" inputMode="decimal" placeholder="ör. 90" {...form.register("finishedGsm")} />
         </FormField>
       </div>
       {itemId && <ComputedGsmRow itemId={itemId} />}
@@ -60,7 +61,34 @@ function ComputedGsmRow({ itemId }: { itemId: string }) {
     retry: false,
     staleTime: 0,
   });
-  return <ComputedGsmView data={q.isSuccess ? q.data : null} />;
+  const data = q.isSuccess ? q.data : null;
+  return (
+    <>
+      <WidthDerivedView data={data} />
+      <ComputedGsmView data={data} />
+    </>
+  );
+}
+
+/** Kayıtlı enlerden türetilenler — metretül (g/mt), en çekmesi, en sırası uyarısı. Sayılar SUNUCUDAN; bilinmeyen "—". */
+export function WidthDerivedView({ data }: { data: ItemComputedGsm | null | undefined }) {
+  if (!data) return null;
+  const known = (n: number | null | undefined): n is number => n != null && Number.isFinite(n);
+  const hasAny = known(data.rawGPerMt) || known(data.finishedGPerMt) || known(data.widthShrinkPct);
+  const warnings = data.widthWarnings ?? [];
+  if (!hasAny && warnings.length === 0) return null;
+  return (
+    <div className="space-y-2">
+      {hasAny && (
+        <p className="flex flex-wrap items-center gap-x-1 text-xs text-muted-foreground tabular-nums" data-testid="item-width-derived">
+          Metretül: ham {num(data.rawGPerMt ?? null)} g/mt · mamul {num(data.finishedGPerMt ?? null)} g/mt
+          {known(data.widthShrinkPct) && <> · <span className="font-medium text-foreground">En çekmesi %{num(data.widthShrinkPct)}</span></>}
+          <InfoPopover label="Metretül ve en çekmesi" desc="Kayıtlı değerlerden: g/mt = g/m² × en (m) — ham gramaj için ham en, mamul gramaj için mamul en. En çekmesi = (ham en − mamul en) ÷ ham en. Değiştirdiğiniz değerler kaydedince yansır." />
+        </p>
+      )}
+      {warnings.map((w) => <Callout key={w.code} tone="warning">{w.message}</Callout>)}
+    </div>
+  );
 }
 
 /** Saf görünüm: `gsm` bilinmiyorsa hiçbir şey çizmez. */

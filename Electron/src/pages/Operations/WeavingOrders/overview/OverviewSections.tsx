@@ -5,6 +5,7 @@
 // çağıran bölümü hiç çizmez. Kırpılmış listede sayaç "son N / toplam M" der.
 // =============================================================================
 import type { MouseEvent, ReactNode } from "react";
+import { unitLabel } from "@/lib/item-unit";
 import { formatNumber } from "@/lib/format";
 import { formatFactory } from "@/lib/factory-time";
 import { WARP_BEAM_STATUS_META } from "@/pages/Operations/WarpBeams/types";
@@ -232,7 +233,7 @@ export function OrderLinesSection({ lines }: { lines: WeavingOrderLineLink[] }) 
               {l.orderLine.cancelledAt && <span className="chip bad">iptal</span>}
               <span className="num">
                 {l.allocatedM !== null ? `${formatNumber(l.allocatedM, 0)} m tahsis · ` : ""}
-                {formatNumber(l.orderLine.quantity, 0)} {l.orderLine.unit}
+                {formatNumber(l.orderLine.quantity, 0)} {unitLabel(l.orderLine.unit)}
               </span>
             </Row>
           ))}

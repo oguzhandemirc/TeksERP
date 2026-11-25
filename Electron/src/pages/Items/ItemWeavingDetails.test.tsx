@@ -12,7 +12,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/render";
 import { ItemFormDialog } from "./ItemFormDialog";
-import { ComputedGsmView } from "./ItemWeavingDetails";
+import { ComputedGsmView, WidthDerivedView } from "./ItemWeavingDetails";
 import type { Item, ItemComputedGsm } from "./types";
 
 vi.mock("@/lib/picker-loader", () => ({ loadAllForPicker: () => Promise.resolve({ data: [], pagination: { page: 1, pageSize: 500, total: 0, totalPages: 1 } }) }));
@@ -146,5 +146,25 @@ describe("Dokuma ayrıntıları — hesaplanan gramaj", () => {
     await waitFor(() => expect(computedGsm).toHaveBeenCalled());
     await new Promise((r) => setTimeout(r, 0));
     expect(screen.queryByTestId("item-computed-gsm")).toBeNull();
+  });
+});
+
+describe("Dokuma ayrıntıları — enlerden türetilenler (inceleme Not 2/4/5)", () => {
+  it("⭐ §4a sunucunun g/mt + en çekmesi değerleri basılır (panel hesap yapmaz); en sırası uyarısı Callout", () => {
+    render(<WidthDerivedView data={calc({ rawGPerMt: 255, finishedGPerMt: 252, widthShrinkPct: 6.67, widthWarnings: [{ code: "FINISHED_WIDER_THAN_RAW", message: "Mamul en ham enden geniş" }] })} />);
+    const row = screen.getByTestId("item-width-derived");
+    expect(row).toHaveTextContent("ham 255 g/mt");
+    expect(row).toHaveTextContent("mamul 252 g/mt");
+    expect(row).toHaveTextContent(/En çekmesi %6,7/);
+    expect(screen.getByText("Mamul en ham enden geniş")).toBeInTheDocument();
+  });
+
+  it("⭐ §4b eksik değer → '—'; hiçbiri yoksa ve uyarı yoksa satır yok (eski sunucu dahil)", () => {
+    const { unmount } = render(<WidthDerivedView data={calc({ rawGPerMt: 255, finishedGPerMt: null, widthShrinkPct: null, widthWarnings: [] })} />);
+    expect(screen.getByTestId("item-width-derived")).toHaveTextContent("mamul — g/mt");
+    expect(screen.getByTestId("item-width-derived")).not.toHaveTextContent("En çekmesi");
+    unmount();
+    render(<WidthDerivedView data={calc()} />);
+    expect(screen.queryByTestId("item-width-derived")).toBeNull();
   });
 });
