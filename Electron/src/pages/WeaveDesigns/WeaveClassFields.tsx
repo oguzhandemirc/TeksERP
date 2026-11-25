@@ -13,8 +13,10 @@ export const NATIVE_SELECT_CLASS = "h-9 w-full rounded-md border bg-background p
 /** Radix Select boş değer taşımaz → "belirtilmedi" belirteci. */
 const NONE = "NONE";
 
-export function WeaveClassFields({ value, onChange, disabled, idPrefix, keep }: {
+export function WeaveClassFields({ value, onChange, disabled, idPrefix, keep, fieldClassName }: {
   value: WeaveClass;
+  /** Her iki seçicinin ızgara hücresi (desen bilgileri sekmesinin geniş ekran ızgarası). */
+  fieldClassName?: string;
   onChange: (next: WeaveClass) => void;
   disabled?: boolean;
   idPrefix: string;
@@ -26,11 +28,11 @@ export function WeaveClassFields({ value, onChange, disabled, idPrefix, keep }: 
   const structLabels = { [NONE]: "Belirtilmedi", ...Object.fromEntries(WEAVE_STRUCTURES.map((s) => [s, WEAVE_STRUCTURE_LABEL[s]])) } as Record<WeaveStructure | typeof NONE, string>;
   return (
     <>
-      <FormField label="Mekanizma" htmlFor={`${idPrefix}-mech`} required info={MECHANISM_INFO} hint={SHED_MECHANISM_HINT[value.shedMechanism]}>
+      <FormField className={fieldClassName} label="Mekanizma" htmlFor={`${idPrefix}-mech`} required info={MECHANISM_INFO} hint={SHED_MECHANISM_HINT[value.shedMechanism]}>
         <EnumSelect<ShedMechanism> id={`${idPrefix}-mech`} value={value.shedMechanism} labels={mechLabels} disabled={disabled}
           onChange={(m) => onChange({ ...value, shedMechanism: m })} />
       </FormField>
-      <FormField label="Örgü" htmlFor={`${idPrefix}-struct`} info={STRUCTURE_INFO}>
+      <FormField className={fieldClassName} label="Örgü" htmlFor={`${idPrefix}-struct`} info={STRUCTURE_INFO}>
         <EnumSelect<WeaveStructure | typeof NONE> id={`${idPrefix}-struct`} value={value.weaveStructure ?? NONE} labels={structLabels} disabled={disabled}
           onChange={(s) => onChange({ ...value, weaveStructure: s === NONE ? null : s })} />
       </FormField>

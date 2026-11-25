@@ -25,8 +25,15 @@ type Form = Record<TextKey, string> & WeaveClass & { drawingInType: DrawingInTyp
 
 interface FieldDef {
   key: TextKey; label: string; max: number; mode?: "numeric" | "decimal"; info?: string; required?: boolean; placeholder?: string;
+  /** 2xl 8 sütunlu ızgarada genişlik; verilmezse 1 (kısa sayı alanı ~190 px). */
+  span?: 2 | 3 | 4;
   show: (m: ShedMechanism, f: Form) => boolean;
 }
+
+// Geniş ekranda (2xl) 8 sütun: kısa sayılar dar hücrede, metin alanları geniş; 1440'ın altı eski 3 sütun.
+// Sınıflar düz metin kalmalı (Tailwind tarayıcısı birleştirilmiş adı görmez).
+const SPAN_CLASS = { 1: "2xl:col-span-1", 2: "2xl:col-span-2", 3: "2xl:col-span-3", 4: "2xl:col-span-4" } as const;
+const FULL_ROW = "sm:col-span-2 lg:col-span-3 2xl:col-span-8";
 
 const ALL = () => true;
 /** FIELDS'in ilk üçü kimlik alanları (her mekanizmada). */
@@ -34,17 +41,17 @@ const IDENTITY_COUNT = 3;
 /** T1 (ürün kartı denetimi): aile örgüyü/kumaş türünü tekrar sormaz — onların yeri başka. */
 export const FAMILY_INFO = "Desenleri gruplayan ad (ör. BALIK). Toplu atkı ücreti ve listede gruplama içindir. Kumaş türü (tül/fon) ürün kartında, örgü desen kartında seçilir; buraya yazmayın. (Eski adı: Aile etiketi)";
 const FIELDS: FieldDef[] = [
-  { key: "code", label: "Desen kodu", required: true, max: 32, show: ALL },
-  { key: "name", label: "Desen adı", required: true, max: 100, show: ALL },
-  { key: "familyLabel", label: "Desen ailesi", max: 40, info: FAMILY_INFO, placeholder: "ör. BALIK", show: ALL },
+  { key: "code", label: "Desen kodu", required: true, max: 32, span: 2, show: ALL },
+  { key: "name", label: "Desen adı", required: true, max: 100, span: 4, show: ALL },
+  { key: "familyLabel", label: "Desen ailesi", max: 40, info: FAMILY_INFO, placeholder: "ör. BALIK", span: 2, show: ALL },
   { key: "frameCount", label: "Çerçeve sayısı", max: 2, mode: "numeric", info: "Armürün kullandığı çerçeve (gücü) sayısı; 1–32.", show: (m) => m === "DOBBY" },
   { key: "repeatCm", label: "Rapor boyu (cm)", max: 10, mode: "decimal", info: "Desenin boyuna bir kez tekrar ettiği uzunluk.", show: (m) => m !== "JACQUARD" },
-  { key: "loomFileName", label: "Tezgâh desen dosyası (.DOP)", max: 64, show: (m) => m === "DOBBY" },
-  { key: "loomFileName", label: "Desen dosyası", max: 64, info: "Jakar makinesine yüklenen desen dosyasının adı (ör. GUL-01.JC5). Desen bu dosyadan dokunur.", show: (m) => m === "JACQUARD" },
+  { key: "loomFileName", label: "Tezgâh desen dosyası (.DOP)", max: 64, span: 2, show: (m) => m === "DOBBY" },
+  { key: "loomFileName", label: "Desen dosyası", max: 64, span: 2, info: "Jakar makinesine yüklenen desen dosyasının adı (ör. GUL-01.JC5). Desen bu dosyadan dokunur.", show: (m) => m === "JACQUARD" },
   { key: "hookCount", label: "Kanca sayısı", max: 5, mode: "numeric", info: "Jakar makinesinin kullandığı kanca (platin) sayısı; her kanca bir ya da birkaç çözgü telini kaldırır. 1–30.000.", show: (m) => m === "JACQUARD" },
   { key: "repeatWidthCm", label: "Rapor eni (cm)", max: 10, mode: "decimal", info: "Desenin enine bir kez tekrar ettiği genişlik.", show: (m) => m === "JACQUARD" },
   { key: "repeatCm", label: "Rapor boyu (cm)", max: 10, mode: "decimal", info: "Desenin boyuna bir kez tekrar ettiği uzunluk.", show: (m) => m === "JACQUARD" },
-  { key: "lenoSetup", label: "Döner kurulumu", max: 100, show: (_m, f) => f.weaveStructure === "LENO" },
+  { key: "lenoSetup", label: "Döner kurulumu", max: 100, span: 3, show: (_m, f) => f.weaveStructure === "LENO" },
 ];
 
 function toForm(d: WeaveDesign): Form {
@@ -88,29 +95,30 @@ export function StructureTab({ design, fabric, canWrite, onOpenItem }: { design:
   const m = form.shedMechanism;
   const savedMech = resolveWeaveClass(design).shedMechanism;
   const renderField = (f: FieldDef) => (
-    <FormField key={`${f.key}-${f.label}`} label={f.label} htmlFor={`wd-${f.key}`} required={f.required} info={f.info}
+    <FormField key={`${f.key}-${f.label}`} className={SPAN_CLASS[f.span ?? 1]} label={f.label} htmlFor={`wd-${f.key}`} required={f.required} info={f.info}
       hint={f.key === "loomFileName" && loomFileNameTooLong(form.loomFileName) ? LOOM_FILE_NAME_WARNING : undefined} hintTone="warning">
       <Input id={`wd-${f.key}`} value={form[f.key]} maxLength={f.max} inputMode={f.mode} placeholder={f.placeholder} disabled={!canWrite} onChange={(e) => set(f.key, e.target.value)} />
     </FormField>
   );
   return (
     <div className="space-y-6">
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-8">
         {/* Kimlik (kod · ad · aile) önce, sınıf ikinci satırda, mekanizmaya ait alanlar sonra. */}
         {FIELDS.slice(0, IDENTITY_COUNT).map(renderField)}
-        <WeaveClassFields idPrefix="wd-edit" value={form} keep={savedMech} disabled={!canWrite} onChange={(c) => setForm((f) => ({ ...f, ...c }))} />
+        <WeaveClassFields idPrefix="wd-edit" value={form} keep={savedMech} disabled={!canWrite} fieldClassName={SPAN_CLASS[2]}
+          onChange={(c) => setForm((f) => ({ ...f, ...c }))} />
         {FIELDS.slice(IDENTITY_COUNT).filter((f) => f.show(m, form)).map(renderField)}
-        <DrawingInFields idPrefix="wd" mechanism={m} type={form.drawingInType} note={form.drawingInNote} disabled={!canWrite}
+        <DrawingInFields idPrefix="wd" mechanism={m} type={form.drawingInType} note={form.drawingInNote} disabled={!canWrite} fieldClassName={SPAN_CLASS[2]}
           onType={(t) => setForm((f) => ({ ...f, drawingInType: t }))} onNote={(v) => set("drawingInNote", v)} />
-        {m === "JACQUARD" && savedMech === "JACQUARD" && <DesignImageSection design={design} canWrite={canWrite} />}
+        {m === "JACQUARD" && savedMech === "JACQUARD" && <DesignImageSection design={design} canWrite={canWrite} className={FULL_ROW} />}
         {m === "JACQUARD" && savedMech !== "JACQUARD" && (
-          <p className="text-xs text-muted-foreground sm:col-span-2 lg:col-span-3">Desen görseli, mekanizma Jakar olarak kaydedildikten sonra yüklenebilir.</p>
+          <p className={`text-xs text-muted-foreground ${FULL_ROW}`}>Desen görseli, mekanizma Jakar olarak kaydedildikten sonra yüklenebilir.</p>
         )}
-        <FormField className="sm:col-span-2 lg:col-span-3" label="Not" htmlFor="wd-notes">
+        <FormField className={FULL_ROW} label="Not" htmlFor="wd-notes">
           <Textarea id="wd-notes" value={form.notes} maxLength={500} disabled={!canWrite} onChange={(e) => set("notes", e.target.value)} />
         </FormField>
         {canWrite && (
-          <div className="sm:col-span-2 lg:col-span-3">
+          <div className={FULL_ROW}>
             <Button disabled={save.isPending || !form.code.trim() || !form.name.trim()} onClick={() => save.mutate()}>Kaydet</Button>
           </div>
         )}

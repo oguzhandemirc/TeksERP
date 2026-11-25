@@ -13,7 +13,7 @@ import type { WeaveDesign } from "../types";
 const MAX_BYTES = 5 * 1024 * 1024;
 const IMAGE_INFO = "Desenin fotoğrafı ya da tezgâh programından alınmış görüntüsü (JPEG veya PNG, en çok 5 MB). Desen kartı ekranında gösterilir; hesaba girmez.";
 
-export function DesignImageSection({ design, canWrite }: { design: WeaveDesign; canWrite: boolean }) {
+export function DesignImageSection({ design, canWrite, className = "" }: { design: WeaveDesign; canWrite: boolean; className?: string }) {
   const qc = useQueryClient();
   const input = useRef<HTMLInputElement>(null);
   const meta = design.image ?? null;
@@ -40,7 +40,7 @@ export function DesignImageSection({ design, canWrite }: { design: WeaveDesign; 
   };
   const busy = upload.isPending || remove.isPending;
   return (
-    <div className="space-y-2 sm:col-span-2 lg:col-span-3">
+    <div className={`space-y-2 ${className}`}>
       <div className="flex items-center gap-1.5">
         <Label>Desen görseli</Label>
         <InfoPopover desc={IMAGE_INFO} label="Desen görseli açıklaması" />

@@ -15,8 +15,10 @@ const NOTE_INFO = "Tellerin hangi çerçeveden ve tarağın hangi dişinden geç
 
 export const drawingInApplies = (m: ShedMechanism): boolean => m === "CAM" || m === "DOBBY";
 
-export function DrawingInFields({ idPrefix, mechanism, type, onType, note, onNote, disabled }: {
+export function DrawingInFields({ idPrefix, mechanism, type, onType, note, onNote, disabled, fieldClassName }: {
   idPrefix: string;
+  /** Tür seçicisinin ızgara hücresi (desen bilgileri sekmesinin geniş ekran ızgarası). */
+  fieldClassName?: string;
   mechanism: ShedMechanism;
   type: DrawingInType | null;
   onType: (t: DrawingInType | null) => void;
@@ -28,12 +30,12 @@ export function DrawingInFields({ idPrefix, mechanism, type, onType, note, onNot
   const custom = type === "CUSTOM";
   return (
     <>
-      <FormField label="Tahar türü" htmlFor={`${idPrefix}-drawingInType`} info={TYPE_INFO} hint={type ? DRAWING_IN_HINT[type] : undefined}>
+      <FormField className={fieldClassName} label="Tahar türü" htmlFor={`${idPrefix}-drawingInType`} info={TYPE_INFO} hint={type ? DRAWING_IN_HINT[type] : undefined}>
         <EnumSelect<DrawingInType | typeof NONE> id={`${idPrefix}-drawingInType`} value={type ?? NONE} labels={TYPE_LABELS} disabled={disabled}
           onChange={(v) => onType(isDrawingInType(v) ? v : null)} />
       </FormField>
       {onNote && (
-        <FormField className="sm:col-span-2 lg:col-span-2" htmlFor={`${idPrefix}-drawingInNote`} info={NOTE_INFO}
+        <FormField className="sm:col-span-2 lg:col-span-2 2xl:col-span-4" htmlFor={`${idPrefix}-drawingInNote`} info={NOTE_INFO}
           label={custom ? <span className="font-semibold">Tahar düzeni (özel taharı buraya yazın)</span> : "Tahar notu"}>
           <Input id={`${idPrefix}-drawingInNote`} value={note ?? ""} maxLength={300} placeholder="ör. 1-2-3-4 düz, kenar 2'li, döner 1-2"
             disabled={disabled} onChange={(e) => onNote(e.target.value)} />
