@@ -25,7 +25,7 @@ export interface TabletConstructionDto {
     liftPlan: number[][] | null;
     /** 1-tabanlı döner çerçeve no'ları. */
     lenoFrames: number[];
-    /** 1-tabanlı kenar çerçeve no'ları (2026-11-25 EKLEME; Armür dışında boş). Tablet henüz çizmez. */
+    /** 1-tabanlı kenar çerçeve no'ları (2026-11-25 EKLEME; Armür dışında boş). Tablet yeşil sütun / metin olarak gösterir (K6b). */
     selvedgeFrames: number[];
     drawingInNote: string | null;
   } | null;
@@ -36,7 +36,8 @@ export interface TabletConstructionDto {
     sequenceCode: string | null;
     weftProgramNo: string | null;
     picksInRepeatTotal: number;
-    yarns: Array<{ letter: string; picksInRepeat: number; yarnCode: string; yarnName: string; swapped: boolean }>;
+    /** `colorChannel` (K6, 2026-11-25 EKLEME): renk seçici kanalı; null = belirtilmemiş. Eski tablet alanı yok sayar. */
+    yarns: Array<{ letter: string; picksInRepeat: number; yarnCode: string; yarnName: string; swapped: boolean; colorChannel: number | null }>;
     /** Atkı seçici: atkı başına 1-tabanlı iplik satırı no (sunucu `expandWeftSequence`); kod yoksa null. */
     pickSequence: number[] | null;
   } | null;
@@ -67,7 +68,7 @@ export function toTabletConstruction(weavingOrderId: string, c: EffectiveConstru
         weftProgramNo: c.weft.weftProgramNo,
         picksInRepeatTotal: c.weft.picksInRepeatTotal,
         yarns: c.weft.yarns.map((y) => ({
-          letter: y.letter, picksInRepeat: y.picksInRepeat, yarnCode: y.yarnItem.code, yarnName: y.yarnItem.name, swapped: y.cardYarnItem !== null,
+          letter: y.letter, picksInRepeat: y.picksInRepeat, yarnCode: y.yarnItem.code, yarnName: y.yarnItem.name, swapped: y.cardYarnItem !== null, colorChannel: y.colorChannel,
         })),
         pickSequence: c.weft.pickSequence,
       }
