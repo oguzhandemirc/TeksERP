@@ -6,10 +6,12 @@ import { ProductRecipeFormDialog } from "./ProductRecipeFormDialog";
 import { buildRecipePayload } from "./recipePayload";
 import { productRecipeService } from "./service";
 import type { ProductRecipe } from "./types";
+import { TERIM } from "@/lib/terim";
 
 export function useProductRecipeRecordForm(): RecordFormSpec<ProductRecipe> {
   return useMemo<RecordFormSpec<ProductRecipe>>(() => ({
-    entityName: "İş emri şablonu",
+    // Rejime göre ad (terbiye/dokuma) — eski sabit ad yazılmaz.
+    entityName: `${TERIM.terbiyeIsEmri.cumleBasi.yalin} şablonu`,
     service: productRecipeService,
     writePermission: "station:write", // şablon ekranı ile aynı
     invalidateKeys: ["product-recipes"],
