@@ -9,6 +9,8 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { consumableBalances, consumableMovementSign } from "./helpers/consumable-stock.helper";
 import { resolveConsumableStockEnabled } from "./system-setting.service";
+import { isBelowMinStock } from "./helpers/min-stock.helper";
+import { readIdCondition } from "../utils/query-parser";
 
 export interface ConsumableStockRow {
   itemId: string;
@@ -18,36 +20,54 @@ export interface ConsumableStockRow {
   balance: string;
   negative: boolean;
   isActive: boolean;
+  /** Kartın asgari stoğu (kartın biriminde); boş = eşik yok. */
+  minStockQty: string | null;
+  belowMinStock: boolean;
 }
 
-export async function listConsumableStock(o: { search?: string } = {}): Promise<{
+export async function listConsumableStock(o: { search?: string; itemId?: string; belowMin?: boolean } = {}): Promise<{
   enabled: boolean;
   rows: ConsumableStockRow[];
-  summary: { itemCount: number; negativeCount: number };
+  summary: { itemCount: number; negativeCount: number; belowMinCount: number };
 }> {
   const q = o.search?.trim();
+  const idCond = readIdCondition(o.itemId);
   const items = await prisma.item.findMany({
     where: {
       itemType: ItemType.CONSUMABLE,
+      ...(idCond ? { id: idCond } : {}),
       ...(q ? { OR: [{ name: { contains: q, mode: "insensitive" } }, { code: { contains: q, mode: "insensitive" } }] } : {}),
     },
-    select: { id: true, code: true, name: true, unit: true, lifecycleStatus: true },
+    select: { id: true, code: true, name: true, unit: true, lifecycleStatus: true, minStockQty: true },
     orderBy: [{ name: "asc" }, { id: "asc" }],
   });
   const bal = await consumableBalances(prisma, items.map((i) => i.id));
   // Arşivlenmiş (pasif) kalem yalnız hareketi varsa görünür (geçmiş bakiyesi kaybolmasın). Bu bir
   // GÖRÜNÜRLÜK kuralıdır, kullanılabilirlik kararı değil (o `assertItemUsable`da).
-  const rows = items
+  const base = items
     .filter((i) => i.lifecycleStatus !== ItemLifecycleStatus.ARCHIVED || bal.has(i.id))
     .map((i) => {
       const b = bal.get(i.id) ?? new Prisma.Decimal(0);
       const isActive = i.lifecycleStatus !== ItemLifecycleStatus.ARCHIVED;
-      return { itemId: i.id, code: i.code, name: i.name, unit: i.unit, balance: b.toFixed(3), negative: b.lt(0), isActive };
+      return {
+        itemId: i.id,
+        code: i.code,
+        name: i.name,
+        unit: i.unit,
+        balance: b.toFixed(3),
+        negative: b.lt(0),
+        isActive,
+        minStockQty: i.minStockQty?.toFixed(3) ?? null,
+        belowMinStock: isBelowMinStock(b, i.minStockQty, !isActive),
+      };
     });
+  // Asgari altı sayısı FACETED (filtre seçilince liste toplamı); süzme sunucuda, liste + özet aynı satır kümesinden.
+  const belowMinCount = base.filter((r) => r.belowMinStock).length;
+  const rows = o.belowMin ? base.filter((r) => r.belowMinStock) : base;
   return {
     enabled: await resolveConsumableStockEnabled(),
     rows,
-    summary: { itemCount: rows.length, negativeCount: rows.filter((r) => r.negative).length },
+    summary: { itemCount: rows.length, negativeCount: rows.filter((r) => r.negative).length, belowMinCount },
   };
 }
 

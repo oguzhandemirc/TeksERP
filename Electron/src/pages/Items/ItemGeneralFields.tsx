@@ -138,7 +138,7 @@ export function ItemGeneralFields(p: Props) {
       {/* K2/K3: en ve gramaj kumaşın günlük bilgisi — tek bölüm, açık. */}
       {itemType === ItemType.FABRIC && <ItemWeavingDetails form={form} itemId={initial?.id ?? null} widthVisible={p.widthVisible} />}
       {itemType === ItemType.FABRIC && <ItemFabricTradeSection form={form} unit={p.derivedUnit} />}
-      {carriesMinStock(itemType) && <ItemMinStockSection form={form} unit={form.watch("unit")} />}
+      {carriesMinStock(itemType) && <ItemMinStockSection form={form} unit={form.watch("unit")} saved={initial} />}
 
       <StockCodeRow
         isEdit={isEdit}
