@@ -56,6 +56,7 @@ export function ItemWarpSection({ form, canWrite, itemId }: { form: UseFormRetur
                 icon={Ruler}
                 nullable
                 noneLabel="Çözgü kartı yok"
+                title="Çözgü kartı seç"
                 placeholder="Çözgü kartı seç"
                 recordForm={canWrite ? recordSpec : undefined}
               />

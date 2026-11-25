@@ -64,19 +64,19 @@ export function WeftContentFields({ value, onChange, canWrite, savedSeq, idPrefi
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="space-y-1.5">
-          <div className="flex items-center gap-1">
+          {/* Üç etiket satırı da sabit h-5: ⓘ (20 px) olan satır yandakilerden yüksek kalıp kutuyu aşağı itmesin (önizlemede 4 px kayma ölçüldü). */}
+          <div className="flex h-5 items-center gap-1">
             <Label htmlFor={`${idPrefix}-seq`}>Atkı sırası kodu</Label>
-            {/* -my-1: ⓘ (20 px) etiket satırını büyütmesin, yandaki etiketlerle aynı hizada kalsın (FormField `info` ile aynı yol). */}
-            <InfoPopover label="Sıra kodu nasıl yazılır" desc={SEQ_INFO} className="-my-1" />
+            <InfoPopover label="Sıra kodu nasıl yazılır" desc={SEQ_INFO} />
           </div>
           <Input id={`${idPrefix}-seq`} value={seq} maxLength={120} disabled={!canWrite} onChange={(e) => set({ seq: e.target.value })} placeholder="ör. 10x(A2 B2 C1) D4" />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor={`${idPrefix}-ppc`}>Atkı sıklığı (atkı/cm)</Label>
+          <div className="flex h-5 items-center"><Label htmlFor={`${idPrefix}-ppc`}>Atkı sıklığı (atkı/cm)</Label></div>
           <Input id={`${idPrefix}-ppc`} value={picksPerCm} inputMode="decimal" disabled={!canWrite} onChange={(e) => set({ picksPerCm: e.target.value })} placeholder="ör. 22" />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor={`${idPrefix}-prog`}>Atkı program no</Label>
+          <div className="flex h-5 items-center"><Label htmlFor={`${idPrefix}-prog`}>Atkı program no</Label></div>
           <Input id={`${idPrefix}-prog`} value={program} maxLength={16} disabled={!canWrite} onChange={(e) => set({ program: e.target.value })} placeholder="ör. 6037" />
         </div>
       </div>
