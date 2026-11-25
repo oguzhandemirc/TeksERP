@@ -6,6 +6,7 @@ import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { sackStoreService } from "./SackStore/service";
 import { resolveMachineStopEnabled } from "./MachineStops/stop-regime";
+import { resolveWarpSpecEnabled } from "@/lib/warp-spec-regime";
 import { isModuleEnabled, licenseClosedModules } from "@/lib/license/module-enabled";
 import type { OperationsVisibilityContext } from "./tile-config";
 
@@ -99,6 +100,7 @@ export function useOperationsVisibilityContext(): OperationsVisibilityContext {
     dokumaEnabled,
     tezgahEnabled,
     machineStopEnabled,
+    warpSpecEnabled: resolveWarpSpecEnabled({ devereEnabled, dokumaEnabled }),
     kaliteGuvenceEnabled,
     maliyetEnabled,
     gelenBelgeEnabled: incomingDocumentEnabled,

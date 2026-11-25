@@ -21,7 +21,8 @@ export const MODUL_SONDALARI: readonly ModulSondasi[] = [
   { alan: "financeEnabled", uclar: ["/api/finance/cari", "/api/finance/invoices", "/api/finance/cash-boxes"] },
   { alan: "ticaretEnabled", uclar: ["/api/stock-counts", "/api/item-prices", "/api/purchase-orders", "/api/goods-receipts"] },
   { alan: "iplikEnabled", uclar: ["/api/yarn/stocks"] },
-  { alan: "devereEnabled", uclar: ["/api/warp-specs", "/api/warping-orders", "/api/warping-beam-rejections", "/api/warping-receive-docs"] },
+  // `/api/warp-specs` burada DEĞİL: çözgü kartı devere ∨ dokuma rejiminde (`requireWarpSpecRegime`, D4/K1) — tek modül sondası olamaz.
+  { alan: "devereEnabled", uclar: ["/api/warping-orders", "/api/warping-beam-rejections", "/api/warping-receive-docs"] },
   { alan: "dokumaEnabled", uclar: ["/api/weaving-orders"] },
   { alan: "maliyetEnabled", uclar: ["/api/cost/parameter-sets"] },
   { alan: "emanetEnabled", uclar: ["/api/consigned-work", "/api/consignment-dispatches"] },

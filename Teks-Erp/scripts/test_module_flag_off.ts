@@ -230,6 +230,8 @@ const MODULLER: ModulTanimi[] = [
     okuyucu: "readDevereEnabled",
     modulKodu: "devere",
     routeDosyalari: ["routes/warp-spec.routes.ts", "routes/warping-order.routes.ts"],
+    // D4/K1: çözgü kartı devere ∨ dokuma rejiminde; rejim kapalıyken karar devere kapısına devredilir (devere §8 ölçer).
+    devralanKapi: { "routes/warp-spec.routes.ts": "requireWarpSpecRegime" },
     sondalar: modulUclari("devereEnabled"),
     onKosul: { alan: "iplikEnabled", beklenenModulKodu: "iplik" },
   },
@@ -392,11 +394,9 @@ const SONDA_IZINLERI = [
   "workorder:read",
   "order:read",
   "quality:read",
-  // Devere sondası (`/api/warp-specs`) modül kapısından SONRA izin kapısına
+  // Devere sondası (`/api/warping-orders`, D4a) modül kapısından SONRA izin kapısına
   // çarpar; bu izin olmadan "modül AÇIKKEN 2xx" körlük zemini modül yüzünden
   // değil YETKİ yüzünden kırmızı verir ve yanlış hikâye anlatır (ölçüldü).
-  "warpspec:read",
-  // Fason devere siparişi sondası (`/api/warping-orders`, D4a) — aynı gerekçe.
   "warping-order:read",
   // Kalite Güvence sondaları (`/api/lab-tests`, `/api/lab-test-types`) — aynı gerekçe.
   "labtest:read",
