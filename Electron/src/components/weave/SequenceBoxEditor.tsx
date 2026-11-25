@@ -36,7 +36,7 @@ export function SequenceBoxEditor({ value, onChange, letterCount, defaultStyle, 
   if (!parsed || !boxes) {
     return (
       <div className="space-y-1.5 rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground" data-testid="seq-editor-unreadable">
-        <p>{parsed ? `Kod ${formatQty(SEQUENCE_EDIT_MAX, 0)} ${unit}tan uzun; metinden düzenleyin.` : `“${value}” kutulara çevrilemedi — biçim: harf + adet (ör. ${defaultStyle === "digit-first" ? "2A 1B" : "A2 B1"}).`}</p>
+        <p>{parsed ? `Kod ${formatQty(SEQUENCE_EDIT_MAX, 0)} ${unit}tan uzun; metinden düzenleyin.` : `“${value}” kutulara çevrilemedi — biçim: harf + adet (ör. ${defaultStyle === "digit-first" ? "2A 1B ya da 5x(2A 1B) 4C" : "A2 B1 ya da 10x(A2 B2 C1) D4"}).`}</p>
         {!disabled && !parsed && <Button type="button" size="sm" variant="outline" onClick={() => onChange(boxesToCode([1], defaultStyle))}>Şeridi baştan başlat</Button>}
       </div>
     );
@@ -49,6 +49,9 @@ export function SequenceBoxEditor({ value, onChange, letterCount, defaultStyle, 
   const sel = active !== null && active < boxes.length ? active : null;
   return (
     <div className="space-y-2" data-testid="seq-editor">
+      {parsed.repeated && !disabled && (
+        <p className="text-xs text-muted-foreground" data-testid="seq-editor-repeat-note">Şeritte değişiklik yapınca tekrar kısaltması açılır.</p>
+      )}
       <BoxStrip boxes={boxes} active={sel} letters={letters} unit={unit} label={label} disabled={disabled} setActive={setActive} emit={emit} />
       {!disabled && <BoxActions boxes={boxes} active={sel} letters={letters} unit={unit} emit={emit} />}
       <Summary boxes={boxes} letters={letterCount} unit={unit} />

@@ -13,28 +13,81 @@ const DIGIT_FIRST = /^(\d{1,4}[A-Z])+$/;
 const LETTER_FIRST = /^([A-Z]\d{1,4})+$/;
 const LETTERS_ONLY = /^[A-Z]+$/;
 
-export interface ParsedCode { runs: Run[]; style: CodeStyle }
+/** `repeated`: kodda tekrar kısaltması vardı, koşular AÇILMIŞ hâldedir (şeritten düzenleme kısaltmayı açar). */
+export interface ParsedCode { runs: Run[]; style: CodeStyle; repeated?: true }
 
-/**
- * Kodu koşulara böler. "A2 B1", "2A 1B", "1 A 1 B", "ABAB" okunur; boş → boş liste; okunamayan → null.
- * Ayırıcılar (boşluk , ; + · / -) yok sayılır — sunucu `warp-sequence.helper` ile aynı okuma.
- */
-export function parseSequenceCode(raw: string | null | undefined): ParsedCode | null {
-  const s = (raw ?? "").toUpperCase().replace(/[\s,;+·/-]+/g, "");
-  if (s.length === 0) return { runs: [], style: "letter-first" };
+/** Tekrar açılımının üst sınırı: sunucu tavanlarının (atkı 512, çözgü 2000) üstü zaten geçersizdir. */
+const REPEAT_EXPAND_MAX = 4096;
+const GROUP = /(\d{1,4})\s*[X*]\s*\(([^()]*)\)|\(([^()]*)\)\s*[X*]\s*(\d{1,4})/g;
+
+interface RepeatPart { text: string; times: number; group: boolean }
+
+/** Sunucu `sequence-repeat.helper` aynası: "10x(…)", "(…)x10", "10*(…)"; iç içe/kapanmayan parantez null. */
+function splitRepeatGroups(upper: string): RepeatPart[] | null {
+  let depth = 0;
+  for (const ch of upper) {
+    if (ch === "(" && ++depth > 1) return null;
+    if (ch === ")" && --depth < 0) return null;
+  }
+  if (depth !== 0) return null;
+  const parts: RepeatPart[] = [];
+  let last = 0;
+  for (const m of upper.matchAll(GROUP)) {
+    if (m.index > last) parts.push({ text: upper.slice(last, m.index), times: 1, group: false });
+    const times = Number(m[1] ?? m[4]);
+    const text = (m[2] ?? m[3])!;
+    if (times <= 0 || text.trim() === "") return null;
+    parts.push({ text, times, group: true });
+    last = m.index + m[0].length;
+  }
+  if (last < upper.length) parts.push({ text: upper.slice(last), times: 1, group: false });
+  return parts.some((p) => !p.group && /[()]/.test(p.text)) ? null : parts;
+}
+
+/** Tek parçayı (parantezsiz) koşulara böler; `style` null = yalnız harf (biçim belirsiz). */
+function parseFlat(s: string): { runs: Run[]; style: CodeStyle | null } | null {
   const runs: Run[] = [];
-  let style: CodeStyle = "letter-first";
+  let style: CodeStyle | null = null;
   if (LETTERS_ONLY.test(s)) {
     for (const ch of s) runs.push({ letter: ch.charCodeAt(0) - 64, count: 1 });
   } else if (DIGIT_FIRST.test(s)) {
     style = "digit-first";
     for (const m of s.matchAll(/(\d{1,4})([A-Z])/g)) runs.push({ letter: m[2]!.charCodeAt(0) - 64, count: Number(m[1]) });
   } else if (LETTER_FIRST.test(s)) {
+    style = "letter-first";
     for (const m of s.matchAll(/([A-Z])(\d{1,4})/g)) runs.push({ letter: m[1]!.charCodeAt(0) - 64, count: Number(m[2]) });
   } else {
     return null;
   }
   return runs.every((r) => r.count > 0) ? { runs, style } : null;
+}
+
+/**
+ * Kodu koşulara böler. "A2 B1", "2A 1B", "1 A 1 B", "ABAB" ve tekrar kısaltması "10x(A2 B2 C1) D4" okunur;
+ * boş → boş liste; okunamayan → null. Ayırıcılar (boşluk , ; + · / -) yok sayılır — sunucu
+ * `warp-sequence.helper` / `weft-sequence.helper` ile aynı okuma.
+ */
+export function parseSequenceCode(raw: string | null | undefined): ParsedCode | null {
+  const parts = splitRepeatGroups((raw ?? "").toUpperCase());
+  if (!parts) return null;
+  const runs: Run[] = [];
+  let style: CodeStyle | null = null;
+  let repeated = false;
+  let total = 0;
+  for (const p of parts) {
+    const s = p.text.replace(/[\s,;+·/-]+/g, "");
+    if (s.length === 0) continue;
+    const flat = parseFlat(s);
+    if (!flat) return null;
+    style ??= flat.style;
+    if (p.group) repeated = true;
+    total += flat.runs.reduce((n, r) => n + r.count, 0) * p.times;
+    if (repeated && total > REPEAT_EXPAND_MAX) return null;
+    for (let k = 0; k < p.times; k++) runs.push(...flat.runs.map((r) => ({ ...r })));
+  }
+  const out: ParsedCode = { runs, style: style ?? "letter-first" };
+  if (repeated) out.repeated = true;
+  return out;
 }
 
 const letterOf = (n: number) => String.fromCharCode(64 + n);

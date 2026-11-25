@@ -3,8 +3,9 @@
 // =============================================================================
 // Not serbest metindir ve hesaba GİRMEZ; burası yalnız GÖSTERİM içindir (tel düzeni şeridi, tarak
 // planı). İstemci açılımı yeniden hesaplamaz — sonuç DTO'da `endsSequence` olarak gider. Okunamayan
-// not null döner (ekran oransal bloğa düşer). SAF.
+// not null döner (ekran oransal bloğa düşer). SAF. Tekrar kısaltması "5x(2A 1B) 4C" de okunur.
 // =============================================================================
+import { splitRepeatGroups } from "./sequence-repeat.helper";
 
 /** Bir raporun tel sayısı tavanı — üstü gösterim için anlamsız, null döner. */
 export const WARP_SEQUENCE_MAX_REPEAT = 2000;
@@ -43,6 +44,20 @@ function tokenize(note: string): Array<{ letter: number; count: number }> | null
   return out.every((t) => t.count > 0) ? out : null;
 }
 
+/** Tekrar kısaltmalı not ("5x(2A 1B) 4C"): parça başına çiftler + tekrar sayısı; parantez hatası ya da okunamayan parça null. */
+function tokenizeWithRepeats(note: string): Array<{ tokens: Array<{ letter: number; count: number }>; times: number }> | null {
+  const split = splitRepeatGroups(note.toUpperCase());
+  if (!split.ok) return null;
+  const out: Array<{ tokens: Array<{ letter: number; count: number }>; times: number }> = [];
+  for (const p of split.parts) {
+    if (!p.group && p.text.replace(/[\s,;+·/-]+/g, "") === "") continue;
+    const tokens = tokenize(p.text);
+    if (!tokens) return null;
+    out.push({ tokens, times: p.times });
+  }
+  return out.length > 0 ? out : null;
+}
+
 /**
  * Dizilim notunu tel tel açar. `endsByLetter[i]` = (i+1). harfin (A = 0) toplam teli, sıra kart satırı
  * sırasıdır. Not boş/okunamaz, kartta olmayan harf ya da rapor tavanı aşılırsa null.
@@ -54,13 +69,19 @@ export function expandWarpSequence(
   maxRepeat: number = WARP_SEQUENCE_MAX_REPEAT,
 ): WarpEndsSequence | null {
   if (!note || endsByLetter.length === 0) return null;
-  const tokens = tokenize(note);
-  if (!tokens) return null;
+  const parts = tokenizeWithRepeats(note);
+  if (!parts) return null;
   const repeat: number[] = [];
-  for (const t of tokens) {
-    if (t.letter > endsByLetter.length) return null;
-    if (repeat.length + t.count > maxRepeat) return null;
-    for (let i = 0; i < t.count; i++) repeat.push(t.letter);
+  for (const p of parts) {
+    let partEnds = 0;
+    for (const t of p.tokens) {
+      if (t.letter > endsByLetter.length) return null;
+      partEnds += t.count;
+    }
+    if (repeat.length + partEnds * p.times > maxRepeat) return null;
+    for (let k = 0; k < p.times; k++) {
+      for (const t of p.tokens) for (let i = 0; i < t.count; i++) repeat.push(t.letter);
+    }
   }
   const totalEnds = endsByLetter.reduce((s, n) => s + Math.max(0, n), 0);
   const repeatCount = Math.floor(totalEnds / repeat.length);

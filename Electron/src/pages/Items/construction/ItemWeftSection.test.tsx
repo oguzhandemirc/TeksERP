@@ -37,7 +37,7 @@ describe("ItemWeftSection", () => {
     renderWithProviders(<ItemWeftSection draft={draft({ mode: "new", content: { ...EMPTY_WEFT, rows: [{ yarnItemId: "", picks: "" }] } })} canWrite />);
     expect(screen.getByText("Atış adedi")).toBeInTheDocument();
     expect(screen.getByLabelText("Atkı sıklığı (atkı/cm)")).toHaveAttribute("placeholder", "ör. 22");
-    expect(screen.getByLabelText("Atkı sırası kodu")).toHaveAttribute("placeholder", "ör. A4 B1 A4 C1");
+    expect(screen.getByLabelText("Atkı sırası kodu")).toHaveAttribute("placeholder", "ör. 10x(A2 B2 C1) D4");
     expect(screen.getByLabelText("Atkı program no")).toHaveAttribute("placeholder", "ör. 6037");
     expect(screen.getByLabelText("Atkı A rapordaki atkı adedi")).toHaveAttribute("placeholder", "ör. 4");
   });
