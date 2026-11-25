@@ -1,6 +1,6 @@
 // Kumaş görünümü (drawdown) ve tahar şeridinin SAF hesabı — yalnız görünüm için; sunucu basımındaki
 // `weave-drawdown.helper` ile aynı örnek tabloyu paylaşır (parite: `weave-drawdown.test.ts` DRAWDOWN_CASES).
-// Kural: tahar verisi yok → DÜZ TAHAR (zemin çerçeveleri sırayla, döner çerçeveler hariç); atkı j'de telin
+// Kural: tahar verisi yok → DÜZ TAHAR (zemin çerçeveleri sırayla, döner ve kenar çerçeveleri hariç); atkı j'de telin
 // çerçevesi kalkıksa hücre = çözgü (0), değilse o atkının ipliği (seçici; yoksa 1. iplik).
 
 /** Kumaş görünümü hücresi: 0 = çözgü üstte, k ≥ 1 = k. atkı ipliği üstte. */
@@ -9,10 +9,10 @@ export type DrawdownCell = number;
 /** Kumaş görünümü tavanı — 512 atkı × 4 rapor çizimi tarayıcıyı yormasın diye satır sayısı kırpılır. */
 export const DRAWDOWN_MAX_PICKS = 1024;
 
-/** Döner (leno) olmayan çerçevelerin 0-tabanlı sütun indeksleri (sıralı). */
-export function groundFrameIndexes(frameCount: number, lenoFrames: readonly number[] = []): number[] {
-  const leno = new Set(lenoFrames);
-  return Array.from({ length: Math.max(0, frameCount) }, (_, c) => c).filter((c) => !leno.has(c + 1));
+/** Zemin çerçevelerinin (döner ve kenar DIŞI) 0-tabanlı sütun indeksleri (sıralı). */
+export function groundFrameIndexes(frameCount: number, lenoFrames: readonly number[] = [], selvedgeFrames: readonly number[] = []): number[] {
+  const skip = new Set([...lenoFrames, ...selvedgeFrames]);
+  return Array.from({ length: Math.max(0, frameCount) }, (_, c) => c).filter((c) => !skip.has(c + 1));
 }
 
 /** Düz tahar: tel i → çerçeve (0-tabanlı sütun). Zemin çerçevesi yoksa boş. */
@@ -34,6 +34,8 @@ export function drawdownRepeatPicks(planPicks: number, seqLength: number, cap = 
 export interface DrawdownInput {
   liftPlan: readonly (readonly number[])[];
   lenoFrames?: readonly number[];
+  /** Kenar çerçeveleri — zemin raporuna girmez (sunucu ikizi). */
+  selvedgeFrames?: readonly number[];
   /** Atkı başına 1-tabanlı iplik no (sunucu `pickSequence`); null/boş = tek iplik. */
   pickSequence?: readonly number[] | null;
   /** Yatay/dikey rapor tekrarı (1×, 2×, 4×). */
@@ -49,9 +51,9 @@ export interface Drawdown {
   cells: DrawdownCell[][];
 }
 
-export function computeDrawdown({ liftPlan, lenoFrames = [], pickSequence, repeat = 1 }: DrawdownInput): Drawdown {
+export function computeDrawdown({ liftPlan, lenoFrames = [], selvedgeFrames = [], pickSequence, repeat = 1 }: DrawdownInput): Drawdown {
   const frames = liftPlan.reduce((m, row) => Math.max(m, row.length), 0);
-  const ground = groundFrameIndexes(frames, lenoFrames);
+  const ground = groundFrameIndexes(frames, lenoFrames, selvedgeFrames);
   const rep = Math.max(1, Math.trunc(repeat));
   const seq = pickSequence && pickSequence.length > 0 ? pickSequence : null;
   const basePicks = drawdownRepeatPicks(liftPlan.length, seq?.length ?? 0);

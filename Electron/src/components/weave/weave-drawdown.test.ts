@@ -10,6 +10,8 @@ import { yarnColor } from "./weave-palette";
 const DRAWDOWN_CASES: Array<{ name: string; input: Parameters<typeof computeDrawdown>[0]; cells: number[][] }> = [
   { name: "bez ayağı, seçicisiz", input: { liftPlan: [[1, 0], [0, 1]] }, cells: [[0, 1], [1, 0]] },
   { name: "döner çerçeveler (1, 2) kumaşa girmez", input: { liftPlan: [[1, 1, 1, 0], [1, 1, 0, 1]], lenoFrames: [1, 2] }, cells: [[0, 1], [1, 0]] },
+  // Sunucu `test_weave_drawdown` §5a ile aynı örnek.
+  { name: "kenar çerçeveleri (1, 2) zemin raporuna girmez", input: { liftPlan: [[1, 0, 1, 0], [0, 1, 0, 1]], selvedgeFrames: [1, 2] }, cells: [[0, 1], [1, 0]] },
   {
     name: "armür 2 × seçici 3 → rapor EKOK 6 atkı",
     input: { liftPlan: [[1, 0], [0, 1]], pickSequence: [1, 2, 3] },
@@ -36,6 +38,15 @@ describe("kumaş görünümü (drawdown)", () => {
     expect(dd.ends).toBe(14);
     expect(dd.picks).toBe(30);
     expect(dd.draw[0]).toBe(2);
+  });
+
+  it("G5 biçimi: 12 çerçeve, 1–2 kenar → zemin raporu 10 tel; 2× tekrarda kenar teli araya girmez", () => {
+    const liftPlan = Array.from({ length: 9 }, (_, r) => Array.from({ length: 12 }, (_, c) => ((r + c) % 2)));
+    const one = computeDrawdown({ liftPlan, selvedgeFrames: [1, 2] });
+    expect(one.ends).toBe(10);
+    const two = computeDrawdown({ liftPlan, selvedgeFrames: [1, 2], repeat: 2 });
+    expect(two.draw.every((f) => f >= 2)).toBe(true);
+    expect(groundFrameIndexes(5, [1], [2])).toEqual([2, 3, 4]);
   });
 
   it("düz tahar ve tahar matrisi", () => {

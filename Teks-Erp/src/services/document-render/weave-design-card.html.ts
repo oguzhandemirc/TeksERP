@@ -32,6 +32,8 @@ export interface WeaveCardView {
   liftPlan: number[][] | null;
   /** 1-tabanlı döner çerçeve no'ları. */
   lenoFrames: number[];
+  /** 1-tabanlı kenar çerçeve no'ları ("K" başlıklı ayrı blok); yok/boş = bugünkü basım. */
+  selvedgeFrames?: number[];
   /** Atkı başına 1-tabanlı iplik satırı no; null = seçici kodu yok. */
   pickSequence: number[] | null;
   weft: {
@@ -90,16 +92,20 @@ function yarnText(y: WeaveCardYarn): string {
   return `${e(y.name)}${y.denier ? ` <span class="den">${e(y.denier)} DN</span>` : ""}`;
 }
 
-/** Çerçeve sütunlarını ardışık bloklara böler: döner ↔ zemin geçişinde yeni blok (kâğıttaki ayrık kutular). */
-export function frameBlocks(frames: number, leno: ReadonlySet<number>): number[][] {
+/** Çerçeve sütunlarını ardışık bloklara böler: döner / kenar / zemin geçişinde yeni blok (kâğıttaki ayrık kutular). */
+export function frameBlocks(frames: number, leno: ReadonlySet<number>, selvedge: ReadonlySet<number> = new Set()): number[][] {
+  const role = (f: number): number => (leno.has(f) ? 1 : selvedge.has(f) ? 2 : 0);
   const blocks: number[][] = [];
   for (let f = 1; f <= frames; f++) {
     const last = blocks[blocks.length - 1];
-    if (last && leno.has(last[0]!) === leno.has(f)) last.push(f);
+    if (last && role(last[0]!) === role(f)) last.push(f);
     else blocks.push([f]);
   }
   return blocks;
 }
+
+/** Kenar sütunu stili yalnız kenar işaretli kartta basılır: işaretsiz kartın HTML'i bayt-aynı kalır. */
+const SELVEDGE_CSS = `<style>.grid th.selv{background:#fff;border-bottom:0.6mm double #333}.grid td.c.selv{background:#f7f7f7;border-style:dashed}.sw.selv{background:#f7f7f7;border-style:dashed}</style>`;
 
 function gridHtml(v: WeaveCardView): string {
   const plan = v.liftPlan ?? [];
@@ -108,13 +114,15 @@ function gridHtml(v: WeaveCardView): string {
   const filled = Math.max(plan.length, v.pickSequence?.length ?? 0);
   if (frames === 0 && selCount === 0) return `<p class="empty">Armür planı girilmemiş.</p>`;
   const leno = new Set(v.lenoFrames.filter((f) => f <= frames));
-  const blocks = frameBlocks(frames, leno);
+  const selv = new Set((v.selvedgeFrames ?? []).filter((f) => f <= frames && !leno.has(f)));
+  const blocks = frameBlocks(frames, leno, selv);
   const cols = frames + selCount + 1 + blocks.length + (selCount ? 1 : 0);
   const cell = Math.max(3.2, Math.min(6.5, 176 / cols));
   const gap = `<td class="gap"></td>`;
+  const cls = (f: number): string => (leno.has(f) ? "leno" : selv.has(f) ? "selv" : "");
   const head = [
     `<th class="no"></th>`,
-    ...blocks.map((b) => gap + b.map((f) => `<th class="${leno.has(f) ? "leno" : ""}">${f}</th>`).join("")),
+    ...blocks.map((b) => gap + b.map((f) => `<th class="${cls(f)}">${f}${selv.has(f) ? "K" : ""}</th>`).join("")),
     selCount ? gap + Array.from({ length: selCount }, (_, i) => `<th class="sel">${i + 1}.</th>`).join("") : "",
   ].join("");
   const body: string[] = [];
@@ -123,17 +131,18 @@ function gridHtml(v: WeaveCardView): string {
     const pick = r < filled ? v.pickSequence?.[r] : undefined;
     body.push(`<tr><td class="no">${r < filled ? r + 1 : ""}</td>${blocks.map((b) => gap + b.map((f) => {
       const on = row?.[f - 1] === 1;
-      return `<td class="c${leno.has(f) ? " leno" : ""}">${on ? "X" : ""}</td>`;
+      return `<td class="c${cls(f) ? ` ${cls(f)}` : ""}">${on ? "X" : ""}</td>`;
     }).join("")).join("")}${selCount ? gap + Array.from({ length: selCount }, (_, i) => `<td class="c sel">${pick === i + 1 ? "X" : ""}</td>`).join("") : ""}</tr>`);
   }
   const legend = [
     leno.size ? `<span class="lg"><i class="sw leno"></i>Döner çerçeve: ${[...leno].join(", ")}</span>` : "",
+    selv.size ? `<span class="lg"><i class="sw selv"></i>Kenar çerçeve (K): ${[...selv].join(", ")}</span>` : "",
     selCount ? `<span class="lg">Sağ blok: atkı seçici (hangi atkı ipliği atılır)</span>` : "",
   ].filter(Boolean).join("");
   // CSS ölçüsü (para değil): yüzde birlik mm yeter.
   const mm = Math.round(cell * 100) / 100;
   const pt = Math.round(Math.min(9, cell * 1.6) * 10) / 10;
-  return `<style>.grid td.c,.grid th{width:${mm}mm;height:${mm}mm;font-size:${pt}pt}</style>
+  return `<style>.grid td.c,.grid th{width:${mm}mm;height:${mm}mm;font-size:${pt}pt}</style>${selv.size ? SELVEDGE_CSS : ""}
 <table class="grid"><thead><tr>${head}</tr></thead><tbody>${body.join("")}</tbody></table>${legend ? `<div class="legend">${legend}</div>` : ""}`;
 }
 

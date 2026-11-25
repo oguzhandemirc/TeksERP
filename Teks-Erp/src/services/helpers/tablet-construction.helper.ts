@@ -25,6 +25,8 @@ export interface TabletConstructionDto {
     liftPlan: number[][] | null;
     /** 1-tabanlı döner çerçeve no'ları. */
     lenoFrames: number[];
+    /** 1-tabanlı kenar çerçeve no'ları (2026-11-25 EKLEME; Armür dışında boş). Tablet henüz çizmez. */
+    selvedgeFrames: number[];
     drawingInNote: string | null;
   } | null;
   weft: {
@@ -53,7 +55,7 @@ export function toTabletConstruction(weavingOrderId: string, c: EffectiveConstru
     design: d
       ? {
         code: d.code, name: d.name, loomFileName: d.loomFileName, frameCount: d.frameCount, repeatCm: num(d.repeatCm),
-        kind: d.kind, shedMechanism: d.shedMechanism, weaveStructure: d.weaveStructure, liftPlan: Array.isArray(d.liftPlan) ? (d.liftPlan as number[][]) : null, lenoFrames: d.lenoFrames, drawingInNote: d.drawingInNote,
+        kind: d.kind, shedMechanism: d.shedMechanism, weaveStructure: d.weaveStructure, liftPlan: Array.isArray(d.liftPlan) ? (d.liftPlan as number[][]) : null, lenoFrames: d.lenoFrames, selvedgeFrames: d.selvedgeFrames, drawingInNote: d.drawingInNote,
       }
       : null,
     weft: c.weft

@@ -69,7 +69,7 @@ export function WeaveDesignDetailPage() {
               <TabsContent value="lift" forceMount className="mt-4 data-[state=inactive]:hidden">
                 {/* Izgara yalnız Armür'de anlamlı; sunucu Armür dışı ızgara yazımını reddeder. */}
                 {resolveWeaveClass(d).shedMechanism === "DOBBY" ? (
-                  <LiftPlanTab key={d.id + JSON.stringify(d.liftPlan ?? null) + JSON.stringify(d.lenoFrames ?? [])} design={d} fabric={fabric} canWrite={canWrite} />
+                  <LiftPlanTab key={d.id + JSON.stringify(d.liftPlan ?? null) + JSON.stringify(d.lenoFrames ?? []) + JSON.stringify(d.selvedgeFrames ?? [])} design={d} fabric={fabric} canWrite={canWrite} />
                 ) : (
                   <p className="text-sm text-muted-foreground">
                     Bu desenin mekanizması {SHED_MECHANISM_LABEL[resolveWeaveClass(d).shedMechanism]}; armür ızgarası yalnız Armür mekanizmasında çizilir.

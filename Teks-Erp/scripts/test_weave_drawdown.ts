@@ -34,6 +34,23 @@ function main(): void {
   check("§3d bütün çerçeveler döner → null", computeDrawdown({ kind: "DOBBY", liftPlan: [[1, 0]], lenoFrames: [1, 2], pickSequence: null }) === null);
   check("§3e armür yok → null", computeDrawdown({ kind: "DOBBY", liftPlan: null, lenoFrames: [], pickSequence: null }) === null && computeDrawdown({ kind: "DOBBY", liftPlan: [], lenoFrames: [], pickSequence: null }) === null);
 
+  console.log("§5 kenar çerçevesi (dilim C)");
+  const kenar = computeDrawdown({ kind: "DOBBY", liftPlan: [[1, 0, 1, 0], [0, 1, 0, 1]], lenoFrames: [], selvedgeFrames: [1, 2], pickSequence: null });
+  check("§5a kenar çerçeveleri zemin raporuna girmez (parite örneği: zemin 3,4)", kenar?.groundFrames.join() === "3,4" && grid(kenar?.cells) === "01/10", grid(kenar?.cells));
+  // G5 (desen programı): 12 çerçeve × 9 atkı; Ç1–Ç2 kenar bezayağı, Ç3–Ç12 atkı 1–5 saten (2 atlamalı), 6–9 bezayağı.
+  const g5 = Array.from({ length: 9 }, (_, j) => Array.from({ length: 12 }, (_, c) => {
+    if (c < 2) return (c + j) % 2 === 0 ? 1 : 0;
+    const g = c - 2;
+    return j < 5 ? ((g * 2) % 5 === j ? 1 : 0) : (g + j) % 2 === 0 ? 1 : 0;
+  }));
+  const g5dd = computeDrawdown({ kind: "DOBBY", liftPlan: g5, lenoFrames: [], selvedgeFrames: [1, 2], pickSequence: null });
+  check("§5b G5: zemin raporu 10 tel (Ç3–Ç12), kenar teli rapor içinde tekrar etmez", g5dd?.ends === 10 && g5dd.groundFrames.join() === "3,4,5,6,7,8,9,10,11,12", `${g5dd?.ends}`);
+  const g5wide = computeDrawdown({ kind: "DOBBY", liftPlan: g5, lenoFrames: [], selvedgeFrames: [1, 2], pickSequence: null, ends: 30 });
+  check("§5c G5 3 rapor: tahar Ç1/Ç2'ye hiç uğramaz", g5wide?.threading.length === 30 && g5wide.threading.every((f) => f >= 3));
+  const noSel = computeDrawdown({ kind: "DOBBY", liftPlan: g5, lenoFrames: [], pickSequence: null });
+  check("§5d kenar verilmezse bugünkü davranış (12 çerçeve zemin)", noSel?.ends === 12 && grid(noSel.cells) === grid(computeDrawdown({ kind: "DOBBY", liftPlan: g5, lenoFrames: [], selvedgeFrames: [], pickSequence: null })?.cells));
+  check("§5e döner + kenar birlikte: zemin ikisinin de dışı", computeDrawdown({ kind: "DOBBY", liftPlan: [[1, 0, 1, 0, 1]], lenoFrames: [1], selvedgeFrames: [2], pickSequence: null })?.groundFrames.join() === "3,4,5");
+
   console.log("§4 pencere");
   check("§4a 14 zemin, 30 armür + 30 seçici → 28 tel × 30 atkı", JSON.stringify(drawdownWindow(14, 30, 30)) === '{"ends":28,"picks":30}', JSON.stringify(drawdownWindow(14, 30, 30)));
   check("§4b 4 zemin, 4 armür + 6 seçici → 24 × 24 (EKOK 12'nin katı)", JSON.stringify(drawdownWindow(4, 4, 6)) === '{"ends":24,"picks":24}', JSON.stringify(drawdownWindow(4, 4, 6)));

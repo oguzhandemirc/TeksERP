@@ -1,7 +1,7 @@
 // =============================================================================
 // KUMAŞ GÖRÜNÜMÜ (drawdown) — armür planı + atkı seçiciden kare ızgara (kart görseli, 2026-11-22)
 // =============================================================================
-// Kural: tel i'nin çerçevesi = DÜZ TAHAR (zemin çerçeveleri sırayla, döner çerçeveler hariç); atkı j'de
+// Kural: tel i'nin çerçevesi = DÜZ TAHAR (zemin çerçeveleri sırayla, döner ve kenar çerçeveleri hariç); atkı j'de
 // o çerçeve kalkıksa hücre çözgüdür (0), değilse atkı seçicisindeki iplik no'su (seçici yoksa 1).
 // Döner (LENO) desen çizilmez: doup hareketi ızgarayla simüle edilemez. Panel/tablet aynaları aynı
 // örneklerle parite testine bağlıdır. SAF; gösterim içindir, hesaba girmez.
@@ -19,6 +19,8 @@ export interface DrawdownInput {
   liftPlan: ReadonlyArray<ReadonlyArray<number>> | null;
   /** 1-tabanlı döner çerçeve no'ları. */
   lenoFrames: readonly number[];
+  /** 1-tabanlı kenar çerçeve no'ları — zemin raporuna girmez (kenar teli rapor içinde tekrar etmez). */
+  selvedgeFrames?: readonly number[];
   /** Atkı başına 1-tabanlı iplik satırı no; null = seçici yok. */
   pickSequence: readonly number[] | null;
   /** Çizilecek tel sayısı; varsayılan bir düz tahar raporu (zemin çerçeve sayısı). */
@@ -40,14 +42,21 @@ export interface WeaveDrawdown {
 
 const clamp = (n: number, max: number): number => Math.max(1, Math.min(max, Math.floor(n)));
 
+/** Zemin çerçeveleri (1-tabanlı, sıralı): döner ve kenar DIŞI. */
+export function groundFrameNumbers(frames: number, lenoFrames: readonly number[], selvedgeFrames: readonly number[] = []): number[] {
+  const skip = new Set([...lenoFrames, ...selvedgeFrames]);
+  const out: number[] = [];
+  for (let f = 1; f <= frames; f++) if (!skip.has(f)) out.push(f);
+  return out;
+}
+
 /** Desenin kumaş görünümü; LENO, boş armür ya da zemin çerçevesi yoksa null. */
 export function computeDrawdown(input: DrawdownInput): WeaveDrawdown | null {
-  if (input.kind === "LENO") return null;  const plan = input.liftPlan ?? [];
+  if (input.kind === "LENO") return null;
+  const plan = input.liftPlan ?? [];
   if (plan.length === 0) return null;
   const frames = plan.reduce((m, r) => Math.max(m, r.length), 0);
-  const leno = new Set(input.lenoFrames);
-  const groundFrames: number[] = [];
-  for (let f = 1; f <= frames; f++) if (!leno.has(f)) groundFrames.push(f);
+  const groundFrames = groundFrameNumbers(frames, input.lenoFrames, input.selvedgeFrames);
   if (groundFrames.length === 0) return null;
   const ends = clamp(input.ends ?? groundFrames.length, DRAWDOWN_MAX_ENDS);
   const picks = clamp(input.picks ?? plan.length, DRAWDOWN_MAX_PICKS);

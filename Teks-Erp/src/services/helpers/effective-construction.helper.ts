@@ -30,14 +30,15 @@ const WARP_SELECT = {
 const DESIGN_SELECT = {
   id: true, code: true, name: true, kind: true, shedMechanism: true, weaveStructure: true, hookCount: true, repeatWidthCm: true,
   familyLabel: true, frameCount: true, repeatCm: true,
-  liftPlan: true, loomFileName: true, lenoSetup: true, lenoFrames: true, drawingInNote: true, isActive: true,
+  liftPlan: true, loomFileName: true, lenoSetup: true, lenoFrames: true, selvedgeFrames: true, drawingInNote: true, isActive: true,
 } satisfies Prisma.WeaveDesignSelect;
 type RawDesign = Prisma.WeaveDesignGetPayload<{ select: typeof DESIGN_SELECT }>;
 export type EffectiveWeaveDesign = Omit<RawDesign, "shedMechanism" | "weaveStructure"> & WeaveClass;
 
 /**
  * Desenin okuyucu görünümü — TEK nokta: sınıflama çözülür, Armür dışı mekanizmada saklı armür ızgarası
- * GÖRÜNMEZ (drawdown, basım, tablet, panel yapı görseli hepsi buradan okur); Jakar dışında kanca sayısı gizli.
+ * GÖRÜNMEZ (drawdown, basım, tablet, panel yapı görseli hepsi buradan okur); kenar çerçeveleri de (ızgaranın
+ * parçası); Jakar dışında kanca sayısı gizli.
  */
 export function effectiveWeaveDesign(d: RawDesign | null): EffectiveWeaveDesign | null {
   if (!d) return null;
@@ -45,6 +46,7 @@ export function effectiveWeaveDesign(d: RawDesign | null): EffectiveWeaveDesign 
   return {
     ...d, ...cls,
     liftPlan: mechanismUsesLiftPlan(cls.shedMechanism) ? d.liftPlan : null,
+    selvedgeFrames: mechanismUsesLiftPlan(cls.shedMechanism) ? d.selvedgeFrames : [],
     hookCount: cls.shedMechanism === "JACQUARD" ? d.hookCount : null,
   };
 }
