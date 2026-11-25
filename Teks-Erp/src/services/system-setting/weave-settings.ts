@@ -23,9 +23,16 @@ async function readBoolTrue(key: string, tx?: SettingDb): Promise<boolean> {
   return asBooleanDefaultTrue(setting?.value);
 }
 
-export const readDokumaMechanismCamEnabled = (tx?: SettingDb): Promise<boolean> => readBoolTrue(SETTING_KEYS.DOKUMA_MECHANISM_CAM_ENABLED, tx);
-export const readDokumaMechanismDobbyEnabled = (tx?: SettingDb): Promise<boolean> => readBoolTrue(SETTING_KEYS.DOKUMA_MECHANISM_DOBBY_ENABLED, tx);
-export const readDokumaMechanismJacquardEnabled = (tx?: SettingDb): Promise<boolean> => readBoolTrue(SETTING_KEYS.DOKUMA_MECHANISM_JACQUARD_ENABLED, tx);
+// `export async function` biçimi bilinçli: `test_feature_flag_contract` okuyucuyu bu imzadan bulur.
+export async function readDokumaMechanismCamEnabled(tx?: SettingDb): Promise<boolean> {
+  return readBoolTrue(SETTING_KEYS.DOKUMA_MECHANISM_CAM_ENABLED, tx);
+}
+export async function readDokumaMechanismDobbyEnabled(tx?: SettingDb): Promise<boolean> {
+  return readBoolTrue(SETTING_KEYS.DOKUMA_MECHANISM_DOBBY_ENABLED, tx);
+}
+export async function readDokumaMechanismJacquardEnabled(tx?: SettingDb): Promise<boolean> {
+  return readBoolTrue(SETTING_KEYS.DOKUMA_MECHANISM_JACQUARD_ENABLED, tx);
+}
 
 /** Mekanizma → ayar anahtarı + API adı (yazma doğrulaması ve servis kapısı aynı tabloyu okur). */
 export const MECHANISM_SETTING: Readonly<Record<WeaveShedMechanismValue, { key: string; flag: "dokumaMechanismCamEnabled" | "dokumaMechanismDobbyEnabled" | "dokumaMechanismJacquardEnabled" }>> = {

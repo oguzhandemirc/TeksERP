@@ -45,7 +45,7 @@ import { DEVERE_BEAM_CARD_AUTO_PRINTS, type DevereBeamCardAutoPrint } from "./de
 import { DEVERE_DUPLICATE_DELIVERY_NOTE_MODES, DEVERE_RECEIVE_WEIGHING_MODES, type DevereDuplicateDeliveryNote, type DevereReceiveWeighing } from "./devere-receive";
 import { readKursunMeterCapture } from "./kursun-batch";
 import { DEVERE_REED_NUMBER_UNITS, MECHANISM_SETTING, readEnabledShedMechanisms, type DevereReedNumberUnit } from "./weave-settings";
-import { SHED_MECHANISM_LABEL, WEAVE_SHED_MECHANISMS } from "../../constants/weave-classification";
+import { SHED_MECHANISM_LABEL, WEAVE_SHED_MECHANISMS, type WeaveShedMechanismValue } from "../../constants/weave-classification";
 import { LABEL_COPIES_MAX, readNotificationInboxEnabled, type DefaultLabelMedia } from "./labels";
 import { DEFAULT_DEVERE_DENIER_SUGGEST_MIN_BEAMS, DEVERE_DENIER_SUGGEST_MIN_BEAMS_MAX, DEFAULT_DEVERE_DENIER_SUGGEST_THRESHOLD_PCT, DEVERE_DENIER_SUGGEST_THRESHOLD_PCT_MAX, DEFAULT_DEVERE_FASON_WASTE_TOLERANCE_PCT, DEVERE_FASON_WASTE_TOLERANCE_PCT_MAX, DEFAULT_DEVERE_WARP_FIXED_WASTE_M, DEVERE_WARP_FIXED_WASTE_M_MAX, DEFAULT_DOKUMA_WEAVING_WASTE_PCT, DOKUMA_WEAVING_WASTE_PCT_MAX, readDepoMultiEnabledRaw, readDevereEnabledRaw, readDokumaEnabledRaw, readEmanetEnabledRaw, readGelenBelgeEnabledRaw, readIplikEnabledRaw, readKaliteGuvenceEnabledRaw, readKumasTeknikEnabledRaw, readMaliyetEnabledRaw, readProductionEnabledRaw, readTezgahEnabledRaw, readTicaretEnabledRaw } from "./modules";
 import { readTezgahAlarmEnabled, readTezgahAlarmNoShiftMode, readTezgahAlarmUnclassifiedTargetMinutes } from "./packing-loom";
@@ -898,7 +898,13 @@ export async function setFeatureFlags(
       await this.set(SETTING_KEYS.DOKUMA_YARN_RESERVATION_ENABLED, input.dokumaYarnReservationEnabled, `Dokuma: açık ${TERIM.dokumaIsEmri.cogulCekimKucuk.ilgi} kalan ipliği ayrılmış sayılır (görünürlük, engellemez)`, userId);
     }
     // K10: mekanizma şalterleri — yazımdan SONRAKİ küme boş kalamaz (çıkışsız kapı: hiçbir desen kartı açılamaz).
-    const mechanismInputs = WEAVE_SHED_MECHANISMS.filter((m) => Object.prototype.hasOwnProperty.call(input, MECHANISM_SETTING[m].flag));
+    // Anahtarlar literal: sözleşme bekçisi yazma dalını `hasOwnProperty.call(input, "<ad>")` imzasından bulur.
+    const mechanismPresent: Record<WeaveShedMechanismValue, boolean> = {
+      CAM: Object.prototype.hasOwnProperty.call(input, "dokumaMechanismCamEnabled"),
+      DOBBY: Object.prototype.hasOwnProperty.call(input, "dokumaMechanismDobbyEnabled"),
+      JACQUARD: Object.prototype.hasOwnProperty.call(input, "dokumaMechanismJacquardEnabled"),
+    };
+    const mechanismInputs = WEAVE_SHED_MECHANISMS.filter((m) => mechanismPresent[m]);
     if (mechanismInputs.length > 0) {
       const after = await readEnabledShedMechanisms();
       for (const m of mechanismInputs) {
