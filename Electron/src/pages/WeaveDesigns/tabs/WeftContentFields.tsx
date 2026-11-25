@@ -66,7 +66,8 @@ export function WeftContentFields({ value, onChange, canWrite, savedSeq, idPrefi
         <div className="space-y-1.5">
           <div className="flex items-center gap-1">
             <Label htmlFor={`${idPrefix}-seq`}>Atkı sırası kodu</Label>
-            <InfoPopover label="Sıra kodu nasıl yazılır" desc={SEQ_INFO} />
+            {/* -my-1: ⓘ (20 px) etiket satırını büyütmesin, yandaki etiketlerle aynı hizada kalsın (FormField `info` ile aynı yol). */}
+            <InfoPopover label="Sıra kodu nasıl yazılır" desc={SEQ_INFO} className="-my-1" />
           </div>
           <Input id={`${idPrefix}-seq`} value={seq} maxLength={120} disabled={!canWrite} onChange={(e) => set({ seq: e.target.value })} placeholder="ör. 10x(A2 B2 C1) D4" />
         </div>

@@ -20,7 +20,7 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initial?: WarpSpec | null;
-  /** "Kopyala": aynı reçeteden yeni kart taslağı (kayıt OLUŞTURMA olarak gider). */
+  /** "Örnek al": aynı reçeteden yeni kart taslağı (kayıt OLUŞTURMA olarak gider). */
   draft?: WarpSpecFormValues | null;
   onSubmit: (values: WarpSpecFormValues) => void | Promise<void>;
   isSubmitting?: boolean;
@@ -34,7 +34,7 @@ export function WarpSpecFormDialog({ open, onOpenChange, initial, draft, onSubmi
       onOpenChange={onOpenChange}
       size="wide"
       sectionsKey="warp-spec.form"
-      title={initial ? "Çözgü Kartını Düzenle" : draft ? "Çözgü Kartını Kopyala" : "Yeni Çözgü Kartı"}
+      title={initial ? "Çözgü Kartını Düzenle" : draft ? "Yeni Çözgü Kartı (örnekten)" : "Yeni Çözgü Kartı"}
       description="İplikler ve telleri, tarak ve dizilim. Sağdaki hesap iplik kartındaki denyeyle anında güncellenir."
       schema={warpSpecFormSchema}
       defaultValues={initial ? buildDefaults(initial) : (draft ?? buildDefaults(null))}

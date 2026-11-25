@@ -39,9 +39,9 @@ describe("buildDefaults", () => {
 });
 
 describe("copyDraft", () => {
-  it("kod boş, ad KOPYA, aktif; satırlar ve dizilim kopya", () => {
+  it("örnek al: kod boş, ad '(kopya)' önerisi, aktif; satırlar ve dizilim aynı", () => {
     const d = copyDraft(spec());
-    expect([d.code, d.name, d.isActive, d.sequenceNote]).toEqual(["", "UA çözgüsü KOPYA", true, "2A 1B"]);
+    expect([d.code, d.name, d.isActive, d.sequenceNote]).toEqual(["", "UA çözgüsü (kopya)", true, "2A 1B"]);
     expect(d.yarns).toHaveLength(2);
   });
 });

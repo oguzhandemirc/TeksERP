@@ -1,4 +1,4 @@
-// "Bu desene özel kopya" onayı: hangi kumaşın yeni karta geçeceğini ve hangilerinin eski kartta kalacağını
+// "Örnek al (yalnız bu desen)" onayı (eski adı "Bu desene özel kopya"); kaynak kart değişmez: hangi kumaşın yeni karta geçeceğini ve hangilerinin eski kartta kalacağını
 // listeler (liste sunucudan, `filter[weftSpecId]`). Kod/ad önerilir; aynı gövdenin tekrarı sunucuda aynı kopyayı döner.
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -34,7 +34,7 @@ export function WeftSpecForkDialog({ spec, fabric, onClose }: Props) {
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle className="pr-6">Bu desene özel kopya — {spec.code}</DialogTitle>
+          <DialogTitle className="pr-6">Örnek al (yalnız bu desen) — {spec.code}</DialogTitle>
           <DialogDescription>Kart iplikleri, sıra kodu ve sıklığıyla kopyalanır; yalnız aşağıdaki kumaş yeni karta geçer.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">

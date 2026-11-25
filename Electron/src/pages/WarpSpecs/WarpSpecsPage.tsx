@@ -16,7 +16,7 @@ export function WarpSpecsPage() {
       columns={warpSpecColumns}
       writePermission="warpspec:write"
       searchHint="Kod veya ad"
-      copyLabel="Kopyala (yeni kart)"
+      copyLabel="Örnek al (yeni kart)"
       renderForm={({ open, onOpenChange, initial, onSubmit, isSubmitting, copyFrom }) => (
         <WarpSpecFormDialog
           open={open}

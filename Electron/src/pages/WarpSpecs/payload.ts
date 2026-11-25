@@ -32,13 +32,13 @@ export function buildPayload(v: WarpSpecFormValues): WarpSpecPayload {
 }
 
 /** Kayıttaki satırlar; satırsız (eski) kartta kolonlardan tek satır. */
-function rowsOf(initial: WarpSpec): WarpSpecFormValues["yarns"] {
+function rowsOf(initial: Omit<WarpSpec, "id">): WarpSpecFormValues["yarns"] {
   const rows = [...(initial.yarns ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
   if (rows.length > 0) return rows.map((r) => ({ yarnItemId: r.yarnItemId, endsCount: decimalToFormText(r.endsCount) }));
   return [{ yarnItemId: initial.yarnItemId ?? "", endsCount: decimalToFormText(initial.endsCount) }];
 }
 
-export function buildDefaults(initial?: WarpSpec | null): WarpSpecFormValues {
+export function buildDefaults(initial?: Omit<WarpSpec, "id"> | null): WarpSpecFormValues {
   if (!initial) return warpSpecFormDefaults;
   return {
     code: initial.code,
@@ -57,8 +57,8 @@ export function buildDefaults(initial?: WarpSpec | null): WarpSpecFormValues {
   };
 }
 
-/** "Kopyala": aynı reçeteyle YENİ kart taslağı — kod boş (tekil), ad "… KOPYA", hep aktif. */
-export function copyDraft(row: WarpSpec): WarpSpecFormValues {
+/** "Örnek al": aynı reçeteyle YENİ kart taslağı — kod boş (tekil), ad "… (kopya)", hep aktif; kimlik okunmaz. */
+export function copyDraft(row: Omit<WarpSpec, "id">): WarpSpecFormValues {
   const d = buildDefaults(row);
-  return { ...d, code: "", name: `${row.name} KOPYA`.slice(0, 100), isActive: true };
+  return { ...d, code: "", name: `${row.name} (kopya)`.slice(0, 100), isActive: true };
 }

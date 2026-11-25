@@ -2,6 +2,7 @@
 // atkı alanları ürün penceresiyle aynı (`WeftContentFields`). Süzme sunucuda (arama, pasifler).
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import { Plus } from "lucide-react";
 import { PageShell } from "@/components/layout/PageShell";
 import { ListFooter, ListToolbar } from "@/components/layout/ListPage";
@@ -23,7 +24,9 @@ import { WEFT_SPECS_QUERY_KEY, WeftSpecFormDialog } from "./WeftSpecFormDialog";
 export function WeftSpecsPage() {
   const { hasPermission } = useRoleAccess();
   const canWrite = hasPermission("warpspec:write");
-  const [search, setSearch] = useState("");
+  // `?search=<kod>`: kullanım yerinden (ürün penceresi, desen kartı) "Atkı Kartları ekranında aç" kartı süzülü açar.
+  const [searchParams] = useSearchParams();
+  const [search, setSearch] = useState(() => searchParams.get("search") ?? "");
   const [includeInactive, setIncludeInactive] = useState(false);
   const [editing, setEditing] = useState<WeftSpecListRow | null>(null);
   const [formOpen, setFormOpen] = useState(false);

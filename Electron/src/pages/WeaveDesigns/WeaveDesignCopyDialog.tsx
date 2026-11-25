@@ -31,7 +31,7 @@ export function WeaveDesignCopyDialog({ source, onClose, onCreated }: { source: 
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{source.code} desen kartını kopyala</DialogTitle>
+          <DialogTitle>{source.code} kartından örnek al — yeni desen kartı</DialogTitle>
           <DialogDescription>
             Yeni kart bu kartın yapı bilgilerini (mekanizma: {SHED_MECHANISM_LABEL[resolveWeaveClass(source).shedMechanism]}){hasGrid ? ", armür ızgarasını" : ""} ve
             notlarını alır; sonra yalnız farkı değiştirirsiniz. Tezgâh dosya adı boş başlar; desen görseli ve bağlı kumaşlar kopyalanmaz.
@@ -49,7 +49,7 @@ export function WeaveDesignCopyDialog({ source, onClose, onCreated }: { source: 
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Vazgeç</Button>
-          <Button disabled={!ready || create.isPending} onClick={() => create.mutate()}>Kopyala</Button>
+          <Button disabled={!ready || create.isPending} onClick={() => create.mutate()}>Yeni kartı oluştur</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
