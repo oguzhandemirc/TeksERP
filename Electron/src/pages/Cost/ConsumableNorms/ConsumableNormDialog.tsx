@@ -1,6 +1,7 @@
 // "Norm gir / Normu değiştir" — kalem seçiciler DOĞRUDAN modal (combobox yok). Yeni sürüm şu andan itibaren geçerli.
 // Token MANTIKSAL DENEME başına (`useAttemptToken`); sunucunun 409 cümlesi diyalogda kalır.
 import { useState } from "react";
+import { unitLabel } from "@/lib/item-unit";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -119,11 +120,11 @@ function QtyField(p: { value: string; onChange: (v: string) => void; unit?: stri
   return (
     <>
       <label>
-        <span className="text-muted-foreground">Miktar{p.unit ? ` (${p.unit}/${perOf(p.basis)})` : ""}</span>
+        <span className="text-muted-foreground">Miktar{p.unit ? ` (${unitLabel(p.unit)}/${perOf(p.basis)})` : ""}</span>
         <Input aria-label="Miktar" className="mt-1 text-right tabular-nums" inputMode="decimal" value={p.value} onChange={(e) => p.onChange(e.target.value)} />
       </label>
       <ZeroNormHint />
-      {p.current && <p className="text-xs text-muted-foreground">Şu anki: {decToInput(p.current.qtyPerM)} {p.current.unit}/{perOf(p.current.basis)}</p>}
+      {p.current && <p className="text-xs text-muted-foreground">Şu anki: {decToInput(p.current.qtyPerM)} {unitLabel(p.current.unit)}/{perOf(p.current.basis)}</p>}
     </>
   );
 }

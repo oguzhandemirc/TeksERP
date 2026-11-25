@@ -9,6 +9,7 @@ import type { Item } from "@/pages/Items/types";
 import { suggestWarpEnds } from "@/pages/Operations/WarpPlan/service";
 import { fmtKg, parseInput, yarnLetter } from "@/pages/Operations/WarpPlan/warp-plan-model";
 import { formatQty } from "@/lib/format";
+import { InfoPopover } from "@/components/ui/info-popover";
 import { WARP_SPEC_MAX_YARNS, type WarpSpecFormValues } from "./schema";
 import { useWarpCalc } from "./useWarpCalc";
 import { yarnOwnWasteNote } from "@/pages/Operations/WarpPlan/yarn-waste-note";
@@ -70,7 +71,7 @@ export function YarnRowsEditor() {
       <div className={`${ROW_GRID} px-1 text-xs font-medium text-muted-foreground`}>
         <span />
         <span>İplik</span>
-        <span>Tel adedi</span>
+        <span className="inline-flex items-center gap-1">Tel adedi <InfoPopover label="Tel adedi" desc="Kenar telleri dahil yazın; çözgü kg'ı bu adetlerden hesaplanır." /></span>
         <span />
         <span />
       </div>

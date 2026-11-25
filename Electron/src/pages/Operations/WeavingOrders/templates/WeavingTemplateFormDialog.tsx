@@ -77,7 +77,7 @@ function NameFields({ form }: { form: Form }) {
 }
 
 function FabricField({ form }: { form: Form }) {
-  const itemForm = useItemRecordForm();
+  const itemForm = useItemRecordForm(["FABRIC"]);
   return (
     <FormField label="Kumaş" error={form.formState.errors.itemId} info="Boş = formda seçilir.">
       <Controller

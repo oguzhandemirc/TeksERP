@@ -9,7 +9,7 @@ import { setDefaultWarehouse, warehouseService } from "./service";
 import { WarehouseFormDialog } from "./WarehouseFormDialog";
 import { WarehouseMovementsSheet } from "./WarehouseMovementsSheet";
 import type { Warehouse } from "./types";
-import type { WarehouseFormValues } from "./schema";
+import { buildWarehousePayload } from "./schema";
 
 /**
  * DEPOLAR — fiziksel depo tanımları.
@@ -48,15 +48,6 @@ export function WarehousesPage() {
     [canWrite, setDefaultM],
   );
 
-  const buildPayload = (v: WarehouseFormValues, initial: Warehouse | null): Partial<Warehouse> => ({
-    // Kod backend'de üretilir (DP+GGAAYY+NNNN); create'te gönderilmez, edit'te korunur.
-    ...(initial?.code ? { code: initial.code } : {}),
-    name: v.name,
-    address: v.address || null,
-    notes: v.notes || null,
-    isActive: v.isActive,
-  });
-
   return (
     <>
       <CrudPage<Warehouse>
@@ -83,7 +74,7 @@ export function WarehousesPage() {
             onOpenChange={onOpenChange}
             initial={initial}
             isSubmitting={isSubmitting}
-            onSubmit={(values) => onSubmit(buildPayload(values, initial))}
+            onSubmit={(values) => onSubmit(buildWarehousePayload(values, initial))}
           />
         )}
       />

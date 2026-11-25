@@ -9,12 +9,14 @@
 //   §4 ürün yazma yolu panel biçimi: "300.5" NOKTALI METİN kabul; null temizler; diffPct doğru
 //   §5 eksik veri → null (0 ya da hata değil); kumaş olmayan kart → kg alanları null
 //   §6 ürün yok → 404; route `item:read` kapılı ve `/api/items`ten önce bağlı
-//   §7 teknik özet (2026-11-25): endsPerCm = tel ÷ ham en, repeatsPerM = 100 ÷ desen boyu, eksik → null
+//   §7 teknik özet (2026-11-25): endsPerCm = tel ÷ ham en, repeatsPerM = 100 ÷ rapor boyu, eksik → null
+//   §8 enler (2026-11-25): en çekmesi %, g/m² → g/mt, mamul ≤ ham ≤ tarak UYARISI (ret yok), etkin yapıda aynı uyarı
 //
 // NEGATİF SONDA — 2026-11-11 koşuldu (cp + geri alma):
 //   servisteki `{ includeWaste: false }` sökülünce → §1a/§2a ❌ · `layersOk` şartı sökülmedi (katman
 //   bekçisi `test_cozgu_katman_motor` ölçer) · route izni `item:write` yapılınca → §6b ❌
 //   2026-11-25: servis desen `repeatCm`ini okumayınca → §7d ❌ · tel/cm paydası ham en + 4 yapılınca → §7a/§7c ❌
+//   2026-11-25: en helper'ında `finished.gt(raw)` → `lt` yapılınca §8c/§8d ❌ · etkin yapıdan en uyarısı sökülünce §8e ❌
 // Koşum: npx tsx scripts/test_kumas_hesaplanan_gramaj.ts
 // =============================================================================
 import { readFileSync } from "node:fs";
@@ -25,6 +27,7 @@ import { itemService } from "../src/routes/item.routes";
 import { computedGsmForItem, presentComputedGsm } from "../src/services/fabric-gsm.service";
 import { buildCostInput, loadCostStructureSourcesTx } from "../src/services/helpers/cost-assembler.helper";
 import { yarnUsagePerM } from "../src/services/helpers/fabric-cost.helper";
+import { resolveEffectiveConstruction } from "../src/services/helpers/effective-construction.helper";
 import { ensureTestAdmin } from "./fixture-test-user";
 import { altinYapiYaz, fiksturKur, fiksturSil, type MaliyetFikstur } from "./lib/maliyet-fikstur";
 
@@ -145,6 +148,21 @@ async function main(): Promise<void> {
   check("§7d ⭐ desen kartı rapor boyu 1,5 cm → repeatCm 1,5 · repeatsPerM 66,67", t1.repeatCm === 1.5 && t1.repeatsPerM === 66.67, JSON.stringify(t1));
   check("§7e çözgüsüz kumaş → endsCount/endsPerCm null (0 değil)", e.endsCount === null && e.endsPerCm === null, JSON.stringify(e));
   await prisma.item.update({ where: { id: f.fabricId }, data: { weaveDesignId: null } });
+
+  // §8 enler (2026-11-25): en çekmesi, g/m² → g/mt, mamul ≤ ham ≤ tarak uyarısı (ret değil); eksik → null/uyarı yok
+  const w0 = presentComputedGsm({ rawWidthCm: null, warpKgPerM: null, weftKgPerM: null, enteredRawGsm: D(85) });
+  check("§8a en yok → widthShrinkPct/rawGPerMt null, uyarı yok", w0.widthShrinkPct === null && w0.rawGPerMt === null && w0.finishedGPerMt === null && w0.widthWarnings.length === 0, JSON.stringify(w0));
+  await itemService.update(f.fabricId, { rawWidthCm: "300", widthCm: "280", rawGsm: "85", finishedGsm: "90" }, admin.id);
+  const w1 = await computedGsmForItem(f.fabricId);
+  check("§8b ⭐ ham 300 / mamul 280 → en çekmesi %6,67 · ham 85×3 = 255 g/mt · mamul 90×2,8 = 252 g/mt · tarak 310", w1.widthShrinkPct === 6.67 && w1.rawGPerMt === 255 && w1.finishedGPerMt === 252 && w1.finishedWidthCm === 280 && w1.reedWidthCm === 310, JSON.stringify(w1));
+  check("§8c sıra doğru (280 ≤ 300 ≤ 310) → uyarı yok", w1.widthWarnings.length === 0, JSON.stringify(w1.widthWarnings));
+  await itemService.update(f.fabricId, { rawWidthCm: "320", widthCm: "330" }, admin.id);
+  const w2 = await computedGsmForItem(f.fabricId);
+  const codes = w2.widthWarnings.map((x) => x.code).sort().join(",");
+  check("§8d ⭐ mamul 330 > ham 320 > tarak 310 → iki uyarı (kayıt reddedilmedi)", codes === "FINISHED_WIDER_THAN_RAW,RAW_WIDER_THAN_REED", codes);
+  const eff = await resolveEffectiveConstruction(prisma, f.fabricId);
+  check("§8e desen kartı etkin yapı uyarıları aynı en uyarılarını taşır (tek helper)", eff.warnings.some((x) => x.code === "FINISHED_WIDER_THAN_RAW") && eff.warnings.some((x) => x.code === "RAW_WIDER_THAN_REED"), JSON.stringify(eff.warnings));
+  await itemService.update(f.fabricId, { widthCm: null, rawWidthCm: null, rawGsm: null, finishedGsm: null }, admin.id);
 }
 
 main()

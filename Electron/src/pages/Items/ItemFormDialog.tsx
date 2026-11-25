@@ -10,7 +10,7 @@ import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { decimalToFormText } from "@/lib/decimal-form-text";
 import { RecordInfoButton } from "@/components/RecordInfoButton";
 import { InfoPopover } from "@/components/ui/info-popover";
-import { useDevereEnabled, useKaliteGuvenceEnabled, useMaliyetEnabled } from "@/hooks/usePricingEnabled";
+import { useDevereEnabled, useDokumaEnabled, useKaliteGuvenceEnabled, useMaliyetEnabled } from "@/hooks/usePricingEnabled";
 import type { Item, ItemCreatePayload } from "./types";
 import { itemFormDefaults, makeItemFormSchema, type ItemFormValues } from "./schema";
 import { fabricDetailToFormText, itemCarriesAllowedLists } from "./itemPayload.helper";
@@ -18,6 +18,7 @@ import { ItemCardTabs, INSTANT_SAVE_TABS, type ItemExtraTab } from "./ItemCardTa
 import { useConstructionPickersVisible } from "./ItemConstructionPickers";
 import { ItemCostLink } from "./ItemCostLink";
 import { ItemGeneralFields } from "./ItemGeneralFields";
+import { scopeItemType } from "./itemTypeScope";
 import { AllowedListDialogs } from "./ItemFormParts";
 import { useItemWeftDraft } from "./construction/useItemWeftDraft";
 import { useItemFormSave } from "./construction/useItemFormSave";
@@ -33,6 +34,7 @@ interface Props {
   draft?: Item | null; // Örnek al taslağı (kimliksiz, kod boş) — YENİ kayıt
   onSubmit: (payload: ItemCreatePayload) => void | Promise<void>;
   isSubmitting?: boolean;
+  allowedTypes?: readonly ItemType[]; // seçicinin tip kapsamı — yeni kayıtta Tip bununla sınırlanır
 }
 
 function toFormValues(initial: Item): ItemFormValues {
@@ -59,15 +61,14 @@ function toFormValues(initial: Item): ItemFormValues {
 }
 
 /** Ürün penceresi: Genel · Çözgü · Atkı · Desen (B19 tek pencere; veri yapısı aynı, birleşme yalnız ekranda). */
-export function ItemFormDialog({ open, onOpenChange, initial, draft, onSubmit, isSubmitting }: Props) {
-  const isEdit = Boolean(initial);
-  const formId = useId();
-  const [colorsOpen, setColorsOpen] = useState(false);
-  const [propsOpen, setPropsOpen] = useState(false);
+export function ItemFormDialog({ open, onOpenChange, initial, draft, onSubmit, isSubmitting, allowedTypes }: Props) {
+  const isEdit = Boolean(initial), formId = useId();
+  const [colorsOpen, setColorsOpen] = useState(false), [propsOpen, setPropsOpen] = useState(false);
+  const typeScope = isEdit ? undefined : allowedTypes;
   /** Stok kodunu elle yazma modu — varsayılan KAPALI, kutu hiç çizilmez. */
   const [manualCode, setManualCode] = useState(false);
   const [tab, setTab] = useState("info");
-  const defaults = useMemo(() => (initial ? toFormValues(initial) : draft ? { ...toFormValues(draft), code: "" } : itemFormDefaults), [initial, draft]);
+  const defaults = useMemo(() => (initial ? toFormValues(initial) : scopeItemType(draft ? { ...toFormValues(draft), code: "" } : itemFormDefaults, typeScope)), [initial, draft, typeScope]);
   const schema = useMemo(() => makeItemFormSchema(isEdit), [isEdit]);
   const form = useForm<ItemFormValues>({ resolver: zodResolver(schema) as Resolver<ItemFormValues>, defaultValues: defaults });
 
@@ -83,7 +84,7 @@ export function ItemFormDialog({ open, onOpenChange, initial, draft, onSubmit, i
   const itemType = form.watch("itemType");
   const { hasPermission } = useRoleAccess();
   const devereEnabled = useDevereEnabled();
-  const kaliteGuvenceEnabled = useKaliteGuvenceEnabled();
+  const widthVisible = [useKaliteGuvenceEnabled(), useDokumaEnabled()].some(Boolean); // mamul en: Kalite Güvence ya da dokuma (iki kanca da koşar)
   const yarnWasteVisible = useMaliyetEnabled() && itemType === ItemType.YARN;
   const constructionVisible = useConstructionPickersVisible(itemType);
   const warpVisible = itemType === ItemType.FABRIC && devereEnabled;
@@ -105,7 +106,7 @@ export function ItemFormDialog({ open, onOpenChange, initial, draft, onSubmit, i
 
   const { handleSubmit, saving, shareQuestion } = useItemFormSave({
     open, form, initial, weft, onSubmit,
-    visible: { construction: constructionVisible, yarnWaste: yarnWasteVisible, kaliteGuvence: kaliteGuvenceEnabled },
+    visible: { construction: constructionVisible, yarnWaste: yarnWasteVisible, kaliteGuvence: widthVisible },
     onInvalidWeft: () => setTab("weft"),
   });
 
@@ -172,9 +173,9 @@ export function ItemFormDialog({ open, onOpenChange, initial, draft, onSubmit, i
             <ItemGeneralFields
               form={form}
               open={open}
-              initial={initial}
+              initial={initial} allowedTypes={typeScope}
               derivedUnit={derivedUnit}
-              kaliteGuvenceEnabled={kaliteGuvenceEnabled}
+              widthVisible={widthVisible}
               yarnWasteVisible={yarnWasteVisible}
               carriesLists={carriesLists}
               staleLists={staleLists}

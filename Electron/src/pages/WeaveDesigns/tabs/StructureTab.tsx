@@ -34,7 +34,7 @@ const FIELDS: FieldDef[] = [
   { key: "name", label: "Desen adı *", max: 100, show: ALL },
   { key: "familyLabel", label: "Aile etiketi (TERGAL-DÖNER, BALIK…)", max: 40, show: ALL },
   { key: "frameCount", label: "Çerçeve sayısı (1–32)", max: 2, mode: "numeric", show: (m) => m === "DOBBY" },
-  { key: "repeatCm", label: "Desen boyu (cm)", max: 10, mode: "decimal", show: (m) => m !== "JACQUARD" },
+  { key: "repeatCm", label: "Rapor boyu (cm)", max: 10, mode: "decimal", info: "Desenin boyuna bir kez tekrar ettiği uzunluk.", show: (m) => m !== "JACQUARD" },
   { key: "loomFileName", label: "Tezgâh desen dosyası (.DOP)", max: 64, show: (m) => m === "DOBBY" },
   { key: "loomFileName", label: "Desen dosyası", max: 64, info: "Jakar makinesine yüklenen desen dosyasının adı (ör. GUL-01.JC5). Desen bu dosyadan dokunur.", show: (m) => m === "JACQUARD" },
   { key: "hookCount", label: "Kanca sayısı", max: 5, mode: "numeric", info: "Jakar makinesinin kullandığı kanca (platin) sayısı; her kanca bir ya da birkaç çözgü telini kaldırır. 1–30.000.", show: (m) => m === "JACQUARD" },

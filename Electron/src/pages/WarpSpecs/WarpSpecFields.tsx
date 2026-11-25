@@ -73,20 +73,20 @@ export function ReedFields({ form }: { form: Form }) {
   const reedUnit = useReedUnit();
   return (
     <FieldGrid cols={4}>
-      <FormField label="Kenar teli" htmlFor="selvedgeEnds" error={e.selvedgeEnds} info="Satır tel adetleri kenar dahil yazılır; bu alan bilgi içindir, hesaba girmez.">
+      <FormField label="Kenar teli" htmlFor="selvedgeEnds" error={e.selvedgeEnds} info="Kenar telleri iplik satırlarındaki tel adetlerinin içindedir ve kg'a orada girer. Bu alan yalnız tarak planı çizimi ve devere talimatı içindir; ayrıca eklenmez.">
         <Input id="selvedgeEnds" {...form.register("selvedgeEnds")} inputMode="numeric" className={EXAMPLE_PH} placeholder="ör. 24" />
       </FormField>
       <FormField label={`Tarak no (${reedUnitLabel(reedUnit)})`} htmlFor="reedNo" error={e.reedNo}
-        info="Birim firma ayarından gelir (Sistem → Özellik Anahtarları → Devere / Levent). Taraktan tel önerisinde kullanılır; hesaba girmez.">
+        info="Birim firma ayarından gelir (Sistem → Özellik Anahtarları → Devere / Levent). Yalnız taraktan tel önerisinde kullanılır; kg'a ve maliyete girmez.">
         <Input id="reedNo" {...form.register("reedNo")} inputMode="decimal" className={EXAMPLE_PH} placeholder={reedUnit === "DENTS_PER_CM" ? "ör. 10" : "ör. 100"} />
       </FormField>
       <FormField label="Dişe tel" htmlFor="endsPerDent" error={e.endsPerDent} info="Taraktan tel önerisinde boşsa 1 sayılır.">
         <Input id="endsPerDent" {...form.register("endsPerDent")} inputMode="numeric" className={EXAMPLE_PH} placeholder="ör. 4" />
       </FormField>
-      <FormField label="Tarak eni (cm)" htmlFor="reedWidthCm" error={e.reedWidthCm} info="Bilgi alanı; taraktan tel önerisinde kullanılır, hesaba girmez.">
+      <FormField label="Tarak eni (cm)" htmlFor="reedWidthCm" error={e.reedWidthCm} info="Maliyette atkı boyu buradan alınır (ürünün maliyet yapısında “Atkı boyu” girilmediyse; o da yoksa ham en + kenar payı). Taraktan tel önerisinde ve tezgâh önerisinde de kullanılır. Çözgü kg'ına girmez.">
         <Input id="reedWidthCm" {...form.register("reedWidthCm")} inputMode="decimal" className={EXAMPLE_PH} placeholder="ör. 280" />
       </FormField>
-      <FormField className="sm:col-span-2" label="Dizilim (talimat)" htmlFor="sequenceNote" error={e.sequenceNote} info="Devereciye giden talimat: ör. 2A 1B. Tekrar eden kısmı parantezle kısaltabilirsiniz: 5x(2A 1B) 4C. Hesaba girmez.">
+      <FormField className="sm:col-span-2" label="Dizilim (talimat)" htmlFor="sequenceNote" error={e.sequenceNote} info="Devereciye giden talimat: ör. 2A 1B. Tekrar eden kısmı parantezle kısaltabilirsiniz: 5x(2A 1B) 4C. Kg ve maliyete girmez.">
         <Input id="sequenceNote" {...form.register("sequenceNote")} className={EXAMPLE_PH} placeholder="ör. 5x(2A 1B) 4C" />
       </FormField>
       <FormField label="Çekme (%)" htmlFor="takeUpPct" error={e.takeUpPct} info="Çözgü çekmesi (take-up): dokumada çözgünün kumaştan ne kadar uzun harcandığı. Çözgü ÷ kumaş oranı: çözgü = kumaş ÷ (1 − çekme). Boşsa tezgahtan doğan topun otomatik tüketimi çözgü = kumaş sayar ve uyarır.">
