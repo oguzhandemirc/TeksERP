@@ -5,15 +5,15 @@ import { AlertTriangle } from "lucide-react";
 import { Dialog, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { TabbedDialogContent, TabbedDialogFooter, TabbedDialogHeader } from "@/components/ui/tabbed-dialog";
 import { Button } from "@/components/ui/button";
-import { ItemType, unitForItemType, type ProductItemType } from "@/types/enums";
+import { ItemType, unitForItemType } from "@/types/enums";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
-import { decimalToFormText } from "@/lib/decimal-form-text";
 import { RecordInfoButton } from "@/components/RecordInfoButton";
 import { InfoPopover } from "@/components/ui/info-popover";
 import { useDevereEnabled, useDokumaEnabled, useKaliteGuvenceEnabled, useMaliyetEnabled } from "@/hooks/usePricingEnabled";
 import type { Item, ItemCreatePayload } from "./types";
 import { itemFormDefaults, makeItemFormSchema, type ItemFormValues } from "./schema";
-import { fabricDetailToFormText, itemCarriesAllowedLists } from "./itemPayload.helper";
+import { itemCarriesAllowedLists } from "./itemPayload.helper";
+import { toFormValues } from "./itemFormValues";
 import { ItemCardTabs, INSTANT_SAVE_TABS, type ItemExtraTab } from "./ItemCardTabs";
 import { useConstructionPickersVisible } from "./ItemConstructionPickers";
 import { ItemCostLink } from "./ItemCostLink";
@@ -35,29 +35,6 @@ interface Props {
   onSubmit: (payload: ItemCreatePayload) => void | Promise<void>;
   isSubmitting?: boolean;
   allowedTypes?: readonly ItemType[]; // seçicinin tip kapsamı — yeni kayıtta Tip bununla sınırlanır
-}
-
-function toFormValues(initial: Item): ItemFormValues {
-  return {
-    code: initial.code,
-    name: initial.name,
-    // Hizmet kartı bu tabloda yaşamaz (`items_no_service_ck`); tip daraltması yalnız derleyici içindir.
-    itemType: initial.itemType as ProductItemType,
-    unit: initial.unit,
-    linearDensityDen: decimalToFormText(initial.linearDensityDen),
-    yarnWastePct: fabricDetailToFormText(initial.yarnWastePct),
-    yarnPurchaseUnit: initial.yarnPurchaseUnit ?? "KG",
-    yarnPiecesPerM: fabricDetailToFormText(initial.yarnPiecesPerM),
-    widthCm: initial.widthCm == null ? "" : String(Number(initial.widthCm)).replace(".", ","),
-    rawWidthCm: fabricDetailToFormText(initial.rawWidthCm),
-    rawGsm: fabricDetailToFormText(initial.rawGsm),
-    finishedGsm: fabricDetailToFormText(initial.finishedGsm),
-    warpSpecId: initial.warpSpecId ?? "",
-    weftSpecId: initial.weftSpecId ?? "",
-    weaveDesignId: initial.weaveDesignId ?? "",
-    allowedColorIds: initial.allowedColors?.map((c) => c.colorId) ?? [],
-    allowedPropertyIds: initial.allowedProperties?.map((p) => p.propertyId) ?? [],
-  };
 }
 
 /** Ürün penceresi: Genel · Çözgü · Atkı · Desen (B19 tek pencere; veri yapısı aynı, birleşme yalnız ekranda). */

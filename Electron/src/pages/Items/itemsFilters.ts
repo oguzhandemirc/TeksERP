@@ -50,7 +50,7 @@ export function itemStatusFilters(s: ItemStatusFilter): Record<string, string> {
 /** "Tümü" değeri — Radix boş string kabul etmez; ürün seçicinin `ItemTypeFilter` "ALL"ı ile aynı. */
 export const ITEM_FILTER_ALL = "ALL";
 
-export type ItemUrlFilterKey = "itemType" | "unit" | "allowedColorId" | "allowedPropertyId";
+export type ItemUrlFilterKey = "itemType" | "unit" | "allowedColorId" | "allowedPropertyId" | "fabricTypeId";
 
 export interface ItemUrlFilterDef {
   /** Backend süzgeç adı = URL `filter[<key>]` (itemType/unit skaler kolon; allowed* ilişki süzgeci, item.service `extraWhere`). */
@@ -85,7 +85,7 @@ export const itemListFilters = (status: ItemStatusFilter, sp: URLSearchParams): 
 });
 
 /** Renk/Özellik ekseninin URL anahtarları — Tür kumaş dışına çıkınca ikisi de silinir. */
-export const ITEM_CATALOG_KEYS: readonly ItemUrlFilterKey[] = ["allowedColorId", "allowedPropertyId"];
+export const ITEM_CATALOG_KEYS: readonly ItemUrlFilterKey[] = ["allowedColorId", "allowedPropertyId", "fabricTypeId"];
 
 /** URL'deki Tür süzgeci (yok = "ALL"). Bilinmeyen değer kumaş sayılmaz → renk ekseni kapanır (fail-closed). */
 export const itemTypeFilterFromParams = (sp: URLSearchParams): ItemTypeFilter => (sp.get(itemUrlFilterParam("itemType")) ?? ITEM_FILTER_ALL) as ItemTypeFilter;
