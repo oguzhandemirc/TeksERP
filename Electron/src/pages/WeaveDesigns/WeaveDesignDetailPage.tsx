@@ -52,7 +52,7 @@ export function WeaveDesignDetailPage() {
         ) : (
           <>
             <FabricChooser fabrics={fabricList} loading={fabrics.isLoading} selectedId={fabric?.id ?? null} onSelect={setChosen} />
-            <TechSummaryStrip fabric={fabric} />
+            <TechSummaryStrip fabric={fabric} frameCount={resolveWeaveClass(d).shedMechanism === "DOBBY" ? d.frameCount : undefined} />
             <Tabs value={tab} onValueChange={setTab}>
               <TabsList className="max-w-full justify-start overflow-x-auto">
                 <TabsTrigger value="structure">Yapı</TabsTrigger>

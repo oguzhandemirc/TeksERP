@@ -10,6 +10,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { buildCostInput, loadCostStructureSourcesTx } from "./helpers/cost-assembler.helper";
 import { yarnUsagePerM } from "./helpers/fabric-cost.helper";
+import { gramsPerLinearMetre, widthOrderWarnings, widthShrinkPct } from "./helpers/fabric-width.helper";
 
 type Dec = Prisma.Decimal;
 const KG_TO_G = new Prisma.Decimal(1000);
@@ -31,7 +32,20 @@ export interface ComputedGsm {
   picksInRepeat: number | null;
   repeatCm: number | null;
   repeatsPerM: number | null;
+  /** Enler (2026-11-25) — EK alanlar. Mamul en = `Item.widthCm`; tarak eni zemin çözgü kartından. */
+  finishedWidthCm: number | null;
+  reedWidthCm: number | null;
+  /** (ham en − mamul en) ÷ ham en × 100; iki en de yoksa null. */
+  widthShrinkPct: number | null;
+  /** Girilen gramajın metretül karşılığı: g/m² × en (m) — ham için ham en, mamul için mamul en. */
+  rawGPerMt: number | null;
+  finishedGPerMt: number | null;
+  /** mamul en ≤ ham en ≤ tarak eni sırası bozuksa UYARI (ret değil); eksik değerde karşılaştırma yok. */
+  widthWarnings: Array<{ code: string; message: string }>;
 }
+
+export interface WidthParts { finishedWidthCm: Dec | null; reedWidthCm: Dec | null; enteredFinishedGsm: Dec | null }
+const NO_WIDTH: WidthParts = { finishedWidthCm: null, reedWidthCm: null, enteredFinishedGsm: null };
 
 interface GsmParts { rawWidthCm: Dec | null; warpKgPerM: Dec | null; weftKgPerM: Dec | null; enteredRawGsm: Dec | null }
 export interface TechSummaryParts { endsCount: number | null; picksPerCm: Dec | null; picksInRepeat: number | null; repeatCm: Dec | null }
@@ -39,7 +53,7 @@ const NO_TECH: TechSummaryParts = { endsCount: null, picksPerCm: null, picksInRe
 const pos = (v: Dec | null): Dec | null => (v && v.gt(0) ? v : null);
 
 /** Ham değerlerden (Decimal) sözleşme alanları — yuvarlama yalnız burada (2 hane). */
-export function presentComputedGsm(p: GsmParts, t: TechSummaryParts = NO_TECH): ComputedGsm {
+export function presentComputedGsm(p: GsmParts, t: TechSummaryParts = NO_TECH, w: WidthParts = NO_WIDTH): ComputedGsm {
   const warpG = p.warpKgPerM?.mul(KG_TO_G) ?? null;
   const weftG = p.weftKgPerM?.mul(KG_TO_G) ?? null;
   const total = warpG && weftG ? warpG.plus(weftG) : null;
@@ -63,6 +77,12 @@ export function presentComputedGsm(p: GsmParts, t: TechSummaryParts = NO_TECH): 
     picksInRepeat: t.picksInRepeat && t.picksInRepeat > 0 ? t.picksInRepeat : null,
     repeatCm: num2(repeat),
     repeatsPerM: num2(repeat ? HUNDRED.div(repeat) : null),
+    finishedWidthCm: num2(pos(w.finishedWidthCm)),
+    reedWidthCm: num2(pos(w.reedWidthCm)),
+    widthShrinkPct: num2(widthShrinkPct(p.rawWidthCm, w.finishedWidthCm)),
+    rawGPerMt: num2(gramsPerLinearMetre(p.enteredRawGsm, p.rawWidthCm)),
+    finishedGPerMt: num2(gramsPerLinearMetre(w.enteredFinishedGsm, w.finishedWidthCm)),
+    widthWarnings: widthOrderWarnings({ finishedWidthCm: w.finishedWidthCm, rawWidthCm: p.rawWidthCm, reedWidthCm: w.reedWidthCm }),
   };
 }
 
@@ -70,11 +90,15 @@ export function presentComputedGsm(p: GsmParts, t: TechSummaryParts = NO_TECH): 
 export async function computedGsmForItem(itemId: string): Promise<ComputedGsm> {
   const item = await prisma.item.findUnique({
     where: { id: itemId },
-    select: { id: true, itemType: true, rawWidthCm: true, rawGsm: true, weaveDesign: { select: { repeatCm: true } } },
+    select: {
+      id: true, itemType: true, rawWidthCm: true, rawGsm: true, widthCm: true, finishedGsm: true,
+      weaveDesign: { select: { repeatCm: true } }, warpSpec: { select: { reedWidthCm: true } },
+    },
   });
   if (!item) throw AppError.notFound("Ürün bulunamadı.");
   const base = { rawWidthCm: item.rawWidthCm, enteredRawGsm: item.rawGsm };
-  if (item.itemType !== "FABRIC") return presentComputedGsm({ ...base, warpKgPerM: null, weftKgPerM: null });
+  const widths: WidthParts = { finishedWidthCm: item.widthCm, reedWidthCm: item.warpSpec?.reedWidthCm ?? null, enteredFinishedGsm: item.finishedGsm };
+  if (item.itemType !== "FABRIC") return presentComputedGsm({ ...base, warpKgPerM: null, weftKgPerM: null }, NO_TECH, widths);
   const src = await loadCostStructureSourcesTx(prisma as unknown as Prisma.TransactionClient, [item.id]);
   const input = buildCostInput(src, { itemId: item.id });
   const usage = yarnUsagePerM(input, { includeWaste: false });
@@ -88,5 +112,6 @@ export async function computedGsmForItem(itemId: string): Promise<ComputedGsm> {
   return presentComputedGsm(
     { ...base, warpKgPerM, weftKgPerM },
     { endsCount, picksPerCm: input.weft?.picksPerCm.value ?? null, picksInRepeat, repeatCm: item.weaveDesign?.repeatCm ?? null },
+    widths,
   );
 }

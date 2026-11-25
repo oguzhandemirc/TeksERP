@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
 import { itemTypeLabels } from "@/types/enums";
+import { unitLabel } from "@/lib/item-unit";
 import { itemCarriesAllowedLists } from "./itemPayload.helper";
 import { ItemLifecycleBadge, itemLifecycleExportText } from "./ItemLifecycleBadge";
 
@@ -77,6 +78,8 @@ export const itemColumns: ColumnDef<Item>[] = [
   {
     accessorKey: "unit",
     header: () => <SortableHeader field="unit" label="Birim" />,
+    cell: ({ row }) => unitLabel(row.original.unit),
+    meta: { exportValue: (r: Item) => unitLabel(r.unit) },
   },
   {
     id: "allowedColors",

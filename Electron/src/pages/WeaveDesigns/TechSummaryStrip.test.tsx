@@ -37,6 +37,16 @@ describe("TechSummaryStrip", () => {
     expect(screen.getByTestId("tech-endsCount")).toHaveTextContent("—");
   });
 
+  it("Armür deseninde çerçeve sayısı hücresi görünür; verilmezse hücre yok", async () => {
+    computedGsm.mockResolvedValue({ rawWidthCm: 300, warpGPerM: 50, weftGPerM: 40, totalGPerM: 90, gsm: 30, enteredRawGsm: null, diffPct: null });
+    const { unmount } = renderWithProviders(<TechSummaryStrip fabric={FABRIC} frameCount={12} />);
+    await waitFor(() => expect(screen.getByTestId("tech-frameCount")).toHaveTextContent("12"));
+    unmount();
+    renderWithProviders(<TechSummaryStrip fabric={FABRIC} />);
+    await waitFor(() => expect(screen.getByTestId("tech-gsm")).toHaveTextContent("30"));
+    expect(screen.queryByTestId("tech-frameCount")).toBeNull();
+  });
+
   it("kumaş yokken şerit çizilmez, sorgu atılmaz", () => {
     renderWithProviders(<TechSummaryStrip fabric={null} />);
     expect(screen.queryByTestId("tech-summary")).toBeNull();

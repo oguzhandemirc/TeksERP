@@ -6,6 +6,7 @@
 // "İstek düştü" ile "kayıt yok" ayrı cümledir (İplik Stoğu emsali). Süzme sunucuda.
 // =============================================================================
 import { useMemo, useState } from "react";
+import { unitLabel } from "@/lib/item-unit";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { AlertTriangle } from "lucide-react";
@@ -38,11 +39,11 @@ const COLUMNS: ColumnDef<ConsumableStockRow>[] = [
   {
     id: "balance",
     header: "Bakiye",
-    meta: { label: "Bakiye", align: "right", exportValue: (r) => `${formatNumber(r.balance, 3)} ${r.unit}` },
+    meta: { label: "Bakiye", align: "right", exportValue: (r) => `${formatNumber(r.balance, 3)} ${unitLabel(r.unit)}` },
     cell: ({ row: { original: r } }) => (
       <span className={`tabular-nums ${r.negative ? "text-amber-600" : ""}`}>
         {r.negative && <AlertTriangle className="mr-1 inline h-4 w-4" aria-label="Eksi bakiye — mal kabul girişini kontrol edin" />}
-        {formatNumber(r.balance, 3)} {r.unit}
+        {formatNumber(r.balance, 3)} {unitLabel(r.unit)}
       </span>
     ),
   },

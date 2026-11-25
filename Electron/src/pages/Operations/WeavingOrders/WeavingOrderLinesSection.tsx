@@ -18,6 +18,7 @@ import type { WeavingOrderLineLink } from "./types";
 import { OrderLinePickerDialog } from "./OrderLinePickerDialog";
 import { orderLinePrefill } from "./prefill";
 import { formatQty } from "@/lib/format";
+import { unitLabel } from "@/lib/item-unit";
 
 /** Satırın gösterim verisi — DTO (kayıtlı bağ) ya da seçici satırı (yeni bağ) aynı biçime iner. */
 export interface LineMeta {
@@ -41,7 +42,7 @@ export function metaFromAvailable(l: AvailableOrderLine): LineMeta {
 /** Kayıtlı bağ (Z1 DTO, iç içe) → gösterim (saf): açık = quantity − shippedQty; iptal satır "iptal" işaretli. */
 export function metaFromLink(l: WeavingOrderLineLink): LineMeta {
   const open = Math.max(0, num(l.orderLine.quantity) ?? 0) - Math.max(0, num(l.orderLine.shippedQty) ?? 0);
-  const unit = l.orderLine.unit === "MT" ? "m" : l.orderLine.unit.toLowerCase();
+  const unit = unitLabel(l.orderLine.unit);
   return {
     orderNumber: l.orderLine.order.orderNumber,
     customerName: l.orderLine.order.customer.name,

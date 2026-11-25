@@ -10,6 +10,7 @@ import { loadAllForPicker } from "@/lib/picker-loader";
 import { subcontractorService } from "@/pages/Subcontractors/service";
 import { subcontractorCategoryService } from "@/pages/SubcontractorCategories/service";
 import type { Subcontractor } from "@/pages/Subcontractors/types";
+import { useSubcontractorRecordForm } from "@/pages/Subcontractors/useSubcontractorRecordForm";
 
 export type CategoryScopeState =
   | { kind: "none" }
@@ -59,10 +60,12 @@ export function SubcontractorCategoryPicker({ categoryId, categoryCode, queryKey
   const [showAll, setShowAll] = useState(false);
   const filtered = scope.kind === "ready" && !showAll;
   const filters = filtered ? { categoryId: scope.categoryId } : undefined;
+  const subcontractorForm = useSubcontractorRecordForm();
   return (
     <EntityPickerModal<Subcontractor>
       {...rest}
       service={subcontractorService}
+      recordForm={subcontractorForm}
       queryKey={`${queryKey}-${filtered ? scope.categoryId : "all"}`}
       filters={filters}
       headerSlot={<CategoryScopeBar scope={scope} showAll={showAll} onShowAll={setShowAll} />}

@@ -14,6 +14,7 @@ import { QuickAddProperty } from "@/components/forms/QuickAddProperty";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { stationService } from "@/pages/Stations/service";
 import type { Station } from "@/pages/Stations/types";
+import { useStationRecordForm } from "@/pages/Stations/useStationRecordForm";
 import { SubcontractorCategoryPicker } from "@/components/forms/SubcontractorCategoryPicker";
 import { stationKindLabels } from "@/types/enums";
 import { stationCapabilityService } from "@/pages/StationCapabilities/service";
@@ -79,6 +80,7 @@ export function RouteStepDetail({
   paramBox,
 }: Props) {
   const isExternal = step.stationType === "EXTERNAL";
+  const stationForm = useStationRecordForm();
   const tone = toneFor(step.stationType, step.stationKind);
   const { hasPermission } = useRoleAccess();
   const canWriteProperty = hasPermission("property:write");
@@ -194,6 +196,7 @@ export function RouteStepDetail({
             value={step.stationId || null}
             onChange={onPickStation}
             service={stationService}
+            recordForm={stationForm}
             queryKey="stations-wo-step"
             getLabel={(s) => s.name}
             getSubLabel={(s) => `${s.code} · ${stationKindLabels[s.kind] ?? s.kind}`}

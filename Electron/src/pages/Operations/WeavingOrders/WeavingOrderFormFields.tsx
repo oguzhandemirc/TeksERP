@@ -47,7 +47,7 @@ function useItemWarpSpecPrefill(form: Form, enabled: boolean): void {
 
 export function FabricFields({ form, devereEnabled }: { form: Form; devereEnabled: boolean }) {
   const colorForm = useColorRecordForm();
-  const itemForm = useItemRecordForm();
+  const itemForm = useItemRecordForm(["FABRIC"]);
   useItemWarpSpecPrefill(form, devereEnabled);
   // Yeni dokuma işi = yeni üretim planı (A3): Tükenene kadar kart ayara bağlı listelenir.
   const flags = useFeatureFlags().data?.data;

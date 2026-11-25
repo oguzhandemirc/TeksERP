@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import { Factory, Plus } from "lucide-react";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -92,7 +93,9 @@ export function ProductionStationsPage() {
   const canWrite = hasPermission("station:write");
 
   const [showInactive, setShowInactive] = useState(false);
-  const [search, setSearch] = useState("");
+  // Derin bağlantı (`?search=`: seçicideki "Kart ekranında aç") aramayı doldurur.
+  const [searchParams] = useSearchParams();
+  const [search, setSearch] = useState(() => searchParams.get("search") ?? "");
   const debouncedSearch = useDebouncedValue(search, 300);
   const [stationId, setStationId] = useState("__all__");
   const [machinePresence, setMachinePresence] = useState<MachinePresence>("all");
