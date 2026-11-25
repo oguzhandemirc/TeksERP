@@ -1,12 +1,14 @@
 // Ürün penceresi > Desen (B19): desen kartını kısa listeden seç ya da aynı pencereden yeni desen kartı aç (kod · ad ·
 // mekanizma · örgü); armür ızgarası / jakar bilgileri Desen Kartları ekranında doldurulur.
+// Kullanım yeri (kullanıcı 2026-11-25): desen burada düzenlenmez — "Örnek al" (yalnız yeni kart) ya da Desen Kartları ekranında aç.
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Controller, type UseFormReturn } from "react-hook-form";
-import { Grid3x3, Plus } from "lucide-react";
+import { Copy, Grid3x3, Plus, SquareArrowOutUpRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/forms/FormField";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
+import { WeaveDesignCopyDialog } from "@/pages/WeaveDesigns/WeaveDesignCopyDialog";
 import { WeaveDesignCreateDialog } from "@/pages/WeaveDesigns/WeaveDesignCreateDialog";
 import { weaveDesignApi } from "@/pages/WeaveDesigns/service";
 import type { WeaveDesign } from "@/pages/WeaveDesigns/types";
@@ -28,8 +30,14 @@ export function mechanismDetail(d: WeaveDesign): string[] {
   return [];
 }
 
+// Sekme deposu tembel: statik import bütün rota ağacını ürün penceresine bağlardı.
+function openWeaveDesign(id: string) {
+  void import("@/store/tabs").then((m) => m.useTabsStore.getState().openTab(`/definitions/weave-designs/${id}`, { forceNew: true }));
+}
+
 export function ItemWeaveSection({ form, canWrite }: { form: UseFormReturn<ItemFormValues>; canWrite: boolean }) {
   const [creating, setCreating] = useState(false);
+  const [copying, setCopying] = useState(false);
   const designId = form.watch("weaveDesignId");
   const design = useQuery({ queryKey: ["weave-designs", "detail", designId], queryFn: () => weaveDesignApi.get(designId), enabled: !!designId });
   const d = design.data;
@@ -74,7 +82,24 @@ export function ItemWeaveSection({ form, canWrite }: { form: UseFormReturn<ItemF
             <dt className="text-muted-foreground">Örgü</dt><dd>{cls.weaveStructure ? WEAVE_STRUCTURE_LABEL[cls.weaveStructure] : "Belirtilmedi"}</dd>
             {mechanismDetail(d).length > 0 && (<><dt className="text-muted-foreground">Ayrıntı</dt><dd>{mechanismDetail(d).join(" · ")}</dd></>)}
           </dl>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {canWrite && (
+              <Button type="button" size="sm" variant="outline" onClick={() => setCopying(true)}>
+                <Copy className="mr-1.5 h-4 w-4" />Örnek al (yalnız bu kumaş)
+              </Button>
+            )}
+            <Button type="button" size="sm" variant="outline" onClick={() => openWeaveDesign(d.id)}>
+              <SquareArrowOutUpRight className="mr-1.5 h-4 w-4" />Desen Kartları ekranında aç
+            </Button>
+          </div>
         </div>
+      )}
+      {copying && d && (
+        <WeaveDesignCopyDialog
+          source={d}
+          onClose={() => setCopying(false)}
+          onCreated={(id) => form.setValue("weaveDesignId", id, { shouldDirty: true })}
+        />
       )}
       {creating && (
         <WeaveDesignCreateDialog

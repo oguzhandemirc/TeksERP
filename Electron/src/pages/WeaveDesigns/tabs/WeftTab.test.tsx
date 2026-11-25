@@ -68,7 +68,7 @@ describe("WeftTab — bu desene özel kopya", () => {
     expect(screen.getByTestId("fork-staying")).toHaveTextContent("D2059");
     expect(screen.getByTestId("fork-staying")).not.toHaveTextContent("D2057 — ");
     expect(screen.queryByTestId("fork-staying-more")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Kopyala ve bu kumaşa bağla" }));
+    fireEvent.click(screen.getByRole("button", { name: "Yeni kartı oluştur ve bu kumaşa bağla" }));
     await waitFor(() => expect(api.fork).toHaveBeenCalledWith("w-1", { itemId: "it-a", code: "ATK-ORTAK-D2057", name: "Ortak atkı (D2057)" }));
     // (d) örnek alma kaynağı değiştirmez: ortak karta PATCH yok.
     expect(api.update).not.toHaveBeenCalled();

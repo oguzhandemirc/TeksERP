@@ -65,7 +65,7 @@ export function WeftSpecForkDialog({ spec, fabric, onClose }: Props) {
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Vazgeç</Button>
-          <Button disabled={!code.trim() || !name.trim() || fork.isPending || users.isLoading} onClick={() => fork.mutate()}>Kopyala ve bu kumaşa bağla</Button>
+          <Button disabled={!code.trim() || !name.trim() || fork.isPending || users.isLoading} onClick={() => fork.mutate()}>Yeni kartı oluştur ve bu kumaşa bağla</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
