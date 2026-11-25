@@ -38,9 +38,15 @@ describe("top/sevk kumaş seçicileri", () => {
   });
 
   it("Manuel stok girişi yalnız aktif kumaş ister", async () => {
+    // Seçici modal (EntityPickerModal) → listCursor; liste modal açılınca istenir.
+    const listCursor = vi.spyOn(itemService, "listCursor").mockResolvedValue({ success: true, data: [], pagination: { nextCursor: null, hasMore: false, limit: 50 } } as never);
     renderWithProviders(<ManualEntryDialog open onOpenChange={() => {}} />);
-    for (const f of await itemFiltersAfterOpen()) {
-      expect(f).toEqual(expect.objectContaining({ itemType: "FABRIC", lifecycleStatus: "ACTIVE" }));
+    await userEvent.click(await screen.findByText("Kumaş ara..."));
+    await waitFor(() => expect(listCursor).toHaveBeenCalled());
+    for (const [params] of listCursor.mock.calls) {
+      expect(params?.filters).toEqual(expect.objectContaining({ itemType: "FABRIC", lifecycleStatus: "ACTIVE" }));
     }
+    // Ortak kayıt formu bağlı: seçici modalında "Yeni Ürün" (kumaş kapsamlı ürün formu).
+    expect(await screen.findByRole("button", { name: /Yeni Ürün ekle/ })).toBeInTheDocument();
   });
 });

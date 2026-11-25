@@ -22,6 +22,7 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { ItemPickerModal } from "@/components/forms/ItemPickerModal";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { routeService } from "@/pages/Routes/service";
+import { useRouteRecordForm } from "@/pages/Routes/useRouteRecordForm";
 import type { ProductionRoute } from "@/pages/Routes/types";
 import { apiErrorText } from "@/lib/api-error";
 import { TERIM } from "@/lib/terim";
@@ -85,6 +86,7 @@ type RouteFieldsProps = {
 /** Fabrika varsayılan rotası + öneri önceliği — backend `suggestRoute` zincirinin iki ayarı. */
 function RouteSuggestionFields({ routeId, onRouteChange, priority, onPriorityChange, saved, routeDirty }: RouteFieldsProps) {
   const savedRoute = saved?.defaultRoute;
+  const routeForm = useRouteRecordForm();
   const defaultPriority = saved?.defaultRouteSuggestionPriority ?? "CUSTOMER_FIRST";
   return (
     <>
@@ -99,6 +101,7 @@ function RouteSuggestionFields({ routeId, onRouteChange, priority, onPriorityCha
             value={routeId}
             onChange={onRouteChange}
             service={routeService}
+            recordForm={routeForm}
             queryKey="routes"
             getLabel={(r) => r.name}
             getSubLabel={(r) => r.code}

@@ -6,12 +6,14 @@ import { Input } from "@/components/ui/input";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { defectTypeService } from "@/pages/DefectTypes/service";
 import type { DefectType } from "@/pages/DefectTypes/types";
+import { useDefectTypeRecordForm } from "@/pages/DefectTypes/useDefectTypeRecordForm";
 import { SIZE_LABEL, SIZE_ORDER, SIZE_POINTS, defectRowProblem, newDefectRow, type DefectRow } from "./inspectionRules";
 
 interface Props { rows: DefectRow[]; onChange: (rows: DefectRow[]) => void }
 
 export function DefectTableEditor({ rows, onChange }: Props) {
   const patch = (key: string, p: Partial<DefectRow>) => onChange(rows.map((r) => (r.key === key ? { ...r, ...p } : r)));
+  const defectForm = useDefectTypeRecordForm();
   return (
     <div className="space-y-2" data-testid="defect-editor">
       {rows.length === 0 && <p className="rounded-md border border-dashed p-3 text-center text-xs text-muted-foreground">Hata yok — temiz top olarak kaydedilir.</p>}
@@ -23,7 +25,7 @@ export function DefectTableEditor({ rows, onChange }: Props) {
               <span className="w-6 text-xs text-muted-foreground tabular-nums">{i + 1}.</span>
               <div className="min-w-[12rem] flex-1">
                 <EntityPickerModal<DefectType>
-                  value={r.defectTypeId || null} onChange={(id) => patch(r.key, { defectTypeId: id ?? "" })} service={defectTypeService}
+                  value={r.defectTypeId || null} onChange={(id) => patch(r.key, { defectTypeId: id ?? "" })} service={defectTypeService} recordForm={defectForm}
                   queryKey="inspection-defect-type" getLabel={(t) => t.name} getSubLabel={(t) => t.code} placeholder="Hata türü seç" title="Hata türü" triggerClassName="h-9 w-full"
                 />
               </div>

@@ -30,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { routeService } from "@/pages/Routes/service";
+import { useRouteRecordForm } from "@/pages/Routes/useRouteRecordForm";
 import type { ProductionRoute } from "@/pages/Routes/types";
 import { stationCapabilityService } from "@/pages/StationCapabilities/service";
 import { capCanApplyColor } from "@/pages/StationCapabilities/types";
@@ -116,6 +117,7 @@ export function RouteEditor({
   stepParamBox,
   renderChipDetail,
 }: Props) {
+  const routeForm = useRouteRecordForm();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
@@ -252,6 +254,7 @@ export function RouteEditor({
               onSeed(id);
             }}
             service={routeService}
+            recordForm={routeForm}
             queryKey="routes"
             getLabel={(r) => r.name}
             getSubLabel={(r) => r.code}

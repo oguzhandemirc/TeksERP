@@ -14,6 +14,11 @@ import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPicker
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { productRecipeService } from "@/pages/ProductRecipes/service";
 import type { ProductRecipe } from "@/pages/ProductRecipes/types";
+import { useProductRecipeRecordForm } from "@/pages/ProductRecipes/useProductRecipeRecordForm";
+import { useWeaveDesignRecordForm } from "@/pages/WeaveDesigns/useWeaveDesignRecordForm";
+import type { RecordFormSpec } from "@/components/forms/record-form/types";
+
+type Variant = ProductRecipe & { variantCode?: string | null };
 import {
   fetchEffectiveConstruction,
   weaveDesignPickerService,
@@ -27,16 +32,19 @@ import type { WeavingOrderFormValues } from "./schema";
 type Form = UseFormReturn<WeavingOrderFormValues>;
 
 function RecipePicker({ form, itemId }: { form: Form; itemId: string }) {
+  // Varyant = iş emri şablonu; `variantCode` yalnız okuma ekidir → aynı kayıt formu.
+  const recipeForm = useProductRecipeRecordForm() as RecordFormSpec<Variant>;
   return (
     <FormField label="Varyant (opsiyonel)" error={form.formState.errors.recipeId} info="Varyantın değiştirdiği atkı ipliği özete yansır">
       <Controller
         control={form.control}
         name="recipeId"
         render={({ field }) => (
-          <EntityPickerModal<ProductRecipe & { variantCode?: string | null }>
+          <EntityPickerModal<Variant>
             value={field.value || null}
             onChange={(id) => field.onChange(id ?? "")}
             service={productRecipeService}
+            recordForm={recipeForm}
             queryKey={`product-recipes-weaving-${itemId}`}
             filters={{ itemId, isActive: "true" }}
             getLabel={(r) => (r.variantCode ? `${r.variantCode} · ${r.name}` : r.name)}
@@ -68,6 +76,7 @@ function useResetOnItemChange(form: Form, itemId: string): void {
 export function ConstructionFields({ form, initialItemId = null }: { form: Form; initialItemId?: string | null }) {
   const { hasPermission } = useRoleAccess();
   const canRead = hasPermission("warpspec:read");
+  const weaveForm = useWeaveDesignRecordForm();
   const itemId = form.watch("itemId");
   useResetOnItemChange(form, itemId);
   // Düzenlemede (ürün aynıyken) boş alan açık null = "kartsız"; oluştururken/ürün değişince ürünün kartı.
@@ -118,6 +127,7 @@ export function ConstructionFields({ form, initialItemId = null }: { form: Form;
                 value={field.value || null}
                 onChange={(id) => field.onChange(id ?? "")}
                 service={weaveDesignPickerService}
+                recordForm={weaveForm}
                 queryKey="weave-designs-weaving"
                 getLabel={(d) => d.name}
                 getSubLabel={(d) => d.code}
