@@ -4673,6 +4673,8 @@ model Item {
 model FabricType {
   id        String   @id @default(uuid()) @db.Uuid
   name      String   @unique @db.VarChar(60)
+  /// Arama gölgesi: GENERATED tr_fold("name") (migration `20261125160000_lif_kumas_turu_fold`); yazılamaz.
+  nameFold  String?  @default(dbgenerated())
   sortOrder Int      @default(0)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now()) @db.Timestamptz
@@ -4689,6 +4691,9 @@ model FiberType {
   id           String   @id @default(uuid()) @db.Uuid
   name         String   @unique @db.VarChar(40)
   abbreviation String?  @db.VarChar(8)
+  /// Arama gölgeleri: GENERATED tr_fold (migration `20261125160000_lif_kumas_turu_fold`); yazılamaz.
+  nameFold         String? @default(dbgenerated())
+  abbreviationFold String? @default(dbgenerated())
   sortOrder    Int      @default(0)
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now()) @db.Timestamptz

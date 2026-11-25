@@ -146,7 +146,7 @@ async function main(): Promise<void> {
   const cat = readFileSync(join(SRC, "routes", "fabric-fiber-type.routes.ts"), "utf8");
   const app = readFileSync(join(SRC, "app.ts"), "utf8");
   const itemsAt = app.search(/app\.use\("\/api\/items",/);
-  check("§8a lif ucu item:write, kompozisyon item:read kapılı", /router\.use\(verifyToken,\s*requirePermission\(permission\)\)/.test(route) && /itemFiberRouter = gatedRouter\("item:write"\)/.test(route) && /itemCompositionRouter = gatedRouter\("item:read"\)/.test(route));
+  check("§8a lif ucu item:write, kompozisyon item:read kapılı", /router\.use\(verifyToken,\s*requirePermission\("item:write"\)\)/.test(route) && /itemFiberRouter = router\b/.test(route) && /itemCompositionRouter\.use\(verifyToken,\s*requirePermission\("item:read"\)\)/.test(route));
   check("§8b iki uç da /api/items'ten ÖNCE bağlı", app.indexOf('"/api/items/:id/fibers"') >= 0 && app.indexOf('"/api/items/:id/fibers"') < itemsAt && app.indexOf('"/api/items/:id/computed-composition"') < itemsAt);
   check("§8c kumaş/lif türü kataloğunda silme ucu yok", !/router\.delete\(/.test(cat));
 }

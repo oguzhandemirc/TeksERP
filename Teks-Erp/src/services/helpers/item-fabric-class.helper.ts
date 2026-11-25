@@ -4,6 +4,7 @@
 import { FlameRetardancy } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
+import { ekranYolu } from "../../constants/panel-ekran-yolu";
 import { FABRIC_TECHNIQUES, FABRIC_TECHNIQUES_AVAILABLE, type FabricTechniqueValue } from "../../constants/weave-classification";
 
 /** Üretim tekniği (2026-11-25): yalnız bugün açık teknikler (Dokuma); Örme "yakında" → 400; null/"" temizler. */
@@ -49,7 +50,7 @@ export async function readFabricTypeRef(raw: unknown, itemId?: string): Promise<
   if (!t) throw AppError.badRequest("Kumaş türü bulunamadı.", { code: "FABRIC_TYPE_NOT_FOUND" });
   if (!t.isActive) {
     const kept = itemId ? await prisma.item.count({ where: { id: itemId, fabricTypeId: raw } }) : 0;
-    if (kept === 0) throw AppError.badRequest("Kumaş türü pasif; Tanımlar › Kumaş Türleri'nden etkinleştirin.", { code: "FABRIC_TYPE_INACTIVE" });
+    if (kept === 0) throw AppError.badRequest(`Kumaş türü pasif; ${ekranYolu("kumasTurleri")} ekranından etkinleştirin.`, { code: "FABRIC_TYPE_INACTIVE" });
   }
   return raw;
 }
