@@ -4686,6 +4686,7 @@ model FabricType {
 
   items Item[] @relation("ItemFabricType")
 
+  @@unique([nameFold])
   @@map("fabric_types")
 }
 
@@ -4705,6 +4706,7 @@ model FiberType {
 
   itemFibers ItemFiber[]
 
+  @@unique([nameFold])
   @@map("fiber_types")
 }
 
