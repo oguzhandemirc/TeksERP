@@ -23,6 +23,17 @@ describe("Z2 bayrak bağı (kaynak taraması)", () => {
     }
   });
 
+  it("Dokuma İşi formu: çözgü kartı seçici useWarpSpecEnabled'a (devere ∨ dokuma) bağlı; levent ön-dolumu devere kapısında", () => {
+    const fields = src("WeavingOrders/WeavingOrderFormFields.tsx");
+    const m = fields.match(/const (\w+) = useWarpSpecEnabled\(\);/);
+    expect(m).not.toBeNull();
+    expect(fields).toMatch(new RegExp(`\\{${m![1]} && \\(\\s*<FormField label="Çözgü kartı"`));
+    expect(fields).toContain(`useItemWarpSpecPrefill(form, ${m![1]});`);
+    expect(fields).not.toMatch(/devereEnabled/);
+    const dialog = src("WeavingOrders/WeavingOrderFormDialog.tsx");
+    expect(dialog).toMatch(/\{devereEnabled && <BeamPrefillField /);
+  });
+
   it("üç kanca bayrak anahtarını fail-closed okur (yüklenene dek false)", () => {
     const s = src("../../hooks/usePricingEnabled.ts");
     for (const key of ["devereBeamWeavingLinkRequired", "dokumaRunWeavingOrderRequired", "dokumaOrderLineLinkRequired"]) {

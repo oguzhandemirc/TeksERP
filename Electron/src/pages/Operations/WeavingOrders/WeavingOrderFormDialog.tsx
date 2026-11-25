@@ -88,7 +88,7 @@ export function WeavingOrderFormDialog({ open, onOpenChange, initial, preset, on
             <div className="space-y-4">
               <FieldGrid cols={4}>
                 {devereEnabled && <BeamPrefillField form={form} onSuggestion={setSuggestion} />}
-                <FabricFields form={form} devereEnabled={devereEnabled} />
+                <FabricFields form={form} />
               </FieldGrid>
               <ConstructionFields form={form} initialItemId={initial?.itemId ?? null} />
             </div>
