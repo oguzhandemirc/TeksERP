@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/forms/FormField";
 import { EnumSelect } from "@/components/forms/EnumSelect";
 import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
-import { ItemType, itemTypeLabels, productItemTypeLabels, type ProductItemType } from "@/types/enums";
+import { ItemType, itemTypeLabels, type ProductItemType } from "@/types/enums";
 import { colorService } from "@/pages/Colors/service";
 import { fabricPropertyService } from "@/pages/FabricProperties/service";
 import { loadAllForPicker } from "@/lib/picker-loader";
@@ -19,13 +19,17 @@ import { ItemYarnFields } from "./ItemYarnFields";
 import { ItemWeavingDetails } from "./ItemWeavingDetails";
 import { PickerTrigger, StockCodeRow } from "./ItemFormParts";
 import { FabricTechniqueField } from "./FabricTechniqueField";
+import { unitLabel } from "@/lib/item-unit";
+import { itemTypeScope } from "./itemTypeScope";
 
 interface Props {
   form: UseFormReturn<ItemFormValues>;
   open: boolean;
   initial: Item | null | undefined;
+  allowedTypes?: readonly ItemType[];
   derivedUnit: string;
-  kaliteGuvenceEnabled: boolean;
+  /** Mamul en alanı: Kalite Güvence ya da dokuma modülü açıkken. */
+  widthVisible: boolean;
   yarnWasteVisible: boolean;
   carriesLists: boolean;
   staleLists: boolean;
@@ -64,7 +68,8 @@ export function ItemGeneralFields(p: Props) {
     const all = propsQ.data?.data ?? [];
     return allowedPropertyIds.map((id) => all.find((x) => x.id === id)).filter((x): x is NonNullable<typeof x> => Boolean(x));
   }, [allowedPropertyIds, propsQ.data?.data]);
-  const fabricWidth = itemType === ItemType.FABRIC && p.kaliteGuvenceEnabled;
+  const fabricWidth = itemType === ItemType.FABRIC && p.widthVisible;
+  const typeScope = itemTypeScope(isEdit ? null : p.allowedTypes);
 
   return (
     <>
@@ -75,26 +80,26 @@ export function ItemGeneralFields(p: Props) {
           {/* Canlı veride "ACTIVO" ve "ACTİVO" iki ayrı kumaş olarak duruyordu (i/İ tuzağı) — uyarı yazarken görünsün. */}
           <SimilarNamesWarning entity="items" name={form.watch("name") ?? ""} excludeId={initial?.id} />
         </FormField>
-        <FormField label="Tip" error={errors.itemType} required={!isEdit} info={isEdit ? "Tip kayıttan sonra değiştirilemez." : undefined}>
+        <FormField label="Tip" error={errors.itemType} required={!isEdit} info={isEdit ? "Tip kayıttan sonra değiştirilemez." : typeScope.info}>
           <Controller
             control={form.control}
             name="itemType"
             render={({ field }) => (
-              <EnumSelect<ProductItemType> value={field.value} onChange={field.onChange} labels={productItemTypeLabels} disabled={isEdit} />
+              <EnumSelect<ProductItemType> value={field.value} onChange={field.onChange} labels={typeScope.labels} disabled={isEdit || typeScope.locked} />
             )}
           />
         </FormField>
         <FormField label="Birim" info="Seçilen tipe göre otomatik atanır.">
-          <Input value={p.derivedUnit} readOnly tabIndex={-1} className="bg-muted font-mono text-center cursor-not-allowed" />
+          <Input value={unitLabel(p.derivedUnit)} readOnly tabIndex={-1} className="bg-muted text-center cursor-not-allowed" />
         </FormField>
         {itemType === ItemType.FABRIC && <FabricTechniqueField />}
         {/* Denye + satın alma birimi yalnız iplikte (SY-a); zorunlu DEĞİL — çözgü/atkı kartı açarken sunucu anlaşılır 400 verir. */}
         {itemType === ItemType.YARN && <ItemYarnFields form={form} />}
         {p.yarnWasteVisible && <ItemYarnWasteField form={form} />}
-        {/* K4P: ürün kartı eni — muayene puan/100 m² kaynağı #1; modül kapalıyken alan hiç yok (bugünkü form). */}
+        {/* K4P: ürün kartı eni (= mamul en, dokuma.md) — muayene puan/100 m² kaynağı #1; iki modül de kapalıyken alan yok. */}
         {fabricWidth && (
-          <FormField label="En (cm)" htmlFor="widthCm" error={errors.widthCm} info="4 puan muayenesinde puan/100 m² bu enden hesaplanır; boşsa KK1'de ölçülen en kullanılır">
-            <Input id="widthCm" inputMode="decimal" placeholder="280" {...form.register("widthCm")} />
+          <FormField label="Mamul en (cm)" htmlFor="widthCm" error={errors.widthCm} info="Bitmiş kumaşın eni. 4 puan muayenesinde puan/100 m² bu enden hesaplanır (boşsa KK1'de ölçülen en); ham en ile birlikte en çekmesini verir.">
+            <Input id="widthCm" inputMode="decimal" placeholder="ör. 280" {...form.register("widthCm")} />
           </FormField>
         )}
       </div>

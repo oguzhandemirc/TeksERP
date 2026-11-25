@@ -24,6 +24,8 @@ router.use(verifyToken, requirePermission("item:read"));
  *       Teknik özet (desen kartı şeridi): `endsCount` = zemin + ek çözgü katmanı teli · `endsPerCm = endsCount ÷ rawWidthCm` ·
  *       `picksPerCm` + `picksInRepeat` (Σ atkı satırı rapor atkısı) atkı kartından · `repeatCm` desen kartından ·
  *       `repeatsPerM = 100 ÷ repeatCm`.
+ *       Enler: `finishedWidthCm` (= ürün eni) · `reedWidthCm` (zemin çözgü kartı) · `widthShrinkPct = (ham − mamul) ÷ ham × 100` ·
+ *       `rawGPerMt = rawGsm × ham en/100` · `finishedGPerMt = finishedGsm × mamul en/100` · `widthWarnings[]` (mamul ≤ ham ≤ tarak bozuksa).
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: path
@@ -32,7 +34,7 @@ router.use(verifyToken, requirePermission("item:read"));
  *         schema: { type: string, format: uuid }
  *     responses:
  *       200:
- *         description: "{ success, data: { rawWidthCm, warpGPerM, weftGPerM, totalGPerM, gsm, enteredRawGsm, diffPct, endsCount, endsPerCm, picksPerCm, picksInRepeat, repeatCm, repeatsPerM } } — her alan number|null"
+ *         description: "{ success, data: { rawWidthCm, warpGPerM, weftGPerM, totalGPerM, gsm, enteredRawGsm, diffPct, endsCount, endsPerCm, picksPerCm, picksInRepeat, repeatCm, repeatsPerM, finishedWidthCm, reedWidthCm, widthShrinkPct, rawGPerMt, finishedGPerMt, widthWarnings } } — widthWarnings dizi, öteki her alan number|null"
  *       404: { description: Ürün bulunamadı }
  */
 router.get("/", async (req: Request, res: Response, next: NextFunction) => {

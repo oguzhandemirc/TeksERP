@@ -26,36 +26,37 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initial?: Station | null;
+  draft?: Partial<Station> | null; // seçicide "Örnek al" (kimliksiz)
   onSubmit: (values: StationFormValues) => void | Promise<void>;
   isSubmitting?: boolean;
   /** Liste görünümünde kurşun ayarı istasyon panelindedir; aynı veri iki açık formdan yazılmasın. */
   hideKursun?: boolean;
 }
 
-export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting, hideKursun }: Props) {
+export function StationFormDialog({ open, onOpenChange, initial, draft, onSubmit, isSubmitting, hideKursun }: Props) {
   // WEAVING türü yalnız dokuma modülü açıkken seçilebilir (mevcut değer korunur).
   const dokumaEnabled = useDokumaEnabled();
   // Devere yetenek kutuları yalnız devere modülü açıkken çizilir (kapalıyken form BİREBİR eski).
   const devereEnabled = useDevereEnabled();
-  const defaults: StationFormValues = initial
+  // Örnek al taslağı seçici satırının kimliksiz kopyasıdır (aynı alanlar); kayıt yine yalnız oluşturur.
+  const src = (initial ?? draft) as Station | null | undefined;
+  const defaults: StationFormValues = src
     ? {
-        name: initial.name,
-        type: initial.type,
-        kind: initial.kind,
-        department: initial.department ?? "",
-        isActive: initial.isActive,
-        appliesColor: initial.appliesColor ?? false,
-        appliesProperty: initial.appliesProperty ?? true,
-        appliesQuality: initial.appliesQuality ?? false,
-        inspectionEnabled: initial.inspectionEnabled ?? false,
-        machineStopEnabled: initial.machineStopEnabled ?? true,
-        producesWarpBeam: initial.producesWarpBeam ?? false,
-        consumesWarpBeam: initial.consumesWarpBeam ?? false,
-        capturesWidth: initial.capturesWidth ?? false,
-        scanAddAllowed: initial.scanAddAllowed ?? false,
-        scanNotSkippable: initial.scanNotSkippable ?? false,
-        defaultLabelCopies: initial.defaultLabelCopies ?? null,
-        defaultCategoryId: initial.defaultCategoryId ?? null,
+        name: src.name,
+        type: src.type,
+        kind: src.kind,
+        department: src.department ?? "",
+        isActive: initial ? src.isActive : true,
+        appliesColor: src.appliesColor ?? false,
+        appliesProperty: src.appliesProperty ?? true,
+        appliesQuality: src.appliesQuality ?? false,
+        inspectionEnabled: src.inspectionEnabled ?? false,
+        machineStopEnabled: src.machineStopEnabled ?? true,
+        producesWarpBeam: src.producesWarpBeam ?? false, consumesWarpBeam: src.consumesWarpBeam ?? false,
+        capturesWidth: src.capturesWidth ?? false,
+        scanAddAllowed: src.scanAddAllowed ?? false, scanNotSkippable: src.scanNotSkippable ?? false,
+        defaultLabelCopies: src.defaultLabelCopies ?? null,
+        defaultCategoryId: src.defaultCategoryId ?? null,
       }
     : // Yeni kayıt: yetenek kutuları ön-seçili türün ÖNERİSİYLE açılır (`stationKindDefaults.ts`).
       { ...stationFormDefaults, ...suggestedCapabilities(stationFormDefaults.kind) };
@@ -64,7 +65,7 @@ export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSub
     <EntityFormDialog<StationFormValues>
       open={open}
       onOpenChange={onOpenChange}
-      title={initial ? "İstasyonu Düzenle" : "Yeni İstasyon"}
+      title={initial ? "İstasyonu Düzenle" : draft ? "Yeni İstasyon (örnekten)" : "Yeni İstasyon"}
       schema={stationFormSchema}
       defaultValues={defaults}
       onSubmit={onSubmit}

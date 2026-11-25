@@ -16,6 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { cn } from "@/lib/utils";
+import { unitLabel } from "@/lib/item-unit";
 import {
   ITEM_PICKER_ANY,
   ITEM_PICKER_EMPTY,
@@ -87,7 +88,7 @@ function PickerRow({ r, onPick, record }: { r: ItemPickerRow; onPick: (row: Item
       <TableCell className="py-1.5">
         <Badge variant={typeBadgeVariant(r.itemType)}>{ITEM_TYPE_LABEL[r.itemType]}</Badge>
       </TableCell>
-      <TableCell className="py-1.5 text-xs">{r.unit}</TableCell>
+      <TableCell className="py-1.5 text-xs">{unitLabel(r.unit)}</TableCell>
       <TableCell className="py-1.5">
         <ColorCells r={r} />
       </TableCell>
@@ -159,7 +160,7 @@ export function ItemPickerModal({ open, onOpenChange, onPick, allowedTypes, life
     onPick(row);
     onOpenChange(false);
   };
-  const record = useRecordForm(useItemRecordForm<ItemPickerRow>(), (saved) => pick(itemPickerRow(saved)));
+  const record = useRecordForm(useItemRecordForm<ItemPickerRow>(allowedTypes), (saved) => pick(itemPickerRow(saved)));
   const emptyText = search || hasItemPickerFilter(filter) ? ITEM_PICKER_FILTERED_EMPTY : ITEM_PICKER_EMPTY;
 
   return (

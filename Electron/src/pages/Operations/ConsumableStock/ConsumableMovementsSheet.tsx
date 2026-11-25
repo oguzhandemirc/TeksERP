@@ -1,5 +1,6 @@
 // Sarf kaleminin hareketleri — yeni → eski, sunucu cursor'ı; ters kayıtlar ve geri alınmış tüketim işaretli.
 import { useInfiniteQuery } from "@tanstack/react-query";
+import { unitLabel } from "@/lib/item-unit";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -39,7 +40,7 @@ export function ConsumableMovementsSheet({ row, onClose }: { row: ConsumableStoc
                 <tr>
                   <th className="p-2">Tarih</th>
                   <th className="p-2">Hareket</th>
-                  <th className="p-2 text-right">Miktar ({row?.unit})</th>
+                  <th className="p-2 text-right">Miktar ({unitLabel(row?.unit)})</th>
                   <th className="p-2">Kaynak</th>
                 </tr>
               </thead>

@@ -18,6 +18,7 @@ import { formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { customerService } from "@/pages/Customers/service";
+import { useCustomerRecordForm } from "@/pages/Customers/useCustomerRecordForm";
 import { BranchSelect } from "@/pages/Customers/BranchSelect";
 import {
   useCustomerBranchesEnabled,
@@ -43,6 +44,7 @@ interface Props {
  */
 export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, dispatchNo }: Props) {
   const qc = useQueryClient();
+  const customerForm = useCustomerRecordForm("isCustomerRole");
   const [reason, setReason] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [completeWO, setCompleteWO] = useState(false);
@@ -269,6 +271,7 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
                       value={customerId}
                       onChange={handleCustomerChange}
                       service={customerService}
+                      recordForm={customerForm}
                       queryKey="direct-ship-customer"
                       getLabel={(c) => c.name}
                       getSubLabel={(c) => c.code}

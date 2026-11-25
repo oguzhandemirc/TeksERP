@@ -62,7 +62,9 @@ export function useRecordForm<T extends { id: string }, R extends { id: string }
   };
 
   const element = spec && canWrite ? (
-    <>
+    // React olayları portaldan da kabarır: seçici bir üst formun içindeyse (iş emri, levent formu)
+    // iç formun submit'i üst formu da göndermesin.
+    <span className="contents" onSubmit={(e) => e.stopPropagation()}>
       {spec.renderForm({
         open: state.mode !== "closed",
         onOpenChange: (open) => { if (!open) setState({ mode: "closed" }); },
@@ -83,7 +85,7 @@ export function useRecordForm<T extends { id: string }, R extends { id: string }
           setShared(null);
         }}
       />
-    </>
+    </span>
   ) : null;
 
   return {

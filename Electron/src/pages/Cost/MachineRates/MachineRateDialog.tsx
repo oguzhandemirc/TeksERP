@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { machineService } from "@/pages/Machines/service";
+import { useMachineRecordForm } from "@/pages/Machines/useMachineRecordForm";
 import type { Machine } from "@/pages/Machines/types";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { apiErrorText } from "@/lib/api-error";
@@ -94,6 +95,7 @@ export function MachineRateDialog({ onClose, current, machine: presetMachine }: 
 
 /** Değişimde/satırdan açılışta makine kilitli; başlıktan açılışta seçici DOĞRUDAN modal (combobox yok). */
 function MachineField({ fixed, value, onChange }: { fixed: MachineBrief | null; value: string | null; onChange: (id: string | null) => void }) {
+  const machineForm = useMachineRecordForm();
   return (
     <div>
       <span className="text-muted-foreground">Makine</span>
@@ -104,6 +106,7 @@ function MachineField({ fixed, value, onChange }: { fixed: MachineBrief | null; 
           value={value}
           onChange={onChange}
           service={machineService}
+          recordForm={machineForm}
           queryKey="machines"
           getLabel={(m) => `${m.code} — ${m.name}`}
           getSubLabel={(m) => m.station?.name}

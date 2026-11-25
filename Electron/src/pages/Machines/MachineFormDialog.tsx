@@ -16,25 +16,29 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initial?: Machine | null;
+  /** Seçicide "Örnek al": kimliksiz taslak (yalnız oluşturur). */
+  draft?: Partial<Machine> | null;
   onSubmit: (values: MachineFormValues) => void | Promise<void>;
   isSubmitting?: boolean;
   /** Kart-içi "Makine ekle" için ön-seçili istasyon (yeni kayıtta). */
   defaultStationId?: string;
 }
 
-export function MachineFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting, defaultStationId }: Props) {
+export function MachineFormDialog({ open, onOpenChange, initial, draft, onSubmit, isSubmitting, defaultStationId }: Props) {
   // Yuva alanı yalnız devere modülü açıkken çizilir (kapalıyken form BİREBİR eski, değer 1 gider).
   const devereEnabled = useDevereEnabled();
   // Planlama (devir/verim/en) yalnız dokuma tezgâhında anlamlı — modül kapalıyken bölüm yok (bugünkü form).
   const dokumaEnabled = useDokumaEnabled();
-  const defaults: MachineFormValues = initial
+  // Örnek al taslağı (kimliksiz) düzenleme değerleriyle aynı yoldan dolar; kayıt yine yalnız oluşturur.
+  const src = initial ?? draft;
+  const defaults: MachineFormValues = src
     ? {
-        stationId: initial.stationId,
-        name: initial.name,
-        warpBeamSlots: initial.warpBeamSlots ?? 1,
-        planRpm: planningToFormText(initial.planRpm),
-        planEfficiencyPct: planningToFormText(initial.planEfficiencyPct),
-        maxWorkingWidthCm: planningToFormText(initial.maxWorkingWidthCm),
+        stationId: src.stationId ?? machineFormDefaults.stationId,
+        name: src.name ?? "",
+        warpBeamSlots: src.warpBeamSlots ?? 1,
+        planRpm: planningToFormText(src.planRpm),
+        planEfficiencyPct: planningToFormText(src.planEfficiencyPct),
+        maxWorkingWidthCm: planningToFormText(src.maxWorkingWidthCm),
       }
     : { ...machineFormDefaults, stationId: defaultStationId ?? machineFormDefaults.stationId };
 
@@ -42,7 +46,7 @@ export function MachineFormDialog({ open, onOpenChange, initial, onSubmit, isSub
     <EntityFormDialog<MachineFormValues>
       open={open}
       onOpenChange={onOpenChange}
-      title={initial ? "Makineyi Düzenle" : "Yeni Makine"}
+      title={initial ? "Makineyi Düzenle" : draft ? "Yeni Makine (örnekten)" : "Yeni Makine"}
       schema={machineFormSchema}
       defaultValues={defaults}
       onSubmit={onSubmit}

@@ -12,11 +12,13 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initial?: Warehouse | null;
+  /** Seçicide "Örnek al": kimliksiz taslak (yalnız oluşturur). */
+  draft?: Partial<Warehouse> | null;
   onSubmit: (values: WarehouseFormValues) => void | Promise<void>;
   isSubmitting?: boolean;
 }
 
-export function WarehouseFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting }: Props) {
+export function WarehouseFormDialog({ open, onOpenChange, initial, draft, onSubmit, isSubmitting }: Props) {
   // ⚠️ 2026-09-02'den beri çok-depoluluk VERİDEN TÜRETİLMİYOR: ikinci depoyu
   // açmak yüzeyleri kendiliğinden getirmez, `depo.multiEnabled` de açılmalıdır.
   // Kullanıcı bunu kaydettikten SONRA "seçici niye çıkmadı" diye aramasın diye
@@ -36,13 +38,15 @@ export function WarehouseFormDialog({ open, onOpenChange, initial, onSubmit, isS
         notes: initial.notes ?? "",
         isActive: initial.isActive,
       }
-    : warehouseFormDefaults;
+    : draft
+      ? { ...warehouseFormDefaults, name: draft.name ?? "", address: draft.address ?? "", notes: draft.notes ?? "" }
+      : warehouseFormDefaults;
 
   return (
     <EntityFormDialog<WarehouseFormValues>
       open={open}
       onOpenChange={onOpenChange}
-      title={initial ? "Depoyu Düzenle" : "Yeni Depo"}
+      title={initial ? "Depoyu Düzenle" : draft ? "Yeni Depo (örnekten)" : "Yeni Depo"}
       schema={warehouseFormSchema}
       defaultValues={defaults}
       onSubmit={onSubmit}

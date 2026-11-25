@@ -17,6 +17,7 @@ import { warpSpecService } from "@/pages/WarpSpecs/service";
 import type { WarpSpec } from "@/pages/WarpSpecs/types";
 import { subcontractorService } from "@/pages/Subcontractors/service";
 import type { Subcontractor } from "@/pages/Subcontractors/types";
+import { useSubcontractorRecordForm } from "@/pages/Subcontractors/useSubcontractorRecordForm";
 import { customerService } from "@/pages/Customers/service";
 import type { Customer } from "@/pages/Customers/types";
 import { warpBeamPlanDefaults, warpBeamPlanSchema, type WarpBeamPlanValues } from "./schema";
@@ -47,6 +48,7 @@ function buildDefaults(initial?: WarpBeam | null): WarpBeamPlanValues {
 
 function OriginFields({ form, editing }: { form: Form; editing: boolean }) {
   const customerForm = useCustomerRecordForm();
+  const subcontractorForm = useSubcontractorRecordForm();
   const err = form.formState.errors;
   const origin = form.watch("originKind");
   // G3 emanet: CONSIGNED yalnız modül açıkken seçilebilir (kapalıda seçenek hiç çizilmez — bayt bayt eski form).
@@ -91,7 +93,7 @@ function OriginFields({ form, editing }: { form: Form; editing: boolean }) {
             control={form.control}
             name="subcontractorId"
             render={({ field }) => (
-              <EntityPickerModal<Subcontractor> value={field.value || null} onChange={(id) => field.onChange(id ?? "")} service={subcontractorService} queryKey="subcontractors-warp-beam" getLabel={(s) => s.name} icon={Handshake} title="Fasoncu seç" placeholder="Fasoncu seç" nullable />
+              <EntityPickerModal<Subcontractor> value={field.value || null} onChange={(id) => field.onChange(id ?? "")} service={subcontractorService} recordForm={subcontractorForm} queryKey="subcontractors-warp-beam" getLabel={(s) => s.name} icon={Handshake} title="Fasoncu seç" placeholder="Fasoncu seç" nullable />
             )}
           />
         </FormField>

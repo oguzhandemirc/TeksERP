@@ -12,14 +12,18 @@ import { subcontractorService } from "@/pages/Subcontractors/service";
 import type { Subcontractor } from "@/pages/Subcontractors/types";
 import { warehouseService } from "@/pages/Warehouses/service";
 import type { Warehouse } from "@/pages/Warehouses/types";
+import { useSubcontractorRecordForm } from "@/pages/Subcontractors/useSubcontractorRecordForm";
+import { useWarehouseRecordForm } from "@/pages/Warehouses/useWarehouseRecordForm";
 
 export function SubcontractorPicker({ value, onChange, id, title = "Devereci seç" }: { value: string | null; onChange: (id: string | null) => void; id?: string; title?: string }) {
+  const subcontractorForm = useSubcontractorRecordForm();
   return (
     <div id={id}>
       <EntityPickerModal<Subcontractor>
         value={value}
         onChange={(v) => onChange(v)}
         service={subcontractorService}
+        recordForm={subcontractorForm}
         queryKey="subcontractors-beam-body"
         filters={{ isActive: "true" }}
         getLabel={(s) => s.name}
@@ -33,12 +37,14 @@ export function SubcontractorPicker({ value, onChange, id, title = "Devereci se�
 }
 
 export function WarehousePicker({ value, onChange, id, placeholder = "Depo seç (isteğe bağlı)" }: { value: string | null; onChange: (id: string | null) => void; id?: string; placeholder?: string }) {
+  const warehouseForm = useWarehouseRecordForm();
   return (
     <div id={id}>
       <EntityPickerModal<Warehouse>
         value={value}
         onChange={(v) => onChange(v)}
         service={warehouseService}
+        recordForm={warehouseForm}
         queryKey="warehouses-beam-body"
         filters={{ isActive: "true" }}
         getLabel={(w) => w.name}
