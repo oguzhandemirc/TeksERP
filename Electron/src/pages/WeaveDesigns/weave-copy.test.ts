@@ -23,6 +23,13 @@ describe("buildCopyPayload", () => {
     expect(p.liftPlan).not.toBe(base.liftPlan);
   });
 
+  it("tahar türü: Armür/Eksantrik'te kopyalanır, Jakar'da ve boşken gönderilmez", () => {
+    expect(buildCopyPayload({ ...base, drawingInType: "SKIP" }, { code: "X", name: "Y" }).drawingInType).toBe("SKIP");
+    expect(buildCopyPayload({ ...base, shedMechanism: "CAM", drawingInType: "POINTED" }, { code: "X", name: "Y" }).drawingInType).toBe("POINTED");
+    expect(buildCopyPayload({ ...base, shedMechanism: "JACQUARD", drawingInType: "POINTED" }, { code: "X", name: "Y" })).not.toHaveProperty("drawingInType");
+    expect(buildCopyPayload({ ...base, drawingInType: null }, { code: "X", name: "Y" })).not.toHaveProperty("drawingInType");
+  });
+
   it("Eksantrik: saklı ızgara ve kanca taşınmaz (sunucu reddederdi)", () => {
     const p = buildCopyPayload({ ...base, shedMechanism: "CAM", weaveStructure: "PLAIN", selvedgeFrames: [2] }, { code: "X", name: "Y" });
     expect(p).not.toHaveProperty("liftPlan");

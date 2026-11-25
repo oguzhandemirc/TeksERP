@@ -5,6 +5,8 @@ import { cn } from "@/lib/utils";
 import { dueText, feeText, fmtM, isBeamCountOpen, planText, trimNum } from "./order-model";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { formatQty } from "@/lib/format";
+import { formatReedNo } from "@/lib/reed-unit";
+import { useReedUnit } from "@/hooks/useReedUnit";
 import { useWarpingPreview } from "./service";
 import type { WarpingOrder } from "./types";
 import { orderPreviewBody, percentWasteText } from "./waste-model";
@@ -36,8 +38,9 @@ function WasteItem({ o }: { o: WarpingOrder }) {
 
 export function OrderSummary({ o }: { o: WarpingOrder }) {
   const due = dueText(o.expectedReturnAt, o.status);
+  const reedNo = formatReedNo(o.warpSpec.reedNo, useReedUnit());
   const reed = [
-    o.warpSpec.reedNo && `tarak ${o.warpSpec.reedNo}`,
+    reedNo && `tarak ${reedNo}`,
     o.warpSpec.reedWidthCm && `${trimNum(o.warpSpec.reedWidthCm)} cm`,
     o.warpSpec.endsPerDent && `dişe ${o.warpSpec.endsPerDent} tel`,
   ]

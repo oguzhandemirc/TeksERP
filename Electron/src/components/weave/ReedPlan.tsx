@@ -1,6 +1,7 @@
 // Tarak planı: sol kenardan bir örnek — her diş bir kutu, içinde dişe giren tel kadar kare. Kenar teli
 // ayrı tonda, zemin telleri tel düzeni (sunucu `endsSequence`) sırasıyla boyanır. Sayılar özet satırında.
 import { formatQty } from "@/lib/format";
+import { DEFAULT_REED_UNIT, formatReedNo, reedUnitLabel, type ReedUnit } from "@/lib/reed-unit";
 import { cn } from "@/lib/utils";
 import { WeaveGrid } from "./WeaveGrid";
 import { YarnLegend } from "./YarnLegend";
@@ -12,7 +13,10 @@ export const SELVEDGE_COLOR = "hsl(var(--muted-foreground) / 0.55)";
 
 export interface ReedPlanProps {
   endsPerDent: number | null | undefined;
+  /** Saklı birimde (diş/10 cm). */
   reedNo?: string | number | null;
+  /** Firma tarak birimi (gösterim); varsayılan diş/10 cm. */
+  reedUnit?: ReedUnit;
   /** Toplam tel (kenar dahil). */
   totalEnds: number;
   /** Toplam kenar teli (iki yan); her yana yarısı. */
@@ -34,7 +38,9 @@ export function groundDentsFor(maxWidth: number, endsPerDent: number): number {
   return Math.max(3, Math.min(12, Math.floor((maxWidth - 2 * dent) / dent)));
 }
 
-export function ReedPlan({ endsPerDent, reedNo, totalEnds, selvedgeEnds, endsSequence, maxWidth = 640, slots, className }: ReedPlanProps) {
+export function ReedPlan({ endsPerDent, reedNo, reedUnit = DEFAULT_REED_UNIT, totalEnds, selvedgeEnds, endsSequence, maxWidth = 640, slots, className }: ReedPlanProps) {
+  // `reedNo` saklı birimde (diş/10 cm); gösterim çağıranın verdiği firma biriminde (`useReedUnit`).
+  const reedText = formatReedNo(reedNo, reedUnit);
   const epdIn = endsPerDent && endsPerDent > 0 ? endsPerDent : 1;
   const s = reedSample({ endsPerDent, totalEnds, selvedgeEnds, repeat: endsSequence?.repeat, groundDentsShown: groundDentsFor(maxWidth, epdIn) });
   if (!s) {
@@ -43,7 +49,7 @@ export function ReedPlan({ endsPerDent, reedNo, totalEnds, selvedgeEnds, endsSeq
   const epd = endsPerDent!;
   const parts = [
     `Dişe ${formatQty(epd, 0)} tel`,
-    reedNo != null && String(reedNo) !== "" ? `tarak no ${formatQty(reedNo, 2)}` : null,
+    reedText ? `tarak no ${reedText} ${reedUnitLabel(reedUnit)}` : null,
     s.selvedgePerSide > 0 ? `kenar her yanda ${formatQty(s.selvedgePerSide, 0)} tel (${formatQty(s.selvedgeDents, 0)} diş)` : null,
     `≈ ${formatQty(s.totalDents, 0)} diş`,
   ].filter(Boolean);

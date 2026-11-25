@@ -6,6 +6,7 @@
 // Saatler fabrika diliminden (`factory-time`). Sevk irsaliyesi seçilirse talimattan önce, sayfa sonuyla ayrılır.
 // =============================================================================
 import { fmtFactoryDate, fmtFactoryDateTime } from "@/lib/factory-time";
+import { DEFAULT_REED_UNIT, formatReedNo, reedUnitLabel, type ReedUnit } from "@/lib/reed-unit";
 import { fmtKg, fmtM, isBeamCountOpen, trimNum } from "./order-model";
 import type { WarpingDispatchRow, WarpingInstruction } from "./yarn-types";
 import { reedPlanHtml, reedPlanText, VISUAL_CSS, warpEndsStripHtml } from "./instruction-visual-html";
@@ -17,12 +18,14 @@ const yarnCell = (name: string, code: string) => `${esc(name || code)}${name && 
 
 const row = (label: string, value: string) => `<tr><th>${esc(label)}</th><td>${esc(value)}</td></tr>`;
 
-export function reedText(r: WarpingInstruction["reed"]): string {
+/** Dış belge: tarak numarası firma biriminde ve birim adıyla (deveci birimi tahmin etmesin). */
+export function reedText(r: WarpingInstruction["reed"], unit: ReedUnit = DEFAULT_REED_UNIT): string {
   if (!r) return "—";
-  return [r.reedNo && `No ${r.reedNo}`, r.reedWidthCm && `${trimNum(r.reedWidthCm)} cm`, r.endsPerDent !== null && `dişe ${r.endsPerDent} tel`].filter(Boolean).join(" · ") || "—";
+  const no = formatReedNo(r.reedNo, unit);
+  return [no && `No ${no} ${reedUnitLabel(unit)}`, r.reedWidthCm && `${trimNum(r.reedWidthCm)} cm`, r.endsPerDent !== null && `dişe ${r.endsPerDent} tel`].filter(Boolean).join(" · ") || "—";
 }
 
-function instructionSection(i: WarpingInstruction): string {
+function instructionSection(i: WarpingInstruction, unit: ReedUnit): string {
   const cards = [`${i.warpSpec.name} (${i.warpSpec.code})`, ...i.extraSpecs.map((e) => `${e.name} (${e.code}, ek tel grubu)`)].join("; ");
   const beams = i.beamLines.map((b) => `${b.beamCount} × ${fmtM(b.beamLengthM)} m`).join(" + ");
   const beamRow = isBeamCountOpen(i) ? row("Levent adedi", `devereciye bırakıldı, toplam ${fmtM(i.targetLengthM)} m`) : row("Levent", `${beams} — toplam ${i.beamCount} levent, ${fmtM(i.targetLengthM)} m`);
@@ -37,7 +40,7 @@ function instructionSection(i: WarpingInstruction): string {
       ${row("Çözgü kartı", cards)}
       ${beamRow}
       ${row("Toplam tel", String(i.totalEnds))}
-      ${row("Tarak", reedText(i.reed))}
+      ${row("Tarak", reedText(i.reed, unit))}
       ${reedPlan ? row("Tarak planı", reedPlan) : ""}
       ${row("Termin", i.expectedReturnAt ? fmtFactoryDate(i.expectedReturnAt) : "—")}
     </table>
@@ -92,7 +95,7 @@ h1{font-size:16pt;margin:0 0 2mm}.code{color:#666;font-size:8pt}.sub{color:#444;
 ${VISUAL_CSS}`;
 
 /** Tam belge; `dispatch` verilirse irsaliye önce, talimat ayrı sayfada. */
-export function buildInstructionHtml(i: WarpingInstruction, dispatch?: WarpingDispatchRow | null): string {
+export function buildInstructionHtml(i: WarpingInstruction, dispatch?: WarpingDispatchRow | null, unit: ReedUnit = DEFAULT_REED_UNIT): string {
   const title = dispatch ? `${dispatch.dispatchNo} — ${i.orderNo}` : `Çözgü talimatı ${i.orderNo}`;
-  return `<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>${esc(title)}</title><style>${CSS}</style></head><body>${dispatch ? dispatchSection(dispatch, i) : ""}${instructionSection(i)}</body></html>`;
+  return `<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>${esc(title)}</title><style>${CSS}</style></head><body>${dispatch ? dispatchSection(dispatch, i) : ""}${instructionSection(i, unit)}</body></html>`;
 }

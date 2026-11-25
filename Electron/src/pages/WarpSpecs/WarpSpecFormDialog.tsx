@@ -3,6 +3,7 @@ import { EntityFormDialog } from "@/components/forms/EntityFormDialog";
 import { FormCard, WideFormColumns } from "@/components/forms/WideFormDialog";
 import { warpSpecFormSchema, type WarpSpecFormValues } from "./schema";
 import { buildDefaults } from "./payload";
+import { useReedUnit } from "@/hooks/useReedUnit";
 import { YarnRowsEditor } from "./YarnRowsEditor";
 import { WarpCalcPanel } from "./WarpCalcPanel";
 import { WarpSpecVisualPanel } from "./WarpSpecVisualPanel";
@@ -28,6 +29,7 @@ interface Props {
 
 /** Geniş form: solda Kimlik · Çözgü iplikleri · Tarak ve dizilim, sağda yapışkan Hesap paneli + Not; dar ekranda tek sütun, hesap altta. */
 export function WarpSpecFormDialog({ open, onOpenChange, initial, draft, onSubmit, isSubmitting }: Props) {
+  const reedUnit = useReedUnit();
   return (
     <EntityFormDialog<WarpSpecFormValues>
       open={open}
@@ -37,7 +39,7 @@ export function WarpSpecFormDialog({ open, onOpenChange, initial, draft, onSubmi
       title={initial ? "Çözgü Kartını Düzenle" : draft ? "Yeni Çözgü Kartı (örnekten)" : "Yeni Çözgü Kartı"}
       description="İplikler ve telleri, tarak ve dizilim. Sağdaki hesap iplik kartındaki denyeyle anında güncellenir."
       schema={warpSpecFormSchema}
-      defaultValues={initial ? buildDefaults(initial) : (draft ?? buildDefaults(null))}
+      defaultValues={initial ? buildDefaults(initial, reedUnit) : (draft ?? buildDefaults(null))}
       onSubmit={onSubmit}
       isSubmitting={isSubmitting}
     >

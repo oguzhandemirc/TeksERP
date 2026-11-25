@@ -1,6 +1,6 @@
 // Yapı sekmesi: desen kimliği + sınıf (mekanizma · örgü) + mekanizmaya ait tezgâh bilgileri. Alanlar
 // mekanizmaya göre: Armür → çerçeve/.DOP/tahar · Jakar → desen dosyası, kanca, rapor en×boy, görsel ·
-// Eksantrik → yalnız örgü. Gizli alan GÖNDERİLMEZ (saklı değer silinmez; sunucu zaten Armür dışı ızgarayı,
+// Eksantrik → örgü + tahar. Gizli alan GÖNDERİLMEZ (saklı değer silinmez; sunucu zaten Armür dışı ızgarayı,
 // Jakar dışı kancayı reddeder). Boş gönderilen görünür alanı sunucu NULL'a çevirir.
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -14,14 +14,15 @@ import { weaveDesignApi } from "../service";
 import type { DesignFabric, WeaveDesign, WeaveDesignInput } from "../types";
 import { resolveWeaveClass, type ShedMechanism, type WeaveClass } from "../weave-class";
 import { WeaveClassFields } from "../WeaveClassFields";
+import { DrawingInFields, drawingInApplies } from "../DrawingInFields";
+import { LOOM_FILE_NAME_WARNING, loomFileNameTooLong } from "../loom-file-name";
+import type { DrawingInType } from "@/components/weave/weave-drawing-in";
 import { DesignImageSection } from "./DesignImageSection";
 import { WarpLayersSection } from "./WarpLayersSection";
 import { decimalToFormText } from "@/lib/decimal-form-text";
 
 type TextKey = "code" | "name" | "familyLabel" | "frameCount" | "repeatCm" | "repeatWidthCm" | "hookCount" | "loomFileName" | "lenoSetup" | "drawingInNote" | "notes";
-type Form = Record<TextKey, string> & WeaveClass;
-
-const DRAWING_IN_HINT = "Tellerin hangi çerçeveden ve tarağın hangi dişinden geçtiği (tahar ve tarak taharı). Örnek: \"1-2-3-4 düz, kenar 2'li, döner 1-2\". Desen kartı basımında \"Tahar\" satırı olarak çıkar; hesaba girmez. Boş bırakılabilir.";
+type Form = Record<TextKey, string> & WeaveClass & { drawingInType: DrawingInType | null };
 
 interface FieldDef { key: TextKey; label: string; max: number; mode?: "numeric" | "decimal"; info?: string; show: (m: ShedMechanism, f: Form) => boolean }
 
@@ -47,6 +48,7 @@ function toForm(d: WeaveDesign): Form {
     code: d.code, name: d.name, ...resolveWeaveClass(d), familyLabel: d.familyLabel ?? "", frameCount: d.frameCount?.toString() ?? "",
     repeatCm: decimalToFormText(d.repeatCm), repeatWidthCm: decimalToFormText(d.repeatWidthCm ?? null), hookCount: d.hookCount?.toString() ?? "",
     loomFileName: d.loomFileName ?? "", lenoSetup: d.lenoSetup ?? "", drawingInNote: d.drawingInNote ?? "", notes: d.notes ?? "",
+    drawingInType: d.drawingInType ?? null,
   };
 }
 
@@ -61,7 +63,8 @@ export function structurePayload(f: Form): WeaveDesignInput {
     code: f.code.trim(), name: f.name.trim(), shedMechanism: m, weaveStructure: f.weaveStructure,
     familyLabel: orNull(f.familyLabel), repeatCm: decOrNull(f.repeatCm), notes: orNull(f.notes),
   };
-  if (m === "DOBBY") Object.assign(body, { frameCount: intOrNull(f.frameCount), loomFileName: orNull(f.loomFileName), drawingInNote: orNull(f.drawingInNote) });
+  if (m === "DOBBY") Object.assign(body, { frameCount: intOrNull(f.frameCount), loomFileName: orNull(f.loomFileName) });
+  if (drawingInApplies(m)) Object.assign(body, { drawingInType: f.drawingInType, drawingInNote: orNull(f.drawingInNote) });
   if (m === "JACQUARD") Object.assign(body, { loomFileName: orNull(f.loomFileName), hookCount: intOrNull(f.hookCount), repeatWidthCm: decOrNull(f.repeatWidthCm) });
   if (f.weaveStructure === "LENO") body.lenoSetup = orNull(f.lenoSetup);
   return body;
@@ -87,6 +90,7 @@ export function StructureTab({ design, fabric, canWrite }: { design: WeaveDesign
         {f.info && <InfoPopover desc={f.info} label={`${f.label} açıklaması`} />}
       </div>
       <Input id={`wd-${f.key}`} value={form[f.key]} maxLength={f.max} inputMode={f.mode} disabled={!canWrite} onChange={(e) => set(f.key, e.target.value)} />
+      {f.key === "loomFileName" && loomFileNameTooLong(form.loomFileName) && <p className="text-xs text-amber-700 dark:text-amber-400">{LOOM_FILE_NAME_WARNING}</p>}
     </div>
   );
   return (
@@ -94,17 +98,10 @@ export function StructureTab({ design, fabric, canWrite }: { design: WeaveDesign
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {/* Kimlik (kod · ad · aile) önce, sınıf ikinci satırda, mekanizmaya ait alanlar sonra. */}
         {FIELDS.slice(0, IDENTITY_COUNT).map(renderField)}
-        <WeaveClassFields idPrefix="wd-edit" value={form} disabled={!canWrite} onChange={(c) => setForm((f) => ({ ...f, ...c }))} />
+        <WeaveClassFields idPrefix="wd-edit" value={form} keep={savedMech} disabled={!canWrite} onChange={(c) => setForm((f) => ({ ...f, ...c }))} />
         {FIELDS.slice(IDENTITY_COUNT).filter((f) => f.show(m, form)).map(renderField)}
-        {m === "DOBBY" && (
-          <div className="space-y-1.5 sm:col-span-2 lg:col-span-3">
-            <div className="flex items-center gap-1.5">
-              <Label htmlFor="wd-drawingInNote">Tahar düzeni</Label>
-              <InfoPopover desc={DRAWING_IN_HINT} label="Tahar düzeni açıklaması" />
-            </div>
-            <Input id="wd-drawingInNote" value={form.drawingInNote} maxLength={300} placeholder="1-2-3-4 düz, kenar 2'li, döner 1-2" disabled={!canWrite} onChange={(e) => set("drawingInNote", e.target.value)} />
-          </div>
-        )}
+        <DrawingInFields idPrefix="wd" mechanism={m} type={form.drawingInType} note={form.drawingInNote} disabled={!canWrite}
+          onType={(t) => setForm((f) => ({ ...f, drawingInType: t }))} onNote={(v) => set("drawingInNote", v)} />
         {m === "JACQUARD" && savedMech === "JACQUARD" && <DesignImageSection design={design} canWrite={canWrite} />}
         {m === "JACQUARD" && savedMech !== "JACQUARD" && (
           <p className="text-xs text-muted-foreground sm:col-span-2 lg:col-span-3">Desen görseli, mekanizma Jakar olarak kaydedildikten sonra yüklenebilir.</p>

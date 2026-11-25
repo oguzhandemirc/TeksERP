@@ -4,8 +4,10 @@ import { warpSpecService } from "./service";
 import { WarpSpecFormDialog } from "./WarpSpecFormDialog";
 import { buildPayload, copyDraft } from "./payload";
 import type { WarpSpec } from "./types";
+import { useReedUnit } from "@/hooks/useReedUnit";
 
 export function WarpSpecsPage() {
+  const reedUnit = useReedUnit();
   return (
     <CrudPage<WarpSpec>
       title="Çözgü Kartları"
@@ -22,10 +24,10 @@ export function WarpSpecsPage() {
           open={open}
           onOpenChange={onOpenChange}
           initial={initial}
-          draft={copyFrom ? copyDraft(copyFrom) : null}
+          draft={copyFrom ? copyDraft(copyFrom, reedUnit) : null}
           isSubmitting={isSubmitting}
           // `yarns` satır gövdesi WarpSpec tipinde yok (yazım sözleşmesi) — CrudPage Partial<T> bekler.
-          onSubmit={(values) => onSubmit(buildPayload(values) as unknown as Partial<WarpSpec>)}
+          onSubmit={(values) => onSubmit(buildPayload(values, reedUnit) as unknown as Partial<WarpSpec>)}
         />
       )}
     />
