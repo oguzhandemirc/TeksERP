@@ -1,5 +1,6 @@
 // Bir (hizmet × sarf) çiftinin norm sürümleri (damgalı dahil) + aktif normu kaldırma (silinmez, damgalanır).
 import { useState } from "react";
+import { unitLabel } from "@/lib/item-unit";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -38,7 +39,7 @@ export function ConsumableNormHistorySheet({ row, onClose }: { row: ConsumableNo
           {(q.data ?? []).map((p) => (
             <li key={p.id} className="rounded-md border p-2">
               <div className="flex items-center justify-between gap-2">
-                <span className="font-medium tabular-nums">{fmtQtyDecFull(p.qtyPerM, 6)} {p.unit}/{p.basis === "PER_ROLL" ? "top" : "m"}</span>
+                <span className="font-medium tabular-nums">{fmtQtyDecFull(p.qtyPerM, 6)} {unitLabel(p.unit)}/{p.basis === "PER_ROLL" ? "top" : "m"}</span>
                 {p.revokedAt ? <Badge variant="muted">Damgalı</Badge> : <Badge>Geçerli</Badge>}
               </div>
               <p className="text-xs text-muted-foreground">
@@ -57,7 +58,7 @@ export function ConsumableNormHistorySheet({ row, onClose }: { row: ConsumableNo
           open={revokeOpen}
           onOpenChange={setRevokeOpen}
           title={`${pair} normu kaldırılsın mı?`}
-          description={`${fmtQtyDecFull(row.qtyPerM, 6)} ${row.unit}/${row.basis === "PER_ROLL" ? "top" : "m"} damgalanır, silinmez. Bu hizmetin bundan sonraki işlerinde bu sarf kârlılığa girmez; geçmiş aylar değişmez.`}
+          description={`${fmtQtyDecFull(row.qtyPerM, 6)} ${unitLabel(row.unit)}/${row.basis === "PER_ROLL" ? "top" : "m"} damgalanır, silinmez. Bu hizmetin bundan sonraki işlerinde bu sarf kârlılığa girmez; geçmiş aylar değişmez.`}
           confirmLabel="Kaldır"
           destructive
           isPending={revoke.isPending}

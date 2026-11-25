@@ -106,4 +106,11 @@ export interface ItemComputedGsm {
   picksInRepeat?: number | null;
   repeatCm?: number | null;
   repeatsPerM?: number | null;
+  /** Enler (2026-11-25) — eski sunucu göndermez. Hesap SUNUCUDA (`fabric-width.helper`); panel yalnız basar. */
+  finishedWidthCm?: number | null;
+  reedWidthCm?: number | null;
+  widthShrinkPct?: number | null;
+  rawGPerMt?: number | null;
+  finishedGPerMt?: number | null;
+  widthWarnings?: Array<{ code: string; message: string }>;
 }

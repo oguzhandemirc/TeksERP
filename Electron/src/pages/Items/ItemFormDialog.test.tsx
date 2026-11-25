@@ -21,8 +21,9 @@ vi.mock("@/components/forms/SimilarNamesWarning", () => ({ SimilarNamesWarning: 
 vi.mock("@/components/RecordInfoButton", () => ({ RecordInfoButton: () => null }));
 vi.mock("./AllowedColorsDialog", () => ({ AllowedColorsDialog: () => null }));
 vi.mock("./AllowedPropertiesDialog", () => ({ AllowedPropertiesDialog: () => null }));
-const flags = vi.hoisted(() => ({ kg: false, mal: false }));
-vi.mock("@/hooks/usePricingEnabled", () => ({ useDevereEnabled: () => false, useDokumaEnabled: () => false, useKaliteGuvenceEnabled: () => flags.kg, useMaliyetEnabled: () => flags.mal }));
+const flags = vi.hoisted(() => ({ kg: false, mal: false, dk: false }));
+vi.mock("@/hooks/usePricingEnabled", () => ({ useDevereEnabled: () => false, useDokumaEnabled: () => flags.dk, useKaliteGuvenceEnabled: () => flags.kg, useMaliyetEnabled: () => flags.mal }));
+const WIDTH = /Mamul en \(cm\)/;
 
 const COLORS = "İzinli Renkler";
 const PROPS = "İzinli Özellikler";
@@ -74,13 +75,14 @@ describe("ItemFormDialog — izinli renk/özellik yalnız kumaşta", () => {
   });
 });
 
-describe("ItemFormDialog — En (cm) yalnız Kalite Güvence açıkken (K4P)", () => {
-  it("⭐ §4a modül kapalı: alan yok, payload'da widthCm anahtarı yok", async () => {
+describe("ItemFormDialog — Mamul en (cm) Kalite Güvence ya da dokuma açıkken (K4P · inceleme Not 2)", () => {
+  it("⭐ §4a iki modül de kapalı: alan yok, payload'da widthCm anahtarı yok", async () => {
     flags.kg = false;
+    flags.dk = false;
     const user = userEvent.setup();
     const onSubmit = vi.fn();
     renderWithProviders(<ItemFormDialog open onOpenChange={() => {}} onSubmit={onSubmit} initial={item({ widthCm: "280.00" })} />);
-    expect(screen.queryByLabelText(/En \(cm\)/)).toBeNull();
+    expect(screen.queryByLabelText(WIDTH)).toBeNull();
     await user.click(screen.getByRole("button", { name: "Güncelle" }));
     await waitFor(() => expect(onSubmit).toHaveBeenCalled());
     expect("widthCm" in (onSubmit.mock.calls[0]![0] as Record<string, unknown>)).toBe(false);
@@ -91,7 +93,7 @@ describe("ItemFormDialog — En (cm) yalnız Kalite Güvence açıkken (K4P)", (
     const user = userEvent.setup();
     const onSubmit = vi.fn();
     renderWithProviders(<ItemFormDialog open onOpenChange={() => {}} onSubmit={onSubmit} initial={item({ widthCm: "280.00" })} />);
-    const input = screen.getByLabelText(/En \(cm\)/);
+    const input = screen.getByLabelText(WIDTH);
     expect(input).toHaveValue("280");
     await user.clear(input);
     await user.type(input, "152,5");
@@ -103,7 +105,44 @@ describe("ItemFormDialog — En (cm) yalnız Kalite Güvence açıkken (K4P)", (
   it("⭐ §4c modül açık + iplik kartı: alan yok (en kumaş özelliği)", () => {
     flags.kg = true;
     renderWithProviders(<ItemFormDialog open onOpenChange={() => {}} onSubmit={() => {}} initial={item({ itemType: "YARN", unit: "KG" })} />);
-    expect(screen.queryByLabelText(/En \(cm\)/)).toBeNull();
+    expect(screen.queryByLabelText(WIDTH)).toBeNull();
+  });
+
+  it("⭐ §4d yalnız dokuma açık: kumaşta mamul en görünür ve payload'a gider", async () => {
+    flags.kg = false;
+    flags.dk = true;
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    renderWithProviders(<ItemFormDialog open onOpenChange={() => {}} onSubmit={onSubmit} initial={item({ widthCm: "280.00" })} />);
+    expect(screen.getByLabelText(WIDTH)).toHaveValue("280");
+    await user.click(screen.getByRole("button", { name: "Güncelle" }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect(onSubmit.mock.calls[0]![0]).toMatchObject({ widthCm: "280" });
+    flags.dk = false;
+  });
+});
+
+describe("ItemFormDialog — seçici kapsamı Tip'i kilitler (inceleme Not 10b)", () => {
+  it("⭐ yalnız kumaş kapsamı: yeni kayıtta Tip Kumaş ve değiştirilemez; birim 'm'", () => {
+    renderWithProviders(<ItemFormDialog open onOpenChange={() => {}} onSubmit={() => {}} allowedTypes={["FABRIC"]} />);
+    const combo = screen.getByRole("combobox");
+    expect(combo).toHaveTextContent("Kumaş");
+    expect(combo).toBeDisabled();
+    expect(screen.getByDisplayValue("m")).toBeInTheDocument();
+  });
+
+  it("⭐ yalnız iplik kapsamı: varsayılan Kumaş yerine İplik ön-ayarlı gelir", () => {
+    renderWithProviders(<ItemFormDialog open onOpenChange={() => {}} onSubmit={() => {}} allowedTypes={["YARN"]} />);
+    expect(screen.getByRole("combobox")).toHaveTextContent("İplik");
+    expect(screen.getByDisplayValue("kg")).toBeInTheDocument();
+  });
+
+  it("çok tip kapsamı: yalnız o tipler listelenir, kilit yok", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<ItemFormDialog open onOpenChange={() => {}} onSubmit={() => {}} allowedTypes={["FABRIC", "CONSUMABLE"]} />);
+    await user.click(screen.getByRole("combobox"));
+    const names = (await screen.findAllByRole("option")).map((o) => o.textContent);
+    expect(names).toEqual(["Kumaş", "Sarf Malzeme"]);
   });
 });
 

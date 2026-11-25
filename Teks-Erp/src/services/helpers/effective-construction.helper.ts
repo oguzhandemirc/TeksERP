@@ -16,6 +16,7 @@ import { expandWeftSequence, weftLetter } from "./weft-sequence.helper";
 import { WARP_SPEC_YARN_DENIER_SELECT, warpSpecYarnLines } from "./warp-spec-yarn.helper";
 import { expandWarpSequence, type WarpEndsSequence } from "./warp-sequence.helper";
 import { pctText, qtyText } from "./qty-text.helper";
+import { widthOrderWarnings } from "./fabric-width.helper";
 import { mechanismUsesLiftPlan, resolveWeaveClass, type WeaveClass } from "../../constants/weave-classification";
 
 type Db = Prisma.TransactionClient | typeof prisma;
@@ -25,7 +26,7 @@ const WARP_SELECT = {
   // Fason devere D2: iplik + denye kart satırlarından (`yarns`); `yarnItem` = ana iplik.
   id: true, code: true, name: true, takeUpPct: true, wastePct: true, ...WARP_SPEC_YARN_DENIER_SELECT,
   // Kart görseli (tel düzeni şeridi + tarak planı) — gösterim alanları.
-  sequenceNote: true, endsPerDent: true, reedNo: true, selvedgeEnds: true,
+  sequenceNote: true, endsPerDent: true, reedNo: true, selvedgeEnds: true, reedWidthCm: true,
 } satisfies Prisma.WarpSpecSelect;
 const DESIGN_SELECT = {
   id: true, code: true, name: true, kind: true, shedMechanism: true, weaveStructure: true, hookCount: true, repeatWidthCm: true,
@@ -56,7 +57,7 @@ const WEFT_SELECT = {
 } satisfies Prisma.WeftSpecSelect;
 
 const ITEM_CONSTRUCTION_SELECT = {
-  id: true, code: true, name: true, itemType: true, widthCm: true,
+  id: true, code: true, name: true, itemType: true, widthCm: true, rawWidthCm: true,
   warpSpec: { select: WARP_SELECT },
   warpLayers: { orderBy: { sortOrder: "asc" }, select: { role: true, beamMode: true, sortOrder: true, warpSpec: { select: WARP_SELECT } } },
   weftSpec: { select: WEFT_SELECT },
@@ -120,7 +121,7 @@ function constructionWarnings(c: Omit<EffectiveConstruction, "warnings">): Effec
     if (declared > 0 && Math.abs(implied - declared) / declared * 100 > REPEAT_PICKS_TOLERANCE_PCT) {
       out.push({
         code: CONSTRUCTION_WARNING.repeatPicksMismatch,
-        message: `Rapordaki atkı (${total}) ÷ desen boyu (${qtyText(d.repeatCm)} cm) = ${pctText(implied)} atkı/cm; kartın sıklığı ${declared} — fark %${pctText(REPEAT_PICKS_TOLERANCE_PCT)}'ten büyük.`,
+        message: `Rapordaki atkı (${total}) ÷ rapor boyu (${qtyText(d.repeatCm)} cm) = ${pctText(implied)} atkı/cm; kartın sıklığı ${declared} — fark %${pctText(REPEAT_PICKS_TOLERANCE_PCT)}'ten büyük.`,
       });
     }
   }
@@ -206,7 +207,9 @@ export async function resolveEffectiveConstruction(
       : null,
     weaveDesign: effectiveWeaveDesign(item.weaveDesign),
   };
-  return { ...base, warnings: constructionWarnings(base) };
+  // En sırası (mamul ≤ ham ≤ tarak) uyarısı ürün penceresiyle AYNI helper'dan.
+  const widthWarnings = widthOrderWarnings({ finishedWidthCm: item.widthCm, rawWidthCm: item.rawWidthCm, reedWidthCm: item.warpSpec?.reedWidthCm });
+  return { ...base, warnings: [...constructionWarnings(base), ...widthWarnings] };
 }
 
 export interface WeftOverrideOrphan {
