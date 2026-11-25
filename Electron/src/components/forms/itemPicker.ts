@@ -93,6 +93,8 @@ export interface ItemPickerRow {
   lifecycle: ItemLifecycleStatus;
   /** SY-a: KG dışı iplik satın alma birimi (KG kartta anahtar yok). */
   yarnPurchaseUnit?: "ADET" | "METRE";
+  /** Kartın mamul eni (cm) — sipariş/teklif satırı ön-dolumu; eski sunucuda/boş kartta yok. */
+  widthCm?: string | number | null;
 }
 
 const SHOWN = 3;
@@ -114,6 +116,7 @@ export function itemPickerRow(it: Item): ItemPickerRow {
     lifecycle: itemLifecycleOf(it),
     // SY-a: yalnız KG dışı iplikte (fiyat ekranı birim etiketini buradan okur); KG kartın satırı bugünküyle aynı.
     ...(it.yarnPurchaseUnit && it.yarnPurchaseUnit !== "KG" ? { yarnPurchaseUnit: it.yarnPurchaseUnit } : {}),
+    ...(it.widthCm != null && it.widthCm !== "" ? { widthCm: it.widthCm } : {}),
   };
 }
 

@@ -1,6 +1,7 @@
 // Kalem kaynağı: kart ürünü (ürün seçici DOĞRUDAN modal, yalnız kumaş) ya da yeni desen (Hızlı Hesaplayıcı'nın
 // elle yapı bileşeni yeniden kullanılır). Renk seçici müşterinin renk adlarıyla açılır.
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { itemWidthOf, prefillWidthText } from "@/lib/item-width-prefill";
 import { useQuery } from "@tanstack/react-query";
 import { PackageSearch } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,7 @@ interface Props { value: LineForm; onChange: (patch: Partial<LineForm>) => void;
 
 function ItemSource({ value, onChange, customerId }: Props) {
   const [open, setOpen] = useState(false);
+  const autoWidth = useRef<number | null>(null);
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <label className="text-sm">
@@ -37,7 +39,11 @@ function ItemSource({ value, onChange, customerId }: Props) {
         onOpenChange={setOpen}
         allowedTypes={["FABRIC"]}
         onPick={(r) => {
-          onChange({ item: { id: r.id, code: r.code, name: r.name }, colorId: null, recipeId: null });
+          // En ön-dolumu: kartın mamul eni boş alana / önceki ön-dolumun yerine; elle yazılmış en korunur.
+          const nextWidth = itemWidthOf(r.widthCm);
+          const width = prefillWidthText(value.width, autoWidth.current, nextWidth);
+          autoWidth.current = nextWidth;
+          onChange({ item: { id: r.id, code: r.code, name: r.name }, colorId: null, recipeId: null, width });
           setOpen(false);
         }}
       />

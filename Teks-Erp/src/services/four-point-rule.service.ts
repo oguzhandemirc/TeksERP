@@ -86,13 +86,20 @@ function auditView(input: RuleSetInput, bands: RuleBand[]): Record<string, unkno
   };
 }
 
-export async function listRuleSets(q: { scope?: string; customerId?: string; includeInactive?: string }) {
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export async function listRuleSets(q: { scope?: string; customerId?: string; itemId?: string; includeInactive?: string }) {
   const where: Prisma.FourPointRuleSetWhereInput = {};
   if (q.scope) {
     if (q.scope !== "FACTORY" && q.scope !== "CUSTOMER") throw bad("Tanınmayan kapsam süzgeci.", "FOUR_POINT_FILTER_INVALID");
     where.scope = q.scope;
   }
   if (q.customerId) where.customerId = q.customerId;
+  // Ürün kartı "Ticari" sekmesi: yalnız o ürüne bağlı (müşteri+ürün) setler; bozuk kimlik 400 (fail-closed).
+  if (q.itemId) {
+    if (!UUID_RE.test(q.itemId)) throw bad("Geçersiz ürün süzgeci.", "FOUR_POINT_FILTER_INVALID");
+    where.itemId = q.itemId;
+  }
   if (q.includeInactive !== "1") where.isActive = true;
   return prisma.fourPointRuleSet.findMany({
     where,

@@ -21,6 +21,7 @@ vi.mock("@/components/RecordInfoButton", () => ({ RecordInfoButton: () => null }
 vi.mock("./AllowedColorsDialog", () => ({ AllowedColorsDialog: () => null }));
 vi.mock("./AllowedPropertiesDialog", () => ({ AllowedPropertiesDialog: () => null }));
 vi.mock("@/hooks/usePricingEnabled", () => ({ useDevereEnabled: () => false, useWarpSpecEnabled: () => false, useDokumaEnabled: () => false, useKaliteGuvenceEnabled: () => false, useMaliyetEnabled: () => false }));
+vi.mock("./commercial/ItemCommercialSection", () => ({ useItemCommercialSections: () => null, ItemCommercialSection: () => null }));
 const computedGsm = vi.fn();
 vi.mock("./service", () => ({ itemService: { computedGsm: (id: string) => computedGsm(id) } }));
 
