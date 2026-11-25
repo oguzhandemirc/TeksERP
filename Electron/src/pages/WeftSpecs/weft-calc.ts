@@ -65,7 +65,8 @@ export function buildWeftCalcBody(c: WeftContent, ctx: WeftCalcCtx | undefined, 
 }
 
 export function calculateWeft(body: WeftCalcBody): Promise<WeftCalcResult> {
-  return apiClient.post<ApiResponse<WeftCalcResult>>("/api/weft-specs/calc", body).then((r) => r.data.data);
+  // Yazarken her durulmada istek gider: hata tostu yağmasın, panel "Hesaplanamadı." der.
+  return apiClient.post<ApiResponse<WeftCalcResult>>("/api/weft-specs/calc", body, { suppressErrorToast: true }).then((r) => r.data.data);
 }
 
 export function useWeftCalc(body: WeftCalcBody | null) {

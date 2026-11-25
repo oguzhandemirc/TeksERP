@@ -38,7 +38,7 @@ describe("WeftCalcPanel", () => {
     post.mockResolvedValue({ data: { success: true, data: result() } });
     renderWithProviders(<WeftCalcPanel content={content} />);
     await waitFor(() => expect(screen.getByTestId("weft-calc-missing")).toHaveTextContent("Atkı boyu kumaştan gelir"));
-    expect(post).toHaveBeenCalledWith("/api/weft-specs/calc", expect.objectContaining({ picksPerCm: 22.5 }));
+    expect(post).toHaveBeenCalledWith("/api/weft-specs/calc", expect.objectContaining({ picksPerCm: 22.5 }), { suppressErrorToast: true });
     expect(screen.getByTestId("weft-calc-total-net")).toHaveTextContent("—");
     expect(screen.getByTestId("weft-calc-row-B")).toHaveTextContent("kg'a girmez");
   });
