@@ -22,10 +22,11 @@ export function YarnWhereSection({ itemId, itemType }: { itemId: string; itemTyp
   const fason = useYarnAtSubcontractor({ yarnItemId: itemId }, fasonOn);
   if (!depotOn && !fasonOn) return null;
   const fasonRows = [...(fason.data ?? [])].sort((a, b) => subLabel(a).localeCompare(subLabel(b), "tr") || (a.lotNo ?? "").localeCompare(b.lotNo ?? "", "tr"));
-  // Ürün kartında formun ALTINDA, "Stok" başlıklı (K5): form bilgiyle (Ad) başlar, durum bilgisi sonda.
+  // Ürün kartında formun ALTINDA (K5): form bilgiyle (Ad) başlar, durum bilgisi sonda. Başlık "Eldeki stok":
+  // hemen üstteki formun "Stok" (asgari stok) bölümüyle aynı adı taşıyınca iki "Stok" başlığı alt alta çıkıyordu.
   return (
     <section className="space-y-2 border-t pt-3" data-testid="yarn-where" aria-labelledby="yarn-where-title">
-      <h3 id="yarn-where-title" className="text-sm font-medium text-muted-foreground">Stok</h3>
+      <h3 id="yarn-where-title" className="text-sm font-medium text-muted-foreground">Eldeki stok</h3>
       <div className="grid gap-2 sm:grid-cols-2">
       {depotOn && (
         <HoldingSection
