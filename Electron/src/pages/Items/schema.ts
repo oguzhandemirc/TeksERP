@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ItemType } from "@/types/enums";
 import { acceptNumberAsText } from "@/lib/decimal-form-text";
 import { fabricClassDefaults, fabricClassFields } from "./fabricClass.schema";
+import { cardExtraDefaults, cardExtraFields } from "./cardExtra.schema";
 
 /** Dokuma ayrıntısı sayısı — Decimal(·,2) metin taşınır, virgül kabul, "" = boş; `max` kolon tavanı. */
 const positiveDecimalText = (label: string, max: number) =>
@@ -108,6 +109,7 @@ export const makeItemFormSchema = (isEdit: boolean) =>
     allowedColorIds: z.array(z.string()),
     allowedPropertyIds: z.array(z.string()),
     ...fabricClassFields,
+    ...cardExtraFields,
   });
 
 export type ItemFormValues = z.infer<ReturnType<typeof makeItemFormSchema>>;
@@ -131,4 +133,5 @@ export const itemFormDefaults: ItemFormValues = {
   allowedColorIds: [],
   allowedPropertyIds: [],
   ...fabricClassDefaults,
+  ...cardExtraDefaults,
 };

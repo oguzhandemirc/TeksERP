@@ -2464,6 +2464,19 @@ enum FlameRetardancy {
   OTHER_FR
 }
 
+/// D4b — iplik büküm yönü (S / Z). NULL = belirtilmemiş.
+enum YarnTwistDirection {
+  S
+  Z
+}
+
+/// D4b — iplik parlaklığı (Parlak / Yarı mat / Mat). NULL = belirtilmemiş.
+enum YarnLuster {
+  BRIGHT
+  SEMI_DULL
+  FULL_DULL
+}
+
 /// Ek çözgü katmanının rolü (§3.4): döner (leno) çözgü ya da ikinci zemin çözgüsü.
 enum WarpLayerRole {
   LENO
@@ -4501,6 +4514,16 @@ model Item {
   /// fire zinciri (yapı/kart/parametre) YERİNE kullanılır (tek çözücü `yarn-waste.helper`). NULL = bugünkü
   /// davranış. CHECK `items_yarn_waste_pct_ck` (0..50, yalnız YARN).
   yarnWastePct     Decimal? @db.Decimal(5, 2)
+  /// D4b (2026-11-25) İPLİK TEKNİK ALANLARI — bilgi/süzme; hepsi yalnız YARN (servis 400 `ITEM_YARN_SPEC_YARN_ONLY`,
+  /// CHECK `items_yarn_spec_ck`). Bugün iplik adına gömülü ("68/24 Den 800S YARI MAT"); ad ayrıştırılmaz.
+  yarnFilamentCount  Int?
+  yarnPly            Int?
+  /// Büküm tur/metre; 0 = bükümsüz (flat).
+  yarnTwistTpm       Int?
+  yarnTwistDirection YarnTwistDirection?
+  yarnLuster         YarnLuster?
+  /// D4b ASGARİ STOK — kartın biriminde; yalnız YARN/CONSUMABLE (CHECK `items_min_stock_qty_ck`, > 0). NULL = uyarı yok.
+  minStockQty        Decimal? @db.Decimal(14, 3)
 
   /// KUMAŞ → ÇÖZGÜ KARTI (N:1) — "bu deseni hangi çözgü besliyor".
   /// Yalnız `ItemType.FABRIC` için anlamlıdır (servis 400 verir).
@@ -4531,6 +4554,11 @@ model Item {
   fabricTypeId    String?          @db.Uuid
   /// K8 — YANMAZLIK (bilgi). NULL = belirtilmemiş; NONE = yanmaz değil. Yalnız KUMAŞ (servis 400).
   flameRetardancy FlameRetardancy?
+  /// D4b (2026-11-25) KUMAŞ TİCARİ ALANLARI — yalnız KUMAŞ (servis 400 `ITEM_FABRIC_STRUCTURE_FABRIC_ONLY`,
+  /// CHECK `items_fabric_trade_ck`). Standart top boyu (m) ve asgari sipariş (kartın biriminde) > 0.
+  standardRollLengthM Decimal? @db.Decimal(8, 2)
+  minOrderQty         Decimal? @db.Decimal(12, 2)
+  careInstructions    String?  @db.VarChar(500)
 
   // Relations
   /// K8 — kumaş türü; tür silinmez (pasife alınır) → Restrict.

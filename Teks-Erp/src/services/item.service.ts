@@ -68,6 +68,7 @@ import type { CursorPaginatedResponse } from "./base.service";
 import { emitItemCreatedTx } from "./notification-sources/anaveri";
 import type { FabricTechniqueValue } from "../constants/weave-classification";
 import { assertNoFibersInPatch, readFabricTechnique, readFabricTypeRef, readFlameRetardancy, readWeftSpecRef } from "./helpers/item-fabric-class.helper";
+import { assertUnitChangeAllowed, FABRIC_TRADE_KEYS, readFabricTradeFields, readMinStockField, readYarnSpecFields, YARN_SPEC_KEYS } from "./helpers/item-card-extra.helper";
 import { fibersAuditPayload, parseItemFibers, writeItemFibersTx } from "./helpers/item-fiber.helper";
 
 export interface ItemCreateInput {
@@ -199,7 +200,7 @@ async function assertWeftSwitchKeepsOverrides(itemId: string, weftSpecId: unknow
 }
 
 /** MAL-1 (S2 çekirdeği): kumaş yapısı alanları — gövdede adı geçen anahtarlar (`undefined` dokunmaz). */
-const FABRIC_STRUCTURE_KEYS = ["rawWidthCm", "rawGsm", "finishedGsm", "composition", "weftSpecId", "weaveDesignId", "fabricTechnique", "fabricTypeId", "flameRetardancy"] as const;
+const FABRIC_STRUCTURE_KEYS = ["rawWidthCm", "rawGsm", "finishedGsm", "composition", "weftSpecId", "weaveDesignId", "fabricTechnique", "fabricTypeId", "flameRetardancy", ...FABRIC_TRADE_KEYS] as const;
 
 /**
  * Kumaş yapısı alanlarını doğrular ve Prisma verisine çevirir: yalnız KUMAŞ kartında (400), sayılar
@@ -222,9 +223,10 @@ async function readFabricStructureFields(itemType: string | undefined, data: Rec
   if (present.includes("fabricTechnique")) out.fabricTechnique = readFabricTechnique(data.fabricTechnique);
   if (present.includes("fabricTypeId")) out.fabricTypeId = await readFabricTypeRef(data.fabricTypeId, itemId);
   if (present.includes("flameRetardancy")) out.flameRetardancy = readFlameRetardancy(data.flameRetardancy);
+  Object.assign(out, readFabricTradeFields(data));
   const setsValue = Object.values(out).some((v) => v !== null);
   if (setsValue && itemType !== undefined && itemType !== "FABRIC") {
-    throw AppError.badRequest("En/gramaj/kompozisyon/atkı/desen kartı/kumaş türü/yanmazlık yalnız KUMAŞ kartına girilir", { code: "ITEM_FABRIC_STRUCTURE_FABRIC_ONLY" });
+    throw AppError.badRequest("En/gramaj/kompozisyon/atkı/desen kartı/kumaş türü/yanmazlık/top boyu/asgari sipariş/bakım talimatı yalnız KUMAŞ kartına girilir", { code: "ITEM_FABRIC_STRUCTURE_FABRIC_ONLY" });
   }
   return out;
 }
@@ -313,6 +315,8 @@ export class ItemService extends BaseService {
       ...(await readFabricStructureFields(input.itemType, data)),
       ...readYarnWasteField(input.itemType, data),
       ...(await readYarnUnitFields(prisma, input.itemType, data)),
+      ...readYarnSpecFields(input.itemType, data),
+      ...readMinStockField(input.itemType, data),
     };
     // K7: iplik lif bileşimi doğuşta kartla AYNI tx'te yazılır (düzenleme ayrı uç: PUT /items/:id/fibers).
     const fiberRows = await parseItemFibers(prisma, data.fibers, { itemType: input.itemType });
@@ -610,6 +614,11 @@ export class ItemService extends BaseService {
       const cur = await prisma.item.findUnique({ where: { id }, select: { itemType: true } });
       Object.assign(data, readYarnWasteField(cur?.itemType, data));
     }
+    if ([...YARN_SPEC_KEYS, "minStockQty"].some((k) => Object.prototype.hasOwnProperty.call(data, k))) {
+      const cur = await prisma.item.findUnique({ where: { id }, select: { itemType: true } });
+      Object.assign(data, readYarnSpecFields(cur?.itemType, data), readMinStockField(cur?.itemType, data));
+    }
+    if (Object.prototype.hasOwnProperty.call(data, "unit")) await assertUnitChangeAllowed(id, data.unit);
     if (Object.prototype.hasOwnProperty.call(data, "yarnPurchaseUnit") || Object.prototype.hasOwnProperty.call(data, "yarnPiecesPerM")) {
       const cur = await prisma.item.findUnique({ where: { id }, select: { id: true, itemType: true, yarnPurchaseUnit: true } });
       if (cur) Object.assign(data, await readYarnUnitFields(prisma, cur.itemType, data, cur));

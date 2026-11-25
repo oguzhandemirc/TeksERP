@@ -29,7 +29,8 @@ export function buildItemPayload(
 ): ItemCreatePayload {
   const base = {
     name: v.name.trim(),
-    unit: unitForItemType[v.itemType] ?? v.unit,
+    // K9: sarfta birim seçilir (kg/metre/adet); kumaş/iplikte tipten türer.
+    unit: v.itemType === ItemType.CONSUMABLE ? v.unit : (unitForItemType[v.itemType] ?? v.unit),
     // Boş alan `null` gider: "" Decimal kolonunda geçersizdir ve kolonu
     // temizlemenin tek yolu budur (alan yalnız YARN'da çizilir, diğer
     // tiplerde zaten boş kalır).

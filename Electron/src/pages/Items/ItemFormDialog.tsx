@@ -73,7 +73,9 @@ export function ItemFormDialog({ open, onOpenChange, initial, draft, onSubmit, i
   const newNoun = itemTypeScope(typeScope).locked ? itemTypeLabels[itemType] : "Ürün";
   const weft = useItemWeftDraft(open, initial?.weftSpecId ?? draft?.weftSpecId ?? null);
 
-  useEffect(() => { form.setValue("unit", derivedUnit, { shouldDirty: true }); }, [derivedUnit, form]);
+  // K9: kayıtlı sarf kendi seçilmiş birimini korur; yeni sarf "Adet" ile başlar, kumaş/iplik tipten türer.
+  const keepUnit = itemType === ItemType.CONSUMABLE && initial?.itemType === ItemType.CONSUMABLE;
+  useEffect(() => { if (!keepUnit) form.setValue("unit", derivedUnit, { shouldDirty: true }); }, [derivedUnit, keepUnit, form]);
 
   // İzinli renk/özellik YALNIZ kumaşta: tür iplik/sarfa çevrilince (create) değerler boşalır;
   // düzenlemede tür kilitli, eski iplik kartında kalmış liste NOTLA gösterilir, kaydedince payload `[]` ile kaldırır.
