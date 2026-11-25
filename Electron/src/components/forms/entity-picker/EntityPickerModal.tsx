@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, ChevronsUpDown, Loader2, Plus, Search, type LucideIcon } from "lucide-react";
+import { ChevronsUpDown, Loader2, Plus, Search, type LucideIcon } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -15,6 +15,10 @@ import { cn } from "@/lib/utils";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import type { CrudService } from "@/services/crudService";
 import { useEntityPickerData } from "./useEntityPickerData";
+import { PickerRow } from "./PickerRow";
+import { useRecordForm } from "../record-form/useRecordForm";
+import { PickerNewButton, PickerRowActions } from "../record-form/PickerRecordActions";
+import type { RecordFormSpec } from "../record-form/types";
 
 export interface EntityPickerModalProps<T extends { id: string }> {
   value: string | null | undefined;
@@ -58,6 +62,8 @@ export interface EntityPickerModalProps<T extends { id: string }> {
   countLabel?: string;
   /** Modal başlığının altında, aramanın üstünde ek şerit (ör. kategori süzgeci anahtarı + uyarı). */
   headerSlot?: ReactNode;
+  /** Verilirse seçicide Yeni · Düzenle · Örnek al (yazma izniyle); kaydedilen kayıt seçili gelir. */
+  recordForm?: RecordFormSpec<T>;
 }
 
 /**
@@ -93,6 +99,7 @@ export function EntityPickerModal<T extends { id: string }>({
   countLabel,
   defaultOpen,
   headerSlot,
+  recordForm,
 }: EntityPickerModalProps<T>) {
   const [open, setOpen] = useState(defaultOpen ?? false);
   // Sekme açıkken URL parametresi (?report=1) sonradan gelirse de pencere açılsın (ilk bağlanmayla sınırlı kalmasın).
@@ -125,6 +132,7 @@ export function EntityPickerModal<T extends { id: string }>({
     onChange(id, item);
     setOpen(false);
   };
+  const record = useRecordForm<T>(recordForm, (saved) => choose(saved.id, saved));
   const showNone = nullable && !debouncedSearch.trim();
   const nothingFound = !isLoading && items.length === 0;
 
@@ -176,15 +184,18 @@ export function EntityPickerModal<T extends { id: string }>({
           </DialogHeader>
           {headerSlot && <div className="shrink-0">{headerSlot}</div>}
 
-          <div className="relative shrink-0">
-            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Ara (ad veya kod)..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="h-9 pl-8 text-sm"
-              autoFocus
-            />
+          <div className="flex shrink-0 items-center gap-2">
+            <div className="relative min-w-0 flex-1">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Ara (ad veya kod)..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="h-9 pl-8 text-sm"
+                autoFocus
+              />
+            </div>
+            {recordForm && <PickerNewButton handle={record} entityName={recordForm.entityName} />}
           </div>
 
           <div className="min-h-0 flex-1 overflow-auto rounded-md border">
@@ -205,6 +216,7 @@ export function EntityPickerModal<T extends { id: string }>({
                   subLabel={getSubLabel?.(item)}
                   leading={renderLeading?.(item)}
                   onClick={() => choose(item.id, item)}
+                  actions={recordForm && <PickerRowActions handle={record} item={item} label={getLabel(item)} />}
                 />
               ))}
               {isLoading && (
@@ -262,48 +274,9 @@ export function EntityPickerModal<T extends { id: string }>({
               )}
             </div>
           )}
+          {record.element}
         </DialogContent>
       </Dialog>
     </>
-  );
-}
-
-function PickerRow({
-  selected,
-  onClick,
-  label,
-  subLabel,
-  leading,
-  dimmed,
-}: {
-  selected: boolean;
-  onClick: () => void;
-  label: string;
-  subLabel?: string | null;
-  leading?: ReactNode;
-  dimmed?: boolean;
-}) {
-  return (
-    <li>
-      <button
-        type="button"
-        onClick={onClick}
-        className={cn(
-          "flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent/50",
-          selected && "bg-primary/10 hover:bg-primary/15",
-        )}
-      >
-        {leading}
-        <div className="min-w-0 flex-1">
-          <div className={cn("truncate", dimmed && !selected && "italic text-muted-foreground")}>
-            {label}
-          </div>
-          {subLabel && (
-            <div className="truncate text-[11px] text-muted-foreground">{subLabel}</div>
-          )}
-        </div>
-        {selected && <Check className="h-4 w-4 shrink-0 text-primary" />}
-      </button>
-    </li>
   );
 }

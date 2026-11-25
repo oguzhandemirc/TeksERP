@@ -8,6 +8,8 @@ import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
 
 vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { success: vi.fn(), info: vi.fn(), error: vi.fn() }) }));
+const openTab = vi.hoisted(() => vi.fn());
+vi.mock("@/store/tabs", () => ({ useTabsStore: { getState: () => ({ openTab }) } }));
 vi.mock("@/components/production/SpecOpenOrdersNotice", () => ({ SpecOpenOrdersNotice: () => null }));
 const { api, countUsers, listUsers, construction } = vi.hoisted(() => ({
   construction: { current: { weft: null } as unknown },
@@ -26,7 +28,7 @@ import { suggestForkCode, suggestForkName } from "./weft-fork-defaults";
 
 const FABRIC = { id: "it-a", code: "D2057", name: "TÜL D2057", weftSpecId: "w-1", weaveDesignId: "wd-1" };
 const SPEC = { id: "w-1", code: "ATK-ORTAK", name: "Ortak atkı", picksPerCm: "20", sequenceCode: null, weftProgramNo: null, yarns: [] };
-const BUTTON = /Bu desene özel kopya/;
+const BUTTON = /Örnek al \(yalnız bu desen\)/;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -66,8 +68,10 @@ describe("WeftTab — bu desene özel kopya", () => {
     expect(screen.getByTestId("fork-staying")).toHaveTextContent("D2059");
     expect(screen.getByTestId("fork-staying")).not.toHaveTextContent("D2057 — ");
     expect(screen.queryByTestId("fork-staying-more")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Kopyala ve bu kumaşa bağla" }));
+    fireEvent.click(screen.getByRole("button", { name: "Yeni kartı oluştur ve bu kumaşa bağla" }));
     await waitFor(() => expect(api.fork).toHaveBeenCalledWith("w-1", { itemId: "it-a", code: "ATK-ORTAK-D2057", name: "Ortak atkı (D2057)" }));
+    // (d) örnek alma kaynağı değiştirmez: ortak karta PATCH yok.
+    expect(api.update).not.toHaveBeenCalled();
   });
   it("§4b liste sayfa sınırında kesilirse \"+N kumaş daha\" söylenir", async () => {
     countUsers.mockResolvedValue(250);
@@ -75,6 +79,35 @@ describe("WeftTab — bu desene özel kopya", () => {
     renderWithProviders(<WeftTab fabric={FABRIC} canWrite />);
     fireEvent.click(await screen.findByRole("button", { name: BUTTON }));
     await waitFor(() => expect(screen.getByTestId("fork-staying-more")).toHaveTextContent("+248 kumaş daha"));
+  });
+
+  it("§6 ⭐ paylaşılan kart burada düzenlenmez: alanlar kilitli, Kaydet yok, PATCH yok; asıl yer yeni sekmede açılır", async () => {
+    countUsers.mockResolvedValue(3);
+    renderWithProviders(<WeftTab fabric={FABRIC} canWrite />);
+    fireEvent.click(await screen.findByRole("button", { name: /Atkı Kartları ekranında aç/ }));
+    await waitFor(() => expect(openTab).toHaveBeenCalledWith("/definitions/weft-specs?search=ATK-ORTAK", { forceNew: true }));
+    expect(screen.getByLabelText("Atkı sırası kodu")).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Kaydet" })).toBeNull();
+    expect(api.update).not.toHaveBeenCalled();
+  });
+  it("§7 kullanım sayısı alınamazsa kilitli say (fail-closed)", async () => {
+    countUsers.mockRejectedValue(new Error("ağ"));
+    renderWithProviders(<WeftTab fabric={FABRIC} canWrite />);
+    expect(await screen.findByText("Atkı kartının kaç kumaşta kullanıldığı öğrenilemedi")).toBeInTheDocument();
+    expect(screen.getByLabelText("Atkı sırası kodu")).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Kaydet" })).toBeNull();
+  });
+  it("§8 yalnız bu kumaşa ait kart burada düzenlenir: Kaydet → PATCH", async () => {
+    countUsers.mockResolvedValue(1);
+    api.get.mockResolvedValue({ ...SPEC, sequenceCode: "A1", yarns: [{ yarnItemId: "y-a", picksInRepeat: 1, sortOrder: 0 }] });
+    api.update.mockResolvedValue({});
+    renderWithProviders(<WeftTab fabric={FABRIC} canWrite />);
+    const input = await screen.findByLabelText("Atkı sırası kodu");
+    await waitFor(() => expect(input).not.toBeDisabled());
+    fireEvent.change(input, { target: { value: "A2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Kaydet" }));
+    await waitFor(() => expect(api.update).toHaveBeenCalledWith("w-1", expect.objectContaining({ sequenceCode: "A2" })));
+    expect(screen.queryByRole("button", { name: /Atkı Kartları ekranında aç/ })).toBeNull();
   });
 
   it("§5 öneri kod 32 / ad 100 karaktere kırpılır, ad son eki korur", () => {

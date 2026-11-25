@@ -161,9 +161,9 @@ describe("WarpSpecFormDialog — D3 satır editörü", () => {
     expect(screen.getByLabelText("A tel adedi")).toHaveProperty("value", "3000");
   });
 
-  it("Kopyala taslağı: başlık kopya, kod boş, satırlar dolu", () => {
+  it("Örnek al taslağı: başlık örnekten, kod boş, satırlar dolu", () => {
     renderDialog({ draft: copyDraft(spec) });
-    expect(screen.getByText("Çözgü Kartını Kopyala")).toBeTruthy();
+    expect(screen.getByText("Yeni Çözgü Kartı (örnekten)")).toBeTruthy();
     expect(screen.getByLabelText("Kod", { exact: false })).toHaveProperty("value", "");
     expect(screen.getByLabelText("B tel adedi")).toHaveProperty("value", "4000");
     expect(buildDefaults(null).yarns).toHaveLength(1);

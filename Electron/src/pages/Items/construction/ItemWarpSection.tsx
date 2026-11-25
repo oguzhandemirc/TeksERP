@@ -1,26 +1,22 @@
 // Ürün penceresi > Çözgü (B19): çözgü çok kumaşta paylaşılır (devere siparişi / levent ona bağlı) → var olanı seçmek varsayılan.
-// "Yeni çözgü kartı" ve "Kopyasını oluştur" Çözgü Kartları formunu iç pencerede açar; kart kendi Kaydet'iyle hemen yazılır,
-// bu kumaşa bağ ürün kaydıyla gider. Paylaşılan kartı düzenlemek bütün kumaşları etkiler — bant bunu söyler.
-import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+// Burası çözgü kartının KULLANIM YERİ (kullanıcı 2026-11-25: override yalnız tanımın asıl yerinden): Yeni ve Örnek al serbest;
+// Düzenle yalnız başka kumaşta kullanılmayan kartta yerinde, paylaşılan kartta "Çözgü Kartları ekranında aç" / "Örnek al".
+import { useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Controller, type UseFormReturn } from "react-hook-form";
 import { Copy, Pencil, Plus, Ruler } from "lucide-react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { FormField } from "@/components/forms/FormField";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
+import { useRecordForm } from "@/components/forms/record-form/useRecordForm";
 import { warpSpecService } from "@/pages/WarpSpecs/service";
-import { WarpSpecFormDialog } from "@/pages/WarpSpecs/WarpSpecFormDialog";
-import { buildPayload, copyDraft } from "@/pages/WarpSpecs/payload";
+import { useWarpSpecRecordForm } from "@/pages/WarpSpecs/useWarpSpecRecordForm";
 import type { WarpSpec } from "@/pages/WarpSpecs/types";
-import type { WarpSpecFormValues } from "@/pages/WarpSpecs/schema";
 import apiClient from "@/services/apiClient";
 import { buildQueryString } from "@/lib/query-builder";
 import type { PaginatedResponse } from "@/types/api";
 import type { ItemFormValues } from "../schema";
-
-type Dialog = { kind: "new" } | { kind: "edit"; spec: WarpSpec } | { kind: "copy"; spec: WarpSpec } | null;
 
 function countWarpUsers(warpSpecId: string) {
   const qs = buildQueryString({ pageSize: 1, filters: { warpSpecId } });
@@ -28,27 +24,20 @@ function countWarpUsers(warpSpecId: string) {
 }
 
 export function ItemWarpSection({ form, canWrite, itemId }: { form: UseFormReturn<ItemFormValues>; canWrite: boolean; itemId: string | null }) {
-  const qc = useQueryClient();
-  const [dialog, setDialog] = useState<Dialog>(null);
   const warpId = form.watch("warpSpecId");
   const spec = useQuery({ queryKey: ["warp-specs", "detail", warpId], queryFn: () => warpSpecService.getById(warpId).then((r) => r.data), enabled: !!warpId });
   const users = useQuery({ queryKey: ["warp-specs", "users", warpId], queryFn: () => countWarpUsers(warpId), enabled: !!warpId });
   const savedHere = itemId && users.data !== undefined ? 1 : 0;
   const others = Math.max(0, (users.data ?? 0) - savedHere);
-  const save = useMutation({
-    mutationFn: async (values: WarpSpecFormValues) => {
-      const body = buildPayload(values) as unknown as Partial<WarpSpec>;
-      return dialog?.kind === "edit" ? warpSpecService.update(dialog.spec.id, body) : warpSpecService.create(body);
-    },
-    onSuccess: (res) => {
-      void qc.invalidateQueries({ queryKey: ["warp-specs"] });
-      if (dialog?.kind !== "edit") {
-        form.setValue("warpSpecId", res.data.id, { shouldDirty: true });
-        toast.success(`${res.data.code} çözgü kartı açıldı ve bu kumaşa seçildi.`);
-      } else toast.success("Çözgü kartı güncellendi.");
-      setDialog(null);
-    },
-  });
+  // Yalnız bu kumaşa ait = seçili kart + kullanım sayısı ÖLÇÜLDÜ + başka kumaş yok; bilinmeyen her durumda kilitli.
+  const exclusive = useCallback(
+    (row: WarpSpec) => row.id === warpId && users.data !== undefined && others === 0,
+    [warpId, users.data, others],
+  );
+  const recordSpec = useWarpSpecRecordForm(exclusive);
+  const select = (saved: WarpSpec) => form.setValue("warpSpecId", saved.id, { shouldDirty: true });
+  const record = useRecordForm(recordSpec, select);
+  const showActions = canWrite && record.canWrite;
   return (
     <div className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
@@ -68,14 +57,13 @@ export function ItemWarpSection({ form, canWrite, itemId }: { form: UseFormRetur
                 nullable
                 noneLabel="Çözgü kartı yok"
                 placeholder="Çözgü kartı seç"
-                quickAddLabel={canWrite ? "Yeni çözgü kartı" : undefined}
-                onQuickAdd={canWrite ? () => setDialog({ kind: "new" }) : undefined}
+                recordForm={canWrite ? recordSpec : undefined}
               />
             )}
           />
         </FormField>
-        {canWrite && (
-          <Button type="button" variant="outline" onClick={() => setDialog({ kind: "new" })}>
+        {showActions && (
+          <Button type="button" variant="outline" onClick={record.openCreate}>
             <Plus className="mr-1.5 h-4 w-4" />Yeni çözgü kartı
           </Button>
         )}
@@ -90,31 +78,22 @@ export function ItemWarpSection({ form, canWrite, itemId }: { form: UseFormRetur
           </p>
           {others > 0 && (
             <Callout tone="warning" className="mt-3" title={`Bu çözgü kartı ${others} kumaşta daha kullanılıyor`}>
-              Düzenlerseniz hepsinde değişir. Yalnız bu kumaş için farklı çözgü gerekiyorsa kopyasını oluşturun.
+              Ortak kart burada değiştirilmez: değişiklik Çözgü Kartları ekranında yapılır. Yalnız bu kumaş için farklı çözgü gerekiyorsa örnek alarak yeni kart açın.
             </Callout>
           )}
-          {canWrite && (
+          {showActions && (
             <div className="mt-3 flex flex-wrap gap-2">
-              <Button type="button" size="sm" variant="outline" onClick={() => setDialog({ kind: "edit", spec: spec.data! })}>
-                <Pencil className="mr-1.5 h-4 w-4" />{others > 0 ? `Düzenle (${others + savedHere} kumaşın hepsi)` : "Düzenle"}
+              <Button type="button" size="sm" variant="outline" onClick={() => record.openEdit(spec.data!)}>
+                <Pencil className="mr-1.5 h-4 w-4" />Düzenle
               </Button>
-              <Button type="button" size="sm" variant="outline" onClick={() => setDialog({ kind: "copy", spec: spec.data! })}>
-                <Copy className="mr-1.5 h-4 w-4" />Kopyasını oluştur (yalnız bu kumaş)
+              <Button type="button" size="sm" variant="outline" onClick={() => void record.openTemplate(spec.data!)}>
+                <Copy className="mr-1.5 h-4 w-4" />Örnek al (yalnız bu kumaş)
               </Button>
             </div>
           )}
         </div>
       )}
-      {dialog && (
-        <WarpSpecFormDialog
-          open
-          onOpenChange={(o) => !o && setDialog(null)}
-          initial={dialog.kind === "edit" ? dialog.spec : null}
-          draft={dialog.kind === "copy" ? copyDraft(dialog.spec) : null}
-          isSubmitting={save.isPending}
-          onSubmit={(values) => save.mutateAsync(values).then(() => undefined)}
-        />
-      )}
+      {record.element}
     </div>
   );
 }

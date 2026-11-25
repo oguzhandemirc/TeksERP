@@ -1,7 +1,7 @@
 // Ürün penceresi > Atkı (B19): hiç atkı kartı yokken "var olan kartı seç" çizilmez; yeni atkıda sütun başlığı
 // sütun başlığı "Atış adedi" (uzun anlam ⓘ'de), yer tutucular "ör. …" (dolu değer gibi durmaz).
 import { describe, expect, it, vi } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
 import { EMPTY_WEFT } from "@/pages/WeaveDesigns/tabs/WeftContentFields";
 import { ItemWeftSection } from "./ItemWeftSection";
@@ -13,8 +13,41 @@ vi.mock("@/lib/picker-loader", () => ({ loadAllForPicker: () => Promise.resolve(
 
 const noop = () => {};
 const draft = (p: Partial<ItemWeftDraft>): ItemWeftDraft => ({
-  mode: "none", cardId: null, savedCardId: null, content: EMPTY_WEFT, touched: false, card: null, cardLoading: false, others: 0,
-  setContent: noop, startNew: noop, pickCard: noop, clear: noop, ...p,
+  mode: "none", cardId: null, savedCardId: null, content: EMPTY_WEFT, touched: false, card: null, cardLoading: false, others: 0, forking: false,
+  setContent: noop, startNew: noop, startFork: noop, pickCard: noop, clear: noop, ...p,
+});
+const openTab = vi.hoisted(() => vi.fn());
+vi.mock("@/store/tabs", () => ({ useTabsStore: { getState: () => ({ openTab }) } }));
+const CARD = { id: "w1", code: "1205", name: "Ortak atkı", picksPerCm: "18", sequenceCode: "A1", weftProgramNo: null, yarns: [{ yarnItemId: "y1", picksInRepeat: 1, sortOrder: 0 }] } as never;
+const saved = (p: Partial<ItemWeftDraft>) => draft({ mode: "card", cardId: "w1", savedCardId: "w1", card: CARD, ...p });
+
+describe("ItemWeftSection — paylaşılan kart kullanım yerinde kilitli (kullanıcı 2026-11-25)", () => {
+  it("(a) ⭐ başka kumaşta da kullanılan kart: alanlar kilitli, kopya + Atkı Kartları ekranı yolu", async () => {
+    list.rows = [];
+    const startFork = vi.fn();
+    renderWithProviders(<ItemWeftSection draft={saved({ others: 2, startFork })} canWrite />);
+    expect(screen.getByText("Bu atkı kartı 2 kumaşta daha kullanılıyor")).toBeInTheDocument();
+    expect(screen.getByLabelText("Atkı sırası kodu")).toBeDisabled();
+    expect(screen.queryByText(/Hepsinde/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Yalnız bu kumaş için kopya/ }));
+    expect(startFork).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: /Atkı Kartları ekranında aç/ }));
+    await waitFor(() => expect(openTab).toHaveBeenCalledWith("/definitions/weft-specs?search=1205", { forceNew: true }));
+  });
+  it("kullanım sayısı bilinmiyorsa da kilitli", () => {
+    renderWithProviders(<ItemWeftSection draft={saved({ others: null })} canWrite />);
+    expect(screen.getByLabelText("Atkı sırası kodu")).toBeDisabled();
+    expect(screen.getByTestId("weft-shared-lock")).toBeInTheDocument();
+  });
+  it("(b) yalnız bu kumaşa ait kart yerinde düzenlenir; kopya seçilince paylaşılan kart da (kopyaya) düzenlenir", () => {
+    const { unmount } = renderWithProviders(<ItemWeftSection draft={saved({ others: 0 })} canWrite />);
+    expect(screen.getByLabelText("Atkı sırası kodu")).not.toBeDisabled();
+    expect(screen.queryByTestId("weft-shared-lock")).toBeNull();
+    unmount();
+    renderWithProviders(<ItemWeftSection draft={saved({ others: 2, forking: true })} canWrite />);
+    expect(screen.getByLabelText("Atkı sırası kodu")).not.toBeDisabled();
+    expect(screen.getByText(/kartın kopyası açılır/)).toBeInTheDocument();
+  });
 });
 
 describe("ItemWeftSection", () => {

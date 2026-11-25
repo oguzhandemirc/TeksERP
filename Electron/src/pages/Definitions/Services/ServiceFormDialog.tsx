@@ -16,17 +16,20 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initial?: ServiceItem | null;
+  /** Örnek al taslağı (kimliksiz) — yeni kart bu değerlerle dolu açılır. */
+  draft?: Partial<ServiceItem> | null;
   onSubmit: (values: ServiceFormValues, processIds: string[] | null) => void | Promise<void>;
   isSubmitting?: boolean;
 }
 
-export function ServiceFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting }: Props) {
+export function ServiceFormDialog({ open, onOpenChange, initial, draft, onSubmit, isSubmitting }: Props) {
   const sel = useServiceProcessSelection(initial?.id ?? null, open);
-  const defaults: ServiceFormValues = initial
+  const src = initial ?? draft;
+  const defaults: ServiceFormValues = src
     ? {
-        code: initial.code,
-        name: initial.name,
-        unit: (ITEM_UNIT_CODES as readonly string[]).includes(initial.unit) ? initial.unit : "MT",
+        code: src.code ?? "",
+        name: src.name ?? "",
+        unit: (ITEM_UNIT_CODES as readonly string[]).includes(src.unit ?? "") ? (src.unit as string) : "MT",
       }
     : serviceFormDefaults;
 
@@ -34,7 +37,7 @@ export function ServiceFormDialog({ open, onOpenChange, initial, onSubmit, isSub
     <EntityFormDialog<ServiceFormValues>
       open={open}
       onOpenChange={onOpenChange}
-      title={initial ? "Hizmet Kartını Düzenle" : "Yeni Hizmet Kartı"}
+      title={initial ? "Hizmet Kartını Düzenle" : draft ? "Yeni Hizmet Kartı (örnekten)" : "Yeni Hizmet Kartı"}
       description="Faturalanan hizmet (kurşun, boya, devere…). Süreç eşlemesi isteğe bağlıdır."
       size="medium"
       schema={serviceFormSchema}

@@ -22,6 +22,7 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initial?: Customer | null;
+  draft?: Customer | null; // Örnek al taslağı (kimliksiz; kod/VKN boş) — YENİ kart
   onSubmit: (values: CustomerFormValues) => void | Promise<void>;
   isSubmitting?: boolean;
   /** Oluşturma formunda satır-içi şube editörünü göster (varsayılan true). Sipariş
@@ -73,11 +74,11 @@ const INSTANT_TABS: Record<string, string> = {
   "barcode-series": "Bu sekmedeki değişiklikler anında kaydedilir.",
 };
 
-function CustomerFormHeader({ initial }: { initial?: Customer | null }) {
+function CustomerFormHeader({ initial, fromTemplate }: { initial?: Customer | null; fromTemplate?: boolean }) {
   return (
     <TabbedDialogHeader className="pr-20">
       <div className="flex items-center gap-1.5">
-        <DialogTitle>{initial ? "Cari Kartını Düzenle" : "Yeni Cari"}</DialogTitle>
+        <DialogTitle>{initial ? "Cari Kartını Düzenle" : fromTemplate ? "Yeni Cari (örnekten)" : "Yeni Cari"}</DialogTitle>
         {/* ⓘ — kim oluşturdu / en son kim değiştirdi (2026-08-19). Kaynak: kaydın KENDİ künye kolonları (Plan A);
             audit 6 ayda arşivlenir, künye kaybolmamalı. */}
         {initial && <RecordInfoButton table="CUSTOMER" id={initial.id} createdAt={initial.createdAt} updatedAt={initial.updatedAt} />}
@@ -92,12 +93,12 @@ function CustomerFormHeader({ initial }: { initial?: Customer | null }) {
   );
 }
 
-export function CustomerFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting, showBranchDraft = true, requiredRole }: Props) {
+export function CustomerFormDialog({ open, onOpenChange, initial, draft, onSubmit, isSubmitting, showBranchDraft = true, requiredRole }: Props) {
   const isEdit = Boolean(initial);
   const branchesEnabled = useCustomerBranchesEnabled();
   // Z-B: Finans bölümü yalnız finance:read + modül açıkken; yazma yetkisi yoksa salt-okunur (gövdeye alt nesne konmaz).
   const financeAccess = useCustomerFinanceAccess();
-  const defaults = formDefaults(initial, requiredRole);
+  const defaults = formDefaults(initial ?? draft, requiredRole);
   const form = useForm<CustomerFormValues>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(customerFormSchema as any) as unknown as Resolver<CustomerFormValues>,
@@ -151,7 +152,7 @@ export function CustomerFormDialog({ open, onOpenChange, initial, onSubmit, isSu
         <TabbedDialogContent className="w-[calc(100%-2rem)] max-w-[88rem]" data-form-size="wide">
           <FormProvider {...form}>
           <ModalSectionsScope modalId="customer.form">
-          <CustomerFormHeader initial={initial} />
+          <CustomerFormHeader initial={initial} fromTemplate={Boolean(draft)} />
 
           {isEdit && initial ? (
             <CustomerEditTabs customer={initial} activeTab={activeTab} onTabChange={setActiveTab} infoPanel={infoForm} destination={form.watch("defaultDestination")} />

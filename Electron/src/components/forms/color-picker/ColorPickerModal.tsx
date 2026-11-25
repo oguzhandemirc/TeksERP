@@ -18,6 +18,10 @@ import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { ColorSwatchCard } from "./ColorSwatchCard";
 import { useColorPickerData } from "./useColorPickerData";
 import { QuickAddColor } from "./QuickAddColor";
+import { useColorRecordForm } from "@/pages/Colors/useColorRecordForm";
+import { useRecordForm } from "../record-form/useRecordForm";
+import { PickerRowActions } from "../record-form/PickerRecordActions";
+import type { Color } from "@/pages/Colors/types";
 
 export interface ColorPickerModalProps {
   value: string | null;
@@ -80,6 +84,12 @@ export function ColorPickerModal({
     onChange(id);
     setOpen(false);
   };
+
+  // Yeni = alttaki hızlı ekle şeridi (çift düğme yok); satırda Düzenle (Renkler ekranına) + Örnek al.
+  const record = useRecordForm<Color>(useColorRecordForm(), (saved) => choose(saved.id));
+  const rowActions = (c: { id: string; name: string }) => (
+    <PickerRowActions handle={record} item={c as Color} label={c.name} />
+  );
 
   const showNone = allowNone && !debouncedSearch.trim();
   const nothingFound =
@@ -175,6 +185,7 @@ export function ColorPickerModal({
                       hex={c.hex}
                       highlighted
                       onClick={() => choose(c.id)}
+                      actions={rowActions(c)}
                     />
                   ))}
                 </ColorGrid>
@@ -192,6 +203,7 @@ export function ColorPickerModal({
                       name={c.name}
                       hex={c.hex}
                       onClick={() => choose(c.id)}
+                      actions={rowActions(c)}
                     />
                   ))}
                 </ColorGrid>
@@ -236,6 +248,7 @@ export function ColorPickerModal({
               <QuickAddColor onCreated={(id) => choose(id)} />
             </div>
           )}
+          {record.element}
         </DialogContent>
       </Dialog>
     </>

@@ -20,11 +20,13 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initial?: Color | null;
+  /** Örnek al taslağı (kimliksiz) — yeni renk bu değerlerle dolu açılır. */
+  draft?: Partial<Color> | null;
   onSubmit: (values: ColorFormValues) => void | Promise<void>;
   isSubmitting?: boolean;
 }
 
-export function ColorFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting }: Props) {
+export function ColorFormDialog({ open, onOpenChange, initial, draft, onSubmit, isSubmitting }: Props) {
   // Düzenlemede rengin atalı müşterilerini + müşterideki adlarını çek.
   const detailQ = useQuery({
     queryKey: ["color", initial?.id, "detail"],
@@ -43,7 +45,9 @@ export function ColorFormDialog({ open, onOpenChange, initial, onSubmit, isSubmi
         customerIds: assignedCustomerIds,
         customerAliases: assignedAliases,
       }
-    : colorFormDefaults;
+    : draft
+      ? { ...colorFormDefaults, name: draft.name ?? "", hex: draft.hex ?? "", isActive: true }
+      : colorFormDefaults;
 
   // Detay (customerIds + alias) yüklenince formu doğru seçimle yeniden başlat.
   const formKey = initial
@@ -55,7 +59,7 @@ export function ColorFormDialog({ open, onOpenChange, initial, onSubmit, isSubmi
       key={formKey}
       open={open}
       onOpenChange={onOpenChange}
-      title={initial ? "Rengi Düzenle" : "Yeni Renk"}
+      title={initial ? "Rengi Düzenle" : draft ? "Yeni Renk (örnekten)" : "Yeni Renk"}
       schema={colorFormSchema}
       defaultValues={defaults}
       onSubmit={onSubmit}

@@ -14,7 +14,8 @@ import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { CustomerFormDialog } from "@/pages/Customers/CustomerFormDialog";
-import { customerCardPayload, type CustomerFormValues } from "@/pages/Customers/schema";
+import type { CustomerFormValues } from "@/pages/Customers/schema";
+import { quickCreateCustomerPayload } from "@/pages/Customers/useCustomerRecordForm";
 import { customerService } from "@/pages/Customers/service";
 import type { Customer } from "@/pages/Customers/types";
 import type { SupplierParty } from "./supplierParty";
@@ -58,19 +59,7 @@ export function SupplierQuickCreate({ onCreated, disabled, mode = "supplier" }: 
         isSubmitting={createMut.isPending}
         showBranchDraft={false}
         requiredRole={requiredRole}
-        onSubmit={(v: CustomerFormValues) => {
-          createMut.mutate({
-            // Kod backend'de üretilir (MUS+GGAAYY+NNNN) — istemciden gönderilmez.
-            name: v.name,
-            taxNumber: v.taxNumber || null,
-            ...customerCardPayload(v),
-            isCustomerRole: v.isCustomerRole,
-            isSupplierRole: v.isSupplierRole,
-            // "Fason iş yapar" işaretliyse kart + profil tek işlemde (sunucu `subcontractorRole`).
-            ...(v.isSubcontractorRole ? { subcontractorRole: true } : {}),
-            isActive: true,
-          } as Partial<Customer>);
-        }}
+        onSubmit={(v: CustomerFormValues) => createMut.mutate(quickCreateCustomerPayload(v))}
       />
     </>
   );

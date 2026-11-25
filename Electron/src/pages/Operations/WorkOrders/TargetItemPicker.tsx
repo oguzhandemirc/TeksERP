@@ -6,6 +6,7 @@ import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPicker
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { itemLifecycleOf, pickableLifecycle } from "@/lib/item-lifecycle";
 import type { WorkOrderFormValues } from "./schema";
+import { useItemRecordForm } from "@/pages/Items/useItemRecordForm";
 
 /**
  * Hedef Kumaş picker — genel arama modalı (EntityPickerModal) üzerine RHF
@@ -28,6 +29,7 @@ export function TargetItemPicker({
   /** İş emri = yeni üretim planı (A3, ayara bağlı) · reçete = tanım (B, yalnız Aktif). */
   use?: "plan" | "definition";
 }) {
+  const itemForm = useItemRecordForm();
   const flags = useFeatureFlags().data?.data;
   const lifecycleStatus = use === "plan" ? pickableLifecycle("plan", flags) : "ACTIVE";
   return (
@@ -41,7 +43,7 @@ export function TargetItemPicker({
             field.onChange(id);
             onItemChange?.();
           }}
-          service={itemService}
+          service={itemService} recordForm={itemForm}
           queryKey="items-wo-target"
           filters={{ lifecycleStatus }}
           getLabel={(i) => i.name}

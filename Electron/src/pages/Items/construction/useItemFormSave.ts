@@ -1,4 +1,4 @@
-// Ürün penceresi Kaydet akışı (B19): atkı planı → (paylaşılan kartta soru) → atkı çağrısı + ürün gövdesi → onSubmit.
+// Ürün penceresi Kaydet akışı (B19): atkı planı → (paylaşılan kart → kopya ya da dur; ortak kart PATCH'lenmez) → atkı çağrısı + ürün gövdesi → onSubmit.
 // Yeni üründe deneme kimliği (`clientToken`) pencere açılışında yenilenir; belirsiz hatada yapışır (kk1.md).
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -42,7 +42,7 @@ export function useItemFormSave({ open, form, initial, weft, visible, onSubmit, 
       onInvalidWeft();
       return;
     }
-    const plan = visible.construction ? await share.resolvePlan(first, weft.others, weft.card, initial?.code ?? "") : first;
+    const plan = visible.construction ? await share.resolvePlan(first, weft, initial?.code ?? "") : first;
     if (!plan) return;
     // Atkı bağı plandan; desen kartı form alanından (atkı anahtarını `applyWeftPlan` koyar).
     const base = {

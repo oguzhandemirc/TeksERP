@@ -1,6 +1,7 @@
 // Ürün penceresi kaydı — atkı planını ürün gövdesine/çağrılarına çevirir (B19).
 // Yeni ürün: atkı taslağı `weftSpecDraft` ile ürünün KENDİ isteğinde gider (sunucuda tek tx), deneme kimliği `clientToken`.
 // Düzenleme: atkı çağrısı ürün PATCH'inden ÖNCE; her çağrı kendi içinde tutarlı ve tekrarlanabilir (attach replay, PATCH aynı içerik).
+// Paylaşılan kart burada PATCH'lenmez (kullanıcı 2026-11-25: override yalnız asıl yerden — Atkı Kartları ekranı).
 import { weftSpecApi } from "@/pages/WeaveDesigns/service";
 import type { ItemCreatePayload } from "../types";
 import type { WeftSavePlan } from "./useItemWeftDraft";
@@ -37,9 +38,12 @@ export async function applyWeftPlan(
     case "attach":
       await api.attach({ itemId: ctx.itemId!, expectedWeftSpecId: ctx.savedWeftSpecId, weft: plan.body });
       return out; // bağ sunucuda kuruldu; ürün gövdesi atkıya dokunmaz
-    case "patch-card":
+    case "patch-card": // yalnız bu kumaşa ait kart (planWeftSave: başka kullanan yok, bilinerek)
       await api.patch(plan.weftSpecId, plan.body);
       return out;
+    case "shared-card":
+      // Fail-closed: paylaşılan kart ürün penceresinden PATCH'lenmez; buraya ancak kopyaya çevrilmeden gelinir.
+      throw new Error("Paylaşılan atkı kartı burada değiştirilemez; kopya açın ya da Atkı Kartları ekranında düzenleyin.");
     case "fork-patch": {
       // Önce kopya (kumaşın bağı sunucuda kopyaya geçer, öteki kumaşlar eski kartta kalır), sonra değişiklik kopyaya.
       const forked = await api.fork(plan.sourceId, { itemId: ctx.itemId!, code: plan.code, name: plan.name });

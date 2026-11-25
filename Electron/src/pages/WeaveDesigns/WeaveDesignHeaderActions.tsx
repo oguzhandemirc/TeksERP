@@ -1,4 +1,4 @@
-// Desen kartı başlık eylemleri — durum rozeti · Bas · Kopyala · Pasife al/Aktif et. Yazma eylemleri
+// Desen kartı başlık eylemleri — durum rozeti · Bas · Örnek al · Pasife al/Aktif et. Yazma eylemleri
 // yalnız `warpspec:write` ile çizilir (sunucu yine kapıdır).
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -26,7 +26,7 @@ export function WeaveDesignHeaderActions({ design: d, fabric, canWrite }: { desi
     <div className="flex items-center gap-2">
       {d.isActive ? <Badge variant="default">Aktif</Badge> : <Badge variant="muted">Pasif</Badge>}
       <WeaveCardPrintButton fabric={fabric} />
-      {canWrite && <Button size="sm" variant="outline" onClick={() => setCopying(true)}>Kopyala</Button>}
+      {canWrite && <Button size="sm" variant="outline" title="Bu kartın değerleriyle YENİ desen kartı aç (bu kart değişmez)" onClick={() => setCopying(true)}>Örnek al</Button>}
       {canWrite && (
         <Button size="sm" variant="outline" disabled={toggleActive.isPending} onClick={() => toggleActive.mutate()}>
           {d.isActive ? "Pasife al" : "Aktif et"}
