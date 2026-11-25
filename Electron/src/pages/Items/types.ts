@@ -7,6 +7,26 @@ export type YarnPurchaseUnit = "KG" | "ADET" | "METRE";
 /** K8 yanmazlık — kapalı küme (sunucu pg enum); null = belirtilmemiş. */
 export type FlameRetardancy = "NONE" | "FR_YARN" | "TREVIRA_CS" | "OTHER_FR";
 
+/** D4b iplik büküm yönü / parlaklık — backend `YarnTwistDirection` / `YarnLuster` aynası; null = belirtilmemiş. */
+export type YarnTwistDirection = "S" | "Z";
+export type YarnLuster = "BRIGHT" | "SEMI_DULL" | "FULL_DULL";
+
+/** D4b kart alanları (eski sunucuda yok): kumaş top boyu/asgari sipariş/bakım · iplik teknik · iplik+sarf asgari stok. */
+export interface ItemCardExtra {
+  standardRollLengthM?: string | number | null;
+  minOrderQty?: string | number | null;
+  careInstructions?: string | null;
+  yarnFilamentCount?: number | null;
+  yarnPly?: number | null;
+  yarnTwistTpm?: number | null;
+  yarnTwistDirection?: YarnTwistDirection | null;
+  yarnLuster?: YarnLuster | null;
+  minStockQty?: string | number | null;
+}
+
+/** Gövdede: sayılar noktalı metin, boş = `null` (temizle); anahtar yalnız dolu ya da kayıtlı değer temizleniyorsa gider. */
+export type ItemCardExtraPayload = { [K in keyof ItemCardExtra]?: string | null };
+
 export interface ItemFiberLink {
   fiberTypeId: string;
   pct: string | number;
@@ -39,7 +59,7 @@ export interface ItemColorLink {
   color: ItemColorLite;
 }
 
-export interface Item {
+export interface Item extends ItemCardExtra {
   id: string;
   code: string;
   name: string;
@@ -86,7 +106,7 @@ export interface Item {
   updatedAt: string;
 }
 
-export interface ItemCreatePayload {
+export interface ItemCreatePayload extends ItemCardExtraPayload {
   /** Boş/verilmezse backend STK-NNNNNN otomatik üretir. */
   code?: string;
   name: string;

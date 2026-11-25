@@ -11,6 +11,7 @@ import type { ItemFormValues } from "../schema";
 import { buildItemPayload, fabricDetailPayload, yarnUnitPayload, yarnWastePayload } from "../itemPayload.helper";
 import { constructionPayload } from "../ItemConstructionPickers";
 import { fabricClassPayload, fiberBody, fibersChanged, fibersCreatePayload } from "../fabricClass.payload";
+import { cardExtraPayload } from "../cardExtra.payload";
 import { itemService } from "../service";
 import { planWeftSave, type ItemWeftDraft } from "./useItemWeftDraft";
 import { applyWeftPlan } from "./item-save";
@@ -54,6 +55,7 @@ export function useItemFormSave({ open, form, initial, weft, visible, onSubmit, 
       ...yarnWastePayload(v, initial, visible.yarnWaste),
       ...yarnUnitPayload(v, initial),
       ...fabricClassPayload(v, initial),
+      ...cardExtraPayload(v, initial),
       ...fibersCreatePayload(v, isEdit),
     };
     setSaving(true);

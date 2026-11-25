@@ -5,6 +5,7 @@ import type { Item } from "./types";
 import type { ItemFormValues } from "./schema";
 import { fabricDetailToFormText } from "./itemPayload.helper";
 import { fabricClassFormValues } from "./fabricClass.payload";
+import { cardExtraFormValues } from "./cardExtra.payload";
 
 export function toFormValues(initial: Item): ItemFormValues {
   return {
@@ -27,5 +28,6 @@ export function toFormValues(initial: Item): ItemFormValues {
     allowedColorIds: initial.allowedColors?.map((c) => c.colorId) ?? [],
     allowedPropertyIds: initial.allowedProperties?.map((p) => p.propertyId) ?? [],
     ...fabricClassFormValues(initial),
+    ...cardExtraFormValues(initial),
   };
 }

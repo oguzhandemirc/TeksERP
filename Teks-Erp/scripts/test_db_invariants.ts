@@ -1354,6 +1354,10 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string;
   { table: "weave_design_images", name: "weave_design_images_mime_ck" },
   // İplik lif bileşimi (20261125150000): satır payı 0 < pct ≤ 100 (Σ = 100 servis kapısı `item-fiber.helper`).
   { table: "item_fibers", name: "item_fibers_pct_ck" },
+  // Ürün kartı D4b (20261125210000): iplik teknik alanları / asgari stok / kumaş ticari alanları — tip kapsamlı (servis 400 ilk hat).
+  { table: "items", name: "items_yarn_spec_ck" },
+  { table: "items", name: "items_min_stock_qty_ck" },
+  { table: "items", name: "items_fabric_trade_ck" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

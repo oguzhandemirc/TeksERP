@@ -1,5 +1,5 @@
-// Ürün penceresi > Genel: ad · tip · birim · (iplikte numara/alım birimi/fire) · (kumaşta tür/yanmazlık/kompozisyon) ·
-// renkler/özellikler · ölçüler ve gramaj · stok kodu. Çözgü/atkı/desen kendi sekmelerinde (B19). Sıra bilinçli: ÖNCE ad; stok kodu EN ALTTA kapalı satır (2026-08-17).
+// Ürün penceresi > Genel: ad · tip · birim (sarfta seçilir) · (iplikte numara/alım birimi/fire/filament/kat/büküm/parlaklık) ·
+// (kumaşta tür/yanmazlık/kompozisyon) · renkler/özellikler · ölçüler ve gramaj · top ve sipariş · (iplik/sarf) stok · stok kodu. Çözgü/atkı/desen kendi sekmelerinde (B19). Sıra bilinçli: ÖNCE ad; stok kodu EN ALTTA kapalı satır (2026-08-17).
 import { useMemo } from "react";
 import { Controller, type UseFormReturn } from "react-hook-form";
 import { useQuery } from "@tanstack/react-query";
@@ -18,10 +18,11 @@ import { ItemYarnWasteField } from "./ItemYarnWasteField";
 import { ItemYarnFields } from "./ItemYarnFields";
 import { ItemWeavingDetails } from "./ItemWeavingDetails";
 import { LockedValue, PickerTrigger, StockCodeRow } from "./ItemFormParts";
+import { ItemFabricTradeSection, ItemMinStockSection, ItemUnitField, ItemYarnSpecFields } from "./ItemCardExtraFields";
+import { carriesMinStock } from "./cardExtra.payload";
 import { FabricClassFields } from "./FabricClassFields";
 import { ItemCompositionField } from "./ItemCompositionField";
 import { ItemFiberFields } from "./ItemFiberFields";
-import { unitLabel } from "@/lib/item-unit";
 import { itemTypeScope } from "./itemTypeScope";
 
 interface Props {
@@ -93,13 +94,12 @@ export function ItemGeneralFields(p: Props) {
             />
           )}
         </FormField>
-        <FormField label="Birim" htmlFor="itemUnitLocked" info="Seçilen tipe göre otomatik atanır.">
-          <LockedValue id="itemUnitLocked" text={unitLabel(p.derivedUnit)} />
-        </FormField>
+        <ItemUnitField form={form} derivedUnit={p.derivedUnit} />
         {itemType === ItemType.FABRIC && <FabricClassFields form={form} />}
         {/* Denye + alım birimi yalnız iplikte (SY-a); zorunlu DEĞİL — çözgü/atkı kartı açarken sunucu anlaşılır 400 verir. */}
         {itemType === ItemType.YARN && <ItemYarnFields form={form} />}
         {p.yarnWasteVisible && <ItemYarnWasteField form={form} />}
+        {itemType === ItemType.YARN && <ItemYarnSpecFields form={form} />}
         {itemType === ItemType.FABRIC && <div className="sm:col-span-2"><ItemCompositionField form={form} itemId={initial?.id ?? null} /></div>}
       </div>
       {itemType === ItemType.YARN && <ItemFiberFields form={form} />}
@@ -137,6 +137,8 @@ export function ItemGeneralFields(p: Props) {
 
       {/* K2/K3: en ve gramaj kumaşın günlük bilgisi — tek bölüm, açık. */}
       {itemType === ItemType.FABRIC && <ItemWeavingDetails form={form} itemId={initial?.id ?? null} widthVisible={p.widthVisible} />}
+      {itemType === ItemType.FABRIC && <ItemFabricTradeSection form={form} unit={p.derivedUnit} />}
+      {carriesMinStock(itemType) && <ItemMinStockSection form={form} unit={form.watch("unit")} />}
 
       <StockCodeRow
         isEdit={isEdit}

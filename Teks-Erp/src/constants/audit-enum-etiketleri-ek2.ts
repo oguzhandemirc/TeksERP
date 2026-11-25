@@ -35,4 +35,10 @@ export const ENUM_LABELS_EK2: Record<string, string> = {
   FR_YARN: "FR iplik",
   TREVIRA_CS: "Trevira CS",
   OTHER_FR: "Diğer yanmaz",
+  // YarnTwistDirection · YarnLuster (ürün kartı D4b, 2026-11-25)
+  S: "S büküm",
+  Z: "Z büküm",
+  BRIGHT: "Parlak",
+  SEMI_DULL: "Yarı mat",
+  FULL_DULL: "Mat",
 };
