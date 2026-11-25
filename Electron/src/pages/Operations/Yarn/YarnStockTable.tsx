@@ -25,6 +25,7 @@ import { useLocalTable } from "@/hooks/useLocalTable";
 import { cn } from "@/lib/utils";
 import { formatInstant, type YarnStockRow } from "./service";
 import { isNegative, kg } from "./qty";
+import { MIN_STOCK_BADGE_TEXT, MinStockCell, minStockText } from "@/components/operations/MinStockCell";
 
 interface Handlers {
   onOpenMovements: (row: YarnStockRow) => void;
@@ -60,6 +61,13 @@ const BALANCE_UPDATED: ColumnDef<YarnStockRow>[] = [
         </span>
       );
     },
+  },
+  {
+    // Rozet KALEM düzeyidir (bütün depoların toplamı); karar sunucuda (`belowMinStock`).
+    id: "minStock",
+    header: "Asgari stok",
+    meta: { label: "Asgari stok", align: "right", exportValue: (r) => `${minStockText(r.minStockQty ?? null, r.item.unit)}${r.belowMinStock ? ` (${MIN_STOCK_BADGE_TEXT})` : ""}` },
+    cell: ({ row: { original: r } }) => <MinStockCell minStockQty={r.minStockQty ?? null} below={r.belowMinStock === true} unit={r.item.unit} />,
   },
   {
     id: "updatedAt",
@@ -100,6 +108,17 @@ export function useYarnStockTable(rows: YarnStockRow[], showWarehouse: boolean, 
     [showWarehouse, onOpenMovements, onAddMovement],
   );
   return useLocalTable({ tableKey: "yarn:stocks", data: rows, columns });
+}
+
+/** Alt şerit: asgari altı KALEM sayısı (faceted — "Asgari altı" seçilince listedeki kalem sayısı). */
+export function YarnBelowMinNote({ count }: { count: number | undefined }) {
+  if (!count) return null;
+  return (
+    <span className="flex items-center gap-1 text-amber-700 dark:text-amber-400" title="Kalem toplamı (bütün depolar) ürün kartındaki asgari stoğun altında. Listelemek için “Asgari altı” filtresini seçin.">
+      <AlertTriangle className="h-3.5 w-3.5" />
+      {count} kalem asgari altı
+    </span>
+  );
 }
 
 export function YarnStockTable({

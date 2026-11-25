@@ -11,12 +11,23 @@ export interface ConsumableStockRow {
   balance: string;
   negative: boolean;
   isActive: boolean;
+  /** Kartın asgari stoğu (kartın biriminde); boş = eşik yok. Eski sunucu göndermez. */
+  minStockQty?: string | null;
+  belowMinStock?: boolean;
 }
 
 export interface ConsumableStockList {
   enabled: boolean;
   rows: ConsumableStockRow[];
-  summary: { itemCount: number; negativeCount: number };
+  /** `belowMinCount` faceted: "Asgari altı" filtresi seçilince listenin satır sayısı. */
+  summary: { itemCount: number; negativeCount: number; belowMinCount?: number };
+}
+
+export interface ConsumableStockQuery {
+  search?: string;
+  belowMin?: boolean;
+  /** Tek kalem (ürün penceresi) ya da CSV. */
+  itemId?: string;
 }
 
 export interface ConsumableMovementRow {
@@ -46,8 +57,10 @@ export const CONSUMABLE_KIND_LABEL: Record<ConsumableMovementKind, string> = {
   CONSUMPTION_REVERSAL_IN: "Tüketim geri alındı",
 };
 
-export async function listConsumableStock(search: string): Promise<ConsumableStockList> {
-  const res = await apiClient.get("/api/consumable-stock", { params: search.trim() ? { search: search.trim() } : {} });
+export async function listConsumableStock(q: ConsumableStockQuery = {}): Promise<ConsumableStockList> {
+  const search = q.search?.trim();
+  const params = { ...(search ? { search } : {}), ...(q.belowMin ? { belowMin: "1" } : {}), ...(q.itemId ? { itemId: q.itemId } : {}) };
+  const res = await apiClient.get("/api/consumable-stock", { params });
   return res.data.data as ConsumableStockList;
 }
 

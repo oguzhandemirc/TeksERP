@@ -36,6 +36,8 @@ export interface YarnFilterState {
   itemId: string | null;
   warehouseId: string;
   onlyNonZero: boolean;
+  /** Yalnız asgari altı kalemler — sunucu bu süzgeçte sıfır bakiyeyi de döndürür (`onlyNonZero` etkisiz). */
+  belowMin: boolean;
 }
 
 export const EMPTY_YARN_FILTERS: YarnFilterState = {
@@ -43,10 +45,11 @@ export const EMPTY_YARN_FILTERS: YarnFilterState = {
   itemId: null,
   warehouseId: "",
   onlyNonZero: true,
+  belowMin: false,
 };
 
 export function isYarnFilterDirty(f: YarnFilterState): boolean {
-  return Boolean(f.search || f.itemId || f.warehouseId) || f.onlyNonZero !== EMPTY_YARN_FILTERS.onlyNonZero;
+  return Boolean(f.search || f.itemId || f.warehouseId || f.belowMin) || f.onlyNonZero !== EMPTY_YARN_FILTERS.onlyNonZero;
 }
 
 /**
@@ -72,6 +75,11 @@ function hasNarrowingFilter(f: YarnFilterState): boolean {
 }
 
 export function yarnEmptyStateMessage(f: YarnFilterState): string {
+  if (f.belowMin) {
+    return hasNarrowingFilter(f)
+      ? "Bu filtreyle asgari stoğun altına düşen iplik yok."
+      : "Asgari stoğun altına düşen iplik yok. Eşik ürün kartının Stok bölümünden verilir.";
+  }
   if (f.onlyNonZero) {
     return hasNarrowingFilter(f)
       ? "Bu filtreyle bakiyesi olan iplik yok. Sıfır bakiyeli kalemler gizli — “Yalnız bakiyesi olanlar” kutusunu kaldırın ya da diğer filtreleri temizleyin."
@@ -126,7 +134,16 @@ export function YarnFilterBar({ value, onChange, tools }: Props) {
         />
       )}
 
-      <ToolbarToggle checked={value.onlyNonZero} onCheckedChange={(c) => set("onlyNonZero", c)} label="Yalnız bakiyesi olanlar" />
+      <ToolbarToggle
+        checked={value.belowMin}
+        onCheckedChange={(c) => set("belowMin", c)}
+        label="Asgari altı"
+        title="Yalnız kalem toplamı (bütün depolar) ürün kartındaki asgari stoğun altında olan iplikler; sıfır bakiyeli satırlar da görünür"
+      />
+      {/* Asgari altı seçiliyken sıfır bakiye sunucuda hep döner — kutu etkisiz olacağı için çizilmez. */}
+      {!value.belowMin && (
+        <ToolbarToggle checked={value.onlyNonZero} onCheckedChange={(c) => set("onlyNonZero", c)} label="Yalnız bakiyesi olanlar" />
+      )}
 
       {isYarnFilterDirty(value) && (
         <Button variant="ghost" size="sm" className="h-8" onClick={() => onChange(EMPTY_YARN_FILTERS)}>

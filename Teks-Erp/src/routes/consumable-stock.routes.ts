@@ -10,7 +10,15 @@ import { listConsumableMovements, listConsumableStock } from "../services/consum
 const router = Router();
 router.use(verifyToken, requireTicaretEnabled);
 
-const listQuery = z.strictObject({ search: z.string().max(100).optional() });
+const uuidCsv = z
+  .string()
+  .max(4000)
+  .refine((v) => v.split(",").every((s) => z.uuid().safeParse(s.trim()).success), { message: "Geçersiz kalem kimliği." });
+const listQuery = z.strictObject({
+  search: z.string().max(100).optional(),
+  itemId: uuidCsv.optional(),
+  belowMin: z.enum(["1", "0", "true", "false"]).optional(),
+});
 const movementQuery = z.strictObject({
   cursor: z.uuid().optional(),
   limit: z.coerce.number().int().min(1).max(200).optional(),
@@ -21,8 +29,20 @@ const movementQuery = z.strictObject({
  * /api/consumable-stock:
  *   get:
  *     tags: [ConsumableStock]
- *     summary: Sarf kalemlerinin stok bakiyesi (eksi bakiye işaretli)
+ *     summary: Sarf kalemlerinin stok bakiyesi (eksi bakiye ve asgari altı işaretli)
  *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: search
+ *         schema: { type: string, maxLength: 100 }
+ *       - in: query
+ *         name: itemId
+ *         schema: { type: string }
+ *         description: UUID ya da virgüllü UUID listesi
+ *       - in: query
+ *         name: belowMin
+ *         schema: { type: string, enum: ["1", "0", "true", "false"] }
+ *         description: Yalnız bakiyesi asgari stoğun altında olan kalemler
  *     responses:
  *       200: { description: Liste + özet }
  */
@@ -30,7 +50,11 @@ router.get("/", requireAnyPermission("goods-receipt:read", "goods-receipt:write"
   try {
     const q = listQuery.safeParse(req.query);
     if (!q.success) throw AppError.badRequest("Geçersiz sorgu parametresi.", { code: "CONSUMABLE_STOCK_QUERY_INVALID" });
-    const data = await listConsumableStock(q.data);
+    const data = await listConsumableStock({
+      search: q.data.search,
+      itemId: q.data.itemId,
+      belowMin: q.data.belowMin === "1" || q.data.belowMin === "true",
+    });
     res.status(200).json({ success: true, data });
   } catch (e) {
     next(e);

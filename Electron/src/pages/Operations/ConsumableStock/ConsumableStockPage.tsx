@@ -22,6 +22,8 @@ import { formatNumber } from "@/lib/format";
 import { flagSettingTrail } from "@/lib/flag-setting-path";
 import { listConsumableStock, type ConsumableStockRow } from "./service";
 import { ConsumableMovementsSheet } from "./ConsumableMovementsSheet";
+import { ToolbarToggle } from "@/components/data-table/ToolbarToggle";
+import { MIN_STOCK_BADGE_TEXT, MinStockCell, minStockText } from "@/components/operations/MinStockCell";
 
 const COLUMNS: ColumnDef<ConsumableStockRow>[] = [
   { accessorKey: "code", header: "Kod", cell: ({ row }) => <span className="font-mono">{row.original.code}</span> },
@@ -47,6 +49,12 @@ const COLUMNS: ColumnDef<ConsumableStockRow>[] = [
       </span>
     ),
   },
+  {
+    id: "minStock",
+    header: "Asgari stok",
+    meta: { label: "Asgari stok", align: "right", exportValue: (r) => `${minStockText(r.minStockQty ?? null, r.unit)}${r.belowMinStock ? ` (${MIN_STOCK_BADGE_TEXT})` : ""}` },
+    cell: ({ row: { original: r } }) => <MinStockCell minStockQty={r.minStockQty ?? null} below={r.belowMinStock === true} unit={r.unit} />,
+  },
 ];
 
 const actionsColumn = (onOpen: (r: ConsumableStockRow) => void): ColumnDef<ConsumableStockRow> => ({
@@ -64,8 +72,10 @@ const actionsColumn = (onOpen: (r: ConsumableStockRow) => void): ColumnDef<Consu
 
 export function ConsumableStockPage() {
   const [search, setSearch] = useState("");
+  const [belowMin, setBelowMin] = useState(false);
   const [open, setOpen] = useState<ConsumableStockRow | null>(null);
-  const q = useQuery({ queryKey: ["consumable-stock", search], queryFn: () => listConsumableStock(search) });
+  const q = useQuery({ queryKey: ["consumable-stock", search, belowMin], queryFn: () => listConsumableStock({ search, belowMin }) });
+  const belowMinCount = q.data?.summary.belowMinCount ?? 0;
   const data = q.data;
   const rows = useMemo(() => data?.rows ?? [], [data]);
   const columns = useMemo(() => [...COLUMNS, actionsColumn(setOpen)], []);
@@ -83,6 +93,7 @@ export function ConsumableStockPage() {
       )}
       <ListToolbar className="flex-row flex-wrap items-center">
         <ListSearchBox value={search} onSearchChange={setSearch} searchHint="Kalem adı ya da kodu ara" />
+        <ToolbarToggle checked={belowMin} onCheckedChange={setBelowMin} label={MIN_STOCK_BADGE_TEXT} title="Yalnız bakiyesi ürün kartındaki asgari stoğun altında olan kalemler" />
         <div className="ml-auto flex items-center gap-1.5">
           <DataTableTools table={table} compact exportName="Sarf stoğu" />
         </div>
@@ -94,8 +105,8 @@ export function ConsumableStockPage() {
         isError={q.isError}
         errorText="Sarf stoğu yüklenemedi — bağlantıyı, Ticaret modülünü ve yetkinizi kontrol edin."
         onRetry={() => void q.refetch()}
-        emptyText={search ? "Aramaya uyan kalem yok." : "Sarf türünde kalem yok."}
-        emptyDescription={search ? undefined : "Ürün kartında türü “Sarf” olan kalemler burada listelenir."}
+        emptyText={belowMin ? "Asgari stoğun altına düşen kalem yok." : search ? "Aramaya uyan kalem yok." : "Sarf türünde kalem yok."}
+        emptyDescription={belowMin || search ? undefined : "Ürün kartında türü “Sarf” olan kalemler burada listelenir."}
       />
       <ListFooter
         loaded={rows.length}
@@ -106,6 +117,7 @@ export function ConsumableStockPage() {
               items={[
                 { key: "items", label: "Kalem", value: data.summary.itemCount },
                 ...(data.summary.negativeCount > 0 ? [{ key: "neg", label: "Eksi bakiye", value: data.summary.negativeCount, tone: "warn" as const }] : []),
+                ...(belowMinCount > 0 ? [{ key: "belowMin", label: MIN_STOCK_BADGE_TEXT, value: belowMinCount, tone: "warn" as const }] : []),
               ]}
             />
           )
