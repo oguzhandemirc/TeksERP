@@ -80,8 +80,8 @@ export function ReedFields({ form }: { form: Form }) {
       <FormField label="Tarak eni (cm)" htmlFor="reedWidthCm" error={e.reedWidthCm} info="Bilgi alanı; taraktan tel önerisinde kullanılır, hesaba girmez.">
         <Input id="reedWidthCm" {...form.register("reedWidthCm")} inputMode="decimal" className={EXAMPLE_PH} placeholder="ör. 280" />
       </FormField>
-      <FormField className="sm:col-span-2" label="Dizilim (talimat)" htmlFor="sequenceNote" error={e.sequenceNote} info="Devereciye giden talimat: ör. 2A 1B. Hesaba girmez.">
-        <Input id="sequenceNote" {...form.register("sequenceNote")} className={EXAMPLE_PH} placeholder="ör. 2A 1B" />
+      <FormField className="sm:col-span-2" label="Dizilim (talimat)" htmlFor="sequenceNote" error={e.sequenceNote} info="Devereciye giden talimat: ör. 2A 1B. Tekrar eden kısmı parantezle kısaltabilirsiniz: 5x(2A 1B) 4C. Hesaba girmez.">
+        <Input id="sequenceNote" {...form.register("sequenceNote")} className={EXAMPLE_PH} placeholder="ör. 5x(2A 1B) 4C" />
       </FormField>
       <FormField label="Çekme (%)" htmlFor="takeUpPct" error={e.takeUpPct} info="Çözgü çekmesi (take-up): dokumada çözgünün kumaştan ne kadar uzun harcandığı. Çözgü ÷ kumaş oranı: çözgü = kumaş ÷ (1 − çekme). Boşsa tezgahtan doğan topun otomatik tüketimi çözgü = kumaş sayar ve uyarır.">
         <Input id="takeUpPct" {...form.register("takeUpPct")} inputMode="decimal" className={EXAMPLE_PH} placeholder="ör. 8" />

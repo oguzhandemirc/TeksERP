@@ -2,18 +2,16 @@
 // Atkı/varyant/çözgü katmanı KUMAŞ başına tutulur (desen N kumaşı besler) → üstte kumaş seçimi.
 // Maliyet sekmesi `cost:read` + `maliyetEnabled` yoksa çizilmez (koşulsuz 403 verecek sorgu atılmaz).
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useParams, useSearchParams } from "react-router-dom";
-import { toast } from "sonner";
 import { PageBody, PageShell } from "@/components/layout/PageShell";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useOperationsVisibilityContext } from "@/pages/Operations/useOperationsVisibility";
 import { FabricChooser } from "./FabricChooser";
-import { WeaveCardPrintButton } from "./WeaveCardPrintButton";
+import { TechSummaryStrip } from "./TechSummaryStrip";
+import { WeaveDesignHeaderActions } from "./WeaveDesignHeaderActions";
 import { listDesignFabrics, weaveDesignApi } from "./service";
 import { CostTab } from "./tabs/CostTab";
 import { LiftPlanTab } from "./tabs/LiftPlanTab";
@@ -26,7 +24,6 @@ const DETAIL_TABS = new Set(["structure", "weft", "lift", "variants"]);
 
 export function WeaveDesignDetailPage() {
   const { id = "" } = useParams();
-  const qc = useQueryClient();
   const { hasPermission } = useRoleAccess();
   const { maliyetEnabled } = useOperationsVisibilityContext();
   const canWrite = hasPermission("warpspec:write");
@@ -39,30 +36,13 @@ export function WeaveDesignDetailPage() {
   const fabrics = useQuery({ queryKey: ["weave-designs", "fabrics", id], queryFn: () => listDesignFabrics(id), enabled: !!id });
   const fabricList = fabrics.data ?? [];
   const fabric = fabricList.find((f) => f.id === chosen) ?? fabricList[0] ?? null;
-  const toggleActive = useMutation({
-    mutationFn: () => (design.data?.isActive ? weaveDesignApi.deactivate(id) : weaveDesignApi.activate(id)),
-    onSuccess: (r) => {
-      toast.success(r.message ?? "Desen kartı güncellendi.");
-      void qc.invalidateQueries({ queryKey: ["weave-designs"] });
-    },
-  });
   const d = design.data;
   return (
     <PageShell>
       <PageHeader
         title={d ? `${d.code} — Desen kartı` : "Desen kartı"}
         statusLine={d ? `${d.name} · ${weaveClassLabel(d)}` : undefined}
-        actions={d && (
-          <div className="flex items-center gap-2">
-            {d.isActive ? <Badge variant="default">Aktif</Badge> : <Badge variant="muted">Pasif</Badge>}
-            <WeaveCardPrintButton fabric={fabric} />
-            {canWrite && (
-              <Button size="sm" variant="outline" disabled={toggleActive.isPending} onClick={() => toggleActive.mutate()}>
-                {d.isActive ? "Pasife al" : "Aktif et"}
-              </Button>
-            )}
-          </div>
-        )}
+        actions={d && <WeaveDesignHeaderActions design={d} fabric={fabric} canWrite={canWrite} />}
       />
       <PageBody className="min-h-0 space-y-4 p-4 sm:p-6">
         {design.isLoading ? (
@@ -72,6 +52,7 @@ export function WeaveDesignDetailPage() {
         ) : (
           <>
             <FabricChooser fabrics={fabricList} loading={fabrics.isLoading} selectedId={fabric?.id ?? null} onSelect={setChosen} />
+            <TechSummaryStrip fabric={fabric} />
             <Tabs value={tab} onValueChange={setTab}>
               <TabsList className="max-w-full justify-start overflow-x-auto">
                 <TabsTrigger value="structure">Yapı</TabsTrigger>

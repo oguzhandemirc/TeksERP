@@ -99,4 +99,11 @@ export interface ItemComputedGsm {
   gsm: number | null;
   enteredRawGsm: number | null;
   diffPct: number | null;
+  /** Teknik özet (desen kartı şeridi) — eski sunucu göndermez (undefined = bilinmiyor). */
+  endsCount?: number | null;
+  endsPerCm?: number | null;
+  picksPerCm?: number | null;
+  picksInRepeat?: number | null;
+  repeatCm?: number | null;
+  repeatsPerM?: number | null;
 }
