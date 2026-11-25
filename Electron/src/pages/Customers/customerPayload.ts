@@ -2,7 +2,7 @@
 import { financeSubBody, type FinanceSubBody } from "./customerFinance";
 import type { Customer } from "./types";
 import { toPayload } from "./tamburLabelSettings";
-import { branchDraftHasContent, customerCardPayload, type CustomerFormValues } from "./schema";
+import { branchDraftHasContent, customerCardPayload, newCardSubcontractorBody, type CustomerFormValues } from "./schema";
 
 /** Tek-adım oluşturmada backend'e gönderilen satır-içi şube gövdesi. */
 interface BranchCreatePayload {
@@ -24,7 +24,7 @@ function tamburBody(t: CustomerFormValues["tamburLabel"]): Partial<Omit<Customer
   return r.ok ? (r.body as Partial<Omit<Customer, "finance">>) : {};
 }
 
-type CustomerWritePayload = Partial<Omit<Customer, "finance">> & { branches?: BranchCreatePayload[]; subcontractorRole?: true; finance?: FinanceSubBody };
+type CustomerWritePayload = Partial<Omit<Customer, "finance">> & { branches?: BranchCreatePayload[]; subcontractorRole?: true; subcontractorCategoryIds?: string[]; finance?: FinanceSubBody };
 
 export const buildCustomerPayload = (v: CustomerFormValues, initial: Customer | null, finance: { canWrite: boolean; enabled: boolean } = { canWrite: false, enabled: false }): CustomerWritePayload => {
   // Şubeler yalnız OLUŞTURMADA gönderilir (müşteri + şubeler tek transaction'da doğar);
@@ -39,10 +39,10 @@ export const buildCustomerPayload = (v: CustomerFormValues, initial: Customer | 
     taxNumber: v.taxNumber || null,
     ...customerCardPayload(v),
     // Rol modeli: `type` gönderilmez (sunucu türetir). Fason rolü bayrağı gövdede YOK (profil bağı türetir);
-    // YENİ kartta "Fason iş yapar" → `subcontractorRole:true` (sunucu kart + profili tek tx'te doğurur).
+    // YENİ kartta "Fason iş yapar" → `subcontractorRole:true` + seçilen kategoriler (sunucu kart + profil + bağları tek tx'te doğurur).
     isCustomerRole: v.isCustomerRole,
     isSupplierRole: v.isSupplierRole,
-    ...(!initial && v.isSubcontractorRole ? { subcontractorRole: true } : {}),
+    ...(!initial ? newCardSubcontractorBody(v) : {}),
     isActive: v.isActive,
     // Tambur / etiket ayarları (Etiket Şablonları sekmesi) — tek kayıt modelinde aynı Kaydet ile, yalnız düzenlemede.
     ...(initial ? tamburBody(v.tamburLabel) : {}),

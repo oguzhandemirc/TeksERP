@@ -8,6 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { MultiSelectCheckboxList } from "@/components/forms/MultiSelectCheckboxList";
 import { DocumentProfileSelect } from "@/components/forms/DocumentProfileSelect";
 import { subcontractorCategoryService } from "@/pages/SubcontractorCategories/service";
+import { categoryHint } from "@/pages/Customers/CustomerSubcontractorCategories";
 import {
   subcontractorFormDefaults,
   subcontractorFormSchema,
@@ -152,7 +153,7 @@ export function SubcontractorFormDialog({
                         name="categoryIds"
                         render={({ field }) => (
                           <MultiSelectCheckboxList
-                            items={(categories.data?.data ?? []).map((c) => ({ id: c.id, label: c.name, hint: c.description ?? c.code }))}
+                            items={(categories.data?.data ?? []).map((c) => ({ id: c.id, label: c.name, hint: categoryHint(c) }))}
                             value={field.value}
                             onChange={field.onChange}
                             placeholder="Kategori ara..."

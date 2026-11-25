@@ -19,20 +19,23 @@ export const SUBCONTRACTOR_ROLE_LABEL = "Fason iş yapar";
 export const SUBCONTRACTOR_ROLE_TYPE_HINT = `Fason profili için kartın ${partnerRoleLabels.supplier} rolü olmalı.`;
 export const SUBCONTRACTOR_ROLE_OFF_HINT = `Kimlik › Roller satırında "${SUBCONTRACTOR_ROLE_LABEL}" seçilince fason kategorileri burada seçilir.`;
 
-/** Bu carinin fason profili (aktif ya da pasif) — bağ `customerId` üzerinden, liste süzgeciyle. */
-export function useSubcontractorProfile(customerId: string) {
-  return useQuery({ queryKey: ["subcontractor-profile", customerId], queryFn: () => fetchSubcontractorProfile(customerId), staleTime: 30_000 });
+export const SUBCONTRACTOR_NEW_CARD_HINT = "Kaydet'e basınca kart, fason profili ve seçilen kategoriler tek kayıtta oluşur (belge profili ve ücretler sonra profil penceresinden).";
+
+/** Bu carinin fason profili (aktif ya da pasif) — bağ `customerId` üzerinden, liste süzgeciyle. Yeni kartta (id yok) sorgu yok. */
+export function useSubcontractorProfile(customerId: string | null) {
+  return useQuery({ queryKey: ["subcontractor-profile", customerId], queryFn: () => fetchSubcontractorProfile(customerId as string), enabled: Boolean(customerId), staleTime: 30_000 });
 }
 
-export function CustomerSubcontractorRole({ customer }: { customer: Customer }) {
+/** `customer` null = YENİ kart: profil henüz yok; kategori seçimi form değeridir, kart gövdesiyle tek istekte gider. */
+export function CustomerSubcontractorRole({ customer }: { customer: Customer | null }) {
   const qc = useQueryClient();
   const form = useFormContext<CustomerFormValues>();
-  const profile = useSubcontractorProfile(customer.id);
+  const profile = useSubcontractorProfile(customer?.id ?? null);
   const on = form.watch("isSubcontractorRole");
   const draftCats = form.watch("subcontractorCategoryIds");
   const p = profile.data ?? null;
   const refresh = () => {
-    void qc.invalidateQueries({ queryKey: ["subcontractor-profile", customer.id] });
+    void qc.invalidateQueries({ queryKey: ["subcontractor-profile", customer?.id] });
     void qc.invalidateQueries({ queryKey: ["subcontractors"] });
   };
 
@@ -52,14 +55,16 @@ export function CustomerSubcontractorRole({ customer }: { customer: Customer }) 
             Fason profili: <span className="font-mono">{p.code}</span>
             {p.isActive ? "" : " (pasif — Kaydet ile yeniden açılır)"} — <SubcontractorProfileEdit profile={p} onSaved={refresh} />
           </>
-        ) : (
+        ) : customer ? (
           "Kaydet'e basınca bu kart için fason profili açılır (belge profili ve ücretler sonra profil penceresinden)."
+        ) : (
+          SUBCONTRACTOR_NEW_CARD_HINT
         )}
       </p>
       <CustomerSubcontractorCategories
         value={draftCats ?? (p?.categories ?? []).map((c) => c.categoryId)}
         onChange={(ids) => form.setValue("subcontractorCategoryIds", ids, { shouldDirty: true })}
-        disabled={profile.isLoading}
+        disabled={Boolean(customer) && profile.isLoading}
       />
     </div>
   );

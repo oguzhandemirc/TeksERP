@@ -16,7 +16,7 @@ import { nextSeriesNo } from "./number-series.service";
 import { p2002TargetsCode, withBarcodeRetry } from "../utils/barcode-retry";
 import { parseQueryParams, readFilterList } from "../utils/query-parser";
 import { applyPartnerRoles, roleListWhere, type PartnerRoles } from "./helpers/partner-roles.helper";
-import { createProfileForCustomerTx, PROFILE_CUSTOMER_TYPE_MESSAGE } from "./subcontractor-management.service";
+import { createProfileForCustomerTx, PROFILE_CUSTOMER_TYPE_MESSAGE, takeCardSubcontractorIntent } from "./subcontractor-management.service";
 import { AuditService } from "./audit.service";
 import { normalizeTamburLabelSettings } from "./helpers/customer-tambur-settings-input.helper";
 import { validateAndShapeBranches } from "./helpers/customer-inline-branches.helper";
@@ -83,13 +83,15 @@ async function nextCustomerCode(): Promise<string> {
 export interface CardCreatePlan {
   readonly data: Record<string, unknown>;
   readonly wantsProfile: boolean;
+  /** Profille aynı tx'te bağlanacak fason kategorileri (yalnız `wantsProfile` iken dolu olabilir). */
+  readonly categoryIds: readonly string[];
   readonly branches: ReturnType<typeof validateAndShapeBranches>;
 }
 
 /** `createCardInTx` çıktısı — commit sonrası `finishCardCreate`e verilir. */
 export interface BornCard {
   readonly card: Record<string, unknown>;
-  readonly profile: { id: string; code: string } | null;
+  readonly profile: { id: string; code: string; categoryIds: string[] } | null;
   readonly cariAccountId: string | null;
   readonly auditData: Record<string, unknown>;
 }
@@ -248,11 +250,10 @@ export class CustomerService extends BaseService {
    */
   prepareCardCreate(data: Record<string, unknown>): CardCreatePlan {
     this.normalizeDefaultDestination(data); normalizeTamburLabelSettings(data); // tambur/etiket ayarı (S5)
-    const wantsProfile = data.subcontractorRole === true;
-    delete data.subcontractorRole;
+    const { wantsProfile, categoryIds } = takeCardSubcontractorIntent(data);
     const roles = applyPartnerRoles(data, null);
     if (wantsProfile && !roles.isSupplierRole) throw AppError.badRequest(PROFILE_CUSTOMER_TYPE_MESSAGE);
-    return { data, wantsProfile, branches: validateAndShapeBranches(data.branches) };
+    return { data, wantsProfile, categoryIds, branches: validateAndShapeBranches(data.branches) };
   }
 
   /**
@@ -300,7 +301,7 @@ export class CustomerService extends BaseService {
     const c = (await tx.customer.create({ data: prismaData as never, include: { subcontractor: { select: { id: true, isActive: true } } } })) as unknown as {
       id: string; code: string; name: string; taxNumber: string | null; contactPhone: string | null; address: string | null;
     };
-    const profile = plan.wantsProfile ? await createProfileForCustomerTx(tx, c, userId) : null;
+    const profile = plan.wantsProfile ? await createProfileForCustomerTx(tx, c, userId, plan.categoryIds) : null;
     const cariAccountId = await bornCariAccountTx(tx, c.id);
     // Toplu içe aktarma ve yönetim bulutu (kendi türü `cari.patron-carisi`) `notify:false` geçer.
     if (opts?.notify !== false) await emitCustomerCardCreatedTx(tx, c.id, userId);
@@ -316,7 +317,7 @@ export class CustomerService extends BaseService {
   ): Promise<ApiResponse<unknown>> {
     const { card, profile, cariAccountId } = born;
     await AuditService.log({ userId, action: "CREATE", tableName: "CUSTOMER", recordId: card.id as string, newData: { ...born.auditData, ...(opts.auditExtra ?? {}) } });
-    if (profile) await AuditService.log({ userId, action: "CREATE", tableName: "SUBCONTRACTOR", recordId: profile.id, newData: { code: profile.code, customerId: card.id, bornWithCard: true } });
+    if (profile) await AuditService.log({ userId, action: "CREATE", tableName: "SUBCONTRACTOR", recordId: profile.id, newData: { code: profile.code, customerId: card.id, bornWithCard: true, categoryIds: profile.categoryIds } });
     if (opts.finance && cariAccountId) await writeCustomerFinanceTerms(card.id as string, opts.finance, userId);
     return { success: true, data: { ...card, cariAccountId }, message: profile ? "Kart ve fason profili oluşturuldu" : "Kayıt oluşturuldu" };
   }

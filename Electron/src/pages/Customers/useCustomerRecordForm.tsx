@@ -4,7 +4,7 @@ import { Suspense, lazy, useMemo } from "react";
 import type { RecordFormSpec } from "@/components/forms/record-form/types";
 // Tembel: cari formu ağır; ortak seçici (SupplierPickerModal) onu statik import zincirine sokmasın.
 const CustomerFormDialog = lazy(() => import("./CustomerFormDialog").then((m) => ({ default: m.CustomerFormDialog })));
-import { customerCardPayload, type CustomerFormValues } from "./schema";
+import { customerCardPayload, newCardSubcontractorBody, type CustomerFormValues } from "./schema";
 import { customerService } from "./service";
 import type { Customer } from "./types";
 
@@ -16,8 +16,8 @@ export function quickCreateCustomerPayload(v: CustomerFormValues): Partial<Custo
     ...customerCardPayload(v),
     isCustomerRole: v.isCustomerRole,
     isSupplierRole: v.isSupplierRole,
-    // "Fason iş yapar" işaretliyse kart + profil tek işlemde (sunucu `subcontractorRole`).
-    ...(v.isSubcontractorRole ? { subcontractorRole: true } : {}),
+    // "Fason iş yapar" işaretliyse kart + profil + kategoriler tek işlemde (sunucu `subcontractorRole`).
+    ...newCardSubcontractorBody(v),
     isActive: true,
   } as Partial<Customer>;
 }

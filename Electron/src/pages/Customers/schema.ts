@@ -195,3 +195,10 @@ export function customerCardPayload(v: CustomerFormValues) {
     documentProfileId: v.documentProfileId ?? null,
   };
 }
+
+/** YENİ kartın fason gövdesi (iki giriş noktası ortak): kart + profil + kategori bağları sunucuda TEK tx'te doğar. */
+export function newCardSubcontractorBody(v: CustomerFormValues): { subcontractorRole?: true; subcontractorCategoryIds?: string[] } {
+  if (!v.isSubcontractorRole) return {};
+  const cats = v.subcontractorCategoryIds ?? [];
+  return { subcontractorRole: true, ...(cats.length > 0 ? { subcontractorCategoryIds: cats } : {}) };
+}
