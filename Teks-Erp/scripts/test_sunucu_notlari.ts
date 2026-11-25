@@ -122,6 +122,8 @@ const OTOMATIK_YAZIMLAR: readonly { yer: string; sinif: Sinif; zarfUyarisi: bool
   // Fason devere D3 çözgü hesabı: kart formu şeridi + Çözgü Hesabı ekranı girdi değişince ~400 ms durulup sorar; yazmaz,
   // stok uyarısını zarfa basar (ekran satır içi gösterir → `serverWarnings: "handled"`).
   { yer: "Electron/src/pages/Operations/WarpPlan/service.ts::calculateWarpPlan", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: true },
+  // K4 atkı ihtiyacı: atkı formu değişince ~400 ms durulup `POST /api/weft-specs/calc` sorar; yazmaz, eksikler `data.missing` içinde (zarf uyarısız).
+  { yer: "Electron/src/pages/WeftSpecs/weft-calc.ts::calculateWeft", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
   // Fason devere D6a: sipariş formu plan önizlemesi (~400 ms durulunca `POST /api/warping-orders/preview`); yazmaz, zarfa uyarı basmaz.
   { yer: "Electron/src/pages/Operations/WarpingOrders/service.ts::previewWarpingOrder", sinif: "PREVIEW_ON_TYPING", zarfUyarisi: false },
   // T5 belge şablonu: Sistem önizlemesi / sürüm karşılaştırması / yayın onayı açılınca çizer (yazmaz; zarf `ok(res, data)`, uyarısız).

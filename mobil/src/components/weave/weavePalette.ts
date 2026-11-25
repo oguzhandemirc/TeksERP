@@ -13,6 +13,9 @@ export const WEAVE_COLORS = {
   lift: colors.text,
   leno: palette.amber[600],
   lenoBg: palette.amber[100],
+  /** Kenar çerçevesi — panel armür ızgarasının yeşil "K" dili. */
+  selvedge: palette.emerald[600],
+  selvedgeBg: palette.emerald[100],
   selectorBg: colors.surfaceMuted,
   bg: colors.surface,
   line: colors.borderStrong,

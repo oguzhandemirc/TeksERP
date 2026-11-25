@@ -40,6 +40,12 @@ describe('weaveGrid', () => {
     expect(L.lenoBgPath).toBe('M0 0h10v30h-10Z');
   });
 
+  it('kenar çerçevesi yalnız zemin tonu; döner çerçeveyle çakışan ve aralık dışı atlanır', () => {
+    const L = weaveGridLayout({ liftPlan: plan, lenoFrames: [1], selvedgeFrames: [1, 2, 99] }, 10, 'top-down');
+    expect(L.selvedgeBgPath).toBe('M10 0h10v30h-10Z');
+    expect(weaveGridLayout({ liftPlan: plan }, 10, 'top-down').selvedgeBgPath).toBe('');
+  });
+
   it('seçici: iplik başına tek path, blok bir hücre boşlukla sağda', () => {
     const L = weaveGridLayout({ liftPlan: plan, pickSequence: [1, 2, 1], yarnCount: 2 }, 10, 'top-down');
     expect(L.selectorX).toBe(50);

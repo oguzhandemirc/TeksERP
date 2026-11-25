@@ -13,6 +13,8 @@ export type GridDirection = 'bottom-up' | 'top-down';
 export interface WeaveGridInput {
   liftPlan: number[][] | null | undefined;
   lenoFrames?: readonly number[] | null;
+  /** Kenar çerçeveleri (1-tabanlı) — yalnız zemin tonu (yeşil); döner çerçeveyle çakışan atlanır. */
+  selvedgeFrames?: readonly number[] | null;
   pickSequence?: readonly number[] | null;
   /** Atkı kartındaki iplik sayısı (seçici sütunu); dizide daha büyük no varsa o kadar sütun açılır. */
   yarnCount?: number;
@@ -53,6 +55,8 @@ export interface WeaveGridLayout extends WeaveGridShape {
   lenoLiftPath: string;
   /** Döner çerçeve sütunlarının zemini. */
   lenoBgPath: string;
+  /** Kenar çerçevesi sütunlarının zemini. */
+  selvedgeBgPath: string;
   /** Seçici: iplik no (1-tabanlı) → dolu hücre path'i. */
   selectorPaths: { yarn: number; d: string }[];
   /** Izgara çizgileri (iki blok). */
@@ -96,6 +100,10 @@ export function weaveGridLayout(input: WeaveGridInput, cell: number, direction: 
   }
   let lenoBgPath = '';
   for (const f of leno) lenoBgPath += rect((f - 1) * cell, 0, cell, height);
+  let selvedgeBgPath = '';
+  for (const f of new Set(input.selvedgeFrames ?? [])) {
+    if (f >= 1 && f <= frames && !leno.has(f)) selvedgeBgPath += rect((f - 1) * cell, 0, cell, height);
+  }
 
   let linesPath = '';
   const block = (x0: number, cols: number) => {
@@ -107,7 +115,7 @@ export function weaveGridLayout(input: WeaveGridInput, cell: number, direction: 
   block(selectorX, selCount);
 
   const selectorPaths = [...sel.entries()].sort((a, b) => a[0] - b[0]).map(([yarn, d]) => ({ yarn, d }));
-  return { ...shape, cell, width, height, selectorX, liftPath, lenoLiftPath, lenoBgPath, selectorPaths, linesPath };
+  return { ...shape, cell, width, height, selectorX, liftPath, lenoLiftPath, lenoBgPath, selvedgeBgPath, selectorPaths, linesPath };
 }
 
 /** Tam ekran hücre boyu: satırlar yüksekliğe, sütunlar genişliğe sığsın; [min, max] arasında (sığmazsa kaydırma). */
