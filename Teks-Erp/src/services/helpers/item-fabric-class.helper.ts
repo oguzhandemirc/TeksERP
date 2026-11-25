@@ -4,6 +4,33 @@
 import { FlameRetardancy } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
+import { FABRIC_TECHNIQUES, FABRIC_TECHNIQUES_AVAILABLE, type FabricTechniqueValue } from "../../constants/weave-classification";
+
+/** Üretim tekniği (2026-11-25): yalnız bugün açık teknikler (Dokuma); Örme "yakında" → 400; null/"" temizler. */
+export function readFabricTechnique(raw: unknown): FabricTechniqueValue | null {
+  if (raw === null || raw === "") return null;
+  if (!(FABRIC_TECHNIQUES as readonly unknown[]).includes(raw)) throw AppError.badRequest("Üretim tekniği Dokuma/Örme (WOVEN/KNITTED) olmalı.", { code: "FABRIC_TECHNIQUE_INVALID" });
+  if (!FABRIC_TECHNIQUES_AVAILABLE.includes(raw as FabricTechniqueValue)) {
+    throw AppError.badRequest("Örme üretim tekniği henüz kullanılamıyor; Dokuma seçin.", { code: "FABRIC_TECHNIQUE_NOT_AVAILABLE" });
+  }
+  return raw as FabricTechniqueValue;
+}
+
+/** Atkı kartı bağı: AKTİF kart olmalı; null/"" temizler. */
+export async function readWeftSpecRef(w: unknown): Promise<string | null> {
+  if (w === null || w === "") return null;
+  if (typeof w !== "string") throw AppError.badRequest("Atkı kartı kimliği geçersiz.");
+  const n = await prisma.weftSpec.count({ where: { id: w, isActive: true } });
+  if (n === 0) throw AppError.badRequest("Atkı kartı bulunamadı ya da pasif", { code: "WEFT_SPEC_NOT_FOUND" });
+  return w;
+}
+
+/** K7: PATCH'te `fibers` sessiz düşmesin — lif bileşimi kendi ucundan (replace) yazılır. */
+export function assertNoFibersInPatch(data: Record<string, unknown>): void {
+  if (Object.prototype.hasOwnProperty.call(data, "fibers")) {
+    throw AppError.badRequest("Lif bileşimi PUT /api/items/:id/fibers ile değiştirilir.", { code: "ITEM_FIBER_USE_PUT" });
+  }
+}
 
 const FLAME_VALUES = Object.values(FlameRetardancy) as string[];
 

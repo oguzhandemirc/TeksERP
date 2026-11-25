@@ -66,8 +66,8 @@ import { serviceItemService } from "./service-item.service";
 import type { PaginatedResponse } from "../types/api.types";
 import type { CursorPaginatedResponse } from "./base.service";
 import { emitItemCreatedTx } from "./notification-sources/anaveri";
-import { FABRIC_TECHNIQUES, FABRIC_TECHNIQUES_AVAILABLE, type FabricTechniqueValue } from "../constants/weave-classification";
-import { readFabricTypeRef, readFlameRetardancy } from "./helpers/item-fabric-class.helper";
+import type { FabricTechniqueValue } from "../constants/weave-classification";
+import { assertNoFibersInPatch, readFabricTechnique, readFabricTypeRef, readFlameRetardancy, readWeftSpecRef } from "./helpers/item-fabric-class.helper";
 import { fibersAuditPayload, parseItemFibers, writeItemFibersTx } from "./helpers/item-fiber.helper";
 
 export interface ItemCreateInput {
@@ -201,16 +201,6 @@ async function assertWeftSwitchKeepsOverrides(itemId: string, weftSpecId: unknow
 /** MAL-1 (S2 çekirdeği): kumaş yapısı alanları — gövdede adı geçen anahtarlar (`undefined` dokunmaz). */
 const FABRIC_STRUCTURE_KEYS = ["rawWidthCm", "rawGsm", "finishedGsm", "composition", "weftSpecId", "weaveDesignId", "fabricTechnique", "fabricTypeId", "flameRetardancy"] as const;
 
-/** Üretim tekniği (2026-11-25): yalnız bugün açık teknikler (Dokuma); Örme "yakında" → 400; null/"" temizler. */
-function readFabricTechnique(raw: unknown): FabricTechniqueValue | null {
-  if (raw === null || raw === "") return null;
-  if (!(FABRIC_TECHNIQUES as readonly unknown[]).includes(raw)) throw AppError.badRequest("Üretim tekniği Dokuma/Örme (WOVEN/KNITTED) olmalı.", { code: "FABRIC_TECHNIQUE_INVALID" });
-  if (!FABRIC_TECHNIQUES_AVAILABLE.includes(raw as FabricTechniqueValue)) {
-    throw AppError.badRequest("Örme üretim tekniği henüz kullanılamıyor; Dokuma seçin.", { code: "FABRIC_TECHNIQUE_NOT_AVAILABLE" });
-  }
-  return raw as FabricTechniqueValue;
-}
-
 /**
  * Kumaş yapısı alanlarını doğrular ve Prisma verisine çevirir: yalnız KUMAŞ kartında (400), sayılar
  * metinden Decimal'e (float yazılmaz; DB CHECK ikinci hat), atkı kartı AKTİF olmalı. `null` temizler.
@@ -227,16 +217,7 @@ async function readFabricStructureFields(itemType: string | undefined, data: Rec
   dec("rawGsm", "Ham gramaj");
   dec("finishedGsm", "Mamul gramaj");
   if (present.includes("composition")) out.composition = parseTextField(data.composition, "Kompozisyon", 200) ?? null;
-  if (present.includes("weftSpecId")) {
-    const w = data.weftSpecId;
-    if (w === null || w === "") out.weftSpecId = null;
-    else if (typeof w !== "string") throw AppError.badRequest("Atkı kartı kimliği geçersiz.");
-    else {
-      const n = await prisma.weftSpec.count({ where: { id: w, isActive: true } });
-      if (n === 0) throw AppError.badRequest("Atkı kartı bulunamadı ya da pasif", { code: "WEFT_SPEC_NOT_FOUND" });
-      out.weftSpecId = w;
-    }
-  }
+  if (present.includes("weftSpecId")) out.weftSpecId = await readWeftSpecRef(data.weftSpecId);
   if (present.includes("weaveDesignId")) out.weaveDesignId = await readWeaveDesignRef(data.weaveDesignId);
   if (present.includes("fabricTechnique")) out.fabricTechnique = readFabricTechnique(data.fabricTechnique);
   if (present.includes("fabricTypeId")) out.fabricTypeId = await readFabricTypeRef(data.fabricTypeId, itemId);
@@ -515,14 +496,8 @@ export class ItemService extends BaseService {
               // Yalnız iç quick-create (saha KK1) opt'u işaretler; public gövde etkisiz.
               // Doğuş deneme kimliği (`clientToken`) yalnız token boğazından (`color-item-create.service.ts`).
               ...(opts?.pendingReview ? { pendingReview: true } : {}), ...(opts?.clientToken ? { clientToken: opts.clientToken } : {}),
-              allowedColors:
-                allowedColorIds.length > 0
-                  ? { create: allowedColorIds.map((colorId) => ({ colorId })) }
-                  : undefined,
-              allowedProperties:
-                allowedPropertyIds.length > 0
-                  ? { create: allowedPropertyIds.map((propertyId) => ({ propertyId })) }
-                  : undefined,
+              allowedColors: allowedColorIds.length > 0 ? { create: allowedColorIds.map((colorId) => ({ colorId })) } : undefined,
+              allowedProperties: allowedPropertyIds.length > 0 ? { create: allowedPropertyIds.map((propertyId) => ({ propertyId })) } : undefined,
             }, actorId, "CREATE", "item") as Prisma.ItemUncheckedCreateInput,
             include: {
               allowedColors: { include: { color: true } },
@@ -626,10 +601,7 @@ export class ItemService extends BaseService {
       }
     }
 
-    // K7: sessiz düşürme yerine açık yönlendirme — lif bileşimi kendi ucundan (replace) yazılır.
-    if (Object.prototype.hasOwnProperty.call(data, "fibers")) {
-      throw AppError.badRequest("Lif bileşimi PUT /api/items/:id/fibers ile değiştirilir.", { code: "ITEM_FIBER_USE_PUT" });
-    }
+    assertNoFibersInPatch(data);
     if (Object.prototype.hasOwnProperty.call(data, "warpSpecId")) {
       const cur = await prisma.item.findUnique({ where: { id }, select: { itemType: true } });
       await assertWarpSpecAssignable(cur?.itemType, data.warpSpecId as string | null | undefined);
