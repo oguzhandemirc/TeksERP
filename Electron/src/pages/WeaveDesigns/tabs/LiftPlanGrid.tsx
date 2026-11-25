@@ -54,7 +54,8 @@ function HeaderRow({ frames, leno, selvedge, selCount, canWrite }: Pick<Props, "
           <div key={c} role="columnheader" data-leno={canWrite ? c + 1 : undefined} data-role={isLeno ? "leno" : isSelv ? "selvedge" : undefined}
             title={headTitle(isLeno, isSelv, canWrite)}
             className={cn(HEAD, isLeno ? "rounded-sm bg-amber-500 font-semibold text-white"
-              : isSelv ? "rounded-sm bg-emerald-600 text-[8px] font-semibold tracking-tighter text-white" : "text-muted-foreground", canWrite && "cursor-pointer")}>
+              // "12K" 16 px hücreye sığsın: küçük punto, sıkı aralık, taşma kırpılır.
+              : isSelv ? "overflow-hidden whitespace-nowrap rounded-sm bg-emerald-600 text-[7px] font-semibold tracking-[-0.06em] text-white" : "text-muted-foreground", canWrite && "cursor-pointer")}>
             {c + 1}{isSelv ? "K" : ""}
           </div>
         );
