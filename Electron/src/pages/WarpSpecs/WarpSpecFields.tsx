@@ -10,6 +10,8 @@ import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
 import { formatQty } from "@/lib/format";
 import { suggestWarpEnds } from "@/pages/Operations/WarpPlan/service";
 import { parseInput } from "@/pages/Operations/WarpPlan/warp-plan-model";
+import { useReedUnit } from "@/hooks/useReedUnit";
+import { reedDentsPerCm, reedUnitLabel } from "@/lib/reed-unit";
 import type { WarpSpecFormValues } from "./schema";
 
 type Form = UseFormReturn<WarpSpecFormValues>;
@@ -36,9 +38,11 @@ export function IdentityFields({ form, excludeId }: { form: Form; excludeId?: st
 /** "Taraktan": tarak × tarak eni × dişe tel → toplam tel ÖNERİSİ (birim profildir). Tek satırda uygular, çok satırda yalnız gösterir. */
 export function ReedHelper({ form }: { form: Form }) {
   const [note, setNote] = useState<string | null>(null);
+  const reedUnit = useReedUnit();
   const run = async () => {
     const v = form.getValues();
-    const reed = parseInput(String(v.reedNo ?? ""));
+    // Öneri ucu diş/cm ister; form firma biriminde taşır (saklama diş/10 cm).
+    const reed = reedDentsPerCm(String(v.reedNo ?? ""), reedUnit);
     const width = parseInput(String(v.reedWidthCm ?? ""));
     const perDent = (v.endsPerDent ?? "").toString().trim() === "" ? 1 : parseInput(String(v.endsPerDent));
     if (!reed || !width || !perDent) return setNote("Önce tarak no ve tarak enini girin.");
@@ -66,13 +70,15 @@ export function ReedHelper({ form }: { form: Form }) {
 /** Tarak ve dizilim: kısa sayısal alanlar ızgarada yan yana (geniş ekranda 4, dar ekranda 2 → 1 sütun). */
 export function ReedFields({ form }: { form: Form }) {
   const e = form.formState.errors;
+  const reedUnit = useReedUnit();
   return (
     <FieldGrid cols={4}>
       <FormField label="Kenar teli" htmlFor="selvedgeEnds" error={e.selvedgeEnds} info="Kenar telleri iplik satırlarındaki tel adetlerinin içindedir ve kg'a orada girer. Bu alan yalnız tarak planı çizimi ve devere talimatı içindir; ayrıca eklenmez.">
         <Input id="selvedgeEnds" {...form.register("selvedgeEnds")} inputMode="numeric" className={EXAMPLE_PH} placeholder="ör. 24" />
       </FormField>
-      <FormField label="Tarak no" htmlFor="reedNo" error={e.reedNo} info="Birimi fabrikanın kendi kullanımıdır (diş/cm ya da diş/10 cm). Yalnız taraktan tel önerisinde kullanılır; kg'a ve maliyete girmez.">
-        <Input id="reedNo" {...form.register("reedNo")} inputMode="decimal" className={EXAMPLE_PH} placeholder="ör. 14" />
+      <FormField label={`Tarak no (${reedUnitLabel(reedUnit)})`} htmlFor="reedNo" error={e.reedNo}
+        info="Birim firma ayarından gelir (Sistem → Özellik Anahtarları → Devere / Levent). Yalnız taraktan tel önerisinde kullanılır; kg'a ve maliyete girmez.">
+        <Input id="reedNo" {...form.register("reedNo")} inputMode="decimal" className={EXAMPLE_PH} placeholder={reedUnit === "DENTS_PER_CM" ? "ör. 10" : "ör. 100"} />
       </FormField>
       <FormField label="Dişe tel" htmlFor="endsPerDent" error={e.endsPerDent} info="Taraktan tel önerisinde boşsa 1 sayılır.">
         <Input id="endsPerDent" {...form.register("endsPerDent")} inputMode="numeric" className={EXAMPLE_PH} placeholder="ör. 4" />

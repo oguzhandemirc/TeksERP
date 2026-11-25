@@ -4,9 +4,11 @@
 import { ReedPlan } from "@/components/weave/ReedPlan";
 import { WarpEndsStrip } from "@/components/weave/WarpEndsStrip";
 import { useWarpingInstruction } from "./yarn-service";
+import { useReedUnit } from "@/hooks/useReedUnit";
 
 export function WarpLayoutSection({ orderId }: { orderId: string }) {
   const q = useWarpingInstruction(orderId, true);
+  const reedUnit = useReedUnit();
   const i = q.data;
   return (
     <section className="space-y-2" aria-label="Çözgü düzeni" data-testid="warping-layout">
@@ -25,7 +27,7 @@ export function WarpLayoutSection({ orderId }: { orderId: string }) {
           />
           <div className="min-w-0 space-y-1.5">
             <p className="text-xs font-medium text-muted-foreground">Tarak planı</p>
-            <ReedPlan endsPerDent={i.reed?.endsPerDent ?? null} reedNo={i.reed?.reedNo ?? null} totalEnds={i.totalEnds}
+            <ReedPlan endsPerDent={i.reed?.endsPerDent ?? null} reedNo={i.reed?.reedNo ?? null} reedUnit={reedUnit} totalEnds={i.totalEnds}
               selvedgeEnds={i.selvedgeEnds ?? null} endsSequence={i.endsSequence ?? null} maxWidth={560} />
           </div>
         </div>

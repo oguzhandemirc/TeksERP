@@ -28,6 +28,8 @@ export interface WeaveCardView {
     hookCount?: number | null; repeatWidthCm?: string | null;
     /** Tahar düzeni notu; null = satır basılmaz (bugünkü görünüm). */
     drawingInNote: string | null;
+    /** Tahar türü adı (K1: "Sivri"); ikisi de boşsa satır basılmaz. Yok = bugünkü basım. */
+    drawingInTypeLabel?: string | null;
   } | null;
   liftPlan: number[][] | null;
   /** 1-tabanlı döner çerçeve no'ları. */
@@ -50,6 +52,12 @@ export interface WeaveCardView {
   weavingOrderNumber?: string | null;
   /** Kumaş görünümü (servis `computeDrawdown`); LENO = açıklama, null/yok = armür yok (blok basılmaz). */
   fabric?: ({ kind: "DRAWDOWN" } & WeaveDrawdown) | { kind: "LENO" } | null;
+}
+
+/** "TAHAR : Sivri · not" — tür ve not ayrı ayrı boş olabilir; ikisi de boşsa satır yok (bugünkü basım bayt-aynı). */
+function taharHtml(d: WeaveCardView["design"]): string {
+  const parts = [d?.drawingInTypeLabel, d?.drawingInNote].filter((x): x is string => !!x).map(e);
+  return parts.length ? `<div class="kv"><b>TAHAR :</b> ${parts.join(" · ")}</div>` : "";
 }
 
 /** Basım gri tonları (siyah-beyaz yazıcı): 0 = çözgü üstte, k = k. atkı ipliği. */
@@ -200,7 +208,7 @@ ${gridHtml(v)}
 <div class="bottom">
 <div><h3>ATKI İPLİKLERİ</h3>${weftYarns}${w?.sequenceCode ? `<div class="kv muted">Seçici sırası: ${e(w.sequenceCode)}</div>` : ""}</div>
 <div>${warpsHtml(v)}
-${d?.drawingInNote ? `<div class="kv"><b>TAHAR :</b> ${e(d.drawingInNote)}</div>` : ""}<div class="kv"><b>ATKI SIKLIĞI :</b> ${w?.picksPerCm ? `${e(w.picksPerCm)} ATKI/CM` : "—"}</div>
+${taharHtml(d)}<div class="kv"><b>ATKI SIKLIĞI :</b> ${w?.picksPerCm ? `${e(w.picksPerCm)} ATKI/CM` : "—"}</div>
 ${w ? `<div class="kv muted">Atkı kartı: ${e(w.code)} · ${e(w.name)}${w.weftProgramNo ? ` · Program ${e(w.weftProgramNo)}` : ""}</div>` : ""}</div>${fabricHtml(v)}
 </div>
 ${variantsHtml(v)}

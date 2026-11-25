@@ -13,6 +13,7 @@ import { computeDrawdown, drawdownWindow, groundFrameNumbers } from "./helpers/w
 import { warpSpecDenierLines } from "./helpers/warp-spec-yarn.helper";
 import { qtyText } from "./helpers/qty-text.helper";
 import { weaveClassLabel } from "../constants/weave-classification";
+import { drawingInUnit, WEAVE_DRAWING_IN_LABEL } from "../constants/weave-drawing-in";
 import { renderWeaveDesignCardHtml, type WeaveCardView, type WeaveCardYarn } from "./document-render/weave-design-card.html";
 
 const LAYER_ROLE_LABEL: Record<string, string> = { LENO: "döner", SECONDARY: "ikinci" };
@@ -35,9 +36,10 @@ function fabricView(c: EffectiveConstruction): WeaveCardView["fabric"] {
   if (!d || !plan || plan.length === 0) return null;
   if (d.weaveStructure === "LENO") return { kind: "LENO" };
   const frames = plan.reduce((m, r) => Math.max(m, r.length), 0);
-  const ground = groundFrameNumbers(frames, d.lenoFrames, d.selvedgeFrames).length;
+  // Pencerenin tel birimi bir TAHAR raporudur (sivride 2n−2 tel); düz taharda zemin çerçeve sayısı (bugünkü).
+  const drawUnit = drawingInUnit(groundFrameNumbers(frames, d.lenoFrames, d.selvedgeFrames).length, d.drawingInType).length;
   const seq = c.weft?.pickSequence ?? null;
-  const dd = computeDrawdown({ kind: d.weaveStructure, liftPlan: plan, lenoFrames: d.lenoFrames, selvedgeFrames: d.selvedgeFrames, pickSequence: seq, ...drawdownWindow(ground, plan.length, seq?.length ?? 0) });
+  const dd = computeDrawdown({ kind: d.weaveStructure, liftPlan: plan, lenoFrames: d.lenoFrames, selvedgeFrames: d.selvedgeFrames, drawingInType: d.drawingInType, pickSequence: seq, ...drawdownWindow(drawUnit, plan.length, seq?.length ?? 0) });
   return dd ? { kind: "DRAWDOWN", ...dd } : null;
 }
 
@@ -65,6 +67,7 @@ export async function buildWeaveCardView(itemId: string, now: Date = new Date(),
         code: d.code, name: d.name, kindLabel: weaveClassLabel(d), familyLabel: d.familyLabel, frameCount: d.frameCount,
         repeatCm: dec(d.repeatCm), repeatWidthCm: dec(d.repeatWidthCm), hookCount: d.hookCount, loomFileName: d.loomFileName, lenoSetup: d.lenoSetup,
         drawingInNote: d.drawingInNote,
+        drawingInTypeLabel: d.drawingInType ? WEAVE_DRAWING_IN_LABEL[d.drawingInType] : null,
       }
       : null,
     liftPlan: Array.isArray(d?.liftPlan) ? (d.liftPlan as number[][]) : null,

@@ -10,13 +10,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { printTracked } from "@/lib/print";
 import { apiErrorMessage } from "@/services/apiClient";
 import { buildInstructionHtml } from "./instruction-html";
+import { useReedUnit } from "@/hooks/useReedUnit";
 import { useWarpingInstruction } from "./yarn-service";
 import type { WarpingDispatchRow } from "./yarn-types";
 
 export function InstructionPrintDialog({ orderId, dispatch, onClose }: { orderId: string; dispatch?: WarpingDispatchRow | null; onClose: () => void }) {
   const q = useWarpingInstruction(orderId, true);
   const [withDispatch, setWithDispatch] = useState(Boolean(dispatch));
-  const html = q.data ? buildInstructionHtml(q.data, withDispatch ? dispatch : null) : null;
+  const reedUnit = useReedUnit();
+  const html = q.data ? buildInstructionHtml(q.data, withDispatch ? dispatch : null, reedUnit) : null;
   const print = () => {
     if (!html || !q.data) return;
     const subject = withDispatch && dispatch

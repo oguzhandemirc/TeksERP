@@ -2,6 +2,7 @@
 // `effective-construction.helper` yanıtlarının aynası (Seyitoğlu SY-A3). Decimal alanlar metin gelir.
 import type { WarpEndsSequenceView } from "@/components/weave/warp-ends";
 import type { ShedMechanism, WeaveStructure } from "./weave-class";
+import type { DrawingInType } from "@/components/weave/weave-drawing-in";
 
 export const WEAVE_DESIGN_KINDS = ["PLAIN", "DOBBY", "JACQUARD", "LENO"] as const;
 export type WeaveDesignKind = (typeof WEAVE_DESIGN_KINDS)[number];
@@ -52,6 +53,8 @@ export interface WeaveDesign {
   selvedgeFrames?: number[];
   /** Tahar düzeni notu (serbest metin, ≤300); eski backend göndermez. */
   drawingInNote?: string | null;
+  /** Tahar türü (K1) — yalnız Eksantrik/Armür; eski backend göndermez (undefined = bilinmiyor). */
+  drawingInType?: DrawingInType | null;
   notes: string | null;
   isActive: boolean;
 }

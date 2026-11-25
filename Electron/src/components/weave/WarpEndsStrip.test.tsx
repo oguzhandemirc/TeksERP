@@ -61,10 +61,15 @@ describe("ReedPlan", () => {
     render(<ReedPlan endsPerDent={2} reedNo={80} totalEnds={3548} selvedgeEnds={48} endsSequence={seq} />);
     const s = screen.getByTestId("reed-plan-summary").textContent ?? "";
     expect(s).toContain("Dişe 2 tel");
-    expect(s).toContain("tarak no 80");
+    expect(s).toContain("tarak no 80 diş/10 cm");
     expect(s).toContain("kenar her yanda 24 tel (12 diş)");
     expect(s).toMatch(/1\.?774 diş/);
     expect(screen.getByText(/Kenar teli/)).toBeTruthy();
+  });
+
+  it("diş/cm biriminde saklı değer ÷10 gösterilir (K9)", () => {
+    render(<ReedPlan endsPerDent={2} reedNo={80} reedUnit="DENTS_PER_CM" totalEnds={3548} />);
+    expect(screen.getByTestId("reed-plan-summary").textContent ?? "").toContain("tarak no 8 diş/cm");
   });
 
   it("dişe tel yoksa yönlendirme metni", () => {

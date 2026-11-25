@@ -51,6 +51,15 @@ function main(): void {
   check("§5d kenar verilmezse bugünkü davranış (12 çerçeve zemin)", noSel?.ends === 12 && grid(noSel.cells) === grid(computeDrawdown({ kind: "DOBBY", liftPlan: g5, lenoFrames: [], selvedgeFrames: [], pickSequence: null })?.cells));
   check("§5e döner + kenar birlikte: zemin ikisinin de dışı", computeDrawdown({ kind: "DOBBY", liftPlan: [[1, 0, 1, 0, 1]], lenoFrames: [1], selvedgeFrames: [2], pickSequence: null })?.groundFrames.join() === "3,4,5");
 
+  // K1 tahar türü — panel `weave-drawdown.test` DRAWDOWN_CASES ile aynı örnekler (parite).
+  const diag = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]];
+  const pointed = computeDrawdown({ kind: "DOBBY", liftPlan: diag, lenoFrames: [], selvedgeFrames: [], pickSequence: null, drawingInType: "POINTED" });
+  check("§5f sivri tahar 4 çerçeve → 6 tel (1-2-3-4-3-2)", grid(pointed?.cells) === "011111/101110/110101/111011", grid(pointed?.cells));
+  const skip = computeDrawdown({ kind: "DOBBY", liftPlan: diag, lenoFrames: [], selvedgeFrames: [], pickSequence: null, drawingInType: "SKIP" });
+  check("§5g atlamalı tahar 4 çerçeve → 1-3-2-4", grid(skip?.cells) === "0111/1101/1011/1110", grid(skip?.cells));
+  const custom = computeDrawdown({ kind: "DOBBY", liftPlan: diag, lenoFrames: [], selvedgeFrames: [], pickSequence: null, drawingInType: "CUSTOM" });
+  check("§5h özel tahar düz çizilir (bugünkü)", grid(custom?.cells) === grid(computeDrawdown({ kind: "DOBBY", liftPlan: diag, lenoFrames: [], selvedgeFrames: [], pickSequence: null })?.cells));
+
   console.log("§4 pencere");
   check("§4a 14 zemin, 30 armür + 30 seçici → 28 tel × 30 atkı", JSON.stringify(drawdownWindow(14, 30, 30)) === '{"ends":28,"picks":30}', JSON.stringify(drawdownWindow(14, 30, 30)));
   check("§4b 4 zemin, 4 armür + 6 seçici → 24 × 24 (EKOK 12'nin katı)", JSON.stringify(drawdownWindow(4, 4, 6)) === '{"ends":24,"picks":24}', JSON.stringify(drawdownWindow(4, 4, 6)));

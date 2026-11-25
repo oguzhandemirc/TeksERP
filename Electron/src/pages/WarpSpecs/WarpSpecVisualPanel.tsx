@@ -8,6 +8,8 @@ import { WarpEndsStrip } from "@/components/weave/WarpEndsStrip";
 import { ReedPlan } from "@/components/weave/ReedPlan";
 import { parseInput } from "@/pages/Operations/WarpPlan/warp-plan-model";
 import { buildDefaults } from "./payload";
+import { useReedUnit } from "@/hooks/useReedUnit";
+import { reedFromInput } from "@/lib/reed-unit";
 import type { WarpSpecFormValues } from "./schema";
 import { warpSpecService } from "./service";
 import type { WarpSpec } from "./types";
@@ -32,6 +34,7 @@ const intOf = (v: unknown): number | null => {
 export function WarpSpecVisualPanel({ initial }: { initial?: WarpSpec | null }) {
   const { control } = useFormContext<WarpSpecFormValues>();
   const { yarns, per1000 } = useWarpCalc();
+  const reedUnit = useReedUnit(); // ReedPlan saklı birimi (diş/10 cm) bekler; form firma biriminde taşır.
   const [note, endsPerDent, reedNo, selvedge] = useWatch({ control, name: ["sequenceNote", "endsPerDent", "reedNo", "selvedgeEnds"] });
   const detail = useQuery({
     queryKey: ["warp-specs", "detail", initial?.id],
@@ -67,7 +70,7 @@ export function WarpSpecVisualPanel({ initial }: { initial?: WarpSpec | null }) 
         </section>
         <section className="space-y-1.5">
           <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tarak planı</h4>
-          <ReedPlan endsPerDent={intOf(endsPerDent)} reedNo={reedNo} totalEnds={total} selvedgeEnds={intOf(selvedge)} endsSequence={seq} maxWidth={300} />
+          <ReedPlan endsPerDent={intOf(endsPerDent)} reedNo={reedFromInput(reedNo, reedUnit)} reedUnit={reedUnit} totalEnds={total} selvedgeEnds={intOf(selvedge)} endsSequence={seq} maxWidth={300} />
         </section>
       </div>
     </aside>

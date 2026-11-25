@@ -2,6 +2,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
 import type { WarpSpec } from "./types";
+import { ReedNoText } from "@/components/weave/ReedNoText";
 import { formatQty } from "@/lib/format";
 import { yarnLetter } from "@/pages/Operations/WarpPlan/warp-plan-model";
 
@@ -69,7 +70,7 @@ export const warpSpecColumns: ColumnDef<WarpSpec>[] = [
       }
       return (
         <span className="text-xs tabular-nums">
-          {reedNo ? `No ${num(reedNo, 2)}` : "—"}
+          <ReedNoText stored={reedNo || null} prefix="No " />
           {endsPerDent ? ` · ${endsPerDent} tel/diş` : ""}
           {reedWidthCm ? ` · ${num(reedWidthCm, 2)} cm` : ""}
         </span>

@@ -6,8 +6,10 @@ import { WarpSpecFormDialog } from "./WarpSpecFormDialog";
 import { buildPayload, copyDraft } from "./payload";
 import { warpSpecService } from "./service";
 import type { WarpSpec } from "./types";
+import { useReedUnit } from "@/hooks/useReedUnit";
 
 export function useWarpSpecRecordForm(isExclusive?: (row: WarpSpec) => boolean): RecordFormSpec<WarpSpec> {
+  const reedUnit = useReedUnit();
   return useMemo<RecordFormSpec<WarpSpec>>(() => ({
     entityName: "Çözgü kartı",
     service: warpSpecService,
@@ -24,11 +26,11 @@ export function useWarpSpecRecordForm(isExclusive?: (row: WarpSpec) => boolean):
         open={open}
         onOpenChange={onOpenChange}
         initial={initial}
-        draft={draft ? copyDraft(draft as Omit<WarpSpec, "id">) : null}
+        draft={draft ? copyDraft(draft as Omit<WarpSpec, "id">, reedUnit) : null}
         isSubmitting={isSubmitting}
         // `yarns` satır gövdesi WarpSpec tipinde yok (yazım sözleşmesi).
-        onSubmit={(values) => onSubmit(buildPayload(values) as unknown as Partial<WarpSpec>)}
+        onSubmit={(values) => onSubmit(buildPayload(values, reedUnit) as unknown as Partial<WarpSpec>)}
       />
     ),
-  }), [isExclusive]);
+  }), [isExclusive, reedUnit]);
 }

@@ -1967,8 +1967,8 @@ model WarpSpec {
   endsCount    Int
   /// Kenar teli — bilgi; toplam telin İÇİNDEDİR, ayrıca eklenmez.
   selvedgeEnds Int?
-  /// Tarak numarası. ⚠️ BİRİMİ PROFİLDİR (diş/cm ya da diş/10 cm) ve ölçülmeden
-  /// hesaba GİRMEZ; bugün yalnız ekranda gösterilir.
+  /// Tarak numarası — SAKLAMA BİRİMİ diş/10 cm (K9, 2026-11-25). Panel `devere.reedNumberUnit` ayarı diş/cm
+  /// ise gösterim/girişte ÷10/×10 çevirir (tek helper `Electron/src/lib/reed-unit.ts`). Hesaba GİRMEZ.
   reedNo       Decimal? @db.Decimal(6, 2)
   /// Dişe tel — bilgi.
   endsPerDent  Int?
@@ -2442,6 +2442,14 @@ enum WeaveStructure {
   OTHER
 }
 
+/// Tahar türü (K1, 2026-11-25): Düz · Sivri · Atlamalı · Özel. NULL = bilinmiyor (düz tahar varsayılır, bugünkü görünüm).
+enum WeaveDrawingInType {
+  STRAIGHT
+  POINTED
+  SKIP
+  CUSTOM
+}
+
 /// Kumaş üretim tekniği (2026-11-25): Dokuma · Örme. Örme bugün kapalı (servis 400); NULL = Dokuma.
 enum FabricTechnique {
   WOVEN
@@ -2508,6 +2516,9 @@ model WeaveDesign {
   /// Tahar düzeni notu (tel → çerçeve + tarak taharı; "1-2-3-4 düz, kenar 2'li, döner 1-2"). Serbest metin,
   /// hesaba girmez; desen kartı basımında "Tahar" satırı. Boş = bugünkü görünüm.
   drawingInNote String?        @db.VarChar(300)
+  /// Tahar türü (K1) — yalnız Eksantrik/Armür'de yazılır (Jakar'da servis 400, `effectiveWeaveDesign` gizler).
+  /// Düz/Sivri/Atlamalı kumaş görünümünde standart dizilimle çizilir; Özel ve NULL düz tahar varsayar.
+  drawingInType WeaveDrawingInType?
   notes        String?         @db.VarChar(500)
   isActive     Boolean         @default(true)
 

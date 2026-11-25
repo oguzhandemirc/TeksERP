@@ -18,6 +18,7 @@ import { expandWarpSequence, type WarpEndsSequence } from "./warp-sequence.helpe
 import { pctText, qtyText } from "./qty-text.helper";
 import { widthOrderWarnings } from "./fabric-width.helper";
 import { mechanismUsesLiftPlan, resolveWeaveClass, type WeaveClass } from "../../constants/weave-classification";
+import { mechanismUsesFrames } from "../../constants/weave-drawing-in";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -31,7 +32,7 @@ const WARP_SELECT = {
 const DESIGN_SELECT = {
   id: true, code: true, name: true, kind: true, shedMechanism: true, weaveStructure: true, hookCount: true, repeatWidthCm: true,
   familyLabel: true, frameCount: true, repeatCm: true,
-  liftPlan: true, loomFileName: true, lenoSetup: true, lenoFrames: true, selvedgeFrames: true, drawingInNote: true, isActive: true,
+  liftPlan: true, loomFileName: true, lenoSetup: true, lenoFrames: true, selvedgeFrames: true, drawingInNote: true, drawingInType: true, isActive: true,
 } satisfies Prisma.WeaveDesignSelect;
 type RawDesign = Prisma.WeaveDesignGetPayload<{ select: typeof DESIGN_SELECT }>;
 export type EffectiveWeaveDesign = Omit<RawDesign, "shedMechanism" | "weaveStructure"> & WeaveClass;
@@ -49,6 +50,8 @@ export function effectiveWeaveDesign(d: RawDesign | null): EffectiveWeaveDesign 
     liftPlan: mechanismUsesLiftPlan(cls.shedMechanism) ? d.liftPlan : null,
     selvedgeFrames: mechanismUsesLiftPlan(cls.shedMechanism) ? d.selvedgeFrames : [],
     hookCount: cls.shedMechanism === "JACQUARD" ? d.hookCount : null,
+    // Tahar türü (K1) yalnız çerçeveli mekanizmada; Jakar'a çevrilen kartın saklı türü görünmez.
+    drawingInType: mechanismUsesFrames(cls.shedMechanism) ? d.drawingInType : null,
   };
 }
 const WEFT_SELECT = {

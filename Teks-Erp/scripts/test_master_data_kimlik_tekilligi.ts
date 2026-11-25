@@ -336,6 +336,7 @@ async function main(): Promise<void> {
     ["FabricProperty.valueType: FabricPropertyValueType", "değerin BİÇİMİ (metin/sayı/liste), nesnenin rolü değil"],
     ["LabelTemplate.kind: LabelKind", "şablonun bastığı belge türü"],
     ["WeaveDesign.kind: WeaveDesignKind", "örgü türü (bezayağı/armür/jakar/leno) — bir desen aynı anda iki ağızlık düzeniyle dokunmaz (SEYİTOĞLU MİG-1)"],
+    ["WeaveDesign.drawingInType: WeaveDrawingInType", "tahar düzeni (düz/sivri/atlamalı/özel) — bir desenin çerçevelere tek tahar dizilimi vardır (K1, 2026-11-25)"],
     ["Customer.type: CompanyType",
      "⚠️ BU VAKANIN KENDİSİ — artık TÜRETİLMİŞ alandır (üç rol bayrağı tek kaynak, `resolveCompanyType`) ve kaldırma fazında düşecek (IS-ORTAGI-ROL-MODELI.md §7.2)"],
   ]);

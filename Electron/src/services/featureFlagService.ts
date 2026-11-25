@@ -479,6 +479,12 @@ export interface FeatureFlags {
   dokumaWeavingWastePct: number;
   /** SY-3 I1: iplik ayırma görünürlüğü (HAM; etkin = üretim && dokuma && bayrak). Varsayılan KAPALI. */
   dokumaYarnReservationEnabled: boolean;
+  /** K10: firmanın kullandığı mekanizmalar (backend varsayılanı üçü TRUE = bugün). Kapalı olan yeni seçimde görünmez. */
+  dokumaMechanismCamEnabled: boolean;
+  dokumaMechanismDobbyEnabled: boolean;
+  dokumaMechanismJacquardEnabled: boolean;
+  /** K9: tarak numarası birimi (backend `DEFAULT_DEVERE_REED_NUMBER_UNIT` = diş/10 cm); çeviri `lib/reed-unit.ts`. */
+  devereReedNumberUnit: DevereReedNumberUnit;
   /** Dokuma işi modülü (dokuma işi planlama · tezgah koşumu · top indirme).
    *  Varsayılan KAPALI. ⚠️ ÜRETİME BAĞIMLI, tezgah izlemenin KARDEŞİ: bu alan HAM
    *  değerdir; etkin değer `production && dokuma` (`useOperationsVisibilityContext`). */
@@ -983,6 +989,8 @@ export type DevereBeamCardAutoPrint = "OFF" | "ASK" | "ALWAYS";
 /** Devere ek E1 — backend `DevereDuplicateDeliveryNote` / `DevereReceiveWeighing` aynası. */
 export type DevereDuplicateDeliveryNote = "ALLOW" | "WARN" | "BLOCK";
 export type DevereReceiveWeighing = "OFF" | "OPTIONAL" | "REQUIRED";
+/** K9: tarak numarası birimi — backend `DevereReedNumberUnit` aynası. */
+export type DevereReedNumberUnit = "DENTS_PER_10CM" | "DENTS_PER_CM";
 /** S1: top doğuş yolu — backend `DokumaRollBirth` aynası. */
 export type DokumaRollBirth = "TABLET_DOFF" | "KK1_LABEL_OR_ORDER" | "KK1_LABEL_ONLY";
 export type AlarmShiftNotice = "NO_SHIFT_DEFINED" | "NO_SHIFT_NOW";

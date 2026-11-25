@@ -41,7 +41,7 @@ vi.mock("@/components/forms/SimilarNamesWarning", () => ({ SimilarNamesWarning: 
 vi.mock("@/components/production/SpecOpenOrdersNotice", () => ({ SpecOpenOrdersNotice: () => null }));
 
 const spec: WarpSpec = {
-  id: "s1", code: "UA-Ç", name: "UA çözgüsü", yarnItemId: "y1", endsCount: 7000, selvedgeEnds: null, reedNo: 20, endsPerDent: 1,
+  id: "s1", code: "UA-Ç", name: "UA çözgüsü", yarnItemId: "y1", endsCount: 7000, selvedgeEnds: null, reedNo: 200, endsPerDent: 1,
   reedWidthCm: 350, takeUpPct: null, wastePct: null, notes: null, isActive: true, createdAt: "", updatedAt: "",
   yarns: [
     { yarnItemId: "y1", endsCount: 3000, sortOrder: 0 },
@@ -156,6 +156,7 @@ describe("WarpSpecFormDialog — D3 satır editörü", () => {
     suggest.mockResolvedValue({ endsCount: 7000, diffKg: null, denier: null });
     renderDialog({ initial: spec });
     await user.click(screen.getByRole("button", { name: /Taraktan/ }));
+    // Saklama diş/10 cm (K9): tarak no 200 → öneri ucuna 20 diş/cm.
     await waitFor(() => expect(suggest).toHaveBeenCalledWith({ kind: "REED", reedPerCm: 20, widthCm: 350, endsPerDent: 1 }));
     expect((await screen.findByTestId("reed-helper-note")).textContent).toContain("paylaştırın");
     expect(screen.getByLabelText("A tel adedi")).toHaveProperty("value", "3000");

@@ -26,6 +26,11 @@ export const ENUM_LABELS_EK2: Record<string, string> = {
   SATIN: "Saten",
   // FabricTechnique (2026-11-25) — WOVEN ortak (ITEM.fabricTechnique override'ı "Dokuma")
   KNITTED: "Örme",
+  // WeaveDrawingInType (K1, 2026-11-25) — tahar türü
+  STRAIGHT: "Düz tahar",
+  POINTED: "Sivri tahar",
+  SKIP: "Atlamalı tahar",
+  CUSTOM: "Özel tahar",
   // FlameRetardancy (2026-11-25, K8) — NONE genel "Yok" ile ortak
   FR_YARN: "FR iplik",
   TREVIRA_CS: "Trevira CS",

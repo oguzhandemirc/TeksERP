@@ -17,6 +17,17 @@ const DRAWDOWN_CASES: Array<{ name: string; input: Parameters<typeof computeDraw
     input: { liftPlan: [[1, 0], [0, 1]], pickSequence: [1, 2, 3] },
     cells: [[0, 1], [2, 0], [0, 3], [1, 0], [0, 2], [3, 0]],
   },
+  // Sunucu `test_weave_drawdown` §5f/§5g ile aynı örnekler (K1 tahar türü).
+  {
+    name: "sivri tahar 4 çerçeve → 6 tel (1-2-3-4-3-2)",
+    input: { liftPlan: [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]], drawingInType: "POINTED" },
+    cells: [[0, 1, 1, 1, 1, 1], [1, 0, 1, 1, 1, 0], [1, 1, 0, 1, 0, 1], [1, 1, 1, 0, 1, 1]],
+  },
+  {
+    name: "atlamalı tahar 4 çerçeve → 1-3-2-4",
+    input: { liftPlan: [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]], drawingInType: "SKIP" },
+    cells: [[0, 1, 1, 1], [1, 1, 0, 1], [1, 0, 1, 1], [1, 1, 1, 0]],
+  },
   {
     name: "2× rapor tekrarı",
     input: { liftPlan: [[1, 0], [0, 1]], repeat: 2 },

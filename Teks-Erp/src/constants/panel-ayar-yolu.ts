@@ -17,6 +17,7 @@ export const PANEL_SETTING_SCREEN = {
   devere: "Sistem → Özellik Anahtarları → Devere / Levent",
   production: "Sistem → Özellik Anahtarları → Üretim — Saha",
   tezgah: "Sistem → Özellik Anahtarları → Tezgah izleme",
+  dokuma: "Sistem → Özellik Anahtarları → Dokuma",
   warehouse: "Sistem → Özellik Anahtarları → Mal Kabul & Alış",
   yarn: "Sistem → Özellik Anahtarları → İplik",
   finance: "Sistem → Özellik Anahtarları → Muhasebe",

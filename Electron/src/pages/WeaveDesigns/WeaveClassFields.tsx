@@ -3,18 +3,22 @@
 import { Label } from "@/components/ui/label";
 import { InfoPopover } from "@/components/ui/info-popover";
 import {
-  MECHANISM_INFO, SHED_MECHANISMS, SHED_MECHANISM_HINT, SHED_MECHANISM_LABEL, STRUCTURE_INFO,
+  MECHANISM_INFO, SHED_MECHANISM_HINT, SHED_MECHANISM_LABEL, STRUCTURE_INFO,
   WEAVE_STRUCTURES, WEAVE_STRUCTURE_LABEL, type ShedMechanism, type WeaveClass, type WeaveStructure,
 } from "./weave-class";
+import { mechanismChoices, useEnabledMechanisms } from "./mechanism-options";
 
 export const NATIVE_SELECT_CLASS = "h-9 w-full rounded-md border bg-background px-2 text-sm";
 
-export function WeaveClassFields({ value, onChange, disabled, idPrefix }: {
+export function WeaveClassFields({ value, onChange, disabled, idPrefix, keep }: {
   value: WeaveClass;
   onChange: (next: WeaveClass) => void;
   disabled?: boolean;
   idPrefix: string;
+  /** Kartın kayıtlı mekanizması: firma ayarında kapalı olsa da listede kalır. */
+  keep?: ShedMechanism;
 }) {
+  const choices = mechanismChoices(useEnabledMechanisms(), keep ?? value.shedMechanism);
   return (
     <>
       <div className="space-y-1.5">
@@ -24,7 +28,7 @@ export function WeaveClassFields({ value, onChange, disabled, idPrefix }: {
         </div>
         <select id={`${idPrefix}-mech`} className={NATIVE_SELECT_CLASS} value={value.shedMechanism} disabled={disabled}
           onChange={(e) => onChange({ ...value, shedMechanism: e.target.value as ShedMechanism })}>
-          {SHED_MECHANISMS.map((m) => <option key={m} value={m}>{SHED_MECHANISM_LABEL[m]}</option>)}
+          {choices.map((m) => <option key={m} value={m}>{SHED_MECHANISM_LABEL[m]}</option>)}
         </select>
         <p className="text-xs text-muted-foreground">{SHED_MECHANISM_HINT[value.shedMechanism]}</p>
       </div>
