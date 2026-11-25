@@ -14,6 +14,7 @@ import { unitLabel } from "@/lib/item-unit";
 import type { ItemFormValues } from "./schema";
 import { LockedValue } from "./ItemFormParts";
 import { LUSTER_OPTIONS, TWIST_OPTIONS } from "./cardExtra.schema";
+import { ItemStockLevelNote } from "./ItemStockLevelNote";
 
 type Form = UseFormReturn<ItemFormValues>;
 
@@ -109,8 +110,8 @@ export function ItemFabricTradeSection({ form, unit }: { form: Form; unit: strin
   );
 }
 
-/** İplik/sarf "Stok" bölümü — asgari stok (kartın biriminde); boş = uyarı yok. */
-export function ItemMinStockSection({ form, unit }: { form: Form; unit: string }) {
+/** İplik/sarf "Stok" bölümü — asgari stok (kartın biriminde); boş = uyarı yok. Kayıtlı kartta asgari altı uyarısı. */
+export function ItemMinStockSection({ form, unit, saved }: { form: Form; unit: string; saved?: { id: string; itemType: string; minStockQty?: string | number | null } | null }) {
   return (
     <section className="space-y-3 border-t pt-3" aria-labelledby="item-stock-title">
       <h3 id="item-stock-title" className="text-sm font-medium text-muted-foreground">Stok</h3>
@@ -119,6 +120,7 @@ export function ItemMinStockSection({ form, unit }: { form: Form; unit: string }
           <Input id="minStockQty" inputMode="decimal" placeholder="ör. 500" {...form.register("minStockQty")} />
         </FormField>
       </div>
+      {saved && <ItemStockLevelNote itemId={saved.id} itemType={saved.itemType} unit={unit} minStockQty={saved.minStockQty} />}
     </section>
   );
 }

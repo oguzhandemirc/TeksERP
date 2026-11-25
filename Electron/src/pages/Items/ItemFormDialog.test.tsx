@@ -25,7 +25,7 @@ vi.mock("./AllowedColorsDialog", () => ({ AllowedColorsDialog: () => null }));
 vi.mock("./AllowedPropertiesDialog", () => ({ AllowedPropertiesDialog: () => null }));
 const flags = vi.hoisted(() => ({ kg: false, mal: false, dk: false }));
 // Devere kapalı varsayılır: çözgü kartı rejimi (devere ∨ dokuma) burada dokumayı izler.
-vi.mock("@/hooks/usePricingEnabled", () => ({ useDevereEnabled: () => false, useWarpSpecEnabled: () => flags.dk, useDokumaEnabled: () => flags.dk, useKaliteGuvenceEnabled: () => flags.kg, useMaliyetEnabled: () => flags.mal }));
+vi.mock("@/hooks/usePricingEnabled", () => ({ useDevereEnabled: () => false, useWarpSpecEnabled: () => flags.dk, useDokumaEnabled: () => flags.dk, useKaliteGuvenceEnabled: () => flags.kg, useMaliyetEnabled: () => flags.mal, useFeatureFlags: () => ({ data: undefined }) }));
 vi.mock("./construction/ItemWarpSection", () => ({ ItemWarpSection: () => <p>çözgü bölümü</p> }));
 const WIDTH = /Mamul en \(cm\)/;
 // D3: sekme içerikleri ağ çağırır — burada ölçülen sekmenin görünürlüğü ve açılış sekmesi.

@@ -46,6 +46,10 @@ export interface YarnStockRow {
   updatedAt: string;
   item: { id: string; code: string; name: string; unit: string };
   warehouse: { id: string; code: string; name: string };
+  /** Kartın asgari stoğu (kg); boş = eşik yok. Eski sunucu göndermez. */
+  minStockQty?: string | null;
+  /** KALEMİN bütün depolardaki toplamı asgari stoğun altında mı (satırın deposu değil). */
+  belowMinStock?: boolean;
 }
 
 export interface YarnMovementRow {
@@ -146,7 +150,7 @@ export interface YarnStockListResponse {
   data: YarnStockRow[];
   pagination: { page: number; pageSize: number; total: number; totalPages: number };
   /** SAYFANIN değil FİLTRENİN toplamı — "depoda ne kadar iplik var" sorusunun cevabı. */
-  totals: { balanceKg: DecimalLike };
+  totals: { balanceKg: DecimalLike; /** Faceted: "Asgari altı" seçilince listedeki kalem sayısı. */ belowMinItemCount?: number };
 }
 
 export interface YarnMovementListResponse {
@@ -286,6 +290,8 @@ export async function listYarnStocks(params: {
   onlyNonZero?: boolean;
   /** Kalem adı/kodu. */
   search?: string;
+  /** Yalnız asgari altı kalemlerin satırları (sunucu sıfır bakiyeyi de döndürür). */
+  belowMin?: boolean;
 }): Promise<YarnStockListResponse> {
   const res = await apiClient.get("/api/yarn/stocks", {
     params: {
@@ -298,6 +304,7 @@ export async function listYarnStocks(params: {
       // AÇMAZ; parametreyi hiç göndermemek daha dürüst.
       ...(params.onlyNonZero ? { onlyNonZero: "true" } : {}),
       ...(params.search ? { search: params.search } : {}),
+      ...(params.belowMin ? { belowMin: "1" } : {}),
     },
   });
   return res.data as YarnStockListResponse;

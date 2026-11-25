@@ -50,7 +50,7 @@ import {
   yarnEmptyStateMessage,
   type YarnFilterState,
 } from "./YarnFilterBar";
-import { YarnStockTable, useYarnStockTable } from "./YarnStockTable";
+import { YarnBelowMinNote, YarnStockTable, useYarnStockTable } from "./YarnStockTable";
 import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { YarnMovementsSheet } from "./YarnMovementsSheet";
 import { YarnMovementDialog } from "./YarnMovementDialog";
@@ -80,10 +80,10 @@ export function YarnStockPage() {
   const [tab, setTab] = useState<"stok" | "lotlar">("stok");
   const [creatingLot, setCreatingLot] = useState(false);
 
-  const { search, itemId, warehouseId, onlyNonZero } = filters;
+  const { search, itemId, warehouseId, onlyNonZero, belowMin } = filters;
 
   const q = useQuery({
-    queryKey: ["yarn", "stocks", page, search, itemId ?? "", warehouseId, onlyNonZero],
+    queryKey: ["yarn", "stocks", page, search, itemId ?? "", warehouseId, onlyNonZero, belowMin],
     queryFn: () =>
       listYarnStocks({
         page,
@@ -92,6 +92,7 @@ export function YarnStockPage() {
         itemId: itemId ?? undefined,
         warehouseId: warehouseId || undefined,
         onlyNonZero,
+        belowMin,
       }),
   });
 
@@ -183,6 +184,7 @@ export function YarnStockPage() {
                   {negativeCount} satır eksi bakiye
                 </span>
               )}
+              <YarnBelowMinNote count={q.data?.totals.belowMinItemCount} />
             </span>
           }
         >

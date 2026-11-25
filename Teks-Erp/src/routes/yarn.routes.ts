@@ -84,8 +84,12 @@ const uuidCsv = z
  *       - in: query
  *         name: search
  *         schema: { type: string }
+ *       - in: query
+ *         name: belowMin
+ *         schema: { type: string, enum: ["1", "0", "true", "false"] }
+ *         description: Yalnız kalem toplamı asgari stoğun altında olan ipliklerin satırları (sıfır bakiye dahil)
  *     responses:
- *       200: { description: Bakiye listesi + filtrenin kg toplamı }
+ *       200: { description: Bakiye listesi + filtrenin kg toplamı + asgari altı kalem sayısı }
  */
 router.get("/stocks", requirePermission("warehouse:read"), async (req, res, next) => {
   try {
@@ -97,6 +101,7 @@ router.get("/stocks", requirePermission("warehouse:read"), async (req, res, next
         warehouseId: uuidCsv.optional(),
         onlyNonZero: z.enum(["true", "false"]).optional(),
         search: z.string().max(200).optional(),
+        belowMin: z.enum(["1", "0", "true", "false"]).optional(),
       })
       .parse(req.query);
 
@@ -108,6 +113,7 @@ router.get("/stocks", requirePermission("warehouse:read"), async (req, res, next
         warehouseId: q.warehouseId,
         onlyNonZero: q.onlyNonZero === "true",
         search: q.search,
+        belowMin: q.belowMin === "1" || q.belowMin === "true",
       }),
     );
   } catch (e) {

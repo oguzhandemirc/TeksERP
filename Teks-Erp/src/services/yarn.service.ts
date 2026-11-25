@@ -48,10 +48,11 @@ import { assertLotMatchesItemTx, assertLotQualityReleasedTx, normalizeLotNo, yar
 import { SETTING_KEYS, readIplikEnabled } from "./system-setting.service";
 import { licenseModuleError } from "../lib/license/module-ceiling";
 import { buildNextCursor, cursorWhere, decodeCursor } from "../utils/cursor";
-import { buildTurkishSearch } from "../utils/query-parser";
+import { buildTurkishSearch, readIdCondition } from "../utils/query-parser";
 import type { ApiResponse } from "../types/api.types";import { assertItemUsable, assertItemUsableTx, type ItemUsage } from "./helpers/item-usage.helper";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
 import { qtyText } from "./helpers/qty-text.helper";
+import { withYarnMinStock, yarnMinStockScope } from "./helpers/yarn-min-stock.helper";
 
 
 
@@ -264,6 +265,8 @@ export interface YarnStockRow {
   item: { id: string; code: string; name: string; unit: string };
   warehouse: { id: string; code: string; name: string };
   updatedAt: Date;
+  minStockQty: string | null; // kartın asgari stoğu (kg); boş = eşik yok
+  belowMinStock: boolean; // KALEM toplamı (bütün depolar) asgari altı mı — satırın deposu değil
 }
 
 export interface YarnMovementCreateInput {
@@ -291,7 +294,8 @@ export class YarnService {
     warehouseId?: string | string[];
     onlyNonZero?: boolean;
     search?: string;
-  }): Promise<{ success: true; data: YarnStockRow[]; pagination: { page: number; pageSize: number; total: number; totalPages: number }; totals: { balanceKg: string } }> {
+    belowMin?: boolean; // yalnız asgari altı kalemler; sıfır bakiye dahil (`onlyNonZero` uygulanmaz)
+  }): Promise<{ success: true; data: YarnStockRow[]; pagination: { page: number; pageSize: number; total: number; totalPages: number }; totals: { balanceKg: string; belowMinItemCount: number } }> {
     const page = Math.max(1, params.page ?? 1);
     const pageSize = Math.min(200, Math.max(1, params.pageSize ?? 50));
 
@@ -299,16 +303,10 @@ export class YarnService {
     // ⚠️ CSV/çoklu seçim: tek değer → düz eşitlik (mevcut sorgu şekli korunur),
     // N değer → `in`. Ham CSV'yi uuid kolonuna geçirmek P2007 → 400 üretir
     // (2026-08-06 çoklu seçim dersi).
-    const idCond = (v: string | string[] | undefined): string | { in: string[] } | undefined => {
-      const list = (Array.isArray(v) ? v : typeof v === "string" ? v.split(",") : []).map((s) => s.trim()).filter(Boolean);
-      if (list.length === 0) return undefined;
-      return list.length === 1 ? list[0]! : { in: list };
-    };
-    const itemCond = idCond(params.itemId);
-    const whCond = idCond(params.warehouseId);
+    const itemCond = readIdCondition(params.itemId);
+    const whCond = readIdCondition(params.warehouseId);
     if (itemCond) where.itemId = itemCond;
     if (whCond) where.warehouseId = whCond;
-    if (params.onlyNonZero) where.NOT = { balanceKg: 0 };
     if (params.search?.trim()) {
       // ⚠️ TÜRKÇE-DUYARLI ARAMA ZORUNLU — bu, düz `contains + insensitive`in
       // KESİN KIRIK olduğu yer: `Item.name` `normalizeItemName` ile tr-TR
@@ -318,9 +316,12 @@ export class YarnService {
       where.item = { OR: buildTurkishSearch(params.search, ["name", "code"]) };
     }
 
-    const [rows, total, agg] = await Promise.all([
+    // Asgari altı kalem düzeyidir (bütün depolar); liste/özet where'leri tek yerden (yarn-min-stock.helper).
+    const { belowIds, belowWhere, listWhere } = await yarnMinStockScope(prisma, where, params);
+
+    const [rows, total, agg, belowGroups] = await Promise.all([
       prisma.yarnStock.findMany({
-        where,
+        where: listWhere,
         // Çok stoklu depoda operatörün aradığı satır "en çok olan"dır.
         orderBy: [{ balanceKg: "desc" }, { id: "asc" }],
         skip: (page - 1) * pageSize,
@@ -329,21 +330,22 @@ export class YarnService {
           id: true,
           balanceKg: true,
           updatedAt: true,
-          item: { select: { id: true, code: true, name: true, unit: true } },
+          item: { select: { id: true, code: true, name: true, unit: true, minStockQty: true } },
           warehouse: { select: { id: true, code: true, name: true } },
         },
       }),
-      prisma.yarnStock.count({ where }),
-      prisma.yarnStock.aggregate({ where, _sum: { balanceKg: true } }),
+      prisma.yarnStock.count({ where: listWhere }),
+      prisma.yarnStock.aggregate({ where: listWhere, _sum: { balanceKg: true } }),
+      prisma.yarnStock.groupBy({ by: ["itemId"], where: belowWhere }),
     ]);
 
     return {
       success: true,
-      data: rows as YarnStockRow[],
+      data: withYarnMinStock(rows, belowIds),
       pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) },
       // Toplam SAYFANIN değil FİLTRENİN toplamıdır — "depoda ne kadar iplik var"
       // sorusunun cevabı sayfa 1'in toplamı değildir.
-      totals: { balanceKg: (agg._sum.balanceKg ?? D(0)).toString() },
+      totals: { balanceKg: (agg._sum.balanceKg ?? D(0)).toString(), belowMinItemCount: belowGroups.length },
     };
   }
 
