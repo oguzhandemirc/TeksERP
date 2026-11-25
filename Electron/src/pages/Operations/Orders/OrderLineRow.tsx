@@ -3,7 +3,9 @@
 // Yeni Kumaş · Özellik isteği · Not ekle · alias · ATP. Kumaş uyarısı GEÇİCİ (③): kumaşsız renk/özellik/submit
 // → kumaş seçiciye amber halka + `role="status"` "Önce kumaş seçin", 3 s sonra söner (`useTransientFlag`).
 // =============================================================================
+import { useRef } from "react";
 import { Trash2, PackagePlus, Package, StickyNote, X } from "lucide-react";
+import { itemWidthOf, prefillWidth } from "@/lib/item-width-prefill";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -62,6 +64,8 @@ export function OrderLineRow(p: OrderLineRowProps) {
   const cols = lineGridCols(pricingEnabled);
   // Yeni satırda seçilebilir kartlar "Yeni sipariş" ayarından (§4.1); sunucu kayıtta yine karar verir.
   const lifecycle = pickableLifecycle("order", useFeatureFlags().data?.data);
+  // Bu satırda en son ön-doldurulan en (kayıtlı eski satırda null → yalnız boş alan dolar).
+  const autoWidth = useRef<number | null>(null);
   return (
     <li className="rounded-md border p-2" data-testid="order-line">
       <div className={cols}>
@@ -73,7 +77,13 @@ export function OrderLineRow(p: OrderLineRowProps) {
               kalır; kumaş değişince renk/özellik/birim sıfırlama davranışı aynen. */}
           <ItemSelect
             value={line.itemId || null}
-            onChange={(v) => onPatch({ itemId: v ?? "", colorId: null, requiredPropertyIds: [], targetValues: [], unit: undefined, recipeId: null })}
+            onChange={(v, row) => {
+              // En ön-dolumu: kartın mamul eni boş alana / önceki ön-dolumun yerine; elle yazılmış en korunur.
+              const nextWidth = itemWidthOf(row?.widthCm);
+              const width = prefillWidth(line.width, autoWidth.current, nextWidth);
+              autoWidth.current = nextWidth;
+              onPatch({ itemId: v ?? "", colorId: null, requiredPropertyIds: [], targetValues: [], unit: undefined, recipeId: null, width });
+            }}
             allowedTypes={ORDER_LINE_ITEM_TYPES}
             lifecycle={lifecycle}
             aria-label="Kumaş seç"

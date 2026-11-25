@@ -20,7 +20,7 @@ import { randomUUID } from "crypto";
 import prisma from "../src/lib/prisma";
 import { readFileSync } from "fs";
 import path from "path";
-import { assertGradeNotInActiveRuleSet, createRuleSet, setRuleSetActive, updateRuleSet } from "../src/services/four-point-rule.service";
+import { assertGradeNotInActiveRuleSet, createRuleSet, listRuleSets, setRuleSetActive, updateRuleSet } from "../src/services/four-point-rule.service";
 import { itemService } from "../src/routes/item.routes";
 import { itemImportAdapter } from "../src/services/import/adapters/item.adapter";
 import type { PreparedRow } from "../src/services/import/import.types";
@@ -119,6 +119,11 @@ async function main(): Promise<void> {
     check("müşteri + başka ürün → müşteri geneli", (await resolveFourPointRule(prisma, { customerId: cust.id, itemId: other.id }))?.id === cGen.id);
     check("müşterisiz → fabrika", (await resolveFourPointRule(prisma, { itemId: item.id }))?.id === f2.id);
     check("bilinmeyen müşteri → fabrika", (await resolveFourPointRule(prisma, { customerId: randomUUID(), itemId: item.id }))?.id === f2.id);
+    // Ürün kartı "Ticari" sekmesi: ürün süzgeci yalnız o ürünün setini döner; bozuk kimlik 400.
+    const byItem = await listRuleSets({ itemId: item.id });
+    check("ürün süzgeci → yalnız müşteri+ürün seti", byItem.length === 1 && byItem[0]!.id === cItem.id, String(byItem.length));
+    check("başka ürün süzgecinde bu set yok", !(await listRuleSets({ itemId: other.id })).some((s) => s.id === cItem.id));
+    check("bozuk ürün kimliği → 400 FOUR_POINT_FILTER_INVALID", (await errCode(listRuleSets({ itemId: "x" }))) === "FOUR_POINT_FILTER_INVALID");
     await setRuleSetActive(cItem.id, false, uid);
     check("pasif müşteri+ürün seti atlanır → müşteri geneli", (await resolveFourPointRule(prisma, { customerId: cust.id, itemId: item.id }))?.id === cGen.id);
 

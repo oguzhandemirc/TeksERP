@@ -35,6 +35,9 @@ const quiet = { suppressErrorToast: true } as const;
 export const ruleSetService = {
   list: (includeInactive: boolean) =>
     apiClient.get<ApiResponse<RuleSet[]>>("/api/four-point-rules", { params: includeInactive ? { includeInactive: "1" } : {} }).then((r) => r.data.data),
+  /** Ürüne bağlı (müşteri+ürün) aktif setler — süzme sunucuda (`?itemId=`). */
+  listForItem: (itemId: string) =>
+    apiClient.get<ApiResponse<RuleSet[]>>("/api/four-point-rules", { params: { itemId } }).then((r) => r.data.data),
   create: (body: RuleSetCreateBody) => apiClient.post<ApiResponse<RuleSet>>("/api/four-point-rules", body, quiet).then((r) => r.data.data),
   update: (id: string, body: RuleSetBody) => apiClient.put<ApiResponse<RuleSet>>(`/api/four-point-rules/${id}`, body, quiet).then((r) => r.data.data),
   setActive: (id: string, isActive: boolean) =>

@@ -30,6 +30,8 @@ vi.mock("./construction/ItemWarpSection", () => ({ ItemWarpSection: () => <p>ç�
 const WIDTH = /Mamul en \(cm\)/;
 // D3: sekme içerikleri ağ çağırır — burada ölçülen sekmenin görünürlüğü ve açılış sekmesi.
 vi.mock("./variants/ItemVariantsSection", async (orig) => ({ ...(await orig<object>()), ItemVariantsSection: () => <p>varyant listesi</p> }));
+// D4 "Ticari" sekmesinin kendi bekçisi var (`commercial/ItemCommercialSection.test.tsx`); burada sekme çizilmez.
+vi.mock("./commercial/ItemCommercialSection", () => ({ useItemCommercialSections: () => null, ItemCommercialSection: () => null }));
 vi.mock("./construction/ItemWeftSection", () => ({ ItemWeftSection: () => null }));
 vi.mock("./construction/ItemWeaveSection", () => ({ ItemWeaveSection: () => null }));
 
