@@ -16,7 +16,7 @@ import { constructionApi } from "../service";
 const INFO = "Satır = atkı, sütun = atkı ipliği (A, B, C…). Dolu kare o atkıda hangi ipliğin atıldığını gösterir; tezgâhın atkı "
   + "seçicisi bu sırayla çalışır. Alttaki renk raporu bandı aynı sırayı soldan sağa iki rapor boyunca gösterir; kalın çizgi rapor sınırıdır.";
 
-export function WeftSequenceStrip({ fabricId, stale }: { fabricId: string; stale: boolean }) {
+export function WeftSequenceStrip({ fabricId }: { fabricId: string }) {
   const [direction, setDirection] = useWeaveDirection();
   const construction = useQuery({
     queryKey: ["item-construction", fabricId, null],
@@ -34,7 +34,6 @@ export function WeftSequenceStrip({ fabricId, stale }: { fabricId: string; stale
         </h3>
         {seq && <WeaveDirectionToggle value={direction} onChange={setDirection} />}
       </div>
-      {stale && <p className="text-xs text-amber-700 dark:text-amber-400" role="status">Sıra kodu değişti — kaydedince görünüm güncellenir.</p>}
       {construction.isLoading ? (
         <p className="text-sm text-muted-foreground">Yükleniyor…</p>
       ) : !seq || seq.length === 0 ? (

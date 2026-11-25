@@ -17,13 +17,20 @@ import apiClient from "@/services/apiClient";
 import { buildQueryString } from "@/lib/query-builder";
 import type { PaginatedResponse } from "@/types/api";
 import type { ItemFormValues } from "../schema";
+import { WarpLayersSection } from "@/pages/WeaveDesigns/tabs/WarpLayersSection";
 
 function countWarpUsers(warpSpecId: string) {
   const qs = buildQueryString({ pageSize: 1, filters: { warpSpecId } });
   return apiClient.get<PaginatedResponse<unknown>>(`/api/items${qs}`).then((r) => r.data.pagination.total);
 }
 
-export function ItemWarpSection({ form, canWrite, itemId }: { form: UseFormReturn<ItemFormValues>; canWrite: boolean; itemId: string | null }) {
+interface Props {
+  form: UseFormReturn<ItemFormValues>; canWrite: boolean; itemId: string | null;
+  /** Ek çözgü katmanları (D3): kayıtlı kumaşta ve dokuma yapısı okunabiliyorsa (uç dokuma kapısında). */
+  layersVisible?: boolean;
+}
+
+export function ItemWarpSection({ form, canWrite, itemId, layersVisible = false }: Props) {
   const warpId = form.watch("warpSpecId");
   const spec = useQuery({ queryKey: ["warp-specs", "detail", warpId], queryFn: () => warpSpecService.getById(warpId).then((r) => r.data), enabled: !!warpId });
   const users = useQuery({ queryKey: ["warp-specs", "users", warpId], queryFn: () => countWarpUsers(warpId), enabled: !!warpId });
@@ -94,6 +101,7 @@ export function ItemWarpSection({ form, canWrite, itemId }: { form: UseFormRetur
           )}
         </div>
       )}
+      {itemId && layersVisible && <WarpLayersSection fabric={{ id: itemId, code: "" }} canWrite={canWrite} place="item" />}
       {record.element}
     </div>
   );

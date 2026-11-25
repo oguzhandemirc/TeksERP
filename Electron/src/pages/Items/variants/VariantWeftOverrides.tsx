@@ -9,8 +9,8 @@ import { Button } from "@/components/ui/button";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { itemService } from "@/pages/Items/service";
 import type { Item } from "@/pages/Items/types";
-import { constructionApi } from "../service";
-import { ConstructionWarnings } from "./ConstructionWarnings";
+import { constructionApi } from "@/pages/WeaveDesigns/service";
+import { ConstructionWarnings } from "@/pages/WeaveDesigns/tabs/ConstructionWarnings";
 
 export function VariantWeftOverrides({ fabricId, recipeId }: { fabricId: string; recipeId: string }) {
   const qc = useQueryClient();

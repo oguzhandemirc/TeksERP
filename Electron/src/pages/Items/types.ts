@@ -61,6 +61,8 @@ export interface Item {
   /** SY-A4: atkı kartı + desen kartı (yalnız KUMAŞ; eski sunucuda yok). */
   weftSpecId?: string | null;
   weaveDesignId?: string | null;
+  /** D3: liste "Desen" sütunu (kod + mekanizma · örgü); eski sunucuda yok → "—". */
+  weaveDesign?: { id: string; code: string; name: string; kind?: string | null; shedMechanism?: string | null; weaveStructure?: string | null } | null;
   /** K4P ürün kartı eni (cm); Decimal metin gelir. Eski sunucuda yok. */
   widthCm?: string | number | null;
   /** Dokuma ayrıntıları (yalnız KUMAŞ; Decimal sayı/metin gelir; eski sunucuda yok). */

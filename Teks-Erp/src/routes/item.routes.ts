@@ -56,6 +56,8 @@ export const itemService = new ItemService({
     allowedProperties: { include: { property: true } },
     // K7/K8: kumaş türü (liste sütunu) + iplik lif bileşimi (kart formu, örnek alma).
     fabricType: { select: { id: true, name: true, isActive: true } },
+    // D3/K10: liste "Desen" sütunu (kod + mekanizma · örgü); alan ekler, sözleşmeyi kırmaz.
+    weaveDesign: { select: { id: true, code: true, name: true, kind: true, shedMechanism: true, weaveStructure: true } },
     fibers: { select: { fiberTypeId: true, pct: true, fiberType: { select: { id: true, name: true, abbreviation: true, isActive: true } } }, orderBy: { pct: "desc" } },
   },
   // Create/update ItemService'te custom — assertNameNotDuplicate oradan da

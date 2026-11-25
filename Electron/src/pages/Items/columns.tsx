@@ -8,13 +8,19 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
 import { itemTypeLabels } from "@/types/enums";
 import { unitLabel } from "@/lib/item-unit";
+import { formatQty } from "@/lib/format";
+import { weaveClassLabel } from "@/pages/WeaveDesigns/weave-class";
 import { itemCarriesAllowedLists } from "./itemPayload.helper";
 import { ItemLifecycleBadge, itemLifecycleExportText } from "./ItemLifecycleBadge";
 
 /** İplik/sarf satırında renk/özellik hücresi BOŞ — "Tümü" yazmak iplikte anlamsız (yalnız kumaş liste taşır). */
 const NOT_APPLICABLE = <span className="text-xs text-muted-foreground">—</span>;
+const DASH = <span className="text-muted-foreground">—</span>;
 import { itemService } from "./service";
 import type { Item } from "./types";
+
+/** Excel/PDF: "D-102 · Armür · Döner" (desen yoksa boş). */
+export const weaveDesignText = (r: Item) => (r.weaveDesign ? `${r.weaveDesign.code} · ${weaveClassLabel(r.weaveDesign)}` : "");
 
 /**
  * Saha (KK1) oluşturulmuş "onay bekliyor" deseni için rozet + inline Onayla.
@@ -81,6 +87,28 @@ export const itemColumns: ColumnDef<Item>[] = [
     header: "Kumaş türü",
     meta: { exportValue: (r: Item) => r.fabricType?.name ?? "" },
     cell: ({ row }) => row.original.fabricType?.name ?? <span className="text-muted-foreground">—</span>,
+  },
+  {
+    // D3/K10: desen kartı (kod + mekanizma · örgü) salt okunur; mekanizma/örgü desen kartında seçilir.
+    id: "weaveDesign",
+    header: "Desen",
+    meta: { exportValue: weaveDesignText },
+    cell: ({ row }) => {
+      const d = row.original.weaveDesign;
+      if (!d) return DASH;
+      return (
+        <span className="whitespace-nowrap">
+          <span className="font-mono text-xs">{d.code}</span>
+          <span className="text-xs text-muted-foreground"> · {weaveClassLabel(d)}</span>
+        </span>
+      );
+    },
+  },
+  {
+    id: "widthCm",
+    header: "Mamul en (cm)",
+    meta: { align: "right", exportValue: (r: Item) => (r.widthCm == null || r.widthCm === "" ? "" : formatQty(r.widthCm, 2)) },
+    cell: ({ row }) => (row.original.widthCm == null || row.original.widthCm === "" ? DASH : <span className="tabular-nums">{formatQty(row.original.widthCm, 2)}</span>),
   },
   {
     accessorKey: "unit",

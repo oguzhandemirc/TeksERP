@@ -26,6 +26,7 @@ import { CopyFromFabricButton } from "./construction/CopyFromFabricButton";
 import { ItemWarpSection } from "./construction/ItemWarpSection";
 import { ItemWeftSection } from "./construction/ItemWeftSection";
 import { ItemWeaveSection } from "./construction/ItemWeaveSection";
+import { ItemVariantsSection, useVariantsTabVisible } from "./variants/ItemVariantsSection";
 
 interface Props {
   open: boolean;
@@ -35,10 +36,11 @@ interface Props {
   onSubmit: (payload: ItemCreatePayload) => void | Promise<void>;
   isSubmitting?: boolean;
   allowedTypes?: readonly ItemType[]; // seçicinin tip kapsamı — yeni kayıtta Tip bununla sınırlanır
+  initialTab?: string; // "Üründe aç" (desen kartı) ilgili sekmede açar: warp · weft · variants
 }
 
 /** Ürün penceresi: Genel · Çözgü · Atkı · Desen (B19 tek pencere; veri yapısı aynı, birleşme yalnız ekranda). */
-export function ItemFormDialog({ open, onOpenChange, initial, draft, onSubmit, isSubmitting, allowedTypes }: Props) {
+export function ItemFormDialog({ open, onOpenChange, initial, draft, onSubmit, isSubmitting, allowedTypes, initialTab }: Props) {
   const isEdit = Boolean(initial), formId = useId();
   const [colorsOpen, setColorsOpen] = useState(false), [propsOpen, setPropsOpen] = useState(false);
   const typeScope = isEdit ? undefined : allowedTypes;
@@ -53,7 +55,7 @@ export function ItemFormDialog({ open, onOpenChange, initial, draft, onSubmit, i
     if (open) {
       form.reset(defaults);
       setManualCode(false);
-      setTab("info");
+      setTab(initialTab ?? "info");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initial?.id, draft]);
@@ -90,9 +92,14 @@ export function ItemFormDialog({ open, onOpenChange, initial, draft, onSubmit, i
   });
 
   const extraTabs: ItemExtraTab[] = [];
-  if (warpVisible) extraTabs.push({ value: "warp", label: "Çözgü", content: <ItemWarpSection form={form} canWrite={canWriteSpecs} itemId={initial?.id ?? null} /> });
+  if (warpVisible) extraTabs.push({ value: "warp", label: "Çözgü", content: <ItemWarpSection form={form} canWrite={canWriteSpecs} itemId={initial?.id ?? null} layersVisible={constructionVisible} /> });
   if (constructionVisible) extraTabs.push({ value: "weft", label: "Atkı", content: <ItemWeftSection draft={weft} canWrite={canWriteSpecs} itemId={initial?.id ?? null} rawWidthText={form.watch("rawWidthCm")} /> },
     { value: "weave", label: "Desen", content: <ItemWeaveSection form={form} canWrite={canWriteSpecs} /> });
+  const variantsVisible = useVariantsTabVisible(itemType, isEdit, constructionVisible);
+  if (variantsVisible && initial) extraTabs.push({ value: "variants", label: "Varyantlar",
+    content: <ItemVariantsSection fabric={{ id: initial.id, code: initial.code, name: initial.name, allowedColorIds: (initial.allowedColors ?? []).map((c) => c.colorId) }} /> });
+  // İstenen sekme bu kartta yoksa (modül/izin) Genel'e düşer — boş panel açılmaz.
+  const shownTab = tab === "info" || tab === "customer-aliases" || extraTabs.some((t) => t.value === tab) ? tab : "info";
   const busy = isSubmitting || saving;
 
   return (
@@ -132,7 +139,7 @@ export function ItemFormDialog({ open, onOpenChange, initial, draft, onSubmit, i
         <ItemCardTabs
           item={initial}
           extraTabs={extraTabs}
-          tab={tab}
+          tab={shownTab}
           onTabChange={setTab}
           footer={(t) => (
             <TabbedDialogFooter>
