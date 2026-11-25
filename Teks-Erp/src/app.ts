@@ -584,8 +584,8 @@ app.use("/api/machines", machineRouter);
 app.use("/api/peripherals", peripheralRouter);
 app.use("/api/routes", routeRoutes);
 app.use("/api/product-recipes", productRecipeRoutes);
-// Çözgü kartları (devere modülü) — router'ın kendi kapısı: verifyToken +
-// requireDevereEnabled (ticaret → iplik → devere zinciri) + requirePermission.
+// Çözgü kartları (devere ∨ dokuma, ürün kartı D4/K1) — router'ın kendi kapısı: verifyToken +
+// requireWarpSpecRegime + requirePermission.
 app.use("/api/warp-specs", warpSpecRoutes);
 app.use("/api/warp-plan", warpPlanRoutes);
 app.use("/api/warping-orders", warpingOrderRoutes);

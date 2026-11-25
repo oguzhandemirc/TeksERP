@@ -24,7 +24,9 @@ vi.mock("@/components/RecordInfoButton", () => ({ RecordInfoButton: () => null }
 vi.mock("./AllowedColorsDialog", () => ({ AllowedColorsDialog: () => null }));
 vi.mock("./AllowedPropertiesDialog", () => ({ AllowedPropertiesDialog: () => null }));
 const flags = vi.hoisted(() => ({ kg: false, mal: false, dk: false }));
-vi.mock("@/hooks/usePricingEnabled", () => ({ useDevereEnabled: () => false, useDokumaEnabled: () => flags.dk, useKaliteGuvenceEnabled: () => flags.kg, useMaliyetEnabled: () => flags.mal }));
+// Devere kapalı varsayılır: çözgü kartı rejimi (devere ∨ dokuma) burada dokumayı izler.
+vi.mock("@/hooks/usePricingEnabled", () => ({ useDevereEnabled: () => false, useWarpSpecEnabled: () => flags.dk, useDokumaEnabled: () => flags.dk, useKaliteGuvenceEnabled: () => flags.kg, useMaliyetEnabled: () => flags.mal }));
+vi.mock("./construction/ItemWarpSection", () => ({ ItemWarpSection: () => <p>çözgü bölümü</p> }));
 const WIDTH = /Mamul en \(cm\)/;
 // D3: sekme içerikleri ağ çağırır — burada ölçülen sekmenin görünürlüğü ve açılış sekmesi.
 vi.mock("./variants/ItemVariantsSection", async (orig) => ({ ...(await orig<object>()), ItemVariantsSection: () => <p>varyant listesi</p> }));
@@ -202,6 +204,17 @@ describe("ItemFormDialog — iplik firesi % (SY-3 I2)", () => {
 
 describe("ItemFormDialog — Varyantlar sekmesi ve açılış sekmesi (D3/K7)", () => {
   const asUser = (permissions: string[] | null) => useAuthStore.setState({ user: permissions ? ({ userId: "u1", username: "k", permissions } as unknown as JwtPayload) : null });
+  // D4/K1: Çözgü sekmesi çözgü kartı rejimine (devere ∨ dokuma) bağlı — devere kapalı, dokuma açık kumaşta görünür.
+  it("⭐ çözgü kartı rejimi: devere kapalı + dokuma açık → kumaşta Çözgü sekmesi var; rejim kapalı → yok", () => {
+    flags.dk = true;
+    const { unmount } = renderWithProviders(<ItemFormDialog open onOpenChange={() => {}} onSubmit={() => {}} initial={item({})} initialTab="warp" />);
+    expect(screen.getByRole("tab", { name: "Çözgü" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("çözgü bölümü")).toBeInTheDocument();
+    unmount();
+    flags.dk = false;
+    renderWithProviders(<ItemFormDialog open onOpenChange={() => {}} onSubmit={() => {}} initial={item({})} initialTab="warp" />);
+    expect(screen.queryByRole("tab", { name: "Çözgü" })).toBeNull();
+  });
   it("⭐ kayıtlı kumaş + dokuma + okuma izni: Varyantlar sekmesi var; initialTab ile o sekmede açılır", () => {
     flags.dk = true;
     asUser(["warpspec:read", "station:read"]);

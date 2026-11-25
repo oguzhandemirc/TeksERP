@@ -73,6 +73,11 @@ export interface OperationsVisibilityContext {
    */
   machineStopEnabled: boolean;
   /**
+   * ÇÖZGÜ KARTI rejimi (ürün kartı D4/K1) — `devere ∨ dokuma`; tek çözüm `lib/warp-spec-regime.ts`.
+   * Backend kapısı `requireWarpSpecRegime`. İsteğe bağlı: yoksa KAPALI (eski bağlam literalleri).
+   */
+  warpSpecEnabled?: boolean;
+  /**
    * KALİTE GÜVENCE modülü (`kaliteGuvence.enabled`, K4P) — zincirsiz (KK1 üretim kapalıyken de
    * çalışır). Belirsizken FALSE ("sıfır görünür fark"); backend kapısı `requireKaliteGuvenceEnabled`.
    */

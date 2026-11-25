@@ -125,7 +125,9 @@ export const ROUTE_MODULE: Readonly<Record<string, RouteModuleFlag>> = {
  * route kapısı modül yerine bağlamın REJİM alanını okur. `machineStopEnabled` = dokuma ∨ (üretim ∧
  * `uretim.makineDurusTakibi`) — karo yüklemiyle (`isMachineStopsVisible` / `isShiftDefinitionsVisible`) aynı alan.
  */
-export const ROUTE_REGIME: Readonly<Record<string, Extract<keyof OperationsVisibilityContext, "machineStopEnabled">>> = {
+export const ROUTE_REGIME: Readonly<Record<string, Extract<keyof OperationsVisibilityContext, "machineStopEnabled" | "warpSpecEnabled">>> = {
+  // D4/K1: çözgü kartı = devere ∨ dokuma (backend `requireWarpSpecRegime`); manifestoda devere modülünde kalır.
+  "definitions/warp-specs": "warpSpecEnabled",
   "operations/machine-stops": "machineStopEnabled",
   "definitions/shift-definitions": "machineStopEnabled",
   // D4-A4: rapor YAPRAĞI (üç segment) — üretim raporları kategorisi açık kalır, yalnız bu rapor rejime bağlı.
@@ -182,7 +184,7 @@ export function isRouteModuleOpen(pathname: string, ctx: OperationsVisibilityCon
   }
   for (const key of regimeKeyCandidates(pathname)) {
     const r = ROUTE_REGIME[key];
-    if (r) return ctx[r];
+    if (r) return ctx[r] === true;
   }
   const m = routeModuleOf(pathname);
   return m === null ? true : ctx[m];

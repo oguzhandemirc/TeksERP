@@ -408,6 +408,14 @@ async function main(): Promise<void> {
     const g = b >= 0 ? kod.slice(b, kod.indexOf("\n}\n", b)) : "";
     check(`§6i ⭐ ${devralan} genel rejim dışında \`${KAPI}\`e devreder`, new RegExp(`await ${KAPI}\\(req, res, next\\)`).test(g), g ? "" : "gövde yok");
   }
+  // §6k (ürün kartı D4/K1): çözgü kartı dokuma ürün yapısının parçası — dokuma açık + devere kapalı kurulumda
+  // `/api/warp-specs` açılır. Yüklem `requireDokumaEnabled`in açık dalıyla aynı iki okumayı yapar (üretim ∧ dokuma).
+  const wsHelper = yorumlariSok(fs.readFileSync(path.join(SRC, "services/helpers/warp-spec-regime.helper.ts"), "utf8"));
+  const wsRoute = yorumlariSok(fs.readFileSync(path.join(SRC, "routes/warp-spec.routes.ts"), "utf8"));
+  check(
+    "§6k ⭐ Çözgü kartı rejimi dokumayı kapsar (helper üretim ∧ dokuma okur, router `requireWarpSpecRegime` taşır)",
+    /readProductionEnabled\(tx\)\)\s*&&\s*\(await readDokumaEnabled\(tx\)/.test(wsHelper) && /router\.use\(verifyToken, requireWarpSpecRegime\)/.test(wsRoute),
+  );
 
   // ── §7 ⭐ BAYRAK KAPALIYKEN SIFIR GÖRÜNÜR FARK ────────────────────────────
   const istemciDosyalari = [...kaynakDosyalari(ELECTRON_SRC), ...kaynakDosyalari(MOBIL_SRC)];

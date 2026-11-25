@@ -9,7 +9,7 @@ import { ItemType, itemTypeLabels, unitForItemType } from "@/types/enums";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { RecordInfoButton } from "@/components/RecordInfoButton";
 import { InfoPopover } from "@/components/ui/info-popover";
-import { useDevereEnabled, useDokumaEnabled, useKaliteGuvenceEnabled, useMaliyetEnabled } from "@/hooks/usePricingEnabled";
+import { useDokumaEnabled, useKaliteGuvenceEnabled, useMaliyetEnabled, useWarpSpecEnabled } from "@/hooks/usePricingEnabled";
 import type { Item, ItemCreatePayload } from "./types";
 import { itemFormDefaults, makeItemFormSchema, type ItemFormValues } from "./schema";
 import { itemCarriesAllowedLists } from "./itemPayload.helper";
@@ -62,11 +62,11 @@ export function ItemFormDialog({ open, onOpenChange, initial, draft, onSubmit, i
 
   const itemType = form.watch("itemType");
   const { hasPermission } = useRoleAccess();
-  const devereEnabled = useDevereEnabled();
+  const warpSpecEnabled = useWarpSpecEnabled(); // çözgü kartı rejimi: devere ∨ dokuma (D4/K1)
   const widthVisible = [useKaliteGuvenceEnabled(), useDokumaEnabled()].some(Boolean); // mamul en: Kalite Güvence ya da dokuma (iki kanca da koşar)
   const yarnWasteVisible = useMaliyetEnabled() && itemType === ItemType.YARN;
   const constructionVisible = useConstructionPickersVisible(itemType);
-  const warpVisible = itemType === ItemType.FABRIC && devereEnabled;
+  const warpVisible = itemType === ItemType.FABRIC && warpSpecEnabled;
   const canWriteSpecs = hasPermission("warpspec:write");
   const derivedUnit = unitForItemType[itemType] ?? "MT";
   // Seçici tek tipe kilitliyse başlık o tipi söyler ("Yeni Kumaş"); serbest tipte "Yeni Ürün".
