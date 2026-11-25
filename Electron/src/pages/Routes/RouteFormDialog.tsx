@@ -32,6 +32,8 @@ interface Props {
   isSubmitting?: boolean;
   /** Yeni kayıtta "İş emri kısayolu" işaretli başlar ("Yeni özel iş emri" kartından gelindi, K20). */
   newAsShortcut?: boolean;
+  /** Seçicide "Örnek al": kimliksiz tam rota (adımlarıyla) — "Şuradan kopyala" ile aynı değerler, yalnız oluşturur. */
+  draft?: ProductionRoute | null;
 }
 
 // Rota adımını forma çevir — fason planlaması (Saha #14) dahil. EXTERNAL adımda
@@ -57,7 +59,8 @@ function stepToForm(s: ProductionRoute["steps"][number]) {
   };
 }
 
-function buildDefaults(initial?: ProductionRoute | null, newAsShortcut = false): RouteFormValues {
+function buildDefaults(initial?: ProductionRoute | null, newAsShortcut = false, draft?: ProductionRoute | null): RouteFormValues {
+  if (!initial && draft) return buildCopyValues(draft);
   if (!initial) return newAsShortcut ? { ...routeFormDefaults, isWorkOrderShortcut: true } : routeFormDefaults;
   return {
     name: initial.name,
@@ -93,13 +96,14 @@ export function RouteFormDialog({
   onSubmit,
   isSubmitting,
   newAsShortcut = false,
+  draft,
 }: Props) {
   const isEdit = Boolean(initial);
 
   const form = useForm<RouteFormValues>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(routeFormSchema as any) as unknown as Resolver<RouteFormValues>,
-    defaultValues: buildDefaults(initial, newAsShortcut),
+    defaultValues: buildDefaults(initial, newAsShortcut, draft),
   });
 
   const [stepsError, setStepsError] = useState<string | null>(null);
@@ -107,7 +111,7 @@ export function RouteFormDialog({
 
   useEffect(() => {
     if (open) {
-      form.reset(buildDefaults(initial, newAsShortcut));
+      form.reset(buildDefaults(initial, newAsShortcut, draft));
       setStepsError(null);
       setCopySourceId(null);
     }
@@ -145,7 +149,7 @@ export function RouteFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Rotayı Düzenle" : "Yeni Üretim Rotası"}</DialogTitle>
+          <DialogTitle>{isEdit ? "Rotayı Düzenle" : draft ? "Yeni Üretim Rotası (örnekten)" : "Yeni Üretim Rotası"}</DialogTitle>
           <DialogDescription>
             {TERIM.terbiyeIsEmri.cumleBasi.bulunma} kullanılacak istasyon sırasını tanımla. Adımlar sürüklenip yeniden
             sıralanabilir. Her adımda o istasyonun uygulayabildiği renk/özellikler seçilirse{" "}

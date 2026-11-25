@@ -2,41 +2,10 @@ import { CrudPage } from "@/components/layout/CrudPage";
 import { recipeColumns } from "./columns";
 import { productRecipeService } from "./service";
 import { ProductRecipeFormDialog } from "./ProductRecipeFormDialog";
+import { buildRecipePayload } from "./recipePayload";
 import type { ProductRecipe } from "./types";
-import { type RecipeFormValues } from "./schema";
 import { TERIM } from "@/lib/terim";
 import { screenTitle } from "@/components/layout/screen-title";
-
-interface RecipePropertyCreate {
-  propertyId: string;
-}
-
-interface RecipePayload {
-  code?: string;
-  name: string;
-  itemId: string;
-  colorId: string | null;
-  width: number | null;
-  foldType: string | null;
-  routeId: string | null;
-  isActive: boolean;
-  properties: RecipePropertyCreate[];
-}
-
-function buildPayload(v: RecipeFormValues): RecipePayload {
-  const base: RecipePayload = {
-    name: v.name,
-    itemId: v.targetItemId ?? "",
-    colorId: v.targetColorId ?? null,
-    width: typeof v.width === "number" ? v.width : null,
-    foldType: v.foldType?.trim() ? v.foldType.trim() : null,
-    routeId: v.routeTemplateId || null,
-    isActive: v.isActive,
-    properties: (v.targetPropertyIds ?? []).map((id) => ({ propertyId: id })),
-  };
-  // Kod backend'de üretilir (REC+GGAAYY+NNNN); create'te gönderilmez, edit'te backend korur.
-  return base;
-}
 
 export function ProductRecipesPage() {
   return (
@@ -58,7 +27,7 @@ export function ProductRecipesPage() {
           isSubmitting={isSubmitting}
           onSubmit={(values) =>
             onSubmit(
-              buildPayload(values) as unknown as Partial<ProductRecipe>,
+              buildRecipePayload(values) as unknown as Partial<ProductRecipe>,
             )
           }
         />

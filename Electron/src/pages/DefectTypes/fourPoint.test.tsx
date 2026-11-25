@@ -14,8 +14,8 @@ vi.mock("@/components/layout/CrudPage", () => ({
 vi.mock("@/components/PermissionGate", () => ({ PermissionGate: ({ children }: { children: React.ReactNode }) => <>{children}</> }));
 vi.mock("./DefectTypeSortDialog", () => ({ DefectTypeSortDialog: () => null }));
 
-import { DefectTypesPage, buildPayload } from "./DefectTypesPage";
-import { defectTypeFormDefaults } from "./schema";
+import { DefectTypesPage } from "./DefectTypesPage";
+import { buildPayload, defectTypeFormDefaults } from "./schema";
 import { orderDefectTypes, sortOrderChanges } from "./defectSort";
 import type { DefectType } from "./types";
 

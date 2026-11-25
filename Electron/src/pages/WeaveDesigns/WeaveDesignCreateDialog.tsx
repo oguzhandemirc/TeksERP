@@ -10,21 +10,25 @@ import { Label } from "@/components/ui/label";
 import { weaveDesignApi } from "./service";
 import { WeaveClassFields } from "./WeaveClassFields";
 import type { WeaveClass } from "./weave-class";
+import type { WeaveDesignInput } from "./types";
 
 export { NATIVE_SELECT_CLASS } from "./WeaveClassFields";
 
-export function WeaveDesignCreateDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
+/** `onSubmit` verilirse (seçicideki "Yeni") kaydı, bildirimi ve kapanışı çağıran yapar (ortak kayıt formu kancası). */
+export function WeaveDesignCreateDialog({ onClose, onCreated, onSubmit }: { onClose: () => void; onCreated?: (id: string) => void; onSubmit?: (body: WeaveDesignInput) => Promise<void> }) {
   const qc = useQueryClient();
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const [cls, setCls] = useState<WeaveClass>({ shedMechanism: "DOBBY", weaveStructure: null });
   const create = useMutation({
-    mutationFn: () => weaveDesignApi.create({ code: code.trim(), name: name.trim(), ...cls }),
-    onSuccess: (row) => {
+    mutationFn: async () => {
+      const body = { code: code.trim(), name: name.trim(), ...cls };
+      if (onSubmit) return onSubmit(body);
+      const row = await weaveDesignApi.create(body);
       toast.success("Desen kartı oluşturuldu.");
       void qc.invalidateQueries({ queryKey: ["weave-designs"] });
       onClose();
-      onCreated(row.id);
+      onCreated?.(row.id);
     },
   });
   const ready = code.trim().length > 0 && name.trim().length > 0;

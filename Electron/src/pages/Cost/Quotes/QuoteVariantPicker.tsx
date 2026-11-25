@@ -9,6 +9,8 @@ import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { productRecipeService } from "@/pages/ProductRecipes/service";
 import type { ProductRecipe } from "@/pages/ProductRecipes/types";
+import { useProductRecipeRecordForm } from "@/pages/ProductRecipes/useProductRecipeRecordForm";
+import type { RecordFormSpec } from "@/components/forms/record-form/types";
 
 type Variant = ProductRecipe & { variantCode?: string | null };
 
@@ -20,6 +22,8 @@ export function QuoteVariantPicker({ itemId, value, onChange }: Props) {
   // Uç üretim modülü kapısının arkasında (MODULE_DISABLED): modül kapalıysa ya da bayrak henüz bilinmiyorsa sorgu atılmaz.
   const productionOn = useFeatureFlags().data?.data?.productionEnabled === true;
   const canRead = useRoleAccess().hasPermission("station:read") && productionOn;
+  // Varyant = iş emri şablonu (`ProductRecipe`); `variantCode` yalnız okuma ekidir → aynı kayıt formu.
+  const recipeForm = useProductRecipeRecordForm() as RecordFormSpec<Variant>;
   const variants = useQuery({
     queryKey: ["quote-line-variants", itemId],
     queryFn: () => loadAllForPicker(productRecipeService, { filters: { itemId, isActive: "true" }, sortBy: "code" }).then((r) => r.data),
@@ -34,6 +38,7 @@ export function QuoteVariantPicker({ itemId, value, onChange }: Props) {
           value={value}
           onChange={onChange}
           service={productRecipeService}
+          recordForm={recipeForm}
           queryKey={`product-recipes-quote-${itemId}`}
           filters={{ itemId }}
           getLabel={variantText}
