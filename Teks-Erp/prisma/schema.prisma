@@ -2456,6 +2456,14 @@ enum FabricTechnique {
   KNITTED
 }
 
+/// K8 — kumaşın yanmazlığı (kapalı küme; dördüncüsü "Diğer FR" kaçış değeri). NULL = belirtilmemiş.
+enum FlameRetardancy {
+  NONE
+  FR_YARN
+  TREVIRA_CS
+  OTHER_FR
+}
+
 /// Ek çözgü katmanının rolü (§3.4): döner (leno) çözgü ya da ikinci zemin çözgüsü.
 enum WarpLayerRole {
   LENO
@@ -4518,8 +4526,17 @@ model Item {
   weaveDesignId String?  @db.Uuid
   /// Üretim tekniği (2026-11-25) — yalnız KUMAŞ; NULL = Dokuma (okuyucu varsayılanı). Örme bugün 400.
   fabricTechnique FabricTechnique?
+  /// K8 (Seyitoğlu 2026-11-25) — KUMAŞ TÜRÜ (N:1, ayarlanabilir liste `fabric_types`). Yalnız `ItemType.FABRIC`
+  /// (servis 400 `ITEM_FABRIC_STRUCTURE_FABRIC_ONLY`); seçimde tür AKTİF olmalı, pasife alınan tür eski kartta okunur.
+  fabricTypeId    String?          @db.Uuid
+  /// K8 — YANMAZLIK (bilgi). NULL = belirtilmemiş; NONE = yanmaz değil. Yalnız KUMAŞ (servis 400).
+  flameRetardancy FlameRetardancy?
 
   // Relations
+  /// K8 — kumaş türü; tür silinmez (pasife alınır) → Restrict.
+  fabricType                     FabricType?                 @relation("ItemFabricType", fields: [fabricTypeId], references: [id], onDelete: Restrict)
+  /// K7 — İPLİK LİF BİLEŞİMİ satırları (yalnız YARN; Σ pay = 100, tek yazar `item-fiber.helper`).
+  fibers                         ItemFiber[]                 @relation("ItemFiberItem")
   rolls                          Roll[]
   orderLines                     OrderLine[]
   swatches                       Swatch[]
@@ -4659,9 +4676,66 @@ model Item {
   @@index([warpSpecId])
   @@index([weftSpecId])
   @@index([weaveDesignId])
+  @@index([fabricTypeId])
   // Patron bulutu eşitleme filigranı `(updatedAt, id)` — değişiklik taraması satır değeri karşılaştırmasıyla sayfalanır.
   @@index([updatedAt, id], map: "items_updatedAt_esitleme_idx")
   @@map("items")
+}
+
+/// K8 (Seyitoğlu 2026-11-25) — KUMAŞ TÜRÜ kataloğu (Tül, Fon, Blackout…): yalnız sınıflama, ayarlanabilir kısa liste.
+/// Enum değil tablo: liste fabrikaya göre değişir (perde ↔ döşemelik). Silme ucu YOK; pasife alma seçiciden düşürür,
+/// eski kart değeri okumaya devam eder (yapılandırma referansı — mal/belge/bakiye değil, arşiv kapısı uyarır).
+model FabricType {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique @db.VarChar(60)
+  /// Arama gölgesi: GENERATED tr_fold("name") (migration `20261125160000_lif_kumas_turu_fold`); yazılamaz.
+  nameFold  String?  @default(dbgenerated())
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  items Item[] @relation("ItemFabricType")
+
+  @@unique([nameFold])
+  @@map("fabric_types")
+}
+
+/// K7 (Seyitoğlu 2026-11-25) — LİF TÜRÜ kataloğu (Polyester, Pamuk, Viskon…): kumaş türüyle AYNI yaklaşım (tablo).
+/// `abbreviation` kompozisyon metnindeki kısa ad ("%83 PES"); boşsa ad yazılır. Silme yok, pasife alma.
+model FiberType {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String   @unique @db.VarChar(40)
+  abbreviation String?  @db.VarChar(8)
+  /// Arama gölgeleri: GENERATED tr_fold (migration `20261125160000_lif_kumas_turu_fold`); yazılamaz.
+  nameFold         String? @default(dbgenerated())
+  abbreviationFold String? @default(dbgenerated())
+  sortOrder    Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now()) @db.Timestamptz
+  updatedAt    DateTime @updatedAt @db.Timestamptz
+
+  itemFibers ItemFiber[]
+
+  @@unique([nameFold])
+  @@map("fiber_types")
+}
+
+/// K7 — İPLİK LİF BİLEŞİMİ: saf yapılandırma pivotu (replace = izinli hard delete), yalnız YARN kartı.
+/// Σ pay = 100 servis kapısıdır (satırlar arası CHECK yazılamaz; tek yazar `item-fiber.helper`); satır CHECK
+/// `item_fibers_pct_ck` (0 < pay ≤ 100). Değişmez satır → `updatedAt` YOK (pivot konvansiyonu).
+model ItemFiber {
+  itemId      String   @db.Uuid
+  fiberTypeId String   @db.Uuid
+  pct         Decimal  @db.Decimal(5, 2)
+  createdAt   DateTime @default(now()) @db.Timestamptz
+
+  item      Item      @relation("ItemFiberItem", fields: [itemId], references: [id], onDelete: Cascade)
+  fiberType FiberType @relation(fields: [fiberTypeId], references: [id], onDelete: Restrict)
+
+  @@id([itemId, fiberTypeId])
+  @@index([fiberTypeId])
+  @@map("item_fibers")
 }
 
 /// HİZMET KARTI (2026-11-07, migration `service_items_split`) — müşteriye kesilen / fasona verilen

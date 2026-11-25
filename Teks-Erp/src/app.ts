@@ -64,6 +64,8 @@ import inventoryRoutes from "./routes/inventory.routes";
 import orderRoutes from "./routes/order.routes";
 import productionProposalRoutes from "./routes/production-proposal.routes";
 import itemComputedGsmRoutes from "./routes/item-computed-gsm.routes";
+import { itemCompositionRouter, itemFiberRouter } from "./routes/item-fiber.routes";
+import { fabricTypeRoutes, fiberTypeRoutes } from "./routes/fabric-fiber-type.routes";
 import loomSuggestionRoutes from "./routes/loom-suggestion.routes";
 import recordInfoRoutes from "./routes/record-info.routes";
 import rowMarkRoutes from "./routes/row-marks.routes";
@@ -564,7 +566,12 @@ app.use("/api", licenseGate);
 app.use("/api/auth", authRoutes);
 // Seyitoğlu temel: hesaplanan gramaj (kendi yoluna bağlı; salt okuma).
 app.use("/api/items/:id/computed-gsm", itemComputedGsmRoutes);
+// K7: iplik lif bileşimi + kumaş hesaplanan kompozisyonu (kendi yollarına bağlı).
+app.use("/api/items/:id/fibers", itemFiberRouter);
+app.use("/api/items/:id/computed-composition", itemCompositionRouter);
 app.use("/api/items", itemRoutes);
+app.use("/api/fabric-types", fabricTypeRoutes);
+app.use("/api/fiber-types", fiberTypeRoutes);
 // Hizmet kartları ayrı tabloda (`service_items`, D1b); izin ürün kartıyla aynı.
 app.use("/api/service-items", serviceItemRoutes);
 app.use("/api/customers", customerRoutes);

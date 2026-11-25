@@ -25,6 +25,8 @@ const flags = vi.hoisted(() => ({ kg: false, mal: false, dk: false }));
 vi.mock("@/hooks/usePricingEnabled", () => ({ useDevereEnabled: () => false, useDokumaEnabled: () => flags.dk, useKaliteGuvenceEnabled: () => flags.kg, useMaliyetEnabled: () => flags.mal }));
 const WIDTH = /Mamul en \(cm\)/;
 
+/** Tip seçicisi formun İLK açılırı (kumaş kartında Yanmazlık da açılır — K8). */
+const tipCombo = () => screen.getAllByRole("combobox")[0]!;
 const COLORS = "İzinli Renkler";
 const PROPS = "İzinli Özellikler";
 
@@ -50,7 +52,7 @@ describe("ItemFormDialog — izinli renk/özellik yalnız kumaşta", () => {
     renderWithProviders(<ItemFormDialog open onOpenChange={() => {}} onSubmit={onSubmit} />);
     expect(screen.getByText(COLORS)).toBeInTheDocument();
     await user.type(screen.getByLabelText(/^Ad/), "İPLİK 150D");
-    await user.click(screen.getByRole("combobox"));
+    await user.click(tipCombo());
     await user.click(await screen.findByRole("option", { name: "İplik" }));
     await waitFor(() => expect(screen.queryByText(COLORS)).toBeNull());
     expect(screen.queryByText(PROPS)).toBeNull();
@@ -125,7 +127,7 @@ describe("ItemFormDialog — Mamul en (cm) Kalite Güvence ya da dokuma açıkke
 describe("ItemFormDialog — seçici kapsamı Tip'i kilitler (inceleme Not 10b)", () => {
   it("⭐ yalnız kumaş kapsamı: yeni kayıtta Tip Kumaş ve değiştirilemez; birim 'm'", () => {
     renderWithProviders(<ItemFormDialog open onOpenChange={() => {}} onSubmit={() => {}} allowedTypes={["FABRIC"]} />);
-    const combo = screen.getByRole("combobox");
+    const combo = tipCombo();
     expect(combo).toHaveTextContent("Kumaş");
     expect(combo).toBeDisabled();
     expect(screen.getByDisplayValue("m")).toBeInTheDocument();
@@ -133,14 +135,14 @@ describe("ItemFormDialog — seçici kapsamı Tip'i kilitler (inceleme Not 10b)"
 
   it("⭐ yalnız iplik kapsamı: varsayılan Kumaş yerine İplik ön-ayarlı gelir", () => {
     renderWithProviders(<ItemFormDialog open onOpenChange={() => {}} onSubmit={() => {}} allowedTypes={["YARN"]} />);
-    expect(screen.getByRole("combobox")).toHaveTextContent("İplik");
+    expect(tipCombo()).toHaveTextContent("İplik");
     expect(screen.getByDisplayValue("kg")).toBeInTheDocument();
   });
 
   it("çok tip kapsamı: yalnız o tipler listelenir, kilit yok", async () => {
     const user = userEvent.setup();
     renderWithProviders(<ItemFormDialog open onOpenChange={() => {}} onSubmit={() => {}} allowedTypes={["FABRIC", "CONSUMABLE"]} />);
-    await user.click(screen.getByRole("combobox"));
+    await user.click(tipCombo());
     const names = (await screen.findAllByRole("option")).map((o) => o.textContent);
     expect(names).toEqual(["Kumaş", "Sarf Malzeme"]);
   });
@@ -150,7 +152,7 @@ describe("ItemFormDialog — hizmet kartı ayrı tabloda (D2)", () => {
   it("⭐ Tip seçenekleri yalnız Kumaş · İplik · Sarf — 'Hizmet' YOK (Tanımlar › Hizmet Kartları)", async () => {
     const user = userEvent.setup();
     renderWithProviders(<ItemFormDialog open onOpenChange={() => {}} onSubmit={() => {}} />);
-    await user.click(screen.getByRole("combobox"));
+    await user.click(tipCombo());
     const names = (await screen.findAllByRole("option")).map((o) => o.textContent);
     expect(names).toEqual(["Kumaş", "İplik", "Sarf Malzeme"]);
   });

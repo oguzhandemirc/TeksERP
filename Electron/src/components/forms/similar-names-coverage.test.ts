@@ -30,6 +30,8 @@ const EXEMPT: Record<string, string> = {
     "makine kartı — cihaz kaydı, ana veri değil; benzer-ad ucu yok, ad tekilliği sunucuda (409 COLLECTOR_NAME_TAKEN)",
   "SubcontractorCategories/SubcontractorCategoryFormDialog.tsx":
     "fason kategorisi — similar-names ucu henüz yok (bkz. takip)",
+  "FabricFiberTypes/ClassTypeFormDialog.tsx":
+    "kumaş/lif türü — kısa sınıflama listesi (≈10 satır, tümü ekranda); ad tekilliği sunucuda (unique), benzer-ad ucu yok",
   "Subcontractors/SubcontractorFormDialog.tsx":
     "fason firma — similar-names ucu henüz yok (bkz. takip)",
 };

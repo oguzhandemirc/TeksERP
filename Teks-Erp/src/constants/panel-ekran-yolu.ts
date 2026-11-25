@@ -35,6 +35,7 @@ export const PANEL_EKRAN = {
   vardiyaTanimlari: { menu: "Tanımlar", karo: "Vardiya Tanımları" },
   donanim: { menu: "Tanımlar", karo: "Donanım" },
   musteriVarsayilanUrunleri: { menu: "Tanımlar", karo: "Müşteri Varsayılan Ürünleri" },
+  kumasTurleri: { menu: "Tanımlar", karo: "Kumaş Türleri" },
   etiketDuzenleri: { menu: "Belgeler", karo: "Etiketler", alt: "Etiket Düzenleri" },
   etiketAtamalari: { menu: "Belgeler", karo: "Etiketler", alt: "Etiket Atamaları" },
   kumasStogu: { menu: "Depo", karo: "Kumaş Stoğu" },

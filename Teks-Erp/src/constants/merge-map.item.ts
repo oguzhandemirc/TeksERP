@@ -314,4 +314,14 @@ export const ITEM_MERGE_RULES: MoveRule[] = [
         "Aynı sayım fişinde iki kalem birleşirse sayılan miktar sessizce kaybolur; sayım " +
         "tutanağı geçmiş bir ölçümün kaydıdır, yeniden yazılmaz. Çakışma yalnız AYNI fişte doğar.",
     },
+    {
+      kind: "EXEMPT",
+      model: "ItemFiber",
+      table: "item_fibers",
+      column: "itemId",
+      reason:
+        "İpliğin lif payları (K7) kartın KENDİ tanımıdır ve toplamı %100'dür; iki kartın payını " +
+        "satır satır taşımak/birleştirmek %100'ü bozar. Survivor kendi kompozisyonunu korur, " +
+        "kaynağınki mezar taşında kalır (birleştirme sert silmez, cascade tetiklenmez).",
+    },
 ];

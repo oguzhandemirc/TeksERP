@@ -31,4 +31,8 @@ export const ENUM_LABELS_EK2: Record<string, string> = {
   POINTED: "Sivri tahar",
   SKIP: "Atlamalı tahar",
   CUSTOM: "Özel tahar",
+  // FlameRetardancy (2026-11-25, K8) — NONE genel "Yok" ile ortak
+  FR_YARN: "FR iplik",
+  TREVIRA_CS: "Trevira CS",
+  OTHER_FR: "Diğer yanmaz",
 };

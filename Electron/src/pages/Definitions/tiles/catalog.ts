@@ -1,5 +1,5 @@
 // Tanımlar › Ürün Kataloğu karoları (sıra = hub sırası).
-import { Package, Award, Palette, Sparkles, Tag, Table2, Wrench } from "lucide-react";
+import { Package, Award, Palette, Sparkles, Tag, Table2, Wrench, Layers, Spline } from "lucide-react";
 import { itemPricesTileVisible } from "../ItemPrices/regime";
 import { servicePricesTileVisible } from "../ServicePrices/regime";
 import { flagOffHint } from "@/lib/flag-setting-path";
@@ -52,6 +52,24 @@ export const catalogTiles: DefinitionTile[] = [
     permission: "item:read",
     visibleWhen: servicePricesTileVisible,
     offHint: flagOffHint("financeEnabled"),
+  },
+  {
+    key: "fabric-types",
+    title: "Kumaş Türleri",
+    description: "Tül, Fon, Blackout, Döşemelik gibi kumaş türleri",
+    icon: Layers,
+    to: "/definitions/fabric-types",
+    group: "catalog",
+    permission: "item:read",
+  },
+  {
+    key: "fiber-types",
+    title: "Lif Türleri",
+    description: "İplik lif bileşimi: Polyester, Pamuk, Viskon…",
+    icon: Spline,
+    to: "/definitions/fiber-types",
+    group: "catalog",
+    permission: "item:read",
   },
   {
     key: "fabric-properties",

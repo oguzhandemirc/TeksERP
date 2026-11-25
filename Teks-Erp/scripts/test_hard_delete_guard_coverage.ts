@@ -202,6 +202,7 @@ const EXPECTED: Record<string, string> = {
   "Item <- CustomerItemColorAlias.item : Cascade": "cascade-intended — ad eşlemesi kumaşsız anlamsız",
   "Item <- ItemAllowedColor.item : Cascade": "cascade-intended — izin pivotu (pivot replace istisnası)",
   "Item <- ItemAllowedProperty.item : Cascade": "cascade-intended — izin pivotu",
+  "Item <- ItemFiber.item : Cascade": "cascade-intended — iplik lif payı pivotu (K7, pivot replace istisnası); ipliksiz anlamsız",
   "Item <- WorkOrder.targetItem : SetNull": "guarded (woCount, A5 2026-07-31)",
   // --- 2026-09-12: uç keşfiyle İZLEMEYE GİREN altı model ---------------------
   // Makine: üretim atfı ve oturum geçmişi guard'lıdır (gerekçeler
