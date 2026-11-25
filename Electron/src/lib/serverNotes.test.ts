@@ -35,6 +35,16 @@ describe("serverNotes — sunucu notlarının tek kaynağı", () => {
     expect(toast.warning).toHaveBeenCalledTimes(1);
   });
 
+  it("⭐ sunucu KOD gönderirse ham basılmaz: tanınan kod Türkçe metin, tanınmayan kod genel Türkçe cümle", () => {
+    showServerWarnings({ warnings: ["STANDARD_COST_MISSING", "PRICE_STALE", "ZZ_UNKNOWN_CODE", "N-5 Düz cümle_ kalır"] });
+    const texts = vi.mocked(toast.warning).mock.calls.map((c) => c[0]);
+    expect(texts[0]).toMatch(/standart maliyeti yok/);
+    expect(texts[1]).toBe("Kullanılan bir fiyat 90 günden eski.");
+    expect(texts[2]).toBe("Sunucu bir uyarı bildirdi (kod: ZZ_UNKNOWN_CODE).");
+    expect(texts[3]).toBe("N-5 Düz cümle_ kalır");
+    expect(texts.some((t) => t === "STANDARD_COST_MISSING")).toBe(false);
+  });
+
   it("genel basım kararı: yazım yöntemi + bayraksız + zarf", () => {
     const zarf = { success: true, data: {} };
     expect(shouldToastWarnings({ method: "post" }, zarf)).toBe(true);

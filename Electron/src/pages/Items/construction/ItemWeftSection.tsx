@@ -78,7 +78,7 @@ interface SectionProps {
 
 export function ItemWeftSection({ draft, canWrite, itemId, rawWidthText }: SectionProps) {
   const calcCtx = { itemId, rawWidthCm: positiveOrNull(rawWidthText) };
-  const weftForm = useWeftSpecRecordForm(); // seçici: Yeni · Örnek al · Düzenle → kart ekranı (ortak kart burada değişmez)
+  const weftForm = useWeftSpecRecordForm(calcCtx); // seçici: Yeni · Örnek al · Düzenle → kart ekranı (ortak kart burada değişmez)
   const savedCard = draft.mode === "card" && !!draft.cardId && draft.cardId === draft.savedCardId;
   // Yerinde düzenleme yalnız bu kumaşa ait kartta; paylaşılan/bilinmeyen kartta yalnız "kopya" seçildikten sonra.
   const editableCard = savedCard && canWrite && (draft.forking || cardEditableInPlace(draft));

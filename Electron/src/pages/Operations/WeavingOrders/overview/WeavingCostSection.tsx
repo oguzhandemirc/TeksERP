@@ -52,7 +52,9 @@ export function WeavingCostSection({ itemId }: { itemId: string }) {
             ))}
           </>
         )}
-        <Link className="text-xs underline" to={`/cost/items/${itemId}`}>Maliyet kartına git</Link>
+        <div className="order">
+          <Link className="text-xs underline" to={`/cost/items/${itemId}`} data-testid="wo-cost-link">Maliyet kartına git</Link>
+        </div>
       </div>
     </V3Section>
   );

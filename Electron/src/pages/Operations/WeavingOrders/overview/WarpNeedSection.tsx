@@ -42,7 +42,7 @@ export function WarpNeedSection({ weavingOrderId, isOpen, onNavigate }: Props) {
         )}
         <button
           type="button"
-          className="text-xs underline"
+          className="px-[18px] text-xs underline"
           onClick={(e) => {
             onNavigate();
             openTarget(needTabHref({ weavingOrderId }), e);

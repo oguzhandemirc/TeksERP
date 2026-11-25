@@ -9,6 +9,7 @@
 //   §5 kapılar: modül kapalı 403 MODULE_DISABLED · `quote:write` yok 403
 //   §6 ⭐ görünürlük: `cost:read` yok → maliyet alanları DÜŞER (sıfırlanmaz), iç not yalnız `quote:write`;
 //      rotaların her JSON yanıtı `quoteViewFor`dan geçer
+//   §7 SAF: COST_INPUT_MISSING `details.yarns` — fiyatsız iplikler tekil (fiyatlı iplik girmez)
 // Çalıştır: npx tsx scripts/test_teklif_uc.ts (yalnız test DB)
 // =============================================================================
 import { randomUUID } from "node:crypto";
@@ -22,6 +23,7 @@ import { sendQuote } from "../src/services/sales-quote-transitions.service";
 import { createStandardCostVersion } from "../src/services/standard-cost.service";
 import { suggestUnitPrice } from "../src/services/helpers/fabric-cost.helper";
 import { quoteViewFor } from "../src/services/helpers/quote-view.helper";
+import { missingPriceYarns } from "../src/services/helpers/quote-line-cost.helper";
 import { requireMaliyetEnabled } from "../src/middlewares/module.middleware";
 import { requirePermission } from "../src/middlewares/rbac.middleware";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
@@ -183,8 +185,20 @@ async function bolum6(quoteId: string): Promise<void> {
   }
 }
 
+/** §7 SAF — fiyatsız iplikler `details.yarns` için tekil toplanır (çözgü + atkı; fiyatlı iplik girmez). */
+function bolum7Saf(): void {
+  const y = (id: string | null, name: string, priced: boolean) => ({ yarnItemId: id, name, price: priced ? { amount: D(1), currency: "TRY", source: "KART" } : null });
+  const input = {
+    warp: { yarn: y("w1", "Çözgü PES", false), endsCount: 100 },
+    weft: { yarns: [{ ...y("a1", "Atkı A", true), picksInRepeat: 1 }, { ...y("w1", "Çözgü PES", false), picksInRepeat: 1 }, { ...y(null, "Elle iplik", false), picksInRepeat: 1 }] },
+  } as unknown as Parameters<typeof missingPriceYarns>[0];
+  const got = missingPriceYarns(input).map((r) => r.name);
+  check("§7 ⭐ eksik fiyatlı iplikler tekil listelenir (fiyatlı atkı hariç, elle iplik dahil)", JSON.stringify(got) === JSON.stringify(["Çözgü PES", "Elle iplik"]), JSON.stringify(got));
+}
+
 async function main(): Promise<void> {
   assertGelistirmeVeritabani("test_teklif_uc");
+  bolum7Saf();
   const m = await fiksturKur("TKU");
   const t = await teklifFiksturKur("TKU");
   const generalIds: string[] = [];

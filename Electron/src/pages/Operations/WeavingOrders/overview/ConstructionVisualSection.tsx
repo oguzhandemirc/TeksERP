@@ -19,7 +19,7 @@ import { stripYarnsOf } from "@/pages/WeaveDesigns/tabs/WarpLayersVisual";
 import { WARP_LAYER_ROLE_LABEL, type WarpRef } from "@/pages/WeaveDesigns/types";
 import { resolveWeaveClass, weaveClassLabel } from "@/pages/WeaveDesigns/weave-class";
 import { weavingOrderService } from "../service";
-import { miniLiftLayout, weaveDesignHref, type WeavingOrderConstruction } from "./construction-visual";
+import { miniLiftLayout, weaveDesignHref, weftLegendLabel, type WeavingOrderConstruction } from "./construction-visual";
 
 export const WEAVING_ORDER_CONSTRUCTION_QUERY_KEY = "weaving-order-construction";
 
@@ -164,7 +164,7 @@ function MiniLiftPlan({ c, onOpen, weftSlots }: { c: WeavingOrderConstruction; o
         { color: LIFT_COLOR, label: "Çerçeve kalkık" },
         ...(lenoSet.size > 0 ? [{ color: LENO_TINT, label: "Döner çerçeve" }] : []),
         ...(selvSet.size > 0 ? [{ color: SELVEDGE_TINT, label: "Kenar çerçevesi" }] : []),
-        ...yarns.map((y, i) => ({ color: weftColor(i + 1), mark: y.letter || yarnLetter(i), label: `${y.yarnItem.name} (atkı)` })),
+        ...yarns.map((y, i) => ({ color: weftColor(i + 1), mark: y.letter || yarnLetter(i), label: weftLegendLabel(y) })),
       ]} />
     </div>
   );

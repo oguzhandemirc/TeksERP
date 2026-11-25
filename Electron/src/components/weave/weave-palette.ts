@@ -22,5 +22,5 @@ export const WARP_COLOR = "hsl(var(--foreground) / 0.78)";
 export const LENO_TINT = "hsl(38 92% 50% / 0.2)";
 export const LENO_LABEL = "hsl(32 95% 44%)";
 /** Kenar (selvedge) çerçevesi — desen kartı armür ızgarasındaki yeşil "K" dili (emerald-100 zemin / emerald-600 başlık). */
-export const SELVEDGE_TINT = "hsl(152 76% 40% / 0.18)";
+export const SELVEDGE_TINT = "var(--weave-selvedge-tint, #d1fae5)";
 export const SELVEDGE_LABEL = "hsl(161 94% 30%)";

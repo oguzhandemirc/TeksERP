@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { miniLiftLayout, weaveDesignHref } from "./construction-visual";
+import { miniLiftLayout, weaveDesignHref, weftLegendLabel } from "./construction-visual";
+
+it("atkı lejantı kanalı 'Kanal N' diliyle yazar; kanalsız satırda eklemez", () => {
+  expect(weftLegendLabel({ yarnItem: { name: "PES 150" }, colorChannel: 3 })).toBe("PES 150 (atkı) · Kanal 3");
+  expect(weftLegendLabel({ yarnItem: { name: "PES 150" }, colorChannel: null })).toBe("PES 150 (atkı)");
+  expect(weftLegendLabel({ yarnItem: { name: "PES 150" } })).toBe("PES 150 (atkı)");
+});
 
 const plan = (picks: number, frames: number) => Array.from({ length: picks }, (_, r) => Array.from({ length: frames }, (_, c) => ((r + c) % 2)));
 
@@ -23,6 +29,10 @@ describe("miniLiftLayout", () => {
   it("armür yok/boş → null", () => {
     expect(miniLiftLayout(null, [], [1], 1)).toBeNull();
     expect(miniLiftLayout([], [], [1], 1)).toBeNull();
+  });
+
+  it("kısa armürde (4 atkı × 8 çerçeve + 2 seçici) kare 20 px'e büyür", () => {
+    expect(miniLiftLayout(plan(4, 8), [], [1, 2, 1, 2], 2)!.cell).toBe(20);
   });
 
   it("32 çerçevede kare 6 px tabanında kalır", () => {

@@ -205,6 +205,8 @@
     --station-process: 258 70% 56%;
     --station-tambur: 165 75% 32%;
     --station-depo: 40 92% 44%;
+    /* Armür kenar çerçevesi zemini — LiftPlanGrid'in emerald-100 / emerald-950 tonuyla aynı (mini ızgara satır içi stil). */
+    --weave-selvedge-tint: #d1fae5;
 
     /* Grafik paleti */
     --chart-1: 250 72% 58%;
@@ -294,6 +296,7 @@
     --station-process: 258 80% 72%;
     --station-tambur: 165 65% 48%;
     --station-depo: 43 92% 56%;
+    --weave-selvedge-tint: #022c22;
 
     --chart-1: 252 85% 72%;
     --chart-2: 192 80% 58%;

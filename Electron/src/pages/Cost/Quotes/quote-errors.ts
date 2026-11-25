@@ -6,7 +6,17 @@ import { apiErrorCode } from "../shared/errors";
 import { QUOTE_STATUS_LABEL } from "./labels";
 import type { QuoteStatus } from "./quote-types";
 
-type Details = { status?: unknown; lines?: unknown; required?: unknown; missing?: unknown };
+type Details = { status?: unknown; lines?: unknown; required?: unknown; missing?: unknown; yarns?: unknown };
+
+/** COST_INPUT_MISSING `details.yarns` (sunucu ek alanı; eski sunucu göndermez) → "KOD · Ad" listesi. */
+function missingYarnNames(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return v.flatMap((y: { code?: unknown; name?: unknown }) => {
+    const name = typeof y?.name === "string" ? y.name : null;
+    const code = typeof y?.code === "string" && y.code ? y.code : null;
+    return name ? [code && code !== name ? `${code} · ${name}` : name] : code ? [code] : [];
+  });
+}
 function details(error: unknown): Details {
   return (axios.isAxiosError(error) ? (error.response?.data as { details?: Details } | undefined)?.details : undefined) ?? {};
 }
@@ -38,10 +48,13 @@ export function quoteErrorMessage(error: unknown): string {
       return Array.isArray(d.required) && d.required.includes("order:write")
         ? "Sipariş oluşturma yetkiniz yok — teklifi siparişe dönüştürmek için sipariş yazma izni de gerekir."
         : apiErrorMessage(error);
-    case "COST_INPUT_MISSING":
-      return Array.isArray(d.missing) && d.missing.includes("FX_RATE_MISSING")
-        ? "Bu döviz için kur bulunamadı — kuru elle girin."
+    case "COST_INPUT_MISSING": {
+      if (Array.isArray(d.missing) && d.missing.includes("FX_RATE_MISSING")) return "Bu döviz için kur bulunamadı — kuru elle girin.";
+      const yarns = missingYarnNames(d.yarns);
+      return yarns.length > 0
+        ? `İplik maliyet fiyatı eksik — kalem fiyatlanamadı. Fiyat girilecek iplikler: ${yarns.join(", ")} (Maliyet → İplik Maliyet Fiyatları).`
         : "Maliyet girdisi eksik — kalem fiyatlanamadı (ürünün yapısını ya da iplik fiyatlarını tamamlayın).";
+    }
     default:
       return apiErrorMessage(error);
   }

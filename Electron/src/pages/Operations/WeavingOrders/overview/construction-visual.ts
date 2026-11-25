@@ -30,6 +30,8 @@ export interface MiniLiftLayout {
 
 /** Mini ızgaranın hedef yüksekliği (px); aşan armür kutuda dikey kayar. */
 const MINI_MAX_HEIGHT = 360;
+/** Kısa armürde (ör. 4 atkı × 8 çerçeve) kare tavanı; 12 px'te ızgara çekmecede pul gibi kalıyordu. */
+const MINI_MAX_CELL = 20;
 
 /** Mini armür + seçici düzeni; çizilecek armür yoksa null. */
 export function miniLiftLayout(
@@ -47,11 +49,16 @@ export function miniLiftLayout(
   for (let c = 1; c < frames; c++) if (leno.has(c) !== leno.has(c + 1)) gaps.push(c);
   if (selCols > 0) gaps.push(frames);
   const cols = frames + selCols;
-  // Blok aralığı ~ bir kare; 6–12 px arası en iri kare. Uzun armürde (yüzlerce atkı) kutu kayar, kare küçülür.
+  // Blok aralığı ~ bir kare; 6–20 px arası en iri kare (kısa armür okunur kalsın). Uzun armürde kutu kayar, kare küçülür.
   const byWidth = Math.floor(maxWidth / (cols + gaps.length + 3));
   const byHeight = Math.floor(MINI_MAX_HEIGHT / rows);
-  const cell = Math.max(6, Math.min(12, byWidth, byHeight));
+  const cell = Math.max(6, Math.min(MINI_MAX_CELL, byWidth, byHeight));
   return { rows, frames, selCols, cols, gaps, cell };
+}
+
+/** Lejantta atkı ipliği satırı — basılı desen kartı ve tabletle aynı dil: "<iplik> (atkı) · Kanal N". */
+export function weftLegendLabel(y: { yarnItem: { name: string }; colorChannel?: number | null }): string {
+  return `${y.yarnItem.name} (atkı)${y.colorChannel != null ? ` · Kanal ${y.colorChannel}` : ""}`;
 }
 
 /** Desen kartı detayına bağlantı: Armür sekmesi, iş emrinin ürünü seçili. */

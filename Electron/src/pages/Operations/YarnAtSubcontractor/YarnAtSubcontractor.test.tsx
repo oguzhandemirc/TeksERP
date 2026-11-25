@@ -167,6 +167,8 @@ describe("iplik kartı — Nerede?", () => {
     expect(screen.getByText(/devreden var/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Fasondaki İplik ekranında aç/ }).getAttribute("href")).toContain("filter[yarnItemId]=y1");
     expect(list).toHaveBeenCalledWith({ yarnItemId: "y1" });
+    // Formun "Stok" (asgari stok) bölümüyle aynı başlık alt alta çıkmasın.
+    expect(screen.getByRole("region", { name: "Eldeki stok" })).toBeInTheDocument();
   });
   it("③ kumaş kartında, devere+iplik kapalıyken ya da izinsiz hiç çizilmez", async () => {
     const { container, unmount } = renderWithProviders(<YarnWhereSection itemId="f1" itemType="FABRIC" />);

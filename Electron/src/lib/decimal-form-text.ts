@@ -7,6 +7,12 @@ export function decimalToFormText(value: string | number | null | undefined): st
   return typeof value === "number" ? (Number.isFinite(value) ? String(value) : "") : value;
 }
 
+/** Aynı dönüşüm, Türkçe ondalıkla ("2.5" → "2,5"): girdi özet şeridiyle aynı yazımı göstersin. Kaydeden
+ *  taraf virgülü noktaya çevirmeli (ör. `v.replace(",", ".")`). */
+export function decimalToTrFormText(value: string | number | null | undefined): string {
+  return decimalToFormText(value).replace(".", ",");
+}
+
 /** Şema girişinde aynı dönüşüm: sayı gelirse metne çevrilir, sonra asıl metin şeması uygulanır. */
 export function acceptNumberAsText<T extends z.ZodType>(schema: T) {
   return z.preprocess((v) => (typeof v === "number" ? decimalToFormText(v) : v), schema);

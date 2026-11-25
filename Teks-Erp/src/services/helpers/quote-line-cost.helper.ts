@@ -12,6 +12,7 @@ import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { assembleCostInputTx, type CostSourceRef } from "./cost-assembler.helper";
 import { computeFabricCost, roundCost4, type CostInput } from "./fabric-cost.helper";
+import { costWarpYarns } from "./fabric-cost-types.helper";
 import { costInputSnapshotSchema, fxRatesSnapshotSchema, parseCostInputSnapshot, serializeCostInput } from "./cost-snapshot.helper";
 import { resolveFx } from "../cost-calc.service";
 
@@ -38,14 +39,35 @@ export interface QuoteLineCost {
   warnings: string[];
 }
 
-const missingError = (missing: string[]) =>
-  AppError.badRequest("Maliyet girdisi eksik; teklif kalemi fiyatlanamaz.", { code: "COST_INPUT_MISSING", missing });
+export type MissingPriceYarn = { id: string | null; code: string | null; name: string };
+
+/** Fiyatı olmayan çözgü/atkı iplikleri (tekil) — "hangi iplik?" sorusunu panel listeleyebilsin. SAF. */
+export function missingPriceYarns(input: CostInput): Array<{ id: string | null; name: string }> {
+  const all = [
+    ...[...(input.warp ? [input.warp] : []), ...(input.warpLayers ?? [])].flatMap((w) => costWarpYarns(w)),
+    ...(input.weft?.yarns ?? []),
+  ];
+  const seen = new Map<string, { id: string | null; name: string }>();
+  for (const y of all) if (y.price === null) seen.set(y.yarnItemId ?? `elle:${y.name}`, { id: y.yarnItemId, name: y.name });
+  return [...seen.values()];
+}
+
+/** 400 COST_INPUT_MISSING; iplik fiyatı eksikse `details.yarns` eksik iplikleri taşır (ek alan — eski istemci okumaz). */
+async function missingError(missing: string[], input: CostInput): Promise<AppError> {
+  const yarns = missing.includes("YARN_PRICE_MISSING") ? missingPriceYarns(input) : [];
+  const ids = yarns.flatMap((y) => (y.id ? [y.id] : []));
+  const codes = ids.length ? new Map((await prisma.item.findMany({ where: { id: { in: ids } }, select: { id: true, code: true } })).map((r) => [r.id, r.code])) : new Map<string, string>();
+  const detailYarns: MissingPriceYarn[] = yarns.map((y) => ({ ...y, code: (y.id && codes.get(y.id)) || null }));
+  return AppError.badRequest("Maliyet girdisi eksik; teklif kalemi fiyatlanamaz.", {
+    code: "COST_INPUT_MISSING", missing, ...(detailYarns.length ? { yarns: detailYarns } : {}),
+  });
+}
 
 /** Canlı hesap (motor): girdi + kur fotoğrafı; eksik → 400. */
 async function liveCost(input: CostInput, kaynak: "CANLI" | "ELLE_YAPI", extraWarnings: string[]): Promise<QuoteLineCost> {
   const fx = await resolveFx(input, {});
   const out = computeFabricCost(input, fx.rates);
-  if (!out.result) throw missingError(out.missing);
+  if (!out.result) throw await missingError(out.missing, input);
   const warnings = [...extraWarnings, ...out.warnings];
   const costPerMTry = roundCost4(out.result.totalCostPerMTry);
   return {

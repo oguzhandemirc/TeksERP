@@ -52,4 +52,11 @@ describe("hata kodu → Türkçe", () => {
     expect(missingItemLines(axiosErr(400, { code: "QUOTE_LINE_ITEM_MISSING", lines: [{ lineNo: 2, description: "Sahra" }] }))).toEqual([{ lineNo: 2, description: "Sahra" }]);
     expect(missingItemLines(axiosErr(400, { code: "OTHER" }))).toBeNull();
   });
+  it("⭐ COST_INPUT_MISSING details.yarns → hangi ipliğe fiyat girileceğini adıyla söyler; eski sunucu → genel cümle", () => {
+    const yarns = [{ id: "a", code: "TEST-IPLIK-A", name: "TEST PES 150" }, { id: null, code: null, name: "Elle iplik" }];
+    const msg = quoteErrorMessage(axiosErr(400, { code: "COST_INPUT_MISSING", missing: ["YARN_PRICE_MISSING"], yarns }));
+    expect(msg).toContain("TEST-IPLIK-A · TEST PES 150, Elle iplik");
+    expect(quoteErrorMessage(axiosErr(400, { code: "COST_INPUT_MISSING", missing: ["YARN_PRICE_MISSING"] }))).toContain("iplik fiyatlarını tamamlayın");
+    expect(quoteErrorMessage(axiosErr(400, { code: "COST_INPUT_MISSING", missing: ["FX_RATE_MISSING"], yarns }))).toContain("kur bulunamadı");
+  });
 });

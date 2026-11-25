@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { acceptNumberAsText, decimalToFormText } from "./decimal-form-text";
+import { acceptNumberAsText, decimalToFormText, decimalToTrFormText } from "./decimal-form-text";
 import { makeItemFormSchema } from "@/pages/Items/schema";
 
 describe("decimalToFormText", () => {
@@ -9,6 +9,12 @@ describe("decimalToFormText", () => {
   });
   it("sonlu olmayan sayı boş döner", () => {
     expect(decimalToFormText(Number.NaN)).toBe("");
+  });
+});
+
+describe("decimalToTrFormText", () => {
+  it("⭐ girdide Türkçe ondalık: 2.5 / \"2.5\" → \"2,5\"; tam sayı ve boş aynen", () => {
+    expect([decimalToTrFormText(2.5), decimalToTrFormText("2.5"), decimalToTrFormText(8), decimalToTrFormText(null)]).toEqual(["2,5", "2,5", "8", ""]);
   });
 });
 

@@ -18,7 +18,7 @@ import { LOOM_FILE_NAME_WARNING, loomFileNameTooLong } from "../loom-file-name";
 import type { DrawingInType } from "@/components/weave/weave-drawing-in";
 import { DesignImageSection } from "./DesignImageSection";
 import { WarpLayersSection } from "./WarpLayersSection";
-import { decimalToFormText } from "@/lib/decimal-form-text";
+import { decimalToTrFormText } from "@/lib/decimal-form-text";
 
 type TextKey = "code" | "name" | "familyLabel" | "frameCount" | "repeatCm" | "repeatWidthCm" | "hookCount" | "loomFileName" | "lenoSetup" | "drawingInNote" | "notes";
 type Form = Record<TextKey, string> & WeaveClass & { drawingInType: DrawingInType | null };
@@ -50,7 +50,7 @@ const FIELDS: FieldDef[] = [
 function toForm(d: WeaveDesign): Form {
   return {
     code: d.code, name: d.name, ...resolveWeaveClass(d), familyLabel: d.familyLabel ?? "", frameCount: d.frameCount?.toString() ?? "",
-    repeatCm: decimalToFormText(d.repeatCm), repeatWidthCm: decimalToFormText(d.repeatWidthCm ?? null), hookCount: d.hookCount?.toString() ?? "",
+    repeatCm: decimalToTrFormText(d.repeatCm), repeatWidthCm: decimalToTrFormText(d.repeatWidthCm ?? null), hookCount: d.hookCount?.toString() ?? "",
     loomFileName: d.loomFileName ?? "", lenoSetup: d.lenoSetup ?? "", drawingInNote: d.drawingInNote ?? "", notes: d.notes ?? "",
     drawingInType: d.drawingInType ?? null,
   };
