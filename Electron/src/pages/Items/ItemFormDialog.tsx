@@ -30,6 +30,7 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initial?: Item | null;
+  draft?: Item | null; // Örnek al taslağı (kimliksiz, kod boş) — YENİ kayıt
   onSubmit: (payload: ItemCreatePayload) => void | Promise<void>;
   isSubmitting?: boolean;
 }
@@ -58,7 +59,7 @@ function toFormValues(initial: Item): ItemFormValues {
 }
 
 /** Ürün penceresi: Genel · Çözgü · Atkı · Desen (B19 tek pencere; veri yapısı aynı, birleşme yalnız ekranda). */
-export function ItemFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting }: Props) {
+export function ItemFormDialog({ open, onOpenChange, initial, draft, onSubmit, isSubmitting }: Props) {
   const isEdit = Boolean(initial);
   const formId = useId();
   const [colorsOpen, setColorsOpen] = useState(false);
@@ -66,7 +67,7 @@ export function ItemFormDialog({ open, onOpenChange, initial, onSubmit, isSubmit
   /** Stok kodunu elle yazma modu — varsayılan KAPALI, kutu hiç çizilmez. */
   const [manualCode, setManualCode] = useState(false);
   const [tab, setTab] = useState("info");
-  const defaults = useMemo(() => (initial ? toFormValues(initial) : itemFormDefaults), [initial]);
+  const defaults = useMemo(() => (initial ? toFormValues(initial) : draft ? { ...toFormValues(draft), code: "" } : itemFormDefaults), [initial, draft]);
   const schema = useMemo(() => makeItemFormSchema(isEdit), [isEdit]);
   const form = useForm<ItemFormValues>({ resolver: zodResolver(schema) as Resolver<ItemFormValues>, defaultValues: defaults });
 
@@ -77,7 +78,7 @@ export function ItemFormDialog({ open, onOpenChange, initial, onSubmit, isSubmit
       setTab("info");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, initial?.id]);
+  }, [open, initial?.id, draft]);
 
   const itemType = form.watch("itemType");
   const { hasPermission } = useRoleAccess();
@@ -88,11 +89,9 @@ export function ItemFormDialog({ open, onOpenChange, initial, onSubmit, isSubmit
   const warpVisible = itemType === ItemType.FABRIC && devereEnabled;
   const canWriteSpecs = hasPermission("warpspec:write");
   const derivedUnit = unitForItemType[itemType] ?? "MT";
-  const weft = useItemWeftDraft(open, initial?.weftSpecId ?? null);
+  const weft = useItemWeftDraft(open, initial?.weftSpecId ?? draft?.weftSpecId ?? null);
 
-  useEffect(() => {
-    form.setValue("unit", derivedUnit, { shouldDirty: true });
-  }, [derivedUnit, form]);
+  useEffect(() => { form.setValue("unit", derivedUnit, { shouldDirty: true }); }, [derivedUnit, form]);
 
   // İzinli renk/özellik YALNIZ kumaşta: tür iplik/sarfa çevrilince (create) değerler boşalır;
   // düzenlemede tür kilitli, eski iplik kartında kalmış liste NOTLA gösterilir, kaydedince payload `[]` ile kaldırır.
@@ -112,10 +111,8 @@ export function ItemFormDialog({ open, onOpenChange, initial, onSubmit, isSubmit
 
   const extraTabs: ItemExtraTab[] = [];
   if (warpVisible) extraTabs.push({ value: "warp", label: "Çözgü", content: <ItemWarpSection form={form} canWrite={canWriteSpecs} itemId={initial?.id ?? null} /> });
-  if (constructionVisible) {
-    extraTabs.push({ value: "weft", label: "Atkı", content: <ItemWeftSection draft={weft} canWrite={canWriteSpecs} /> });
-    extraTabs.push({ value: "weave", label: "Desen", content: <ItemWeaveSection form={form} canWrite={canWriteSpecs} /> });
-  }
+  if (constructionVisible) extraTabs.push({ value: "weft", label: "Atkı", content: <ItemWeftSection draft={weft} canWrite={canWriteSpecs} /> },
+    { value: "weave", label: "Desen", content: <ItemWeaveSection form={form} canWrite={canWriteSpecs} /> });
   const busy = isSubmitting || saving;
 
   return (
@@ -124,7 +121,7 @@ export function ItemFormDialog({ open, onOpenChange, initial, onSubmit, isSubmit
       <TabbedDialogContent className="w-[calc(100%-2rem)] max-w-6xl" data-form-size="wide">
         <TabbedDialogHeader>
           <div className="flex items-center gap-1.5">
-            <DialogTitle>{isEdit ? "Ürünü Düzenle" : "Yeni Ürün"}</DialogTitle>
+            <DialogTitle>{isEdit ? "Ürünü Düzenle" : draft ? "Yeni Ürün (örnekten)" : "Yeni Ürün"}</DialogTitle>
             {/* ⓘ — kim oluşturdu / en son kim değiştirdi; kaynak kaydın KENDİ künye kolonları (audit arşivlenir). */}
             {isEdit && initial && <RecordInfoButton table="ITEM" id={initial.id} createdAt={initial.createdAt} updatedAt={initial.updatedAt} />}
             {/* B11: stok kodu başlıkta rozet; maliyet bağlantısı aynı satırın sağında. */}

@@ -26,6 +26,7 @@ import { useAttemptToken } from "@/lib/attemptToken";
 import { weavingOrderService } from "@/pages/Operations/WeavingOrders/service";
 import { orderPrefillForBeam } from "@/pages/Operations/WeavingOrders/prefill";
 import { TERIM } from "@/lib/terim";
+import { useCustomerRecordForm } from "@/pages/Customers/useCustomerRecordForm";
 
 type Form = UseFormReturn<WarpBeamPlanValues>;
 
@@ -45,6 +46,7 @@ function buildDefaults(initial?: WarpBeam | null): WarpBeamPlanValues {
 }
 
 function OriginFields({ form, editing }: { form: Form; editing: boolean }) {
+  const customerForm = useCustomerRecordForm();
   const err = form.formState.errors;
   const origin = form.watch("originKind");
   // G3 emanet: CONSIGNED yalnız modül açıkken seçilebilir (kapalıda seçenek hiç çizilmez — bayt bayt eski form).
@@ -78,7 +80,7 @@ function OriginFields({ form, editing }: { form: Form; editing: boolean }) {
             control={form.control}
             name="ownerCustomerId"
             render={({ field }) => (
-              <EntityPickerModal<Customer> value={field.value || null} onChange={(id) => field.onChange(id ?? "")} service={customerService} queryKey="customers-warp-beam-owner" getLabel={(c) => c.name} icon={Building2} title="Sahip müşteri seç" placeholder="Sahip müşteri seç" nullable disabled={editing} />
+              <EntityPickerModal<Customer> value={field.value || null} onChange={(id) => field.onChange(id ?? "")} service={customerService} recordForm={customerForm} queryKey="customers-warp-beam-owner" getLabel={(c) => c.name} icon={Building2} title="Sahip müşteri seç" placeholder="Sahip müşteri seç" nullable disabled={editing} />
             )}
           />
         </FormField>
@@ -100,7 +102,7 @@ function OriginFields({ form, editing }: { form: Form; editing: boolean }) {
             control={form.control}
             name="supplierId"
             render={({ field }) => (
-              <EntityPickerModal<Customer> value={field.value || null} onChange={(id) => field.onChange(id ?? "")} service={customerService} queryKey="customers-warp-beam-supplier" getLabel={(c) => c.name} icon={Building2} title="Tedarikçi seç" placeholder="Tedarikçi seç" nullable />
+              <EntityPickerModal<Customer> value={field.value || null} onChange={(id) => field.onChange(id ?? "")} service={customerService} recordForm={customerForm} queryKey="customers-warp-beam-supplier" getLabel={(c) => c.name} icon={Building2} title="Tedarikçi seç" placeholder="Tedarikçi seç" nullable />
             )}
           />
         </FormField>

@@ -31,8 +31,12 @@ import {
   type ItemPickerFilterState,
   type ItemPickerRow,
   type ItemTypeFilter, ITEM_CATALOG_HINT,
+  itemPickerRow,
 } from "./itemPicker";
 import { useItemPickerCatalogs, useItemPickerData, type CatalogOption } from "./useItemPickerData";
+import { useItemRecordForm } from "@/pages/Items/useItemRecordForm";
+import { useRecordForm, type RecordFormHandle } from "./record-form/useRecordForm";
+import { PickerNewButton, PickerRowActions } from "./record-form/PickerRecordActions";
 
 const HEADERS = ["Kod", "Ad", "Tür", "Birim", "Renkler", "Özellikler"] as const;
 
@@ -68,7 +72,7 @@ function ColorCells({ r }: { r: ItemPickerRow }) {
   );
 }
 
-function PickerRow({ r, onPick }: { r: ItemPickerRow; onPick: (row: ItemPickerRow) => void }) {
+function PickerRow({ r, onPick, record }: { r: ItemPickerRow; onPick: (row: ItemPickerRow) => void; record: RecordFormHandle<ItemPickerRow> }) {
   return (
     <TableRow className={cn("cursor-pointer", !r.isActive && "opacity-60")} onClick={() => onPick(r)}>
       <TableCell className="py-1.5 font-mono text-xs">{r.code}</TableCell>
@@ -90,6 +94,12 @@ function PickerRow({ r, onPick }: { r: ItemPickerRow; onPick: (row: ItemPickerRo
       <TableCell className="py-1.5 text-xs">
         {r.itemType !== "FABRIC" ? null : r.properties.length === 0 ? <span className="text-muted-foreground">—</span> : r.properties.join(", ") + (r.propertyMore > 0 ? ` +${r.propertyMore}` : "")}
       </TableCell>
+      {record.canWrite && (
+        // Satır tıklaması seçer; eylem hücresi tıklamayı satıra taşırmaz. Satır hafif özet → loadFull tam kartı çeker.
+        <TableCell className="w-0 py-1" onClick={(e) => e.stopPropagation()}>
+          <PickerRowActions handle={record} item={r} label={r.name} />
+        </TableCell>
+      )}
     </TableRow>
   );
 }
@@ -149,6 +159,7 @@ export function ItemPickerModal({ open, onOpenChange, onPick, allowedTypes, life
     onPick(row);
     onOpenChange(false);
   };
+  const record = useRecordForm(useItemRecordForm<ItemPickerRow>(), (saved) => pick(itemPickerRow(saved)));
   const emptyText = search || hasItemPickerFilter(filter) ? ITEM_PICKER_FILTERED_EMPTY : ITEM_PICKER_EMPTY;
 
   return (
@@ -163,6 +174,7 @@ export function ItemPickerModal({ open, onOpenChange, onPick, allowedTypes, life
             <Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input aria-label="Ürün ara" placeholder="Kod, ad…" className="pl-8" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} autoFocus />
           </div>
+          <PickerNewButton handle={record} entityName="Ürün" />
           {!locked && (
             <Select value={filter.type} onValueChange={(v) => setFilter((f) => withItemType(f, v as ItemTypeFilter, allowedTypes))}>
               <SelectTrigger aria-label="Tür" className="w-44">
@@ -191,11 +203,12 @@ export function ItemPickerModal({ open, onOpenChange, onPick, allowedTypes, life
                 {HEADERS.map((h) => (
                   <TableHead key={h}>{h}</TableHead>
                 ))}
+                {record.canWrite && <TableHead><span className="sr-only">Eylemler</span></TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {data.rows.map((r) => (
-                <PickerRow key={r.id} r={r} onPick={pick} />
+                <PickerRow key={r.id} r={r} onPick={pick} record={record} />
               ))}
               {!data.isLoading && data.rows.length === 0 && (
                 <TableRow className="hover:bg-transparent">
@@ -208,6 +221,7 @@ export function ItemPickerModal({ open, onOpenChange, onPick, allowedTypes, life
           </Table>
           <div ref={sentinelRef} aria-hidden className="h-px w-full" />
         </div>
+        {record.element}
         <StatusLine count={data.rows.length} hasMore={data.hasMore} isFetchingNext={data.isFetchingNext || data.isLoading} isError={data.isError} />
       </DialogContent>
     </Dialog>

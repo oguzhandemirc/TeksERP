@@ -17,6 +17,7 @@ import type { Item } from "@/pages/Items/types";
 import { WEAVING_KIND_LABEL } from "../types";
 import { templateFormSchema, templateToFormValues, type TemplateFormValues } from "./preset";
 import type { WeavingOrderTemplate } from "./types";
+import { useItemRecordForm } from "@/pages/Items/useItemRecordForm";
 
 type Form = UseFormReturn<TemplateFormValues>;
 /** Radix Select boş değer taşımaz — "formda seçilir" seçeneğinin iç adı. */
@@ -76,6 +77,7 @@ function NameFields({ form }: { form: Form }) {
 }
 
 function FabricField({ form }: { form: Form }) {
+  const itemForm = useItemRecordForm();
   return (
     <FormField label="Kumaş" error={form.formState.errors.itemId} info="Boş = formda seçilir.">
       <Controller
@@ -85,7 +87,7 @@ function FabricField({ form }: { form: Form }) {
           <EntityPickerModal<Item>
             value={field.value || null}
             onChange={(id) => field.onChange(id ?? "")}
-            service={itemService}
+            service={itemService} recordForm={itemForm}
             queryKey="items-weaving-template"
             filters={{ itemType: "FABRIC" }}
             getLabel={(i) => i.name}

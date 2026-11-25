@@ -20,6 +20,9 @@ import { PICKER_ROLE_DEFAULTS, STATUS_DEFAULT, type PickerList, type PickerMode,
 import { isRoleFilterDirty } from "@/lib/partnerRoles";
 import { useSupplierPickerData } from "./useSupplierPickerData";
 import { SupplierPickerToolbar } from "./SupplierPickerToolbar";
+import { useCustomerRecordForm } from "@/pages/Customers/useCustomerRecordForm";
+import { useRecordForm, type RecordFormHandle } from "./record-form/useRecordForm";
+import { PickerRowActions } from "./record-form/PickerRecordActions";
 import { ConvertBackLink, ConvertCustomerConfirm, ConvertCustomerLink, useCanConvertCustomer } from "./SupplierConvertCustomer";
 
 export const SUPPLIER_PICKER_EMPTY = "Tedarikçi kartı yok — Tanımlar → İş Ortakları → Cariler'den ya da buradaki Yeni cari düğmesiyle açın.";
@@ -61,7 +64,7 @@ function roleBadgeVariant(r: SupplierPickerRow): "secondary" | "muted" | "defaul
   return r.roleLabel.includes("Tedarikçi") ? "default" : "muted";
 }
 
-function PickerRow({ r, list, onPick }: { r: SupplierPickerRow; list: PickerList; onPick: (r: SupplierPickerRow) => void }) {
+function PickerRow({ r, list, onPick, record }: { r: SupplierPickerRow; list: PickerList; onPick: (r: SupplierPickerRow) => void; record?: RecordFormHandle<SupplierPickerRow> }) {
   return (
     <TableRow className={cn("cursor-pointer", !r.isActive && "opacity-60")} onClick={() => onPick(r)}>
       <TableCell className="py-1.5 font-mono text-xs">{r.code ?? "—"}</TableCell>
@@ -78,6 +81,12 @@ function PickerRow({ r, list, onPick }: { r: SupplierPickerRow; list: PickerList
       )}
       <TableCell className="py-1.5 text-xs">{r.taxNumber ?? <span className="text-muted-foreground">—</span>}</TableCell>
       <TableCell className="py-1.5 text-xs">{r.phone ?? <span className="text-muted-foreground">—</span>}</TableCell>
+      {record && (
+        // Yalnız cari kart satırı (fason firması ayrı tanım); satır hafif özet → örnek alırken tam kart çekilir.
+        <TableCell className="w-0 py-1" onClick={(e) => e.stopPropagation()}>
+          {r.kind === "CUSTOMER" && <PickerRowActions handle={record} item={r} label={r.name} />}
+        </TableCell>
+      )}
     </TableRow>
   );
 }
@@ -121,6 +130,11 @@ export function SupplierPickerModal({ open, onOpenChange, onPick, includeInactiv
     onPick(p);
     setOpen(false);
   };
+  const record = useRecordForm(
+    useCustomerRecordForm<SupplierPickerRow>(mode === "customer" ? "isCustomerRole" : mode === "supplier" ? "isSupplierRole" : undefined),
+    (saved) => pick({ kind: "CUSTOMER", id: saved.id }),
+  );
+  const rowRecord = record.canWrite && !converting ? record : undefined;
   const onRow = (r: SupplierPickerRow) => (converting ? setConvertRow(r) : pick({ kind: r.kind, id: r.id }));
   const emptyText = search || ((isRoleFilterDirty(filters) || (mode === "cari" && status !== STATUS_DEFAULT)) && !converting) ? SUPPLIER_PICKER_FILTERED_EMPTY : EMPTY[list];
 
@@ -143,11 +157,12 @@ export function SupplierPickerModal({ open, onOpenChange, onPick, includeInactiv
                 {headers.map((h) => (
                   <TableHead key={h}>{h}</TableHead>
                 ))}
+                {rowRecord && <TableHead><span className="sr-only">Eylemler</span></TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {data.rows.map((r) => (
-                <PickerRow key={r.key} r={r} list={list} onPick={onRow} />
+                <PickerRow key={r.key} r={r} list={list} onPick={onRow} record={rowRecord} />
               ))}
               {!data.isLoading && data.rows.length === 0 && (
                 <TableRow className="hover:bg-transparent">
@@ -161,6 +176,7 @@ export function SupplierPickerModal({ open, onOpenChange, onPick, includeInactiv
           <div ref={sentinelRef} aria-hidden className="h-px w-full" />
         </div>
         <StatusLine count={data.rows.length} hasMore={data.hasMore} isFetchingNext={data.isFetchingNext || data.isLoading} />
+        {record.element}
         {canConvert && <ConvertCustomerConfirm row={convertRow} onCancel={() => setConvertRow(null)} onConverted={pick} />}
       </DialogContent>
     </Dialog>

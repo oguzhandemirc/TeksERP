@@ -27,6 +27,8 @@ import type { WeavingOrderFormValues } from "./schema";
 import { WEAVING_KIND_LABEL } from "./types";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
 import { PlannedMHint, type PlannedMSuggestion } from "./BeamPrefillField";
+import { useItemRecordForm } from "@/pages/Items/useItemRecordForm";
+import { useColorRecordForm } from "@/pages/Colors/useColorRecordForm";
 
 type Form = UseFormReturn<WeavingOrderFormValues>;
 
@@ -44,6 +46,8 @@ function useItemWarpSpecPrefill(form: Form, enabled: boolean): void {
 }
 
 export function FabricFields({ form, devereEnabled }: { form: Form; devereEnabled: boolean }) {
+  const colorForm = useColorRecordForm();
+  const itemForm = useItemRecordForm();
   useItemWarpSpecPrefill(form, devereEnabled);
   // Yeni dokuma işi = yeni üretim planı (A3): Tükenene kadar kart ayara bağlı listelenir.
   const flags = useFeatureFlags().data?.data;
@@ -58,7 +62,7 @@ export function FabricFields({ form, devereEnabled }: { form: Form; devereEnable
             <EntityPickerModal<Item>
               value={field.value || null}
               onChange={(id) => field.onChange(id ?? "")}
-              service={itemService}
+              service={itemService} recordForm={itemForm}
               queryKey="items-weaving-fabric"
               filters={{ itemType: "FABRIC", lifecycleStatus: pickableLifecycle("plan", flags) }}
               getLabel={(i) => i.name}
@@ -78,7 +82,7 @@ export function FabricFields({ form, devereEnabled }: { form: Form; devereEnable
             <EntityPickerModal<Color>
               value={field.value || null}
               onChange={(id) => field.onChange(id ?? "")}
-              service={colorService}
+              service={colorService} recordForm={colorForm}
               queryKey="colors-weaving"
               getLabel={(c) => c.name}
               getSubLabel={(c) => c.code}

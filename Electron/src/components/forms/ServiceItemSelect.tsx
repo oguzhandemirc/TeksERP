@@ -9,6 +9,7 @@ import { Wrench } from "lucide-react";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { serviceItemService } from "@/pages/Definitions/Services/service";
 import type { ServiceItem } from "@/pages/Definitions/Services/types";
+import { useServiceRecordForm } from "@/pages/Definitions/Services/useServiceRecordForm";
 
 interface Props {
   value: string | null;
@@ -26,6 +27,7 @@ interface Props {
 export const SERVICE_ITEM_PICKER_QUERY_KEY = "service-items";
 
 export function ServiceItemSelect({ value, onChange, filters, placeholder = "Hizmet kartı seç…", nullable, noneLabel, disabled, triggerClassName }: Props) {
+  const recordForm = useServiceRecordForm();
   return (
     <EntityPickerModal<ServiceItem>
       value={value}
@@ -46,6 +48,7 @@ export function ServiceItemSelect({ value, onChange, filters, placeholder = "Hiz
       disabled={disabled}
       triggerClassName={triggerClassName}
       countLabel="hizmet kartı"
+      recordForm={recordForm}
     />
   );
 }
