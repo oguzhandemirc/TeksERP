@@ -58,7 +58,7 @@ const body = <T extends z.ZodType>(s: T, req: Request) => s.parse(req.body ?? {}
  * /api/four-point-rules:
  *   get:
  *     tags: [FourPointRules]
- *     summary: "Kural setleri (varsayılan yalnız aktif; ?includeInactive=1)"
+ *     summary: "Kural setleri (varsayılan yalnız aktif; ?includeInactive=1 · ?itemId= ürüne bağlı setler)"
  *     security: [{ bearerAuth: [] }]
  *   post:
  *     tags: [FourPointRules]

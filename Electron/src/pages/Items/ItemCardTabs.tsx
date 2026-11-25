@@ -12,6 +12,7 @@ import type { Item } from "./types";
 import { ItemCustomerColorAliasesPanel } from "./ItemCustomerColorAliasesPanel";
 import { ItemCustomerItemAliasesPanel } from "./ItemCustomerItemAliasesPanel";
 import { YarnWhereSection } from "@/pages/Operations/YarnAtSubcontractor/YarnWhereSection";
+import { ItemCommercialSection, useItemCommercialSections } from "./commercial/ItemCommercialSection";
 
 export interface ItemExtraTab { value: string; label: string; content: ReactNode }
 /** Anında kaydeden (formdan bağımsız) sekmeler — alt çubuk notu bunlarda. */
@@ -38,8 +39,10 @@ export function ItemCardTabs({ item, children, footer = () => null, extraTabs = 
   // İplik kartında stok durumu (depo / fasonda, devere D6c) formun ALTINDA (K5). Maliyet kartı bağlantısı başlık satırında (B11).
   const stock = item?.itemType === "YARN" ? <YarnWhereSection itemId={item.id} itemType={item.itemType} /> : null;
   const aliasTabs = !!item && item.itemType === "FABRIC" && hasPermission("customer-alias:read");
+  // D4: "Ticari" (salt okunur fiyat · tedarikçi kodu · kalite bağlantısı) yalnız kayıtlı kartta ve erişim varken.
+  const commercial = useItemCommercialSections(item);
   // Sabit çerçeveli modalın gövdesi (tabbed-dialog): sekmesizde tek kaydırıcı, sekmelide şerit sabit + panel kayar.
-  if (!aliasTabs && extraTabs.length === 0) {
+  if (!aliasTabs && !commercial && extraTabs.length === 0) {
     return (
       <>
         <TabbedDialogBody className="space-y-4">{children}{stock}</TabbedDialogBody>
@@ -54,6 +57,7 @@ export function ItemCardTabs({ item, children, footer = () => null, extraTabs = 
           <TabsTrigger value="info">Genel</TabsTrigger>
           {extraTabs.map((t) => <TabsTrigger key={t.value} value={t.value}>{t.label}</TabsTrigger>)}
           {aliasTabs && <TabsTrigger value="customer-aliases">Müşteri adları</TabsTrigger>}
+          {commercial && <TabsTrigger value="commercial">Ticari</TabsTrigger>}
         </TabbedDialogTabList>
         <TabbedDialogPanel value="info" forceMount className="space-y-4">{children}{stock}</TabbedDialogPanel>
         {extraTabs.map((t) => <TabbedDialogPanel key={t.value} value={t.value} className="space-y-4">{t.content}</TabbedDialogPanel>)}
@@ -72,6 +76,11 @@ export function ItemCardTabs({ item, children, footer = () => null, extraTabs = 
                 }}
               />
             </AliasSection>
+          </TabbedDialogPanel>
+        )}
+        {commercial && item && (
+          <TabbedDialogPanel value="commercial" className="space-y-4">
+            <ItemCommercialSection item={item} sections={commercial} />
           </TabbedDialogPanel>
         )}
       </TabbedDialogTabs>

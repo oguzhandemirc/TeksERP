@@ -19,6 +19,7 @@ import { newLineClientId, type OrderLineFormValues } from "./schema";
 import { LINE_HEADERS, OrderLineRow, lineGridCols } from "./OrderLineRow";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { itemWidthOf, prefillWidth } from "@/lib/item-width-prefill";
 
 type LineFieldError = { message?: string } | undefined;
 type LineError = { itemId?: LineFieldError; quantity?: LineFieldError } | undefined;
@@ -76,7 +77,9 @@ export function OrderLinesEditor({ value, onChange, error, lineErrors, customerI
       void qc.invalidateQueries({ queryKey: ["items"] });
       const created = res.data;
       if (quickAddForLine && created?.id) {
-        updateLine(quickAddForLine, { itemId: created.id });
+        // Yeni kumaşın eni yalnız boş en alanını doldurur (elle yazılmış en korunur).
+        const current = value.find((l) => l.clientId === quickAddForLine)?.width ?? null;
+        updateLine(quickAddForLine, { itemId: created.id, width: prefillWidth(current, null, itemWidthOf(created.widthCm)) });
         toast.success(`Kumaş oluşturuldu: ${created.code}`);
       }
       setQuickAddForLine(null);

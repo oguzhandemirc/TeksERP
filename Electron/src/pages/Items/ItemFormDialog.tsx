@@ -99,7 +99,7 @@ export function ItemFormDialog({ open, onOpenChange, initial, draft, onSubmit, i
   if (variantsVisible && initial) extraTabs.push({ value: "variants", label: "Varyantlar",
     content: <ItemVariantsSection fabric={{ id: initial.id, code: initial.code, name: initial.name, allowedColorIds: (initial.allowedColors ?? []).map((c) => c.colorId) }} /> });
   // İstenen sekme bu kartta yoksa (modül/izin) Genel'e düşer — boş panel açılmaz.
-  const shownTab = tab === "info" || tab === "customer-aliases" || extraTabs.some((t) => t.value === tab) ? tab : "info";
+  const shownTab = tab === "info" || tab === "customer-aliases" || tab === "commercial" || extraTabs.some((t) => t.value === tab) ? tab : "info";
   const busy = isSubmitting || saving;
 
   return (

@@ -19,6 +19,7 @@
 // =============================================================================
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import { ArrowRight, Search, Tag } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
@@ -37,6 +38,7 @@ import { ItemPricesPanel } from "./ItemPricesPanel";
 import { useItemPricesAccess } from "./useItemPricesAccess";
 
 const FINDER_PAGE_SIZE = 100;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface ItemBucket {
   subject: PriceSubject;
@@ -67,7 +69,9 @@ function bucketByItem(rows: ItemPriceRow[]): ItemBucket[] {
 export function ItemPricesPage() {
   const access = useItemPricesAccess();
   const [kind, setKind] = useState<PriceSubjectKind>("PRODUCT");
-  const [itemId, setItemId] = useState<string | null>(null);
+  // `?itemId=` (ürün kartı "Ticari" → "Kalem Fiyatları ekranında aç") kartı seçili açar; bozuk kimlik yok sayılır.
+  const [params] = useSearchParams();
+  const [itemId, setItemId] = useState<string | null>(() => (UUID.test(params.get("itemId") ?? "") ? params.get("itemId") : null));
   const pick = (s: PriceSubject) => {
     setKind(s.kind);
     setItemId(s.id);
