@@ -176,7 +176,8 @@ function yuklemAlani(dosya: string, fnAdi: string): { alan: string; negatif: boo
     `export function ${fnAdi}\\s*\\(\\s*([A-Za-z0-9_]+)[^)]*\\)[^{]*\\{([\\s\\S]*?)\\n\\}`,
   ).exec(govde);
   if (!fn) return null;
-  const ret = new RegExp(`return\\s+(!)?${fn[1]!}\\.([A-Za-z0-9_]+)\\s*;`).exec(fn[2]!);
+  // `=== true` biçimi isteğe bağlı bağlam alanı içindir (D4/K1 `isWarpSpecsVisible`): alan yoksa KAPALI.
+  const ret = new RegExp(`return\\s+(!)?${fn[1]!}\\.([A-Za-z0-9_]+)(?:\\s*===\\s*true)?\\s*;`).exec(fn[2]!);
   if (ret) return { alan: ret[2]!, negatif: Boolean(ret[1]) };
   // `return ctx.<modül> && <ek koşul>;` — ilk birleşen modül kapısıdır; ek koşul karoyu yalnız DARALTIR (B4 gövde modu).
   const ve = new RegExp(`return\\s+${fn[1]!}\\.([A-Za-z0-9_]+)\\s*&&[^;]*;`).exec(fn[2]!);
@@ -311,6 +312,11 @@ const KARO_REJIM: ReadonlyArray<{ key: string; alan: string; reason: string }> =
     key: "definitions/shift-definitions",
     alan: "machineStopEnabled",
     reason: "Vardiya takvimi ve tanım uçları duruş rejimiyle açılır (`shift-definition.routes` `requireMachineStopRegime`).",
+  },
+  {
+    key: "definitions/warp-specs",
+    alan: "warpSpecEnabled",
+    reason: "Çözgü kartı = devere ∨ dokuma — aidiyet devere, kapı geniş; backend `requireWarpSpecRegime` (D4/K1).",
   },
 ];
 

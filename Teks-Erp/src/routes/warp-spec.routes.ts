@@ -1,14 +1,13 @@
 // =============================================================================
-// TeksERP — Çözgü Kartı (WarpSpec) Routes · devere modülü
+// TeksERP — Çözgü Kartı (WarpSpec) Routes · devere ∨ dokuma rejimi
 // =============================================================================
 // Çözgü kartı ana veridir; CRUD `BaseController` üzerinden koşar.
 //
-// ⚠️ ÜÇ KAPI SIRAYLA: `verifyToken` → `requireDevereEnabled` (modül rejimi — YALNIZ
-// devere; iplik/ticaret bağımlılığı YOK, §9.7d / 1e K3 2026-09-14) → `requirePermission`
-// (kişi bunu yapabilir mi). Modül kapısı izin kapısının YERİNE GEÇMEZ: bayrak
-// "bu kurulum bu modülü kullanıyor mu", izin "bu kişi bunu yapabilir mi".
-// Jenerik `requireModule("devere")` YASAK — kapı varlığı middleware'in ADIYLA
-// ölçülüyor (`test_devere_regime_gate`, `test_screen_catalog §10`).
+// ⚠️ ÜÇ KAPI SIRAYLA: `verifyToken` → `requireWarpSpecRegime` (çözgü kartı ürün yapısı tanımıdır:
+// devere ∨ dokuma; ürün kartı D4/K1 2026-11-25; ikisi de kapalıyken `requireDevereEnabled` 403'ü) →
+// `requirePermission` (kişi bunu yapabilir mi). Levent verisi okuyan denye sapma uçları devere
+// kapısını AYRICA taşır. Jenerik `requireModule("devere")` YASAK — kapı varlığı middleware'in
+// ADIYLA ölçülüyor (`test_devere_regime_gate` §6/§8, `test_module_flag_off` §2).
 // =============================================================================
 
 import { Router } from "express";
@@ -17,7 +16,7 @@ import { WarpSpecService } from "../services/warp-spec.service";
 import { WARP_SPEC_YARN_DENIER_INCLUDE } from "../services/helpers/warp-spec-yarn.helper";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
-import { requireDevereEnabled } from "../middlewares/module.middleware";
+import { requireDevereEnabled, requireWarpSpecRegime } from "../middlewares/module.middleware";
 import { z } from "zod";
 import { applyDenierSuggestion, getDenierDeviationReport } from "../services/denier-deviation.service";
 import { denierDeviationQuerySchema } from "./reports/dokuma.report.routes";
@@ -40,18 +39,18 @@ export const warpSpecService = new WarpSpecService({
 const controller = new BaseController(warpSpecService);
 const router = Router();
 
-router.use(verifyToken, requireDevereEnabled);
+router.use(verifyToken, requireWarpSpecRegime);
 
 /**
  * @openapi
  * /api/warp-specs:
  *   get:
  *     tags: [WarpSpecs]
- *     summary: Çözgü kartı listesi (devere modülü)
+ *     summary: Çözgü kartı listesi (devere ya da dokuma modülü)
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Liste }
- *       403: { description: Devere modülü kapalı (MODULE_DISABLED) ya da yetki yok }
+ *       403: { description: Devere ve dokuma modülü kapalı (MODULE_DISABLED) ya da yetki yok }
  */
 router.get("/", requirePermission("warpspec:read"), controller.findAll);
 
@@ -97,7 +96,8 @@ export const denierApplyBodySchema = z.object({
  *       400: { description: "INVALID_RANGE ya da tanınmayan parametre" }
  *       403: { description: Devere modülü kapalı (MODULE_DISABLED) ya da yetki yok }
  */
-router.get("/denier-deviation", requirePermission("warpspec:read"), async (req, res, next) => {
+// Levent sarım verisi okur (devere F1) → çözgü kartı rejimi yetmez, devere kapısı ayrıca.
+router.get("/denier-deviation", requireDevereEnabled, requirePermission("warpspec:read"), async (req, res, next) => {
   try {
     const q = denierDeviationQuerySchema.parse(req.query);
     res.status(200).json({ success: true, data: await getDenierDeviationReport(q) });
@@ -130,7 +130,7 @@ router.get("/denier-deviation", requirePermission("warpspec:read"), async (req, 
  *       404: { description: İplik kartı yok }
  *       409: { description: "DENIER_CHANGED (details.currentDenier)" }
  */
-router.post("/denier-deviation/apply", requirePermission("item:write"), async (req, res, next) => {
+router.post("/denier-deviation/apply", requireDevereEnabled, requirePermission("item:write"), async (req, res, next) => {
   try {
     const body = denierApplyBodySchema.parse(req.body);
     const data = await applyDenierSuggestion(body, req.user!.userId);

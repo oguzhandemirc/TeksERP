@@ -34,6 +34,7 @@
 - **[PROFİL]** Rapor kategorisi (`reports/<kat>`) gizlenince alt raporlar her yüzeyden düşer; kademe `isMenuHidden`te tek yerde; adres kapısı (`isCenterEntryVisible`) menü süzgecini okumaz.
 - **[ÇEKİRDEK]** En yetkili hesap GÖRÜNÜR (gizleme süzgeci geri gelmez); `/users/:id/credentials` sistem hesabına dar 403 kapısı DURUR; `/users/:id` önek kapısı KALIR; ayar şifresi yönetim uçları 403 (404 değil).
 - **[ÇEKİRDEK]** Özellik Anahtarları'nda KAPALI modülün bayrak satırı fabrika yöneticisine HİÇ çizilmez, satır kalmazsa sekme düşer; satıcıda (supap dahil) hiçbir satır gizlenmez, kilit bandı satıcıda.
+- **[ÇEKİRDEK]** Çözgü kartı tanımını devere VEYA dokuma açıkken kullan (backend `requireWarpSpecRegime` ← `warp-spec-regime.helper`, panel `lib/warp-spec-regime.ts` → `warpSpecEnabled`/`useWarpSpecEnabled`); levent/fason devere işlemlerini ve denye sapmayı devere kapısında tut.
 
 ## Backend
 
@@ -167,3 +168,4 @@ Kök betik: `scripts/test_profil_raporu_kapisi.mjs`.
 - 2026-10-24 — [ÇEKİRDEK] Kapsamsız ayar kategorisi beyanı (`bildirim.gelenKutusuEnabled`) — `arsiv/2026-10.md`
 - 2026-10-29 — [ÇEKİRDEK] Makine duruşu dokumasız rejim kapısı (D4-A1) — `arsiv/2026-10.md`
 - 2026-10-30 — [ÇEKİRDEK] Panel Makine Duruşları + vardiya tanımı duruş rejiminde (D4-A3) — `arsiv/2026-10.md`
+- 2026-11-25 — [ÇEKİRDEK] Çözgü kartı devere ∨ dokuma rejimi (ürün kartı D4/K1) — `arsiv/2026-11.md`
