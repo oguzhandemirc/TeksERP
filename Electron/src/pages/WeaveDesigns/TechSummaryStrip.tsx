@@ -21,7 +21,7 @@ export function techSummaryCells(d: Partial<ItemComputedGsm> | null | undefined,
     : [{ key: "frameCount", label: "Çerçeve sayısı", value: show(frameCount), unit: "çerçeve", info: "Armürde kullanılan çerçeve sayısı (desen kartından)." }];
   return [
     ...frame,
-    c("endsCount", "Toplam tel", "tel", "Zemin çözgüsü ile döner/ikinci çözgü tellerinin toplamı (çözgü kartlarından)."),
+    c("endsCount", "Toplam çözgü teli", "tel", "Zemin çözgüsü ile döner/ikinci çözgü tellerinin toplamı (çözgü kartlarından)."),
     c("endsPerCm", "Çözgü sıklığı", "tel/cm", "Çözgü sıklığı = toplam tel ÷ ham en."),
     c("picksPerCm", "Atkı sıklığı", "atkı/cm", "Santimetreye düşen atkı sayısı (atkı kartından)."),
     c("picksInRepeat", "Rapordaki atkı", "atkı", "Atkı sırası bir kez tamamlanana kadar atılan atkı sayısı (atkı kartındaki adetlerin toplamı)."),

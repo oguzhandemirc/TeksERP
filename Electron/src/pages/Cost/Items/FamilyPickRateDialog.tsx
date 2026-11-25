@@ -85,7 +85,7 @@ export function FamilyPickRateDialog({ onClose }: { onClose: () => void }) {
       <div className="space-y-4">
         <FormCard title="Aile ve ücret" icon={Coins}>
           <FieldGrid cols={3}>
-            <FormField label="Desen ailesi" required info="Aile, desen kartındaki 'aile' etiketidir (ör. TERGAL-DÖNER). Etiketsiz desenler listede yoktur.">
+            <FormField label="Desen ailesi" required info="Desen kartındaki “Desen ailesi” alanı (ör. BALIK). Ailesi boş desenler listede yoktur.">
               <Select value={family} onValueChange={(v) => { setFamily(v); setPicked(null); }}>
                 <SelectTrigger aria-label="Desen ailesi"><SelectValue placeholder={fams.isLoading ? "Yükleniyor…" : "Aile seçin"} /></SelectTrigger>
                 <SelectContent>

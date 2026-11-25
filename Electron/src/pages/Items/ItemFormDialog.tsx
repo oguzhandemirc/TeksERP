@@ -5,7 +5,7 @@ import { AlertTriangle } from "lucide-react";
 import { Dialog, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { TabbedDialogContent, TabbedDialogFooter, TabbedDialogHeader } from "@/components/ui/tabbed-dialog";
 import { Button } from "@/components/ui/button";
-import { ItemType, unitForItemType } from "@/types/enums";
+import { ItemType, itemTypeLabels, unitForItemType } from "@/types/enums";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { RecordInfoButton } from "@/components/RecordInfoButton";
 import { InfoPopover } from "@/components/ui/info-popover";
@@ -18,7 +18,7 @@ import { ItemCardTabs, INSTANT_SAVE_TABS, type ItemExtraTab } from "./ItemCardTa
 import { useConstructionPickersVisible } from "./ItemConstructionPickers";
 import { ItemCostLink } from "./ItemCostLink";
 import { ItemGeneralFields } from "./ItemGeneralFields";
-import { scopeItemType } from "./itemTypeScope";
+import { itemTypeScope, scopeItemType } from "./itemTypeScope";
 import { AllowedListDialogs } from "./ItemFormParts";
 import { useItemWeftDraft } from "./construction/useItemWeftDraft";
 import { useItemFormSave } from "./construction/useItemFormSave";
@@ -67,6 +67,8 @@ export function ItemFormDialog({ open, onOpenChange, initial, draft, onSubmit, i
   const warpVisible = itemType === ItemType.FABRIC && devereEnabled;
   const canWriteSpecs = hasPermission("warpspec:write");
   const derivedUnit = unitForItemType[itemType] ?? "MT";
+  // Seçici tek tipe kilitliyse başlık o tipi söyler ("Yeni Kumaş"); serbest tipte "Yeni Ürün".
+  const newNoun = itemTypeScope(typeScope).locked ? itemTypeLabels[itemType] : "Ürün";
   const weft = useItemWeftDraft(open, initial?.weftSpecId ?? draft?.weftSpecId ?? null);
 
   useEffect(() => { form.setValue("unit", derivedUnit, { shouldDirty: true }); }, [derivedUnit, form]);
@@ -99,7 +101,7 @@ export function ItemFormDialog({ open, onOpenChange, initial, draft, onSubmit, i
       <TabbedDialogContent className="w-[calc(100%-2rem)] max-w-6xl" data-form-size="wide">
         <TabbedDialogHeader>
           <div className="flex items-center gap-1.5">
-            <DialogTitle>{isEdit ? "Ürünü Düzenle" : draft ? "Yeni Ürün (örnekten)" : "Yeni Ürün"}</DialogTitle>
+            <DialogTitle>{isEdit ? "Ürünü Düzenle" : `Yeni ${newNoun}${draft ? " (örnekten)" : ""}`}</DialogTitle>
             {/* ⓘ — kim oluşturdu / en son kim değiştirdi; kaynak kaydın KENDİ künye kolonları (audit arşivlenir). */}
             {isEdit && initial && <RecordInfoButton table="ITEM" id={initial.id} createdAt={initial.createdAt} updatedAt={initial.updatedAt} />}
             {/* B11: stok kodu başlıkta rozet; maliyet bağlantısı aynı satırın sağında. */}
@@ -121,7 +123,7 @@ export function ItemFormDialog({ open, onOpenChange, initial, draft, onSubmit, i
           <div className="mx-6 mb-3 flex shrink-0 items-start gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <span>
-              Bu desen sahada (ham giriş) oluşturuldu ve onay bekliyor. Bilgileri gözden geçirip <strong>Güncelle</strong>'ye bastığınızda onaylanmış sayılır.
+              Bu ürün sahada (ham giriş) oluşturuldu ve onay bekliyor. Bilgileri gözden geçirip <strong>Güncelle</strong>'ye bastığınızda onaylanmış sayılır.
             </span>
           </div>
         )}
@@ -156,7 +158,6 @@ export function ItemFormDialog({ open, onOpenChange, initial, draft, onSubmit, i
               yarnWasteVisible={yarnWasteVisible}
               carriesLists={carriesLists}
               staleLists={staleLists}
-              hasSavedWeavingValues={Boolean(defaults.rawWidthCm || defaults.rawGsm || defaults.finishedGsm)}
               manualCode={manualCode}
               onManualCodeChange={(next) => {
                 setManualCode(next);

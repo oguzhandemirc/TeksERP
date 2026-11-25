@@ -1,4 +1,4 @@
-// Yapı sekmesi: desen kimliği + sınıf (mekanizma · örgü) + mekanizmaya ait tezgâh bilgileri. Alanlar
+// Desen bilgileri sekmesi: desen kimliği + sınıf (mekanizma · örgü) + mekanizmaya ait tezgâh bilgileri. Alanlar
 // mekanizmaya göre: Armür → çerçeve/.DOP/tahar · Jakar → desen dosyası, kanca, rapor en×boy, görsel ·
 // Eksantrik → örgü + tahar. Gizli alan GÖNDERİLMEZ (saklı değer silinmez; sunucu zaten Armür dışı ızgarayı,
 // Jakar dışı kancayı reddeder). Boş gönderilen görünür alanı sunucu NULL'a çevirir.
@@ -7,9 +7,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { InfoPopover } from "@/components/ui/info-popover";
+import { FormField } from "@/components/forms/FormField";
 import { weaveDesignApi } from "../service";
 import type { DesignFabric, WeaveDesign, WeaveDesignInput } from "../types";
 import { resolveWeaveClass, type ShedMechanism, type WeaveClass } from "../weave-class";
@@ -24,16 +23,21 @@ import { decimalToFormText } from "@/lib/decimal-form-text";
 type TextKey = "code" | "name" | "familyLabel" | "frameCount" | "repeatCm" | "repeatWidthCm" | "hookCount" | "loomFileName" | "lenoSetup" | "drawingInNote" | "notes";
 type Form = Record<TextKey, string> & WeaveClass & { drawingInType: DrawingInType | null };
 
-interface FieldDef { key: TextKey; label: string; max: number; mode?: "numeric" | "decimal"; info?: string; show: (m: ShedMechanism, f: Form) => boolean }
+interface FieldDef {
+  key: TextKey; label: string; max: number; mode?: "numeric" | "decimal"; info?: string; required?: boolean; placeholder?: string;
+  show: (m: ShedMechanism, f: Form) => boolean;
+}
 
 const ALL = () => true;
 /** FIELDS'in ilk üçü kimlik alanları (her mekanizmada). */
 const IDENTITY_COUNT = 3;
+/** T1 (ürün kartı denetimi): aile örgüyü/kumaş türünü tekrar sormaz — onların yeri başka. */
+export const FAMILY_INFO = "Desenleri gruplayan ad (ör. BALIK). Toplu atkı ücreti ve listede gruplama içindir. Kumaş türü (tül/fon) ürün kartında, örgü desen kartında seçilir; buraya yazmayın. (Eski adı: Aile etiketi)";
 const FIELDS: FieldDef[] = [
-  { key: "code", label: "Desen kodu *", max: 32, show: ALL },
-  { key: "name", label: "Desen adı *", max: 100, show: ALL },
-  { key: "familyLabel", label: "Aile etiketi (TERGAL-DÖNER, BALIK…)", max: 40, show: ALL },
-  { key: "frameCount", label: "Çerçeve sayısı (1–32)", max: 2, mode: "numeric", show: (m) => m === "DOBBY" },
+  { key: "code", label: "Desen kodu", required: true, max: 32, show: ALL },
+  { key: "name", label: "Desen adı", required: true, max: 100, show: ALL },
+  { key: "familyLabel", label: "Desen ailesi", max: 40, info: FAMILY_INFO, placeholder: "ör. BALIK", show: ALL },
+  { key: "frameCount", label: "Çerçeve sayısı", max: 2, mode: "numeric", info: "Armürün kullandığı çerçeve (gücü) sayısı; 1–32.", show: (m) => m === "DOBBY" },
   { key: "repeatCm", label: "Rapor boyu (cm)", max: 10, mode: "decimal", info: "Desenin boyuna bir kez tekrar ettiği uzunluk.", show: (m) => m !== "JACQUARD" },
   { key: "loomFileName", label: "Tezgâh desen dosyası (.DOP)", max: 64, show: (m) => m === "DOBBY" },
   { key: "loomFileName", label: "Desen dosyası", max: 64, info: "Jakar makinesine yüklenen desen dosyasının adı (ör. GUL-01.JC5). Desen bu dosyadan dokunur.", show: (m) => m === "JACQUARD" },
@@ -84,14 +88,10 @@ export function StructureTab({ design, fabric, canWrite }: { design: WeaveDesign
   const m = form.shedMechanism;
   const savedMech = resolveWeaveClass(design).shedMechanism;
   const renderField = (f: FieldDef) => (
-    <div key={`${f.key}-${f.label}`} className="space-y-1.5">
-      <div className="flex items-center gap-1.5">
-        <Label htmlFor={`wd-${f.key}`}>{f.label}</Label>
-        {f.info && <InfoPopover desc={f.info} label={`${f.label} açıklaması`} />}
-      </div>
-      <Input id={`wd-${f.key}`} value={form[f.key]} maxLength={f.max} inputMode={f.mode} disabled={!canWrite} onChange={(e) => set(f.key, e.target.value)} />
-      {f.key === "loomFileName" && loomFileNameTooLong(form.loomFileName) && <p className="text-xs text-amber-700 dark:text-amber-400">{LOOM_FILE_NAME_WARNING}</p>}
-    </div>
+    <FormField key={`${f.key}-${f.label}`} label={f.label} htmlFor={`wd-${f.key}`} required={f.required} info={f.info}
+      hint={f.key === "loomFileName" && loomFileNameTooLong(form.loomFileName) ? LOOM_FILE_NAME_WARNING : undefined} hintTone="warning">
+      <Input id={`wd-${f.key}`} value={form[f.key]} maxLength={f.max} inputMode={f.mode} placeholder={f.placeholder} disabled={!canWrite} onChange={(e) => set(f.key, e.target.value)} />
+    </FormField>
   );
   return (
     <div className="space-y-6">
@@ -106,10 +106,9 @@ export function StructureTab({ design, fabric, canWrite }: { design: WeaveDesign
         {m === "JACQUARD" && savedMech !== "JACQUARD" && (
           <p className="text-xs text-muted-foreground sm:col-span-2 lg:col-span-3">Desen görseli, mekanizma Jakar olarak kaydedildikten sonra yüklenebilir.</p>
         )}
-        <div className="space-y-1.5 sm:col-span-2 lg:col-span-3">
-          <Label htmlFor="wd-notes">Not</Label>
+        <FormField className="sm:col-span-2 lg:col-span-3" label="Not" htmlFor="wd-notes">
           <Textarea id="wd-notes" value={form.notes} maxLength={500} disabled={!canWrite} onChange={(e) => set("notes", e.target.value)} />
-        </div>
+        </FormField>
         {canWrite && (
           <div className="sm:col-span-2 lg:col-span-3">
             <Button disabled={save.isPending || !form.code.trim() || !form.name.trim()} onClick={() => save.mutate()}>Kaydet</Button>

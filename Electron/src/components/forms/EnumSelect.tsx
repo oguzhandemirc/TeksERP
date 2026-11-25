@@ -6,12 +6,14 @@ interface Props<T extends string> {
   labels: Record<T, string>;
   placeholder?: string;
   disabled?: boolean;
+  /** Etiketin `htmlFor`u — FormField etiketi tetikleyiciye bağlansın (erişilebilir ad). */
+  id?: string;
 }
 
-export function EnumSelect<T extends string>({ value, onChange, labels, placeholder, disabled }: Props<T>) {
+export function EnumSelect<T extends string>({ value, onChange, labels, placeholder, disabled, id }: Props<T>) {
   return (
     <Select value={value} onValueChange={(v) => onChange(v as T)} disabled={disabled}>
-      <SelectTrigger>
+      <SelectTrigger id={id}>
         <SelectValue placeholder={placeholder ?? "Seç..."} />
       </SelectTrigger>
       <SelectContent>

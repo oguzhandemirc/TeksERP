@@ -84,7 +84,7 @@ export function AllowedColorsDialog({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-xl">
           <DialogHeader>
-            <DialogTitle>İzinli Renkler</DialogTitle>
+            <DialogTitle>Renkler (kartela)</DialogTitle>
             <DialogDescription>
               Bu kumaş için seçilebilir renkler. Boş bırakılırsa tüm aktif renkler serbest.
             </DialogDescription>

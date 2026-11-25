@@ -28,8 +28,8 @@ interface FinishingProps {
 
 export function FinishingCard({ rateCode, onRateCode, label, onLabel, rates, disabled, flagged, extraField }: FinishingProps) {
   return (
-    <SectionCard title="Terbiye ve ek kalem"
-      titleExtra={<InfoPopover label="Terbiye ve ek kalem açıklaması" desc="Fason tarifesi seçilmezse kumaş ham satılır (terbiye maliyeti yok). Ek kalem metre başına sabit TL tutardır; etiket dökümde satır adı olur." />}>
+    <SectionCard title="Terbiye ve ek masraf"
+      titleExtra={<InfoPopover label="Terbiye ve ek masraf açıklaması" desc="Fason tarifesi seçilmezse kumaş ham satılır (terbiye maliyeti yok). Ek masraf metre başına sabit TL tutardır; etiket dökümde satır adı olur." />}>
       <div className="space-y-3">
         <div className="block text-sm" data-field="finishingRateCode">
           <span className={FIELD_LABEL}>Fason tarifesi</span>
@@ -45,7 +45,7 @@ export function FinishingCard({ rateCode, onRateCode, label, onLabel, rates, dis
         </div>
         <div className="grid gap-3 sm:grid-cols-[minmax(9rem,12rem)_1fr]">
           {extraField}
-          <label className="text-sm"><span className={FIELD_LABEL}>Ek kalem etiketi</span>
+          <label className="text-sm"><span className={FIELD_LABEL}>Ek masraf etiketi</span>
             <Input className="mt-1" disabled={disabled} maxLength={STRUCTURE_MAX.extraCostLabel} placeholder="ör. Ambalaj" value={label} onChange={(e) => onLabel(e.target.value)} /></label>
         </div>
       </div>

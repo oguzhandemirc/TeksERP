@@ -38,7 +38,7 @@ export const warpSpecColumns: ColumnDef<WarpSpec>[] = [
                 <span className="text-muted-foreground"> · {num(r.endsCount)} tel</span>
               </span>
             ))}
-            {row.original.sequenceNote ? <span className="text-muted-foreground">Dizilim: {row.original.sequenceNote}</span> : null}
+            {row.original.sequenceNote ? <span className="text-muted-foreground">Çözgü dizimi: {row.original.sequenceNote}</span> : null}
           </span>
         );
       }
@@ -57,7 +57,7 @@ export const warpSpecColumns: ColumnDef<WarpSpec>[] = [
   },
   {
     accessorKey: "endsCount",
-    header: () => <SortableHeader field="endsCount" label="Tel adedi" />,
+    header: () => <SortableHeader field="endsCount" label="Toplam çözgü teli" />,
     cell: ({ row }) => <span className="tabular-nums">{num(row.original.endsCount)}</span>,
   },
   {

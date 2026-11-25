@@ -1,20 +1,18 @@
 // =============================================================================
-// ÜRÜN FORMU — "Dokuma ayrıntıları" katlanır bölümü (Seyitoğlu temel)
+// ÜRÜN FORMU — "Ölçüler ve gramaj" bölümü (ürün kartı denetimi K2/K3)
 // =============================================================================
-// Yalnız KUMAŞ kartında; ham en + ham/mamul gramaj girişi ve kayıtlı kartta hesaplanan gramaj satırı.
-// Hesaplanamayan değer gösterilmez (0 ya da tahmin YOK); uç yoksa/hata verirse satır sessizce gizlenir.
+// Yalnız KUMAŞ kartında ve AÇIK: ham en → mamul en yan yana (en çekmesi ikisinden), ardından ham/mamul gramaj;
+// kayıtlı kartta türetilen satırlar. Hesaplanamayan değer gösterilmez (0 ya da tahmin YOK); uç hata verirse satır gizlenir.
 // =============================================================================
 import type { UseFormReturn } from "react-hook-form";
 import { useQuery } from "@tanstack/react-query";
 import { FormField } from "@/components/forms/FormField";
-import { CollapsibleFormSection } from "@/components/forms/CollapsibleFormSection";
 import { Callout } from "@/components/ui/callout";
 import { Input } from "@/components/ui/input";
 import { InfoPopover } from "@/components/ui/info-popover";
 import type { ItemFormValues } from "./schema";
 import type { ItemComputedGsm } from "./types";
 import { itemService } from "./service";
-import { FABRIC_DETAIL_KEYS } from "./itemPayload.helper";
 import { qtyFormatter } from "@/lib/format";
 
 /** Girilen ham gramaj hesaplanandan bu oranı (mutlak) AŞARSA uyarı çıkar. */
@@ -26,22 +24,28 @@ const num = (n: number | null): string => (n == null || !Number.isFinite(n) ? "�
 export function ItemWeavingDetails({
   form,
   itemId,
-  hasSavedValues,
+  widthVisible,
 }: {
   form: UseFormReturn<ItemFormValues>;
   /** Kayıtlı kartın kimliği — yalnız düzenlemede hesap satırı istenir. */
   itemId: string | null;
-  /** Kartta dolu dokuma ayrıntısı var → bölüm açık gelir. */
-  hasSavedValues: boolean;
+  /** Mamul en alanı: Kalite Güvence ya da dokuma modülü açıkken. */
+  widthVisible: boolean;
 }) {
   const err = form.formState.errors;
-  const hasError = FABRIC_DETAIL_KEYS.some((k) => Boolean(err[k]));
   return (
-    <CollapsibleFormSection title="Dokuma ayrıntıları" defaultOpen={hasSavedValues} forceOpen={hasError} testId="item-weaving-details">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <FormField label="Ham en (cm)" htmlFor="rawWidthCm" error={err.rawWidthCm}>
+    <section className="space-y-3 border-t pt-3" data-testid="item-weaving-details" aria-labelledby="item-measures-title">
+      <h3 id="item-measures-title" className="text-sm font-medium text-muted-foreground">Ölçüler ve gramaj</h3>
+      <div className={widthVisible ? "grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4" : "grid grid-cols-1 gap-3 sm:grid-cols-3"}>
+        <FormField label="Ham en (cm)" htmlFor="rawWidthCm" error={err.rawWidthCm} info="Tezgâhtan çıkan (terbiye öncesi) kumaşın eni.">
           <Input id="rawWidthCm" inputMode="decimal" placeholder="ör. 300" {...form.register("rawWidthCm")} />
         </FormField>
+        {/* K4P: ürün kartı eni (= mamul en, dokuma.md) — muayene puan/100 m² kaynağı #1; iki modül de kapalıyken alan yok. */}
+        {widthVisible && (
+          <FormField label="Mamul en (cm)" htmlFor="widthCm" error={err.widthCm} info="Bitmiş kumaşın eni (satış eni). 4 puan muayenesinde puan/100 m² bu enden hesaplanır (boşsa KK1'de ölçülen en); ham en ile birlikte en çekmesini (terbiyede) verir.">
+            <Input id="widthCm" inputMode="decimal" placeholder="ör. 280" {...form.register("widthCm")} />
+          </FormField>
+        )}
         <FormField label="Ham gramaj (g/m²)" htmlFor="rawGsm" error={err.rawGsm}>
           <Input id="rawGsm" inputMode="decimal" placeholder="ör. 85" {...form.register("rawGsm")} />
         </FormField>
@@ -50,7 +54,7 @@ export function ItemWeavingDetails({
         </FormField>
       </div>
       {itemId && <ComputedGsmRow itemId={itemId} />}
-    </CollapsibleFormSection>
+    </section>
   );
 }
 
@@ -82,7 +86,7 @@ export function WidthDerivedView({ data }: { data: ItemComputedGsm | null | unde
       {hasAny && (
         <p className="flex flex-wrap items-center gap-x-1 text-xs text-muted-foreground tabular-nums" data-testid="item-width-derived">
           Metretül: ham {num(data.rawGPerMt ?? null)} g/mt · mamul {num(data.finishedGPerMt ?? null)} g/mt
-          {known(data.widthShrinkPct) && <> · <span className="font-medium text-foreground">En çekmesi %{num(data.widthShrinkPct)}</span></>}
+          {known(data.widthShrinkPct) && <> · <span className="font-medium text-foreground">En çekmesi (terbiyede) %{num(data.widthShrinkPct)}</span></>}
           <InfoPopover label="Metretül ve en çekmesi" desc="Kayıtlı değerlerden: g/mt = g/m² × en (m) — ham gramaj için ham en, mamul gramaj için mamul en. En çekmesi = (ham en − mamul en) ÷ ham en. Değiştirdiğiniz değerler kaydedince yansır." />
         </p>
       )}
@@ -99,7 +103,7 @@ export function ComputedGsmView({ data }: { data: ItemComputedGsm | null | undef
   return (
     <div className="space-y-2">
       <p className="text-xs text-muted-foreground tabular-nums" data-testid="item-computed-gsm">
-        Hesaplanan: çözgü {num(data.warpGPerM)} g/m · atkı {num(data.weftGPerM)} g/m · toplam {num(data.totalGPerM)} g/m ·{" "}
+        Hesaplanan metretül ağırlığı: çözgü {num(data.warpGPerM)} · atkı {num(data.weftGPerM)} · toplam {num(data.totalGPerM)} g/mt · gramaj{" "}
         <span className="font-medium text-foreground">{num(data.gsm)} g/m²</span>
       </p>
       {warn && (

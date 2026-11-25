@@ -59,7 +59,7 @@ export function CostItemDetailPage() {
         ) : (
           <Tabs value={tab} onValueChange={setTab} className="flex flex-1 flex-col">
             <TabsList>
-              <TabsTrigger value="structure">Yapı</TabsTrigger>
+              <TabsTrigger value="structure">Maliyet yapısı</TabsTrigger>
               <TabsTrigger value="breakdown">Döküm</TabsTrigger>
               <TabsTrigger value="versions">Sürümler</TabsTrigger>
             </TabsList>

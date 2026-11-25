@@ -1,6 +1,6 @@
-// Ürün kartı sekmeleri: "Genel" (form) + kumaş yapısı (Çözgü · Atkı · Desen — B19 tek pencere) + "Müşteri Kumaş Adları" +
-// "Müşteri Renk Adları". Yapı sekmeleri KUMAŞ + modül/izin varken (`extraTabs`), müşteri adı sekmeleri düzenlenen KUMAŞ kartında
-// `customer-alias:read` varken çizilir; hiçbiri yoksa form bugünkü gibi tek başına durur.
+// Ürün kartı sekmeleri: "Genel" (form) + kumaş yapısı (Çözgü · Atkı · Desen — B19 tek pencere) + "Müşteri adları"
+// (kumaş adı + renk adı iki bölüm, K8). Yapı sekmeleri KUMAŞ + modül/izin varken (`extraTabs`), müşteri adları düzenlenen
+// KUMAŞ kartında `customer-alias:read` varken çizilir; hiçbiri yoksa form bugünkü gibi tek başına durur.
 // Alt çubuk (`footer`) sekmelerin DIŞINDA çizilir: her sekmede görünür (B18/4); "Genel" paneli `forceMount` — başka
 // sekmedeyken de form DOM'da kalır, alt çubuktaki Kaydet (`form={id}`) onu gönderebilir.
 import { useState, type ReactNode } from "react";
@@ -15,7 +15,7 @@ import { YarnWhereSection } from "@/pages/Operations/YarnAtSubcontractor/YarnWhe
 
 export interface ItemExtraTab { value: string; label: string; content: ReactNode }
 /** Anında kaydeden (formdan bağımsız) sekmeler — alt çubuk notu bunlarda. */
-export const INSTANT_SAVE_TABS = new Set(["customer-item-aliases", "customer-color-aliases"]);
+export const INSTANT_SAVE_TABS = new Set(["customer-aliases"]);
 
 interface Props {
   /** Düzenlenen kart; yeni kartta null. */
@@ -35,14 +35,14 @@ export function ItemCardTabs({ item, children, footer = () => null, extraTabs = 
   const [innerTab, setInnerTab] = useState("info");
   const tab = tabProp ?? innerTab;
   const setTab = onTabChange ?? setInnerTab;
-  // İplik kartında "Nerede?" (depo / fasonda, devere D6c). Maliyet kartı bağlantısı başlık satırında (B11).
-  const costLink = item?.itemType === "YARN" ? <YarnWhereSection itemId={item.id} itemType={item.itemType} /> : null;
+  // İplik kartında stok durumu (depo / fasonda, devere D6c) formun ALTINDA (K5). Maliyet kartı bağlantısı başlık satırında (B11).
+  const stock = item?.itemType === "YARN" ? <YarnWhereSection itemId={item.id} itemType={item.itemType} /> : null;
   const aliasTabs = !!item && item.itemType === "FABRIC" && hasPermission("customer-alias:read");
   // Sabit çerçeveli modalın gövdesi (tabbed-dialog): sekmesizde tek kaydırıcı, sekmelide şerit sabit + panel kayar.
   if (!aliasTabs && extraTabs.length === 0) {
     return (
       <>
-        <TabbedDialogBody className="space-y-4">{costLink}{children}</TabbedDialogBody>
+        <TabbedDialogBody className="space-y-4">{children}{stock}</TabbedDialogBody>
         {footer("info")}
       </>
     );
@@ -53,17 +53,16 @@ export function ItemCardTabs({ item, children, footer = () => null, extraTabs = 
         <TabbedDialogTabList>
           <TabsTrigger value="info">Genel</TabsTrigger>
           {extraTabs.map((t) => <TabsTrigger key={t.value} value={t.value}>{t.label}</TabsTrigger>)}
-          {aliasTabs && <TabsTrigger value="customer-item-aliases">Müşteri Kumaş Adları</TabsTrigger>}
-          {aliasTabs && <TabsTrigger value="customer-color-aliases">Müşteri Renk Adları</TabsTrigger>}
+          {aliasTabs && <TabsTrigger value="customer-aliases">Müşteri adları</TabsTrigger>}
         </TabbedDialogTabList>
-        <TabbedDialogPanel value="info" forceMount className="space-y-4">{costLink}{children}</TabbedDialogPanel>
+        <TabbedDialogPanel value="info" forceMount className="space-y-4">{children}{stock}</TabbedDialogPanel>
         {extraTabs.map((t) => <TabbedDialogPanel key={t.value} value={t.value} className="space-y-4">{t.content}</TabbedDialogPanel>)}
         {aliasTabs && item && (
-          <>
-            <TabbedDialogPanel value="customer-item-aliases">
+          <TabbedDialogPanel value="customer-aliases" className="space-y-6">
+            <AliasSection title="Kumaş adları">
               <ItemCustomerItemAliasesPanel item={{ id: item.id, name: item.name, lifecycle: itemLifecycleOf(item) }} />
-            </TabbedDialogPanel>
-            <TabbedDialogPanel value="customer-color-aliases">
+            </AliasSection>
+            <AliasSection title="Renk adları">
               <ItemCustomerColorAliasesPanel
                 item={{
                   id: item.id,
@@ -72,11 +71,20 @@ export function ItemCardTabs({ item, children, footer = () => null, extraTabs = 
                   allowedColorIds: (item.allowedColors ?? []).map((c) => c.colorId),
                 }}
               />
-            </TabbedDialogPanel>
-          </>
+            </AliasSection>
+          </TabbedDialogPanel>
         )}
       </TabbedDialogTabs>
       {footer(tab)}
     </>
+  );
+}
+
+function AliasSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="space-y-2" aria-label={title}>
+      <h3 className="text-sm font-semibold">{title}</h3>
+      {children}
+    </section>
   );
 }

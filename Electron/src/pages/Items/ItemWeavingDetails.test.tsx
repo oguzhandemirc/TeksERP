@@ -29,23 +29,22 @@ const item = (over: Partial<Item>): Item =>
 const calc = (over: Partial<ItemComputedGsm> = {}): ItemComputedGsm => ({
   rawWidthCm: 300, warpGPerM: 120.44, weftGPerM: 135, totalGPerM: 255.44, gsm: 85.15, enteredRawGsm: null, diffPct: null, ...over,
 });
-const section = () => screen.getByTestId("item-weaving-details") as HTMLDetailsElement;
+const section = () => screen.getByTestId("item-weaving-details");
 
 beforeEach(() => {
   computedGsm.mockReset();
   computedGsm.mockResolvedValue(calc({ gsm: null }));
 });
 
-describe("Dokuma ayrıntıları — alanlar ve görünürlük", () => {
-  it("⭐ §1 kumaşta bölüm var, boşken KAPALI; dolu değerle AÇIK; iplikte bölüm YOK", () => {
+describe("Ölçüler ve gramaj — alanlar ve görünürlük", () => {
+  it("⭐ §1 kumaşta bölüm AÇIK ve başlıklı (boşken de); dolu değer görünür; iplikte bölüm YOK", () => {
     const { unmount } = renderWithProviders(<ItemFormDialog open onOpenChange={() => {}} onSubmit={() => {}} initial={item({})} />);
-    expect(section().open).toBe(false);
-    expect(screen.getByLabelText("Ham en (cm)")).toBeInTheDocument();
+    expect(section()).toHaveTextContent("Ölçüler ve gramaj");
+    expect(screen.getByLabelText("Ham en (cm)")).toBeVisible();
     expect(screen.getByLabelText("Ham gramaj (g/m²)")).toBeInTheDocument();
     expect(screen.getByLabelText("Mamul gramaj (g/m²)")).toBeInTheDocument();
     unmount();
     const r2 = renderWithProviders(<ItemFormDialog open onOpenChange={() => {}} onSubmit={() => {}} initial={item({ rawGsm: 85.5 })} />);
-    expect(section().open).toBe(true);
     expect(screen.getByLabelText("Ham gramaj (g/m²)")).toHaveValue("85,5");
     r2.unmount();
     renderWithProviders(<ItemFormDialog open onOpenChange={() => {}} onSubmit={() => {}} initial={item({ itemType: "YARN", unit: "KG" })} />);
@@ -81,14 +80,13 @@ describe("Dokuma ayrıntıları — istek gövdesi", () => {
     expect("finishedGsm" in body).toBe(false);
   });
 
-  it("⭐ §2c sıfır reddedilir, bölüm hata ile açılır, gövde gitmez", async () => {
+  it("⭐ §2c sıfır reddedilir, hata bölümde görünür, gövde gitmez", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn();
     renderWithProviders(<ItemFormDialog open onOpenChange={() => {}} onSubmit={onSubmit} initial={item({})} />);
     await user.type(screen.getByLabelText("Ham gramaj (g/m²)"), "0");
     await user.click(screen.getByRole("button", { name: "Güncelle" }));
-    expect(await screen.findByText("Ham gramaj sıfırdan büyük olmalı")).toBeInTheDocument();
-    expect(section().open).toBe(true);
+    expect(await screen.findByText("Ham gramaj sıfırdan büyük olmalı")).toBeVisible();
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
@@ -112,7 +110,7 @@ describe("Dokuma ayrıntıları — hesaplanan gramaj", () => {
   it("⭐ §3b dolu → tr-TR biçim, en çok 1 ondalık, bilinmeyen parça '—'", () => {
     render(<ComputedGsmView data={calc({ weftGPerM: null })} />);
     expect(screen.getByTestId("item-computed-gsm")).toHaveTextContent(
-      "Hesaplanan: çözgü 120,4 g/m · atkı — g/m · toplam 255,4 g/m · 85,2 g/m²",
+      "Hesaplanan metretül ağırlığı: çözgü 120,4 · atkı — · toplam 255,4 g/mt · gramaj 85,2 g/m²",
     );
   });
 
@@ -155,7 +153,7 @@ describe("Dokuma ayrıntıları — enlerden türetilenler (inceleme Not 2/4/5)"
     const row = screen.getByTestId("item-width-derived");
     expect(row).toHaveTextContent("ham 255 g/mt");
     expect(row).toHaveTextContent("mamul 252 g/mt");
-    expect(row).toHaveTextContent(/En çekmesi %6,7/);
+    expect(row).toHaveTextContent(/En çekmesi \(terbiyede\) %6,7/);
     expect(screen.getByText("Mamul en ham enden geniş")).toBeInTheDocument();
   });
 

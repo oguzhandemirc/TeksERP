@@ -138,7 +138,7 @@ describe("ItemCardTabs", () => {
 
   it("düzenlenen kumaş kartında ve okuma izniyle sekme çizilir", () => {
     renderWithProviders(<ItemCardTabs item={fabric}><div>form</div></ItemCardTabs>);
-    expect(screen.getByRole("tab", { name: "Müşteri Renk Adları" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Müşteri adları" })).toBeInTheDocument();
   });
 
   it("izin yoksa, yeni kartta ya da iplik kartında sekme yok — form tek başına", () => {

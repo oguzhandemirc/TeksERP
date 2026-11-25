@@ -1,6 +1,6 @@
 // Ürün formunun küçük parçaları: stok kodu satırı, izinli liste tetiği, izinli renk/özellik pencereleri.
 import { Controller, type UseFormReturn } from "react-hook-form";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Lock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,16 @@ import { cn } from "@/lib/utils";
 import { AllowedColorsDialog } from "./AllowedColorsDialog";
 import { AllowedPropertiesDialog } from "./AllowedPropertiesDialog";
 import type { ItemFormValues } from "./schema";
+
+/** Değiştirilemeyen değer (kilitli tip, otomatik birim): açılır liste görünümü vermeyen gri kutu + kilit. */
+export function LockedValue({ id, text }: { id?: string; text: string }) {
+  return (
+    <div className="relative">
+      <Lock className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
+      <Input id={id} value={text} readOnly tabIndex={-1} className="cursor-not-allowed bg-muted pl-8" />
+    </div>
+  );
+}
 
 /**
  * Stok kodu satırı — formun EN ALTINDA ve varsayılan KAPALI.

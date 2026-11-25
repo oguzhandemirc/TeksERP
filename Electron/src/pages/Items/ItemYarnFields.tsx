@@ -2,7 +2,7 @@
 // ya da metreyle alınır, denyesi yoktur ve kg stoğuna girmez. Denye için dtex/Nm/Ne/g/m çevirici ve "600 KAR İPİ"
 // tipi addan ÖNERİ (kullanıcı tıklamadan yazılmaz) burada; hesap sunucuda.
 import { useState } from "react";
-import { Controller, type UseFormReturn } from "react-hook-form";
+import type { UseFormReturn } from "react-hook-form";
 import { Sparkles } from "lucide-react";
 import { FormField } from "@/components/forms/FormField";
 import { EnumSelect } from "@/components/forms/EnumSelect";
@@ -19,71 +19,56 @@ import {
 } from "@/lib/yarn-count";
 import type { ItemFormValues } from "./schema";
 
-const FANCY_UNIT_LABEL = { ADET: "Adet", METRE: "Metre" } as const;
+const PURCHASE_UNITS = [
+  { value: "KG", label: "Kg" },
+  { value: "ADET", label: "Adet" },
+  { value: "METRE", label: "Metre" },
+] as const;
 
 export function ItemYarnFields({ form }: { form: UseFormReturn<ItemFormValues> }) {
   const unit = form.watch("yarnPurchaseUnit");
   const fancy = unit !== "KG";
   const denier = form.watch("linearDensityDen");
   const suggestion = denier.trim() === "" ? denierSuggestionFromName(form.watch("name") ?? "") : null;
-  // Yeni fantezi kartta varsayılan ADET (sektörde pul adetle alınır); normal iplik KG = bugünkü davranış.
-  const setFancy = (on: boolean) => {
-    form.setValue("yarnPurchaseUnit", on ? "ADET" : "KG", { shouldDirty: true });
-    if (!on) form.setValue("yarnPiecesPerM", "", { shouldDirty: true });
+  // Tek alan (jargon denetimi): "İplik türü" lif türüyle karışıyordu; normal iplik Kg, fantezi Adet/Metre.
+  const setUnit = (v: ItemFormValues["yarnPurchaseUnit"]) => {
+    form.setValue("yarnPurchaseUnit", v, { shouldDirty: true });
+    if (v !== "ADET") form.setValue("yarnPiecesPerM", "", { shouldDirty: true });
   };
   const applyDenier = (text: string) => form.setValue("linearDensityDen", text, { shouldDirty: true, shouldValidate: true });
 
   return (
     <>
-      <FormField label="İplik türü" hint={fancy ? "Pul, payet şerit" : "Kg ile alınır"} info="Fantezi iplik (pul, payet şerit) adetle ya da metreyle alınır; denyesi gerekmez ve kg stoğuna/iplik ihtiyacına girmez. Çözgüde kullanılamaz.">
-        <div className="grid grid-cols-2 gap-1 rounded-md border p-1" role="radiogroup" aria-label="İplik türü">
-          {([false, true] as const).map((on) => (
+      <FormField label="Alım birimi" hint={fancy ? "Fantezi iplik (pul, payet şerit)" : "Normal iplik"} info="Normal iplik kg ile alınır. Fantezi iplik (pul, payet şerit) adetle ya da metreyle alınır; denyesi gerekmez, kg stoğuna ve iplik ihtiyacına girmez, çözgüde kullanılamaz. Maliyet bu birimin fiyatıyla hesaplanır: adet → metredeki adet × adet fiyatı; metre → iplik metresi × metre fiyatı.">
+        <div className="grid grid-cols-3 gap-1 rounded-md border p-1" role="radiogroup" aria-label="Alım birimi">
+          {PURCHASE_UNITS.map((o) => (
             <button
-              key={String(on)}
+              key={o.value}
               type="button"
               role="radio"
-              aria-checked={fancy === on}
-              onClick={() => setFancy(on)}
-              className={cn("rounded px-2 py-1.5 text-sm transition-colors", fancy === on ? "bg-primary text-primary-foreground" : "hover:bg-muted")}
+              aria-checked={unit === o.value}
+              onClick={() => setUnit(o.value)}
+              className={cn("rounded px-2 py-1.5 text-sm transition-colors", unit === o.value ? "bg-primary text-primary-foreground" : "hover:bg-muted")}
             >
-              {on ? "Fantezi" : "Normal"}
+              {o.label}
             </button>
           ))}
         </div>
       </FormField>
 
-      {fancy && (
-        <FormField label="Satın alma birimi" info="Maliyet bu birimin fiyatıyla hesaplanır: adet → metredeki adet × adet fiyatı; metre → iplik metresi × metre fiyatı.">
-          <Controller
-            control={form.control}
-            name="yarnPurchaseUnit"
-            render={({ field }) => (
-              <EnumSelect<"ADET" | "METRE">
-                value={field.value === "METRE" ? "METRE" : "ADET"}
-                onChange={(v) => {
-                  field.onChange(v);
-                  if (v !== "ADET") form.setValue("yarnPiecesPerM", "", { shouldDirty: true });
-                }}
-                labels={FANCY_UNIT_LABEL}
-              />
-            )}
-          />
-        </FormField>
-      )}
-
       {unit === "ADET" && (
         <FormField label="İplik metresindeki adet" htmlFor="yarnPiecesPerM" error={form.formState.errors.yarnPiecesPerM} info="Örn. 3 mm pul ipliğinde 1 metrede yaklaşık 333 pul. Maliyette atkı ipliği boyu × bu sayı × adet fiyatı.">
-          <Input id="yarnPiecesPerM" inputMode="decimal" placeholder="333" {...form.register("yarnPiecesPerM")} />
+          <Input id="yarnPiecesPerM" inputMode="decimal" placeholder="ör. 333" {...form.register("yarnPiecesPerM")} />
         </FormField>
       )}
 
       <FormField
-        label={fancy ? "Denye" : "Denye (iplik inceliği)"}
+        label="İplik numarası (denye)"
         htmlFor="linearDensityDen"
         error={form.formState.errors.linearDensityDen}
         info="Çözgü kartı ve kg hesabı için gerekli — kg = tel × denye × metre ÷ 9.000.000. Elinizde dtex/Nm/Ne/g/m varsa çeviriciyi kullanın."
       >
-        <Input id="linearDensityDen" inputMode="decimal" placeholder={fancy ? "Boş bırakılabilir" : "150"} {...form.register("linearDensityDen")} />
+        <Input id="linearDensityDen" inputMode="decimal" placeholder={fancy ? "Boş bırakılabilir" : "ör. 150"} {...form.register("linearDensityDen")} />
         {suggestion && !fancy && (
           <button type="button" onClick={() => applyDenier(suggestion)} className="mt-1 inline-flex items-center gap-1 text-xs text-primary hover:underline">
             <Sparkles className="h-3 w-3" /> Addaki {suggestion} denye mi? Denye olarak kullan

@@ -45,7 +45,7 @@ export function ItemConstructionPickers({ form }: { form: UseFormReturn<ItemForm
   const err = form.formState.errors;
   return (
     <>
-      <FormField label="Atkı kartı" error={err.weftSpecId} info="Atkı sırası, iplikler ve sıklık; maliyet ve dokuma iş emri buradan okur">
+      <FormField label="Atkı kartı" error={err.weftSpecId} info="Atkı raporu, iplikler ve sıklık; maliyet ve dokuma iş emri buradan okur">
         <Controller
           control={form.control}
           name="weftSpecId"

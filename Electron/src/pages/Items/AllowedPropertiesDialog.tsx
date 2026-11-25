@@ -90,7 +90,7 @@ export function AllowedPropertiesDialog({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-xl">
           <DialogHeader>
-            <DialogTitle>İzinli Özellikler</DialogTitle>
+            <DialogTitle>Uygulanabilir özellikler</DialogTitle>
             <DialogDescription>
               Bu kumaşa uygulanabilecek özellikler. Boş bırakılırsa tüm aktif özellikler serbest.
             </DialogDescription>

@@ -47,7 +47,7 @@ export function WarpSpecVisualPanel({ initial }: { initial?: WarpSpec | null }) 
   const seq = saved ? (serverSeq ?? null) : null;
   // Yükleniyor / eski sunucu (alan yok) "dizilim okunamadı" demesin.
   const hint = !saved ? undefined
-    : detail.isLoading ? "Dizilim yükleniyor…"
+    : detail.isLoading ? "Çözgü dizimi yükleniyor…"
     : detail.data && serverSeq === undefined ? "Tel tel dizilim sunucu güncellenince görünür; şimdilik ipliklerin tel payı gösteriliyor."
     : undefined;
   const nameOf = (id: string) =>

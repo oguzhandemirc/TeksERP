@@ -3,6 +3,7 @@
 import type { UseFormReturn } from "react-hook-form";
 import { FormField } from "@/components/forms/FormField";
 import { Input } from "@/components/ui/input";
+import { WASTE_PRECEDENCE_TEXT } from "@/lib/waste-precedence";
 import type { ItemFormValues } from "./schema";
 
 export function ItemYarnWasteField({ form }: { form: UseFormReturn<ItemFormValues> }) {
@@ -11,9 +12,9 @@ export function ItemYarnWasteField({ form }: { form: UseFormReturn<ItemFormValue
       label="İplik firesi %"
       htmlFor="yarnWastePct"
       error={form.formState.errors.yarnWastePct}
-      info="Doluysa bu iplik maliyet ve iplik ihtiyacında bu fireyle hesaplanır; boşsa çözgü/atkı kartındaki fire kullanılır (0–50)"
+      info={`Doluysa bu iplik maliyet ve iplik ihtiyacında her kumaşta bu fireyle hesaplanır (0–50). ${WASTE_PRECEDENCE_TEXT}`}
     >
-      <Input id="yarnWastePct" inputMode="decimal" placeholder="Boş = kart firesi" {...form.register("yarnWastePct")} />
+      <Input id="yarnWastePct" inputMode="decimal" placeholder="Boş = sıradaki fire" {...form.register("yarnWastePct")} />
     </FormField>
   );
 }

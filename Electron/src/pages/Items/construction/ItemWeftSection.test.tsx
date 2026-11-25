@@ -27,7 +27,7 @@ describe("ItemWeftSection — paylaşılan kart kullanım yerinde kilitli (kulla
     const startFork = vi.fn();
     renderWithProviders(<ItemWeftSection draft={saved({ others: 2, startFork })} canWrite />);
     expect(screen.getByText("Bu atkı kartı 2 kumaşta daha kullanılıyor")).toBeInTheDocument();
-    expect(screen.getByLabelText("Atkı sırası kodu")).toBeDisabled();
+    expect(screen.getByLabelText("Atkı raporu")).toBeDisabled();
     expect(screen.queryByText(/Hepsinde/)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Yalnız bu kumaş için kopya/ }));
     expect(startFork).toHaveBeenCalled();
@@ -36,16 +36,16 @@ describe("ItemWeftSection — paylaşılan kart kullanım yerinde kilitli (kulla
   });
   it("kullanım sayısı bilinmiyorsa da kilitli", () => {
     renderWithProviders(<ItemWeftSection draft={saved({ others: null })} canWrite />);
-    expect(screen.getByLabelText("Atkı sırası kodu")).toBeDisabled();
+    expect(screen.getByLabelText("Atkı raporu")).toBeDisabled();
     expect(screen.getByTestId("weft-shared-lock")).toBeInTheDocument();
   });
   it("(b) yalnız bu kumaşa ait kart yerinde düzenlenir; kopya seçilince paylaşılan kart da (kopyaya) düzenlenir", () => {
     const { unmount } = renderWithProviders(<ItemWeftSection draft={saved({ others: 0 })} canWrite />);
-    expect(screen.getByLabelText("Atkı sırası kodu")).not.toBeDisabled();
+    expect(screen.getByLabelText("Atkı raporu")).not.toBeDisabled();
     expect(screen.queryByTestId("weft-shared-lock")).toBeNull();
     unmount();
     renderWithProviders(<ItemWeftSection draft={saved({ others: 2, forking: true })} canWrite />);
-    expect(screen.getByLabelText("Atkı sırası kodu")).not.toBeDisabled();
+    expect(screen.getByLabelText("Atkı raporu")).not.toBeDisabled();
     expect(screen.getByText(/kartın kopyası açılır/)).toBeInTheDocument();
   });
 });
@@ -70,7 +70,7 @@ describe("ItemWeftSection", () => {
     renderWithProviders(<ItemWeftSection draft={draft({ mode: "new", content: { ...EMPTY_WEFT, rows: [{ yarnItemId: "", picks: "" }] } })} canWrite />);
     expect(screen.getByText("Atış adedi")).toBeInTheDocument();
     expect(screen.getByLabelText("Atkı sıklığı (atkı/cm)")).toHaveAttribute("placeholder", "ör. 22");
-    expect(screen.getByLabelText("Atkı sırası kodu")).toHaveAttribute("placeholder", "ör. 10x(A2 B2 C1) D4");
+    expect(screen.getByLabelText("Atkı raporu")).toHaveAttribute("placeholder", "ör. 10x(A2 B2 C1) D4");
     expect(screen.getByLabelText("Atkı program no")).toHaveAttribute("placeholder", "ör. 6037");
     expect(screen.getByLabelText("Atkı A rapordaki atkı adedi")).toHaveAttribute("placeholder", "ör. 4");
   });
