@@ -160,6 +160,7 @@
 - Kart görsellerini veriden türet: çözgü dizilim açılımını yalnız `warp-sequence.helper` (`endsSequence`; okunamayan not null), kumaş görünümünü yalnız `weave-drawdown.helper` (düz tahar, LENO çizilmez) üretsin; istemci `pickSequence`/`endsSequence` hesaplamaz, drawdown aynası aynı örnek tabloyla parite testine bağlıdır. · bekçi: `test_warp_sequence`, `test_weave_drawdown` <sub>(arşiv:2026-11-22 Kart görseli A)</sub>
 - Kart editörlerinin kutu şeridi/ızgara taslağını (`lift-plan-edit`, `sequence-edit`) yalnız düzenleme önizlemesi say: kaydedilen değer `liftPlan`/`lenoFrames`, `sequenceCode`, `sequenceNote` metnidir; kayıtlı görünüm ve tel tutma uyarısı sunucunun `pickSequence`/`endsSequence`inden çizilsin. <sub>(arşiv:2026-11-23 Kart görseli I)</sub>
 - [ÇEKİRDEK] Desen sınıfını yalnız `weave-classification.ts` `resolveWeaveClass` ile oku (mekanizma Eksantrik/Armür/Jakar + ayrı örgü; `kind` çift yazılan geçiş alanı); Armür dışı ızgara ve Jakar dışı kanca yazımı 400, saklı eski değeri silme, okuyucular `effectiveWeaveDesign` üzerinden görmesin; Örme tekniği açılana dek 400. <sub>(arşiv:2026-11-25 Desen sınıflaması üç eksen)</sub>
+- Desen kartı teknik özetini (tel/cm, rapor/m, gramaj) yalnız `computed-gsm` ucundan bas; kartı kopyalarken tek `POST /api/weave-designs` gönder, etkin görünümü izle (gizli ızgara/kanca taşınmaz), tezgâh dosya adını boş bırak. · bekçi: `test_kumas_hesaplanan_gramaj` §7 <sub>(arşiv:2026-11-25 Desen kartı teknik özet şeridi)</sub>
 
 ## Panel (Electron)
 

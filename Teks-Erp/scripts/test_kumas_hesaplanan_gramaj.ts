@@ -9,10 +9,12 @@
 //   §4 ürün yazma yolu panel biçimi: "300.5" NOKTALI METİN kabul; null temizler; diffPct doğru
 //   §5 eksik veri → null (0 ya da hata değil); kumaş olmayan kart → kg alanları null
 //   §6 ürün yok → 404; route `item:read` kapılı ve `/api/items`ten önce bağlı
+//   §7 teknik özet (2026-11-25): endsPerCm = tel ÷ ham en, repeatsPerM = 100 ÷ desen boyu, eksik → null
 //
 // NEGATİF SONDA — 2026-11-11 koşuldu (cp + geri alma):
 //   servisteki `{ includeWaste: false }` sökülünce → §1a/§2a ❌ · `layersOk` şartı sökülmedi (katman
 //   bekçisi `test_cozgu_katman_motor` ölçer) · route izni `item:write` yapılınca → §6b ❌
+//   2026-11-25: servis desen `repeatCm`ini okumayınca → §7d ❌ · tel/cm paydası ham en + 4 yapılınca → §7a/§7c ❌
 // Koşum: npx tsx scripts/test_kumas_hesaplanan_gramaj.ts
 // =============================================================================
 import { readFileSync } from "node:fs";
@@ -20,7 +22,7 @@ import { join } from "node:path";
 import { ItemType, Prisma } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { itemService } from "../src/routes/item.routes";
-import { computedGsmForItem } from "../src/services/fabric-gsm.service";
+import { computedGsmForItem, presentComputedGsm } from "../src/services/fabric-gsm.service";
 import { buildCostInput, loadCostStructureSourcesTx } from "../src/services/helpers/cost-assembler.helper";
 import { yarnUsagePerM } from "../src/services/helpers/fabric-cost.helper";
 import { ensureTestAdmin } from "./fixture-test-user";
@@ -46,6 +48,7 @@ const WEFT_304_G = D(28).mul(100).mul("3.04").mul(D(150).plus(300).div(2)).div(9
 
 let f: MaliyetFikstur | null = null;
 const extra: string[] = [];
+const weaveIds: string[] = [];
 
 async function usage(itemId: string, includeWaste?: boolean) {
   const src = await loadCostStructureSourcesTx(prisma as unknown as Prisma.TransactionClient, [itemId]);
@@ -121,6 +124,27 @@ async function main(): Promise<void> {
   const itemsAt = app.search(/app\.use\("\/api\/items",/);
   check("§6b route kapısı dosya başında: router.use(verifyToken, requirePermission(\"item:read\"))", /router\.use\(verifyToken,\s*requirePermission\("item:read"\)\)/.test(route));
   check("§6c app.ts: computed-gsm, /api/items'ten ÖNCE bağlı", gsmAt >= 0 && itemsAt >= 0 && gsmAt < itemsAt, `${gsmAt} / ${itemsAt}`);
+
+  // §7 teknik özet (desen kartı şeridi) — tel ÷ ham en, rapor tekrarı; eksik veri → null
+  const z = presentComputedGsm(
+    { rawWidthCm: D(300), warpKgPerM: null, weftKgPerM: null, enteredRawGsm: null },
+    { endsCount: 6800, picksPerCm: D(28), picksInRepeat: 12, repeatCm: D("1.5") },
+  );
+  check("§7a ⭐ 6800 tel ÷ 300 cm = 22,67 tel/cm; rapor 1,5 cm → 66,67 rapor/m", z.endsPerCm === 22.67 && z.repeatsPerM === 66.67 && z.endsCount === 6800 && z.repeatCm === 1.5, JSON.stringify(z));
+  const zn = presentComputedGsm({ rawWidthCm: null, warpKgPerM: null, weftKgPerM: null, enteredRawGsm: null }, { endsCount: 6800, picksPerCm: null, picksInRepeat: 0, repeatCm: null });
+  check("§7b en yok → endsPerCm null; rapor boyu yok → repeatCm/repeatsPerM null; 0 → null", zn.endsPerCm === null && zn.repeatCm === null && zn.repeatsPerM === null && zn.picksPerCm === null && zn.picksInRepeat === null, JSON.stringify(zn));
+  await itemService.update(f.fabricId, { rawWidthCm: "300" }, admin.id);
+  const yarnRows = await prisma.weftSpecYarn.findMany({ where: { weftSpecId: f.weftSpecId }, select: { picksInRepeat: true } });
+  const expPicks = yarnRows.reduce((s, r) => s + r.picksInRepeat, 0);
+  const t0 = await computedGsmForItem(f.fabricId);
+  check("§7c kumaş: 9600 tel ÷ 300 = 32 tel/cm · 28 atkı/cm · rapor atkısı = Σ satır · desen yok → rapor null", t0.endsCount === 9600 && t0.endsPerCm === 32 && t0.picksPerCm === 28 && t0.picksInRepeat === expPicks && expPicks > 0 && t0.repeatCm === null && t0.repeatsPerM === null, JSON.stringify(t0));
+  const wd = await prisma.weaveDesign.create({ data: { code: `${f.tag}-WD`, name: `${f.tag} desen`, kind: "DOBBY", shedMechanism: "DOBBY", repeatCm: D("1.5") }, select: { id: true } });
+  weaveIds.push(wd.id);
+  await prisma.item.update({ where: { id: f.fabricId }, data: { weaveDesignId: wd.id } });
+  const t1 = await computedGsmForItem(f.fabricId);
+  check("§7d ⭐ desen kartı rapor boyu 1,5 cm → repeatCm 1,5 · repeatsPerM 66,67", t1.repeatCm === 1.5 && t1.repeatsPerM === 66.67, JSON.stringify(t1));
+  check("§7e çözgüsüz kumaş → endsCount/endsPerCm null (0 değil)", e.endsCount === null && e.endsPerCm === null, JSON.stringify(e));
+  await prisma.item.update({ where: { id: f.fabricId }, data: { weaveDesignId: null } });
 }
 
 main()
@@ -131,6 +155,8 @@ main()
   .finally(async () => {
     try {
       if (extra.length) await prisma.item.deleteMany({ where: { id: { in: extra } } });
+      if (f) await prisma.item.updateMany({ where: { id: f.fabricId }, data: { weaveDesignId: null } });
+      if (weaveIds.length) await prisma.weaveDesign.deleteMany({ where: { id: { in: weaveIds } } });
       if (f) await fiksturSil(f);
     } catch (e) {
       fail++;

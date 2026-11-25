@@ -24,16 +24,30 @@ export interface ComputedGsm {
   gsm: number | null;
   enteredRawGsm: number | null;
   diffPct: number | null;
+  /** Teknik özet (desen kartı şeridi, 2026-11-25) — EK alanlar; eski istemci yok sayar. Yapı yoksa null. */
+  endsCount: number | null;
+  endsPerCm: number | null;
+  picksPerCm: number | null;
+  picksInRepeat: number | null;
+  repeatCm: number | null;
+  repeatsPerM: number | null;
 }
 
+interface GsmParts { rawWidthCm: Dec | null; warpKgPerM: Dec | null; weftKgPerM: Dec | null; enteredRawGsm: Dec | null }
+export interface TechSummaryParts { endsCount: number | null; picksPerCm: Dec | null; picksInRepeat: number | null; repeatCm: Dec | null }
+const NO_TECH: TechSummaryParts = { endsCount: null, picksPerCm: null, picksInRepeat: null, repeatCm: null };
+const pos = (v: Dec | null): Dec | null => (v && v.gt(0) ? v : null);
+
 /** Ham değerlerden (Decimal) sözleşme alanları — yuvarlama yalnız burada (2 hane). */
-export function presentComputedGsm(p: { rawWidthCm: Dec | null; warpKgPerM: Dec | null; weftKgPerM: Dec | null; enteredRawGsm: Dec | null }): ComputedGsm {
+export function presentComputedGsm(p: GsmParts, t: TechSummaryParts = NO_TECH): ComputedGsm {
   const warpG = p.warpKgPerM?.mul(KG_TO_G) ?? null;
   const weftG = p.weftKgPerM?.mul(KG_TO_G) ?? null;
   const total = warpG && weftG ? warpG.plus(weftG) : null;
-  const width = p.rawWidthCm && p.rawWidthCm.gt(0) ? p.rawWidthCm : null;
+  const width = pos(p.rawWidthCm);
   const gsm = total && width ? total.div(width.div(HUNDRED)) : null;
   const diff = gsm && gsm.gt(0) && p.enteredRawGsm ? p.enteredRawGsm.minus(gsm).div(gsm).mul(HUNDRED) : null;
+  const ends = t.endsCount && t.endsCount > 0 ? t.endsCount : null;
+  const repeat = pos(t.repeatCm);
   return {
     rawWidthCm: num2(p.rawWidthCm),
     warpGPerM: num2(warpG),
@@ -42,12 +56,22 @@ export function presentComputedGsm(p: { rawWidthCm: Dec | null; warpKgPerM: Dec 
     gsm: num2(gsm),
     enteredRawGsm: num2(p.enteredRawGsm),
     diffPct: num2(diff),
+    endsCount: ends,
+    // Gramajla AYNI en (ham en); tarak eni değil — şerit "toplam tel ÷ ham en" der.
+    endsPerCm: num2(ends && width ? new Prisma.Decimal(ends).div(width) : null),
+    picksPerCm: num2(pos(t.picksPerCm)),
+    picksInRepeat: t.picksInRepeat && t.picksInRepeat > 0 ? t.picksInRepeat : null,
+    repeatCm: num2(repeat),
+    repeatsPerM: num2(repeat ? HUNDRED.div(repeat) : null),
   };
 }
 
 /** Ürün yoksa 404; KUMAŞ değilse ya da yapı eksikse kg alanları null (hata değil). */
 export async function computedGsmForItem(itemId: string): Promise<ComputedGsm> {
-  const item = await prisma.item.findUnique({ where: { id: itemId }, select: { id: true, itemType: true, rawWidthCm: true, rawGsm: true } });
+  const item = await prisma.item.findUnique({
+    where: { id: itemId },
+    select: { id: true, itemType: true, rawWidthCm: true, rawGsm: true, weaveDesign: { select: { repeatCm: true } } },
+  });
   if (!item) throw AppError.notFound("Ürün bulunamadı.");
   const base = { rawWidthCm: item.rawWidthCm, enteredRawGsm: item.rawGsm };
   if (item.itemType !== "FABRIC") return presentComputedGsm({ ...base, warpKgPerM: null, weftKgPerM: null });
@@ -58,5 +82,11 @@ export async function computedGsmForItem(itemId: string): Promise<ComputedGsm> {
   const layersOk = usage.warpLayers.length === (input.warpLayers?.length ?? 0);
   const warpKgPerM = usage.warp && layersOk ? usage.warpLayers.reduce((a, l) => a.plus(l.kgPerM), usage.warp.kgPerM) : null;
   const weftKgPerM = usage.weft.length > 0 ? usage.weft.reduce((a, w) => a.plus(w.kgPerM), new Prisma.Decimal(0)) : null;
-  return presentComputedGsm({ ...base, warpKgPerM, weftKgPerM });
+  // Özet: tel = zemin + ek katmanlar (zemin yoksa bilinmiyor); sıklık/rapor atkısı motorun gördüğü atkıdan.
+  const endsCount = input.warp ? (input.warpLayers ?? []).reduce((a, l) => a + l.endsCount, input.warp.endsCount) : null;
+  const picksInRepeat = input.weft && input.weft.yarns.length > 0 ? input.weft.yarns.reduce((a, y) => a + y.picksInRepeat, 0) : null;
+  return presentComputedGsm(
+    { ...base, warpKgPerM, weftKgPerM },
+    { endsCount, picksPerCm: input.weft?.picksPerCm.value ?? null, picksInRepeat, repeatCm: item.weaveDesign?.repeatCm ?? null },
+  );
 }
