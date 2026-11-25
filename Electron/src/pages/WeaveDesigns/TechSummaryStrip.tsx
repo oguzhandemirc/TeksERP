@@ -22,9 +22,9 @@ export function techSummaryCells(d: Partial<ItemComputedGsm> | null | undefined)
     c("picksInRepeat", "Rapordaki atkı", "atkı", "Atkı sırası bir kez tamamlanana kadar atılan atkı sayısı (atkı kartındaki adetlerin toplamı)."),
     c("repeatCm", "Rapor boyu", "cm", "Desenin kendini tekrar ettiği boy (desen kartından)."),
     c("repeatsPerM", "1 metrede rapor", "rapor", "1 metre kumaşta desenin kaç kez tekrarlandığı = 100 ÷ rapor boyu."),
-    c("warpGPerM", "Çözgü", "g/m", "1 metre kumaştaki çözgü ipliği ağırlığı (fire hariç)."),
-    c("weftGPerM", "Atkı", "g/m", "1 metre kumaştaki atkı ipliği ağırlığı (fire hariç)."),
-    c("totalGPerM", "Toplam", "g/m", "Çözgü + atkı; 1 metre ham kumaşın ağırlığı."),
+    c("warpGPerM", "Çözgü ağırlığı", "g/m", "1 metre kumaştaki çözgü ipliği ağırlığı (fire hariç)."),
+    c("weftGPerM", "Atkı ağırlığı", "g/m", "1 metre kumaştaki atkı ipliği ağırlığı (fire hariç)."),
+    c("totalGPerM", "Metre ağırlığı", "g/m", "Çözgü + atkı; 1 metre ham kumaşın ağırlığı."),
     c("gsm", "Gramaj", "g/m²", "Metrekare ağırlığı = toplam g/m ÷ ham en (m)."),
   ];
 }
