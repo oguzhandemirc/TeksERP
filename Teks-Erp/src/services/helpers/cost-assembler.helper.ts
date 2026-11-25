@@ -103,9 +103,16 @@ export function loadCostStructureSourcesTx(tx: Db, itemIds: string[]): Promise<C
   return loadSourcesTx(tx, { itemIds, extraRateCodes: [], recipeIds: [], withPrices: false });
 }
 
-async function loadSourcesTx(tx: Db, a: { itemIds: string[]; extraRateCodes: string[]; recipeIds: string[]; withPrices: boolean }): Promise<CostSources> {
+/** K4 atkı hesap paneli: kaydedilmemiş atkıyı taşıyan HAZIR satır — aynı kaynak yüklemesi (fire, birim, parametre); fiyatsız. */
+export function loadCostStructureSourcesForRowTx(tx: Db, row: CostItemRow): Promise<CostSources> {
+  return loadSourcesTx(tx, { itemIds: [], rows: [row], extraRateCodes: [], recipeIds: [], withPrices: false });
+}
+export const COST_ITEM_SELECT = itemSelect;
+export const COST_YARN_SELECT = yarnSelect;
+
+async function loadSourcesTx(tx: Db, a: { itemIds: string[]; rows?: CostItemRow[]; extraRateCodes: string[]; recipeIds: string[]; withPrices: boolean }): Promise<CostSources> {
   const { itemIds, extraRateCodes, recipeIds } = a;
-  const rows = itemIds.length ? await tx.item.findMany({ where: { id: { in: itemIds } }, select: itemSelect }) : [];
+  const rows = a.rows ?? (itemIds.length ? await tx.item.findMany({ where: { id: { in: itemIds } }, select: itemSelect }) : []);
   const params = await tx.costParameterSet.findFirst({ where: { status: "ACTIVE" } });
   const recipes = recipeIds.length ? await tx.productRecipe.findMany({ where: { id: { in: recipeIds } }, select: { id: true, itemId: true, finishingRateCode: true } }) : [];
   const warpLayers = await readWarpLayersForItems(tx, rows.map((r) => r.id));

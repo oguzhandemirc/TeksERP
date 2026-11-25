@@ -38,6 +38,7 @@ export const WEFT_SPEC_SELECT = {
       yarnItemId: true,
       picksInRepeat: true,
       sortOrder: true,
+      colorChannel: true,
       yarnItem: { select: { id: true, code: true, name: true, linearDensityDen: true } },
     },
     orderBy: { sortOrder: "asc" },
@@ -50,6 +51,29 @@ interface YarnLine {
   yarnItemId: string;
   /** Sıra kodu doluysa gövdede verilmeyebilir; türetim sonrası hep dolu. */
   picksInRepeat: number | null;
+  /** K6: renk seçici kanalı (1..WEFT_COLOR_CHANNEL_MAX); null = belirtilmemiş. */
+  colorChannel: number | null;
+}
+
+/** Türetim sonrası kalıcı satır — kart doğuşu, taslak, güncelleme aynı biçimi yazar. */
+export interface WeftYarnLine { yarnItemId: string; picksInRepeat: number; colorChannel: number | null }
+
+/** Renk seçici kanal tavanı — DB CHECK `weft_spec_yarns_color_channel_ck` aynası (rapier seçicilerde yaygın üst sınır 16). */
+export const WEFT_COLOR_CHANNEL_MAX = 16;
+
+/** `yarns.create`/`createMany` satırları (sıra = dizi sırası). */
+export function weftYarnRows(yarns: WeftYarnLine[]): Array<{ yarnItemId: string; picksInRepeat: number; sortOrder: number; colorChannel: number | null }> {
+  return yarns.map((y, i) => ({ yarnItemId: y.yarnItemId, picksInRepeat: y.picksInRepeat, sortOrder: i, colorChannel: y.colorChannel }));
+}
+
+/** Kanal: boş/undefined = belirtilmemiş; aksi 1..16 tam sayı. */
+function parseColorChannel(raw: unknown, row: number): number | null {
+  if (raw === undefined || raw === null || raw === "") return null;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1 || n > WEFT_COLOR_CHANNEL_MAX) {
+    throw AppError.badRequest(`${row}. satır: kanal 1 ile ${WEFT_COLOR_CHANNEL_MAX} arasında bir tam sayı olmalı.`, { code: "WEFT_CHANNEL_INVALID" });
+  }
+  return n;
 }
 
 const ALLOWED = new Set(["code", "name", "picksPerCm", "sequenceNote", "sequenceCode", "weftProgramNo", "notes", "yarns"]);
@@ -65,13 +89,19 @@ async function parseYarns(raw: unknown, picksOptional: boolean): Promise<YarnLin
   const lines: YarnLine[] = raw.map((r, i) => {
     const o = (r ?? {}) as Record<string, unknown>;
     if (typeof o.yarnItemId !== "string" || o.yarnItemId.length === 0) throw AppError.badRequest(`${i + 1}. satır: iplik seçilmedi.`);
-    if (picksOptional && (o.picksInRepeat === undefined || o.picksInRepeat === null)) return { yarnItemId: o.yarnItemId, picksInRepeat: null };
+    const colorChannel = parseColorChannel(o.colorChannel, i + 1);
+    if (picksOptional && (o.picksInRepeat === undefined || o.picksInRepeat === null)) return { yarnItemId: o.yarnItemId, picksInRepeat: null, colorChannel };
     const n = Number(o.picksInRepeat);
     if (!Number.isInteger(n) || n <= 0) throw AppError.badRequest(`${i + 1}. satır: rapordaki atkı adedi sıfırdan büyük bir tam sayı olmalı.`);
-    return { yarnItemId: o.yarnItemId, picksInRepeat: n };
+    return { yarnItemId: o.yarnItemId, picksInRepeat: n, colorChannel };
   });
   if (new Set(lines.map((l) => l.yarnItemId)).size !== lines.length) {
     throw AppError.badRequest("Aynı iplik atkı kartına iki kez yazılamaz — rapordaki adedini artırın.");
+  }
+  const channels = lines.map((l) => l.colorChannel).filter((c): c is number => c !== null);
+  if (new Set(channels).size !== channels.length) {
+    const dup = channels.find((c, i) => channels.indexOf(c) !== i);
+    throw AppError.badRequest(`Kanal ${dup} iki satırda kullanılmış — her iplik renk seçicide ayrı kanala takılır.`, { code: "WEFT_CHANNEL_DUPLICATE" });
   }
   for (const l of lines) {
     const item = await prisma.item.findUnique({ where: { id: l.yarnItemId }, select: { id: true, name: true, itemType: true, linearDensityDen: true, yarnPurchaseUnit: true } });
@@ -116,11 +146,11 @@ function parseSequenceField(raw: unknown): string | null | undefined {
  * Sıra kodu doluysa satır adetleri ONDAN türetilir (gövdede verilen adet türetilenle çelişirse 400);
  * boşsa her satır kendi adedini taşımalı (bugünkü davranış).
  */
-function applySequence(sequence: string | null, lines: YarnLine[]): { sequenceCode: string | null; lines: Array<{ yarnItemId: string; picksInRepeat: number }> } {
+function applySequence(sequence: string | null, lines: YarnLine[]): { sequenceCode: string | null; lines: WeftYarnLine[] } {
   if (sequence === null) {
     const missing = lines.findIndex((l) => l.picksInRepeat === null);
     if (missing >= 0) throw AppError.badRequest(`${missing + 1}. satır: rapordaki atkı adedi girilmedi (sıra kodu yokken adet zorunlu).`);
-    return { sequenceCode: null, lines: lines.map((l) => ({ yarnItemId: l.yarnItemId, picksInRepeat: l.picksInRepeat! })) };
+    return { sequenceCode: null, lines: lines.map((l) => ({ yarnItemId: l.yarnItemId, picksInRepeat: l.picksInRepeat!, colorChannel: l.colorChannel })) };
   }
   const parsed = parseWeftSequence(sequence, lines.length);
   return {
@@ -130,7 +160,7 @@ function applySequence(sequence: string | null, lines: YarnLine[]): { sequenceCo
       if (l.picksInRepeat !== null && l.picksInRepeat !== derived) {
         throw AppError.badRequest(`${i + 1}. satır: girilen adet (${l.picksInRepeat}) sıra kodundan türeyen adetle (${derived}) çelişiyor.`, { code: "WEFT_SEQUENCE_MISMATCH" });
       }
-      return { yarnItemId: l.yarnItemId, picksInRepeat: derived };
+      return { yarnItemId: l.yarnItemId, picksInRepeat: derived, colorChannel: l.colorChannel };
     }),
   };
 }
@@ -143,7 +173,7 @@ function conflict(e: unknown): never {
 export interface WeftSpecContent {
   scalars: Prisma.WeftSpecUncheckedUpdateInput;
   sequenceCode: string | null;
-  yarns: Array<{ yarnItemId: string; picksInRepeat: number }>;
+  yarns: WeftYarnLine[];
 }
 
 const CONTENT_ALLOWED = new Set(["picksPerCm", "sequenceNote", "sequenceCode", "weftProgramNo", "notes", "yarns"]);
@@ -197,7 +227,7 @@ export async function createWeftSpec(body: Record<string, unknown>, userId?: str
         ...scalars,
         createdById: userId ?? null,
         updatedById: userId ?? null,
-        yarns: { create: yarns.map((y, i) => ({ yarnItemId: y.yarnItemId, picksInRepeat: y.picksInRepeat, sortOrder: i })) },
+        yarns: { create: weftYarnRows(yarns) },
       },
       select: WEFT_SPEC_SELECT,
     });
@@ -224,7 +254,7 @@ export async function updateWeftSpec(id: string, body: Record<string, unknown>, 
   const yarnsIn = body.yarns === undefined ? undefined : await parseYarns(body.yarns, effectiveSeq !== null);
   // Yeni sıra kodu mevcut satırlardan yeniden türetir; kod temizlenince adetler olduğu gibi kalır.
   const rewrite = yarnsIn !== undefined || (seqField !== undefined && seqField !== null);
-  const base = yarnsIn ?? before.yarns.map((y) => ({ yarnItemId: y.yarnItemId, picksInRepeat: null }));
+  const base = yarnsIn ?? before.yarns.map((y) => ({ yarnItemId: y.yarnItemId, picksInRepeat: null, colorChannel: y.colorChannel }));
   const applied = rewrite ? applySequence(effectiveSeq, base) : null;
   if (seqField !== undefined) scalars.sequenceCode = applied?.sequenceCode ?? null;
   const yarns = applied?.lines;
@@ -239,9 +269,7 @@ export async function updateWeftSpec(id: string, body: Record<string, unknown>, 
         // ③b saf yapılandırma pivotu: satırlar deftere yazmaz; parasal sonuç maliyet sürümünde donar.
         await tx.weftSpecYarn.deleteMany({ where: { weftSpecId: id } });
         if (yarns.length > 0) {
-          await tx.weftSpecYarn.createMany({
-            data: yarns.map((y, i) => ({ weftSpecId: id, yarnItemId: y.yarnItemId, picksInRepeat: y.picksInRepeat, sortOrder: i })),
-          });
+          await tx.weftSpecYarn.createMany({ data: weftYarnRows(yarns).map((r) => ({ ...r, weftSpecId: id })) });
         }
       }
     });
@@ -257,7 +285,7 @@ export async function updateWeftSpec(id: string, body: Record<string, unknown>, 
     sequenceCode: r.sequenceCode,
     weftProgramNo: r.weftProgramNo,
     notes: r.notes,
-    yarns: r.yarns.map((y) => ({ yarnItemId: y.yarnItemId, picksInRepeat: y.picksInRepeat })),
+    yarns: r.yarns.map((y) => ({ yarnItemId: y.yarnItemId, picksInRepeat: y.picksInRepeat, colorChannel: y.colorChannel })),
   });
   void AuditService.log({ userId, action: "UPDATE", tableName: "WEFT_SPEC", recordId: id, oldData: view(before), newData: view(after) });
   return after;

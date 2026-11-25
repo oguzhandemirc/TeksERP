@@ -24,7 +24,7 @@ export default function WeaveGrid({ cell, direction = 'bottom-up', maxRows, labe
   const L = useMemo(
     () => weaveGridLayout(input, cell, direction, maxRows),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- girdi dizileri sorgu verisinden, referansla sabit
-    [input.liftPlan, input.lenoFrames, input.pickSequence, input.yarnCount, cell, direction, maxRows],
+    [input.liftPlan, input.lenoFrames, input.selvedgeFrames, input.pickSequence, input.yarnCount, cell, direction, maxRows],
   );
   if (L.rows === 0 || (L.frames === 0 && L.selCount === 0)) return null;
   const ox = labels ? LABEL_W : 0;
@@ -40,6 +40,7 @@ export default function WeaveGrid({ cell, direction = 'bottom-up', maxRows, labe
         <Rect x={0} y={0} width={L.frames * cell} height={L.height} fill={WEAVE_COLORS.bg} />
         {L.selCount > 0 ? <Rect x={L.selectorX} y={0} width={L.selCount * cell} height={L.height} fill={WEAVE_COLORS.selectorBg} /> : null}
         {L.lenoBgPath ? <Path d={L.lenoBgPath} fill={WEAVE_COLORS.lenoBg} /> : null}
+        {L.selvedgeBgPath ? <Path d={L.selvedgeBgPath} fill={WEAVE_COLORS.selvedgeBg} /> : null}
         {L.liftPath ? <Path d={L.liftPath} fill={WEAVE_COLORS.lift} /> : null}
         {L.lenoLiftPath ? <Path d={L.lenoLiftPath} fill={WEAVE_COLORS.leno} /> : null}
         {L.selectorPaths.map((s) => <Path key={s.yarn} d={s.d} fill={yarnColor(s.yarn)} />)}

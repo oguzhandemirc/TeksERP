@@ -8,21 +8,26 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { weaveDesignApi } from "./service";
-import type { WeaveDesign } from "./types";
+import type { WeaveDesign, WeaveDesignInput } from "./types";
 import { buildCopyPayload } from "./weave-copy";
 import { SHED_MECHANISM_LABEL, resolveWeaveClass } from "./weave-class";
 
-export function WeaveDesignCopyDialog({ source, onClose, onCreated }: { source: WeaveDesign; onClose: () => void; onCreated: (id: string) => void }) {
+// `onSubmit` verilirse (seçicideki "Örnek al") kaydı, bildirimi ve kapanışı ortak kayıt formu kancası yapar.
+type Props = { source: WeaveDesign; onClose: () => void; onCreated?: (id: string) => void; onSubmit?: (body: WeaveDesignInput) => Promise<void> };
+
+export function WeaveDesignCopyDialog({ source, onClose, onCreated, onSubmit }: Props) {
   const qc = useQueryClient();
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
   const create = useMutation({
-    mutationFn: () => weaveDesignApi.create(buildCopyPayload(source, { code, name })),
-    onSuccess: (row) => {
+    mutationFn: async () => {
+      const body = buildCopyPayload(source, { code, name });
+      if (onSubmit) return onSubmit(body);
+      const row = await weaveDesignApi.create(body);
       toast.success(`${source.code} kartından örnek alındı: ${row.code}`);
       void qc.invalidateQueries({ queryKey: ["weave-designs"] });
       onClose();
-      onCreated(row.id);
+      onCreated?.(row.id);
     },
   });
   const ready = code.trim().length > 0 && name.trim().length > 0;

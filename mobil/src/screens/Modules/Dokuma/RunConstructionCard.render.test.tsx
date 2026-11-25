@@ -57,6 +57,19 @@ test('yapılı iş → armür dosyası, sıklık, atkı sırası, varyant işare
   expect(r.queryByTestId('weave-mini')).toBeNull();
 });
 
+test('K6: renk seçici kanalı satırda; görselsiz kenar çerçeveleri metinle', async () => {
+  construction.mockResolvedValue({
+    ...full,
+    design: { ...full.design!, selvedgeFrames: [1, 2] },
+    weft: { ...full.weft!, yarns: [{ ...full.weft!.yarns[0]!, colorChannel: 3 }, full.weft!.yarns[1]!] },
+  });
+  const r = renderWithPaper(<RunConstructionCard weavingOrderId="wo1" />);
+  await r.findByTestId('run-construction');
+  expect(r.getByText('A × 8 — PES-150 Polyester 150 — Kanal 3')).toBeTruthy();
+  expect(r.getByText('C × 1 — SIM-1 Sim (varyant)')).toBeTruthy();
+  expect(r.getByTestId('run-construction-selvedge')).toHaveTextContent('Kenar çerçeveleri: 1, 2');
+});
+
 test('sunucu armür + seçici gönderiyorsa mini görsel; dokununca tam ekran, yön çevrilir', async () => {
   const withGrid: RunConstruction = {
     ...full,

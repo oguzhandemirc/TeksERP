@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { DefectSeverity } from "@/types/enums";
 import { DEFECT_GROUPS } from "@/lib/hata-gruplari";
+import type { DefectType } from "./types";
 
 export const defectTypeFormSchema = z.object({
   // Sınır DB kolonuyla birebir (DefectType.name @db.VarChar(100)) — panel
@@ -39,3 +40,22 @@ export const defectTypeFormDefaults: DefectTypeFormValues = {
   isDefault: false,
   fixedPoints: "",
 };
+
+/** Hata tipi yazma gövdesi — Hata Tipleri ekranı ve seçicideki kayıt formu (Yeni · Örnek al) aynısını kullanır. */
+export const buildPayload = (
+  v: DefectTypeFormValues,
+  initial: DefectType | null,
+  fourPoint = false,
+): Partial<DefectType> => ({
+  // Kod backend'de üretilir (HATA+GGAAYY+NNNN); create'te gönderilmez, edit'te korunur.
+  ...(initial?.code ? { code: initial.code } : {}),
+  name: v.name,
+  description: v.description || null,
+  severity: (v.severity || null) as DefectType["severity"],
+  defectGroup: v.defectGroup || null,
+  isActive: v.isActive,
+  // `true` backend'de tek-varsayılan tx'inden geçer (eskisi düşer); `false` düz yazılır.
+  isDefault: v.isDefault,
+  // K4P: yalnız modül açıkken gider — kapalıyken gönderilen `null` mevcut sabit puanı silerdi.
+  ...(fourPoint ? { fixedPoints: v.fixedPoints === "" ? null : Number(v.fixedPoints) } : {}),
+});

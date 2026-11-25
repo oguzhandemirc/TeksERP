@@ -72,7 +72,7 @@ async function forkInTx(tx: Prisma.TransactionClient, { sourceId, itemId, code, 
 
   const source = await tx.weftSpec.findUniqueOrThrow({
     where: { id: sourceId },
-    select: { picksPerCm: true, sequenceNote: true, sequenceCode: true, weftProgramNo: true, notes: true, yarns: { select: { yarnItemId: true, picksInRepeat: true, sortOrder: true }, orderBy: { sortOrder: "asc" } } },
+    select: { picksPerCm: true, sequenceNote: true, sequenceCode: true, weftProgramNo: true, notes: true, yarns: { select: { yarnItemId: true, picksInRepeat: true, sortOrder: true, colorChannel: true }, orderBy: { sortOrder: "asc" } } },
   });
   // Sıra (sortOrder) aynen korunur: varyant atkı değişimleri sıraya bağlıdır, yeni kartta da geçerli kalır.
   const created = await tx.weftSpec.create({
@@ -86,7 +86,8 @@ async function forkInTx(tx: Prisma.TransactionClient, { sourceId, itemId, code, 
       notes: source.notes,
       createdById: userId,
       updatedById: userId,
-      yarns: { create: source.yarns.map((y) => ({ yarnItemId: y.yarnItemId, picksInRepeat: y.picksInRepeat, sortOrder: y.sortOrder })) },
+      // K6: renk seçici kanalı da kopyalanır (kopya tezgâhta aynı kanallarla dokunur).
+      yarns: { create: source.yarns.map((y) => ({ yarnItemId: y.yarnItemId, picksInRepeat: y.picksInRepeat, sortOrder: y.sortOrder, colorChannel: y.colorChannel })) },
     },
     select: { id: true },
   });

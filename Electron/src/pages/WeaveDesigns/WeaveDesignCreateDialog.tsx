@@ -13,10 +13,12 @@ import type { WeaveClass } from "./weave-class";
 import { defaultMechanism, useEnabledMechanisms } from "./mechanism-options";
 import { DrawingInFields, drawingInApplies } from "./DrawingInFields";
 import type { DrawingInType } from "@/components/weave/weave-drawing-in";
+import type { WeaveDesignInput } from "./types";
 
 export { NATIVE_SELECT_CLASS } from "./WeaveClassFields";
 
-export function WeaveDesignCreateDialog({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
+/** `onSubmit` verilirse (seçicideki "Yeni") kaydı, bildirimi ve kapanışı çağıran yapar (ortak kayıt formu kancası). */
+export function WeaveDesignCreateDialog({ onClose, onCreated, onSubmit }: { onClose: () => void; onCreated?: (id: string) => void; onSubmit?: (body: WeaveDesignInput) => Promise<void> }) {
   const qc = useQueryClient();
   const [code, setCode] = useState("");
   const [name, setName] = useState("");
@@ -26,14 +28,16 @@ export function WeaveDesignCreateDialog({ onClose, onCreated }: { onClose: () =>
   const enabled = useEnabledMechanisms();
   const cls: WeaveClass = enabled.includes(picked.shedMechanism) ? picked : { ...picked, shedMechanism: defaultMechanism(enabled) };
   const create = useMutation({
-    mutationFn: () => weaveDesignApi.create({
-      code: code.trim(), name: name.trim(), ...cls, ...(drawingInApplies(cls.shedMechanism) && drawingInType ? { drawingInType } : {}),
-    }),
-    onSuccess: (row) => {
+    mutationFn: async () => {
+      const body: WeaveDesignInput = {
+        code: code.trim(), name: name.trim(), ...cls, ...(drawingInApplies(cls.shedMechanism) && drawingInType ? { drawingInType } : {}),
+      };
+      if (onSubmit) return onSubmit(body);
+      const row = await weaveDesignApi.create(body);
       toast.success("Desen kartı oluşturuldu.");
       void qc.invalidateQueries({ queryKey: ["weave-designs"] });
       onClose();
-      onCreated(row.id);
+      onCreated?.(row.id);
     },
   });
   const ready = code.trim().length > 0 && name.trim().length > 0;

@@ -78,7 +78,7 @@ export async function buildWeaveCardView(itemId: string, now: Date = new Date(),
       ? {
         code: c.weft.code, name: c.weft.name, picksPerCm: dec(c.weft.picksPerCm), weftProgramNo: c.weft.weftProgramNo,
         sequenceCode: c.weft.sequenceCode,
-        yarns: c.weft.yarns.map((y) => ({ ...yarn(y.yarnItem), no: y.sortOrder + 1, picksInRepeat: y.picksInRepeat })),
+        yarns: c.weft.yarns.map((y) => ({ ...yarn(y.yarnItem), no: y.sortOrder + 1, picksInRepeat: y.picksInRepeat, colorChannel: y.colorChannel })),
       }
       : null,
     warps: warpSpecs.map(({ roleLabel, spec }) => ({

@@ -14,7 +14,7 @@ import { isUniqueViolation } from "./helpers/cost-input.helper";
 import { foldNameForCompare } from "./helpers/name-normalize.helper";
 import { findWeftOverrideOrphans, throwWeftOverrideOrphan } from "./helpers/effective-construction.helper";
 import { assertItemUsable } from "./helpers/item-usage.helper";
-import { parseWeftSpecContent, WEFT_SPEC_SELECT, type WeftSpecContent, type WeftSpecRow } from "./weft-spec.service";
+import { parseWeftSpecContent, WEFT_SPEC_SELECT, weftYarnRows, type WeftSpecContent, type WeftSpecRow } from "./weft-spec.service";
 
 const CODE_MAX = 32;
 const NAME_MAX = 100;
@@ -70,7 +70,7 @@ export async function createWeftSpecFromDraftTx(
       sequenceCode: draft.sequenceCode,
       createdById: userId,
       updatedById: userId,
-      yarns: { create: draft.yarns.map((y, i) => ({ yarnItemId: y.yarnItemId, picksInRepeat: y.picksInRepeat, sortOrder: i })) },
+      yarns: { create: weftYarnRows(draft.yarns) },
     },
     select: { id: true, code: true, name: true },
   });
@@ -89,7 +89,8 @@ export function logDraftWeftCreate(card: { id: string; code: string; name: strin
 /** Kayıtlı kart taslakla aynı içerikte mi (replay ölçütü). */
 function sameContent(row: WeftSpecRow, draft: WeftSpecContent): boolean {
   if ((row.sequenceCode ?? null) !== draft.sequenceCode || row.yarns.length !== draft.yarns.length) return false;
-  return row.yarns.every((y, i) => y.yarnItemId === draft.yarns[i]!.yarnItemId && y.picksInRepeat === draft.yarns[i]!.picksInRepeat);
+  return row.yarns.every((y, i) => y.yarnItemId === draft.yarns[i]!.yarnItemId && y.picksInRepeat === draft.yarns[i]!.picksInRepeat
+    && (y.colorChannel ?? null) === draft.yarns[i]!.colorChannel);
 }
 
 export interface AttachInput { itemId: string; expectedWeftSpecId: string | null; weft: Record<string, unknown> }

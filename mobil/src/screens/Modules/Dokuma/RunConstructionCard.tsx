@@ -13,7 +13,7 @@ import { useQuery } from '@tanstack/react-query';
 import { machineRunService, type RunConstruction } from '../../../services/machineRun.service';
 import TruncatedText from '../../../components/TruncatedText';
 import { WeaveMini, canShowWeave } from './WeaveGridSheet';
-import { colors, spacing, typography } from '../../../theme';
+import { colors, palette, spacing, typography } from '../../../theme';
 
 const LAYER_ROLE: Record<string, string> = { LENO: 'Döner çözgü', SECONDARY: 'Ek çözgü' };
 
@@ -22,6 +22,8 @@ const fmt = (n: number): string => n.toLocaleString('tr-TR', { maximumFractionDi
 export function ConstructionDetails({ c }: { c: RunConstruction }) {
   const d = c.design;
   const w = c.weft;
+  // Görsel çizilmişse kenar çerçeveleri yeşil sütun + lejantla görünür; çizilmemişse metinle söylenir.
+  const selvedge = d?.selvedgeFrames ?? [];
   const designBits = d ? [d.code, d.loomFileName ? `Armür: ${d.loomFileName}` : null, d.frameCount != null ? `${d.frameCount} çerçeve` : null, d.repeatCm != null ? `Rapor ${fmt(d.repeatCm)} cm` : null] : [];
   const weftBits = w ? [w.picksPerCm != null ? `${fmt(w.picksPerCm)} atkı/cm` : null, w.sequenceCode ? `Sıra ${w.sequenceCode}` : null, w.weftProgramNo ? `Program ${w.weftProgramNo}` : null] : [];
   return (
@@ -29,10 +31,13 @@ export function ConstructionDetails({ c }: { c: RunConstruction }) {
       <Text style={styles.title}>Etkin yapı{c.variantCode ? ` · Varyant ${c.variantCode}` : ''}</Text>
       {d ? <Text style={styles.line}>Desen: {designBits.filter(Boolean).join(' · ')}</Text> : null}
       <WeaveMini c={c} />
+      {selvedge.length > 0 && !canShowWeave(c) ? (
+        <Text style={[styles.line, styles.selvedge]} testID="run-construction-selvedge">Kenar çerçeveleri: {selvedge.join(', ')}</Text>
+      ) : null}
       {w ? <Text style={styles.line}>Atkı: {weftBits.filter(Boolean).join(' · ') || w.code}</Text> : null}
       {w?.yarns.map((y) => (
         <TruncatedText key={y.letter} style={[styles.yarn, y.swapped && styles.swapped]}>
-          {`${y.letter} × ${y.picksInRepeat} — ${y.yarnCode} ${y.yarnName}${y.swapped ? ' (varyant)' : ''}`}
+          {`${y.letter} × ${y.picksInRepeat} — ${y.yarnCode} ${y.yarnName}${y.colorChannel != null ? ` — Kanal ${y.colorChannel}` : ''}${y.swapped ? ' (varyant)' : ''}`}
         </TruncatedText>
       ))}
       {c.warpLayers.map((l) => (
@@ -73,5 +78,6 @@ const styles = StyleSheet.create({
   line: { fontSize: typography.size.sm, color: colors.textSecondary },
   yarn: { fontSize: typography.size.sm, color: colors.text },
   swapped: { fontWeight: typography.weight.semibold },
+  selvedge: { color: palette.emerald[700] },
   weaveSection: { gap: spacing.xs, marginTop: spacing.sm },
 });

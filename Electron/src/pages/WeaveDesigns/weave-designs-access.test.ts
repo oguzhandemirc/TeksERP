@@ -77,13 +77,17 @@ describe("Atkı kartı gövdesi", () => {
   const rows = [{ yarnItemId: "y1", picks: "4" }, { yarnItemId: "y2", picks: "1" }];
   it("sıra kodu doluysa adetler gövdeye girmez (sunucu türetir)", () => {
     expect(buildWeftBody(" A4 B1 ", "22,5", "6037", rows)).toEqual({
-      sequenceCode: "A4 B1", picksPerCm: "22.5", weftProgramNo: "6037", yarns: [{ yarnItemId: "y1" }, { yarnItemId: "y2" }],
+      sequenceCode: "A4 B1", picksPerCm: "22.5", weftProgramNo: "6037", yarns: [{ yarnItemId: "y1", colorChannel: null }, { yarnItemId: "y2", colorChannel: null }],
     });
   });
   it("sıra kodu boşsa elle adet (bugünkü davranış)", () => {
     expect(buildWeftBody("", "", "", rows)).toEqual({
       sequenceCode: null, picksPerCm: null, weftProgramNo: null,
-      yarns: [{ yarnItemId: "y1", picksInRepeat: 4 }, { yarnItemId: "y2", picksInRepeat: 1 }],
+      yarns: [{ yarnItemId: "y1", picksInRepeat: 4, colorChannel: null }, { yarnItemId: "y2", picksInRepeat: 1, colorChannel: null }],
     });
+  });
+  it("K6a: renk seçici kanalı satırla gider; boş = null", () => {
+    const withCh = [{ yarnItemId: "y1", picks: "4", channel: " 3 " }, { yarnItemId: "y2", picks: "1", channel: "" }];
+    expect((buildWeftBody("", "", "", withCh).yarns as Array<{ colorChannel: number | null }>).map((y) => y.colorChannel)).toEqual([3, null]);
   });
 });

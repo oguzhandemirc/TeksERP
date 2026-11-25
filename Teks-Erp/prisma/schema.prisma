@@ -2395,6 +2395,9 @@ model WeftSpecYarn {
   picksInRepeat Int
   /// Kart içi sıra — CHECK ≥ 0.
   sortOrder     Int    @db.SmallInt
+  /// K6 (2026-11-25): tezgâh renk seçicisinde bu ipliğin takıldığı kanal (1..16, CHECK); boş = belirtilmemiş.
+  /// Aynı kartta iki satır aynı kanalı kullanamaz (unique; NULL'lar çakışmaz).
+  colorChannel  Int?   @db.SmallInt
 
   weftSpec WeftSpec @relation(fields: [weftSpecId], references: [id], onDelete: Restrict)
   yarnItem Item     @relation("WeftSpecYarnItem", fields: [yarnItemId], references: [id], onDelete: Restrict)
@@ -2403,6 +2406,7 @@ model WeftSpecYarn {
   updatedAt DateTime @updatedAt @db.Timestamptz
 
   @@unique([weftSpecId, sortOrder])
+  @@unique([weftSpecId, colorChannel])
   @@index([yarnItemId])
   @@map("weft_spec_yarns")
 }

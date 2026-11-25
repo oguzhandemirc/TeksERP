@@ -56,7 +56,7 @@ export function effectiveWeaveDesign(d: RawDesign | null): EffectiveWeaveDesign 
 }
 const WEFT_SELECT = {
   id: true, code: true, name: true, picksPerCm: true, sequenceCode: true, weftProgramNo: true,
-  yarns: { orderBy: { sortOrder: "asc" }, select: { sortOrder: true, picksInRepeat: true, yarnItem: { select: YARN_SELECT } } },
+  yarns: { orderBy: { sortOrder: "asc" }, select: { sortOrder: true, picksInRepeat: true, colorChannel: true, yarnItem: { select: YARN_SELECT } } },
 } satisfies Prisma.WeftSpecSelect;
 
 const ITEM_CONSTRUCTION_SELECT = {
@@ -86,6 +86,8 @@ export interface EffectiveWeftYarn {
   sortOrder: number;
   letter: string;
   picksInRepeat: number;
+  /** K6: renk seçici kanalı (kartın satırına aittir; varyant iplik değişimi kanalı değiştirmez); null = belirtilmemiş. */
+  colorChannel: number | null;
   yarnItem: YarnRef;
   /** Varyant bu satırın ipliğini değiştirdiyse kartın özgün ipliği; değiştirmediyse null. */
   cardYarnItem: YarnRef | null;
@@ -190,6 +192,7 @@ export async function resolveEffectiveConstruction(
       sortOrder: y.sortOrder,
       letter: weftLetter(y.sortOrder),
       picksInRepeat: y.picksInRepeat,
+      colorChannel: y.colorChannel,
       yarnItem: swap ?? y.yarnItem,
       cardYarnItem: swap ? y.yarnItem : null,
     };

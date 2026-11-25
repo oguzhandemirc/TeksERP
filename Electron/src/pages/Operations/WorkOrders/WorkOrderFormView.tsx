@@ -38,6 +38,8 @@ import { WorkOrderLivePreview } from "./WorkOrderLivePreview";
 import { CoveragePanel } from "./CoveragePanel";
 import { OrderPickerDialog, type PickedOrderLine } from "./OrderPickerDialog";
 import { productRecipeService } from "@/pages/ProductRecipes/service";
+import { useProductRecipeRecordForm } from "@/pages/ProductRecipes/useProductRecipeRecordForm";
+import { useRouteRecordForm } from "@/pages/Routes/useRouteRecordForm";
 import type { ProductRecipe } from "@/pages/ProductRecipes/types";
 import { useTargetQuantityEnabled } from "@/hooks/usePricingEnabled";
 import { useNumberSourceState } from "@/lib/number-source";
@@ -146,6 +148,8 @@ export function WorkOrderFormView({
   belgeOkut = true,
 }: Props) {
   const isEdit = Boolean(workOrder);
+  const recipeForm = useProductRecipeRecordForm();
+  const routeForm = useRouteRecordForm();
   const targetQuantityEnabled = useTargetQuantityEnabled();
   // ⚠️ TEK KAYNAK: eski `partyCodeAuto` bayrağı artık `numberSource`tan TÜRETİLİYOR
   // (D3③) ve boolean olduğu için ÜÇÜNCÜ hâli (SYSTEM = elle giriş YASAK)
@@ -582,6 +586,7 @@ export function WorkOrderFormView({
                 value={recipeId}
                 onChange={(id) => void applyRecipe(id)}
                 service={productRecipeService}
+                recordForm={recipeForm}
                 queryKey="product-recipes"
                 getLabel={(r) => r.name}
                 getSubLabel={(r) => r.code}
@@ -849,6 +854,7 @@ export function WorkOrderFormView({
                       handleSeedRoute(id);
                     }}
                     service={routeService}
+                    recordForm={routeForm}
                     queryKey="routes"
                     getLabel={(r) => r.name}
                     getSubLabel={(r) => r.code}

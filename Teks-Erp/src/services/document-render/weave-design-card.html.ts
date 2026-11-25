@@ -40,7 +40,8 @@ export interface WeaveCardView {
   pickSequence: number[] | null;
   weft: {
     code: string; name: string; picksPerCm: string | null; weftProgramNo: string | null; sequenceCode: string | null;
-    yarns: Array<WeaveCardYarn & { no: number; picksInRepeat: number }>;
+    /** `colorChannel` (K6): renk seçici kanalı; yok/null = basılmaz (bayt-aynı). */
+    yarns: Array<WeaveCardYarn & { no: number; picksInRepeat: number; colorChannel?: number | null }>;
   } | null;
   warps: Array<{ roleLabel: string; code: string; name: string; lines: Array<WeaveCardYarn & { endsCount: number }> }>;
   widthCm: string | null;
@@ -179,7 +180,7 @@ export function renderWeaveDesignCardHtml(v: WeaveCardView): string {
   ].filter(Boolean).join(" · ");
   const w = v.weft;
   const weftYarns = w?.yarns.length
-    ? `<ol class="yarns">${w.yarns.map((y) => `<li value="${y.no}">${yarnText(y)} <span class="muted">· ${y.picksInRepeat} atkı/rapor</span></li>`).join("")}</ol>`
+    ? `<ol class="yarns">${w.yarns.map((y) => `<li value="${y.no}">${yarnText(y)} <span class="muted">· ${y.picksInRepeat} atkı/rapor</span>${y.colorChannel != null ? ` <b>· Kanal ${y.colorChannel}</b>` : ""}</li>`).join("")}</ol>`
     : `<p class="muted">—</p>`;
   return `<!doctype html><html lang="tr"><head><meta charset="utf-8"><title>Desen kartı ${e(v.designNo)}</title><style>
 @page{size:A4 portrait;margin:10mm}

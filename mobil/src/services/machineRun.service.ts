@@ -36,6 +36,8 @@ export interface RunConstruction {
     /** Kart görsel alanları (2026-11) — eski sunucuda YOK; yoksa görsel gizlenir. Armür: satır = atkı, sütun = çerçeve, 0/1. */
     liftPlan?: number[][] | null;
     lenoFrames?: number[];
+    /** Kenar çerçeveleri (K6b) — eski sunucuda YOK. */
+    selvedgeFrames?: number[];
     kind?: string;
     drawingInNote?: string | null;
   } | null;
@@ -48,7 +50,8 @@ export interface RunConstruction {
     sequenceCode: string | null;
     weftProgramNo: string | null;
     picksInRepeatTotal: number;
-    yarns: { letter: string; picksInRepeat: number; yarnCode: string; yarnName: string; swapped: boolean }[];
+    /** `colorChannel` (K6a): tezgâh renk seçici kanalı; eski sunucuda YOK, null = girilmemiş. */
+    yarns: { letter: string; picksInRepeat: number; yarnCode: string; yarnName: string; swapped: boolean; colorChannel?: number | null }[];
   } | null;
   warpLayers: { role: string; beamMode: string; warpCode: string; warpName: string }[];
 }

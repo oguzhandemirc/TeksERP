@@ -13,6 +13,7 @@ import { weftSpecApi } from "@/pages/WeaveDesigns/service";
 import type { WeftSpecListRow } from "@/pages/WeaveDesigns/types";
 import { buildWeftBody, EMPTY_WEFT, weftContentReady, WeftContentFields, type WeftContent } from "@/pages/WeaveDesigns/tabs/WeftContentFields";
 import { weftContentFromSpec } from "@/pages/WeaveDesigns/tabs/WeftSpecEditor";
+import { WeftCalcPanel } from "./WeftCalcPanel";
 
 export const WEFT_SPECS_QUERY_KEY = "weft-specs";
 const FIRST_ROW: WeftContent = { ...EMPTY_WEFT, rows: [{ yarnItemId: "", picks: "" }] };
@@ -52,7 +53,7 @@ export function WeftSpecFormDialog({ open, onOpenChange, initial, canWrite }: Pr
   const others = initial ? initial.fabricCount : 0;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[calc(100%-2rem)] max-w-4xl" data-form-size="wide">
+      <DialogContent className="w-[calc(100%-2rem)] max-w-6xl" data-form-size="wide">
         <DialogHeader>
           <DialogTitle>{initial ? "Atkı kartını düzenle" : "Yeni atkı kartı"}</DialogTitle>
           <DialogDescription>Atkı iplikleri, atkı sırası, sıklık ve tezgâh program numarası. Bir atkı kartı birden çok kumaşta kullanılabilir.</DialogDescription>
@@ -74,7 +75,10 @@ export function WeftSpecFormDialog({ open, onOpenChange, initial, canWrite }: Pr
             </Callout>
           )}
           {initial && canWrite && <SpecOpenOrdersNotice kind="weft" id={initial.id} />}
-          <WeftContentFields value={content} onChange={setContent} canWrite={canWrite} savedSeq={initial?.sequenceCode ?? ""} idPrefix="wsf" />
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
+            <WeftContentFields value={content} onChange={setContent} canWrite={canWrite} savedSeq={initial?.sequenceCode ?? ""} idPrefix="wsf" />
+            <WeftCalcPanel content={content} />
+          </div>
         </div>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{canWrite ? "İptal" : "Kapat"}</Button>
