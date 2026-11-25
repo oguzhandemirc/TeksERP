@@ -13,6 +13,7 @@ import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPicker
 import { ServiceItemSelect } from "@/components/forms/ServiceItemSelect";
 import { subcontractorService } from "@/pages/Subcontractors/service";
 import type { Subcontractor } from "@/pages/Subcontractors/types";
+import { useSubcontractorRecordForm } from "@/pages/Subcontractors/useSubcontractorRecordForm";
 import type { Currency } from "@/pages/Finance/service";
 import { CurrencySelect } from "../shared/CurrencySelect";
 import { decToInput, toDecimalText } from "../shared/format";
@@ -23,6 +24,7 @@ interface Props { onClose: () => void; current: FinishingRate | null }
 
 export function FinishingRateDialog({ onClose, current }: Props) {
   const qc = useQueryClient();
+  const subcontractorForm = useSubcontractorRecordForm();
   const [code, setCode] = useState(current?.code ?? "");
   const [name, setName] = useState(current?.name ?? "");
   const [subId, setSubId] = useState<string | null>(current?.subcontractorId ?? null);
@@ -71,7 +73,7 @@ export function FinishingRateDialog({ onClose, current }: Props) {
               <Input id="fr-code" maxLength={FINISHING_MAX.code} disabled={!!current} value={code} onChange={(e) => setCode(e.target.value)} />
             </FormField>
             <FormField label="Fason firma" info="Boş bırakılırsa tarife firmaya bağlı olmaz (genel fiyat). Devere ücreti için devereciyi seçin; sipariş formu ücreti buradan doldurur.">
-              <EntityPickerModal<Subcontractor> value={subId} onChange={setSubId} service={subcontractorService} queryKey="subcontractors-finishing-rate"
+              <EntityPickerModal<Subcontractor> value={subId} onChange={setSubId} service={subcontractorService} recordForm={subcontractorForm} queryKey="subcontractors-finishing-rate"
                 getLabel={(s) => s.name} icon={Handshake} title="Fason firma seç" placeholder="Seçilmedi" nullable />
             </FormField>
             <FormField label="Hizmet kartı" info="Fason/devereci faturası taslağı bu kartla gelir (devere: Ham metre tarifesi metre ücretine, Kilo tarifesi kg ücretine). Boşsa satır açıklama satırı olur ve kartı her faturada elle seçersiniz.">

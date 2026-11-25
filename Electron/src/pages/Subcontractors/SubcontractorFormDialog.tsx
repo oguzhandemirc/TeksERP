@@ -24,6 +24,8 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initial?: Subcontractor | null;
+  /** Seçicide "Örnek al": kimliksiz taslak (yalnız oluşturur). */
+  draft?: Partial<Subcontractor> | null;
   onSubmit: (values: SubcontractorFormValues) => void | Promise<void>;
   isSubmitting?: boolean;
 }
@@ -32,6 +34,7 @@ export function SubcontractorFormDialog({
   open,
   onOpenChange,
   initial,
+  draft,
   onSubmit,
   isSubmitting,
 }: Props) {
@@ -47,7 +50,17 @@ export function SubcontractorFormDialog({
         categoryIds: initial.categories.map((c) => c.categoryId),
         customerId: (initial.customerId ?? null) as unknown as string,
       }
-    : subcontractorFormDefaults;
+    : draft
+      ? {
+          // Örnek al: vergi no ve bağlı cari kopyalanmaz (cari başına tek fason profili); kategori/profil gelir.
+          ...subcontractorFormDefaults,
+          name: draft.name ?? "",
+          phone: draft.phone ?? "",
+          address: draft.address ?? "",
+          documentProfileId: draft.documentProfileId ?? null,
+          categoryIds: (draft.categories ?? []).map((c) => c.categoryId),
+        }
+      : subcontractorFormDefaults;
 
   const categories = useQuery({
     queryKey: ["subcontractor-categories", "all-active"],
@@ -65,7 +78,7 @@ export function SubcontractorFormDialog({
     <EntityFormDialog<SubcontractorFormValues>
       open={open}
       onOpenChange={onOpenChange}
-      title={initial ? "Fason Firmayı Düzenle" : "Yeni Fason Firma"}
+      title={initial ? "Fason Firmayı Düzenle" : draft ? "Yeni Fason Firma (örnekten)" : "Yeni Fason Firma"}
       schema={subcontractorFormSchema}
       defaultValues={defaults}
       onSubmit={onSubmit}

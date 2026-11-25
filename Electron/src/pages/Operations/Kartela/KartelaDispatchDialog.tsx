@@ -15,6 +15,7 @@ import { RollPickerDialog } from "@/components/operations/roll-picker/RollPicker
 import { toastServerSuccess } from "@/lib/serverNotes";
 import { subcontractorService } from "@/pages/Subcontractors/service";
 import type { Subcontractor } from "@/pages/Subcontractors/types";
+import { useSubcontractorRecordForm } from "@/pages/Subcontractors/useSubcontractorRecordForm";
 import { kartelaService } from "./service";
 import { buildDispatchPayload, KARTELA_PICKER_SCOPES, refreshKartelaLists, type KartelaPickedRoll } from "./kartelaActions";
 import { useDispatchDraft, type DispatchDraft } from "./useDispatchDraft";
@@ -95,6 +96,7 @@ export function KartelaDispatchDialog({ open, onOpenChange, onCreated, initialRo
 
 function FirmField({ draft, enabled, disabled }: { draft: DispatchDraft; enabled: boolean; disabled: boolean }) {
   const cat = useKartelaFirmCategory(enabled);
+  const subcontractorForm = useSubcontractorRecordForm();
   return (
     <section className="space-y-1.5">
       <div className="text-sm font-medium">Kartela firması</div>
@@ -107,6 +109,7 @@ function FirmField({ draft, enabled, disabled }: { draft: DispatchDraft; enabled
           value={draft.firmId}
           onChange={draft.setFirmId}
           service={subcontractorService}
+          recordForm={subcontractorForm}
           queryKey="subcontractors-kartela"
           filters={cat.categoryId ? { categoryId: cat.categoryId } : undefined}
           disabled={disabled || !cat.categoryId}

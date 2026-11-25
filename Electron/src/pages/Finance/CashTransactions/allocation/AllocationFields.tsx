@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { TERIM } from "@/lib/terim";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { machineService } from "@/pages/Machines/service";
+import { useMachineRecordForm } from "@/pages/Machines/useMachineRecordForm";
 import type { Machine } from "@/pages/Machines/types";
 import { ServiceItemSelect } from "@/components/forms/ServiceItemSelect";
 import type { WorkOrder } from "@/pages/Operations/WorkOrders/types";
@@ -22,9 +23,10 @@ const TYPES: AllocationTargetType[] = ["MACHINE", "WORK_ORDER", "SERVICE_ITEM"];
 
 function TargetPicker({ value, onChange }: Props) {
   const set = (id: string | null) => onChange({ ...value, targetId: id });
+  const machineForm = useMachineRecordForm();
   if (value.targetType === "MACHINE") {
     return (
-      <EntityPickerModal<Machine> value={value.targetId} onChange={set} service={machineService} queryKey="expense-alloc-machines"
+      <EntityPickerModal<Machine> value={value.targetId} onChange={set} service={machineService} recordForm={machineForm} queryKey="expense-alloc-machines"
         getLabel={(m) => m.name} getSubLabel={(m) => m.code} icon={Cog} title="Makine seç" placeholder="Makine seç" triggerClassName="w-full" />
     );
   }

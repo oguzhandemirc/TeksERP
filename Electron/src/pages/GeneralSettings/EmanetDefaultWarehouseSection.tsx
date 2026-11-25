@@ -12,6 +12,7 @@ import { apiErrorText } from "@/lib/api-error";
 import { useEmanetEnabled } from "@/hooks/usePricingEnabled";
 import { warehouseService } from "@/pages/Warehouses/service";
 import type { Warehouse } from "@/pages/Warehouses/types";
+import { useWarehouseRecordForm } from "@/pages/Warehouses/useWarehouseRecordForm";
 import { FieldLabel } from "./SettingRow";
 import { SETTINGS_ADMIN_PERMISSION } from "./settings-config";
 import { EMANET_DEFAULT_WAREHOUSE_QUERY_KEY, getEmanetDefaultWarehouse, updateEmanetDefaultWarehouse } from "./emanetDefaultWarehouse";
@@ -21,6 +22,7 @@ export const EMANET_DEFAULT_WAREHOUSE_TITLE = "Emanet varsayılan deposu";
 
 export function EmanetDefaultWarehouseSection({ writePermissions = [SETTINGS_ADMIN_PERMISSION] }: { writePermissions?: string[] }) {
   const qc = useQueryClient();
+  const warehouseForm = useWarehouseRecordForm();
   const emanetOn = useEmanetEnabled();
   const q = useQuery({ queryKey: EMANET_DEFAULT_WAREHOUSE_QUERY_KEY, queryFn: getEmanetDefaultWarehouse, enabled: emanetOn, retry: false });
   const serverId = q.data?.warehouse?.id ?? null;
@@ -56,6 +58,7 @@ export function EmanetDefaultWarehouseSection({ writePermissions = [SETTINGS_ADM
               value={draft}
               onChange={(id) => setDraft(id)}
               service={warehouseService}
+              recordForm={warehouseForm}
               queryKey="warehouses-emanet-default"
               getLabel={(w) => w.name}
               getSubLabel={(w) => (w.isDefault ? `${w.code} · varsayılan depo` : w.code)}
