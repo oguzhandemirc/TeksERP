@@ -7,15 +7,10 @@ import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import { replaceItemFibers } from "../services/item-fiber.service";
 import { computedCompositionForItem } from "../services/fabric-composition.service";
 
-/** Dosya başı toplu kapı (BE-30): her alt router kendi izniyle doğar. */
-function gatedRouter(permission: string): Router {
-  const router = Router({ mergeParams: true });
-  router.use(verifyToken, requirePermission(permission));
-  return router;
-}
-
-/** `/api/items/:id/fibers` */
-export const itemFiberRouter = gatedRouter("item:write");
+/** `/api/items/:id/fibers` — dosya başı toplu kapı (BE-30); izin kodu statik (test_permission_catalog AST'i çözer). */
+const router = Router({ mergeParams: true });
+router.use(verifyToken, requirePermission("item:write"));
+export const itemFiberRouter = router;
 
 /**
  * @openapi
@@ -48,7 +43,8 @@ itemFiberRouter.put("/", async (req: Request, res: Response, next: NextFunction)
 });
 
 /** `/api/items/:id/computed-composition` */
-export const itemCompositionRouter = gatedRouter("item:read");
+export const itemCompositionRouter = Router({ mergeParams: true });
+itemCompositionRouter.use(verifyToken, requirePermission("item:read"));
 
 /**
  * @openapi

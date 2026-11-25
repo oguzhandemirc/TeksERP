@@ -12,6 +12,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { buildCostInput, loadCostStructureSourcesTx } from "./helpers/cost-assembler.helper";
 import { yarnUsagePerM } from "./helpers/fabric-cost.helper";
+import { pctText } from "./helpers/qty-text.helper";
 
 type Dec = Prisma.Decimal;
 const ZERO = new Prisma.Decimal(0);
@@ -54,7 +55,7 @@ export function roundShares(shares: FiberShare[]): CompositionPart[] {
     .map((r) => ({ fiberTypeId: r.s.fiberTypeId, name: r.s.name, abbreviation: r.s.abbreviation, pct: r.floor }));
 }
 
-export const compositionText = (parts: CompositionPart[]): string => parts.map((p) => `%${p.pct} ${p.abbreviation ?? p.name}`).join(" ");
+export const compositionText = (parts: CompositionPart[]): string => parts.map((p) => `%${pctText(p.pct, 0)} ${p.abbreviation ?? p.name}`).join(" ");
 
 /** İplik başına net kg/m (çözgü zemini + ek katmanlar + atkı); çözülemeyen parça varsa null. */
 function yarnKgMap(usage: ReturnType<typeof yarnUsagePerM>, layerCount: number): Map<string, Dec> | null {

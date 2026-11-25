@@ -10,6 +10,7 @@ import { Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { parseDecimalField } from "./cost-input.helper";
+import { pctText } from "./qty-text.helper";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 export interface ItemFiberRow { fiberTypeId: string; pct: Prisma.Decimal }
@@ -47,7 +48,7 @@ export async function parseItemFibers(
   if (rows.length === 0) return rows;
   const sum = rows.reduce((a, r) => a.plus(r.pct), new Prisma.Decimal(0));
   if (!sum.eq(HUNDRED)) {
-    throw AppError.badRequest(`Lif payları toplamı %100 olmalı (şu an %${sum.toString()}).`, { code: "ITEM_FIBER_SUM_NOT_100", sum: sum.toString() });
+    throw AppError.badRequest(`Lif payları toplamı %100 olmalı (şu an %${pctText(sum)}).`, { code: "ITEM_FIBER_SUM_NOT_100", sum: sum.toString() });
   }
   const ids = rows.map((r) => r.fiberTypeId);
   const types = await db.fiberType.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, isActive: true } });
