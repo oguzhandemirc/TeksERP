@@ -76,6 +76,13 @@ export const itemColumns: ColumnDef<Item>[] = [
     cell: ({ row }) => <Badge variant="muted">{itemTypeLabels[row.original.itemType]}</Badge>,
   },
   {
+    // K8: kumaş türü (yalnız kumaşta dolu; eski sunucuda alan yok → "—").
+    id: "fabricType",
+    header: "Kumaş türü",
+    meta: { exportValue: (r: Item) => r.fabricType?.name ?? "" },
+    cell: ({ row }) => row.original.fabricType?.name ?? <span className="text-muted-foreground">—</span>,
+  },
+  {
     accessorKey: "unit",
     header: () => <SortableHeader field="unit" label="Birim" />,
     cell: ({ row }) => unitLabel(row.original.unit),

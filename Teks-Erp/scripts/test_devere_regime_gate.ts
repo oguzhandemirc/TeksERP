@@ -266,9 +266,15 @@ async function main(): Promise<void> {
     // §7c: red mesajı VAR OLAN bir yüzeye gönderiyor mu? "kalem kartından
     // denyeyi girin" cümlesi, o alan panelde çizilmiyorsa operatörü olmayan
     // bir kutuya yollar — denetimin ORTA-1'i tam olarak buydu.
-    const FORM = path.resolve(__dirname, "../../Electron/src/pages/Items/ItemFormDialog.tsx");
-    const formMetni = fs.existsSync(FORM) ? fs.readFileSync(FORM, "utf8") : "";
-    const yuzeyVar = /linearDensityDen/.test(formMetni);
+    // K7 (2026-11-25): iplik alanları alt bileşene taşındı — çizim zinciri
+    // ItemFormDialog → ItemGeneralFields → ItemYarnFields izlenir (zincir kopuksa kırmızı).
+    const oku = (ad: string): string => {
+      const p = path.resolve(__dirname, "../../Electron/src/pages/Items", ad);
+      return fs.existsSync(p) ? fs.readFileSync(p, "utf8") : "";
+    };
+    const formMetni = oku("ItemFormDialog.tsx");
+    const zincirVar = /<ItemGeneralFields\b/.test(formMetni) && /<ItemYarnFields\b/.test(oku("ItemGeneralFields.tsx"));
+    const yuzeyVar = /linearDensityDen/.test(formMetni) || (zincirVar && /linearDensityDen/.test(oku("ItemYarnFields.tsx")));
     check(
       "§7c ⭐ Denye red mesajının gönderdiği yüzey VAR (kalem formunda alan çizili)",
       yuzeyVar,

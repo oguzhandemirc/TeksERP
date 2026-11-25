@@ -4,6 +4,24 @@ import type { ItemLifecycleStatus } from "@/lib/item-lifecycle";
 /** SY-a: iplik satın alma birimi — backend `YarnPurchaseUnit` aynası. */
 export type YarnPurchaseUnit = "KG" | "ADET" | "METRE";
 
+/** K8 yanmazlık — kapalı küme (sunucu pg enum); null = belirtilmemiş. */
+export type FlameRetardancy = "NONE" | "FR_YARN" | "TREVIRA_CS" | "OTHER_FR";
+
+export interface ItemFiberLink {
+  fiberTypeId: string;
+  pct: string | number;
+  fiberType?: { id: string; name: string; abbreviation: string | null };
+}
+
+/** `GET /api/items/:id/computed-composition` — bilinmiyorsa `parts`/`text` null, sebep `status`. */
+export interface ItemComputedComposition {
+  status: "OK" | "NOT_FABRIC" | "MISSING_STRUCTURE" | "MISSING_FIBER";
+  parts: Array<{ fiberTypeId: string; name: string; abbreviation: string | null; pct: number }> | null;
+  text: string | null;
+  manual: string | null;
+  missingYarns: Array<{ id: string; name: string; code?: string }>;
+}
+
 export interface ItemColorLite {
   id: string;
   code: string;
@@ -49,6 +67,13 @@ export interface Item {
   rawWidthCm?: string | number | null;
   rawGsm?: string | number | null;
   finishedGsm?: string | number | null;
+  /** K7/K8 (yalnız KUMAŞ; eski sunucuda yok): kompozisyonun ELLE düzeltmesi (boş = hesaplanan), kumaş türü, yanmazlık. */
+  composition?: string | null;
+  fabricTypeId?: string | null;
+  fabricType?: { id: string; name: string } | null;
+  flameRetardancy?: FlameRetardancy | null;
+  /** K7: iplik lif bileşimi (yalnız İPLİK; pay Decimal metin). */
+  fibers?: ItemFiberLink[];
   /** Saha (mobil KK1) "yeni desen" olarak açtı → admin gözden geçirmesi bekleniyor. */
   pendingReview?: boolean;
   /** Item'a uygulanabilir özellikler (kataloğu). Boşsa = serbest. */
@@ -84,6 +109,12 @@ export interface ItemCreatePayload {
   rawWidthCm?: string | null;
   rawGsm?: string | null;
   finishedGsm?: string | null;
+  /** K7/K8 — yalnız KUMAŞ; anahtar dolu ya da kayıtlı değer temizleniyorsa gider. */
+  composition?: string | null;
+  fabricTypeId?: string | null;
+  flameRetardancy?: FlameRetardancy | null;
+  /** K7 — yalnız YENİ iplik kartında (doğuşta aynı tx); düzenlemede PUT /api/items/:id/fibers. */
+  fibers?: Array<{ fiberTypeId: string; pct: string }>;
   /** Düzenlemede admin onayı: kaydedince saha işareti temizlenir (false). */
   pendingReview?: boolean;
   allowedPropertyIds?: string[];

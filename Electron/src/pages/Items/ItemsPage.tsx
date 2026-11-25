@@ -25,6 +25,7 @@ import {
   type ItemUrlFilterDef,
 } from "./itemsFilters";
 import type { Item } from "./types";
+import { useFabricTypeFilter } from "./useFabricTypeFilter";
 
 // "Ürün Kartları": aynı `Item` tablosunda kumaş · iplik · sarf birlikte (hizmet kartı ayrı tablo); sayfa adı
 // tür ayrımını taşımaz, tür alanı/süzgeci taşır. Süzgeç planı `itemsFilters.ts`.
@@ -38,6 +39,8 @@ export function ItemsPage() {
   // Renk ekseni yalnız Kumaş/Tümü (modalla aynı yüklem). Paylaşılan bağlantı iplik + renk taşıyorsa
   // renk anahtarı sessizce sunucuya gitmesin: eksen kapalıyken URL'den düşürülür.
   const colorAxis = itemCatalogAxisApplies(searchParams);
+  const fabricTypeFilter = useFabricTypeFilter(); // K8: kumaş ekseni (Kumaş/Tümü), tür değişince URL'den düşer
+
   useEffect(() => {
     if (colorAxis || !ITEM_CATALOG_KEYS.some((k) => searchParams.has(itemUrlFilterParam(k)))) return;
     const next = new URLSearchParams(searchParams);
@@ -91,6 +94,7 @@ export function ItemsPage() {
             onChange={(v) => setParam(ITEM_STATUS_PARAM, v === null || v === ITEM_STATUS_DEFAULT ? null : v)}
           />
           {urlSelect(ITEM_URL_FILTERS[1]!)}
+          {colorAxis && fabricTypeFilter && urlSelect(fabricTypeFilter)}
           {colorAxis && catalogFilters.map((f) => (f.options === null ? null : urlSelect({ ...f, options: f.options }, ITEM_CATALOG_HINT)))}
         </>
       }

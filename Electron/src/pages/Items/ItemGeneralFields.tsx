@@ -19,6 +19,9 @@ import { ItemYarnFields } from "./ItemYarnFields";
 import { ItemWeavingDetails } from "./ItemWeavingDetails";
 import { PickerTrigger, StockCodeRow } from "./ItemFormParts";
 import { FabricTechniqueField } from "./FabricTechniqueField";
+import { FabricClassFields } from "./FabricClassFields";
+import { ItemCompositionField } from "./ItemCompositionField";
+import { ItemFiberFields } from "./ItemFiberFields";
 import { unitLabel } from "@/lib/item-unit";
 import { itemTypeScope } from "./itemTypeScope";
 
@@ -93,6 +96,7 @@ export function ItemGeneralFields(p: Props) {
           <Input value={unitLabel(p.derivedUnit)} readOnly tabIndex={-1} className="bg-muted text-center cursor-not-allowed" />
         </FormField>
         {itemType === ItemType.FABRIC && <FabricTechniqueField />}
+        {itemType === ItemType.FABRIC && <FabricClassFields form={form} />}
         {/* Denye + satın alma birimi yalnız iplikte (SY-a); zorunlu DEĞİL — çözgü/atkı kartı açarken sunucu anlaşılır 400 verir. */}
         {itemType === ItemType.YARN && <ItemYarnFields form={form} />}
         {p.yarnWasteVisible && <ItemYarnWasteField form={form} />}
@@ -102,7 +106,9 @@ export function ItemGeneralFields(p: Props) {
             <Input id="widthCm" inputMode="decimal" placeholder="ör. 280" {...form.register("widthCm")} />
           </FormField>
         )}
+        {itemType === ItemType.FABRIC && <div className="sm:col-span-2"><ItemCompositionField form={form} itemId={initial?.id ?? null} /></div>}
       </div>
+      {itemType === ItemType.YARN && <ItemFiberFields form={form} />}
 
       {p.carriesLists && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

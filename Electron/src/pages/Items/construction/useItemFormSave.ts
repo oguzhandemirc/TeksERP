@@ -10,6 +10,8 @@ import type { Item, ItemCreatePayload } from "../types";
 import type { ItemFormValues } from "../schema";
 import { buildItemPayload, fabricDetailPayload, yarnUnitPayload, yarnWastePayload } from "../itemPayload.helper";
 import { constructionPayload } from "../ItemConstructionPickers";
+import { fabricClassPayload, fiberBody, fibersChanged, fibersCreatePayload } from "../fabricClass.payload";
+import { itemService } from "../service";
 import { planWeftSave, type ItemWeftDraft } from "./useItemWeftDraft";
 import { applyWeftPlan } from "./item-save";
 import { useWeftShareQuestion } from "./WeftShareQuestion";
@@ -51,9 +53,13 @@ export function useItemFormSave({ open, form, initial, weft, visible, onSubmit, 
       ...fabricDetailPayload(v, initial),
       ...yarnWastePayload(v, initial, visible.yarnWaste),
       ...yarnUnitPayload(v, initial),
+      ...fabricClassPayload(v, initial),
+      ...fibersCreatePayload(v, isEdit),
     };
     setSaving(true);
     try {
+      // K7: düzenlemede lif bileşimi kendi ucundan (replace), kart gövdesinden ÖNCE — pencere onSubmit'te kapanır.
+      if (initial && fibersChanged(v, initial)) await itemService.replaceFibers(initial.id, fiberBody(v));
       const ctx = { visible: visible.construction, itemId: initial?.id ?? null, savedWeftSpecId: initial?.weftSpecId ?? null, clientToken: isEdit ? undefined : attempt.token() };
       await onSubmit(await applyWeftPlan(plan, base, ctx));
       attempt.onSuccess();

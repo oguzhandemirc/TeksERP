@@ -42,6 +42,7 @@ import { PermissionsCatalogPage } from "@/pages/Access/Permissions/PermissionsCa
 import { PatronCloudPage } from "@/pages/Access/PatronCloud/PatronCloudPage";
 import { PatronPhonePage } from "@/pages/Access/PatronPhone/PatronPhonePage";
 import { ItemsPage } from "@/pages/Items/ItemsPage";
+import { FabricTypesPage, FiberTypesPage } from "@/pages/FabricFiberTypes/ClassTypePage";
 import { ProductionStationsPage } from "@/pages/Stations/ProductionStationsPage";
 import { EtiketlerPage } from "@/pages/Labels/EtiketlerPage";
 import { MachinesPage } from "@/pages/Machines/MachinesPage";
@@ -240,6 +241,23 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="item:read">
         <ItemsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // K7/K8: ürün kartının sınıflama listeleri — karo izniyle BİREBİR (item:read; yazma sayfada item:write).
+    path: "definitions/fabric-types",
+    element: (
+      <ProtectedRoute requirePermission="item:read">
+        <FabricTypesPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "definitions/fiber-types",
+    element: (
+      <ProtectedRoute requirePermission="item:read">
+        <FiberTypesPage />
       </ProtectedRoute>
     ),
   },

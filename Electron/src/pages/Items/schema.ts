@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ItemType } from "@/types/enums";
 import { acceptNumberAsText } from "@/lib/decimal-form-text";
+import { fabricClassDefaults, fabricClassFields } from "./fabricClass.schema";
 
 /** Dokuma ayrıntısı sayısı — Decimal(·,2) metin taşınır, virgül kabul, "" = boş; `max` kolon tavanı. */
 const positiveDecimalText = (label: string, max: number) =>
@@ -106,6 +107,7 @@ export const makeItemFormSchema = (isEdit: boolean) =>
     weaveDesignId: z.string(),
     allowedColorIds: z.array(z.string()),
     allowedPropertyIds: z.array(z.string()),
+    ...fabricClassFields,
   });
 
 export type ItemFormValues = z.infer<ReturnType<typeof makeItemFormSchema>>;
@@ -128,4 +130,5 @@ export const itemFormDefaults: ItemFormValues = {
   weaveDesignId: "",
   allowedColorIds: [],
   allowedPropertyIds: [],
+  ...fabricClassDefaults,
 };

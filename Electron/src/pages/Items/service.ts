@@ -2,7 +2,7 @@ import apiClient from "@/services/apiClient";
 import { createCrudService } from "@/services/crudService";
 import type { ApiResponse } from "@/types/api";
 import type { ItemLifecyclePreview, ItemLifecycleStatus } from "@/lib/item-lifecycle";
-import type { Item, ItemColorLink, ItemComputedGsm, ItemPropertyLink } from "./types";
+import type { Item, ItemColorLink, ItemComputedComposition, ItemComputedGsm, ItemFiberLink, ItemPropertyLink } from "./types";
 
 const baseService = createCrudService<Item>("/api/items");
 
@@ -33,6 +33,14 @@ export const itemService = {
     apiClient
       .get<ApiResponse<ItemComputedGsm>>(`/api/items/${itemId}/computed-gsm`, { suppressErrorToast: true })
       .then((r) => r.data.data),
+  /** K7 kompozisyon (iplik paylarından). Toast YOK: eski sunucuda uç yok (404), satır sessizce gizlenir. */
+  computedComposition: (itemId: string) =>
+    apiClient
+      .get<ApiResponse<ItemComputedComposition>>(`/api/items/${itemId}/computed-composition`, { suppressErrorToast: true })
+      .then((r) => r.data.data),
+  /** K7 lif bileşimi düzenlemesi — liste TAMAMEN yenilenir (boş liste temizler). */
+  replaceFibers: (itemId: string, fibers: Array<{ fiberTypeId: string; pct: string }>) =>
+    apiClient.put<ApiResponse<ItemFiberLink[]>>(`/api/items/${itemId}/fibers`, { fibers }).then((r) => r.data),
   /** Liste rozeti: kart başına kalan canlı kayıt. */
   lifecycleSummary: (ids: string[]) =>
     apiClient
