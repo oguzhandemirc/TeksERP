@@ -436,6 +436,12 @@ export const updateSchema = z.strictObject({
   dokumaRunWeavingOrderRequired: z.boolean().optional(),
   dokumaOrderLineLinkRequired: z.boolean().optional(),
   dokumaYarnReservationEnabled: z.boolean().optional(),
+  /** K10: mekanizma şalterleri (en az biri açık — servis 400 `WEAVE_MECHANISM_NONE_ENABLED`). */
+  dokumaMechanismCamEnabled: z.boolean().optional(),
+  dokumaMechanismDobbyEnabled: z.boolean().optional(),
+  dokumaMechanismJacquardEnabled: z.boolean().optional(),
+  /** K9: tarak numarası birimi (`DEVERE_REED_NUMBER_UNITS` ile birebir). */
+  devereReedNumberUnit: z.enum(["DENTS_PER_10CM", "DENTS_PER_CM"]).optional(),
   /** S1: top doğuş yolu (enum; `DOKUMA_ROLL_BIRTH_MODES` ile birebir). */
   dokumaRollBirth: z.enum(["TABLET_DOFF", "KK1_LABEL_OR_ORDER", "KK1_LABEL_ONLY"]).optional(),
   /** Dokuma firesi % (`DOKUMA_WEAVING_WASTE_PCT_MAX` ile birebir); null = varsayılana (0) dön. */

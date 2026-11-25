@@ -8,7 +8,8 @@ import { WeaveGrid } from "@/components/weave/WeaveGrid";
 import { WeaveScrollBox } from "@/components/weave/WeaveScrollBox";
 import { WeaveSegmented } from "@/components/weave/WeaveViewControls";
 import { YarnLegend } from "@/components/weave/YarnLegend";
-import { computeDrawdown, drawdownRepeatPicks, groundFrameIndexes, threadingMatrix } from "@/components/weave/weave-drawdown";
+import { computeDrawdown, drawdownRepeatPicks, drawUnit, groundFrameIndexes, threadingMatrix } from "@/components/weave/weave-drawdown";
+import { DRAWING_IN_LABEL, drawingInIsDrawn, type DrawingInType } from "@/components/weave/weave-drawing-in";
 import type { WeaveDirection } from "@/components/weave/weave-direction";
 import { WARP_COLOR, LIFT_COLOR, yarnColor, yarnLetter } from "@/components/weave/weave-palette";
 import type { LiftPlan, WeaveDesign } from "../types";
@@ -18,14 +19,15 @@ const REPEATS = [1, 2, 4] as const;
 const ROW_LABEL_W = 30;
 
 const DRAWDOWN_INFO = "Kumaş görünümü armür planından ve atkı seçiciden çizilir: telin çerçevesi kalkıksa kare çözgü rengini, "
-  + "inikse o atkıda atılan ipliğin rengini alır. Tahar planı girilmediği için düz tahar varsayılır (zemin çerçeveleri 1, 2, 3… sırayla; "
-  + "döner çerçeveler hariç). Kalın çizgiler desen raporunun sınırıdır.";
+  + "inikse o atkıda atılan ipliğin rengini alır. Tahar Yapı sekmesindeki tahar türüne göre çizilir: Düz 1, 2, 3…; Sivri 1, 2, 3, 2…; "
+  + "Atlamalı önce tek sonra çift çerçeveler. Tür seçilmemişse ya da Özel ise düz tahar varsayılır (döner ve kenar çerçeveleri hariç). "
+  + "Kalın çizgiler desen raporunun sınırıdır.";
 
 const LENO_INFO = "Döner (leno) desende döner teli zemin telinin etrafında çaprazlanır; kare ızgara bu hareketi gösteremez, bu yüzden "
   + "kumaş görünümü çizilmez. Döner çerçeveler yukarıdaki armür ızgarasında turuncu sütunlardır; döner tertibatı tezgâhta ayrıca ayarlanır.";
 
 interface Props {
-  design: Pick<WeaveDesign, "kind" | "shedMechanism" | "weaveStructure" | "drawingInNote" | "lenoSetup">;
+  design: Pick<WeaveDesign, "kind" | "shedMechanism" | "weaveStructure" | "drawingInNote" | "drawingInType" | "lenoSetup">;
   plan: LiftPlan;
   lenoFrames: readonly number[];
   selvedgeFrames?: readonly number[];
@@ -35,6 +37,14 @@ interface Props {
 }
 
 const NONE: readonly number[] = [];
+
+/** Görünümün altındaki tahar cümlesi: çizilen tür adıyla; Özel/boş düz varsayıldığını söyler (eski metin bayt-aynı). */
+export function drawingInCaption(type: DrawingInType | null, note: string | null): string {
+  if (drawingInIsDrawn(type)) return `${DRAWING_IN_LABEL[type!]} tahar ile çizildi${note ? ` · tahar notu: ${note}` : "."}`;
+  const head = type === "CUSTOM" ? "Özel tahar: düz tahar varsayıldı" : "Düz tahar varsayıldı";
+  if (note) return `${head} · tahar notu: ${note}`;
+  return type === "CUSTOM" ? `${head}.` : "Düz tahar varsayıldı (tahar planı girilmemiş).";
+}
 
 export function FabricPreviewSection({ design, plan, lenoFrames, selvedgeFrames = NONE, selector, yarnNames, direction }: Props) {
   const [repeat, setRepeat] = useState<number>(2);
@@ -60,7 +70,9 @@ export function FabricPreviewSection({ design, plan, lenoFrames, selvedgeFrames 
   const frames = plan.reduce((m, row) => Math.max(m, row.length), 0);
   const ground = groundFrameIndexes(frames, lenoFrames, selvedgeFrames);
   if (plan.length === 0 || ground.length === 0) return null;
-  const dd = computeDrawdown({ liftPlan: plan, lenoFrames, selvedgeFrames, pickSequence: selector, repeat });
+  const drawingInType = design.drawingInType ?? null;
+  const dd = computeDrawdown({ liftPlan: plan, lenoFrames, selvedgeFrames, pickSequence: selector, repeat, drawingInType });
+  const unitEnds = drawUnit(ground, drawingInType).length;
   const basePicks = drawdownRepeatPicks(plan.length, selector?.length ?? 0);
   const threading = threadingMatrix(frames, dd.draw);
   const leno = new Set(lenoFrames);
@@ -79,17 +91,17 @@ export function FabricPreviewSection({ design, plan, lenoFrames, selvedgeFrames 
           <div className="sticky top-0 z-10 space-y-1 bg-background pb-2 pt-2">
             <span className="block text-[11px] font-medium text-muted-foreground" style={{ paddingLeft: ROW_LABEL_W }}>Tahar (çerçeve × tel)</span>
             <WeaveGrid ariaLabel="Tahar planı" rows={frames} cols={dd.ends} cell={cell} direction="bottom-up" rowLabelWidth={ROW_LABEL_W}
-              rowLabel={(f) => String(f + 1)} colBandEvery={ground.length}
+              rowLabel={(f) => String(f + 1)} colBandEvery={unitEnds}
               fill={(f, i) => (threading[f]![i] === 1 ? LIFT_COLOR : null)} />
           </div>
           <span className="text-[11px] font-medium text-muted-foreground" style={{ paddingLeft: ROW_LABEL_W }}>Kumaş (atkı × tel)</span>
           <WeaveGrid ariaLabel="Kumaş görünümü" rows={dd.picks} cols={dd.ends} cell={cell} direction={direction} rowLabelWidth={ROW_LABEL_W}
-            rowBandEvery={basePicks} colBandEvery={ground.length} gridLines={cell >= 8}
+            rowBandEvery={basePicks} colBandEvery={unitEnds} gridLines={cell >= 8}
             fill={(j, i) => { const v = dd.cells[j]![i]!; return v === 0 ? WARP_COLOR : yarnColor(v); }} />
         </div>
       </WeaveScrollBox>
       <p className="max-w-xl text-xs text-muted-foreground">
-        {design.drawingInNote ? `Düz tahar varsayıldı · tahar notu: ${design.drawingInNote}` : "Düz tahar varsayıldı (tahar planı girilmemiş)."}
+        {drawingInCaption(drawingInType, design.drawingInNote ?? null)}
         {leno.size > 0 && " Döner çerçeveler kumaş görünümüne girmez."}
         {selvedgeFrames.length > 0 && ` Kenar çerçeveleri (${selvedgeFrames.join(", ")}) kumaşın iki kenarındadır; zemin raporuna girmez.`}
         {!selector && " Atkı seçici yok — tek atkı ipliğiyle çizildi."}

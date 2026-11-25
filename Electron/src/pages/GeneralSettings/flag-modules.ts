@@ -132,6 +132,8 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   // Devere ek E1 (2026-11-21): irsaliye no tekrarı ve dönüş tartısı devere modülünün davranış ayarları.
   devereDuplicateDeliveryNote: "devereEnabled",
   devereReceiveWeighing: "devereEnabled",
+  // K9 (2026-11-25): tarak numarası birimi çözgü kartının (devere modülü) gösterim ayarı.
+  devereReedNumberUnit: "devereEnabled",
   // Devere F1 (2026-11-20): denye sapma raporunun öneri eşikleri devere modülünün sayısal ayarları.
   devereDenierSuggestMinBeams: "devereEnabled",
   devereDenierSuggestThresholdPct: "devereEnabled",
@@ -141,6 +143,10 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   dokumaRollBirth: "dokumaEnabled",
   dokumaWeavingWastePct: "dokumaEnabled",
   dokumaYarnReservationEnabled: "dokumaEnabled",
+  // K10 (2026-11-25): mekanizma şalterleri desen kartının (dokuma modülü) seçenek ayarı.
+  dokumaMechanismCamEnabled: "dokumaEnabled",
+  dokumaMechanismDobbyEnabled: "dokumaEnabled",
+  dokumaMechanismJacquardEnabled: "dokumaEnabled",
   // Tezgah Salonu (2026-10-10): iletim payı tezgah izleme modülünün sayısal ayarı.
   tezgahEscalationGraceMinutes: "tezgahEnabled",
   // Dokuma alarmı: alarm motoru ve ayarları tezgah izleme modülünün davranış bayrakları ("Tezgah izleme" kategorisi).

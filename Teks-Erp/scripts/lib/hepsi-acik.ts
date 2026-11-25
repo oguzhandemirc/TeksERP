@@ -174,6 +174,10 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   dokumaRunWeavingOrderRequired: A(true),
   dokumaOrderLineLinkRequired: A(true),
   dokumaYarnReservationEnabled: A(true),
+  dokumaMechanismCamEnabled: A(true), // K10: üç mekanizma da açık = her desen kartı seçeneği (varsayılan)
+  dokumaMechanismDobbyEnabled: A(true),
+  dokumaMechanismJacquardEnabled: A(true),
+  devereReedNumberUnit: A("DENTS_PER_CM"), // K9: çeviri yolunu devreye sokan değer (gösterim ÷10); saklama değişmez
   dokumaWeavingWastePct: A(5), // fireyi devreye sokan değer: öneri/iplik ihtiyacı ham metresi büyür
   dokumaRollBirth: A("KK1_LABEL_OR_ORDER"), // KK1_LABEL_ONLY A yolunu kapatır; en çok işleten değer iki yolu da açar
   tezgahEscalationGraceMinutes: A(5),

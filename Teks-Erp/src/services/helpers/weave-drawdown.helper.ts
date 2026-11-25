@@ -1,11 +1,13 @@
 // =============================================================================
 // KUMAŞ GÖRÜNÜMÜ (drawdown) — armür planı + atkı seçiciden kare ızgara (kart görseli, 2026-11-22)
 // =============================================================================
-// Kural: tel i'nin çerçevesi = DÜZ TAHAR (zemin çerçeveleri sırayla, döner ve kenar çerçeveleri hariç); atkı j'de
+// Kural: tel i'nin çerçevesi = tahar dizilimi (`drawingInUnit`: düz/sivri/atlamalı; döner ve kenar çerçeveleri hariç); atkı j'de
 // o çerçeve kalkıksa hücre çözgüdür (0), değilse atkı seçicisindeki iplik no'su (seçici yoksa 1).
 // Döner (LENO) desen çizilmez: doup hareketi ızgarayla simüle edilemez. Panel/tablet aynaları aynı
 // örneklerle parite testine bağlıdır. SAF; gösterim içindir, hesaba girmez.
 // =============================================================================
+
+import { drawingInUnit, type WeaveDrawingInTypeValue } from "../../constants/weave-drawing-in";
 
 export const DRAWDOWN_MAX_ENDS = 512;
 export const DRAWDOWN_MAX_PICKS = 512;
@@ -23,14 +25,16 @@ export interface DrawdownInput {
   selvedgeFrames?: readonly number[];
   /** Atkı başına 1-tabanlı iplik satırı no; null = seçici yok. */
   pickSequence: readonly number[] | null;
-  /** Çizilecek tel sayısı; varsayılan bir düz tahar raporu (zemin çerçeve sayısı). */
+  /** Tahar türü (K1): Sivri/Atlamalı standart dizilimle çizilir; boş/Düz/Özel = düz tahar (bugünkü çizim). */
+  drawingInType?: WeaveDrawingInTypeValue | null;
+  /** Çizilecek tel sayısı; varsayılan bir tahar raporu (`drawingInUnit` uzunluğu). */
   ends?: number;
   /** Çizilecek atkı sayısı; varsayılan armür planı satır sayısı. */
   picks?: number;
 }
 
 export interface WeaveDrawdown {
-  /** Düz tahar sırasıyla zemin çerçeveleri (1-tabanlı). */
+  /** Zemin çerçeveleri, numara sırasıyla (1-tabanlı). */
   groundFrames: number[];
   /** Tel başına çerçeve no (1-tabanlı) — tahar şeridi. */
   threading: number[];
@@ -58,10 +62,11 @@ export function computeDrawdown(input: DrawdownInput): WeaveDrawdown | null {
   const frames = plan.reduce((m, r) => Math.max(m, r.length), 0);
   const groundFrames = groundFrameNumbers(frames, input.lenoFrames, input.selvedgeFrames);
   if (groundFrames.length === 0) return null;
-  const ends = clamp(input.ends ?? groundFrames.length, DRAWDOWN_MAX_ENDS);
+  const unit = drawingInUnit(groundFrames.length, input.drawingInType).map((g) => groundFrames[g]!);
+  const ends = clamp(input.ends ?? unit.length, DRAWDOWN_MAX_ENDS);
   const picks = clamp(input.picks ?? plan.length, DRAWDOWN_MAX_PICKS);
   const seq = input.pickSequence && input.pickSequence.length > 0 ? input.pickSequence : null;
-  const threading = Array.from({ length: ends }, (_, i) => groundFrames[i % groundFrames.length]!);
+  const threading = Array.from({ length: ends }, (_, i) => unit[i % unit.length]!);
   const cells: number[][] = [];
   for (let j = 0; j < picks; j++) {
     const row = plan[j % plan.length]!;

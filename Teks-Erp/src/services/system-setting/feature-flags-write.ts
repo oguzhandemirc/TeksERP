@@ -44,6 +44,8 @@ import { DEFAULT_DEVERE_STALE_FULL_BEAM_DAYS, DEFAULT_DEVERE_STALE_OUT_BODY_DAYS
 import { DEVERE_BEAM_CARD_AUTO_PRINTS, type DevereBeamCardAutoPrint } from "./devere-beam-card";
 import { DEVERE_DUPLICATE_DELIVERY_NOTE_MODES, DEVERE_RECEIVE_WEIGHING_MODES, type DevereDuplicateDeliveryNote, type DevereReceiveWeighing } from "./devere-receive";
 import { readKursunMeterCapture } from "./kursun-batch";
+import { DEVERE_REED_NUMBER_UNITS, MECHANISM_SETTING, readEnabledShedMechanisms, type DevereReedNumberUnit } from "./weave-settings";
+import { SHED_MECHANISM_LABEL, WEAVE_SHED_MECHANISMS } from "../../constants/weave-classification";
 import { LABEL_COPIES_MAX, readNotificationInboxEnabled, type DefaultLabelMedia } from "./labels";
 import { DEFAULT_DEVERE_DENIER_SUGGEST_MIN_BEAMS, DEVERE_DENIER_SUGGEST_MIN_BEAMS_MAX, DEFAULT_DEVERE_DENIER_SUGGEST_THRESHOLD_PCT, DEVERE_DENIER_SUGGEST_THRESHOLD_PCT_MAX, DEFAULT_DEVERE_FASON_WASTE_TOLERANCE_PCT, DEVERE_FASON_WASTE_TOLERANCE_PCT_MAX, DEFAULT_DEVERE_WARP_FIXED_WASTE_M, DEVERE_WARP_FIXED_WASTE_M_MAX, DEFAULT_DOKUMA_WEAVING_WASTE_PCT, DOKUMA_WEAVING_WASTE_PCT_MAX, readDepoMultiEnabledRaw, readDevereEnabledRaw, readDokumaEnabledRaw, readEmanetEnabledRaw, readGelenBelgeEnabledRaw, readIplikEnabledRaw, readKaliteGuvenceEnabledRaw, readKumasTeknikEnabledRaw, readMaliyetEnabledRaw, readProductionEnabledRaw, readTezgahEnabledRaw, readTicaretEnabledRaw } from "./modules";
 import { readTezgahAlarmEnabled, readTezgahAlarmNoShiftMode, readTezgahAlarmUnclassifiedTargetMinutes } from "./packing-loom";
@@ -894,6 +896,27 @@ export async function setFeatureFlags(
         throw AppError.badRequest("dokumaYarnReservationEnabled boolean olmalı");
       }
       await this.set(SETTING_KEYS.DOKUMA_YARN_RESERVATION_ENABLED, input.dokumaYarnReservationEnabled, `Dokuma: açık ${TERIM.dokumaIsEmri.cogulCekimKucuk.ilgi} kalan ipliği ayrılmış sayılır (görünürlük, engellemez)`, userId);
+    }
+    // K10: mekanizma şalterleri — yazımdan SONRAKİ küme boş kalamaz (çıkışsız kapı: hiçbir desen kartı açılamaz).
+    const mechanismInputs = WEAVE_SHED_MECHANISMS.filter((m) => Object.prototype.hasOwnProperty.call(input, MECHANISM_SETTING[m].flag));
+    if (mechanismInputs.length > 0) {
+      const after = await readEnabledShedMechanisms();
+      for (const m of mechanismInputs) {
+        const v = input[MECHANISM_SETTING[m].flag];
+        if (typeof v !== "boolean") throw AppError.badRequest(`${MECHANISM_SETTING[m].flag} boolean olmalı`);
+        if (v) after.add(m); else after.delete(m);
+      }
+      if (after.size === 0) throw AppError.badRequest("En az bir mekanizma (Eksantrik, Armür ya da Jakar) açık kalmalı.", { code: "WEAVE_MECHANISM_NONE_ENABLED" });
+      for (const m of mechanismInputs) {
+        await this.set(MECHANISM_SETTING[m].key, input[MECHANISM_SETTING[m].flag] as boolean, `Dokuma: ${SHED_MECHANISM_LABEL[m]} mekanizması yeni desen kartında seçilebilir`, userId);
+      }
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "devereReedNumberUnit")) {
+      const v = input.devereReedNumberUnit;
+      if (typeof v !== "string" || !DEVERE_REED_NUMBER_UNITS.includes(v as DevereReedNumberUnit)) {
+        throw AppError.badRequest("Tarak numarası birimi diş/10 cm ya da diş/cm (DENTS_PER_10CM/DENTS_PER_CM) olmalı");
+      }
+      await this.set(SETTING_KEYS.DEVERE_REED_NUMBER_UNIT, v, "Çözgü kartı: tarak numarası birimi (gösterim/giriş; saklama hep diş/10 cm)", userId);
     }
     if (Object.prototype.hasOwnProperty.call(input, "dokumaOrderLineLinkRequired")) {
       if (typeof input.dokumaOrderLineLinkRequired !== "boolean") {

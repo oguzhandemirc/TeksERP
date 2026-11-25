@@ -1,7 +1,8 @@
 // Kumaş görünümü (drawdown) ve tahar şeridinin SAF hesabı — yalnız görünüm için; sunucu basımındaki
 // `weave-drawdown.helper` ile aynı örnek tabloyu paylaşır (parite: `weave-drawdown.test.ts` DRAWDOWN_CASES).
-// Kural: tahar verisi yok → DÜZ TAHAR (zemin çerçeveleri sırayla, döner ve kenar çerçeveleri hariç); atkı j'de telin
-// çerçevesi kalkıksa hücre = çözgü (0), değilse o atkının ipliği (seçici; yoksa 1. iplik).
+// Kural: tel → çerçeve tahar türünün dizilimi (`weave-drawing-in`; tür yok/Özel → DÜZ TAHAR; döner ve kenar çerçeveleri
+// hariç); atkı j'de telin çerçevesi kalkıksa hücre = çözgü (0), değilse o atkının ipliği (seçici; yoksa 1. iplik).
+import { drawingInUnit, type DrawingInType } from "./weave-drawing-in";
 
 /** Kumaş görünümü hücresi: 0 = çözgü üstte, k ≥ 1 = k. atkı ipliği üstte. */
 export type DrawdownCell = number;
@@ -19,6 +20,11 @@ export function groundFrameIndexes(frameCount: number, lenoFrames: readonly numb
 export function straightDraw(ground: readonly number[], ends: number): number[] {
   if (ground.length === 0) return [];
   return Array.from({ length: Math.max(0, ends) }, (_, i) => ground[i % ground.length]!);
+}
+
+/** Bir tahar raporu: tel → çerçeve (0-tabanlı sütun), tür dizilimiyle (`drawingInUnit`); boş tür = düz. */
+export function drawUnit(ground: readonly number[], type: DrawingInType | null | undefined): number[] {
+  return drawingInUnit(ground.length, type).map((g) => ground[g]!);
 }
 
 const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
@@ -40,6 +46,8 @@ export interface DrawdownInput {
   pickSequence?: readonly number[] | null;
   /** Yatay/dikey rapor tekrarı (1×, 2×, 4×). */
   repeat?: number;
+  /** Tahar türü (K1): Sivri/Atlamalı standart dizilim; boş/Düz/Özel = düz tahar (bugünkü çizim). */
+  drawingInType?: DrawingInType | null;
 }
 
 export interface Drawdown {
@@ -51,14 +59,15 @@ export interface Drawdown {
   cells: DrawdownCell[][];
 }
 
-export function computeDrawdown({ liftPlan, lenoFrames = [], selvedgeFrames = [], pickSequence, repeat = 1 }: DrawdownInput): Drawdown {
+export function computeDrawdown({ liftPlan, lenoFrames = [], selvedgeFrames = [], pickSequence, repeat = 1, drawingInType = null }: DrawdownInput): Drawdown {
   const frames = liftPlan.reduce((m, row) => Math.max(m, row.length), 0);
   const ground = groundFrameIndexes(frames, lenoFrames, selvedgeFrames);
   const rep = Math.max(1, Math.trunc(repeat));
   const seq = pickSequence && pickSequence.length > 0 ? pickSequence : null;
   const basePicks = drawdownRepeatPicks(liftPlan.length, seq?.length ?? 0);
   const picks = Math.min(basePicks * rep, DRAWDOWN_MAX_PICKS);
-  const draw = straightDraw(ground, ground.length * rep);
+  const unit = drawUnit(ground, drawingInType);
+  const draw = straightDraw(unit, unit.length * rep);
   const cells = Array.from({ length: picks }, (_, j) => {
     const row = liftPlan[j % liftPlan.length] ?? [];
     const weft = seq ? seq[j % seq.length]! : 1;

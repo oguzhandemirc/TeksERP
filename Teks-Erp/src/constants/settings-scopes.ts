@@ -163,13 +163,14 @@ export const SETTINGS_SCOPES: readonly SettingsScope[] = [
       "devereResidualTareFromBody",
       "devereDuplicateDeliveryNote",
       "devereReceiveWeighing",
+      "devereReedNumberUnit",
       "devereDenierSuggestMinBeams",
       "devereDenierSuggestThresholdPct",
       "devereBeamWeavingLinkRequired",
     ],
   },
   // `dokumaRollBirth` (S4b, 2026-10-21) panel Dokuma kategorisinin enum satırıyla birlikte girdi (`settings-scope-mirror.test`).
-  { permission: "settings:dokuma", flagKeys: ["dokumaRunWeavingOrderRequired", "dokumaOrderLineLinkRequired", "dokumaRollBirth", "dokumaWeavingWastePct", "dokumaYarnReservationEnabled", "tezgahEscalationGraceMinutes", "tezgahAlarmEnabled", "tezgahAlarmUnclassifiedTargetMinutes", "tezgahAlarmUnclassifiedEnabled", "tezgahAlarmRenotifyMinutes", "tezgahAlarmEscalateWhenAcked", "tezgahAlarmNoShiftMode", "tezgahCollectorSilenceMinutes", "tezgahMaxOpenStopHours"] },
+  { permission: "settings:dokuma", flagKeys: ["dokumaRunWeavingOrderRequired", "dokumaOrderLineLinkRequired", "dokumaRollBirth", "dokumaWeavingWastePct", "dokumaYarnReservationEnabled", "dokumaMechanismCamEnabled", "dokumaMechanismDobbyEnabled", "dokumaMechanismJacquardEnabled","tezgahEscalationGraceMinutes", "tezgahAlarmEnabled", "tezgahAlarmUnclassifiedTargetMinutes", "tezgahAlarmUnclassifiedEnabled", "tezgahAlarmRenotifyMinutes", "tezgahAlarmEscalateWhenAcked", "tezgahAlarmNoShiftMode", "tezgahCollectorSilenceMinutes", "tezgahMaxOpenStopHours"] },
   {
     permission: "settings:warehouse",
     flagKeys: ["purchaseBlockOverReceiptEnabled", "goodsReceiptRequirePriceEnabled", "consumableStockEnabled"],

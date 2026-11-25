@@ -11,6 +11,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { isUniqueViolation, parseDecimalField, parseTextField } from "./helpers/cost-input.helper";
+import { assertDrawingInMechanism, assertMechanismEnabled, parseDrawingInType } from "./helpers/weave-design-gates.helper";
 import { LIFT_PLAN_MAX_FRAMES, LIFT_PLAN_MAX_PICKS, WEAVE_DESIGN_KINDS } from "../constants/weave-design";
 import {
   KIND_TO_CLASS,
@@ -42,6 +43,7 @@ export const WEAVE_DESIGN_SELECT = {
   lenoFrames: true,
   selvedgeFrames: true,
   drawingInNote: true,
+  drawingInType: true,
   notes: true,
   isActive: true,
   createdAt: true,
@@ -66,7 +68,7 @@ function present<T extends { kind: string; shedMechanism: string | null; weaveSt
 
 const ALLOWED = new Set([
   "code", "name", "kind", "shedMechanism", "weaveStructure", "hookCount", "repeatWidthCm", "familyLabel", "frameCount", "repeatCm",
-  "liftPlan", "loomFileName", "lenoSetup", "lenoFrames", "selvedgeFrames", "drawingInNote", "notes",
+  "liftPlan", "loomFileName", "lenoSetup", "lenoFrames", "selvedgeFrames", "drawingInNote", "drawingInType", "notes",
 ]);
 
 function rejectUnknown(body: Record<string, unknown>): void {
@@ -222,6 +224,9 @@ function parseScalars(body: Record<string, unknown>, partial: boolean, current: 
   if (leno !== undefined) out.lenoFrames = leno;
   const selvedge = parseSelvedgeFrames(body.selvedgeFrames);
   if (selvedge !== undefined) out.selvedgeFrames = selvedge;
+  const drawingInType = parseDrawingInType(body.drawingInType);
+  if (drawingInType !== undefined) out.drawingInType = drawingInType;
+  assertDrawingInMechanism(drawingInType, cls.effective.shedMechanism);
   assertMechanismFields(out, cls.effective);
   assertFrameRoles(out, current);
   return out;
@@ -236,7 +241,7 @@ function auditView(r: RawRow): Record<string, unknown> {
   return {
     code: r.code, name: r.name, kind: r.kind, shedMechanism: r.shedMechanism, weaveStructure: r.weaveStructure,
     hookCount: r.hookCount, repeatWidthCm: r.repeatWidthCm?.toString() ?? null, familyLabel: r.familyLabel, frameCount: r.frameCount,
-    repeatCm: r.repeatCm?.toString() ?? null, loomFileName: r.loomFileName, lenoSetup: r.lenoSetup, lenoFrames: r.lenoFrames, selvedgeFrames: r.selvedgeFrames, drawingInNote: r.drawingInNote, notes: r.notes,
+    repeatCm: r.repeatCm?.toString() ?? null, loomFileName: r.loomFileName, lenoSetup: r.lenoSetup, lenoFrames: r.lenoFrames, selvedgeFrames: r.selvedgeFrames, drawingInNote: r.drawingInNote, drawingInType: r.drawingInType, notes: r.notes,
     liftPlanSize: Array.isArray(r.liftPlan) ? r.liftPlan.length : null,
   };
 }
@@ -269,6 +274,7 @@ export async function getWeaveDesign(id: string): Promise<WeaveDesignRow> {
 export async function createWeaveDesign(body: Record<string, unknown>, userId?: string): Promise<WeaveDesignRow> {
   rejectUnknown(body);
   const data = parseScalars(body, false, null) as Prisma.WeaveDesignUncheckedCreateInput;
+  await assertMechanismEnabled(data.shedMechanism ?? undefined, null);
   let row: RawRow;
   try {
     row = await prisma.weaveDesign.create({ data: { ...data, createdById: userId ?? null, updatedById: userId ?? null }, select: WEAVE_DESIGN_SELECT });
@@ -284,6 +290,7 @@ export async function updateWeaveDesign(id: string, body: Record<string, unknown
   const before = await getRaw(id);
   const data = parseScalars(body, true, before);
   if (Object.keys(data).length === 0) throw AppError.badRequest("Güncellenecek alan yok.");
+  await assertMechanismEnabled(data.shedMechanism as WeaveClass["shedMechanism"] | undefined, resolveWeaveClass(before).shedMechanism);
   let after: RawRow;
   try {
     after = await prisma.weaveDesign.update({ where: { id }, data: { ...data, updatedById: userId ?? null }, select: WEAVE_DESIGN_SELECT });

@@ -626,6 +626,7 @@ export interface SettingsCategory {
  */
 /** Ayarlar › Devere / Levent grup adları (Devere H2) — sıra kategorinin `groupOrder`ında. */
 const DEVERE_GROUP = {
+  warpCard: "Çözgü kartı",
   inhouse: "İçeride levent sarımı",
   mount: "Tezgah bağı",
   beamBody: "Levent gövdesi",
@@ -1913,7 +1914,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     moduleKey: "devereEnabled",
     // Devere H2: bütün devere ayarlarının tek evi. Yeni devere ayarı uygun gruba `group` ile girer;
     // "Levent gövdesi" B1/B3 (beamBodyMode, beamBodyMachineFit), "Denye sapma raporu" F1 satırları için yer tutar.
-    groupOrder: [DEVERE_GROUP.inhouse, DEVERE_GROUP.mount, DEVERE_GROUP.beamBody, DEVERE_GROUP.fasonDispatch, DEVERE_GROUP.fasonClose, DEVERE_GROUP.fasonInvoice, DEVERE_GROUP.denier],
+    groupOrder: [DEVERE_GROUP.warpCard, DEVERE_GROUP.inhouse, DEVERE_GROUP.mount, DEVERE_GROUP.beamBody, DEVERE_GROUP.fasonDispatch, DEVERE_GROUP.fasonClose, DEVERE_GROUP.fasonInvoice, DEVERE_GROUP.denier],
     flags: [
       {
         group: DEVERE_GROUP.inhouse,
@@ -2006,6 +2007,21 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       },
     ],
     enumFlags: [
+      {
+        // K9 (2026-11-25): `defaultValue` backend `DEFAULT_DEVERE_REED_NUMBER_UNIT` ile birebir (bekçi §16); çeviri `lib/reed-unit.ts`.
+        group: DEVERE_GROUP.warpCard,
+        enumKey: "devereReedNumberUnit",
+        title: "Tarak numarası birimi",
+        summary: "Çözgü kartında tarak numarası diş/10 cm ile mi, diş/cm ile mi yazılıp gösterilsin.",
+        desc: "Tarak numarası, tarağın belli bir boyunda kaç diş olduğudur. Diş/10 cm seçiliyken (varsayılan) 100 yazılan tarak 10 cm'de 100 diştir; diş/cm seçiliyken aynı tarak 10 olarak yazılır ve gösterilir. Kayıtlı değerler değişmez, yalnız yazılış ve gösterim birimi değişir; çözgü kartları, devere talimatı ve tarak planı aynı birimi kullanır.",
+        defaultValue: "DENTS_PER_10CM",
+        display: "radio",
+        audience: ["Planlamacı", "Yönetim"],
+        options: [
+          { value: "DENTS_PER_10CM", label: "Diş/10 cm (varsayılan)", hint: "ör. 100 = 10 cm'de 100 diş." },
+          { value: "DENTS_PER_CM", label: "Diş/cm", hint: "ör. 10 = 1 cm'de 10 diş." },
+        ],
+      },
       {
         // Fason devere D4b (K4): `defaultValue` backend `DEFAULT_DEVERE_FASON_LOT_POLICY` ile birebir (bekçi §16).
         group: DEVERE_GROUP.fasonDispatch,
@@ -2217,8 +2233,8 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     id: "dokuma",
     label: "Dokuma",
     icon: Factory,
-    description: "Dokuma iş emri, tezgah koşumu ve sipariş bağı katılık ayarları.",
-    keywords: "dokuma iş emri tezgah koşum sipariş satırı bağ zincir levent",
+    description: "Dokuma iş emri, tezgah koşumu, sipariş bağı ve kullanılan tezgâh mekanizması ayarları.",
+    keywords: "dokuma iş emri tezgah koşum sipariş satırı bağ zincir levent mekanizma eksantrik armür jakar desen kartı teknik örme",
     kind: "flags",
     section: "production",
     permissionAny: [SETTINGS_ADMIN_PERMISSION, "settings:dokuma"],
@@ -2248,6 +2264,31 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         defaultOn: false,
         audience: ["Planlamacı", "Yönetim"],
         get desc() { return `Açıkken planlı ya da süren kendi tezgâh ${TERIM.dokumaIsEmri.cogulCekimKucuk.ilgi} kalan metresi için gereken iplik “ayrılan” sayılır: İplik İhtiyaç Planı'nda Ayrılan ve Serbest sütunları çıkar, eksik serbest miktara göre hesaplanır; hazır leventler önce bu işlere düşülür. Stok kilitlenmez, hiçbir kayıt engellenmez; ayrılan stoğu aşarsa yalnız uyarı verilir. Kapalıyken (varsayılan) ekranlar bugünkü gibidir.`; },
+      },
+      // K10 (2026-11-25): backend `readDokumaMechanism*Enabled` (kayıt yok = true) ile birebir; en az biri açık kalır (sunucu 400).
+      {
+        key: "dokumaMechanismCamEnabled",
+        title: "Eksantrik tezgâh kullanılıyor",
+        summary: "Desen kartında Eksantrik mekanizması seçilebilsin.",
+        defaultOn: true,
+        audience: ["Planlamacı", "Yönetim"],
+        desc: "Firmada kamla çalışan (eksantrik) tezgâh yoksa kapatın; yeni desen kartında Eksantrik seçeneği görünmez. Önceden Eksantrik kaydedilmiş kartlar aynen açılır ve düzenlenir, mekanizmaları kendiliğinden değişmez. Üç mekanizmadan en az biri açık kalmalıdır. Üretim tekniği bugün yalnız dokumadır; örme ileride açılacak.",
+      },
+      {
+        key: "dokumaMechanismDobbyEnabled",
+        title: "Armürlü tezgâh kullanılıyor",
+        summary: "Desen kartında Armür mekanizması seçilebilsin.",
+        defaultOn: true,
+        audience: ["Planlamacı", "Yönetim"],
+        desc: "Firmada armürlü (programlı çerçeveli) tezgâh yoksa kapatın; yeni desen kartında Armür seçeneği görünmez. Önceden Armür kaydedilmiş kartlar aynen açılır ve düzenlenir, mekanizmaları kendiliğinden değişmez. Üç mekanizmadan en az biri açık kalmalıdır.",
+      },
+      {
+        key: "dokumaMechanismJacquardEnabled",
+        title: "Jakarlı tezgâh kullanılıyor",
+        summary: "Desen kartında Jakar mekanizması seçilebilsin.",
+        defaultOn: true,
+        audience: ["Planlamacı", "Yönetim"],
+        desc: "Firmada jakarlı tezgâh yoksa kapatın; yeni desen kartında Jakar seçeneği görünmez. Önceden Jakar kaydedilmiş kartlar aynen açılır ve düzenlenir, mekanizmaları kendiliğinden değişmez. Üç mekanizmadan en az biri açık kalmalıdır.",
       },
     ],
     enumFlags: [

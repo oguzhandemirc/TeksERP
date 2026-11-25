@@ -16,6 +16,7 @@ import { type CariHoldDefaultScope, type CariHoldEmanetShipment, type CariHoldRe
 import { type DevereSettleDefault } from "./devere-settle";
 import { type DevereBeamCardAutoPrint } from "./devere-beam-card";
 import { type DevereDuplicateDeliveryNote, type DevereReceiveWeighing } from "./devere-receive";
+import { type DevereReedNumberUnit } from "./weave-settings";
 import { type CompanyLetterhead, type DocumentsConfig } from "./documents";
 import { SETTING_KEYS } from "./keys";
 import { type DefaultLabelMedia } from "./labels";
@@ -264,6 +265,12 @@ export interface FeatureFlags {
   dokumaWeavingWastePct: number;
   /** SY-3 I1: iplik ayırma görünürlüğü (HAM; etkin değer `resolveDokumaYarnReservationEnabled`). */
   dokumaYarnReservationEnabled: boolean;
+  /** K10: firmanın kullandığı mekanizmalar (varsayılan üçü TRUE = bugün); kapalı olan yeni desen kartında 400. */
+  dokumaMechanismCamEnabled: boolean;
+  dokumaMechanismDobbyEnabled: boolean;
+  dokumaMechanismJacquardEnabled: boolean;
+  /** K9: tarak numarası birimi (varsayılan `DENTS_PER_10CM` = bugünkü saklama); çeviri yalnız panelde. */
+  devereReedNumberUnit: DevereReedNumberUnit;
   /** Dokuma işi modülü (dokuma işi planlama · tezgah koşumu · top indirme).
    *  Varsayılan KAPALI. ⚠️ ÜRETİME BAĞIMLI: bu alan HAM değerdir; etkin değer
    *  `production && dokuma` ve kapının içinde çözülür. */

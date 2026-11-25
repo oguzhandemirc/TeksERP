@@ -430,6 +430,14 @@ export const SETTING_KEYS = {
   DOKUMA_WEAVING_WASTE_PCT: "dokuma.weavingWastePct",
   /** SY-3 I1 (2026-11-12): iplik ayırma görünürlüğü — açık dokuma işlerinin kalan iplik kg'ı "ayrılmış" sayılır; ENGELLEMEZ. Varsayılan FALSE. */
   DOKUMA_YARN_RESERVATION_ENABLED: "dokuma.yarnReservationEnabled",
+  /** Seyitoğlu K10 (2026-11-25): firmanın kullandığı ağızlık mekanizmaları — kapalı olan yeni desen kartında seçilemez (400);
+   *  kayıtlı eski değer okunur. Üçü de varsayılan TRUE = bugünkü davranış; en az biri açık kalır. Kaynak `weave-settings.ts`. */
+  DOKUMA_MECHANISM_CAM_ENABLED: "dokuma.mechanismCamEnabled",
+  DOKUMA_MECHANISM_DOBBY_ENABLED: "dokuma.mechanismDobbyEnabled",
+  DOKUMA_MECHANISM_JACQUARD_ENABLED: "dokuma.mechanismJacquardEnabled",
+  /** Seyitoğlu K9 (2026-11-25): tarak numarası birimi — `DENTS_PER_10CM` (varsayılan = bugünkü saklama) · `DENTS_PER_CM`.
+   *  DB değeri hep diş/10 cm; çeviri yalnız panelin gösterim/giriş katmanında. */
+  DEVERE_REED_NUMBER_UNIT: "devere.reedNumberUnit",
   /**
    * KAPALI raporların anahtar listesi (JSON `string[]`, `REPORT_CATALOG` anahtarları).
    *
