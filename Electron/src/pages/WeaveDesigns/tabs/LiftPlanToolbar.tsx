@@ -17,7 +17,7 @@ const HELP = "Fareyle basılı tutup sürükleyerek boyayın: boş kareden başl
   + "Shift basılıyken sürüklemek (ya da Seç aracı) bir alan seçer; kopyala, yapıştır, tekrarla, ayna, kaydır, temizle ve hazır örgü "
   + "seçili alana, seçim yoksa bütün ızgaraya uygulanır. Klavye: oklar imleci taşır, Boşluk kareyi çevirir, Shift+ok seçer, "
   + "Ctrl+Z geri al, Ctrl+Y yinele, Ctrl+C/X/V kopyala/kes/yapıştır, Ctrl+A tümünü seç, Delete seçimi temizler, Esc seçimi kaldırır. "
-  + "Hazır örgü döner çerçeveleri atlar.";
+  + "Hazır örgü döner ve kenar çerçevelerini atlar.";
 
 interface Props {
   dispatch: (a: EditorAction) => void;
