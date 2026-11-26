@@ -17,6 +17,7 @@ import { lineSubjectFrom, lineSubjectId, withLineType, type InvoiceLineType } fr
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { useCustomerTerms } from "./useCustomerTerms";
 import { applyTaxDefaults, useInvoiceTaxDefaults } from "./useInvoiceTaxDefaults";
+import { WithholdingOffNote } from "./WithholdingOffNote";
 import { useAttemptToken } from "@/lib/attemptToken";
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
 import {
@@ -615,6 +616,7 @@ function InvoiceFormBody({
             {prefill.notice.message}
           </p>
         )}
+        <WithholdingOffNote reason={taxDefaults?.withholdingOffReason} />
         <ServiceWorksBreakdown rows={prefill?.serviceWorks} currency={prefill?.currency ?? "TRY"} />
 
         {/* ⚠️ DÜZENLEMEDE ÜÇ ALAN KİLİTLİ (tür · cari · para birimi): PATCH

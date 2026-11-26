@@ -99,3 +99,25 @@ describe("yeni ALIŞ faturası — taraf sunucuya gider (F7)", () => {
     await waitFor(() => expect(numberValues()).toContain("70"));
   });
 });
+
+describe("tevkifat önerisi kapalı geldiğinde neden (F7b withholdingOffReason)", () => {
+  it("sunucu nedeni bildirince günlük dille bilgi satırı çıkar, kod görünmez", async () => {
+    getInvoiceTaxDefaults.mockImplementation(async () => ({ vatRate: 20, withholdingRate: 0, withholdingOffReason: "PERFORMER_SUPPLIED_MATERIAL" }));
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const Wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={qc}>
+        <MemoryRouter>{children}</MemoryRouter>
+      </QueryClientProvider>
+    );
+    render(<InvoiceFormDialog open onOpenChange={() => {}} onCreated={() => {}} />, { wrapper: Wrapper });
+    const note = await screen.findByTestId("withholding-off-note");
+    expect(note).toHaveTextContent("Ana hammaddeyi");
+    expect(note).not.toHaveTextContent("PERFORMER_SUPPLIED_MATERIAL");
+  });
+
+  it("neden yoksa satır çizilmez", async () => {
+    renderWithWarmCache();
+    await waitFor(() => expect(numberValues()).toContain("50"));
+    expect(screen.queryByTestId("withholding-off-note")).toBeNull();
+  });
+});
