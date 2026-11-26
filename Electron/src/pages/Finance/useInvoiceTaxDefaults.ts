@@ -11,14 +11,18 @@ import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { getInvoiceTaxDefaults, type InvoiceTaxDefaults, type InvoiceType } from "./service";
 import type { InvoiceFormLine } from "./invoiceForm";
 
-export function useInvoiceTaxDefaults(type: InvoiceType, customerId: string | null, enabled: boolean): InvoiceTaxDefaults | null {
+export function useInvoiceTaxDefaults(type: InvoiceType, customerId: string | null, enabled: boolean, workOrderId?: string): InvoiceTaxDefaults | null {
   const financeEnabled = useFeatureFlags().data?.data?.financeEnabled ?? false;
   const askable = type === "SALES" || type === "PURCHASE";
   // F7: ALIŞTA da taraf gönderilir — fason firma carisinin alış tevkifatı + genel alış ayarı (yalnız fason rolü) sunucuda çözülür.
   const party = customerId;
+  // F7b: İE bağlamı yalnız kaynağı tek İE'ye bağlı taslakta var; yoksa anahtar ve istek bugünkü şekliyle kalır.
   const q = useQuery({
-    queryKey: ["finance", "invoice-tax-defaults", type, party],
-    queryFn: () => getInvoiceTaxDefaults(type as "SALES" | "PURCHASE", party),
+    queryKey: ["finance", "invoice-tax-defaults", type, party, ...(workOrderId ? [workOrderId] : [])],
+    queryFn: () =>
+      workOrderId
+        ? getInvoiceTaxDefaults(type as "SALES" | "PURCHASE", party, workOrderId)
+        : getInvoiceTaxDefaults(type as "SALES" | "PURCHASE", party),
     enabled: financeEnabled && enabled && askable,
     staleTime: 60_000,
     retry: false,

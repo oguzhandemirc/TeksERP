@@ -42,6 +42,10 @@
 //      NULL'lar; `RollReturn` satırından geri eklenir, belge/özetle aynı kural); iade ayrı belgeyle
 //      (satış iadesi) kapanır, taslak NET'e DÜŞMEZ. NEGATİF SONDA (2026-09-18, ölçüldü):
 //      `collectReturnedRollsGross` `[]` dönünce §10c/§10d kırmızı (2 ❌; §10b ön koşul yeşil kalır — iade gerçekten oldu); geri alındı.
+//   §11 ⭐ F7b İE BAĞLAMI — sevkin topları TEK İE'ye bağlıysa önizleme `workOrderId` döner ve satır vergisi
+//      malzeme kuralından gelir (US ⇒ tevkifat 0; panel nedeni aynı İE ile sorar); iki İE'li sevkte alan yok, bugünkü.
+//      NEGATİF SONDA (2026-11-26, ölçüldü): `soleWorkOrderOfRolls` hep null dönünce 51/0 yerine 48/3
+//      (❌ §11b · §11c [50,50] · §11d; §11a/§11e zemin yeşil kalır — doğru); geri alındı.
 //
 // NEGATİF SONDA (2026-08-14 — koşuldu, kırmızı GÖRÜLDÜ, dosya shasum ile
 // birebir geri yüklendi: dc724ae3…). `shipping.service.
@@ -94,6 +98,8 @@ const shipmentIds: string[] = [];
 let userId: string | null = null;
 const orderIds: string[] = [];
 const itemIds: string[] = [];
+const woIds: string[] = [];
+const batchIds: string[] = [];
 let customerId: string | null = null;
 let colorId: string | null = null;
 
@@ -522,6 +528,43 @@ async function main(): Promise<void> {
     check("§10e Sevk anında doğan otomatik taslak da 95 m (iade onu DEĞİŞTİRMEZ)", gInv != null && gInv.lines.reduce((a, l) => a + Number(l.qty), 0) === 95, String(gInv?.lines.map((l) => Number(l.qty))));
   }
 
+  // ── §11 F7b İE BAĞLAMI: tek İE'li sevkin vergisi malzeme kuralından ─────
+  {
+    const W = [SETTING_KEYS.FINANCE_WITHHOLDING_ENABLED, SETTING_KEYS.FINANCE_WITHHOLDING_NUMERATOR, SETTING_KEYS.FINANCE_WITHHOLDING_DENOMINATOR];
+    for (const k of W) await rememberFlag(k);
+    await prisma.systemSetting.upsert({ where: { key: W[0]! }, create: { key: W[0]!, value: true }, update: { value: true } });
+    await prisma.systemSetting.upsert({ where: { key: W[1]! }, create: { key: W[1]!, value: 5 }, update: { value: 5 } });
+    await prisma.systemSetting.upsert({ where: { key: W[2]! }, create: { key: W[2]!, value: 10 }, update: { value: 10 } });
+    const woInBatch = async (m: "US" | "CUSTOMER", rIds: string[]): Promise<string> => {
+      const wo = await prisma.workOrder.create({ data: { workOrderNumber: `${TAG}-WO${woIds.length}`, materialProvidedBy: m }, select: { id: true } });
+      woIds.push(wo.id);
+      const b = await prisma.batch.create({ data: { batchNumber: `${TAG}-P${woIds.length}`, workOrderId: wo.id }, select: { id: true } });
+      batchIds.push(b.id);
+      await prisma.roll.updateMany({ where: { id: { in: rIds } }, data: { batchId: b.id } });
+      return wo.id;
+    };
+    const u1 = await makeRoll(itemA.id, 30, wh.id);
+    const u2 = await makeRoll(itemB.id, 20, wh.id);
+    const c1 = await makeRoll(itemA.id, 25, wh.id);
+    const woUs = await woInBatch("US", [u1, u2]);
+    const woCu = await woInBatch("CUSTOMER", [c1]);
+    const m1 = await makeRoll(itemA.id, 10, wh.id);
+    const m2 = await makeRoll(itemA.id, 10, wh.id);
+    await prisma.roll.updateMany({ where: { id: m1 }, data: { batchId: batchIds[0]! } });
+    await prisma.roll.updateMany({ where: { id: m2 }, data: { batchId: batchIds[1]! } });
+    const usShip = await quickShip([u1, u2], customer.id);
+    const cuShip = await quickShip([c1], customer.id);
+    const mixShip = await quickShip([m1, m2], customer.id);
+    const us = await collectShipmentInvoiceDraftLines(usShip.data.id, customer.id, Currency.TRY);
+    const cu = await collectShipmentInvoiceDraftLines(cuShip.data.id, customer.id, Currency.TRY);
+    const mix = await collectShipmentInvoiceDraftLines(mixShip.data.id, customer.id, Currency.TRY);
+    check("§11a Zemin: genel tevkifat açık — İE'siz/CUSTOMER sevkte satır tevkifatı 50", cu.lines.length > 0 && cu.lines.every((l) => l.withholdingRate === 50), JSON.stringify(cu.lines.map((l) => l.withholdingRate)));
+    check("§11b ⭐ tek İE (US) sevk: workOrderId döner", us.workOrderId === woUs, String(us.workOrderId));
+    check("§11c ⭐ tek İE (US) sevk: satırlar tevkifatsız (malzeme kuralı; panel nedeni İE ile sorar)", us.lines.length === 2 && us.lines.every((l) => !l.withholdingRate), JSON.stringify(us.lines.map((l) => l.withholdingRate)));
+    check("§11d tek İE (CUSTOMER) sevk: workOrderId döner, vergi bugünkü", cu.workOrderId === woCu);
+    check("§11e iki İE'li sevk: alan YOK (karışıkta kural uydurulmaz), tevkifat bugünkü 50", !("workOrderId" in mix) && mix.lines.every((l) => l.withholdingRate === 50), JSON.stringify({ wo: mix.workOrderId, w: mix.lines.map((l) => l.withholdingRate) }));
+  }
+
   // ── §6 KÖRLÜK ZEMİNİ ────────────────────────────────────────────────────
   // "İhlal bulunamadı" ile "hiçbir şeye bakılmadı" aynı yeşile çıkmasın:
   // fixture gerçekten kurulmadıysa yukarıdaki tüm sayımlar vakumen doğrudur.
@@ -582,6 +625,9 @@ main()
       await prisma.rollVariance.deleteMany({ where: { rollId: { in: rollIds } } });
       await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
     }
+    // §11 parti → İE (top silindikten sonra; Batch.workOrder FK'si RESTRICT).
+    if (batchIds.length > 0) await prisma.batch.deleteMany({ where: { id: { in: batchIds } } });
+    if (woIds.length > 0) await prisma.workOrder.deleteMany({ where: { id: { in: woIds } } });
     if (shipmentIds.length > 0) await prisma.shipment.deleteMany({ where: { id: { in: shipmentIds } } });
     // SÜPÜRME: hızlı sevkin doğurduğu çuval operatöre görünmez ve id'si yanıtta
     // dönmez — kod bozukken (negatif sonda) yarım kalan çuval listeye HİÇ
