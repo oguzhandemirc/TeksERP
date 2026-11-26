@@ -24,7 +24,7 @@ export function mechanismDetail(d: WeaveDesign): string[] {
   if (m === "JACQUARD") {
     return [
       d.hookCount ? `${d.hookCount} kanca` : null,
-      d.repeatWidthCm && d.repeatCm ? `rapor ${d.repeatWidthCm} × ${d.repeatCm} cm` : null,
+      d.repeatWidthCm && d.repeatCm ? `desen raporu ${d.repeatWidthCm} × ${d.repeatCm} cm` : null,
       d.loomFileName ? `desen dosyası ${d.loomFileName}` : null,
     ].filter((x): x is string => !!x);
   }
@@ -47,7 +47,7 @@ export function ItemWeaveSection({ form, canWrite }: { form: UseFormReturn<ItemF
   return (
     <div className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-        <FormField label="Desen kartı" error={form.formState.errors.weaveDesignId} info="Mekanizma (Eksantrik · Armür · Jakar), örgü, armür ızgarası ya da jakar desen dosyası">
+        <FormField label="Desen kartı" error={form.formState.errors.weaveDesignId} info="Mekanizma (Eksantrik · Armür · Jakar), örgü, desen örgüsü ya da jakar desen dosyası">
           <Controller
             control={form.control}
             name="weaveDesignId"

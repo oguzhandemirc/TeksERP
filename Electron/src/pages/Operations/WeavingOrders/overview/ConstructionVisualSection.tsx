@@ -111,11 +111,11 @@ function ConstructionBody({ c, itemId, onNavigate, print }: { c: WeavingOrderCon
 function noLiftPlanText(d: NonNullable<WeavingOrderConstruction["weaveDesign"]>): string {
   const m = resolveWeaveClass(d).shedMechanism;
   if (m === "JACQUARD") {
-    const parts = [d.hookCount ? `${d.hookCount} kanca` : null, d.repeatWidthCm && d.repeatCm ? `rapor ${d.repeatWidthCm} × ${d.repeatCm} cm` : null].filter(Boolean);
+    const parts = [d.hookCount ? `${d.hookCount} kanca` : null, d.repeatWidthCm && d.repeatCm ? `desen raporu ${d.repeatWidthCm} × ${d.repeatCm} cm` : null].filter(Boolean);
     return `Jakar desen — tezgâhın desen dosyasından dokunur${parts.length ? ` (${parts.join(", ")})` : ""}.`;
   }
-  if (m === "CAM") return "Eksantrik desen — armür ızgarası yok; çerçeveleri tezgâhın kamları kaldırır.";
-  return "Desen kartında armür planı girilmemiş.";
+  if (m === "CAM") return "Eksantrik desen — desen örgüsü ızgarası yok; çerçeveleri tezgâhın kamları kaldırır.";
+  return "Desen kartında desen örgüsü girilmemiş.";
 }
 
 /** Küçük karede iki haneli çerçeve noları sıkışmasın: yalnız çiftler yazılır. */
@@ -136,7 +136,7 @@ function MiniLiftPlan({ c, onOpen, weftSlots }: { c: WeavingOrderConstruction; o
   const tint = (col: number) => (col >= lay.frames ? null : lenoSet.has(col + 1) ? LENO_TINT : selvSet.has(col + 1) ? SELVEDGE_TINT : null);
   const labelColor = (col: number) => (col >= lay.frames ? undefined : lenoSet.has(col + 1) ? LENO_LABEL : selvSet.has(col + 1) ? SELVEDGE_LABEL : undefined);
   const grid = (
-    <WeaveGrid ariaLabel={`Armür planı: ${lay.rows} atkı, ${lay.frames} çerçeve${lay.selCols ? ", atkı seçici" : ""}`}
+    <WeaveGrid ariaLabel={`Desen örgüsü: ${lay.rows} atkı, ${lay.frames} çerçeve${lay.selCols ? ", atkı seçici" : ""}`}
       rows={lay.rows} cols={lay.cols} cell={lay.cell} direction={direction} colGapsBefore={lay.gaps}
       colTint={tint}
       colLabel={(col) => (col >= lay.frames ? yarnLetter(col - lay.frames) : frameLabel(col + 1, lay.cell))}
@@ -150,11 +150,11 @@ function MiniLiftPlan({ c, onOpen, weftSlots }: { c: WeavingOrderConstruction; o
   return (
     <div className="space-y-1.5">
       <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-        Armür planı{lay.selCols ? " + atkı seçici" : ""} <span className="font-normal normal-case">· atkı 1 {direction === "bottom-up" ? "altta" : "üstte"}</span>
+        Desen örgüsü{lay.selCols ? " + atkı seçici" : ""} <span className="font-normal normal-case">· atkı 1 {direction === "bottom-up" ? "altta" : "üstte"}</span>
       </h3>
       <WeaveScrollBox direction={direction} className="max-h-[400px] p-1.5">
         {onOpen ? (
-          <button type="button" onClick={onOpen} title="Desen kartının Armür sekmesinde aç" aria-label="Armür planını desen kartında aç"
+          <button type="button" onClick={onOpen} title="Desen kartının Desen örgüsü sekmesinde aç" aria-label="Desen örgüsünü desen kartında aç"
             className="block cursor-pointer rounded-sm hover:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring" data-testid="wo-construction-lift">
             {grid}
           </button>

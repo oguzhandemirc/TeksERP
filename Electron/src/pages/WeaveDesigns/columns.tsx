@@ -14,7 +14,7 @@ export const WEAVE_DESIGN_COLUMNS: ColumnDef<WeaveDesignRow>[] = [
   { id: "structure", header: "Örgü", meta: { label: "Örgü" }, accessorFn: (r) => { const s = resolveWeaveClass(r).weaveStructure; return s ? WEAVE_STRUCTURE_LABEL[s] : "—"; } },
   { id: "family", header: "Desen ailesi", meta: { label: "Desen ailesi" }, accessorFn: (r) => r.familyLabel ?? "—" },
   { id: "frames", header: "Çerçeve", meta: right("Çerçeve"), accessorFn: (r) => r.frameCount ?? "—" },
-  { id: "repeat", header: "Rapor boyu (cm)", meta: right("Rapor boyu (cm)"), accessorFn: (r) => r.repeatCm ?? "—" },
+  { id: "repeat", header: "Desen rapor boyu (cm)", meta: right("Desen rapor boyu (cm)"), accessorFn: (r) => r.repeatCm ?? "—" },
   {
     id: "active",
     header: "Durum",

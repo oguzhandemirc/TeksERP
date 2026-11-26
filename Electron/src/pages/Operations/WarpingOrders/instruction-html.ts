@@ -45,7 +45,7 @@ function instructionSection(i: WarpingInstruction, unit: ReedUnit): string {
       ${row("Termin", i.expectedReturnAt ? fmtFactoryDate(i.expectedReturnAt) : "—")}
     </table>
     <table class="grid"><thead><tr><th class="c">Harf</th><th>İplik</th><th class="n">Tel</th><th class="n">Denye</th></tr></thead><tbody>${yarns}</tbody></table>
-    <div class="box"><b>Dizilim:</b> ${i.sequenceNote ? esc(i.sequenceNote) : "—"}</div>
+    <div class="box"><b>Çözgü raporu:</b> ${i.sequenceNote ? esc(i.sequenceNote) : "—"}</div>
     ${warpEndsStripHtml(i.endsSequence, i.yarns)}
     ${reedPlanHtml(i.reed?.endsPerDent ?? null, i.totalEnds, i.selvedgeEnds, i.endsSequence)}
     ${i.notes ? `<div class="box"><b>Not:</b> ${esc(i.notes)}</div>` : ""}

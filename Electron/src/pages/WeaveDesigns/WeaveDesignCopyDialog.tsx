@@ -38,7 +38,7 @@ export function WeaveDesignCopyDialog({ source, onClose, onCreated, onSubmit }: 
         <DialogHeader>
           <DialogTitle>{source.code} kartından örnek al — yeni desen kartı</DialogTitle>
           <DialogDescription>
-            Yeni kart bu kartın yapı bilgilerini (mekanizma: {SHED_MECHANISM_LABEL[resolveWeaveClass(source).shedMechanism]}){hasGrid ? ", armür ızgarasını" : ""} ve
+            Yeni kart bu kartın yapı bilgilerini (mekanizma: {SHED_MECHANISM_LABEL[resolveWeaveClass(source).shedMechanism]}){hasGrid ? ", desen örgüsünü" : ""} ve
             notlarını alır; sonra yalnız farkı değiştirirsiniz. Tezgâh dosya adı boş başlar; desen görseli ve bağlı kumaşlar kopyalanmaz.
           </DialogDescription>
         </DialogHeader>

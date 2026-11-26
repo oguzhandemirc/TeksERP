@@ -80,14 +80,14 @@ function rejectUnknown(body: Record<string, unknown>): void {
 export function parseLiftPlan(raw: unknown): number[][] | null | undefined {
   if (raw === undefined) return undefined;
   if (raw === null) return null;
-  if (!Array.isArray(raw) || raw.length === 0) throw AppError.badRequest("Armür ızgarası boş olmayan bir satır listesi olmalı.", { code: "LIFT_PLAN_INVALID" });
-  if (raw.length > LIFT_PLAN_MAX_PICKS) throw AppError.badRequest(`Armür ızgarası en çok ${LIFT_PLAN_MAX_PICKS} atkı satırı olabilir.`, { code: "LIFT_PLAN_INVALID" });
+  if (!Array.isArray(raw) || raw.length === 0) throw AppError.badRequest("Desen örgüsü boş olmayan bir satır listesi olmalı.", { code: "LIFT_PLAN_INVALID" });
+  if (raw.length > LIFT_PLAN_MAX_PICKS) throw AppError.badRequest(`Desen örgüsü en çok ${LIFT_PLAN_MAX_PICKS} atkı satırı olabilir.`, { code: "LIFT_PLAN_INVALID" });
   const width = Array.isArray(raw[0]) ? raw[0].length : 0;
-  if (width === 0 || width > LIFT_PLAN_MAX_FRAMES) throw AppError.badRequest(`Armür ızgarası 1–${LIFT_PLAN_MAX_FRAMES} çerçeve genişliğinde olmalı.`, { code: "LIFT_PLAN_INVALID" });
+  if (width === 0 || width > LIFT_PLAN_MAX_FRAMES) throw AppError.badRequest(`Desen örgüsü 1–${LIFT_PLAN_MAX_FRAMES} çerçeve genişliğinde olmalı.`, { code: "LIFT_PLAN_INVALID" });
   return raw.map((row, i) => {
-    if (!Array.isArray(row) || row.length !== width) throw AppError.badRequest(`Armür ızgarasının ${i + 1}. satırı ${width} hücre olmalı.`, { code: "LIFT_PLAN_INVALID" });
+    if (!Array.isArray(row) || row.length !== width) throw AppError.badRequest(`Desen örgüsünün ${i + 1}. satırı ${width} hücre olmalı.`, { code: "LIFT_PLAN_INVALID" });
     return row.map((c) => {
-      if (c !== 0 && c !== 1) throw AppError.badRequest(`Armür ızgarasının ${i + 1}. satırında yalnız 0/1 olabilir.`, { code: "LIFT_PLAN_INVALID" });
+      if (c !== 0 && c !== 1) throw AppError.badRequest(`Desen örgüsünün ${i + 1}. satırında yalnız 0/1 olabilir.`, { code: "LIFT_PLAN_INVALID" });
       return c;
     });
   });
@@ -178,7 +178,7 @@ function classWrite(body: Record<string, unknown>, current: RawRow | null): { da
 /** Mekanizmaya ait olmayan alan YAZILMAZ (saklı eski değer silinmez; okuyucular görmez). */
 function assertMechanismFields(out: Prisma.WeaveDesignUncheckedUpdateInput, effective: WeaveClass): void {
   if (out.liftPlan !== undefined && out.liftPlan !== Prisma.DbNull && !mechanismUsesLiftPlan(effective.shedMechanism)) {
-    throw AppError.badRequest("Armür ızgarası yalnız Armür mekanizmalı desende girilir.", { code: "WEAVE_DESIGN_LIFT_PLAN_DOBBY_ONLY" });
+    throw AppError.badRequest("Desen örgüsü yalnız Armür mekanizmalı desende girilir.", { code: "WEAVE_DESIGN_LIFT_PLAN_DOBBY_ONLY" });
   }
   if (Array.isArray(out.selvedgeFrames) && out.selvedgeFrames.length > 0 && !mechanismUsesLiftPlan(effective.shedMechanism)) {
     throw AppError.badRequest("Kenar çerçevesi yalnız Armür mekanizmalı desende işaretlenir.", { code: "WEAVE_DESIGN_SELVEDGE_DOBBY_ONLY" });
@@ -204,7 +204,7 @@ function parseScalars(body: Record<string, unknown>, partial: boolean, current: 
   Object.assign(out, cls.data);
   const hooks = parseHookCount(body.hookCount);
   if (hooks !== undefined) out.hookCount = hooks;
-  const repeatWidth = parseDecimalField(body.repeatWidthCm, { label: "Rapor eni (cm)", min: 0, minExclusive: true, scale: 2 });
+  const repeatWidth = parseDecimalField(body.repeatWidthCm, { label: "Desen rapor eni (cm)", min: 0, minExclusive: true, scale: 2 });
   if (repeatWidth !== undefined) out.repeatWidthCm = repeatWidth;
   const texts: Array<[keyof typeof body & string, string, number]> = [
     ["familyLabel", "Aile etiketi", 40], ["loomFileName", "Tezgâh desen dosyası", 64], ["lenoSetup", "Döner kurulumu", 100],
@@ -216,7 +216,7 @@ function parseScalars(body: Record<string, unknown>, partial: boolean, current: 
   }
   const frames = parseFrameCount(body.frameCount);
   if (frames !== undefined) out.frameCount = frames;
-  const repeat = parseDecimalField(body.repeatCm, { label: "Rapor boyu (cm)", min: 0, minExclusive: true, scale: 2 });
+  const repeat = parseDecimalField(body.repeatCm, { label: "Desen rapor boyu (cm)", min: 0, minExclusive: true, scale: 2 });
   if (repeat !== undefined) out.repeatCm = repeat;
   const plan = parseLiftPlan(body.liftPlan);
   if (plan !== undefined) out.liftPlan = plan === null ? Prisma.DbNull : plan;

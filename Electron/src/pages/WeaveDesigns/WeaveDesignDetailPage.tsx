@@ -61,7 +61,7 @@ export function WeaveDesignDetailPage() {
               <TabsList className="max-w-full justify-start overflow-x-auto">
                 <TabsTrigger value="structure">Desen bilgileri</TabsTrigger>
                 <TabsTrigger value="weft">Atkı raporu</TabsTrigger>
-                <TabsTrigger value="lift">Armür</TabsTrigger>
+                <TabsTrigger value="lift">Desen örgüsü</TabsTrigger>
                 <TabsTrigger value="variants">Varyantlar</TabsTrigger>
                 {showCost && <TabsTrigger value="cost">Maliyet</TabsTrigger>}
               </TabsList>
@@ -76,8 +76,8 @@ export function WeaveDesignDetailPage() {
                   <LiftPlanTab key={d.id + JSON.stringify(d.liftPlan ?? null) + JSON.stringify(d.lenoFrames ?? []) + JSON.stringify(d.selvedgeFrames ?? [])} design={d} fabric={fabric} canWrite={canWrite} />
                 ) : (
                   <p className="text-sm text-muted-foreground">
-                    Bu desenin mekanizması {SHED_MECHANISM_LABEL[resolveWeaveClass(d).shedMechanism]}; armür ızgarası yalnız Armür mekanizmasında çizilir.
-                    Mekanizmayı Yapı sekmesinden değiştirebilirsiniz.
+                    Bu desenin mekanizması {SHED_MECHANISM_LABEL[resolveWeaveClass(d).shedMechanism]}; desen örgüsü ızgarası yalnız Armür mekanizmasında çizilir.
+                    Mekanizmayı Desen bilgileri sekmesinden değiştirebilirsiniz.
                   </p>
                 )}
               </TabsContent>

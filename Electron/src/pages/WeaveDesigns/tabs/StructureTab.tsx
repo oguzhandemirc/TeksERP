@@ -45,12 +45,12 @@ const FIELDS: FieldDef[] = [
   { key: "name", label: "Desen adı", required: true, max: 100, span: 4, show: ALL },
   { key: "familyLabel", label: "Desen ailesi", max: 40, info: FAMILY_INFO, placeholder: "ör. BALIK", span: 2, show: ALL },
   { key: "frameCount", label: "Çerçeve sayısı", max: 2, mode: "numeric", info: "Armürün kullandığı çerçeve (gücü) sayısı; 1–32.", show: (m) => m === "DOBBY" },
-  { key: "repeatCm", label: "Rapor boyu (cm)", max: 10, mode: "decimal", info: "Desenin boyuna bir kez tekrar ettiği uzunluk.", show: (m) => m !== "JACQUARD" },
+  { key: "repeatCm", label: "Desen rapor boyu (cm)", max: 10, mode: "decimal", info: "Desenin boyuna bir kez tekrar ettiği uzunluk.", show: (m) => m !== "JACQUARD" },
   { key: "loomFileName", label: "Tezgâh desen dosyası (.DOP)", max: 64, span: 2, show: (m) => m === "DOBBY" },
   { key: "loomFileName", label: "Desen dosyası", max: 64, span: 2, info: "Jakar makinesine yüklenen desen dosyasının adı (ör. GUL-01.JC5). Desen bu dosyadan dokunur.", show: (m) => m === "JACQUARD" },
   { key: "hookCount", label: "Kanca sayısı", max: 5, mode: "numeric", info: "Jakar makinesinin kullandığı kanca (platin) sayısı; her kanca bir ya da birkaç çözgü telini kaldırır. 1–30.000.", show: (m) => m === "JACQUARD" },
-  { key: "repeatWidthCm", label: "Rapor eni (cm)", max: 10, mode: "decimal", info: "Desenin enine bir kez tekrar ettiği genişlik.", show: (m) => m === "JACQUARD" },
-  { key: "repeatCm", label: "Rapor boyu (cm)", max: 10, mode: "decimal", info: "Desenin boyuna bir kez tekrar ettiği uzunluk.", show: (m) => m === "JACQUARD" },
+  { key: "repeatWidthCm", label: "Desen rapor eni (cm)", max: 10, mode: "decimal", info: "Desenin enine bir kez tekrar ettiği genişlik.", show: (m) => m === "JACQUARD" },
+  { key: "repeatCm", label: "Desen rapor boyu (cm)", max: 10, mode: "decimal", info: "Desenin boyuna bir kez tekrar ettiği uzunluk.", show: (m) => m === "JACQUARD" },
   { key: "lenoSetup", label: "Döner kurulumu", max: 100, span: 3, show: (_m, f) => f.weaveStructure === "LENO" },
 ];
 

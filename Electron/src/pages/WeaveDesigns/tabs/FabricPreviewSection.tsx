@@ -18,13 +18,13 @@ import { isLeno } from "../weave-class";
 const REPEATS = [1, 2, 4] as const;
 const ROW_LABEL_W = 30;
 
-const DRAWDOWN_INFO = "Kumaş görünümü armür planından ve atkı seçiciden çizilir: telin çerçevesi kalkıksa kare çözgü rengini, "
+const DRAWDOWN_INFO = "Kumaş görünümü desen örgüsünden ve atkı seçiciden çizilir: telin çerçevesi kalkıksa kare çözgü rengini, "
   + "inikse o atkıda atılan ipliğin rengini alır. Tahar Yapı sekmesindeki tahar türüne göre çizilir: Düz 1, 2, 3…; Sivri 1, 2, 3, 2…; "
   + "Atlamalı önce tek sonra çift çerçeveler. Tür seçilmemişse ya da Özel ise düz tahar varsayılır (döner ve kenar çerçeveleri hariç). "
   + "Kalın çizgiler desen raporunun sınırıdır.";
 
 const LENO_INFO = "Döner (leno) desende döner teli zemin telinin etrafında çaprazlanır; kare ızgara bu hareketi gösteremez, bu yüzden "
-  + "kumaş görünümü çizilmez. Döner çerçeveler yukarıdaki armür ızgarasında turuncu sütunlardır; döner tertibatı tezgâhta ayrıca ayarlanır.";
+  + "kumaş görünümü çizilmez. Döner çerçeveler yukarıdaki desen örgüsü ızgarasında turuncu sütunlardır; döner tertibatı tezgâhta ayrıca ayarlanır.";
 
 interface Props {
   design: Pick<WeaveDesign, "kind" | "shedMechanism" | "weaveStructure" | "drawingInNote" | "drawingInType" | "lenoSetup">;
@@ -61,7 +61,7 @@ export function FabricPreviewSection({ design, plan, lenoFrames, selvedgeFrames 
       <section className="min-w-0 max-w-xl flex-1 space-y-2" aria-label="Kumaş görünümü">
         {heading}
         <Callout tone="muted" title="Döner desende kumaş görünümü çizilmez">
-          Döner teli zemin telinin etrafında çaprazlandığı için kare ızgarayla gösterilemez; döner çerçeveler armür ızgarasında turuncu sütunlardır.
+          Döner teli zemin telinin etrafında çaprazlandığı için kare ızgarayla gösterilemez; döner çerçeveler desen örgüsü ızgarasında turuncu sütunlardır.
           {design.lenoSetup && <span className="mt-1 block">Döner tertibatı: {design.lenoSetup}</span>}
         </Callout>
       </section>
@@ -82,8 +82,8 @@ export function FabricPreviewSection({ design, plan, lenoFrames, selvedgeFrames 
     <section className="min-w-0 max-w-full space-y-2" aria-label="Kumaş görünümü">
       <div className="flex flex-wrap items-center justify-between gap-2">
         {heading}
-        <WeaveSegmented label="Rapor tekrarı" value={repeat} onChange={setRepeat}
-          options={REPEATS.map((n) => ({ value: n, label: `${n}×`, title: `${n} rapor yan yana ve üst üste` }))} />
+        <WeaveSegmented label="Desen raporu tekrarı" value={repeat} onChange={setRepeat}
+          options={REPEATS.map((n) => ({ value: n, label: `${n}×`, title: `${n} desen raporu yan yana ve üst üste` }))} />
       </div>
       <WeaveScrollBox direction={direction} className="max-h-[70vh] pt-0" label="Tahar ve kumaş görünümü">
         <div className="inline-flex flex-col gap-1">

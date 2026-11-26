@@ -38,8 +38,8 @@ describe('warpBandLayout', () => {
   });
 
   it('alt satır: rapor × tekrar + artık = toplam; açılım yoksa neden', () => {
-    expect(warpBandCaption({ endsSequence: seq })).toBe('Rapor 3 tel × 1166 + 2 = 3500 tel');
-    expect(warpBandCaption({ endsSequence: { ...seq, remainder: 0 } })).toBe('Rapor 3 tel × 1166 = 3500 tel');
+    expect(warpBandCaption({ endsSequence: seq })).toBe('Çözgü raporu 3 tel × 1166 + 2 = 3500 tel');
+    expect(warpBandCaption({ endsSequence: { ...seq, remainder: 0 } })).toBe('Çözgü raporu 3 tel × 1166 = 3500 tel');
     expect(warpBandCaption({ endsSequence: null, sequenceNote: 'karışık' })).toContain('okunamadı');
     expect(warpBandCaption({ endsSequence: null })).toContain('yazılmamış');
   });

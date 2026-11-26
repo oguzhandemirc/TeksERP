@@ -11,7 +11,7 @@ export function WarpSpecsPage() {
   return (
     <CrudPage<WarpSpec>
       title="Çözgü Kartları"
-      description="Çözgü tanımı: iplikler ve telleri · dizilim · tarak. Bir çözgü kartı birden çok deseni besler; levent bu karta göre sarılır."
+      description="Çözgü tanımı: iplikler ve telleri · çözgü raporu · tarak. Bir çözgü kartı birden çok deseni besler; levent bu karta göre sarılır."
       entityName="Çözgü kartı"
       queryKey="warp-specs"
       service={warpSpecService}
