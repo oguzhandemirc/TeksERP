@@ -45,6 +45,7 @@ import { assertCariNotMergedTx } from "./helpers/cari-merged-guard.helper";
 // durumun iki farklı adla anılmasına giden en kısa yoldur.
 import { CHEQUE_STATUS_LABEL } from "./cheque.service";
 import type { ApiResponse } from "../types/api.types";
+import { paraMetni } from "./reports/anlati/sayi-bicim";
 
 // -----------------------------------------------------------------------------
 // SÖZLEŞME TİPLERİ
@@ -705,7 +706,7 @@ export class PaymentAllocationService {
       // okumayla; sebep iptalse aşağıdaki tavan satırına hiç düşülmez.
       await this.explainInvoiceBumpZeroTx(tx, inv.id);
       throw AppError.conflict(
-        `${inv.docNo} için kapatılabilecek tutar ${invOpen.toString()} ${inv.currency} — ${amount.toString()} yazılamaz.`,
+        `${inv.docNo} için kapatılabilecek tutar ${paraMetni(Number(invOpen))} ${inv.currency} — ${paraMetni(Number(amount))} yazılamaz.`,
       );
     }
     const srcBumped = input.paymentId
@@ -720,7 +721,7 @@ export class PaymentAllocationService {
       if (input.chequeId) await this.explainChequeBumpZeroTx(tx, input.chequeId);
       else await this.explainPaymentBumpZeroTx(tx, input.paymentId as string);
       throw AppError.conflict(
-        `${src.label} üzerinde kapamaya kalan tutar ${srcFree.toString()} ${src.currency} — ${amount.toString()} yazılamaz.`,
+        `${src.label} üzerinde kapamaya kalan tutar ${paraMetni(Number(srcFree))} ${src.currency} — ${paraMetni(Number(amount))} yazılamaz.`,
       );
     }
 

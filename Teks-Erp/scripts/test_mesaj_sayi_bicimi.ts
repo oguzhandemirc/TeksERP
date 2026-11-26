@@ -13,6 +13,7 @@
 //   §1a yuvadan hemen sonra birim (` m`, `kg`, `metre`, `mt`) ya da `%` → ifade biçimleyici çağrısı olmalı
 //   §1b yuvadan hemen önce `%` (`%${x}`) → `pctText`
 //   §1c yuvada `.toFixed(` → hiç olmaz (birimsiz de: nokta ondalık)
+//   §1e yuvadan sonra döviz kodu (` TL`, ` USD`…) ya da `${…currency}` yuvası → `paraMetni` (binlik noktalı, 2 hane)
 // Etiketli şablon (`Prisma.sql`…, `$queryRaw`…) ve logger/console çağrısı insan metni değildir, atlanır.
 // Muaf listesi gerekçeli ve iki yönlü (§3): artık eşleşmeyen muaf kırmızıdır.
 //
@@ -47,6 +48,9 @@ const ROUTES = path.join(ROOT, "src/routes");
 const FORMATTERS = new Set(["qtyText", "pctText", "sayiMetni", "oranMetni", "paraMetni", "formatNumber", "formatNotificationNumber", "formatDisplay"]);
 const INTEGER_CALLS = new Set(["round", "floor", "ceil", "trunc"]);
 const UNIT_AFTER = /^\s?(?:m|kg|metre|mt)(?![\p{L}\d]|\.")/u;
+// §1e para: yuvadan sonra döviz kodu (`3.00 USD`) ya da `${…currency}` yuvası → `paraMetni` (2026-11-26 prova Ü1: yerel `money` sarmalayıcısı `.toFixed(2)` saklıyordu).
+const CURRENCY_AFTER = /^\s?(?:TL|TRY|USD|EUR|GBP|₺)(?![\p{L}\d])/u;
+const CURRENCY_EXPR = /(?:^|\.)currency$/i;
 const PCT_AFTER = /^\s?%/;
 const PCT_BEFORE = /%$/;
 const LOG_CALLEE = /^(?:logger|console|log)\.\w+$/;
@@ -95,6 +99,14 @@ const ALLOWED: Record<string, string> = {
   "src/services/helpers/cash-balance-guard.helper.ts::ref.amount.toFixed(2)": "para (tutar)",
   "src/services/payment.service.ts::summary.leftover.toFixed(2)": "para (artan tutar)",
   "src/services/payment.service.ts::summary.total.toFixed(2)": "para (toplam)",
+  // ── §1e para kuralının sayı olmayan yuvaları / kendi tr-TR biçimleyicisi ──
+  "src/services/payment-allocation.service.ts::src.label": "kaynak belge ETİKETİ (metin), ardından döviz kodu — sayı değil",
+  "src/services/reports/finance-aging.report.ts::b.currency": "döviz KODU (`USD TL karşılığı`), sayı değil",
+  "src/services/reports/profitability.sunum.ts::say(draft)": "yerel `say` = Intl tr-TR (virgül ondalık), Türkçe para metni",
+  "src/services/reports/profitability.sunum.ts::say(idleTry)": "yerel `say` = Intl tr-TR (virgül ondalık), Türkçe para metni",
+  "src/services/reports/profitability.sunum.ts::say(undistributed)": "yerel `say` = Intl tr-TR (virgül ondalık), Türkçe para metni",
+  "src/services/reports/profitability.sunum.ts::say(late)": "yerel `say` = Intl tr-TR (virgül ondalık), Türkçe para metni",
+  "src/services/reports/profitability.sunum.ts::say(directLeft)": "yerel `say` = Intl tr-TR (virgül ondalık), Türkçe para metni",
   // ── Tamsayı sayım: birim sözcüğü ad tamlamasıdır ("3 metre okuması") ──
   "src/services/helpers/guarded-hard-remove.ts::n": "okuma ADEDİ (count), tamsayı",
   // ── Basılı müşteri belgesi: `genel.md` "basılı müşteri belgeleri ayrı karar" ──
@@ -193,8 +205,11 @@ function scanSource(rel: string, text: string): Hit[] {
         // `${a} %${b}`: `%` sonraki değerin önekidir · `%${x}%`: LIKE kalıbı, sayı değil.
         const pctAfter = PCT_AFTER.test(after) && (last || after.trim() !== "%");
         const like = PCT_BEFORE.test(before) && /^%/.test(after);
+        const next = last ? null : n.templateSpans[i + 1]!.expression.getText(sf);
+        const currencyAfter = CURRENCY_AFTER.test(after) || (after.trim() === "" && next !== null && CURRENCY_EXPR.test(next));
         if (src.includes(".toFixed(")) add("toFixed");
         else if (UNIT_AFTER.test(after) && !formatted(expr, sc)) add("birim");
+        else if (currencyAfter && !formatted(expr, sc)) add("para");
         else if (!like && (pctAfter || PCT_BEFORE.test(before)) && !formatted(expr, sc)) add("yüzde");
       });
     }
@@ -239,6 +254,10 @@ function main(): void {
   check("§2d SQL gövdesi · LIKE `%${q}%` · Math.round · yerel sarmalayıcı · `${a} %${pctText(b)}` · yedek metin bırakılır", s(
     "a = `SELECT x FROM t m WHERE m.id = ${id}`; b = `%${term}%`; c = `~${Math.round(q)} m`; const tr1 = (n) => sayiMetni(n, 1); d = `%${tr1(p)}`; e = `${ok ? \"▲\" : \"▼\"} %${pctText(v)}`; f = `${r ? qtyText(r.q) : \"?\"} m`; g = `${list.length} kg`;",
   ).length === 0);
+
+  check("§2e para: `${money(d)} ${inv.currency}` · `${t.toString()} USD` yakalanır; `${paraMetni(n)} ${x.currency}` · `${n} TLsiz` bırakılır", JSON.stringify([
+    s("const money = (v) => v.toFixed(2); w = `fark ${money(d)} ${inv.currency}.`"), s("m = `tutar ${t.toString()} USD`"), s("m = `${paraMetni(Number(t))} ${x.currency}`; k = `${n} TLsiz`"),
+  ]) === JSON.stringify([["para"], ["para"], []]));
 
   // §3 muaf listesi bayat değil
   const used = new Set(all.map(allowedKey).filter((k): k is string => !!k));

@@ -12,6 +12,7 @@ import { AppError } from "../../utils/app-error";
 import { readDevereReworkBillable, readFinanceInvoicePriceTolerancePct } from "../system-setting.service";
 import { ACCEPTED_WARPING_BEAM_WHERE, loadWarpingOrderFeesTx, type WarpingOrderFee } from "./warping-fee.helper";
 import { pctText } from "./qty-text.helper";
+import { paraMetni } from "../reports/anlati/sayi-bicim";
 
 type Tx = Prisma.TransactionClient;
 type Db = Tx | typeof prisma;
@@ -149,7 +150,7 @@ export async function warpingFeeMatchTx(db: Db, invoiceId: string): Promise<Warp
   const diff = comparable ? net.minus(total) : null;
   const pct = diff && !total.isZero() ? diff.div(total).mul(100) : null;
   const exceeded = comparable && diff !== null && !diff.isZero() && (pct === null || pct.abs().gt(tolerancePct));
-  if (exceeded) warnings.push(`Fatura beklenen devere ücretinden farklı: ${money(diff!)} ${inv.currency}${pct ? ` (%${pctText(Number(pct.toDecimalPlaces(2)))})` : ""}. Onay engellenmez; kontrol edin.`);
+  if (exceeded) warnings.push(`Fatura beklenen devere ücretinden farklı: ${paraMetni(Number(diff!))} ${inv.currency}${pct ? ` (%${pctText(Number(pct.toDecimalPlaces(2)))})` : ""}. Onay engellenmez; kontrol edin.`);
   return {
     currency: inv.currency, orders, expectedTotal: comparable ? money(total) : null, invoiceNet: money(net),
     difference: diff ? money(diff) : null, diffPct: pct ? pct.toDecimalPlaces(2).toFixed(2) : null, tolerancePct, exceeded, currencyMismatch, missingPrice, warnings,

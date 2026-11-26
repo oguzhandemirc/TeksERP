@@ -82,7 +82,7 @@ export async function previewSettleWarpingOrder(id: string, body: WarpingSettleB
 
 function settleReplay(id: string, hash: string) {
   type Hit = { warpingOrderId: string; settlementId: string; requestHash: string; reopened: boolean };
-  return tokenReplay<Hit, WarpingSettlementRecord & { warnings: string[]; replayed: boolean }>({
+  return tokenReplay<Hit, SettleOutcome>({
     find: async (db, clientToken) => {
       const s = await db.warpingOrderSettlement.findUnique({ where: { clientToken }, select: { id: true, warpingOrderId: true, requestHash: true, reversal: { select: { id: true } } } });
       return s ? { warpingOrderId: s.warpingOrderId, settlementId: s.id, requestHash: s.requestHash ?? "", reopened: s.reversal !== null } : null;
@@ -96,7 +96,7 @@ function settleReplay(id: string, hash: string) {
       { ad: "requestHash", mevcut: hit.requestHash, gelen: hash },
     ],
     collision: "Bu işlem kimliği başka içerikli bir kapanışa ait — kapanış formunu yeniden açıp gönderin.",
-    respond: async (hit) => ({ ...(await loadSettlementRecord(prisma, hit.settlementId)), warnings: [], replayed: true }),
+    respond: async (hit) => ({ ...(await loadSettlementRecord(prisma, hit.settlementId)), warnings: [], replayed: true, keepKg: null }),
   });
 }
 
@@ -109,7 +109,10 @@ export async function claimForSettleTx(tx: Tx, id: string, userId: string): Prom
 }
 
 /** Kapanış: iade + fire + kalır; sipariş COMPLETED. */
-export async function settleWarpingOrder(id: string, input: WarpingSettleInput, userId: string): Promise<WarpingSettlementRecord & { warnings: string[]; replayed: boolean }> {
+/** `keepKg`: deverecide kalan toplam (kayıt yok, yalnız yanıt mesajı için); replay'de null. */
+type SettleOutcome = WarpingSettlementRecord & { warnings: string[]; replayed: boolean; keepKg: string | null };
+
+export async function settleWarpingOrder(id: string, input: WarpingSettleInput, userId: string): Promise<SettleOutcome> {
   const { clientToken, ...body } = input;
   const reason = body.reason?.trim() || null;
   // Gövdesiz kapanış önizlemeyle aynı kipi uygular; kip özete girer (ayar denemeler arası değişirse 409 çakışma).
@@ -161,6 +164,6 @@ export async function settleWarpingOrder(id: string, input: WarpingSettleInput, 
     for (const r of rec.returns) {
       await AuditService.log({ userId, action: "UPDATE", tableName: "SUBCONTRACTOR_DISPATCH", recordId: dispatchOf.get(r.dispatchItemId ?? "") ?? id, newData: { yarnReturned: r.yarnItemId, movementId: r.movementId, qtyKg: r.qtyKg, warpingOrderId: id, settlementId: out.settlementId } });
     }
-    return { ...rec, warnings: p.warnings, replayed: false };
+    return { ...rec, warnings: p.warnings, replayed: false, keepKg: sum((l) => l.keepKg) };
   });
 }

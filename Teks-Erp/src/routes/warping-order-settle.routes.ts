@@ -112,10 +112,12 @@ router.post("/:id/settle/preview", requirePermission("warping-order:settle"), re
 router.post("/:id/settle", requirePermission("warping-order:settle"), requireIplikEnabled, wrap(async (req) => {
   const id = parse(Id, req.params.id);
   const body = parse(SettleBody, req.body);
-  const { warnings, replayed, ...data } = await settleWarpingOrder(id, body, req.user!.userId);
+  const { warnings, replayed, keepKg, ...data } = await settleWarpingOrder(id, body, req.user!.userId);
+  // Deverecide kalan da söylenir; yoksa "iade 0, fire 0" kalan ipliği gizler (prova Ü2).
+  const kept = keepKg !== null && Number(keepKg) > 0 ? `, deverecide kalır ${qtyText(keepKg)} kg` : "";
   return {
     status: replayed ? 200 : 201,
-    body: { success: true, data, message: replayed ? "Bu kapanış zaten kayıtlı" : `Sipariş kapandı — iade ${qtyText(data.totalReturnKg)} kg, fire ${qtyText(data.totalWasteKg)} kg`, ...(warnings.length > 0 ? { warnings } : {}) },
+    body: { success: true, data, message: replayed ? "Bu kapanış zaten kayıtlı" : `Sipariş kapandı — iade ${qtyText(data.totalReturnKg)} kg, fire ${qtyText(data.totalWasteKg)} kg${kept}`, ...(warnings.length > 0 ? { warnings } : {}) },
   };
 }));
 
