@@ -5,6 +5,7 @@
 //   §1 kayıt → ACTIVE v1 (77,0395); iplik fiyatı değişir → v1 sayıları/dökümü DEĞİŞMEZ, liste
 //      ve detay `girdiDegisti=true`; v2 → v1 SUPERSEDED (+damga), tek ACTIVE
 //   §2 iki paralel kayıt → biri 409 COST_VERSION_CONFLICT, tek ACTIVE; §2b DB seddi: ikinci ACTIVE doğrudan yazılamaz
+//   §2c–e (SY-N1) elle açık tx: farklı zincir eşzamanlı ikisi geçer; aynı zincir (ilk sürüm dahil) 409 kalır
 //   §3 eksik girdi → 400 COST_INPUT_MISSING `details.missing` (kur yok → FX_RATE_MISSING, 1'e düşmez)
 //   §4 geri alma YENİ sürüm yazar (eski fotoğraf + kur), eskisini değiştirmez
 //   §5 köprü: finans/devere/iplik/ticaret kapalıyken öneri null ve ilgili tabloya SORGU YOK
@@ -204,6 +205,84 @@ async function bolum2b(f: MaliyetFikstur): Promise<void> {
   check("§2b ⭐ DB seddi: aynı ürüne ikinci ACTIVE doğrudan yazılamaz (P2002, kısmi unique indeks)", code === "P2002", String(code));
 }
 
+type Tx = Prisma.TransactionClient;
+/** ACTIVE desen-geneli sürümün kopya verisi (kimlik/damga alanları atılır) — elle tx yazımları için. */
+async function surumKopyasi(f: MaliyetFikstur, over: { versionNo: number; recipeId: string | null }) {
+  const act = await prisma.standardCostVersion.findFirstOrThrow({ where: { itemId: f.fabricId, recipeId: null, status: "ACTIVE" } });
+  const { id: _id, supersededAt: _s, restoredFromId: _r, createdAt: _c, updatedAt: _u, ...rest } = act;
+  return { act, data: { ...rest, ...over, status: "ACTIVE" as const, fxRates: rest.fxRates as Prisma.InputJsonValue, inputSnapshot: rest.inputSnapshot as Prisma.InputJsonValue, warnings: rest.warnings as Prisma.InputJsonValue } };
+}
+/**
+ * Elle AÇIK tutulan tx: `yaz` satırları kilitler/yazar, sonra yarışan servis çağrısı başlar; servis bağlantısı
+ * PG'de kilit beklemeye düşünce (pg_stat_activity, ≤15 sn) tx commit edilir. Zamanlamaya değil gözlenen beklemeye bağlıdır.
+ */
+async function elleAcikTx(yaz: (tx: Tx) => Promise<void>, yaris: () => Promise<unknown>): Promise<{ sonuc: Awaited<ReturnType<typeof hata>>; bekledi: boolean }> {
+  let p: ReturnType<typeof hata> | null = null;
+  let bekledi = false;
+  await prisma.$transaction(
+    async (tx) => {
+      await yaz(tx);
+      p = hata(yaris);
+      for (let i = 0; i < 150 && !bekledi; i++) {
+        const r = await prisma.$queryRaw<Array<{ n: number }>>`SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`;
+        bekledi = (r[0]?.n ?? 0) > 0;
+        if (!bekledi) await new Promise((res) => setTimeout(res, 100));
+      }
+    },
+    { timeout: 30_000, maxWait: 10_000 },
+  );
+  return { sonuc: await p!, bekledi };
+}
+
+/**
+ * SY-N1: sürüm no sayacı ürün başına, aktif tekillik (itemId, recipeId) başına. Varyant zincirine açık tx'te
+ * max+1 yazılırken desen geneli kaydı aynı max'ı okur → `itemId_versionNo` P2002. Birbirini SUPERSEDE etmeyen
+ * iki iş çarpışmamalı (yeniden deneme taze max okur). NEGATİF SONDA (2026-11-26): `writeVersion`daki
+ * `withBarcodeRetry` sarmalı kaldırılınca §2c 409/COST_VERSION_CONFLICT ile ❌.
+ */
+async function bolum2c(f: MaliyetFikstur, recipeId: string): Promise<void> {
+  const max = (await prisma.standardCostVersion.aggregate({ where: { itemId: f.fabricId }, _max: { versionNo: true } }))._max.versionNo ?? 0;
+  const { act, data } = await surumKopyasi(f, { versionNo: max + 1, recipeId });
+  const { sonuc, bekledi } = await elleAcikTx(
+    async (tx) => void (await tx.standardCostVersion.create({ data, select: { id: true } })),
+    () => svc.createStandardCostVersion(f.fabricId, { fxRates: FX }),
+  );
+  const genel = await prisma.standardCostVersion.findFirst({ where: { itemId: f.fabricId, recipeId: null, status: "ACTIVE" }, select: { id: true, versionNo: true } });
+  const varyant = await prisma.standardCostVersion.count({ where: { itemId: f.fabricId, recipeId, status: "ACTIVE" } });
+  check("§2c ⭐ Farklı zincir (varyant ↔ desen geneli) eşzamanlı: ikisi de geçer, sürüm no tek artan dizi", bekledi && sonuc === null && genel !== null && genel.id !== act.id && genel.versionNo === max + 2 && varyant === 1, `bekledi=${bekledi} sonuc=${sonuc ? `${sonuc.status}/${sonuc.code}` : "ok"} no=${genel?.versionNo}`);
+}
+
+/** Aynı zincir: açık tx önceki ACTIVE'i SUPERSEDE edip yeni sürüm yazarken servis claim'i count=0 → 409 kalır. */
+async function bolum2d(f: MaliyetFikstur): Promise<void> {
+  const max = (await prisma.standardCostVersion.aggregate({ where: { itemId: f.fabricId }, _max: { versionNo: true } }))._max.versionNo ?? 0;
+  const { act, data } = await surumKopyasi(f, { versionNo: max + 1, recipeId: null });
+  const { sonuc, bekledi } = await elleAcikTx(
+    async (tx) => {
+      await tx.standardCostVersion.updateMany({ where: { id: act.id, status: "ACTIVE" }, data: { status: "SUPERSEDED", supersededAt: new Date() } });
+      await tx.standardCostVersion.create({ data, select: { id: true } });
+    },
+    () => svc.createStandardCostVersion(f.fabricId, { fxRates: FX }),
+  );
+  const actives = await prisma.standardCostVersion.count({ where: { itemId: f.fabricId, recipeId: null, status: "ACTIVE" } });
+  check("§2d ⭐ Aynı zincir eşzamanlı: ikinci yazım hâlâ 409 COST_VERSION_CONFLICT, tek ACTIVE", bekledi && sonuc?.status === 409 && sonuc.code === "COST_VERSION_CONFLICT" && actives === 1, `bekledi=${bekledi} sonuc=${sonuc ? `${sonuc.status}/${sonuc.code}` : "ok"} active=${actives}`);
+}
+
+/**
+ * Aynı zincirin İLK sürüm yarışı (önceki ACTIVE yok → claim yok): çakışma önce `(itemId, versionNo)` indeksine
+ * düşebilir; yeniden deneme zincirde yeni ACTIVE görünce 409 verir, kaybedeni kazananın üstüne yazmaz.
+ * NEGATİF SONDA (2026-11-26): `seenPrev` denetimi kaldırılınca §2e "ok" ile ❌.
+ */
+async function bolum2e(f: MaliyetFikstur, recipeId: string): Promise<void> {
+  const max = (await prisma.standardCostVersion.aggregate({ where: { itemId: f.fabricId }, _max: { versionNo: true } }))._max.versionNo ?? 0;
+  const { data } = await surumKopyasi(f, { versionNo: max + 1, recipeId });
+  const { sonuc, bekledi } = await elleAcikTx(
+    async (tx) => void (await tx.standardCostVersion.create({ data, select: { id: true } })),
+    () => svc.createStandardCostVersion(f.fabricId, { fxRates: FX, recipeId }),
+  );
+  const actives = await prisma.standardCostVersion.count({ where: { itemId: f.fabricId, recipeId, status: "ACTIVE" } });
+  check("§2e ⭐ Aynı zincirin ilk sürüm yarışı: ikinci yazım 409 COST_VERSION_CONFLICT, tek ACTIVE", bekledi && sonuc?.status === 409 && sonuc.code === "COST_VERSION_CONFLICT" && actives === 1, `bekledi=${bekledi} sonuc=${sonuc ? `${sonuc.status}/${sonuc.code}` : "ok"} active=${actives}`);
+}
+
 function bolum8(): void {
   const md = readFileSync(join(__dirname, "../../docs/kurallar/defter.md"), "utf8");
   // Kısa alan dosyasında envanter madde listesidir (tablo `ayrinti/defter.md`de).
@@ -217,6 +296,8 @@ async function main(): Promise<void> {
   bolum8();
   assertGelistirmeVeritabani("test_standart_maliyet_surum");
   const f = await fiksturKur("SMS");
+  let recipeId: string | null = null;
+  let recipe2Id: string | null = null;
   try {
     const v1 = await bolum1(f);
     await bolum2(f);
@@ -226,7 +307,20 @@ async function main(): Promise<void> {
     await bolum6(f);
     await bolum7(f);
     await bolum2b(f);
+    recipeId = (await prisma.productRecipe.create({ data: { code: `TEST-${f.tag}-RV`, name: `TEST ${f.tag} varyant`, itemId: f.fabricId }, select: { id: true } })).id;
+    await bolum2c(f, recipeId);
+    await bolum2d(f);
+    recipe2Id = (await prisma.productRecipe.create({ data: { code: `TEST-${f.tag}-RV2`, name: `TEST ${f.tag} varyant 2`, itemId: f.fabricId }, select: { id: true } })).id;
+    await bolum2e(f, recipe2Id);
   } finally {
+    // Varyant sürümleri RESTRICT FK ile varyanta bağlı: önce kalemler + sürümler, sonra varyant (yalnız test DB).
+    for (const rid of [recipeId, recipe2Id]) {
+      if (!rid) continue;
+      const vs = await prisma.standardCostVersion.findMany({ where: { recipeId: rid }, select: { id: true } });
+      await prisma.standardCostLine.deleteMany({ where: { versionId: { in: vs.map((v) => v.id) } } });
+      await prisma.standardCostVersion.deleteMany({ where: { recipeId: rid } });
+      await prisma.productRecipe.delete({ where: { id: rid } });
+    }
     await fiksturSil(f);
   }
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

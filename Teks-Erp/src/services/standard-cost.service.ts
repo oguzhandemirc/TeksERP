@@ -3,12 +3,13 @@
 // =============================================================================
 // Sürüm DONMUŞ FOTOĞRAFTIR: tutarlar, kalemler ve motor girdisi (`inputSnapshot`) yazıldığı anda
 // donar; detay/geçmiş SAKLANANI okur, canlı girdiden yeniden hesaplamaz. Kayıt tek tx: önceki ACTIVE
-// → SUPERSEDED (atomik updateMany) + yeni sürüm + kalemler; yarışta partial unique/versionNo P2002 →
-// 409. "Geri alma" eski fotoğraftan YENİ sürüm yazar, eskisi değişmez. Audit tx DIŞINDA.
+// → SUPERSEDED (atomik updateMany) + yeni sürüm + kalemler; aynı zincir yarışı (claim/partial unique) →
+// 409, başka zincirin versionNo P2002'si yeniden denenir (SY-N1). "Geri alma" eski fotoğraftan YENİ sürüm yazar, eskisi değişmez. Audit tx DIŞINDA.
 // =============================================================================
 import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
+import { p2002TargetsCode, withBarcodeRetry } from "../utils/barcode-retry";
 import { AuditService } from "./audit.service";
 import { assembleCostInputTx, buildCostInput, loadCostSourcesTx } from "./helpers/cost-assembler.helper";
 import { isUniqueViolation } from "./helpers/cost-input.helper";
@@ -84,10 +85,16 @@ async function writeVersion(p: {
 }): Promise<{ created: VersionRow; supersededId: string | null }> {
   const r = p.out.result!;
   const now = new Date();
+  // İlk denemede görülen önceki ACTIVE; yeniden denemede değişmişse aynı zincire başka yazım girmiştir → 409 kalır.
+  let seenPrev: { id: string | null } | undefined;
   try {
-    return await prisma.$transaction(async (tx) => {
+    // SY-N1: sürüm no ürün başına, aktif tekillik zincir başına — başka zincirin eşzamanlı yazımı yalnız
+    // `(itemId, versionNo)` P2002'si üretir; taze max ile yeniden denenir (advisory kilit aynı zincirin 409'unu yutardı).
+    return await withBarcodeRetry(() => prisma.$transaction(async (tx) => {
       // Aktif tekillik (itemId, recipeId) başına (SY-MIG): desen geneli ile varyant sürümü birbirini SUPERSEDE etmez.
       const prev = await tx.standardCostVersion.findFirst({ where: { itemId: p.itemId, recipeId: p.recipeId, status: "ACTIVE" }, select: { id: true } });
+      if (seenPrev === undefined) seenPrev = { id: prev?.id ?? null };
+      else if (seenPrev.id !== (prev?.id ?? null)) throw AppError.conflict("Maliyet sürümü aynı anda değişti; yeniden deneyin.", { code: "COST_VERSION_CONFLICT" });
       if (prev) {
         const claim = await tx.standardCostVersion.updateMany({ where: { id: prev.id, status: "ACTIVE" }, data: { status: "SUPERSEDED", supersededAt: now } });
         if (claim.count === 0) throw AppError.conflict("Maliyet sürümü aynı anda değişti; yeniden deneyin.", { code: "COST_VERSION_CONFLICT" });
@@ -126,9 +133,10 @@ async function writeVersion(p: {
       });
       await emitStandardCostVersionTx(tx, created.id, p.userId);
       return { created, supersededId: prev?.id ?? null };
-    });
+    }), 3, (err) => p2002TargetsCode(err, "versionNo"), "Maliyet sürüm numarası");
   } catch (e) {
-    if (isUniqueViolation(e)) throw AppError.conflict("Bu ürün için aynı anda başka bir maliyet sürümü kaydedildi.", { code: "COST_VERSION_CONFLICT" });
+    const exhausted = e instanceof AppError && e.statusCode === 409 && !e.details?.code;
+    if (isUniqueViolation(e) || exhausted) throw AppError.conflict("Bu ürün için aynı anda başka bir maliyet sürümü kaydedildi.", { code: "COST_VERSION_CONFLICT" });
     throw e;
   }
 }
