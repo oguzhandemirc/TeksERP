@@ -1,4 +1,4 @@
-// Yeni emanet çıkış belgesi: müşteri (doğrudan modal) → levent / iplik lotu kalemleri → sunucu önizlemesi → kaydet.
+// Yeni emanet çıkış belgesi: müşteri (doğrudan modal, yalnız emaneti olanlar `/owners`) → levent / iplik lotu kalemleri → sunucu önizlemesi → kaydet.
 // Top bu belgeye girmez: emanet top normal sevkiyattan çıkar (çuval/tartı/brüt sevk kuralı değişmez).
 import { useState } from "react";
 import { Boxes, Cylinder, Loader2 } from "lucide-react";
@@ -6,9 +6,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { CustomerPickerField } from "@/components/forms/CustomerPickerField";
 import { useDevereEnabled, useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { BeamPicker } from "./BeamPicker";
+import { OwnerPickerField } from "./OwnerPickerField";
 import { YarnLinePicker } from "./YarnLinePicker";
 import { DraftItemsTable } from "./DraftItemsTable";
 import { useConsignmentDraft } from "./useConsignmentDraft";
@@ -39,7 +39,7 @@ export function ConsignmentDispatchFormDialog({ open, onOpenChange, onCreated }:
         <div className="min-h-0 flex-1 space-y-4 overflow-auto">
           <div className="space-y-1">
             <Label>Müşteri (malın sahibi)</Label>
-            <CustomerPickerField value={owner} onChange={d.changeOwner} />
+            <OwnerPickerField value={owner} onChange={d.changeOwner} />
             {owner && d.items.length > 0 && <p className="text-xs text-muted-foreground">Müşteri değişirse kalem listesi boşalır.</p>}
           </div>
           <AddItemButtons hasOwner={Boolean(owner)} onPick={setPicker} />

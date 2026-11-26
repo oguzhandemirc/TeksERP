@@ -5,6 +5,8 @@
 // seçici yok (kartsız satır). Tür değişince öteki türün kartı düşer (`withLineType`). Seçilen kartın adı çağırana
 // gider: açıklama boşsa ön-dolum (`InvoiceLineRow`).
 // =============================================================================
+import { X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { ItemSelect } from "@/components/forms/ItemSelect";
 import { ServiceItemSelect } from "@/components/forms/ServiceItemSelect";
 import { cn } from "@/lib/utils";
@@ -38,22 +40,46 @@ export function InvoiceLineSubjectField({ subject, onTypeChange, onPick }: Props
         ))}
       </div>
       {subject.lineType === "PRODUCT" && (
-        <ItemSelect
-          value={subject.itemId}
-          onChange={(id, row) => onPick({ itemId: id }, row?.name ?? null)}
-          placeholder="Ürün kartı (ops.)"
-          aria-label="Ürün kartı seç"
-        />
+        <div className="flex min-w-0 items-center gap-1">
+          <ItemSelect
+            className="min-w-0 flex-1"
+            value={subject.itemId}
+            onChange={(id, row) => onPick({ itemId: id }, row?.name ?? null)}
+            placeholder="Ürün kartı (ops.)"
+            aria-label="Ürün kartı seç"
+          />
+          {subject.itemId && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-9 w-7 shrink-0"
+              aria-label="Ürün seçimini temizle"
+              title="Ürün seçimini temizle"
+              onClick={() => onPick({ itemId: null }, null)}
+            >
+              <X className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
       )}
       {subject.lineType === "SERVICE" && (
-        <ServiceItemSelect
-          value={subject.serviceItemId}
-          onChange={(id, row) => onPick({ serviceItemId: id }, row?.name ?? null)}
-          placeholder="Hizmet kartı seç"
-          nullable
-          noneLabel="— (kartsız satır)"
-          triggerClassName="h-9 py-1.5"
-        />
+        <>
+          <ServiceItemSelect
+            value={subject.serviceItemId}
+            onChange={(id, row) => onPick({ serviceItemId: id }, row?.name ?? null)}
+            placeholder="Hizmet kartı seç"
+            nullable
+            noneLabel="— (kartsız satır)"
+            triggerClassName="h-9 py-1.5"
+          />
+          {/* Kartsız hizmet satırı sunucuya açıklama satırı (TEXT) olarak gider — sessiz dönüşüm olmasın. */}
+          {!subject.serviceItemId && (
+            <p className="text-[11px] leading-tight text-amber-700 dark:text-amber-400" role="status">
+              Hizmet kartı seçilmedi; satır açıklama olarak kaydedilir.
+            </p>
+          )}
+        </>
       )}
       {subject.lineType === "TEXT" && (
         <p className="flex h-9 items-center px-1 text-xs text-muted-foreground">Kartsız satır — yalnız açıklama</p>

@@ -61,6 +61,10 @@ export interface CariRow {
   withholdingEnabled?: boolean | null;
   withholdingNumerator?: number | null;
   withholdingDenominator?: number | null;
+  /** F7: ALIŞ tevkifatı geçersiz kılması (bu cari bize fatura kesince); null = genel alış ayarı. Eski backend göndermez. */
+  purchaseWithholdingEnabled?: boolean | null;
+  purchaseWithholdingNumerator?: number | null;
+  purchaseWithholdingDenominator?: number | null;
   balances: Array<{ currency: Currency; balance: number }>;
   /** Vadesi geçmiş AÇIK tutar, para birimi bazında (H2). YALNIZ `withOverdue`
    *  ile istenince gelir; eski backend'de hiç gelmez → alan OPSİYONEL okunur.
@@ -460,14 +464,20 @@ export interface CariUpdateInput {
   withholdingEnabled?: boolean | null;
   withholdingNumerator?: number | null;
   withholdingDenominator?: number | null;
+  purchaseWithholdingEnabled?: boolean | null;
+  purchaseWithholdingNumerator?: number | null;
+  purchaseWithholdingDenominator?: number | null;
 }
 
-/** D4-V1k: cari KDV / tevkifat gövdesi (null = genel ayar). */
+/** D4-V1k: cari KDV / tevkifat gövdesi (null = genel ayar). Alış üçlüsü yalnız backend alanı döndürüyorsa gider. */
 export interface CariTaxOverrideBody {
   vatRate: string | null;
   withholdingEnabled: boolean | null;
   withholdingNumerator: number | null;
   withholdingDenominator: number | null;
+  purchaseWithholdingEnabled?: boolean | null;
+  purchaseWithholdingNumerator?: number | null;
+  purchaseWithholdingDenominator?: number | null;
 }
 
 /** D4-V1k: yeni fatura satırının ön değeri — sunucunun TEK çözümleyicisinden (müşteri cari ?? genel ayar). */
@@ -475,7 +485,12 @@ export interface InvoiceTaxDefaults {
   vatRate: number;
   /** KDV'nin %'si (5/10 → 50); 0 = tevkifat yok. */
   withholdingRate: number;
+  /** F7b: tevkifat önerisi kuralla kapandıysa nedeni (yalnız o durumda gelir; eski backend hiç göndermez). */
+  withholdingOffReason?: WithholdingOffReason;
 }
+
+/** Sunucunun bildirdiği kapanma nedenleri; tanınmayan değer genel cümleyle gösterilir (`withholdingOffText`). */
+export type WithholdingOffReason = "PERFORMER_SUPPLIED_MATERIAL" | (string & {});
 
 export async function getInvoiceTaxDefaults(type: "SALES" | "PURCHASE", customerId: string | null): Promise<InvoiceTaxDefaults> {
   const res = await apiClient.get<{ data: InvoiceTaxDefaults }>("/api/finance/invoices/tax-defaults", {
