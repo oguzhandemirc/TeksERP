@@ -176,6 +176,10 @@ for _ in $(seq 20); do curl -fsS -o /dev/null "$SUNUCU/testkanal/backend-oci/son
 sudo install -d -m 0755 "/etc/systemd/system/$AD.service.d"
 # R23 ön duyurusu (üretimde 5 dk) test çapalı ikilide 2 sn: her sürüm pencere içinde ilk görülür, kapı yine koşar.
 printf '[Service]\nEnvironment=TEKSERP_TEST_CAPASI=%s/capa.json\nEnvironment=TEKSERP_TEST_ON_DUYURU_MS=2000\n' "$FX" | sudo tee "$EK" >/dev/null
+# Kök açıkça root 0755 doğar: `install -d` ara dizini umask'la açar, ubuntu-26.04'ün sudo'su (sudo-rs) umask'ı
+# sıkılaştırmaz → kök 0777 doğup güncelleyici `IZIN_GUVENSIZ` ile reddediyordu (kurulumda kökü kurulum yaratır).
+echo "umask: kullanıcı $(umask) · sudo $(sudo sh -c umask)"
+sudo install -d -o root -g root -m 0755 "$KOK"
 sudo install -d -m 0700 "$KOK/yapilandirma"
 printf 'POSTGRES_PASSWORD=duman-%s\nJWT_SECRET=duman-jwt-%s\n' "$RANDOM$RANDOM" "$RANDOM$RANDOM" | sudo tee "$KOK/yapilandirma/.env" >/dev/null
 sudo chmod 0600 "$KOK/yapilandirma/.env"
