@@ -2,6 +2,7 @@
 // doldurma (`formFields` + `suggestions`), alan engelleri ve form ucunun ek gövde alanları. Kural sunucudadır; burası
 // yalnız formu doldurur, düğmenin neden kapalı olduğunu söyler ve verilen alanı gövdeye koyar.
 import { addDaysToKey, factoryDayKey, factoryDayStartIso, fmtDayKey } from '../../../../lib/factory-time';
+import { materialProvidedByBody, type MaterialProvider } from '../../../../lib/materialProvider';
 import type { CreateWorkOrderFromNoteBody, DocFormFields, DocFormSuggestions, TabletWoEntry } from '../../../../services/inboundDoc.service';
 import type { ProductionRoute } from '../../../../services/route.service';
 import { kursunStepOf } from '../desk/deskPlan';
@@ -67,6 +68,8 @@ export interface WoFormExtras {
   steps: EditStep[] | null;
   /** Kurşun adımının plan makinesi: undefined = karar yok (şablon makinesi) · null = "Sonra seçilsin". */
   machineId?: string | null;
+  /** F7b ana hammaddeyi kim verdi; yok/null = "Bilinmiyor" (gövdeye gitmez = bugünkü). */
+  materialProvidedBy?: MaterialProvider | null;
 }
 
 export type WoType = 'ORDER_PRODUCTION' | 'STOCK_PRODUCTION' | 'CUSTOMER_GOODS_SERVICE';
@@ -250,6 +253,7 @@ export type ExtraBody = Pick<
   | 'targetPropertyIds'
   | 'steps'
   | 'stepPlanning'
+  | 'materialProvidedBy'
 >;
 
 /**
@@ -286,7 +290,7 @@ export function buildExtraBody(e: WoFormExtras, c: { hasTambur: boolean; perPart
   if (e.woType) out.type = e.woType;
   else if (c.ownGoods && e.orderLineIds.length === 0) out.type = 'STOCK_PRODUCTION';
   if (e.propertyIds !== null) out.targetPropertyIds = [...e.propertyIds];
-  Object.assign(out, planBody(e, c));
+  Object.assign(out, materialProvidedByBody(e.materialProvidedBy), planBody(e, c));
   return out;
 }
 

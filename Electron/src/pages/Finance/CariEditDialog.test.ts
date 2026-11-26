@@ -143,6 +143,14 @@ describe("buildCariUpdatePayload", () => {
     ]);
   });
 
+  it("F7: alış tevkifatı formu gövdeye üç alanla girer (backend Zod şeması üçünü de kabul eder)", () => {
+    const tax = { vatRate: "", withholding: "FACTORY" as const, ratio: "", purchase: { withholding: "APPLY" as const, ratio: "2/10" } };
+    const body = okBody(form({ tax }));
+    expect(body).toEqual(expect.objectContaining({ purchaseWithholdingEnabled: true, purchaseWithholdingNumerator: 2, purchaseWithholdingDenominator: 10 }));
+    const bad = buildCariUpdatePayload(form({ tax: { ...tax, purchase: { withholding: "APPLY", ratio: "abc" } } }));
+    expect(bad.ok === false && bad.errors.tax?.startsWith("Alış")).toBe(true);
+  });
+
   it("not: boş → null (temizler), dolu → kırpılmış metin", () => {
     expect(okBody(form()).notes).toBeNull();
     expect(okBody(form({ notes: "  mutabakat ay sonu  " })).notes).toBe("mutabakat ay sonu");
@@ -269,12 +277,12 @@ describe("D4-V1k KDV / tevkifat geçersiz kılması", () => {
 
   it("müşteri %10 + uygulanır + 5/10 tur atmada korunur", () => {
     const f = formFromCari(cust({ vatRate: "10", withholdingEnabled: true, withholdingNumerator: 5, withholdingDenominator: 10 }));
-    expect(f.tax).toEqual({ vatRate: "10", withholding: "APPLY", ratio: "5/10" });
+    expect(f.tax).toEqual({ vatRate: "10", withholding: "APPLY", ratio: "5/10", purchase: null });
     expect(okBody(f)).toMatchObject({ vatRate: "10", withholdingEnabled: true, withholdingNumerator: 5, withholdingDenominator: 10 });
   });
 
   it("geçersiz oran → istek KURULMAZ, hata tax alanında", () => {
-    const f = { ...formFromCari(cust(v1k)), tax: { vatRate: "", withholding: "APPLY" as const, ratio: "11/10" } };
+    const f = { ...formFromCari(cust(v1k)), tax: { vatRate: "", withholding: "APPLY" as const, ratio: "11/10", purchase: null } };
     const r = buildCariUpdatePayload(f);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.errors.tax).toMatch(/pay\/payda/);

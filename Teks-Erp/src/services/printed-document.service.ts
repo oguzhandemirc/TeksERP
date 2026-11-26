@@ -95,6 +95,8 @@ export const DOC_CONFIG_KEYS: Record<PrintedDocType, string> = {
   WARP_BEAM_CARD: "leventKarti",
   // Devere S6 — devereci gövde mutabakatı (devereciye gider; iç not kolonu opt-in).
   BEAM_BODY_STATEMENT: "govdeMutabakat",
+  // Denetim 6 — emanet çıkış belgesi (emanet sahibine gider; iç not opt-in).
+  CONSIGNMENT_DISPATCH: "emanetCikis",
 };
 
 /** Snapshot zarfı — `doc` tip-bazlı payload, geri kalanı ortak meta. */

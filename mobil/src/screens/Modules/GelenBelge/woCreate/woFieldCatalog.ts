@@ -19,6 +19,7 @@ export type WoFieldKey =
   | 'hedefRenk'
   | 'hedefOzellik'
   | 'katTipi'
+  | 'malzemeVeren'
   | 'planBaslangic'
   | 'planBitis'
   | 'not';
@@ -53,6 +54,8 @@ export const WO_FIELDS: readonly WoFieldDef[] = [
   { key: 'hedefRenk', label: 'Hedef renk', section: 'Üretim', required: false },
   { key: 'hedefOzellik', label: 'Hedef özellikler', section: 'Üretim', required: false, when: 'Üretim Rotası seçilince' },
   { key: 'katTipi', label: 'Kat tipi', section: 'Üretim', required: false, when: 'Rotada tambur varsa ya da rotasızda' },
+  // F7b: panel emsali gibi her türde sorulur (koşulsuz); "Bilinmiyor" = bugünkü.
+  { key: 'malzemeVeren', label: 'Ana hammaddeyi kim verdi', section: 'Üretim', required: false },
   { key: 'planBaslangic', label: 'Planlı başlangıç', section: 'Plan', required: false },
   { key: 'planBitis', label: 'Planlı bitiş', section: 'Plan', required: false },
   { key: 'not', label: 'Üretim notu', section: 'Plan', required: false },
@@ -216,6 +219,7 @@ export function valuedFields(e: WoFormExtras, c: { stepsEdited: boolean }): WoFi
     ['hedefKg', filled(e.targetWeight)],
     ['hedefRenk', !!e.targetColorId],
     ['hedefOzellik', e.propertyIds !== null],
+    ['malzemeVeren', !!e.materialProvidedBy],
     ['planBaslangic', !!e.plannedStart],
     ['planBitis', !!e.plannedEnd],
     ['not', filled(e.note)],

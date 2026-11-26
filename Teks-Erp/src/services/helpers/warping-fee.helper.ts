@@ -67,6 +67,8 @@ export interface WarpingReceiptFee {
   expectedAmount: Prisma.Decimal | null;
   /** İptal edilmemiş bağlı fatura (kabul başına en çok bir). */
   invoice: WarpingReceiptInvoiceRef | null;
+  /** Kabul edilen sarımlar: levent başı sarım metresi + ücret ölçüsü (bedelsiz yeniden sarımda 0) — gerçek maliyet paylaştırması. */
+  beams: Array<{ beamId: string; lengthM: Prisma.Decimal; qty: Prisma.Decimal }>;
 }
 
 export interface WarpingOrderFee {
@@ -112,11 +114,13 @@ export async function loadWarpingOrderFeesTx(
       const isRework = b.reworkOfBeamId !== null;
       const r = byKey.get(b.warpingReceiptKey) ?? {
         receiptKey: b.warpingReceiptKey, warpingOrderId: o.id, deliveryNoteNo: w.deliveryNoteNo, receivedAt: w.createdAt,
-        beamCount: 0, lengthM: ZERO, qty: ZERO, expectedAmount: null, invoice: invByKey.get(b.warpingReceiptKey) ?? null,
+        beamCount: 0, lengthM: ZERO, qty: ZERO, expectedAmount: null, invoice: invByKey.get(b.warpingReceiptKey) ?? null, beams: [],
       };
+      const beamQty = !isRework || opts.reworkBillable ? warpingFeeQty(o.feeUnit, w) : ZERO;
       r.beamCount += 1;
       r.lengthM = r.lengthM.plus(w.lengthM ?? 0);
-      if (!isRework || opts.reworkBillable) r.qty = r.qty.plus(warpingFeeQty(o.feeUnit, w));
+      r.qty = r.qty.plus(beamQty);
+      r.beams.push({ beamId: b.id, lengthM: D(w.lengthM ?? 0), qty: beamQty });
       if (w.createdAt < r.receivedAt) r.receivedAt = w.createdAt;
       byKey.set(b.warpingReceiptKey, r);
     }

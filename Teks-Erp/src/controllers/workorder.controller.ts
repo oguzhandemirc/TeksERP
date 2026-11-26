@@ -120,6 +120,8 @@ export const workOrderFormFieldShape = {
   plannedStartDate: formIsoDate("Planlı başlangıç"),
   plannedEndDate: formIsoDate("Planlı bitiş"),
   foldType: workOrderCoreShape.foldType,
+  // F7b: belgeden açılan İE'de de "ana hammaddeyi kim verdi"; yoksa NULL (= bugünkü, eski istemci).
+  materialProvidedBy: workOrderCoreShape.materialProvidedBy,
   orderLineIds: workOrderCoreShape.orderLineIds,
   // K30-D: panel klasik formunun eksik üç alanı; verilmezse bugünkü davranış (eski istemci).
   targetPropertyIds: workOrderCoreShape.targetPropertyIds,

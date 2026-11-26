@@ -4,6 +4,7 @@ import { Text, TouchableRipple, Icon, IconButton, TextInput, Switch } from 'reac
 
 import PickerModal from '../../../../components/PickerModal';
 import ColorSelectField from '../../../../components/ColorSelectField';
+import { MaterialProvidedByField } from '../../../../components/form/MaterialProvidedByField';
 import PropertyPickerModal from './PropertyPickerModal';
 import RouteStepsModal from '../RouteStepsModal';
 import { SCAN_ROUTE_HINT } from '../scanRouteOption';
@@ -180,6 +181,8 @@ export default function StepProduction({ wo, showErrors = false }: Props) {
           ) : null}
         </View>
       </View>
+
+      <MaterialProvidedByField value={wo.materialProvidedBy} onChange={wo.setMaterialProvidedBy} />
 
       {/* ── Hedef renk — yalnız rota renk uyguluyorsa ── */}
       {wo.canApplyColor ? (

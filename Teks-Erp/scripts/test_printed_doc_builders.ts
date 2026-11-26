@@ -53,6 +53,7 @@ import "../src/services/quote-documents.service";
 import "../src/services/order-documents.service";
 import "../src/services/warp-beam-card.service";
 import "../src/services/beam-body/statement";
+import "../src/services/consignment-dispatch/printed-doc";
 
 let pass = 0;
 let fail = 0;
@@ -121,6 +122,8 @@ const REAL_SOURCE: Record<PrintedDocType, () => Promise<string | null>> = {
   [PrintedDocType.WARP_BEAM_CARD]: async () => null,
   // Devere S6: gövde mutabakatı (kaynak devereci) — gerçek kaynakla basım `test_govde_mutabakat` kendi fikstürüyle.
   [PrintedDocType.BEAM_BODY_STATEMENT]: async () => null,
+  // Denetim 6: emanet çıkış belgesi — gerçek kaynakla basım `test_emanet_cikis` §11 kendi fikstürüyle.
+  [PrintedDocType.CONSIGNMENT_DISPATCH]: async () => null,
 };
 
 /** Çağrıyı koşar; YALNIZ şema/sorgu-şekli hatasında `false` döner.

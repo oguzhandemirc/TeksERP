@@ -8,7 +8,7 @@
 import type { Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { suggestFxRate } from "../helpers/maliyet-bridge.helper";
-import { weavingActualCostTx, weavingOrdersActiveIn, type WeavingActualCost, type WeavingActualMissing } from "../helpers/weaving-actual-cost.helper";
+import { WEAVING_INFO_CODES, weavingActualCostTx, weavingOrdersActiveIn, type WeavingActualCost, type WeavingActualMissing } from "../helpers/weaving-actual-cost.helper";
 import { readCostPresentationCurrency, readCostProfitMachineTime, type CostPresentationCurrency } from "../system-setting.service";
 import type { ResolvedDayRange } from "./temel/_day-range";
 import { dayRangeParameters } from "./temel/_day-range";
@@ -30,7 +30,15 @@ const MISSING_TEXT: Record<WeavingActualMissing, string> = {
   KOSUM_METRESI: "koşum metresi yok",
   TOP_YOK: "top yok",
   STANDART_YOK: "standart maliyet yok",
+  DEVERE_UCRETI: "devere siparişinde ücret yok",
+  DEVERE_FATURASI: "devere faturası yok",
+  COZGU_TUKETIMI: "çözgü tüketimi",
+  LEVENT_KOKENI: "satın alınan ya da emanet levent",
+  FX_RATE_MISSING: "devere ücreti kuru yok",
+  VARYANT_STANDART_YOK: "varyantın standart maliyeti yok, desen geneli kullanıldı",
 };
+
+const WARPING_SOURCE_TEXT = { FATURA: "fatura", TARIFE: "tarife (tahmini)", KARMA: "karma (kısmen tahmini)" } as const;
 
 export interface WeavingEfficiencyReport {
   currency: CostPresentationCurrency;
@@ -59,10 +67,32 @@ function money(d: Dec | null, r: WeavingEfficiencyReport): TabloHucresi {
 }
 
 function rowStatus(w: WeavingActualCost, r: WeavingEfficiencyReport): string {
-  const notes = w.missing.filter((m) => m !== "TOP_YOK" || w.runCount > 0).map((m) => MISSING_TEXT[m]);
+  const info = w.missing.filter((m) => WEAVING_INFO_CODES.includes(m)).map((m) => MISSING_TEXT[m]);
+  const notes = w.missing.filter((m) => !WEAVING_INFO_CODES.includes(m) && (m !== "TOP_YOK" || w.runCount > 0)).map((m) => MISSING_TEXT[m]);
   if (r.currency !== "TRY" && r.fxRate === null) notes.unshift(`${r.currency} kuru yok`);
-  if (notes.length > 0) return `${EKSIK}: ${notes.join(", ")}`;
-  return w.ongoing ? "devam ediyor" : "tamam";
+  const base = notes.length > 0 ? `${EKSIK}: ${notes.join(", ")}` : w.ongoing ? "devam ediyor" : "tamam";
+  return info.length > 0 ? `${base} (${info.join(", ")})` : base;
+}
+
+/** "Devere /m": devere kapalı → boş; ölçülemedi → "eksik" (0 değil). */
+function warpingMoney(w: WeavingActualCost, r: WeavingEfficiencyReport): TabloHucresi {
+  if (w.warpingMissing === null) return null;
+  if (w.warpingPerMTry === null) return w.warpingMissing.length > 0 ? EKSIK : null;
+  return money(w.warpingPerMTry, r);
+}
+
+/** "Devere kaynağı": fatura · tarife (tahmini) · karma; eksik kodları ve kısmi kapsam açık yazılır. */
+function warpingSourceText(w: WeavingActualCost): string | null {
+  if (w.warpingMissing === null) return null;
+  const parts: string[] = [];
+  if (w.warpingSource) parts.push(WARPING_SOURCE_TEXT[w.warpingSource]);
+  else if (w.warpingCostTry !== null) parts.push("fason devere yok (kendi leventi)");
+  if (w.warpingMissing.length > 0) {
+    const covered = w.warpingCoveredMeters && w.warpingCoveredMeters.gt(0) && w.warpingMissing.includes("COZGU_TUKETIMI")
+      ? ` (kapsanan ${qtyText(w.warpingCoveredMeters, 1)} / ${qtyText(w.totalMeters, 1)} m)` : "";
+    parts.push(`${EKSIK}: ${w.warpingMissing.map((m) => MISSING_TEXT[m]).join(", ")}${covered}`);
+  }
+  return parts.length > 0 ? parts.join(" · ") : "—";
 }
 
 export function weavingEfficiencyTable(r: WeavingEfficiencyReport): TabloBlok {
@@ -81,6 +111,8 @@ export function weavingEfficiencyTable(r: WeavingEfficiencyReport): TabloBlok {
       { anahtar: "durusPayi", baslik: "Duruş payı", birim: "yuzde", hiza: "sag" },
       { anahtar: "kosumluM", baslik: "Koşumlu top", birim: "m", hiza: "sag" },
       { anahtar: "kosumsuzM", baslik: "Koşumsuz top", birim: "m", hiza: "sag" },
+      { anahtar: "devereM", baslik: "Devere /m", birim: unit, hiza: "sag" },
+      { anahtar: "devereKaynak", baslik: "Devere kaynağı" },
       { anahtar: "durum", baslik: "Durum" },
     ],
     satirlar: r.rows.map((w) => {
@@ -99,6 +131,8 @@ export function weavingEfficiencyTable(r: WeavingEfficiencyReport): TabloBlok {
         durusPayi: w.stopShare === null ? null : num(w.stopShare.mul(100), 1),
         kosumluM: num(w.metersViaRun, 1),
         kosumsuzM: num(w.metersViaOrder, 1),
+        devereM: warpingMoney(w, r),
+        devereKaynak: warpingSourceText(w),
         durum: rowStatus(w, r),
       };
     }),
@@ -117,6 +151,8 @@ export function buildWeavingEfficiencySunumu(r: WeavingEfficiencyReport, window:
   if (r.currency !== "TRY" && r.fxRate === null) warnings.push(`${r.currency} kuru bulunamadı: tutarlar "eksik" yazıldı (sıfır değil).`);
   if (Number(r.runlessMeters) > 0) warnings.push(`Koşum açılmadan dokunan ${qtyText(r.runlessMeters)} m kumaşın gerçek maliyeti ölçülemedi (koşumsuz metre).`);
   if (ongoingCount > 0) warnings.push(`Devam eden ${ongoingCount} iş tabloda gösterildi, sapma ana sayısına girmedi (tezgâhtaki kumaş henüz top değil).`);
+  const estimatedWarping = r.rows.filter((w) => w.warpingSource === "TARIFE" || w.warpingSource === "KARMA").length;
+  if (estimatedWarping > 0) warnings.push(`${estimatedWarping} işin devere maliyeti, faturası henüz onaylanmadığı için devere siparişindeki ücretten tahmin edildi.`);
   if (timeSource === "NORM") warnings.push("Tezgâh süresi metre normundan hesaplandı (Kârlılık makine süresi ayarı: NORM).");
   return {
     anahtar: WEAVING_EFFICIENCY_KEY,
@@ -137,6 +173,7 @@ export function buildWeavingEfficiencySunumu(r: WeavingEfficiencyReport, window:
       { ad: "Satır kapsamı", aciklama: "Dönem yalnız işi seçer; satırdaki saat, maliyet ve metre işin tüm ömrüdür. Sapma ana sayısına yalnız bitmiş işler girer." },
       { ad: "Kur", aciklama: "TL dışı sunumda standart ve gerçek tutarlar günün kuruyla çevrilir; standart maliyet ekranındaki donmuş sürüm kurundan farklı olabilir, fark yüzdesi etkilenmez." },
       { ad: "Koşumsuz top", aciklama: "Kalite girişinde işe bağlanan ama tezgâhı bilinmeyen top. İşin hiç koşumu yoksa gerçek maliyet ölçülemez." },
+      { ad: "Devere", aciklama: "Fason devere (çözgü sarımı) bedeli, topun tükettiği çözgü metresi kadar: onaylı devereci faturasının KDV hariç tutarı × fatura kuru, leventin sarılan metresine bölünür. Fatura yoksa, taslaksa ya da iptal edildiyse devere siparişindeki ücret × kabul günü kuruyla tahmin edilir. Metre, çözgü tüketimi yazılmış topların kumaş metresidir; tüketimi yazılmamış top (levent otomatik tüketimi kapalı ya da tezgâhta bağlı levent yok) bu hesaba girmez ve \"eksik: çözgü tüketimi\" yazılır. Kendi devere makinemizde sarılan leventin fason bedeli yoktur. Tezgâh sapmasına eklenmez." },
       { ad: "Duruş payı", aciklama: "Kapanmış koşumlarda duruş süresinin koşum süresine oranı." },
       { ad: EKSIK, aciklama: "Kur, saat ücreti, koşum ya da standart maliyet bulunamadığı için değer hesaplanamadı; sıfır demek değildir." },
     ],

@@ -19,6 +19,8 @@ export const ENUM_LABELS_EK2: Record<string, string> = {
   FORMULA: "Ek maliyet formülü",
   // PrintedDocType (devere S6): devereci gövde mutabakatı
   BEAM_BODY_STATEMENT: "Gövde mutabakatı",
+  // PrintedDocType (denetim 6): emanet çıkış belgesi
+  CONSIGNMENT_DISPATCH: "Emanet çıkış belgesi",
   // WeaveShedMechanism (2026-11-25) — DOBBY/JACQUARD WeaveDesignKind ile ortak
   CAM: "Eksantrik",
   // WeaveStructure (2026-11-25) — PLAIN/LENO WeaveDesignKind ile, OTHER genel ile ortak

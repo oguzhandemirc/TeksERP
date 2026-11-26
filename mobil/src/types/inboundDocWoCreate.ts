@@ -2,6 +2,7 @@
 // sınırında olduğundan ayrı dosya; servis aynı adlarla yeniden dışa verir (çağıranlar değişmez).
 import type { CreateWorkOrderRoll } from './inboundDocRolls';
 import type { RollStage } from './models';
+import type { MaterialProvider } from '../lib/materialProvider';
 import type { SkipDeclaredField } from '../store/docIncomingFields';
 
 /** Sözleşme 3: belgeden tek seferde terbiye iş emri (`POST /gelen-belge/irsaliyeler/:id/is-emri`). */
@@ -67,6 +68,8 @@ export interface CreateWorkOrderFromNoteBody {
   plannedEndDate?: string;
   foldType?: string;
   orderLineIds?: string[];
+  /** F7b ana hammaddeyi kim verdi; YALNIZ seçildiyse gider (eski sunucu strict gövdeyle 400). */
+  materialProvidedBy?: MaterialProvider;
   // K30-D (hepsi isteğe bağlı; anahtar yoksa sunucuda bugünkü türetme):
   /** Hedef özellikler (BAYRAK); anahtar verilince istemcinin kümesi yazılır (istasyon tohumu eklenmez). */
   targetPropertyIds?: string[];

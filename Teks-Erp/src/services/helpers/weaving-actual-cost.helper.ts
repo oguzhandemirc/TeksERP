@@ -8,13 +8,15 @@
 // alınabilir, metre düzeltilebilir). Bilinmeyen değer 0 DEĞİLDİR: null + eksik kodu.
 // Süre kaynağı ikinci ayar açmaz (§15.1 notu): `maliyet.karlilik.makineSuresi` NORM ise metre ÷ norm, diğer
 // kiplerde (OTURUM varsayılan · VARDIYA) tezgâhın süresi KOŞUMDUR (`KOSUM`).
+// Devere payı (`warping*`) ayrı alanlardır, köprüden (`loadRollWarpingCosts`) okunur; tezgâh sayıları değişmez.
 // =============================================================================
 import { Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import type { ProfitMachineTimeMode } from "../system-setting.service";
 import { machineCostRateHistory } from "./cost-rate-validity.helper";
 import { machineHourCostTry, machineRateAt, normHours } from "./profitability-machine.helper";
-import { liveRollMetersByWeavingOrder } from "./weaving-order-of-roll.helper";
+import { liveRollMetersByWeavingOrder, liveRollsByWeavingOrder } from "./weaving-order-of-roll.helper";
+import { loadRollWarpingCosts, type RollWarpingCostRead } from "./maliyet-bridge.helper";
 
 type Dec = Prisma.Decimal;
 type Db = Prisma.TransactionClient | typeof prisma;
@@ -23,7 +25,21 @@ const HOUR_MS = 3_600_000;
 
 export type WeavingTimeSource = "KOSUM" | "NORM";
 export type WeavingActualMissing =
-  | "FASON" | "KOSUM_YOK" | "MAKINE_TARIFESI" | "MAKINE_NORMU" | "KOSUM_METRESI" | "TOP_YOK" | "STANDART_YOK";
+  | "FASON" | "KOSUM_YOK" | "MAKINE_TARIFESI" | "MAKINE_NORMU" | "KOSUM_METRESI" | "TOP_YOK" | "STANDART_YOK"
+  | "DEVERE_UCRETI" | "DEVERE_FATURASI" | "COZGU_TUKETIMI" | "LEVENT_KOKENI" | "FX_RATE_MISSING"
+  /** SY-N4 BİLGİ (eksik değil): varyantın sürümü yok, standart desen genelinden — rakam varyantın değil, sessiz kalmasın. */
+  | "VARYANT_STANDART_YOK";
+/** Devere payının kaynağı: onaylı fatura · siparişteki ücretten tahmin · ikisi karışık. */
+export type WeavingWarpingSource = "FATURA" | "TARIFE" | "KARMA";
+
+/** Satırı "eksik" yapmayan bilgi kodları — rapor notu olarak düşer. */
+export const WEAVING_INFO_CODES: readonly WeavingActualMissing[] = ["VARYANT_STANDART_YOK"];
+
+/** Standart sürüm boşluğu: hiç yok → eksik; varyantlı iş desen geneline düştü → bilgi. */
+function standardGaps(found: boolean, hasRecipe: boolean, variantHit: boolean): WeavingActualMissing[] {
+  if (!found) return ["STANDART_YOK"];
+  return hasRecipe && !variantHit ? ["VARYANT_STANDART_YOK"] : [];
+}
 
 /** Standart maliyetin DOKUMA satırları (tezgah saati yöntemi üç satır, atkı ücreti yöntemi tek satır). */
 export const WEAVING_STANDARD_COMPONENTS = ["LOOM_MACHINE", "LOOM_LABOR", "ENERGY", "WEAVING_PICK"] as const;
@@ -53,6 +69,57 @@ export interface WeavingActualCost {
   stopShare: Dec | null;
   ongoing: boolean;
   missing: WeavingActualMissing[];
+  // Devere payı (tezgâh sapması ana sayısına GİRMEZ, K9). Devere modülü kapalıysa hepsi null.
+  /** Çözgü tüketimi bağlı topların devere maliyeti, TL (bir pay bilinmiyorsa null). */
+  warpingCostTry: Dec | null;
+  /** `warpingCostTry` ÷ `warpingCoveredMeters`. */
+  warpingPerMTry: Dec | null;
+  /** Tüketim satırı (CONSUMED) olan canlı topların kumaş metresi — devere payının paydası. */
+  warpingCoveredMeters: Dec | null;
+  /** null = fason devere payı yok (yalnız kendi devere leventi) ya da ölçülemedi. */
+  warpingSource: WeavingWarpingSource | null;
+  /** Payın tahmini (faturasız kabul) kısmı, TL. */
+  warpingEstimatedTry: Dec | null;
+  /** Yalnız devere payının eksikleri — ana `missing` (tezgâh) bunlardan etkilenmez. */
+  warpingMissing: WeavingActualMissing[] | null;
+}
+
+type WarpingFields = Pick<WeavingActualCost, "warpingCostTry" | "warpingPerMTry" | "warpingCoveredMeters" | "warpingSource" | "warpingEstimatedTry" | "warpingMissing">;
+const NO_WARPING: WarpingFields = { warpingCostTry: null, warpingPerMTry: null, warpingCoveredMeters: null, warpingSource: null, warpingEstimatedTry: null, warpingMissing: null };
+
+/** İşin canlı toplarından devere payı: tüketimi olmayan top paya da paydaya da girmez (`COZGU_TUKETIMI`, uydurma 0 yok). */
+function warpingOf(rolls: Array<{ id: string; initialQty: Dec }>, costs: Map<string, RollWarpingCostRead>): WarpingFields {
+  const missing = new Set<WeavingActualMissing>();
+  const sources = new Set<string>();
+  let cost: Dec | null = D0();
+  let estimated = D0();
+  let covered = D0();
+  for (const r of rolls) {
+    const c = costs.get(r.id);
+    if (!c) { missing.add("COZGU_TUKETIMI"); continue; }
+    covered = covered.plus(r.initialQty);
+    cost = cost && c.costTry ? cost.plus(c.costTry) : null;
+    estimated = estimated.plus(c.estimatedTry);
+    c.sources.forEach((s) => sources.add(s));
+    c.missing.forEach((m) => missing.add(m));
+  }
+  const measurable = covered.gt(0);
+  const source: WeavingWarpingSource | null = sources.size === 2 ? "KARMA" : sources.has("FATURA") ? "FATURA" : sources.has("TARIFE") ? "TARIFE" : null;
+  return {
+    warpingCostTry: measurable ? cost : null,
+    warpingPerMTry: measurable && cost ? cost.div(covered) : null,
+    warpingCoveredMeters: covered,
+    warpingSource: measurable && cost ? source : null,
+    warpingEstimatedTry: measurable && cost ? estimated : null,
+    warpingMissing: [...missing],
+  };
+}
+
+/** İş başına devere alanları; devere kapalıysa (köprü null) hepsi null. Payda kümesi tezgâh maliyetiyle aynı (canlı top). */
+async function warpingFieldsFor(db: Db, weavingOrderIds: string[]): Promise<(id: string) => WarpingFields> {
+  const liveRolls = await liveRollsByWeavingOrder(db, weavingOrderIds);
+  const costs = await loadRollWarpingCosts(db, [...liveRolls.values()].flat().map((r) => r.id));
+  return (id) => (costs ? warpingOf(liveRolls.get(id) ?? [], costs) : NO_WARPING);
 }
 
 export function weavingTimeSourceOf(mode: ProfitMachineTimeMode): WeavingTimeSource {
@@ -129,6 +196,7 @@ export async function weavingActualCostTx(
     },
   });
   const meters = await liveRollMetersByWeavingOrder(db, weavingOrderIds);
+  const warpingFor = await warpingFieldsFor(db, weavingOrderIds);
   const machineIds = [...new Set(orders.flatMap((o) => o.machineRuns.map((r) => r.machineId)))].sort();
   const rates = await machineCostRateHistory(db, machineIds);
   const itemIds = [...new Set(orders.map((o) => o.itemId))];
@@ -144,8 +212,7 @@ export async function weavingActualCostTx(
   });
   const genericOf = new Map(versions.map((v) => [v.itemId, v]));
   const variantOf = new Map(variantVersions.map((v) => [`${v.itemId}|${v.recipeId}`, v]));
-  const versionOf = (o: { itemId: string; recipeId: string | null }) =>
-    (o.recipeId ? variantOf.get(`${o.itemId}|${o.recipeId}`) : undefined) ?? genericOf.get(o.itemId);
+  const versionOf = (o: { itemId: string; recipeId: string | null }) => (o.recipeId ? variantOf.get(`${o.itemId}|${o.recipeId}`) : undefined) ?? genericOf.get(o.itemId);
   const byId = new Map(orders.map((o) => [o.id, o]));
 
   return weavingOrderIds.flatMap((id) => {
@@ -156,7 +223,7 @@ export async function weavingActualCostTx(
     const totalMeters = m.viaRun.plus(m.viaOrder);
     const v = versionOf(o);
     const standardPerMTry = v ? v.lines.reduce((a, l) => a.plus(l.amountPerMTry), D0()) : null;
-    if (!v) missing.push("STANDART_YOK");
+    missing.push(...standardGaps(!!v, !!o.recipeId, variantOf.has(`${o.itemId}|${o.recipeId}`)));
 
     const { hours, cost, runSec, stopSec, closedRuns } = runTotals(o.machineRuns, { rates, timeSource, now, missing });
     const fason = o.executionKind === "SUBCONTRACTED";
@@ -190,7 +257,7 @@ export async function weavingActualCostTx(
       realizedMPerHour: machineHours && machineHours.gt(0) && totalMeters.gt(0) ? totalMeters.div(machineHours) : null,
       stopShare: closedRuns > 0 && runSec > 0 ? new Prisma.Decimal(stopSec).div(runSec) : null,
       ongoing: o.status !== "COMPLETED" || o.machineRuns.some((r) => r.endedAt === null),
-      missing: [...new Set(missing)],
+      missing: [...new Set(missing)], ...warpingFor(id),
     }];
   });
 }

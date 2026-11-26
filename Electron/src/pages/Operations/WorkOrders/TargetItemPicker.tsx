@@ -8,6 +8,9 @@ import { itemLifecycleOf, pickableLifecycle } from "@/lib/item-lifecycle";
 import type { WorkOrderFormValues } from "./schema";
 import { useItemRecordForm } from "@/pages/Items/useItemRecordForm";
 
+/** Üretimin hedefi kumaştır: iplik/sarf kartı hedef olarak sunulmaz (süzme sunucuda, liste + cursor aynı where). */
+export const TARGET_ITEM_TYPE = "FABRIC";
+
 /**
  * Hedef Kumaş picker — genel arama modalı (EntityPickerModal) üzerine RHF
  * Controller sarmalı. Yüzlerce kumaş için sunucu cursor araması + sonsuz kaydırma.
@@ -45,7 +48,7 @@ export function TargetItemPicker({
           }}
           service={itemService} recordForm={itemForm}
           queryKey="items-wo-target"
-          filters={{ lifecycleStatus }}
+          filters={{ lifecycleStatus, itemType: TARGET_ITEM_TYPE }}
           getLabel={(i) => i.name}
           getSubLabel={(i) => (itemLifecycleOf(i) === "PHASE_OUT" ? `${i.code} · Tükenene kadar` : i.code)}
           nullable

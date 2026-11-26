@@ -10,7 +10,7 @@
 // =============================================================================
 import { Prisma, type Currency } from "@prisma/client";
 import prisma from "../../lib/prisma";
-import { readDevereEnabled, readEmanetEnabled, readFinanceEnabled, readIplikEnabled, readTicaretEnabled, resolveDokumaYarnReservationEnabled } from "../system-setting.service";
+import { readCostProfitSubcontractSource, readDevereEnabled, readDevereReworkBillable, readEmanetEnabled, readFinanceEnabled, readIplikEnabled, readTicaretEnabled, resolveDokumaYarnReservationEnabled } from "../system-setting.service";
 import { factoryYmd } from "../../constants/time";
 import { addDaysYmd } from "./dokuma-levent-rapor.helper";
 
@@ -97,6 +97,31 @@ export async function suggestConsumablePurchasePrices(itemIds: string[], at: Dat
     rest = rest.filter((id) => !hit.has(id));
   }
   return out;
+}
+
+// ── Dokuma gerçek maliyeti — devere payı (devere maliyet dilim 1) ──
+
+export interface RollWarpingCostRead {
+  costTry: Prisma.Decimal | null;
+  estimatedTry: Prisma.Decimal;
+  sources: Array<"FATURA" | "TARIFE">;
+  missing: Array<"DEVERE_UCRETI" | "DEVERE_FATURASI" | "LEVENT_KOKENI" | "FX_RATE_MISSING">;
+}
+
+/**
+ * Topların devere payı (devere modülü). Devere kapalı → SORGU ATMADAN null (yüzey bugünküyle aynı). Finans kapalıysa
+ * fatura okunmaz, kabuller siparişin ücretinden tahmin edilir; kur `suggestFxRate` (finans kapalı + döviz → eksik).
+ */
+export async function loadRollWarpingCosts(db: Prisma.TransactionClient | typeof prisma, rollIds: string[]): Promise<Map<string, RollWarpingCostRead> | null> {
+  if (!(await readDevereEnabled())) return null;
+  const { loadRollWarpingCostsTx } = await import("./warping-actual-fee.helper");
+  const finance = (await readFinanceEnabled()) ? await import("./warping-fee-finance.helper") : null;
+  return loadRollWarpingCostsTx(db, rollIds, {
+    readInvoices: finance ? finance.readWarpingReceiptInvoices : null,
+    fxRate: suggestFxRate,
+    reworkBillable: await readDevereReworkBillable(),
+    invoiceOnly: (await readCostProfitSubcontractSource()) === "YALNIZ_FATURA",
+  });
 }
 
 // ── İplik ihtiyaç planı (MAL-7) köprüleri — `null` = modül kapalı, "bilinmiyor"; 0 DEĞİL ──
