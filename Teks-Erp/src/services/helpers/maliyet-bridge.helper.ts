@@ -10,7 +10,7 @@
 // =============================================================================
 import { Prisma, type Currency } from "@prisma/client";
 import prisma from "../../lib/prisma";
-import { readCostProfitSubcontractSource, readDevereEnabled, readDevereReworkBillable, readEmanetEnabled, readFinanceEnabled, readIplikEnabled, readTicaretEnabled, resolveDokumaYarnReservationEnabled } from "../system-setting.service";
+import { readCostProfitSubcontractSource, readDevereEnabled, readDevereReworkBillable, readDokumaEnabled, readEmanetEnabled, readFinanceEnabled, readIplikEnabled, readTicaretEnabled, resolveDokumaYarnReservationEnabled, type ProfitMachineTimeMode } from "../system-setting.service";
 import { factoryYmd } from "../../constants/time";
 import { addDaysYmd } from "./dokuma-levent-rapor.helper";
 
@@ -82,6 +82,15 @@ export async function suggestSalePrice(itemId: string, currency: Currency, custo
 export async function loadProfitabilityFinance(): Promise<typeof import("./profitability-finance.helper") | null> {
   if (!(await readFinanceEnabled())) return null;
   return import("./profitability-finance.helper");
+}
+
+/** K1 kumaş satışı: dokuma işlerinin gerçek maliyeti ("Dokuma maliyeti" tablosunun tek kaynağı). Dokuma kapalı → SORGU ATMADAN null. */
+export async function loadWeavingActualCosts(
+  weavingOrderIds: string[], mode: ProfitMachineTimeMode,
+): Promise<import("./weaving-actual-cost.helper").WeavingActualCost[] | null> {
+  if (!(await readDokumaEnabled())) return null;
+  const { weavingActualCostTx } = await import("./weaving-actual-cost.helper");
+  return weavingActualCostTx(prisma, weavingOrderIds, mode);
 }
 
 /** Sarf kalemlerinin `at` anında geçerli genel alış fiyatı (`ItemPrice(PURCHASE)`, TRY önce); ticaret kapalı → null. */

@@ -5,7 +5,7 @@
 // `maliyet-bridge.helper` içinden, finans modülü açıkken DİNAMİK import edilir (maliyet.md köprü kuralı).
 // Yalnız okur; hiçbir şey hesaplamaz — pay/tutar aritmetiği `profitability.helper`dadır.
 // =============================================================================
-import { Currency, InvoiceStatus, InvoiceType, Prisma, ServiceMeterBasis } from "@prisma/client";
+import { Currency, InvoiceLineType, InvoiceStatus, InvoiceType, Prisma, ServiceMeterBasis } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { resolveExchangeRateTx } from "./finance.helper";
 
@@ -117,6 +117,53 @@ export async function readServiceRevenueInvoices(start: Date, end: Date): Promis
         ownerCustomerId: l.roll?.ownerCustomerId ?? l.warpBeam?.ownerCustomerId ?? null,
         readingStepId: l.reading?.workOrderStepId ?? null, ...readingShare(l.serviceItemId, l.reading?.billingLinks ?? []),
       })),
+    };
+  });
+}
+
+export interface ProductRevenueInvoiceRow {
+  id: string;
+  docNo: string;
+  status: InvoiceStatus;
+  exchangeRate: Prisma.Decimal;
+  issueDate: Date;
+  confirmedAt: Date | null;
+  cancelledAt: Date | null;
+  cariCustomerId: string | null;
+  /** Sevk bağı (`Invoice.shipmentId`); elle satış ya da doğrudan sevkte null. */
+  shipmentId: string | null;
+  /** Ürün kartı → ÜRÜN satırı net tutarları toplamı (belge para birimi; KDV/tevkifat hariç; hizmet geliriyle aynı tanım). */
+  lineTotalByItem: Map<string, Prisma.Decimal>;
+}
+
+/**
+ * K1 kumaş satışı geliri: en az bir ÜRÜN satırı (`lineType=PRODUCT`, `itemId` dolu) taşıyan SATIŞ faturaları; dönem
+ * kuralı `readServiceRevenueInvoices` ile aynı (fatura tarihi aralıkta onaylı/taslak, ya da iptal anı aralıkta).
+ */
+export async function readProductRevenueInvoices(start: Date, end: Date): Promise<ProductRevenueInvoiceRow[]> {
+  const productLine = { lineType: InvoiceLineType.PRODUCT, itemId: { not: null } };
+  const rows = await prisma.invoice.findMany({
+    where: {
+      type: InvoiceType.SALES,
+      lines: { some: productLine },
+      OR: [
+        { issueDate: { gte: start, lt: end }, OR: [{ status: InvoiceStatus.DRAFT }, { confirmedAt: { not: null } }] },
+        { cancelledAt: { gte: start, lt: end }, confirmedAt: { not: null } },
+      ],
+    },
+    select: {
+      id: true, docNo: true, status: true, exchangeRate: true, issueDate: true, confirmedAt: true, cancelledAt: true, shipmentId: true,
+      cari: { select: { customerId: true } },
+      lines: { where: productLine, select: { itemId: true, lineTotal: true } },
+    },
+    orderBy: [{ issueDate: "asc" }, { id: "asc" }],
+  });
+  return rows.map((r) => {
+    const lineTotalByItem = new Map<string, Prisma.Decimal>();
+    for (const l of r.lines) lineTotalByItem.set(l.itemId!, (lineTotalByItem.get(l.itemId!) ?? new Prisma.Decimal(0)).plus(l.lineTotal));
+    return {
+      id: r.id, docNo: r.docNo, status: r.status, exchangeRate: r.exchangeRate, issueDate: r.issueDate, confirmedAt: r.confirmedAt,
+      cancelledAt: r.cancelledAt, cariCustomerId: r.cari.customerId, shipmentId: r.shipmentId, lineTotalByItem,
     };
   });
 }

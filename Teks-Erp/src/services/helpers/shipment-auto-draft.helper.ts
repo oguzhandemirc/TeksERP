@@ -55,7 +55,6 @@ import {
 import { D0 } from "./allocation.helper";
 import { deriveInvoiceDueDate, findCariAccountForCardTx } from "./finance.helper";
 import { resolveInvoiceTaxDefaults, taxLineFields } from "./invoice-tax-defaults.helper";
-import { SACK_ABSENT_STATUSES } from "./sack-invariants.helper";
 import { LEDGER_UNIT, unitLabel } from "../../constants/item-unit";
 import { uyari } from "../../lib/logger";
 import { ekranYolu } from "../../constants/panel-ekran-yolu";
@@ -64,6 +63,7 @@ import type { ServiceDraftWorkRow } from "../service-billing/types";
 import { loadServiceBillingSettings, resolveServiceBillingEnabled } from "./../system-setting.service";
 import { isConsignedRoll } from "./stock-ownership.helper";
 import { qtyText } from "./qty-text.helper";
+import { collectShipmentGrossRolls } from "./shipment-sold-rolls.helper";
 
 /**
  * Sevk edilmiş bir sevkiyattan SATIŞ faturası taslağı satırları.
@@ -134,52 +134,8 @@ export interface ShipmentDraftLinesResult {
   shipmentGross?: { rollCount: number; meters: string };
 }
 
-type DraftRollRow = {
-  id: string;
-  itemId: string;
-  colorId: string | null;
-  currentQty: Prisma.Decimal;
-  width: Prisma.Decimal | null;
-  item: { name: string };
-  color: { name: string } | null;
-  ownerCustomerId: string | null;
-  barcode: string | null;
-};
-
-/**
- * BRÜTLEŞTİRME — iade edilmiş toplar sevk anındaki metrajlarıyla taslağa GERİ EKLENİR
- * (`collectShipmentDocContent` ile aynı kural). İade `Roll.shipmentId`yi NULL'lar; yalnız canlı
- * küme okunursa taslak NET çıkar ve iade ikinci kez (SALES_RETURN belgesiyle) düşüldüğünde çift
- * düşüm doğar. Canlı id kümesiyle dedup: iki sorgu arasında commit olan iade iki kez sayılmasın.
- */
-async function collectReturnedRollsGross(shipmentId: string, liveIds: Set<string>): Promise<DraftRollRow[]> {
-  const returned = await prisma.rollReturn.findMany({
-    where: { fromShipmentId: shipmentId, cancelledAt: null },
-    select: {
-      rollId: true,
-      itemId: true,
-      colorId: true,
-      qty: true,
-      width: true,
-      item: { select: { name: true } },
-      color: { select: { name: true } },
-      roll: { select: { barcode: true, ownerCustomerId: true } },
-    },
-  });
-  return returned
-    .filter((rr) => !liveIds.has(rr.rollId))
-    .map((rr) => ({
-      id: rr.rollId,
-      itemId: rr.itemId,
-      colorId: rr.colorId,
-      currentQty: rr.qty,
-      width: rr.width,
-      item: { name: rr.item?.name ?? "" },
-      color: rr.color ? { name: rr.color.name } : null,
-      ownerCustomerId: rr.roll.ownerCustomerId,
-      barcode: rr.roll.barcode,
-    }));
-}
+// BRÜTLEŞTİRME — iade edilmiş toplar sevk anındaki metrajlarıyla taslağa GERİ EKLENİR (`collectShipmentDocContent`
+// ile aynı kural); küme TEK kaynaktan (`collectShipmentGrossRolls`) — kumaş satışı kârlılığı da aynı kümeyi okur.
 
 /** H8: sevk taslağında hizmet satırı yokken kullanıcıya söylenen neden (iş kaybolmadı, dönem sonunu bekliyor). */
 export const PERIOD_END_SERVICE_WARNING = `Hizmet işleri dönem sonu hizmet faturasına bırakıldı (${ekranYolu("faturalar")} → "Dönem sonu hizmet faturası").`;
@@ -226,21 +182,7 @@ async function collectProductDraftLines(
   // Hayalet toplar DIŞARIDA — resmi belgenin (`collectShipmentDocContent`)
   // kullandığı kümenin AYNISI. `SHIPPED` bu kümede YOK, yani sevk edilmiş
   // toplar sayılır (sack-invariants.helper başlığı).
-  const liveRolls = await prisma.roll.findMany({
-    where: { shipmentId, status: { notIn: SACK_ABSENT_STATUSES } },
-    select: {
-      id: true,
-      itemId: true,
-      colorId: true,
-      currentQty: true,
-      width: true,
-      item: { select: { name: true } },
-      color: { select: { name: true } },
-      ownerCustomerId: true,
-      barcode: true,
-    },
-  });
-  const grossRolls = [...liveRolls, ...(await collectReturnedRollsGross(shipmentId, new Set(liveRolls.map((r) => r.id))))];
+  const grossRolls = await collectShipmentGrossRolls([shipmentId]);
   // H7: hizmet faturası açıkken emanet top ürün satırı OLMAZ (işçiliği hizmet satırı taşır).
   const rolls = serviceBilling ? grossRolls.filter((r) => !isConsignedRoll(r)) : grossRolls;
   const shipmentGross = serviceBilling
