@@ -8,6 +8,7 @@ import type { WorkOrder } from "./types";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { materialFieldVisible } from "./materialProvidedByVisibility";
+import { formEndpointExtras } from "./oie/docFormFill";
 
 // Fason F7b: "ana hammaddeyi kim verdi" düğme grubu + gövde allowlist'i (alan yazılmazsa sunucuya gitmez).
 describe("MaterialProvidedByField", () => {
@@ -38,19 +39,27 @@ describe("materialProvidedBy gövde + ön doldurma", () => {
   });
 });
 
-// İnceleme ORTA-2: belgeden İE kipinde gövde alanı taşımaz → düğme grubu GİZLİ (seçim sessizce düşmesin).
-describe("belgeden İE kipinde alan gizli", () => {
-  it("noteId doluyken görünmez, boşken görünür", () => {
-    expect(materialFieldVisible("note-1")).toBe(false);
+// G4 (2026-11-26): belgeden İE kipinde alan form ucuyla taşınır; yalnız ayrı onayda (İE burada açılmaz) gizli.
+describe("belgeden İE kipinde görünürlük + gövde", () => {
+  it("belgesiz ve WITH_WORK_ORDER'da görünür; ayrı onayda (SEPARATE) gizli", () => {
     expect(materialFieldVisible(null)).toBe(true);
     expect(materialFieldVisible(undefined)).toBe(true);
+    expect(materialFieldVisible("note-1", "WITH_WORK_ORDER")).toBe(true);
+    expect(materialFieldVisible("note-1", "SEPARATE")).toBe(false);
+    expect(materialFieldVisible("note-1")).toBe(false);
   });
-  it("form düğme grubunu yalnız materialFieldVisible(docScan.noteId) ile çizer", () => {
+  it("form ucu gövdesi: seçilen değer gider, Bilinmiyor (null) anahtarsız (eski sunucu katı gövde)", () => {
+    const base = { targetItemId: null, targetColorId: null, width: null, targetQuantity: null, targetWeight: null, plannedStartDate: null, plannedEndDate: null, foldType: null };
+    expect(formEndpointExtras({ ...base, materialProvidedBy: "US" }, false).materialProvidedBy).toBe("US");
+    expect("materialProvidedBy" in formEndpointExtras({ ...base, materialProvidedBy: null }, false)).toBe(false);
+    expect("materialProvidedBy" in formEndpointExtras(base, true)).toBe(false);
+  });
+  it("form düğme grubunu yalnız materialFieldVisible(docScan.noteId, docScan.approval) ile çizer", () => {
     const src = readFileSync(join(process.cwd(), "src/pages/Operations/WorkOrders/WorkOrderFormView.tsx"), "utf8");
     const at = src.indexOf("<MaterialProvidedByField");
     expect(at).toBeGreaterThan(0);
     expect(src.split("<MaterialProvidedByField").length - 1).toBe(1);
-    const guard = src.lastIndexOf("{materialFieldVisible(docScan.noteId) && (", at);
+    const guard = src.lastIndexOf("{materialFieldVisible(docScan.noteId, docScan.approval) && (", at);
     expect(guard).toBeGreaterThan(0);
     expect(src.slice(guard, at)).not.toMatch(/\)\}/);
   });
