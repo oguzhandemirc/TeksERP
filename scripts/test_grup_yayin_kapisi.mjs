@@ -6,7 +6,7 @@
 // uzak dünya geçici dizindir. Hiçbir senaryo gerçek VDS'e, Cloudflare'e ya da anahtara dokunmaz.
 //   §1 hüküm (saf): özet eşitliği · K-6 ikinci onay · kaçış · ölçülemedi
 //   §2 hedef/grup: eski kanal kodu RED · bilinmeyen grup RED · hedef kayıttan türer · ezme ortamı RED
-//   §3 test grubu: terfi etiketi İSTEMEZ; gerçek yayın (sahte uzak): paket ÖNCE latest.yml EN SON, künye kanalı = GRUP
+//   §3 test grubu: terfi etiketi İSTEMEZ; gerçek yayın (sahte uzak): paket ÖNCE latest.yml EN SON (geçici ad → 0644 → atomik mv; mv düşerse yayın değişmez), künye kanalı = GRUP
 //   §3i dosya izni: sahte scp yerel kipi taşır, sahte kenar "others" okuma biti yoksa 403 verir — yerel 0600 paket
 //      sunucuda 0644 olur · dış 403'te latest.yml YÜKLENMEZ (chmod / ön doğrulama sökülünce KIRMIZI, sondalı)
 //   §4 oncu/genel: etiketsiz RED · kaynak gruptan farklı özet RED · profil matrisi kapısı yoksa RED · K-6
@@ -55,6 +55,10 @@ for (const ad of ['SSH_HEDEF', 'UZAK_DIZIN', 'YAYIN_KOK', 'YAYIN_URL', 'BASE_URL
 const SURUM = '9.9.9';
 const HOST = 'https://indir.etkiliyazilim.com/';
 const UZAK_KOK = '/opt/stack/apps/tekserp-indir';
+// latest.yml önce bu ada yüklenir, sunucuda 0644 + `mv` ile yerine konur (yarım manifest yayına açılmaz).
+const GECICI_YML = 'latest.yml.yukleniyor';
+const hedefGrupta = (c, g) => c.hedef === `${UZAK_KOK}/html/${g}/electron/` || c.hedef === `${UZAK_KOK}/html/${g}/electron/${GECICI_YML}`;
+const dosyaKipi = (f) => (fs.existsSync(f) ? fs.statSync(f).mode & 0o777 : null);
 const ONAY_ONCU = 'Kullanıcı panel sürümünü öncü grup için onayladı 2026-10-06 10:00';
 const ONAY_GENEL = 'Kullanıcı aynı sürümü herkese açmak için ikinci kez onayladı 2026-10-06 12:00';
 const KACIS = 'Kullanıcı bugün acil yayın istedi';
@@ -404,7 +408,9 @@ const kunyeKanali = (yolu) => {
   const yukleme = scpler.map((c) => c.kaynaklar.join('+'));
   ol('§3 test grubu yayını: çıkış 0, ssh/scp/curl yalnız sahte uzağa', rg.kod === 0 && /OK — 'test' grubunda yayında/.test(rg.cikti) && !cagri.some((c) => c.YABANCI_AG), rg.cikti);
   ol('§3 yükleme sırası: paket + blockmap ÖNCE, latest.yml EN SON', yukleme.length === 2 && /Setup\.exe\+.*\.blockmap/.test(yukleme[0]) && yukleme[1] === 'latest.yml', JSON.stringify(yukleme));
-  ol('§3 hedef yalnız test grubunun dizini (oncu/genel dizinine yazılmadı)', scpler.every((c) => c.hedef === `${UZAK_KOK}/html/test/electron/`) && !fs.existsSync(y.uzakDosya('oncu', 'latest.yml')) && !fs.existsSync(y.uzakDosya('genel', 'latest.yml')), JSON.stringify(scpler));
+  ol('§3 hedef yalnız test grubunun dizini (oncu/genel dizinine yazılmadı)', scpler.every((c) => hedefGrupta(c, 'test')) && !fs.existsSync(y.uzakDosya('oncu', 'latest.yml')) && !fs.existsSync(y.uzakDosya('genel', 'latest.yml')), JSON.stringify(scpler));
+  ol('§3 ⭐ latest.yml GEÇİCİ ada yüklenip atomik mv ile yerine kondu (geçici dosya kalmadı, 0644)',
+    scpler[1]?.hedef === `${UZAK_KOK}/html/test/electron/${GECICI_YML}` && !fs.existsSync(y.uzakDosya('test', GECICI_YML)) && dosyaKipi(y.uzakDosya('test', 'latest.yml')) === 0o644, JSON.stringify(scpler));
   ol('§3 yayındaki künyenin kanalı = TEST grubu', kunyeKanali(y.uzakDosya('test', 'latest.yml')) === 'test');
   ol('§3 ortak paketin kendi latest.yml\'i (künyesiz) DEĞİŞMEDİ', fs.readFileSync(path.join(y.paket, 'latest.yml'), 'utf8') === ortakYml);
   ol('§3 kenar okumaları belirteçli', cagri.filter((c) => c.arac === 'curl').length > 0 && cagri.filter((c) => c.arac === 'curl').every((c) => c.belirtec === true));
@@ -468,7 +474,7 @@ const kunyeKanali = (yolu) => {
   ol('§5 paket BAYT-EŞİT (oncu dizinindeki Setup = test dizinindeki Setup = ortak paket)',
     fs.existsSync(t.uzakDosya('oncu', t.ad)) && fs.readFileSync(t.uzakDosya('oncu', t.ad)).equals(fs.readFileSync(t.uzakDosya('test', t.ad))) && fs.readFileSync(t.uzakDosya('oncu', t.ad)).equals(ortakOnce.exe));
   ol('§5 künye hedef grupla yeniden imzalı (kanal = oncu; test künyesi oncu\'da geçmez)', kunyeKanali(t.uzakDosya('oncu', 'latest.yml')) === 'oncu');
-  ol('§5 yükleme sırası: paket ÖNCE, latest.yml EN SON; yalnız oncu dizinine', sc.length === 2 && sc[1].kaynaklar.join() === 'latest.yml' && sc.every((c) => c.hedef === `${UZAK_KOK}/html/oncu/electron/`), JSON.stringify(sc));
+  ol('§5 yükleme sırası: paket ÖNCE, latest.yml EN SON; yalnız oncu dizinine', sc.length === 2 && sc[1].kaynaklar.join() === 'latest.yml' && sc.every((c) => hedefGrupta(c, 'oncu')) && !fs.existsSync(t.uzakDosya('oncu', GECICI_YML)), JSON.stringify(sc));
   ol('§5 ortak paket ve test grubu DEĞİŞMEDİ', fs.readFileSync(path.join(t.paket, 'latest.yml'), 'utf8') === ortakOnce.yml && fs.readFileSync(t.uzakDosya('test', 'latest.yml'), 'utf8') === `version: ${SURUM}\n`);
   ol('§5 imza aracı hedef GRUP adıyla çağrıldı (--musteri=oncu)', t.cagrilar().some((c) => c.arac === 'npx' && /--musteri=oncu\b/.test(c.args)));
 
@@ -533,6 +539,10 @@ const ondogrulamasiz = (m) => m.replace(/^  on_dogrula "[^\n]*$/gm, '  :');
   ol('§3i sonda: chmod söküldü → ön doğrulama 403\'te yine DURDURUR (ikinci sed)', dis403Yesil(s1), s1.r.cikti.slice(-300));
   const s2 = izinSenaryosu(ondogrulamasiz(GERCEK_BETIK), { chmodEtkisiz: true });
   ol('§3i sonda: ön doğrulama söküldü → latest.yml 403 pakete rağmen yüklenir, yüklem KIRMIZI', ondogrulamasiz(GERCEK_BETIK) !== GERCEK_BETIK && !dis403Yesil(s2) && s2.latestScp, s2.r.cikti.slice(-300));
+  // Sunucuda mv düşerse yayındaki manifest değişmez, geçici dosya temizlenir, çıkış ≠ 0.
+  const mvsiz = GERCEK_BETIK.replace('chmod 0644 "$1" && mv -f -- "$1" "$2"', 'false');
+  const s3 = izinSenaryosu(mvsiz);
+  ol('§3i ⭐ uzakta mv düştü → çıkış ≠ 0, latest.yml yayına girmedi, geçici dosya silindi', mvsiz !== GERCEK_BETIK && s3.r.kod !== 0 && !fs.existsSync(s3.o.uzakDosya('test', 'latest.yml')) && !fs.existsSync(s3.o.uzakDosya('test', GECICI_YML)) && /DEĞİŞMEDİ/.test(s3.r.cikti), s3.r.cikti.slice(-300));
 }
 
 /* ------------------------------------------------------------------ *
@@ -559,6 +569,9 @@ function betikIhlalleri(metin) {
   const onDogrula = kod.search(/^\s*on_dogrula "TeksERP-\$surum-Setup\.exe"/m);
   if (uzakChmod < 0 || uzakChmod > latestScp) f.push('paket dosyaları uzakta 0644 yapılmıyor (latest.yml\'den önce)');
   if (onDogrula < 0 || onDogrula > latestScp) f.push('paket dışarıdan 200 doğrulanmadan latest.yml yükleniyor');
+  const geciciScp = kod.search(/^\s*scp -s "\$latest" "\$SSH_HEDEF:\$gecici_yml"/m);
+  const atomikMv = kod.search(/^chmod 0644 "\$1" && mv -f -- "\$1" "\$2"$/m);
+  if (geciciScp < 0 || atomikMv < geciciScp || /scp[^\n]*"\$latest" "\$SSH_HEDEF:\$UZAK_DIZIN\/(latest\.yml)?"/.test(kod)) f.push('latest.yml doğrudan hedef ada yükleniyor (geçici ad + atomik mv yok)');
   if (/\$\{(SSH_HEDEF|UZAK_DIZIN|YAYIN_KOK|YAYIN_URL|BASE_URL):?[-=]/.test(kod)) f.push('yayın hedefi ezme deseni');
   if (/yayin-hedefi/.test(kod)) f.push('hedef ESKİ kanal kaydından çözülüyor');
   if (/etikiliyazilim\.com|\/opt\/stack/.test(kod)) f.push('yayın/VDS kökü LİTERAL');
@@ -580,7 +593,9 @@ function betikIhlalleri(metin) {
   mut('derleme bağı söküldü', (m) => m.replace('grup-yayin-kapisi.mjs" derleme-bagi ', 'grup-yayin-kapisi.mjs" x '), /derleme bağı çağrısı YOK/);
   mut('rotasyon kilidi söküldü', (m) => m.replace('grup-yayin-kapisi.mjs" rotasyon ', 'grup-yayin-kapisi.mjs" x '), /rotasyon kilidi çağrısı YOK/);
   mut('latest.yml paketten önce yükleniyor', (m) => m.replace('scp -s "$setup" "$blockmap"', 'scp -s "$latest" "$SSH_HEDEF:$UZAK_DIZIN/"\n  scp -s "$setup" "$blockmap"'), /EN SON/);
-  mut('uzak chmod söküldü', (m) => m.replace(/^chmod 0644 "\$1" "\$2"$/m, ':'), /0644/);
+  mut('latest.yml doğrudan hedef ada (geçici ad + mv söküldü)', (m) => m.replace('scp -s "$latest" "$SSH_HEDEF:$gecici_yml"', 'scp -s "$latest" "$SSH_HEDEF:$UZAK_DIZIN/"').replace('chmod 0644 "$1" && mv -f -- "$1" "$2"', 'chmod 0644 "$2"'), /geçici ad/);
+  mut('atomik mv söküldü (geçici ada yüklenip bırakılıyor)', (m) => m.replace('chmod 0644 "$1" && mv -f -- "$1" "$2"', 'chmod 0644 "$1"'), /geçici ad/);
+  mut('uzak chmod söküldü',(m) => m.replace(/^chmod 0644 "\$1" "\$2"$/m, ':'), /0644/);
   mut('ön doğrulama latest.yml\'den sonraya taşındı', (m) => m.replace(/^  on_dogrula "TeksERP-\$surum-Setup\.exe" .*$/m, '').replace('echo "Doğrulanıyor..."', 'on_dogrula "TeksERP-$surum-Setup.exe"\necho "Doğrulanıyor..."'), /200 doğrulanmadan/);
   mut('UZAK_DIZIN ezmesi geri geldi', (m) => `${m}\nUZAK_DIZIN="\${UZAK_DIZIN:-/x}"\n`, /ezme deseni/);
   mut('hedef eski kanal kaydından çözülüyor', (m) => `${m}\nnode x/kanal-kapisi.mjs yayin-hedefi a panel\n`, /ESKİ kanal kaydından/);
