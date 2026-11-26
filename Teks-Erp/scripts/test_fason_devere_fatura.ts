@@ -10,6 +10,7 @@
 //   izinsiz yok · A15 replay · A16 yarış (iki taslak aynı kabul; açık bağlama tx'i ↔ storno) · PATCH REPLACE · liste süzgeci
 //   · ALIŞ dışı 400 · `devere.reworkBillable` okuyucusu (kayıt yok = true).
 // NEGATİF SONDA (koşuldu 2026-11-20): bkz. arşiv notu "Devere A1 — devereci faturası".
+// NEGATİF SONDA 2026-11-26: `warpingFeeMatchTx` net = `subtotal − discountTotal` iken iskontolu fatura ❌ (net 250, fark −75).
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım; ayarlar FOTOĞRAFINA döndürülür, kendi kayıtlarını siler.
 // =============================================================================
 import { randomUUID } from "node:crypto";
@@ -164,6 +165,11 @@ async function main(): Promise<void> {
     const full = await listWarpingOrders({ status: [], subcontractorId: sub.id, warpSpecId: specId, salesOrderId: null, feeInvoiced: ["FULL"], limit: 50 });
     const none = await listWarpingOrders({ status: [], subcontractorId: sub.id, warpSpecId: specId, salesOrderId: null, feeInvoiced: ["NONE"], limit: 50 });
     check("Liste `filter[feeInvoiced]`: FULL = {A} · NONE = {B, E, F, G}; özet şeridi aynı where'den", full.data.map((r) => r.id).join() === A && none.data.length === 4 && none.summary.count === 4 && !none.data.some((r) => r.id === A || r.id === H), `${full.data.length}/${none.data.length}`);
+
+    // İskontolu fatura: 400 − %18,75 (75) → subtotal 325 = beklenen; iskonto ikinci kez düşülürse net 250, fark −75.
+    await invoiceService.updateDraft(invA, { lines: [{ description: "Devere ücreti", qty: 1, unit: "adet", unitPrice: 400, discountRate: 18.75 }] }, U);
+    const mDisc = await warpingFeeMatch(invA);
+    check("⭐ İskontolu fatura: net = subtotal 325,00 (iskonto 75 ikinci kez düşülmez) → fark 0, uyarı yok", mDisc?.invoiceNet === "325.00" && mDisc.difference === "0.00" && !mDisc.exceeded, JSON.stringify({ n: mDisc?.invoiceNet, d: mDisc?.difference }));
 
     // ── A2 fark uyarır, onay serbest; iptal → seçilir ─────────────────────
     await invoiceService.updateDraft(invA, { lines: [{ description: "Devere ücreti", qty: 1, unit: "adet", unitPrice: 345 }] }, U);

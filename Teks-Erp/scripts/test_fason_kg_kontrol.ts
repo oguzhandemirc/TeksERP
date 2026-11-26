@@ -23,7 +23,11 @@
 //   kaldırılınca §4g ❌; helper'da `&& !partial` kaldırılınca §3f/§4d ❌. Hepsi geri alındı.
 // NEGATİF SONDA — 2026-11-01 (SY-P2): `pickFinishingRateAtDispatch`te an = `new Date()` (aktif tarife) → §5a §5d §5i ❌;
 //   an = çıplak `dispatchedAt` (gün sonu yok) → §5c ❌; `!currencyMismatch &&` kaldırılınca §3b §5f ❌. Hepsi geri alındı.
+// NEGATİF SONDA — 2026-11-26 (iskonto çift düşümü): serviste net = `subtotal.minus(discountTotal)` geri konunca
+//   §3n §4d2 §5i ❌ (net 14,55, fark −3,45). Geri alındı.
 // =============================================================================
+import fs from "node:fs";
+import path from "node:path";
 import { Prisma } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import {
@@ -81,8 +85,24 @@ function bolum2(): void {
   check("§2e belirsiz kod → satır yok", computeDispatchFinishingCheck(inp({ rateCodes: ["BOYA-R", "BOYA-E"] })).reason === "AMBIGUOUS_RATE_CODE");
 }
 
+// §3n tek kaynak: fatura neti yalnız `invoiceNetExVat`; `subtotal` zaten iskontolu → `discountTotal` hiçbir yerde nete karışmaz.
+function bolum3Kaynak(): void {
+  const root = path.join(__dirname, "../src");
+  const offenders: string[] = [];
+  const walk = (dir: string): void => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) { if (e.name !== "generated") walk(p); }
+      else if (/\.ts$/.test(e.name) && /minus\(\s*[\w.]*discountTotal|-\s*[\w.]*"?discountTotal/.test(fs.readFileSync(p, "utf8"))) offenders.push(path.relative(root, p));
+    }
+  };
+  walk(root);
+  const net = fs.readFileSync(path.join(root, "services/helpers/invoice-net.helper.ts"), "utf8");
+  check("§3n ⭐ `discountTotal` src'de nete katılmıyor (iskonto `subtotal`da zaten düşülmüş); tek okuyucu `invoiceNetExVat`", offenders.length === 0 && /export function invoiceNetExVat/.test(net), offenders.join(", "));
+}
+
 function bolum3(): void {
-  const inv = (currency: "USD" | "TRY", net: string, status: "DRAFT" | "CONFIRMED" = "CONFIRMED") => ({ docNo: `F-${currency}-${net}`, status, currency, net: D(net) });
+  const inv =(currency: "USD" | "TRY", net: string, status: "DRAFT" | "CONFIRMED" = "CONFIRMED") => ({ docNo: `F-${currency}-${net}`, status, currency, net: D(net) });
   const r = computeDispatchFinishingCheck(inp({ invoices: [inv("USD", "20")] }));
   check("§3a fatura 20 − beklenen 18 = 2,00", r.line?.invoice?.difference === "2.00" && r.line.invoice.netAmount === "20.00");
   const tl = computeDispatchFinishingCheck(inp({ invoices: [inv("TRY", "700")] }));
@@ -191,20 +211,22 @@ async function bolum4(): Promise<void> {
     const rec = await prisma.subcontractorReceipt.create({ data: { receiptNo: `${f.tag}-SR`, subcontractorId: dye.id, workOrderId: c.woId, stepId: c.stepId }, select: { id: true } });
     c.receiptId = rec.id;
     await prisma.subcontractorReceiptItem.create({ data: { receiptId: rec.id, newRollId: newRoll, sourceDispatchItemId: di2.id } });
-    const mkInv = async (n: string, status: "CONFIRMED" | "CANCELLED", subtotal: string) => {
+    // `subtotal` = Σ satır neti (iskonto ZATEN düşülmüş, `computeInvoiceTotals`); `discountTotal` yalnız bilgidir.
+    const mkInv = async (n: string, status: "CONFIRMED" | "CANCELLED", subtotal: string, discountTotal = "0") => {
       const i = await prisma.invoice.create({
-        data: { docNo: `${f.tag}-F${n}`, type: "PURCHASE", status, cariId: cari.id, currency: "USD", issueDate: new Date(), subtotal: D(subtotal), discountTotal: D(0), subcontractorReceiptId: rec.id, confirmedAt: new Date(), ...(status === "CANCELLED" ? { cancelledAt: new Date() } : {}) },
+        data: { docNo: `${f.tag}-F${n}`, type: "PURCHASE", status, cariId: cari.id, currency: "USD", issueDate: new Date(), subtotal: D(subtotal), discountTotal: D(discountTotal), subcontractorReceiptId: rec.id, confirmedAt: new Date(), ...(status === "CANCELLED" ? { cancelledAt: new Date() } : {}) },
         select: { id: true },
       });
       c.invoiceIds.push(i.id);
     };
-    await mkInv("1", "CONFIRMED", "19.40");
+    // İskontolu fatura: brüt 24,25 − %20 (4,85) → subtotal 19,40; net 19,40 (iskonto ikinci kez düşülmez).
+    await mkInv("1", "CONFIRMED", "19.40", "4.85");
     await mkInv("2", "CANCELLED", "500");
     const p = await getDispatchFinishingCheck(disp.id, ALL);
     check("§4d kısmi kabul (yalnız 7,5 kg'lık top) faturası → fark null, kısmi; iptal sayılmaz", p.line?.invoice?.difference === null && p.line.invoice.partial === true && p.line.invoice.docNos.length === 1, JSON.stringify(p.line?.invoice));
     await prisma.subcontractorReceiptItem.create({ data: { receiptId: rec.id, newRollId: await roll("4"), sourceDispatchItemId: di1 } });
     const d = await getDispatchFinishingCheck(disp.id, ALL);
-    check("§4d2 tam kabul faturası: 19,40 − 18,00 = 1,40", d.line?.invoice?.difference === "1.40" && d.line.invoice.partial === false, JSON.stringify(d.line?.invoice));
+    check("§4d2 ⭐ tam kabul, İSKONTOLU fatura: net = subtotal 19,40 (iskonto 4,85 ikinci kez düşülmez) − 18,00 = 1,40", d.line?.invoice?.difference === "1.40" && d.line.invoice.partial === false, JSON.stringify(d.line?.invoice));
     // #377: tarife sevkten SONRA değişti → karşılaştırma sevk günündeki 0,90 ile kalır (aktif 1,20 DEĞİL).
     const dayMs = 86_400_000;
     await prisma.finishingRate.updateMany({ where: { code: kg }, data: { createdAt: new Date(Date.now() - 5 * dayMs) } });
@@ -260,6 +282,7 @@ async function main(): Promise<void> {
   bolum1();
   bolum2();
   bolum3();
+  bolum3Kaynak();
   bolum5();
   assertGelistirmeVeritabani("test_fason_kg_kontrol");
   await bolum4();
