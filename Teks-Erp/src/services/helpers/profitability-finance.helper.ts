@@ -135,6 +135,8 @@ export interface ProductRevenueInvoiceRow {
   shipmentId: string | null;
   /** Ürün kartı → ÜRÜN satırı net tutarları toplamı (belge para birimi; KDV/tevkifat hariç; hizmet geliriyle aynı tanım). */
   lineTotalByItem: Map<string, Prisma.Decimal>;
+  /** Ürün kartı → ÜRÜN satırı miktarı toplamı (emanet metresi satıra girmiş mi sorusu için). */
+  qtyByItem: Map<string, Prisma.Decimal>;
 }
 
 /**
@@ -155,16 +157,20 @@ export async function readProductRevenueInvoices(start: Date, end: Date): Promis
     select: {
       id: true, docNo: true, status: true, exchangeRate: true, issueDate: true, confirmedAt: true, cancelledAt: true, shipmentId: true,
       cari: { select: { customerId: true } },
-      lines: { where: productLine, select: { itemId: true, lineTotal: true } },
+      lines: { where: productLine, select: { itemId: true, lineTotal: true, qty: true } },
     },
     orderBy: [{ issueDate: "asc" }, { id: "asc" }],
   });
   return rows.map((r) => {
     const lineTotalByItem = new Map<string, Prisma.Decimal>();
-    for (const l of r.lines) lineTotalByItem.set(l.itemId!, (lineTotalByItem.get(l.itemId!) ?? new Prisma.Decimal(0)).plus(l.lineTotal));
+    const qtyByItem = new Map<string, Prisma.Decimal>();
+    for (const l of r.lines) {
+      lineTotalByItem.set(l.itemId!, (lineTotalByItem.get(l.itemId!) ?? new Prisma.Decimal(0)).plus(l.lineTotal));
+      qtyByItem.set(l.itemId!, (qtyByItem.get(l.itemId!) ?? new Prisma.Decimal(0)).plus(l.qty));
+    }
     return {
       id: r.id, docNo: r.docNo, status: r.status, exchangeRate: r.exchangeRate, issueDate: r.issueDate, confirmedAt: r.confirmedAt,
-      cancelledAt: r.cancelledAt, cariCustomerId: r.cari.customerId, shipmentId: r.shipmentId, lineTotalByItem,
+      cancelledAt: r.cancelledAt, cariCustomerId: r.cari.customerId, shipmentId: r.shipmentId, lineTotalByItem, qtyByItem,
     };
   });
 }

@@ -125,16 +125,23 @@ async function resolveRollOrigins(rollIds: string[]): Promise<Map<string, { weav
 }
 
 /** Faturanın ürün × köken kovaları: satılan topa düşen gelir payı köken (iş + fason) başına toplanır. */
-function bucketsOf(inv: ProductRevenueInvoiceRow, soldOf: (shipmentId: string, itemId: string) => ShipmentGrossRoll[], origins: Map<string, { weavingOrderId: string | null; fason: boolean }>): Array<{ itemId: string; bucket: Bucket }> {
+type RollsOf = (shipmentId: string, itemId: string) => ShipmentGrossRoll[];
+function bucketsOf(inv: ProductRevenueInvoiceRow, soldOf: RollsOf, consignedOf: RollsOf, origins: Map<string, { weavingOrderId: string | null; fason: boolean }>): Array<{ itemId: string; bucket: Bucket }> {
   const out: Array<{ itemId: string; bucket: Bucket }> = [];
   for (const itemId of [...inv.lineTotalByItem.keys()].sort()) {
     const revenueTry = inv.lineTotalByItem.get(itemId)!.mul(inv.exchangeRate);
     const rolls = inv.shipmentId ? soldOf(inv.shipmentId, itemId) : [];
+    const consigned = inv.shipmentId ? consignedOf(inv.shipmentId, itemId) : [];
+    // Yalnız emanet taşıyan satır kumaş evrenine girmez (müşterinin malı satılmaz).
+    if (rolls.length === 0 && consigned.length > 0) continue;
     if (rolls.length === 0) {
       out.push({ itemId, bucket: { weavingOrderId: null, fason: false, rollCount: 0, returnedRollCount: 0, meters: D0(), revenueTry, noShipment: true } });
       continue;
     }
-    const shares = shareByMeters(revenueTry, rolls.map((r) => r.currentQty));
+    // Satır miktarı kendi metremizi aşıyorsa emanet metresi de satıra yazılmış (hizmet faturası kapalı taslak): emanet payı düşer.
+    const ownM = rolls.reduce((a, r) => a.plus(r.currentQty), D0());
+    const pool = consigned.length > 0 && (inv.qtyByItem.get(itemId) ?? D0()).gt(ownM) ? [...rolls, ...consigned] : rolls;
+    const shares = shareByMeters(revenueTry, pool.map((r) => r.currentQty));
     const byKey = new Map<string, Bucket>();
     rolls.forEach((r, i) => {
       const o = origins.get(r.id) ?? { weavingOrderId: null, fason: false };
@@ -187,11 +194,16 @@ export async function computeProductProfitability(ctx: {
 }): Promise<ProductProfitability> {
   const { start, end, monthOf } = ctx;
   const invoices = await ctx.readInvoices(start, end);
-  const sold = (await collectShipmentGrossRolls(invoices.flatMap((i) => (i.shipmentId ? [i.shipmentId] : [])))).filter((r) => !isConsignedRoll(r));
-  const soldIndex = new Map<string, ShipmentGrossRoll[]>();
-  for (const r of sold) soldIndex.set(`${r.shipmentId}|${r.itemId}`, [...(soldIndex.get(`${r.shipmentId}|${r.itemId}`) ?? []), r]);
-  for (const list of soldIndex.values()) list.sort((a, b) => a.id.localeCompare(b.id));
-  const soldOf = (shipmentId: string, itemId: string) => soldIndex.get(`${shipmentId}|${itemId}`) ?? [];
+  const gross = await collectShipmentGrossRolls(invoices.flatMap((i) => (i.shipmentId ? [i.shipmentId] : [])));
+  const sold = gross.filter((r) => !isConsignedRoll(r));
+  const indexOf = (list: ShipmentGrossRoll[]) => {
+    const idx = new Map<string, ShipmentGrossRoll[]>();
+    for (const r of list) idx.set(`${r.shipmentId}|${r.itemId}`, [...(idx.get(`${r.shipmentId}|${r.itemId}`) ?? []), r]);
+    for (const l of idx.values()) l.sort((a, b) => a.id.localeCompare(b.id));
+    return (shipmentId: string, itemId: string) => idx.get(`${shipmentId}|${itemId}`) ?? [];
+  };
+  const soldOf = indexOf(sold);
+  const consignedOf = indexOf(gross.filter((r) => isConsignedRoll(r)));
   const origins = await resolveRollOrigins([...new Set(sold.map((r) => r.id))]);
   const woIds = [...new Set([...origins.values()].flatMap((o) => (o.weavingOrderId ? [o.weavingOrderId] : [])))].sort();
   const costs = new Map(((await loadWeavingActualCosts(woIds, ctx.machineTime)) ?? []).map((c) => [c.weavingOrderId, c]));
@@ -201,7 +213,7 @@ export async function computeProductProfitability(ctx: {
   const draftRows: ProductProfitRow[] = [];
   let returned = false;
   for (const inv of invoices) {
-    const parts = bucketsOf(inv, soldOf, origins).map((p) => ({ ...p, c: costsOf(p.bucket, p.bucket.weavingOrderId ? costs.get(p.bucket.weavingOrderId) : undefined) }));
+    const parts = bucketsOf(inv, soldOf, consignedOf, origins).map((p) => ({ ...p, c: costsOf(p.bucket, p.bucket.weavingOrderId ? costs.get(p.bucket.weavingOrderId) : undefined) }));
     const emit = (kind: ProductProfitRow["kind"], month: string, sign: 1 | -1) => {
       const neg = (d: Dec | null) => (d === null ? null : sign === 1 ? d : d.neg());
       for (const { itemId, bucket: b, c } of parts) {

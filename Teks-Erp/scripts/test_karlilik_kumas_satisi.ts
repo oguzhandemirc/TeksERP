@@ -5,7 +5,8 @@
 //      maliyet = işin gerçek TL/m ("Dokuma maliyeti" tablosu, `weavingActualCostTx`) × satılan metre; hizmet satırı
 //      ve metin satırı kumaş gelirine girmez
 //   §2 iade edilmiş top brütte KALIR (gelir payı + maliyet), `IADE_DUSULMEDI` bilgisi
-//   §3 emanet top evrene girmez (metre payına da)
+//   §3 emanet top evrene girmez (metre payına da); satır miktarı emanet metresini de taşıyorsa (hizmet faturası kapalı
+//      taslak) emanet payı gelirden düşer, yalnız emanet taşıyan satır evrene hiç girmez (inceleme B4)
 //   §4 iptal İPTAL AYINDA eksi satır, fatura ayı değişmez; taslak `productDraftRows`ta, katkısız
 //   §5 dokunmamış top `DOKUMA_ISI_YOK`, sevksiz fatura `SEVK_BAGI_YOK` — gelir görünür, katkı null
 //   §6 tambur çocuğu atanın dokuma işine çözülür; boyahaneden doğan top (ata bağı yok) `DIS_FASON`
@@ -185,6 +186,16 @@ async function main(): Promise<void> {
       { kind: "PRODUCT", id: F1, qty: "300", total: "1500.00" }, { kind: "PRODUCT", id: F2, qty: "50", total: "200.00" },
       { kind: "PRODUCT", id: F3, qty: "25", total: "50.00" }, { kind: "SERVICE", id: svc.id, qty: "1", total: "999.00" }, { kind: "TEXT", qty: "1", total: "0.00" },
     ] });
+    // İnceleme B4 (hizmet faturası kapalı → taslak emanet topu ürün satırına yazar): SH2 kendi 50 m + emanet 50 m, satır 100 m
+    // × 10 TL; SH3 yalnız emanet 20 m. INV1'de satır (300 m) emanetsiz metreye eşit → bugünkü bölüşüm (§1b).
+    const sh2 = await prisma.shipment.create({ data: { shipmentNo: `${P}-SH2`, customerId: c.id }, select: { id: true } });
+    const sh3 = await prisma.shipment.create({ data: { shipmentNo: `${P}-SH3`, customerId: c.id }, select: { id: true } });
+    ids.shipments.push(sh2.id, sh3.id);
+    await roll("O2", F2, 50, { entrySource: RollEntrySource.MANUAL_ENTRY, shipmentId: sh2.id });
+    await roll("E2", F2, 50, { entrySource: RollEntrySource.MANUAL_ENTRY, ownerCustomerId: c.id, shipmentId: sh2.id });
+    await roll("E3", F2, 20, { entrySource: RollEntrySource.MANUAL_ENTRY, ownerCustomerId: c.id, shipmentId: sh3.id });
+    await invoice({ cariId: cari.id, docNo: "F4", issue: T("2022-04-16"), status: InvoiceStatus.CONFIRMED, shipmentId: sh2.id, lines: [{ kind: "PRODUCT", id: F2, qty: "100", total: "1000.00" }] });
+    await invoice({ cariId: cari.id, docNo: "F5", issue: T("2022-04-17"), status: InvoiceStatus.CONFIRMED, shipmentId: sh3.id, lines: [{ kind: "PRODUCT", id: F2, qty: "20", total: "200.00" }] });
     // INV2: sevksiz elle satış, Mayıs'ta iptal. INV3: taslak.
     await invoice({ cariId: cari.id, docNo: "F2", issue: T("2022-04-20"), status: InvoiceStatus.CANCELLED, cancelledAt: T("2022-05-05"), lines: [{ kind: "PRODUCT", id: F1, qty: "10", total: "70.00" }] });
     await invoice({ cariId: cari.id, docNo: "F3", issue: T("2022-04-25"), status: InvoiceStatus.DRAFT, lines: [{ kind: "PRODUCT", id: F1, qty: "300", total: "900.00" }] });
@@ -216,6 +227,11 @@ async function main(): Promise<void> {
 
     // ── §3 emanet ──
     check("§3a ⭐ emanet top (30 m) evrene girmez: F1 satılan metre 300 (330 değil)", f2(inv1.filter((r) => r.itemId === F1).reduce((a, r) => a.plus(r.meters), new Prisma.Decimal(0))) === "300.00");
+    const f4 = rows.filter((r) => r.docNo === `${P}-F4`);
+    check("§3b ⭐ satır emanet metresini de taşıyor (100 m = 50 kendi + 50 emanet): kendi topun geliri 500,00 (1000 değil), metre 50",
+      f4.length === 1 && f2(f4[0]!.revenueTry) === "500.00" && f2(f4[0]!.meters) === "50.00", f4.map((r) => `${f2(r.revenueTry)}/${f2(r.meters)}`).join(","));
+    check("§3c yalnız emanet top taşıyan satır kumaş evrenine girmez (SEVK_BAGI_YOK geliri DEĞİL)", !rows.some((r) => r.docNo === `${P}-F5`),
+      rows.filter((r) => r.docNo === `${P}-F5`).map((r) => r.missing.join("+")).join(","));
 
     // ── §5 dokunmamış / sevksiz ──
     check("§5a ⭐ al-sat top `DOKUMA_ISI_YOK`, gelir 400,00 görünür, maliyet ve katkı null",
