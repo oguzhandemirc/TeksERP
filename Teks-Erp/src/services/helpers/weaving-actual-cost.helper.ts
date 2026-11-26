@@ -29,14 +29,22 @@ export type WeavingActualMissing =
   | "FASON" | "KOSUM_YOK" | "MAKINE_TARIFESI" | "MAKINE_NORMU" | "KOSUM_METRESI" | "TOP_YOK" | "STANDART_YOK"
   | "DEVERE_UCRETI" | "DEVERE_FATURASI" | "COZGU_TUKETIMI" | "LEVENT_KOKENI" | "FX_RATE_MISSING" | "IPLIK_FIYATI"
   /** SY-N4 BİLGİ (eksik değil): varyantın sürümü yok, standart desen genelinden — rakam varyantın değil, sessiz kalmasın. */
-  | "VARYANT_STANDART_YOK";
+  | "VARYANT_STANDART_YOK"
+  /** BİLGİ: çözgü ipliği müşteri malı (müşteri ipliğiyle devere) — bizim maliyetimize girmez, "eksik" değildir. */
+  | "MUSTERI_IPLIGI";
 /** Devere payının kaynağı: onaylı fatura · siparişteki ücretten tahmin · ikisi karışık. */
 export type WeavingWarpingSource = "FATURA" | "TARIFE" | "KARMA";
 /** Çözgü ipliği payının kaynağı: lot (mal kabul) fiyatı · maliyet kartı iplik fiyatı (tahmini) · ikisi karışık. */
 export type WeavingWarpYarnSource = "LOT" | "MALIYET_FIYATI" | "KARMA";
 
 /** Satırı "eksik" yapmayan bilgi kodları — rapor notu olarak düşer. */
-export const WEAVING_INFO_CODES: readonly WeavingActualMissing[] = ["VARYANT_STANDART_YOK"];
+export const WEAVING_INFO_CODES: readonly WeavingActualMissing[] = ["VARYANT_STANDART_YOK", "MUSTERI_IPLIGI"];
+
+/** Çözgü ipliğinin tamamı müşteri malı: pay "0 TL" değil, sayı yok + bilgi kodu (karışıkta kendi payımız kalır). */
+function customerYarnOnly<S>(y: Covered<S>): Covered<S> {
+  const only = y.source === null && y.costTry !== null && y.costTry.isZero() && y.missing?.includes("MUSTERI_IPLIGI") === true;
+  return only ? { ...y, costTry: null, perMTry: null, estimatedTry: null } : y;
+}
 
 /** Standart sürüm boşluğu: hiç yok → eksik; varyantlı iş desen geneline düştü → bilgi. */
 function standardGaps(found: boolean, hasRecipe: boolean, variantHit: boolean): WeavingActualMissing[] {
@@ -145,7 +153,7 @@ async function warpFieldsFor(db: Db, weavingOrderIds: string[]): Promise<(id: st
   return (id) => {
     const rolls = liveRolls.get(id) ?? [];
     const w = fees ? coveredShare(rolls, fees, ["FATURA", "TARIFE"] as const, "KARMA") : NOT_COVERED;
-    const y = yarns ? coveredShare(rolls, yarns, ["LOT", "MALIYET_FIYATI"] as const, "KARMA") : NOT_COVERED;
+    const y = yarns ? customerYarnOnly(coveredShare(rolls, yarns, ["LOT", "MALIYET_FIYATI"] as const, "KARMA")) : NOT_COVERED;
     return {
       warpingCostTry: w.costTry, warpingPerMTry: w.perMTry, warpingCoveredMeters: w.coveredMeters, warpingSource: w.source, warpingEstimatedTry: w.estimatedTry, warpingMissing: w.missing,
       warpYarnCostTry: y.costTry, warpYarnPerMTry: y.perMTry, warpYarnCoveredMeters: y.coveredMeters, warpYarnSource: y.source, warpYarnEstimatedTry: y.estimatedTry, warpYarnMissing: y.missing,
