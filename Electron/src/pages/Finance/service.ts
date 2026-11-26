@@ -492,9 +492,10 @@ export interface InvoiceTaxDefaults {
 /** Sunucunun bildirdiği kapanma nedenleri; tanınmayan değer genel cümleyle gösterilir (`withholdingOffText`). */
 export type WithholdingOffReason = "PERFORMER_SUPPLIED_MATERIAL" | (string & {});
 
-export async function getInvoiceTaxDefaults(type: "SALES" | "PURCHASE", customerId: string | null): Promise<InvoiceTaxDefaults> {
+/** `workOrderId` (F7b İE bağlamı) yalnız kaynağı tek iş emrine bağlı taslakta gider; malzeme kuralı ve nedeni ondan çözülür. */
+export async function getInvoiceTaxDefaults(type: "SALES" | "PURCHASE", customerId: string | null, workOrderId?: string): Promise<InvoiceTaxDefaults> {
   const res = await apiClient.get<{ data: InvoiceTaxDefaults }>("/api/finance/invoices/tax-defaults", {
-    params: { type, ...(customerId ? { customerId } : {}) },
+    params: { type, ...(customerId ? { customerId } : {}), ...(workOrderId ? { workOrderId } : {}) },
   });
   return res.data.data;
 }
@@ -670,6 +671,8 @@ export interface ShipmentInvoiceDraftLines {
   currency: Currency;
   /** F4: hizmet satırlarının iş kırılımı; eski backend yollamaz. */
   serviceWorks?: ServiceDraftWorkRow[];
+  /** F7b: sevkin topları TEK iş emrine bağlıysa onun id'si; yoksa/eski backend ⇒ alan yok. */
+  workOrderId?: string;
 }
 
 /**
