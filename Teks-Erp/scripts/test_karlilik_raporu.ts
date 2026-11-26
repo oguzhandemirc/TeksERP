@@ -160,9 +160,9 @@ function prow(p: { itemId: string; wo: string | null; revenue: number; weaving: 
   const dn = (v: number | null | undefined) => (v === null || v === undefined ? null : D(v));
   return {
     month: p.month ?? "2023-03", kind: "INVOICED", invoiceId: `pinv-${seq}`, docNo: `SF-${seq}`, customerId: p.customerId === undefined ? "c1" : p.customerId,
-    itemId: p.itemId, weavingOrderId: p.wo, ongoing: p.ongoing ?? false, rollCount: 2, returnedRollCount: 0, meters: D(100), revenueTry: D(p.revenue),
+    itemId: p.itemId, weavingOrderId: p.wo, ongoing: p.ongoing ?? false, rollCount: 2, returnedRollCount: 0, meters: D(100), hamMeters: D(100), revenueTry: D(p.revenue),
     weavingTry: dn(p.weaving), warpingTry: p.warping === undefined ? null : dn(p.warping), warpingEstimated: false, yarnTry: dn(p.yarn),
-    subcontractTry: p.wo ? D(0) : null, contributionTry: dn(p.contribution), missing: p.missing ?? [],
+    yarnEstimated: false, customerYarn: false, subcontractTry: p.wo ? D(0) : null, subcontractEstimated: false, contributionTry: dn(p.contribution), missing: p.missing ?? [],
   };
 }
 const PNAMES: ProductNames = {

@@ -69,7 +69,7 @@ async function consumablePriceResolver(ctx: CostContext, consumableIds: string[]
   };
 }
 
-type ReceiptInfo = { id: string; stepId: string | null; subcontractorId: string; receivedAt: Date; meters: Prisma.Decimal };
+export type ReceiptInfo = { id: string; stepId: string | null; subcontractorId: string; receivedAt: Date; meters: Prisma.Decimal };
 
 /** RECEIVED işlerin makbuzu: doğan top (`parentReceiptId`) ya da makbuzdan kendisi dönen top; adım bağın adımıyla eşleşir. */
 async function loadReceipts(links: RevenueLinkRow[]): Promise<Map<string, ReceiptInfo>> {
@@ -120,7 +120,7 @@ export async function computeWorkCosts(ctx: CostContext, links: RevenueLinkRow[]
   const priceOf = await consumablePriceResolver(ctx, [...new Set(norms.map((n) => n.consumableItemId))], fx);
   const receipts = await loadReceipts(links);
   const invoiceTotals = await ctx.finance.readSubcontractInvoiceTotals([...new Set([...receipts.values()].map((r) => r.id))]);
-  const rateMemo = new Map<string, Promise<Array<{ pricePerM: Prisma.Decimal; currency: Currency; basis: string }>>>();
+  const subcontractOf = subcontractShareResolver(ctx, invoiceTotals);
 
   for (const l of links) {
     const missing: ProfitMissingCode[] = [];
@@ -146,25 +146,39 @@ export async function computeWorkCosts(ctx: CostContext, links: RevenueLinkRow[]
     // RECEIVED iş ama makbuz çözülemedi (iptal / adım uyuşmaz) → maliyet sessizce 0 OLMAZ.
     if (l.meterBasis === ServiceMeterBasis.RECEIVED && !rc) { subcontractTry = null; missing.push("DIS_FASON_MAKBUZU"); }
     if (rc) {
-      const billed = invoiceTotals.get(rc.id);
-      if (billed && rc.meters.gt(0)) subcontractTry = billed.mul(l.billedMeters).div(rc.meters);
-      else if (ctx.subcontractSource === "YALNIZ_FATURA") { subcontractTry = null; missing.push("DIS_FASON_FATURASI"); }
-      else {
-        const key = `${rc.subcontractorId}:${rc.receivedAt.getTime()}`;
-        if (!rateMemo.has(key)) rateMemo.set(key, prisma.finishingRate.findMany({
-          where: { AND: [{ subcontractorId: rc.subcontractorId }, finishingRateValidAt(rc.receivedAt)] },
-          select: { pricePerM: true, currency: true, basis: true },
-        }));
-        const rates = await rateMemo.get(key)!;
-        // Firmanın o gün tek geçerli tarifesi varsa tahmin; yoksa (hiç ya da hangisi belirsiz) eksik.
-        const fxRate = rates.length === 1 ? await fx(rates[0]!.currency, rc.receivedAt) : null;
-        // KG tarifesi metreyle çarpılamaz (sevk kilosu SY-E2'de) → tahmin yok, eksik (fail-closed).
-        if (rates.length !== 1 || rates[0]!.basis === "KG") { subcontractTry = null; missing.push("DIS_FASON_TARIFESI"); }
-        else if (!fxRate) { subcontractTry = null; if (!missing.includes("FX_RATE_MISSING")) missing.push("FX_RATE_MISSING"); }
-        else { subcontractTry = rates[0]!.pricePerM.mul(l.billedMeters).mul(fxRate); subcontractEstimated = true; }
-      }
+      const s = await subcontractOf(rc, l.billedMeters);
+      subcontractTry = s.subcontractTry;
+      subcontractEstimated = s.estimated;
+      for (const m of s.missing) if (!missing.includes(m)) missing.push(m);
     }
     out.set(l.id, { consumableTry, subcontractTry, subcontractEstimated, missing });
   }
   return out;
+}
+
+/**
+ * Makbuz payı — hizmet ve kumaş satırının TEK kuralı: onaylı fason faturası × (metre / makbuz metresi); fatura yoksa
+ * `YALNIZ_FATURA`da eksik, `FATURA_ONCE`da firmanın o gün tek geçerli metre tarifesi × metre (tahmini).
+ */
+export function subcontractShareResolver(ctx: Pick<CostContext, "subcontractSource" | "finance">, invoiceTotals: Map<string, Prisma.Decimal>) {
+  const fx = fxCache(ctx.finance);
+  const rateMemo = new Map<string, Promise<Array<{ pricePerM: Prisma.Decimal; currency: Currency; basis: string }>>>();
+  return async (rc: Pick<ReceiptInfo, "id" | "subcontractorId" | "receivedAt" | "meters">, meters: Prisma.Decimal) => {
+    const none = (code: ProfitMissingCode) => ({ subcontractTry: null, estimated: false, missing: [code] });
+    const billed = invoiceTotals.get(rc.id);
+    if (billed && rc.meters.gt(0)) return { subcontractTry: billed.mul(meters).div(rc.meters), estimated: false, missing: [] as ProfitMissingCode[] };
+    if (ctx.subcontractSource === "YALNIZ_FATURA") return none("DIS_FASON_FATURASI");
+    const key = `${rc.subcontractorId}:${rc.receivedAt.getTime()}`;
+    if (!rateMemo.has(key)) rateMemo.set(key, prisma.finishingRate.findMany({
+      where: { AND: [{ subcontractorId: rc.subcontractorId }, finishingRateValidAt(rc.receivedAt)] },
+      select: { pricePerM: true, currency: true, basis: true },
+    }));
+    const rates = await rateMemo.get(key)!;
+    // Firmanın o gün tek geçerli tarifesi varsa tahmin; yoksa (hiç ya da hangisi belirsiz) eksik.
+    const fxRate = rates.length === 1 ? await fx(rates[0]!.currency, rc.receivedAt) : null;
+    // KG tarifesi metreyle çarpılamaz (sevk kilosu SY-E2'de) → tahmin yok, eksik (fail-closed).
+    if (rates.length !== 1 || rates[0]!.basis === "KG") return none("DIS_FASON_TARIFESI");
+    if (!fxRate) return none("FX_RATE_MISSING");
+    return { subcontractTry: rates[0]!.pricePerM.mul(meters).mul(fxRate), estimated: true, missing: [] as ProfitMissingCode[] };
+  };
 }
