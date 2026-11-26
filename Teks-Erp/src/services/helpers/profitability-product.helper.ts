@@ -90,15 +90,22 @@ async function resolveRollOrigins(rollIds: string[]): Promise<Map<string, { weav
   const lineage = await collectRollLineage(rollIds);
   const nodes = await prisma.roll.findMany({
     where: { id: { in: lineage } },
-    select: { id: true, parentRollId: true, parentReceipt: { select: { cancelledAt: true, weavingOrderId: true } } },
+    select: { id: true, parentRollId: true, parentReceiptId: true },
   });
   // Fason dokuma makbuzu (`weavingOrderId` dolu) dokuma kaynağıdır, boya/apre değildir.
+  // Top → iş zinciri yalnız `weaving-order-of-roll.helper`da (test_subcontractor_weaving §5b); burada yalnız makbuz türü okunur.
   const throughFason = await prisma.subcontractorReceiptItem.findMany({
     where: { newRollId: { in: lineage }, receipt: { cancelledAt: null, weavingOrderId: null } },
     select: { newRollId: true },
   });
   const fasonIds = new Set(throughFason.map((i) => i.newRollId));
-  for (const n of nodes) if (n.parentReceipt && !n.parentReceipt.cancelledAt && !n.parentReceipt.weavingOrderId) fasonIds.add(n.id);
+  const receiptIds = [...new Set(nodes.flatMap((n) => (n.parentReceiptId ? [n.parentReceiptId] : [])))];
+  const dyeReceipts = receiptIds.length === 0 ? [] : await prisma.subcontractorReceipt.findMany({
+    where: { id: { in: receiptIds }, cancelledAt: null, weavingOrderId: null },
+    select: { id: true },
+  });
+  const dyeReceiptIds = new Set(dyeReceipts.map((r) => r.id));
+  for (const n of nodes) if (n.parentReceiptId && dyeReceiptIds.has(n.parentReceiptId)) fasonIds.add(n.id);
   const parentOf = new Map(nodes.map((n) => [n.id, n.parentRollId]));
   const woOf = await weavingOrdersOfRolls(prisma, lineage);
   for (const id of rollIds) {
