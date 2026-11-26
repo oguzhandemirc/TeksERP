@@ -89,7 +89,7 @@ function warpingSourceText(w: WeavingActualCost): string | null {
   else if (w.warpingCostTry !== null) parts.push("fason devere yok (kendi leventi)");
   if (w.warpingMissing.length > 0) {
     const covered = w.warpingCoveredMeters && w.warpingCoveredMeters.gt(0) && w.warpingMissing.includes("COZGU_TUKETIMI")
-      ? ` (kapsanan ${qtyText(w.warpingCoveredMeters.toFixed(1))} / ${qtyText(w.totalMeters.toFixed(1))} m)` : "";
+      ? ` (kapsanan ${qtyText(w.warpingCoveredMeters, 1)} / ${qtyText(w.totalMeters, 1)} m)` : "";
     parts.push(`${EKSIK}: ${w.warpingMissing.map((m) => MISSING_TEXT[m]).join(", ")}${covered}`);
   }
   return parts.length > 0 ? parts.join(" · ") : "—";
