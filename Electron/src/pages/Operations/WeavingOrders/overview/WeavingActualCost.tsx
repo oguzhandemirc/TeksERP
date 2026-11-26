@@ -1,4 +1,4 @@
-// Devere maliyet dilim 2-3: dokuma iş emrinin GERÇEKLEŞEN maliyeti (tezgâh · devere · çözgü ipliği) standart karşılığıyla.
+// Devere maliyet dilim 2-3 + K7: dokuma iş emrinin GERÇEKLEŞEN maliyeti (tezgâh · devere · çözgü · atkı ipliği) standart karşılığıyla.
 // Sayılar ve metinler sunucudan (`/api/cost/weaving-orders/:id/actual`); panel hesaplamaz, boş değere 0 yazmaz.
 import { useQuery } from "@tanstack/react-query";
 import { InfoPopover } from "@/components/ui/info-popover";
@@ -9,6 +9,7 @@ const ROW_INFO: Record<WeavingActualRow["anahtar"], string> = {
   TEZGAH: "Tezgâhın bu işte çalıştığı süre × o tarihteki saat ücreti, işin toplarının metresine bölünür. Standart: maliyet kartındaki dokuma satırları.",
   DEVERE: "Devereci faturasının KDV hariç tutarı, topun kullandığı çözgü kadar. Fatura yoksa devere siparişindeki ücretten tahmin edilir. Standart maliyette devere ayrı seçilemediği için karşılaştırılmaz.",
   COZGU_IPLIGI: "Leventteki iplik kilosu × lotun alış fiyatı (devere firesi dahil), topun kullandığı çözgü kadar. Lot fiyatı yoksa maliyet kartındaki iplik fiyatından tahmin edilir. Atkı ipliği girmez.",
+  ATKI_IPLIGI: "Atkı tartılmadığı için miktar normdur: standart maliyetteki atkı miktarı × topun metresi. Fiyat gerçektir: topun doğduğu ana kadar o ipliğin son giren lotunun alış fiyatı; yoksa maliyet kartındaki fiyattan tahmin edilir. Müşterinin ipliği maliyetimize girmez.",
 };
 
 function value(v: string | null, eksik: string[]): string {
