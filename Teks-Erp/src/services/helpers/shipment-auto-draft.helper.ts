@@ -55,7 +55,7 @@ import {
 import { D0 } from "./allocation.helper";
 import { deriveInvoiceDueDate, findCariAccountForCardTx } from "./finance.helper";
 import { resolveInvoiceTaxDefaults, taxLineFields } from "./invoice-tax-defaults.helper";
-import { whereWorkOrdersOfRolls } from "./workorder-rolls.helper";
+import { whereRollsOfWorkOrder, whereWorkOrdersOfRolls } from "./workorder-rolls.helper";
 import { LEDGER_UNIT, unitLabel } from "../../constants/item-unit";
 import { uyari } from "../../lib/logger";
 import { ekranYolu } from "../../constants/panel-ekran-yolu";
@@ -134,17 +134,23 @@ export interface ShipmentDraftLinesResult {
   /** H7: sevk brütü (top · metre) — taslak notunda hizmet satırlarının yanında görünür. */
   shipmentGross?: { rollCount: number; meters: string };
   /**
-   * F7b: sevkin topları TEK iş emrine bağlıysa onun id'si (vergi ön değerinin malzeme bağlamı); sıfır/çok İE'de
-   * alan YOK (bağlamsız = bugünkü). Panel bunu `tax-defaults?workOrderId=` ile geri yollar, "tevkifat neden yok" satırı çizilir.
+   * F7b: sevkin BÜTÜN topları TEK iş emrine bağlıysa onun id'si (ürün satırı vergisinin malzeme bağlamı); sıfır/çok İE,
+   * İE'siz ya da emanet top varsa alan YOK (bağlamsız = bugünkü). Panel bunu `tax-defaults?workOrderId=` ile geri yollar, "tevkifat neden yok" satırı çizilir.
    */
   workOrderId?: string;
 }
 
-/** F7b: topların TEK iş emri (üç bağ, `whereWorkOrdersOfRolls`); hiç ya da birden çok İE ⇒ null — karışık sevkte kural uydurulmaz. */
-export async function soleWorkOrderOfRolls(rollIds: readonly string[]): Promise<string | null> {
-  if (rollIds.length === 0) return null;
-  const wos = await prisma.workOrder.findMany({ where: whereWorkOrdersOfRolls({ id: { in: [...rollIds] } }), select: { id: true }, take: 2 });
-  return wos.length === 1 ? wos[0]!.id : null;
+/**
+ * F7b: sevkin BÜTÜN topları aynı TEK iş emrine bağlıysa onun id'si (üç bağ, `whereWorkOrdersOfRolls`); aksi null —
+ * karışık sevkte kural uydurulmaz: çok İE, İE'siz top ya da emanet top (müşteri malı: ana hammadde bizden değil).
+ */
+export async function soleWorkOrderOfRolls(rolls: ReadonlyArray<{ id: string; ownerCustomerId?: string | null }>): Promise<string | null> {
+  if (rolls.length === 0 || rolls.some((r) => isConsignedRoll(r))) return null;
+  const ids = [...new Set(rolls.map((r) => r.id))];
+  const wos = await prisma.workOrder.findMany({ where: whereWorkOrdersOfRolls({ id: { in: ids } }), select: { id: true }, take: 2 });
+  if (wos.length !== 1) return null;
+  const linked = await prisma.roll.count({ where: { AND: [{ id: { in: ids } }, whereRollsOfWorkOrder(wos[0]!.id)] } });
+  return linked === ids.length ? wos[0]!.id : null;
 }
 
 // BRÜTLEŞTİRME — iade edilmiş toplar sevk anındaki metrajlarıyla taslağa GERİ EKLENİR (`collectShipmentDocContent`
@@ -175,7 +181,8 @@ export async function collectShipmentInvoiceDraftLines(
   }
   const sh = await prisma.shipment.findUnique({ where: { id: shipmentId }, select: { dispatchedAt: true } });
   const svc = await collectShipmentServiceBilling({ shipmentId, customerId, currency, settings: service, dispatchedAt: sh?.dispatchedAt ?? null });
-  const tax = taxLineFields(await resolveInvoiceTaxDefaults({ type: InvoiceType.SALES, customerId, workOrderId: product.workOrderId ?? null }));
+  // Hizmet satırı emanet topun işçiliğidir: ana hammadde müşterinin, malzeme kuralı uygulanmaz (finans.md F7b) — bağlamsız.
+  const tax = taxLineFields(await resolveInvoiceTaxDefaults({ type: InvoiceType.SALES, customerId }));
   return {
     ...product,
     lines: [...product.lines, ...svc.lines.map((l) => ({ ...l, ...tax }))],
@@ -201,8 +208,8 @@ async function collectProductDraftLines(
   const shipmentGross = serviceBilling
     ? { rollCount: grossRolls.length, meters: grossRolls.reduce((a, r) => a.plus(r.currentQty), D0()).toFixed(2) }
     : undefined;
-  // Brüt kümeden: emanet top ürün satırı olmasa da hizmet satırının vergisi aynı İE bağlamını okur.
-  const workOrderId = await soleWorkOrderOfRolls(grossRolls.map((r) => r.id));
+  // Brüt kümeden: sevkte emanet ya da İE'siz top varsa (ürün satırı olmasa da) bağlam yok.
+  const workOrderId = await soleWorkOrderOfRolls(grossRolls);
   const woCtx = workOrderId ? { workOrderId } : {};
   if (rolls.length === 0) return { lines: [], orderPriced: 0, orderConflicts: 0, warnings: [], ...(shipmentGross ? { shipmentGross } : {}), ...woCtx };
   const warnings = await collectUnmeasuredAllocationWarnings(shipmentId);

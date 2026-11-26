@@ -2,18 +2,23 @@
 // BEKÇİ — Atkı ipliği gerçek maliyeti: norm miktar × gerçek fiyat (devere maliyet K7; plan PLAN-devere-maliyet-1126 §3)
 // =============================================================================
 // Atkının topa lot bağı yok (tartılmaz): miktar standart sürümün WEFT_YARN satırı (kg/m) × top metresi; fiyat topun
-// doğduğu ana kadar son giren lotun mal kabul fiyatı → maliyet kartı (tahmini) → eksik. Müşteri lotu → bilgi.
+// doğduğu ana kadar son giren BİZİM lotun mal kabul fiyatı → maliyet kartı (tahmini) → eksik. İşin müşterisinin lotu → bilgi.
 //   §1 ⭐ el hesabı: norm 0,04 kg/m × 100 m = 4 kg × son lot 100 TL (eski lot 80 TL değil) = 400 TL → 4 TL/m; LOT
 //   §2 lot fiyatsız → kart 50 TL/kg → 2 TL/m; MALIYET_FIYATI, tahmini = tamamı
 //   §3 fiyat yok → null + ATKI_FIYATI, hücre "eksik" (0 değil)
-//   §4 ⭐ son giren lot müşterinin → bilgi MUSTERI_IPLIGI (eksik değil), sayı yok, hücre "müşteri ipliği"
+//   §4 (inceleme B3) lot sahibi ↔ işin müşterisi (sipariş müşterisi; siparişsizde topun sahibi): ⭐a kendi işimizde
+//      sonradan giren müşteri lotu fiyatımızı ezmez (bizim lot) · ⭐b müşteri işi + aynı müşterinin lotu → MUSTERI_IPLIGI
+//      (eksik değil, sayı yok, hücre "müşteri ipliği") · c başka müşterinin işi → bizim lot · ⭐d müşteri lotundan sonra
+//      giren bizim lot müşteri işini bizim maliyetimize çevirmez · e siparişsiz iş, topun sahibi = lot sahibi → bilgi
+//      NEGATİF SONDA (2026-11-26, ölçüldü): fiyat aramasında sahipli lot süzgeci kaldırıldı → 19/0 yerine 17/2
+//      (❌ §4a · §4c); sipariş müşterileri yok sayıldı → 16/3 (❌ §4b · §4d · §7b); geri alındı.
 //   §5 iki atkı (lot + kart) → KARMA, tahmini pay ayrı
 //   §6 standart sürümde atkı satırı yok → ATKI_NORMU (eksik)
 //   §7 iş emri ayrıntısı: ATKI_IPLIGI satırı (standart ↔ gerçekleşen, tahmini rozeti, müşteri ipliği eksiksiz)
 //   §8 ⭐ iptal edilen mal kabul fişinin girişi "son giren lot" sayılmaz → bir önceki lot (80 TL) → 3,2 TL/m
 //   §9 iplik kapalı → lot okunmaz: kartsız iplik eksik, kartlı iplik kart fiyatı
 //   §10 tek kaynak (metin): atkı helper'ı iplik defterine dokunmaz, köprü dinamik import, float yok
-// NEGATİF SONDALAR (2026-11-26, hepsi kırmızı verdi, geri alındı):
+// NEGATİF SONDALAR (2026-11-26, B3 öncesi ölçüm — §4a o günkü müşteri ipliği kontrolü, bugünkü §4b; hepsi kırmızı verdi, geri alındı):
 //   ① giriş okuyucusunda iptal fiş süzgeci kaldırıldı → §8a ❌   ② müşteri dalı kaldırıldı (lot fiyatına düştü) → §4a/§7b ❌
 //   ③ son lot yerine ilk lot (orderBy asc) → §1a/§1b/§4a/§5a/§7a/§7b ❌
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım; ayarlar FOTOĞRAFINA döner, kendi kayıtlarını siler.
@@ -79,9 +84,10 @@ async function main(): Promise<void> {
   const foto = await prisma.systemSetting.findMany({ where: { key: { in: [...SETTING_FOTO] } }, select: { key: true, value: true } });
   const whId = await fixtureWarehouseId();
   const inventory = new InventoryService();
-  const ids = { yarns: [] as string[], lots: [] as string[], receipts: [] as string[], fabrics: [] as string[], versions: [] as string[], rolls: [] as string[], wos: [] as string[], machines: [] as string[], cards: [] as string[] };
+  const ids = { yarns: [] as string[], lots: [] as string[], receipts: [] as string[], fabrics: [] as string[], versions: [] as string[], rolls: [] as string[], wos: [] as string[], machines: [] as string[], cards: [] as string[], orders: [] as string[] };
   let stationId: string | null = null;
   let ownerId: string | null = null;
+  let otherId: string | null = null;
   let mf: MaliyetFikstur | null = null;
   try {
     await setSetting(SETTING_KEYS.DEVERE_ENABLED, "false");
@@ -90,6 +96,7 @@ async function main(): Promise<void> {
     const paramId = mf.paramId;
     stationId = (await prisma.station.create({ data: { name: `${TAG}-DOKUMA`, code: code("DK"), type: StationType.INTERNAL, kind: "WEAVING" }, select: { id: true } })).id;
     ownerId = (await prisma.customer.create({ data: { code: code("OWN"), name: `${TAG} kumaş müşterisi` }, select: { id: true } })).id;
+    otherId = (await prisma.customer.create({ data: { code: code("OTH"), name: `${TAG} başka müşteri` }, select: { id: true } })).id;
 
     const mkYarn = async (k: string) => {
       const y = (await prisma.item.create({ data: { code: code(k), name: `${TAG} atkı ${k}`, itemType: "YARN", unit: "KG", linearDensityDen: 150 }, select: { id: true } })).id;
@@ -120,11 +127,17 @@ async function main(): Promise<void> {
       return f;
     };
     // Tezgâh + iş + koşum + doff'lu top (A yolu); devere kapalı → çözgü tüketimi yazılmaz.
-    const job = async (k: string, fabricId: string, meters: number) => {
+    // `customerId` verilirse iş o müşterinin siparişine bağlanır (işin sahibi = sipariş müşterisi).
+    const job = async (k: string, fabricId: string, meters: number, customerId: string | null = null) => {
       const m = (await prisma.machine.create({ data: { stationId: stationId!, name: `${TAG} ${k}`, code: code(`M${k}`) }, select: { id: true } })).id;
       ids.machines.push(m);
       const wo = (await prisma.weavingOrder.create({ data: { weavingOrderNumber: code(`W${k}`), itemId: fabricId, executionKind: "IN_HOUSE", status: "COMPLETED" }, select: { id: true } })).id;
       ids.wos.push(wo);
+      if (customerId) {
+        const o = await prisma.order.create({ data: { orderNumber: code(`O${k}`), customerId, lines: { create: [{ itemId: fabricId, quantity: meters }] } }, select: { id: true, lines: { select: { id: true } } } });
+        ids.orders.push(o.id);
+        await prisma.weavingOrderToOrderLine.create({ data: { weavingOrderId: wo, orderLineId: o.lines[0]!.id } });
+      }
       const run = (await prisma.machineRun.create({ data: { machineId: m, weavingOrderId: wo, startedAt: new Date(Date.now() - 3_600_000) }, select: { id: true } })).id;
       const doff = (await openDoff({ machineId: m, machineRunId: run, productionLineNo: 1, pieceCount: 1, counterSource: MachineDataSource.OPERATOR })).data!.id;
       const r = await inventory.createInitialEntry({ itemId: fabricId, initialQty: meters }, undefined, null, false, { forcedEntrySource: RollEntrySource.WEAVING, doffEventId: doff });
@@ -173,10 +186,29 @@ async function main(): Promise<void> {
       wC.weftYarnCostTry === null && wC.weftYarnPerMTry === null && wC.weftYarnMissing?.includes("ATKI_FIYATI") === true && cell(wC, "atkiIplikM") === EKSIK
         && cell(wC, "atkiIplikKaynak") === "eksik: atkı ipliği fiyatı yok", `${cell(wC, "atkiIplikM")} | ${cell(wC, "atkiIplikKaynak")}`);
 
-    console.log("\n§4 — müşteri ipliği");
-    const WM = await job("M", await fabric("M", [{ yarnId: M, kgPerM: "0.04", std: "2" }]), 10);
+    console.log("\n§4 — müşteri ipliği (lotun sahibi ↔ işin müşterisi)");
+    const fabricM = await fabric("M", [{ yarnId: M, kgPerM: "0.04", std: "2" }]);
+    const wOwn = await row(await job("MO", fabricM, 10));
+    check("§4a ⭐ kendi işimiz, son giren lot müşterinin → sahipli lot fiyatı EZMEZ: bizim lot 90 TL × 0,4 kg = 36 TL → 3,6 TL/m; LOT",
+      eq(wOwn.weftYarnCostTry, 36) && eq(wOwn.weftYarnPerMTry, "3.6") && wOwn.weftYarnSource === "LOT" && wOwn.weftYarnMissing?.length === 0,
+      `${s(wOwn.weftYarnCostTry)} · ${wOwn.weftYarnSource} · ${wOwn.weftYarnMissing}`);
+    const wOther = await row(await job("MX", fabricM, 10, otherId));
+    check("§4c başka müşterinin işi + lot sahibi farklı müşteri → müşteri ipliği DEĞİL, bizim lot fiyatı (3,6 TL/m)",
+      eq(wOther.weftYarnPerMTry, "3.6") && wOther.weftYarnSource === "LOT" && !wOther.weftYarnMissing?.includes("MUSTERI_IPLIGI"), `${s(wOther.weftYarnPerMTry)} · ${wOther.weftYarnMissing}`);
+    const Q = await mkYarn("Q");
+    await receive(Q, "Q1", null, ownerId);
+    await receive(Q, "Q2", "70");
+    const wQ = await row(await job("Q", await fabric("Q", [{ yarnId: Q, kgPerM: "0.04", std: "2" }]), 10, ownerId));
+    check("§4d ⭐ müşteri işi + o müşterinin lotu var, sonra bizim lot girdi → yine MUSTERI_IPLIGI (bizim lot müşteri ipliğini maliyetimize yazmaz)",
+      wQ.weftYarnCostTry === null && JSON.stringify(wQ.weftYarnMissing) === JSON.stringify(["MUSTERI_IPLIGI"]), `${s(wQ.weftYarnCostTry)} · ${wQ.weftYarnMissing}`);
+    const WE = await job("ME", fabricM, 10);
+    await prisma.roll.updateMany({ where: { id: ids.rolls[ids.rolls.length - 1]! }, data: { ownerCustomerId: ownerId } });
+    const wE = await row(WE);
+    check("§4e siparişsiz iş ama top müşterinin (emanet doğum niteliği) + lot aynı müşterinin → MUSTERI_IPLIGI",
+      wE.weftYarnCostTry === null && JSON.stringify(wE.weftYarnMissing) === JSON.stringify(["MUSTERI_IPLIGI"]), `${s(wE.weftYarnCostTry)} · ${wE.weftYarnMissing}`);
+    const WM = await job("M", fabricM, 10, ownerId);
     const wM = await row(WM);
-    check("§4a ⭐ son giren lot müşterinin → bilgi MUSTERI_IPLIGI (eksik değil); sayı yok (0 TL değil); hücre 'müşteri ipliği'",
+    check("§4b ⭐ müşteri işi + aynı müşterinin lotu → bilgi MUSTERI_IPLIGI (eksik değil); sayı yok (0 TL değil); hücre 'müşteri ipliği'",
       wM.weftYarnCostTry === null && wM.weftYarnPerMTry === null && wM.weftYarnSource === null && JSON.stringify(wM.weftYarnMissing) === JSON.stringify(["MUSTERI_IPLIGI"])
         && cell(wM, "atkiIplikM") === "müşteri ipliği" && cell(wM, "atkiIplikKaynak") === "müşteri ipliği (maliyetimize girmez)",
       `${s(wM.weftYarnCostTry)} · ${wM.weftYarnMissing} | ${cell(wM, "atkiIplikM")} | ${cell(wM, "atkiIplikKaynak")}`);
@@ -225,6 +257,9 @@ async function main(): Promise<void> {
     await prisma.roll.deleteMany({ where: { id: { in: ids.rolls } } });
     await prisma.doffEvent.deleteMany({ where: { machineId: { in: ids.machines } } });
     await prisma.machineRun.deleteMany({ where: { machineId: { in: ids.machines } } });
+    await prisma.weavingOrderToOrderLine.deleteMany({ where: { weavingOrderId: { in: ids.wos } } });
+    await prisma.orderLine.deleteMany({ where: { orderId: { in: ids.orders } } });
+    await prisma.order.deleteMany({ where: { id: { in: ids.orders } } });
     await prisma.weavingOrder.deleteMany({ where: { id: { in: ids.wos } } });
     await prisma.machine.deleteMany({ where: { id: { in: ids.machines } } });
     if (stationId) await prisma.station.deleteMany({ where: { id: stationId } });
@@ -236,7 +271,7 @@ async function main(): Promise<void> {
     await prisma.standardCostLine.deleteMany({ where: { versionId: { in: ids.versions } } });
     await prisma.standardCostVersion.deleteMany({ where: { id: { in: ids.versions } } });
     await prisma.item.deleteMany({ where: { id: { in: [...ids.yarns, ...ids.fabrics] } } });
-    if (ownerId) await prisma.customer.deleteMany({ where: { id: ownerId } });
+    await prisma.customer.deleteMany({ where: { id: { in: [ownerId, otherId].filter((x): x is string => x !== null) } } });
     if (mf) await fiksturSil(mf);
     for (const key of SETTING_FOTO) {
       const f = foto.find((x) => x.key === key);
