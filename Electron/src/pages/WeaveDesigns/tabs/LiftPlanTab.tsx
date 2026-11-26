@@ -25,6 +25,8 @@ const LEGEND = "Çerçeve numarasına bir kez tıklayınca döner (leno), ikinci
   + "döner ve kenar çerçeveleri ızgarada ve basılan desen kartında ayrı blok olur, kumaş görünümüne girmez. "
   + "Sağdaki 1., 2., 3. sütunları seçili kumaşın atkı kartındaki sıra kodundan gelir (hangi atkıda hangi iplik atılır); "
   + "değiştirmek için Atkı raporu sekmesindeki kodu düzenleyin.";
+const ALIAS_INFO = "Hangi atkıda hangi çerçevenin kalktığını gösteren ızgara; başka fabrikalarda armür planı ya da kaldırma planı da denir. "
+  + "Ustaya giden el notunda da \"desen örgüsü\" diye geçer.";
 
 const EMPTY: number[] = [];
 
@@ -51,7 +53,7 @@ export function LiftPlanTab({ design, fabric, canWrite }: { design: WeaveDesign;
       liftPlan: liftPlanForSave(plan), lenoFrames: lenoList, ...(design.selvedgeFrames !== undefined ? { selvedgeFrames: selvList } : {}),
     }),
     onSuccess: () => {
-      toast.success("Armür planı kaydedildi.");
+      toast.success("Desen örgüsü kaydedildi.");
       void qc.invalidateQueries({ queryKey: ["weave-designs"] });
     },
   });
@@ -72,13 +74,13 @@ export function LiftPlanTab({ design, fabric, canWrite }: { design: WeaveDesign;
         </>
       )}
       {rows === 0 ? (
-        <p className="text-sm text-muted-foreground">Armür planı girilmemiş{canWrite ? " — çerçeve ve atkı sayısını yazıp “Izgarayı kur”a basın." : "."}</p>
+        <p className="text-sm text-muted-foreground">Desen örgüsü girilmemiş{canWrite ? " — çerçeve ve atkı sayısını yazıp “Izgarayı kur”a basın." : "."}</p>
       ) : (
         // Desen kâğıdı düzeni: solda armür + seçici, sağda tahar + kumaş görünümü (dar pencerede alt alta).
         <div className="flex flex-wrap items-start gap-x-10 gap-y-6">
-          <section className="min-w-0 max-w-full space-y-2" aria-label="Armür planı">
+          <section className="min-w-0 max-w-full space-y-2" aria-label="Desen örgüsü">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold">Armür planı{selCount > 0 ? " ve atkı seçici" : ""}</h3>
+              <h3 className="flex items-center gap-1 text-sm font-semibold">Desen örgüsü{selCount > 0 ? " ve atkı seçici" : ""}<InfoPopover label="Desen örgüsü nedir" desc={ALIAS_INFO} /></h3>
               <WeaveDirectionToggle value={direction} onChange={setDirection} />
             </div>
             <LiftPlanGrid plan={plan} frames={size.frames} rows={rows} leno={lenoSet} selvedge={selvSet} selector={selector} selCount={selCount} canWrite={canWrite}

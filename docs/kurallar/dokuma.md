@@ -167,6 +167,7 @@
 - Desen kartı teknik özetini (tel/cm, rapor/m, gramaj) yalnız `computed-gsm` ucundan bas; kartı kopyalarken tek `POST /api/weave-designs` gönder, etkin görünümü izle (gizli ızgara/kanca taşınmaz), tezgâh dosya adını boş bırak. · bekçi: `test_kumas_hesaplanan_gramaj` §7 <sub>(arşiv:2026-11-25 Desen kartı teknik özet şeridi)</sub>
 - Kumaşa ait olanı (atkı, varyant, ek çözgü katmanı) yalnız kumaşın ürün penceresinde düzenlet; desen kartında salt okunur özet + "Üründe aç" göster (devere kapalıyken sarım biçimi desen kartında kalır). <sub>(arşiv:2026-11-25 Kumaşa ait olan ürün penceresinde)</sub>
 - Renk seçici kanalını atkı kartının SATIRINDA tut (`weft_spec_yarns.colorChannel` 1..16, kartta tekil; varyant iplik değişimi kanalı değiştirmez); atkı ihtiyacını (kg/1000 m) yalnız `POST /api/weft-specs/calc` hesaplasın (maliyet motoru, yazmaz) — panel çizer. · bekçi: `test_atki_kanal_hesap` <sub>(arşiv:2026-11-25 Atkı renk seçici kanalı + atkı hesap paneli)</sub>
+- Desen bağlamında fabrika jargonunu kullan: atkı raporu, çözgü raporu, desen örgüsü (ⓘ'de eş ad "armür planı / kaldırma planı"); çıplak "Rapor" yazma ("Desen rapor boyu" gibi nitele); mekanizma adı "Armür" değişmez. <sub>(arşiv:2026-11-26 Fabrika jargonu: atkı raporu, çözgü raporu, desen örgüsü)</sub>
 
 ## Panel (Electron)
 

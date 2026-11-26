@@ -204,7 +204,7 @@ describe("WeavingOrderDetailSheet — Yapı (kart görseli)", () => {
     weaveDesign: { id: "d1", code: "UA6007", name: "Döner", kind: "LENO", loomFileName: "X.DOP", frameCount: 4, liftPlan: [[1, 0, 1, 0], [0, 1, 0, 1], [1, 1, 0, 0]], lenoFrames: [1] },
   };
 
-  it("⭐ mini armür + seçici + çözgü bandı; ızgara tık → desen kartının Armür sekmesi; yazdır → DESEN_KARTI", async () => {
+  it("⭐ mini armür + seçici + çözgü bandı; ızgara tık → desen kartının Desen örgüsü sekmesi; yazdır → DESEN_KARTI", async () => {
     overview.mockReturnValue(ok({ progress: PROGRESS, liveRuns: EMPTY }));
     construction.mockResolvedValue(CONSTRUCTION);
     cardHtml.mockResolvedValue("<html>kart</html>");
@@ -213,7 +213,7 @@ describe("WeavingOrderDetailSheet — Yapı (kart görseli)", () => {
     const lift = await screen.findByTestId("wo-construction-lift");
     expect(construction).toHaveBeenCalledWith("wo1");
     expect(lift.querySelector("svg")?.getAttribute("aria-label")).toContain("3 atkı, 4 çerçeve, atkı seçici");
-    expect(screen.getByTestId("warp-ends-strip")).toHaveTextContent("Rapor 3 tel");
+    expect(screen.getByTestId("warp-ends-strip")).toHaveTextContent("Çözgü raporu 3 tel");
     fireEvent.click(lift.querySelector("button") ?? lift);
     expect(h.onClose).toHaveBeenCalled();
     expect(openTarget.mock.calls[0]![0]).toBe("/definitions/weave-designs/d1?tab=lift&fabric=i1");

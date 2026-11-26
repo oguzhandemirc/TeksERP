@@ -59,7 +59,7 @@ export default function WarpEndsBand({ yarns, endsSequence, sequenceNote, compac
       </View>
       <Text style={styles.caption}>{warpBandCaption({ endsSequence, sequenceNote })}</Text>
       {endsSequence && !endsSequence.matchesYarnEnds ? (
-        <Text style={styles.warn} testID={testID ? `${testID}-uyari` : undefined}>Dizilim, karttaki iplik tel sayılarıyla tutmuyor — kartı panelden kontrol ettirin.</Text>
+        <Text style={styles.warn} testID={testID ? `${testID}-uyari` : undefined}>Çözgü raporu, karttaki iplik tel sayılarıyla tutmuyor — kartı panelden kontrol ettirin.</Text>
       ) : null}
     </View>
   );

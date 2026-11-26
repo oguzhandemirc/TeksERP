@@ -22,7 +22,7 @@ describe("çözgü talimatı görseli", () => {
   it("⭐ açılım varsa şerit SVG'si + harfler + rapor özeti basılır", () => {
     const html = warpEndsStripHtml(SEQ, BASE.yarns);
     expect(html).toContain("<svg");
-    expect(html).toContain("Rapor 3 tel × 1166 tekrar + 2 tel = 3500 tel");
+    expect(html).toContain("Çözgü raporu 3 tel × 1166 tekrar + 2 tel = 3500 tel");
     expect(html).toContain("şeritte 3 rapor");
     expect(html).toMatch(/>A<\/text>/);
     expect(html).toMatch(/>B<\/text>/);

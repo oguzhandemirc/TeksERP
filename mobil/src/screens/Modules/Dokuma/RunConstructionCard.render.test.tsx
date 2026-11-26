@@ -48,8 +48,8 @@ test('yapılı iş → armür dosyası, sıklık, atkı sırası, varyant işare
   const r = renderWithPaper(<RunConstructionCard weavingOrderId="wo1" />);
   await r.findByTestId('run-construction');
   expect(r.getByText(/Varyant V02/)).toBeTruthy();
-  expect(r.getByText(/Armür: D2057\.DOP/)).toBeTruthy();
-  expect(r.getByText(/20 atkı\/cm · Sıra A4 B1 A4 C1/)).toBeTruthy();
+  expect(r.getByText(/Tezgâh dosyası D2057\.DOP/)).toBeTruthy();
+  expect(r.getByText(/20 atkı\/cm · Atkı raporu A4 B1 A4 C1/)).toBeTruthy();
   expect(r.getByText(/C × 1 — SIM-1 Sim \(varyant\)/)).toBeTruthy();
   expect(r.getByText(/Döner çözgü: CZ-D/)).toBeTruthy();
   expect(r.UNSAFE_queryAllByType(TextInput)).toHaveLength(0);
@@ -90,12 +90,12 @@ test('sunucu armür + seçici gönderiyorsa mini görsel; dokununca tam ekran, y
   expect(r.getByText(/1\. atkı en üstte/)).toBeTruthy();
 });
 
-test('iş emri detayı: "Armür planı" başlığı TEK (mini kartın kendi başlığı; bölüm başlığı yok)', async () => {
+test('iş emri detayı: "Desen örgüsü" başlığı TEK (mini kartın kendi başlığı; bölüm başlığı yok)', async () => {
   construction.mockResolvedValue({
     ...full,
     design: { ...full.design!, liftPlan: [[1, 0], [0, 1]], lenoFrames: [], kind: 'PLAIN' },
   } as RunConstruction);
   const r = renderWithPaper(<WeavingOrderWeave weavingOrderId="wo1" />);
   await r.findByTestId('dokuma-detay-armur');
-  expect(r.getAllByText('Armür planı')).toHaveLength(1);
+  expect(r.getAllByText('Desen örgüsü')).toHaveLength(1);
 });

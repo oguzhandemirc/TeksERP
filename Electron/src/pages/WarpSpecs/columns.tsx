@@ -38,7 +38,7 @@ export const warpSpecColumns: ColumnDef<WarpSpec>[] = [
                 <span className="text-muted-foreground"> · {num(r.endsCount)} tel</span>
               </span>
             ))}
-            {row.original.sequenceNote ? <span className="text-muted-foreground">Çözgü dizimi: {row.original.sequenceNote}</span> : null}
+            {row.original.sequenceNote ? <span className="text-muted-foreground">Çözgü raporu: {row.original.sequenceNote}</span> : null}
           </span>
         );
       }

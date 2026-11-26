@@ -64,13 +64,13 @@ export function warpBandLayout(input: WarpBandInput, width: number, height: numb
   return { kind: 'proportional', segments, ticksPath: '', width };
 }
 
-/** Bant altı satırı: "Rapor 3 tel × 1166 + 2 = 3500 tel" ya da oransal açıklaması. */
+/** Bant altı satırı: "Çözgü raporu 3 tel × 1166 + 2 = 3500 tel" ya da oransal açıklaması. */
 export function warpBandCaption(input: WarpBandInput & { sequenceNote?: string | null }): string {
   const seq = input.endsSequence;
   if (seq && seq.repeat.length > 0) {
     const rest = seq.remainder > 0 ? ` + ${seq.remainder}` : '';
-    return `Rapor ${seq.repeat.length} tel × ${seq.repeatCount}${rest} = ${seq.totalEnds} tel`;
+    return `Çözgü raporu ${seq.repeat.length} tel × ${seq.repeatCount}${rest} = ${seq.totalEnds} tel`;
   }
   const note = input.sequenceNote?.trim();
-  return note ? `Dizilim "${note}" okunamadı — iplik payına göre gösteriliyor` : 'Dizilim yazılmamış — iplik payına göre gösteriliyor';
+  return note ? `Çözgü raporu "${note}" okunamadı — iplik payına göre gösteriliyor` : 'Çözgü raporu yazılmamış — iplik payına göre gösteriliyor';
 }

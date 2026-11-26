@@ -15,8 +15,8 @@ export const WEAVE_STRUCTURE_LABEL: Record<WeaveStructure, string> = {
 /** ⓘ açıklamaları — sade Türkçe, tezgâh başındaki kişinin dilinde. */
 export const SHED_MECHANISM_HINT: Record<ShedMechanism, string> = {
   CAM: "Basit örgüler (bezayağı, dimi) için. Çerçeveleri tezgâhın kamları kaldırır; program ya da ızgara gerekmez.",
-  DOBBY: "Çerçeveleri armür programı kaldırır. Hangi atkıda hangi çerçevenin kalktığı Armür sekmesindeki ızgarada çizilir.",
-  JACQUARD: "Her çözgü teli ayrı bir kancayla kalkar; çerçeve yoktur. Desen tezgâhın desen dosyasından gelir; burada dosya adı, kanca sayısı ve rapor ölçüsü tutulur.",
+  DOBBY: "Çerçeveleri armür programı kaldırır. Hangi atkıda hangi çerçevenin kalktığı Desen örgüsü sekmesindeki ızgarada çizilir (armür planı).",
+  JACQUARD: "Her çözgü teli ayrı bir kancayla kalkar; çerçeve yoktur. Desen tezgâhın desen dosyasından gelir; burada dosya adı, kanca sayısı ve desen rapor ölçüsü tutulur.",
 };
 export const MECHANISM_INFO = "Tezgâhın çözgü tellerini nasıl kaldırdığı: Eksantrik (kamla, basit örgüler), Armür (programlı çerçeveler), Jakar (her tel ayrı kanca).";
 export const STRUCTURE_INFO = "İpliklerin birbirinin altından üstünden nasıl geçtiği. Döner (leno) iki çözgü telinin atkı etrafında dönmesidir; Armür ya da Jakarla dokunur. Bilinmiyorsa boş bırakılabilir.";

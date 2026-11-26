@@ -45,7 +45,7 @@ export function WeftSpecsPage() {
     <PageShell>
       <PageHeader
         title="Atkı Kartları"
-        description="Atkı iplikleri · atkı sırası · sıklık · program no. Bir atkı kartı birden çok kumaşı besler; kumaşa ürün penceresinin Atkı sekmesinden bağlanır."
+        description="Atkı iplikleri · atkı raporu · sıklık · program no. Bir atkı kartı birden çok kumaşı besler; kumaşa ürün penceresinin Atkı sekmesinden bağlanır."
         actions={
           <div className="flex items-center gap-2">
             <RefreshButton queryKey={WEFT_SPECS_QUERY_KEY} />

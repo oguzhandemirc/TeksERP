@@ -148,7 +148,7 @@ export function LiftPlanGrid(props: Props) {
   return (
     <div ref={box} tabIndex={canWrite ? 0 : undefined} onKeyDown={props.onKeyDown} onPointerDown={onPointerDown} onPointerMove={onPointerMove}
       className="max-h-[70vh] w-fit max-w-full touch-none select-none overflow-auto rounded-md border p-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-      role="grid" aria-label="Armür ızgarası" aria-multiselectable={canWrite || undefined}>
+      role="grid" aria-label="Desen örgüsü ızgarası" aria-multiselectable={canWrite || undefined}>
       {direction === "top-down" && header}
       {rowsInDisplayOrder(rows, direction).map((r) => {
         const inSel = !!selection && r >= selection.r0 && r <= selection.r1;

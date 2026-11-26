@@ -69,9 +69,9 @@ export async function parseWarpYarnRows(raw: unknown): Promise<WarpSpecYarnLine[
 export function normalizeSequenceNote(v: unknown): string | null | undefined {
   if (v === undefined) return undefined;
   if (v === null) return null;
-  if (typeof v !== "string") throw AppError.badRequest("Dizilim notu metin olmalı.");
+  if (typeof v !== "string") throw AppError.badRequest("Çözgü raporu metin olmalı.");
   const t = v.trim();
-  if (t.length > SEQUENCE_NOTE_MAX) throw AppError.badRequest(`Dizilim notu en çok ${SEQUENCE_NOTE_MAX} karakter olabilir.`);
+  if (t.length > SEQUENCE_NOTE_MAX) throw AppError.badRequest(`Çözgü raporu en çok ${SEQUENCE_NOTE_MAX} karakter olabilir.`);
   return t === "" ? null : t;
 }
 

@@ -77,7 +77,7 @@ export function OrderSummary({ o }: { o: WarpingOrder }) {
       <Item label="Tarak">{reed || "—"}</Item>
       <Item label="Açılış">{fmtFactoryDateTime(o.createdAt)}</Item>
       {o.warpSpec.sequenceNote && (
-        <Item label="Dizilim" className="sm:col-span-2">
+        <Item label="Çözgü raporu"className="sm:col-span-2">
           {o.warpSpec.sequenceNote}
         </Item>
       )}
