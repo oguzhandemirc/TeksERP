@@ -37,6 +37,7 @@ import { TERIM } from '../../../lib/terim';
 import { addPicked, prunePicked, type PickedOrderLines } from './orderLinkAnchor';
 import { SCAN_NOT_FOUND_REASON, scanLookupReason } from './scanLookupReason';
 import { routeApplyCaps } from './routeCaps';
+import { materialProvidedByBody, type MaterialProvider } from '../../../lib/materialProvider';
 
 export interface ScannedRoll {
   id: string;
@@ -159,6 +160,8 @@ export function useQuickWorkOrder(opts: { initialRouteTemplateId?: string | null
   // bir değeri sessizce gönderirdi (backend katalog doğrulamasıyla 400).
   // Ön-seçim aşağıda katalogun İLK değeriyle yapılır.
   const [foldType, setFoldType] = useState<string | null>(null);
+  // F7b ana hammaddeyi kim verdi; null = "Bilinmiyor" (gövdeye gitmez = bugünkü).
+  const [materialProvidedBy, setMaterialProvidedBy] = useState<MaterialProvider | null>(null);
   // Boş bırakılırsa ve sipariş bağlıysa backend kalemlerin requiredProperties
   // birleşimini kendisi uygular (workorder.service create()) — istemci bu listeyi
   // okuyamaz (AvailableOrderLine taşımaz), o yüzden ön-doldurma YAPILMAZ; arayüz
@@ -918,6 +921,7 @@ export function useQuickWorkOrder(opts: { initialRouteTemplateId?: string | null
       // Migration GEREKMEZ: `parameters` zaten JSON kolon ve `quick-start` Zod
       // şeması onu kabul ediyor (`workOrderCoreShape`, doğrulandı).
       ...(reworkPlan.parameters ? { parameters: reworkPlan.parameters } : {}),
+      ...materialProvidedByBody(materialProvidedBy),
     };
     mutation.mutate(payload);
   }, [
@@ -942,6 +946,7 @@ export function useQuickWorkOrder(opts: { initialRouteTemplateId?: string | null
     lockedItemId,
     dispatchFirstStep,
     firstStepDispatch,
+    materialProvidedBy,
     mutation,
   ]);
 
@@ -960,6 +965,7 @@ export function useQuickWorkOrder(opts: { initialRouteTemplateId?: string | null
     // Tambur varsa). Sabit '2-KAT' yazmak, katalogda o değer yoksa geçersiz bir
     // seçimle başlamak demekti.
     setFoldType(null);
+    setMaterialProvidedBy(null);
     setTargetPropertyIds([]);
     setOrderLineIds([]);
     setPickedOrderLines({});
@@ -1021,6 +1027,8 @@ export function useQuickWorkOrder(opts: { initialRouteTemplateId?: string | null
     orderWidth,
     foldType,
     setFoldType,
+    materialProvidedBy,
+    setMaterialProvidedBy,
     // Kat seçenekleri katalogdan + "bu rotada kat sorulur mu" kararı.
     foldValues,
     foldNotConfigured,

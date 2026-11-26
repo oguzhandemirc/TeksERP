@@ -4,6 +4,7 @@
 import axios from "axios";
 import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
+import type { MaterialProvider } from "@/types/enums";
 import type { MultiPartyMode, NotePartiesView } from "./partyDraft";
 import type { DocReadSummary } from "./docFormFill";
 
@@ -86,6 +87,8 @@ export interface NoteWorkOrderBody {
   plannedEndDate?: string;
   foldType?: string;
   orderLineIds?: string[];
+  /** F7b: yalnız seçildiyse gider (anahtarsız = bilinmiyor; eski sunucu katı gövdeyle 400 verirdi). */
+  materialProvidedBy?: MaterialProvider;
 }
 
 export interface NoteWorkOrderResult {

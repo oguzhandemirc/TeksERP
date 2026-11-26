@@ -10,7 +10,7 @@
 // replay olur; ikinci top/İE doğmaz. Okuma kapısı yalnız SÜREN okumadır: düşen/okuyucusuz belgede operatörün elle girdiği
 // değerlerle kayıt yapılır (uyarıyla).
 // =============================================================================
-import { DeliveryNoteStatus, type RollStage } from "@prisma/client";
+import { DeliveryNoteStatus, type MaterialProvider, type RollStage } from "@prisma/client";
 import prisma from "../lib/prisma";
 import type { JwtPayload } from "../types/api.types";
 import { AppError } from "../utils/app-error";
@@ -104,6 +104,8 @@ export interface FormWorkOrderInput {
   plannedStartDate?: string | null;
   plannedEndDate?: string | null;
   foldType?: string | null;
+  /** F7b: ana hammaddeyi kim verdi; yok/null = bilinmiyor (bugünkü). */
+  materialProvidedBy?: MaterialProvider | null;
   orderLineIds?: string[] | null;
   /** K30-D: anahtar VARSA istemcinin hedef özellik kümesi (istasyon bayrakları eklenmez; kullanıcı kaldırabilir), yoksa bugünkü. */
   targetPropertyIds?: string[];
@@ -148,9 +150,9 @@ export async function assertFormSteps(input: FormWorkOrderInput): Promise<WorkOr
 }
 
 /** quickStart'a geçen form alanları — yalnız verilenler (yoksa quickStart bugünkü gibi türetir). */
-export type FormWorkOrderFields = Pick<WorkOrderCreateInput, "targetItemId" | "targetColorId" | "width" | "targetQuantity" | "targetWeight" | "plannedStartDate" | "plannedEndDate" | "orderLineIds" | "type" | "customerId">;
+export type FormWorkOrderFields = Pick<WorkOrderCreateInput, "targetItemId" | "targetColorId" | "width" | "targetQuantity" | "targetWeight" | "plannedStartDate" | "plannedEndDate" | "orderLineIds" | "type" | "customerId" | "materialProvidedBy">;
 export function formWorkOrderFields(input: FormWorkOrderInput): FormWorkOrderFields {
-  const keys = ["targetItemId", "targetColorId", "width", "targetQuantity", "targetWeight", "plannedStartDate", "plannedEndDate", "type"] as const;
+  const keys = ["targetItemId", "targetColorId", "width", "targetQuantity", "targetWeight", "plannedStartDate", "plannedEndDate", "type", "materialProvidedBy"] as const;
   const out: FormWorkOrderFields = {};
   for (const k of keys) if (input[k] != null) Object.assign(out, { [k]: input[k] });
   if (input.orderLineIds?.length) out.orderLineIds = input.orderLineIds;

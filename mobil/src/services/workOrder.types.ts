@@ -1,5 +1,6 @@
 // İş emri servisinin tel tipleri — dosya boyu tavanı için servisten ayrıldı; workOrder.service yeniden ihraç eder.
 import type { WorkOrder } from '../types/models';
+import type { MaterialProvider } from '../lib/materialProvider';
 
 /** WO oluşturma/replace için rota adımı. Replace'te mevcut adımı güncellemek için `id` ver. */
 export interface WorkOrderStepInput {
@@ -48,6 +49,8 @@ export interface WorkOrderPayload {
   }[];
   orderLineIds?: string[];
   targetPropertyIds?: string[];
+  /** F7b ana hammaddeyi kim verdi; yok = bilinmiyor (sunucu NULL yazar). */
+  materialProvidedBy?: MaterialProvider;
 }
 
 /** GET /work-orders/:id/linkable-order-lines satırı — backend aynası. */

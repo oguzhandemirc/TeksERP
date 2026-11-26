@@ -200,6 +200,12 @@ describe('buildExtraBody', () => {
     expect(buildExtraBody(full, { hasTambur: false })).not.toHaveProperty('foldType');
     expect(buildExtraBody(extras(), { hasTambur: true })).toEqual({});
   });
+  it('F7b malzeme veren: seçilen değer gider (belge + kendi üretim); Bilinmiyor/yok anahtarsız (eski sunucu strict 400)', () => {
+    expect(buildExtraBody(extras({ materialProvidedBy: 'US' }), { hasTambur: false }).materialProvidedBy).toBe('US');
+    expect(buildExtraBody(extras({ materialProvidedBy: 'CUSTOMER' }), { hasTambur: false, ownGoods: true }).materialProvidedBy).toBe('CUSTOMER');
+    expect(buildExtraBody(extras({ materialProvidedBy: null }), { hasTambur: false })).not.toHaveProperty('materialProvidedBy');
+    expect(buildExtraBody(extras(), { hasTambur: false, perParty: true })).not.toHaveProperty('materialProvidedBy');
+  });
 });
 
 describe('plannedDayOptions', () => {
