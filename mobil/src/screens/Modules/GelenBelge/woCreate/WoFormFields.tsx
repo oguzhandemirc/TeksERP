@@ -7,6 +7,7 @@ import { Text, TextInput } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 import type { BandTone } from '../../../../components/form/tone';
 import { SelectButton } from '../../../../components/form/SelectButton';
+import { MaterialProvidedByField } from '../../../../components/form/MaterialProvidedByField';
 import PickerModal, { type PickerOption } from '../../../../components/PickerModal';
 import { usePickableLifecycle } from '../../../../hooks/useFeatureFlags';
 import { fmtDayKey } from '../../../../lib/factory-time';
@@ -106,6 +107,7 @@ export default function WoFormFields(props: Props) {
 
       <TargetFields {...p} customerId={p.plan?.customerId ?? null} onPickItem={() => setPicker('item')} />
       {p.plan && <TargetPropsBlock plan={p.plan} show={show} locked={locked} />}
+      {show('malzemeVeren') && <MaterialProvidedByField value={e.materialProvidedBy ?? null} onChange={(v) => edit({ materialProvidedBy: v })} disabled={locked} />}
       <FoldAndPlan {...p} onPick={setPicker} />
       <FieldPickers {...p} picker={picker} setPicker={setPicker} days={days} />
     </View>

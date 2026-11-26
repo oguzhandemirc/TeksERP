@@ -826,7 +826,7 @@ export function WorkOrderFormView({
                     />
                   </FormField>
                 )}
-                {materialFieldVisible(docScan.noteId) && (
+                {materialFieldVisible(docScan.noteId, docScan.approval) && (
                   <FormField label="Ana hammaddeyi kim verdi?" className="sm:col-span-2">
                     <MaterialProvidedByField
                       value={form.watch("materialProvidedBy") ?? null}

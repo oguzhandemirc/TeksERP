@@ -12,7 +12,9 @@
 //   §5 ⭐ okuma özeti: TR sayı ("1.250,50"), kanonik ondalık ("125.125" binlik SANILMAZ); KAPALI öneri yok; ONER tek aday
 //      önerilir, çift aday/top doğuramayan ürün önerilmez; NOT desen/renk nota eklenir
 //   §6 saf `formNumber` / `formFieldsFromRegion` + tanıtma anahtarları (`ASSIGNABLE_FIELD_KEYS`)
-// Negatif sonda: `formWorkOrderFields` boş nesne dönünce §3 kırmızı; `noteFormFields` ONER dalı atlanınca §5 ONER kırmızı.
+//   §8 F7b `materialProvidedBy` belgeden İE'ye taşınır (tek parti, SINGLE, PER_PARTY); yoksa NULL; tanınmayan 400
+// Negatif sonda: `formWorkOrderFields` boş nesne dönünce §3 kırmızı; `noteFormFields` ONER dalı atlanınca §5 ONER kırmızı;
+// `formWorkOrderFields` anahtar listesinden `materialProvidedBy` çıkınca §8 üç ⭐ kırmızı (2026-11-26).
 // =============================================================================
 import { randomUUID, createHash } from "crypto";
 import type { AddressInfo } from "net";
@@ -347,6 +349,24 @@ async function run(url: string): Promise<void> {
   const ids7p = (r7p.data as { workOrders?: Array<{ workOrderId: string }> } | undefined)?.workOrders?.map((w) => w.workOrderId) ?? [];
   const st7p = await Promise.all(ids7p.map(async (id) => (await woSteps(id)).map((x) => x.stationId).join()));
   check("§7 ⭐ çok parti PER_PARTY: her iş emri düzenlenmiş adımlarla", r7p.status === 201 && ids7p.length === 2 && st7p.every((x) => x === [station, kStation].join()), `${r7p.status} ${r7p.code ?? ""} ${JSON.stringify(st7p)}`);
+
+  console.log("§8 F7b ana hammaddeyi kim verdi (materialProvidedBy)");
+  const mat = async (id: unknown) => (await prisma.workOrder.findUnique({ where: { id: woId(id) }, select: { materialProvidedBy: true } }))?.materialProvidedBy;
+  check("§8 ⭐ alan gönderilmezse NULL (eski istemci = bugünkü)", r2.status === 201 && (await mat(r2.data?.workOrderId)) === null, String(await mat(r2.data?.workOrderId)));
+  const n8 = await mkNote();
+  const r8 = await formWo(n8, body({ materialProvidedBy: "US" }));
+  check("§8 ⭐ tek parti: gövdedeki US İE'ye yazılır", r8.status === 201 && (await mat(r8.data?.workOrderId)) === "US", `${r8.status} ${r8.code ?? ""} ${String(await mat(r8.data?.workOrderId))}`);
+  const n8s = await mkPartyNote();
+  const r8s = await formWo(n8s, body({ parties: parties(n8s), mode: "SINGLE", materialProvidedBy: "MIXED" }));
+  check("§8 ⭐ çok parti SINGLE: MIXED İE'ye yazılır", r8s.status === 201 && (await mat(r8s.data?.workOrderId)) === "MIXED", `${r8s.status} ${r8s.code ?? ""}`);
+  const n8p = await mkPartyNote();
+  const r8p = await formWo(n8p, body({ parties: parties(n8p), mode: "PER_PARTY", materialProvidedBy: "CUSTOMER" }));
+  const ids8p = (r8p.data as { workOrders?: Array<{ workOrderId: string }> } | undefined)?.workOrders?.map((w) => w.workOrderId) ?? [];
+  const m8p = await Promise.all(ids8p.map((id) => mat(id)));
+  check("§8 ⭐ çok parti PER_PARTY: her iş emrine CUSTOMER", r8p.status === 201 && ids8p.length === 2 && m8p.every((m) => m === "CUSTOMER"), `${r8p.status} ${r8p.code ?? ""} ${JSON.stringify(m8p)}`);
+  const n8b = await mkNote();
+  const r8b = await formWo(n8b, body({ materialProvidedBy: "BIZ" }));
+  check("§8 tanınmayan değer → 400; belge DRAFT", r8b.status === 400 && (await noteStatus(n8b)) === "DRAFT", `${r8b.status} ${r8b.code ?? ""}`);
 }
 
 async function cleanup(): Promise<void> {
