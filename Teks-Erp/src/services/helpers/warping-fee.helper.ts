@@ -7,7 +7,7 @@
 // `ACCEPTED_WARPING_BEAM_WHERE` BOĞAZ-İKİZ (bekçi `test_fason_devere_fatura` ikizin eşitliğini ölçer). Yeniden sarım
 // (`reworkOfBeamId` dolu) `devere.reworkBillable=false` iken beklenen dışında kalır. YALNIZ OKUR.
 // =============================================================================
-import { InvoiceStatus, Prisma, WarpingFeeUnit, type Currency, type WarpBeamStatus, type WarpingOrderStatus } from "@prisma/client";
+import { InvoiceStatus, Prisma, WarpBeamOrigin, WarpingFeeUnit, type Currency, type WarpBeamStatus, type WarpingOrderStatus } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { sequentialTx } from "./tx-sequential-relations.helper";
 import { isRejectedBeam, NOT_REJECTED_BEAM_WHERE } from "./warping-beam-rejection.helper";
@@ -23,7 +23,15 @@ export const ACCEPTED_WARPING_BEAM_WHERE = {
   ...NOT_REJECTED_BEAM_WHERE,
 } satisfies Prisma.WarpBeamWhereInput;
 
-/** K3 bellek-içi ikiz — `ACCEPTED_WARPING_BEAM_WHERE` ile aynı soruyu cevaplar. */
+/**
+ * Levent dışarıdan hazır mı geldi (satın alınan / emanet) → sarımı bizde yazılmadı, devere ve iplik maliyeti bilinmez.
+ * Köken YALNIZ `originKind`ten: `ownerCustomerId` mülkiyet eksenidir, devere kabulü onu müşteri ipliği lotundan kalıtır.
+ */
+export function isBoughtOrConsignedBeam(originKind: WarpBeamOrigin): boolean {
+  return originKind === WarpBeamOrigin.PURCHASED || originKind === WarpBeamOrigin.CONSIGNED;
+}
+
+/** K3 bellek-içi ikiz —`ACCEPTED_WARPING_BEAM_WHERE` ile aynı soruyu cevaplar. */
 export function isAcceptedWarpingBeam(b: { warpingOrderId: string | null; status: WarpBeamStatus; events: ReadonlyArray<{ kind: string; reversal: { id: string } | null }> }): boolean {
   return b.warpingOrderId !== null && b.events.some((e) => e.kind === "WOUND" && e.reversal === null) && !isRejectedBeam(b);
 }

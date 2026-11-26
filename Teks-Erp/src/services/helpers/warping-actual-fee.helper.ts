@@ -9,7 +9,7 @@
 // =============================================================================
 import { Prisma, WarpBeamOrigin, type Currency } from "@prisma/client";
 import prisma from "../../lib/prisma";
-import { loadWarpingOrderFeesTx, type WarpingReceiptFee } from "./warping-fee.helper";
+import { isBoughtOrConsignedBeam, loadWarpingOrderFeesTx, type WarpingReceiptFee } from "./warping-fee.helper";
 
 type Dec = Prisma.Decimal;
 type Db = Prisma.TransactionClient | typeof prisma;
@@ -108,9 +108,8 @@ export async function loadRollWarpingCostsTx(db: Db, rollIds: string[], ctx: War
     let line: Dec | null = D0();
     const consumedM = new Prisma.Decimal(c.lengthM ?? 0);
     const b = c.beam;
-    // Köken `originKind`ten: `ownerCustomerId` mülkiyet eksenidir, devere kabulü onu müşteri ipliği lotundan kalıtır —
-    // o leventin devere faturası yine bize kesilir, "emanet levent" sayılmaz.
-    if (b.originKind === WarpBeamOrigin.PURCHASED || b.originKind === WarpBeamOrigin.CONSIGNED) {
+    // Müşteri ipliğiyle kendi devere siparişimizden gelen leventin devere faturası yine bize kesilir → emanet sayılmaz.
+    if (isBoughtOrConsignedBeam(b.originKind)) {
       line = null;
       acc.missing.push("LEVENT_KOKENI");
     } else if (b.originKind === WarpBeamOrigin.SUBCONTRACT) {

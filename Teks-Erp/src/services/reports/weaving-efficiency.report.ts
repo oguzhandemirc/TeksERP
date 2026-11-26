@@ -37,7 +37,9 @@ const MISSING_TEXT: Record<WeavingActualMissing, string> = {
   FX_RATE_MISSING: "kur yok",
   IPLIK_FIYATI: "çözgü ipliği fiyatı yok",
   VARYANT_STANDART_YOK: "varyantın standart maliyeti yok, desen geneli kullanıldı",
+  MUSTERI_IPLIGI: "müşteri ipliği (maliyetimize girmez)",
 };
+const isInfo = (m: WeavingActualMissing): boolean => WEAVING_INFO_CODES.includes(m);
 
 export const WARPING_SOURCE_TEXT = { FATURA: "fatura", TARIFE: "tarife (tahmini)", KARMA: "karma (kısmen tahmini)" } as const;
 export const WARP_YARN_SOURCE_TEXT = { LOT: "lot fiyatı", MALIYET_FIYATI: "maliyet kartı fiyatı (tahmini)", KARMA: "karma (kısmen tahmini)" } as const;
@@ -51,7 +53,9 @@ export const warpingView = (w: WeavingActualCost): WarpShareView => ({
 });
 export const warpYarnView = (w: WeavingActualCost): WarpShareView => ({
   perMTry: w.warpYarnPerMTry, costTry: w.warpYarnCostTry, coveredMeters: w.warpYarnCoveredMeters, missing: w.warpYarnMissing,
-  sourceText: w.warpYarnSource ? WARP_YARN_SOURCE_TEXT[w.warpYarnSource] : null,
+  // Bilgi kodu (müşteri ipliği) kaynağın parçasıdır, eksik listesine girmez.
+  sourceText: [w.warpYarnSource ? WARP_YARN_SOURCE_TEXT[w.warpYarnSource] : null, ...(w.warpYarnMissing ?? []).filter(isInfo).map((m) => MISSING_TEXT[m])]
+    .filter((t): t is string => t !== null).join(" · ") || null,
 });
 
 export interface WeavingEfficiencyReport {
@@ -91,7 +95,7 @@ function rowStatus(w: WeavingActualCost, r: WeavingEfficiencyReport): string {
 /** "Devere /m" · "Çözgü ipliği /m": devere kapalı → boş; ölçülemedi → "eksik" (0 değil). */
 function shareMoney(v: WarpShareView, r: WeavingEfficiencyReport): TabloHucresi {
   if (v.missing === null) return null;
-  if (v.perMTry === null) return v.missing.length > 0 ? EKSIK : null;
+  if (v.perMTry === null) return v.missing.some((m) => !isInfo(m)) ? EKSIK : v.missing.includes("MUSTERI_IPLIGI") ? "müşteri ipliği" : null;
   return money(v.perMTry, r);
 }
 
@@ -100,10 +104,11 @@ export function shareSourceText(v: WarpShareView, totalMeters: Dec): string | nu
   if (v.missing === null) return null;
   const parts: string[] = [];
   if (v.sourceText) parts.push(v.sourceText);
-  if (v.missing.length > 0) {
-    const covered = v.coveredMeters && v.coveredMeters.gt(0) && v.missing.includes("COZGU_TUKETIMI")
+  const gaps = v.missing.filter((m) => !isInfo(m));
+  if (gaps.length > 0) {
+    const covered = v.coveredMeters && v.coveredMeters.gt(0) && gaps.includes("COZGU_TUKETIMI")
       ? ` (kapsanan ${qtyText(v.coveredMeters, 1)} / ${qtyText(totalMeters, 1)} m)` : "";
-    parts.push(`${EKSIK}: ${v.missing.map((m) => MISSING_TEXT[m]).join(", ")}${covered}`);
+    parts.push(`${EKSIK}: ${gaps.map((m) => MISSING_TEXT[m]).join(", ")}${covered}`);
   }
   return parts.length > 0 ? parts.join(" · ") : "—";
 }
@@ -193,7 +198,7 @@ export function buildWeavingEfficiencySunumu(r: WeavingEfficiencyReport, window:
       { ad: "Kur", aciklama: "TL dışı sunumda standart ve gerçek tutarlar günün kuruyla çevrilir; standart maliyet ekranındaki donmuş sürüm kurundan farklı olabilir, fark yüzdesi etkilenmez." },
       { ad: "Koşumsuz top", aciklama: "Kalite girişinde işe bağlanan ama tezgâhı bilinmeyen top. İşin hiç koşumu yoksa gerçek maliyet ölçülemez." },
       { ad: "Devere", aciklama: "Fason devere (çözgü sarımı) bedeli, topun tükettiği çözgü metresi kadar: onaylı devereci faturasının KDV hariç tutarı × fatura kuru, leventin sarılan metresine bölünür. Fatura yoksa, taslaksa ya da iptal edildiyse devere siparişindeki ücret × kabul günü kuruyla tahmin edilir. Metre, çözgü tüketimi yazılmış topların kumaş metresidir; tüketimi yazılmamış top (levent otomatik tüketimi kapalı ya da tezgâhta bağlı levent yok) bu hesaba girmez ve \"eksik: çözgü tüketimi\" yazılır. Kendi devere makinemizde sarılan leventin fason bedeli yoktur. Tezgâh sapmasına eklenmez." },
-      { ad: "Çözgü ipliği", aciklama: "Leventin sarımında yazılan iplik kilosu (iplik başına) × lot fiyatı (lotun mal kabul fiyatı × kabul günü kuru), devere siparişinin iplik firesi leventlere sarım metresi payıyla eklenir; leventin sarılan metresine bölünür ve topun tükettiği çözgü metresi kadar topa yazılır. Lot fiyatı yoksa maliyet kartındaki iplik fiyatıyla tahmin edilir. Atkı ipliği tartılmadığı için bu kolona girmez. Tezgâh sapmasına eklenmez." },
+      { ad: "Çözgü ipliği", aciklama: "Leventin sarımında yazılan iplik kilosu (iplik başına) × lot fiyatı (lotun mal kabul fiyatı × kabul günü kuru), devere siparişinin iplik firesi leventlere sarım metresi payıyla eklenir; leventin sarılan metresine bölünür ve topun tükettiği çözgü metresi kadar topa yazılır. Lot fiyatı yoksa maliyet kartındaki iplik fiyatıyla tahmin edilir. Müşterinin ipliğiyle sarılan levent bizim maliyetimize girmez, \"müşteri ipliği\" yazılır (eksik değildir). Atkı ipliği tartılmadığı için bu kolona girmez. Tezgâh sapmasına eklenmez." },
       { ad: "Duruş payı", aciklama: "Kapanmış koşumlarda duruş süresinin koşum süresine oranı." },
       { ad: EKSIK, aciklama: "Kur, saat ücreti, koşum ya da standart maliyet bulunamadığı için değer hesaplanamadı; sıfır demek değildir." },
     ],

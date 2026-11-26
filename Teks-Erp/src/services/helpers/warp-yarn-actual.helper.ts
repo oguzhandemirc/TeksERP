@@ -11,14 +11,15 @@ import { Prisma, WarpBeamOrigin, YarnPurchaseUnit, type Currency } from "@prisma
 import prisma from "../../lib/prisma";
 import { isCostPriceValidAt } from "./cost-price-validity.helper";
 import type { BeamIssueLot, LotPriceRead } from "./warp-yarn-lot-price.helper";
-import { ACCEPTED_WARPING_BEAM_WHERE } from "./warping-fee.helper";
+import { ACCEPTED_WARPING_BEAM_WHERE, isBoughtOrConsignedBeam } from "./warping-fee.helper";
 
 type Dec = Prisma.Decimal;
 type Db = Prisma.TransactionClient | typeof prisma;
 const D0 = () => new Prisma.Decimal(0);
 
 export type WarpYarnCostSource = "LOT" | "MALIYET_FIYATI";
-export type WarpYarnCostMissing = "IPLIK_FIYATI" | "LEVENT_KOKENI" | "FX_RATE_MISSING";
+/** `MUSTERI_IPLIGI` eksik değil BİLGİDİR (müşteri malı iplik; dokuma tarafında `WEAVING_INFO_CODES`). */
+export type WarpYarnCostMissing = "IPLIK_FIYATI" | "LEVENT_KOKENI" | "FX_RATE_MISSING" | "MUSTERI_IPLIGI";
 
 export interface WarpYarnActualCtx {
   /** İplik kapalıysa null — lot fiyatı okunmaz, her kg maliyet kartı fiyatına düşer. */
@@ -171,9 +172,12 @@ async function beamPerMOf(
   const beamPerM = new Map<string, BeamPerM>();
   for (const b of beams) {
     const r: BeamPerM = { perM: D0(), estPerM: D0(), sources: new Set(), missing: new Set() };
-    if (b.ownerCustomerId || b.originKind === WarpBeamOrigin.PURCHASED || b.originKind === WarpBeamOrigin.CONSIGNED) {
+    if (isBoughtOrConsignedBeam(b.originKind)) {
       r.perM = null;
       r.missing.add("LEVENT_KOKENI");
+    } else if (b.ownerCustomerId) {
+      // Müşteri malı iplik bizim maliyetimiz değildir: pay toplamı bozmaz (0 katkı), bilgi koduyla ayrı söylenir.
+      r.missing.add("MUSTERI_IPLIGI");
     } else {
       const p = await woundPriced(b.id, b.originKind !== WarpBeamOrigin.SUBCONTRACT);
       const lengthM = lengthOf(b.id);
