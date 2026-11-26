@@ -2,7 +2,8 @@
 import { financeSubBody, type FinanceSubBody } from "./customerFinance";
 import type { Customer } from "./types";
 import { toPayload } from "./tamburLabelSettings";
-import { branchDraftHasContent, customerCardPayload, newCardSubcontractorBody, type CustomerFormValues } from "./schema";
+import { branchDraftHasContent, customerCardPayload, type CustomerFormValues } from "./schema";
+import { newCardSubcontractorBody } from "./subcontractorCardBody";
 
 /** Tek-adım oluşturmada backend'e gönderilen satır-içi şube gövdesi. */
 interface BranchCreatePayload {

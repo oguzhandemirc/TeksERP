@@ -4,7 +4,8 @@ import { Suspense, lazy, useMemo } from "react";
 import type { RecordFormSpec } from "@/components/forms/record-form/types";
 // Tembel: cari formu ağır; ortak seçici (SupplierPickerModal) onu statik import zincirine sokmasın.
 const CustomerFormDialog = lazy(() => import("./CustomerFormDialog").then((m) => ({ default: m.CustomerFormDialog })));
-import { customerCardPayload, newCardSubcontractorBody, type CustomerFormValues } from "./schema";
+import { customerCardPayload, type CustomerFormValues } from "./schema";
+import { newCardSubcontractorBody } from "./subcontractorCardBody";
 import { customerService } from "./service";
 import type { Customer } from "./types";
 
