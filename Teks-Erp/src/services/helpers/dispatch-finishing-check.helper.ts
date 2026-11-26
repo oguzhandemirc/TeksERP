@@ -60,7 +60,7 @@ export interface FinishingCheckInvoice {
   docNo: string;
   status: "DRAFT" | "CONFIRMED";
   currency: Currency;
-  /** KDV hariç net = subtotal − discountTotal. */
+  /** KDV hariç net = `subtotal` (satır iskontosu zaten düşülmüş; `invoiceNetExVat`). */
   net: Prisma.Decimal;
 }
 

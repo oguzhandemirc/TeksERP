@@ -12,6 +12,7 @@ import { AppError } from "../utils/app-error";
 import { readFinanceEnabled } from "./system-setting.service";
 import { ACTIVE_ORDER_LINK } from "./helpers/order-link.helper";
 import { resolveFinishingRateCode } from "./helpers/finishing-rate-code.helper";
+import { invoiceNetExVat } from "./helpers/invoice-net.helper";
 import {
   computeDispatchFinishingCheck,
   pickDispatchRateCode,
@@ -108,7 +109,7 @@ async function readInvoices(dispatchId: string, itemIds: string[]): Promise<Invo
     },
     orderBy: [{ issueDate: "asc" }, { id: "asc" }],
     select: {
-      docNo: true, status: true, currency: true, subtotal: true, discountTotal: true,
+      docNo: true, status: true, currency: true, subtotal: true,
       subcontractorReceipt: { select: { items: { select: { sourceDispatchItemId: true, sourceDispatchItem: { select: { dispatchId: true } } } } } },
     },
   });
@@ -118,7 +119,7 @@ async function readInvoices(dispatchId: string, itemIds: string[]): Promise<Invo
   const covered = new Set(receiptItems.map((it) => it.sourceDispatchItemId));
   const coversWhole = itemIds.every((id) => covered.has(id));
   return {
-    invoices: rows.map((r) => ({ docNo: r.docNo, status: r.status === "DRAFT" ? "DRAFT" : "CONFIRMED", currency: r.currency, net: r.subtotal.minus(r.discountTotal) })),
+    invoices: rows.map((r) => ({ docNo: r.docNo, status: r.status === "DRAFT" ? "DRAFT" : "CONFIRMED", currency: r.currency, net: invoiceNetExVat(r) })),
     coversOther,
     coversWhole,
   };

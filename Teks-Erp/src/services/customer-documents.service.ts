@@ -14,7 +14,7 @@ import { DOC_PERMISSIONS } from "../routes/printed-document.routes";
 import { factoryDayEndOfKey, factoryDayStartOfKey } from "../constants/time";
 import { readFinanceEnabled } from "./system-setting/finance";
 import { effectiveIncomingDocsEnabled } from "./system-setting/incoming-docs";
-import { readKaliteGuvenceEnabled, readMaliyetEnabled, readProductionEnabled, readTicaretEnabled } from "./system-setting/modules";
+import { readEmanetEnabled, readKaliteGuvenceEnabled, readMaliyetEnabled, readProductionEnabled, readTicaretEnabled } from "./system-setting/modules";
 
 export const INCOMING_DELIVERY_NOTE = "INCOMING_DELIVERY_NOTE" as const;
 
@@ -37,6 +37,7 @@ export const PRINTED_TARGET = {
   SALES_QUOTE: "quote",
   PRICE_LIST: "price-list",
   ORDER_CONFIRMATION: "order",
+  CONSIGNMENT_DISPATCH: "consignment-dispatch",
 } as const;
 
 export type CustomerPrintedDocType = keyof typeof PRINTED_TARGET;
@@ -51,6 +52,7 @@ const maliyet: ModuleReader = async () => (await readProductionEnabled()) && (aw
 const ticaret: ModuleReader = () => readTicaretEnabled();
 const kaliteGuvence: ModuleReader = () => readKaliteGuvenceEnabled();
 const incomingDocs: ModuleReader = () => effectiveIncomingDocsEnabled();
+const emanet: ModuleReader = () => readEmanetEnabled();
 /** Tür → modül kapısı. Burada olmayan tür çekirdektir (hep açık). */
 const TYPE_MODULE: Partial<Record<CustomerDocType, ModuleReader>> = {
   INVOICE_INTERNAL: finance,
@@ -61,6 +63,7 @@ const TYPE_MODULE: Partial<Record<CustomerDocType, ModuleReader>> = {
   PRICE_LIST: maliyet,
   GOODS_RECEIPT: ticaret,
   INSPECTION_REPORT: kaliteGuvence,
+  CONSIGNMENT_DISPATCH: emanet,
   [INCOMING_DELIVERY_NOTE]: incomingDocs,
 };
 
@@ -106,6 +109,8 @@ const SOURCE_IDS: Record<CustomerPrintedDocType, (c: string) => Prisma.Sql> = {
   SALES_QUOTE: byCustomer("sales_quotes"),
   PRICE_LIST: byCustomer("price_lists"),
   ORDER_CONFIRMATION: byCustomer("orders"),
+  // Emanet çıkışının carisi malın SAHİBİDİR (`ownerCustomerId`, belge alıcısı).
+  CONSIGNMENT_DISPATCH: (c) => Prisma.sql`SELECT id FROM consignment_dispatches WHERE "ownerCustomerId" = ${c}::uuid`,
 };
 
 export interface CustomerDocumentsQuery {
