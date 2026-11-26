@@ -16,8 +16,9 @@ import { buildYarnNeedSunumu, yarnReservationWarnings } from "../../services/rep
 import { requireFinanceEnabled } from "../../middlewares/finance.middleware";
 import { reportEnvelope } from "../../services/reports/_shared";
 import { coreDayRangeQuerySchema, resolveCoreDayRange } from "../../services/reports/temel/_day-range";
-import { PROFIT_BREAKDOWNS, PROFITABILITY_KEY } from "../../services/reports/profitability.sunum";
-import { profitabilityReport } from "../../services/reports/profitability.report";
+import { PROFIT_BREAKDOWNS, PROFIT_SCOPES, PROFITABILITY_KEY } from "../../services/reports/profitability.sunum";
+import { PRODUCT_BREAKDOWNS } from "../../services/reports/profitability-product.sunum";
+import { profitabilityScopedReport } from "../../services/reports/profitability.report";
 import { REPORT_BY_KEY } from "../../constants/report-catalog";
 import { AppError } from "../../utils/app-error";
 import { buildWeavingEfficiencySunumu, weavingEfficiencyReport } from "../../services/reports/weaving-efficiency.report";
@@ -95,10 +96,17 @@ router.get("/dokuma-verimlilik", requireDokumaEnabled, requireReportOpen("maliye
   }
 });
 
-/** Kârlılık sorgusu — gün aralığı + kıyas + kırılım; tanınmayan anahtar 400. */
+/** Kârlılık sorgusu — gün aralığı + kıyas + kapsam + kırılım; tanınmayan anahtar/değer 400 (kapsam ↔ kırılım uyumu koşucuda). */
 export const profitabilityQuerySchema = coreDayRangeQuerySchema.extend({
-  kirilim: z.enum(PROFIT_BREAKDOWNS, { message: "Tanınmayan kırılım" }).optional(),
+  kapsam: z.enum(PROFIT_SCOPES, { message: "Tanınmayan kapsam (hizmet ya da kumas)" }).optional(),
+  kirilim: z.enum([...PROFIT_BREAKDOWNS, ...PRODUCT_BREAKDOWNS.filter((b) => !(PROFIT_BREAKDOWNS as readonly string[]).includes(b))] as [string, ...string[]], { message: "Tanınmayan kırılım" }).optional(),
 }).strict();
+
+/** Kumaş kapsamı dokuma modülünün yüzeyidir: yalnız `kapsam=kumas` isteğinde dokuma kapısı (kapalı → 403 MODULE_DISABLED). */
+function requireDokumaForFabricScope(req: Request, res: Response, next: NextFunction): void {
+  if (req.query.kapsam === "kumas") void requireDokumaEnabled(req, res, next);
+  else next();
+}
 
 /**
  * @openapi
@@ -115,19 +123,20 @@ export const profitabilityQuerySchema = coreDayRangeQuerySchema.extend({
  *       - { in: query, name: from, schema: { type: string, format: date } }
  *       - { in: query, name: to, schema: { type: string, format: date } }
  *       - { in: query, name: kiyas, schema: { type: string, enum: [none, prev, prevYear] } }
- *       - { in: query, name: kirilim, schema: { type: string, enum: [musteri, islem, makine, ay, is] } }
+ *       - { in: query, name: kapsam, schema: { type: string, enum: [hizmet, kumas] }, description: "Yoksa ayar maliyet.karlilik.varsayilanKapsam (HIZMET; KUMAS yalnız dokuma açıkken)" }
+ *       - { in: query, name: kirilim, schema: { type: string, enum: [musteri, islem, makine, ay, is, desen] }, description: "hizmet: musteri|islem|makine|ay|is · kumas: desen|musteri|ay|is" }
  *     responses:
- *       200: { description: "RaporSunumu (tablo = seçili kırılım; toplam tam kümeden)" }
- *       400: { description: Tanınmayan ya da geçersiz parametre }
- *       403: { description: Maliyet ya da ön muhasebe kapalı (MODULE_DISABLED), rapor kapalı ya da yetki yok }
+ *       200: { description: "RaporSunumu (tablo = seçili kapsam ve kırılım; toplam tam kümeden)" }
+ *       400: { description: Tanınmayan ya da geçersiz parametre; kapsama ait olmayan kırılım (PROFIT_BREAKDOWN_SCOPE) }
+ *       403: { description: Maliyet ya da ön muhasebe kapalı, kumaş kapsamında dokuma kapalı (MODULE_DISABLED), rapor kapalı ya da yetki yok }
  *       409: { description: Modül istek sırasında kapandı (PROFITABILITY_MODULE_CHANGED) }
  */
-router.get("/karlilik", requireFinanceEnabled, requireReportOpen("maliyet/karlilik"), requirePermission("cost:read"), requirePermission("report:finance"),
+router.get("/karlilik", requireFinanceEnabled, requireDokumaForFabricScope, requireReportOpen("maliyet/karlilik"), requirePermission("cost:read"), requirePermission("report:finance"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const q = profitabilityQuerySchema.parse(req.query);
       const window = resolveCoreDayRange(q, REPORT_BY_KEY.get(PROFITABILITY_KEY)?.varsayilanGun ?? 90);
-      const sunum = await profitabilityReport(window, q.kirilim ?? "musteri");
+      const sunum = await profitabilityScopedReport(window, { kapsam: q.kapsam, kirilim: q.kirilim });
       // Kapılar (lisans tavanlı) yukarıda reddeder; null yalnız istek sırasında modül kapanınca — ikinci MODULE_DISABLED sitesi açılmaz.
       if (!sunum) throw AppError.conflict("Maliyet ya da ön muhasebe modülü istek sırasında kapandı; sayfayı yenileyin", { code: "PROFITABILITY_MODULE_CHANGED" });
       res.status(200).json(reportEnvelope(sunum, window.range, window.compareRange, { warnings: sunum.uyarilar }));

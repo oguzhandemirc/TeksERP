@@ -8,7 +8,7 @@
 
 export {
   readCostPresentationCurrency, readCostFinishingKgBasis, readCostProfitSubcontractSource, readCostProfitConsumablePriceSource,
-  readCostWeavingStandardMethod, readCostWasteMethod, readOrderProductionProposal, readCostProfitMachineTime, readCostProfitOverheadKey,
+  readCostWeavingStandardMethod, readCostWasteMethod, readOrderProductionProposal, readCostProfitMachineTime, readCostProfitOverheadKey, readCostProfitDefaultScope,
   sanitizeProfitCategoryClasses, readCostProfitCategoryClasses, readFinanceCariHoldReleaseBySamePerson,
   readFinanceCariHoldEmanetShipment, cariHoldEmanetShipmentColumnSql, readFinanceRiskLimitCurrencyMode, resolveServiceBillingEnabled,
   resolveRiskLimitBlockIntake, resolveRiskLimitBlockShipment, loadServiceBillingSettings, readFinanceAutoAllocateOnPaymentEnabled,
@@ -35,7 +35,7 @@ export {
   DEFAULT_COST_FINISHING_KG_BASIS, RISK_LIMIT_CURRENCY_MODES, DEFAULT_RISK_LIMIT_CURRENCY_MODE, PROFIT_SUBCONTRACT_SOURCES,
   DEFAULT_PROFIT_SUBCONTRACT_SOURCE, PROFIT_CONSUMABLE_PRICE_SOURCES, DEFAULT_PROFIT_CONSUMABLE_PRICE_SOURCE,
   WEAVING_STANDARD_METHODS, DEFAULT_WEAVING_STANDARD_METHOD, DEFAULT_COST_WASTE_METHOD, ORDER_PRODUCTION_PROPOSAL_MODES, DEFAULT_ORDER_PRODUCTION_PROPOSAL,
-  PROFIT_MACHINE_TIME_MODES, DEFAULT_PROFIT_MACHINE_TIME_MODE, PROFIT_OVERHEAD_KEYS, DEFAULT_PROFIT_OVERHEAD_KEY,
+  PROFIT_MACHINE_TIME_MODES, DEFAULT_PROFIT_MACHINE_TIME_MODE, PROFIT_OVERHEAD_KEYS, DEFAULT_PROFIT_OVERHEAD_KEY, PROFIT_DEFAULT_SCOPES, DEFAULT_PROFIT_DEFAULT_SCOPE,
   PROFIT_CATEGORY_CLASSES, PROFIT_CATEGORY_CLASS_MAX_ENTRIES, PROFIT_CATEGORY_CLASS_MAX_KEY, TAMBUR_PLAN_WIDTH_CHECKS,
   DEFAULT_TAMBUR_PLAN_WIDTH_CHECK, TAMBUR_PLAN_WIDTH_TOLERANCE_MAX_CM, TAMBUR_CHILD_WIDTH_SOURCES, DEFAULT_TAMBUR_CHILD_WIDTH_SOURCE,
   TAMBUR_LABEL_PRINT_TIMINGS, DEFAULT_TAMBUR_LABEL_PRINT_TIMING, LABEL_COPIES_SOURCES, DEFAULT_LABEL_COPIES_SOURCE,
@@ -71,7 +71,7 @@ export type {
   ServiceBillingPriceDate, KursunGramPriceBasis, ExpenseCategorySuggestions, ExpenseAllocationField,
   ExpenseAllocationClosedWorkOrder, CariHoldDefaultScope, CariHoldReleaseBySamePerson, CariHoldEmanetShipment,
   CostPresentationCurrency, RiskLimitCurrencyMode, ProfitSubcontractSource, ProfitConsumablePriceSource, WeavingStandardMethod,
-  OrderProductionProposalMode, ProfitMachineTimeMode, ProfitOverheadKey, ProfitCategoryClass, ProfitCategoryClassMap,
+  OrderProductionProposalMode, ProfitMachineTimeMode, ProfitOverheadKey, ProfitDefaultScope, ProfitCategoryClass, ProfitCategoryClassMap,
   TamburPlanWidthCheck, TamburChildWidthSource, TamburLabelPrintTiming, LabelCopiesSource, LabelCustomerCodeMissing,
   LabelCustomerCodeAt, TamburCalibrationCheck, WebTotpPolicy, ShippingInvoiceMode, ShippingDocItemNameMode, ShippingDocCekiNameMode,
   ShippingSackSeqPrefix, PackingPoolPackageNo, PackingGroupNumbering, PackingGroupMode, PackageNoMode, PackageNumbering,

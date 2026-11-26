@@ -9,6 +9,8 @@
 //   §6 sorgu şeması strict (tanınmayan anahtar / kırılım 400); §7 statik — uç kapı zinciri, sunum saf (prisma yok),
 //      katkı yalnız helper'da hesaplanır; §8 ayar okuma anında: ayar değişince "hesap" özeti değişir
 //   §9 kıyas ayları ana dönemin tam aylarıyla ÖRTÜŞMEZ (örtüşürse kıyas yok + uyarı); tam ay notu bitiş gününe de bakar
+//   §10 K1 dilim 2 kapsam: beyansız hizmet yanıtı çipsiz; çipli yanıt yalnız çip kadar farklı; kapsam/kırılım çözümü + 400
+//   §11 kumaş tablosu: kırılım toplamları = motor satırları; eksik boş + rozet; al-sat "dokuma işi yok"; havuz/iade uyarısı
 // DB'ye YAZMAZ (saf girdiyle); HTTP ucu bölümü yok (kapı zinciri §7'de kaynaktan ölçülür).
 // Panel tarafı: Electron `pages/Reports/Maliyet/profitability.test.tsx` (Excel/PDF = ekran) +
 // `pages/Cost/cost-no-client-math.test.ts` (istemci hesap bekçisi, Reports/Maliyet dahil).
@@ -18,7 +20,9 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { Prisma, ServiceMeterBasis } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
-import type { ProfitabilityResult, ProfitabilityRow } from "../src/services/helpers/profitability.helper";
+import type { ProductMissingCode, ProductNotice, ProductProfitRow, ProfitabilityResult, ProfitabilityRow } from "../src/services/helpers/profitability.helper";
+import { buildProductProfitabilitySunumu, PRODUCT_BREAKDOWNS, productTable, type ProductNames } from "../src/services/reports/profitability-product.sunum";
+import { resolveProfitView } from "../src/services/reports/profitability.report";
 import { buildProfitabilitySunumu, compareMonthsOf, PROFIT_BREAKDOWNS, PROFIT_WORK_ROW_LIMIT, profitTable, settingsSummary, type ProfitNames } from "../src/services/reports/profitability.sunum";
 import { resolveCoreDayRange } from "../src/services/reports/temel/_day-range";
 import { profitabilityQuerySchema } from "../src/routes/reports/maliyet.report.routes";
@@ -122,7 +126,8 @@ async function main(): Promise<void> {
   const route = readFileSync(path.join(root, "src/routes/reports/maliyet.report.routes.ts"), "utf8");
   check("§7a uç zinciri: router maliyet kapısı → ön muhasebe → rapor kapısı → cost:read + report:finance",
     /router\.use\(verifyToken, requireMaliyetEnabled\)/.test(route)
-      && /router\.get\("\/karlilik", requireFinanceEnabled, requireReportOpen\("maliyet\/karlilik"\), requirePermission\("cost:read"\), requirePermission\("report:finance"\)/.test(route));
+      && /router\.get\("\/karlilik", requireFinanceEnabled, requireDokumaForFabricScope, requireReportOpen\("maliyet\/karlilik"\), requirePermission\("cost:read"\), requirePermission\("report:finance"\)/.test(route)
+      && /req\.query\.kapsam === "kumas"\) void requireDokumaEnabled\(req, res, next\)/.test(route));
   const sunumSrc = readFileSync(path.join(root, "src/services/reports/profitability.sunum.ts"), "utf8");
   check("§7b sunum saf: prisma import etmez", !/lib\/prisma/.test(sunumSrc));
   check("§7c ⭐ katkı/net yalnız helper'da hesaplanır (sunum gelirden maliyet düşmez)", !/(revenue|contribution)(Try)?\??\.minus|\.minus\((?![^)]*Distributed)[^)]*(consum|machine|subcontract|labor|overhead)/i.test(sunumSrc));
@@ -144,6 +149,75 @@ async function main(): Promise<void> {
   const mid = buildProfitabilitySunumu({ result: result(complete), previous: null, names: NAMES, window: resolveCoreDayRange({ from: "2023-03-01", to: "2023-03-15", kiyas: "none" }, 90), breakdown: "musteri" });
   check("§9d bitiş ay ortasında → tam ay notu çıkar", mid.uyarilar.some((u) => u.startsWith("Kârlılık tam aylarla")));
   check("§9e ay sınırına oturan dönemde not yok", !s.uyarilar.some((u) => u.startsWith("Kârlılık tam aylarla")));
+  scopeChecks(complete);
+  fabricChecks(complete);
+}
+
+// ── §10–§11 K1 dilim 2: kapsam (hizmet / kumaş) ─────────────────────────────────────────────────
+function prow(p: { itemId: string; wo: string | null; revenue: number; weaving: number | null; warping?: number | null; yarn: number | null; contribution: number | null; missing?: ProductMissingCode[]; customerId?: string | null; month?: string; ongoing?: boolean }): ProductProfitRow {
+  seq++;
+  const dn = (v: number | null | undefined) => (v === null || v === undefined ? null : D(v));
+  return {
+    month: p.month ?? "2023-03", kind: "INVOICED", invoiceId: `pinv-${seq}`, docNo: `SF-${seq}`, customerId: p.customerId === undefined ? "c1" : p.customerId,
+    itemId: p.itemId, weavingOrderId: p.wo, ongoing: p.ongoing ?? false, rollCount: 2, returnedRollCount: 0, meters: D(100), revenueTry: D(p.revenue),
+    weavingTry: dn(p.weaving), warpingTry: p.warping === undefined ? null : dn(p.warping), warpingEstimated: false, yarnTry: dn(p.yarn),
+    subcontractTry: p.wo ? D(0) : null, contributionTry: dn(p.contribution), missing: p.missing ?? [],
+  };
+}
+const PNAMES: ProductNames = {
+  customers: new Map([["c1", "Kaya Perde"], ["c2", "Deniz Tül"]]), items: new Map([["i1", "Tül 2001"], ["i2", "Hazır Voal"]]), weavingOrders: new Map([["w1", "DK-1"], ["w2", "DK-2"]]),
+};
+const withProducts = (rows: ProfitabilityRow[], productRows: ProductProfitRow[], notices: ProductNotice[] = ["GENEL_GIDER_DAGITILMADI"]): ProfitabilityResult =>
+  ({ ...result(rows), productRows, productDraftRows: [], productNotices: notices });
+
+function scopeChecks(complete: ProfitabilityRow[]): void {
+  console.log("── §10 kapsam çözümü · bayt-aynı ──");
+  const base = { result: result(complete), previous: null, names: NAMES, window: WINDOW, breakdown: "musteri" as const };
+  const plain = buildProfitabilitySunumu(base);
+  const offered = buildProfitabilitySunumu({ ...base, scopeOffered: true });
+  check("§10a ⭐ dokuma kapalı (beyansız) hizmet yanıtında kapsam çipi yok", !plain.parametreler.some((p) => p.ad === "kapsam"));
+  const stripped = { ...offered, parametreler: offered.parametreler.filter((p) => p.ad !== "kapsam") };
+  check("§10b ⭐ dokuma açıkken hizmet yanıtı yalnız kapsam çipi kadar farklı (tablo/sayı/uyarı bayt-aynı)", JSON.stringify(stripped) === JSON.stringify(plain)
+    && offered.parametreler.find((p) => p.ad === "kapsam")?.deger === "hizmet");
+  const v = (q: Parameters<typeof resolveProfitView>[0], dokuma: boolean, def: "HIZMET" | "KUMAS") => { try { return resolveProfitView(q, dokuma, def); } catch (e) { return (e as { details?: { code?: string } }).details?.code ?? "?"; } };
+  check("§10c kapsamsız + ayar HIZMET → hizmet/müşteri (bugünkü)", JSON.stringify(v({}, true, "HIZMET")) === JSON.stringify({ scope: "hizmet", breakdown: "musteri" }));
+  check("§10d kapsamsız + ayar KUMAS + dokuma açık → kumaş/desen", JSON.stringify(v({}, true, "KUMAS")) === JSON.stringify({ scope: "kumas", breakdown: "desen" }));
+  check("§10e ayar KUMAS ama dokuma kapalı → hizmete düşer", JSON.stringify(v({}, false, "KUMAS")) === JSON.stringify({ scope: "hizmet", breakdown: "musteri" }));
+  check("§10f kapsama ait olmayan kırılım 400 PROFIT_BREAKDOWN_SCOPE (kumaş+işlem, hizmet+desen)",
+    v({ kapsam: "kumas", kirilim: "islem" }, true, "HIZMET") === "PROFIT_BREAKDOWN_SCOPE" && v({ kirilim: "desen" }, true, "HIZMET") === "PROFIT_BREAKDOWN_SCOPE");
+  check("§10g şema: tanınmayan kapsam 400, kumaş+desen geçerli",
+    !profitabilityQuerySchema.safeParse({ kapsam: "renk" }).success && profitabilityQuerySchema.safeParse({ kapsam: "kumas", kirilim: "desen" }).success);
+}
+
+function fabricChecks(complete: ProfitabilityRow[]): void {
+  console.log("── §11 kumaş tablosu ──");
+  const rows = [
+    prow({ itemId: "i1", wo: "w1", revenue: 1000, weaving: 300, yarn: 100, contribution: 600 }),
+    prow({ itemId: "i1", wo: "w2", revenue: 500, weaving: 150, yarn: null, contribution: null, missing: ["IPLIK_MALIYETI"], customerId: "c2", month: "2023-04", ongoing: true }),
+    prow({ itemId: "i2", wo: null, revenue: 200, weaving: null, yarn: null, contribution: null, missing: ["DOKUMA_ISI_YOK"] }),
+  ];
+  const res = withProducts(complete, rows, ["GENEL_GIDER_DAGITILMADI", "IADE_DUSULMEDI"]);
+  const s = buildProductProfitabilitySunumu({ result: res, previous: null, names: PNAMES, window: WINDOW, breakdown: "desen" });
+  const totals = PRODUCT_BREAKDOWNS.map((b) => productTable(rows, b, PNAMES).toplam);
+  check("§11a ⭐ her kırılımın toplamı AYNI ve motor satırlarının toplamı (gelir 1700, kalan boş)",
+    totals.every((t) => JSON.stringify({ ...t, ad: "" }) === JSON.stringify({ ...totals[0]!, ad: "" })) && totals[0]!.gelir === 1700 && totals[0]!.katki === null, JSON.stringify(totals[0]));
+  const isTable = productTable(rows, "is", PNAMES);
+  check("§11b eksiksiz satırın kalanı motorun sayısı (600), eksikli grubun kalanı BOŞ", isTable.satirlar[0]?.katki === 600 && s.tablo.satirlar.find((r) => r.ad === "Tül 2001")?.katki === null);
+  const alSat = s.tablo.satirlar.find((r) => r.ad === "Hazır Voal");
+  check("§11c ⭐ al-sat satırı görünür: gelir dolu, dokuma boş (0 değil), rozet 'eksik: dokuma işi yok'", alSat?.gelir === 200 && alSat?.dokuma === null && alSat?.durum === "eksik: dokuma işi yok", JSON.stringify(alSat));
+  check("§11d iş sürüyor rozeti + iplik eksiği", String(isTable.satirlar[1]?.durum) === "eksik: iplik maliyeti · iş sürüyor", String(isTable.satirlar[1]?.durum));
+  check("§11e ⭐ 'genel gider dağıtılmadı' ve 'iade düşülmedi' uyarıları + kalan tanımı", s.uyarilar.some((u) => u.startsWith("Genel gider ve işçilik kumaş satırlarına dağıtılmadı"))
+    && s.uyarilar.some((u) => u.startsWith("İade edilen toplar")) && s.tanimlar.some((t) => t.ad === "Kalan (katkı)" && t.aciklama.includes("genel gider ve işçilik dağıtılmadı")));
+  check("§11f kapsam beyanı 'kumas', kırılım seçenekleri desen/müşteri/ay/iş", s.parametreler.find((p) => p.ad === "kapsam")?.deger === "kumas"
+    && JSON.stringify(s.parametreler.find((p) => p.ad === "kirilim")?.secenekler?.map((o) => o.deger)) === JSON.stringify(PRODUCT_BREAKDOWNS));
+  check("§11g ana sayı ölçülemedi (eksik var), yan sayı hizmet kalanı = hizmet tablosunun toplamı", s.anaSayi.deger === null && Boolean(s.anaSayi.olculemedi)
+    && s.yanSayilar.find((f) => f.olcu === "karlilik.hizmetKatki")?.deger === buildProfitabilitySunumu({ result: res, previous: null, names: NAMES, window: WINDOW, breakdown: "musteri" }).anaSayi.deger);
+  check("§11h devere kalemi okunmayan kurulumda devere kolonu yok", !s.tablo.kolonlar.some((k) => k.anahtar === "devere"));
+  const full = [prow({ itemId: "i1", wo: "w1", revenue: 1000, weaving: 300, warping: 40, yarn: 100, contribution: 560 }), prow({ itemId: "i1", wo: "w2", revenue: 400, weaving: 100, warping: 20, yarn: 50, contribution: 230 })];
+  const sFull = buildProductProfitabilitySunumu({ result: withProducts(complete, full), previous: null, names: PNAMES, window: WINDOW, breakdown: "musteri" });
+  check("§11i ⭐ eksiksizde ana sayı = Σ motor katkısı (790), devere kolonu var", sFull.anaSayi.deger === 790 && sFull.tablo.kolonlar.some((k) => k.anahtar === "devere") && sFull.tablo.toplam?.devere === 60);
+  const src = readFileSync(path.join(__dirname, "..", "src/services/reports/profitability-product.sunum.ts"), "utf8");
+  check("§11j ⭐ kumaş sunumu saf ve katkı hesaplamaz (prisma yok, gelirden maliyet düşmez)", !/lib\/prisma/.test(src) && !/\.minus\(/.test(src));
 }
 
 main()

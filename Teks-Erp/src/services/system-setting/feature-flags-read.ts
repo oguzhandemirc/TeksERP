@@ -9,7 +9,7 @@
 import { REPORT_BY_KEY, isRetiredReportKey } from "../../constants/report-catalog";
 import { isHostedInstallation } from "../helpers/install-class.helper";
 import { ApiResponse } from "../../types/api.types"; import prisma from "../../lib/prisma";
-import { readConsumableStockEnabled, readCostFinishingKgBasis, readCostPresentationCurrency, readCostProfitCategoryClasses, readCostProfitConsumablePriceSource, readCostWasteMethod, readCostProfitMachineTime, readCostProfitOverheadKey, readCostProfitSubcontractSource, readCostWeavingStandardMethod, readFinanceAllowZeroPriceLineEnabled, readFinanceAutoAllocateOnPaymentEnabled, readFinanceCariHoldEmanetShipment, readFinanceCariHoldReleaseBySamePerson, readFinanceFutureDatedDocumentBlockEnabled, readFinanceRiskLimitCurrencyMode, readFinanceYarnOutOnInvoiceEnabled, readGoodsReceiptRequirePriceEnabled, readGoodsReceiptYarnQualityHoldEnabled, readOrderProductionProposal, readProductionCancelReasonRequired, readPurchaseBlockOverReceiptEnabled, readYarnBlockNegativeBalanceEnabled } from "./cost-purchase";
+import { readConsumableStockEnabled, readCostFinishingKgBasis, readCostPresentationCurrency, readCostProfitCategoryClasses, readCostProfitConsumablePriceSource, readCostWasteMethod, readCostProfitMachineTime, readCostProfitOverheadKey, readCostProfitDefaultScope, readCostProfitSubcontractSource, readCostWeavingStandardMethod, readFinanceAllowZeroPriceLineEnabled, readFinanceAutoAllocateOnPaymentEnabled, readFinanceCariHoldEmanetShipment, readFinanceCariHoldReleaseBySamePerson, readFinanceFutureDatedDocumentBlockEnabled, readFinanceRiskLimitCurrencyMode, readFinanceYarnOutOnInvoiceEnabled, readGoodsReceiptRequirePriceEnabled, readGoodsReceiptYarnQualityHoldEnabled, readOrderProductionProposal, readProductionCancelReasonRequired, readPurchaseBlockOverReceiptEnabled, readYarnBlockNegativeBalanceEnabled } from "./cost-purchase";
 import { readDeviceAutoReattach, readDevicePairingRequired, readDeviceProofRequired, readDeviceUnpairedPasswordLogin, readShortCredentialApprovedDeviceOnly, readShortCredentialTotpRequired, readTrustedDeviceDays, readWebTotpPolicy } from "./device-auth";
 import { readCompanyLegalIdentity, readCompanyLetterhead, readDocumentsConfig, readEIrsaliyeConfig } from "./documents";
 import { applyTermRegime, settingMapClient } from "./feature-flags-read-helpers"; import { readDevereDefaultLeadDays } from "./devere-lead"; import { readDevereStaleFullBeamDays, readDevereStaleOutBodyDays } from "./devere-stale"; import { readDevereBeamCardAutoPrint } from "./devere-beam-card";
@@ -137,7 +137,7 @@ export async function getFeatureFlags(): Promise<ApiResponse<FeatureFlags>> {
       costWasteMethod: await readCostWasteMethod(cacheClient),
       orderProductionProposal: await readOrderProductionProposal(cacheClient),
       costProfitMachineTime: await readCostProfitMachineTime(cacheClient),
-      costProfitOverheadKey: await readCostProfitOverheadKey(cacheClient),
+      costProfitOverheadKey: await readCostProfitOverheadKey(cacheClient), costProfitDefaultScope: await readCostProfitDefaultScope(cacheClient),
       costProfitCategoryClasses: await readCostProfitCategoryClasses(cacheClient),
       financeAutoAllocateOnPaymentEnabled:
         await readFinanceAutoAllocateOnPaymentEnabled(cacheClient),

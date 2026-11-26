@@ -253,6 +253,8 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   orderProductionProposal: "productionEnabled",
   costProfitMachineTime: "financeEnabled",
   costProfitOverheadKey: "financeEnabled",
+  // K1 dilim 2: "kumaş" kapsamı yalnız dokuma açıkken anlamlı → satır dokuma kapalı kurulumda gizlenir.
+  costProfitDefaultScope: "dokumaEnabled",
   financeAutoAllocateOnPaymentEnabled: "financeEnabled",
   // ⚠️ İPLİK bayrağı DEĞİL: kural FATURA ONAYINDA koşar (`finance/invoices`),
   // iplik defteri yalnız etkilenen taraftır. İplik modülü kapalı bir kurulumda

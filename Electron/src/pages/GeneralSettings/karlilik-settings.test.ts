@@ -59,3 +59,14 @@ describe("Kârlılık makine süresi / genel gider ayar satırları (D4-G2b)", (
     }
   });
 });
+
+// K1 dilim 2: Kârlılık ekranının açılış kapsamı (backend `PROFIT_DEFAULT_SCOPES`, varsayılan `HIZMET` = bugünkü tablo).
+describe("Kârlılık ekranı açılış kapsamı (K1 dilim 2)", () => {
+  it("HIZMET varsayılan, iki değer, Kârlılık grubunda; satır dokuma kapalıyken gizlenir", () => {
+    const r = row("costProfitDefaultScope");
+    expect(r?.defaultValue).toBe("HIZMET");
+    expect(r?.options.map((o) => o.value)).toEqual(["HIZMET", "KUMAS"]);
+    expect(r?.group).toBe("Kârlılık");
+    expect(FLAG_MODULE.costProfitDefaultScope).toBe("dokumaEnabled");
+  });
+});

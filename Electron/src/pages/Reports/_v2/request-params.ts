@@ -11,6 +11,10 @@ import { REPORT_DATE_URL_KEYS, asOfParams, rangeDayParams, rangeIsoParams, toYmd
 export const COMPARE_PARAM = "kiyas";
 /** Tablo görünümü beyanı (backend `VIEW_PARAM`); sunucu her zaman bir tablo uygular, "Tümü" anlamsız. */
 export const VIEW_PARAM = "gorunum";
+/** Rapor kapsamı beyanı (Kârlılık: hizmet / kumaş); sunucu hep bir kapsam uygular, "Tümü" anlamsız. */
+export const SCOPE_PARAM = "kapsam";
+/** Bir seçim değişince düşen seçimler: kapsam değişince kırılım seçenekleri değişir (eski kırılım yeni kapsamda 400 verir). */
+export const PARAM_RESETS: Readonly<Record<string, readonly string[]>> = { [SCOPE_PARAM]: ["kirilim"] };
 
 function dateParams(entry: ReportCatalogEntry, search: URLSearchParams): Record<string, string | undefined> {
   switch (entry.tarih) {

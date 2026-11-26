@@ -330,6 +330,7 @@ export const updateSchema = z.strictObject({
   // D4-G2b: makine süresi, genel gider anahtarı, kategori sınıfları (`PROFIT_*` sabitleri ile birebir; harita süzgeci serviste).
   costProfitMachineTime: z.enum(["OTURUM", "VARDIYA", "NORM"], { message: "Makine süresi OTURUM, VARDIYA ya da NORM olmalı" }).optional(),
   costProfitOverheadKey: z.enum(["YOK", "METRE", "GELIR", "MAKINE_SAATI"], { message: "Genel gider anahtarı YOK, METRE, GELIR ya da MAKINE_SAATI olmalı" }).optional(),
+  costProfitDefaultScope: z.enum(["HIZMET", "KUMAS"], { message: "Kârlılık varsayılan kapsamı HIZMET ya da KUMAS olmalı" }).optional(),
   costProfitCategoryClasses: z
     .record(z.string().trim().min(1, "Kategori adı boş olamaz").max(100, "Kategori adı en çok 100 karakter"), z.enum(["ISCILIK", "GENEL_GIDER", "HARIC"], { message: "Kategori sınıfı ISCILIK, GENEL_GIDER ya da HARIC olmalı" }))
     .refine((m) => Object.keys(m).length <= 200, { message: "En çok 200 kategori sınıflanabilir" })

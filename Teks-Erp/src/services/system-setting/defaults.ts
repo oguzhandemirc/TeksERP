@@ -211,6 +211,10 @@ export const DEFAULT_PROFIT_MACHINE_TIME_MODE: ProfitMachineTimeMode = "OTURUM";
 export const PROFIT_OVERHEAD_KEYS = ["YOK", "METRE", "GELIR", "MAKINE_SAATI"] as const;
 export type ProfitOverheadKey = (typeof PROFIT_OVERHEAD_KEYS)[number];
 export const DEFAULT_PROFIT_OVERHEAD_KEY: ProfitOverheadKey = "YOK";
+/** K1 dilim 2: Kârlılık ekranının varsayılan kapsamı; `HIZMET` bugünkü davranış, `KUMAS` dokuma kapalıyken hizmete düşer. */
+export const PROFIT_DEFAULT_SCOPES = ["HIZMET", "KUMAS"] as const;
+export type ProfitDefaultScope = (typeof PROFIT_DEFAULT_SCOPES)[number];
+export const DEFAULT_PROFIT_DEFAULT_SCOPE: ProfitDefaultScope = "HIZMET";
 /** D4-G2b: masraf kategorisi sınıfı; sınıflanmamış kategori `GENEL_GIDER` sayılır (tasarım §8.3 "bağlanmamış EXPENSE havuzu"). */
 export const PROFIT_CATEGORY_CLASSES = ["ISCILIK", "GENEL_GIDER", "HARIC"] as const;
 export type ProfitCategoryClass = (typeof PROFIT_CATEGORY_CLASSES)[number];
