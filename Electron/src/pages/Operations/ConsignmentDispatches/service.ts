@@ -9,6 +9,7 @@ import type {
   ConsignmentDispatchListFilter,
   ConsignmentDispatchListResult,
   ConsignmentDispatchPreview,
+  ConsignmentOwners,
 } from "./types";
 
 const BASE = "/api/consignment-dispatches";
@@ -68,6 +69,14 @@ export async function getConsignmentCancelPreview(id: string): Promise<Consignme
 
 export async function cancelConsignmentDispatch(id: string, reason: string): Promise<ConsignmentDispatchDto> {
   const r = await apiClient.post<{ data: ConsignmentDispatchDto }>(`${BASE}/${id}/cancel`, { reason });
+  return r.data.data;
+}
+
+/** Emaneti olan sahipler (en çok 100, ad sırası). Müşteri kartı okunmaz; izin `consignment:write ∨ mobile:depo`. */
+export async function listConsignmentOwners(search: string): Promise<ConsignmentOwners> {
+  const params: Record<string, string> = { limit: "100" };
+  if (search.trim()) params.search = search.trim().slice(0, 64);
+  const r = await apiClient.get<{ data: ConsignmentOwners }>(`${BASE}/owners`, { params });
   return r.data.data;
 }
 

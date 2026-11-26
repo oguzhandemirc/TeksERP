@@ -9,12 +9,20 @@
 //      (skaler değil) → 200; cursor modu da aynı kapı.
 //   §3 alış siparişi listesi: `PURCHASE_ORDER_FILTER_NAMES` (status · supplierId · subcontractorId) çıplak → 400;
 //      `warehouseId` bu ucun süzgeci değil → serbest (kapı ucun okuduğu adlarla sınırlı).
+//   §4 top listesi/özet/depo kapsamı: çıplak `mulkiyet`/`ownerCustomerId` → 400; list.ts'in okuduğu her süzgeç adı
+//      `ROLL_LIST_FILTER_NAMES`te (sonda 2026-11-26: findAllRolls'tan kapı kalkınca §4a/§4b ❌; listeden `mulkiyet`
+//      düşünce §4a/§4d/§4f ❌).
 // Negatif sondalar (kırmızı görüldü): `known.has(k)` şartı düşürülünce §1c (tanınmayan ad da 400) ❌ ·
 //   `findAllOffset`ten `assertListQueryShape` kalkınca §2a ❌ · `LIST_QUERY_RESERVED`ten `limit` düşünce §1b ❌.
 // DB'ye YAZMAZ (yalnız okur: ItemService.findAll) → yine de `hedefDbEngeli()` (okuma bekçileri de sonda DB'de).
 // =============================================================================
-import type { Request } from "express";
+import type { Request, Response } from "express";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import prisma, { pool } from "../src/lib/prisma";
+import { InventoryService } from "../src/services/inventory.service";
+import { ROLL_LIST_FILTER_NAMES } from "../src/services/inventory/list";
+import { InventoryController } from "../src/controllers/inventory.controller";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { LIST_QUERY_RESERVED, assertNoBareFilterParams } from "../src/utils/query-parser";
 import { ItemService } from "../src/services/item.service";
@@ -69,6 +77,25 @@ async function main(): Promise<void> {
   check("§3a ⭐ `?status=OPEN,PARTIAL` (bulgu) → 400; okuyucu ile kapı aynı liste (status · supplierId · subcontractorId)", !r3a.ok && JSON.stringify([...PURCHASE_ORDER_FILTER_NAMES]) === JSON.stringify(["status", "supplierId", "subcontractorId"]));
   const r3b = await bekle(() => assertNoBareFilterParams(req({ warehouseId: "x" }), PURCHASE_ORDER_FILTER_NAMES));
   check("§3b bu ucun süzgeci olmayan çıplak ad (`warehouseId`) serbest — kapı ucun okuduğuyla sınırlı", r3b.ok);
+
+  // ── §4 top listesi · özet · depo kapsamı ───────────────────────────────
+  const inv = new InventoryService();
+  const r4a = await bekle(inv.findAllRolls(req({ mulkiyet: "OWN", pageSize: "1" })));
+  check("§4a ⭐ /rolls çıplak `?mulkiyet=OWN` → 400 BARE_FILTER_PARAM (sessiz TÜMÜ değil)", !r4a.ok && kod(r4a.e) === "BARE_FILTER_PARAM", r4a.ok ? "geçti" : kod(r4a.e));
+  const r4b = await bekle(inv.findAllRolls(req({ mode: "cursor", limit: "1", ownerCustomerId: "00000000-0000-0000-0000-000000000000" })));
+  check("§4b /rolls cursor: çıplak `?ownerCustomerId=` → 400", !r4b.ok && kod(r4b.e) === "BARE_FILTER_PARAM", r4b.ok ? "geçti" : kod(r4b.e));
+  const r4c = await bekle(inv.findAllRolls(req({ "filter[mulkiyet]": "OWN", pageSize: "1" })));
+  check("§4c `filter[mulkiyet]` sarmalı → liste döner", r4c.ok, r4c.ok ? "" : kod(r4c.e));
+  const r4d = await bekle(inv.getRollStats(req({ mulkiyet: "CONSIGNED" })));
+  check("§4d /rolls/stats aynı kapı (liste ↔ şerit tek küme)", !r4d.ok && kod(r4d.e) === "BARE_FILTER_PARAM", r4d.ok ? "geçti" : kod(r4d.e));
+  let scopeErr: unknown = null;
+  await new InventoryController().getWarehouseScope(req({ mulkiyet: "OWN" }), { status: () => ({ json: () => undefined }) } as unknown as Response, (e?: unknown) => { scopeErr = e; });
+  check("§4e /rolls/warehouse-scope çıplak `?mulkiyet=` → 400", kod(scopeErr) === "BARE_FILTER_PARAM", kod(scopeErr));
+  // Okuyucu ↔ kapı tek küme: list.ts'in okuduğu her `f["x"]` listede olmalı (yeni süzgeç kapıyı sessizce delmesin).
+  const listSrc = readFileSync(path.join(__dirname, "../src/services/inventory/list.ts"), "utf8");
+  const readNames = [...new Set([...listSrc.matchAll(/\bf\["([A-Za-z]+)"\]/g)].map((m) => m[1]!))];
+  const missingNames = readNames.filter((n) => !(ROLL_LIST_FILTER_NAMES as readonly string[]).includes(n));
+  check("§4f okunan her top süzgeci ROLL_LIST_FILTER_NAMES'te (okuyucu = kapı)", readNames.length >= 20 && missingNames.length === 0, missingNames.join(",") || `${readNames.length} ad`);
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();

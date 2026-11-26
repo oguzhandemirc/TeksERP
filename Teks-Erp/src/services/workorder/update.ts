@@ -16,8 +16,10 @@ import {
   type MaterialProvider,
 } from "@prisma/client";
 import {
+  diffTrackedFields,
   recordWorkOrderFieldDiffTx,
 } from "../helpers/workorder-field-diff.helper";
+import { isTravelerCardField } from "../../constants/workorder-event-fields";
 import { computeWorkOrderLocks, touchWorkOrderTx } from "../helpers/workorder-locks.helper";
 import { assertTargetColorChange } from "../helpers/workorder-target-color.helper";
 import { applyFoldTypeForWriteInPlace } from "../helpers/fold-type";
@@ -156,7 +158,7 @@ export async function update(
     // Hedef ürünü bu karta ÇEVİRMEK yeni üretim planıdır (A3); değişmeyen hedef kontrol edilmez.
     const retargetItemId =
       data.targetItemId && data.targetItemId !== (wo.targetItemId ?? null) ? data.targetItemId : null;
-    if (retargetItemId) await assertItemUsable(prisma, retargetItemId, "NEW_PLAN");
+    if (retargetItemId) await assertItemUsable(prisma, retargetItemId, "NEW_PLAN", { workOrderTarget: true });
     if (data.targetColorId) {
       const color = await prisma.color.findUnique({
         where: { id: data.targetColorId },
@@ -198,7 +200,7 @@ export async function update(
     // koy; eşzamanlı finalize WO'yu COMPLETED yaparsa count===0 → 409.
     await prisma.$transaction(async (tx) => {
       // İLK ifade (WO satır kilidinden ÖNCE — birleştirme 8030 EXCL tutup WO satırı ister).
-      if (retargetItemId) await assertItemUsableTx(tx, retargetItemId, "NEW_PLAN");
+      if (retargetItemId) await assertItemUsableTx(tx, retargetItemId, "NEW_PLAN", { workOrderTarget: true });
       // F58: WO satırını kilitle → locks'u kilit ALTINDA taze hesapla ve kilit
       // guard'larını yeniden doğrula. 3085'teki tx-DIŞI locks eşzamanlı adım-tamamlama/
       // sevkle bayatlayabilir; bu turda finishStep/finalize/createOpenFabric/cutOpenFabric
@@ -261,9 +263,11 @@ export async function update(
         );
       }
       await recordWorkOrderFieldDiffTx(tx, id, { before, after: patch }, { trigger: "WO_UPDATE", userId });
-      // Kart snapshot'ı bu alanları DONDURUYOR (ürün/renk/en/miktar/kat/tarihler) —
-      // WO değişince eldeki kâğıt yanlışlanır. Snapshot yalnız `reprint` ile tazelenir.
-      await markTravelerCardDirtyTx(tx, id);
+      // Kart snapshot'ı yalnız TRAVELER_CARD_FIELDS'i dondurur; malzeme sağlayan gibi kartta olmayan
+      // alanın değişimi kâğıdı yanlışlamaz. Snapshot yalnız `reprint` ile tazelenir.
+      if (diffTrackedFields(before, patch).some((c) => isTravelerCardField(c.field))) {
+        await markTravelerCardDirtyTx(tx, id);
+      }
     });
     const updated = await prisma.workOrder.findUnique({ where: { id } });
 

@@ -1,6 +1,7 @@
 // BEKÇİ — D4-V1k cari KDV / tevkifat saf form katmanı (boş = genel ayar; yarım oran yok; 1 ≤ pay ≤ payda ≤ 99).
 import { describe, expect, it } from "vitest";
-import { buildTaxOverrideBody, parseVatRate, parseWithholdingRatio } from "./cariTaxOverride";
+import { buildTaxOverrideBody, parseVatRate, parseWithholdingRatio, taxFormFromCari } from "./cariTaxOverride";
+import type { CariRow } from "./service";
 
 describe("parseVatRate", () => {
   it("boş → null (genel ayar); virgül noktaya döner; % işareti kabul", () => {
@@ -32,20 +33,45 @@ describe("parseWithholdingRatio", () => {
 });
 
 describe("buildTaxOverrideBody", () => {
-  it("genel ayar seçimi → hepsi null", () => {
-    expect(buildTaxOverrideBody({ vatRate: "", withholding: "FACTORY", ratio: "" })).toEqual({
+  it("genel ayar seçimi → hepsi null; alış alanı yoksa (eski backend) gövdeye girmez", () => {
+    expect(buildTaxOverrideBody({ vatRate: "", withholding: "FACTORY", ratio: "", purchase: null })).toEqual({
       ok: true,
       body: { vatRate: null, withholdingEnabled: null, withholdingNumerator: null, withholdingDenominator: null },
     });
   });
   it("uygulanmaz → false; oran boş olabilir", () => {
-    const r = buildTaxOverrideBody({ vatRate: "10", withholding: "NONE", ratio: "" });
+    const r = buildTaxOverrideBody({ vatRate: "10", withholding: "NONE", ratio: "", purchase: null });
     expect(r).toEqual({ ok: true, body: { vatRate: "10", withholdingEnabled: false, withholdingNumerator: null, withholdingDenominator: null } });
   });
   it("hatalı KDV ya da oran → ok:false + Türkçe ileti", () => {
-    const a = buildTaxOverrideBody({ vatRate: "150", withholding: "FACTORY", ratio: "" });
+    const a = buildTaxOverrideBody({ vatRate: "150", withholding: "FACTORY", ratio: "", purchase: null });
     expect(a.ok).toBe(false);
-    const b = buildTaxOverrideBody({ vatRate: "", withholding: "APPLY", ratio: "abc" });
+    const b = buildTaxOverrideBody({ vatRate: "", withholding: "APPLY", ratio: "abc", purchase: null });
     expect(b.ok === false && b.error.includes("pay/payda")).toBe(true);
+  });
+  it("F7 alış tevkifatı: satıştan ayrı üç alan gövdeye girer (genel = null)", () => {
+    const r = buildTaxOverrideBody({ vatRate: "", withholding: "FACTORY", ratio: "", purchase: { withholding: "APPLY", ratio: "2/10" } });
+    expect(r.ok && r.body).toEqual(
+      expect.objectContaining({ withholdingEnabled: null, purchaseWithholdingEnabled: true, purchaseWithholdingNumerator: 2, purchaseWithholdingDenominator: 10 }),
+    );
+    const g = buildTaxOverrideBody({ vatRate: "", withholding: "APPLY", ratio: "5/10", purchase: { withholding: "FACTORY", ratio: "" } });
+    expect(g.ok && g.body).toEqual(expect.objectContaining({ purchaseWithholdingEnabled: null, purchaseWithholdingNumerator: null, purchaseWithholdingDenominator: null }));
+    const n = buildTaxOverrideBody({ vatRate: "", withholding: "FACTORY", ratio: "", purchase: { withholding: "NONE", ratio: "" } });
+    expect(n.ok && n.body.purchaseWithholdingEnabled).toBe(false);
+  });
+  it("hatalı alış oranı → ok:false, ileti 'Alış' der", () => {
+    const r = buildTaxOverrideBody({ vatRate: "", withholding: "FACTORY", ratio: "", purchase: { withholding: "APPLY", ratio: "11/10" } });
+    expect(r.ok === false && r.error.startsWith("Alış tevkifat")).toBe(true);
+  });
+});
+
+describe("taxFormFromCari", () => {
+  const base = { vatRate: null, withholdingEnabled: null, withholdingNumerator: null, withholdingDenominator: null } as const;
+  it("alış alanlarını satırdan forma taşır", () => {
+    const f = taxFormFromCari({ ...base, purchaseWithholdingEnabled: false, purchaseWithholdingNumerator: 3, purchaseWithholdingDenominator: 10 } as unknown as CariRow);
+    expect(f?.purchase).toEqual({ withholding: "NONE", ratio: "3/10" });
+  });
+  it("alış alanını göndermeyen backend → purchase null (çizilmez)", () => {
+    expect(taxFormFromCari({ ...base } as unknown as CariRow)?.purchase).toBeNull();
   });
 });

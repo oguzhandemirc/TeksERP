@@ -45,6 +45,14 @@ vi.mock("@/components/forms/CustomerPickerField", () => ({
     </button>
   ),
 }));
+// Form sahibi `/owners` seçicisinden seçer (genel müşteri seçicisi yalnız liste filtresinde kalır).
+vi.mock("../OwnerPickerField", () => ({
+  OwnerPickerField: ({ value, onChange }: { value: string | null; onChange: (id: string | null) => void }) => (
+    <button type="button" data-testid="pick-owner" onClick={() => onChange("cA")}>
+      {value ?? "Müşteri seç…"}
+    </button>
+  ),
+}));
 const BEAM: DraftItem = {
   key: "beam:b1",
   input: { kind: "WARP_BEAM", warpBeamId: "b1" },
@@ -154,7 +162,8 @@ describe("Emanet Çıkış listesi", () => {
 
 async function openFormWithBeam() {
   renderWithProviders(<ConsignmentDispatchFormDialog open onOpenChange={() => {}} onCreated={() => {}} />);
-  fireEvent.click(screen.getByTestId("pick-customer"));
+  expect(screen.queryByTestId("pick-customer")).toBeNull();
+  fireEvent.click(screen.getByTestId("pick-owner"));
   fireEvent.click(screen.getByRole("button", { name: /Levent ekle/ }));
   fireEvent.click(screen.getByText("levent-sec"));
 }
@@ -207,7 +216,7 @@ describe("Yeni emanet çıkışı", () => {
       ],
     });
     renderWithProviders(<ConsignmentDispatchFormDialog open onOpenChange={() => {}} onCreated={() => {}} />);
-    fireEvent.click(screen.getByTestId("pick-customer"));
+    fireEvent.click(screen.getByTestId("pick-owner"));
     fireEvent.click(screen.getByRole("button", { name: /İplik lotu ekle/ }));
     fireEvent.click(screen.getByText("lot-sec"));
     await waitFor(() => expect(svc.preview).toHaveBeenCalled());
