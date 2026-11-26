@@ -25,6 +25,13 @@ import { createBatchTx, mergeBatches, moveRolls } from "../src/services/batch.se
 import { withBarcodeRetry } from "../src/utils/barcode-retry";
 import { markTravelerCardDirtyTx } from "../src/services/helpers/traveler-card-dirty.helper";
 import { TravelerCardService } from "../src/services/traveler-card.service";
+import { WorkOrderService } from "../src/services/workorder.service";
+import {
+  TRAVELER_CARD_FIELDS,
+  WORK_ORDER_TRACKED_FIELDS,
+  isTravelerCardField,
+  type WorkOrderTrackedField,
+} from "../src/constants/workorder-event-fields";
 
 let pass = 0;
 let fail = 0;
@@ -390,6 +397,28 @@ async function testHelperContract(woId: string): Promise<void> {
   });
 }
 
+// ── 7) İş emri PATCH'i: yalnız kart alanı değişince bayat ──────────────────
+// `materialProvidedBy` snapshot'ta yok — onu değiştiren PATCH kâğıdı yanlışlamaz.
+// Sonda (2026-11-26): update.ts'te koşul kaldırılıp koşulsuz işaretlendi → §7a ❌.
+async function testPatchFields(woId: string): Promise<void> {
+  console.log("\n── 7) İş emri PATCH: kart alanı kümesi (TRAVELER_CARD_FIELDS) ──");
+  const wos = new WorkOrderService();
+  await clean(woId);
+  await wos.update(woId, { materialProvidedBy: "CUSTOMER" });
+  check("§7a yalnız materialProvidedBy değişen PATCH kartı bayat işaretlemez", (await dirty(woId)) === false);
+  await wos.update(woId, { width: 151 });
+  check("§7b kartta olan alan (en) değişince bayat", (await dirty(woId)) === true);
+  await clean(woId);
+  await wos.update(woId, { width: 151, materialProvidedBy: "CUSTOMER" });
+  check("§7c değeri değişmeyen alanlar (aynı en) kartı bayat işaretlemez", (await dirty(woId)) === false);
+  const notOnCard: WorkOrderTrackedField[] = ["isActive", "materialProvidedBy"];
+  check(
+    "§7d küme = izlenen alanlar − kartta olmayanlar (isActive, materialProvidedBy)",
+    WORK_ORDER_TRACKED_FIELDS.every((f) => isTravelerCardField(f) !== notOnCard.includes(f)),
+    TRAVELER_CARD_FIELDS.join(","),
+  );
+}
+
 // ── Temizlik ────────────────────────────────────────────────────────────────
 async function teardown(): Promise<void> {
   await prisma.rollProperty.deleteMany({ where: { rollId: { in: cleanup.rollIds } } });
@@ -411,6 +440,7 @@ async function main(): Promise<void> {
     await testClearing(woId);
     await testHelperContract(woId);
     await testAutoRevision(woId);
+    await testPatchFields(woId);
   } catch (e) {
     fail++;
     console.log(`  ✗ BEKLENMEYEN HATA: ${e instanceof Error ? e.message : String(e)}`);

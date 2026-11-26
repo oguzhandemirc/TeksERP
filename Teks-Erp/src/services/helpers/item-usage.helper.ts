@@ -71,7 +71,15 @@ export interface ItemUsageOpts {
   newQty?: Prisma.Decimal | number | string;
   /** Pasif kartta söylenecek metin (ör. top dirilmesi: çıkış yolunu söyler). Kod aynı: ITEM_INACTIVE. */
   archivedMessage?: string;
+  /**
+   * İş emrine YENİ hedef olarak bağlanıyor (açılış · hedef değişimi): kart top doğurabilen türden olmalı.
+   * Hedefi değişmeyen güncelleme bunu VERMEZ — tür kapısından önce açılmış eski kayıt reddedilmez.
+   */
+  workOrderTarget?: boolean;
 }
+
+/** Top doğurabilen ürün türleri — İE hedefi, gelen belge varsayılanları ve belgesiz KK1 aynı küme (yalnız kumaş). */
+export const ROLL_BEARING_ITEM_TYPES: readonly ItemType[] = [ItemType.FABRIC];
 
 export interface ItemUsageResult {
   id: string;
@@ -141,6 +149,13 @@ async function decide(row: Row | null, usage: ItemUsage, opts: ItemUsageOpts, db
     );
   }
   const base = { id: row.id, code: row.code, name: row.name, itemType: row.itemType, lifecycleStatus: row.lifecycleStatus };
+  // İş emri top üretir; iplik/sarf hedefte KK1'de yanlış kartla top doğururdu. Allowlist: yeni tür kendiliğinden dışarıda.
+  if (opts.workOrderTarget && !ROLL_BEARING_ITEM_TYPES.includes(row.itemType)) {
+    throw AppError.badRequest(
+      `"${row.name}" ${TYPE_NOUN[row.itemType]} ${TERIM.terbiyeIsEmri.tekilKucuk} hedefi olamaz — ${TERIM.terbiyeIsEmri.tekilKucuk} top üretir; hedef olarak yalnız kumaş kartı seçilebilir.`,
+      { code: "WORK_ORDER_TARGET_ITEM_TYPE", itemType: row.itemType },
+    );
+  }
   if (row.lifecycleStatus === ItemLifecycleStatus.ARCHIVED) {
     if (opts.archivedMessage) throw AppError.conflict(opts.archivedMessage, { code: "ITEM_INACTIVE" });
     throw AppError.conflict(

@@ -167,3 +167,15 @@ export interface ConsignmentCandidates {
   yarns: ConsignmentYarnCandidate[];
   truncated: { beams: boolean; yarns: boolean };
 }
+
+/** `GET /owners`: emaneti (levent / iplik lotu) olan müşteriler — yalnız kimlik/kod/ad. */
+export interface ConsignmentOwner {
+  id: string;
+  code: string;
+  name: string;
+}
+
+export interface ConsignmentOwners {
+  owners: ConsignmentOwner[];
+  truncated: boolean;
+}

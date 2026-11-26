@@ -29,6 +29,7 @@ import {
   buildTextSearch,
   readFilterList,
   readIdCondition,
+  assertNoBareFilterParams,
 } from "../../utils/query-parser";
 import {
   decodeDynamicCursor,
@@ -108,6 +109,17 @@ export interface RollStats {
   /** Emanet kırılımı (F1) — toplamın müşteri malı kısmı; yalnız `emanet.enabled` açıkken döner (kapalıyken yanıt bayt-aynı). */
   consigned?: { count: number; qty: number; weight: number };
 }
+
+/**
+ * `buildRollWhere`in `filter[...]`ten okuduğu süzgeç adları — çıplak süzgeç kapısının (BARE_FILTER_PARAM) listesi.
+ * Çıplak `?mulkiyet=OWN` sessizce TÜMÜ dönüyordu; yeni okunan ad buraya eklenir (`test_bare_filter_param` §4 ölçer).
+ */
+export const ROLL_LIST_FILTER_NAMES = [
+  "colorId", "currentStationId", "currentStepKind", "dispatchableForStepId", "foldType", "includeFire", "itemId",
+  "markedForKartela", "mulkiyet", "ownerCustomerId", "processingStatus", "propertyIds", "qtyMax", "qtyMin",
+  "qualityGrade", "rollKind", "rollScope", "shadeCode", "shipmentScope", "status", "statusIn",
+  "subcontractorCategoryId", "subcontractorId", "warehouseId", "widthMax", "widthMin",
+] as const;
 
 export function buildRollWhere(
     params: QueryParams,
@@ -605,6 +617,7 @@ export function buildRollWhere(
 export async function findAllRolls(this: InventoryServiceThis, 
     req: Request
   ): Promise<PaginatedResponse<Roll> | CursorPaginatedResponse<Roll>> {
+    assertNoBareFilterParams(req, ROLL_LIST_FILTER_NAMES);
     const params = parseQueryParams(req);
     // sortBy güvenlik süzgeci — bilinmeyen kolon (500) + indekssiz keyfi sort engellenir.
     params.sortBy = resolveSortBy(params.sortBy, ROLL_SORTABLE_FIELDS);
@@ -697,6 +710,7 @@ export async function findAllRolls(this: InventoryServiceThis,
   }
 
 export async function getRollStats(this: InventoryServiceThis, req: Request): Promise<ApiResponse<RollStats>> {
+    assertNoBareFilterParams(req, ROLL_LIST_FILTER_NAMES);
     const params = parseQueryParams(req);
     // tx dışı (global prisma) iki bağımsız okuma — paralel.
     const [{ fireCodes }, emanetOn] = await Promise.all([loadProducedBuckets(prisma), readEmanetEnabled()]);

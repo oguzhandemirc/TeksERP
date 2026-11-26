@@ -8,7 +8,7 @@
 import type { Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { suggestFxRate } from "../helpers/maliyet-bridge.helper";
-import { weavingActualCostTx, weavingOrdersActiveIn, type WeavingActualCost, type WeavingActualMissing } from "../helpers/weaving-actual-cost.helper";
+import { WEAVING_INFO_CODES, weavingActualCostTx, weavingOrdersActiveIn, type WeavingActualCost, type WeavingActualMissing } from "../helpers/weaving-actual-cost.helper";
 import { readCostPresentationCurrency, readCostProfitMachineTime, type CostPresentationCurrency } from "../system-setting.service";
 import type { ResolvedDayRange } from "./temel/_day-range";
 import { dayRangeParameters } from "./temel/_day-range";
@@ -35,6 +35,7 @@ const MISSING_TEXT: Record<WeavingActualMissing, string> = {
   COZGU_TUKETIMI: "çözgü tüketimi",
   LEVENT_KOKENI: "satın alınan ya da emanet levent",
   FX_RATE_MISSING: "devere ücreti kuru yok",
+  VARYANT_STANDART_YOK: "varyantın standart maliyeti yok, desen geneli kullanıldı",
 };
 
 const WARPING_SOURCE_TEXT = { FATURA: "fatura", TARIFE: "tarife (tahmini)", KARMA: "karma (kısmen tahmini)" } as const;
@@ -66,10 +67,11 @@ function money(d: Dec | null, r: WeavingEfficiencyReport): TabloHucresi {
 }
 
 function rowStatus(w: WeavingActualCost, r: WeavingEfficiencyReport): string {
-  const notes = w.missing.filter((m) => m !== "TOP_YOK" || w.runCount > 0).map((m) => MISSING_TEXT[m]);
+  const info = w.missing.filter((m) => WEAVING_INFO_CODES.includes(m)).map((m) => MISSING_TEXT[m]);
+  const notes = w.missing.filter((m) => !WEAVING_INFO_CODES.includes(m) && (m !== "TOP_YOK" || w.runCount > 0)).map((m) => MISSING_TEXT[m]);
   if (r.currency !== "TRY" && r.fxRate === null) notes.unshift(`${r.currency} kuru yok`);
-  if (notes.length > 0) return `${EKSIK}: ${notes.join(", ")}`;
-  return w.ongoing ? "devam ediyor" : "tamam";
+  const base = notes.length > 0 ? `${EKSIK}: ${notes.join(", ")}` : w.ongoing ? "devam ediyor" : "tamam";
+  return info.length > 0 ? `${base} (${info.join(", ")})` : base;
 }
 
 /** "Devere /m": devere kapalı → boş; ölçülemedi → "eksik" (0 değil). */
