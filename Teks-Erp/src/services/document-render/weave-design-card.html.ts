@@ -121,7 +121,7 @@ function gridHtml(v: WeaveCardView): string {
   const frames = plan.reduce((m, r) => Math.max(m, r.length), 0);
   const selCount = v.pickSequence ? (v.weft?.yarns.length ?? 0) : 0;
   const filled = Math.max(plan.length, v.pickSequence?.length ?? 0);
-  if (frames === 0 && selCount === 0) return `<p class="empty">Armür planı girilmemiş.</p>`;
+  if (frames === 0 && selCount === 0) return `<p class="empty">Desen örgüsü girilmemiş.</p>`;
   const leno = new Set(v.lenoFrames.filter((f) => f <= frames));
   const selv = new Set((v.selvedgeFrames ?? []).filter((f) => f <= frames && !leno.has(f)));
   const blocks = frameBlocks(frames, leno, selv);
@@ -172,7 +172,7 @@ export function renderWeaveDesignCardHtml(v: WeaveCardView): string {
     d ? `Örgü: <b>${e(d.code)}</b> · ${e(d.name)} (${e(d.kindLabel)})` : "",
     d?.familyLabel ? `Aile: ${e(d.familyLabel)}` : "",
     d?.frameCount ? `Çerçeve: ${d.frameCount}` : "",
-    d?.repeatWidthCm && d.repeatCm ? `Rapor: ${e(d.repeatWidthCm)} × ${e(d.repeatCm)} cm` : d?.repeatCm ? `Rapor: ${e(d.repeatCm)} cm` : "",
+    d?.repeatWidthCm && d.repeatCm ? `Desen raporu: ${e(d.repeatWidthCm)} × ${e(d.repeatCm)} cm` : d?.repeatCm ? `Desen raporu: ${e(d.repeatCm)} cm` : "",
     d?.hookCount ? `Kanca: ${d.hookCount}` : "",
     v.widthCm ? `En: ${e(v.widthCm)} cm` : "",
     d?.loomFileName ? `Tezgâh dosyası: ${e(d.loomFileName)}` : "",
@@ -206,7 +206,7 @@ h1{text-align:center;font-size:16pt;margin:0 0 2mm}h3{font-size:10pt;margin:4mm 
 <div class="sub">${e(v.itemName)}${v.weavingOrderNumber ? ` · ${TERIM.dokumaIsEmri.tekil}: <b>${e(v.weavingOrderNumber)}</b>` : ""}${meta ? `<br>${meta}` : ""}</div>
 ${gridHtml(v)}
 <div class="bottom">
-<div><h3>ATKI İPLİKLERİ</h3>${weftYarns}${w?.sequenceCode ? `<div class="kv muted">Seçici sırası: ${e(w.sequenceCode)}</div>` : ""}</div>
+<div><h3>ATKI İPLİKLERİ</h3>${weftYarns}${w?.sequenceCode ? `<div class="kv muted">Atkı raporu: ${e(w.sequenceCode)}</div>` : ""}</div>
 <div>${warpsHtml(v)}
 ${taharHtml(d)}<div class="kv"><b>ATKI SIKLIĞI :</b> ${w?.picksPerCm ? `${e(w.picksPerCm)} ATKI/CM` : "—"}</div>
 ${w ? `<div class="kv muted">Atkı kartı: ${e(w.code)} · ${e(w.name)}${w.weftProgramNo ? ` · Program ${e(w.weftProgramNo)}` : ""}</div>` : ""}</div>${fabricHtml(v)}

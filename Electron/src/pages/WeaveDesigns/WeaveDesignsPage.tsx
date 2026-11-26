@@ -39,7 +39,7 @@ export function WeaveDesignsPage() {
     <PageShell>
       <PageHeader
         title="Desen Kartları"
-        description="Örgü türü · armür planı · atkı sırası · varyantlar. Bir desen birden çok kumaşı besler."
+        description="Örgü türü · desen örgüsü · atkı raporu · varyantlar. Bir desen birden çok kumaşı besler."
         actions={
           <div className="flex items-center gap-2">
             <RefreshButton queryKey={WEAVE_DESIGNS_QUERY_KEY} />

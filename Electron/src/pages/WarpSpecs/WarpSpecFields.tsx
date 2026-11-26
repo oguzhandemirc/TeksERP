@@ -87,7 +87,7 @@ export function ReedFields({ form }: { form: Form }) {
       <FormField label="Tarak eni (cm)" htmlFor="reedWidthCm" error={e.reedWidthCm} info="Maliyette atkı boyu buradan alınır (ürünün maliyet yapısında “Atkı boyu” girilmediyse; o da yoksa ham en + kenar payı). Taraktan tel önerisinde ve tezgâh önerisinde de kullanılır. Çözgü kg'ına girmez.">
         <Input id="reedWidthCm" {...form.register("reedWidthCm")} inputMode="decimal" className={EXAMPLE_PH} placeholder="ör. 280" />
       </FormField>
-      <FormField className="sm:col-span-2" label="Çözgü dizimi" htmlFor="sequenceNote" error={e.sequenceNote} info="Devereciye giden renk/iplik raporu: ör. 2A 1B. Tekrar eden kısmı parantezle kısaltabilirsiniz: 5x(2A 1B) 4C. Kg ve maliyete girmez. (Eski adı: Dizilim)">
+      <FormField className="sm:col-span-2" label="Çözgü raporu" htmlFor="sequenceNote" error={e.sequenceNote} info="Enine tekrar eden çözgü teli dizisi; devereciye giden renk/iplik raporu: ör. 2A 1B. Tekrar eden kısmı parantezle kısaltabilirsiniz: 5x(2A 1B) 4C. Kg ve maliyete girmez. (Eski adları: Çözgü dizimi, Dizilim)">
         <Input id="sequenceNote" {...form.register("sequenceNote")} className={EXAMPLE_PH} placeholder="ör. 5x(2A 1B) 4C" />
       </FormField>
       <FormField label="Çözgü çekmesi (%)" htmlFor="takeUpPct" error={e.takeUpPct} info="Dokumada çözgünün kumaştan ne kadar uzun harcandığı: çözgü = kumaş ÷ (1 − çekme). Terbiyedeki boy ve en çekmesinden ayrıdır. Boşsa tezgâhtan doğan topun otomatik tüketimi çözgü = kumaş sayar ve uyarır.">

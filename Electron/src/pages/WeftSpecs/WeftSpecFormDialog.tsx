@@ -66,7 +66,7 @@ export function WeftSpecFormDialog({ open, onOpenChange, initial, canWrite, draf
       <DialogContent className="w-[calc(100%-2rem)] max-w-6xl" data-form-size="wide">
         <DialogHeader>
           <DialogTitle>{initial ? "Atkı kartını düzenle" : "Yeni atkı kartı"}</DialogTitle>
-          <DialogDescription>Atkı iplikleri, atkı sırası, sıklık ve tezgâh program numarası. Bir atkı kartı birden çok kumaşta kullanılabilir.</DialogDescription>
+          <DialogDescription>Atkı iplikleri, atkı raporu, sıklık ve tezgâh program numarası. Bir atkı kartı birden çok kumaşta kullanılabilir.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">

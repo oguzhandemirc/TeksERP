@@ -24,8 +24,8 @@ export function ConstructionDetails({ c }: { c: RunConstruction }) {
   const w = c.weft;
   // Görsel çizilmişse kenar çerçeveleri yeşil sütun + lejantla görünür; çizilmemişse metinle söylenir.
   const selvedge = d?.selvedgeFrames ?? [];
-  const designBits = d ? [d.code, d.loomFileName ? `Armür: ${d.loomFileName}` : null, d.frameCount != null ? `${d.frameCount} çerçeve` : null, d.repeatCm != null ? `Rapor ${fmt(d.repeatCm)} cm` : null] : [];
-  const weftBits = w ? [w.picksPerCm != null ? `${fmt(w.picksPerCm)} atkı/cm` : null, w.sequenceCode ? `Sıra ${w.sequenceCode}` : null, w.weftProgramNo ? `Program ${w.weftProgramNo}` : null] : [];
+  const designBits = d ? [d.code, d.loomFileName ? `Tezgâh dosyası ${d.loomFileName}` : null, d.frameCount != null ? `${d.frameCount} çerçeve` : null, d.repeatCm != null ? `Desen raporu ${fmt(d.repeatCm)} cm` : null] : [];
+  const weftBits = w ? [w.picksPerCm != null ? `${fmt(w.picksPerCm)} atkı/cm` : null, w.sequenceCode ? `Atkı raporu ${w.sequenceCode}` : null, w.weftProgramNo ? `Program ${w.weftProgramNo}` : null] : [];
   return (
     <View style={styles.box} testID="run-construction">
       <Text style={styles.title}>Etkin yapı{c.variantCode ? ` · Varyant ${c.variantCode}` : ''}</Text>
@@ -66,7 +66,7 @@ export function WeavingOrderWeave({ weavingOrderId }: { weavingOrderId: string }
   const q = useRunConstruction(weavingOrderId);
   return q.data && canShowWeave(q.data) ? (
     <View style={styles.weaveSection} testID="dokuma-detay-armur">
-      {/* Bölüm başlığı yok: mini kartın kendi "Armür planı" başlığı var (çift başlık). */}
+      {/* Bölüm başlığı yok: mini kartın kendi "Desen örgüsü" başlığı var (çift başlık). */}
       <WeaveMini c={q.data} />
     </View>
   ) : null;

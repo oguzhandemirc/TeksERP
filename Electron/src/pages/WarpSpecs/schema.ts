@@ -38,7 +38,7 @@ export const warpSpecFormSchema = z.object({
       (rows) => new Set(rows.map((r) => r.yarnItemId).filter(Boolean)).size === rows.filter((r) => r.yarnItemId).length,
       "Aynı iplik iki satırda olamaz — telini tek satırda topla",
     ),
-  sequenceNote: z.string().max(160, "Çözgü dizimi en fazla 160 karakter olabilir").optional().or(z.literal("")),
+  sequenceNote: z.string().max(160, "Çözgü raporu en fazla 160 karakter olabilir").optional().or(z.literal("")),
   selvedgeEnds: acceptNumberAsText(
     z
       .string()

@@ -186,7 +186,7 @@ export const productionTiles: DefinitionTile[] = [
     // İzin çözgü kartıyla aynı kod (`warpspec:read`; yeni izin yok, tasarım §2.7).
     key: "weave-designs",
     title: "Desen Kartları",
-    description: "Örgü türü · armür planı · atkı sırası · varyantlar (bir desen çok kumaşı besler)",
+    description: "Örgü türü · desen örgüsü · atkı raporu · varyantlar (bir desen çok kumaşı besler)",
     icon: Grid3x3,
     to: "/definitions/weave-designs",
     group: "production",
@@ -198,7 +198,7 @@ export const productionTiles: DefinitionTile[] = [
     // ATKI KARTLARI (B19) — atkı kartı kendi ekranında da açılır/düzenlenir (ürün penceresi dışında); dokuma modülü.
     key: "weft-specs",
     title: "Atkı Kartları",
-    description: "Atkı iplikleri · atkı sırası · sıklık · program no (bir atkı kartı çok kumaşı besler)",
+    description: "Atkı iplikleri · atkı raporu · sıklık · program no (bir atkı kartı çok kumaşı besler)",
     icon: Rows3,
     to: "/definitions/weft-specs",
     group: "production",

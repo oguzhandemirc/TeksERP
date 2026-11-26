@@ -126,16 +126,16 @@ function constructionWarnings(c: Omit<EffectiveConstruction, "warnings">): Effec
     if (declared > 0 && Math.abs(implied - declared) / declared * 100 > REPEAT_PICKS_TOLERANCE_PCT) {
       out.push({
         code: CONSTRUCTION_WARNING.repeatPicksMismatch,
-        message: `Rapordaki atkı (${total}) ÷ rapor boyu (${qtyText(d.repeatCm)} cm) = ${pctText(implied)} atkı/cm; kartın sıklığı ${declared} — fark %${pctText(REPEAT_PICKS_TOLERANCE_PCT)}'ten büyük.`,
+        message: `Atkı raporundaki atkı (${total}) ÷ desen rapor boyu (${qtyText(d.repeatCm)} cm) = ${pctText(implied)} atkı/cm; kartın sıklığı ${declared} — fark %${pctText(REPEAT_PICKS_TOLERANCE_PCT)}'ten büyük.`,
       });
     }
   }
   const shape = liftPlanShape(d?.liftPlan ?? null);
   if (shape && d?.frameCount != null && shape.frames > d.frameCount) {
-    out.push({ code: CONSTRUCTION_WARNING.liftPlanFramesExceed, message: `Armür ızgarası ${shape.frames} çerçeve kullanıyor; desen kartında çerçeve sayısı ${d.frameCount}.` });
+    out.push({ code: CONSTRUCTION_WARNING.liftPlanFramesExceed, message: `Desen örgüsü ${shape.frames} çerçeve kullanıyor; desen kartında çerçeve sayısı ${d.frameCount}.` });
   }
   if (shape && total > 0 && shape.picks !== total) {
-    out.push({ code: CONSTRUCTION_WARNING.liftPlanPicksMismatch, message: `Armür ızgarası ${shape.picks} atkı satırı; atkı kartı raporu ${total} atkı (bilgi).` });
+    out.push({ code: CONSTRUCTION_WARNING.liftPlanPicksMismatch, message: `Desen örgüsü ${shape.picks} atkı satırı; atkı raporu ${total} atkı (bilgi).` });
   }
   return out;
 }

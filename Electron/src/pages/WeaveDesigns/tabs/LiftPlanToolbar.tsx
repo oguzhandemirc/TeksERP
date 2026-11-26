@@ -99,7 +99,7 @@ function StructureGroup({ dispatch }: Pick<Props, "dispatch">) {
 
 export function LiftPlanToolbar({ dispatch, tool, canUndo, canRedo, hasSel, hasClip, direction }: Props) {
   return (
-    <div className="flex flex-wrap items-end gap-x-5 gap-y-3 rounded-lg border bg-muted/30 px-3 py-2" aria-label="Armür düzenleme araçları">
+    <div className="flex flex-wrap items-end gap-x-5 gap-y-3 rounded-lg border bg-muted/30 px-3 py-2" aria-label="Desen örgüsü düzenleme araçları">
       <Group label="Araç">
         <WeaveSegmented label="Araç" value={tool} onChange={(t) => dispatch({ type: "tool", tool: t })} options={[
           { value: "paint", label: <><Pencil className="h-3.5 w-3.5" />Boya</>, title: "Basılı sürükle: boya / sil" },
@@ -111,7 +111,7 @@ export function LiftPlanToolbar({ dispatch, tool, canUndo, canRedo, hasSel, hasC
       <EditGroup dispatch={dispatch} hasSel={hasSel} hasClip={hasClip} direction={direction} />
       <TemplateGroup dispatch={dispatch} hasSel={hasSel} />
       <StructureGroup dispatch={dispatch} />
-      <InfoPopover label="Armür editörü nasıl kullanılır" desc={HELP} />
+      <InfoPopover label="Desen örgüsü editörü nasıl kullanılır" desc={HELP} />
     </div>
   );
 }

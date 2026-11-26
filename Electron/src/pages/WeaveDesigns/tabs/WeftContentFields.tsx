@@ -169,7 +169,7 @@ export function WeftRowsHeader({ extra }: { extra?: string }) {
       <span />
       <span>Atkı ipliği</span>
       {/* 8rem sütunda uzun başlık 1440'ta iki satıra kırılıyordu: kısa etiket, tam anlam ⓘ'de. */}
-      <span className="flex items-center gap-1 whitespace-nowrap">Atış adedi<InfoPopover label="Rapordaki atkı adedi" desc={PICKS_INFO} /></span>
+      <span className="flex items-center gap-1 whitespace-nowrap">Atış adedi<InfoPopover label="Atkı raporundaki atkı adedi" desc={PICKS_INFO} /></span>
       <span className="flex items-center gap-1 whitespace-nowrap">Kanal<InfoPopover label="Renk seçici kanalı" desc={CHANNEL_INFO} /></span>
       {extra && <span className="text-right">{extra}</span>}
       <span />

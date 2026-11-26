@@ -73,7 +73,7 @@ describe("WarpSpecFormDialog — D3 satır editörü", () => {
     expect(screen.getByLabelText("A tel adedi")).toHaveProperty("value", "3000");
     expect(screen.getByLabelText("B tel adedi")).toHaveProperty("value", "4000");
     expect(screen.getByTestId("warp-total-ends").textContent).toMatch(/7\.?000/);
-    expect(screen.getByRole("textbox", { name: /^Çözgü dizimi/ })).toHaveProperty("value", "3A 4B");
+    expect(screen.getByRole("textbox", { name: /^Çözgü raporu/ })).toHaveProperty("value", "3A 4B");
     // Hesap paneli: iplik başına tel · denye · 1000 m kg · pay; ad + küçük kod; formül ve denye uyarısı.
     const rowA = screen.getByTestId("warp-calc-row-A").textContent ?? "";
     expect(rowA).toContain("PES 150");
@@ -177,9 +177,9 @@ describe("WarpSpecFormDialog — Görünüm (tel düzeni + tarak)", () => {
     renderDialog({ initial: spec });
     const summary = await screen.findByTestId("warp-ends-summary");
     expect(getById).toHaveBeenCalledWith("s1");
-    expect(summary.textContent).toMatch(/Rapor 7 tel × 1\.?000 tekrar = 7\.?000 tel/);
+    expect(summary.textContent).toMatch(/Çözgü raporu 7 tel × 1\.?000 tekrar = 7\.?000 tel/);
     expect(screen.getByTestId("reed-plan-summary").textContent).toContain("Dişe 1 tel");
-    const note = screen.getByRole("textbox", { name: /^Çözgü dizimi/ });
+    const note = screen.getByRole("textbox", { name: /^Çözgü raporu/ });
     await user.clear(note);
     await user.type(note, "1A 1B");
     expect(screen.queryByTestId("warp-ends-summary")).toBeNull();

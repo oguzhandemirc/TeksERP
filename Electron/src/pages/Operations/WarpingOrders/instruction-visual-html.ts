@@ -69,7 +69,7 @@ export function warpEndsStripHtml(seq: WarpEndsSequenceView | null | undefined, 
   for (let r = 0; r < shown; r++) for (let i = 0; i < drawLen; i++) cells.push({ yarn: seq.repeat[i]! });
   const cellMm = Math.max(1.2, Math.min(6, STRIP_MM / cells.length));
   const svg = stripSvg(cells, cellMm, `Tel düzeni: ${len} tellik rapor`, { bandEvery: shown > 1 ? len : undefined });
-  const sum = `Rapor ${len} tel × ${seq.repeatCount} tekrar${seq.remainder > 0 ? ` + ${seq.remainder} tel` : ""} = ${seq.totalEnds} tel`
+  const sum = `Çözgü raporu ${len} tel × ${seq.repeatCount} tekrar${seq.remainder > 0 ? ` + ${seq.remainder} tel` : ""} = ${seq.totalEnds} tel`
     + (shown > 1 ? ` · şeritte ${shown} rapor` : "")
     + (len > MAX_PRINT_ENDS ? ` · raporun ilk ${MAX_PRINT_ENDS} teli basıldı` : "");
   const used = [...new Set(seq.repeat)].sort((a, b) => a - b);
@@ -77,7 +77,7 @@ export function warpEndsStripHtml(seq: WarpEndsSequenceView | null | undefined, 
     const y = yarns[n - 1];
     return `<span class="lg">${swatch(printGray(n).fill)} <b>${esc(y?.letter ?? letterOf(n))}</b> ${esc(y ? y.name || y.code : "")}</span>`;
   }).join("");
-  const warn = seq.matchesYarnEnds ? "" : `<div class="warn">Dizilim iplik satırlarındaki telleri tutmuyor — kartı kontrol edin.</div>`;
+  const warn = seq.matchesYarnEnds ? "" : `<div class="warn">Çözgü raporu iplik satırlarındaki telleri tutmuyor — kartı kontrol edin.</div>`;
   return `<div class="viz"><div class="vt">Tel düzeni (çözgü raporu, soldan sağa)</div>${svg}<div class="vs">${esc(sum)}</div><div class="vl">${legend}</div>${warn}</div>`;
 }
 

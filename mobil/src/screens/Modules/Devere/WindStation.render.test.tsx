@@ -103,7 +103,7 @@ it('§5 iki iplikli kart: tel düzeni bandı sunucu açılımından (rapor satı
   await act(async () => {});
   expect(r.getByTestId('sar-tel-duzeni')).toBeTruthy();
   expect(r.getByText('Tel düzeni · 2A 1B')).toBeTruthy();
-  expect(r.getByText('Rapor 3 tel × 1166 + 2 = 3500 tel')).toBeTruthy();
+  expect(r.getByText('Çözgü raporu 3 tel × 1166 + 2 = 3500 tel')).toBeTruthy();
   expect(r.getByText('P75 · 1166 tel')).toBeTruthy();
   expect(r.queryByTestId('sar-tel-duzeni-uyari')).toBeNull();
 });

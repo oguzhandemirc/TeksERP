@@ -10,7 +10,7 @@ describe("WarpEndsStrip", () => {
   it("sunucu açılımı: rapor şeridi + 'rapor × tekrar = toplam', uyarı yok", () => {
     render(<WarpEndsStrip yarns={yarns} endsSequence={seq} cardEnds={3500} />);
     const sum = screen.getByTestId("warp-ends-summary").textContent ?? "";
-    expect(sum).toContain("Rapor 3 tel");
+    expect(sum).toContain("Çözgü raporu 3 tel");
     expect(sum).toMatch(/1\.?166 tekrar/);
     expect(sum).toContain("+ 2 tel");
     expect(sum).toMatch(/= 3\.?500 tel/);
@@ -23,7 +23,7 @@ describe("WarpEndsStrip", () => {
     render(<WarpEndsStrip yarns={[{ label: "A", endsCount: 3000 }, { label: "B", endsCount: 500 }]}
       endsSequence={{ ...seq, matchesYarnEnds: false }} cardEnds={3600} />);
     const w = screen.getByTestId("warp-ends-warning").textContent ?? "";
-    expect(w).toMatch(/A dizilimde 2\.?334 \/ kartta 3\.?000/);
+    expect(w).toMatch(/A raporda 2\.?334 \/ kartta 3\.?000/);
     expect(w).toMatch(/toplam teli 3\.?600/);
   });
 
@@ -31,8 +31,8 @@ describe("WarpEndsStrip", () => {
     render(<WarpEndsStrip yarns={[{ label: "Simli", endsCount: 3000 }, { label: "Naylon", endsCount: 500 }]}
       endsSequence={{ ...seq, matchesYarnEnds: false }} cardEnds={3500} slots={[2, 3]} />);
     const w = screen.getByTestId("warp-ends-warning").textContent ?? "";
-    expect(w).toMatch(/B dizilimde 2\.?334 \/ kartta 3\.?000/);
-    expect(w).toMatch(/C dizilimde/);
+    expect(w).toMatch(/B raporda 2\.?334 \/ kartta 3\.?000/);
+    expect(w).toMatch(/C raporda/);
     const legend = screen.getByRole("list", { name: "Renk açıklaması" }).textContent ?? "";
     expect(legend).toMatch(/BSimli/);
     expect(legend).toMatch(/CNaylon/);

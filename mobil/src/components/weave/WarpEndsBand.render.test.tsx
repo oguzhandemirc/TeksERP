@@ -24,7 +24,7 @@ describe('WarpEndsBand', () => {
     fireEvent(r.getByTestId('b').children[1] as never, 'layout', { nativeEvent: { layout: { width: 300, height: 28 } } });
     expect(r.getByTestId('b-svg')).toBeTruthy();
     expect(r.UNSAFE_getAllByType(Rect)).toHaveLength(2);
-    expect(r.getByText('Rapor 3 tel × 2 = 6 tel')).toBeTruthy();
+    expect(r.getByText('Çözgü raporu 3 tel × 2 = 6 tel')).toBeTruthy();
     expect(r.queryByTestId('b-uyari')).toBeNull();
   });
 

@@ -37,7 +37,7 @@ export function WarpSpecFormDialog({ open, onOpenChange, initial, draft, onSubmi
       size="wide"
       sectionsKey="warp-spec.form"
       title={initial ? "Çözgü Kartını Düzenle" : draft ? "Yeni Çözgü Kartı (örnekten)" : "Yeni Çözgü Kartı"}
-      description="İplikler ve telleri, tarak ve çözgü dizimi. Sağdaki hesap iplik kartındaki denyeyle anında güncellenir."
+      description="İplikler ve telleri, tarak ve çözgü raporu. Sağdaki hesap iplik kartındaki denyeyle anında güncellenir."
       schema={warpSpecFormSchema}
       defaultValues={initial ? buildDefaults(initial, reedUnit) : (draft ?? buildDefaults(null))}
       onSubmit={onSubmit}
@@ -54,7 +54,7 @@ export function WarpSpecFormDialog({ open, onOpenChange, initial, draft, onSubmi
               <FormCard sectionId="yarns" sectionRequired title="Çözgü iplikleri" icon={Layers}>
                 <YarnRowsEditor />
               </FormCard>
-              <FormCard sectionId="reed" errorFields={REED_FIELDS} title="Tarak ve çözgü dizimi" icon={Ruler} note="Tarak eni maliyette atkı boyunu belirler" aside={<ReedHelper form={form} />}>
+              <FormCard sectionId="reed" errorFields={REED_FIELDS} title="Tarak ve çözgü raporu" icon={Ruler} note="Tarak eni maliyette atkı boyunu belirler" aside={<ReedHelper form={form} />}>
                 <ReedFields form={form} />
                 <WarpSequenceBoxes />
               </FormCard>

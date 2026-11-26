@@ -51,9 +51,9 @@ const rowMark = (slots: readonly number[] | null | undefined): RowMark => ({
 });
 
 function fallbackNote(pending: boolean | undefined, note: string | null | undefined): string {
-  if (pending) return "Kaydedince dizilim tel tel çözülür; şimdilik ipliklerin tel payı gösteriliyor.";
-  if (note && note.trim()) return `Çözgü dizimi “${note.trim()}” okunamadı; ipliklerin tel payı gösteriliyor.`;
-  return "Çözgü dizimi girilmemiş; ipliklerin tel payı gösteriliyor.";
+  if (pending) return "Kaydedince çözgü raporu tel tel çözülür; şimdilik ipliklerin tel payı gösteriliyor.";
+  if (note && note.trim()) return `Çözgü raporu “${note.trim()}” okunamadı; ipliklerin tel payı gösteriliyor.`;
+  return "Çözgü raporu girilmemiş; ipliklerin tel payı gösteriliyor.";
 }
 
 export function WarpEndsStrip(props: WarpEndsStripProps) {
@@ -100,7 +100,7 @@ function SequenceBand({ seq, yarns, cardEnds, compact, maxWidth, mark }: {
         />
       </div>
       <p className="text-xs tabular-nums" data-testid="warp-ends-summary">
-        <span className="font-medium">Rapor {formatQty(len, 0)} tel</span>
+        <span className="font-medium">Çözgü raporu {formatQty(len, 0)} tel</span>
         {" × "}{formatQty(seq.repeatCount, 0)} tekrar
         {seq.remainder > 0 && <> + {formatQty(seq.remainder, 0)} tel</>}
         {" = "}<span className="font-medium">{formatQty(seq.totalEnds, 0)} tel</span>
@@ -111,8 +111,8 @@ function SequenceBand({ seq, yarns, cardEnds, compact, maxWidth, mark }: {
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
           <div className="space-y-0.5">
             {yarnMismatch && (
-              <p>Çözgü dizimi iplik satırlarındaki telleri tutmuyor:{" "}
-                {yarns.map((y, i) => `${mark.letter(i + 1)} dizilimde ${formatQty(byYarn[i] ?? 0, 0)} / kartta ${formatQty(y.endsCount, 0)}`).join(" · ")}
+              <p>Çözgü raporu iplik satırlarındaki telleri tutmuyor:{" "}
+                {yarns.map((y, i) => `${mark.letter(i + 1)} raporda ${formatQty(byYarn[i] ?? 0, 0)} / kartta ${formatQty(y.endsCount, 0)}`).join(" · ")}
               </p>
             )}
             {cardMismatch && <p>Kartın toplam teli {formatQty(cardEnds, 0)}, iplik satırlarının toplamı {formatQty(seq.totalEnds, 0)}.</p>}

@@ -47,12 +47,12 @@ export function WeaveMini({ c }: { c: RunConstruction }) {
         borderless={false}
         testID="weave-mini"
         accessibilityRole="button"
-        accessibilityLabel="Armür planını büyüt"
+        accessibilityLabel="Desen örgüsünü büyüt"
       >
         <View style={styles.miniRow}>
           <WeaveGrid {...input} cell={MINI_CELL} maxRows={MINI_MAX_ROWS} />
           <View style={styles.miniText}>
-            <Text style={styles.miniTitle}>Armür planı</Text>
+            <Text style={styles.miniTitle}>Desen örgüsü</Text>
             <Text style={styles.miniSub}>{`${shape.rows} atkı · ${shape.frames} çerçeve${cut ? ` (ilk ${MINI_MAX_ROWS} atkı)` : ''}`}</Text>
             <Text style={styles.miniHint}>Büyütmek için dokunun</Text>
           </View>
@@ -88,7 +88,7 @@ export default function WeaveGridSheet({ c, visible, onClose }: { c: RunConstruc
       onDismiss={onClose}
       size="xl"
       scrollRef={scrollRef}
-      title={`Armür planı${c.design ? ` · ${c.design.code}` : ''}`}
+      title={`Desen örgüsü${c.design ? ` · ${c.design.code}` : ''}`}
       subtitle={[c.design?.loomFileName ? `Dosya ${c.design.loomFileName}` : null, `${shape.rows} atkı · ${shape.frames} çerçeve`, direction === 'bottom-up' ? '1. atkı en altta (tezgâh ekranı gibi)' : '1. atkı en üstte (kâğıt gibi)'].filter(Boolean).join(' · ')}
       header={
         <View style={styles.legend} testID="weave-legend">
