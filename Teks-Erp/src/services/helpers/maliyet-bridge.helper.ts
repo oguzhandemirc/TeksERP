@@ -133,6 +133,27 @@ export async function loadRollWarpingCosts(db: Prisma.TransactionClient | typeof
   });
 }
 
+export interface RollWarpYarnCostRead {
+  costTry: Prisma.Decimal | null;
+  estimatedTry: Prisma.Decimal;
+  sources: Array<"LOT" | "MALIYET_FIYATI">;
+  missing: Array<"IPLIK_FIYATI" | "LEVENT_KOKENI" | "FX_RATE_MISSING">;
+}
+
+/**
+ * Topların çözgü ipliği payı (devere maliyet dilim 3). Devere kapalı → SORGU ATMADAN null. İplik kapalıysa lot fiyatı
+ * ve WARP_ISSUE okunmaz; kırılım kg'ı maliyet kartı iplik fiyatıyla (tahmini) fiyatlanır.
+ */
+export async function loadRollWarpYarnCosts(db: Prisma.TransactionClient | typeof prisma, rollIds: string[]): Promise<Map<string, RollWarpYarnCostRead> | null> {
+  if (!(await readDevereEnabled())) return null;
+  const { loadRollWarpYarnCostsTx } = await import("./warp-yarn-actual.helper");
+  const iplik = (await readIplikEnabled()) ? await import("./warp-yarn-lot-price.helper") : null;
+  return loadRollWarpYarnCostsTx(db, rollIds, {
+    lots: iplik ? { prices: (d, ids) => iplik.readLotPricesTry(d, ids, suggestFxRate), issues: iplik.readBeamIssueLots } : null,
+    fxRate: suggestFxRate,
+  });
+}
+
 // ── İplik ihtiyaç planı (MAL-7) köprüleri — `null` = modül kapalı, "bilinmiyor"; 0 DEĞİL ──
 
 export interface YarnStockRead { serbestKg: Prisma.Decimal; emanetKg: Prisma.Decimal | null }
