@@ -146,6 +146,8 @@ async function invoice(spec: {
       docNo: `${P}-${spec.docNo}`, type: spec.type ?? "SALES", status: spec.status, cariId: spec.cariId, currency: spec.currency ?? Currency.TRY,
       exchangeRate: spec.rate ?? "1", issueDate: spec.issue, confirmedAt: spec.status === InvoiceStatus.DRAFT ? null : spec.issue,
       subcontractorReceiptId: spec.receiptId ?? null,
+      // Üretim yolu `subtotal`ı Σ satır neti olarak yazar (`computeInvoiceTotals`); fason tutarı tek okuyucu `invoiceNetExVat` ondan okur.
+      subtotal: spec.lines.reduce((a, l) => a.plus(l.total), new Prisma.Decimal(0)),
       lines: { create: spec.lines.map((l, i) => ({ lineNo: i + 1, ...lineSubject(l.item), description: "TEST", qty: l.qty, unitPrice: new Prisma.Decimal(l.total).div(l.qty), lineTotal: l.total, vatAmount: "0" })) },
     },
     select: { id: true },
