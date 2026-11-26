@@ -202,8 +202,8 @@ function fabricChecks(complete: ProfitabilityRow[]): void {
   check("§11a ⭐ her kırılımın toplamı AYNI ve motor satırlarının toplamı (gelir 1700, kalan boş)",
     totals.every((t) => JSON.stringify({ ...t, ad: "" }) === JSON.stringify({ ...totals[0]!, ad: "" })) && totals[0]!.gelir === 1700 && totals[0]!.katki === null, JSON.stringify(totals[0]));
   const isTable = productTable(rows, "is", PNAMES);
-  check("§11b eksiksiz satırın kalanı motorun sayısı (600), eksikli grubun kalanı BOŞ", isTable.satirlar[0]?.katki === 600 && s.tablo.satirlar.find((r) => r.ad === "Tül 2001")?.katki === null);
-  const alSat = s.tablo.satirlar.find((r) => r.ad === "Hazır Voal");
+  check("§11b eksiksiz satırın kalanı motorun sayısı (600), eksikli grubun kalanı BOŞ", isTable.satirlar[0]?.katki === 600 && s.tablo?.satirlar.find((r) => r.ad === "Tül 2001")?.katki === null);
+  const alSat = s.tablo?.satirlar.find((r) => r.ad === "Hazır Voal");
   check("§11c ⭐ al-sat satırı görünür: gelir dolu, dokuma boş (0 değil), rozet 'eksik: dokuma işi yok'", alSat?.gelir === 200 && alSat?.dokuma === null && alSat?.durum === "eksik: dokuma işi yok", JSON.stringify(alSat));
   check("§11d iş sürüyor rozeti + iplik eksiği", String(isTable.satirlar[1]?.durum) === "eksik: iplik maliyeti · iş sürüyor", String(isTable.satirlar[1]?.durum));
   check("§11e ⭐ 'genel gider dağıtılmadı' ve 'iade düşülmedi' uyarıları + kalan tanımı", s.uyarilar.some((u) => u.startsWith("Genel gider ve işçilik kumaş satırlarına dağıtılmadı"))
@@ -212,10 +212,10 @@ function fabricChecks(complete: ProfitabilityRow[]): void {
     && JSON.stringify(s.parametreler.find((p) => p.ad === "kirilim")?.secenekler?.map((o) => o.deger)) === JSON.stringify(PRODUCT_BREAKDOWNS));
   check("§11g ana sayı ölçülemedi (eksik var), yan sayı hizmet kalanı = hizmet tablosunun toplamı", s.anaSayi.deger === null && Boolean(s.anaSayi.olculemedi)
     && s.yanSayilar.find((f) => f.olcu === "karlilik.hizmetKatki")?.deger === buildProfitabilitySunumu({ result: res, previous: null, names: NAMES, window: WINDOW, breakdown: "musteri" }).anaSayi.deger);
-  check("§11h devere kalemi okunmayan kurulumda devere kolonu yok", !s.tablo.kolonlar.some((k) => k.anahtar === "devere"));
+  check("§11h devere kalemi okunmayan kurulumda devere kolonu yok", !s.tablo?.kolonlar.some((k) => k.anahtar === "devere"));
   const full = [prow({ itemId: "i1", wo: "w1", revenue: 1000, weaving: 300, warping: 40, yarn: 100, contribution: 560 }), prow({ itemId: "i1", wo: "w2", revenue: 400, weaving: 100, warping: 20, yarn: 50, contribution: 230 })];
   const sFull = buildProductProfitabilitySunumu({ result: withProducts(complete, full), previous: null, names: PNAMES, window: WINDOW, breakdown: "musteri" });
-  check("§11i ⭐ eksiksizde ana sayı = Σ motor katkısı (790), devere kolonu var", sFull.anaSayi.deger === 790 && sFull.tablo.kolonlar.some((k) => k.anahtar === "devere") && sFull.tablo.toplam?.devere === 60);
+  check("§11i ⭐ eksiksizde ana sayı = Σ motor katkısı (790), devere kolonu var", sFull.anaSayi.deger === 790 && sFull.tablo?.kolonlar.some((k) => k.anahtar === "devere") === true &&sFull.tablo?.toplam?.devere === 60);
   const src = readFileSync(path.join(__dirname, "..", "src/services/reports/profitability-product.sunum.ts"), "utf8");
   check("§11j ⭐ kumaş sunumu saf ve katkı hesaplamaz (prisma yok, gelirden maliyet düşmez)", !/lib\/prisma/.test(src) && !/\.minus\(/.test(src));
 }
