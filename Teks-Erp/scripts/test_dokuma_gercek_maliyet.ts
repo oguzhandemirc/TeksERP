@@ -17,6 +17,8 @@
 //   ④ (inceleme düzeltmesi) payda süzgeci yeniden `notIn: K18_DEAD_STATUSES` yapıldı → §1e ❌
 //   ⑤ (inceleme düzeltmesi) ana sayıdan `!w.ongoing` süzgeci kaldırıldı → §5e ❌
 //   ⑥ (SY-N3, 2026-11-01) `versionOf` varyant haritasını atlayıp yalnız desen genelini okudu → §8a ❌
+//   ⑦ (SY-N4, 2026-11-26) helper'da VARYANT_STANDART_YOK satırı kaldırıldı → §8d/§8e ❌; rapor bilgi kodunu
+//      eksik sayınca (WEAVING_INFO_CODES süzgeci kalktı) → §8e ❌
 // ⚠️ DB'ye yazar → `hedefDbEngeli()` ilk adım; fikstür `finally`de silinir.
 // =============================================================================
 import { randomUUID } from "node:crypto";
@@ -213,6 +215,14 @@ async function variantSection(now: Date): Promise<void> {
   check("§8a ⭐ varyantlı iş varyantın sürümünü okur: 5 + 2 + 1 = 8, teorik 20 m/sa", !!a && eq(a.standardPerMTry, "8") && eq(a.theoreticalMPerHour, "20"), `${s(a?.standardPerMTry ?? null)} · ${s(a?.theoreticalMPerHour ?? null)}`);
   check("§8b sürümü olmayan varyant desen geneline düşer (6, STANDART_YOK yok)", !!b && eq(b.standardPerMTry, "6") && !b.missing.includes("STANDART_YOK"), s(b?.standardPerMTry ?? null));
   check("§8c varyantsız iş bugünkü gibi desen geneli (6)", !!c && eq(c.standardPerMTry, "6"), s(c?.standardPerMTry ?? null));
+  // SY-N4: desen geneline düşüş sessiz kalmaz — bilgi kodu + rapor notu; satırı "eksik" yapmaz.
+  check("§8d ⭐ sürümsüz varyant VARYANT_STANDART_YOK taşır; kendi sürümü olan ve varyantsız iş taşımaz",
+    !!b && b.missing.includes("VARYANT_STANDART_YOK") && !!a && !a.missing.includes("VARYANT_STANDART_YOK") && !!c && !c.missing.includes("VARYANT_STANDART_YOK"),
+    `${b?.missing.join(",")} | ${a?.missing.join(",")} | ${c?.missing.join(",")}`);
+  const rep: WeavingEfficiencyReport = { currency: "TRY", fxRate: null, rows: [b!], runlessMeters: "0" };
+  const durum = String(weavingEfficiencyTable(rep).satirlar[0]?.["durum"] ?? "");
+  check("§8e rapor durumu varyant notunu söyler; bilgi kodu tek başına 'eksik' yazdırmaz",
+    durum.includes("varyantın standart maliyeti yok") && !/eksik:[^(]*varyant/.test(durum), durum);
 }
 
 async function cleanup(): Promise<void> {

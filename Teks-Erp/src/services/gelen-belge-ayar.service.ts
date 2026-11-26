@@ -31,13 +31,12 @@
 // Ürün kapısı tek karar: yaşam döngüsü `assertItemUsable(NEW_STOCK)` + top doğurabilen tür ALLOWLIST'i
 // (`ROLL_BEARING_ITEM_TYPES`; yeni tür — ör. SERVICE — eklendiği gün kendiliğinden dışarıda kalır).
 // =============================================================================
-import { ItemType } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { settingScreenPath } from "../constants/panel-ayar-yolu";
 import { ekranYolu } from "../constants/panel-ekran-yolu";
 import { TERIM } from "../constants/terim";
-import { assertItemUsable } from "./helpers/item-usage.helper";
+import { assertItemUsable, ROLL_BEARING_ITEM_TYPES } from "./helpers/item-usage.helper";
 import { factoryRouteProblem } from "./gelen-belge-rota-onerisi.service";
 import { DEFAULT_OUTLIER_FACTOR, OUTLIER_FACTOR_MAX, OUTLIER_FACTOR_MIN } from "../lib/gelen-belge/taslak";
 import { readStationVerifySettings, setStationLookupOptions, type StationVerifySettings } from "./gelen-belge-ayar-istasyon";
@@ -93,8 +92,8 @@ import {
 } from "./system-setting.service";
 import type { DefaultItemView, IncomingDocSettings, IncomingDocSettingsInput } from "./gelen-belge-ayar-types";
 
-/** Top doğurabilen ürün türleri — `InventoryService.createInitialEntry` kapısıyla aynı küme (yalnız kumaş). */
-export const ROLL_BEARING_ITEM_TYPES: readonly ItemType[] = [ItemType.FABRIC];
+// Top doğurabilen tür kümesi İE hedef kapısıyla ortak; tek tanım kullanım kuralının yanında.
+export { ROLL_BEARING_ITEM_TYPES };
 
 // Ham ayar ucunun yazamadığı anahtarlar ayrı dosyada (bu servis satır tavanında); içe aktaranlar buradan okur.
 export { INCOMING_DOC_DEDICATED_SETTING_KEYS } from "./gelen-belge-ayar-anahtarlari";
