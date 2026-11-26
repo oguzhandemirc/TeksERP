@@ -5,7 +5,8 @@
 //      maliyet = işin gerçek TL/m ("Dokuma maliyeti" tablosu, `weavingActualCostTx`) × satılan metre; hizmet satırı
 //      ve metin satırı kumaş gelirine girmez
 //   §2 iade edilmiş top brütte KALIR (gelir payı + maliyet), `IADE_DUSULMEDI` bilgisi
-//   §3 emanet top evrene girmez (metre payına da)
+//   §3 emanet top evrene girmez (metre payına da); satır miktarı emanet metresini de taşıyorsa (hizmet faturası kapalı
+//      taslak) emanet payı gelirden düşer, yalnız emanet taşıyan satır evrene hiç girmez (inceleme B4)
 //   §4 iptal İPTAL AYINDA eksi satır, fatura ayı değişmez; taslak `productDraftRows`ta, katkısız
 //   §5 dokunmamış top `DOKUMA_ISI_YOK`, sevksiz fatura `SEVK_BAGI_YOK` — gelir görünür, katkı null
 //   §6 tambur çocuğu atanın dokuma işine çözülür; boyahaneden doğan top (ata bağı yok, dilim 3) makbuz kalemindeki ham
@@ -58,7 +59,7 @@ const f2 = (d: Prisma.Decimal | null | undefined) => (d === null || d === undefi
 const ids = {
   customers: [] as string[], items: [] as string[], rolls: [] as string[], invoices: [] as string[], shipments: [] as string[], returns: [] as string[],
   orders: [] as string[], machines: [] as string[], stations: [] as string[], receipts: [] as string[], wos: [] as string[], steps: [] as string[], svc: [] as string[],
-  versions: [] as string[], yarns: [] as string[], lots: [] as string[], goods: [] as string[], cards: [] as string[],
+  versions: [] as string[], yarns: [] as string[], lots: [] as string[], goods: [] as string[], cards: [] as string[], salesOrders: [] as string[],
 };
 let mf: MaliyetFikstur | null = null;
 
@@ -148,6 +149,8 @@ async function invoice(spec: {
       docNo: `${P}-${spec.docNo}`, type: spec.type ?? "SALES", status: spec.status, cariId: spec.cariId, currency: spec.rate ? Currency.USD : Currency.TRY,
       exchangeRate: spec.rate ?? "1", issueDate: spec.issue, confirmedAt: spec.status === InvoiceStatus.DRAFT ? null : spec.issue,
       cancelledAt: spec.cancelledAt ?? null, shipmentId: spec.shipmentId ?? null, subcontractorReceiptId: spec.receiptId ?? null,
+      // Üretim yolu `subtotal`ı Σ satır neti yazar (`computeInvoiceTotals`); fason tutarı `invoiceNetExVat` ondan okur.
+      subtotal: spec.lines.reduce((a, l) => a.plus(l.total), new Prisma.Decimal(0)),
       lines: { create: spec.lines.map((l, i) => ({
         lineNo: i + 1, lineType: l.kind, itemId: l.kind === "PRODUCT" ? l.id! : null, serviceItemId: l.kind === "SERVICE" ? l.id! : null,
         description: "TEST", qty: l.qty, unitPrice: new Prisma.Decimal(l.total).div(l.qty), lineTotal: l.total, vatAmount: "0",
@@ -239,6 +242,10 @@ async function main(): Promise<void> {
     const F4 = await item("F4");
     await weftVersion(F4, YM, "0.01", mf.paramId);
     const WO4 = await weavingOrder("4", F4, m.id, 2);
+    // Müşteri ipliği yalnız işin müşterisinin lotuysa (inceleme B3): WO4 c'nin siparişini besler.
+    const so4 = await prisma.order.create({ data: { orderNumber: `${P}-SO4`, customerId: c.id, lines: { create: [{ itemId: F4, quantity: 50 }] } }, select: { id: true, lines: { select: { id: true } } } });
+    ids.salesOrders.push(so4.id);
+    await prisma.weavingOrderToOrderLine.create({ data: { weavingOrderId: WO4, orderLineId: so4.lines[0]!.id } });
     const sh2 = await prisma.shipment.create({ data: { shipmentNo: `${P}-SH2`, customerId: c.id }, select: { id: true } });
     ids.shipments.push(sh2.id);
     await roll("4", F4, 50, { weavingOrderId: WO4, shipmentId: sh2.id });
@@ -250,6 +257,16 @@ async function main(): Promise<void> {
       { kind: "PRODUCT", id: F1, qty: "300", total: "1500.00" }, { kind: "PRODUCT", id: F2, qty: "50", total: "200.00" },
       { kind: "PRODUCT", id: F3, qty: "25", total: "50.00" }, { kind: "SERVICE", id: svc.id, qty: "1", total: "999.00" }, { kind: "TEXT", qty: "1", total: "0.00" },
     ] });
+    // İnceleme B4 (hizmet faturası kapalı → taslak emanet topu ürün satırına yazar): SH4 kendi 50 m + emanet 50 m, satır 100 m
+    // × 10 TL; SH5 yalnız emanet 20 m. INV1'de satır (300 m) emanetsiz metreye eşit → bugünkü bölüşüm (§1b).
+    const sh4 = await prisma.shipment.create({ data: { shipmentNo: `${P}-SH4`, customerId: c.id }, select: { id: true } });
+    const sh5 = await prisma.shipment.create({ data: { shipmentNo: `${P}-SH5`, customerId: c.id }, select: { id: true } });
+    ids.shipments.push(sh4.id, sh5.id);
+    await roll("O2", F2, 50, { entrySource: RollEntrySource.MANUAL_ENTRY, shipmentId: sh4.id });
+    await roll("E2", F2, 50, { entrySource: RollEntrySource.MANUAL_ENTRY, ownerCustomerId: c.id, shipmentId: sh4.id });
+    await roll("E3", F2, 20, { entrySource: RollEntrySource.MANUAL_ENTRY, ownerCustomerId: c.id, shipmentId: sh5.id });
+    await invoice({ cariId: cari.id, docNo: "F6", issue: T("2022-04-16"), status: InvoiceStatus.CONFIRMED, shipmentId: sh4.id, lines: [{ kind: "PRODUCT", id: F2, qty: "100", total: "1000.00" }] });
+    await invoice({ cariId: cari.id, docNo: "F7", issue: T("2022-04-17"), status: InvoiceStatus.CONFIRMED, shipmentId: sh5.id, lines: [{ kind: "PRODUCT", id: F2, qty: "20", total: "200.00" }] });
     // INV2: sevksiz elle satış, Mayıs'ta iptal. INV3: taslak.
     await invoice({ cariId: cari.id, docNo: "F2", issue: T("2022-04-20"), status: InvoiceStatus.CANCELLED, cancelledAt: T("2022-05-05"), lines: [{ kind: "PRODUCT", id: F1, qty: "10", total: "70.00" }] });
     await invoice({ cariId: cari.id, docNo: "F3", issue: T("2022-04-25"), status: InvoiceStatus.DRAFT, lines: [{ kind: "PRODUCT", id: F1, qty: "300", total: "900.00" }] });
@@ -281,6 +298,11 @@ async function main(): Promise<void> {
 
     // ── §3 emanet ──
     check("§3a ⭐ emanet top (30 m) evrene girmez: F1 satılan metre 300 (330 değil)", f2(inv1.filter((r) => r.itemId === F1).reduce((a, r) => a.plus(r.meters), new Prisma.Decimal(0))) === "300.00");
+    const f6 = rows.filter((r) => r.docNo === `${P}-F6`);
+    check("§3b ⭐ satır emanet metresini de taşıyor (100 m = 50 kendi + 50 emanet): kendi topun geliri 500,00 (1000 değil), metre 50",
+      f6.length === 1 && f2(f6[0]!.revenueTry) === "500.00" && f2(f6[0]!.meters) === "50.00", f6.map((r) => `${f2(r.revenueTry)}/${f2(r.meters)}`).join(","));
+    check("§3c yalnız emanet top taşıyan satır kumaş evrenine girmez (SEVK_BAGI_YOK geliri DEĞİL)", !rows.some((r) => r.docNo === `${P}-F7`),
+      rows.filter((r) => r.docNo === `${P}-F7`).map((r) => r.missing.join("+")).join(","));
 
     // ── §5 dokunmamış / sevksiz ──
     check("§5a ⭐ al-sat top `DOKUMA_ISI_YOK`, gelir 400,00 görünür, maliyet ve katkı null",
@@ -367,6 +389,9 @@ async function temizle(foto: Array<{ key: string; value: Prisma.JsonValue }>): P
   await q(prisma.workOrder.deleteMany({ where: { id: { in: ids.wos } } }));
   await q(prisma.machineRun.deleteMany({ where: { machineId: { in: ids.machines } } }));
   await q(prisma.machineCostRate.deleteMany({ where: { machineId: { in: ids.machines } } }));
+  await q(prisma.weavingOrderToOrderLine.deleteMany({ where: { weavingOrderId: { in: ids.orders } } }));
+  await q(prisma.orderLine.deleteMany({ where: { orderId: { in: ids.salesOrders } } }));
+  await q(prisma.order.deleteMany({ where: { id: { in: ids.salesOrders } } }));
   await q(prisma.weavingOrder.deleteMany({ where: { id: { in: ids.orders } } }));
   await q(prisma.machine.deleteMany({ where: { id: { in: ids.machines } } }));
   await q(prisma.station.deleteMany({ where: { id: { in: ids.stations } } }));

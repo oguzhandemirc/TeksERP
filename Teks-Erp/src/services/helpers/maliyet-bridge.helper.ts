@@ -159,7 +159,7 @@ export async function loadRollWarpYarnCosts(db: Prisma.TransactionClient | typeo
  * lot girişleri okunmaz; norm maliyet kartı fiyatıyla (tahmini) fiyatlanır.
  */
 export async function loadRollWeftYarnCosts(
-  db: Prisma.TransactionClient | typeof prisma, rolls: Array<{ rollId: string; lines: import("./weft-yarn-actual.helper").WeftNormLine[] }>,
+  db: Prisma.TransactionClient | typeof prisma, rolls: import("./weft-yarn-actual.helper").WeftRollInput[],
 ): Promise<Map<string, import("./weft-yarn-actual.helper").RollWeftYarnCost>> {
   const { loadRollWeftYarnCostsTx } = await import("./weft-yarn-actual.helper");
   const iplik = (await readIplikEnabled()) ? await import("./warp-yarn-lot-price.helper") : null;

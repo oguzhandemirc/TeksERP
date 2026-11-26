@@ -106,6 +106,8 @@ const OTHER_MODEL: ReadonlySet<string> = new Set([
   "src/services/beam-body/write.ts",
   // Devere ek B2: gövde iade belgesi sahibi (`BeamBodyReturn.ownerCustomerId`) — top değil.
   "src/services/beam-body/returns.ts",
+  // Atkı ipliği gerçek maliyeti: iplik giriş lotunun sahibi (`YarnLot.ownerCustomerId`, NULL = bizim lot) — top değil.
+  "src/services/helpers/weft-yarn-actual.helper.ts",
 ]);
 
 function walk(dir: string, out: string[] = []): string[] {

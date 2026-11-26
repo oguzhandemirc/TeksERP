@@ -52,7 +52,8 @@ const EN_AZ_SATIR = 1000; // 2026-09-14: 1766 satır; yarısı düşerse tablo k
 // 501 → 500 (2026-10-06, O13b): main'de gerçek 502 idi (taban aşılmış); hücre sınıflandı, gerçek 500.
 // 500 → 498 (2026-10-06, O15): segmented-buttons-row iki satırı sondayla sınıflandı.
 // 498 → 495 (2026-11-12): emekli rapor sayfalarının istemci test satırları haritadan kalktı.
-const DUZ_TABAN = 495;
+// 495 → 494 (2026-11-26, maliyet incelemesi): test_auto_draft_shipment finans satırı sondayla sınıflandı.
+const DUZ_TABAN = 494;
 
 let pass = 0;
 let fail = 0;
