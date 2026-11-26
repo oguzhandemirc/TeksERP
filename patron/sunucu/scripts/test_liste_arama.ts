@@ -314,8 +314,9 @@ async function hizmetSuzgeci(o: Ortam, k: TestKurulumu, h: TestHesabi): Promise<
   const w = { t: new Date(o.saat.simdi() - 60_000).toISOString(), k: "000000000004" };
   const t = new Date(o.saat.simdi() - 120_000).toISOString();
   const id = { hizmet: randomUUID(), baska: randomUUID(), f1: randomUUID(), f2: randomUUID(), f3: randomUUID(), u1: randomUUID() };
+  // `fiyat` FINANS sınıfıdır, kökte gönderilemez (ALAN_SINIFI_IHLALI); süzgeç için gerekmez.
   const fiyat = (fid: string, hizmetId: string | null) =>
-    ({ id: fid, urunId: hizmetId ? null : randomUUID(), hizmetId, cariKartId: null, tur: "SALE", doviz: "TRY", fiyat: "12.50", degisim: t });
+    ({ id: fid, urunId: hizmetId ? null : randomUUID(), hizmetId, cariKartId: null, tur: "SALE", doviz: "TRY", degisim: t });
   const kayitlar = [girdi("fiyat", { yaz: [fiyat(id.f1, id.hizmet), fiyat(id.f2, id.baska), fiyat(id.f3, null)], yeni: w })];
   const r = await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk: new Date(o.saat.simdi() - 60_000), kayitlar }) });
   if (r.status !== 200 || (r.json as unknown as { ret: unknown[] }).ret.length > 0) throw new Error(`hizmet fikstürü: ${r.status} ${JSON.stringify(r.json)}`);
