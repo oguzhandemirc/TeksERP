@@ -127,7 +127,8 @@ async function main(): Promise<void> {
   check("§7a uç zinciri: router maliyet kapısı → ön muhasebe → rapor kapısı → cost:read + report:finance",
     /router\.use\(verifyToken, requireMaliyetEnabled\)/.test(route)
       && /router\.get\("\/karlilik", requireFinanceEnabled, requireDokumaForFabricScope, requireReportOpen\("maliyet\/karlilik"\), requirePermission\("cost:read"\), requirePermission\("report:finance"\)/.test(route)
-      && /req\.query\.kapsam === "kumas"\) void requireDokumaEnabled\(req, res, next\)/.test(route));
+      && /profitabilityQuerySchema\.safeParse\(req\.query\)/.test(route)
+      && /q\.success && q\.data\.kapsam === "kumas"\) void requireDokumaEnabled\(req, res, next\)/.test(route));
   const sunumSrc = readFileSync(path.join(root, "src/services/reports/profitability.sunum.ts"), "utf8");
   check("§7b sunum saf: prisma import etmez", !/lib\/prisma/.test(sunumSrc));
   check("§7c ⭐ katkı/net yalnız helper'da hesaplanır (sunum gelirden maliyet düşmez)", !/(revenue|contribution)(Try)?\??\.minus|\.minus\((?![^)]*Distributed)[^)]*(consum|machine|subcontract|labor|overhead)/i.test(sunumSrc));
@@ -204,7 +205,7 @@ function fabricChecks(complete: ProfitabilityRow[]): void {
   const isTable = productTable(rows, "is", PNAMES);
   check("§11b eksiksiz satırın kalanı motorun sayısı (600), eksikli grubun kalanı BOŞ", isTable.satirlar[0]?.katki === 600 && s.tablo?.satirlar.find((r) => r.ad === "Tül 2001")?.katki === null);
   const alSat = s.tablo?.satirlar.find((r) => r.ad === "Hazır Voal");
-  check("§11c ⭐ al-sat satırı görünür: gelir dolu, dokuma boş (0 değil), rozet 'eksik: dokuma işi yok'", alSat?.gelir === 200 && alSat?.dokuma === null && alSat?.durum === "eksik: dokuma işi yok", JSON.stringify(alSat));
+  check("§11c ⭐ al-sat satırı görünür: gelir dolu, dokuma boş (0 değil), rozet 'eksik: dokuma iş emri yok' (TERIM)", alSat?.gelir === 200 && alSat?.dokuma === null && alSat?.durum === "eksik: dokuma iş emri yok", JSON.stringify(alSat));
   check("§11d iş sürüyor rozeti + iplik eksiği", String(isTable.satirlar[1]?.durum) === "eksik: iplik maliyeti · iş sürüyor", String(isTable.satirlar[1]?.durum));
   check("§11e ⭐ 'genel gider dağıtılmadı' ve 'iade düşülmedi' uyarıları + kalan tanımı", s.uyarilar.some((u) => u.startsWith("Genel gider ve işçilik kumaş satırlarına dağıtılmadı"))
     && s.uyarilar.some((u) => u.startsWith("İade edilen toplar")) && s.tanimlar.some((t) => t.ad === "Kalan (katkı)" && t.aciklama.includes("genel gider ve işçilik dağıtılmadı")));

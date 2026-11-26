@@ -9,7 +9,9 @@ import { Prisma } from "@prisma/client";
 import type { ParametreBeyani, RaporSunumu, TabloBlok, TabloHucresi, TabloKolonu } from "./sunum/sunum.types";
 import { catalogHeader, metricFigure, periodOf, plainFigure } from "./temel/_common";
 import { dayRangeParameters, type ResolvedDayRange } from "./temel/_day-range";
+import { TERIM } from "../../constants/terim";
 import { anlatiUret } from "./anlati/anlati";
+import { paraMetni } from "./anlati/sayi-bicim";
 import { missingText } from "./weaving-efficiency.report";
 import type { ProfitabilityResult, ProductMissingCode, ProductProfitRow } from "../helpers/profitability.helper";
 import {
@@ -23,7 +25,7 @@ const LABEL: Record<ProductBreakdown, string> = { desen: "Desen", musteri: "Mü�
 
 /** Kumaş satışına özgü kodların günlük dili; dokuma kodları "Dokuma maliyeti" raporunun sözlüğünden (tek kaynak). */
 const OWN_TEXT: Partial<Record<ProductMissingCode, string>> = {
-  IPLIK_MALIYETI: "iplik maliyeti", DOKUMA_ISI_YOK: "dokuma işi yok", SEVK_BAGI_YOK: "sevk bağı yok", DIS_FASON: "boya/apre fasonu",
+  IPLIK_MALIYETI: "iplik maliyeti", DOKUMA_ISI_YOK: `${TERIM.dokumaIsEmri.tekilKucuk} yok`, SEVK_BAGI_YOK: "sevk bağı yok", DIS_FASON: "boya/apre fasonu",
 };
 export const productMissingText = (c: ProductMissingCode): string => OWN_TEXT[c] ?? missingText(c as Parameters<typeof missingText>[0]);
 const WARPING_CODES: readonly ProductMissingCode[] = ["DEVERE_UCRETI", "DEVERE_FATURASI", "COZGU_TUKETIMI", "LEVENT_KOKENI"];
@@ -130,20 +132,18 @@ export function productTable(rows: ProductProfitRow[], by: ProductBreakdown, nam
   };
 }
 
-const TR_NUMBER = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 2 });
-const say = (d: Dec): string => TR_NUMBER.format(Number(d.toFixed(2)));
 
 function productWarnings(r: ProfitabilityResult, notes: string[]): string[] {
   const rows = r.productRows ?? [];
   const drafts = r.productDraftRows ?? [];
   const w = [...notes];
-  if (drafts.length > 0) w.push(`Taslak faturalarda ${say(drafts.reduce((a, d) => a.plus(d.revenueTry), D0()))} TL kumaş geliri var; kesinleşmediği için kalana girmedi.`);
+  if (drafts.length > 0) w.push(`Taslak faturalarda ${paraMetni(drafts.reduce((a, d) => a.plus(d.revenueTry), D0()).toNumber())} TL kumaş geliri var; kesinleşmediği için kalana girmedi.`);
   const cancelled = rows.filter((x) => x.kind === "CANCELLED").length;
   if (cancelled > 0) w.push(`${cancelled} satır iptal edilen faturadan geliyor; iptal edildiği ayda eksi yazıldı, eski ay değişmedi.`);
   const missing = rows.filter((x) => x.missing.length > 0).length;
   if (missing > 0) w.push(`${missing} satırda eksik girdi var (Durum kolonunda "eksik"); bu satırların kalanı hesaplanmadı, 0 sayılmadı.`);
   const ongoing = rows.filter((x) => x.ongoing).length;
-  if (ongoing > 0) w.push(`${ongoing} satırın dokuma işi sürüyor; maliyeti bugünkü bilgiyle, iş ilerledikçe değişebilir.`);
+  if (ongoing > 0) w.push(`${ongoing} satırın ${TERIM.dokumaIsEmri.tekilKucuk} sürüyor; maliyeti bugünkü bilgiyle, iş ilerledikçe değişebilir.`);
   const notices = r.productNotices ?? [];
   if (notices.includes("GENEL_GIDER_DAGITILMADI")) w.push("Genel gider ve işçilik kumaş satırlarına dağıtılmadı; \"Kalan\" yalnız doğrudan maliyet düşülerek bulunur.");
   if (notices.includes("IADE_DUSULMEDI")) w.push("İade edilen toplar satışta (brüt) kaldı; iade faturaları bu tabloya henüz düşülmüyor.");
@@ -159,7 +159,7 @@ function productDefinitions(withWarping: boolean): Array<{ ad: string; aciklama:
     { ad: "İplik", aciklama: "Çözgü ve atkı ipliğinin maliyeti; okunamadığında \"eksik: iplik maliyeti\" yazar." },
     { ad: "Boya/apre fasonu", aciklama: "Topun boyahaneden geçtiği fasonun bedeli; zincirde fason yoksa 0, okunamadığında \"eksik\"." },
     { ad: "Kalan (katkı)", aciklama: "Satış gelirinden iplik, dokuma, devere ve fason çıkınca kalan; genel gider ve işçilik dağıtılmadı." },
-    { ad: "Eksik", aciklama: "Maliyeti okunamayan parça sıfır sayılmaz, satırın kalanı boş kalır. \"dokuma işi yok\": top hiçbir dokuma işine bağlanmıyor (al-sat ya da stok devri)." },
+    { ad: "Eksik", aciklama: `Maliyeti okunamayan parça sıfır sayılmaz, satırın kalanı boş kalır. "${OWN_TEXT.DOKUMA_ISI_YOK}": top hiçbir ${TERIM.dokumaIsEmri.cekimKucuk.yonelme} bağlanmıyor (al-sat ya da stok devri).` },
   ];
 }
 

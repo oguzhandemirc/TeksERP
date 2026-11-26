@@ -104,7 +104,9 @@ export const profitabilityQuerySchema = coreDayRangeQuerySchema.extend({
 
 /** Kumaş kapsamı dokuma modülünün yüzeyidir: yalnız `kapsam=kumas` isteğinde dokuma kapısı (kapalı → 403 MODULE_DISABLED). */
 function requireDokumaForFabricScope(req: Request, res: Response, next: NextFunction): void {
-  if (req.query.kapsam === "kumas") void requireDokumaEnabled(req, res, next);
+  // Tek kapı şema: geçersiz sorgu burada geçer, 400'ü (izin kapılarından sonra) handler'daki aynı parse verir.
+  const q = profitabilityQuerySchema.safeParse(req.query);
+  if (q.success && q.data.kapsam === "kumas") void requireDokumaEnabled(req, res, next);
   else next();
 }
 
