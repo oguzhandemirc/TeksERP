@@ -31,6 +31,7 @@ function useCariMutations(onCustomerDone: () => void, onSubDone: () => void) {
       toast.success("Kart oluşturuldu.");
       onCustomerDone();
       void qc.invalidateQueries({ queryKey: ["customers"] });
+      void qc.invalidateQueries({ queryKey: ["subcontractors"] }); // "Fason iş yapar" ise profil kartla doğdu
     },
   });
   // Tek kayıt modeli (B18/7): Kaydet önce kartı, sonra (değiştiyse) fason profilini yazar — profil Tedarikçi rolünü

@@ -19,6 +19,7 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/render";
 import { CustomerFormDialog } from "./CustomerFormDialog";
 import { buildCustomerPayload } from "./customerPayload";
+import { quickCreateCustomerPayload } from "./useCustomerRecordForm";
 import { NO_ROLE_MESSAGE, SUBCONTRACTOR_NEEDS_SUPPLIER_MESSAGE, customerFormDefaults, customerFormSchema } from "./schema";
 import type { Customer } from "./types";
 
@@ -70,6 +71,8 @@ describe("CustomerFormDialog — rol modeli", () => {
     expect(box("Tedarikçi")).toBeChecked();
     expect(box("Tedarikçi")).toBeDisabled();
     expect(screen.getByText(SUBCONTRACTOR_NEEDS_SUPPLIER_MESSAGE)).toBeInTheDocument();
+    // Yeni kartta Fason bölümü (kategori seçimi) rol işaretlenince çizilir — kaydetmeyi beklemez.
+    expect(screen.getByTestId("fason-paneli")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Kaydet" }));
     await waitFor(() => expect(onSubmit).toHaveBeenCalled());
     const v = onSubmit.mock.calls[0]![0];
@@ -77,8 +80,15 @@ describe("CustomerFormDialog — rol modeli", () => {
     const payload = buildCustomerPayload(v, null) as Record<string, unknown>;
     expect(payload).toMatchObject({ isSupplierRole: true, subcontractorRole: true });
     expect(payload).not.toHaveProperty("isSubcontractorRole");
+    expect(payload).not.toHaveProperty("subcontractorCategoryIds"); // seçim yok → alan yok (eski gövde)
+    // Seçilen kategoriler AYNI gövdeyle gider (tek istek); rol kapalıysa seçim gönderilmez.
+    const withCats = { ...v, subcontractorCategoryIds: ["cat-1"] };
+    expect(buildCustomerPayload(withCats, null)).toMatchObject({ subcontractorRole: true, subcontractorCategoryIds: ["cat-1"] });
+    expect(quickCreateCustomerPayload(withCats)).toMatchObject({ subcontractorRole: true, subcontractorCategoryIds: ["cat-1"] });
+    expect(buildCustomerPayload({ ...withCats, isSubcontractorRole: false }, null)).not.toHaveProperty("subcontractorCategoryIds");
     // Düzenlemede (initial var) subcontractorRole GİTMEZ — profil paneli yazar.
     expect(buildCustomerPayload(v, { id: "c1", code: "K" } as Customer)).not.toHaveProperty("subcontractorRole");
+    expect(buildCustomerPayload(withCats, { id: "c1", code: "K" } as Customer)).not.toHaveProperty("subcontractorCategoryIds");
   });
 
   it("⭐ ② requiredRole=isSupplierRole (tedarikçi seçicisinden): Tedarikçi işaretli + kilitli, Müşteri boş ve serbest", () => {

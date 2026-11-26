@@ -270,6 +270,7 @@ router.get("/:id", verifyToken, requireAnyPermission("customer:read", ...MOBILE_
  *               isSupplierRole: { type: boolean, description: "Tedarikçi rolü" }
  *               isSubcontractorRole: { type: boolean, description: "Fason rolü — gövdeden YAZILAMAZ (düşer); fason profili bağı türetir" }
  *               subcontractorRole: { type: boolean, description: "Yalnız oluşturmada: true ise kart + fason profili TEK tx'te doğar (Tedarikçi rolü şart, yoksa 400; aynı adda bağsız fason varsa 409)" }
+ *               subcontractorCategoryIds: { type: array, items: { type: string, format: uuid }, description: "Yalnız oluşturmada, subcontractorRole ile: profil kategorileri aynı tx'te bağlanır; geçersiz/pasif → 400 SUBCONTRACTOR_CATEGORY_INVALID (hiçbir şey yazılmaz); rolsüz dolu → 400 SUBCONTRACTOR_CATEGORY_WITHOUT_ROLE" }
  *               type: { type: string, enum: [CUSTOMER, SUPPLIER, BOTH], description: "TÜRETİLMİŞ (yalnız okunur); eski istemci gönderirse rollere çevrilir, en az bir rol zorunlu" }
  *               exportCode: { type: string, description: "İhracat kodu — sevk belgelerinde şube kodu yoksa basılır" }
  *               address: { type: string }
