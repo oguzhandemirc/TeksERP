@@ -28,6 +28,7 @@ import { renderInspectionReportHtml } from "../src/services/document-render/insp
 import { renderSalesQuoteHtml } from "../src/services/document-render/sales-quote.html";
 import { renderOrderConfirmationHtml } from "../src/services/document-render/order-confirmation.html";
 import { renderBeamBodyStatementHtml } from "../src/services/document-render/beam-body-statement.html";
+import { renderConsignmentDispatchHtml } from "../src/services/document-render/consignment-dispatch.html";
 import { renderPriceListHtml } from "../src/services/document-render/price-list.html";
 import { renderQualityCertificateHtml } from "../src/services/document-render/quality-certificate.html";
 import { renderReturnDispatchHtml } from "../src/services/document-render/return-dispatch.html";
@@ -58,6 +59,7 @@ const DOCS: { key: string; label: string; sample: keyof typeof SAMPLE_PRINTED_DO
   { key: "fiyatListesi", label: "Fiyat Listesi", sample: "PRICE_LIST", render: renderPriceListHtml as R },
   { key: "siparisTeyidi", label: "Sipariş Teyidi", sample: "ORDER_CONFIRMATION", render: renderOrderConfirmationHtml as R },
   { key: "govdeMutabakat", label: "Gövde Mutabakatı", sample: "BEAM_BODY_STATEMENT", render: renderBeamBodyStatementHtml as R },
+  { key: "emanetCikis", label: "Emanet Çıkış Belgesi", sample: "CONSIGNMENT_DISPATCH", render: renderConsignmentDispatchHtml as R },
   { key: "iadeIrsaliyesi", label: "İade İrsaliyesi", sample: "RETURN_DISPATCH", render: renderReturnDispatchHtml as R },
 ];
 

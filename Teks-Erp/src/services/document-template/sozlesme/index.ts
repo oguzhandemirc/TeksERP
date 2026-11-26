@@ -7,6 +7,7 @@
 
 export { beamBodyStatementContract } from "./beam-body-statement"; // BEAM_BODY_STATEMENT
 export { chequeDeliveryNoteContract } from "./cheque-delivery-note"; // CHEQUE_DELIVERY_NOTE
+export { consignmentDispatchContract } from "./consignment-dispatch"; // CONSIGNMENT_DISPATCH
 export { freeDocumentContract } from "./free-document"; // FREE_DOCUMENT
 export { goodsReceiptContract } from "./goods-receipt"; // GOODS_RECEIPT
 export { inspectionReportContract } from "./inspection-report"; // INSPECTION_REPORT

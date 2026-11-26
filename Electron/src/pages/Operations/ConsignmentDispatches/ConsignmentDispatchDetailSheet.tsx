@@ -1,10 +1,13 @@
-// Emanet çıkış belgesi detayı: başlık, kalemler (levent metresi / lot × depo kg), iptal durumu ve iptal eylemi.
+// Emanet çıkış belgesi detayı: başlık, kalemler (levent metresi / lot × depo kg), iptal durumu, basılı belge ve iptal eylemi.
+// Basılı belge (`CONSIGNMENT_DISPATCH`) çıkışta donar; iptal edilmiş çıkışta da açılır ve İPTAL filigranıyla basılır.
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Ban } from "lucide-react";
+import { Ban, Printer } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PermissionGate } from "@/components/PermissionGate";
+import { PrintedDocDialog } from "@/components/print/PrintedDocDialog";
 import { formatFactory } from "@/lib/factory-time";
 import { CONSIGNMENT_DISPATCHES_QUERY_KEY, getConsignmentDispatch } from "./service";
 import { fmtNum, fmtQty, KIND_LABEL } from "./consignmentText";
@@ -38,44 +41,61 @@ export function ConsignmentDispatchDetailSheet({ dispatchId, onClose, onCancel }
     enabled: Boolean(dispatchId),
   });
   const d = q.data;
+  const [docOpen, setDocOpen] = useState(false);
   return (
-    <Sheet open={Boolean(dispatchId)} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent className="w-[640px] sm:max-w-[640px]">
-        <SheetHeader>
-          <SheetTitle className="flex items-center gap-2">
-            <span className="font-mono">{d?.dispatchNo ?? "…"}</span>
-            {d?.cancelledAt && <Badge variant="outline">İptal</Badge>}
-          </SheetTitle>
-        </SheetHeader>
-        {q.isError ? (
-          <div className="mt-4 text-sm">
-            <p className="text-destructive">Belge yüklenemedi.</p>
-            <Button variant="outline" size="sm" className="mt-2" onClick={() => void q.refetch()}>
-              Tekrar dene
-            </Button>
-          </div>
-        ) : !d ? (
-          <p className="mt-4 text-sm text-muted-foreground">Yükleniyor…</p>
-        ) : (
-          <div className="mt-4 space-y-4 text-sm">
-            <DispatchFacts d={d} />
-            <DispatchItems items={d.items} />
-            <p className="text-muted-foreground">
-              {d.totals.beamCount} levent · {fmtNum(d.totals.beamLengthM)} m · {fmtNum(d.totals.yarnKg)} kg
-              iplik
-            </p>
-            {!d.cancelledAt && (
-              <PermissionGate permission="consignment:write">
-                <Button variant="destructive" onClick={() => onCancel(d.id)}>
-                  <Ban className="mr-1 h-4 w-4" />
-                  İptal Et…
+    <>
+      <Sheet open={Boolean(dispatchId)} onOpenChange={(o) => !o && onClose()}>
+        <SheetContent className="w-[640px] sm:max-w-[640px]">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
+              <span className="font-mono">{d?.dispatchNo ?? "…"}</span>
+              {d?.cancelledAt && <Badge variant="outline">İptal</Badge>}
+            </SheetTitle>
+          </SheetHeader>
+          {q.isError ? (
+            <div className="mt-4 text-sm">
+              <p className="text-destructive">Belge yüklenemedi.</p>
+              <Button variant="outline" size="sm" className="mt-2" onClick={() => void q.refetch()}>
+                Tekrar dene
+              </Button>
+            </div>
+          ) : !d ? (
+            <p className="mt-4 text-sm text-muted-foreground">Yükleniyor…</p>
+          ) : (
+            <div className="mt-4 space-y-4 text-sm">
+              <DispatchFacts d={d} />
+              <DispatchItems items={d.items} />
+              <p className="text-muted-foreground">
+                {d.totals.beamCount} levent · {fmtNum(d.totals.beamLengthM)} m · {fmtNum(d.totals.yarnKg)} kg
+                iplik
+              </p>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setDocOpen(true)}>
+                  <Printer className="mr-1 h-4 w-4" />
+                  Belgeyi Görüntüle / Bas
                 </Button>
-              </PermissionGate>
-            )}
-          </div>
-        )}
-      </SheetContent>
-    </Sheet>
+                {!d.cancelledAt && (
+                  <PermissionGate permission="consignment:write">
+                    <Button variant="destructive" onClick={() => onCancel(d.id)}>
+                      <Ban className="mr-1 h-4 w-4" />
+                      İptal Et…
+                    </Button>
+                  </PermissionGate>
+                )}
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+      <PrintedDocDialog
+        docType="CONSIGNMENT_DISPATCH"
+        sourceId={docOpen ? dispatchId : null}
+        open={docOpen && Boolean(dispatchId)}
+        onOpenChange={setDocOpen}
+        title={`Emanet Çıkış Belgesi — ${d?.dispatchNo ?? ""}`}
+        writePermission="consignment:write"
+      />
+    </>
   );
 }
 

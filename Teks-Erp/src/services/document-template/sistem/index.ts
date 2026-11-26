@@ -10,6 +10,7 @@
 
 export { beamBodyStatementSystem } from "./beam-body-statement"; // BEAM_BODY_STATEMENT
 export { chequeDeliveryNoteSystem } from "./cheque-delivery-note"; // CHEQUE_DELIVERY_NOTE
+export { consignmentDispatchSystem } from "./consignment-dispatch"; // CONSIGNMENT_DISPATCH
 export { freeDocumentSystem } from "./free-document"; // FREE_DOCUMENT
 export { goodsReceiptSystem } from "./goods-receipt"; // GOODS_RECEIPT
 export { inspectionReportSystem } from "./inspection-report"; // INSPECTION_REPORT

@@ -17,6 +17,8 @@
 //   §9 iptal engelleri — CONFIRMED faturalı levent bağı 409 CONSIGNMENT_BEAM_INVOICED (belge iptal değil, bağ damgasız;
 //      engel `cancelledAt`ın gölgesinde kalmaz) · DRAFT bağ iptalde damgalanır (revokeReason CONSIGNMENT_CANCEL) ·
 //      çıkıştan sonra levent başka olay aldıysa gerçek iptal 409 CONSIGNMENT_BEAM_MOVED_AFTER (WARP_BEAM_STATE değil)
+//   §11 basılı belge — çıkışta v1 ACTIVE donar (no = çıkış no, depo adı yok) · iptalde VOIDED + İPTAL filigranı ·
+//      Excel = PDF satırları · iptal edilmiş belge reissue 409 · lazy-init (iptal → VOIDED) · izin kapısı · iç not opt-in
 //   §10 pasif lot — önizleme blockedReason YARN_LOT_INACTIVE = oluştur 409 · iptal ters kaydı pasif lota yazılır ·
 //      istisna yalnız CONSIGNMENT_OUT_CANCEL (pasif lota IN hâlâ 400)
 //
@@ -27,7 +29,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { Request, Response } from "express";
-import { Currency, Prisma, WarpBeamOrigin, WarpBeamStatus, WarpKgSource, YarnMovementKind } from "@prisma/client";
+import { Currency, Prisma, PrintedDocType, WarpBeamOrigin, WarpBeamStatus, WarpKgSource, YarnMovementKind } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
@@ -47,6 +49,11 @@ import { AppError } from "../src/utils/app-error";
 import { fixtureWarehouseId } from "./fixture-warehouse";
 import { ensureTestAdmin } from "./fixture-test-user";
 import { ensureCariAccountTx } from "../src/services/helpers/finance.helper";
+import { printedDocumentService, type PrintedDocSnapshot } from "../src/services/printed-document.service";
+import { CONSIGNMENT_DISPATCH_TITLE, renderConsignmentDispatchHtml, renderConsignmentDispatchTables } from "../src/services/document-render/consignment-dispatch.html";
+import { SAMPLE_PRINTED_DOCS } from "../src/services/document-render/sample-data";
+import { DOC_PERMISSIONS } from "../src/routes/printed-document.routes";
+import { requireAnyPermission } from "../src/middlewares/rbac.middleware";
 
 let pass = 0;
 let fail = 0;
@@ -251,6 +258,49 @@ async function main(): Promise<void> {
     const again = await createConsignmentDispatch(body([{ kind: "WARP_BEAM", warpBeamId: bA1 }]), admin.id);
     check("§7h iptalden sonra levent yeniden çıkabilir (READY döngüsü)", !again.replayed && (await prisma.warpBeam.findUniqueOrThrow({ where: { id: bA1 }, select: { status: true } })).status === "SHIPPED_TO_OWNER");
 
+    console.log("\n── §11 Basılı belge (CONSIGNMENT_DISPATCH) ──");
+    const DOC = PrintedDocType.CONSIGNMENT_DISPATCH;
+    const docsOf = (sourceId: string) => prisma.printedDocument.findMany({ where: { docType: DOC, sourceId }, orderBy: { version: "asc" }, select: { id: true, version: true, status: true, documentNo: true, voidReason: true, snapshot: true } });
+    const voided = await docsOf(d1.id);
+    check("§11a ⭐ iptal edilen çıkışın belgesi aynı tx'te VOIDED (v1, no = çıkış no, iptal sebebi)",
+      voided.length === 1 && voided[0]!.status === "VOIDED" && voided[0]!.documentNo === d1.dispatchNo && (voided[0]!.voidReason ?? "").includes(TAG), JSON.stringify(voided.map((v) => [v.version, v.status])));
+    const live = await docsOf(again.data.id);
+    const whName = (await prisma.warehouse.findUniqueOrThrow({ where: { id: whId }, select: { name: true } })).name;
+    const liveSnap = JSON.stringify(live[0]?.snapshot ?? null);
+    check("§11b ⭐ çıkış tx'inde v1 ACTIVE donar; no = çıkış no, levent no payload'da, depo adı YOK",
+      live.length === 1 && live[0]!.status === "ACTIVE" && live[0]!.version === 1 && live[0]!.documentNo === again.data.dispatchNo
+      && liveSnap.includes(again.data.items[0]!.warpBeam!.beamNo) && !liveSnap.includes(whName), `${live.length} belge`);
+    const html = (await printedDocumentService.getHtml(DOC, again.data.id)).data?.html ?? "";
+    check("§11c HTML: başlık + belge no + sahip + levent no + teslim imzaları",
+      html.includes(CONSIGNMENT_DISPATCH_TITLE) && html.includes(again.data.dispatchNo) && html.includes(`${TAG} Müşteri A`) && html.includes(again.data.items[0]!.warpBeam!.beamNo) && html.includes("Teslim Alan"));
+    const voidHtml = (await printedDocumentService.getHtml(DOC, d1.id)).data?.html ?? "";
+    check("§11d iptal edilen çıkışın belgesi İPTAL filigranıyla basılır, lot no görünür", voidHtml.includes(">İPTAL<") && voidHtml.includes(`${TAG}-LA`));
+    const tbl = (await printedDocumentService.getTables(DOC, d1.id)).data;
+    check("§11e Excel = PDF: kalem tablosu çıkışın satır sayısı, başlıkta belge no",
+      !!tbl && tbl.tables.length === 1 && tbl.tables[0]!.rows.length === d1.items.length && tbl.header.some(([k, v]) => k === "Belge No" && v === d1.dispatchNo));
+    check("§11f iptal edilmiş belge yeniden basılamaz → 409", durum(await beklenenHata(() => printedDocumentService.reissue(DOC, d1.id, `${TAG} deneme`, admin.id))) === 409);
+    // Lazy-init: belgesiz eski kayıt ilk açılışta doğar; iptal edilmiş eski kayıt VOIDED doğar.
+    await prisma.printedDocument.deleteMany({ where: { docType: DOC, sourceId: { in: [d1.id, again.data.id] } } });
+    await printedDocumentService.getCurrent(DOC, again.data.id);
+    await printedDocumentService.getCurrent(DOC, d1.id);
+    const lazyLive = await docsOf(again.data.id);
+    const lazyVoid = await docsOf(d1.id);
+    check("§11g eski kayıt lazy-init: canlı çıkış ACTIVE, iptal edilmiş çıkış VOIDED doğar",
+      lazyLive.length === 1 && lazyLive[0]!.status === "ACTIVE" && lazyVoid.length === 1 && lazyVoid[0]!.status === "VOIDED");
+    const perm = DOC_PERMISSIONS.CONSIGNMENT_DISPATCH;
+    const gate = (perms: string[]): AppError | null => {
+      let got: unknown = null;
+      requireAnyPermission(...(perm?.read ?? []))({ user: { permissions: perms } } as unknown as Request, {} as Response, (e?: unknown) => { got = e ?? null; });
+      return got instanceof AppError ? got : null;
+    };
+    check("§11h izin kapısı: okuma consignment:read|write, revizyon consignment:write; izinsiz 403, consignment:read geçer",
+      !!perm && perm.write.join() === "consignment:write" && durum(gate(["shipping:read"])) === 403 && gate(["consignment:read"]) === null);
+    const sampleSnap = { schemaVersion: 1, frozenAt: "", company: { name: "X", letterhead: {} }, docConfigOverride: null, doc: SAMPLE_PRINTED_DOCS.CONSIGNMENT_DISPATCH } as unknown as PrintedDocSnapshot;
+    const note = String((SAMPLE_PRINTED_DOCS.CONSIGNMENT_DISPATCH as { header: { notes: string } }).header.notes);
+    check("§11i belge notu iç alan OPT-IN: varsayılan basılmaz, `sections.internalNotes` ile basılır (HTML ve Excel)",
+      !renderConsignmentDispatchHtml(sampleSnap).includes(note) && !JSON.stringify(renderConsignmentDispatchTables(sampleSnap)).includes(note)
+      && renderConsignmentDispatchHtml({ ...sampleSnap, docConfigOverride: { sections: { internalNotes: true } } } as PrintedDocSnapshot).includes(note));
+
     console.log("\n── §8 Liste ──");
     const lst = await listConsignmentDispatches({ ownerCustomerId: custA.id, status: "ALL", limit: 50 });
     const act = await listConsignmentDispatches({ ownerCustomerId: custA.id, status: "ACTIVE", limit: 1 });
@@ -324,6 +374,7 @@ async function main(): Promise<void> {
     }
     if (ids.svc) await prisma.serviceItem.deleteMany({ where: { id: ids.svc } });
     await prisma.cariAccount.deleteMany({ where: { customerId: { in: ids.custs } } });
+    await prisma.printedDocument.deleteMany({ where: { docType: PrintedDocType.CONSIGNMENT_DISPATCH, sourceId: { in: dIds } } });
     await prisma.consignmentDispatchItem.deleteMany({ where: { dispatchId: { in: dIds } } });
     await prisma.consignmentDispatch.deleteMany({ where: { id: { in: dIds } } });
     await prisma.warpBeam.deleteMany({ where: { id: { in: ids.beams } } });

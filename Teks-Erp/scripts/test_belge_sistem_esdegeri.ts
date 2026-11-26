@@ -16,6 +16,7 @@
  */
 
 import { renderBeamBodyStatementHtml } from "../src/services/document-render/beam-body-statement.html";
+import { renderConsignmentDispatchHtml } from "../src/services/document-render/consignment-dispatch.html";
 import { renderWarpBeamCardHtml } from "../src/services/document-render/warp-beam-card.html";
 import { renderInspectionReportHtml } from "../src/services/document-render/inspection-report.html";
 import { renderOrderConfirmationHtml } from "../src/services/document-render/order-confirmation.html";
@@ -67,6 +68,7 @@ type SystemRenderer = (snapshot: PrintedDocSnapshot, meta: SystemMeta) => string
 const RENDERERS: Readonly<Record<string, SystemRenderer>> = {
   BEAM_BODY_STATEMENT: (s, m) => renderBeamBodyStatementHtml(s, m as Parameters<typeof renderBeamBodyStatementHtml>[1]),
   CHEQUE_DELIVERY_NOTE: (s, m) => renderChequeDeliveryNoteHtml(s, m as Parameters<typeof renderChequeDeliveryNoteHtml>[1]),
+  CONSIGNMENT_DISPATCH: (s, m) => renderConsignmentDispatchHtml(s, m as Parameters<typeof renderConsignmentDispatchHtml>[1]),
   FREE_DOCUMENT: (s, m) => renderFreeDocumentHtml({ ...(s as unknown as FreeDocumentSnapshot), config: (s.docConfigOverride ?? {}) as DocumentConfig }, m),
   GOODS_RECEIPT: (s, m) => renderGoodsReceiptHtml(s, m as Parameters<typeof renderGoodsReceiptHtml>[1]),
   INSPECTION_REPORT: (s, m) => renderInspectionReportHtml(s, m as Parameters<typeof renderInspectionReportHtml>[1]),
