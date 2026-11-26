@@ -10,6 +10,7 @@
 //   S21 yeniden açma: WASTE_CANCEL + iade stornosu, IN_PROGRESS; çift yeniden açma 409; tekrar kapanış
 //   Yarış: iki eşzamanlı kapanıştan biri 409 · açık tx iade tutarken kapanış claim'de bekler, TAZE tutmayla planlar
 //   DB  CHECK (kg > 0, tür ⇔ ters bağ) + tek ters · uçların `requireIplikEnabled`'ı ve mount sırası
+//   Ü2/Ü3 (2026-11-26 prova): listelenmeyen kalem "kalır" uyarısı + yanıt keepKg · ≤ 5 g yuvarlama artığı fireye
 // NEGATİF SONDA (koşuldu 2026-11-18): bkz. arşiv notu "Fason devere D5b".
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım; ayarlar FOTOĞRAFINA döndürülür, kendi kayıtlarını siler.
 // =============================================================================
@@ -35,6 +36,8 @@ import { receiveWarpingOrder, type WarpingReceiveBeamInput } from "../src/servic
 import { previewSettleWarpingOrder, settleWarpingOrder, type WarpingSettleInput } from "../src/services/warping-order/settle";
 import { listWarpingSettlements } from "../src/services/warping-order/settle-record";
 import { previewReopenWarpingOrder, reopenWarpingOrder } from "../src/services/warping-order/reopen";
+import { buildSettlePlan, unlistedKeepWarnings } from "../src/services/helpers/warping-settle-plan.helper";
+import type { WarpingYarnItem } from "../src/services/helpers/warping-yarn-open.helper";
 
 let pass = 0;
 let fail = 0;
@@ -133,7 +136,7 @@ async function main(): Promise<void> {
     check("Gövde: iade + fire > tutulan 400 · sebepsiz iade 400 · tutulmayan kalem 400", eEx?.code === "WARPING_SETTLE_EXCEEDS" && eRs?.code === "WARPING_SETTLE_RETURN_REASON" && eUk?.code === "WARPING_SETTLE_LINE_UNKNOWN", `${show(eEx)} | ${show(eRs)} | ${show(eUk)}`);
     const pvY = await previewSettleWarpingOrder(A, { lines: [{ dispatchItemId: itY, wasteKg: 3 }] });
     const pvYy = (y: { id: string }) => pvY.plan.yarns.find((v) => v.yarnItemId === y.id)!;
-    check("İplik başı tolerans: yalnız Y fire %6,98 > 5 (genel %1,96 içinde) → overTolerance + Y uyarısı, X uyarısız", pvY.plan.overTolerance && pvY.plan.wastePct === "1.96" && pvYy(Y).wastePct === "6.98" && pvYy(Y).overTolerance && !pvYy(X).overTolerance && pvY.warnings.length === 1 && pvY.warnings[0]!.includes("fire %6,98 toleransı (%5)"), `${pvY.plan.wastePct} ${pvYy(Y).wastePct} ${JSON.stringify(pvY.warnings)}`);
+    check("İplik başı tolerans: yalnız Y fire %6,98 > 5 (genel %1,96 içinde) → overTolerance + Y uyarısı, X uyarısız", pvY.plan.overTolerance && pvY.plan.wastePct === "1.96" && pvYy(Y).wastePct === "6.98" && pvYy(Y).overTolerance && !pvYy(X).overTolerance && pvY.warnings.length === 2 && pvY.warnings[0]!.includes("fire %6,98 toleransı (%5)") && pvY.warnings[1]!.startsWith("2 kalem için kapanış satırı gönderilmedi"), `${pvY.plan.wastePct} ${pvYy(Y).wastePct} ${JSON.stringify(pvY.warnings)}`);
     const xStock0 = await stockOf(X);
     const tokA = randomUUID();
     const sA = await settle(A, body, tokA);
@@ -220,6 +223,29 @@ async function main(): Promise<void> {
     await prisma.warpingOrder.update({ where: { id: E }, data: { status: "IN_PROGRESS" } });
     const eEmpty = await errOf(() => settle(E, {}));
     check("Sevksiz ve leventsiz sipariş kapatılamaz → 409 WARPING_SETTLE_EMPTY", eEmpty?.code === "WARPING_SETTLE_EMPTY", show(eEmpty));
+    // ── Ü2 (2026-11-26 prova): satırlı ama BOŞ gövde — kalan sessizce "kalır" olmasın ─
+    const F = await newOrder(5);
+    await send(F, [[Y, 50]]);
+    await receive(F);
+    const pvF = await previewSettleWarpingOrder(F, { lines: [] });
+    const sF = await settle(F, { lines: [] });
+    const unlisted = (w: string[]) => w.some((x) => x.includes("kapanış satırı gönderilmedi") && x.includes("10 kg"));
+    check("Ü2 `lines: []`: önizleme + kapanış uyarısı kalan 10 kg'ı söyler; yanıt keepKg 10, fire 0", unlisted(pvF.warnings) && unlisted(sF.warnings) && sF.keepKg === "10.000" && sF.totalWasteKg === "0.000", `${JSON.stringify(sF.warnings)} keep ${sF.keepKg}`);
+    const routesU2 = fs.readFileSync(path.join(__dirname, "../src/routes/warping-order-settle.routes.ts"), "utf8");
+    check("Ü2 route mesajı deverecide kalanı söyler (`deverecide kalır ${qtyText(keepKg)} kg`)", /deverecide kalır \$\{qtyText\(keepKg\)\} kg/.test(routesU2) && /Sipariş kapandı[^\n]*\$\{kept\}/.test(routesU2));
+    // ── Ü3: plan firesi ile tutulan arasındaki yuvarlama artığı (≤ 5 g) fireye katılır; gerçek kalan kalır ─
+    const it3 = (dispatchItemId: string, openKg: string) => ({ dispatchItemId, dispatchId: "d", dispatchNo: "S-1", yarnItemId: "y3", lotId: null, lotNo: null, own: true, openKg: new Prisma.Decimal(openKg) }) as unknown as WarpingYarnItem;
+    const y3 = (grossKg: string, netKg: string) => [{ yarnItemId: "y3", code: "Y3", netKg, grossKg, woundKg: netKg, unallocatedKg: "0" }];
+    const p3 = buildSettlePlan([it3("a", "1.000"), it3("b", "2.369")], y3("112.256", "108.888"), {}, { tolerance: null, mode: "WASTE_UP_TO_PLAN" });
+    const p3b = buildSettlePlan([it3("a", "3.869")], y3("112.256", "108.888"), {}, { tolerance: null, mode: "WASTE_UP_TO_PLAN" });
+    check("Ü3 tutulan 3,369 · plan firesi 3,368 → fire 3,369, kalır tam 0 (son kaleme artık); 0,5 kg gerçek kalan kalır", p3.yarns[0]!.wasteKg.eq("3.369") && p3.yarns[0]!.keepKg.isZero() && p3.lines.every((l) => l.keepKg.isZero()) && p3.lines[1]!.wasteKg.eq("2.369")
+      && p3b.yarns[0]!.wasteKg.eq("3.368") && p3b.yarns[0]!.keepKg.eq("0.501"), JSON.stringify([p3.yarns[0]!.wasteKg, p3.yarns[0]!.keepKg, p3b.yarns[0]!.wasteKg, p3b.yarns[0]!.keepKg]));
+    const fullBody = { lines: [{ dispatchItemId: "a", returnKg: 0, wasteKg: 0 }, { dispatchItemId: "b", returnKg: 0, wasteKg: 1 }] };
+    const partBody = { lines: [{ dispatchItemId: "b", returnKg: 0, wasteKg: 1 }] };
+    const wFull = unlistedKeepWarnings(buildSettlePlan([it3("a", "1.000"), it3("b", "2.369")], y3("112.256", "108.888"), fullBody, { tolerance: null }), fullBody);
+    const partPlan = buildSettlePlan([it3("a", "1.000"), it3("b", "2.369")], y3("112.256", "108.888"), partBody, { tolerance: null });
+    const wPart = unlistedKeepWarnings(partPlan, partBody);
+    check("Ü2 saf: her kalemi listeleyen gövde (panel, 0'lar dahil) uyarısız · eksik kalem '1 kalem … 1 kg' uyarır · plan uyarısına girmez (iade penceresi kısmi planı)", wFull.length === 0 && wPart.length === 1 && wPart[0]!.startsWith("1 kalem") && wPart[0]!.includes(" 1 kg") && partPlan.warnings.length === 0, JSON.stringify([wFull, wPart, partPlan.warnings]));
     // ── DB seddi + kapılar ───────────────────────────────────────────────
     const anyWaste = await prisma.warpingYarnWaste.findFirstOrThrow({ where: { warpingOrderId: D2, kind: "WASTE" }, select: { id: true, settlementId: true, dispatchItemId: true } });
     const base = { settlementId: anyWaste.settlementId, warpingOrderId: D2, dispatchItemId: anyWaste.dispatchItemId };

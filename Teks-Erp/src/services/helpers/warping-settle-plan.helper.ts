@@ -3,7 +3,7 @@
 // =============================================================================
 // Kalan iplik kalem kalem (sevk kalemi × lot) üçe bölünür: İADE (depoya döner) · FİRE (defter satırı) · DEVERECİDE
 // KALIR (kayıt yok; tutma açık kalır, sonraki siparişe devreder). Gövdede satır yoksa VARSAYILAN A1-a: iplik başına
-// fire = min(kalan, plan brüt − plan net), sevk sırasıyla (FIFO) kalemlere; fazlası kalır, iade 0.
+// fire = min(kalan, plan brüt − plan net), sevk sırasıyla (FIFO) kalemlere; fazlası kalır (5 g'lık yuvarlama artığı fireye), iade 0.
 // H1: gövdesiz kipi `devere.settleDefault` seçer (KEEP hepsi kalır · RETURN hepsi iade · WASTE_ALL hepsi fire); varsayılan A1-a.
 // fire % = Σ fire / (Σ sarılan nominal + Σ fire); tolerans (siparişte donmuş, NULL/0 = denetim yok) yalnız UYARIR.
 // =============================================================================
@@ -18,6 +18,19 @@ import { qtyText, pctText } from "./qty-text.helper";
  *  Operatör dili; "nominal tüketim / tel / denye" gibi terimler mutabakat ekranında kalır. */
 export function beamOverYarnWarning(yarnName: string, overKg: Prisma.Decimal.Value): string {
   return `${yarnName}: leventler, deverecideki iplikten ${qtyText(overKg)} kg fazla görünüyor. Eksik sevk kaydı ya da çözgü kartında hata olabilir; fazlası hesaba yazılmadı.`;
+}
+
+/**
+ * Satırlı KAPANIŞTA gövdede adı geçmeyen kalemler tümüyle deverecide kalır — sessiz kalmasın (prova Ü2: `lines: []`).
+ * Yalnız kapanış önizlemesi/kapanışı çağırır; tek kalemli iade penceresi planı bilerek kısmidir.
+ */
+export function unlistedKeepWarnings(plan: SettlePlan, body: WarpingSettleBody): string[] {
+  if (body.lines === undefined) return [];
+  const inBody = new Set(body.lines.map((l) => l.dispatchItemId));
+  const omitted = plan.lines.filter((l) => !inBody.has(l.dispatchItemId));
+  if (omitted.length === 0) return [];
+  const keepKg = omitted.reduce((s, l) => s.plus(l.keepKg), new Prisma.Decimal(0));
+  return [`${omitted.length} kalem için kapanış satırı gönderilmedi — bu kalemlerdeki ${qtyText(keepKg)} kg iplik iade ya da fire yazılmadan deverecide kalır (sonraki siparişe devreder).`];
 }
 
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
@@ -78,13 +91,18 @@ const dec3 = (v: number, ad: string) => {
 };
 const pct = (part: Prisma.Decimal, whole: Prisma.Decimal) => (whole.isZero() ? null : part.div(whole).mul(100).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP));
 
-/** A1-a: iplik başına plan firesi kadar fire, sevk sırasıyla (FIFO). */
+/** Plan brüt/net ve levent başı sarım ayrı ayrı 3 haneye yuvarlanır; aradaki bu kadarlık fark fiziksel kalan değildir. */
+export const SETTLE_ROUNDING_SLACK_KG = D("0.005");
+
+/** A1-a: iplik başına plan firesi kadar fire, sevk sırasıyla (FIFO); yuvarlama artığı kadar kalan fireye katılır. */
 function wasteUpToPlan(held: WarpingYarnItem[], yarns: SettlePlanYarnInput[]): Map<string, Prisma.Decimal> {
   const waste = new Map<string, Prisma.Decimal>();
   for (const y of yarns) {
     const items = held.filter((i) => i.yarnItemId === y.yarnItemId);
     const left = items.reduce((s, i) => s.plus(i.openKg), ZERO);
-    let rest = Prisma.Decimal.min(left, Prisma.Decimal.max(ZERO, D(y.grossKg).minus(y.netKg)));
+    const planned = Prisma.Decimal.max(ZERO, D(y.grossKg).minus(y.netKg)).toDecimalPlaces(3, Prisma.Decimal.ROUND_HALF_UP);
+    // Plan firesi varken 3,369 tutulan − 3,368 plan → "kalır 0,001" görünmesin (prova Ü3).
+    let rest = planned.gt(0) && left.minus(planned).lte(SETTLE_ROUNDING_SLACK_KG) ? left : Prisma.Decimal.min(left, planned);
     for (const it of items) {
       const take = Prisma.Decimal.min(rest, it.openKg);
       if (take.gt(0)) waste.set(it.dispatchItemId, take);

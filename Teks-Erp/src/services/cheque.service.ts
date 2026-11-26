@@ -70,6 +70,7 @@ import { resolvePartyToCardTx } from "./helpers/party-card.helper";
 import type { ApiResponse } from "../types/api.types";
 import { moveAccountBalanceTx as moveLedgerAccountBalanceTx } from "./helpers/cash-ledger.helper";
 import { resolveChequeNoteMovementEnabled } from "./system-setting.service";
+import { paraMetni } from "./reports/anlati/sayi-bicim";
 
 // -----------------------------------------------------------------------------
 // BELGE NUMARASI
@@ -1099,7 +1100,7 @@ export class ChequeService {
   private assertNotAllocated(row: TransitionRow, action: string): void {
     if (D(row.allocatedTotal).gt(0)) {
       throw AppError.conflict(
-        `${row.docNo} ${row.allocatedTotal} ${row.currency} tutarında faturaya kapatılmış — "${action}" öncesinde kapamayı kaldırın.`,
+        `${row.docNo} ${paraMetni(Number(row.allocatedTotal))} ${row.currency} tutarında faturaya kapatılmış — "${action}" öncesinde kapamayı kaldırın.`,
       );
     }
   }
