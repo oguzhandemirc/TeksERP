@@ -12,7 +12,8 @@ vi.mock("@/hooks/usePricingEnabled", async (orig) => ({
 let perms: string[] = [];
 vi.mock("@/hooks/useRoleAccess", () => ({ useRoleAccess: () => ({ hasPermission: (p: string) => perms.includes(p) }) }));
 const detail = vi.fn();
-vi.mock("@/pages/Cost/Items/service", () => ({ costItemService: { detail: (...a: unknown[]) => detail(...a) } }));
+const actual = vi.fn();
+vi.mock("@/pages/Cost/Items/service", () => ({ costItemService: { detail: (...a: unknown[]) => detail(...a), weavingOrderActual: (...a: unknown[]) => actual(...a) } }));
 
 import { WeavingCostSection } from "./WeavingCostSection";
 
@@ -22,6 +23,48 @@ beforeEach(() => {
   moduleOpen = true;
   perms = ["cost:read"];
   detail.mockReset();
+  actual.mockReset();
+});
+
+type ActualRowInput = { anahtar: string; ad: string; standartTlM: string | null; gercekTlM: string | null; kaynak: string | null; tahmini?: boolean; eksik?: string[] };
+const actualRow = ({ tahmini = false, eksik = [], ...rest }: ActualRowInput) => ({ ...rest, tahmini, eksik });
+
+describe("WeavingCostSection — gerçekleşen (devere maliyet dilim 2-3)", () => {
+  it("⭐ iş emri verilince satırlar sunucu metniyle: standart ↔ gerçekleşen, kaynak, tahmini rozeti; ölçülemeyen 'eksik' (0 değil)", async () => {
+    detail.mockResolvedValue({ aktifSurum: null });
+    actual.mockResolvedValue({
+      isEmriId: "w1", isEmriNo: "W-1", devamEdiyor: false, topMetre: "100",
+      satirlar: [
+        actualRow({ anahtar: "TEZGAH", ad: "Tezgâh (dokuma)", standartTlM: "3", gercekTlM: "2.5", kaynak: "koşum süresi × tezgâh saat ücreti" }),
+        actualRow({ anahtar: "DEVERE", ad: "Devere (çözgü sarımı)", standartTlM: null, gercekTlM: "5.25", kaynak: "tarife (tahmini)", tahmini: true }),
+        actualRow({ anahtar: "COZGU_IPLIGI", ad: "Çözgü ipliği", standartTlM: "4", gercekTlM: null, kaynak: null, eksik: ["çözgü ipliği fiyatı yok"] }),
+      ],
+      notlar: ["Devere için standart maliyette ayrı kalem seçilemiyor; karşılaştırma yapılmaz."],
+    });
+    renderWithProviders(<WeavingCostSection itemId="i1" weavingOrderId="w1" />);
+    expect(await screen.findAllByTestId("wo-actual-row")).toHaveLength(3);
+    expect(actual).toHaveBeenCalledWith("w1");
+    expect(screen.getByTestId("wo-actual-DEVERE")).toHaveTextContent("5,25 TL/m");
+    expect(screen.getAllByTestId("wo-actual-estimated")).toHaveLength(1);
+    expect(screen.getByTestId("wo-actual-COZGU_IPLIGI")).toHaveTextContent("eksik");
+    expect(screen.getByText("eksik: çözgü ipliği fiyatı yok")).toBeInTheDocument();
+    expect(screen.getByTestId("wo-actual-notes")).toHaveTextContent("ayrı kalem seçilemiyor");
+    expect(screen.getByText("Maliyet")).toBeInTheDocument();
+  });
+
+  it("cost:read yok → gerçekleşen sorgusu da atılmaz", () => {
+    perms = [];
+    renderWithProviders(<WeavingCostSection itemId="i1" weavingOrderId="w1" />);
+    expect(actual).not.toHaveBeenCalled();
+  });
+
+  it("eski sunucu (uç yok) → 'okunamadı', standart bölüm yine çizilir", async () => {
+    detail.mockResolvedValue({ aktifSurum: null });
+    actual.mockRejectedValue(new Error("404"));
+    renderWithProviders(<WeavingCostSection itemId="i1" weavingOrderId="w1" />);
+    expect(await screen.findByText("Gerçekleşen maliyet okunamadı.")).toBeInTheDocument();
+    expect(await screen.findByText("Bu ürünün kayıtlı standart maliyeti yok.")).toBeInTheDocument();
+  });
 });
 
 describe("WeavingCostSection", () => {

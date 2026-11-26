@@ -13,7 +13,8 @@
 //   §7 kendi leventi (IN_HOUSE) → ölçülmüş 0; ücretsiz sipariş → `DEVERE_UCRETI` ("eksik", 0 değil); YALNIZ_FATURA →
 //      `DEVERE_FATURASI`; kur yok → `FX_RATE_MISSING`
 //   §8 tek kaynak (metin): dokuma helper'ı devere/fatura tablosuna dokunmaz (köprü); ücret çarpımı yok; float yok
-//   §9 devere kapalı → alanlar null, kolon var hücre boş
+//   §9 devere kapalı → alanlar null, kolon var hücre boş; iş emri ayrıntısında yalnız Tezgâh satırı
+//   §10 (dilim 2) iş emri ayrıntısı ucu: DTO el hesabı (5,25 · fatura · standart karşılık null), 404, uç kapıları
 // NEGATİF SONDALAR (2026-11-26, hepsi kırmızı verdi, geri alındı):
 //   ① fatura okuyucusunda `status: CONFIRMED` → DRAFT+CANCELLED da → §2c/§3a/§5b/§6c/§7c ❌ (21/6)
 //   ② net = `subtotal − discountTotal` (iskonto iki kez düşer; subtotal zaten satır neti) → §1b/§1c/§6a ❌ (23/4)
@@ -44,6 +45,7 @@ import { weavingActualCostTx, type WeavingActualCost } from "../src/services/hel
 import { loadRollWarpingCostsTx, splitInvoiceNet } from "../src/services/helpers/warping-actual-fee.helper";
 import { buildWeavingEfficiencySunumu, EKSIK, weavingEfficiencyTable, type WeavingEfficiencyReport } from "../src/services/reports/weaving-efficiency.report";
 import { resolveCoreDayRange } from "../src/services/reports/temel/_day-range";
+import { getWeavingOrderActualCost } from "../src/services/weaving-order-actual-cost.service";
 import { yorumlariSok } from "./lib/regime-gate-scan";
 
 let pass = 0;
@@ -200,8 +202,23 @@ async function main(): Promise<void> {
     const tablo = weavingEfficiencyTable(report([w1]));
     const keys = tablo.kolonlar.map((k) => k.anahtar);
     check("§1d kolonlar: 'Devere /m' + 'Devere kaynağı' Durum'dan önce; eski kolonlar aynı sırada",
-      keys.join(",") === "is,urun,tezgah,standartM,gercekM,fark,farkYuzde,teorikMSaat,gercekMSaat,durusPayi,kosumluM,kosumsuzM,devereM,devereKaynak,durum"
+      keys.join(",") === "is,urun,tezgah,standartM,gercekM,fark,farkYuzde,teorikMSaat,gercekMSaat,durusPayi,kosumluM,kosumsuzM,devereM,devereKaynak,cozguIplikM,cozguIplikKaynak,durum"
         && tablo.kolonlar.find((k) => k.anahtar === "devereM")?.baslik === "Devere /m" && tablo.kolonlar.find((k) => k.anahtar === "devereKaynak")?.baslik === "Devere kaynağı");
+
+    console.log("\n§10 — iş emri ayrıntısı ucu (DTO)");
+    const dto = await getWeavingOrderActualCost(L1.woId);
+    const dv = dto.satirlar.find((x) => x.anahtar === "DEVERE");
+    check("§10a ⭐ DTO satırları Tezgâh · Devere · Çözgü ipliği; Devere gerçekleşen 5,25 TL/m, kaynak 'fatura', tahmini değil, standart karşılık YOK (null, 0 değil)",
+      dto.satirlar.map((x) => x.anahtar).join(",") === "TEZGAH,DEVERE,COZGU_IPLIGI" && dv?.gercekTlM === "5.25" && dv.kaynak === "fatura" && dv.tahmini === false && dv.standartTlM === null && dv.eksik.length === 0,
+      JSON.stringify(dv));
+    check("§10b DTO notu devere için standart kalemin seçilemediğini söyler; iş no ve top metresi tek kaynaktan",
+      dto.notlar.some((n) => /standart maliyette ayrı kalem seçilemiyor/.test(n)) && dto.isEmriId === L1.woId && dto.topMetre === "100");
+    let notFound = 0;
+    try { await getWeavingOrderActualCost(randomUUID()); } catch (e) { notFound = (e as { statusCode?: number }).statusCode ?? -1; }
+    check("§10c olmayan iş emri → 404", notFound === 404, String(notFound));
+    const routeSrc = yorumlariSok(readFileSync(path.join(__dirname, "..", "src/routes/cost.routes.ts"), "utf8"));
+    check("§10d uç `/api/cost/weaving-orders/:id/actual`: dokuma kapısı + `cost:read` (maliyet kapısı router seviyesinde)",
+      /router\.get\("\/weaving-orders\/:id\/actual", requireDokumaEnabled, requirePermission\("cost:read"\)/.test(routeSrc) && /router\.use\(verifyToken, requireMaliyetEnabled\)/.test(routeSrc));
 
     console.log("\n§2 — faturasız kabul (tahmini)");
     const R2 = await usdAt(await receivedAt(k2));
@@ -304,6 +321,8 @@ async function main(): Promise<void> {
     check("§9a devere kapalı → devere alanları null (sorgu yok), tezgâh alanları aynı; kolon var hücre boş",
       w1off.warpingCostTry === null && w1off.warpingMissing === null && w1off.warpingSource === null && eq(w1off.totalMeters, 150)
         && cell(w1off, "devereM") === null && cell(w1off, "devereKaynak") === null && weavingEfficiencyTable(report([w1off])).kolonlar.some((k) => k.anahtar === "devereM"));
+    const dtoOff = await getWeavingOrderActualCost(L1.woId);
+    check("§9b devere kapalı → iş emri ayrıntısında yalnız Tezgâh satırı (devere/iplik satırı yok)", dtoOff.satirlar.map((x) => x.anahtar).join(",") === "TEZGAH");
     await setSetting(SETTING_KEYS.DEVERE_ENABLED, "true");
   } finally {
     await prisma.warpBeamEvent.deleteMany({ where: { rollId: { in: rollIds }, reversesEventId: { not: null } } });

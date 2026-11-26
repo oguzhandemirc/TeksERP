@@ -11,7 +11,8 @@ import { Router, type NextFunction, type Request, type Response } from "express"
 import { z } from "zod";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { matchesPermission, requirePermission } from "../middlewares/rbac.middleware";
-import { requireMaliyetEnabled } from "../middlewares/module.middleware";
+import { requireDokumaEnabled, requireMaliyetEnabled } from "../middlewares/module.middleware";
+import { getWeavingOrderActualCost } from "../services/weaving-order-actual-cost.service";
 import {
   activateDraft,
   createDraft,
@@ -695,6 +696,25 @@ router.get("/subcontractor-dispatches/:id/finishing-check", requirePermission("c
   // Fatura kısmı finans kapılı: finance:read yoksa servis faturayı hiç okumaz (invoice null).
   const canReadInvoices = matchesPermission(req.user?.permissions ?? [], "finance:read");
   res.status(200).json({ success: true, data: await getDispatchFinishingCheck(id, { canReadInvoices }) });
+}));
+
+/**
+ * @openapi
+ * /api/cost/weaving-orders/{id}/actual:
+ *   get:
+ *     tags: [Cost]
+ *     summary: Dokuma iş emrinin gerçekleşen maliyeti (tezgâh, devere, çözgü ipliği) standart karşılıklarıyla
+ *     description: Yalnız okuma (devere maliyet dilim 2-3). Sayılar saklanmaz, her okumada türer; ölçülemeyen değer null + `eksik` metni (0 değil). Devere modülü kapalıysa devere ve çözgü ipliği satırları gelmez.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+ *     responses:
+ *       200: { description: "{ isEmriId, isEmriNo, devamEdiyor, topMetre, satirlar, notlar }" }
+ *       403: { description: Maliyet ya da dokuma modülü kapalı (MODULE_DISABLED) ya da yetki yok }
+ *       404: { description: İş emri yok }
+ */
+router.get("/weaving-orders/:id/actual", requireDokumaEnabled, requirePermission("cost:read"), wrap(async (req, res) => {
+  const { id } = idParam.parse(req.params);
+  res.status(200).json({ success: true, data: await getWeavingOrderActualCost(id) });
 }));
 
 /**
