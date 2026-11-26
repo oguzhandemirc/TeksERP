@@ -51,11 +51,12 @@ async function baglanKodu(url: string): Promise<string> {
   finally { await c.end().catch(() => undefined); }
 }
 
-/** Servisi verilen URL'le ayrı süreçte koşar (prisma tekili açılışta DATABASE_URL okur). */
+/** Servisi verilen URL'le ayrı süreçte koşar (prisma tekili açılışta DATABASE_URL okur).
+ *  Çocuk doğal çıkar: `process.exit` V8 çıkış kilitlenmesine düşebilir (test_db_rol_gocu §7b, 2026-11-26). */
 function servis(url: string, ifade: string): { ok: boolean; out: unknown; err?: string } {
   try {
     const out = execFileSync("npx", ["tsx", "-e",
-      `const s=require("./src/services/read-only-db.service");Promise.resolve(${ifade}).then(r=>{console.log("SONUC"+JSON.stringify({ok:true,out:r}));process.exit(0)},e=>{console.log("SONUC"+JSON.stringify({ok:false,err:(e.details&&e.details.code)||e.message}));process.exit(0)})`],
+      `const s=require("./src/services/read-only-db.service");Promise.resolve(${ifade}).then(r=>{console.log("SONUC"+JSON.stringify({ok:true,out:r}))},e=>{console.log("SONUC"+JSON.stringify({ok:false,err:(e.details&&e.details.code)||e.message}))})`],
     { cwd: ROOT, env: { ...process.env, DATABASE_URL: url }, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
     const m = /SONUC(\{.*\})/.exec(out);
     return m ? JSON.parse(m[1]) : { ok: false, out: null, err: "çıktı yok" };
