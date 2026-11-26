@@ -20,9 +20,17 @@ export function beamOverYarnWarning(yarnName: string, overKg: Prisma.Decimal.Val
   return `${yarnName}: leventler, deverecideki iplikten ${qtyText(overKg)} kg fazla görünüyor. Eksik sevk kaydı ya da çözgü kartında hata olabilir; fazlası hesaba yazılmadı.`;
 }
 
-/** Satırlı kapanışta gövdede adı geçmeyen kalemler tümüyle deverecide kalır — sessiz kalmasın diye uyarı. */
-export function unlistedKeepWarning(itemCount: number, keepKg: Prisma.Decimal.Value): string {
-  return `${itemCount} kalem için kapanış satırı gönderilmedi — bu kalemlerdeki ${qtyText(keepKg)} kg iplik iade ya da fire yazılmadan deverecide kalır (sonraki siparişe devreder).`;
+/**
+ * Satırlı KAPANIŞTA gövdede adı geçmeyen kalemler tümüyle deverecide kalır — sessiz kalmasın (prova Ü2: `lines: []`).
+ * Yalnız kapanış önizlemesi/kapanışı çağırır; tek kalemli iade penceresi planı bilerek kısmidir.
+ */
+export function unlistedKeepWarnings(plan: SettlePlan, body: WarpingSettleBody): string[] {
+  if (body.lines === undefined) return [];
+  const inBody = new Set(body.lines.map((l) => l.dispatchItemId));
+  const omitted = plan.lines.filter((l) => !inBody.has(l.dispatchItemId));
+  if (omitted.length === 0) return [];
+  const keepKg = omitted.reduce((s, l) => s.plus(l.keepKg), new Prisma.Decimal(0));
+  return [`${omitted.length} kalem için kapanış satırı gönderilmedi — bu kalemlerdeki ${qtyText(keepKg)} kg iplik iade ya da fire yazılmadan deverecide kalır (sonraki siparişe devreder).`];
 }
 
 const D = (v: Prisma.Decimal.Value) => new Prisma.Decimal(v);
@@ -184,11 +192,6 @@ export function buildSettlePlan(held0: WarpingYarnItem[], yarns: SettlePlanYarnI
   const wastePct = pct(totWaste, totWound.plus(totWaste));
   const overAll = tol !== null && wastePct !== null && wastePct.gt(tol);
   if (overAll) warnings.unshift(`Sipariş geneli fire %${pctText(wastePct!)} toleransı (%${pctText(tol!)}) aşıyor — kapanış engellenmez.`);
-  // Satırlı gövdede listede olmayan kalem sessizce "kalır" olmasın (prova Ü2: `lines: []` ile kapanış).
-  if (!isDefault) {
-    const omitted = lines.filter((l) => !split.has(l.dispatchItemId));
-    if (omitted.length > 0) warnings.push(unlistedKeepWarning(omitted.length, omitted.reduce((s, l) => s.plus(l.keepKg), ZERO)));
-  }
   return { isDefault, defaultMode: isDefault ? mode : null, lines, yarns: yarnRows, wastePct, tolerancePct: tol, overTolerance: overAll || yarnRows.some((y) => y.overTolerance), warnings };
 }
 

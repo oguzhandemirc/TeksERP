@@ -36,7 +36,7 @@ import { receiveWarpingOrder, type WarpingReceiveBeamInput } from "../src/servic
 import { previewSettleWarpingOrder, settleWarpingOrder, type WarpingSettleInput } from "../src/services/warping-order/settle";
 import { listWarpingSettlements } from "../src/services/warping-order/settle-record";
 import { previewReopenWarpingOrder, reopenWarpingOrder } from "../src/services/warping-order/reopen";
-import { buildSettlePlan } from "../src/services/helpers/warping-settle-plan.helper";
+import { buildSettlePlan, unlistedKeepWarnings } from "../src/services/helpers/warping-settle-plan.helper";
 import type { WarpingYarnItem } from "../src/services/helpers/warping-yarn-open.helper";
 
 let pass = 0;
@@ -240,9 +240,12 @@ async function main(): Promise<void> {
     const p3b = buildSettlePlan([it3("a", "3.869")], y3("112.256", "108.888"), {}, { tolerance: null, mode: "WASTE_UP_TO_PLAN" });
     check("Ü3 tutulan 3,369 · plan firesi 3,368 → fire 3,369, kalır tam 0 (son kaleme artık); 0,5 kg gerçek kalan kalır", p3.yarns[0]!.wasteKg.eq("3.369") && p3.yarns[0]!.keepKg.isZero() && p3.lines.every((l) => l.keepKg.isZero()) && p3.lines[1]!.wasteKg.eq("2.369")
       && p3b.yarns[0]!.wasteKg.eq("3.368") && p3b.yarns[0]!.keepKg.eq("0.501"), JSON.stringify([p3.yarns[0]!.wasteKg, p3.yarns[0]!.keepKg, p3b.yarns[0]!.wasteKg, p3b.yarns[0]!.keepKg]));
-    const full = buildSettlePlan([it3("a", "1.000"), it3("b", "2.369")], y3("112.256", "108.888"), { lines: [{ dispatchItemId: "a", returnKg: 0, wasteKg: 0 }, { dispatchItemId: "b", returnKg: 0, wasteKg: 1 }] }, { tolerance: null });
-    const part = buildSettlePlan([it3("a", "1.000"), it3("b", "2.369")], y3("112.256", "108.888"), { lines: [{ dispatchItemId: "b", returnKg: 0, wasteKg: 1 }] }, { tolerance: null });
-    check("Ü2 saf: her kalemi listeleyen gövde (panel, 0'lar dahil) uyarısız · eksik kalem '1 kalem … 1 kg' uyarır", full.warnings.length === 0 && part.warnings.length === 1 && part.warnings[0]!.startsWith("1 kalem") && part.warnings[0]!.includes(" 1 kg"), JSON.stringify([full.warnings, part.warnings]));
+    const fullBody = { lines: [{ dispatchItemId: "a", returnKg: 0, wasteKg: 0 }, { dispatchItemId: "b", returnKg: 0, wasteKg: 1 }] };
+    const partBody = { lines: [{ dispatchItemId: "b", returnKg: 0, wasteKg: 1 }] };
+    const wFull = unlistedKeepWarnings(buildSettlePlan([it3("a", "1.000"), it3("b", "2.369")], y3("112.256", "108.888"), fullBody, { tolerance: null }), fullBody);
+    const partPlan = buildSettlePlan([it3("a", "1.000"), it3("b", "2.369")], y3("112.256", "108.888"), partBody, { tolerance: null });
+    const wPart = unlistedKeepWarnings(partPlan, partBody);
+    check("Ü2 saf: her kalemi listeleyen gövde (panel, 0'lar dahil) uyarısız · eksik kalem '1 kalem … 1 kg' uyarır · plan uyarısına girmez (iade penceresi kısmi planı)", wFull.length === 0 && wPart.length === 1 && wPart[0]!.startsWith("1 kalem") && wPart[0]!.includes(" 1 kg") && partPlan.warnings.length === 0, JSON.stringify([wFull, wPart, partPlan.warnings]));
     // ── DB seddi + kapılar ───────────────────────────────────────────────
     const anyWaste = await prisma.warpingYarnWaste.findFirstOrThrow({ where: { warpingOrderId: D2, kind: "WASTE" }, select: { id: true, settlementId: true, dispatchItemId: true } });
     const base = { settlementId: anyWaste.settlementId, warpingOrderId: D2, dispatchItemId: anyWaste.dispatchItemId };

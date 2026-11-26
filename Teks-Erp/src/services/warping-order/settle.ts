@@ -15,7 +15,7 @@ import { tokenReplay } from "../helpers/token-replay.helper";
 import { loadWarpingYarnItems, lockDispatchItemsTx } from "../helpers/warping-yarn-open.helper";
 import { writeWastesTx } from "./waste-write";
 import { loadWarpingSettlement } from "../helpers/warping-settlement.helper";
-import { buildSettlePlan, settlePlanDto, settleRequestHash, type SettlePlan, type SettlePlanCtx, type WarpingSettleBody } from "../helpers/warping-settle-plan.helper";
+import { buildSettlePlan, settlePlanDto, settleRequestHash, unlistedKeepWarnings, type SettlePlan, type SettlePlanCtx, type WarpingSettleBody } from "../helpers/warping-settle-plan.helper";
 import { WARPING_ORDER_TABLE } from "./create";
 import { loadSettlementRecord, WARPING_SETTLE, type WarpingSettlementRecord } from "./settle-record";
 import { returnWarpingYarnTx } from "./yarn-return";
@@ -77,7 +77,7 @@ export async function previewSettleWarpingOrder(id: string, body: WarpingSettleB
   const mode = await readDevereSettleDefault();
   const ev = await prisma.$transaction(async (tx) => evaluateSettle(tx, id, body, { tolerance: o.wasteTolerancePct, mode }));
   const blockers = settleBlockers(o, ev);
-  return { order: { id: o.id, orderNo: o.orderNo, status: o.status }, canSettle: blockers.length === 0, blockers, plan: settlePlanDto(ev.plan), settlement: ev.settlement, warnings: ev.plan.warnings };
+  return { order: { id: o.id, orderNo: o.orderNo, status: o.status }, canSettle: blockers.length === 0, blockers, plan: settlePlanDto(ev.plan), settlement: ev.settlement, warnings: [...ev.plan.warnings, ...unlistedKeepWarnings(ev.plan, body)] };
 }
 
 function settleReplay(id: string, hash: string) {
@@ -164,6 +164,6 @@ export async function settleWarpingOrder(id: string, input: WarpingSettleInput, 
     for (const r of rec.returns) {
       await AuditService.log({ userId, action: "UPDATE", tableName: "SUBCONTRACTOR_DISPATCH", recordId: dispatchOf.get(r.dispatchItemId ?? "") ?? id, newData: { yarnReturned: r.yarnItemId, movementId: r.movementId, qtyKg: r.qtyKg, warpingOrderId: id, settlementId: out.settlementId } });
     }
-    return { ...rec, warnings: p.warnings, replayed: false, keepKg: sum((l) => l.keepKg) };
+    return { ...rec, warnings: [...p.warnings, ...unlistedKeepWarnings(p, body)], replayed: false, keepKg: sum((l) => l.keepKg) };
   });
 }
