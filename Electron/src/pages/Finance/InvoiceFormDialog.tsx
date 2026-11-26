@@ -89,6 +89,8 @@ export interface InvoicePrefill {
   notice?: { tone: "warn" | "info"; message: string } | null;
   /** F4: sevk taslağındaki hizmet satırlarının iş kırılımı (yalnız bilgi; satırlar `lines`ta). */
   serviceWorks?: ServiceDraftWorkRow[];
+  /** F7b: kaynak (sevk) tek iş emrine bağlıysa — vergi ön değeri malzeme kuralını ve "tevkifat neden yok" nedenini ondan çözer. */
+  workOrderId?: string;
   /** Devere A2 "Fatura gir": bu siparişlerin faturasız kabulleri seçili açılır (taslak sunucuda doğar). */
   warpingOrderIds?: string[];
 }
@@ -428,7 +430,7 @@ function InvoiceFormBody({
 
   // D4-V1k: yeni faturada KDV/tevkifat ön değeri müşteri cari ?? genel ayar (sunucunun tek çözümleyicisi);
   // yalnız hâlâ önceki ön değeri taşıyan satır yenilenir — kullanıcının yazdığı oran ezilmez.
-  const taxDefaults = useInvoiceTaxDefaults(type, customerId, !isEdit);
+  const taxDefaults = useInvoiceTaxDefaults(type, customerId, !isEdit, prefill?.workOrderId);
   const newLineTax = taxDefaults ?? { vatRate: defaultVatRate, withholdingRate: 0 };
   // Taban, satırların GERÇEKTEN kurulduğu değerdir (emptyLine(defaultVatRate) → tevkifat 0); sorgu önbellekteyse
   // taxDefaults ilk render'da dolu gelir ve taban ona eşitlenirse ön değer hiç uygulanmazdı.

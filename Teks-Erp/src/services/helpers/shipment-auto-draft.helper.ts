@@ -56,6 +56,7 @@ import { D0 } from "./allocation.helper";
 import { deriveInvoiceDueDate, findCariAccountForCardTx } from "./finance.helper";
 import { resolveInvoiceTaxDefaults, taxLineFields } from "./invoice-tax-defaults.helper";
 import { SACK_ABSENT_STATUSES } from "./sack-invariants.helper";
+import { whereWorkOrdersOfRolls } from "./workorder-rolls.helper";
 import { LEDGER_UNIT, unitLabel } from "../../constants/item-unit";
 import { uyari } from "../../lib/logger";
 import { ekranYolu } from "../../constants/panel-ekran-yolu";
@@ -132,6 +133,18 @@ export interface ShipmentDraftLinesResult {
   serviceWorks?: ServiceDraftWorkRow[];
   /** H7: sevk brütü (top · metre) — taslak notunda hizmet satırlarının yanında görünür. */
   shipmentGross?: { rollCount: number; meters: string };
+  /**
+   * F7b: sevkin topları TEK iş emrine bağlıysa onun id'si (vergi ön değerinin malzeme bağlamı); sıfır/çok İE'de
+   * alan YOK (bağlamsız = bugünkü). Panel bunu `tax-defaults?workOrderId=` ile geri yollar, "tevkifat neden yok" satırı çizilir.
+   */
+  workOrderId?: string;
+}
+
+/** F7b: topların TEK iş emri (üç bağ, `whereWorkOrdersOfRolls`); hiç ya da birden çok İE ⇒ null — karışık sevkte kural uydurulmaz. */
+export async function soleWorkOrderOfRolls(rollIds: readonly string[]): Promise<string | null> {
+  if (rollIds.length === 0) return null;
+  const wos = await prisma.workOrder.findMany({ where: whereWorkOrdersOfRolls({ id: { in: [...rollIds] } }), select: { id: true }, take: 2 });
+  return wos.length === 1 ? wos[0]!.id : null;
 }
 
 type DraftRollRow = {
@@ -206,7 +219,7 @@ export async function collectShipmentInvoiceDraftLines(
   }
   const sh = await prisma.shipment.findUnique({ where: { id: shipmentId }, select: { dispatchedAt: true } });
   const svc = await collectShipmentServiceBilling({ shipmentId, customerId, currency, settings: service, dispatchedAt: sh?.dispatchedAt ?? null });
-  const tax = taxLineFields(await resolveInvoiceTaxDefaults({ type: InvoiceType.SALES, customerId }));
+  const tax = taxLineFields(await resolveInvoiceTaxDefaults({ type: InvoiceType.SALES, customerId, workOrderId: product.workOrderId ?? null }));
   return {
     ...product,
     lines: [...product.lines, ...svc.lines.map((l) => ({ ...l, ...tax }))],
@@ -246,7 +259,10 @@ async function collectProductDraftLines(
   const shipmentGross = serviceBilling
     ? { rollCount: grossRolls.length, meters: grossRolls.reduce((a, r) => a.plus(r.currentQty), D0()).toFixed(2) }
     : undefined;
-  if (rolls.length === 0) return { lines: [], orderPriced: 0, orderConflicts: 0, warnings: [], ...(shipmentGross ? { shipmentGross } : {}) };
+  // Brüt kümeden: emanet top ürün satırı olmasa da hizmet satırının vergisi aynı İE bağlamını okur.
+  const workOrderId = await soleWorkOrderOfRolls(grossRolls.map((r) => r.id));
+  const woCtx = workOrderId ? { workOrderId } : {};
+  if (rolls.length === 0) return { lines: [], orderPriced: 0, orderConflicts: 0, warnings: [], ...(shipmentGross ? { shipmentGross } : {}), ...woCtx };
   const warnings = await collectUnmeasuredAllocationWarnings(shipmentId);
   // G3 emanet (E4b): müşterinin kendi malı satılmaz — satır YİNE yazılır (fatura muhasebe kararı), uyarı basılır.
   const emanet = rolls.filter((r) => isConsignedRoll(r));
@@ -338,7 +354,7 @@ async function collectProductDraftLines(
   });
 
   // KDV/tevkifat TEK çözümleyiciden (müşteri cari ?? genel ayar) — panel formu ve dönem taslağı da aynı helper'ı okur.
-  const tax = taxLineFields(await resolveInvoiceTaxDefaults({ type: InvoiceType.SALES, customerId }));
+  const tax = taxLineFields(await resolveInvoiceTaxDefaults({ type: InvoiceType.SALES, customerId, workOrderId }));
 
   const lines = [...groups.values()].map((g) => {
     const contract = contractPriceOf(g);
@@ -353,7 +369,7 @@ async function collectProductDraftLines(
       ...tax,
     };
   });
-  return { lines, orderPriced, orderConflicts, warnings, ...(shipmentGross ? { shipmentGross } : {}) };
+  return { lines, orderPriced, orderConflicts, warnings, ...(shipmentGross ? { shipmentGross } : {}), ...woCtx };
 }
 
 /** Bu sevkiyatın tahsis aldığı MT-dışı sipariş satırları → taslak uyarısı (satır başına bir). */

@@ -36,7 +36,7 @@ Sınıf: [ÇEKİRDEK] her kurulumda aynı · [PROFİL] bu fabrikanın ayarı. Pl
 - [ÇEKİRDEK] Terbiye kodu önceliği ELLE > varyant (`ProductRecipe.finishingRateCode`) > ürün yapısı > yok; varyant kodu yazımda aktif tarifeye çözülmeli (400 `COST_FINISHING_RATE_UNKNOWN`).
 - [ÇEKİRDEK] `KG` tarife ham metre başına `birim × kg/m`; kg `maliyet.terbiyeKgTabani`ne göre (NET_HAM = take-up'lı firesiz çözgü + atkı · IPLIK_TUKETIMI = fireli `warpKgPerM + weftKgPerM`), girdiye `kgBase` DONAR; metre tarifede `kgBase` yazılmaz, ayar okunmaz.
 - [ÇEKİRDEK] Kârlılığın dış fason tahmini KG tarifesini metreyle ÇARPMAZ → `DIS_FASON_TARIFESI` eksik.
-- [ÇEKİRDEK] Standart maliyet sürümünün aktif tekilliği ve geçmişi (itemId, recipeId) zinciridir: varyant sürümü desen geneli sürümü kapatmaz; fiyat listesi doldurma anahtarı itemId + renk + recipeId.
+- [ÇEKİRDEK] Standart maliyet sürümü (itemId, recipeId) zinciri, varyant geneli kapatmaz; sürüm no ürün başına tek dizi (çapraz zincir P2002 yeniden denenir); fiyat listesi anahtarı itemId + renk + recipeId.
 - [ÇEKİRDEK] Varyantlı teklif kalemi yalnız kendi varyant sürümünü dondurur, yoksa canlı hesaplar — desen geneli sürüme düşmez (recipeId NULL = bugünkü davranış).
 - [ÇEKİRDEK] Dokuma gerçek maliyetinde standart = iş emri varyantının ACTIVE sürümü, yoksa desen geneli ACTIVE; bulut `standart-maliyet` kaydı `varyantId` + `varyantAdi`/`varyantKodu` taşır, anahtar urunId + varyantId (desen genelinde null).
 - [ÇEKİRDEK] Varyant maliyetinde atkı satırı varyantın atkı değişimini (`ProductRecipeWeftYarn`) kullanır (iplik, fiyat, etiket varyantın; pay/sıklık kartın; yoksa bayt-aynı); "bu sıradaki atkı ipliği ne" tek cevabı `weftOverrideFor`.
