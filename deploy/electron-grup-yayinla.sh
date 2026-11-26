@@ -279,10 +279,18 @@ UZAK
   on_dogrula "TeksERP-$surum-Setup.exe" || { rm -f "$yayindaki_yml"; exit 1; }
 
   if [ "${atla_yukleme:-0}" != "1" ] || ! cmp -s "$yayindaki_yml" "$latest"; then
-    echo "2/2  latest.yml (en son — sıra önemli; '$grup' künyeli)..."
-    scp -s "$latest" "$SSH_HEDEF:$UZAK_DIZIN/"
-    uzak "$UZAK_DIZIN/latest.yml" <<'UZAK' || { rm -f "$yayindaki_yml"; hata "latest.yml kipi sunucuda 0644 yapılamadı."; }
-chmod 0644 "$1"
+    echo "2/2  latest.yml (en son — sıra önemli; '$grup' künyeli; geçici ad → 0644 → atomik mv)..."
+    # Doğrudan hedef ada yazmak yarım dosyayı yayına açar; aynı dizinde tek rename ile paneller ya eskiyi ya yeniyi görür.
+    gecici_yml="$UZAK_DIZIN/latest.yml.yukleniyor"
+    gecici_sil() { uzak "$gecici_yml" >/dev/null 2>&1 <<'UZAK' || true
+rm -f -- "$1"
+UZAK
+    }
+    scp -s "$latest" "$SSH_HEDEF:$gecici_yml" \
+      || { gecici_sil; rm -f "$yayindaki_yml"; hata "latest.yml geçici ada yüklenemedi — yayındaki latest.yml DEĞİŞMEDİ."; }
+    uzak "$gecici_yml" "$UZAK_DIZIN/latest.yml" <<'UZAK' \
+      || { gecici_sil; rm -f "$yayindaki_yml"; hata "latest.yml kipi 0644 yapılamadı / yerine konamadı — yayındaki latest.yml DEĞİŞMEDİ."; }
+chmod 0644 "$1" && mv -f -- "$1" "$2"
 UZAK
   fi
   rm -f "$yayindaki_yml"
