@@ -97,20 +97,35 @@ export async function liveRollMetersByWeavingOrder(
   db: Db, weavingOrderIds: string[],
 ): Promise<Map<string, { viaRun: Prisma.Decimal; viaOrder: Prisma.Decimal }>> {
   const out = new Map<string, { viaRun: Prisma.Decimal; viaOrder: Prisma.Decimal }>();
+  for (const [id, rolls] of await liveRollsByWeavingOrder(db, weavingOrderIds)) {
+    const cur = { viaRun: new Decimal(0), viaOrder: new Decimal(0) };
+    for (const r of rolls) {
+      if (r.viaRun) cur.viaRun = cur.viaRun.plus(r.initialQty);
+      else cur.viaOrder = cur.viaOrder.plus(r.initialQty);
+    }
+    out.set(id, cur);
+  }
+  return out;
+}
+
+/** Gerçek maliyet paydasının TOP listesi (aynı yüklem: yalnız İPTAL topu girmez) — devere payı top başına okunur. */
+export async function liveRollsByWeavingOrder(
+  db: Db, weavingOrderIds: string[],
+): Promise<Map<string, Array<{ id: string; initialQty: Prisma.Decimal; viaRun: boolean }>>> {
+  const out = new Map<string, Array<{ id: string; initialQty: Prisma.Decimal; viaRun: boolean }>>();
   if (weavingOrderIds.length === 0) return out;
   const rolls = await db.roll.findMany({
     where: { status: { not: RollStatus.CANCELLED }, ...rollsOfWeavingOrderWhere(weavingOrderIds) },
-    select: { initialQty: true, weavingOrderId: true, doffEvent: { select: { revokedAt: true, machineRun: { select: { weavingOrderId: true } } } } },
+    select: { id: true, initialQty: true, weavingOrderId: true, doffEvent: { select: { revokedAt: true, machineRun: { select: { weavingOrderId: true } } } } },
     orderBy: { id: "asc" },
   });
   for (const r of rolls) {
     const runWo = r.doffEvent && !r.doffEvent.revokedAt ? r.doffEvent.machineRun?.weavingOrderId ?? null : null;
     const id = runWo ?? r.weavingOrderId;
     if (!id) continue;
-    const cur = out.get(id) ?? { viaRun: new Decimal(0), viaOrder: new Decimal(0) };
-    if (runWo) cur.viaRun = cur.viaRun.plus(r.initialQty);
-    else cur.viaOrder = cur.viaOrder.plus(r.initialQty);
-    out.set(id, cur);
+    const list = out.get(id) ?? [];
+    list.push({ id: r.id, initialQty: r.initialQty, viaRun: runWo !== null });
+    out.set(id, list);
   }
   return out;
 }
