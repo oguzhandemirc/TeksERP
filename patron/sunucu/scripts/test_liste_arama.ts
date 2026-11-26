@@ -9,6 +9,7 @@
 //   §7 ⭐ kimlik süzgeçleri (`LIST_ID_FILTERS` TEK beyan): beyanlı projeksiyonda 200, beyansızda 400; başka tesis sızmaz
 //   §8 beyan ↔ fabrika kataloğu iki yönlü (kolonu taşıyan her projeksiyon beyanlı, beyanlı her çift kolonu taşır) · `/oturum` yeteneği
 //   §9 ⭐ iş emri araması (no · müşteri · sipariş no; Açık/Kapalı) + üyelik süzgeçleri (`LIST_MEMBER_FILTERS`: asama · fasonFirmaId · siparisId · cariKartId; beyansız 400)
+//   §10 ⭐ hizmetId süzgeci (fiyat/fatura-kalemi): yalnız o hizmetin satırı; beyansız listede ve biçimsiz değerde 400
 // Koşum: npx tsx scripts/test_liste_arama.ts
 // =============================================================================
 import { randomUUID } from "node:crypto";
@@ -307,6 +308,25 @@ async function isEmriUyelik(o: Ortam, k: TestKurulumu, h: TestHesabi): Promise<v
   kontrol("§9h `/oturum` üyelik yeteneği beyandan", JSON.stringify(yetenek) === JSON.stringify({ "is-emri": [...LIST_MEMBER_FILTER_KEYS] }), JSON.stringify(yetenek));
 }
 
+/** Hizmet kartı D3: hizmet fiyatının ve fatura satırının konusu `hizmetId`de; süzgeç yalnız o hizmeti getirir. */
+async function hizmetSuzgeci(o: Ortam, k: TestKurulumu, h: TestHesabi): Promise<void> {
+  console.log("\n§10 hizmetId kimlik süzgeci");
+  const w = { t: new Date(o.saat.simdi() - 60_000).toISOString(), k: "000000000004" };
+  const t = new Date(o.saat.simdi() - 120_000).toISOString();
+  const id = { hizmet: randomUUID(), baska: randomUUID(), f1: randomUUID(), f2: randomUUID(), f3: randomUUID(), u1: randomUUID() };
+  const fiyat = (fid: string, hizmetId: string | null) =>
+    ({ id: fid, urunId: hizmetId ? null : randomUUID(), hizmetId, cariKartId: null, tur: "SALE", doviz: "TRY", fiyat: "12.50", degisim: t });
+  const kayitlar = [girdi("fiyat", { yaz: [fiyat(id.f1, id.hizmet), fiyat(id.f2, id.baska), fiyat(id.f3, null)], yeni: w })];
+  const r = await imzali(o, k, "/v1/esitle", { govde: paket(k, { ufuk: new Date(o.saat.simdi() - 60_000), kayitlar }) });
+  if (r.status !== 200 || (r.json as unknown as { ret: unknown[] }).ret.length > 0) throw new Error(`hizmet fikstürü: ${r.status} ${JSON.stringify(r.json)}`);
+  const bir = await ara(o, h, "fiyat", { hizmetId: id.hizmet.toUpperCase() });
+  kontrol("§10a ⭐ fiyat?hizmetId → yalnız o hizmetin fiyatı (büyük harf dahil)", bir.status === 200 && ayni(bir.ids, [id.f1]), `${bir.status} ${bir.ids.size}`);
+  const beyansiz = await ara(o, h, "siparis-kalemi", { hizmetId: id.hizmet });
+  kontrol("§10b hizmetId taşımayan projeksiyonda (siparis-kalemi) → 400", beyansiz.status === 400, `${beyansiz.status}`);
+  const bicim = await ara(o, h, "fatura-kalemi", { hizmetId: "x' OR 1=1" });
+  kontrol("§10c biçimsiz hizmetId → 400", bicim.status === 400, `${bicim.status}`);
+}
+
 async function main(): Promise<void> {
   const o = await ortamKur();
   const k = await tesisKur(o);
@@ -327,6 +347,7 @@ async function main(): Promise<void> {
     await kimlikRls(o, h, await hesapKur(o, k2.tesisId, ROLE_TEMPLATES.PATRON), sid, sid2);
     await beyanKatalog(o, h);
     await isEmriUyelik(o, k, h);
+    await hizmetSuzgeci(o, k, h);
   } finally {
     await temizleTesis(o, k.tesisId);
     await temizleTesis(o, k2.tesisId);
