@@ -73,7 +73,7 @@ export function listParams(f: CostItemFilter, cursor: string | null, limit: numb
 
 /** Dokuma iş emri gerçekleşen maliyeti (`GET /api/cost/weaving-orders/:id/actual`) — sayılar ve metinler sunucudan. */
 export interface WeavingActualRow {
-  anahtar: "TEZGAH" | "DEVERE" | "COZGU_IPLIGI";
+  anahtar: "TEZGAH" | "DEVERE" | "COZGU_IPLIGI" | "ATKI_IPLIGI";
   ad: string;
   standartTlM: string | null;
   gercekTlM: string | null;
