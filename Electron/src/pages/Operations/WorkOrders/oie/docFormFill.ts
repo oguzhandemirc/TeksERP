@@ -148,9 +148,10 @@ export interface ClassicPayloadPart {
   foldType: string | null;
   orderLineIds?: string[];
   targetValues?: Array<{ propertyId: string; valueId: string }>;
+  materialProvidedBy?: NoteWorkOrderBody["materialProvidedBy"] | null;
 }
 
-export type FormEndpointExtras = Pick<NoteWorkOrderBody, "targetItemId" | "targetColorId" | "width" | "targetQuantity" | "targetWeight" | "plannedStartDate" | "plannedEndDate" | "foldType" | "orderLineIds">;
+export type FormEndpointExtras = Pick<NoteWorkOrderBody, "targetItemId" | "targetColorId" | "width" | "targetQuantity" | "targetWeight" | "plannedStartDate" | "plannedEndDate" | "foldType" | "orderLineIds" | "materialProvidedBy">;
 
 /**
  * S16a form ucunun ek alanları: boş olan hiç gitmez (sunucu bugünkü varsayılanı uygular). Her partiye ayrı iş emri
@@ -168,6 +169,7 @@ export function formEndpointExtras(p: ClassicPayloadPart, perParty: boolean): Fo
   if (p.plannedEndDate) out.plannedEndDate = p.plannedEndDate;
   if (p.foldType) out.foldType = p.foldType;
   if (p.orderLineIds?.length) out.orderLineIds = p.orderLineIds;
+  if (p.materialProvidedBy) out.materialProvidedBy = p.materialProvidedBy;
   return out;
 }
 
