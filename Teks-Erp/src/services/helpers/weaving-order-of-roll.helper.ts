@@ -76,6 +76,121 @@ export async function weavingOrdersOfRolls(db: Db, rollIds: string[]): Promise<M
   return out;
 }
 
+// ── Satılan topun kökeni: tambur atası + boya/apre makbuzu üzerinden ham topa (K1 dilim 3) ──────────────
+
+/** Topun düşen dokuma işi (yoksa null), topun bu işe düşen payı ve satılan 1 m'ye karşılık ham metre (ölçülemezse null). */
+export type RollWeavingOrigin = { weavingOrderId: string | null; share: Prisma.Decimal; hamPerM: Prisma.Decimal | null };
+/** Zincirdeki boya/apre makbuzu: makbuzun çıkış metresi ve satılan 1 m'ye düşen çıkış metresi (ölçülemezse null). */
+export type RollFinishingPass = { receiptId: string; subcontractorId: string; receivedAt: Date; outputM: Prisma.Decimal; perM: Prisma.Decimal | null };
+export type RollOriginTrace = { origins: RollWeavingOrigin[]; passes: RollFinishingPass[] };
+
+const ORIGIN_DEPTH = 12;
+const qtyOf = (r: { initialQty: Prisma.Decimal; currentQty: Prisma.Decimal }) => (r.initialQty.gt(0) ? r.initialQty : r.currentQty);
+type FinishingReceipt = {
+  id: string; subcontractorId: string; receivedAt: Date; bornM: Prisma.Decimal; hasBorn: boolean;
+  /** Kalem başına giren (ham) metre: `receivedQty`, NULL kalemde topun kendisi bir kez. */
+  inputs: Array<{ rollId: string; qty: Prisma.Decimal }>;
+};
+type OriginGraph = {
+  rolls: Map<string, RollWeavingRow & { parentRollId: string | null; parentReceiptId: string | null }>;
+  receipts: Map<string, FinishingReceipt>;
+  /** Kendisi dönen top (doğansız makbuz) → makbuz kalemleri. */
+  selfReturns: Map<string, Array<{ receiptId: string; qty: Prisma.Decimal }>>;
+};
+
+function finishingInputs(items: Array<{ newRollId: string; receivedQty: Prisma.Decimal | null; newRoll: { initialQty: Prisma.Decimal; currentQty: Prisma.Decimal } }>) {
+  const seen = new Set<string>();
+  return items.flatMap((i) => {
+    if (i.receivedQty !== null) return [{ rollId: i.newRollId, qty: i.receivedQty }];
+    if (seen.has(i.newRollId)) return [];
+    seen.add(i.newRollId);
+    return [{ rollId: i.newRollId, qty: qtyOf(i.newRoll) }];
+  });
+}
+
+/** Ata zincirini katman katman toplar (N+1 yok): top, boya/apre makbuzu (iptalsiz, dokuma makbuzu değil) ve kalemleri. */
+async function loadOriginGraph(db: Db, rollIds: string[]): Promise<OriginGraph> {
+  const g: OriginGraph = { rolls: new Map(), receipts: new Map(), selfReturns: new Map() };
+  let frontier = [...new Set(rollIds)];
+  for (let depth = 0; depth < ORIGIN_DEPTH && frontier.length > 0; depth++) {
+    const rows = await db.roll.findMany({ where: { id: { in: frontier } }, select: { ...ROLL_WEAVING_SELECT, parentRollId: true, parentReceiptId: true } });
+    for (const r of rows) g.rolls.set(r.id, r);
+    const self = await db.subcontractorReceiptItem.findMany({
+      where: { newRollId: { in: frontier }, receipt: { cancelledAt: null, weavingOrderId: null } }, select: { receiptId: true },
+    });
+    const wanted = [...new Set([...rows.flatMap((r) => (r.parentReceiptId ? [r.parentReceiptId] : [])), ...self.map((s) => s.receiptId)])].filter((id) => !g.receipts.has(id));
+    const receipts = wanted.length === 0 ? [] : await db.subcontractorReceipt.findMany({
+      where: { id: { in: wanted }, cancelledAt: null, weavingOrderId: null },
+      select: {
+        id: true, subcontractorId: true, receivedAt: true, bornRolls: { select: { initialQty: true, currentQty: true } },
+        items: { select: { newRollId: true, receivedQty: true, newRoll: { select: { initialQty: true, currentQty: true } } }, orderBy: { id: "asc" } },
+      },
+    });
+    for (const rc of receipts) {
+      const inputs = finishingInputs(rc.items);
+      g.receipts.set(rc.id, { id: rc.id, subcontractorId: rc.subcontractorId, receivedAt: rc.receivedAt, bornM: rc.bornRolls.reduce((a, b) => a.plus(qtyOf(b)), new Decimal(0)), hasBorn: rc.bornRolls.length > 0, inputs });
+      if (rc.bornRolls.length > 0) continue;
+      for (const i of inputs) g.selfReturns.set(i.rollId, [...(g.selfReturns.get(i.rollId) ?? []), { receiptId: rc.id, qty: i.qty }]);
+    }
+    const next = new Set<string>();
+    for (const r of rows) if (r.parentRollId) next.add(r.parentRollId);
+    for (const rc of g.receipts.values()) if (rc.hasBorn) for (const i of rc.inputs) next.add(i.rollId);
+    frontier = [...next].filter((id) => !g.rolls.has(id));
+  }
+  return g;
+}
+
+/** Bir topu köküne yürür: `m` = satılan 1 m'ye karşılık bu topun metresi, `share` = satılan topun bu kola düşen payı. */
+type WalkStep = { m: Prisma.Decimal | null; share: Prisma.Decimal; seen: Set<string> };
+function walkOrigin(w: { g: OriginGraph; out: RollOriginTrace }, id: string, { m, share, seen }: WalkStep): void {
+  const { g, out } = w;
+  const node = g.rolls.get(id);
+  if (!node || seen.has(id) || seen.size >= ORIGIN_DEPTH * 4) { out.origins.push({ weavingOrderId: null, share, hamPerM: m }); return; }
+  seen.add(id);
+  const own = g.selfReturns.get(id) ?? [];
+  const ownSum = own.reduce((a, s) => a.plus(s.qty), new Decimal(0));
+  for (const s of own) {
+    const rc = g.receipts.get(s.receiptId)!;
+    const perM = m && ownSum.gt(0) ? m.mul(s.qty).div(ownSum) : null;
+    out.passes.push({ receiptId: rc.id, subcontractorId: rc.subcontractorId, receivedAt: rc.receivedAt, outputM: rc.inputs.reduce((a, i) => a.plus(i.qty), new Decimal(0)), perM: perM === null ? null : perM.mul(share) });
+  }
+  const hit = pickWeavingOrder(node);
+  if (hit) { out.origins.push({ weavingOrderId: hit.weavingOrderId, share, hamPerM: m }); return; }
+  if (node.parentRollId) { walkOrigin(w, node.parentRollId, { m, share, seen }); return; }
+  const rc = node.parentReceiptId ? g.receipts.get(node.parentReceiptId) : undefined;
+  const inSum = rc ? rc.inputs.reduce((a, i) => a.plus(i.qty), new Decimal(0)) : new Decimal(0);
+  if (!rc || inSum.lte(0)) { out.origins.push({ weavingOrderId: null, share, hamPerM: m }); return; }
+  out.passes.push({ receiptId: rc.id, subcontractorId: rc.subcontractorId, receivedAt: rc.receivedAt, outputM: rc.bornM, perM: m ? m.mul(share) : null });
+  // Doğan topun ham karşılığı makbuz düzeyinde: Σ giren ham ÷ Σ doğan (çekme); kalem payı giren metreyle.
+  for (const i of rc.inputs) walkOrigin(w, i.rollId, { m: m && rc.bornM.gt(0) ? m.mul(inSum).div(rc.bornM) : null, share: share.mul(i.qty).div(inSum), seen: new Set(seen) });
+}
+
+/**
+ * K1 dilim 3 — satılan topun dokuma kökeni: kendi işi → tambur atası (`parentRollId`) → boya/apre makbuzundan doğduysa
+ * (`parentReceiptId`, dokuma makbuzu değil) makbuzun kalemlerindeki ham toplar. Aynı işe düşen kollar birleşir; pay Σ = 1.
+ */
+export async function weavingOriginsOfRolls(db: Db, rollIds: string[]): Promise<Map<string, RollOriginTrace>> {
+  const out = new Map<string, RollOriginTrace>();
+  if (rollIds.length === 0) return out;
+  const g = await loadOriginGraph(db, rollIds);
+  for (const id of rollIds) {
+    const t: RollOriginTrace = { origins: [], passes: [] };
+    walkOrigin({ g, out: t }, id, { m: new Decimal(1), share: new Decimal(1), seen: new Set() });
+    const byWo = new Map<string | null, RollWeavingOrigin>();
+    for (const o of t.origins) {
+      const prev = byWo.get(o.weavingOrderId);
+      // Ham metre: kolun payıyla ağırlıklı (kol başına m, kola düşen pay share) — birleşimde Σ (m × pay) / Σ pay.
+      const w = o.hamPerM ? o.hamPerM.mul(o.share) : null;
+      if (!prev) { byWo.set(o.weavingOrderId, { ...o, hamPerM: w }); continue; }
+      byWo.set(o.weavingOrderId, { weavingOrderId: o.weavingOrderId, share: prev.share.plus(o.share), hamPerM: prev.hamPerM && w ? prev.hamPerM.plus(w) : null });
+    }
+    const origins = [...byWo.values()].map((o) => ({ ...o, hamPerM: o.hamPerM && o.share.gt(0) ? o.hamPerM.div(o.share) : null }));
+    origins.sort((a, b) => String(a.weavingOrderId).localeCompare(String(b.weavingOrderId)));
+    out.set(id, { origins, passes: t.passes });
+  }
+  return out;
+}
+
 /** Z3: fasonda dokunan işlerin KABUL edilen metresi (makbuz zinciri, iptal edilmemiş makbuz, ölü olmayan top) — iş başına Σ ilk metre. */
 export async function receivedMetersByWeavingOrder(db: Db, weavingOrderIds: string[]): Promise<Map<string, number>> {
   const out = new Map<string, number>();

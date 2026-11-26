@@ -25,7 +25,8 @@ const LABEL: Record<ProductBreakdown, string> = { desen: "Desen", musteri: "Mü�
 
 /** Kumaş satışına özgü kodların günlük dili; dokuma kodları "Dokuma maliyeti" raporunun sözlüğünden (tek kaynak). */
 const OWN_TEXT: Partial<Record<ProductMissingCode, string>> = {
-  IPLIK_MALIYETI: "iplik maliyeti", DOKUMA_ISI_YOK: `${TERIM.dokumaIsEmri.tekilKucuk} yok`, SEVK_BAGI_YOK: "sevk bağı yok", DIS_FASON: "boya/apre fasonu",
+  IPLIK_MALIYETI: "iplik maliyeti", DOKUMA_ISI_YOK: `${TERIM.dokumaIsEmri.tekilKucuk} yok`, SEVK_BAGI_YOK: "sevk bağı yok",
+  HAM_METRE: "ham metre (boyahane dönüşü ölçülmedi)", DIS_FASON_FATURASI: "boya/apre faturası", DIS_FASON_TARIFESI: "boya/apre tarifesi",
 };
 export const productMissingText = (c: ProductMissingCode): string => OWN_TEXT[c] ?? missingText(c as Parameters<typeof missingText>[0]);
 const WARPING_CODES: readonly ProductMissingCode[] = ["DEVERE_UCRETI", "DEVERE_FATURASI", "COZGU_TUKETIMI", "LEVENT_KOKENI"];
@@ -39,6 +40,8 @@ export interface ProductNames {
 export interface ProductGroup {
   label: string; meters: Dec; revenue: Dec; yarn: Dec | null; weaving: Dec | null; warping: Dec | null; subcontract: Dec | null;
   contribution: Dec | null; missing: Set<ProductMissingCode>; estimated: boolean; ongoing: boolean;
+  /** İplik kaynağı rozetleri: maliyet kartı fiyatından (tahmini) · müşteri ipliği (bilgi); boya/apre tarife tahmini. */
+  yarnEstimated: boolean; customerYarn: boolean; subcontractEstimated: boolean;
 }
 
 const D0 = () => new Prisma.Decimal(0);
@@ -49,6 +52,7 @@ function groupOf(label: string, r: ProductProfitRow): ProductGroup {
   return {
     label, meters: r.meters, revenue: r.revenueTry, yarn: r.yarnTry, weaving: r.weavingTry, warping: r.warpingTry, subcontract: r.subcontractTry,
     contribution: r.contributionTry, missing: new Set(r.missing), estimated: r.warpingEstimated, ongoing: r.ongoing,
+    yarnEstimated: r.yarnEstimated, customerYarn: r.customerYarn, subcontractEstimated: r.subcontractEstimated,
   };
 }
 
@@ -58,6 +62,7 @@ function merge(t: ProductGroup, g: ProductGroup): ProductGroup {
     label: t.label, meters: t.meters.plus(g.meters), revenue: t.revenue.plus(g.revenue), yarn: add(t.yarn, g.yarn), weaving: add(t.weaving, g.weaving),
     warping: add(t.warping, g.warping), subcontract: add(t.subcontract, g.subcontract), contribution: add(t.contribution, g.contribution),
     missing: new Set([...t.missing, ...g.missing]), estimated: t.estimated || g.estimated, ongoing: t.ongoing || g.ongoing,
+    yarnEstimated: t.yarnEstimated || g.yarnEstimated, customerYarn: t.customerYarn || g.customerYarn, subcontractEstimated: t.subcontractEstimated || g.subcontractEstimated,
   };
 }
 
@@ -93,17 +98,20 @@ export function productGroups(rows: ProductProfitRow[], by: ProductBreakdown, na
 export function productTotal(groups: ProductGroup[]): ProductGroup {
   const zero: ProductGroup = {
     label: "Toplam", meters: D0(), revenue: D0(), yarn: D0(), weaving: D0(), warping: D0(), subcontract: D0(), contribution: D0(),
-    missing: new Set(), estimated: false, ongoing: false,
+    missing: new Set(), estimated: false, ongoing: false, yarnEstimated: false, customerYarn: false, subcontractEstimated: false,
   };
   return groups.reduce(merge, zero);
 }
 
-/** Durum rozeti: eksik parçalar · iş sürüyor · devere tahmini. */
-export function productBadge(g: Pick<ProductGroup, "missing" | "estimated" | "ongoing">): string {
+/** Durum rozeti: eksik parçalar · iş sürüyor · tahmini kaynaklar · müşteri ipliği (bilgi). */
+export function productBadge(g: Pick<ProductGroup, "missing" | "estimated" | "ongoing"> & Partial<Pick<ProductGroup, "yarnEstimated" | "customerYarn" | "subcontractEstimated">>): string {
   const parts: string[] = [];
   if (g.missing.size > 0) parts.push(`eksik: ${[...g.missing].map(productMissingText).sort((a, b) => a.localeCompare(b, "tr")).join(", ")}`);
   if (g.ongoing) parts.push("iş sürüyor");
   if (g.estimated) parts.push("devere tahmini");
+  if (g.yarnEstimated) parts.push("iplik tahmini");
+  if (g.subcontractEstimated) parts.push("boya/apre tahmini");
+  if (g.customerYarn) parts.push("müşteri ipliği");
   return parts.join(" · ");
 }
 
@@ -147,6 +155,7 @@ function productWarnings(r: ProfitabilityResult, notes: string[]): string[] {
   const notices = r.productNotices ?? [];
   if (notices.includes("GENEL_GIDER_DAGITILMADI")) w.push("Genel gider ve işçilik kumaş satırlarına dağıtılmadı; \"Kalan\" yalnız doğrudan maliyet düşülerek bulunur.");
   if (notices.includes("IADE_DUSULMEDI")) w.push("İade edilen toplar satışta (brüt) kaldı; iade faturaları bu tabloya henüz düşülmüyor.");
+  if (notices.includes("COZGU_IPLIGI_OKUNMADI")) w.push("Çözgü hazırlama (devere) modülü kapalı: çözgü ipliği okunmuyor, \"İplik\" yalnız atkı ipliğini taşır.");
   return w;
 }
 
@@ -154,10 +163,10 @@ function productDefinitions(withWarping: boolean): Array<{ ad: string; aciklama:
   return [
     { ad: "Satış geliri", aciklama: "Onaylı satış faturasındaki kumaş satırlarının KDV hariç TL tutarı; faturanın sevk ettiği toplara metre payıyla bölünür (aynı desenin farklı renk fiyatları ortalanır)." },
     { ad: "Satılan metre", aciklama: "Sevk anındaki top metresi; sonradan iade edilen top da dahildir (brüt)." },
-    { ad: "Dokuma (tezgâh)", aciklama: "Topun dokunduğu işin bugüne kadarki metre başı tezgâh maliyeti × satılan metre; \"Dokuma maliyeti\" raporuyla aynı sayı." },
-    ...(withWarping ? [{ ad: "Çözgü hazırlama (devere)", aciklama: "İşin devere payı × satılan metre: faturadan, fatura yoksa siparişteki ücretten (tahmini)." }] : []),
-    { ad: "İplik", aciklama: "Çözgü ve atkı ipliğinin maliyeti; okunamadığında \"eksik: iplik maliyeti\" yazar." },
-    { ad: "Boya/apre fasonu", aciklama: "Topun boyahaneden geçtiği fasonun bedeli; zincirde fason yoksa 0, okunamadığında \"eksik\"." },
+    { ad: "Dokuma (tezgâh)", aciklama: `Topun dokunduğu işin bugüne kadarki metre başı tezgâh maliyeti × metre; ${TERIM.dokumaIsEmri.cekimKucuk.ilgi} "Gerçekleşen" tablosuyla aynı sayı. Boyahaneden dönen topta metre ham karşılığıdır (kabulde giren ham metre ÷ dönen metre).` },
+    ...(withWarping ? [{ ad: "Çözgü hazırlama (devere)", aciklama: "İşin devere payı × metre: faturadan, fatura yoksa siparişteki ücretten (tahmini)." }] : []),
+    { ad: "İplik", aciklama: "Çözgü ipliği (lot fiyatı) + atkı ipliği (norm miktar × gerçek fiyat), işin metre başı payı × metre. Lot fiyatı yoksa maliyet kartı fiyatı (\"iplik tahmini\"); müşteri ipliği maliyete girmez, eksik sayılmaz." },
+    { ad: "Boya/apre fasonu", aciklama: "Topun geçtiği boya/apre kabulünün onaylı fason faturasından metre payı; fatura yoksa ayara göre tarife tahmini ya da \"eksik\". Zincirde kabul yoksa 0." },
     { ad: "Kalan (katkı)", aciklama: "Satış gelirinden iplik, dokuma, devere ve fason çıkınca kalan; genel gider ve işçilik dağıtılmadı." },
     { ad: "Eksik", aciklama: `Maliyeti okunamayan parça sıfır sayılmaz, satırın kalanı boş kalır. "${OWN_TEXT.DOKUMA_ISI_YOK}": top hiçbir ${TERIM.dokumaIsEmri.cekimKucuk.yonelme} bağlanmıyor (al-sat ya da stok devri).` },
   ];

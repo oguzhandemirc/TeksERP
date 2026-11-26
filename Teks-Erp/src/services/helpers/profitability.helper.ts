@@ -218,7 +218,10 @@ export async function computeProfitability(params: { fromMonth: string; toMonth:
   const months = await applyPools(rows, { settings, finance, fromMonth, toMonth, start, end, idle: machine.idle });
   // Kumaş satışı havuz dağıtımından SONRA ve ayrı: hizmet satırları ve ay özeti kumaştan etkilenmez (K1.4).
   const product = params.includeProducts && (await readDokumaEnabled())
-    ? await computeProductProfitability({ readInvoices: finance.readProductRevenueInvoices, machineTime: settings.machineTime, start, end, monthOf: factoryMonthOf })
+    ? await computeProductProfitability({
+      readInvoices: finance.readProductRevenueInvoices, machineTime: settings.machineTime, subcontractSource: settings.subcontractSource, finance,
+      start, end, monthOf: factoryMonthOf,
+    })
     : null;
   return {
     fromMonth, toMonth, settings, rows, draftRows, months, idleMachineDays: machine.idle,
