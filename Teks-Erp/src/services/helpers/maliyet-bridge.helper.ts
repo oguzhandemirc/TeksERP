@@ -128,7 +128,7 @@ export interface RollWarpYarnCostRead {
   costTry: Prisma.Decimal | null;
   estimatedTry: Prisma.Decimal;
   sources: Array<"LOT" | "MALIYET_FIYATI">;
-  missing: Array<"IPLIK_FIYATI" | "LEVENT_KOKENI" | "FX_RATE_MISSING">;
+  missing: Array<"IPLIK_FIYATI" | "LEVENT_KOKENI" | "FX_RATE_MISSING" | "MUSTERI_IPLIGI">;
 }
 
 /**

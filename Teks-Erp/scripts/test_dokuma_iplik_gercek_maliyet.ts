@@ -17,6 +17,10 @@
 // NEGATİF SONDALAR (2026-11-26, hepsi kırmızı verdi, geri alındı):
 //   ① lot okuyucusunda fiş süzgeci `status: ACTIVE` → `goodsReceiptId not null` (iptal fiş de sayılır) → §8a ❌
 //   ② fire payı levente eklenmedi → §3a/§4a/§7a ❌   ③ lot fiyatı yok sayıldı → §1a/§1b/§3a/§4a/§6a/§7a ❌
+//   §11 levent kökeni: müşteri ipliği (sahibi müşteri, köken PURCHASED/CONSIGNED değil) → BİLGİ MUSTERI_IPLIGI, eksik değil;
+//      satın alınan / emanet → LEVENT_KOKENI (köken `isBoughtOrConsignedBeam`, devere tarafıyla tek yüklem); karışık → kendi payımız
+//   ④ müşteri dalı kaldırıldı (lot fiyatıyla fiyatlandı) → §11a/§11b/§11e ❌  ⑤ müşteri dalı köken dalından önce → §11d ❌
+//   ⑥ MUSTERI_IPLIGI bilgi kümesinden çıktı → §11a/§11b/§11e ❌  ⑦ tamamı müşteri ipliği → "0 TL" yazıldı → §11a/§11b ❌
 // ⚠️ DB'ye YAZAR → `hedefDbEngeli()` ilk adım; ayarlar FOTOĞRAFINA döner, kendi kayıtlarını siler.
 // =============================================================================
 import { randomUUID } from "node:crypto";
@@ -62,7 +66,7 @@ const eq = (d: Prisma.Decimal | null | undefined, v: Prisma.Decimal.Value) => d 
 const s = (d: Prisma.Decimal | null | undefined) => (d == null ? "null" : d.toString());
 const SETTING_FOTO = [
   SETTING_KEYS.DEVERE_ENABLED, SETTING_KEYS.IPLIK_ENABLED, SETTING_KEYS.DOKUMA_ENABLED, SETTING_KEYS.DEVERE_LOT_REQUIRED,
-  SETTING_KEYS.DEVERE_FASON_LOT_POLICY, SETTING_KEYS.DEVERE_MOUNT_TRACKING, SETTING_KEYS.DEVERE_AUTO_CONSUME,
+  SETTING_KEYS.DEVERE_FASON_LOT_POLICY, SETTING_KEYS.DEVERE_MOUNT_TRACKING, SETTING_KEYS.DEVERE_AUTO_CONSUME, SETTING_KEYS.EMANET_ENABLED,
 ] as const;
 const setSetting = (key: string, value: Prisma.InputJsonValue) => prisma.systemSetting.upsert({ where: { key }, create: { key, value }, update: { value } });
 
@@ -100,8 +104,9 @@ async function main(): Promise<void> {
   let stationId: string | null = null;
   let versionId: string | null = null;
   let mf: MaliyetFikstur | null = null;
+  let ownerId: string | null = null;
   try {
-    for (const k of [SETTING_KEYS.DEVERE_ENABLED, SETTING_KEYS.IPLIK_ENABLED, SETTING_KEYS.DOKUMA_ENABLED, SETTING_KEYS.DEVERE_MOUNT_TRACKING, SETTING_KEYS.DEVERE_AUTO_CONSUME]) await setSetting(k, "true");
+    for (const k of [SETTING_KEYS.DEVERE_ENABLED, SETTING_KEYS.IPLIK_ENABLED, SETTING_KEYS.DOKUMA_ENABLED, SETTING_KEYS.DEVERE_MOUNT_TRACKING, SETTING_KEYS.DEVERE_AUTO_CONSUME, SETTING_KEYS.EMANET_ENABLED]) await setSetting(k, "true");
     await setSetting(SETTING_KEYS.DEVERE_LOT_REQUIRED, "false");
     await setSetting(SETTING_KEYS.DEVERE_FASON_LOT_POLICY, "FREE");
     await reconcileReasonPresets();
@@ -253,6 +258,45 @@ async function main(): Promise<void> {
     check("§9b devere kapalı → çözgü ipliği alanları null; kolon var hücre boş",
       wOff.warpYarnCostTry === null && wOff.warpYarnMissing === null && cell(wOff, "cozguIplikM") === null && cell(wOff, "cozguIplikKaynak") === null);
     await setSetting(SETTING_KEYS.DEVERE_ENABLED, "true");
+
+    console.log("\n§11 — levent kökeni (müşteri ipliği · satın alınan · emanet · karışık)");
+    ownerId = (await prisma.customer.create({ data: { code: code("OWN"), name: `${TAG} kumaş müşterisi` }, select: { id: true } })).id;
+    // Devere kabulü sahibi müşteri ipliği lotundan kalıtır (`receive-core`); fikstür kalıtılmış hâli doğrudan kurar.
+    const M = await order(X, 3);
+    await prisma.warpBeam.updateMany({ where: { id: { in: [M.beamIds[0]!, M.beamIds[1]!] } }, data: { ownerCustomerId: ownerId } });
+    const readyBeam = async (origin: { originKind: WarpBeamOrigin; subcontractorId?: string; ownerCustomerId?: string }) => {
+      const b = (await createWarpBeam({ warpSpecId: X.spec, plannedLengthM: 1000, ...origin })).data.id;
+      ids.beams.push(b);
+      await prisma.$transaction((tx) => applyWarpBeamEventTx(tx, { beamId: b, kind: "WOUND", from: WarpBeamStatus.PLANNED, to: WarpBeamStatus.READY, data: { lengthM: 1000, endsCount: 3000, denier: 150, theoreticalKg: 50, kgSource: WarpKgSource.THEORETICAL } }));
+      return b;
+    };
+    const LM = await loomFor("TM", [M.beamIds[0]!]);
+    await top(LM, 10);
+    const wM = await row(LM.woId);
+    const yM = (await getWeavingOrderActualCost(LM.woId)).satirlar.find((x) => x.anahtar === "COZGU_IPLIGI");
+    check("§11a ⭐ müşteri ipliğiyle kendi devere siparişimiz → bilgi MUSTERI_IPLIGI (eksik DEĞİL, LEVENT_KOKENI değil); pay 0 yazılmaz (null), hücre 'müşteri ipliği'",
+      wM.warpYarnCostTry === null && wM.warpYarnPerMTry === null && wM.warpYarnSource === null && JSON.stringify(wM.warpYarnMissing) === JSON.stringify(["MUSTERI_IPLIGI"])
+        && cell(wM, "cozguIplikM") === "müşteri ipliği" && cell(wM, "cozguIplikKaynak") === "müşteri ipliği (maliyetimize girmez)",
+      `${s(wM.warpYarnCostTry)} · ${wM.warpYarnMissing} | ${cell(wM, "cozguIplikM")} | ${cell(wM, "cozguIplikKaynak")}`);
+    check("§11b iş emri ayrıntısı: çözgü ipliği satırı eksik listesi BOŞ, kaynak 'müşteri ipliği (maliyetimize girmez)'",
+      yM?.eksik.length === 0 && yM.kaynak === "müşteri ipliği (maliyetimize girmez)" && yM.gercekTlM === null && yM.tahmini === false, JSON.stringify(yM));
+    const kokenEksik = (w: WeavingActualCost) => w.warpYarnCostTry === null && w.warpYarnMissing?.includes("LEVENT_KOKENI") === true && !w.warpYarnMissing.includes("MUSTERI_IPLIGI")
+      && cell(w, "cozguIplikM") === EKSIK && cell(w, "cozguIplikKaynak") === "eksik: satın alınan ya da emanet levent";
+    const LP = await loomFor("TP", [await readyBeam({ originKind: WarpBeamOrigin.PURCHASED, subcontractorId: sub.id })]);
+    await top(LP, 10);
+    const wP = await row(LP.woId);
+    check("§11c ⭐ satın alınan levent → LEVENT_KOKENI, hücre 'eksik' (bilgi değil)", kokenEksik(wP), `${wP.warpYarnMissing} | ${cell(wP, "cozguIplikM")} | ${cell(wP, "cozguIplikKaynak")}`);
+    const LK = await loomFor("TK", [await readyBeam({ originKind: WarpBeamOrigin.CONSIGNED, ownerCustomerId: ownerId })]);
+    await top(LK, 10);
+    const wK = await row(LK.woId);
+    check("§11d ⭐ emanet (sahibi müşteri) levent → yine LEVENT_KOKENI; müşteri ipliği sayılmaz (köken önce)", kokenEksik(wK), `${wK.warpYarnMissing} | ${cell(wK, "cozguIplikM")}`);
+    const LX = await loomFor("TX", [M.beamIds[1]!, M.beamIds[2]!]);
+    await top(LX, 40);
+    const wX = await row(LX.woId);
+    check("§11e karışık top (müşteri ipliği + kendi ipliğimiz) → yalnız kendi payı: 50 m × 5 = 250 TL → 6,25 TL/m; LOT + bilgi notu",
+      eq(wX.warpYarnCostTry, 250) && eq(wX.warpYarnPerMTry, "6.25") && wX.warpYarnSource === "LOT" && JSON.stringify(wX.warpYarnMissing) === JSON.stringify(["MUSTERI_IPLIGI"])
+        && cell(wX, "cozguIplikM") === 6.25 && cell(wX, "cozguIplikKaynak") === "lot fiyatı · müşteri ipliği (maliyetimize girmez)",
+      `${s(wX.warpYarnCostTry)} · ${wX.warpYarnSource} · ${wX.warpYarnMissing} | ${cell(wX, "cozguIplikKaynak")}`);
   } finally {
     const orderBeams = (await prisma.warpBeam.findMany({ where: { warpingOrderId: { in: ids.orders } }, select: { id: true } })).map((b) => b.id);
     const beamIds = [...orderBeams, ...ids.beams];
@@ -294,6 +338,7 @@ async function main(): Promise<void> {
     await prisma.yarnLot.deleteMany({ where: { id: { in: ids.lots } } });
     await prisma.yarnCostPrice.deleteMany({ where: { id: { in: ids.cards } } });
     await prisma.item.deleteMany({ where: { id: { in: ids.yarns } } });
+    if (ownerId) await prisma.customer.deleteMany({ where: { id: ownerId } });
     if (versionId) {
       await prisma.standardCostLine.deleteMany({ where: { versionId } });
       await prisma.standardCostVersion.deleteMany({ where: { id: versionId } });
