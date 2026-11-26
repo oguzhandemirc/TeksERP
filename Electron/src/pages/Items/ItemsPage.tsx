@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { CrudPage } from "@/components/layout/CrudPage";
 import { SelectChip } from "@/components/data-table/filter-row/SelectChip";
 import { ITEM_CATALOG_HINT } from "@/components/forms/itemPicker";
@@ -20,6 +20,7 @@ import {
   itemTypeChangeParams,
   itemListFilters,
   itemUrlFilterParam,
+  legacyServiceListTarget,
   parseItemStatus,
   type ItemStatusFilter,
   type ItemUrlFilterDef,
@@ -30,6 +31,13 @@ import { useFabricTypeFilter } from "./useFabricTypeFilter";
 // "Ürün Kartları": aynı `Item` tablosunda kumaş · iplik · sarf birlikte (hizmet kartı ayrı tablo); sayfa adı
 // tür ayrımını taşımaz, tür alanı/süzgeci taşır. Süzgeç planı `itemsFilters.ts`.
 export function ItemsPage() {
+  const [searchParams] = useSearchParams();
+  // Eski hizmet yer imi boş liste göstermesin; `replace` → geri tuşu döngüye girmez (LegacyCariRedirect deseni).
+  const legacyTarget = legacyServiceListTarget(searchParams);
+  return legacyTarget ? <Navigate to={legacyTarget} replace /> : <ItemsPageBody />;
+}
+
+function ItemsPageBody() {
   const [searchParams, setSearchParams] = useSearchParams();
   const status = parseItemStatus(searchParams.get(ITEM_STATUS_PARAM));
   const extraFilters = useMemo(() => itemListFilters(status, searchParams), [status, searchParams]);
