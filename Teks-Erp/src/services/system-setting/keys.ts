@@ -134,7 +134,8 @@ export const SETTING_KEYS = {
   /** D4-G2b: genel gider havuzunun işlere dağıtım anahtarı — `YOK` (varsayılan; dağıtılmaz) · `METRE` · `GELIR` · `MAKINE_SAATI`. */
   COST_PROFIT_OVERHEAD_KEY: "maliyet.karlilik.genelGiderAnahtari",
   /** D4-G2b: masraf kategorisi → sınıf (`ISCILIK` / `GENEL_GIDER` / `HARIC`); varsayılan `{}` (her kategori genel gider). */
-  COST_PROFIT_CATEGORY_CLASSES: "maliyet.karlilik.kategoriSiniflari",
+  // K1 dilim 2 (yanındaki): Kârlılık ekranının kapsamsız açılışı — `HIZMET` (varsayılan; bugünkü tablo) · `KUMAS` (yalnız dokuma açıkken).
+  COST_PROFIT_CATEGORY_CLASSES: "maliyet.karlilik.kategoriSiniflari", COST_PROFIT_DEFAULT_SCOPE: "maliyet.karlilik.varsayilanKapsam",
   /** Tahsilat/ödeme kaydında en eski açık faturalara OTOMATİK kapama — FIFO
    *  (default FALSE). Bugün kapama (`PaymentAllocation`) elle seçilir; açıkken
    *  tutar vade/tarih sırasıyla açık bakiyelere dağıtılır ve artan tutar

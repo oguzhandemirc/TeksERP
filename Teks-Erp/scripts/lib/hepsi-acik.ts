@@ -86,6 +86,7 @@ export const HEPSI_ACIK: Readonly<Record<string, AcikGirdisi>> = {
   orderProductionProposal: A("ONIZLEME"), // önizleme + uygula uçlarını açar; ONAYDA_TASLAK yalnız panelde kendiliğinden açar
   costProfitMachineTime: V("yalnız kârlılık okumasının kaynağı; hiçbir kapıyı açıp kapamaz"),
   costProfitOverheadKey: V("yalnız kârlılık okumasının dağıtım anahtarı; hiçbir kapıyı açıp kapamaz"),
+  costProfitDefaultScope: V("yalnız Kârlılık ekranının açılış kapsamı; hiçbir kapıyı açıp kapamaz"),
   costProfitCategoryClasses: V("yalnız kârlılık okumasının masraf sınıfları; hiçbir kapıyı açıp kapamaz"),
   financeCariHoldDefaultScope: V("yalnız form ön seçimi; kapsamı kilit koyan seçer, hiçbir kapıyı açıp kapamaz"),
   financeCariHoldReleaseBySamePerson: A("DENY"), // açma ucunun "koyan kişi" dalını işletir

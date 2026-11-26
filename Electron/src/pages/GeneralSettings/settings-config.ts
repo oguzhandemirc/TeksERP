@@ -3110,6 +3110,21 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
           { value: "MAKINE_SAATI", label: "Makine saatine göre", hint: "Makinede uzun kalan iş çok pay alır." },
         ],
       },
+      {
+        // K1 dilim 2: `defaultValue` backend `DEFAULT_PROFIT_DEFAULT_SCOPE` ile birebir; yalnız ekranın açılışını seçer.
+        enumKey: "costProfitDefaultScope",
+        group: "Kârlılık",
+        title: "Kârlılık ekranı neyle açılsın",
+        summary: "Ekran ilk açıldığında hizmet işleri mi, satılan kumaş mı görünsün.",
+        desc: "Hizmet işleri (varsayılan): fason hizmet faturalarının kârlılığı. Kumaş satışı: dokunan kumaşın satış faturası, dokuma ve devere maliyeti, kalan. Ekrandaki \"Kapsam\" seçimiyle ikisi arasında her zaman geçilebilir; ayar yalnız ilk açılışı belirler.",
+        defaultValue: "HIZMET",
+        display: "radio",
+        audience: ["Muhasebeci", "Yönetim"],
+        options: [
+          { value: "HIZMET", label: "Hizmet işleri (varsayılan)", hint: "Bugünkü tablo." },
+          { value: "KUMAS", label: "Kumaş satışı", hint: "Dokuma modülü açık olmalı." },
+        ],
+      },
     ],
   },
   {

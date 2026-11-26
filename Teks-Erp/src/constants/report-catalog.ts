@@ -224,7 +224,7 @@ export const REPORT_CATALOG: readonly ReportCatalogEntry[] = [
     nesil: "v2", kategoriV2: "uretim", persona: ["planlama", "patron"], varyantBoyutlari: ["musteri", "urun"], hazir: true, yeniRapor: true },
   // D4-G3: kârlılık (hizmet işleri; tek kaynak `profitability.helper`); panelde kendi sayfası (V2_KEYS_WITH_OWN_PAGE),
   // Maliyet & Teklif hub'ında karo. Kapı maliyet ∧ ön muhasebe; izin `cost:read` (+ uçta `report:finance`). Varyant sonraki dilim.
-  { key: "maliyet/karlilik", baslik: "Kârlılık", soru: "Hangi müşteri, hangi işlem ve hangi ay ne kazandırdı; gelirden ipe, makineye ve dışarıya ne gitti?",
+  { key: "maliyet/karlilik", baslik: "Kârlılık", soru: "Hangi müşteri, hangi işlem, hangi kumaş ve hangi ay ne kazandırdı; gelirden ipe, makineye ve dışarıya ne gitti?",
     sinif: "basit", izin: "cost:read", modul: "maliyetEnabled", varsayilanGun: 90, tarih: "aralik-gun",
     panelYolu: "reports/maliyet/karlilik", uc: "/api/reports/maliyet/karlilik", kapiTasiyici: [{ dosya: "src/routes/reports/maliyet.report.routes.ts", yol: "/karlilik" }], yuzey: "yaprak",
     nesil: "v2", kategoriV2: "para", persona: ["patron", "muhasebe"], varyantBoyutlari: ["musteri", "makine"], hazir: true, yeniRapor: true },

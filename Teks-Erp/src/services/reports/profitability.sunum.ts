@@ -22,6 +22,17 @@ export type ProfitBreakdown = (typeof PROFIT_BREAKDOWNS)[number];
 /** "iş" kırılımında ekrana basılan satır tavanı; toplam ve ana sayı TAM kümeden. */
 export const PROFIT_WORK_ROW_LIMIT = 500;
 
+/** K1 dilim 2: ekranın kapsamı — hizmet işleri (bugünkü tablo) · kumaş satışı (`profitability-product.sunum`). */
+export const PROFIT_SCOPES = ["hizmet", "kumas"] as const;
+export type ProfitScope = (typeof PROFIT_SCOPES)[number];
+export const SCOPE_PARAM = "kapsam";
+const SCOPE_LABEL: Record<ProfitScope, string> = { hizmet: "Hizmet işleri", kumas: "Kumaş satışı" };
+
+/** Kapsam çipi — yalnız dokuma açık kurulumda beyan edilir (kapalıyken yanıt bayt-aynı kalır). */
+export function scopeParameter(selected: ProfitScope): ParametreBeyani {
+  return { ad: SCOPE_PARAM, etiket: "Kapsam", tur: "secim", deger: selected, secenekler: PROFIT_SCOPES.map((k) => ({ deger: k, etiket: SCOPE_LABEL[k] })) };
+}
+
 const BREAKDOWN_LABEL: Record<ProfitBreakdown, string> = { musteri: "Müşteri", islem: "İşlem", makine: "Makine", ay: "Ay", is: "İş" };
 const GROUP_BY: Record<Exclude<ProfitBreakdown, "is">, ProfitGroupBy> = { musteri: "customer", islem: "serviceItem", makine: "machine", ay: "month" };
 
@@ -40,7 +51,7 @@ export interface ProfitNames {
 }
 
 const MONTH_NAMES = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
-const monthName = (ym: string): string => `${MONTH_NAMES[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}`;
+export const monthName = (ym: string): string => `${MONTH_NAMES[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}`;
 const tl = (d: Prisma.Decimal | null): number | null => (d === null ? null : Number(d.toFixed(2)));
 const D0 = () => new Prisma.Decimal(0);
 const TR_NUMBER = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 2 });
@@ -195,26 +206,39 @@ export function breakdownParameter(selected: ProfitBreakdown, allowed: readonly 
   return { ad: "kirilim", etiket: "Kırılım", tur: "secim", deger: selected, secenekler: allowed.map((k) => ({ deger: k, etiket: BREAKDOWN_LABEL[k] })) };
 }
 
+/** Dönem notları (tam ay, örtüşen kıyas) — hizmet ve kumaş kapsamı aynı cümleleri basar. */
+export function rangeNotesOf(window: ResolvedDayRange): string[] {
+  const m = monthsOfWindow(window.days);
+  const cmpMonths = compareMonthsOf(window);
+  const aligned = window.days.from.endsWith("-01") && window.days.to === lastDayOf(m.toMonth);
+  return [
+    aligned ? null : `Kârlılık tam aylarla hesaplanır: ${monthName(m.fromMonth)} – ${monthName(m.toMonth)}${cmpMonths ? `; kıyas ${monthName(cmpMonths.fromMonth)} – ${monthName(cmpMonths.toMonth)}` : ""}.`,
+    window.compareDays && !cmpMonths ? "Kıyas dönemi bu dönemin aylarıyla örtüştüğü için kıyas yapılmadı." : null,
+  ].filter((x): x is string => x !== null);
+}
+
+/** Kıyas döneminin zarf alanı — yalnız kıyas ayları ve önceki sonuç varsa. */
+export function comparePeriodOf(window: ResolvedDayRange, hasPrevious: boolean): { kiyasDonemi?: ReturnType<typeof periodOf> } {
+  const cmpMonths = compareMonthsOf(window);
+  return cmpMonths && hasPrevious ? { kiyasDonemi: periodOf(monthsRange(cmpMonths)) } : {};
+}
+
 export function buildProfitabilitySunumu(p: {
   result: ProfitabilityResult; previous: ProfitabilityResult | null; names: ProfitNames; window: ResolvedDayRange; breakdown: ProfitBreakdown;
   allowedBreakdowns?: readonly ProfitBreakdown[];
+  /** K1 dilim 2: dokuma açıkken kapsam çipi beyan edilir; verilmezse yanıt bugünküyle bayt-aynı. */
+  scopeOffered?: boolean;
 }): RaporSunumu {
   const { result, previous, names, window, breakdown } = p;
   const total = totalOf(profitGroups(result.rows, "ay", names));
   const prevTotal = previous ? totalOf(profitGroups(previous.rows, "ay", names)) : null;
-  const m = monthsOfWindow(window.days);
-  const cmpMonths = compareMonthsOf(window);
-  const aligned = window.days.from.endsWith("-01") && window.days.to === lastDayOf(m.toMonth);
-  const notes = [
-    aligned ? null : `Kârlılık tam aylarla hesaplanır: ${monthName(m.fromMonth)} – ${monthName(m.toMonth)}${cmpMonths ? `; kıyas ${monthName(cmpMonths.fromMonth)} – ${monthName(cmpMonths.toMonth)}` : ""}.`,
-    window.compareDays && !cmpMonths ? "Kıyas dönemi bu dönemin aylarıyla örtüştüğü için kıyas yapılmadı." : null,
-  ].filter((x): x is string => x !== null);
+  const notes = rangeNotesOf(window);
   const missingRows = result.rows.filter((x) => x.missing.length > 0).length;
   const byCustomer = profitGroups(result.rows, "musteri", names);
   return {
     ...catalogHeader(PROFITABILITY_KEY),
     donem: periodOf(window.range),
-    ...(cmpMonths && previous ? { kiyasDonemi: periodOf(monthsRange(cmpMonths)) } : {}),
+    ...comparePeriodOf(window, previous !== null),
     anaSayi: metricFigure("karlilik.katki", tl(total.contribution), {
       unit: "TRY", previous: prevTotal ? tl(prevTotal.contribution) : undefined,
       unmeasured: `${missingRows} işte eksik girdi var; "Durum" kolonundaki eksikler girilince hesaplanır`,
@@ -242,7 +266,7 @@ export function buildProfitabilitySunumu(p: {
       { ad: "Eksik", aciklama: "Norm, fiyat, kur ya da saat ücreti girilmemiş iş; değeri sıfır sayılmaz, boş bırakılır." },
     ],
     parametreler: [
-      ...dayRangeParameters(window.days, window.mode), breakdownParameter(breakdown, p.allowedBreakdowns),
+      ...dayRangeParameters(window.days, window.mode), ...(p.scopeOffered ? [scopeParameter("hizmet")] : []), breakdownParameter(breakdown, p.allowedBreakdowns),
       { ad: "hesap", etiket: "hesap", tur: "metin", deger: settingsSummary(result.settings) },
     ],
     uyarilar: warningsOf(result, notes),
