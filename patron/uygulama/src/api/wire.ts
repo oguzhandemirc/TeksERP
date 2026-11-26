@@ -206,7 +206,7 @@ export const LIST_SEARCH: Readonly<Record<string, ListSearchSpec>> = {
 };
 
 // ---------------------------------------------------------------- liste kimlik süzgeçleri
-export const LIST_ID_FILTER_KEYS = ["cariKartId", "cariHesapId", "siparisId", "teklifId", "urunId"] as const;
+export const LIST_ID_FILTER_KEYS = ["cariKartId", "cariHesapId", "siparisId", "teklifId", "urunId", "hizmetId"] as const;
 export type ListIdFilterKey = (typeof LIST_ID_FILTER_KEYS)[number];
 
 /**
@@ -219,6 +219,7 @@ export const LIST_ID_FILTERS: Readonly<Record<ListIdFilterKey, readonly string[]
   siparisId: ["siparis-kalemi", "teklif"],
   teklifId: ["teklif-kalemi"],
   urunId: ["siparis-kalemi", "is-emri", "fatura-kalemi", "fiyat", "teklif-kalemi", "standart-maliyet"],
+  hizmetId: ["fatura-kalemi", "fiyat"],
 };
 
 // ---------------------------------------------------------------- liste anahtar süzgeçleri (D4-KUC3c)

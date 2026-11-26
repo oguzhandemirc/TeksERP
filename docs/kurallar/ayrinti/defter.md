@@ -55,7 +55,7 @@ Durum tabloları **"şu an ne"**yi tutar; defterler **"ne oldu"**yu tutar ve "ne
 
 | Sınıf | Ne yapar | Neden meşru | Emsal |
 |---|---|---|---|
-| **④ Deftere hiç yazmamış taslak** | atomik claim'li fiziksel silme | hiçbir bakiye/defter satırı üretmedi — geri alınacak bir "olay" yok | `invoice.service.ts:883` (`deleteMany({id, status: DRAFT})`, `count===0` → taze okuma → 409) |
+| **④ Deftere hiç yazmamış taslak** | atomik claim'li fiziksel silme | hiçbir bakiye/defter satırı üretmedi — geri alınacak bir "olay" yok | `invoice.service.ts` `deleteDraft` (`deleteMany({id, status: DRAFT})`, `count===0` → taze okuma → 409) |
 | **③b Yapılandırma pivotu replace** | üst kayıt yaşar, ayar kümesi yenilenir | satırın parasal/ticari/kalite sonucu yok; cevaplanan soru "bu ayarı kim değiştirdi"dir ve onun yeri KARAR satırıdır, pivot satırı değil | `StationProperty` · `ItemAllowedColor` · `ItemAllowedProperty` · `RouteStepProperty` · `PermissionTemplateItem` · `CustomerTemplateRoute` · `LabelContextDefault` · `PeripheralTemplateRoute` · `SubcontractorToCategory` · `StationColor` · `CustomerItemAlias` · `CustomerColorAlias` · `CustomerItemColorAlias` · `WeftSpecYarn` |
 
 - **[ÇEKİRDEK]** ③b'de pivot satırı silinebilir ama DEĞİŞİKLİĞİN KENDİSİ bir karar defterine yazılır; yüzlerce ayar satırını versiyonlamak tabloyu şişirir, sorulan soruyu cevaplamaz. Üç müşteri adı pivotunda (`CustomerItemAlias` · `CustomerColorAlias` · `CustomerItemColorAlias`) bu karar satırı bugün audit'tir — "audit yalnız ayak izi" ile gerilimli BEYANLI BORÇ, üçü için tek seferde çözülür. <sub>(arşiv:2026-09-10 · arşiv:2026-09-28 borç notu)</sub>

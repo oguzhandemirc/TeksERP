@@ -25,7 +25,7 @@
 
 ### Yasaklar
 
-- **[ÇEKİRDEK]** Olay defterinde kronoloji `createdAt`'tir, `eventDate` DEĞİL — eventDate kullanıcı girdisidir ve geriye tarihlenebilir; 'en son olay' araması `createdAt desc` ile yapılır (cheque cancelCollect: yanlış hesaptan geri çekme canlı ölçüldü). Append-only defterde yazım sırası = gerçek kronoloji. · bekçi: `çek bekçisi §19n (cheque.service.ts:1049 yorumu; dosya adı doğrulanmadı)` <sub>(CLAUDE.md:286)</sub>
+- **[ÇEKİRDEK]** Olay defterinde kronoloji `createdAt`'tir, `eventDate` DEĞİL — eventDate kullanıcı girdisidir ve geriye tarihlenebilir; 'en son olay' araması `createdAt desc` ile yapılır (cheque cancelCollect: yanlış hesaptan geri çekme canlı ölçüldü). Append-only defterde yazım sırası = gerçek kronoloji. · bekçi: `test_cheque_portfolio.ts §19n (cheque.service.ts cancelCollect + loadForwardEventTx yorumu)` <sub>(CLAUDE.md:286)</sub>
 - **[ÇEKİRDEK]** TR-only BİLİNÇLİ (2026-08-15 kullanıcı kararı): arayüz ve backend mesajları Türkçe; i18n/sözlük altyapısı KURULMAZ. Yabancı müşteri gerçekten doğarsa yalnız ticaret yüzeyleri (cari/fatura/çek/kasa/mal kabul) sınırlı sözlüğe alınır — o gün planlanır, bugünden hazırlık yapılmaz. <sub>(CLAUDE.md:298)</sub>
 
 ### Reçeteler
