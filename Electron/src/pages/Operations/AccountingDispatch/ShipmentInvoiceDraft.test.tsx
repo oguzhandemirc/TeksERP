@@ -112,6 +112,19 @@ describe("ShipmentInvoiceDraft", () => {
     expect(captured?.notice?.message).toContain("2 kalemde");
   });
 
+  it("⭐ F7b tek İE'li sevkte workOrderId forma geçer; eski backend yollamazsa anahtar yok", async () => {
+    getShipmentInvoiceDraftLines.mockResolvedValue({ ...DTO, workOrderId: "wo-1" });
+    const { unmount } = renderWithProviders(<ShipmentInvoiceDraft row={ROW} onClose={() => {}} onCreated={() => {}} />);
+    await screen.findByTestId("fatura-formu");
+    expect(captured?.workOrderId).toBe("wo-1");
+    unmount();
+    captured = undefined;
+    getShipmentInvoiceDraftLines.mockResolvedValue(DTO);
+    renderWithProviders(<ShipmentInvoiceDraft row={{ ...ROW, id: "sh-2" }} onClose={() => {}} onCreated={() => {}} />);
+    await screen.findByTestId("fatura-formu");
+    expect(captured && "workOrderId" in captured).toBe(false);
+  });
+
   it("⭐ F4 iş kırılımı (serviceWorks) forma geçer; eski backend yollamazsa alan yok", async () => {
     const works = [{ source: "STEP", subjectKind: "ROLL", subjectId: "r1", subjectCode: "T1", serviceItemId: "s1", processLabel: "Boya", workOrderStepId: "st1", qty: "100", unit: "METER", meterBasis: "RECEIVED", unitPrice: "2", excludedReason: null }];
     getShipmentInvoiceDraftLines.mockResolvedValue({ ...DTO, serviceWorks: works });

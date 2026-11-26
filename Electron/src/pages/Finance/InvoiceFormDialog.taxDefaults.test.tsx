@@ -6,6 +6,8 @@
 //    sonra seçilen müşterinin değeri de "elle değiştirilmiş" sayılıp atlanırdı (inceleme bulgusu, PR #359).
 // ⭐ F7 (#630): ALIŞTA da seçilen cari (`customerId`) sunucuya gider — fason firmanın alış tevkifatı ondan çözülür.
 //    Negatif sonda: `useInvoiceTaxDefaults` tarafı yalnız SALES'te gönderecek hâle dönünce ⭐ alış testi kırmızı.
+// ⭐ F7b: kaynak tek İE'ye bağlıysa `prefill.workOrderId` sorguya gider, "tevkifat neden yok" satırı görünür.
+//    Negatif sonda (2026-11-26): formda `prefill?.workOrderId` geçişi silinince ⭐ İE testi kırmızı (1 ❌); geri alındı.
 // =============================================================================
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { ReactNode } from "react";
@@ -113,6 +115,32 @@ describe("tevkifat önerisi kapalı geldiğinde neden (F7b withholdingOffReason)
     const note = await screen.findByTestId("withholding-off-note");
     expect(note).toHaveTextContent("Ana hammaddeyi");
     expect(note).not.toHaveTextContent("PERFORMER_SUPPLIED_MATERIAL");
+  });
+
+  it("⭐ kaynak tek İE'ye bağlıysa (prefill.workOrderId) sorgu İE'yle gider ve bilgi satırı görünür", async () => {
+    getInvoiceTaxDefaults.mockImplementation(async (_t: string, _c: string | null, wo?: string) =>
+      wo === "wo-1" ? { vatRate: 20, withholdingRate: 0, withholdingOffReason: "PERFORMER_SUPPLIED_MATERIAL" } : GENERAL,
+    );
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const Wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={qc}>
+        <MemoryRouter>{children}</MemoryRouter>
+      </QueryClientProvider>
+    );
+    render(
+      <InvoiceFormDialog open onOpenChange={() => {}} onCreated={() => {}} prefill={{ customerId: "cus-1", workOrderId: "wo-1", lines: [{ description: "Tül", qty: 10, unit: "m", unitPrice: 5 }] }} />,
+      { wrapper: Wrapper },
+    );
+    const note = await screen.findByTestId("withholding-off-note");
+    expect(note).toHaveTextContent("Ana hammaddeyi");
+    expect(getInvoiceTaxDefaults).toHaveBeenCalledWith("SALES", "cus-1", "wo-1");
+  });
+
+  it("İE'siz açılışta istek bugünkü şekliyle (üçüncü argümansız) gider", async () => {
+    renderWithWarmCache();
+    fireEvent.click(screen.getByText("Cari seç (stub)"));
+    await waitFor(() => expect(getInvoiceTaxDefaults).toHaveBeenCalledWith("SALES", "cus-1"));
+    expect(getInvoiceTaxDefaults.mock.calls.every((c) => c.length === 2)).toBe(true);
   });
 
   it("neden yoksa satır çizilmez", async () => {

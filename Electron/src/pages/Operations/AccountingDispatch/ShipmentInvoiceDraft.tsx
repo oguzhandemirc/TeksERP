@@ -63,6 +63,8 @@ export function ShipmentInvoiceDraft({ row, onClose, onCreated }: Props) {
     sourceLabel: row.shipmentNo,
     notice: draftPriceNotice(dto),
     serviceWorks: dto.serviceWorks,
+    // F7b: tek İE'li sevkte vergi ön değeri İE bağlamıyla sorulur (eski backend alanı yollamaz ⇒ bugünkü).
+    ...(dto.workOrderId ? { workOrderId: dto.workOrderId } : {}),
   };
 
   return (
