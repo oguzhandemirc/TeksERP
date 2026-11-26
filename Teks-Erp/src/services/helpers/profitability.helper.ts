@@ -13,6 +13,7 @@
 //   D4-G2b: katkıya makine-saat maliyeti girer (`profitability-machine`); net = katkı − işçilik − genel gider
 //   (`profitability-overhead`; genel gider varsayılan `YOK` → dağıtılmaz, net = katkı). Ay özeti `months`.
 //   D4-G2c: bağlı masraf as-of doğrudan masraftır (`profitability-allocation`); bağ yoksa alan eklenmez (bayt-aynı).
+//   K1: kumaş satışı ayrı evren (`profitability-product`), yalnız `includeProducts` ile; hizmet satırlarına dokunmaz.
 // Modül: maliyet KAPALI → null, tabloya sorgu yok; finans kapalı → null (gelir faturadan; maliyet-bridge emsali).
 // =============================================================================
 import { InvoiceStatus, Prisma, ServiceMeterBasis } from "@prisma/client";
@@ -25,6 +26,7 @@ import {
   readCostProfitMachineTime,
   readCostProfitOverheadKey,
   readCostProfitSubcontractSource,
+  readDokumaEnabled,
   readFinanceExpenseAllocationField,
   readMaliyetEnabled,
   type ProfitCategoryClassMap,
@@ -40,6 +42,8 @@ export type { RevenueLinkRow };
 import { computeMachineCosts, type IdleMachineDay, type MachineMissingCode } from "./profitability-machine.helper";
 import { attachDirectExpenses, deductFromPools, readMonthAllocations, workOrderOfSteps, type MonthDirectExpenses } from "./profitability-allocation.helper";
 import { buildMonthPools, distributePool, overheadBase, type PoolCategory } from "./profitability-overhead.helper";
+import { computeProductProfitability, type ProductNotice, type ProductProfitRow } from "./profitability-product.helper";
+export type { ProductMissingCode, ProductNotice, ProductProfitRow } from "./profitability-product.helper";
 
 export type ProfitMissingCode = CostMissingCode | MachineMissingCode;
 export type { IdleMachineDay } from "./profitability-machine.helper";
@@ -110,6 +114,10 @@ export interface ProfitabilityResult {
   draftRows: ProfitabilityRow[];
   months: ProfitMonthSummary[];
   idleMachineDays: IdleMachineDay[];
+  /** K1: kumaş satışı satırları — yalnız `includeProducts` + dokuma açıkken (yoksa alan yok, yanıt bayt-aynı); havuz almaz. */
+  productRows?: ProductProfitRow[];
+  productDraftRows?: ProductProfitRow[];
+  productNotices?: ProductNotice[];
 }
 
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
@@ -153,7 +161,7 @@ function revenueByLink(inv: RevenueInvoiceRow): Map<string, { revenueTry: Prisma
 }
 
 /** Ay aralığının kârlılık satırları. Maliyet ya da finans kapalı → null (tabloya sorgu atılmaz). */
-export async function computeProfitability(params: { fromMonth: string; toMonth: string }): Promise<ProfitabilityResult | null> {
+export async function computeProfitability(params: { fromMonth: string; toMonth: string; includeProducts?: boolean }): Promise<ProfitabilityResult | null> {
   const { fromMonth, toMonth } = params;
   if (!MONTH_RE.test(fromMonth) || !MONTH_RE.test(toMonth) || fromMonth > toMonth) {
     throw AppError.badRequest("Ay aralığı YYYY-AA biçiminde ve başlangıç ≤ bitiş olmalı", { code: "PROFIT_RANGE_INVALID" });
@@ -208,7 +216,14 @@ export async function computeProfitability(params: { fromMonth: string; toMonth:
   const order = (a: ProfitabilityRow, b: ProfitabilityRow) => a.month.localeCompare(b.month) || (a.kind === b.kind ? 0 : a.kind === "INVOICED" ? -1 : 1);
   rows.sort(order);
   const months = await applyPools(rows, { settings, finance, fromMonth, toMonth, start, end, idle: machine.idle });
-  return { fromMonth, toMonth, settings, rows, draftRows, months, idleMachineDays: machine.idle };
+  // Kumaş satışı havuz dağıtımından SONRA ve ayrı: hizmet satırları ve ay özeti kumaştan etkilenmez (K1.4).
+  const product = params.includeProducts && (await readDokumaEnabled())
+    ? await computeProductProfitability({ readInvoices: finance.readProductRevenueInvoices, machineTime: settings.machineTime, start, end, monthOf: factoryMonthOf })
+    : null;
+  return {
+    fromMonth, toMonth, settings, rows, draftRows, months, idleMachineDays: machine.idle,
+    ...(product ? { productRows: product.rows, productDraftRows: product.draftRows, productNotices: product.notices } : {}),
+  };
 }
 
 /** Ay havuzlarını o ayın FATURALANAN satırlarına dağıtır (satırı yerinde günceller) ve ay özetini döner. */
