@@ -32,6 +32,7 @@ import "../src/services/quote-documents.service";
 import "../src/services/order-documents.service";
 import "../src/services/warp-beam-card.service";
 import "../src/services/beam-body/statement";
+import "../src/services/consignment-dispatch/printed-doc";
 import {
   systemSettingService,
   readDocumentsLogo,

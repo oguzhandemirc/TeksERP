@@ -178,6 +178,11 @@ export const DOC_PERMISSIONS: Record<string, { read: string[]; write: string[] }
     read: ["beam-body:read", "beam-body:write"],
     write: ["beam-body:write"],
   },
+  // Denetim 6 — emanet çıkış ekranıyla HİZALI (detay `consignment:read`); gerekçeli yeniden basım çıkış yazma izniyle.
+  CONSIGNMENT_DISPATCH: {
+    read: ["consignment:read", "consignment:write"],
+    write: ["consignment:write"],
+  },
 };
 
 /** docType path paramına göre ilgili modülün izinlerini uygular. */

@@ -20,6 +20,7 @@ import {
   D, type NormalizedDispatch,
 } from "./lines";
 import { loadConsignmentDispatchDto, type ConsignmentDispatchDetail } from "./read";
+import { freezeConsignmentDispatchDocTx } from "./printed-doc";
 import type { ConsignmentDispatchCreateInput, ConsignmentDispatchPreview } from "./types";
 
 export const CONSIGNMENT_DISPATCH_TABLE = "CONSIGNMENT_DISPATCH";
@@ -137,6 +138,8 @@ export async function createConsignmentDispatch(input: ConsignmentDispatchCreate
         });
         yarnLines.push({ itemId: item.id, lotId: y.lotId, warehouseId: y.warehouseId, qtyKg: y.qtyKg.toFixed(3) });
       }
+      // Basılı belge v1 aynı tx'te donar (transfer/fason sevk emsali): içerik "çıkış anı"dır.
+      await freezeConsignmentDispatchDocTx(tx, header.id, userId);
       return { id: header.id, dispatchNo, beamEvents, yarnLines };
     });
     await AuditService.log({

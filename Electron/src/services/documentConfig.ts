@@ -360,6 +360,7 @@ export const DOC_TYPE_TO_KEY: Record<string, string> = {
   STOCK_COUNT: "stokSayimi",
   WARP_BEAM_CARD: "leventKarti",
   BEAM_BODY_STATEMENT: "govdeMutabakat",
+  CONSIGNMENT_DISPATCH: "emanetCikis",
 };
 
 /**
@@ -540,6 +541,26 @@ export const DOC_FIELD_CATALOGS: Record<string, DocFieldDef[]> = {
     { key: "lnLabel", label: "Sağ blok etiketleri (Tarih: / Dönem:)", group: "header" },
     { key: "lnValue", label: "Sağ blok DEĞERLERİ (tarih, dönem)", group: "header" },
     { key: "vehicle", label: "Araç / referans satırı", group: "header" },
+    { key: "secHead", label: "Tablo başlıkları", group: "table" },
+    { key: "secCell", label: "Tablo hücreleri", group: "table" },
+    { key: "secTot", label: "TOPLAM satırı", group: "table" },
+    { key: "note", label: "Not / alt bilgi", group: "footer" },
+    { key: "signLabel", label: "İmza etiketleri", group: "footer" },
+    { key: "stamp", label: "Basım damgası (tarih / basan)", group: "footer" },
+    { key: "tblCap", label: "Tablo üstü başlık", group: "table" },
+    { key: "decl", label: "Beyan metni", group: "footer" },
+  ],
+  // Denetim 6 emanet çıkış belgesi — backend `doc-fields.ts` emanetCikis aynası (ticari belge iskeleti).
+  emanetCikis: [
+    { key: "company", label: "Firma adı", group: "header" },
+    { key: "letterhead", label: "Künye satırları (adres/tel/vergi)", group: "header" },
+    { key: "sayinLabel", label: '"SAYIN:" etiketi', group: "header" },
+    { key: "sayin", label: "Emanet sahibi adı", group: "header" },
+    { key: "subLine", label: "Alt bilgi satırı (kod)", group: "header" },
+    { key: "title", label: "Belge başlığı", group: "header" },
+    { key: "lnLabel", label: "Sağ blok etiketleri (Belge No: / Tarih:)", group: "header" },
+    { key: "lnValue", label: "Sağ blok DEĞERLERİ (no, tarih)", group: "header" },
+    { key: "vehicle", label: "Araç satırı (plaka / şoför)", group: "header" },
     { key: "secHead", label: "Tablo başlıkları", group: "table" },
     { key: "secCell", label: "Tablo hücreleri", group: "table" },
     { key: "secTot", label: "TOPLAM satırı", group: "table" },
@@ -1518,6 +1539,37 @@ export const DOC_DEFS: DocDef[] = [
           { key: "direction", label: "Yön" },
           { key: "kind", label: "Hareket" },
           { key: "document", label: "Belge" },
+        ],
+      },
+    ],
+  },
+  {
+    // Denetim 6 — emanet sahibine giden çıkış belgesi; backend `document-render/consignment-dispatch.html.ts`.
+    key: "emanetCikis",
+    label: "Emanet Çıkış Belgesi",
+    defaultTitle: "EMANET ÇIKIŞ BELGESİ",
+    fields: DOC_FIELD_CATALOGS.emanetCikis,
+    defaultSignatures: ["Teslim Eden", "Teslim Alan"],
+    sections: [
+      { key: "date", label: "Tarih" },
+      { key: "ownerCode", label: "Emanet sahibi kodu" },
+      { key: "vehicle", label: "Araç (plaka / şoför)" },
+      { key: "summary", label: "Özet (levent adet/metre · iplik kg)" },
+      { key: "lineTable", label: "Çıkan kalemler tablosu" },
+      // İç veri: renderer `cfg.sections?.internalNotes === true` ister.
+      { key: "internalNotes", label: "Belge notu (iç not)", defaultHidden: true },
+    ],
+    tables: [
+      {
+        key: "kalemler",
+        label: "Çıkan Kalemler",
+        columns: [
+          { key: "seq", label: "#" },
+          { key: "kind", label: "Tür" },
+          { key: "item", label: "Kalem" },
+          { key: "ref", label: "Levent / lot" },
+          { key: "qty", label: "Miktar" },
+          { key: "unit", label: "Birim" },
         ],
       },
     ],

@@ -17,6 +17,7 @@ import { listWindingLinksForBeams, revokeWindingLinksForConsignmentTx } from "..
 import { previewDb } from "./lines";
 import { loadConsignmentDispatchDto, type ConsignmentDispatchDetail } from "./read";
 import { CONSIGNMENT_DISPATCH_TABLE } from "./create";
+import { voidConsignmentDispatchDocTx } from "./printed-doc";
 import type { ConsignmentDispatchCancelInput, ConsignmentDispatchCancelPreview, ConsignmentDispatchErrorCode } from "./types";
 
 type Db = Prisma.TransactionClient;
@@ -134,6 +135,8 @@ export async function cancelConsignmentDispatch(id: string, input: ConsignmentDi
         consignmentItemId: it.id, reason: `Emanet çıkış iptali ${r.dispatch.dispatchNo}: ${reason}`, userId,
       });
     }
+    // Basılı belge İPTAL filigranıyla VOIDED (birlikte ya da hiç).
+    await voidConsignmentDispatchDocTx(tx, id, reason);
     return { dispatchNo: r.dispatch.dispatchNo, beamEvents, revokedLinkIds: r.billingLinks.map((l) => l.linkId), yarnCount: r.yarnItems.length };
   });
   await AuditService.log({

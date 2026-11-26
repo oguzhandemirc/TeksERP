@@ -123,6 +123,8 @@ export const DOC_FIELD_CATALOGS: Record<string, DocFieldDef[]> = {
   siparisTeyidi: [...COMMON, TBL_CAP, DECL],
   // Devere S6 gövde mutabakatı (ticari belge iskeleti).
   govdeMutabakat: [...COMMON, TBL_CAP, DECL],
+  // Denetim 6 emanet çıkış belgesi (ticari belge iskeleti).
+  emanetCikis: [...COMMON, TBL_CAP, DECL],
   iadeIrsaliyesi: [...COMMON, ...BOXES, SEC_CAPTION],
   // Ticaret paketi — iç depo belgeleri (iade irsaliyesiyle aynı iskelet).
   depoTransfer: [...COMMON, ...BOXES, SEC_CAPTION],

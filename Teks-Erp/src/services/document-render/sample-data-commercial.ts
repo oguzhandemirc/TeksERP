@@ -6,6 +6,7 @@ import { previewSeriesCode, resolveSeriesFormat } from "../number-series.service
 import { SAMPLE_INSPECTION_REPORT } from "./sample-data-inspection";
 import { SAMPLE_WARP_BEAM_CARD } from "./sample-data-warp-beam-card";
 import { SAMPLE_BEAM_BODY_STATEMENT } from "./sample-data-beam-body-statement";
+import { SAMPLE_CONSIGNMENT_DISPATCH } from "./sample-data-consignment-dispatch";
 
 const DAY = "2026-06-07T00:00:00.000Z";
 // Örnek no seriden, ERİŞİMDE türetilir (literal yazılmaz; modül yüklenirken seri okunmaz — sample-data `ornekNo` emsali).
@@ -60,4 +61,5 @@ export const SAMPLE_CUSTOMER_EXTRA_DOCS = {
   ORDER_CONFIRMATION: SAMPLE_ORDER_CONFIRMATION,
   WARP_BEAM_CARD: SAMPLE_WARP_BEAM_CARD, // devere S5 levent kartı (sample-data.ts satır tavanı)
   BEAM_BODY_STATEMENT: SAMPLE_BEAM_BODY_STATEMENT, // devere S6 gövde mutabakatı
+  CONSIGNMENT_DISPATCH: SAMPLE_CONSIGNMENT_DISPATCH, // denetim 6 emanet çıkış belgesi
 } as const satisfies Record<string, Record<string, unknown>>;

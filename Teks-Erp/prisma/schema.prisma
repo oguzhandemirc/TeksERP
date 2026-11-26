@@ -9724,6 +9724,9 @@ enum PrintedDocType {
   // 2026-11-22 devere S6 (SONA). Devereciye gider ("sizdeki gövdelerimiz"); kaynak Subcontractor, no = fason kodu.
   // Panel "Mutabakat bas" içerik değiştiyse yeni sürüm dondurur (sürüm geçmişi = gönderilen mutabakatlar). İç kolon OPT-IN.
   BEAM_BODY_STATEMENT // Gövde mutabakatı (Subcontractor)
+  // 2026-11-26 emanet çıkış (SONA). Müşteriye (emanet sahibine) gider; kaynak ConsignmentDispatch, no = çıkış no.
+  // Çıkış tx'inde donar, iptal tx'inde VOIDED. Depo adı payload'da yok; belge notu OPT-IN.
+  CONSIGNMENT_DISPATCH // Emanet çıkış belgesi (ConsignmentDispatch)
 }
 
 enum PrintedDocStatus {

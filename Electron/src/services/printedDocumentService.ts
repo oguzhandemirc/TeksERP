@@ -47,7 +47,9 @@ export type PrintedDocType =
   // Levent kartı (A6, 2026-11-22) — sarımdan sonra levent kılıfına takılır.
   | "WARP_BEAM_CARD"
   // Gövde mutabakatı (devere S6) — kaynak devereci; "Mutabakat bas" içerik değiştiyse yeni sürüm.
-  | "BEAM_BODY_STATEMENT";
+  | "BEAM_BODY_STATEMENT"
+  // Emanet çıkış belgesi (denetim 6) — çıkışta donar, iptalde VOIDED.
+  | "CONSIGNMENT_DISPATCH";
 
 export type PrintedDocStatus = "ACTIVE" | "SUPERSEDED" | "VOIDED";
 
